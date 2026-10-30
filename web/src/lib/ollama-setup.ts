@@ -81,5 +81,7 @@ export function prepareOllama(
  */
 export function validOllamaModel(text: string): boolean {
 	if (text.length === 0 || text.length > 200 || text.includes('..')) return false;
-	return /^([A-Za-z0-9][A-Za-z0-9._-]*(:[0-9]{1,5})?\/)*[A-Za-z0-9][A-Za-z0-9._-]*(:[A-Za-z0-9_][A-Za-z0-9._-]{0,127})?$/.test(text);
+	return /^([A-Za-z0-9][A-Za-z0-9._-]*(:[0-9]{1,5})?\/)*[A-Za-z0-9][A-Za-z0-9._-]*(:[A-Za-z0-9_][A-Za-z0-9._-]{0,127})?$/.test(
+		text,
+	);
 }

@@ -101,8 +101,8 @@ def smoke(archive, timeout, log, plugins=None, force_tcg=False):
         def plugin_test(boot):
             # Only the fresh VM receives this disposable key and test storage.
             if boot == 1:
-                request("/api/v1/account/ssh-keys", {"key": (directory / "ssh-key.pub").read_text().strip()})
-                request("/api/v1/storage/volumes", {"name": "smoketest", "level": "raid0", "filesystem": "ext4", "disks": ["vda", "vdb"], "erase": ["vda", "vdb"]})
+                request("/api/v1/account/ssh-keys", {"key": (directory / "ssh-key.pub").read_text().strip(), "password": password})
+                request("/api/v1/storage/volumes", {"name": "smoketest", "level": "raid0", "filesystem": "ext4", "disks": ["vda", "vdb"], "erase": ["vda", "vdb"], "identities": {d["name"]: d["identity"] for d in request("/api/v1/storage")["disks"]}})
             request("/api/v1/system/ssh", {"enabled": True}, method="PUT")
             ssh_options = ["-i", str(directory / "ssh-key"), "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
                            "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={directory}/known_hosts", "-o", "ConnectTimeout=3"]

@@ -8,7 +8,7 @@
 	import ContextMenu from '#lib/components/ContextMenu.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
-	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
@@ -86,7 +86,7 @@
 			unlocking = null;
 			await load();
 		} catch (err) {
-			unlockError = errorText(err instanceof ApiError ? err.code : 'internal');
+			unlockError = apiErrorText(err);
 		}
 	}
 	const volumeOptions = $derived(
@@ -131,18 +131,17 @@
 		]);
 		if (disposed) return;
 		if (results[0].status === 'fulfilled') shares = results[0].value;
-		else error = fail(results[0].reason);
+		else error = apiErrorText(results[0].reason);
 		if (results[1].status === 'fulfilled') {
 			accounts = results[1].value;
 			accountReady = true;
 		} else {
-			error = fail(results[1].reason);
+			error = apiErrorText(results[1].reason);
 			accountReady = false;
 		}
 		loading = false;
 		if (reloadAfter) return load();
 	}
-	const fail = (err: unknown) => errorText(err instanceof ApiError ? err.code : 'internal');
 	async function saveView() {
 		if (savingView) return;
 		savingView = true;
@@ -152,7 +151,7 @@
 			await api.put('/preferences/shares', value);
 			if (session.data?.user?.name === account) session.shares = { ...value };
 		} catch (err) {
-			preferenceError = fail(err);
+			preferenceError = apiErrorText(err);
 		} finally {
 			savingView = false;
 		}
@@ -200,7 +199,7 @@
 			);
 			if (ticket === previewFor) dataPreview = preview;
 		} catch (err) {
-			if (ticket === previewFor) previewError = fail(err);
+			if (ticket === previewFor) previewError = apiErrorText(err);
 		} finally {
 			if (ticket === previewFor) previewing = false;
 		}
@@ -229,7 +228,7 @@
 			if (selected === share.name) selected = '';
 			await load();
 		} catch (err) {
-			deleteError = fail(err);
+			deleteError = apiErrorText(err);
 			// What stands in the way may have changed: show the current state.
 			if (deleteData && err instanceof ApiError && err.status === 409) void loadPreview(share);
 		} finally {
@@ -567,13 +566,13 @@
 		onclose={() => (dialog = null)}
 		ondone={done}
 	/>
-{:else if dialog?.kind === 'edit'}<ShareDialog
-		share={dialog.share}
-		{volumes}
-		{accounts}
-		onclose={() => (dialog = null)}
-		ondone={done}
-	/>
+{:else if dialog?.kind === 'edit'}{#key dialog}<ShareDialog
+			share={dialog.share}
+			{volumes}
+			{accounts}
+			onclose={() => (dialog = null)}
+			ondone={done}
+		/>{/key}
 {:else if dialog?.kind === 'connect'}
 	<Dialog
 		title={t('shares.connectTitle', { name: dialog.share.name })}

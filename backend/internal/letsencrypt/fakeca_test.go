@@ -211,7 +211,12 @@ func (ca *fakeCA) thumbprint(raw json.RawMessage) string {
 	}
 	x, _ := base64.RawURLEncoding.DecodeString(jwk.X)
 	y, _ := base64.RawURLEncoding.DecodeString(jwk.Y)
-	thumb, err := acme.JWKThumbprint(&ecdsa.PublicKey{Curve: elliptic.P256(), X: new(big.Int).SetBytes(x), Y: new(big.Int).SetBytes(y)})
+	pub, err := ecdsa.ParseUncompressedPublicKey(elliptic.P256(), append(append([]byte{4}, x...), y...))
+	if err != nil {
+		ca.t.Errorf("jwk key: %v", err)
+		return ""
+	}
+	thumb, err := acme.JWKThumbprint(pub)
 	if err != nil {
 		ca.t.Errorf("thumbprint: %v", err)
 	}

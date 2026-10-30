@@ -1,14 +1,31 @@
 <script lang="ts">
 	// Settings › Temperatures › Fans (backend package fans): every fan stays
 	// with the BIOS until it gets a fixed speed or a curve here.
+	import { poll } from '#lib/poll.ts';
 	import { onMount } from 'svelte';
 	import { api, ApiError } from '#lib/api.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
 
 	type Point = { celsius: number; percent: number };
-	type Control = { id: string; mode: 'bios' | 'fixed' | 'curve'; percent?: number; sensor?: string; points?: Point[]; min: number };
-	type Fan = { id: string; chip: string; label: string; rpm: number | null; percent: number; control: Control; sensorC?: number; error?: string };
+	type Control = {
+		id: string;
+		mode: 'bios' | 'fixed' | 'curve';
+		percent?: number;
+		sensor?: string;
+		points?: Point[];
+		min: number;
+	};
+	type Fan = {
+		id: string;
+		chip: string;
+		label: string;
+		rpm: number | null;
+		percent: number;
+		control: Control;
+		sensorC?: number;
+		error?: string;
+	};
 
 	let fans = $state<Fan[] | null>(null);
 	let drafts = $state<Record<string, Control>>({});
@@ -28,7 +45,8 @@
 		fans = answer.fans;
 		readOnly = answer.readOnly;
 		const next: Record<string, Control> = {};
-		for (const fan of answer.fans) next[fan.id] = drafts[fan.id] && !saved ? drafts[fan.id] : structuredClone(fan.control);
+		for (const fan of answer.fans)
+			next[fan.id] = drafts[fan.id] && !saved ? drafts[fan.id] : structuredClone(fan.control);
 		drafts = next;
 	}
 
@@ -36,14 +54,10 @@
 		try {
 			take(await api.get<{ fans: Fan[]; readOnly: boolean }>('/system/fans'));
 		} catch (err) {
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
+			error = apiErrorText(err);
 		}
 	}
-	onMount(() => {
-		void load();
-		const timer = setInterval(() => !document.hidden && !busy && load(), 5000);
-		return () => clearInterval(timer);
-	});
+	onMount(() => poll(load, { interval: 5000, skip: () => busy }));
 
 	function setMode(id: string, mode: Control['mode']) {
 		const d = drafts[id];
@@ -65,7 +79,10 @@
 			take(await api.put<{ fans: Fan[]; readOnly: boolean }>('/system/fans', body));
 			saved = true;
 		} catch (err) {
-			error = err instanceof ApiError && err.code === 'invalid_fans' ? `${errorText(err.code)} ${err.message.replace(/^fans: invalid settings: /, '')}` : errorText(err instanceof ApiError ? err.code : 'internal');
+			error =
+				err instanceof ApiError && err.code === 'invalid_fans'
+					? `${errorText(err.code)} ${err.message.replace(/^fans: invalid settings: /, '')}`
+					: apiErrorText(err);
 		} finally {
 			busy = false;
 		}
@@ -86,35 +103,88 @@
 				<div class="head">
 					<strong>{fan.label}</strong>
 					<span class="muted mono">{fan.chip}</span>
-					<span class="mono">{fan.rpm === null ? '–' : t('fans.rpm', { rpm: String(fan.rpm) })} · {fan.percent} %</span>
-					{#if fan.sensorC !== undefined}<span class="mono muted">{fan.sensorC.toFixed(0)} °C</span>{/if}
+					<span class="mono"
+						>{fan.rpm === null ? '–' : t('fans.rpm', { rpm: String(fan.rpm) })} · {fan.percent} %</span
+					>
+					{#if fan.sensorC !== undefined}<span class="mono muted">{fan.sensorC.toFixed(0)} °C</span
+						>{/if}
 				</div>
 				{#if fan.error}<p class="notice-warn">{fan.error}</p>{/if}
 				<div class="modes" role="radiogroup" aria-label={t('fans.mode')}>
 					{#each ['bios', 'fixed', 'curve'] as mode (mode)}
-						<label class="check"><input type="radio" name="mode-{fan.id}" checked={d.mode === mode} disabled={busy || readOnly} onchange={() => setMode(fan.id, mode as Control['mode'])} /><span>{t(`fans.mode.${mode}` as never)}</span></label>
+						<label class="check"
+							><input
+								type="radio"
+								name="mode-{fan.id}"
+								checked={d.mode === mode}
+								disabled={busy || readOnly}
+								onchange={() => setMode(fan.id, mode as Control['mode'])}
+							/><span>{t(`fans.mode.${mode}` as never)}</span></label
+						>
 					{/each}
 				</div>
 				{#if d.mode === 'fixed'}
-					<label class="stack"><span>{t('fans.fixed', { percent: String(d.percent ?? 60) })}</span><input type="range" min={d.min} max="100" step="5" bind:value={d.percent} disabled={busy || readOnly} /></label>
+					<label class="stack"
+						><span>{t('fans.fixed', { percent: String(d.percent ?? 60) })}</span><input
+							type="range"
+							min={d.min}
+							max="100"
+							step="5"
+							bind:value={d.percent}
+							disabled={busy || readOnly}
+						/></label
+					>
 				{:else if d.mode === 'curve'}
 					<label class="stack"
-						><span>{t('fans.sensor')}</span><select class="field" bind:value={d.sensor} disabled={busy || readOnly}
-							><option value="disks">{t('fans.disks')}</option>{#each sensors as s (s.id)}<option value={s.id}>{s.chip} · {s.label} ({s.celsius?.toFixed(0)} °C)</option>{/each}</select
+						><span>{t('fans.sensor')}</span><select
+							class="field"
+							bind:value={d.sensor}
+							disabled={busy || readOnly}
+							><option value="disks">{t('fans.disks')}</option>{#each sensors as s (s.id)}<option
+									value={s.id}>{s.chip} · {s.label} ({s.celsius?.toFixed(0)} °C)</option
+								>{/each}</select
 						></label
 					>
 					<div class="points">
 						<span class="muted small">{t('fans.points')}</span>
 						{#each d.points ?? [] as point, i (i)}
 							<span class="point"
-								><input class="field mono" type="number" min="0" max="110" bind:value={point.celsius} aria-label={t('fans.celsius')} disabled={busy || readOnly} /> °C →
-								<input class="field mono" type="number" min="0" max="100" step="5" bind:value={point.percent} aria-label={t('fans.percent')} disabled={busy || readOnly} /> %</span
+								><input
+									class="field mono"
+									type="number"
+									min="0"
+									max="110"
+									bind:value={point.celsius}
+									aria-label={t('fans.celsius')}
+									disabled={busy || readOnly}
+								/>
+								°C →
+								<input
+									class="field mono"
+									type="number"
+									min="0"
+									max="100"
+									step="5"
+									bind:value={point.percent}
+									aria-label={t('fans.percent')}
+									disabled={busy || readOnly}
+								/> %</span
 							>
 						{/each}
 					</div>
 				{/if}
 				{#if d.mode !== 'bios'}
-					<label class="stack narrow"><span>{t('fans.min')}</span><input class="field mono" type="number" min="20" max="100" step="5" bind:value={d.min} disabled={busy || readOnly} /></label>
+					<label class="stack narrow"
+						><span>{t('fans.min')}</span><input
+							class="field mono"
+							type="number"
+							min="20"
+							max="100"
+							step="5"
+							bind:value={d.min}
+							disabled={busy || readOnly}
+						/></label
+					>
 				{/if}
 			</div>
 		{/if}
@@ -123,7 +193,9 @@
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	{#if fans?.length}
 		<div class="row-actions">
-			<button type="button" class="btn btn-primary" disabled={busy || readOnly} onclick={save}>{t('common.save')}</button>
+			<button type="button" class="btn btn-primary" disabled={busy || readOnly} onclick={save}
+				>{t('common.save')}</button
+			>
 			{#if saved}<span class="muted" role="status">{t('ui.saved')}</span>{/if}
 		</div>
 	{/if}

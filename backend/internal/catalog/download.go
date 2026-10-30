@@ -10,10 +10,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"path"
 	"strings"
 	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/httpfetch"
+	"github.com/ra5on/TitanOS/backend/internal/netguard"
 )
 
 const (
@@ -34,12 +38,19 @@ const (
 // errNotModified means the source is still what it was at the last fetch.
 var errNotModified = errors.New("catalog: not modified")
 
+// sourceAddress decides which addresses sources are fetched from, checked
+// right before connecting and on every redirect. Owners and administrators
+// add sources, so like plugin sources their own servers in the home network
+// are allowed; loopback and the like (titand's own services) never.
+// Tests that serve sources on loopback replace it.
+var sourceAddress = func(a netip.AddrPort) bool { return netguard.LAN(a.Addr()) }
+
 // newClient returns the HTTP client sources are fetched with. A fetch may
-// take minutes; only a server that does not answer at all is given up on.
+// take minutes (fetchTimeout bounds it as a whole); only a server that does
+// not answer at all is given up on early. Redirects only go to http(s) and
+// never from https back to http.
 func newClient() *http.Client {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.ResponseHeaderTimeout = 30 * time.Second
-	return &http.Client{Transport: transport}
+	return httpfetch.NewClient(httpfetch.Policy{Allow: sourceAddress})
 }
 
 // download returns the YAML files of a source by their path, and the

@@ -92,7 +92,7 @@ var apiRoutes = []apiRoute{
 	{"GET", "/storage", assistant.AreaStorage, "", "Disks and volumes in full detail."},
 	{"GET", "/storage/disk-sleep", assistant.AreaStorage, "", "Sleep time of hard disks: default, overrides per volume and disk, effective value and state of each disk."},
 	{"PUT", "/storage/disk-sleep", assistant.AreaStorage, assistant.LevelNormal, `Set the sleep time of hard disks (body {"idleMinutes": 30}; 0 is off). Optional "volumes" {"<volume>": minutes} and "disks" {"<disk id from GET>": minutes} replace all overrides; a missing entry inherits, 0 never sleeps; leave them out to keep the stored ones.`},
-	{"POST", "/storage/volumes/{name}/disks", assistant.AreaStorage, assistant.LevelDestroy, `Add a disk to a volume or replace a missing one (body {"disk": "sdc", "erase": true}); everything on the disk is erased.`},
+	{"POST", "/storage/volumes/{name}/disks", assistant.AreaStorage, assistant.LevelDestroy, `Add a disk to a volume or replace a missing one (body {"disk": "sdc", "identity": "<identity of the disk from GET /storage>", "erase": true}); everything on the disk is erased.`},
 	{"DELETE", "/storage/volumes/{name}/disks/{disk}", assistant.AreaStorage, assistant.LevelDestroy, "Take a disk out of a volume."},
 	{"GET", "/storage/volumes/{name}/snapshots", assistant.AreaStorage, "", "Snapshots of a Btrfs volume."},
 	{"POST", "/storage/volumes/{name}/snapshots", assistant.AreaStorage, assistant.LevelNormal, `Create a snapshot of a Btrfs volume (body {"action": "create"}).`},
@@ -210,6 +210,9 @@ func (s *Server) apiTools(user auth.User, chat *http.Request) []assistant.Tool {
 			Name:        "api_read",
 			Description: "Read from a GET route of api_routes, e.g. /docker/apps/immich or /notifications/settings. Returns the JSON answer.",
 			Parameters:  schema(map[string]any{"path": str("Path of the route with its values filled in, optionally with ?query.")}, "path"),
+			// Answers carry text people and outside sources chose: names,
+			// descriptions, notification texts, container labels.
+			Untrusted: true,
 			Read: func(ctx context.Context, args json.RawMessage) (assistant.Result, error) {
 				var req struct{ Path string }
 				if err := assistant.DecodeArgs(args, &req); err != nil {

@@ -239,3 +239,78 @@ func TestRestoreReplicaIntoNewFolder(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// endlessSend stands in for a large btrfs send.
+func endlessSend(ctx context.Context, _ ...string) *exec.Cmd {
+	return exec.CommandContext(ctx, "cat", "/dev/zero")
+}
+
+// otherNAS lists no snapshots and handles PUT with put.
+func otherNAS(t *testing.T, put http.HandlerFunc) *httptest.Server {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.Write([]byte(`{"snapshots":[]}`))
+			return
+		}
+		put(w, r)
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+func runAgainst(t *testing.T, p *pair, server *httptest.Server) error {
+	t.Helper()
+	p.sender.Client = server.Client()
+	p.sender.command = endlessSend
+	id, err := p.sender.Save("", Request{Name: "offsite", Enabled: true, Volume: "tank", Code: code(server.URL+"/home", "home", "secret"), EveryHours: 24, Keep: 7})
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	p.sender.OnResult = func(_ Job, err error) { done <- err }
+	if err := p.sender.Start(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if p.sender.Busy() {
+			t.Fatal("still running after the end")
+		}
+		return err
+	case <-time.After(20 * time.Second):
+		t.Fatal("the run hangs: btrfs send blocks on a pipe nobody reads")
+	}
+	return nil
+}
+
+func TestReplicationEndsWhenTheOtherSideAnswersEarly(t *testing.T) {
+	p := newPair(t)
+	server := otherNAS(t, func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "busy", http.StatusConflict) // without reading the stream
+	})
+	err := runAgainst(t, p, server)
+	if err == nil || !strings.Contains(err.Error(), "409") {
+		t.Fatal(err)
+	}
+	// The snapshot without a copy on the other side is gone again.
+	if got := localSnapshots(filepath.Join(p.sender.mountRoot, "tank", localDir, p.sender.Jobs()[0].ID)); len(got) != 0 {
+		t.Fatalf("left: %v", got)
+	}
+}
+
+func TestReplicationGivesUpAStreamThatStandsStill(t *testing.T) {
+	p := newPair(t)
+	p.sender.stall = 300 * time.Millisecond
+	server := otherNAS(t, func(w http.ResponseWriter, r *http.Request) {
+		// Takes nothing and does not answer (for longer than the sender
+		// waits; the server notices no hang-up while the body is unread).
+		select {
+		case <-r.Context().Done():
+		case <-time.After(5 * time.Second):
+		}
+	})
+	err := runAgainst(t, p, server)
+	if err == nil || !strings.Contains(err.Error(), "stood still") {
+		t.Fatal(err)
+	}
+}

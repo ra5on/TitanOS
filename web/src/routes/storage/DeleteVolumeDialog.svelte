@@ -23,7 +23,7 @@
 				method: 'DELETE',
 				credentials: 'same-origin',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ confirm: volume.name })
+				body: JSON.stringify({ confirm: volume.name }),
 			});
 			if (!res.ok) {
 				const data = await res.json().catch(() => null);
@@ -32,7 +32,10 @@
 			ondone();
 		} catch (err) {
 			const code = err instanceof ApiError ? err.code : 'unreachable';
-			error = { text: errorText(code), detail: code === 'storage_failed' && err instanceof ApiError ? err.message : '' };
+			error = {
+				text: errorText(code),
+				detail: code === 'storage_failed' && err instanceof ApiError ? err.message : '',
+			};
 			working = false;
 		}
 	}
@@ -45,18 +48,32 @@
 			<div class="affected">
 				<p>{t('delete.affected')}</p>
 				<ul>
-					{#if usage.shares.length}<li>{t('delete.affectedShares', { shares: usage.shares.join(', ') })}</li>{/if}
-					{#if usage.vms.length}<li>{t('delete.affectedVms', { vms: usage.vms.join(', ') })}</li>{/if}
-					{#if usage.docker}<li>{usage.docker.length ? t('storage.onVolumeDockerApps', { apps: usage.docker.join(', ') }) : t('storage.onVolumeDockerEngine')}</li>{/if}
+					{#if usage.shares.length}<li>
+							{t('delete.affectedShares', { shares: usage.shares.join(', ') })}
+						</li>{/if}
+					{#if usage.vms.length}<li>
+							{t('delete.affectedVms', { vms: usage.vms.join(', ') })}
+						</li>{/if}
+					{#if usage.docker}<li>
+							{usage.docker.length
+								? t('storage.onVolumeDockerApps', { apps: usage.docker.join(', ') })
+								: t('storage.onVolumeDockerEngine')}
+						</li>{/if}
 				</ul>
 			</div>
 		{/if}
 		{#if error}
-			<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>
+			<div class="notice-error" role="alert">
+				{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
+			</div>
 		{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={onclose} disabled={working}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-danger" disabled={working} onclick={submit}>{t('delete.submit')}</button>
+			<button type="button" class="btn" onclick={onclose} disabled={working}
+				>{t('common.cancel')}</button
+			>
+			<button type="button" class="btn btn-danger" disabled={working} onclick={submit}
+				>{t('delete.submit')}</button
+			>
 		</div>
 	</div>
 </Dialog>

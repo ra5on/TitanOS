@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { poll } from '#lib/poll.ts';
 	import { tileOptions, type TileOptions } from '../options.ts';
 	let { options = tileOptions(null, 'assistant') }: { options?: TileOptions } = $props();
 	// The latest tasks of this account and the next automations. Reads only
@@ -34,13 +35,7 @@
 		}
 	}
 
-	onMount(() => {
-		load();
-		const timer = setInterval(() => {
-			if (document.visibilityState === 'visible') load();
-		}, 30000);
-		return () => clearInterval(timer);
-	});
+	onMount(() => poll(load, { interval: 30000 }));
 
 	const CHIP: Record<string, string> = {
 		confirmation: 'warn',

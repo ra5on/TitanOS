@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
+	"github.com/ra5on/TitanOS/backend/internal/run"
 )
 
 // An app is a Compose project whose compose file TitanOS keeps in
@@ -113,7 +114,7 @@ func (m *Manager) validateCompose(ctx context.Context, volume, name, compose, en
 	if err := file.Close(); err != nil {
 		return err
 	}
-	out, err := m.runner.Run(ctx, compose, "docker", "compose", "--project-name", name,
+	out, err := run.Combined(ctx, m.runner, compose, "docker", "compose", "--project-name", name,
 		"--file", "-", "--project-directory", m.appData(volume, name), "--env-file", file.Name(), "config", "--quiet")
 	if err != nil {
 		return &InvalidComposeError{Detail: strings.TrimSpace(out)}
@@ -221,7 +222,7 @@ func (m *Manager) startJob(ctx context.Context, volume, name string, job *Job, p
 		var out string
 		var err error
 		if pull {
-			out, err = m.runner.Run(ctx, "", "docker", m.compose(volume, name, "pull", "--quiet")...)
+			out, err = run.Combined(ctx, m.runner, "", "docker", m.compose(volume, name, "pull", "--quiet")...)
 		}
 		if err == nil {
 			// Resolve hardware against the leases under hardwareMu, but run
@@ -235,7 +236,7 @@ func (m *Manager) startJob(ctx context.Context, volume, name string, job *Job, p
 				args := m.compose(volume, name, "up", "--detach", "--remove-orphans", "--quiet-pull")
 				args[4] = path
 				var up string
-				up, err = m.runner.Run(ctx, "", "docker", args...)
+				up, err = run.Combined(ctx, m.runner, "", "docker", args...)
 				cleanup()
 				m.endCompose(name)
 				out += up
@@ -437,14 +438,14 @@ func (m *Manager) RemoveApp(ctx context.Context, name string, purge bool) error 
 		if purge {
 			down = append(down, "--volumes")
 		}
-		if out, err := m.runner.Run(ctx, "", "docker", m.compose(settings.Volume, name, down...)...); err != nil {
+		if out, err := run.Combined(ctx, m.runner, "", "docker", m.compose(settings.Volume, name, down...)...); err != nil {
 			slog.Error("app removal failed", "app", name, "output", tail(out, 2000))
 			return err
 		}
 		if purge {
 			// Separately and without failing: an image another app uses
 			// stays, and Compose would give up on the first one.
-			if out, err := m.runner.Run(ctx, "", "docker", m.compose(settings.Volume, name, "down", "--rmi", "all")...); err != nil {
+			if out, err := run.Combined(ctx, m.runner, "", "docker", m.compose(settings.Volume, name, "down", "--rmi", "all")...); err != nil {
 				slog.Warn("images of a removed app kept", "app", name, "output", tail(out, 2000))
 			}
 		}

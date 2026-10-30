@@ -230,8 +230,8 @@ func (m *Manager) luksFormat(ctx context.Context, password []byte, device, label
 	}
 	out, err := m.runner.Run(ctx, "", "cryptsetup", "luksUUID", device)
 	uuid := strings.TrimSpace(out)
-	if err != nil || uuid == "" {
-		return "", fmt.Errorf("%w: new LUKS container on %s has no UUID", ErrNotPossible, device)
+	if err != nil || !validUUID(uuid) {
+		return "", fmt.Errorf("%w: new LUKS container on %s has no valid UUID", ErrNotPossible, device)
 	}
 	return uuid, nil
 }
@@ -977,10 +977,12 @@ func (m *Manager) checkNewMemberPassword(ctx context.Context, volume VolumeConfi
 
 // eraseLUKS destroys the key slots of a LUKS device (cryptsetup erase): its
 // contents can never be read again, whatever password someone has.
-func (m *Manager) eraseLUKS(ctx context.Context, device string) {
+func (m *Manager) eraseLUKS(ctx context.Context, device string) error {
 	if _, err := m.runner.Run(ctx, "", "cryptsetup", "erase", "--batch-mode", device); err != nil {
 		slog.Warn("erase LUKS header", "device", device, "err", err)
+		return fmt.Errorf("erase LUKS header on %s: %w", device, err)
 	}
+	return nil
 }
 
 // uuidsWithout returns the LUKS UUIDs of a volume without one.

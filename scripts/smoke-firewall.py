@@ -203,7 +203,7 @@ def smoke(archive, output, timeout, force_tcg=False):
                     wait(ready, 'health', timeout, 3)
                     if boot == '1':
                         request('/setup', {'name': 'fwtester', 'password': account})
-                        request('/account/ssh-keys', {'key': (directory / 'key.pub').read_text().strip()})
+                        request('/account/ssh-keys', {'key': (directory / 'key.pub').read_text().strip(), 'password': account})
                     else:
                         request('/login', {'name': 'fwtester', 'password': account})
                     request('/system/ssh', {'enabled': True}, 'PUT')

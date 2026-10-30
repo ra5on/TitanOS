@@ -3,9 +3,9 @@
 	// drives) of this account, for the assistant to read. Only names travel:
 	// the NAS reads the files itself with the rights of the account.
 	import { onMount } from 'svelte';
-	import { api, ApiError } from '#lib/api.ts';
+	import { api } from '#lib/api.ts';
 	import { formatBytes } from '#lib/format.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import type { ChatAttachment } from '#lib/assistant.svelte.ts';
 	import Dialog from './Dialog.svelte';
 	import Icon from './Icon.svelte';
@@ -22,25 +22,30 @@
 	let chosen = $state<ChatAttachment[]>([]);
 	let error = $state('');
 
-	const readable = /\.(txt|md|markdown|csv|tsv|json|ya?ml|conf|cfg|ini|toml|xml|log|sh|py|js|ts|html|css|sql|docx|xlsx|png|jpe?g|webp|gif)$/i;
+	const readable =
+		/\.(txt|md|markdown|csv|tsv|json|ya?ml|conf|cfg|ini|toml|xml|log|sh|py|js|ts|html|css|sql|docx|xlsx|png|jpe?g|webp|gif)$/i;
 
 	onMount(async () => {
 		try {
 			roots = (await api.get<Root[]>('/files/roots')).filter((r) => r.kind !== 'stick');
 		} catch (err) {
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
+			error = apiErrorText(err);
 		}
 	});
 
 	async function open(next: Root, path: string) {
 		error = '';
 		try {
-			const list = await api.get<Entry[]>(`/files/list?${new URLSearchParams({ root: next.id, path })}`);
+			const list = await api.get<Entry[]>(
+				`/files/list?${new URLSearchParams({ root: next.id, path })}`,
+			);
 			root = next;
 			dir = path;
-			entries = list.filter((e) => !e.name.startsWith('.')).sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
+			entries = list
+				.filter((e) => !e.name.startsWith('.'))
+				.sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
 		} catch (err) {
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
+			error = apiErrorText(err);
 		}
 	}
 
@@ -60,7 +65,8 @@
 		const path = dir ? `${dir}/${entry.name}` : entry.name;
 		const i = chosen.findIndex((c) => `${c.root}/${c.path}` === key(entry.name));
 		if (i >= 0) chosen.splice(i, 1);
-		else if (chosen.length < max) chosen.push({ name: entry.name, kind: 'nas', root: root.id, path });
+		else if (chosen.length < max)
+			chosen.push({ name: entry.name, kind: 'nas', root: root.id, path });
 	}
 	const isChosen = (entry: Entry) => chosen.some((c) => `${c.root}/${c.path}` === key(entry.name));
 </script>
@@ -68,13 +74,21 @@
 <Dialog title={t('assistant.nasTitle')} wide {onclose}>
 	<p class="muted small">{t('assistant.nasText', { count: max })}</p>
 	<div class="where">
-		{#if root}<button type="button" class="btn small-btn" onclick={up}><Icon name="arrowUp" size={14} />{t('assistant.nasUp')}</button>{/if}
+		{#if root}<button type="button" class="btn small-btn" onclick={up}
+				><Icon name="arrowUp" size={14} />{t('assistant.nasUp')}</button
+			>{/if}
 		<span class="mono">{root ? `${root.name}/${dir}` : t('assistant.nasRoots')}</span>
 	</div>
 	<ul class="list">
 		{#if !root}
 			{#each roots as r (r.id)}
-				<li><button type="button" class="row" onclick={() => open(r, '')}><Icon name="folder" size={16} /><span>{r.name}</span><span class="muted small">{r.kind}</span></button></li>
+				<li>
+					<button type="button" class="row" onclick={() => open(r, '')}
+						><Icon name="folder" size={16} /><span>{r.name}</span><span class="muted small"
+							>{r.kind}</span
+						></button
+					>
+				</li>
 			{:else}
 				<li class="muted small">{t('assistant.nasNone')}</li>
 			{/each}
@@ -82,11 +96,23 @@
 			{#each entries as entry (entry.name)}
 				<li>
 					{#if entry.dir}
-						<button type="button" class="row" onclick={() => open(root!, dir ? `${dir}/${entry.name}` : entry.name)}><Icon name="folder" size={16} /><span>{entry.name}</span></button>
+						<button
+							type="button"
+							class="row"
+							onclick={() => open(root!, dir ? `${dir}/${entry.name}` : entry.name)}
+							><Icon name="folder" size={16} /><span>{entry.name}</span></button
+						>
 					{:else}
 						<label class="row" class:off={!readable.test(entry.name)}>
-							<input type="checkbox" checked={isChosen(entry)} disabled={!readable.test(entry.name) || (!isChosen(entry) && chosen.length >= max)} onchange={() => toggle(entry)} />
-							<Icon name="file" size={16} /><span>{entry.name}</span><span class="muted small">{formatBytes(entry.size)}</span>
+							<input
+								type="checkbox"
+								checked={isChosen(entry)}
+								disabled={!readable.test(entry.name) || (!isChosen(entry) && chosen.length >= max)}
+								onchange={() => toggle(entry)}
+							/>
+							<Icon name="file" size={16} /><span>{entry.name}</span><span class="muted small"
+								>{formatBytes(entry.size)}</span
+							>
 						</label>
 					{/if}
 				</li>
@@ -98,7 +124,12 @@
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	<div class="dialog-actions">
 		<button type="button" class="btn" onclick={onclose}>{t('common.cancel')}</button>
-		<button type="button" class="btn btn-primary" onclick={() => onpick(chosen)} disabled={chosen.length === 0}>{t('assistant.nasAttach', { count: chosen.length })}</button>
+		<button
+			type="button"
+			class="btn btn-primary"
+			onclick={() => onpick(chosen)}
+			disabled={chosen.length === 0}>{t('assistant.nasAttach', { count: chosen.length })}</button
+		>
 	</div>
 </Dialog>
 

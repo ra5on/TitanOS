@@ -5,9 +5,10 @@
 	// automatic blocking and the log of dropped packets. Zones, networks and
 	// policies go on trial together when the firewall is on; the automatic
 	// blocking is saved on its own.
+	import { poll } from '#lib/poll.ts';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { api, ApiError, type FirewallConfig, type FirewallStatus, type FirewallZoneDef } from '#lib/api.ts';
+	import { api, type FirewallConfig, type FirewallStatus, type FirewallZoneDef } from '#lib/api.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import Tabs from '#lib/components/Tabs.svelte';
 	import TrialBanner from '#lib/components/TrialBanner.svelte';
@@ -26,7 +27,7 @@
 		zoneProblem,
 		type Tab,
 	} from '#lib/firewall.ts';
-	import { errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { revealTarget } from '#lib/reveal-target.ts';
 	import AutoBlockTab from './AutoBlockTab.svelte';
 	import CellPanel from './CellPanel.svelte';
@@ -62,7 +63,8 @@
 		const list = (status?.apps ?? []).map((a) => ({ key: a.key, name: a.name }));
 		for (const cell of draft?.cells ?? [])
 			for (const p of cell.policies)
-				if (p.app && !list.some((a) => a.key === p.app)) list.push({ key: p.app, name: p.app.replace(/^container:/, '') });
+				if (p.app && !list.some((a) => a.key === p.app))
+					list.push({ key: p.app, name: p.app.replace(/^container:/, '') });
 		return list.toSorted((a, b) => a.name.localeCompare(b.name));
 	});
 
@@ -71,7 +73,7 @@
 			take(await api.get<FirewallStatus>('/firewall'));
 			loadError = '';
 		} catch (err) {
-			loadError = errorText(err instanceof ApiError ? err.code : 'internal');
+			loadError = apiErrorText(err);
 		}
 	}
 
@@ -96,12 +98,10 @@
 	$effect(() => {
 		if (!status?.pending) return;
 		const tick = setInterval(() => (left = Math.max(0, left - 1)), 1000);
-		const poll = setInterval(() => {
-			if (!document.hidden) void load();
-		}, 5000);
+		const stop = poll(load, { interval: 5000, immediate: false });
 		return () => {
 			clearInterval(tick);
-			clearInterval(poll);
+			stop();
 		};
 	});
 
@@ -115,12 +115,15 @@
 		busy = true;
 		error = notice = '';
 		try {
-			const next = await api.put<FirewallStatus>('/firewall', $state.snapshot(draft) as Record<string, unknown>);
+			const next = await api.put<FirewallStatus>(
+				'/firewall',
+				$state.snapshot(draft) as Record<string, unknown>,
+			);
 			draft = null;
 			take(next);
 			notice = next.pending ? '' : t('ui.saved');
 		} catch (err) {
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
+			error = apiErrorText(err);
 		} finally {
 			busy = false;
 		}
@@ -136,7 +139,7 @@
 			take(next);
 			notice = t(action === 'confirm' ? 'firewall.confirmed' : 'firewall.reverted');
 		} catch (err) {
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
+			error = apiErrorText(err);
 			void load();
 		} finally {
 			busy = false;
@@ -198,14 +201,20 @@
 		return { text: 'firewall.stateOff', tone: '' };
 	});
 	function zoneLabel(id: string): string {
-		if (['home', 'vpn', 'internet', 'docker'].includes(id)) return t(`firewall.zone.${id}` as MessageKey);
-		const own = (draft ?? status?.config)?.zones.find((z) => z.id === id) ?? status?.config.zones.find((z) => z.id === id);
+		if (['home', 'vpn', 'internet', 'docker'].includes(id))
+			return t(`firewall.zone.${id}` as MessageKey);
+		const own =
+			(draft ?? status?.config)?.zones.find((z) => z.id === id) ??
+			status?.config.zones.find((z) => z.id === id);
 		return own?.name || id;
 	}
 	function zoneText(id: string): string {
-		if (['home', 'vpn', 'internet', 'docker'].includes(id)) return t(`firewall.zoneText.${id}` as MessageKey);
+		if (['home', 'vpn', 'internet', 'docker'].includes(id))
+			return t(`firewall.zoneText.${id}` as MessageKey);
 		const own = draft?.zones.find((z) => z.id === id);
-		return own ? t('firewall.zoneMembers', { networks: own.networks.length, sources: own.sources.length }) : '';
+		return own
+			? t('firewall.zoneMembers', { networks: own.networks.length, sources: own.sources.length })
+			: '';
 	}
 	const selectedTo = $derived(
 		selected
@@ -239,7 +248,9 @@
 		<h2 class="tile-title" id="firewall-main" use:revealTarget>{t('firewall.title')}</h2>
 		<div><span class="chip {stateChip.tone}">{t(stateChip.text)}</span></div>
 		<label class="check"
-			><input type="checkbox" bind:checked={draft.enabled} disabled={locked} /><span>{t('firewall.enable')}</span></label
+			><input type="checkbox" bind:checked={draft.enabled} disabled={locked} /><span
+				>{t('firewall.enable')}</span
+			></label
 		>
 		<p class="muted">{t('firewall.intro')}</p>
 		{#if status.clientAddress}<p class="muted">
@@ -248,7 +259,9 @@
 					zone: status.clientZone ? zoneLabel(status.clientZone) : '–',
 				})}
 			</p>{/if}
-		{#if status.error}<p class="notice-error" role="alert">{t('firewall.loadError', { detail: status.error })}</p>{/if}
+		{#if status.error}<p class="notice-error" role="alert">
+				{t('firewall.loadError', { detail: status.error })}
+			</p>{/if}
 		{#if status.dockerError && status.config.enabled}<p class="notice-warn" role="alert">
 				{t('firewall.dockerError', { detail: status.dockerError })}
 			</p>{/if}
@@ -294,16 +307,26 @@
 				</div>
 				<div>
 					<dt>{zoneLabel('vpn')}</dt>
-					<dd><span class="mono">{(status.vpnNetworks ?? []).join(', ')}</span> · tailscale0, wt0, ipv64wg</dd>
+					<dd>
+						<span class="mono">{(status.vpnNetworks ?? []).join(', ')}</span> · tailscale0, wt0, ipv64wg
+					</dd>
 				</div>
-				<div><dt>{zoneLabel('internet')}</dt><dd>{t('firewall.internetText')}</dd></div>
-				<div><dt>{zoneLabel('docker')}</dt><dd>{t('firewall.dockerText')}</dd></div>
+				<div>
+					<dt>{zoneLabel('internet')}</dt>
+					<dd>{t('firewall.internetText')}</dd>
+				</div>
+				<div>
+					<dt>{zoneLabel('docker')}</dt>
+					<dd>{t('firewall.dockerText')}</dd>
+				</div>
 				{#each ownZones(draft) as zone, i (zone.id)}
 					<div class="own">
 						<dt>{zone.name || zone.id}</dt>
 						<dd>
 							<span class="mono"
-								>{[...zone.networks.map((n) => n.replace(/^[a-z]+:/, '')), ...zone.sources].join(', ') || '–'}</span
+								>{[...zone.networks.map((n) => n.replace(/^[a-z]+:/, '')), ...zone.sources].join(
+									', ',
+								) || '–'}</span
 							>
 							<span class="buttons"
 								><button
@@ -322,7 +345,8 @@
 									class="btn small"
 									type="button"
 									disabled={locked}
-									onclick={() => (editing = { zone: $state.snapshot(zone), isNew: false })}>{t('firewall.zoneEdit')}</button
+									onclick={() => (editing = { zone: $state.snapshot(zone), isNew: false })}
+									>{t('firewall.zoneEdit')}</button
 								></span
 							>
 						</dd>
@@ -333,8 +357,11 @@
 			<p class="muted small">{t('firewall.zoneOrder')}</p>
 			<p class="muted small">{t('firewall.bypassText')}</p>
 			<div class="row-actions start">
-				<button class="btn" type="button" disabled={locked || ownZones(draft).length >= 16} onclick={newZone}
-					>{t('firewall.zoneAdd')}</button
+				<button
+					class="btn"
+					type="button"
+					disabled={locked || ownZones(draft).length >= 16}
+					onclick={newZone}>{t('firewall.zoneAdd')}</button
 				>
 			</div>
 		</section>
@@ -348,30 +375,33 @@
 		<RecentTab {status} {zoneLabel} onreload={load} ontake={take} />
 	{/if}
 
-	{#if trialTab && (dirty || error || notice)}<div class="save-bar {dirty ? 'notice-warn pinned' : ''}">
+	{#if trialTab && (dirty || error || notice)}<div
+			class="save-bar {dirty ? 'notice-warn pinned' : ''}"
+		>
 			{#if dirty}<p>{t(draft.enabled ? 'firewall.unsavedTrial' : 'firewall.unsaved')}</p>{/if}
 			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 			{#if notice && !dirty}<p role="status">{notice}</p>{/if}
 			{#if dirty}<div class="row-actions">
-					<button class="btn" disabled={busy} onclick={discard}>{t('common.cancel')}</button
-					><button class="btn btn-primary" disabled={busy || !valid} onclick={apply}
-						>{t(draft.enabled ? 'firewall.applyTrial' : 'common.save')}</button
+					<button class="btn" disabled={busy} onclick={discard}>{t('common.cancel')}</button><button
+						class="btn btn-primary"
+						disabled={busy || !valid}
+						onclick={apply}>{t(draft.enabled ? 'firewall.applyTrial' : 'common.save')}</button
 					>
 				</div>{/if}
 		</div>{/if}
 {:else if !loadError}<p class="loading" role="status">{t('common.loading')}</p>{/if}
 
 {#if editing && draft && status}
-	<ZoneDialog
-		zone={editing.zone}
-		isNew={editing.isNew}
-		cfg={draft}
-		networks={status.networks ?? []}
-		{zoneLabel}
-		onsave={saveZone}
-		onremove={editing.isNew ? undefined : () => deleteZone(editing!.zone.id)}
-		onclose={() => (editing = null)}
-	/>
+	{#key editing}<ZoneDialog
+			zone={editing.zone}
+			isNew={editing.isNew}
+			cfg={draft}
+			networks={status.networks ?? []}
+			{zoneLabel}
+			onsave={saveZone}
+			onremove={editing.isNew ? undefined : () => deleteZone(editing!.zone.id)}
+			onclose={() => (editing = null)}
+		/>{/key}
 {/if}
 
 <style>

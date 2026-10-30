@@ -39,6 +39,11 @@ type CacheConfig struct {
 	DataUUID string `json:"dataUUID"` // PARTUUID of the cache partition
 	// Removing is set while dirty blocks are written back before removal.
 	Removing bool `json:"removing,omitempty"`
+	// Stale is set when the volume was used without its cache (a read
+	// cache whose SSD was missing): the array changed behind the cache's
+	// back, so its blocks may be old. The next setup starts the cache
+	// empty (metadata zeroed) and clears the flag.
+	Stale bool `json:"stale,omitempty"`
 }
 
 // CacheView is what the page shows about a cache.
@@ -105,24 +110,37 @@ func (m *Manager) mountSource(ctx context.Context, volume VolumeConfig) (string,
 // lowerDevice is what lies on top of the array of an mdadm volume: its
 // cache device when it has a cache (set up here), else plain.
 func (m *Manager) lowerDevice(ctx context.Context, volume VolumeConfig, plain string) (string, error) {
-	if volume.Cache == nil || volume.Filesystem == "btrfs" {
+	if volume.Filesystem == "btrfs" {
 		return plain, nil
 	}
 	name := cacheName(volume.Name)
 	device := "/dev/mapper/" + name
+	if volume.Cache == nil {
+		// A cache switched off in this boot stays as a plain linear
+		// mapping of the array until the next start, and holds the array:
+		// go through it.
+		if table, err := m.runner.Run(ctx, "", "dmsetup", "table", name); err == nil && target(table) == "linear" {
+			return device, nil
+		}
+		return plain, nil
+	}
 	if _, err := m.runner.Run(ctx, "", "dmsetup", "status", name); err == nil {
 		return device, nil // already set up (titand restarted)
 	}
+	// A write cache may hold blocks the array lacks; so may one that was
+	// being written back when the system went down (Removing). Without
+	// the SSD such a volume stays unmounted.
+	mayBeDirty := volume.Cache.Mode == "writeback" || volume.Cache.Removing
 	if !m.cachePresent(volume.Cache) {
-		if volume.Cache.Mode == "writeback" && !volume.Cache.Removing {
-			if m.OnCacheMissing != nil {
-				m.OnCacheMissing(volume.Name)
-			}
+		if m.OnCacheMissing != nil {
+			m.OnCacheMissing(volume.Name)
+		}
+		if mayBeDirty {
 			return "", fmt.Errorf("%w: the write cache SSD of %s is missing; its unwritten blocks are only there", ErrNotPossible, volume.Name)
 		}
 		slog.Warn("cache SSD missing, mounting without cache", "volume", volume.Name)
-		if m.OnCacheMissing != nil {
-			m.OnCacheMissing(volume.Name)
+		if err := m.markCacheStale(volume); err != nil {
+			return "", err
 		}
 		return plain, nil
 	}
@@ -130,20 +148,61 @@ func (m *Manager) lowerDevice(ctx context.Context, volume VolumeConfig, plain st
 	if !ok || a.sectors == 0 {
 		return "", fmt.Errorf("%w: array of %s not running", ErrNotPossible, volume.Name)
 	}
+	if volume.Cache.Stale {
+		// The array was written without the cache: whatever the SSD holds
+		// may be older. Start with an empty cache. (Only a read cache is
+		// ever used without its SSD; the mode may have changed since.)
+		slog.Warn("cache SSD was missing before, starting the cache empty", "volume", volume.Name)
+		if err := m.zeroStart(m.partUUIDPath(volume.Cache.MetaUUID)); err != nil {
+			slog.Warn("cache metadata not cleared, mounting without cache", "volume", volume.Name, "err", err)
+			return plain, nil // still Stale
+		}
+	}
 	mode, policy := volume.Cache.Mode, cachePolicy
 	if volume.Cache.Removing {
 		mode, policy = "writeback", "cleaner"
 	}
 	table := cacheTable(a.sectors, m.partUUIDPath(volume.Cache.MetaUUID), m.partUUIDPath(volume.Cache.DataUUID), "/dev/"+a.device, mode, policy)
 	if _, err := m.runner.Run(ctx, "", "dmsetup", "create", name, "--table", table); err != nil {
-		if volume.Cache.Mode == "writeback" {
+		if mayBeDirty {
 			return "", err
 		}
 		slog.Warn("cache not set up, mounting without cache", "volume", volume.Name, "err", err)
+		if err := m.markCacheStale(volume); err != nil {
+			return "", err
+		}
 		return plain, nil
+	}
+	if volume.Cache.Stale {
+		if err := m.updateVolume(volume.Name, func(v *VolumeConfig) {
+			if v.Cache != nil {
+				v.Cache.Stale = false
+			}
+		}); err != nil {
+			// Harmless: the next setup clears the (fresh) cache once more.
+			slog.Warn("cache marked stale still", "volume", volume.Name, "err", err)
+		}
 	}
 	slog.Info("SSD cache set up", "volume", volume.Name, "mode", mode)
 	return device, nil
+}
+
+// markCacheStale records that a read cache's volume is about to be used
+// without the cache. If that cannot be saved the volume is not used: the
+// next start with the SSD would otherwise serve old blocks.
+func (m *Manager) markCacheStale(volume VolumeConfig) error {
+	if volume.Cache.Stale {
+		return nil
+	}
+	err := m.updateVolume(volume.Name, func(v *VolumeConfig) {
+		if v.Cache != nil {
+			v.Cache.Stale = true
+		}
+	})
+	if err != nil {
+		return fmt.Errorf("%w: cannot record that %s runs without its cache: %v", ErrNotPossible, volume.Name, err)
+	}
+	return nil
 }
 
 // EnableCache prepares an SSD as cache of an mdadm volume. It takes effect
@@ -212,7 +271,7 @@ func (m *Manager) EnableCache(ctx context.Context, name, diskName, mode, identit
 		part := partitionName(device.Name, i)
 		out, err := m.runner.Run(ctx, "", "blkid", "-p", "-s", "PART_ENTRY_UUID", "-o", "value", part)
 		uuid := strings.TrimSpace(out)
-		if err != nil || uuid == "" {
+		if err != nil || !validUUID(uuid) {
 			return fmt.Errorf("%w: partition %s has no PARTUUID", ErrNotPossible, part)
 		}
 		// dm-cache reads an all-zero metadata start as "new cache".
@@ -265,10 +324,27 @@ func (m *Manager) SetCacheMode(ctx context.Context, name, mode string) error {
 	if !slices.Contains(cacheModes, mode) || volume.Cache.Removing {
 		return ErrInvalidLevel
 	}
+	if volume.Cache.Mode == "writeback" && mode == "writethrough" && m.cacheActive(ctx, volume) {
+		// A read cache is mounted without its SSD, so the switch is only
+		// saved once no block lives on the SSD alone.
+		if err := m.flushCache(ctx, volume, cacheFlushWait); err != nil {
+			m.reloadCache(context.WithoutCancel(ctx), volume, "writeback", cachePolicy)
+			if errors.Is(err, errCacheDirty) {
+				return fmt.Errorf("%w: the write cache did not finish writing back; try again later", ErrBusy)
+			}
+			return err
+		}
+	}
 	if err := m.reloadCache(ctx, volume, mode, cachePolicy); err != nil {
 		return err
 	}
 	return m.updateVolume(name, func(v *VolumeConfig) { v.Cache.Mode = mode })
+}
+
+// cacheActive tells whether the cache device of a volume is set up.
+func (m *Manager) cacheActive(ctx context.Context, volume VolumeConfig) bool {
+	_, err := m.runner.Run(ctx, "", "dmsetup", "status", cacheName(volume.Name))
+	return err == nil
 }
 
 // reloadCache changes mode and policy of an active cache; it does nothing
@@ -283,20 +359,148 @@ func (m *Manager) reloadCache(ctx context.Context, volume VolumeConfig, mode, po
 		return fmt.Errorf("%w: array not running", ErrNotPossible)
 	}
 	table := cacheTable(a.sectors, m.partUUIDPath(volume.Cache.MetaUUID), m.partUUIDPath(volume.Cache.DataUUID), "/dev/"+a.device, mode, policy)
+	return m.swapTable(ctx, name, table)
+}
+
+// swapTable loads a new table into a device-mapper device and makes it live.
+func (m *Manager) swapTable(ctx context.Context, name, table string) error {
 	if _, err := m.runner.Run(ctx, "", "dmsetup", "reload", name, "--table", table); err != nil {
 		return err
 	}
 	// Suspend waits for I/O in flight and, with writeback, flushes it.
 	if _, err := m.runner.Run(ctx, "", "dmsetup", "suspend", name); err != nil {
+		// Drop the loaded table, or a later resume would still swap it in.
+		m.runner.Run(context.WithoutCancel(ctx), "", "dmsetup", "clear", name)
 		return err
 	}
-	_, err := m.runner.Run(ctx, "", "dmsetup", "resume", name)
+	_, err := m.runner.Run(context.WithoutCancel(ctx), "", "dmsetup", "resume", name)
 	return err
 }
 
-// DisableCache takes the SSD out. A read cache is forgotten at once (it
-// stays in use until the next start, harmlessly). A write cache first
-// writes every dirty block back; RunCacheCleaner forgets it when done.
+// cacheFlushWait is how long flushCache waits for dirty blocks to reach
+// the array (replaced in tests).
+var cacheFlushWait = 5 * time.Minute
+
+// cacheFlushPoll is how often flushCache looks again (replaced in tests).
+var cacheFlushPoll = 2 * time.Second
+
+// flushCache writes every dirty block of an active cache back and leaves
+// it in writethrough mode (policy cleaner), where no write makes a block
+// dirty again. errCacheDirty when the blocks did not get written back
+// within wait; the cache then goes on writing back. Called with actions
+// held.
+func (m *Manager) flushCache(ctx context.Context, volume VolumeConfig, wait time.Duration) error {
+	name := cacheName(volume.Name)
+	// A write cache writes back in its own mode first (that switch is
+	// known to work with dirty blocks); a read cache never leaves
+	// writethrough, so no write can become dirty on the way.
+	mode := "writeback"
+	if volume.Cache.Mode == "writethrough" && !volume.Cache.Removing {
+		mode = "writethrough"
+	}
+	if err := m.reloadCache(ctx, volume, mode, "cleaner"); err != nil {
+		return err
+	}
+	deadline := time.Now().Add(wait)
+	for {
+		out, err := m.runner.Run(ctx, "", "dmsetup", "status", name)
+		if err != nil {
+			return err
+		}
+		if view, ok := parseCacheStatusOK(out); ok && view.DirtyBlocks == 0 {
+			break
+		}
+		if !time.Now().Before(deadline) {
+			return errCacheDirty
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(min(cacheFlushPoll, max(time.Until(deadline), 0))):
+		}
+	}
+	if mode != "writethrough" {
+		if err := m.reloadCache(ctx, volume, "writethrough", "cleaner"); err != nil {
+			return err
+		}
+	}
+	out, err := m.runner.Run(ctx, "", "dmsetup", "status", name)
+	if err != nil {
+		return err
+	}
+	if view, ok := parseCacheStatusOK(out); !ok || view.DirtyBlocks > 0 {
+		return errCacheDirty
+	}
+	return nil
+}
+
+// clearCacheSSD makes the SSD of a deleted volume's cache forget it: the
+// metadata start is zeroed (the cache would start empty) and the cache
+// partition discarded where the SSD supports it. Best effort; the SSD is
+// a free disk again afterwards and is wiped before any further use.
+func (m *Manager) clearCacheSSD(ctx context.Context, c *CacheConfig) {
+	if !m.cachePresent(c) {
+		return
+	}
+	if err := m.zeroStart(m.partUUIDPath(c.MetaUUID)); err != nil {
+		slog.Warn("clear cache metadata", "err", err)
+	}
+	if _, err := m.runner.Run(ctx, "", "blkdiscard", "--force", m.partUUIDPath(c.DataUUID)); err != nil {
+		slog.Info("cache partition not discarded", "err", err)
+	}
+}
+
+// errCacheDirty says that a cache still holds blocks the array lacks.
+var errCacheDirty = errors.New("storage: the cache still holds unwritten blocks")
+
+// detachCache takes an active cache out from under a running volume
+// without unmounting it: the cache device becomes a plain linear mapping of
+// the array, so nothing lands on the SSD any more and nothing is lost when
+// the device goes away at shutdown. It refuses while blocks are dirty.
+// Called with actions held.
+func (m *Manager) detachCache(ctx context.Context, volume VolumeConfig) error {
+	name := cacheName(volume.Name)
+	table, err := m.runner.Run(ctx, "", "dmsetup", "table", name)
+	if err != nil {
+		return err
+	}
+	if target(table) == "linear" {
+		return nil // detached before (titand stopped before saving)
+	}
+	a, ok := m.arrayOf(ctx, volume)
+	if !ok || a.sectors == 0 {
+		return fmt.Errorf("%w: array of %s not running", ErrNotPossible, volume.Name)
+	}
+	// First writethrough: from now on no write can make a block dirty, so
+	// "no dirty blocks" stays true until the switch below.
+	if err := m.flushCache(ctx, volume, 0); err != nil {
+		return err
+	}
+	if err := m.swapTable(ctx, name, fmt.Sprintf("0 %d linear /dev/%s 0", a.sectors, a.device)); err != nil {
+		return err
+	}
+	table, err = m.runner.Run(ctx, "", "dmsetup", "table", name)
+	if err != nil {
+		return err
+	}
+	if target(table) != "linear" {
+		return fmt.Errorf("%w: %s did not switch away from the cache", ErrNotPossible, name)
+	}
+	return nil
+}
+
+// target is the target type of a one-line dmsetup table or status.
+func target(line string) string {
+	fields := strings.Fields(line)
+	if len(fields) < 3 {
+		return ""
+	}
+	return fields[2]
+}
+
+// DisableCache takes the SSD out. A read cache without dirty blocks is
+// detached at once (detachCache). A write cache first writes every dirty
+// block back; RunCacheCleaner detaches and forgets it when done.
 func (m *Manager) DisableCache(ctx context.Context, name string) error {
 	m.actions.Lock()
 	defer m.actions.Unlock()
@@ -307,14 +511,57 @@ func (m *Manager) DisableCache(ctx context.Context, name string) error {
 	if !ok || volume.Cache == nil {
 		return ErrNotFound
 	}
-	if _, err := m.runner.Run(ctx, "", "dmsetup", "status", cacheName(name)); err != nil || volume.Cache.Mode == "writethrough" {
-		// Not set up, or nothing on the SSD that the array lacks.
+	out, err := m.runner.Run(ctx, "", "dmsetup", "status", cacheName(name))
+	if err != nil {
+		if (volume.Cache.Mode == "writeback" || volume.Cache.Removing) && m.cachePresent(volume.Cache) {
+			// Not set up although the SSD is there (volume locked or not
+			// mounted yet): its dirty blocks can be written back once the
+			// volume runs again, so do not throw them away now. Without
+			// the SSD they are gone anyway; forgetting the cache is then
+			// the only way to use the array again.
+			return fmt.Errorf("%w: the write cache of %s is not running; mount the volume first so that its blocks can be written back", ErrNotPossible, name)
+		}
 		return m.updateVolume(name, func(v *VolumeConfig) { v.Cache = nil })
+	}
+	if target(out) == "linear" {
+		return m.updateVolume(name, func(v *VolumeConfig) { v.Cache = nil })
+	}
+	if view, ok := parseCacheStatusOK(out); ok && view.DirtyBlocks == 0 && volume.Cache.Mode == "writethrough" {
+		// A read cache: nothing on the SSD the array lacks.
+		if err := m.detachCache(ctx, volume); err == nil {
+			return m.updateVolume(name, func(v *VolumeConfig) { v.Cache = nil })
+		} else if !errors.Is(err, errCacheDirty) {
+			return err
+		}
 	}
 	if err := m.reloadCache(ctx, volume, "writeback", "cleaner"); err != nil {
 		return err
 	}
 	return m.updateVolume(name, func(v *VolumeConfig) { v.Cache.Removing = true })
+}
+
+// finishCacheRemoval detaches a written-back cache from its running
+// volume and forgets it. The cache is only forgotten once the volume no
+// longer goes through it: a cache device left in writeback mode could
+// collect dirty blocks again, lost at shutdown.
+func (m *Manager) finishCacheRemoval(ctx context.Context, name string) bool {
+	m.actions.Lock()
+	defer m.actions.Unlock()
+	volume, ok := m.find(name)
+	if !ok || volume.Cache == nil || !volume.Cache.Removing {
+		return false
+	}
+	if err := m.detachCache(ctx, volume); err != nil {
+		if !errors.Is(err, errCacheDirty) {
+			slog.Warn("write cache not detached yet", "volume", name, "err", err)
+		}
+		return false
+	}
+	if err := m.updateVolume(name, func(v *VolumeConfig) { v.Cache = nil }); err != nil {
+		slog.Warn("written-back cache not forgotten", "volume", name, "err", err)
+		return false
+	}
+	return true
 }
 
 // RunCacheCleaner forgets caches that were being written back once they
@@ -329,15 +576,13 @@ func (m *Manager) RunCacheCleaner(ctx context.Context) {
 			if err != nil {
 				continue
 			}
-			if view := parseCacheStatus(out); view.DirtyBlocks == 0 {
-				m.actions.Lock()
-				err := m.updateVolume(volume.Name, func(v *VolumeConfig) { v.Cache = nil })
-				m.actions.Unlock()
-				if err == nil {
-					slog.Info("write cache written back and removed", "volume", volume.Name)
-					if m.OnCacheRemoved != nil {
-						m.OnCacheRemoved(volume.Name)
-					}
+			if view, ok := parseCacheStatusOK(out); target(out) != "linear" && (!ok || view.DirtyBlocks > 0) {
+				continue
+			}
+			if m.finishCacheRemoval(ctx, volume.Name) {
+				slog.Info("write cache written back and removed", "volume", volume.Name)
+				if m.OnCacheRemoved != nil {
+					m.OnCacheRemoved(volume.Name)
 				}
 			}
 		}
@@ -352,10 +597,22 @@ func (m *Manager) RunCacheCleaner(ctx context.Context) {
 // parseCacheStatus reads `dmsetup status` of a cache target:
 // 0 <len> cache <mbs> <used>/<total meta> <cbs> <used>/<total> <rh> <rm> <wh> <wm> <demotions> <promotions> <dirty> …
 func parseCacheStatus(output string) CacheView {
+	view, _ := parseCacheStatusOK(output)
+	return view
+}
+
+// parseCacheStatusOK is parseCacheStatus that also says whether output was
+// the status of a cache target at all. Callers that act on "no dirty
+// blocks" must not trust a status they could not read.
+func parseCacheStatusOK(output string) (CacheView, bool) {
 	view := CacheView{ReadHitRate: -1}
 	fields := strings.Fields(output)
 	if len(fields) < 14 || fields[2] != "cache" {
-		return view
+		return view, false
+	}
+	dirty, err := strconv.ParseUint(fields[13], 10, 64)
+	if err != nil {
+		return view, false
 	}
 	blockSectors, _ := strconv.ParseUint(fields[5], 10, 64)
 	view.BlockBytes = blockSectors * 512
@@ -368,8 +625,8 @@ func parseCacheStatus(output string) CacheView {
 	if hits+misses > 0 {
 		view.ReadHitRate = hits / (hits + misses)
 	}
-	view.DirtyBlocks, _ = strconv.ParseUint(fields[13], 10, 64)
-	return view
+	view.DirtyBlocks = dirty
+	return view, true
 }
 
 // cacheView is the state of a volume's cache for the page.

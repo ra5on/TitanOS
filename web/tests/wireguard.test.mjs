@@ -16,6 +16,8 @@ test('configuration files get names wg-quick accepts', () => {
 });
 
 test('endpoints are names or addresses without port', () => {
-	for (const ok of ['', 'nas.example.org', '203.0.113.5', '2001:db8::1']) assert.ok(validEndpoint(ok), ok);
-	for (const bad of ['nas example', 'nas.example.org:51820x', '.nas', 'a..b', 'x;rm']) assert.ok(!validEndpoint(bad), bad);
+	for (const ok of ['', 'nas.example.org', '203.0.113.5', '2001:db8::1'])
+		assert.ok(validEndpoint(ok), ok);
+	for (const bad of ['nas example', 'nas.example.org:51820x', '.nas', 'a..b', 'x;rm'])
+		assert.ok(!validEndpoint(bad), bad);
 });

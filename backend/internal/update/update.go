@@ -216,6 +216,10 @@ type Progress struct {
 	Percent             float64 `json:"percent"`
 	SpeedBytesPerSecond uint64  `json:"speedBytesPerSecond"`
 	Error               string  `json:"error"`
+	// FallbackRemoved says that the stick had no room for the new system
+	// next to both old ones: the fallback slot was emptied before the
+	// download, and a failed download leaves no system to go back to.
+	FallbackRemoved bool `json:"fallbackRemoved,omitempty"`
 }
 
 // Pending is an update or a step back that takes effect with the next restart.
@@ -290,6 +294,8 @@ type Manager struct {
 	// stall is how long a download may stand still, retryPause the wait
 	// before it is taken up again.
 	stall, retryPause time.Duration
+	// freeSpace is what the stick has free; tests replace it.
+	freeSpace func() (int64, error)
 
 	// Disabled leaves the stick alone: in development mode titand runs
 	// on the developer's own machine.
@@ -694,6 +700,16 @@ func (m *Manager) putEntry(slot, content string, counted bool) error {
 	return syncDir(dir)
 }
 
+// clearSlot makes a slot unbootable and removes its system files.
+func (m *Manager) clearSlot(slot string) {
+	// What is in the slot can no longer be started while it is replaced.
+	m.removeEntry(slot)
+	dir := filepath.Join(m.bootDir, "titanos", slot)
+	for _, name := range append(slices.Clone(slotFiles), "version") {
+		os.Remove(filepath.Join(dir, name))
+	}
+}
+
 func (m *Manager) removeEntry(slot string) {
 	dir := filepath.Join(m.bootDir, "loader/entries")
 	files, _ := os.ReadDir(dir)
@@ -1043,37 +1059,42 @@ func (m *Manager) Install(ctx context.Context) error {
 			return fmt.Errorf("%w: update to %s first", ErrTooOld, manifest.MinVersion)
 		}
 	}
-	entries := m.readEntries()
-	if e, ok := entries[m.slot]; ok && e.left != nil {
-		return ErrUnconfirmed
-	}
-	// The stick must hold the new system next to the running one.
-	target := other(m.slot)
-	var room unix.Statfs_t
-	if err := unix.Statfs(m.bootDir, &room); err != nil {
+	if err := m.unconfirmed(); err != nil {
 		return err
 	}
-	free := int64(room.Bavail) * int64(room.Bsize)
-	for _, name := range slotFiles {
-		if info, err := os.Stat(filepath.Join(m.bootDir, "titanos", target, name)); err == nil {
-			free += info.Size() // goes away first
-		}
-	}
-	free += m.stickFor(target).Size()
-	if free < manifest.Size()+(8<<20) {
-		return fmt.Errorf("%w: %d MiB needed, %d MiB free", ErrNoSpace, manifest.Size()>>20, free>>20)
+	target := other(m.slot)
+	staged, err := m.room(target, manifest.Size())
+	if err != nil {
+		return err
 	}
 	if !m.work.TryLock() {
 		return ErrBusy
 	}
-	m.setProgress(func(p *Progress) { *p = Progress{Phase: "download"} })
+	// What was read above may have changed while another action (a step
+	// back, a cancelled switch, an app update) held the lock: look again.
+	m.mu.Lock()
+	again := m.available
+	busy := m.pending != nil || m.appTrial || m.progress.Phase == "download" || m.progress.Phase == "switch" || m.progress.Phase == "restart"
+	m.mu.Unlock()
+	if busy || again == nil || again.Version != manifest.Version {
+		m.work.Unlock()
+		if again == nil {
+			return ErrNothing
+		}
+		return ErrBusy
+	}
+	if err := m.unconfirmed(); err != nil {
+		m.work.Unlock()
+		return err
+	}
+	m.setProgress(func(p *Progress) { *p = Progress{Phase: "download", FallbackRemoved: !staged} })
 	go func() {
 		defer m.work.Unlock()
-		err := m.install(context.WithoutCancel(ctx), *manifest, target)
+		err := m.install(context.WithoutCancel(ctx), *manifest, target, staged)
 		m.forget()
 		m.setProgress(func(p *Progress) {
 			if err != nil {
-				*p = Progress{Phase: "failed", Error: err.Error()}
+				*p = Progress{Phase: "failed", Error: err.Error(), FallbackRemoved: !staged}
 			} else {
 				*p = Progress{Phase: "done", Percent: 100}
 			}
@@ -1085,7 +1106,71 @@ func (m *Manager) Install(ctx context.Context) error {
 	return nil
 }
 
-func (m *Manager) install(ctx context.Context, manifest Manifest, target string) error {
+// unconfirmed refuses an update while the running system is itself still
+// on trial.
+func (m *Manager) unconfirmed() error {
+	if e, ok := m.readEntries()[m.slot]; ok && e.left != nil {
+		return ErrUnconfirmed
+	}
+	return nil
+}
+
+// stagingDir is where a new system is loaded while the fallback slot stays
+// intact; on the stick, next to the slots.
+func (m *Manager) stagingDir(target string) string {
+	return filepath.Join(m.bootDir, "titanos", ".incoming-"+target)
+}
+
+// room checks that the stick holds the new system next to the running
+// one. staged says whether it also fits next to the fallback: then it is
+// loaded beside it and the fallback is only replaced once everything is
+// there and checked. Otherwise the fallback has to go first (slots are
+// large, sticks often small).
+func (m *Manager) room(target string, size int64) (bool, error) {
+	free, err := m.stickFree()
+	if err != nil {
+		return false, err
+	}
+	need := size + (8 << 20)
+	free += dirSize(m.stagingDir(target)) // left over from a broken attempt
+	if free >= need {
+		return true, nil
+	}
+	for _, name := range slotFiles {
+		if info, err := os.Stat(filepath.Join(m.bootDir, "titanos", target, name)); err == nil {
+			free += info.Size() // goes away first
+		}
+	}
+	free += m.stickFor(target).Size()
+	if free < need {
+		return false, fmt.Errorf("%w: %d MiB needed, %d MiB free", ErrNoSpace, size>>20, free>>20)
+	}
+	return false, nil
+}
+
+func (m *Manager) stickFree() (int64, error) {
+	if m.freeSpace != nil {
+		return m.freeSpace()
+	}
+	var room unix.Statfs_t
+	if err := unix.Statfs(m.bootDir, &room); err != nil {
+		return 0, err
+	}
+	return int64(room.Bavail) * int64(room.Bsize), nil
+}
+
+func dirSize(dir string) int64 {
+	var total int64
+	entries, _ := os.ReadDir(dir)
+	for _, entry := range entries {
+		if info, err := entry.Info(); err == nil && info.Mode().IsRegular() {
+			total += info.Size()
+		}
+	}
+	return total
+}
+
+func (m *Manager) install(ctx context.Context, manifest Manifest, target string, staged bool) error {
 	slog.Info("installing update", "version", manifest.Version, "slot", target)
 	base := m.source() + "/releases/download/" + manifest.Tag + "/"
 	// Plugins belong to the system image: a release that is an app on an
@@ -1109,32 +1194,58 @@ func (m *Manager) install(ctx context.Context, manifest Manifest, target string)
 		}
 	}
 	dir := filepath.Join(m.bootDir, "titanos", target)
-	// What is in the slot can no longer be started while it is replaced.
-	m.removeEntry(target)
-	for _, name := range append(slices.Clone(slotFiles), "version") {
-		os.Remove(filepath.Join(dir, name))
+	stage := m.stagingDir(target)
+	os.RemoveAll(stage)
+	load := dir
+	if staged {
+		load = stage
+	} else {
+		// No room for three systems: the fallback goes before the download.
+		slog.Warn("the stick has no room for the new system next to the fallback; the fallback slot is emptied first", "slot", target)
+		m.clearSlot(target)
+		if err := m.stickFor(target).Clear(); err != nil {
+			return err
+		}
 	}
-	// The new image brings its own titand; apps of the old one do not fit it.
-	if err := m.stickFor(target).Clear(); err != nil {
-		return err
-	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(load, 0o755); err != nil {
 		return err
 	}
 	total, done := manifest.Size(), int64(0)
 	for _, file := range manifest.Files {
 		before := done
-		err := m.download(ctx, base+file.Asset, filepath.Join(dir, file.Name), file, func(n int64, speed uint64) {
+		err := m.download(ctx, base+file.Asset, filepath.Join(load, file.Name), file, func(n int64, speed uint64) {
 			m.setProgress(func(p *Progress) {
 				p.File, p.Percent, p.SpeedBytesPerSecond = file.Name, 100*float64(before+n)/float64(total), speed
 			})
 		})
 		if err != nil {
+			if staged {
+				os.RemoveAll(stage) // the fallback is untouched
+			}
 			return fmt.Errorf("%s: %w", file.Name, err)
 		}
 		done += file.Size
 	}
-	m.setProgress(func(p *Progress) { *p = Progress{Phase: "switch", Percent: 100} })
+	if staged {
+		// Everything is there and checked: only now replace the fallback.
+		m.clearSlot(target)
+		if err := m.stickFor(target).Clear(); err != nil {
+			return err
+		}
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+		for _, file := range manifest.Files {
+			if err := os.Rename(filepath.Join(stage, file.Name), filepath.Join(dir, file.Name)); err != nil {
+				return err
+			}
+		}
+		if err := syncDir(dir); err != nil {
+			return err
+		}
+		os.RemoveAll(stage)
+	}
+	m.setProgress(func(p *Progress) { *p = Progress{Phase: "switch", Percent: 100, FallbackRemoved: !staged} })
 	if err := writeFile(filepath.Join(dir, "version"), []byte(manifest.Version+"\n")); err != nil {
 		return err
 	}

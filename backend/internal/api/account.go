@@ -75,6 +75,29 @@ func (s *Server) handleTwoFactorEnable(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string][]string{"recoveryCodes": codes})
 }
 
+// reconfirm checks password and, if two-factor login is on, a code as
+// proof that it is the owner of the account who asks for a change that
+// opens another way into it. Failures count against the account like a
+// failed login; it answers the request itself when the proof fails.
+func (s *Server) reconfirm(w http.ResponseWriter, user auth.User, password, code string) bool {
+	key := "user:" + user.Name
+	if wait := s.limiter.RetryAfter(key); wait > 0 {
+		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
+		return false
+	}
+	if _, ok := s.opts.Users.Authenticate(user.Name, password); !ok {
+		s.limiter.Fail(key)
+		writeError(w, http.StatusForbidden, "wrong_password", "the password is wrong")
+		return false
+	}
+	if !s.opts.Users.CheckSecondFactor(user.Name, code) {
+		s.limiter.Fail(key)
+		writeError(w, http.StatusForbidden, "invalid_code", "the code is wrong or was used already")
+		return false
+	}
+	return true
+}
+
 // handleTwoFactorDisable switches the second factor off, with the password
 // and a code as proof that it is the owner of the account who asks.
 func (s *Server) handleTwoFactorDisable(w http.ResponseWriter, r *http.Request) {

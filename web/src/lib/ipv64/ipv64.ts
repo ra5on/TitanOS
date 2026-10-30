@@ -3,7 +3,17 @@
 // titand passes them on; secrets (tokens, push URLs, update tokens, keys of
 // integrations, WireGuard keys) are never part of them.
 
-export const TABS = ['overview', 'domains', 'dyndns', 'assignments', 'monitoring', 'failover', 'public', 'router', 'blocklist'] as const;
+export const TABS = [
+	'overview',
+	'domains',
+	'dyndns',
+	'assignments',
+	'monitoring',
+	'failover',
+	'public',
+	'router',
+	'blocklist',
+] as const;
 export type Tab = (typeof TABS)[number];
 
 export function tabFrom(value: string | null): Tab {
@@ -12,7 +22,9 @@ export function tabFrom(value: string | null): Tab {
 
 /** Where a sub-tab of IPv64 lives: the tab "IPv64" of Settings › Dynamic DNS. */
 export function ipv64Href(sub?: string | null): string {
-	return sub && (TABS as readonly string[]).includes(sub) ? `/settings/ddns?tab=ipv64&sub=${sub}` : '/settings/ddns?tab=ipv64';
+	return sub && (TABS as readonly string[]).includes(sub)
+		? `/settings/ddns?tab=ipv64&sub=${sub}`
+		: '/settings/ddns?tab=ipv64';
 }
 
 /** The two tabs of Settings › Dynamic DNS. */
@@ -33,7 +45,13 @@ export type Me = {
 	log_retention_days: number;
 	auth: { type: string; key_id: number | null; key_name: string };
 };
-export type LogEntry = { id: number; domain_id: number | null; title: string; message: string; time: string };
+export type LogEntry = {
+	id: number;
+	domain_id: number | null;
+	title: string;
+	message: string;
+	time: string;
+};
 export type LogPage = { entries: LogEntry[]; next_before: number | null; retention_days: number };
 export type ApiKey = {
 	id: number;
@@ -46,7 +64,17 @@ export type ApiKey = {
 	usedBy: string[];
 };
 
-export type Domain = { id: number; name: string; kind: string; zone: string; wildcard: boolean; ignore: string; ipv6Prefix?: string; active: boolean; updateCount: number };
+export type Domain = {
+	id: number;
+	name: string;
+	kind: string;
+	zone: string;
+	wildcard: boolean;
+	ignore: string;
+	ipv6Prefix?: string;
+	active: boolean;
+	updateCount: number;
+};
 export type DnsRecord = {
 	id: number;
 	domain: string;
@@ -61,7 +89,13 @@ export type DnsRecord = {
 };
 export type DomainDetail = Domain & { records: DnsRecord[] };
 
-export type CheckEvent = { id: number; time: string; status: string; message: string; latency_ms: number | null };
+export type CheckEvent = {
+	id: number;
+	time: string;
+	status: string;
+	message: string;
+	latency_ms: number | null;
+};
 export type Check = {
 	id: string;
 	name: string;
@@ -88,15 +122,35 @@ export type Check = {
 	} | null;
 	recent?: CheckEvent[];
 };
-export type Integration = { id: number; type: string; name: string; status: string; default: boolean | null; options: { [key: string]: unknown }; uses: number };
-export type Incident = { id: number; status: string; created_at: string | null; closed_at: string | null; events: { time: string | null; kind: string; message: string }[] };
+export type Integration = {
+	id: number;
+	type: string;
+	name: string;
+	status: string;
+	default: boolean | null;
+	options: { [key: string]: unknown };
+	uses: number;
+};
+export type Incident = {
+	id: number;
+	status: string;
+	created_at: string | null;
+	closed_at: string | null;
+	events: { time: string | null; kind: string; message: string }[];
+};
 export type Stats = {
 	range: string;
 	measurements: number;
 	availability_percent: number | null;
 	latency_ms: { avg: number | null; min: number | null; max: number | null };
 	bucket_seconds: number;
-	series: { time: string; measurements: number; availability_percent: number; latency_avg_ms: number | null; latency_max_ms: number | null }[];
+	series: {
+		time: string;
+		measurements: number;
+		availability_percent: number;
+		latency_avg_ms: number | null;
+		latency_max_ms: number | null;
+	}[];
 };
 export type StatusPage = {
 	id: number;
@@ -134,12 +188,41 @@ export type Policy = {
 	notifications_enabled: boolean;
 	integrations: number[];
 	monitors_down: number;
-	monitors: { healthcheck: string; name: string; negate: boolean; healthcheck_status: string | null }[];
-	rules: { record: string; fqdn: string | null; record_type: string; state: string; target: { kind: string; ip?: string; record?: string; offline_page?: string } }[];
+	monitors: {
+		healthcheck: string;
+		name: string;
+		negate: boolean;
+		healthcheck_status: string | null;
+	}[];
+	rules: {
+		record: string;
+		fqdn: string | null;
+		record_type: string;
+		state: string;
+		target: { kind: string; ip?: string; record?: string; offline_page?: string };
+	}[];
 };
-export type Maintenance = { id: string; domain: string; check: string; checkName: string; createdCheck?: boolean; offlinePage: string; policy: string; records: string[]; at: string };
+export type Maintenance = {
+	id: string;
+	domain: string;
+	check: string;
+	checkName: string;
+	createdCheck?: boolean;
+	offlinePage: string;
+	policy: string;
+	records: string[];
+	at: string;
+};
 
-export type Mapping = { id: string; name: string; listen_port: number; transport: string; target_port: number; record: string; fqdn: string | null };
+export type Mapping = {
+	id: string;
+	name: string;
+	listen_port: number;
+	transport: string;
+	target_port: number;
+	record: string;
+	fqdn: string | null;
+};
 export type CDN = {
 	id: string;
 	domain: string | null;
@@ -161,7 +244,17 @@ export type CDN = {
 	traffic_mb: { in: number; out: number };
 	mappings?: Mapping[];
 };
-export type Published = { app: string; port: number; domain: string; prefix?: string; cdn: string; createdCDN?: boolean; records: string[]; firewall?: boolean; at: string };
+export type Published = {
+	app: string;
+	port: number;
+	domain: string;
+	prefix?: string;
+	cdn: string;
+	createdCDN?: boolean;
+	records: string[];
+	firewall?: boolean;
+	at: string;
+};
 
 export type Peer = {
 	id: string;
@@ -188,9 +281,33 @@ export type Gateway = {
 	traffic_bytes: { in: number; out: number };
 	peers?: Peer[];
 };
-export type Router = { id: string; name: string; vrf: string; traffic_limited: boolean; gateways: Gateway[] };
-export type Route = { id: number; destination: string; gateway: string; distance: number; peer: string | null; system: boolean; disabled: boolean; state: string };
-export type RouterRule = { id: number; chain: string; action: string; family: string; source: string | null; destination: string | null; disabled: boolean; state: string };
+export type Router = {
+	id: string;
+	name: string;
+	vrf: string;
+	traffic_limited: boolean;
+	gateways: Gateway[];
+};
+export type Route = {
+	id: number;
+	destination: string;
+	gateway: string;
+	distance: number;
+	peer: string | null;
+	system: boolean;
+	disabled: boolean;
+	state: string;
+};
+export type RouterRule = {
+	id: number;
+	chain: string;
+	action: string;
+	family: string;
+	source: string | null;
+	destination: string | null;
+	disabled: boolean;
+	state: string;
+};
 export type PublicIP = { id: number; ip: string; type: string; disabled: boolean; state: string };
 
 export type Status = {
@@ -198,14 +315,31 @@ export type Status = {
 		settings: {
 			notify: { enabled: boolean; failover: boolean; cdnTraffic: boolean; healthchecks: boolean };
 			blocklist: { enabled: boolean };
-			wireguard: { enabled: boolean; router?: string; gateway?: string; peer?: string; name?: string; publicKey?: string; addresses?: string[]; endpoint?: string; allowedIPs?: string[] };
+			wireguard: {
+				enabled: boolean;
+				router?: string;
+				gateway?: string;
+				peer?: string;
+				name?: string;
+				publicKey?: string;
+				addresses?: string[];
+				endpoint?: string;
+				allowedIPs?: string[];
+			};
 			published: Published[];
 			maintenance: Maintenance[];
 		};
 		keySet: boolean;
 		keySource: '' | 'own' | 'ddns' | 'letsencrypt';
 		poll: { last?: string; error?: string };
-		blocklistStatus: { entries: number; truncated?: boolean; live: boolean; fetched?: string; next?: string; error?: string };
+		blocklistStatus: {
+			entries: number;
+			truncated?: boolean;
+			live: boolean;
+			fetched?: string;
+			next?: string;
+			error?: string;
+		};
 		tunnel: { up: boolean; error?: string; routes: string[] };
 		readOnly: boolean;
 	};
@@ -246,7 +380,16 @@ export const KEY_LIFETIMES = [86400 * 7, 86400 * 30, 86400 * 90, 86400 * 365, 0]
 
 /** Fields of an integration per type, after POST /integrations. Secret
  * fields are write-only: TitanOS never reads them back. */
-export const INTEGRATION_FIELDS: { [type: string]: { name: string; secret?: boolean; kind?: 'number' | 'url'; required?: boolean; min?: number; max?: number }[] } = {
+export const INTEGRATION_FIELDS: {
+	[type: string]: {
+		name: string;
+		secret?: boolean;
+		kind?: 'number' | 'url';
+		required?: boolean;
+		min?: number;
+		max?: number;
+	}[];
+} = {
 	telegram: [
 		{ name: 'chat_id', required: true },
 		{ name: 'api_token', secret: true, required: true },
@@ -267,7 +410,11 @@ export const INTEGRATION_FIELDS: { [type: string]: { name: string; secret?: bool
 		{ name: 'device' },
 		{ name: 'priority', kind: 'number', min: -2, max: 1 },
 	],
-	discord: [{ name: 'webhook_url', kind: 'url', secret: true, required: true }, { name: 'ping_user' }, { name: 'ping_group' }],
+	discord: [
+		{ name: 'webhook_url', kind: 'url', secret: true, required: true },
+		{ name: 'ping_user' },
+		{ name: 'ping_group' },
+	],
 	webhook: [
 		{ name: 'url_down', kind: 'url', secret: true },
 		{ name: 'url_up', kind: 'url', secret: true },
@@ -288,15 +435,26 @@ export function integrationProblems(type: string, values: { [field: string]: str
 		if (v && f.kind === 'url' && !/^https?:\/\/[^\s/]+/.test(v)) out.push(f.name);
 		if (v && f.kind === 'number') {
 			const n = Number(v);
-			if (!Number.isInteger(n) || (f.min !== undefined && n < f.min) || (f.max !== undefined && n > f.max)) out.push(f.name);
+			if (
+				!Number.isInteger(n) ||
+				(f.min !== undefined && n < f.min) ||
+				(f.max !== undefined && n > f.max)
+			)
+				out.push(f.name);
 		}
 	}
-	if (type === 'webhook' && !(values.url_down ?? '').trim() && !(values.url_up ?? '').trim()) out.push('url_down');
+	if (type === 'webhook' && !(values.url_down ?? '').trim() && !(values.url_up ?? '').trim())
+		out.push('url_down');
 	return out;
 }
 
 /** The body of a new integration: only its own fields, numbers as numbers. */
-export function integrationBody(type: string, name: string, preselect: boolean, values: { [field: string]: string }) {
+export function integrationBody(
+	type: string,
+	name: string,
+	preselect: boolean,
+	values: { [field: string]: string },
+) {
 	const body: { [key: string]: unknown } = { type, name: name.trim(), default: preselect };
 	for (const f of INTEGRATION_FIELDS[type] ?? []) {
 		const v = (values[f.name] ?? '').trim();
@@ -358,7 +516,8 @@ export function checkProblems(f: CheckForm): string[] {
 	} else {
 		if ((f.type === 'icmp' || f.type === 'tcp') && !f.target.trim()) out.push('target');
 		if (f.type === 'tcp' && !(f.port >= 1 && f.port <= 65535)) out.push('port');
-		if ((f.type === 'http' || f.type === 'keyword') && !/^https?:\/\/\S+$/.test(f.url.trim())) out.push('url');
+		if ((f.type === 'http' || f.type === 'keyword') && !/^https?:\/\/\S+$/.test(f.url.trim()))
+			out.push('url');
 		if (f.type === 'keyword' && !f.keyword.trim()) out.push('keyword');
 		if (!(f.interval >= 1 && f.interval <= 86400)) out.push('interval');
 		if (!(f.retry >= 10 && f.retry <= 86400)) out.push('retry');
@@ -369,7 +528,13 @@ export function checkProblems(f: CheckForm): string[] {
 
 /** The body of a check: only the fields of its type. */
 export function checkBody(f: CheckForm) {
-	const body: { [key: string]: unknown } = { name: f.name.trim(), type: f.type, integrations: f.integrations, notify_on_down: f.onDown, notify_on_up: f.onUp };
+	const body: { [key: string]: unknown } = {
+		name: f.name.trim(),
+		type: f.type,
+		integrations: f.integrations,
+		notify_on_down: f.onDown,
+		notify_on_up: f.onUp,
+	};
 	if (f.type === 'push') {
 		body.period_seconds = f.period * 60;
 		body.grace_seconds = f.grace * 60;
@@ -408,7 +573,21 @@ export function usagePercent(u: Usage | undefined): number | null {
 export function tone(state: string): 'ok' | 'warn' | 'error' | '' {
 	if (['up', 'active', 'ready', 'on'].includes(state)) return 'ok';
 	if (['down', 'failed_over', 'suspended_traffic_limit'].includes(state)) return 'error';
-	if (['warning', 'stabilizing', 'pending', 'applying', 'failover_requested', 'fallback_requested', 'disabling', 'creating', 'paused', 'pending_verification'].includes(state)) return 'warn';
+	if (
+		[
+			'warning',
+			'stabilizing',
+			'pending',
+			'applying',
+			'failover_requested',
+			'fallback_requested',
+			'disabling',
+			'creating',
+			'paused',
+			'pending_verification',
+		].includes(state)
+	)
+		return 'warn';
 	return '';
 }
 
@@ -512,7 +691,9 @@ export function assignRows(data: Pick<Assignments, 'domains' | 'assignments'>): 
 	const rows: AssignRow[] = [];
 	for (const d of [...data.domains].sort((a, b) => a.name.localeCompare(b.name))) {
 		rows.push({ name: d.name, zone: d.name, assignment: byName.get(d.name) ?? null });
-		for (const a of data.assignments.filter((x) => x.zone === d.name && x.domain !== d.name).sort((x, y) => x.domain.localeCompare(y.domain)))
+		for (const a of data.assignments
+			.filter((x) => x.zone === d.name && x.domain !== d.name)
+			.sort((x, y) => x.domain.localeCompare(y.domain)))
 			rows.push({ name: a.domain, zone: d.name, assignment: a });
 	}
 	return rows;
@@ -549,7 +730,10 @@ export type AssignForm = {
 export function assignForm(current: Assignment | null): AssignForm {
 	return {
 		kind: current ? (current.target === 'public' ? 'app' : current.target) : 'nas',
-		app: current && (current.target === 'app' || current.target === 'public') ? (current.app ?? '') : '',
+		app:
+			current && (current.target === 'app' || current.target === 'public')
+				? (current.app ?? '')
+				: '',
 		via: current?.target === 'public' ? 'public' : 'local',
 		port: current?.port ?? 0,
 		scheme: current?.scheme === 'https' ? 'https' : 'http',
@@ -569,8 +753,22 @@ export function assignBody(form: AssignForm, firewall: boolean) {
 			return { target: 'target', targetId: form.targetId };
 		default:
 			return form.via === 'public'
-				? { target: 'app', app: form.app, public: true, port: form.port, scheme: form.scheme, firewall: firewall && form.firewall, confirm: true }
-				: { target: 'app', app: form.app, port: form.port, scheme: form.scheme, localOnly: form.localOnly };
+				? {
+						target: 'app',
+						app: form.app,
+						public: true,
+						port: form.port,
+						scheme: form.scheme,
+						firewall: firewall && form.firewall,
+						confirm: true,
+					}
+				: {
+						target: 'app',
+						app: form.app,
+						port: form.port,
+						scheme: form.scheme,
+						localOnly: form.localOnly,
+					};
 	}
 }
 
@@ -580,7 +778,8 @@ export function assignProblems(form: AssignForm, hasRoute: boolean): string[] {
 	if (form.kind === 'target' && !form.targetId) out.push('target');
 	if (form.kind === 'app') {
 		if (!form.app) out.push('app');
-		else if ((form.via === 'public' || !hasRoute) && !(form.port > 0 && form.port < 65536)) out.push('port');
+		else if ((form.via === 'public' || !hasRoute) && !(form.port > 0 && form.port < 65536))
+			out.push('port');
 		if (form.via === 'public' && !form.ownLogin) out.push('ownLogin');
 	}
 	return out;

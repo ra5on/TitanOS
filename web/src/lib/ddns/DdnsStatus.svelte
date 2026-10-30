@@ -2,9 +2,8 @@
 	// The state of dynamic DNS: found and published addresses, the last and
 	// next look, the last error and "Update now". Shared by Settings ›
 	// Dynamic DNS and Settings › IPv64 › DynDNS.
-	import { ApiError } from '#lib/api.ts';
 	import { formatDateTime } from '#lib/format.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { revealTarget } from '#lib/reveal-target.ts';
 	import { ddnsBadge, updateNow, type DdnsStatus } from './ddns.ts';
 
@@ -32,7 +31,7 @@
 			onstatus(await updateNow());
 			setTimeout(onrefresh, 3000);
 		} catch (err) {
-			updateError = errorText(err instanceof ApiError ? err.code : 'internal');
+			updateError = apiErrorText(err);
 		}
 	}
 </script>
@@ -43,18 +42,45 @@
 	{#if status.disabled}<p class="notice-warn">{t('ddns.devMode')}</p>{/if}
 	<p class="muted">{intro}</p>
 	<dl>
-		<div><dt>{t('ddns.currentIPv4')}</dt><dd class="mono">{status.currentIPv4 || '–'}</dd></div>
-		<div><dt>{t('ddns.currentIPv6')}</dt><dd class="mono">{status.currentIPv6 || '–'}</dd></div>
-		<div><dt>{t('ddns.publishedIPv4')}</dt><dd class="mono">{status.publishedIPv4 || '–'}</dd></div>
-		<div><dt>{t('ddns.publishedIPv6')}</dt><dd class="mono">{status.publishedIPv6 || '–'}</dd></div>
-		<div><dt>{t('ddns.lastCheck')}</dt><dd>{when(status.lastCheck)}</dd></div>
-		<div><dt>{t('ddns.lastUpdate')}</dt><dd>{when(status.lastUpdate)}</dd></div>
-		{#if status.nextCheck}<div><dt>{t('ddns.nextCheck')}</dt><dd>{when(status.nextCheck)}</dd></div>{/if}
+		<div>
+			<dt>{t('ddns.currentIPv4')}</dt>
+			<dd class="mono">{status.currentIPv4 || '–'}</dd>
+		</div>
+		<div>
+			<dt>{t('ddns.currentIPv6')}</dt>
+			<dd class="mono">{status.currentIPv6 || '–'}</dd>
+		</div>
+		<div>
+			<dt>{t('ddns.publishedIPv4')}</dt>
+			<dd class="mono">{status.publishedIPv4 || '–'}</dd>
+		</div>
+		<div>
+			<dt>{t('ddns.publishedIPv6')}</dt>
+			<dd class="mono">{status.publishedIPv6 || '–'}</dd>
+		</div>
+		<div>
+			<dt>{t('ddns.lastCheck')}</dt>
+			<dd>{when(status.lastCheck)}</dd>
+		</div>
+		<div>
+			<dt>{t('ddns.lastUpdate')}</dt>
+			<dd>{when(status.lastUpdate)}</dd>
+		</div>
+		{#if status.nextCheck}<div>
+				<dt>{t('ddns.nextCheck')}</dt>
+				<dd>{when(status.nextCheck)}</dd>
+			</div>{/if}
 	</dl>
-	{#if status.lastError}<div class="notice-error" role="alert">{t('ddns.lastError')}<pre>{status.lastError}</pre></div>{/if}
+	{#if status.lastError}<div class="notice-error" role="alert">
+			{t('ddns.lastError')}
+			<pre>{status.lastError}</pre>
+		</div>{/if}
 	<div class="row-actions">
-		<button type="button" class="btn" disabled={!status.settings.enabled || status.running || status.disabled} onclick={update}
-			>{t('ddns.updateNow')}</button
+		<button
+			type="button"
+			class="btn"
+			disabled={!status.settings.enabled || status.running || status.disabled}
+			onclick={update}>{t('ddns.updateNow')}</button
 		>
 		<button type="button" class="btn" onclick={onrefresh}>{t('ddns.refresh')}</button>
 	</div>

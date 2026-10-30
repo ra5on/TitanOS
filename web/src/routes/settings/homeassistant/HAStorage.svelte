@@ -3,10 +3,10 @@
 	// Assistant OS mounts as network storage for backups, media or add-ons,
 	// all with one account of its own. TitanOS can enter them there itself
 	// and watches the backups.
-	import { api, ApiError } from '#lib/api.ts';
+	import { api } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { formatDateTime } from '#lib/format.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 
 	type Usage = 'backup' | 'media' | 'share';
 	type Backup = {
@@ -76,9 +76,6 @@
 			register: true,
 		};
 	}
-	function failure(err: unknown) {
-		return errorText(err instanceof ApiError ? err.code : 'internal');
-	}
 	function take(next: Status) {
 		// Older titand (and the development mode without volumes) may send null.
 		next.volumes ??= [];
@@ -91,7 +88,7 @@
 		try {
 			take(await api.get<Status>('/homeassistant/storage'));
 		} catch (err) {
-			loadError = failure(err);
+			loadError = apiErrorText(err);
 		}
 	}
 	$effect(() => {
@@ -105,7 +102,7 @@
 		try {
 			return await call();
 		} catch (err) {
-			error = failure(err);
+			error = apiErrorText(err);
 			return null;
 		} finally {
 			busy = '';
@@ -218,7 +215,7 @@
 				.map((entry) => entry.name)
 				.sort((a, b) => a.localeCompare(b));
 		} catch (err) {
-			pickError = failure(err);
+			pickError = apiErrorText(err);
 		}
 	}
 	function openPicker() {

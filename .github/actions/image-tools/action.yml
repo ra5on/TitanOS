@@ -15,13 +15,13 @@ runs:
         echo "mkosi-source=$(jq -er .mkosi.source "$lock")" >> "$GITHUB_OUTPUT"
         echo "mkosi-commit=$(jq -er .mkosi.commit "$lock")" >> "$GITHUB_OUTPUT"
 
-    - uses: actions/setup-node@v7
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version: ${{ steps.lock.outputs.node }}
         cache: npm
         cache-dependency-path: web/package-lock.json
 
-    - uses: actions/setup-go@v7
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
         go-version: ${{ steps.lock.outputs.go }}
         cache-dependency-path: backend/go.sum

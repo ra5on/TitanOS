@@ -1,7 +1,7 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # Sign an already packed release. Only the protected publish job gets the key.
 # Locally minisign asks for the password; CI sets MINISIGN_PASSWORD.
-set -eu
+set -euo pipefail
 release=${1:?usage: sign-release.sh <release directory> <secret key>}
 key=${2:?usage: sign-release.sh <release directory> <secret key>}
 version=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$release/manifest.json")

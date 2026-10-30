@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { api, ApiError } from '#lib/api.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { api } from '#lib/api.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 
 	type Props = {
 		share: string;
@@ -19,30 +19,45 @@
 	let failed = $state<Record<string, string>>({});
 
 	const join = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
-	const listed = $derived(mode === 'only' ? folders : skip.filter((s) => s.startsWith(`${share}/`)).map((s) => s.slice(share.length + 1)));
+	const listed = $derived(
+		mode === 'only'
+			? folders
+			: skip.filter((s) => s.startsWith(`${share}/`)).map((s) => s.slice(share.length + 1)),
+	);
 	const under = (path: string, parent: string) => path.startsWith(`${parent}/`);
 	/** A folder above this one is already chosen (mode only) or left out (mode all). */
 	const inherited = (path: string) => listed.some((p) => under(path, p));
-	const checked = (path: string) => (mode === 'only' ? listed.includes(path) || inherited(path) : !listed.includes(path) && !inherited(path));
+	const checked = (path: string) =>
+		mode === 'only'
+			? listed.includes(path) || inherited(path)
+			: !listed.includes(path) && !inherited(path);
 
 	function toggle(path: string) {
 		if (inherited(path)) return;
 		const own = listed.includes(path);
 		// Choosing or leaving out a folder covers what is below it.
-		const next = own ? listed.filter((p) => p !== path) : [...listed.filter((p) => !under(p, path)), path];
+		const next = own
+			? listed.filter((p) => p !== path)
+			: [...listed.filter((p) => !under(p, path)), path];
 		if (mode === 'only') onchange(next, skip);
-		else onchange(folders, [...skip.filter((s) => !s.startsWith(`${share}/`)), ...next.map((p) => `${share}/${p}`)]);
+		else
+			onchange(folders, [
+				...skip.filter((s) => !s.startsWith(`${share}/`)),
+				...next.map((p) => `${share}/${p}`),
+			]);
 	}
 
 	async function expand(dir: string) {
 		open[dir] = !open[dir];
 		if (!open[dir] || children[dir]) return;
 		try {
-			const res = await api.get<{ folders: string[] }>(`/backups/folders?share=${encodeURIComponent(share)}&dir=${encodeURIComponent(dir)}`);
+			const res = await api.get<{ folders: string[] }>(
+				`/backups/folders?share=${encodeURIComponent(share)}&dir=${encodeURIComponent(dir)}`,
+			);
 			children[dir] = res.folders;
 			delete failed[dir];
 		} catch (e) {
-			failed[dir] = errorText(e instanceof ApiError ? e.code : 'internal');
+			failed[dir] = apiErrorText(e);
 		}
 	}
 
@@ -55,8 +70,21 @@
 	{#each children[dir] ?? [] as name (name)}
 		{@const path = join(dir, name)}
 		<div class="node" style:padding-left="{depth * 1.25}rem">
-			<button type="button" class="arrow" aria-expanded={!!open[path]} aria-label={t('backup.openFolder', { name })} onclick={() => expand(path)}>{open[path] ? '▾' : '▸'}</button>
-			<label class="check"><input type="checkbox" checked={checked(path)} disabled={inherited(path)} onchange={() => toggle(path)} /><span class="mono">{name}</span></label>
+			<button
+				type="button"
+				class="arrow"
+				aria-expanded={!!open[path]}
+				aria-label={t('backup.openFolder', { name })}
+				onclick={() => expand(path)}>{open[path] ? '▾' : '▸'}</button
+			>
+			<label class="check"
+				><input
+					type="checkbox"
+					checked={checked(path)}
+					disabled={inherited(path)}
+					onchange={() => toggle(path)}
+				/><span class="mono">{name}</span></label
+			>
 		</div>
 		{#if open[path]}{@render level(path, depth + 1)}{/if}
 	{/each}
@@ -67,8 +95,30 @@
 </div>
 
 <style>
-	.tree { max-height: 18rem; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-ctl); padding: 0.4rem 0.6rem; }
-	.node { display: flex; align-items: center; gap: 0.25rem; min-height: 1.8rem; }
-	.arrow { background: none; border: 0; color: var(--muted); cursor: pointer; width: 1.4rem; padding: 0; }
-	.check { display: flex; align-items: center; gap: 0.4rem; }
+	.tree {
+		max-height: 18rem;
+		overflow: auto;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-ctl);
+		padding: 0.4rem 0.6rem;
+	}
+	.node {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		min-height: 1.8rem;
+	}
+	.arrow {
+		background: none;
+		border: 0;
+		color: var(--muted);
+		cursor: pointer;
+		width: 1.4rem;
+		padding: 0;
+	}
+	.check {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+	}
 </style>

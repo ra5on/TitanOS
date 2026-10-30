@@ -2,8 +2,7 @@
 	// First start: create the owner account. The assistant at /welcome
 	// takes over from there (name of the NAS, time zone, what to do next).
 	import { goto } from '$app/navigation';
-	import { ApiError } from '#lib/api.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { session, setupOwner } from '#lib/session.svelte.ts';
 	import AuthCard from './AuthCard.svelte';
 	import Restore from './Restore.svelte';
@@ -39,7 +38,7 @@
 			await setupOwner(wanted, password);
 			await goto('/welcome');
 		} catch (err) {
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
+			error = apiErrorText(err);
 		} finally {
 			busy = false;
 		}
@@ -53,17 +52,41 @@
 		<label>
 			<span>{t('auth.name')}</span>
 			<!-- svelte-ignore a11y_autofocus -->
-			<input class="field" type="text" bind:value={name} autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="32" required autofocus aria-describedby="name-hint" />
+			<input
+				class="field"
+				type="text"
+				bind:value={name}
+				autocomplete="username"
+				autocapitalize="none"
+				spellcheck="false"
+				maxlength="32"
+				required
+				autofocus
+				aria-describedby="name-hint"
+			/>
 			<small id="name-hint">{t('auth.nameHint')}</small>
 		</label>
 		<label>
 			<span>{t('auth.password')}</span>
-			<input class="field" type="password" bind:value={password} autocomplete="new-password" required aria-describedby="password-hint" />
+			<input
+				class="field"
+				type="password"
+				bind:value={password}
+				autocomplete="new-password"
+				required
+				aria-describedby="password-hint"
+			/>
 			<small id="password-hint">{t('auth.passwordHint', { min: MIN_PASSWORD_LENGTH })}</small>
 		</label>
 		<label>
 			<span>{t('auth.passwordRepeat')}</span>
-			<input class="field" type="password" bind:value={repeat} autocomplete="new-password" required />
+			<input
+				class="field"
+				type="password"
+				bind:value={repeat}
+				autocomplete="new-password"
+				required
+			/>
 		</label>
 		{#if error}<p class="notice-warn" role="alert">{error}</p>{/if}
 		<button class="btn btn-primary" type="submit" disabled={busy}>{t('auth.createOwner')}</button>

@@ -4,14 +4,39 @@ package run
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
-// Runner runs a system command and returns what it printed.
+// Runner runs a system command and returns what it printed on stdout.
+//
+// What the command printed on stderr never ends up in the returned string,
+// so warnings cannot sneak into parsed values (a UUID, JSON). On failure
+// the returned string is still stdout only; the error is a *CommandError
+// whose Output carries stderr and stdout for messages and logs.
 type Runner interface {
 	Run(ctx context.Context, stdin string, name string, args ...string) (string, error)
+}
+
+// CombinedRunner also runs a command with stdout and stderr in one string,
+// for output that is shown to people as it is (job logs, diagnostics) and
+// never parsed.
+type CombinedRunner interface {
+	RunCombined(ctx context.Context, stdin string, name string, args ...string) (string, error)
+}
+
+// Combined runs a command through r and returns stdout and stderr together
+// when r can do that, otherwise what r.Run returns. Test fakes usually only
+// implement Run and take the second path.
+func Combined(ctx context.Context, r Runner, stdin string, name string, args ...string) (string, error) {
+	if c, ok := r.(CombinedRunner); ok {
+		return c.RunCombined(ctx, stdin, name, args...)
+	}
+	return r.Run(ctx, stdin, name, args...)
 }
 
 // Exec runs commands on the real system.
@@ -22,18 +47,32 @@ func (Exec) Run(ctx context.Context, stdin string, name string, args ...string) 
 	if stdin != "" {
 		cmd.Stdin = strings.NewReader(stdin)
 	}
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return string(output), &CommandError{Command: name + " " + strings.Join(args, " "), Output: strings.TrimSpace(string(output)), Err: err}
+	return separate(ctx, cmd, name, args)
+}
+
+// RunCombined runs a command and returns stdout and stderr interleaved, as
+// the terminal would show them. Only for output that is not parsed.
+func (Exec) RunCombined(ctx context.Context, stdin string, name string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	if stdin != "" {
+		cmd.Stdin = strings.NewReader(stdin)
 	}
-	return string(output), nil
+	var output bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &output, &output
+	if err := wait(ctx, cmd); err != nil {
+		if errors.Is(err, ErrAbandoned) {
+			return "", &CommandError{Command: commandLine(name, args), Err: err}
+		}
+		return output.String(), &CommandError{Command: commandLine(name, args), Output: strings.TrimSpace(output.String()), Err: err}
+	}
+	return output.String(), nil
 }
 
 // RunSecret runs a command that needs secrets, such as the passphrase of an
 // encrypted volume. stdin is fed as given; each entry of extra is readable
 // on its own descriptor, the first as /dev/fd/3. Secrets never appear on
 // the command line, and a CommandError carries only the arguments and what
-// the command printed, never its input.
+// the command printed, never its input. Like Run, it returns stdout only.
 func (Exec) RunSecret(ctx context.Context, stdin []byte, extra [][]byte, name string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	if stdin != nil {
@@ -60,11 +99,74 @@ func (Exec) RunSecret(ctx context.Context, stdin []byte, extra [][]byte, name st
 			w.Close()
 		}(w, secret)
 	}
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return string(output), &CommandError{Command: name + " " + strings.Join(args, " "), Output: strings.TrimSpace(string(output)), Err: err}
+	return separate(ctx, cmd, name, args)
+}
+
+// abandonAfter is how long a command may take to end once its context is
+// done before Run gives up waiting for it (replaced in tests).
+var abandonAfter = 15 * time.Second
+
+// ErrAbandoned says that a command did not end after its context was done
+// and was left behind: typically a process stuck in uninterruptible sleep
+// (D state) on a hanging disk, which not even SIGKILL ends. The caller can
+// go on; the process stays until the kernel lets it go.
+var ErrAbandoned = errors.New("run: command did not end after it was cancelled and was left behind")
+
+// separate runs cmd with stdout and stderr in their own buffers.
+func separate(ctx context.Context, cmd *exec.Cmd, name string, args []string) (string, error) {
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := wait(ctx, cmd); err != nil {
+		if errors.Is(err, ErrAbandoned) {
+			return "", &CommandError{Command: commandLine(name, args), Err: err}
+		}
+		return stdout.String(), &CommandError{Command: commandLine(name, args), Output: joinOutput(stderr.String(), stdout.String()), Err: err}
 	}
-	return string(output), nil
+	return stdout.String(), nil
+}
+
+// wait runs cmd to its end. When its context is done, CommandContext kills
+// the process; if it still has not ended abandonAfter later, wait returns
+// ErrAbandoned without it. The buffers of cmd must not be read then: the
+// process may still write.
+//
+// No WaitDelay: a command that ends normally while a child it left behind
+// keeps stdout open is still waited for, as before.
+func wait(ctx context.Context, cmd *exec.Cmd) error {
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+	}
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(abandonAfter):
+		return fmt.Errorf("%w: %v", ErrAbandoned, ctx.Err())
+	}
+}
+
+// joinOutput is what a failed command printed, stderr first: that is where
+// the reason usually is, while some tools (smartctl, sfdisk) explain
+// themselves on stdout.
+func joinOutput(stderr, stdout string) string {
+	stderr, stdout = strings.TrimSpace(stderr), strings.TrimSpace(stdout)
+	switch {
+	case stderr == "":
+		return stdout
+	case stdout == "":
+		return stderr
+	}
+	return stderr + "\n" + stdout
+}
+
+func commandLine(name string, args []string) string {
+	return name + " " + strings.Join(args, " ")
 }
 
 // CommandError is a failed system command, with what it printed.

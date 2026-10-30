@@ -11,13 +11,24 @@
 		code.make();
 		const count = code.getModuleCount();
 		let path = '';
-		for (let row = 0; row < count; row++) for (let column = 0; column < count; column++) if (code.isDark(row, column)) path += `M${column},${row}h1v1h-1z`;
+		for (let row = 0; row < count; row++)
+			for (let column = 0; column < count; column++)
+				if (code.isDark(row, column)) path += `M${column},${row}h1v1h-1z`;
 		return { count, path };
 	});
 </script>
 
-<svg class="qr" style:width="{size}px" style:height="{size}px" viewBox="-2 -2 {qr.count + 4} {qr.count + 4}" role="img" aria-label={label}
-	><rect x="-2" y="-2" width={qr.count + 4} height={qr.count + 4} class="paper" /><path d={qr.path} class="ink" /></svg
+<svg
+	class="qr"
+	style:width="{size}px"
+	style:height="{size}px"
+	viewBox="-2 -2 {qr.count + 4} {qr.count + 4}"
+	role="img"
+	aria-label={label}
+	><rect x="-2" y="-2" width={qr.count + 4} height={qr.count + 4} class="paper" /><path
+		d={qr.path}
+		class="ink"
+	/></svg
 >
 
 <style>

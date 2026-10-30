@@ -73,7 +73,7 @@ func TestBtrfsCreateProfiles(t *testing.T) {
 		{"raid5", []string{"sde", "sdf", "nvme0n1"}, "", false},
 	} {
 		m, runner, _ := newTestManager(t)
-		err := m.Create(context.Background(), CreateRequest{Name: "tank", Level: c.level, Filesystem: "btrfs", Disks: c.disks, Erase: c.disks})
+		err := createVolume(m, context.Background(), CreateRequest{Name: "tank", Level: c.level, Filesystem: "btrfs", Disks: c.disks, Erase: c.disks})
 		if !c.ok {
 			if err == nil || len(runner.commands) != 0 {
 				t.Errorf("%s on %v accepted or changed disks: %v %v", c.level, c.disks, err, runner.commands)
@@ -142,13 +142,13 @@ func TestAddDiskToCompleteBtrfsVolume(t *testing.T) {
 	ctx := context.Background()
 	m, runner := layoutManager(t, btrfsMember("sda"), btrfsMember("sdb"), tdisk("sdc", "C"))
 	// An old mirror without profile/devices: RAID 1 of two disks.
-	if err := m.AddBtrfsDisk(ctx, "tank", "sdc", "raid1c3", "", false); !errors.Is(err, ErrNotConfirmed) {
+	if err := m.AddBtrfsDisk(ctx, "tank", "sdc", "raid1c3", idOf(m, "sdc"), false); !errors.Is(err, ErrNotConfirmed) {
 		t.Fatal("not confirmed:", err)
 	}
-	if err := m.AddBtrfsDisk(ctx, "tank", "sdc", "raid5", "", true); !errors.Is(err, ErrInvalidLevel) {
+	if err := m.AddBtrfsDisk(ctx, "tank", "sdc", "raid5", idOf(m, "sdc"), true); !errors.Is(err, ErrInvalidLevel) {
 		t.Fatal("unknown profile:", err)
 	}
-	if err := m.AddBtrfsDisk(ctx, "tank", "sdc", "raid1c3", "", true); err != nil {
+	if err := m.AddBtrfsDisk(ctx, "tank", "sdc", "raid1c3", idOf(m, "sdc"), true); err != nil {
 		t.Fatal(err)
 	}
 	got := strings.Join(runner.btrfs, "\n")
@@ -162,7 +162,7 @@ func TestAddDiskToCompleteBtrfsVolume(t *testing.T) {
 	if !m.Reshaping() {
 		t.Fatal("a running balance must hold app updates")
 	}
-	if err := m.AddBtrfsDisk(ctx, "tank", "sdc", "", "", true); !errors.Is(err, ErrBusy) {
+	if err := m.AddBtrfsDisk(ctx, "tank", "sdc", "", idOf(m, "sdc"), true); !errors.Is(err, ErrBusy) {
 		t.Fatal("second change during the balance:", err)
 	}
 	// The balance ends: the next look says so.
@@ -178,7 +178,7 @@ func TestAddDiskReplacesMissingBtrfsMember(t *testing.T) {
 	ctx := context.Background()
 	m, runner := layoutManager(t, btrfsMember("sda"), tdisk("sdc", "C"))
 	runner.btrfsShow = "\tTotal devices 2\n\tdevid    1 size 8589934592 used 1 path /dev/sda1\n\t*** Some devices missing\n"
-	if err := m.AddDisk(ctx, "tank", "sdc", true, ""); err != nil {
+	if err := m.AddDisk(ctx, "tank", "sdc", true, idOf(m, "sdc")); err != nil {
 		t.Fatal(err)
 	}
 	if got := strings.Join(runner.btrfs, "\n"); !strings.Contains(got, "replace start 2 /dev/sdc1") || strings.Contains(got, "device add") {

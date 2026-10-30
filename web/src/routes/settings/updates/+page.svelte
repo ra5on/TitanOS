@@ -1,6 +1,7 @@
 <script lang="ts">
 	// Updates: a new version goes into the other slot of the stick and
 	// starts on trial; the one before stays as the fallback.
+	import { poll } from '#lib/poll.ts';
 	import { api, ApiError } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
@@ -9,9 +10,30 @@
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 
 	/** checkEvery: minutes between automatic checks; 0 or missing is once a day, -1 manual only. */
-	type Settings = { channel: 'stable' | 'beta'; autoInstall: boolean; installTime: string; checkEvery?: number };
-	type Manifest = { version: string; channel: string; kernel: string; released: string; minVersion?: string; changelog: string; files: { size: number }[]; app?: { base: string; size: number } };
-	type Slot = { name: string; version: string; running: boolean; complete: boolean; next: boolean; triesLeft: number | null };
+	type Settings = {
+		channel: 'stable' | 'beta';
+		autoInstall: boolean;
+		installTime: string;
+		checkEvery?: number;
+	};
+	type Manifest = {
+		version: string;
+		channel: string;
+		kernel: string;
+		released: string;
+		minVersion?: string;
+		changelog: string;
+		files: { size: number }[];
+		app?: { base: string; size: number };
+	};
+	type Slot = {
+		name: string;
+		version: string;
+		running: boolean;
+		complete: boolean;
+		next: boolean;
+		triesLeft: number | null;
+	};
 	type Status = {
 		version: string;
 		release: boolean;
@@ -23,7 +45,15 @@
 		/** When the next automatic check is due; null with manual checks or none scheduled. */
 		nextCheck: string | null;
 		checkError: string;
-		progress: { phase: '' | 'download' | 'switch' | 'restart' | 'done' | 'failed'; file: string; percent: number; speedBytesPerSecond: number; error: string };
+		progress: {
+			phase: '' | 'download' | 'switch' | 'restart' | 'done' | 'failed';
+			file: string;
+			percent: number;
+			speedBytesPerSecond: number;
+			error: string;
+			/** No room on the stick next to the old version: the fallback slot was emptied. */
+			fallbackRemoved?: boolean;
+		};
 		pending: { kind: 'update' | 'rollback'; version: string; slot: string } | null;
 		canRollback: boolean;
 		unconfirmed: boolean;
@@ -46,7 +76,7 @@
 	let encrypted = $state<string[]>([]);
 	const beforeEncryption = (target: string) => {
 		const [major, minor] = target.replace(/^v/, '').split('.').map(Number);
-		return Number.isInteger(major) && Number.isInteger(minor) && (major === 0 && minor < 31);
+		return Number.isInteger(major) && Number.isInteger(minor) && major === 0 && minor < 31;
 	};
 	$effect(() => {
 		if (asking !== 'rollback') return;
@@ -60,7 +90,14 @@
 
 	function problem(err: unknown) {
 		const code = err instanceof ApiError ? err.code : 'internal';
-		error = { text: errorText(code), detail: ['update_failed', 'update_too_old', 'update_no_space'].includes(code) && err instanceof ApiError ? err.message : '' };
+		error = {
+			text: errorText(code),
+			detail:
+				['update_failed', 'update_too_old', 'update_no_space'].includes(code) &&
+				err instanceof ApiError
+					? err.message
+					: '',
+		};
 	}
 
 	// How often to look, as the server keeps it (minutes): presets, or a
@@ -90,8 +127,17 @@
 		}
 	}
 
-	const chosenEvery = $derived(mode === 'manual' ? MANUAL : mode === 'custom' ? Math.round(amount * (unit === 'days' ? 24 * 60 : 60)) : Number(mode));
-	const customInvalid = $derived(mode === 'custom' && (!Number.isFinite(amount) || chosenEvery < MIN_EVERY || chosenEvery > MAX_EVERY));
+	const chosenEvery = $derived(
+		mode === 'manual'
+			? MANUAL
+			: mode === 'custom'
+				? Math.round(amount * (unit === 'days' ? 24 * 60 : 60))
+				: Number(mode),
+	);
+	const customInvalid = $derived(
+		mode === 'custom' &&
+			(!Number.isFinite(amount) || chosenEvery < MIN_EVERY || chosenEvery > MAX_EVERY),
+	);
 	const manual = $derived(mode === 'manual');
 
 	// Applies the choice to the draft. Installing by itself needs automatic
@@ -140,14 +186,18 @@
 		}
 	}
 
-	const working = $derived(status?.progress.phase === 'download' || status?.progress.phase === 'switch' || status?.progress.phase === 'restart' || !!restartFrom);
+	const working = $derived(
+		status?.progress.phase === 'download' ||
+			status?.progress.phase === 'switch' ||
+			status?.progress.phase === 'restart' ||
+			!!restartFrom,
+	);
 	$effect(() => {
 		if (status?.progress.phase === 'restart' && !restartFrom) restartFrom = status.version;
 	});
 	$effect(() => {
-		load();
-		const timer = setInterval(() => !document.hidden && load(), working ? 1500 : 15_000);
-		return () => clearInterval(timer);
+		const fast = working;
+		return poll(load, { interval: fast ? 1500 : 15_000 });
 	});
 
 	async function act(action: 'check' | 'install' | 'rollback' | 'cancel' | 'app-rollback') {
@@ -166,18 +216,26 @@
 		busy = '';
 	}
 
-	const changed = $derived(!!status && !!draft && JSON.stringify(draft) !== JSON.stringify(status.settings));
+	const changed = $derived(
+		!!status && !!draft && JSON.stringify(draft) !== JSON.stringify(status.settings),
+	);
 	// The next check belongs to the saved interval; it is hidden while
 	// another one is chosen but not saved yet.
-	const nextCheck = $derived(status?.nextCheck && draft && (draft.checkEvery ?? 0) === (status.settings.checkEvery ?? 0) ? new Date(status.nextCheck) : null);
+	const nextCheck = $derived(
+		status?.nextCheck && draft && (draft.checkEvery ?? 0) === (status.settings.checkEvery ?? 0)
+			? new Date(status.nextCheck)
+			: null,
+	);
 	async function save(event: SubmitEvent) {
 		event.preventDefault();
 		if (!draft) return;
-		busy = 'save'; saved = false;
+		busy = 'save';
+		saved = false;
 		error = null;
 		try {
 			take(await api.put<Status>('/update/settings', draft));
-			draft = { ...status!.settings }; saved = true;
+			draft = { ...status!.settings };
+			saved = true;
 			showEvery(draft.checkEvery ?? 0);
 		} catch (err) {
 			problem(err);
@@ -186,9 +244,15 @@
 	}
 
 	const appUpdate = $derived(status?.kind === 'app' && !!status.available?.app);
-	const size = $derived(appUpdate ? (status?.available?.app?.size ?? 0) : (status?.available?.files.reduce((sum, file) => sum + file.size, 0) ?? 0));
+	const size = $derived(
+		appUpdate
+			? (status?.available?.app?.size ?? 0)
+			: (status?.available?.files.reduce((sum, file) => sum + file.size, 0) ?? 0),
+	);
 	// Where going back from an app update leads: the app before, or the titand of the system image.
-	const appTarget = $derived(status?.app.previous || (status ? t('update.app.base', { version: status.base }) : ''));
+	const appTarget = $derived(
+		status?.app.previous || (status ? t('update.app.base', { version: status.base }) : ''),
+	);
 	const other = $derived(status?.slots.find((slot) => !slot.running));
 
 	function slotState(slot: Slot): string {
@@ -201,7 +265,9 @@
 
 <PageHead title={t('update.title')} parent={{ href: '/settings', label: t('nav.settings') }} />
 
-{#if error}<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>{/if}
+{#if error}<div class="notice-error" role="alert">
+		{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
+	</div>{/if}
 
 {#if status && draft}
 	<section class="tile panel" aria-labelledby="upd-now">
@@ -209,16 +275,29 @@
 			<h2 class="tile-title" id="upd-now">{t('update.installed')}</h2>
 			{#if !status.release}<span class="chip warn">{t('update.devBuild')}</span>{/if}
 		</div>
-		<p class="version"><span class="mono">TitanOS {status.version}</span>{#if status.base && status.base !== status.version}<span class="muted base">{t('update.app.onBase', { version: status.base })}</span>{/if}</p>
-		{#if restartedTo}<p class="notice-ok" role="status">{t('update.app.restarted', { version: restartedTo })}</p>{/if}
+		<p class="version">
+			<span class="mono">TitanOS {status.version}</span
+			>{#if status.base && status.base !== status.version}<span class="muted base"
+					>{t('update.app.onBase', { version: status.base })}</span
+				>{/if}
+		</p>
+		{#if restartedTo}<p class="notice-ok" role="status">
+				{t('update.app.restarted', { version: restartedTo })}
+			</p>{/if}
 		{#if status.app.trial}<p class="notice-warn" role="status">{t('update.app.trial')}</p>{/if}
 
 		{#if status.pending}
 			<div class="notice-ok" role="status">
-				{t(status.pending.kind === 'rollback' ? 'update.pendingRollback' : 'update.pendingUpdate', { version: status.pending.version })}
+				{t(status.pending.kind === 'rollback' ? 'update.pendingRollback' : 'update.pendingUpdate', {
+					version: status.pending.version,
+				})}
 				<div class="row">
-					<button type="button" class="btn btn-primary" onclick={() => (restarting = true)}>{t('update.restartNow')}</button>
-					<button type="button" class="btn" disabled={busy !== ''} onclick={() => act('cancel')}>{t('update.cancel')}</button>
+					<button type="button" class="btn btn-primary" onclick={() => (restarting = true)}
+						>{t('update.restartNow')}</button
+					>
+					<button type="button" class="btn" disabled={busy !== ''} onclick={() => act('cancel')}
+						>{t('update.cancel')}</button
+					>
 				</div>
 			</div>
 		{:else if status.unconfirmed}
@@ -229,16 +308,40 @@
 			<p class="notice-warn">{t('update.noKey')}</p>
 		{:else if working}
 			<div class="progress">
-				<div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(status.progress.percent)} aria-label={t('update.downloading')}><span style:width="{status.progress.percent}%"></span></div>
+				<div
+					class="bar"
+					role="progressbar"
+					aria-valuemin="0"
+					aria-valuemax="100"
+					aria-valuenow={Math.round(status.progress.percent)}
+					aria-label={t('update.downloading')}
+				>
+					<span style:width="{status.progress.percent}%"></span>
+				</div>
 				<p class="muted">
 					{#if status.progress.phase === 'download'}
-						{t('update.downloading')}{' · '}<span class="mono">{status.progress.percent.toFixed(0)} % · {(status.progress.speedBytesPerSecond / 1e6).toFixed(1)} MB/s</span>
+						{t('update.downloading')}{' · '}<span class="mono"
+							>{status.progress.percent.toFixed(0)} % · {(
+								status.progress.speedBytesPerSecond / 1e6
+							).toFixed(1)} MB/s</span
+						>
 					{:else if status.progress.phase === 'restart' || restartFrom}{t('update.app.restarting')}
 					{:else}{t('update.switching')}{/if}
 				</p>
+				{#if status.progress.fallbackRemoved}<p class="notice-warn" role="status">
+						{t('update.fallbackRemoved')}
+					</p>{/if}
 			</div>
 		{:else if status.progress.phase === 'failed'}
-			<div class="notice-error" role="alert">{t('update.failed')}<pre>{status.progress.error}</pre></div>
+			<div class="notice-error" role="alert">
+				{t('update.failed')}
+				<pre>{status.progress.error}</pre>
+				{#if status.progress.fallbackRemoved}<p>
+						<strong>{t('update.fallbackRemovedFailed')}</strong>
+					</p>{/if}
+			</div>
+		{:else if status.progress.phase === 'done' && status.progress.fallbackRemoved}
+			<p class="notice-warn" role="status">{t('update.fallbackRemoved')}</p>
 		{/if}
 
 		{#if status.available && !status.pending && !working}
@@ -247,20 +350,44 @@
 					<span class="name">TitanOS {status.available.version}</span>
 					<span class="chips">
 						{#if appUpdate}<span class="chip ok">{t('update.app.noRestart')}</span>{/if}
-						<span class="chip info">{t(status.available.channel === 'beta' ? 'update.channel.beta' : 'update.channel.stable')}</span>
+						<span class="chip info"
+							>{t(
+								status.available.channel === 'beta'
+									? 'update.channel.beta'
+									: 'update.channel.stable',
+							)}</span
+						>
 					</span>
 				</div>
-				<p class="muted">{t('update.availableMeta', { date: formatDateTime(new Date(status.available.released)), kernel: status.available.kernel, size: formatBytes(size) })}</p>
-				{#if status.available.changelog}<pre class="changelog">{status.available.changelog}</pre>{/if}
-				<div><button type="button" class="btn btn-primary" disabled={busy !== '' || status.unconfirmed || status.app.trial} onclick={() => (asking = 'install')}>{t('update.install')}</button></div>
+				<p class="muted">
+					{t('update.availableMeta', {
+						date: formatDateTime(new Date(status.available.released)),
+						kernel: status.available.kernel,
+						size: formatBytes(size),
+					})}
+				</p>
+				{#if status.available.changelog}<pre class="changelog">{status.available
+							.changelog}</pre>{/if}
+				<div>
+					<button
+						type="button"
+						class="btn btn-primary"
+						disabled={busy !== '' || status.unconfirmed || status.app.trial}
+						onclick={() => (asking = 'install')}>{t('update.install')}</button
+					>
+				</div>
 			</div>
 		{:else if status.canVerify && !status.pending && !working}
 			<div class="row">
-				<button type="button" class="btn" disabled={busy !== ''} onclick={() => act('check')}>{t(busy === 'check' ? 'update.checking' : 'update.check')}</button>
+				<button type="button" class="btn" disabled={busy !== ''} onclick={() => act('check')}
+					>{t(busy === 'check' ? 'update.checking' : 'update.check')}</button
+				>
 				<span class="muted" role="status">
 					{#if status.checkError}{t('update.checkFailed')}
 					{:else if checked}{t('update.upToDate')}
-					{:else if status.lastCheck}{t('update.lastCheck', { time: formatDateTime(new Date(status.lastCheck)) })}{/if}
+					{:else if status.lastCheck}{t('update.lastCheck', {
+							time: formatDateTime(new Date(status.lastCheck)),
+						})}{/if}
 				</span>
 			</div>
 			{#if status.checkError}<pre class="muted">{status.checkError}</pre>{/if}
@@ -272,48 +399,96 @@
 			<h2 class="tile-title" id="upd-app">{t('update.app.title')}</h2>
 			<p class="muted">{t('update.app.text', { version: status.base })}</p>
 			<ul class="slots">
-				<li><span class="name">{t('update.app.running')}</span><span class="mono">{status.app.current || t('update.app.base', { version: status.base })}</span></li>
-				{#if status.app.previous}<li><span class="name">{t('update.app.previous')}</span><span class="mono">{status.app.previous}</span></li>{/if}
+				<li>
+					<span class="name">{t('update.app.running')}</span><span class="mono"
+						>{status.app.current || t('update.app.base', { version: status.base })}</span
+					>
+				</li>
+				{#if status.app.previous}<li>
+						<span class="name">{t('update.app.previous')}</span><span class="mono"
+							>{status.app.previous}</span
+						>
+					</li>{/if}
 			</ul>
 			{#if status.app.canRollback && !status.pending}
-				<div><button type="button" class="btn" disabled={busy !== '' || working} onclick={() => (asking = 'app-rollback')}>{t('update.app.rollback', { target: appTarget })}</button></div>
+				<div>
+					<button
+						type="button"
+						class="btn"
+						disabled={busy !== '' || working}
+						onclick={() => (asking = 'app-rollback')}
+						>{t('update.app.rollback', { target: appTarget })}</button
+					>
+				</div>
 			{/if}
 		</section>
 	{/if}
 
 	{#if status.slots.length > 0}
-	<section class="tile panel" aria-labelledby="upd-slots">
-		<h2 class="tile-title" id="upd-slots">{t('update.slots')}</h2>
-		<p class="muted">{t('update.slotsText')}</p>
-		<ul class="slots">
-			{#each status.slots as slot (slot.name)}
-				<li>
-					<span class="mono name">{t('update.slot', { name: slot.name.toUpperCase() })}</span>
-					<span class="mono">{slot.complete || slot.running ? slot.version || '–' : '–'}</span>
-					<span class="grow muted">{slotState(slot)}{#if slot.triesLeft !== null && slot.triesLeft > 0}{' · '}{t('update.slot.tries', { count: slot.triesLeft })}{/if}</span>
-				</li>
-			{/each}
-		</ul>
-		{#if status.canRollback && !status.pending && other}
-			<div><button type="button" class="btn" disabled={busy !== '' || working} onclick={() => (asking = 'rollback')}>{t('update.rollback', { version: other.version || '?' })}</button></div>
-		{/if}
-	</section>
+		<section class="tile panel" aria-labelledby="upd-slots">
+			<h2 class="tile-title" id="upd-slots">{t('update.slots')}</h2>
+			<p class="muted">{t('update.slotsText')}</p>
+			<ul class="slots">
+				{#each status.slots as slot (slot.name)}
+					<li>
+						<span class="mono name">{t('update.slot', { name: slot.name.toUpperCase() })}</span>
+						<span class="mono">{slot.complete || slot.running ? slot.version || '–' : '–'}</span>
+						<span class="grow muted"
+							>{slotState(slot)}{#if slot.triesLeft !== null && slot.triesLeft > 0}{' · '}{t(
+									'update.slot.tries',
+									{ count: slot.triesLeft },
+								)}{/if}</span
+						>
+					</li>
+				{/each}
+			</ul>
+			{#if status.canRollback && !status.pending && other}
+				<div>
+					<button
+						type="button"
+						class="btn"
+						disabled={busy !== '' || working}
+						onclick={() => (asking = 'rollback')}
+						>{t('update.rollback', { version: other.version || '?' })}</button
+					>
+				</div>
+			{/if}
+		</section>
 	{/if}
 
 	<form class="tile panel" onsubmit={save}>
 		<h2 class="tile-title">{t('update.settings')}</h2>
 		<p class="muted">{t('update.singleChannel')}</p>
 		<div class="interval">
-			<label class="narrow"><span>{t('update.interval')}</span>
+			<label class="narrow"
+				><span>{t('update.interval')}</span>
 				<select class="field" bind:value={mode} onchange={pickMode}>
-					{#each presets as every (every)}<option value={String(every)}>{t(`update.interval.${every}` as 'update.interval.0')}</option>{/each}
+					{#each presets as every (every)}<option value={String(every)}
+							>{t(`update.interval.${every}` as 'update.interval.0')}</option
+						>{/each}
 					<option value="custom">{t('update.interval.custom')}</option>
 					<option value="manual">{t('update.interval.manual')}</option>
 				</select>
 			</label>
 			{#if mode === 'custom'}
-				<label class="amount"><span>{t('update.interval.every')}</span><input class="field mono" type="number" min="1" max={unit === 'days' ? 30 : 720} step="1" bind:value={amount} oninput={chooseEvery} aria-invalid={customInvalid} /></label>
-				<select class="field unit" bind:value={unit} onchange={chooseEvery} aria-label={t('update.interval.unit')}>
+				<label class="amount"
+					><span>{t('update.interval.every')}</span><input
+						class="field mono"
+						type="number"
+						min="1"
+						max={unit === 'days' ? 30 : 720}
+						step="1"
+						bind:value={amount}
+						oninput={chooseEvery}
+						aria-invalid={customInvalid}
+					/></label
+				>
+				<select
+					class="field unit"
+					bind:value={unit}
+					onchange={chooseEvery}
+					aria-label={t('update.interval.unit')}
+				>
 					<option value="hours">{t('update.interval.hours')}</option>
 					<option value="days">{t('update.interval.days')}</option>
 				</select>
@@ -321,33 +496,65 @@
 		</div>
 		{#if customInvalid}<p class="notice-error" role="alert">{t('update.interval.range')}</p>{/if}
 		<p class="muted">{t(manual ? 'update.interval.manualHint' : 'update.interval.hint')}</p>
-		{#if nextCheck && !manual}<p class="muted" role="status">{nextCheck.getTime() <= Date.now() ? t('update.nextCheckSoon') : t('update.nextCheck', { time: formatDateTime(nextCheck) })}</p>{/if}
-		<label class="check"><input type="checkbox" bind:checked={draft.autoInstall} disabled={manual} /><span>{t('update.auto')}</span></label>
+		{#if nextCheck && !manual}<p class="muted" role="status">
+				{nextCheck.getTime() <= Date.now()
+					? t('update.nextCheckSoon')
+					: t('update.nextCheck', { time: formatDateTime(nextCheck) })}
+			</p>{/if}
+		<label class="check"
+			><input type="checkbox" bind:checked={draft.autoInstall} disabled={manual} /><span
+				>{t('update.auto')}</span
+			></label
+		>
 		{#if manual}
 			<p class="muted">{t('update.autoNeedsChecks')}</p>
 		{:else if draft.autoInstall}
-			<label class="narrow"><span>{t('update.autoTime')}</span><input class="field mono" type="time" bind:value={draft.installTime} required /></label>
+			<label class="narrow"
+				><span>{t('update.autoTime')}</span><input
+					class="field mono"
+					type="time"
+					bind:value={draft.installTime}
+					required
+				/></label
+			>
 			<p class="muted">{t('update.autoHint')}</p>
 		{:else}
 			<p class="muted">{t('update.manualHint')}</p>
 		{/if}
-		<div class="row-actions"><button type="submit" class="btn btn-primary" disabled={!changed || customInvalid || busy !== ''}>{t(busy === 'save' ? 'ui.saving' : 'notify.save')}</button>{#if saved && !changed}<span class="muted" role="status">{t('ui.saved')}</span>{/if}</div>
+		<div class="row-actions">
+			<button
+				type="submit"
+				class="btn btn-primary"
+				disabled={!changed || customInvalid || busy !== ''}
+				>{t(busy === 'save' ? 'ui.saving' : 'notify.save')}</button
+			>{#if saved && !changed}<span class="muted" role="status">{t('ui.saved')}</span>{/if}
+		</div>
 	</form>
 {/if}
 
 {#if asking === 'install' && status?.available}
-	<Dialog title={t('update.confirmTitle', { version: status.available.version })} onclose={() => (asking = '')}>
-		<p>{t(appUpdate ? 'update.app.confirmText' : 'update.confirmText', { size: formatBytes(size) })}</p>
+	<Dialog
+		title={t('update.confirmTitle', { version: status.available.version })}
+		onclose={() => (asking = '')}
+	>
+		<p>
+			{t(appUpdate ? 'update.app.confirmText' : 'update.confirmText', { size: formatBytes(size) })}
+		</p>
 		<p class="muted">{t(appUpdate ? 'update.app.confirmSafe' : 'update.confirmSafe')}</p>
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={() => (asking = '')}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-primary" onclick={() => act('install')}>{t('update.install')}</button>
+			<button type="button" class="btn btn-primary" onclick={() => act('install')}
+				>{t('update.install')}</button
+			>
 		</div>
 	</Dialog>
 {/if}
 
 {#if asking === 'rollback' && other}
-	<Dialog title={t('update.rollbackTitle', { version: other.version || '?' })} onclose={() => (asking = '')}>
+	<Dialog
+		title={t('update.rollbackTitle', { version: other.version || '?' })}
+		onclose={() => (asking = '')}
+	>
 		<p>{t('update.rollbackText')}</p>
 		<p class="notice-warn">{t('update.rollbackWarn')}</p>
 		{#if encrypted.length && beforeEncryption(other.version || '')}
@@ -357,18 +564,25 @@
 		{/if}
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={() => (asking = '')}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-primary" onclick={() => act('rollback')}>{t('update.rollbackDo')}</button>
+			<button type="button" class="btn btn-primary" onclick={() => act('rollback')}
+				>{t('update.rollbackDo')}</button
+			>
 		</div>
 	</Dialog>
 {/if}
 
 {#if asking === 'app-rollback' && status}
-	<Dialog title={t('update.app.rollbackTitle', { target: appTarget })} onclose={() => (asking = '')}>
+	<Dialog
+		title={t('update.app.rollbackTitle', { target: appTarget })}
+		onclose={() => (asking = '')}
+	>
 		<p>{t('update.app.rollbackText')}</p>
 		<p class="notice-warn">{t('update.rollbackWarn')}</p>
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={() => (asking = '')}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-primary" onclick={() => act('app-rollback')}>{t('update.rollbackDo')}</button>
+			<button type="button" class="btn btn-primary" onclick={() => act('app-rollback')}
+				>{t('update.rollbackDo')}</button
+			>
 		</div>
 	</Dialog>
 {/if}

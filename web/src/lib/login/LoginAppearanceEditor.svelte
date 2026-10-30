@@ -3,16 +3,22 @@
 	// owners and administrators. Saved on its own, independent of "Apply" for
 	// the account's appearance.
 	import { onDestroy, onMount } from 'svelte';
-	import { api, ApiError } from '#lib/api.ts';
+	import { api } from '#lib/api.ts';
 	import Slider from '#lib/components/Slider.svelte';
 	import EffectSlider from '#lib/dashboard/EffectSlider.svelte';
 	import { BACKGROUND_IDS } from '#lib/dashboard/visual.ts';
-	import { errorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import Login from '#lib/pages/Login.svelte';
 	import { session } from '#lib/session.svelte.ts';
 	import { appearance } from '#lib/theme/appearance.svelte.ts';
 	import { isHex, type Hex } from '#lib/theme/color.ts';
-	import { ACCENT_IDS, ACCENTS, LIMITS, resolvePalette, SURFACE_STYLES } from '#lib/theme/themes.ts';
+	import {
+		ACCENT_IDS,
+		ACCENTS,
+		LIMITS,
+		resolvePalette,
+		SURFACE_STYLES,
+	} from '#lib/theme/themes.ts';
 	import {
 		cardContrast,
 		defaultLoginLook,
@@ -32,7 +38,7 @@
 		loginSaveBody,
 		sanitizeLoginLook,
 		type LoginLocale,
-		type LoginLook
+		type LoginLook,
 	} from './look.ts';
 	import { loadLoginLook, loginLook, PREVIEW_KEY, useLoginLook } from './state.svelte.ts';
 
@@ -78,7 +84,9 @@
 			cancelled = true;
 		};
 	});
-	const behind = $derived(picture ? (average ? dimmed(average, draft.background.dim) : null) : palette.bg);
+	const behind = $derived(
+		picture ? (average ? dimmed(average, draft.background.dim) : null) : palette.bg,
+	);
 	const ratio = $derived(behind ? cardContrast(palette, effective, behind) : 21);
 
 	// Unsaved changes reach an open preview tab right away.
@@ -114,7 +122,15 @@
 			const data = context.getImageData(0, 0, 16, 16).data;
 			const sum = [0, 0, 0];
 			for (let i = 0; i < data.length; i += 4) for (let c = 0; c < 3; c++) sum[c] += data[i + c];
-			const color = '#' + sum.map((v) => Math.round(v / (data.length / 4)).toString(16).padStart(2, '0')).join('');
+			const color =
+				'#' +
+				sum
+					.map((v) =>
+						Math.round(v / (data.length / 4))
+							.toString(16)
+							.padStart(2, '0'),
+					)
+					.join('');
 			return isHex(color) ? color.toUpperCase() : null;
 		} catch {
 			return null;
@@ -149,7 +165,12 @@
 			if (pending) URL.revokeObjectURL(pending.url);
 			pending = { file, url };
 			// Shown until saving; titand stores its own re-encoded copy.
-			draft.image = { id, width: image.naturalWidth, height: image.naturalHeight, bytes: file.size };
+			draft.image = {
+				id,
+				width: image.naturalWidth,
+				height: image.naturalHeight,
+				bytes: file.size,
+			};
 			draft.background = { ...draft.background, source: 'custom', id: '' };
 		} catch {
 			URL.revokeObjectURL(url);
@@ -162,7 +183,11 @@
 		message = null;
 		try {
 			let result: unknown = null;
-			if (!pending && isDefaultLook({ ...draft, image: null }) && (saved.image === null || removesImage)) {
+			if (
+				!pending &&
+				isDefaultLook({ ...draft, image: null }) &&
+				(saved.image === null || removesImage)
+			) {
 				await api.delete('/login-appearance');
 			} else if (pending && draft.background.source === 'custom') {
 				const form = new FormData();
@@ -180,7 +205,7 @@
 			draft = structuredClone($state.snapshot(saved));
 			message = { text: t('loginLook.saved'), warn: false };
 		} catch (err) {
-			message = { text: errorText(err instanceof ApiError ? err.code : 'internal'), warn: true };
+			message = { text: apiErrorText(err), warn: true };
 		} finally {
 			saving = false;
 		}
@@ -193,7 +218,8 @@
 		message = null;
 	}
 
-	const format = (n: number) => new Intl.NumberFormat(i18n.locale, { maximumFractionDigits: 1 }).format(n);
+	const format = (n: number) =>
+		new Intl.NumberFormat(i18n.locale, { maximumFractionDigits: 1 }).format(n);
 	const scale = $derived(frameWidth > 0 ? frameWidth / 1280 : 0.4);
 </script>
 
@@ -211,14 +237,18 @@
 	</div>
 
 	{#if ratio < 4.5}
-		<p class="notice-warn" role="status">{t('loginLook.contrastWarning', { ratio: format(ratio) + ':1' })}</p>
+		<p class="notice-warn" role="status">
+			{t('loginLook.contrastWarning', { ratio: format(ratio) + ':1' })}
+		</p>
 	{/if}
 
 	<div class="divided">
 		<label class="stack"
 			>{t('loginLook.theme')}<select class="field" bind:value={draft.theme}>
 				{#each LOGIN_THEMES as id (id)}
-					<option value={id}>{id === 'inherit' ? t('loginLook.themeInherit') : t(`theme.${id}`)}</option>
+					<option value={id}
+						>{id === 'inherit' ? t('loginLook.themeInherit') : t(`theme.${id}`)}</option
+					>
 				{/each}
 			</select></label
 		>
@@ -227,9 +257,22 @@
 		{:else}
 			<div class="accents" role="radiogroup" aria-label={t('appearance.accent')}>
 				{#each ACCENT_IDS as id (id)}
-					<button type="button" role="radio" aria-label={t(`accent.${id}`)} aria-checked={draft.accent === id} style:background={ACCENTS[id].hex} onclick={() => (draft.accent = id)}></button>
+					<button
+						type="button"
+						role="radio"
+						aria-label={t(`accent.${id}`)}
+						aria-checked={draft.accent === id}
+						style:background={ACCENTS[id].hex}
+						onclick={() => (draft.accent = id)}
+					></button>
 				{/each}
-				<input type="color" aria-label={t('appearance.customAccent')} class:picked={draft.accent === 'custom'} bind:value={draft.customAccent} oninput={() => (draft.accent = 'custom')} />
+				<input
+					type="color"
+					aria-label={t('appearance.customAccent')}
+					class:picked={draft.accent === 'custom'}
+					bind:value={draft.customAccent}
+					oninput={() => (draft.accent = 'custom')}
+				/>
 			</div>
 			<label class="stack"
 				>{t('appearance.style')}<select class="field" bind:value={draft.style}>
@@ -237,8 +280,20 @@
 				</select></label
 			>
 			{#if draft.style === 'glass'}
-				<Slider id="login-glass" label={t('appearance.transparency')} bind:value={draft.glass} limit={LIMITS.glass} unit="%" />
-				<Slider id="login-blur" label={t('appearance.blur')} bind:value={draft.blur} limit={LIMITS.blur} unit="px" />
+				<Slider
+					id="login-glass"
+					label={t('appearance.transparency')}
+					bind:value={draft.glass}
+					limit={LIMITS.glass}
+					unit="%"
+				/>
+				<Slider
+					id="login-blur"
+					label={t('appearance.blur')}
+					bind:value={draft.blur}
+					limit={LIMITS.blur}
+					unit="px"
+				/>
 				<p class="hint muted">{t('loginLook.glassHint')}</p>
 			{/if}
 		{/if}
@@ -251,7 +306,11 @@
 				value={draft.background.source}
 				onchange={(e) => {
 					const source = e.currentTarget.value as LoginLook['background']['source'];
-					draft.background = { ...draft.background, source, id: source === 'builtin' ? draft.background.id || BACKGROUND_IDS[0] : '' };
+					draft.background = {
+						...draft.background,
+						source,
+						id: source === 'builtin' ? draft.background.id || BACKGROUND_IDS[0] : '',
+					};
 					if (source === 'custom' && !draft.image) fileInput?.click();
 				}}
 			>
@@ -267,7 +326,9 @@
 						aria-checked={draft.background.id === id}
 						aria-label={t('dashboard.visual.pick', { name: t(`dashboard.bg.${id}` as MessageKey) })}
 						onclick={() => (draft.background = { ...draft.background, id })}
-						><img src={'/backgrounds/' + id + '.webp'} alt="" loading="lazy" /><span>{t(`dashboard.bg.${id}` as MessageKey)}</span></button
+						><img src={'/backgrounds/' + id + '.webp'} alt="" loading="lazy" /><span
+							>{t(`dashboard.bg.${id}` as MessageKey)}</span
+						></button
 					>
 				{/each}
 			</div>
@@ -275,13 +336,25 @@
 		{#if draft.background.source === 'custom'}
 			<div class="upload">
 				<span class="muted"
-					>{#if pending}{pending.file.name} · {t('loginLook.imagePending')}{:else if draft.image}{draft.image.width} × {draft.image.height}{:else}{t('loginLook.imageNone')}{/if}</span
+					>{#if pending}{pending.file.name} · {t(
+							'loginLook.imagePending',
+						)}{:else if draft.image}{draft.image.width} × {draft.image.height}{:else}{t(
+							'loginLook.imageNone',
+						)}{/if}</span
 				>
-				<button type="button" class="btn" onclick={() => fileInput?.click()}>{draft.image ? t('loginLook.replaceImage') : t('loginLook.chooseImage')}</button>
+				<button type="button" class="btn" onclick={() => fileInput?.click()}
+					>{draft.image ? t('loginLook.replaceImage') : t('loginLook.chooseImage')}</button
+				>
 			</div>
 			<p class="hint muted">{t('loginLook.imageHint')}</p>
 		{/if}
-		<input bind:this={fileInput} type="file" accept={LOGIN_IMAGE_TYPES.join(',')} hidden onchange={pickImage} />
+		<input
+			bind:this={fileInput}
+			type="file"
+			accept={LOGIN_IMAGE_TYPES.join(',')}
+			hidden
+			onchange={pickImage}
+		/>
 		{#if removesImage}<p class="hint muted">{t('loginLook.imageRemoved')}</p>{/if}
 		{#if draft.background.source !== 'theme'}
 			<label class="stack"
@@ -291,30 +364,69 @@
 				</select></label
 			>
 			{#if draft.background.fit === 'cover'}
-				<EffectSlider label={t('dashboard.visual.zoom')} value={draft.background.zoom} min={100} max={200} onbegin={() => {}} onchange={(v) => (draft.background.zoom = v)} />
-				<EffectSlider label={t('dashboard.visual.positionX')} value={draft.background.x} onbegin={() => {}} onchange={(v) => (draft.background.x = v)} />
-				<EffectSlider label={t('dashboard.visual.positionY')} value={draft.background.y} onbegin={() => {}} onchange={(v) => (draft.background.y = v)} />
+				<EffectSlider
+					label={t('dashboard.visual.zoom')}
+					value={draft.background.zoom}
+					min={100}
+					max={200}
+					onbegin={() => {}}
+					onchange={(v) => (draft.background.zoom = v)}
+				/>
+				<EffectSlider
+					label={t('dashboard.visual.positionX')}
+					value={draft.background.x}
+					onbegin={() => {}}
+					onchange={(v) => (draft.background.x = v)}
+				/>
+				<EffectSlider
+					label={t('dashboard.visual.positionY')}
+					value={draft.background.y}
+					onbegin={() => {}}
+					onchange={(v) => (draft.background.y = v)}
+				/>
 			{/if}
-			<EffectSlider label={t('dashboard.visual.dim')} value={draft.background.dim} max={80} onbegin={() => {}} onchange={(v) => (draft.background.dim = v)} />
+			<EffectSlider
+				label={t('dashboard.visual.dim')}
+				value={draft.background.dim}
+				max={80}
+				onbegin={() => {}}
+				onchange={(v) => (draft.background.dim = v)}
+			/>
 		{/if}
 	</div>
 
 	<div class="divided two">
 		<label class="stack"
 			>{t('loginLook.position')}<select class="field" bind:value={draft.position}>
-				{#each LOGIN_POSITIONS as id (id)}<option value={id}>{t(`loginLook.position.${id}`)}</option>{/each}
+				{#each LOGIN_POSITIONS as id (id)}<option value={id}>{t(`loginLook.position.${id}`)}</option
+					>{/each}
 			</select></label
 		>
 		<label class="stack"
 			>{t('loginLook.width')}<select class="field" bind:value={draft.width}>
-				{#each LOGIN_WIDTHS as id (id)}<option value={id}>{t(`loginLook.width.${id}`)}</option>{/each}
+				{#each LOGIN_WIDTHS as id (id)}<option value={id}>{t(`loginLook.width.${id}`)}</option
+					>{/each}
 			</select></label
 		>
 	</div>
 	<p class="hint muted">{t('loginLook.positionHint')}</p>
-	<label class="check"><input type="checkbox" checked={!draft.hideHost} onchange={(e) => (draft.hideHost = !e.currentTarget.checked)} />{t('loginLook.showHost')}</label>
-	<label class="check"><input type="checkbox" checked={!draft.hideLogo} onchange={(e) => (draft.hideLogo = !e.currentTarget.checked)} />{t('loginLook.showLogo')}</label>
-	<label class="check"><input type="checkbox" bind:checked={draft.clock} />{t('loginLook.clock')}</label>
+	<label class="check"
+		><input
+			type="checkbox"
+			checked={!draft.hideHost}
+			onchange={(e) => (draft.hideHost = !e.currentTarget.checked)}
+		/>{t('loginLook.showHost')}</label
+	>
+	<label class="check"
+		><input
+			type="checkbox"
+			checked={!draft.hideLogo}
+			onchange={(e) => (draft.hideLogo = !e.currentTarget.checked)}
+		/>{t('loginLook.showLogo')}</label
+	>
+	<label class="check"
+		><input type="checkbox" bind:checked={draft.clock} />{t('loginLook.clock')}</label
+	>
 
 	<fieldset class="divided texts">
 		<legend class="tile-title">{t('loginLook.texts')}</legend>
@@ -341,7 +453,12 @@
 						maxlength={LOGIN_NOTICE_MAX}
 						value={text.notice}
 						oninput={(e) => setText(locale, 'notice', e.currentTarget.value)}
-					/><small class="muted">{t('loginLook.count', { count: [...text.notice].length, max: LOGIN_NOTICE_MAX })}</small></label
+					/><small class="muted"
+						>{t('loginLook.count', {
+							count: [...text.notice].length,
+							max: LOGIN_NOTICE_MAX,
+						})}</small
+					></label
 				>
 			</div>
 		{/each}
@@ -349,8 +466,12 @@
 	</fieldset>
 
 	<div class="row-actions">
-		<button type="button" class="btn btn-primary" onclick={save} disabled={saving || !dirty}>{t('loginLook.save')}</button>
-		<button type="button" class="btn" onclick={reset} disabled={saving}>{t('loginLook.reset')}</button>
+		<button type="button" class="btn btn-primary" onclick={save} disabled={saving || !dirty}
+			>{t('loginLook.save')}</button
+		>
+		<button type="button" class="btn" onclick={reset} disabled={saving}
+			>{t('loginLook.reset')}</button
+		>
 		<span class="state" class:warn={message?.warn} role="status">
 			{#if message}{message.text}{:else if dirty}{t('loginLook.unsaved')}{/if}
 		</span>

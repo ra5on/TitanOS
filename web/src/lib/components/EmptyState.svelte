@@ -19,9 +19,27 @@
 			<!-- An empty hexagon box (the logo's frame), drawn with the theme colors. -->
 			<svg class="art" viewBox="0 0 120 84" width="120" height="84" aria-hidden="true">
 				<ellipse cx="60" cy="76" rx="40" ry="5" fill="var(--track)" />
-				<path d="M60 8 92 26v34L60 78 28 60V26Z" fill="color-mix(in srgb, var(--accent) 10%, transparent)" stroke="var(--border)" stroke-width="2" stroke-linejoin="round" />
-				<path d="M28 26l32 18 32-18M60 44v34" fill="none" stroke="var(--border)" stroke-width="2" stroke-linejoin="round" />
-				<path d="M60 8 92 26 60 44 28 26Z" fill="color-mix(in srgb, var(--accent) 22%, transparent)" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" />
+				<path
+					d="M60 8 92 26v34L60 78 28 60V26Z"
+					fill="color-mix(in srgb, var(--accent) 10%, transparent)"
+					stroke="var(--border)"
+					stroke-width="2"
+					stroke-linejoin="round"
+				/>
+				<path
+					d="M28 26l32 18 32-18M60 44v34"
+					fill="none"
+					stroke="var(--border)"
+					stroke-width="2"
+					stroke-linejoin="round"
+				/>
+				<path
+					d="M60 8 92 26 60 44 28 26Z"
+					fill="color-mix(in srgb, var(--accent) 22%, transparent)"
+					stroke="var(--accent)"
+					stroke-width="2"
+					stroke-linejoin="round"
+				/>
 				<circle cx="98" cy="12" r="3" fill="var(--accent)" opacity="0.7" />
 				<circle cx="18" cy="20" r="2" fill="var(--muted)" opacity="0.6" />
 				<circle cx="104" cy="42" r="1.6" fill="var(--muted)" opacity="0.5" />

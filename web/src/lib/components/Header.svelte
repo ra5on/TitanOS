@@ -22,7 +22,9 @@
 
 	let mobileMenu = $state<HTMLElement>();
 	let mobileOpen = $state(false);
-	const currentLabel = $derived(allItems.find((item) => isCurrent(item.href))?.label ?? 'nav.label');
+	const currentLabel = $derived(
+		allItems.find((item) => isCurrent(item.href))?.label ?? 'nav.label',
+	);
 	// The app on the home screen has no back button of the browser: show
 	// one once there is a page to go back to (CSS shows it only there).
 	let visited = $state(false);
@@ -63,8 +65,12 @@
 </script>
 
 <header>
-	{#if visited && page.url.pathname !== '/'}<button type="button" class="app-back" onclick={() => history.back()} aria-label={t('nav.back')} title={t('nav.back')}
-			><Icon name="arrowLeft" size={20} /></button
+	{#if visited && page.url.pathname !== '/'}<button
+			type="button"
+			class="app-back"
+			onclick={() => history.back()}
+			aria-label={t('nav.back')}
+			title={t('nav.back')}><Icon name="arrowLeft" size={20} /></button
 		>{/if}
 	<a class="brand" href="/" aria-label="TitanOS"><Logo size={28} /></a>
 	<button

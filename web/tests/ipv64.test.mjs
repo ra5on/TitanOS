@@ -74,12 +74,29 @@ test('a check sends only the fields of its type', () => {
 
 test('integrations need the fields of their type and keep numbers as numbers', () => {
 	assert.deepEqual(integrationProblems('telegram', { chat_id: '42' }), ['api_token']);
-	assert.deepEqual(integrationProblems('gotify', { server_url: 'https://g.example', app_token: 'a', priority: '11' }), ['priority']);
+	assert.deepEqual(
+		integrationProblems('gotify', {
+			server_url: 'https://g.example',
+			app_token: 'a',
+			priority: '11',
+		}),
+		['priority'],
+	);
 	assert.deepEqual(integrationProblems('webhook', {}), ['url_down']);
 	assert.deepEqual(integrationProblems('webhook', { url_up: 'https://hook.example/up' }), []);
 	assert.deepEqual(integrationProblems('carrier', {}), ['type']);
-	const body = integrationBody('ntfy', ' phone ', true, { server_url: 'https://ntfy.sh/topic', priority_down: '5', priority_up: '' });
-	assert.deepEqual(body, { type: 'ntfy', name: 'phone', default: true, server_url: 'https://ntfy.sh/topic', priority_down: 5 });
+	const body = integrationBody('ntfy', ' phone ', true, {
+		server_url: 'https://ntfy.sh/topic',
+		priority_down: '5',
+		priority_up: '',
+	});
+	assert.deepEqual(body, {
+		type: 'ntfy',
+		name: 'phone',
+		default: true,
+		server_url: 'https://ntfy.sh/topic',
+		priority_down: 5,
+	});
 	assert.equal(integrationBody('sms', 's', false, { number: '0171' }).country_code, '0049');
 });
 
@@ -104,8 +121,20 @@ test('validators follow the description of IPv64', () => {
 test('the availability chart maps 100 % to the top', () => {
 	const points = chartPoints(
 		[
-			{ time: 'a', measurements: 1, availability_percent: 100, latency_avg_ms: null, latency_max_ms: null },
-			{ time: 'b', measurements: 1, availability_percent: 50, latency_avg_ms: null, latency_max_ms: null },
+			{
+				time: 'a',
+				measurements: 1,
+				availability_percent: 100,
+				latency_avg_ms: null,
+				latency_max_ms: null,
+			},
+			{
+				time: 'b',
+				measurements: 1,
+				availability_percent: 50,
+				latency_avg_ms: null,
+				latency_max_ms: null,
+			},
 		],
 		300,
 		60,
@@ -115,11 +144,17 @@ test('the availability chart maps 100 % to the top', () => {
 });
 
 test('IPv64 is a tab of Dynamic DNS, not an area of its own, and the search finds its parts', () => {
-	assert.equal(settingsAreas.find((a) => a.id === 'ipv64'), undefined);
+	assert.equal(
+		settingsAreas.find((a) => a.id === 'ipv64'),
+		undefined,
+	);
 	const ddns = settingsAreas.find((a) => a.id === 'ddns');
 	assert.ok(ddns && ddns.group === 'network' && ddns.admin);
 	const parts = settingSections.ddns.filter((s) => s.id.startsWith('ipv64-'));
-	assert.deepEqual(parts.map((s) => s.id), TABS.map((tab) => `ipv64-${tab}`));
+	assert.deepEqual(
+		parts.map((s) => s.id),
+		TABS.map((tab) => `ipv64-${tab}`),
+	);
 	for (const s of parts) assert.equal(s.href, ipv64Href(s.id.slice('ipv64-'.length)));
 	assert.ok(matchesSetting('cloud router', 'IPv64', 'ipv64-router'));
 	assert.ok(matchesSetting('failover', 'IPv64', 'ipv64-failover'));
@@ -141,37 +176,93 @@ test('old links of Settings › IPv64 land on the tab of Dynamic DNS', () => {
 
 function keysIn(file) {
 	const text = readFileSync(file, 'utf8');
-	return [...text.matchAll(/'((?:ipv64x|ipv64)\.[A-Za-z0-9_.]+)'/g)].map((m) => m[1]).filter((k) => k !== 'ipv64.de');
+	return [...text.matchAll(/'((?:ipv64x|ipv64)\.[A-Za-z0-9_.]+)'/g)]
+		.map((m) => m[1])
+		.filter((k) => k !== 'ipv64.de');
 }
 
 test('every text of the IPv64 pages exists in German and English', () => {
 	const dir = new URL('../src/lib/ipv64/', import.meta.url);
-	const files = readdirSync(dir).filter((f) => f.endsWith('.svelte')).map((f) => new URL(f, dir));
+	const files = readdirSync(dir)
+		.filter((f) => f.endsWith('.svelte'))
+		.map((f) => new URL(f, dir));
 	files.push(new URL('../src/routes/docker/apps/[name]/AppIpv64.svelte', import.meta.url));
-	for (const f of ['Heartbeat.svelte', 'DdnsStatus.svelte', 'UpdaterFields.svelte']) files.push(new URL(`../src/lib/ddns/${f}`, import.meta.url));
+	for (const f of ['Heartbeat.svelte', 'DdnsStatus.svelte', 'UpdaterFields.svelte'])
+		files.push(new URL(`../src/lib/ddns/${f}`, import.meta.url));
 	const keys = new Set(files.flatMap(keysIn));
 	// Keys built from the enums of the description.
 	for (const tab of TABS) keys.add(`ipv64x.tab.${tab}`);
 	for (const u of USAGE) keys.add(`ipv64x.usage.${u}`);
 	for (const ty of CHECK_TYPES) keys.add(`ipv64x.checkType.${ty}`);
-	for (const st of ['new', 'up', 'paused', 'warning', 'down', 'stabilizing']) keys.add(`ipv64x.checkState.${st}`);
-	for (const ty of [...Object.keys(INTEGRATION_FIELDS), 'account_email']) keys.add(`ipv64x.integrationType.${ty}`);
-	for (const fields of Object.values(INTEGRATION_FIELDS)) for (const f of fields) keys.add(`ipv64x.field.${f.name}`);
+	for (const st of ['new', 'up', 'paused', 'warning', 'down', 'stabilizing'])
+		keys.add(`ipv64x.checkState.${st}`);
+	for (const ty of [...Object.keys(INTEGRATION_FIELDS), 'account_email'])
+		keys.add(`ipv64x.integrationType.${ty}`);
+	for (const fields of Object.values(INTEGRATION_FIELDS))
+		for (const f of fields) keys.add(`ipv64x.field.${f.name}`);
 	for (const m of POLICY_MODES) keys.add(`ipv64x.mode.${m}`);
-	for (const st of ['pending', 'active', 'failed_over', 'paused', 'failover_requested', 'fallback_requested']) keys.add(`ipv64x.policyState.${st}`);
+	for (const st of [
+		'pending',
+		'active',
+		'failed_over',
+		'paused',
+		'failover_requested',
+		'fallback_requested',
+	])
+		keys.add(`ipv64x.policyState.${st}`);
 	for (const f of FRONTENDS) keys.add(`ipv64x.frontendKind.${f}`);
-	for (const st of ['on', 'off', 'disabling', 'suspended_traffic_limit']) keys.add(`ipv64x.onOff.${st}`);
-	for (const p of ['server_assignment', 'dns', 'config_deploy', 'certificate', 'server_move', 'deletion']) keys.add(`ipv64x.pendingKind.${p}`);
+	for (const st of ['on', 'off', 'disabling', 'suspended_traffic_limit'])
+		keys.add(`ipv64x.onOff.${st}`);
+	for (const p of [
+		'server_assignment',
+		'dns',
+		'config_deploy',
+		'certificate',
+		'server_move',
+		'deletion',
+	])
+		keys.add(`ipv64x.pendingKind.${p}`);
 	for (const c of ['default', 'letsencrypt', 'issuing']) keys.add(`ipv64x.cert.${c}`);
-	for (const st of ['active', 'inactive', 'cdn_record', 'cdn_proxied', 'cdn_partial', 'failover_record', 'failover_replaced']) keys.add(`ipv64x.recordState.${st}`);
-	for (const s of ['own', 'ddns', 'letsencrypt']) keys.add(`ipv64x.keySource.${s}`), keys.add(`ipv64x.usedBy.${s}`);
+	for (const st of [
+		'active',
+		'inactive',
+		'cdn_record',
+		'cdn_proxied',
+		'cdn_partial',
+		'failover_record',
+		'failover_replaced',
+	])
+		keys.add(`ipv64x.recordState.${st}`);
+	for (const s of ['own', 'ddns', 'letsencrypt'])
+		(keys.add(`ipv64x.keySource.${s}`), keys.add(`ipv64x.usedBy.${s}`));
 	for (const s of ['own', 'ddns', 'letsencrypt', 'none']) keys.add(`ipv64x.dyn.key.${s}`);
 	for (const k of ['nas', 'app', 'target', 'public']) keys.add(`ipv64x.assign.kind.${k}`);
 	for (const d of ['ddns', 'wildcard', 'cdn', 'none']) keys.add(`ipv64x.assign.dns.${d}`);
-	for (const kind of ['delete', 'reset', 'rotate', 'record', 'deleteCheck', 'rotateCheck', 'deleteIntegration', 'deletePage'])
+	for (const kind of [
+		'delete',
+		'reset',
+		'rotate',
+		'record',
+		'deleteCheck',
+		'rotateCheck',
+		'deleteIntegration',
+		'deletePage',
+	])
 		for (const part of ['title', 'text', 'button']) keys.add(`ipv64x.confirm.${kind}.${part}`);
-	for (const kind of ['ipv64_failover', 'ipv64_fallback', 'ipv64_check_down', 'ipv64_cdn_traffic']) keys.add(`notify.kind.${kind}.title`), keys.add(`notify.kind.${kind}.text`);
-	for (const code of ['ipv64_not_found', 'ipv64_conflict', 'ipv64_limit', 'ipv64_invalid', 'ipv64_exists', 'ipv64_reserved_port', 'ipv64_port_not_published', 'browser_session_required', 'ipv64_confirm_required', 'ddns_other_provider'])
+	for (const kind of ['ipv64_failover', 'ipv64_fallback', 'ipv64_check_down', 'ipv64_cdn_traffic'])
+		(keys.add(`notify.kind.${kind}.title`), keys.add(`notify.kind.${kind}.text`));
+	for (const code of [
+		'ipv64_not_found',
+		'ipv64_conflict',
+		'ipv64_limit',
+		'ipv64_invalid',
+		'ipv64_exists',
+		'ipv64_reserved_port',
+		'ipv64_port_not_published',
+		'browser_session_required',
+		'ipv64_confirm_required',
+		'ddns_other_provider',
+	])
 		keys.add(`error.${code}`);
 	const missing = [...keys].filter((k) => !(k in de) || !(k in en) || !de[k] || !en[k]);
 	assert.deepEqual(missing, []);
@@ -181,18 +272,31 @@ test('assignments list every domain with the names below it', () => {
 	const rows = assignRows({
 		domains: [{ name: 'nas.ipv64.de' }, { name: 'b.ipv64.net' }],
 		assignments: [
-			{ domain: 'photos.nas.ipv64.de', zone: 'nas.ipv64.de', target: 'app', app: 'immich', port: 2283 },
+			{
+				domain: 'photos.nas.ipv64.de',
+				zone: 'nas.ipv64.de',
+				target: 'app',
+				app: 'immich',
+				port: 2283,
+			},
 			{ domain: 'nas.ipv64.de', zone: 'nas.ipv64.de', target: 'nas' },
 			{ domain: 'a.nas.ipv64.de', zone: 'nas.ipv64.de', target: 'public', app: 'x', port: 80 },
 		],
 	});
 	assert.deepEqual(
 		rows.map((r) => [r.name, r.assignment?.target ?? null]),
-		[['b.ipv64.net', null], ['nas.ipv64.de', 'nas'], ['a.nas.ipv64.de', 'public'], ['photos.nas.ipv64.de', 'app']],
+		[
+			['b.ipv64.net', null],
+			['nas.ipv64.de', 'nas'],
+			['a.nas.ipv64.de', 'public'],
+			['photos.nas.ipv64.de', 'app'],
+		],
 	);
 	assert.equal(assignName(' Photos ', 'nas.ipv64.de'), 'photos.nas.ipv64.de');
 	assert.equal(assignName('', 'nas.ipv64.de'), 'nas.ipv64.de');
-	assert.ok(validAssignPrefix('a.b') && !validAssignPrefix('a.b', true) && !validAssignPrefix('-x'));
+	assert.ok(
+		validAssignPrefix('a.b') && !validAssignPrefix('a.b', true) && !validAssignPrefix('-x'),
+	);
 });
 
 test('the assignment form sends what the target needs', () => {
@@ -201,12 +305,32 @@ test('the assignment form sends what the target needs', () => {
 	const app = { ...form, kind: 'app', app: 'immich', port: 0 };
 	assert.deepEqual(assignProblems(app, false), ['port']);
 	assert.deepEqual(assignProblems(app, true), []);
-	assert.deepEqual(assignBody({ ...app, port: 2283 }, true), { target: 'app', app: 'immich', port: 2283, scheme: 'http', localOnly: true });
+	assert.deepEqual(assignBody({ ...app, port: 2283 }, true), {
+		target: 'app',
+		app: 'immich',
+		port: 2283,
+		scheme: 'http',
+		localOnly: true,
+	});
 	const pub = { ...app, port: 2283, via: 'public' };
 	assert.deepEqual(assignProblems(pub, true), ['ownLogin']);
-	assert.deepEqual(assignBody({ ...pub, ownLogin: true }, false), { target: 'app', app: 'immich', public: true, port: 2283, scheme: 'http', firewall: false, confirm: true });
+	assert.deepEqual(assignBody({ ...pub, ownLogin: true }, false), {
+		target: 'app',
+		app: 'immich',
+		public: true,
+		port: 2283,
+		scheme: 'http',
+		firewall: false,
+		confirm: true,
+	});
 	assert.deepEqual(assignProblems({ ...form, kind: 'target' }, false), ['target']);
-	const back = assignForm({ domain: 'a.nas.ipv64.de', zone: 'nas.ipv64.de', target: 'public', app: 'x', port: 80 });
+	const back = assignForm({
+		domain: 'a.nas.ipv64.de',
+		zone: 'nas.ipv64.de',
+		target: 'public',
+		app: 'x',
+		port: 80,
+	});
 	assert.equal(back.kind, 'app');
 	assert.equal(back.via, 'public');
 });

@@ -1,0 +1,29 @@
+version: 2
+updates:
+  # Actions are pinned to full commit SHAs with the version as a comment;
+  # Dependabot updates both.
+  - package-ecosystem: github-actions
+    directories:
+      - /
+      - /.github/actions/image-tools
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
+
+  - package-ecosystem: gomod
+    directory: /backend
+    schedule:
+      interval: weekly
+    groups:
+      golang-x:
+        patterns: ['golang.org/x/*']
+
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]

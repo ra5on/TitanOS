@@ -1,12 +1,13 @@
 <script lang="ts">
 	// System containers (LXC): the list on the left, the chosen container on
 	// the right with its actions, settings and snapshots.
+	import { poll } from '#lib/poll.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { api, ApiError } from '#lib/api.ts';
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { containerLabel, type LXCList, type LXCSnapshot, type LXCStatus } from '#lib/lxc.ts';
 	import { addLXCConsole } from '#lib/terminal.svelte.ts';
 	import { goto } from '$app/navigation';
@@ -36,20 +37,15 @@
 	const readOnly = $derived(!!list?.dev || !list?.installed);
 
 	async function load() {
-		if (document.hidden) return;
 		try {
 			list = await api.get<LXCList>('/lxc');
 			loadError = '';
 		} catch (err) {
-			loadError = errorText(err instanceof ApiError ? err.code : 'internal');
+			loadError = apiErrorText(err);
 		}
 	}
 
-	onMount(() => {
-		load();
-		const timer = setInterval(load, 5000);
-		return () => clearInterval(timer);
-	});
+	onMount(() => poll(load, { interval: 5000 }));
 
 	// Snapshots are read from the volume only when a Btrfs container is opened.
 	$effect(() => {
@@ -73,7 +69,7 @@
 			);
 			if (snapshotFor === name) snapshots = res.snapshots;
 		} catch (err) {
-			actionError = errorText(err instanceof ApiError ? err.code : 'internal');
+			actionError = apiErrorText(err);
 		}
 	}
 
@@ -386,17 +382,17 @@
 {/if}
 
 {#if form && list}
-	<LxcForm
-		{list}
-		existing={form.existing}
-		onclose={() => (form = null)}
-		ondone={(name) => {
-			form = null;
-			void load().then(() =>
-				goto(`/lxc?${new URLSearchParams({ ct: name })}`, { replaceState: true }),
-			);
-		}}
-	/>
+	{#key form}<LxcForm
+			{list}
+			existing={form.existing}
+			onclose={() => (form = null)}
+			ondone={(name) => {
+				form = null;
+				void load().then(() =>
+					goto(`/lxc?${new URLSearchParams({ ct: name })}`, { replaceState: true }),
+				);
+			}}
+		/>{/key}
 {/if}
 
 {#if removing}

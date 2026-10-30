@@ -74,14 +74,18 @@ func externalClient() *http.Client {
 // host of a link or a source list, so it may be in the home network; a host
 // that only a list names (public) may not.
 func (m *Manager) guarded(public bool) *http.Client {
-	if public {
+	// Callers run concurrently (catalog refresh, installs); the clients are
+	// made once. A test may have set them before.
+	m.guardedOnce.Do(func() {
 		if m.publicClient == nil {
 			m.publicClient = httpfetch.NewClient(httpfetch.Policy{Allow: func(a netip.AddrPort) bool { return netguard.Public(a.Addr()) }})
 		}
+		if m.externalClient == nil {
+			m.externalClient = externalClient()
+		}
+	})
+	if public {
 		return m.publicClient
-	}
-	if m.externalClient == nil {
-		m.externalClient = externalClient()
 	}
 	return m.externalClient
 }

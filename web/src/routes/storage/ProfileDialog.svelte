@@ -1,9 +1,9 @@
 <script lang="ts">
 	// Changes the profile of a complete Btrfs volume in place (btrfs balance).
-	import { api, ApiError, type BtrfsProfile, type Volume } from '#lib/api.ts';
+	import { api, type BtrfsProfile, type Volume } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { formatDiskBytes } from '#lib/format.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 	import { BTRFS_MIN, btrfsUsable, profileOf } from './btrfs.ts';
 
@@ -11,13 +11,24 @@
 	let { volume, onclose, ondone }: Props = $props();
 
 	const current = $derived(profileOf(volume));
+	// Props are read once on purpose: the draft starts from them and later
+	// changes of the props must not overwrite what is being edited; the storage page mounts this dialog anew for each opening ({#key dialog}).
 	// svelte-ignore state_referenced_locally
 	let profile = $state<BtrfsProfile>(profileOf(volume));
 	let working = $state(false);
 	let error = $state('');
 
-	const sizes = $derived((storage.status?.disks ?? []).filter((disk) => disk.volume === volume.name).map((disk) => disk.sizeBytes));
-	const profiles = $derived((['raid1', 'raid1c3', 'single'] as BtrfsProfile[]).map((p) => ({ id: p, possible: volume.members.length >= BTRFS_MIN[p] })));
+	const sizes = $derived(
+		(storage.status?.disks ?? [])
+			.filter((disk) => disk.volume === volume.name)
+			.map((disk) => disk.sizeBytes),
+	);
+	const profiles = $derived(
+		(['raid1', 'raid1c3', 'single'] as BtrfsProfile[]).map((p) => ({
+			id: p,
+			possible: volume.members.length >= BTRFS_MIN[p],
+		})),
+	);
 	// Less copies than now: the dialog says so before anything starts.
 	const fewer = $derived(BTRFS_MIN[profile] < BTRFS_MIN[current]);
 
@@ -29,7 +40,7 @@
 			await api.put(`/storage/volumes/${volume.name}/profile`, { profile });
 			ondone();
 		} catch (err) {
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
+			error = apiErrorText(err);
 			working = false;
 		}
 	}
@@ -41,20 +52,41 @@
 		<div class="options" role="radiogroup" aria-label={t('btrfs.profileAfter')}>
 			{#each profiles as p (p.id)}
 				<label class="option" class:disabled={!p.possible}>
-					<input type="radio" name="btrfs-profile" value={p.id} bind:group={profile} disabled={!p.possible || working} />
+					<input
+						type="radio"
+						name="btrfs-profile"
+						value={p.id}
+						bind:group={profile}
+						disabled={!p.possible || working}
+					/>
 					<span>
-						<span class="option-name">{t(`level.${p.id}`)}{p.id === current ? ' · ' + t('btrfs.profileKeep') : ''}</span>
-						<span class="muted small">{p.possible ? t(`level.${p.id}Desc`) + ' · ' + formatDiskBytes(btrfsUsable(p.id, sizes)) : t('create.capacityNeeds', { count: BTRFS_MIN[p.id] })}</span>
+						<span class="option-name"
+							>{t(`level.${p.id}`)}{p.id === current ? ' · ' + t('btrfs.profileKeep') : ''}</span
+						>
+						<span class="muted small"
+							>{p.possible
+								? t(`level.${p.id}Desc`) + ' · ' + formatDiskBytes(btrfsUsable(p.id, sizes))
+								: t('create.capacityNeeds', { count: BTRFS_MIN[p.id] })}</span
+						>
 					</span>
 				</label>
 			{/each}
 		</div>
-		{#if fewer}<p class="notice-warn" role="alert">{t(profile === 'single' ? 'create.singleWarning' : 'btrfs.fewerCopies')}</p>{/if}
+		{#if fewer}<p class="notice-warn" role="alert">
+				{t(profile === 'single' ? 'create.singleWarning' : 'btrfs.fewerCopies')}
+			</p>{/if}
 		<p class="muted">{t('btrfs.balanceHint')}</p>
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={onclose} disabled={working}>{t('common.cancel')}</button>
-			<button type="button" class={fewer ? 'btn btn-warn' : 'btn btn-primary'} disabled={profile === current || working} onclick={submit}>{t('btrfs.profileSubmit')}</button>
+			<button type="button" class="btn" onclick={onclose} disabled={working}
+				>{t('common.cancel')}</button
+			>
+			<button
+				type="button"
+				class={fewer ? 'btn btn-warn' : 'btn btn-primary'}
+				disabled={profile === current || working}
+				onclick={submit}>{t('btrfs.profileSubmit')}</button
+			>
 		</div>
 	</div>
 </Dialog>

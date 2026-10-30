@@ -249,7 +249,7 @@ func TestCreateValidation(t *testing.T) {
 		{"unknown disk", CreateRequest{Name: "new", Level: "raid1", Filesystem: "ext4", Disks: []string{"sdq", "sde"}, Erase: []string{"sdq", "sde"}}, ErrDiskUnavailable},
 	}
 	for _, tt := range tests {
-		if err := m.Create(ctx, tt.req); !errors.Is(err, tt.want) {
+		if err := createVolume(m, ctx, tt.req); !errors.Is(err, tt.want) {
 			t.Errorf("%s: err = %v, want %v", tt.name, err, tt.want)
 		}
 	}
@@ -262,7 +262,7 @@ func TestCreate(t *testing.T) {
 	m, runner, store := newTestManager(t)
 	// sdf is the smallest disk (4 GiB): every member gets its size.
 	req := CreateRequest{Name: "Backup", Level: "raid5", Filesystem: "xfs", Disks: []string{"sdd", "sde", "sdf"}, Erase: []string{"sdf", "sde", "sdd"}}
-	if err := m.Create(context.Background(), req); err != nil {
+	if err := createVolume(m, context.Background(), req); err != nil {
 		t.Fatal(err)
 	}
 
@@ -305,7 +305,7 @@ func TestCreate(t *testing.T) {
 func TestCreateRaid0HasNoBitmapAndExt4Options(t *testing.T) {
 	m, runner, _ := newTestManager(t)
 	req := CreateRequest{Name: "scratch", Level: "raid0", Filesystem: "ext4", Disks: []string{"sde", "nvme0n1"}, Erase: []string{"sde", "nvme0n1"}}
-	if err := m.Create(context.Background(), req); err != nil {
+	if err := createVolume(m, context.Background(), req); err != nil {
 		t.Fatal(err)
 	}
 	all := strings.Join(runner.commands, "\n")
@@ -338,7 +338,7 @@ func TestCreateSingleDiskRaid0(t *testing.T) {
 		t.Run(tt.filesystem, func(t *testing.T) {
 			m, runner, store := newTestManager(t)
 			req := CreateRequest{Name: "scratch", Level: "raid0", Filesystem: tt.filesystem, Disks: []string{tt.disk}, Erase: []string{tt.disk}}
-			if err := m.Create(context.Background(), req); err != nil {
+			if err := createVolume(m, context.Background(), req); err != nil {
 				t.Fatal(err)
 			}
 			for _, want := range []string{
@@ -365,7 +365,7 @@ func TestCreateStopsAtTheFirstFailure(t *testing.T) {
 	m, runner, store := newTestManager(t)
 	runner.fail = "mdadm --create"
 	req := CreateRequest{Name: "media", Level: "raid1", Filesystem: "ext4", Disks: []string{"sde", "sdf"}, Erase: []string{"sde", "sdf"}}
-	err := m.Create(context.Background(), req)
+	err := createVolume(m, context.Background(), req)
 	var commandErr *CommandError
 	if !errors.As(err, &commandErr) {
 		t.Fatalf("err = %v, want the failed command", err)
@@ -408,13 +408,13 @@ func TestAddDiskNeedsConfirmationAndARunningVolume(t *testing.T) {
 	m.volumes = []VolumeConfig{{Name: "data", Level: "raid5", ArrayUUID: dataArrayUUID}, {Name: "fast", Level: "raid0", ArrayUUID: "x"}}
 	ctx := context.Background()
 
-	if err := m.AddDisk(ctx, "data", "sde", false, ""); !errors.Is(err, ErrNotConfirmed) {
+	if err := m.AddDisk(ctx, "data", "sde", false, idOf(m, "sde")); !errors.Is(err, ErrNotConfirmed) {
 		t.Errorf("without confirmation: %v", err)
 	}
-	if err := m.AddDisk(ctx, "fast", "sde", true, ""); !errors.Is(err, ErrNotPossible) {
+	if err := m.AddDisk(ctx, "fast", "sde", true, idOf(m, "sde")); !errors.Is(err, ErrNotPossible) {
 		t.Errorf("RAID 0: %v", err)
 	}
-	if err := m.AddDisk(ctx, "data", "sde", true, ""); !errors.Is(err, ErrNotPossible) {
+	if err := m.AddDisk(ctx, "data", "sde", true, idOf(m, "sde")); !errors.Is(err, ErrNotPossible) {
 		t.Errorf("array not running: %v", err)
 	}
 	if len(runner.commands) != 0 {
@@ -430,9 +430,9 @@ func TestReadOnlyRefusesEveryAction(t *testing.T) {
 
 	disks := []string{"sde", "sdf"}
 	for name, err := range map[string]error{
-		"create": m.Create(ctx, CreateRequest{Name: "new", Level: "raid1", Filesystem: "ext4", Disks: disks, Erase: disks}),
+		"create": createVolume(m, ctx, CreateRequest{Name: "new", Level: "raid1", Filesystem: "ext4", Disks: disks, Erase: disks}),
 		"delete": m.Delete(ctx, "data", "data"),
-		"add":    m.AddDisk(ctx, "data", "sde", true, ""),
+		"add":    m.AddDisk(ctx, "data", "sde", true, idOf(m, "sde")),
 		"remove": m.RemoveDisk(ctx, "data", "sda"),
 		"check":  m.Check(ctx, "data", true),
 	} {
@@ -460,4 +460,74 @@ func TestOwnsMatchesArrayAndFilesystemSpellings(t *testing.T) {
 			t.Errorf("Owns(%q) != %v", uuid, want)
 		}
 	}
+}
+
+func TestCreateCleansUpWhenTheFileSystemFails(t *testing.T) {
+	for _, fail := range []string{"mkfs.xfs", "mdadm --detail"} {
+		m, runner, _ := newTestManager(t)
+		runner.fail = fail
+		if fail == "mdadm --detail" {
+			// fakeRunner answers --detail itself; make it fail via a wrapper.
+			m.runner = &failDetail{runner}
+		}
+		req := CreateRequest{Name: "Backup", Level: "raid5", Filesystem: "xfs", Disks: []string{"sdd", "sde", "sdf"}, Erase: []string{"sdd", "sde", "sdf"}}
+		if err := createVolume(m, context.Background(), req); err == nil {
+			t.Fatalf("%s: created", fail)
+		}
+		all := strings.Join(runner.commands, "\n")
+		create := strings.Index(all, "mdadm --create")
+		if create < 0 {
+			t.Fatalf("%s: no array created:\n%s", fail, all)
+		}
+		for _, want := range []string{
+			"wipefs --all --force /dev/md/Backup",
+			"mdadm --stop /dev/md/Backup",
+			"mdadm --zero-superblock --force /dev/sdd1",
+			"mdadm --zero-superblock --force /dev/sdf1",
+			"wipefs --all --force /dev/sde1",
+		} {
+			if i := strings.LastIndex(all, want); i < create {
+				t.Errorf("%s: missing clean-up %q after the array was created:\n%s", fail, want, all)
+			}
+		}
+		if strings.Index(all, "wipefs --all --force /dev/md/Backup") > strings.Index(all, "mdadm --stop /dev/md/Backup") {
+			t.Errorf("%s: signatures inside the array must go before it stops", fail)
+		}
+		if _, ok := m.find("Backup"); ok {
+			t.Errorf("%s: volume recorded", fail)
+		}
+	}
+}
+
+func TestCreateRefusesAFileSystemUUIDThatIsNone(t *testing.T) {
+	m, runner, _ := newTestManager(t)
+	m.runner = &noisyBlkid{runner}
+	req := CreateRequest{Name: "Backup", Level: "raid5", Filesystem: "xfs", Disks: []string{"sdd", "sde", "sdf"}, Erase: []string{"sdd", "sde", "sdf"}}
+	if err := createVolume(m, context.Background(), req); err == nil {
+		t.Fatal("a warning became the file system UUID")
+	}
+	if _, ok := m.find("Backup"); ok {
+		t.Fatal("recorded")
+	}
+	if !strings.Contains(strings.Join(runner.commands, "\n"), "mdadm --stop /dev/md/Backup") {
+		t.Fatal("array left behind")
+	}
+}
+
+type failDetail struct{ *fakeRunner }
+
+func (r *failDetail) Run(ctx context.Context, stdin, name string, args ...string) (string, error) {
+	if name == "mdadm" && slices.Contains(args, "--detail") {
+		return "", &CommandError{Command: "mdadm --detail", Err: errors.New("exit status 1")}
+	}
+	return r.fakeRunner.Run(ctx, stdin, name, args...)
+}
+
+type noisyBlkid struct{ *fakeRunner }
+
+func (r *noisyBlkid) Run(ctx context.Context, stdin, name string, args ...string) (string, error) {
+	if name == "blkid" {
+		return "", nil
+	}
+	return r.fakeRunner.Run(ctx, stdin, name, args...)
 }

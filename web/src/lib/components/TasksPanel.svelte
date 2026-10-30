@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { poll } from '#lib/poll.ts';
 	import { api, type CopyJob, type VMStatus } from '#lib/api.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
@@ -37,11 +38,8 @@
 	$effect(() => {
 		const privileged = admin;
 		let alive = true;
-		let busy = false;
 		const cache = new Map<string, Task[]>();
-		async function poll() {
-			if (document.hidden || busy) return;
-			busy = true;
+		async function collect() {
 			const sources: [string, () => Promise<Task[]>][] = [
 				[
 					'files',
@@ -134,15 +132,11 @@
 				tasks = [...cache.values()].flat();
 				loaded = true;
 			}
-			busy = false;
 		}
-		void poll();
-		const timer = setInterval(poll, 5000);
-		document.addEventListener('visibilitychange', poll);
+		const stop = poll(collect, { interval: 5000 });
 		return () => {
 			alive = false;
-			clearInterval(timer);
-			document.removeEventListener('visibilitychange', poll);
+			stop();
 		};
 	});
 	const all = $derived([

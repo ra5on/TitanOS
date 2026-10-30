@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The tab "Snapshots" of a VM: the list, the schedule and the dialogs
 	// to make, restore and delete snapshots.
+	import { poll } from '#lib/poll.ts';
 	import { api, ApiError, type VM } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
@@ -57,13 +58,7 @@
 	const polling = $derived(busy || status?.job?.state === 'running' || !!status?.pending);
 	$effect(() => {
 		const url = base;
-		const timer = setInterval(
-			() => {
-				if (!document.hidden) load(url);
-			},
-			polling ? 3000 : 15000,
-		);
-		return () => clearInterval(timer);
+		return poll(() => load(url), { interval: polling ? 3000 : 15000, immediate: false });
 	});
 
 	function open(next: Panel, snapshot: Snapshot | null = null) {

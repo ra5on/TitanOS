@@ -1,37 +1,31 @@
 <script lang="ts">
 	import TemplateDialog from './TemplateDialog.svelte';
 	import { templateLayout, type DashboardTemplate } from './tiles.ts';
-	import { tick, untrack, onDestroy, type Component } from 'svelte';
-	import {
-		api,
-		ApiError,
-		type VM,
-		type VMStatus,
-		type DockerContainer,
-		type DockerStatus,
-		type Share,
-	} from '#lib/api.ts';
-	import { t, errorText, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { tick, untrack, onDestroy } from 'svelte';
+	import { api } from '#lib/api.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 
 	import { session } from '#lib/session.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
-	import { dockerName } from '#lib/docker-name.ts';
-	import { vmLabel } from '#lib/vm-name.ts';
-	import { dockerGroups } from '#lib/docker-layout.ts';
-	import { tailnetHost, type TailnetStatus } from '#lib/app-links.ts';
 	import { dashboardControl } from './control.svelte.ts';
 	import { positionGrid } from './position-grid.svelte.ts';
 	import { columnOrder, dropLayout, type Rect } from './positions.ts';
-	import { formatBytes } from '#lib/format.ts';
-	import { cpuTemperature, temperatureSelection, tileTemperatures } from './temperatures.ts';
-	import type { TailnetDevices } from './tailscale.ts';
-	import type { NetbirdPeers } from './netbird.ts';
-	import Icon from '#lib/components/Icon.svelte';
-	import Dialog from '#lib/components/Dialog.svelte';
-	import NavigationGuard from '#lib/operations/NavigationGuard.svelte';
+	import { temperatureSelection } from './temperatures.ts';
+	import { dashboardData } from './dashboard-data.svelte.ts';
 	import {
-		TILES,
+		inspectorItems as itemsOf,
+		tileSummary,
+		tileTitle,
+		workloadGroups as groupsOf,
+	} from './tile-info.ts';
+	import Icon from '#lib/components/Icon.svelte';
+	import NavigationGuard from '#lib/operations/NavigationGuard.svelte';
+	import EditorToolbar from './EditorToolbar.svelte';
+	import AddTiles from './AddTiles.svelte';
+	import EditorConfirm from './EditorConfirm.svelte';
+	import TileHead from './TileHead.svelte';
+	import {
 		ADMIN_TILES,
 		addableTiles,
 		defaultPlacement,
@@ -49,24 +43,7 @@
 	import { dashboardVisual, type DashboardVisual } from './visual.ts';
 	import { dashboardScene } from './scene.svelte.ts';
 	import TileEditor, { type EditPart } from './TileEditor.svelte';
-	import UsageTile from './tiles/UsageTile.svelte';
-	import AcceleratorTile from './tiles/AcceleratorTile.svelte';
-	import WorkloadTile from './tiles/WorkloadTile.svelte';
-	import CollectionTile from './tiles/CollectionTile.svelte';
-	import SystemTile from './tiles/SystemTile.svelte';
-	import NetworkTile from './tiles/NetworkTile.svelte';
-	import DisksTile from './tiles/DisksTile.svelte';
-	import VolumesTile from './tiles/VolumesTile.svelte';
-	import TemperaturesTile from './tiles/TemperaturesTile.svelte';
-	import AssistantTile from './tiles/AssistantTile.svelte';
-	import TailscaleTile from './tiles/TailscaleTile.svelte';
-	import NetbirdTile from './tiles/NetbirdTile.svelte';
-	const CONTENT: Partial<Record<StaticTileId, Component<{ options?: TileOptions }>>> = {
-		volumes: VolumesTile,
-		disks: DisksTile,
-		temperatures: TemperaturesTile,
-		assistant: AssistantTile,
-	};
+	import TileContent from './TileContent.svelte';
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 	const hardwareKinds = () => [
 		...new Set<StaticTileId>(
@@ -203,51 +180,9 @@
 		dashboardControl.editing = editing;
 	});
 	let ghost = $state<{ left: number; top: number; width: number; height: number } | null>(null);
-	let refreshSerial = $state(0),
-		kvm = $state(false);
-	let containers = $state<DockerContainer[]>([]),
-		vms = $state<VM[]>([]),
-		shares = $state<Share[]>([]),
-		tailnet = $state<TailnetStatus | null>(null),
-		tailnetDevices = $state<TailnetDevices | null>(null),
-		tailnetDevicesError = $state(''),
-		netbirdPeers = $state<NetbirdPeers | null>(null),
-		netbirdPeersError = $state('');
-	let containersReady = $state(false),
-		vmsReady = $state(false),
-		sharesReady = $state(false),
-		dockerError = $state(''),
-		vmError = $state(''),
-		sharesError = $state('');
 	const currentSettings = $derived(tileOptions(options, customize ?? 'cpu'));
 	const currentPlacement = $derived(shown.find((p) => p.id === customize));
 	const hidden = $derived(addableTiles(shown, { admin, hardware: hardwareKinds() }));
-	// Stacks, VMs and single containers in their own groups; entries already on
-	// the dashboard are marked, adding them again creates an independent copy.
-	type WorkloadGroup = { label: MessageKey; choices: { id: TileId; name: string }[] };
-	const workloadGroups = $derived(
-		(
-			[
-				{
-					label: 'docker.stack',
-					choices: dockerGroups(containers)
-						.filter((g) => g.id.startsWith('app:'))
-						.map((g) => ({ id: g.id as TileId, name: g.name })),
-				},
-				{
-					label: 'nav.vms',
-					choices: vms.map((vm) => ({ id: `vm:${vm.name}` as TileId, name: vmLabel(vm) })),
-				},
-				{
-					label: 'tile.container',
-					choices: containers.map((c) => ({
-						id: `container:${c.name}` as TileId,
-						name: dockerName(c, 'distinct'),
-					})),
-				},
-			] satisfies WorkloadGroup[]
-		).filter((group) => group.choices.length),
-	);
 	const dirty = $derived(
 		editing &&
 			(JSON.stringify(shown) !== JSON.stringify(saved) ||
@@ -260,140 +195,20 @@
 		admin &&
 			(editing || shown.some((p) => workload(p.id) || ['docker', 'vms'].includes(sourceId(p.id)))),
 	);
-	$effect(() => {
-		if (!watched) return;
-		void refreshSerial;
-		let disposed = false,
-			inflight = false;
-		async function refresh() {
-			if (inflight || document.hidden) return;
-			inflight = true;
-			const results = await Promise.allSettled([
-				api.get<VMStatus>('/vms'),
-				api.get<DockerStatus>('/docker'),
-				api.get<TailnetStatus>('/plugins/tailscale'),
-			]);
-			if (!disposed) {
-				const [machines, docker, tailscale] = results;
-				if (machines.status === 'fulfilled') {
-					vms = machines.value.vms;
-					kvm = machines.value.kvm;
-					vmsReady = true;
-					vmError = '';
-				} else vmError = fail(machines.reason);
-				if (docker.status === 'fulfilled') {
-					containers = docker.value.containers;
-					containersReady = true;
-					dockerError =
-						docker.value.settings.enabled && !docker.value.running
-							? t('dashboard.engineUnavailable')
-							: '';
-				} else dockerError = fail(docker.reason);
-				if (tailscale.status === 'fulfilled') tailnet = tailscale.value;
-				else tailnet = null;
-			}
-			inflight = false;
-		}
-		void refresh();
-		const timer = setInterval(refresh, 5000);
-		return () => {
-			disposed = true;
-			clearInterval(timer);
-		};
-	});
-	// Tailnet devices only while a Tailscale tile is shown or being edited;
-	// the server answers from a short RAM cache.
 	const watchesTailnet = $derived(
 		admin && (editing || shown.some((p) => sourceId(p.id) === 'tailscale')),
 	);
-	$effect(() => {
-		if (!watchesTailnet) return;
-		void refreshSerial;
-		let disposed = false,
-			inflight = false;
-		async function refresh() {
-			if (inflight || document.hidden) return;
-			inflight = true;
-			try {
-				const value = await api.get<TailnetDevices>('/plugins/tailscale/devices');
-				if (!disposed) {
-					tailnetDevices = value;
-					tailnetDevicesError = '';
-				}
-			} catch (e) {
-				if (!disposed) tailnetDevicesError = fail(e);
-			} finally {
-				inflight = false;
-			}
-		}
-		void refresh();
-		const timer = setInterval(refresh, 15000);
-		return () => {
-			disposed = true;
-			clearInterval(timer);
-		};
-	});
-	// NetBird peers only while a NetBird tile is shown or being edited;
-	// the server answers from a short RAM cache.
 	const watchesNetbird = $derived(
 		admin && (editing || shown.some((p) => sourceId(p.id) === 'netbird')),
 	);
-	$effect(() => {
-		if (!watchesNetbird) return;
-		void refreshSerial;
-		let disposed = false,
-			inflight = false;
-		async function refresh() {
-			if (inflight || document.hidden) return;
-			inflight = true;
-			try {
-				const value = await api.get<NetbirdPeers>('/plugins/netbird/peers');
-				if (!disposed) {
-					netbirdPeers = value;
-					netbirdPeersError = '';
-				}
-			} catch (e) {
-				if (!disposed) netbirdPeersError = fail(e);
-			} finally {
-				inflight = false;
-			}
-		}
-		void refresh();
-		const timer = setInterval(refresh, 15000);
-		return () => {
-			disposed = true;
-			clearInterval(timer);
-		};
-	});
 	const watchesShares = $derived(editing || shown.some((p) => sourceId(p.id) === 'shares'));
-	$effect(() => {
-		if (!watchesShares) return;
-		void refreshSerial;
-		let disposed = false,
-			inflight = false;
-		async function refresh() {
-			if (inflight || document.hidden) return;
-			inflight = true;
-			try {
-				const value = await api.get<Share[]>('/shares');
-				if (!disposed) {
-					shares = value;
-					sharesReady = true;
-					sharesError = '';
-				}
-			} catch (e) {
-				if (!disposed) sharesError = fail(e);
-			} finally {
-				inflight = false;
-			}
-		}
-		void refresh();
-		const timer = setInterval(refresh, 15000);
-		return () => {
-			disposed = true;
-			clearInterval(timer);
-		};
+	const data = dashboardData({
+		workloads: () => watched,
+		tailnet: () => watchesTailnet,
+		netbird: () => watchesNetbird,
+		shares: () => watchesShares,
 	});
+	const workloadGroups = $derived(groupsOf(data));
 	let initializedHardware = false;
 	$effect(() => {
 		if (initializedHardware || editing || !system.info) return;
@@ -403,21 +218,7 @@
 		saved = next;
 		rebuild(next);
 	});
-	function fail(e: unknown) {
-		return errorText(e instanceof ApiError ? e.code : 'internal');
-	}
-	function titleOf(id: TileId) {
-		const o = tileOptions(options, id);
-		if (o.title) return o.title;
-		const target = workload(id);
-		if (target) {
-			const vm = target.kind === 'vm' ? vms.find((v) => v.name === target.name) : undefined;
-			const container =
-				target.kind === 'container' ? containers.find((v) => v.name === target.name) : undefined;
-			return vm ? vmLabel(vm) : container ? dockerName(container, 'distinct') : target.name;
-		}
-		return t(tileSpec(id).title);
-	}
+	const titleOf = (id: TileId) => tileTitle(id, { options, data });
 	function readGrid(): TilePlacement[] {
 		return shown;
 	}
@@ -556,7 +357,7 @@
 			customize = null;
 			rebuild(layout);
 		} catch (e) {
-			error = fail(e);
+			error = apiErrorText(e);
 		} finally {
 			saving = false;
 		}
@@ -817,101 +618,14 @@
 		};
 		if (!editing) await finish();
 	}
-	function summary(id: TileId) {
-		const kind = sourceId(id),
-			info = system.info;
-		if (kind === 'system') return info ? t('dashboard.online') : '–';
-		if (kind === 'docker' || kind.startsWith('app:')) {
-			if (!containersReady || dockerError) return '–';
-			const cs = kind.startsWith('app:')
-				? containers.filter((c) => c.app === kind.slice(4))
-				: containers;
-			const gs = dockerGroups(cs);
-			return t('dashboard.appSummary', {
-				count: gs.length,
-				running: gs.filter((g) => g.members.some((c) => c.state === 'running')).length,
-			});
-		}
-		if (kind === 'vms')
-			return vmsReady && !vmError
-				? t('dashboard.runningSummary', {
-						running: vms.filter((v) => v.state === 'running').length,
-						count: vms.length,
-					})
-				: '–';
-		if (kind === 'cpu') {
-			if (!tileOptions(options, id).temperature) return '';
-			const temp = cpuTemperature(info?.temperatures, tileOptions(options, id).sensor);
-			return temp?.celsius == null ? '' : `${temp.celsius.toFixed(0)} °C`;
-		}
-		if (kind === 'memory') return info ? formatBytes(info.memory.totalBytes) : '–';
-		if (kind === 'volumes')
-			return storage.status
-				? t('dashboard.mountedSummary', {
-						count: storage.status.volumes.filter((v) => v.mounted).length,
-					})
-				: '–';
-		if (kind === 'shares')
-			return sharesReady && !sharesError
-				? t('dashboard.shareSummary', { count: shares.length })
-				: '–';
-		if (kind === 'disks')
-			return storage.status
-				? t('dashboard.deviceSummary', {
-						count: storage.status.disks.filter((d) => d.role !== 'stick').length,
-					})
-				: '–';
-		if (['accelerators', 'igpu', 'nvidia', 'npu'].includes(kind))
-			return info
-				? t('dashboard.deviceSummary', {
-						count: info.accelerators.filter(
-							(d) =>
-								kind === 'accelerators' ||
-								(kind === 'npu'
-									? d.kind === 'npu'
-									: kind === 'nvidia'
-										? d.vendor === 'NVIDIA' && d.kind !== 'npu'
-										: d.kind !== 'npu' && d.vendor !== 'NVIDIA'),
-						).length,
-					})
-				: '–';
-		if (kind === 'netbird') {
-			if (!netbirdPeers || netbirdPeersError) return '–';
-			if (!netbirdPeers.active) return t('netbird.states.inactive');
-			const o = tileOptions(options, id),
-				list = netbirdPeers.peers.filter((p) => o.items === null || o.items.includes(p.id));
-			return t('netbird.peer.summary', {
-				online: list.filter((p) => p.online === true).length,
-				count: list.length,
-			});
-		}
-		if (kind === 'tailscale') {
-			if (!tailnetDevices || tailnetDevicesError) return '–';
-			if (!tailnetDevices.active) return t('tailscale.states.inactive');
-			const o = tileOptions(options, id),
-				list = tailnetDevices.devices.filter((d) => o.items === null || o.items.includes(d.id));
-			return t('tailscale.device.summary', {
-				online: list.filter((d) => d.online === true).length,
-				count: list.length,
-			});
-		}
-		if (kind === 'temperatures')
-			return t('dashboard.sensorSummary', {
-				count: tileTemperatures(
-					session.dashboard,
-					tileOptions(options, id).items,
-					info?.temperatures ?? [],
-				).length,
-			});
-		if (kind === 'network') {
-			const o = tileOptions(options, id),
-				n = o.interface ? info?.networks.find((n) => n.interface === o.interface) : info?.network;
-			return n
-				? `${n.interface || '–'}${n.speedMbps > 0 ? ' · ' + n.speedMbps + ' Mbit/s' : ''}`
-				: '–';
-		}
-		return '';
-	}
+	const summary = (id: TileId) =>
+		tileSummary(id, {
+			options,
+			data,
+			info: system.info,
+			storage: storage.status,
+			dashboard: session.dashboard,
+		});
 
 	// Editor shortcuts: Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z or +Y redo, Ctrl/Cmd+S
 	// save, Escape closes the side panel and then leaves the editor.
@@ -961,110 +675,37 @@
 		const element = target.closest<HTMLElement>('[data-edit-part]');
 		configure(id, (element?.dataset.editPart as EditPart) || 'tile');
 	}
-	const inspectorItems = $derived.by(() => {
-		if (!customize) return [];
-		switch (sourceId(customize)) {
-			case 'docker':
-				return dockerGroups(containers).map((g) => ({ id: g.id, name: g.name }));
-			case 'vms':
-				return vms.map((v) => ({ id: v.name, name: vmLabel(v) }));
-			case 'shares':
-				return shares.map((s) => ({ id: s.name, name: s.name }));
-			case 'volumes':
-				return (storage.status?.volumes ?? []).map((v) => ({ id: v.name, name: v.name }));
-			case 'netbird':
-				return (netbirdPeers?.peers ?? []).map((p) => ({
-					id: p.id,
-					name: p.self ? `${p.name} · ${t('netbird.peer.self')}` : p.name || p.fqdn,
-				}));
-			case 'tailscale':
-				return (tailnetDevices?.devices ?? []).map((d) => ({
-					id: d.id,
-					name: d.self ? `${d.name} · ${t('tailscale.device.self')}` : d.name || d.hostName,
-				}));
-			case 'temperatures':
-				return (system.info?.temperatures ?? []).map((s) => ({
-					id: s.id,
-					name: `${s.label} · ${s.chip}`,
-				}));
-			case 'disks':
-				return (storage.status?.disks ?? [])
-					.filter((d) => d.role !== 'stick')
-					.map((d) => ({ id: d.identity || d.serial || d.name, name: d.name }));
-			default:
-				return [];
-		}
-	});
+	const inspectorItems = $derived(
+		customize ? itemsOf(customize, { data, info: system.info, storage: storage.status }) : [],
+	);
 </script>
 
 <svelte:window onkeydown={keys} />
 <NavigationGuard {dirty} />
 <div class="dashboard-page" inert={saving}>
-	{#if editing}<div class="editbar" role="toolbar" aria-label={t('dashboard.editor.toolbar')}>
-			<div class="flow-controls">
-				<button
-					class="btn"
-					aria-pressed={adding}
-					disabled={saving}
-					onclick={() => (adding ? (adding = false) : openAdd())}
-					><Icon name="plus" size={16} />{t('dashboard.hidden')}</button
-				><a class="btn" href="/settings/appearance"
-					><Icon name="palette" size={16} />{t('dashboard.visual.all')}</a
-				>
-				<label
-					>{t('dashboard.columns')}<select
-						class="field"
-						value={columns}
-						onchange={(e) => {
-							checkpoint();
-							columns = columnCount(Number(e.currentTarget.value));
-						}}
-						>{#each [1, 2, 3, 4] as n}<option value={n}>{n}</option>{/each}</select
-					></label
-				><label
-					>{t('dashboard.minimumWidth')}<input
-						class="field"
-						type="number"
-						min="280"
-						max="700"
-						step="10"
-						value={minimumWidth}
-						onchange={(e) => {
-							checkpoint();
-							minimumWidth = columnWidth(Number(e.currentTarget.value));
-						}}
-					/></label
-				>{#if actualColumns !== columns}<span
-						>{t('dashboard.visibleColumns', { count: actualColumns })}</span
-					>{/if}
-			</div>
-			<div class="editor-actions">
-				<button
-					class="btn icon-btn"
-					disabled={!undo.length || saving}
-					title={`${t('dashboard.editor.undo')} (Strg+Z)`}
-					aria-label={t('dashboard.editor.undo')}
-					onclick={() => step('undo')}><Icon name="undo" size={15} /></button
-				><button
-					class="btn icon-btn"
-					disabled={!redo.length || saving}
-					title={`${t('dashboard.editor.redo')} (Strg+Y)`}
-					aria-label={t('dashboard.editor.redo')}
-					onclick={() => step('redo')}><Icon name="redo" size={15} /></button
-				><button class="btn" disabled={saving} onclick={() => (choosingTemplate = true)}
-					>{t('dashboard.templates.button')}</button
-				><button class="btn" disabled={saving} onclick={() => (confirmRestore = true)}
-					>{t('dashboard.restore')}</button
-				><button class="btn" disabled={saving} onclick={requestCancel}>{t('common.cancel')}</button
-				><button
-					class="btn btn-primary"
-					disabled={saving}
-					title={`${t('dashboard.editor.save')} (Strg+S)`}
-					onclick={finish}
-					>{saving ? t('dashboard.editor.saving') : t('dashboard.editor.save')}</button
-				>
-			</div>
-		</div>{/if}
+	{#if editing}<EditorToolbar
+			{adding}
+			{saving}
+			{columns}
+			{minimumWidth}
+			{actualColumns}
+			canUndo={undo.length > 0}
+			canRedo={redo.length > 0}
+			ontoggleadd={() => (adding ? (adding = false) : openAdd())}
+			oncolumns={(value) => {
+				checkpoint();
+				columns = columnCount(value);
+			}}
+			onminimumwidth={(value) => {
+				checkpoint();
+				minimumWidth = columnWidth(value);
+			}}
+			onstep={step}
+			ontemplate={() => (choosingTemplate = true)}
+			onrestore={() => (confirmRestore = true)}
+			oncancel={requestCancel}
+			onsave={finish}
+		/>{/if}
 	{#if error}<div class="notice-error" role="alert">
 			{error}<button class="btn" onclick={finish}>{t('ui.retry')}</button>
 		</div>{/if}
@@ -1076,8 +717,7 @@
 		<div class="area">
 			<div class="dashboard-grid" {@attach attachGrid}>
 				{#each mountedLayout as tile (tile.id)}
-					{@const source = sourceId(tile.id)}{@const target = workload(tile.id)}{@const spec =
-						tileSpec(tile.id)}{@const settings = tileOptions(options, tile.id)}
+					{@const spec = tileSpec(tile.id)}{@const settings = tileOptions(options, tile.id)}
 					<div
 						class="grid-stack-item"
 						data-position={tile.id}
@@ -1105,66 +745,23 @@
 							aria-label={titleOf(tile.id)}
 							onpointerdown={(e) => selectPart(e, tile.id)}
 						>
-							{#if settings.showTitle || settings.collapsed || editing}<!-- svelte-ignore a11y_no_static_element_interactions (the grip is the keyboard handle) -->
-								<div
-									class="tile-head"
-									class:draggable={editing && !tile.locked}
+							{#if settings.showTitle || settings.collapsed || editing}<TileHead
+									title={titleOf(tile.id)}
+									summary={summary(tile.id)}
+									{settings}
+									{editing}
+									locked={!!tile.locked}
+									{saving}
 									onpointerdown={(e) => headMove(e, tile.id)}
-								>
-									{#if editing}<button
-											disabled={tile.locked}
-											class="grip"
-											title={t('dashboard.editor.moveHint')}
-											aria-label={t('dashboard.move', { tile: titleOf(tile.id) })}
-											onkeydown={(e) => keyboardMove(e, tile.id)}
-											><Icon name="grip" size={16} /></button
-										>{/if}
-									{#if settings.showIcon}<span class="tile-symbol"
-											><Icon name={settings.icon} size={settings.titleSize + 3} /></span
-										>{/if}
-									<h2 class="tile-title" data-edit-part="heading">
-										{settings.showTitle ? titleOf(tile.id) : ''}
-									</h2>
-									{#if settings.showSummary}<span class="tile-summary">{summary(tile.id)}</span
-										>{/if}
-									{#if editing}<button
-											class="tile-action"
-											title={t(tile.locked ? 'dashboard.unlockPosition' : 'dashboard.lockPosition')}
-											aria-label={t('dashboard.lockPosition')}
-											aria-pressed={!!tile.locked}
-											onclick={() => {
-												checkpoint();
-												rebuild(
-													shown.map((p) => (p.id === tile.id ? { ...p, locked: !p.locked } : p)),
-												);
-											}}><Icon name={tile.locked ? 'lock' : 'unlock'} size={14} /></button
-										><button
-											class="tile-action"
-											title={t('dashboard.tileOptions')}
-											aria-label={`${t('dashboard.tileOptions')}: ${titleOf(tile.id)}`}
-											onclick={() => configure(tile.id)}><Icon name="edit" size={14} /></button
-										><button
-											class="tile-action"
-											title={t('dashboard.hide', { tile: titleOf(tile.id) })}
-											aria-label={t('dashboard.hide', { tile: titleOf(tile.id) })}
-											onclick={() => hide(tile.id)}><Icon name="close" size={16} /></button
-										>{:else}<button
-											class="tile-action collapse"
-											class:collapsed={settings.collapsed}
-											disabled={saving}
-											title={t(
-												settings.collapsed ? 'dashboard.expandTile' : 'dashboard.collapseTile',
-												{ name: titleOf(tile.id) },
-											)}
-											aria-label={t(
-												settings.collapsed ? 'dashboard.expandTile' : 'dashboard.collapseTile',
-												{ name: titleOf(tile.id) },
-											)}
-											aria-expanded={!settings.collapsed}
-											onclick={() => runtimeOption(tile.id, 'collapsed', !settings.collapsed)}
-											><Icon name="chevronDown" size={13} /></button
-										>{/if}
-								</div>{/if}
+									onkeymove={(e) => keyboardMove(e, tile.id)}
+									onlock={() => {
+										checkpoint();
+										rebuild(shown.map((p) => (p.id === tile.id ? { ...p, locked: !p.locked } : p)));
+									}}
+									onconfigure={() => configure(tile.id)}
+									onhide={() => hide(tile.id)}
+									oncollapse={() => runtimeOption(tile.id, 'collapsed', !settings.collapsed)}
+								/>{/if}
 							{#if !settings.collapsed || editing}<!-- svelte-ignore a11y_no_noninteractive_tabindex (fixed-height content is keyboard scrollable) -->
 								<div
 									class="tile-body"
@@ -1173,90 +770,19 @@
 									role="region"
 									aria-label={titleOf(tile.id)}
 								>
-									{#if target?.kind === 'app'}<CollectionTile
-											kind="docker"
-											{kvm}
-											onoption={(key, value) => runtimeOption(tile.id, key, value)}
-											disabled={saving}
-											options={settings}
-											containers={containers.filter((c) => c.app === target.name)}
-											ready={containersReady}
-											error={dockerError}
-											{admin}
-											tailscaleHost={tailnetHost(tailnet)}
-											{editing}
-											onrefresh={() => refreshSerial++}
-											onpin={(id) => {
-												if (!editing) startEditing();
-												add(shown.some((p) => p.id === id) ? duplicateId(id) : id);
-											}}
-										/>
-									{:else if target}<WorkloadTile
-											kind={target.kind}
-											name={target.name}
-											options={settings}
-											{editing}
-											{kvm}
-											tailscaleHost={tailnetHost(tailnet)}
-											vm={vms.find((v) => v.name === target.name)}
-											container={containers.find((c) => c.name === target.name)}
-											onrefresh={() => refreshSerial++}
-											ready={target.kind === 'vm' ? vmsReady : containersReady}
-											error={target.kind === 'vm' ? vmError : dockerError}
-											{admin}
-										/>
-									{:else if source === 'cpu' || source === 'memory'}<UsageTile
-											kind={source}
-											options={settings}
-											ondetails={() => runtimeOption(tile.id, 'details', !settings.details)}
-										/>
-									{:else if source === 'network'}<NetworkTile options={settings} />
-									{:else if source === 'netbird'}<NetbirdTile
-											options={settings}
-											value={netbirdPeers}
-											error={netbirdPeersError}
-										/>
-									{:else if source === 'tailscale'}<TailscaleTile
-											options={settings}
-											value={tailnetDevices}
-											error={tailnetDevicesError}
-										/>
-									{:else if source === 'system'}<SystemTile options={settings} />
-									{:else if source === 'igpu' || source === 'npu' || source === 'nvidia' || source === 'accelerators'}<AcceleratorTile
-											kind={source}
-											options={settings}
-										/>
-									{:else if source === 'docker' || source === 'vms' || source === 'shares'}<CollectionTile
-											kind={source}
-											{kvm}
-											onoption={(key, value) => runtimeOption(tile.id, key, value)}
-											disabled={saving}
-											options={settings}
-											{containers}
-											{vms}
-											{shares}
-											ready={source === 'docker'
-												? containersReady
-												: source === 'vms'
-													? vmsReady
-													: sharesReady}
-											error={source === 'docker'
-												? dockerError
-												: source === 'vms'
-													? vmError
-													: sharesError}
-											{admin}
-											tailscaleHost={tailnetHost(tailnet)}
-											{editing}
-											onrefresh={() => refreshSerial++}
-											onpin={(id) => {
-												if (!editing) startEditing();
-												add(shown.some((p) => p.id === id) ? duplicateId(id) : id);
-											}}
-										/>
-									{:else}{@const Content = CONTENT[source as StaticTileId]}{#if Content}<Content
-												options={settings}
-											/>{/if}{/if}
+									<TileContent
+										id={tile.id}
+										{settings}
+										{data}
+										{admin}
+										{editing}
+										{saving}
+										onoption={(key, value) => runtimeOption(tile.id, key, value)}
+										onpin={(id) => {
+											if (!editing) startEditing();
+											add(shown.some((p) => p.id === id) ? duplicateId(id) : id);
+										}}
+									/>
 								</div>{/if}
 							{#if editing}<button
 									disabled={tile.locked}
@@ -1278,46 +804,15 @@
 					></div>{/if}
 			</div>
 		</div>
-		{#if editing && adding}<aside class="tile add-tiles" aria-label={t('dashboard.hidden')}>
-				<div class="add-head">
-					<h2 class="tile-title">{t('dashboard.hidden')}</h2>
-					<button
-						class="tile-action"
-						title={t('common.close')}
-						aria-label={t('common.close')}
-						onclick={() => (adding = false)}><Icon name="close" size={16} /></button
-					>
-				</div>
-				{#if hidden.length}<div class="tile-choices">
-						{#each hidden as id}<button
-								class="btn"
-								disabled={shown.length >= 100}
-								onclick={() => add(id)}><Icon name="plus" size={14} />{t(TILES[id].title)}</button
-							>{/each}
-					</div>{:else}<p class="muted">{t('dashboard.editor.allAdded')}</p>{/if}
-				{#if admin}<label
-						>{t('dashboard.workload')}<select class="field" bind:value={selection}
-							><option value="">{t('dashboard.pickWorkload')}</option
-							>{#each workloadGroups as group}<optgroup label={t(group.label)}
-									>{#each group.choices as choice}<option value={choice.id}
-											>{choice.name}{shown.some((p) => sourceId(p.id) === choice.id)
-												? ` · ${t('dashboard.onDashboard')}`
-												: ''}</option
-										>{/each}</optgroup
-								>{/each}</select
-						></label
-					><button
-						class="btn"
-						disabled={!selection || shown.length >= 100}
-						onclick={() =>
-							add(
-								shown.some((p) => p.id === selection)
-									? duplicateId(selection as TileId)
-									: (selection as TileId),
-							)}>{t('dashboard.addWorkload')}</button
-					>{/if}
-				<p class="muted">{t('dashboard.hiddenHint')}</p>
-			</aside>{/if}
+		{#if editing && adding}<AddTiles
+				{hidden}
+				{shown}
+				{admin}
+				{workloadGroups}
+				bind:selection
+				onadd={add}
+				onclose={() => (adding = false)}
+			/>{/if}
 		{#if editing && customize && currentPlacement}<TileEditor
 				id={customize}
 				title={titleOf(customize)}
@@ -1365,33 +860,26 @@
 				onclose={() => (customize = null)}
 			/>{/if}
 	</div>
-	{#if confirmCancel}<Dialog
+	{#if confirmCancel}<EditorConfirm
 			title={t('dashboard.editor.discardTitle')}
+			text={t('dashboard.editor.discardText')}
+			keep={t('dashboard.editor.keepEditing')}
+			confirm={t('dashboard.editor.discard')}
+			onconfirm={cancel}
 			onclose={() => (confirmCancel = false)}
-			><p>{t('dashboard.editor.discardText')}</p>
-			<div class="dialog-actions">
-				<button class="btn" onclick={() => (confirmCancel = false)}
-					>{t('dashboard.editor.keepEditing')}</button
-				><button type="button" class="btn btn-warn" onclick={cancel}
-					>{t('dashboard.editor.discard')}</button
-				>
-			</div></Dialog
-		>{/if}
+		/>{/if}
 	{#if choosingTemplate}<TemplateDialog
 			onpick={useTemplate}
 			onclose={() => (choosingTemplate = false)}
 		/>{/if}
-	{#if confirmRestore}<Dialog
+	{#if confirmRestore}<EditorConfirm
 			title={t('dashboard.restore')}
+			text={t('dashboard.editor.restoreText')}
+			keep={t('common.cancel')}
+			confirm={t('dashboard.restore')}
+			onconfirm={restoreDefaults}
 			onclose={() => (confirmRestore = false)}
-			><p>{t('dashboard.editor.restoreText')}</p>
-			<div class="dialog-actions">
-				<button class="btn" onclick={() => (confirmRestore = false)}>{t('common.cancel')}</button
-				><button type="button" class="btn btn-warn" onclick={restoreDefaults}
-					>{t('dashboard.restore')}</button
-				>
-			</div></Dialog
-		>{/if}
+		/>{/if}
 </div>
 
 <style>
@@ -1404,28 +892,6 @@
 	.area {
 		flex: 1;
 		min-width: 0;
-	}
-	.editor-actions {
-		display: flex;
-		justify-content: flex-end;
-		flex-wrap: wrap;
-		gap: 8px;
-	}
-	.icon-btn {
-		padding-inline: 9px;
-	}
-	.collapse :global(svg) {
-		transform: rotate(180deg);
-	}
-	.collapse.collapsed :global(svg) {
-		transform: none;
-	}
-	.tile-summary {
-		color: var(--muted);
-		font-size: 11px;
-		min-width: 0;
-		overflow-wrap: anywhere;
-		text-align: right;
 	}
 	.editing .dashboard-grid {
 		background-image:
@@ -1443,7 +909,6 @@
 		background: color-mix(in srgb, var(--accent) 12%, transparent);
 		border-radius: 4px;
 	}
-	.grip:disabled,
 	.resize-handle:disabled {
 		cursor: default;
 		opacity: 0.35;
@@ -1459,21 +924,6 @@
 	.grid-stack-item {
 		min-width: 0;
 		position: relative;
-	}
-	.flow-controls {
-		display: flex;
-		gap: 14px;
-		flex-wrap: wrap;
-		align-items: center;
-	}
-	.flow-controls label {
-		display: flex;
-		gap: 8px;
-		align-items: center;
-	}
-	.flow-controls .field {
-		width: 80px;
-		min-height: 32px;
 	}
 	.resize-handle {
 		position: absolute;
@@ -1508,57 +958,9 @@
 		outline: 2px solid var(--accent);
 		outline-offset: -1px;
 	}
-	.tile-head {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		flex: none;
-		min-height: 35px;
-		padding: 5px 10px;
-		border-bottom: 1px solid var(--border);
-		background: color-mix(in srgb, var(--text) 3%, transparent);
-	}
 	/* Selected text in the editor would be dragged natively by the browser instead of the tile. */
 	.editing .dashboard-grid {
 		user-select: none;
-	}
-	.tile-head.draggable {
-		cursor: grab;
-		touch-action: none;
-	}
-	.moving .tile-head.draggable {
-		cursor: grabbing;
-	}
-	.tile-title {
-		flex: 1;
-		min-width: 0;
-		font-size: var(--tile-title-size, 13px);
-		font-weight: var(--tile-title-weight, 500);
-		font-family: var(--tile-title-font);
-		color: var(--tile-title-color, var(--text));
-		text-align: var(--tile-title-align, left);
-		line-height: 1.3;
-		letter-spacing: 0;
-		text-transform: uppercase;
-		overflow-wrap: anywhere;
-	}
-	.tile-symbol {
-		color: var(--accent);
-	}
-	.grip,
-	.tile-action {
-		border: 0;
-		background: transparent;
-		color: var(--muted);
-		padding: 3px;
-		cursor: pointer;
-		display: flex;
-		align-items: center;
-		flex: none;
-	}
-	.grip {
-		cursor: grab;
-		touch-action: none;
 	}
 	.tile-body {
 		min-height: 0;
@@ -1618,64 +1020,9 @@
 		outline-offset: 3px;
 		cursor: pointer;
 	}
-	/* One bar for all editor controls; it stays below the header while scrolling. */
-	.editbar {
-		position: sticky;
-		top: 60px;
-		z-index: 15;
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		gap: 12px;
-		flex-wrap: wrap;
-		border: 1px solid var(--border);
-		background: var(--surface);
-		border-radius: var(--radius-ctl);
-		padding: 8px 12px;
-		margin-bottom: 12px;
-		font-size: 0.8rem;
-		color: var(--muted);
-	}
-	.dashboard-page:has(.editbar) {
+	/* The editor bar of EditorToolbar.svelte pushes the sticky side panels down. */
+	.dashboard-page:has(:global(.editbar)) {
 		--dashboard-sticky-top: 132px;
-	}
-	.add-tiles {
-		position: sticky;
-		top: var(--dashboard-sticky-top, 76px);
-		width: 320px;
-		flex: none;
-		max-height: calc(100vh - var(--dashboard-sticky-top, 76px) - 19px);
-		overflow: auto;
-		box-sizing: border-box;
-		padding: 18px;
-		display: flex;
-		flex-direction: column;
-		gap: 15px;
-		background: var(--surface);
-	}
-	.add-head {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 8px;
-	}
-	.tile-choices {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 8px;
-	}
-	.add-tiles label {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 10px;
-	}
-	.add-tiles select {
-		width: auto;
-		max-width: 100%;
-	}
-	.add-tiles p {
-		font-size: 0.8rem;
 	}
 	@supports not (backdrop-filter: blur(1px)) {
 		.dashboard-tile {
@@ -1695,17 +1042,6 @@
 		}
 		.with-inspector .area {
 			padding-bottom: 75vh;
-		}
-		.editbar {
-			font-size: 0.75rem;
-		}
-		.add-tiles {
-			position: fixed;
-			inset: auto 10px 12px;
-			top: auto;
-			width: auto;
-			max-height: 75vh;
-			z-index: 40;
 		}
 		.dashboard-tile {
 			container-type: inline-size;

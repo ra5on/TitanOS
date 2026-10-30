@@ -119,7 +119,7 @@ func TestDiskIdentityStaleSelectionAndProtectedDisks(t *testing.T) {
 		t.Fatal(err)
 	}
 	req.Identities["sdd"] = "stale"
-	if err := m.Create(context.Background(), req); !errors.Is(err, ErrDiskUnavailable) {
+	if err := createVolume(m, context.Background(), req); !errors.Is(err, ErrDiskUnavailable) {
 		t.Fatal(err)
 	}
 	if len(runner.commands) != 0 {
@@ -128,10 +128,56 @@ func TestDiskIdentityStaleSelectionAndProtectedDisks(t *testing.T) {
 	req.Identities = nil
 	req.Disks = []string{"sdz"}
 	req.Erase = req.Disks
-	if err := m.Create(context.Background(), req); !errors.Is(err, ErrDiskUnavailable) {
+	if err := createVolume(m, context.Background(), req); !errors.Is(err, ErrDiskUnavailable) {
 		t.Fatal("accepted boot disk", err)
 	}
 	if len(runner.commands) != 0 {
 		t.Fatal(runner.commands)
+	}
+}
+
+// idOf is the identity the disk list shows for a disk, "" when it is gone.
+func idOf(m *Manager, name string) string {
+	devices, err := m.blockDevices(context.Background())
+	if err != nil {
+		return ""
+	}
+	device, ok := findDevice(devices, name)
+	if !ok {
+		return ""
+	}
+	return diskIdentity(classify(device, nil))
+}
+
+// createVolume is Create with the identities the disk list shows, as the
+// page sends them, unless the request names its own.
+func createVolume(m *Manager, ctx context.Context, req CreateRequest) error {
+	if req.Identities == nil {
+		req.Identities = map[string]string{}
+		for _, name := range req.Disks {
+			req.Identities[name] = idOf(m, name)
+		}
+	}
+	return m.Create(ctx, req)
+}
+
+func TestDiskIdentityWithoutSerialUsesNameAndPartitionTable(t *testing.T) {
+	a := blockDevice{Name: "/dev/vda", KName: "/dev/vda", Type: "disk", Size: 8 << 30, Model: "QEMU"}
+	b := a
+	b.Name, b.KName = "/dev/vdb", "/dev/vdb"
+	if diskIdentity(classify(a, nil)) == diskIdentity(classify(b, nil)) {
+		t.Fatal("two equal disks without serial cannot be told apart")
+	}
+	repartitioned := a
+	repartitioned.PTUUID = "1234abcd-0000-4000-8000-000000000000"
+	if diskIdentity(classify(a, nil)) == diskIdentity(classify(repartitioned, nil)) {
+		t.Fatal("a new partition table went unnoticed")
+	}
+	wwn := a
+	wwn.WWN = "0x5000c500a1b2c3d4"
+	moved := wwn
+	moved.Name, moved.KName = "/dev/sdq", "/dev/sdq"
+	if diskIdentity(classify(wwn, nil)) != diskIdentity(classify(moved, nil)) {
+		t.Fatal("a disk with WWN changed identity with its name")
 	}
 }

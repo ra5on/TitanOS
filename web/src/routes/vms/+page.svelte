@@ -12,7 +12,8 @@
 	import PageHead from '#lib/components/PageHead.svelte';
 	import TasksPanel from '#lib/components/TasksPanel.svelte';
 	import { api, ApiError, type VM, type VMStatus } from '#lib/api.ts';
-	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
+	import { poll, type Poller } from '#lib/poll.ts';
+	import { apiErrorText, errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 	import { addVmConsole } from '#lib/terminal.svelte.ts';
@@ -175,7 +176,7 @@
 			await api.put('/preferences/vnc', value);
 		} catch (err) {
 			session.vnc = previous;
-			sizeError = errorText(err instanceof ApiError ? err.code : 'internal');
+			sizeError = apiErrorText(err);
 		}
 	}
 
@@ -224,8 +225,11 @@
 		};
 	}
 
-	async function load() {
-		if (document.hidden || refreshing) return;
+	// Every refresh goes through the poller: runs never overlap, and one asked
+	// for during a run follows it, so an older answer never wins.
+	let poller: Poller | undefined;
+	const load = () => poller?.now() ?? Promise.resolve();
+	async function fetchStatus() {
 		refreshing = true;
 		try {
 			status = await api.get<VMStatus>('/vms');
@@ -245,9 +249,11 @@
 		}
 	}
 	$effect(() => {
-		load();
-		const timer = setInterval(load, 3000);
-		return () => clearInterval(timer);
+		const current = (poller = poll(fetchStatus, { interval: 3000 }));
+		return () => {
+			current();
+			if (poller === current) poller = undefined;
+		};
 	});
 
 	let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
@@ -419,7 +425,9 @@
 		);
 	// A VM that cannot change its resolution shows scaling; the choice stays
 	// for the next VM that can.
-	const shownMode = $derived<ScaleMode>(mode === 'remote' && current && current.template !== 'linux' ? 'scale' : mode);
+	const shownMode = $derived<ScaleMode>(
+		mode === 'remote' && current && current.template !== 'linux' ? 'scale' : mode,
+	);
 	// Only a different VM closes the list; a refreshed copy of the same one
 	// (a new object after every poll) must not.
 	const currentName = $derived(current?.name);
@@ -487,8 +495,10 @@
 	{#if !status.kvm}<p class="notice-warn" role="status">{t('vms.noKvm')}</p>{/if}
 	<PageHead title={t('vms.title')}>
 		{#snippet actions()}
-<a class="btn" href="/vms/media">{t('media.title')}</a>
-			<button type="button" class="btn" onclick={() => (adopting = true)}>{t('vms.adopt.open')}</button>
+			<a class="btn" href="/vms/media">{t('media.title')}</a>
+			<button type="button" class="btn" onclick={() => (adopting = true)}
+				>{t('vms.adopt.open')}</button
+			>
 			<TasksPanel compact />
 			<a class="btn btn-primary" href="/vms/new">{t('vms.create')}</a>
 		{/snippet}
@@ -508,7 +518,9 @@
 				{#if current.description}<span class="description muted">{current.description}</span>{/if}
 				{#if current.ioError}<p class="notice-error io-error" role="alert">
 						{t('vms.ioError')}
-						<button type="button" class="btn small" onclick={() => act(current, 'resume')}>{t('vms.resume')}</button>
+						<button type="button" class="btn small" onclick={() => act(current, 'resume')}
+							>{t('vms.resume')}</button
+						>
 					</p>{/if}
 			</div>
 			<div class="buttons">
@@ -672,7 +684,12 @@
 								>
 							{/snippet}
 						</Dropdown>
-						<Dropdown label={t('vms.display')} text={t(`vms.mode.${shownMode}`)} icon="monitor" compact>
+						<Dropdown
+							label={t('vms.display')}
+							text={t(`vms.mode.${shownMode}`)}
+							icon="monitor"
+							compact
+						>
 							{#snippet children(close)}
 								{#each MODES as entry (entry)}
 									<button
@@ -886,7 +903,13 @@
 							</div>
 						{:else if connectionPhase !== 'connected'}
 							<p class="muted hint" role="status">
-								{t(connectionPhase === 'disabled' ? 'vms.screenDisabled' : connectionPhase === 'lost' ? 'vms.screenLost' : 'vms.screenConnecting')}
+								{t(
+									connectionPhase === 'disabled'
+										? 'vms.screenDisabled'
+										: connectionPhase === 'lost'
+											? 'vms.screenLost'
+											: 'vms.screenConnecting',
+								)}
 							</p>
 						{/if}
 						<p class="muted hint">{t('vms.hint')}</p>
@@ -1050,10 +1073,13 @@
 				>
 				<button
 					type="button"
-					class="btn {kind === 'paste' ? 'btn-primary' : kind === 'remove' && draft.deleteDisks ? 'btn-danger' : 'btn-warn'}"
+					class="btn {kind === 'paste'
+						? 'btn-primary'
+						: kind === 'remove' && draft.deleteDisks
+							? 'btn-danger'
+							: 'btn-warn'}"
 					disabled={dialogBusy}
-					onclick={submit}
-					>{t(`vms.submit.${kind}`)}</button
+					onclick={submit}>{t(`vms.submit.${kind}`)}</button
 				>
 			</div>
 		</form>

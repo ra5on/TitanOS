@@ -1,20 +1,27 @@
 <script lang="ts">
+	import { poll } from '#lib/poll.ts';
 	import { beforeNavigate, goto } from '$app/navigation';
-	import { onDestroy } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { dockerName } from '#lib/docker-name.ts';
 	import { publicURL } from '#lib/app-links.ts';
 	import HardwarePicker from '#lib/components/HardwarePicker.svelte';
 	import ImageField from '#lib/components/ImageField.svelte';
-import LANAssignment from '#lib/components/LANAssignment.svelte';
+	import LANAssignment from '#lib/components/LANAssignment.svelte';
 	import { parseDocument, type Document } from 'yaml';
 	import { page } from '$app/state';
-	import { api, ApiError, type AppProxyStatus, type DockerContainer, type DockerStatus } from '#lib/api.ts';
+	import {
+		api,
+		ApiError,
+		type AppProxyStatus,
+		type DockerContainer,
+		type DockerStatus,
+	} from '#lib/api.ts';
 	import Icon from '#lib/components/Icon.svelte';
 	import { stackPrimary, sanitizeDockerLayout } from '#lib/docker-layout.ts';
 	import { formatBytes, formatPercent } from '#lib/format.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
 	import { addContainerConsole } from '#lib/terminal.svelte.ts';
@@ -95,33 +102,37 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 				if (!parse()) view = 'compose';
 			},
 			(err) => {
-				if (app === name) loadError = errorText(err instanceof ApiError ? err.code : 'internal');
+				if (app === name) loadError = apiErrorText(err);
 			},
 		);
 	}
 	let statusError = $state('');
 	async function loadStatus() {
-		if (document.hidden || applying) return;
+		if (applying) return;
 		try {
 			status = await api.get<DockerStatus>('/docker');
 			statusError = '';
 		} catch (err) {
-			statusError = errorText(err instanceof ApiError ? err.code : 'internal');
+			statusError = apiErrorText(err);
 		}
 	}
 	$effect(() => {
-		loadCompose(name);
-		void loadStatus();
-		const timer = setInterval(loadStatus, 5000);
-		return () => clearInterval(timer);
+		const app = name;
+		untrack(() => loadCompose(app));
 	});
+	$effect(() => poll(loadStatus, { interval: 5000 }));
 
 	// The head of the page: state and load of the app's containers, with
 	// the actions of the Docker page for the container of the chosen service.
-	const members = $derived((status?.containers ?? []).filter((container) => container.app === name));
+	const members = $derived(
+		(status?.containers ?? []).filter((container) => container.app === name),
+	);
 	const runningCount = $derived(members.filter(isRunning).length);
 	const primary = $derived(
-		stackPrimary({ id: `app:${name}`, name, members }, sanitizeDockerLayout(session.docker).primaryServices),
+		stackPrimary(
+			{ id: `app:${name}`, name, members },
+			sanitizeDockerLayout(session.docker).primaryServices,
+		),
 	);
 	const target = $derived(
 		members.find((container) => container.service === service) ?? primary ?? members[0],
@@ -157,24 +168,28 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 			for (const container of members)
 				await api.post(`/docker/containers/${encodeURIComponent(container.id)}/restart`);
 		} catch (err) {
-			actionError = errorText(err instanceof ApiError ? err.code : 'internal');
+			actionError = apiErrorText(err);
 		} finally {
 			restarting = false;
 			await loadStatus();
 		}
 	}
-	let logs = $state<{ container: DockerContainer; text: string | null; error: string } | null>(null);
+	let logs = $state<{ container: DockerContainer; text: string | null; error: string } | null>(
+		null,
+	);
 	let logsRequest = 0;
 	async function showLogs(container: DockerContainer) {
 		const request = ++logsRequest;
 		if (logs?.container.id !== container.id) logs = { container, text: null, error: '' };
 		else logs.error = '';
 		try {
-			const res = await api.get<{ logs: string }>(`/docker/containers/${encodeURIComponent(container.id)}/logs?tail=300`);
+			const res = await api.get<{ logs: string }>(
+				`/docker/containers/${encodeURIComponent(container.id)}/logs?tail=300`,
+			);
 			if (request === logsRequest && logs?.container.id === container.id) logs.text = res.logs;
 		} catch (err) {
 			if (request === logsRequest && logs?.container.id === container.id)
-				logs.error = errorText(err instanceof ApiError ? err.code : 'internal');
+				logs.error = apiErrorText(err);
 		}
 	}
 	let confirmDiscard = $state(false);
@@ -303,11 +318,15 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 			{#if runningCount}
 				<span class="mono value"
 					><span class="muted">{t('docker.cpu')}</span>
-					{formatPercent(members.filter(isRunning).reduce((sum, container) => sum + container.cpuPercent, 0))}</span
+					{formatPercent(
+						members.filter(isRunning).reduce((sum, container) => sum + container.cpuPercent, 0),
+					)}</span
 				>
 				<span class="mono value"
 					><span class="muted">{t('docker.ram')}</span>
-					{formatBytes(members.filter(isRunning).reduce((sum, container) => sum + container.memoryBytes, 0))}</span
+					{formatBytes(
+						members.filter(isRunning).reduce((sum, container) => sum + container.memoryBytes, 0),
+					)}</span
 				>
 			{/if}
 		{:else if status}
@@ -317,10 +336,18 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 		{/if}
 	</div>
 	<div class="quick">
-		{#each quickLinks as link (link.label)}<a class="btn small" href={link.href} target="_blank" rel="noreferrer" title={link.label}
-				><Icon name={link.icon} size={14} />{link.text}</a
+		{#each quickLinks as link (link.label)}<a
+				class="btn small"
+				href={link.href}
+				target="_blank"
+				rel="noreferrer"
+				title={link.label}><Icon name={link.icon} size={14} />{link.text}</a
 			>{/each}
-		<button type="button" class="btn small" disabled={!target} onclick={() => target && showLogs(target)}
+		<button
+			type="button"
+			class="btn small"
+			disabled={!target}
+			onclick={() => target && showLogs(target)}
 			><Icon name="fileText" size={14} />{t('docker.logs')}</button
 		>
 		<button
@@ -330,11 +357,22 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 			onclick={() => target && addContainerConsole(target.id, dockerName(target, 'distinct'))}
 			><Icon name="terminal" size={14} />{t('docker.console')}</button
 		>
-		<button type="button" class="btn small" disabled={!members.length || restarting || applying} onclick={restartAll}
-			><Icon name="restart" size={14} />{t(restarting ? 'editor.restarting' : 'docker.restart')}</button
+		<button
+			type="button"
+			class="btn small"
+			disabled={!members.length || restarting || applying}
+			onclick={restartAll}
+			><Icon name="restart" size={14} />{t(
+				restarting ? 'editor.restarting' : 'docker.restart',
+			)}</button
 		>
-		{#if proxy}<button type="button" class="btn small" onclick={() => (tailnetDialog = published ? 'remove' : 'publish')}
-				><Icon name="tailnet" size={14} />{t(published ? 'docker.tailnetUnpublish' : 'docker.tailnetPublish')}</button
+		{#if proxy}<button
+				type="button"
+				class="btn small"
+				onclick={() => (tailnetDialog = published ? 'remove' : 'publish')}
+				><Icon name="tailnet" size={14} />{t(
+					published ? 'docker.tailnetUnpublish' : 'docker.tailnetPublish',
+				)}</button
 			>{/if}
 	</div>
 	{#if statusError}<div class="notice-warn row-note" role="alert">
@@ -343,8 +381,11 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 			>
 		</div>{/if}
 	{#if actionError}<div class="notice-error row-note" role="alert">
-			<span>{actionError}</span><button type="button" class="btn small" disabled={restarting} onclick={restartAll}
-				>{t('common.retry')}</button
+			<span>{actionError}</span><button
+				type="button"
+				class="btn small"
+				disabled={restarting}
+				onclick={restartAll}>{t('common.retry')}</button
 			>
 		</div>{/if}
 </section>
@@ -501,7 +542,14 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 	</section>
 
 	{#if form.network !== 'host' && form.network !== 'none'}
-<LANAssignment {text} {service} onchange={(next)=>{text=next;parse();}} />
+		<LANAssignment
+			{text}
+			{service}
+			onchange={(next) => {
+				text = next;
+				parse();
+			}}
+		/>
 		<section class="tile" aria-labelledby="h-ports">
 			<div class="section-head">
 				<h2 class="tile-title" id="h-ports">{t('editor.ports')}</h2>
@@ -646,7 +694,10 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 	</div>
 {/if}
 
-{#if confirmDiscard}<Dialog title={t('editor.discardTitle')} onclose={() => (confirmDiscard = false)}>
+{#if confirmDiscard}<Dialog
+		title={t('editor.discardTitle')}
+		onclose={() => (confirmDiscard = false)}
+	>
 		<p>{t('editor.discardText')}</p>
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={() => (confirmDiscard = false)}
@@ -665,8 +716,10 @@ import LANAssignment from '#lib/components/LANAssignment.svelte';
 		onclose={() => (logs = null)}
 	>
 		{#if open.error}<div class="notice-error row-note" role="alert">
-				<span>{open.error}</span><button type="button" class="btn small" onclick={() => showLogs(open.container)}
-					>{t('common.retry')}</button
+				<span>{open.error}</span><button
+					type="button"
+					class="btn small"
+					onclick={() => showLogs(open.container)}>{t('common.retry')}</button
 				>
 			</div>{/if}
 		<pre class="logs">{open.text === null ? '…' : open.text || t('docker.logsEmpty')}</pre>

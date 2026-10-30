@@ -68,10 +68,16 @@ export function formatNumber(value: number): string {
 /** Date and time in the language of the interface; optionally in another time zone (e.g. the NAS's). */
 export function formatDateTime(date: Date, timeZone?: string): string {
 	try {
-		return new Intl.DateTimeFormat(i18n.locale, { dateStyle: 'medium', timeStyle: 'short', timeZone }).format(date);
+		return new Intl.DateTimeFormat(i18n.locale, {
+			dateStyle: 'medium',
+			timeStyle: 'short',
+			timeZone,
+		}).format(date);
 	} catch {
 		// An unknown zone falls back to the browser's.
-		return new Intl.DateTimeFormat(i18n.locale, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+		return new Intl.DateTimeFormat(i18n.locale, { dateStyle: 'medium', timeStyle: 'short' }).format(
+			date,
+		);
 	}
 }
 

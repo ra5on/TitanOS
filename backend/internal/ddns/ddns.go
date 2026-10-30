@@ -650,24 +650,29 @@ func (m *Manager) Status() Status {
 	return st
 }
 
+// ipv4Client connects over IPv4 only; one for all lookups, so idle
+// connections are reused and closed after a while instead of piling up.
+var ipv4Client = &http.Client{
+	Timeout: 20 * time.Second,
+	Transport: &http.Transport{
+		DialContext: func(ctx context.Context, _, addr string) (net.Conn, error) {
+			dialer := net.Dialer{Timeout: 10 * time.Second}
+			return dialer.DialContext(ctx, "tcp4", addr)
+		},
+		TLSHandshakeTimeout: 10 * time.Second,
+		IdleConnTimeout:     90 * time.Second,
+		MaxIdleConnsPerHost: 2,
+	},
+}
+
 // lookupIPv4 asks a service over IPv4 which address the request came from.
 func lookupIPv4(ctx context.Context, address string) (netip.Addr, error) {
-	dialer := &net.Dialer{Timeout: 10 * time.Second}
-	client := &http.Client{
-		Timeout: 20 * time.Second,
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, _, addr string) (net.Conn, error) {
-				return dialer.DialContext(ctx, "tcp4", addr)
-			},
-			TLSHandshakeTimeout: 10 * time.Second,
-		},
-	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
 	if err != nil {
 		return netip.Addr{}, errors.New("lookup address not usable")
 	}
 	req.Header.Set("User-Agent", "TitanOS")
-	res, err := client.Do(req)
+	res, err := ipv4Client.Do(req)
 	if err != nil {
 		var urlErr *url.Error
 		if errors.As(err, &urlErr) {
@@ -677,6 +682,8 @@ func lookupIPv4(ctx context.Context, address string) (netip.Addr, error) {
 	}
 	defer res.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(res.Body, 256))
+	// Read what is left (bounded) so the connection can be used again.
+	io.Copy(io.Discard, io.LimitReader(res.Body, 64<<10))
 	if res.StatusCode != http.StatusOK {
 		return netip.Addr{}, fmt.Errorf("%s: HTTP %d", req.URL.Host, res.StatusCode)
 	}

@@ -60,6 +60,17 @@ type Sessions struct {
 	// last written there, so that only a real change writes again.
 	keep Keeper
 	kept []byte
+	// want is what the stick should hold, wantMap the same as a map to
+	// write. A single writer (writeKept) writes the latest of it outside
+	// the lock, so that a slow stick never holds up logins; changes in
+	// the meantime are taken together. wantGen counts the changes,
+	// writing says whether the writer runs, idle wakes those who wait
+	// for it.
+	want    []byte
+	wantMap map[string]Session
+	wantGen uint64
+	writing bool
+	idle    *sync.Cond
 	// stay is the setting "stay logged in": days after the login, 0 = off,
 	// StayForever = no end.
 	stay int
@@ -405,6 +416,7 @@ func (s *Sessions) Remember(store Keeper) error {
 		}
 	}
 	s.kept, _ = json.Marshal(written)
+	s.want = s.kept
 	now := s.now()
 	for hash, session := range stored {
 		raw, err := hex.DecodeString(hash)
@@ -426,9 +438,10 @@ func fixed(session *Session) Session {
 	return Session{User: session.User, Created: session.Created, RemoteIP: session.RemoteIP, UserAgent: session.UserAgent, Remember: true}
 }
 
-// keepRemembered writes the remembered sessions to the stick if they
+// keepRemembered has the remembered sessions written to the stick if they
 // changed. Only the fields that are fixed for a session are written, so
-// using a session never writes. The lock is held.
+// using a session never writes. The lock is held; the writing itself
+// happens in writeKept, outside of it.
 func (s *Sessions) keepRemembered() {
 	if s.keep == nil {
 		return
@@ -441,21 +454,69 @@ func (s *Sessions) keepRemembered() {
 		}
 	}
 	data, err := json.Marshal(stored)
-	if err != nil || string(data) == string(s.kept) {
+	if err != nil || string(data) == string(s.want) {
 		return
 	}
-	if err := s.keep.WriteJSON(RememberFile, stored); err != nil {
-		slog.Warn("remembered logins not saved to the stick", "err", err)
-		return
+	s.want, s.wantMap = data, stored
+	s.wantGen++
+	if !s.writing {
+		s.writing = true
+		go s.writeKept()
 	}
-	s.kept = data
 }
 
-// Flush writes the sessions now, for a clean stop of titand.
+// writeKept writes what keepRemembered asked for, always the latest, one
+// write at a time and so in order, until nothing is left to write.
+func (s *Sessions) writeKept() {
+	s.mu.Lock()
+	for done := uint64(0); done != s.wantGen; {
+		gen, data, stored, keep := s.wantGen, s.want, s.wantMap, s.keep
+		written := string(data) == string(s.kept)
+		s.mu.Unlock()
+		var err error
+		if !written {
+			err = keep.WriteJSON(RememberFile, stored)
+		}
+		s.mu.Lock()
+		switch {
+		case err != nil:
+			slog.Warn("remembered logins not saved to the stick", "err", err)
+			// The next change tries again, also back to the same state.
+			if s.wantGen == gen {
+				s.want = s.kept
+			}
+		case !written:
+			s.kept = data
+		}
+		done = gen
+	}
+	s.writing = false
+	s.waiters().Broadcast()
+	s.mu.Unlock()
+}
+
+// waiters returns the condition writeKept signals. The lock is held.
+func (s *Sessions) waiters() *sync.Cond {
+	if s.idle == nil {
+		s.idle = sync.NewCond(&s.mu)
+	}
+	return s.idle
+}
+
+// waitKept waits until the stick holds what it should. The lock is held.
+func (s *Sessions) waitKept() {
+	for s.writing {
+		s.waiters().Wait()
+	}
+}
+
+// Flush writes the sessions now, for a clean stop of titand, and waits
+// for the remembered ones to be on the stick.
 func (s *Sessions) Flush() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.save()
+	s.waitKept()
 }
 
 // save writes the sessions to the file, if there is one. The lock is held.

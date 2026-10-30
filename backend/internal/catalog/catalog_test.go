@@ -9,10 +9,13 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/netguard"
 )
 
 const plain = "services:\n  web:\n    image: traefik/whoami\n    ports:\n      - \"8080:80\"\n"
@@ -316,5 +319,22 @@ func TestSources(t *testing.T) {
 	}
 	if sources, apps := again.Status(); len(sources) != 4 || len(apps) != 3 {
 		t.Errorf("after removing: %d sources, %d apps", len(sources), len(apps))
+	}
+}
+
+func TestMain(m *testing.M) {
+	// The test servers listen on loopback, which real sources may not use.
+	sourceAddress = func(netip.AddrPort) bool { return true }
+	os.Exit(m.Run())
+}
+
+func TestSourcesNeverReachLoopback(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(withMeta)) }))
+	defer srv.Close()
+	allowed := sourceAddress
+	sourceAddress = func(a netip.AddrPort) bool { return netguard.LAN(a.Addr()) }
+	defer func() { sourceAddress = allowed }()
+	if _, _, err := download(context.Background(), newClient(), srv.URL+"/compose.yaml", ""); !errors.Is(err, ErrUnreachable) || !strings.Contains(err.Error(), "not allowed") {
+		t.Fatalf("loopback source: %v", err)
 	}
 }

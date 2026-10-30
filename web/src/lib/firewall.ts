@@ -28,7 +28,8 @@ export function tabFrom(param: string | null, hash = ''): Tab {
 	if (anchor === 'firewall-autoblock') return 'autoblock';
 	if (anchor === 'firewall-recent') return 'recent';
 	if (anchor === 'firewall-networks') return 'networks';
-	if (anchor === 'firewall-apps' || anchor === 'firewall-rules' || anchor === 'firewall-policies') return 'policies';
+	if (anchor === 'firewall-apps' || anchor === 'firewall-rules' || anchor === 'firewall-policies')
+		return 'policies';
 	return 'zones';
 }
 
@@ -36,7 +37,9 @@ export function tabFrom(param: string | null, hash = ''): Tab {
 export function servicePorts(service: FirewallService): string {
 	return service.ports
 		.map((set) =>
-			set.protocol === 'icmp' ? 'ICMP' : `${set.protocol.toUpperCase()} ${(set.ports ?? []).join(', ')}`,
+			set.protocol === 'icmp'
+				? 'ICMP'
+				: `${set.protocol.toUpperCase()} ${(set.ports ?? []).join(', ')}`,
 		)
 		.join(' · ');
 }
@@ -72,12 +75,18 @@ export function routable(cfg: FirewallConfig, from: string, to: string): boolean
 }
 
 /** The cell nobody changed, as the backend makes it. */
-export function defaultCell(cfg: FirewallConfig, services: FirewallService[], from: string, to: string): FirewallCell {
+export function defaultCell(
+	cfg: FirewallConfig,
+	services: FirewallService[],
+	from: string,
+	to: string,
+): FirewallCell {
 	const cell: FirewallCell = { from, to, policies: [], default: 'deny' };
 	if (to === NAS) {
 		if (from === 'home' || from === 'vpn' || from === 'internet') {
 			for (const s of services)
-				if (s.default[from]) cell.policies.push({ action: 'allow', protocol: 'any', service: s.id });
+				if (s.default[from])
+					cell.policies.push({ action: 'allow', protocol: 'any', service: s.id });
 		} else if (from === 'docker') {
 			cell.policies.push(
 				{ action: 'allow', protocol: 'any', service: 'apps' },
@@ -93,12 +102,24 @@ export function defaultCell(cfg: FirewallConfig, services: FirewallService[], fr
 }
 
 /** The cell of a pair: the stored one or its default. */
-export function cellOf(cfg: FirewallConfig, services: FirewallService[], from: string, to: string): FirewallCell {
-	return cfg.cells.find((c) => c.from === from && c.to === to) ?? defaultCell(cfg, services, from, to);
+export function cellOf(
+	cfg: FirewallConfig,
+	services: FirewallService[],
+	from: string,
+	to: string,
+): FirewallCell {
+	return (
+		cfg.cells.find((c) => c.from === from && c.to === to) ?? defaultCell(cfg, services, from, to)
+	);
 }
 
 /** The cell of a pair inside cfg, added with its default if missing, to edit it. */
-export function editCell(cfg: FirewallConfig, services: FirewallService[], from: string, to: string): FirewallCell {
+export function editCell(
+	cfg: FirewallConfig,
+	services: FirewallService[],
+	from: string,
+	to: string,
+): FirewallCell {
 	let cell = cfg.cells.find((c) => c.from === from && c.to === to);
 	if (!cell) {
 		cfg.cells.push(defaultCell(cfg, services, from, to));
@@ -117,7 +138,8 @@ export type CellState = 'allow' | 'deny' | 'partial';
 /** Allowed, blocked or partly: by the default and the enabled policies against it. */
 export function cellState(cell: FirewallCell): CellState {
 	const active = cell.policies.filter((p) => !p.disabled);
-	if (cell.default === 'allow') return active.some((p) => p.action === 'deny') ? 'partial' : 'allow';
+	if (cell.default === 'allow')
+		return active.some((p) => p.action === 'deny') ? 'partial' : 'allow';
 	return active.some((p) => p.action === 'allow') ? 'partial' : 'deny';
 }
 
@@ -144,7 +166,11 @@ export function assignNetwork(cfg: FirewallConfig, id: string, zone: string): vo
 /** A fresh ID for an own zone. */
 export function newZoneId(cfg: FirewallConfig, random = Math.random): string {
 	for (;;) {
-		const id = 'z' + Math.floor(random() * 36 ** 5).toString(36).padStart(5, '0');
+		const id =
+			'z' +
+			Math.floor(random() * 36 ** 5)
+				.toString(36)
+				.padStart(5, '0');
 		if (!cfg.zones.some((z) => z.id === id)) return id;
 	}
 }
@@ -165,10 +191,13 @@ export function cloneConfig(cfg: FirewallConfig): FirewallConfig {
 }
 
 function tidy(p: FirewallPolicy): FirewallPolicy {
-	const out: FirewallPolicy = { action: p.action, protocol: p.service || p.app ? 'any' : p.protocol || 'any' };
+	const out: FirewallPolicy = {
+		action: p.action,
+		protocol: p.service || p.app ? 'any' : p.protocol || 'any',
+	};
 	for (const key of ['ports', 'service', 'app', 'source', 'destination', 'comment'] as const) {
 		const value = (p[key] ?? '').trim();
-		if (value && !((key === 'ports') && (p.service || p.app))) out[key] = value;
+		if (value && !(key === 'ports' && (p.service || p.app))) out[key] = value;
 	}
 	if (p.disabled) out.disabled = true;
 	return out;
@@ -192,7 +221,11 @@ function canonical(cfg: FirewallConfig, services: FirewallService[]): string {
 }
 
 /** Whether the parts that go on trial differ (the automatic blocking is saved on its own). */
-export function samePolicies(a: FirewallConfig, b: FirewallConfig, services: FirewallService[]): boolean {
+export function samePolicies(
+	a: FirewallConfig,
+	b: FirewallConfig,
+	services: FirewallService[],
+): boolean {
 	return canonical(a, services) === canonical(b, services);
 }
 
@@ -228,15 +261,19 @@ export type PolicyProblem =
 
 /** The first problem of a policy as a message key, or '' if it looks fine. */
 export function policyProblem(policy: FirewallPolicy): PolicyProblem {
-	if (!policy.service && !policy.app && policy.ports && !validPorts(policy.ports)) return 'firewall.rulePorts';
+	if (!policy.service && !policy.app && policy.ports && !validPorts(policy.ports))
+		return 'firewall.rulePorts';
 	if (policy.source && !validSource(policy.source)) return 'firewall.ruleSource';
 	if (policy.destination && !validSource(policy.destination)) return 'firewall.policyDestination';
-	if (policy.comment && (policy.comment.length > 80 || /["\\\n\r\t]/.test(policy.comment))) return 'firewall.ruleComment';
+	if (policy.comment && (policy.comment.length > 80 || /["\\\n\r\t]/.test(policy.comment)))
+		return 'firewall.ruleComment';
 	return '';
 }
 
 /** The first problem of an own zone as a message key, or ''. */
-export function zoneProblem(zone: FirewallZoneDef): '' | 'firewall.zoneName' | 'firewall.ruleSource' {
+export function zoneProblem(
+	zone: FirewallZoneDef,
+): '' | 'firewall.zoneName' | 'firewall.ruleSource' {
 	const name = (zone.name ?? '').trim();
 	if (!name || name.length > 40 || /["\\\n\r\t]/.test(name)) return 'firewall.zoneName';
 	if (zone.sources.some((s) => !validSource(s))) return 'firewall.ruleSource';

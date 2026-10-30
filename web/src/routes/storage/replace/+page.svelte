@@ -4,13 +4,19 @@
 	// (add, remove) and the live copy of an mdadm disk (replace).
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { api, ApiError, type Disk, type Volume } from '#lib/api.ts';
+	import { api, type Disk, type Volume } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
-	import { needsSwap, newlyAttached, replacementDisks, swapCandidates, type SwapCandidate } from '#lib/disk-swap.ts';
+	import {
+		needsSwap,
+		newlyAttached,
+		replacementDisks,
+		swapCandidates,
+		type SwapCandidate,
+	} from '#lib/disk-swap.ts';
 	import { formatDiskBytes, formatDuration } from '#lib/format.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
-	import { storage, watchStorage, refreshStorage } from '#lib/storage.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
+	import { storage, refreshStorage } from '#lib/storage.svelte.ts';
 	import { diskType } from '../labels.ts';
 
 	let volumeName = $state(page.url.searchParams.get('volume') ?? '');
@@ -25,13 +31,10 @@
 	let known = $state<string[] | null>(null);
 	let now = $state(Date.now());
 
+	// The shell already keeps the storage state current; this page only needs the clock.
 	onMount(() => {
-		const stop = watchStorage();
 		const tick = setInterval(() => (now = Date.now()), 1000);
-		return () => {
-			stop();
-			clearInterval(tick);
-		};
+		return () => clearInterval(tick);
 	});
 
 	const status = $derived(storage.status);
@@ -41,27 +44,45 @@
 	const candidate = $derived(candidates.find((c) => c.disk === diskName));
 	const oldDisk = $derived(status?.disks.find((d) => d.name === diskName));
 	const smallestMember = $derived(
-		volume && status ? Math.min(...volume.members.map((m) => status.disks.find((d) => d.name === m.disk)?.sizeBytes ?? Infinity).filter(Number.isFinite)) : 0,
+		volume && status
+			? Math.min(
+					...volume.members
+						.map((m) => status.disks.find((d) => d.name === m.disk)?.sizeBytes ?? Infinity)
+						.filter(Number.isFinite),
+				)
+			: 0,
 	);
-	const options = $derived(status ? replacementDisks(status.disks, oldDisk, Number.isFinite(smallestMember) ? smallestMember : 0) : []);
+	const options = $derived(
+		status
+			? replacementDisks(
+					status.disks,
+					oldDisk,
+					Number.isFinite(smallestMember) ? smallestMember : 0,
+				)
+			: [],
+	);
 	const fresh = $derived(known && status ? newlyAttached(known, options) : []);
 	const needsPassword = $derived(!!volume?.encryption && volume.filesystem === 'btrfs');
-	const syncing = $derived(!!volume?.sync || volume?.state === 'rebuilding' || volume?.state === 'syncing');
+	const syncing = $derived(
+		!!volume?.sync || volume?.state === 'rebuilding' || volume?.state === 'syncing',
+	);
 
 	// Offer the volume that needs it most when none was named.
 	$effect(() => {
 		if (!volumeName && volumes.length) volumeName = (volumes.find(needsSwap) ?? volumes[0]).name;
 	});
 	$effect(() => {
-		if (volume && !candidates.some((c) => c.disk === diskName)) diskName = candidates.find((c) => c.mode !== 'impossible')?.disk ?? '';
+		if (volume && !candidates.some((c) => c.disk === diskName))
+			diskName = candidates.find((c) => c.mode !== 'impossible')?.disk ?? '';
 	});
 	// While running, move on once the rebuild or copy is over.
 	$effect(() => {
-		if (step === 'running' && volume && !syncing && volume.state === 'ok') step = candidate?.mode === 'live' || candidate?.mode === 'addRemove' ? 'cleanup' : 'done';
+		if (step === 'running' && volume && !syncing && volume.state === 'ok')
+			step = candidate?.mode === 'live' || candidate?.mode === 'addRemove' ? 'cleanup' : 'done';
 	});
 
 	function fail(err: unknown) {
-		error = err instanceof ApiError ? `${errorText(err.code)}${err.message ? ` ${err.message}` : ''}` : errorText('internal');
+		error = apiErrorText(err, { detail: true });
 	}
 
 	async function act(action: () => Promise<unknown>, next?: typeof step) {
@@ -94,7 +115,9 @@
 	const takeOut = () =>
 		act(async () => {
 			await api.delete(`/storage/volumes/${volumeName}/disks/${diskName}`);
-			known = (status?.disks ?? []).filter((d) => d.name !== diskName).map((d) => d.identity ?? d.name);
+			known = (status?.disks ?? [])
+				.filter((d) => d.name !== diskName)
+				.map((d) => d.identity ?? d.name);
 		}, 'insert');
 
 	function start() {
@@ -103,16 +126,29 @@
 		confirming = false;
 		void act(() => {
 			if (candidate.mode === 'live')
-				return api.post(`/storage/volumes/${volumeName}/replace`, { old: diskName, new: target.name, erase: true, identity: target.identity });
-			return api.post(`/storage/volumes/${volumeName}/disks`, { disk: target.name, erase: true, identity: target.identity, password: needsPassword ? password : undefined });
+				return api.post(`/storage/volumes/${volumeName}/replace`, {
+					old: diskName,
+					new: target.name,
+					erase: true,
+					identity: target.identity,
+				});
+			return api.post(`/storage/volumes/${volumeName}/disks`, {
+				disk: target.name,
+				erase: true,
+				identity: target.identity,
+				password: needsPassword ? password : undefined,
+			});
 		}, 'running');
 	}
 
-	const removeOld = () => act(() => api.delete(`/storage/volumes/${volumeName}/disks/${diskName}`), 'done');
+	const removeOld = () =>
+		act(() => api.delete(`/storage/volumes/${volumeName}/disks/${diskName}`), 'done');
 
 	function describe(c: SwapCandidate): string {
 		const disk = status?.disks.find((d) => d.name === c.disk);
-		const what = disk ? `${diskType(disk)} · ${disk.model || '–'} · ${disk.serial || '–'} · ${formatDiskBytes(disk.sizeBytes)}` : t('swap.missingDisk');
+		const what = disk
+			? `${diskType(disk)} · ${disk.model || '–'} · ${disk.serial || '–'} · ${formatDiskBytes(disk.sizeBytes)}`
+			: t('swap.missingDisk');
 		return what;
 	}
 </script>
@@ -128,7 +164,13 @@
 {:else}
 	<ol class="steps" aria-label={t('swap.title')}>
 		{#each ['pick', 'insert', 'running', 'done'] as s, i (s)}
-			<li class:current={step === s || (s === 'insert' && step === 'prepare') || (s === 'running' && step === 'cleanup')}>{i + 1}. {t(`swap.step.${s}` as never)}</li>
+			<li
+				class:current={step === s ||
+					(s === 'insert' && step === 'prepare') ||
+					(s === 'running' && step === 'cleanup')}
+			>
+				{i + 1}. {t(`swap.step.${s}` as never)}
+			</li>
 		{/each}
 	</ol>
 
@@ -139,29 +181,46 @@
 			<h2 class="tile-title">{t('swap.pickTitle')}</h2>
 			<label class="stack"
 				><span>{t('swap.volume')}</span><select class="field" bind:value={volumeName}
-					>{#each volumes as v (v.name)}<option value={v.name}>{v.name} · {t(`state.${v.state}` as never)}</option>{/each}</select
+					>{#each volumes as v (v.name)}<option value={v.name}
+							>{v.name} · {t(`state.${v.state}` as never)}</option
+						>{/each}</select
 				></label
 			>
 			<fieldset class="disks">
 				<legend>{t('swap.disk')}</legend>
 				{#each candidates as c (c.disk)}
 					<label class="choice" class:off={c.mode === 'impossible'}>
-						<input type="radio" name="disk" value={c.disk} bind:group={diskName} disabled={c.mode === 'impossible'} />
+						<input
+							type="radio"
+							name="disk"
+							value={c.disk}
+							bind:group={diskName}
+							disabled={c.mode === 'impossible'}
+						/>
 						<span class="mono">{c.disk || '–'}</span>
 						<span class="what">{describe(c)}</span>
-						{#if c.mode === 'rebuild'}<span class="chip error">{t(c.present ? 'swap.failed' : 'swap.missing')}</span>{:else if c.warn}<span class="chip warn">{t('swap.smartWarn')}</span>{/if}
+						{#if c.mode === 'rebuild'}<span class="chip error"
+								>{t(c.present ? 'swap.failed' : 'swap.missing')}</span
+							>{:else if c.warn}<span class="chip warn">{t('swap.smartWarn')}</span>{/if}
 					</label>
 				{/each}
 			</fieldset>
 			{#if candidate}<p class="muted">{t(`swap.mode.${candidate.mode}` as never)}</p>{/if}
-			<div class="row-actions"><button class="btn btn-primary" disabled={!candidate || candidate.mode === 'impossible'} onclick={begin}>{t('swap.next')}</button></div>
+			<div class="row-actions">
+				<button
+					class="btn btn-primary"
+					disabled={!candidate || candidate.mode === 'impossible'}
+					onclick={begin}>{t('swap.next')}</button
+				>
+			</div>
 		</section>
 	{:else if step === 'prepare'}
 		<section class="tile panel">
 			<h2 class="tile-title">{t('swap.prepareTitle', { disk: diskName })}</h2>
 			<p>{t('swap.prepareText')}</p>
 			<div class="row-actions">
-				<button class="btn btn-danger" disabled={busy} onclick={takeOut}>{t('swap.takeOut')}</button>
+				<button class="btn btn-danger" disabled={busy} onclick={takeOut}>{t('swap.takeOut')}</button
+				>
 				<button class="btn" onclick={() => (step = 'pick')}>{t('swap.back')}</button>
 			</div>
 		</section>
@@ -170,9 +229,20 @@
 			<h2 class="tile-title">{t('swap.insertTitle')}</h2>
 			{#if oldDisk}
 				<div class="find">
-					<p>{t(candidate?.mode === 'rebuild' ? 'swap.pullOld' : 'swap.keepOld', { disk: diskName, model: oldDisk.model || '–', serial: oldDisk.serial || '–' })}</p>
-					<button class="btn" disabled={busy || identifyUntil > now} onclick={() => identify(diskName)}
-						>{identifyUntil > now ? t('swap.identifying', { seconds: String(Math.ceil((identifyUntil - now) / 1000)) }) : t('swap.identify')}</button
+					<p>
+						{t(candidate?.mode === 'rebuild' ? 'swap.pullOld' : 'swap.keepOld', {
+							disk: diskName,
+							model: oldDisk.model || '–',
+							serial: oldDisk.serial || '–',
+						})}
+					</p>
+					<button
+						class="btn"
+						disabled={busy || identifyUntil > now}
+						onclick={() => identify(diskName)}
+						>{identifyUntil > now
+							? t('swap.identifying', { seconds: String(Math.ceil((identifyUntil - now) / 1000)) })
+							: t('swap.identify')}</button
 					>
 				</div>
 			{/if}
@@ -184,28 +254,66 @@
 						<label class="choice">
 							<input type="radio" name="new" value={d.name} bind:group={chosenNew} />
 							<span class="mono">{d.name}</span>
-							<span class="what">{diskType(d)} · {d.model || '–'} · {d.serial || '–'} · {formatDiskBytes(d.sizeBytes)}</span>
-							{#if fresh.some((f) => f.name === d.name)}<span class="chip ok">{t('swap.justAttached')}</span>{/if}
+							<span class="what"
+								>{diskType(d)} · {d.model || '–'} · {d.serial || '–'} · {formatDiskBytes(
+									d.sizeBytes,
+								)}</span
+							>
+							{#if fresh.some((f) => f.name === d.name)}<span class="chip ok"
+									>{t('swap.justAttached')}</span
+								>{/if}
 							{#if d.role === 'used'}<span class="chip warn">{t('swap.hasData')}</span>{/if}
 						</label>
 					{/each}
 				</fieldset>
 			{:else}
-				<p class="muted" role="status">{t('swap.waiting', { size: formatDiskBytes(Math.max(oldDisk?.sizeBytes ?? 0, Number.isFinite(smallestMember) ? smallestMember : 0)) })}</p>
+				<p class="muted" role="status">
+					{t('swap.waiting', {
+						size: formatDiskBytes(
+							Math.max(
+								oldDisk?.sizeBytes ?? 0,
+								Number.isFinite(smallestMember) ? smallestMember : 0,
+							),
+						),
+					})}
+				</p>
 			{/if}
-			{#if needsPassword}<label class="stack"><span>{t('swap.password')}</span><input class="field" type="password" bind:value={password} autocomplete="off" /></label>{/if}
+			{#if needsPassword}<label class="stack"
+					><span>{t('swap.password')}</span><input
+						class="field"
+						type="password"
+						bind:value={password}
+						autocomplete="off"
+					/></label
+				>{/if}
 			<div class="row-actions">
-				<button class="btn btn-primary" disabled={busy || !chosenNew || (needsPassword && !password)} onclick={() => (confirming = true)}>{t('swap.start')}</button>
+				<button
+					class="btn btn-primary"
+					disabled={busy || !chosenNew || (needsPassword && !password)}
+					onclick={() => (confirming = true)}>{t('swap.start')}</button
+				>
 			</div>
 		</section>
 	{:else if step === 'running'}
 		<section class="tile panel">
-			<h2 class="tile-title">{t(candidate?.mode === 'live' ? 'swap.copying' : 'swap.rebuilding')}</h2>
+			<h2 class="tile-title">
+				{t(candidate?.mode === 'live' ? 'swap.copying' : 'swap.rebuilding')}
+			</h2>
 			{#if volume?.sync}
-				<div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(volume.sync.percent)}>
+				<div
+					class="bar"
+					role="progressbar"
+					aria-valuemin="0"
+					aria-valuemax="100"
+					aria-valuenow={Math.round(volume.sync.percent)}
+				>
 					<span style:width="{volume.sync.percent}%"></span>
 				</div>
-				<p class="muted">{Math.round(volume.sync.percent)} % · {t('swap.remaining', { time: formatDuration(volume.sync.remainingSeconds) })}</p>
+				<p class="muted">
+					{Math.round(volume.sync.percent)} % · {t('swap.remaining', {
+						time: formatDuration(volume.sync.remainingSeconds),
+					})}
+				</p>
 			{:else}
 				<p class="muted" role="status">{t('swap.starting')}</p>
 			{/if}
@@ -215,7 +323,11 @@
 		<section class="tile panel">
 			<h2 class="tile-title">{t('swap.cleanupTitle')}</h2>
 			<p>{t('swap.cleanupText', { disk: diskName })}</p>
-			<div class="row-actions"><button class="btn btn-primary" disabled={busy} onclick={removeOld}>{t('swap.removeOld')}</button></div>
+			<div class="row-actions">
+				<button class="btn btn-primary" disabled={busy} onclick={removeOld}
+					>{t('swap.removeOld')}</button
+				>
+			</div>
 		</section>
 	{:else}
 		<section class="tile panel">
@@ -224,7 +336,11 @@
 			{#if oldDisk && !oldDisk.volume}
 				<div class="find">
 					<p>{t('swap.pullNow', { disk: diskName, serial: oldDisk.serial || '–' })}</p>
-					<button class="btn" disabled={busy || identifyUntil > now} onclick={() => identify(diskName)}>{t('swap.identify')}</button>
+					<button
+						class="btn"
+						disabled={busy || identifyUntil > now}
+						onclick={() => identify(diskName)}>{t('swap.identify')}</button
+					>
 				</div>
 			{/if}
 			<div class="row-actions"><a class="btn" href="/storage">{t('swap.toStorage')}</a></div>
@@ -236,8 +352,12 @@
 	<Dialog title={t('swap.confirmTitle')} onclose={() => (confirming = false)}>
 		<p>{t('swap.confirmText', { disk: chosenNew, volume: volumeName })}</p>
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (confirming = false)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-danger" disabled={busy} onclick={start}>{t('swap.confirm')}</button>
+			<button type="button" class="btn" onclick={() => (confirming = false)}
+				>{t('common.cancel')}</button
+			>
+			<button type="button" class="btn btn-danger" disabled={busy} onclick={start}
+				>{t('swap.confirm')}</button
+			>
 		</div>
 	</Dialog>
 {/if}

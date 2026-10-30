@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { poll } from '#lib/poll.ts';
 	import { onMount } from 'svelte';
 	import { api } from '#lib/api.ts';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
@@ -33,7 +34,7 @@
 		if (inflight) return;
 		inflight = true;
 		try {
-			data = await api.get('/operations');
+			data = await api.get<Operations>('/operations');
 			error = '';
 		} catch (e) {
 			error = operationError(e, t);
@@ -54,11 +55,7 @@
 		}
 	}
 	onMount(() => {
-		load();
-		const timer = setInterval(() => {
-			if (!document.hidden && !busy) load();
-		}, 15000);
-		return () => clearInterval(timer);
+		return poll(load, { interval: 15000, skip: () => busy });
 	});
 </script>
 

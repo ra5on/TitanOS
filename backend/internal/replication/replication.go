@@ -121,6 +121,10 @@ type Manager struct {
 	now       func() time.Time
 	// command starts btrfs with a pipe; tests replace it.
 	command func(ctx context.Context, args ...string) *exec.Cmd
+	// stall gives up a stream that moved no byte for so long; answerWait
+	// is how long the other side may take to answer once all is sent
+	// (btrfs receive finishing). Tests shorten them.
+	stall, answerWait time.Duration
 
 	mu       sync.Mutex
 	loaded   bool
@@ -132,7 +136,10 @@ type Manager struct {
 func NewManager(store *config.Store) *Manager {
 	return &Manager{
 		store: store, runner: run.Exec{}, mountRoot: "/mnt", now: time.Now, states: map[string]*State{},
+		// No overall timeout: a first copy at a bandwidth limit may run for
+		// days. stream gives up on a connection that stands still instead.
 		Client: &http.Client{Timeout: 0},
+		stall:  5 * time.Minute, answerWait: 30 * time.Minute,
 		command: func(ctx context.Context, args ...string) *exec.Cmd {
 			return exec.CommandContext(ctx, "btrfs", args...)
 		},
@@ -424,7 +431,7 @@ func (m *Manager) send(ctx context.Context, job Job, progress func(int64)) (stri
 	if slices.Contains(local, name) {
 		return "", ErrBusy
 	}
-	if _, err := m.runner.Run(ctx, "", "btrfs", "subvolume", "snapshot", "-r", point, filepath.Join(dir, name)); err != nil {
+	if _, err := btrfs(ctx, m.runner, "subvolume", "snapshot", "-r", point, filepath.Join(dir, name)); err != nil {
 		return "", err
 	}
 	parent := ""
@@ -441,13 +448,13 @@ func (m *Manager) send(ctx context.Context, job Job, progress func(int64)) (stri
 	args = append(args, filepath.Join(dir, name))
 	if err := m.stream(ctx, job, name, args, progress); err != nil {
 		// The new snapshot is useless without its copy on the other side.
-		m.runner.Run(context.WithoutCancel(ctx), "", "btrfs", "subvolume", "delete", filepath.Join(dir, name))
+		btrfs(context.WithoutCancel(ctx), m.runner, "subvolume", "delete", filepath.Join(dir, name))
 		return "", err
 	}
 	// Keep the snapshot just sent (the next parent) and the one before.
 	local = append(local, name)
 	for _, old := range local[:max(0, len(local)-2)] {
-		if _, err := m.runner.Run(ctx, "", "btrfs", "subvolume", "delete", filepath.Join(dir, old)); err != nil {
+		if _, err := btrfs(ctx, m.runner, "subvolume", "delete", filepath.Join(dir, old)); err != nil {
 			slog.Warn("old replication snapshot not deleted", "snapshot", old, "err", err)
 		}
 	}
@@ -500,9 +507,23 @@ func (m *Manager) remoteSnapshots(ctx context.Context, job Job) ([]string, error
 }
 
 // stream pipes btrfs send into a PUT to the other NAS.
+//
+// Whatever ends the request early (an error, an answer before the stream
+// was taken in full, a connection that stands still) cancels the context:
+// that kills btrfs send, which would otherwise block for ever on a pipe
+// nobody reads, and cmd.Wait with it.
 func (m *Manager) stream(ctx context.Context, job Job, name string, args []string, progress func(int64)) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	stalled := false
+	var stallMu sync.Mutex
+	watchdog := time.AfterFunc(m.stall, func() {
+		stallMu.Lock()
+		stalled = true
+		stallMu.Unlock()
+		cancel()
+	})
+	defer watchdog.Stop()
 	cmd := m.command(ctx, args...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -513,39 +534,77 @@ func (m *Manager) stream(ctx context.Context, job Job, name string, args []strin
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	body := &counter{r: stdout, limit: int64(job.LimitMiB) << 20, start: time.Now(), progress: progress}
+	// finish ends btrfs send after an early end of the request.
+	finish := func(err error) error {
+		cancel()
+		stdout.Close()
+		cmd.Wait()
+		stallMu.Lock()
+		defer stallMu.Unlock()
+		if stalled {
+			return fmt.Errorf("the transfer stood still for %v: %w", m.stall, err)
+		}
+		return err
+	}
+	body := &counter{r: stdout, closer: stdout, limit: int64(job.LimitMiB) << 20, start: time.Now(), progress: progress,
+		activity: func(sent bool) {
+			if sent {
+				watchdog.Reset(m.answerWait)
+			} else {
+				watchdog.Reset(m.stall)
+			}
+		}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, fmt.Sprintf("%s/_replica/%s?keep=%d", job.URL, name, job.Keep), body)
 	if err != nil {
-		cancel()
-		cmd.Wait()
-		return err
+		return finish(err)
 	}
 	req.SetBasicAuth(job.User, job.Token)
 	req.Header.Set("Content-Type", "application/octet-stream")
 	res, err := m.Client.Do(req)
 	if err != nil {
-		cancel()
-		cmd.Wait()
-		return err
+		return finish(err)
 	}
 	defer res.Body.Close()
 	answer, _ := io.ReadAll(io.LimitReader(res.Body, 512))
+	if res.StatusCode != http.StatusCreated {
+		// Answered before or without taking the stream: btrfs send may
+		// still be writing into the pipe.
+		return finish(fmt.Errorf("other NAS: %s: %s", res.Status, strings.TrimSpace(string(answer))))
+	}
 	if waitErr := cmd.Wait(); waitErr != nil {
 		return fmt.Errorf("btrfs send: %v: %s", waitErr, strings.TrimSpace(stderr.String()))
-	}
-	if res.StatusCode != http.StatusCreated {
-		return fmt.Errorf("other NAS: %s: %s", res.Status, strings.TrimSpace(string(answer)))
 	}
 	return nil
 }
 
-// counter counts what is read and slows down to the limit (bytes per second).
+// btrfsTimeout bounds snapshot and delete commands: they take seconds,
+// and one hanging on a broken disk must not keep a job running for ever.
+const btrfsTimeout = 10 * time.Minute
+
+func btrfs(ctx context.Context, runner run.Runner, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, btrfsTimeout)
+	defer cancel()
+	return runner.Run(ctx, "", "btrfs", args...)
+}
+
+// counter counts what is read and slows down to the limit (bytes per
+// second). activity is told of every read, with true once all was read;
+// Close (from the HTTP client, when it stops sending) closes closer.
 type counter struct {
 	r        io.Reader
+	closer   io.Closer
 	n        int64
 	limit    int64
 	start    time.Time
 	progress func(int64)
+	activity func(sent bool)
+}
+
+func (c *counter) Close() error {
+	if c.closer == nil {
+		return nil
+	}
+	return c.closer.Close()
 }
 
 func (c *counter) Read(p []byte) (int, error) {
@@ -556,6 +615,9 @@ func (c *counter) Read(p []byte) (int, error) {
 	c.n += int64(n)
 	if c.progress != nil {
 		c.progress(c.n)
+	}
+	if c.activity != nil && (n > 0 || err != nil) {
+		c.activity(err == io.EOF)
 	}
 	if c.limit > 0 {
 		if ahead := time.Duration(float64(c.n)/float64(c.limit)*float64(time.Second)) - time.Since(c.start); ahead > 0 {
@@ -649,7 +711,7 @@ func (r *Receiver) receive(w http.ResponseWriter, req *http.Request, source, dir
 	incoming := filepath.Join(dir, ".incoming")
 	if leftovers, _ := os.ReadDir(incoming); len(leftovers) > 0 {
 		for _, entry := range leftovers {
-			r.runner.Run(req.Context(), "", "btrfs", "subvolume", "delete", filepath.Join(incoming, entry.Name()))
+			btrfs(req.Context(), r.runner, "subvolume", "delete", filepath.Join(incoming, entry.Name()))
 		}
 	}
 	if err := os.MkdirAll(incoming, 0o700); err != nil {
@@ -660,7 +722,7 @@ func (r *Receiver) receive(w http.ResponseWriter, req *http.Request, source, dir
 	cmd.Stdin = req.Body
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		r.runner.Run(context.WithoutCancel(req.Context()), "", "btrfs", "subvolume", "delete", filepath.Join(incoming, name))
+		btrfs(context.WithoutCancel(req.Context()), r.runner, "subvolume", "delete", filepath.Join(incoming, name))
 		slog.Warn("replica not received", "source", source, "snapshot", name, "err", err, "output", strings.TrimSpace(string(output)))
 		http.Error(w, "receive failed", http.StatusInternalServerError)
 		return
@@ -676,7 +738,7 @@ func (r *Receiver) receive(w http.ResponseWriter, req *http.Request, source, dir
 	keep = min(max(keep, 2), 365)
 	all := received(dir)
 	for _, old := range all[:max(0, len(all)-keep)] {
-		r.runner.Run(context.WithoutCancel(req.Context()), "", "btrfs", "subvolume", "delete", filepath.Join(dir, old))
+		btrfs(context.WithoutCancel(req.Context()), r.runner, "subvolume", "delete", filepath.Join(dir, old))
 	}
 	w.WriteHeader(http.StatusCreated)
 }
@@ -732,7 +794,7 @@ func (r *Receiver) Restore(ctx context.Context, volume, source, snapshot string)
 	if _, err := os.Lstat(target); err == nil {
 		return "", fmt.Errorf("%w: %s exists", ErrInvalid, target)
 	}
-	if _, err := r.runner.Run(ctx, "", "btrfs", "subvolume", "snapshot", from, target); err != nil {
+	if _, err := btrfs(ctx, r.runner, "subvolume", "snapshot", from, target); err != nil {
 		return "", err
 	}
 	return target, nil

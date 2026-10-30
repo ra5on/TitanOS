@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { api, ApiError } from '#lib/api.ts';
+	import { api } from '#lib/api.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { formatDateTime } from '#lib/format.ts';
 
 	type Jobs = {
@@ -39,7 +39,7 @@
 				},
 				(err) => {
 					jobs = null;
-					dataError = errorText(err instanceof ApiError ? err.code : 'internal');
+					dataError = apiErrorText(err);
 				},
 			),
 			api.get<Config>('/config-backup').then(
@@ -49,7 +49,7 @@
 				},
 				(err) => {
 					config = null;
-					configError = errorText(err instanceof ApiError ? err.code : 'internal');
+					configError = apiErrorText(err);
 				},
 			),
 		]);

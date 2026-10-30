@@ -13,7 +13,7 @@ func TestFirstVolumeFoldersAcrossFilesystems(t *testing.T) {
 		t.Run(filesystem, func(t *testing.T) {
 			m, _, store := newTestManager(t)
 			req := CreateRequest{Name: "first", Level: "raid1", Filesystem: filesystem, Disks: []string{"sde", "sdf"}, Erase: []string{"sde", "sdf"}}
-			if err := m.Create(context.Background(), req); err != nil {
+			if err := createVolume(m, context.Background(), req); err != nil {
 				t.Fatal(err)
 			}
 			for _, name := range []string{"vms", "appdata", "iso"} {
@@ -31,7 +31,7 @@ func TestFirstVolumeFoldersAcrossFilesystems(t *testing.T) {
 				t.Fatal("recreated a deliberately deleted folder")
 			}
 			req.Name = "second"
-			if err := m.Create(context.Background(), req); err != nil {
+			if err := createVolume(m, context.Background(), req); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := os.Stat(filepath.Join(m.MountPoint("second"), "vms")); !os.IsNotExist(err) {
@@ -45,7 +45,7 @@ func TestFolderSetupDoesNotWriteToOverlayAndResumesAfterMount(t *testing.T) {
 	m, runner, store := newTestManager(t)
 	runner.fail = "mount "
 	req := CreateRequest{Name: "first", Level: "raid0", Filesystem: "ext4", Disks: []string{"sde"}, Erase: []string{"sde"}}
-	if err := m.Create(context.Background(), req); err == nil {
+	if err := createVolume(m, context.Background(), req); err == nil {
 		t.Fatal("mount failure ignored")
 	}
 	if _, err := os.Stat(filepath.Join(m.MountPoint("first"), "vms")); !os.IsNotExist(err) {

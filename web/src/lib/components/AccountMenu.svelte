@@ -37,7 +37,14 @@
 
 {#if user}
 	<div class="account" bind:this={root}>
-		<button type="button" class="trigger" class:open aria-haspopup="menu" aria-expanded={open} onclick={() => (open = !open)}>
+		<button
+			type="button"
+			class="trigger"
+			class:open
+			aria-haspopup="menu"
+			aria-expanded={open}
+			onclick={() => (open = !open)}
+		>
 			<span class="avatar" aria-hidden="true">{initial}</span>
 			<span class="name">{user.name}</span>
 			<Icon name="chevronDown" size={14} />
@@ -53,22 +60,32 @@
 					</span>
 				</div>
 				<hr />
-				<a role="menuitem" href="/account" onclick={() => (open = false)}><Icon name="key" />{t('menu.account')}</a>
-				<button type="button" role="menuitem" onclick={openAppearance}><Icon name="palette" />{t('menu.appearance')}</button>
-				<div class="language"><Icon name="globe" /><span>{t('lang.label')}</span><LanguageSwitch /></div>
+				<a role="menuitem" href="/account" onclick={() => (open = false)}
+					><Icon name="key" />{t('menu.account')}</a
+				>
+				<button type="button" role="menuitem" onclick={openAppearance}
+					><Icon name="palette" />{t('menu.appearance')}</button
+				>
+				<div class="language">
+					<Icon name="globe" /><span>{t('lang.label')}</span><LanguageSwitch />
+				</div>
 				{#if canAdminister}
 					<hr />
-					<button type="button" role="menuitem" onclick={() => ask('restart')}><Icon name="restart" />{t('menu.restart')}</button>
-					<button type="button" role="menuitem" onclick={() => ask('shutdown')}><Icon name="power" />{t('menu.shutdown')}</button>
+					<button type="button" role="menuitem" onclick={() => ask('restart')}
+						><Icon name="restart" />{t('menu.restart')}</button
+					>
+					<button type="button" role="menuitem" onclick={() => ask('shutdown')}
+						><Icon name="power" />{t('menu.shutdown')}</button
+					>
 				{/if}
 				<hr />
-				<button type="button" role="menuitem" onclick={logout}><Icon name="logout" />{t('menu.logout')}</button>
+				<button type="button" role="menuitem" onclick={logout}
+					><Icon name="logout" />{t('menu.logout')}</button
+				>
 			</div>
 		{/if}
 	</div>
 {/if}
-
-
 
 {#if power}
 	<PowerDialog action={power} onclose={() => (power = null)} />

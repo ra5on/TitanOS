@@ -1,0 +1,35 @@
+# Updates (System und App)
+
+Festgelegte Regeln (aus CLAUDE.md). Inhaltlich unverändert aus der Projektdatei `CLAUDE.md` hierher verschoben (30.10.2026); sie gelten weiter verbindlich. Kernregeln stehen in `CLAUDE.md`, das Verzeichnis aller Regeldateien in `docs/rules/README.md`. Neue Regeln dieses Bereichs hier ergänzen. Verweise wie „siehe unten“ oder „siehe ‚Zugang‘“ beziehen sich auf die frühere Gesamtdatei; den genannten Abschnitt über `docs/rules/README.md` finden.
+
+Bereich: Gemeinsame Update-Regeln, A/B-Systemupdates und App-Updates ohne NAS-Neustart. Build- und Release-Grundregeln stehen weiterhin in CLAUDE.md.
+
+## Build, Releases und Updates (Detailregeln)
+
+### Gemeinsame Update-Regeln
+
+- Quelle: GitHub Releases von `ra5on/TitanOS`, **nur Stable** seit 0.5.0. Alte Kanal-Einstellungen werden auf Stable migriert; keine Stable/Beta-Auswahl und kein Beta-Feed als aktueller Updateweg. Optionale Funktionen können weiterhin ein Beta-Label tragen (SMB-Ordnerkopie).
+- Direkter Download von `https://github.com/ra5on/TitanOS/releases/latest/download/manifest.json`, ohne GitHub-API. Das interne Feld `source` erlaubt Spiegel/Tests, niemals das Umgehen der Signaturprüfung.
+- Manifest: Version, Tag, Kanal, Kernel, Veröffentlichungsdatum, Mindestversion, Changelog, Slot-Kommandozeile und Dateien mit Größe/SHA-256, zusätzlich Plugin-Inventar und optional `app` (`base`, `asset`, `sha256`, `size`).
+- **Ohne gültige Signatur keine Installation, auch nicht mit Warnung oder manuell.** Signierte Manifeste werden gegen `/usr/share/titanos/update-keys/*.pub` geprüft, danach Größe und SHA-256 jeder Datei. Downloads unterstützen HTTP-Range, ohne große Zwischenablage im RAM.
+- Im Abbild: `titanos-release-1.pub` (ID `8EAABC2A42904C1D`) und `titanos-recovery-1.pub` (ID `E58A91B20B598ABB`). Private Release-Geheimnisse nur im geschützten GitHub-Environment `release`, Reserve beim Besitzer. Externe Sicherung am 14. Oktober 2026 bestätigt; Offline-Verwahrung der Reserve noch nicht bestätigt. Schlüsselwechsel vorab per Update vorbereiten.
+- Einstellungen in `/config/system/update.json`: automatische Installation mit Uhrzeit und Häufigkeit der Prüfung im optionalen Feld `checkEvery` (Minuten; fehlend/0 = täglich wie bisher, `-1` = nur manuell, sonst 60–43200 = 1 Stunde bis 30 Tage; UI: 6 h, 12 h, täglich, wöchentlich, benutzerdefiniert in Stunden/Tagen, nur manuell; andere Werte lehnt die API ab). Abstand ab der letzten Prüfung jeder Art, nur im RAM; erste Prüfung fünf Minuten nach dem Start; nach einem Fehlschlag erneut nach dem Abstand, höchstens nach 24 Stunden. „Nächste Prüfung“ kommt aus dem RAM. Nach vollständig erfolgreicher Besitzer-/Administrator-Anmeldung zusätzlich `CheckAfterLogin` im Hintergrund (90 Sekunden, gleichzeitige Anmeldungen zusammenfassen); keine Prüfung bei Benutzerkonten, offener 2FA oder Seitenneuladen, keine automatische Installation durch Anmeldung, kein Prüfen im Entwicklungsmodus. „Nur manuell“ schaltet Zeitplan- und Anmeldeprüfung ab, „Nach Updates suchen“ bleibt; automatische Installation braucht automatische Prüfung (UI schaltet sie ab und sperrt sie, API lehnt die Kombination ab). Ältere Versionen ignorieren `checkEvery` und prüfen täglich. Details `docs/APP-UPDATES.md`. Meldung verlinkt `/settings/updates`; Fehler blockieren die Anmeldung nicht.
+- Neue Konfigurationsfelder müssen von Basis und voriger App-Version weiterhin lesbar sein; keine inkompatiblen Umbenennungen/Pflichtfelder. Rückwege einschließlich Plugin-Einstellungen erhalten.
+
+### Volle Systemupdates (A/B)
+
+- Drei Slot-Dateien direkt in den inaktiven Slot schreiben, passende offizielle Plugins **vor** dem Slot-Wechsel vorbereiten. Plugin-Dateien und Einstellungen nach Basis-Version getrennt halten.
+- `loader.conf` hat kein festes `default`. `sort-key` `titanos-1` bevorzugt den neuen Slot, `titanos-2` den Rückfall; neuer Eintrag `titanos-<slot>+3.conf` für drei Versuche.
+- `titanos-boot-check.service` ruft `titand -check-boot` auf. Bis zu fünf Minuten auf `/api/v1/health` warten: Konfiguration gelesen, Volumes versorgt, zuvor eingebundene Volumes wieder eingebunden; aktivierte Plugins gehören zum Healthcheck. Dann Zähler durch Umbenennen in `titanos-<slot>.conf` entfernen. **Kein `systemd-bless-boot`**. Fehler führt über `FailureAction=reboot` zum nächsten Versuch, nach drei Fehlstarts zum alten Slot.
+- `/config/system/update-pending.json` enthält die Boot-ID; bloßer Dienstneustart entscheidet keinen Systemwechsel. Ergebnis nach Neustart: installiert, fehlgeschlagen oder zurückgewechselt.
+- Rückwechsel tauscht die `sort-key` und läuft ebenfalls auf Probe; vor dem Neustart abbrechbar („Doch nicht“). Ein Ziel vor 0.31.0 kann keine verschlüsselten Volumes öffnen: sie fehlen dann in `update-pending.json` (`update.Manager.Encrypted`, `knowsEncryption`), sonst scheitert der Boot-Check dreimal und der Stick kehrt zurück; der Rückwechsel-Dialog nennt sie. Plugins auf einem verschlüsselten Volume lassen den Boot-Check eines solchen Ziels trotzdem scheitern (Warnung im Dialog).
+- Der Bootloader `EFI/BOOT/BOOTX64.EFI` wird von Updates weiterhin nicht ersetzt; manuelle Systeminstallation aus einer Datei ist nicht umgesetzt.
+
+### App-Updates ohne NAS-Neustart
+
+- Paket `app`, Details `docs/APP-UPDATES.md`. Bei passender `/usr/share/titanos/base-version` wird nur titand mit Weboberfläche geladen; sonst volles Systemupdate.
+- Ablage `titanos/<slot>/app/`: höchstens aktuelle/vorige App samt signierten Manifesten und `state.json`. Basis-titand prüft Signatur, Basis und Hash, kopiert nach `/var/lib/titanos/app/` im RAM und startet per `exec`. Nicht aus `/run` ausführen (noexec).
+- Probe über `titand -check-app` / `titanos-app-check.service`; Rückfall nach drei Fehlstarts oder nach fünf Minuten ohne erfolgreichen Healthcheck, zuerst vorige App, sonst Basis. Rückwechsel ohne NAS-Neustart; volle Updates leeren den App-Ordner des Ziel-Slots.
+- Installation wartet auf laufende Kopier-/Verschiebeaufträge und Downloads von Links, Backups, Wartungsaufträge, offene RAID-Erweiterungen, Plattenprüfungen, VM-Plattenkopien/Klone, Snapshots, NVIDIA-Builds und ungeklärte Anwendungssicherungen. Ein titand-Neustart ist kein NAS-Neustart; nur ausdrücklich dauerhaft protokollierte Aufträge überleben ihn. RAM-Aufträge und offene Verbindungen nicht als dauerhaft behandeln.
+- Anmeldungen überleben den Dienstneustart in `/run/titanos/sessions.json` (nur root), nicht den NAS-Neustart – außer mit eingeschaltetem „Angemeldet bleiben“ (siehe Konten und Rechte). Unverändertes Netzwerk, Docker und NUT bleiben laufen; `/run/titanos/vms-autostarted` verhindert erneuten Autostart absichtlich gestoppter VMs. Kernreservierungen werden abgeglichen.
+- Plugin-Katalog, NVIDIA-Bauumgebung und Treiber richten sich nach der **Basis-Version**, nicht der angezeigten App-Version.

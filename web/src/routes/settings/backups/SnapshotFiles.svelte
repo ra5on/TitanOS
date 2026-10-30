@@ -1,12 +1,17 @@
 <script lang="ts">
 	// Browses one saved state folder by folder and picks files and folders
 	// to restore. Paths are those inside the backup (/mnt/<volume>/<share>/…).
-	import { api, ApiError } from '#lib/api.ts';
+	import { api } from '#lib/api.ts';
 	import { formatBytes } from '#lib/format.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 
 	type Entry = { name: string; path: string; type: string; size: number };
-	let { job, snapshot, start, selected = $bindable([]) }: { job: string; snapshot: string; start: string; selected: string[] } = $props();
+	let {
+		job,
+		snapshot,
+		start,
+		selected = $bindable([]),
+	}: { job: string; snapshot: string; start: string; selected: string[] } = $props();
 
 	let path = $state('');
 	let entries = $state<Entry[]>([]);
@@ -24,7 +29,14 @@
 		loading = true;
 		error = '';
 		try {
-			const res = await api.get<{ entries: Entry[]; total: number; cut: boolean; nextOffset?: number }>(`/backups/${encodeURIComponent(job)}/snapshots/${encodeURIComponent(snapshot)}/files?path=${encodeURIComponent(folder)}&offset=${offset}`);
+			const res = await api.get<{
+				entries: Entry[];
+				total: number;
+				cut: boolean;
+				nextOffset?: number;
+			}>(
+				`/backups/${encodeURIComponent(job)}/snapshots/${encodeURIComponent(snapshot)}/files?path=${encodeURIComponent(folder)}&offset=${offset}`,
+			);
 			if (mine !== request) return;
 			path = folder;
 			entries = offset ? [...entries, ...res.entries] : res.entries;
@@ -33,7 +45,7 @@
 			next = res.nextOffset ?? null;
 		} catch (err) {
 			if (mine !== request) return;
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
+			error = apiErrorText(err);
 		}
 		loading = false;
 	}
@@ -54,16 +66,31 @@
 
 <div class="picker">
 	<div class="where">
-		<button type="button" class="btn" disabled={!parent || loading} onclick={() => open(parent)} aria-label={t('backup.filesUp')}>↑</button>
+		<button
+			type="button"
+			class="btn"
+			disabled={!parent || loading}
+			onclick={() => open(parent)}
+			aria-label={t('backup.filesUp')}>↑</button
+		>
 		<span class="mono">{path}</span>
 	</div>
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	<ul>
 		{#each entries as entry (entry.path)}
 			<li>
-				<label class="check"><input type="checkbox" checked={selected.includes(entry.path)} onchange={() => toggle(entry.path)} aria-label={entry.name} /></label>
+				<label class="check"
+					><input
+						type="checkbox"
+						checked={selected.includes(entry.path)}
+						onchange={() => toggle(entry.path)}
+						aria-label={entry.name}
+					/></label
+				>
 				{#if entry.type === 'dir'}
-					<button type="button" class="link" disabled={loading} onclick={() => open(entry.path)}>{entry.name}/</button>
+					<button type="button" class="link" disabled={loading} onclick={() => open(entry.path)}
+						>{entry.name}/</button
+					>
 				{:else}
 					<span>{entry.name}</span>
 				{/if}
@@ -73,7 +100,13 @@
 			<li class="muted" role="status">{loading ? t('common.loading') : t('backup.filesEmpty')}</li>
 		{/each}
 	</ul>
-	{#if next !== null}<button type="button" class="btn" disabled={loading} onclick={() => open(path, next ?? 0)}>{t('backup.filesMore', { shown: entries.length, total })}</button>{/if}
+	{#if next !== null}<button
+			type="button"
+			class="btn"
+			disabled={loading}
+			onclick={() => open(path, next ?? 0)}
+			>{t('backup.filesMore', { shown: entries.length, total })}</button
+		>{/if}
 	{#if cut}<p class="notice-warn">{t('backup.filesCut')}</p>{/if}
 	<p class="muted small">{t('backup.filesSelected', { count: selected.length })}</p>
 </div>

@@ -15,7 +15,7 @@
 		type ProxyForm,
 	} from '#lib/app-proxy.ts';
 	import ProxyRouteFields from '#lib/components/ProxyRouteFields.svelte';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 
 	// The HTTPS name of an app (e.g. https://immich.nas.local) is saved on
 	// its own: it changes nothing in the compose file and recreates no
@@ -52,7 +52,7 @@
 			take(next);
 			if (!saved) form = proxyForm(null, suggestedProxyName(app));
 		} catch (err) {
-			if (current === app) loadError = errorText(err instanceof ApiError ? err.code : 'internal');
+			if (current === app) loadError = apiErrorText(err);
 		}
 	}
 	$effect(() => {
@@ -95,9 +95,7 @@
 			notice = t('proxy.saved');
 		} catch (err) {
 			error =
-				err instanceof ApiError && err.code === 'proxy_invalid'
-					? err.message
-					: errorText(err instanceof ApiError ? err.code : 'internal');
+				err instanceof ApiError && err.code === 'proxy_invalid' ? err.message : apiErrorText(err);
 		} finally {
 			busy = false;
 		}
@@ -113,7 +111,7 @@
 			form.port = suggestedProxyPort(members);
 			notice = t('proxy.removed');
 		} catch (err) {
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
+			error = apiErrorText(err);
 		} finally {
 			busy = false;
 		}

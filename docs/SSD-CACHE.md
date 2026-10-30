@@ -8,7 +8,7 @@ Eine freie SSD kann ein mdadm-Volume (ext4/XFS) beschleunigen. Der Cache ist
 
 | Modus | dm-cache | Was passiert, wenn die SSD ausfällt |
 |---|---|---|
-| **Lesecache** (Standard) | `writethrough` | nichts geht verloren; ohne SSD wird das Volume direkt eingebunden, es gibt eine Meldung |
+| **Lesecache** (Standard) | `writethrough` | nichts geht verloren; ohne SSD wird das Volume direkt eingebunden, es gibt eine Meldung. Weil das Array dann ohne den Cache beschrieben wird, merkt sich TitanOS das (`stale`) und beginnt beim nächsten Start mit SSD mit leerem Cache (Metadaten genullt) |
 | **Lese- und Schreibcache** | `writeback` | noch nicht zurückgeschriebene Daten gehen verloren, das Dateisystem kann beschädigt werden; ohne SSD bleibt das Volume **ausgehängt** |
 
 Der Schreibcache ist eine bewusste Wahl mit Warnung im Dialog; empfohlen nur
@@ -30,11 +30,26 @@ wechseln (`dmsetup reload` mit kurzem `suspend`/`resume`).
 - Die Cache-SSD zählt als Mitglied des Volumes und wird nirgends sonst
   angeboten. Erweitern (RAID5/6) ist mit Cache gesperrt
   (`volume_cache_configured`).
-- Ausschalten: Ein Lesecache wird sofort vergessen (er läuft bis zum nächsten
-  Start harmlos weiter). Ein Schreibcache wird zuerst mit der Policy `cleaner`
-  vollständig zurückgeschrieben (`removing`); sobald `dmsetup status` keine
-  „dirty“ Blöcke mehr zeigt, wird er vergessen (Meldung
-  `volume_cache_removed`).
+- Ausschalten: Ein Schreibcache wird zuerst mit der Policy `cleaner`
+  vollständig zurückgeschrieben (`removing`). Sobald `dmsetup status` keine
+  „dirty“ Blöcke mehr zeigt, wechselt er auf `writethrough` (ab da wird kein
+  Block mehr „dirty“), das wird erneut geprüft, und erst dann bekommt
+  `/dev/mapper/titanos-cache-<volume>` per `dmsetup reload` eine `linear`-
+  Tabelle direkt auf das Array: Das eingebundene Volume läuft weiter, die SSD
+  ist frei, und beim Herunterfahren geht nichts verloren. Danach wird der
+  Cache vergessen (Meldung `volume_cache_removed`); die lineare Zuordnung
+  bleibt bis zum nächsten Start. Ein Lesecache ohne offene Blöcke wird sofort
+  so abgelöst. Ein Schreibcache, der nicht läuft, obwohl die SSD da ist (z. B.
+  gesperrtes Volume), lässt sich erst ausschalten, wenn er läuft; fehlt die
+  SSD, wird er auf Wunsch vergessen (seine offenen Blöcke sind dann ohnehin
+  verloren). Fehlt die SSD während `removing`, bleibt das Volume ausgehängt.
+- Löschen eines verschlüsselten Volumes mit Cache: erst zurückschreiben und
+  `writethrough` (höchstens 5 Minuten, sonst „beschäftigt“, später erneut),
+  dann `cryptsetup erase` und `wipefs` durch den Cache, dann das Cache-Gerät
+  entfernen; die Metadaten der SSD werden genullt und die Cache-Partition per
+  `blkdiscard` verworfen, wo die SSD das kann.
+- Die PARTUUIDs der Cache-Partitionen zählen zu `storage.Owns`: Die SSD
+  erscheint nicht unter „Laufwerk formatieren“.
 - Die Speicher-Seite zeigt Belegung, Lesetreffer und offene Blöcke aus
   `dmsetup status`.
 - `dmsetup` und das Kernelmodul `dm-cache` sind im Abbild; es ist kein neues

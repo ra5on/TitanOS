@@ -104,19 +104,25 @@ func (m *Manager) enableLink(ctx context.Context) string {
 	return loginURL(answer.URL)
 }
 
+// localClient reaches the LocalAPI of the plugin's tailscaled; one for all
+// calls, so idle connections do not pile up.
+var localClient = &http.Client{Transport: &http.Transport{
+	DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		var d net.Dialer
+		return d.DialContext(ctx, "unix", localSocket)
+	},
+	IdleConnTimeout: 30 * time.Second,
+}}
+
 // queryFeature is POST /localapi/v0/query-feature on the socket of the
 // plugin's tailscaled.
 func queryFeature(ctx context.Context, feature string) ([]byte, error) {
-	client := &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-		var d net.Dialer
-		return d.DialContext(ctx, "unix", localSocket)
-	}}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://local-tailscaled.sock/localapi/v0/query-feature?feature="+url.QueryEscape(feature), nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Sec-Tailscale", "localapi")
-	resp, err := client.Do(req)
+	resp, err := localClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +191,7 @@ func (m *Manager) fetchCertificate(ctx context.Context, name string) (*tls.Certi
 	}
 	cert, err := tls.X509KeyPair(certPEM, keyPEM)
 	if err != nil {
-		return nil, errors.New("Tailscale handed out an unusable certificate")
+		return nil, errors.New("unusable certificate from Tailscale")
 	}
 	if cert.Leaf == nil {
 		if cert.Leaf, err = x509.ParseCertificate(cert.Certificate[0]); err != nil {

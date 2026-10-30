@@ -1,6 +1,7 @@
 <script lang="ts">
 	// Dynamic DNS (backend package ddns): host names at the public IPv4
 	// address of the connection and the global IPv6 address of the NAS.
+	import { poll } from '#lib/poll.ts';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -17,11 +18,17 @@
 		type DnsProvider,
 		type SecretName,
 	} from '#lib/dns-providers.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { revealTarget } from '#lib/reveal-target.ts';
 	import DdnsStatusPanel from '#lib/ddns/DdnsStatus.svelte';
 	import UpdaterFields from '#lib/ddns/UpdaterFields.svelte';
-	import { MAX_HOSTS, updaterForm, updaterPayload, type DdnsStatus, type UpdaterForm } from '#lib/ddns/ddns.ts';
+	import {
+		MAX_HOSTS,
+		updaterForm,
+		updaterPayload,
+		type DdnsStatus,
+		type UpdaterForm,
+	} from '#lib/ddns/ddns.ts';
 	import Ipv64Panel from '#lib/ipv64/Ipv64Panel.svelte';
 	import Ipv64Area from '#lib/ipv64/Ipv64Area.svelte';
 	import { DDNS_TABS, ddnsTabFrom, type DdnsTab } from '#lib/ipv64/ipv64.ts';
@@ -45,7 +52,13 @@
 
 	let enabled = $state(false);
 	let names = $state('');
-	let updater = $state<UpdaterForm>({ ipv4: true, ipv6: true, interval: 0, lookupURL: '', iface: '' });
+	let updater = $state<UpdaterForm>({
+		ipv4: true,
+		ipv6: true,
+		interval: 0,
+		lookupURL: '',
+		iface: '',
+	});
 	let provider = $state<DnsProvider>({ type: '' });
 	let cleared = $state<SecretName[]>([]);
 
@@ -65,7 +78,7 @@
 			status = next;
 			loadError = '';
 		} catch (err) {
-			loadError = errorText(err instanceof ApiError ? err.code : 'internal');
+			loadError = apiErrorText(err);
 		}
 	}
 	onMount(() => {
@@ -73,10 +86,7 @@
 	});
 	$effect(() => {
 		if (!status?.running) return;
-		const timer = setInterval(() => {
-			if (!document.hidden) load(false);
-		}, 3000);
-		return () => clearInterval(timer);
+		return poll(() => load(false), { interval: 3000, immediate: false });
 	});
 	$effect(() => {
 		if (saved) {
@@ -88,12 +98,18 @@
 	const hostnames = $derived(parseNames(names));
 	const badNames = $derived(hostnames.filter((name) => !validHostName(name)));
 	const missing = $derived(
-		status ? missingFields(provider, status.settings.provider, status.secrets, cleared, 'address') : [],
+		status
+			? missingFields(provider, status.settings.provider, status.secrets, cleared, 'address')
+			: [],
 	);
 	const valid = $derived(
 		badNames.length === 0 &&
 			hostnames.length <= MAX_HOSTS &&
-			(!enabled || (hostnames.length > 0 && (updater.ipv4 || updater.ipv6) && !!provider.type && missing.length === 0)),
+			(!enabled ||
+				(hostnames.length > 0 &&
+					(updater.ipv4 || updater.ipv6) &&
+					!!provider.type &&
+					missing.length === 0)),
 	);
 
 	async function save(event: SubmitEvent) {
@@ -119,7 +135,7 @@
 			error =
 				err instanceof ApiError && err.code === 'invalid_ddns'
 					? `${errorText(err.code)} ${err.message.replace(/^ddns: invalid settings: /, '')}`
-					: errorText(err instanceof ApiError ? err.code : 'internal');
+					: apiErrorText(err);
 		} finally {
 			busy = false;
 		}
@@ -142,15 +158,26 @@
 {#if tab === 'ipv64'}
 	<Ipv64Area />
 {:else if loadError}
-	<div class="notice-error" role="alert">{loadError}<button class="btn" onclick={() => load()}>{t('ui.retry')}</button></div>
+	<div class="notice-error" role="alert">
+		{loadError}<button class="btn" onclick={() => load()}>{t('ui.retry')}</button>
+	</div>
 {:else if !status}
 	<p class="muted loading" role="status">{t('common.loading')}</p>
 {:else}
-	<DdnsStatusPanel {status} intro={t('ddns.intro')} onstatus={(next) => (status = next)} onrefresh={() => load(false)} />
+	<DdnsStatusPanel
+		{status}
+		intro={t('ddns.intro')}
+		onstatus={(next) => (status = next)}
+		onrefresh={() => load(false)}
+	/>
 
 	<form class="tile panel" aria-labelledby="ddns-settings" onsubmit={save}>
 		<h2 class="tile-title" id="ddns-settings" use:revealTarget>{t('ddns.settingsTitle')}</h2>
-		<label class="check"><input type="checkbox" bind:checked={enabled} disabled={busy} /><span>{t('ddns.enable')}</span></label>
+		<label class="check"
+			><input type="checkbox" bind:checked={enabled} disabled={busy} /><span
+				>{t('ddns.enable')}</span
+			></label
+		>
 
 		<div class="divided">
 			<h3>{t('dnsProvider.title')}</h3>
@@ -174,24 +201,35 @@
 				placeholder="nas.example.org"
 				spellcheck="false"
 				autocapitalize="off"
-				disabled={busy}
-			></textarea></label
+				disabled={busy}></textarea></label
 		>
 		<p class="muted hint">{t('ddns.hostnamesHint')}</p>
-		{#if badNames.length}<p class="notice-warn" role="alert">{t('ddns.hostnamesInvalid', { names: badNames.join(', ') })}</p>{/if}
-		{#if hostnames.length > MAX_HOSTS}<p class="notice-warn" role="alert">{t('ddns.hostnamesTooMany')}</p>{/if}
+		{#if badNames.length}<p class="notice-warn" role="alert">
+				{t('ddns.hostnamesInvalid', { names: badNames.join(', ') })}
+			</p>{/if}
+		{#if hostnames.length > MAX_HOSTS}<p class="notice-warn" role="alert">
+				{t('ddns.hostnamesTooMany')}
+			</p>{/if}
 
 		<UpdaterFields bind:form={updater} disabled={busy} />
 
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 		<div class="row-actions">
 			<button class="btn btn-primary" disabled={busy || !valid}>{t('common.save')}</button>
-			{#if busy || saved}<span class="muted" role="status">{t(busy ? 'ui.saving' : 'ui.saved')}</span>{/if}
+			{#if busy || saved}<span class="muted" role="status"
+					>{t(busy ? 'ui.saving' : 'ui.saved')}</span
+				>{/if}
 		</div>
 	</form>
 
 	{#if provider.type === 'ipv64'}
-		<Ipv64Panel {status} apiKey={provider.token ?? ''} hostnames={hostnames} onhost={addHost} onstatus={(next) => (status = next)} />
+		<Ipv64Panel
+			{status}
+			apiKey={provider.token ?? ''}
+			{hostnames}
+			onhost={addHost}
+			onstatus={(next) => (status = next)}
+		/>
 	{/if}
 {/if}
 

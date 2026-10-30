@@ -1,9 +1,10 @@
 <script lang="ts">
-	import { api, ApiError } from '#lib/api.ts';
+	import { poll } from '#lib/poll.ts';
+	import { api } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
-	import { t, errorText } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { onMount } from 'svelte';
 	import {
 		indexSettings,
@@ -27,9 +28,6 @@
 		dirty = $state(false);
 	let confirm = $state<{ kind: 'index' | 'thumbs'; volume: string } | null>(null);
 
-	function failure(err: unknown) {
-		return errorText(err instanceof ApiError ? err.code : 'internal');
-	}
 	// The status is RAM in titand: reading it touches neither disks nor the stick.
 	async function refresh() {
 		try {
@@ -38,16 +36,10 @@
 			if (!dirty) draft = indexSettings(next.status);
 			loadError = '';
 		} catch (err) {
-			loadError = failure(err);
+			loadError = apiErrorText(err);
 		}
 	}
-	onMount(() => {
-		void refresh();
-		const timer = setInterval(() => {
-			if (!document.hidden && !busy) void refresh();
-		}, 5000);
-		return () => clearInterval(timer);
-	});
+	onMount(() => poll(refresh, { interval: 5000, skip: () => busy }));
 	function toggle(list: string[], value: string, on: boolean) {
 		dirty = true;
 		saved = false;
@@ -65,7 +57,7 @@
 			dirty = false;
 			saved = true;
 		} catch (err) {
-			error = failure(err);
+			error = apiErrorText(err);
 		} finally {
 			busy = false;
 		}
@@ -76,7 +68,7 @@
 			await api.post('/files/index/run', { volume });
 			await refresh();
 		} catch (err) {
-			error = failure(err);
+			error = apiErrorText(err);
 		}
 	}
 	async function remove() {
@@ -93,7 +85,7 @@
 			confirm = null;
 			await refresh();
 		} catch (err) {
-			error = failure(err);
+			error = apiErrorText(err);
 		} finally {
 			busy = false;
 		}

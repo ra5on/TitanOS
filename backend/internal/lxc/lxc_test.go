@@ -221,6 +221,12 @@ func TestSettingsAreValidated(t *testing.T) {
 			c.Mounts = []Mount{{Path: env.m.mountRoot + "/data/media/../media", Target: "/mnt/x"}}
 		}, ErrBadFolder},
 		{func(c *Container) {
+			// A line break in a folder name would add lines to the LXC configuration.
+			bad := filepath.Join(env.m.mountRoot, "data", "x\nlxc.hook.pre-start = /bin/sh")
+			os.MkdirAll(bad, 0o755)
+			c.Mounts = []Mount{{Path: bad, Target: "/mnt/x"}}
+		}, ErrBadFolder},
+		{func(c *Container) {
 			c.Mounts = []Mount{{Path: filepath.Join(env.m.mountRoot, "data", "media"), Target: "/proc/x"}}
 		}, ErrInvalid},
 		{func(c *Container) {
@@ -264,6 +270,18 @@ func TestSettingsAreValidated(t *testing.T) {
 	os.Remove(env.m.lxcStart)
 	if err := env.m.Create(ctx, base, mounted); !errors.Is(err, ErrUnavailable) {
 		t.Fatal(err)
+	}
+}
+
+func TestMountEntryEscapesBlanks(t *testing.T) {
+	env := newTestManager(t)
+	photos := filepath.Join(env.m.mountRoot, "data", `My Photos\raw`+"\t")
+	c := Container{Name: "web", Volume: "data", Distribution: "debian", Release: "trixie", Arch: "amd64",
+		Network: "none", Mounts: []Mount{{Path: photos, Target: "/srv/photos"}}}
+	text := env.m.Config(c, false)
+	want := "lxc.mount.entry = " + filepath.Join(env.m.mountRoot, "data") + `/My\040Photos\134raw\011 srv/photos none bind,create=dir 0 0` + "\n"
+	if !strings.Contains(text, want) {
+		t.Fatalf("missing %q in\n%s", want, text)
 	}
 }
 

@@ -6,7 +6,7 @@
 	import { ApiError } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { formatDateTime } from '#lib/format.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 	import {
 		heartbeatChecks,
 		heartbeatChoiceValid,
@@ -33,8 +33,9 @@
 	} = $props();
 
 	function failure(err: unknown): string {
-		if (err instanceof ApiError && err.code.startsWith('ipv64_') && err.code !== 'ipv64_no_key') return `${errorText(err.code)} ${err.message}`;
-		return errorText(err instanceof ApiError ? err.code : 'internal');
+		if (err instanceof ApiError && err.code.startsWith('ipv64_') && err.code !== 'ipv64_no_key')
+			return `${errorText(err.code)} ${err.message}`;
+		return apiErrorText(err);
 	}
 	const when = (value?: string) => (value ? formatDateTime(new Date(value)) : '–');
 
@@ -45,7 +46,14 @@
 	let switchingOff = $state(false);
 	let checks = $state<Ipv64Healthcheck[]>([]);
 	let integrations = $state<Ipv64Integration[]>([]);
-	let choice = $state({ check: 'new', name: '', period: 30, grace: 10, integrations: [0], autoPause: true });
+	let choice = $state({
+		check: 'new',
+		name: '',
+		period: 30,
+		grace: 10,
+		integrations: [0],
+		autoPause: true,
+	});
 	let remote = $state<Ipv64Healthcheck | null>(null);
 	let testWait = $state(false);
 	let testNotice = $state('');
@@ -96,7 +104,9 @@
 		}
 	}
 	function toggleIntegration(id: number, on: boolean) {
-		choice.integrations = on ? [...new Set([...choice.integrations, id])] : choice.integrations.filter((x) => x !== id);
+		choice.integrations = on
+			? [...new Set([...choice.integrations, id])]
+			: choice.integrations.filter((x) => x !== id);
 	}
 </script>
 
@@ -118,20 +128,44 @@
 	>
 	{#if beat.enabled}
 		<dl>
-			<div><dt>{t('ipv64.check')}</dt><dd>{beat.check || '–'}</dd></div>
-			<div><dt>{t('ipv64.lastPing')}</dt><dd>{when(status.heartbeat.lastPing)}</dd></div>
-			<div><dt>{t('ipv64.nextPing')}</dt><dd>{when(status.heartbeat.nextPing)}</dd></div>
-			<div><dt>{t('ipv64.autoPause')}</dt><dd>{t(beat.autoPause ? 'ipv64.yes' : 'ipv64.no')}</dd></div>
+			<div>
+				<dt>{t('ipv64.check')}</dt>
+				<dd>{beat.check || '–'}</dd>
+			</div>
+			<div>
+				<dt>{t('ipv64.lastPing')}</dt>
+				<dd>{when(status.heartbeat.lastPing)}</dd>
+			</div>
+			<div>
+				<dt>{t('ipv64.nextPing')}</dt>
+				<dd>{when(status.heartbeat.nextPing)}</dd>
+			</div>
+			<div>
+				<dt>{t('ipv64.autoPause')}</dt>
+				<dd>{t(beat.autoPause ? 'ipv64.yes' : 'ipv64.no')}</dd>
+			</div>
 			{#if remote}
-				<div><dt>{t('ipv64.remoteStatus')}</dt><dd>{remote.status}</dd></div>
-				<div><dt>{t('ipv64.lastSeen')}</dt><dd>{when(remote.lastSeenAt)}</dd></div>
+				<div>
+					<dt>{t('ipv64.remoteStatus')}</dt>
+					<dd>{remote.status}</dd>
+				</div>
+				<div>
+					<dt>{t('ipv64.lastSeen')}</dt>
+					<dd>{when(remote.lastSeenAt)}</dd>
+				</div>
 			{/if}
 		</dl>
 		{#if status.heartbeat.paused}<p class="notice-warn">{t('ipv64.pausedForShutdown')}</p>{/if}
-		{#if status.heartbeat.lastError}<p class="notice-error" role="alert">{status.heartbeat.lastError}</p>{/if}
+		{#if status.heartbeat.lastError}<p class="notice-error" role="alert">
+				{status.heartbeat.lastError}
+			</p>{/if}
 		<div class="row-actions">
-			<button type="button" class="btn" disabled={!keyKnown || beatBusy} onclick={loadRemote}>{t('ipv64.remoteLoad')}</button>
-			<button type="button" class="btn" disabled={!keyKnown || testWait} onclick={sendTest}>{t('ipv64.test')}</button>
+			<button type="button" class="btn" disabled={!keyKnown || beatBusy} onclick={loadRemote}
+				>{t('ipv64.remoteLoad')}</button
+			>
+			<button type="button" class="btn" disabled={!keyKnown || testWait} onclick={sendTest}
+				>{t('ipv64.test')}</button
+			>
 		</div>
 		{#if testNotice}<p class="muted" role="status">{testNotice}</p>{/if}
 	{/if}
@@ -144,13 +178,38 @@
 		<label class="stack"
 			><span>{t('ipv64.check')}</span><select class="field" bind:value={choice.check}>
 				<option value="new">{t('ipv64.newCheck')}</option>
-				{#each checks as check (check.id)}<option value={check.id}>{check.name} ({check.status})</option>{/each}
+				{#each checks as check (check.id)}<option value={check.id}
+						>{check.name} ({check.status})</option
+					>{/each}
 			</select></label
 		>
 		{#if choice.check === 'new'}
-			<label class="stack"><span>{t('ipv64.checkName')}</span><input class="field" type="text" bind:value={choice.name} maxlength="100" /></label>
-			<label class="stack"><span>{t('ipv64.period')}</span><input class="field short" type="number" min="20" max="1440" bind:value={choice.period} /></label>
-			<label class="stack"><span>{t('ipv64.grace')}</span><input class="field short" type="number" min="1" max="1440" bind:value={choice.grace} /></label>
+			<label class="stack"
+				><span>{t('ipv64.checkName')}</span><input
+					class="field"
+					type="text"
+					bind:value={choice.name}
+					maxlength="100"
+				/></label
+			>
+			<label class="stack"
+				><span>{t('ipv64.period')}</span><input
+					class="field short"
+					type="number"
+					min="20"
+					max="1440"
+					bind:value={choice.period}
+				/></label
+			>
+			<label class="stack"
+				><span>{t('ipv64.grace')}</span><input
+					class="field short"
+					type="number"
+					min="1"
+					max="1440"
+					bind:value={choice.grace}
+				/></label
+			>
 			<p class="muted hint">{t('ipv64.periodHint')}</p>
 			<fieldset>
 				<legend>{t('ipv64.integrations')}</legend>
@@ -165,12 +224,23 @@
 				{/each}
 			</fieldset>
 		{/if}
-		<label class="check"><input type="checkbox" bind:checked={choice.autoPause} /><span>{t('ipv64.autoPauseLabel')}</span></label>
+		<label class="check"
+			><input type="checkbox" bind:checked={choice.autoPause} /><span
+				>{t('ipv64.autoPauseLabel')}</span
+			></label
+		>
 		<p class="muted hint">{t('ipv64.autoPauseHint')}</p>
 		{#if beatError}<p class="notice-error" role="alert">{beatError}</p>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={beatBusy} onclick={() => (switchingOn = false)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-primary" disabled={beatBusy || !heartbeatChoiceValid(choice)} onclick={switchOn}>{t('ipv64.onSubmit')}</button>
+			<button type="button" class="btn" disabled={beatBusy} onclick={() => (switchingOn = false)}
+				>{t('common.cancel')}</button
+			>
+			<button
+				type="button"
+				class="btn btn-primary"
+				disabled={beatBusy || !heartbeatChoiceValid(choice)}
+				onclick={switchOn}>{t('ipv64.onSubmit')}</button
+			>
 		</div>
 	</Dialog>
 {/if}
@@ -180,10 +250,24 @@
 		<p>{t('ipv64.offText', { check: beat.check || '' })}</p>
 		{#if beatError}<p class="notice-error" role="alert">{beatError}</p>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={beatBusy} onclick={() => (switchingOff = false)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-danger" disabled={beatBusy || !keyKnown} onclick={() => switchOff('delete')}>{t('ipv64.offDelete')}</button>
-			<button type="button" class="btn btn-warn" disabled={beatBusy || !keyKnown} onclick={() => switchOff('pause')}>{t('ipv64.offPause')}</button>
-			<button type="button" class="btn" disabled={beatBusy} onclick={() => switchOff('')}>{t('ipv64.offOnly')}</button>
+			<button type="button" class="btn" disabled={beatBusy} onclick={() => (switchingOff = false)}
+				>{t('common.cancel')}</button
+			>
+			<button
+				type="button"
+				class="btn btn-danger"
+				disabled={beatBusy || !keyKnown}
+				onclick={() => switchOff('delete')}>{t('ipv64.offDelete')}</button
+			>
+			<button
+				type="button"
+				class="btn btn-warn"
+				disabled={beatBusy || !keyKnown}
+				onclick={() => switchOff('pause')}>{t('ipv64.offPause')}</button
+			>
+			<button type="button" class="btn" disabled={beatBusy} onclick={() => switchOff('')}
+				>{t('ipv64.offOnly')}</button
+			>
 		</div>
 	</Dialog>
 {/if}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { poll } from '#lib/poll.ts';
 	import { untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { parseLogs, type LogEntry as Entry } from '#lib/logs.ts';
@@ -118,8 +119,7 @@
 
 	$effect(() => {
 		if (!follow) return;
-		const timer = setInterval(more, 3000);
-		return () => clearInterval(timer);
+		return poll(more, { interval: 3000, immediate: false });
 	});
 
 	const clock = $derived(
@@ -257,7 +257,9 @@
 					<span class="source">{entry.source}</span>
 					<span class="message"
 						>{#if level(entry.priority)}<span class="tag"
-								>{t(entry.priority <= 3 ? 'notify.severity.error' : 'notify.severity.warning')}</span
+								>{t(
+									entry.priority <= 3 ? 'notify.severity.error' : 'notify.severity.warning',
+								)}</span
 							>
 						{/if}{entry.message}</span
 					>

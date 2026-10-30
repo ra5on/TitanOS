@@ -48,13 +48,27 @@ export type ProviderField = {
 	requiredForChallenge?: boolean;
 };
 
-export const TSIG_ALGORITHMS = ['hmac-sha256', 'hmac-sha512', 'hmac-sha384', 'hmac-sha224', 'hmac-sha1'];
+export const TSIG_ALGORITHMS = [
+	'hmac-sha256',
+	'hmac-sha512',
+	'hmac-sha384',
+	'hmac-sha224',
+	'hmac-sha1',
+];
 
 export const providerFields: Record<DnsProviderType, ProviderField[]> = {
 	cloudflare: [{ name: 'token', label: 'apiToken', secret: true, required: true }],
 	desec: [{ name: 'token', label: 'apiToken', secret: true, required: true }],
 	hetzner: [{ name: 'token', label: 'apiToken', secret: true, required: true }],
-	ionos: [{ name: 'token', label: 'ionosKey', secret: true, required: true, placeholder: 'prefix.secret' }],
+	ionos: [
+		{
+			name: 'token',
+			label: 'ionosKey',
+			secret: true,
+			required: true,
+			placeholder: 'prefix.secret',
+		},
+	],
 	netcup: [
 		{ name: 'customer', label: 'customer', required: true, placeholder: '12345' },
 		{ name: 'token', label: 'apiKey', secret: true, required: true },
@@ -80,7 +94,12 @@ export const providerFields: Record<DnsProviderType, ProviderField[]> = {
 		{ name: 'secret', label: 'tsigSecret', secret: true, required: true },
 	],
 	dyndns2: [
-		{ name: 'server', label: 'updateUrl', required: true, placeholder: 'https://dynupdate.no-ip.com/nic/update' },
+		{
+			name: 'server',
+			label: 'updateUrl',
+			required: true,
+			placeholder: 'https://dynupdate.no-ip.com/nic/update',
+		},
 		{ name: 'user', label: 'user' },
 		{ name: 'password', label: 'password', secret: true },
 	],
@@ -88,15 +107,30 @@ export const providerFields: Record<DnsProviderType, ProviderField[]> = {
 
 /** The providers for a purpose; dyndns2 only changes addresses. */
 export function providerTypes(purpose: 'challenge' | 'address'): DnsProviderType[] {
-	const all: DnsProviderType[] = ['cloudflare', 'desec', 'hetzner', 'ionos', 'netcup', 'inwx', 'duckdns', 'ipv64', 'rfc2136'];
+	const all: DnsProviderType[] = [
+		'cloudflare',
+		'desec',
+		'hetzner',
+		'ionos',
+		'netcup',
+		'inwx',
+		'duckdns',
+		'ipv64',
+		'rfc2136',
+	];
 	return purpose === 'address' ? [...all, 'dyndns2'] : all;
 }
 
 /** The fields of a provider for a purpose. */
-export function fieldsFor(type: DnsProviderType, purpose: 'challenge' | 'address'): ProviderField[] {
+export function fieldsFor(
+	type: DnsProviderType,
+	purpose: 'challenge' | 'address',
+): ProviderField[] {
 	return providerFields[type]
 		.filter((field) => !field.only || field.only === purpose)
-		.map((field) => (field.requiredForChallenge && purpose === 'challenge' ? { ...field, required: true } : field));
+		.map((field) =>
+			field.requiredForChallenge && purpose === 'challenge' ? { ...field, required: true } : field,
+		);
 }
 
 /** Fields the account of a provider is known by: secrets stay only with them. */
@@ -104,7 +138,9 @@ const accountFields: FieldName[] = ['customer', 'user', 'server', 'keyName'];
 
 /** Whether the stored secrets still belong to the account in the form. */
 export function sameAccount(form: DnsProvider, stored: DnsProvider): boolean {
-	return form.type === stored.type && accountFields.every((f) => (form[f] ?? '') === (stored[f] ?? ''));
+	return (
+		form.type === stored.type && accountFields.every((f) => (form[f] ?? '') === (stored[f] ?? ''))
+	);
 }
 
 /**
@@ -122,10 +158,17 @@ export function missingFields(
 	const keep = sameAccount(form, stored);
 	const filled = (field: ProviderField) => {
 		if ((form[field.name] ?? '').trim()) return true;
-		return !!field.secret && keep && !!set[field.name as SecretName] && !cleared.includes(field.name as SecretName);
+		return (
+			!!field.secret &&
+			keep &&
+			!!set[field.name as SecretName] &&
+			!cleared.includes(field.name as SecretName)
+		);
 	};
 	const fields = fieldsFor(form.type, purpose);
-	const missing = fields.filter((field) => field.required && !filled(field)).map((field) => field.name);
+	const missing = fields
+		.filter((field) => field.required && !filled(field))
+		.map((field) => field.name);
 	// IPv64 for dynamic DNS: the API key or the update token.
 	if (form.type === 'ipv64' && purpose === 'address' && !fields.some((f) => f.secret && filled(f)))
 		missing.push('token', 'updateToken');
@@ -133,7 +176,10 @@ export function missingFields(
 }
 
 /** What is sent: only the fields of the chosen provider, secrets only when typed. */
-export function providerPayload(form: DnsProvider, purpose: 'challenge' | 'address' = 'challenge'): DnsProvider {
+export function providerPayload(
+	form: DnsProvider,
+	purpose: 'challenge' | 'address' = 'challenge',
+): DnsProvider {
 	if (!form.type) return { type: '' };
 	const out: DnsProvider = { type: form.type };
 	for (const field of fieldsFor(form.type, purpose)) {

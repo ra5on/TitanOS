@@ -3,11 +3,19 @@
 	// browser or the app on the home screen shows what the bell shows, from
 	// the level set under "send from". iPhones only from the home screen.
 	import { onMount } from 'svelte';
-	import { api, ApiError } from '#lib/api.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { api } from '#lib/api.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { formatTime } from '#lib/format.ts';
 	import Dialog from './Dialog.svelte';
-	import { appleMobile, currentSubscription, deviceName, pushSupported, standalone, subscribe, type PushDevice } from '#lib/web-push.ts';
+	import {
+		appleMobile,
+		currentSubscription,
+		deviceName,
+		pushSupported,
+		standalone,
+		subscribe,
+		type PushDevice,
+	} from '#lib/web-push.ts';
 
 	let devices = $state<PushDevice[] | null>(null);
 	let publicKey = $state('');
@@ -21,12 +29,14 @@
 	let denied = $state(false);
 
 	function fail(err: unknown) {
-		error = err instanceof Error && err.message === 'denied' ? t('push.denied') : errorText(err instanceof ApiError ? err.code : 'internal');
+		error = err instanceof Error && err.message === 'denied' ? t('push.denied') : apiErrorText(err);
 	}
 
 	async function load() {
 		try {
-			const answer = await api.get<{ publicKey: string; devices: PushDevice[] }>('/notifications/push');
+			const answer = await api.get<{ publicKey: string; devices: PushDevice[] }>(
+				'/notifications/push',
+			);
 			publicKey = answer.publicKey;
 			devices = answer.devices;
 			const subscription = await currentSubscription().catch(() => null);
@@ -39,8 +49,13 @@
 
 	// The NAS names a device by a hash of its endpoint (first 8 bytes of SHA-256).
 	async function idOf(subscription: PushSubscription): Promise<string> {
-		const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(subscription.endpoint));
-		return [...new Uint8Array(digest).slice(0, 8)].map((b) => b.toString(16).padStart(2, '0')).join('');
+		const digest = await crypto.subtle.digest(
+			'SHA-256',
+			new TextEncoder().encode(subscription.endpoint),
+		);
+		return [...new Uint8Array(digest).slice(0, 8)]
+			.map((b) => b.toString(16).padStart(2, '0'))
+			.join('');
 	}
 
 	onMount(() => {
@@ -54,7 +69,10 @@
 		busy = true;
 		error = message = '';
 		try {
-			const device = await subscribe(publicKey, deviceName(navigator.userAgent, navigator.maxTouchPoints));
+			const device = await subscribe(
+				publicKey,
+				deviceName(navigator.userAgent, navigator.maxTouchPoints),
+			);
 			thisDevice = device.id;
 			await load();
 			message = t('push.enabled');
@@ -110,7 +128,11 @@
 	{:else if denied}
 		<p class="notice-warn">{t('push.blocked')}</p>
 	{:else if !thisDevice}
-		<div class="row-actions"><button type="button" class="btn btn-primary" disabled={busy || !publicKey} onclick={enable}>{t('push.enable')}</button></div>
+		<div class="row-actions">
+			<button type="button" class="btn btn-primary" disabled={busy || !publicKey} onclick={enable}
+				>{t('push.enable')}</button
+			>
+		</div>
 	{/if}
 	{#if message}<p class="muted" role="status">{message}</p>{/if}
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
@@ -118,11 +140,24 @@
 		<ul class="devices divided">
 			{#each devices as device (device.id)}
 				<li>
-					<span class="name">{device.name || device.service}{#if device.id === thisDevice}<span class="chip ok">{t('push.thisDevice')}</span>{/if}</span>
-					<span class="muted small">{t('push.since', { date: formatTime(new Date(device.created)) })}</span>
+					<span class="name"
+						>{device.name || device.service}{#if device.id === thisDevice}<span class="chip ok"
+								>{t('push.thisDevice')}</span
+							>{/if}</span
+					>
+					<span class="muted small"
+						>{t('push.since', { date: formatTime(new Date(device.created)) })}</span
+					>
 					<span class="row-actions">
-						<button type="button" class="btn small" disabled={busy} onclick={() => test(device)}>{t('push.test')}</button>
-						<button type="button" class="btn small" disabled={busy} onclick={() => (removing = device)}>{t('push.remove')}</button>
+						<button type="button" class="btn small" disabled={busy} onclick={() => test(device)}
+							>{t('push.test')}</button
+						>
+						<button
+							type="button"
+							class="btn small"
+							disabled={busy}
+							onclick={() => (removing = device)}>{t('push.remove')}</button
+						>
 					</span>
 				</li>
 			{/each}
@@ -136,8 +171,15 @@
 	<Dialog title={t('push.remove')} onclose={() => (removing = null)}>
 		<p>{t('push.removeText', { name: removing.name || removing.service })}</p>
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (removing = null)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-danger" disabled={busy} onclick={() => removing && remove(removing)}>{t('push.remove')}</button>
+			<button type="button" class="btn" onclick={() => (removing = null)}
+				>{t('common.cancel')}</button
+			>
+			<button
+				type="button"
+				class="btn btn-danger"
+				disabled={busy}
+				onclick={() => removing && remove(removing)}>{t('push.remove')}</button
+			>
 		</div>
 	</Dialog>
 {/if}

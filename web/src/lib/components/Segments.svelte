@@ -5,7 +5,7 @@
 		value = $bindable(),
 		label,
 		disabled = false,
-		onchange
+		onchange,
 	}: {
 		options: { value: T; label: string }[];
 		value: T;

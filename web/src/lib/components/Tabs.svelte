@@ -5,7 +5,7 @@
 		tabs,
 		value,
 		label,
-		onchange
+		onchange,
 	}: {
 		tabs: { id: T; label: string; badge?: string | number }[];
 		value: T;
@@ -16,8 +16,16 @@
 
 <div class="tabs" role="tablist" aria-label={label}>
 	{#each tabs as tab (tab.id)}
-		<button class="btn" type="button" role="tab" aria-selected={value === tab.id} data-tab={tab.id} onclick={() => onchange(tab.id)}
-			>{tab.label}{#if tab.badge !== undefined && tab.badge !== ''}<span class="badge">{tab.badge}</span>{/if}</button
+		<button
+			class="btn"
+			type="button"
+			role="tab"
+			aria-selected={value === tab.id}
+			data-tab={tab.id}
+			onclick={() => onchange(tab.id)}
+			>{tab.label}{#if tab.badge !== undefined && tab.badge !== ''}<span class="badge"
+					>{tab.badge}</span
+				>{/if}</button
 		>
 	{/each}
 </div>

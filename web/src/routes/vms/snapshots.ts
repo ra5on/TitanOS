@@ -1,6 +1,21 @@
 // What GET /vms/<name>/snapshots returns.
-export type SnapshotSchedule = { enabled: boolean; time: string; days: number[]; keep: number; memory: boolean; allowPause: boolean };
-export type Snapshot = { id: string; name: string; created: string; memory: boolean; automatic: boolean; bytes: number; incomplete?: boolean };
+export type SnapshotSchedule = {
+	enabled: boolean;
+	time: string;
+	days: number[];
+	keep: number;
+	memory: boolean;
+	allowPause: boolean;
+};
+export type Snapshot = {
+	id: string;
+	name: string;
+	created: string;
+	memory: boolean;
+	automatic: boolean;
+	bytes: number;
+	incomplete?: boolean;
+};
 export type SnapshotStatus = {
 	snapshots: Snapshot[];
 	schedule: SnapshotSchedule;

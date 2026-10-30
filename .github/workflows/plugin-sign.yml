@@ -4,7 +4,8 @@ name: Plugin sets
 # sets (draft releases common-<n> / kernel-<package>-<n>) and NVIDIA driver
 # updates (draft releases pending-nvidia-<run>-<kernel set>). The key stays in
 # this repository's environment "release"; the plugin repository never sees
-# it. See docs/PLUGIN-REPO.md.
+# it, and none of its code runs next to it: the drafts are downloaded as data
+# and signed by scripts/sign-plugin-set.py of this tag. See docs/PLUGIN-REPO.md.
 #
 # The environment permits v* tags only. A scheduled or manual run on the
 # default branch therefore only looks for drafts and, if there are some,
@@ -57,13 +58,15 @@ jobs:
         run: |
           execution_tag=
           while IFS= read -r tag; do
-            if gh api "repos/$GITHUB_REPOSITORY/contents/.github/workflows/plugin-sign.yml?ref=$tag" >/dev/null 2>&1; then
+            # Older tags signed with scripts of the plugin repository; only
+            # one with this repository's own signer may hold the key.
+            if gh api "repos/$GITHUB_REPOSITORY/contents/scripts/sign-plugin-set.py?ref=$tag" >/dev/null 2>&1; then
               execution_tag=$tag
               break
             fi
           done < <(gh api --paginate "repos/$GITHUB_REPOSITORY/tags?per_page=100" --jq '.[].name' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9.]+)?$' | sort -rV)
           if [ -z "$execution_tag" ]; then
-            echo "No release tag contains plugin-sign.yml yet." >&2
+            echo "No release tag contains scripts/sign-plugin-set.py yet." >&2
             exit 1
           fi
           # A run that already waits for approval is enough.
@@ -83,13 +86,13 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.PLUGINS_DISPATCH_TOKEN }}
     steps:
-      # The public keys of the image, to check that the key is the real one.
-      - uses: actions/checkout@v7
-      # sets.py and nvidia-update-release.py, as published on main.
-      - uses: actions/checkout@v7
+      # The signer (scripts/sign-plugin-set.py) and the public keys of the
+      # image, from this tag. Nothing of the plugin repository is checked out
+      # or run here: its drafts are only data, and only a signature the image
+      # accepts leaves the job.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: ra5on/TitanOS-Plugins
-          path: plugins-repo
+          persist-credentials: false
       - name: Sign and publish
         env:
           MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
@@ -122,8 +125,8 @@ jobs:
               set_tag=${tag#pending-nvidia-*-}
               set_tag=kernel-${set_tag#kernel-}
               [ "$(jq -r .tag "$dir/target.json")" = "$set_tag" ] || { echo "$tag does not belong to $set_tag" >&2; exit 1; }
-              python3 plugins-repo/scripts/nvidia-update-release.py sign "$dir" "$key"
-              python3 plugins-repo/scripts/nvidia-update-release.py verify "$dir"
+              # Signs the update and nvidia-updates.json, then checks them.
+              python3 scripts/sign-plugin-set.py nvidia "$dir" "$key"
               gh release upload "$set_tag" --repo "$PLUGINS" "$dir"/nvidia-update-*
               gh release upload "$set_tag" --repo "$PLUGINS" "$dir/nvidia-updates.json" "$dir/nvidia-updates.json.minisig" --clobber
               gh api -X DELETE "repos/$PLUGINS/releases/$id"
@@ -131,15 +134,15 @@ jobs:
               continue
             fi
             rm -f "$dir"/*.minisig
-            python3 plugins-repo/scripts/sets.py sign "$dir" "$key"
-            # Only a signature the image accepts goes out.
-            python3 plugins-repo/scripts/sets.py verify "$dir" build/mkosi.extra/usr/share/titanos/update-keys
+            # Signs manifests and index, then checks the set against the keys
+            # of the image: only a signature the image accepts goes out.
+            python3 scripts/sign-plugin-set.py set "$dir" "$key"
             for signature in "$dir"/*.minisig; do upload "$id" "$signature"; done
             gh api -X PATCH "repos/$PLUGINS/releases/$id" -F draft=false -f make_latest=false >/dev/null
             current=-
             rm -rf catalog-current catalog-new
             if gh release download catalog --repo "$PLUGINS" -p 'catalog.json*' -D catalog-current; then current=catalog-current; fi
-            python3 plugins-repo/scripts/sets.py pointer "$dir" "$current" catalog-new "$key"
+            python3 scripts/sign-plugin-set.py pointer "$dir" "$current" catalog-new "$key"
             if ! gh release view catalog --repo "$PLUGINS" >/dev/null 2>&1; then
               gh release create catalog --repo "$PLUGINS" --title "Plugin catalog" --latest=false \
                 --notes "Signed pointer to the current plugin sets (catalog.json). TitanOS reads it; see docs/PLUGIN-REPO.md in ra5on/TitanOS."

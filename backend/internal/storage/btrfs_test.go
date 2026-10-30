@@ -16,7 +16,7 @@ func TestBtrfsCreateSafetyAndNativeMirror(t *testing.T) {
 		{Name: "mirror", Level: "raid1", Filesystem: "btrfs", Disks: []string{"sde", "sdz"}, Erase: []string{"sde", "sdz"}},
 	} {
 		m, runner, _ := newTestManager(t)
-		if err := m.Create(context.Background(), req); err == nil {
+		if err := createVolume(m, context.Background(), req); err == nil {
 			t.Fatal("accepted unsafe mirror", req)
 		}
 		if len(runner.commands) != 0 {
@@ -25,7 +25,7 @@ func TestBtrfsCreateSafetyAndNativeMirror(t *testing.T) {
 	}
 	m, runner, _ := newTestManager(t)
 	req := CreateRequest{Name: "mirror", Level: "raid1", Filesystem: "btrfs", Disks: []string{"sde", "sdf"}, Erase: []string{"sde", "sdf"}}
-	if err := m.Create(context.Background(), req); err != nil {
+	if err := createVolume(m, context.Background(), req); err != nil {
 		t.Fatal(err)
 	}
 	commands := strings.Join(runner.commands, "\n")

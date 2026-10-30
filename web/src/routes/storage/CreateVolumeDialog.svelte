@@ -1,5 +1,12 @@
 <script lang="ts">
-	import { api, ApiError, type BtrfsProfile, type Disk, type Filesystem, type RaidLevel } from '#lib/api.ts';
+	import {
+		api,
+		ApiError,
+		type BtrfsProfile,
+		type Disk,
+		type Filesystem,
+		type RaidLevel,
+	} from '#lib/api.ts';
 	import { btrfsUsable } from './btrfs.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { formatDiskBytes } from '#lib/format.ts';
@@ -18,12 +25,12 @@
 		{ id: 'raid5', min: 3 },
 		{ id: 'raid6', min: 4 },
 		{ id: 'raid10', min: 4 },
-		{ id: 'raid0', min: 1 }
+		{ id: 'raid0', min: 1 },
 	];
 	const BTRFS: { id: BtrfsProfile; min: number }[] = [
 		{ id: 'raid1', min: 2 },
 		{ id: 'raid1c3', min: 3 },
-		{ id: 'single', min: 1 }
+		{ id: 'single', min: 1 },
 	];
 	const FILESYSTEMS: Filesystem[] = ['ext4', 'xfs', 'btrfs'];
 
@@ -31,11 +38,11 @@
 	let level = $state<RaidLevel | BtrfsProfile>('raid1');
 	let filesystem = $state<Filesystem>('ext4');
 	let selected = $state<string[]>([]);
-    let selectionIdentities = $state<Record<string, string>>({});
-    function remember(disk: Disk, checked: boolean) {
-        if (checked && disk.identity) selectionIdentities[disk.name] = disk.identity;
-        else delete selectionIdentities[disk.name];
-    }
+	let selectionIdentities = $state<Record<string, string>>({});
+	function remember(disk: Disk, checked: boolean) {
+		if (checked && disk.identity) selectionIdentities[disk.name] = disk.identity;
+		else delete selectionIdentities[disk.name];
+	}
 	let confirmed = $state(false);
 	// Optional LUKS2 encryption, off by default. The password is needed
 	// after every start; nothing can recover it.
@@ -49,34 +56,62 @@
 		if (repeat !== '' && repeat !== password) return t('crypt.mismatch');
 		return '';
 	});
-	const encryptionReady = $derived(!encrypt || (password.length >= 8 && password.length <= 512 && repeat === password && understood));
+	const encryptionReady = $derived(
+		!encrypt ||
+			(password.length >= 8 && password.length <= 512 && repeat === password && understood),
+	);
 	let working = $state(false);
 	let error = $state<{ text: string; detail: string } | null>(null);
 
 	const usable = $derived(disks.filter(isUsable));
 	const chosen = $derived(usable.filter((disk) => selected.includes(disk.name)));
-	const staleSelection = $derived(selected.length !== chosen.length || chosen.some(disk => disk.identity !== selectionIdentities[disk.name]));
-	const levels = $derived<{ id: RaidLevel | BtrfsProfile; min: number }[]>(filesystem === 'btrfs' ? BTRFS : LEVELS);
+	const staleSelection = $derived(
+		selected.length !== chosen.length ||
+			chosen.some((disk) => disk.identity !== selectionIdentities[disk.name]),
+	);
+	const levels = $derived<{ id: RaidLevel | BtrfsProfile; min: number }[]>(
+		filesystem === 'btrfs' ? BTRFS : LEVELS,
+	);
 	const min = $derived(levels.find((entry) => entry.id === level)?.min ?? 1);
 
 	/** What the volume will hold; the same for every disk as the smallest one. */
 	const capacity = $derived.by(() => {
 		const n = chosen.length;
 		if (n < min) return { text: t('create.capacityNeeds', { count: min }), ok: false };
-		if (filesystem === 'btrfs') return { text: formatDiskBytes(btrfsUsable(level as BtrfsProfile, chosen.map((disk) => disk.sizeBytes))), ok: true };
+		if (filesystem === 'btrfs')
+			return {
+				text: formatDiskBytes(
+					btrfsUsable(
+						level as BtrfsProfile,
+						chosen.map((disk) => disk.sizeBytes),
+					),
+				),
+				ok: true,
+			};
 		if (level === 'raid10' && n % 2 !== 0) return { text: t('create.capacityEven'), ok: false };
 		const smallest = Math.min(...chosen.map((disk) => disk.sizeBytes));
-		const data = { raid0: n, raid1: 1, raid5: n - 1, raid6: n - 2, raid10: n / 2 }[level as RaidLevel];
+		const data = { raid0: n, raid1: 1, raid5: n - 1, raid6: n - 2, raid10: n / 2 }[
+			level as RaidLevel
+		];
 		return { text: formatDiskBytes(smallest * data), ok: true };
 	});
 
 	const nameError = $derived.by(() => {
 		if (name === '') return '';
 		if (!NAME.test(name)) return errorText('invalid_volume_name');
-		if (taken.some(existing => existing.toLowerCase() === name.toLowerCase())) return errorText('volume_exists');
+		if (taken.some((existing) => existing.toLowerCase() === name.toLowerCase()))
+			return errorText('volume_exists');
 		return '';
 	});
-	const ready = $derived(NAME.test(name) && !nameError && capacity.ok && !staleSelection && confirmed && encryptionReady && !working);
+	const ready = $derived(
+		NAME.test(name) &&
+			!nameError &&
+			capacity.ok &&
+			!staleSelection &&
+			confirmed &&
+			encryptionReady &&
+			!working,
+	);
 
 	// Btrfs and mdadm have their own lists; switching keeps RAID 1, which both know.
 	function pickFilesystem(id: Filesystem) {
@@ -96,13 +131,29 @@
 		working = true;
 		error = null;
 		try {
-			await api.post('/storage/volumes', { name, level, filesystem, disks: $state.snapshot(selected), erase: $state.snapshot(selected), identities: $state.snapshot(selectionIdentities), encrypt: encrypt || undefined, password: encrypt ? password : undefined });
+			await api.post('/storage/volumes', {
+				name,
+				level,
+				filesystem,
+				disks: $state.snapshot(selected),
+				erase: $state.snapshot(selected),
+				identities: $state.snapshot(selectionIdentities),
+				encrypt: encrypt || undefined,
+				password: encrypt ? password : undefined,
+			});
 			password = '';
 			repeat = '';
 			ondone();
 		} catch (err) {
 			const code = err instanceof ApiError ? err.code : 'internal';
-			error = { text: errorText(code), detail: ['storage_failed', 'disk_unavailable', 'volume_busy'].includes(code) && err instanceof ApiError ? err.message : '' };
+			error = {
+				text: errorText(code),
+				detail:
+					['storage_failed', 'disk_unavailable', 'volume_busy'].includes(code) &&
+					err instanceof ApiError
+						? err.message
+						: '',
+			};
 			working = false;
 		}
 	}
@@ -113,15 +164,39 @@
 		<label class="field-row">
 			<span class="label">{t('create.name')}</span>
 			<!-- svelte-ignore a11y_autofocus -->
-			<input class="field mono" type="text" bind:value={name} maxlength="12" autocapitalize="none" spellcheck="false" autofocus aria-describedby="volume-name-hint" />
-			<small id="volume-name-hint" class:problem={nameError}>{nameError || t('create.nameHint')}</small>
+			<input
+				class="field mono"
+				type="text"
+				bind:value={name}
+				maxlength="12"
+				autocapitalize="none"
+				spellcheck="false"
+				autofocus
+				aria-describedby="volume-name-hint"
+			/>
+			<small id="volume-name-hint" class:problem={nameError}
+				>{nameError || t('create.nameHint')}</small
+			>
 		</label>
 
 		<div class="field-row">
 			<span class="label" id="fs-label">{t('create.filesystem')}</span>
-			<div class="options two" role="radiogroup" aria-labelledby="fs-label" tabindex="-1" onkeydown={radioKeys}>
+			<div
+				class="options two"
+				role="radiogroup"
+				aria-labelledby="fs-label"
+				tabindex="-1"
+				onkeydown={radioKeys}
+			>
 				{#each FILESYSTEMS as id (id)}
-					<button type="button" class="option" role="radio" aria-checked={filesystem === id} tabindex={filesystem === id ? 0 : -1} onclick={() => pickFilesystem(id)}>
+					<button
+						type="button"
+						class="option"
+						role="radio"
+						aria-checked={filesystem === id}
+						tabindex={filesystem === id ? 0 : -1}
+						onclick={() => pickFilesystem(id)}
+					>
 						<span class="option-name">{t(`fs.${id}`)}</span>
 						<span class="muted small">{t(`fs.${id}Desc`)}</span>
 					</button>
@@ -131,40 +206,77 @@
 
 		<div class="field-row">
 			<span class="label" id="level-label">{t('create.level')}</span>
-			<div class="options" role="radiogroup" aria-labelledby="level-label" tabindex="-1" onkeydown={radioKeys}>
+			<div
+				class="options"
+				role="radiogroup"
+				aria-labelledby="level-label"
+				tabindex="-1"
+				onkeydown={radioKeys}
+			>
 				{#each levels as entry (entry.id)}
-					<button type="button" class="option" role="radio" aria-checked={level === entry.id} tabindex={level === entry.id ? 0 : -1} onclick={() => (level = entry.id)}>
+					<button
+						type="button"
+						class="option"
+						role="radio"
+						aria-checked={level === entry.id}
+						tabindex={level === entry.id ? 0 : -1}
+						onclick={() => (level = entry.id)}
+					>
 						<span class="option-name">{t(`level.${entry.id}`)}</span>
 						<span class="muted small">{t(`level.${entry.id}Desc`)}</span>
 					</button>
 				{/each}
 			</div>
 			{#if filesystem === 'btrfs'}<p class="muted small">{t('create.btrfsProfiles')}</p>{/if}
-			{#if level === 'raid0' || level === 'single'}<p class="notice-warn" role="alert">{t(level === 'single' ? 'create.singleWarning' : 'create.raid0Warning')}</p>{/if}
+			{#if level === 'raid0' || level === 'single'}<p class="notice-warn" role="alert">
+					{t(level === 'single' ? 'create.singleWarning' : 'create.raid0Warning')}
+				</p>{/if}
 		</div>
 
 		<div class="field-row">
 			<span class="label">{t('create.disks')}</span>
 			<DiskPicker {disks} bind:selected name="volume-disks" onselect={remember} />
-            {#if staleSelection}
-                <p class="notice-warn" role="alert">{t('create.changedDisks')}</p>
-                <button type="button" class="btn" onclick={() => { selected = []; selectionIdentities = {}; }}>{t('create.clearSelection')}</button>
-            {/if}
+			{#if staleSelection}
+				<p class="notice-warn" role="alert">{t('create.changedDisks')}</p>
+				<button
+					type="button"
+					class="btn"
+					onclick={() => {
+						selected = [];
+						selectionIdentities = {};
+					}}>{t('create.clearSelection')}</button
+				>
+			{/if}
 		</div>
 
 		<div class="field-row">
 			<label class="confirm">
 				<input type="checkbox" bind:checked={encrypt} />
-				<span><strong>{t('crypt.createEncrypt')}</strong> <span class="muted small">{t('crypt.createEncryptDesc')}</span></span>
+				<span
+					><strong>{t('crypt.createEncrypt')}</strong>
+					<span class="muted small">{t('crypt.createEncryptDesc')}</span></span
+				>
 			</label>
 			{#if encrypt}
 				<label class="field-row">
 					<span class="label">{t('crypt.password')}</span>
-					<input class="field" type="password" autocomplete="new-password" bind:value={password} maxlength="512" />
+					<input
+						class="field"
+						type="password"
+						autocomplete="new-password"
+						bind:value={password}
+						maxlength="512"
+					/>
 				</label>
 				<label class="field-row">
 					<span class="label">{t('crypt.repeat')}</span>
-					<input class="field" type="password" autocomplete="new-password" bind:value={repeat} maxlength="512" />
+					<input
+						class="field"
+						type="password"
+						autocomplete="new-password"
+						bind:value={repeat}
+						maxlength="512"
+					/>
 					{#if passwordProblem}<small class="problem">{passwordProblem}</small>{/if}
 				</label>
 				<p class="notice-warn" role="alert">{t('crypt.createWarning')}</p>
@@ -184,18 +296,26 @@
 		{#if capacity.ok}
 			<label class="confirm">
 				<input type="checkbox" bind:checked={confirmed} />
-				<span>{t('create.eraseConfirm', { disks: chosen.map((disk) => disk.name).join(', ') })}</span>
+				<span
+					>{t('create.eraseConfirm', { disks: chosen.map((disk) => disk.name).join(', ') })}</span
+				>
 			</label>
 		{/if}
 
 		{#if error}
-			<div class="notice-error" role="alert">{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}</div>
+			<div class="notice-error" role="alert">
+				{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
+			</div>
 		{/if}
 
 		<div class="dialog-actions">
 			<span class="working" role="status">{working ? t('create.working') : ''}</span>
-			<button type="button" class="btn" onclick={onclose} disabled={working}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-warn" disabled={!ready} onclick={submit}>{t('create.submit')}</button>
+			<button type="button" class="btn" onclick={onclose} disabled={working}
+				>{t('common.cancel')}</button
+			>
+			<button type="button" class="btn btn-warn" disabled={!ready} onclick={submit}
+				>{t('create.submit')}</button
+			>
 		</div>
 	</form>
 </Dialog>

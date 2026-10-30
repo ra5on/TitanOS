@@ -3,10 +3,10 @@
 	// per volume and per disk (disk > volume > default). Saving sends only
 	// existing volumes and disks, so overrides of removed ones go on save.
 	import { untrack } from 'svelte';
-	import { api, ApiError, type DiskSleepOrigin, type DiskSleepStatus } from '#lib/api.ts';
+	import { api, type DiskSleepOrigin, type DiskSleepStatus } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { formatDiskBytes } from '#lib/format.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { effectiveSleep, overridesFrom, shortSerial } from './disk-sleep.ts';
 
 	type Props = {
@@ -104,7 +104,7 @@
 			saved = true;
 			onsaved(updated);
 		} catch (err) {
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
+			error = apiErrorText(err);
 		}
 		busy = false;
 	}

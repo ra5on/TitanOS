@@ -102,3 +102,35 @@ func TestQuotaMountOptionNeverBlocksTheMount(t *testing.T) {
 		t.Fatal("problem not recorded")
 	}
 }
+
+func TestShareQuotasAreSwitchedOnWhereTheVolumeIsMounted(t *testing.T) {
+	ctx := context.Background()
+	// Below a cache: tune2fs must go through it, not past it to the array.
+	m, runner := cacheManager(t)
+	activeCache(t, m, runner, "writeback", 0)
+	m.volumes[0].ShareQuotas = true
+	if err := m.mountWith(ctx, m.volumes[0], false); err != nil {
+		t.Fatal(err)
+	}
+	all := strings.Join(runner.commands, "\n")
+	if !strings.Contains(all, "tune2fs -O quota,project -Q prjquota /dev/mapper/titanos-cache-tank") || strings.Contains(all, "UUID=fs") {
+		t.Fatalf("tune2fs not on the mounted device:\n%s", all)
+	}
+
+	// Encrypted: the file system is inside the opened LUKS device.
+	e, tree, _ := encryptedArray(t)
+	if err := e.Unlock(ctx, "tank", []byte(goodPassword)); err != nil {
+		t.Fatal(err)
+	}
+	tree.mounted = map[string]bool{}
+	tree.commands = nil
+	cfg, _ := e.find("tank")
+	cfg.ShareQuotas = true
+	if err := e.mountWith(ctx, cfg, false); err != nil {
+		t.Fatal(err)
+	}
+	all = strings.Join(tree.commands, "\n")
+	if !strings.Contains(all, "tune2fs -O quota,project -Q prjquota "+e.mapperPath("titanos-crypt-tank")) {
+		t.Fatalf("tune2fs not inside LUKS:\n%s", all)
+	}
+}

@@ -15,13 +15,19 @@ func (s *Server) admitOperation(w http.ResponseWriter) (func(), bool) {
 	}
 	return leave, true
 }
+
 func (s *Server) requireHeavyAdmin(next http.HandlerFunc) http.HandlerFunc {
-	return s.requireAdmin(func(w http.ResponseWriter, r *http.Request) {
+	return s.requireAdmin(s.admitted(next))
+}
+
+// admitted runs next as an admitted heavy operation.
+func (s *Server) admitted(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		leave, ok := s.admitOperation(w)
 		if !ok {
 			return
 		}
 		defer leave()
 		next(w, r)
-	})
+	}
 }

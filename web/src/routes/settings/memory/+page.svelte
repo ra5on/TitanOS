@@ -1,8 +1,9 @@
 <script lang="ts">
-	import { api, ApiError, type SystemInfo } from '#lib/api.ts';
+	import { poll } from '#lib/poll.ts';
+	import { api, type SystemInfo } from '#lib/api.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { formatBytes } from '#lib/format.ts';
-	import { t, errorText } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { onMount } from 'svelte';
 	type Status = {
 		settings: { cachePercent: number };
@@ -21,23 +22,16 @@
 		pollError = $state(''),
 		saved = $state(false);
 	let revision = 0;
-	function failure(err: unknown) {
-		return (
-			errorText(err instanceof ApiError ? err.code : 'internal') +
-			(err instanceof ApiError ? `\n${err.message}` : '')
-		);
-	}
 	onMount(() => {
-		let stopped = false,
-			reading = false,
-			initialized = false;
-		async function refresh() {
-			if (stopped || reading || document.hidden || busy) return;
-			reading = true;
+		let initialized = false;
+		async function refresh(signal: AbortSignal) {
 			const started = revision;
 			try {
-				const result = await api.get<Status>('/system/memory', AbortSignal.timeout(10000));
-				if (!stopped && started === revision) {
+				const result = await api.get<Status>(
+					'/system/memory',
+					AbortSignal.any([signal, AbortSignal.timeout(10000)]),
+				);
+				if (!signal.aborted && started === revision) {
 					status = result;
 					if (!initialized) {
 						percent = result.settings.cachePercent;
@@ -46,17 +40,11 @@
 					pollError = '';
 				}
 			} catch (err) {
-				if (!stopped && started === revision) pollError = failure(err);
-			} finally {
-				reading = false;
+				if (!signal.aborted && started === revision)
+					pollError = apiErrorText(err, { detail: true });
 			}
 		}
-		void refresh();
-		const timer = setInterval(refresh, 5000);
-		return () => {
-			stopped = true;
-			clearInterval(timer);
-		};
+		return poll(refresh, { interval: 5000, skip: () => busy });
 	});
 	async function save(event: SubmitEvent) {
 		event.preventDefault();
@@ -68,7 +56,7 @@
 			status = await api.put<Status>('/system/memory', { cachePercent: percent });
 			saved = true;
 		} catch (err) {
-			error = failure(err);
+			error = apiErrorText(err, { detail: true });
 		} finally {
 			busy = false;
 		}
@@ -89,7 +77,12 @@
 	<form class="tile panel" onsubmit={save}>
 		<label class="stack"
 			><span>{t('memoryPolicy.percent')}</span>
-			<select id="cache-budget" class="field" bind:value={percent} disabled={busy || status.readOnly}>
+			<select
+				id="cache-budget"
+				class="field"
+				bind:value={percent}
+				disabled={busy || status.readOnly}
+			>
 				{#each [10, 20, 30, 40, 50, 60, 70, 80, 90] as value (value)}<option {value}
 						>{value} %</option
 					>{/each}

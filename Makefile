@@ -1,7 +1,7 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo 0.0.0)
 LDFLAGS := -s -w -X github.com/ra5on/TitanOS/backend/internal/version.Version=$(VERSION)
 
-.PHONY: build web titand titanosctl test test-release dev dev-backend dev-web zip zip-dev qemu clean
+.PHONY: build web titand titanosctl test test-release lint dev dev-backend dev-web zip zip-dev qemu clean
 
 # titand with the web UI embedded: backend/bin/titand
 build: web titand titanosctl
@@ -19,6 +19,18 @@ test: web/node_modules
 	cd backend && go vet ./... && go test ./...
 	cd web && npm test
 	cd web && npm run check
+
+# Static checks. The versions are pinned; go run fetches them into the module
+# cache. shellcheck comes from the distribution (apt/dnf install shellcheck).
+STATICCHECK_VERSION := 2026.2.2
+GOVULNCHECK_VERSION := v1.9.0
+ACTIONLINT_VERSION := v1.7.12
+
+lint:
+	cd backend && go run honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION) ./...
+	cd backend && go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
+	shellcheck scripts/*.sh
+	go run github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION)
 
 # Real miniature images/signatures exercise release packaging and tamper rejection.
 test-release:

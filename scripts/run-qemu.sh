@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # Boots the stick contents (out/stick) in QEMU: UEFI firmware (OVMF), the
 # stick as an emulated USB drive with one FAT32 partition labelled TITANOS.
 #
@@ -15,7 +15,7 @@
 #   GRAPHIC=1     open a window instead of using the terminal as serial console
 #
 # The serial console is this terminal. Leave with Ctrl+A, then X.
-set -eu
+set -euo pipefail
 
 cd "$(dirname "$0")/.."
 

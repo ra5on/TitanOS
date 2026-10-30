@@ -32,15 +32,17 @@
 		<thead>
 			<tr>
 				<th scope="col" class="corner">{t('firewall.from')} \ {t('firewall.to')}</th>
-				{#each columns as to (to)}<th scope="col" class:dest={to !== NAS && to !== APPS}>{columnLabel(to)}</th>{/each}
+				{#each columns as to (to)}<th scope="col" class:dest={to !== NAS && to !== APPS}
+						>{columnLabel(to)}</th
+					>{/each}
 			</tr>
 		</thead>
 		<tbody>
 			{#each cfg.zones as zone (zone.id)}
 				<tr>
 					<th scope="row"
-						><strong>{zoneLabel(zone.id)}</strong>{#if zoneText(zone.id)}<br /><span class="muted small"
-								>{zoneText(zone.id)}</span
+						><strong>{zoneLabel(zone.id)}</strong>{#if zoneText(zone.id)}<br /><span
+								class="muted small">{zoneText(zone.id)}</span
 							>{/if}</th
 					>
 					{#each columns as to (to)}
@@ -53,18 +55,27 @@
 									type="button"
 									class="cell {state}"
 									aria-pressed={selected?.from === zone.id && selected?.to === to}
-									aria-label={t('firewall.cellTitle', { from: zoneLabel(zone.id), to: columnLabel(to) })}
+									aria-label={t('firewall.cellTitle', {
+										from: zoneLabel(zone.id),
+										to: columnLabel(to),
+									})}
 									data-cell="{zone.id}>{to}"
 									onclick={() => onselect(zone.id, to)}
-									><span class="state">{t(`firewall.cell.${state}`)}</span>{#if count}<span class="small"
-											>{t(cell.default === 'allow' ? 'firewall.cellBlocked' : 'firewall.cellAllowed', { count })}</span
+									><span class="state">{t(`firewall.cell.${state}`)}</span>{#if count}<span
+											class="small"
+											>{t(
+												cell.default === 'allow' ? 'firewall.cellBlocked' : 'firewall.cellAllowed',
+												{ count },
+											)}</span
 										>{/if}</button
 								></td
 							>
 						{:else}
 							<td
 								><span class="cell none" title={t('firewall.notThroughNas')}
-									><span aria-hidden="true">—</span><span class="sr-only">{t('firewall.notThroughNas')}</span></span
+									><span aria-hidden="true">—</span><span class="sr-only"
+										>{t('firewall.notThroughNas')}</span
+									></span
 								></td
 							>
 						{/if}

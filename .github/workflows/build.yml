@@ -10,9 +10,9 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Read pinned toolchain versions
         id: lock
@@ -20,19 +20,19 @@ jobs:
           echo "node=$(jq -er .node.version scripts/dev-toolchains.lock.json)" >> "$GITHUB_OUTPUT"
           echo "go=$(jq -er .go.version scripts/dev-toolchains.lock.json)" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ steps.lock.outputs.node }}
           cache: npm
           cache-dependency-path: web/package-lock.json
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ steps.lock.outputs.go }}
           cache-dependency-path: backend/go.sum
 
       - name: Release regression test tools
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends squashfs-tools minisign zip xz-utils qemu-utils iptables iproute2 kmod dnsmasq-base busybox ovmf restic poppler-utils tesseract-ocr tesseract-ocr-deu tesseract-ocr-eng
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends shellcheck squashfs-tools minisign zip xz-utils qemu-utils iptables iproute2 kmod dnsmasq-base busybox ovmf restic poppler-utils tesseract-ocr tesseract-ocr-deu tesseract-ocr-eng
 
       - name: Open firewall, guest DHCP and bridge forwarding
         run: |
@@ -47,6 +47,10 @@ jobs:
 
       - name: Check formatting
         run: test -z "$(gofmt -l backend)"
+
+      # staticcheck, govulncheck, shellcheck and actionlint (Makefile).
+      - name: Lint
+        run: make lint
 
       # Opens every page of a development titand and clicks every button, so
       # a page that breaks while rendering ("500 Internal Error") cannot ship.
@@ -70,7 +74,7 @@ jobs:
             -d "{\"name\":\"crawler\",\"password\":\"$password\"}" "$UI_URL/api/v1/setup" > /dev/null
           UI_LOGIN="crawler:$password" node scripts/test-ui-crawl.mjs
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:
           name: ui-crawl
@@ -79,7 +83,7 @@ jobs:
             ${{ runner.temp }}/titand.log
           if-no-files-found: ignore
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: titand-linux-amd64
           path: |

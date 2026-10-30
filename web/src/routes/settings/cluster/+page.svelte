@@ -2,12 +2,13 @@
 	// Settings › Cluster (backend package cluster): several TitanOS that trust
 	// each other fully, as in Proxmox. Accounts are the same everywhere, every
 	// node can be managed from here, backups go from node to node.
+	import { poll } from '#lib/poll.ts';
 	import { onMount } from 'svelte';
 	import { api, ApiError } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { formatBytes, formatDuration } from '#lib/format.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { switchNode } from '#lib/cluster-node.ts';
 	import {
@@ -44,7 +45,7 @@
 	function problem(err: unknown): string {
 		if (err instanceof ApiError && err.code === 'cluster_version')
 			return t('cluster.versionMismatch', { version: err.message.replace(/^.*version /, '') });
-		return errorText(err instanceof ApiError ? err.code : 'internal');
+		return apiErrorText(err);
 	}
 
 	function fill(next: ClusterPage) {
@@ -62,13 +63,7 @@
 			loadError = problem(err);
 		}
 	}
-	onMount(() => {
-		void load();
-		const timer = setInterval(() => {
-			if (!busy && inCluster) void load();
-		}, 20000);
-		return () => clearInterval(timer);
-	});
+	onMount(() => poll(load, { interval: 20000, skip: () => busy || !inCluster }));
 
 	async function act(run: () => Promise<ClusterPage | void>) {
 		busy = true;

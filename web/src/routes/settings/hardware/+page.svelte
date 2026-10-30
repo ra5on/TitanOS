@@ -1,20 +1,25 @@
 <script lang="ts">
+	import { poll } from '#lib/poll.ts';
 	import IntelGuc from './IntelGuc.svelte';
 	import NvidiaPower from './NvidiaPower.svelte';
-	import { api, ApiError, type Hardware } from '#lib/api.ts';
+	import { api, type Hardware } from '#lib/api.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
-	import { errorText, t, tOr } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t, tOr } from '#lib/i18n/index.svelte.ts';
 
 	let data = $state<Hardware | null>(null);
 	let error = $state('');
 
-	$effect(() => {
-		const load = () => api.get<Hardware>('/hardware').then((res) => (data = res), (err) => (error = errorText(err instanceof ApiError ? err.code : 'internal')));
-		load();
-		const timer = setInterval(() => !document.hidden && load(), 5000);
-		return () => clearInterval(timer);
-	});
+	$effect(() =>
+		poll(
+			() =>
+				api.get<Hardware>('/hardware').then(
+					(res) => (data = res),
+					(err) => (error = apiErrorText(err)),
+				),
+			{ interval: 5000 },
+		),
+	);
 
 	const users = (id: string) => data?.usedBy[id] ?? [];
 </script>
@@ -33,17 +38,35 @@
 		{#each data.hardware.pci as device (device.address)}
 			<div class="device">
 				<div class="main">
-					<span class="name">{t(`hardware.kind.${device.kind}`)} · {device.vendorName || device.vendor}</span>
-					<span class="muted mono">{device.address} · {device.vendor}:{device.device} · {device.iommuGroup >= 0 ? t('hardware.group', { group: device.iommuGroup }) : t('hardware.noGroup')}</span>
-					{#if device.companions.length > 0}<span class="muted mono">{t('hardware.companions', { list: device.companions.join(', ') })}</span>{/if}
+					<span class="name"
+						>{t(`hardware.kind.${device.kind}`)} · {device.vendorName || device.vendor}</span
+					>
+					<span class="muted mono"
+						>{device.address} · {device.vendor}:{device.device} · {device.iommuGroup >= 0
+							? t('hardware.group', { group: device.iommuGroup })
+							: t('hardware.noGroup')}</span
+					>
+					{#if device.companions.length > 0}<span class="muted mono"
+							>{t('hardware.companions', { list: device.companions.join(', ') })}</span
+						>{/if}
 				</div>
 				<div class="state">
-					<span class="chip" class:ok={device.passable}>{device.passable ? t('hardware.passable') : t('hardware.notPassable')}</span>
-					<span class="muted">{device.driver === 'vfio-pci' ? t('hardware.inVm') : device.driver ? t('hardware.driver', { driver: device.driver }) : t('hardware.noDriver')}</span>
+					<span class="chip" class:ok={device.passable}
+						>{device.passable ? t('hardware.passable') : t('hardware.notPassable')}</span
+					>
+					<span class="muted"
+						>{device.driver === 'vfio-pci'
+							? t('hardware.inVm')
+							: device.driver
+								? t('hardware.driver', { driver: device.driver })
+								: t('hardware.noDriver')}</span
+					>
 					{#if device.primary}<span class="chip">{t('hardware.primary')}</span>{/if}
 				</div>
 				<div class="use">
-					{#if device.vendor === '10de' && device.driver === 'nvidia'}<NvidiaPower address={device.address} />{/if}
+					{#if device.vendor === '10de' && device.driver === 'nvidia'}<NvidiaPower
+							address={device.address}
+						/>{/if}
 					{#if users(device.address).length > 0}
 						<span>{t('hardware.assigned', { vms: users(device.address).join(', ') })}</span>
 					{:else if device.passable}

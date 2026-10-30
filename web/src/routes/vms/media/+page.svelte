@@ -1,10 +1,11 @@
 <script lang="ts">
+	import { poll } from '#lib/poll.ts';
 	import { onDestroy } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
-	import { api, ApiError, type VMStatus } from '#lib/api.ts';
+	import { api, type VMStatus } from '#lib/api.ts';
 	import { vmLabel } from '#lib/vm-name.ts';
 	import { storage } from '#lib/storage.svelte.ts';
-	import { errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { formatBytes } from '#lib/format.ts';
 	import { mediaActive, verifyMediaUpload, type MediaJob } from '#lib/media.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
@@ -52,12 +53,9 @@
 			vms = status.vms;
 			mediaError = '';
 		} catch (e) {
-			mediaError = errorText(e instanceof ApiError ? e.code : 'internal');
+			mediaError = apiErrorText(e);
 		}
 	}
-	const failure = (e: unknown) =>
-		errorText(e instanceof ApiError ? e.code : 'internal') +
-		(e instanceof ApiError ? ` · ${e.message}` : '');
 	const phases: Record<string, MessageKey> = {
 		uploading: 'media.phase.uploading',
 		downloading: 'media.phase.downloading',
@@ -75,7 +73,8 @@
 		try {
 			const res = await api.get<{ jobs: MediaJob[]; chunkBytes: number }>('/vms/imports');
 			const finished = (res.jobs ?? []).some(
-				(job) => job.phase === 'done' && jobs.some((old) => old.id === job.id && old.phase !== 'done'),
+				(job) =>
+					job.phase === 'done' && jobs.some((old) => old.id === job.id && old.phase !== 'done'),
 			);
 			jobs = res.jobs ?? [];
 			chunk = res.chunkBytes || 8 << 20;
@@ -83,7 +82,7 @@
 			// A newly published medium belongs into the list below.
 			if (finished) void loadMedia();
 		} catch (e) {
-			loadError = errorText(e instanceof ApiError ? e.code : 'internal');
+			loadError = apiErrorText(e);
 		} finally {
 			loading = false;
 		}
@@ -97,13 +96,7 @@
 		void loadMedia();
 	});
 	$effect(() => {
-		const timer = setInterval(
-			() => {
-				if (!document.hidden) void load();
-			},
-			active ? 1500 : 15000,
-		);
-		return () => clearInterval(timer);
+		return poll(load, { interval: active ? 1500 : 15000, immediate: false });
 	});
 	function outputName(source: string) {
 		let result = source.split('/').at(-1) ?? '';
@@ -160,9 +153,7 @@
 			}
 			if (!paused.has(job.id)) await api.post(`/vms/imports/${job.id}/finish`, {});
 		} catch (e) {
-			error =
-				errorText(e instanceof ApiError ? e.code : 'internal') +
-				(e instanceof ApiError ? ` · ${e.message}` : '');
+			error = apiErrorText(e, { detail: true });
 		} finally {
 			uploading = '';
 			verifyProgress = '';
@@ -186,9 +177,7 @@
 			if (source === 'upload' && picked) void send(job, picked);
 			await load();
 		} catch (e) {
-			error =
-				errorText(e instanceof ApiError ? e.code : 'internal') +
-				(e instanceof ApiError ? ` · ${e.message}` : '');
+			error = apiErrorText(e, { detail: true });
 		} finally {
 			busy = false;
 		}
@@ -202,7 +191,7 @@
 			await api.post(`/vms/imports/${job.id}/${action}`, {});
 			await load();
 		} catch (e) {
-			error = failure(e);
+			error = apiErrorText(e, { detail: true });
 		} finally {
 			controlling.delete(job.id);
 		}
@@ -220,7 +209,7 @@
 			confirm = null;
 			await load();
 		} catch (e) {
-			confirmError = failure(e);
+			confirmError = apiErrorText(e, { detail: true });
 		} finally {
 			confirmBusy = false;
 			controlling.delete(job.id);
@@ -241,12 +230,12 @@
 {#if error && !adding}<div class="notice-error" role="alert">{error}</div>{/if}
 {#if loadError}<div class="notice-warn stale" role="alert">
 		<span>{loadError}</span><button class="btn" onclick={load}>{t('common.retry')}</button>
-	</div>{/if}{#if verifyProgress}<p
-		role="status"
-	>
+	</div>{/if}{#if verifyProgress}<p role="status">
 		{verifyProgress}
 	</p>{/if}
-{#if loading}<p class="loading" role="status">{t('common.loading')}</p>{:else if !jobs.length}<EmptyState
+{#if loading}<p class="loading" role="status">
+		{t('common.loading')}
+	</p>{:else if !jobs.length}<EmptyState
 		title={t('media.empty')}
 	/>{:else}{#each jobs as job (job.id)}<section class="tile job">
 			<div class="row">
@@ -282,8 +271,7 @@
 				{#if job.phase === 'review'}<button
 						class="btn"
 						disabled={controlling.has(job.id)}
-						onclick={() => control(job, 'review')}
-						>{t('media.review')}</button
+						onclick={() => control(job, 'review')}>{t('media.review')}</button
 					>{/if}{#if job.url && job.phase === 'paused'}<button
 						class="btn btn-primary"
 						disabled={controlling.has(job.id)}
@@ -325,13 +313,16 @@
 <section class="tile files" aria-labelledby="media-files">
 	<div class="row">
 		<h2 class="tile-title" id="media-files">{t('media.files')}</h2>
-		<button class="btn" onclick={loadMedia}><Icon name="refresh" />{t('media.filesRefresh')}</button>
+		<button class="btn" onclick={loadMedia}><Icon name="refresh" />{t('media.filesRefresh')}</button
+		>
 	</div>
 	{#if mediaError}<div class="notice-error" role="alert">
 			<span>{mediaError}</span>
 			<button class="btn" onclick={loadMedia}>{t('common.retry')}</button>
 		</div>{/if}
-	{#if media === null && !mediaError}<p class="muted loading" role="status">{t('common.loading')}</p>
+	{#if media === null && !mediaError}<p class="muted loading" role="status">
+			{t('common.loading')}
+		</p>
 	{:else if media && media.length === 0}<p class="muted">{t('media.filesEmpty')}</p>
 	{:else if media}<ul class="file-list">
 			{#each media as entry (entry.path)}

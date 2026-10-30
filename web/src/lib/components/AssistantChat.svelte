@@ -13,7 +13,7 @@
 		setPrefs,
 		stop,
 		type ChatAttachment,
-		type ChatEntry
+		type ChatEntry,
 	} from '#lib/assistant.svelte.ts';
 	import { chatMarkdown } from '#lib/chat-markdown.ts';
 	import { errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
@@ -25,7 +25,7 @@
 	import Icon from './Icon.svelte';
 
 	let input = $state('');
- let diagnosticContent=$state(false);
+	let diagnosticContent = $state(false);
 	let attachments = $state<ChatAttachment[]>([]);
 	let attachError = $state('');
 	let field = $state<HTMLTextAreaElement>();
@@ -38,16 +38,26 @@
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 	const suggestions = $derived<MessageKey[]>(
 		admin
-			? ['assistant.suggest.disks', 'assistant.suggest.backups', 'assistant.suggest.errors', 'assistant.suggest.howto', 'assistant.suggest.sort']
-			: ['assistant.suggest.shares', 'assistant.suggest.files', 'assistant.suggest.sort']
+			? [
+					'assistant.suggest.disks',
+					'assistant.suggest.backups',
+					'assistant.suggest.errors',
+					'assistant.suggest.howto',
+					'assistant.suggest.sort',
+				]
+			: ['assistant.suggest.shares', 'assistant.suggest.files', 'assistant.suggest.sort'],
 	);
 	const chosen = $derived(chosenModel());
 	const models = $derived.by(() => {
 		const names = assistant.models.map((m) => m.name);
 		return chosen && !names.includes(chosen) ? [chosen, ...names] : names;
 	});
-	const vision = $derived(assistant.models.find((m) => m.name === chosen)?.capabilities.includes('vision') ?? false);
-	const lastAnswer = $derived(assistant.messages.findLastIndex((m) => m.role === 'assistant' && !!m.content));
+	const vision = $derived(
+		assistant.models.find((m) => m.name === chosen)?.capabilities.includes('vision') ?? false,
+	);
+	const lastAnswer = $derived(
+		assistant.messages.findLastIndex((m) => m.role === 'assistant' && !!m.content),
+	);
 	const lastQuestion = $derived(assistant.messages.findLastIndex((m) => m.role === 'user'));
 	const reading = $derived.by(() => {
 		const last = assistant.messages.at(-1);
@@ -86,7 +96,9 @@
 			try {
 				attachments.push(await readAttachment(file));
 			} catch (err) {
-				attachError = errorText(err instanceof Error && 'code' in err ? String(err.code) : 'internal');
+				attachError = errorText(
+					err instanceof Error && 'code' in err ? String(err.code) : 'internal',
+				);
 			}
 		}
 		if (picker) picker.value = '';
@@ -111,7 +123,8 @@
 	}
 
 	function details(entry: ChatEntry): string {
-		const args = entry.args && JSON.stringify(entry.args) !== '{}' ? JSON.stringify(entry.args) + '\n\n' : '';
+		const args =
+			entry.args && JSON.stringify(entry.args) !== '{}' ? JSON.stringify(entry.args) + '\n\n' : '';
 		const text = entry.content.length > 3000 ? entry.content.slice(0, 3000) + ' …' : entry.content;
 		return args + text;
 	}
@@ -157,22 +170,47 @@
 			{#if message.role === 'user'}
 				{#if editing?.index === index}
 					<div class="edit">
-						<textarea class="field" bind:value={editing.text} rows="3" aria-label={t('assistant.editQuestion')}></textarea>
+						<textarea
+							class="field"
+							bind:value={editing.text}
+							rows="3"
+							aria-label={t('assistant.editQuestion')}></textarea>
 						<div class="row">
-							<button type="button" class="btn" onclick={() => (editing = null)}>{t('common.cancel')}</button>
-							<button type="button" class="btn btn-primary" onclick={saveEdit} disabled={!editing.text.trim()}>{t('assistant.askAgain')}</button>
+							<button type="button" class="btn" onclick={() => (editing = null)}
+								>{t('common.cancel')}</button
+							>
+							<button
+								type="button"
+								class="btn btn-primary"
+								onclick={saveEdit}
+								disabled={!editing.text.trim()}>{t('assistant.askAgain')}</button
+							>
 						</div>
 					</div>
 				{:else}
 					<div class="msg user">
 						{message.content}
 						{#if message.attachments?.length}
-							<div class="files">{#each message.attachments as file (file.name)}<span class="file"><Icon name={file.kind === 'image' ? 'image' : 'fileText'} size={12} />{file.name}</span>{/each}</div>
+							<div class="files">
+								{#each message.attachments as file (file.name)}<span class="file"
+										><Icon
+											name={file.kind === 'image' ? 'image' : 'fileText'}
+											size={12}
+										/>{file.name}</span
+									>{/each}
+							</div>
 						{/if}
 					</div>
 					{#if !assistant.busy}
 						<div class="under right">
-							<button type="button" class="mini" title={t('assistant.editQuestion')} aria-label={t('assistant.editQuestion')} onclick={() => (editing = { index, text: message.content })}><Icon name="edit" size={13} /></button>
+							<button
+								type="button"
+								class="mini"
+								title={t('assistant.editQuestion')}
+								aria-label={t('assistant.editQuestion')}
+								onclick={() => (editing = { index, text: message.content })}
+								><Icon name="edit" size={13} /></button
+							>
 						</div>
 					{/if}
 				{/if}
@@ -181,13 +219,20 @@
 					<AssistantAction action={message.action} {index} />
 				{:else}
 					<details class="step" class:failed={!message.ok}>
-						<summary><span class="mono">{message.tool}</span>{message.ok ? '' : ` – ${t('assistant.toolFailed')}`}</summary>
+						<summary
+							><span class="mono">{message.tool}</span>{message.ok
+								? ''
+								: ` – ${t('assistant.toolFailed')}`}</summary
+						>
 						<pre class="mono">{details(message)}</pre>
 					</details>
 				{/if}
 			{:else}
 				{#if message.thinking}
-					<details class="think"><summary>{t('assistant.thoughts')}</summary><p>{message.thinking}</p></details>
+					<details class="think">
+						<summary>{t('assistant.thoughts')}</summary>
+						<p>{message.thinking}</p>
+					</details>
 				{/if}
 				{#if message.problem}
 					<div class="msg answer problem" role="alert">
@@ -201,7 +246,10 @@
 						<div class="sources">
 							<span class="muted">{t('assistant.sources')}</span>
 							{#each message.sources as source (source.url)}
-								<a href={source.url} target="_blank" rel="noopener noreferrer" title={source.url}>{source.title || new URL(source.url).hostname} <span class="muted">({new URL(source.url).hostname})</span></a>
+								<a href={source.url} target="_blank" rel="noopener noreferrer" title={source.url}
+									>{source.title || new URL(source.url).hostname}
+									<span class="muted">({new URL(source.url).hostname})</span></a
+								>
 							{/each}
 						</div>
 					{/if}
@@ -209,9 +257,22 @@
 				{#if message.stopped}<p class="muted small">{t('assistant.stopped')}</p>{/if}
 				{#if message.content && !assistant.busy}
 					<div class="under">
-						<button type="button" class="mini" title={t('assistant.copy')} aria-label={t('assistant.copy')} onclick={() => copy(message.content, index)}><Icon name={copied === index ? 'check' : 'copy'} size={13} /></button>
+						<button
+							type="button"
+							class="mini"
+							title={t('assistant.copy')}
+							aria-label={t('assistant.copy')}
+							onclick={() => copy(message.content, index)}
+							><Icon name={copied === index ? 'check' : 'copy'} size={13} /></button
+						>
 						{#if index === lastAnswer && lastAnswer > lastQuestion}
-							<button type="button" class="mini" title={t('assistant.regenerate')} aria-label={t('assistant.regenerate')} onclick={regenerate}><Icon name="refresh" size={13} /></button>
+							<button
+								type="button"
+								class="mini"
+								title={t('assistant.regenerate')}
+								aria-label={t('assistant.regenerate')}
+								onclick={regenerate}><Icon name="refresh" size={13} /></button
+							>
 						{/if}
 					</div>
 				{/if}
@@ -220,25 +281,51 @@
 			<div class="empty">
 				<p>{t(admin ? 'assistant.intro' : 'assistant.introUser')}</p>
 				<div class="suggestions">
-					{#each suggestions as key (key)}<button type="button" class="btn" onclick={() => send(t(key))}>{t(key)}</button>{/each}
+					{#each suggestions as key (key)}<button
+							type="button"
+							class="btn"
+							onclick={() => send(t(key))}>{t(key)}</button
+						>{/each}
 				</div>
 			</div>
 		{/each}
 
 		{#if assistant.busy}
 			{#if assistant.draft.thinking}
-				<details class="think" open><summary>{t('assistant.thoughts')}</summary><p>{assistant.draft.thinking}</p></details>
+				<details class="think" open>
+					<summary>{t('assistant.thoughts')}</summary>
+					<p>{assistant.draft.thinking}</p>
+				</details>
 			{/if}
 			{#if assistant.draft.content}
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -- escaped in chatMarkdown -->
 				<div class="msg answer text">{@html chatMarkdown(assistant.draft.content)}</div>
 			{:else}
-				<p class="muted working" role="status">{assistant.run?.state === 'queued' ? t('agent.state.queued') : assistant.run?.stage ? t(`agent.stage.${assistant.run.stage}` as MessageKey, {tool: assistant.run.tool ?? ''}) : reading ? t('assistant.reading', { tool: reading }) : t('assistant.thinking')}</p>
+				<p class="muted working" role="status">
+					{assistant.run?.state === 'queued'
+						? t('agent.state.queued')
+						: assistant.run?.stage
+							? t(`agent.stage.${assistant.run.stage}` as MessageKey, {
+									tool: assistant.run.tool ?? '',
+								})
+							: reading
+								? t('assistant.reading', { tool: reading })
+								: t('assistant.thinking')}
+				</p>
 			{/if}
 		{/if}
 		{#if assistant.stats && !assistant.busy}
 			{@const st = assistant.stats}
-			<p class="muted stats">{t('assistant.stats', { rounds: st.rounds, prompt: formatNumber(st.prompt), generated: formatNumber(st.generated), model: (st.modelMs / 1000).toFixed(1), tools: st.tools, toolTime: (st.toolMs / 1000).toFixed(1) })}</p>
+			<p class="muted stats">
+				{t('assistant.stats', {
+					rounds: st.rounds,
+					prompt: formatNumber(st.prompt),
+					generated: formatNumber(st.generated),
+					model: (st.modelMs / 1000).toFixed(1),
+					tools: st.tools,
+					toolTime: (st.toolMs / 1000).toFixed(1),
+				})}
+			</p>
 		{/if}
 		{#if assistant.error}<p class="notice-error" role="alert">{errorText(assistant.error)}</p>{/if}
 	</div>
@@ -247,60 +334,171 @@
 		{#if assistant.run}
 			<span role="status">{t(`agent.state.${assistant.run.state}` as MessageKey)}</span>
 			{#if assistant.run.detail}<span class="muted small">{assistant.run.detail}</span>{/if}
-			{#if assistant.busy}<button class="btn" onclick={() => controlRun('pause')}>{t('agent.pause')}</button>
-			{:else if assistant.messages.some(m=>m.action && ['running','uncertain'].includes(m.action.state))}<button class="btn" onclick={() => controlRun('reconcile')}>{t('agent.reconcile')}</button>
- {:else if ['paused','waiting','blocked','stopped'].includes(assistant.run.state)}<button class="btn" onclick={() => controlRun('resume')}>{t('agent.resume')}</button>{/if}
+			{#if assistant.busy}<button class="btn" onclick={() => controlRun('pause')}
+					>{t('agent.pause')}</button
+				>
+			{:else if assistant.messages.some((m) => m.action && ['running', 'uncertain'].includes(m.action.state))}<button
+					class="btn"
+					onclick={() => controlRun('reconcile')}>{t('agent.reconcile')}</button
+				>
+			{:else if ['paused', 'waiting', 'blocked', 'stopped'].includes(assistant.run.state)}<button
+					class="btn"
+					onclick={() => controlRun('resume')}>{t('agent.resume')}</button
+				>{/if}
 		{/if}
-		<label><input type="checkbox" bind:checked={assistant.dryRun} disabled={assistant.busy || !!assistant.run && ['paused','waiting','blocked','confirmation','queued','running'].includes(assistant.run.state)} /> {t('agent.dryRun')}</label>
-		{#if assistant.archived}<span class="muted small">{t('agent.compacted', {count:assistant.archived})}</span>{/if}
-		{#if assistant.chatId}<label><input type="checkbox" bind:checked={diagnosticContent}/>{t('agent.diagnosticContent')}</label><a class="btn" href={apiPath(`/assistant/chats/${assistant.chatId}/diagnostics${diagnosticContent?'?content=true':''}`)} download>{t('agent.diagnostics')}</a>{/if}
+		<label
+			><input
+				type="checkbox"
+				bind:checked={assistant.dryRun}
+				disabled={assistant.busy ||
+					(!!assistant.run &&
+						['paused', 'waiting', 'blocked', 'confirmation', 'queued', 'running'].includes(
+							assistant.run.state,
+						))}
+			/>
+			{t('agent.dryRun')}</label
+		>
+		{#if assistant.archived}<span class="muted small"
+				>{t('agent.compacted', { count: assistant.archived })}</span
+			>{/if}
+		{#if assistant.chatId}<label
+				><input type="checkbox" bind:checked={diagnosticContent} />{t(
+					'agent.diagnosticContent',
+				)}</label
+			><a
+				class="btn"
+				href={apiPath(
+					`/assistant/chats/${assistant.chatId}/diagnostics${diagnosticContent ? '?content=true' : ''}`,
+				)}
+				download>{t('agent.diagnostics')}</a
+			>{/if}
 	</div>
 
-	<form onsubmit={(event) => { event.preventDefault(); submit(); }}>
+	<form
+		onsubmit={(event) => {
+			event.preventDefault();
+			submit();
+		}}
+	>
 		{#if attachments.length}
 			<div class="files pending">
 				{#each attachments as file, i (i)}
 					<span class="file">
-						<Icon name={file.kind === 'image' ? 'image' : file.kind === 'nas' ? 'folder' : 'fileText'} size={12} />{file.name}
-						<button type="button" class="mini" aria-label={t('assistant.removeAttachment', { name: file.name })} onclick={() => attachments.splice(i, 1)}><Icon name="close" size={11} /></button>
+						<Icon
+							name={file.kind === 'image' ? 'image' : file.kind === 'nas' ? 'folder' : 'fileText'}
+							size={12}
+						/>{file.name}
+						<button
+							type="button"
+							class="mini"
+							aria-label={t('assistant.removeAttachment', { name: file.name })}
+							onclick={() => attachments.splice(i, 1)}><Icon name="close" size={11} /></button
+						>
 					</span>
 				{/each}
 			</div>
-			{#if attachments.some((a) => a.kind === 'image' || (a.kind === 'nas' && /\.(png|jpe?g|webp|gif)$/i.test(a.name))) && !vision}<p class="muted small">{t('assistant.noVision')}</p>{/if}
+			{#if attachments.some((a) => a.kind === 'image' || (a.kind === 'nas' && /\.(png|jpe?g|webp|gif)$/i.test(a.name))) && !vision}<p
+					class="muted small"
+				>
+					{t('assistant.noVision')}
+				</p>{/if}
 		{/if}
 		{#if attachError}<p class="notice-error small" role="alert">{attachError}</p>{/if}
 		<div class="compose">
-			<input bind:this={picker} type="file" multiple hidden accept="image/png,image/jpeg,image/webp,.txt,.md,.json,.yaml,.yml,.log,.csv,.conf,.cfg,.ini,.toml,.xml,.sh,.py,.js,.ts" onchange={attach} />
-			<button type="button" class="icon" aria-label={t('assistant.attach')} title={t('assistant.attach')} onclick={() => picker?.click()} disabled={assistant.busy || attachments.length >= 4}><Icon name="upload" size={16} /></button>
-			<button type="button" class="icon" aria-label={t('assistant.attachNas')} title={t('assistant.attachNas')} onclick={() => (picking = true)} disabled={assistant.busy || attachments.length >= 4}><Icon name="folder" size={16} /></button>
-			<textarea bind:this={field} bind:value={input} class="field" rows="1" placeholder={t('assistant.placeholder')} aria-label={t('assistant.message')} onkeydown={keydown} oninput={grow}></textarea>
+			<input
+				bind:this={picker}
+				type="file"
+				multiple
+				hidden
+				accept="image/png,image/jpeg,image/webp,.txt,.md,.json,.yaml,.yml,.log,.csv,.conf,.cfg,.ini,.toml,.xml,.sh,.py,.js,.ts"
+				onchange={attach}
+			/>
+			<button
+				type="button"
+				class="icon"
+				aria-label={t('assistant.attach')}
+				title={t('assistant.attach')}
+				onclick={() => picker?.click()}
+				disabled={assistant.busy || attachments.length >= 4}
+				><Icon name="upload" size={16} /></button
+			>
+			<button
+				type="button"
+				class="icon"
+				aria-label={t('assistant.attachNas')}
+				title={t('assistant.attachNas')}
+				onclick={() => (picking = true)}
+				disabled={assistant.busy || attachments.length >= 4}
+				><Icon name="folder" size={16} /></button
+			>
+			<textarea
+				bind:this={field}
+				bind:value={input}
+				class="field"
+				rows="1"
+				placeholder={t('assistant.placeholder')}
+				aria-label={t('assistant.message')}
+				onkeydown={keydown}
+				oninput={grow}></textarea>
 			{#if assistant.busy}
 				<button type="submit" class="btn" disabled={!input.trim()}>{t('agent.steer')}</button>
-				<button type="button" class="btn send" aria-label={t('assistant.stop')} title={t('assistant.stop')} onclick={stop}><Icon name="stop" size={16} /></button>
+				<button
+					type="button"
+					class="btn send"
+					aria-label={t('assistant.stop')}
+					title={t('assistant.stop')}
+					onclick={stop}><Icon name="stop" size={16} /></button
+				>
 			{:else}
-				<button type="submit" class="btn btn-primary send" aria-label={t('assistant.send')} title={t('assistant.send')} disabled={!input.trim()}><Icon name="send" size={16} /></button>
+				<button
+					type="submit"
+					class="btn btn-primary send"
+					aria-label={t('assistant.send')}
+					title={t('assistant.send')}
+					disabled={!input.trim()}><Icon name="send" size={16} /></button
+				>
 			{/if}
 		</div>
 		<div class="options">
 			<label class="model">
 				<span class="muted">{t('assistant.model')}</span>
-				<select class="field" value={chosen} onchange={(event) => setPrefs({ model: event.currentTarget.value })} disabled={assistant.busy}>
-					{#each models as model (model)}<option value={model}>{model}</option>{:else}<option value="">{t('assistant.noModels')}</option>{/each}
+				<select
+					class="field"
+					value={chosen}
+					onchange={(event) => setPrefs({ model: event.currentTarget.value })}
+					disabled={assistant.busy}
+				>
+					{#each models as model (model)}<option value={model}>{model}</option>{:else}<option
+							value="">{t('assistant.noModels')}</option
+						>{/each}
 				</select>
 			</label>
 			{#if currentPage}
 				<label class="context" title={t('assistant.pageContextHint')}>
-					<input type="checkbox" checked={assistant.prefs.pageContext} onchange={(event) => setPrefs({ pageContext: event.currentTarget.checked })} />
+					<input
+						type="checkbox"
+						checked={assistant.prefs.pageContext}
+						onchange={(event) => setPrefs({ pageContext: event.currentTarget.checked })}
+					/>
 					<span class="muted">{t('assistant.pageContext')}</span>
 				</label>
 			{/if}
 		</div>
-		<p class="note muted">{t(assistant.status?.persistent ? 'assistant.note' : 'assistant.noteMemory')}</p>
+		<p class="note muted">
+			{t(assistant.status?.persistent ? 'assistant.note' : 'assistant.noteMemory')}
+		</p>
 	</form>
 </div>
 
 {#if picking}
-	<NasFilePicker max={4 - attachments.length} onclose={() => (picking = false)} onpick={(files) => { attachments.push(...files); picking = false; }} />
+	<NasFilePicker
+		max={4 - attachments.length}
+		onclose={() => (picking = false)}
+		onpick={(files) => {
+			attachments.push(...files);
+			picking = false;
+		}}
+	/>
 {/if}
 
 <style>
@@ -309,7 +507,15 @@
 		font-size: 0.75rem;
 		text-align: end;
 	}
-	.agent-controls { display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:8px 14px; border-top:1px solid var(--border); font-size:0.8125rem; }
+	.agent-controls {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 10px;
+		align-items: center;
+		padding: 8px 14px;
+		border-top: 1px solid var(--border);
+		font-size: 0.8125rem;
+	}
 	.chat {
 		flex: 1;
 		min-height: 0;

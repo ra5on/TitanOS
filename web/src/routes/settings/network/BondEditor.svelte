@@ -29,6 +29,8 @@
 		onclose: () => void;
 	} = $props();
 
+	// Props are read once on purpose: the draft starts from them and later
+	// changes of the props must not overwrite what is being edited; the page mounts this editor anew for each bond ({#key bondEditor}).
 	// svelte-ignore state_referenced_locally
 	let b = $state($state.snapshot(bond));
 	const candidates = $derived(bondCandidates(config, ports, b));

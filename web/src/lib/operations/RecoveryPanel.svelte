@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { poll } from '#lib/poll.ts';
 	import { onMount } from 'svelte';
 	import { api, type StorageStatus } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
@@ -65,11 +66,7 @@
 		}
 	}
 	onMount(() => {
-		load();
-		const timer = setInterval(() => {
-			if (!document.hidden && !busy && !review) load();
-		}, 15000);
-		return () => clearInterval(timer);
+		return poll(() => load(), { interval: 15000, skip: () => busy || !!review });
 	});
 	async function openApplication() {
 		await load(true);

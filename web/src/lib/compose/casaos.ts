@@ -22,7 +22,9 @@ export function isCasaOS(compose: string): boolean {
 }
 
 function record(value: unknown): Record<string, unknown> {
-	return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+	return value && typeof value === 'object' && !Array.isArray(value)
+		? (value as Record<string, unknown>)
+		: {};
 }
 
 /** Reduces the locales of a CasaOS text (en_US, de_DE, …) to the languages TitanOS speaks. */
@@ -59,10 +61,17 @@ const OPEN_PLACEHOLDER = /\[[A-Z][A-Z0-9_ ]{2,}\]/;
 
 /** Returns the template as a compose file with an x-titanos block. */
 export function fromCasaOS(compose: string, appId: string, ctx: CasaContext): string {
-	const values: Record<string, string> = { TZ: ctx.timezone, PUID: String(ctx.uid), PGID: String(ctx.gid) };
+	const values: Record<string, string> = {
+		TZ: ctx.timezone,
+		PUID: String(ctx.uid),
+		PGID: String(ctx.gid),
+	};
 	const text = compose
 		.replace(/\$\{AppID\}|\$AppID\b/g, appId)
-		.replace(/(?<!\$)\$\{(TZ|PUID|PGID)(?::?-[^}]*)?\}|(?<!\$)\$(TZ|PUID|PGID)\b/g, (_match, braced: string, plain: string) => values[braced ?? plain])
+		.replace(
+			/(?<!\$)\$\{(TZ|PUID|PGID)(?::?-[^}]*)?\}|(?<!\$)\$(TZ|PUID|PGID)\b/g,
+			(_match, braced: string, plain: string) => values[braced ?? plain],
+		)
 		.replace(HOST_PLACEHOLDER, ctx.host);
 
 	const doc = parseDocument(text);
@@ -75,19 +84,30 @@ export function fromCasaOS(compose: string, appId: string, ctx: CasaContext): st
 	const variables: Record<string, Record<string, unknown>> = {};
 	const paths: Record<string, Record<string, unknown>> = {};
 	const ports: Record<string, Record<string, unknown>> = {};
-	const note = (into: Record<string, Record<string, unknown>>, key: string, entry: Record<string, unknown>) => {
-		const kept = Object.fromEntries(Object.entries(entry).filter(([, value]) => value !== undefined));
+	const note = (
+		into: Record<string, Record<string, unknown>>,
+		key: string,
+		entry: Record<string, unknown>,
+	) => {
+		const kept = Object.fromEntries(
+			Object.entries(entry).filter(([, value]) => value !== undefined),
+		);
 		if (Object.keys(kept).length > 0) into[key] = { ...into[key], ...kept };
 	};
 
 	for (const service of services) {
 		const described = record(doc.toJS().services?.[service]?.['x-casaos']);
-		const describedAs = (list: unknown, container: string) => (Array.isArray(list) ? list : []).find((entry) => String(record(entry).container) === container);
+		const describedAs = (list: unknown, container: string) =>
+			(Array.isArray(list) ? list : []).find(
+				(entry) => String(record(entry).container) === container,
+			);
 		doc.deleteIn(['services', service, 'x-casaos']);
 
 		const entries = readService(doc, service);
 		for (const pair of entries.env) {
-			note(variables, pair.name, { label: label(record(describedAs(described.envs, pair.name)).description, pair.name) });
+			note(variables, pair.name, {
+				label: label(record(describedAs(described.envs, pair.name)).description, pair.name),
+			});
 			// "[EUFY_USERNAME]" is a blank to fill in, not a value.
 			if (OPEN_PLACEHOLDER.test(pair.value)) {
 				note(variables, pair.name, { required: true, placeholder: pair.value });
@@ -96,7 +116,10 @@ export function fromCasaOS(compose: string, appId: string, ctx: CasaContext): st
 			// "${TOKEN:?Token required}" refuses to start without a value from outside.
 			const demanded = /^\$\{[A-Za-z_][A-Za-z0-9_]*:?\?([^}]*)\}$/.exec(pair.value);
 			if (demanded) {
-				note(variables, pair.name, { required: true, placeholder: demanded[1].trim().slice(0, 120) });
+				note(variables, pair.name, {
+					required: true,
+					placeholder: demanded[1].trim().slice(0, 120),
+				});
 				pair.value = '';
 			}
 		}
@@ -112,22 +135,50 @@ export function fromCasaOS(compose: string, appId: string, ctx: CasaContext): st
 				suggest = MEDIA_FOLDERS.includes(folder.toLowerCase()) ? 'media' : 'share';
 				row.host = ['.', folder.toLowerCase(), ...rest].join('/');
 			}
-			note(paths, row.container, { label: label(record(describedAs(described.volumes, row.container)).description, row.container), suggest });
+			note(paths, row.container, {
+				label: label(
+					record(describedAs(described.volumes, row.container)).description,
+					row.container,
+				),
+				suggest,
+			});
 		}
 		for (const row of entries.ports) {
 			if (row.raw !== undefined) continue;
-			const webui = service === main && row.host !== '' && row.host === portMap && row.protocol === 'tcp' ? true : undefined;
-			note(ports, row.protocol === 'udp' ? `${row.container}/udp` : row.container, { label: label(record(describedAs(described.ports, row.container)).description, row.container), webui });
+			const webui =
+				service === main && row.host !== '' && row.host === portMap && row.protocol === 'tcp'
+					? true
+					: undefined;
+			note(ports, row.protocol === 'udp' ? `${row.container}/udp` : row.container, {
+				label: label(
+					record(describedAs(described.ports, row.container)).description,
+					row.container,
+				),
+				webui,
+			});
 		}
 		if (service === main && portMap !== '' && entries.webui === '') {
 			const index = typeof top.index === 'string' && top.index.startsWith('/') ? top.index : '/';
-			entries.webui = top.scheme === 'https' ? `https://[host]:${portMap}${index}` : portMap + (index === '/' ? '' : index);
+			entries.webui =
+				top.scheme === 'https'
+					? `https://[host]:${portMap}${index}`
+					: portMap + (index === '/' ? '' : index);
 		}
 		writeService(doc, service, entries);
 	}
 
 	doc.delete('x-casaos');
-	const meta: Record<string, unknown> = { icon: top.icon, main, tips: texts(record(top.tips).before_install), variables, paths, ports };
-	doc.set('x-titanos', Object.fromEntries(Object.entries(meta).filter(([, value]) => value !== undefined)));
+	const meta: Record<string, unknown> = {
+		icon: top.icon,
+		main,
+		tips: texts(record(top.tips).before_install),
+		variables,
+		paths,
+		ports,
+	};
+	doc.set(
+		'x-titanos',
+		Object.fromEntries(Object.entries(meta).filter(([, value]) => value !== undefined)),
+	);
 	return doc.toString({ lineWidth: 0 });
 }

@@ -272,6 +272,9 @@ func (s *Server) planVolumeCreate(ctx context.Context, args json.RawMessage) (*a
 		return nil, err
 	}
 	var models []string
+	// The card erases exactly the disks seen now: storage refuses a disk
+	// whose identity changed before the plan is approved.
+	identities := map[string]string{}
 	for _, name := range req.Disks {
 		i := slices.IndexFunc(status.Disks, func(d storage.Disk) bool { return d.Name == name })
 		if i < 0 {
@@ -282,8 +285,9 @@ func (s *Server) planVolumeCreate(ctx context.Context, args json.RawMessage) (*a
 			return nil, assistant.Errorf("disk %s is in use", name)
 		}
 		models = append(models, name+" ("+strings.TrimSpace(d.Model)+")")
+		identities[name] = d.Identity
 	}
-	body := map[string]any{"name": req.Name, "level": req.Level, "filesystem": req.Filesystem, "disks": req.Disks, "erase": req.Disks}
+	body := map[string]any{"name": req.Name, "level": req.Level, "filesystem": req.Filesystem, "disks": req.Disks, "erase": req.Disks, "identities": identities}
 	return withLevel(card("volume.create", map[string]string{"name": req.Name, "level": req.Level, "filesystem": req.Filesystem, "disks": strings.Join(models, ", ")},
 		"POST", "/storage/volumes", body), assistant.LevelDestroy, req.Name, ""), nil
 }

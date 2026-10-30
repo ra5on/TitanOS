@@ -19,7 +19,16 @@
 		disabled?: boolean;
 		children: Snippet<[() => void]>;
 	};
-	let { label, text, icon, kind = 'menu', align = 'left', compact = false, disabled = false, children }: Props = $props();
+	let {
+		label,
+		text,
+		icon,
+		kind = 'menu',
+		align = 'left',
+		compact = false,
+		disabled = false,
+		children,
+	}: Props = $props();
 
 	let open = $state(false);
 	let root: HTMLElement | undefined = $state();
@@ -74,7 +83,9 @@
 	}
 </script>
 
-<svelte:window onpointerdown={(event) => open && !root?.contains(event.target as Node) && close()} />
+<svelte:window
+	onpointerdown={(event) => open && !root?.contains(event.target as Node) && close()}
+/>
 
 <div class="dropdown" bind:this={root}>
 	<button
@@ -91,7 +102,9 @@
 		onclick={toggle}
 	>
 		{#if icon}<Icon name={icon} size={16} />{/if}
-		{#if text}<span class="text">{text}</span><span class="chevron"><Icon name="chevronDown" size={14} /></span>{/if}
+		{#if text}<span class="text">{text}</span><span class="chevron"
+				><Icon name="chevronDown" size={14} /></span
+			>{/if}
 	</button>
 	{#if open}
 		<div

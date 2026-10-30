@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { api, ApiError } from '#lib/api.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { api } from '#lib/api.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
@@ -21,9 +21,7 @@
 			networks = res.networks ?? [];
 			parents = res.parents ?? [];
 		} catch (e) {
-			error =
-				errorText(e instanceof ApiError ? e.code : 'internal') +
-				(e instanceof ApiError && e.message ? ' · ' + e.message : '');
+			error = apiErrorText(e, { detail: true });
 		} finally {
 			loading = false;
 		}
@@ -56,9 +54,7 @@
 			draft = null;
 			await load();
 		} catch (e) {
-			error =
-				errorText(e instanceof ApiError ? e.code : 'internal') +
-				(e instanceof ApiError && e.message ? ' · ' + e.message : '');
+			error = apiErrorText(e, { detail: true });
 			await load();
 		} finally {
 			busy = false;
@@ -73,9 +69,7 @@
 			remove = null;
 			await load();
 		} catch (e) {
-			error =
-				errorText(e instanceof ApiError ? e.code : 'internal') +
-				(e instanceof ApiError && e.message ? ' · ' + e.message : '');
+			error = apiErrorText(e, { detail: true });
 		} finally {
 			busy = false;
 		}
@@ -94,9 +88,11 @@
 {#if !parents.length && !loading}<p class="notice-warn">
 		{t('lan.needParent')} <a href="/settings/network">{t('netcfg.title')}</a>
 	</p>{/if}
-{#if loading}<p class="loading" role="status">{t('common.loading')}</p>{:else if !networks.length}<EmptyState
-		title={t('lan.empty')}
-	/>{:else}<section class="tile content">
+{#if loading}<p class="loading" role="status">
+		{t('common.loading')}
+	</p>{:else if !networks.length}<EmptyState title={t('lan.empty')} />{:else}<section
+		class="tile content"
+	>
 		{#each networks as n (n.name)}<article>
 				<div class="row">
 					<div>

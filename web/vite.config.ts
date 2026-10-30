@@ -23,7 +23,7 @@ function manual(): Plugin {
 			for (const name of readdirSync('../docs')) {
 				if (name.endsWith('.md')) cpSync(`../docs/${name}`, `${target}/docs/${name}`);
 			}
-		}
+		},
 	};
 }
 
@@ -39,15 +39,18 @@ export default defineConfig(({ mode }) => ({
 				directives: {
 					'script-src': ['self'],
 					'object-src': ['none'],
-					'base-uri': ['self']
-				}
-			}
-		})
+					'base-uri': ['self'],
+				},
+			},
+		}),
 	],
 	server: {
 		// During development the API comes from a locally running titand.
 		proxy: {
-			'/api': { target: loadEnv(mode, '.', '').TITANOS_DEV_API || 'http://127.0.0.1:8080', ws: true }
-		}
-	}
+			'/api': {
+				target: loadEnv(mode, '.', '').TITANOS_DEV_API || 'http://127.0.0.1:8080',
+				ws: true,
+			},
+		},
+	},
 }));

@@ -215,7 +215,7 @@ def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, 
                         time.sleep(3)
                     if boot == 1:
                         request('/setup', {'name': 'storagetester', 'password': password})
-                        request('/account/ssh-keys', {'key': (directory / 'key.pub').read_text().strip()})
+                        request('/account/ssh-keys', {'key': (directory / 'key.pub').read_text().strip(), 'password': password})
                     else:
                         request('/login', {'name': 'storagetester', 'password': password})
                     request('/system/ssh', {'enabled': True}, 'PUT')
@@ -234,13 +234,13 @@ def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, 
                         assert all(name.startswith('vd') for name in members), members
                         remote('mdadm --create /dev/md/old --run --metadata=1.2 --level=1 --raid-devices=2 ' + ' '.join('/dev/' + name for name in members) + '; mkfs.ext4 -q /dev/md/old')
                         try:
-                            request('/storage/volumes', {'name': 'unsafe', 'level': 'raid0', 'filesystem': 'ext4', 'disks': members[:1], 'erase': members[:1]})
+                            request('/storage/volumes', {'name': 'unsafe', 'level': 'raid0', 'filesystem': 'ext4', 'disks': members[:1], 'erase': members[:1], 'identities': {d['name']: d['identity'] for d in request('/storage')['disks']}})
                         except RuntimeError as error:
                             assert 'disk_unavailable' in str(error), error
                         else:
                             raise AssertionError('accepted partial foreign RAID selection')
                         remote('test -b /dev/md/old; mdadm --detail /dev/md/old')
-                        request('/storage/volumes', {'name': 'mirror', 'level': 'raid1', 'filesystem': 'btrfs', 'disks': members, 'erase': members})
+                        request('/storage/volumes', {'name': 'mirror', 'level': 'raid1', 'filesystem': 'btrfs', 'disks': members, 'erase': members, 'identities': {d['name']: d['identity'] for d in request('/storage')['disks']}})
                         assert volume()['mounted'], volume()
                         remote('test -d /mnt/mirror/vms && test -d /mnt/mirror/appdata && test -d /mnt/mirror/iso')
                         # After mirror: the first new volume gets the default folders.
@@ -312,7 +312,7 @@ def smoke(archive, plugins, log, timeout, workflows=False, online_virtio=False, 
                     if boot == 3:
                         assert volume()['state'] == 'degraded', volume()
                         print(remote('btrfs filesystem show --raw /mnt/mirror'), flush=True)
-                        request('/storage/volumes/mirror/disks', {'disk': disks['BTRFS3'], 'erase': True})
+                        request('/storage/volumes/mirror/disks', {'disk': disks['BTRFS3'], 'erase': True, 'identity': next(d['identity'] for d in request('/storage')['disks'] if d['name'] == disks['BTRFS3'])})
                         deadline = time.monotonic() + 180
                         while True:
                             result = remote('btrfs replace status -1 /mnt/mirror')

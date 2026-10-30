@@ -3,11 +3,12 @@
 	// Every drive is listed, also new and empty ones; protected or busy ones
 	// say why they cannot be formatted. The work runs on the NAS and goes on
 	// when the dialog is closed; a notification tells how it ended.
+	import { poll } from '#lib/poll.ts';
 	import { api, ApiError } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { formatDiskBytes } from '#lib/format.ts';
-	import { errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import {
 		driveFilesystems,
 		formatRunning,
@@ -63,17 +64,13 @@
 				confirming = false;
 			}
 		} catch (err) {
-			loadError = errorText(err instanceof ApiError ? err.code : 'internal');
+			loadError = apiErrorText(err);
 		} finally {
 			loaded = true;
 		}
 	}
 
-	$effect(() => {
-		load();
-		const timer = setInterval(() => !document.hidden && load(), 2000);
-		return () => clearInterval(timer);
-	});
+	$effect(() => poll(load, { interval: 2000 }));
 
 	function choose(d: Drive) {
 		if (!d.formattable || running) return;

@@ -59,10 +59,7 @@
 				retry = setTimeout(connect, 5000);
 				return;
 			}
-			const connection = new RFB(
-				element,
-				apiSocket(`/vms/${vm}/screen`),
-			);
+			const connection = new RFB(element, apiSocket(`/vms/${vm}/screen`));
 			rfb = connection;
 			connection.background = 'var(--screen-bg)';
 			applyMode();
@@ -121,7 +118,6 @@
 </script>
 
 <div class="screen" class:full={effective === 'full'} bind:this={target}></div>
-
 
 <style>
 	.screen {

@@ -229,7 +229,8 @@ func (s *Server) handleAddVolumeDisk(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Disk  string `json:"disk"`
 		Erase bool   `json:"erase"`
-		// Identity is the disk's identity from the disk list, optional.
+		// Identity is the disk's identity from the disk list; required,
+		// the disk is erased (storage.ErrIdentityRequired).
 		Identity string `json:"identity"`
 		// Profile converts a Btrfs volume while the disk is added
 		// (single, raid1, raid1c3); empty keeps the profile.

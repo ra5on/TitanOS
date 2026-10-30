@@ -452,7 +452,6 @@ func (m *Manager) Query(ctx context.Context, f Filter) (entries []Entry, more bo
 	cutoff := m.now().UTC().AddDate(0, 0, -f.Days)
 	m.mu.Lock()
 	s := m.settings
-	pending := slices.Clone(m.pending)
 	recent := slices.Clone(m.recent)
 	m.mu.Unlock()
 	found := []Entry{}
@@ -472,7 +471,7 @@ func (m *Manager) Query(ctx context.Context, f Filter) (entries []Entry, more bo
 	defer m.ioMu.Unlock()
 	// Entries written while we waited for the lock are on the volume now.
 	m.mu.Lock()
-	pending = slices.Clone(m.pending)
+	pending := slices.Clone(m.pending)
 	m.mu.Unlock()
 	for _, e := range pending {
 		if f.match(e, cutoff) {

@@ -67,11 +67,18 @@ func (s *Server) handleTokenCreate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name   string   `json:"name"`
 		Scopes []string `json:"scopes"`
+		// Password and Code confirm it like switching two-factor login
+		// off: a token is another way into the account.
+		Password string `json:"password"`
+		Code     string `json:"code"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
 	noteTarget(r, req.Name)
+	if !s.reconfirm(w, currentUser(r), req.Password, req.Code) {
+		return
+	}
 	token, plain, err := s.tokens.Create(currentUser(r), req.Name, req.Scopes)
 	if err != nil {
 		writeError(w, 400, "invalid_api_token", err.Error())

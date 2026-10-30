@@ -1,6 +1,7 @@
 <script lang="ts">
 	// Certificates from Let's Encrypt (backend package letsencrypt): names,
 	// how they are proven (DNS provider or port 80), state of the renewal.
+	import { poll } from '#lib/poll.ts';
 	import { onMount } from 'svelte';
 	import { api, ApiError } from '#lib/api.ts';
 	import DnsProviderFields from '#lib/components/DnsProviderFields.svelte';
@@ -15,7 +16,7 @@
 		type SecretName,
 	} from '#lib/dns-providers.ts';
 	import { formatDateTime } from '#lib/format.ts';
-	import { errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { revealTarget } from '#lib/reveal-target.ts';
 
 	type Settings = {
@@ -29,7 +30,13 @@
 		propagation?: number;
 		directory?: string;
 	};
-	type CertInfo = { names: string[]; issuer: string; notBefore: string; notAfter: string; fingerprint: string };
+	type CertInfo = {
+		names: string[];
+		issuer: string;
+		notBefore: string;
+		notAfter: string;
+		fingerprint: string;
+	};
 	type Status = {
 		settings: Settings;
 		secrets: Partial<Record<SecretName, boolean>>;
@@ -91,7 +98,7 @@
 			status = next;
 			loadError = '';
 		} catch (err) {
-			loadError = errorText(err instanceof ApiError ? err.code : 'internal');
+			loadError = apiErrorText(err);
 		}
 	}
 	onMount(() => {
@@ -100,10 +107,7 @@
 	// While a certificate is being fetched the page follows along.
 	$effect(() => {
 		if (!status?.running) return;
-		const timer = setInterval(() => {
-			if (!document.hidden) load(false);
-		}, 3000);
-		return () => clearInterval(timer);
+		return poll(() => load(false), { interval: 3000, immediate: false });
 	});
 	$effect(() => {
 		if (saved) {
@@ -121,7 +125,9 @@
 			: [],
 	);
 	const propagationValue = $derived(propagation ?? 0);
-	const propagationBad = $derived(!Number.isInteger(propagationValue) || propagationValue < 0 || propagationValue > 3600);
+	const propagationBad = $derived(
+		!Number.isInteger(propagationValue) || propagationValue < 0 || propagationValue > 3600,
+	);
 	const valid = $derived(
 		badNames.length === 0 &&
 			(!enabled || domains.length > 0) &&
@@ -153,7 +159,10 @@
 			fill(next);
 			saved = true;
 		} catch (err) {
-			error = err instanceof ApiError && err.code === 'invalid_letsencrypt' ? `${errorText(err.code)} ${err.message.replace(/^letsencrypt: invalid settings: /, '')}` : errorText(err instanceof ApiError ? err.code : 'internal');
+			error =
+				err instanceof ApiError && err.code === 'invalid_letsencrypt'
+					? `${errorText(err.code)} ${err.message.replace(/^letsencrypt: invalid settings: /, '')}`
+					: apiErrorText(err);
 		} finally {
 			busy = false;
 		}
@@ -164,7 +173,7 @@
 		try {
 			status = await api.post<Status>('/system/letsencrypt/renew', {});
 		} catch (err) {
-			renewError = errorText(err instanceof ApiError ? err.code : 'internal');
+			renewError = apiErrorText(err);
 		}
 	}
 
@@ -176,14 +185,18 @@
 		return { text: 'letsencrypt.state.waiting', tone: '' };
 	});
 	const daysLeft = $derived(
-		status?.certificate ? Math.floor((Date.parse(status.certificate.notAfter) - Date.now()) / 86_400_000) : 0,
+		status?.certificate
+			? Math.floor((Date.parse(status.certificate.notAfter) - Date.now()) / 86_400_000)
+			: 0,
 	);
 </script>
 
 <PageHead title={t('letsencrypt.title')} parent={{ href: '/settings', label: t('nav.settings') }} />
 
 {#if loadError}
-	<div class="notice-error" role="alert">{loadError}<button class="btn" onclick={() => load()}>{t('ui.retry')}</button></div>
+	<div class="notice-error" role="alert">
+		{loadError}<button class="btn" onclick={() => load()}>{t('ui.retry')}</button>
+	</div>
 {:else if !status}
 	<p class="muted loading" role="status">{t('common.loading')}</p>
 {:else}
@@ -199,12 +212,26 @@
 		<p class="muted">{t('letsencrypt.intro')}</p>
 		{#if status.certificate}
 			{#if status.certificateStaging}<p class="notice-warn">{t('letsencrypt.stagingCert')}</p>{/if}
-			{#if daysLeft < 14}<p class="notice-warn">{t('letsencrypt.expiring', { days: Math.max(daysLeft, 0) })}</p>{/if}
+			{#if daysLeft < 14}<p class="notice-warn">
+					{t('letsencrypt.expiring', { days: Math.max(daysLeft, 0) })}
+				</p>{/if}
 			<dl>
-				<div><dt>{t('access.certIssuer')}</dt><dd>{status.certificate.issuer || '–'}</dd></div>
-				<div><dt>{t('access.certUntil')}</dt><dd>{formatDateTime(new Date(status.certificate.notAfter))}</dd></div>
-				{#if status.renewAt}<div><dt>{t('letsencrypt.renewAt')}</dt><dd>{formatDateTime(new Date(status.renewAt))}</dd></div>{/if}
-				<div class="wide"><dt>{t('access.certNames')}</dt><dd class="mono">{status.certificate.names.join(', ')}</dd></div>
+				<div>
+					<dt>{t('access.certIssuer')}</dt>
+					<dd>{status.certificate.issuer || '–'}</dd>
+				</div>
+				<div>
+					<dt>{t('access.certUntil')}</dt>
+					<dd>{formatDateTime(new Date(status.certificate.notAfter))}</dd>
+				</div>
+				{#if status.renewAt}<div>
+						<dt>{t('letsencrypt.renewAt')}</dt>
+						<dd>{formatDateTime(new Date(status.renewAt))}</dd>
+					</div>{/if}
+				<div class="wide">
+					<dt>{t('access.certNames')}</dt>
+					<dd class="mono">{status.certificate.names.join(', ')}</dd>
+				</div>
 			</dl>
 		{:else if status.settings.enabled}
 			<p class="muted">{t('letsencrypt.noCert')}</p>
@@ -213,16 +240,27 @@
 			<div class="notice-error" role="alert">
 				{t('letsencrypt.lastError', { count: status.failures })}
 				<pre>{status.lastError}</pre>
-				{#if status.nextAttempt}<p>{t('letsencrypt.nextAttempt', { time: formatDateTime(new Date(status.nextAttempt)) })}</p>{/if}
+				{#if status.nextAttempt}<p>
+						{t('letsencrypt.nextAttempt', { time: formatDateTime(new Date(status.nextAttempt)) })}
+					</p>{/if}
 			</div>
 		{/if}
 		<dl>
-			{#if status.lastAttempt}<div><dt>{t('letsencrypt.lastAttempt')}</dt><dd>{formatDateTime(new Date(status.lastAttempt))}</dd></div>{/if}
-			{#if status.lastSuccess}<div><dt>{t('letsencrypt.lastSuccess')}</dt><dd>{formatDateTime(new Date(status.lastSuccess))}</dd></div>{/if}
+			{#if status.lastAttempt}<div>
+					<dt>{t('letsencrypt.lastAttempt')}</dt>
+					<dd>{formatDateTime(new Date(status.lastAttempt))}</dd>
+				</div>{/if}
+			{#if status.lastSuccess}<div>
+					<dt>{t('letsencrypt.lastSuccess')}</dt>
+					<dd>{formatDateTime(new Date(status.lastSuccess))}</dd>
+				</div>{/if}
 		</dl>
 		<div class="row-actions">
-			<button type="button" class="btn" disabled={!status.settings.enabled || status.running || status.disabled} onclick={renew}
-				>{t('letsencrypt.renewNow')}</button
+			<button
+				type="button"
+				class="btn"
+				disabled={!status.settings.enabled || status.running || status.disabled}
+				onclick={renew}>{t('letsencrypt.renewNow')}</button
 			>
 			<a class="btn" href="/settings/access#access-cert">{t('letsencrypt.toAccess')}</a>
 		</div>
@@ -231,7 +269,11 @@
 
 	<form class="tile panel" aria-labelledby="le-settings" onsubmit={save}>
 		<h2 class="tile-title" id="le-settings" use:revealTarget>{t('letsencrypt.settingsTitle')}</h2>
-		<label class="check"><input type="checkbox" bind:checked={enabled} disabled={busy} /><span>{t('letsencrypt.enable')}</span></label>
+		<label class="check"
+			><input type="checkbox" bind:checked={enabled} disabled={busy} /><span
+				>{t('letsencrypt.enable')}</span
+			></label
+		>
 		<p class="muted hint">{t('letsencrypt.enableHint')}</p>
 
 		<label class="stack"
@@ -242,35 +284,48 @@
 				placeholder="nas.example.org"
 				spellcheck="false"
 				autocapitalize="off"
-				disabled={busy}
-			></textarea></label
+				disabled={busy}></textarea></label
 		>
 		<p class="muted hint">{t('letsencrypt.namesHint')}</p>
 		{#if badNames.length}<p class="notice-warn" role="alert">
-				{t(wildcardAllowed ? 'letsencrypt.namesInvalid' : 'letsencrypt.namesInvalidHttp', { names: badNames.join(', ') })}
+				{t(wildcardAllowed ? 'letsencrypt.namesInvalid' : 'letsencrypt.namesInvalidHttp', {
+					names: badNames.join(', '),
+				})}
 			</p>{/if}
 
 		<div class="divided">
 			<h3 id="le-challenge">{t('letsencrypt.challenge')}</h3>
 			<label class="check"
-				><input type="radio" name="challenge" value="dns-01" bind:group={challenge} disabled={busy} /><span
-					>{t('letsencrypt.challengeDns')}</span
-				></label
+				><input
+					type="radio"
+					name="challenge"
+					value="dns-01"
+					bind:group={challenge}
+					disabled={busy}
+				/><span>{t('letsencrypt.challengeDns')}</span></label
 			>
 			<p class="muted hint">{t('letsencrypt.challengeDnsHint')}</p>
 			<label class="check"
-				><input type="radio" name="challenge" value="http-01" bind:group={challenge} disabled={busy} /><span
-					>{t('letsencrypt.challengeHttp')}</span
-				></label
+				><input
+					type="radio"
+					name="challenge"
+					value="http-01"
+					bind:group={challenge}
+					disabled={busy}
+				/><span>{t('letsencrypt.challengeHttp')}</span></label
 			>
 			<p class="muted hint">{t('letsencrypt.challengeHttpHint')}</p>
-			{#if challenge === 'http-01' && !status.httpPort}<p class="notice-warn">{t('letsencrypt.noHttpPort')}</p>{/if}
+			{#if challenge === 'http-01' && !status.httpPort}<p class="notice-warn">
+					{t('letsencrypt.noHttpPort')}
+				</p>{/if}
 			{#if challenge === 'http-01' && status.httpPort && status.firewall && !status.internetHttp}
 				<div class="notice-warn" role="note" data-testid="le-firewall-http">
 					<p>{t('letsencrypt.firewallHttp')}</p>
 					<p>{t('letsencrypt.firewallHttpWays')}</p>
 					<div class="row-actions">
-						<a class="btn" href="/settings/firewall?tab=policies#firewall-policies">{t('letsencrypt.toFirewall')}</a>
+						<a class="btn" href="/settings/firewall?tab=policies#firewall-policies"
+							>{t('letsencrypt.toFirewall')}</a
+						>
 						<button type="button" class="btn" disabled={busy} onclick={() => (challenge = 'dns-01')}
 							>{t('letsencrypt.useDns')}</button
 						>
@@ -304,21 +359,33 @@
 					/></label
 				>
 				<p class="muted hint">{t('letsencrypt.propagationHint')}</p>
-				{#if propagationBad}<p class="notice-warn" role="alert">{t('letsencrypt.propagationInvalid')}</p>{/if}
+				{#if propagationBad}<p class="notice-warn" role="alert">
+						{t('letsencrypt.propagationInvalid')}
+					</p>{/if}
 			</div>
 			<div class="divided">
-				<label class="check"><input type="checkbox" bind:checked={apps} disabled={busy} /><span>{t('letsencrypt.apps')}</span></label>
+				<label class="check"
+					><input type="checkbox" bind:checked={apps} disabled={busy} /><span
+						>{t('letsencrypt.apps')}</span
+					></label
+				>
 				{#if status.appDomain}
-					<p class="muted hint">{t('letsencrypt.appsHint', { wildcard: `*.${status.appDomain}` })}</p>
+					<p class="muted hint">
+						{t('letsencrypt.appsHint', { wildcard: `*.${status.appDomain}` })}
+					</p>
 				{:else}
-					<p class="muted hint">{t('letsencrypt.appsNoDomain')} <a href="/settings/proxy">{t('proxy.settingsTitle')}</a></p>
+					<p class="muted hint">
+						{t('letsencrypt.appsNoDomain')} <a href="/settings/proxy">{t('proxy.settingsTitle')}</a>
+					</p>
 				{/if}
 			</div>
 		{/if}
 
 		<div class="divided">
 			<label class="stack"
-				><span>{t('letsencrypt.email')} <span class="muted">({t('dnsProvider.optional')})</span></span><input
+				><span
+					>{t('letsencrypt.email')} <span class="muted">({t('dnsProvider.optional')})</span></span
+				><input
 					class="field"
 					type="email"
 					bind:value={email}
@@ -327,10 +394,17 @@
 				/></label
 			>
 			<p class="muted hint">{t('letsencrypt.emailHint')}</p>
-			<label class="check"><input type="checkbox" bind:checked={staging} disabled={busy || !!directory.trim()} /><span>{t('letsencrypt.staging')}</span></label>
+			<label class="check"
+				><input type="checkbox" bind:checked={staging} disabled={busy || !!directory.trim()} /><span
+					>{t('letsencrypt.staging')}</span
+				></label
+			>
 			<p class="muted hint">{t('letsencrypt.stagingHint')}</p>
 			<label class="stack"
-				><span>{t('letsencrypt.directory')} <span class="muted">({t('dnsProvider.optional')})</span></span><input
+				><span
+					>{t('letsencrypt.directory')}
+					<span class="muted">({t('dnsProvider.optional')})</span></span
+				><input
 					class="field mono"
 					type="url"
 					bind:value={directory}
@@ -345,7 +419,9 @@
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 		<div class="row-actions">
 			<button class="btn btn-primary" disabled={busy || !valid}>{t('common.save')}</button>
-			{#if busy || saved}<span class="muted" role="status">{t(busy ? 'ui.saving' : 'ui.saved')}</span>{/if}
+			{#if busy || saved}<span class="muted" role="status"
+					>{t(busy ? 'ui.saving' : 'ui.saved')}</span
+				>{/if}
 		</div>
 	</form>
 {/if}

@@ -20,6 +20,34 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 )
 
+// automationExecution is the execution policy a run of an automation gets.
+// An automation may only make the global policy stricter: "direct" counts
+// when the global policy is direct or the account is an owner, otherwise
+// the global policy applies.
+func automationExecution(global, requested string, role auth.Role) string {
+	switch requested {
+	case "confirm":
+		return "confirm"
+	case "direct":
+		if global == "direct" || role == auth.RoleOwner {
+			return "direct"
+		}
+	}
+	return global
+}
+
+// validateAutomationExecution refuses to save an automation that would run
+// more freely than the global policy allows its account.
+func (s *Server) validateAutomationExecution(u auth.User, a *assistant.Automation) error {
+	if !a.Enabled || a.Execution != "direct" {
+		return nil
+	}
+	if automationExecution(s.opts.Assistant.Settings().Execution, a.Execution, u.Role) != "direct" {
+		return fmt.Errorf("%w: it needs the global direct mode or an owner account", assistant.ErrDirectForbidden)
+	}
+	return nil
+}
+
 func (s *Server) validateAutomation(u auth.User, a *assistant.Automation) error {
 	if err := a.Validate(time.Now()); err != nil {
 		return err
@@ -95,6 +123,10 @@ func (s *Server) handleAutomationSave(w http.ResponseWriter, r *http.Request) {
 		writeAssistantError(w, err)
 		return
 	}
+	if err := s.validateAutomationExecution(currentUser(r), &a); err != nil {
+		writeAssistantError(w, err)
+		return
+	}
 	saved, err := s.automations.Put(currentUser(r).Name, a, time.Now())
 	if err != nil {
 		writeAssistantError(w, err)
@@ -147,6 +179,9 @@ func (s *Server) automationTools(u auth.User) []assistant.Tool {
 				return nil, err
 			}
 			if err := s.validateAutomation(u, &q.Automation); err != nil {
+				return nil, err
+			}
+			if err := s.validateAutomationExecution(u, &q.Automation); err != nil {
 				return nil, err
 			}
 			if q.Automation.ID != "" {

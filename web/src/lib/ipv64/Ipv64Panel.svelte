@@ -8,7 +8,7 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { IPV64_ZONES, validIpv64Wish } from '#lib/dns-providers.ts';
 	import Heartbeat from '#lib/ddns/Heartbeat.svelte';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { keyBody, type DdnsStatus, type Ipv64Domain } from '#lib/ddns/ddns.ts';
 
 	let {
@@ -30,7 +30,7 @@
 	function failure(err: unknown): string {
 		if (err instanceof ApiError && err.code.startsWith('ipv64_') && err.code !== 'ipv64_no_key')
 			return `${errorText(err.code)} ${err.message}`;
-		return errorText(err instanceof ApiError ? err.code : 'internal');
+		return apiErrorText(err);
 	}
 
 	// --- domains ---
@@ -47,7 +47,10 @@
 		domainsBusy = true;
 		domainsError = '';
 		try {
-			const answer = await api.post<{ domains: Ipv64Domain[]; zones: string[] }>('/network/ipv64/domains', body());
+			const answer = await api.post<{ domains: Ipv64Domain[]; zones: string[] }>(
+				'/network/ipv64/domains',
+				body(),
+			);
 			domains = answer.domains;
 			if (answer.zones?.length) zones = answer.zones;
 		} catch (err) {
@@ -61,7 +64,10 @@
 		domainsBusy = true;
 		domainsError = '';
 		try {
-			const created = await api.post<Ipv64Domain>('/network/ipv64/domains/create', body({ name: newName }));
+			const created = await api.post<Ipv64Domain>(
+				'/network/ipv64/domains/create',
+				body({ name: newName }),
+			);
 			creating = false;
 			wish = '';
 			onhost(created.name);
@@ -76,8 +82,13 @@
 		domainsBusy = true;
 		domainsError = '';
 		try {
-			const changed = await api.post<Ipv64Domain>('/network/ipv64/domains/change', body({ domain: domain.name, wildcard }));
-			domains = (domains ?? []).map((d) => (d.name === changed.name ? { ...d, wildcard: changed.wildcard } : d));
+			const changed = await api.post<Ipv64Domain>(
+				'/network/ipv64/domains/change',
+				body({ domain: domain.name, wildcard }),
+			);
+			domains = (domains ?? []).map((d) =>
+				d.name === changed.name ? { ...d, wildcard: changed.wildcard } : d,
+			);
 		} catch (err) {
 			domainsError = failure(err);
 		} finally {
@@ -97,7 +108,6 @@
 			domainsBusy = false;
 		}
 	}
-
 </script>
 
 <section class="tile panel" aria-labelledby="ipv64-title">
@@ -105,12 +115,16 @@
 	<p class="muted">{t('ipv64.intro')}</p>
 	{#if !keyKnown}<p class="notice-warn">{t('ipv64.needsKey')}</p>{/if}
 
-	<p class="muted hint">{t('ipv64.moved')} <a href="/settings/ddns?tab=ipv64&sub=domains">{t('ipv64.movedLink')}</a></p>
+	<p class="muted hint">
+		{t('ipv64.moved')} <a href="/settings/ddns?tab=ipv64&sub=domains">{t('ipv64.movedLink')}</a>
+	</p>
 
 	<div class="part">
 		<h3>{t('ipv64.domains')}</h3>
 		<div class="row-actions">
-			<button type="button" class="btn" disabled={!keyKnown || domainsBusy} onclick={loadDomains}>{t('ipv64.domainsLoad')}</button>
+			<button type="button" class="btn" disabled={!keyKnown || domainsBusy} onclick={loadDomains}
+				>{t('ipv64.domainsLoad')}</button
+			>
 		</div>
 		{#if domainsError}<p class="notice-error" role="alert">{domainsError}</p>{/if}
 		{#if notice}<p class="notice-ok" role="status">{notice}</p>{/if}
@@ -124,14 +138,28 @@
 								<td class="mono">{domain.name}</td>
 								<td>
 									{#if domain.wildcard}<span class="chip ok">{t('ipv64.wildcardOn')}</span>{/if}
-									{#if hostnames.includes(domain.name)}<span class="chip">{t('ipv64.inUse')}</span>{/if}
+									{#if hostnames.includes(domain.name)}<span class="chip">{t('ipv64.inUse')}</span
+										>{/if}
 								</td>
 								<td class="actions">
-									{#if !hostnames.includes(domain.name)}<button type="button" class="btn" onclick={() => onhost(domain.name)}>{t('ipv64.use')}</button>{/if}
-									<button type="button" class="btn" disabled={domainsBusy} onclick={() => setWildcard(domain, !domain.wildcard)}
+									{#if !hostnames.includes(domain.name)}<button
+											type="button"
+											class="btn"
+											onclick={() => onhost(domain.name)}>{t('ipv64.use')}</button
+										>{/if}
+									<button
+										type="button"
+										class="btn"
+										disabled={domainsBusy}
+										onclick={() => setWildcard(domain, !domain.wildcard)}
 										>{t(domain.wildcard ? 'ipv64.wildcardOff' : 'ipv64.wildcardTurnOn')}</button
 									>
-									<button type="button" class="btn" disabled={domainsBusy} onclick={() => (proxyDomain = domain.name)}>{t('ipv64.forApps')}</button>
+									<button
+										type="button"
+										class="btn"
+										disabled={domainsBusy}
+										onclick={() => (proxyDomain = domain.name)}>{t('ipv64.forApps')}</button
+									>
 								</td>
 							</tr>
 						{/each}
@@ -141,15 +169,25 @@
 			<p class="muted hint">{t('ipv64.wildcardHint')}</p>
 			<div class="create">
 				<label class="stack"
-					><span>{t('ipv64.newName')}</span><input class="field mono" type="text" bind:value={wish} placeholder="meinnas" spellcheck="false" autocapitalize="off" /></label
+					><span>{t('ipv64.newName')}</span><input
+						class="field mono"
+						type="text"
+						bind:value={wish}
+						placeholder="meinnas"
+						spellcheck="false"
+						autocapitalize="off"
+					/></label
 				>
 				<label class="stack"
 					><span>{t('ipv64.zone')}</span><select class="field mono" bind:value={zone}>
 						{#each zones as z (z)}<option value={z}>{z}</option>{/each}
 					</select></label
 				>
-				<button type="button" class="btn" disabled={!validIpv64Wish(wish.trim().toLowerCase()) || domainsBusy} onclick={() => (creating = true)}
-					>{t('ipv64.create')}</button
+				<button
+					type="button"
+					class="btn"
+					disabled={!validIpv64Wish(wish.trim().toLowerCase()) || domainsBusy}
+					onclick={() => (creating = true)}>{t('ipv64.create')}</button
 				>
 			</div>
 		{/if}
@@ -162,8 +200,12 @@
 	<Dialog title={t('ipv64.createTitle')} locked={domainsBusy} onclose={() => (creating = false)}>
 		<p>{t('ipv64.createText', { name: newName })}</p>
 		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={domainsBusy} onclick={() => (creating = false)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-primary" disabled={domainsBusy} onclick={createDomain}>{t('ipv64.create')}</button>
+			<button type="button" class="btn" disabled={domainsBusy} onclick={() => (creating = false)}
+				>{t('common.cancel')}</button
+			>
+			<button type="button" class="btn btn-primary" disabled={domainsBusy} onclick={createDomain}
+				>{t('ipv64.create')}</button
+			>
 		</div>
 	</Dialog>
 {/if}
@@ -172,8 +214,15 @@
 	<Dialog title={t('ipv64.forAppsTitle')} locked={domainsBusy} onclose={() => (proxyDomain = null)}>
 		<p>{t('ipv64.forAppsText', { domain: proxyDomain })}</p>
 		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={domainsBusy} onclick={() => (proxyDomain = null)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-primary" disabled={domainsBusy} onclick={() => proxyDomain && useForApps(proxyDomain)}>{t('ipv64.forApps')}</button>
+			<button type="button" class="btn" disabled={domainsBusy} onclick={() => (proxyDomain = null)}
+				>{t('common.cancel')}</button
+			>
+			<button
+				type="button"
+				class="btn btn-primary"
+				disabled={domainsBusy}
+				onclick={() => proxyDomain && useForApps(proxyDomain)}>{t('ipv64.forApps')}</button
+			>
 		</div>
 	</Dialog>
 {/if}

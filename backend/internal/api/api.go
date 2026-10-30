@@ -4,6 +4,7 @@ package api
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"io"
@@ -11,7 +12,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -299,11 +299,12 @@ func New(opts Options) *Server {
 	mux := &routeMux{ServeMux: http.NewServeMux()}
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
 	mux.HandleFunc("GET /api/v1/session", s.handleSession)
-	mux.HandleFunc("POST /api/v1/setup", s.handleSetup)
+	// Whoever sets up first owns the NAS: only from the home network.
+	mux.HandleFunc("POST /api/v1/setup", setupLocal(s.handleSetup))
 	// A new stick may take the configuration from a backup instead.
-	mux.HandleFunc("GET /api/v1/setup/backups", s.handleSetupBackups)
-	mux.HandleFunc("POST /api/v1/setup/restore", s.handleSetupRestore)
-	mux.HandleFunc("POST /api/v1/setup/restore/upload", s.handleSetupRestoreUpload)
+	mux.HandleFunc("GET /api/v1/setup/backups", setupLocal(s.handleSetupBackups))
+	mux.HandleFunc("POST /api/v1/setup/restore", setupLocal(s.handleSetupRestore))
+	mux.HandleFunc("POST /api/v1/setup/restore/upload", setupLocal(s.handleSetupRestoreUpload))
 	mux.HandleFunc("POST /api/v1/login", s.handleLogin)
 	mux.HandleFunc("POST /api/v1/login/passkey/begin", s.handlePasskeyLoginBegin)
 	mux.HandleFunc("POST /api/v1/login/passkey", s.handlePasskeyLogin)
@@ -478,33 +479,33 @@ func New(opts Options) *Server {
 	// Docker. Whoever controls containers controls the machine: administrators only.
 	mux.HandleFunc("GET /api/v1/docker", s.requireAdmin(s.handleDocker))
 	mux.HandleFunc("GET /api/v1/docker/networks", s.requireAdmin(s.handleLANNetworks))
-	mux.HandleFunc("POST /api/v1/docker/networks", s.requireHeavyAdmin(s.handleLANCreate))
-	mux.HandleFunc("DELETE /api/v1/docker/networks/{name}", s.requireAdmin(s.handleLANRemove))
-	mux.HandleFunc("PUT /api/v1/docker/settings", s.requireAdmin(s.handleDockerSettings))
-	mux.HandleFunc("POST /api/v1/docker/containers/{id}/{action}", s.requireAdmin(s.handleContainerAction))
-	mux.HandleFunc("DELETE /api/v1/docker/containers/{id}", s.requireAdmin(s.handleContainerRemove))
+	mux.HandleFunc("POST /api/v1/docker/networks", s.requireHeavyAppAdmin(s.handleLANCreate))
+	mux.HandleFunc("DELETE /api/v1/docker/networks/{name}", s.requireAppAdmin(s.handleLANRemove))
+	mux.HandleFunc("PUT /api/v1/docker/settings", s.requireAppAdmin(s.handleDockerSettings))
+	mux.HandleFunc("POST /api/v1/docker/containers/{id}/{action}", s.requireAppAdmin(s.handleContainerAction))
+	mux.HandleFunc("DELETE /api/v1/docker/containers/{id}", s.requireAppAdmin(s.handleContainerRemove))
 	mux.HandleFunc("GET /api/v1/docker/containers/{id}/logs", s.requireAdmin(s.handleContainerLogs))
-	mux.HandleFunc("POST /api/v1/docker/apps", s.requireHeavyAdmin(s.handleAppCreate))
+	mux.HandleFunc("POST /api/v1/docker/apps", s.requireHeavyAppAdmin(s.handleAppCreate))
 	mux.HandleFunc("GET /api/v1/docker/apps/{name}", s.requireAdmin(s.handleAppCompose))
-	mux.HandleFunc("POST /api/v1/docker/apps/{name}/network", s.requireHeavyAdmin(s.handleLANAssign))
-	mux.HandleFunc("DELETE /api/v1/docker/apps/{name}", s.requireAdmin(s.handleAppRemove))
-	mux.HandleFunc("PUT /api/v1/docker/apps/{name}", s.requireAdmin(s.handleAppSetCompose))
-	mux.HandleFunc("POST /api/v1/docker/apps/{name}/update", s.requireHeavyAdmin(s.handleAppUpdate))
-	mux.HandleFunc("DELETE /api/v1/docker/apps/{name}/job", s.requireAdmin(s.handleAppJobDismiss))
-	mux.HandleFunc("POST /api/v1/docker/updates/check", s.requireAdmin(s.handleUpdatesCheck))
+	mux.HandleFunc("POST /api/v1/docker/apps/{name}/network", s.requireHeavyAppAdmin(s.handleLANAssign))
+	mux.HandleFunc("DELETE /api/v1/docker/apps/{name}", s.requireAppAdmin(s.handleAppRemove))
+	mux.HandleFunc("PUT /api/v1/docker/apps/{name}", s.requireAppAdmin(s.handleAppSetCompose))
+	mux.HandleFunc("POST /api/v1/docker/apps/{name}/update", s.requireHeavyAppAdmin(s.handleAppUpdate))
+	mux.HandleFunc("DELETE /api/v1/docker/apps/{name}/job", s.requireAppAdmin(s.handleAppJobDismiss))
+	mux.HandleFunc("POST /api/v1/docker/updates/check", s.requireAppAdmin(s.handleUpdatesCheck))
 	mux.HandleFunc("GET /api/v1/docker/auto-update", s.requireAdmin(s.handleAutoUpdates))
-	mux.HandleFunc("PUT /api/v1/docker/auto-update", s.requireAdmin(s.handleAutoUpdatesSet))
-	mux.HandleFunc("POST /api/v1/docker/updates/apply", s.requireHeavyAdmin(s.handleUpdatesApply))
-	mux.HandleFunc("GET /api/v1/docker/containers/{id}/console", s.requireAdmin(s.handleContainerConsole))
+	mux.HandleFunc("PUT /api/v1/docker/auto-update", s.requireAppAdmin(s.handleAutoUpdatesSet))
+	mux.HandleFunc("POST /api/v1/docker/updates/apply", s.requireHeavyAppAdmin(s.handleUpdatesApply))
+	mux.HandleFunc("GET /api/v1/docker/containers/{id}/console", s.requireAppConsole(s.handleContainerConsole))
 	mux.HandleFunc("GET /api/v1/docker/proxy", s.requireAdmin(s.handleAppProxy))
-	mux.HandleFunc("PUT /api/v1/docker/proxy", s.requireAdmin(s.handleAppProxyDomain))
-	mux.HandleFunc("PUT /api/v1/docker/proxy/apps/{app}", s.requireAdmin(s.handleAppProxyRoute))
-	mux.HandleFunc("DELETE /api/v1/docker/proxy/apps/{app}", s.requireAdmin(s.handleAppProxyRemove))
-	mux.HandleFunc("POST /api/v1/docker/proxy/apps/{app}/tailnet", s.requireAdmin(s.handleAppTailnet))
-	mux.HandleFunc("DELETE /api/v1/docker/proxy/apps/{app}/tailnet", s.requireAdmin(s.handleAppTailnetRemove))
-	mux.HandleFunc("POST /api/v1/docker/proxy/apps/{app}/tailnet/check", s.requireAdmin(s.handleAppTailnetCheck))
-	mux.HandleFunc("PUT /api/v1/docker/proxy/targets/{id}", s.requireAdmin(s.handleAppProxyTarget))
-	mux.HandleFunc("DELETE /api/v1/docker/proxy/targets/{id}", s.requireAdmin(s.handleAppProxyTargetRemove))
+	mux.HandleFunc("PUT /api/v1/docker/proxy", s.requireAppAdmin(s.handleAppProxyDomain))
+	mux.HandleFunc("PUT /api/v1/docker/proxy/apps/{app}", s.requireAppAdmin(s.handleAppProxyRoute))
+	mux.HandleFunc("DELETE /api/v1/docker/proxy/apps/{app}", s.requireAppAdmin(s.handleAppProxyRemove))
+	mux.HandleFunc("POST /api/v1/docker/proxy/apps/{app}/tailnet", s.requireAppAdmin(s.handleAppTailnet))
+	mux.HandleFunc("DELETE /api/v1/docker/proxy/apps/{app}/tailnet", s.requireAppAdmin(s.handleAppTailnetRemove))
+	mux.HandleFunc("POST /api/v1/docker/proxy/apps/{app}/tailnet/check", s.requireAppAdmin(s.handleAppTailnetCheck))
+	mux.HandleFunc("PUT /api/v1/docker/proxy/targets/{id}", s.requireAppAdmin(s.handleAppProxyTarget))
+	mux.HandleFunc("DELETE /api/v1/docker/proxy/targets/{id}", s.requireAppAdmin(s.handleAppProxyTargetRemove))
 
 	// The app store: templates to install as Docker apps.
 	mux.HandleFunc("GET /api/v1/apps", s.requireAdmin(s.handleApps))
@@ -516,17 +517,17 @@ func New(opts Options) *Server {
 	// Virtual machines. Like containers: administrators only.
 	mux.HandleFunc("GET /api/v1/vms", s.requireAdmin(s.handleVMs))
 	mux.HandleFunc("GET /api/v1/vms/imports", s.requireAdmin(s.handleMediaImports))
-	mux.HandleFunc("POST /api/v1/vms/imports", s.requireHeavyAdmin(s.handleMediaImport))
-	mux.HandleFunc("POST /api/v1/vms/virtio", s.requireHeavyAdmin(s.handleVirtIO))
-	mux.HandleFunc("PUT /api/v1/vms/imports/{id}/data", s.requireHeavyAdmin(s.handleMediaChunk))
-	mux.HandleFunc("POST /api/v1/vms/imports/{id}/verify", s.requireHeavyAdmin(s.handleMediaUploadVerify))
-	mux.HandleFunc("POST /api/v1/vms/imports/{id}/{action}", s.requireAdmin(s.handleMediaControl))
-	mux.HandleFunc("POST /api/v1/vms", s.requireHeavyAdmin(s.handleVMCreate))
+	mux.HandleFunc("POST /api/v1/vms/imports", s.requireHeavyAppAdmin(s.handleMediaImport))
+	mux.HandleFunc("POST /api/v1/vms/virtio", s.requireHeavyAppAdmin(s.handleVirtIO))
+	mux.HandleFunc("PUT /api/v1/vms/imports/{id}/data", s.requireHeavyAppAdmin(s.handleMediaChunk))
+	mux.HandleFunc("POST /api/v1/vms/imports/{id}/verify", s.requireHeavyAppAdmin(s.handleMediaUploadVerify))
+	mux.HandleFunc("POST /api/v1/vms/imports/{id}/{action}", s.requireAppAdmin(s.handleMediaControl))
+	mux.HandleFunc("POST /api/v1/vms", s.requireHeavyAppAdmin(s.handleVMCreate))
 	mux.HandleFunc("GET /api/v1/vms/media", s.requireAdmin(s.handleVMMedia))
 	mux.HandleFunc("GET /api/v1/vms/host", s.requireAdmin(s.handleVMHost))
 	// Taking a VM over from the copy of its settings on a volume.
 	mux.HandleFunc("GET /api/v1/vms/adopt", s.requireAdmin(s.handleVMAdoptable))
-	mux.HandleFunc("POST /api/v1/vms/adopt", s.requireAdmin(s.handleVMAdopt))
+	mux.HandleFunc("POST /api/v1/vms/adopt", s.requireAppAdmin(s.handleVMAdopt))
 	mux.HandleFunc("GET /api/v1/hardware", s.requireAdmin(s.handleHardware))
 	mux.HandleFunc("GET /api/v1/system/memory", s.requireAdmin(s.handleMemoryPolicy))
 	mux.HandleFunc("PUT /api/v1/system/memory", s.requireAdmin(s.handleMemoryPolicyChange))
@@ -542,34 +543,34 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/hardware/intel-gpu", s.requireAdmin(s.handleIntelGuc))
 	mux.HandleFunc("PUT /api/v1/hardware/intel-gpu", s.requireAdmin(s.handleIntelGucSet))
 	mux.HandleFunc("GET /api/v1/vms/{name}/snapshots", s.requireAdmin(s.handleVMSnapshots))
-	mux.HandleFunc("POST /api/v1/vms/{name}/snapshots", s.requireHeavyAdmin(s.handleVMSnapshotCreate))
-	mux.HandleFunc("PUT /api/v1/vms/{name}/snapshot-schedule", s.requireAdmin(s.handleVMSnapshotSchedule))
-	mux.HandleFunc("POST /api/v1/vms/{name}/snapshot-recovery", s.requireHeavyAdmin(s.handleVMSnapshotRecover))
-	mux.HandleFunc("POST /api/v1/vms/{name}/snapshots/{snapshot}/restore", s.requireHeavyAdmin(s.handleVMSnapshotRestore))
-	mux.HandleFunc("DELETE /api/v1/vms/{name}/snapshots/{snapshot}", s.requireHeavyAdmin(s.handleVMSnapshotDelete))
-	mux.HandleFunc("POST /api/v1/vms/{name}/grow", s.requireHeavyAdmin(s.handleVMGrow))
-	mux.HandleFunc("GET /api/v1/vms/{name}/serial", s.requireAdmin(s.handleVMSerial))
-	mux.HandleFunc("PUT /api/v1/vms/{name}", s.requireAdmin(s.handleVMUpdate))
-	mux.HandleFunc("DELETE /api/v1/vms/{name}", s.requireAdmin(s.handleVMDelete))
+	mux.HandleFunc("POST /api/v1/vms/{name}/snapshots", s.requireHeavyAppAdmin(s.handleVMSnapshotCreate))
+	mux.HandleFunc("PUT /api/v1/vms/{name}/snapshot-schedule", s.requireAppAdmin(s.handleVMSnapshotSchedule))
+	mux.HandleFunc("POST /api/v1/vms/{name}/snapshot-recovery", s.requireHeavyAppAdmin(s.handleVMSnapshotRecover))
+	mux.HandleFunc("POST /api/v1/vms/{name}/snapshots/{snapshot}/restore", s.requireHeavyAppAdmin(s.handleVMSnapshotRestore))
+	mux.HandleFunc("DELETE /api/v1/vms/{name}/snapshots/{snapshot}", s.requireHeavyAppAdmin(s.handleVMSnapshotDelete))
+	mux.HandleFunc("POST /api/v1/vms/{name}/grow", s.requireHeavyAppAdmin(s.handleVMGrow))
+	mux.HandleFunc("GET /api/v1/vms/{name}/serial", s.requireAppConsole(s.handleVMSerial))
+	mux.HandleFunc("PUT /api/v1/vms/{name}", s.requireAppAdmin(s.handleVMUpdate))
+	mux.HandleFunc("DELETE /api/v1/vms/{name}", s.requireAppAdmin(s.handleVMDelete))
 	mux.HandleFunc("GET /api/v1/vms/{name}/xml", s.requireAdmin(s.handleVMXML))
 	mux.HandleFunc("GET /api/v1/vms/{name}/addresses", s.requireAdmin(s.handleVMAddresses))
-	mux.HandleFunc("PUT /api/v1/vms/{name}/medium", s.requireAdmin(s.handleVMMedium))
+	mux.HandleFunc("PUT /api/v1/vms/{name}/medium", s.requireAppAdmin(s.handleVMMedium))
 	mux.HandleFunc("GET /api/v1/vms/{name}/screen", s.requireAdmin(s.handleVMScreen))
-	mux.HandleFunc("POST /api/v1/vms/{name}/{action}", s.requireAdmin(s.handleVMAction))
+	mux.HandleFunc("POST /api/v1/vms/{name}/{action}", s.requireAppAdmin(s.handleVMAction))
 
 	// System containers (LXC). Like VMs: administrators only.
 	mux.HandleFunc("GET /api/v1/lxc", s.requireAdmin(s.handleLXC))
 	mux.HandleFunc("GET /api/v1/lxc/images", s.requireAdmin(s.handleLXCImages))
-	mux.HandleFunc("POST /api/v1/lxc", s.requireHeavyAdmin(s.handleLXCCreate))
-	mux.HandleFunc("PUT /api/v1/lxc/{name}", s.requireAdmin(s.handleLXCUpdate))
-	mux.HandleFunc("DELETE /api/v1/lxc/{name}", s.requireAdmin(s.handleLXCDelete))
+	mux.HandleFunc("POST /api/v1/lxc", s.requireHeavyAppAdmin(s.handleLXCCreate))
+	mux.HandleFunc("PUT /api/v1/lxc/{name}", s.requireAppAdmin(s.handleLXCUpdate))
+	mux.HandleFunc("DELETE /api/v1/lxc/{name}", s.requireAppAdmin(s.handleLXCDelete))
 	mux.HandleFunc("GET /api/v1/lxc/{name}/config", s.requireAdmin(s.handleLXCConfig))
-	mux.HandleFunc("GET /api/v1/lxc/{name}/console", s.requireAdmin(s.handleLXCConsole))
+	mux.HandleFunc("GET /api/v1/lxc/{name}/console", s.requireAppConsole(s.handleLXCConsole))
 	mux.HandleFunc("GET /api/v1/lxc/{name}/snapshots", s.requireAdmin(s.handleLXCSnapshots))
-	mux.HandleFunc("POST /api/v1/lxc/{name}/snapshots", s.requireHeavyAdmin(s.handleLXCSnapshotCreate))
-	mux.HandleFunc("POST /api/v1/lxc/{name}/snapshots/{snapshot}/restore", s.requireHeavyAdmin(s.handleLXCSnapshotRestore))
-	mux.HandleFunc("DELETE /api/v1/lxc/{name}/snapshots/{snapshot}", s.requireHeavyAdmin(s.handleLXCSnapshotDelete))
-	mux.HandleFunc("POST /api/v1/lxc/{name}/{action}", s.requireAdmin(s.handleLXCAction))
+	mux.HandleFunc("POST /api/v1/lxc/{name}/snapshots", s.requireHeavyAppAdmin(s.handleLXCSnapshotCreate))
+	mux.HandleFunc("POST /api/v1/lxc/{name}/snapshots/{snapshot}/restore", s.requireHeavyAppAdmin(s.handleLXCSnapshotRestore))
+	mux.HandleFunc("DELETE /api/v1/lxc/{name}/snapshots/{snapshot}", s.requireHeavyAppAdmin(s.handleLXCSnapshotDelete))
+	mux.HandleFunc("POST /api/v1/lxc/{name}/{action}", s.requireAppAdmin(s.handleLXCAction))
 
 	// How the NAS is connected. Changes are on trial until confirmed.
 	mux.HandleFunc("GET /api/v1/network", s.requireAdmin(s.handleNetwork))
@@ -777,7 +778,7 @@ func New(opts Options) *Server {
 
 	// Browsers must not let another website send requests with our cookie.
 	s.patterns = mux.patterns
-	s.handler = securityHeaders(s.clusterAccess(http.NewCrossOriginProtection().Handler(s.bearerAccess(s.activityLog(mux.ServeMux)))))
+	s.handler = s.securityHeaders(s.clusterAccess(http.NewCrossOriginProtection().Handler(s.bearerAccess(s.activityLog(mux.ServeMux)))))
 	return s
 }
 
@@ -801,14 +802,37 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.handler.ServeHTTP(w, r)
 }
 
-func securityHeaders(next http.Handler) http.Handler {
+func (s *Server) securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "same-origin")
+		if s.trustedTLS(r) {
+			h.Set("Strict-Transport-Security", hstsValue)
+		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// hstsValue keeps browsers on HTTPS for half a year, for the name of the
+// request only: other names of the NAS (apps, .local, the IP address) keep
+// their own certificates.
+const hstsValue = "max-age=15552000"
+
+// trustedTLS reports whether the request came over a certificate from
+// Let's Encrypt. Only then is HSTS safe: with the self-signed or an own
+// certificate the browser could no longer be told to accept it.
+func (s *Server) trustedTLS(r *http.Request) bool {
+	if r.TLS == nil || r.TLS.ServerName == "" || s.opts.Certificate == nil {
+		return false
+	}
+	info := s.opts.Certificate.Info()
+	if info.LetsEncrypt == nil {
+		return false
+	}
+	served, err := s.opts.Certificate.GetCertificate(&tls.ClientHelloInfo{ServerName: r.TLS.ServerName})
+	return err == nil && tlscert.Describe(served).Fingerprint == info.LetsEncrypt.Fingerprint
 }
 
 // apiError is the body of every failed API request. The web UI translates
@@ -848,13 +872,31 @@ func readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	return readJSONBody(w, r, v)
 }
 
+// jsonReadTimeout is how long a client has to send a JSON body. The
+// server has no ReadTimeout (uploads and WebSockets take long), so the
+// deadline is set here, for JSON bodies only.
+var jsonReadTimeout = 30 * time.Second
+
 // readJSONBody is readJSON for callers that set their own size limit.
 func readJSONBody(w http.ResponseWriter, r *http.Request, v any) bool {
+	// Not every writer supports it (tests, in-process requests); without,
+	// the body is read as before.
+	control := http.NewResponseController(w)
+	timed := control.SetReadDeadline(time.Now().Add(jsonReadTimeout)) == nil
 	body, err := io.ReadAll(r.Body)
+	if timed && err == nil {
+		// The handler may run long after the body; an expired deadline
+		// would end its request context. After a failed read it stays, so
+		// that the server does not wait for the rest of the body.
+		control.SetReadDeadline(time.Time{})
+	}
 	if err != nil {
 		var tooLarge *http.MaxBytesError
+		var netErr net.Error
 		if errors.As(err, &tooLarge) {
 			writeError(w, http.StatusRequestEntityTooLarge, "too_large", "request body too large")
+		} else if errors.As(err, &netErr) && netErr.Timeout() {
+			writeError(w, http.StatusRequestTimeout, "request_timeout", "the request body did not arrive in time")
 		} else {
 			writeError(w, http.StatusBadRequest, "bad_request", "could not read the request body")
 		}
@@ -938,19 +980,59 @@ func (s *Server) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
 			writeError(w, http.StatusForbidden, "forbidden", "this needs an owner or administrator")
 			return
 		}
-		if gate := s.opts.ApplicationBackups; gate != nil && (strings.HasPrefix(r.URL.Path, "/api/v1/docker/") || strings.HasPrefix(r.URL.Path, "/api/v1/vms") || strings.HasPrefix(r.URL.Path, "/api/v1/vm-clones/") || r.URL.Path == "/api/v1/lxc" || strings.HasPrefix(r.URL.Path, "/api/v1/lxc/")) && (r.Method != "GET" || strings.HasSuffix(r.URL.Path, "/console") || strings.HasSuffix(r.URL.Path, "/serial")) {
-			if !gate.Gate.TryRLock() {
-				writeError(w, http.StatusLocked, "application_backup_running", "application backup owns the application lifecycle")
-				return
-			}
-			defer gate.Gate.RUnlock()
-			if gate.Busy() {
-				writeError(w, http.StatusLocked, "application_backup_running", "review the pending application backup before changing applications")
-				return
-			}
-		}
 		next(w, r)
 	})
+}
+
+// requireAppAdmin is requireAdmin for routes that change Docker apps, VMs
+// or system containers. An application backup owns their lifecycle: the
+// change waits for none to run and holds the gate until it is done.
+func (s *Server) requireAppAdmin(next http.HandlerFunc) http.HandlerFunc {
+	return s.requireAdmin(s.appLifecycle(true, next))
+}
+
+// requireHeavyAppAdmin is requireAppAdmin for changes that also need
+// admission as a heavy operation.
+func (s *Server) requireHeavyAppAdmin(next http.HandlerFunc) http.HandlerFunc {
+	return s.requireAdmin(s.appLifecycle(true, s.admitted(next)))
+}
+
+// requireAppConsole is requireAdmin for consoles of apps, VMs and system
+// containers. They are not opened while an application backup runs, but
+// an open console must not block a backup for as long as it stays open,
+// so the gate is checked only when it opens.
+func (s *Server) requireAppConsole(next http.HandlerFunc) http.HandlerFunc {
+	return s.requireAdmin(s.appLifecycle(false, next))
+}
+
+// appLifecycle refuses the request while an application backup runs or
+// waits for review. With hold it keeps the gate for the whole request.
+func (s *Server) appLifecycle(hold bool, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		gate := s.opts.ApplicationBackups
+		if gate == nil {
+			next(w, r)
+			return
+		}
+		if !gate.Gate.TryRLock() {
+			writeError(w, http.StatusLocked, "application_backup_running", "application backup owns the application lifecycle")
+			return
+		}
+		if hold {
+			defer gate.Gate.RUnlock()
+		}
+		if gate.Busy() {
+			if !hold {
+				gate.Gate.RUnlock()
+			}
+			writeError(w, http.StatusLocked, "application_backup_running", "review the pending application backup before changing applications")
+			return
+		}
+		if !hold {
+			gate.Gate.RUnlock()
+		}
+		next(w, r)
+	}
 }
 
 // handleHealth says that titand answers and, as "ready", that it has its

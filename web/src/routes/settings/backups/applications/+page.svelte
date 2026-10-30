@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { poll } from '#lib/poll.ts';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { api, type StorageStatus } from '#lib/api.ts';
@@ -92,7 +93,7 @@
 		error = '';
 		result = null;
 		try {
-			plan = await api.post(`/backups/${encodeURIComponent(job)}/applications/preview`, {
+			plan = await api.post<Plan>(`/backups/${encodeURIComponent(job)}/applications/preview`, {
 				snapshot,
 				volume,
 			});
@@ -144,10 +145,7 @@
 				target = previous.target;
 			} else await choose();
 		});
-		const timer = setInterval(() => {
-			if (!document.hidden && watching && !busy) load();
-		}, 5000);
-		return () => clearInterval(timer);
+		return poll(load, { interval: 5000, immediate: false, skip: () => !watching || busy });
 	});
 </script>
 

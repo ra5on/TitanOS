@@ -13,7 +13,9 @@ export function btrfsUsable(profile: BtrfsProfile, sizes: number[]): number {
 	const sum = sorted.reduce((total, size) => total + size, 0);
 	const copies = COPIES[profile];
 	if (copies <= 1) return sum;
-	const rest = sorted.slice(0, Math.max(0, sorted.length - (copies - 1))).reduce((total, size) => total + size, 0);
+	const rest = sorted
+		.slice(0, Math.max(0, sorted.length - (copies - 1)))
+		.reduce((total, size) => total + size, 0);
 	return Math.min(Math.floor(sum / copies), rest);
 }
 
@@ -36,5 +38,9 @@ export function takesDisk(volume: Volume): boolean {
 
 /** Whether a disk can be taken out of a complete Btrfs volume. */
 export function canShrink(volume: Volume): boolean {
-	return volume.filesystem === 'btrfs' && volume.state === 'ok' && volume.members.length > BTRFS_MIN[profileOf(volume)];
+	return (
+		volume.filesystem === 'btrfs' &&
+		volume.state === 'ok' &&
+		volume.members.length > BTRFS_MIN[profileOf(volume)]
+	);
 }

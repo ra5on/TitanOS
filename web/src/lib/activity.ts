@@ -95,7 +95,8 @@ const named: Record<string, string> = {
 	'POST /api/v1/storage/volumes/{name}/lock': 'volumeLock',
 	'POST /api/v1/storage/volumes/{name}/passwords': 'volumePasswords',
 	'GET /api/v1/storage/volumes/{name}/luks-header': 'volumeHeaderBackup',
-	'POST /api/v1/storage/volumes/{name}/snapshots/{snapshot}/folders/restore': 'snapshotFolderRestore',
+	'POST /api/v1/storage/volumes/{name}/snapshots/{snapshot}/folders/restore':
+		'snapshotFolderRestore',
 	'GET /api/v1/terminal/shell': 'consoleShell',
 	'GET /api/v1/docker/containers/{id}/console': 'consoleContainer',
 	'GET /api/v1/vms/{name}/serial': 'consoleSerial',

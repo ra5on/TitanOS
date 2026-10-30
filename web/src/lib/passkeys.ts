@@ -19,7 +19,8 @@ export function toB64(buffer: ArrayBuffer | null | undefined): string {
 
 /** Whether this page can use passkeys at all: a browser with WebAuthn and a host name (not an IP address). */
 export function passkeysPossible(): boolean {
-	if (typeof window === 'undefined' || !window.PublicKeyCredential || !window.isSecureContext) return false;
+	if (typeof window === 'undefined' || !window.PublicKeyCredential || !window.isSecureContext)
+		return false;
 	const host = window.location.hostname;
 	return !/^[\d.]+$/.test(host) && !host.includes(':') && !host.startsWith('[');
 }
@@ -49,8 +50,8 @@ export async function addPasskey(password: string, code: string, name: string): 
 			...p,
 			challenge: fromB64(p.challenge),
 			user: { ...p.user, id: fromB64(p.user.id) },
-			excludeCredentials: p.excludeCredentials.map((c) => ({ ...c, id: fromB64(c.id) }))
-		}
+			excludeCredentials: p.excludeCredentials.map((c) => ({ ...c, id: fromB64(c.id) })),
+		},
 	})) as PublicKeyCredential | null;
 	if (!credential) throw new Error('cancelled');
 	const response = credential.response as AuthenticatorAttestationResponse;
@@ -58,14 +59,19 @@ export async function addPasskey(password: string, code: string, name: string): 
 		challengeId: options.challengeId,
 		name,
 		clientDataJSON: toB64(response.clientDataJSON),
-		attestationObject: toB64(response.attestationObject)
+		attestationObject: toB64(response.attestationObject),
 	});
 	return answer.passkeys;
 }
 
 type GetOptions = {
 	challengeId: string;
-	publicKey: { challenge: string; rpId: string; timeout: number; userVerification: UserVerificationRequirement };
+	publicKey: {
+		challenge: string;
+		rpId: string;
+		timeout: number;
+		userVerification: UserVerificationRequirement;
+	};
 };
 
 /** Logs in with a passkey the browser or phone holds. */
@@ -73,7 +79,7 @@ export async function loginWithPasskey(): Promise<void> {
 	const options = await api.post<GetOptions>('/login/passkey/begin');
 	const p = options.publicKey;
 	const credential = (await navigator.credentials.get({
-		publicKey: { ...p, challenge: fromB64(p.challenge), allowCredentials: [] }
+		publicKey: { ...p, challenge: fromB64(p.challenge), allowCredentials: [] },
 	})) as PublicKeyCredential | null;
 	if (!credential) throw new Error('cancelled');
 	const response = credential.response as AuthenticatorAssertionResponse;
@@ -83,6 +89,6 @@ export async function loginWithPasskey(): Promise<void> {
 		clientDataJSON: toB64(response.clientDataJSON),
 		authenticatorData: toB64(response.authenticatorData),
 		signature: toB64(response.signature),
-		userHandle: toB64(response.userHandle)
+		userHandle: toB64(response.userHandle),
 	});
 }

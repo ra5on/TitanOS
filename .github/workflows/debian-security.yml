@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Packages of the latest release against trixie-security
         id: check
@@ -59,6 +59,8 @@ jobs:
             cat build/debian-security.txt
             echo '```'
             echo
+            # Backticks are Markdown here, not a command.
+            # shellcheck disable=SC2016
             echo 'Nach dem Merge wird der nächste Tag ein volles Release (neues Systemabbild mit mkosi, Neustart des NAS). Veröffentlicht wird erst nach deiner Freigabe im Environment `release`.'
           } > body.md
           gh pr create --base main --head "$branch" --label debian-security \

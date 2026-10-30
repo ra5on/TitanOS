@@ -33,6 +33,8 @@ func writeAssistantError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusBadRequest, "assistant_key_missing", err.Error())
 	case errors.Is(err, assistant.ErrKeyServer):
 		writeError(w, http.StatusBadRequest, "assistant_key_server", err.Error())
+	case errors.Is(err, assistant.ErrDirectForbidden):
+		writeError(w, http.StatusBadRequest, "automation_direct_forbidden", err.Error())
 	case errors.Is(err, assistant.ErrInvalid):
 		writeError(w, http.StatusBadRequest, "invalid_assistant", err.Error())
 	case errors.Is(err, assistant.ErrChatNotFound):
@@ -105,6 +107,8 @@ func (s *Server) handleAssistantStatus(w http.ResponseWriter, r *http.Request) {
 		"model":      settings.Model,
 		"web":        s.assistantWeb(user),
 		"persistent": s.chats.Persistent(),
+		// Lets the automation form offer "direct" only where it may run so.
+		"execution": settings.Execution,
 	})
 }
 

@@ -9,7 +9,15 @@ export function validVMDisplayName(value: string): boolean {
 
 /** Only the identifier goes into paths, URLs and libvirt domain commands. */
 export function newVMIdentifier(label: string, taken: string[]): string {
-	const base = label.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replaceAll('ß', 'ss').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 31) || 'vm';
+	const base =
+		label
+			.normalize('NFKD')
+			.replace(/\p{M}/gu, '')
+			.toLowerCase()
+			.replaceAll('ß', 'ss')
+			.replace(/[^a-z0-9]+/g, '-')
+			.replace(/^-+|-+$/g, '')
+			.slice(0, 31) || 'vm';
 	const names = new Set(taken);
 	let name = base;
 	for (let i = 2; names.has(name); i++) {

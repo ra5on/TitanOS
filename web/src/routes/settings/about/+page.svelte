@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { session } from '#lib/session.svelte.ts';
 	// What is running, and under which licenses.
-	import { api, ApiError } from '#lib/api.ts';
+	import { api } from '#lib/api.ts';
 	import Logo from '#lib/components/Logo.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
 
 	type About = { version: string; kernel: string; license: string; thirdParty: string };
@@ -15,7 +15,7 @@
 	$effect(() => {
 		api.get<About>('/about').then(
 			(res) => (about = res),
-			(err) => (error = errorText(err instanceof ApiError ? err.code : 'internal'))
+			(err) => (error = apiErrorText(err)),
 		);
 	});
 
@@ -30,13 +30,31 @@
 	<section class="tile panel">
 		<Logo size={40} />
 		<dl>
-			<div><dt>{t('about.version')}</dt><dd class="mono">{about.version}</dd></div>
-			{#if slot}<div><dt>{t('about.slot')}</dt><dd class="mono">{slot}</dd></div>{/if}
-			<div><dt>{t('about.kernel')}</dt><dd class="mono">{about.kernel || '–'}</dd></div>
-			<div><dt>{t('about.base')}</dt><dd>{t('about.baseText')}</dd></div>
+			<div>
+				<dt>{t('about.version')}</dt>
+				<dd class="mono">{about.version}</dd>
+			</div>
+			{#if slot}<div>
+					<dt>{t('about.slot')}</dt>
+					<dd class="mono">{slot}</dd>
+				</div>{/if}
+			<div>
+				<dt>{t('about.kernel')}</dt>
+				<dd class="mono">{about.kernel || '–'}</dd>
+			</div>
+			<div>
+				<dt>{t('about.base')}</dt>
+				<dd>{t('about.baseText')}</dd>
+			</div>
 		</dl>
-		<p><a href="https://github.com/ra5on/TitanOS" target="_blank" rel="noreferrer">github.com/ra5on/TitanOS</a></p>
-		{#if session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin'}<p><a href="/welcome?step=3">{t('about.setupList')}</a></p>{/if}
+		<p>
+			<a href="https://github.com/ra5on/TitanOS" target="_blank" rel="noreferrer"
+				>github.com/ra5on/TitanOS</a
+			>
+		</p>
+		{#if session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin'}<p>
+				<a href="/welcome?step=3">{t('about.setupList')}</a>
+			</p>{/if}
 	</section>
 
 	<section class="tile panel" aria-labelledby="about-license">

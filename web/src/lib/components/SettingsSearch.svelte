@@ -29,7 +29,9 @@
 			event.preventDefault();
 			const step = event.key === 'ArrowDown' ? 1 : -1;
 			settingsSearch.active = (Math.max(active, 0) + step + results.length) % results.length;
-			document.getElementById(`${idPrefix}-${settingsSearch.active}`)?.scrollIntoView({ block: 'nearest' });
+			document
+				.getElementById(`${idPrefix}-${settingsSearch.active}`)
+				?.scrollIntoView({ block: 'nearest' });
 		} else if (event.key === 'Enter') {
 			const entry = results[active];
 			if (!entry) return;

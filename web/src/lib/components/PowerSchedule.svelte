@@ -1,13 +1,22 @@
 <script lang="ts">
 	// Shutting down and switching on at set times, and Wake-on-LAN.
-	import { api, ApiError } from '#lib/api.ts';
+	import { api } from '#lib/api.ts';
 	import { formatDateTime } from '#lib/format.ts';
-	import { errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 
 	type Time = { enabled: boolean; days: number[]; time: string };
 	type Schedule = { off: Time; on: Time; wakeOnLan: boolean };
 	type Iface = { name: string; mac: string; supported: boolean; enabled: boolean };
-	type Status = { settings: Schedule; nextOff?: string; nextOn?: string; rtc: boolean; interfaces: Iface[]; postponed?: string; readOnly: boolean; error?: string };
+	type Status = {
+		settings: Schedule;
+		nextOff?: string;
+		nextOn?: string;
+		rtc: boolean;
+		interfaces: Iface[];
+		postponed?: string;
+		readOnly: boolean;
+		error?: string;
+	};
 
 	let status = $state<Status | null>(null);
 	let draft = $state<Schedule | null>(null);
@@ -16,13 +25,21 @@
 	let saved = $state(false);
 	// Monday first, as calendars here show it; 0 is Sunday.
 	const DAYS = [1, 2, 3, 4, 5, 6, 0];
-	const fill = (v: Time | undefined, time: string): Time => ({ enabled: v?.enabled ?? false, days: v?.days?.length ? v.days : [0, 1, 2, 3, 4, 5, 6], time: v?.time || time });
+	const fill = (v: Time | undefined, time: string): Time => ({
+		enabled: v?.enabled ?? false,
+		days: v?.days?.length ? v.days : [0, 1, 2, 3, 4, 5, 6],
+		time: v?.time || time,
+	});
 	function take(res: Status) {
 		status = res;
-		draft = { off: fill(res.settings.off, '23:30'), on: fill(res.settings.on, '07:00'), wakeOnLan: res.settings.wakeOnLan };
+		draft = {
+			off: fill(res.settings.off, '23:30'),
+			on: fill(res.settings.on, '07:00'),
+			wakeOnLan: res.settings.wakeOnLan,
+		};
 	}
 	function fail(err: unknown) {
-		error = errorText(err instanceof ApiError ? err.code : 'internal') + (err instanceof ApiError && err.message ? `: ${err.message}` : '');
+		error = apiErrorText(err, { detail: true });
 	}
 	$effect(() => {
 		api.get<Status>('/system/power-schedule').then(take, fail);
@@ -43,18 +60,41 @@
 		}
 	}
 	function toggleDay(entry: Time, day: number) {
-		entry.days = entry.days.includes(day) ? entry.days.filter((d) => d !== day) : [...entry.days, day];
+		entry.days = entry.days.includes(day)
+			? entry.days.filter((d) => d !== day)
+			: [...entry.days, day];
 	}
 	const anyWake = $derived(status?.interfaces.some((i) => i.supported) ?? false);
 </script>
 
 {#snippet times(entry: Time, which: 'off' | 'on')}
-	<label class="check"><input type="checkbox" bind:checked={entry.enabled} disabled={busy || (which === 'on' && !status?.rtc)} /><span>{t(`powerSchedule.${which}` as MessageKey)}</span></label>
+	<label class="check"
+		><input
+			type="checkbox"
+			bind:checked={entry.enabled}
+			disabled={busy || (which === 'on' && !status?.rtc)}
+		/><span>{t(`powerSchedule.${which}` as MessageKey)}</span></label
+	>
 	<div class="row">
-		<label class="tiny"><span>{t('powerSchedule.time')}</span><input class="field mono" type="time" bind:value={entry.time} disabled={busy || !entry.enabled} /></label>
+		<label class="tiny"
+			><span>{t('powerSchedule.time')}</span><input
+				class="field mono"
+				type="time"
+				bind:value={entry.time}
+				disabled={busy || !entry.enabled}
+			/></label
+		>
 		<div class="days" role="group" aria-label={t('powerSchedule.days')}>
 			{#each DAYS as day}
-				<button type="button" class="btn day" class:active={entry.days.includes(day)} aria-pressed={entry.days.includes(day)} disabled={busy || !entry.enabled} onclick={() => toggleDay(entry, day)}>{t(`automation.day${day}` as MessageKey).slice(0, 2)}</button>
+				<button
+					type="button"
+					class="btn day"
+					class:active={entry.days.includes(day)}
+					aria-pressed={entry.days.includes(day)}
+					disabled={busy || !entry.enabled}
+					onclick={() => toggleDay(entry, day)}
+					>{t(`automation.day${day}` as MessageKey).slice(0, 2)}</button
+				>
 			{/each}
 		</div>
 	</div>
@@ -66,18 +106,45 @@
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	{#if status && draft}
 		{#if status.readOnly}<p class="notice-warn">{t('powerSchedule.readOnly')}</p>{/if}
-		{#if status.error}<p class="notice-warn">{t('powerSchedule.problem')} <span class="mono">{status.error}</span></p>{/if}
-		{#if status.postponed}<p class="notice-warn">{t('powerSchedule.postponed', { why: status.postponed })}</p>{/if}
+		{#if status.error}<p class="notice-warn">
+				{t('powerSchedule.problem')} <span class="mono">{status.error}</span>
+			</p>{/if}
+		{#if status.postponed}<p class="notice-warn">
+				{t('powerSchedule.postponed', { why: status.postponed })}
+			</p>{/if}
 		<form onsubmit={save}>
 			{@render times(draft.off, 'off')}
-			{#if status.nextOff && draft.off.enabled}<p class="muted small">{t('powerSchedule.nextOff', { at: formatDateTime(new Date(status.nextOff)) })}</p>{/if}
+			{#if status.nextOff && draft.off.enabled}<p class="muted small">
+					{t('powerSchedule.nextOff', { at: formatDateTime(new Date(status.nextOff)) })}
+				</p>{/if}
 			{@render times(draft.on, 'on')}
-			{#if !status.rtc}<p class="muted small">{t('powerSchedule.noRtc')}</p>{:else}<p class="muted small">{t('powerSchedule.rtcHint')}</p>{/if}
-			{#if status.nextOn && draft.on.enabled}<p class="muted small">{t('powerSchedule.nextOn', { at: formatDateTime(new Date(status.nextOn)) })}</p>{/if}
-			<label class="check"><input type="checkbox" bind:checked={draft.wakeOnLan} disabled={busy || !anyWake} /><span>{t('powerSchedule.wol')}</span></label>
+			{#if !status.rtc}<p class="muted small">{t('powerSchedule.noRtc')}</p>{:else}<p
+					class="muted small"
+				>
+					{t('powerSchedule.rtcHint')}
+				</p>{/if}
+			{#if status.nextOn && draft.on.enabled}<p class="muted small">
+					{t('powerSchedule.nextOn', { at: formatDateTime(new Date(status.nextOn)) })}
+				</p>{/if}
+			<label class="check"
+				><input type="checkbox" bind:checked={draft.wakeOnLan} disabled={busy || !anyWake} /><span
+					>{t('powerSchedule.wol')}</span
+				></label
+			>
 			<ul class="ifaces">
 				{#each status.interfaces as iface (iface.name)}
-					<li><span class="mono">{iface.name}</span><span class="mono muted">{iface.mac}</span><span class="chip {iface.supported ? (iface.enabled ? 'ok' : 'info') : ''}">{t(iface.supported ? (iface.enabled ? 'powerSchedule.wolOn' : 'powerSchedule.wolOff') : 'powerSchedule.wolNone')}</span></li>
+					<li>
+						<span class="mono">{iface.name}</span><span class="mono muted">{iface.mac}</span><span
+							class="chip {iface.supported ? (iface.enabled ? 'ok' : 'info') : ''}"
+							>{t(
+								iface.supported
+									? iface.enabled
+										? 'powerSchedule.wolOn'
+										: 'powerSchedule.wolOff'
+									: 'powerSchedule.wolNone',
+							)}</span
+						>
+					</li>
 				{/each}
 			</ul>
 			<p class="muted small">{t('powerSchedule.wolHint')}</p>

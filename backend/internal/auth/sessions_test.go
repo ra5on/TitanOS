@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -126,13 +127,16 @@ func TestRememberedSessionsOutliveARestartOfTheNAS(t *testing.T) {
 	if err := first.SetStay(90); err != nil {
 		t.Fatal(err)
 	}
+	first.Flush()
 	kept, _ := first.Create("alex", "192.0.2.1", "Safari")
+	first.Flush()
 	// Setting, logins after switching on, the new login.
 	if stick.writes != 3 || strings.Contains(string(stick.files[RememberFile]), kept) || !strings.Contains(string(stick.files[RememberFile]), "kim") {
 		t.Fatalf("stick after login: %d writes, %s", stick.writes, stick.files[RememberFile])
 	}
 	first.now = func() time.Time { return time.Now().Add(40 * 24 * time.Hour) }
 	first.Get(kept)
+	first.Flush()
 	if stick.writes != 3 {
 		t.Error("using a remembered login wrote to the stick")
 	}
@@ -153,6 +157,7 @@ func TestRememberedSessionsOutliveARestartOfTheNAS(t *testing.T) {
 	if _, ok := second.Get(plain); !ok {
 		t.Error("a login from before switching on did not outlive the restart")
 	}
+	second.Flush()
 	if stick.writes != 3 {
 		t.Error("taking the logins over wrote to the stick")
 	}
@@ -176,6 +181,7 @@ func TestRememberedSessionsOutliveARestartOfTheNAS(t *testing.T) {
 
 	// Ending it, also for the whole account, removes it from the stick.
 	second.DeleteUser("alex", "")
+	second.Flush()
 	third := NewSessions()
 	third.Remember(stick)
 	if _, ok := third.Get(forever); ok {
@@ -188,6 +194,7 @@ func TestRememberedSessionsOutliveARestartOfTheNAS(t *testing.T) {
 	if err := third.SetStay(0); err != nil {
 		t.Fatal(err)
 	}
+	third.Flush()
 	fourth := NewSessions()
 	fourth.Remember(stick)
 	if _, ok := fourth.Get(token); ok {
@@ -205,6 +212,7 @@ func TestRememberedSessionsOutliveARestartOfTheNAS(t *testing.T) {
 		t.Error("an unreadable stick was not reported")
 	}
 	fifth.Create("alex", "192.0.2.1", "Safari")
+	fifth.Flush()
 	if stick.writes != writes {
 		t.Error("the file on an unreadable stick was overwritten")
 	}
@@ -217,6 +225,7 @@ func TestStayFromBeforeTheSetting(t *testing.T) {
 	old.Remember(stick)
 	old.SetStay(30)
 	token, _ := old.Create("alex", "192.0.2.1", "Safari")
+	old.Flush()
 	delete(stick.files, StayFile)
 
 	next := NewSessions()
@@ -228,5 +237,73 @@ func TestStayFromBeforeTheSetting(t *testing.T) {
 	}
 	if _, ok := next.Get(token); !ok {
 		t.Error("the login of 0.37.0 is gone")
+	}
+}
+
+// slowKeeper is a stick that takes its time to write.
+type slowKeeper struct {
+	memKeeper
+	mu      sync.Mutex
+	release chan struct{}
+	started chan struct{}
+}
+
+func (k *slowKeeper) WriteJSON(name string, v any) error {
+	if name == RememberFile {
+		k.started <- struct{}{}
+		<-k.release
+	}
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return k.memKeeper.WriteJSON(name, v)
+}
+
+func (k *slowKeeper) ReadJSON(name string, v any) error {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return k.memKeeper.ReadJSON(name, v)
+}
+
+// A slow stick does not hold up logins, and the last state wins.
+func TestRememberedSessionsAreWrittenOutsideTheLock(t *testing.T) {
+	stick := &slowKeeper{memKeeper: memKeeper{files: map[string][]byte{}}, release: make(chan struct{}), started: make(chan struct{}, 8)}
+	sessions := NewSessions()
+	if err := sessions.Remember(stick); err != nil {
+		t.Fatal(err)
+	}
+	if err := sessions.SetStay(30); err != nil {
+		t.Fatal(err)
+	}
+	first, _ := sessions.Create("alex", "192.0.2.1", "Safari")
+	<-stick.started
+	// The writer hangs on the stick; logins go on meanwhile.
+	done := make(chan string)
+	go func() {
+		second, _ := sessions.Create("kim", "192.0.2.2", "Firefox")
+		sessions.Get(first)
+		sessions.Delete(first)
+		done <- second
+	}()
+	var second string
+	select {
+	case second = <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("a login waited for the stick")
+	}
+	close(stick.release)
+	sessions.Flush()
+	stick.mu.Lock()
+	data := string(stick.files[RememberFile])
+	writes := stick.writes
+	stick.mu.Unlock()
+	if !strings.Contains(data, "kim") || strings.Contains(data, "alex") {
+		t.Errorf("stick after the slow write: %s", data)
+	}
+	// The setting, the first state and the latest; nothing in between.
+	if writes != 3 {
+		t.Errorf("%d writes", writes)
+	}
+	if _, ok := sessions.Get(second); !ok {
+		t.Error("the second login is gone")
 	}
 }

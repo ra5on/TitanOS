@@ -9,7 +9,14 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import ProxyRouteFields from '#lib/components/ProxyRouteFields.svelte';
 	import Segments from '#lib/components/Segments.svelte';
-	import { normalLocalName, proxyBody, proxyForm, proxyProblems, suggestedProxyName, type ProxyForm } from '#lib/app-proxy.ts';
+	import {
+		normalLocalName,
+		proxyBody,
+		proxyForm,
+		proxyProblems,
+		suggestedProxyName,
+		type ProxyForm,
+	} from '#lib/app-proxy.ts';
 	import { validIpv64Wish } from '#lib/dns-providers.ts';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import {
@@ -89,25 +96,47 @@
 			const info = await api.get<{ ports: number[] }>(`/ipv64/apps/${encodeURIComponent(app)}`);
 			if (editing?.form.app !== app) return;
 			ports = info.ports;
-			if (!ports.includes(editing.form.port)) editing.form.port = routeOf(app)?.port ?? ports[0] ?? 0;
+			if (!ports.includes(editing.form.port))
+				editing.form.port = routeOf(app)?.port ?? ports[0] ?? 0;
 		} catch {
 			ports = [];
 		}
 	}
 
 	const hasRoute = $derived(!!(editing?.form.app && routeOf(editing.form.app)));
-	const localLabel = $derived(normalLocalName(proxy?.localName ?? '') || proxy?.defaultLocalName || '');
-	const targetProblems = $derived(newTarget && proxy ? proxyProblems(newTarget, true, [...proxy.apps, ...targets], localLabel) : []);
-	const problems = $derived(
-		editing ? [...assignProblems(editing.form, hasRoute), ...(editing.form.kind === 'target' && newTarget ? (targetProblems.length ? ['newTarget'] : []) : [])].filter(
-			(p) => !(p === 'target' && newTarget),
-		) : [],
+	const localLabel = $derived(
+		normalLocalName(proxy?.localName ?? '') || proxy?.defaultLocalName || '',
 	);
-	const nameOK = $derived(!editing || editing.form.kind !== 'app' || editing.form.via !== 'public' || isDirectChild(editing.name));
+	const targetProblems = $derived(
+		newTarget && proxy
+			? proxyProblems(newTarget, true, [...proxy.apps, ...targets], localLabel)
+			: [],
+	);
+	const problems = $derived(
+		editing
+			? [
+					...assignProblems(editing.form, hasRoute),
+					...(editing.form.kind === 'target' && newTarget
+						? targetProblems.length
+							? ['newTarget']
+							: []
+						: []),
+				].filter((p) => !(p === 'target' && newTarget))
+			: [],
+	);
+	const nameOK = $derived(
+		!editing ||
+			editing.form.kind !== 'app' ||
+			editing.form.via !== 'public' ||
+			isDirectChild(editing.name),
+	);
 
 	// Through the CDN only one label may stand before a domain of the account.
 	function isDirectChild(name: string) {
-		const zone = data?.domains.map((d) => d.name).filter((d) => name === d || name.endsWith(`.${d}`)).sort((a, b) => b.length - a.length)[0];
+		const zone = data?.domains
+			.map((d) => d.name)
+			.filter((d) => name === d || name.endsWith(`.${d}`))
+			.sort((a, b) => b.length - a.length)[0];
 		if (!zone) return true;
 		const before = name === zone ? '' : name.slice(0, -zone.length - 1);
 		return !before.includes('.');
@@ -116,7 +145,8 @@
 	function newTargetId(name: string) {
 		const base = suggestedProxyName(name).slice(0, 32).replace(/-+$/, '') || 'target';
 		let id = base;
-		for (let i = 2; targets.some((target) => target.app === id); i++) id = `${base.slice(0, 29)}-${i}`;
+		for (let i = 2; targets.some((target) => target.app === id); i++)
+			id = `${base.slice(0, 29)}-${i}`;
 		return id;
 	}
 
@@ -133,11 +163,17 @@
 			const form = { ...what.form };
 			if (form.kind === 'target' && newTarget) {
 				const id = newTargetId(newTarget.name);
-				proxy = await api.put<AppProxyStatus>(`/docker/proxy/targets/${encodeURIComponent(id)}`, proxyBody(newTarget, true));
+				proxy = await api.put<AppProxyStatus>(
+					`/docker/proxy/targets/${encodeURIComponent(id)}`,
+					proxyBody(newTarget, true),
+				);
 				form.targetId = id;
 				newTarget = null;
 			}
-			data = await api.put<Assignments>(`/ipv64/assignments/${encodeURIComponent(what.name)}`, assignBody(form, !!data?.firewall));
+			data = await api.put<Assignments>(
+				`/ipv64/assignments/${encodeURIComponent(what.name)}`,
+				assignBody(form, !!data?.firewall),
+			);
 			proxy = await api.get<AppProxyStatus>('/docker/proxy');
 			notice = t('ipv64x.assign.done', { name: what.name });
 			editing = null;
@@ -175,43 +211,78 @@
 				return t('ipv64x.assign.toPublic', { app: a.app ?? '', port: a.port ?? '' });
 			default: {
 				const target = targets.find((r) => r.app === a.app);
-				return t('ipv64x.assign.toTarget', { name: target?.name ?? a.app ?? '', host: target?.host ?? '' });
+				return t('ipv64x.assign.toTarget', {
+					name: target?.name ?? a.app ?? '',
+					host: target?.host ?? '',
+				});
 			}
 		}
 	}
-	const dnsText = (a: Assignment) => t(`ipv64x.assign.dns.${a.target === 'public' ? 'cdn' : a.dns || 'none'}` as MessageKey);
+	const dnsText = (a: Assignment) =>
+		t(`ipv64x.assign.dns.${a.target === 'public' ? 'cdn' : a.dns || 'none'}` as MessageKey);
 	const full = $derived(!!data && data.ddns.hostnames.length >= data.ddns.max);
 </script>
 
 <div class="ipv64-tab">
 	{#if loadError}
-		<div class="notice-error" role="alert">{loadError}<button class="btn" onclick={load}>{t('ui.retry')}</button></div>
+		<div class="notice-error" role="alert">
+			{loadError}<button class="btn" onclick={load}>{t('ui.retry')}</button>
+		</div>
 	{:else if !data}
 		<p class="muted loading" role="status">{t('common.loading')}</p>
 	{:else}
 		<section class="tile panel" aria-labelledby="ipv64-assign">
 			<h2 class="tile-title" id="ipv64-assign">{t('ipv64x.assign.title')}</h2>
 			<p class="muted hint">{t('ipv64x.assign.intro')}</p>
-			{#if data.ddns.provider && data.ddns.provider !== 'ipv64'}<p class="notice-warn">{t('ipv64x.dyn.otherProvider', { provider: data.ddns.provider })}</p>{/if}
+			{#if data.ddns.provider && data.ddns.provider !== 'ipv64'}<p class="notice-warn">
+					{t('ipv64x.dyn.otherProvider', { provider: data.ddns.provider })}
+				</p>{/if}
 			{#if !editing && error}<p class="notice-error" role="alert">{error}</p>{/if}
 			{#if notice}<p class="notice-ok" role="status">{notice}</p>{/if}
 			<div class="table-wrap">
 				<table>
-					<thead><tr><th>{t('ipv64x.domain')}</th><th>{t('ipv64x.assign.target')}</th><th>{t('ipv64x.assign.dns')}</th><th></th></tr></thead>
+					<thead
+						><tr
+							><th>{t('ipv64x.domain')}</th><th>{t('ipv64x.assign.target')}</th><th
+								>{t('ipv64x.assign.dns')}</th
+							><th></th></tr
+						></thead
+					>
 					<tbody>
 						{#each rows as row (row.name)}
 							<tr>
 								<td class="mono" class:sub={row.name !== row.zone}
-									>{#if row.assignment?.url}<a href={row.assignment.url} target="_blank" rel="noopener noreferrer">{row.name}</a>{:else}{row.name}{/if}</td
+									>{#if row.assignment?.url}<a
+											href={row.assignment.url}
+											target="_blank"
+											rel="noopener noreferrer">{row.name}</a
+										>{:else}{row.name}{/if}</td
 								>
 								<td class="wrap"
-									>{#if row.assignment}<span class="chip {row.assignment.target === 'public' ? 'warn' : 'ok'}">{t(`ipv64x.assign.kind.${row.assignment.target}` as MessageKey)}</span>
-										{targetText(row.assignment)}{:else}<span class="muted">{t('ipv64x.assign.none')}</span>{/if}</td
+									>{#if row.assignment}<span
+											class="chip {row.assignment.target === 'public' ? 'warn' : 'ok'}"
+											>{t(`ipv64x.assign.kind.${row.assignment.target}` as MessageKey)}</span
+										>
+										{targetText(row.assignment)}{:else}<span class="muted"
+											>{t('ipv64x.assign.none')}</span
+										>{/if}</td
 								>
 								<td>{row.assignment ? dnsText(row.assignment) : '–'}</td>
 								<td class="actions">
-									<button type="button" class="btn" disabled={busy} onclick={() => open(row.name, row.assignment)}>{t(row.assignment ? 'ipv64x.assign.change' : 'ipv64x.assign.assign')}</button>
-									{#if row.assignment}<button type="button" class="btn" disabled={busy} onclick={() => ((removing = row.assignment), (error = ''))}>{t('ipv64x.assign.remove')}</button>{/if}
+									<button
+										type="button"
+										class="btn"
+										disabled={busy}
+										onclick={() => open(row.name, row.assignment)}
+										>{t(row.assignment ? 'ipv64x.assign.change' : 'ipv64x.assign.assign')}</button
+									>
+									{#if row.assignment}<button
+											type="button"
+											class="btn"
+											disabled={busy}
+											onclick={() => ((removing = row.assignment), (error = ''))}
+											>{t('ipv64x.assign.remove')}</button
+										>{/if}
 								</td>
 							</tr>
 						{:else}
@@ -225,21 +296,53 @@
 			<h3>{t('ipv64x.assign.newTitle')}</h3>
 			<div class="inline">
 				<label class="stack"
-					><span>{t('ipv64x.assign.prefix')}</span><input class="field mono short" type="text" bind:value={prefix} placeholder="photos" autocapitalize="off" spellcheck="false" /></label
+					><span>{t('ipv64x.assign.prefix')}</span><input
+						class="field mono short"
+						type="text"
+						bind:value={prefix}
+						placeholder="photos"
+						autocapitalize="off"
+						spellcheck="false"
+					/></label
 				>
 				<label class="stack grow"
-					><span>{t('ipv64x.domain')}</span><select class="field mono" bind:value={parent}>{#each data.domains as d (d.name)}<option value={d.name}>{d.name}</option>{/each}</select></label
+					><span>{t('ipv64x.domain')}</span><select class="field mono" bind:value={parent}
+						>{#each data.domains as d (d.name)}<option value={d.name}>{d.name}</option
+							>{/each}</select
+					></label
 				>
-				<button type="button" class="btn" disabled={busy || !parent || !prefix.trim() || !validAssignPrefix(prefix)} onclick={() => open(assignName(prefix, parent), data?.assignments.find((a) => a.domain === assignName(prefix, parent)) ?? null)}
-					>{t('ipv64x.assign.assign')}</button
+				<button
+					type="button"
+					class="btn"
+					disabled={busy || !parent || !prefix.trim() || !validAssignPrefix(prefix)}
+					onclick={() =>
+						open(
+							assignName(prefix, parent),
+							data?.assignments.find((a) => a.domain === assignName(prefix, parent)) ?? null,
+						)}>{t('ipv64x.assign.assign')}</button
 				>
 			</div>
 			<div class="inline">
-				<label class="stack"><span>{t('ipv64x.newName')}</span><input class="field mono" type="text" bind:value={wish} placeholder="meinnas" autocapitalize="off" spellcheck="false" /></label>
 				<label class="stack"
-					><span>{t('ipv64x.zone')}</span><select class="field mono" bind:value={zone}>{#each status.zones as z (z)}<option value={z}>{z}</option>{/each}</select></label
+					><span>{t('ipv64x.newName')}</span><input
+						class="field mono"
+						type="text"
+						bind:value={wish}
+						placeholder="meinnas"
+						autocapitalize="off"
+						spellcheck="false"
+					/></label
 				>
-				<button type="button" class="btn" disabled={busy || !validIpv64Wish(wish.trim().toLowerCase())} onclick={() => open(`${wish.trim().toLowerCase()}.${zone}`, null, true)}
+				<label class="stack"
+					><span>{t('ipv64x.zone')}</span><select class="field mono" bind:value={zone}
+						>{#each status.zones as z (z)}<option value={z}>{z}</option>{/each}</select
+					></label
+				>
+				<button
+					type="button"
+					class="btn"
+					disabled={busy || !validIpv64Wish(wish.trim().toLowerCase())}
+					onclick={() => open(`${wish.trim().toLowerCase()}.${zone}`, null, true)}
 					>{t('ipv64x.assign.createAssign')}</button
 				>
 			</div>
@@ -249,15 +352,24 @@
 </div>
 
 {#if editing}
-	<Dialog title={t('ipv64x.assign.dialogTitle', { name: editing.name })} locked={busy} wide onclose={() => (editing = null)}>
+	<Dialog
+		title={t('ipv64x.assign.dialogTitle', { name: editing.name })}
+		locked={busy}
+		wide
+		onclose={() => (editing = null)}
+	>
 		<form
 			class="assign"
 			onsubmit={(event) => {
 				event.preventDefault();
 			}}
 		>
-			{#if editing.create}<p class="notice-warn">{t('ipv64x.createText', { name: editing.name })}</p>{/if}
-			{#if editing.current}<p class="muted">{t('ipv64x.assign.currently', { target: targetText(editing.current) })}</p>{/if}
+			{#if editing.create}<p class="notice-warn">
+					{t('ipv64x.createText', { name: editing.name })}
+				</p>{/if}
+			{#if editing.current}<p class="muted">
+					{t('ipv64x.assign.currently', { target: targetText(editing.current) })}
+				</p>{/if}
 			<Segments
 				label={t('ipv64x.assign.target')}
 				options={[
@@ -294,36 +406,75 @@
 				/>
 				{#if editing.form.app}
 					{#if editing.form.via === 'local' && hasRoute}
-						<p class="muted">{t('ipv64x.assign.routeExists', { name: routeOf(editing.form.app)?.name ?? '', port: routeOf(editing.form.app)?.port ?? '' })}</p>
+						<p class="muted">
+							{t('ipv64x.assign.routeExists', {
+								name: routeOf(editing.form.app)?.name ?? '',
+								port: routeOf(editing.form.app)?.port ?? '',
+							})}
+						</p>
 					{:else}
 						{#if ports.length}
 							<div class="inline">
-								<label class="stack"><span>{t('ipv64x.port')}</span><select class="field" bind:value={editing.form.port} disabled={busy}>{#each ports as p (p)}<option value={p}>{p}</option>{/each}</select></label>
 								<label class="stack"
-									><span>{t('ipv64x.backendScheme')}</span><select class="field" bind:value={editing.form.scheme} disabled={busy}><option value="http">http</option><option value="https">https</option></select></label
+									><span>{t('ipv64x.port')}</span><select
+										class="field"
+										bind:value={editing.form.port}
+										disabled={busy}
+										>{#each ports as p (p)}<option value={p}>{p}</option>{/each}</select
+									></label
+								>
+								<label class="stack"
+									><span>{t('ipv64x.backendScheme')}</span><select
+										class="field"
+										bind:value={editing.form.scheme}
+										disabled={busy}
+										><option value="http">http</option><option value="https">https</option></select
+									></label
 								>
 							</div>
 						{:else}
 							<p class="notice-warn">{t('ipv64x.appNoPort')}</p>
 						{/if}
 						{#if editing.form.via === 'local'}
-							<label class="check"><input type="checkbox" bind:checked={editing.form.localOnly} disabled={busy} /><span>{t('proxy.localOnly')}</span></label>
-							<p class="muted hint">{t(editing.form.localOnly ? 'ipv64x.assign.localOnlyHint' : 'proxy.localOnlyOff')}</p>
+							<label class="check"
+								><input
+									type="checkbox"
+									bind:checked={editing.form.localOnly}
+									disabled={busy}
+								/><span>{t('proxy.localOnly')}</span></label
+							>
+							<p class="muted hint">
+								{t(editing.form.localOnly ? 'ipv64x.assign.localOnlyHint' : 'proxy.localOnlyOff')}
+							</p>
 						{/if}
 					{/if}
 					{#if editing.form.via === 'local'}
 						<p class="muted hint">{t('ipv64x.assign.localText')}</p>
 					{:else}
 						{#if !nameOK}<p class="notice-warn">{t('ipv64x.assign.publicOneLabel')}</p>{/if}
-						<p class="notice-warn"><strong>{t('ipv64x.appWarnInternet', { address: `https://${editing.name}` })}</strong></p>
+						<p class="notice-warn">
+							<strong>{t('ipv64x.appWarnInternet', { address: `https://${editing.name}` })}</strong>
+						</p>
 						<ul>
 							<li>{t('ipv64x.appWarnLogin')}</li>
 							<li>{t('ipv64x.appWarnCreates')}</li>
 							<li>{t('ipv64x.appWarnRouter', { port: editing.form.port })}</li>
-							<li>{data?.firewall && editing.form.firewall ? t('ipv64x.appWarnFirewall') : t('ipv64x.appWarnNoFirewall')}</li>
+							<li>
+								{data?.firewall && editing.form.firewall
+									? t('ipv64x.appWarnFirewall')
+									: t('ipv64x.appWarnNoFirewall')}
+							</li>
 						</ul>
-						{#if data?.firewall}<label class="check"><input type="checkbox" bind:checked={editing.form.firewall} disabled={busy} /><span>{t('ipv64x.appFirewall')}</span></label>{/if}
-						<label class="check"><input type="checkbox" bind:checked={editing.form.ownLogin} disabled={busy} /><span>{t('ipv64x.appOwnLogin')}</span></label>
+						{#if data?.firewall}<label class="check"
+								><input type="checkbox" bind:checked={editing.form.firewall} disabled={busy} /><span
+									>{t('ipv64x.appFirewall')}</span
+								></label
+							>{/if}
+						<label class="check"
+							><input type="checkbox" bind:checked={editing.form.ownLogin} disabled={busy} /><span
+								>{t('ipv64x.appOwnLogin')}</span
+							></label
+						>
 					{/if}
 				{/if}
 			{:else}
@@ -346,25 +497,48 @@
 						}}
 					>
 						<option value="">{t('ipv64x.assign.devicePick')}</option>
-						{#each targets as target (target.app)}<option value={target.app}>{target.name} ({target.host}:{target.port})</option>{/each}
+						{#each targets as target (target.app)}<option value={target.app}
+								>{target.name} ({target.host}:{target.port})</option
+							>{/each}
 						<option value="__new">{t('ipv64x.assign.deviceNew')}</option>
 					</select></label
 				>
 				{#if newTarget && proxy}
-					<ProxyRouteFields bind:form={newTarget} target problems={targetProblems} suffixes={proxy.suffixes} mdns={proxy.mdns ?? true} tailnet={proxy.tailnet} disabled={busy} />
+					<ProxyRouteFields
+						bind:form={newTarget}
+						target
+						problems={targetProblems}
+						suffixes={proxy.suffixes}
+						mdns={proxy.mdns ?? true}
+						tailnet={proxy.tailnet}
+						disabled={busy}
+					/>
 				{/if}
 				<p class="muted hint">{t('ipv64x.assign.deviceText')}</p>
 			{/if}
 
-			{#if editing.form.kind !== 'app' || editing.form.via === 'local'}<p class="muted hint">{t('ipv64x.assign.dnsText', { max: data?.ddns.max ?? 8 })}</p>{/if}
+			{#if editing.form.kind !== 'app' || editing.form.via === 'local'}<p class="muted hint">
+					{t('ipv64x.assign.dnsText', { max: data?.ddns.max ?? 8 })}
+				</p>{/if}
 			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 			<div class="dialog-actions">
-				<button type="button" class="btn" disabled={busy} onclick={() => (editing = null)}>{t('common.cancel')}</button>
+				<button type="button" class="btn" disabled={busy} onclick={() => (editing = null)}
+					>{t('common.cancel')}</button
+				>
 				<button
 					type="button"
-					class={editing.form.kind === 'app' && editing.form.via === 'public' ? 'btn btn-warn' : 'btn btn-primary'}
+					class={editing.form.kind === 'app' && editing.form.via === 'public'
+						? 'btn btn-warn'
+						: 'btn btn-primary'}
 					disabled={busy || problems.length > 0 || !nameOK}
-					onclick={submit}>{t(busy ? 'ipv64x.assign.working' : editing.create ? 'ipv64x.assign.createAssign' : 'ipv64x.assign.assign')}</button
+					onclick={submit}
+					>{t(
+						busy
+							? 'ipv64x.assign.working'
+							: editing.create
+								? 'ipv64x.assign.createAssign'
+								: 'ipv64x.assign.assign',
+					)}</button
 				>
 			</div>
 		</form>
@@ -372,12 +546,24 @@
 {/if}
 
 {#if removing}
-	<Dialog title={t('ipv64x.assign.removeTitle', { name: removing.domain })} locked={busy} onclose={() => (removing = null)}>
-		<p>{t(removing.target === 'public' ? 'ipv64x.assign.removePublic' : 'ipv64x.assign.removeText', { name: removing.domain })}</p>
+	<Dialog
+		title={t('ipv64x.assign.removeTitle', { name: removing.domain })}
+		locked={busy}
+		onclose={() => (removing = null)}
+	>
+		<p>
+			{t(removing.target === 'public' ? 'ipv64x.assign.removePublic' : 'ipv64x.assign.removeText', {
+				name: removing.domain,
+			})}
+		</p>
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={busy} onclick={() => (removing = null)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-danger" disabled={busy} onclick={remove}>{t('ipv64x.assign.remove')}</button>
+			<button type="button" class="btn" disabled={busy} onclick={() => (removing = null)}
+				>{t('common.cancel')}</button
+			>
+			<button type="button" class="btn btn-danger" disabled={busy} onclick={remove}
+				>{t('ipv64x.assign.remove')}</button
+			>
 		</div>
 	</Dialog>
 {/if}

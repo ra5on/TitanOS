@@ -3,17 +3,26 @@
 	import { vmLabel } from '#lib/vm-name.ts';
 	// The terminal at the lower edge of every page: a root shell on the NAS
 	// and consoles of containers as tabs. The page above stays usable.
-	import { api, ApiError, type DockerStatus, type VMStatus } from '#lib/api.ts';
+	import { api, type DockerStatus, type VMStatus } from '#lib/api.ts';
 	import { formatDuration } from '#lib/format.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { session as account } from '#lib/session.svelte.ts';
-	import { addContainerConsole, addNasShell, addVmConsole, closeSession, MIN_HEIGHT, remember, terminal } from '#lib/terminal.svelte.ts';
+	import {
+		addContainerConsole,
+		addNasShell,
+		addVmConsole,
+		closeSession,
+		MIN_HEIGHT,
+		remember,
+		terminal,
+	} from '#lib/terminal.svelte.ts';
 	import TerminalScreen from './TerminalScreen.svelte';
 	import Dialog from './Dialog.svelte';
 	import { focusFirstItem, moveFocus } from './menu.ts';
 	import { tick } from 'svelte';
 
-	let info = $state<{ enabled: boolean; nasShell: boolean } | null>(null);
+	type TerminalInfo = { enabled: boolean; nasShell: boolean };
+	let info = $state<TerminalInfo | null>(null);
 	let error = $state('');
 	let menu = $state(false);
 	let containers = $state<{ id: string; name: string }[]>([]);
@@ -35,11 +44,11 @@
 	// No console asks for the password again: the login is enough.
 	async function check(): Promise<boolean> {
 		try {
-			info = await api.get('/terminal');
+			info = await api.get<TerminalInfo>('/terminal');
 			error = '';
 			return !info?.enabled;
 		} catch (err) {
-			error = errorText(err instanceof ApiError ? err.code : 'internal');
+			error = apiErrorText(err);
 			return false;
 		}
 	}
@@ -51,7 +60,8 @@
 
 	// A first session, so that an opened panel is not empty.
 	$effect(() => {
-		if (terminal.open && info?.enabled && info.nasShell && terminal.sessions.length === 0) addNasShell();
+		if (terminal.open && info?.enabled && info.nasShell && terminal.sessions.length === 0)
+			addNasShell();
 	});
 
 	$effect(() => {
@@ -65,12 +75,16 @@
 		if (!menu) return;
 		try {
 			const status = await api.get<DockerStatus>('/docker');
-			containers = status.containers.filter((container) => container.state === 'running').map((container) => ({ id: container.id, name: dockerName(container, 'distinct') }));
+			containers = status.containers
+				.filter((container) => container.state === 'running')
+				.map((container) => ({ id: container.id, name: dockerName(container, 'distinct') }));
 		} catch {
 			containers = [];
 		}
 		try {
-			machines = (await api.get<VMStatus>('/vms')).vms.filter((vm) => vm.state === 'running').map((vm) => ({ name: vm.name, label: vmLabel(vm) }));
+			machines = (await api.get<VMStatus>('/vms')).vms
+				.filter((vm) => vm.state === 'running')
+				.map((vm) => ({ name: vm.name, label: vmLabel(vm) }));
 		} catch {
 			machines = [];
 		}
@@ -114,7 +128,11 @@
 	function drag(event: PointerEvent) {
 		const handle = event.currentTarget as HTMLElement;
 		handle.setPointerCapture(event.pointerId);
-		const move = (moved: PointerEvent) => (terminal.height = Math.min(maxHeight(), Math.max(MIN_HEIGHT, window.innerHeight - moved.clientY)));
+		const move = (moved: PointerEvent) =>
+			(terminal.height = Math.min(
+				maxHeight(),
+				Math.max(MIN_HEIGHT, window.innerHeight - moved.clientY),
+			));
 		const stop = () => {
 			handle.removeEventListener('pointermove', move);
 			remember();
@@ -127,68 +145,159 @@
 	function resizeByKey(event: KeyboardEvent) {
 		if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
 		event.preventDefault();
-		terminal.height = Math.min(maxHeight(), Math.max(MIN_HEIGHT, terminal.height + (event.key === 'ArrowUp' ? 40 : -40)));
+		terminal.height = Math.min(
+			maxHeight(),
+			Math.max(MIN_HEIGHT, terminal.height + (event.key === 'ArrowUp' ? 40 : -40)),
+		);
 		remember();
 	}
 
 	function status(): string {
 		if (!current) return '';
 		const time = formatDuration(Math.max(0, (now - current.started) / 1000));
-		return current.kind === 'nas' ? t('terminal.statusNas', { time }) : t(current.kind === 'vm' ? 'terminal.statusVm' : current.kind === 'lxc' ? 'terminal.statusLxc' : 'terminal.statusContainer', { name: current.title, time });
+		return current.kind === 'nas'
+			? t('terminal.statusNas', { time })
+			: t(
+					current.kind === 'vm'
+						? 'terminal.statusVm'
+						: current.kind === 'lxc'
+							? 'terminal.statusLxc'
+							: 'terminal.statusContainer',
+					{ name: current.title, time },
+				);
 	}
 </script>
 
-<svelte:window onclick={(event) => menu && !menuRoot?.contains(event.target as Node) && (menu = false)} />
+<svelte:window
+	onclick={(event) => menu && !menuRoot?.contains(event.target as Node) && (menu = false)}
+/>
 
-<section class="panel" class:full={terminal.full} class:closed={!terminal.open} style:height={terminal.full ? undefined : `${terminal.height}px`} aria-label={t('terminal.title')} aria-hidden={!terminal.open}>
+<section
+	class="panel"
+	class:full={terminal.full}
+	class:closed={!terminal.open}
+	style:height={terminal.full ? undefined : `${terminal.height}px`}
+	aria-label={t('terminal.title')}
+	aria-hidden={!terminal.open}
+>
 	{#if !terminal.full}
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
-		<div class="grip" role="separator" aria-orientation="horizontal" aria-label={t('terminal.resize')} aria-valuenow={terminal.height} tabindex="0" onpointerdown={drag} onkeydown={resizeByKey}><span></span></div>
+		<div
+			class="grip"
+			role="separator"
+			aria-orientation="horizontal"
+			aria-label={t('terminal.resize')}
+			aria-valuenow={terminal.height}
+			tabindex="0"
+			onpointerdown={drag}
+			onkeydown={resizeByKey}
+		>
+			<span></span>
+		</div>
 	{/if}
 
 	<div class="toolbar">
 		<div class="tabs" role="tablist" aria-label={t('terminal.sessions')} bind:this={menuRoot}>
 			{#each terminal.sessions as session (session.id)}
 				<div class="tab" class:on={session.id === terminal.active}>
-					<button type="button" role="tab" aria-selected={session.id === terminal.active} onclick={() => (terminal.active = session.id)}>
-						<span class="kind" class:ct={session.kind === 'ct'} class:vm={session.kind === 'vm'} class:lxc={session.kind === 'lxc'} aria-hidden="true">{session.kind === 'nas' ? 'NAS' : session.kind === 'vm' ? 'VM' : session.kind === 'lxc' ? 'LXC' : 'CT'}</span>
+					<button
+						type="button"
+						role="tab"
+						aria-selected={session.id === terminal.active}
+						onclick={() => (terminal.active = session.id)}
+					>
+						<span
+							class="kind"
+							class:ct={session.kind === 'ct'}
+							class:vm={session.kind === 'vm'}
+							class:lxc={session.kind === 'lxc'}
+							aria-hidden="true"
+							>{session.kind === 'nas'
+								? 'NAS'
+								: session.kind === 'vm'
+									? 'VM'
+									: session.kind === 'lxc'
+										? 'LXC'
+										: 'CT'}</span
+						>
 						<span class="mono">{session.title}</span>
 					</button>
-					<button type="button" class="x" aria-label={t('terminal.end', { name: session.title })} onclick={() => end(session.id, session.title, session.kind)}>✕</button>
+					<button
+						type="button"
+						class="x"
+						aria-label={t('terminal.end', { name: session.title })}
+						onclick={() => end(session.id, session.title, session.kind)}>✕</button
+					>
 				</div>
 			{/each}
-			<button type="button" class="plus" bind:this={plus} aria-label={t('terminal.new')} aria-haspopup="menu" aria-expanded={menu} onclick={openMenu} disabled={!info?.enabled}>+</button>
+			<button
+				type="button"
+				class="plus"
+				bind:this={plus}
+				aria-label={t('terminal.new')}
+				aria-haspopup="menu"
+				aria-expanded={menu}
+				onclick={openMenu}
+				disabled={!info?.enabled}>+</button
+			>
 			{#if menu}
-				<div class="menu floating-menu" role="menu" tabindex="-1" aria-label={t('terminal.new')} bind:this={menuPanel} onkeydown={menuKeys}>
+				<div
+					class="menu floating-menu"
+					role="menu"
+					tabindex="-1"
+					aria-label={t('terminal.new')}
+					bind:this={menuPanel}
+					onkeydown={menuKeys}
+				>
 					{#if info?.nasShell}
-						<button type="button" role="menuitem" onclick={() => choose(addNasShell)}><span class="kind" aria-hidden="true">NAS</span>{t('terminal.newNas')}</button>
+						<button type="button" role="menuitem" onclick={() => choose(addNasShell)}
+							><span class="kind" aria-hidden="true">NAS</span>{t('terminal.newNas')}</button
+						>
 					{/if}
 					<span class="muted heading">{t('terminal.newContainer')}</span>
 					{#each containers as container (container.id)}
-						<button type="button" role="menuitem" onclick={() => choose(() => addContainerConsole(container.id, container.name))}><span class="dot ok" aria-hidden="true"></span><span class="mono">{container.name}</span></button>
+						<button
+							type="button"
+							role="menuitem"
+							onclick={() => choose(() => addContainerConsole(container.id, container.name))}
+							><span class="dot ok" aria-hidden="true"></span><span class="mono"
+								>{container.name}</span
+							></button
+						>
 					{:else}
 						<span class="muted none">{t('terminal.noContainers')}</span>
 					{/each}
 					{#if machines.length > 0}
 						<span class="muted heading">{t('terminal.newVm')}</span>
 						{#each machines as machine (machine.name)}
-							<button type="button" role="menuitem" onclick={() => choose(() => addVmConsole(machine.name, machine.label))}><span class="kind vm" aria-hidden="true">VM</span><span class="mono">{machine.label}</span></button>
+							<button
+								type="button"
+								role="menuitem"
+								onclick={() => choose(() => addVmConsole(machine.name, machine.label))}
+								><span class="kind vm" aria-hidden="true">VM</span><span class="mono"
+									>{machine.label}</span
+								></button
+							>
 						{/each}
 					{/if}
-					<a role="menuitem" href="/vms" onclick={() => closeMenu()}><span class="kind vm" aria-hidden="true">VM</span>{t('terminal.vmConsole')}</a>
+					<a role="menuitem" href="/vms" onclick={() => closeMenu()}
+						><span class="kind vm" aria-hidden="true">VM</span>{t('terminal.vmConsole')}</a
+					>
 				</div>
 			{/if}
 		</div>
 
 		{#if current?.kind === 'ct'}
-			<label class="shell"><span class="muted">{t('terminal.shell')}</span>
+			<label class="shell"
+				><span class="muted">{t('terminal.shell')}</span>
 				<select class="field mono" bind:value={current.shell}>
 					<option value="">{t('terminal.shellAuto')}</option>
 					<option value="bash">bash</option>
 					<option value="sh">sh</option>
 				</select>
 			</label>
-			<label class="shell"><span class="muted">{t('terminal.user')}</span>
+			<label class="shell"
+				><span class="muted">{t('terminal.user')}</span>
 				<input
 					class="field mono user"
 					list="terminal-users"
@@ -201,30 +310,65 @@
 						if (current && value !== (current.user ?? '')) current.user = value || undefined;
 					}}
 				/>
-				<datalist id="terminal-users"><option value="root"></option><option value="1000:1000"></option></datalist>
+				<datalist id="terminal-users"
+					><option value="root"></option><option value="1000:1000"></option></datalist
+				>
 			</label>
 		{/if}
 
 		<div class="tools">
 			{#if searching}
 				<!-- svelte-ignore a11y_autofocus -->
-				<input class="field mono find" type="search" bind:value={query} placeholder={t('terminal.search')} aria-label={t('terminal.search')} autofocus onkeydown={(event) => {
-					if (event.key === 'Enter') screen?.find(query, event.shiftKey);
-					if (event.key === 'Escape') {
-						searching = false;
-						screen?.focus();
-					}
-				}} />
+				<input
+					class="field mono find"
+					type="search"
+					bind:value={query}
+					placeholder={t('terminal.search')}
+					aria-label={t('terminal.search')}
+					autofocus
+					onkeydown={(event) => {
+						if (event.key === 'Enter') screen?.find(query, event.shiftKey);
+						if (event.key === 'Escape') {
+							searching = false;
+							screen?.focus();
+						}
+					}}
+				/>
 			{/if}
-			<button type="button" aria-label={t('terminal.search')} aria-pressed={searching} onclick={() => (searching = !searching)}>⌕</button>
+			<button
+				type="button"
+				aria-label={t('terminal.search')}
+				aria-pressed={searching}
+				onclick={() => (searching = !searching)}>⌕</button
+			>
 			<button type="button" onclick={() => screen?.copy()}>{t('terminal.copy')}</button>
 			<button type="button" onclick={() => screen?.paste()}>{t('terminal.paste')}</button>
-			<button type="button" aria-label={t('terminal.fontSmaller')} onclick={() => setFont(terminal.fontSize - 1)}>A−</button>
+			<button
+				type="button"
+				aria-label={t('terminal.fontSmaller')}
+				onclick={() => setFont(terminal.fontSize - 1)}>A−</button
+			>
 			<span class="mono size">{terminal.fontSize}</span>
-			<button type="button" aria-label={t('terminal.fontLarger')} onclick={() => setFont(terminal.fontSize + 1)}>A+</button>
+			<button
+				type="button"
+				aria-label={t('terminal.fontLarger')}
+				onclick={() => setFont(terminal.fontSize + 1)}>A+</button
+			>
 			{#if !terminal.full}
-				<a class="tool" href="/terminal" target="_blank" rel="noopener" aria-label={t('terminal.ownTab')} title={t('terminal.ownTab')}>↗</a>
-				<button type="button" aria-label={t('terminal.minimize')} title={t('terminal.minimize')} onclick={() => (terminal.open = false)}>▾</button>
+				<a
+					class="tool"
+					href="/terminal"
+					target="_blank"
+					rel="noopener"
+					aria-label={t('terminal.ownTab')}
+					title={t('terminal.ownTab')}>↗</a
+				>
+				<button
+					type="button"
+					aria-label={t('terminal.minimize')}
+					title={t('terminal.minimize')}
+					onclick={() => (terminal.open = false)}>▾</button
+				>
 			{/if}
 		</div>
 	</div>
@@ -233,11 +377,20 @@
 		{#if info && !info.enabled}
 			<p class="message">{t('terminal.off')} <a href="/settings">{t('nav.settings')}</a></p>
 		{:else if terminal.sessions.length === 0}
-			<p class="message">{error || t(info?.nasShell === false ? 'terminal.emptyNoShell' : 'terminal.empty')}</p>
+			<p class="message">
+				{error || t(info?.nasShell === false ? 'terminal.emptyNoShell' : 'terminal.empty')}
+			</p>
 		{/if}
 		{#each terminal.sessions as session (session.id)}
 			{#key `${session.shell}|${session.user ?? ''}`}
-				<TerminalScreen bind:this={screens[session.id]} {session} active={terminal.open && session.id === terminal.active} fontSize={terminal.fontSize} confirmed={info?.enabled === true} onrefused={() => check()} />
+				<TerminalScreen
+					bind:this={screens[session.id]}
+					{session}
+					active={terminal.open && session.id === terminal.active}
+					fontSize={terminal.fontSize}
+					confirmed={info?.enabled === true}
+					onrefused={() => check()}
+				/>
 			{/key}
 		{/each}
 	</div>
@@ -253,8 +406,16 @@
 	<Dialog title={t('terminal.endTitle')} onclose={() => (ending = null)}>
 		<p>{t('terminal.endText', { name: target.title })}</p>
 		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (ending = null)}>{t('common.cancel')}</button>
-			<button type="button" class="btn btn-warn" onclick={() => { closeSession(target.id); ending = null; }}>{t('terminal.endConfirm')}</button>
+			<button type="button" class="btn" onclick={() => (ending = null)}>{t('common.cancel')}</button
+			>
+			<button
+				type="button"
+				class="btn btn-warn"
+				onclick={() => {
+					closeSession(target.id);
+					ending = null;
+				}}>{t('terminal.endConfirm')}</button
+			>
 		</div>
 	</Dialog>
 {/if}

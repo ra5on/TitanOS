@@ -255,7 +255,7 @@ func (m *Manager) openImport(ctx context.Context, c *ImportCandidate, password [
 	fsType, _ := m.runner.Run(ctx, "", "blkid", "--match-tag", "TYPE", "--output", "value", device)
 	uuid, _ := m.runner.Run(ctx, "", "blkid", "--match-tag", "UUID", "--output", "value", device)
 	c.Filesystem, c.FilesystemUUID = strings.TrimSpace(fsType), strings.TrimSpace(uuid)
-	if !slices.Contains([]string{"ext4", "xfs"}, c.Filesystem) || c.FilesystemUUID == "" {
+	if !slices.Contains([]string{"ext4", "xfs"}, c.Filesystem) || !validUUID(c.FilesystemUUID) {
 		m.luksClose(ctx, mapper)
 		return fmt.Errorf("%w: unsupported-filesystem", ErrNotPossible)
 	}

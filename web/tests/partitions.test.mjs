@@ -12,8 +12,32 @@ import {
 } from '../src/routes/files/partitions.ts';
 
 const MiB = 2 ** 20;
-const disk = { id: 'a', device: '/dev/sdb', model: 'Ultra Fit', serial: '4C53', size: 32e9, transport: 'usb', kind: 'removable', readOnly: false, table: 'gpt', partitions: [], formattable: true };
-const part = (number, start, size, fsType = 'ext4', growBy = 0) => ({ number, device: `/dev/sdb${number}`, start, size, type: '0FC63DAF-8483-4772-8E79-3D69D8477DE4', fsType, label: '', uuid: '', mounted: false, growBy, renamable: true });
+const disk = {
+	id: 'a',
+	device: '/dev/sdb',
+	model: 'Ultra Fit',
+	serial: '4C53',
+	size: 32e9,
+	transport: 'usb',
+	kind: 'removable',
+	readOnly: false,
+	table: 'gpt',
+	partitions: [],
+	formattable: true,
+};
+const part = (number, start, size, fsType = 'ext4', growBy = 0) => ({
+	number,
+	device: `/dev/sdb${number}`,
+	start,
+	size,
+	type: '0FC63DAF-8483-4772-8E79-3D69D8477DE4',
+	fsType,
+	label: '',
+	uuid: '',
+	mounted: false,
+	growBy,
+	renamable: true,
+});
 
 test('partitions and gaps come in the order they lie on the drive', () => {
 	const layout = {
@@ -21,7 +45,10 @@ test('partitions and gaps come in the order they lie on the drive', () => {
 		table: 'gpt',
 		sectorSize: 512,
 		partitions: [part(2, 1025 * MiB, 1024 * MiB), part(1, MiB, 512 * MiB, 'vfat')],
-		gaps: [{ start: 513 * MiB, size: 512 * MiB, after: 1 }, { start: 2049 * MiB, size: 28000 * MiB, after: 2 }],
+		gaps: [
+			{ start: 513 * MiB, size: 512 * MiB, after: 1 },
+			{ start: 2049 * MiB, size: 28000 * MiB, after: 2 },
+		],
 		job: null,
 	};
 	const rows = segments(layout);

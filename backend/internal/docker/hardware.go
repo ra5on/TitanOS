@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
+	"github.com/ra5on/TitanOS/backend/internal/run"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -337,7 +338,7 @@ func (m *Manager) recreateLegacyCDI(ctx context.Context, id string) (bool, error
 	if err == nil {
 		args := m.compose(volume, app, "up", "--detach", "--no-deps", "--force-recreate", "--pull", "never", service)
 		args[4] = path
-		output, err = m.runner.Run(ctx, "", "docker", args...)
+		output, err = run.Combined(ctx, m.runner, "", "docker", args...)
 		cleanup()
 	}
 	m.mu.Lock()

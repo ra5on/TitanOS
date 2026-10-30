@@ -129,8 +129,17 @@ func writeKeyError(w http.ResponseWriter, err error) {
 }
 
 func (s *Server) handleAccountKeyAdd(w http.ResponseWriter, r *http.Request) {
-	var req struct{ Key string }
+	var req struct {
+		Key string `json:"key"`
+		// Password and Code confirm it like switching two-factor login
+		// off: a key is another way into the account.
+		Password string `json:"password"`
+		Code     string `json:"code"`
+	}
 	if !readJSON(w, r, &req) {
+		return
+	}
+	if !s.reconfirm(w, currentUser(r), req.Password, req.Code) {
 		return
 	}
 	user, err := s.opts.Users.AddSSHKey(currentUser(r).Name, req.Key)

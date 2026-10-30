@@ -18,7 +18,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"slices"
 	"time"
 
@@ -223,11 +222,6 @@ func (m *Manager) removeVolumeCopy(v VM) {
 			slog.Warn("copy of the VM settings not deleted", "vm", v.Name, "err", err)
 		}
 	}
-}
-
-// copyPath is where the copy of a VM lies; for tests and messages.
-func (m *Manager) copyPath(v VM) string {
-	return filepath.Join(m.dir(v.Volume, v.folder()), volumeCopyName)
 }
 
 // UseMountRoot makes the manager find the volumes below root; for tests.

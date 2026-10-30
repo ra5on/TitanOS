@@ -11,7 +11,7 @@
 		busy = false,
 		onconfirm,
 		onrevert,
-		children
+		children,
 	}: {
 		title: string;
 		hint: string;
@@ -30,7 +30,9 @@
 	{@render children?.()}
 	<div class="row-actions">
 		<button class="btn" type="button" disabled={busy} onclick={onrevert}>{revertLabel}</button
-		><button class="btn btn-primary" type="button" disabled={busy} onclick={onconfirm}>{confirmLabel}</button>
+		><button class="btn btn-primary" type="button" disabled={busy} onclick={onconfirm}
+			>{confirmLabel}</button
+		>
 	</div>
 </section>
 

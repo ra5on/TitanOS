@@ -1,11 +1,12 @@
 <script lang="ts">
 	// The tab "Overview" of a VM: what it is made of and what it does, as
 	// tiles. The CD drive can be changed here, also while the VM runs.
+	import { poll } from '#lib/poll.ts';
 	import { api, ApiError, type Hardware, type Volume, type VM } from '#lib/api.ts';
 	import Icon from '#lib/components/Icon.svelte';
 	import Sparkline from '#lib/components/Sparkline.svelte';
 	import { formatBytes, formatDateTime, formatDuration, formatPercent } from '#lib/format.ts';
-	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import type { SnapshotStatus } from './snapshots.ts';
 	import IsoPicker from './IsoPicker.svelte';
 
@@ -33,7 +34,6 @@
 		addresses = null;
 		if (!running) return;
 		const ask = async () => {
-			if (document.hidden) return;
 			try {
 				const result = await api.get<{ addresses: string[]; source: '' | 'agent' | 'arp' }>(
 					url + '/addresses',
@@ -43,9 +43,7 @@
 				if (url === base) addresses = { addresses: [], source: '' };
 			}
 		};
-		ask();
-		const timer = setInterval(ask, 30000);
-		return () => clearInterval(timer);
+		return poll(ask, { interval: 30000 });
 	});
 
 	let snapshots = $state<SnapshotStatus | null>(null);
@@ -53,7 +51,6 @@
 		const url = base;
 		snapshots = null;
 		const ask = async () => {
-			if (document.hidden) return;
 			try {
 				const result = await api.get<SnapshotStatus>(url + '/snapshots');
 				if (url === base) snapshots = result;
@@ -61,9 +58,7 @@
 				// The tile then says nothing about snapshots.
 			}
 		};
-		ask();
-		const timer = setInterval(ask, 30000);
-		return () => clearInterval(timer);
+		return poll(ask, { interval: 30000 });
 	});
 
 	// Names of the devices handed to the VM; the configuration only has addresses.
@@ -151,7 +146,7 @@
 			onchanged();
 		} catch (err) {
 			const text =
-				errorText(err instanceof ApiError ? err.code : 'internal') +
+				apiErrorText(err) +
 				(err instanceof ApiError && err.code === 'vm_failed' ? ` ${err.message}` : '');
 			if (medium) medium.error = text;
 			else ejectError = text;

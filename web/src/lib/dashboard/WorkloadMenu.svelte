@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { api, ApiError, type DockerContainer, type DockerStatus, type VM } from '#lib/api.ts';
-	import { t, tOr, errorText } from '#lib/i18n/index.svelte.ts';
+	import { api, type DockerContainer, type DockerStatus, type VM } from '#lib/api.ts';
+	import { apiErrorText, t, tOr } from '#lib/i18n/index.svelte.ts';
 	import ContextMenu from '#lib/components/ContextMenu.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -107,7 +107,7 @@
 			onrefresh();
 			onclose();
 		} catch (e) {
-			error = errorText(e instanceof ApiError ? e.code : 'internal');
+			error = apiErrorText(e);
 			dialog = 'confirm';
 			pending = action;
 		} finally {
@@ -133,7 +133,7 @@
 			).logs;
 		} catch (e) {
 			logs = '';
-			error = errorText(e instanceof ApiError ? e.code : 'internal');
+			error = apiErrorText(e);
 		}
 	}
 	async function remove() {
@@ -147,7 +147,7 @@
 			onrefresh();
 			onclose();
 		} catch (e) {
-			error = errorText(e instanceof ApiError ? e.code : 'internal');
+			error = apiErrorText(e);
 		} finally {
 			busy = false;
 		}

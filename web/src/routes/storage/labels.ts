@@ -58,5 +58,10 @@ export function stateTone(volume: Volume): 'ok' | 'warn' | 'error' {
 
 /** Disks a volume may take: not the stick, not in a volume, nothing mounted, not being tested. */
 export function isUsable(disk: Disk): boolean {
-	return !disk.unavailableReason && (disk.role === 'free' || disk.role === 'used') && !disk.mounted && !disk.testing;
+	return (
+		!disk.unavailableReason &&
+		(disk.role === 'free' || disk.role === 'used') &&
+		!disk.mounted &&
+		!disk.testing
+	);
 }

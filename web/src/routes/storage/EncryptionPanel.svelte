@@ -77,13 +77,19 @@
 			if (dialog === 'unlock') await api.post(`${base}/unlock`, { password: current });
 			else if (dialog === 'lock') await api.post(`${base}/lock`, {});
 			else if (dialog === 'header') await downloadHeader();
-			else await api.post(`${base}/passwords`, { action: dialog, current, password: needsNew ? password : undefined });
+			else
+				await api.post(`${base}/passwords`, {
+					action: dialog,
+					current,
+					password: needsNew ? password : undefined,
+				});
 			close();
 			refreshStorage();
 		} catch (err) {
 			const code = codeOf(err);
 			error = errorText(code);
-			if (code === 'volume_password_attempts' && err instanceof ApiError && err.retryAfter > 0) error = t('crypt.retry', { seconds: err.retryAfter });
+			if (code === 'volume_password_attempts' && err instanceof ApiError && err.retryAfter > 0)
+				error = t('crypt.retry', { seconds: err.retryAfter });
 			current = '';
 		}
 		working = false;
@@ -96,27 +102,51 @@
 		<span>
 			{#if encryption.locked}<span class="locked">{t('crypt.locked')}</span>
 			{:else}{t('crypt.unlocked')}{/if}
-			{#if encryption.members > 1} · {t('crypt.members', { open: encryption.unlocked, total: encryption.members })}{/if}
-			{#if encryption.passwords > 0} · {t('crypt.passwords', { count: encryption.passwords })}{/if}
+			{#if encryption.members > 1}
+				· {t('crypt.members', { open: encryption.unlocked, total: encryption.members })}{/if}
+			{#if encryption.passwords > 0}
+				· {t('crypt.passwords', { count: encryption.passwords })}{/if}
 		</span>
 		<span class="buttons">
 			{#if encryption.locked || encryption.unlocked < encryption.members}
-				<button type="button" class="btn small btn-primary" disabled={busy} onclick={() => open('unlock')}>{t('crypt.unlock')}</button>
+				<button
+					type="button"
+					class="btn small btn-primary"
+					disabled={busy}
+					onclick={() => open('unlock')}>{t('crypt.unlock')}</button
+				>
 			{/if}
 			{#if !encryption.locked}
-				<button type="button" class="btn small" disabled={busy} onclick={() => open('lock')}>{t('crypt.lock')}</button>
+				<button type="button" class="btn small" disabled={busy} onclick={() => open('lock')}
+					>{t('crypt.lock')}</button
+				>
 			{/if}
-			<button type="button" class="btn small" disabled={busy} onclick={() => open('change')}>{t('crypt.change')}</button>
-			<button type="button" class="btn small" disabled={busy} onclick={() => open('add')}>{t('crypt.add')}</button>
-			{#if encryption.passwords > 1}<button type="button" class="btn small" disabled={busy} onclick={() => open('remove')}>{t('crypt.remove')}</button>{/if}
-			<button type="button" class="btn small" disabled={busy} onclick={() => open('header')}>{t('crypt.header')}</button>
+			<button type="button" class="btn small" disabled={busy} onclick={() => open('change')}
+				>{t('crypt.change')}</button
+			>
+			<button type="button" class="btn small" disabled={busy} onclick={() => open('add')}
+				>{t('crypt.add')}</button
+			>
+			{#if encryption.passwords > 1}<button
+					type="button"
+					class="btn small"
+					disabled={busy}
+					onclick={() => open('remove')}>{t('crypt.remove')}</button
+				>{/if}
+			<button type="button" class="btn small" disabled={busy} onclick={() => open('header')}
+				>{t('crypt.header')}</button
+			>
 		</span>
 		{#if encryption.locked}<p class="notice-warn">{t('crypt.lockedNote')}</p>{/if}
 	</div>
 {/if}
 
 {#if dialog}
-	<Dialog title={t(`crypt.${dialog}Title`, { volume: volume.name })} locked={working} onclose={close}>
+	<Dialog
+		title={t(`crypt.${dialog}Title`, { volume: volume.name })}
+		locked={working}
+		onclose={close}
+	>
 		<form
 			class="body"
 			onsubmit={(event) => {
@@ -127,32 +157,64 @@
 			<p>{t(`crypt.${dialog}Text`, { volume: volume.name })}</p>
 			{#if dialog !== 'lock' && dialog !== 'header'}
 				<label class="stack">
-					<span>{t(dialog === 'unlock' ? 'crypt.password' : dialog === 'remove' ? 'crypt.removeWhich' : 'crypt.current')}</span>
+					<span
+						>{t(
+							dialog === 'unlock'
+								? 'crypt.password'
+								: dialog === 'remove'
+									? 'crypt.removeWhich'
+									: 'crypt.current',
+						)}</span
+					>
 					<!-- svelte-ignore a11y_autofocus -->
-					<input class="field" type="password" autocomplete="off" bind:value={current} maxlength="512" autofocus />
+					<input
+						class="field"
+						type="password"
+						autocomplete="off"
+						bind:value={current}
+						maxlength="512"
+						autofocus
+					/>
 				</label>
 			{/if}
 			{#if needsNew}
 				<label class="stack">
 					<span>{t('crypt.new')}</span>
-					<input class="field" type="password" autocomplete="new-password" bind:value={password} maxlength="512" />
+					<input
+						class="field"
+						type="password"
+						autocomplete="new-password"
+						bind:value={password}
+						maxlength="512"
+					/>
 				</label>
 				<label class="stack">
 					<span>{t('crypt.repeat')}</span>
-					<input class="field" type="password" autocomplete="new-password" bind:value={repeat} maxlength="512" />
+					<input
+						class="field"
+						type="password"
+						autocomplete="new-password"
+						bind:value={repeat}
+						maxlength="512"
+					/>
 					{#if problem}<small class="problem">{problem}</small>{/if}
 				</label>
 			{/if}
-			{#if dialog === 'header'}<p class="notice-warn" role="alert">{t('crypt.headerWarning')}</p>{/if}
+			{#if dialog === 'header'}<p class="notice-warn" role="alert">
+					{t('crypt.headerWarning')}
+				</p>{/if}
 			{#if dialog === 'change'}<p class="muted">{t('crypt.changeHint')}</p>{/if}
 			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 			<div class="dialog-actions">
-				<button type="button" class="btn" disabled={working} onclick={close}>{t('common.cancel')}</button>
+				<button type="button" class="btn" disabled={working} onclick={close}
+					>{t('common.cancel')}</button
+				>
 				<button
 					type={dialog === 'unlock' ? 'submit' : 'button'}
 					class="btn {dialog === 'lock' || dialog === 'remove' ? 'btn-warn' : 'btn-primary'}"
 					disabled={!ready}
-					onclick={dialog === 'unlock' ? undefined : submit}>{t(working && dialog === 'lock' ? 'crypt.locking' : `crypt.${dialog}Submit`)}</button
+					onclick={dialog === 'unlock' ? undefined : submit}
+					>{t(working && dialog === 'lock' ? 'crypt.locking' : `crypt.${dialog}Submit`)}</button
 				>
 			</div>
 		</form>

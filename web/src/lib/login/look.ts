@@ -13,10 +13,17 @@ import {
 	type AccentId,
 	type Appearance,
 	type Palette,
-	type SurfaceStyle
+	type SurfaceStyle,
 } from '../theme/themes.ts';
 
-export const LOGIN_THEMES = ['inherit', 'graphit', 'schwarz', 'mitternacht', 'hell', 'auto'] as const;
+export const LOGIN_THEMES = [
+	'inherit',
+	'graphit',
+	'schwarz',
+	'mitternacht',
+	'hell',
+	'auto',
+] as const;
 export type LoginTheme = (typeof LOGIN_THEMES)[number];
 export const LOGIN_SOURCES = ['theme', 'builtin', 'custom'] as const;
 export type LoginSource = (typeof LOGIN_SOURCES)[number];
@@ -78,14 +85,18 @@ export function defaultLoginLook(): LoginLook {
 		texts: {},
 		hideHost: false,
 		hideLogo: false,
-		clock: false
+		clock: false,
 	};
 }
 
-const record = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {});
-const oneOf = <T extends string>(v: unknown, allowed: readonly T[], fallback: T): T => (allowed.includes(v as T) ? (v as T) : fallback);
+const record = (v: unknown): Record<string, unknown> =>
+	typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {};
+const oneOf = <T extends string>(v: unknown, allowed: readonly T[], fallback: T): T =>
+	allowed.includes(v as T) ? (v as T) : fallback;
 const number = (v: unknown, fallback: number, min: number, max: number) =>
-	typeof v === 'number' && Number.isFinite(v) ? Math.max(min, Math.min(max, Math.round(v))) : fallback;
+	typeof v === 'number' && Number.isFinite(v)
+		? Math.max(min, Math.min(max, Math.round(v)))
+		: fallback;
 
 /** Removes what a text line may not contain and cuts it to its limit. */
 export function cleanLoginText(value: unknown, most: number): string {
@@ -100,12 +111,18 @@ export function sanitizeLoginLook(input: unknown): LoginLook {
 	const b = record(v.background);
 	let source = oneOf(b.source, LOGIN_SOURCES, d.background.source);
 	let id = typeof b.id === 'string' ? b.id : '';
-	if (source === 'builtin' && !BACKGROUND_IDS.includes(id as (typeof BACKGROUND_IDS)[number])) source = 'theme';
+	if (source === 'builtin' && !BACKGROUND_IDS.includes(id as (typeof BACKGROUND_IDS)[number]))
+		source = 'theme';
 	if (source !== 'builtin') id = '';
 	const i = record(v.image);
 	const image =
 		typeof i.id === 'string' && /^[a-f0-9]{64}$/.test(i.id)
-			? { id: i.id, width: number(i.width, 0, 0, 50000), height: number(i.height, 0, 0, 50000), bytes: number(i.bytes, 0, 0, LOGIN_IMAGE_MAX * 4) }
+			? {
+					id: i.id,
+					width: number(i.width, 0, 0, 50000),
+					height: number(i.height, 0, 0, 50000),
+					bytes: number(i.bytes, 0, 0, LOGIN_IMAGE_MAX * 4),
+				}
 			: null;
 	if (source === 'custom' && !image) source = 'theme';
 	const texts: LoginLook['texts'] = {};
@@ -130,7 +147,7 @@ export function sanitizeLoginLook(input: unknown): LoginLook {
 			x: number(b.x, 50, 0, 100),
 			y: number(b.y, 50, 0, 100),
 			zoom: number(b.zoom, 100, 100, 200),
-			dim: number(b.dim, d.background.dim, 0, 80)
+			dim: number(b.dim, d.background.dim, 0, 80),
 		},
 		image,
 		position: oneOf(v.position, LOGIN_POSITIONS, d.position),
@@ -138,7 +155,7 @@ export function sanitizeLoginLook(input: unknown): LoginLook {
 		texts,
 		hideHost: v.hideHost === true,
 		hideLogo: v.hideLogo === true,
-		clock: v.clock === true
+		clock: v.clock === true,
 	};
 }
 
@@ -156,13 +173,17 @@ export function loginSaveBody(look: LoginLook, removeImage = false): Record<stri
 }
 
 /** Title and notice in a language; a missing text comes from the other language. */
-export function loginTexts(look: LoginLook | null, locale: LoginLocale, fallbackTitle: string): LoginTexts {
+export function loginTexts(
+	look: LoginLook | null,
+	locale: LoginLocale,
+	fallbackTitle: string,
+): LoginTexts {
 	const other: LoginLocale = locale === 'de' ? 'en' : 'de';
 	const own = look?.texts[locale];
 	const second = look?.texts[other];
 	return {
 		title: own?.title || second?.title || fallbackTitle,
-		notice: own?.notice || second?.notice || ''
+		notice: own?.notice || second?.notice || '',
 	};
 }
 
@@ -171,12 +192,24 @@ export function loginTexts(look: LoginLook | null, locale: LoginLocale, fallback
  * last (or the defaults), as before; a fixed theme starts from the defaults.
  * `scoped` is false when nothing differs from today's page.
  */
-export function loginAppearance(look: LoginLook | null, inherited: Appearance): { appearance: Appearance; scoped: boolean } {
-	if (!look || (look.theme === 'inherit' && look.background.source === 'theme')) return { appearance: inherited, scoped: false };
+export function loginAppearance(
+	look: LoginLook | null,
+	inherited: Appearance,
+): { appearance: Appearance; scoped: boolean } {
+	if (!look || (look.theme === 'inherit' && look.background.source === 'theme'))
+		return { appearance: inherited, scoped: false };
 	const base: Appearance =
 		look.theme === 'inherit'
 			? { ...inherited }
-			: { ...defaultAppearance(), theme: look.theme, accent: look.accent, customAccent: look.customAccent, style: look.style, glass: look.glass, blur: look.blur };
+			: {
+					...defaultAppearance(),
+					theme: look.theme,
+					accent: look.accent,
+					customAccent: look.customAccent,
+					style: look.style,
+					glass: look.glass,
+					blur: look.blur,
+				};
 	// A picture behind the card: glass keeps its readable minimum opacity.
 	if (look.background.source !== 'theme') base.bg = 'image';
 	else if (look.theme !== 'inherit') base.bg = 'shapes';
@@ -187,7 +220,8 @@ export function loginAppearance(look: LoginLook | null, inherited: Appearance): 
 export function loginBackgroundURL(look: LoginLook | null, override = ''): string {
 	if (!look) return '';
 	if (look.background.source === 'builtin') return '/backgrounds/' + look.background.id + '.webp';
-	if (look.background.source === 'custom') return override || (look.image ? '/api/v1/login-appearance/background/' + look.image.id : '');
+	if (look.background.source === 'custom')
+		return override || (look.image ? '/api/v1/login-appearance/background/' + look.image.id : '');
 	return '';
 }
 
@@ -200,7 +234,17 @@ function rgb(hex: Hex): number[] {
 export function composite(top: Hex, alpha: number, bottom: Hex): Hex {
 	const a = rgb(top);
 	const b = rgb(bottom);
-	return '#' + a.map((v, i) => Math.round(v * alpha + b[i] * (1 - alpha)).toString(16).padStart(2, '0')).join('').toUpperCase();
+	return (
+		'#' +
+		a
+			.map((v, i) =>
+				Math.round(v * alpha + b[i] * (1 - alpha))
+					.toString(16)
+					.padStart(2, '0'),
+			)
+			.join('')
+			.toUpperCase()
+	);
 }
 
 /**
@@ -210,7 +254,12 @@ export function composite(top: Hex, alpha: number, bottom: Hex): Hex {
  * background after darkening.
  */
 export function cardContrast(palette: Palette, appearance: Appearance, behind: Hex): number {
-	const alpha = appearance.style === 'flat' ? 1 : appearance.style === 'outline' ? 0 : glassAlpha(appearance, palette);
+	const alpha =
+		appearance.style === 'flat'
+			? 1
+			: appearance.style === 'outline'
+				? 0
+				: glassAlpha(appearance, palette);
 	const card = composite(palette.surface, alpha, behind);
 	return Math.min(contrast(palette.text, card), contrast(palette.muted, card));
 }

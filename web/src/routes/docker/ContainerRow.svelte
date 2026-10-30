@@ -20,7 +20,15 @@
 		member?: boolean;
 		details: boolean;
 	};
-	let { container, host, tailscaleHost, busy, member = false, details, ...actions }: Props = $props();
+	let {
+		container,
+		host,
+		tailscaleHost,
+		busy,
+		member = false,
+		details,
+		...actions
+	}: Props = $props();
 
 	const MAX_PORTS = 3;
 	const name = $derived(dockerName(container, member ? 'service' : 'app'));
@@ -30,49 +38,91 @@
 	const age = $derived(stateAge(container));
 </script>
 
-<div id={`docker-container-${encodeURIComponent(container.name)}`} class="row" class:member class:stopped={!running} role="listitem" aria-label={name}>
+<div
+	id={`docker-container-${encodeURIComponent(container.name)}`}
+	class="row"
+	class:member
+	class:stopped={!running}
+	role="listitem"
+	aria-label={name}
+>
 	<div class="who">
 		{#if !member}
 			<span class="icon"><AppIcon src={container.icon} {name} /></span>
 		{/if}
 		<span class="names">
 			<span class="line">
-				{#if container.managed && !member}<a class="name" href="/docker/apps/{container.app}" title={container.name}>{name}</a>{:else}<span class="name" title={container.name}>{name}</span>{/if}
+				{#if container.managed && !member}<a
+						class="name"
+						href="/docker/apps/{container.app}"
+						title={container.name}>{name}</a
+					>{:else}<span class="name" title={container.name}>{name}</span>{/if}
 				{#if container.updateAvailable}<span class="chip warn">{t('docker.update')}</span>{/if}
 			</span>
 			{#if details}<span class="mono image" title={container.image}>{container.image}</span>{/if}
 		</span>
 	</div>
 	<div class="stats">
-	<div class="state" title={age ? t(running ? 'docker.runningSince' : 'docker.stoppedSince', { time: age }) : undefined}>
-		<span class="dot" class:ok={running} aria-hidden="true"></span>
-		<span>{t(`docker.state.${container.state}`)}</span>
-		<span class="age">{age}</span>
-	</div>
-	<div class="cpu">
-		<span class="label">{t('docker.cpu')}</span>
-		<span class="mono">{running ? formatPercent(container.cpuPercent) : '–'}</span>
-		{#if details}<span class="spark">{#if running}<CpuSpark values={container.cpuHistory} />{/if}</span>{/if}
-	</div>
-	<div class="ram">
-		<span class="label">{t('docker.ram')}</span>
-		<span class="mono">{running ? formatBytes(container.memoryBytes) : '–'}</span>
-	</div>
+		<div
+			class="state"
+			title={age
+				? t(running ? 'docker.runningSince' : 'docker.stoppedSince', { time: age })
+				: undefined}
+		>
+			<span class="dot" class:ok={running} aria-hidden="true"></span>
+			<span>{t(`docker.state.${container.state}`)}</span>
+			<span class="age">{age}</span>
+		</div>
+		<div class="cpu">
+			<span class="label">{t('docker.cpu')}</span>
+			<span class="mono">{running ? formatPercent(container.cpuPercent) : '–'}</span>
+			{#if details}<span class="spark"
+					>{#if running}<CpuSpark values={container.cpuHistory} />{/if}</span
+				>{/if}
+		</div>
+		<div class="ram">
+			<span class="label">{t('docker.ram')}</span>
+			<span class="mono">{running ? formatBytes(container.memoryBytes) : '–'}</span>
+		</div>
 	</div>
 	<div class="ports">
 		{#each ports.slice(0, MAX_PORTS) as port (port)}<span class="chip mono">{port}</span>{/each}
-		{#if ports.length > MAX_PORTS}<span class="chip mono" title={ports.slice(MAX_PORTS).join(', ')}>+{ports.length - MAX_PORTS}</span>{/if}
+		{#if ports.length > MAX_PORTS}<span class="chip mono" title={ports.slice(MAX_PORTS).join(', ')}
+				>+{ports.length - MAX_PORTS}</span
+			>{/if}
 	</div>
 	<!-- The addresses get a labelled line of their own in the stacked layout. -->
 	{#if links.length > 0}
 		<div class="links">
-			{#each links as link, index (`${index}:${link.href}`)}<a class="btn small" href={link.href} target="_blank" rel="noreferrer" title={link.label}><Icon name={link.icon} size={14} />{link.text}</a>{/each}
+			{#each links as link, index (`${index}:${link.href}`)}<a
+					class="btn small"
+					href={link.href}
+					target="_blank"
+					rel="noreferrer"
+					title={link.label}><Icon name={link.icon} size={14} />{link.text}</a
+				>{/each}
 		</div>
 	{/if}
 	<div class="acts">
-		{#each links as link, index (`${index}:${link.href}`)}<a class="btn small link" href={link.href} target="_blank" rel="noreferrer" aria-label={link.label} title={link.label}><Icon name={link.icon} size={14} /><span class="text">{link.text}</span></a>{/each}
-		<button type="button" class="btn small toggle" onclick={() => actions.onaction(running ? 'stop' : 'start')} disabled={busy} aria-label={t(running ? 'docker.stop' : 'docker.start')}>
-			<Icon name={running ? 'stop' : 'play'} size={14} /><span class="text">{t(running ? 'docker.stop' : 'docker.start')}</span>
+		{#each links as link, index (`${index}:${link.href}`)}<a
+				class="btn small link"
+				href={link.href}
+				target="_blank"
+				rel="noreferrer"
+				aria-label={link.label}
+				title={link.label}
+				><Icon name={link.icon} size={14} /><span class="text">{link.text}</span></a
+			>{/each}
+		<button
+			type="button"
+			class="btn small toggle"
+			onclick={() => actions.onaction(running ? 'stop' : 'start')}
+			disabled={busy}
+			aria-label={t(running ? 'docker.stop' : 'docker.start')}
+		>
+			<Icon name={running ? 'stop' : 'play'} size={14} /><span class="text"
+				>{t(running ? 'docker.stop' : 'docker.start')}</span
+			>
 		</button>
 		<ContainerMenu {container} name={dockerName(container, 'distinct')} {busy} {...actions} />
 	</div>

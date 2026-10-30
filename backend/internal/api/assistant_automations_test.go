@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/assistant"
+	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/office"
 )
 
@@ -421,5 +422,67 @@ func TestAutomationCanPauseAfterAccessRevoked(t *testing.T) {
 	list, _ := ts.server.automations.List("alex")
 	if len(list[0].Runs) != 0 || list[0].Detail == "" {
 		t.Fatal("manual run bypassed access", list)
+	}
+}
+
+func TestAutomationExecutionOnlyTightensThePolicy(t *testing.T) {
+	for _, test := range []struct {
+		global, requested string
+		role              auth.Role
+		want              string
+	}{
+		{"confirm", "inherit", auth.RoleAdmin, "confirm"},
+		{"direct", "inherit", auth.RoleUser, "direct"},
+		{"direct", "confirm", auth.RoleUser, "confirm"},
+		{"confirm", "direct", auth.RoleAdmin, "confirm"},
+		{"confirm", "direct", auth.RoleUser, "confirm"},
+		{"confirm", "direct", auth.RoleOwner, "direct"},
+		{"direct", "direct", auth.RoleAdmin, "direct"},
+		{"confirm", "", auth.RoleOwner, "confirm"},
+	} {
+		if got := automationExecution(test.global, test.requested, test.role); got != test.want {
+			t.Errorf("automationExecution(%q, %q, %s) = %q", test.global, test.requested, test.role, got)
+		}
+	}
+
+	ts := newTestServer(t)
+	ts.setup()
+	ts.withShare()
+	ts.request("PUT", "/api/v1/assistant", map[string]any{"enabled": true, "execution": "confirm", "model": "qwen3:8b"})
+	ts.users.Create("sam", testPassword, auth.RoleAdmin)
+	sam := ts.newClient()
+	ts.do(sam, "POST", "/api/v1/login", credentials{Name: "sam", Password: testPassword})
+	automation := func(execution string, enabled bool) map[string]any {
+		return map[string]any{"name": "Report", "prompt": "Inspect storage", "enabled": enabled, "execution": execution, "trigger": map[string]any{"kind": "interval", "minutes": 60}}
+	}
+	// An administrator cannot loosen the global confirm policy ...
+	if res, body := ts.do(sam, "POST", "/api/v1/assistant/automations", automation("direct", true)); res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "automation_direct_forbidden" {
+		t.Fatalf("admin saved direct under confirm: %d %s", res.StatusCode, body)
+	}
+	// ... but may tighten it or save a paused one.
+	for _, a := range []map[string]any{automation("confirm", true), automation("inherit", true), automation("direct", false)} {
+		if res, body := ts.do(sam, "POST", "/api/v1/assistant/automations", a); res.StatusCode != http.StatusOK {
+			t.Fatalf("%v: %d %s", a, res.StatusCode, body)
+		}
+	}
+	// The owner decides the global policy and may choose direct.
+	if res, body := ts.request("POST", "/api/v1/assistant/automations", automation("direct", true)); res.StatusCode != http.StatusOK {
+		t.Fatalf("owner: %d %s", res.StatusCode, body)
+	}
+	// The agent tool refuses the same as the route.
+	u, _ := ts.users.Get("sam")
+	for _, tool := range ts.server.automationTools(u) {
+		if tool.Name != "automation_save" {
+			continue
+		}
+		raw, _ := json.Marshal(map[string]any{"automation": automation("direct", true)})
+		if _, err := tool.Plan(context.Background(), raw); err == nil {
+			t.Fatal("agent tool planned direct under confirm")
+		}
+	}
+	// Under a global direct policy, direct is no loosening.
+	ts.request("PUT", "/api/v1/assistant", map[string]any{"enabled": true, "execution": "direct", "model": "qwen3:8b"})
+	if res, body := ts.do(sam, "POST", "/api/v1/assistant/automations", automation("direct", true)); res.StatusCode != http.StatusOK {
+		t.Fatalf("admin under direct: %d %s", res.StatusCode, body)
 	}
 }

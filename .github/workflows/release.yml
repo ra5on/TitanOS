@@ -47,8 +47,6 @@ on:
       - 'backend/internal/storage/quota.go'
       - 'backend/internal/shares/quota.go'
       - 'scripts/snapshot-guest.c'
-      - 'scripts/native_apps_smoke.py'
-      - 'scripts/native-apps-render.mjs'
       - 'docs/releases/**'
       - '.github/actions/image-tools/**'
       - '.github/workflows/release.yml'
@@ -79,7 +77,7 @@ jobs:
       kind: ${{ steps.kind.outputs.kind }}
       base: ${{ steps.kind.outputs.base }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The message of the tag is the changelog.
           fetch-depth: 0
@@ -219,7 +217,7 @@ jobs:
         if: steps.kind.outputs.kind == 'system'
         run: python3 scripts/smoke-storage.py out/release/titanos-${{ steps.version.outputs.version }}.zip ${{ (github.event_name != 'pull_request' && steps.plugins.outputs.ready != 'false') && '--plugins out/release' || '' }} --timeout 420 --workflows023
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: release-boot-log
@@ -231,7 +229,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ github.event_name == 'push' && 'release' || 'release-rehearsal' }}
           path: out/release/
@@ -249,9 +247,9 @@ jobs:
       contents: write
     steps:
       # Only for the public keys and the release notes; nothing is built here.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: release
           path: release

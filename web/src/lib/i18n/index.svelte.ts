@@ -1,3 +1,4 @@
+import { ApiError } from '../api.ts';
 import de from './de.json';
 import en from './en.json';
 
@@ -37,7 +38,7 @@ export function t(key: MessageKey, params?: Record<string, string | number>): st
 	const text = messages[i18n.locale][key];
 	if (!params) return text;
 	return text.replace(/\{(\w+)\}/g, (match, name: string) =>
-		name in params ? String(params[name]) : match
+		name in params ? String(params[name]) : match,
 	);
 }
 
@@ -50,4 +51,15 @@ export function tOr(key: string, fallback: string): string {
 export function errorText(code: string): string {
 	const key = `error.${code}`;
 	return key in de ? t(key as MessageKey) : t('error.internal');
+}
+
+/**
+ * The text for an error thrown by `api`; anything else counts as an internal error.
+ * With `detail`, the server's own message follows on a new line, for errors whose
+ * cause only the server can name (e.g. what a tool printed).
+ */
+export function apiErrorText(err: unknown, options?: { detail?: boolean }): string {
+	if (!(err instanceof ApiError)) return t('error.internal');
+	const text = errorText(err.code);
+	return options?.detail && err.message ? `${text}\n${err.message}` : text;
 }
