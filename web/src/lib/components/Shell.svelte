@@ -12,6 +12,7 @@
 	import { system, watchSystem } from '#lib/system.svelte.ts';
 	import { terminal, toggleTerminal } from '#lib/terminal.svelte.ts';
 	import Header from './Header.svelte';
+	import SideNav from './SideNav.svelte';
 	import CommandPalette from './CommandPalette.svelte';
 	import { palette, togglePalette } from '#lib/palette.svelte.ts';
 	import StatusBar from './StatusBar.svelte';
@@ -33,6 +34,7 @@
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 
 	let shortcutsOpen = $state(false);
+	const side = $derived(appearance.current.nav.layout === 'side');
 
 	// The nodes of the cluster, for the switcher; once per page load.
 	$effect(() => {
@@ -137,22 +139,25 @@
 		>
 	</div>
 {/if}
-<div
-	class="shell"
-	style:padding-bottom={admin && terminal.open && !terminal.full
-		? `${terminal.height}px`
-		: undefined}
->
-	<Header />
-	<main class:readable={!dockerPage} class:dashboard={page.url.pathname === '/'}>
-		<ClusterBanner />
-		{#if !dockerPage}<ConnectionBanner
-			/>{#if !['/', '/vms', '/vms/screen'].includes(page.url.pathname)}<TasksPanel
-					hideEmptyMobile={page.url.pathname === '/files'}
-				/>{/if}{/if}
-		{@render children()}
-	</main>
-	<StatusBar note={shell.statusNote} />
+<div class="frame" class:side>
+	{#if side}<SideNav />{/if}
+	<div
+		class="shell"
+		style:padding-bottom={admin && terminal.open && !terminal.full
+			? `${terminal.height}px`
+			: undefined}
+	>
+		<Header {side} />
+		<main class:readable={!dockerPage} class:dashboard={page.url.pathname === '/'}>
+			<ClusterBanner />
+			{#if !dockerPage}<ConnectionBanner
+				/>{#if !['/', '/vms', '/vms/screen'].includes(page.url.pathname)}<TasksPanel
+						hideEmptyMobile={page.url.pathname === '/files'}
+					/>{/if}{/if}
+			{@render children()}
+		</main>
+		<StatusBar note={shell.statusNote} />
+	</div>
 </div>
 {#if admin}<TerminalPanel />{/if}
 {#if palette.open}<CommandPalette onclose={() => (palette.open = false)} />{/if}
@@ -208,6 +213,14 @@
 		min-height: 100vh;
 		display: flex;
 		flex-direction: column;
+	}
+	.frame.side {
+		display: flex;
+		align-items: flex-start;
+	}
+	.frame.side > .shell {
+		flex: 1 1 auto;
+		min-width: 0;
 	}
 	main {
 		flex: 1 1 auto;

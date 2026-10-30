@@ -152,3 +152,17 @@ test('menus and windows: every style and fallback sets the surfaces; menus use t
 	);
 	assert.match(palette, /surface="menu"/);
 });
+
+test('bars stay opaque unless they get own glass values', () => {
+	const plain = sanitizeAppearance({ style: 'glass' });
+	const header = resolvePalette(plain, false).header;
+	assert.equal(plain.bars.own, false);
+	assert.equal(cssVariables(plain, false)['--bar-bg'], header);
+	assert.equal(cssVariables(plain, false)['--bar-backdrop'], 'none');
+	const glass = sanitizeAppearance({ style: 'glass', bars: { own: true, glass: 60, blur: 20 } });
+	assert.notEqual(cssVariables(glass, false)['--bar-bg'], header);
+	assert.equal(cssVariables(glass, false)['--bar-backdrop'], 'blur(20px) saturate(160%)');
+	// Flat and outline keep them opaque even with own values.
+	const flat = sanitizeAppearance({ style: 'flat', bars: { own: true, glass: 60 } });
+	assert.equal(cssVariables(flat, false)['--bar-bg'], resolvePalette(flat, false).header);
+});
