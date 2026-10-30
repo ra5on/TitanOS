@@ -49,11 +49,26 @@ test('sanitizing keeps unknown but valid ids and drops junk', () => {
 	assert.deepEqual(sanitizeNav({ order: ['fleet', 'fleet', 'Bad Id', 7, 'docker'], hidden: 'x' }), {
 		order: ['fleet', 'docker'],
 		hidden: [],
+		layout: 'top',
 	});
-	assert.deepEqual(sanitizeNav(null), { order: [], hidden: [] });
-	assert.deepEqual(defaultAppearance().nav, { order: [], hidden: [] });
+	assert.deepEqual(sanitizeNav(null), { order: [], hidden: [], layout: 'top' });
+	assert.deepEqual(defaultAppearance().nav, { order: [], hidden: [], layout: 'top' });
 	assert.deepEqual(sanitizeAppearance({ nav: { order: ['tools'] } }).nav, {
 		order: ['tools'],
 		hidden: [],
+		layout: 'top',
 	});
+});
+
+test('the sidebar is kept, anything else means the header', () => {
+	assert.equal(sanitizeNav({ layout: 'side' }).layout, 'side');
+	assert.equal(sanitizeNav({ layout: 'left' }).layout, 'top');
+	assert.equal(
+		sanitizeAppearance({ nav: { layout: 'side', hidden: ['apps'] } }).nav.layout,
+		'side',
+	);
+});
+
+test('every tab has an icon for the sidebar', () => {
+	for (const item of NAV) assert.ok(item.icon, item.id);
 });

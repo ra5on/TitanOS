@@ -14,7 +14,12 @@
 	import { togglePalette } from '#lib/palette.svelte.ts';
 	import AccountMenu from './AccountMenu.svelte';
 	import Logo from './Logo.svelte';
+	import NodeMenu from './NodeMenu.svelte';
 	import Notifications from './Notifications.svelte';
+	import { clusterNodes } from '#lib/cluster.svelte.ts';
+
+	/** The tabs are in the sidebar (desktop); the header keeps the tools and names the area. */
+	let { side = false }: { side?: boolean } = $props();
 
 	const role = $derived(session.data?.user?.role ?? 'user');
 	const allItems = $derived(navForRole(role));
@@ -64,7 +69,7 @@
 	}
 </script>
 
-<header>
+<header class:side>
 	{#if visited && page.url.pathname !== '/'}<button
 			type="button"
 			class="app-back"
@@ -72,7 +77,12 @@
 			aria-label={t('nav.back')}
 			title={t('nav.back')}><Icon name="arrowLeft" size={20} /></button
 		>{/if}
-	<a class="brand" href="/" aria-label="TitanOS"><Logo size={28} /></a>
+	{#if clusterNodes.nodes.length > 1}<div class="brand"><NodeMenu variant="logo" /></div>{:else}<a
+			class="brand"
+			href="/"
+			aria-label="TitanOS"><Logo size={28} /></a
+		>{/if}
+	{#if side}<h1 class="area">{t(currentLabel)}</h1>{/if}
 	<button
 		class="mobile-nav-trigger"
 		type="button"
@@ -248,6 +258,26 @@
 	}
 	.brand {
 		display: flex;
+	}
+	.area {
+		display: none;
+	}
+	@media (min-width: 761px) {
+		header.side .brand,
+		header.side > .nav-shell {
+			display: none;
+		}
+		header.side .area {
+			display: block;
+			flex: 1 1 auto;
+			min-width: 0;
+			margin: 0;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+			font-size: 1.125rem;
+			font-weight: 600;
+		}
 	}
 	.app-back {
 		display: none;
@@ -470,7 +500,7 @@
 			gap: 10px;
 			padding: 8px 12px;
 		}
-		.brand :global(svg:last-child) {
+		.brand :global(.logo > svg:last-child) {
 			display: none;
 		}
 	}

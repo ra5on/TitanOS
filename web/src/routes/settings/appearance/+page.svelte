@@ -498,6 +498,21 @@
 
 		<section class="tile panel" aria-labelledby="h-nav" id="navigation">
 			<h2 class="tile-title" id="h-nav">{t('appearance.nav.title')}</h2>
+			<fieldset class="layouts">
+				<legend>{t('appearance.nav.layout')}</legend>
+				{#each ['top', 'side'] as const as layout (layout)}
+					<label class="layout" class:selected={draft.nav.layout === layout}
+						><input
+							type="radio"
+							name="nav-layout"
+							value={layout}
+							bind:group={draft.nav.layout}
+						/><span class="sketch {layout}" aria-hidden="true"><i></i><i></i></span><strong
+							>{t(`appearance.nav.${layout}`)}</strong
+						><span class="muted small">{t(`appearance.nav.${layout}Hint`)}</span></label
+					>
+				{/each}
+			</fieldset>
 			<ol class="nav-list">
 				{#each navArranged as item, index (item.id)}
 					<li>
@@ -536,7 +551,7 @@
 				<button
 					type="button"
 					class="btn small"
-					onclick={() => (draft.nav = { order: [], hidden: [] })}
+					onclick={() => (draft.nav = { ...draft.nav, order: [], hidden: [] })}
 					>{t('appearance.nav.reset')}</button
 				>
 			</div>
@@ -881,6 +896,73 @@
 		.preview {
 			position: static;
 		}
+	}
+	.layouts {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+		gap: 12px;
+		margin: 0 0 12px;
+		padding: 0;
+		border: 0;
+	}
+	.layouts legend {
+		margin-bottom: 8px;
+		padding: 0;
+		font-weight: 500;
+	}
+	.layout {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		padding: 12px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-ctl);
+		cursor: pointer;
+	}
+	.layout.selected {
+		border-color: var(--accent);
+		background: color-mix(in srgb, var(--accent) 8%, transparent);
+	}
+	.layout input {
+		position: absolute;
+		top: 12px;
+		right: 12px;
+		accent-color: var(--accent);
+	}
+	.layout:has(input:focus-visible) {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	.sketch {
+		position: relative;
+		height: 64px;
+		margin-bottom: 6px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-small);
+		background: var(--bg);
+	}
+	.sketch i {
+		position: absolute;
+		border-radius: 3px;
+		background: color-mix(in srgb, var(--text) 10%, transparent);
+	}
+	.sketch i:first-child {
+		background: color-mix(in srgb, var(--accent) 45%, transparent);
+	}
+	.sketch.top i:first-child {
+		inset: 5px 5px auto;
+		height: 9px;
+	}
+	.sketch.top i:last-child {
+		inset: 19px 5px 5px;
+	}
+	.sketch.side i:first-child {
+		inset: 5px auto 5px 5px;
+		width: 26px;
+	}
+	.sketch.side i:last-child {
+		inset: 5px 5px 5px 36px;
 	}
 	.nav-list {
 		margin: 0;
