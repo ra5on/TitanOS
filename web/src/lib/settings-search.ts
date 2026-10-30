@@ -59,6 +59,7 @@ const keywords: Record<string, string> = {
 	'ipv64-router': 'ipv64 cloud router wireguard tunnel vpn gateway peer ipv64wg',
 	'ipv64-blocklist': 'ipv64 blocklist sperrliste honeypot v64 melden report firewall',
 	wireguard: 'wireguard vpn tunnel fernzugriff remote access qr handy phone smartphone laptop server',
+	cluster: 'cluster knoten nodes verbund proxmox mehrere nas andere titanos beitreten join konten synchronisieren backup',
 	api: 'api token tokens cli titanosctl openapi rest automatisierung automation',
 	mcp: 'mcp model context protocol ki ai claude desktop code client clients agent llm werkzeuge tools',
 	proxy:
@@ -91,6 +92,10 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 	letsencrypt: [
 		{ id: 'letsencrypt-status', label: 'letsencrypt.statusTitle', href: '/settings/letsencrypt#le-status' },
 		{ id: 'letsencrypt-settings', label: 'letsencrypt.settingsTitle', href: '/settings/letsencrypt#le-settings' },
+	],
+	cluster: [
+		{ id: 'cluster-join', label: 'cluster.joinInfo', href: '/settings/cluster#cluster-join' },
+		{ id: 'cluster-nodes', label: 'cluster.nodes', href: '/settings/cluster#cluster-nodes' },
 	],
 	wireguard: [
 		{ id: 'wg-server', label: 'wg.server', href: '/settings/wireguard#wg-server' },
@@ -167,6 +172,7 @@ export const settingsAreas: SettingsArea[] = [
 	{ id: 'letsencrypt', label: 'letsencrypt.title', group: 'network', icon: 'check', admin: true, isNew: true },
 	{ id: 'ddns', label: 'ddns.title', group: 'network', icon: 'refresh', admin: true, isNew: true },
 	{ id: 'wireguard', label: 'wg.title', group: 'network', icon: 'key', admin: true, isNew: true },
+	{ id: 'cluster', label: 'cluster.title', group: 'network', icon: 'tailnet', admin: true, isNew: true },
 	{ id: 'proxy', label: 'proxy.settingsTitle', group: 'network', icon: 'external', admin: true },
 	{ id: 'access', label: 'access.title', group: 'network', icon: 'lock', admin: true },
 	{ id: 'backups', label: 'safeguard.title', group: 'data', icon: 'archive', admin: true },

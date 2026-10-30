@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { apiPath } from '#lib/cluster-node.ts';
 	import { ApiError, type Volume } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
@@ -18,7 +19,7 @@
 		try {
 			// DELETE with a body: the API still expects the volume name as the
 			// confirmation; the dialog sends it once the button is clicked.
-			const res = await fetch(`/api/v1/storage/volumes/${volume.name}`, {
+			const res = await fetch(apiPath(`/storage/volumes/${volume.name}`), {
 				method: 'DELETE',
 				credentials: 'same-origin',
 				headers: { 'Content-Type': 'application/json' },

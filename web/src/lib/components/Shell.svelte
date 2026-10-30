@@ -15,6 +15,8 @@
 	import CommandPalette from './CommandPalette.svelte';
 	import { palette, togglePalette } from '#lib/palette.svelte.ts';
 	import StatusBar from './StatusBar.svelte';
+	import ClusterBanner from './ClusterBanner.svelte';
+	import { loadClusterNodes } from '#lib/cluster.svelte.ts';
 	import TerminalPanel from './TerminalPanel.svelte';
 	import Icon from './Icon.svelte';
 	import { assistant, loadAssistant, toggleAssistant } from '#lib/assistant.svelte.ts';
@@ -31,6 +33,11 @@
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 
 	let shortcutsOpen = $state(false);
+
+	// The nodes of the cluster, for the switcher; once per page load.
+	$effect(() => {
+		void loadClusterNodes();
+	});
 
 	/** Whether a key press belongs to a field, an editor or the terminal. */
 	function typing(target: EventTarget | null) {
@@ -138,6 +145,7 @@
 >
 	<Header />
 	<main class:readable={!dockerPage} class:dashboard={page.url.pathname === '/'}>
+		<ClusterBanner />
 		{#if !dockerPage}<ConnectionBanner
 			/>{#if !['/', '/vms', '/vms/screen'].includes(page.url.pathname)}<TasksPanel hideEmptyMobile={page.url.pathname === '/files'} />{/if}{/if}
 		{@render children()}

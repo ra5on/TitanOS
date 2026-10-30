@@ -23,6 +23,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/backup"
 	"github.com/ra5on/TitanOS/backend/internal/backuptarget"
 	"github.com/ra5on/TitanOS/backend/internal/catalog"
+	"github.com/ra5on/TitanOS/backend/internal/cluster"
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
 	"github.com/ra5on/TitanOS/backend/internal/ddns"
@@ -157,6 +158,9 @@ type Options struct {
 	Assistant *assistant.Manager
 	// Activity records who changed what; nil records nothing.
 	Activity *activity.Manager
+	// Cluster is the membership in a cluster of NAS; nil in development
+	// tests that do not need it.
+	Cluster *cluster.Manager
 	// Thumbs makes previews for the file manager; nil offers none.
 	Thumbs *thumbs.Manager
 	// FileIndex is the optional full-text index; nil offers no content search.
@@ -216,6 +220,9 @@ func New(opts Options) *Server {
 	}
 	if s.opts.Shares != nil {
 		s.opts.Shares.OnPurgeResumed(s.sharePurgeDone)
+	}
+	if c := s.opts.Cluster; c != nil {
+		c.Applied, c.Status, c.Notify = s.clusterApplied, s.ClusterStatus, s.clusterNotify
 	}
 	if s.opts.Assistant == nil {
 		s.opts.Assistant = assistant.NewManager(opts.Store)
@@ -567,15 +574,15 @@ func New(opts Options) *Server {
 	// How the NAS is connected. Changes are on trial until confirmed.
 	mux.HandleFunc("GET /api/v1/network", s.requireAdmin(s.handleNetwork))
 	mux.HandleFunc("POST /api/v1/network/diagnostics", s.requireAdmin(s.handleNetworkDiagnostics))
-	mux.HandleFunc("PUT /api/v1/network", s.requireAdmin(s.handleNetworkChange))
-	mux.HandleFunc("PUT /api/v1/network/options", s.requireAdmin(s.handleNetworkOptions))
-	mux.HandleFunc("POST /api/v1/network/bridge", s.requireAdmin(s.handleNetworkBridge))
-	mux.HandleFunc("POST /api/v1/network/confirm", s.requireAdmin(s.handleNetworkConfirm))
+	mux.HandleFunc("PUT /api/v1/network", s.requireAdmin(s.clusterLocal(s.handleNetworkChange)))
+	mux.HandleFunc("PUT /api/v1/network/options", s.requireAdmin(s.clusterLocal(s.handleNetworkOptions)))
+	mux.HandleFunc("POST /api/v1/network/bridge", s.requireAdmin(s.clusterLocal(s.handleNetworkBridge)))
+	mux.HandleFunc("POST /api/v1/network/confirm", s.requireAdmin(s.clusterLocal(s.handleNetworkConfirm)))
 	mux.HandleFunc("POST /api/v1/network/revert", s.requireAdmin(s.handleNetworkRevert))
 	// The packet filter; changes are on trial like network changes.
 	mux.HandleFunc("GET /api/v1/firewall", s.requireAdmin(s.handleFirewall))
-	mux.HandleFunc("PUT /api/v1/firewall", s.requireAdmin(s.handleFirewallChange))
-	mux.HandleFunc("POST /api/v1/firewall/confirm", s.requireAdmin(s.handleFirewallConfirm))
+	mux.HandleFunc("PUT /api/v1/firewall", s.requireAdmin(s.clusterLocal(s.handleFirewallChange)))
+	mux.HandleFunc("POST /api/v1/firewall/confirm", s.requireAdmin(s.clusterLocal(s.handleFirewallConfirm)))
 	mux.HandleFunc("POST /api/v1/firewall/revert", s.requireAdmin(s.handleFirewallRevert))
 	mux.HandleFunc("PUT /api/v1/firewall/autoblock", s.requireAdmin(s.handleFirewallAutoBlock))
 	mux.HandleFunc("POST /api/v1/firewall/unblock", s.requireAdmin(s.handleFirewallUnblock))
@@ -763,12 +770,14 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/session/confirm", s.requireUser(s.handleConfirm))
 	mux.HandleFunc("GET /api/v1/session/confirmed", s.requireUser(s.handleConfirmed))
 
+	s.routeCluster(mux)
+
 	mux.HandleFunc("/api/", handleAPINotFound)
 	mux.Handle("/", uiHandler(opts.UI))
 
 	// Browsers must not let another website send requests with our cookie.
 	s.patterns = mux.patterns
-	s.handler = securityHeaders(http.NewCrossOriginProtection().Handler(s.bearerAccess(s.activityLog(mux.ServeMux))))
+	s.handler = securityHeaders(s.clusterAccess(http.NewCrossOriginProtection().Handler(s.bearerAccess(s.activityLog(mux.ServeMux)))))
 	return s
 }
 
@@ -882,6 +891,10 @@ func (s *Server) authenticate(r *http.Request) (auth.User, bool) {
 	// Only in-process requests can carry this unexported context key.
 	if name, ok := r.Context().Value(agentIdentity{}).(string); ok {
 		return s.activeUser(name)
+	}
+	// Signed by another node of the cluster on behalf of this account.
+	if id, ok := cluster.FromContext(r.Context()); ok {
+		return s.activeUser(id.User)
 	}
 	cookie, err := r.Cookie(s.cookieName())
 	if err != nil {

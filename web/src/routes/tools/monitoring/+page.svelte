@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { apiPath } from '#lib/cluster-node.ts';
 	import { onMount } from 'svelte';
 	import NavigationGuard from '#lib/operations/NavigationGuard.svelte';
 	import { api, type StorageStatus } from '#lib/api.ts';
@@ -81,7 +82,7 @@
 		busy = true;
 		error = null;
 		try {
-			const response = await fetch(`/api/v1/monitoring/export?hours=${hours}&format=${format}`, {
+			const response = await fetch(apiPath(`/monitoring/export?hours=${hours}&format=${format}`), {
 				credentials: 'same-origin',
 			});
 			if (!response.ok)

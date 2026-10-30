@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { apiPath } from '#lib/cluster-node.ts';
  import {onMount} from 'svelte';
  import {api,ApiError} from '#lib/api.ts';
  import {t,tOr,errorText,type MessageKey} from '#lib/i18n/index.svelte.ts';
@@ -20,7 +21,7 @@
   busy=true;error='';const stream=new AbortController();
   try{
    let res:Response;
-   try{res=await fetch(`/api/v1/assistant/chats/${encodeURIComponent(task.id)}/control`,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'resume'}),signal:stream.signal});}
+   try{res=await fetch(apiPath(`/assistant/chats/${encodeURIComponent(task.id)}/control`),{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'resume'}),signal:stream.signal});}
    catch{throw new ApiError(0,'unreachable','');}
    if(!res.ok){let code='internal',message='';try{const data=await res.json();code=data.error?.code??code;message=data.error?.message??'';}catch{/* not JSON */}throw new ApiError(res.status,code,message);}
   }catch(e){error=failure(e);}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { apiPath } from '#lib/cluster-node.ts';
 	import { untrack, tick, onMount } from 'svelte';
  import { page } from '$app/state';
 	import { api, ApiError, type CopyJob, type FileEntry, type FileRoot, type UploadStatus, type UsbDevice } from '#lib/api.ts';
@@ -799,7 +800,7 @@
 	/** Gives a text file or an image to the assistant with a question about it. */
 	async function showAssistant(name: string) {
 		try {
-			const res = await fetch('/api/v1/files/download?' + new URLSearchParams({ root: rootId, path: join(dir, name) }), { credentials: 'same-origin' });
+			const res = await fetch(apiPath('/files/download?' + new URLSearchParams({ root: rootId, path: join(dir, name) })), { credentials: 'same-origin' });
 			if (!res.ok) throw new Error(String(res.status));
 			const blob = await res.blob();
 			const file = new File([blob], name, { type: previewKind(name, blob.size) === 'image' ? blob.type || 'image/png' : 'text/plain' });
@@ -818,7 +819,7 @@
 			return;
 		}
 		// The browser saves the answer; nothing passes through this page's memory.
-		location.href = '/api/v1/files/download?' + new URLSearchParams({ root: rootId, path: join(dir, single.name) });
+		location.href = apiPath('/files/download?' + new URLSearchParams({ root: rootId, path: join(dir, single.name) }));
 	}
 	function show(kind: 'mkdir' | 'rename' | 'delete') {
 		if (!writable || dialogBusy) return;

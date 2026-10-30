@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { apiPath } from '#lib/cluster-node.ts';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -28,7 +29,7 @@
 		packing = true;
 		packError = '';
 		try {
-			const res = await fetch('/api/v1/diagnostics/bundle', { credentials: 'same-origin' });
+			const res = await fetch(apiPath('/diagnostics/bundle'), { credentials: 'same-origin' });
 			if (!res.ok) throw new Error(String(res.status));
 			const blob = await res.blob();
 			const name =

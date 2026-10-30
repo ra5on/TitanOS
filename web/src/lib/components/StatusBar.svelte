@@ -3,6 +3,7 @@
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
+	import NodeSwitcher from './NodeSwitcher.svelte';
 
 	type Props = { note?: string };
 	/** Replaces the state on the left, e.g. while the dashboard is being edited. */
@@ -41,7 +42,7 @@
 
 <footer class="mono">
 	<span>{note || left}</span>
-	<span>{right}</span>
+	<span class="right"><NodeSwitcher /><span>{right}</span></span>
 </footer>
 
 <style>
@@ -64,4 +65,5 @@
 		}
 	}
  footer span { min-width: 0; overflow-wrap: anywhere; }
+ .right { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; }
 </style>

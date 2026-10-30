@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { apiPath } from '#lib/cluster-node.ts';
 	import { api, ApiError } from '#lib/api.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
@@ -177,7 +178,7 @@
 <section class="tile panel" aria-labelledby="api-docs">
 	<h2 class="tile-title" id="api-docs">{t('api.documentation')}</h2>
 	<div class="row-actions">
-		<a class="btn" href="/api/v1/openapi.json" target="_blank" rel="noreferrer"
+		<a class="btn" href={apiPath('/openapi.json')} target="_blank" rel="noreferrer"
 			>{t('api.openapi')}</a
 		>
 	</div>

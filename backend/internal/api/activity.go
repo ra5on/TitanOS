@@ -32,6 +32,8 @@ type activityKey struct{}
 // activityQuiet are changes too frequent or too private to be worth an entry:
 // upload chunks, previews and searches, personal UI state and chats.
 var activityQuiet = []string{
+	// Requests through to another node of the cluster are logged there.
+	"/api/v1/cluster/nodes/{id}/api/{path...}",
 	"PATCH /api/v1/files/uploads/{id}",
 	"POST /api/v1/files/uploads/{id}/verify",
 	"POST /api/v1/files/compare",
@@ -135,6 +137,8 @@ func noteActivity(r *http.Request, user auth.User) {
 		rec.via = activity.ViaToken
 	} else if _, ok := r.Context().Value(agentIdentity{}).(string); ok {
 		rec.via = activity.ViaAgent
+	} else if viaCluster(r) {
+		rec.via = activity.ViaCluster
 	}
 	for _, m := range activityParam.FindAllStringSubmatch(action, -1) {
 		// One-time tokens in a path are secrets, never names.

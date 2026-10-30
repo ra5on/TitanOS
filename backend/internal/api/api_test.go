@@ -80,6 +80,12 @@ type testServer struct {
 
 func newTestServer(t *testing.T) *testServer {
 	t.Helper()
+	return newTestServerWith(t, nil)
+}
+
+// newTestServerWith is newTestServer with a last change to the options.
+func newTestServerWith(t *testing.T, change func(*Options)) *testServer {
+	t.Helper()
 	store := config.Open(t.TempDir())
 	users := auth.NewUsers(store)
 	if err := users.Load(); err != nil {
@@ -93,10 +99,14 @@ func newTestServer(t *testing.T) *testServer {
 	home.Load()
 	notifier := loadedNotify(store)
 	notifier.SetHomeAssistant(home)
-	handler := New(Options{
+	opts := Options{
 		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Energy: disabledEnergy(store), MemoryPolicy: disabledMemory(store), PowerButton: disabledPowerButton(store), Tailscale: disabledTailscale(store), Netbird: disabledNetbird(store),
 		Storage: disks, Shares: shareManager, Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(t, store), BackupTarget: loadedTarget(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: notifier, HomeAssistant: home, ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: updater, Backup: disabledBackups(store), UPS: disabledUPS(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3", LetsEncrypt: disabledLetsEncrypt(store), DDNS: disabledDDNS(store),
-	})
+	}
+	if change != nil {
+		change(&opts)
+	}
+	handler := New(opts)
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 	ts := &testServer{server: handler, t: t, url: srv.URL, store: store, users: users, power: power, update: updater, disks: disks, shares: shareManager, home: home}

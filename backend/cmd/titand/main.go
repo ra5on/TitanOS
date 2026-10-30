@@ -37,6 +37,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/backup"
 	"github.com/ra5on/TitanOS/backend/internal/backuptarget"
 	"github.com/ra5on/TitanOS/backend/internal/catalog"
+	"github.com/ra5on/TitanOS/backend/internal/cluster"
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
 	"github.com/ra5on/TitanOS/backend/internal/ddns"
@@ -844,6 +845,25 @@ func run(opts options) error {
 	backupTarget.Replicas = replicaReceiver.Serve
 	backupTarget.Load()
 	go backupTarget.Run(ctx)
+
+	// The cluster: other TitanOS this NAS trusts fully (package cluster).
+	nodes := cluster.NewManager(store)
+	nodes.Users, nodes.Version, nodes.Backups = users, version.Version, backupTarget
+	nodes.Name = func() string { name, _ := os.Hostname(); return name }
+	nodes.Port = portOf(opts.httpsAddr, 443)
+	if opts.dev {
+		// Development mode serves plain HTTP on one address.
+		nodes.Insecure, nodes.Loopback = true, true
+		nodes.Port = portOf(opts.devAddr, 8080)
+		devAddr := opts.devAddr
+		nodes.Local = func() []string { return []string{devAddr} }
+	}
+	if err := nodes.Load(); err != nil {
+		slog.Warn("cluster settings not readable from /config", "err", err)
+	}
+	users.Changed = nodes.AccountChanged
+	go nodes.Run(ctx)
+	go nodes.RunRelay(ctx)
 	replicas := replication.NewManager(store)
 	replicas.Disabled = opts.dev
 	replicas.Mounted, replicas.Filesystem = volumes.Mounted, volumes.FilesystemOf
@@ -1343,6 +1363,7 @@ func run(opts options) error {
 		Sessions:           sessions,
 		Assistant:          chat,
 		Activity:           audit,
+		Cluster:            nodes,
 	})
 
 	agentDone := make(chan struct{})
@@ -1375,6 +1396,10 @@ func run(opts options) error {
 	} else {
 		https := newServer(opts.httpsAddr, site)
 		https.TLSConfig = &tls.Config{GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			// Other nodes of the cluster ask for its own certificate.
+			if cert := nodes.Certificate(hello); cert != nil {
+				return cert, nil
+			}
 			if names := routes.CertificateNames(hello.ServerName); names != nil {
 				return certs.ForNames(hello.ServerName, names)
 			}
@@ -1644,4 +1669,14 @@ func (p announcedPower) Reboot() error {
 func (p announcedPower) Poweroff() error {
 	p.before()
 	return p.Power.Poweroff()
+}
+
+// portOf returns the port of a listen address, fallback without one.
+func portOf(address string, fallback int) int {
+	if _, port, err := net.SplitHostPort(address); err == nil {
+		if n, err := strconv.Atoi(port); err == nil && n > 0 {
+			return n
+		}
+	}
+	return fallback
 }

@@ -62,6 +62,8 @@ const (
 	ViaToken  = "token"
 	ViaAgent  = "agent"
 	ViaSystem = "system"
+	// ViaCluster is a request another node of the cluster passed on.
+	ViaCluster = "cluster"
 	// ViaSSH is a login over SSH, read from the journal of sshd.
 	ViaSSH = "ssh"
 	// ViaMCP is a tool call of an AI client through the MCP server.
