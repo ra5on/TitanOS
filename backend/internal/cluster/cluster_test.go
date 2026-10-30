@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -78,6 +79,11 @@ func newTestNode(t *testing.T, name string, accounts map[string]string) *testNod
 			http.Error(w, "unsigned", http.StatusUnauthorized)
 			return
 		}
+		// As api.clusterAccess: only a node that may manage gets through.
+		if !m.MayManage(id.Node) {
+			http.Error(w, "not permitted", http.StatusForbidden)
+			return
+		}
 		io.WriteString(w, id.User+" "+r.URL.Path+" cookie="+r.Header.Get("Cookie"))
 	})
 	srv := httptest.NewUnstartedServer(mux)
@@ -86,6 +92,8 @@ func newTestNode(t *testing.T, name string, accounts map[string]string) *testNod
 			return c, nil
 		}
 		return nil, errors.New("no certificate")
+	}, GetConfigForClient: func(h *tls.ClientHelloInfo) (*tls.Config, error) {
+		return m.ServerConfig(h), nil
 	}}
 	srv.StartTLS()
 	t.Cleanup(srv.Close)
@@ -137,22 +145,37 @@ func TestClusterJoinAccountsProxyAndRemoval(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Cluster != "Home" || strings.Join(p.Replaced, ",") != "alex" || strings.Join(p.Added, ",") != "bob" {
+	if p.Cluster != "Home" || strings.Join(p.Replaced, ",") != "alex" || strings.Join(p.Local, ",") != "bob" {
 		t.Fatalf("preview %+v", p)
 	}
 	if err := b.m.Join(ctx, info); err != nil {
 		t.Fatal(err)
 	}
-	// The cluster's alex replaced B's; bob went to A.
+	// The cluster's alex replaced B's; bob stays on B only.
 	if !sameAccount(a, b, "alex") {
 		t.Fatal("alex of the cluster not taken over")
 	}
 	if u, _ := b.users.Get("alex"); u.Role != auth.RoleOwner {
 		t.Fatalf("alex on B has role %s", u.Role)
 	}
-	eventually(t, "bob on A", func() bool { return sameAccount(a, b, "bob") })
 	if len(a.m.View().Nodes) != 2 || len(b.m.View().Nodes) != 2 {
 		t.Fatal("both nodes should know both")
+	}
+	if !a.m.IsAdmin() || !a.m.Manages() || b.m.IsAdmin() || b.m.Manages() {
+		t.Fatal("A should be the admin node, B a member")
+	}
+	if v := b.m.View(); v.Admin != a.m.ID() || v.Manages {
+		t.Fatalf("view of B: admin %q manages %t", v.Admin, v.Manages)
+	}
+	// A member shows no join information and changes nothing.
+	if b.m.JoinInfo() != "" {
+		t.Fatal("member shows the join information")
+	}
+	if err := b.m.Rename(ctx, "Mine"); !errors.Is(err, ErrNotPermitted) {
+		t.Fatalf("member renamed the cluster: %v", err)
+	}
+	if err := b.m.SetManage(ctx, b.m.ID(), true); !errors.Is(err, ErrNotPermitted) {
+		t.Fatalf("member allowed itself: %v", err)
 	}
 
 	// A change on A reaches B; the Linux number stays B's own.
@@ -165,23 +188,39 @@ func TestClusterJoinAccountsProxyAndRemoval(t *testing.T) {
 		t.Fatal("UID changed")
 	}
 
-	// A third node joins with the information shown on B.
+	// A third node joins with the information of A.
 	c := newTestNode(t, "nas-c", map[string]string{"carl": "password-of-c"})
-	if err := c.m.Join(ctx, b.m.JoinInfo()); err != nil {
+	if err := c.m.Join(ctx, a.m.JoinInfo()); err != nil {
 		t.Fatal(err)
 	}
 	eventually(t, "C known everywhere", func() bool { return len(a.m.View().Nodes) == 3 && len(b.m.View().Nodes) == 3 })
-	eventually(t, "carl on A", func() bool { return sameAccount(a, c, "carl") })
 
-	// Removing on B reaches A and C.
-	if err := b.users.Delete("carl"); err != nil {
+	// Accounts go from A to the members only: new and removed ones.
+	if _, err := a.users.Create("dora", "password-of-d", auth.RoleUser); err != nil {
 		t.Fatal(err)
 	}
-	eventually(t, "carl gone", func() bool {
-		_, onA := a.users.Get("carl")
-		_, onC := c.users.Get("carl")
-		return !onA && !onC
+	eventually(t, "dora on B and C", func() bool { return sameAccount(a, b, "dora") && sameAccount(a, c, "dora") })
+	if err := a.users.Delete("dora"); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "dora gone", func() bool {
+		_, onB := b.users.Get("dora")
+		_, onC := c.users.Get("dora")
+		return !onB && !onC
 	})
+	if _, err := b.users.Create("eve", "password-of-e", auth.RoleAdmin); err != nil {
+		t.Fatal(err)
+	}
+	a.m.syncAccounts(ctx)
+	b.m.syncAccounts(ctx)
+	for name, n := range map[string]*testNode{"bob": a, "carl": a, "eve": a} {
+		if _, ok := n.users.Get(name); ok {
+			t.Fatalf("%s of a member reached the admin node", name)
+		}
+	}
+	if _, ok := c.users.Get("eve"); ok {
+		t.Fatal("eve of B reached C")
+	}
 
 	// Proxy: A passes a request of alex to B, without the cookie of A.
 	var bID string
@@ -198,7 +237,62 @@ func TestClusterJoinAccountsProxyAndRemoval(t *testing.T) {
 		t.Fatalf("proxy: %d %q", rec.Code, rec.Body.String())
 	}
 
-	// Overview: every node online.
+	// B may not manage A: neither through its proxy nor signing itself,
+	// nor passing itself off as A with the secret it knows.
+	rec = httptest.NewRecorder()
+	b.m.Proxy(rec, httptest.NewRequest("GET", "/api/v1/storage", nil), a.m.ID(), "alex", "storage")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("member proxied to the admin node: %d", rec.Code)
+	}
+	direct := func(as string) int {
+		t.Helper()
+		target := mustNode(t, b.m, a.m.ID())
+		req, _ := http.NewRequest("GET", "https://"+target.Addresses[0]+"/api/v1/storage", nil)
+		b.m.mu.Lock()
+		secret, gen := b.m.secrets.Secret, b.m.state.Generation
+		b.m.mu.Unlock()
+		at, nonce := time.Now().Unix(), fmt.Sprintf("%024x", time.Now().UnixNano())
+		sig := signature(secret, "GET", "/api/v1/storage", as, gen, at, nonce, "alex")
+		req.Header.Set(Header, fmt.Sprintf("node=%s, gen=%d, time=%d, nonce=%s, user=alex, sig=%s", as, gen, at, nonce, sig))
+		res, err := b.m.transport(target.Cert).RoundTrip(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.StatusCode
+	}
+	if code := direct(b.m.ID()); code != http.StatusForbidden {
+		t.Fatalf("member signed for itself: %d", code)
+	}
+	if code := direct(c.m.ID()); code != http.StatusUnauthorized {
+		t.Fatalf("member passed itself off as C: %d", code)
+	}
+
+	// A allows B to manage: B reaches A and C, and may admit nodes.
+	if err := a.m.SetManage(ctx, bID, true); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "B manages", func() bool { return b.m.Manages() && c.m.MayManage(bID) })
+	rec = httptest.NewRecorder()
+	b.m.Proxy(rec, httptest.NewRequest("GET", "/api/v1/storage", nil), a.m.ID(), "alex", "storage")
+	if rec.Code != 200 {
+		t.Fatalf("allowed node not let through: %d %q", rec.Code, rec.Body.String())
+	}
+	if b.m.JoinInfo() == "" {
+		t.Fatal("allowed node shows no join information")
+	}
+	// Only A decides who manages, and nobody takes A out.
+	if err := b.m.SetManage(ctx, c.m.ID(), true); !errors.Is(err, ErrNotPermitted) {
+		t.Fatalf("B allowed C: %v", err)
+	}
+	if err := b.m.Remove(ctx, a.m.ID()); !errors.Is(err, ErrNotPermitted) {
+		t.Fatalf("B removed the admin node: %v", err)
+	}
+	if err := a.m.SetManage(ctx, bID, false); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "B a member again", func() bool { return !b.m.Manages() && !c.m.MayManage(bID) })
+
 	for _, v := range a.m.Overview(ctx) {
 		if !v.Online || v.Status == nil {
 			t.Fatalf("node %s not online: %s", v.Name, v.Error)
@@ -236,7 +330,7 @@ func TestClusterJoinAccountsProxyAndRemoval(t *testing.T) {
 	if c.m.InCluster() {
 		t.Fatal("removed node still in the cluster")
 	}
-	key := func(m *Manager) string { info, _ := parseJoinInfo(m.JoinInfo()); return info.Key }
+	key := func(m *Manager) string { m.mu.Lock(); defer m.mu.Unlock(); return m.secrets.JoinKey }
 	if old, _ := parseJoinInfo(oldInfo); key(b.m) == old.Key || key(b.m) != key(a.m) {
 		t.Fatal("join key not replaced everywhere")
 	}
@@ -263,6 +357,13 @@ func TestClusterJoinAccountsProxyAndRemoval(t *testing.T) {
 	}
 }
 
+// fromNode gives req the TLS connection of node n, as it shows its
+// certificate when it connects.
+func fromNode(req *http.Request, n *Manager) *http.Request {
+	req.TLS = &tls.ConnectionState{PeerCertificates: []*x509.Certificate{n.cert.tls.Leaf}}
+	return req
+}
+
 func mustNode(t *testing.T, m *Manager, id string) Node {
 	n, err := m.node(id)
 	if err != nil {
@@ -285,6 +386,7 @@ func TestVerifyRefusesReplayWrongSecretAndPublicAddresses(t *testing.T) {
 	if err := b.m.sign(req, "alex"); err != nil {
 		t.Fatal(err)
 	}
+	fromNode(req, b.m)
 	if id, err := a.m.Verify(req); err != nil || id.User != "alex" {
 		t.Fatalf("signed request refused: %v", err)
 	}
@@ -302,7 +404,7 @@ func TestVerifyRefusesReplayWrongSecretAndPublicAddresses(t *testing.T) {
 	req3 := httptest.NewRequest("GET", "/api/v1/storage", nil)
 	req3.RemoteAddr = "8.8.8.8:5000"
 	b.m.sign(req3, "alex")
-	if _, err := a.m.Verify(req3); err == nil {
+	if _, err := a.m.Verify(fromNode(req3, b.m)); err == nil {
 		t.Fatal("request from the internet accepted")
 	}
 	// Signed by a node that does not know the secret.
@@ -311,7 +413,7 @@ func TestVerifyRefusesReplayWrongSecretAndPublicAddresses(t *testing.T) {
 	req4 := httptest.NewRequest("GET", "/api/v1/storage", nil)
 	req4.RemoteAddr = "192.168.1.30:5000"
 	stranger.m.sign(req4, "alex")
-	if _, err := a.m.Verify(req4); err == nil {
+	if _, err := a.m.Verify(fromNode(req4, stranger.m)); err == nil {
 		t.Fatal("request of another cluster accepted")
 	}
 }
@@ -390,7 +492,7 @@ func TestVerifyChecksEveryField(t *testing.T) {
 		}
 		sig := signature(secret, req.Method, req.URL.RequestURI(), node, gen, at.Unix(), n, "alex")
 		req.Header.Set(Header, fmt.Sprintf("node=%s, gen=%d, time=%d, nonce=%s, user=alex, sig=%s", node, gen, at.Unix(), n, sig))
-		return req
+		return fromNode(req, b.m)
 	}
 	lan, now, peer := "192.168.1.20:5000", time.Now(), b.m.ID()
 	if _, err := a.m.Verify(signed(lan, peer, gen, now, "")); err != nil {
@@ -409,6 +511,7 @@ func TestVerifyChecksEveryField(t *testing.T) {
 		"public address":    signed("8.8.8.8:5000", peer, gen, now, ""),
 		"short nonce":       signed(lan, peer, gen, now, "abcd"),
 		"unparsable remote": signed("somewhere", peer, gen, now, ""),
+		"without TLS":       func() *http.Request { r := signed(lan, peer, gen, now, ""); r.TLS = nil; return r }(),
 	} {
 		if _, err := a.m.Verify(req); !errors.Is(err, ErrUnauthorized) {
 			t.Errorf("%s: %v", name, err)
@@ -460,5 +563,41 @@ func TestNoncesExpireAndAreBounded(t *testing.T) {
 	// Once they expire there is room again.
 	if !n.fresh("c/1", later.Add(2*skew+time.Second)) || len(n.seen) != 1 {
 		t.Fatalf("after expiry: %d nonces", len(n.seen))
+	}
+}
+
+func TestAdminNodeLeavesAndOlderClusters(t *testing.T) {
+	ctx := context.Background()
+	a := newTestNode(t, "nas-a", map[string]string{"alex": "password-of-a"})
+	b := newTestNode(t, "nas-b", map[string]string{"bob": "password-of-b"})
+	if err := a.m.Create("Home"); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.m.Join(ctx, a.m.JoinInfo()); err != nil {
+		t.Fatal(err)
+	}
+	// The admin node leaves although no other node may manage: it tells
+	// the others itself, and the node that joined next takes over.
+	if err := a.m.Leave(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if a.m.InCluster() {
+		t.Fatal("A still in the cluster")
+	}
+	eventually(t, "B alone and admin", func() bool { return len(b.m.View().Nodes) == 1 && b.m.IsAdmin() })
+
+	// A cluster from before the roles: the node that joined first.
+	early, late := time.Unix(1000, 0), time.Unix(2000, 0)
+	s := &State{Nodes: []Node{{ID: "b", Joined: late}, {ID: "c", Joined: early}, {ID: "a", Joined: late}}}
+	if got := adminOf(s); got != "c" {
+		t.Fatalf("admin of an older cluster: %q", got)
+	}
+	s.Admin = "gone"
+	if got := adminOf(s); got != "c" {
+		t.Fatalf("admin after it left: %q", got)
+	}
+	s.Admin = "a"
+	if got := adminOf(s); got != "a" {
+		t.Fatalf("stored admin: %q", got)
 	}
 }

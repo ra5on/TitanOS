@@ -54,6 +54,8 @@
 	const owner = $derived(session.data?.user?.role === 'owner');
 	const cluster = $derived(page?.cluster);
 	const inCluster = $derived(!!cluster?.name);
+	const manages = $derived(!!cluster?.manages);
+	const isAdmin = $derived(!!cluster && cluster.admin === cluster.self);
 	const version = $derived(page?.nodes.find((n) => n.self)?.status?.version ?? '');
 
 	function problem(err: unknown): string {
@@ -193,6 +195,14 @@
 		}
 	}
 
+	async function setManage(node: NodeView, manage: boolean) {
+		await act(() =>
+			api.put<ClusterPage>('/cluster/nodes/' + encodeURIComponent(node.id) + '/manage', {
+				manage,
+			}),
+		);
+	}
+
 	async function remove(node: NodeView) {
 		if (await act(() => api.delete<ClusterPage>('/cluster/nodes/' + encodeURIComponent(node.id))))
 			removing = null;
@@ -301,8 +311,8 @@
 					{#if preview.replaced.length}<p class="notice-warn">
 							{t('cluster.previewReplaced', { names: preview.replaced.join(', ') })}
 						</p>{/if}
-					{#if preview.added.length}<p>
-							{t('cluster.previewAdded', { names: preview.added.join(', ') })}
+					{#if preview.local.length}<p>
+							{t('cluster.previewLocal', { names: preview.local.join(', ') })}
 						</p>{/if}
 					{#if preview.taken.length}<p>
 							{t('cluster.previewTaken', { names: preview.taken.join(', ') })}
@@ -330,6 +340,15 @@
 					<div class="node-head">
 						<span class="name">{node.name}</span>
 						{#if node.self}<span class="chip">{t('cluster.thisNode')}</span>{/if}
+						<span class="chip" class:info={node.id === cluster.admin || node.manage}
+							>{t(
+								node.id === cluster.admin
+									? 'cluster.roleAdmin'
+									: node.manage
+										? 'cluster.roleManage'
+										: 'cluster.roleMember',
+							)}</span
+						>
 						<span class="chip" class:ok={node.online} class:error={!node.online}
 							>{t(node.online ? 'cluster.online' : 'cluster.offline')}</span
 						>
@@ -363,46 +382,55 @@
 						{(node.address ? [node.address] : node.addresses.slice(0, 3)).join(' · ')}
 					</p>
 					<div class="row-actions">
-						{#if !node.self}
+						{#if !node.self && manages}
 							<button
 								class="btn small"
 								disabled={!manageable(node, version)}
 								onclick={() => switchNode(node.id)}>{t('cluster.manage')}</button
 							>
-							{#if owner}<button class="btn small" disabled={busy} onclick={() => (removing = node)}
-									>{t('cluster.remove')}</button
+							{#if owner && isAdmin}<button
+									class="btn small"
+									disabled={busy}
+									aria-pressed={!!node.manage}
+									onclick={() => setManage(node, !node.manage)}
+									>{t(node.manage ? 'cluster.manageRevoke' : 'cluster.manageAllow')}</button
+								>{/if}
+							{#if owner && node.id !== cluster.admin}<button
+									class="btn small"
+									disabled={busy}
+									onclick={() => (removing = node)}>{t('cluster.remove')}</button
 								>{/if}
 						{/if}
 					</div>
 				</li>
 			{/each}
 		</ul>
-		<p class="muted small">{t('cluster.trust')}</p>
+		<p class="muted small">{t(manages ? 'cluster.trust' : 'cluster.memberHint')}</p>
 	</section>
 
-	<section class="tile panel" id="cluster-join" aria-labelledby="cluster-join-title">
-		<h2 class="tile-title" id="cluster-join-title">{t('cluster.joinInfo')}</h2>
-		<p class="muted">{t('cluster.joinInfoHint')}</p>
-		{#if joinInfo}<textarea
-				class="field mono join-info"
-				rows="4"
-				readonly
-				value={joinInfo}
-				aria-label={t('cluster.joinInfo')}
-				onfocus={(e) => e.currentTarget.select()}></textarea>
-			<p class="muted small">{t('cluster.joinInfoHides')}</p>{/if}
-		<div class="row-actions">
-			{#if joinInfo}<button class="btn btn-primary" onclick={copy}
-					>{t(copied ? 'cluster.copied' : 'cluster.copy')}</button
-				><button class="btn" onclick={hideJoinInfo}>{t('cluster.hideJoinInfo')}</button
-				>{:else}<button class="btn btn-primary" disabled={busy} onclick={openReveal}
-					>{t('cluster.showJoinInfo')}</button
-				>{/if}
-			<button class="btn" disabled={busy} onclick={() => (confirmKey = true)}
-				>{t('cluster.newKey')}</button
-			>
-		</div>
-	</section>
+	{#if manages}<section class="tile panel" id="cluster-join" aria-labelledby="cluster-join-title">
+			<h2 class="tile-title" id="cluster-join-title">{t('cluster.joinInfo')}</h2>
+			<p class="muted">{t('cluster.joinInfoHint')}</p>
+			{#if joinInfo}<textarea
+					class="field mono join-info"
+					rows="4"
+					readonly
+					value={joinInfo}
+					aria-label={t('cluster.joinInfo')}
+					onfocus={(e) => e.currentTarget.select()}></textarea>
+				<p class="muted small">{t('cluster.joinInfoHides')}</p>{/if}
+			<div class="row-actions">
+				{#if joinInfo}<button class="btn btn-primary" onclick={copy}
+						>{t(copied ? 'cluster.copied' : 'cluster.copy')}</button
+					><button class="btn" onclick={hideJoinInfo}>{t('cluster.hideJoinInfo')}</button
+					>{:else}<button class="btn btn-primary" disabled={busy} onclick={openReveal}
+						>{t('cluster.showJoinInfo')}</button
+					>{/if}
+				<button class="btn" disabled={busy} onclick={() => (confirmKey = true)}
+					>{t('cluster.newKey')}</button
+				>
+			</div>
+		</section>{/if}
 
 	<form class="tile panel" onsubmit={saveSettings}>
 		<h2 class="tile-title">{t('cluster.settings')}</h2>
@@ -412,7 +440,7 @@
 				type="text"
 				bind:value={clusterName}
 				maxlength="63"
-				disabled={busy}
+				disabled={busy || !manages}
 			/></label
 		>
 		<div class="stack">
@@ -431,7 +459,7 @@
 				disabled={busy}></textarea><small class="muted">{t('cluster.extraHint')}</small></label
 		>
 		<label class="check"
-			><input type="checkbox" bind:checked={internet} disabled={busy} /><span
+			><input type="checkbox" bind:checked={internet} disabled={busy || !manages} /><span
 				>{t('cluster.internet')}</span
 			></label
 		>

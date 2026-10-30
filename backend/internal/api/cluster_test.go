@@ -78,6 +78,32 @@ func TestClusterThroughTheAPI(t *testing.T) {
 	if res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"name":"alex"`) {
 		t.Fatalf("users of B through A: %d %s", res.StatusCode, body)
 	}
+	// B is a member: it manages nobody until A allows it. Joining ended
+	// the session of alex on B (the cluster's alex replaced it).
+	aID := nodeA.ID()
+	if res, body := b.request("POST", "/api/v1/login", credentials{Name: "alex", Password: testPassword}); res.StatusCode != http.StatusOK {
+		t.Fatalf("login on B: %d %s", res.StatusCode, body)
+	}
+	res, body = b.request("GET", "/api/v1/cluster/nodes/"+aID+"/api/users", nil)
+	if res.StatusCode != http.StatusForbidden || errorCode(t, body) != "cluster_not_permitted" {
+		t.Fatalf("member managed the admin node: %d %s", res.StatusCode, body)
+	}
+	res, body = b.request("POST", "/api/v1/cluster/join-info", map[string]string{"password": testPassword})
+	if res.StatusCode != http.StatusForbidden || errorCode(t, body) != "cluster_not_permitted" {
+		t.Fatalf("member showed the join information: %d %s", res.StatusCode, body)
+	}
+	if res, body := b.request("PUT", "/api/v1/cluster/nodes/"+bID+"/manage", map[string]bool{"manage": true}); res.StatusCode != http.StatusForbidden {
+		t.Fatalf("member allowed itself: %d %s", res.StatusCode, body)
+	}
+	if res, body := a.request("PUT", "/api/v1/cluster/nodes/"+bID+"/manage", map[string]bool{"manage": true}); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"manage":true`) {
+		t.Fatalf("allow B: %d %s", res.StatusCode, body)
+	}
+	if res, body := b.request("GET", "/api/v1/cluster/nodes/"+aID+"/api/users", nil); res.StatusCode != http.StatusOK {
+		t.Fatalf("allowed node not let through: %d %s", res.StatusCode, body)
+	}
+	if res, body := b.request("GET", "/api/v1/cluster/nodes", nil); !strings.Contains(string(body), `"manages":true`) {
+		t.Fatalf("nodes of B: %d %s", res.StatusCode, body)
+	}
 	// Confirming network and firewall changes stays on the node itself.
 	for _, path := range []string{"network/confirm", "firewall/confirm"} {
 		res, body = a.request("POST", "/api/v1/cluster/nodes/"+bID+"/api/"+path, nil)

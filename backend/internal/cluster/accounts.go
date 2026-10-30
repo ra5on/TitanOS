@@ -11,10 +11,11 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 )
 
-// Accounts are the same on every node. A change here gets a new version
-// (time and node) and goes to all others; a node takes over a change when
-// its version is newer than the one it knows. Every minute the nodes
-// compare their versions, so that a node that was away catches up.
+// The accounts of the admin node go to every node. A change there gets a
+// new version (time and node) and goes to all others; a node takes over a
+// change when its version is newer than the one it knows. Every minute the
+// admin node compares the versions, so that a node that was away catches
+// up. The own accounts of the other nodes stay with them.
 
 // accountHash identifies the content of an account, without the Linux user
 // number, which every node keeps for itself.
@@ -35,7 +36,7 @@ type accountRecord struct {
 // AccountChanged is called for every account written or removed on this
 // node (auth.Users.Changed).
 func (m *Manager) AccountChanged(name string) {
-	if !m.InCluster() {
+	if !m.IsAdmin() {
 		return
 	}
 	if m.noteLocal(name) {
@@ -173,6 +174,9 @@ func (m *Manager) versions() map[string]AccountVersion {
 // older titand, the local console), then sends every node the accounts it
 // is behind on.
 func (m *Manager) syncAccounts(ctx context.Context) {
+	if !m.IsAdmin() {
+		return
+	}
 	names := map[string]bool{}
 	for _, u := range m.Users.List() {
 		names[u.Name] = true
@@ -203,4 +207,29 @@ func (m *Manager) syncAccounts(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// clusterAccounts returns the accounts of this node that the cluster has:
+// on the admin node all of them, elsewhere those that came from it. state
+// nil means the current one.
+func (m *Manager) clusterAccounts(state *State) []auth.User {
+	m.mu.Lock()
+	if state == nil {
+		state = m.state
+	}
+	admin := state != nil && adminOf(state) == m.self.ID
+	known := map[string]bool{}
+	if state != nil {
+		for name, v := range state.Accounts {
+			known[name] = !v.Deleted
+		}
+	}
+	m.mu.Unlock()
+	var out []auth.User
+	for _, u := range m.Users.List() {
+		if admin || known[u.Name] {
+			out = append(out, u)
+		}
+	}
+	return out
 }

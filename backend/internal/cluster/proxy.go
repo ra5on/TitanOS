@@ -111,6 +111,10 @@ type proxyKey struct{}
 // user: path is the part after /api/v1. The other node checks the account
 // and its rights itself. Consoles and other WebSockets go through as well.
 func (m *Manager) Proxy(w http.ResponseWriter, r *http.Request, id, user, path string) {
+	if !m.Manages() {
+		writeError(w, http.StatusForbidden, "cluster_not_permitted", "this node may not manage the others")
+		return
+	}
 	n, err := m.node(id)
 	if err != nil {
 		status, code := ErrorCode(err)

@@ -27,14 +27,15 @@ var transports sync.Map // fingerprint+internet → *http.Transport
 func (m *Manager) transport(cert string) *http.Transport {
 	m.mu.Lock()
 	internet := m.state != nil && m.state.Internet
+	own, self := m.cert.tls, m.self.ID
 	m.mu.Unlock()
-	key := fmt.Sprintf("%s/%t/%t/%t", cert, internet, m.Insecure, m.Loopback)
+	key := fmt.Sprintf("%s/%s/%t/%t/%t", self, cert, internet, m.Insecure, m.Loopback)
 	if t, ok := transports.Load(key); ok {
 		return t.(*http.Transport)
 	}
 	dialer := &net.Dialer{Timeout: 5 * time.Second, KeepAlive: 30 * time.Second}
 	t := &http.Transport{
-		TLSClientConfig: pinned(cert),
+		TLSClientConfig: pinned(cert, own),
 		// Every dial checks the address it lands on, also of a host name.
 		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 			host, port, err := net.SplitHostPort(address)

@@ -65,6 +65,8 @@ func ErrorCode(err error) (int, string) {
 		return http.StatusConflict, "cluster_node_self"
 	case errors.Is(err, ErrUnreachable):
 		return http.StatusBadGateway, "cluster_unreachable"
+	case errors.Is(err, ErrNotPermitted):
+		return http.StatusForbidden, "cluster_not_permitted"
 	case errors.Is(err, ErrUnauthorized):
 		return http.StatusUnauthorized, "cluster_unauthorized"
 	case errors.Is(err, ErrInvalid):
@@ -114,6 +116,11 @@ func (m *Manager) PeerHandler() http.Handler {
 		case r.Method == "GET" && path == "accounts":
 			writeJSON(w, http.StatusOK, m.versions())
 		case r.Method == "POST" && path == "accounts":
+			// Accounts come from the admin node only.
+			if !m.isAdmin(id.Node) {
+				writePeerError(w, ErrNotPermitted)
+				return
+			}
 			var records []accountRecord
 			if !readBody(w, r, &records) {
 				return
@@ -138,18 +145,23 @@ func (m *Manager) PeerHandler() http.Handler {
 			if !readBody(w, r, &msg) {
 				return
 			}
-			if err := m.takeMembership(msg); err != nil {
+			if err := m.takeMembership(id.Node, msg); err != nil {
 				writePeerError(w, err)
 				return
 			}
 			w.WriteHeader(http.StatusNoContent)
 		case r.Method == "POST" && path == "leave":
+			// A member cannot do the removal: the leaving node asks the next.
+			if !m.Manages() {
+				writePeerError(w, ErrNotPermitted)
+				return
+			}
 			// Answer first: the removal tells the leaving node as well.
 			w.WriteHeader(http.StatusNoContent)
 			if f, ok := w.(http.Flusher); ok {
 				f.Flush()
 			}
-			if err := m.Remove(r.Context(), id.Node); err != nil {
+			if err := m.remove(r.Context(), id.Node); err != nil {
 				slog.Warn("cluster: leaving node not removed", "err", err)
 			}
 		case r.Method == "POST" && path == "backup/pair":
@@ -186,13 +198,17 @@ func (m *Manager) peerPreview(w http.ResponseWriter, r *http.Request) {
 		writePeerError(w, err)
 		return
 	}
+	if err := m.managing(); err != nil {
+		writePeerError(w, err)
+		return
+	}
 	m.mu.Lock()
 	res := previewResponse{Name: m.state.Name, Version: m.Version, Nodes: []string{}, Accounts: []string{}}
 	for _, n := range m.state.Nodes {
 		res.Nodes = append(res.Nodes, n.Name)
 	}
 	m.mu.Unlock()
-	for _, u := range m.Users.List() {
+	for _, u := range m.clusterAccounts(nil) {
 		res.Accounts = append(res.Accounts, u.Name)
 	}
 	writeJSON(w, http.StatusOK, res)
