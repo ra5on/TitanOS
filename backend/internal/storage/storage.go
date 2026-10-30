@@ -82,6 +82,8 @@ type Disk struct {
 	// Testing is set while a test of the disk runs; nothing else may use it.
 	Testing bool   `json:"testing,omitempty"`
 	Smart   *Smart `json:"smart"`
+	// wwn and ptUUID only go into Identity.
+	wwn, ptUUID string
 }
 
 // Smart is the health a disk reports about itself. Nil if it reports none.
@@ -277,7 +279,7 @@ type Manager struct {
 
 // NewManager returns a manager working on the real system.
 func NewManager(store *config.Store) *Manager {
-	return &Manager{store: store, runner: run.Exec{}, mountRoot: "/mnt", sysBlock: "/sys/block", smart: map[string]*Smart{}}
+	return &Manager{store: store, runner: timeoutRunner{}, mountRoot: "/mnt", sysBlock: "/sys/block", smart: map[string]*Smart{}}
 }
 
 // Load reads the configured volumes from /config.
@@ -314,8 +316,9 @@ func (m *Manager) FilesystemUUIDs() []string {
 	return uuids
 }
 
-// Owns reports a filesystem or RAID array UUID of a configured volume, in
-// any of the spellings of lsblk and mdadm.
+// Owns reports a filesystem, RAID array or LUKS UUID of a configured
+// volume, in any of the spellings of lsblk and mdadm, or the PARTUUID of a
+// partition of its SSD cache (those carry no filesystem to know them by).
 func (m *Manager) Owns(uuid string) bool {
 	uuid = normalizeUUID(uuid)
 	if uuid == "" {
@@ -326,6 +329,9 @@ func (m *Manager) Owns(uuid string) bool {
 			return true
 		}
 		if volume.Encryption != nil && slices.ContainsFunc(volume.Encryption.UUIDs, func(u string) bool { return normalizeUUID(u) == uuid }) {
+			return true
+		}
+		if c := volume.Cache; c != nil && (normalizeUUID(c.MetaUUID) == uuid || normalizeUUID(c.DataUUID) == uuid) {
 			return true
 		}
 	}

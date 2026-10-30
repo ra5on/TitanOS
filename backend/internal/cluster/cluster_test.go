@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -362,5 +363,102 @@ func TestSourceName(t *testing.T) {
 	}
 	if sourceName("nas", 2) != "nas-2" {
 		t.Error("suffix")
+	}
+}
+
+func TestVerifyChecksEveryField(t *testing.T) {
+	a := newTestNode(t, "nas-a", map[string]string{"alex": "password-of-a"})
+	b := newTestNode(t, "nas-b", map[string]string{"bob": "password-of-b"})
+	if err := a.m.Create("Home"); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.m.Join(context.Background(), a.m.View().JoinInfo); err != nil {
+		t.Fatal(err)
+	}
+	a.m.mu.Lock()
+	secret, gen := a.m.secrets.Secret, a.m.state.Generation
+	a.m.mu.Unlock()
+	nonce := 0
+	// signed builds a request with a correct signature over the given fields.
+	signed := func(remote, node string, gen int, at time.Time, fixedNonce string) *http.Request {
+		req := httptest.NewRequest("GET", "/api/v1/storage", nil)
+		req.RemoteAddr = remote
+		n := fixedNonce
+		if n == "" {
+			nonce++
+			n = strings.Repeat("0", 16) + fmt.Sprintf("%08x", nonce)
+		}
+		sig := signature(secret, req.Method, req.URL.RequestURI(), node, gen, at.Unix(), n, "alex")
+		req.Header.Set(Header, fmt.Sprintf("node=%s, gen=%d, time=%d, nonce=%s, user=alex, sig=%s", node, gen, at.Unix(), n, sig))
+		return req
+	}
+	lan, now, peer := "192.168.1.20:5000", time.Now(), b.m.ID()
+	if _, err := a.m.Verify(signed(lan, peer, gen, now, "")); err != nil {
+		t.Fatalf("correct request refused: %v", err)
+	}
+	if _, err := a.m.Verify(signed("100.101.102.103:5000", peer, gen, now, "")); err != nil {
+		t.Fatalf("request over Tailscale refused: %v", err)
+	}
+	for name, req := range map[string]*http.Request{
+		"old generation":    signed(lan, peer, gen-1, now, ""),
+		"newer generation":  signed(lan, peer, gen+1, now, ""),
+		"too old":           signed(lan, peer, gen, now.Add(-skew-time.Minute), ""),
+		"from the future":   signed(lan, peer, gen, now.Add(skew+time.Minute), ""),
+		"unknown node":      signed(lan, "ghost", gen, now, ""),
+		"own node":          signed(lan, a.m.ID(), gen, now, ""),
+		"public address":    signed("8.8.8.8:5000", peer, gen, now, ""),
+		"short nonce":       signed(lan, peer, gen, now, "abcd"),
+		"unparsable remote": signed("somewhere", peer, gen, now, ""),
+	} {
+		if _, err := a.m.Verify(req); !errors.Is(err, ErrUnauthorized) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	// The same nonce again, even on a newly signed request.
+	reused := strings.Repeat("ab", 12)
+	if _, err := a.m.Verify(signed(lan, peer, gen, now, reused)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.m.Verify(signed(lan, peer, gen, now.Add(time.Second), reused)); !errors.Is(err, ErrUnauthorized) {
+		t.Errorf("repeated nonce: %v", err)
+	}
+	// Loopback only in development and tests (a node of its own: the
+	// test nodes above run on loopback in the background).
+	plain := &Manager{}
+	if plain.allowedPeer("127.0.0.1:5000", false) || plain.allowedPeer("[::1]:5000", true) {
+		t.Error("loopback allowed")
+	}
+	if !plain.allowedPeer("8.8.8.8:5000", true) || plain.allowedPeer("8.8.8.8:5000", false) {
+		t.Error("internet setting not followed")
+	}
+}
+
+func TestNoncesExpireAndAreBounded(t *testing.T) {
+	n := newNonces()
+	start := time.Unix(1_000_000, 0)
+	if !n.fresh("a/1", start) || n.fresh("a/1", start.Add(time.Minute)) {
+		t.Fatal("replay within the window")
+	}
+	// Long after the window the old nonce is dropped from the map.
+	later := start.Add(2*skew + time.Second)
+	if !n.fresh("a/2", later) {
+		t.Fatal("new nonce refused")
+	}
+	if _, kept := n.seen["a/1"]; kept {
+		t.Fatal("expired nonce kept")
+	}
+	// A full map refuses rather than forgetting nonces that are still valid.
+	for i := len(n.seen); i < maxNonces; i++ {
+		n.seen[fmt.Sprint("b/", i)] = later
+	}
+	if n.fresh("c/1", later.Add(time.Second)) {
+		t.Fatal("nonce accepted beyond the cap")
+	}
+	if len(n.seen) > maxNonces {
+		t.Fatalf("%d nonces", len(n.seen))
+	}
+	// Once they expire there is room again.
+	if !n.fresh("c/1", later.Add(2*skew+time.Second)) || len(n.seen) != 1 {
+		t.Fatalf("after expiry: %d nonces", len(n.seen))
 	}
 }

@@ -215,3 +215,18 @@ func TestAssistantDiagnosticsDistinguishMessagesAndToolErrors(t *testing.T) {
 		t.Fatalf("content leaked: %s", data)
 	}
 }
+
+func TestAPIReadIsUntrusted(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	user, _ := ts.users.Get("alex")
+	for _, tool := range ts.server.apiTools(user, httptest.NewRequest("GET", "/", nil)) {
+		if tool.Name == "api_read" {
+			if !tool.Untrusted {
+				t.Fatal("api_read returns text people chose but is trusted")
+			}
+			return
+		}
+	}
+	t.Fatal("no api_read")
+}

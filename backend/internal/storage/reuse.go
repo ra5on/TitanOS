@@ -11,8 +11,24 @@ import (
 	"strings"
 )
 
+// diskIdentity is what the disk list shows as a disk's identity and what
+// erasing requests must send back: the request is refused when the disk
+// under that name is no longer the one that was picked.
+//
+// A disk with a serial number or WWN is identified by them (with model and
+// size), never by its kernel name, which can move to another disk after a
+// restart or a hot swap. Without either (some virtual disks and USB
+// adapters) nothing tells two equal disks apart but the name; the
+// partition table UUID is added there so that a disk repartitioned since
+// the selection does not pass either. The partition table is left out
+// where a serial or WWN exists: the identity is also the key a dashboard
+// tile keeps for a disk, and it would change with every new table.
 func diskIdentity(d Disk) string {
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s\x00%s\x00%d", d.Name, d.Model, d.Serial, d.SizeBytes))))
+	key := fmt.Sprintf("v2\x00%s\x00%s\x00%s\x00%d", d.Model, d.Serial, d.wwn, d.SizeBytes)
+	if d.Serial == "" && d.wwn == "" {
+		key = fmt.Sprintf("v2-name\x00%s\x00%s\x00%d\x00%s", d.Name, d.Model, d.SizeBytes, d.ptUUID)
+	}
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(key)))
 }
 func diskUnavailable(d Disk) string {
 	switch {
@@ -168,23 +184,33 @@ func (m *Manager) releaseOldArrays(ctx context.Context, devices []blockDevice, s
 	return current, nil
 }
 
+// ErrIdentityRequired refuses a request that erases a disk without naming
+// the disk's identity from the disk list.
+var ErrIdentityRequired = fmt.Errorf("%w: the identity of the disk from the disk list is required", ErrDiskUnavailable)
+
 // checkIdentity refuses a disk that is gone or is no longer the one the
-// caller picked. An empty identity (older clients) checks only presence.
+// caller picked. Every request that erases a disk must name its identity.
 func checkIdentity(devices []blockDevice, name, identity string) error {
 	device, found := findDevice(devices, name)
 	if !found {
 		return fmt.Errorf("%w: %s not found", ErrDiskUnavailable, name)
 	}
-	if identity != "" && diskIdentity(classify(device, nil)) != identity {
+	if identity == "" {
+		return fmt.Errorf("%w (%s)", ErrIdentityRequired, name)
+	}
+	if diskIdentity(classify(device, nil)) != identity {
 		return fmt.Errorf("%w: %s changed since selection; refresh the disk list", ErrDiskUnavailable, name)
 	}
 	return nil
 }
+
+// validateDiskIdentities checks that every disk of a new volume is still
+// the one picked from the disk list (see checkIdentity).
 func validateDiskIdentities(req CreateRequest, status Status) error {
-	if len(req.Identities) == 0 {
-		return nil
-	} // Older API clients still get all live safety checks.
 	for _, name := range req.Disks {
+		if req.Identities[name] == "" {
+			return fmt.Errorf("%w (%s)", ErrIdentityRequired, name)
+		}
 		index := slices.IndexFunc(status.Disks, func(d Disk) bool { return d.Name == name })
 		if index < 0 || req.Identities[name] != diskIdentity(status.Disks[index]) {
 			return fmt.Errorf("%w: %s changed since selection; refresh the disk list", ErrDiskUnavailable, name)

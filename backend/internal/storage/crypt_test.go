@@ -4,6 +4,8 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -25,11 +27,11 @@ type cryptRunner struct {
 	keys      map[string][]string // device → passwords (key slots)
 	crypt     []string            // cryptsetup and dmsetup commands
 	secrets   []string            // stdin and descriptors of cryptsetup
-	dm        map[string]bool
+	dm        *fakeDM
 }
 
 func newCryptRunner(base Runner, dir string) *cryptRunner {
-	return &cryptRunner{base: base, mapperDir: dir, keys: map[string][]string{}, dm: map[string]bool{}}
+	return &cryptRunner{base: base, mapperDir: dir, keys: map[string][]string{}, dm: newFakeDM()}
 }
 
 func (r *cryptRunner) Run(ctx context.Context, stdin, name string, args ...string) (string, error) {
@@ -40,9 +42,26 @@ func (r *cryptRunner) Run(ctx context.Context, stdin, name string, args ...strin
 		r.crypt = append(r.crypt, name+" "+strings.Join(args, " "))
 	}
 	if _, tree := r.base.(*treeRunner); tree && name == "blkid" && slices.Contains(args, "UUID") {
-		return "btrfs-uuid\n", nil
+		return testBtrfsUUID + "\n", nil
 	}
 	return r.base.Run(ctx, stdin, name, args...)
+}
+
+// testBtrfsUUID is the UUID blkid reports for new Btrfs file systems here.
+const testBtrfsUUID = "b7f5b7f5-0000-4000-8000-000000000001"
+
+// fakeUUID is a stable, well-formed UUID for a name, as the fake tools
+// print them.
+func fakeUUID(name string) string {
+	sum := sha256.Sum256([]byte(name))
+	h := hex.EncodeToString(sum[:16])
+	return h[:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:32]
+}
+
+// poolMapper is the mapper name of a new member of the encrypted Btrfs
+// volume "pool" on the given partition.
+func poolMapper(part string) string {
+	return cryptName(VolumeConfig{Name: "pool", Filesystem: "btrfs"}, fakeUUID("luks-"+part))
 }
 
 var errNoKey = &CommandError{Command: "cryptsetup", Output: "No key available with this passphrase.", Err: errors.New("exit status 2")}
@@ -60,16 +79,7 @@ func (r *cryptRunner) RunSecret(ctx context.Context, stdin []byte, extra [][]byt
 		r.secrets = append(r.secrets, string(e))
 	}
 	if name == "dmsetup" {
-		switch args[0] {
-		case "status":
-			if r.dm[args[1]] {
-				return "0 2000 cache 8 10/100 512 0/1000 0 0 0 0 0 0 0 1 writethrough 2 migration_threshold 2048 smq 0 rw -", nil
-			}
-			return "", errors.New("No such device")
-		case "create":
-			r.dm[args[1]] = true
-		}
-		return "", nil
+		return r.dm.run(args)
 	}
 	last := args[len(args)-1]
 	has := func(device, key string) bool { return slices.Contains(r.keys[device], key) }
@@ -77,7 +87,7 @@ func (r *cryptRunner) RunSecret(ctx context.Context, stdin []byte, extra [][]byt
 	case "luksFormat":
 		r.keys[last] = []string{string(stdin)}
 	case "luksUUID":
-		return "luks-" + strings.ReplaceAll(strings.TrimPrefix(last, "/dev/"), "/", "-") + "\n", nil
+		return fakeUUID("luks-"+strings.ReplaceAll(strings.TrimPrefix(last, "/dev/"), "/", "-")) + "\n", nil
 	case "open":
 		if slices.Contains(args, "--test-passphrase") {
 			if !has(last, string(stdin)) {
@@ -148,13 +158,13 @@ func TestCreateEncryptedArrayPutsFileSystemInsideLUKS(t *testing.T) {
 	ctx := context.Background()
 	disks := []string{"sdd", "sde", "sdf"}
 	// A short password is refused before any disk is touched.
-	if err := m.Create(ctx, CreateRequest{Name: "Safe", Level: "raid5", Filesystem: "ext4", Disks: disks, Erase: disks, Encrypt: true, Password: "short"}); !errors.Is(err, ErrWeakPassword) {
+	if err := createVolume(m, ctx, CreateRequest{Name: "Safe", Level: "raid5", Filesystem: "ext4", Disks: disks, Erase: disks, Encrypt: true, Password: "short"}); !errors.Is(err, ErrWeakPassword) {
 		t.Fatal(err)
 	}
 	if len(base.commands) != 0 {
 		t.Fatalf("disks touched for a weak password: %v", base.commands)
 	}
-	if err := m.Create(ctx, CreateRequest{Name: "Safe", Level: "raid5", Filesystem: "ext4", Disks: disks, Erase: disks, Encrypt: true, Password: goodPassword}); err != nil {
+	if err := createVolume(m, ctx, CreateRequest{Name: "Safe", Level: "raid5", Filesystem: "ext4", Disks: disks, Erase: disks, Encrypt: true, Password: goodPassword}); err != nil {
 		t.Fatal(err)
 	}
 	crypt := runner.commands()
@@ -173,10 +183,10 @@ func TestCreateEncryptedArrayPutsFileSystemInsideLUKS(t *testing.T) {
 		t.Fatal("file system on the bare array")
 	}
 	cfg, _ := m.find("Safe")
-	if cfg.Encryption == nil || !slices.Equal(cfg.Encryption.UUIDs, []string{"luks-md-Safe"}) {
+	if cfg.Encryption == nil || !slices.Equal(cfg.Encryption.UUIDs, []string{fakeUUID("luks-md-Safe")}) {
 		t.Fatalf("encryption not recorded: %+v", cfg.Encryption)
 	}
-	if !m.Owns("luks-md-Safe") {
+	if !m.Owns(fakeUUID("luks-md-Safe")) {
 		t.Fatal("LUKS UUID must count as the volume's")
 	}
 	checkNoSecret(t, m, base.commands, runner.crypt)
@@ -474,7 +484,7 @@ func TestDeleteEncryptedArrayDestroysTheKeySlots(t *testing.T) {
 func luksPart(name, uuid string, open bool) blockDevice {
 	part := blockDevice{Name: "/dev/" + name, KName: "/dev/" + name, Type: "part", Size: 7 << 30, FSType: "crypto_LUKS", UUID: uuid}
 	if open {
-		part.Children = []blockDevice{{Name: "/dev/mapper/titanos-crypt-pool-" + uuid[:8], KName: "/dev/dm-" + name, Type: "crypt", Size: 7<<30 - 16<<20, FSType: "btrfs", UUID: "btrfs-uuid"}}
+		part.Children = []blockDevice{{Name: "/dev/mapper/titanos-crypt-pool-" + uuid[:8], KName: "/dev/dm-" + name, Type: "crypt", Size: 7<<30 - 16<<20, FSType: "btrfs", UUID: testBtrfsUUID}}
 	}
 	return part
 }
@@ -489,7 +499,7 @@ func encryptedBtrfs(t *testing.T, open bool) (*Manager, *treeRunner, *cryptRunne
 	m.runner, m.mapperDir = runner, runner.mapperDir
 	runner.keys["/dev/sda1"] = []string{goodPassword}
 	runner.keys["/dev/sdb1"] = []string{goodPassword}
-	m.volumes = []VolumeConfig{{Name: "pool", Level: "raid1", Profile: "raid1", Devices: 2, Filesystem: "btrfs", FilesystemUUID: "btrfs-uuid", Encryption: &EncryptionConfig{UUIDs: []string{"aaaaaaaa-1111", "bbbbbbbb-2222"}}}}
+	m.volumes = []VolumeConfig{{Name: "pool", Level: "raid1", Profile: "raid1", Devices: 2, Filesystem: "btrfs", FilesystemUUID: testBtrfsUUID, Encryption: &EncryptionConfig{UUIDs: []string{"aaaaaaaa-1111", "bbbbbbbb-2222"}}}}
 	m.saveVolumes(m.volumes)
 	m.loaded = true
 	return m, tree, runner
@@ -548,21 +558,21 @@ func TestCreateEncryptedBtrfsHasLUKSOnEveryMember(t *testing.T) {
 	m.runner, m.mapperDir = runner, runner.mapperDir
 	m.loaded = true
 	disks := []string{"sdc", "sdd"}
-	if err := m.Create(context.Background(), CreateRequest{Name: "pool", Level: "raid1", Filesystem: "btrfs", Disks: disks, Erase: disks, Encrypt: true, Password: goodPassword}); err != nil {
+	if err := createVolume(m, context.Background(), CreateRequest{Name: "pool", Level: "raid1", Filesystem: "btrfs", Disks: disks, Erase: disks, Encrypt: true, Password: goodPassword}); err != nil {
 		t.Fatal(err)
 	}
 	crypt := runner.commands()
-	for _, want := range []string{"--key-file=- /dev/sdc1", "--key-file=- /dev/sdd1", "open --type luks --disable-keyring --key-file=- /dev/sdc1 titanos-crypt-pool-lukssdc1"} {
+	for _, want := range []string{"--key-file=- /dev/sdc1", "--key-file=- /dev/sdd1", "open --type luks --disable-keyring --key-file=- /dev/sdc1 " + poolMapper("sdc1")} {
 		if !strings.Contains(crypt, want) {
 			t.Fatalf("missing %q:\n%s", want, crypt)
 		}
 	}
 	all := strings.Join(tree.commands, "\n")
-	if !strings.Contains(all, "mkfs.btrfs -f -L pool -d raid1 -m raid1 "+filepath.Join(m.mapperDir, "titanos-crypt-pool-lukssdc1")+" "+filepath.Join(m.mapperDir, "titanos-crypt-pool-lukssdd1")) {
+	if !strings.Contains(all, "mkfs.btrfs -f -L pool -d raid1 -m raid1 "+filepath.Join(m.mapperDir, poolMapper("sdc1"))+" "+filepath.Join(m.mapperDir, poolMapper("sdd1"))) {
 		t.Fatalf("Btrfs not on the opened devices:\n%s", all)
 	}
 	cfg, _ := m.find("pool")
-	if cfg.Encryption == nil || !slices.Equal(cfg.Encryption.UUIDs, []string{"luks-sdc1", "luks-sdd1"}) {
+	if cfg.Encryption == nil || !slices.Equal(cfg.Encryption.UUIDs, []string{fakeUUID("luks-sdc1"), fakeUUID("luks-sdd1")}) {
 		t.Fatalf("%+v", cfg.Encryption)
 	}
 	checkNoSecret(t, m, tree.commands, runner.crypt)
@@ -573,26 +583,26 @@ func TestAddDiskToEncryptedBtrfsNeedsThePassword(t *testing.T) {
 	m, tree, runner := encryptedBtrfs(t, true)
 	tree.devices = append(tree.devices, tdisk("sdc", "C"))
 	tree.mounted[m.MountPoint("pool")] = true
-	if err := m.AddBtrfsDiskWithPassword(ctx, "pool", "sdc", "", "", true, nil); !errors.Is(err, ErrPasswordRequired) {
+	if err := m.AddBtrfsDiskWithPassword(ctx, "pool", "sdc", "", idOf(m, "sdc"), true, nil); !errors.Is(err, ErrPasswordRequired) {
 		t.Fatal(err)
 	}
-	if err := m.AddBtrfsDiskWithPassword(ctx, "pool", "sdc", "", "", true, []byte("wrong password")); !errors.Is(err, ErrWrongPassword) {
+	if err := m.AddBtrfsDiskWithPassword(ctx, "pool", "sdc", "", idOf(m, "sdc"), true, []byte("wrong password")); !errors.Is(err, ErrWrongPassword) {
 		t.Fatal(err)
 	}
 	if strings.Contains(strings.Join(tree.commands, "\n"), "sdc") {
 		t.Fatal("disk erased before the password was checked")
 	}
-	if err := m.AddBtrfsDiskWithPassword(ctx, "pool", "sdc", "", "", true, []byte(goodPassword)); err != nil {
+	if err := m.AddBtrfsDiskWithPassword(ctx, "pool", "sdc", "", idOf(m, "sdc"), true, []byte(goodPassword)); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(runner.commands(), "--key-file=- /dev/sdc1") {
 		t.Fatal(runner.commands())
 	}
-	if !strings.Contains(runner.commands(), "btrfs device add -f "+filepath.Join(m.mapperDir, "titanos-crypt-pool-lukssdc1")+" "+m.MountPoint("pool")) {
+	if !strings.Contains(runner.commands(), "btrfs device add -f "+filepath.Join(m.mapperDir, poolMapper("sdc1"))+" "+m.MountPoint("pool")) {
 		t.Fatal(runner.commands())
 	}
 	cfg, _ := m.find("pool")
-	if len(cfg.Encryption.UUIDs) != 3 || cfg.Encryption.UUIDs[2] != "luks-sdc1" {
+	if len(cfg.Encryption.UUIDs) != 3 || cfg.Encryption.UUIDs[2] != fakeUUID("luks-sdc1") {
 		t.Fatalf("%+v", cfg.Encryption)
 	}
 }
@@ -619,4 +629,100 @@ func TestImportListsEncryptedArraysAndRefusesLooseLUKS(t *testing.T) {
 	if c := found["luks:loose"]; c.Reason != "encrypted-partition" {
 		t.Fatalf("loose LUKS: %+v", c)
 	}
+}
+
+// encryptedCachedArray is encryptedArray with a running write cache below
+// the encryption, holding dirty blocks.
+func encryptedCachedArray(t *testing.T, dirty uint64) (*Manager, *treeRunner, *cryptRunner) {
+	t.Helper()
+	ctx := context.Background()
+	m, tree, runner := encryptedArray(t)
+	m.partUUIDDir = t.TempDir()
+	for _, uuid := range []string{testMetaUUID, testDataUUID} {
+		os.WriteFile(filepath.Join(m.partUUIDDir, uuid), nil, 0o600)
+	}
+	m.zero = func(string) error { return nil }
+	m.volumes[0].Cache = &CacheConfig{Mode: "writeback", MetaUUID: testMetaUUID, DataUUID: testDataUUID}
+	m.saveVolumes(m.volumes)
+	runner.keys["/dev/mapper/titanos-cache-tank"] = []string{goodPassword}
+	if err := m.Unlock(ctx, "tank", []byte(goodPassword)); err != nil {
+		t.Fatal(err)
+	}
+	runner.dm.dirty["titanos-cache-tank"] = dirty
+	runner.crypt = nil
+	return m, tree, runner
+}
+
+func TestDeleteEncryptedArrayWritesTheCacheBackBeforeErasing(t *testing.T) {
+	old := cacheFlushPoll
+	cacheFlushPoll = time.Millisecond
+	defer func() { cacheFlushPoll = old }()
+	m, _, runner := encryptedCachedArray(t, 9)
+	runner.dm.cleanAfter = 2
+	if err := m.Delete(context.Background(), "tank", "tank"); err != nil {
+		t.Fatal(err)
+	}
+	crypt := runner.commands()
+	order := []string{
+		"cryptsetup close titanos-crypt-tank",
+		"writeback cleaner 0",
+		"writethrough cleaner 0",
+		"cryptsetup erase --batch-mode /dev/mapper/titanos-cache-tank",
+		"wipefs --all --force /dev/mapper/titanos-cache-tank",
+		"dmsetup remove titanos-cache-tank",
+		"mdadm --stop",
+	}
+	at := -1
+	for _, want := range order {
+		i := strings.Index(crypt, want)
+		if i < at {
+			t.Fatalf("%q out of order or missing:\n%s", want, crypt)
+		}
+		at = i
+	}
+	if runner.dm.dirty["titanos-cache-tank"] != 0 {
+		t.Fatal("dirty blocks left")
+	}
+}
+
+func TestDeleteEncryptedArrayWaitsForTheCacheOrRefuses(t *testing.T) {
+	oldWait, oldPoll := cacheFlushWait, cacheFlushPoll
+	cacheFlushWait, cacheFlushPoll = 5*time.Millisecond, time.Millisecond
+	defer func() { cacheFlushWait, cacheFlushPoll = oldWait, oldPoll }()
+	m, _, runner := encryptedCachedArray(t, 9)
+	runner.dm.cleanAfter = -1
+	if err := m.Delete(context.Background(), "tank", "tank"); !errors.Is(err, ErrBusy) {
+		t.Fatal(err)
+	}
+	crypt := runner.commands()
+	if strings.Contains(crypt, "erase") || strings.Contains(crypt, "dmsetup remove") || strings.Contains(crypt, "mdadm --stop") {
+		t.Fatalf("went on with dirty blocks:\n%s", crypt)
+	}
+	if _, ok := m.find("tank"); !ok {
+		t.Fatal("volume forgotten")
+	}
+}
+
+func TestDeleteEncryptedArrayStopsWhenEraseFails(t *testing.T) {
+	ctx := context.Background()
+	m, _, runner := encryptedArray(t)
+	if err := m.Unlock(ctx, "tank", []byte(goodPassword)); err != nil {
+		t.Fatal(err)
+	}
+	m.runner = &failingErase{runner}
+	if err := m.Delete(ctx, "tank", "tank"); err == nil {
+		t.Fatal("deleted although the key slots are still there")
+	}
+	if strings.Contains(runner.commands(), "mdadm --stop") {
+		t.Fatal("array stopped")
+	}
+}
+
+type failingErase struct{ *cryptRunner }
+
+func (r *failingErase) Run(ctx context.Context, stdin, name string, args ...string) (string, error) {
+	if name == "cryptsetup" && args[0] == "erase" {
+		return "", &CommandError{Command: "cryptsetup erase", Output: "Device busy", Err: errors.New("exit status 5")}
+	}
+	return r.cryptRunner.Run(ctx, stdin, name, args...)
 }

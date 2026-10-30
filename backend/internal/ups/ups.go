@@ -483,6 +483,11 @@ func (m *Manager) look(ctx context.Context) {
 	values := parse(output)
 	if err != nil || values["ups.status"] == "" {
 		status.Error = strings.TrimSpace(output)
+		// upsc explains a failure on stderr, which is not in output.
+		var command *run.CommandError
+		if status.Error == "" && errors.As(err, &command) && command.Output != "" {
+			status.Error = command.Output
+		}
 		if status.Error == "" && err != nil {
 			status.Error = err.Error()
 		}

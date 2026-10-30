@@ -83,14 +83,17 @@ type Device struct {
 }
 
 type node struct {
-	Name       string `json:"name"`
-	Type       string `json:"type"`
-	Size       uint64 `json:"size"`
-	Transport  string `json:"tran"`
-	Model      string `json:"model"`
-	FSType     string `json:"fstype"`
-	Label      string `json:"label"`
-	UUID       string `json:"uuid"`
+	Name      string `json:"name"`
+	Type      string `json:"type"`
+	Size      uint64 `json:"size"`
+	Transport string `json:"tran"`
+	Model     string `json:"model"`
+	FSType    string `json:"fstype"`
+	Label     string `json:"label"`
+	UUID      string `json:"uuid"`
+	// PartUUID names partitions without a filesystem, such as those of
+	// an SSD cache of a volume.
+	PartUUID   string `json:"partuuid"`
 	Mountpoint string `json:"mountpoint"`
 	Children   []node `json:"children"`
 	// Only read for whole disks, see disks.go.
@@ -118,7 +121,7 @@ func (f *flag) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-var lsblkArgs = []string{"--json", "--bytes", "--paths", "--output", "NAME,TYPE,SIZE,TRAN,MODEL,FSTYPE,LABEL,UUID,MOUNTPOINT,ROTA,RM,RO,DISC-GRAN,SERIAL,WWN,PTTYPE,PTUUID"}
+var lsblkArgs = []string{"--json", "--bytes", "--paths", "--output", "NAME,TYPE,SIZE,TRAN,MODEL,FSTYPE,LABEL,UUID,MOUNTPOINT,ROTA,RM,RO,DISC-GRAN,SERIAL,WWN,PTTYPE,PTUUID,PARTUUID"}
 
 // transports are the buses of local drives. An empty transport is what some
 // USB adapters and older kernels report. virtio and network disks stay out.
@@ -137,7 +140,9 @@ type Manager struct {
 	// Disabled refuses to mount anything: in development mode titand runs on
 	// the developer's own machine.
 	Disabled bool
-	// Reserved reports a filesystem UUID that belongs to a volume of the NAS.
+	// Reserved reports a filesystem, array, LUKS or partition UUID that
+	// belongs to a volume of the NAS (storage.Manager.Owns). It is asked
+	// about both the UUID and the PARTUUID of every node.
 	Reserved func(uuid string) bool
 	// Claimed excludes whole disks assigned to VMs or undergoing disk tests.
 	Claimed func() map[string]string
@@ -173,8 +178,16 @@ func NewManager() *Manager {
 const bootStickLabel = "TITANOS"
 
 // collect adds the usable filesystems below a drive.
+// isReserved asks reserved about the UUID and the PARTUUID of a node.
+func isReserved(n node, reserved func(string) bool) bool {
+	if reserved == nil {
+		return false
+	}
+	return (n.UUID != "" && reserved(n.UUID)) || (n.PartUUID != "" && reserved(n.PartUUID))
+}
+
 func collect(n node, transport string, out *[]Device, reserved func(string) bool) {
-	if (n.Type != "disk" && n.Type != "part") || n.Label == bootStickLabel || (reserved != nil && reserved(n.UUID)) {
+	if (n.Type != "disk" && n.Type != "part") || n.Label == bootStickLabel || isReserved(n, reserved) {
 		return
 	}
 	if n.Transport != "" {
@@ -189,7 +202,7 @@ func collect(n node, transport string, out *[]Device, reserved func(string) bool
 	if !alias && n.FSType != "" && n.UUID != "" && (n.Type == "part" || n.Type == "disk") && slices.Contains(transports, transport) {
 		// RAID members and swap are not data; the boot stick stays out of reach.
 		if n.FSType != "linux_raid_member" && n.FSType != "swap" && n.FSType != "crypto_LUKS" && n.FSType != "LVM2_member" &&
-			n.Label != bootStickLabel && (reserved == nil || !reserved(n.UUID)) {
+			n.Label != bootStickLabel && !isReserved(n, reserved) {
 			_, supported := filesystems[n.FSType]
 			// An image stick is read as a whole; it is only busy when a
 			// partition of it is in use.

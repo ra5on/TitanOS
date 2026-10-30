@@ -203,3 +203,101 @@ func TestDevelopmentModeTouchesNothing(t *testing.T) {
 		t.Fatalf("calls in development mode: %v", f.calls)
 	}
 }
+
+func TestKeysAndAddresses(t *testing.T) {
+	private, public, err := NewKeyPair()
+	if err != nil || !validKey(private) || !validKey(public) {
+		t.Fatal(private, public, err)
+	}
+	if derived, err := publicOf(private); err != nil || derived != public {
+		t.Fatalf("public key of the private key: %q %v", derived, err)
+	}
+	if _, err := publicOf("not base64!"); err == nil {
+		t.Fatal("broken private key accepted")
+	}
+	for _, bad := range []string{"", "abc", "AAAA"} {
+		if validKey(bad) {
+			t.Errorf("validKey(%q)", bad)
+		}
+	}
+	// A /28 holds 16 addresses: network, server, 13 devices, broadcast.
+	s := Settings{Network: "10.253.0.0/28"}
+	if serverAddress(s.Network).String() != "10.253.0.1/28" {
+		t.Fatal(serverAddress(s.Network))
+	}
+	for i := range 13 {
+		a, ok := nextAddress(s)
+		if !ok {
+			t.Fatalf("full after %d devices", i)
+		}
+		s.Peers = append(s.Peers, Peer{Address: a.String() + "/32"})
+	}
+	if s.Peers[0].Address != "10.253.0.2/32" || s.Peers[12].Address != "10.253.0.14/32" {
+		t.Fatalf("addresses: %v … %v", s.Peers[0].Address, s.Peers[12].Address)
+	}
+	if a, ok := nextAddress(s); ok {
+		t.Fatalf("broadcast address handed out: %v", a)
+	}
+	// A freed address is used again.
+	s.Peers = s.Peers[1:]
+	if a, ok := nextAddress(s); !ok || a.String() != "10.253.0.2" {
+		t.Fatal(a, ok)
+	}
+}
+
+func TestEndpointsAndConfigs(t *testing.T) {
+	for host, want := range map[string]bool{
+		"": true, "nas.example.org": true, "203.0.113.5": true, "2001:db8::1": true,
+		"fe80::1%eth0": false, ".example.org": false, "nas..example.org": false, "nas_example.org": false, "näs.example.org": false,
+		strings.Repeat("a", 254): false,
+	} {
+		if validEndpoint(host) != want {
+			t.Errorf("validEndpoint(%q) != %v", host, want)
+		}
+	}
+	s := Settings{Network: "10.253.0.0/24", Port: 51820, Endpoint: "nas.example.org",
+		Peers: []Peer{{Name: "Handy", PublicKey: "pub", Preshared: "psk", Address: "10.253.0.2/32"}}}
+	server := serverConfig(s, "priv")
+	if !strings.Contains(server, "ListenPort = 51820") || !strings.Contains(server, "PublicKey = pub\nPresharedKey = psk\nAllowedIPs = 10.253.0.2/32") || strings.Contains(server, "Address") {
+		t.Fatalf("server config:\n%s", server)
+	}
+	// Split tunnel: the tunnel and the private IPv4 home networks, once each.
+	client := ClientConfig(s, s.Peers[0], "client-private", "server-public", []string{"192.168.178.0/24", "192.168.178.7/24", "2001:db8::/64", "8.8.8.0/24", "bogus"})
+	if !strings.Contains(client, "AllowedIPs = 10.253.0.0/24, 192.168.178.0/24\n") || !strings.Contains(client, "Endpoint = nas.example.org:51820") || strings.Contains(client, "DNS =") {
+		t.Fatalf("client config:\n%s", client)
+	}
+}
+
+func TestStatusReadsTheDump(t *testing.T) {
+	m, f, _ := fixture(t)
+	ctx := context.Background()
+	if err := m.Set(ctx, Settings{Enabled: true, Endpoint: "nas.example.org"}); err != nil {
+		t.Fatal(err)
+	}
+	peer, _, err := m.AddPeer(ctx, "Laptop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.dump = "private\tpublic\t51820\toff\n" +
+		peer.PublicKey + "\tpsk\t198.51.100.4:41000\t" + peer.Address + "\t1700000000\t1024\t2048\t25\n" +
+		"short\tline\n"
+	st := m.Status()
+	if !st.Running || st.PublicKey == "" || len(st.Peers) != 1 {
+		t.Fatalf("status: %+v", st)
+	}
+	p := st.Peers[0]
+	if p.Name != "Laptop" || p.Endpoint != "198.51.100.4:41000" || p.Received != 1024 || p.Sent != 2048 || p.LastHandshake == nil || p.LastHandshake.Unix() != 1700000000 {
+		t.Fatalf("peer: %+v", p)
+	}
+	// A device that never connected has no handshake and no endpoint.
+	never := parseDump("if\n" + "key\t(none)\t(none)\t10.253.0.3/32\t0\t0\t0\toff\n")["key"]
+	if never.LastHandshake != nil || never.Endpoint != "" {
+		t.Fatalf("idle device: %+v", never)
+	}
+	if err := m.RemovePeer(ctx, "unknown"); !errors.Is(err, ErrNotFound) {
+		t.Fatal(err)
+	}
+	if err := m.RemovePeer(ctx, peer.PublicKey); err != nil || len(m.Status().Peers) != 0 {
+		t.Fatal("device not removed", err)
+	}
+}

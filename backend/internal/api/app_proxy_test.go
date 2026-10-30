@@ -71,7 +71,7 @@ func TestAppProxyRoutes(t *testing.T) {
 	if res, body := ts.request("PUT", "/api/v1/docker/proxy/targets/web", map[string]any{"name": "web", "host": "1.1.1.1", "port": 80}); res.StatusCode != http.StatusBadRequest {
 		t.Fatalf("public target: %d %s", res.StatusCode, body)
 	}
-	res, body = ts.request("GET", "/api/v1/docker/proxy", nil)
+	_, body = ts.request("GET", "/api/v1/docker/proxy", nil)
 	json.Unmarshal(body, &status)
 	if len(status.Targets) != 1 || status.Targets[0].Host != "192.168.1.30" || len(status.Apps) != 0 {
 		t.Fatalf("status %s", body)

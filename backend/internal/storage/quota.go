@@ -38,9 +38,12 @@ func (m *Manager) SetShareQuotas(name string, on bool) error {
 }
 
 // quotaMountOptions prepares a volume for project quotas before it is
-// mounted. A failure never keeps the volume from mounting: the data comes
-// first, the quotas stay pending and the reason is shown.
-func (m *Manager) quotaMountOptions(ctx context.Context, volume VolumeConfig) string {
+// mounted. source is exactly what will be mounted (mountSource): tune2fs
+// must change the file system there, through an SSD cache or inside LUKS,
+// never the array below behind their back. A failure never keeps the
+// volume from mounting: the data comes first, the quotas stay pending and
+// the reason is shown.
+func (m *Manager) quotaMountOptions(ctx context.Context, volume VolumeConfig, source string) string {
 	m.setQuotaProblem(volume.Name, "")
 	if !volume.ShareQuotas {
 		return ""
@@ -50,7 +53,7 @@ func (m *Manager) quotaMountOptions(ctx context.Context, volume VolumeConfig) st
 		// XFS checks the quotas itself while mounting.
 		return ",prjquota"
 	case "ext4":
-		device := "UUID=" + volume.FilesystemUUID
+		device := source
 		out, err := m.runner.Run(ctx, "", "tune2fs", "-l", device)
 		if err == nil && ext4HasProjectQuota(out) {
 			// The quota feature only counts; prjquota makes ext4 enforce.

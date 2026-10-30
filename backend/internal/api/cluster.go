@@ -17,18 +17,6 @@ import (
 // cluster.PeerPrefix, signed requests on behalf of an account, and the
 // routes of the settings page.
 
-// clusterLocalOnly are changes that must come from a browser at this node:
-// confirming a network or firewall change proves that the browser still
-// reaches the NAS, which a request through another node does not show.
-var clusterLocalOnly = []string{
-	"PUT /api/v1/network",
-	"PUT /api/v1/network/options",
-	"POST /api/v1/network/bridge",
-	"POST /api/v1/network/confirm",
-	"PUT /api/v1/firewall",
-	"POST /api/v1/firewall/confirm",
-}
-
 // clusterAccess serves the requests of other nodes and checks those they
 // pass on for an account. A signed request carries neither cookie nor
 // API token: the account is the one the other node signed for.
@@ -68,7 +56,9 @@ func viaCluster(r *http.Request) bool {
 	return ok
 }
 
-// clusterLocal refuses the changes of clusterLocalOnly from another node.
+// clusterLocal refuses a change from another node: confirming a network
+// or firewall change proves that the browser still reaches the NAS, which
+// a request through another node does not show.
 func (s *Server) clusterLocal(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if viaCluster(r) {

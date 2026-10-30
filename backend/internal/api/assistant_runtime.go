@@ -65,8 +65,10 @@ func (s *Server) startAgent(user auth.User, chat *assistant.Chat, model, page st
 	base, persistent := s.chatsDir()
 	policy := s.opts.Assistant.Settings()
 	execution := policy.Execution
-	if chat.Automation != "" && chat.Execution != "" && chat.Execution != "inherit" {
-		execution = chat.Execution
+	if chat.Automation != "" {
+		// Checked again on every run: the global policy or the role may
+		// have changed since the automation was saved.
+		execution = automationExecution(policy.Execution, chat.Execution, user.Role)
 	}
 	go func() {
 		defer cancel()
@@ -186,7 +188,7 @@ func (s *Server) startAgent(user auth.User, chat *assistant.Chat, model, page st
 		}
 		if err == nil {
 			if a := assistant.Pending(chat); a != nil {
-				a.Auto = execution == "direct" || a.Approved || (chat.Task != nil && chat.Task.Approved && a.Level != assistant.LevelDestroy && a.Key != "task")
+				a.Auto = assistant.AutoRun(execution, chat.Task, a)
 				if a.Auto {
 					err = execute(ctx, chat, a)
 				} else {

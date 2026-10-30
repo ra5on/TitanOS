@@ -30,41 +30,96 @@ type passkeyChallenge struct {
 	rpID      string
 	origin    string
 	expires   time.Time
+	// source is who asked: the address (IPv6 by /64) of a login, the
+	// account of a registration.
+	source string
 }
+
+const (
+	// passkeyMaxWaiting bounds the challenges in RAM. When it is full,
+	// new ones are refused instead of pushing out those of others.
+	passkeyMaxWaiting = 4096
+	// passkeyPerSource is how many challenges one source has waiting;
+	// its own oldest gives way, never one of somebody else.
+	passkeyPerSource = 8
+	// passkeyBegins challenges a source gets per passkeyBeginWindow.
+	passkeyBegins      = 20
+	passkeyBeginWindow = time.Minute
+)
 
 type passkeyChallenges struct {
 	mu    sync.Mutex
 	items map[string]passkeyChallenge
+	// begins are the recent challenges of each source, for the rate.
+	begins map[string][]time.Time
 }
 
-// put stores a fresh challenge and returns its ID. At most 256 wait at a
-// time; the oldest go first.
-func (p *passkeyChallenges) put(c passkeyChallenge) (string, []byte) {
+// passkeySource is the source of a login challenge: the address, or its
+// /64 for IPv6, where one device easily has many addresses.
+func passkeySource(r *http.Request) string {
+	ip := net.ParseIP(remoteIP(r))
+	if ip == nil {
+		return "ip:" + remoteIP(r)
+	}
+	if ip.To4() == nil {
+		return "net:" + ip.Mask(net.CIDRMask(64, 128)).String()
+	}
+	return "ip:" + ip.String()
+}
+
+// put stores a fresh challenge and returns its ID; ok is false when the
+// source asked too often or too many are waiting.
+func (p *passkeyChallenges) put(c passkeyChallenge) (id string, challenge []byte, ok bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	now := time.Now()
 	if p.items == nil {
 		p.items = map[string]passkeyChallenge{}
+		p.begins = map[string][]time.Time{}
+	}
+	for source, times := range p.begins {
+		recent := times[:0]
+		for _, at := range times {
+			if now.Sub(at) < passkeyBeginWindow {
+				recent = append(recent, at)
+			}
+		}
+		if len(recent) == 0 {
+			delete(p.begins, source)
+		} else {
+			p.begins[source] = recent
+		}
+	}
+	if len(p.begins[c.source]) >= passkeyBegins || len(p.begins) >= passkeyMaxWaiting {
+		return "", nil, false
 	}
 	var oldest string
+	mine := 0
 	for id, item := range p.items {
 		if now.After(item.expires) {
 			delete(p.items, id)
-		} else if oldest == "" || item.expires.Before(p.items[oldest].expires) {
-			oldest = id
+		} else if item.source == c.source {
+			mine++
+			if oldest == "" || item.expires.Before(p.items[oldest].expires) {
+				oldest = id
+			}
 		}
 	}
-	if len(p.items) >= 256 {
+	if mine >= passkeyPerSource {
 		delete(p.items, oldest)
 	}
+	if len(p.items) >= passkeyMaxWaiting {
+		return "", nil, false
+	}
+	p.begins[c.source] = append(p.begins[c.source], now)
 	raw := make([]byte, 16)
 	rand.Read(raw)
 	c.challenge = make([]byte, 32)
 	rand.Read(c.challenge)
 	c.expires = now.Add(passkeyChallengeTTL)
-	id := hex.EncodeToString(raw)
+	id = hex.EncodeToString(raw)
 	p.items[id] = c
-	return id, c.challenge
+	return id, c.challenge, true
 }
 
 // take hands out a challenge once.
@@ -180,7 +235,11 @@ func (s *Server) handlePasskeyBegin(w http.ResponseWriter, r *http.Request) {
 	for _, alg := range webauthn.Algorithms {
 		params = append(params, map[string]any{"type": "public-key", "alg": alg})
 	}
-	id, challenge := s.passkeys.put(passkeyChallenge{user: user.Name, rpID: rpID, origin: origin})
+	id, challenge, ok := s.passkeys.put(passkeyChallenge{user: user.Name, rpID: rpID, origin: origin, source: "user:" + user.Name})
+	if !ok {
+		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many passkey requests, try again later")
+		return
+	}
 	hostname, _ := os.Hostname()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"challengeId": id,
@@ -269,7 +328,13 @@ func (s *Server) handlePasskeyLoginBegin(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed logins, try again later")
 		return
 	}
-	id, challenge := s.passkeys.put(passkeyChallenge{rpID: rpID, origin: origin})
+	id, challenge, ok := s.passkeys.put(passkeyChallenge{rpID: rpID, origin: origin, source: passkeySource(r)})
+	if !ok {
+		writeJSON(w, http.StatusTooManyRequests, map[string]apiError{"error": {
+			Code: "rate_limited", Message: "too many passkey requests, try again later", RetryAfter: int(passkeyBeginWindow.Seconds()),
+		}})
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"challengeId": id,
 		"publicKey": map[string]any{

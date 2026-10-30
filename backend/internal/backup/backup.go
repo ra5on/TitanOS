@@ -171,6 +171,9 @@ type State struct {
 	FailingSince *time.Time `json:"failingSince,omitempty"`
 	// Warning is set when a backup was made but could not read everything.
 	Warning string `json:"warning"`
+	// Skipped counts the links and special files (FIFOs, sockets, devices)
+	// a plain copy left out in its last run; they are named in Warning.
+	Skipped int64 `json:"skipped,omitempty"`
 	// Bytes is how much data the last backup covered.
 	Bytes uint64 `json:"bytes"`
 	// RestoredTo is the folder of the last restore; RestoreError why the
@@ -715,14 +718,52 @@ func (m *Manager) update(job Job, change func(*State)) {
 		return // written when the run ends
 	}
 	if file := m.stateFile(job); file != "" {
-		if err := os.MkdirAll(filepath.Dir(file), 0o700); err == nil {
-			data, _ := json.MarshalIndent(copied, "", "  ")
-			tmp := file + ".new"
-			if os.WriteFile(tmp, data, 0o600) == nil {
-				os.Rename(tmp, file)
-			}
+		if err := writeState(file, copied); err != nil {
+			slog.Warn("backup state not saved", "job", job.ID, "err", err)
 		}
 	}
+}
+
+// writeState replaces the state file of a job durably: the new content is
+// synced before it takes the old name, and the rename itself afterwards.
+func writeState(file string, state State) error {
+	dir := filepath.Dir(file)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp := file + ".new"
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, file); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	return d.Sync()
 }
 
 // rememberHosts adds the lines ssh learnt to the stored known_hosts. Two

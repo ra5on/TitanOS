@@ -299,7 +299,7 @@ func (m *Manager) Bundle(ctx context.Context, w io.Writer, accounts []string) er
 		for _, command := range section.commands {
 			fmt.Fprintf(&b, "$ %s\n", strings.Join(command, " "))
 			commandCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
-			output, err := m.runner.Run(commandCtx, "", command[0], command[1:]...)
+			output, err := run.Combined(commandCtx, m.runner, "", command[0], command[1:]...)
 			cancel()
 			b.WriteString(strings.TrimRight(output, "\n"))
 			if err != nil {

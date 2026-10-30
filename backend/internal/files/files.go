@@ -43,11 +43,21 @@ type Root struct {
 	// with it, files called .env are hidden everywhere. The stick keeps
 	// password hashes and keys there.
 	Hide []string `json:"-"`
+	// Show, if set, is the only part of the root that exists for users:
+	// "dir/" shows a folder with everything in it, any other entry one
+	// file with the copy an edit keeps of it (name.prev) and the folders on
+	// its way. Everything else counts as hidden, so a secret that a new
+	// version adds stays out of sight.
+	Show []string `json:"-"`
 }
 
 // secret reports whether a path is one the root hides.
 func (r Root) secret(rel string) bool {
-	if len(r.Hide) == 0 {
+	if len(r.Hide) == 0 && len(r.Show) == 0 {
+		return false
+	}
+	rel = path.Clean(strings.Trim(rel, "/"))
+	if rel == "." || rel == "" {
 		return false
 	}
 	for i, part := range strings.Split(rel, "/") {
@@ -55,7 +65,19 @@ func (r Root) secret(rel string) bool {
 			return true
 		}
 	}
-	return false
+	if len(r.Show) == 0 {
+		return false
+	}
+	for _, shown := range r.Show {
+		if dir, ok := strings.CutSuffix(shown, "/"); ok {
+			if rel == dir || strings.HasPrefix(rel, shown) || strings.HasPrefix(dir, rel+"/") {
+				return false
+			}
+		} else if rel == shown || rel == shown+".prev" || strings.HasPrefix(shown, rel+"/") {
+			return false
+		}
+	}
+	return true
 }
 
 // Entry is a file or folder in a listing.

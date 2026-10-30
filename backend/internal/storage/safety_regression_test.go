@@ -183,7 +183,7 @@ func TestAddDiskRefusesForeignArraysHoldersAndMounts(t *testing.T) {
 			if kind == "sysfs holder" {
 				os.MkdirAll(filepath.Join(m.sysBlock, "sdx", "sdx1", "holders", "dm-3"), 0o755)
 			}
-			err := m.AddDisk(context.Background(), "data", "sdx", true, "")
+			err := m.AddDisk(context.Background(), "data", "sdx", true, idOf(m, "sdx"))
 			if kind == "own old array" {
 				// An old array that lives only on this disk is stopped first,
 				// exactly as Create does; it is never wiped while running.
@@ -212,7 +212,7 @@ func TestBtrfsReplacementRefusesForeignArray(t *testing.T) {
 	m.volumes = []VolumeConfig{{Name: "mirror", Level: "raid1", Filesystem: "btrfs", FilesystemUUID: "fs"}}
 	runner.mounted[m.MountPoint("mirror")] = true
 	runner.btrfsShow = "Total devices 2\n\tdevid    1 size 1073741824 used 0 path /dev/sda1\n\tdevid    2 size 0 used 0 path  MISSING\n"
-	if err := m.AddDisk(context.Background(), "mirror", "sdx", true, ""); !errors.Is(err, ErrDiskUnavailable) {
+	if err := m.AddDisk(context.Background(), "mirror", "sdx", true, idOf(m, "sdx")); !errors.Is(err, ErrDiskUnavailable) {
 		t.Fatal(err)
 	}
 	if len(runner.wiped()) != 0 {
@@ -352,10 +352,10 @@ func TestBtrfsMissingCount(t *testing.T) {
 }
 
 // AddDisk takes the identity the disk list showed and refuses a disk that
-// changed behind the same name; older clients without it keep working.
+// changed behind the same name, or a request without an identity.
 func TestAddDiskChecksPickedIdentity(t *testing.T) {
 	members := []blockDevice{tdisk("sda", "A", raidPart("sda1")), tdisk("sdb", "B", raidPart("sdb1")), tdisk("sdc", "C", raidPart("sdc1"))}
-	for _, kind := range []string{"matching", "stale", "omitted"} {
+	for _, kind := range []string{"matching", "stale", "omitted", "renamed"} {
 		t.Run(kind, func(t *testing.T) {
 			m, runner := treeManager(t, append(slices.Clone(members), tdisk("sdx", "X")))
 			m.volumes = []VolumeConfig{{Name: "data", Level: "raid5", Filesystem: "ext4", ArrayUUID: runningArrayUUID}}
@@ -370,9 +370,17 @@ func TestAddDiskChecksPickedIdentity(t *testing.T) {
 				runner.devices[3].Serial = "REPLACEMENT" // hot-swapped after picking
 			case "omitted":
 				identity = ""
+			case "renamed":
+				// The same disk under another name keeps its identity: the
+				// kernel name is not part of it when there is a serial.
+				d := runner.devices[3]
+				d.Name, d.KName = "/dev/sdy", "/dev/sdy"
+				if diskIdentity(classify(d, nil)) != identity {
+					t.Fatal("identity depends on the kernel name")
+				}
 			}
 			err = m.AddDisk(context.Background(), "data", "sdx", true, identity)
-			if kind == "stale" {
+			if kind == "stale" || kind == "omitted" {
 				if !errors.Is(err, ErrDiskUnavailable) || len(runner.commands) != 0 {
 					t.Fatal(err, runner.commands)
 				}

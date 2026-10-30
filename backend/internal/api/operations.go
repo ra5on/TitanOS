@@ -28,6 +28,7 @@ func (s *Server) operationsRoutes(mux *routeMux) {
 	}
 	admin := func(route string, fn http.HandlerFunc) { register(route, fn, s.requireAdmin) }
 	heavy := func(route string, fn http.HandlerFunc) { register(route, fn, s.requireHeavyAdmin) }
+	heavyApp := func(route string, fn http.HandlerFunc) { register(route, fn, s.requireHeavyAppAdmin) }
 	admin("GET /api/v1/operations", s.handleOperations)
 	admin("GET /api/v1/maintenance", s.handleMaintenance)
 	admin("PUT /api/v1/maintenance", s.handleMaintenanceSet)
@@ -59,9 +60,9 @@ func (s *Server) operationsRoutes(mux *routeMux) {
 	heavy("POST /api/v1/backups/{id}/applications/{step}", s.handleApplicationRestore)
 	admin("GET /api/v1/backups/application-recovery", s.handleApplicationRecovery)
 	admin("POST /api/v1/backups/application-recovery", s.handleApplicationRecover)
-	heavy("POST /api/v1/vms/{name}/clone", s.handleVMClone)
+	heavyApp("POST /api/v1/vms/{name}/clone", s.handleVMClone)
 	admin("GET /api/v1/vm-clones/{volume}", s.handleVMClones)
-	heavy("POST /api/v1/vm-clones/{volume}/{id}", s.handleVMCloneRecover)
+	heavyApp("POST /api/v1/vm-clones/{volume}/{id}", s.handleVMCloneRecover)
 	mux.HandleFunc("DELETE /api/v1/files/transfers", s.requireUser(s.handleTransfersClear))
 	mux.HandleFunc("DELETE /api/v1/files/transfers/{id}", s.requireUser(s.handleTransferForget))
 }

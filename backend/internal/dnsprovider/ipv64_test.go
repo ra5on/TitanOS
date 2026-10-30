@@ -15,6 +15,35 @@ import (
 	"time"
 )
 
+// ipv64WireRecord and ipv64WireCheck are records and checks as the fake
+// sends them (the API's snake_case fields, with the token).
+type ipv64WireRecord struct {
+	ID         int64  `json:"id"`
+	Prefix     string `json:"prefix"`
+	FQDN       string `json:"fqdn"`
+	Type       string `json:"type"`
+	Content    string `json:"content"`
+	TTL        int    `json:"ttl"`
+	State      string `json:"state"`
+	PendingDNS bool   `json:"pending_dns"`
+}
+
+type ipv64WireCheck struct {
+	Token  string `json:"token"`
+	Name   string `json:"name"`
+	Type   string `json:"type"`
+	Status string `json:"status"`
+	Notify struct {
+		Integrations []int `json:"integrations"`
+	} `json:"notify"`
+	LastSeen *time.Time `json:"last_seen_at"`
+	Push     *struct {
+		Period     int        `json:"period_seconds"`
+		Grace      int        `json:"grace_seconds"`
+		ExpectedBy *time.Time `json:"expected_by"`
+	} `json:"push"`
+}
+
 // fakeIPv64 follows the OpenAPI description of ipv64.net/api/v2 for the
 // parts TitanOS uses, plus /nic/update and /health.
 type fakeIPv64 struct {

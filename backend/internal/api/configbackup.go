@@ -3,7 +3,9 @@ package api
 import (
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"sync"
 	"time"
@@ -113,6 +115,41 @@ func (s *Server) newStickLocked(w http.ResponseWriter) bool {
 		return false
 	}
 	return true
+}
+
+// setupLocal lets the first setup and the restore of a backup through only
+// from the network the NAS stands in: loopback, private (also IPv6 ULA)
+// and link-local addresses, and the networks of its own interfaces (a home
+// network often has a public IPv6 prefix only). A NAS that is reachable
+// from the internet before it is set up must not be taken over by the
+// first stranger.
+func setupLocal(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		addr, err := netip.ParseAddr(remoteIP(r))
+		addr = addr.Unmap()
+		if err != nil || !(addr.IsLoopback() || addr.IsPrivate() || addr.IsLinkLocalUnicast() || onLink(addr)) {
+			slog.Warn("setup from outside the home network refused", "ip", remoteIP(r))
+			writeError(w, http.StatusForbidden, "setup_not_local", "set up the NAS from a device in the same network")
+			return
+		}
+		next(w, r)
+	}
+}
+
+// onLink reports whether an address is in a network of an interface of
+// this machine.
+func onLink(addr netip.Addr) bool {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return false
+	}
+	for _, a := range addrs {
+		prefix, err := netip.ParsePrefix(a.String())
+		if err == nil && prefix.Bits() > 0 && prefix.Masked().Contains(addr) {
+			return true
+		}
+	}
+	return false
 }
 
 // handleSetupBackups lists the backups found on the disks of this machine.

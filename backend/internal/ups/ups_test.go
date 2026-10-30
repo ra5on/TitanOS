@@ -23,7 +23,8 @@ func (f *fakeSystem) Run(_ context.Context, _ string, name string, args ...strin
 	switch name {
 	case "upsc":
 		if f.upsc == "" {
-			return "Error: Connection failure: Connection refused", &run.CommandError{Command: name, Err: errors.New("exit status 1")}
+			// upsc prints the reason on stderr: only in the error.
+			return "", &run.CommandError{Command: name, Output: "Error: Connection failure: Connection refused", Err: errors.New("exit status 1")}
 		}
 		return f.upsc, nil
 	case "nut-scanner":

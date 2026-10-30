@@ -25,10 +25,10 @@ func TestGrowthJournalFencesOtherMutationsAfterRestart(t *testing.T) {
 	if !m.GrowthPending() {
 		t.Fatal("growth pointer lost")
 	}
-	if err := m.Create(context.Background(), CreateRequest{}); !errors.Is(err, ErrBusy) {
+	if err := createVolume(m, context.Background(), CreateRequest{}); !errors.Is(err, ErrBusy) {
 		t.Fatal(err)
 	}
-	if err := m.AddDisk(context.Background(), "data", "sde", true, ""); !errors.Is(err, ErrBusy) {
+	if err := m.AddDisk(context.Background(), "data", "sde", true, idOf(m, "sde")); !errors.Is(err, ErrBusy) {
 		t.Fatal(err)
 	}
 	if len(runner.commands) != 0 {

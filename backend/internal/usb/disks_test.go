@@ -38,7 +38,10 @@ const disksListing = `{"blockdevices":[
  {"name":"/dev/vda","type":"disk","size":10737418240,"tran":"virtio"},
  {"name":"/dev/sdj","type":"disk","size":8000000000,"tran":"usb","model":"TitanOS Stick","children":[
    {"name":"/dev/sdj1","type":"part","size":8,"fstype":"vfat","uuid":"BOOT-0001","label":"TITANOS"}]},
- {"name":"/dev/sdk","type":"disk","size":500107862016,"tran":"sata","model":"VM disk"}
+ {"name":"/dev/sdk","type":"disk","size":500107862016,"tran":"sata","model":"VM disk"},
+ {"name":"/dev/nvme1n1","type":"disk","size":500107862016,"tran":"nvme","model":"Cache SSD","pttype":"gpt","children":[
+   {"name":"/dev/nvme1n1p1","type":"part","size":67108864,"partuuid":"cache-meta"},
+   {"name":"/dev/nvme1n1p2","type":"part","size":500039704576,"partuuid":"cache-data"}]}
 ]}`
 
 func newDisksTest(t *testing.T) (*Manager, *fake) {
@@ -59,7 +62,9 @@ func TestDisksShowEmptyAndForeignDrives(t *testing.T) {
 	for _, d := range disks {
 		got = append(got, filepath.Base(d.Device)+":"+d.Kind+":"+d.Reason)
 	}
-	// The NAS disk, the boot stick, the empty reader and virtio stay out.
+	// The NAS disk, the cache SSD of a volume (known only by the PARTUUIDs
+	// of its partitions), the boot stick, the empty reader and virtio stay
+	// out.
 	want := "mmcblk0:sd:,nvme0n1:nvme:,sda:hdd:,sdb:removable:,sdc:hdd:,sde:hdd:inuse,sdg:removable:readonly,sdh:ssd:inuse,sdi:ssd:mounted,sdk:ssd:claimed"
 	if strings.Join(got, ",") != want {
 		t.Fatalf("disks\n got %s\nwant %s", strings.Join(got, ","), want)
@@ -103,7 +108,6 @@ type formatFake struct {
 	after     string
 	formatted bool
 	fail      string
-	mounts    string
 }
 
 func (f *formatFake) Run(ctx context.Context, stdin, name string, args ...string) (string, error) {

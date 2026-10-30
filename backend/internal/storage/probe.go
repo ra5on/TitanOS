@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -20,6 +21,7 @@ type blockDevice struct {
 	Model      string        `json:"model"`
 	Serial     string        `json:"serial"`
 	WWN        string        `json:"wwn"`
+	PTUUID     string        `json:"ptuuid"` // partition table UUID
 	FSType     string        `json:"fstype"`
 	Label      string        `json:"label"`
 	UUID       string        `json:"uuid"`
@@ -29,7 +31,7 @@ type blockDevice struct {
 }
 
 var lsblkArgs = []string{"--json", "--bytes", "--paths", "--output",
-	"NAME,KNAME,TYPE,SIZE,ROTA,RM,TRAN,MODEL,SERIAL,WWN,FSTYPE,LABEL,UUID,MOUNTPOINT,PARTUUID"}
+	"NAME,KNAME,TYPE,SIZE,ROTA,RM,TRAN,MODEL,SERIAL,WWN,FSTYPE,LABEL,UUID,MOUNTPOINT,PARTUUID,PTUUID"}
 
 func parseLsblk(output string) ([]blockDevice, error) {
 	var result struct {
@@ -83,6 +85,8 @@ func classify(d blockDevice, volumeByArray map[string]string) Disk {
 		Serial:    strings.TrimSpace(d.Serial),
 		SizeBytes: d.Size,
 		Kind:      diskKind(d),
+		wwn:       strings.TrimSpace(d.WWN),
+		ptUUID:    strings.TrimSpace(d.PTUUID),
 	}
 
 	stick, mountedAbove := false, false
@@ -174,6 +178,24 @@ func isDisk(d blockDevice) bool {
 // lsblk prints 8-4-4-4-12 with dashes, mdadm 8:8:8:8 with colons.
 func normalizeUUID(uuid string) string {
 	return strings.ToLower(strings.NewReplacer("-", "", ":", "").Replace(uuid))
+}
+
+// uuidPattern is a UUID as blkid, cryptsetup and sfdisk print them for
+// ext4, XFS, Btrfs, LUKS and GPT partitions.
+var uuidPattern = regexp.MustCompile(`^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$`)
+
+// validUUID guards UUIDs parsed from command output before they are
+// stored: a warning printed by a tool must never become an identity.
+func validUUID(uuid string) bool { return uuidPattern.MatchString(uuid) }
+
+// mdUUIDDashed spells an mdadm UUID (8:8:8:8) as 8-4-4-4-12, so that
+// validUUID can check it.
+func mdUUIDDashed(uuid string) string {
+	n := normalizeUUID(uuid)
+	if len(n) != 32 {
+		return ""
+	}
+	return n[:8] + "-" + n[8:12] + "-" + n[12:16] + "-" + n[16:20] + "-" + n[20:]
 }
 
 // array is the live state of one md device, read from /sys.

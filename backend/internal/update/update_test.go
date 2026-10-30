@@ -714,3 +714,67 @@ func TestKnowsEncryption(t *testing.T) {
 		}
 	}
 }
+
+// fallbackInB puts an older system into slot b, as after an earlier update.
+func fallbackInB(t *testing.T, e *env) {
+	t.Helper()
+	os.MkdirAll(filepath.Join(e.boot, "titanos/b"), 0o755)
+	for _, name := range slotFiles {
+		os.WriteFile(filepath.Join(e.boot, "titanos/b", name), []byte("older "+name), 0o644)
+	}
+	os.WriteFile(filepath.Join(e.boot, "titanos/b/version"), []byte("0.9.0\n"), 0o644)
+	os.WriteFile(filepath.Join(e.boot, "loader/entries/titanos-b.conf"), []byte("title    TitanOS\nversion  0.9.0\nsort-key titanos-2\nlinux    /titanos/b/vmlinuz\n"), 0o644)
+}
+
+func TestFailedDownloadKeepsTheFallbackWhenThereIsRoom(t *testing.T) {
+	e := newEnv(t)
+	fallbackInB(t, e)
+	e.publish(t, "1.1.0", ChannelStable, nil)
+	e.release.assets["titanos-1.1.0-initrd.img"][100] ^= 0xff
+	e.install(t)
+	status := e.m.Status()
+	if status.Progress.Phase != "failed" || status.Progress.FallbackRemoved {
+		t.Fatalf("status: %+v", status.Progress)
+	}
+	if got := entries(e); got != "titanos-a.conf[titanos-a] titanos-b.conf[titanos-2]" {
+		t.Errorf("the fallback entry went: %s", got)
+	}
+	if data, _ := os.ReadFile(filepath.Join(e.boot, "titanos/b/initrd.img")); string(data) != "older initrd.img" {
+		t.Errorf("the fallback system went: %q", data)
+	}
+	if _, err := os.Stat(e.m.stagingDir("b")); err == nil {
+		t.Error("staging left behind")
+	}
+
+	// Next time it works and replaces the fallback only at the end.
+	e.publish(t, "1.1.0", ChannelStable, nil)
+	e.install(t)
+	if status := e.m.Status(); status.Progress.Phase != "done" || status.Pending == nil || status.Slots[1].Version != "1.1.0" {
+		t.Fatalf("after: %+v", status)
+	}
+}
+
+func TestNoRoomForThreeSystemsSaysTheFallbackIsGone(t *testing.T) {
+	e := newEnv(t)
+	fallbackInB(t, e)
+	// The new system fits only once the fallback is gone.
+	for _, name := range slotFiles {
+		os.WriteFile(filepath.Join(e.boot, "titanos/b", name), make([]byte, 2<<20), 0o644)
+	}
+	e.m.freeSpace = func() (int64, error) { return 8 << 20, nil }
+	e.publish(t, "1.1.0", ChannelStable, nil)
+	e.release.assets["titanos-1.1.0-initrd.img"][100] ^= 0xff
+	e.install(t)
+	status := e.m.Status()
+	if status.Progress.Phase != "failed" || !status.Progress.FallbackRemoved {
+		t.Fatalf("status: %+v", status.Progress)
+	}
+	if got := entries(e); got != "titanos-a.conf[titanos-a]" {
+		t.Errorf("entries: %s", got)
+	}
+	e.m.freeSpace = func() (int64, error) { return 0, nil }
+	os.RemoveAll(filepath.Join(e.boot, "titanos/b"))
+	if _, err := e.m.room("b", 1<<30); !errors.Is(err, ErrNoSpace) {
+		t.Fatal("no room at all:", err)
+	}
+}

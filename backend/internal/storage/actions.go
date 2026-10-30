@@ -279,45 +279,20 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) error {
 		args = append(args, "--bitmap=internal")
 	}
 	if _, err := m.runner.Run(ctx, "", "mdadm", append(args, parts...)...); err != nil {
+		m.undoCreate(ctx, req, "", parts)
 		return err
 	}
-	if _, err := m.runner.Run(ctx, "", "udevadm", "settle"); err != nil {
-		return err
-	}
-
-	detail, err := m.runner.Run(ctx, "", "mdadm", "--detail", "--export", arrayPath)
+	arrayUUID, _, encryption, fsUUID, err := m.formatArray(ctx, req, arrayPath, password)
 	if err != nil {
-		return err
-	}
-	arrayUUID := parseMdadmExport(detail)["MD_UUID"]
-	if arrayUUID == "" {
-		return errors.New("storage: new array has no UUID")
-	}
-
-	// An encrypted volume has its file system inside LUKS on the array.
-	target := arrayPath
-	var encryption *EncryptionConfig
-	if req.Encrypt {
-		target, encryption, err = m.encryptArray(ctx, req.Name, arrayPath, password)
-		if err != nil {
-			return err
-		}
-	}
-	mkfs := []string{"-F", "-q", "-L", req.Name, "-m", "0", target}
-	if req.Filesystem == "xfs" {
-		mkfs = []string{"-f", "-q", "-L", req.Name, target}
-	}
-	if _, err := m.runner.Run(ctx, "", "mkfs."+req.Filesystem, mkfs...); err != nil {
-		return err
-	}
-	fsUUID, err := m.runner.Run(ctx, "", "blkid", "--match-tag", "UUID", "--output", "value", target)
-	if err != nil {
+		// The disks were given up for this volume: leave nothing behind
+		// that looks like an array, a LUKS container or a file system.
+		m.undoCreate(ctx, req, arrayPath, parts)
 		return err
 	}
 
 	volume := VolumeConfig{
 		Name: req.Name, Level: req.Level, Filesystem: req.Filesystem,
-		ArrayUUID: arrayUUID, FilesystemUUID: strings.TrimSpace(fsUUID),
+		ArrayUUID: arrayUUID, FilesystemUUID: fsUUID,
 		Created:           time.Now().UTC().Truncate(time.Second),
 		InitializeFolders: len(m.configured()) == 0,
 		Encryption:        encryption,
@@ -328,6 +303,82 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) error {
 		return fmt.Errorf("volume created but not saved to /config: %w", err)
 	}
 	return m.mount(ctx, volume)
+}
+
+// formatArray turns a freshly created array into the volume's file system,
+// inside LUKS when asked to, and returns the array UUID, the device the
+// file system is on, the encryption and the file system UUID.
+func (m *Manager) formatArray(ctx context.Context, req CreateRequest, arrayPath string, password []byte) (string, string, *EncryptionConfig, string, error) {
+	if _, err := m.runner.Run(ctx, "", "udevadm", "settle"); err != nil {
+		return "", "", nil, "", err
+	}
+	detail, err := m.runner.Run(ctx, "", "mdadm", "--detail", "--export", arrayPath)
+	if err != nil {
+		return "", "", nil, "", err
+	}
+	arrayUUID := parseMdadmExport(detail)["MD_UUID"]
+	if !validUUID(mdUUIDDashed(arrayUUID)) {
+		return "", "", nil, "", errors.New("storage: new array has no UUID")
+	}
+	// An encrypted volume has its file system inside LUKS on the array.
+	target := arrayPath
+	var encryption *EncryptionConfig
+	if req.Encrypt {
+		target, encryption, err = m.encryptArray(ctx, req.Name, arrayPath, password)
+		if err != nil {
+			return "", "", nil, "", err
+		}
+	}
+	mkfs := []string{"-F", "-q", "-L", req.Name, "-m", "0", target}
+	if req.Filesystem == "xfs" {
+		mkfs = []string{"-f", "-q", "-L", req.Name, target}
+	}
+	if _, err := m.runner.Run(ctx, "", "mkfs."+req.Filesystem, mkfs...); err != nil {
+		return "", "", nil, "", err
+	}
+	out, err := m.runner.Run(ctx, "", "blkid", "--match-tag", "UUID", "--output", "value", target)
+	if err != nil {
+		return "", "", nil, "", err
+	}
+	fsUUID := strings.TrimSpace(out)
+	if !validUUID(fsUUID) {
+		return "", "", nil, "", fmt.Errorf("storage: new file system on %s has no valid UUID (%q)", target, fsUUID)
+	}
+	return arrayUUID, target, encryption, fsUUID, nil
+}
+
+// undoCreate takes apart what a failed Create built after the disks were
+// partitioned: the LUKS container is closed, signatures inside the array
+// (LUKS, file system) and the array itself are removed and the member
+// partitions and disks wiped. arrayPath is empty when mdadm --create
+// itself failed. Best effort, errors are logged: the volume was never
+// recorded, and the disks had been given up for it.
+func (m *Manager) undoCreate(ctx context.Context, req CreateRequest, arrayPath string, parts []string) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
+	defer cancel()
+	slog.Warn("creating volume failed, cleaning up the disks", "name", req.Name, "disks", req.Disks)
+	try := func(name string, args ...string) {
+		if _, err := m.runner.Run(ctx, "", name, args...); err != nil {
+			slog.Warn("clean up after failed create", "command", name+" "+strings.Join(args, " "), "err", err)
+		}
+	}
+	if arrayPath != "" {
+		if req.Encrypt {
+			if err := m.luksClose(ctx, cryptName(VolumeConfig{Name: req.Name}, "")); err != nil {
+				slog.Warn("clean up after failed create: close LUKS", "err", err)
+			}
+		}
+		try("wipefs", "--all", "--force", arrayPath)
+		try("mdadm", "--stop", arrayPath)
+	}
+	for _, part := range parts {
+		try("mdadm", "--zero-superblock", "--force", part)
+		try("wipefs", "--all", "--force", part)
+	}
+	for _, disk := range req.Disks {
+		try("wipefs", "--all", "--force", "/dev/"+disk)
+	}
+	try("udevadm", "settle")
 }
 
 // arrayOf returns the live array of a volume.
@@ -357,17 +408,19 @@ func (m *Manager) mountWith(ctx context.Context, volume VolumeConfig, degraded b
 	if err := os.MkdirAll(mountPoint, 0o755); err != nil {
 		return err
 	}
-	quotas := m.quotaMountOptions(ctx, volume)
+	// The source first: quotas are prepared on exactly the device that
+	// gets mounted.
+	source, err := m.mountSource(ctx, volume)
+	if err != nil {
+		return err
+	}
+	quotas := m.quotaMountOptions(ctx, volume, source)
 	options := "noatime" + quotas
 	if volume.Filesystem == "btrfs" {
 		options += ",subvolid=5"
 		if degraded {
 			options += ",degraded"
 		}
-	}
-	source, err := m.mountSource(ctx, volume)
-	if err != nil {
-		return err
 	}
 	_, err = m.runner.Run(ctx, "", "mount", "-t", volume.Filesystem, "-o", options, source, mountPoint)
 	if err != nil && quotas != "" {
@@ -478,24 +531,41 @@ func (m *Manager) Delete(ctx context.Context, name, confirm string) error {
 			if err := m.luksClose(ctx, cryptName(volume, "")); err != nil {
 				return fmt.Errorf("%w: %v", ErrBusy, err)
 			}
-			device, err := m.lowerDevice(ctx, volume, "/dev/"+a.device)
+			md := "/dev/" + a.device
+			device, err := m.lowerDevice(ctx, volume, md)
 			if err != nil {
-				device = "/dev/" + a.device
+				device = md // a write cache whose SSD is gone: erase the array itself
 			}
-			m.eraseLUKS(ctx, device)
+			if device != md {
+				// Through a cache: write back what is dirty and switch to
+				// writethrough first, so that the erased header reaches the
+				// disks (and replaces any copy on the SSD) instead of
+				// waiting on the SSD as a dirty block that removing the
+				// cache device would drop.
+				if err := m.flushCache(ctx, volume, cacheFlushWait); err != nil {
+					return fmt.Errorf("%w: the SSD cache could not be written back yet, try again: %v", ErrBusy, err)
+				}
+			}
+			if err := m.eraseLUKS(ctx, device); err != nil {
+				return err
+			}
 			// erase leaves the LUKS header with empty key slots inside
 			// the array; wipefs on the members below cannot see it (it
 			// starts at the data offset). Remove its signatures here, so
 			// that a reassembled array is not offered as LUKS again.
 			if _, err := m.runner.Run(ctx, "", "wipefs", "--all", "--force", device); err != nil {
-				slog.Warn("wipe LUKS header", "device", device, "err", err)
+				return fmt.Errorf("wipe LUKS header: %w", err)
 			}
 		}
-		// The cache device holds the array open.
-		if volume.Cache != nil {
-			if _, err := m.runner.Run(ctx, "", "dmsetup", "status", cacheName(name)); err == nil {
-				m.runner.Run(ctx, "", "dmsetup", "remove", cacheName(name))
+		// The cache device holds the array open (also one left detached,
+		// as a linear mapping, after the cache was switched off).
+		if _, err := m.runner.Run(ctx, "", "dmsetup", "status", cacheName(name)); err == nil {
+			if _, err := m.runner.Run(ctx, "", "dmsetup", "remove", cacheName(name)); err != nil {
+				return fmt.Errorf("%w: %v", ErrBusy, err)
 			}
+		}
+		if volume.Cache != nil {
+			m.clearCacheSSD(ctx, volume.Cache)
 		}
 		if _, err := m.runner.Run(ctx, "", "mdadm", "--stop", "/dev/"+a.device); err != nil {
 			return err

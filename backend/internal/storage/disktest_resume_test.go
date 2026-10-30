@@ -293,8 +293,14 @@ func TestADifferentDiskUnderTheSameNameIsNotContinued(t *testing.T) {
 		}
 		time.Sleep(2 * time.Millisecond)
 	}
+	// Wait for the save to let go of the folder, and check that it did not
+	// put the checkpoint back on its way out.
 	e.m.testSaveMu.Lock()
+	_, back := readState(t, e)
 	e.m.testSaveMu.Unlock()
+	if back {
+		t.Fatal("the checkpoint of the other disk came back")
+	}
 }
 
 func TestSelfTestIsWatchedAgainOrStartedOnceMore(t *testing.T) {

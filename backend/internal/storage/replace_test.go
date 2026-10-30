@@ -20,16 +20,16 @@ func replaceFixture(t *testing.T) (*Manager, *treeRunner) {
 func TestReplaceWorkingDiskKeepsRedundancy(t *testing.T) {
 	ctx := context.Background()
 	m, runner := replaceFixture(t)
-	if err := m.ReplaceDisk(ctx, "data", "sdb", "sdx", "", false); !errors.Is(err, ErrNotConfirmed) {
+	if err := m.ReplaceDisk(ctx, "data", "sdb", "sdx", idOf(m, "sdx"), false); !errors.Is(err, ErrNotConfirmed) {
 		t.Fatal(err)
 	}
-	if err := m.ReplaceDisk(ctx, "data", "sdb", "sdb", "", true); !errors.Is(err, ErrNotPossible) {
+	if err := m.ReplaceDisk(ctx, "data", "sdb", "sdb", idOf(m, "sdb"), true); !errors.Is(err, ErrNotPossible) {
 		t.Fatal("old disk as new disk")
 	}
-	if err := m.ReplaceDisk(ctx, "data", "sdx", "sdb", "", true); !errors.Is(err, ErrDiskUnavailable) {
+	if err := m.ReplaceDisk(ctx, "data", "sdx", "sdb", idOf(m, "sdb"), true); !errors.Is(err, ErrDiskUnavailable) {
 		t.Fatalf("not a member: %v", err)
 	}
-	if err := m.ReplaceDisk(ctx, "data", "sdb", "sdx", "", true); err != nil {
+	if err := m.ReplaceDisk(ctx, "data", "sdb", "sdx", idOf(m, "sdx"), true); err != nil {
 		t.Fatal(err)
 	}
 	add := slices.Index(runner.commands, "mdadm --manage /dev/md127 --add /dev/sdx1")
@@ -49,28 +49,28 @@ func TestReplaceRefusesWhatCannotCopy(t *testing.T) {
 	m, runner := replaceFixture(t)
 	md := filepath.Join(m.sysBlock, "md127", "md")
 	writeSys(t, filepath.Join(md, "degraded"), "1")
-	if err := m.ReplaceDisk(ctx, "data", "sdb", "sdx", "", true); !errors.Is(err, ErrNotPossible) {
+	if err := m.ReplaceDisk(ctx, "data", "sdb", "sdx", idOf(m, "sdx"), true); !errors.Is(err, ErrNotPossible) {
 		t.Fatalf("degraded: %v", err)
 	}
 	writeSys(t, filepath.Join(md, "degraded"), "0")
 	writeSys(t, filepath.Join(md, "sync_action"), "check")
-	if err := m.ReplaceDisk(ctx, "data", "sdb", "sdx", "", true); !errors.Is(err, ErrBusy) {
+	if err := m.ReplaceDisk(ctx, "data", "sdb", "sdx", idOf(m, "sdx"), true); !errors.Is(err, ErrBusy) {
 		t.Fatalf("checking: %v", err)
 	}
 	writeSys(t, filepath.Join(md, "sync_action"), "idle")
 	writeSys(t, filepath.Join(md, "dev-sdb1", "state"), "spare")
-	if err := m.ReplaceDisk(ctx, "data", "sdb", "sdx", "", true); !errors.Is(err, ErrNotPossible) {
+	if err := m.ReplaceDisk(ctx, "data", "sdb", "sdx", idOf(m, "sdx"), true); !errors.Is(err, ErrNotPossible) {
 		t.Fatalf("spare: %v", err)
 	}
 	m.volumes[0].Filesystem = "btrfs"
-	if err := m.ReplaceDisk(ctx, "data", "sdb", "sdx", "", true); !errors.Is(err, ErrNotPossible) {
+	if err := m.ReplaceDisk(ctx, "data", "sdb", "sdx", idOf(m, "sdx"), true); !errors.Is(err, ErrNotPossible) {
 		t.Fatalf("btrfs: %v", err)
 	}
 	if len(runner.commands) != 0 {
 		t.Fatalf("commands ran: %v", runner.commands)
 	}
 	m.ReadOnly = true
-	if err := m.ReplaceDisk(ctx, "data", "sdb", "sdx", "", true); !errors.Is(err, ErrReadOnly) {
+	if err := m.ReplaceDisk(ctx, "data", "sdb", "sdx", idOf(m, "sdx"), true); !errors.Is(err, ErrReadOnly) {
 		t.Fatal("development mode")
 	}
 }

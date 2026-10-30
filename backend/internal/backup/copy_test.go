@@ -2,9 +2,12 @@ package backup
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
@@ -62,9 +65,36 @@ func TestUSBCopyRetainsDeletedAndReplacesChanged(t *testing.T) {
 		t.Fatal("destination symlink accepted")
 	}
 	job.Destination.Folder = "backups/copy"
+	// A link or FIFO in the source is left out with a warning; the rest
+	// is still copied.
 	os.Symlink("/etc/passwd", filepath.Join(source, "link"))
-	if err := m.copyUSB(context.Background(), job); err == nil {
-		t.Fatal("source symlink accepted")
+	if err := syscall.Mkfifo(filepath.Join(source, "pipe"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(source, "new.txt"), []byte("new"), 0600)
+	if err := m.copyUSB(context.Background(), job); err != nil {
+		t.Fatal("a link stopped the whole copy:", err)
+	}
+	for _, name := range []string{"link", "pipe"} {
+		if _, err := os.Lstat(filepath.Join(target, "backups/copy/docs", name)); !os.IsNotExist(err) {
+			t.Fatalf("%s copied", name)
+		}
+	}
+	if b, _ := os.ReadFile(filepath.Join(target, "backups/copy/docs/new.txt")); string(b) != "new" {
+		t.Fatal("rest not copied")
+	}
+	state := m.states[job.ID]
+	if state.Skipped != 2 || !strings.Contains(state.Warning, "docs/link") || !strings.Contains(state.Warning, "docs/pipe") {
+		t.Fatalf("not warned: %+v", state)
+	}
+	var saved State
+	if data, err := os.ReadFile(m.stateFile(job)); err != nil || json.Unmarshal(data, &saved) != nil || saved.Skipped != 2 {
+		t.Fatalf("state not saved: %s %v", data, err)
+	}
+	os.Remove(filepath.Join(source, "link"))
+	os.Remove(filepath.Join(source, "pipe"))
+	if err := m.copyUSB(context.Background(), job); err != nil || m.states[job.ID].Warning != "" || m.states[job.ID].Skipped != 0 {
+		t.Fatalf("warning stayed: %v %+v", err, m.states[job.ID])
 	}
 	m.WithUSB = func(context.Context, string, func(*os.Root) error) error { return errors.New("missing USB") }
 	if err := m.copyUSB(context.Background(), job); err == nil {

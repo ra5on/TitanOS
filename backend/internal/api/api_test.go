@@ -304,6 +304,7 @@ func loadedCatalog(t *testing.T, store *config.Store) *catalog.Manager {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write(buf.Bytes()) }))
 	t.Cleanup(srv.Close)
 	m := catalog.NewManager(store)
+	m.SetClient(srv.Client()) // the default client refuses loopback
 	m.SetOfficialURL(srv.URL + "/apps")
 	m.Load()
 	m.Refresh(context.Background())
@@ -1206,7 +1207,7 @@ func TestSSHKeysAndAccess(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
 	const key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGaa0YUn9eEcPL0FzQ0qzL9dXYrmsBrrmIjXzyEGPBaN test@laptop"
-	res, body := ts.request("POST", "/api/v1/account/ssh-keys", map[string]string{"key": key})
+	res, body := ts.request("POST", "/api/v1/account/ssh-keys", map[string]string{"key": key, "password": testPassword})
 	if res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"type":"ssh-ed25519"`) || !strings.Contains(string(body), `"comment":"test@laptop"`) || !strings.Contains(string(body), `"mayLogin":true`) || !strings.Contains(string(body), `"sshEnabled":false`) {
 		t.Fatalf("add: %d %s", res.StatusCode, body)
 	}
@@ -1214,10 +1215,10 @@ func TestSSHKeysAndAccess(t *testing.T) {
 	if strings.Contains(string(body), "AAAAC3NzaC1lZDI1NTE5") {
 		t.Errorf("the answer repeats the key: %s", body)
 	}
-	if res, body := ts.request("POST", "/api/v1/account/ssh-keys", map[string]string{"key": key}); res.StatusCode != http.StatusConflict || errorCode(t, body) != "ssh_key_exists" {
+	if res, body := ts.request("POST", "/api/v1/account/ssh-keys", map[string]string{"key": key, "password": testPassword}); res.StatusCode != http.StatusConflict || errorCode(t, body) != "ssh_key_exists" {
 		t.Errorf("twice: %d %s", res.StatusCode, body)
 	}
-	if res, body := ts.request("POST", "/api/v1/account/ssh-keys", map[string]string{"key": `command="id" ` + key}); res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "invalid_ssh_key" {
+	if res, body := ts.request("POST", "/api/v1/account/ssh-keys", map[string]string{"key": `command="id" ` + key, "password": testPassword}); res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "invalid_ssh_key" {
 		t.Errorf("with options: %d %s", res.StatusCode, body)
 	}
 	var listed struct{ Keys []struct{ ID string } }
@@ -1608,10 +1609,10 @@ func disabledMemory(store *config.Store) *system.MemoryPolicy {
 func TestTextEditorReadsAndSavesLargeJSONWithVersion(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
-	if err := ts.store.WriteJSON("editor.json", map[string]string{"text": "original"}); err != nil {
+	if err := ts.store.WriteJSON("network/editor.json", map[string]string{"text": "original"}); err != nil {
 		t.Fatal(err)
 	}
-	res, body := ts.request("GET", "/api/v1/files/text?root=stick&path=editor.json", nil)
+	res, body := ts.request("GET", "/api/v1/files/text?root=stick&path=network/editor.json", nil)
 	if res.StatusCode != http.StatusOK {
 		t.Fatal(res.StatusCode, string(body))
 	}
@@ -1620,7 +1621,7 @@ func TestTextEditorReadsAndSavesLargeJSONWithVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	content := `{"text":"` + strings.Repeat("x", 80000) + `"}`
-	payload := map[string]string{"root": "stick", "path": "editor.json", "content": content, "version": original.Version}
+	payload := map[string]string{"root": "stick", "path": "network/editor.json", "content": content, "version": original.Version}
 	if res, body = ts.request("PUT", "/api/v1/files/text", payload); res.StatusCode != http.StatusOK {
 		t.Fatal(res.StatusCode, string(body))
 	}
@@ -1779,10 +1780,11 @@ func TestFileJobControlsRequireOwnJob(t *testing.T) {
 func TestZipDownloadNameAndEmptyDirectory(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
-	if err := os.Mkdir(filepath.Join(ts.store.Dir(), "Leer"), 0700); err != nil {
+	// Only the settings the stick manager shows, such as network/.
+	if err := os.MkdirAll(filepath.Join(ts.store.Dir(), "network", "Leer"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	q := url.Values{"root": {"stick"}, "path": {"Leer"}, "name": {"Meine-Sicherung.ZIP"}}
+	q := url.Values{"root": {"stick"}, "path": {"network/Leer"}, "name": {"Meine-Sicherung.ZIP"}}
 	res, body := ts.request("GET", "/api/v1/files/zip?"+q.Encode(), nil)
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("%d %s", res.StatusCode, body)
@@ -1805,18 +1807,19 @@ func TestZipDownloadNameAndEmptyDirectory(t *testing.T) {
 
 func TestPreviousTextAccessAndRestoreVersions(t *testing.T) {
 	ts := newTestServer(t)
-	endpoint := "/api/v1/files/text/previous?root=stick&path=note.txt"
+	endpoint := "/api/v1/files/text/previous?root=stick&path=network/note.txt"
 	if res, _ := ts.request("GET", endpoint, nil); res.StatusCode != http.StatusUnauthorized {
 		t.Fatal(res.StatusCode)
 	}
 	ts.setup()
-	os.WriteFile(filepath.Join(ts.store.Dir(), "note.txt"), []byte("current"), 0600)
-	os.WriteFile(filepath.Join(ts.store.Dir(), "note.txt.prev"), []byte("previous"), 0600)
+	os.Mkdir(filepath.Join(ts.store.Dir(), "network"), 0700)
+	os.WriteFile(filepath.Join(ts.store.Dir(), "network", "note.txt"), []byte("current"), 0600)
+	os.WriteFile(filepath.Join(ts.store.Dir(), "network", "note.txt.prev"), []byte("previous"), 0600)
 	res, body := ts.request("GET", endpoint, nil)
 	if res.StatusCode != http.StatusOK || !bytes.Contains(body, []byte("previous")) {
 		t.Fatalf("%d %s", res.StatusCode, body)
 	}
-	if res, _ := ts.request("PUT", "/api/v1/files/text", map[string]string{"root": "stick", "path": "note.txt", "content": "previous", "version": "stale"}); res.StatusCode != http.StatusConflict {
+	if res, _ := ts.request("PUT", "/api/v1/files/text", map[string]string{"root": "stick", "path": "network/note.txt", "content": "previous", "version": "stale"}); res.StatusCode != http.StatusConflict {
 		t.Fatal(res.StatusCode)
 	}
 	ts.users.Create("guest", testPassword, auth.RoleUser)
@@ -1828,12 +1831,13 @@ func TestPreviousTextAccessAndRestoreVersions(t *testing.T) {
 
 func TestFileMediaStreamingIsAuthorizedTypedAndSupportsRanges(t *testing.T) {
 	ts := newTestServer(t)
-	endpoint := "/api/v1/files/download?root=stick&path=Clip.MP4&media=1"
+	endpoint := "/api/v1/files/download?root=stick&path=network/Clip.MP4&media=1"
 	if res, _ := ts.request("GET", endpoint, nil); res.StatusCode != http.StatusUnauthorized {
 		t.Fatal(res.StatusCode)
 	}
 	ts.setup()
-	if err := os.WriteFile(filepath.Join(ts.store.Dir(), "Clip.MP4"), []byte("0123456789"), 0600); err != nil {
+	os.Mkdir(filepath.Join(ts.store.Dir(), "network"), 0700)
+	if err := os.WriteFile(filepath.Join(ts.store.Dir(), "network", "Clip.MP4"), []byte("0123456789"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	req, _ := http.NewRequest("GET", ts.url+endpoint, nil)
@@ -1853,13 +1857,13 @@ func TestFileMediaStreamingIsAuthorizedTypedAndSupportsRanges(t *testing.T) {
 	if !strings.HasPrefix(res.Header.Get("Content-Disposition"), "inline;") {
 		t.Fatal(res.Header)
 	}
-	if err := os.WriteFile(filepath.Join(ts.store.Dir(), "unsafe.html"), []byte("<script>alert(1)</script>"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(ts.store.Dir(), "network", "unsafe.html"), []byte("<script>alert(1)</script>"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if res, _ := ts.request("GET", "/api/v1/files/download?root=stick&path=unsafe.html&media=1", nil); res.StatusCode != http.StatusBadRequest {
+	if res, _ := ts.request("GET", "/api/v1/files/download?root=stick&path=network/unsafe.html&media=1", nil); res.StatusCode != http.StatusBadRequest {
 		t.Fatal(res.StatusCode)
 	}
-	if res, _ := ts.request("GET", "/api/v1/files/download?root=stick&path=unsafe.html", nil); !strings.HasPrefix(res.Header.Get("Content-Disposition"), "attachment;") {
+	if res, _ := ts.request("GET", "/api/v1/files/download?root=stick&path=network/unsafe.html", nil); !strings.HasPrefix(res.Header.Get("Content-Disposition"), "attachment;") {
 		t.Fatal(res.Header)
 	}
 }
@@ -2141,6 +2145,7 @@ func TestLoginCanStayLoggedIn(t *testing.T) {
 	}
 
 	// A restart of the NAS: a new session store reads only the stick.
+	ts.server.sessions.Flush()
 	ts.server.sessions = auth.NewSessions()
 	if err := ts.server.sessions.Remember(ts.store); err != nil {
 		t.Fatal(err)

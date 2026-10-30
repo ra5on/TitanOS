@@ -35,6 +35,10 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		}
 	}
 	var total uint64
+	// Links and special files are not copied (a link could point anywhere,
+	// a FIFO would block); each is left out and named in the warning.
+	var skipped []string
+	var skippedCount int64
 	// Unlike restic, a copy follows the limit as the clock passes a window
 	// boundary; the page shows the limit that holds right now.
 	var pace *limiter
@@ -91,7 +95,11 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 							return copyDirectories(target, dst)
 						}
 						if !info.Mode().IsRegular() {
-							return fmt.Errorf("unsupported source file %s/%s (links and special files are not copied)", name, rel)
+							skippedCount++
+							if len(skipped) < 10 {
+								skipped = append(skipped, name+"/"+rel)
+							}
+							return nil
 						}
 						if err := copyDirectories(target, path.Dir(dst)); err != nil {
 							return err
@@ -122,8 +130,17 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		}
 		return nil
 	}()
+	warning := ""
+	if skippedCount > 0 {
+		warning = fmt.Sprintf("%d links or special files not copied: %s", skippedCount, strings.Join(skipped, ", "))
+		if skippedCount > int64(len(skipped)) {
+			warning += ", …"
+		}
+	}
 	if err == nil {
-		m.update(job, func(s *State) { s.Bytes, s.BytesDone, s.Percent = total, total, 100 })
+		m.update(job, func(s *State) {
+			s.Bytes, s.BytesDone, s.Percent, s.Warning, s.Skipped = total, total, 100, warning, skippedCount
+		})
 	}
 	return err
 }

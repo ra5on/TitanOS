@@ -27,6 +27,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"golang.org/x/sys/unix"
 
@@ -647,11 +648,16 @@ func (m *Manager) checkMounts(c *Container) error {
 // onVolume makes sure a folder is a folder of a volume, not one of the
 // private folders of TitanOS or of LXC, and returns its real path.
 func (m *Manager) onVolume(path string) (string, error) {
+	// A control character could end the line of the LXC configuration
+	// the folder is written to and smuggle in further keys.
+	if strings.ContainsFunc(path, unicode.IsControl) {
+		return "", ErrBadFolder
+	}
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		return "", ErrBadFolder
 	}
 	real, err := filepath.EvalSymlinks(path)
-	if err != nil {
+	if err != nil || strings.ContainsFunc(real, unicode.IsControl) {
 		return "", ErrBadFolder
 	}
 	relative, found := strings.CutPrefix(real, m.mountRoot+"/")

@@ -211,6 +211,7 @@ type Manager struct {
 	// publicClient reaches public addresses only: for what a source list
 	// names on a host other than its own.
 	publicClient  *http.Client
+	guardedOnce   sync.Once
 	sources       []Source
 	sourcesLoaded bool
 	sourceEntries []catalogEntry

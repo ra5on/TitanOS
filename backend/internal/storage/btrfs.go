@@ -50,8 +50,8 @@ func (m *Manager) createBtrfs(ctx context.Context, req CreateRequest, devices []
 		return err
 	}
 	uuid = strings.TrimSpace(uuid)
-	if uuid == "" {
-		return fmt.Errorf("%w: new Btrfs filesystem has no UUID", ErrNotPossible)
+	if !validUUID(uuid) {
+		return fmt.Errorf("%w: new Btrfs filesystem has no valid UUID", ErrNotPossible)
 	}
 	volume := VolumeConfig{Name: req.Name, Level: req.Level, Filesystem: "btrfs", FilesystemUUID: uuid, Profile: req.Level, Devices: len(parts), Created: time.Now().UTC().Truncate(time.Second), Encryption: encryption}
 	volume.InitializeFolders = len(m.configured()) == 0

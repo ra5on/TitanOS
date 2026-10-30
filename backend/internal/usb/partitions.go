@@ -560,9 +560,8 @@ func (m *Manager) FormatPartition(ctx context.Context, id string, number int, re
 			if s.Reason == "" && l.Table == "dos" && slices.Contains(extendedTypes, s.Type) {
 				return "", fmt.Errorf("%w: extended", ErrPartitionUnsupported)
 			}
-			if l.Table == "dos" && req.Filesystem == "vfat" && fat32(s.Size) != fat32(s.Size) {
-				return "", nil
-			}
+			// FAT16 or FAT32 and their MBR type follow from the size
+			// (partitionType, mkfsArgs); the work below sets the type.
 			return s.Device, checkFilesystem(req.Filesystem, req.Label, s.Size)
 		},
 		work: func(ctx context.Context, job *FormatJob, l *Layout) error {

@@ -184,8 +184,16 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	req.normalize()
 	ip := remoteIP(r)
 	userKey, ipKey := "user:"+req.Name, "ip:"+ip
+	// A browser that logged into this account before is limited on its
+	// own (login_device.go): failures of strangers lock the account name
+	// for unknown devices only, never its owner out. The lock of the
+	// address holds for everyone.
+	guessKey := userKey
+	if device := s.knownDevice(r, req.Name); device != "" {
+		guessKey = device
+	}
 
-	if wait := s.limiter.RetryAfter(userKey, ipKey); wait > 0 {
+	if wait := s.limiter.RetryAfter(guessKey, ipKey); wait > 0 {
 		seconds := int(math.Ceil(wait.Seconds()))
 		s.recordEvent(r, req.Name, "login_blocked", "", false)
 		writeJSON(w, http.StatusTooManyRequests, map[string]apiError{"error": {
@@ -203,7 +211,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// answer reveals nothing to someone guessing.
 	user, ok := s.opts.Users.Verify(req.Name, req.Password)
 	if !ok {
-		s.limiter.Fail(userKey, ipKey)
+		s.limiter.Fail(guessKey, ipKey)
 		s.opts.Firewall.Failed(ip, firewall.SourceWeb)
 		slog.Warn("login failed", "user", req.Name, "ip", ip)
 		s.recordEvent(r, req.Name, "login_failed", "", false)
@@ -218,7 +226,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !s.opts.Users.CheckSecondFactor(user.Name, req.Code) {
-			s.limiter.Fail(userKey, ipKey)
+			s.limiter.Fail(guessKey, ipKey)
 			s.opts.Firewall.Failed(ip, firewall.SourceWeb)
 			slog.Warn("login failed at the second factor", "user", req.Name, "ip", ip)
 			s.recordEvent(r, req.Name, "login_failed", "2fa", false)
@@ -234,6 +242,8 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.limiter.Reset(userKey)
+	s.limiter.Reset(guessKey)
+	s.rememberDevice(w, user.Name)
 	slog.Info("login", "user", user.Name, "ip", ip)
 	// Accounts from before shares existed get their SMB password now, the
 	// only moment the password is known.

@@ -86,11 +86,10 @@ func (s *Server) fileRoots(user auth.User) []files.Root {
 				roots = append(roots, files.Root{ID: "usb/" + drive.Mount, Name: drive.Name, Kind: "usb", Dir: drive.Dir, Writable: !drive.ReadOnly})
 			}
 		}
-		// The stick is only looked at, apart from text files. Its secrets
-		// stay hidden; /config is a link, so that listing the roots does not
-		// wake the stick up.
+		// The stick is only looked at, apart from text files. /config is a
+		// link, so that listing the roots does not wake the stick up.
 		roots = append(roots, files.Root{ID: "stick", Name: "TITANOS", Kind: "stick", Dir: s.opts.Store.Dir(), Editable: true,
-			Hide: []string{"users", "tls", "ssh", "notify", "backup", "ddns", "wireguard", "ipv64", "assistant", "sessions", "cluster"}})
+			Hide: stickHidden, Show: stickShown})
 		for _, volume := range mounted {
 			roots = append(roots, files.Root{ID: "volume/" + volume, Name: volume, Kind: "volume", Dir: s.opts.Storage.MountPoint(volume), Volume: volume, Writable: true})
 		}
@@ -98,9 +97,40 @@ func (s *Server) fileRoots(user auth.User) []files.Root {
 	return roots
 }
 
+// stickHidden are folders of the stick that hold password hashes, keys
+// and tokens. stickShown below already leaves them out; the list stays as
+// a second fence and marks the root as one with secrets (files.Root.Hide).
+var stickHidden = []string{"users", "tls", "ssh", "notify", "backup", "ddns", "wireguard", "ipv64", "assistant", "sessions", "cluster", "homeassistant"}
+
+// stickShown is all of the stick that the file manager shows: settings
+// without secrets. A folder ("apps/") is shown with everything in it, apart
+// from .env files; anything not named here, such as the settings of Home
+// Assistant, plugins, the UPS or the assistant and every key file, does
+// not exist as far as the file manager can tell.
+var stickShown = []string{
+	"apps/", "network/", "shares/", "storage/", "firewall/",
+	"docker/settings.json", "docker/sources.json", "docker/auto-update.json", "docker/lan-networks.json", "docker/proxy.json",
+	"plugins/settings.json", "plugins/sources.json",
+	"system/settings.json", "system/terminal.json", "system/backup.json", "system/energy.json", "system/fans.json",
+	"system/power-button.json", "system/power-schedule.json", "system/memory.json", "system/monitoring.json",
+	"system/maintenance.json", "system/login.json", "system/intel-gpu.json", "system/update.json", "system/ssh.json",
+	"system/webdav.json", "system/health-report.json",
+}
+
+// requestRoots are the roots of the account behind a request. The stick is
+// offered only to a browser session on this NAS: API tokens, MCP clients,
+// the assistant and other nodes of the cluster never see it.
+func (s *Server) requestRoots(r *http.Request) []files.Root {
+	roots := s.fileRoots(currentUser(r))
+	if webSession(r) && !viaCluster(r) {
+		return roots
+	}
+	return slices.DeleteFunc(roots, func(root files.Root) bool { return root.Kind == "stick" })
+}
+
 // fileRoot resolves the root a request names, or answers it with an error.
 func (s *Server) fileRoot(w http.ResponseWriter, r *http.Request, id string) (files.Root, bool) {
-	for _, root := range s.fileRoots(currentUser(r)) {
+	for _, root := range s.requestRoots(r) {
 		if root.ID == id {
 			return root, true
 		}
@@ -120,7 +150,7 @@ type rootResponse struct {
 
 func (s *Server) handleFileRoots(w http.ResponseWriter, r *http.Request) {
 	list := []rootResponse{}
-	for _, root := range s.fileRoots(currentUser(r)) {
+	for _, root := range s.requestRoots(r) {
 		var total, free uint64
 		if root.Kind != "stick" {
 			total, free = files.Usage(root)

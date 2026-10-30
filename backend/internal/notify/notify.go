@@ -28,12 +28,11 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
-	"github.com/ra5on/TitanOS/backend/internal/netguard"
-
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/httpfetch"
+	"github.com/ra5on/TitanOS/backend/internal/netguard"
 )
 
 const (
@@ -604,25 +603,10 @@ func sendMail(cfg Email, message []byte) error {
 
 // confinedClient connects to public addresses only and follows no redirect.
 func confinedClient() *http.Client {
-	dialer := &net.Dialer{Timeout: 10 * time.Second, Control: func(_, address string, _ syscall.RawConn) error {
-		host, _, err := net.SplitHostPort(address)
-		if err != nil {
-			return err
-		}
-		addr, err := netip.ParseAddr(host)
-		if err != nil || !public(addr) {
-			return errors.New("only public addresses can be reached")
-		}
-		return nil
-	}}
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.Proxy = nil
-	transport.DialContext = dialer.DialContext
-	return &http.Client{
-		Timeout:       20 * time.Second,
-		Transport:     transport,
-		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	}
+	client := httpfetch.NewClient(httpfetch.Policy{Allow: func(a netip.AddrPort) bool { return public(a.Addr()) }})
+	client.Timeout = 20 * time.Second
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return client
 }
 
 // public is the rule for confined accounts; other outbound requests made for

@@ -63,10 +63,16 @@ func (m *Manager) Config(c Container, forCreate bool) string {
 			options += ",ro"
 		}
 		// The place in the container is relative to its root filesystem.
-		line("lxc.mount.entry", fmt.Sprintf("%s %s none %s 0 0", mount.Path, strings.TrimPrefix(mount.Target, "/"), options))
+		// LXC reads the entry like a line of fstab (getmntent), so blanks
+		// and backslashes in a folder name ("My Photos") are escaped.
+		line("lxc.mount.entry", fmt.Sprintf("%s %s none %s 0 0", mountEscaper.Replace(mount.Path), mountEscaper.Replace(strings.TrimPrefix(mount.Target, "/")), options))
 	}
 	return b.String()
 }
+
+// mountEscaper escapes the characters getmntent splits fields at the
+// way fstab does: as octal escapes it decodes again.
+var mountEscaper = strings.NewReplacer("\\", `\134`, " ", `\040`, "\t", `\011`, "\n", `\012`)
 
 // include picks the snippet of the LXC package for a distribution, or the
 // generic one.

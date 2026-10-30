@@ -227,7 +227,7 @@ func (m *Manager) disks(ctx context.Context, self *FormatJob) ([]Disk, *FormatJo
 // reservedBelow finds a filesystem or array of a NAS volume anywhere on a
 // disk. Those disks are handled under Storage only.
 func (m *Manager) reservedBelow(n node) bool {
-	if m.Reserved != nil && n.UUID != "" && m.Reserved(n.UUID) {
+	if isReserved(n, m.Reserved) {
 		return true
 	}
 	for _, child := range n.Children {

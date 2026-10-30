@@ -127,6 +127,11 @@ func (m *Manager) SetOfficialURL(address string) {
 	m.mu.Unlock()
 }
 
+// SetClient replaces the client sources are fetched with, before Load.
+// Tests use it to reach their servers on loopback, which the default client
+// refuses.
+func (m *Manager) SetClient(client *http.Client) { m.client = client }
+
 // Load reads the sources from /config.
 func (m *Manager) Load() error {
 	var file struct{ Sources []Source }

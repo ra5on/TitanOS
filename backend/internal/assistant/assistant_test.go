@@ -635,3 +635,83 @@ func TestTaskMakesActionsAutomatic(t *testing.T) {
 		t.Fatal("task survived a new message")
 	}
 }
+
+func TestUntrustedContentKeepsDangerManual(t *testing.T) {
+	// The model reads a log and then proposes a restart: direct mode and an
+	// approved task must not run it without a click.
+	for _, test := range []struct {
+		name      string
+		execution string
+		task      *Task
+	}{
+		{"direct", "direct", nil},
+		{"task", "", &Task{Title: "Wartung", Approved: true}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fake := &fakeOllama{replies: [][]string{
+				{`{"role":"assistant","content":"","tool_calls":[{"function":{"name":"logs_search","arguments":{}}}]}`},
+				{`{"role":"assistant","content":"","tool_calls":[{"function":{"name":"power_action","arguments":{}}}]}`},
+			}}
+			m := manager(t, fake.serve(t))
+			var calls []string
+			chat := newChat(t, "Was ist los?")
+			chat.Task = test.task
+			turn := Turn{Person: Person{Name: "alex", Role: "owner"}, Tools: testTools(&calls), Emit: func(Event) {}, Execution: test.execution}
+			if err := m.Answer(context.Background(), chat, turn); err != nil {
+				t.Fatal(err)
+			}
+			a := Pending(chat)
+			if a == nil || len(a.After) == 0 || a.Auto {
+				t.Fatalf("dangerous action after untrusted content runs on its own: %+v", a)
+			}
+		})
+	}
+}
+
+func TestAutoRun(t *testing.T) {
+	approved := &Task{Approved: true}
+	for _, test := range []struct {
+		execution string
+		task      *Task
+		action    Action
+		want      bool
+	}{
+		{"confirm", nil, Action{Level: LevelNormal}, false},
+		{"direct", nil, Action{Level: LevelDestroy}, true},
+		{"confirm", approved, Action{Level: LevelDanger}, true},
+		{"confirm", approved, Action{Level: LevelDestroy}, false},
+		{"confirm", approved, Action{Level: LevelNormal, Key: "task"}, false},
+		// After untrusted content only harmless actions follow the policy.
+		{"direct", nil, Action{Level: LevelNormal, After: []string{"web_read"}}, true},
+		{"direct", nil, Action{Level: LevelDanger, After: []string{"web_read"}}, false},
+		{"direct", nil, Action{Level: LevelDestroy, After: []string{"attachment"}}, false},
+		{"confirm", approved, Action{Level: LevelDanger, After: []string{"file_read"}}, false},
+		// A click of the person always counts.
+		{"confirm", nil, Action{Level: LevelDestroy, After: []string{"web_read"}, Approved: true}, true},
+	} {
+		if got := AutoRun(test.execution, test.task, &test.action); got != test.want {
+			t.Errorf("AutoRun(%q, %v, %+v) = %v", test.execution, test.task, test.action, got)
+		}
+	}
+}
+
+func TestPromptNamesUntrustedRule(t *testing.T) {
+	m := manager(t, "http://127.0.0.1:1")
+	for _, execution := range []string{"confirm", "direct"} {
+		settings := m.Settings()
+		settings.Execution = execution
+		if err := m.SetSettings(settings); err != nil {
+			t.Fatal(err)
+		}
+		if text := m.prompt(Person{Name: "alex", Role: "owner"}, "", false, nil); !strings.Contains(text, "after reading untrusted content") {
+			t.Fatalf("%s: prompt misses the untrusted rule", execution)
+		}
+	}
+}
+
+func TestOllamaClientTimeouts(t *testing.T) {
+	tr := ollamaClient().Transport.(*http.Transport)
+	if tr.Proxy != nil || tr.DialContext == nil || tr.TLSHandshakeTimeout == 0 || tr.ResponseHeaderTimeout < 5*time.Minute || ollamaClient().Timeout != 0 {
+		t.Fatalf("transport: %+v", tr)
+	}
+}

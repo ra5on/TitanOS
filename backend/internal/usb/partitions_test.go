@@ -507,3 +507,27 @@ func TestBtrfsOnSeveralDrivesDoesNotGrow(t *testing.T) {
 		t.Fatalf("btrfs\n%s", strings.Join(got, "\n"))
 	}
 }
+
+// Formatting FAT on MBR picks FAT16 or FAT32 by size, sets the matching
+// type and still checks name and size.
+func TestFormatFATOnMBRFollowsTheSize(t *testing.T) {
+	m, f := newPartsTest(t)
+	f.listing = `{"blockdevices":[{"name":"/dev/sdb","type":"disk","size":32010928128,"tran":"usb","pttype":"dos","children":[
+ {"name":"/dev/sdb1","type":"part","size":104857600,"fstype":"vfat","uuid":"S1"},
+ {"name":"/dev/sdb2","type":"part","size":1073741824,"fstype":"vfat","uuid":"S2"}]}]}`
+	f.table = `{"partitiontable":{"label":"dos","id":"0x1","device":"/dev/sdb","unit":"sectors","sectorsize":512,"partitions":[
+ {"node":"/dev/sdb1","start":2048,"size":204800,"type":"c"},
+ {"node":"/dev/sdb2","start":206848,"size":2097152,"type":"e"}]}}`
+	l := layoutOf(t, m)
+	if err := m.FormatPartition(context.Background(), l.Disk.ID, 1, PartitionRequest{Filesystem: "vfat", Label: "Fotos ä"}); !errors.Is(err, ErrFormatInvalid) {
+		t.Fatalf("bad FAT name on MBR: %v", err)
+	}
+	waitJob(t, m, m.FormatPartition(context.Background(), l.Disk.ID, 1, PartitionRequest{Filesystem: "vfat", Label: "small"}))
+	waitJob(t, m, m.FormatPartition(context.Background(), l.Disk.ID, 2, PartitionRequest{Filesystem: "vfat", Label: "large"}))
+	got := strings.Join(f.commands(), "\n")
+	for _, want := range []string{"--part-type /dev/sdb 1 e", "mkfs.vfat -n SMALL /dev/sdb1", "--part-type /dev/sdb 2 c", "mkfs.vfat -F 32 -n LARGE /dev/sdb2"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q:\n%s", want, got)
+		}
+	}
+}

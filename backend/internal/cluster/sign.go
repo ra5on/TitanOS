@@ -136,26 +136,37 @@ func (m *Manager) allowedPeer(remote string, internet bool) bool {
 	return netguard.Local(addr) || internet && netguard.Public(addr)
 }
 
-// nonces remembers the nonces of the last skew, so that a request cannot
-// be sent twice.
+// nonces remembers the nonces of the last 2*skew, so that a request cannot
+// be sent twice. Old nonces are dropped as time goes on; a hard cap keeps a
+// flood of validly signed requests from growing the map without bound.
 type nonces struct {
-	mu   sync.Mutex
-	seen map[string]time.Time
+	mu     sync.Mutex
+	seen   map[string]time.Time
+	pruned time.Time
 }
+
+// maxNonces is far above what the nodes of a cluster send within 2*skew.
+// When it is reached, requests are refused until old nonces expire:
+// forgetting a nonce early would let its request be replayed.
+const maxNonces = 1 << 16
 
 func newNonces() *nonces { return &nonces{seen: map[string]time.Time{}} }
 
 func (n *nonces) fresh(key string, now time.Time) bool {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	if len(n.seen) > 4096 {
+	if now.Sub(n.pruned) >= skew/4 {
 		for k, at := range n.seen {
 			if now.Sub(at) > 2*skew {
 				delete(n.seen, k)
 			}
 		}
+		n.pruned = now
 	}
 	if _, ok := n.seen[key]; ok {
+		return false
+	}
+	if len(n.seen) >= maxNonces {
 		return false
 	}
 	n.seen[key] = now

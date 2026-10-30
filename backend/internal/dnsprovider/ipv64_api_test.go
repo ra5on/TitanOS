@@ -401,3 +401,189 @@ func TestIPv64TokenBucketFollowsHeaders(t *testing.T) {
 		t.Fatalf("long hold: %v", err)
 	}
 }
+
+// The smaller views the DynDNS page and the heartbeat read come from the
+// same requests as the full API.
+func TestIPv64ViewsOfTheFullAPI(t *testing.T) {
+	fake := ipv64fake.New(t)
+	c := NewIPv64(ipv64fake.Key, "", Options{BaseURL: fake.Server.URL})
+	ctx := context.Background()
+
+	account, err := c.Account(ctx)
+	if err != nil || account.Username != "owner" || account.Plan != "Free" || account.KeyName != "titanos" {
+		t.Fatalf("account: %+v %v", account, err)
+	}
+	if u := account.Usage["dyndns_domains"]; u.Used != 1 || u.Limit == nil || *u.Limit != 3 {
+		t.Fatalf("usage: %+v", account.Usage)
+	}
+	noSecrets(t, account, "owner@example.org")
+
+	integrations, err := c.Integrations(ctx)
+	if err != nil || len(integrations) != 1 || integrations[0].ID != 0 || integrations[0].Type != "account_email" {
+		t.Fatalf("integrations: %+v %v", integrations, err)
+	}
+
+	added, err := c.AddRecord(ctx, "nas.ipv64.de", "TXT", "_acme-challenge", "challenge")
+	if err != nil || added.ID == 0 || added.Type != "TXT" || added.Prefix != "_acme-challenge" {
+		t.Fatalf("add record: %+v %v", added, err)
+	}
+	txt, err := c.Records(ctx, "nas.ipv64.de", "TXT", "_acme-challenge")
+	if err != nil || len(txt) != 1 || txt[0].Content != "challenge" {
+		t.Fatalf("TXT records: %+v %v", txt, err)
+	}
+	all, err := c.Records(ctx, "nas.ipv64.de", "", "")
+	full, err2 := c.FullRecords(ctx, "nas.ipv64.de")
+	if err != nil || err2 != nil || len(all) != 2 || len(full) != 2 || all[0].ID != full[0].ID || full[0].Token == "" {
+		t.Fatalf("records: %+v / %+v %v %v", all, full, err, err2)
+	}
+	noSecrets(t, all, full[0].Token)
+	if _, err := c.FullRecords(ctx, "not a host"); !errors.Is(err, ErrInvalid) {
+		t.Fatal("bad domain accepted")
+	}
+	if err := c.DeleteRecord(ctx, added.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	push, err := c.CreateHealthcheck(ctx, "heartbeat", time.Hour, 10*time.Minute, []int{0})
+	if err != nil || push.Token() == "" || push.ID != HealthcheckID(push.Token()) || push.Period != 3600 || push.Grace != 600 || len(push.Integrations) != 1 {
+		t.Fatalf("create: %+v %v", push, err)
+	}
+	noSecrets(t, push, push.Token())
+	if _, err := c.CreateHealthcheck(ctx, "x", 90*time.Second, time.Minute, nil); !errors.Is(err, ErrInvalid) {
+		t.Fatal("90 seconds accepted")
+	}
+	if _, err := c.CreateCheck(ctx, HealthcheckInput{Name: ptr("web"), Type: ptr("http"), URL: ptr("https://nas.example.org")}); err != nil {
+		t.Fatal(err)
+	}
+	checks, err := c.Healthchecks(ctx)
+	if err != nil || len(checks) != 1 || checks[0].Token() != push.Token() || checks[0].Name != "heartbeat" {
+		t.Fatalf("push checks only: %+v %v", checks, err)
+	}
+	if err := c.PauseHealthcheck(ctx, push.Token()); err != nil {
+		t.Fatal(err)
+	}
+	if h, err := c.Healthcheck(ctx, push.Token()); err != nil || h.Status != "paused" || h.ID != push.ID {
+		t.Fatalf("paused: %+v %v", h, err)
+	}
+	if err := c.ResumeHealthcheck(ctx, push.Token()); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.TestNotification(ctx, push.Token()); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.DeleteHealthcheck(ctx, push.Token()); err != nil {
+		t.Fatal(err)
+	}
+	if checks, _ := c.Healthchecks(ctx); len(checks) != 0 {
+		t.Fatalf("deleted check still listed: %+v", checks)
+	}
+}
+
+func TestIPv64ListsChangesAndDeletes(t *testing.T) {
+	fake := ipv64fake.New(t)
+	c := NewIPv64(ipv64fake.Key, "", Options{BaseURL: fake.Server.URL})
+	ctx := context.Background()
+
+	p, err := c.CreatePolicy(ctx, PolicyInput{Name: ptr("nas"), Mode: ptr("manual"), Linking: ptr("and")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list, err := c.Policies(ctx); err != nil || len(list) != 1 || list[0].ID != p.ID {
+		t.Fatalf("policies: %+v %v", list, err)
+	}
+	if changed, err := c.ChangePolicy(ctx, p.ID, PolicyInput{Name: ptr("renamed")}); err != nil || changed.Name != "renamed" {
+		t.Fatalf("change policy: %+v %v", changed, err)
+	}
+	if _, err := c.PolicyAction(ctx, p.ID, "explode"); !errors.Is(err, ErrInvalid) {
+		t.Fatal("unknown policy action")
+	}
+	if err := c.DeletePolicy(ctx, p.ID); err != nil {
+		t.Fatal(err)
+	}
+	if list, _ := c.Policies(ctx); len(list) != 0 {
+		t.Fatalf("deleted policy listed: %+v", list)
+	}
+
+	page, err := c.CreateOfflinePage(ctx, OfflinePageInput{Name: ptr("Wartung")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list, err := c.OfflinePages(ctx); err != nil || len(list) != 1 {
+		t.Fatalf("offline pages: %+v %v", list, err)
+	}
+	if changed, err := c.ChangeOfflinePage(ctx, page.ID, OfflinePageInput{Name: ptr("Pause")}); err != nil || changed.Name != "Pause" {
+		t.Fatalf("change offline page: %+v %v", changed, err)
+	}
+	if err := c.DeleteOfflinePage(ctx, page.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	sp, err := c.CreateStatusPage(ctx, StatusPageInput{Name: ptr("NAS"), Slug: ptr("meinnas")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list, err := c.StatusPages(ctx); err != nil || len(list) != 1 {
+		t.Fatalf("status pages: %+v %v", list, err)
+	}
+	if err := c.DeleteStatusPage(ctx, sp.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	cdn, err := c.CreateCDN(ctx, "nas.ipv64.de")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list, err := c.CDNs(ctx); err != nil || len(list) != 1 {
+		t.Fatalf("CDNs: %+v %v", list, err)
+	}
+	if _, err := c.CDN(ctx, "../me"); !errors.Is(err, ErrInvalid) {
+		t.Fatal("path in a CDN token accepted")
+	}
+	if _, err := c.DeleteCDN(ctx, cdn.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	router, err := c.CreateRouter(ctx, "home")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list, err := c.Routers(ctx); err != nil || len(list) != 1 {
+		t.Fatalf("routers: %+v %v", list, err)
+	}
+	if renamed, err := c.RenameRouter(ctx, router.ID, "office"); err != nil || renamed.Name != "office" {
+		t.Fatalf("rename: %+v %v", renamed, err)
+	}
+	if _, err := c.RenameRouter(ctx, router.ID, ""); !errors.Is(err, ErrInvalid) {
+		t.Fatal("empty name accepted")
+	}
+	peer, err := c.CreatePeer(ctx, router.Gateways[0].ID, "laptop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := c.Peer(ctx, peer.ID); err != nil || got.ID != peer.ID {
+		t.Fatalf("peer: %+v %v", got, err)
+	}
+	if err := c.DeletePeer(ctx, peer.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Peer(ctx, "../x"); !errors.Is(err, ErrInvalid) {
+		t.Fatal("path in a peer token accepted")
+	}
+}
+
+func TestIPv64RateLimitIsPerAccount(t *testing.T) {
+	a, again, b := ipv64LimiterFor("key-a"), ipv64LimiterFor("key-a"), ipv64LimiterFor("key-b")
+	if a != again || a == b {
+		t.Fatal("one bucket per API key expected")
+	}
+	// A 429 of one account does not hold back the other.
+	h := http.Header{}
+	h.Set("Retry-After", "30")
+	a.observe(h, http.StatusTooManyRequests)
+	if b.reserve() != 0 {
+		t.Fatal("the other account waits")
+	}
+	if a.reserve() < 29*time.Second {
+		t.Fatal("the limited account does not wait")
+	}
+}
