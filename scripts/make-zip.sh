@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # Builds the system image with mkosi and packs the contents of the USB stick:
 #
 #   out/stick/                 the stick layout, ready to copy onto a FAT32 stick
@@ -8,7 +8,7 @@
 #   --dev   development build: root autologin on console and serial port
 #
 # Expects backend/bin/titand to exist (make build). VERSION sets the version.
-set -eu
+set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
@@ -55,10 +55,16 @@ elif [ "$(id -u)" -ne 0 ]; then
     userns="unshare --user --map-auto --map-root-user"
 fi
 
+# Reproducible image: file and squashfs timestamps come from the commit, not
+# from the clock (mkosi clamps the tree and hands SOURCE_DATE_EPOCH on to
+# mkosi.finalize and mksquashfs). Passed as an option, which sudo keeps.
+epoch=${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct 2>/dev/null || true)}
+
 # sudo may resolve commands through its secure_path even with PATH preserved.
 mkosi_bin=$(command -v mkosi)
 $userns "$mkosi_bin" --directory build \
     --image-version "$version" \
+    ${epoch:+--source-date-epoch "$epoch"} \
     ${profile:+--profile "$profile"} \
     --extra-tree "$extra" \
     --force build

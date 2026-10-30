@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # Turns the stick built by make-zip.sh into the files of a release:
 #
 #   out/release/titanos-<version>.zip (+ .sha256)   everything for a new stick
@@ -21,7 +21,7 @@
 #   TITAND=path         titand of the release (default backend/bin/titand)
 #
 # Expects out/stick and build/mkosi.output from "make zip" with the same VERSION.
-set -eu
+set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
@@ -228,6 +228,8 @@ PY
 
 echo
 echo "Release $version ($channel) in $release:"
+# The names are our own release files; ls only shows their sizes.
+# shellcheck disable=SC2012
 ls -l "$release" | awk 'NR > 1 { printf "  %10d  %s\n", $5, $9 }'
 echo
 echo "Sign before publishing: scripts/sign-release.sh $release <secret-key>"
