@@ -94,12 +94,31 @@ func (m *Manager) Certificate(hello *tls.ClientHelloInfo) *tls.Certificate {
 	return &cert
 }
 
-// pinned returns a TLS configuration that accepts exactly the certificate
-// with the fingerprint want, whoever signed it.
-func pinned(want string) *tls.Config {
+// ServerConfig returns the TLS configuration for a connection of another
+// node (one that asked for ServerName), nil for every other: the cluster
+// certificate of this node, and the other node is asked for its own.
+func (m *Manager) ServerConfig(hello *tls.ClientHelloInfo) *tls.Config {
+	cert := m.Certificate(hello)
+	if cert == nil {
+		return nil
+	}
 	return &tls.Config{
-		ServerName: ServerName,
-		MinVersion: tls.VersionTLS12,
+		Certificates: []tls.Certificate{*cert},
+		MinVersion:   tls.VersionTLS12,
+		// Not checked against an authority: Verify compares the
+		// fingerprint with the node the request is signed for.
+		ClientAuth: tls.RequestClientCert,
+	}
+}
+
+// pinned returns a TLS configuration that accepts exactly the certificate
+// with the fingerprint want, whoever signed it, and shows own: the other
+// node checks it against the node the request is signed for (Verify).
+func pinned(want string, own tls.Certificate) *tls.Config {
+	return &tls.Config{
+		ServerName:   ServerName,
+		MinVersion:   tls.VersionTLS12,
+		Certificates: []tls.Certificate{own},
 		// The chain is not checked against any authority: the fingerprint
 		// below is the whole check.
 		InsecureSkipVerify: true,
