@@ -99,9 +99,14 @@
 		}
 		surface.own = own;
 	}
-	const FLOATING_GROUPS = ['menus', 'dialogs'] as const;
+	const FLOATING_GROUPS = ['menus', 'dialogs', 'bars'] as const;
 	const ownOptions = $derived([
 		{ value: 'inherit', label: t('appearance.floating.inherit') },
+		{ value: 'own', label: t('appearance.floating.own') },
+	]);
+	// The bars are opaque unless they get own values.
+	const barOptions = $derived([
+		{ value: 'inherit', label: t('appearance.floating.opaqueBars') },
 		{ value: 'own', label: t('appearance.floating.own') },
 	]);
 
@@ -342,12 +347,12 @@
 			<h2 class="tile-title" id="h-floating">{t('appearance.floating.title')}</h2>
 			{#if draft.style === 'glass'}
 				{#each FLOATING_GROUPS as key (key)}
-					<fieldset class:divided={key === 'dialogs'}>
+					<fieldset class:divided={key !== 'menus'}>
 						<legend>{t(`appearance.floating.${key}`)}</legend>
 						<p class="hint muted">{t(`appearance.floating.${key}Desc`)}</p>
 						<Segments
 							label={t(`appearance.floating.${key}`)}
-							options={ownOptions}
+							options={key === 'bars' ? barOptions : ownOptions}
 							value={draft[key].own ? 'own' : 'inherit'}
 							onchange={(value) => setOwn(draft[key], value === 'own')}
 						/>
@@ -366,13 +371,14 @@
 								limit={LIMITS.blur}
 								unit="px"
 							/>
-							<Slider
-								id="{key}-shine"
-								label={t('appearance.shine')}
-								bind:value={draft[key].shine}
-								limit={LIMITS.shine}
-								unit="%"
-							/>
+							{#if key !== 'bars'}
+								<Slider
+									id="{key}-shine"
+									label={t('appearance.shine')}
+									bind:value={draft[key].shine}
+									limit={LIMITS.shine}
+									unit="%"
+								/>{/if}
 						{/if}
 					</fieldset>
 				{/each}
@@ -513,6 +519,11 @@
 					>
 				{/each}
 			</fieldset>
+			{#if draft.nav.layout === 'side'}<label class="check magnify"
+					><input type="checkbox" bind:checked={draft.nav.magnify} />{t(
+						'appearance.nav.magnify',
+					)}</label
+				>{/if}
 			<ol class="nav-list">
 				{#each navArranged as item, index (item.id)}
 					<li>

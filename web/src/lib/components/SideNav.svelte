@@ -43,7 +43,12 @@
 	}
 </script>
 
-<aside class="side-nav" class:folded aria-label={t('nav.label')}>
+<aside
+	class="side-nav bar-surface"
+	class:folded
+	class:magnify={appearance.current.nav.magnify}
+	aria-label={t('nav.label')}
+>
 	<a class="brand" href="/" aria-label="TitanOS"><Logo size={28} wordmark={!folded} /></a>
 	{#if clusterNodes.nodes.length > 1}<NodeMenu variant={folded ? 'badge' : 'card'} />{/if}
 	<nav>
@@ -82,7 +87,6 @@
 		flex-direction: column;
 		gap: 8px;
 		padding: 14px 12px;
-		background: var(--header);
 		border-right: 1px solid var(--border);
 	}
 	.brand {
@@ -194,6 +198,34 @@
 	}
 	.folded .fold .label {
 		display: none;
+	}
+	/* Like a dock: the symbol under the pointer grows, its neighbours a
+	   little; the rows grow with them, so nothing overlaps. */
+	.folded.magnify nav a {
+		transition: height 220ms cubic-bezier(0.2, 0.8, 0.3, 1.2);
+	}
+	.folded.magnify nav a :global(svg) {
+		transition: transform 220ms cubic-bezier(0.2, 0.8, 0.3, 1.2);
+	}
+	.folded.magnify nav a:hover {
+		height: 52px;
+	}
+	.folded.magnify nav a:hover :global(svg) {
+		transform: scale(1.45);
+	}
+	.folded.magnify nav a:has(+ a:hover),
+	.folded.magnify nav a:hover + a {
+		height: 44px;
+	}
+	.folded.magnify nav a:has(+ a:hover) :global(svg),
+	.folded.magnify nav a:hover + a :global(svg) {
+		transform: scale(1.2);
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.folded.magnify nav a,
+		.folded.magnify nav a :global(svg) {
+			transition: none;
+		}
 	}
 	@media (max-width: 760px) {
 		.side-nav {

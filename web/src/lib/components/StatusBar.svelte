@@ -46,7 +46,7 @@
 	});
 </script>
 
-<footer class="mono">
+<footer class="mono bar-surface">
 	<span>{note || left}</span>
 	<span>{right}</span>
 </footer>
@@ -60,7 +60,6 @@
 		justify-content: space-between;
 		gap: 6px 24px;
 		padding: 10px 32px;
-		background: var(--header);
 		border-top: 1px solid var(--border);
 		font-size: 0.75rem;
 		color: var(--muted);

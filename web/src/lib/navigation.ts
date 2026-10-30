@@ -37,12 +37,18 @@ export const NAV_FIXED = 'settings';
 
 /**
  * Own order and hidden tabs of an account; empty = standard. `layout` puts
- * them in the header (top, standard) or in a sidebar on the left (side).
+ * them in the header (top, standard) or in a sidebar on the left (side);
+ * `magnify` enlarges the symbols of the folded sidebar under the pointer.
  */
-export type NavPrefs = { order: string[]; hidden: string[]; layout: NavLayout };
+export type NavPrefs = { order: string[]; hidden: string[]; layout: NavLayout; magnify: boolean };
 export type NavLayout = 'top' | 'side';
 
-export const defaultNav = (): NavPrefs => ({ order: [], hidden: [], layout: 'top' });
+export const defaultNav = (): NavPrefs => ({
+	order: [],
+	hidden: [],
+	layout: 'top',
+	magnify: true,
+});
 
 // Unknown ids are kept, so a tab of a newer app version keeps its place
 // when an older version saves the appearance in between.
@@ -62,6 +68,7 @@ export function sanitizeNav(input: unknown): NavPrefs {
 		order: ids(v.order),
 		hidden: ids(v.hidden).filter((id) => id !== NAV_FIXED),
 		layout: v.layout === 'side' ? 'side' : 'top',
+		magnify: v.magnify !== false,
 	};
 }
 

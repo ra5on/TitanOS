@@ -50,13 +50,20 @@ test('sanitizing keeps unknown but valid ids and drops junk', () => {
 		order: ['fleet', 'docker'],
 		hidden: [],
 		layout: 'top',
+		magnify: true,
 	});
-	assert.deepEqual(sanitizeNav(null), { order: [], hidden: [], layout: 'top' });
-	assert.deepEqual(defaultAppearance().nav, { order: [], hidden: [], layout: 'top' });
+	assert.deepEqual(sanitizeNav(null), { order: [], hidden: [], layout: 'top', magnify: true });
+	assert.deepEqual(defaultAppearance().nav, {
+		order: [],
+		hidden: [],
+		layout: 'top',
+		magnify: true,
+	});
 	assert.deepEqual(sanitizeAppearance({ nav: { order: ['tools'] } }).nav, {
 		order: ['tools'],
 		hidden: [],
 		layout: 'top',
+		magnify: true,
 	});
 });
 
@@ -71,4 +78,10 @@ test('the sidebar is kept, anything else means the header', () => {
 
 test('every tab has an icon for the sidebar', () => {
 	for (const item of NAV) assert.ok(item.icon, item.id);
+});
+
+test('magnifying the folded sidebar is on unless switched off', () => {
+	assert.equal(sanitizeNav({}).magnify, true);
+	assert.equal(sanitizeNav({ magnify: false }).magnify, false);
+	assert.equal(sanitizeNav({ magnify: 'no' }).magnify, true);
 });

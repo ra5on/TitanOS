@@ -69,7 +69,7 @@
 	}
 </script>
 
-<header class:side>
+<header class="bar-surface" class:side>
 	{#if visited && page.url.pathname !== '/'}<button
 			type="button"
 			class="app-back"
@@ -250,7 +250,6 @@
 		align-items: center;
 		gap: 16px;
 		padding: 8px 24px;
-		background: var(--header);
 		border-bottom: 1px solid var(--border);
 	}
 	header > :global(*) {

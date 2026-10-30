@@ -12,6 +12,8 @@
 	--bg: #0e1114;
 	--surface: #161a1f;
 	--header: #12161a;
+	--bar-bg: var(--header);
+	--bar-backdrop: none;
 	--border: #232a31;
 	--text: #e6e9ed;
 	--muted: #9aa3ad;
@@ -215,6 +217,25 @@
 	-webkit-backdrop-filter: var(--menu-backdrop);
 	backdrop-filter: var(--menu-backdrop);
 	box-shadow: var(--menu-shadow);
+}
+
+/* Header, sidebar and status bar (Settings › Appearance › Bars). The glass
+   lies on a layer behind the content: a backdrop-filter on the bar itself
+   would make it a backdrop root, and its menus would no longer blur the
+   page. The bar must be positioned and form a stacking context. */
+.bar-surface {
+	background: transparent;
+	isolation: isolate;
+}
+.bar-surface::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	background: var(--bar-bg);
+	-webkit-backdrop-filter: var(--bar-backdrop);
+	backdrop-filter: var(--bar-backdrop);
+	pointer-events: none;
 }
 
 *,
