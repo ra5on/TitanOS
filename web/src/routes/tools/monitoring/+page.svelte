@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { apiPath } from '#lib/cluster-node.ts';
 	import { onMount } from 'svelte';
 	import NavigationGuard from '#lib/operations/NavigationGuard.svelte';
 	import { api, type StorageStatus } from '#lib/api.ts';
@@ -82,17 +81,10 @@
 		busy = true;
 		error = null;
 		try {
-			const response = await fetch(apiPath(`/monitoring/export?hours=${hours}&format=${format}`), {
-				credentials: 'same-origin',
-			});
-			if (!response.ok)
-				throw new Error((await response.json()).error?.message ?? response.statusText);
-			const url = URL.createObjectURL(await response.blob());
-			const link = document.createElement('a');
-			link.href = url;
-			link.download = `titanos-monitoring-${hours}h.${format}`;
-			link.click();
-			setTimeout(() => URL.revokeObjectURL(url), 1000);
+			await api.download(
+				`/monitoring/export?hours=${hours}&format=${format}`,
+				`titanos-monitoring-${hours}h.${format}`,
+			);
 		} catch (e) {
 			error = requestProblem(e, t);
 		} finally {

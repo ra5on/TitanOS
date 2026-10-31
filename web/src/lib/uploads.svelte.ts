@@ -1,8 +1,7 @@
 // The upload queue. It lives outside any page, so uploads keep running
 // while the user moves around the UI.
 
-import { apiPath } from '#lib/cluster-node.ts';
-import { api, ApiError, type UploadStatus } from './api.ts';
+import { api, apiFetch, ApiError, type UploadStatus } from './api.ts';
 
 /** Size of one request. A lost connection costs at most this much again. */
 const CHUNK_BYTES = 8 * 1024 * 1024;
@@ -120,9 +119,8 @@ async function transfer(item: Upload) {
 				return;
 			const started = performance.now();
 			try {
-				const res = await fetch(apiPath(`/files/uploads/${item.id}?offset=${item.sent}`), {
+				const res = await apiFetch(`/files/uploads/${item.id}?offset=${item.sent}`, {
 					method: 'PATCH',
-					credentials: 'same-origin',
 					body: item.file.slice(item.sent, item.sent + CHUNK_BYTES),
 				});
 				const problem = !res.ok
@@ -236,9 +234,8 @@ export async function recover(
 ) {
 	if (file.size !== status.size) throw new ApiError(409, 'upload_mismatch', '');
 	for (let offset = 0; offset < status.offset; offset += CHUNK_BYTES) {
-		const res = await fetch(apiPath(`/files/uploads/${status.id}/verify?offset=${offset}`), {
+		const res = await apiFetch(`/files/uploads/${status.id}/verify?offset=${offset}`, {
 			method: 'POST',
-			credentials: 'same-origin',
 			body: file.slice(offset, Math.min(offset + CHUNK_BYTES, status.offset)),
 		});
 		if (!res.ok)

@@ -168,16 +168,11 @@
 	/** The kept log of the start before this one, from the volume. */
 	async function exportPrevious() {
 		noPrevious = false;
-		const res = await fetch(apiPath('/logs/export?boot=previous'), { credentials: 'same-origin' });
-		if (!res.ok) {
+		try {
+			await api.download('/logs/export?boot=previous', 'titanos-log-previous-start.txt');
+		} catch {
 			noPrevious = true;
-			return;
 		}
-		const link = document.createElement('a');
-		link.href = URL.createObjectURL(await res.blob());
-		link.download = 'titanos-log-previous-start.txt';
-		link.click();
-		setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
 	}
 
 	// Messages known to be harmless: shown, but quiet, with a note why.

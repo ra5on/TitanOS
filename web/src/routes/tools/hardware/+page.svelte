@@ -2,7 +2,6 @@
 	// Hardware prüfen: a read-only compatibility report that can be saved
 	// as text or JSON (for a bug report or a forum question).
 	import { api } from '#lib/api.ts';
-	import { apiPath } from '#lib/cluster-node.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import UnboundDevices from '#lib/components/UnboundDevices.svelte';
 	import VirtCheck from '#lib/components/VirtCheck.svelte';
@@ -30,19 +29,11 @@
 	async function save(format: 'text' | 'json') {
 		saveError = '';
 		try {
-			const res = await fetch(apiPath(`/hardware/report?format=${format}`), {
-				credentials: 'same-origin',
-			});
-			if (!res.ok) throw new Error(String(res.status));
-			const blob = await res.blob();
-			const name =
-				/filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ??
-				`titanos-hardware.${format === 'text' ? 'txt' : 'json'}`;
-			const link = document.createElement('a');
-			link.href = URL.createObjectURL(blob);
-			link.download = name;
-			link.click();
-			setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
+			await api.download(
+				`/hardware/report?format=${format}`,
+				`titanos-hardware.${format === 'text' ? 'txt' : 'json'}`,
+				{ serverName: true },
+			);
 		} catch {
 			saveError = t('hwcheck.exportFailed');
 		}

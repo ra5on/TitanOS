@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { apiPath } from '#lib/cluster-node.ts';
 	import { onMount } from 'svelte';
 	import NavigationGuard from '#lib/operations/NavigationGuard.svelte';
 	import { api, type Account, type StorageStatus } from '#lib/api.ts';
@@ -101,15 +100,7 @@
 		try {
 			const q = query();
 			q.set('format', format);
-			const response = await fetch(apiPath(`/activity?${q}`), { credentials: 'same-origin' });
-			if (!response.ok)
-				throw new Error((await response.json()).error?.message ?? response.statusText);
-			const url = URL.createObjectURL(await response.blob());
-			const link = document.createElement('a');
-			link.href = url;
-			link.download = `titanos-activity-${days}d.${format}`;
-			link.click();
-			setTimeout(() => URL.revokeObjectURL(url), 1000);
+			await api.download(`/activity?${q}`, `titanos-activity-${days}d.${format}`);
 		} catch (e) {
 			error = operationError(e, t);
 		} finally {
