@@ -35,7 +35,9 @@ func (m *Manager) copyUSB(ctx context.Context, job Job) error {
 // copyItem is one file a run wants to copy.
 type copyItem struct {
 	share, rel, dst string
-	size            int64
+	// prev is the same file in the dated run before, if any.
+	prev string
+	size int64
 }
 
 // copyProblems collects what a run left out, by reason, for the warning.
@@ -139,6 +141,20 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		return err
 	}
 	folding := caseInsensitive(target, job.Destination.Folder)
+	// With dated folders each run gets a folder of its own; unchanged
+	// files are hard links to the run before, where the drive allows it.
+	dated := job.Copy != nil && job.Copy.Dated
+	base, prev := job.Destination.Folder, ""
+	links := false
+	var runs []datedRun
+	if dated {
+		runs = datedRuns(target, job.Destination.Folder, m.local(m.now()).Location())
+		if len(runs) > 0 {
+			prev = path.Join(job.Destination.Folder, runs[len(runs)-1].name)
+		}
+		base = path.Join(job.Destination.Folder, newRunName(m.local(m.now()), runs))
+		links = canLink(target, job.Destination.Folder)
+	}
 	seen := map[string]string{}
 
 	// First the list: what there is, how much, and what is new. It gives the
@@ -190,7 +206,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 					}
 					return nil
 				}
-				dst := path.Join(job.Destination.Folder, name, rel)
+				dst := path.Join(base, name, rel)
 				if folding {
 					// Foto.jpg and foto.jpg are one file there: keep the first.
 					key := strings.ToLower(dst)
@@ -215,9 +231,20 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 					problems.add("links or special files", name+"/"+rel)
 					return nil
 				}
-				items = append(items, copyItem{share: name, rel: rel, dst: dst, size: info.Size()})
+				item := copyItem{share: name, rel: rel, dst: dst, size: info.Size()}
+				compare := dst
+				if dated {
+					compare = ""
+					if prev != "" {
+						item.prev = path.Join(prev, name, rel)
+						if links {
+							compare = item.prev
+						}
+					}
+				}
+				items = append(items, item)
 				planned += uint64(info.Size())
-				if old, err := target.Lstat(dst); err != nil || old.Size() != info.Size() || !sameTime(old.ModTime(), info.ModTime()) {
+				if old, err := target.Lstat(compare); compare == "" || err != nil || old.Size() != info.Size() || !sameTime(old.ModTime(), info.ModTime()) {
 					needed += uint64(info.Size())
 				}
 				return nil
@@ -229,8 +256,22 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		}
 		root.Close()
 	}
-	if free, ok := freeSpace(target); ok && needed > free {
-		return fmt.Errorf("%w: %d MB needed, %d MB free on the drive", errNoSpace, needed>>20, free>>20)
+	// Not enough room: with the job's leave, old dated runs go first,
+	// oldest first, never the newest.
+	var freed []string
+	for {
+		free, ok := freeSpace(target)
+		if !ok || needed <= free {
+			break
+		}
+		if !dated || !job.Keep.dropsOldest() || len(runs) < 2 {
+			return fmt.Errorf("%w: %d MB needed, %d MB free on the drive", errNoSpace, needed>>20, free>>20)
+		}
+		if err := target.RemoveAll(path.Join(job.Destination.Folder, runs[0].name)); err != nil {
+			return err
+		}
+		freed = append(freed, runs[0].name)
+		runs = runs[1:]
 	}
 	m.update(job, func(s *State) { s.BytesTotal = planned })
 
@@ -276,8 +317,13 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 			problems.add(problemOf(err), item.share+"/"+item.rel)
 			continue
 		}
-		base := total
-		_, err := copyFilePaced(ctx, root, item.rel, target, item.dst, pace, func(done int64) { progress(base + uint64(done)) })
+		offset := total
+		var err error
+		if item.prev != "" && links {
+			_, err = copyOrLink(ctx, root, item.rel, target, item.dst, item.prev, pace, func(done int64) { progress(offset + uint64(done)) })
+		} else {
+			_, err = copyFilePaced(ctx, root, item.rel, target, item.dst, pace, func(done int64) { progress(offset + uint64(done)) })
+		}
 		if err != nil {
 			if fatalTarget(err) {
 				return err
@@ -287,6 +333,16 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		total += uint64(item.size)
 		progress(total)
 	}
+	if job.Copy != nil && job.Copy.Mirror && !dated {
+		if err := m.mirror(ctx, job, target, sources, &problems); err != nil {
+			return err
+		}
+	}
+	if dated {
+		if err := m.keepRuns(job, target, datedRuns(target, job.Destination.Folder, m.local(m.now()).Location())); err != nil {
+			return err
+		}
+	}
 	// Everything on the drive, also the renames, before it counts as done:
 	// whoever pulls the drive then loses nothing.
 	if err := syncTarget(target); err != nil {
@@ -295,6 +351,9 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 	m.update(job, func(s *State) {
 		s.Bytes, s.BytesDone, s.BytesTotal, s.Percent, s.Warning, s.Skipped = total, total, planned, 100, problems.String(), problems.total()
 	})
+	if len(freed) > 0 && m.OnFreed != nil && job.Keep.dropsOldest() {
+		m.OnFreed(job.ID, len(freed))
+	}
 	return nil
 }
 
@@ -327,8 +386,10 @@ func sameTime(a, b time.Time) bool {
 	return d > -2*time.Second && d < 2*time.Second
 }
 
-// freeSpace is what the destination has left.
-func freeSpace(target *os.Root) (uint64, bool) {
+// freeSpace is what the destination has left; a variable for tests.
+var freeSpace = statfsFree
+
+func statfsFree(target *os.Root) (uint64, bool) {
 	var st syscall.Statfs_t
 	if err := syscall.Statfs(target.Name(), &st); err != nil {
 		return 0, false

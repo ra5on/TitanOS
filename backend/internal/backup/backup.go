@@ -174,6 +174,9 @@ type Job struct {
 	WindowFrom string   `json:"windowFrom,omitempty"`
 	WindowTo   string   `json:"windowTo,omitempty"`
 	Keep       Keep     `json:"keep"`
+	// Copy holds the options of readable copies; nil is a plain copy that
+	// only adds and replaces. Older versions ignore it.
+	Copy *CopyOptions `json:"copy,omitempty"`
 	// Bandwidth limits how fast a run moves data; nil is no limit.
 	Bandwidth *Bandwidth `json:"bandwidth,omitempty"`
 	// Password encrypts the backup. It is made once and never changes.
@@ -422,6 +425,9 @@ func check(job Job, shares []Source, volumes []string) error {
 	}
 	if err := checkKeep(job.Keep); err != nil {
 		return err
+	}
+	if c := job.Copy; c != nil && (!plainCopy(job.Destination.Type) || c.MirrorDays < 0 || c.MirrorDays > 3650) {
+		return invalid("options of the readable copy")
 	}
 	d := job.Destination
 	switch d.Type {
