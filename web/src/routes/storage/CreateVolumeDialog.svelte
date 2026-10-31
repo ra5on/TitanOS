@@ -9,6 +9,7 @@
 	} from '#lib/api.ts';
 	import { btrfsUsable } from './btrfs.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import HelpTip from '#lib/components/HelpTip.svelte';
 	import { formatDiskBytes } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import DiskPicker from './DiskPicker.svelte';
@@ -47,6 +48,8 @@
 	// Optional LUKS2 encryption, off by default. The password is needed
 	// after every start; nothing can recover it.
 	let encrypt = $state(false);
+	// Regular checks, all chosen by default (decided 31.10.2026).
+	let checks = $state({ parity: true, smartShort: true, smartLong: true, snapshots: true });
 	let password = $state('');
 	let repeat = $state('');
 	let understood = $state(false);
@@ -139,6 +142,7 @@
 				erase: $state.snapshot(selected),
 				identities: $state.snapshot(selectionIdentities),
 				encrypt: encrypt || undefined,
+				checks: { ...checks, snapshots: filesystem === 'btrfs' && checks.snapshots },
 				password: encrypt ? password : undefined,
 			});
 			password = '';
@@ -180,7 +184,7 @@
 		</label>
 
 		<div class="field-row">
-			<span class="label" id="fs-label">{t('create.filesystem')}</span>
+			<span class="label" id="fs-label">{t('create.filesystem')}<HelpTip term="filesystem" /></span>
 			<div
 				class="options two"
 				role="radiogroup"
@@ -205,7 +209,7 @@
 		</div>
 
 		<div class="field-row">
-			<span class="label" id="level-label">{t('create.level')}</span>
+			<span class="label" id="level-label">{t('create.level')}<HelpTip term="raid" /></span>
 			<div
 				class="options"
 				role="radiogroup"
@@ -249,11 +253,42 @@
 			{/if}
 		</div>
 
+		<fieldset class="checks">
+			<legend>{t('create.checks')}<HelpTip term="checks" /></legend>
+			<p class="muted small">{t('create.checksIntro')}</p>
+			<label class="confirm"
+				><input type="checkbox" bind:checked={checks.parity} /><span
+					><strong>{t(filesystem === 'btrfs' ? 'create.checkScrub' : 'create.checkParity')}</strong>
+					<span class="muted small"
+						>{t(filesystem === 'btrfs' ? 'create.checkScrubHint' : 'create.checkParityHint')}</span
+					></span
+				></label
+			>
+			<label class="confirm"
+				><input type="checkbox" bind:checked={checks.smartShort} /><span
+					><strong>{t('create.checkSmartShort')}</strong>
+					<span class="muted small">{t('create.checkSmartShortHint')}</span></span
+				></label
+			>
+			<label class="confirm"
+				><input type="checkbox" bind:checked={checks.smartLong} /><span
+					><strong>{t('create.checkSmartLong')}</strong>
+					<span class="muted small">{t('create.checkSmartLongHint')}</span></span
+				></label
+			>
+			{#if filesystem === 'btrfs'}<label class="confirm"
+					><input type="checkbox" bind:checked={checks.snapshots} /><span
+						><strong>{t('create.checkSnapshots')}</strong>
+						<span class="muted small">{t('create.checkSnapshotsHint')}</span></span
+					></label
+				>{/if}
+		</fieldset>
+
 		<div class="field-row">
 			<label class="confirm">
 				<input type="checkbox" bind:checked={encrypt} />
 				<span
-					><strong>{t('crypt.createEncrypt')}</strong>
+					><strong>{t('crypt.createEncrypt')}</strong><HelpTip term="luks" />
 					<span class="muted small">{t('crypt.createEncryptDesc')}</span></span
 				>
 			</label>
@@ -408,5 +443,20 @@
 		font-size: 0.75rem;
 		white-space: pre-wrap;
 		word-break: break-word;
+	}
+	.checks {
+		display: grid;
+		gap: 8px;
+		margin: 0;
+		padding: 12px 14px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-ctl);
+	}
+	.checks legend {
+		padding: 0 6px;
+		font-weight: 600;
+	}
+	.checks p {
+		margin: 0;
 	}
 </style>

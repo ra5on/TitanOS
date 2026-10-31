@@ -2,6 +2,7 @@
 	import { api } from '#lib/api.ts';
 	import { formatBytes, formatBytesOf, formatDuration } from '#lib/format.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
+	import HelpTip from '#lib/components/HelpTip.svelte';
 	import { system } from '#lib/system.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import type { TileOptions } from '../options.ts';
@@ -89,7 +90,7 @@
 	>
 		{#each options.systemFields as field}<div>
 				{#if options.showLabels}<dt data-edit-part="labels">
-						{t(`dashboard.field.${field}`)}
+						{t(`dashboard.field.${field}`)}{#if field === 'slot'}<HelpTip term="slot" />{/if}
 					</dt>{/if}
 				<dd class:hostname={field === 'hostname'} data-edit-part="value">{value(field)}</dd>
 			</div>{/each}

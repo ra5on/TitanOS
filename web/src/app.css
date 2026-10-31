@@ -454,6 +454,15 @@ input[type='checkbox'] {
 	background: var(--status-error);
 	filter: brightness(1.08);
 }
+/* A button that opens the confirmation of a destroying action: red, but
+   only the confirming button in the dialog is filled. */
+.btn-danger-outline {
+	border-color: color-mix(in srgb, var(--status-error) 60%, transparent);
+	color: var(--status-error);
+}
+.btn-danger-outline:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--status-error) 12%, transparent);
+}
 
 .notice-ok {
 	padding: 10px 14px;

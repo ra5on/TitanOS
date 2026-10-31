@@ -3,6 +3,7 @@
 	import type { Volume } from '#lib/api.ts';
 	import Snapshots from './Snapshots.svelte';
 	import Icon from '#lib/components/Icon.svelte';
+	import HelpTip from '#lib/components/HelpTip.svelte';
 	import { formatDiskBytes, formatDuration, formatPercent } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { stateTone } from './labels.ts';
@@ -100,7 +101,7 @@
 >
 	<div class="head">
 		<span class="mono name">{volume.name}</span>
-		<span class="chip">{t(`level.${volume.level}`)}</span>
+		<span class="chip">{t(`level.${volume.level}`)}</span><HelpTip term="raid" />
 		<span class="chip">{t(`fs.${volume.filesystem}`)}</span>
 		<span class="chip {tone}">{t(`state.${volume.state}`)}</span>
 		{#if volume.encryption}<span class="chip" class:warn={locked}
@@ -235,7 +236,14 @@
 					onclick={onprofile}
 					disabled={busy}>{t('btrfs.profileChange')}</button
 				>{/if}
-			<button type="button" class="btn delete" onclick={ondelete} disabled={busy}
+		</div>
+		<!-- Destroying actions stand apart from maintenance, in red. -->
+		<div class="danger-zone">
+			<div>
+				<strong>{t('ui.dangerZone')}</strong>
+				<p class="muted">{t('storage.deleteHint')}</p>
+			</div>
+			<button type="button" class="btn btn-danger" onclick={ondelete} disabled={busy}
 				>{t('storage.delete')}</button
 			>
 		</div>
@@ -391,7 +399,24 @@
 		gap: 8px;
 		padding-top: 4px;
 	}
-	.delete {
-		margin-left: auto;
+	.danger-zone {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px 16px;
+		margin-top: 6px;
+		padding-top: 12px;
+		border-top: 1px solid var(--border);
+	}
+	.danger-zone strong {
+		color: var(--status-error);
+		font-size: 0.8125rem;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+	}
+	.danger-zone p {
+		margin: 4px 0 0;
+		font-size: 0.8125rem;
 	}
 </style>

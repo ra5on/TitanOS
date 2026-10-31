@@ -333,7 +333,7 @@
 							{#if manageable && account.name !== me?.name}
 								<button
 									type="button"
-									class="btn"
+									class="btn btn-danger-outline"
 									onclick={() => (
 										(dialogError = ''),
 										(dialog = { kind: 'delete', name: account.name })

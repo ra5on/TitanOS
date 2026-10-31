@@ -141,10 +141,14 @@ func (s *Server) handleSmartDisk(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreateVolume(w http.ResponseWriter, r *http.Request) {
-	var req storage.CreateRequest
-	if !readJSON(w, r, &req) {
+	var body struct {
+		storage.CreateRequest
+		Checks volumeChecks `json:"checks"`
+	}
+	if !readJSON(w, r, &body) {
 		return
 	}
+	req := body.CreateRequest
 	noteTarget(r, req.Name)
 	if req.Encrypt && !s.requireWebSession(w, r) {
 		return
@@ -154,6 +158,7 @@ func (s *Server) handleCreateVolume(w http.ResponseWriter, r *http.Request) {
 		writeStorageError(w, r, "create volume", err)
 		return
 	}
+	s.addVolumeChecks(context.WithoutCancel(r.Context()), r, req, body.Checks)
 	w.WriteHeader(http.StatusCreated)
 }
 

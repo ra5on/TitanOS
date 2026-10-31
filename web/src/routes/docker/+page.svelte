@@ -691,7 +691,7 @@
 					<a class="btn" href="/docker/apps/{app}">{t('docker.edit')}</a>
 					<button
 						type="button"
-						class="btn"
+						class="btn btn-danger-outline"
 						disabled={busyKeys.has(appKey(app))}
 						onclick={() => askRemoveApp(app)}>{t('docker.remove')}</button
 					>
@@ -721,7 +721,7 @@
 				<a class="btn" href="/docker/apps/{app}">{t('docker.edit')}</a>
 				<button
 					type="button"
-					class="btn"
+					class="btn btn-danger-outline"
 					disabled={busyKeys.has(appKey(app))}
 					onclick={() => askRemoveApp(app)}>{t('docker.remove')}</button
 				>

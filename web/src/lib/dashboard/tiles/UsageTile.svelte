@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { formatBytes } from '#lib/format.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
+	import HelpTip from '#lib/components/HelpTip.svelte';
 	import { system, systemHistory } from '#lib/system.svelte.ts';
 	import { memoryParts } from '#lib/memory.ts';
 	import type { TileOptions } from '../options.ts';
@@ -117,13 +118,11 @@
 						>{!system.reachable || !ram ? '–' : formatBytes(ram.occupied)}</b
 					>
 				</div>
-				<div>
-					<span>{t('memoryPolicy.pressure')}</span><b
-						>{!system.reachable || !info.memory.pressure
-							? t('common.unavailable')
-							: `${info.memory.pressure.someAvg10.toFixed(1)} % / ${info.memory.pressure.fullAvg10.toFixed(1)} %`}</b
-					>
-				</div>
+				{#if system.reachable && info.memory.pressure}<div>
+						<span>{t('memoryPolicy.pressure')}<HelpTip term="psi" /></span><b
+							>{`${info.memory.pressure.someAvg10.toFixed(1)} % / ${info.memory.pressure.fullAvg10.toFixed(1)} %`}</b
+						>
+					</div>{/if}
 			</div>{/if}
 		{#if part === 'details' && kind === 'cpu' && options.details && info.cpu.threadUsage?.length}<div
 				class="core-grid"
