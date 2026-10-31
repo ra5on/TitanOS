@@ -91,7 +91,7 @@ test('the settings navigation keeps its fixed groups, order and role filter', as
 		.flatMap((g) => g.entries)
 		.filter((e) => e.isNew)
 		.map((e) => e.id);
-	assert.deepEqual(fresh, ['ddns', 'cluster', 'firewall', 'letsencrypt', 'wireguard']);
+	assert.deepEqual(fresh, ['ddns', 'cluster', 'firewall', 'letsencrypt', 'wireguard', 'mcp']);
 	const user = settingsEntries('', false, label).flatMap((g) => g.entries.map((e) => e.id));
 	assert.deepEqual(user, ['about', 'temperatures', 'api', 'appearance']);
 	const ssh = settingsEntries('SSH', true, label).flatMap((g) => g.entries);
