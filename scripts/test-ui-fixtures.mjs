@@ -256,6 +256,21 @@ export function fixtureFactory(browser, errors) {
       // GET /plugins/netbird; the handlers below change it like titand.
       netbird: netbirdStatus(),
       netbirdCalls: [],
+      // role "setup": a fresh stick. The session asks for the owner account
+      // until POST /setup; setupBackups is what GET /setup/backups finds on
+      // the disks (scripts may fill it), setupCalls records what was sent.
+      setupDone: role !== "setup",
+      setupBackups: [],
+      setupCalls: [],
+      // GET /network for the bridge step of /welcome (setup variant only).
+      network: {
+        config: { bridge: false },
+        configured: false,
+        bridgeReady: false,
+        pending: null,
+        pendingSeconds: 0,
+        interfaces: [{ name: "enp3s0", carrier: true }],
+      },
     };
     await ctx.route("**/api/v1/**", async (route) => {
       const url = new URL(route.request().url()),
@@ -526,10 +541,40 @@ export function fixtureFactory(browser, errors) {
       if (path === "/session")
         return json({
           configAvailable: true,
-          setupRequired: false,
-          user: { name: "alex", role, twoFactor: false },
+          setupRequired: !data.setupDone,
+          user: data.setupDone
+            ? {
+                name: "alex",
+                role: role === "setup" ? "owner" : role,
+                twoFactor: false,
+              }
+            : null,
           hostname: "titan-test",
         });
+      if (path === "/setup" && method === "POST") {
+        const body = route.request().postDataJSON();
+        data.setupCalls.push(["setup", body]);
+        data.setupDone = true;
+        return json({ name: body.name, role: "owner" });
+      }
+      if (path === "/setup/backups")
+        return json({ backups: data.setupBackups });
+      if (path.startsWith("/setup/restore")) {
+        data.setupCalls.push(["restore", path]);
+        return json({});
+      }
+      // Only for the setup variant; other scripts keep their own answers.
+      if (role === "setup" && path === "/network" && method === "GET")
+        return json({ network: data.network });
+      if (role === "setup" && path === "/network/bridge" && method === "POST") {
+        data.network = {
+          ...data.network,
+          config: { bridge: true },
+          configured: true,
+          bridgeReady: true,
+        };
+        return json({ network: data.network });
+      }
       if (path === "/preferences") return json(data.prefs);
       if (path === "/preferences/shares") {
         data.prefs.shares = route.request().postDataJSON();

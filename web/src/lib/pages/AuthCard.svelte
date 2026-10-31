@@ -238,6 +238,15 @@
 	.clock span {
 		font-size: 0.8125rem;
 	}
+	/* Phones: less frame around the card, more room for the fields. */
+	@media (max-width: 480px) {
+		main {
+			padding: 16px;
+		}
+		.card {
+			padding: 28px 20px 24px;
+		}
+	}
 	@media (max-width: 760px) {
 		main.left,
 		main.right {
