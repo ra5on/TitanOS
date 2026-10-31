@@ -24,7 +24,8 @@
 		type Bandwidth,
 		type BandwidthForm,
 	} from '#lib/backup-bandwidth.ts';
-	import FolderTree from './FolderTree.svelte';
+	import FolderPicker from './FolderPicker.svelte';
+	import { selectionOfIn, shareOfIn, type Chosen } from './selection.ts';
 	import KeepVersions, { keepPayload, type Keep } from './KeepVersions.svelte';
 	import SnapshotFiles from './SnapshotFiles.svelte';
 	import SmbTargets, { type SmbTarget } from './SmbTargets.svelte';
@@ -287,57 +288,42 @@
 		};
 	});
 
-	type Mode = 'whole' | 'all' | 'only';
 	const EXTRAS = ['appdata', 'vms', 'lxc', 'config'] as const;
-	/** Per share: all of it, or with folders left out, or only some folders. */
-	let modes = $state<Record<string, Mode>>({});
 	let patterns = $state('');
 	let bandwidth = $state<BandwidthForm>(bandwidthForm());
+	/** What is saved, as one list of folders (decided 31.10.2026). */
+	let chosen = $state<Chosen[]>([]);
+	/** The row whose folder is being picked; -1 adds a new one. */
+	let picking = $state<number | null>(null);
 
+	const shareOf = (c: Chosen) => shareOfIn(overview?.shares ?? [], c);
 	function loadSelection(job: Job) {
-		modes = {};
+		const list: Chosen[] = [];
+		const volumeOf = (share: string) =>
+			overview?.shares.find((s) => s.name === share)?.volume ?? '';
 		for (const name of job.sources) {
-			modes[name] = job.folders?.[name]?.length
-				? 'only'
-				: job.skip?.some((skip) => skip.startsWith(`${name}/`))
-					? 'all'
-					: 'whole';
+			const volume = volumeOf(name);
+			const only = job.folders?.[name] ?? [];
+			if (only.length) for (const f of only) list.push({ volume, path: `${name}/${f}` });
+			else list.push({ volume, path: name });
 		}
+		for (const v of job.volumes ?? []) list.push({ volume: v, path: '' });
+		for (const place of job.places ?? []) {
+			const at = place.indexOf('/');
+			list.push({ volume: place.slice(0, at), path: place.slice(at + 1) });
+		}
+		chosen = list.length ? list : [{ volume: '', path: '' }];
 		patterns = (job.patterns ?? []).join('\n');
 		bandwidth = bandwidthForm(job.bandwidth);
 	}
 
-	function setMode(name: string, mode: Mode) {
-		if (!draft) return;
-		modes[name] = mode;
-		// What belongs to the other way of choosing is dropped.
-		if (mode !== 'only' && draft.folders) delete draft.folders[name];
-		if (mode !== 'all' && draft.skip)
-			draft.skip = draft.skip.filter((skip) => !skip.startsWith(`${name}/`));
-	}
+	const selectionOf = (list: Chosen[]) => selectionOfIn(overview?.shares ?? [], list);
 
-	function setFolders(name: string, folders: string[], skip: string[]) {
-		if (!draft) return;
-		draft.folders = { ...draft.folders, [name]: folders };
-		draft.skip = skip;
-	}
-
-	/** Volumes whose folder tree is open, for choosing folders outside shares. */
-	let placesOpen = $state<Record<string, boolean>>({});
-	function toggleVolume(volume: string) {
-		if (!draft) return;
-		const list = draft.volumes ?? [];
-		const on = !list.includes(volume);
-		draft.volumes = on ? [...list, volume] : list.filter((v) => v !== volume);
-		// A whole volume covers its folders.
-		if (on) draft.places = (draft.places ?? []).filter((p) => !p.startsWith(`${volume}/`));
-	}
-	function setPlaces(volume: string, folders: string[]) {
-		if (!draft) return;
-		draft.places = [
-			...(draft.places ?? []).filter((p) => !p.startsWith(`${volume}/`)),
-			...folders.map((f) => `${volume}/${f}`),
-		];
+	function pick(c: Chosen) {
+		if (picking === null) return;
+		if (picking < 0) chosen = [...chosen.filter((x) => x.volume), c];
+		else chosen[picking] = c;
+		picking = null;
 	}
 
 	function toggleExtra(extra: string) {
@@ -362,19 +348,6 @@
 	function toggleWindow(on: boolean) {
 		if (!draft) return;
 		[draft.windowFrom, draft.windowTo] = on ? ['01:00', '06:00'] : ['', ''];
-	}
-
-	function toggleSource(name: string) {
-		if (!draft) return;
-		const on = !draft.sources.includes(name);
-		draft.sources = on
-			? [...draft.sources, name]
-			: draft.sources.filter((source) => source !== name);
-		if (on) modes[name] = 'whole';
-		else {
-			setMode(name, 'whole');
-			delete modes[name];
-		}
 	}
 
 	/** A pairing code of another TitanOS: titanos-backup: and base64url JSON. */
@@ -510,25 +483,17 @@
 			busy = false;
 			return;
 		}
-		const chosen = draft.sources.filter(
-			(name) => modes[name] === 'only' && !draft!.folders?.[name]?.length,
+		const selection = selectionOf(chosen);
+		// Left-out folders of shares that are no longer chosen go too.
+		const skip = (draft.skip ?? []).filter((entry) =>
+			selection.sources.includes(entry.split('/')[0]),
 		);
-		if (chosen.length > 0) {
-			error = { text: t('backup.noFolderChosen', { share: chosen[0] }), detail: '' };
-			busy = false;
-			return;
-		}
-		const folders = Object.fromEntries(
-			Object.entries(draft.folders ?? {}).filter(
-				([name, list]) => modes[name] === 'only' && list.length > 0,
-			),
-		);
-		const skip = (draft.skip ?? []).filter((entry) => modes[entry.split('/')[0]] === 'all');
 		const times = [...new Set((draft.times ?? []).filter(Boolean))].sort();
 		const weekdays = [...(draft.weekdays ?? [])].sort();
 		const job = {
 			...draft,
-			folders,
+			sources: selection.sources,
+			folders: selection.folders,
 			skip,
 			patterns: patterns
 				.split('\n')
@@ -557,8 +522,8 @@
 						mirrorDays: draft.copy?.mirror ? Number(draft.copy.mirrorDays) || 30 : 0,
 					}
 				: undefined,
-			volumes: draft.volumes ?? [],
-			places: draft.places ?? [],
+			volumes: selection.volumes,
+			places: selection.places,
 		};
 		try {
 			apply(
@@ -1020,109 +985,94 @@
 		{/if}
 		<fieldset>
 			<legend>{t('backup.sources')}</legend>
-			{#each overview.shares as share (share.name)}
-				<div class="source">
-					<div class="row">
-						<label class="check"
-							><input
-								type="checkbox"
-								checked={draft.sources.includes(share.name)}
-								onchange={() => toggleSource(share.name)}
-							/><span class="mono">{share.name}</span></label
-						>
-						{#if draft.sources.includes(share.name)}
-							<select
-								class="field narrow"
-								aria-label={t('backup.modeOf', { share: share.name })}
-								value={modes[share.name] ?? 'whole'}
-								onchange={(e) => setMode(share.name, e.currentTarget.value as Mode)}
-							>
-								<option value="whole">{t('backup.mode.whole')}</option>
-								<option value="all">{t('backup.mode.all')}</option>
-								<option value="only">{t('backup.mode.only')}</option>
-							</select>
-						{/if}
-					</div>
-					{#if draft.sources.includes(share.name) && modes[share.name] && modes[share.name] !== 'whole'}
-						<p class="muted">
-							{t(modes[share.name] === 'only' ? 'backup.onlyHint' : 'backup.allHint')}
-						</p>
-						<FolderTree
-							share={share.name}
-							mode={modes[share.name] as 'all' | 'only'}
-							folders={draft.folders?.[share.name] ?? []}
-							skip={draft.skip ?? []}
-							onchange={(folders, skip) => setFolders(share.name, folders, skip)}
-						/>
-					{/if}
+			<p class="muted small">{t('backup.pick.hint')}</p>
+			{#each chosen as c, i (i)}
+				<div class="picked">
+					<button
+						type="button"
+						class="field pickfield"
+						onclick={() => (picking = i)}
+						aria-label={t('backup.pick.change')}
+						>{#if c.volume}<Icon name="folder" />
+							<span class="mono"
+								>{c.volume}{c.path ? ' › ' + c.path.replaceAll('/', ' › ') : ''}</span
+							>{#if !c.path}<span class="muted small">{t('backup.pick.whole')}</span
+								>{:else if shareOf(c) && !shareOf(c)?.rest}<span class="chip"
+									>{t('backup.pick.share')}</span
+								>{/if}{:else}<span class="muted">{t('backup.pick.choose')}</span>{/if}</button
+					>
+					{#if chosen.length > 1 || c.volume}<button
+							type="button"
+							class="btn small"
+							aria-label={t('backup.pick.remove')}
+							onclick={() =>
+								(chosen =
+									chosen.length > 1
+										? chosen.filter((_, n) => n !== i)
+										: [{ volume: '', path: '' }])}><Icon name="close" /></button
+						>{/if}
 				</div>
 			{/each}
-			{#if overview.volumes?.length}
-				<p class="legend-sub">{t('backup.volumesTitle')}</p>
-				{#each overview.volumes as volume (volume)}
-					{@const whole = draft.volumes?.includes(volume)}
-					{@const chosen = (draft.places ?? []).filter((p) => p.startsWith(`${volume}/`)).length}
-					<div class="source">
-						<div class="row">
+			<div>
+				<button type="button" class="btn small" onclick={() => (picking = -1)}
+					><Icon name="plus" /> {t('backup.pick.add')}</button
+				>
+			</div>
+			<p class="muted small">{t('backup.neverSaved')}</p>
+			<details class="more">
+				<summary>{t('backup.moreOptions')}</summary>
+				{#if !plainCopy(draft.destination.type)}<p class="legend-sub">{t('backup.extras')}</p>
+					<div class="row">
+						{#each EXTRAS as extra (extra)}
 							<label class="check"
 								><input
 									type="checkbox"
-									checked={whole}
-									onchange={() => toggleVolume(volume)}
-								/><span>{t('backup.wholeVolume', { volume })}</span></label
+									checked={draft.extras?.includes(extra)}
+									onchange={() => toggleExtra(extra)}
+								/><span>{t(`backup.extra.${extra}` as 'backup.extra.appdata')}</span></label
 							>
-							{#if !whole}<button
-									type="button"
-									class="btn small"
-									aria-expanded={!!placesOpen[volume]}
-									onclick={() => (placesOpen[volume] = !placesOpen[volume])}
-									>{t('backup.foldersOutside')}</button
-								>{#if chosen}<span class="muted small"
-										>{t('backup.foldersChosen', { n: chosen })}</span
-									>{/if}{/if}
-						</div>
-						{#if placesOpen[volume] && !whole}
-							<FolderTree
-								share=""
-								{volume}
-								mode="only"
-								folders={(draft.places ?? [])
-									.filter((p) => p.startsWith(`${volume}/`))
-									.map((p) => p.slice(volume.length + 1))}
-								skip={[]}
-								onchange={(folders) => setPlaces(volume, folders)}
-							/>
-						{/if}
+						{/each}
 					</div>
-				{/each}
-				<p class="muted small">{t('backup.neverSaved')}</p>
-			{/if}
-			{#if !plainCopy(draft.destination.type)}<p class="legend-sub">{t('backup.extras')}</p>
-				<div class="row">
-					{#each EXTRAS as extra (extra)}
-						<label class="check"
-							><input
-								type="checkbox"
-								checked={draft.extras?.includes(extra)}
-								onchange={() => toggleExtra(extra)}
-							/><span>{t(`backup.extra.${extra}` as 'backup.extra.appdata')}</span></label
-						>
-					{/each}
-				</div>
-			{/if}{#if !plainCopy(draft.destination.type)}<ApplicationSelection
-					bind:applications={draft.applications}
-					bind:allowStop={draft.allowStop}
-				/>{/if}{#if draft.extras?.includes('config')}<p class="notice-warn">
-					{t('backup.extra.configHint')}
-				</p>{/if}
-			<label class="block"
-				><span>{t('backup.patterns')}</span>
-				<textarea class="field mono" rows="2" bind:value={patterns} placeholder="*.tmp"></textarea>
-			</label>
-			<p class="muted">
-				{t(plainCopy(draft.destination.type) ? 'backup.copyPatterns' : 'backup.patternsHint')}
-			</p>
+					{#if draft.extras?.includes('config')}<p class="notice-warn">
+							{t('backup.extra.configHint')}
+						</p>{/if}
+					<ApplicationSelection
+						bind:applications={draft.applications}
+						bind:allowStop={draft.allowStop}
+					/>
+				{/if}
+				{#if draft.skip?.length}
+					<p class="legend-sub">{t('backup.skipList')}</p>
+					<div class="row">
+						{#each draft.skip as entry (entry)}<span class="chip"
+								>{entry}
+								<button
+									type="button"
+									class="link"
+									aria-label={t('backup.pick.remove')}
+									onclick={() => (draft!.skip = draft!.skip!.filter((e) => e !== entry))}
+									><Icon name="close" size={12} /></button
+								></span
+							>{/each}
+					</div>
+				{/if}
+				<label class="block"
+					><span>{t('backup.patterns')}</span>
+					<textarea class="field mono" rows="2" bind:value={patterns} placeholder="*.tmp"
+					></textarea>
+				</label>
+				<p class="muted">
+					{t(plainCopy(draft.destination.type) ? 'backup.copyPatterns' : 'backup.patternsHint')}
+				</p>
+			</details>
 		</fieldset>
+		{#if picking !== null}<FolderPicker
+				volumes={overview.volumes ?? []}
+				shares={overview.shares}
+				start={picking >= 0 && chosen[picking]?.volume ? chosen[picking] : undefined}
+				onpick={pick}
+				onclose={() => (picking = null)}
+			/>{/if}
 		<fieldset class="divided">
 			<legend>{t('backup.destination')}</legend>
 			<div class="segments" role="radiogroup" aria-label={t('backup.destination')}>
@@ -1661,11 +1611,8 @@
 				type="submit"
 				class="btn btn-primary"
 				disabled={busy ||
-					(draft.sources.length === 0 &&
-						!draft.extras?.length &&
-						!draft.applications?.length &&
-						!draft.volumes?.length &&
-						!draft.places?.length)}>{isNew ? t('backup.create') : t('notify.save')}</button
+					(!chosen.some((c) => c.volume) && !draft.extras?.length && !draft.applications?.length)}
+				>{isNew ? t('backup.create') : t('notify.save')}</button
 			>
 		</div>
 	</form>
@@ -1940,6 +1887,40 @@
 		height: 18px;
 		margin: 0;
 	}
+	.picked {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+		margin-bottom: 6px;
+	}
+	.pickfield {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+		flex: 1;
+		min-width: 0;
+		text-align: left;
+		cursor: pointer;
+	}
+	.pickfield .mono {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.more {
+		margin-top: 8px;
+	}
+	.more summary {
+		cursor: pointer;
+		color: var(--accent);
+	}
+	.link {
+		background: none;
+		border: 0;
+		color: inherit;
+		cursor: pointer;
+		padding: 0 0 0 4px;
+	}
 	.formats {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
@@ -2034,9 +2015,6 @@
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
-	}
-	.source {
-		margin-bottom: 0.6rem;
 	}
 	.legend-sub {
 		margin: 0.8rem 0 0.3rem;

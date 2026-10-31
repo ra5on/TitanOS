@@ -302,7 +302,8 @@ func (m *Manager) VolumeFolders(volume, dir string) ([]string, error) {
 	}
 	folders := []string{}
 	for _, entry := range entries {
-		if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || (dir == "" && slices.Contains(neverSaved, entry.Name())) {
+		// Private data, snapshots and recycle bins are never saved, at no level.
+		if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || slices.Contains(neverSaved, entry.Name()) || strings.HasPrefix(entry.Name(), ".titanos") {
 			continue
 		}
 		folders = append(folders, entry.Name())
