@@ -236,7 +236,7 @@ func (m *Manager) EnableCache(ctx context.Context, name, diskName, mode, identit
 	if err != nil {
 		return err
 	}
-	disk, err := m.usable(m.status(devices, m.arrays(ctx)), diskName)
+	disk, err := m.usable(m.status(ctx, devices, m.arrays(ctx)), diskName)
 	if err != nil {
 		return err
 	}
@@ -674,12 +674,12 @@ func parseCacheStatusOK(output string) (CacheView, bool) {
 }
 
 // cacheView is the state of a volume's cache for the page.
-func (m *Manager) cacheView(cfg VolumeConfig) *CacheView {
+func (m *Manager) cacheView(ctx context.Context, cfg VolumeConfig) *CacheView {
 	if cfg.Cache == nil {
 		return nil
 	}
 	view := CacheView{ReadHitRate: -1}
-	if out, err := m.runner.Run(context.Background(), "", "dmsetup", "status", cacheName(cfg.Name)); err == nil {
+	if out, err := m.runner.Run(ctx, "", "dmsetup", "status", cacheName(cfg.Name)); err == nil {
 		view = parseCacheStatus(out)
 		view.Active = true
 	}

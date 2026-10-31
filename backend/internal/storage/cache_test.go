@@ -186,7 +186,7 @@ func TestEnableCacheTakesEffectOnMount(t *testing.T) {
 		t.Fatal(got)
 	}
 	// The status shows it, and grow refuses the volume.
-	view := m.cacheView(cfg)
+	view := m.cacheView(context.Background(), cfg)
 	if !view.Active || view.TotalBlocks != 1000 || view.Missing {
 		t.Fatalf("view: %+v", view)
 	}

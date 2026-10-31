@@ -286,7 +286,7 @@ func (m *Manager) replaceMissingBtrfs(ctx context.Context, volume VolumeConfig, 
 	if present == 0 || present >= btrfsDiskCount(volume) {
 		return fmt.Errorf("%w: a Btrfs member must be missing", ErrNotPossible)
 	}
-	disk, err := m.usable(m.status(devices, m.arrays(ctx)), diskName)
+	disk, err := m.usable(m.status(ctx, devices, m.arrays(ctx)), diskName)
 	if err != nil {
 		return err
 	}

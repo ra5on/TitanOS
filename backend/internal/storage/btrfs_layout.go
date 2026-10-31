@@ -170,7 +170,7 @@ func (m *Manager) addBtrfsDisk(ctx context.Context, volume VolumeConfig, diskNam
 	if len(parts)+1 < layout.minDisks {
 		return ErrTooFewDisks
 	}
-	disk, err := m.usable(m.status(devices, m.arrays(ctx)), diskName)
+	disk, err := m.usable(m.status(ctx, devices, m.arrays(ctx)), diskName)
 	if err != nil {
 		return err
 	}

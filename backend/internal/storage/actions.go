@@ -233,7 +233,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) error {
 	if err != nil {
 		return err
 	}
-	status := m.status(devices, m.arrays(ctx))
+	status := m.status(ctx, devices, m.arrays(ctx))
 	if err := validateDiskIdentities(req, status); err != nil {
 		return err
 	}
@@ -677,7 +677,7 @@ func (m *Manager) prepareMember(ctx context.Context, name string, a array, diskN
 	if err != nil {
 		return "", err
 	}
-	disk, err := m.usable(m.status(devices, []array{a}), diskName)
+	disk, err := m.usable(m.status(ctx, devices, []array{a}), diskName)
 	if err != nil {
 		return "", err
 	}

@@ -57,7 +57,7 @@ func (m *Manager) ImportCandidates(ctx context.Context) ([]ImportCandidate, erro
 		return nil, err
 	}
 	arrays := m.arrays(ctx)
-	status := m.status(devices, arrays)
+	status := m.status(ctx, devices, arrays)
 	registered := map[string]bool{}
 	for _, v := range m.configured() {
 		registered[normalizeUUID(v.ArrayUUID)] = true
