@@ -26,7 +26,11 @@
 	} from '#lib/backup-bandwidth.ts';
 	import FolderPicker from './FolderPicker.svelte';
 	import { selectionOfIn, shareOfIn, type Chosen } from './selection.ts';
-	import KeepVersions, { keepPayload, type Keep } from '#lib/components/KeepVersions.svelte';
+	import KeepVersions, {
+		keepPayload,
+		lastOf,
+		type Keep,
+	} from '#lib/components/KeepVersions.svelte';
 	import SnapshotFiles from './SnapshotFiles.svelte';
 	import SmbTargets, { type SmbTarget } from './SmbTargets.svelte';
 	import TargetPanel from './TargetPanel.svelte';
@@ -243,7 +247,7 @@
 			monthDay: 1,
 			time: '02:30',
 			times: ['02:30'],
-			keep: { daily: 7, weekly: 4, monthly: 6, weeklyDay: 0 },
+			keep: { last: 10, daily: 0, weekly: 0, monthly: 0 },
 		};
 		original = null;
 		loadSelection(draft);
@@ -262,7 +266,7 @@
 		// ApplicationSelection binds both; a bound prop may not be undefined.
 		draft.applications ??= [];
 		draft.allowStop ??= false;
-		draft.keep = { weeklyDay: 0, ...draft.keep };
+		draft.keep = { ...draft.keep, last: lastOf(draft.keep) };
 		if (!draft.weekdays?.length) draft.weekdays = [draft.weekday];
 		if (!draft.times?.length) draft.times = [draft.time];
 		original = { ...draft.destination };
@@ -1588,13 +1592,7 @@
 			{#if plainCopy(draft.destination.type) && !draft.copy?.dated}
 				<p class="muted">{t('backup.copy.noVersions')}</p>
 			{:else}
-				<KeepVersions
-					bind:keep={draft.keep}
-					times={draft.every === 'hourly'
-						? []
-						: [...new Set(draft.times ?? [])].filter(Boolean).sort()}
-					target={fullTarget(draft.destination.type)}
-				/>
+				<KeepVersions bind:keep={draft.keep} target={fullTarget(draft.destination.type)} />
 			{/if}
 		</fieldset>
 		{#if error}<div class="notice-error" role="alert">

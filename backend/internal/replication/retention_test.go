@@ -26,8 +26,12 @@ func TestReceivedSnapshotsKeptByRules(t *testing.T) {
 		t.Fatalf("rules kept %v", stays)
 	}
 	// Rules a receiver does not accept fall back to the count.
-	if gone := keepReceived(all, 5, `{"mode":"rolling"}`, now); len(gone) != 16 {
+	if gone := keepReceived(all, 5, `{"mode":"x"}`, now); len(gone) != 16 {
 		t.Fatalf("bad rules: %d gone", len(gone))
+	}
+	// Rolling (0.42.0): all stay; makeRoom frees space before a transfer.
+	if gone := keepReceived(all, 365, `{"mode":"rolling"}`, now); len(gone) != 0 {
+		t.Fatalf("rolling: %d gone", len(gone))
 	}
 	job := Job{URL: "https://nas:8750/src", Keep: 9, Versions: &retention.Keep{Daily: 7, WeeklyDay: 7}}
 	address := replicaURL(job, "x")

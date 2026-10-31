@@ -33,7 +33,11 @@ Tailscale-Adressen, Port 8750, und kennt jeden Sender an Name und Token. Unter
   `.titanos/replicas/<sender>/<stand>`. Ein abgebrochener Empfang hinterlässt
   keinen halben Stand; Reste werden beim nächsten Empfang entfernt.
 - Danach löscht der Empfänger Stände über der gewählten Zahl (mindestens zwei
-  bleiben), der Sender behält seine letzten zwei Snapshots als Grundlage für
+  bleiben). Mit „Behalten, bis auf dem anderen NAS der Platz knapp wird“
+  (seit 0.42.0) löscht er nichts nach dem Empfang, sondern vorher die ältesten
+  Stände, bis wieder 10 % seines Volumes frei sind; läuft der Empfang trotzdem
+  voll, löscht er den ältesten und meldet 507, der nächste Lauf versucht es
+  erneut. Der neueste Stand bleibt immer. Der Sender behält seine letzten zwei Snapshots als Grundlage für
   die nächste Differenz. Scheitert ein Lauf, wird sein neuer Snapshot gelöscht
   und es gibt die Meldung `replication_failed`; ein neuer Versuch folgt nach
   30 Minuten.
@@ -57,6 +61,7 @@ Der Zustand der Läufe liegt im RAM.
 
 Geprüft mit Unit-Tests, die Sender und Empfänger über einen echten
 HTTP-Server mit nachgebautem `btrfs` verbinden (erste und folgende Läufe,
-Differenzen, Aufbewahrung, falsches Token, abgebrochener Empfang,
+Differenzen, Aufbewahrung (Zahl und „bis knapp“ mit nachgebautem freiem
+Platz), falsches Token, abgebrochener Empfang,
 Wiederherstellen). Echtes `btrfs send/receive` zwischen zwei NAS über
 Tailscale ist noch nicht geprüft.

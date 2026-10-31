@@ -310,7 +310,8 @@
 					bind:versions={editing.versions}
 					min={2}
 					max={365}
-					unit={t('keep.unit.snapshots')}
+					unit="snapshots"
+					rolling
 				/>
 			</div>
 			<label class="check"

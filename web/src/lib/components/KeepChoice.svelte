@@ -1,24 +1,22 @@
 <script lang="ts" module>
-	/** What the backend gets: the rules, and a count for older versions. */
+	/** What the backend gets: the count, and rules only for "until full". */
 	export function keepChoicePayload(
 		count: number,
 		versions: Keep | null | undefined,
 		min: number,
 		max: number,
 	): { keep: number; versions: Keep | undefined } {
-		if (!versions) return { keep: Number(count) || min, versions: undefined };
-		const rules = keepPayload(versions);
-		const total = rules.daily + rules.weekly + rules.monthly;
-		return { keep: Math.min(max, Math.max(min, total || min)), versions: rules };
+		if (versions?.mode === 'rolling') return { keep: max, versions: keepPayload(versions) };
+		return { keep: Math.min(max, Math.max(min, Number(count) || min)), versions: undefined };
 	}
 </script>
 
 <script lang="ts">
 	// How many versions stay, for snapshots, replication and the stick
-	// backup (decided 31.10.2026): the newest N as before, or by day, week
-	// and month like data backups. The count stays what older versions use.
+	// backup (decided 31.10.2026): one number like data backups; "until
+	// full" only for replication, whose versions lie on the other NAS. Rules
+	// by day, week and month from 0.41.0 show as their total and go on save.
 	import KeepVersions, { keepPayload, type Keep } from './KeepVersions.svelte';
-	import { t } from '#lib/i18n/index.svelte.ts';
 
 	let {
 		count = $bindable(),
@@ -26,60 +24,36 @@
 		min = 1,
 		max = 100,
 		unit,
+		rolling = false,
 	}: {
 		count: number;
 		versions: Keep | null | undefined;
 		min?: number;
 		max?: number;
-		/** What is counted, e.g. "Snapshots". */
-		unit: string;
+		/** What is counted. */
+		unit: 'backups' | 'snapshots';
+		/** Offer "until the volume of the other NAS runs short". */
+		rolling?: boolean;
 	} = $props();
-
-	const name = $props.id();
-	function byRules(on: boolean) {
-		versions = on ? { daily: 7, weekly: 4, monthly: 6, weeklyDay: 0 } : null;
-	}
 </script>
 
-<div class="choice">
-	<label class="check"
-		><input type="radio" {name} checked={!versions} onchange={() => byRules(false)} /><span
-			>{t('keep.newestN')}</span
-		>
-		<input
-			class="field mono count"
-			type="number"
-			{min}
-			{max}
-			bind:value={count}
-			disabled={!!versions}
-			aria-label={unit}
-		/>
-		<span>{unit}</span></label
-	>
-	<label class="check"
-		><input type="radio" {name} checked={!!versions} onchange={() => byRules(true)} /><span
-			>{t('keep.byDayWeekMonth')}</span
-		></label
-	>
-	{#if versions}
-		<KeepVersions bind:keep={versions} times={[]} simple />
-	{/if}
-</div>
-
-<style>
-	.choice {
-		display: grid;
-		gap: 8px;
+<KeepVersions
+	bind:keep={
+		() => ({
+			last: count,
+			daily: 0,
+			weekly: 0,
+			monthly: 0,
+			mode: versions?.mode === 'rolling' ? 'rolling' : '',
+		}),
+		(k) => {
+			count = k.last ?? count;
+			versions = k.mode === 'rolling' ? keepPayload(k) : null;
+		}
 	}
-	.check {
-		display: flex;
-		gap: 8px;
-		align-items: center;
-		flex-wrap: wrap;
-	}
-	.count {
-		width: 5rem;
-		text-align: center;
-	}
-</style>
+	{unit}
+	{rolling}
+	{min}
+	{max}
+	target="replica"
+/>

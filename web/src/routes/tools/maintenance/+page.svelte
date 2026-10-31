@@ -472,7 +472,7 @@
 						bind:versions={draft.versions}
 						min={1}
 						max={100}
-						unit={t('keep.unit.snapshots')}
+						unit="snapshots"
 					/>
 				</div>
 				<label

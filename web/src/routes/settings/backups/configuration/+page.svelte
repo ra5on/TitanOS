@@ -301,7 +301,7 @@
 				bind:versions={draft.versions}
 				min={1}
 				max={100}
-				unit={t('keep.unit.backups')}
+				unit="backups"
 			/>
 		</div>
 		<div class="option divided">

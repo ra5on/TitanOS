@@ -32,6 +32,9 @@ func Check(k Keep) error {
 	if k.Mode != "" && k.Mode != "rolling" {
 		return invalid("how versions are kept")
 	}
+	if k.Last < 0 || k.Last > 9999 {
+		return invalid("how many versions to keep")
+	}
 	if k.WhenFull != "" && k.WhenFull != "oldest" {
 		return invalid("what happens when the target is full")
 	}
@@ -61,7 +64,7 @@ func validClock(at string) bool {
 // Chosen reports whether a job picks its versions itself instead of
 // leaving that to restic's --keep-* flags.
 func (k Keep) Chosen() bool {
-	return k.Mode == "rolling" || k.DailyAt != "" || k.WeeklyAt != "" || k.WeeklyDay != 0 ||
+	return k.Mode == "rolling" || k.Last > 0 || k.DailyAt != "" || k.WeeklyAt != "" || k.WeeklyDay != 0 ||
 		k.MonthlyAt != "" || k.MonthlyDay != 0 || k.MonthlyNth != 0
 }
 
@@ -80,6 +83,12 @@ func Select(k Keep, versions []Version, now time.Time) map[string]bool {
 			if k.MaxAgeMonths == 0 || !v.Time.Before(now.AddDate(0, -k.MaxAgeMonths, 0)) {
 				keep[v.ID] = true
 			}
+		}
+		return keep
+	}
+	if k.Last > 0 {
+		for _, v := range sorted[max(0, len(sorted)-k.Last):] {
+			keep[v.ID] = true
 		}
 		return keep
 	}
@@ -216,6 +225,10 @@ func OldestFirst(versions []Version) []Version {
 // a rolling job leaves them at zero, which there also keeps everything.
 
 type Keep struct {
+	// Last keeps the newest that many versions (0.42.0, decided
+	// 31.10.2026: "Aufbewahren" is one number). It wins over the counts
+	// below; older versions do not know it and keep everything.
+	Last    int `json:"last,omitempty"`
 	Daily   int `json:"daily"`
 	Weekly  int `json:"weekly"`
 	Monthly int `json:"monthly"`
