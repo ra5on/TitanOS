@@ -90,7 +90,8 @@ func newEnv(t *testing.T) *env {
 	e.m.Sources = func() []Source {
 		return []Source{{Name: "media", Volume: "tank", Path: filepath.Join(root, "mnt/tank/media")}, {Name: "photos", Volume: "tank", Path: filepath.Join(root, "mnt/tank/photos")}}
 	}
-	e.m.OnResult = func(job string, err error) {
+	// Every run, also repeated failures that send no message.
+	e.m.ended = func(job string, err error) {
 		if err != nil {
 			e.results <- job + ": " + err.Error()
 		} else {

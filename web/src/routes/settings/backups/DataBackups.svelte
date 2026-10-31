@@ -29,12 +29,14 @@
 	import SmbTargets, { type SmbTarget } from './SmbTargets.svelte';
 	import TargetPanel from './TargetPanel.svelte';
 	import ReplicationPanel from './ReplicationPanel.svelte';
-	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 
 	type Kind = 'smb-copy' | 'usb-copy' | 'local' | 's3' | 'sftp' | 'rest' | 'titanos';
 	type Destination = {
 		type: Kind;
 		deviceId?: string;
+		/** The drive's name when the job was saved, only for showing. */
+		deviceName?: string;
 		targetId?: string;
 		volume?: string;
 		folder?: string;
@@ -86,6 +88,8 @@
 		};
 		running: boolean;
 		phase: string;
+		/** Started, but waiting for another job to end. */
+		queued?: boolean;
 		percent: number;
 		bytesDone: number;
 		bytesTotal: number;
@@ -93,6 +97,8 @@
 		lastRun: string | null;
 		lastOK: string | null;
 		lastError: string;
+		/** A known cause of lastError, with a text under error.<code>. */
+		lastErrorCode?: string;
 		warning: string;
 		/** Links and special files (FIFOs, sockets, devices) the last run left out. */
 		skipped?: number;
@@ -386,7 +392,12 @@
 			case 'smb-copy':
 				return { type: 'smb-copy', targetId: d.targetId, folder: d.folder };
 			case 'usb-copy':
-				return { type: 'usb-copy', deviceId: d.deviceId, folder: d.folder };
+				return {
+					type: 'usb-copy',
+					deviceId: d.deviceId,
+					deviceName: usbDrives.find((drive) => drive.id === d.deviceId)?.name ?? d.deviceName,
+					folder: d.folder,
+				};
 			case 'local':
 				return { type: 'local', volume: d.volume, folder: d.folder };
 			case 's3':
@@ -619,7 +630,7 @@
 
 	function where(d: Destination): string {
 		if (d.type === 'smb-copy') return `${d.targetId} / ${d.folder}`;
-		if (d.type === 'usb-copy') return `${t('backup.kind.usb-copy')} ${d.deviceId} / ${d.folder}`;
+		if (d.type === 'usb-copy') return `${t('backup.kind.usb-copy')} ${d.deviceName || d.deviceId} / ${d.folder}`;
 		switch (d.type) {
 			case 'local':
 				return `/mnt/${d.volume}/${d.folder}`;
@@ -719,7 +730,8 @@
 						<span class="mono">{where(job.destination)}</span>
 					</p>
 				</div>
-				{#if state.running}<span class="chip info"
+				{#if state.running && state.queued}<span class="chip">{t('backup.queued')}</span
+					>{:else if state.running}<span class="chip info"
 						>{t(`backup.phase.${state.phase}` as 'backup.phase.backup')}</span
 					>
 				{:else if view.stateKnown === false || state.statusError}<span class="chip warn"
@@ -807,6 +819,7 @@
 					class="notice-error"
 				>
 					{t('backup.lastError')}
+					{#if state.lastErrorCode}<p>{t(`error.${state.lastErrorCode}` as MessageKey)}</p>{/if}
 					<pre>{state.lastError}</pre>
 				</div>{/if}
 			{#if !state.running && state.warning}<div class="notice-warn">
@@ -1039,7 +1052,7 @@
 						<option value="" disabled>–</option>
 						{#if draft.destination.deviceId && !usbDrives.some((d) => d.id === draft?.destination.deviceId)}<option
 								value={draft.destination.deviceId}
-								>{draft.destination.deviceId} · {t('backup.usbMissing')}</option
+								>{draft.destination.deviceName || draft.destination.deviceId} · {t('backup.usbMissing')}</option
 							>{/if}
 						{#each usbDrives.filter((d) => d.supported) as drive (drive.id)}<option value={drive.id}
 								>{drive.name} · {drive.id}</option

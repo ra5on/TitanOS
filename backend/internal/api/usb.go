@@ -22,6 +22,8 @@ var usbErrors = []struct {
 	{usb.ErrBusy, http.StatusConflict, "usb_busy"},
 	{usb.ErrMounted, http.StatusConflict, "usb_mounted"},
 	{usb.ErrNotMounted, http.StatusConflict, "usb_not_mounted"},
+	{usb.ErrReadOnly, http.StatusConflict, "usb_read_only"},
+	{usb.ErrInUse, http.StatusConflict, "usb_in_use"},
 	{usb.ErrNotFormattable, http.StatusConflict, "usb_not_formattable"},
 	{usb.ErrFormatInvalid, http.StatusBadRequest, "usb_format_invalid"},
 	{usb.ErrPartitionUnsupported, http.StatusUnprocessableEntity, "usb_partition_unsupported"},

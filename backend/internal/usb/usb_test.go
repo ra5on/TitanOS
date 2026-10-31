@@ -284,3 +284,31 @@ func TestNTFSReadOnlyFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestDriveInUseAndStaleMounts(t *testing.T) {
+	m, f := newTest(t)
+	ctx := context.Background()
+	// A backup writing to one drive blocks ejecting that drive and
+	// formatting, nothing else.
+	m.inUse = map[string]int{"AAAA-BBBB": 1}
+	if err := m.Eject(ctx, "AAAA-BBBB"); !errors.Is(err, ErrInUse) {
+		t.Errorf("eject while writing: %v", err)
+	}
+	if err := m.Mount(ctx, "AAAA-BBBB"); err != nil {
+		t.Errorf("mounting another time: %v", err)
+	}
+	if !m.using() {
+		t.Error("use not seen")
+	}
+	m.inUse = nil
+
+	// A drive pulled while mounted leaves its mount behind; mounting it
+	// again first removes that.
+	dir := filepath.Join(m.root, "data-1234ab")
+	os.WriteFile(m.mountsFile, []byte("/dev/gone9 "+dir+" ext4 rw 0 0\n"), 0o644)
+	f.calls = nil
+	m.dropStale(ctx, dir)
+	if !strings.Contains(strings.Join(f.calls, "\n"), "umount -l "+dir) {
+		t.Errorf("stale mount kept: %v", f.calls)
+	}
+}

@@ -748,6 +748,9 @@ func (w *titand) wireBackups() error {
 			w.notifier.Notify(notify.Error, "backup_failed", job)
 		}
 	}
+	w.backups.OnRecovered = func(job string) {
+		w.notifier.Notify(notify.Info, "backup_recovered", job)
+	}
 	w.backups.OnCheck = func(job string, err error) {
 		if err != nil {
 			w.notifier.Notify(notify.Error, "backup_check_failed", job)
@@ -832,7 +835,10 @@ func (w *titand) wireBackups() error {
 	w.background(func() { w.backups.Run(ctx) })
 	w.drives.Reserved = w.volumes.Owns
 	w.drives.Busy = func() bool { return w.volumes.ActionsRunning() || w.volumes.GrowthActive() }
-	w.drives.OnPlug = func(d usb.Device) { w.notifier.Notify(notify.Info, "usb_plugged", d.Name) }
+	w.drives.OnPlug = func(d usb.Device) {
+		w.notifier.Notify(notify.Info, "usb_plugged", d.Name)
+		go w.backups.Plugged(d.ID)
+	}
 	w.drives.OnFormatted = func(job usb.FormatJob) {
 		switch {
 		case job.Action != "" && job.Phase == "done":

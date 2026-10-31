@@ -366,7 +366,7 @@ func (m *Manager) Format(ctx context.Context, id string, req FormatRequest) erro
 			m.operation.Unlock()
 		}
 	}()
-	if m.Busy != nil && m.Busy() {
+	if (m.Busy != nil && m.Busy()) || m.using() {
 		return ErrBusy
 	}
 	disks, _, err := m.Disks(ctx)

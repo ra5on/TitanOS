@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -12,6 +13,11 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
+
+	"golang.org/x/sys/unix"
+
+	"github.com/ra5on/TitanOS/backend/internal/usb"
 )
 
 // copyUSB makes plain, directly readable copies. It never removes a destination
@@ -24,21 +30,208 @@ func (m *Manager) copyUSB(ctx context.Context, job Job) error {
 	return m.WithUSB(ctx, job.Destination.DeviceID, func(target *os.Root) error { return m.copyTo(ctx, job, target) })
 }
 
+// copyItem is one file a run wants to copy.
+type copyItem struct {
+	share, rel, dst string
+	size            int64
+}
+
+// copyProblems collects what a run left out, by reason, for the warning.
+type copyProblems struct {
+	count    map[string]int64
+	examples map[string][]string
+	order    []string
+}
+
+func (p *copyProblems) add(reason, what string) {
+	if p.count == nil {
+		p.count, p.examples = map[string]int64{}, map[string][]string{}
+	}
+	if p.count[reason] == 0 {
+		p.order = append(p.order, reason)
+	}
+	p.count[reason]++
+	if len(p.examples[reason]) < 5 {
+		p.examples[reason] = append(p.examples[reason], what)
+	}
+}
+
+func (p *copyProblems) total() int64 {
+	var n int64
+	for _, c := range p.count {
+		n += c
+	}
+	return n
+}
+
+// String is the warning of the run: per reason the count and examples.
+func (p *copyProblems) String() string {
+	var parts []string
+	for _, reason := range p.order {
+		line := fmt.Sprintf("%d %s: %s", p.count[reason], reason, strings.Join(p.examples[reason], ", "))
+		if p.count[reason] > int64(len(p.examples[reason])) {
+			line += ", …"
+		}
+		parts = append(parts, line)
+	}
+	return strings.Join(parts, "; ")
+}
+
+// fatalTarget reports errors that mean the destination itself fails: full,
+// read-only, gone. Those end the run; anything else skips one file.
+func fatalTarget(err error) bool {
+	return errors.Is(err, syscall.ENOSPC) || errors.Is(err, syscall.EROFS) || errors.Is(err, syscall.EIO) ||
+		errors.Is(err, syscall.ENODEV) || errors.Is(err, syscall.ENOTCONN) || errors.Is(err, syscall.EDQUOT) ||
+		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
+// problemOf names why one file could not be copied, in words the page shows.
+func problemOf(err error) string {
+	switch {
+	case errors.Is(err, syscall.EFBIG):
+		return "files too large for the drive's file system (FAT32: 4 GB)"
+	case errors.Is(err, syscall.EINVAL), errors.Is(err, syscall.ENAMETOOLONG), errors.Is(err, syscall.EILSEQ):
+		return "names the drive's file system does not allow"
+	case errors.Is(err, errSourceChanged):
+		return "files that changed while being copied"
+	case errors.Is(err, fs.ErrPermission):
+		return "files that could not be read"
+	}
+	return "files with other errors"
+}
+
+var errSourceChanged = errors.New("source changed")
+
+// caseInsensitive finds out whether the destination folds the case of
+// names (FAT, exFAT, NTFS through some drivers).
+func caseInsensitive(target *os.Root, dir string) bool {
+	probe := path.Join(dir, ".titanos-Case-"+rand.Text())
+	f, err := target.OpenFile(probe, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return false
+	}
+	f.Close()
+	defer target.Remove(probe)
+	_, err = target.Lstat(strings.ToLower(probe))
+	return err == nil
+}
+
 func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 	sources := map[string]Source{}
 	for _, source := range m.sources() {
 		sources[source.Name] = source
 	}
+	var problems copyProblems
+	available := 0
 	for _, name := range job.Sources {
-		if _, ok := sources[name]; !ok {
-			return fmt.Errorf("source share %s is not mounted", name)
+		if _, ok := sources[name]; ok {
+			available++
+		} else {
+			problems.add("shares not available", name)
 		}
 	}
-	var total uint64
-	// Links and special files are not copied (a link could point anywhere,
-	// a FIFO would block); each is left out and named in the warning.
-	var skipped []string
-	var skippedCount int64
+	if available == 0 {
+		return fmt.Errorf("none of the shares of this job is available")
+	}
+	if err := copyDirectories(target, job.Destination.Folder); err != nil {
+		return err
+	}
+	folding := caseInsensitive(target, job.Destination.Folder)
+	seen := map[string]string{}
+
+	// First the list: what there is, how much, and what is new. It gives the
+	// page a percentage and the run a check of the free space.
+	var items []copyItem
+	var planned, needed uint64
+	for _, name := range job.Sources {
+		source, ok := sources[name]
+		if !ok {
+			continue
+		}
+		root, err := os.OpenRoot(source.Path)
+		if err != nil {
+			problems.add("shares not available", name)
+			continue
+		}
+		folders := job.Folders[name]
+		if len(folders) == 0 {
+			folders = []string{"."}
+		}
+		for _, folder := range folders {
+			if info, err := root.Lstat(folder); err != nil || !info.IsDir() {
+				problems.add("folders not available", name+"/"+folder)
+				continue
+			}
+			err := fs.WalkDir(root.FS(), folder, func(rel string, entry fs.DirEntry, err error) error {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				if err != nil {
+					problems.add("files that could not be read", name+"/"+rel)
+					if entry != nil && entry.IsDir() {
+						return fs.SkipDir
+					}
+					return nil
+				}
+				excluded := entry.Name() == ".recycle" || entry.Name() == ".titanos" || strings.HasSuffix(entry.Name(), ".titanos-part")
+				for _, skip := range job.Skip {
+					full := name + "/" + rel
+					excluded = excluded || full == skip || strings.HasPrefix(full, skip+"/")
+				}
+				for _, pattern := range job.Patterns {
+					match, _ := path.Match(pattern, entry.Name())
+					excluded = excluded || match
+				}
+				if excluded {
+					if entry.IsDir() {
+						return fs.SkipDir
+					}
+					return nil
+				}
+				dst := path.Join(job.Destination.Folder, name, rel)
+				if folding {
+					// Foto.jpg and foto.jpg are one file there: keep the first.
+					key := strings.ToLower(dst)
+					if other, ok := seen[key]; ok && other != dst {
+						problems.add("names that differ only in upper/lower case (the drive treats them as one)", name+"/"+rel)
+						if entry.IsDir() {
+							return fs.SkipDir
+						}
+						return nil
+					}
+					seen[key] = dst
+				}
+				if entry.IsDir() {
+					return nil
+				}
+				info, err := entry.Info()
+				if err != nil {
+					problems.add("files that could not be read", name+"/"+rel)
+					return nil
+				}
+				if !info.Mode().IsRegular() {
+					problems.add("links or special files", name+"/"+rel)
+					return nil
+				}
+				items = append(items, copyItem{share: name, rel: rel, dst: dst, size: info.Size()})
+				planned += uint64(info.Size())
+				if old, err := target.Lstat(dst); err != nil || old.Size() != info.Size() || !sameTime(old.ModTime(), info.ModTime()) {
+					needed += uint64(info.Size())
+				}
+				return nil
+			})
+			if err != nil {
+				root.Close()
+				return err
+			}
+		}
+		root.Close()
+	}
+	if free, ok := freeSpace(target); ok && needed > free {
+		return fmt.Errorf("%w: %d MB needed, %d MB free on the drive", errNoSpace, needed>>20, free>>20)
+	}
+	m.update(job, func(s *State) { s.BytesTotal = planned })
+
 	// Unlike restic, a copy follows the limit as the clock passes a window
 	// boundary; the page shows the limit that holds right now.
 	var pace *limiter
@@ -47,102 +240,108 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 			m.update(job, func(s *State) { s.BandwidthLimit = int(rate >> 20) })
 		})
 	}
-	err := func() error {
-		for _, name := range job.Sources {
-			source := sources[name]
-			root, err := os.OpenRoot(source.Path)
-			if err != nil {
-				return err
-			}
-			err = func() error {
-				defer root.Close()
-				folders := job.Folders[name]
-				if len(folders) == 0 {
-					folders = []string{"."}
-				}
-				for _, folder := range folders {
-					if info, err := root.Lstat(folder); err != nil || !info.IsDir() {
-						return fmt.Errorf("source folder %s/%s is unavailable", name, folder)
-					}
-					err := fs.WalkDir(root.FS(), folder, func(rel string, entry fs.DirEntry, err error) error {
-						if err != nil {
-							return err
-						}
-						if err := ctx.Err(); err != nil {
-							return err
-						}
-						excluded := entry.Name() == ".recycle" || strings.HasSuffix(entry.Name(), ".titanos-part")
-						for _, skip := range job.Skip {
-							full := name + "/" + rel
-							excluded = excluded || full == skip || strings.HasPrefix(full, skip+"/")
-						}
-						for _, pattern := range job.Patterns {
-							match, _ := path.Match(pattern, entry.Name())
-							excluded = excluded || match
-						}
-						if excluded {
-							if entry.IsDir() {
-								return fs.SkipDir
-							}
-							return nil
-						}
-						info, err := entry.Info()
-						if err != nil {
-							return err
-						}
-						dst := path.Join(job.Destination.Folder, name, rel)
-						if entry.IsDir() {
-							return copyDirectories(target, dst)
-						}
-						if !info.Mode().IsRegular() {
-							skippedCount++
-							if len(skipped) < 10 {
-								skipped = append(skipped, name+"/"+rel)
-							}
-							return nil
-						}
-						if err := copyDirectories(target, path.Dir(dst)); err != nil {
-							return err
-						}
-						n, err := copyFilePaced(ctx, root, rel, target, dst, pace, func(done int64) {
-							m.mu.Lock()
-							if state := m.states[job.ID]; state != nil {
-								state.BytesDone = total + uint64(done)
-							}
-							m.mu.Unlock()
-						})
-						if err != nil {
-							return err
-						}
-						total += uint64(n)
-						m.update(job, func(s *State) { s.BytesDone = total })
-						return nil
-					})
-					if err != nil {
-						return err
-					}
-				}
-				return nil
-			}()
-			if err != nil {
-				return err
-			}
+	var total uint64
+	roots := map[string]*os.Root{}
+	defer func() {
+		for _, root := range roots {
+			root.Close()
 		}
-		return nil
 	}()
-	warning := ""
-	if skippedCount > 0 {
-		warning = fmt.Sprintf("%d links or special files not copied: %s", skippedCount, strings.Join(skipped, ", "))
-		if skippedCount > int64(len(skipped)) {
-			warning += ", …"
+	progress := func(done uint64) {
+		m.mu.Lock()
+		if state := m.states[job.ID]; state != nil {
+			state.BytesDone = done
+			if planned > 0 {
+				state.Percent = min(100, float64(done)*100/float64(planned))
+			}
 		}
+		m.mu.Unlock()
 	}
-	if err == nil {
-		m.update(job, func(s *State) {
-			s.Bytes, s.BytesDone, s.Percent, s.Warning, s.Skipped = total, total, 100, warning, skippedCount
-		})
+	for _, item := range items {
+		root := roots[item.share]
+		if root == nil {
+			var err error
+			if root, err = os.OpenRoot(sources[item.share].Path); err != nil {
+				problems.add("shares not available", item.share)
+				continue
+			}
+			roots[item.share] = root
+		}
+		if err := copyDirectories(target, path.Dir(item.dst)); err != nil {
+			if fatalTarget(err) {
+				return err
+			}
+			problems.add(problemOf(err), item.share+"/"+item.rel)
+			continue
+		}
+		base := total
+		_, err := copyFilePaced(ctx, root, item.rel, target, item.dst, pace, func(done int64) { progress(base + uint64(done)) })
+		if err != nil {
+			if fatalTarget(err) {
+				return err
+			}
+			problems.add(problemOf(err), item.share+"/"+item.rel)
+		}
+		total += uint64(item.size)
+		progress(total)
 	}
-	return err
+	// Everything on the drive, also the renames, before it counts as done:
+	// whoever pulls the drive then loses nothing.
+	if err := syncTarget(target); err != nil {
+		return err
+	}
+	m.update(job, func(s *State) {
+		s.Bytes, s.BytesDone, s.BytesTotal, s.Percent, s.Warning, s.Skipped = total, total, planned, 100, problems.String(), problems.total()
+	})
+	return nil
+}
+
+var errNoSpace = errors.New("not enough space on the drive")
+
+// errorCode names the causes of a failed copy people can do something
+// about; the page has a text for each (error.<code>).
+func errorCode(err error) string {
+	switch {
+	case errors.Is(err, usb.ErrNotFound):
+		return "usb_not_found"
+	case errors.Is(err, usb.ErrReadOnly), errors.Is(err, syscall.EROFS):
+		return "usb_read_only"
+	case errors.Is(err, usb.ErrUnsupported):
+		return "usb_unsupported"
+	case errors.Is(err, usb.ErrMountFailed):
+		return "drive_mount_failed"
+	case errors.Is(err, usb.ErrNotMounted), errors.Is(err, syscall.EIO), errors.Is(err, syscall.ENODEV), errors.Is(err, syscall.ENOTCONN):
+		return "backup_drive_lost"
+	case errors.Is(err, errNoSpace), errors.Is(err, syscall.ENOSPC), errors.Is(err, syscall.EDQUOT):
+		return "backup_no_space"
+	}
+	return ""
+}
+
+// sameTime compares modification times as file systems keep them: FAT
+// rounds to two seconds.
+func sameTime(a, b time.Time) bool {
+	d := a.Sub(b)
+	return d > -2*time.Second && d < 2*time.Second
+}
+
+// freeSpace is what the destination has left.
+func freeSpace(target *os.Root) (uint64, bool) {
+	var st syscall.Statfs_t
+	if err := syscall.Statfs(target.Name(), &st); err != nil {
+		return 0, false
+	}
+	return st.Bavail * uint64(st.Bsize), true
+}
+
+// syncTarget writes everything of the destination file system to the drive.
+func syncTarget(target *os.Root) error {
+	dir, err := target.Open(".")
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return unix.Syncfs(int(dir.Fd()))
 }
 
 // Refuse destination links even when they point somewhere within the same disk.
@@ -206,7 +405,7 @@ func copyFilePaced(ctx context.Context, source *os.Root, from string, target *os
 			return 0, err
 		}
 		if after.Size() != before.Size() || !after.ModTime().Equal(before.ModTime()) {
-			return 0, fmt.Errorf("source changed during comparison: %s", from)
+			return 0, fmt.Errorf("%w during comparison: %s", errSourceChanged, from)
 		}
 		if same {
 			return before.Size(), nil
@@ -257,7 +456,7 @@ func copyFilePaced(ctx context.Context, source *os.Root, from string, target *os
 		return total, err
 	}
 	if total != before.Size() || after.Size() != before.Size() || !after.ModTime().Equal(before.ModTime()) {
-		return total, fmt.Errorf("source changed during copying: %s", from)
+		return total, fmt.Errorf("%w during copying: %s", errSourceChanged, from)
 	}
 	if err := target.Chtimes(temp, before.ModTime(), before.ModTime()); err != nil {
 		return total, err

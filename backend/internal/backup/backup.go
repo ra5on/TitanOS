@@ -70,7 +70,10 @@ type Destination struct {
 	// Type is local, usb-copy, s3, sftp or rest.
 	Type     string `json:"type"`
 	DeviceID string `json:"deviceId,omitempty"`
-	TargetID string `json:"targetId,omitempty"`
+	// DeviceName is the name the drive had when the job was saved, only
+	// for showing; older versions ignore it.
+	DeviceName string `json:"deviceName,omitempty"`
+	TargetID   string `json:"targetId,omitempty"`
 	// local: a folder on another volume.
 	Volume string `json:"volume,omitempty"`
 	Folder string `json:"folder,omitempty"`
@@ -155,7 +158,9 @@ type State struct {
 	Probe              *ProbeResult              `json:"probe,omitempty"`
 	Running            bool                      `json:"running"`
 	// Phase is backup, cleanup or restore while Running.
-	Phase      string  `json:"phase"`
+	Phase string `json:"phase"`
+	// Queued is set while a started job waits for another one to end.
+	Queued     bool    `json:"queued,omitempty"`
 	Percent    float64 `json:"percent"`
 	BytesDone  uint64  `json:"bytesDone"`
 	BytesTotal uint64  `json:"bytesTotal"`
@@ -166,6 +171,9 @@ type State struct {
 	LastRun   *time.Time `json:"lastRun"`
 	LastOK    *time.Time `json:"lastOK"`
 	LastError string     `json:"lastError"`
+	// LastErrorCode names known causes of LastError, so that the page can
+	// say it in the language of the viewer; empty for others.
+	LastErrorCode string `json:"lastErrorCode,omitempty"`
 	// FailingSince is the first failed attempt after the last backup that
 	// worked; empty while backups work.
 	FailingSince *time.Time `json:"failingSince,omitempty"`
@@ -222,8 +230,12 @@ type Manager struct {
 	PrepareApplications func(context.Context, Job, string, []string) ([]string, func() error, error)
 	// WithUSB pins a mounted filesystem for the complete copy operation.
 	WithUSB func(context.Context, string, func(*os.Root) error) error
-	// OnResult is told how each scheduled or started backup ended.
-	OnResult func(job string, err error)
+	// OnResult is told of each backup that worked and of the first failure
+	// of a series; OnRecovered when a job works again after failing.
+	OnResult    func(job string, err error)
+	OnRecovered func(job string)
+	// ended is told of every run; tests wait for it.
+	ended func(job string, err error)
 	// OnCheck hears how a check of a repository ended.
 	OnCheck func(job string, err error)
 	OnProbe func(job string, err error)
@@ -381,6 +393,9 @@ func check(job Job, shares []Source, volumes []string) error {
 	case "usb-copy", "smb-copy":
 		if (d.Type == "usb-copy" && !regexp.MustCompile(`^[A-Za-z0-9-]{4,80}$`).MatchString(d.DeviceID)) || (d.Type == "smb-copy" && !naming.ValidBackup(d.TargetID)) || !relative(d.Folder) || len(job.Extras) != 0 {
 			return invalid("USB identity, folder or unsupported extra source")
+		}
+		if len(d.DeviceName) > 64 || strings.ContainsFunc(d.DeviceName, func(r rune) bool { return r < ' ' || r == 0x7f }) {
+			return invalid("drive name")
 		}
 		for _, pattern := range job.Patterns {
 			if _, err := path.Match(pattern, ""); err != nil || strings.Contains(pattern, "/") || strings.Contains(pattern, "**") {
@@ -993,21 +1008,23 @@ func (m *Manager) begin(job Job, phase string, work func(context.Context) error)
 		return ErrRunning
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	state.Running, state.Phase, state.Percent, state.BytesDone, state.BytesTotal, state.BandwidthLimit = true, phase, 0, 0, 0, 0
+	state.Running, state.Queued, state.Phase, state.Percent, state.BytesDone, state.BytesTotal, state.BandwidthLimit = true, true, phase, 0, 0, 0, 0
 	m.cancels[job.ID] = cancel
 	m.mu.Unlock()
 	go func() {
 		m.queue.Lock()
+		m.update(job, func(s *State) { s.Queued = false })
 		err := work(ctx)
 		m.queue.Unlock()
 		cancelled := ctx.Err() != nil
+		var firstFailure, recovered bool
 		cancel()
 		now := m.now()
 		m.mu.Lock()
 		delete(m.cancels, job.ID)
 		m.mu.Unlock()
 		m.update(job, func(s *State) {
-			s.Running, s.Phase, s.Percent, s.BandwidthLimit = false, "", 0, 0
+			s.Running, s.Queued, s.Phase, s.Percent, s.BandwidthLimit = false, false, "", 0, 0
 			if phase != "backup" {
 				// A failed check is kept as CheckError, a failed restore as
 				// RestoreError: neither is a failed backup.
@@ -1021,24 +1038,34 @@ func (m *Manager) begin(job Job, phase string, work func(context.Context) error)
 				}
 				return
 			}
-			s.LastRun, s.LastError = &now, ""
+			s.LastRun, s.LastError, s.LastErrorCode = &now, "", ""
 			switch {
 			case cancelled:
 				s.LastError = errCancelled
 			case err != nil:
-				s.LastError = err.Error()
+				s.LastError, s.LastErrorCode = err.Error(), errorCode(err)
 				if s.FailingSince == nil {
-					s.FailingSince = &now
+					s.FailingSince, firstFailure = &now, true
 				}
 			default:
+				recovered = s.FailingSince != nil
 				s.LastOK, s.FailingSince = &now, nil
 			}
 		})
 		if err != nil && !cancelled {
 			slog.Warn("backup job failed", "job", job.ID, "phase", phase, "err", err)
 		}
-		if phase == "backup" && !cancelled && m.OnResult != nil {
+		// One message when a job starts failing and one when it works again,
+		// not one per attempt: an hourly job with its drive unplugged
+		// would otherwise report every hour.
+		if phase == "backup" && !cancelled && m.OnResult != nil && (err == nil || firstFailure) {
 			m.OnResult(job.ID, err)
+		}
+		if recovered && m.OnRecovered != nil {
+			m.OnRecovered(job.ID)
+		}
+		if phase == "backup" && !cancelled && m.ended != nil {
+			m.ended(job.ID, err)
 		}
 	}()
 	return nil
@@ -1285,6 +1312,30 @@ func (m *Manager) Run(ctx context.Context) {
 				}
 			}
 			m.checkOverdue(job, state)
+		}
+	}
+}
+
+// Plugged starts the USB copies to a drive that was just plugged in whose
+// last attempt failed, for example because the drive was not there. Jobs
+// run by hand only are left alone.
+func (m *Manager) Plugged(deviceID string) {
+	if m.Disabled {
+		return
+	}
+	m.mu.Lock()
+	jobs := slices.Clone(m.jobs)
+	m.mu.Unlock()
+	for _, job := range jobs {
+		if job.Destination.Type != "usb-copy" || job.Destination.DeviceID != deviceID || !job.Enabled || m.stateFile(job) == "" {
+			continue
+		}
+		if state := m.state(job); state.Running || state.FailingSince == nil {
+			continue
+		}
+		slog.Info("backup drive plugged in, catching up", "job", job.ID)
+		if err := m.Start(job.ID); err != nil && !errors.Is(err, ErrRunning) {
+			slog.Warn("backup not started", "job", job.ID, "err", err)
 		}
 	}
 }

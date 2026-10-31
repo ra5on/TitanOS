@@ -37,6 +37,11 @@ var (
 	// ErrMounted and ErrNotMounted report a request that makes no sense.
 	ErrMounted    = errors.New("usb: the drive is mounted already")
 	ErrNotMounted = errors.New("usb: the drive is not mounted")
+	// ErrReadOnly means the drive is mounted read-only, for example an NTFS
+	// drive Windows did not shut down cleanly.
+	ErrReadOnly = errors.New("usb: the drive can only be read")
+	// ErrInUse means a backup writes to the drive right now.
+	ErrInUse = errors.New("usb: a backup writes to the drive")
 )
 
 // Filesystems without Unix ownership use root-only mount permissions. Upload
@@ -167,6 +172,16 @@ type Manager struct {
 	mu        sync.Mutex
 	// seen are the drives of the last look; nil until there was one.
 	seen map[string]bool
+	// inUse counts the backups writing to a drive, by ID. A long copy holds
+	// only its drive, not every other drive of the NAS.
+	inUse map[string]int
+}
+
+// using reports whether a backup writes to any drive.
+func (m *Manager) using() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.inUse) > 0
 }
 
 // NewManager returns a manager for the real system.
@@ -385,6 +400,7 @@ func (m *Manager) mount(ctx context.Context, id string) error {
 		return ErrUnsupported
 	}
 	dir := filepath.Join(m.root, mountName(d))
+	m.dropStale(ctx, dir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
@@ -406,6 +422,25 @@ func (m *Manager) mount(ctx context.Context, id string) error {
 	return nil
 }
 
+// dropStale removes what is left of a drive pulled while mounted: the
+// mount stays in the table with a device that is gone, and the drive comes
+// back under another device name. Nothing can be written there any more.
+func (m *Manager) dropStale(ctx context.Context, dir string) {
+	for device, mounted := range m.mounts() {
+		if mounted != dir {
+			continue
+		}
+		if _, err := os.Stat(device); err == nil {
+			continue
+		}
+		if _, err := m.runner.Run(ctx, "", "umount", "-l", dir); err != nil {
+			slog.Warn("stale usb mount not removed", "dir", dir, "err", err)
+			continue
+		}
+		slog.Info("stale usb mount removed", "dir", dir, "device", device)
+	}
+}
+
 // Eject writes out what is waiting and unmounts a drive.
 func (m *Manager) Eject(ctx context.Context, id string) error {
 	if !m.operation.TryLock() {
@@ -414,6 +449,12 @@ func (m *Manager) Eject(ctx context.Context, id string) error {
 	defer m.operation.Unlock()
 	if m.Disabled {
 		return ErrDisabled
+	}
+	m.mu.Lock()
+	writing := m.inUse[id] > 0
+	m.mu.Unlock()
+	if writing {
+		return ErrInUse
 	}
 	d, err := m.find(ctx, id)
 	if err != nil {
@@ -538,62 +579,92 @@ func (m *Manager) WithMounted(ctx context.Context, id string, work func(*os.Root
 	if m.Disabled {
 		return ErrDisabled
 	}
+	root, err := m.pin(ctx, id)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		root.Close()
+		m.mu.Lock()
+		if m.inUse[id]--; m.inUse[id] <= 0 {
+			delete(m.inUse, id)
+		}
+		m.mu.Unlock()
+	}()
+	return work(root)
+}
+
+// pin mounts a drive if needed, opens it and marks it in use, all under the
+// operation lock, so that no format or eject comes in between.
+func (m *Manager) pin(ctx context.Context, id string) (*os.Root, error) {
 	m.operation.Lock()
 	defer m.operation.Unlock()
 	d, err := m.find(ctx, id)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !d.Mounted {
 		if err := m.mount(ctx, id); err != nil {
-			return err
+			return nil, err
 		}
 		d, err = m.find(ctx, id)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if !d.Mounted {
-		return ErrNotMounted
+		return nil, ErrNotMounted
 	}
 	if d.ReadOnly {
-		return ErrBusy
+		return nil, ErrReadOnly
 	}
 	root, err := os.OpenRoot(d.Dir)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer root.Close()
+	pinned := false
+	defer func() {
+		if !pinned {
+			root.Close()
+		}
+	}()
 	// Recheck after opening: refuse a vanished/replaced mount before any write.
 	again, err := m.find(ctx, id)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !again.Mounted || again.ReadOnly || again.Dir != d.Dir || again.path != d.path {
-		return ErrNotMounted
+		return nil, ErrNotMounted
 	}
 	// Linux mount IDs identify the pinned mount even for Btrfs subvolumes,
 	// whose stat device number need not match mountinfo's device number.
 	directory, err := root.Open(".")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer directory.Close()
 	var stat unix.Statx_t
 	if err := unix.Statx(int(directory.Fd()), "", unix.AT_EMPTY_PATH, unix.STATX_MNT_ID, &stat); err != nil {
-		return err
+		return nil, err
 	}
 	if stat.Mask&unix.STATX_MNT_ID == 0 {
-		return ErrNotMounted
+		return nil, ErrNotMounted
 	}
 	mountInfo, err := os.ReadFile(m.mountInfoFile)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !matchesMount(string(mountInfo), d.Dir, d.path, d.FSType, fmt.Sprintf("%d", stat.Mnt_id)) {
-		return ErrNotMounted
+		return nil, ErrNotMounted
 	}
-	return work(root)
+	m.mu.Lock()
+	if m.inUse == nil {
+		m.inUse = map[string]int{}
+	}
+	m.inUse[id]++
+	m.mu.Unlock()
+	pinned = true
+	return root, nil
 }
 
 func matchesMount(info, dir, device, fsType, mountID string) bool {

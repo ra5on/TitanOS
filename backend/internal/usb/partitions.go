@@ -366,7 +366,7 @@ func (m *Manager) startPartitionJob(ctx context.Context, id string, a partitionA
 			m.operation.Unlock()
 		}
 	}()
-	if m.Busy != nil && m.Busy() {
+	if (m.Busy != nil && m.Busy()) || m.using() {
 		return ErrBusy
 	}
 	l, err := m.layout(ctx, id, nil)

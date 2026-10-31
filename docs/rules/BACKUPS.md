@@ -47,7 +47,18 @@ Bereich: Datensicherung, Stick-/Konfigurationssicherung, USB-Kopie, SMB-Kopie, M
   Keine Löschweitergabe und keine Versionierung/Verschlüsselung; ausschließlich
   Freigaben, reguläre Dateien und einfache Namensmuster. `os.Root` hält das
   geprüfte Ziel-Dateisystem fest, keine Ausweichschreibzugriffe ins RAM.
-  Die USB-Verwaltung sperrt Auswerfen während einer Kopie. Siehe
+  Die USB-Verwaltung sperrt während einer Kopie nur Auswerfen dieses Laufwerks
+  sowie Formatieren/Partitionieren (`usb.Manager.inUse`), nicht die anderen
+  Laufwerke. Seit 0.41.0 (Entscheidung 31.10.2026): Einzelne Problemdateien
+  (FAT32-4-GB-Grenze, unzulässige Namen, nur Groß-/Kleinschreibung verschieden,
+  unlesbar, während des Kopierens geändert) und fehlende Freigaben/Ordner werden
+  übersprungen und als Warnung mit Anzahl und Beispielen gezeigt; nur Fehler
+  des Ziels (voll, schreibgeschützt, E/A-Fehler, abgezogen) beenden den Lauf.
+  Platzprüfung vorab, Prozentanzeige, `syncfs` am Ende. Gleich große Dateien
+  werden weiterhin byteweise verglichen. Meldung nur beim ersten Fehlschlag
+  einer Serie und beim Wiederanlaufen; ein fehlgeschlagener Auftrag startet beim
+  Anstecken seines Laufwerks sofort. Bekannte Ursachen haben einen Code
+  (`state.lastErrorCode`) mit übersetztem Text. Siehe
   `docs/USB-COPY-BACKUPS.md`; Tests niemals auf Host-Platten ausführen.
 - Stick-Konfiguration: zusätzlicher täglicher/wöchentlicher Zeitplan in
   `/config/system/backup.json`; NAS-Zeitzone, Startsicherung und Änderungsbündelung
