@@ -40,11 +40,30 @@ Tailnet.
 ## Weboberfläche unter dem Tailnet-Namen (HTTPS)
 
 TitanOS ist im Tailnet unter `https://<name>.<tailnet>.ts.net` erreichbar
-(MagicDNS). Seit 0.34.0 liefert titand dort ein **gültiges Zertifikat** aus,
-sobald in der Tailscale-Admin-Konsole unter DNS „HTTPS Certificates“
-eingeschaltet ist; sonst bleibt es beim selbst signierten Zertifikat mit
+(MagicDNS). Seit 0.34.0 kann titand dort ein **gültiges Zertifikat** von
+Tailscale ausliefern; sonst bleibt es beim selbst signierten Zertifikat mit
 Browserwarnung. Passkeys und Mitteilungen auf dem iPhone brauchen das gültige.
 
+- **Schalter, ab Werk aus** (seit 0.41.0, Entscheidung des Projektinhabers vom
+  31.10.2026, PLAN 12b): Tailscale-Einstellungen › „HTTPS-Zertifikat von
+  Tailscale“ › „Gültiges Zertifikat für … verwenden“. Die Seite nennt die
+  Voraussetzungen in der Tailscale-Verwaltung (DNS: **MagicDNS** und
+  **HTTPS Certificates** eingeschaltet) und dass der Name dann in den
+  öffentlichen Certificate-Transparency-Protokollen erscheint. Gespeichert als
+  optionales `httpsCertificate` in `/config/plugins/tailscale/settings.json`
+  (nur beim Umschalten geschrieben, ohne die zweiminütige Probe der übrigen
+  Einstellungen, weil der Zugang per IP davon nie abhängt; während einer
+  laufenden Probe gesperrt). Route `PUT /api/v1/plugins/tailscale/https` mit
+  `{"enabled": true|false}`. Ausgeschaltet fragt titand Tailscale nach keinem
+  Zertifikat, und ein bereits ausgeliefertes wird sofort zurückgezogen.
+- **Übergang von älteren Versionen:** Fehlt `httpsCertificate` (Einstellungen
+  einer Version vor 0.41.0, die das Zertifikat ohne Schalter holte), bleibt es
+  nur dann eingeschaltet, wenn tailscaled bereits ein Zertifikat für den Namen
+  hat (`.titanos/tailscale/certs/<name>.crt` im Zustand auf dem Daten-Volume):
+  Dann steht der Name ohnehin schon in den öffentlichen Protokollen, und
+  Passkeys auf diesem Namen funktionieren nach dem Update weiter. Sonst aus.
+  Ältere Versionen ignorieren das Feld; nach einem Rückweg holen sie das
+  Zertifikat wieder wie früher ohne Schalter.
 - titand fragt `tailscale status --json` (`CertDomains`, eigener `DNSName`) und
   lässt sich mit `tailscale cert --cert-file … --key-file … <name>` das
   Zertifikat geben (Let's Encrypt über Tailscale). Die Dateien liegen nur kurz
@@ -59,8 +78,7 @@ Browserwarnung. Passkeys und Mitteilungen auf dem iPhone brauchen das gültige.
   (Plugin aus, nicht verbunden, HTTPS im Tailnet aus, Fehler) alle 5 Minuten.
   Ein fehlgeschlagener Abruf behält ein noch gültiges Zertifikat. Nichts davon
   greift auf `/config` zu; im Entwicklungsmodus passiert nichts.
-- Kein eigener Schalter in TitanOS: Das Einschalten von HTTPS im Tailnet ist
-  die Entscheidung des Besitzers. Ist es aus, holt titand über das Plugin den
+- Ist der Schalter an, HTTPS im Tailnet aber aus, holt titand über das Plugin den
   Ein-Klick-Link von Tailscale (LocalAPI `POST /localapi/v0/query-feature?feature=serve`
   am Socket `/run/tailscale/tailscaled.sock`, derselbe Link wie bei
   `tailscale serve`; nur Links auf `login.tailscale.com` werden gezeigt) und
@@ -69,8 +87,16 @@ Browserwarnung. Passkeys und Mitteilungen auf dem iPhone brauchen das gültige.
   nach, damit das Zertifikat dem Klick gleich folgt. Der Name erscheint dabei
   in öffentlichen Certificate-Transparency-Protokollen; die Seite sagt das.
 - Zustand in `GET /api/v1/plugins/tailscale` unter `https` (`state`
-  inactive/disabled/ok/error, `name`, `notAfter`, `error`, `enableUrl`) und in den
-  Tailscale-Einstellungen mit Link auf die Adresse.
+  off/inactive/disabled/ok/error, `enabled`, `name`, `notAfter`, `error`,
+  `enableUrl`) und in den Tailscale-Einstellungen mit Link auf die Adresse.
+- Geprüft mit Go-Tests (`cert_test.go`: aus ohne Abruf, Einschalten mit
+  sofortigem Abruf und Speichern, Probe behält den Schalter, Sperre während der
+  Probe, Ausschalten zieht das Zertifikat zurück, Übergang von älteren
+  Einstellungen) und Screenshots mit Testdaten. Nicht geprüft: ein echtes
+  Tailnet mit „HTTPS Certificates“ und der tatsächliche Ablageort der
+  Zertifikate von tailscaled (aus dem Ordner der Zustandsdatei abgeleitet).
+  Der Dialog „Im Tailnet veröffentlichen“ (Docker) zeigt seinen Hinweis auf
+  HTTPS im Tailnet nur, solange der Schalter an ist.
 
 ## Docker-Apps im Tailnet veröffentlichen
 

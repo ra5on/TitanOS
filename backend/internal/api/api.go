@@ -693,6 +693,7 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/plugins/tailscale", s.requireAdmin(s.handleTailscale))
 	mux.HandleFunc("GET /api/v1/plugins/tailscale/devices", s.requireAdmin(s.handleTailscaleDevices))
 	mux.HandleFunc("PUT /api/v1/plugins/tailscale", s.requireAdmin(s.handleTailscaleSettings))
+	mux.HandleFunc("PUT /api/v1/plugins/tailscale/https", s.requireAdmin(s.handleTailscaleHTTPS))
 	mux.HandleFunc("POST /api/v1/plugins/tailscale/control/{action}", s.requireAdmin(s.handleTailscaleAction))
 	mux.HandleFunc("GET /api/v1/plugins/netbird", s.requireAdmin(s.handleNetbird))
 	mux.HandleFunc("GET /api/v1/plugins/netbird/peers", s.requireAdmin(s.handleNetbirdPeers))

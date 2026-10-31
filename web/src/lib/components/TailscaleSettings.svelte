@@ -4,6 +4,7 @@
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { formatTime } from '#lib/format.ts';
 	import Dialog from './Dialog.svelte';
+	import TailscaleHttps, { type HttpsStatus } from './TailscaleHttps.svelte';
 	let { onpending = (_pending: boolean) => {} }: { onpending?: (pending: boolean) => void } =
 		$props();
 	type Settings = {
@@ -26,7 +27,7 @@
 		health: string[];
 		pendingUntil?: string;
 		error?: string;
-		https?: { name?: string; state: string; notAfter?: string; error?: string; enableUrl?: string };
+		https?: HttpsStatus;
 	};
 	let status = $state<Status | null>(null),
 		busy = $state(false),
@@ -134,32 +135,6 @@
 		</div>
 		{#if status.name}<strong>{status.name}</strong>{/if}
 		{#each status.ips as ip (ip)}<span class="mono address">{ip}</span>{/each}
-		{#if status.https?.state === 'ok' && status.https.name}<p class="https">
-				<span>{t('tailscale.httpsReady')}</span>
-				<a class="mono address" href="https://{status.https.name}">https://{status.https.name}</a
-				>{#if status.https.notAfter}<span class="muted">
-						· {t('tailscale.httpsUntil', {
-							date: formatTime(new Date(status.https.notAfter)),
-						})}</span
-					>{/if}
-			</p>
-		{:else if status.https?.state === 'disabled'}<div class="notice-warn https-off">
-				<p>
-					{t(status.https.enableUrl ? 'tailscale.httpsOffLink' : 'tailscale.httpsDisabled', {
-						name: status.https.name ?? '',
-					})}
-				</p>
-				{#if status.https.enableUrl}<a
-						class="btn btn-primary"
-						href={status.https.enableUrl}
-						target="_blank"
-						rel="noopener noreferrer">{t('tailscale.httpsEnable')}</a
-					>{/if}
-			</div>
-		{:else if status.https?.state === 'error'}<p class="notice-warn">
-				{t('tailscale.httpsError')}
-				{status.https.error ?? ''}
-			</p>{/if}
 		{#if status.error}<p class="notice-warn">{status.error}</p>{/if}
 		{#each status.health as warning (warning)}<p class="notice-warn">{warning}</p>{/each}
 		{#if !status.active}<p class="muted">{t('tailscale.activateHint')}</p>{/if}
@@ -196,6 +171,11 @@
 				</div>
 			</div>
 		{/if}
+		<TailscaleHttps
+			https={status.https}
+			disabled={busy || status.readOnly || !!status.pendingUntil}
+			onupdate={(value) => take(value as Status)}
+		/>
 		<form onsubmit={save} oninput={() => (dirty = true)} onchange={() => (dirty = true)}>
 			<fieldset disabled={locked}>
 				<label for="ts-routes">{t('tailscale.routes')}</label>
@@ -300,12 +280,6 @@
 	}
 	.notice-error {
 		white-space: pre-wrap;
-	}
-	.https-off {
-		display: flex;
-		flex-direction: column;
-		gap: 10px;
-		align-items: flex-start;
 	}
 	summary {
 		cursor: pointer;

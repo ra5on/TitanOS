@@ -37,6 +37,11 @@ type Settings struct {
 	ExitNode      string   `json:"exitNode"`
 	AcceptRoutes  bool     `json:"acceptRoutes"`
 	AcceptDNS     bool     `json:"acceptDNS"`
+	// HTTPSCertificate switches the certificate of the NAS's own name in
+	// the tailnet on or off (cert.go). Since 0.41.0, optional: missing is
+	// off, unless an earlier version already got a certificate. Older
+	// versions ignore it. Not part of the trial of the other settings.
+	HTTPSCertificate *bool `json:"httpsCertificate,omitempty"`
 }
 type Peer struct {
 	ID     string `json:"id"`
@@ -287,6 +292,8 @@ func (m *Manager) Set(s Settings) error {
 	if m.pending != nil {
 		return ErrPending
 	}
+	// The certificate switch has its own route and no trial.
+	s.HTTPSCertificate = m.settings.HTTPSCertificate
 	if err := m.apply(s); err != nil {
 		if rollbackErr := m.apply(m.settings); rollbackErr != nil {
 			previous := m.settings
