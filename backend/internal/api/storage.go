@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/ra5on/TitanOS/backend/internal/smarthistory"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 )
 
@@ -138,6 +139,24 @@ func (s *Server) handleSmartDisk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, report)
+}
+
+// handleSmartHistory returns the daily SMART values kept for one disk.
+func (s *Server) handleSmartHistory(w http.ResponseWriter, r *http.Request) {
+	report, err := s.opts.Storage.SmartReport(r.Context(), r.PathValue("disk"))
+	if err != nil {
+		writeStorageError(w, r, "smart history", err)
+		return
+	}
+	history := smarthistory.History{Disk: report.Disk, Samples: []smarthistory.Sample{}}
+	if s.opts.SmartHistory != nil {
+		if history, err = s.opts.SmartHistory.History(report); err != nil {
+			slog.Warn("SMART history not readable", "disk", report.Disk, "err", err)
+			writeError(w, http.StatusServiceUnavailable, "smart_history_unavailable", "the SMART history could not be read")
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, history)
 }
 
 func (s *Server) handleCreateVolume(w http.ResponseWriter, r *http.Request) {

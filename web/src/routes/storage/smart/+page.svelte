@@ -6,6 +6,7 @@
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SmartHistory from './SmartHistory.svelte';
 	import { formatDateTime, formatNumber } from '#lib/format.ts';
 	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
@@ -296,6 +297,7 @@
 								>{t('smart.volume')}: {d.volume}</a
 							>{/if}
 					</p>
+					<SmartHistory disk={d.disk} />
 					{#if v}
 						<section aria-labelledby="smart-attributes">
 							<h3 id="smart-attributes">{v.nvme ? t('smart.healthLog') : t('smart.attributes')}</h3>

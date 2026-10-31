@@ -49,6 +49,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/replication"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/shutdown"
+	"github.com/ra5on/TitanOS/backend/internal/smarthistory"
 	"github.com/ra5on/TitanOS/backend/internal/sshd"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
@@ -80,6 +81,8 @@ type Options struct {
 	Shares             *shares.Manager
 	Files              *files.Manager
 	Docker             *docker.Manager
+	// SmartHistory keeps the daily SMART values per disk; nil keeps none.
+	SmartHistory *smarthistory.Recorder
 	// AppProxy gives apps HTTPS names of their own; nil leaves them out.
 	AppProxy *appproxy.Manager
 	Catalog  *catalog.Manager
@@ -337,6 +340,7 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/storage/smart", s.requireAdmin(s.handleSmart))
 	mux.HandleFunc("POST /api/v1/storage/smart/refresh", s.requireAdmin(s.handleSmartRefresh))
 	mux.HandleFunc("GET /api/v1/storage/smart/{disk}", s.requireAdmin(s.handleSmartDisk))
+	mux.HandleFunc("GET /api/v1/storage/smart/{disk}/history", s.requireAdmin(s.handleSmartHistory))
 	mux.HandleFunc("POST /api/v1/storage/volumes", s.requireHeavyAdmin(s.handleCreateVolume))
 	mux.HandleFunc("DELETE /api/v1/storage/volumes/{name}", s.requireHeavyAdmin(s.handleDeleteVolume))
 	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/disks", s.requireHeavyAdmin(s.handleAddVolumeDisk))
