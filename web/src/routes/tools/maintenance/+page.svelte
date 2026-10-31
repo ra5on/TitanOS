@@ -36,9 +36,16 @@
 			...new Set([nasZone, settings?.timezone, 'UTC', ...Intl.supportedValuesOf('timeZone')]),
 		].filter((zone): zone is string => !!zone),
 	);
-	const kinds = ['raid-check', 'smart-long', 'backup-check', 'restore-probe', 'snapshot'] as const;
+	const kinds = [
+		'raid-check',
+		'smart-short',
+		'smart-long',
+		'backup-check',
+		'restore-probe',
+		'snapshot',
+	] as const;
 	const targets = $derived(
-		draft?.kind === 'smart-long'
+		draft?.kind === 'smart-long' || draft?.kind === 'smart-short'
 			? (storage?.disks ?? [])
 					.filter((d) => d.serial && d.role !== 'stick')
 					.map((d) => ({ id: d.serial, name: `${d.model} · ${d.serial}` }))

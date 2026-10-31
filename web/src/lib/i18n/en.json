@@ -7045,5 +7045,6 @@
 	"notify.kind.memory_corrected.title": "Memory: corrected errors ({subject})",
 	"notify.kind.memory_corrected.text": "ECC corrected errors in the memory. A few are harmless; if they pile up, a module is failing.",
 	"notify.kind.memory_uncorrected.title": "Memory: uncorrectable errors ({subject})",
-	"notify.kind.memory_uncorrected.text": "The memory has errors ECC could not correct. Data can be corrupted: check and replace the memory module."
+	"notify.kind.memory_uncorrected.text": "The memory has errors ECC could not correct. Data can be corrupted: check and replace the memory module.",
+	"ops.kind.smart-short": "SMART short test"
 }

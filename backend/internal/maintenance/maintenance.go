@@ -52,7 +52,15 @@ type Settings struct {
 	WindowFrom   string `json:"windowFrom"`
 	WindowTo     string `json:"windowTo"`
 	Jobs         []Job  `json:"jobs"`
+	// LaterJobs holds, on the stick only, jobs of kinds that versions before
+	// 0.41.0 do not know (smart-short): they would refuse the whole file.
+	// Merged into Jobs when loaded.
+	LaterJobs []Job `json:"laterJobs,omitempty"`
 }
+
+// laterKinds came after 0.40.0; see Settings.LaterJobs.
+var laterKinds = []string{"smart-short"}
+
 type State struct {
 	Running     bool       `json:"running"`
 	Blocked     bool       `json:"blocked"`
@@ -116,6 +124,8 @@ func (m *Manager) Load() error {
 	} else if err != nil {
 		return err
 	}
+	s.Jobs = append(s.Jobs, s.LaterJobs...)
+	s.LaterJobs = nil
 	for i := range s.Jobs {
 		if value := s.Jobs[i].DependencyEnabled; value != nil {
 			s.Jobs[i].Enabled = *value
@@ -153,7 +163,7 @@ func validate(s Settings) error {
 			return errors.New("invalid maintenance job")
 		}
 		ids[j.ID] = true
-		if !slices.Contains([]string{"raid-check", "smart-long", "backup-check", "restore-probe", "snapshot"}, j.Kind) || !slices.Contains([]string{"daily", "weekly", "monthly"}, j.Every) || !slices.Contains([]string{"window", "skip"}, j.Missed) {
+		if !slices.Contains([]string{"raid-check", "smart-short", "smart-long", "backup-check", "restore-probe", "snapshot"}, j.Kind) || !slices.Contains([]string{"daily", "weekly", "monthly"}, j.Every) || !slices.Contains([]string{"window", "skip"}, j.Missed) {
 			return errors.New("invalid maintenance schedule")
 		}
 		if _, ok := clock(j.Time); !ok {
@@ -246,6 +256,15 @@ func (m *Manager) Set(s Settings) error {
 			enabled := j.Enabled
 			j.DependencyEnabled = &enabled
 			j.Enabled = false
+		}
+	}
+	all := persistedSettings.Jobs
+	persistedSettings.Jobs, persistedSettings.LaterJobs = []Job{}, nil
+	for _, j := range all {
+		if slices.Contains(laterKinds, j.Kind) {
+			persistedSettings.LaterJobs = append(persistedSettings.LaterJobs, j)
+		} else {
+			persistedSettings.Jobs = append(persistedSettings.Jobs, j)
 		}
 	}
 	if err := m.store.WriteJSON(settingsFile, persistedSettings); err != nil {

@@ -108,7 +108,7 @@ func (s *Server) handleMaintenanceSet(w http.ResponseWriter, r *http.Request) {
 				featureError(w, errors.New("choose a compatible volume"))
 				return
 			}
-		case "smart-long":
+		case "smart-short", "smart-long":
 			status, err := s.opts.Storage.Status(r.Context())
 			if err != nil {
 				featureError(w, err)

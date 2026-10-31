@@ -1242,6 +1242,8 @@ func (w *titand) wireMaintenance() error {
 		switch job.Kind {
 		case "raid-check":
 			return w.volumes.MaintenanceCheck(work, job.Target)
+		case "smart-short":
+			return w.volumes.ShortSMART(work, job.Target)
 		case "smart-long":
 			return w.volumes.LongSMART(work, job.Target)
 		case "backup-check", "restore-probe":

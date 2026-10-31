@@ -3,7 +3,7 @@ export type MaintenanceJob = {
 	dependsOn?: string;
 	id: string;
 	name: string;
-	kind: 'raid-check' | 'smart-long' | 'backup-check' | 'restore-probe' | 'snapshot';
+	kind: 'raid-check' | 'smart-short' | 'smart-long' | 'backup-check' | 'restore-probe' | 'snapshot';
 	target: string;
 	enabled: boolean;
 	every: 'daily' | 'weekly' | 'monthly';

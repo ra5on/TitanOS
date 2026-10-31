@@ -7045,5 +7045,6 @@
 	"notify.kind.memory_corrected.title": "Arbeitsspeicher: korrigierte Fehler ({subject})",
 	"notify.kind.memory_corrected.text": "ECC hat Fehler im Arbeitsspeicher korrigiert. Einzelne sind unbedenklich; häufen sie sich, kündigt sich ein defektes Modul an.",
 	"notify.kind.memory_uncorrected.title": "Arbeitsspeicher: nicht korrigierbare Fehler ({subject})",
-	"notify.kind.memory_uncorrected.text": "Der Arbeitsspeicher hat Fehler, die ECC nicht korrigieren konnte. Daten können verfälscht werden: Speichermodul prüfen und tauschen."
+	"notify.kind.memory_uncorrected.text": "Der Arbeitsspeicher hat Fehler, die ECC nicht korrigieren konnte. Daten können verfälscht werden: Speichermodul prüfen und tauschen.",
+	"ops.kind.smart-short": "SMART-Kurztest"
 }
