@@ -165,7 +165,8 @@
 	td {
 		border-top: 1px solid var(--border);
 		padding: 7px 9px 7px 0;
-		overflow-wrap: anywhere;
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	td:last-child,
 	th:last-child {
@@ -182,7 +183,7 @@
 		color: var(--tile-value-color, var(--text));
 		padding: 0;
 		font: var(--tile-value-weight) var(--tile-value-size, 14px) var(--tile-value-font);
-		overflow-wrap: anywhere;
+		overflow-wrap: break-word;
 		text-align: left;
 		white-space: normal;
 	}
