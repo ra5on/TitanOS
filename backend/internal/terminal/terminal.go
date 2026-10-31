@@ -171,6 +171,8 @@ func start(command []string) (*Session, error) {
 	defer slave.Close()
 	unix.IoctlSetWinsize(int(master.Fd()), unix.TIOCSWINSZ, &unix.Winsize{Col: 80, Row: 24})
 
+	// No timeout on purpose: the shell lives as long as its console. The
+	// console ends it (Session.Close) after 15 minutes without input.
 	cmd := exec.Command(command[0], command[1:]...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
 	cmd.Env = []string{

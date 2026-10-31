@@ -99,7 +99,10 @@ func networkRecovery(dir string) error {
 		return fmt.Errorf("stop daemon: %w: %s", err, out)
 	}
 	defer func() {
-		if out, err := exec.Command("systemctl", "start", "titand.service").CombinedOutput(); err != nil {
+		// A context of its own: the one above may have run out meanwhile.
+		start, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+		if out, err := exec.CommandContext(start, "systemctl", "start", "titand.service").CombinedOutput(); err != nil {
 			fmt.Fprintf(os.Stderr, "start daemon: %v: %s\n", err, out)
 		}
 	}()
@@ -124,7 +127,10 @@ func clearSSHNetworks(store *config.Store, read func(string) (string, error)) er
 		return fmt.Errorf("stop daemon: %w: %s", err, out)
 	}
 	defer func() {
-		if out, err := exec.Command("systemctl", "start", "titand.service").CombinedOutput(); err != nil {
+		// A context of its own: the one above may have run out meanwhile.
+		start, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+		if out, err := exec.CommandContext(start, "systemctl", "start", "titand.service").CombinedOutput(); err != nil {
 			fmt.Fprintf(os.Stderr, "start daemon: %v: %s\n", err, out)
 		}
 	}()
