@@ -5,6 +5,11 @@
 #   out/release/titanos-<version>-vmlinuz           \
 #   out/release/titanos-<version>-initrd.img         } one system slot, for updates
 #   out/release/titanos-<version>-filesystem.squashfs /
+#   out/release/titanos-<version>-new-{vmlinuz,initrd.img,filesystem.squashfs}
+#                                                   the slot with the newer kernel (kernel choice
+#                                                   "Neu", docs/KERNEL.md), if out/kernel-new exists
+#   out/release/titanos-<version>.img.xz            the stick as a disk image for legacy BIOS boards,
+#                                                   if STICK_IMAGE=1
 #   out/release/titanos-<version>-titand            titand alone, for an app update without restart
 #   out/release/titanos-<version>-sources.txt       where the sources of the Debian packages are
 #   out/release/manifest.json                       what an update consists of
@@ -19,6 +24,7 @@
 #   BASE_VERSION=x.y.z  the system image the release was made on; set for an app
 #                       release (repack-release.py), else the version itself
 #   TITAND=path         titand of the release (default backend/bin/titand)
+#   STICK_IMAGE=1       also pack the stick as a disk image (legacy BIOS)
 #
 # Expects out/stick and build/mkosi.output from "make zip" with the same VERSION.
 set -euo pipefail
@@ -74,6 +80,29 @@ fi
 if [ ! -f "$titand" ] || ! unsquashfs -cat "$slot/filesystem.squashfs" usr/bin/titand | cmp -s - "$titand"; then
     echo "$titand is not the titand inside the image" >&2; exit 1
 fi
+# The same system with the newer kernel (make-zip.sh --kernel-new, or the
+# variant of the base for an app release). Same checks as the default image.
+variant=out/kernel-new
+variant_image=build/mkosi.output-new
+if [ -d "$variant" ]; then
+    vsquash=$variant/filesystem.squashfs
+    if [ "$(cat "$variant/version" 2>/dev/null)" != "$version" ]; then
+        echo "$variant does not hold version $version" >&2; exit 1
+    fi
+    if [ "$(unsquashfs -cat "$vsquash" usr/share/titanos/kernel-variant)" != new ]; then
+        echo "$variant is not the image with the new kernel" >&2; exit 1
+    fi
+    if [ "${ALLOW_DEV:-}" != 1 ] && { unsquashfs -l "$vsquash" | grep -q 'getty@.*\.service\.d/autologin\.conf' \
+        || unsquashfs -cat "$vsquash" usr/lib/os-release | grep -q '^VARIANT_ID=dev$'; }; then
+        echo "refusing to publish a development image with the new kernel" >&2; exit 1
+    fi
+    if [ "$(unsquashfs -cat "$vsquash" usr/share/titanos/base-version 2>/dev/null)" != "$base" ]; then
+        echo "the image with the new kernel does not name $base as its base version" >&2; exit 1
+    fi
+    if ! unsquashfs -cat "$vsquash" usr/bin/titand | cmp -s - "$titand"; then
+        echo "$titand is not the titand inside the image with the new kernel" >&2; exit 1
+    fi
+fi
 
 release=out/release
 rm -rf "$release"
@@ -83,12 +112,20 @@ mkdir -p "$release"
 (cd "$release" && sha256sum "titanos-$version.zip" > "titanos-$version.zip.sha256")
 for file in vmlinuz initrd.img filesystem.squashfs; do
     cp "$slot/$file" "$release/titanos-$version-$file"
+    if [ -d "$variant" ]; then
+        cp "$variant/$file" "$release/titanos-$version-new-$file"
+    fi
 done
+if [ "${STICK_IMAGE:-}" = 1 ]; then
+    python3 scripts/make-stick-image.py "$stick" "$release/titanos-$version.img"
+    xz -T0 -6 "$release/titanos-$version.img"
+fi
 cp "$titand" "$release/titanos-$version-titand"
 if [ -x backend/bin/titanosctl ]; then
     cp backend/bin/titanosctl "$release/titanos-$version-cli-linux-amd64"
 fi
 
+VARIANT=$([ -d "$variant" ] && echo "$variant") VARIANT_IMAGE=$variant_image \
 VERSION=$version BASE=$base CHANNEL=$channel CHANGELOG=$changelog RELEASE=$release IMAGE=$image \
     MIN_VERSION=${MIN_VERSION:-} WITHOUT_PLUGINS=${WITHOUT_PLUGINS:-} python3 - <<'PY'
 import datetime, hashlib, json, os, re, tarfile, shutil, zipfile
@@ -110,7 +147,7 @@ def sha256(path):
 options = [line.split(None, 1)[1].strip() for line in open("boot/entry.conf.in") if line.startswith("options")]
 assert len(options) == 1 and "live-media-path=/titanos/@SLOT@" in options[0], options
 
-def kernel_package(kernel):
+def kernel_package(kernel, image=image):
     """The Debian version of the image's kernel package: plugin sets are ordered by it."""
     for block in (Path(image) / "rootfs/var/lib/dpkg/status").read_text().split("\n\n"):
         fields = dict(re.findall(r"^(Package|Version|Status): (.*)$", block, re.M))
@@ -144,6 +181,21 @@ manifest = {
 }
 if os.environ["MIN_VERSION"]:
     manifest["minVersion"] = os.environ["MIN_VERSION"]
+# The same system with the newer kernel. Optional; older TitanOS ignore it.
+# Its plugins come from the plugin repository (kernel set of kernelPackage).
+variant = os.environ["VARIANT"]
+if variant:
+    kernel_new = open(os.path.join(variant, "kernel-version")).read().strip()
+    if "bpo" not in kernel_new or kernel_new == manifest["kernel"]:
+        raise SystemExit("the new kernel is not a backports kernel: " + kernel_new)
+    new_files = []
+    for name in ("vmlinuz", "initrd.img", "filesystem.squashfs"):
+        asset = f"titanos-{version}-new-{name}"
+        path = os.path.join(release, asset)
+        new_files.append({"name": name, "asset": asset, "sha256": sha256(path), "size": os.path.getsize(path)})
+    manifest["variants"] = {"new": {"kernel": kernel_new,
+                                    "kernelPackage": kernel_package(kernel_new, os.environ["VARIANT_IMAGE"]),
+                                    "files": new_files}}
 # Plugins come from the sets of ra5on/TitanOS-Plugins (scripts/plugin-set.py
 # puts them into out/plugins); they must match this exact system. The official
 # ones are those the image has catalog entries for. Driver plugins carry their
@@ -195,6 +247,8 @@ with open(os.path.join(release, "manifest.json"), "w", encoding="utf-8") as f:
 # Use the inventory generated for this actual image, including Go, npm and fonts.
 notices = Path(image) / "rootfs/usr/share/titanos"
 components = json.loads((notices / "components.json").read_text())
+variant_notices = Path(os.environ["VARIANT_IMAGE"]) / "rootfs/usr/share/titanos"
+variant_components = json.loads((variant_notices / "components.json").read_text()) if variant else []
 if not any(c["ecosystem"] == "Debian" for c in components):
     raise SystemExit("missing Debian license inventory")
 with open(os.path.join(release, f"titanos-{version}-sources.txt"), "w", encoding="utf-8") as f:
@@ -204,9 +258,19 @@ with open(os.path.join(release, f"titanos-{version}-sources.txt"), "w", encoding
         f.write(f"{c['ecosystem']}: {c['name']} {c['version']}\n  {c['source']}\n")
     for name, plugin_version, links in plugin_sources:
         f.write(f"Plugin: {name} {plugin_version}\n" + "".join(f"  {link}\n" for link in links))
+    if variant:
+        # Kernel and firmware of the image with the new kernel differ.
+        known = {(c["ecosystem"], c["name"], c["version"]) for c in components}
+        extra = [c for c in variant_components if (c["ecosystem"], c["name"], c["version"]) not in known]
+        f.write("\nImage with the new kernel (titanos-" + version + "-new-*), additionally:\n")
+        for c in extra:
+            f.write(f"{c['ecosystem']}: {c['name']} {c['version']}\n  {c['source']}\n")
 with tarfile.open(os.path.join(release, f"titanos-{version}-licenses.tar.gz"), "w:gz") as archive:
     for name in ["LICENSE.md", "THIRD_PARTY_LICENSES", "components.json", "licenses"]:
         archive.add(notices / name, arcname=name)
+    if variant:
+        for name in ["components.json", "licenses"]:
+            archive.add(variant_notices / name, arcname="kernel-new/" + name)
 with open(os.path.join(release, "SHA256SUMS"), "w", encoding="utf-8") as f:
     for path in sorted(Path(release).iterdir()):
         if path.name != "SHA256SUMS":

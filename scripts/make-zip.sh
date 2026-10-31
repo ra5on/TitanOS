@@ -3,9 +3,16 @@
 #
 #   out/stick/                 the stick layout, ready to copy onto a FAT32 stick
 #   out/titanos-<version>.zip  the same as a zip, plus its SHA-256
+#   out/titanos-<version>.img  with --image: the stick as a disk image that
+#                              also starts on boards with a legacy BIOS
 #
-# Usage: scripts/make-zip.sh [--dev]
-#   --dev   development build: root autologin on console and serial port
+# Usage: scripts/make-zip.sh [--dev] [--image | --kernel-new]
+#   --dev         development build: root autologin on console and serial port
+#   --image       also write the stick image (scripts/make-stick-image.py)
+#   --kernel-new  the system with the newer kernel from trixie-backports
+#                 (kernel choice "Neu", docs/KERNEL.md): built into
+#                 build/mkosi.output-new, its slot files go to out/kernel-new/;
+#                 no stick. Build it next to the default image of a release.
 #
 # Expects backend/bin/titand to exist (make build). VERSION sets the version.
 set -euo pipefail
@@ -13,11 +20,23 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 profile=
-case "${1:-}" in
-    --dev) profile=dev ;;
-    "") ;;
-    *) echo "usage: $0 [--dev]" >&2; exit 2 ;;
-esac
+kernel_new=
+stick_image=
+for arg in "$@"; do
+    case "$arg" in
+        --dev) profile=dev ;;
+        --kernel-new) kernel_new=1 ;;
+        --image) stick_image=1 ;;
+        *) echo "usage: $0 [--dev] [--image | --kernel-new]" >&2; exit 2 ;;
+    esac
+done
+profiles=()
+[ -n "$profile" ] && profiles+=(--profile "$profile")
+output=mkosi.output
+if [ -n "$kernel_new" ]; then
+    profiles+=(--profile kernel-new)
+    output=mkosi.output-new
+fi
 
 version=${VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo 0.0.0)}
 name=titanos-$version${profile:+-$profile}
@@ -68,11 +87,29 @@ mkosi_bin=$(command -v mkosi)
 $userns "$mkosi_bin" --directory build \
     --image-version "$version" \
     ${epoch:+--source-date-epoch "$epoch"} \
-    ${profile:+--profile "$profile"} \
+    "${profiles[@]}" \
+    --output-directory "$output" \
     --extra-tree "$extra" \
     --force build
 
-image=build/mkosi.output
+image=build/$output
+
+if [ -n "$kernel_new" ]; then
+    kernel=$(cat "$image/kernel-version")
+    case "$kernel" in
+        *bpo*) ;;
+        *) echo "the image with the new kernel holds $kernel, not a backports kernel" >&2; exit 1 ;;
+    esac
+    rm -rf out/kernel-new
+    mkdir -p out/kernel-new
+    cp "$image/vmlinuz" "$image/initrd.img" "$image/filesystem.squashfs" "$image/kernel-version" out/kernel-new/
+    echo "$version" > out/kernel-new/version
+    echo
+    echo "Kernel (new): $kernel"
+    echo "Slot files:   out/kernel-new/"
+    exit 0
+fi
+
 stick=out/stick
 
 rm -rf "$stick"
@@ -105,3 +142,8 @@ echo "Kernel:       $(cat "$image/kernel-version")"
 echo "System image: $(du -h "$stick/titanos/$slot/filesystem.squashfs" | cut -f1) (filesystem.squashfs)"
 echo "Stick:        $stick"
 echo "Zip:          out/$name.zip ($(du -h "out/$name.zip" | cut -f1))"
+if [ -n "$stick_image" ]; then
+    rm -f "out/$name.img"
+    python3 scripts/make-stick-image.py "$stick" "out/$name.img"
+    echo "Stick image:  out/$name.img (legacy BIOS and UEFI)"
+fi

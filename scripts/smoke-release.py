@@ -37,7 +37,10 @@ def free_port():
         return sock.getsockname()[1]
 
 
-def smoke(archive, timeout, log, plugins=None, force_tcg=False):
+OVMF32 = ["/usr/share/OVMF/OVMF32_CODE_4M.fd", "/usr/share/OVMF/OVMF32_CODE_4M.secboot.fd"]
+
+
+def smoke(archive, timeout, log, plugins=None, force_tcg=False, firmware="uefi", kernel_new=None):
     os.environ["PATH"] += ":/usr/sbin:/sbin"
     context = ssl._create_unverified_context()  # expected self-signed NAS certificate
     with tempfile.TemporaryDirectory(prefix="titanos-release-") as tmp:
@@ -51,6 +54,14 @@ def smoke(archive, timeout, log, plugins=None, force_tcg=False):
                     raise ValueError("installation ZIP contains user configuration")
             packed.extractall(stick)
         version = (stick / "titanos/a/version").read_text().strip()
+        if kernel_new:
+            # The slot as an update with kernel choice "Neu" writes it.
+            for name in ["vmlinuz", "initrd.img", "filesystem.squashfs"]:
+                shutil.copyfile(kernel_new / f"titanos-{version}-new-{name}", stick / "titanos/a" / name)
+        if firmware != "uefi":
+            # GRUB cannot read QEMU's SMBIOS credentials: the serial console
+            # comes from the stick's own custom.cfg instead.
+            (stick / "boot/grub/custom.cfg").write_text('set titanos_extra="console=tty0 console=ttyS0,115200"\n')
         disk = directory / "stick.img"
         with disk.open("wb") as file:
             file.truncate(4 * 1024**3)
@@ -58,6 +69,9 @@ def smoke(archive, timeout, log, plugins=None, force_tcg=False):
         partition = str(disk) + "@@1M"
         command("mformat", "-i", partition, "-F", "-v", "TITANOS", "::")
         command("mcopy", "-i", partition, "-s", *map(str, stick.iterdir()), "::")
+        if firmware == "bios":
+            # The tool on the stick, as a user runs it.
+            command("python3", str(stick / "boot/grub/stick-bios.py"), str(disk), str(stick / "boot/grub"))
         shutil.copyfile("/usr/share/OVMF/OVMF_VARS_4M.fd", directory / "OVMF_VARS.fd")
         port = free_port()
         ssh_port = free_port()
@@ -82,9 +96,19 @@ def smoke(archive, timeout, log, plugins=None, force_tcg=False):
                 return json.loads(body) if body else None
 
         accel = ["-accel", "kvm", "-cpu", "host"] if not force_tcg and os.access("/dev/kvm", os.W_OK) else ["-accel", "tcg", "-cpu", "max"]
-        args = ["qemu-system-x86_64", "-machine", "q35", *accel, "-smp", "2", "-m", "4G",
-                "-drive", "if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd",
-                "-drive", f"if=pflash,format=raw,file={directory}/OVMF_VARS.fd",
+        if firmware == "bios":
+            # SeaBIOS on the old PC machine, like a board without UEFI.
+            boot_firmware = ["-machine", "pc"]
+        elif firmware == "ia32":
+            # 32-bit UEFI on a 64-bit CPU, like Bay Trail boards.
+            code = next(path for path in OVMF32 if os.path.exists(path))
+            shutil.copyfile("/usr/share/OVMF/OVMF32_VARS_4M.fd", directory / "OVMF32_VARS.fd")
+            boot_firmware = ["-machine", "q35", "-drive", f"if=pflash,format=raw,readonly=on,file={code}",
+                             "-drive", f"if=pflash,format=raw,file={directory}/OVMF32_VARS.fd"]
+        else:
+            boot_firmware = ["-machine", "q35", "-drive", "if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd",
+                             "-drive", f"if=pflash,format=raw,file={directory}/OVMF_VARS.fd"]
+        args = ["qemu-system-x86_64", *boot_firmware, *accel, "-smp", "2", "-m", "4G",
                 "-device", "qemu-xhci", "-drive", f"if=none,id=stick,format=raw,file={disk}",
                 "-device", "usb-storage,drive=stick,removable=on,bootindex=0",
                 "-netdev", f"user,id=net0,hostfwd=tcp:127.0.0.1:{port}-:443,hostfwd=tcp:127.0.0.1:{ssh_port}-:22", "-device", "virtio-net-pci,netdev=net0",
@@ -151,7 +175,7 @@ def smoke(archive, timeout, log, plugins=None, force_tcg=False):
         certificate = None
         with log.open("wb") as serial:
             for boot in (1, 2):
-                print(f"UEFI boot {boot}: TitanOS {version} ({accel[1]})", flush=True)
+                print(f"{firmware} boot {boot}: TitanOS {version}{' with the new kernel' if kernel_new else ''} ({accel[1]})", flush=True)
                 process = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=serial, stderr=subprocess.STDOUT)
                 try:
                     deadline = time.monotonic() + timeout
@@ -182,6 +206,12 @@ def smoke(archive, timeout, log, plugins=None, force_tcg=False):
                         raise AssertionError("wrong version or owner account")
                     # These authenticated endpoints also exercise the embedded backend/UI contract.
                     about = request("/api/v1/about")
+                    if kernel_new and "bpo" not in about["kernel"]:
+                        raise AssertionError(f"not the new kernel: {about['kernel']}")
+                    loader = request("/api/v1/update").get("bootLoader")
+                    expected = {"uefi": "systemd-boot", "bios": "grub-i386-pc", "ia32": "grub-i386-efi"}[firmware]
+                    if loader != expected:
+                        raise AssertionError(f"started by {loader}, expected {expected}")
                     if "Debian:" not in json.dumps(about) or "Go:" not in json.dumps(about):
                         raise AssertionError("generated third-party notices missing from About")
                     if "hd-idle" not in json.dumps(about):
@@ -247,6 +277,10 @@ if __name__ == "__main__":
     parser.add_argument("--log", type=Path, default=Path("out/release-smoke.log"))
     parser.add_argument("--plugins", type=Path, help="test NVIDIA plugin installation and removal using disposable VM disks")
     parser.add_argument("--tcg", action="store_true", help="force CPU emulation to reproduce CI without KVM")
+    parser.add_argument("--firmware", choices=["uefi", "bios", "ia32"], default="uefi",
+                        help="64-bit UEFI (systemd-boot), legacy BIOS or 32-bit UEFI (GRUB)")
+    parser.add_argument("--kernel-new", type=Path, help="release directory: boot the slot with the newer kernel")
     args = parser.parse_args()
     args.log.parent.mkdir(parents=True, exist_ok=True)
-    smoke(args.zip.resolve(), args.timeout, args.log, args.plugins.resolve() if args.plugins else None, args.tcg)
+    smoke(args.zip.resolve(), args.timeout, args.log, args.plugins.resolve() if args.plugins else None, args.tcg,
+          args.firmware, args.kernel_new.resolve() if args.kernel_new else None)

@@ -169,6 +169,47 @@ class ReleaseTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "inventory"):
             verify.verify(self.release, self.keys)
 
+    def kernel_new(self, marker="new"):
+        """The same image with a backports kernel, as make-zip.sh --kernel-new leaves it."""
+        image = self.repo / "build/mkosi.output-new"
+        shutil.copytree(self.root, image / "rootfs", symlinks=True)
+        (image / "rootfs/usr/share/titanos/kernel-variant").write_text(marker + "\n")
+        (image / "rootfs/var/lib/dpkg/status").write_text(
+            "Package: linux-image-6.16.12+bpo-amd64\nStatus: install ok installed\nVersion: 6.16.12-1~bpo13+1\n")
+        (image / "rootfs/usr/share/titanos/components.json").write_text(json.dumps([
+            dict(ecosystem="Debian", name="example", version="1", source="https://example.org/source", notices=["NOTICE"]),
+            dict(ecosystem="Debian", name="linux-signed-amd64", version="6.16.12-1~bpo13+1", source="https://example.org/linux", notices=["NOTICE"])]))
+        variant = self.repo / "out/kernel-new"
+        variant.mkdir(parents=True)
+        self.command("mksquashfs", str(image / "rootfs"), str(variant / "filesystem.squashfs"), "-noappend", "-quiet", "-processors", "1")
+        for name in ["vmlinuz", "initrd.img"]:
+            (variant / name).write_bytes(b"new " + name.encode())
+        (variant / "kernel-version").write_text("6.16.12+bpo-amd64\n")
+        (variant / "version").write_text("0.1.0-beta.1\n")
+
+    def test_release_with_the_new_kernel(self):
+        self.kernel_new()
+        self.pack()
+        self.sign()
+        self.assertEqual(verify.verify(self.release, self.keys), "0.1.0-beta.1")
+        manifest = json.loads((self.release / "manifest.json").read_text())
+        new = manifest["variants"]["new"]
+        self.assertEqual(new["kernel"], "6.16.12+bpo-amd64")
+        self.assertEqual(new["kernelPackage"], "6.16.12-1~bpo13+1")
+        self.assertEqual([f["asset"] for f in new["files"]], [f"titanos-0.1.0-beta.1-new-{n}" for n in ["vmlinuz", "initrd.img", "filesystem.squashfs"]])
+        self.assertEqual(manifest["kernel"], "6.12-test")
+        self.assertIn("linux-signed-amd64 6.16.12-1~bpo13+1", (self.release / "titanos-0.1.0-beta.1-sources.txt").read_text())
+        path = self.release / "titanos-0.1.0-beta.1-new-vmlinuz"
+        path.write_bytes(b"other kernel")
+        with self.assertRaises(ValueError):
+            verify.verify(self.release, self.keys)
+
+    def test_new_kernel_image_must_say_so(self):
+        self.kernel_new(marker="stable")
+        self.command("mksquashfs", str(self.root), str(self.slot / "filesystem.squashfs"), "-noappend", "-quiet", "-processors", "1")
+        output = self.command("scripts/make-release.sh", "0.1.0-beta.1", "beta", success=False)
+        self.assertIn("not the image with the new kernel", output)
+
     def test_multiple_plugins_signed_and_verified(self):
         plugins = self.repo / "out/plugins"
         for name in ["intel-gpu-tools", "coral-usb", "tailscale", "netbird"]:
@@ -324,6 +365,7 @@ class ReleaseTest(unittest.TestCase):
             size=len(data), modules=["ngbe"], sources=["wangxun-nic-sources.tar.gz"])))
         (plugins / "wangxun-nic-licenses.tar.gz").write_bytes(b"notices")
         (plugins / "wangxun-nic-sources.tar.gz").write_bytes(b"sources")
+        self.kernel_new()
         self.pack()
         self.sign()
         # The base as GitHub serves it.
@@ -377,6 +419,13 @@ else:
         self.assertEqual(sorted(p["name"] for p in manifest["plugins"]), ["nvidia", "wangxun-nic"])
         self.assertEqual((self.release / "wangxun-nic-sources.tar.gz").read_bytes(), b"sources")
         self.assertEqual(manifest["nvidiaBuildSDK"], base["nvidiaBuildSDK"])
+        # The image with the new kernel: its kernel bit for bit, the new titand inside.
+        new, base_new = manifest["variants"]["new"], base["variants"]["new"]
+        self.assertEqual(new["kernel"], base_new["kernel"])
+        self.assertEqual(new["files"][0]["sha256"], base_new["files"][0]["sha256"])
+        image = self.release / "titanos-0.1.0-beta.2-new-filesystem.squashfs"
+        self.assertEqual(cat("usr/bin/titand"), b"titand 0.1.0-beta.2")
+        self.assertEqual(cat("usr/share/titanos/kernel-variant"), b"new\n")
 
     def test_repack_refuses_a_base_with_a_foreign_signature(self):
         self.pack()

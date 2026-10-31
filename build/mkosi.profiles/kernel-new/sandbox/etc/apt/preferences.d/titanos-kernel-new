@@ -1,0 +1,4 @@
+# Kernel and firmware from trixie-backports, everything else from trixie.
+Package: linux-image-amd64 linux-image-*-amd64 linux-base linux-kbuild-* firmware-*
+Pin: release n=trixie-backports
+Pin-Priority: 990
