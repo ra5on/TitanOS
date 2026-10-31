@@ -260,7 +260,7 @@ try {
   await open(page, "docker", "Application-2");
   await page
     .getByRole("menu")
-    .getByRole("menuitem", { name: "Stopp", exact: true })
+    .getByRole("menuitem", { name: "Stoppen", exact: true })
     .click();
   await page
     .getByRole("dialog")
@@ -276,7 +276,7 @@ try {
   containers[2].state = "exited";
   await page
     .getByRole("menu")
-    .getByRole("menuitem", { name: "Start", exact: true })
+    .getByRole("menuitem", { name: "Starten", exact: true })
     .waitFor({ timeout: 7500 });
   await page.keyboard.press("Escape");
   containers[2].state = "running";

@@ -70,13 +70,13 @@
 		<button
 			class="btn icon-btn"
 			disabled={!canUndo || saving}
-			title={`${t('dashboard.editor.undo')} (Strg+Z)`}
+			title={`${t('dashboard.editor.undo')} (${t('shortcuts.ctrl')}+Z)`}
 			aria-label={t('dashboard.editor.undo')}
 			onclick={() => onstep('undo')}><Icon name="undo" size={15} /></button
 		><button
 			class="btn icon-btn"
 			disabled={!canRedo || saving}
-			title={`${t('dashboard.editor.redo')} (Strg+Y)`}
+			title={`${t('dashboard.editor.redo')} (${t('shortcuts.ctrl')}+Y)`}
 			aria-label={t('dashboard.editor.redo')}
 			onclick={() => onstep('redo')}><Icon name="redo" size={15} /></button
 		><button class="btn" disabled={saving} onclick={ontemplate}
@@ -85,7 +85,7 @@
 		><button class="btn" disabled={saving} onclick={oncancel}>{t('common.cancel')}</button><button
 			class="btn btn-primary"
 			disabled={saving}
-			title={`${t('dashboard.editor.save')} (Strg+S)`}
+			title={`${t('dashboard.editor.save')} (${t('shortcuts.ctrl')}+S)`}
 			onclick={onsave}>{saving ? t('dashboard.editor.saving') : t('dashboard.editor.save')}</button
 		>
 	</div>

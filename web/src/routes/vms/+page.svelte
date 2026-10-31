@@ -13,7 +13,7 @@
 	import TasksPanel from '#lib/components/TasksPanel.svelte';
 	import { api, ApiError, type VM, type VMStatus } from '#lib/api.ts';
 	import { poll, type Poller } from '#lib/poll.ts';
-	import { apiErrorText, errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 	import { addVmConsole } from '#lib/terminal.svelte.ts';
@@ -399,20 +399,28 @@
 	const CTRL: [number, string] = [0xffe3, 'ControlLeft'];
 	const ALT: [number, string] = [0xffe9, 'AltLeft'];
 	const KEYS: { label: string; keys: [number, string][] }[] = [
-		{ label: 'Strg+Alt+Entf', keys: [CTRL, ALT, [0xffff, 'Delete']] },
-		{ label: 'Strg+Alt+⌫', keys: [CTRL, ALT, [0xff08, 'Backspace']] },
+		{ label: 'Ctrl+Alt+Delete', keys: [CTRL, ALT, [0xffff, 'Delete']] },
+		{ label: 'Ctrl+Alt+⌫', keys: [CTRL, ALT, [0xff08, 'Backspace']] },
 		...[1, 2, 3, 7].map((n) => ({
-			label: `Strg+Alt+F${n}`,
+			label: `Ctrl+Alt+F${n}`,
 			keys: [CTRL, ALT, [0xffbd + n, `F${n}`]] as [number, string][],
 		})),
 		{ label: 'Alt+Tab', keys: [ALT, [0xff09, 'Tab']] },
 		{ label: 'Win', keys: [[0xffeb, 'MetaLeft']] },
-		{ label: 'Druck', keys: [[0xff61, 'PrintScreen']] },
+		{ label: 'Print', keys: [[0xff61, 'PrintScreen']] },
 	];
+	// Key names come from the translations ("Strg+Alt+Entf" in German).
+	const KEY_NAMES: Record<string, MessageKey> = {
+		Ctrl: 'shortcuts.ctrl',
+		Alt: 'shortcuts.alt',
+		Delete: 'shortcuts.delete',
+		Print: 'shortcuts.print',
+	};
 	const keyLabel = (label: string) =>
-		i18n.locale === 'en'
-			? label.replace('Strg', 'Ctrl').replace('Entf', 'Del').replace('Druck', 'Print')
-			: label;
+		label
+			.split('+')
+			.map((part) => (KEY_NAMES[part] ? t(KEY_NAMES[part]) : part))
+			.join('+');
 
 	const MODES: ScaleMode[] = ['scale', 'remote', 'full'];
 	// Only the virtio graphics of the Linux template can take a resolution
