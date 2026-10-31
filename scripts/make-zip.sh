@@ -99,9 +99,15 @@ image=build/$output
 
 if [ -n "$kernel_new" ]; then
     kernel=$(cat "$image/kernel-version")
-    case "$kernel" in
+    # uname shows no "bpo"; the version of the kernel package does
+    # (7.2.11-1~bpo13+1 for 7.2.11+deb13-amd64).
+    package=$(python3 -c 'import json, sys
+for p in json.load(open(sys.argv[1]))["packages"]:
+    if p["name"] == "linux-image-" + sys.argv[2]:
+        print(p["version"])' "$image/rootfs.manifest" "$kernel")
+    case "$package" in
         *bpo*) ;;
-        *) echo "the image with the new kernel holds $kernel, not a backports kernel" >&2; exit 1 ;;
+        *) echo "the image with the new kernel holds $kernel (${package:-no package}), not a backports kernel" >&2; exit 1 ;;
     esac
     rm -rf out/kernel-new
     mkdir -p out/kernel-new
