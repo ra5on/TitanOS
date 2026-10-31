@@ -56,3 +56,7 @@ Eigene Ergänzungen der Kernel-Kommandozeile nur für diesen Stick (z. B. seriel
 - Go-Tests (`grub_test.go`) für Zählung, Abgleich, `bootenv` und Kernelparameter; Python-Tests (`scripts/tests/test_boot.py`) für MBR-Installation, Ablehnungen und das Stick-Abbild.
 - `release.yml` bootet das Release-ZIP zusätzlich mit SeaBIOS und 32-Bit-OVMF (`smoke-release.py --firmware bios|ia32`). Dieser CI-Schritt ist nur lokal vorbereitet, noch nicht in CI gelaufen.
 - **Nicht geprüft:** echte Hardware (N40L/N54L, Bay-Trail-Boards). BIOS-Eigenheiten beim USB-Start (Diskettenemulation, USB-HDD vs. USB-ZIP) sind nur über die Laufwerksnummer-Korrektur wie bei `grub-bios-setup` abgedeckt. Der vollständige Image-Build mit den neuen Paketen (`make zip`) lief hier nicht, weil er root braucht.
+
+## 32-Bit-UEFI: `efi=noruntime`
+
+Auf 32-Bit-UEFI startet GRUB den 64-Bit-Kernel im gemischten Modus. Aufrufe der EFI-Laufzeitdienste der 32-Bit-Firmware brachten den Kernel im CI-Rauchtest (QEMU/TCG mit OVMF ia32 aus Ubuntu, 31.10.2026) früh zum Absturz („kernel tried to execute NX-protected page“). `boot/grub.cfg.in` hängt deshalb auf diesem Weg fest `efi=noruntime` an. TitanOS braucht dort keine EFI-Variablen: GRUB führt Versuche und bevorzugten Slot in `grubenv`. Das ist eine feste Einstellung des Sticks für diesen Startweg, kein zur Laufzeit gesetzter Parameter; `custom.cfg` sollte `titanos_extra` deshalb ergänzen statt ersetzen. 64-Bit-UEFI (systemd-boot) und Legacy-BIOS sind nicht betroffen.
