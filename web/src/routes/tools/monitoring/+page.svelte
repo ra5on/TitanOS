@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import NavigationGuard from '#lib/operations/NavigationGuard.svelte';
 	import { api, type StorageStatus } from '#lib/api.ts';
+	import { GB, MB, mbToMiB, mibToMB } from '#lib/format.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import HistoryChart from '#lib/operations/HistoryChart.svelte';
@@ -136,8 +137,10 @@
 				class="field"
 				type="number"
 				min="8"
-				max="256"
-				bind:value={settings.maxMiB}
+				max="268"
+				bind:value={
+					() => mibToMB(settings?.maxMiB ?? 0), (mb) => settings && (settings.maxMiB = mbToMiB(mb))
+				}
 				required
 			/></label
 		><button class="btn btn-primary" disabled={busy}>{t('ops.save')}</button
@@ -191,18 +194,18 @@
 		{samples}
 		value={(s) => {
 			const d = s.disks.find((d) => d.name === disk);
-			return d ? d.readBps / 1048576 : null;
+			return d ? d.readBps / MB : null;
 		}}
 		label={t('ops.read')}
-		unit="MiB/s"
+		unit="MB/s"
 	/><HistoryChart
 		{samples}
 		value={(s) => {
 			const d = s.disks.find((d) => d.name === disk);
-			return d ? d.writeBps / 1048576 : null;
+			return d ? d.writeBps / MB : null;
 		}}
 		label={t('ops.write')}
-		unit="MiB/s"
+		unit="MB/s"
 	/><HistoryChart
 		{samples}
 		value={(s) => s.disks.find((d) => d.name === disk)?.latencyMs ?? null}
@@ -222,27 +225,27 @@
 		{samples}
 		value={(s) => {
 			const n = s.networks.find((n) => n.name === network);
-			return n ? n.receive / 1048576 : null;
+			return n ? n.receive / MB : null;
 		}}
 		label={t('ops.receive')}
-		unit="MiB/s"
+		unit="MB/s"
 	/><HistoryChart
 		{samples}
 		value={(s) => {
 			const n = s.networks.find((n) => n.name === network);
-			return n ? n.send / 1048576 : null;
+			return n ? n.send / MB : null;
 		}}
 		label={t('ops.send')}
-		unit="MiB/s"
+		unit="MB/s"
 	/>
 	{#each [...new Set(samples.flatMap( (s) => s.volumes.map((v) => v.name) ))].sort() as name (name)}<HistoryChart
 			{samples}
 			value={(s) => {
 				const v = s.volumes.find((v) => v.name === name);
-				return v ? v.used / 1073741824 : null;
+				return v ? v.used / GB : null;
 			}}
 			label={`${t('ops.usage')} · ${name}`}
-			unit="GiB"
+			unit="GB"
 		/>{/each}
 </div>
 

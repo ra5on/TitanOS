@@ -440,7 +440,7 @@
 						type="text"
 						lang={locale}
 						maxlength={LOGIN_TITLE_MAX}
-						placeholder={locale === 'de' ? 'Anmelden' : 'Sign in'}
+						placeholder={locale === 'de' ? 'Anmelden' : 'Log in'}
 						value={text.title}
 						oninput={(e) => setText(locale, 'title', e.currentTarget.value)}
 					/></label

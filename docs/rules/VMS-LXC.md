@@ -52,6 +52,8 @@ Bereich: VM-Erstellung, Firmware, Konsole, Snapshots, App-Vorlagen, Hardware und
 - **Lüfter** (seit 0.35.0, Paket `fans`, `docs/FANS.md`, Einstellungen › Temperaturen, nur Besitzer/Admin): ab Werk alle beim BIOS; je Lüfter fest oder Kurve (2–8 steigende Punkte, Sensor hwmon oder wärmste Platte aus dem SMART-Cache, 2 °C Hysterese), Minimum 20–100 % (Vorgabe 30). Sensor nicht lesbar → 100 %. Originaler `pwmN_enable` in `/run/titanos/fans-original.json`, zurück beim Umschalten auf BIOS und beim Beenden von titand (war manuell → 255). Alle 5 s, Schreiben nur bei Änderung; Entwicklungsmodus nur lesend. `/config/system/fans.json`.
 - Keine pauschale Neustartpflicht für Gerätezuordnungen. **Lokal vorbereitete NVIDIA-Treiber** werden dagegen ausdrücklich beim nächsten NAS-Neustart aktiviert (siehe eigenen Abschnitt).
 
+- **Größen in GB** (Entscheidung 31.10.2026, Einzelheiten `docs/rules/WEB-UI.md` › Einheiten): VM-Assistent und LXC-Formular zeigen RAM und Platten dezimal (GB bzw. MB). Gespeichert bleibt `memoryMiB`; umgerechnet wird nur beim Ändern (`Math.round(GB·1000³/1024²)`), ein unveränderter Wert bleibt bitgenau. Neue Platten und Vergrößern schicken `sizeBytes` = GB·1000³ (ganzzahlige GB sind immer ein Vielfaches von 512 Byte); die kleinste neue Platte ist 1 GB (`vm.go`, vorher 1 GiB). Neue VMs starten mit 2 GB (1907 MiB). Windows 11 verlangt 4096 MiB; bei der Windows-Vorlage warnt das Formular unter 4,3 GB. Geprüft: `go test ./internal/vm`, svelte-check, Screenshots des Assistenten; kein Lauf auf echter Hardware.
+
 ## VM-Snapshots und App-Vorlagen
 
 - VM-Snapshots: eigener Reiter, manuelle Aufnahme, Wiederherstellung,

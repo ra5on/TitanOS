@@ -22,22 +22,22 @@ afterEach(() => {
 	i18n.locale = before;
 });
 
-test('formatBytes: binary steps, fewer digits for larger numbers', () => {
+test('formatBytes: decimal steps, fewer digits for larger numbers', () => {
 	expect(formatBytes(0)).toBe('0 B');
-	expect(formatBytes(1023)).toBe('1.023 B');
-	expect(formatBytes(1024)).toBe('1 KB');
-	expect(formatBytes(1536)).toBe('1,5 KB');
-	expect(formatBytes(3328599654)).toBe('3,1 GB');
-	expect(formatBytes(150 * 1024 ** 2)).toBe('150 MB');
-	expect(formatBytes(2 * 1024 ** 6)).toBe('2.048 PB');
+	expect(formatBytes(999)).toBe('999 B');
+	expect(formatBytes(1000)).toBe('1 KB');
+	expect(formatBytes(1500)).toBe('1,5 KB');
+	expect(formatBytes(3_100_000_000)).toBe('3,1 GB');
+	expect(formatBytes(150 * 1000 ** 2)).toBe('150 MB');
+	expect(formatBytes(2 * 1000 ** 6)).toBe('2.000 PB');
 	i18n.locale = 'en';
-	expect(formatBytes(1536)).toBe('1.5 KB');
+	expect(formatBytes(1500)).toBe('1.5 KB');
 });
 
 test('formatBytesOf: both values in the unit of the total', () => {
-	expect(formatBytesOf(3.1 * 1024 ** 3, 16 * 1024 ** 3)).toBe('3,1 / 16 GB');
-	expect(formatBytesOf(512, 1000)).toBe('512 / 1.000 B');
-	expect(formatBytesOf(0, 200 * 1024 ** 2)).toBe('0 / 200 MB');
+	expect(formatBytesOf(3.1 * 1000 ** 3, 16 * 1000 ** 3)).toBe('3,1 / 16 GB');
+	expect(formatBytesOf(512, 999)).toBe('512 / 999 B');
+	expect(formatBytesOf(0, 200 * 1000 ** 2)).toBe('0 / 200 MB');
 });
 
 test('formatDiskBytes: decimal units like on the label of a disk', () => {
@@ -49,9 +49,9 @@ test('formatDiskBytes: decimal units like on the label of a disk', () => {
 test('formatPercent, formatNumber and formatMegabytesPerSecond', () => {
 	expect(formatPercent(42.6)).toBe('43 %');
 	expect(formatNumber(1234567)).toBe('1.234.567');
-	expect(formatMegabytesPerSecond(150 * 1024 ** 2)).toBe('150');
-	expect(formatMegabytesPerSecond(12.34 * 1024 ** 2)).toBe('12,3');
-	expect(formatMegabytesPerSecond(1.234 * 1024 ** 2)).toBe('1,23');
+	expect(formatMegabytesPerSecond(150 * 1000 ** 2)).toBe('150');
+	expect(formatMegabytesPerSecond(12.34 * 1000 ** 2)).toBe('12,3');
+	expect(formatMegabytesPerSecond(1.234 * 1000 ** 2)).toBe('1,23');
 });
 
 test('formatDuration: the two largest units', () => {

@@ -147,7 +147,9 @@ func (m *Manager) prepare(ctx context.Context, vm *VM, mounted []string) error {
 				return err
 			}
 		}
-		if disk.SizeBytes < gib || disk.SizeBytes > 16<<40 {
+		// The web UI takes sizes in decimal GB (decision of 31 Oct 2026),
+		// so the smallest disk is 1 GB, not 1 GiB.
+		if disk.SizeBytes < 1_000_000_000 || disk.SizeBytes > 16<<40 {
 			return fmt.Errorf("%w: disk size out of range", ErrInvalid)
 		}
 		if !slices.Contains(mounted, disk.Volume) {

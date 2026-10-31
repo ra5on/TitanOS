@@ -2,7 +2,9 @@
 import type { Volume, VMHost } from '#lib/api.ts';
 import { t } from '#lib/i18n/index.svelte.ts';
 
-export const GIB = 1024 ** 3;
+import { GB } from '#lib/format.ts';
+
+export { GB };
 /** The tag a shared folder is mounted by inside the VM. */
 const TAG = /^[A-Za-z0-9_-]{1,36}$/;
 
@@ -10,7 +12,8 @@ export type DiskDraft = {
 	/** A new empty disk, a copy of an image, an image as it is, or a whole disk. */
 	mode: 'new' | 'copy' | 'direct' | 'block';
 	format: 'qcow2' | 'raw';
-	sizeGiB: number;
+	/** Decimal gigabytes as typed; sent to titand as bytes. */
+	sizeGB: number;
 	volume: string;
 	/** The image or the whole disk, for everything but `new`. */
 	path: string;
@@ -36,9 +39,9 @@ export function diskBlocked(
 	if (disk.mode === 'direct' || disk.mode === 'block') return disk.path === '';
 	const image = imageOf(images, disk);
 	return (
-		!(disk.sizeGiB >= 1) ||
-		(disk.mode === 'copy' && (!image || disk.sizeGiB * GIB < image.virtualBytes)) ||
-		(disk.format === 'raw' && disk.sizeGiB * GIB > free(disk.volume))
+		!(disk.sizeGB >= 1) ||
+		(disk.mode === 'copy' && (!image || disk.sizeGB * GB < image.virtualBytes)) ||
+		(disk.format === 'raw' && disk.sizeGB * GB > free(disk.volume))
 	);
 }
 

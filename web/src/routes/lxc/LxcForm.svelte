@@ -4,6 +4,7 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { api, ApiError, type Share } from '#lib/api.ts';
 	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { mbToMiB, mibToMB } from '#lib/format.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 	import {
 		containerLabel,
@@ -214,7 +215,13 @@
 				</label>
 				<label>
 					<span>{t('lxc.form.memory')}</span>
-					<input class="field" type="number" min="0" step="64" bind:value={memoryMiB} />
+					<input
+						class="field"
+						type="number"
+						min="0"
+						step="1"
+						bind:value={() => mibToMB(memoryMiB), (mb) => (memoryMiB = mbToMiB(mb))}
+					/>
 				</label>
 			</div>
 		</fieldset>

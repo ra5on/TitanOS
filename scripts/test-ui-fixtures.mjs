@@ -1,4 +1,38 @@
 // Shared isolated API fixtures. No requests reach a NAS.
+import { execFileSync } from "node:child_process";
+import { readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// The release the screenshots show: the newest tag of the repository, or
+// without tags (shallow CI checkout) the newest docs/releases/vX.Y.Z.md.
+// There is no VERSION file; the build takes its version from git too.
+export function releaseVersion() {
+  const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+  const pattern = /^v?(\d+)\.(\d+)\.(\d+)$/;
+  try {
+    const tag = execFileSync(
+      "git",
+      ["describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"],
+      { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+    ).trim();
+    if (pattern.test(tag)) return tag.replace(/^v/, "");
+  } catch {
+    // No git or no tags: fall back to the release notes.
+  }
+  try {
+    const versions = readdirSync(join(root, "docs", "releases"))
+      .map((name) => /^v(\d+)\.(\d+)\.(\d+)\.md$/.exec(name))
+      .filter(Boolean)
+      .map((m) => m.slice(1, 4).map(Number))
+      .sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]);
+    if (versions.length) return versions.at(-1).join(".");
+  } catch {
+    // Nothing readable: keep a neutral value.
+  }
+  return "0.0.0";
+}
+
 export function fixtureFactory(browser, errors) {
   const time = "2026-10-23T16:00:00Z";
   const volume = {
@@ -17,7 +51,7 @@ export function fixtureFactory(browser, errors) {
   };
   const system = {
     hostname: "titan-test",
-    version: "0.16.0",
+    version: releaseVersion(),
     kernel: "test",
     uptimeSeconds: 1000,
     cpu: { model: "Test CPU", threads: 8, usagePercent: 12 },

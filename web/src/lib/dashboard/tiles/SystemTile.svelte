@@ -115,7 +115,9 @@
 			var(--tile-label-font);
 		color: var(--tile-label-color, var(--muted));
 		text-align: var(--tile-label-align);
-		overflow-wrap: anywhere;
+		/* Long labels ("Betriebssystem") break only at hyphenation points. */
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	dd {
 		margin: 0;
@@ -130,5 +132,12 @@
 	.unlabelled div {
 		grid-template-columns: minmax(0, 1fr);
 		gap: 2px;
+	}
+	/* Narrow tiles (phones): the label stands above its value. */
+	@container (max-width: 420px) {
+		dl div {
+			grid-template-columns: minmax(0, 1fr);
+			gap: 0;
+		}
 	}
 </style>

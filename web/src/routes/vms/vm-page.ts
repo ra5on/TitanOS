@@ -1,7 +1,7 @@
 // What the VMs page works out from the status, without the page itself.
 
 import { ApiError, type VM, type VMStatus, type Volume } from '#lib/api.ts';
-import { errorText, t, type Locale } from '#lib/i18n/index.svelte.ts';
+import { errorText, t, type Locale, type MessageKey } from '#lib/i18n/index.svelte.ts';
 import { vmLabel } from '#lib/vm-name.ts';
 import type { ScaleMode } from './VncScreen.svelte';
 
@@ -92,19 +92,28 @@ export const noticeClass = {
 const CTRL: [number, string] = [0xffe3, 'ControlLeft'];
 const ALT: [number, string] = [0xffe9, 'AltLeft'];
 export const KEYS: { label: string; keys: [number, string][] }[] = [
-	{ label: 'Strg+Alt+Entf', keys: [CTRL, ALT, [0xffff, 'Delete']] },
-	{ label: 'Strg+Alt+⌫', keys: [CTRL, ALT, [0xff08, 'Backspace']] },
+	{ label: 'Ctrl+Alt+Delete', keys: [CTRL, ALT, [0xffff, 'Delete']] },
+	{ label: 'Ctrl+Alt+⌫', keys: [CTRL, ALT, [0xff08, 'Backspace']] },
 	...[1, 2, 3, 7].map((n) => ({
-		label: `Strg+Alt+F${n}`,
+		label: `Ctrl+Alt+F${n}`,
 		keys: [CTRL, ALT, [0xffbd + n, `F${n}`]] as [number, string][],
 	})),
 	{ label: 'Alt+Tab', keys: [ALT, [0xff09, 'Tab']] },
 	{ label: 'Win', keys: [[0xffeb, 'MetaLeft']] },
-	{ label: 'Druck', keys: [[0xff61, 'PrintScreen']] },
+	{ label: 'Print', keys: [[0xff61, 'PrintScreen']] },
 ];
-export const keyLabel = (label: string, locale: Locale) =>
-	locale === 'en'
-		? label.replace('Strg', 'Ctrl').replace('Entf', 'Del').replace('Druck', 'Print')
-		: label;
+// Key names come from the translations ("Strg+Alt+Entf" in German); the
+// locale argument makes the label follow a language switch.
+const KEY_NAMES: Record<string, MessageKey> = {
+	Ctrl: 'shortcuts.ctrl',
+	Alt: 'shortcuts.alt',
+	Delete: 'shortcuts.delete',
+	Print: 'shortcuts.print',
+};
+export const keyLabel = (label: string, _locale?: Locale) =>
+	label
+		.split('+')
+		.map((part) => (KEY_NAMES[part] ? t(KEY_NAMES[part]) : part))
+		.join('+');
 
 export const MODES: ScaleMode[] = ['scale', 'remote', 'full'];

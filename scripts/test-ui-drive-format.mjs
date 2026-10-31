@@ -127,15 +127,15 @@ try {
     await dialog.getByRole("row", { name: /Freier Bereich/ }).first().getByRole("button", { name: "Partition anlegen …" }).click();
     const create1 = page.getByRole("dialog", { name: "Partition anlegen" });
     await create1.getByLabel("Den ganzen freien Bereich nutzen").uncheck();
-    await create1.getByLabel("Größe in MiB").fill("999999");
+    await create1.getByLabel("Größe in MB").fill("999999");
     await create1.getByText("So viel Platz ist dort nicht frei.").waitFor();
     assert.equal(await create1.getByRole("button", { name: "Anlegen" }).isDisabled(), true);
-    await create1.getByLabel("Größe in MiB").fill("2048");
+    await create1.getByLabel("Größe in MB").fill("2048");
     await create1.getByLabel("Dateisystem").selectOption("ext4");
     await create1.getByLabel("Name", { exact: true }).fill("Daten");
     await create1.getByRole("button", { name: "Anlegen" }).click();
     await create1.waitFor({ state: "detached" });
-    assert.deepEqual(data.partitionActions, [{ id: "stick", action: "create", start: 8 * GiB + MiB, size: 2048 * MiB, filesystem: "ext4", label: "Daten" }]);
+    assert.deepEqual(data.partitionActions, [{ id: "stick", action: "create", start: 8 * GiB + MiB, size: 1953 * MiB, filesystem: "ext4", label: "Daten" }]);
     await dialog.getByText("Partition anlegen").first().waitFor();
     await finish(dialog);
 

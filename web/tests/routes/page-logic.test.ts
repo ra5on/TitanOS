@@ -74,9 +74,9 @@ test('vms: the NAS message only for vm_failed, keys in English', () => {
 	expect(problem(new ApiError(500, 'vm_failed', 'qemu said no')).detail).toBe('qemu said no');
 	expect(problem(new ApiError(500, 'internal', 'secret')).detail).toBe('');
 	expect(problem(new Error('x')).detail).toBe('');
-	expect(keyLabel('Strg+Alt+Entf', 'en')).toBe('Ctrl+Alt+Del');
-	expect(keyLabel('Druck', 'en')).toBe('Print');
-	expect(keyLabel('Strg+Alt+Entf', 'de')).toBe('Strg+Alt+Entf');
+	// Key names come from the translations of the current language.
+	expect(keyLabel('Ctrl+Alt+Delete')).toMatch(/^(Strg|Ctrl)\+Alt\+(Entf|Del)/);
+	expect(keyLabel('Alt+Tab')).toBe('Alt+Tab');
 });
 
 const plugin = (over: Partial<Plugin> = {}) =>

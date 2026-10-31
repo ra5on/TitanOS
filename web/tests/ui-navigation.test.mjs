@@ -89,7 +89,7 @@ test('the settings navigation keeps its fixed groups, order and role filter', as
 	);
 	const fresh = admin
 		.flatMap((g) => g.entries)
-		.filter((e) => e.isNew)
+		.filter((e) => e.newSince)
 		.map((e) => e.id);
 	assert.deepEqual(fresh, [
 		'services',
@@ -118,4 +118,22 @@ test('a settings path names the area whose "new" badge it takes away', () => {
 	assert.equal(settingsAreaOf('/settings/backups/data/'), 'backups');
 	assert.equal(settingsAreaOf('/settings'), '');
 	assert.equal(settingsAreaOf('/settings/'), '');
+});
+
+test('"new" badges end by themselves after two minor versions or 30 days', async () => {
+	const { stillNew } = await import('../src/lib/settings-search.ts');
+	const since = { version: '0.41.0', date: '2026-10-31' };
+	const day = (d) => Date.parse(`${d}T12:00:00Z`);
+	assert.ok(stillNew(since, '0.41.0', day('2026-10-31')));
+	assert.ok(stillNew(since, '0.42.3', day('2026-11-10')));
+	assert.ok(!stillNew(since, '0.43.0', day('2026-11-10')), 'second minor version after');
+	assert.ok(!stillNew(since, '1.0.0', day('2026-11-10')), 'new major version');
+	assert.ok(!stillNew(since, '0.41.1', day('2026-11-30')), '30 days over');
+	assert.ok(stillNew(since, '0.41.1', day('2026-11-29')));
+	// Dev builds and missing data: only the date counts.
+	assert.ok(stillNew(since, 'v0.40.0-12-gabc-dirty', day('2026-11-01')));
+	assert.ok(stillNew(since, undefined, day('2026-11-01')));
+	assert.ok(!stillNew(since, 'dev', day('2026-12-01')));
+	// Areas from 0.31 are no longer new in 0.40.
+	assert.ok(!stillNew({ version: '0.31.0', date: '2026-10-28' }, '0.40.0', day('2026-10-31')));
 });
