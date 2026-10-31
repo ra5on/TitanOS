@@ -12,6 +12,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/retention"
 )
 
 // Readable copies (decided 31.10.2026): besides adding and replacing,
@@ -129,11 +131,11 @@ func copyOrLink(ctx context.Context, source *os.Root, from string, target *os.Ro
 
 // keepRuns removes the dated runs Keep does not keep.
 func (m *Manager) keepRuns(job Job, target *os.Root, runs []datedRun) error {
-	versions := make([]version, len(runs))
+	versions := make([]retention.Version, len(runs))
 	for i, r := range runs {
-		versions[i] = version{ID: r.name, Time: r.at}
+		versions[i] = retention.Version{ID: r.name, Time: r.at}
 	}
-	keep := keepVersions(job.Keep, versions, m.local(m.now()))
+	keep := retention.Select(job.Keep, versions, m.local(m.now()))
 	for _, r := range runs {
 		if !keep[r.name] {
 			if err := target.RemoveAll(path.Join(job.Destination.Folder, r.name)); err != nil {

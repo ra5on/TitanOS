@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/ra5on/TitanOS/backend/internal/retention"
 	"io"
 	"os"
 	"path"
@@ -350,8 +351,9 @@ func (m *Manager) snapshotIdentity(ctx context.Context, volume, name string) (st
 }
 
 // ScheduledSnapshot takes a snapshot for a maintenance job and removes the
-// oldest beyond keep. lockDays > 0 forbids deleting it for that long.
-func (m *Manager) ScheduledSnapshot(ctx context.Context, volume, id string, keep, lockDays int) error {
+// oldest beyond keep, or, with versions, those the rules by day, week and
+// month do not keep. lockDays > 0 forbids deleting it for that long.
+func (m *Manager) ScheduledSnapshot(ctx context.Context, volume, id string, keep, lockDays int, versions *retention.Keep) error {
 	m.actions.Lock()
 	defer m.actions.Unlock()
 	if !regexp.MustCompile(`^[A-Za-z0-9-]{1,32}$`).MatchString(id) || keep < 1 || keep > 100 {
@@ -398,6 +400,9 @@ func (m *Manager) ScheduledSnapshot(ctx context.Context, volume, id string, keep
 	if err := volumedata.WriteJSON(root, inventory, copies); err != nil {
 		return fmt.Errorf("snapshot %s created, inventory could not be saved: %w", name, err)
 	}
+	if versions != nil {
+		return m.pruneByVersions(ctx, volume, root, inventory, prefix, copies, *versions)
+	}
 	for len(copies) > keep {
 		old := copies[0]
 		// A locked snapshot stays, and with it the ones after it: retention
@@ -420,6 +425,39 @@ func (m *Manager) ScheduledSnapshot(ctx context.Context, volume, id string, keep
 		}
 	}
 	return nil
+}
+
+// pruneByVersions removes the scheduled snapshots the rules do not keep.
+// Locked ones and ones whose time cannot be read stay.
+func (m *Manager) pruneByVersions(ctx context.Context, volume string, root *os.Root, inventory, prefix string, copies []scheduledSnapshot, keep retention.Keep) error {
+	var versions []retention.Version
+	for _, c := range copies {
+		stamp, _, _ := strings.Cut(strings.TrimPrefix(c.Name, prefix), "-")
+		at, err := time.Parse("20060102T150405", stamp)
+		if err != nil {
+			continue
+		}
+		versions = append(versions, retention.Version{ID: c.Name, Time: at.In(time.Local)})
+	}
+	stays := retention.Select(keep, versions, time.Now())
+	var left []scheduledSnapshot
+	for _, c := range copies {
+		known := slices.ContainsFunc(versions, func(v retention.Version) bool { return v.ID == c.Name })
+		if !known || stays[c.Name] || !m.lockedUntil(volume, c.Name).IsZero() {
+			left = append(left, c)
+			continue
+		}
+		identity, err := m.snapshotIdentity(ctx, volume, c.Name)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		if err == nil && identity == c.UUID {
+			if err := m.snapshotAction(ctx, volume, c.Name, "delete", c.Name); err != nil && !errors.Is(err, ErrNotFound) {
+				return fmt.Errorf("snapshot created, retention failed: %w", err)
+			}
+		}
+	}
+	return volumedata.WriteJSON(root, inventory, left)
 }
 
 type SnapshotRestorePreview struct {

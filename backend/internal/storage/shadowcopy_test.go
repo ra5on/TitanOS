@@ -94,7 +94,7 @@ func TestLockedSnapshotsStay(t *testing.T) {
 	ctx := context.Background()
 	m.clock = func() time.Time { return time.Now() }
 	for range 3 {
-		if err := m.ScheduledSnapshot(ctx, "pool", "daily", 1, 30); err != nil {
+		if err := m.ScheduledSnapshot(ctx, "pool", "daily", 1, 30, nil); err != nil {
 			t.Fatal(err)
 		}
 		time.Sleep(time.Millisecond)
@@ -109,7 +109,7 @@ func TestLockedSnapshotsStay(t *testing.T) {
 	}
 	// After the lock the retention catches up.
 	m.clock = func() time.Time { return time.Now().AddDate(0, 0, 31) }
-	if err := m.ScheduledSnapshot(ctx, "pool", "daily", 1, 0); err != nil {
+	if err := m.ScheduledSnapshot(ctx, "pool", "daily", 1, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if entries, _ := os.ReadDir(filepath.Join(point, ".titanos", "snapshots")); len(entries) != 1 {

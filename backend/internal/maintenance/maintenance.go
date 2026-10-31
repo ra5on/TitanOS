@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/ra5on/TitanOS/backend/internal/retention"
 	"io/fs"
 	"reflect"
 	"regexp"
@@ -46,6 +47,9 @@ type Job struct {
 	// LockDays keeps each snapshot of a snapshot job from being deleted for
 	// that many days (0 to 365); older versions ignore it.
 	LockDays int `json:"lockDays,omitempty"`
+	// Versions picks which snapshots stay by day, week and month (0.41.0,
+	// see internal/retention); Keep stays the count older versions use.
+	Versions *retention.Keep `json:"versions,omitempty"`
 }
 type Settings struct {
 	BackupsFirst bool   `json:"backupsFirst,omitempty"`
@@ -200,6 +204,9 @@ func validate(s Settings) error {
 		}
 		if j.Kind == "snapshot" && (j.Keep < 1 || !j.AllowPrune) {
 			return errors.New("snapshot retention must be confirmed")
+		}
+		if v := j.Versions; v != nil && (j.Kind != "snapshot" || v.Mode != "" || v.WhenFull != "" || retention.Check(*v) != nil) {
+			return errors.New("invalid snapshot versions")
 		}
 	}
 	for _, j := range s.Jobs {

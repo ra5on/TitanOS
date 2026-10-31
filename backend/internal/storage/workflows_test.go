@@ -209,7 +209,7 @@ func TestScheduledRetentionNeverEnrollsManualNames(t *testing.T) {
 	manual := "auto-test-20000101T000000-000000000"
 	os.Mkdir(filepath.Join(dir, manual), 0700)
 	for range 2 {
-		if err := m.ScheduledSnapshot(context.Background(), "data", "test", 1, 0); err != nil {
+		if err := m.ScheduledSnapshot(context.Background(), "data", "test", 1, 0, nil); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -36,6 +36,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/naming"
+	"github.com/ra5on/TitanOS/backend/internal/retention"
 )
 
 const (
@@ -95,41 +96,8 @@ type Destination struct {
 	Password string `json:"password,omitempty"`
 }
 
-// Keep says how many backups stay: the newest of each of that many days,
-// weeks and months. All zero keeps everything.
-//
-// Since 0.41.0 (decided 31.10.2026) the optional fields below pick which
-// run of a day, week or month stays, and Mode "rolling" keeps every run
-// until the target is full. Older versions read only the three counts;
-// a rolling job leaves them at zero, which there also keeps everything.
-// See retention.go.
-type Keep struct {
-	Daily   int `json:"daily"`
-	Weekly  int `json:"weekly"`
-	Monthly int `json:"monthly"`
-	// Mode is "" (by the counts above) or "rolling".
-	Mode string `json:"mode,omitempty"`
-	// DailyAt, WeeklyAt and MonthlyAt are the run (HH:MM) that stays for
-	// the day, week or month; empty keeps the newest, as before.
-	DailyAt  string `json:"dailyAt,omitempty"`
-	WeeklyAt string `json:"weeklyAt,omitempty"`
-	// WeeklyDay is the weekday, 1 = Monday … 7 = Sunday; 0 = newest.
-	WeeklyDay int    `json:"weeklyDay,omitempty"`
-	MonthlyAt string `json:"monthlyAt,omitempty"`
-	// MonthlyDay is the day of the month, 1 … 28 or -1 for the last one.
-	// Instead, MonthlyNth (1 … 4, -1 = last) with MonthlyWeekday (1 … 7)
-	// names a weekday such as the first Monday. Neither set: newest.
-	MonthlyDay     int `json:"monthlyDay,omitempty"`
-	MonthlyNth     int `json:"monthlyNth,omitempty"`
-	MonthlyWeekday int `json:"monthlyWeekday,omitempty"`
-	// WhenFull is "" (stop and report) or "oldest": when the target is
-	// full, the oldest versions go, as few as needed, never the newest.
-	// A rolling job always works like "oldest".
-	WhenFull string `json:"whenFull,omitempty"`
-	// MaxAgeMonths, for rolling jobs, also removes versions older than
-	// that; 0 keeps them until space runs out.
-	MaxAgeMonths int `json:"maxAgeMonths,omitempty"`
-}
+// Keep says which versions stay, see internal/retention.
+type Keep = retention.Keep
 
 // Job is one backup: what, where to, when.
 type Application struct {
@@ -442,8 +410,8 @@ func check(job Job, shares []Source, volumes []string) error {
 			return invalid("how many to keep")
 		}
 	}
-	if err := checkKeep(job.Keep); err != nil {
-		return err
+	if err := retention.Check(job.Keep); err != nil {
+		return invalid("%s", strings.TrimPrefix(err.Error(), "retention: invalid: "))
 	}
 	if c := job.Copy; c != nil && (!plainCopy(job.Destination.Type) || c.MirrorDays < 0 || c.MirrorDays > 3650) {
 		return invalid("options of the readable copy")
@@ -1234,7 +1202,7 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 		out, err = m.runBackup(ctx, job, env, args, &total)
 		// A full target: with the job's leave, the oldest version goes
 		// and the run starts again, until it fits or one version is left.
-		if err == nil || ctx.Err() != nil || !noSpace(out) || !job.Keep.dropsOldest() {
+		if err == nil || ctx.Err() != nil || !noSpace(out) || !job.Keep.DropsOldest() {
 			break
 		}
 		gone, ferr := m.dropOldest(ctx, job, env, base)
@@ -1280,7 +1248,7 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 		m.OnIncomplete(job.ID)
 	}
 
-	if job.Keep.chosen() && len(sel.missing) == 0 {
+	if job.Keep.Chosen() && len(sel.missing) == 0 {
 		if err := m.forgetChosen(ctx, job, env, base); err != nil && ctx.Err() == nil {
 			m.update(job, func(s *State) { s.Warning = strings.TrimSpace(s.Warning + "\n" + err.Error()) })
 		}

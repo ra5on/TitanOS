@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/ra5on/TitanOS/backend/internal/retention"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -101,6 +102,9 @@ type Settings struct {
 	// Encrypt seals new backups with the password in passwordFile
 	// (crypt.go). Older versions ignore it and save without.
 	Encrypt bool `json:"encrypt,omitempty"`
+	// Versions picks which backups stay by day, week and month (0.41.0,
+	// see internal/retention); Keep stays the count older versions use.
+	Versions *retention.Keep `json:"versions,omitempty"`
 }
 
 // Manifest is the first file in a backup and says what it is.
@@ -207,6 +211,9 @@ func (m *Manager) SetSettings(settings Settings, known []string) error {
 	}
 	if settings.Keep < 1 || settings.Keep > 100 {
 		return fmt.Errorf("%w: keep", ErrInvalid)
+	}
+	if v := settings.Versions; v != nil && (v.Mode != "" || v.WhenFull != "" || retention.Check(*v) != nil) {
+		return fmt.Errorf("%w: versions", ErrInvalid)
 	}
 	if settings.Volume != "" && !slices.Contains(known, settings.Volume) {
 		return fmt.Errorf("%w: volume", ErrInvalid)
@@ -534,9 +541,23 @@ func (m *Manager) create(volume string) (string, error) {
 	slog.Info("configuration saved", "volume", volume, "backup", name, "files", len(files))
 
 	// The oldest go once there are more than wanted.
-	keep := m.current().Keep
+	settings := m.current()
+	if settings.Versions != nil {
+		// The new one and the older ones, by the rules.
+		versions := []retention.Version{{ID: name, Time: m.now().In(time.Local)}}
+		for _, old := range existing {
+			versions = append(versions, retention.Version{ID: old.Name, Time: old.Time.In(time.Local)})
+		}
+		stays := retention.Select(*settings.Versions, versions, m.now().In(time.Local))
+		for _, old := range existing {
+			if !stays[old.Name] {
+				os.Remove(filepath.Join(dir, old.Name))
+			}
+		}
+		return name, nil
+	}
 	for i, old := range existing {
-		if i+1 >= keep {
+		if i+1 >= settings.Keep {
 			os.Remove(filepath.Join(dir, old.Name))
 		}
 	}

@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"errors"
+	"github.com/ra5on/TitanOS/backend/internal/retention"
 	"os"
 	"path/filepath"
 	"strings"
@@ -430,5 +431,26 @@ func TestWholeDiskBtrfsIsADevice(t *testing.T) {
 		if deviceName.MatchString(name) != ok {
 			t.Errorf("%s: want %v", name, ok)
 		}
+	}
+}
+
+func TestKeepsByDayWeekMonth(t *testing.T) {
+	e := newEnv(t)
+	if err := e.m.SetSettings(Settings{Enabled: true, Volume: "tank", Keep: 14, Versions: &retention.Keep{Daily: 2}}, []string{"tank"}); err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for i := range 4 {
+		e.clock = e.clock.Add(12 * time.Hour)
+		e.write(t, "system/settings.json", strings.Repeat("y", i+1))
+		names = append(names, e.create(t))
+	}
+	// Two runs a day for two days: the newest of each day stays.
+	list := e.m.List([]string{"tank"})
+	if len(list) != 2 || list[0].Name != names[3] {
+		t.Errorf("kept: %+v (made %v)", list, names)
+	}
+	if err := e.m.SetSettings(Settings{Enabled: true, Keep: 3, Versions: &retention.Keep{Mode: "rolling"}}, nil); !errors.Is(err, ErrInvalid) {
+		t.Errorf("rolling accepted: %v", err)
 	}
 }

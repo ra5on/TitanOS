@@ -1258,7 +1258,7 @@ func (w *titand) wireMaintenance() error {
 		case "backup-check", "restore-probe":
 			return w.backups.MaintenanceRun(work, job.Target, job.Kind, job.ReadData, backup.ProbeRequest{MaxBytes: job.MaxBytes, MaxFiles: job.MaxFiles})
 		case "snapshot":
-			if err := w.volumes.ScheduledSnapshot(work, job.Target, job.ID, job.Keep, job.LockDays); err != nil {
+			if err := w.volumes.ScheduledSnapshot(work, job.Target, job.ID, job.Keep, job.LockDays, job.Versions); err != nil {
 				return err
 			}
 			w.volumes.SyncShadowCopies(work, w.folders.PreviousVersionVolumes())

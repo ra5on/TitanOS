@@ -256,7 +256,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		if !ok || needed <= free {
 			break
 		}
-		if !dated || !job.Keep.dropsOldest() || len(runs) < 2 {
+		if !dated || !job.Keep.DropsOldest() || len(runs) < 2 {
 			return fmt.Errorf("%w: %d MB needed, %d MB free on the drive", errNoSpace, needed>>20, free>>20)
 		}
 		if err := target.RemoveAll(path.Join(job.Destination.Folder, runs[0].name)); err != nil {
@@ -343,7 +343,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 	m.update(job, func(s *State) {
 		s.Bytes, s.BytesDone, s.BytesTotal, s.Percent, s.Warning, s.Skipped = total, total, planned, 100, problems.String(), problems.total()
 	})
-	if len(freed) > 0 && m.OnFreed != nil && job.Keep.dropsOldest() {
+	if len(freed) > 0 && m.OnFreed != nil && job.Keep.DropsOldest() {
 		m.OnFreed(job.ID, len(freed))
 	}
 	return nil
