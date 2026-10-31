@@ -22,9 +22,9 @@ import (
 // manages (see docs/IPV64.md). Routes mirror the paths of IPv64 under
 // /api/v1/ipv64; the key is the one of this area or of dynamic DNS/Let's
 // Encrypt and never leaves titand. Only owners and administrators; every
-// change additionally only from a web session (not from the assistant,
+// change additionally only from a web session (not from MCP,
 // Home Assistant or an API token), and none of these routes is in the
-// assistant's catalog.
+// MCP catalog.
 
 // ipv64Area keeps what the routes remember in RAM.
 type ipv64Area struct {

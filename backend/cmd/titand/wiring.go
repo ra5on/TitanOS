@@ -1306,6 +1306,8 @@ func (w *titand) wireAPI() error {
 
 	// Watches that Home Assistant keeps putting its backups on the NAS.
 	w.background(func() { w.handler.RunHAStorage(ctx) })
+	// Leftovers of the AI chat removed in 0.41.0, once.
+	w.background(func() { w.handler.RemoveRetiredAssistant(ctx) })
 	w.background(func() { w.home.RunMQTT(ctx, w.handler.HASnapshot, w.handler.HACommand) })
 	w.schedule.Busy = w.handler.PowerBusy
 	w.background(func() { w.schedule.Run(ctx) })

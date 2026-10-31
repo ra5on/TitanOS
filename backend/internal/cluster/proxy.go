@@ -164,7 +164,7 @@ func (m *Manager) newProxy() *httputil.ReverseProxy {
 			}
 		},
 		Transport: proxyTransport{m},
-		// Streams (logs, the assistant, consoles) pass at once.
+		// Streams (logs, events, consoles) pass at once.
 		FlushInterval: -1,
 		ModifyResponse: func(res *http.Response) error {
 			// The other node sets no cookie of this one.

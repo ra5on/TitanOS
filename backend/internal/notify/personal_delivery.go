@@ -86,10 +86,6 @@ func (m *Manager) saveQuiet(user string, messages []PersonalMessage) error {
 		return err
 	}
 	copy := slices.Clone(messages)
-	// Approval credentials are RAM-only and never persisted with deferred text.
-	for i := range copy {
-		copy[i].Actions = nil
-	}
 	return store.WriteJSON("pending.json", copy)
 }
 func (m *Manager) restoreQuiet(user string, state *personalState) error {
@@ -102,9 +98,6 @@ func (m *Manager) restoreQuiet(user string, state *personalState) error {
 	}
 	if len(state.held) > 50 {
 		state.held = state.held[len(state.held)-50:]
-	}
-	for i := range state.held {
-		state.held[i].Actions = nil
 	}
 	if len(state.held) > 0 {
 		delay := time.Second

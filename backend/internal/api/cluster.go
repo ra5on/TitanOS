@@ -76,7 +76,7 @@ func (s *Server) clusterLocal(next http.HandlerFunc) http.HandlerFunc {
 
 // requireOwnSession lets only a browser session of this node through: the
 // cluster itself is managed from the node, and only a person may switch
-// to another node (no API token, assistant or other node).
+// to another node (no API token, MCP or other node).
 func (s *Server) requireOwnSession(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if viaCluster(r) || !webSession(r) || s.sessionToken(r) == "" {

@@ -13,7 +13,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/toolcatalog"
 )
 
-// The reading tools of the assistant for owners and administrators. Each
+// The reading tools of the catalog for owners and administrators. Each
 // returns a compact JSON object for the model.
 
 func (s *Server) toolSystemStatus(ctx context.Context) (any, error) {

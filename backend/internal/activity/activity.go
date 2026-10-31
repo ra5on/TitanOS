@@ -60,7 +60,6 @@ type Entry struct {
 const (
 	ViaWeb    = "web"
 	ViaToken  = "token"
-	ViaAgent  = "agent"
 	ViaSystem = "system"
 	// ViaCluster is a request another node of the cluster passed on.
 	ViaCluster = "cluster"
@@ -68,6 +67,8 @@ const (
 	ViaSSH = "ssh"
 	// ViaMCP is a tool call of an AI client through the MCP server.
 	ViaMCP = "mcp"
+	// ViaHomeAssistant is a button or switch pressed in Home Assistant.
+	ViaHomeAssistant = "homeassistant"
 )
 
 type Status struct {

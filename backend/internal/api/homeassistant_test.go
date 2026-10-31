@@ -160,7 +160,7 @@ func TestHomeAssistantNotifyChannel(t *testing.T) {
 	ts.request("PUT", "/api/v1/homeassistant/settings", map[string]any{"enabled": true, "url": ha.URL, "token": "ha-token"})
 	settings := map[string]any{"language": "en", "content": "summary", "origin": "https://nas.local",
 		"homeAssistant": map[string]any{"enabled": true, "service": "notify.mobile_app_phone"},
-		"events":        map[string]bool{"agent": true}}
+		"events":        map[string]bool{"storage": true}}
 	if res, body := ts.request("PUT", "/api/v1/account/notifications", settings); res.StatusCode != 200 {
 		t.Fatalf("%d %s", res.StatusCode, body)
 	}

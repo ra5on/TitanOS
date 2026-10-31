@@ -13,7 +13,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/toolcatalog"
 )
 
-// The actions of the assistant. A tool here never changes anything: it
+// The actions of the catalog (MCP). A tool here never changes anything: it
 // checks the target and describes the API route that the browser calls
 // once the person confirms the card, with the session of the account.
 // The level of confirmation is decided here, never by the model.
@@ -23,8 +23,8 @@ import (
 // of the stick backup, plugins from files or addresses, certificate,
 // changing the network, switching the firewall on or off, confirming a
 // change on trial, one's own password and second factor. For those the
-// assistant links the page. Plugins, firewall rules and more of the
-// backups have their tools in assistant_areas.go.
+// client is pointed to the web UI. Plugins, firewall rules and more of the
+// backups have their tools in catalog_areas.go.
 
 type plan func(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error)
 

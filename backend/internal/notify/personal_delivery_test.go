@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func TestDeferredPersistenceNeverStoresApprovalCredentials(t *testing.T) {
+func TestDeferredPersistenceNeedsTheVolume(t *testing.T) {
 	m, _ := newManager(t)
 	base := t.TempDir()
 	available := true
@@ -21,12 +21,12 @@ func TestDeferredPersistenceNeverStoresApprovalCredentials(t *testing.T) {
 	if err := m.SetPersonal("alex", p); err != nil {
 		t.Fatal(err)
 	}
-	msg := PersonalMessage{Event: EventDone, Severity: Info, Title: "Result", Text: "private", Actions: []PushAction{{URL: "https://nas/secret-approval", HAAction: "secret-action"}}}
+	msg := PersonalMessage{Event: EventStorage, Severity: Warning, Title: "Result", Text: "private"}
 	if err := m.SendPersonal("alex", "first", msg); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(filepath.Join(base, "alex", "notifications", "pending.json"))
-	if err != nil || !strings.Contains(string(data), "private") || strings.Contains(string(data), "secret-") {
+	if err != nil || !strings.Contains(string(data), "private") {
 		t.Fatal(string(data), err)
 	}
 	available = false

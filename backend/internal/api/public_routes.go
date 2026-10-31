@@ -12,16 +12,16 @@ import (
 // list below is the whole contract: the token check (publicScope), the
 // OpenAPI file and the changing tools of the MCP server (mcp_tools.go) are
 // all made from it. A token never opens account, shell, credential, update,
-// network/firewall confirmation or assistant endpoints.
+// network/firewall confirmation or MCP settings endpoints.
 type publicRoute struct {
 	Method string
 	Path   string // below /api/v1, with {parameters}
 	Scope  string
 	// Tool names the MCP tool made from this route. Empty: MCP does not
-	// offer the route itself (it has a tool of the assistant catalog for
+	// offer the route itself (it has a tool of the catalog for
 	// the same data, or the answer is not JSON).
 	Tool string
-	// Level of a change, as for the assistant: normal, danger or destroy.
+	// Level of a change, as in the catalog: normal, danger or destroy.
 	// Danger and destroy need confirm=true over MCP.
 	Level  string
 	En, De string

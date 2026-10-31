@@ -23,7 +23,7 @@ import (
 // Docker apps. Every target is checked against the current state when the
 // card is planned and again right before it runs (the plan is made anew
 // and compared). The plans are pure functions of a status, so that their
-// levels can be tested without a real NAS. See docs/ASSISTANT.md.
+// levels can be tested without a real NAS. See docs/MCP.md.
 //
 // Not offered: installing plugins from a file or an address (only official
 // plugins by name from the signed catalog), changing the network,
@@ -49,7 +49,7 @@ func (s *Server) areaTools() []toolcatalog.Tool {
 				}
 				return pluginsView(s.opts.Plugins.Status(mounted())), nil
 			}),
-		actionTool("plugin_install", "Propose to install an official plugin by its name from plugins_list (installable true). Community plugins, files and addresses are never installed by the assistant. A plugin becomes part of the system with full rights.",
+		actionTool("plugin_install", "Propose to install an official plugin by its name from plugins_list (installable true). Community plugins, files and addresses are never installed over MCP. A plugin becomes part of the system with full rights.",
 			map[string]any{"name": str("Name as plugins_list shows it."), "volume": str("Volume for the plugin files; only needed while no plugin is installed yet."),
 				"activate": map[string]any{"type": "boolean", "description": "Switch it on right away (default true)."}}, []string{"name"},
 			func(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
@@ -281,7 +281,7 @@ func pluginsView(st plugins.Status) map[string]any {
 			item.Devices = append(item.Devices, d.Name)
 		}
 		if !p.Installed && !item.Installable {
-			// A loose file in a share: shown, never installed by the assistant.
+			// A loose file in a share: shown, never installed over MCP.
 			item.Problem = strings.TrimSpace(item.Problem + " not_installable_over_mcp")
 		}
 		list = append(list, item)
@@ -294,7 +294,7 @@ func pluginsView(st plugins.Status) map[string]any {
 }
 
 // officialDownload is a plugin of the signed release catalog that is not
-// installed: the only kind the assistant installs.
+// installed: the only kind MCP installs.
 func officialDownload(p plugins.Plugin) bool {
 	return !p.Installed && p.Download && p.Official
 }

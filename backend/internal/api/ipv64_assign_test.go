@@ -127,7 +127,7 @@ func TestIPv64Assignments(t *testing.T) {
 	rec := httptest.NewRecorder()
 	ts.server.ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {
-		t.Fatalf("assistant removed an assignment: %d", rec.Code)
+		t.Fatalf("in-process call removed an assignment: %d", rec.Code)
 	}
 
 	// Taking back leaves the domain at IPv64.

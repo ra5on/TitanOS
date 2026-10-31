@@ -272,6 +272,7 @@ func New(opts Options) *Server {
 	}
 	if s.opts.Notify != nil {
 		s.opts.Notify.SetPersonalDataDir(s.notifyDir)
+		s.opts.Notify.Audience = s.notifyAudience
 	}
 	s.haStore.check = make(chan struct{}, 1)
 
@@ -340,7 +341,7 @@ func New(opts Options) *Server {
 	mux.HandleFunc("PUT /api/v1/storage/volumes/{name}/profile", s.requireHeavyAdmin(s.handleBtrfsProfile))
 	mux.HandleFunc("PUT /api/v1/storage/volumes/{name}/cache", s.requireHeavyAdmin(s.handleVolumeCache))
 	mux.HandleFunc("DELETE /api/v1/storage/volumes/{name}/cache", s.requireHeavyAdmin(s.handleVolumeCacheRemove))
-	// Encrypted volumes: browser sessions only, never in the assistant
+	// Encrypted volumes: browser sessions only, never over MCP
 	// catalog or the public API (storage_crypt.go).
 	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/unlock", s.requireAdmin(s.handleVolumeUnlock))
 	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/lock", s.requireHeavyAdmin(s.handleVolumeLock))
@@ -893,7 +894,7 @@ func (s *Server) authenticate(r *http.Request) (auth.User, bool) {
 }
 
 // activeUser returns an account that exists and is not locked. Everything
-// that acts as an account (sessions, API tokens, the assistant, Home
+// that acts as an account (sessions, API tokens, MCP, Home
 // Assistant, consoles) goes through it, so a lock holds on every path even
 // before its sessions are ended.
 func (s *Server) activeUser(name string) (auth.User, bool) {

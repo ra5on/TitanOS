@@ -24,3 +24,18 @@ func (s *Server) notifyDir() (string, bool) {
 	slices.Sort(mounted)
 	return filepath.Join(s.opts.Storage.MountPoint(mounted[0]), ".titanos", "notify"), true
 }
+
+// notifyAudience are the accounts that may get the notifications of the NAS
+// on their own channels: owners and administrators that are not locked.
+func (s *Server) notifyAudience() []string {
+	if s.opts.Users == nil {
+		return nil
+	}
+	var names []string
+	for _, user := range s.opts.Users.List() {
+		if user.Role.CanAdminister() && !user.Disabled {
+			names = append(names, user.Name)
+		}
+	}
+	return names
+}

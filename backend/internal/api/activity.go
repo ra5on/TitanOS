@@ -44,9 +44,6 @@ var activityQuiet = []string{
 	"POST /api/v1/storage/smart/refresh",
 	"POST /api/v1/files/usage",
 	"POST /api/v1/files/url-download/probe",
-	"POST /api/v1/assistant/knowledge/search",
-	"POST /api/v1/assistant/automations/preview",
-	"POST /api/v1/assistant/probe",
 	"PUT /api/v1/preferences/{kind}",
 	"PUT /api/v1/background",
 	"DELETE /api/v1/background",
@@ -125,7 +122,7 @@ func noteActivity(r *http.Request, user auth.User) {
 		if !contains(activityReads, action) {
 			return
 		}
-	} else if contains(activityQuiet, action) || strings.HasPrefix(action, "POST /api/v1/assistant/chats") || strings.HasPrefix(action, "PUT /api/v1/assistant/chats") || strings.HasPrefix(action, "DELETE /api/v1/assistant/chats") {
+	} else if contains(activityQuiet, action) {
 		return
 	}
 	rec.user = user.Name
@@ -136,7 +133,7 @@ func noteActivity(r *http.Request, user auth.User) {
 	} else if _, ok := r.Context().Value(apiTokenIdentity{}).(string); ok {
 		rec.via = activity.ViaToken
 	} else if _, ok := r.Context().Value(inProcessIdentity{}).(string); ok {
-		rec.via = activity.ViaAgent
+		rec.via = activity.ViaHomeAssistant
 	} else if viaCluster(r) {
 		rec.via = activity.ViaCluster
 	}

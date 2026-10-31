@@ -19,7 +19,7 @@ import (
 
 // Which tools the model gets is decided for every question from the role
 // of the account: a tool the role may not use is not even offered. The
-// tools check the account themselves as well. See docs/ASSISTANT.md.
+// tools check the account themselves as well. See docs/MCP.md.
 
 func schema(properties map[string]any, required ...string) map[string]any {
 	if properties == nil {
@@ -220,7 +220,7 @@ func (s *Server) catalogMyShares(user auth.User) map[string]any {
 	return map[string]any{"shares": list}
 }
 
-// hiddenPath reports whether the assistant must not see a path: what
+// hiddenPath reports whether MCP must not see a path: what
 // TitanOS keeps on a volume (chats, backups of the stick) and .env files.
 func hiddenPath(p string) bool {
 	for _, part := range strings.Split(path.Clean("/"+p), "/") {
@@ -253,7 +253,7 @@ func catalogFileError(err error) error {
 	return toolcatalog.CodedErrorf(code, "%v. %s", err, next)
 }
 
-// assistantRoot finds a root of the file manager for the assistant: the
+// catalogRoot finds a root of the file manager for MCP: the
 // same as the account has, without the stick.
 func (s *Server) catalogRoot(user auth.User, id string) (files.Root, error) {
 	for _, root := range s.fileRoots(user) {

@@ -155,6 +155,9 @@ type Manager struct {
 	ha HASender
 	// Push sends to subscribed browsers (package webpush); nil without.
 	Push func(message Message, title string)
+	// Audience are the accounts that may get notifications of the NAS on
+	// their own channels (owners and administrators); nil sends none.
+	Audience func() []string
 	// now is the clock; tests replace it.
 	now    func() time.Time
 	people personalStore
@@ -361,6 +364,7 @@ func (m *Manager) Notify(severity, kind, subject string) {
 	}
 	m.mu.Unlock()
 	slog.Info("notification", "severity", severity, "kind", kind, "subject", subject)
+	go m.tellPeople(message)
 	if rank[severity] >= rank[settings.MinSeverity] {
 		if m.collect(settings, message) {
 			return

@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 )
@@ -23,7 +22,7 @@ func personalSink(t *testing.T, m *Manager, user string, quiet Quiet) *sink {
 	server := srv.URL
 	p := defaultPersonal("en")
 	p.Ntfy = Ntfy{Enabled: true, URL: server + "/me", Token: "secret-token"}
-	p.Events[EventDone] = true
+	p.Events[EventStorage] = true
 	p.Quiet = quiet
 	p.Origin = "https://nas.local/"
 	if err := m.SetPersonal(user, p); err != nil {
@@ -66,7 +65,7 @@ func TestPersonalSecretsStayOnTheNAS(t *testing.T) {
 func TestPersonalOncePerKeyAndWithLink(t *testing.T) {
 	m, _ := newManager(t)
 	s := personalSink(t, m, "alex", Quiet{})
-	msg := PersonalMessage{Event: EventDone, Severity: Info, Title: "Done: report", Text: "All volumes fine.", Path: "/assistant?chat=c1"}
+	msg := PersonalMessage{Event: EventStorage, Severity: Info, Title: "Done: report", Text: "All volumes fine.", Path: "/storage"}
 	for range 2 {
 		if err := m.SendPersonal("alex", "c1/done/3", msg); err != nil {
 			t.Fatal(err)
@@ -77,7 +76,7 @@ func TestPersonalOncePerKeyAndWithLink(t *testing.T) {
 	if len(s.requests) != 1 || !strings.Contains(got[0], "All volumes fine.") {
 		t.Fatalf("sent %v", s.requests)
 	}
-	if click := s.headers[0].Get("Click"); click != "https://nas.local/assistant?chat=c1" {
+	if click := s.headers[0].Get("Click"); click != "https://nas.local/storage" {
 		t.Fatalf("click %q", click)
 	}
 	if s.headers[0].Get("Authorization") != "Bearer secret-token" {
@@ -85,37 +84,10 @@ func TestPersonalOncePerKeyAndWithLink(t *testing.T) {
 	}
 	// An event the account switched off is not sent.
 	p, _, _ := m.PersonalSettings("alex")
-	p.Events[EventDone] = false
+	p.Events[EventStorage] = false
 	m.SetPersonal("alex", p)
 	if err := m.SendPersonal("alex", "c1/done/5", msg); !errors.Is(err, ErrUnreachable) {
 		t.Fatalf("switched-off event: %v", err)
-	}
-}
-
-func TestPersonalAgentRateLimit(t *testing.T) {
-	m, _ := newManager(t)
-	// Deliveries run in the background and read the clock too.
-	var clock sync.Mutex
-	current := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
-	m.now = func() time.Time { clock.Lock(); defer clock.Unlock(); return current }
-	advance := func(d time.Duration) { clock.Lock(); current = current.Add(d); clock.Unlock() }
-	personalSink(t, m, "alex", Quiet{})
-	msg := PersonalMessage{Event: EventAgent, Severity: Info, Title: "Hi", Text: "x"}
-	if err := m.SendPersonal("alex", "", msg); err != nil {
-		t.Fatal(err)
-	}
-	if err := m.SendPersonal("alex", "", msg); !errors.Is(err, ErrRateLimited) {
-		t.Fatalf("second within a minute: %v", err)
-	}
-	for i := range 19 {
-		advance(time.Minute + time.Second)
-		if err := m.SendPersonal("alex", "", msg); err != nil {
-			t.Fatalf("message %d: %v", i+2, err)
-		}
-	}
-	advance(2 * time.Minute)
-	if err := m.SendPersonal("alex", "", msg); !errors.Is(err, ErrRateLimited) {
-		t.Fatalf("21st within an hour: %v", err)
 	}
 }
 
@@ -128,12 +100,12 @@ func TestQuietHoursHoldAndDigest(t *testing.T) {
 		return time.Date(night.Year(), night.Month(), night.Day(), 6, 59, 59, 900_000_000, time.Local)
 	}
 	for i, title := range []string{"first", "second"} {
-		if err := m.SendPersonal("alex", title, PersonalMessage{Event: EventDone, Severity: Info, Title: title}); err != nil {
+		if err := m.SendPersonal("alex", title, PersonalMessage{Event: EventStorage, Severity: Info, Title: title}); err != nil {
 			t.Fatal(i, err)
 		}
 	}
 	// Errors are not held back.
-	if err := m.SendPersonal("alex", "err", PersonalMessage{Event: EventBlocked, Severity: Error, Title: "broken"}); err != nil {
+	if err := m.SendPersonal("alex", "err", PersonalMessage{Event: EventSystem, Severity: Error, Title: "broken"}); err != nil {
 		t.Fatal(err)
 	}
 	got := s.wait(t, 2)
@@ -191,7 +163,7 @@ func TestPersonalMailUsesTheSharedServerOnly(t *testing.T) {
 	if err := m.SetPersonal("alex", p); err != nil {
 		t.Fatal(err)
 	}
-	if m.Reachable("alex", EventBlocked) {
+	if m.Reachable("alex", EventSystem) {
 		t.Fatal("reachable by mail without a mail server")
 	}
 	var sent []string
@@ -238,5 +210,37 @@ func TestConfinedUserCannotReachPrivateAddresses(t *testing.T) {
 		if public(netip.MustParseAddr(addr)) != want {
 			t.Errorf("public(%s) != %v", addr, want)
 		}
+	}
+}
+
+// Notifications of the NAS reach owners and administrators on their own
+// channels, by kind: warnings and errors, information only for updates.
+func TestNASNotificationsReachTheAudience(t *testing.T) {
+	m, _ := newManager(t)
+	s := personalSink(t, m, "alex", Quiet{})
+	p, _, _ := m.PersonalSettings("alex")
+	p.Events[EventUpdates] = true
+	p.Events[EventBackups] = false
+	if err := m.SetPersonal("alex", p); err != nil {
+		t.Fatal(err)
+	}
+	m.Audience = func() []string { return []string{"alex"} }
+	m.Notify(Info, "disk_test_passed", "sdb")    // information about storage: not sent
+	m.Notify(Error, "backup_failed", "cloud")    // backups switched off
+	m.Notify(Error, "volume_degraded", "tank")   // sent, links to /storage
+	m.Notify(Info, "update_available", "0.41.0") // information about updates: sent
+	got := s.wait(t, 2)
+	if len(got) != 2 || !strings.Contains(strings.Join(got, "\n"), "tank") || !strings.Contains(strings.Join(got, "\n"), "new version") {
+		t.Fatalf("sent: %v", got)
+	}
+	time.Sleep(50 * time.Millisecond)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.requests) != 2 {
+		t.Fatalf("too many: %v", s.requests)
+	}
+	clicks := s.headers[0].Get("Click") + s.headers[1].Get("Click")
+	if !strings.Contains(clicks, "https://nas.local/storage") || !strings.Contains(clicks, "https://nas.local/settings/updates") {
+		t.Fatalf("links: %q", clicks)
 	}
 }

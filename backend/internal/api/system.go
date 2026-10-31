@@ -125,7 +125,7 @@ func (s *Server) handlePower(w http.ResponseWriter, r *http.Request) {
 		AfterRebuild bool `json:"afterRebuild"`
 		// Wait: someone watches in the web UI and decides when guests are
 		// still running after the waiting time. Without it (Home Assistant,
-		// the assistant, API) the NAS goes on by itself then.
+		// MCP, API) the NAS goes on by itself then.
 		Wait bool `json:"wait"`
 		// Now skips ending the guests first (systemd still ends them).
 		Now bool `json:"now"`
