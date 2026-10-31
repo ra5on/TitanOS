@@ -282,6 +282,9 @@ type Status struct {
 	App AppStatus `json:"app"`
 	// Variant is the kernel variant of the running system.
 	Variant string `json:"variant"`
+	// BootLoader is what started this system: systemd-boot, grub-i386-pc
+	// (legacy BIOS) or grub-i386-efi (32-bit UEFI).
+	BootLoader string `json:"bootLoader"`
 	// KernelSwitch says that Available is the running version with the
 	// other kernel variant, as the settings ask for.
 	KernelSwitch bool `json:"kernelSwitch,omitempty"`
@@ -890,6 +893,7 @@ func (m *Manager) Status() Status {
 	}
 	status.Base = m.Base
 	status.Variant = normalVariant(m.Variant)
+	status.BootLoader = m.BootLoader()
 	status.KernelMissing = m.kernelMissing
 	if m.available != nil {
 		status.Kind = KindSystem
