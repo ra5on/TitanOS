@@ -5,8 +5,8 @@ Seit 0.41.0 heißt das Ziel **USB-Laufwerk**; dort wählt man zwischen
 auf der Platte, mit Versionen, Prüfung und Einzeldatei-Wiederherstellung).
 Für lesbare Kopien gibt es zusätzlich den Spiegel (auf dem NAS Gelöschtes
 kommt nach `_gelöscht/<Datum>` und wird nach 30 Tagen entfernt) und
-Datumsordner je Lauf mit „Versionen behalten“ und „älteste löschen, wenn das
-Laufwerk voll ist“. Einzelheiten in `docs/rules/BACKUPS.md`.
+Datumsordner je Lauf; unter „Aufbewahren“ gilt „Die letzten [N] Sicherungen
+behalten“ oder „Behalten, bis das Laufwerk voll ist“ (seit 0.42.0). Einzelheiten in `docs/rules/BACKUPS.md`.
 
 Unter **Einstellungen › Backups › Neuer Auftrag** als Ziel **USB-Kopie** wählen.
 Freigaben und bei Bedarf einzelne Unterordner auswählen, die externe Platte und

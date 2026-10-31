@@ -111,4 +111,4 @@ Maßgebliche Bedienung, Grenzen und Prüfungen: `docs/WORKFLOWS.md`.
 - **Prüfungen beim Anlegen** (Plan 7a): Der Dialog „Volume anlegen“ bietet RAID-Prüfung bzw. Scrub monatlich, SMART-Kurztest wöchentlich und SMART-Langtest monatlich an, vorausgewählt und abwählbar; der Nutzer entscheidet. Angelegt werden gewöhnliche Wartungsaufträge.
 - **SMART-Kurztest** ist eine eigene Wartungsart (`smart-short`); Wartungsaufträge können zusätzlich alle N Stunden laufen (`every: "hours"`, `everyHours` 1–168, Plan 16). Aufträge, die ältere Versionen nicht kennen, stehen auf dem Stick in `laterJobs`, damit diese die Datei weiter lesen.
 - **Schreibcache auf einer SSD** (Plan 7d): Bei nur einer SSD im Modus Lesen+Schreiben erklärt die Seite das Risiko; der Nutzer entscheidet.
-- **Geplante Snapshots** behalten wahlweise die neuesten N oder nach Tag, Woche und Monat (`versions`, siehe `docs/rules/BACKUPS.md`).
+- **Geplante Snapshots** behalten die neuesten N („Die letzten [N] Snapshots behalten“, seit 0.42.0; Regeln nach Tag, Woche und Monat aus 0.41.0 gelten bis zum nächsten Speichern, siehe `docs/rules/BACKUPS.md`).

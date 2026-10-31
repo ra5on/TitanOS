@@ -101,8 +101,28 @@ func TestRollingKeepsAllOrByAge(t *testing.T) {
 	}
 }
 
+func TestKeepLastN(t *testing.T) {
+	now := time.Date(2026, 10, 31, 16, 0, 0, 0, time.Local)
+	all := runs(now, 10, nil)
+	k := Keep{Last: 5, Daily: 7, Weekly: 4}
+	if !k.Chosen() {
+		t.Fatal("last must be picked by Select")
+	}
+	got := kept(k, all, now)
+	want := []string{"2026-10-29T03", "2026-10-29T15", "2026-10-30T03", "2026-10-30T15", "2026-10-31T03", "2026-10-31T15"}[1:]
+	if !slices.Equal(got, want) {
+		t.Fatalf("kept %v, want %v", got, want)
+	}
+	if len(kept(Keep{Last: 50}, all, now)) != len(all) {
+		t.Fatal("fewer versions than last must all stay")
+	}
+	if len(kept(Keep{Last: 2, Mode: "rolling"}, all, now)) != len(all) {
+		t.Fatal("rolling keeps all")
+	}
+}
+
 func TestCheckKeep(t *testing.T) {
-	for _, bad := range []Keep{{Mode: "x"}, {WhenFull: "newest"}, {DailyAt: "3:00"}, {WeeklyDay: 8}, {MonthlyDay: 29}, {MonthlyNth: 1}, {MonthlyDay: 1, MonthlyNth: 1, MonthlyWeekday: 1}} {
+	for _, bad := range []Keep{{Last: -1}, {Last: 10000}, {Mode: "x"}, {WhenFull: "newest"}, {DailyAt: "3:00"}, {WeeklyDay: 8}, {MonthlyDay: 29}, {MonthlyNth: 1}, {MonthlyDay: 1, MonthlyNth: 1, MonthlyWeekday: 1}} {
 		if Check(bad) == nil {
 			t.Errorf("accepted %+v", bad)
 		}

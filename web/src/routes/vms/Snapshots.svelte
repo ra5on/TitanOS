@@ -5,6 +5,7 @@
 	import { api, ApiError, type VM } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
+	import KeepVersions from '#lib/components/KeepVersions.svelte';
 	import { formatBytes } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { vmLabel } from '#lib/vm-name.ts';
@@ -243,18 +244,19 @@
 							disabled={!schedule.enabled}
 						/></label
 					>
-					<label
-						>{t('snapshots.keep')}<input
-							class="field"
-							type="number"
-							min="1"
-							max="100"
-							bind:value={schedule.keep}
-							required
-							disabled={!schedule.enabled}
-						/></label
-					>
 				</div>
+				<fieldset disabled={!schedule.enabled}>
+					<legend>{t('snapshots.keep')}</legend>
+					<KeepVersions
+						bind:keep={
+							() => ({ last: schedule.keep, daily: 0, weekly: 0, monthly: 0 }),
+							(k) => (schedule.keep = k.last ?? schedule.keep)
+						}
+						unit="snapshots"
+						rolling={false}
+						max={100}
+					/>
+				</fieldset>
 				<fieldset disabled={!schedule.enabled}>
 					<legend>{t('snapshots.days')}</legend>
 					<div class="week">

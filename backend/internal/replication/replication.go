@@ -83,6 +83,9 @@ type Job struct {
 	LimitMiB int `json:"limitMiB,omitempty"`
 	// Versions picks which snapshots the other NAS keeps by day, week and
 	// month (0.41.0); a receiver before 0.41.0 keeps the newest Keep.
+	// Mode "rolling" (0.42.0) keeps them all until the volume of the other
+	// NAS runs short, then the oldest go; a receiver before 0.42.0 keeps
+	// the newest Keep, which is then 365.
 	Versions *retention.Keep `json:"versions,omitempty"`
 }
 
@@ -203,11 +206,14 @@ func (m *Manager) Save(id string, req Request) (string, error) {
 	if !naming.ValidBackup(req.Name) || !naming.ValidVolume(req.Volume) {
 		return "", fmt.Errorf("%w: name or volume", ErrInvalid)
 	}
-	if req.EveryHours < 1 || req.EveryHours > 168 || req.Keep < 2 || req.Keep > 365 || req.LimitMiB < 0 || req.LimitMiB > 10000 {
+	if req.EveryHours < 1 || req.EveryHours > 168 || req.Keep < 2 || req.Keep > maxKeep || req.LimitMiB < 0 || req.LimitMiB > 10000 {
 		return "", fmt.Errorf("%w: schedule, keep or limit", ErrInvalid)
 	}
-	if v := req.Versions; v != nil && (v.Mode != "" || v.WhenFull != "" || retention.Check(*v) != nil) {
+	if v := req.Versions; v != nil && (v.WhenFull != "" || v.MaxAgeMonths != 0 || retention.Check(*v) != nil) {
 		return "", fmt.Errorf("%w: versions", ErrInvalid)
+	}
+	if v := req.Versions; v != nil && v.Mode == "rolling" {
+		req.Keep, req.Versions = maxKeep, &retention.Keep{Mode: "rolling"}
 	}
 	if m.Filesystem != nil && m.Filesystem(req.Volume) != "btrfs" {
 		return "", ErrNotBtrfs
@@ -643,15 +649,17 @@ type Receiver struct {
 	MountRoot  string
 	Mounted    func() []string
 	Filesystem func(volume string) string
-	runner     run.Runner
-	command    func(ctx context.Context, args ...string) *exec.Cmd
-	mu         sync.Mutex
-	busy       map[string]bool
+	// Space tells the free and total bytes of the file system at path.
+	Space   func(path string) (free, total uint64, err error)
+	runner  run.Runner
+	command func(ctx context.Context, args ...string) *exec.Cmd
+	mu      sync.Mutex
+	busy    map[string]bool
 }
 
 // NewReceiver returns a receiver for the real system.
 func NewReceiver() *Receiver {
-	return &Receiver{MountRoot: "/mnt", runner: run.Exec{}, busy: map[string]bool{},
+	return &Receiver{MountRoot: "/mnt", runner: run.Exec{}, busy: map[string]bool{}, Space: statfsSpace,
 		command: func(ctx context.Context, args ...string) *exec.Cmd { return exec.CommandContext(ctx, "btrfs", args...) }}
 }
 
@@ -681,7 +689,7 @@ func (r *Receiver) Serve(w http.ResponseWriter, req *http.Request, source, volum
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{"snapshots": received(dir)})
 	case snapshotForm.MatchString(rest) && req.Method == http.MethodPut:
-		r.receive(w, req, source, dir, rest)
+		r.receive(w, req, source, filepath.Join(r.MountRoot, volume), dir, rest)
 	default:
 		http.Error(w, "not found", http.StatusNotFound)
 	}
@@ -696,7 +704,7 @@ func received(dir string) []string {
 	return names
 }
 
-func (r *Receiver) receive(w http.ResponseWriter, req *http.Request, source, dir, name string) {
+func (r *Receiver) receive(w http.ResponseWriter, req *http.Request, source, volumePath, dir, name string) {
 	r.mu.Lock()
 	if r.busy[source] {
 		r.mu.Unlock()
@@ -727,12 +735,25 @@ func (r *Receiver) receive(w http.ResponseWriter, req *http.Request, source, dir
 		http.Error(w, "storage unavailable", http.StatusServiceUnavailable)
 		return
 	}
+	rolling := rollingRules(req.URL.Query().Get("versions"))
+	if rolling {
+		r.makeRoom(req.Context(), source, volumePath, dir)
+	}
 	cmd := r.command(req.Context(), "receive", "-e", incoming)
 	cmd.Stdin = req.Body
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		_, _ = btrfs(context.WithoutCancel(req.Context()), r.runner, "subvolume", "delete", filepath.Join(incoming, name)) // cleanup, best effort: nothing more can be done if it fails
 		slog.Warn("replica not received", "source", source, "snapshot", name, "err", err, "output", strings.TrimSpace(string(output)))
+		if rolling && noSpace(string(output)) {
+			// The next run finds one version less, until it fits.
+			if gone := r.dropOldest(context.WithoutCancel(req.Context()), source, volumePath, dir); gone != "" {
+				http.Error(w, "the volume is full; removed the oldest snapshot "+gone+", the next run tries again", http.StatusInsufficientStorage)
+				return
+			}
+			http.Error(w, "the volume is full", http.StatusInsufficientStorage)
+			return
+		}
 		http.Error(w, "receive failed", http.StatusInternalServerError)
 		return
 	}
@@ -750,6 +771,61 @@ func (r *Receiver) receive(w http.ResponseWriter, req *http.Request, source, dir
 		_, _ = btrfs(context.WithoutCancel(req.Context()), r.runner, "subvolume", "delete", filepath.Join(dir, old)) // cleanup, best effort: nothing more can be done if it fails
 	}
 	w.WriteHeader(http.StatusCreated)
+}
+
+// maxKeep is the most snapshots a count keeps, and what a rolling job
+// asks of a receiver before 0.42.0.
+const maxKeep = 365
+
+// reserve is the share of the volume a rolling receiver keeps free for
+// the shares, apps and VMs of the other NAS: before a transfer, the oldest
+// snapshots go until that much is free again.
+const reserve = 10
+
+// rollingRules reports whether the sender asks to keep every snapshot
+// until the volume runs short.
+func rollingRules(rules string) bool {
+	var k retention.Keep
+	return rules != "" && len(rules) <= 2048 && json.Unmarshal([]byte(rules), &k) == nil && k.Mode == "rolling"
+}
+
+// noSpace tells a btrfs receive that ran out of space.
+func noSpace(output string) bool {
+	return strings.Contains(output, "No space left on device") || strings.Contains(output, "ENOSPC")
+}
+
+// makeRoom removes the oldest snapshots of a source until reserve percent
+// of the volume is free; the newest always stays, it is the parent of the
+// next transfer.
+func (r *Receiver) makeRoom(ctx context.Context, source, volumePath, dir string) {
+	if r.Space == nil {
+		return
+	}
+	for {
+		free, total, err := r.Space(volumePath)
+		if err != nil || total == 0 || free*100 >= total*reserve {
+			return
+		}
+		if r.dropOldest(ctx, source, volumePath, dir) == "" {
+			return
+		}
+	}
+}
+
+// dropOldest deletes the oldest snapshot of a source unless it is the only
+// one, waits until btrfs gave its space back and returns its name.
+func (r *Receiver) dropOldest(ctx context.Context, source, volumePath, dir string) string {
+	all := received(dir)
+	if len(all) < 2 {
+		return ""
+	}
+	if _, err := btrfs(ctx, r.runner, "subvolume", "delete", filepath.Join(dir, all[0])); err != nil {
+		slog.Warn("old replica not removed", "source", source, "snapshot", all[0], "err", err)
+		return ""
+	}
+	_, _ = btrfs(ctx, r.runner, "subvolume", "sync", volumePath) // waits for the cleaner; without it the space only shows later
+	slog.Warn("volume short of space, oldest replica removed", "source", source, "snapshot", all[0])
+	return all[0]
 }
 
 // replicaURL is where a snapshot goes, with what the other NAS keeps.
@@ -771,6 +847,9 @@ func keepReceived(all []string, keep int, rules string, now time.Time) []string 
 		var parsed retention.Keep
 		if json.Unmarshal([]byte(rules), &parsed) == nil && parsed.Mode == "" && parsed.WhenFull == "" && retention.Check(parsed) == nil {
 			versions = &parsed
+		}
+		if rollingRules(rules) {
+			return nil // makeRoom removes the oldest when space runs short
 		}
 	}
 	if versions == nil {

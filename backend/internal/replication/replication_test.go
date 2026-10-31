@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/retention"
 )
 
 // fakeBtrfs makes and deletes snapshot folders like btrfs would.
@@ -312,5 +313,42 @@ func TestReplicationGivesUpAStreamThatStandsStill(t *testing.T) {
 	err := runAgainst(t, p, server)
 	if err == nil || !strings.Contains(err.Error(), "stood still") {
 		t.Fatal(err)
+	}
+}
+
+func TestRollingReplicaMakesRoomOnTheOtherNAS(t *testing.T) {
+	p := newPair(t)
+	free := uint64(50)
+	p.receiver.Space = func(string) (uint64, uint64, error) { return free, 1000, nil }
+	id, err := p.sender.Save("", Request{Name: "offsite", Enabled: true, Volume: "tank", Code: code(p.server.URL+"/home", "home", "secret"), EveryHours: 24, Keep: 2, Versions: &retention.Keep{Mode: "rolling"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job := p.sender.Jobs()[0]; job.Keep != maxKeep || job.Versions == nil || job.Versions.Mode != "rolling" {
+		t.Fatalf("rolling job: %+v", job)
+	}
+	// Enough space: every snapshot stays.
+	free = 500
+	var names []string
+	for range 4 {
+		names = append(names, p.runOnce(t, id).Snapshot)
+		p.clock = p.clock.Add(25 * time.Hour)
+	}
+	if got := received(p.inbox); len(got) != 4 {
+		t.Fatalf("received: %v", got)
+	}
+	// Short of space: the oldest go before the next transfer, the newest
+	// (the parent) stays.
+	free = 50
+	names = append(names, p.runOnce(t, id).Snapshot)
+	got := received(p.inbox)
+	if len(got) != 2 || got[0] != names[3] || got[1] != names[4] {
+		t.Fatalf("after making room: %v", got)
+	}
+	if !p.btrfs.has("btrfs subvolume sync") {
+		t.Fatal("space not waited for")
+	}
+	if _, err := p.sender.Save(id, Request{Name: "offsite", Enabled: true, Volume: "tank", EveryHours: 24, Keep: 2, Versions: &retention.Keep{Mode: "rolling", WhenFull: "oldest"}}); err == nil {
+		t.Fatal("whenFull accepted")
 	}
 }
