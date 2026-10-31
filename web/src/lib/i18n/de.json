@@ -7206,5 +7206,9 @@
 	"mcp.movedLink": "Zum MCP-Server",
 	"api.scope.systemWrite": "NAS verwalten (Speicher, Freigaben, Sicherungen, Konten, Plugins, Firewall, Updates, Neustart)",
 	"help.mcp.title": "MCP",
-	"help.mcp.text": "Das Model Context Protocol ist ein offener Standard, über den KI-Programme wie Claude Werkzeuge benutzen. TitanOS bietet seine Funktionen als solche Werkzeuge an; die KI handelt dabei nur mit den Rechten des Tokens, das du ihr gibst."
+	"help.mcp.text": "Das Model Context Protocol ist ein offener Standard, über den KI-Programme wie Claude Werkzeuge benutzen. TitanOS bietet seine Funktionen als solche Werkzeuge an; die KI handelt dabei nur mit den Rechten des Tokens, das du ihr gibst.",
+	"ops.hours": "Alle paar Stunden",
+	"ops.everyHours": "Alle … Stunden",
+	"ops.everyHoursHint": "Gezählt ab der Uhrzeit darunter. Läuft nur im Wartungsfenster; für rund um die Uhr Beginn und Ende des Fensters gleich setzen (z. B. 00:00 bis 00:00). Läuft eine Prüfung noch, wartet die nächste.",
+	"ops.everyHoursLong": "Achtung: Eine RAID-Prüfung bzw. ein SMART-Langtest liest jede Platte vollständig und dauert oft viele Stunden. In kurzen Abständen laufen die Platten praktisch dauernd unter Last und nutzen sich schneller ab; empfohlen ist einmal im Monat. Läuft eine Prüfung noch, wartet die nächste."
 }

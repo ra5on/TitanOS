@@ -107,6 +107,7 @@
 			draft.dependsOn ??= '';
 			draft.weekdays ??= [0];
 			draft.monthDay ||= 1;
+			draft.everyHours ||= 6;
 		}
 		// The dialog starts from what is stored, not from unsaved changes above it.
 		draftVolume = stored()?.volume ?? '';
@@ -370,11 +371,28 @@
 			<p class="muted">{t('tasks.sharedVolume')}</p>
 			<label
 				>{t('ops.every')}<select class="field" bind:value={draft.every}
-					>{#each ['daily', 'weekly', 'monthly'] as every (every)}<option value={every}
+					>{#each ['hours', 'daily', 'weekly', 'monthly'] as every (every)}<option value={every}
 							>{t(`ops.${every}` as MessageKey)}</option
 						>{/each}</select
 				></label
 			>
+			{#if draft.every === 'hours'}<label
+					>{t('ops.everyHours')}<input
+						class="field"
+						type="number"
+						bind:value={draft.everyHours}
+						min="1"
+						max="168"
+						required
+					/></label
+				>
+				<p class="muted small">
+					{t(
+						draft.kind === 'raid-check' || draft.kind === 'smart-long'
+							? 'ops.everyHoursLong'
+							: 'ops.everyHoursHint',
+					)}
+				</p>{/if}
 			{#if draft.every === 'weekly'}<fieldset>
 					<legend>{t('ops.weekdays')}</legend>
 					<div class="actions">

@@ -3,6 +3,7 @@ package maintenance
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 func TestAuditCanDisableWhenHistoryVolumeIsUnavailable(t *testing.T) {
@@ -133,5 +134,30 @@ func TestLaterKindsStayReadableForOlderApplications(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("later job lost on load")
+	}
+}
+
+func TestJobsEveryFewHours(t *testing.T) {
+	loc := time.UTC
+	j := Job{Every: "hours", EveryHours: 2, Time: "00:30"}
+	now := time.Date(2026, 10, 31, 13, 10, 0, 0, loc)
+	prev, next := slots(j, now, loc)
+	if !prev.Equal(time.Date(2026, 10, 31, 12, 30, 0, 0, loc)) || !next.Equal(time.Date(2026, 10, 31, 14, 30, 0, 0, loc)) {
+		t.Fatalf("slots %v %v", prev, next)
+	}
+	m := fixture(t)
+	s := settings()
+	s.Jobs[0].Every, s.Jobs[0].EveryHours = "hours", 0
+	if err := m.Set(s); err == nil {
+		t.Fatal("hours without a distance accepted")
+	}
+	s.Jobs[0].EveryHours = 1
+	if err := m.Set(s); err != nil {
+		t.Fatal(err)
+	}
+	var stored Settings
+	m.store.ReadJSON(settingsFile, &stored)
+	if len(stored.LaterJobs) != 1 {
+		t.Fatalf("hourly job readable for older versions: %+v", stored)
 	}
 }

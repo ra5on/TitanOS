@@ -6,7 +6,9 @@ export type MaintenanceJob = {
 	kind: 'raid-check' | 'smart-short' | 'smart-long' | 'backup-check' | 'restore-probe' | 'snapshot';
 	target: string;
 	enabled: boolean;
-	every: 'daily' | 'weekly' | 'monthly';
+	every: 'hours' | 'daily' | 'weekly' | 'monthly';
+	/** Distance of jobs every few hours, 1 to 168. */
+	everyHours?: number;
 	weekdays: number[];
 	monthDay: number;
 	time: string;
