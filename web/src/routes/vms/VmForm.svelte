@@ -22,7 +22,8 @@
 	import VmDisks from './VmDisks.svelte';
 	import VmInstall from './VmInstall.svelte';
 	import VmSchedule from './VmSchedule.svelte';
-	import { GIB, diskBlocked, folderProblem, freeOn, type DiskDraft } from './vm-form.ts';
+	import { GB, diskBlocked, folderProblem, freeOn, type DiskDraft } from './vm-form.ts';
+	import { MIB, formatBytes } from '#lib/format.ts';
 	import { scheduleDraft, schedulePayload, scheduleProblems } from '#lib/vm-schedule.ts';
 	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
@@ -51,7 +52,8 @@
 	let displayName = $state(initial ? vmLabel(initial) : '');
 	let description = $state(initial?.description ?? '');
 	let vcpus = $state(initial?.vcpus ?? 2);
-	let memoryGiB = $state(initial ? initial.memoryMiB / 1024 : 2);
+	// Kept in MiB as titand stores it; the form shows decimal GB (2 GB for a new VM).
+	let memoryMiB = $state(initial ? initial.memoryMiB : Math.round((2 * GB) / MIB));
 	let pinning = $state((initial?.cpuPin?.length ?? 0) > 0);
 	let pinned = $state<number[]>(initial?.cpuPin ?? []);
 	let exclusive = $state(initial?.exclusive ?? false);
@@ -134,7 +136,7 @@
 	// A first disk, once it is known where it can lie.
 	$effect(() => {
 		if (!existing && disks.length === 0 && volumes.length > 0 && !touched)
-			disks.push({ mode: 'new', format: 'qcow2', sizeGiB: 64, volume: volumes[0].name, path: '' });
+			disks.push({ mode: 'new', format: 'qcow2', sizeGB: 64, volume: volumes[0].name, path: '' });
 	});
 	// Windows 11 asks for a TPM and Secure Boot: on with that template
 	// unless switched off, and not offered with the others.
@@ -151,9 +153,9 @@
 		try {
 			await api.post(`/vms/${existing.name}/grow`, {
 				disk: index,
-				sizeBytes: Math.round(grow[index] * GIB),
+				sizeBytes: Math.round(grow[index] * GB),
 			});
-			existing.disks[index].sizeBytes = Math.round(grow[index] * GIB);
+			existing.disks[index].sizeBytes = Math.round(grow[index] * GB);
 			delete grow[index];
 		} catch (err) {
 			fail(err);
@@ -224,7 +226,7 @@
 			displayName,
 			description,
 			vcpus,
-			memoryGiB,
+			memoryMiB,
 			pinning,
 			pinned,
 			exclusive,
@@ -285,7 +287,7 @@
 
 	const hardwareSettings = () => ({
 		vcpus: vcpuCount,
-		memoryMiB: Math.round(memoryGiB * 1024),
+		memoryMiB,
 		cpuPin: pinning ? pinned : [],
 		exclusive: pinning && exclusive,
 		iso: iso.trim(),
@@ -323,7 +325,7 @@
 						? { path: disk.path }
 						: {
 								format: disk.format,
-								sizeBytes: Math.round(disk.sizeGiB * GIB),
+								sizeBytes: Math.round(disk.sizeGB * GB),
 								volume: disk.volume,
 								source: disk.mode === 'copy' ? disk.path : undefined,
 							},
@@ -476,7 +478,7 @@
 				hostError={partErrors.host}
 				onretryhost={() => loadPart('host')}
 				bind:vcpus
-				bind:memoryGiB
+				bind:memoryMiB
 				bind:pinning
 				bind:pinned
 				bind:exclusive
@@ -576,7 +578,7 @@
 			</div>
 			<div>
 				<dt>{t('vms.new.memory')}</dt>
-				<dd class="mono">{memoryGiB} GiB</dd>
+				<dd class="mono">{formatBytes(memoryMiB * MIB)}</dd>
 			</div>
 			{#if !existing}<div>
 					<dt>{t('vms.new.step3')}</dt>
@@ -585,7 +587,7 @@
 							.map((disk) =>
 								disk.mode === 'block' || disk.mode === 'direct'
 									? disk.path.split('/').at(-1)
-									: `${disk.sizeGiB} GiB ${disk.format === 'raw' ? 'img' : 'qcow2'} (${disk.volume})`,
+									: `${disk.sizeGB} GB ${disk.format === 'raw' ? 'img' : 'qcow2'} (${disk.volume})`,
 							)
 							.join(', ') || '–'}
 					</dd>

@@ -4,7 +4,7 @@ import {
 	createProblem,
 	growLimit,
 	growProblem,
-	mibToBytes,
+	mbToBytes,
 	partitionJob,
 	sameDrive,
 	segments,
@@ -73,11 +73,14 @@ test('a new partition must fit into its gap and suit the filesystem', () => {
 	const gap = { start: 513 * MiB, size: 512 * MiB, after: 1 };
 	assert.equal(createProblem(gap, 512 * MiB, 'exfat', 1, 'gpt'), '');
 	assert.equal(createProblem(gap, 513 * MiB, 'exfat', 1, 'gpt'), 'files.partitions.sizeTooLarge');
-	assert.equal(createProblem(gap, mibToBytes('abc'), '', 1, 'gpt'), 'files.partitions.sizeInvalid');
+	assert.equal(createProblem(gap, mbToBytes('abc'), '', 1, 'gpt'), 'files.partitions.sizeInvalid');
 	assert.equal(createProblem(gap, 200 * MiB, 'xfs', 1, 'gpt'), 'files.formatTooSmall');
 	assert.equal(createProblem(gap, 200 * MiB, '', 4, 'dos'), 'files.partitions.mbrFull');
-	assert.equal(mibToBytes('100,7'), 100 * MiB);
-	assert.ok(Number.isNaN(mibToBytes('0')));
+	// Typed in decimal MB, rounded down to a whole MiB: 100,7 MB = 96,03 MiB.
+	assert.equal(mbToBytes('100,7'), 96 * MiB);
+	assert.equal(mbToBytes('1'), 0);
+	assert.ok(Number.isNaN(mbToBytes('0')));
+	assert.ok(Number.isNaN(mbToBytes('0')));
 });
 
 test('growing only goes up, into the free space right after, not for FAT', () => {

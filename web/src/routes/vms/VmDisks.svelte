@@ -5,7 +5,7 @@
 	import RetryNotice from '#lib/components/RetryNotice.svelte';
 	import { formatBytes } from '#lib/format.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
-	import { GIB, freeOn, imageOf, type DiskDraft } from './vm-form.ts';
+	import { GB, freeOn, imageOf, type DiskDraft } from './vm-form.ts';
 
 	const SIZES = [16, 32, 64, 128, 256, 512];
 
@@ -57,21 +57,21 @@
 	function addDisk(mode: DiskDraft['mode']) {
 		ontouch();
 		const volume = disks.findLast((disk) => disk.volume)?.volume ?? volumes[0]?.name ?? '';
-		if (mode === 'new') disks.push({ mode, format: 'qcow2', sizeGiB: 64, volume, path: '' });
+		if (mode === 'new') disks.push({ mode, format: 'qcow2', sizeGB: 64, volume, path: '' });
 		else if (mode === 'copy')
 			pickImage(
-				{ mode, format: 'qcow2', sizeGiB: 1, volume, path: '' },
+				{ mode, format: 'qcow2', sizeGB: 1, volume, path: '' },
 				host.images[0]?.path ?? '',
 				true,
 			);
 		else if (mode === 'block')
-			disks.push({ mode, format: 'raw', sizeGiB: 0, volume: '', path: freeDisks[0]?.path ?? '' });
+			disks.push({ mode, format: 'raw', sizeGB: 0, volume: '', path: freeDisks[0]?.path ?? '' });
 	}
 	/** A copy starts as large as its original. */
 	function pickImage(disk: DiskDraft, path: string, add = false) {
 		disk.path = path;
 		const image = host.images.find((candidate) => candidate.path === path);
-		if (image) disk.sizeGiB = Math.max(disk.sizeGiB, Math.ceil(image.virtualBytes / GIB));
+		if (image) disk.sizeGB = Math.max(disk.sizeGB, Math.ceil(image.virtualBytes / GB));
 		if (add) disks.push(disk);
 	}
 	function setUse(disk: DiskDraft, mode: 'copy' | 'direct') {
@@ -83,7 +83,7 @@
 		if (disk.mode === 'block') return { text: t('vms.form.blockNote'), warn: true };
 		if (disk.mode === 'direct') return { text: t('vms.form.directNote'), warn: false };
 		const available = freeOn(volumes, disk.volume);
-		const size = disk.sizeGiB * GIB;
+		const size = disk.sizeGB * GB;
 		const image = imageOf(host.images, disk);
 		if (disk.mode === 'copy' && image && size < image.virtualBytes)
 			return {
@@ -125,16 +125,16 @@
 							id="disk-grow-{index}"
 							class="field mono number"
 							type="number"
-							min={Math.ceil(disk.sizeBytes / GIB) + 1}
+							min={Math.ceil(disk.sizeBytes / GB) + 1}
 							max="16384"
 							bind:value={grow[index]}
-							placeholder={String(Math.ceil(disk.sizeBytes / GIB))}
-						/><span class="muted">GiB</span>
+							placeholder={String(Math.ceil(disk.sizeBytes / GB))}
+						/><span class="muted">GB</span>
 						<button
 							type="button"
 							class="btn small"
 							onclick={() => ongrow(index)}
-							disabled={busy || !(grow[index] * GIB > disk.sizeBytes)}>{t('vms.form.grow')}</button
+							disabled={busy || !(grow[index] * GB > disk.sizeBytes)}>{t('vms.form.grow')}</button
 						>
 					</div>
 					<small>{t('vms.form.growNote')}</small>
@@ -241,7 +241,7 @@
 							min="8"
 							max="2048"
 							step="8"
-							bind:value={disk.sizeGiB}
+							bind:value={disk.sizeGB}
 							aria-label={t('vms.new.sizeOf', { file: fileOf(disk) })}
 						/>
 						<input
@@ -250,8 +250,8 @@
 							type="number"
 							min="1"
 							max="16384"
-							bind:value={disk.sizeGiB}
-						/><span class="muted">GiB</span>
+							bind:value={disk.sizeGB}
+						/><span class="muted">GB</span>
 					</div>
 					{#if disk.mode === 'new'}
 						<details class="size-presets">
@@ -260,8 +260,8 @@
 								{#each SIZES as size (size)}
 									<button
 										type="button"
-										aria-pressed={disk.sizeGiB === size}
-										onclick={() => (disk.sizeGiB = size)}>{size} GiB</button
+										aria-pressed={disk.sizeGB === size}
+										onclick={() => (disk.sizeGB = size)}>{size} GB</button
 									>
 								{/each}
 							</div>

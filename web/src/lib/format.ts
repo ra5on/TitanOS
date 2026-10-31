@@ -6,12 +6,30 @@ function number(value: number, maximumFractionDigits: number): string {
 
 const UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
 
-/** 3328599654 → "3,1 GB". Binary steps (1024), like the tools on the NAS itself. */
+/** Decimal units as everywhere in the interface (decision of 31 Oct 2026): 1 GB = 1000³ bytes. */
+export const KB = 1000;
+export const MB = 1000 ** 2;
+export const GB = 1000 ** 3;
+/** Binary units, only for converting to what QEMU, libvirt or the kernel expect. Never shown. */
+export const MIB = 1024 ** 2;
+export const GIB = 1024 ** 3;
+
+/** A value titand keeps in MiB, as whole decimal MB for a form field (256 → 268). */
+export function mibToMB(mib: number): number {
+	return Math.round((mib * MIB) / MB);
+}
+
+/** Whole decimal MB typed in a form back to the MiB titand keeps (268 → 256). */
+export function mbToMiB(mb: number): number {
+	return Math.round((Number(mb) * MB) / MIB);
+}
+
+/** 3328599654 → "3,33 GB". Decimal steps (1000), never GiB in the interface. */
 export function formatBytes(bytes: number): string {
 	let value = bytes;
 	let unit = 0;
-	while (value >= 1024 && unit < UNITS.length - 1) {
-		value /= 1024;
+	while (value >= 1000 && unit < UNITS.length - 1) {
+		value /= 1000;
 		unit++;
 	}
 	const digits = unit === 0 || value >= 100 ? 0 : value >= 10 ? 1 : 2;
@@ -22,8 +40,8 @@ export function formatBytes(bytes: number): string {
 export function formatBytesOf(used: number, total: number): string {
 	let unit = 0;
 	let scale = 1;
-	while (total / scale >= 1024 && unit < UNITS.length - 1) {
-		scale *= 1024;
+	while (total / scale >= 1000 && unit < UNITS.length - 1) {
+		scale *= 1000;
 		unit++;
 	}
 	const digits = (value: number) => (unit === 0 || value >= 100 ? 0 : 1);
@@ -34,9 +52,14 @@ export function formatPercent(value: number): string {
 	return `${number(value, 0)} %`;
 }
 
-/** Bytes per second → megabytes per second, as a bare number. */
+/** A number with up to `digits` decimals in the interface language ("2,15"). */
+export function formatDecimal(value: number, digits = 2): string {
+	return number(value, digits);
+}
+
+/** Bytes per second → megabytes (1000²) per second, as a bare number. */
 export function formatMegabytesPerSecond(bytesPerSecond: number): string {
-	const value = bytesPerSecond / (1024 * 1024);
+	const value = bytesPerSecond / MB;
 	return number(value, value >= 100 ? 0 : value >= 10 ? 1 : 2);
 }
 

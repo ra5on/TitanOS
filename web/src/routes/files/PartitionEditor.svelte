@@ -22,8 +22,9 @@
 		createProblem,
 		growLimit,
 		growProblem,
+		MB,
 		MiB,
-		mibToBytes,
+		mbToBytes,
 		sameDrive,
 		segments,
 		typeName,
@@ -118,13 +119,13 @@
 		rest = true;
 		scheme = current.size > 2 * 2 ** 40 ? 'gpt' : layout?.table === 'dos' ? 'dos' : 'gpt';
 		filesystem = 'exfat';
-		if (next.kind === 'create') size = String(Math.floor(next.gap.size / MiB));
+		if (next.kind === 'create') size = String(Math.floor(next.gap.size / MB));
 		if (next.kind === 'format' || next.kind === 'label') {
 			label = next.part.label;
 			const fs = next.part.fsType as DriveFilesystem;
 			if (fs in driveFilesystems) filesystem = fs;
 		}
-		if (next.kind === 'grow') size = String(Math.floor(growLimit(next.part) / MiB));
+		if (next.kind === 'grow') size = String(Math.floor(growLimit(next.part) / MB));
 	}
 
 	/** The label rules of the filesystem a label is for. */
@@ -141,7 +142,7 @@
 		action?.kind === 'create'
 			? rest
 				? Math.floor(action.gap.size / MiB) * MiB
-				: mibToBytes(size)
+				: mbToBytes(size)
 			: 0,
 	);
 	const createError = $derived(
@@ -150,7 +151,7 @@
 			: '',
 	);
 	const growSize = $derived(
-		action?.kind === 'grow' ? (rest ? growLimit(action.part) : mibToBytes(size)) : 0,
+		action?.kind === 'grow' ? (rest ? growLimit(action.part) : mbToBytes(size)) : 0,
 	);
 	const growError = $derived(action?.kind === 'grow' ? growProblem(action.part, growSize) : '');
 	const formError = $derived.by(() => {
@@ -438,7 +439,7 @@
 					<label
 						>{a.kind === 'create'
 							? t('files.partitions.size')
-							: t('files.partitions.growTo', { max: Math.floor(growLimit(a.part) / MiB) })}<input
+							: t('files.partitions.growTo', { max: Math.floor(growLimit(a.part) / MB) })}<input
 							class="field mono"
 							inputmode="numeric"
 							bind:value={size}

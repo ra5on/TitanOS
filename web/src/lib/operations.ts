@@ -154,7 +154,7 @@ export function newMaintenanceJob(): MaintenanceJob {
 		time: '03:00',
 		missed: 'window',
 		readData: 5,
-		maxBytes: 64 * 1048576,
+		maxBytes: 64 * 1000 * 1000,
 		maxFiles: 20,
 		keep: 7,
 		allowPrune: false,

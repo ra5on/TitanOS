@@ -3,7 +3,7 @@
 	import NavigationGuard from '#lib/operations/NavigationGuard.svelte';
 	import { onMount } from 'svelte';
 	import { api, type StorageStatus } from '#lib/api.ts';
-	import { formatDateTime } from '#lib/format.ts';
+	import { MB, formatDateTime } from '#lib/format.ts';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { problemText, requestProblem, type Problem } from '../problem.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
@@ -445,10 +445,10 @@
 						class="field"
 						type="number"
 						min="1"
-						max="1024"
-						value={draft.maxBytes / 1048576}
+						max="1073"
+						value={Math.round(draft.maxBytes / MB)}
 						onchange={(e) => {
-							if (draft) draft.maxBytes = Number(e.currentTarget.value) * 1048576;
+							if (draft) draft.maxBytes = Number(e.currentTarget.value) * MB;
 						}}
 					/></label
 				><label

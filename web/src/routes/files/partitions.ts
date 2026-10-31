@@ -104,11 +104,14 @@ export function typeName(table: string, type: string): string {
 /** Filesystems that grow with their partition: FAT and exFAT do not. */
 export const growableFilesystems = ['', 'ext2', 'ext3', 'ext4', 'xfs', 'btrfs', 'ntfs'];
 
-/** Bytes of a size typed in MiB, or NaN. */
-export function mibToBytes(text: string): number {
+/** Decimal megabyte: sizes are typed in MB like everywhere in the interface. */
+export const MB = 1000 ** 2;
+
+/** Bytes of a size typed in MB, rounded down to a whole MiB (partitions start and end there), or NaN. */
+export function mbToBytes(text: string): number {
 	const value = Number(text.trim().replace(',', '.'));
 	if (!Number.isFinite(value) || value <= 0) return NaN;
-	return Math.floor(value) * MiB;
+	return Math.floor((value * MB) / MiB) * MiB;
 }
 
 /** Why a new partition does not fit, as an i18n key, or ''. */

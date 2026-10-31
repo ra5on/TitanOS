@@ -302,3 +302,18 @@ func hasNotice(ts *testServer, kind string) bool {
 	_, body := ts.request("GET", "/api/v1/notifications", nil)
 	return strings.Contains(string(body), kind)
 }
+
+func TestHAQuotaTakesDecimalBytesFirst(t *testing.T) {
+	if got := haQuota(5_000_000_000, 0); got != 5_000_000_000 {
+		t.Fatalf("bytes: %d", got)
+	}
+	if got := haQuota(0, 2); got != 2<<30 {
+		t.Fatalf("older clients in GiB: %d", got)
+	}
+	if got := haQuota(3_000_000_000, 7); got != 3_000_000_000 {
+		t.Fatalf("bytes win: %d", got)
+	}
+	if got := haQuota(0, 0); got != 0 {
+		t.Fatalf("no limit: %d", got)
+	}
+}

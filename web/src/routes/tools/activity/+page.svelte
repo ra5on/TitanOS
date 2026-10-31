@@ -6,7 +6,7 @@
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
-	import { formatDateTime } from '#lib/format.ts';
+	import { formatDateTime, mbToMiB, mibToMB } from '#lib/format.ts';
 	import { operationError } from '#lib/operations.ts';
 	import {
 		activityLabel,
@@ -239,9 +239,11 @@
 			><span>{t('ops.budget')}</span><input
 				class="field"
 				type="number"
-				min="8"
-				max="256"
-				bind:value={settings.maxMiB}
+				min="9"
+				max="268"
+				bind:value={
+					() => mibToMB(settings?.maxMiB ?? 0), (mb) => settings && (settings.maxMiB = mbToMiB(mb))
+				}
 				required
 			/></label
 		>
