@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/diagnose"
+	"github.com/ra5on/TitanOS/backend/internal/logkeep"
 )
 
 // handleLogs returns lines of the journal. The log names accounts and
@@ -66,7 +67,18 @@ func (s *Server) handleLogsExport(w http.ResponseWriter, r *http.Request) {
 		}
 		q.Since = time.Unix(seconds, 0)
 	}
-	text, err := s.opts.Diagnose.Export(r.Context(), q)
+	var text string
+	var err error
+	if q.Previous && s.opts.LogKeep != nil {
+		// The journal of an earlier start only survives on a volume.
+		text, err = s.opts.LogKeep.Previous()
+		if errors.Is(err, logkeep.ErrNoStart) {
+			writeError(w, http.StatusNotFound, "no_previous_logs", "no log of the previous start was kept")
+			return
+		}
+	} else {
+		text, err = s.opts.Diagnose.Export(r.Context(), q)
+	}
 	if err != nil {
 		if errors.Is(err, diagnose.ErrInvalid) {
 			writeError(w, http.StatusBadRequest, "bad_request", err.Error())

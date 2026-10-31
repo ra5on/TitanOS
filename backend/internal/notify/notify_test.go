@@ -430,3 +430,33 @@ func TestWatcherWarnsOnce(t *testing.T) {
 		t.Errorf("got  %s\nwant %s", got, want)
 	}
 }
+
+// The bell survives a restart when a volume holds it.
+func TestBellKeptOnTheVolume(t *testing.T) {
+	dir := t.TempDir()
+	first, _ := newManager(t)
+	first.SetPersonalDataDir(func() (string, bool) { return dir, true })
+	first.Notify(Warning, "volume_degraded", "tank")
+	first.Notify(Info, "update_available", "0.41.0")
+	for range 100 {
+		if _, err := os.Stat(filepath.Join(dir, bellFile)); err == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	time.Sleep(50 * time.Millisecond)
+	second, _ := newManager(t)
+	second.SetPersonalDataDir(func() (string, bool) { return dir, true })
+	second.Notify(Error, "disk_unhealthy", "sdb")
+	list := second.Messages()
+	if len(list) != 3 || list[0].Kind != "disk_unhealthy" || list[2].Kind != "volume_degraded" {
+		t.Fatalf("bell after restart: %+v", list)
+	}
+	ids := map[int]bool{}
+	for _, m := range list {
+		if ids[m.ID] {
+			t.Fatal("ids twice")
+		}
+		ids[m.ID] = true
+	}
+}

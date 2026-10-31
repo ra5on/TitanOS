@@ -37,6 +37,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 	"github.com/ra5on/TitanOS/backend/internal/ipv64"
 	"github.com/ra5on/TitanOS/backend/internal/letsencrypt"
+	"github.com/ra5on/TitanOS/backend/internal/logkeep"
 	"github.com/ra5on/TitanOS/backend/internal/lxc"
 	"github.com/ra5on/TitanOS/backend/internal/maintenance"
 	"github.com/ra5on/TitanOS/backend/internal/media"
@@ -163,6 +164,8 @@ type Options struct {
 	Thumbs *thumbs.Manager
 	// FileIndex is the optional full-text index; nil offers no content search.
 	FileIndex *fileindex.Manager
+	// LogKeep keeps the journal on a volume; nil offers only this start.
+	LogKeep *logkeep.Manager
 }
 
 // Server answers all HTTP requests.

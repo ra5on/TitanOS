@@ -6,6 +6,7 @@ import "strings"
 // a volume or a disk. The web UI has its own texts for the same kinds.
 var texts = map[string]map[string][2]string{
 	"de": {
+		"unclean_shutdown":          {"Das NAS wurde nicht ordnungsgemäß heruntergefahren", "Der vorige Start endete ohne sauberes Herunterfahren (Stromausfall, Absturz oder Reset); letzte Spur {s}. Prüfe den Zustand der Volumes; das Protokoll des vorigen Starts gibt es unter Werkzeuge › Protokolle."},
 		"maintenance_failed":        {"Wartung {s} fehlgeschlagen", "Der Wartungsauftrag benötigt Aufmerksamkeit. Einzelheiten stehen unter Werkzeuge › Wartung."},
 		"backup_probe_failed":       {"Wiederherstellungsprobe für {s} fehlgeschlagen", "Die Probe konnte nicht vollständig geprüft werden. Einzelheiten stehen unter Einstellungen › Sicherungen."},
 		"backup_check_failed":       {"Prüfung des Backups {s} fehlgeschlagen", "restic hat im Speicherort des Backups {s} Fehler gefunden. Einzelheiten stehen unter Einstellungen › Sicherungen."},
@@ -86,6 +87,7 @@ var texts = map[string]map[string][2]string{
 		"vm_schedule_forced":        {"{s} ausgeschaltet", "Der Gast der VM {s} ist nicht innerhalb der Wartezeit heruntergefahren. TitanOS hat die VM ausgeschaltet (wie Stecker ziehen)."},
 	},
 	"en": {
+		"unclean_shutdown":          {"The NAS was not shut down properly", "The previous start ended without a clean shutdown (power cut, crash or reset); last trace {s}. Check the state of the volumes; the log of the previous start is under Tools › Logs."},
 		"maintenance_failed":        {"Maintenance {s} failed", "The maintenance job needs attention. Details are under Tools › Maintenance."},
 		"backup_probe_failed":       {"Restore probe for {s} failed", "The probe could not be fully verified. Details are under Settings › Backups."},
 		"backup_check_failed":       {"Check of backup {s} failed", "restic found errors in the destination of the backup {s}. Details are under Settings › Backups."},

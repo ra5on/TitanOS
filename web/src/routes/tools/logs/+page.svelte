@@ -164,6 +164,22 @@
 		link.click();
 	}
 
+	let noPrevious = $state(false);
+	/** The kept log of the start before this one, from the volume. */
+	async function exportPrevious() {
+		noPrevious = false;
+		const res = await fetch(apiPath('/logs/export?boot=previous'), { credentials: 'same-origin' });
+		if (!res.ok) {
+			noPrevious = true;
+			return;
+		}
+		const link = document.createElement('a');
+		link.href = URL.createObjectURL(await res.blob());
+		link.download = 'titanos-log-previous-start.txt';
+		link.click();
+		setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
+	}
+
 	// Messages known to be harmless: shown, but quiet, with a note why.
 	const HARMLESS = [/portmapper: failed to get PCP mapping/, /PCP is implemented but not enabled/];
 	const harmless = (entry: Entry) => HARMLESS.some((pattern) => pattern.test(entry.message));
@@ -219,6 +235,7 @@
 		<button type="button" class="btn" disabled={entries.length === 0} onclick={exportLines}
 			>{t('tools.exportLines')}</button
 		>
+		<button type="button" class="btn" onclick={exportPrevious}>{t('tools.exportPrevious')}</button>
 		<span class="muted count" role="status"
 			>{#if copied === 'ok'}{t('tools.copied')}{:else if copied === 'failed'}{t(
 					'tools.copyFailed',
@@ -231,6 +248,7 @@
 				>{t('ui.retry')}</button
 			>
 		</p>{/if}
+	{#if noPrevious}<p class="notice-warn" role="status">{t('tools.noPrevious')}</p>{/if}
 	<div class="frame">
 		<!-- A region that scrolls must be reachable with the keyboard. -->
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->

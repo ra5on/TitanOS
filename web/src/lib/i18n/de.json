@@ -7031,5 +7031,9 @@
 	"common.day6": "Samstag",
 	"activity.via.homeassistant": "Home Assistant",
 	"activity.via.agent": "intern",
-	"tools.harmless": "Bekannt harmlos: Der Router hat PCP ausgeschaltet; Tailscale verbindet trotzdem über UPnP oder ein Relais. Wer die Meldung loswerden will, schaltet PCP im Router ein."
+	"tools.harmless": "Bekannt harmlos: Der Router hat PCP ausgeschaltet; Tailscale verbindet trotzdem über UPnP oder ein Relais. Wer die Meldung loswerden will, schaltet PCP im Router ein.",
+	"notify.kind.unclean_shutdown.title": "Das NAS wurde nicht ordnungsgemäß heruntergefahren",
+	"notify.kind.unclean_shutdown.text": "Der vorige Start endete ohne sauberes Herunterfahren (Stromausfall, Absturz oder Reset); letzte Spur {subject}. Prüfe den Zustand der Volumes; das Protokoll des vorigen Starts gibt es unter Werkzeuge › Protokolle.",
+	"tools.exportPrevious": "Vorigen Start herunterladen",
+	"tools.noPrevious": "Vom vorigen Start wurde kein Protokoll aufbewahrt. TitanOS bewahrt Protokolle auf dem ersten Volume auf, sobald eines eingebunden ist."
 }

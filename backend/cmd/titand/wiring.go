@@ -38,6 +38,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 	"github.com/ra5on/TitanOS/backend/internal/ipv64"
 	"github.com/ra5on/TitanOS/backend/internal/letsencrypt"
+	"github.com/ra5on/TitanOS/backend/internal/logkeep"
 	"github.com/ra5on/TitanOS/backend/internal/lxc"
 	"github.com/ra5on/TitanOS/backend/internal/maintenance"
 	"github.com/ra5on/TitanOS/backend/internal/media"
@@ -96,6 +97,7 @@ type titand struct {
 	extensions      *plugins.Manager
 	shells          *terminal.Manager
 	notifier        *notify.Manager
+	logs            *logkeep.Manager
 	pushes          *webpush.Manager
 	home            *homeassistant.Manager
 	stickBackup     *configbackup.Manager
@@ -436,6 +438,25 @@ func (w *titand) wireNotifications() error {
 	// Tells in the web UI, by mail and by push message when a volume or a
 	// disk needs attention.
 	w.notifier = notify.NewManager(w.store)
+	// The journal beyond a restart, on the first volume; an earlier start
+	// that did not end cleanly becomes a notification.
+	w.logs = logkeep.New(command.Exec{})
+	w.logs.Target = func() (string, bool) {
+		mounted := w.volumes.Mounted()
+		if len(mounted) == 0 {
+			return "", false
+		}
+		slices.Sort(mounted)
+		return w.volumes.MountPoint(mounted[0]), true
+	}
+	w.logs.OnUnclean = func(u logkeep.Unclean) {
+		when := u.Started.Local().Format("02.01.2006 15:04")
+		if !u.LastLine.IsZero() {
+			when = u.LastLine.Local().Format("02.01.2006 15:04")
+		}
+		w.notifier.Notify(notify.Warning, "unclean_shutdown", when)
+	}
+	w.notifier.Urgent = w.logs.Urgent
 	// Only owners and administrators may point their own channels into the
 	// home network; a plain user's go to public addresses only.
 	w.notifier.Confined = func(name string) bool {
@@ -1282,6 +1303,7 @@ func (w *titand) wireAPI() error {
 		Replication:        w.replicas,
 		ReplicaReceiver:    w.replicaReceiver,
 		Diagnose:           w.diagnostics,
+		LogKeep:            w.logs,
 		SSH:                w.access,
 		Update:             w.updates,
 		Backup:             w.backups,
@@ -1308,6 +1330,7 @@ func (w *titand) wireAPI() error {
 	w.background(func() { w.handler.RunHAStorage(ctx) })
 	// Leftovers of the AI chat removed in 0.41.0, once.
 	w.background(func() { w.handler.RemoveRetiredAssistant(ctx) })
+	w.background(func() { w.logs.Run(ctx) })
 	w.background(func() { w.home.RunMQTT(ctx, w.handler.HASnapshot, w.handler.HACommand) })
 	w.schedule.Busy = w.handler.PowerBusy
 	w.background(func() { w.schedule.Run(ctx) })
