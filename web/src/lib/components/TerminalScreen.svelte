@@ -220,6 +220,6 @@
 		padding: 6px 16px;
 		background: var(--warn-bg);
 		color: var(--warn-text);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 </style>

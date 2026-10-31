@@ -54,7 +54,7 @@ func (m *Manager) Pending() int {
 // has not gone out since.
 func digestDue(d Digest, now, sent time.Time) bool {
 	var hour, minute int
-	fmt.Sscanf(d.Time, "%d:%d", &hour, &minute)
+	_, _ = fmt.Sscanf(d.Time, "%d:%d", &hour, &minute) // a value that cannot be read leaves the zero value, which the code handles
 	at := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, now.Location())
 	return d.Enabled && !now.Before(at) && sent.Before(at)
 }
@@ -94,7 +94,7 @@ func (m *Manager) sendDigest(now time.Time) {
 		severity = Warning
 	}
 	summary := Message{Time: now, Severity: severity, Kind: "digest", Title: title, Text: b.String()}
-	m.deliver(settings, summary, nil)
+	_ = m.deliver(settings, summary, nil) // without a single channel deliver sends in the background and returns nil
 	if m.Push != nil {
 		hostname, _ := os.Hostname()
 		m.Push(summary, "["+hostname+"] "+title)

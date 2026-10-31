@@ -419,7 +419,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 4px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.crumbs button {
 		padding: 4px 6px;
@@ -437,7 +437,7 @@
 		margin: 0;
 		padding: 10px 14px;
 		border-bottom: 1px solid var(--panel-border);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.notice-error {
 		margin: 10px 14px;
@@ -449,10 +449,10 @@
 		gap: 12px;
 		padding: 9px 14px;
 		border-bottom: 1px solid var(--panel-border);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.row.header {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.row.picked {
@@ -465,7 +465,7 @@
 	}
 	.num {
 		text-align: right;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		white-space: nowrap;
 	}
 	.entry {
@@ -505,7 +505,7 @@
 	}
 	.count {
 		margin-right: auto;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	@media (max-width: 760px) {
 		.row {

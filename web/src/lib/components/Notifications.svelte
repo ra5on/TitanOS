@@ -16,9 +16,9 @@
 	import { system } from '#lib/system.svelte.ts';
 	import Icon from './Icon.svelte';
 	import Dialog from './Dialog.svelte';
-	import { askAbout, assistant } from '#lib/assistant.svelte.ts';
 
-	let { compact = false }: { compact?: boolean } = $props();
+	/** `side`: in the sidebar, the list opens to the right of it, upwards. */
+	let { compact = false, side = false }: { compact?: boolean; side?: boolean } = $props();
 	let open = $state(false);
 	let busy = $state(false);
 	let error = $state('');
@@ -94,7 +94,7 @@
 	}}
 />
 
-<div class="notifications" class:compact bind:this={root}>
+<div class="notifications" class:compact class:side bind:this={root}>
 	<button
 		type="button"
 		class="trigger"
@@ -182,22 +182,6 @@
 										>{/if}
 								</span>
 							{/if}
-							{#if assistant.status?.available}
-								<button
-									type="button"
-									class="notice-link ask"
-									onclick={() => {
-										open = false;
-										askAbout(
-											t('assistant.askNotice', {
-												title: text.title,
-												text: text.text,
-												time: formatDateTime(new Date(notice.time)),
-											}),
-										);
-									}}>{t('assistant.ask')}</button
-								>
-							{/if}
 						</li>
 					{/each}
 				</ul>
@@ -280,7 +264,7 @@
 		min-width: 16px;
 		height: 16px;
 		padding: 0 3px;
-		font-size: 10px;
+		font-size: var(--text-xs);
 	}
 	.trigger.open,
 	.trigger:hover {
@@ -306,7 +290,7 @@
 		border-radius: 999px;
 		background: var(--accent);
 		color: var(--on-accent);
-		font-size: 0.6875rem;
+		font-size: var(--text-xs);
 		font-weight: 700;
 	}
 	.count.warning {
@@ -327,7 +311,7 @@
 		max-height: min(70vh, 560px);
 		display: flex;
 		flex-direction: column;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.head {
 		display: flex;
@@ -344,7 +328,7 @@
 		gap: 4px 14px;
 	}
 	.name {
-		font-size: 0.9375rem;
+		font-size: var(--text-md);
 		font-weight: 600;
 	}
 	ul {
@@ -371,10 +355,10 @@
 		gap: 10px;
 	}
 	time {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.what {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		font-weight: 600;
 	}
 	.empty,
@@ -383,7 +367,16 @@
 		padding: 12px 14px;
 	}
 	.foot {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
+	}
+	.side .panel {
+		position: fixed;
+		top: auto;
+		right: auto;
+		left: calc(var(--side-nav-width, 236px) + 8px);
+		bottom: 12px;
+		max-width: calc(100vw - var(--side-nav-width, 236px) - 24px);
+		max-height: calc(100dvh - 24px);
 	}
 	@media (max-width: 760px) {
 		.panel {

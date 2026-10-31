@@ -25,6 +25,8 @@ func newManager(t *testing.T) (*Manager, string) {
 	dir := t.TempDir()
 	m := NewManager(config.Open(dir))
 	m.retryPause = time.Millisecond
+	// Bell writes run in the background; they must end before the temporary folders go.
+	t.Cleanup(m.WaitBell)
 	if err := m.Load(); err != nil {
 		t.Fatal(err)
 	}
@@ -428,5 +430,35 @@ func TestWatcherWarnsOnce(t *testing.T) {
 	want := "volume_full:tank disk_unhealthy:sda (WD Red, S1) disk_hot:sda (WD Red, S1) volume_mismatch:tank volume_full:tank disk_unhealthy:sda (WD Red, S1) disk_hot:sda (WD Red, S1)"
 	if got := kinds(m); got != want {
 		t.Errorf("got  %s\nwant %s", got, want)
+	}
+}
+
+// The bell survives a restart when a volume holds it.
+func TestBellKeptOnTheVolume(t *testing.T) {
+	dir := t.TempDir()
+	first, _ := newManager(t)
+	first.SetPersonalDataDir(func() (string, bool) { return dir, true })
+	first.Notify(Warning, "volume_degraded", "tank")
+	first.Notify(Info, "update_available", "0.41.0")
+	for range 100 {
+		if _, err := os.Stat(filepath.Join(dir, bellFile)); err == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	time.Sleep(50 * time.Millisecond)
+	second, _ := newManager(t)
+	second.SetPersonalDataDir(func() (string, bool) { return dir, true })
+	second.Notify(Error, "disk_unhealthy", "sdb")
+	list := second.Messages()
+	if len(list) != 3 || list[0].Kind != "disk_unhealthy" || list[2].Kind != "volume_degraded" {
+		t.Fatalf("bell after restart: %+v", list)
+	}
+	ids := map[int]bool{}
+	for _, m := range list {
+		if ids[m.ID] {
+			t.Fatal("ids twice")
+		}
+		ids[m.ID] = true
 	}
 }

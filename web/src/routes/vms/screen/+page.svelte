@@ -105,7 +105,7 @@
 		gap: 4px;
 		padding: 4px 12px;
 		border-top: 1px solid var(--border);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.grow {
 		flex: 1 1 auto;

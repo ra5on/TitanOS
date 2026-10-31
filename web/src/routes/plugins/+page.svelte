@@ -1,79 +1,45 @@
 <script lang="ts">
 	import { poll } from '#lib/poll.ts';
 	import { tick, untrack } from 'svelte';
-	import { api, ApiError } from '#lib/api.ts';
+	import { api } from '#lib/api.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import TailscaleSettings from '#lib/components/TailscaleSettings.svelte';
 	import NetbirdSettings from '#lib/components/NetbirdSettings.svelte';
-	import Dialog from '#lib/components/Dialog.svelte';
-	import DriverUpdates, { type DriverStatus } from '#lib/components/DriverUpdates.svelte';
+	import DriverUpdates from '#lib/components/DriverUpdates.svelte';
 	import PluginSteps from '#lib/components/PluginSteps.svelte';
 	import { latestFor, type PluginProgress } from '#lib/plugin-progress.ts';
 	import { formatBytes } from '#lib/format.ts';
-	import { errorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
-
-	type Plugin = {
-		name: string;
-		title: string;
-		description: Record<string, string> | null;
-		version: string;
-		size: number;
-		kernel: string;
-		contains: Record<string, string[]> | null;
-		modules: string[] | null;
-		services: string[] | null;
-		installed: boolean;
-		enabled: boolean;
-		active: boolean;
-		path: string;
-		official: boolean;
-		local: boolean;
-		download: boolean;
-		licenseUrl?: string;
-		problem: string;
-		update?: { path: string; version: string; official: boolean; download?: boolean } | null;
-		category?: string;
-		license?: string;
-		upstream?: { name?: string; url?: string; version?: string } | null;
-		details?: Record<string, Details> | null;
-		sources?: string[] | null;
-		devices?: Device[] | null;
-		// A community plugin of a source (its id) or behind a single link.
-		source?: string;
-		url?: string;
-	};
-	type Source = {
-		id: string;
-		name: string;
-		url: string;
-		added: string;
-		plugins: number;
-		error?: string;
-	};
-	type Device = { key: string; bus: string; address?: string; name: string; driver?: string };
-	type Details = {
-		when?: string;
-		hardware?: string[] | null;
-		changes?: string;
-		limits?: string[] | null;
-		footprint?: string;
-	};
-	type Recommendation = { plugin: string; title: string; category?: string; devices: Device[] };
-	type Status = {
-		driverUpdate: DriverStatus;
-		volume: string;
-		kernel: string;
-		plugins: Plugin[];
-		catalog: { release: string; state: string; error?: string };
-		recommendations?: Recommendation[] | null;
-		dismissed?: number;
-		sources?: Source[] | null;
-	};
+	import LinkDialog from './LinkDialog.svelte';
+	import ProblemNotice from './ProblemNotice.svelte';
+	import RemoveDialog from './RemoveDialog.svelte';
+	import SourceRemoveDialog from './SourceRemoveDialog.svelte';
+	import SourcesDialog from './SourcesDialog.svelte';
+	import UpdateDialog from './UpdateDialog.svelte';
+	import {
+		aboutOf,
+		badge,
+		CATEGORIES,
+		categoryKey,
+		categoryOf,
+		containsOf,
+		hue,
+		isLink,
+		localized,
+		matches,
+		monogram,
+		pluginProblem,
+		type Category,
+		type Plugin,
+		type Source,
+		type Status,
+		type Problem,
+	} from './plugins.ts';
 
 	let status = $state<Status | null>(null);
-	let error = $state<{ text: string; detail: string } | null>(null);
+	let error = $state<Problem | null>(null);
 	let picked = $state('');
 	let asking = $state(false);
 	let activate = $state(true);
@@ -120,64 +86,16 @@
 	const volumes = $derived(
 		(storage.status?.volumes ?? []).filter((entry) => entry.mounted).map((entry) => entry.name),
 	);
-	const text = (texts: Record<string, string> | null) =>
-		texts?.[i18n.locale] ?? texts?.en ?? Object.values(texts ?? {})[0] ?? '';
-	const contains = (plugin: Plugin) => plugin.contains?.[i18n.locale] ?? plugin.contains?.en ?? [];
-	const monogram = (plugin: Plugin) =>
-		plugin.title
-			.replace(/[^a-zA-Z0-9]/g, '')
-			.slice(0, 2)
-			.replace(/^./, (c) => c.toUpperCase()) || '?';
-	const hue = (plugin: Plugin) =>
-		[...plugin.name].reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) % 360, 7);
-
-	// Areas of the catalog, in this order; unknown categories are "other".
-	const CATEGORIES = [
-		'network',
-		'graphics',
-		'sensors',
-		'storage',
-		'tools',
-		'remote',
-		'other',
-	] as const;
-	type Category = (typeof CATEGORIES)[number];
-	const categoryKey: Record<Category, MessageKey> = {
-		network: 'plugins.category.network',
-		graphics: 'plugins.category.graphics',
-		sensors: 'plugins.category.sensors',
-		storage: 'plugins.category.storage',
-		tools: 'plugins.category.tools',
-		remote: 'plugins.category.remote',
-		other: 'plugins.category.other',
-	};
-	const categoryOf = (plugin: { category?: string }): Category =>
-		(CATEGORIES as readonly string[]).includes(plugin.category ?? '')
-			? (plugin.category as Category)
-			: 'other';
-	const about = (plugin: Plugin): Details | null =>
-		plugin.details?.[i18n.locale] ?? plugin.details?.en ?? null;
+	const text = (texts: Record<string, string> | null) => localized(texts, i18n.locale);
+	const contains = (plugin: Plugin) => containsOf(plugin, i18n.locale);
+	const about = (plugin: Plugin) => aboutOf(plugin, i18n.locale);
 	let query = $state('');
 	let area = $state<Category | ''>('');
-	function matches(plugin: Plugin, words: string) {
-		if (!words) return true;
-		const info = about(plugin);
-		const haystack = [
-			plugin.title,
-			plugin.name,
-			text(plugin.description),
-			...(info?.hardware ?? []),
-			info?.when ?? '',
-			...(plugin.devices ?? []).map((device) => device.name),
-		]
-			.join(' ')
-			.toLowerCase();
-		return words.split(/\s+/).every((word) => haystack.includes(word));
-	}
 	const shownPlugins = $derived(
 		plugins.filter(
 			(plugin) =>
-				(!area || categoryOf(plugin) === area) && matches(plugin, query.trim().toLowerCase()),
+				(!area || categoryOf(plugin) === area) &&
+				matches(plugin, query.trim().toLowerCase(), i18n.locale),
 		),
 	);
 	const groups = $derived(
@@ -192,7 +110,7 @@
 	const recommendations = $derived(status?.recommendations ?? []);
 	const fits = (plugin: Plugin) =>
 		!plugin.installed && recommendations.some((entry) => entry.plugin === plugin.name);
-	const link = (value: string) => /^https:\/\/\S+$/.test(value);
+	const link = isLink;
 
 	// Opens the plugin and, if it can be installed right away, its install form.
 	async function showRecommended(name: string) {
@@ -230,27 +148,8 @@
 		}
 	}
 
-	function badge(plugin: Plugin): { text: string; kind: string } {
-		if (!plugin.installed && plugin.problem === 'kernel')
-			return { text: t('plugins.incompatible'), kind: 'warn' };
-		if (!plugin.installed) return { text: t('plugins.available'), kind: '' };
-		if (plugin.problem) return { text: t('plugins.notLoaded'), kind: 'warn' };
-		if (plugin.active) return { text: t('plugins.active'), kind: 'ok' };
-		return { text: t(plugin.enabled ? 'plugins.waiting' : 'plugins.off'), kind: '' };
-	}
-
 	function problem(err: unknown) {
-		const code = err instanceof ApiError ? err.code : 'internal';
-		error = {
-			text: errorText(code),
-			detail:
-				(code === 'plugin_failed' ||
-					code === 'invalid_plugin' ||
-					code === 'plugin_download_failed') &&
-				err instanceof ApiError
-					? err.message
-					: '',
-		};
+		error = pluginProblem(err);
 	}
 
 	// Polling goes on during a change, so the page keeps showing what the
@@ -462,9 +361,7 @@
 {/if}
 
 {#if error && !asking && !removing && !updating && !linking && !sourcesOpen}
-	<div class="notice-error" role="alert">
-		{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
-	</div>
+	<ProblemNotice problem={error} />
 {/if}
 
 {#if status && recommendations.length > 0}
@@ -779,9 +676,7 @@
 							></label
 						>
 						<p class="muted note">{t('plugins.activateLaterHint')}</p>
-						{#if error}<div class="notice-error" role="alert">
-								{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
-							</div>{/if}
+						{#if error}<ProblemNotice problem={error} />{/if}
 						{#if shown}
 							<PluginSteps progress={shown} ondismiss={busy ? undefined : () => dismiss(shown)} />
 						{:else if busy}
@@ -893,231 +788,74 @@
 
 {#if removing}
 	{@const target = removing}
-	<Dialog
-		title={t('plugins.removeTitle', { name: target.title })}
-		locked={busy}
+	<RemoveDialog
+		title={target.title}
+		{busy}
+		steps={removingSteps}
+		{error}
 		onclose={() => (removing = null)}
-	>
-		<p class="text">{t('plugins.removeText')}</p>
-		{#if removingSteps && (busy || removingSteps.state !== 'done')}<PluginSteps
-				progress={removingSteps}
-			/>{/if}
-		{#if error}
-			<div class="notice-error" role="alert">
-				{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
-			</div>
-		{/if}
-		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (removing = null)} disabled={busy}
-				>{t('common.cancel')}</button
-			>
-			<button
-				type="button"
-				class="btn btn-warn"
-				onclick={() => run(() => api.delete<Status>(`/plugins/${target.name}`), target.name)}
-				disabled={busy}>{t('plugins.removeSubmit')}</button
-			>
-		</div>
-	</Dialog>
+		onremove={() => run(() => api.delete<Status>(`/plugins/${target.name}`), target.name)}
+	/>
 {/if}
 
 {#if linking}
-	<Dialog title={t('plugins.fromLinkTitle')} locked={busy} onclose={() => (linking = false)}>
-		<p class="text">{t('plugins.fromLinkText')}</p>
-		<form class="stack" onsubmit={(event) => (event.preventDefault(), checkLink())}>
-			<label class="stack"
-				><span>{t('plugins.fromLinkURL')}</span>
-				<input
-					class="field mono"
-					type="url"
-					placeholder="https://example.org/plugins/name.plugin.json"
-					bind:value={linkURL}
-					disabled={busy}
-					oninput={() => (linkPreview = null)}
-				/>
-			</label>
-			<div class="row-actions">
-				<button type="submit" class="btn" disabled={busy || linkChecking || !linkURL.trim()}
-					>{t(linkChecking ? 'plugins.fromLinkChecking' : 'plugins.fromLinkCheck')}</button
-				>
-			</div>
-		</form>
-		{#if linkPreview}
-			{@const preview = linkPreview}
-			<div class="stack">
-				<p>
-					<strong>{preview.title}</strong>
-					<span class="muted mono"
-						>{preview.name} · {preview.version || '–'} · {formatBytes(preview.size)}</span
-					>
-				</p>
-				{#if text(preview.description)}<p class="muted">{text(preview.description)}</p>{/if}
-				<p class="notice-warn">
-					{t(preview.official ? 'plugins.trustOfficial' : 'plugins.trustLink')}
-				</p>
-				{#if preview.problem === 'kernel'}<p class="notice-warn">
-						{t('plugins.incompatible')}
-					</p>{/if}
-				{#if !status?.volume}
-					<label class="stack"
-						><span>{t('plugins.volume')}</span>
-						<select class="field" bind:value={volume}
-							>{#each volumes as entry (entry)}<option value={entry}>{entry}</option>{/each}</select
-						>
-					</label>
-				{/if}
-				<label class="check"
-					><input type="checkbox" bind:checked={activate} disabled={busy} /><span
-						>{t('plugins.activateNow')}</span
-					></label
-				>
-				{#if stepsFor(preview.name)}<PluginSteps progress={stepsFor(preview.name)!} />{/if}
-			</div>
-		{/if}
-		{#if error}<div class="notice-error" role="alert">
-				{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
-			</div>{/if}
-		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (linking = false)} disabled={busy}
-				>{t('common.cancel')}</button
-			>
-			<!-- The API wants the plugin name as confirmation for an unsigned plugin; the click is that confirmation. -->
-			<button
-				type="button"
-				class="btn btn-primary"
-				onclick={installLink}
-				disabled={busy || !linkPreview || linkPreview.problem === 'kernel' || !volume}
-				>{t(busy ? 'plugins.downloading' : 'plugins.downloadInstall')}</button
-			>
-		</div>
-	</Dialog>
+	<LinkDialog
+		bind:url={linkURL}
+		bind:volume
+		bind:activate
+		preview={linkPreview}
+		chooseVolume={!status?.volume}
+		{volumes}
+		{busy}
+		checking={linkChecking}
+		steps={linkPreview ? stepsFor(linkPreview.name) : undefined}
+		{error}
+		onclose={() => (linking = false)}
+		oncheck={checkLink}
+		oninstall={installLink}
+		onedit={() => (linkPreview = null)}
+	/>
 {/if}
 
 {#if sourcesOpen}
-	<Dialog
-		title={t('plugins.sourceListTitle')}
-		locked={sourceAdding}
+	<SourcesDialog
+		{sources}
+		bind:url={sourceURL}
+		adding={sourceAdding}
+		{error}
 		onclose={() => (sourcesOpen = false)}
-	>
-		<p class="text">{t('plugins.sourcesText')}</p>
-		{#if sources.length}
-			<ul class="sources">
-				{#each sources as source (source.id)}
-					<li class="divided">
-						<div class="about">
-							<span class="name">{source.name}</span>
-							<span class="muted mono path">{source.url}</span>
-							{#if source.error}<span class="notice-warn"
-									>{t('plugins.sourceError')} {source.error}</span
-								>{:else}<span class="muted"
-									>{t('plugins.sourcePlugins', { count: source.plugins })}</span
-								>{/if}
-						</div>
-						<button
-							type="button"
-							class="btn"
-							onclick={() => (sourceRemoving = source)}
-							disabled={sourceAdding}>{t('plugins.sourceRemove')}</button
-						>
-					</li>
-				{/each}
-			</ul>
-		{:else}
-			<p class="muted">{t('plugins.sourcesEmpty')}</p>
-		{/if}
-		<form class="stack" onsubmit={(event) => (event.preventDefault(), addSource())}>
-			<label class="stack"
-				><span>{t('plugins.sourceURL')}</span>
-				<input
-					class="field mono"
-					type="url"
-					placeholder="https://example.org/plugins/plugins.json"
-					bind:value={sourceURL}
-					disabled={sourceAdding}
-				/>
-			</label>
-			<p class="muted note">{t('plugins.sourceFormat')}</p>
-			<div class="row-actions">
-				<button type="submit" class="btn btn-primary" disabled={sourceAdding || !sourceURL.trim()}
-					>{t(sourceAdding ? 'plugins.sourceAdding' : 'plugins.sourceAdd')}</button
-				>
-			</div>
-		</form>
-		{#if error}<div class="notice-error" role="alert">
-				{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
-			</div>{/if}
-		<div class="dialog-actions">
-			<button
-				type="button"
-				class="btn"
-				onclick={() => (sourcesOpen = false)}
-				disabled={sourceAdding}>{t('common.close')}</button
-			>
-		</div>
-	</Dialog>
+		onadd={addSource}
+		onremove={(source) => (sourceRemoving = source)}
+	/>
 {/if}
 
 {#if sourceRemoving}
 	{@const target = sourceRemoving}
-	<Dialog
-		title={t('plugins.sourceRemoveTitle', { name: target.name })}
+	<SourceRemoveDialog
+		name={target.name}
 		onclose={() => (sourceRemoving = null)}
-	>
-		<p class="text">{t('plugins.sourceRemoveText')}</p>
-		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (sourceRemoving = null)}
-				>{t('common.cancel')}</button
-			>
-			<button type="button" class="btn btn-warn" onclick={() => removeSource(target)}
-				>{t('plugins.sourceRemove')}</button
-			>
-		</div>
-	</Dialog>
+		onremove={() => removeSource(target)}
+	/>
 {/if}
 
 {#if updating}
 	{@const target = updating}
-	<Dialog
-		title={t('plugins.updateTitle', { name: target.title, version: target.version })}
-		locked={busy}
+	<UpdateDialog
+		{target}
+		{busy}
+		steps={updatingSteps}
+		{error}
 		onclose={() => (updating = null)}
-	>
-		<p class="text">{t('plugins.updateText')}</p>
-		{#if !target.official}<p class="notice-warn">{t('plugins.trustCommunity')}</p>{/if}
-		{#if target.download}<p class="text">{t('plugins.updateDownloadText')}</p>{:else}<p
-				class="muted mono path"
-			>
-				{target.path}
-			</p>{/if}
-		{#if updatingSteps && (busy || updatingSteps.state !== 'done')}<PluginSteps
-				progress={updatingSteps}
-			/>{/if}
-		{#if error}
-			<div class="notice-error" role="alert">
-				{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
-			</div>
-		{/if}
-		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (updating = null)} disabled={busy}
-				>{t('common.cancel')}</button
-			>
-			<!-- The API wants the plugin name as confirmation for an unsigned version; the click is that confirmation. -->
-			<button
-				type="button"
-				class="btn btn-primary"
-				onclick={() =>
-					run(
-						() =>
-							api.post<Status>(`/plugins/${target.name}/update`, {
-								path: target.path,
-								confirm: target.name,
-							}),
-						target.name,
-					)}
-				disabled={busy}>{t(busy ? 'plugins.updating' : 'plugins.update')}</button
-			>
-		</div>
-	</Dialog>
+		onupdate={() =>
+			run(
+				() =>
+					api.post<Status>(`/plugins/${target.name}/update`, {
+						path: target.path,
+						confirm: target.name,
+					}),
+				target.name,
+			)}
+	/>
 {/if}
 
 <style>
@@ -1128,14 +866,14 @@
 	}
 	.intro {
 		max-width: 60rem;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.empty {
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
 		padding: 32px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.layout {
 		display: flex;
@@ -1190,7 +928,7 @@
 	}
 	.group {
 		margin-top: 8px;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		font-weight: 600;
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
@@ -1231,7 +969,7 @@
 	.monogram.large {
 		width: 56px;
 		height: 56px;
-		font-size: 1.25rem;
+		font-size: var(--text-xl);
 	}
 	.about {
 		flex: 1 1 auto;
@@ -1247,18 +985,18 @@
 		gap: 4px 10px;
 	}
 	.name {
-		font-size: 0.9375rem;
+		font-size: var(--text-md);
 		font-weight: 600;
 	}
 	.source {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.description {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		overflow-wrap: anywhere;
 	}
 	.note {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	aside {
 		flex: 0 1 520px;
@@ -1275,12 +1013,12 @@
 		border-bottom: 1px solid var(--panel-border);
 	}
 	h2 {
-		font-size: 1.125rem;
+		font-size: var(--text-lg);
 		font-weight: 600;
 	}
 	.meta,
 	.path {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
 	}
 	.body {
@@ -1288,7 +1026,7 @@
 		flex-direction: column;
 		gap: 16px;
 		padding: var(--tile-pad);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.block {
 		display: flex;
@@ -1296,7 +1034,7 @@
 		gap: 8px;
 	}
 	h3 {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		font-weight: 600;
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
@@ -1321,26 +1059,6 @@
 		justify-content: space-between;
 		gap: 12px;
 	}
-	.sources {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-	}
-	.sources li {
-		display: flex;
-		gap: 0.75rem;
-		align-items: center;
-		justify-content: space-between;
-		padding: 0.5rem 0;
-	}
-	.sources .about {
-		display: flex;
-		flex-direction: column;
-		min-width: 0;
-	}
-	.sources .path {
-		overflow-wrap: anywhere;
-	}
 	.update {
 		padding: 10px 12px;
 		border: 1px solid var(--panel-border);
@@ -1355,7 +1073,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);
@@ -1364,7 +1082,7 @@
 		flex-direction: row;
 		align-items: center;
 		gap: 10px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.check span {
 		color: var(--text);
@@ -1375,12 +1093,12 @@
 		margin: 0;
 	}
 	.text {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	pre {
 		margin: 8px 0 0;
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		white-space: pre-wrap;
 		word-break: break-word;
 	}
@@ -1388,7 +1106,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.progress progress {
 		width: 100%;

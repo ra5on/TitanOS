@@ -9,9 +9,11 @@
 	} from '#lib/api.ts';
 	import { btrfsUsable } from './btrfs.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import HelpTip from '#lib/components/HelpTip.svelte';
 	import { formatDiskBytes } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import DiskPicker from './DiskPicker.svelte';
+	import SmrWarning from './SmrWarning.svelte';
 	import { isUsable } from './labels.ts';
 	import { radioKeys } from '#lib/radio-group.ts';
 
@@ -47,6 +49,8 @@
 	// Optional LUKS2 encryption, off by default. The password is needed
 	// after every start; nothing can recover it.
 	let encrypt = $state(false);
+	// Regular checks, all chosen by default (decided 31.10.2026).
+	let checks = $state({ parity: true, smartShort: true, smartLong: true, snapshots: true });
 	let password = $state('');
 	let repeat = $state('');
 	let understood = $state(false);
@@ -139,6 +143,7 @@
 				erase: $state.snapshot(selected),
 				identities: $state.snapshot(selectionIdentities),
 				encrypt: encrypt || undefined,
+				checks: { ...checks, snapshots: filesystem === 'btrfs' && checks.snapshots },
 				password: encrypt ? password : undefined,
 			});
 			password = '';
@@ -180,7 +185,7 @@
 		</label>
 
 		<div class="field-row">
-			<span class="label" id="fs-label">{t('create.filesystem')}</span>
+			<span class="label" id="fs-label">{t('create.filesystem')}<HelpTip term="filesystem" /></span>
 			<div
 				class="options two"
 				role="radiogroup"
@@ -205,7 +210,7 @@
 		</div>
 
 		<div class="field-row">
-			<span class="label" id="level-label">{t('create.level')}</span>
+			<span class="label" id="level-label">{t('create.level')}<HelpTip term="raid" /></span>
 			<div
 				class="options"
 				role="radiogroup"
@@ -236,6 +241,7 @@
 		<div class="field-row">
 			<span class="label">{t('create.disks')}</span>
 			<DiskPicker {disks} bind:selected name="volume-disks" onselect={remember} />
+			<SmrWarning {level} {selected} />
 			{#if staleSelection}
 				<p class="notice-warn" role="alert">{t('create.changedDisks')}</p>
 				<button
@@ -249,11 +255,42 @@
 			{/if}
 		</div>
 
+		<fieldset class="checks">
+			<legend>{t('create.checks')}<HelpTip term="checks" /></legend>
+			<p class="muted small">{t('create.checksIntro')}</p>
+			<label class="confirm"
+				><input type="checkbox" bind:checked={checks.parity} /><span
+					><strong>{t(filesystem === 'btrfs' ? 'create.checkScrub' : 'create.checkParity')}</strong>
+					<span class="muted small"
+						>{t(filesystem === 'btrfs' ? 'create.checkScrubHint' : 'create.checkParityHint')}</span
+					></span
+				></label
+			>
+			<label class="confirm"
+				><input type="checkbox" bind:checked={checks.smartShort} /><span
+					><strong>{t('create.checkSmartShort')}</strong>
+					<span class="muted small">{t('create.checkSmartShortHint')}</span></span
+				></label
+			>
+			<label class="confirm"
+				><input type="checkbox" bind:checked={checks.smartLong} /><span
+					><strong>{t('create.checkSmartLong')}</strong>
+					<span class="muted small">{t('create.checkSmartLongHint')}</span></span
+				></label
+			>
+			{#if filesystem === 'btrfs'}<label class="confirm"
+					><input type="checkbox" bind:checked={checks.snapshots} /><span
+						><strong>{t('create.checkSnapshots')}</strong>
+						<span class="muted small">{t('create.checkSnapshotsHint')}</span></span
+					></label
+				>{/if}
+		</fieldset>
+
 		<div class="field-row">
 			<label class="confirm">
 				<input type="checkbox" bind:checked={encrypt} />
 				<span
-					><strong>{t('crypt.createEncrypt')}</strong>
+					><strong>{t('crypt.createEncrypt')}</strong><HelpTip term="luks" />
 					<span class="muted small">{t('crypt.createEncryptDesc')}</span></span
 				>
 			</label>
@@ -332,21 +369,21 @@
 		gap: 8px;
 	}
 	.label {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		font-weight: 500;
 	}
 	.field {
 		max-width: 16rem;
 	}
 	small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	small.problem {
 		color: var(--warn-text);
 	}
 	.small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.options {
 		display: grid;
@@ -377,7 +414,7 @@
 		border-color: var(--accent);
 	}
 	.option-name {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		font-weight: 600;
 	}
 	.capacity {
@@ -387,26 +424,41 @@
 		padding: 12px 14px;
 		background: var(--chip);
 		border-radius: var(--radius-ctl);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.confirm {
 		display: flex;
 		gap: 8px;
 		align-items: flex-start;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.working {
 		order: -2;
 		margin-right: auto;
 		align-self: center;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		color: var(--muted);
 	}
 	pre {
 		margin: 8px 0 0;
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		white-space: pre-wrap;
 		word-break: break-word;
+	}
+	.checks {
+		display: grid;
+		gap: 8px;
+		margin: 0;
+		padding: 12px 14px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-ctl);
+	}
+	.checks legend {
+		padding: 0 6px;
+		font-weight: 600;
+	}
+	.checks p {
+		margin: 0;
 	}
 </style>

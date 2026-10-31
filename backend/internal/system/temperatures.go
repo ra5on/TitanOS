@@ -104,3 +104,6 @@ func readTemperatures(sys string) []Temperature {
 	})
 	return result
 }
+
+// ReadTemperatures reads the hwmon temperatures of the running system.
+func ReadTemperatures() []Temperature { return readTemperatures("/sys") }

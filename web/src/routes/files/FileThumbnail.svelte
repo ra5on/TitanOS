@@ -68,6 +68,6 @@
 		border-radius: var(--radius-small);
 		background: var(--surface);
 		color: var(--text);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 </style>

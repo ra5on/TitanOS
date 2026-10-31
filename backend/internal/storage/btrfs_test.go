@@ -108,7 +108,7 @@ func TestBtrfsMembershipAndProgress(t *testing.T) {
 	m, _, _ := newTestManager(t)
 	m.volumes = []VolumeConfig{{Name: "mirror", Filesystem: "btrfs", FilesystemUUID: "same", Level: "raid1"}}
 	devices := []blockDevice{{Name: "/dev/sdx", Type: "disk", Size: 8 << 30, Children: []blockDevice{{Name: "/dev/sdx1", FSType: "btrfs", UUID: "same", Size: 7 << 30}}}}
-	status := m.status(devices, nil)
+	status := m.status(context.Background(), devices, nil)
 	if status.Disks[0].Role != RoleMember || status.Volumes[0].State != VolumeDegraded {
 		t.Fatalf("missing member not detected: %+v", status)
 	}

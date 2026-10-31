@@ -525,10 +525,10 @@ func (m *Manager) masquerade(ctx context.Context, network string) error {
 }
 
 func (m *Manager) down(ctx context.Context) {
-	m.runner.Run(ctx, "", "ip", "link", "del", "dev", Interface)
-	m.runner.Run(ctx, "", "iptables", "-t", "nat", "-D", "POSTROUTING", "-j", natChain)
-	m.runner.Run(ctx, "", "iptables", "-t", "nat", "-F", natChain)
-	m.runner.Run(ctx, "", "iptables", "-t", "nat", "-X", natChain)
+	_, _ = m.runner.Run(ctx, "", "ip", "link", "del", "dev", Interface)                        // cleanup, best effort: nothing more can be done if it fails
+	_, _ = m.runner.Run(ctx, "", "iptables", "-t", "nat", "-D", "POSTROUTING", "-j", natChain) // cleanup, best effort: nothing more can be done if it fails
+	_, _ = m.runner.Run(ctx, "", "iptables", "-t", "nat", "-F", natChain)                      // cleanup, best effort: nothing more can be done if it fails
+	_, _ = m.runner.Run(ctx, "", "iptables", "-t", "nat", "-X", natChain)                      // cleanup, best effort: nothing more can be done if it fails
 }
 
 // Status reads the devices' handshakes from wg (on request, never on a

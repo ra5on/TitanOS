@@ -156,7 +156,7 @@ func (info joinInfo) candidateNodes() []Node {
 // askCluster sends an unsigned request of the join to the first node of
 // info that answers.
 func (m *Manager) askCluster(ctx context.Context, info joinInfo, path string, in, out any) error {
-	var lastErr error = ErrUnreachable
+	lastErr := ErrUnreachable
 	for _, n := range info.candidateNodes() {
 		err := m.try(ctx, n, func(ctx context.Context, address string) (*http.Response, error) {
 			return m.postJSON(ctx, n, address, path, in)

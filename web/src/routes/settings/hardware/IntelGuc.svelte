@@ -228,7 +228,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.name {
 		font-weight: 600;
@@ -246,7 +246,7 @@
 		word-break: keep-all;
 	}
 	.small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		margin: 0;
 	}
 	dl {
@@ -254,7 +254,7 @@
 		grid-template-columns: max-content 1fr;
 		gap: 4px 14px;
 		margin: 6px 0 0;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	dt {
 		color: var(--muted);

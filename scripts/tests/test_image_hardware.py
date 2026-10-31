@@ -42,7 +42,9 @@ class ImageHardwareTest(unittest.TestCase):
         self.modules = self.root / "usr/lib/modules" / self.kernel
         self.modules.mkdir(parents=True)
         # Built-in drivers are just as usable as .ko files.
-        (self.modules / "modules.builtin").write_text("\n".join("kernel/" + name.replace("_", "-") + ".ko" for name in hardware.MODULES))
+        # Of each group (ntfs3 or ntfs) the first is there.
+        names = list(hardware.MODULES) + [group[0] for group in hardware.ANY_OF]
+        (self.modules / "modules.builtin").write_text("\n".join("kernel/" + name.replace("_", "-") + ".ko" for name in names))
 
     def test_both_vendors_before_the_compressed_root(self):
         hardware.check_image(self.root, self.kernel)
@@ -52,6 +54,15 @@ class ImageHardwareTest(unittest.TestCase):
             self.initrd.write_bytes(archive(entries) + gzip.compress(archive([(missing, b"late microcode")])))
             with self.assertRaisesRegex(ValueError, "missing early microcode"):
                 hardware.check_microcode(self.initrd)
+
+    def test_one_driver_of_a_group_is_enough(self):
+        # Linux 7 calls its NTFS driver ntfs instead of ntfs3.
+        builtin = self.modules / "modules.builtin"
+        builtin.write_text(builtin.read_text().replace("kernel/ntfs3.ko", "kernel/ntfs.ko"))
+        hardware.check_image(self.root, self.kernel)
+        builtin.write_text(builtin.read_text().replace("kernel/ntfs.ko\n", "").replace("\nkernel/ntfs.ko", ""))
+        with self.assertRaisesRegex(ValueError, "ntfs3/ntfs"):
+            hardware.check_image(self.root, self.kernel)
 
     def test_empty_and_truncated_microcode_are_rejected(self):
         self.initrd.write_bytes(archive([(name, b"") for name in hardware.MICROCODE]))

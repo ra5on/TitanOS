@@ -177,7 +177,7 @@ func (m *Manager) loadBlocks(now time.Time) {
 	var running []Block
 	if m.runFile != "" {
 		if data, err := os.ReadFile(m.runFile); err == nil {
-			json.Unmarshal(data, &running)
+			_ = json.Unmarshal(data, &running) // a value that cannot be read leaves the zero value, which the code handles
 		}
 	}
 	seen := map[string]bool{}
@@ -205,10 +205,10 @@ func (m *Manager) saveRun() {
 	if err != nil {
 		return
 	}
-	os.MkdirAll(filepath.Dir(m.runFile), 0o700)
+	_ = os.MkdirAll(filepath.Dir(m.runFile), 0o700) // a runtime or state file only; without it the default applies
 	tmp := m.runFile + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o600); err == nil {
-		os.Rename(tmp, m.runFile)
+		_ = os.Rename(tmp, m.runFile) // a runtime or state file only; without it the default applies
 	}
 }
 

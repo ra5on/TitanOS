@@ -68,7 +68,7 @@ func TestDiskSleepOverridesAPI(t *testing.T) {
 			t.Fatalf("effective values: %+v", disk)
 		}
 	}
-	// Only the default: the overrides stay (older clients, the assistant).
+	// Only the default: the overrides stay (older clients, MCP).
 	if code, status, body := put(map[string]int{"idleMinutes": 10}); code != http.StatusOK || status.IdleMinutes != 10 || len(status.Volumes) != 1 || status.Volumes["tank"] != 0 || status.Disks["serial:WD-2"] != 60 {
 		t.Fatalf("default only: %d %s", code, body)
 	}

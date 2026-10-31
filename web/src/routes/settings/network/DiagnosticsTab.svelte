@@ -98,7 +98,7 @@
 		margin: 4px 0 0;
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	td:first-child {
 		width: 1%;

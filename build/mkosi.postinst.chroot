@@ -28,6 +28,11 @@ ln -s ../usr/lib/os-release /etc/os-release
 install -d /usr/share/titanos
 printf '%s\n' "$version" > /usr/share/titanos/base-version
 
+# GRUB for 32-bit UEFI and legacy BIOS boards (scripts/make-grub.sh). The
+# images stay in the system: they are what make-zip.sh puts on the stick.
+sh /usr/share/titanos/make-grub.sh /usr/share/titanos/grub-early.cfg /usr/share/titanos/boot
+rm /usr/share/titanos/make-grub.sh /usr/share/titanos/grub-early.cfg
+
 cat > /etc/issue <<'ISSUE'
 \S{PRETTY_NAME} – \n (\l)
 Web UI: https://\4

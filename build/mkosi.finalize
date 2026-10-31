@@ -28,6 +28,10 @@ rm "$BUILDROOT/usr/share/titanos/check-image-hardware.py"
 cp "$BUILDROOT/boot/vmlinuz-$kernel" "$OUTPUTDIR/vmlinuz"
 cp "$BUILDROOT/boot/initrd.img-$kernel" "$OUTPUTDIR/initrd.img"
 cp "$BUILDROOT/usr/lib/systemd/boot/efi/systemd-bootx64.efi" "$OUTPUTDIR/BOOTX64.EFI"
+# GRUB for 32-bit UEFI and legacy BIOS, built in mkosi.postinst.chroot.
+cp "$BUILDROOT/usr/share/titanos/boot/BOOTIA32.EFI" "$OUTPUTDIR/BOOTIA32.EFI"
+mkdir -p "$OUTPUTDIR/grub/i386-pc"
+cp "$BUILDROOT/usr/share/titanos/boot/i386-pc/boot.img" "$BUILDROOT/usr/share/titanos/boot/i386-pc/core.img" "$OUTPUTDIR/grub/i386-pc/"
 printf '%s\n' "$kernel" > "$OUTPUTDIR/kernel-version"
 
 # Kernel and initrd are loaded from the stick by the boot loader. Keeping a

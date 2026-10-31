@@ -37,6 +37,11 @@ type Settings struct {
 	ExitNode      string   `json:"exitNode"`
 	AcceptRoutes  bool     `json:"acceptRoutes"`
 	AcceptDNS     bool     `json:"acceptDNS"`
+	// HTTPSCertificate switches the certificate of the NAS's own name in
+	// the tailnet on or off (cert.go). Since 0.41.0, optional: missing is
+	// off, unless an earlier version already got a certificate. Older
+	// versions ignore it. Not part of the trial of the other settings.
+	HTTPSCertificate *bool `json:"httpsCertificate,omitempty"`
 }
 type Peer struct {
 	ID     string `json:"id"`
@@ -269,7 +274,7 @@ func (m *Manager) apply(s Settings) error {
 	defer cancel()
 	_, err := m.runner.Run(ctx, "", "/usr/libexec/titanos-tailscale-runtime", "apply")
 	if err != nil {
-		m.writeRuntime(old)
+		_ = m.writeRuntime(old) // going back to the settings before; the first error is returned
 		return fmt.Errorf("apply Tailscale settings: %w", err)
 	}
 	return nil
@@ -287,12 +292,14 @@ func (m *Manager) Set(s Settings) error {
 	if m.pending != nil {
 		return ErrPending
 	}
+	// The certificate switch has its own route and no trial.
+	s.HTTPSCertificate = m.settings.HTTPSCertificate
 	if err := m.apply(s); err != nil {
 		if rollbackErr := m.apply(m.settings); rollbackErr != nil {
 			previous := m.settings
 			m.pending = &previous
 			m.deadline = time.Now()
-			m.timer = time.AfterFunc(10*time.Second, func() { m.Undo() })
+			m.timer = time.AfterFunc(10*time.Second, func() { _ = m.Undo() }) // Undo keeps its error in m.problem and tries again
 			err = errors.Join(err, rollbackErr)
 		}
 		m.problem = err.Error()
@@ -302,7 +309,7 @@ func (m *Manager) Set(s Settings) error {
 	m.pending = &previous
 	m.settings = s
 	m.deadline = time.Now().Add(2 * time.Minute)
-	m.timer = time.AfterFunc(2*time.Minute, func() { m.Undo() })
+	m.timer = time.AfterFunc(2*time.Minute, func() { _ = m.Undo() }) // Undo keeps its error in m.problem and tries again
 	m.problem = ""
 	return nil
 }
@@ -331,7 +338,7 @@ func (m *Manager) Undo() error {
 	}
 	if err := m.apply(*m.pending); err != nil {
 		m.problem = err.Error()
-		m.timer = time.AfterFunc(10*time.Second, func() { m.Undo() })
+		m.timer = time.AfterFunc(10*time.Second, func() { _ = m.Undo() }) // Undo keeps its error in m.problem and tries again
 		return err
 	}
 	m.settings = *m.pending

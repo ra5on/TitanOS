@@ -22,6 +22,10 @@ on:
       - 'build/**'
       - 'boot/**'
       - 'scripts/make-zip.sh'
+      - 'scripts/make-grub.sh'
+      - 'scripts/stick-bios.py'
+      - 'scripts/make-stick-image.py'
+      - 'scripts/grubenv.py'
       - 'scripts/check-image-hardware.py'
       - 'plugins/catalog/**'
       - 'scripts/plugin-set.py'
@@ -143,6 +147,15 @@ jobs:
           VERSION=${{ steps.version.outputs.version }} MKOSI_SUDO=1 scripts/make-zip.sh
           sudo chown -R "$(id -u):$(id -g)" out build/mkosi.output
 
+      - name: Build the image with the newer kernel (kernel choice "Neu")
+        if: steps.kind.outputs.kind == 'system'
+        # The same system with the kernel of trixie-backports (docs/KERNEL.md),
+        # into build/mkosi.output-new and out/kernel-new; make-release.sh
+        # carries it as the slot variant "new".
+        run: |
+          VERSION=${{ steps.version.outputs.version }} MKOSI_SUDO=1 scripts/make-zip.sh --kernel-new
+          sudo chown -R "$(id -u):$(id -g)" out build/mkosi.output-new
+
       - name: The image of the base release with the new titand
         if: steps.kind.outputs.kind == 'app'
         run: python3 scripts/repack-release.py --base ${{ steps.kind.outputs.base }} --version ${{ steps.version.outputs.version }}
@@ -155,27 +168,42 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           GH_TOKEN: ${{ secrets.PLUGINS_DISPATCH_TOKEN }}
         run: |
-          kernel=$(cat build/mkosi.output/kernel-version)
-          package=$(python3 scripts/plugin-set.py package build/mkosi.output)
-          fetch() { python3 scripts/plugin-set.py fetch --base "$VERSION" --kernel "$kernel" --kernel-package "$package" --dest out/plugin-sets; }
-          status=0; fetch || status=$?
-          if [ "$status" = 3 ] && [ "$GITHUB_EVENT_NAME" = push ]; then
-            if [ -z "$GH_TOKEN" ]; then
-              echo "no plugin set for $kernel ($package) and no PLUGINS_DISPATCH_TOKEN to request one" >&2
-              exit 1
+          # Both kernels need their plugin set: the default one is carried in
+          # the release, the one of the newer kernel is fetched by the NAS
+          # from the plugin repository (doubled plugin build time, decided
+          # 31.10.2026). variant is "" or "new".
+          sets() {
+            image=$1; dest=$2; variant=$3
+            kernel=$(cat "$image/kernel-version")
+            package=$(python3 scripts/plugin-set.py package "$image")
+            fetch() { python3 scripts/plugin-set.py fetch --base "$VERSION" --kernel "$kernel" --kernel-package "$package" --dest "$dest"; }
+            status=0; fetch || status=$?
+            # A set for the newer kernel is only fetched, never requested:
+            # the plugin repository builds those once it handles
+            # kernelVariant (patch prepared 31.10.2026, applied by its owner).
+            if [ "$status" = 3 ] && [ "$GITHUB_EVENT_NAME" = push ] && [ -z "$variant" ]; then
+              if [ -z "$GH_TOKEN" ]; then
+                echo "no plugin set for $kernel ($package) and no PLUGINS_DISPATCH_TOKEN to request one" >&2
+                exit 1
+              fi
+              # The plugin repository rebuilds this commit's image (with the
+              # newer kernel for the variant), checks the kernel, builds and
+              # tests the set; its owner approves the signing.
+              gh api repos/ra5on/TitanOS-Plugins/dispatches -f event_type=titanos-release \
+                -f "client_payload[version]=$VERSION" -f "client_payload[ref]=$GITHUB_SHA" \
+                -f "client_payload[kernel]=$kernel" -f "client_payload[kernelPackage]=$package" \
+                -f "client_payload[kernelVariant]=$variant"
+              echo "Waiting for the plugin set of $kernel ($package)"
+              until [ "$status" = 0 ]; do
+                sleep 120
+                status=0; fetch || status=$?
+                [ "$status" = 0 ] || [ "$status" = 3 ] || exit "$status"
+              done
             fi
-            # The plugin repository rebuilds this commit's image, checks the
-            # kernel, builds and tests the set; its owner approves the signing.
-            gh api repos/ra5on/TitanOS-Plugins/dispatches -f event_type=titanos-release \
-              -f "client_payload[version]=$VERSION" -f "client_payload[ref]=$GITHUB_SHA" \
-              -f "client_payload[kernel]=$kernel" -f "client_payload[kernelPackage]=$package"
-            echo "Waiting for the plugin set of $kernel ($package)"
-            until [ "$status" = 0 ]; do
-              sleep 120
-              status=0; fetch || status=$?
-              [ "$status" = 0 ] || [ "$status" = 3 ] || exit "$status"
-            done
-          elif [ "$status" = 3 ]; then
+            return "$status"
+          }
+          status=0; sets build/mkosi.output out/plugin-sets "" || status=$?
+          if [ "$status" = 3 ]; then
             # A manual rehearsal of a kernel without a set packs the system alone.
             echo "ready=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -183,6 +211,12 @@ jobs:
             exit "$status"
           fi
           python3 scripts/plugin-set.py import --base "$VERSION" out/plugin-sets/kernel out/plugin-sets/common
+          status=0; sets build/mkosi.output-new out/plugin-sets-new new || status=$?
+          if [ "$status" = 3 ]; then
+            echo "::warning::no plugin set for the newer kernel yet; NAS with kernel choice 'Neu' and kernel plugins cannot update until it exists"
+          elif [ "$status" != 0 ]; then
+            exit "$status"
+          fi
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
       - name: Test NVIDIA compilation in the NAS build environment
@@ -197,6 +231,8 @@ jobs:
           # Only a pull request packs the system alone; it is never published.
           WITHOUT_PLUGINS: ${{ (github.event_name == 'pull_request' || steps.plugins.outputs.ready == 'false') && '1' || '' }}
           BASE_VERSION: ${{ steps.kind.outputs.base }}
+          # The stick as a disk image for boards with a legacy BIOS.
+          STICK_IMAGE: '1'
         run: scripts/make-release.sh ${{ steps.version.outputs.version }} ${{ steps.version.outputs.channel }} changelog.txt
 
       - name: Exercise signing and verification with a disposable key
@@ -207,6 +243,20 @@ jobs:
 
       - name: Boot the actual installation ZIP in UEFI QEMU
         run: python3 scripts/smoke-release.py out/release/titanos-${{ steps.version.outputs.version }}.zip ${{ (github.event_name != 'pull_request' && steps.plugins.outputs.ready != 'false') && '--plugins out/release' || '' }} --timeout 420
+
+      - name: Boot the image with the newer kernel, and the stick with a legacy BIOS and 32-bit UEFI
+        # An app release on a base from before 0.41 has neither.
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          zip=out/release/titanos-$VERSION.zip
+          if [ -f "out/release/titanos-$VERSION-new-vmlinuz" ]; then
+            python3 scripts/smoke-release.py "$zip" --kernel-new out/release --log out/release-smoke-kernel-new.log --timeout 420
+          fi
+          if unzip -l "$zip" boot/grub/grub.cfg > /dev/null; then
+            python3 scripts/smoke-release.py "$zip" --firmware bios --log out/release-smoke-bios.log --timeout 420
+            python3 scripts/smoke-release.py "$zip" --firmware ia32 --log out/release-smoke-ia32.log --timeout 420
+          fi
 
       - name: App update, its failure and the way back in UEFI QEMU
         if: github.event_name != 'push'

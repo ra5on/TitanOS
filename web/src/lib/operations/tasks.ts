@@ -21,8 +21,6 @@ export type TaskKind =
 	| 'docker'
 	| 'vm'
 	| 'disk'
-	| 'assistant'
-	| 'automation'
 	| 'upload'
 	| 'recovery'
 	| 'plugin'
@@ -307,59 +305,6 @@ export function taskItems(data: Operations): TaskItem[] {
 			state: data.applicationRecovery.active ? 'running' : 'blocked',
 			href: '/tools/tasks',
 		});
-	for (const chat of data.assistant ?? []) {
-		if (!chat.run) continue;
-		const run = chat.run;
-		const state: TaskState =
-			run.state === 'done'
-				? 'done'
-				: run.state === 'stopped'
-					? 'cancelled'
-					: ['confirmation', 'blocked'].includes(run.state)
-						? 'blocked'
-						: run.state === 'paused'
-							? 'paused'
-							: run.state === 'running'
-								? 'running'
-								: 'waiting';
-		const actions: TaskAction[] = [];
-		if (isActive({ state } as TaskItem))
-			actions.push({
-				label: state === 'paused' ? 'resume' : 'pause',
-				path: `/assistant/chats/${path(chat.id)}/control`,
-				body: { action: state === 'paused' ? 'resume' : 'pause' },
-			});
-		if (['running', 'paused', 'waiting'].includes(state))
-			actions.push({
-				label: 'stop',
-				path: `/assistant/chats/${path(chat.id)}/control`,
-				body: { action: 'stop' },
-			});
-		result.push({
-			id: `assistant:${chat.id}`,
-			name: chat.title,
-			kind: 'assistant',
-			state,
-			detail: run.detail,
-			at: chat.updated,
-			href: `/assistant?chat=${path(chat.id)}`,
-			actions,
-		});
-	}
-	for (const automation of data.automations ?? []) {
-		if (!automation.enabled) continue;
-		const next = automation.next && Date.parse(automation.next) > 0 ? automation.next : undefined;
-		result.push({
-			id: `automation:${automation.id}`,
-			name: automation.name,
-			kind: 'automation',
-			state: automation.pending || !next ? 'waiting' : 'scheduled',
-			detail: automation.detail,
-			at: next,
-			wait: automation.kind === 'event' ? 'event' : undefined,
-			href: '/assistant/automations',
-		});
-	}
 	for (const upload of data.uploads ?? [])
 		result.push({
 			id: `upload:${upload.id}`,
@@ -392,8 +337,6 @@ export function taskItems(data: Operations): TaskItem[] {
 			href: '/storage',
 		});
 	const sources: Record<string, MessageKey> = {
-		assistant: 'assistant.title',
-		automations: 'tasks.kind.automation',
 		docker: 'nav.docker',
 		'application-recovery': 'ops.appRecover',
 		'vm-clones': 'ops.cloneRecovery',

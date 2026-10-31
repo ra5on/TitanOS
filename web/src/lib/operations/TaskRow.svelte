@@ -54,7 +54,7 @@
 		gap: 16px;
 		padding: 14px 0;
 		border-bottom: 1px solid var(--border);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		min-width: 0;
 	}
 	.description {
@@ -70,7 +70,7 @@
 	}
 	.meta {
 		color: var(--muted);
-		font-size: 0.8rem;
+		font-size: var(--text-sm);
 		margin-top: 4px;
 	}
 	.problem strong {

@@ -70,13 +70,13 @@
 		<button
 			class="btn icon-btn"
 			disabled={!canUndo || saving}
-			title={`${t('dashboard.editor.undo')} (Strg+Z)`}
+			title={`${t('dashboard.editor.undo')} (${t('shortcuts.ctrl')}+Z)`}
 			aria-label={t('dashboard.editor.undo')}
 			onclick={() => onstep('undo')}><Icon name="undo" size={15} /></button
 		><button
 			class="btn icon-btn"
 			disabled={!canRedo || saving}
-			title={`${t('dashboard.editor.redo')} (Strg+Y)`}
+			title={`${t('dashboard.editor.redo')} (${t('shortcuts.ctrl')}+Y)`}
 			aria-label={t('dashboard.editor.redo')}
 			onclick={() => onstep('redo')}><Icon name="redo" size={15} /></button
 		><button class="btn" disabled={saving} onclick={ontemplate}
@@ -85,7 +85,7 @@
 		><button class="btn" disabled={saving} onclick={oncancel}>{t('common.cancel')}</button><button
 			class="btn btn-primary"
 			disabled={saving}
-			title={`${t('dashboard.editor.save')} (Strg+S)`}
+			title={`${t('dashboard.editor.save')} (${t('shortcuts.ctrl')}+S)`}
 			onclick={onsave}>{saving ? t('dashboard.editor.saving') : t('dashboard.editor.save')}</button
 		>
 	</div>
@@ -95,7 +95,7 @@
 	/* One bar for all editor controls; it stays below the header while scrolling. */
 	.editbar {
 		position: sticky;
-		top: 60px;
+		top: var(--header-height, 60px);
 		z-index: 15;
 		display: flex;
 		justify-content: space-between;
@@ -107,7 +107,7 @@
 		border-radius: var(--radius-ctl);
 		padding: 8px 12px;
 		margin-bottom: 12px;
-		font-size: 0.8rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.flow-controls {
@@ -136,7 +136,7 @@
 	}
 	@media (max-width: 760px) {
 		.editbar {
-			font-size: 0.75rem;
+			font-size: var(--text-sm);
 		}
 	}
 </style>

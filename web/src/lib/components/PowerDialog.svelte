@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { poll } from '#lib/poll.ts';
-	import { apiPath } from '#lib/cluster-node.ts';
 	// Confirmation before a restart or shutdown, and the waiting screen after it.
-	import { api } from '#lib/api.ts';
+	import { api, apiFetch } from '#lib/api.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import Dialog from './Dialog.svelte';
 
@@ -120,7 +119,7 @@
 		for (;;) {
 			await new Promise((resolve) => setTimeout(resolve, 3000));
 			try {
-				const res = await fetch(apiPath('/health'), { cache: 'no-store' });
+				const res = await apiFetch('/health', { cache: 'no-store' });
 				if (res.ok && (wasDown || Date.now() - started > 30000)) {
 					location.reload();
 					return;
@@ -254,7 +253,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	li {
 		display: flex;
@@ -280,7 +279,7 @@
 	}
 	.state {
 		color: var(--muted);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.state.ok {
 		color: var(--ok-text);
@@ -289,6 +288,6 @@
 		color: var(--error-text);
 	}
 	.small {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 </style>

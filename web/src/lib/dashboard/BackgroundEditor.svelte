@@ -369,12 +369,12 @@
 <style>
 	h2 {
 		margin: 4px 0 5px;
-		font-size: 20px;
+		font-size: var(--text-xl);
 	}
 	p {
 		color: var(--muted);
 		line-height: 1.5;
-		font-size: 12px;
+		font-size: var(--text-sm);
 		margin: 0;
 	}
 	.selected-wallpaper {
@@ -399,13 +399,13 @@
 	}
 	.selected-wallpaper strong {
 		display: block;
-		font-size: 13px;
+		font-size: var(--text-base);
 		margin-bottom: 5px;
 		overflow-wrap: anywhere;
 	}
 	.selected-wallpaper small {
 		color: var(--muted);
-		font-size: 11px;
+		font-size: var(--text-xs);
 	}
 	.wide-btn {
 		width: 100%;
@@ -415,7 +415,7 @@
 	.effect-field {
 		display: block;
 		margin: 13px 0;
-		font-size: 12px;
+		font-size: var(--text-sm);
 		color: var(--text);
 	}
 	.effect-field select {
@@ -427,13 +427,13 @@
 		border-radius: var(--radius-small);
 		background: var(--chip);
 		border: 1px solid var(--border);
-		font-size: 11px;
+		font-size: var(--text-xs);
 	}
 	.effects-check {
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		font-size: 12px;
+		font-size: var(--text-sm);
 		margin: 16px 0;
 	}
 	.effects-check input {
@@ -458,7 +458,7 @@
 	}
 	.source-tabs button {
 		font: inherit;
-		font-size: 12px;
+		font-size: var(--text-sm);
 		background: none;
 		border: 0;
 		color: var(--muted);
@@ -476,7 +476,7 @@
 		padding: 2px 6px;
 		border-radius: var(--radius-small);
 		margin-left: 5px;
-		font-size: 10px;
+		font-size: var(--text-xs);
 	}
 	.gallery-content {
 		display: grid;
@@ -512,7 +512,7 @@
 	.wallpaper-label {
 		display: block;
 		padding: 9px 10px;
-		font-size: 12px;
+		font-size: var(--text-sm);
 	}
 	.wallpaper-choice[aria-pressed='true'] {
 		outline: 2px solid var(--accent);
@@ -529,7 +529,7 @@
 		height: 21px;
 		align-items: center;
 		justify-content: center;
-		font-size: 13px;
+		font-size: var(--text-base);
 		display: none;
 	}
 	.wallpaper-choice[aria-pressed='true'] .chosen {
@@ -548,7 +548,7 @@
 		background: var(--bg);
 	}
 	h3 {
-		font-size: 17px;
+		font-size: var(--text-lg);
 		margin: 13px 0 6px;
 	}
 	.gallery-preview p {
@@ -556,7 +556,7 @@
 	}
 	.gallery-preview small,
 	.save-hint {
-		font-size: 11px;
+		font-size: var(--text-xs);
 		color: var(--muted);
 	}
 	.save-hint {
@@ -621,12 +621,12 @@
 		border-radius: var(--radius-small);
 	}
 	.personal-image strong {
-		font-size: 13px;
+		font-size: var(--text-base);
 		overflow-wrap: anywhere;
 	}
 	.personal-image small {
 		display: block;
-		font-size: 11px;
+		font-size: var(--text-xs);
 		color: var(--muted);
 		margin: 5px 0;
 	}

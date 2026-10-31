@@ -494,6 +494,7 @@ func newServer(addr string, handler http.Handler) *http.Server {
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
+		ErrorLog:          newServerLog(),
 	}
 }
 

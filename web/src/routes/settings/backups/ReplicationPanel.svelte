@@ -1,4 +1,6 @@
 <script lang="ts">
+	import KeepChoice, { keepChoicePayload } from '#lib/components/KeepChoice.svelte';
+	import type { Keep } from '#lib/components/KeepVersions.svelte';
 	import { poll } from '#lib/poll.ts';
 	import ClusterPair from '#lib/components/ClusterPair.svelte';
 	// Btrfs replication: send a volume to another TitanOS (sender side) and
@@ -27,6 +29,7 @@
 		user: string;
 		everyHours: number;
 		keep: number;
+		versions?: Keep | null;
 		limitMiB?: number;
 		state: State;
 	};
@@ -46,6 +49,7 @@
 		code: string;
 		everyHours: number;
 		keep: number;
+		versions?: Keep | null;
 		limitMiB: number;
 	} | null>(null);
 	let removing = $state<Job | null>(null);
@@ -82,6 +86,7 @@
 			code: '',
 			everyHours: 24,
 			keep: 14,
+			versions: null,
 			limitMiB: 0,
 		};
 	}
@@ -96,6 +101,7 @@
 			code: '',
 			everyHours: job.everyHours,
 			keep: job.keep,
+			versions: job.versions ?? null,
 			limitMiB: job.limitMiB ?? 0,
 		};
 	}
@@ -105,7 +111,8 @@
 		if (!editing || busy) return;
 		busy = true;
 		error = '';
-		const { id, ...body } = editing;
+		const { id, ...rest } = editing;
+		const body = { ...rest, ...keepChoicePayload(rest.keep, rest.versions, 2, 365) };
 		try {
 			if (id) await api.put(`/replication/${id}`, body);
 			else await api.post('/replication', body);
@@ -285,15 +292,7 @@
 						bind:value={editing.everyHours}
 					/></label
 				>
-				<label class="narrow"
-					><span>{t('replication.keep')}</span><input
-						class="field"
-						type="number"
-						min="2"
-						max="365"
-						bind:value={editing.keep}
-					/></label
-				>
+
 				<label class="narrow"
 					><span>{t('replication.limit')}</span><input
 						class="field"
@@ -303,6 +302,16 @@
 						bind:value={editing.limitMiB}
 					/></label
 				>
+			</div>
+			<div class="keep-block">
+				<span class="legend-sub">{t('replication.keep')}</span>
+				<KeepChoice
+					bind:count={editing.keep}
+					bind:versions={editing.versions}
+					min={2}
+					max={365}
+					unit={t('keep.unit.snapshots')}
+				/>
 			</div>
 			<label class="check"
 				><input type="checkbox" bind:checked={editing.enabled} /><span

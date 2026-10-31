@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -32,7 +33,8 @@ type fake struct {
 func (f *fake) Run(ctx context.Context, stdin, name string, args ...string) (string, error) {
 	line := name + " " + strings.Join(args, " ")
 	f.calls = append(f.calls, line)
-	if f.fail != "" && strings.HasPrefix(line, f.fail) {
+	// fail holds prefixes of the commands that fail, separated by "|".
+	if f.fail != "" && slices.ContainsFunc(strings.Split(f.fail, "|"), func(p string) bool { return strings.HasPrefix(line, p) }) {
 		return "", &run.CommandError{Command: line, Output: "target is busy", Err: errors.New("exit status 32")}
 	}
 	switch name {
@@ -254,9 +256,25 @@ func TestInternalTransportsAndProtectedDrives(t *testing.T) {
 
 }
 
-func TestNTFSReadOnlyFallback(t *testing.T) {
+func TestNTFSNewKernelDriver(t *testing.T) {
+	// Linux 7 has no ntfs3; its driver is called ntfs.
 	m, f := newTest(t)
 	f.fail = "mount -t ntfs3 "
+	if err := m.Mount(context.Background(), "NTFS0000000000AA"); err != nil {
+		t.Fatal(err)
+	}
+	calls := strings.Join(f.calls, "\n")
+	if !strings.Contains(calls, "mount -t ntfs -o nosuid,nodev,noexec,uid=0,gid=0,fmask=0177,dmask=0077 ") || strings.Contains(calls, "ntfs-3g") {
+		t.Fatal(calls)
+	}
+	if !matchesMount("12 1 0:1 / /x rw - ntfs /dev/sdd1 rw", "/x", "/dev/sdd1", "ntfs", "12") {
+		t.Fatal("mount with the ntfs driver not recognised")
+	}
+}
+
+func TestNTFSReadOnlyFallback(t *testing.T) {
+	m, f := newTest(t)
+	f.fail = "mount -t ntfs3 |mount -t ntfs "
 	if err := m.Mount(context.Background(), "NTFS0000000000AA"); err != nil {
 		t.Fatal(err)
 	}
@@ -282,5 +300,33 @@ func TestNTFSReadOnlyFallback(t *testing.T) {
 	f.fail = "mount "
 	if err := m.Mount(context.Background(), "1111-sata"); !errors.Is(err, ErrMountFailed) {
 		t.Fatal(err)
+	}
+}
+
+func TestDriveInUseAndStaleMounts(t *testing.T) {
+	m, f := newTest(t)
+	ctx := context.Background()
+	// A backup writing to one drive blocks ejecting that drive and
+	// formatting, nothing else.
+	m.inUse = map[string]int{"AAAA-BBBB": 1}
+	if err := m.Eject(ctx, "AAAA-BBBB"); !errors.Is(err, ErrInUse) {
+		t.Errorf("eject while writing: %v", err)
+	}
+	if err := m.Mount(ctx, "AAAA-BBBB"); err != nil {
+		t.Errorf("mounting another time: %v", err)
+	}
+	if !m.using() {
+		t.Error("use not seen")
+	}
+	m.inUse = nil
+
+	// A drive pulled while mounted leaves its mount behind; mounting it
+	// again first removes that.
+	dir := filepath.Join(m.root, "data-1234ab")
+	os.WriteFile(m.mountsFile, []byte("/dev/gone9 "+dir+" ext4 rw 0 0\n"), 0o644)
+	f.calls = nil
+	m.dropStale(ctx, dir)
+	if !strings.Contains(strings.Join(f.calls, "\n"), "umount -l "+dir) {
+		t.Errorf("stale mount kept: %v", f.calls)
 	}
 }

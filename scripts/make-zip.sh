@@ -3,9 +3,16 @@
 #
 #   out/stick/                 the stick layout, ready to copy onto a FAT32 stick
 #   out/titanos-<version>.zip  the same as a zip, plus its SHA-256
+#   out/titanos-<version>.img  with --image: the stick as a disk image that
+#                              also starts on boards with a legacy BIOS
 #
-# Usage: scripts/make-zip.sh [--dev]
-#   --dev   development build: root autologin on console and serial port
+# Usage: scripts/make-zip.sh [--dev] [--image | --kernel-new]
+#   --dev         development build: root autologin on console and serial port
+#   --image       also write the stick image (scripts/make-stick-image.py)
+#   --kernel-new  the system with the newer kernel from trixie-backports
+#                 (kernel choice "Neu", docs/KERNEL.md): built into
+#                 build/mkosi.output-new, its slot files go to out/kernel-new/;
+#                 no stick. Build it next to the default image of a release.
 #
 # Expects backend/bin/titand to exist (make build). VERSION sets the version.
 set -euo pipefail
@@ -13,11 +20,26 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 profile=
-case "${1:-}" in
-    --dev) profile=dev ;;
-    "") ;;
-    *) echo "usage: $0 [--dev]" >&2; exit 2 ;;
-esac
+kernel_new=
+stick_image=
+for arg in "$@"; do
+    case "$arg" in
+        --dev) profile=dev ;;
+        --kernel-new) kernel_new=1 ;;
+        --image) stick_image=1 ;;
+        *) echo "usage: $0 [--dev] [--image | --kernel-new]" >&2; exit 2 ;;
+    esac
+done
+profiles=()
+[ -n "$profile" ] && profiles+=(--profile "$profile")
+output=mkosi.output
+if [ -n "$kernel_new" ]; then
+    # Its own cache: the incremental cache of the default image already
+    # holds the Debian kernel, and its key does not see the profile's apt
+    # sources, so the newer kernel would never be installed.
+    profiles+=(--profile kernel-new --cache-directory mkosi.cache-new)
+    output=mkosi.output-new
+fi
 
 version=${VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo 0.0.0)}
 name=titanos-$version${profile:+-$profile}
@@ -40,6 +62,9 @@ python3 scripts/third-party-licenses.py application "$extra/usr/share/titanos"
 install -m 0644 scripts/third-party-licenses.py "$extra/usr/share/titanos/build-licenses.py"
 install -m 0644 scripts/normalize-image-tmpfiles.py "$extra/usr/share/titanos/normalize-image-tmpfiles.py"
 install -m 0644 scripts/check-image-hardware.py "$extra/usr/share/titanos/check-image-hardware.py"
+# GRUB for boards without 64-bit UEFI is built inside the image (postinst).
+install -m 0755 scripts/make-grub.sh "$extra/usr/share/titanos/make-grub.sh"
+install -m 0644 boot/grub-early.cfg "$extra/usr/share/titanos/grub-early.cfg"
 # Catalog descriptions and hardware rules of the official plugins: the NAS
 # recommends a plugin for its hardware without asking GitHub first.
 install -d "$extra/usr/share/titanos/plugin-catalog"
@@ -65,11 +90,35 @@ mkosi_bin=$(command -v mkosi)
 $userns "$mkosi_bin" --directory build \
     --image-version "$version" \
     ${epoch:+--source-date-epoch "$epoch"} \
-    ${profile:+--profile "$profile"} \
+    "${profiles[@]}" \
+    --output-directory "$output" \
     --extra-tree "$extra" \
     --force build
 
-image=build/mkosi.output
+image=build/$output
+
+if [ -n "$kernel_new" ]; then
+    kernel=$(cat "$image/kernel-version")
+    # uname shows no "bpo"; the version of the kernel package does
+    # (7.2.11-1~bpo13+1 for 7.2.11+deb13-amd64).
+    package=$(python3 -c 'import json, sys
+for p in json.load(open(sys.argv[1]))["packages"]:
+    if p["name"] == "linux-image-" + sys.argv[2]:
+        print(p["version"])' "$image/rootfs.manifest" "$kernel")
+    case "$package" in
+        *bpo*) ;;
+        *) echo "the image with the new kernel holds $kernel (${package:-no package}), not a backports kernel" >&2; exit 1 ;;
+    esac
+    rm -rf out/kernel-new
+    mkdir -p out/kernel-new
+    cp "$image/vmlinuz" "$image/initrd.img" "$image/filesystem.squashfs" "$image/kernel-version" out/kernel-new/
+    echo "$version" > out/kernel-new/version
+    echo
+    echo "Kernel (new): $kernel"
+    echo "Slot files:   out/kernel-new/"
+    exit 0
+fi
+
 stick=out/stick
 
 rm -rf "$stick"
@@ -78,6 +127,19 @@ cp "$image/BOOTX64.EFI" "$stick/EFI/BOOT/BOOTX64.EFI"
 cp boot/loader.conf "$stick/loader/loader.conf"
 sed -e "s|@VERSION@|$version|g" -e "s|@SLOT@|$slot|g" boot/entry.conf.in \
     > "$stick/loader/entries/titanos-$slot.conf"
+# Boards without 64-bit UEFI: GRUB for 32-bit UEFI (BOOTIA32.EFI) and for a
+# legacy BIOS (boot.img/core.img, written behind the MBR by stick-bios.py or
+# in the stick image). Both read boot/grub/grub.cfg and follow the same A/B
+# entries as systemd-boot; updates never replace these files.
+cp "$image/BOOTIA32.EFI" "$stick/EFI/BOOT/BOOTIA32.EFI"
+mkdir -p "$stick/boot/grub/i386-pc"
+cp "$image/grub/i386-pc/boot.img" "$image/grub/i386-pc/core.img" "$stick/boot/grub/i386-pc/"
+# GRUB itself replaces $1 with the slot, so it stays literal here.
+# shellcheck disable=SC2016
+options=$(sed -n 's/^options[[:space:]]*//p' boot/entry.conf.in | sed 's|@SLOT@|$1|g')
+sed "s|@OPTIONS@|$options|" boot/grub.cfg.in > "$stick/boot/grub/grub.cfg"
+python3 scripts/grubenv.py "$stick/boot/grub/grubenv" titanos_prefer=$slot
+install -m 0644 scripts/stick-bios.py "$stick/boot/grub/stick-bios.py"
 cp "$image/vmlinuz" "$image/initrd.img" "$image/filesystem.squashfs" "$stick/titanos/$slot/"
 # The updater reads from this file which version lies in a slot.
 echo "$version" > "$stick/titanos/$slot/version"
@@ -91,3 +153,8 @@ echo "Kernel:       $(cat "$image/kernel-version")"
 echo "System image: $(du -h "$stick/titanos/$slot/filesystem.squashfs" | cut -f1) (filesystem.squashfs)"
 echo "Stick:        $stick"
 echo "Zip:          out/$name.zip ($(du -h "out/$name.zip" | cut -f1))"
+if [ -n "$stick_image" ]; then
+    rm -f "out/$name.img"
+    python3 scripts/make-stick-image.py "$stick" "out/$name.img"
+    echo "Stick image:  out/$name.img (legacy BIOS and UEFI)"
+fi

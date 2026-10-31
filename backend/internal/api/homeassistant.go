@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ra5on/TitanOS/backend/internal/assistant"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
+	"github.com/ra5on/TitanOS/backend/internal/toolcatalog"
 )
 
 // Home Assistant: the connection (owners and administrators), the notify
@@ -175,17 +175,17 @@ func (s *Server) handleHACall(w http.ResponseWriter, r *http.Request) {
 
 // haTools are the assistant's tools for Home Assistant, only for owners and
 // administrators and only while a server is set up.
-func (s *Server) haTools(user auth.User) []assistant.Tool {
+func (s *Server) haTools(user auth.User) []toolcatalog.Tool {
 	ha := s.opts.HomeAssistant
 	if ha == nil || !ha.Active() || !user.Role.CanAdminister() {
 		return nil
 	}
-	return []assistant.Tool{
+	return []toolcatalog.Tool{
 		s.haUndoTool(user),
 		reading("ha_diagnostics", "Read the HA observer connection timeline and lost-buffer counters. Gaps are not replayed; use ha_history for bounded recorder evidence and never infer a cause from correlation alone.", nil, false, noArgs(func(ctx context.Context) (any, error) { return ha.Diagnostics(), nil })),
 		reading("ha_capabilities", "Inspect actual service schemas, device features, units and limits of one released entity before changing it.", schema(map[string]any{"entity": str("Released entity ID")}, "entity"), true, func(ctx context.Context, args json.RawMessage) (any, error) {
 			var q struct{ Entity string }
-			if err := assistant.DecodeArgs(args, &q); err != nil {
+			if err := toolcatalog.DecodeArgs(args, &q); err != nil {
 				return nil, err
 			}
 			return ha.Capabilities(ctx, q.Entity)
@@ -202,7 +202,7 @@ func (s *Server) haTools(user auth.User) []assistant.Tool {
 					Domain, Area, Search string
 					Offset               int
 				}
-				if err := assistant.DecodeArgs(args, &q); err != nil {
+				if err := toolcatalog.DecodeArgs(args, &q); err != nil {
 					return nil, err
 				}
 				states, err := ha.States(ctx, true)
@@ -243,7 +243,7 @@ func (s *Server) haTools(user auth.User) []assistant.Tool {
 			schema(map[string]any{"entity": str("Entity ID, e.g. light.kitchen.")}, "entity"), true,
 			func(ctx context.Context, args json.RawMessage) (any, error) {
 				var q struct{ Entity string }
-				if err := assistant.DecodeArgs(args, &q); err != nil {
+				if err := toolcatalog.DecodeArgs(args, &q); err != nil {
 					return nil, err
 				}
 				if !ha.Allowed(q.Entity) {
@@ -259,7 +259,7 @@ func (s *Server) haTools(user auth.User) []assistant.Tool {
 					Start, End time.Time
 					Offset     int
 				}
-				if err := assistant.DecodeArgs(args, &q); err != nil {
+				if err := toolcatalog.DecodeArgs(args, &q); err != nil {
 					return nil, err
 				}
 				return ha.History(ctx, q.Entity, q.Start, q.End, q.Offset)
@@ -271,13 +271,13 @@ func (s *Server) haTools(user auth.User) []assistant.Tool {
 				"entities": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "minItems": 1, "maxItems": 50, "description": "Entity IDs from ha_entities."},
 				"data":     map[string]any{"type": "object", "description": "Service data without targets, optional."},
 			}, []string{"domain", "service", "entities"},
-			func(ctx context.Context, args json.RawMessage) (*assistant.Action, error) {
+			func(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
 				var q struct {
 					Domain, Service, Reason string
 					Entities                []string
 					Data                    map[string]any
 				}
-				if err := assistant.DecodeArgs(args, &q); err != nil {
+				if err := toolcatalog.DecodeArgs(args, &q); err != nil {
 					return nil, err
 				}
 				level, ok := homeassistant.Level(q.Domain)
@@ -292,9 +292,9 @@ func (s *Server) haTools(user auth.User) []assistant.Tool {
 				summary := q.Domain + "." + q.Service + " → " + strings.Join(q.Entities, ", ")
 				action := card("api.change", map[string]string{"summary": summary}, "POST", "/homeassistant/call", haCall{q.Domain, q.Service, q.Entities, q.Data})
 				if level == homeassistant.LevelDanger {
-					return withLevel(action, assistant.LevelDanger, "", ""), nil
+					return withLevel(action, toolcatalog.LevelDanger, "", ""), nil
 				}
-				return withLevel(action, assistant.LevelNormal, "", ""), nil
+				return withLevel(action, toolcatalog.LevelNormal, "", ""), nil
 			}),
 	}
 }

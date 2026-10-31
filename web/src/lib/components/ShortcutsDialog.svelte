@@ -3,8 +3,8 @@
 	import Dialog from './Dialog.svelte';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 
-	type Props = { admin: boolean; assistant: boolean; onclose: () => void };
-	let { admin, assistant, onclose }: Props = $props();
+	type Props = { admin: boolean; onclose: () => void };
+	let { admin, onclose }: Props = $props();
 
 	const mac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 	const mod = mac ? '⌘' : 'Strg';
@@ -14,7 +14,6 @@
 			[
 				{ keys: [mod, 'K'], label: 'shortcuts.palette', show: true },
 				{ keys: ['Strg', '`'], label: 'shortcuts.terminal', show: admin },
-				{ keys: ['Strg', 'J'], label: 'shortcuts.assistant', show: assistant },
 				{ keys: ['?'], label: 'shortcuts.help', show: true },
 				{ keys: [mod, 'Z'], label: 'shortcuts.dashboardUndo', show: true },
 				{ keys: [mod, 'S'], label: 'shortcuts.dashboardSave', show: true },
@@ -48,7 +47,7 @@
 		grid-template-columns: max-content 1fr;
 		gap: 10px 18px;
 		margin: 0;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	dt {
 		display: flex;
@@ -67,15 +66,15 @@
 		border-bottom-width: 2px;
 		border-radius: var(--radius-small);
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		text-align: center;
 	}
 	.plus {
 		color: var(--muted);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.hint {
 		margin: 0;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 </style>

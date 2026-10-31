@@ -83,7 +83,7 @@ func (s *Server) handleNotifyTest(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleAccountNotify shows where the assistant reaches one's own account.
+// handleAccountNotify shows where the NAS reaches one's own account.
 func (s *Server) handleAccountNotify(w http.ResponseWriter, r *http.Request) {
 	settings, set, err := s.opts.Notify.PersonalSettings(currentUser(r).Name)
 	if err != nil {

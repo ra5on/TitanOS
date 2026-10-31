@@ -51,11 +51,11 @@ func (s *Server) handleFirewallChange(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &cfg) {
 		return
 	}
-	// The assistant has no address of a web session to keep in; it changes
+	// An MCP client has no address of a web session to keep in; it changes
 	// rules only, never the switch, and a person confirms in the web UI.
 	var err error
-	if _, agent := r.Context().Value(agentIdentity{}).(string); agent {
-		err = s.opts.Firewall.ChangeFromAssistant(r.Context(), cfg)
+	if _, agent := r.Context().Value(inProcessIdentity{}).(string); agent {
+		err = s.opts.Firewall.ChangeInProcess(r.Context(), cfg)
 	} else {
 		err = s.opts.Firewall.Change(r.Context(), cfg, remoteIP(r))
 	}
@@ -73,7 +73,7 @@ func (s *Server) handleFirewallChange(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleFirewallConfirm keeps the change on trial. Only a person in the
-// web UI may do it: API tokens and the assistant never reach this route.
+// web UI may do it: API tokens and MCP never reach this route.
 func (s *Server) handleFirewallConfirm(w http.ResponseWriter, r *http.Request) {
 	if err := s.opts.Firewall.Confirm(r.Context()); err != nil {
 		writeFirewallError(w, err)

@@ -33,8 +33,10 @@ helper = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(helper)
 
 # Driver plugins whose modules load without hardware (PCI drivers register and
-# wait for devices); it87-extended needs a Super I/O chip.
-DRIVER_MODULES = {'wangxun-nic': ('libwx', 'ngbe', 'txgbe'), 'intel-qat': ('qat_4xxx', 'qat_420xx')}
+# wait for devices); it87-extended needs a Super I/O chip. The Realtek vendor
+# drivers also run their hand-over service, which finds no RTL8125/8126 here.
+DRIVER_MODULES = {'wangxun-nic': ('libwx', 'ngbe', 'txgbe'), 'intel-qat': ('qat_4xxx', 'qat_420xx'),
+                  'r8125': ('r8125',), 'r8126': ('r8126',)}
 
 
 def driver_plugins(plugins):

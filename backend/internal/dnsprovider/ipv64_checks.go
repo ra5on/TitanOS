@@ -382,7 +382,7 @@ func (c *IPv64) Events(ctx context.Context, token string, limit int, before int6
 		NextBefore *int64 `json:"next_before"`
 	}
 	if len(answer.Meta) > 0 {
-		json.Unmarshal(answer.Meta, &meta)
+		_ = json.Unmarshal(answer.Meta, &meta) // a value that cannot be read leaves the zero value, which the code handles
 	}
 	page.HasMore, page.NextBefore = meta.HasMore, meta.NextBefore
 	return page, nil

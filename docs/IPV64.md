@@ -29,9 +29,9 @@ gegen das echte IPv64 ist nichts davon abgenommen.
   einen einfachen Bestätigungsdialog, der die Folgen nennt (kein Eintippen von
   Namen).
 - **Rechte:** nur Besitzer und Administratoren. Jede Änderung zusätzlich nur aus
-  einer angemeldeten Websitzung (`browserOnly`): weder der KI-Assistent noch Home
+  einer angemeldeten Websitzung (`browserOnly`): weder MCP-Clients noch Home
   Assistant noch API-Tokens können bei IPv64 etwas anlegen oder das NAS
-  öffentlich machen. Keine dieser Routen steht im Katalog des Assistenten.
+  öffentlich machen. Keine dieser Routen steht im MCP-Werkzeugkatalog.
 - **API-Key:** ein eigener Key dieser Seite (`/config/ipv64/settings.json`,
   vor dem Speichern mit `GET /me` geprüft) oder der Key von Dynamisches DNS bzw.
   Let's Encrypt. Er wird nur „ist gesetzt“ angezeigt und geht nur als

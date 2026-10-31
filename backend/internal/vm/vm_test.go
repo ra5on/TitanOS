@@ -68,7 +68,7 @@ func newTestManager(t *testing.T) (*Manager, *fakeRunner) {
 	m.runDir = filepath.Join(root, "run")
 	m.pidDir = filepath.Join(root, "pids")
 	m.kvm = root // exists
-	m.runGid, m.runUid = os.Getgid(), os.Getuid()
+	m.runGID, m.runUID = os.Getgid(), os.Getuid()
 	m.autostartFile = filepath.Join(root, "run-titanos", "vms-autostarted")
 	m.powerFile = filepath.Join(root, "run-titanos", "vm-schedule.json")
 	runner := &fakeRunner{pidDir: m.pidDir}
@@ -207,7 +207,7 @@ func TestCreateStartDelete(t *testing.T) {
 
 	// The VM survives a restart of titand.
 	again := NewManager(m.store, m.gid)
-	again.mountRoot, again.runDir, again.pidDir, again.runner, again.runGid = m.mountRoot, m.runDir, m.pidDir, runner, m.runGid
+	again.mountRoot, again.runDir, again.pidDir, again.runner, again.runGID = m.mountRoot, m.runDir, m.pidDir, runner, m.runGID
 	if err := again.Load(); err != nil {
 		t.Fatal(err)
 	}
@@ -378,7 +378,7 @@ func TestExistingImagesAndWholeDisks(t *testing.T) {
 	os.Symlink(filepath.Join(devices, "sdb"), filepath.Join(m.byID, "wwn-0x5000"))
 	os.Symlink(filepath.Join(devices, "sdc"), filepath.Join(m.byID, "ata-IN_A_VOLUME"))
 	m.FreeDisks = func() []string { return []string{"sdb"} }
-	m.runGid = os.Getgid()
+	m.runGID = os.Getgid()
 	if disks := m.WholeDisks(); len(disks) != 1 || disks[0].Device != "sdb" || filepath.Base(disks[0].Path) != "ata-FREE_1" {
 		t.Fatalf("whole disks = %+v", disks)
 	}

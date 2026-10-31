@@ -203,7 +203,7 @@
 		flex-direction: column;
 		gap: 12px;
 		padding: 18px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	section p {
 		margin: 0;
@@ -228,7 +228,7 @@
 		font-weight: 500;
 	}
 	.small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
 	}
 	form {
@@ -243,6 +243,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 </style>

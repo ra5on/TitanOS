@@ -69,7 +69,7 @@
 		max-width: 32rem;
 	}
 	.hint {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.notice-error {
 		white-space: pre-wrap;

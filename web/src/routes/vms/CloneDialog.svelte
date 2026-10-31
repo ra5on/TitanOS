@@ -83,6 +83,6 @@
 		flex-direction: column;
 		gap: 6px;
 		flex: 1 1 200px;
-		font-size: 0.85rem;
+		font-size: var(--text-base);
 	}
 </style>

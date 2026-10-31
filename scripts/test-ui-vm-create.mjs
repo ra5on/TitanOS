@@ -278,7 +278,7 @@ try {
       ).length,
       1,
     );
-    await menu(page, "Running VM", "Neustarten", "keyboard");
+    await menu(page, "Running VM", "Neu starten", "keyboard");
     await page.waitForTimeout(150);
     assert.equal(
       requests.filter(
@@ -312,7 +312,7 @@ try {
     await page.goto(`${base}/vms?vm=running&tab=overview`);
     await page.locator(".head .dropdown button").click();
     await page
-      .getByRole("menuitem", { name: "Neustarten", exact: true })
+      .getByRole("menuitem", { name: "Neu starten", exact: true })
       .click();
     await page.waitForTimeout(150);
     assert.equal(
@@ -486,7 +486,7 @@ try {
       .getByRole("radio", { name: "Datei direkt verwenden", exact: true })
       .click();
     await page
-      .getByRole("button", { name: "+ Ganze Festplatte", exact: true })
+      .getByRole("button", { name: "+ Ganze Platte", exact: true })
       .click();
     assert.equal(await page.locator(".disk").count(), 4);
     await page

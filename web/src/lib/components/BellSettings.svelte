@@ -68,7 +68,7 @@
 		gap: 14px;
 		padding: var(--tile-pad);
 		margin-block: var(--gap);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.bell > p {
 		margin: 0;
@@ -77,7 +77,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);
@@ -96,13 +96,13 @@
 	legend {
 		margin-bottom: 8px;
 		color: var(--muted);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.check {
 		flex-direction: row;
 		align-items: center;
 		gap: 10px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.check > span {
 		color: var(--text);
@@ -114,7 +114,7 @@
 		flex: none;
 	}
 	.small {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.actions {
 		display: flex;

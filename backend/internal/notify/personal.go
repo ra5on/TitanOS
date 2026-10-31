@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"net/mail"
 	"regexp"
 	"slices"
@@ -13,15 +14,43 @@ import (
 	"unicode/utf8"
 )
 
-// Events an account can be told about by the assistant.
+// Kinds of NAS messages an account can have sent to its own channels.
+// Every notification of the NAS belongs to one of them (eventOf).
 const (
-	EventConfirmation = "confirmation" // a task waits for an approval
-	EventDone         = "done"         // a task has an answer
-	EventBlocked      = "blocked"      // a task cannot go on
-	EventAgent        = "agent"        // the agent writes on its own (notify_me)
+	EventStorage = "storage" // disks, volumes, shares, USB drives
+	EventBackups = "backups" // backups, replication, the stick backup
+	EventUpdates = "updates" // TitanOS, apps and plugins
+	EventSystem  = "system"  // power, UPS, network, certificates, VMs, cluster
 )
 
-var personalEvents = []string{EventConfirmation, EventDone, EventBlocked, EventAgent}
+var personalEvents = []string{EventStorage, EventBackups, EventUpdates, EventSystem}
+
+// eventOf is the kind of message a notification kind belongs to.
+func eventOf(kind string) string {
+	switch {
+	case strings.HasPrefix(kind, "disk_"), strings.HasPrefix(kind, "volume_"), strings.HasPrefix(kind, "share_"),
+		strings.HasPrefix(kind, "usb_"), strings.HasPrefix(kind, "snapshot_"):
+		return EventStorage
+	case strings.HasPrefix(kind, "backup_"), strings.HasPrefix(kind, "config_backup_"), kind == "replication_failed":
+		return EventBackups
+	case strings.HasPrefix(kind, "update_"), strings.HasPrefix(kind, "docker_"), kind == "plugin_recommended":
+		return EventUpdates
+	}
+	return EventSystem
+}
+
+// pathOf is the page of the web UI a notification kind links to.
+func pathOf(event string) string {
+	switch event {
+	case EventStorage:
+		return "/storage"
+	case EventBackups:
+		return "/settings/backups"
+	case EventUpdates:
+		return "/settings/updates"
+	}
+	return "/"
+}
 
 // MaxPersonalText limits what one personal message carries.
 const MaxPersonalText = 1000
@@ -40,9 +69,9 @@ type Quiet struct {
 	To      string `json:"to"`   // HH:MM
 }
 
-// Personal is /config/users/<name>/notify.json: where the assistant reaches
-// one account. Unlike the shared channels it may carry a short summary,
-// because only that account reads it.
+// Personal is /config/users/<name>/notify.json: where the NAS reaches one
+// owner or administrator with its own channels, quiet hours and choice of
+// messages, besides the shared channels of Settings › Notifications.
 type Personal struct {
 	PersistQuiet bool          `json:"persistQuiet,omitempty"`
 	Fallback     string        `json:"fallback,omitempty"`
@@ -54,7 +83,7 @@ type Personal struct {
 	// HomeAssistant uses the shared connection with the account's own service.
 	HomeAssistant HomeAssistant   `json:"homeAssistant"`
 	Events        map[string]bool `json:"events"`
-	// Content is summary (a short excerpt of the answer) or none.
+	// Content is summary (the text of the message) or none (title only).
 	Content string `json:"content"`
 	Quiet   Quiet  `json:"quiet"`
 	// Origin is the address of the web UI the settings were saved from;
@@ -68,25 +97,14 @@ type PersonalMessage struct {
 	Severity string
 	Title    string
 	Text     string
-	// Path is a page of the web UI the message links to, e.g. /assistant?chat=…
+	// Path is a page of the web UI the message links to, e.g. /storage.
 	Path string
-	// Actions are buttons in the message, where the channel has them
-	// (ntfy, the Home Assistant app).
-	Actions []PushAction
-}
-
-// PushAction is a button in a message: ntfy posts to URL, the Home
-// Assistant app fires mobile_app_notification_action with HAAction.
-type PushAction struct {
-	Label    string
-	URL      string
-	HAAction string
 }
 
 func personalFile(user string) string { return "users/" + user + "/notify.json" }
 
 func defaultPersonal(language string) Personal {
-	return Personal{Language: language, Content: "summary", Events: map[string]bool{EventConfirmation: true, EventDone: false, EventBlocked: true, EventAgent: true}}
+	return Personal{Language: language, Content: "summary", Events: map[string]bool{EventStorage: true, EventBackups: true, EventUpdates: false, EventSystem: true}}
 }
 
 var clock = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
@@ -99,7 +117,6 @@ type personalState struct {
 	sent           map[string]bool // event keys already told, see SendPersonal
 	held           []PersonalMessage
 	flush          *time.Timer
-	recent         []time.Time // agent messages, for the rate limit
 }
 
 type personalStore struct {
@@ -124,9 +141,15 @@ func (m *Manager) personalLocked(user string) (*personalState, error) {
 	if err := m.store.ReadJSON(personalFile(user), &settings); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}
-	if settings.Events == nil {
-		settings.Events = defaultPersonal(language).Events
+	// Kinds an older version knew (those of the removed AI chat) are dropped; kinds the
+	// file does not have yet start with their default.
+	events := defaultPersonal(language).Events
+	for event, on := range settings.Events {
+		if _, known := events[event]; known {
+			events[event] = on
+		}
 	}
+	settings.Events = events
 	state := &personalState{settings: settings, sent: map[string]bool{}}
 	m.people.users[user] = state
 	if settings.PersistQuiet {
@@ -284,14 +307,6 @@ func (m *Manager) anyChannel(p Personal) bool {
 	return p.Email.Enabled && mailServer || p.Ntfy.Enabled || p.Telegram.Enabled || p.Discord.Enabled || haReady
 }
 
-// Summary shortens an answer for a personal message, or leaves it out.
-func (p Personal) Summary(text string) string {
-	if p.Content != "summary" {
-		return ""
-	}
-	return shorten(strings.TrimSpace(text), 300)
-}
-
 func shorten(text string, limit int) string {
 	if utf8.RuneCountInString(text) <= limit {
 		return text
@@ -300,15 +315,11 @@ func shorten(text string, limit int) string {
 	return strings.TrimSpace(string(runes[:limit])) + "…"
 }
 
-// ErrRateLimited means the agent wrote too often.
-var ErrRateLimited = errors.New("notify: too many messages")
-
 // ErrUnreachable means the account has no channel for this event.
 var ErrUnreachable = errors.New("notify: no channel set up for this account")
 
 // SendPersonal sends a message to one account if it wants the event. key
-// makes it happen only once per task and event (empty: no such limit). The
-// summary is added by the caller through Personal.Summary.
+// makes it happen only once (empty: no such limit).
 func (m *Manager) SendPersonal(user, key string, message PersonalMessage) error {
 	m.people.mu.Lock()
 	defer m.people.mu.Unlock()
@@ -333,12 +344,8 @@ func (m *Manager) SendPersonal(user, key string, message PersonalMessage) error 
 		// Mark accepted messages only after rate and persistence checks.
 	}
 	now := m.now()
-	if message.Event == EventAgent {
-		state.recent = slices.DeleteFunc(state.recent, func(t time.Time) bool { return now.Sub(t) > time.Hour })
-		if len(state.recent) >= 20 || len(state.recent) > 0 && now.Sub(state.recent[len(state.recent)-1]) < time.Minute {
-			return ErrRateLimited
-		}
-
+	if p.Content == "none" {
+		message.Text = ""
 	}
 	message.Text = shorten(message.Text, MaxPersonalText)
 	if end, quiet := quietUntil(p.Quiet, now); quiet && message.Severity != Error {
@@ -355,9 +362,6 @@ func (m *Manager) SendPersonal(user, key string, message PersonalMessage) error 
 		if key != "" {
 			state.sent[key] = true
 		}
-		if message.Event == EventAgent {
-			state.recent = append(state.recent, now)
-		}
 		if state.flush == nil {
 			state.flush = time.AfterFunc(end.Sub(now), func() { m.flushHeld(user) })
 		}
@@ -365,9 +369,6 @@ func (m *Manager) SendPersonal(user, key string, message PersonalMessage) error 
 	}
 	if key != "" {
 		state.sent[key] = true
-	}
-	if message.Event == EventAgent {
-		state.recent = append(state.recent, now)
 	}
 	m.sendTo(user, p, message)
 	return nil
@@ -430,7 +431,7 @@ func (m *Manager) flushHeld(user string) {
 		}
 		b.WriteString("\n")
 	}
-	m.sendTo(user, state.settings, PersonalMessage{Severity: Info, Title: title, Text: shorten(b.String(), MaxPersonalText), Path: "/assistant"})
+	m.sendTo(user, state.settings, PersonalMessage{Severity: Info, Title: title, Text: shorten(b.String(), MaxPersonalText), Path: "/"})
 }
 
 // quietUntil says whether t lies in the quiet hours and when they end.
@@ -506,15 +507,6 @@ func (m *Manager) personalSenders(user string, p Personal, message PersonalMessa
 			if link != "" {
 				header["Click"] = link
 			}
-			var actions []string
-			for _, a := range message.Actions {
-				if a.URL != "" && !strings.ContainsAny(a.Label+a.URL, ",;\r\n") {
-					actions = append(actions, "http, "+a.Label+", "+a.URL+", method=POST, clear=true")
-				}
-			}
-			if len(actions) > 0 {
-				header["Actions"] = encodeHeader(strings.Join(actions, "; "))
-			}
 			body := message.Text
 			if body == "" {
 				body = message.Title
@@ -533,20 +525,30 @@ func (m *Manager) personalSenders(user string, p Personal, message PersonalMessa
 				// Opens the page when the message is tapped (Android: clickAction, iOS: url).
 				data["url"], data["clickAction"] = link, link
 			}
-			var actions []map[string]string
-			for _, a := range message.Actions {
-				if a.HAAction != "" {
-					actions = append(actions, map[string]string{"action": a.HAAction, "title": a.Label})
-				}
-			}
-			if len(actions) > 0 {
-				data["actions"] = actions
-			}
 			body := message.Text
 			if body == "" {
 				body = message.Title
 			}
 			return m.haSend(p.HomeAssistant, title, body, data)
 		},
+	}
+}
+
+// tellPeople sends a notification of the NAS to the accounts that want its
+// kind (Audience: owners and administrators). Warnings and errors always;
+// information only for updates.
+func (m *Manager) tellPeople(message Message) {
+	if m.Audience == nil || message.Kind == "test" {
+		return
+	}
+	event := eventOf(message.Kind)
+	if rank[message.Severity] < rank[Warning] && event != EventUpdates {
+		return
+	}
+	for _, user := range m.Audience() {
+		personal := PersonalMessage{Event: event, Severity: message.Severity, Title: message.Title, Text: message.Text, Path: pathOf(event)}
+		if err := m.SendPersonal(user, "", personal); err != nil && !errors.Is(err, ErrUnreachable) {
+			slog.Warn("personal notification not sent", "user", user, "kind", message.Kind, "err", err)
+		}
 	}
 }

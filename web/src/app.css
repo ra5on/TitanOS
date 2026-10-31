@@ -41,9 +41,24 @@
 	--radius-small: calc(var(--radius-ctl) * 0.6);
 	--radius-bar: calc(var(--radius-ctl) * 0.3);
 	--font-scale: 1;
-	--text-body: 0.875rem;
-	--text-page: 1.375rem;
-	--text-section: 1rem;
+	/* Type scale: six steps, all in rem, so the font size under Settings ›
+	   Appearance (--font-scale on <html>) reaches every text. Components
+	   use these steps instead of their own sizes. */
+	--text-xs: 0.6875rem;
+	--text-sm: 0.75rem;
+	--text-base: 0.8125rem;
+	--text-md: 0.875rem;
+	--text-lg: 1rem;
+	--text-xl: 1.375rem;
+	--text-body: var(--text-md);
+	--text-page: var(--text-xl);
+	--text-section: var(--text-lg);
+	/* Spacing scale for gaps, padding and margins. */
+	--space-1: 4px;
+	--space-2: 8px;
+	--space-3: 12px;
+	--space-4: 16px;
+	--space-5: 24px;
 	--control-height: 2.25rem;
 	--page-pad: 20px;
 	--gap: 12px;
@@ -296,7 +311,7 @@ input[type='checkbox'] {
 }
 
 .tile-title {
-	font-size: 0.8125rem;
+	font-size: var(--text-base);
 	font-weight: 600;
 	letter-spacing: 0.06em;
 	text-transform: uppercase;
@@ -309,14 +324,14 @@ input[type='checkbox'] {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	gap: 8px;
+	gap: var(--space-2);
 	padding: 0 0.875rem;
 	background: transparent;
 	border: 1px solid var(--border);
 	border-radius: var(--radius-ctl);
 	color: var(--text);
 	font: inherit;
-	font-size: 0.875rem;
+	font-size: var(--text-md);
 	text-decoration: none;
 	white-space: nowrap;
 	cursor: pointer;
@@ -400,7 +415,7 @@ input[type='checkbox'] {
 	border: 1px solid var(--warn-border);
 	border-radius: var(--radius-ctl);
 	color: var(--warn-text);
-	font-size: 0.875rem;
+	font-size: var(--text-md);
 }
 
 .notice-error {
@@ -409,17 +424,17 @@ input[type='checkbox'] {
 	border: 1px solid var(--error-border);
 	border-radius: var(--radius-ctl);
 	color: var(--error-text);
-	font-size: 0.875rem;
+	font-size: var(--text-md);
 }
 
 .chip {
 	display: inline-flex;
 	align-items: center;
-	padding: 2px 8px;
+	padding: 2px var(--space-2);
 	background: var(--chip);
 	border: 1px solid var(--border);
 	border-radius: var(--radius-small);
-	font-size: 0.75rem;
+	font-size: var(--text-sm);
 	font-weight: 500;
 	white-space: nowrap;
 }
@@ -454,6 +469,15 @@ input[type='checkbox'] {
 	background: var(--status-error);
 	filter: brightness(1.08);
 }
+/* A button that opens the confirmation of a destroying action: red, but
+   only the confirming button in the dialog is filled. */
+.btn-danger-outline {
+	border-color: color-mix(in srgb, var(--status-error) 60%, transparent);
+	color: var(--status-error);
+}
+.btn-danger-outline:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--status-error) 12%, transparent);
+}
 
 .notice-ok {
 	padding: 10px 14px;
@@ -461,7 +485,7 @@ input[type='checkbox'] {
 	border: 1px solid var(--ok-border);
 	border-radius: var(--radius-ctl);
 	color: var(--ok-text);
-	font-size: 0.875rem;
+	font-size: var(--text-md);
 }
 
 /* Shrink grid/flex children rather than letting long values widen the viewport. */
@@ -588,7 +612,7 @@ main.readable :target {
 	padding: 0;
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
+	gap: var(--space-2);
 	min-width: 0;
 }
 .panel legend {
@@ -597,14 +621,14 @@ main.readable :target {
 	padding: 0;
 	margin-bottom: 2px;
 	font-weight: 600;
-	font-size: 0.875rem;
+	font-size: var(--text-md);
 }
 .panel .stack {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
 	max-width: 32rem;
-	font-size: 0.875rem;
+	font-size: var(--text-md);
 }
 .panel .stack > span:first-child {
 	color: var(--muted);
@@ -613,7 +637,7 @@ main.readable :target {
 	display: flex;
 	align-items: center;
 	gap: 10px;
-	font-size: 0.875rem;
+	font-size: var(--text-md);
 }
 .panel .check input {
 	width: 18px;
@@ -640,10 +664,10 @@ main.readable :target {
 .data-table {
 	width: 100%;
 	border-collapse: collapse;
-	font-size: 0.875rem;
+	font-size: var(--text-md);
 }
 .data-table :is(th, td) {
-	padding: 8px 10px;
+	padding: var(--space-2) 10px;
 	border-bottom: 1px solid var(--border);
 	text-align: left;
 	vertical-align: middle;
@@ -651,7 +675,7 @@ main.readable :target {
 .data-table th {
 	color: var(--muted);
 	font-weight: 500;
-	font-size: 0.75rem;
+	font-size: var(--text-sm);
 }
 .data-table td.actions {
 	white-space: nowrap;

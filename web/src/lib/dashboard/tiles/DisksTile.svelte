@@ -68,7 +68,7 @@
 		gap: 10px;
 		flex-wrap: wrap;
 		color: var(--muted);
-		font-size: 11px;
+		font-size: var(--text-xs);
 		margin-top: 10px;
 	}
 	.collection {
@@ -87,7 +87,7 @@
 		gap: 10px;
 		padding: var(--row-pad) 0;
 		border-top: 1px solid var(--panel-border);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.disk:first-child {
 		border-top: 0;
@@ -98,7 +98,7 @@
 		min-width: 4rem;
 		max-width: 35%;
 		overflow-wrap: anywhere;
-		font-size: var(--tile-value-size, 16px);
+		font-size: var(--tile-value-size, var(--text-lg));
 		font-family: var(--tile-value-font);
 		font-weight: var(--tile-value-weight);
 		flex: none;
@@ -112,9 +112,9 @@
 		text-overflow: ellipsis;
 	}
 	.temp {
-		font-size: var(--tile-value-size, 16px);
+		font-size: var(--tile-value-size, var(--text-lg));
 	}
 	p {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 </style>

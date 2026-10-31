@@ -208,7 +208,7 @@
 		padding: 0;
 		text-align: left;
 		cursor: pointer;
-		font: var(--tile-value-weight) var(--tile-label-size, 12px) var(--tile-value-font);
+		font: var(--tile-value-weight) var(--tile-label-size, var(--text-sm)) var(--tile-value-font);
 		color: var(--tile-value-color, var(--text));
 		overflow-wrap: anywhere;
 		text-decoration: none;
@@ -223,7 +223,7 @@
 		gap: 6px;
 		flex-wrap: wrap;
 		color: var(--tile-label-color, var(--muted));
-		font-size: var(--tile-label-size, 12px);
+		font-size: var(--tile-label-size, var(--text-sm));
 	}
 	.device-state {
 		font-size: 0.85em;
@@ -240,11 +240,11 @@
 	}
 	dt {
 		color: var(--tile-label-color, var(--muted));
-		font-size: var(--tile-label-size, 12px);
+		font-size: var(--tile-label-size, var(--text-sm));
 	}
 	dd {
 		margin: 4px 0 0;
-		font-size: var(--tile-label-size, 12px);
+		font-size: var(--tile-label-size, var(--text-sm));
 		font-family: var(--tile-value-font);
 		overflow-wrap: anywhere;
 	}
@@ -253,7 +253,7 @@
 		justify-content: space-between;
 		flex-wrap: wrap;
 		gap: 5px;
-		font-size: var(--tile-label-size, 12px);
+		font-size: var(--tile-label-size, var(--text-sm));
 	}
 	.engine b {
 		font-weight: 400;

@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"errors"
+	"github.com/ra5on/TitanOS/backend/internal/retention"
 	"os"
 	"path/filepath"
 	"strings"
@@ -205,13 +206,13 @@ func TestRestoreOnANewStick(t *testing.T) {
 		t.Errorf("not mounted read-only without replaying the journal, or not unmounted:\n%s", calls)
 	}
 
-	if _, err := stick.m.RestoreFound(context.Background(), "md127", "config-20200101T000000Z-000000000000.tar.gz"); !errors.Is(err, ErrNotFound) {
+	if _, err := stick.m.RestoreFound(context.Background(), "md127", "config-20200101T000000Z-000000000000.tar.gz", ""); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown backup: %v", err)
 	}
-	if _, err := stick.m.RestoreFound(context.Background(), "../md127", name); !errors.Is(err, ErrNotFound) {
+	if _, err := stick.m.RestoreFound(context.Background(), "../md127", name, ""); !errors.Is(err, ErrNotFound) {
 		t.Errorf("odd device name: %v", err)
 	}
-	manifest, err := stick.m.RestoreFound(context.Background(), "md127", name)
+	manifest, err := stick.m.RestoreFound(context.Background(), "md127", name, "")
 	if err != nil || manifest.Version != "1.2.3" {
 		t.Fatalf("restore: %+v %v", manifest, err)
 	}
@@ -284,7 +285,7 @@ func TestUploadIsCheckedBeforeAnythingIsWritten(t *testing.T) {
 		stick := newEnv(t)
 		os.RemoveAll(filepath.Join(stick.root, "config"))
 		os.MkdirAll(filepath.Join(stick.root, "config"), 0o755)
-		if _, err := stick.m.RestoreUpload(upload); !errors.Is(err, ErrNotABackup) {
+		if _, err := stick.m.RestoreUpload(upload, ""); !errors.Is(err, ErrNotABackup) {
 			t.Errorf("%s: %v", name, err)
 		}
 		if entries, _ := os.ReadDir(filepath.Join(stick.root, "config")); len(entries) != 0 {
@@ -299,7 +300,7 @@ func TestUploadIsCheckedBeforeAnythingIsWritten(t *testing.T) {
 	os.RemoveAll(filepath.Join(stick.root, "config"))
 	os.MkdirAll(filepath.Join(stick.root, "config"), 0o755)
 	good := archive(t, manifest, [3]string{"users", "dir", ""}, account, [3]string{"network/network.json", "", `{"dhcp":true}`})
-	got, err := stick.m.RestoreUpload(good)
+	got, err := stick.m.RestoreUpload(good, "")
 	if err != nil || got.Hostname != "nas" {
 		t.Fatalf("restore: %+v %v", got, err)
 	}
@@ -314,7 +315,7 @@ func TestDevelopmentModeTouchesNothing(t *testing.T) {
 	if _, err := e.m.Create([]string{"tank"}); !errors.Is(err, ErrDisabled) {
 		t.Errorf("create: %v", err)
 	}
-	if _, err := e.m.RestoreUpload(strings.NewReader("")); !errors.Is(err, ErrDisabled) {
+	if _, err := e.m.RestoreUpload(strings.NewReader(""), ""); !errors.Is(err, ErrDisabled) {
 		t.Errorf("restore: %v", err)
 	}
 	if len(e.m.Find(context.Background())) != 0 || len(e.system.calls) != 0 {
@@ -399,7 +400,7 @@ func TestRestoreLeavesOutThePendingUpdate(t *testing.T) {
 	e.write(t, "system/update.json", `{"auto":false}`)
 	name := e.create(t)
 	stick := newStick(t, e)
-	if _, err := stick.m.RestoreFound(context.Background(), "md127", name); err != nil {
+	if _, err := stick.m.RestoreFound(context.Background(), "md127", name, ""); err != nil {
 		t.Fatal(err)
 	}
 	for _, file := range []string{"system/update-pending.json", ".accounts.lock"} {
@@ -430,5 +431,26 @@ func TestWholeDiskBtrfsIsADevice(t *testing.T) {
 		if deviceName.MatchString(name) != ok {
 			t.Errorf("%s: want %v", name, ok)
 		}
+	}
+}
+
+func TestKeepsByDayWeekMonth(t *testing.T) {
+	e := newEnv(t)
+	if err := e.m.SetSettings(Settings{Enabled: true, Volume: "tank", Keep: 14, Versions: &retention.Keep{Daily: 2}}, []string{"tank"}); err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for i := range 4 {
+		e.clock = e.clock.Add(12 * time.Hour)
+		e.write(t, "system/settings.json", strings.Repeat("y", i+1))
+		names = append(names, e.create(t))
+	}
+	// Two runs a day for two days: the newest of each day stays.
+	list := e.m.List([]string{"tank"})
+	if len(list) != 2 || list[0].Name != names[3] {
+		t.Errorf("kept: %+v (made %v)", list, names)
+	}
+	if err := e.m.SetSettings(Settings{Enabled: true, Keep: 3, Versions: &retention.Keep{Mode: "rolling"}}, nil); !errors.Is(err, ErrInvalid) {
+		t.Errorf("rolling accepted: %v", err)
 	}
 }

@@ -23,11 +23,11 @@
 
 ## Ein Server für Dateien, Apps und virtuelle Maschinen
 
-TitanOS macht aus einem x86-64-PC einen zentralen Speicher und Anwendungsserver. Du verwaltest RAID-Volumes, Freigaben, Docker-Apps, LXC-Systemcontainer, virtuelle Maschinen und Sicherungen in einer gemeinsamen Weboberfläche. Dazu kommen ein Dateimanager, Hardware-Monitoring, Home Assistant und ein optionaler KI-Assistent.
+TitanOS macht aus einem x86-64-PC einen zentralen Speicher und Anwendungsserver. Du verwaltest RAID-Volumes, Freigaben, Docker-Apps, LXC-Systemcontainer, virtuelle Maschinen und Sicherungen in einer gemeinsamen Weboberfläche. Dazu kommen ein Dateimanager, Hardware-Monitoring, Home Assistant und ein optionaler MCP-Server für KI-Clients wie Claude.
 
 Die Startseite passt du an deinen Alltag an: Welche Informationen du siehst, wie viel Platz sie bekommen und wie sie aussehen, bestimmst du selbst. Jede Person hat ihr eigenes Dashboard und ihre eigenen Darstellungseinstellungen.
 
-Das System basiert auf **Debian 13**, startet per UEFI von einem USB-Stick und läuft aus dem Arbeitsspeicher. Nutzdaten, Container und VM-Abbilder liegen auf separaten Daten-Volumes. Die Konfiguration bleibt auf dem Stick; automatische Konfigurationssicherungen helfen beim Austausch eines ausgefallenen Sticks.
+Das System basiert auf **Debian 13**, startet per UEFI (auch 32-Bit-UEFI) oder Legacy-BIOS von einem USB-Stick und läuft aus dem Arbeitsspeicher. Nutzdaten, Container und VM-Abbilder liegen auf separaten Daten-Volumes. Die Konfiguration bleibt auf dem Stick; automatische Konfigurationssicherungen helfen beim Austausch eines ausgefallenen Sticks.
 
 Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-Software-RAID und ist ein eigenständiges Projekt ohne Verbindung zu Lime Technology.
 
@@ -43,7 +43,7 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 - **Aussehen an einem Ort:** Theme, Akzent, Flach, Glas oder Kontur mit Transparenz, Unschärfe und Glanz, Leuchten mit eigener Farbe, Ecken, Schriftgröße, Dichte und Bewegung stellst du unter Einstellungen › Darstellung ein; sie gelten für alle Kacheln und die ganze Oberfläche. Menüs und Dialogfenster bekommen auf Wunsch eigene Transparenz, Unschärfe und Abdunkelung, auch das Menü auf dem Handy. Der Editor führt mit „Darstellung“ direkt dorthin.
 - **Eigener Hintergrund:** zehn mitgelieferte Motive oder bis zu fünf eigene Bilder pro Konto, ganzes Bild oder Ausschnitt mit Position und Zoom, feststehend oder mitlaufend und abdunkelbar; gewählt unter Einstellungen › Darstellung › Hintergrund des Dashboards; ab Werk liegt ein gewähltes Bild auch hinter allen anderen Seiten.
 - **Flüssige Messwerte:** einstellbare, abschaltbare Übergänge für Balken, Ringe und Verläufe (Einstellungen › Darstellung); die Bewegungsreduktion des Browsers wird berücksichtigt.
-- **Kompakter Schnellzugriff:** Suche, Terminal, Assistent, Benachrichtigungen und Dashboard-Bearbeiten liegen in einer gemeinsamen Fläche oben rechts; das Konto-Menü bleibt separat.
+- **Kompakter Schnellzugriff:** Suche, Terminal, Benachrichtigungen und Dashboard-Bearbeiten liegen in einer gemeinsamen Fläche oben rechts; das Konto-Menü bleibt separat.
 - **Inhalte selbst auswählen:** Systeminformationen einblenden und sortieren; CPU-Threads, Sensoren, Netzwerkschnittstellen und einzelne Geräte oder Anwendungen gezielt anzeigen.
 - **Tailnet im Blick:** Die Kachel „Tailscale“ (Besitzer/Administratoren) zeigt die Geräte des Tailnets. Pro Kachel wählst du Geräte und sortierbare Angaben: Online/Offline, Tailscale-IPv4/IPv6, Hostname, MagicDNS-Name, zuletzt gesehen, Betriebssystem, Exit Node, Subnet-Routen und eine Markierung für dieses NAS.
 - **NetBird-Netz im Blick:** Die Kachel „NetBird“ (Besitzer/Administratoren) zeigt die Geräte des NetBird-Netzes mit wählbaren, sortierbaren Angaben: verbunden, dieses NAS, NetBird-IP/IPv6, Name (FQDN), letzter Handshake, Verbindungsart (direkt oder über Relay) und Netze; optional nur verbundene Geräte.
@@ -155,7 +155,7 @@ Die VM-Einrichtung zeigt kompakte Kacheln mit einer gemeinsamen Zusammenfassung.
 ### Wartung, Monitoring und Diagnose
 
 - **Wartungspläne:** gemeinsame Zeitfenster mit Zeitzone; RAID-Prüfungen, Btrfs-Scrub, SMART-Langtests, Backup-Prüfungen, Wiederherstellungsproben und Snapshot-Aufbewahrung. Abhängigkeiten, optionaler Backup-Vorrang und sichtbare Wartegründe.
-- **Auftragsübersicht:** laufende und bekannte abgeschlossene Vorgänge filtern, Fehler prüfen und unterstützte Aufträge pausieren, abbrechen oder fortsetzen. Eigene KI-Aufträge, Automationen und Uploads einsehen.
+- **Auftragsübersicht:** laufende und bekannte abgeschlossene Vorgänge filtern, Fehler prüfen und unterstützte Aufträge pausieren, abbrechen oder fortsetzen. Eigene Uploads einsehen.
 - **Live-Monitoring:** CPU und Threads, RAM, Netzverkehr, Volumes, Laufwerke, Temperaturen und Beschleuniger. Kurze Verläufe im RAM; optional sieben oder 30 Tage auf einem Daten-Volume, mit CSV-/JSON-Export. Fehlende Werte bleiben unbekannt.
 - **Lüfter:** je Lüfter BIOS, feste Drehzahl oder eine Kurve nach Temperatursensor oder wärmster Platte, mit Volllast bei Sensorausfall. CPU-Leistung (RAPL) als Messwert. [Lüfter](docs/FANS.md).
 - **RAM-Verwaltung:** verfügbarer RAM, Dateicache und übrige Belegung getrennt sehen; Hinweise bei anhaltender Speicherknappheit und optionale PSI-Wartezeiten. Linux verwaltet Lesecache automatisch. Das einstellbare Schreibpufferbudget und begrenzte Upload-Fenster orientieren sich an verfügbarem Arbeitsspeicher und einer Systemreserve.
@@ -183,28 +183,17 @@ Die VM-Einrichtung zeigt kompakte Kacheln mit einer gemeinsamen Zusammenfassung.
 - **NAS-Werte per MQTT-Discovery:** System, Volumes/RAID, Laufwerke, Container, Stacks, VMs, Netzwerk, Backups, Wartung, Kapazitätsprognosen und USV sowie GPU, iGPU und NPU.
 - **Gezielt veröffentlichen:** Gruppen und einzelne Geräte auswählen. Stabile Kennungen, Verfügbarkeit, Ablaufzeiten und Bereinigung entfernter Entitäten; keine zusätzlichen SMART-Abfragen zum Aufwecken schlafender Platten.
 - **Optionale Knöpfe:** Container, VMs und eingerichtete Backups steuern, Updates prüfen sowie NAS-Neustart und Herunterfahren auslösen. Die Rechte des ausgewählten Kontos gelten auch hier.
-- **Freigegebene HA-Geräte im Assistenten:** ganze Bereiche oder einzelne Geräte mit Aliasnamen und Fähigkeiten erlauben, Zustände lesen, erlaubte Dienste aufrufen und Zielzustände prüfen; begrenzte Rücknahme unterstützter Schaltvorgänge.
-- **Automationen und Assist:** Zustandswechsel, Schwellwerte und Bedingungen als Auslöser; Recorder-Historie, Fragen per Assist und optionale native Gesprächsintegration. Benachrichtigungen über die Home-Assistant-App mit passenden Aktionen.
+- **Speicher für Home Assistant:** Freigaben für Backups, Medien und Add-ons mit eigenem Konto direkt in Home Assistant OS eintragen und HA-Backups überwachen.
+- **Geräte für MCP freigeben:** ganze Bereiche oder einzelne Geräte mit Aliasnamen und Fähigkeiten erlauben; KI-Clients lesen Zustände und Historie, rufen erlaubte Dienste auf und prüfen Zielzustände; begrenzte Rücknahme unterstützter Schaltvorgänge.
+- **Benachrichtigungen** über die Home-Assistant-App aufs Smartphone.
 
 [Home-Assistant-Anleitung, Einrichtung und Prüfgrenzen](docs/HOME-ASSISTANT.md)
-
-### Optionaler KI-Assistent
-
-- **Modell wählen:** Ollama im Heimnetz, mit einem Klick als App eingerichtet (Modell aus einer Liste oder frei eingetragen), oder Claude bzw. ein OpenAI-kompatibler Dienst mit eigenem Schlüssel; ab Werk ausgeschaltet. Bei Cloud-Anbietern sagt die Seite deutlich, dass Inhalte an den Anbieter gehen. Chats mit laufender Antwortausgabe, persönliche Verläufe auf einem Daten-Volume und Schnellzugriff per Strg+J.
-- **Das NAS befragen und verwalten:** Systemzustand, Speicher, Freigaben, Docker, VMs, Backups, Plugins, Firewall, Protokolle, Dateien und Handbuch einbeziehen; optional Websuche. Lese- und Änderungsrechte pro Bereich festlegen.
-- **Aufträge laufen auf dem NAS:** Änderungen nach Freigabe, optional ausdrücklich im Direktmodus; Probelauf, Pause, Stopp, Fortsetzen, Prioritäten, Abhängigkeiten und Checkpoints. Das Schließen des Browsers beendet den Auftrag nicht. Unbekannte Änderungsausgänge werden nicht automatisch wiederholt.
-- **Persönliches Wissen:** explizite Notizen, Vorlagen, Projekte und ausgewählte Quellordner mit gezielter Suche. Systemprompt, Modellprofile, Kontextvorschau, Modelltests und Statistik je Chat.
-- **Dokumente:** Word-, Excel-, PDF- und Textdateien erzeugen; PDF-Text und optionale OCR lesen. Unterstützte Word-/Textänderungen und Excel-Wertzellen als neue geprüfte Kopien speichern; Formeln bleiben geschützt.
-- **Automationen:** einmalig, nach Intervall, täglich oder wöchentlich mit Zeitzone sowie durch Meldungen, USB-, Volume-, Ordner- und Home-Assistant-Ereignisse. Vorlagen, Bedingungen, Zeitfenster, Hysterese und Versionsverlauf.
-- **Private Benachrichtigungen:** je Konto Freigaben, Ergebnisse oder Blockierungen melden, mit Zusammenfassung, Ruhezeiten und optionalem Ersatzkanal. Optional Freigeben/Ablehnen über ntfy oder die HA-App; zerstörerische Aktionen bleiben davon ausgeschlossen.
-
-[KI-Assistent: Bedienung, Rechte und Grenzen](docs/ASSISTANT.md) · [Wissen, Dokumente und Automationen](docs/ASSISTANT-EXPANSION.md)
 
 ### API und Automatisierung
 
 - **Persönliche API-Zugänge:** benannte, widerrufbare Tokens mit bewusst gewählten Bereichen und aktuellen Konto-/Share-Rechten. Standard nur lesend, Geheimnis einmalig sichtbar, ausschließlich sein Hash wird gespeichert.
 - **OpenAPI und CLI:** dokumentierter API-Vertrag und statisches `titanosctl` für Status, Dateien sowie erlaubte Docker-/VM-Aktionen. [Verwendung](docs/PUBLIC-API.md).
-- **MCP-Server (optional):** Claude Desktop, Claude Code und andere MCP-Clients arbeiten mit den Rechten eines persönlichen Tokens am NAS; gefährliche Aktionen nur mit ausdrücklicher Bestätigung, alles im Aktivitätsprotokoll. [Einrichtung](docs/MCP.md).
+- **MCP-Server (optional, ab Werk aus):** Claude Desktop, Claude Code und andere MCP-Clients arbeiten mit den Rechten eines persönlichen Tokens am NAS: Zustand, Speicher, Freigaben, Dateien und Dokumente (Word, Excel, PDF), Docker, VMs, Sicherungen, Firewall-Regeln, Konten, Plugins, Updates, Neustart/Ausschalten, freigegebene Home-Assistant-Geräte und das Handbuch. Verwaltungsaktionen brauchen den Token-Bereich `system:write` (nur Besitzer/Administratoren). Jedes Werkzeug lässt sich einzeln ausschalten; gefährliche und zerstörende Aufrufe sind ab Werk gesperrt und laufen erst nach ausdrücklicher Freischaltung und mit Bestätigung des Clients. Geheimnisse, Passwörter, Konsolen und Netzwerkbestätigung bleiben außen vor; jeder Aufruf steht im Aktivitätsprotokoll. [Einrichtung](docs/MCP.md).
 
 ### Netzwerk, Energie und Systemzugang
 
@@ -219,7 +208,7 @@ Die VM-Einrichtung zeigt kompakte Kacheln mit einer gemeinsamen Zusammenfassung.
 - **Dynamisches DNS:** Namen auf die öffentliche IPv4-Adresse des Anschlusses und die IPv6-Adresse des NAS halten, bei denselben Anbietern oder per dyndns2 (Strato, No-IP …); optional eine Überwachung der Erreichbarkeit bei IPv64.net.
 - **IPv64.net-Konto** (Reiter IPv64 unter Dynamisches DNS): Paket, Verbrauch, Log und API-Keys, Domains und DNS-Einträge, Zuweisungen von Domains an NAS, Apps und Geräte (über die „Eigenen Domains“ der HTTPS-Namen), Healthchecks aller Arten mit Statistik, Integrationen und Statusseiten, Offline-Seiten und DNS-Failover, CDN/Reverse Proxy und Portmapper, Docker-Apps „Öffentlich über IPv64“, Cloud Router mit optionalem WireGuard-Tunnel des NAS und die v64 Blocklist für die Firewall – alles ab Werk aus.
 - **Terminal und SSH:** NAS-Shell und Docker-Konsolen als Browser-Tabs für Besitzer/Administratoren. SSH ist zunächst ausgeschaltet; nach Aktivierung Anmeldung mit eigenem Konto und Schlüssel, bei Bedarf `sudo`. Linux-root ist für direkte Anmeldung gesperrt. Offene Konsolen enden innerhalb weniger Sekunden nach Abmelden, Kontolöschung, Herabstufung oder Passwort-Zurücksetzen; ein entfernter SSH-Schlüssel beendet auch die SSH-Sitzungen des Kontos.
-- **Benachrichtigungen:** Meldungszentrale mit persönlichen Filtern sowie E-Mail, ntfy, Telegram, Discord, Home-Assistant-App und Mitteilungen direkt aufs Handy oder in den Browser (Web Push, auf dem iPhone über TitanOS auf dem Home-Bildschirm) für Systemereignisse; auf Wunsch ein wöchentlicher oder monatlicher Bericht über das NAS. Eigene ntfy-/Discord-Ziele normaler Benutzerkonten erreichen nur öffentliche Adressen, nicht das Heimnetz.
+- **Benachrichtigungen:** Meldungszentrale mit persönlichen Filtern sowie E-Mail, ntfy, Telegram, Discord, Home-Assistant-App und Mitteilungen direkt aufs Handy oder in den Browser (Web Push, auf dem iPhone über TitanOS auf dem Home-Bildschirm) für Systemereignisse; Besitzer und Administratoren bekommen Speicher-, Sicherungs-, Update- und Systemmeldungen zusätzlich auf eigene Wege mit Ruhezeiten; auf Wunsch ein wöchentlicher oder monatlicher Bericht über das NAS.
 
 [Firewall-Seite mit Zonen, Docker-Apps, eigenen Regeln und automatischem Sperren](docs/screenshots/current/firewall.png)
 
@@ -257,7 +246,7 @@ TitanOS nutzt einen **Stable-Kanal**. Die Weboberfläche prüft und installiert 
 
 | Bereich | Voraussetzung |
 |---|---|
-| Rechner | x86-64/amd64 mit UEFI; Secure Boot für das NAS ausgeschaltet |
+| Rechner | x86-64/amd64 mit UEFI, 32-Bit-UEFI oder Legacy-BIOS (dafür das Stick-Abbild oder `boot/grub/stick-bios.py`, siehe `docs/BOOT.md`); Secure Boot für das NAS ausgeschaltet |
 | Arbeitsspeicher | Für erste Tests 4 GB einplanen, zusätzlich RAM für Apps und VMs; keine pauschal abgenommene Hardware-Mindestgröße |
 | Bootmedium | USB-Stick mit 8–32 GB, FAT32, Label `TITANOS` |
 | Nutzdaten | Separate Laufwerke; ein neues Volume löscht die ausgewählten Platten |
@@ -291,7 +280,7 @@ Die Datenplatten nicht als neue Volumes anlegen oder formatieren. Ohne Konfigura
 | Dateien und Übertragungen | [Dateieditor](docs/FILE-EDITOR.md), [RAM/Uploads](docs/MEMORY.md), [Windows-SMB](docs/WINDOWS-SMB.md) |
 | Hardware und Fernzugriff | [Plugins](docs/PLUGINS.md), [NVIDIA](docs/NVIDIA.md), [Tailscale](docs/TAILSCALE.md), [NetBird](docs/NETBIRD.md), [Netzwerk](docs/NETWORKING.md), [Cluster](docs/CLUSTER.md) |
 | API und Medien | [Öffentliche API/CLI](docs/PUBLIC-API.md), [VM-Medien](docs/VM-MEDIA.md), [Plugin-Aufräumen](docs/PLUGIN-CLEANUP.md) |
-| Integrationen | [Home Assistant/MQTT](docs/HOME-ASSISTANT.md), [KI-Assistent](docs/ASSISTANT.md) |
+| Integrationen | [Home Assistant/MQTT](docs/HOME-ASSISTANT.md), [MCP-Server](docs/MCP.md) |
 | Entwicklung und Veröffentlichung | [Release-Ablauf](docs/RELEASING.md), [UI-Entwürfe](docs/design/README.md), [Screenshots](docs/screenshots/README.md) |
 | Änderungen und Prüfstand | [GitHub Releases](https://github.com/ra5on/TitanOS/releases), [detaillierte Release-Berichte](docs/releases/) |
 

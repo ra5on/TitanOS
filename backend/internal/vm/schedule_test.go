@@ -317,7 +317,7 @@ func TestPowerScheduleSurvivesTitandRestart(t *testing.T) {
 	// titand restarts (an app update): /run keeps what was done.
 	again := NewManager(m.store, os.Getgid())
 	again.mountRoot, again.runDir, again.pidDir, again.kvm, again.runner = m.mountRoot, m.runDir, m.pidDir, m.kvm, m.runner
-	again.runGid, again.runUid, again.autostartFile, again.powerFile = m.runGid, m.runUid, m.autostartFile, m.powerFile
+	again.runGID, again.runUID, again.autostartFile, again.powerFile = m.runGID, m.runUID, m.autostartFile, m.powerFile
 	again.Timezone = m.Timezone
 	if err := again.Load(); err != nil {
 		t.Fatal(err)
@@ -335,7 +335,7 @@ func TestPowerScheduleSurvivesTitandRestart(t *testing.T) {
 	os.Remove(m.powerFile)
 	boot := NewManager(m.store, os.Getgid())
 	boot.mountRoot, boot.runDir, boot.pidDir, boot.kvm, boot.runner = m.mountRoot, m.runDir, m.pidDir, m.kvm, m.runner
-	boot.runGid, boot.runUid, boot.autostartFile, boot.powerFile = m.runGid, m.runUid, m.autostartFile, m.powerFile
+	boot.runGID, boot.runUID, boot.autostartFile, boot.powerFile = m.runGID, m.runUID, m.autostartFile, m.powerFile
 	boot.Timezone = m.Timezone
 	boot.Load()
 	boot.tick(t, mounted, time.Date(2026, 11, 2, 7, 10, 0, 0, loc))

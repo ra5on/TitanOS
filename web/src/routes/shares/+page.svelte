@@ -2,10 +2,8 @@
 	import { onMount, tick, untrack } from 'svelte';
 	import { beforeNavigate } from '$app/navigation';
 	import { page } from '$app/state';
-	import { api, ApiError, type Account, type Share } from '#lib/api.ts';
-	import Dialog from '#lib/components/Dialog.svelte';
+	import { api, type Account, type Share } from '#lib/api.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
-	import ContextMenu from '#lib/components/ContextMenu.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
@@ -20,13 +18,12 @@
 		type ShareView,
 	} from '#lib/share-view.ts';
 	import ShareDialog from './ShareDialog.svelte';
+	import ConnectDialog from './ConnectDialog.svelte';
+	import DeleteShareDialog from './DeleteShareDialog.svelte';
+	import ShareMenu, { type ShareChoice } from './ShareMenu.svelte';
+	import UnlockDialog from './UnlockDialog.svelte';
+	import { accessSummary } from './shares-page.ts';
 	import { formatDiskBytes } from '#lib/format.ts';
-	import {
-		canDeleteData,
-		usageKey,
-		type ShareDataPreview,
-		type ShareDeletion,
-	} from '#lib/share-delete.ts';
 
 	const canAdminister = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 	const volumes = $derived((storage.status?.volumes ?? []).map((v) => v.name));
@@ -59,16 +56,8 @@
 		accountReady = $state(false),
 		savingView = $state(false);
 	let error = $state(''),
-		preferenceError = $state(''),
-		deleteError = $state('');
-	let deleting = $state(false),
-		deleteData = $state(false),
-		dataPreview = $state<ShareDataPreview | null>(null),
-		previewing = $state(false),
-		previewError = $state(''),
-		purgeStarted = $state(''),
-		copied = $state(''),
-		copyFailed = $state('');
+		preferenceError = $state('');
+	let purgeStarted = $state('');
 	let dialog = $state<
 		{ kind: 'create' } | { kind: 'edit' | 'delete' | 'connect'; share: Share } | null
 	>(null);
@@ -77,18 +66,6 @@
 	const shown = $derived(visibleShares(shares ?? [], view, query, i18n.locale));
 	const detail = $derived(shares?.find((s) => s.name === selected));
 	let unlocking = $state<Share | null>(null);
-	let unlockError = $state('');
-	async function unlock() {
-		if (!unlocking) return;
-		unlockError = '';
-		try {
-			await api.post(`/shares/${encodeURIComponent(unlocking.name)}/unlock`, {});
-			unlocking = null;
-			await load();
-		} catch (err) {
-			unlockError = apiErrorText(err);
-		}
-	}
 	const volumeOptions = $derived(
 		[
 			...new Set([
@@ -171,6 +148,15 @@
 		await tick();
 		action();
 	}
+	function menuChoice(share: Share, choice: ShareChoice) {
+		void choose(() => {
+			if (choice === 'details') {
+				selected = share.name;
+				tab = 'general';
+			} else if (choice === 'delete') dialog = { kind: 'delete', share };
+			else dialog = { kind: choice, share };
+		});
+	}
 	function showMenu(event: MouseEvent, share: Share) {
 		const b = (event.currentTarget as HTMLElement).getBoundingClientRect();
 		menu = { share, x: b.right, y: b.bottom };
@@ -179,94 +165,11 @@
 		dialog = null;
 		await load();
 	}
-	function openDelete(share: Share) {
-		deleteError = '';
-		deleteData = false;
-		dataPreview = null;
-		previewError = '';
-		dialog = { kind: 'delete', share };
-	}
-	// Counting a large folder takes a while; the dialog stays usable meanwhile.
-	let previewFor = 0;
-	async function loadPreview(share: Share) {
-		const ticket = ++previewFor;
-		previewing = true;
-		previewError = '';
-		dataPreview = null;
-		try {
-			const preview = await api.get<ShareDataPreview>(
-				`/shares/${encodeURIComponent(share.name)}/delete-data`,
-			);
-			if (ticket === previewFor) dataPreview = preview;
-		} catch (err) {
-			if (ticket === previewFor) previewError = apiErrorText(err);
-		} finally {
-			if (ticket === previewFor) previewing = false;
-		}
-	}
-	function toggleData(share: Share) {
-		if (deleteData) void loadPreview(share);
-		else {
-			previewFor++;
-			previewing = false;
-			dataPreview = null;
-			previewError = '';
-		}
-	}
-	async function remove(share: Share) {
-		deleting = true;
-		deleteError = '';
-		try {
-			if (deleteData) {
-				if (!dataPreview) return;
-				await api.post<ShareDeletion>(`/shares/${encodeURIComponent(share.name)}/delete-data`, {
-					path: dataPreview.path,
-				});
-				purgeStarted = share.name;
-			} else await api.delete(`/shares/${encodeURIComponent(share.name)}`);
-			dialog = null;
-			if (selected === share.name) selected = '';
-			await load();
-		} catch (err) {
-			deleteError = apiErrorText(err);
-			// What stands in the way may have changed: show the current state.
-			if (deleteData && err instanceof ApiError && err.status === 409) void loadPreview(share);
-		} finally {
-			deleting = false;
-		}
-	}
-	function addresses(share: Share, host: string) {
-		const list: { label: string; value: string }[] = [];
-		if (share.smb)
-			list.push(
-				{ label: t('shares.windows'), value: `\\\\${host}\\${share.name}` },
-				// Finder: Go › Connect to Server.
-				{ label: t('shares.mac'), value: `smb://${host}/${encodeURIComponent(share.name)}` },
-				// File managers (GNOME, KDE) take the URL, mount.cifs the UNC form.
-				{ label: t('shares.linux'), value: `smb://${host}/${encodeURIComponent(share.name)}` },
-				{ label: t('shares.linuxMount'), value: `//${host}/${share.name}` },
-			);
-		if (share.nfs.enabled) list.push({ label: t('shares.nfs'), value: `${host}:/${share.name}` });
-		return list;
-	}
-	async function copy(value: string, code: Element | null) {
-		copyFailed = '';
-		try {
-			await navigator.clipboard.writeText(value);
-			copied = value;
-			setTimeout(() => {
-				if (!disposed) copied = '';
-			}, 1500);
-		} catch {
-			// No clipboard (plain http, refused): select the address for copying by hand.
-			copied = '';
-			copyFailed = value;
-			if (code) getSelection()?.selectAllChildren(code);
-		}
-	}
-	function accessSummary(s: Share) {
-		const count = Object.keys(s.access).length;
-		return count === 1 ? t('shares.accountOne') : t('shares.accountCount', { count });
+	async function deleted(share: Share, purged: boolean) {
+		if (purged) purgeStarted = share.name;
+		dialog = null;
+		if (selected === share.name) selected = '';
+		await load();
 	}
 </script>
 
@@ -530,35 +433,16 @@
 	</div>
 {/if}
 {#if menu}
-	<ContextMenu
-		label={t('shares.actionsFor', { name: menu.share.name })}
+	{@const share = menu.share}
+	<ShareMenu
+		{share}
 		x={menu.x}
 		y={menu.y}
+		{canAdminister}
+		{accountReady}
 		onclose={() => (menu = null)}
-	>
-		{@const share = menu.share}
-		<button
-			role="menuitem"
-			onclick={() =>
-				choose(() => {
-					selected = share.name;
-					tab = 'general';
-				})}>{t('shares.details')}</button
-		>
-		<button role="menuitem" onclick={() => choose(() => (dialog = { kind: 'connect', share }))}
-			>{t('shares.connect')}</button
-		>
-		<a role="menuitem" href={shareFilesURL(share.name)}>{t('shares.openFiles')}</a>
-		{#if canAdminister}<button
-				role="menuitem"
-				disabled={!accountReady}
-				onclick={() => choose(() => (dialog = { kind: 'edit', share }))}>{t('shares.edit')}</button
-			>
-			<hr />
-			<button role="menuitem" class="danger" onclick={() => choose(() => openDelete(share))}
-				>{t('shares.delete')}</button
-			>{/if}
-	</ContextMenu>
+		onchoose={(choice) => menuChoice(share, choice)}
+	/>
 {/if}
 {#if dialog?.kind === 'create'}<ShareDialog
 		{volumes}
@@ -574,122 +458,25 @@
 			ondone={done}
 		/>{/key}
 {:else if dialog?.kind === 'connect'}
-	<Dialog
-		title={t('shares.connectTitle', { name: dialog.share.name })}
-		onclose={() => ((dialog = null), (copyFailed = ''))}
-	>
-		{#each [host, mdnsHost].filter(Boolean) as via, index (via)}
-			{#if mdnsHost}<h3 class="via">
-					{t(index === 0 ? 'shares.viaAddress' : 'shares.viaName')}
-				</h3>{/if}
-			{#each addresses(dialog.share, via) as address (address.label)}<div class="address">
-					<span>{address.label}</span><code class="mono">{address.value}</code><button
-						class="btn"
-						onclick={(event) => copy(address.value, event.currentTarget.previousElementSibling)}
-						>{t(copied === address.value ? 'shares.copied' : 'shares.copy')}</button
-					>
-					{#if copyFailed === address.value}<p class="notice-warn copy-failed" role="alert">
-							{t('shares.copyFailed')}
-						</p>{/if}
-				</div>{/each}
-		{/each}
-		{#if !dialog.share.smb && !dialog.share.nfs.enabled}<p>{t('shares.noProtocol')}</p>{/if}
-		<div class="dialog-actions">
-			<button class="btn" onclick={() => (dialog = null)}>{t('common.done')}</button>
-		</div>
-	</Dialog>
+	<ConnectDialog share={dialog.share} {host} {mdnsHost} onclose={() => (dialog = null)} />
 {:else if dialog?.kind === 'delete'}
 	{@const share = dialog.share}
-	<Dialog
-		title={t('share.deleteTitle', { name: share.name })}
-		locked={deleting}
+	<DeleteShareDialog
+		{share}
 		onclose={() => (dialog = null)}
-	>
-		{#if !deleteData}<p>{t('share.deleteText', { path: share.path })}</p>{/if}
-		<label class="check"
-			><input
-				type="checkbox"
-				bind:checked={deleteData}
-				disabled={deleting}
-				onchange={() => toggleData(share)}
-			/><span>{t('share.deleteData')}</span></label
-		>
-		{#if deleteData}
-			<div class="purge" aria-live="polite">
-				<p class="notice-warn">{t('share.deleteDataHint', { path: share.path })}</p>
-				{#if previewing}<p class="muted">{t('share.deleteDataCounting')}</p>
-				{:else if previewError}<p class="notice-error" role="alert">{previewError}</p>
-				{:else if dataPreview}
-					<p class="mono path">{dataPreview.path}</p>
-					{#if !dataPreview.exists}<p>{t('share.deleteDataMissing', { path: dataPreview.path })}</p>
-					{:else}<p>
-							{t('share.deleteDataSummary', {
-								files: dataPreview.files.toLocaleString(i18n.locale),
-								dirs: dataPreview.dirs.toLocaleString(i18n.locale),
-								size: formatDiskBytes(dataPreview.bytes),
-							})}
-						</p>
-						{#if !dataPreview.complete}<p class="muted">
-								{t('share.deleteDataPartial', { limit: dataPreview.limit ?? '' })}
-							</p>{/if}
-						{#if dataPreview.subvolume}<p>{t('share.deleteDataSubvolume')}</p>{/if}
-					{/if}
-					{#if dataPreview.blockers.length}
-						<div class="notice-error" role="alert">
-							<p>{t('share.deleteDataBlocked')}</p>
-							<ul>
-								{#each dataPreview.blockers as use, i (i)}<li>
-										{t(usageKey(use.kind), { name: use.name ?? '', path: use.path ?? '' })}
-									</li>{/each}
-							</ul>
-						</div>
-					{/if}
-					{#if dataPreview.warnings.length}
-						<div class="notice-warn">
-							<p>{t('share.deleteDataWarnings')}</p>
-							<ul>
-								{#each dataPreview.warnings as use, i (i)}<li>
-										{t(usageKey(use.kind), { name: use.name ?? '', path: use.path ?? '' })}
-									</li>{/each}
-							</ul>
-						</div>
-					{/if}
-				{/if}
-				{#if !previewing && (previewError || dataPreview?.blockers.length)}<button
-						class="btn"
-						disabled={deleting}
-						onclick={() => loadPreview(share)}>{t('share.deleteDataRetry')}</button
-					>{/if}
-			</div>
-		{/if}
-		{#if deleteError}<p class="notice-error" role="alert">{deleteError}</p>{/if}
-		<div class="dialog-actions">
-			<button class="btn" disabled={deleting} onclick={() => (dialog = null)}
-				>{t('common.cancel')}</button
-			><button
-				class="btn btn-warn"
-				disabled={deleting || (deleteData && (previewing || !canDeleteData(dataPreview)))}
-				onclick={() => remove(share)}
-				>{t(deleteData ? 'share.deleteDataSubmit' : 'share.deleteSubmit')}</button
-			>
-		</div>
-	</Dialog>
+		ondeleted={(purged) => deleted(share, purged)}
+	/>
 {/if}
 
 {#if unlocking}
-	<Dialog
-		title={t('shares.guardUnlockTitle', { name: unlocking.name })}
+	<UnlockDialog
+		share={unlocking}
 		onclose={() => (unlocking = null)}
-	>
-		<p>{t('shares.guardUnlockText')}</p>
-		{#if unlockError}<p class="notice-error" role="alert">{unlockError}</p>{/if}
-		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (unlocking = null)}
-				>{t('common.cancel')}</button
-			>
-			<button type="button" class="btn btn-warn" onclick={unlock}>{t('shares.guardUnlock')}</button>
-		</div>
-	</Dialog>
+		ondone={async () => {
+			unlocking = null;
+			await load();
+		}}
+	/>
 {/if}
 
 <style>
@@ -702,30 +489,6 @@
 	}
 	.locked p {
 		margin: 0;
-	}
-	.check {
-		display: flex;
-		gap: 8px;
-		align-items: center;
-		margin-top: 8px;
-	}
-	.purge {
-		display: grid;
-		gap: 8px;
-		margin-top: 8px;
-	}
-	.purge p,
-	.purge ul {
-		margin: 0;
-	}
-	.purge ul {
-		padding-left: 18px;
-	}
-	.purge .path {
-		overflow-wrap: anywhere;
-	}
-	.purge .btn {
-		justify-self: start;
 	}
 	.quota-bar {
 		display: block;
@@ -765,7 +528,7 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		margin-left: auto;
 	}
 	.share-layout {
@@ -785,13 +548,13 @@
 	table {
 		width: 100%;
 		border-collapse: collapse;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	th {
 		text-align: left;
 		font-weight: 500;
 		color: var(--muted);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	th,
 	td {
@@ -828,7 +591,7 @@
 	small {
 		display: block;
 		color: var(--muted);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		margin-top: 3px;
 	}
 	.warning {
@@ -840,10 +603,10 @@
 		flex-wrap: wrap;
 	}
 	.chip {
-		font-size: 0.6875rem;
+		font-size: var(--text-xs);
 	}
 	.state {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.state::before {
 		content: '';
@@ -869,7 +632,7 @@
 	}
 	.list-count {
 		padding: 10px 14px;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.detail {
@@ -883,7 +646,7 @@
 		gap: 12px;
 	}
 	.detail h2 {
-		font-size: 1.125rem;
+		font-size: var(--text-lg);
 		overflow-wrap: anywhere;
 	}
 	.tabs {
@@ -899,7 +662,7 @@
 		border-bottom: 2px solid transparent;
 		padding: 10px 0;
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		cursor: pointer;
 	}
 	.tabs button[aria-selected='true'] {
@@ -910,7 +673,7 @@
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
 		gap: 12px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	dt {
 		color: var(--muted);
@@ -927,33 +690,8 @@
 		margin-top: 20px;
 	}
 	.hint {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		margin-top: 12px;
-	}
-	.address {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 8px;
-		align-items: center;
-		font-size: 0.8125rem;
-	}
-	.address > span,
-	.copy-failed {
-		width: 100%;
-	}
-	.via {
-		margin: 4px 0 0;
-		font-size: 0.8125rem;
-		font-weight: 600;
-	}
-	.address code {
-		flex: 1;
-		min-width: 0;
-		overflow-wrap: anywhere;
-		padding: 10px;
-		background: var(--chip);
-		border-radius: var(--radius-ctl);
-		user-select: all;
 	}
 	.notice-error {
 		display: flex;
@@ -1004,7 +742,7 @@
 			flex: 1;
 		}
 		.share-name {
-			font-size: 0.8125rem;
+			font-size: var(--text-base);
 		}
 	}
 </style>

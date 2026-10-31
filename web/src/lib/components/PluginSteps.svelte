@@ -78,7 +78,7 @@
 		flex-direction: column;
 		align-items: flex-start;
 		gap: 8px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	ol {
 		width: 100%;
@@ -133,7 +133,7 @@
 	pre {
 		margin: 4px 0 0;
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		white-space: pre-wrap;
 		word-break: break-word;
 	}

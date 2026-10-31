@@ -52,7 +52,7 @@
 	li {
 		display: flex;
 		gap: 10px;
-		font-size: 0.85rem;
+		font-size: var(--text-base);
 	}
 	strong {
 		font-family: var(--font-mono);

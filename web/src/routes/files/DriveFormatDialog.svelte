@@ -318,7 +318,7 @@
 		gap: 0.3rem;
 	}
 	.small {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		overflow-wrap: anywhere;
 	}
 	.drives {

@@ -21,8 +21,8 @@ const cspExtra = "frame-ancestors 'none'; form-action 'self'"
 
 // contentSecurityPolicy is the policy of index.html as a header, so that it
 // also holds for what the meta tag cannot cover. It is the same policy as
-// in the page, not a stricter one: images, styles, WebSockets (noVNC,
-// xterm) and blob:/data: URLs stay as the UI needs them.
+// in the page (web/vite.config.ts): default-src 'self', with data:/blob:
+// where the UI needs them and https pictures for app icons.
 func contentSecurityPolicy(ui fs.FS) string {
 	data, err := fs.ReadFile(ui, "index.html")
 	if err == nil {

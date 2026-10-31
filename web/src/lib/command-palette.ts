@@ -3,7 +3,7 @@ import type { Role } from './api.ts';
 import { settingSections, settingsAreas } from './settings-search.ts';
 
 export type PaletteEntry = { href: string; label: string; section: string; terms?: string };
-export const pages: { href: string; label: MessageKey; admin?: boolean; assistant?: boolean }[] = [
+export const pages: { href: string; label: MessageKey; admin?: boolean }[] = [
 	{ href: '/', label: 'nav.dashboard' },
 	{ href: '/storage', label: 'nav.storage', admin: true },
 	{ href: '/shares', label: 'nav.shares', admin: true },
@@ -14,8 +14,6 @@ export const pages: { href: string; label: MessageKey; admin?: boolean; assistan
 	{ href: '/lxc', label: 'nav.lxc', admin: true },
 	{ href: '/apps', label: 'nav.apps', admin: true },
 	{ href: '/plugins', label: 'nav.plugins', admin: true },
-	{ href: '/assistant', label: 'assistant.title', assistant: true },
-	{ href: '/assistant/automations', label: 'automation.title', assistant: true },
 	{ href: '/settings', label: 'nav.settings' },
 	{ href: '/tools', label: 'nav.tools', admin: true },
 	{ href: '/tools/logs', label: 'tools.logs', admin: true },
@@ -29,15 +27,11 @@ export const pages: { href: string; label: MessageKey; admin?: boolean; assistan
 	{ href: '/account', label: 'menu.account' },
 ];
 /** Pages and settings the account may open; the settings list is shared with the settings overview. */
-export function palettePages(
-	role: Role,
-	translate: (key: MessageKey) => string,
-	options: { assistant?: boolean } = {},
-): PaletteEntry[] {
+export function palettePages(role: Role, translate: (key: MessageKey) => string): PaletteEntry[] {
 	const admin = role === 'owner' || role === 'admin';
 	return [
 		...pages
-			.filter((p) => (!p.admin || admin) && (!p.assistant || options.assistant))
+			.filter((p) => !p.admin || admin)
 			.map((p) => ({
 				href: p.href,
 				label: translate(p.label),

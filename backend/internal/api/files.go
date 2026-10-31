@@ -105,7 +105,7 @@ var stickHidden = []string{"users", "tls", "ssh", "notify", "backup", "ddns", "w
 // stickShown is all of the stick that the file manager shows: settings
 // without secrets. A folder ("apps/") is shown with everything in it, apart
 // from .env files; anything not named here, such as the settings of Home
-// Assistant, plugins, the UPS or the assistant and every key file, does
+// Assistant, plugins, the UPS and every key file, does
 // not exist as far as the file manager can tell.
 var stickShown = []string{
 	"apps/", "network/", "shares/", "storage/", "firewall/",
@@ -119,7 +119,7 @@ var stickShown = []string{
 
 // requestRoots are the roots of the account behind a request. The stick is
 // offered only to a browser session on this NAS: API tokens, MCP clients,
-// the assistant and other nodes of the cluster never see it.
+// MCP clients and other nodes of the cluster never see it.
 func (s *Server) requestRoots(r *http.Request) []files.Root {
 	roots := s.fileRoots(currentUser(r))
 	if webSession(r) && !viaCluster(r) {

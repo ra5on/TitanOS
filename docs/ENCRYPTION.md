@@ -26,7 +26,7 @@ Freigaben zugreifen.
 - Nach dem Start gibt es einmal die Meldung `volume_locked` („Volume … wartet
   auf sein Passwort“), sobald die Platten des Volumes da sind. Die Meldung und
   die Volume-Kachel des Dashboards führen zum Volume auf der Speicher-Seite,
-  die Statusleiste zeigt es als „gesperrt“.
+  die Statusleiste (bei seitlicher Navigation der Status unten in der Seitenleiste) zeigt es als „gesperrt“.
 - Ein Neustart von titand (etwa durch ein App-Update) sperrt nichts: Die
   geöffneten Geräte bleiben offen.
 - Der Boot-Check nach einem Systemupdate zählt ein gesperrtes Volume als
@@ -40,7 +40,7 @@ zwei Sekunden). Der Zähler liegt nur im RAM. Entsperren, Sperren und jede
 Passwortänderung stehen im Aktivitätsprotokoll (nur der Volume-Name, nie ein
 Passwort).
 
-**Passwörter kommen nur aus einer angemeldeten Websitzung.** Der KI-Assistent,
+**Passwörter kommen nur aus einer angemeldeten Websitzung.** MCP-Clients,
 Home Assistant und persönliche API-Tokens können nicht entsperren, keine
 Passwörter ändern und keine Header-Sicherung laden (`web_session_required`);
 die Routen stehen in keinem Katalog.
@@ -213,7 +213,7 @@ letzte), Header-Sicherung, Löschen mit `cryptsetup erase`, Btrfs-Platte
 hinzufügen nur mit Passwort, Übernahme-Kandidaten; kein Passwort auf einer
 Kommandozeile oder in `volumes.json`. Die Übergabe von stdin und Pipe-
 Deskriptoren ist mit echten Prozessen getestet (`run/run_test.go`), die
-API-Grenze (nur Websitzung, nicht im Assistenten-Katalog) im API-Test.
+API-Grenze (nur Websitzung, nicht im MCP-Werkzeugkatalog) im API-Test.
 
 **Geprüft in QEMU** (28.10.2026, `scripts/smoke-encryption.py`, Ergebnis
 `docs/validation/encryption-qemu-2026-10-28.json`): echtes Abbild aus

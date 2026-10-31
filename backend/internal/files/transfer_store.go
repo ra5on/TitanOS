@@ -167,7 +167,7 @@ func (s *transferStore) initialize(job *Job, sr *os.Root, publish func() error) 
 	if err := s.open(true); err != nil {
 		return err
 	}
-	defer s.closeLocked()
+	defer func() { _ = s.closeLocked() }() // closing what was only read
 	if err := s.db.Update(func(tx *bolt.Tx) error {
 		for _, name := range [][]byte{entryBucket, destinationBucket, stateBucket} {
 			if _, err := tx.CreateBucket(name); err != nil {
@@ -306,7 +306,7 @@ func (j *Job) entry(rel string) (transferEntry, error) {
 }
 func (j *Job) closeStore() {
 	if j.paged() {
-		j.durable.store.close()
+		_ = j.durable.store.close() // cleanup, best effort: nothing more can be done if it fails
 	}
 }
 func (j *Job) keepStoreOpen() {

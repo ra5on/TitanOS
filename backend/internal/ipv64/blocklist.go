@@ -80,7 +80,7 @@ func (m *Manager) dropList(ctx context.Context) {
 	m.list = listState{client: m.list.client}
 	m.mu.Unlock()
 	if m.Firewall != nil {
-		m.Firewall.SetBlocklist(ctx, nil)
+		_ = m.Firewall.SetBlocklist(ctx, nil) // cleanup, best effort: nothing more can be done if it fails
 	}
 }
 

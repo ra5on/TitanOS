@@ -167,6 +167,6 @@
 		gap: 12px;
 	}
 	.small {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 </style>

@@ -195,7 +195,11 @@ func (s *Server) handleHAStorageAdd(w http.ResponseWriter, r *http.Request) {
 		Share    string `json:"share"`
 		Usage    string `json:"usage"`
 		QuotaGiB uint64 `json:"quotaGiB"`
-		Register bool   `json:"register"`
+		// QuotaBytes is the limit in bytes as the web UI sends it (decimal
+		// GB, since 0.41.0); it wins over QuotaGiB, which stays for other
+		// API clients.
+		QuotaBytes uint64 `json:"quotaBytes"`
+		Register   bool   `json:"register"`
 		// Existing uses a share that is there already; Folder a folder in
 		// it; ReadOnly gives the account (and Home Assistant) reading only.
 		Existing bool   `json:"existing"`
@@ -291,7 +295,7 @@ func (s *Server) handleHAStorageAdd(w http.ResponseWriter, r *http.Request) {
 		err = s.opts.Shares.Create(shares.Share{
 			Name: req.Share, Volume: req.Volume, SMB: true,
 			Access: map[string]string{setup.Account: access},
-			Quota:  req.QuotaGiB << 30,
+			Quota:  haQuota(req.QuotaBytes, req.QuotaGiB),
 		}, s.opts.Storage.Names(), s.userNames())
 	}
 	if err != nil {
@@ -645,4 +649,13 @@ func haPassword() string {
 	b := make([]byte, 18)
 	rand.Read(b)
 	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+// haQuota is the share limit of a new Home Assistant share: the bytes when
+// given, otherwise the GiB of older clients; 0 is no limit.
+func haQuota(bytes, gib uint64) uint64 {
+	if bytes > 0 {
+		return bytes
+	}
+	return gib << 30
 }

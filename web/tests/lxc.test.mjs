@@ -76,5 +76,9 @@ test('the container page is in the palette for administrators only, with texts i
 		(key) => key.startsWith('lxc.') || key.startsWith('error.lxc_') || key === 'nav.lxc',
 	))
 		assert.ok(en[key], key);
-	assert.equal(de['nav.lxc'], 'Container');
+	// Plan 10f: the tab is called "LXC" in menu, mobile menu, palette and page title.
+	for (const texts of [de, en]) {
+		assert.equal(texts['nav.lxc'], 'LXC');
+		assert.equal(texts['lxc.title'], 'LXC');
+	}
 });

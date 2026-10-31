@@ -371,7 +371,7 @@
 		padding: 0;
 		margin: 0 0 12px;
 		color: var(--muted);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.steps .current {
 		color: var(--text);
@@ -403,7 +403,7 @@
 	}
 	.what {
 		flex: 1 1 14rem;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.find {
 		display: flex;

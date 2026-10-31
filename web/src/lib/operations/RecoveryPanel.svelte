@@ -226,7 +226,7 @@
 	.row {
 		padding: 14px 0;
 		border-bottom: 1px solid var(--border);
-		font-size: 0.85rem;
+		font-size: var(--text-base);
 	}
 	.row p {
 		flex-basis: 100%;
@@ -238,7 +238,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.85rem;
+		font-size: var(--text-base);
 		margin: 14px 0;
 	}
 	.check {

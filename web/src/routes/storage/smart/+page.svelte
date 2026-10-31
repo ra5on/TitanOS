@@ -6,6 +6,7 @@
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import SmartHistory from './SmartHistory.svelte';
 	import { formatDateTime, formatNumber } from '#lib/format.ts';
 	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
@@ -296,6 +297,7 @@
 								>{t('smart.volume')}: {d.volume}</a
 							>{/if}
 					</p>
+					<SmartHistory disk={d.disk} />
 					{#if v}
 						<section aria-labelledby="smart-attributes">
 							<h3 id="smart-attributes">{v.nvme ? t('smart.healthLog') : t('smart.attributes')}</h3>
@@ -364,7 +366,7 @@
 <style>
 	.intro {
 		margin: 0 0 16px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.state-line {
 		display: flex;
@@ -410,7 +412,7 @@
 	}
 	.sub {
 		display: block;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 		margin-top: 4px;
 	}
@@ -441,7 +443,7 @@
 		gap: 10px;
 	}
 	.detail-heading h2 {
-		font-size: 1rem;
+		font-size: var(--text-lg);
 	}
 	.detail-heading .btn {
 		padding: 6px;
@@ -449,7 +451,7 @@
 	}
 	.detail h3 {
 		margin: 0 0 8px;
-		font-size: 0.9375rem;
+		font-size: var(--text-md);
 	}
 	.detail dl {
 		display: grid;
@@ -459,7 +461,7 @@
 	}
 	.detail dt {
 		color: var(--muted);
-		font-size: 0.8rem;
+		font-size: var(--text-sm);
 	}
 	.detail dd {
 		margin: 2px 0 0;
@@ -468,7 +470,7 @@
 	.findings {
 		margin: 0;
 		padding-left: 18px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.links {
 		display: flex;
@@ -478,7 +480,7 @@
 	}
 	.attr-table td {
 		padding: 6px 8px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.warn-row {
 		background: var(--warn-bg);
@@ -486,7 +488,7 @@
 	.thresholds {
 		margin-top: 20px;
 		padding: 14px 18px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.thresholds summary {
 		cursor: pointer;

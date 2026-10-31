@@ -258,11 +258,11 @@ func (m *Manager) List(root Root, dir string) ([]Entry, error) {
 
 // own gives a new file or folder to the acting account and the share's group.
 func (m *Manager) own(r *os.Root, name string, uid int, dir bool) {
-	r.Lchown(name, uid, m.GID)
+	_ = r.Lchown(name, uid, m.GID) // permissions and times are a convenience; the data are there either way
 	if dir {
-		r.Chmod(name, 0o770|os.ModeSetgid)
+		_ = r.Chmod(name, 0o770|os.ModeSetgid) // permissions and times are a convenience; the data are there either way
 	} else {
-		r.Chmod(name, 0o660)
+		_ = r.Chmod(name, 0o660) // permissions and times are a convenience; the data are there either way
 	}
 }
 
@@ -386,7 +386,7 @@ func (m *Manager) recyclePath(r *os.Root, p, user string) (string, error) {
 	// The time of deletion decides when the bin drops the file.
 	now := m.now()
 	rememberTrash(r, target, p, now)
-	r.Chtimes(target, now, now)
+	_ = r.Chtimes(target, now, now) // permissions and times are a convenience; the data are there either way
 	return target, nil
 }
 

@@ -69,7 +69,7 @@
 		background: var(--bg);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		cursor: pointer;
 	}
 	label.picked {
@@ -91,7 +91,7 @@
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		color: var(--muted);
 	}
 	.has-data {
@@ -101,6 +101,6 @@
 		flex: none;
 	}
 	p {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 </style>

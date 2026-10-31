@@ -16,6 +16,6 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 </style>

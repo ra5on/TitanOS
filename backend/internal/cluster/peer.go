@@ -63,6 +63,8 @@ func ErrorCode(err error) (int, string) {
 		return http.StatusNotFound, "cluster_node_unknown"
 	case errors.Is(err, ErrSelf):
 		return http.StatusConflict, "cluster_node_self"
+	case errors.Is(err, ErrRestarting):
+		return http.StatusServiceUnavailable, "cluster_restarting"
 	case errors.Is(err, ErrUnreachable):
 		return http.StatusBadGateway, "cluster_unreachable"
 	case errors.Is(err, ErrNotPermitted):

@@ -31,9 +31,10 @@ was am NAS geändert hat. Konten mit der Rolle Benutzer sehen das Protokoll nich
   nach dem VM-Zeitplan (`vm_schedule_start`, `vm_schedule_stop`,
   `vm_schedule_poweroff`) mit Herkunft „System“ und ohne Konto; ausgelassene
   oder gescheiterte Termine als fehlgeschlagen. Siehe `docs/VM-SCHEDULE.md`.
-- **Herkunft:** Weboberfläche, API-Token, Assistent/Home Assistant oder SSH. Aufträge
-  des Assistenten laufen über dieselbe API und stehen unter dem Konto, für das er
-  handelt.
+- **Herkunft:** Weboberfläche, API-Token, MCP („per MCP“), Home Assistant
+  (Knöpfe und Schalter über MQTT, `homeassistant`), Cluster, System oder SSH.
+  Aktionen über MCP und Knöpfe aus Home Assistant laufen in-process über dieselbe
+  API und stehen unter dem Konto, für das sie handeln.
 
 Das **Ziel** ist der Name aus der Route (Konto, Freigabe, VM, App …). Bei
 Dateiaktionen kommen die betroffenen Pfade als `Freigabe/Pfad` dazu, höchstens
@@ -47,7 +48,7 @@ ausgelassen. Steuerzeichen werden ersetzt, damit ein Eintrag eine Zeile bleibt.
 Nicht aufgezeichnet werden häufige oder private Vorgänge ohne Änderung am NAS:
 Teilstücke von Uploads, Vorschauen, Suchen, Ordnervergleiche, die eigene
 Dashboard-Anordnung und das Hintergrundbild, das Ausblenden von
-Benachrichtigungen sowie Chats mit dem Assistenten. Normale Lesezugriffe und
+Benachrichtigungen. Normale Lesezugriffe und
 Datei-Downloads bleiben ebenfalls außen vor.
 
 ## Ablage

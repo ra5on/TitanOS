@@ -9,6 +9,7 @@ package configbackup
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -16,6 +17,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/ra5on/TitanOS/backend/internal/retention"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -97,6 +99,12 @@ type Settings struct {
 	Schedule string `json:"schedule"`
 	Time     string `json:"time"`
 	Weekday  int    `json:"weekday"`
+	// Encrypt seals new backups with the password in passwordFile
+	// (crypt.go). Older versions ignore it and save without.
+	Encrypt bool `json:"encrypt,omitempty"`
+	// Versions picks which backups stay by day, week and month (0.41.0,
+	// see internal/retention); Keep stays the count older versions use.
+	Versions *retention.Keep `json:"versions,omitempty"`
 }
 
 // Manifest is the first file in a backup and says what it is.
@@ -118,8 +126,10 @@ type Backup struct {
 	Label     string    `json:"label,omitempty"`
 	Time      time.Time `json:"time"`
 	SizeBytes int64     `json:"sizeBytes"`
-	Hostname  string    `json:"hostname"`
-	Version   string    `json:"version"`
+	// Encrypted backups need their password to be restored.
+	Encrypted bool   `json:"encrypted,omitempty"`
+	Hostname  string `json:"hostname"`
+	Version   string `json:"version"`
 	// Newer says the backup was made by a newer TitanOS than the one
 	// running: the stick should be updated to that version first, or
 	// settings that only the newer version knows may be lost.
@@ -202,6 +212,9 @@ func (m *Manager) SetSettings(settings Settings, known []string) error {
 	if settings.Keep < 1 || settings.Keep > 100 {
 		return fmt.Errorf("%w: keep", ErrInvalid)
 	}
+	if v := settings.Versions; v != nil && (v.Mode != "" || v.WhenFull != "" || retention.Check(*v) != nil) {
+		return fmt.Errorf("%w: versions", ErrInvalid)
+	}
 	if settings.Volume != "" && !slices.Contains(known, settings.Volume) {
 		return fmt.Errorf("%w: volume", ErrInvalid)
 	}
@@ -278,22 +291,35 @@ func readFolder(dir string) []Backup {
 		if match == nil || err != nil || !info.Mode().IsRegular() {
 			continue
 		}
-		manifest, err := readManifest(filepath.Join(dir, entry.Name()))
+		manifest, sealed, err := readManifestOf(filepath.Join(dir, entry.Name()))
 		if err != nil {
 			continue
 		}
-		list = append(list, Backup{Name: entry.Name(), Time: manifest.Time, SizeBytes: info.Size(), Hostname: manifest.Hostname, Version: manifest.Version})
+		list = append(list, Backup{Name: entry.Name(), Time: manifest.Time, SizeBytes: info.Size(), Encrypted: sealed, Hostname: manifest.Hostname, Version: manifest.Version})
 	}
 	return list
 }
 
-// readManifest reads the first file of a backup.
-func readManifest(file string) (Manifest, error) {
+// readManifestOf reads the manifest of a backup and says whether it is
+// encrypted.
+func readManifestOf(file string) (Manifest, bool, error) {
 	f, err := os.Open(file)
 	if err != nil {
-		return Manifest{}, err
+		return Manifest{}, false, err
 	}
 	defer f.Close()
+	head := make([]byte, len(encMagic))
+	if n, _ := io.ReadFull(f, head); n == len(head) && encrypted(head) {
+		_, _ = f.Seek(0, io.SeekStart) // the offset was just read from the same file; the copy checks what it reads
+		manifest, err := sealedManifest(f)
+		return manifest, true, err
+	}
+	_, _ = f.Seek(0, io.SeekStart) // the offset was just read from the same file; the copy checks what it reads
+	manifest, err := plainManifest(f)
+	return manifest, false, err
+}
+
+func plainManifest(f io.Reader) (Manifest, error) {
 	unzip, err := gzip.NewReader(f)
 	if err != nil {
 		return Manifest{}, ErrNotABackup
@@ -426,6 +452,16 @@ func (m *Manager) create(volume string) (string, error) {
 	// The digest covers names and content, not times: a backup is new
 	// only if something in it is.
 	digest := sha256.New()
+	encrypt := m.current().Encrypt
+	var password string
+	if encrypt {
+		secret, err := m.store.Read(passwordFile)
+		if err != nil || len(secret) == 0 {
+			return "", ErrPasswordRequired
+		}
+		password = string(secret)
+		digest.Write([]byte(encMagic))
+	}
 	zip := gzip.NewWriter(part)
 	archive := tar.NewWriter(zip)
 	if err := archive.WriteHeader(&tar.Header{Name: manifestName, Mode: 0o600, Size: int64(len(manifest)), ModTime: now, Typeflag: tar.TypeReg}); err != nil {
@@ -454,6 +490,25 @@ func (m *Manager) create(volume string) (string, error) {
 	if err := zip.Close(); err != nil {
 		return "", err
 	}
+	if encrypt {
+		if _, err := part.Seek(0, io.SeekStart); err != nil {
+			return "", err
+		}
+		plain, err := io.ReadAll(io.LimitReader(part, maxArchive+1))
+		if err != nil {
+			return "", err
+		}
+		sealed, err := seal(manifest, plain, password)
+		if err != nil {
+			return "", err
+		}
+		if err := part.Truncate(0); err != nil {
+			return "", err
+		}
+		if _, err := part.WriteAt(sealed, 0); err != nil {
+			return "", err
+		}
+	}
 	if info, err := part.Stat(); err != nil {
 		return "", err
 	} else if info.Size() > maxArchive {
@@ -480,15 +535,29 @@ func (m *Manager) create(volume string) (string, error) {
 	// The new name has to survive a power cut too: it is what a new
 	// stick looks for.
 	if d, err := os.Open(dir); err == nil {
-		d.Sync()
+		_ = d.Sync() // the data are written; the sync only hurries them to disk
 		d.Close()
 	}
 	slog.Info("configuration saved", "volume", volume, "backup", name, "files", len(files))
 
 	// The oldest go once there are more than wanted.
-	keep := m.current().Keep
+	settings := m.current()
+	if settings.Versions != nil {
+		// The new one and the older ones, by the rules.
+		versions := []retention.Version{{ID: name, Time: m.now().In(time.Local)}}
+		for _, old := range existing {
+			versions = append(versions, retention.Version{ID: old.Name, Time: old.Time.In(time.Local)})
+		}
+		stays := retention.Select(*settings.Versions, versions, m.now().In(time.Local))
+		for _, old := range existing {
+			if !stays[old.Name] {
+				os.Remove(filepath.Join(dir, old.Name))
+			}
+		}
+		return name, nil
+	}
 	for i, old := range existing {
-		if i+1 >= keep {
+		if i+1 >= settings.Keep {
 			os.Remove(filepath.Join(dir, old.Name))
 		}
 	}
@@ -657,7 +726,23 @@ func validName(name string) bool {
 
 // restore writes the content of a backup to /config. The accounts come
 // last: cut short, the stick still counts as new and can be restored again.
-func (m *Manager) restore(r io.ReadSeeker) (Manifest, error) {
+func (m *Manager) restore(r io.ReadSeeker, password string) (Manifest, error) {
+	if _, err := r.Seek(0, io.SeekStart); err != nil {
+		return Manifest{}, err
+	}
+	head := make([]byte, len(encMagic))
+	if n, _ := io.ReadFull(r, head); n == len(head) && encrypted(head) {
+		_, _ = r.Seek(0, io.SeekStart) // the offset was just read from the same file; the copy checks what it reads
+		data, err := io.ReadAll(io.LimitReader(r, maxArchive+1))
+		if err != nil {
+			return Manifest{}, err
+		}
+		plain, err := unseal(data, password)
+		if err != nil {
+			return Manifest{}, err
+		}
+		r = bytes.NewReader(plain)
+	}
 	if _, err := r.Seek(0, io.SeekStart); err != nil {
 		return Manifest{}, err
 	}
@@ -700,7 +785,7 @@ func (m *Manager) restore(r io.ReadSeeker) (Manifest, error) {
 
 // RestoreUpload restores from a backup that is being uploaded. The file is
 // small and is kept in RAM while it is checked.
-func (m *Manager) RestoreUpload(r io.Reader) (Manifest, error) {
+func (m *Manager) RestoreUpload(r io.Reader, password string) (Manifest, error) {
 	if m.Disabled {
 		return Manifest{}, ErrDisabled
 	}
@@ -722,7 +807,7 @@ func (m *Manager) RestoreUpload(r io.Reader) (Manifest, error) {
 	if n > maxArchive {
 		return Manifest{}, ErrTooLarge
 	}
-	return m.restore(spool)
+	return m.restore(spool, password)
 }
 
 // arrays lists the md arrays that are running, by device name.
@@ -807,7 +892,7 @@ func (m *Manager) Find(ctx context.Context) []Backup {
 }
 
 // RestoreFound restores from a backup that Find reported.
-func (m *Manager) RestoreFound(ctx context.Context, device, name string) (Manifest, error) {
+func (m *Manager) RestoreFound(ctx context.Context, device, name, password string) (Manifest, error) {
 	if m.Disabled {
 		return Manifest{}, ErrDisabled
 	}
@@ -829,7 +914,7 @@ func (m *Manager) RestoreFound(ctx context.Context, device, name string) (Manife
 		if info, err := f.Stat(); err != nil || info.Size() > maxArchive {
 			return ErrTooLarge
 		}
-		manifest, err = m.restore(f)
+		manifest, err = m.restore(f, password)
 		return err
 	})
 	return manifest, err

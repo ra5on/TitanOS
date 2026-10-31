@@ -23,11 +23,17 @@ test: web/node_modules
 # Static checks. The versions are pinned; go run fetches them into the module
 # cache. shellcheck comes from the distribution (apt/dnf install shellcheck).
 STATICCHECK_VERSION := 2026.2.2
+ERRCHECK_VERSION := v1.30.0
 GOVULNCHECK_VERSION := v1.9.0
 ACTIONLINT_VERSION := v1.7.12
 
+# staticcheck runs all checks but doc-comment style (backend/staticcheck.conf).
+# errcheck looks at code outside tests; deliberately ignored errors are
+# assigned to _ with a comment, best-effort calls of every kind are listed in
+# backend/.errcheck-excludes.
 lint:
 	cd backend && go run honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION) ./...
+	cd backend && go run github.com/kisielk/errcheck@$(ERRCHECK_VERSION) -ignoretests -exclude .errcheck-excludes ./...
 	cd backend && go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 	shellcheck scripts/*.sh
 	go run github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION)

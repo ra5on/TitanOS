@@ -148,7 +148,7 @@ func alignedBuffer(size int) ([]byte, func()) {
 	if err != nil {
 		return make([]byte, size), func() {}
 	}
-	return buffer, func() { unix.Munmap(buffer) }
+	return buffer, func() { _ = unix.Munmap(buffer) } // cleanup, best effort: nothing more can be done if it fails
 }
 
 // Tests returns the tests that are running or finished and not dismissed,
@@ -366,7 +366,7 @@ func (m *Manager) surfaceTest(ctx context.Context, test *DiskTest, path string) 
 	if err != nil {
 		return 0, err
 	}
-	defer disk.Close()
+	defer func() { _ = disk.Close() }() // closed explicitly below; this only covers early returns
 	size := int64(test.SizeBytes)
 	// Where a continued test picks up: the phase and offset of its last
 	// checkpoint, and the bad places counted until then.
@@ -485,7 +485,7 @@ func (m *Manager) surfaceTest(ctx context.Context, test *DiskTest, path string) 
 				bad()
 			}
 		}
-		disk.Sync()
+		_ = disk.Sync() // the read pass below finds what did not reach the disk
 	} else {
 		pass(PhaseRead, startAt(PhaseRead), func(offset int64, n int) bool {
 			if _, err := disk.ReadAt(got[:n], offset); err != nil {
@@ -495,11 +495,11 @@ func (m *Manager) surfaceTest(ctx context.Context, test *DiskTest, path string) 
 			return true
 		})
 	}
-	disk.Close()
+	_ = disk.Close() // the descriptor is done with; the results are counted already
 	if write {
 		// Let the kernel and udev see that the disk is empty now.
-		m.runner.Run(context.WithoutCancel(ctx), "", "blockdev", "--rereadpt", path)
-		m.runner.Run(context.WithoutCancel(ctx), "", "udevadm", "settle")
+		_, _ = m.runner.Run(context.WithoutCancel(ctx), "", "blockdev", "--rereadpt", path) // only waits for the kernel and udev; the next step checks the result
+		_, _ = m.runner.Run(context.WithoutCancel(ctx), "", "udevadm", "settle")            // only waits for the kernel and udev; the next step checks the result
 	}
 	return errs, nil
 }
@@ -607,7 +607,7 @@ func (m *Manager) smartSelfTest(ctx context.Context, test *DiskTest, path string
 	for {
 		select {
 		case <-ctx.Done():
-			m.runner.Run(context.WithoutCancel(ctx), "", "smartctl", "--abort", path)
+			_, _ = m.runner.Run(context.WithoutCancel(ctx), "", "smartctl", "--abort", path) // cleanup, best effort: nothing more can be done if it fails
 			return true
 		case <-time.After(interval):
 		}
@@ -636,7 +636,7 @@ func (m *Manager) smartSelfTest(ctx context.Context, test *DiskTest, path string
 			return false
 		}
 		if time.Now().After(deadline) {
-			m.runner.Run(context.WithoutCancel(ctx), "", "smartctl", "--abort", path)
+			_, _ = m.runner.Run(context.WithoutCancel(ctx), "", "smartctl", "--abort", path) // cleanup, best effort: nothing more can be done if it fails
 			m.note(test, "smart_aborted", "")
 			return true
 		}

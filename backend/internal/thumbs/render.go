@@ -12,12 +12,12 @@ import (
 	"image/png"
 	"io"
 	"os"
-	"os/exec"
 	"path"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/sandbox"
 	xdraw "golang.org/x/image/draw"
 	_ "golang.org/x/image/webp"
 )
@@ -67,12 +67,12 @@ func (m *Manager) render(ctx context.Context, f *os.File, name string, size int6
 		}
 		img, orientation, err = decodeImage(f)
 	case "pdf":
-		img, err = m.runTool(ctx, f, "pdftoppm", "-f", "1", "-l", "1", "-scale-to", strconv.Itoa(box), "-singlefile", "-png", "/dev/fd/3")
+		img, err = m.runTool(ctx, f, "pdftoppm", "-f", "1", "-l", "1", "-scale-to", strconv.Itoa(box), "-singlefile", "-png", "-")
 	case "video":
 		// A frame one second in avoids the black first frame of many clips;
 		// a shorter clip falls back to its very first frame.
 		args := func(seek string) []string {
-			return []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-threads", "1", "-ss", seek, "-i", "/dev/fd/3", "-frames:v", "1",
+			return []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-threads", "1", "-ss", seek, "-i", "fd:0", "-frames:v", "1",
 				"-vf", fmt.Sprintf("scale=w=%d:h=%d:force_original_aspect_ratio=decrease", box, box), "-f", "image2pipe", "-vcodec", "png", "pipe:1"}
 		}
 		img, err = m.runTool(ctx, f, "ffmpeg", args("1")...)
@@ -126,9 +126,11 @@ func (b *boundedBuffer) Write(p []byte) (int, error) {
 	return b.Buffer.Write(p)
 }
 
-// runTool runs a fixed helper on the already opened file, passed as file
-// descriptor 3: no path from the request reaches the command line and no
-// temporary file is written. The picture comes back through a RAM pipe.
+// runTool runs a fixed helper on the already opened file, passed as its
+// stdin (still seekable, for videos with the index at the end): no path
+// from the request reaches the command line and no temporary file is
+// written. The helper runs in a sandbox (package sandbox); the picture
+// comes back through a RAM pipe.
 func (m *Manager) runTool(ctx context.Context, f *os.File, tool string, args ...string) (image.Image, error) {
 	program, err := m.lookPath(tool)
 	if err != nil {
@@ -136,9 +138,8 @@ func (m *Manager) runTool(ctx context.Context, f *os.File, tool string, args ...
 	}
 	ctx, cancel := context.WithTimeout(ctx, toolTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, program, args...)
-	cmd.ExtraFiles = []*os.File{f}
-	cmd.Env = []string{"PATH=/usr/bin:/bin", "LC_ALL=C"}
+	cmd := sandbox.Command(ctx, sandbox.Limits{MemoryMax: 768 << 20, Runtime: toolTimeout + 10*time.Second}, program, args...)
+	cmd.Stdin = f
 	out := &boundedBuffer{limit: maxRendered}
 	cmd.Stdout, cmd.Stderr = out, &boundedBuffer{limit: 4096}
 	if err := cmd.Run(); err != nil {

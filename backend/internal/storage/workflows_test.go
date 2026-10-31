@@ -58,8 +58,8 @@ func snapshotFilesFixture(t *testing.T) (*Manager, string) {
 	snap := filepath.Join(dir, "manual")
 	os.MkdirAll(filepath.Join(snap, "photos"), 0700)
 	os.WriteFile(filepath.Join(snap, "photos", "a.jpg"), []byte("photo"), 0600)
-	os.MkdirAll(filepath.Join(snap, ".titanos", "assistant"), 0700)
-	os.WriteFile(filepath.Join(snap, ".titanos", "assistant", "private"), []byte("secret"), 0600)
+	os.MkdirAll(filepath.Join(snap, ".titanos", "notify"), 0700)
+	os.WriteFile(filepath.Join(snap, ".titanos", "notify", "private"), []byte("secret"), 0600)
 	os.Symlink("/etc", filepath.Join(snap, "link"))
 	return m, snap
 }
@@ -70,7 +70,7 @@ func TestSnapshotBrowseRestoreExcludesPrivateTreesAndNeverOverwrites(t *testing.
 	if err != nil || len(listing.Entries) != 1 || listing.Entries[0].Path != "photos" {
 		t.Fatal(listing, err)
 	}
-	for _, bad := range []string{"../etc", ".titanos/assistant", "link/passwd", "/etc/passwd"} {
+	for _, bad := range []string{"../etc", ".titanos/notify", "link/passwd", "/etc/passwd"} {
 		if _, err := m.SnapshotFiles(ctx, "data", "manual", bad, 0); err == nil {
 			t.Fatal("accepted", bad)
 		}
@@ -83,7 +83,7 @@ func TestSnapshotBrowseRestoreExcludesPrivateTreesAndNeverOverwrites(t *testing.
 	if err != nil || string(b) != "photo" {
 		t.Fatal(string(b), err)
 	}
-	if _, err := m.RestoreSnapshotFiles(ctx, "data", "manual", SnapshotRestore{Paths: []string{".titanos/assistant/private"}, TargetVolume: "safe"}); err == nil {
+	if _, err := m.RestoreSnapshotFiles(ctx, "data", "manual", SnapshotRestore{Paths: []string{".titanos/notify/private"}, TargetVolume: "safe"}); err == nil {
 		t.Fatal("private chat restored")
 	}
 }
@@ -140,7 +140,7 @@ func TestUsageIsBoundedAndDoesNotFollowLinksOrExposePrivateState(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, e := range out.Entries {
-		if strings.Contains(e.Name, "monitoring") || strings.Contains(e.Name, "assistant") {
+		if strings.Contains(e.Name, "monitoring") || strings.Contains(e.Name, "notify") {
 			t.Fatal("private paths exposed", out)
 		}
 	}
@@ -209,7 +209,7 @@ func TestScheduledRetentionNeverEnrollsManualNames(t *testing.T) {
 	manual := "auto-test-20000101T000000-000000000"
 	os.Mkdir(filepath.Join(dir, manual), 0700)
 	for range 2 {
-		if err := m.ScheduledSnapshot(context.Background(), "data", "test", 1, 0); err != nil {
+		if err := m.ScheduledSnapshot(context.Background(), "data", "test", 1, 0, nil); err != nil {
 			t.Fatal(err)
 		}
 	}

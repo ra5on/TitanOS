@@ -85,12 +85,12 @@ try {
     await section.getByRole("button", { name: "Speicher einrichten" }).click();
     let dialog = page.locator("dialog[open]");
     await dialog.getByLabel("Volume").selectOption("fast");
-    await dialog.getByLabel("Obergrenze in GiB").fill("200");
+    await dialog.getByLabel("Obergrenze in GB").fill("200");
     await dialog.screenshot({ path: `${out}/add-first.png`, animations: "disabled" });
     await dialog.getByRole("button", { name: "Einrichten" }).click();
     dialog = page.locator("dialog[open]");
     await dialog.getByText("Passwort-1-geheim").waitFor();
-    assert.deepEqual(posts(state)[0], { account: "homeassistant", volume: "fast", share: "homeassistant", quotaGiB: 200, usage: "backup", readOnly: false, register: true });
+    assert.deepEqual(posts(state)[0], { account: "homeassistant", volume: "fast", share: "homeassistant", quotaBytes: 200e9, usage: "backup", readOnly: false, register: true });
     await dialog.getByText(/hat den Speicher „titanos_homeassistant“ eingebunden/).waitFor();
     await dialog.getByRole("button", { name: "Schließen" }).click();
     await dialog.waitFor({ state: "detached" });

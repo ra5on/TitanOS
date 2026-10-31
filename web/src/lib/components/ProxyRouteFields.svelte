@@ -218,7 +218,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		min-width: 0;
 	}
 	label > span {
@@ -229,7 +229,7 @@
 		max-width: 32rem;
 	}
 	small {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		color: var(--muted);
 	}
 	.check {
@@ -263,7 +263,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 4px 14px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		overflow-wrap: anywhere;
 	}
 	.problems {
@@ -273,6 +273,6 @@
 		border: 1px solid var(--warn-border);
 		border-radius: var(--radius-ctl);
 		color: var(--warn-text);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 </style>

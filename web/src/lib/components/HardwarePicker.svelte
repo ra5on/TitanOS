@@ -98,6 +98,6 @@
 	}
 	p,
 	label {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 </style>

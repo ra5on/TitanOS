@@ -59,6 +59,9 @@ func certFixture(t *testing.T, f *certRunner) *Manager {
 	m.runtime = config.Open(t.TempDir())
 	m.runner = f
 	m.queryFeature = func(context.Context, string) ([]byte, error) { return nil, errors.New("no tailscaled") }
+	on := true
+	m.settings.HTTPSCertificate = &on
+	m.loaded = true
 	return m
 }
 
@@ -174,3 +177,92 @@ func TestOpenPageLooksAgainSoon(t *testing.T) {
 		t.Fatal("open page does not make titand look again")
 	}
 }
+
+// Off by default: without the switch nothing is asked of Tailscale (the
+// name would land in the public certificate logs); a certificate already
+// served is withdrawn when it is switched off.
+func TestCertificateSwitch(t *testing.T) {
+	f := &certRunner{status: runningStatus, name: "titan.bleak-locrian.ts.net"}
+	m := certFixture(t, f)
+	m.settings.HTTPSCertificate = nil
+	if cert, _ := m.refreshCertificate(context.Background(), nil); cert != nil {
+		t.Fatal("certificate without the switch")
+	}
+	if got := m.Status().HTTPS; got.State != "off" || got.Enabled || got.Name != "titan.bleak-locrian.ts.net" {
+		t.Fatalf("off: %+v", got)
+	}
+	for _, call := range f.calls {
+		if strings.HasPrefix(call, "tailscale cert") {
+			t.Fatal("asked Tailscale for a certificate while off")
+		}
+	}
+	if err := m.SetHTTPSCertificate(true); err != nil {
+		t.Fatal(err)
+	}
+	if len(m.cert.kick) != 1 {
+		t.Fatal("switching on does not make titand look at once")
+	}
+	<-m.cert.kick
+	var stored Settings
+	if err := m.store.ReadJSON(settingsFile, &stored); err != nil || stored.HTTPSCertificate == nil || !*stored.HTTPSCertificate {
+		t.Fatalf("stored %+v %v", stored, err)
+	}
+	cert, ok := m.refreshCertificate(context.Background(), nil)
+	if cert == nil || !ok || !m.Status().HTTPS.Enabled {
+		t.Fatal("no certificate when switched on")
+	}
+	// The trial of the other settings keeps the switch.
+	m.volume = "data"
+	m.runner = okRunner{}
+	if err := m.Set(Settings{Routes: []string{}}); err != nil {
+		t.Fatal(err)
+	}
+	if m.settings.HTTPSCertificate == nil || !*m.settings.HTTPSCertificate {
+		t.Fatal("settings form reset the switch")
+	}
+	if err := m.SetHTTPSCertificate(false); !errors.Is(err, ErrPending) {
+		t.Fatalf("switched during the trial: %v", err)
+	}
+	if err := m.Undo(); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetHTTPSCertificate(false); err != nil {
+		t.Fatal(err)
+	}
+	m.runner = f
+	if cert, _ := m.refreshCertificate(context.Background(), cert); cert != nil || m.Status().HTTPS.State != "off" {
+		t.Fatal("certificate still served after switching off")
+	}
+}
+
+// Settings of an older version have no switch: on only if tailscaled
+// already holds a certificate for the name (the name is public already).
+func TestCertificateSwitchFromOlderSettings(t *testing.T) {
+	f := &certRunner{status: runningStatus, name: "titan.bleak-locrian.ts.net"}
+	m := certFixture(t, f)
+	m.settings.HTTPSCertificate = nil
+	m.mountRoot, m.volume = t.TempDir(), "data"
+	if m.httpsWanted("titan.bleak-locrian.ts.net") {
+		t.Fatal("on without an earlier certificate")
+	}
+	dir := m.mountRoot + "/data/.titanos/tailscale/certs"
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dir+"/titan.bleak-locrian.ts.net.crt", []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if !m.httpsWanted("titan.bleak-locrian.ts.net") || m.httpsWanted("../../x") {
+		t.Fatal("earlier certificate not found, or odd name used")
+	}
+	off := false
+	m.settings.HTTPSCertificate = &off
+	if m.httpsWanted("titan.bleak-locrian.ts.net") {
+		t.Fatal("explicit off ignored")
+	}
+}
+
+// okRunner answers every command without output (the runtime helper).
+type okRunner struct{}
+
+func (okRunner) Run(context.Context, string, string, ...string) (string, error) { return "", nil }

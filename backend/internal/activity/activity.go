@@ -60,7 +60,6 @@ type Entry struct {
 const (
 	ViaWeb    = "web"
 	ViaToken  = "token"
-	ViaAgent  = "agent"
 	ViaSystem = "system"
 	// ViaCluster is a request another node of the cluster passed on.
 	ViaCluster = "cluster"
@@ -68,6 +67,8 @@ const (
 	ViaSSH = "ssh"
 	// ViaMCP is a tool call of an AI client through the MCP server.
 	ViaMCP = "mcp"
+	// ViaHomeAssistant is a button or switch pressed in Home Assistant.
+	ViaHomeAssistant = "homeassistant"
 )
 
 type Status struct {
@@ -81,8 +82,10 @@ type Status struct {
 
 // Filter narrows a query. Before pages backwards through older entries.
 type Filter struct {
-	Days   int
-	User   string
+	Days int
+	User string
+	// Via keeps only entries that came this way (web, token, mcp …).
+	Via    string
 	Text   string
 	Failed bool
 	Before time.Time
@@ -425,6 +428,9 @@ func repairTail(file *os.File) error {
 
 func (f Filter) match(e Entry, cutoff time.Time) bool {
 	if e.At.Before(cutoff) || (!f.Before.IsZero() && !e.At.Before(f.Before)) {
+		return false
+	}
+	if f.Via != "" && e.Via != f.Via {
 		return false
 	}
 	if f.User != "" && e.User != f.User {

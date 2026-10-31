@@ -16,13 +16,15 @@
 	} from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import VirtCheck from '#lib/components/VirtCheck.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import VmConnections from './VmConnections.svelte';
 	import VmCpu from './VmCpu.svelte';
 	import VmDisks from './VmDisks.svelte';
 	import VmInstall from './VmInstall.svelte';
 	import VmSchedule from './VmSchedule.svelte';
-	import { GIB, diskBlocked, folderProblem, freeOn, type DiskDraft } from './vm-form.ts';
+	import { GB, diskBlocked, folderProblem, freeOn, type DiskDraft } from './vm-form.ts';
+	import { MIB, formatBytes } from '#lib/format.ts';
 	import { scheduleDraft, schedulePayload, scheduleProblems } from '#lib/vm-schedule.ts';
 	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
@@ -51,7 +53,8 @@
 	let displayName = $state(initial ? vmLabel(initial) : '');
 	let description = $state(initial?.description ?? '');
 	let vcpus = $state(initial?.vcpus ?? 2);
-	let memoryGiB = $state(initial ? initial.memoryMiB / 1024 : 2);
+	// Kept in MiB as titand stores it; the form shows decimal GB (2 GB for a new VM).
+	let memoryMiB = $state(initial ? initial.memoryMiB : Math.round((2 * GB) / MIB));
 	let pinning = $state((initial?.cpuPin?.length ?? 0) > 0);
 	let pinned = $state<number[]>(initial?.cpuPin ?? []);
 	let exclusive = $state(initial?.exclusive ?? false);
@@ -134,7 +137,7 @@
 	// A first disk, once it is known where it can lie.
 	$effect(() => {
 		if (!existing && disks.length === 0 && volumes.length > 0 && !touched)
-			disks.push({ mode: 'new', format: 'qcow2', sizeGiB: 64, volume: volumes[0].name, path: '' });
+			disks.push({ mode: 'new', format: 'qcow2', sizeGB: 64, volume: volumes[0].name, path: '' });
 	});
 	// Windows 11 asks for a TPM and Secure Boot: on with that template
 	// unless switched off, and not offered with the others.
@@ -151,9 +154,9 @@
 		try {
 			await api.post(`/vms/${existing.name}/grow`, {
 				disk: index,
-				sizeBytes: Math.round(grow[index] * GIB),
+				sizeBytes: Math.round(grow[index] * GB),
 			});
-			existing.disks[index].sizeBytes = Math.round(grow[index] * GIB);
+			existing.disks[index].sizeBytes = Math.round(grow[index] * GB);
 			delete grow[index];
 		} catch (err) {
 			fail(err);
@@ -224,7 +227,7 @@
 			displayName,
 			description,
 			vcpus,
-			memoryGiB,
+			memoryMiB,
 			pinning,
 			pinned,
 			exclusive,
@@ -285,7 +288,7 @@
 
 	const hardwareSettings = () => ({
 		vcpus: vcpuCount,
-		memoryMiB: Math.round(memoryGiB * 1024),
+		memoryMiB,
 		cpuPin: pinning ? pinned : [],
 		exclusive: pinning && exclusive,
 		iso: iso.trim(),
@@ -323,7 +326,7 @@
 						? { path: disk.path }
 						: {
 								format: disk.format,
-								sizeBytes: Math.round(disk.sizeGiB * GIB),
+								sizeBytes: Math.round(disk.sizeGB * GB),
 								volume: disk.volume,
 								source: disk.mode === 'copy' ? disk.path : undefined,
 							},
@@ -366,7 +369,12 @@
 	crumb={existing ? vmLabel(existing) : t('vms.new.crumb')}
 />
 
-{#if status && !status.kvm}<p class="notice-warn" role="status">{t('vms.noKvm')}</p>{/if}
+{#if host?.virt}<VirtCheck virt={host.virt} problemsOnly />{:else if status && !status.kvm}<p
+		class="notice-warn"
+		role="status"
+	>
+		{t('vms.noKvm')}
+	</p>{/if}
 {#if storage.status && volumes.length === 0}<p class="notice-warn" role="status">
 		{t('vms.new.needVolume')}
 	</p>{/if}
@@ -476,7 +484,7 @@
 				hostError={partErrors.host}
 				onretryhost={() => loadPart('host')}
 				bind:vcpus
-				bind:memoryGiB
+				bind:memoryMiB
 				bind:pinning
 				bind:pinned
 				bind:exclusive
@@ -576,7 +584,7 @@
 			</div>
 			<div>
 				<dt>{t('vms.new.memory')}</dt>
-				<dd class="mono">{memoryGiB} GiB</dd>
+				<dd class="mono">{formatBytes(memoryMiB * MIB)}</dd>
 			</div>
 			{#if !existing}<div>
 					<dt>{t('vms.new.step3')}</dt>
@@ -585,7 +593,7 @@
 							.map((disk) =>
 								disk.mode === 'block' || disk.mode === 'direct'
 									? disk.path.split('/').at(-1)
-									: `${disk.sizeGiB} GiB ${disk.format === 'raw' ? 'img' : 'qcow2'} (${disk.volume})`,
+									: `${disk.sizeGB} GB ${disk.format === 'raw' ? 'img' : 'qcow2'} (${disk.volume})`,
 							)
 							.join(', ') || '–'}
 					</dd>
@@ -669,7 +677,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		color: var(--warn-text);
 	}
 	.open-points ul {
@@ -708,7 +716,7 @@
 	}
 	summary {
 		cursor: pointer;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.advanced-body {
 		display: flex;
@@ -741,7 +749,7 @@
 		border-bottom: 1px solid var(--panel-border);
 	}
 	h2 {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.045em;
@@ -767,12 +775,12 @@
 		border-radius: var(--radius-ctl);
 		color: var(--text);
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		text-align: left;
 		cursor: pointer;
 	}
 	.templates .muted {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	@media (max-width: 600px) {
 		.templates {
@@ -783,7 +791,7 @@
 		border-color: var(--accent);
 	}
 	.name {
-		font-size: 0.9375rem;
+		font-size: var(--text-md);
 		font-weight: 600;
 	}
 	.row {
@@ -795,7 +803,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);
@@ -807,7 +815,7 @@
 		flex: 2 1 320px;
 	}
 	small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.warn {
@@ -827,7 +835,7 @@
 		flex-direction: column;
 		gap: 8px;
 		margin: 0;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	dl div {
 		display: flex;
@@ -845,7 +853,7 @@
 	pre {
 		margin: 8px 0 0;
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		white-space: pre-wrap;
 		word-break: break-word;
 	}
@@ -853,7 +861,7 @@
 		flex-direction: row;
 		align-items: center;
 		gap: 10px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.check span {
 		color: var(--text);

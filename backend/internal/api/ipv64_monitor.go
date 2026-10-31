@@ -592,13 +592,13 @@ func (s *Server) handleIPv64MaintenanceCreate(w http.ResponseWriter, r *http.Req
 				return 0, nil, err
 			}
 			if err := s.opts.DDNS.SetHeartbeat(check.Token(), check.Name, 30, true); err != nil {
-				c.DeleteHealthcheck(context.WithoutCancel(ctx), check.Token())
+				_ = c.DeleteHealthcheck(context.WithoutCancel(ctx), check.Token()) // cleanup, best effort: nothing more can be done if it fails
 				return 0, nil, err
 			}
 			token, entry.CheckName, entry.CreatedNew = check.Token(), check.Name, true
 			undo = append(undo, func() {
-				s.opts.DDNS.StopHeartbeat(true)
-				c.DeleteHealthcheck(context.WithoutCancel(ctx), token)
+				_ = s.opts.DDNS.StopHeartbeat(true)                        // cleanup, best effort: nothing more can be done if it fails
+				_ = c.DeleteHealthcheck(context.WithoutCancel(ctx), token) // cleanup, best effort: nothing more can be done if it fails
 			})
 		}
 		entry.Check = dnsprovider.HealthcheckID(token)
@@ -617,7 +617,7 @@ func (s *Server) handleIPv64MaintenanceCreate(w http.ResponseWriter, r *http.Req
 			return 0, nil, err
 		}
 		entry.OfflinePage = page.ID
-		undo = append(undo, func() { c.DeleteOfflinePage(context.WithoutCancel(ctx), page.ID) })
+		undo = append(undo, func() { _ = c.DeleteOfflinePage(context.WithoutCancel(ctx), page.ID) }) // cleanup, best effort: nothing more can be done if it fails
 		name, mode, linking, on := "TitanOS "+req.Domain, "auto_failover_and_fallback", "or", true
 		integrations := []int{0}
 		policy, err := c.CreatePolicy(ctx, dnsprovider.PolicyInput{Name: &name, Mode: &mode, Linking: &linking, NotificationsEnabled: &on, Integrations: &integrations})
@@ -626,7 +626,7 @@ func (s *Server) handleIPv64MaintenanceCreate(w http.ResponseWriter, r *http.Req
 			return 0, nil, err
 		}
 		entry.Policy, entry.ID = policy.ID, policy.ID
-		undo = append(undo, func() { c.DeletePolicy(context.WithoutCancel(ctx), policy.ID) })
+		undo = append(undo, func() { _ = c.DeletePolicy(context.WithoutCancel(ctx), policy.ID) }) // cleanup, best effort: nothing more can be done if it fails
 		if _, err := c.AddMonitor(ctx, policy.ID, token, false); err != nil {
 			rollback()
 			return 0, nil, err
@@ -687,7 +687,7 @@ func (s *Server) handleIPv64MaintenanceDelete(w http.ResponseWriter, r *http.Req
 				if err := c.DeleteHealthcheck(ctx, token); !gone(err) {
 					return 0, nil, err
 				}
-				s.opts.DDNS.StopHeartbeat(true)
+				_ = s.opts.DDNS.StopHeartbeat(true) // cleanup, best effort: nothing more can be done if it fails
 			}
 		}
 		return 0, nil, s.opts.IPv64.RemoveMaintenance(id)

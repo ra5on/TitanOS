@@ -22,9 +22,9 @@ import (
 // manages (see docs/IPV64.md). Routes mirror the paths of IPv64 under
 // /api/v1/ipv64; the key is the one of this area or of dynamic DNS/Let's
 // Encrypt and never leaves titand. Only owners and administrators; every
-// change additionally only from a web session (not from the assistant,
+// change additionally only from a web session (not from MCP,
 // Home Assistant or an API token), and none of these routes is in the
-// assistant's catalog.
+// MCP catalog.
 
 // ipv64Area keeps what the routes remember in RAM.
 type ipv64Area struct {
@@ -79,7 +79,7 @@ func (a *ipv64Area) testAllowed(key string, now time.Time) bool {
 func (s *Server) browserOnly(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		_, token := r.Context().Value(apiTokenIdentity{}).(string)
-		_, agent := r.Context().Value(agentIdentity{}).(string)
+		_, agent := r.Context().Value(inProcessIdentity{}).(string)
 		if token || agent {
 			writeError(w, http.StatusForbidden, "browser_session_required", "this needs a web session")
 			return

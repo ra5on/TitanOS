@@ -56,7 +56,7 @@ func (c *client) do(ctx context.Context, method, path string, query url.Values) 
 	if res.StatusCode >= 400 {
 		defer res.Body.Close()
 		var body struct{ Message string }
-		json.NewDecoder(io.LimitReader(res.Body, 64*1024)).Decode(&body)
+		_ = json.NewDecoder(io.LimitReader(res.Body, 64*1024)).Decode(&body) // a value that cannot be read leaves the zero value, which the code handles
 		return nil, &apiError{Status: res.StatusCode, Message: body.Message}
 	}
 	return res, nil
@@ -88,7 +88,7 @@ func (c *client) sendJSON(ctx context.Context, method, path string, body, v any)
 	defer res.Body.Close()
 	if res.StatusCode >= 400 {
 		var problem struct{ Message string }
-		json.NewDecoder(io.LimitReader(res.Body, 64<<10)).Decode(&problem)
+		_ = json.NewDecoder(io.LimitReader(res.Body, 64<<10)).Decode(&problem) // a value that cannot be read leaves the zero value, which the code handles
 		return &apiError{Status: res.StatusCode, Message: problem.Message}
 	}
 	if v != nil {
@@ -275,7 +275,7 @@ func (c *client) execCreate(ctx context.Context, id string, cmd []string, user s
 	defer res.Body.Close()
 	if res.StatusCode >= 400 {
 		var failure struct{ Message string }
-		json.NewDecoder(io.LimitReader(res.Body, 64*1024)).Decode(&failure)
+		_ = json.NewDecoder(io.LimitReader(res.Body, 64*1024)).Decode(&failure) // a value that cannot be read leaves the zero value, which the code handles
 		return "", &apiError{Status: res.StatusCode, Message: failure.Message}
 	}
 	var created struct {

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/diagnose"
+	"github.com/ra5on/TitanOS/backend/internal/logkeep"
 )
 
 // handleLogs returns lines of the journal. The log names accounts and
@@ -43,6 +44,54 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, logs)
+}
+
+// handleLogsExport sends the journal of this or the previous start as a
+// text file, up to 50,000 lines, filtered like the view.
+func (s *Server) handleLogsExport(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	q := diagnose.ExportQuery{Source: query.Get("source"), Priority: 6, Previous: query.Get("boot") == "previous"}
+	if value := query.Get("priority"); value != "" {
+		priority, err := strconv.Atoi(value)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", "priority must be a number from 0 to 7")
+			return
+		}
+		q.Priority = priority
+	}
+	if value := query.Get("since"); value != "" {
+		seconds, err := strconv.ParseInt(value, 10, 64)
+		if err != nil || seconds <= 0 {
+			writeError(w, http.StatusBadRequest, "bad_request", "since must be a Unix time in seconds")
+			return
+		}
+		q.Since = time.Unix(seconds, 0)
+	}
+	var text string
+	var err error
+	if q.Previous && s.opts.LogKeep != nil {
+		// The journal of an earlier start only survives on a volume.
+		text, err = s.opts.LogKeep.Previous()
+		if errors.Is(err, logkeep.ErrNoStart) {
+			writeError(w, http.StatusNotFound, "no_previous_logs", "no log of the previous start was kept")
+			return
+		}
+	} else {
+		text, err = s.opts.Diagnose.Export(r.Context(), q)
+	}
+	if err != nil {
+		if errors.Is(err, diagnose.ErrInvalid) {
+			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		slog.Error("reading the journal failed", "err", err)
+		writeError(w, http.StatusInternalServerError, "logs_failed", "the log could not be read")
+		return
+	}
+	name := "titanos-log-" + time.Now().Format("2006-01-02T15-04-05") + ".txt"
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
+	w.Write([]byte(text))
 }
 
 // handleDiagnosticBundle packs logs and the state of the system into a zip

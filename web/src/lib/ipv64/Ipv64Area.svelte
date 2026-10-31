@@ -164,7 +164,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--gap, 16px);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	:global(.ipv64-tab .table-wrap) {
 		overflow-x: auto;
@@ -183,7 +183,7 @@
 	:global(.ipv64-tab th) {
 		color: var(--muted);
 		font-weight: 500;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	:global(.ipv64-tab td) {
 		white-space: nowrap;
@@ -203,7 +203,7 @@
 	}
 	:global(.ipv64-tab h3) {
 		margin: 0;
-		font-size: 0.9375rem;
+		font-size: var(--text-md);
 	}
 	:global(.ipv64-tab dl) {
 		display: grid;
@@ -213,7 +213,7 @@
 	}
 	:global(.ipv64-tab dt) {
 		color: var(--muted);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	:global(.ipv64-tab dd) {
 		margin: 2px 0 0;

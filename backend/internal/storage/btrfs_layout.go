@@ -170,7 +170,7 @@ func (m *Manager) addBtrfsDisk(ctx context.Context, volume VolumeConfig, diskNam
 	if len(parts)+1 < layout.minDisks {
 		return ErrTooFewDisks
 	}
-	disk, err := m.usable(m.status(devices, m.arrays(ctx)), diskName)
+	disk, err := m.usable(m.status(ctx, devices, m.arrays(ctx)), diskName)
 	if err != nil {
 		return err
 	}
@@ -325,11 +325,11 @@ func (m *Manager) RemoveBtrfsDisk(ctx context.Context, name, diskName string) er
 			if err := m.saveLayout(volume.Name, btrfsProfile(volume), len(parts)-1); err != nil {
 				slog.Error("Btrfs layout not saved after removing a disk", "name", name, "err", err)
 			}
-			m.runner.Run(ctx, "", "wipefs", "--all", "--force", part.KName)
+			_, _ = m.runner.Run(ctx, "", "wipefs", "--all", "--force", part.KName) // cleanup, best effort: nothing more can be done if it fails
 			if luksUUID != "" {
-				m.luksClose(ctx, cryptName(volume, luksUUID))
-				m.eraseLUKS(ctx, luksPart)
-				m.runner.Run(ctx, "", "wipefs", "--all", "--force", luksPart)
+				_ = m.luksClose(ctx, cryptName(volume, luksUUID))                    // cleanup, best effort: nothing more can be done if it fails
+				_ = m.eraseLUKS(ctx, luksPart)                                       // cleanup, best effort: nothing more can be done if it fails
+				_, _ = m.runner.Run(ctx, "", "wipefs", "--all", "--force", luksPart) // cleanup, best effort: nothing more can be done if it fails
 				if err := m.updateVolume(volume.Name, func(v *VolumeConfig) {
 					if v.Encryption != nil {
 						v.Encryption.UUIDs = uuidsWithout(v.Encryption.UUIDs, luksUUID)
@@ -338,8 +338,8 @@ func (m *Manager) RemoveBtrfsDisk(ctx context.Context, name, diskName string) er
 					slog.Error("LUKS UUID of a removed disk not forgotten", "name", name, "err", err)
 				}
 			}
-			m.runner.Run(ctx, "", "wipefs", "--all", "--force", device.Name)
-			m.runner.Run(ctx, "", "udevadm", "settle")
+			_, _ = m.runner.Run(ctx, "", "wipefs", "--all", "--force", device.Name) // cleanup, best effort: nothing more can be done if it fails
+			_, _ = m.runner.Run(ctx, "", "udevadm", "settle")                       // only waits for the kernel and udev; the next step checks the result
 			slog.Info("disk removed from Btrfs volume", "name", name, "disk", diskName)
 		}
 		m.mu.Lock()

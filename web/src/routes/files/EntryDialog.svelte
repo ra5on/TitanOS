@@ -188,12 +188,12 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.delete-summary ul {
 		margin: 0;
 		padding-left: 18px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		max-height: 14rem;
 		overflow-y: auto;
 		overflow-wrap: anywhere;
@@ -202,7 +202,7 @@
 		order: -2;
 		margin-right: auto;
 		align-self: center;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		color: var(--muted);
 	}
 	form {
@@ -214,9 +214,9 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.text {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 </style>

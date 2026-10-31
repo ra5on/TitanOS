@@ -5,10 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/sandbox"
 )
 
 type PDFPage struct {
@@ -35,7 +36,7 @@ func OCRPDF(ctx context.Context, data []byte, first, last int) (PDFReading, erro
 	defer cancel()
 	for page := first; page <= last; page++ {
 		png := &limitedOutput{limit: 12 << 20}
-		render := exec.CommandContext(ctx, "pdftoppm", "-f", strconv.Itoa(page), "-l", strconv.Itoa(page), "-scale-to", "1800", "-singlefile", "-png", "-")
+		render := sandbox.Command(ctx, sandbox.Limits{}, "pdftoppm", "-f", strconv.Itoa(page), "-l", strconv.Itoa(page), "-scale-to", "1800", "-singlefile", "-png", "-")
 		render.Stdin = bytes.NewReader(data)
 		render.Stdout = png
 		render.Stderr = &limitedOutput{limit: 4096}
@@ -43,7 +44,7 @@ func OCRPDF(ctx context.Context, data []byte, first, last int) (PDFReading, erro
 			return out, fmt.Errorf("OCR render page %d: %w", page, err)
 		}
 		text := &limitedOutput{limit: MaxText / 5}
-		cmd := exec.CommandContext(ctx, "tesseract", "stdin", "stdout", "-l", "deu+eng")
+		cmd := sandbox.Command(ctx, sandbox.Limits{}, "tesseract", "stdin", "stdout", "-l", "deu+eng")
 		cmd.Stdin = bytes.NewReader(png.Bytes())
 		cmd.Stdout = text
 		cmd.Stderr = &limitedOutput{limit: 4096}
@@ -76,7 +77,7 @@ func ReadPDF(ctx context.Context, data []byte, first, last int) (PDFReading, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "pdftotext", "-f", strconv.Itoa(first), "-l", strconv.Itoa(last), "-layout", "-enc", "UTF-8", "-", "-")
+	cmd := sandbox.Command(ctx, sandbox.Limits{}, "pdftotext", "-f", strconv.Itoa(first), "-l", strconv.Itoa(last), "-layout", "-enc", "UTF-8", "-", "-")
 	cmd.Stdin = bytes.NewReader(data)
 	stdout, stderr := &limitedOutput{limit: MaxText}, &limitedOutput{limit: 4096}
 	cmd.Stdout, cmd.Stderr = stdout, stderr

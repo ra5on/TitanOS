@@ -51,10 +51,10 @@ test('temperature tiles show their own sensors or the account selection', async 
 	);
 	assert.deepEqual(
 		tileTemperatures(preferences, [nvme.id], [cpu, nvme]).map((s) => s.label),
-		['Composite'],
+		['NVMe'], // plain names for the sensors everyone has
 	);
 	const gone = tileTemperatures(preferences, [sensor.id, 'c'.repeat(32)], []);
-	assert.equal(gone[0].label, 'Package id 0', 'last known name stays');
+	assert.equal(gone[0].label, 'CPU', 'last known name stays, in plain words');
 	assert.equal(gone[0].sensor, undefined);
 	assert.equal(gone[1].label, 'c'.repeat(32));
 	assert.deepEqual(tileTemperatures(preferences, [], [cpu]), []);

@@ -1,0 +1,59 @@
+{
+  "title": "NVIDIA (ältere Karten)",
+  "description": {
+    "de": "Proprietärer NVIDIA-Treiber der Reihe 580 für Maxwell, Pascal und Volta (z. B. GTX 9xx, GTX 10xx, Titan V), mit CUDA, NVENC/NVDEC und GPU-Containern.",
+    "en": "Proprietary NVIDIA driver of the 580 branch for Maxwell, Pascal and Volta (e.g. GTX 9xx, GTX 10xx, Titan V), with CUDA, NVENC/NVDEC and GPU containers."
+  },
+  "category": "graphics",
+  "license": "NVIDIA license (kernel module core, libraries); GPL-2.0-only/MIT (kernel interface); Apache-2.0 (Container Toolkit)",
+  "upstream": {
+    "name": "NVIDIA driver 580 (CUDA repository for Debian 13), NVIDIA Container Toolkit",
+    "url": "https://developer.download.nvidia.com/compute/cuda/repos/debian13/x86_64/"
+  },
+  "details": {
+    "de": {
+      "when": "Wenn eine ältere NVIDIA-Grafikkarte (Maxwell, Pascal oder Volta) im NAS steckt und Container sie für Transkodierung (z. B. Plex, Jellyfin), CUDA oder KI nutzen sollen. Für Karten ab Turing (RTX 20 und neuer, GTX 16) ist das Plugin „NVIDIA“ mit den offenen Modulen gedacht. Für eine Karte, die nur an eine VM durchgereicht wird, ist kein Plugin nötig.",
+      "hardware": [
+        "Maxwell: z. B. GTX 750/750 Ti, GTX 950–980 Ti, GTX Titan X, Quadro M",
+        "Pascal: z. B. GT 1030, GTX 1050–1080 Ti, Titan X/Xp, Quadro P, Tesla P4/P40/P100",
+        "Volta: Titan V, Quadro GV100, Tesla V100",
+        "Erkannt werden NVIDIA-Grafikgeräte mit PCI-Geräte-IDs von 1300 bis 1DFF, ohne gebundenen Treiber",
+        "Nicht unterstützt: Kepler (GTX 600/700) und älter; die Reihe 470 ist eingestellt und nicht für Kernel 6.12 freigegeben"
+      ],
+      "changes": "Lädt das proprietäre NVIDIA-Kernelmodul der Reihe 580 und startet titanos-nvidia.service, das die CDI-Geräte für Docker im RAM erzeugt. Bringt CUDA- und NVENC/NVDEC-Bibliotheken, NVML, nvidia-smi und das Container Toolkit mit. Kann nicht zusammen mit dem Plugin „NVIDIA“ eingeschaltet werden.",
+      "limits": [
+        "Proprietärer Treiber: NVIDIA pflegt die Reihe 580 als letzte für diese Karten; wann sie keine Updates mehr bekommt, entscheidet NVIDIA.",
+        "Kein Bau auf dem NAS („Treiber vorbereiten“) und keine eigenen Treiberupdates; der Treiber kommt mit dem Plugin-Satz des Kernels.",
+        "Kein Desktop-/Xorg-Treiber, keine OpenGL-/Vulkan-Laufzeit, kein CUDA-Entwicklungs-SDK.",
+        "Bau und Laden sind nur ohne echte Karte geprüft; CUDA und NVENC auf echter Hardware sind ungetestet.",
+        "Mit dem neuen Kernel (Kernel-Wahl „Neu“) gibt es das Plugin nur, wenn die Reihe 580 diesen Kernel unterstützt."
+      ],
+      "footprint": "Das Abbild bleibt auf dem Daten-Volume. RAM belegen das geladene Modul, Bibliotheken der laufenden Container und der Dateicache; nicht gemessen."
+    },
+    "en": {
+      "when": "When an older NVIDIA graphics card (Maxwell, Pascal or Volta) is in the NAS and containers should use it for transcoding (e.g. Plex, Jellyfin), CUDA or AI. Cards from Turing on (RTX 20 and newer, GTX 16) use the \"NVIDIA\" plugin with the open modules. A card that is only passed through to a VM needs no plugin.",
+      "hardware": [
+        "Maxwell: e.g. GTX 750/750 Ti, GTX 950–980 Ti, GTX Titan X, Quadro M",
+        "Pascal: e.g. GT 1030, GTX 1050–1080 Ti, Titan X/Xp, Quadro P, Tesla P4/P40/P100",
+        "Volta: Titan V, Quadro GV100, Tesla V100",
+        "Detected are NVIDIA display devices with PCI device IDs from 1300 to 1DFF, without a bound driver",
+        "Not supported: Kepler (GTX 600/700) and older; the 470 branch is discontinued and not released for kernel 6.12"
+      ],
+      "changes": "Loads NVIDIA's proprietary kernel module of the 580 branch and starts titanos-nvidia.service, which creates the CDI devices for Docker in RAM. Brings CUDA and NVENC/NVDEC libraries, NVML, nvidia-smi and the Container Toolkit. Cannot be enabled together with the \"NVIDIA\" plugin.",
+      "limits": [
+        "Proprietary driver: NVIDIA maintains the 580 branch as the last one for these cards; NVIDIA decides when it stops receiving updates.",
+        "No build on the NAS (Prepare driver) and no separate driver updates; the driver comes with the kernel's plugin set.",
+        "No desktop/Xorg driver, no OpenGL/Vulkan runtime, no CUDA development SDK.",
+        "Build and loading are only checked without a real card; CUDA and NVENC on real hardware are untested.",
+        "With the new kernel (kernel choice \"New\") the plugin exists only if the 580 branch supports that kernel."
+      ],
+      "footprint": "The image stays on the data volume. RAM is used by the loaded module, the libraries of running containers and the file cache; not measured."
+    }
+  },
+  "hardware": [
+    {
+      "modalias": "pci:v000010DEd00001[3-9A-D]*sv*sd*bc03sc*i*",
+      "unbound": true
+    }
+  ]
+}

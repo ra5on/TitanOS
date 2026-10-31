@@ -43,6 +43,34 @@ neue Platte wird wie beim Hinzufügen geprüft und partitioniert; scheitert
 `identity`), `POST /api/v1/storage/disks/{disk}/identify` (`seconds`, 5–120).
 Sonst die vorhandenen Routen zum Hinzufügen und Entfernen.
 
+## Tempo beim Wiederaufbau
+
+Seit 0.41.0 zeigt jede Volume-Karte eines mdadm-Volumes mit Redundanz (RAID 1,
+5, 6, 10) die Zeile **Tempo beim Wiederaufbau** mit drei Stufen. Sie gilt für
+Wiederaufbau, ersten Abgleich und RAID-Prüfung und wirkt sofort, auch auf einen
+laufenden Vorgang:
+
+| Stufe | `sync_speed_min` / `sync_speed_max` (KiB/s je Platte) | Wirkung |
+|---|---|---|
+| Schonend | 1000 / 30000 | NAS bleibt flott, das RAID ist länger ohne volle Ausfallsicherheit |
+| Normal (ab Werk) | `system` / `system` (Kernel: 1000 / 200000) | schnell bei Ruhe, langsamer bei Nutzung |
+| Schnell | 50000 / 2000000 | mindestens etwa 50 MB/s auch unter Last, Zugriffe solange langsamer |
+
+Gespeichert wird die Stufe in `/config/storage/volumes.json` als `syncSpeed`
+(`gentle`/`fast`, Normal ohne Eintrag); ältere Versionen ignorieren das Feld und
+lassen die Kernelwerte. titand schreibt nur in `/sys/block/mdX/md/` dieses
+Arrays, nie in die globalen `/proc/sys/dev/raid`-Werte. Setzt udev das Array
+nach einem Neustart neu zusammen, vergisst der Kernel die Werte; titand sieht
+das an der fehlenden Markierung `(local)` und setzt sie erneut. Im
+Entwicklungsmodus bleibt sysfs unberührt. API:
+`PUT /api/v1/storage/volumes/{name}/sync-speed` mit `{"speed":"gentle"|"normal"|"fast"}`;
+`GET /api/v1/storage` nennt die Stufe je Volume als `syncSpeed`.
+
+Geprüft mit künstlichem sysfs (`syncspeed_test.go`: Schreiben, Speichern,
+erneutes Setzen nach Zusammensetzen, Normal, RAID 0, Entwicklungsmodus) und
+Screenshots mit Testdaten. **Nicht geprüft:** echte Arrays und gemessene
+Geschwindigkeiten.
+
 ## Prüfstand
 
 Mit nachgebautem `lsblk`/`mdadm` und künstlichem sysfs geprüft

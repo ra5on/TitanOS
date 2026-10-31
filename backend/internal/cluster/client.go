@@ -131,7 +131,8 @@ func (m *Manager) call(ctx context.Context, n Node, method, path, user string, i
 // try runs send against the addresses of n in turn. A connection error
 // moves on to the next address; an answer, also an error, ends.
 func (m *Manager) try(ctx context.Context, n Node, send func(context.Context, string) (*http.Response, error), out any) error {
-	var lastErr error = ErrUnreachable
+	lastErr := ErrUnreachable
+	restarting := false
 	for _, address := range m.candidates(n) {
 		res, err := send(ctx, address)
 		if err != nil {
@@ -139,6 +140,7 @@ func (m *Manager) try(ctx context.Context, n Node, send func(context.Context, st
 				return ctx.Err()
 			}
 			lastErr = err
+			restarting = restarting || refused(err)
 			continue
 		}
 		m.reached(n.ID, address)
@@ -152,6 +154,9 @@ func (m *Manager) try(ctx context.Context, n Node, send func(context.Context, st
 		return json.NewDecoder(io.LimitReader(res.Body, 64<<20)).Decode(out)
 	}
 	slog.Debug("cluster: node not reached", "node", n.Name, "err", lastErr)
+	if restarting {
+		return fmt.Errorf("%w: %v", ErrRestarting, lastErr)
+	}
 	return fmt.Errorf("%w: %v", ErrUnreachable, lastErr)
 }
 

@@ -28,10 +28,10 @@
 		display: flex;
 		justify-content: space-between;
 		gap: 12px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.row span {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	input {
 		width: 100%;

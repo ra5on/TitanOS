@@ -22,7 +22,7 @@ func webSession(r *http.Request) bool {
 	if _, ok := r.Context().Value(apiTokenIdentity{}).(string); ok {
 		return false
 	}
-	_, agent := r.Context().Value(agentIdentity{}).(string)
+	_, agent := r.Context().Value(inProcessIdentity{}).(string)
 	return !agent
 }
 

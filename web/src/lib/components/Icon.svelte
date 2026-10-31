@@ -69,6 +69,17 @@
 		terminal: 'M4 5h16v14H4ZM8 10l3 2-3 2M13 15h3',
 		keyboard: 'M3 7h18v10H3ZM7 10h.01M11 10h.01M15 10h.01M8 14h8',
 		monitor: 'M3 4h18v12H3ZM8 20h8M12 16v4',
+		// Marks for dashboard tiles: a memory module, a graphics card with its
+		// fan, a chip with a small network for an NPU.
+		memory:
+			'M3 7h18v9H3ZM6 16v3M9.5 16v3M14.5 16v3M18 16v3M6 10h3v3H6ZM10.5 10h3v3h-3ZM15 10h3v3h-3Z',
+		gpu: 'M2 6h20v11H2ZM2 4v2M6 17v3h7v-3M15.5 8.5a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM15.5 11.5h.01M5 9.5h4M5 13h4',
+		npu: 'M6 6h12v12H6ZM9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3M9.5 9.5l5 1.5-2.5 3.5ZM9.5 9.5h.01M14.5 11h.01M12 14.5h.01',
+		// Neutral marks for operating systems of VMs, drawn for TitanOS (no
+		// vendor logos): a window with four panes and a penguin.
+		windows: 'M4 4h16v16H4ZM12 4v16M4 12h16',
+		linux:
+			'M12 3c-2.4 0-3.8 1.9-3.8 4.3 0 1.5-.6 2.5-1.6 4C5.3 13.2 4.7 15.2 5.2 17.3 5.7 19.4 8 21 12 21s6.3-1.6 6.8-3.7c.5-2.1-.1-4.1-1.4-6-1-1.5-1.6-2.5-1.6-4C15.8 4.9 14.4 3 12 3ZM9.6 12.5c-.3 3.3.6 6.2 2.4 6.2s2.7-2.9 2.4-6.2M10.6 7h.01M13.4 7h.01M11 9.2l1 .9 1-.9',
 		eye: 'M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12ZM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z',
 		undo: 'M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3',
 		redo: 'M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3',

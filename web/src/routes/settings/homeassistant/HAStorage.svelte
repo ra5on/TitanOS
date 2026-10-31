@@ -5,7 +5,7 @@
 	// and watches the backups.
 	import { api } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
-	import { formatDateTime } from '#lib/format.ts';
+	import { GB, formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 
 	type Usage = 'backup' | 'media' | 'share';
@@ -70,7 +70,7 @@
 			share: 'homeassistant',
 			existingShare: '',
 			folder: '',
-			quotaGiB: '',
+			quotaGB: '',
 			usage: 'backup' as Usage,
 			readOnly: false,
 			register: true,
@@ -141,7 +141,7 @@
 					account: form.account,
 					volume: form.volume,
 					share: form.share,
-					quotaGiB: Number(form.quotaGiB) || 0,
+					quotaBytes: Math.round((Number(form.quotaGB) || 0) * GB),
 					usage: form.usage,
 					readOnly,
 					register,
@@ -403,7 +403,7 @@
 							step="1"
 							inputmode="numeric"
 							placeholder={t('hastore.quotaNone')}
-							bind:value={form.quotaGiB}
+							bind:value={form.quotaGB}
 						/></label
 					>
 				{/if}
@@ -598,10 +598,10 @@
 <style>
 	.hint,
 	.account {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.small {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.warn {
 		color: var(--warn-text);
@@ -680,7 +680,7 @@
 	}
 	.usage legend {
 		margin-bottom: 6px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.folder-row {
 		display: flex;
@@ -708,7 +708,7 @@
 		grid-template-columns: max-content minmax(0, 1fr);
 		gap: 6px 16px;
 		margin: 0;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.values dt {
 		color: var(--muted);

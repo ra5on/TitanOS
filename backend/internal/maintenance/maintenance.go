@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/ra5on/TitanOS/backend/internal/retention"
 	"io/fs"
 	"reflect"
 	"regexp"
@@ -31,18 +32,24 @@ type Job struct {
 	Target            string `json:"target"`
 	Enabled           bool   `json:"enabled"`
 	Every             string `json:"every"`
-	Weekdays          []int  `json:"weekdays"`
-	MonthDay          int    `json:"monthDay"`
-	Time              string `json:"time"`
-	Missed            string `json:"missed"`
-	ReadData          int    `json:"readData"`
-	MaxBytes          uint64 `json:"maxBytes"`
-	MaxFiles          int    `json:"maxFiles"`
-	Keep              int    `json:"keep"`
-	AllowPrune        bool   `json:"allowPrune"`
+	// EveryHours is the distance of "hours" jobs (1 to 168), counted from
+	// Time each day.
+	EveryHours int    `json:"everyHours,omitempty"`
+	Weekdays   []int  `json:"weekdays"`
+	MonthDay   int    `json:"monthDay"`
+	Time       string `json:"time"`
+	Missed     string `json:"missed"`
+	ReadData   int    `json:"readData"`
+	MaxBytes   uint64 `json:"maxBytes"`
+	MaxFiles   int    `json:"maxFiles"`
+	Keep       int    `json:"keep"`
+	AllowPrune bool   `json:"allowPrune"`
 	// LockDays keeps each snapshot of a snapshot job from being deleted for
 	// that many days (0 to 365); older versions ignore it.
 	LockDays int `json:"lockDays,omitempty"`
+	// Versions picks which snapshots stay by day, week and month (0.41.0,
+	// see internal/retention); Keep stays the count older versions use.
+	Versions *retention.Keep `json:"versions,omitempty"`
 }
 type Settings struct {
 	BackupsFirst bool   `json:"backupsFirst,omitempty"`
@@ -52,7 +59,18 @@ type Settings struct {
 	WindowFrom   string `json:"windowFrom"`
 	WindowTo     string `json:"windowTo"`
 	Jobs         []Job  `json:"jobs"`
+	// LaterJobs holds, on the stick only, jobs of kinds that versions before
+	// 0.41.0 do not know (smart-short): they would refuse the whole file.
+	// Merged into Jobs when loaded.
+	LaterJobs []Job `json:"laterJobs,omitempty"`
 }
+
+// laterKinds came after 0.40.0; see Settings.LaterJobs. Jobs every few
+// hours ("hours") are later too.
+var laterKinds = []string{"smart-short"}
+
+func laterJob(j Job) bool { return slices.Contains(laterKinds, j.Kind) || j.Every == "hours" }
+
 type State struct {
 	Running     bool       `json:"running"`
 	Blocked     bool       `json:"blocked"`
@@ -116,6 +134,8 @@ func (m *Manager) Load() error {
 	} else if err != nil {
 		return err
 	}
+	s.Jobs = append(s.Jobs, s.LaterJobs...)
+	s.LaterJobs = nil
 	for i := range s.Jobs {
 		if value := s.Jobs[i].DependencyEnabled; value != nil {
 			s.Jobs[i].Enabled = *value
@@ -153,11 +173,14 @@ func validate(s Settings) error {
 			return errors.New("invalid maintenance job")
 		}
 		ids[j.ID] = true
-		if !slices.Contains([]string{"raid-check", "smart-long", "backup-check", "restore-probe", "snapshot"}, j.Kind) || !slices.Contains([]string{"daily", "weekly", "monthly"}, j.Every) || !slices.Contains([]string{"window", "skip"}, j.Missed) {
+		if !slices.Contains([]string{"raid-check", "smart-short", "smart-long", "backup-check", "restore-probe", "snapshot"}, j.Kind) || !slices.Contains([]string{"hours", "daily", "weekly", "monthly"}, j.Every) || !slices.Contains([]string{"window", "skip"}, j.Missed) {
 			return errors.New("invalid maintenance schedule")
 		}
 		if _, ok := clock(j.Time); !ok {
 			return errors.New("invalid job time")
+		}
+		if j.Every == "hours" && (j.EveryHours < 1 || j.EveryHours > 168) {
+			return errors.New("invalid job interval")
 		}
 		if j.Every == "weekly" && (len(j.Weekdays) == 0 || len(j.Weekdays) > 7) {
 			return errors.New("choose weekdays")
@@ -181,6 +204,9 @@ func validate(s Settings) error {
 		}
 		if j.Kind == "snapshot" && (j.Keep < 1 || !j.AllowPrune) {
 			return errors.New("snapshot retention must be confirmed")
+		}
+		if v := j.Versions; v != nil && (j.Kind != "snapshot" || v.Mode != "" || v.WhenFull != "" || retention.Check(*v) != nil) {
+			return errors.New("invalid snapshot versions")
 		}
 	}
 	for _, j := range s.Jobs {
@@ -248,6 +274,15 @@ func (m *Manager) Set(s Settings) error {
 			j.Enabled = false
 		}
 	}
+	all := persistedSettings.Jobs
+	persistedSettings.Jobs, persistedSettings.LaterJobs = []Job{}, nil
+	for _, j := range all {
+		if laterJob(j) {
+			persistedSettings.LaterJobs = append(persistedSettings.LaterJobs, j)
+		} else {
+			persistedSettings.Jobs = append(persistedSettings.Jobs, j)
+		}
+	}
 	if err := m.store.WriteJSON(settingsFile, persistedSettings); err != nil {
 		return err
 	}
@@ -266,6 +301,16 @@ func (m *Manager) Set(s Settings) error {
 func slots(j Job, now time.Time, loc *time.Location) (previous, next *time.Time) {
 	local := now.In(loc)
 	minute, _ := clock(j.Time)
+	if j.Every == "hours" && j.EveryHours > 0 {
+		// Every N hours from Time on a fixed grid, counted from a day in
+		// the past, so that the times do not move when titand restarts.
+		step := time.Duration(j.EveryHours) * time.Hour
+		anchor := time.Date(local.Year(), local.Month(), local.Day()-14, minute/60, minute%60, 0, 0, loc)
+		n := now.Sub(anchor) / step
+		prev := anchor.Add(n * step).UTC()
+		nxt := anchor.Add((n + 1) * step).UTC()
+		return &prev, &nxt
+	}
 	for offset := -32; offset <= 62; offset++ {
 		day := local.AddDate(0, 0, offset)
 		if j.Every == "weekly" && !slices.Contains(j.Weekdays, int(day.Weekday())) {

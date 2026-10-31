@@ -35,10 +35,10 @@ func TestVolumePasswordRoutesNeedABrowserSession(t *testing.T) {
 	if code != http.StatusForbidden {
 		t.Fatalf("encrypted create in-process: %d %s", code, answer)
 	}
-	for _, route := range apiRouteList() {
+	for _, route := range publicRoutes {
 		for _, secret := range []string{"/unlock", "/lock", "/passwords", "/luks-header"} {
-			if strings.Contains(route, "/storage/") && strings.Contains(route, secret) {
-				t.Fatalf("assistant catalog offers %s", route)
+			if strings.Contains(route.Path, "/storage/") && strings.Contains(route.Path, secret) {
+				t.Fatalf("public API offers %s", route.Path)
 			}
 		}
 	}

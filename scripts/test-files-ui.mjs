@@ -182,7 +182,7 @@ try {
 
  // Account persistence must survive a completely new browser context.
  await page.getByRole('button',{name:'Große Symbole',exact:true}).click();
- await page.getByText('Einstellungen werden im Benutzerkonto gespeichert …',{exact:true}).waitFor({state:'hidden'});
+ await page.getByText('Einstellungen werden in deinem Konto gespeichert …',{exact:true}).waitFor({state:'hidden'});
  await page.waitForFunction(()=>document.querySelector('.file-entries img')?.naturalWidth>0);
  await page.screenshot({path:out+'/large-icons.png',fullPage:true});
  const second=await context();await second.page.goto(base+'/files');
@@ -192,7 +192,7 @@ try {
  await second.ctx.close();
  failPreferences=true;
  await page.getByRole('button',{name:'Kleine Symbole',exact:true}).click();
- await page.getByText('Die Änderungen sind noch nicht im Benutzerkonto gespeichert. Bitte erneut versuchen.',{exact:false}).waitFor();
+ await page.getByText('Die Änderungen sind noch nicht in deinem Konto gespeichert. Bitte erneut versuchen.',{exact:false}).waitFor();
  failPreferences=false;await page.getByRole('button',{name:'Erneut versuchen',exact:true}).click();
  await page.waitForFunction(()=>!document.querySelector('[role="alert"]'));
  await page.screenshot({path:out+'/small-icons.png',fullPage:true});
@@ -305,7 +305,7 @@ try {
  await fp.getByRole('button',{name:'Backup',exact:true}).click();await fp.getByText('Datei2.txt',{exact:true}).waitFor();
  assert.equal(await fp.getByText('.env',{exact:true}).count(),0);
  await fp.getByRole('button',{name:'Ansicht',exact:true}).click();await fp.getByLabel('Versteckte Dateien anzeigen',{exact:true}).check();await fp.getByText('.env',{exact:true}).waitFor();
- await fp.getByText('Einstellungen werden im Benutzerkonto gespeichert …',{exact:true}).waitFor({state:'hidden'});
+ await fp.getByText('Einstellungen werden in deinem Konto gespeichert …',{exact:true}).waitFor({state:'hidden'});
  await fp.reload();await fp.getByText('.env',{exact:true}).waitFor();
  await fp.getByRole('checkbox',{name:'Ordner auswählen',exact:true}).check();
  await fp.getByRole('checkbox',{name:'Datei2.txt auswählen',exact:true}).check();
@@ -351,7 +351,7 @@ try {
  await secondary.getByRole('checkbox',{name:'USB-Inhalt.txt auswählen',exact:true}).check();assert.equal(await np.getByRole('button',{name:'← Nach links verschieben',exact:true}).isDisabled(),true);
  assert.equal(await np.getByRole('button',{name:'← Nach links kopieren',exact:true}).isEnabled(),true);
  await np.screenshot({path:out+'/two-folders.png',fullPage:true});assert.ok(await np.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
- await np.getByText('Einstellungen werden im Benutzerkonto gespeichert …',{exact:true}).waitFor({state:'hidden'});await np.reload();await np.getByRole('region',{name:'Rechter Ordner',exact:true}).waitFor();
+ await np.getByText('Einstellungen werden in deinem Konto gespeichert …',{exact:true}).waitFor({state:'hidden'});await np.reload();await np.getByRole('region',{name:'Rechter Ordner',exact:true}).waitFor();
  await np.getByRole('button',{name:'Zwei Ordner anzeigen',exact:true}).click();
  await np.getByRole('button',{name:'Papierkorb',exact:true}).click();await np.getByLabel('Alle gelöschten Dateien',{exact:true}).check();
  await np.getByText('Backup/Fotos/a.txt',{exact:true}).waitFor();await np.getByLabel('Sortieren nach',{exact:true}).selectOption('size');
@@ -362,18 +362,18 @@ try {
  await np.locator('dialog').getByRole('button',{name:'Wiederherstellen',exact:true}).click();await np.getByRole('dialog').waitFor({state:'hidden'});assert.deepEqual(trashRestores.at(-1).paths,['tester/Fotos/a.txt']);
  await np.getByRole('button',{name:'Zurück zu den Dateien',exact:true}).click();
  const input=np.locator('input[type=file]:not([webkitdirectory])').first();const uploadFile={name:'Datei2.txt',mimeType:'text/plain',buffer:Buffer.from('new file')};
- await input.setInputFiles(uploadFile);await np.getByRole('dialog',{name:'Upload prüfen'}).waitFor();await np.getByText('Ziel, Speicherplatz und Namenskonflikte werden geprüft …',{exact:true}).waitFor({state:'hidden'});
- assert.equal(uploadStarts.length,0);await np.locator('dialog select').selectOption('replace');assert.equal(await np.getByRole('button',{name:'Upload starten',exact:true}).isDisabled(),true);
+ await input.setInputFiles(uploadFile);await np.getByRole('dialog',{name:'Hochladen prüfen'}).waitFor();await np.getByText('Ziel, Speicherplatz und Namenskonflikte werden geprüft …',{exact:true}).waitFor({state:'hidden'});
+ assert.equal(uploadStarts.length,0);await np.locator('dialog select').selectOption('replace');assert.equal(await np.getByRole('button',{name:'Hochladen starten',exact:true}).isDisabled(),true);
  await np.getByLabel('Ich bestätige das Ersetzen der ausgewählten vorhandenen Dateien.',{exact:true}).check();await np.screenshot({path:out+'/upload-review.png',fullPage:true});
- await np.getByRole('button',{name:'Upload starten',exact:true}).click();await np.getByRole('dialog').waitFor({state:'hidden'});await np.waitForTimeout(100);
+ await np.getByRole('button',{name:'Hochladen starten',exact:true}).click();await np.getByRole('dialog').waitFor({state:'hidden'});await np.waitForTimeout(100);
  assert.equal(uploadStarts.at(-1).conflict,'replace');assert.equal(uploadStarts.at(-1).root,'share/Backup');
- freeFixture=1;await input.setInputFiles(uploadFile);await np.getByText('Für diese Auswahl ist nicht genug freier Speicher verfügbar.',{exact:true}).waitFor();assert.equal(await np.getByRole('button',{name:'Upload starten',exact:true}).isDisabled(),true);await np.locator('dialog').getByRole('button',{name:'Abbrechen',exact:true}).click();freeFixture=1e9;
- await input.setInputFiles(uploadFile);await np.locator('dialog select').waitFor();await np.locator('dialog select').selectOption('skip');assert.equal(await np.getByRole('button',{name:'Upload starten',exact:true}).isDisabled(),true);await np.locator('dialog').getByRole('button',{name:'Abbrechen',exact:true}).click();
+ freeFixture=1;await input.setInputFiles(uploadFile);await np.getByText('Für diese Auswahl ist nicht genug freier Speicher verfügbar.',{exact:true}).waitFor();assert.equal(await np.getByRole('button',{name:'Hochladen starten',exact:true}).isDisabled(),true);await np.locator('dialog').getByRole('button',{name:'Abbrechen',exact:true}).click();freeFixture=1e9;
+ await input.setInputFiles(uploadFile);await np.locator('dialog select').waitFor();await np.locator('dialog select').selectOption('skip');assert.equal(await np.getByRole('button',{name:'Hochladen starten',exact:true}).isDisabled(),true);await np.locator('dialog').getByRole('button',{name:'Abbrechen',exact:true}).click();
  await next.ctx.close();
 
  toolsFeature=true;filePrefs.owner={};const toolsContext=await context();const tp=toolsContext.page;await tp.goto(base+'/files');await tp.getByText('Backup.zip',{exact:true}).waitFor();
  const searchBefore=searches.length;await tp.getByRole('button',{name:'Werkzeuge',exact:true}).click();await tp.getByRole('menuitem',{name:'Unterordner durchsuchen',exact:true}).click();assert.equal(searches.length,searchBefore);
- await tp.getByLabel('Dateiname enthält',{exact:true}).fill('notiz');await tp.getByLabel('Dateityp / Endung',{exact:true}).fill('txt');await tp.getByLabel('Mindestens (MiB)',{exact:true}).fill('0.00001');
+ await tp.getByLabel('Dateiname enthält',{exact:true}).fill('notiz');await tp.getByLabel('Dateityp / Endung',{exact:true}).fill('txt');await tp.getByLabel('Mindestens (MB)',{exact:true}).fill('0.00001');
  await tp.getByRole('button',{name:'Suche starten',exact:true}).click();await tp.getByText('Backup/Ordner/notiz.txt',{exact:true}).waitFor();assert.equal(searches.at(-1).query,'notiz');assert.equal(searches.at(-1).extension,'txt');assert.ok(searches.at(-1).minSize>0);
  await tp.screenshot({path:out+'/recursive-search.png',fullPage:true});await tp.locator('dialog').getByRole('button',{name:'Ordner öffnen',exact:true}).click();await tp.getByText('notiz.txt',{exact:true}).waitFor();
  await tp.getByRole('button',{name:'Eine Ebene höher',exact:true}).click();await tp.getByText('Datei2.txt',{exact:true}).waitFor();
@@ -393,8 +393,8 @@ try {
  filePrefs.owner={};const newest=await context();const qp=newest.page;await qp.goto(base+'/files');await qp.getByText('Datei2.txt',{exact:true}).waitFor();
  await qp.getByRole('button',{name:'Pausieren',exact:true}).click();await qp.getByText('Pausiert',{exact:true}).waitFor();assert.equal(controls.at(-1).paused,true);
  await Promise.all([qp.waitForResponse(r=>r.url().endsWith('/files/jobs')&&r.status()===200),qp.getByLabel('Priorität',{exact:true}).selectOption('2')]);
- assert.equal(controls.at(-1).priority,2);assert.equal(await qp.getByLabel('Priorität',{exact:true}).inputValue(),'2');await qp.getByLabel('Limit in MiB/s',{exact:true}).fill('12');await Promise.all([qp.waitForResponse(r=>r.url().endsWith('/files/jobs')&&r.status()===200),qp.getByLabel('Limit in MiB/s',{exact:true}).press('Tab')]);
- await qp.getByRole('button',{name:'Fortsetzen',exact:true}).click();await qp.getByRole('button',{name:'Pausieren',exact:true}).waitFor();assert.equal(controls.at(-1).paused,false);assert.equal(controls.at(-1).rate,12*1048576);
+ assert.equal(controls.at(-1).priority,2);assert.equal(await qp.getByLabel('Priorität',{exact:true}).inputValue(),'2');await qp.getByLabel('Limit in MB/s',{exact:true}).fill('12');await Promise.all([qp.waitForResponse(r=>r.url().endsWith('/files/jobs')&&r.status()===200),qp.getByLabel('Limit in MB/s',{exact:true}).press('Tab')]);
+ await qp.getByRole('button',{name:'Fortsetzen',exact:true}).click();await qp.getByRole('button',{name:'Pausieren',exact:true}).waitFor();assert.equal(controls.at(-1).paused,false);assert.equal(controls.at(-1).rate,12e6);
  await qp.screenshot({path:out+'/transfer-controls.png',fullPage:true});
  const scans=usageCalls.length;await qp.getByRole('button',{name:'Werkzeuge',exact:true}).click();await qp.getByRole('menuitem',{name:'Speicherverbrauch analysieren',exact:true}).click();assert.equal(usageCalls.length,scans);await qp.getByRole('button',{name:'Analyse starten',exact:true}).click();await qp.locator('dialog').getByText('Ordner/notiz.txt',{exact:true}).waitFor();assert.equal(usageCalls.at(-1).root,'share/Backup');await qp.screenshot({path:out+'/storage-analysis.png',fullPage:true});await qp.locator('dialog').getByRole('button',{name:'Schließen',exact:true}).click();
  await qp.getByRole('checkbox',{name:'Datei2.txt auswählen',exact:true}).check();await qp.getByRole('checkbox',{name:'Ordner auswählen',exact:true}).check();await qp.getByRole('button',{name:'Herunterladen',exact:true}).click();await qp.getByLabel('Archivname (.zip)',{exact:true}).fill('../bad.zip');assert.equal(await qp.locator('dialog').getByRole('button',{name:'Herunterladen',exact:true}).isDisabled(),true);await qp.getByLabel('Archivname (.zip)',{exact:true}).fill('Meine-Sicherung.zip');await qp.screenshot({path:out+'/download-preview.png',fullPage:true});
@@ -412,7 +412,7 @@ try {
  await ep.getByRole('button',{name:'Zwei Ordner anzeigen',exact:true}).click();await ep.getByRole('region',{name:'Rechter Ordner',exact:true}).getByRole('combobox').selectOption('volume/backup');await ep.getByRole('button',{name:'Werkzeuge',exact:true}).click();await ep.getByRole('menuitem',{name:'Ordner vergleichen',exact:true}).click();await ep.getByRole('button',{name:'Vergleich starten',exact:true}).click();await ep.locator('dialog').getByRole('checkbox',{name:'Ordner/notiz.txt',exact:true}).check();await ep.locator('dialog').getByRole('checkbox',{name:'Datei2.txt',exact:true}).check();await ep.getByRole('button',{name:'Auswahl zum Kopieren prüfen',exact:true}).click();assert.equal(await ep.getByRole('button',{name:'Ausgewählte Dateien kopieren',exact:true}).isDisabled(),true);await ep.getByRole('checkbox',{name:'Ich bestätige das Ersetzen vorhandener Dateien.',exact:true}).check();await ep.screenshot({path:out+'/comparison-copy-review.png',fullPage:true});await ep.getByRole('button',{name:'Ausgewählte Dateien kopieren',exact:true}).click();await ep.getByRole('dialog').waitFor({state:'hidden'});assert.equal(copies.at(-1).choices['Ordner/notiz.txt'].target,'Ordner/notiz.txt');assert.equal(copies.at(-1).choices['Datei2.txt'].targetVersion,'right-v1');
  batchUpload=true;const uploadHeld=new Promise(resolve=>onUploadHeld=resolve);
  const folderUpload=resolvePath(out,'queue-folder');await mkdir(folderUpload,{recursive:true});await writeFile(folderUpload+'/first.txt',Buffer.alloc(9*1024*1024));await writeFile(folderUpload+'/second.txt','x');
- await ep.locator('input[webkitdirectory]').setInputFiles(folderUpload);await ep.getByRole('dialog',{name:'Upload prüfen',exact:true}).waitFor();await ep.getByRole('button',{name:'Upload starten',exact:true}).click();await ep.getByRole('dialog').waitFor({state:'hidden'});
+ await ep.locator('input[webkitdirectory]').setInputFiles(folderUpload);await ep.getByRole('dialog',{name:'Hochladen prüfen',exact:true}).waitFor();await ep.getByRole('button',{name:'Hochladen starten',exact:true}).click();await ep.getByRole('dialog').waitFor({state:'hidden'});
  await uploadHeld;await ep.getByRole('button',{name:'Alle Uploads pausieren',exact:true}).click();assert.equal(Object.keys(uploadData).length,1);releaseUpload();await ep.getByRole('button',{name:'Alle Uploads fortsetzen',exact:true}).click();await ep.locator('.panel .item .state.error').waitFor();await ep.screenshot({path:out+'/upload-queue.png',fullPage:true});await ep.getByRole('button',{name:'Fehlgeschlagene wiederholen',exact:true}).click();await ep.locator('.panel .item .state.ok').nth(1).waitFor();assert.equal(Object.keys(uploadData).length,2);assert.deepEqual(batchFinishes,['batch-0','batch-1']);assert.equal(batchChunks.filter(c=>c.id==='batch-0').length,Math.ceil(uploadData['batch-0'].size/(8*1024*1024)));assert.equal(uploadData['batch-0'].dir,'queue-folder');
 
  await extra.ctx.close();batchUpload=false;
@@ -466,7 +466,7 @@ try {
  {
  filePrefs.owner={};const current=await context();const cp=current.page;await cp.goto(base+'/files');await cp.getByText('Datei2.txt',{exact:true}).waitFor();
  await cp.getByRole('button',{name:'Ordner merken',exact:true}).click();await cp.getByRole('button',{name:'Ordner',exact:true}).click();await cp.getByText('notiz.txt',{exact:true}).waitFor();await cp.getByRole('button',{name:'Ordner merken',exact:true}).click();await cp.getByRole('button',{name:'Ansicht',exact:true}).click();await cp.getByRole('checkbox',{name:'Ansicht für diesen Ordner merken',exact:true}).check();await cp.getByRole('button',{name:'Große Symbole',exact:true}).click();await cp.getByRole('button',{name:'Eine Ebene höher',exact:true}).click();assert.equal(await cp.getByRole('button',{name:'Details',exact:true}).getAttribute('aria-pressed'),'true');
- await cp.getByRole('button',{name:'Favoriten verwalten',exact:true}).click();const labels=cp.getByRole('dialog').getByRole('textbox');await labels.nth(0).fill('Hauptablage');await labels.nth(1).fill('Meine Notizen');await cp.getByRole('button',{name:'„Meine Notizen“ nach oben',exact:true}).click();await cp.getByRole('button',{name:'Speichern',exact:true}).click();await cp.getByText('Einstellungen werden im Benutzerkonto gespeichert …',{exact:true}).waitFor({state:'hidden'});
+ await cp.getByRole('button',{name:'Favoriten verwalten',exact:true}).click();const labels=cp.getByRole('dialog').getByRole('textbox');await labels.nth(0).fill('Hauptablage');await labels.nth(1).fill('Meine Notizen');await cp.getByRole('button',{name:'„Meine Notizen“ nach oben',exact:true}).click();await cp.getByRole('button',{name:'Speichern',exact:true}).click();await cp.getByText('Einstellungen werden in deinem Konto gespeichert …',{exact:true}).waitFor({state:'hidden'});
  await cp.reload();await cp.locator('.favorite-row').first().getByRole('button',{name:'Meine Notizen',exact:true}).click();await cp.getByText('notiz.txt',{exact:true}).waitFor();assert.equal(await cp.getByRole('button',{name:'Große Symbole',exact:true}).getAttribute('aria-pressed'),'true');
  await cp.getByRole('button',{name:'Neu',exact:true}).click();await cp.getByRole('menuitem',{name:'Neue Datei',exact:true}).click();await cp.getByRole('dialog').getByRole('textbox').fill('MeineNotiz');await cp.getByRole('dialog').getByRole('combobox').selectOption('json');await cp.getByRole('button',{name:'Erstellen und bearbeiten',exact:true}).click();await cp.getByRole('dialog',{name:'Ordner/MeineNotiz.json bearbeiten',exact:true}).waitFor();assert.deepEqual(createdFiles.at(-1),{root:'share/Backup',path:'Ordner/MeineNotiz.json'});await cp.getByRole('button',{name:'Schließen',exact:true}).click();await cp.getByRole('button',{name:'Eine Ebene höher',exact:true}).click();await cp.getByText('Datei2.txt',{exact:true}).waitFor();
  await cp.getByRole('button',{name:'Auswahl',exact:true}).click();await cp.getByRole('button',{name:'Passende Einträge auswählen',exact:true}).click();assert.equal(await cp.locator('[data-file-name="Urlaub.JPG"] input').isChecked(),true);await cp.getByRole('button',{name:'Auswahl umkehren',exact:true}).click();assert.equal(await cp.locator('[data-file-name="Urlaub.JPG"] input').isChecked(),false);assert.equal(await cp.locator('[data-file-name="Datei2.txt"] input').isChecked(),true);
@@ -481,7 +481,7 @@ try {
  let order=await names();assert.ok(order.indexOf('Datei2.txt')<order.indexOf('Datei10.txt'));
  await p.getByRole('button',{name:'Größe, aufsteigend sortiert',exact:true}).click();await p.getByRole('button',{name:'Größe, absteigend sortiert',exact:true}).waitFor();
  order=await names();assert.ok(order.indexOf('Datei10.txt')<order.indexOf('Datei2.txt'));
- await p.getByText('Einstellungen werden im Benutzerkonto gespeichert …',{exact:true}).waitFor({state:'hidden'});assert.equal(filePrefs.owner.sort,'size');assert.equal(filePrefs.owner.descending,true);
+ await p.getByText('Einstellungen werden in deinem Konto gespeichert …',{exact:true}).waitFor({state:'hidden'});assert.equal(filePrefs.owner.sort,'size');assert.equal(filePrefs.owner.descending,true);
  await p.getByRole('button',{name:'Name',exact:true}).click();await p.getByRole('button',{name:'Name, aufsteigend sortiert',exact:true}).waitFor();
  await p.getByText('Urlaub.JPG',{exact:true}).dblclick();await p.locator('dialog img').waitFor();await p.keyboard.press('Escape');await p.clock.runFor(50);await p.getByRole('dialog').waitFor({state:'hidden'});
  assert.deepEqual(await p.locator('.row:not(.header) input:checked').count(),1);

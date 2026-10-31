@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { api } from '#lib/api.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import Rule321 from './Rule321.svelte';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { formatDateTime } from '#lib/format.ts';
 
@@ -153,6 +154,7 @@
 {#if config && !config.backup.settings.enabled}<p class="notice-warn">{t('safeguard.configOff')}</p>
 {:else if config && !config.backup.target}<p class="notice-warn">{t('stick.noVolume')}</p>{/if}
 
+<Rule321 jobs={jobs?.jobs} />
 <div class="actions">
 	<a class="btn" href="/settings/backups/coverage">{t('coverage.title')}</a><a
 		class="btn"

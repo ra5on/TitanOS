@@ -366,7 +366,7 @@ func (m *Manager) Format(ctx context.Context, id string, req FormatRequest) erro
 			m.operation.Unlock()
 		}
 	}()
-	if m.Busy != nil && m.Busy() {
+	if (m.Busy != nil && m.Busy()) || m.using() {
 		return ErrBusy
 	}
 	disks, _, err := m.Disks(ctx)
@@ -485,7 +485,7 @@ func (m *Manager) format(ctx context.Context, job *FormatJob, d Disk, req Format
 	if _, err := m.runner.Run(ctx, "", "mkfs."+req.Filesystem, mkfsArgs(req, d.Size, part)...); err != nil {
 		return "", err
 	}
-	m.runner.Run(ctx, "", "udevadm", "settle", "--timeout=10")
+	_, _ = m.runner.Run(ctx, "", "udevadm", "settle", "--timeout=10") // only waits for the kernel and udev; the next step checks the result
 	devices, err := m.List(ctx)
 	if err != nil {
 		return "", err
@@ -506,7 +506,7 @@ func (m *Manager) format(ctx context.Context, job *FormatJob, d Disk, req Format
 
 // newPartition waits for the kernel to show the partition sfdisk made.
 func (m *Manager) newPartition(ctx context.Context, disk string) (string, error) {
-	m.runner.Run(ctx, "", "udevadm", "settle", "--timeout=10")
+	_, _ = m.runner.Run(ctx, "", "udevadm", "settle", "--timeout=10") // only waits for the kernel and udev; the next step checks the result
 	for try := 0; ; try++ {
 		nodes, err := m.blockDevices(ctx, disk)
 		if err == nil && len(nodes) == 1 {

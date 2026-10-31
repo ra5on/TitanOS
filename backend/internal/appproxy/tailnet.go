@@ -390,7 +390,7 @@ func (t *Tailnet) ensure(ctx context.Context, volume string, w tailnetWant, key 
 		if err := os.MkdirAll(t.runDir, 0o700); err != nil {
 			return fail(err)
 		}
-		t.runner.Run(ctx, "", "systemctl", "reset-failed", tailnetUnit+id+".service")
+		_, _ = t.runner.Run(ctx, "", "systemctl", "reset-failed", tailnetUnit+id+".service") // cleanup, best effort: nothing more can be done if it fails
 		if _, err := t.runner.Run(ctx, "", "systemd-run", "--unit="+tailnetUnit+id, "--collect",
 			"--property=Restart=on-failure", "--property=RestartSec=5", "--property=UMask=0077",
 			"--setenv=TS_NO_LOGS_NO_SUPPORT=true",
@@ -439,14 +439,14 @@ func (t *Tailnet) ensure(ctx context.Context, volume string, w tailnetWant, key 
 			return fail(err)
 		}
 		st = tsStatus{}
-		json.Unmarshal([]byte(raw), &st)
+		_ = json.Unmarshal([]byte(raw), &st) // a value that cannot be read leaves the zero value, which the code handles
 	}
 	if st.BackendState != "Running" {
 		return &TailnetNode{State: "starting"}
 	}
 	if !strings.EqualFold(st.Self.HostName, w.name) {
 		// The name was changed in TitanOS: the device follows.
-		t.cmd(ctx, id, "set", "--hostname="+w.name)
+		_, _ = t.cmd(ctx, id, "set", "--hostname="+w.name) // the name is set again on the next check
 	}
 	dns := strings.TrimSuffix(strings.ToLower(st.Self.DNSName), ".")
 	node := &TailnetNode{State: "running", URL: "https://" + dns, dns: dns, ips: st.Self.TailscaleIPs}
@@ -472,7 +472,7 @@ func (t *Tailnet) ensure(ctx context.Context, volume string, w tailnetWant, key 
 
 // stop ends a device for now; it keeps its key and comes back with it.
 func (t *Tailnet) stop(ctx context.Context, id string) {
-	t.runner.Run(ctx, "", "systemctl", "stop", tailnetUnit+id+".service")
+	_, _ = t.runner.Run(ctx, "", "systemctl", "stop", tailnetUnit+id+".service") // cleanup, best effort: nothing more can be done if it fails
 	t.mu.Lock()
 	delete(t.served, id)
 	t.mu.Unlock()
@@ -481,7 +481,7 @@ func (t *Tailnet) stop(ctx context.Context, id string) {
 // forget lets a device leave the tailnet, ends it and removes its key.
 func (t *Tailnet) forget(ctx context.Context, volume, id string) {
 	if out, _ := t.runner.Run(ctx, "", "systemctl", "is-active", tailnetUnit+id+".service"); strings.TrimSpace(out) == "active" {
-		t.cmd(ctx, id, "logout")
+		_, _ = t.cmd(ctx, id, "logout") // cleanup, best effort: nothing more can be done if it fails
 	}
 	t.stop(ctx, id)
 	if volume != "" && validNodeID(id) {

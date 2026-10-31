@@ -109,12 +109,12 @@
 		border-bottom: 1px solid var(--border);
 	}
 	strong {
-		font-size: 0.85rem;
+		font-size: var(--text-base);
 		font-weight: 500;
 		overflow-wrap: anywhere;
 	}
 	.state {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	dl {
@@ -123,7 +123,7 @@
 		gap: 7px 12px;
 		margin: 0;
 		padding: 12px;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	dt {
 		min-width: 0;
@@ -139,6 +139,6 @@
 	a {
 		display: block;
 		padding: 0 12px 12px;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 </style>

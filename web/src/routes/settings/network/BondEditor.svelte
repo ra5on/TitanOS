@@ -106,6 +106,6 @@
 		padding: 0;
 	}
 	small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 </style>

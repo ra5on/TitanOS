@@ -92,13 +92,13 @@
 	}
 	.application span {
 		overflow-wrap: anywhere;
-		font-size: 0.85rem;
+		font-size: var(--text-base);
 	}
 	.check {
 		display: flex;
 		gap: 8px;
 		align-items: center;
-		font-size: 0.85rem;
+		font-size: var(--text-base);
 	}
 	legend {
 		font-weight: 600;

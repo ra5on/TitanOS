@@ -24,18 +24,34 @@
 		type Bandwidth,
 		type BandwidthForm,
 	} from '#lib/backup-bandwidth.ts';
-	import FolderTree from './FolderTree.svelte';
+	import FolderPicker from './FolderPicker.svelte';
+	import { selectionOfIn, shareOfIn, type Chosen } from './selection.ts';
+	import KeepVersions, { keepPayload, type Keep } from '#lib/components/KeepVersions.svelte';
 	import SnapshotFiles from './SnapshotFiles.svelte';
 	import SmbTargets, { type SmbTarget } from './SmbTargets.svelte';
 	import TargetPanel from './TargetPanel.svelte';
 	import ReplicationPanel from './ReplicationPanel.svelte';
-	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
-	import { askAbout, assistant } from '#lib/assistant.svelte.ts';
+	import { apiErrorText, errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 
-	type Kind = 'smb-copy' | 'usb-copy' | 'local' | 's3' | 'sftp' | 'rest' | 'titanos';
+	type Kind =
+		| 'smb-copy'
+		| 'usb-copy'
+		| 'local-copy'
+		| 'local'
+		| 'usb'
+		| 'smb'
+		| 's3'
+		| 'sftp'
+		| 'rest'
+		| 'titanos';
+	/** Where a backup goes, as the page offers it; the kind adds the format. */
+	type Place = 'local' | 'usb' | 'smb' | 'titanos' | 's3' | 'sftp' | 'rest';
+	const PLACES: Place[] = ['local', 'usb', 'smb', 'titanos', 's3', 'sftp', 'rest'];
 	type Destination = {
 		type: Kind;
 		deviceId?: string;
+		/** The drive's name when the job was saved, only for showing. */
+		deviceName?: string;
 		targetId?: string;
 		volume?: string;
 		folder?: string;
@@ -72,7 +88,12 @@
 		times?: string[];
 		windowFrom?: string;
 		windowTo?: string;
-		keep: { daily: number; weekly: number; monthly: number };
+		keep: Keep;
+		/** Options of a readable copy (0.41.0). */
+		copy?: { dated?: boolean; mirror?: boolean; mirrorDays?: number };
+		/** Whole volumes and folders outside shares ("volume/folder"). */
+		volumes?: string[];
+		places?: string[];
 		bandwidth?: Bandwidth;
 	};
 	type State = {
@@ -87,6 +108,8 @@
 		};
 		running: boolean;
 		phase: string;
+		/** Started, but waiting for another job to end. */
+		queued?: boolean;
 		percent: number;
 		bytesDone: number;
 		bytesTotal: number;
@@ -94,6 +117,8 @@
 		lastRun: string | null;
 		lastOK: string | null;
 		lastError: string;
+		/** A known cause of lastError, with a text under error.<code>. */
+		lastErrorCode?: string;
 		warning: string;
 		/** Links and special files (FIFOs, sockets, devices) the last run left out. */
 		skipped?: number;
@@ -218,7 +243,7 @@
 			monthDay: 1,
 			time: '02:30',
 			times: ['02:30'],
-			keep: { daily: 7, weekly: 4, monthly: 6 },
+			keep: { daily: 7, weekly: 4, monthly: 6, weeklyDay: 0 },
 		};
 		original = null;
 		loadSelection(draft);
@@ -237,6 +262,7 @@
 		// ApplicationSelection binds both; a bound prop may not be undefined.
 		draft.applications ??= [];
 		draft.allowStop ??= false;
+		draft.keep = { weeklyDay: 0, ...draft.keep };
 		if (!draft.weekdays?.length) draft.weekdays = [draft.weekday];
 		if (!draft.times?.length) draft.times = [draft.time];
 		original = { ...draft.destination };
@@ -262,39 +288,42 @@
 		};
 	});
 
-	type Mode = 'whole' | 'all' | 'only';
-	const EXTRAS = ['appdata', 'vms', 'config'] as const;
-	/** Per share: all of it, or with folders left out, or only some folders. */
-	let modes = $state<Record<string, Mode>>({});
+	const EXTRAS = ['appdata', 'vms', 'lxc', 'config'] as const;
 	let patterns = $state('');
 	let bandwidth = $state<BandwidthForm>(bandwidthForm());
+	/** What is saved, as one list of folders (decided 31.10.2026). */
+	let chosen = $state<Chosen[]>([]);
+	/** The row whose folder is being picked; -1 adds a new one. */
+	let picking = $state<number | null>(null);
 
+	const shareOf = (c: Chosen) => shareOfIn(overview?.shares ?? [], c);
 	function loadSelection(job: Job) {
-		modes = {};
+		const list: Chosen[] = [];
+		const volumeOf = (share: string) =>
+			overview?.shares.find((s) => s.name === share)?.volume ?? '';
 		for (const name of job.sources) {
-			modes[name] = job.folders?.[name]?.length
-				? 'only'
-				: job.skip?.some((skip) => skip.startsWith(`${name}/`))
-					? 'all'
-					: 'whole';
+			const volume = volumeOf(name);
+			const only = job.folders?.[name] ?? [];
+			if (only.length) for (const f of only) list.push({ volume, path: `${name}/${f}` });
+			else list.push({ volume, path: name });
 		}
+		for (const v of job.volumes ?? []) list.push({ volume: v, path: '' });
+		for (const place of job.places ?? []) {
+			const at = place.indexOf('/');
+			list.push({ volume: place.slice(0, at), path: place.slice(at + 1) });
+		}
+		chosen = list.length ? list : [{ volume: '', path: '' }];
 		patterns = (job.patterns ?? []).join('\n');
 		bandwidth = bandwidthForm(job.bandwidth);
 	}
 
-	function setMode(name: string, mode: Mode) {
-		if (!draft) return;
-		modes[name] = mode;
-		// What belongs to the other way of choosing is dropped.
-		if (mode !== 'only' && draft.folders) delete draft.folders[name];
-		if (mode !== 'all' && draft.skip)
-			draft.skip = draft.skip.filter((skip) => !skip.startsWith(`${name}/`));
-	}
+	const selectionOf = (list: Chosen[]) => selectionOfIn(overview?.shares ?? [], list);
 
-	function setFolders(name: string, folders: string[], skip: string[]) {
-		if (!draft) return;
-		draft.folders = { ...draft.folders, [name]: folders };
-		draft.skip = skip;
+	function pick(c: Chosen) {
+		if (picking === null) return;
+		if (picking < 0) chosen = [...chosen.filter((x) => x.volume), c];
+		else chosen[picking] = c;
+		picking = null;
 	}
 
 	function toggleExtra(extra: string) {
@@ -319,19 +348,6 @@
 	function toggleWindow(on: boolean) {
 		if (!draft) return;
 		[draft.windowFrom, draft.windowTo] = on ? ['01:00', '06:00'] : ['', ''];
-	}
-
-	function toggleSource(name: string) {
-		if (!draft) return;
-		const on = !draft.sources.includes(name);
-		draft.sources = on
-			? [...draft.sources, name]
-			: draft.sources.filter((source) => source !== name);
-		if (on) modes[name] = 'whole';
-		else {
-			setMode(name, 'whole');
-			delete modes[name];
-		}
 	}
 
 	/** A pairing code of another TitanOS: titanos-backup: and base64url JSON. */
@@ -367,7 +383,28 @@
 		}
 	}
 
-	const plainCopy = (kind: string) => kind === 'usb-copy' || kind === 'smb-copy';
+	const plainCopy = (kind: string) =>
+		kind === 'usb-copy' || kind === 'smb-copy' || kind === 'local-copy';
+	const placeOf = (kind: Kind): Place =>
+		kind === 'local-copy'
+			? 'local'
+			: kind === 'usb-copy'
+				? 'usb'
+				: kind === 'smb-copy'
+					? 'smb'
+					: kind;
+	/** Volume, drive and share offer a readable copy besides encrypted versions. */
+	const twoFormats = (place: Place) => place === 'local' || place === 'usb' || place === 'smb';
+	const kindOf = (place: Place, readable: boolean): Kind =>
+		readable && twoFormats(place) ? (`${place}-copy` as Kind) : place;
+	const fullTarget = (kind: Kind) =>
+		placeOf(kind) === 'usb'
+			? 'drive'
+			: placeOf(kind) === 'local'
+				? 'volume'
+				: placeOf(kind) === 'smb'
+					? 'share'
+					: 'storage';
 	function setKind(kind: Kind) {
 		if (!draft) return;
 		draft.destination.type = kind;
@@ -375,7 +412,7 @@
 			draft.applications = [];
 			draft.allowStop = false;
 			draft.extras = [];
-			draft.keep = { daily: 0, weekly: 0, monthly: 0 };
+			draft.copy ??= {};
 		}
 		if (kind === 'sftp') showKey();
 		if (kind === 'titanos') pairCode = '';
@@ -387,9 +424,24 @@
 			case 'smb-copy':
 				return { type: 'smb-copy', targetId: d.targetId, folder: d.folder };
 			case 'usb-copy':
-				return { type: 'usb-copy', deviceId: d.deviceId, folder: d.folder };
+				return {
+					type: 'usb-copy',
+					deviceId: d.deviceId,
+					deviceName: usbDrives.find((drive) => drive.id === d.deviceId)?.name ?? d.deviceName,
+					folder: d.folder,
+				};
 			case 'local':
-				return { type: 'local', volume: d.volume, folder: d.folder };
+			case 'local-copy':
+				return { type: d.type, volume: d.volume, folder: d.folder };
+			case 'usb':
+				return {
+					type: 'usb',
+					deviceId: d.deviceId,
+					deviceName: usbDrives.find((drive) => drive.id === d.deviceId)?.name ?? d.deviceName,
+					folder: d.folder,
+				};
+			case 'smb':
+				return { type: 'smb', targetId: d.targetId, folder: d.folder };
 			case 's3':
 				return {
 					type: 's3',
@@ -431,25 +483,17 @@
 			busy = false;
 			return;
 		}
-		const chosen = draft.sources.filter(
-			(name) => modes[name] === 'only' && !draft!.folders?.[name]?.length,
+		const selection = selectionOf(chosen);
+		// Left-out folders of shares that are no longer chosen go too.
+		const skip = (draft.skip ?? []).filter((entry) =>
+			selection.sources.includes(entry.split('/')[0]),
 		);
-		if (chosen.length > 0) {
-			error = { text: t('backup.noFolderChosen', { share: chosen[0] }), detail: '' };
-			busy = false;
-			return;
-		}
-		const folders = Object.fromEntries(
-			Object.entries(draft.folders ?? {}).filter(
-				([name, list]) => modes[name] === 'only' && list.length > 0,
-			),
-		);
-		const skip = (draft.skip ?? []).filter((entry) => modes[entry.split('/')[0]] === 'all');
 		const times = [...new Set((draft.times ?? []).filter(Boolean))].sort();
 		const weekdays = [...(draft.weekdays ?? [])].sort();
 		const job = {
 			...draft,
-			folders,
+			sources: selection.sources,
+			folders: selection.folders,
 			skip,
 			patterns: patterns
 				.split('\n')
@@ -467,11 +511,19 @@
 			windowTo: draft.windowFrom ? draft.windowTo || '' : '',
 			destination: destination(draft.destination),
 			bandwidth: bandwidthPayload(bandwidth),
-			keep: {
-				daily: Number(draft.keep.daily) || 0,
-				weekly: Number(draft.keep.weekly) || 0,
-				monthly: Number(draft.keep.monthly) || 0,
-			},
+			keep:
+				plainCopy(draft.destination.type) && !draft.copy?.dated
+					? { daily: 0, weekly: 0, monthly: 0 }
+					: keepPayload(draft.keep),
+			copy: plainCopy(draft.destination.type)
+				? {
+						dated: !!draft.copy?.dated,
+						mirror: !draft.copy?.dated && !!draft.copy?.mirror,
+						mirrorDays: draft.copy?.mirror ? Number(draft.copy.mirrorDays) || 30 : 0,
+					}
+				: undefined,
+			volumes: selection.volumes,
+			places: selection.places,
 		};
 		try {
 			apply(
@@ -620,7 +672,8 @@
 
 	function where(d: Destination): string {
 		if (d.type === 'smb-copy') return `${d.targetId} / ${d.folder}`;
-		if (d.type === 'usb-copy') return `${t('backup.kind.usb-copy')} ${d.deviceId} / ${d.folder}`;
+		if (d.type === 'usb-copy')
+			return `${t('backup.kind.usb-copy')} ${d.deviceName || d.deviceId} / ${d.folder}`;
 		switch (d.type) {
 			case 'local':
 				return `/mnt/${d.volume}/${d.folder}`;
@@ -720,7 +773,8 @@
 						<span class="mono">{where(job.destination)}</span>
 					</p>
 				</div>
-				{#if state.running}<span class="chip info"
+				{#if state.running && state.queued}<span class="chip">{t('backup.queued')}</span
+					>{:else if state.running}<span class="chip info"
 						>{t(`backup.phase.${state.phase}` as 'backup.phase.backup')}</span
 					>
 				{:else if view.stateKnown === false || state.statusError}<span class="chip warn"
@@ -792,15 +846,17 @@
 				<div>
 					<dt>{t('backup.keeps')}</dt>
 					<dd>
-						{plainCopy(job.destination.type)
-							? t('backup.copyRetain')
-							: job.keep.daily + job.keep.weekly + job.keep.monthly > 0
-								? t('backup.keepsText', {
-										daily: job.keep.daily,
-										weekly: job.keep.weekly,
-										monthly: job.keep.monthly,
-									})
-								: t('backup.keepsAll')}
+						{plainCopy(job.destination.type) && !job.copy?.dated
+							? t(job.copy?.mirror ? 'backup.copyMirror' : 'backup.copyRetain')
+							: job.keep.mode === 'rolling'
+								? t('backup.keepsRolling')
+								: job.keep.daily + job.keep.weekly + job.keep.monthly > 0
+									? t('backup.keepsText', {
+											daily: job.keep.daily,
+											weekly: job.keep.weekly,
+											monthly: job.keep.monthly,
+										})
+									: t('backup.keepsAll')}
 					</dd>
 				</div>
 			</dl>
@@ -808,15 +864,8 @@
 					class="notice-error"
 				>
 					{t('backup.lastError')}
+					{#if state.lastErrorCode}<p>{t(`error.${state.lastErrorCode}` as MessageKey)}</p>{/if}
 					<pre>{state.lastError}</pre>
-					{#if assistant.status?.available}<button
-							type="button"
-							class="btn"
-							onclick={() =>
-								askAbout(t('assistant.askBackup', { job: job.id }), [
-									{ name: `${job.id}-error.txt`, kind: 'text', text: state.lastError },
-								])}><Icon name="chat" size={14} />{t('assistant.ask')}</button
-						>{/if}
 				</div>{/if}
 			{#if !state.running && state.warning}<div class="notice-warn">
 					{t('backup.warning')}
@@ -936,85 +985,147 @@
 		{/if}
 		<fieldset>
 			<legend>{t('backup.sources')}</legend>
-			{#each overview.shares as share (share.name)}
-				<div class="source">
-					<div class="row">
-						<label class="check"
-							><input
-								type="checkbox"
-								checked={draft.sources.includes(share.name)}
-								onchange={() => toggleSource(share.name)}
-							/><span class="mono">{share.name}</span></label
-						>
-						{#if draft.sources.includes(share.name)}
-							<select
-								class="field narrow"
-								aria-label={t('backup.modeOf', { share: share.name })}
-								value={modes[share.name] ?? 'whole'}
-								onchange={(e) => setMode(share.name, e.currentTarget.value as Mode)}
-							>
-								<option value="whole">{t('backup.mode.whole')}</option>
-								<option value="all">{t('backup.mode.all')}</option>
-								<option value="only">{t('backup.mode.only')}</option>
-							</select>
-						{/if}
-					</div>
-					{#if draft.sources.includes(share.name) && modes[share.name] && modes[share.name] !== 'whole'}
-						<p class="muted">
-							{t(modes[share.name] === 'only' ? 'backup.onlyHint' : 'backup.allHint')}
-						</p>
-						<FolderTree
-							share={share.name}
-							mode={modes[share.name] as 'all' | 'only'}
-							folders={draft.folders?.[share.name] ?? []}
-							skip={draft.skip ?? []}
-							onchange={(folders, skip) => setFolders(share.name, folders, skip)}
-						/>
-					{/if}
+			<p class="muted small">{t('backup.pick.hint')}</p>
+			{#each chosen as c, i (i)}
+				<div class="picked">
+					<button
+						type="button"
+						class="field pickfield"
+						onclick={() => (picking = i)}
+						aria-label={t('backup.pick.change')}
+						>{#if c.volume}<Icon name="folder" />
+							<span class="mono"
+								>{c.volume}{c.path ? ' › ' + c.path.replaceAll('/', ' › ') : ''}</span
+							>{#if !c.path}<span class="muted small">{t('backup.pick.whole')}</span
+								>{:else if shareOf(c) && !shareOf(c)?.rest}<span class="chip"
+									>{t('backup.pick.share')}</span
+								>{/if}{:else}<span class="muted">{t('backup.pick.choose')}</span>{/if}</button
+					>
+					{#if chosen.length > 1 || c.volume}<button
+							type="button"
+							class="btn small"
+							aria-label={t('backup.pick.remove')}
+							onclick={() =>
+								(chosen =
+									chosen.length > 1
+										? chosen.filter((_, n) => n !== i)
+										: [{ volume: '', path: '' }])}><Icon name="close" /></button
+						>{/if}
 				</div>
 			{/each}
-			{#if !plainCopy(draft.destination.type)}<p class="legend-sub">{t('backup.extras')}</p>
-				<div class="row">
-					{#each EXTRAS as extra (extra)}
-						<label class="check"
-							><input
-								type="checkbox"
-								checked={draft.extras?.includes(extra)}
-								onchange={() => toggleExtra(extra)}
-							/><span>{t(`backup.extra.${extra}` as 'backup.extra.appdata')}</span></label
-						>
-					{/each}
-				</div>
-			{/if}{#if !plainCopy(draft.destination.type)}<ApplicationSelection
-					bind:applications={draft.applications}
-					bind:allowStop={draft.allowStop}
-				/>{/if}{#if draft.extras?.includes('config')}<p class="notice-warn">
-					{t('backup.extra.configHint')}
-				</p>{/if}
-			<label class="block"
-				><span>{t('backup.patterns')}</span>
-				<textarea class="field mono" rows="2" bind:value={patterns} placeholder="*.tmp"></textarea>
-			</label>
-			<p class="muted">
-				{t(plainCopy(draft.destination.type) ? 'backup.copyPatterns' : 'backup.patternsHint')}
-			</p>
+			<div>
+				<button type="button" class="btn small" onclick={() => (picking = -1)}
+					><Icon name="plus" /> {t('backup.pick.add')}</button
+				>
+			</div>
+			<p class="muted small">{t('backup.neverSaved')}</p>
+			<details class="more">
+				<summary>{t('backup.moreOptions')}</summary>
+				{#if !plainCopy(draft.destination.type)}<p class="legend-sub">{t('backup.extras')}</p>
+					<div class="row">
+						{#each EXTRAS as extra (extra)}
+							<label class="check"
+								><input
+									type="checkbox"
+									checked={draft.extras?.includes(extra)}
+									onchange={() => toggleExtra(extra)}
+								/><span>{t(`backup.extra.${extra}` as 'backup.extra.appdata')}</span></label
+							>
+						{/each}
+					</div>
+					{#if draft.extras?.includes('config')}<p class="notice-warn">
+							{t('backup.extra.configHint')}
+						</p>{/if}
+					<ApplicationSelection
+						bind:applications={draft.applications}
+						bind:allowStop={draft.allowStop}
+					/>
+				{/if}
+				{#if draft.skip?.length}
+					<p class="legend-sub">{t('backup.skipList')}</p>
+					<div class="row">
+						{#each draft.skip as entry (entry)}<span class="chip"
+								>{entry}
+								<button
+									type="button"
+									class="link"
+									aria-label={t('backup.pick.remove')}
+									onclick={() => (draft!.skip = draft!.skip!.filter((e) => e !== entry))}
+									><Icon name="close" size={12} /></button
+								></span
+							>{/each}
+					</div>
+				{/if}
+				<label class="block"
+					><span>{t('backup.patterns')}</span>
+					<textarea class="field mono" rows="2" bind:value={patterns} placeholder="*.tmp"
+					></textarea>
+				</label>
+				<p class="muted">
+					{t(plainCopy(draft.destination.type) ? 'backup.copyPatterns' : 'backup.patternsHint')}
+				</p>
+			</details>
 		</fieldset>
+		{#if picking !== null}<FolderPicker
+				volumes={overview.volumes ?? []}
+				shares={overview.shares}
+				start={picking >= 0 && chosen[picking]?.volume ? chosen[picking] : undefined}
+				onpick={pick}
+				onclose={() => (picking = null)}
+			/>{/if}
 		<fieldset class="divided">
 			<legend>{t('backup.destination')}</legend>
 			<div class="segments" role="radiogroup" aria-label={t('backup.destination')}>
-				{#each ['local', 'usb-copy', 'smb-copy', 'titanos', 's3', 'sftp', 'rest'] as const as kind (kind)}
+				{#each PLACES as place (place)}
+					{@const kind = kindOf(place, plainCopy(draft.destination.type))}
 					<button
 						type="button"
 						role="radio"
-						aria-checked={draft.destination.type === kind}
+						aria-checked={placeOf(draft.destination.type) === place}
 						disabled={!isNew && plainCopy(kind) !== plainCopy(draft.destination.type)}
-						onclick={() => setKind(kind)}>{t(`backup.kind.${kind}`)}</button
+						onclick={() => setKind(kind)}>{t(`backup.place.${place}` as MessageKey)}</button
 					>
 				{/each}
 			</div>
-			<p class="muted">{t(`backup.kindHint.${draft.destination.type}`)}</p>
-			{#if draft.destination.type === 'smb-copy'}
-				<span class="chip warn">{t('backup.beta')}</span>
+			{#if twoFormats(placeOf(draft.destination.type))}
+				{@const place = placeOf(draft.destination.type)}
+				<p class="muted">{t(`backup.placeHint.${place}` as MessageKey)}</p>
+				<div class="formats" role="radiogroup" aria-label={t('backup.format')}>
+					{#each [true, false] as readable (readable)}
+						{@const on = plainCopy(draft.destination.type) === readable}
+						<div class="format" class:on>
+							<label class="fhead"
+								><input
+									type="radio"
+									name="format"
+									checked={on}
+									disabled={!isNew && !on}
+									onchange={() => setKind(kindOf(place, readable))}
+								/><strong
+									>{t(readable ? 'backup.format.readable' : 'backup.format.encrypted')}</strong
+								></label
+							>
+							<span class="muted small"
+								>{t(readable ? 'backup.format.readableHint' : 'backup.format.encryptedHint')}</span
+							>
+							{#if readable && on}
+								<label class="dated"
+									><input
+										type="checkbox"
+										checked={!!draft.copy?.dated}
+										onchange={(e) =>
+											(draft!.copy = { ...draft!.copy, dated: e.currentTarget.checked })}
+									/><span class="small">{t('backup.copy.dated')}</span></label
+								>
+							{/if}
+						</div>
+					{/each}
+				</div>
+				{#if !isNew}<p class="muted small">{t('backup.format.fixed')}</p>{/if}
+			{:else}
+				<p class="muted">{t(`backup.kindHint.${draft.destination.type}` as MessageKey)}</p>
+			{/if}
+			{#if draft.destination.type === 'smb-copy' || draft.destination.type === 'smb'}
 				<label class="block"
 					><span>{t('backup.smb.target')}</span><select
 						class="field"
@@ -1034,7 +1145,7 @@
 						placeholder="backups/{draft.id}"
 					/></label
 				>
-			{:else if draft.destination.type === 'usb-copy'}
+			{:else if draft.destination.type === 'usb-copy' || draft.destination.type === 'usb'}
 				{#if usbError}<p class="notice-warn" role="alert">
 						{usbError}
 						<button type="button" class="btn small" onclick={loadUSB}>{t('ui.retry')}</button>
@@ -1048,7 +1159,9 @@
 						<option value="" disabled>–</option>
 						{#if draft.destination.deviceId && !usbDrives.some((d) => d.id === draft?.destination.deviceId)}<option
 								value={draft.destination.deviceId}
-								>{draft.destination.deviceId} · {t('backup.usbMissing')}</option
+								>{draft.destination.deviceName || draft.destination.deviceId} · {t(
+									'backup.usbMissing',
+								)}</option
 							>{/if}
 						{#each usbDrives.filter((d) => d.supported) as drive (drive.id)}<option value={drive.id}
 								>{drive.name} · {drive.id}</option
@@ -1062,7 +1175,7 @@
 						placeholder={`backups/${draft.id || 'name'}`}
 					/></label
 				>
-			{:else if draft.destination.type === 'local'}
+			{:else if draft.destination.type === 'local' || draft.destination.type === 'local-copy'}
 				<div class="row">
 					<label class="narrow"
 						><span>{t('backup.volume')}</span>
@@ -1427,39 +1540,63 @@
 				</p>
 			{/if}
 		</fieldset>
-		{#if !plainCopy(draft.destination.type)}<fieldset class="divided">
-				<legend>{t('backup.keeps')}</legend>
-				<div class="row">
-					<label class="tiny"
-						><span>{t('backup.keepDaily')}</span><input
-							class="field mono"
-							type="number"
-							min="0"
-							max="999"
-							bind:value={draft.keep.daily}
-						/></label
+		{#if plainCopy(draft.destination.type)}<fieldset class="divided">
+				<legend>{t('backup.copy.deleted')}</legend>
+				{#if draft.copy?.dated}
+					<p class="muted">{t('backup.copy.datedDeleted')}</p>
+				{:else}
+					<label class="check"
+						><input
+							type="radio"
+							name="deleted"
+							checked={!draft.copy?.mirror}
+							onchange={() => (draft!.copy = { ...draft!.copy, mirror: false })}
+						/><span>{t('backup.copy.keepDeleted')}</span></label
 					>
-					<label class="tiny"
-						><span>{t('backup.keepWeekly')}</span><input
-							class="field mono"
-							type="number"
-							min="0"
-							max="999"
-							bind:value={draft.keep.weekly}
-						/></label
+					<p class="muted small indent">{t('backup.copy.keepDeletedHint')}</p>
+					<label class="check"
+						><input
+							type="radio"
+							name="deleted"
+							checked={!!draft.copy?.mirror}
+							onchange={() =>
+								(draft!.copy = {
+									...draft!.copy,
+									mirror: true,
+									mirrorDays: draft!.copy?.mirrorDays || 30,
+								})}
+						/><span>{t('backup.copy.mirror')}</span></label
 					>
-					<label class="tiny"
-						><span>{t('backup.keepMonthly')}</span><input
-							class="field mono"
-							type="number"
-							min="0"
-							max="999"
-							bind:value={draft.keep.monthly}
-						/></label
-					>
-				</div>
-				<p class="muted">{t('backup.keepHint')}</p>
+					<p class="muted small indent">
+						{t('backup.copy.mirrorHint')}
+						{#if draft.copy?.mirror}<span class="inline"
+								><input
+									class="field mono days-input"
+									type="number"
+									min="1"
+									max="3650"
+									aria-label={t('backup.copy.mirrorDays')}
+									bind:value={draft.copy.mirrorDays}
+								/>
+								{t('backup.copy.mirrorDays')}</span
+							>{/if}
+					</p>
+				{/if}
 			</fieldset>{/if}
+		<fieldset class="divided">
+			<legend>{t('backup.keeps')}</legend>
+			{#if plainCopy(draft.destination.type) && !draft.copy?.dated}
+				<p class="muted">{t('backup.copy.noVersions')}</p>
+			{:else}
+				<KeepVersions
+					bind:keep={draft.keep}
+					times={draft.every === 'hourly'
+						? []
+						: [...new Set(draft.times ?? [])].filter(Boolean).sort()}
+					target={fullTarget(draft.destination.type)}
+				/>
+			{/if}
+		</fieldset>
 		{#if error}<div class="notice-error" role="alert">
 				{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
 			</div>{/if}
@@ -1474,7 +1611,7 @@
 				type="submit"
 				class="btn btn-primary"
 				disabled={busy ||
-					(draft.sources.length === 0 && !draft.extras?.length && !draft.applications?.length)}
+					(!chosen.some((c) => c.volume) && !draft.extras?.length && !draft.applications?.length)}
 				>{isNew ? t('backup.create') : t('notify.save')}</button
 			>
 		</div>
@@ -1750,6 +1887,88 @@
 		height: 18px;
 		margin: 0;
 	}
+	.picked {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+		margin-bottom: 6px;
+	}
+	.pickfield {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+		flex: 1;
+		min-width: 0;
+		text-align: left;
+		cursor: pointer;
+	}
+	.pickfield .mono {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.more {
+		margin-top: 8px;
+	}
+	.more summary {
+		cursor: pointer;
+		color: var(--accent);
+	}
+	.link {
+		background: none;
+		border: 0;
+		color: inherit;
+		cursor: pointer;
+		padding: 0 0 0 4px;
+	}
+	.formats {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 10px;
+	}
+	.format {
+		display: grid;
+		gap: 4px;
+		align-content: start;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		padding: 12px 14px;
+	}
+	.format.on {
+		border-color: var(--accent);
+	}
+	.format .fhead,
+	.format .dated {
+		display: flex;
+		flex-direction: row;
+		gap: 8px;
+		align-items: center;
+		justify-content: flex-start;
+		text-align: left;
+		font-size: inherit;
+	}
+	.format .dated {
+		align-items: flex-start;
+		margin: 6px 0 0 24px;
+	}
+	.format > .muted {
+		margin-left: 24px;
+	}
+	.small {
+		font-size: 0.8125rem;
+	}
+	.indent {
+		margin: 0 0 0 24px;
+	}
+	.days-input {
+		width: 4.5rem;
+		text-align: center;
+	}
+	@media (max-width: 760px) {
+		.formats {
+			grid-template-columns: 1fr;
+		}
+	}
 	.segments {
 		display: inline-flex;
 		flex-wrap: wrap;
@@ -1796,9 +2015,6 @@
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
-	}
-	.source {
-		margin-bottom: 0.6rem;
 	}
 	.legend-sub {
 		margin: 0.8rem 0 0.3rem;

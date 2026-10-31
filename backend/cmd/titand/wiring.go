@@ -19,7 +19,6 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/app"
 	"github.com/ra5on/TitanOS/backend/internal/appbackup"
 	"github.com/ra5on/TitanOS/backend/internal/appproxy"
-	"github.com/ra5on/TitanOS/backend/internal/assistant"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/backup"
 	"github.com/ra5on/TitanOS/backend/internal/backuptarget"
@@ -39,6 +38,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 	"github.com/ra5on/TitanOS/backend/internal/ipv64"
 	"github.com/ra5on/TitanOS/backend/internal/letsencrypt"
+	"github.com/ra5on/TitanOS/backend/internal/logkeep"
 	"github.com/ra5on/TitanOS/backend/internal/lxc"
 	"github.com/ra5on/TitanOS/backend/internal/maintenance"
 	"github.com/ra5on/TitanOS/backend/internal/media"
@@ -51,7 +51,9 @@ import (
 	command "github.com/ra5on/TitanOS/backend/internal/run"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/shutdown"
+	"github.com/ra5on/TitanOS/backend/internal/smarthistory"
 	"github.com/ra5on/TitanOS/backend/internal/sshd"
+	"github.com/ra5on/TitanOS/backend/internal/stickwatch"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
 	"github.com/ra5on/TitanOS/backend/internal/tailscale"
@@ -78,12 +80,12 @@ type titand struct {
 
 	store            *config.Store
 	users            *auth.Users
-	chat             *assistant.Manager
 	base             string
 	settings         *system.Settings
 	connection       *network.Manager
 	packetFilter     *firewall.Manager
 	volumes          *storage.Manager
+	smartHistory     *smarthistory.Recorder
 	folders          *shares.Manager
 	routes           *appproxy.Manager
 	devices          *hardware.Manager
@@ -98,6 +100,8 @@ type titand struct {
 	extensions      *plugins.Manager
 	shells          *terminal.Manager
 	notifier        *notify.Manager
+	logs            *logkeep.Manager
+	stick           *stickwatch.Watcher
 	pushes          *webpush.Manager
 	home            *homeassistant.Manager
 	stickBackup     *configbackup.Manager
@@ -158,11 +162,6 @@ func (w *titand) wireBase() error {
 		// tries again when someone opens it.
 		slog.Warn("accounts not readable, is the stick plugged in?", "config", w.opts.configDir, "err", err)
 	}
-	// The chat in the web UI talks to Ollama.
-	w.chat = assistant.NewManager(w.store)
-	if err := w.chat.Load(); err != nil {
-		slog.Warn("assistant settings not readable from /config", "err", err)
-	}
 
 	// The version of the system image; version.Version is newer when an
 	// app update runs on it.
@@ -200,6 +199,14 @@ func (w *titand) wireBase() error {
 	}
 	// Mounts the volumes as their arrays come up and reads the disks' health.
 	w.background(func() { w.volumes.Run(ctx) })
+	// Once a day the SMART values of each disk, on the first volume.
+	w.smartHistory = smarthistory.New("/mnt")
+	w.smartHistory.Disabled = w.opts.dev
+	w.smartHistory.Mounted = w.volumes.Mounted
+	w.smartHistory.Reports = func(ctx context.Context) ([]storage.SmartReport, error) {
+		return w.volumes.SmartReports(ctx, false)
+	}
+	w.background(func() { w.smartHistory.Run(ctx) })
 	return nil
 }
 
@@ -421,6 +428,10 @@ func (w *titand) wireApplications() error {
 	if w.base != "" {
 		w.extensions.Release = w.base
 	}
+	// Both kernel variants of one version keep their plugins apart.
+	if update.ReadVariant(update.VariantFile) == update.VariantNew {
+		w.extensions.Variant = update.VariantNew
+	}
 	w.extensions.Disabled = w.opts.dev
 	if err := w.extensions.Load(); err != nil {
 		slog.Warn("plugin settings not readable from /config", "err", err)
@@ -443,6 +454,31 @@ func (w *titand) wireNotifications() error {
 	// Tells in the web UI, by mail and by push message when a volume or a
 	// disk needs attention.
 	w.notifier = notify.NewManager(w.store)
+	// The journal beyond a restart, on the first volume; an earlier start
+	// that did not end cleanly becomes a notification.
+	w.logs = logkeep.New(command.Exec{})
+	w.logs.Target = func() (string, bool) {
+		mounted := w.volumes.Mounted()
+		if len(mounted) == 0 {
+			return "", false
+		}
+		slices.Sort(mounted)
+		return w.volumes.MountPoint(mounted[0]), true
+	}
+	w.logs.OnUnclean = func(u logkeep.Unclean) {
+		when := u.Started.Local().Format("02.01.2006 15:04")
+		if !u.LastLine.IsZero() {
+			when = u.LastLine.Local().Format("02.01.2006 15:04")
+		}
+		w.notifier.Notify(notify.Warning, "unclean_shutdown", when)
+	}
+	w.notifier.Urgent = w.logs.Urgent
+	// A failing boot stick: kernel errors and failed writes to /config.
+	w.stick = stickwatch.New()
+	w.stick.Report = func(string) { w.notifier.Notify(notify.Error, "stick_error", "TITANOS") }
+	if !w.opts.dev {
+		w.store.OnWriteError = w.stick.Failed
+	}
 	// Only owners and administrators may point their own channels into the
 	// home network; a plain user's go to public addresses only.
 	w.notifier.Confined = func(name string) bool {
@@ -476,7 +512,7 @@ func (w *titand) wireNotifications() error {
 	}
 	// Once per plugin and kind of device; installing stays a click.
 	w.extensions.Notify = func(title string) { w.notifier.Notify(notify.Info, "plugin_recommended", title) }
-	// Home Assistant: the assistant switches entities released to it, and
+	// Home Assistant: MCP clients switch entities released to them, and
 	// messages can go to the Home Assistant app.
 	w.home = homeassistant.NewManager(w.store)
 	if err := w.home.Load(); err != nil {
@@ -648,6 +684,8 @@ func (w *titand) wireUpdates() error {
 	w.slot = system.BootSlot()
 	w.updates = update.NewManager(w.store, version.Version, w.slot)
 	w.updates.Disabled = w.opts.dev || w.slot == ""
+	// Debian's kernel or the newer one of trixie-backports (docs/KERNEL.md).
+	w.updates.Variant = update.ReadVariant(update.VariantFile)
 	// An encrypted volume waits for its password after the switch to a new
 	// system: it must not make the boot check fail (and the update roll
 	// back) just because nobody entered it within five minutes. It counts
@@ -659,8 +697,8 @@ func (w *titand) wireUpdates() error {
 	w.updates.PluginsHealthy = func() bool {
 		return w.extensions.Healthy() || slices.Contains(w.volumes.WaitingForPassword(ctx), w.extensions.Volume())
 	}
-	w.updates.PreparePlugins = func(ctx context.Context, version, kernel, kernelPackage, baseVersion string, assets map[string]string, fetch func(context.Context, string, int64) ([]byte, error), download func(context.Context, string, string, string, int64) error) error {
-		return w.extensions.PrepareUpdate(ctx, version, kernel, kernelPackage, baseVersion, assets, w.volumes.Mounted(), fetch, download)
+	w.updates.PreparePlugins = func(ctx context.Context, version, variant, kernel, kernelPackage, baseVersion string, assets map[string]string, fetch func(context.Context, string, int64) ([]byte, error), download func(context.Context, string, string, string, int64) error) error {
+		return w.extensions.PrepareUpdate(ctx, version, variant, kernel, kernelPackage, baseVersion, assets, w.volumes.Mounted(), fetch, download)
 	}
 	w.updates.Reboot = w.unattended("reboot", "update", w.power.Reboot)
 	if !w.opts.dev && w.slot != "" && w.base != "" {
@@ -680,6 +718,9 @@ func (w *titand) wireUpdates() error {
 		}
 		w.notifier.Notify(severity, kind, subject)
 	}
+	// Started by GRUB (legacy BIOS, 32-bit UEFI): its try count becomes
+	// part of the entry names before anything looks at them.
+	w.updates.ReconcileBootLoader()
 	if err := w.updates.Load(); err != nil {
 		slog.Warn("update settings not readable from /config", "err", err)
 	}
@@ -726,6 +767,12 @@ func (w *titand) wireBackups() error {
 			w.notifier.Notify(notify.Error, "backup_failed", job)
 		}
 	}
+	w.backups.OnFreed = func(job string, versions int) {
+		w.notifier.Notify(notify.Warning, "backup_space_freed", job)
+	}
+	w.backups.OnRecovered = func(job string) {
+		w.notifier.Notify(notify.Info, "backup_recovered", job)
+	}
 	w.backups.OnCheck = func(job string, err error) {
 		if err != nil {
 			w.notifier.Notify(notify.Error, "backup_check_failed", job)
@@ -761,7 +808,7 @@ func (w *titand) wireBackups() error {
 	w.replicaReceiver = replication.NewReceiver()
 	w.replicaReceiver.Mounted, w.replicaReceiver.Filesystem = w.volumes.Mounted, w.volumes.FilesystemOf
 	w.backupTarget.Replicas = w.replicaReceiver.Serve
-	w.backupTarget.Load()
+	_ = w.backupTarget.Load() // Load keeps its own state; a failure shows up as not loaded
 	w.background(func() { w.backupTarget.Run(ctx) })
 
 	// The cluster: other TitanOS this NAS trusts fully (package cluster).
@@ -810,7 +857,10 @@ func (w *titand) wireBackups() error {
 	w.background(func() { w.backups.Run(ctx) })
 	w.drives.Reserved = w.volumes.Owns
 	w.drives.Busy = func() bool { return w.volumes.ActionsRunning() || w.volumes.GrowthActive() }
-	w.drives.OnPlug = func(d usb.Device) { w.notifier.Notify(notify.Info, "usb_plugged", d.Name) }
+	w.drives.OnPlug = func(d usb.Device) {
+		w.notifier.Notify(notify.Info, "usb_plugged", d.Name)
+		go w.backups.Plugged(d.ID)
+	}
 	w.drives.OnFormatted = func(job usb.FormatJob) {
 		switch {
 		case job.Action != "" && job.Phase == "done":
@@ -1167,6 +1217,25 @@ func (w *titand) wireMaintenance() error {
 		slog.Warn("fan settings not readable from /config", "err", err)
 	}
 	w.background(func() { w.coolers.Run(ctx) })
+	// Fans that stopped, temperatures near their critical value, ECC errors.
+	hardware := notify.NewHardwareWatcher(w.notifier)
+	hardware.Fans = func() []notify.FanReading {
+		var list []notify.FanReading
+		for _, f := range w.coolers.Fans() {
+			list = append(list, notify.FanReading{ID: f.ID, Label: f.Label, RPM: f.RPM, Percent: f.Percent})
+		}
+		return list
+	}
+	hardware.Temperatures = func() []notify.TempReading {
+		var list []notify.TempReading
+		for _, t := range system.ReadTemperatures() {
+			list = append(list, notify.TempReading{ID: t.ID, Label: t.Label, Celsius: t.Celsius, Critical: t.CriticalC})
+		}
+		return list
+	}
+	if !w.opts.dev {
+		w.background(func() { hardware.Run(ctx) })
+	}
 	w.upkeep.Disabled = w.opts.dev
 	w.mediaImports = media.New(ctx, w.volumes.Mounted, shares.UsersGID)
 	w.mediaImports.Disabled = w.opts.dev
@@ -1201,12 +1270,14 @@ func (w *titand) wireMaintenance() error {
 		switch job.Kind {
 		case "raid-check":
 			return w.volumes.MaintenanceCheck(work, job.Target)
+		case "smart-short":
+			return w.volumes.ShortSMART(work, job.Target)
 		case "smart-long":
 			return w.volumes.LongSMART(work, job.Target)
 		case "backup-check", "restore-probe":
 			return w.backups.MaintenanceRun(work, job.Target, job.Kind, job.ReadData, backup.ProbeRequest{MaxBytes: job.MaxBytes, MaxFiles: job.MaxFiles})
 		case "snapshot":
-			if err := w.volumes.ScheduledSnapshot(work, job.Target, job.ID, job.Keep, job.LockDays); err != nil {
+			if err := w.volumes.ScheduledSnapshot(work, job.Target, job.ID, job.Keep, job.LockDays, job.Versions); err != nil {
 				return err
 			}
 			w.volumes.SyncShadowCopies(work, w.folders.PreviousVersionVolumes())
@@ -1222,6 +1293,17 @@ func (w *titand) wireMaintenance() error {
 	// An app update restarts titand: it waits for work that would break off.
 	w.updates.Working = func() bool {
 		return w.upkeep.Busy() || w.appBackups.Busy() || w.volumes.ActionsRunning() || w.volumes.SnapshotRestoresRunning() || w.volumes.GrowthPending() || w.volumes.Reshaping() || w.replicas.Busy() || w.fileManager.Busy() || w.backups.Busy() || w.volumes.TestsRunning() || w.machines.Busy() || w.systemContainers.Busy() || w.extensions.Busy() || w.mediaImports.Working() || w.folders.PurgeBusy()
+	}
+	// Settings › Services: what was switched off stays off, before anything
+	// is started automatically.
+	var services struct{ VMsOff, LXCOff bool }
+	if err := w.store.ReadJSON("system/services.json", &services); err == nil {
+		if services.VMsOff {
+			_ = w.machines.SetOff(ctx, true) // best effort at start; the switch is applied again when changed
+		}
+		if services.LXCOff {
+			_ = w.systemContainers.SetOff(ctx, true, nil) // best effort at start; the switch is applied again when changed
+		}
 	}
 	w.background(func() { w.machines.Run(ctx, w.volumes.Mounted) })
 	w.background(func() { w.systemContainers.Run(ctx, w.volumes.Mounted) })
@@ -1256,6 +1338,7 @@ func (w *titand) wireAPI() error {
 		Maintenance:        w.upkeep,
 		ApplicationBackups: w.appBackups,
 		Storage:            w.volumes,
+		SmartHistory:       w.smartHistory,
 		Shares:             w.folders,
 		Files:              w.fileManager,
 		Thumbs:             w.previews,
@@ -1289,6 +1372,8 @@ func (w *titand) wireAPI() error {
 		Replication:        w.replicas,
 		ReplicaReceiver:    w.replicaReceiver,
 		Diagnose:           w.diagnostics,
+		LogKeep:            w.logs,
+		HWCheck:            w.hardwareCheck(),
 		SSH:                w.access,
 		Update:             w.updates,
 		Backup:             w.backups,
@@ -1307,14 +1392,26 @@ func (w *titand) wireAPI() error {
 		ShareDir:           w.shareDir,
 		SecureCookies:      !w.opts.dev,
 		Sessions:           w.sessions,
-		Assistant:          w.chat,
 		Activity:           w.audit,
 		Cluster:            w.nodes,
 	})
+	if err := w.handler.Start(ctx); err != nil {
+		slog.Warn("API settings not read", "err", err)
+	}
+	// The jobs of the API end with the daemon; waitServices bounds the wait.
+	w.background(func() {
+		<-ctx.Done()
+		_ = w.handler.Close() // cleanup, best effort: nothing more can be done if it fails
+	})
 
-	w.background(func() { w.handler.RunAssistant(ctx) })
 	// Watches that Home Assistant keeps putting its backups on the NAS.
 	w.background(func() { w.handler.RunHAStorage(ctx) })
+	// Leftovers of the AI chat removed in 0.41.0, once.
+	w.background(func() { w.handler.RemoveRetiredAssistant(ctx) })
+	w.background(func() { w.logs.Run(ctx) })
+	if !w.opts.dev {
+		w.background(func() { w.stick.Follow(ctx) })
+	}
 	w.background(func() { w.home.RunMQTT(ctx, w.handler.HASnapshot, w.handler.HACommand) })
 	w.schedule.Busy = w.handler.PowerBusy
 	w.background(func() { w.schedule.Run(ctx) })

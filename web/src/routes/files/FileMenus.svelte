@@ -1,6 +1,5 @@
 <script lang="ts">
 	import type { FileEntry, FileRoot } from '#lib/api.ts';
-	import { assistant } from '#lib/assistant.svelte.ts';
 	import ContextMenu from '#lib/components/ContextMenu.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { previewKind, type FileView } from '#lib/file-actions.ts';
@@ -55,7 +54,7 @@
 				role="menuitem"
 				onclick={() => oncommand('openFolder', entry)}
 				><Icon name="folder" size={16} /><span>{t('files.openFolder')}</span><kbd aria-hidden="true"
-					>Enter</kbd
+					>{t('shortcuts.enter')}</kbd
 				></button
 			>
 		{:else if one && previewKind(entry.name, entry.size)}<button
@@ -63,17 +62,12 @@
 				role="menuitem"
 				onclick={() => oncommand('preview', entry)}
 				><Icon name="search" size={16} /><span>{t('files.preview')}</span><kbd aria-hidden="true"
-					>Space</kbd
+					>{t('shortcuts.space')}</kbd
 				></button
 			>{/if}
 		{#if editable}<button type="button" role="menuitem" onclick={() => oncommand('edit', entry)}
 				><Icon name="edit" size={16} /><span>{t('files.edit')}</span></button
 			>{/if}
-		{#if one && !entry.dir && root.kind !== 'stick' && assistant.status?.available && ((previewKind(entry.name, entry.size) === 'text' && entry.size <= 256 << 10) || (previewKind(entry.name, entry.size) === 'image' && entry.size <= 4 << 20))}
-			<button type="button" role="menuitem" onclick={() => oncommand('assistant', entry)}
-				><Icon name="chat" size={16} /><span>{t('assistant.askFileMenu')}</span></button
-			>
-		{/if}
 		<button type="button" role="menuitem" onclick={() => oncommand('download', entry)}
 			><Icon name="download" size={16} /><span>{t('files.download')}</span></button
 		>
@@ -87,12 +81,12 @@
 			<hr />
 			<button type="button" role="menuitem" onclick={() => oncommand('clipboardCopy', entry)}
 				><Icon name="copy" size={16} /><span>{t('files.clipboardCopy')}</span><kbd
-					aria-hidden="true">Ctrl+C</kbd
+					aria-hidden="true">{t('shortcuts.ctrl')}+C</kbd
 				></button
 			>
 			{#if writable}<button type="button" role="menuitem" onclick={() => oncommand('cut', entry)}
 					><i class="no-icon" aria-hidden="true"></i><span>{t('files.cut')}</span><kbd
-						aria-hidden="true">Ctrl+X</kbd
+						aria-hidden="true">{t('shortcuts.ctrl')}+X</kbd
 					></button
 				>{/if}
 			<button type="button" role="menuitem" onclick={() => oncommand('copy', entry)}
@@ -123,7 +117,7 @@
 				class="danger"
 				onclick={() => oncommand('delete', entry)}
 				><Icon name="trash" size={16} /><span>{t('files.delete')}</span><kbd aria-hidden="true"
-					>Entf</kbd
+					>{t('shortcuts.delete')}</kbd
 				></button
 			>{/if}
 	</ContextMenu>
@@ -146,7 +140,7 @@
 			>
 			<button type="button" role="menuitem" disabled={!canPaste} onclick={() => oncommand('paste')}
 				><Icon name="paste" size={16} /><span>{t('files.paste')}</span><kbd aria-hidden="true"
-					>Ctrl+V</kbd
+					>{t('shortcuts.ctrl')}+V</kbd
 				></button
 			>
 			<hr />

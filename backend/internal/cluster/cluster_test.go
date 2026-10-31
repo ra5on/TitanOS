@@ -601,3 +601,51 @@ func TestAdminNodeLeavesAndOlderClusters(t *testing.T) {
 		t.Fatalf("stored admin: %q", got)
 	}
 }
+
+// A node whose titand is starting again (an app update) refuses the
+// connection: the proxy answers "restarting" with a pause to wait, not an
+// error, and the overview names it the same way.
+func TestProxyReportsRestartingNode(t *testing.T) {
+	ctx := context.Background()
+	a := newTestNode(t, "nas-a", map[string]string{"alex": "password-of-a"})
+	b := newTestNode(t, "nas-b", map[string]string{"alex": "password-of-a"})
+	if err := a.m.Create("Home"); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.m.Join(ctx, a.m.JoinInfo()); err != nil {
+		t.Fatal(err)
+	}
+	bID := b.m.ID()
+	rec := httptest.NewRecorder()
+	a.m.Proxy(rec, httptest.NewRequest("GET", "/api/v1/storage", nil), bID, "alex", "storage")
+	if rec.Code != 200 {
+		t.Fatalf("proxy before the restart: %d %q", rec.Code, rec.Body.String())
+	}
+	// B stops listening: its address refuses connections now.
+	b.srv.Close()
+	rec = httptest.NewRecorder()
+	a.m.Proxy(rec, httptest.NewRequest("GET", "/api/v1/storage", nil), bID, "alex", "storage")
+	if rec.Code != http.StatusServiceUnavailable || rec.Header().Get("Retry-After") != "3" || !strings.Contains(rec.Body.String(), `"cluster_restarting"`) {
+		t.Fatalf("restarting node: %d %q %q", rec.Code, rec.Header().Get("Retry-After"), rec.Body.String())
+	}
+	// The cached state says the same until it is asked again.
+	a.m.mu.Lock()
+	delete(a.m.reach, bID)
+	a.m.mu.Unlock()
+	rec = httptest.NewRecorder()
+	a.m.Proxy(rec, httptest.NewRequest("GET", "/api/v1/storage", nil), bID, "alex", "storage")
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("restarting node from the cache: %d %q", rec.Code, rec.Body.String())
+	}
+	a.m.mu.Lock()
+	delete(a.m.status, bID)
+	a.m.mu.Unlock()
+	for _, v := range a.m.Overview(ctx) {
+		if v.ID == bID && (v.Online || v.Error != "cluster_restarting") {
+			t.Fatalf("overview of a restarting node: online %t, error %q", v.Online, v.Error)
+		}
+	}
+	if status, code := ErrorCode(ErrUnreachable); status != http.StatusBadGateway || code != "cluster_unreachable" {
+		t.Fatalf("unreachable: %d %s", status, code)
+	}
+}

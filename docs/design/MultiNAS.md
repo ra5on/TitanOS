@@ -41,7 +41,7 @@ werden („Zertifikat hat sich geändert“).
 
 Ablage auf der Leitstelle: `/config/fleet/nodes.json` (Name, Adressen,
 Fingerabdruck, Reihenfolge, Notiz), Token in `/config/fleet/keys.json` (nur
-„ist gesetzt“ über die API, nie im Diagnosepaket/Assistenten-Katalog, Ordner im
+„ist gesetzt“ über die API, nie im Diagnosepaket/MCP-Werkzeugkatalog, Ordner im
 Stick-Dateimanager ausgeblendet). Geschrieben nur beim Hinzufügen, Ändern,
 Entfernen.
 
@@ -60,7 +60,7 @@ Eine Anfrage je NAS statt vieler, Bereich `fleet:read`, in `publicRoutes`
 - Volumes: Name, Zustand (ok/degradiert/Wiederaufbau/gesperrt/fehlt), belegt/gesamt
 - Platten: Anzahl, mit SMART-Warnung/-Fehler, schlafend
 - Meldungen: Anzahl Warnungen/Fehler der letzten 24 h, die neuesten fünf
-  (Art, Stufe, Betreff, Zeit – ohne Chatinhalte)
+  (Art, Stufe, Betreff, Zeit)
 - Backups: Aufträge gesamt, fehlgeschlagen, überfällig
 - USV: Zustand, Akku
 - Docker/VMs/LXC: laufend/gesamt

@@ -247,21 +247,26 @@ zusätzlich ist die speichernde Adresse ganz freigegeben. Ohne „Regeln behalte
 innerhalb von zwei Minuten lädt titand die vorherigen Regeln (Meldung
 `firewall_reverted`, Aktivitätseintrag). Erst die Bestätigung schreibt
 `/config/firewall/settings.json` und lädt die Regeln ohne Ausnahme.
-Bestätigen geht nur in einer angemeldeten Websitzung: API-Tokens und der
-Assistent erreichen `/firewall/confirm` nicht. Lässt eine Änderung die
+Bestätigen geht nur in einer angemeldeten Websitzung: API-Tokens und
+MCP-Clients erreichen `/firewall/confirm` nicht. Lässt eine Änderung die
 Weboberfläche für die Adresse der speichernden Sitzung nicht mehr zu (Zelle ihrer
 Zone zum NAS, auch einer eigenen Zone, zu der ihr Netz gehört), lehnt die API sie mit `firewall_excludes_you` ab – kein
 Bestätigungsdialog, kein Aussperren. Ausschalten gilt sofort und ohne Probe;
 im ausgeschalteten Zustand gespeicherte Einstellungen gelten beim Einschalten.
 Ein titand-Neustart während der Probe lädt den bestätigten Stand.
 
-Der KI-Assistent (Bereich „Netzwerk und Firewall“, ab Werk aus) ändert nur
-Regeln (`firewall.Manager.ChangeFromAssistant`): Er kann die Firewall weder
-ein- noch ausschalten (`firewall_switch_manual`) noch eine Änderung vorschlagen,
-die die Weboberfläche für Heimnetz oder VPN ohne eigene Absenderregel schließt
-(`firewall_closes_webui`). Er hat keine Adresse einer Websitzung, deshalb gibt
-es für ihn keine freigegebene Adresse auf Probe; bestätigen muss eine Person in
-der Weboberfläche, sonst geht die Änderung zurück. Siehe `docs/ASSISTANT.md`.
+Über den MCP-Server (Werkzeuge `firewall_status`, `firewall_rule_add`,
+`firewall_rule_remove`, `firewall_unblock`; Token-Bereich `system:write`, nur
+Besitzer/Administratoren) ändern KI-Clients nur Regeln
+(`firewall.Manager.ChangeInProcess`): Sie können die Firewall weder ein- noch
+ausschalten (`firewall_switch_manual`) noch eine Änderung vorschlagen, die die
+Weboberfläche für Heimnetz oder VPN ohne eigene Absenderregel schließt
+(`firewall_closes_webui`). Die ändernden Werkzeuge sind gefährlich: Sie laufen
+nur, wenn das Werkzeug in `/config/system/mcp.json` auf „all“ steht und der
+Client `confirm: true` schickt. Ein MCP-Aufruf hat keine Adresse einer
+Websitzung, deshalb gibt es keine freigegebene Adresse auf Probe; bestätigen
+muss eine Person in der Weboberfläche, sonst geht die Änderung zurück. Siehe
+`docs/MCP.md`.
 
 Rückweg ohne Weboberfläche: lokale Konsole, `nft delete table inet titanos`
 (öffnet bis zum nächsten Start von titand alles) oder in

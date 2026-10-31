@@ -3,9 +3,8 @@
 	// host CPUs, memory and firmware. The values belong to the form.
 	import type { VMHost, VMStatus } from '#lib/api.ts';
 	import RetryNotice from '#lib/components/RetryNotice.svelte';
-	import { formatBytes } from '#lib/format.ts';
+	import { GB, MIB, formatBytes, formatDecimal } from '#lib/format.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
-	import { GIB } from './vm-form.ts';
 
 	let {
 		status,
@@ -19,7 +18,7 @@
 		hostError,
 		onretryhost,
 		vcpus = $bindable(),
-		memoryGiB = $bindable(),
+		memoryMiB = $bindable(),
 		pinning = $bindable(),
 		pinned = $bindable(),
 		exclusive = $bindable(),
@@ -37,7 +36,8 @@
 		hostError?: string;
 		onretryhost: () => void;
 		vcpus: number;
-		memoryGiB: number;
+		/** As titand and QEMU take it; shown and set in decimal GB. */
+		memoryMiB: number;
 		pinning: boolean;
 		pinned: number[];
 		exclusive: boolean;
@@ -53,13 +53,13 @@
 			cpuModel: '',
 		},
 	);
-	const maxMemory = $derived(Math.max(1, Math.floor(machine.memoryBytes / GIB)));
+	const maxMemory = $derived(Math.max(1, Math.floor(machine.memoryBytes / GB)));
 	const freeMemory = $derived(
 		Math.max(0, machine.availableMemoryBytes ?? machine.memoryBytes - machine.usedMemoryBytes),
 	);
 	const hybrid = $derived(cpus.some((cpu) => cpu.kind !== ''));
 	const memoryNote = $derived(
-		memoryGiB * GIB > freeMemory && !running
+		memoryMiB * MIB > freeMemory && !running
 			? t('vms.new.memoryOver', { free: formatBytes(freeMemory) })
 			: '',
 	);
@@ -172,13 +172,27 @@
 			<div class="line">
 				<label for="vm-memory">{t('vms.new.memory')}</label><span class="mono"
 					>{t('vms.new.memoryValue', {
-						value: memoryGiB,
+						value: formatDecimal((memoryMiB * MIB) / GB),
 						free: formatBytes(freeMemory),
 					})}</span
 				>
 			</div>
-			<input id="vm-memory" type="range" min="1" max={maxMemory} step="1" bind:value={memoryGiB} />
+			<input
+				id="vm-memory"
+				type="range"
+				min="1"
+				max={maxMemory}
+				step="1"
+				bind:value={
+					// The slider moves in whole GB; an untouched value keeps its MiB exactly.
+					() => (memoryMiB * MIB) / GB,
+					(gb: number) => (memoryMiB = Math.round((Number(gb) * GB) / MIB))
+				}
+			/>
 			{#if memoryNote}<small class="warn">{memoryNote}</small>{/if}
+			{#if template === 'windows' && memoryMiB < 4096}<small class="warn"
+					>{t('vms.new.memoryWindows')}</small
+				>{/if}
 		</div>
 	{/if}
 	<details class="advanced">
@@ -211,7 +225,7 @@
 	}
 	summary {
 		cursor: pointer;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.advanced-body {
 		display: flex;
@@ -230,13 +244,13 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);
 	}
 	small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.warn {
@@ -246,7 +260,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.line {
 		display: flex;
@@ -258,7 +272,7 @@
 	.line label {
 		flex-direction: row;
 		gap: 6px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	input[type='range'] {
 		width: 100%;
@@ -286,7 +300,7 @@
 		border-radius: var(--radius-ctl);
 		color: var(--text);
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		cursor: pointer;
 	}
 	.segments button[aria-checked='true'] {
@@ -310,7 +324,7 @@
 		flex-direction: row;
 		align-items: center;
 		gap: 10px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.check span {
 		color: var(--text);
@@ -337,7 +351,7 @@
 		border-radius: var(--radius-ctl);
 		color: var(--text);
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		text-align: left;
 		cursor: pointer;
 	}
@@ -352,7 +366,7 @@
 		gap: 6px;
 	}
 	.cpu-note {
-		font-size: 0.6875rem;
+		font-size: var(--text-xs);
 		line-height: 1.3;
 	}
 </style>
