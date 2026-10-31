@@ -45,6 +45,14 @@ func (m *Manager) Install(ctx context.Context) error {
 	if m.appKind(manifest) {
 		return m.installApp(ctx, *manifest, raw, signature)
 	}
+	m.mu.Lock()
+	variant := m.wantedVariant()
+	m.mu.Unlock()
+	chosen, ok := manifest.forVariant(variant)
+	if !ok {
+		return fmt.Errorf("%w: the release has no system with the chosen kernel", ErrNothing)
+	}
+	manifest = &chosen
 	if manifest.MinVersion != "" {
 		minimum, _ := parseVersion(manifest.MinVersion)
 		if running, ok := parseVersion(m.version); ok && running.compare(minimum) < 0 {
@@ -82,7 +90,7 @@ func (m *Manager) Install(ctx context.Context) error {
 	m.setProgress(func(p *Progress) { *p = Progress{Phase: "download", FallbackRemoved: !staged} })
 	go func() {
 		defer m.work.Unlock()
-		err := m.install(context.WithoutCancel(ctx), *manifest, target, staged)
+		err := m.install(context.WithoutCancel(ctx), *manifest, variant, target, staged)
 		m.forget()
 		m.setProgress(func(p *Progress) {
 			if err != nil {
@@ -162,8 +170,8 @@ func dirSize(dir string) int64 {
 	return total
 }
 
-func (m *Manager) install(ctx context.Context, manifest Manifest, target string, staged bool) error {
-	slog.Info("installing update", "version", manifest.Version, "slot", target)
+func (m *Manager) install(ctx context.Context, manifest Manifest, variant, target string, staged bool) error {
+	slog.Info("installing update", "version", manifest.Version, "kernel", manifest.Kernel, "variant", variant, "slot", target)
 	base := m.source() + "/releases/download/" + manifest.Tag + "/"
 	// Plugins belong to the system image: a release that is an app on an
 	// older image brings that image's plugins.
@@ -176,7 +184,7 @@ func (m *Manager) install(ctx context.Context, manifest Manifest, target string,
 		for _, plugin := range manifest.Plugins {
 			assets[plugin.Name] = plugin.Asset
 		}
-		if err := m.PreparePlugins(ctx, release, manifest.Kernel, manifest.KernelPackage, base, assets, m.fetch,
+		if err := m.PreparePlugins(ctx, release, variant, manifest.Kernel, manifest.KernelPackage, base, assets, m.fetch,
 			func(ctx context.Context, url, dest, sum string, size int64) error {
 				return m.download(ctx, url, dest, File{SHA256: sum, Size: size}, func(done int64, speed uint64) {
 					m.setProgress(func(p *Progress) { p.File = filepath.Base(dest); p.SpeedBytesPerSecond = speed })
@@ -275,6 +283,7 @@ func (m *Manager) switchTo(target, content string, pending Pending) error {
 		_ = m.store.Remove(pendingFile) // cleanup, best effort: nothing more can be done if it fails
 		return err
 	}
+	m.syncGrub(true)
 	// Everything has to be on the stick before someone restarts.
 	unix.Sync()
 	m.mu.Lock()
@@ -342,6 +351,7 @@ func (m *Manager) Cancel() error {
 	if err := m.store.Remove(pendingFile); err != nil {
 		return err
 	}
+	m.syncGrub(false)
 	unix.Sync()
 	m.mu.Lock()
 	m.pending, m.progress, m.slotCache = nil, Progress{}, nil

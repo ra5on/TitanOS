@@ -13,7 +13,7 @@ Eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen aus ande
 | Bereich | Entscheidung |
 |---|---|
 | Basis | Debian 13 (trixie) minimal, amd64 |
-| Boot | nur UEFI, systemd-boot, Secure Boot aus |
+| Boot | 64-Bit-UEFI mit systemd-boot; seit 0.41 zusätzlich GRUB für 32-Bit-UEFI und Legacy-BIOS mit denselben A/B-Einträgen (`docs/BOOT.md`); Secure Boot aus |
 | Stick | FAT32, Label `TITANOS` |
 | Systemabbild | squashfs (zstd), wird beim Boot **komprimiert** in den RAM (tmpfs) kopiert, darüber overlayfs mit größenbegrenzter tmpfs-Schicht (512 MiB) |
 | Nach dem Boot | Stick wird nur noch für Konfigurationsänderungen und Updates beschrieben |
@@ -55,14 +55,16 @@ Eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen aus ande
 
 ```
 TITANOS (FAT32)
-├── EFI/BOOT/BOOTX64.EFI          # systemd-boot
+├── EFI/BOOT/BOOTX64.EFI          # systemd-boot (64-Bit-UEFI)
+├── EFI/BOOT/BOOTIA32.EFI         # GRUB für 32-Bit-UEFI (ab 0.41)
+├── boot/grub/                    # grub.cfg, grubenv, i386-pc/ (Legacy-BIOS), stick-bios.py (ab 0.41)
 ├── loader/
 │   ├── loader.conf
 │   └── entries/
 │       ├── titanos-a.conf
 │       └── titanos-b.conf         # erst nach dem ersten Update; auf Probe: titanos-b+3.conf
 ├── titanos/
-│   ├── a/  vmlinuz, initrd.img, filesystem.squashfs, version, app/
+│   ├── a/  vmlinuz, initrd.img, filesystem.squashfs, version, app/, bootenv (Kommandozeile für GRUB)
 │   └── b/  (zweiter System-Slot; optional ebenfalls app/)
 └── config/                        # persistente Konfiguration, Konten und Geheimnisse
 ```
@@ -73,7 +75,7 @@ Grundsätze (Kurzfassung; vollständiger Wortlaut mit SSD-Cache, Verschlüsselun
 - Volumes werden über UUIDs in `/config/storage/volumes.json` zugeordnet, nie über Gerätenamen wie `sda`. Arrays setzt udev nach dem Start zusammen, nicht das initramfs.
 - **Im Entwicklungsmodus (`titand -dev`) verändert titand keine Platten.**
 - Split-Lock-Erkennung bleibt aktiv; keine Bootparameter/Sysctls automatisch setzen oder Boot-Einträge anpassen.
-- Treiber, die Debians Kernel nicht baut, nur als signierte Treiber-Plugins, nicht im Grundsystem; ein Kernelwechsel bleibt Entscheidung des Projektinhabers.
+- Treiber, die Debians Kernel nicht baut, nur als signierte Treiber-Plugins, nicht im Grundsystem; ein Kernelwechsel bleibt Entscheidung des Projektinhabers. Seit 0.41 wählt man unter Updates zwischen Kernel „Stabil“ (Debian) und „Neu“ (trixie-backports), Entscheidung vom 31.10.2026 (`docs/KERNEL.md`).
 - journald im RAM mit Größenbegrenzung; seit 0.41.0 schreibt titand das Journal zusätzlich auf ein Daten-Volume (`.titanos/logs/<boot>.log`, begrenzt), nie auf den Stick (Entscheidung 31.10.2026, `docs/rules/SYSTEM.md`).
 
 ## Repo-Struktur (wichtige Einstiegspunkte)
@@ -132,7 +134,7 @@ titanos/
 
 - Quelle nur GitHub Releases von `ra5on/TitanOS`, **nur Stable**, Manifest direkt ohne GitHub-API. **Ohne gültige Signatur keine Installation, auch nicht mit Warnung oder manuell**; danach Größe und SHA-256 jeder Datei.
 - Neue Konfigurationsfelder müssen von Basis und voriger App-Version weiterhin lesbar sein; keine inkompatiblen Umbenennungen/Pflichtfelder. Rückwege einschließlich Plugin-Einstellungen erhalten.
-- Volle Systemupdates: A/B-Slots mit drei Probestarts und Boot-Check über `/api/v1/health` (**kein `systemd-bless-boot`**); `EFI/BOOT/BOOTX64.EFI` wird nicht ersetzt.
+- Volle Systemupdates: A/B-Slots mit drei Probestarts und Boot-Check über `/api/v1/health` (**kein `systemd-bless-boot`**); Bootloader (`EFI/BOOT/BOOTX64.EFI`, `EFI/BOOT/BOOTIA32.EFI`, `boot/grub/`) werden nicht ersetzt.
 - App-Updates: nur titand mit Weboberfläche bei passender Basis-Version, Probe und Rückfall ohne NAS-Neustart; Installation wartet auf laufende dauerhafte Aufträge. Plugin-Katalog, NVIDIA-Bauumgebung und Treiber richten sich nach der **Basis-Version**.
 
 ### Release-Prüfung und Grenzen

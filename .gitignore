@@ -2,6 +2,7 @@
 /dist/
 /out/
 mkosi.output/
+mkosi.output-new/
 mkosi.cache/
 mkosi.pkgcache/
 mkosi.builddir/

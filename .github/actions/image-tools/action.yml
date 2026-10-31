@@ -33,7 +33,7 @@ runs:
         MKOSI_COMMIT: ${{ steps.lock.outputs.mkosi-commit }}
       run: |
         sudo apt-get update
-        sudo apt-get install -y --no-install-recommends debian-archive-keyring squashfs-tools zstd zip systemd-container python3-venv minisign qemu-system-x86 qemu-utils ovmf mtools exfatprogs fdisk kmod openssh-client smbclient gcc libc6-dev restic
+        sudo apt-get install -y --no-install-recommends debian-archive-keyring squashfs-tools zstd zip systemd-container python3-venv minisign qemu-system-x86 qemu-utils ovmf ovmf-ia32 xz-utils unzip mtools exfatprogs fdisk kmod openssh-client smbclient gcc libc6-dev restic
         # The exact commit the image is developed with (dev-toolchains.lock.json).
         python3 -m venv "$RUNNER_TEMP/mkosi"
         "$RUNNER_TEMP/mkosi/bin/pip" install "git+$MKOSI_SOURCE@$MKOSI_COMMIT"

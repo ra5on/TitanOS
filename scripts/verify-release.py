@@ -70,6 +70,19 @@ def verify(release, keys, without_plugins=False):
         asset = f"titanos-{version}-{file['name']}"
         if file["asset"] != asset or checksums[asset] != file["sha256"] or (release / asset).stat().st_size != file["size"]:
             raise ValueError(f"manifest mismatch: {asset}")
+    # The same system with the newer kernel (docs/KERNEL.md), optional.
+    variants = manifest.get("variants", {})
+    if set(variants) - {"new"}:
+        raise ValueError("unknown kernel variant")
+    if new := variants.get("new"):
+        if "bpo" not in str(new.get("kernel", "")) or new["kernel"] == manifest["kernel"]:
+            raise ValueError("the new kernel is not a backports kernel")
+        if sorted(file["name"] for file in new.get("files", [])) != ["filesystem.squashfs", "initrd.img", "vmlinuz"]:
+            raise ValueError("the variant must describe exactly one complete system slot")
+        for file in new["files"]:
+            asset = f"titanos-{version}-new-{file['name']}"
+            if file["asset"] != asset or checksums.get(asset) != file["sha256"] or (release / asset).stat().st_size != file["size"]:
+                raise ValueError(f"manifest mismatch: {asset}")
     # titand alone, for an app update on the image it was made on.
     app = manifest.get("app")
     if not isinstance(app, dict) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9.]+)?", str(app.get("base", ""))):

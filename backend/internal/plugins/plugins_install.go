@@ -80,6 +80,9 @@ func (m *Manager) install(ctx context.Context, manifestPath, volume, confirm str
 	if _, exists := m.installed(settings.Volume)[manifest.Name]; exists {
 		return ErrExists
 	}
+	if other := m.enabledConflict(manifest); activate && other != "" {
+		return conflictError(manifest.Name, other)
+	}
 	if activate && m.compatible(manifest) {
 		tr.expect(activationSteps(manifest)...)
 	}
@@ -241,6 +244,11 @@ func (m *Manager) setEnabled(ctx context.Context, name string, enabled bool, mou
 	}
 	if err := m.ensureReleaseSet(settings.Volume); err != nil {
 		return err
+	}
+	if enabled && !slices.Contains(settings.Enabled, name) {
+		if other := m.enabledConflict(m.installed(settings.Volume)[name]); other != "" {
+			return conflictError(name, other)
+		}
 	}
 	if !enabled {
 		if err := m.deactivate(ctx, name); err != nil {

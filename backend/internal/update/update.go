@@ -109,6 +109,11 @@ type Settings struct {
 	// 0 (or missing) is once a day, CheckManual turns automatic checks off.
 	// Versions before it ignore the field and keep checking once a day.
 	CheckEvery int `json:"checkEvery,omitempty"`
+	// Kernel is the kernel variant updates install: "" or "stable" for
+	// Debian's kernel, "new" for the newer one from trixie-backports
+	// (variants.go). Versions before it ignore the field and install the
+	// stable variant.
+	Kernel string `json:"kernel,omitempty"`
 }
 
 const (
@@ -178,6 +183,9 @@ type Manifest struct {
 		Name  string `json:"name"`
 		Asset string `json:"asset"`
 	} `json:"plugins,omitempty"`
+	// Variants holds the same system with another kernel, by name ("new").
+	// Optional; older versions ignore it and install Files.
+	Variants map[string]Variant `json:"variants,omitempty"`
 }
 
 // Size returns how much the release takes on the stick.
@@ -201,6 +209,10 @@ type Slot struct {
 	Next bool `json:"next"`
 	// TriesLeft is set while the slot still has to prove itself.
 	TriesLeft *int `json:"triesLeft"`
+	// Kernel is the kernel release in the slot, Variant its kernel
+	// variant (stable or new); empty if unknown.
+	Kernel  string `json:"kernel,omitempty"`
+	Variant string `json:"variant,omitempty"`
 }
 
 // Progress is how far an installation is.
@@ -263,6 +275,17 @@ type Status struct {
 	Kind string `json:"kind"`
 	// App is what lies in the app folder of the running slot.
 	App AppStatus `json:"app"`
+	// Variant is the kernel variant of the running system.
+	Variant string `json:"variant"`
+	// BootLoader is what started this system: systemd-boot, grub-i386-pc
+	// (legacy BIOS) or grub-i386-efi (32-bit UEFI).
+	BootLoader string `json:"bootLoader"`
+	// KernelSwitch says that Available is the running version with the
+	// other kernel variant, as the settings ask for.
+	KernelSwitch bool `json:"kernelSwitch,omitempty"`
+	// KernelMissing names a newer release that has no system with the
+	// chosen kernel variant: it is not offered until the choice changes.
+	KernelMissing string `json:"kernelMissing,omitempty"`
 }
 
 // AppStatus tells about the app updates of the running slot.
@@ -282,6 +305,9 @@ type Manager struct {
 	// bootDir is where the stick is mounted, keyDir where the keys are
 	// that updates must be signed with.
 	bootDir, keyDir string
+	// cmdline returns the kernel command line (/proc/cmdline): it tells
+	// whether GRUB started this system.
+	cmdline func() string
 	// version and slot are what is running.
 	version, slot string
 	bootID        string
@@ -295,6 +321,8 @@ type Manager struct {
 	// Disabled leaves the stick alone: in development mode titand runs
 	// on the developer's own machine.
 	Disabled bool
+	// Variant is the kernel variant of the running image (ReadVariant).
+	Variant string
 	// OnEvent is told what users should hear of: update_available,
 	// update_installed, update_failed, update_rolled_back.
 	OnEvent func(kind, subject string)
@@ -305,8 +333,10 @@ type Manager struct {
 	// Encrypted names the volumes with LUKS encryption. A system before
 	// encryptionSince cannot open them; going back to one must not wait for
 	// them, or its boot check fails and the stick returns to this system.
-	Encrypted      func() []string
-	PreparePlugins func(context.Context, string, string, string, string, map[string]string, func(context.Context, string, int64) ([]byte, error), func(context.Context, string, string, string, int64) error) error
+	Encrypted func() []string
+	// PreparePlugins gets version, kernel variant, kernel, kernel package,
+	// base version and the plugin assets of the target.
+	PreparePlugins func(context.Context, string, string, string, string, string, map[string]string, func(context.Context, string, int64) ([]byte, error), func(context.Context, string, string, string, int64) error) error
 	PluginsHealthy func() bool
 
 	// Base is the version of the system image; "" for one that knows no
@@ -334,6 +364,11 @@ type Manager struct {
 	// availableRaw and availableSig are the signed manifest as it came:
 	// an app keeps them next to it on the stick.
 	availableRaw, availableSig []byte
+	// found is the newest release the last check found, newer or not;
+	// evaluateLocked decides from it and the settings what is available.
+	found              *Manifest
+	foundRaw, foundSig []byte
+	kernelMissing      string
 	// appTrial is set while the app of this slot is on trial; appCache is
 	// what was read from the stick about it.
 	appTrial          bool
@@ -362,6 +397,11 @@ func NewManager(store *config.Store, version, slot string) *Manager {
 		store: store, client: &http.Client{}, bootDir: "/efi", keyDir: "/usr/share/titanos/update-keys",
 		version: version, slot: slot, bootID: strings.TrimSpace(string(bootID)), now: time.Now, stall: 90 * time.Second, retryPause: 3 * time.Second, restartDelay: 2 * time.Second,
 		settings: Settings{Channel: ChannelStable, InstallTime: "03:30"},
+		Variant:  VariantStable,
+		cmdline: func() string {
+			data, _ := os.ReadFile("/proc/cmdline")
+			return string(data)
+		},
 	}
 }
 
@@ -440,7 +480,8 @@ func (m *Manager) settleApp() {
 
 // appKind tells whether a release can be installed as an app here.
 func (m *Manager) appKind(manifest *Manifest) bool {
-	return manifest != nil && manifest.App != nil && m.Apps != nil && m.Base != "" && manifest.App.Base == m.Base
+	return manifest != nil && manifest.App != nil && m.Apps != nil && m.Base != "" && manifest.App.Base == m.Base &&
+		m.wantedVariant() == normalVariant(m.Variant)
 }
 
 var clockTime = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
@@ -456,6 +497,13 @@ func (m *Manager) SetSettings(settings Settings) error {
 	// Installing by itself needs something that finds the update.
 	if settings.Manual() && settings.AutoInstall {
 		return ErrInvalid
+	}
+	if !validVariant(settings.Kernel) {
+		return ErrInvalid
+	}
+	// The default kernel is the default: leave the field out.
+	if settings.Kernel == VariantStable {
+		settings.Kernel = ""
 	}
 	// Once a day is the default: leave the field out so the file stays as
 	// it was before the field existed.
@@ -473,9 +521,12 @@ func (m *Manager) SetSettings(settings Settings) error {
 		return err
 	}
 	if settings.Channel != m.settings.Channel {
-		m.available = nil // found for the other channel
+		m.available, m.found = nil, nil // found for the other channel
 	}
 	m.settings = settings
+	// Another kernel choice can turn the last found release into an
+	// update, a kernel switch or nothing.
+	m.evaluateLocked(false)
 	return nil
 }
 
@@ -564,8 +615,17 @@ func (m *Manager) Bless() error {
 	}
 	good := filepath.Join(filepath.Dir(e.path), "titanos-"+m.slot+".conf")
 	if err := os.Rename(e.path, good); err != nil {
-		return err
+		// titand may just have written GRUB's count into the name
+		// (ReconcileBootLoader): take the entry as it is now.
+		e, ok = m.readEntries()[m.slot]
+		if !ok || e.left == nil {
+			return err
+		}
+		if err := os.Rename(e.path, good); err != nil {
+			return err
+		}
 	}
+	m.syncGrub(false)
 	unix.Sync()
 	m.forget()
 	slog.Info("this system is marked good", "slot", m.slot)
@@ -592,11 +652,15 @@ func (m *Manager) Status() Status {
 		status.NextCheck = &next
 	}
 	status.Base = m.Base
+	status.Variant = normalVariant(m.Variant)
+	status.BootLoader = m.BootLoader()
+	status.KernelMissing = m.kernelMissing
 	if m.available != nil {
 		status.Kind = KindSystem
 		if m.appKind(m.available) {
 			status.Kind = KindApp
 		}
+		status.KernelSwitch = m.available.Version == m.version
 	}
 	if m.appCache != nil {
 		cache := *m.appCache

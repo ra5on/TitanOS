@@ -8,14 +8,16 @@ Bereich: Stick-Layout und Volumes, SSD-Cache, Verschlüsselung, Arrays, Firmware
 
 ```
 TITANOS (FAT32)
-├── EFI/BOOT/BOOTX64.EFI          # systemd-boot
+├── EFI/BOOT/BOOTX64.EFI          # systemd-boot (64-Bit-UEFI)
+├── EFI/BOOT/BOOTIA32.EFI         # GRUB für 32-Bit-UEFI (ab 0.41)
+├── boot/grub/                    # grub.cfg, grubenv, i386-pc/ (Legacy-BIOS), stick-bios.py (ab 0.41)
 ├── loader/
 │   ├── loader.conf
 │   └── entries/
 │       ├── titanos-a.conf
 │       └── titanos-b.conf         # erst nach dem ersten Update; auf Probe: titanos-b+3.conf
 ├── titanos/
-│   ├── a/  vmlinuz, initrd.img, filesystem.squashfs, version, app/
+│   ├── a/  vmlinuz, initrd.img, filesystem.squashfs, version, app/, bootenv (Kommandozeile für GRUB)
 │   └── b/  (zweiter System-Slot; optional ebenfalls app/)
 └── config/                        # persistente Konfiguration, Konten und Geheimnisse
 ```

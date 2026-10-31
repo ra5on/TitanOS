@@ -62,7 +62,7 @@ func (m *Manager) Status(mounted []string) Status {
 	status.Catalog = catalog
 	status.DriverUpdate = m.driverSnapshot(settings)
 	if status.DriverUpdate.CanRestore {
-		bundled, e := readManifest(filepath.Join(m.releaseDir(settings.Volume, m.Release), "nvidia"+manifestSuffix))
+		bundled, e := readManifest(filepath.Join(m.releaseDir(settings.Volume, m.key()), "nvidia"+manifestSuffix))
 		status.DriverUpdate.CanRestore = e == nil && bundled.SHA256 != m.installed(settings.Volume)["nvidia"].SHA256
 	}
 	downloads := map[string]int{}

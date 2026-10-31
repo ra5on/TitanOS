@@ -44,10 +44,12 @@ func (m *Manager) fetch(ctx context.Context, url string, limit int64) ([]byte, e
 }
 
 var (
-	assetName  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]{0,120}$`)
-	hexSHA256  = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	feedTag    = regexp.MustCompile(`/releases/tag/([A-Za-z0-9][A-Za-z0-9._+-]{0,120})"`)
-	cmdlineSet = regexp.MustCompile(`^[\x21-\x7e]+( [\x21-\x7e]+)*$`)
+	assetName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]{0,120}$`)
+	hexSHA256 = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	feedTag   = regexp.MustCompile(`/releases/tag/([A-Za-z0-9][A-Za-z0-9._+-]{0,120})"`)
+	// debianVersion is a Debian package version, e.g. 6.16.12-1~bpo13+1.
+	debianVersion = regexp.MustCompile(`^[0-9][0-9A-Za-z.+~:-]{0,79}$`)
+	cmdlineSet    = regexp.MustCompile(`^[\x21-\x7e]+( [\x21-\x7e]+)*$`)
 )
 
 // parseManifest reads a manifest and refuses whatever TitanOS would not
@@ -87,6 +89,21 @@ func parseManifest(data []byte) (Manifest, error) {
 	}
 	if len(names) != len(slotFiles) {
 		return bad("files")
+	}
+	for name, variant := range manifest.Variants {
+		if name != VariantNew || variant.Kernel == "" || !assetName.MatchString(variant.Kernel) || variant.KernelPackage != "" && !debianVersion.MatchString(variant.KernelPackage) {
+			return bad("variant " + name)
+		}
+		var names []string
+		for _, file := range variant.Files {
+			if !slices.Contains(slotFiles, file.Name) || slices.Contains(names, file.Name) || !assetName.MatchString(file.Asset) || !hexSHA256.MatchString(file.SHA256) || file.Size <= 0 || file.Size > maxFile {
+				return bad("variant file " + file.Name)
+			}
+			names = append(names, file.Name)
+		}
+		if len(names) != len(slotFiles) {
+			return bad("variant files")
+		}
 	}
 	plugins := map[string]bool{}
 	for _, plugin := range manifest.Plugins {
@@ -171,15 +188,41 @@ func (m *Manager) Check(ctx context.Context) error {
 		m.checkError = err.Error()
 		return err
 	}
-	found, _ := parseVersion(manifest.Version)
-	// A build that is not a release is older than any release.
-	if running, ok := parseVersion(m.version); ok && found.compare(running) <= 0 {
-		return nil
+	m.found, m.foundRaw, m.foundSig = &manifest, raw, signature
+	m.evaluateLocked(true)
+	return nil
+}
+
+// evaluateLocked decides from the release found last and the kernel choice
+// what can be installed: a newer release, the running version with the
+// other kernel, or nothing. m.mu is held.
+func (m *Manager) evaluateLocked(announce bool) {
+	m.available, m.availableRaw, m.availableSig, m.kernelMissing = nil, nil, nil, ""
+	manifest := m.found
+	if manifest == nil {
+		return
 	}
-	m.available, m.availableRaw, m.availableSig = &manifest, raw, signature
-	if m.announced != manifest.Version && m.OnEvent != nil {
+	found, _ := parseVersion(manifest.Version)
+	running, release := parseVersion(m.version)
+	wanted := m.wantedVariant()
+	_, hasVariant := manifest.forVariant(wanted)
+	switch {
+	// A build that is not a release is older than any release.
+	case !release || found.compare(running) > 0:
+		if !hasVariant && !m.appKind(manifest) {
+			m.kernelMissing = manifest.Version
+			return
+		}
+	case found.compare(running) == 0 && wanted != normalVariant(m.Variant) && hasVariant:
+		// The running version with the chosen kernel: no announcement.
+		m.available, m.availableRaw, m.availableSig = manifest, m.foundRaw, m.foundSig
+		return
+	default:
+		return
+	}
+	m.available, m.availableRaw, m.availableSig = manifest, m.foundRaw, m.foundSig
+	if announce && m.announced != manifest.Version && m.OnEvent != nil {
 		m.announced = manifest.Version
 		go m.OnEvent("update_available", manifest.Version)
 	}
-	return nil
 }

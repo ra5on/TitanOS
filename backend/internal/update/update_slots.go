@@ -124,6 +124,7 @@ func (m *Manager) putEntry(slot, content string, counted bool) error {
 	if err := writeFile(filepath.Join(dir, name), []byte(content)); err != nil {
 		return err
 	}
+	m.writeBootEnv(slot, content)
 	files, _ := os.ReadDir(dir)
 	for _, file := range files {
 		if match := entryName.FindStringSubmatch(file.Name()); match != nil && match[1] == slot && file.Name() != name {
@@ -138,7 +139,7 @@ func (m *Manager) clearSlot(slot string) {
 	// What is in the slot can no longer be started while it is replaced.
 	m.removeEntry(slot)
 	dir := filepath.Join(m.bootDir, "titanos", slot)
-	for _, name := range append(slices.Clone(slotFiles), "version") {
+	for _, name := range append(slices.Clone(slotFiles), "version", bootEnvName) {
 		os.Remove(filepath.Join(dir, name))
 	}
 }
@@ -222,6 +223,10 @@ func (m *Manager) slots(fresh bool) []Slot {
 	for _, name := range []string{"a", "b"} {
 		e, hasEntry := entries[name]
 		slot := Slot{Name: name, Version: m.slotVersion(name), Running: name == m.slot, Complete: hasEntry && m.slotComplete(name), Next: name == next, TriesLeft: e.left}
+		if slot.Complete {
+			slot.Kernel = kernelRelease(filepath.Join(m.bootDir, "titanos", name, "vmlinuz"))
+			slot.Variant = kernelVariant(slot.Kernel)
+		}
 		if slot.Running && slot.Version == "" {
 			slot.Version = m.version
 		}

@@ -12,7 +12,7 @@ Zeiger gibt, nimmt TitanOS die Plugins des eigenen Releases.
   Debian-Version (`VERSION_CODENAME`) und demselben `SYSEXT_LEVEL`. Neuer Bau
   nur bei einem Update des Plugins selbst; installierte Plugins lassen sich dann
   ohne Systemupdate aktualisieren.
-- **Mit Kernelbindung** (NVIDIA, `wangxun-nic`, `intel-qat`, `it87-extended`):
+- **Mit Kernelbindung** (NVIDIA, `nvidia-legacy`, `wangxun-nic`, `intel-qat`, `it87-extended`, `r8125`, `r8126`):
   geordnet nach dem exakten Kernel (`uname -r` plus Debian-Paketversion). Neuer
   Bau nur, wenn ein volles Release einen neuen Kernel bringt. Releases mit
   gleichem Kernel übernehmen die vorhandenen Plugins. NVIDIA-Treiberupdates

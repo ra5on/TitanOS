@@ -55,6 +55,8 @@ var (
 	ErrDownloading   = errors.New("plugins: this plugin is already being downloaded")
 	ErrDriverPending = errors.New("plugins: cancel the scheduled driver activation or reboot before changing plugins")
 	ErrUpdatePending = errors.New("plugins: finish or cancel the system update before changing plugins")
+	// ErrConflict means an enabled plugin excludes the one to be enabled.
+	ErrConflict = errors.New("plugins: another enabled plugin excludes this one")
 )
 
 var nameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`)
@@ -84,6 +86,9 @@ type Manifest struct {
 	// Modules are loaded and Services started once the plugin is in place.
 	Modules  []string `json:"modules"`
 	Services []string `json:"services"`
+	// Conflicts names plugins that must not be enabled together with this
+	// one (conflicts.go). Optional; older TitanOS ignore it.
+	Conflicts []string `json:"conflicts,omitempty"`
 	// Catalog information, all optional; older TitanOS ignore it. The
 	// signature of the manifest covers it like everything else.
 	Catalog
@@ -169,8 +174,13 @@ type Manager struct {
 	LocalBuilds bool // build updated open modules on the NAS, only on request
 	buildKey    []byte
 	Release     string // running TitanOS version; set before Load
-	Disabled    bool
-	mountRoot   string
+	// Variant is the kernel variant of the running image ("" or "stable"
+	// for the default kernel, "new" for the newer one, docs/KERNEL.md):
+	// its plugins are kept apart from those of the same version with the
+	// other kernel. Set before Load.
+	Variant   string
+	Disabled  bool
+	mountRoot string
 	// extDir is where systemd looks for extensions that are not part of
 	// the image: links to the plugins on the volume.
 	extDir string
@@ -346,7 +356,7 @@ func (m *Manager) save(settings Settings) error {
 
 func (m *Manager) dir(volume string) string {
 	if releaseVersion.MatchString(m.Release) {
-		dir := m.releaseDir(volume, m.Release)
+		dir := m.releaseDir(volume, m.key())
 		if id := m.current().DriverSet; id != "" {
 			return filepath.Join(dir, ".sets", id)
 		}

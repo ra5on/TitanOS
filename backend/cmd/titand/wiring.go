@@ -428,6 +428,10 @@ func (w *titand) wireApplications() error {
 	if w.base != "" {
 		w.extensions.Release = w.base
 	}
+	// Both kernel variants of one version keep their plugins apart.
+	if update.ReadVariant(update.VariantFile) == update.VariantNew {
+		w.extensions.Variant = update.VariantNew
+	}
 	w.extensions.Disabled = w.opts.dev
 	if err := w.extensions.Load(); err != nil {
 		slog.Warn("plugin settings not readable from /config", "err", err)
@@ -680,6 +684,8 @@ func (w *titand) wireUpdates() error {
 	w.slot = system.BootSlot()
 	w.updates = update.NewManager(w.store, version.Version, w.slot)
 	w.updates.Disabled = w.opts.dev || w.slot == ""
+	// Debian's kernel or the newer one of trixie-backports (docs/KERNEL.md).
+	w.updates.Variant = update.ReadVariant(update.VariantFile)
 	// An encrypted volume waits for its password after the switch to a new
 	// system: it must not make the boot check fail (and the update roll
 	// back) just because nobody entered it within five minutes. It counts
@@ -691,8 +697,8 @@ func (w *titand) wireUpdates() error {
 	w.updates.PluginsHealthy = func() bool {
 		return w.extensions.Healthy() || slices.Contains(w.volumes.WaitingForPassword(ctx), w.extensions.Volume())
 	}
-	w.updates.PreparePlugins = func(ctx context.Context, version, kernel, kernelPackage, baseVersion string, assets map[string]string, fetch func(context.Context, string, int64) ([]byte, error), download func(context.Context, string, string, string, int64) error) error {
-		return w.extensions.PrepareUpdate(ctx, version, kernel, kernelPackage, baseVersion, assets, w.volumes.Mounted(), fetch, download)
+	w.updates.PreparePlugins = func(ctx context.Context, version, variant, kernel, kernelPackage, baseVersion string, assets map[string]string, fetch func(context.Context, string, int64) ([]byte, error), download func(context.Context, string, string, string, int64) error) error {
+		return w.extensions.PrepareUpdate(ctx, version, variant, kernel, kernelPackage, baseVersion, assets, w.volumes.Mounted(), fetch, download)
 	}
 	w.updates.Reboot = w.unattended("reboot", "update", w.power.Reboot)
 	if !w.opts.dev && w.slot != "" && w.base != "" {
@@ -712,6 +718,9 @@ func (w *titand) wireUpdates() error {
 		}
 		w.notifier.Notify(severity, kind, subject)
 	}
+	// Started by GRUB (legacy BIOS, 32-bit UEFI): its try count becomes
+	// part of the entry names before anything looks at them.
+	w.updates.ReconcileBootLoader()
 	if err := w.updates.Load(); err != nil {
 		slog.Warn("update settings not readable from /config", "err", err)
 	}

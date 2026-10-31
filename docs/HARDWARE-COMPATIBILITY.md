@@ -164,6 +164,9 @@ volle Release baut sie gegen genau seinen Kernel; Bau, Prüfungen und Grenzen:
 | --- | --- | --- | --- |
 | `wangxun-nic` | `ngbe`, `txgbe` (`libwx`) | Wangxun WX1860 (1 GbE, 8088:0100–010b), SP1000/WX1820 (10 GbE, 8088:1001/2001) | baut ohne Warnungen, keine Firmware nötig; Hardware ungeprüft |
 | `intel-qat` | `qat_4xxx`, `qat_420xx` | Intel QAT Gen 4 (8086:4940/4942/4944/4946) | Firmware `qat_4xxx*.bin` aus linux-firmware (Debian liefert sie nicht mit), `qat_402xx`/`qat_420xx` bereits in `firmware-intel-misc`; TitanOS nutzt QAT nicht gezielt |
+| `r8125` | Realtek-Herstellertreiber `r8125` | RTL8125 (2,5 GbE, 10ec:8125), Killer E3000 (10ec:3000) | Ausweichmöglichkeit zu `r8169`, übernimmt nur diese Chips; Quelle muss vor dem ersten Bau festgelegt werden; Hardware ungeprüft |
+| `r8126` | Realtek-Herstellertreiber `r8126` | RTL8126 (5 GbE, 10ec:8126) | wie `r8125` |
+| `nvidia-legacy` | proprietäres NVIDIA-Modul Reihe 580 | Maxwell, Pascal, Volta (PCI 10de:1300–1DFF, Klasse 03) | nie zusammen mit `nvidia`; Lock muss vor dem ersten Bau gefüllt werden; Hardware ungeprüft |
 | `it87-extended` | `it87` von frankcrawford/it87 (fester Commit) | ITE IT8606E, IT8607E, IT8613E, IT8625E, IT8655E, IT8665E, IT8686E, IT8688E, IT8689E, IT8696E, IT8698E, IT8736F, IT8738E, IT8785E zusätzlich zum it87 des Kernels | ersetzt den System-it87; ACPI-Konflikte werden nicht umgangen |
 
 Tehuti TN40xx: nicht unterstützt – braucht QT2025-PHY-Treiber (Rust, von Debian
@@ -318,8 +321,9 @@ Die Treiber-Plugins sind gebaut und gegen den Modulindex des Abbilds
 aufgelöst (Abhängigkeiten, `vermagic`, Aliase); im QEMU-Storage-Test laden
 `wangxun-nic` und `intel-qat` ihre Module ohne passende
 Hardware. Mit echten Karten, QAT-Geräten oder ITE-Chips sind sie nicht geprüft.
-Keine neue pauschale Hardwareabnahme und keine Unterstützung älterer
-NVIDIA-Karten werden aus diesen Tests abgeleitet. Abbildgrößen und konkrete
+Keine neue pauschale Hardwareabnahme wird aus diesen Tests abgeleitet; ältere
+NVIDIA-Karten (Maxwell bis Volta) deckt `nvidia-legacy` ab, auf echter
+Hardware ungeprüft. Abbildgrößen und konkrete
 QEMU-Messungen gehören zum jeweiligen Releasebericht.
 
 Grundlagen: [Debian-Microcode](https://wiki.debian.org/Microcode),

@@ -14,6 +14,9 @@ The result is the layout make-release.sh expects after "make zip":
     build/mkosi.output/kernel-version
     build/mkosi.output/rootfs/usr/share/titanos/  license inventory
     out/plugins/                     the plugins of the base release
+    out/kernel-new/, build/mkosi.output-new/
+                                     the same for the image with the newer
+                                     kernel, if the base release has one
 
 Usage: repack-release.py --base 0.8.0 --version 0.8.1 [--source URL]
 Needs root for unsquashfs/mksquashfs (owners of the files in the image) and
@@ -82,7 +85,13 @@ def fetch_base(source, base, work, keys):
 
 def repack(base_dir, manifest, version, titand, work):
     base = manifest["version"]
-    squashfs = base_dir / f"titanos-{base}-filesystem.squashfs"
+    packed = repack_image(base_dir / f"titanos-{base}-filesystem.squashfs", base, titand, work,
+                          REPO / "build/mkosi.output", manifest["kernel"])
+    return packed
+
+
+def repack_image(squashfs, base, titand, work, image, kernel):
+    """The image of the base with the new titand; its notices go to image."""
     root = work / "rootfs"
     sudo("unsquashfs", "-q", "-no-progress", "-d", str(root), str(squashfs))
     if (root / "usr/share/titanos/base-version").read_text().strip() != base:
@@ -93,6 +102,7 @@ def repack(base_dir, manifest, version, titand, work):
     # The notices of Go modules and npm packages follow the new titand; the
     # Debian part is read from the image as mkosi.finalize does it.
     application = work / "application"
+    shutil.rmtree(application, ignore_errors=True)
     run(sys.executable, LICENSES, "application", str(application))
     notices = root / "usr/share/titanos"
     sudo("rm", "-rf", str(notices / "licenses/go"), str(notices / "licenses/npm"))
@@ -101,15 +111,14 @@ def repack(base_dir, manifest, version, titand, work):
     sudo(sys.executable, LICENSES, "image", str(root))
     sudo("chmod", "-R", "go-w", str(notices))
 
-    image = REPO / "build/mkosi.output"
     shutil.rmtree(image, ignore_errors=True)
     (image / "rootfs/usr/share").mkdir(parents=True)
     run("cp", "-r", str(notices), str(image / "rootfs/usr/share/titanos"))
-    (image / "kernel-version").write_text(manifest["kernel"] + "\n")
+    (image / "kernel-version").write_text(kernel + "\n")
     # make-release.sh reads the kernel package version from it.
     (image / "rootfs/var/lib/dpkg").mkdir(parents=True)
     run("cp", str(root / "var/lib/dpkg/status"), str(image / "rootfs/var/lib/dpkg/status"))
-    packed = work / "filesystem.squashfs"
+    packed = work / f"{image.name}.squashfs"
     # Like mkosi.finalize under SOURCE_DATE_EPOCH: creation time and file
     # times clamped to the commit, so the same commit packs the same image.
     # Outside a checkout (tests) the times stay as they are.
@@ -118,6 +127,27 @@ def repack(base_dir, manifest, version, titand, work):
     sudo("env", *([f"SOURCE_DATE_EPOCH={epoch}"] if epoch else []), "mksquashfs", str(root), str(packed), "-comp", "zstd", "-Xcompression-level", "19", "-b", "1M",
          "-noappend", "-no-progress", "-quiet")
     sudo("rm", "-rf", str(root))
+    return packed
+
+
+def repack_rest(base_dir, manifest, version, titand, work, packed):
+    base = manifest["version"]
+    # The image with the newer kernel (kernel choice "Neu", docs/KERNEL.md).
+    variant = REPO / "out/kernel-new"
+    shutil.rmtree(variant, ignore_errors=True)
+    if new := manifest.get("variants", {}).get("new"):
+        files = {f["name"]: f for f in new["files"]}
+        for name in ["vmlinuz", "initrd.img", "filesystem.squashfs"]:
+            if sha256(base_dir / files[name]["asset"]) != files[name]["sha256"]:
+                raise SystemExit(f"{files[name]['asset']} is not the one of the manifest of the base")
+        packed_new = repack_image(base_dir / files["filesystem.squashfs"]["asset"], base, titand, work,
+                                  REPO / "build/mkosi.output-new", new["kernel"])
+        variant.mkdir(parents=True)
+        for name in ["vmlinuz", "initrd.img"]:
+            shutil.copyfile(base_dir / files[name]["asset"], variant / name)
+        shutil.copyfile(packed_new, variant / "filesystem.squashfs")
+        (variant / "kernel-version").write_text(new["kernel"] + "\n")
+        (variant / "version").write_text(version + "\n")
 
     # The stick of the base, with the new image and version in slot a.
     stick = REPO / "out/stick"
@@ -178,7 +208,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix="titanos-repack-", dir=REPO / "out" if (REPO / "out").is_dir() else None) as tmp:
         work = Path(tmp)
         base_dir, manifest = fetch_base(args.source.rstrip("/"), args.base, work, args.keys)
-        repack(base_dir, manifest, args.version, args.titand.resolve(), work)
+        packed = repack(base_dir, manifest, args.version, args.titand.resolve(), work)
+        repack_rest(base_dir, manifest, args.version, args.titand.resolve(), work, packed)
     print(f"Image of {args.base} with titand {args.version} in out/stick; next: BASE_VERSION={args.base} scripts/make-release.sh {args.version} …")
 
 

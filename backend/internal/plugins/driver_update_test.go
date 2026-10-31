@@ -69,7 +69,7 @@ func TestDriverDownloadSelectionAndReboot(t *testing.T) {
 	if err := m.SetEnabled(ctx, "nvidia", false, mounted); !errors.Is(err, ErrDriverPending) {
 		t.Fatal("mutation lost pending set", err)
 	}
-	if err := m.PrepareUpdate(ctx, "9.9.9", m.kernel, "", "", nil, mounted, nil, nil); !errors.Is(err, ErrDriverPending) {
+	if err := m.PrepareUpdate(ctx, "9.9.9", "", m.kernel, "", "", nil, mounted, nil, nil); !errors.Is(err, ErrDriverPending) {
 		t.Fatal("OS update lost pending choice", err)
 	}
 	if err := m.Load(); err != nil {

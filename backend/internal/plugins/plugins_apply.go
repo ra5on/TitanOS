@@ -64,6 +64,7 @@ func (m *Manager) apply(ctx context.Context, mounted []string) (err error) {
 			}
 		}
 	}
+	m.withoutConflicts(settings.Enabled, wanted)
 	names := make([]string, 0, len(wanted))
 	for name := range wanted {
 		names = append(names, name)

@@ -10,7 +10,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 CATALOG = REPO / "plugins/catalog"
 CATEGORIES = {"network", "graphics", "sensors", "storage", "tools", "remote"}
-OFFICIAL = {"nvidia", "intel-gpu-tools", "coral-usb", "tailscale", "netbird", "wangxun-nic", "intel-qat", "it87-extended"}
+OFFICIAL = {"nvidia", "nvidia-legacy", "intel-gpu-tools", "coral-usb", "tailscale", "netbird", "wangxun-nic", "intel-qat",
+            "it87-extended", "r8125", "r8126"}
 
 
 class PluginCatalogTest(unittest.TestCase):
@@ -44,6 +45,32 @@ class PluginCatalogTest(unittest.TestCase):
         self.assertTrue(matches("2684"))   # AD102, Ada
         self.assertFalse(matches("1B80"))  # GP104, Pascal
         self.assertFalse(matches("1DB4"))  # GV100, Volta
+
+    def test_nvidia_legacy_rules_cover_maxwell_to_volta_only(self):
+        legacy = [rule["modalias"] for rule in json.loads((CATALOG / "nvidia-legacy.json").read_text())["hardware"]]
+        open_rules = [rule["modalias"] for rule in json.loads((CATALOG / "nvidia.json").read_text())["hardware"]]
+
+        def matches(rules, device, klass="03"):
+            alias = f"pci:v000010DEd0000{device}sv00001043sd00008700bc{klass}sc00i00"
+            return any(fnmatch(rule, alias) for rule in rules)
+        for device in ("1380", "13C2", "1401", "17C2", "1B80", "1B06", "1C82", "1D01", "1D81", "1DB4"):
+            self.assertTrue(matches(legacy, device), device)    # GM107 … GV100
+        for device in ("1180", "1004", "1E84", "2504", "2684"):
+            self.assertFalse(matches(legacy, device), device)   # Kepler, Turing and newer
+        self.assertFalse(matches(legacy, "1B80", "04"))          # the card's audio function
+        # Every NVIDIA display ID belongs to at most one of the two plugins.
+        for value in range(0x1000, 0x3000):
+            device = f"{value:04X}"
+            self.assertFalse(matches(legacy, device) and matches(open_rules, device), device)
+
+    def test_realtek_vendor_drivers_are_never_suggested_over_r8169(self):
+        # r8169 binds these chips at boot; "unbound" rules show the devices on
+        # the plugin page without recommending the plugin to every owner.
+        for name, ids in (("r8125", {"8125", "3000"}), ("r8126", {"8126"})):
+            rules = json.loads((CATALOG / f"{name}.json").read_text())["hardware"]
+            self.assertTrue(all(rule["unbound"] for rule in rules))
+            self.assertEqual({rule["modalias"] for rule in rules},
+                             {f"pci:v000010ECd0000{i}sv*sd*bc*sc*i*" for i in ids})
 
 
 def fnmatch(pattern, name):

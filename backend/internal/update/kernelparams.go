@@ -160,6 +160,7 @@ func (m *Manager) SetKernelParam(name, value string) (ParamState, error) {
 		if err := writeFile(e.path, []byte(next)); err != nil {
 			return state, err
 		}
+		m.writeBootEnv(slot, next)
 		changed = true
 	}
 	if changed {

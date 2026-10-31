@@ -106,6 +106,7 @@ func (s *Server) toolUpdateStatus(ctx context.Context) (any, error) {
 		"lastCheck":   status.LastCheck,
 		"nextCheck":   status.NextCheck,
 		"checkEvery":  status.Settings.CheckEvery,
+		"kernel":      status.Variant,
 	}
 	if status.Base != "" {
 		res["baseVersion"] = status.Base

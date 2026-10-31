@@ -167,20 +167,23 @@ func (m *Manager) oldReleases(mounted []string) ([]OldRelease, error) {
 		}
 		relative, e := filepath.Rel(filepath.Join(m.baseDir(m.current().Volume), "releases"), target)
 		if e == nil && !strings.HasPrefix(relative, "..") {
-			version := strings.Split(filepath.ToSlash(relative), "/")[0]
+			version, _, _ := strings.Cut(strings.Split(filepath.ToSlash(relative), "/")[0], "+")
 			protected[version] = "active"
 		}
 	}
 	list := []OldRelease{}
 	for _, entry := range entries {
-		if !releaseVersion.MatchString(entry.Name()) || !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
+		// <version>+<variant> holds the plugins of the same version with
+		// the other kernel; it is protected together with its version.
+		version, variant, _ := strings.Cut(entry.Name(), "+")
+		if !releaseVersion.MatchString(version) || !variantRE.MatchString(variant) || !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
 			continue
 		}
 		bytes, fingerprint, e := releaseSize(root, entry.Name())
 		if e != nil {
 			return nil, e
 		}
-		reason := protected[strings.TrimPrefix(entry.Name(), "v")]
+		reason := protected[strings.TrimPrefix(version, "v")]
 		list = append(list, OldRelease{Version: entry.Name(), Bytes: bytes, Fingerprint: fingerprint, Protected: reason != "", Reason: reason})
 	}
 	slices.SortFunc(list, func(a, b OldRelease) int { return strings.Compare(a.Version, b.Version) })

@@ -242,6 +242,8 @@ export function fixtureFactory(browser, errors) {
         base: "0.24.0",
         kind: "",
         app: { current: "", previous: "", trial: false, canRollback: false },
+        variant: "stable",
+        bootLoader: "systemd-boot",
       },
       updateChecks: 0,
       updatePuts: [],
@@ -1057,6 +1059,7 @@ export function fixtureFactory(browser, errors) {
           });
         const settings = { ...body, checkEvery: every === 24 * 60 ? 0 : every };
         if (!settings.checkEvery) delete settings.checkEvery;
+        if (settings.kernel !== "new") delete settings.kernel;
         const next = new Date(
           Date.parse(data.update.lastCheck) +
             (every > 0 ? every : 24 * 60) * 60e3,
