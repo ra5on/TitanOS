@@ -68,6 +68,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
+		padding: calc(var(--tile-pad) + 2px);
 	}
 	.head {
 		display: flex;

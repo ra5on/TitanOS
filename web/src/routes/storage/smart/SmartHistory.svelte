@@ -97,7 +97,7 @@
 			</figure>
 		{/if}
 		<div class="table">
-			<table>
+			<table class="summary">
 				<thead>
 					<tr>
 						<th>{t('smartHistory.value')}</th>
@@ -244,6 +244,27 @@
 	}
 	.num {
 		text-align: right;
+	}
+	/* Names and changes wrap, so the summary fits a phone without scrolling. */
+	.summary td:first-child,
+	.summary td:last-child {
+		white-space: normal;
+	}
+	.summary td:first-child,
+	.summary td:last-child {
+		min-width: 7.5em;
+		overflow-wrap: normal;
+		word-break: normal;
+		hyphens: auto;
+	}
+	@media (max-width: 600px) {
+		th,
+		td {
+			padding: 6px 4px;
+		}
+		.summary th {
+			white-space: normal;
+		}
 	}
 	tr.bad td {
 		color: var(--error-text);

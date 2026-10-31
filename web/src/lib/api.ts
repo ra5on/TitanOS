@@ -56,9 +56,17 @@ async function request<T>(
 				.catch(() => null);
 			if (answer?.error?.code !== 'cluster_restarting') break;
 			stopWaiting ??= waitForNode();
-			await new Promise((resolve) =>
-				setTimeout(resolve, restartPause(Number(answer.error.retryAfter))),
-			);
+			await new Promise<void>((resolve) => {
+				const timer = setTimeout(resolve, restartPause(Number(answer.error.retryAfter)));
+				signal?.addEventListener(
+					'abort',
+					() => {
+						clearTimeout(timer);
+						resolve();
+					},
+					{ once: true },
+				);
+			});
 		}
 	} finally {
 		stopWaiting?.();

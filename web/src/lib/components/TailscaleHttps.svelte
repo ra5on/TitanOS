@@ -14,7 +14,7 @@
 	// tailscale/cert.go): a switch, off by default, with what Tailscale
 	// needs for it and what it makes public.
 	import { api } from '#lib/api.ts';
-	import { formatTime } from '#lib/format.ts';
+	import { formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 
 	type Props = {
@@ -66,8 +66,8 @@
 				<span>{t('tailscale.httpsReady')}</span>
 				<a class="mono address" href="https://{https.name}">https://{https.name}</a
 				>{#if https.notAfter}<span class="muted">
-						· {t('tailscale.httpsUntil', {
-							date: formatTime(new Date(https.notAfter)),
+						{' '}· {t('tailscale.httpsUntil', {
+							date: formatDateTime(new Date(https.notAfter)),
 						})}</span
 					>{/if}
 			</p>
