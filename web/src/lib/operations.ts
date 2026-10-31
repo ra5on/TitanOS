@@ -20,6 +20,8 @@ export type MaintenanceJob = {
 	allowPrune: boolean;
 	/** Days each snapshot of the job cannot be deleted; absent or 0 for none. */
 	lockDays?: number;
+	/** Snapshot jobs: keep by day, week and month (0.41.0); keep is the count older versions use. */
+	versions?: import('#lib/components/KeepVersions.svelte').Keep | null;
 };
 export type MaintenanceSettings = {
 	backupsFirst?: boolean;

@@ -48,13 +48,16 @@
 	let {
 		keep = $bindable(),
 		times,
-		target,
+		target = 'storage',
+		simple = false,
 	}: {
 		keep: Keep;
 		/** The run times of the schedule, to choose from; empty: any time. */
 		times: string[];
 		/** What "full" refers to: drive, volume, share or storage. */
-		target: 'drive' | 'volume' | 'share' | 'storage';
+		target?: 'drive' | 'volume' | 'share' | 'storage';
+		/** Only the lines by day, week and month: no rolling mode, no "when full". */
+		simple?: boolean;
 	} = $props();
 
 	const DAYS = [1, 2, 3, 4, 5, 6, 7];
@@ -126,130 +129,138 @@
 	{/if}
 {/snippet}
 
-<div class="modes" role="radiogroup" aria-label={t('backup.keeps')}>
-	<div class="mode" class:on={keep.mode !== 'rolling'}>
-		<label class="head"
-			><input
-				type="radio"
-				name="keep-mode"
-				checked={keep.mode !== 'rolling'}
-				onchange={() => (keep.mode = '')}
-			/><strong>{t('keep.bySchedule')}</strong></label
+{#snippet tiers()}
+	<p class="muted small">{t('keep.perLine')}</p>
+	<div class="line">
+		<strong>{t('keep.daily')}</strong>
+		<span class="count"
+			>{t('keep.keepLast')}
+			<input class="field mono" type="number" min="0" max="999" bind:value={keep.daily} />
+			{t('keep.days')}</span
 		>
-		<span class="muted small indent">{t('keep.byScheduleHint')}</span>
-		{#if keep.mode !== 'rolling'}
-			<p class="muted small">{t('keep.perLine')}</p>
-			<div class="line">
-				<strong>{t('keep.daily')}</strong>
-				<span class="count"
-					>{t('keep.keepLast')}
-					<input class="field mono" type="number" min="0" max="999" bind:value={keep.daily} />
-					{t('keep.days')}</span
-				>
-				<span class="which"
-					>{t('keep.fromRunAt')}
-					{@render clock(keep.dailyAt, (v) => (keep.dailyAt = v), t('keep.daily'))}</span
-				>
-			</div>
-			<div class="line">
-				<strong>{t('keep.weekly')}</strong>
-				<span class="count"
-					>{t('keep.keepLast')}
-					<input class="field mono" type="number" min="0" max="999" bind:value={keep.weekly} />
-					{t('keep.weeks')}</span
-				>
-				<span class="which"
-					>{t('keep.fromRunOn')}
-					<select class="field" aria-label={t('keep.weekly')} bind:value={keep.weeklyDay}>
-						<option value={0}>{t('keep.newestOfWeek')}</option>
-						{#each DAYS as d (d)}<option value={d}>{day(d)}</option>{/each}
-					</select>
-					{t('keep.at')}
-					{@render clock(keep.weeklyAt, (v) => (keep.weeklyAt = v), t('keep.weekly'))}</span
-				>
-			</div>
-			<div class="line">
-				<strong>{t('keep.monthly')}</strong>
-				<span class="count"
-					>{t('keep.keepLast')}
-					<input class="field mono" type="number" min="0" max="999" bind:value={keep.monthly} />
-					{t('keep.months')}</span
-				>
-				<span class="which"
-					>{t('keep.fromRunOn')}
-					<select
-						class="field"
-						aria-label={t('keep.monthly')}
-						value={monthValue}
-						onchange={(e) => setMonth(e.currentTarget.value)}
-					>
-						<option value="">{t('keep.newestOfMonth')}</option>
-						<optgroup label={t('keep.fixedDay')}>
-							{#each Array.from({ length: 28 }, (_, i) => i + 1) as d (d)}<option value={`d:${d}`}
-									>{t('keep.dayOfMonth', { day: d })}</option
-								>{/each}
-							<option value="d:-1">{t('keep.lastDay')}</option>
-						</optgroup>
-						<optgroup label={t('keep.weekday')}>
-							{#each NTH as n (n)}{#each DAYS as d (d)}<option value={`n:${n}:${d}`}
-										>{t('keep.nthWeekday', {
-											nth: t(`keep.nth.${n}` as MessageKey),
-											day: day(d),
-										})}</option
-									>{/each}{/each}
-						</optgroup>
-					</select>
-					{t('keep.at')}
-					{@render clock(keep.monthlyAt, (v) => (keep.monthlyAt = v), t('keep.monthly'))}</span
-				>
-			</div>
-			<p class="muted small">
-				{#if total > 0}{t('keep.result', { total, list: result })}{:else}{t('keep.all')}{/if}
-				{t('keep.resultHint')}
-			</p>
-			<label class="check full"
-				><input
-					type="checkbox"
-					checked={keep.whenFull === 'oldest'}
-					onchange={(e) => (keep.whenFull = e.currentTarget.checked ? 'oldest' : '')}
-				/><span
-					><strong>{t(`keep.whenFull.${target}` as MessageKey)}</strong><br /><span
-						class="muted small">{t('keep.whenFullHint')}</span
-					></span
-				></label
-			>
-		{/if}
-	</div>
-	<div class="mode" class:on={keep.mode === 'rolling'}>
-		<label class="head"
-			><input
-				type="radio"
-				name="keep-mode"
-				checked={keep.mode === 'rolling'}
-				onchange={() => (keep.mode = 'rolling')}
-			/><strong>{t(`keep.rolling.${target}` as MessageKey)}</strong></label
+		<span class="which"
+			>{t('keep.fromRunAt')}
+			{@render clock(keep.dailyAt, (v) => (keep.dailyAt = v), t('keep.daily'))}</span
 		>
-		<span class="muted small indent">{t('keep.rollingHint')}</span>
-		{#if keep.mode === 'rolling'}
-			<label class="check indent"
-				><input
-					type="checkbox"
-					checked={(keep.maxAgeMonths ?? 0) > 0}
-					onchange={(e) => (keep.maxAgeMonths = e.currentTarget.checked ? 12 : 0)}
-				/><span>{t('keep.maxAge')}</span>
-				{#if (keep.maxAgeMonths ?? 0) > 0}<input
-						class="field mono age"
-						type="number"
-						min="1"
-						max="1200"
-						bind:value={keep.maxAgeMonths}
-					/>
-					{t('keep.months')}{/if}</label
-			>
-			<p class="muted small indent">{t('keep.newestStays')}</p>
-		{/if}
 	</div>
-</div>
+	<div class="line">
+		<strong>{t('keep.weekly')}</strong>
+		<span class="count"
+			>{t('keep.keepLast')}
+			<input class="field mono" type="number" min="0" max="999" bind:value={keep.weekly} />
+			{t('keep.weeks')}</span
+		>
+		<span class="which"
+			>{t('keep.fromRunOn')}
+			<select class="field" aria-label={t('keep.weekly')} bind:value={keep.weeklyDay}>
+				<option value={0}>{t('keep.newestOfWeek')}</option>
+				{#each DAYS as d (d)}<option value={d}>{day(d)}</option>{/each}
+			</select>
+			{t('keep.at')}
+			{@render clock(keep.weeklyAt, (v) => (keep.weeklyAt = v), t('keep.weekly'))}</span
+		>
+	</div>
+	<div class="line">
+		<strong>{t('keep.monthly')}</strong>
+		<span class="count"
+			>{t('keep.keepLast')}
+			<input class="field mono" type="number" min="0" max="999" bind:value={keep.monthly} />
+			{t('keep.months')}</span
+		>
+		<span class="which"
+			>{t('keep.fromRunOn')}
+			<select
+				class="field"
+				aria-label={t('keep.monthly')}
+				value={monthValue}
+				onchange={(e) => setMonth(e.currentTarget.value)}
+			>
+				<option value="">{t('keep.newestOfMonth')}</option>
+				<optgroup label={t('keep.fixedDay')}>
+					{#each Array.from({ length: 28 }, (_, i) => i + 1) as d (d)}<option value={`d:${d}`}
+							>{t('keep.dayOfMonth', { day: d })}</option
+						>{/each}
+					<option value="d:-1">{t('keep.lastDay')}</option>
+				</optgroup>
+				<optgroup label={t('keep.weekday')}>
+					{#each NTH as n (n)}{#each DAYS as d (d)}<option value={`n:${n}:${d}`}
+								>{t('keep.nthWeekday', {
+									nth: t(`keep.nth.${n}` as MessageKey),
+									day: day(d),
+								})}</option
+							>{/each}{/each}
+				</optgroup>
+			</select>
+			{t('keep.at')}
+			{@render clock(keep.monthlyAt, (v) => (keep.monthlyAt = v), t('keep.monthly'))}</span
+		>
+	</div>
+	<p class="muted small">
+		{#if total > 0}{t('keep.result', { total, list: result })}{:else}{t('keep.all')}{/if}
+		{t('keep.resultHint')}
+	</p>
+{/snippet}
+
+{#if simple}
+	<div class="mode simple">{@render tiers()}</div>
+{:else}
+	<div class="modes" role="radiogroup" aria-label={t('backup.keeps')}>
+		<div class="mode" class:on={keep.mode !== 'rolling'}>
+			<label class="head"
+				><input
+					type="radio"
+					name="keep-mode"
+					checked={keep.mode !== 'rolling'}
+					onchange={() => (keep.mode = '')}
+				/><strong>{t('keep.bySchedule')}</strong></label
+			>
+			<span class="muted small indent">{t('keep.byScheduleHint')}</span>
+			{#if keep.mode !== 'rolling'}
+				{@render tiers()}
+				<label class="check full"
+					><input
+						type="checkbox"
+						checked={keep.whenFull === 'oldest'}
+						onchange={(e) => (keep.whenFull = e.currentTarget.checked ? 'oldest' : '')}
+					/><span
+						><strong>{t(`keep.whenFull.${target}` as MessageKey)}</strong><br /><span
+							class="muted small">{t('keep.whenFullHint')}</span
+						></span
+					></label
+				>
+			{/if}
+		</div>
+		<div class="mode" class:on={keep.mode === 'rolling'}>
+			<label class="head"
+				><input
+					type="radio"
+					name="keep-mode"
+					checked={keep.mode === 'rolling'}
+					onchange={() => (keep.mode = 'rolling')}
+				/><strong>{t(`keep.rolling.${target}` as MessageKey)}</strong></label
+			>
+			<span class="muted small indent">{t('keep.rollingHint')}</span>
+			{#if keep.mode === 'rolling'}
+				<label class="check indent"
+					><input
+						type="checkbox"
+						checked={(keep.maxAgeMonths ?? 0) > 0}
+						onchange={(e) => (keep.maxAgeMonths = e.currentTarget.checked ? 12 : 0)}
+					/><span>{t('keep.maxAge')}</span>
+					{#if (keep.maxAgeMonths ?? 0) > 0}<input
+							class="field mono age"
+							type="number"
+							min="1"
+							max="1200"
+							bind:value={keep.maxAgeMonths}
+						/>
+						{t('keep.months')}{/if}</label
+				>
+				<p class="muted small indent">{t('keep.newestStays')}</p>
+			{/if}
+		</div>
+	</div>
+{/if}
 
 <style>
 	.modes {

@@ -26,7 +26,7 @@
 	} from '#lib/backup-bandwidth.ts';
 	import FolderPicker from './FolderPicker.svelte';
 	import { selectionOfIn, shareOfIn, type Chosen } from './selection.ts';
-	import KeepVersions, { keepPayload, type Keep } from './KeepVersions.svelte';
+	import KeepVersions, { keepPayload, type Keep } from '#lib/components/KeepVersions.svelte';
 	import SnapshotFiles from './SnapshotFiles.svelte';
 	import SmbTargets, { type SmbTarget } from './SmbTargets.svelte';
 	import TargetPanel from './TargetPanel.svelte';

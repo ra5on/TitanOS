@@ -8,6 +8,7 @@
 	import { problemText, requestProblem, type Problem } from '../problem.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import KeepChoice, { keepChoicePayload } from '#lib/components/KeepChoice.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import {
 		newMaintenanceJob,
@@ -149,8 +150,12 @@
 		}
 	}
 	async function saveJob() {
-		const job = draft ? $state.snapshot(draft) : null;
-		if (!job) return;
+		const snapshot = draft ? $state.snapshot(draft) : null;
+		if (!snapshot) return;
+		const job =
+			snapshot.kind === 'snapshot'
+				? { ...snapshot, ...keepChoicePayload(snapshot.keep, snapshot.versions, 1, 100) }
+				: { ...snapshot, versions: undefined };
 		await saveJobs((jobs) => [...jobs.filter((j) => j.id !== job.id), job], draftVolume);
 	}
 	async function action(id: string, kind: string) {
@@ -460,15 +465,17 @@
 						bind:value={draft.maxFiles}
 					/></label
 				>{/if}
-			{#if draft.kind === 'snapshot'}<label
-					>{t('ops.keep')}<input
-						class="field"
-						type="number"
-						min="1"
-						max="100"
-						bind:value={draft.keep}
-					/></label
-				><label
+			{#if draft.kind === 'snapshot'}<div class="keep-block">
+					<span>{t('ops.keep')}</span>
+					<KeepChoice
+						bind:count={draft.keep}
+						bind:versions={draft.versions}
+						min={1}
+						max={100}
+						unit={t('keep.unit.snapshots')}
+					/>
+				</div>
+				<label
 					>{t('ops.lockDays')}<input
 						class="field"
 						type="number"

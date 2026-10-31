@@ -5,12 +5,16 @@
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import KeepChoice, { keepChoicePayload } from '#lib/components/KeepChoice.svelte';
+	import type { Keep } from '#lib/components/KeepVersions.svelte';
 	import { revealTarget } from '#lib/reveal-target.ts';
 
 	type Settings = {
 		enabled: boolean;
 		volume: string;
 		keep: number;
+		/** By day, week and month (0.41.0); null keeps the newest keep. */
+		versions?: Keep | null;
 		schedule: string;
 		time: string;
 		weekday: number;
@@ -94,8 +98,16 @@
 	const changed = $derived(
 		!!status &&
 			!!draft &&
-			(JSON.stringify({ ...draft, keep: Number(draft.keep), encrypt: !!draft.encrypt }) !==
-				JSON.stringify({ ...status.settings, encrypt: !!status.settings.encrypt }) ||
+			(JSON.stringify({
+				...draft,
+				...keepChoicePayload(draft.keep, draft.versions, 1, 100),
+				encrypt: !!draft.encrypt,
+			}) !==
+				JSON.stringify({
+					...status.settings,
+					...keepChoicePayload(status.settings.keep, status.settings.versions, 1, 100),
+					encrypt: !!status.settings.encrypt,
+				}) ||
 				password !== ''),
 	);
 	const newest = $derived(status?.backups[0]);
@@ -110,7 +122,7 @@
 			take(
 				await api.put<Answer>('/config-backup', {
 					...draft,
-					keep: Number(draft.keep) || 0,
+					...keepChoicePayload(draft.keep, draft.versions, 1, 100),
 					password: password || undefined,
 				}),
 			);
@@ -281,17 +293,16 @@
 					{#each volumes as volume (volume)}<option value={volume}>{volume}</option>{/each}
 				</select>
 			</label>
-			<label class="stack tiny"
-				><span>{t('stick.keep')}</span>
-				<input
-					class="field mono"
-					type="number"
-					min="1"
-					max="100"
-					bind:value={draft.keep}
-					required
-				/>
-			</label>
+		</div>
+		<div class="keep-block">
+			<span class="legend-sub">{t('stick.keep')}</span>
+			<KeepChoice
+				bind:count={draft.keep}
+				bind:versions={draft.versions}
+				min={1}
+				max={100}
+				unit={t('keep.unit.backups')}
+			/>
 		</div>
 		<div class="option divided">
 			<label class="check"
