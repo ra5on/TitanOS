@@ -39,3 +39,7 @@ Die Wahl steht im optionalen Feld `kernel` von `/config/system/update.json` (`"n
 ## Stand der Treiber-Plugins für den neuen Kernel (31.10.2026)
 
 Das Plugin-Repository baut Sätze für den neuen Kernel erst, wenn es `kernelVariant` versteht. Die Änderungen dafür liegen als Patch vor und werden vom Projektinhaber im Plugin-Repository eingespielt (dort sind auch die Quellen von `r8125`/`r8126` festzulegen und `nvidia-legacy/packages.lock.json` zu erzeugen). Bis dahin holt der Release-Workflow für den neuen Kernel nur einen schon vorhandenen Satz und warnt sonst; ein NAS mit Kernel „Neu“ kann dann keine Kernel-Plugins (NVIDIA, Netzwerktreiber) nutzen. Der Standard-Kernel ist davon nicht betroffen.
+
+## NTFS mit dem neuen Kernel
+
+Linux 7 (Kernel „Neu“, derzeit 7.2 aus trixie-backports) hat `ntfs3` durch einen neuen Treiber namens `ntfs` ersetzt. Beim Einbinden von USB- und Datenlaufwerken versucht titand deshalb `ntfs3`, dann `ntfs` mit denselben Optionen und erst danach `ntfs-3g` nur lesend; die Abbildprüfung (`scripts/check-image-hardware.py`) verlangt einen der beiden Kerneltreiber. Geprüft mit Unit-Tests; NTFS-Laufwerke am neuen Kernel noch nicht auf Hardware.

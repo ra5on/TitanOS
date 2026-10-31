@@ -405,7 +405,15 @@ func (m *Manager) mount(ctx context.Context, id string) error {
 		return err
 	}
 	options := strings.Trim("nosuid,nodev,noexec,"+fs.options, ",")
-	if _, err := m.runner.Run(ctx, "", "mount", "-t", fs.kind, "-o", options, d.path, dir); err != nil {
+	_, err = m.runner.Run(ctx, "", "mount", "-t", fs.kind, "-o", options, d.path, dir)
+	if err != nil && d.FSType == "ntfs" {
+		// Linux 7 (kernel choice "Neu") replaced ntfs3 with a new driver
+		// named ntfs that takes the same options.
+		if _, again := m.runner.Run(ctx, "", "mount", "-t", "ntfs", "-o", options, d.path, dir); again == nil {
+			err = nil
+		}
+	}
+	if err != nil {
 		// The FUSE driver provides a read-only import path, including Windows
 		// hibernation/unclean shutdown cases. Never force, repair or remove hiberfiles.
 		if d.FSType != "ntfs" {
@@ -680,7 +688,7 @@ func matchesMount(info, dir, device, fsType, mountID string) bool {
 		// Our generated mount directory and lsblk device path contain no spaces.
 		if fields[4] == dir && fields[0] == mountID && tail[1] == device {
 			if fsType == "ntfs" {
-				return tail[0] == "ntfs3" || tail[0] == "fuseblk"
+				return tail[0] == "ntfs3" || tail[0] == "ntfs" || tail[0] == "fuseblk"
 			}
 			return tail[0] == fsType
 		}
