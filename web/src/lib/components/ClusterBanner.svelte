@@ -4,8 +4,12 @@
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { activeNode, switchNode } from '#lib/cluster-node.ts';
 	import { clusterNodes, homeNode } from '#lib/cluster.svelte.ts';
+	import { onNodeRestart } from '#lib/node-restart.ts';
 
 	const id = activeNode();
+	// A request waits for the node while it starts again (app update).
+	let restarting = $state(false);
+	$effect(() => onNodeRestart((value) => (restarting = value)));
 	const node = $derived(id ? clusterNodes.nodes.find((n) => n.id === id) : undefined);
 
 	$effect(() => {
@@ -16,6 +20,7 @@
 {#if id && node}
 	<div class="cluster-banner" role="status">
 		<span>{t('cluster.managing', { name: node.name })}</span>
+		{#if restarting}<span class="restarting">{t('cluster.restarting')}</span>{/if}
 		<button type="button" class="btn small" onclick={() => switchNode(null)}
 			>{t('cluster.back', { name: homeNode()?.name ?? '' })}</button
 		>
@@ -40,5 +45,8 @@
 		background: color-mix(in srgb, var(--accent) 14%, transparent);
 		color: var(--text);
 		font-weight: 500;
+	}
+	.restarting {
+		font-weight: 400;
 	}
 </style>

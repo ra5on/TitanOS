@@ -120,6 +120,10 @@ type VolumeConfig struct {
 	// Encryption is LUKS2 below the file system (crypt.go), off when nil.
 	// Older titand ignore it; they cannot mount such a volume and leave it be.
 	Encryption *EncryptionConfig `json:"encryption,omitempty"`
+	// SyncSpeed is the rebuild speed of an mdadm array (syncspeed.go):
+	// gentle or fast; empty is normal, the kernel's values. Since 0.41.0;
+	// older versions ignore it.
+	SyncSpeed string `json:"syncSpeed,omitempty"`
 }
 
 // Volume is a configured volume with its live state.
@@ -144,6 +148,9 @@ type Volume struct {
 	// ShareQuotas is one of the Quotas* states.
 	ShareQuotas      string `json:"shareQuotas"`
 	ShareQuotasError string `json:"shareQuotasError,omitempty"`
+	// SyncSpeed is the rebuild speed preset (gentle, normal, fast) of an
+	// mdadm array that syncs; empty for Btrfs and RAID 0.
+	SyncSpeed string `json:"syncSpeed,omitempty"`
 }
 
 // Member is a disk of a volume.
@@ -272,6 +279,8 @@ type Manager struct {
 	cryptSlots    map[string]int
 	lockNotified  map[string]bool
 	locking       map[string]bool
+	// syncSpeeds is the rebuild speed set per md device (syncspeed.go).
+	syncSpeeds map[string]syncApplied
 	// mapperDir, cryptTemp and lockWait are replaced in tests.
 	mapperDir, cryptTemp string
 	lockWait             time.Duration
@@ -445,6 +454,9 @@ func (m *Manager) status(ctx context.Context, devices []blockDevice, arrays []ar
 		volume := Volume{
 			Name: cfg.Name, Level: cfg.Level, Filesystem: cfg.Filesystem,
 			MountPoint: m.mountRoot + "/" + cfg.Name, State: VolumeMissing, Members: []Member{},
+		}
+		if hasSyncSpeed(cfg) {
+			volume.SyncSpeed = syncSpeedOf(cfg)
 		}
 		for _, a := range arrays {
 			if a.uuid == "" || cfg.Filesystem == "btrfs" || a.uuid != normalizeUUID(cfg.ArrayUUID) {
@@ -626,6 +638,7 @@ func (m *Manager) Run(ctx context.Context) {
 			}
 		}
 		m.mountAll(ctx)
+		m.applySyncSpeeds(ctx)
 		m.refreshBtrfs(ctx)
 		// A mirror still waiting for its second member is not settled: the
 		// boot check must not count it as missing before the grace is over.

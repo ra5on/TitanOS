@@ -80,3 +80,24 @@ func (s *Server) handleTailscaleDevices(w http.ResponseWriter, r *http.Request) 
 	}
 	writeJSON(w, 200, s.opts.Tailscale.Devices())
 }
+
+// handleTailscaleHTTPS switches the Tailscale certificate of the NAS's own
+// name on or off. Stored at once, without the trial of the other settings.
+func (s *Server) handleTailscaleHTTPS(w http.ResponseWriter, r *http.Request) {
+	if s.opts.Tailscale == nil {
+		writeError(w, 503, "config_unavailable", "Tailscale settings unavailable")
+		return
+	}
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.opts.Tailscale.SetHTTPSCertificate(req.Enabled); err != nil {
+		writeTailscaleError(w, err)
+		return
+	}
+	slog.Info("Tailscale HTTPS certificate switched", "enabled", req.Enabled, "by", currentUser(r).Name)
+	s.handleTailscale(w, r)
+}

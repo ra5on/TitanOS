@@ -2,6 +2,7 @@
 
 import { apiPath } from './cluster-node.ts';
 import type { Virtualization } from './hwcheck.ts';
+import { RESTART_WAIT_MS, restartPause, waitForNode } from './node-restart.ts';
 
 export class ApiError extends Error {
 	readonly status: number;
@@ -38,10 +39,38 @@ async function request<T>(
 	}
 
 	let res: Response;
+	// A node of the cluster that is starting again refused the connection,
+	// so the request never reached it: wait and ask again (node-restart.ts).
+	const started = Date.now();
+	let stopWaiting: (() => void) | undefined;
 	try {
-		res = await fetch(apiPath(path), init);
-	} catch {
-		throw new ApiError(0, 'unreachable', 'titand is not reachable');
+		for (;;) {
+			try {
+				res = await fetch(apiPath(path), init);
+			} catch {
+				throw new ApiError(0, 'unreachable', 'titand is not reachable');
+			}
+			if (res.status !== 503 || Date.now() - started > RESTART_WAIT_MS || signal?.aborted) break;
+			const answer = await res
+				.clone()
+				.json()
+				.catch(() => null);
+			if (answer?.error?.code !== 'cluster_restarting') break;
+			stopWaiting ??= waitForNode();
+			await new Promise<void>((resolve) => {
+				const timer = setTimeout(resolve, restartPause(Number(answer.error.retryAfter)));
+				signal?.addEventListener(
+					'abort',
+					() => {
+						clearTimeout(timer);
+						resolve();
+					},
+					{ once: true },
+				);
+			});
+		}
+	} finally {
+		stopWaiting?.();
 	}
 
 	if (!res.ok) {
@@ -249,7 +278,11 @@ export type Volume = {
 	cache?: VolumeCache;
 	/** LUKS2 encryption (internal/storage crypt.go), set for encrypted volumes. */
 	encryption?: VolumeEncryption;
+	/** Rebuild speed of the RAID array (storage/syncspeed.go); missing for Btrfs and RAID 0. */
+	syncSpeed?: SyncSpeed;
 };
+
+export type SyncSpeed = 'gentle' | 'normal' | 'fast';
 
 export type VolumeEncryption = {
 	/** Waits for its password; nothing on it runs. */

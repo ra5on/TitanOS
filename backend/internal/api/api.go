@@ -50,6 +50,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/replication"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/shutdown"
+	"github.com/ra5on/TitanOS/backend/internal/smarthistory"
 	"github.com/ra5on/TitanOS/backend/internal/sshd"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
@@ -81,6 +82,8 @@ type Options struct {
 	Shares             *shares.Manager
 	Files              *files.Manager
 	Docker             *docker.Manager
+	// SmartHistory keeps the daily SMART values per disk; nil keeps none.
+	SmartHistory *smarthistory.Recorder
 	// AppProxy gives apps HTTPS names of their own; nil leaves them out.
 	AppProxy *appproxy.Manager
 	Catalog  *catalog.Manager

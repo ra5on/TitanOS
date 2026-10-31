@@ -49,7 +49,12 @@ async function loadPreferences() {
 /** Which services run; the tabs of switched-off ones are hidden. */
 export async function loadServices() {
 	try {
-		session.services = await api.get<Record<string, boolean>>('/services/state');
+		// Not longer than a few seconds: a managed node that is restarting
+		// must not hold up the start of the web interface (node-restart.ts).
+		session.services = await api.get<Record<string, boolean>>(
+			'/services/state',
+			AbortSignal.timeout(5000),
+		);
 	} catch {
 		session.services = {};
 	}

@@ -2,11 +2,14 @@ package cluster
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -14,6 +17,40 @@ type cachedStatus struct {
 	at     time.Time
 	status *Status
 	err    string
+	// restarting: the node refused the connection, titand there is
+	// starting again (an app update, a restart).
+	restarting bool
+}
+
+// ErrRestarting means the node refused the connection: its address answers,
+// but titand there does not listen, which is what an app update or a
+// restart of titand looks like for a few seconds. The web interface says
+// so and tries again instead of showing an error.
+var ErrRestarting = fmt.Errorf("%w: it is restarting", ErrUnreachable)
+
+// restartRetry is the pause the web interface waits before it asks again.
+const restartRetry = 3
+
+// refused reports whether err is a refused connection.
+func refused(err error) bool { return errors.Is(err, syscall.ECONNREFUSED) }
+
+// writeRestarting answers that the node is restarting, with the pause
+// after which to try again.
+func writeRestarting(w http.ResponseWriter) {
+	w.Header().Set("Retry-After", fmt.Sprint(restartRetry))
+	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": map[string]any{
+		"code": "cluster_restarting", "message": "the node is restarting", "retryAfter": restartRetry,
+	}})
+}
+
+// writeUnreachable answers a node that did not answer: restarting or not
+// reachable.
+func writeUnreachable(w http.ResponseWriter, err error) {
+	if errors.Is(err, ErrRestarting) {
+		writeRestarting(w)
+		return
+	}
+	writeError(w, http.StatusBadGateway, "cluster_unreachable", "the node is not reachable")
 }
 
 // NodeView is a node in the overview.
@@ -76,6 +113,9 @@ func (m *Manager) peerStatus(ctx context.Context, n Node) (*Status, error) {
 	m.mu.Unlock()
 	if ok && time.Since(c.at) < statusTTL {
 		if c.status == nil {
+			if c.restarting {
+				return nil, ErrRestarting
+			}
 			return nil, ErrUnreachable
 		}
 		return c.status, nil
@@ -86,7 +126,7 @@ func (m *Manager) peerStatus(ctx context.Context, n Node) (*Status, error) {
 	err := m.call(ctx, n, "GET", PeerPrefix+"status", "", nil, &st)
 	m.mu.Lock()
 	if err != nil {
-		m.status[n.ID] = cachedStatus{at: time.Now(), err: err.Error()}
+		m.status[n.ID] = cachedStatus{at: time.Now(), err: err.Error(), restarting: errors.Is(err, ErrRestarting)}
 	} else {
 		m.status[n.ID] = cachedStatus{at: time.Now(), status: &st}
 	}
@@ -123,7 +163,7 @@ func (m *Manager) Proxy(w http.ResponseWriter, r *http.Request, id, user, path s
 	}
 	st, err := m.peerStatus(r.Context(), n)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "cluster_unreachable", "the node is not reachable")
+		writeUnreachable(w, err)
 		return
 	}
 	if st.Version != m.Version {
@@ -132,7 +172,7 @@ func (m *Manager) Proxy(w http.ResponseWriter, r *http.Request, id, user, path s
 	}
 	address, err := m.reachable(r.Context(), n)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "cluster_unreachable", "the node is not reachable")
+		writeUnreachable(w, err)
 		return
 	}
 	ctx := context.WithValue(r.Context(), proxyKey{}, proxyTarget{node: n, address: address, path: "/api/v1/" + strings.TrimPrefix(path, "/"), user: user})
@@ -172,6 +212,13 @@ func (m *Manager) newProxy() *httputil.ReverseProxy {
 			return nil
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			// A refused connection is a node starting again (app update):
+			// expected, the web interface tries again by itself.
+			if refused(err) {
+				slog.Info("cluster: node is restarting, the web interface tries again", "node", r.Context().Value(proxyKey{}).(proxyTarget).node.Name)
+				writeRestarting(w)
+				return
+			}
 			slog.Info("cluster: request to node failed", "err", err)
 			writeError(w, http.StatusBadGateway, "cluster_unreachable", "the node is not reachable")
 		},

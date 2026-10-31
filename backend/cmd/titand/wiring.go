@@ -51,6 +51,7 @@ import (
 	command "github.com/ra5on/TitanOS/backend/internal/run"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/shutdown"
+	"github.com/ra5on/TitanOS/backend/internal/smarthistory"
 	"github.com/ra5on/TitanOS/backend/internal/sshd"
 	"github.com/ra5on/TitanOS/backend/internal/stickwatch"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
@@ -84,6 +85,7 @@ type titand struct {
 	connection       *network.Manager
 	packetFilter     *firewall.Manager
 	volumes          *storage.Manager
+	smartHistory     *smarthistory.Recorder
 	folders          *shares.Manager
 	routes           *appproxy.Manager
 	devices          *hardware.Manager
@@ -197,6 +199,14 @@ func (w *titand) wireBase() error {
 	}
 	// Mounts the volumes as their arrays come up and reads the disks' health.
 	w.background(func() { w.volumes.Run(ctx) })
+	// Once a day the SMART values of each disk, on the first volume.
+	w.smartHistory = smarthistory.New("/mnt")
+	w.smartHistory.Disabled = w.opts.dev
+	w.smartHistory.Mounted = w.volumes.Mounted
+	w.smartHistory.Reports = func(ctx context.Context) ([]storage.SmartReport, error) {
+		return w.volumes.SmartReports(ctx, false)
+	}
+	w.background(func() { w.smartHistory.Run(ctx) })
 	return nil
 }
 
@@ -1319,6 +1329,7 @@ func (w *titand) wireAPI() error {
 		Maintenance:        w.upkeep,
 		ApplicationBackups: w.appBackups,
 		Storage:            w.volumes,
+		SmartHistory:       w.smartHistory,
 		Shares:             w.folders,
 		Files:              w.fileManager,
 		Thumbs:             w.previews,

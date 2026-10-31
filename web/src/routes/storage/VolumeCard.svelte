@@ -10,6 +10,7 @@
 	import { api } from '#lib/api.ts';
 	import { canShrink, takesDisk } from './btrfs.ts';
 	import CachePanel from './CachePanel.svelte';
+	import SyncSpeedPanel from './SyncSpeedPanel.svelte';
 	import EncryptionPanel from './EncryptionPanel.svelte';
 	import { isLocked, lockedBlocks } from './crypt.ts';
 	import { refreshStorage } from '#lib/storage.svelte.ts';
@@ -195,6 +196,7 @@
 			>
 		</div>
 	{/if}
+	{#if canAdminister && volume.syncSpeed}<SyncSpeedPanel {volume} {busy} />{/if}
 	{#if volume.mismatches > 0}
 		<p class="notice-warn">
 			{t('storage.mismatches')}: <span class="mono">{volume.mismatches}</span>
