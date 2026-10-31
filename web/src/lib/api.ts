@@ -1,6 +1,7 @@
 // Thin wrapper around fetch for the titand API.
 
 import { apiPath } from './cluster-node.ts';
+import type { Virtualization } from './hwcheck.ts';
 
 export class ApiError extends Error {
 	readonly status: number;
@@ -633,7 +634,13 @@ export type DiskImage = {
 	usedBy: string;
 };
 export type WholeDisk = { path: string; device: string; usedBy: string };
-export type VMHost = { cpus: HostCPU[]; images: DiskImage[]; disks: WholeDisk[] };
+export type VMHost = {
+	cpus: HostCPU[];
+	images: DiskImage[];
+	disks: WholeDisk[];
+	/** VT-x/AMD-V and IOMMU; older titand leave it out. */
+	virt?: Virtualization | null;
+};
 
 export type PCIDevice = {
 	address: string;

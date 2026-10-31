@@ -14,6 +14,7 @@
 		{ href: '/tools/monitoring', label: 'ops.monitoring', icon: 'activity' },
 		{ href: '/tools/activity', label: 'ops.activity', icon: 'clock' },
 		{ href: '/tools/logs', label: 'tools.logs', icon: 'fileText' },
+		{ href: '/tools/hardware', label: 'hwcheck.title', icon: 'chip' },
 	];
 
 	// Saved links to the journal pointed at a section of this page.

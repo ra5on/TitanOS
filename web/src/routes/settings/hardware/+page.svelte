@@ -2,6 +2,7 @@
 	import { poll } from '#lib/poll.ts';
 	import IntelGuc from './IntelGuc.svelte';
 	import NvidiaPower from './NvidiaPower.svelte';
+	import Unbound from './Unbound.svelte';
 	import { api, type Hardware } from '#lib/api.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
@@ -110,6 +111,8 @@
 	</section>
 	<p class="muted hint">{t('hardware.how')}</p>
 {/if}
+
+<Unbound />
 
 <style>
 	.hint {

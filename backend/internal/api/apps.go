@@ -93,5 +93,7 @@ func (s *Server) handleAppTemplate(w http.ResponseWriter, r *http.Request) {
 		// Devices of the template this machine does not have; with them the
 		// containers would not start.
 		"missingDevices": catalog.MissingDevices(compose),
+		// Instruction sets (AVX, x86-64-v3 …) the app needs and this CPU lacks.
+		"cpuMissing": s.cpuMissing(compose),
 	})
 }

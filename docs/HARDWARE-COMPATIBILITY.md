@@ -218,6 +218,93 @@ Prüfung des betroffenen Sticks, Laufwerks beziehungsweise Controllers; diese
 Änderung repariert keine beschädigten Datenträger und bestätigt keine Behebung
 dieser konkreten Hardwaremeldungen.
 
+## Hardware prüfen
+
+Entscheidung des Projektinhabers vom 31.10.2026 (Plan 5g–5j). Paket
+`backend/internal/hwcheck`, Routen `GET /api/v1/hardware/report`
+(`?format=text` bzw. `?format=json` als Datei) und `GET /api/v1/hardware/disks`,
+nur für Besitzer und Administratoren.
+
+**Was gelesen wird:** ausschließlich sysfs (`/sys/bus/pci`, `/sys/bus/usb`,
+`/sys/block`, `/sys/class/net`, `/sys/class/hwmon`, `/sys/class/dmi/id`,
+`/sys/devices/system/edac`, `/sys/kernel/iommu_groups`,
+`/sys/firmware/acpi/tables`), procfs (`cpuinfo`, `meminfo`, Kernelversion),
+`pci.ids` und die Kernelmeldungen dieses Starts (`journalctl -k -b 0`). Keine
+Plattenbefehle, kein SMART, kein Zugriff auf `/config`; schlafende Platten
+bleiben schlafen. Deshalb läuft die Prüfung auch im Entwicklungsmodus. Nur
+auf Knopfdruck bzw. beim Öffnen der Seite, nie im Polling.
+
+**Wo:** Werkzeuge › Hardware prüfen (ganzer Bericht mit Zusammenfassung,
+Export als Text/JSON ohne Seriennummern und MAC-Adressen; auch in der
+Einrichtungsliste unter `/welcome`), Einstellungen › Hardware › Geräte ohne
+Treiber, das Installationspanel der Apps (CPU), das VM-Formular
+(Virtualisierung) und „Volume anlegen“ (SMR bei RAID 5/6).
+
+### Geräte ohne Treiber (5g)
+
+PCI-Geräte ohne gebundenen Treiber und USB-Geräte, von deren Schnittstellen
+keine einen Treiber hat, dazu „Firmware fehlt“-Meldungen („Direct firmware
+load for … failed“, „firmware: failed to load …“ und ähnliche Zeilen mit
+Dateinamen). Hinweis je Gerät:
+
+1. **Plugin:** Modalias-Regeln der Plugin-Katalogtexte im Abbild, des
+   Release-Katalogs und der installierten Plugins (wie die Empfehlungen).
+2. **Ab Kernel …:** feste Tabelle `newerKernel` nach der Tabelle oben
+   („Was erst ein neuerer Kernel als 6.12 kann“): RTL8127A (10ec:8127, 6.16),
+   10ec:8125 ohne Treiber (RTL8125D zweite Version/RTL8125BP, 6.14), Intel
+   E610 (8086:57ae–57b2, 6.14), Wangxun AML (8088:5010/5110/5025/5125/5040/5140,
+   6.15). Alle laufen mit dem optional wählbaren neueren Kernel (6.16 oder neuer,
+   Plan 5a). Läuft bereits ein Kernel dieser Version, entfällt der Hinweis.
+3. **Braucht meist keinen Treiber:** PCI-Klassen 05 (Speicher-Controller),
+   0600/0601/0680 (Brücken), 0880 (Systemperipherie), 0b (Prozessoren); unter
+   „Systembausteine anzeigen“ eingeklappt.
+4. **Nicht unterstützt:** alles andere.
+
+### CPU und Virtualisierung (5h)
+
+- x86-64-Stufe v1–v4 nach den psABI-Flags, Befehlssätze SSE4.2, AES, AVX,
+  AVX2, AVX-512F, VT-x/AMD-V aus `/proc/cpuinfo`.
+- Apps: Bedarf aus `x-titanos.cpu` der Vorlage und der Image-Tabelle
+  (MongoDB ab 5, `mongodb/mongodb-community-server`, `bitnami/mongodb` ab 5,
+  Immich-Machine-Learning, Frigate: AVX; nach Herstellerangaben, Stand
+  Oktober 2026). Das Installationspanel warnt, installiert aber trotzdem.
+- VMs: vmx/svm-Flag, `/dev/kvm`, Kernelmeldung „disabled by BIOS“, IOMMU-Gruppen
+  und ACPI-Tabelle DMAR/IVRS. Anleitung für Intel und AMD (VT-x/SVM, VT-d/AMD-Vi);
+  `intel_iommu=on`/`amd_iommu=on` wird nur genannt, nie gesetzt.
+
+### Platten-Hinweise (5j)
+
+- **SMR:** zoniert gemeldete Platten und Herstellerliste (WD20/30/40/60EFAX,
+  WD20/30/40/60EZAZ, WD10/20SPZX, Seagate ST2000DM008, ST3000DM007, ST4000DM004,
+  ST6000DM003, ST8000DM004, ST5000DM000, ST500LM030, ST1000LM048, ST2000LM015,
+  ST3000LM024, ST4000LM024, ST5000LM000, ST6000AS0002, ST8000AS0002, Toshiba
+  HDWD240/260, DT02ABA400/600, HDWL110/120, MQ04ABF100, MQ04ABD200). Die Liste
+  ist nicht vollständig; eine nicht genannte Platte kann trotzdem SMR sein.
+- **Hardware-RAID-Controller:** Empfehlung IT- bzw. HBA-Modus, bei Intel-SATA im
+  RAID-Modus AHCI. Firmware wird nie geändert.
+- **UAS-Quirk:** für bekannte Problembrücken der genaue Kernelparameter
+  `usb-storage.quirks=<vid>:<pid>:u`; TitanOS setzt ihn nicht selbst.
+- **SAS-Ruhezustand:** über den bestehenden Ruhemodus (`hd-idle`, SCSI Power
+  Condition 3); `sdparm` wird nicht benötigt (Begründung in
+  `docs/rules/STORAGE.md`, „Platten-Hinweise“).
+
+### Prüfstand und Grenzen
+
+Go-Tests (`backend/internal/hwcheck/hwcheck_test.go`) mit nachgebauten
+sysfs-/procfs-Bäumen: cpuinfo eines Celeron J1900 (v2, ohne AVX) und eines
+Ryzen 5700G (v3), Anforderungen aus Compose-Dateien, VT-x im BIOS aus,
+IOMMU/DMAR, ungebundene PCI-/USB-Geräte mit allen vier Hinweisen und
+Kernelvergleich, Firmware-Meldungen, SATA/SAS/NVMe/USB-Platten mit SMR (Modell
+und zoniert), UAS-Quirk, Controller (Intel-RAID-Modus, VMD, MegaRAID, SAS-HBA)
+und der ganze Bericht samt Textausgabe ohne MAC-Adressen;
+`backend/internal/plugins/hwmatch_test.go`, `backend/internal/api/hwcheck_test.go`
+(Rechte, Export) und `web/tests/hwcheck.test.mjs`. Die Fixtures sind nach den
+Formaten von Linux 6.12 nachgebaut, keine Aufzeichnung einer echten Maschine.
+**Nicht auf echter Hardware geprüft:** weder echte SMR-Platten, Hardware-RAID-
+Controller, UAS-Problemgehäuse, RTL8127/E610-Karten noch ein im BIOS
+abgeschaltetes VT-x. Die Tabellen (SMR, UAS, neuere Kernel, App-Images) sind
+von Hand gepflegt und können veralten.
+
 ## Abnahme
 
 Die Python-Regressionen prüfen erfolgreiche Images, beide Microcode-Hersteller,

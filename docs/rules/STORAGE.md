@@ -46,6 +46,14 @@ Grundsätze:
 - Das Debian-Paket `hd-idle` erhält ausschließlich einzelne Standby-Aufrufe (ATA bei SATA, SCSI bei SAS/USB; SAS mit Power Condition 3 zum automatischen Aufwachen). `hd-idle.service` ist maskiert. Firmware-Timer werden nicht verändert. Ein fehlgeschlagener Aufruf erscheint auf der Speicher-Seite und wird erst nach neuer Aktivität oder einer Einstellung erneut versucht. Im Entwicklungsmodus werden keine Standby-Befehle ausgeführt.
 - Regressionstests prüfen alle Zeiten, Aktivität, Gerätetausch, Ausschlüsse, fehlerhafte Konfiguration/I/O-Zähler, API-Rechte sowie Vorrang, Umbenennung `sdb` → `sdc`, Platten außerhalb von Volumes, alte Datei hin und zurück und die Prüfung der Ausnahmen. Das Diagnosepaket ersetzt die Platten-Schlüssel durch `disk-N`. Der Release-Smoke-Test prüft Standard Aus und Speicherung über zwei UEFI-Starts. Einschlafen und Aufwachen auf echter Hardware einschließlich USB-Adaptern müssen noch getestet werden.
 
+## Platten-Hinweise (Plan 5j, Entscheidung des Projektinhabers vom 31.10.2026)
+
+- Paket `hwcheck` (`disks.go`), `GET /api/v1/hardware/disks`: nur sysfs (`/sys/block/*`, Modell, `queue/rotational`, `queue/zoned`, Gerätepfad), keine Plattenbefehle, weckt keine Platte; im Entwicklungsmodus erlaubt.
+- **SMR:** zoniert gemeldete Platten (`host-managed`/`host-aware`) und HDD-Modelle aus der Herstellertabelle `smrModels` (WD Red EFAX, WD Blue EZAZ/SPZX, Seagate BarraCuda/Archive, Toshiba P300/DT02/L200/MQ04; nicht vollständig). „Volume anlegen“ warnt bei RAID 5/6 mit ausgewählter SMR-Platte; anlegen bleibt erlaubt.
+- **Hardware-RAID:** PCI-Klasse 0104 bzw. Treiber `megaraid_sas`, `hpsa`, `aacraid`, `smartpqi`, `arcmsr`, `3w-*`, `mptsas` → Empfehlung IT-/HBA-Modus; Intel-SATA im RAID-Modus → AHCI empfohlen; Intel VMD (`vmd`) ohne Hinweis. Ein mpt3sas-Controller mit IR-Firmware ist so nicht von einem HBA unterscheidbar.
+- **UAS-Probleme:** bekannte USB-SATA-Brücken (`uasProblems`: JMicron JMS578/JMS561, ASMedia ASM1051E/1053E/1153E, einige Seagate-Gehäuse, VIA VL711/VL715) mit Treiber `uas` bekommen den Hinweis samt genauem Wert `usb-storage.quirks=<vid>:<pid>:u`. **TitanOS setzt diesen Kernelparameter nie selbst** (keine automatischen Bootparameter); läuft das Gehäuse schon über `usb-storage`, wird das nur vermerkt.
+- **SAS-Ruhezustand:** Der bestehende Ruhemodus schickt SAS-HDDs per `hd-idle -c scsi -p 3` (SCSI START STOP UNIT mit Power Condition 3, wacht beim nächsten Zugriff selbst auf) schlafen; der Bericht nennt das je SAS-HDD. `sdparm` kommt nicht ins Abbild: Es kann keine Power Condition direkt setzen, nur `--command=stop` (bräuchte ein ausdrückliches START, die Platte wacht nicht selbst auf) oder die Zeitgeber der Power-Condition-Modusseite ändern (Firmware-Timer werden nach der Regel oben nicht verändert).
+
 ## RAM, Uploads und Gerätezuordnung
 
 - RAM-/Writeback-Budget: `/config/system/memory.json`, Standard 20 % von
