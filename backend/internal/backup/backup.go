@@ -96,10 +96,38 @@ type Destination struct {
 
 // Keep says how many backups stay: the newest of each of that many days,
 // weeks and months. All zero keeps everything.
+//
+// Since 0.41.0 (decided 31.10.2026) the optional fields below pick which
+// run of a day, week or month stays, and Mode "rolling" keeps every run
+// until the target is full. Older versions read only the three counts;
+// a rolling job leaves them at zero, which there also keeps everything.
+// See retention.go.
 type Keep struct {
 	Daily   int `json:"daily"`
 	Weekly  int `json:"weekly"`
 	Monthly int `json:"monthly"`
+	// Mode is "" (by the counts above) or "rolling".
+	Mode string `json:"mode,omitempty"`
+	// DailyAt, WeeklyAt and MonthlyAt are the run (HH:MM) that stays for
+	// the day, week or month; empty keeps the newest, as before.
+	DailyAt  string `json:"dailyAt,omitempty"`
+	WeeklyAt string `json:"weeklyAt,omitempty"`
+	// WeeklyDay is the weekday, 1 = Monday … 7 = Sunday; 0 = newest.
+	WeeklyDay int    `json:"weeklyDay,omitempty"`
+	MonthlyAt string `json:"monthlyAt,omitempty"`
+	// MonthlyDay is the day of the month, 1 … 28 or -1 for the last one.
+	// Instead, MonthlyNth (1 … 4, -1 = last) with MonthlyWeekday (1 … 7)
+	// names a weekday such as the first Monday. Neither set: newest.
+	MonthlyDay     int `json:"monthlyDay,omitempty"`
+	MonthlyNth     int `json:"monthlyNth,omitempty"`
+	MonthlyWeekday int `json:"monthlyWeekday,omitempty"`
+	// WhenFull is "" (stop and report) or "oldest": when the target is
+	// full, the oldest versions go, as few as needed, never the newest.
+	// A rolling job always works like "oldest".
+	WhenFull string `json:"whenFull,omitempty"`
+	// MaxAgeMonths, for rolling jobs, also removes versions older than
+	// that; 0 keeps them until space runs out.
+	MaxAgeMonths int `json:"maxAgeMonths,omitempty"`
 }
 
 // Job is one backup: what, where to, when.
@@ -234,6 +262,9 @@ type Manager struct {
 	// of a series; OnRecovered when a job works again after failing.
 	OnResult    func(job string, err error)
 	OnRecovered func(job string)
+	// OnFreed is told how many old versions a run removed because the
+	// target was full.
+	OnFreed func(job string, versions int)
 	// ended is told of every run; tests wait for it.
 	ended func(job string, err error)
 	// OnCheck hears how a check of a repository ended.
@@ -387,6 +418,9 @@ func check(job Job, shares []Source, volumes []string) error {
 		if count < 0 || count > 999 {
 			return invalid("how many to keep")
 		}
+	}
+	if err := checkKeep(job.Keep); err != nil {
+		return err
 	}
 	d := job.Destination
 	switch d.Type {
@@ -1147,35 +1181,40 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 	}
 	args = append(args, paths...)
 	var total uint64
-	out, err := m.run(ctx, env, args, func(line string) {
-		var message struct {
-			Type    string  `json:"message_type"`
-			Percent float64 `json:"percent_done"`
-			Done    uint64  `json:"bytes_done"`
-			Total   uint64  `json:"total_bytes"`
-			Size    uint64  `json:"total_bytes_processed"`
+	var freed []string
+	var out string
+	for {
+		out, err = m.runBackup(ctx, job, env, args, &total)
+		// A full target: with the job's leave, the oldest version goes
+		// and the run starts again, until it fits or one version is left.
+		if err == nil || ctx.Err() != nil || !noSpace(out) || !job.Keep.dropsOldest() {
+			break
 		}
-		if json.Unmarshal([]byte(line), &message) != nil {
-			return
+		gone, ferr := m.dropOldest(ctx, job, env, base)
+		if ferr != nil || gone == "" {
+			break
 		}
-		switch message.Type {
-		case "status":
-			m.update(job, func(s *State) {
-				s.Percent, s.BytesDone, s.BytesTotal = 100*message.Percent, message.Done, message.Total
-			})
-		case "summary":
-			total = message.Size
-		}
-	})
+		freed = append(freed, gone)
+		slog.Warn("backup target full, oldest version removed", "job", job.ID, "version", gone)
+	}
+	if len(freed) > 0 && m.OnFreed != nil {
+		m.OnFreed(job.ID, len(freed))
+	}
 	warning := ""
+	if len(freed) > 0 {
+		warning = fmt.Sprintf("The target was full; removed the oldest %d version(s): %s", len(freed), strings.Join(freed, ", "))
+	}
 	var exit *exec.ExitError
 	switch {
 	case errors.As(err, &exit) && exit.ExitCode() == 3:
 		// A backup was made, but some files could not be read.
-		warning = lastLines(out, job.Password)
+		warning = strings.TrimSpace(warning + "\n" + lastLines(out, job.Password))
 	case err != nil:
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+		if noSpace(out) {
+			return fmt.Errorf("%w:\n%s", errNoSpace, lastLines(out, job.Password))
 		}
 		return errors.New(lastLines(out, job.Password))
 	}
@@ -1194,7 +1233,11 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 		m.OnIncomplete(job.ID)
 	}
 
-	if job.Keep.Daily+job.Keep.Weekly+job.Keep.Monthly > 0 && len(sel.missing) == 0 {
+	if job.Keep.chosen() && len(sel.missing) == 0 {
+		if err := m.forgetChosen(ctx, job, env, base); err != nil && ctx.Err() == nil {
+			m.update(job, func(s *State) { s.Warning = strings.TrimSpace(s.Warning + "\n" + err.Error()) })
+		}
+	} else if job.Keep.Daily+job.Keep.Weekly+job.Keep.Monthly > 0 && len(sel.missing) == 0 {
 		args := append(slices.Clone(base), "forget", "--tag", "titanos", "--group-by", "tags", "--prune")
 		for flag, count := range map[string]int{"--keep-daily": job.Keep.Daily, "--keep-weekly": job.Keep.Weekly, "--keep-monthly": job.Keep.Monthly} {
 			if count > 0 {
@@ -1208,6 +1251,30 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 	}
 	slog.Info("backup finished", "job", job.ID, "bytes", total)
 	return nil
+}
+
+// runBackup runs restic backup once and reports progress and the size.
+func (m *Manager) runBackup(ctx context.Context, job Job, env, args []string, total *uint64) (string, error) {
+	return m.run(ctx, env, args, func(line string) {
+		var message struct {
+			Type    string  `json:"message_type"`
+			Percent float64 `json:"percent_done"`
+			Done    uint64  `json:"bytes_done"`
+			Total   uint64  `json:"total_bytes"`
+			Size    uint64  `json:"total_bytes_processed"`
+		}
+		if json.Unmarshal([]byte(line), &message) != nil {
+			return
+		}
+		switch message.Type {
+		case "status":
+			m.update(job, func(s *State) {
+				s.Percent, s.BytesDone, s.BytesTotal = 100*message.Percent, message.Done, message.Total
+			})
+		case "summary":
+			*total = message.Size
+		}
+	})
 }
 
 // Snapshots lists the backups of a job, the newest first.

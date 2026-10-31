@@ -2079,6 +2079,8 @@
 	"backup.restoreWhere": "You find the folder under Files › Volumes. The progress shows on this page.",
 	"notify.kind.backup_failed.title": "Backup {subject} failed",
 	"notify.kind.backup_failed.text": "The backup did not run through. Details are under Settings › Backups. Further failed attempts are not reported one by one.",
+	"notify.kind.backup_space_freed.title": "Backup {subject}: target was full",
+	"notify.kind.backup_space_freed.text": "The oldest versions were removed, as set in the job.",
 	"notify.kind.backup_recovered.title": "Backup {subject} works again",
 	"notify.kind.backup_recovered.text": "The backup ran through again after failed attempts.",
 	"notify.kind.backup_incomplete.title": "Backup {subject} incomplete",

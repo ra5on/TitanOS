@@ -748,6 +748,9 @@ func (w *titand) wireBackups() error {
 			w.notifier.Notify(notify.Error, "backup_failed", job)
 		}
 	}
+	w.backups.OnFreed = func(job string, versions int) {
+		w.notifier.Notify(notify.Warning, "backup_space_freed", job)
+	}
 	w.backups.OnRecovered = func(job string) {
 		w.notifier.Notify(notify.Info, "backup_recovered", job)
 	}

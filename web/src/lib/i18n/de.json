@@ -2079,6 +2079,8 @@
 	"backup.restoreWhere": "Du findest den Ordner unter Dateien › Volumes. Den Fortschritt siehst du auf dieser Seite.",
 	"notify.kind.backup_failed.title": "Backup {subject} fehlgeschlagen",
 	"notify.kind.backup_failed.text": "Das Backup ist nicht durchgelaufen. Einzelheiten stehen unter Einstellungen › Backups. Weitere Fehlversuche werden nicht einzeln gemeldet.",
+	"notify.kind.backup_space_freed.title": "Backup {subject}: Ziel war voll",
+	"notify.kind.backup_space_freed.text": "Die ältesten Versionen wurden gelöscht, wie im Auftrag eingestellt.",
 	"notify.kind.backup_recovered.title": "Backup {subject} läuft wieder",
 	"notify.kind.backup_recovered.text": "Das Backup ist nach Fehlversuchen wieder durchgelaufen.",
 	"notify.kind.backup_incomplete.title": "Backup {subject} unvollständig",
