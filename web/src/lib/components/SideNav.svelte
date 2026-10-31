@@ -1,8 +1,9 @@
 <script lang="ts">
 	// The navigation as a sidebar on the left (Appearance › Navigation ›
 	// "Side"), desktop only: the same tabs in the account's order as the
-	// header. Folded it shows only the symbols; whether it is folded is
-	// remembered per browser.
+	// header. There is no head line and no status bar then; their content
+	// sits at the bottom: status, tools, account, "Collapse". Folded it
+	// shows only the symbols; whether it is folded is remembered per browser.
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
@@ -13,6 +14,12 @@
 	import Icon from './Icon.svelte';
 	import Logo from './Logo.svelte';
 	import NodeMenu from './NodeMenu.svelte';
+	import SideStatus from './SideStatus.svelte';
+	import QuickTools from './QuickTools.svelte';
+	import AccountMenu from './AccountMenu.svelte';
+
+	/** `tasks`: the badge for running tasks; `note` replaces the volume state. */
+	let { tasks = true, note = '' }: { tasks?: boolean; note?: string } = $props();
 
 	const KEY = 'titanos.nav.folded';
 
@@ -27,6 +34,24 @@
 			// Without storage the sidebar starts unfolded.
 		}
 	});
+
+	// Menus beside the sidebar and the terminal panel start where it ends.
+	$effect(() => {
+		const root = document.documentElement.style;
+		root.setProperty('--side-nav-width', folded ? '68px' : '236px');
+		return () => root.removeProperty('--side-nav-width');
+	});
+
+	// Folded, the list scrolls when the window is low; the name beside a
+	// symbol is placed in the window (fixed), so the scrolling does not cut it off.
+	function placeLabel(event: Event) {
+		if (!folded) return;
+		const link = (event.target as HTMLElement | null)?.closest?.('a');
+		const label = link?.querySelector<HTMLElement>('.label');
+		if (!link || !label) return;
+		const rect = link.getBoundingClientRect();
+		label.style.top = `${rect.top + rect.height / 2}px`;
+	}
 
 	function toggle() {
 		folded = !folded;
@@ -51,7 +76,7 @@
 >
 	<a class="brand" href="/" aria-label="TitanOS"><Logo size={28} wordmark={!folded} /></a>
 	{#if clusterNodes.nodes.length > 1}<NodeMenu variant={folded ? 'badge' : 'card'} />{/if}
-	<nav>
+	<nav onpointerover={placeLabel} onfocusin={placeLabel} ontransitionend={placeLabel}>
 		{#each items as item (item.href)}
 			<a
 				href={item.href}
@@ -61,6 +86,11 @@
 			>
 		{/each}
 	</nav>
+	<SideStatus {folded} {tasks} {note} />
+	<div class="bottom">
+		<QuickTools side stacked={folded} />
+		<AccountMenu side {folded} />
+	</div>
 	<button
 		type="button"
 		class="fold"
@@ -150,6 +180,18 @@
 		padding-top: 4px;
 		height: 46px;
 	}
+	.bottom {
+		flex: none;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding-top: 8px;
+		border-top: 1px solid var(--border);
+	}
+	.folded .bottom {
+		width: 100%;
+		align-items: center;
+	}
 
 	.folded {
 		width: 68px;
@@ -163,7 +205,11 @@
 	.folded nav {
 		width: 100%;
 		align-items: center;
-		overflow: visible;
+		overflow-x: hidden;
+		scrollbar-width: none;
+	}
+	.folded nav a {
+		height: 36px;
 	}
 	.folded nav a,
 	.folded .fold {
@@ -176,8 +222,8 @@
 	}
 	/* Folded, the name appears beside the symbol on hover and focus. */
 	.folded .label {
-		position: absolute;
-		left: calc(100% + 12px);
+		position: fixed;
+		left: calc(var(--side-nav-width, 68px) + 4px);
 		top: 50%;
 		transform: translateY(-50%);
 		padding: 6px 10px;

@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { dashboardControl } from '#lib/dashboard/control.svelte.ts';
 	import { afterNavigate } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
@@ -8,17 +7,15 @@
 	import { appearance } from '#lib/theme/appearance.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { horizontalNav } from '#lib/horizontal-nav.ts';
-	import { terminal, toggleTerminal } from '#lib/terminal.svelte.ts';
-	import Icon from './Icon.svelte';
-	import { togglePalette } from '#lib/palette.svelte.ts';
 	import AccountMenu from './AccountMenu.svelte';
 	import Logo from './Logo.svelte';
 	import NodeMenu from './NodeMenu.svelte';
-	import Notifications from './Notifications.svelte';
+	import QuickTools from './QuickTools.svelte';
+	import TasksPanel from './TasksPanel.svelte';
 	import { clusterNodes } from '#lib/cluster.svelte.ts';
 
-	/** The tabs are in the sidebar (desktop); the header keeps the tools and names the area. */
-	let { side = false }: { side?: boolean } = $props();
+	/** `tasks`: the badge for running tasks (not where the page has its own entry). */
+	let { tasks = true }: { tasks?: boolean } = $props();
 
 	const role = $derived(session.data?.user?.role ?? 'user');
 	const allItems = $derived(navForRole(role, session.services));
@@ -62,13 +59,12 @@
 	}
 </script>
 
-<header class="bar-surface" class:side>
+<header class="bar-surface">
 	{#if clusterNodes.nodes.length > 1}<div class="brand"><NodeMenu variant="logo" /></div>{:else}<a
 			class="brand"
 			href="/"
 			aria-label="TitanOS"><Logo size={28} /></a
 		>{/if}
-	{#if side}<h1 class="area">{t(currentLabel)}</h1>{/if}
 	<button
 		class="mobile-nav-trigger"
 		type="button"
@@ -170,46 +166,8 @@
 			>
 		</button>
 	</div>
-	<div class="quick-access" role="group" aria-label={t('nav.quickActions')}>
-		<button
-			class="terminal"
-			type="button"
-			onclick={togglePalette}
-			aria-label={t('palette.title')}
-			title={t('palette.shortcut')}><Icon name="search" size={18} /></button
-		>
-		{#if role !== 'user'}
-			<button
-				type="button"
-				class="terminal"
-				aria-pressed={terminal.open}
-				aria-label={t('terminal.title')}
-				title={t('terminal.shortcut')}
-				onclick={toggleTerminal}
-			>
-				<svg
-					width="18"
-					height="18"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"><path d="m5 7 5 5-5 5M12 17h7"></path></svg
-				>
-			</button>
-		{/if}
-		{#if role !== 'user'}<Notifications compact />{/if}
-		{#if page.url.pathname === '/' && dashboardControl.edit}<button
-				class="terminal"
-				type="button"
-				aria-label={t('dashboard.editTitle')}
-				aria-pressed={dashboardControl.editing}
-				disabled={dashboardControl.editing}
-				onclick={() => dashboardControl.edit?.()}><Icon name="edit" size={18} /></button
-			>{/if}
-	</div>
+	{#if tasks}<TasksPanel badge />{/if}
+	<QuickTools />
 	<AccountMenu />
 </header>
 
@@ -222,8 +180,8 @@
 		display: flex;
 		flex-wrap: nowrap;
 		align-items: center;
-		gap: 16px;
-		padding: 8px 24px;
+		gap: 10px;
+		padding: 8px 16px;
 		border-bottom: 1px solid var(--border);
 	}
 	header > :global(*) {
@@ -232,73 +190,6 @@
 	.brand {
 		display: flex;
 	}
-	.area {
-		display: none;
-	}
-	@media (min-width: 761px) {
-		header.side .brand,
-		header.side > .nav-shell {
-			display: none;
-		}
-		header.side .area {
-			display: block;
-			flex: 1 1 auto;
-			min-width: 0;
-			margin: 0;
-			overflow: hidden;
-			text-overflow: ellipsis;
-			white-space: nowrap;
-			font-size: 1.125rem;
-			font-weight: 600;
-		}
-	}
-	.quick-access {
-		display: flex;
-		align-items: center;
-		gap: 0;
-		height: 44px;
-		padding: 3px 4px;
-		box-sizing: border-box;
-		border: 1px solid var(--border);
-		border-radius: var(--radius-ctl);
-		background: var(--chip);
-		--quick-button-size: 36px;
-	}
-	.quick-access .terminal {
-		width: var(--quick-button-size);
-		height: 36px;
-		border: 0;
-		border-radius: var(--radius-small);
-	}
-	.quick-access .terminal:hover {
-		background: color-mix(in srgb, var(--text) 7%, transparent);
-	}
-	.quick-access .terminal:focus-visible {
-		outline: 2px solid var(--accent);
-		outline-offset: -2px;
-	}
-	.terminal {
-		width: 44px;
-		height: 44px;
-		justify-content: center;
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		padding: 0;
-		background: transparent;
-		border: 1px solid var(--border);
-		border-radius: var(--radius-ctl);
-		color: var(--text);
-		font: inherit;
-		font-size: 0.875rem;
-		cursor: pointer;
-	}
-	.terminal[aria-pressed='true'] {
-		background: color-mix(in srgb, var(--accent) 16%, transparent);
-		border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-		font-weight: 500;
-	}
-
 	header > .nav-shell {
 		flex: 1 1 auto;
 		min-width: 0;
@@ -331,10 +222,11 @@
 		outline: 2px solid var(--accent);
 		outline-offset: 1px;
 	}
+	/* Tight enough that all tabs fit from 1280 px on (German labels). */
 	.nav-items {
 		display: flex;
 		width: max-content;
-		gap: 4px;
+		gap: 2px;
 	}
 	.nav-shell nav {
 		flex: 1 1 auto;
@@ -351,7 +243,7 @@
 	}
 	.nav-shell nav a {
 		flex: none;
-		padding: 10px 14px;
+		padding: 10px 8px;
 		border-radius: var(--radius-ctl);
 		font-size: 0.875rem;
 		text-decoration: none;
@@ -465,9 +357,6 @@
 			gap: 4px;
 			padding: 8px;
 		}
-		.quick-access {
-			--quick-button-size: 32px;
-		}
 		.nav-arrow {
 			width: 28px;
 		}
@@ -483,9 +372,6 @@
 		header {
 			gap: 2px;
 			padding-inline: 6px;
-		}
-		.quick-access {
-			--quick-button-size: 28px;
 		}
 	}
 </style>

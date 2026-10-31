@@ -423,7 +423,8 @@
 <style>
 	.panel {
 		position: fixed;
-		left: 0;
+		/* Beside the sidebar ("Navigation: side"), not below it. */
+		left: var(--side-nav-width, 0px);
 		right: 0;
 		bottom: 0;
 		z-index: 15;
@@ -434,7 +435,7 @@
 		box-shadow: var(--shadow-menu);
 	}
 	.panel.full {
-		top: 60px;
+		top: var(--header-height, 60px);
 	}
 	/* Hidden, not removed: the sessions go on. */
 	.panel.closed {

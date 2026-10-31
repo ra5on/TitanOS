@@ -95,7 +95,7 @@
 	/* One bar for all editor controls; it stays below the header while scrolling. */
 	.editbar {
 		position: sticky;
-		top: 60px;
+		top: var(--header-height, 60px);
 		z-index: 15;
 		display: flex;
 		justify-content: space-between;

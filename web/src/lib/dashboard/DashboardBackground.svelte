@@ -37,7 +37,7 @@
 <style>
 	.dashboard-background {
 		position: fixed;
-		inset: 60px 0 34px;
+		inset: var(--header-height, 60px) 0 var(--status-height, 34px);
 		z-index: 0;
 		pointer-events: none;
 		overflow: hidden;
@@ -46,7 +46,7 @@
 	.dashboard-background.scrolling {
 		position: absolute;
 		bottom: auto;
-		height: calc(100svh - 94px);
+		height: calc(100svh - var(--header-height, 60px) - var(--status-height, 34px));
 	}
 	.picture,
 	.dim {
