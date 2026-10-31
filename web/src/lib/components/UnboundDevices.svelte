@@ -90,7 +90,7 @@
 <style>
 	.intro {
 		margin: 0;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		max-width: 60rem;
 	}
 	.list {
@@ -104,7 +104,7 @@
 		gap: 8px 20px;
 		padding: 12px 0;
 		border-top: 1px solid var(--panel-border);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.main {
 		flex: 1 1 280px;
@@ -114,7 +114,7 @@
 		gap: 3px;
 	}
 	.mono {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
 	}
 	.name {
@@ -130,11 +130,11 @@
 	}
 	.sub {
 		margin: 6px 0 0;
-		font-size: 0.9375rem;
+		font-size: var(--text-md);
 	}
 	summary {
 		cursor: pointer;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		padding: 6px 0;
 	}
 	p {

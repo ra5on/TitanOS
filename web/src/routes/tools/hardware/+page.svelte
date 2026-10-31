@@ -249,7 +249,7 @@
 		margin-bottom: var(--gap);
 	}
 	.small {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		margin: 0 0 var(--gap);
 	}
 	.grid {
@@ -259,7 +259,7 @@
 	}
 	section {
 		margin-bottom: var(--gap);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.grid section {
 		margin-bottom: 0;
@@ -301,14 +301,14 @@
 		font-weight: 600;
 	}
 	.mono {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
 	}
 	.note {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.sub {
 		margin: 6px 0 0;
-		font-size: 0.9375rem;
+		font-size: var(--text-md);
 	}
 </style>
