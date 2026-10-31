@@ -17,14 +17,17 @@ early=$1
 out=$2
 lib=${3:-/usr/lib/grub}
 
+# A list of GRUB modules: split into words on purpose.
 common="part_msdos fat search search_label normal configfile linux loadenv test echo boot ls cat sleep reboot halt"
 mkdir -p "$out/i386-pc"
 
+# shellcheck disable=SC2086
 grub-mkimage --directory "$lib/i386-pc" --format i386-pc --compression auto \
     --config "$early" --prefix /boot/grub --output "$out/i386-pc/core.img" \
     biosdisk $common
 cp "$lib/i386-pc/boot.img" "$out/i386-pc/boot.img"
 
+# shellcheck disable=SC2086
 grub-mkimage --directory "$lib/i386-efi" --format i386-efi \
     --config "$early" --prefix /boot/grub --output "$out/BOOTIA32.EFI" \
     efi_gop efi_uga $common

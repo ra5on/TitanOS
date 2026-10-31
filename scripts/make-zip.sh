@@ -125,6 +125,8 @@ sed -e "s|@VERSION@|$version|g" -e "s|@SLOT@|$slot|g" boot/entry.conf.in \
 cp "$image/BOOTIA32.EFI" "$stick/EFI/BOOT/BOOTIA32.EFI"
 mkdir -p "$stick/boot/grub/i386-pc"
 cp "$image/grub/i386-pc/boot.img" "$image/grub/i386-pc/core.img" "$stick/boot/grub/i386-pc/"
+# GRUB itself replaces $1 with the slot, so it stays literal here.
+# shellcheck disable=SC2016
 options=$(sed -n 's/^options[[:space:]]*//p' boot/entry.conf.in | sed 's|@SLOT@|$1|g')
 sed "s|@OPTIONS@|$options|" boot/grub.cfg.in > "$stick/boot/grub/grub.cfg"
 python3 scripts/grubenv.py "$stick/boot/grub/grubenv" titanos_prefer=$slot
