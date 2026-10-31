@@ -34,7 +34,10 @@ profiles=()
 [ -n "$profile" ] && profiles+=(--profile "$profile")
 output=mkosi.output
 if [ -n "$kernel_new" ]; then
-    profiles+=(--profile kernel-new)
+    # Its own cache: the incremental cache of the default image already
+    # holds the Debian kernel, and its key does not see the profile's apt
+    # sources, so the newer kernel would never be installed.
+    profiles+=(--profile kernel-new --cache-directory mkosi.cache-new)
     output=mkosi.output-new
 fi
 

@@ -4,6 +4,7 @@
 mkosi.output/
 mkosi.output-new/
 mkosi.cache/
+mkosi.cache-new/
 mkosi.pkgcache/
 mkosi.builddir/
 *.zip
