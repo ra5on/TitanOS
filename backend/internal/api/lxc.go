@@ -18,6 +18,7 @@ var lxcErrors = []struct {
 	status int
 	code   string
 }{
+	{lxc.ErrServiceOff, http.StatusConflict, "service_off"},
 	{lxc.ErrDisabled, http.StatusConflict, "read_only"},
 	{lxc.ErrUnavailable, http.StatusConflict, "lxc_unavailable"},
 	{lxc.ErrInvalidName, http.StatusBadRequest, "invalid_lxc_name"},

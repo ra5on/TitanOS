@@ -14,7 +14,17 @@ export const session = $state<{
 	dashboard: Record<string, unknown> | null;
 	docker: Record<string, unknown> | null;
 	vnc: Record<string, unknown> | null;
-}>({ status: 'loading', data: null, shares: null, dashboard: null, docker: null, vnc: null });
+	/** Settings › Services: docker, vms and lxc, false when switched off. */
+	services: Record<string, boolean>;
+}>({
+	status: 'loading',
+	data: null,
+	shares: null,
+	dashboard: null,
+	docker: null,
+	vnc: null,
+	services: {},
+});
 
 async function loadPreferences() {
 	try {
@@ -36,6 +46,15 @@ async function loadPreferences() {
 	}
 }
 
+/** Which services run; the tabs of switched-off ones are hidden. */
+export async function loadServices() {
+	try {
+		session.services = await api.get<Record<string, boolean>>('/services/state');
+	} catch {
+		session.services = {};
+	}
+}
+
 /** Asks the NAS who we are. Called at start and after anything that changes it. */
 export async function refreshSession() {
 	try {
@@ -43,7 +62,7 @@ export async function refreshSession() {
 		if (data.user?.name !== session.data?.user?.name) {
 			resetSound();
 		}
-		if (data.user) await loadPreferences();
+		if (data.user) await Promise.all([loadPreferences(), loadServices()]);
 		session.data = data;
 		session.status = 'ready';
 	} catch {

@@ -21,7 +21,7 @@
 	let { side = false }: { side?: boolean } = $props();
 
 	const role = $derived(session.data?.user?.role ?? 'user');
-	const allItems = $derived(navForRole(role));
+	const allItems = $derived(navForRole(role, session.services));
 	const items = $derived(visibleNav(allItems, appearance.current.nav));
 
 	let mobileMenu = $state<HTMLElement>();

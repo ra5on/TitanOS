@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -160,6 +161,8 @@ type sample struct {
 
 // Manager keeps the containers and calls the tools of LXC.
 type Manager struct {
+	// off is the switch of Settings › Services (service.go).
+	off atomic.Bool
 	// NetworkBridge returns the device of a confirmed bridge by its ID.
 	NetworkBridge func(string) (string, bool)
 	// BridgeReady reports whether br0 is set up and confirmed.
@@ -366,7 +369,7 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 		m.mu.Unlock()
 		if !loaded {
 			m.Load()
-		} else if !m.Disabled && m.Installed() {
+		} else if !m.Disabled && !m.off.Load() && m.Installed() {
 			m.autostart(ctx, mounted())
 			m.sample()
 		}
@@ -883,6 +886,9 @@ func (m *Manager) Update(name string, change Change) error {
 // Start writes the configuration of a container and starts it as an
 // instance of titanos-lxc@.service.
 func (m *Manager) Start(ctx context.Context, name string, mounted []string) error {
+	if m.off.Load() {
+		return ErrServiceOff
+	}
 	if m.Disabled {
 		return ErrDisabled
 	}

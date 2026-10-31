@@ -17,7 +17,7 @@
 	const KEY = 'titanos.nav.folded';
 
 	const role = $derived(session.data?.user?.role ?? 'user');
-	const items = $derived(visibleNav(navForRole(role), appearance.current.nav));
+	const items = $derived(visibleNav(navForRole(role, session.services), appearance.current.nav));
 	let folded = $state(false);
 
 	onMount(() => {

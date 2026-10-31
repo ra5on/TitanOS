@@ -1266,6 +1266,17 @@ func (w *titand) wireMaintenance() error {
 	w.updates.Working = func() bool {
 		return w.upkeep.Busy() || w.appBackups.Busy() || w.volumes.ActionsRunning() || w.volumes.SnapshotRestoresRunning() || w.volumes.GrowthPending() || w.volumes.Reshaping() || w.replicas.Busy() || w.fileManager.Busy() || w.backups.Busy() || w.volumes.TestsRunning() || w.machines.Busy() || w.systemContainers.Busy() || w.extensions.Busy() || w.mediaImports.Working() || w.folders.PurgeBusy()
 	}
+	// Settings › Services: what was switched off stays off, before anything
+	// is started automatically.
+	var services struct{ VMsOff, LXCOff bool }
+	if err := w.store.ReadJSON("system/services.json", &services); err == nil {
+		if services.VMsOff {
+			w.machines.SetOff(ctx, true)
+		}
+		if services.LXCOff {
+			w.systemContainers.SetOff(ctx, true, nil)
+		}
+	}
 	w.background(func() { w.machines.Run(ctx, w.volumes.Mounted) })
 	w.background(func() { w.systemContainers.Run(ctx, w.volumes.Mounted) })
 	w.background(func() { w.updates.Run(ctx) })

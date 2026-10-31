@@ -192,6 +192,7 @@ type Server struct {
 	// rebuilding replaces the rebuild check in tests.
 	rebuilding func() bool
 	haUndo     haUndoStore
+	services   servicesState
 	passkeys   passkeyChallenges
 
 	loadMu      sync.Mutex
@@ -468,6 +469,9 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/docker/networks", s.requireHeavyAppAdmin(s.handleLANCreate))
 	mux.HandleFunc("DELETE /api/v1/docker/networks/{name}", s.requireAppAdmin(s.handleLANRemove))
 	mux.HandleFunc("PUT /api/v1/docker/settings", s.requireAppAdmin(s.handleDockerSettings))
+	mux.HandleFunc("GET /api/v1/services/state", s.requireUser(s.handleServicesState))
+	mux.HandleFunc("GET /api/v1/services", s.requireAdmin(s.handleServices))
+	mux.HandleFunc("PUT /api/v1/services/{name}", s.requireAdmin(s.handleServiceSet))
 	mux.HandleFunc("POST /api/v1/docker/containers/{id}/{action}", s.requireAppAdmin(s.handleContainerAction))
 	mux.HandleFunc("DELETE /api/v1/docker/containers/{id}", s.requireAppAdmin(s.handleContainerRemove))
 	mux.HandleFunc("GET /api/v1/docker/containers/{id}/logs", s.requireAdmin(s.handleContainerLogs))

@@ -21,6 +21,7 @@ var vmErrors = []struct {
 	status int
 	code   string
 }{
+	{vm.ErrServiceOff, http.StatusConflict, "service_off"},
 	{vm.ErrSnapshotBusy, http.StatusConflict, "vm_snapshot_busy"},
 	{vm.ErrSnapshotUnsupported, http.StatusConflict, "vm_snapshot_unsupported"},
 	{vm.ErrSnapshotRecovery, http.StatusConflict, "vm_snapshot_recovery"},

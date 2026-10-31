@@ -156,9 +156,13 @@ func (s *Server) mcpAvailable(user auth.User, scopes []string) []mcpTool {
 	allowed := func(scope string) bool {
 		return slices.Contains(scopes, scope) && (!auth.AdminScope(scope) || user.Role.CanAdminister())
 	}
+	on := s.servicesOn()
+	off := func(area string) bool {
+		return area == toolcatalog.AreaDocker && !on["docker"] || area == toolcatalog.AreaVMs && !on["vms"]
+	}
 	var tools []mcpTool
 	for _, tool := range s.catalogTools(user) {
-		if mcpSkip[tool.Name] || !allowed(mcpToolScope(tool)) {
+		if mcpSkip[tool.Name] || !allowed(mcpToolScope(tool)) || off(tool.Area) {
 			continue
 		}
 		if tool.Read != nil {
@@ -168,7 +172,7 @@ func (s *Server) mcpAvailable(user auth.User, scopes []string) []mcpTool {
 		}
 	}
 	for _, route := range publicRoutes {
-		if route.Tool == "" || !allowed(route.Scope) {
+		if route.Tool == "" || !allowed(route.Scope) || off(routeArea(route.Scope)) {
 			continue
 		}
 		tools = append(tools, s.routeTool(route))

@@ -25,6 +25,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -198,6 +199,8 @@ type sample struct {
 
 // Manager keeps the VMs and talks to libvirt.
 type Manager struct {
+	// off is the switch of Settings › Services (service.go).
+	off               atomic.Bool
 	ScheduleAdmission func() (func(), error)
 	AutoReady         func() bool
 	// BridgeReady rejects creation/start until the network trial is confirmed.
@@ -454,7 +457,7 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 		m.mu.Unlock()
 		if !loaded {
 			m.Load()
-		} else if !m.Disabled {
+		} else if !m.Disabled && !m.off.Load() {
 			m.runSnapshotSchedules(ctx, mounted(), time.Now())
 			m.runPowerSchedules(ctx, mounted(), time.Now())
 			m.refreshVolumeCopies(mounted())
@@ -1050,6 +1053,9 @@ func (m *Manager) XML(name string) (string, error) {
 
 // Start boots a VM.
 func (m *Manager) Start(ctx context.Context, name string, mounted []string) error {
+	if m.off.Load() {
+		return ErrServiceOff
+	}
 	if m.NetworkLease != nil {
 		release, err := m.NetworkLease()
 		if err != nil {

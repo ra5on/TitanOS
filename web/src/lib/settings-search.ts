@@ -67,6 +67,8 @@ const keywords: Record<string, string> = {
 	cluster:
 		'cluster knoten nodes verbund proxmox mehrere nas andere titanos beitreten join konten synchronisieren backup',
 	api: 'api token tokens cli titanosctl openapi rest automatisierung automation',
+	services:
+		'dienste services docker vm vms virtuelle maschinen lxc container ausschalten abschalten aus off',
 	mcp: 'mcp model context protocol ki ai claude desktop code client clients agent llm werkzeuge tools',
 	proxy:
 		'proxy reverse https name namen domain mdns avahi app apps adresse address docker zertifikat certificate',
@@ -242,6 +244,14 @@ export const settingsAreas: SettingsArea[] = [
 	{ id: 'about', label: 'about.title', group: 'system', icon: 'fileText' },
 	{ id: 'updates', label: 'update.title', group: 'system', icon: 'download', admin: true },
 	{ id: 'timezone', label: 'settings.datetime', group: 'system', icon: 'clock', admin: true },
+	{
+		id: 'services',
+		label: 'services.title',
+		group: 'system',
+		icon: 'box',
+		admin: true,
+		isNew: true,
+	},
 	{
 		id: 'notifications',
 		label: 'notify.settingsTitle',
