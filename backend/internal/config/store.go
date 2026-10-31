@@ -22,6 +22,9 @@ type Store struct {
 	dir string
 	// changes counts the writes since titand started.
 	changes atomic.Uint64
+	// OnWriteError hears about writes that failed on the medium (a worn
+	// stick); set once at the start.
+	OnWriteError func(error)
 }
 
 // Open returns the store in dir. It does not access the directory.
@@ -37,9 +40,12 @@ func (s *Store) Dir() string { return s.dir }
 // stick, whether there is something new to save.
 func (s *Store) Changes() uint64 { return s.changes.Load() }
 
+// errInvalidName is a name no file can have; it says nothing about the stick.
+var errInvalidName = errors.New("config: invalid name")
+
 func (s *Store) path(name string) (string, error) {
 	if !fs.ValidPath(name) || name == "." {
-		return "", fmt.Errorf("config: invalid name %q", name)
+		return "", fmt.Errorf("%w %q", errInvalidName, name)
 	}
 	return filepath.Join(s.dir, filepath.FromSlash(name)), nil
 }
@@ -69,6 +75,14 @@ func (s *Store) ReadJSON(name string, v any) error {
 // the same directory, is flushed to the stick and then renamed over the old
 // file. A power cut leaves either the old or the new content, never half.
 func (s *Store) Write(name string, data []byte) error {
+	err := s.write(name, data)
+	if err != nil && s.OnWriteError != nil && !errors.Is(err, errInvalidName) {
+		s.OnWriteError(err)
+	}
+	return err
+}
+
+func (s *Store) write(name string, data []byte) error {
 	p, err := s.path(name)
 	if err != nil {
 		return err

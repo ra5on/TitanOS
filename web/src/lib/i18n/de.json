@@ -7035,5 +7035,7 @@
 	"notify.kind.unclean_shutdown.title": "Das NAS wurde nicht ordnungsgemäß heruntergefahren",
 	"notify.kind.unclean_shutdown.text": "Der vorige Start endete ohne sauberes Herunterfahren (Stromausfall, Absturz oder Reset); letzte Spur {subject}. Prüfe den Zustand der Volumes; das Protokoll des vorigen Starts gibt es unter Werkzeuge › Protokolle.",
 	"tools.exportPrevious": "Vorigen Start herunterladen",
-	"tools.noPrevious": "Vom vorigen Start wurde kein Protokoll aufbewahrt. TitanOS bewahrt Protokolle auf dem ersten Volume auf, sobald eines eingebunden ist."
+	"tools.noPrevious": "Vom vorigen Start wurde kein Protokoll aufbewahrt. TitanOS bewahrt Protokolle auf dem ersten Volume auf, sobald eines eingebunden ist.",
+	"notify.kind.stick_error.title": "Der Boot-Stick {subject} zeigt Fehler",
+	"notify.kind.stick_error.text": "Der Stick liest oder schreibt nicht mehr zuverlässig. Prüfe, ob die Sicherung des Sticks aktuell ist (Einstellungen › Sicherungen), und tausche den Stick bald gegen einen neuen."
 }

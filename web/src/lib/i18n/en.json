@@ -7035,5 +7035,7 @@
 	"notify.kind.unclean_shutdown.title": "The NAS was not shut down properly",
 	"notify.kind.unclean_shutdown.text": "The previous start ended without a clean shutdown (power cut, crash or reset); last trace {subject}. Check the state of the volumes; the log of the previous start is under Tools › Logs.",
 	"tools.exportPrevious": "Download previous start",
-	"tools.noPrevious": "No log of the previous start was kept. TitanOS keeps logs on the first volume as soon as one is mounted."
+	"tools.noPrevious": "No log of the previous start was kept. TitanOS keeps logs on the first volume as soon as one is mounted.",
+	"notify.kind.stick_error.title": "The boot stick {subject} shows errors",
+	"notify.kind.stick_error.text": "The stick no longer reads or writes reliably. Check that the backup of the stick is up to date (Settings › Backups) and replace the stick with a new one soon."
 }

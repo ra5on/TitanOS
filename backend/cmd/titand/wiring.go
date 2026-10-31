@@ -52,6 +52,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/shutdown"
 	"github.com/ra5on/TitanOS/backend/internal/sshd"
+	"github.com/ra5on/TitanOS/backend/internal/stickwatch"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
 	"github.com/ra5on/TitanOS/backend/internal/tailscale"
@@ -98,6 +99,7 @@ type titand struct {
 	shells          *terminal.Manager
 	notifier        *notify.Manager
 	logs            *logkeep.Manager
+	stick           *stickwatch.Watcher
 	pushes          *webpush.Manager
 	home            *homeassistant.Manager
 	stickBackup     *configbackup.Manager
@@ -457,6 +459,12 @@ func (w *titand) wireNotifications() error {
 		w.notifier.Notify(notify.Warning, "unclean_shutdown", when)
 	}
 	w.notifier.Urgent = w.logs.Urgent
+	// A failing boot stick: kernel errors and failed writes to /config.
+	w.stick = stickwatch.New()
+	w.stick.Report = func(string) { w.notifier.Notify(notify.Error, "stick_error", "TITANOS") }
+	if !w.opts.dev {
+		w.store.OnWriteError = w.stick.Failed
+	}
 	// Only owners and administrators may point their own channels into the
 	// home network; a plain user's go to public addresses only.
 	w.notifier.Confined = func(name string) bool {
@@ -1331,6 +1339,9 @@ func (w *titand) wireAPI() error {
 	// Leftovers of the AI chat removed in 0.41.0, once.
 	w.background(func() { w.handler.RemoveRetiredAssistant(ctx) })
 	w.background(func() { w.logs.Run(ctx) })
+	if !w.opts.dev {
+		w.background(func() { w.stick.Follow(ctx) })
+	}
 	w.background(func() { w.home.RunMQTT(ctx, w.handler.HASnapshot, w.handler.HACommand) })
 	w.schedule.Busy = w.handler.PowerBusy
 	w.background(func() { w.schedule.Run(ctx) })
