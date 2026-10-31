@@ -1,7 +1,7 @@
 <script lang="ts">
 	// On a new stick: put a saved configuration back instead of setting
 	// the NAS up again. Shown on the setup page.
-	import { api } from '#lib/api.ts';
+	import { api, ApiError } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
@@ -14,6 +14,7 @@
 		hostname: string;
 		version: string;
 		newer?: boolean;
+		encrypted?: boolean;
 	};
 	type Source = { kind: 'found'; backup: Found } | { kind: 'file'; file: File };
 
@@ -22,6 +23,9 @@
 	let source = $state<Source | null>(null);
 	let phase = $state<'idle' | 'working' | 'restarting'>('idle');
 	let error = $state('');
+	// Encrypted backups need their password (decided 31.10.2026).
+	let password = $state('');
+	let sealedFile = $state(false);
 	let picker = $state<HTMLInputElement>();
 
 	// Looking at the disks takes a moment; the setup form does not wait for it.
@@ -62,13 +66,17 @@
 		});
 	}
 
-	function pick(event: Event) {
+	async function pick(event: Event) {
 		const file = (event.currentTarget as HTMLInputElement).files?.[0];
-		if (file) source = { kind: 'file', file };
+		if (!file) return;
+		// An encrypted backup starts with its own mark.
+		sealedFile = (await file.slice(0, 13).text()) === 'TITANOS-ENC1\n';
+		source = { kind: 'file', file };
 	}
 
 	function cancel() {
 		source = null;
+		password = '';
 		if (picker) picker.value = '';
 	}
 
@@ -81,11 +89,31 @@
 				await api.post('/setup/restore', {
 					device: source.backup.device,
 					name: source.backup.name,
+					password: password || undefined,
 				});
-			else await api.post('/setup/restore/upload', source.file);
+			else if (!password) await api.post('/setup/restore/upload', source.file);
+			else {
+				// The password goes in a header: the body is the file itself.
+				const res = await fetch('/api/v1/setup/restore/upload', {
+					method: 'POST',
+					credentials: 'same-origin',
+					headers: { 'X-Backup-Password': password },
+					body: source.file,
+				});
+				if (!res.ok) {
+					const body = await res.json().catch(() => ({}));
+					throw new ApiError(
+						res.status,
+						body?.error?.code ?? 'internal',
+						body?.error?.message ?? '',
+					);
+				}
+			}
 		} catch (err) {
 			error = apiErrorText(err);
 			phase = 'idle';
+			// A wrong or missing password: try again in the same dialog.
+			if (err instanceof ApiError && err.code.startsWith('backup_password')) return;
 			cancel();
 			return;
 		}
@@ -190,6 +218,17 @@
 				{t('restore.newer', { version: source.backup.version })}
 			</p>{/if}
 		<p class="notice-warn">{t('restore.confirmAddress')}</p>
+		{#if (source.kind === 'found' && source.backup.encrypted) || (source.kind === 'file' && sealedFile)}
+			<label class="stack"
+				><span>{t('restore.password')}</span><input
+					class="field"
+					type="password"
+					autocomplete="off"
+					bind:value={password}
+				/></label
+			>
+		{/if}
+		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 		{#if phase === 'working'}<p class="muted" role="status">{t('restore.working')}</p>{/if}
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={cancel} disabled={phase === 'working'}

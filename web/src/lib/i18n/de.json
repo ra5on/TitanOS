@@ -1578,7 +1578,7 @@
 	"notify.kind.config_backup_failed.text": "Die Konfiguration konnte nicht auf das Volume {subject} gesichert werden. Sieh unter Einstellungen › Sicherung des Sticks nach.",
 	"notify.kind.usb_plugged.title": "USB-Laufwerk {subject} angeschlossen",
 	"notify.kind.usb_plugged.text": "Unter Dateien › Weitere Laufwerke kannst du es einbinden und Dateien kopieren.",
-	"error.invalid_backup_settings": "Diese Einstellungen passen nicht.",
+	"error.invalid_backup_settings": "Ungültige Einstellung (Passwort mindestens 8 Zeichen).",
 	"error.backup_no_volume": "Es ist kein Volume eingebunden, auf das gesichert werden könnte.",
 	"error.backup_not_found": "Diese Sicherung gibt es nicht mehr.",
 	"error.not_a_backup": "Das ist keine Sicherung einer TitanOS-Konfiguration, oder die Datei ist beschädigt.",
@@ -7229,5 +7229,17 @@
 	"services.confirm": "{name}: {count} laufen gerade. Sie werden sauber gestoppt; Daten und Einstellungen bleiben erhalten. Beim Einschalten startet, was Autostart hat, wieder.",
 	"services.switchOff": "{name} ausschalten",
 	"error.service_off": "Dieser Dienst ist ausgeschaltet (Einstellungen › Dienste).",
-	"error.docker_needs_volume": "Wähle zuerst auf der Docker-Seite ein Volume für Docker."
+	"error.docker_needs_volume": "Wähle zuerst auf der Docker-Seite ein Volume für Docker.",
+	"stick.encrypt": "Sicherungen mit einem Passwort verschlüsseln (empfohlen)",
+	"stick.encryptHint": "Die Sicherung enthält Zugangsdaten zu anderen Diensten (z. B. Backup-Ziele, DDNS, Home Assistant). Mit Passwort ist eine heruntergeladene oder gestohlene Sicherung wertlos. Ohne das Passwort lässt sich die Sicherung nicht wiederherstellen – bewahre es getrennt vom NAS auf.",
+	"stick.password": "Passwort",
+	"stick.passwordNew": "Neues Passwort (leer lassen, um es zu behalten)",
+	"stick.passwordRepeat": "Wiederholen",
+	"stick.passwordShort": "Mindestens 8 Zeichen.",
+	"stick.passwordMismatch": "Die Passwörter stimmen nicht überein.",
+	"stick.encryptedTitle": "Verschlüsselt",
+	"error.backup_password_required": "Diese Sicherung ist verschlüsselt. Gib ihr Passwort ein.",
+	"error.backup_password_wrong": "Das Passwort passt nicht zu dieser Sicherung.",
+	"restore.password": "Passwort der Sicherung",
+	"restore.encrypted": "verschlüsselt"
 }

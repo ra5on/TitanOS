@@ -14,6 +14,7 @@
 		schedule: string;
 		time: string;
 		weekday: number;
+		encrypt?: boolean;
 	};
 	type Backup = {
 		name: string;
@@ -22,6 +23,7 @@
 		sizeBytes: number;
 		hostname: string;
 		version: string;
+		encrypted?: boolean;
 	};
 	type State = {
 		settings: Settings;
@@ -31,7 +33,7 @@
 		backups: Backup[];
 		next: string | null;
 	};
-	type Answer = { backup: State; volumes: string[] | null };
+	type Answer = { backup: State; volumes: string[] | null; passwordSet?: boolean };
 
 	let status = $state<State | null>(null);
 	let volumes = $state<string[]>([]);
@@ -42,6 +44,19 @@
 	let ran = $state(false);
 	// The backup that waits for the password to be entered again.
 	let wanted = $state<Backup | null>(null);
+	// Encryption of the backups (decided 31.10.2026).
+	let passwordSet = $state(false);
+	let password = $state('');
+	let repeat = $state('');
+	const passwordProblem = $derived(
+		password === '' && repeat === ''
+			? ''
+			: password.length < 8
+				? t('stick.passwordShort')
+				: password !== repeat
+					? t('stick.passwordMismatch')
+					: '',
+	);
 
 	function problem(err: unknown) {
 		const code = err instanceof ApiError ? err.code : 'internal';
@@ -54,6 +69,7 @@
 	function take(res: Answer, keepDraft = false) {
 		status = res.backup;
 		volumes = res.volumes ?? [];
+		passwordSet = !!res.passwordSet;
 		if (!draft || !keepDraft) draft = { ...res.backup.settings };
 	}
 
@@ -78,7 +94,9 @@
 	const changed = $derived(
 		!!status &&
 			!!draft &&
-			JSON.stringify({ ...draft, keep: Number(draft.keep) }) !== JSON.stringify(status.settings),
+			(JSON.stringify({ ...draft, keep: Number(draft.keep), encrypt: !!draft.encrypt }) !==
+				JSON.stringify({ ...status.settings, encrypt: !!status.settings.encrypt }) ||
+				password !== ''),
 	);
 	const newest = $derived(status?.backups[0]);
 
@@ -89,7 +107,15 @@
 		saved = false;
 		error = null;
 		try {
-			take(await api.put<Answer>('/config-backup', { ...draft, keep: Number(draft.keep) || 0 }));
+			take(
+				await api.put<Answer>('/config-backup', {
+					...draft,
+					keep: Number(draft.keep) || 0,
+					password: password || undefined,
+				}),
+			);
+			password = '';
+			repeat = '';
 			saved = true;
 		} catch (err) {
 			problem(err);
@@ -267,8 +293,45 @@
 				/>
 			</label>
 		</div>
+		<div class="option divided">
+			<label class="check"
+				><input type="checkbox" bind:checked={draft.encrypt} /><span>{t('stick.encrypt')}</span
+				></label
+			>
+			<small>{t('stick.encryptHint')}</small>
+		</div>
+		{#if draft.encrypt}
+			<div class="row">
+				<label class="stack narrow"
+					><span>{t(passwordSet ? 'stick.passwordNew' : 'stick.password')}</span><input
+						class="field"
+						type="password"
+						autocomplete="new-password"
+						bind:value={password}
+						placeholder={passwordSet ? t('notify.secretStored') : ''}
+						required={!passwordSet}
+					/></label
+				>
+				<label class="stack narrow"
+					><span>{t('stick.passwordRepeat')}</span><input
+						class="field"
+						type="password"
+						autocomplete="new-password"
+						bind:value={repeat}
+						required={!passwordSet || password !== ''}
+					/></label
+				>
+			</div>
+			{#if passwordProblem}<p class="notice-warn" role="alert">{passwordProblem}</p>{/if}
+		{/if}
 		<div class="row-actions">
-			<button type="submit" class="btn btn-primary" disabled={!changed || busy !== null}
+			<button
+				type="submit"
+				class="btn btn-primary"
+				disabled={!changed ||
+					busy !== null ||
+					!!passwordProblem ||
+					(!!draft.encrypt && !passwordSet && !password)}
 				>{t(busy === 'save' ? 'ui.saving' : 'notify.save')}</button
 			>{#if saved && !changed}<span class="muted" role="status">{t('ui.saved')}</span>{/if}
 		</div>
@@ -293,7 +356,10 @@
 							<tr>
 								<td>{formatDateTime(new Date(backup.time))}</td>
 								<td class="mono">{backup.volume}</td>
-								<td class="mono">{backup.version}</td>
+								<td class="mono"
+									>{backup.version}{#if backup.encrypted}
+										<span class="chip ok" title={t('stick.encryptedTitle')}>🔒</span>{/if}</td
+								>
 								<td class="num mono">{formatBytes(backup.sizeBytes)}</td>
 								<td class="num"
 									><button type="button" class="btn small" onclick={() => download(backup)}

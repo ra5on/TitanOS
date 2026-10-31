@@ -27,6 +27,12 @@ func writeBackupError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, "backup_not_found", err.Error())
 	case errors.Is(err, configbackup.ErrNotABackup):
 		writeError(w, http.StatusBadRequest, "not_a_backup", err.Error())
+	case errors.Is(err, configbackup.ErrPasswordRequired):
+		writeError(w, http.StatusUnauthorized, "backup_password_required", err.Error())
+	case errors.Is(err, configbackup.ErrWrongPassword):
+		writeError(w, http.StatusUnauthorized, "backup_password_wrong", err.Error())
+	case errors.Is(err, configbackup.ErrInvalid):
+		writeError(w, http.StatusBadRequest, "invalid_backup_settings", err.Error())
 	case errors.Is(err, configbackup.ErrTooLarge):
 		writeError(w, http.StatusRequestEntityTooLarge, "too_large", err.Error())
 	default:
@@ -37,14 +43,30 @@ func writeBackupError(w http.ResponseWriter, err error) {
 
 func (s *Server) handleConfigBackup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"backup":  s.opts.ConfigBackup.State(s.opts.Storage.Mounted()),
-		"volumes": s.opts.Storage.Names(),
+		"backup":      s.opts.ConfigBackup.State(s.opts.Storage.Mounted()),
+		"volumes":     s.opts.Storage.Names(),
+		"passwordSet": s.opts.ConfigBackup.PasswordSet(),
 	})
 }
 
 func (s *Server) handleConfigBackupSettings(w http.ResponseWriter, r *http.Request) {
-	var settings configbackup.Settings
-	if !readJSON(w, r, &settings) {
+	var req struct {
+		configbackup.Settings
+		// Password for encrypted backups; empty keeps the one there is.
+		Password string `json:"password,omitempty"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	settings := req.Settings
+	if req.Password != "" {
+		if err := s.opts.ConfigBackup.SetPassword(req.Password); err != nil {
+			writeBackupError(w, err)
+			return
+		}
+	}
+	if settings.Encrypt && !s.opts.ConfigBackup.PasswordSet() {
+		writeError(w, http.StatusBadRequest, "backup_password_required", "a password is needed to encrypt backups")
 		return
 	}
 	if err := s.opts.ConfigBackup.SetSettings(settings, s.opts.Storage.Names()); err != nil {
@@ -180,11 +202,11 @@ func (s *Server) restored(w http.ResponseWriter, r *http.Request, source string)
 func (s *Server) handleSetupRestore(w http.ResponseWriter, r *http.Request) {
 	setupMu.Lock()
 	defer setupMu.Unlock()
-	var req struct{ Device, Name string }
+	var req struct{ Device, Name, Password string }
 	if !readJSON(w, r, &req) || !s.newStickLocked(w) {
 		return
 	}
-	if _, err := s.opts.ConfigBackup.RestoreFound(r.Context(), req.Device, req.Name); err != nil {
+	if _, err := s.opts.ConfigBackup.RestoreFound(r.Context(), req.Device, req.Name, req.Password); err != nil {
 		writeBackupError(w, err)
 		return
 	}
@@ -198,7 +220,7 @@ func (s *Server) handleSetupRestoreUpload(w http.ResponseWriter, r *http.Request
 	if !s.newStickLocked(w) {
 		return
 	}
-	if _, err := s.opts.ConfigBackup.RestoreUpload(r.Body); err != nil {
+	if _, err := s.opts.ConfigBackup.RestoreUpload(r.Body, r.Header.Get("X-Backup-Password")); err != nil {
 		writeBackupError(w, err)
 		return
 	}

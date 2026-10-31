@@ -1578,7 +1578,7 @@
 	"notify.kind.config_backup_failed.text": "The configuration could not be saved to the volume {subject}. Have a look at Settings › Backup of the stick.",
 	"notify.kind.usb_plugged.title": "USB drive {subject} plugged in",
 	"notify.kind.usb_plugged.text": "Mount it under Files › Other drives to copy files.",
-	"error.invalid_backup_settings": "These settings do not fit.",
+	"error.invalid_backup_settings": "Invalid setting (password at least 8 characters).",
 	"error.backup_no_volume": "No volume is mounted that could be saved to.",
 	"error.backup_not_found": "This backup is not there any more.",
 	"error.not_a_backup": "This is not a backup of a TitanOS configuration, or the file is damaged.",
@@ -7229,5 +7229,17 @@
 	"services.confirm": "{name}: {count} are running. They are stopped cleanly; data and settings stay. When switched on again, whatever has autostart starts again.",
 	"services.switchOff": "Switch off {name}",
 	"error.service_off": "This service is switched off (Settings › Services).",
-	"error.docker_needs_volume": "Choose a volume for Docker on the Docker page first."
+	"error.docker_needs_volume": "Choose a volume for Docker on the Docker page first.",
+	"stick.encrypt": "Encrypt backups with a password (recommended)",
+	"stick.encryptHint": "The backup holds credentials for other services (e.g. backup targets, DDNS, Home Assistant). With a password a downloaded or stolen backup is worthless. Without the password the backup cannot be restored – keep it apart from the NAS.",
+	"stick.password": "Password",
+	"stick.passwordNew": "New password (leave empty to keep it)",
+	"stick.passwordRepeat": "Repeat",
+	"stick.passwordShort": "At least 8 characters.",
+	"stick.passwordMismatch": "The passwords do not match.",
+	"stick.encryptedTitle": "Encrypted",
+	"error.backup_password_required": "This backup is encrypted. Enter its password.",
+	"error.backup_password_wrong": "The password does not open this backup.",
+	"restore.password": "Password of the backup",
+	"restore.encrypted": "encrypted"
 }
