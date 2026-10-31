@@ -702,6 +702,9 @@ func (w *titand) wireUpdates() error {
 		}
 		w.notifier.Notify(severity, kind, subject)
 	}
+	// Started by GRUB (legacy BIOS, 32-bit UEFI): its try count becomes
+	// part of the entry names before anything looks at them.
+	w.updates.ReconcileBootLoader()
 	if err := w.updates.Load(); err != nil {
 		slog.Warn("update settings not readable from /config", "err", err)
 	}

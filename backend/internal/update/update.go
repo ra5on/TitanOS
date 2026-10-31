@@ -287,6 +287,9 @@ type Manager struct {
 	// bootDir is where the stick is mounted, keyDir where the keys are
 	// that updates must be signed with.
 	bootDir, keyDir string
+	// cmdline returns the kernel command line (/proc/cmdline): it tells
+	// whether GRUB started this system.
+	cmdline func() string
 	// version and slot are what is running.
 	version, slot string
 	bootID        string
@@ -367,6 +370,10 @@ func NewManager(store *config.Store, version, slot string) *Manager {
 		store: store, client: &http.Client{}, bootDir: "/efi", keyDir: "/usr/share/titanos/update-keys",
 		version: version, slot: slot, bootID: strings.TrimSpace(string(bootID)), now: time.Now, stall: 90 * time.Second, retryPause: 3 * time.Second, restartDelay: 2 * time.Second,
 		settings: Settings{Channel: ChannelStable, InstallTime: "03:30"},
+		cmdline: func() string {
+			data, _ := os.ReadFile("/proc/cmdline")
+			return string(data)
+		},
 	}
 }
 
@@ -569,8 +576,17 @@ func (m *Manager) Bless() error {
 	}
 	good := filepath.Join(filepath.Dir(e.path), "titanos-"+m.slot+".conf")
 	if err := os.Rename(e.path, good); err != nil {
-		return err
+		// titand may just have written GRUB's count into the name
+		// (ReconcileBootLoader): take the entry as it is now.
+		e, ok = m.readEntries()[m.slot]
+		if !ok || e.left == nil {
+			return err
+		}
+		if err := os.Rename(e.path, good); err != nil {
+			return err
+		}
 	}
+	m.syncGrub(false)
 	unix.Sync()
 	m.forget()
 	slog.Info("this system is marked good", "slot", m.slot)
@@ -691,6 +707,7 @@ func (m *Manager) putEntry(slot, content string, counted bool) error {
 	if err := writeFile(filepath.Join(dir, name), []byte(content)); err != nil {
 		return err
 	}
+	m.writeBootEnv(slot, content)
 	files, _ := os.ReadDir(dir)
 	for _, file := range files {
 		if match := entryName.FindStringSubmatch(file.Name()); match != nil && match[1] == slot && file.Name() != name {
@@ -705,7 +722,7 @@ func (m *Manager) clearSlot(slot string) {
 	// What is in the slot can no longer be started while it is replaced.
 	m.removeEntry(slot)
 	dir := filepath.Join(m.bootDir, "titanos", slot)
-	for _, name := range append(slices.Clone(slotFiles), "version") {
+	for _, name := range append(slices.Clone(slotFiles), "version", bootEnvName) {
 		os.Remove(filepath.Join(dir, name))
 	}
 }
@@ -1283,6 +1300,7 @@ func (m *Manager) switchTo(target, content string, pending Pending) error {
 		m.store.Remove(pendingFile)
 		return err
 	}
+	m.syncGrub(true)
 	// Everything has to be on the stick before someone restarts.
 	unix.Sync()
 	m.mu.Lock()
@@ -1350,6 +1368,7 @@ func (m *Manager) Cancel() error {
 	if err := m.store.Remove(pendingFile); err != nil {
 		return err
 	}
+	m.syncGrub(false)
 	unix.Sync()
 	m.mu.Lock()
 	m.pending, m.progress, m.slotCache = nil, Progress{}, nil
