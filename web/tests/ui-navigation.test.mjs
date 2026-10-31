@@ -83,7 +83,7 @@ test('the settings navigation keeps its fixed groups, order and role filter', as
 			['security', ['access', 'firewall', 'letsencrypt', 'wireguard']],
 			['hardware', ['hardware', 'temperatures', 'energy', 'ups', 'power-button']],
 			['data', ['memory', 'backups', 'files']],
-			['integrations', ['homeassistant', 'api']],
+			['integrations', ['homeassistant', 'mcp', 'api']],
 			['personal', ['appearance']],
 		],
 	);

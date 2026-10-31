@@ -82,8 +82,10 @@ type Status struct {
 
 // Filter narrows a query. Before pages backwards through older entries.
 type Filter struct {
-	Days   int
-	User   string
+	Days int
+	User string
+	// Via keeps only entries that came this way (web, token, mcp …).
+	Via    string
 	Text   string
 	Failed bool
 	Before time.Time
@@ -426,6 +428,9 @@ func repairTail(file *os.File) error {
 
 func (f Filter) match(e Entry, cutoff time.Time) bool {
 	if e.At.Before(cutoff) || (!f.Before.IsZero() && !e.At.Before(f.Before)) {
+		return false
+	}
+	if f.Via != "" && e.Via != f.Via {
 		return false
 	}
 	if f.User != "" && e.User != f.User {

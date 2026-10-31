@@ -287,6 +287,14 @@ export const settingsAreas: SettingsArea[] = [
 	{ id: 'backups', label: 'safeguard.title', group: 'data', icon: 'archive', admin: true },
 	{ id: 'files', label: 'fileIndex.title', group: 'data', icon: 'search', admin: true },
 	{ id: 'homeassistant', label: 'ha.title', group: 'integrations', icon: 'home', admin: true },
+	{
+		id: 'mcp',
+		label: 'mcp.pageTitle',
+		group: 'integrations',
+		icon: 'chat',
+		admin: true,
+		isNew: true,
+	},
 	{ id: 'api', label: 'api.title', group: 'integrations', icon: 'key' },
 	{ id: 'appearance', label: 'menu.appearance', group: 'personal', icon: 'palette' },
 ];

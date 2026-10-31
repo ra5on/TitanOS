@@ -251,7 +251,7 @@ func (s *Server) handleActivity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	f := activity.Filter{Days: 7, Limit: 200, User: q.Get("user"), Text: q.Get("q"), Failed: q.Get("failed") == "1"}
+	f := activity.Filter{Days: 7, Limit: 200, User: q.Get("user"), Via: q.Get("via"), Text: q.Get("q"), Failed: q.Get("failed") == "1"}
 	if v := q.Get("days"); v != "" {
 		f.Days, _ = strconv.Atoi(v)
 	}
