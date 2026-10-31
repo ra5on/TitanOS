@@ -70,6 +70,9 @@ func TestKeepChosenRuns(t *testing.T) {
 		t.Fatalf("last day: %v", got)
 	}
 	k = Keep{Monthly: 1, MonthlyNth: -1, MonthlyWeekday: 5}
+	if got := kept(k, all, now); fmt.Sprint(got) != "[2026-10-30T03 2026-10-31T15]" {
+		t.Fatalf("last Friday: %v", got)
+	}
 	if d := nthWeekday(time.Date(2026, 10, 1, 0, 0, 0, 0, time.Local), -1, 5); d.Day() != 30 {
 		t.Fatalf("last Friday of October: %v", d)
 	}
