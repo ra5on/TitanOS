@@ -293,13 +293,8 @@ func readFolder(dir string) []Backup {
 	return list
 }
 
-// readManifest reads the first file of a backup.
-func readManifest(file string) (Manifest, error) {
-	manifest, _, err := readManifestOf(file)
-	return manifest, err
-}
-
-// readManifestOf also says whether the backup is encrypted.
+// readManifestOf reads the manifest of a backup and says whether it is
+// encrypted.
 func readManifestOf(file string) (Manifest, bool, error) {
 	f, err := os.Open(file)
 	if err != nil {
