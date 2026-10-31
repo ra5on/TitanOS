@@ -75,6 +75,6 @@
 
 <style>
 	.hint {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 </style>

@@ -669,7 +669,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		color: var(--warn-text);
 	}
 	.open-points ul {
@@ -708,7 +708,7 @@
 	}
 	summary {
 		cursor: pointer;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.advanced-body {
 		display: flex;
@@ -741,7 +741,7 @@
 		border-bottom: 1px solid var(--panel-border);
 	}
 	h2 {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.045em;
@@ -767,12 +767,12 @@
 		border-radius: var(--radius-ctl);
 		color: var(--text);
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		text-align: left;
 		cursor: pointer;
 	}
 	.templates .muted {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	@media (max-width: 600px) {
 		.templates {
@@ -783,7 +783,7 @@
 		border-color: var(--accent);
 	}
 	.name {
-		font-size: 0.9375rem;
+		font-size: var(--text-md);
 		font-weight: 600;
 	}
 	.row {
@@ -795,7 +795,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);
@@ -807,7 +807,7 @@
 		flex: 2 1 320px;
 	}
 	small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.warn {
@@ -827,7 +827,7 @@
 		flex-direction: column;
 		gap: 8px;
 		margin: 0;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	dl div {
 		display: flex;
@@ -845,7 +845,7 @@
 	pre {
 		margin: 8px 0 0;
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		white-space: pre-wrap;
 		word-break: break-word;
 	}
@@ -853,7 +853,7 @@
 		flex-direction: row;
 		align-items: center;
 		gap: 10px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.check span {
 		color: var(--text);

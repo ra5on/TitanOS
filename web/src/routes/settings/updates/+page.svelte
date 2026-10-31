@@ -594,7 +594,7 @@
 <style>
 	section,
 	form {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	p {
 		max-width: 60rem;
@@ -617,10 +617,10 @@
 		flex-wrap: wrap;
 		align-items: baseline;
 		gap: 4px 12px;
-		font-size: 1.125rem;
+		font-size: var(--text-lg);
 	}
 	.base {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.chips {
 		display: flex;
@@ -640,7 +640,7 @@
 		font-weight: 600;
 	}
 	.available .name {
-		font-size: 1rem;
+		font-size: var(--text-lg);
 	}
 	.changelog {
 		max-height: 18rem;
@@ -652,7 +652,7 @@
 	pre {
 		margin: 0;
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 	}
@@ -691,7 +691,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);

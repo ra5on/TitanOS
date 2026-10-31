@@ -97,7 +97,7 @@
 	.tile-title {
 		flex: 1;
 		min-width: 0;
-		font-size: var(--tile-title-size, 13px);
+		font-size: var(--tile-title-size, var(--text-base));
 		font-weight: var(--tile-title-weight, 500);
 		font-family: var(--tile-title-font);
 		color: var(--tile-title-color, var(--text));
@@ -133,7 +133,7 @@
 		max-width: 100%;
 	}
 	.add-tiles p {
-		font-size: 0.8rem;
+		font-size: var(--text-sm);
 	}
 	@media (max-width: 760px) {
 		.add-tiles {

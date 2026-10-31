@@ -699,7 +699,7 @@
 	.tabs span {
 		margin-left: 7px;
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.search {
 		flex: 1;
@@ -744,7 +744,7 @@
 	}
 	.sub {
 		display: block;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 		margin-top: 4px;
 	}
@@ -758,7 +758,7 @@
 		min-width: 100px;
 	}
 	.sync-inline {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		margin-top: 7px;
 		gap: 6px;
 	}
@@ -775,7 +775,7 @@
 		margin-bottom: 12px;
 	}
 	.detail-heading h2 {
-		font-size: 1rem;
+		font-size: var(--text-lg);
 	}
 	.detail-heading .btn {
 		padding: 6px;
@@ -804,11 +804,11 @@
 		padding: 16px 20px;
 		display: grid;
 		gap: 12px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.usage h3 {
 		margin: 0;
-		font-size: 0.9375rem;
+		font-size: var(--text-md);
 	}
 	.usage dl {
 		display: grid;
@@ -817,7 +817,7 @@
 	}
 	.usage dt {
 		color: var(--muted);
-		font-size: 0.8rem;
+		font-size: var(--text-sm);
 	}
 	.usage dd {
 		margin: 2px 0 0;
@@ -834,7 +834,7 @@
 	}
 	.disk-details dt {
 		color: var(--muted);
-		font-size: 0.8rem;
+		font-size: var(--text-sm);
 	}
 	.disk-details dd {
 		margin: 0;

@@ -228,7 +228,7 @@
 		padding: 0 4px;
 		border: 0;
 		background: transparent;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.tasks-badge {
@@ -243,7 +243,7 @@
 		background: color-mix(in srgb, var(--accent) 12%, transparent);
 		color: var(--text);
 		font: inherit;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		white-space: nowrap;
 		cursor: pointer;
 	}

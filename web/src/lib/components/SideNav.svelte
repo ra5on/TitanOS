@@ -149,7 +149,7 @@
 		background: transparent;
 		color: var(--muted);
 		font: inherit;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		text-decoration: none;
 		white-space: nowrap;
 		cursor: pointer;

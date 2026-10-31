@@ -72,7 +72,7 @@
 		width: 100%;
 	}
 	.search.visible {
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.field-wrap {
 		position: relative;

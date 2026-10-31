@@ -765,7 +765,7 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		margin-left: auto;
 	}
 	.share-layout {
@@ -785,13 +785,13 @@
 	table {
 		width: 100%;
 		border-collapse: collapse;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	th {
 		text-align: left;
 		font-weight: 500;
 		color: var(--muted);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	th,
 	td {
@@ -828,7 +828,7 @@
 	small {
 		display: block;
 		color: var(--muted);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		margin-top: 3px;
 	}
 	.warning {
@@ -840,10 +840,10 @@
 		flex-wrap: wrap;
 	}
 	.chip {
-		font-size: 0.6875rem;
+		font-size: var(--text-xs);
 	}
 	.state {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.state::before {
 		content: '';
@@ -869,7 +869,7 @@
 	}
 	.list-count {
 		padding: 10px 14px;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.detail {
@@ -883,7 +883,7 @@
 		gap: 12px;
 	}
 	.detail h2 {
-		font-size: 1.125rem;
+		font-size: var(--text-lg);
 		overflow-wrap: anywhere;
 	}
 	.tabs {
@@ -899,7 +899,7 @@
 		border-bottom: 2px solid transparent;
 		padding: 10px 0;
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		cursor: pointer;
 	}
 	.tabs button[aria-selected='true'] {
@@ -910,7 +910,7 @@
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
 		gap: 12px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	dt {
 		color: var(--muted);
@@ -927,7 +927,7 @@
 		margin-top: 20px;
 	}
 	.hint {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		margin-top: 12px;
 	}
 	.address {
@@ -935,7 +935,7 @@
 		flex-wrap: wrap;
 		gap: 8px;
 		align-items: center;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.address > span,
 	.copy-failed {
@@ -943,7 +943,7 @@
 	}
 	.via {
 		margin: 4px 0 0;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		font-weight: 600;
 	}
 	.address code {
@@ -1004,7 +1004,7 @@
 			flex: 1;
 		}
 		.share-name {
-			font-size: 0.8125rem;
+			font-size: var(--text-base);
 		}
 	}
 </style>

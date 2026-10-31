@@ -210,7 +210,7 @@
 	.text,
 	.chosen {
 		margin: 0;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.chosen {
 		display: flex;
@@ -219,7 +219,7 @@
 		overflow-wrap: anywhere;
 	}
 	.small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.search {
 		display: flex;
@@ -236,13 +236,13 @@
 		align-items: center;
 		flex-wrap: wrap;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.small-btn {
 		gap: 4px;
 		height: 28px;
 		padding: 0 10px;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.crumb {
 		padding: 2px 4px;
@@ -250,7 +250,7 @@
 		border: 0;
 		border-radius: var(--radius-small);
 		color: var(--text);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		cursor: pointer;
 	}
 	.crumb:hover {
@@ -287,7 +287,7 @@
 		border: 0;
 		color: var(--text);
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		text-align: left;
 		cursor: pointer;
 	}

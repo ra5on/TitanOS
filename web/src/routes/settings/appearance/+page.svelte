@@ -672,7 +672,7 @@
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.color-field input {
 		width: 42px;
@@ -711,10 +711,10 @@
 		gap: 12px;
 	}
 	.small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.hint {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 
 	.themes {
@@ -751,7 +751,7 @@
 		align-items: center;
 	}
 	.option-name {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		font-weight: 600;
 	}
 	.swatch {
@@ -791,7 +791,7 @@
 		background: var(--bg);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		cursor: pointer;
 	}
 	.color > span {
@@ -799,7 +799,7 @@
 		flex-direction: column;
 	}
 	.color .mono {
-		font-size: 0.6875rem;
+		font-size: var(--text-xs);
 	}
 	input[type='color'] {
 		width: 32px;
@@ -822,7 +822,7 @@
 		flex-direction: column;
 		align-items: center;
 		gap: 6px;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		cursor: pointer;
 	}
 	.accent button,
@@ -844,7 +844,7 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 10px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.segments {
 		display: flex;
@@ -862,7 +862,7 @@
 		border-radius: var(--radius-ctl);
 		color: var(--text);
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		font-weight: 500;
 		cursor: pointer;
 	}
@@ -880,7 +880,7 @@
 		background: var(--bg);
 		border: 1px dashed var(--border);
 		border-radius: var(--radius-ctl);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.upload span {
 		flex: 1 1 200px;
@@ -896,7 +896,7 @@
 		gap: 10px;
 	}
 	.state {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		color: var(--muted);
 	}
 	.state.warn {

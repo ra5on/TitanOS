@@ -111,7 +111,7 @@
 
 <style>
 	p {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.sensor {
 		display: flex;
@@ -144,7 +144,7 @@
 		font-weight: 500;
 	}
 	.name .muted {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.value {
 		white-space: nowrap;

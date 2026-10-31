@@ -123,7 +123,7 @@
 <style>
 	.speed {
 		margin-left: 8px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	td.actions {
 		display: flex;

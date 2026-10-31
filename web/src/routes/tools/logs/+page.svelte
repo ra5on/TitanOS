@@ -296,7 +296,7 @@
 		flex-direction: column;
 		gap: 14px;
 		padding: 18px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	section p {
 		margin: 0;
@@ -313,13 +313,13 @@
 		gap: 8px 10px;
 	}
 	.count {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label {
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);
@@ -362,7 +362,7 @@
 		background: var(--track);
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-ctl);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		line-height: 1.55;
 		scrollbar-width: thin;
 		scrollbar-color: var(--muted) transparent;
@@ -393,7 +393,7 @@
 		font-weight: 600;
 	}
 	.note {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	/* Narrow screens: time and source above the message instead of a wide row. */
 	@media (max-width: 760px) {

@@ -90,7 +90,7 @@
 		overflow-y: auto;
 		/* At its end the wheel moves the page on (no overscroll-behavior: contain). */
 		/* A surface of its own keeps the list readable over a background image. */
-		padding: 10px 8px 12px;
+		padding: 10px var(--space-2) var(--space-3);
 	}
 	.settings-main {
 		display: flex;
@@ -115,7 +115,7 @@
 			--control-height: 1.75rem;
 		}
 		.settings-shell :global(:is(.btn, .field)) {
-			font-size: 0.8125rem;
+			font-size: var(--text-base);
 		}
 		.settings-shell :global(.btn) {
 			padding: 0 0.75rem;
@@ -134,7 +134,7 @@
 			align-self: flex-start;
 			min-height: 44px;
 			margin: -10px 0 -6px;
-			font-size: 0.875rem;
+			font-size: var(--text-md);
 			text-decoration: none;
 		}
 	}

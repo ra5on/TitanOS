@@ -99,7 +99,7 @@
 	}
 	p {
 		margin: 0;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.options {
 		display: grid;
@@ -124,6 +124,6 @@
 	}
 	.small {
 		display: block;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 </style>

@@ -499,7 +499,7 @@
 		border: 0;
 		color: inherit;
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		font-weight: 500;
 		cursor: pointer;
 	}
@@ -511,7 +511,7 @@
 		padding: 1px 6px;
 		background: color-mix(in srgb, var(--accent) 18%, transparent);
 		border-radius: var(--radius-small);
-		font-size: 0.6875rem;
+		font-size: var(--text-xs);
 		font-weight: 600;
 	}
 	.kind.ct {
@@ -534,7 +534,7 @@
 		border-radius: var(--radius-ctl);
 		color: var(--text);
 		font: inherit;
-		font-size: 1.125rem;
+		font-size: var(--text-lg);
 		cursor: pointer;
 	}
 	.menu {
@@ -565,7 +565,7 @@
 		border-radius: var(--radius-ctl);
 		color: var(--text);
 		font: inherit;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		text-align: left;
 		cursor: pointer;
 	}
@@ -582,13 +582,13 @@
 	.heading,
 	.none {
 		padding: 6px 12px;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.shell {
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.shell .user {
 		width: 8rem;
@@ -596,7 +596,7 @@
 	.shell select {
 		width: auto;
 		height: 2.125rem;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.tools {
 		display: flex;
@@ -616,7 +616,7 @@
 		border-radius: var(--radius-ctl);
 		color: var(--text);
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		text-decoration: none;
 		cursor: pointer;
 	}
@@ -628,11 +628,11 @@
 	.find {
 		width: 12rem;
 		height: 2.125rem;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.size {
 		width: 1.75rem;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 		text-align: center;
 	}
@@ -647,7 +647,7 @@
 		z-index: 2;
 		padding: 20px 24px;
 		background: var(--bg);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.foot {
 		flex: none;
@@ -658,6 +658,6 @@
 		padding: 6px 20px;
 		border-top: 1px solid var(--border);
 		color: var(--muted);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 </style>

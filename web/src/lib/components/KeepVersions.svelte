@@ -287,7 +287,7 @@
 		margin-left: 24px;
 	}
 	.small {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	p {
 		margin: 0;

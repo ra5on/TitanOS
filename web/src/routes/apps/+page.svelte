@@ -410,12 +410,12 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 12px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.num {
 		margin-left: 4px;
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		opacity: 0.75;
 	}
 	.toggle {
@@ -426,7 +426,7 @@
 		border-radius: var(--radius-ctl);
 		color: var(--text);
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		font-weight: 500;
 		cursor: pointer;
 	}
@@ -445,7 +445,7 @@
 		gap: 8px 16px;
 		padding: 12px 18px;
 		border-bottom: 1px solid var(--panel-border);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.sources-head h2 {
 		margin-right: auto;
@@ -453,7 +453,7 @@
 	.small {
 		height: 2.25rem;
 		padding: 0 0.75rem;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.source {
 		display: flex;
@@ -462,7 +462,7 @@
 		gap: 10px 16px;
 		padding: 12px 18px;
 		border-bottom: 1px solid var(--panel-border);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.source-name {
 		flex: 1 1 280px;
@@ -473,7 +473,7 @@
 		font-weight: 500;
 	}
 	.url {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		font-weight: 400;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -481,12 +481,12 @@
 	}
 	.count {
 		width: 5.5rem;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		text-align: right;
 	}
 	.when {
 		width: 10rem;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.when.failed {
 		color: var(--warn-text);
@@ -494,7 +494,7 @@
 	.known > .muted {
 		display: block;
 		padding: 12px 18px 0;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.when.wide {
 		width: auto;
@@ -515,7 +515,7 @@
 		flex-direction: column;
 		gap: 6px;
 		flex: 0 1 240px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.add label.grow {
 		flex: 1 1 360px;
@@ -525,7 +525,7 @@
 	}
 	.hint {
 		flex: 1 1 100%;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.layout {
 		display: flex;
@@ -554,7 +554,7 @@
 		flex: 0 1 260px;
 	}
 	.shown {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.categories {
 		display: flex;
@@ -569,7 +569,7 @@
 		border-radius: 999px;
 		color: var(--text);
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		font-weight: 500;
 		cursor: pointer;
 	}
@@ -625,7 +625,7 @@
 		justify-content: center;
 		border-radius: var(--radius-ctl);
 		color: var(--text);
-		font-size: 1.0625rem;
+		font-size: var(--text-lg);
 		font-weight: 600;
 	}
 	.names {
@@ -635,16 +635,16 @@
 		min-width: 0;
 	}
 	.name {
-		font-size: 0.9375rem;
+		font-size: var(--text-md);
 		font-weight: 600;
 	}
 	.category,
 	.source-label {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.description {
 		min-height: 2.4rem;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		line-height: 1.45;
 		overflow-wrap: anywhere;
 		/* Some stores write whole paragraphs. */

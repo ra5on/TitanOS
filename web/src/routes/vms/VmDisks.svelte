@@ -326,7 +326,7 @@
 	}
 	summary {
 		cursor: pointer;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	/* Also on the inputs for a size, where `.size .number` takes most of it back. */
 	.number {
@@ -337,7 +337,7 @@
 		justify-content: center;
 		background: color-mix(in srgb, var(--accent) 18%, transparent);
 		border-radius: 50%;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		font-weight: 600;
 	}
 	.content {
@@ -350,13 +350,13 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);
 	}
 	small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.warn {
@@ -374,7 +374,7 @@
 		accent-color: var(--accent);
 	}
 	.note {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.disk {
 		display: flex;
@@ -383,10 +383,10 @@
 		padding: 14px;
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-ctl);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.file {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		font-weight: 500;
 	}
 	.grow {
@@ -409,7 +409,7 @@
 		border-radius: var(--radius-ctl);
 		color: var(--text);
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		cursor: pointer;
 	}
 	.segments button[aria-checked='true'] {
@@ -419,7 +419,7 @@
 	.small {
 		height: 2rem;
 		padding: 0 0.625rem;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.size,
 	.place {
@@ -458,7 +458,7 @@
 		border-color: var(--accent);
 	}
 	.path {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
 	}
 	.add {
@@ -470,7 +470,7 @@
 		border-radius: var(--radius-ctl);
 		color: var(--text);
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		cursor: pointer;
 	}
 	fieldset {

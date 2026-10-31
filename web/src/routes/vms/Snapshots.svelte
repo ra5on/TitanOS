@@ -341,7 +341,7 @@
 	.scope {
 		flex: 1 1 320px;
 		margin: 0;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		max-width: 640px;
 		line-height: 1.65;
 	}
@@ -352,7 +352,7 @@
 	}
 	.schedule {
 		margin: 0;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		padding: 12px 16px;
 		background: var(--glass-surface);
 		border: 1px solid var(--border);
@@ -379,10 +379,10 @@
 		gap: 4px;
 		min-width: 0;
 		overflow-wrap: anywhere;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.info .muted {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	form {
 		display: flex;
@@ -420,7 +420,7 @@
 	}
 	pre {
 		margin-top: 8px;
-		font-size: 0.8rem;
+		font-size: var(--text-sm);
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 	}

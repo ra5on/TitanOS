@@ -179,6 +179,6 @@
 	}
 	.line {
 		padding-left: 1.4em;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 </style>

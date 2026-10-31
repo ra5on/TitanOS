@@ -249,7 +249,7 @@
 		cursor: pointer;
 		padding: 7px 14px;
 		border-bottom: 1px solid var(--panel-border);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		user-select: none;
 	}
 	.row:not(.header):hover {
@@ -266,7 +266,7 @@
 		padding-top: 4px;
 		padding-bottom: 4px;
 		background: var(--surface);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 		cursor: default;
 	}
@@ -305,7 +305,7 @@
 	}
 	.num {
 		text-align: right;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		white-space: nowrap;
 	}
 	.entry {

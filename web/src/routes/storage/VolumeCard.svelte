@@ -294,12 +294,12 @@
 		gap: 8px 10px;
 	}
 	.name {
-		font-size: 1.25rem;
+		font-size: var(--text-xl);
 		font-weight: 500;
 	}
 	.mount {
 		margin-left: auto;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		color: var(--muted);
 	}
 	.sync {
@@ -321,13 +321,13 @@
 		gap: 6px 16px;
 	}
 	.sync-top {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.sync-bottom {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.percent {
-		font-size: 1.375rem;
+		font-size: var(--text-xl);
 		font-weight: 500;
 	}
 	.track {
@@ -348,7 +348,7 @@
 		gap: 8px;
 	}
 	.label {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.members {
@@ -364,7 +364,7 @@
 		background: var(--chip);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.member.building {
 		border-color: var(--warn-border);
@@ -391,7 +391,7 @@
 		display: flex;
 		justify-content: space-between;
 		gap: 12px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.actions {
 		display: flex;
@@ -411,12 +411,12 @@
 	}
 	.danger-zone strong {
 		color: var(--status-error);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		letter-spacing: 0.04em;
 		text-transform: uppercase;
 	}
 	.danger-zone p {
 		margin: 4px 0 0;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 </style>

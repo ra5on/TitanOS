@@ -551,7 +551,7 @@
 		border-radius: var(--radius-ctl);
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		user-select: all;
 	}
 </style>

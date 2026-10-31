@@ -103,7 +103,7 @@
 		flex-direction: column;
 		gap: 4px;
 		padding: 4px 10px 8px;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--text);
 	}
 	.head {
@@ -133,7 +133,7 @@
 	}
 	.version {
 		color: var(--muted);
-		font-size: 0.6875rem;
+		font-size: var(--text-xs);
 	}
 	a:focus-visible {
 		outline: 2px solid var(--accent);
@@ -167,7 +167,7 @@
 		background: var(--surface);
 		box-shadow: var(--shadow-menu);
 		color: var(--text);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		pointer-events: none;
 		opacity: 0;
 		visibility: hidden;

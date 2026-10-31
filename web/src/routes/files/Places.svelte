@@ -285,7 +285,7 @@
 	.group {
 		display: block;
 		padding: 10px 10px 4px;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.group-head {
@@ -324,7 +324,7 @@
 		border-radius: var(--radius-ctl);
 		color: var(--muted);
 		font: inherit;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		text-align: left;
 		cursor: pointer;
 	}
@@ -356,21 +356,21 @@
 	.advanced summary {
 		padding: 10px;
 		cursor: pointer;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		color: var(--text);
 	}
 	.summary-note {
 		display: block;
 		margin-left: 14px;
 		color: var(--muted);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.space {
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
 		margin: 2px 10px 8px 34px;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.bar {
@@ -396,7 +396,7 @@
 		color: var(--text);
 		cursor: pointer;
 		font: inherit;
-		font-size: 0.8rem;
+		font-size: var(--text-sm);
 		padding: 0.25rem 0.6rem;
 	}
 	.chip-btn:disabled {
@@ -416,7 +416,7 @@
 	}
 	.drive-details {
 		display: block;
-		font-size: 0.7rem;
+		font-size: var(--text-xs);
 		overflow-wrap: anywhere;
 	}
 	.usb {
@@ -426,14 +426,14 @@
 		min-height: 38px;
 		padding: 0 10px;
 		color: var(--muted);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.backup-details {
 		display: flex;
 		flex-direction: column;
 		gap: 3px;
 		padding: 0 10px 8px 36px;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.backup-details progress {
@@ -450,7 +450,7 @@
 	}
 	.note {
 		padding: 4px 10px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.link {
 		color: var(--accent);
@@ -464,6 +464,6 @@
 		text-align: left;
 		cursor: pointer;
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 </style>

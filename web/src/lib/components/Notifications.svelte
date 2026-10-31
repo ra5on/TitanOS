@@ -264,7 +264,7 @@
 		min-width: 16px;
 		height: 16px;
 		padding: 0 3px;
-		font-size: 10px;
+		font-size: var(--text-xs);
 	}
 	.trigger.open,
 	.trigger:hover {
@@ -290,7 +290,7 @@
 		border-radius: 999px;
 		background: var(--accent);
 		color: var(--on-accent);
-		font-size: 0.6875rem;
+		font-size: var(--text-xs);
 		font-weight: 700;
 	}
 	.count.warning {
@@ -311,7 +311,7 @@
 		max-height: min(70vh, 560px);
 		display: flex;
 		flex-direction: column;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.head {
 		display: flex;
@@ -328,7 +328,7 @@
 		gap: 4px 14px;
 	}
 	.name {
-		font-size: 0.9375rem;
+		font-size: var(--text-md);
 		font-weight: 600;
 	}
 	ul {
@@ -355,10 +355,10 @@
 		gap: 10px;
 	}
 	time {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.what {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		font-weight: 600;
 	}
 	.empty,
@@ -367,7 +367,7 @@
 		padding: 12px 14px;
 	}
 	.foot {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.side .panel {
 		position: fixed;

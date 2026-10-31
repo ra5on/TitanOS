@@ -44,6 +44,10 @@ export const STYLE_KEYS = [
 ] as const;
 export const EDITOR_ICONS = [
 	'chip',
+	'memory',
+	'gpu',
+	'npu',
+	'os',
 	'monitor',
 	'activity',
 	'disk',
@@ -173,7 +177,11 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 					system: 'monitor',
 					docker: 'grid',
 					vms: 'monitor',
-					memory: 'chip',
+					memory: 'memory',
+					accelerators: 'gpu',
+					igpu: 'gpu',
+					nvidia: 'gpu',
+					npu: 'npu',
 					volumes: 'disk',
 					shares: 'folder',
 					network: 'globe',
@@ -181,7 +189,7 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 					netbird: 'globe',
 					temperatures: 'activity',
 				} as Record<string, (typeof EDITOR_ICONS)[number]>
-			)[idSource] ?? 'chip',
+			)[idSource] ?? (idSource.startsWith('vm:') ? 'os' : 'chip'),
 		),
 		titleSize: number('titleSize', 12, 11, 36),
 		valueSize: number(

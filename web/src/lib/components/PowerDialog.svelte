@@ -254,7 +254,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	li {
 		display: flex;
@@ -280,7 +280,7 @@
 	}
 	.state {
 		color: var(--muted);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.state.ok {
 		color: var(--ok-text);
@@ -289,6 +289,6 @@
 		color: var(--error-text);
 	}
 	.small {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 </style>

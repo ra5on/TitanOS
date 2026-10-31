@@ -1173,7 +1173,7 @@
 		border-radius: 999px;
 		color: var(--muted);
 		font: inherit;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		cursor: pointer;
 	}
 	.filter[aria-pressed='true'] {
@@ -1187,7 +1187,7 @@
 	.vm-empty {
 		margin: 0;
 		padding: 4px 14px 12px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.vm {
 		display: flex;
@@ -1216,7 +1216,7 @@
 	}
 	.vm-name {
 		overflow: hidden;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		font-weight: 500;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -1226,7 +1226,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 4px 6px;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.autostart {
 		display: inline-flex;
@@ -1292,7 +1292,7 @@
 		gap: 10px;
 	}
 	.description {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.buttons {
 		display: flex;
@@ -1325,14 +1325,14 @@
 		border: 0;
 		color: inherit;
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		text-decoration: underline;
 		cursor: pointer;
 	}
 	.btn.small {
 		height: 2rem;
 		padding: 0 10px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.tabs {
 		display: flex;
@@ -1348,7 +1348,7 @@
 		padding: 0 2px;
 		border-bottom: 2px solid transparent;
 		color: var(--muted);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		text-decoration: none;
 		white-space: nowrap;
 	}
@@ -1366,7 +1366,7 @@
 		min-width: 0;
 		align-items: center;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.toolbar::before {
 		content: '';
@@ -1412,7 +1412,7 @@
 		resize: none;
 	}
 	.hint {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.screen-footer {
 		display: flex;
@@ -1434,7 +1434,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);
@@ -1443,7 +1443,7 @@
 		flex-direction: row;
 		align-items: center;
 		gap: 10px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.check span {
 		color: var(--text);
@@ -1454,17 +1454,17 @@
 		margin: 0;
 	}
 	.text {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	textarea {
 		height: auto;
 		padding: 10px 12px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	pre {
 		margin: 8px 0 0;
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		white-space: pre-wrap;
 		word-break: break-word;
 	}

@@ -201,6 +201,6 @@
 		resize: vertical;
 		min-height: 16rem;
 		margin-bottom: 0.8rem;
-		font-size: 0.85rem;
+		font-size: var(--text-base);
 	}
 </style>

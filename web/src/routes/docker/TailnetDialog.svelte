@@ -342,7 +342,7 @@
 		margin: 0 0 12px;
 	}
 	.small-text {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.stack-note,
 	.row {
@@ -384,6 +384,6 @@
 	.small {
 		min-height: 30px;
 		padding: 4px 8px;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 </style>

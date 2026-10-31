@@ -109,7 +109,7 @@
 		flex-direction: column;
 		gap: 14px;
 		padding: 18px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	section p {
 		margin: 0;

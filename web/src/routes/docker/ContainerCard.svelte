@@ -91,17 +91,19 @@
 			{#if running}<CpuSpark values={container.cpuHistory} />{/if}
 		</div>{/if}
 
+	<!-- Ports only when the container publishes any; the actions always
+	     stand on the right, also when there are no ports. -->
 	<div class="bottom">
-		<span class="ports">
-			{#each ports.slice(0, MAX_PORTS) as port (port)}<span class="chip mono">{port}</span>{/each}
-			{#if ports.length > MAX_PORTS}<span
-					class="chip mono"
-					title={ports.slice(MAX_PORTS).join(', ')}>+{ports.length - MAX_PORTS}</span
-				>{/if}
-		</span>
+		{#if ports.length > 0}<span class="ports">
+				{#each ports.slice(0, MAX_PORTS) as port (port)}<span class="chip mono">{port}</span>{/each}
+				{#if ports.length > MAX_PORTS}<span
+						class="chip mono"
+						title={ports.slice(MAX_PORTS).join(', ')}>+{ports.length - MAX_PORTS}</span
+					>{/if}
+			</span>{/if}
 		<button
 			type="button"
-			class="btn small"
+			class="btn small start-stop"
 			onclick={() => actions.onaction(running ? 'stop' : 'start')}
 			disabled={busy}
 		>
@@ -111,7 +113,7 @@
 		</button>
 	</div>
 	{#if links.length > 0}
-		<div class="links">
+		<div class="actions">
 			{#each links as link, index (`${index}:${link.href}`)}<a
 					class="btn small"
 					href={link.href}
@@ -130,8 +132,8 @@
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
-		padding: 12px 14px;
-		font-size: 0.875rem;
+		padding: var(--space-3) 14px;
+		font-size: var(--text-md);
 	}
 	.top {
 		display: flex;
@@ -149,7 +151,7 @@
 		overflow: hidden;
 		border-radius: var(--radius-ctl);
 		color: var(--text);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		font-weight: 600;
 	}
 	.stopped .icon {
@@ -165,7 +167,7 @@
 	.line {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		min-width: 0;
 	}
 	.name {
@@ -181,20 +183,20 @@
 	}
 	.line .chip {
 		flex: none;
-		font-size: 0.6875rem;
+		font-size: var(--text-xs);
 	}
 	.image {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 		color: var(--muted);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.stats {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) 4.5rem 5rem;
 		align-items: end;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.state {
 		display: flex;
@@ -207,7 +209,7 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		color: var(--muted);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.value {
 		display: flex;
@@ -215,14 +217,14 @@
 		text-align: right;
 	}
 	.value .mono {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.stopped .value .mono {
 		color: var(--muted);
 	}
 	.label {
 		color: var(--muted);
-		font-size: 0.6875rem;
+		font-size: var(--text-xs);
 	}
 	.spark {
 		height: 22px;
@@ -238,18 +240,22 @@
 	.ports {
 		flex: 1 1 auto;
 		display: flex;
-		gap: 4px;
+		gap: var(--space-1);
 		min-width: 0;
 		overflow: hidden;
 	}
-	.links {
+	.actions {
 		display: flex;
 		flex-wrap: wrap;
+		justify-content: flex-end;
 		gap: 6px;
+	}
+	.start-stop {
+		margin-left: auto;
 	}
 	.ports .chip {
 		flex: none;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.small {
 		flex: none;
@@ -257,7 +263,7 @@
 		height: 2rem;
 		padding: 0 0.625rem;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	@media (max-width: 760px) {
 		.small {

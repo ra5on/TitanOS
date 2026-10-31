@@ -762,7 +762,7 @@
 
 <style>
 	.location {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.segments {
 		display: inline-flex;
@@ -781,7 +781,7 @@
 		border-radius: var(--radius-ctl);
 		color: var(--text);
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		font-weight: 500;
 		cursor: pointer;
 	}
@@ -810,20 +810,20 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);
 	}
 	small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.check {
 		flex-direction: row;
 		align-items: center;
 		gap: 10px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.check span {
 		color: var(--text);
@@ -851,17 +851,17 @@
 	.raw {
 		flex: 1 1 200px;
 		align-self: center;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		overflow-wrap: anywhere;
 	}
 	.small {
 		height: 2.25rem;
 		padding: 0 0.75rem;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.small-text {
 		align-self: center;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.remove {
 		height: 2.75rem;
@@ -869,14 +869,14 @@
 	}
 	.problem {
 		flex: 1 1 100%;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		color: var(--warn-text);
 	}
 	.yaml {
 		min-height: 60vh;
 		height: auto;
 		padding: calc(var(--row-pad) + 2px) var(--tile-pad);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		line-height: 1.55;
 		resize: vertical;
 		tab-size: 2;
@@ -898,7 +898,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 8px 16px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.quick {
 		gap: 8px;
@@ -909,7 +909,7 @@
 		gap: 8px;
 	}
 	.value {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.row-note {
 		flex: 1 1 100%;
@@ -949,12 +949,12 @@
 		flex: 1 1 16rem;
 	}
 	.note {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	pre {
 		margin: 8px 0 0;
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		white-space: pre-wrap;
 		word-break: break-word;
 	}

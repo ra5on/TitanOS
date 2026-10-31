@@ -230,7 +230,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.point input {
 		width: 4.5rem;

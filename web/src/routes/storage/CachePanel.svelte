@@ -180,7 +180,7 @@
 		align-items: center;
 		gap: 6px 12px;
 		margin-top: 12px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.label {
 		font-weight: 600;
@@ -200,7 +200,7 @@
 	}
 	p {
 		margin: 0;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.modes {
 		display: grid;

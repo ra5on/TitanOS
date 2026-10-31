@@ -325,7 +325,7 @@
 		flex-direction: column;
 		gap: 20px;
 		padding: 28px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.head {
 		display: flex;
@@ -335,11 +335,11 @@
 		border-bottom: 1px solid var(--border);
 	}
 	h1 {
-		font-size: 1.375rem;
+		font-size: var(--text-xl);
 		font-weight: 600;
 	}
 	h2 {
-		font-size: 1.0625rem;
+		font-size: var(--text-lg);
 		font-weight: 600;
 	}
 	p {
@@ -367,7 +367,7 @@
 		border-bottom: 2px solid var(--border);
 		color: var(--muted);
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		text-align: left;
 		cursor: pointer;
 	}
@@ -387,7 +387,7 @@
 		height: 22px;
 		border: 1px solid currentColor;
 		border-radius: 50%;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		font-variant-numeric: tabular-nums;
 	}
 	.step.current .number {
@@ -413,7 +413,7 @@
 		flex-direction: column;
 		align-items: stretch;
 		gap: 6px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.group {
 		align-items: flex-start;
@@ -422,7 +422,7 @@
 		font-weight: 500;
 	}
 	small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.problem {

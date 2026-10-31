@@ -4,6 +4,8 @@
 
 **Aufnahmestand:** alle Bilder in `current/` zeigen die gebaute Svelte-WebUI von **TitanOS 0.31.0**, Quellstand [`e923e2c`](https://github.com/ra5on/TitanOS/commit/e923e2c1ea538e2e7a854b76d2613487299377a0), aufgenommen am **28. Oktober 2026** mit Chromium (Playwright), Theme Graphit, blauer Akzent, Glasflächen, Deutsch.
 
+**Veraltet (Prüfung 31.10.2026, Plan 9f):** `einstellungen.png` zeigt noch die Übersicht mit zweiter Liste und `docker.png` die frühere Tabelle mit Spalte „PORTS“. Die WebUI zeigt beides so nicht mehr (Übersicht nur „Braucht Aufmerksamkeit“ und „Dieses NAS“, Docker-Liste als Kacheln); die Bilder werden mit der nächsten vollständigen Aufnahme ersetzt.
+
 Alle NAS-Antworten werden durch isolierte Demonstrationsdaten ersetzt. Hostname, Konten, Dateien, Laufwerke, Adressen und Messwerte sind Beispiele. Es werden weder echte NAS-Geräte angesprochen noch Container oder VMs gestartet. Die sichtbaren App-Icons sind die konfigurierten Originalbilder der jeweiligen Projekte. Ihre Quellen und SHA-256-Werte stehen in [icon-sources.json](icon-sources.json); Namen und Logos gehören den jeweiligen Projekten. Keine nachträgliche Bildbearbeitung oder eingebauten Design-Mockups. Die Bilder ersetzen keine Funktions- oder Hardwareprüfung.
 
 [capture.json](current/capture.json) nennt Quellstand, Version, Aufnahmedatum und für jedes Bild Aufnahmeskript, Originaldatei der Skriptausgabe, Größe und SHA-256.

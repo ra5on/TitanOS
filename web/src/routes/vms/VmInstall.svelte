@@ -103,23 +103,23 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);
 	}
 	small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.medium {
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.medium label {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.medium-pick {
 		display: flex;
@@ -138,7 +138,7 @@
 		flex-direction: row;
 		align-items: center;
 		gap: 10px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.check span {
 		color: var(--text);

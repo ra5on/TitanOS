@@ -579,7 +579,7 @@
 		gap: 0.3rem;
 	}
 	.small {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		overflow-wrap: anywhere;
 	}
 	.head {
@@ -601,7 +601,7 @@
 		min-width: 6px;
 		padding: 0 4px;
 		overflow: hidden;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		white-space: nowrap;
 		text-overflow: ellipsis;
 		border-radius: var(--radius-small);
@@ -638,7 +638,7 @@
 	table {
 		width: 100%;
 		border-collapse: collapse;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	th,
 	td {
@@ -653,7 +653,7 @@
 	}
 	td.type {
 		min-width: 8rem;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	th,
 	td.mono,
@@ -665,7 +665,7 @@
 	}
 	.compact {
 		padding: 3px 8px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.actions {
 		min-width: 14rem;

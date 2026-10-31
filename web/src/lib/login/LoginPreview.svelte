@@ -58,7 +58,7 @@
 		border-radius: 999px;
 		background: var(--accent);
 		color: var(--on-accent);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		font-weight: 600;
 		white-space: nowrap;
 	}

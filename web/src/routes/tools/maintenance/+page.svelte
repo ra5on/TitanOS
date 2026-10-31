@@ -544,7 +544,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.85rem;
+		font-size: var(--text-base);
 		flex: 1 1 170px;
 		min-width: 0;
 	}
@@ -569,7 +569,7 @@
 	table {
 		width: 100%;
 		border-collapse: collapse;
-		font-size: 0.85rem;
+		font-size: var(--text-base);
 	}
 	th,
 	td {
@@ -599,7 +599,7 @@
 	.detail {
 		display: block;
 		margin-top: 4px;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
 	}
 	.schedules {

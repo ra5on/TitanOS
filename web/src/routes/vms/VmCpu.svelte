@@ -211,7 +211,7 @@
 	}
 	summary {
 		cursor: pointer;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.advanced-body {
 		display: flex;
@@ -230,13 +230,13 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);
 	}
 	small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.warn {
@@ -246,7 +246,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.line {
 		display: flex;
@@ -258,7 +258,7 @@
 	.line label {
 		flex-direction: row;
 		gap: 6px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	input[type='range'] {
 		width: 100%;
@@ -286,7 +286,7 @@
 		border-radius: var(--radius-ctl);
 		color: var(--text);
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		cursor: pointer;
 	}
 	.segments button[aria-checked='true'] {
@@ -310,7 +310,7 @@
 		flex-direction: row;
 		align-items: center;
 		gap: 10px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.check span {
 		color: var(--text);
@@ -337,7 +337,7 @@
 		border-radius: var(--radius-ctl);
 		color: var(--text);
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		text-align: left;
 		cursor: pointer;
 	}
@@ -352,7 +352,7 @@
 		gap: 6px;
 	}
 	.cpu-note {
-		font-size: 0.6875rem;
+		font-size: var(--text-xs);
 		line-height: 1.3;
 	}
 </style>

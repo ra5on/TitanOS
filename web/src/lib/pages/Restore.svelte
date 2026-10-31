@@ -290,15 +290,15 @@
 		background: color-mix(in srgb, var(--accent) 10%, transparent);
 		border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
 		border-radius: var(--radius-ctl);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	p {
 		margin: 0;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.name {
 		margin: 0;
-		font-size: 0.9375rem;
+		font-size: var(--text-md);
 		font-weight: 600;
 	}
 	fieldset {
@@ -348,7 +348,7 @@
 		align-items: center;
 		gap: 12px;
 		color: var(--muted);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.or::before,
 	.or::after {
@@ -365,11 +365,11 @@
 	}
 	.more h2 {
 		margin: 0;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		font-weight: 600;
 	}
 	.more p {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.failed {
 		display: flex;
@@ -409,13 +409,13 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.stack small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.what {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		overflow-wrap: anywhere;
 	}
 </style>

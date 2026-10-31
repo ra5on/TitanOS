@@ -68,6 +68,13 @@ Bereich: Container bearbeiten, Übersicht, App-Store/Katalog, Docker-Layout.
   Symbol öffnet das Stack-Menü (Adressen, Probleme, Links festlegen, Tailnet,
   Bearbeiten). Prüfung: `scripts/test-ui-dashboard-flow.mjs`,
   Screenshots unter `out/validation/`.
+- **Karten einheitlich** (Plan 9d, 31.10.2026): Start/Stopp steht immer rechts
+  unten, Weblinks (WebUI, Tailscale, öffentlich) rechtsbündig darunter; die
+  Portzeile erscheint nur, wenn der Container Ports veröffentlicht, sonst bleibt
+  kein leerer Platz. Die Liste (Kacheln ohne Knöpfe und ohne Spaltenköpfe, siehe
+  oben) bleibt unverändert schlank; die frühere Tabelle mit Spalte „PORTS“ gibt
+  es nicht mehr (der Screenshot `docs/screenshots/current/docker.png` von 0.31.0
+  zeigt noch sie).
 - Pro Konto in `/config/users/<name>/docker.json`, über die vorhandene atomare
   Preferences-API mit RAM-Cache. Nur ausdrückliches Speichern schreibt.
   Zuordnung über `app:<Compose-Projekt>` oder `container:<Name>`, nicht die

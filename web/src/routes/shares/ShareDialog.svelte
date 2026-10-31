@@ -455,7 +455,7 @@
 	}
 	.label,
 	legend {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		font-weight: 500;
 	}
 	legend {
@@ -471,7 +471,7 @@
 		gap: 10px;
 	}
 	small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	small.problem {
@@ -481,7 +481,7 @@
 		display: flex;
 		align-items: flex-start;
 		gap: 10px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.check input {
 		width: 18px;
@@ -496,7 +496,7 @@
 		display: flex;
 		align-items: center;
 		gap: 12px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.number {
 		width: 7rem;
@@ -516,11 +516,11 @@
 		background: var(--bg);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.role {
 		flex: 1 1 auto;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.segments {
 		display: flex;
@@ -538,7 +538,7 @@
 		border-radius: var(--radius-ctl);
 		color: var(--text);
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		cursor: pointer;
 	}
 	.segments button[aria-checked='true'] {

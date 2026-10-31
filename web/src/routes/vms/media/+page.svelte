@@ -465,7 +465,7 @@
 		min-width: 0;
 	}
 	.path {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	form,
 	label {
@@ -486,7 +486,7 @@
 	}
 	.resume {
 		max-width: 100%;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	details summary {
 		cursor: pointer;
@@ -524,7 +524,7 @@
 		align-items: center;
 		padding: 8px 0;
 		border-top: 1px solid var(--panel-border);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	@media (max-width: 760px) {
 		.file-list li {

@@ -1128,14 +1128,14 @@
 	}
 	.intro {
 		max-width: 60rem;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.empty {
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
 		padding: 32px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.layout {
 		display: flex;
@@ -1190,7 +1190,7 @@
 	}
 	.group {
 		margin-top: 8px;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		font-weight: 600;
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
@@ -1231,7 +1231,7 @@
 	.monogram.large {
 		width: 56px;
 		height: 56px;
-		font-size: 1.25rem;
+		font-size: var(--text-xl);
 	}
 	.about {
 		flex: 1 1 auto;
@@ -1247,18 +1247,18 @@
 		gap: 4px 10px;
 	}
 	.name {
-		font-size: 0.9375rem;
+		font-size: var(--text-md);
 		font-weight: 600;
 	}
 	.source {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.description {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		overflow-wrap: anywhere;
 	}
 	.note {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	aside {
 		flex: 0 1 520px;
@@ -1275,12 +1275,12 @@
 		border-bottom: 1px solid var(--panel-border);
 	}
 	h2 {
-		font-size: 1.125rem;
+		font-size: var(--text-lg);
 		font-weight: 600;
 	}
 	.meta,
 	.path {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
 	}
 	.body {
@@ -1288,7 +1288,7 @@
 		flex-direction: column;
 		gap: 16px;
 		padding: var(--tile-pad);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.block {
 		display: flex;
@@ -1296,7 +1296,7 @@
 		gap: 8px;
 	}
 	h3 {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		font-weight: 600;
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
@@ -1355,7 +1355,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);
@@ -1364,7 +1364,7 @@
 		flex-direction: row;
 		align-items: center;
 		gap: 10px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.check span {
 		color: var(--text);
@@ -1375,12 +1375,12 @@
 		margin: 0;
 	}
 	.text {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	pre {
 		margin: 8px 0 0;
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		white-space: pre-wrap;
 		word-break: break-word;
 	}
@@ -1388,7 +1388,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.progress progress {
 		width: 100%;

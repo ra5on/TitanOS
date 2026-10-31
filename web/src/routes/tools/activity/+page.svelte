@@ -262,7 +262,7 @@
 		gap: 14px;
 		padding: var(--tile-pad);
 		margin: var(--gap) 0;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.settings {
 		flex-flow: row wrap;
@@ -293,7 +293,7 @@
 		flex-direction: column;
 		gap: 6px;
 		min-width: 0;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);
@@ -332,7 +332,7 @@
 	}
 	.via {
 		display: block;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.what {
 		display: flex;
@@ -345,7 +345,7 @@
 	}
 	.raw {
 		color: var(--muted);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
 	}
 	.failed strong,
@@ -354,7 +354,7 @@
 	}
 	.tag {
 		font-weight: 600;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	@media (max-width: 640px) {
 		.entries li {

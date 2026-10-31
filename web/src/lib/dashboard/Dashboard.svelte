@@ -25,6 +25,7 @@
 	import AddTiles from './AddTiles.svelte';
 	import EditorConfirm from './EditorConfirm.svelte';
 	import TileHead from './TileHead.svelte';
+	import { vmOsIcon } from '#lib/vm-os.ts';
 	import {
 		ADMIN_TILES,
 		addableTiles,
@@ -219,6 +220,11 @@
 		rebuild(next);
 	});
 	const titleOf = (id: TileId) => tileTitle(id, { options, data });
+	const osIconOf = (id: TileId) => {
+		const target = workload(id);
+		const vm = target?.kind === 'vm' ? data.vms.find((v) => v.name === target.name) : undefined;
+		return vm ? vmOsIcon(vm) : 'monitor';
+	};
 	function readGrid(): TilePlacement[] {
 		return shown;
 	}
@@ -748,6 +754,7 @@
 							{#if settings.showTitle || settings.collapsed || editing}<TileHead
 									title={titleOf(tile.id)}
 									summary={summary(tile.id)}
+									osIcon={osIconOf(tile.id)}
 									{settings}
 									{editing}
 									locked={!!tile.locked}
@@ -973,7 +980,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--tile-gap, 10px);
-		font-size: var(--tile-label-size, 12px);
+		font-size: var(--tile-label-size, var(--text-sm));
 		font-family: var(--tile-label-font);
 		font-weight: var(--tile-label-weight, 400);
 		color: var(--tile-label-color, var(--muted));
@@ -984,7 +991,7 @@
 	}
 	.tile-body :global(.value),
 	.tile-body :global(.usage strong) {
-		font-size: var(--tile-value-size, 36px) !important;
+		font-size: var(--tile-value-size, 2.25rem) !important;
 		color: var(--tile-value-color, var(--text));
 		font-family: var(--tile-value-font);
 		font-weight: var(--tile-value-weight);
@@ -996,14 +1003,14 @@
 	.tile-body :global(.muted),
 	.tile-body :global(.what),
 	.tile-body :global(.state) {
-		font-size: var(--tile-label-size, 12px);
+		font-size: var(--tile-label-size, var(--text-sm));
 		color: var(--tile-label-color, var(--muted));
 	}
 	.tile-body :global(.rates) {
 		background: none;
 	}
 	.tile-body :global(dd) {
-		font-size: var(--tile-label-size, 12px);
+		font-size: var(--tile-label-size, var(--text-sm));
 		color: var(--tile-value-color, var(--text));
 		font-family: var(--tile-value-font);
 		font-weight: var(--tile-value-weight);
