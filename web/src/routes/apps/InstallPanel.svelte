@@ -25,6 +25,7 @@
 		type VarField,
 	} from '#lib/compose/template.ts';
 	import { apiErrorText, errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
+	import { needList } from '#lib/hwcheck.ts';
 	import { system } from '#lib/system.svelte.ts';
 
 	type Props = {
@@ -326,8 +327,13 @@
 			{/if}
 		</div>
 
-		{#if form.risks.length > 0 || form.missingDevices.length > 0 || localize(form.tips, i18n.locale)}
+		{#if form.risks.length > 0 || form.missingDevices.length > 0 || (tpl.cpuMissing?.length ?? 0) > 0 || localize(form.tips, i18n.locale)}
 			<div class="body notes">
+				{#if tpl.cpuMissing?.length}
+					<p class="notice-warn" role="note">
+						{t('apps.cpuMissing', { list: needList(tpl.cpuMissing) })}
+					</p>
+				{/if}
 				{#if form.risks.length > 0}
 					<div class="notice-warn" role="note">
 						{t('apps.risks')}

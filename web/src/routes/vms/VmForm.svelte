@@ -16,6 +16,7 @@
 	} from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import VirtCheck from '#lib/components/VirtCheck.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import VmConnections from './VmConnections.svelte';
 	import VmCpu from './VmCpu.svelte';
@@ -366,7 +367,12 @@
 	crumb={existing ? vmLabel(existing) : t('vms.new.crumb')}
 />
 
-{#if status && !status.kvm}<p class="notice-warn" role="status">{t('vms.noKvm')}</p>{/if}
+{#if host?.virt}<VirtCheck virt={host.virt} problemsOnly />{:else if status && !status.kvm}<p
+		class="notice-warn"
+		role="status"
+	>
+		{t('vms.noKvm')}
+	</p>{/if}
 {#if storage.status && volumes.length === 0}<p class="notice-warn" role="status">
 		{t('vms.new.needVolume')}
 	</p>{/if}

@@ -41,6 +41,7 @@
 			| 'welcome.todoNotify'
 			| 'welcome.todoStick'
 			| 'welcome.todoApps'
+			| 'welcome.todoHardware'
 			| 'welcome.todoDrivers'
 			| 'welcome.todoBackup'
 			| 'welcome.todoRemote'
@@ -117,6 +118,7 @@
 				done: value(push, (p) => p.devices.length > 0),
 			},
 			{ href: '/docker', key: 'welcome.todoApps', done: null },
+			{ href: '/tools/hardware', key: 'welcome.todoHardware', done: null },
 		];
 		// Plugins for detected hardware (drivers, tools): only when there are any.
 		if (plugins.status === 'fulfilled' && (plugins.value.recommendations?.length ?? 0) > 0) {

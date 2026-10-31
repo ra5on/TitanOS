@@ -13,6 +13,7 @@
 	import { formatDiskBytes } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import DiskPicker from './DiskPicker.svelte';
+	import SmrWarning from './SmrWarning.svelte';
 	import { isUsable } from './labels.ts';
 	import { radioKeys } from '#lib/radio-group.ts';
 
@@ -240,6 +241,7 @@
 		<div class="field-row">
 			<span class="label">{t('create.disks')}</span>
 			<DiskPicker {disks} bind:selected name="volume-disks" onselect={remember} />
+			<SmrWarning {level} {selected} />
 			{#if staleSelection}
 				<p class="notice-warn" role="alert">{t('create.changedDisks')}</p>
 				<button
