@@ -186,7 +186,8 @@ if os.environ["MIN_VERSION"]:
 variant = os.environ["VARIANT"]
 if variant:
     kernel_new = open(os.path.join(variant, "kernel-version")).read().strip()
-    if "bpo" not in kernel_new or kernel_new == manifest["kernel"]:
+    series = lambda k: tuple(int(x) for x in re.match(r"(\d+)\.(\d+)", k).groups()) if re.match(r"\d+\.\d+", k) else (0, 0)
+    if series(kernel_new) <= series(manifest["kernel"]):
         raise SystemExit("the new kernel is not a backports kernel: " + kernel_new)
     new_files = []
     for name in ("vmlinuz", "initrd.img", "filesystem.squashfs"):

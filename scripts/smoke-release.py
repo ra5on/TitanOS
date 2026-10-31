@@ -5,6 +5,7 @@ Checks first setup, HTTPS, the real version, persistent accounts/certificate,
 locked-down SSH, HDD idle settings and About notices. Never attaches host or
 existing test disks.
 """
+import re
 import argparse
 import http.cookiejar
 import http.client
@@ -206,7 +207,7 @@ def smoke(archive, timeout, log, plugins=None, force_tcg=False, firmware="uefi",
                         raise AssertionError("wrong version or owner account")
                     # These authenticated endpoints also exercise the embedded backend/UI contract.
                     about = request("/api/v1/about")
-                    if kernel_new and "bpo" not in about["kernel"]:
+                    if kernel_new and not re.match(r"(?:[7-9]|[1-9]\d)\.|6\.(?:1[3-9]|[2-9]\d)\.", about["kernel"]):
                         raise AssertionError(f"not the new kernel: {about['kernel']}")
                     loader = request("/api/v1/update").get("bootLoader")
                     expected = {"uefi": "systemd-boot", "bios": "grub-i386-pc", "ia32": "grub-i386-efi"}[firmware]

@@ -11,6 +11,7 @@ package update
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -109,13 +110,24 @@ func kernelRelease(path string) string {
 	return release
 }
 
+// stableSeries is the kernel series of Debian 13; trixie keeps it for its
+// whole life, backports bring newer series.
+var stableSeries = [2]int{6, 12}
+
 // kernelVariant tells from a kernel release which variant it belongs to:
-// Debian's backports kernels carry "bpo" in their release.
+// a newer series than Debian's stable one is the newer kernel. The release
+// of a backports kernel does not say "bpo" (7.2.11+deb13-amd64); only its
+// package version does.
 func kernelVariant(release string) string {
 	if release == "" {
 		return ""
 	}
 	if strings.Contains(release, "bpo") {
+		return VariantNew
+	}
+	var major, minor int
+	if _, err := fmt.Sscanf(release, "%d.%d", &major, &minor); err == nil &&
+		(major > stableSeries[0] || major == stableSeries[0] && minor > stableSeries[1]) {
 		return VariantNew
 	}
 	return VariantStable

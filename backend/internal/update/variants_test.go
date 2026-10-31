@@ -163,6 +163,9 @@ func TestKernelReleaseFromTheImageHeader(t *testing.T) {
 	if got := kernelRelease(path); got != "" || kernelVariant(got) != "" {
 		t.Errorf("not a kernel: %q", got)
 	}
+	if kernelVariant("7.2.11+deb13-amd64") != VariantNew || kernelVariant("6.16.3+deb13-amd64") != VariantNew {
+		t.Error("backports kernels name no bpo in their release")
+	}
 	if kernelVariant("6.12.48+deb13-amd64") != VariantStable {
 		t.Error("stable kernel")
 	}
