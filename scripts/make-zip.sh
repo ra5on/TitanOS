@@ -40,6 +40,9 @@ python3 scripts/third-party-licenses.py application "$extra/usr/share/titanos"
 install -m 0644 scripts/third-party-licenses.py "$extra/usr/share/titanos/build-licenses.py"
 install -m 0644 scripts/normalize-image-tmpfiles.py "$extra/usr/share/titanos/normalize-image-tmpfiles.py"
 install -m 0644 scripts/check-image-hardware.py "$extra/usr/share/titanos/check-image-hardware.py"
+# GRUB for boards without 64-bit UEFI is built inside the image (postinst).
+install -m 0755 scripts/make-grub.sh "$extra/usr/share/titanos/make-grub.sh"
+install -m 0644 boot/grub-early.cfg "$extra/usr/share/titanos/grub-early.cfg"
 # Catalog descriptions and hardware rules of the official plugins: the NAS
 # recommends a plugin for its hardware without asking GitHub first.
 install -d "$extra/usr/share/titanos/plugin-catalog"
@@ -78,6 +81,17 @@ cp "$image/BOOTX64.EFI" "$stick/EFI/BOOT/BOOTX64.EFI"
 cp boot/loader.conf "$stick/loader/loader.conf"
 sed -e "s|@VERSION@|$version|g" -e "s|@SLOT@|$slot|g" boot/entry.conf.in \
     > "$stick/loader/entries/titanos-$slot.conf"
+# Boards without 64-bit UEFI: GRUB for 32-bit UEFI (BOOTIA32.EFI) and for a
+# legacy BIOS (boot.img/core.img, written behind the MBR by stick-bios.py or
+# in the stick image). Both read boot/grub/grub.cfg and follow the same A/B
+# entries as systemd-boot; updates never replace these files.
+cp "$image/BOOTIA32.EFI" "$stick/EFI/BOOT/BOOTIA32.EFI"
+mkdir -p "$stick/boot/grub/i386-pc"
+cp "$image/grub/i386-pc/boot.img" "$image/grub/i386-pc/core.img" "$stick/boot/grub/i386-pc/"
+options=$(sed -n 's/^options[[:space:]]*//p' boot/entry.conf.in | sed 's|@SLOT@|$1|g')
+sed "s|@OPTIONS@|$options|" boot/grub.cfg.in > "$stick/boot/grub/grub.cfg"
+python3 scripts/grubenv.py "$stick/boot/grub/grubenv" titanos_prefer=$slot
+install -m 0644 scripts/stick-bios.py "$stick/boot/grub/stick-bios.py"
 cp "$image/vmlinuz" "$image/initrd.img" "$image/filesystem.squashfs" "$stick/titanos/$slot/"
 # The updater reads from this file which version lies in a slot.
 echo "$version" > "$stick/titanos/$slot/version"
