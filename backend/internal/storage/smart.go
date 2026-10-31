@@ -267,7 +267,7 @@ func parseSmartValues(output string) *SmartValues {
 		nvme := &SmartNVMe{}
 		number := func(key string) uint64 {
 			var n uint64
-			json.Unmarshal(data.NVMe[key], &n)
+			_ = json.Unmarshal(data.NVMe[key], &n) // a value that cannot be read leaves the zero value, which the code handles
 			return n
 		}
 		nvme.CriticalWarning = int(number("critical_warning"))

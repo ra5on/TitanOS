@@ -265,7 +265,7 @@ func (m *Manager) EnableCache(ctx context.Context, name, diskName, mode, identit
 	if _, err := m.runner.Run(ctx, script, "sfdisk", "--quiet", "--wipe", "always", device.Name); err != nil {
 		return err
 	}
-	m.runner.Run(ctx, "", "udevadm", "settle")
+	_, _ = m.runner.Run(ctx, "", "udevadm", "settle") // only waits for the kernel and udev; the next step checks the result
 	var uuids []string
 	for i := 1; i <= 2; i++ {
 		part := partitionName(device.Name, i)
@@ -328,7 +328,7 @@ func (m *Manager) SetCacheMode(ctx context.Context, name, mode string) error {
 		// A read cache is mounted without its SSD, so the switch is only
 		// saved once no block lives on the SSD alone.
 		if err := m.flushCache(ctx, volume, cacheFlushWait); err != nil {
-			m.reloadCache(context.WithoutCancel(ctx), volume, "writeback", cachePolicy)
+			_ = m.reloadCache(context.WithoutCancel(ctx), volume, "writeback", cachePolicy) // going back to write-back; the flush error is returned
 			if errors.Is(err, errCacheDirty) {
 				return fmt.Errorf("%w: the write cache did not finish writing back; try again later", ErrBusy)
 			}
@@ -370,7 +370,7 @@ func (m *Manager) swapTable(ctx context.Context, name, table string) error {
 	// Suspend waits for I/O in flight and, with writeback, flushes it.
 	if _, err := m.runner.Run(ctx, "", "dmsetup", "suspend", name); err != nil {
 		// Drop the loaded table, or a later resume would still swap it in.
-		m.runner.Run(context.WithoutCancel(ctx), "", "dmsetup", "clear", name)
+		_, _ = m.runner.Run(context.WithoutCancel(ctx), "", "dmsetup", "clear", name) // cleanup, best effort: nothing more can be done if it fails
 		return err
 	}
 	_, err := m.runner.Run(context.WithoutCancel(ctx), "", "dmsetup", "resume", name)
@@ -520,7 +520,7 @@ var removeMapperTries, removeMapperPause = 10, time.Second
 func (m *Manager) removeMapper(ctx context.Context, name string) error {
 	var err error
 	for try := 0; try < removeMapperTries; try++ {
-		m.runner.Run(ctx, "", "udevadm", "settle")
+		_, _ = m.runner.Run(ctx, "", "udevadm", "settle") // only waits for the kernel and udev; the next step checks the result
 		if _, err = m.runner.Run(ctx, "", "dmsetup", "remove", name); err == nil {
 			return nil
 		}

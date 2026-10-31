@@ -32,7 +32,7 @@ func freshStick(t *testing.T, m *Manager) *Manager {
 	t.Helper()
 	fresh := NewManager(config.Open(filepath.Join(t.TempDir(), "config")), m.gid)
 	fresh.mountRoot, fresh.runDir, fresh.pidDir, fresh.kvm = m.mountRoot, m.runDir, m.pidDir, m.kvm
-	fresh.runGid, fresh.runUid, fresh.runner, fresh.Mounted = m.runGid, m.runUid, m.runner, m.Mounted
+	fresh.runGID, fresh.runUID, fresh.runner, fresh.Mounted = m.runGID, m.runUID, m.runner, m.Mounted
 	fresh.autostartFile = filepath.Join(t.TempDir(), "vms-autostarted")
 	fresh.powerFile = filepath.Join(t.TempDir(), "vm-schedule.json")
 	if err := fresh.Load(); err != nil {

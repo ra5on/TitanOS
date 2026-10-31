@@ -119,7 +119,7 @@ func (c *IPv64) Logs(ctx context.Context, limit int, before int64) (IPv64LogPage
 		RetentionDays int    `json:"retention_days"`
 	}
 	if len(answer.Meta) > 0 {
-		json.Unmarshal(answer.Meta, &meta)
+		_ = json.Unmarshal(answer.Meta, &meta) // a value that cannot be read leaves the zero value, which the code handles
 	}
 	page.NextBefore, page.RetentionDays = meta.NextBefore, meta.RetentionDays
 	return page, nil

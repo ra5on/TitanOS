@@ -41,9 +41,10 @@ func networkRecovery(dir string) error {
 	if err := unix.IoctlSetTermios(fd, unix.TCSETS, &private); err != nil {
 		return err
 	}
-	defer unix.IoctlSetTermios(fd, unix.TCSETS, term)
+	// Echo back on; if that fails the terminal stays as it is.
+	defer func() { _ = unix.IoctlSetTermios(fd, unix.TCSETS, term) }()
 	password, readErr := read("Passwort / Password: ")
-	unix.IoctlSetTermios(fd, unix.TCSETS, term)
+	_ = unix.IoctlSetTermios(fd, unix.TCSETS, term) // the terminal works on with the previous settings
 	fmt.Println()
 	if readErr != nil {
 		return readErr

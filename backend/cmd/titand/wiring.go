@@ -789,7 +789,7 @@ func (w *titand) wireBackups() error {
 	w.replicaReceiver = replication.NewReceiver()
 	w.replicaReceiver.Mounted, w.replicaReceiver.Filesystem = w.volumes.Mounted, w.volumes.FilesystemOf
 	w.backupTarget.Replicas = w.replicaReceiver.Serve
-	w.backupTarget.Load()
+	_ = w.backupTarget.Load() // Load keeps its own state; a failure shows up as not loaded
 	w.background(func() { w.backupTarget.Run(ctx) })
 
 	// The cluster: other TitanOS this NAS trusts fully (package cluster).
@@ -1280,10 +1280,10 @@ func (w *titand) wireMaintenance() error {
 	var services struct{ VMsOff, LXCOff bool }
 	if err := w.store.ReadJSON("system/services.json", &services); err == nil {
 		if services.VMsOff {
-			w.machines.SetOff(ctx, true)
+			_ = w.machines.SetOff(ctx, true) // best effort at start; the switch is applied again when changed
 		}
 		if services.LXCOff {
-			w.systemContainers.SetOff(ctx, true, nil)
+			_ = w.systemContainers.SetOff(ctx, true, nil) // best effort at start; the switch is applied again when changed
 		}
 	}
 	w.background(func() { w.machines.Run(ctx, w.volumes.Mounted) })
@@ -1380,7 +1380,7 @@ func (w *titand) wireAPI() error {
 	// The jobs of the API end with the daemon; waitServices bounds the wait.
 	w.background(func() {
 		<-ctx.Done()
-		w.handler.Close()
+		_ = w.handler.Close() // cleanup, best effort: nothing more can be done if it fails
 	})
 
 	// Watches that Home Assistant keeps putting its backups on the NAS.

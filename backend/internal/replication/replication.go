@@ -329,7 +329,7 @@ func (m *Manager) Run(ctx context.Context) {
 		m.mu.Lock()
 		if !m.loaded {
 			m.mu.Unlock()
-			m.Load()
+			_ = m.Load() // Load keeps its own state; a failure shows up as not loaded
 			m.mu.Lock()
 		}
 		var due []string
@@ -344,7 +344,7 @@ func (m *Manager) Run(ctx context.Context) {
 		}
 		m.mu.Unlock()
 		for _, id := range due {
-			m.Start(ctx, id)
+			_ = m.Start(ctx, id) // a job that already runs or was removed meanwhile is skipped
 		}
 		select {
 		case <-ctx.Done():
@@ -448,7 +448,7 @@ func (m *Manager) send(ctx context.Context, job Job, progress func(int64)) (stri
 	args = append(args, filepath.Join(dir, name))
 	if err := m.stream(ctx, job, name, args, progress); err != nil {
 		// The new snapshot is useless without its copy on the other side.
-		btrfs(context.WithoutCancel(ctx), m.runner, "subvolume", "delete", filepath.Join(dir, name))
+		_, _ = btrfs(context.WithoutCancel(ctx), m.runner, "subvolume", "delete", filepath.Join(dir, name)) // cleanup, best effort: nothing more can be done if it fails
 		return "", err
 	}
 	// Keep the snapshot just sent (the next parent) and the one before.
@@ -711,7 +711,7 @@ func (r *Receiver) receive(w http.ResponseWriter, req *http.Request, source, dir
 	incoming := filepath.Join(dir, ".incoming")
 	if leftovers, _ := os.ReadDir(incoming); len(leftovers) > 0 {
 		for _, entry := range leftovers {
-			btrfs(req.Context(), r.runner, "subvolume", "delete", filepath.Join(incoming, entry.Name()))
+			_, _ = btrfs(req.Context(), r.runner, "subvolume", "delete", filepath.Join(incoming, entry.Name())) // cleanup, best effort: nothing more can be done if it fails
 		}
 	}
 	if err := os.MkdirAll(incoming, 0o700); err != nil {
@@ -722,7 +722,7 @@ func (r *Receiver) receive(w http.ResponseWriter, req *http.Request, source, dir
 	cmd.Stdin = req.Body
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		btrfs(context.WithoutCancel(req.Context()), r.runner, "subvolume", "delete", filepath.Join(incoming, name))
+		_, _ = btrfs(context.WithoutCancel(req.Context()), r.runner, "subvolume", "delete", filepath.Join(incoming, name)) // cleanup, best effort: nothing more can be done if it fails
 		slog.Warn("replica not received", "source", source, "snapshot", name, "err", err, "output", strings.TrimSpace(string(output)))
 		http.Error(w, "receive failed", http.StatusInternalServerError)
 		return
@@ -734,11 +734,11 @@ func (r *Receiver) receive(w http.ResponseWriter, req *http.Request, source, dir
 	slog.Info("replica received", "source", source, "snapshot", name)
 	// Old snapshots beyond keep go; the newest stays the parent of the next.
 	keep := 7
-	fmt.Sscan(req.URL.Query().Get("keep"), &keep)
+	_, _ = fmt.Sscan(req.URL.Query().Get("keep"), &keep) // a value that cannot be read leaves the zero value, which the code handles
 	keep = min(max(keep, 2), 365)
 	all := received(dir)
 	for _, old := range all[:max(0, len(all)-keep)] {
-		btrfs(context.WithoutCancel(req.Context()), r.runner, "subvolume", "delete", filepath.Join(dir, old))
+		_, _ = btrfs(context.WithoutCancel(req.Context()), r.runner, "subvolume", "delete", filepath.Join(dir, old)) // cleanup, best effort: nothing more can be done if it fails
 	}
 	w.WriteHeader(http.StatusCreated)
 }

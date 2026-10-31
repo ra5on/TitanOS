@@ -234,7 +234,7 @@ func (m *Manager) BeginVM(ctx context.Context, name string, pci, usb []string, a
 		lease.Stopped = append(lease.Stopped, id)
 		m.gpuLeases[name] = lease
 		if err := m.saveLeases(); err != nil {
-			m.returnVM(ctx, name)
+			_ = m.returnVM(ctx, name) // the save error is what is reported; giving the GPU back is best effort
 			finish()
 			return nil, err
 		}

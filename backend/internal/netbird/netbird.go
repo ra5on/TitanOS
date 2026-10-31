@@ -281,7 +281,7 @@ func (m *Manager) up(s Settings, key string) error {
 	if _, err := m.command(45*time.Second, stdin, call...); err != nil {
 		return errors.New("the NetBird connection could not be started; check the setup key, the management URL and the service log")
 	}
-	m.runtime.Write("applied", []byte(appliedKey(s)))
+	_ = m.runtime.Write("applied", []byte(appliedKey(s))) // a runtime or state file only; without it the default applies
 	return nil
 }
 
@@ -400,7 +400,7 @@ func (m *Manager) restore() {
 		}
 		key = m.key
 	}
-	m.command(20*time.Second, "", "down")
+	_, _ = m.command(20*time.Second, "", "down") // cleanup, best effort: nothing more can be done if it fails
 	if err := m.up(m.settings, key); err != nil {
 		slog.Warn("NetBird reconnect failed", "err", err)
 		m.problem = err.Error()
@@ -428,7 +428,7 @@ func (m *Manager) apply(s, old Settings) error {
 		}
 		key = m.key
 	}
-	m.command(20*time.Second, "", "down")
+	_, _ = m.command(20*time.Second, "", "down") // cleanup, best effort: nothing more can be done if it fails
 	return m.up(s, key)
 }
 
@@ -454,7 +454,7 @@ func (m *Manager) Set(s Settings) error {
 			previous := m.settings
 			m.pending = &previous
 			m.deadline = time.Now()
-			m.timer = time.AfterFunc(10*time.Second, func() { m.Undo() })
+			m.timer = time.AfterFunc(10*time.Second, func() { _ = m.Undo() }) // Undo keeps its error in m.problem and tries again
 			err = errors.Join(err, rollbackErr)
 		}
 		m.problem = err.Error()
@@ -464,7 +464,7 @@ func (m *Manager) Set(s Settings) error {
 	m.pending = &previous
 	m.settings = s
 	m.deadline = time.Now().Add(2 * time.Minute)
-	m.timer = time.AfterFunc(2*time.Minute, func() { m.Undo() })
+	m.timer = time.AfterFunc(2*time.Minute, func() { _ = m.Undo() }) // Undo keeps its error in m.problem and tries again
 	m.problem = ""
 	return nil
 }
@@ -495,7 +495,7 @@ func (m *Manager) Undo() error {
 	}
 	if err := m.apply(*m.pending, m.settings); err != nil {
 		m.problem = err.Error()
-		m.timer = time.AfterFunc(10*time.Second, func() { m.Undo() })
+		m.timer = time.AfterFunc(10*time.Second, func() { _ = m.Undo() }) // Undo keeps its error in m.problem and tries again
 		return err
 	}
 	m.settings = *m.pending

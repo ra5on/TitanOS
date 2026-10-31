@@ -131,7 +131,7 @@ func (m *Manager) call(ctx context.Context, n Node, method, path, user string, i
 // try runs send against the addresses of n in turn. A connection error
 // moves on to the next address; an answer, also an error, ends.
 func (m *Manager) try(ctx context.Context, n Node, send func(context.Context, string) (*http.Response, error), out any) error {
-	var lastErr error = ErrUnreachable
+	lastErr := ErrUnreachable
 	for _, address := range m.candidates(n) {
 		res, err := send(ctx, address)
 		if err != nil {

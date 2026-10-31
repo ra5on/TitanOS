@@ -495,7 +495,7 @@ func (m *Manager) captureSnapshot(ctx context.Context, v VM, req SnapshotRequest
 		var err error
 		snap.Runtime, err = m.snapshotRuntime(ctx, v)
 		if err != nil {
-			store.Remove("operation.json")
+			_ = store.Remove("operation.json") // cleanup, best effort: nothing more can be done if it fails
 			os.RemoveAll(dir)
 			return err
 		}
@@ -505,7 +505,7 @@ func (m *Manager) captureSnapshot(ctx context.Context, v VM, req SnapshotRequest
 		}
 		if _, err = m.runner.Run(ctx, "", "virsh", "--quiet", "save", v.Name, filepath.Join(dir, "memory.save"), "--bypass-cache", "--running"); err != nil {
 			if m.pid(v.Name) != 0 {
-				store.Remove("operation.json")
+				_ = store.Remove("operation.json") // cleanup, best effort: nothing more can be done if it fails
 				os.RemoveAll(dir)
 			}
 			return err
@@ -576,7 +576,7 @@ func (m *Manager) resumeSnapshot(ctx context.Context, store *config.Store, op *s
 	if err := os.MkdirAll(m.runDir, 0o770); err != nil {
 		return err
 	}
-	if err := os.Chown(m.runDir, -1, m.runGid); err != nil {
+	if err := os.Chown(m.runDir, -1, m.runGID); err != nil {
 		return err
 	}
 	if _, err := m.runner.Run(ctx, "", "virsh", "--quiet", "restore", filepath.Join(dir, "memory.save"), "--bypass-cache", "--running"); err != nil {
@@ -640,8 +640,8 @@ func copySnapshotFile(from, to string) error {
 			if hole <= data {
 				return io.ErrNoProgress
 			}
-			in.Seek(data, io.SeekStart)
-			out.Seek(data, io.SeekStart)
+			_, _ = in.Seek(data, io.SeekStart)  // the offset was just read from the same file; the copy checks what it reads
+			_, _ = out.Seek(data, io.SeekStart) // the offset was just read from the same file; the copy checks what it reads
 			for n := data; n < hole; {
 				size := min(int64(8<<20), hole-n)
 				if _, err = io.CopyN(out, in, size); err != nil {

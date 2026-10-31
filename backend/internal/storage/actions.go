@@ -593,7 +593,7 @@ func (m *Manager) Delete(ctx context.Context, name, confirm string) error {
 
 // wipePartitionTables turns the former members of an array back into empty disks.
 func (m *Manager) wipePartitionTables(ctx context.Context, a array) {
-	m.runner.Run(ctx, "", "udevadm", "settle")
+	_, _ = m.runner.Run(ctx, "", "udevadm", "settle") // only waits for the kernel and udev; the next step checks the result
 	devices, err := m.blockDevices(ctx)
 	if err != nil {
 		return
@@ -608,7 +608,7 @@ func (m *Manager) wipePartitionTables(ctx context.Context, a array) {
 			}
 		}
 	}
-	m.runner.Run(ctx, "", "udevadm", "settle")
+	_, _ = m.runner.Run(ctx, "", "udevadm", "settle") // only waits for the kernel and udev; the next step checks the result
 }
 
 // AddDisk adds a disk to a volume. If a disk is missing the new one takes
@@ -746,10 +746,10 @@ func (m *Manager) RemoveDisk(ctx context.Context, name, diskName string) error {
 		if _, err := m.runner.Run(ctx, "", "mdadm", "--manage", "/dev/"+a.device, "--remove", part); err != nil {
 			return err
 		}
-		m.runner.Run(ctx, "", "mdadm", "--zero-superblock", "--force", part)
-		m.runner.Run(ctx, "", "wipefs", "--all", "--force", part)
-		m.runner.Run(ctx, "", "wipefs", "--all", "--force", device.Name)
-		m.runner.Run(ctx, "", "udevadm", "settle")
+		_, _ = m.runner.Run(ctx, "", "mdadm", "--zero-superblock", "--force", part) // cleanup, best effort: nothing more can be done if it fails
+		_, _ = m.runner.Run(ctx, "", "wipefs", "--all", "--force", part)            // cleanup, best effort: nothing more can be done if it fails
+		_, _ = m.runner.Run(ctx, "", "wipefs", "--all", "--force", device.Name)     // cleanup, best effort: nothing more can be done if it fails
+		_, _ = m.runner.Run(ctx, "", "udevadm", "settle")                           // only waits for the kernel and udev; the next step checks the result
 		return nil
 	}
 	return fmt.Errorf("%w: %s is not part of %s", ErrDiskUnavailable, diskName, name)

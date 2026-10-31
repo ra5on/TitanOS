@@ -592,7 +592,7 @@ func (m *Manager) ScanShares(mounted []string) {
 	visited := 0
 	for _, volume := range mounted {
 		root := filepath.Join(m.mountRoot, volume)
-		filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		_ = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error { // the callback collects what it can; unreadable entries are skipped
 			visited++
 			if err != nil || visited > 50000 {
 				return fs.SkipDir
@@ -953,7 +953,7 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 		loaded := m.loaded
 		m.mu.Unlock()
 		if !loaded {
-			m.Load()
+			_ = m.Load() // Load keeps its own state; a failure shows up as not loaded
 		} else if !m.Disabled {
 			volumes := mounted()
 			if err := m.Apply(ctx, volumes); err != nil {
@@ -1353,10 +1353,10 @@ func (m *Manager) replace(ctx context.Context, name, real string, manifest Manif
 		// restart-on-failure of deactivate: it is not going to stay.
 		if manifest, resident := m.resident[name]; resident {
 			for i := len(manifest.Services) - 1; i >= 0; i-- {
-				m.runner.Run(ctx, "", "systemctl", "stop", manifest.Services[i])
+				_, _ = m.runner.Run(ctx, "", "systemctl", "stop", manifest.Services[i]) // cleanup, best effort: nothing more can be done if it fails
 			}
 			for i := len(manifest.Modules) - 1; i >= 0; i-- {
-				m.runner.Run(ctx, "", "modprobe", "-d", m.moduleRoot, "-r", manifest.Modules[i])
+				_, _ = m.runner.Run(ctx, "", "modprobe", "-d", m.moduleRoot, "-r", manifest.Modules[i]) // cleanup, best effort: nothing more can be done if it fails
 			}
 		}
 		delete(m.active, name)

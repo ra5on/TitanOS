@@ -360,7 +360,7 @@ func (m *Manager) release(h *handle) {
 	defer h.mu.Unlock()
 	h.users--
 	if h.users == 0 && h.db != nil {
-		h.db.Close()
+		_ = h.db.Close() // cleanup, best effort: nothing more can be done if it fails
 		h.root.Close()
 		h.db, h.root = nil, nil
 	}
@@ -603,7 +603,7 @@ func (m *Manager) update(ctx context.Context, volume string, prefixes []string, 
 			modified := info.ModTime().UnixNano()
 			var known uint64
 			unchanged := false
-			h.db.View(func(tx *bolt.Tx) error {
+			_ = h.db.View(func(tx *bolt.Tx) error { // a failed lookup indexes the file anew
 				id, old, ok := lookup(tx, rel)
 				if ok && old.same(info.Size(), modified, inode) {
 					known, unchanged = id, true
@@ -644,7 +644,7 @@ func (m *Manager) update(ctx context.Context, volume string, prefixes []string, 
 			break
 		}
 		if err != nil {
-			commit()
+			_ = commit() // the walk error is returned; what was committed stays
 			return err
 		}
 	}
@@ -688,7 +688,7 @@ func (m *Manager) update(ctx context.Context, volume string, prefixes []string, 
 	if err == nil {
 		// Counted afterwards: bucket statistics miss deletions of an open
 		// write transaction.
-		h.db.View(func(tx *bolt.Tx) error { files = tx.Bucket(filesBucket).Stats().KeyN; return nil })
+		_ = h.db.View(func(tx *bolt.Tx) error { files = tx.Bucket(filesBucket).Stats().KeyN; return nil }) // the count is for display only
 	}
 	m.setStatus(volume, func(st *VolumeStatus) { st.Files, st.Bytes, st.Known = files, size, true })
 	return err

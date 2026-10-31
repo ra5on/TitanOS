@@ -219,7 +219,7 @@ func (m *Manager) Connect(ctx context.Context, client *dnsprovider.IPv64, router
 	if err != nil {
 		return err
 	}
-	cleanup := func() { client.DeletePeer(context.WithoutCancel(ctx), peer.ID) }
+	cleanup := func() { _ = client.DeletePeer(context.WithoutCancel(ctx), peer.ID) } // cleanup, best effort: nothing more can be done if it fails
 	// The peer is set up in the background; changes answer 409 meanwhile.
 	if err := retryBusy(ctx, func() error {
 		_, err := client.SetPeerPublicKey(ctx, peer.ID, public)
@@ -253,7 +253,7 @@ func (m *Manager) Connect(ctx context.Context, client *dnsprovider.IPv64, router
 			return err
 		}
 	} else {
-		m.store.Remove(presharedFile)
+		_ = m.store.Remove(presharedFile) // cleanup, best effort: nothing more can be done if it fails
 	}
 	if err := m.update(func(s *Settings) error {
 		s.WireGuard = wg
@@ -306,8 +306,8 @@ func (m *Manager) Disconnect(ctx context.Context, client *dnsprovider.IPv64, del
 		}
 	}
 	m.down(ctx)
-	m.store.Remove(privateKeyFile)
-	m.store.Remove(presharedFile)
+	_ = m.store.Remove(privateKeyFile) // cleanup, best effort: nothing more can be done if it fails
+	_ = m.store.Remove(presharedFile)  // cleanup, best effort: nothing more can be done if it fails
 	return m.update(func(s *Settings) error {
 		s.WireGuard = WireGuard{}
 		return nil
@@ -353,7 +353,7 @@ func (m *Manager) setUp(ctx context.Context, wg WireGuard, private, psk string) 
 		return err
 	}
 	defer os.Remove(keyPath)
-	m.runner.Run(ctx, "", "ip", "link", "del", "dev", Interface)
+	_, _ = m.runner.Run(ctx, "", "ip", "link", "del", "dev", Interface) // cleanup, best effort: nothing more can be done if it fails
 	if _, err := m.runner.Run(ctx, "", "ip", "link", "add", "dev", Interface, "type", "wireguard"); err != nil {
 		return fmt.Errorf("ipv64: interface: %w", err)
 	}
@@ -374,7 +374,7 @@ func (m *Manager) setUp(ctx context.Context, wg WireGuard, private, psk string) 
 		args = append(args, "persistent-keepalive", strconv.Itoa(wg.Keepalive))
 	}
 	if _, err := m.runner.Run(ctx, "", "wg", args...); err != nil {
-		m.runner.Run(ctx, "", "ip", "link", "del", "dev", Interface)
+		_, _ = m.runner.Run(ctx, "", "ip", "link", "del", "dev", Interface) // cleanup, best effort: nothing more can be done if it fails
 		return fmt.Errorf("ipv64: wg: %w", err)
 	}
 	for _, address := range wg.Addresses {
@@ -413,7 +413,7 @@ func (m *Manager) retryTunnel(ctx context.Context) {
 
 func (m *Manager) down(ctx context.Context) {
 	if !m.Disabled {
-		m.runner.Run(ctx, "", "ip", "link", "del", "dev", Interface)
+		_, _ = m.runner.Run(ctx, "", "ip", "link", "del", "dev", Interface) // cleanup, best effort: nothing more can be done if it fails
 	}
 	m.mu.Lock()
 	m.tunnel = tunnelState{}

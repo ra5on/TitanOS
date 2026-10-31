@@ -116,7 +116,7 @@ func (m *Manager) SelfTest(ctx context.Context, serial, kind string) (result err
 				for _, d := range fresh.Disks {
 					if d.Serial == serial && d.Path == disk.Path {
 						cleanup, stop := context.WithTimeout(context.Background(), 30*time.Second)
-						m.runner.Run(cleanup, "", "smartctl", "--abort", disk.Path)
+						_, _ = m.runner.Run(cleanup, "", "smartctl", "--abort", disk.Path) // cleanup, best effort: nothing more can be done if it fails
 						stop()
 					}
 				}

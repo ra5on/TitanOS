@@ -368,7 +368,7 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 		loaded := m.loaded
 		m.mu.Unlock()
 		if !loaded {
-			m.Load()
+			_ = m.Load() // Load keeps its own state; a failure shows up as not loaded
 		} else if !m.Disabled && !m.off.Load() && m.Installed() {
 			m.autostart(ctx, mounted())
 			m.sample()
@@ -798,8 +798,8 @@ func (m *Manager) build(ctx context.Context, c Container, job *Job) error {
 			return ErrBadFolder
 		}
 	}
-	os.Chmod(tmp, 0o700)
-	os.Chmod(cache, 0o700)
+	_ = os.Chmod(tmp, 0o700)   // permissions and times are a convenience; the data are there either way
+	_ = os.Chmod(cache, 0o700) // permissions and times are a convenience; the data are there either way
 	initial := filepath.Join(tmp, c.Name+".conf")
 	if err := os.WriteFile(initial, []byte(m.Config(c, true)), 0o600); err != nil {
 		return err
@@ -1049,7 +1049,7 @@ func (m *Manager) Delete(ctx context.Context, name string, deleteData bool, conf
 		// Snapshots and the root filesystem are subvolumes.
 		snapshots, _ := m.snapshotNames(c)
 		for _, id := range snapshots {
-			m.runner.Run(ctx, "", "btrfs", "subvolume", "delete", filepath.Join(m.snapshotDir(c), id))
+			_, _ = m.runner.Run(ctx, "", "btrfs", "subvolume", "delete", filepath.Join(m.snapshotDir(c), id)) // cleanup, best effort: nothing more can be done if it fails
 		}
 		if _, err := os.Lstat(m.rootfs(c)); err == nil {
 			if _, err := m.runner.Run(ctx, "", "btrfs", "subvolume", "delete", m.rootfs(c)); err != nil {

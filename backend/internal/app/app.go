@@ -341,7 +341,7 @@ func (s *Stick) noteRunning(version string) {
 		return
 	}
 	if err := os.MkdirAll(s.RunDir, 0o700); err == nil {
-		os.WriteFile(s.runningFile(), []byte(version+"\n"), 0o600)
+		_ = os.WriteFile(s.runningFile(), []byte(version+"\n"), 0o600) // a runtime or state file only; without it the default applies
 	}
 }
 

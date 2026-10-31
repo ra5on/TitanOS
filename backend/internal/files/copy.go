@@ -437,7 +437,7 @@ func (m *Manager) runCopy(ctx context.Context, job *Job, sr, dr *os.Root, src, d
 }
 
 func (m *Manager) countTree(job *Job, r *os.Root, rel string) {
-	walk(r, rel, func(_ string, info fs.FileInfo) {
+	_ = walk(r, rel, func(_ string, info fs.FileInfo) { // the callback collects what it can; unreadable entries are skipped
 		if info.Mode().IsRegular() {
 			job.c.count.Add(1)
 			job.c.copied.Add(info.Size())
@@ -711,7 +711,7 @@ func (m *Manager) copyFile(ctx context.Context, job *Job, sr, dr *os.Root, rel, 
 	}
 	m.own(dr, part, uid, false)
 	// The modification time is kept, so that photos stay in order.
-	dr.Chtimes(part, info.ModTime(), info.ModTime())
+	_ = dr.Chtimes(part, info.ModTime(), info.ModTime()) // permissions and times are a convenience; the data are there either way
 	if err := m.saveTransfer(job, "publish "+final); err != nil {
 		return err
 	}

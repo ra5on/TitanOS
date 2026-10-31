@@ -243,7 +243,7 @@ func windowDay(s AutoUpdateSettings, day time.Weekday) bool {
 // nextWindow is the next start of the window after now.
 func nextWindow(s AutoUpdateSettings, now time.Time) time.Time {
 	var hour, minute int
-	fmt.Sscanf(s.Time, "%d:%d", &hour, &minute)
+	_, _ = fmt.Sscanf(s.Time, "%d:%d", &hour, &minute) // a value that cannot be read leaves the zero value, which the code handles
 	for i := range 8 {
 		day := now.AddDate(0, 0, i)
 		at := time.Date(day.Year(), day.Month(), day.Day(), hour, minute, 0, 0, now.Location())
@@ -258,7 +258,7 @@ func nextWindow(s AutoUpdateSettings, now time.Time) time.Time {
 // been used yet.
 func dueWindow(s AutoUpdateSettings, now, last time.Time) bool {
 	var hour, minute int
-	fmt.Sscanf(s.Time, "%d:%d", &hour, &minute)
+	_, _ = fmt.Sscanf(s.Time, "%d:%d", &hour, &minute) // a value that cannot be read leaves the zero value, which the code handles
 	at := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, now.Location())
 	return windowDay(s, now.Weekday()) && !now.Before(at) && now.Sub(at) < time.Hour && last.Before(at)
 }
@@ -331,7 +331,7 @@ func (m *Manager) autoUpdateNow(ctx context.Context, apps []string) {
 			}
 		}
 	}
-	m.CheckUpdates(ctx)
+	_ = m.CheckUpdates(ctx) // only refreshes the update hints; the next round tries again
 }
 
 // realUpdater wires the steps to the engine and docker compose.

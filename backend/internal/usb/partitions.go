@@ -626,7 +626,7 @@ func (m *Manager) SetLabel(ctx context.Context, id string, number int, label str
 			if _, err := m.runner.Run(ctx, "", tool, args...); err != nil {
 				return err
 			}
-			m.runner.Run(ctx, "", "udevadm", "settle", "--timeout=10")
+			_, _ = m.runner.Run(ctx, "", "udevadm", "settle", "--timeout=10") // only waits for the kernel and udev; the next step checks the result
 			return nil
 		},
 	})
@@ -781,7 +781,7 @@ func (m *Manager) makeFilesystem(ctx context.Context, fs, label string, size uin
 	if _, err := m.runner.Run(ctx, "", "mkfs."+fs, mkfsArgs(FormatRequest{Filesystem: fs, Label: label}, size, part)...); err != nil {
 		return err
 	}
-	m.runner.Run(ctx, "", "udevadm", "settle", "--timeout=10")
+	_, _ = m.runner.Run(ctx, "", "udevadm", "settle", "--timeout=10") // only waits for the kernel and udev; the next step checks the result
 	return nil
 }
 
@@ -795,7 +795,7 @@ func (m *Manager) settle(ctx context.Context, disk string, partx ...string) {
 			slog.Info("partx", "disk", disk, "output", cmd.Output)
 		}
 	}
-	m.runner.Run(ctx, "", "udevadm", "settle", "--timeout=10")
+	_, _ = m.runner.Run(ctx, "", "udevadm", "settle", "--timeout=10") // only waits for the kernel and udev; the next step checks the result
 }
 
 // waitNode waits for the kernel to show a partition.
@@ -830,6 +830,6 @@ func (m *Manager) scratchDir() string {
 	if dir == "" {
 		dir = "/run/titanos-partitions"
 	}
-	os.MkdirAll(dir, 0o700)
+	_ = os.MkdirAll(dir, 0o700) // a runtime or state file only; without it the default applies
 	return dir
 }

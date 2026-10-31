@@ -205,7 +205,7 @@ func (m *Manager) applyNetworks(ctx context.Context, networks []string) (bool, e
 	}
 	if output, err := m.runner.Run(ctx, "", "sshd", "-t"); err != nil {
 		if had {
-			os.WriteFile(file, before, 0o644)
+			_ = os.WriteFile(file, before, 0o644) // going back to the file before; the check error is returned
 		} else {
 			os.Remove(file)
 		}

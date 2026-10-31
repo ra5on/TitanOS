@@ -33,7 +33,7 @@ func (m *Manager) SetOff(ctx context.Context, off bool) error {
 	}
 	if !off {
 		m.off.Store(false)
-		m.runner.Run(ctx, "", "systemctl", append([]string{"unmask", "--runtime"}, libvirtUnits...)...)
+		_, _ = m.runner.Run(ctx, "", "systemctl", append([]string{"unmask", "--runtime"}, libvirtUnits...)...) // units that were not masked need no unmask; starting below reports errors
 		_, err := m.runner.Run(ctx, "", "systemctl", "start", "virtqemud.socket", "virtlogd.socket", "virtlockd.socket")
 		slog.Info("VM service switched on")
 		return err
@@ -54,9 +54,9 @@ func (m *Manager) SetOff(ctx context.Context, off bool) error {
 	}
 	for name := range m.RunningNames() {
 		slog.Warn("VM did not shut down in time, switching it off", "vm", name)
-		m.Action(ctx, name, "poweroff")
+		_ = m.Action(ctx, name, "poweroff") // last resort while switching off; nothing more can be done
 	}
-	m.runner.Run(ctx, "", "systemctl", append([]string{"stop"}, libvirtUnits...)...)
+	_, _ = m.runner.Run(ctx, "", "systemctl", append([]string{"stop"}, libvirtUnits...)...) // cleanup, best effort: nothing more can be done if it fails
 	_, err := m.runner.Run(ctx, "", "systemctl", append([]string{"mask", "--runtime"}, libvirtUnits...)...)
 	slog.Info("VM service switched off")
 	return err

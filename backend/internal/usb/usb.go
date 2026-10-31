@@ -463,7 +463,7 @@ func (m *Manager) Eject(ctx context.Context, id string) error {
 	if !d.Mounted {
 		return ErrNotMounted
 	}
-	m.runner.Run(ctx, "", "sync")
+	_, _ = m.runner.Run(ctx, "", "sync") // only waits for the kernel and udev; the next step checks the result
 	if _, err := m.runner.Run(ctx, "", "umount", d.Dir); err != nil {
 		var cmd *run.CommandError
 		if errors.As(err, &cmd) && strings.Contains(cmd.Output, "busy") {

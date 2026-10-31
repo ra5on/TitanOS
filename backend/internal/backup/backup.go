@@ -1028,7 +1028,7 @@ func (m *Manager) runFiles(ctx context.Context, env, args []string, line func(st
 			line(scanner.Text())
 		}
 	}
-	io.Copy(io.Discard, stdout)
+	_, _ = io.Copy(io.Discard, stdout) // draining the body for connection reuse only
 	err = cmd.Wait()
 	return strings.TrimSpace(problems.String()), err
 }
@@ -1041,7 +1041,7 @@ type limited struct {
 
 func (l *limited) Write(p []byte) (int, error) {
 	if take := min(len(p), l.left); take > 0 {
-		l.w.Write(p[:take])
+		_, _ = l.w.Write(p[:take]) // a sink for the first lines of output; losing them loses nothing
 		l.left -= take
 	}
 	return len(p), nil
@@ -1206,7 +1206,7 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 		}
 	}
 	// What a run that was cut short left locked.
-	m.run(ctx, env, append(slices.Clone(base), "unlock"), nil)
+	_, _ = m.run(ctx, env, append(slices.Clone(base), "unlock"), nil) // there may be no stale lock; the backup below reports real errors
 
 	if len(job.Applications) > 0 {
 		extra, finish, err := m.PrepareApplications(ctx, job, m.homeVolume(job), sel.paths)

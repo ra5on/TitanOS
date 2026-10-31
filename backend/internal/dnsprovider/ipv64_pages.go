@@ -258,7 +258,7 @@ func (c *IPv64) UploadIcon(ctx context.Context, id string, data []byte) (IPv64Of
 	if err != nil {
 		return IPv64OfflinePage{}, err
 	}
-	part.Write(data)
+	_, _ = part.Write(data) // writes into a buffer in memory
 	form.Close()
 	answer, err := c.send(ctx, http.MethodPost, "/offline-pages/"+url.PathEscape(id)+"/icon", nil, body.Bytes(), form.FormDataContentType())
 	if err != nil {

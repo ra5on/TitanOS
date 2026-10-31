@@ -238,10 +238,10 @@ type Manager struct {
 	// gid owns the files of the VMs. QEMU does not run as root; it gets at
 	// disks and installation media through this group.
 	gid int
-	// runGid owns runDir: the group QEMU runs in, not the one of all accounts.
-	// runUid is the user QEMU runs as.
-	runGid int
-	runUid int
+	// runGID owns runDir: the group QEMU runs in, not the one of all accounts.
+	// runUID is the user QEMU runs as.
+	runGID int
+	runUID int
 
 	// FreeDisks returns the names (sda, nvme0n1) of the disks that are in
 	// no volume. Only those may be handed to a VM as a whole.
@@ -306,7 +306,7 @@ type Manager struct {
 func NewManager(store *config.Store, gid int) *Manager {
 	return &Manager{
 		store: store, runner: run.Exec{}, mountRoot: "/mnt", runDir: "/run/titanos-vms", pidDir: "/run/libvirt/qemu", procDir: "/proc",
-		kvm: "/dev/kvm", gid: gid, runGid: qemuGroup(gid), runUid: qemuUser(), vms: map[string]VM{}, samples: map[string]*sample{}, autostarted: map[string]bool{}, jobs: map[string]*Job{}, borrowed: map[string][]string{}, starting: map[string]bool{},
+		kvm: "/dev/kvm", gid: gid, runGID: qemuGroup(gid), runUID: qemuUser(), vms: map[string]VM{}, samples: map[string]*sample{}, autostarted: map[string]bool{}, jobs: map[string]*Job{}, borrowed: map[string][]string{}, starting: map[string]bool{},
 		snapshotJobs: map[string]*Job{}, copied: map[string]bool{}, autostartFile: "/run/titanos/vms-autostarted",
 		powerFile: "/run/titanos/vm-schedule.json", powerUnit: time.Second, powerPoll: 2 * time.Second,
 		FreeDisks: func() []string { return nil }, byID: "/dev/disk/by-id", sysDir: "/sys", devDir: "/dev",
@@ -456,7 +456,7 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 		loaded := m.loaded
 		m.mu.Unlock()
 		if !loaded {
-			m.Load()
+			_ = m.Load() // Load keeps its own state; a failure shows up as not loaded
 		} else if !m.Disabled && !m.off.Load() {
 			m.runSnapshotSchedules(ctx, mounted(), time.Now())
 			m.runPowerSchedules(ctx, mounted(), time.Now())
@@ -1146,7 +1146,7 @@ func (m *Manager) Start(ctx context.Context, name string, mounted []string) erro
 	if err := os.MkdirAll(m.runDir, 0o770); err != nil {
 		return err
 	}
-	if err := os.Chown(m.runDir, -1, m.runGid); err != nil {
+	if err := os.Chown(m.runDir, -1, m.runGID); err != nil {
 		return err
 	}
 	if err := os.Chmod(m.runDir, 0o770); err != nil {
@@ -1357,7 +1357,7 @@ func (m *Manager) Media(mounted []string) []Medium {
 	visited := 0
 	for _, volume := range mounted {
 		root := filepath.Join(m.mountRoot, volume)
-		filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		_ = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error { // the callback collects what it can; unreadable entries are skipped
 			visited++
 			if err != nil || visited > 50000 || len(media) >= 200 {
 				return fs.SkipDir

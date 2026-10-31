@@ -823,7 +823,7 @@ func (r *folderRestore) newFolder(ctx context.Context, src, dst *os.File, target
 	done := false
 	defer func() {
 		if !done {
-			removeAllAt(dir, temp)
+			_ = removeAllAt(dir, temp) // cleanup, best effort: nothing more can be done if it fails
 		}
 	}()
 	made, err := openDirAt(dst, temp)
@@ -966,7 +966,7 @@ func (r *folderRestore) copyFile(ctx context.Context, srcDir, dstDir *os.File, n
 	defer func() {
 		out.Close()
 		if !done {
-			unix.Unlinkat(dir, temp, 0)
+			_ = unix.Unlinkat(dir, temp, 0) // cleanup, best effort: nothing more can be done if it fails
 		}
 	}()
 	cloned := unix.IoctlFileClone(ofd, fd) == nil
@@ -1031,7 +1031,7 @@ func (r *folderRestore) copyLink(srcDir, dstDir *os.File, name, target string, s
 	done := false
 	defer func() {
 		if !done {
-			unix.Unlinkat(dir, temp, 0)
+			_ = unix.Unlinkat(dir, temp, 0) // cleanup, best effort: nothing more can be done if it fails
 		}
 	}()
 	if err := unix.Fchownat(dir, temp, int(st.Uid), int(st.Gid), unix.AT_SYMLINK_NOFOLLOW); err != nil && !(errors.Is(err, unix.EPERM) && os.Geteuid() != 0) {

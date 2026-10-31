@@ -192,7 +192,7 @@ func (m *Manager) keepCrashLocked(boot string) bool {
 	}
 	dst := filepath.Join(m.dir, boot+"-crash")
 	found := false
-	filepath.WalkDir(m.pstore, func(p string, d fs.DirEntry, err error) error {
+	_ = filepath.WalkDir(m.pstore, func(p string, d fs.DirEntry, err error) error { // the callback collects what it can; unreadable entries are skipped
 		if err != nil || d.IsDir() {
 			return nil
 		}

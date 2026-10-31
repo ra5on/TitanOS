@@ -414,7 +414,7 @@ func (s *Server) publishApp(ctx context.Context, c *dnsprovider.IPv64, app strin
 	// "Fertig ist die Änderung, wenn bei CDN-Domains die Liste pending
 	// leer ist": wait for the server, looking every few seconds.
 	if err := waitForServer(ctx, c, entry.CDN); err != nil {
-		s.unpublish(context.WithoutCancel(ctx), c, entry)
+		_ = s.unpublish(context.WithoutCancel(ctx), c, entry) // cleanup, best effort: nothing more can be done if it fails
 		return fail(err)
 	}
 	for _, rec := range records {
@@ -427,7 +427,7 @@ func (s *Server) publishApp(ctx context.Context, c *dnsprovider.IPv64, app strin
 			return err
 		})
 		if err != nil && !isCode(err, "already_enabled") {
-			s.unpublish(context.WithoutCancel(ctx), c, entry)
+			_ = s.unpublish(context.WithoutCancel(ctx), c, entry) // cleanup, best effort: nothing more can be done if it fails
 			return fail(err)
 		}
 		entry.Records = append(entry.Records, ref)
@@ -439,7 +439,7 @@ func (s *Server) publishApp(ctx context.Context, c *dnsprovider.IPv64, app strin
 		}
 		return err
 	}); err != nil {
-		s.unpublish(context.WithoutCancel(ctx), c, entry)
+		_ = s.unpublish(context.WithoutCancel(ctx), c, entry) // cleanup, best effort: nothing more can be done if it fails
 		return fail(err)
 	}
 	frontend, on := "https_redirect", true
@@ -450,7 +450,7 @@ func (s *Server) publishApp(ctx context.Context, c *dnsprovider.IPv64, app strin
 		detail, err = c.ChangeCDN(ctx, entry.CDN, in)
 		return err
 	}); err != nil {
-		s.unpublish(context.WithoutCancel(ctx), c, entry)
+		_ = s.unpublish(context.WithoutCancel(ctx), c, entry) // cleanup, best effort: nothing more can be done if it fails
 		return fail(err)
 	}
 	entry.Pending = detail.Pending

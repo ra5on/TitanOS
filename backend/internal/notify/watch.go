@@ -64,7 +64,7 @@ func (w *Watcher) Run(ctx context.Context, status func(context.Context) (storage
 	for {
 		// The stick may not have been there when titand started.
 		if !w.notify.Loaded() {
-			w.notify.Load()
+			_ = w.notify.Load() // Load keeps its own state; a failure shows up as not loaded
 		}
 		if current, err := status(ctx); err == nil {
 			w.Observe(current)
@@ -179,7 +179,7 @@ func (w *Watcher) observeWear(key, label string, warnings []string, defects uint
 	}
 	if len(w.worn) == 0 && w.wornFile != "" {
 		if data, err := os.ReadFile(w.wornFile); err == nil {
-			json.Unmarshal(data, &w.worn)
+			_ = json.Unmarshal(data, &w.worn) // a value that cannot be read leaves the zero value, which the code handles
 		}
 	}
 	before, known := w.worn[key]
@@ -204,8 +204,8 @@ func (w *Watcher) saveWorn() {
 		return
 	}
 	data, _ := json.Marshal(w.worn)
-	os.MkdirAll(filepath.Dir(w.wornFile), 0o755)
+	_ = os.MkdirAll(filepath.Dir(w.wornFile), 0o755) // a runtime or state file only; without it the default applies
 	if err := os.WriteFile(w.wornFile+".tmp", data, 0o600); err == nil {
-		os.Rename(w.wornFile+".tmp", w.wornFile)
+		_ = os.Rename(w.wornFile+".tmp", w.wornFile) // a runtime or state file only; without it the default applies
 	}
 }

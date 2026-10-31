@@ -616,7 +616,7 @@ func (m *Manager) readEntries() map[string]entry {
 		e := entry{path: filepath.Join(dir, file.Name()), content: string(content)}
 		if match[2] != "" {
 			var left int
-			fmt.Sscan(match[2], &left)
+			_, _ = fmt.Sscan(match[2], &left) // a value that cannot be read leaves the zero value, which the code handles
 			e.left = &left
 		}
 		entries[match[1]] = e
@@ -718,7 +718,7 @@ func (m *Manager) removeEntry(slot string) {
 			os.Remove(filepath.Join(dir, file.Name()))
 		}
 	}
-	syncDir(dir)
+	_ = syncDir(dir) // the data are written; the sync only hurries them to disk
 }
 
 func syncDir(dir string) error {
@@ -729,7 +729,7 @@ func syncDir(dir string) error {
 	defer d.Close()
 	// FAT has no directory entries of its own to flush; an error here is
 	// no reason to fail.
-	d.Sync()
+	_ = d.Sync() // the data are written; the sync only hurries them to disk
 	return nil
 }
 
@@ -1280,7 +1280,7 @@ func (m *Manager) switchTo(target, content string, pending Pending) error {
 		return err
 	}
 	if err := m.putEntry(target, withSortKey(content, keyPreferred), true); err != nil {
-		m.store.Remove(pendingFile)
+		_ = m.store.Remove(pendingFile) // cleanup, best effort: nothing more can be done if it fails
 		return err
 	}
 	// Everything has to be on the stick before someone restarts.

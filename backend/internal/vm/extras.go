@@ -309,7 +309,7 @@ func (m *Manager) Images(ctx context.Context, mounted []string) []Image {
 	visited := 0
 	for _, volume := range mounted {
 		root := filepath.Join(m.mountRoot, volume)
-		filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		_ = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error { // the callback collects what it can; unreadable entries are skipped
 			visited++
 			if err != nil || visited > 50000 || len(images) >= 100 {
 				return fs.SkipDir
@@ -446,7 +446,7 @@ func (m *Manager) lend(vm VM) error {
 			m.borrowed[vm.Name] = append(m.borrowed[vm.Name], node)
 		}
 		m.mu.Unlock()
-		return os.Chown(node, -1, m.runGid)
+		return os.Chown(node, -1, m.runGID)
 	}
 	for _, disk := range vm.Disks {
 		if !m.isBlock(disk) {
@@ -505,7 +505,7 @@ func (m *Manager) release() {
 			if !strings.Contains(node, "/bus/usb/") {
 				group = lookupGroup("disk", 0)
 			}
-			os.Chown(node, -1, group)
+			_ = os.Chown(node, -1, group) // permissions and times are a convenience; the data are there either way
 		}
 		delete(m.borrowed, name)
 	}
@@ -569,7 +569,7 @@ func (m *Manager) prepareTPM(dir string) error {
 	if err := os.Mkdir(state, 0o700); err != nil && !os.IsExist(err) {
 		return err
 	}
-	return os.Chown(state, m.runUid, m.runGid)
+	return os.Chown(state, m.runUID, m.runGID)
 }
 
 // CPU is a logical CPU of the NAS.

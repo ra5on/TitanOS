@@ -387,7 +387,7 @@ func (m *Manager) Notify(severity, kind, subject string) {
 		if m.collect(settings, message) {
 			return
 		}
-		m.deliver(settings, message, nil)
+		_ = m.deliver(settings, message, nil) // without a single channel deliver sends in the background and returns nil
 		if m.Push != nil {
 			hostname, _ := os.Hostname()
 			m.Push(message, "["+hostname+"] "+message.Title)
@@ -410,7 +410,7 @@ func (m *Manager) SendReport(title, text string) error {
 	if !any && m.Push == nil {
 		return ErrNoChannel
 	}
-	m.deliver(settings, message, nil)
+	_ = m.deliver(settings, message, nil) // without a single channel deliver sends in the background and returns nil
 	if m.Push != nil {
 		hostname, _ := os.Hostname()
 		m.Push(message, "["+hostname+"] "+title)
@@ -592,7 +592,7 @@ func sendMail(cfg Email, message []byte) error {
 		conn.Close()
 		return err
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }() // the mail was handed over already or failed before
 	if cfg.Security == "starttls" {
 		if err := client.StartTLS(&tls.Config{ServerName: cfg.Host}); err != nil {
 			return err

@@ -257,7 +257,7 @@ func (m *Manager) deleteEncryptedBtrfs(ctx context.Context, volume VolumeConfig,
 		if err := m.luksClose(ctx, cryptName(volume, entry[0])); err != nil {
 			return fmt.Errorf("%w: %v", ErrBusy, err)
 		}
-		m.eraseLUKS(ctx, entry[1])
+		_ = m.eraseLUKS(ctx, entry[1]) // cleanup, best effort: nothing more can be done if it fails
 		if _, err := m.runner.Run(ctx, "", "wipefs", "--all", "--force", entry[1]); err != nil {
 			return err
 		}
