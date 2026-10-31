@@ -11,7 +11,9 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -509,4 +511,70 @@ func sameCopy(ctx context.Context, input *os.File, target *os.Root, to string, p
 			return e1 == e2, nil
 		}
 	}
+}
+
+// copyLocal makes a readable copy in a folder of another volume.
+func (m *Manager) copyLocal(ctx context.Context, job Job) error {
+	if !slices.Contains(m.mounted(), job.Destination.Volume) {
+		return fmt.Errorf("the volume %s of the backup is not mounted", job.Destination.Volume)
+	}
+	root, err := os.OpenRoot(filepath.Join(m.mountRoot, job.Destination.Volume))
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	return m.copyTo(ctx, job, root)
+}
+
+// holdTarget mounts the drive or SMB share of an encrypted job and keeps
+// it, pinned and marked in use, until release is called: restic works on
+// it as a folder for as long as the caller needs.
+func (m *Manager) holdTarget(job Job) (dir string, release func(), err error) {
+	type held struct {
+		dir string
+		err error
+	}
+	ready := make(chan held, 1)
+	done := make(chan struct{})
+	free := make(chan struct{})
+	hold := func(root *os.Root) error {
+		ready <- held{dir: root.Name()}
+		<-free
+		return nil
+	}
+	ctx := context.Background()
+	go func() {
+		defer close(done)
+		var err error
+		switch job.Destination.Type {
+		case "usb":
+			if m.WithUSB == nil {
+				err = fmt.Errorf("USB target is unavailable")
+				break
+			}
+			err = m.WithUSB(ctx, job.Destination.DeviceID, hold)
+		case "smb":
+			var target SMBTarget
+			if target, err = m.smbTarget(job.Destination.TargetID); err == nil {
+				err = m.withSMB(ctx, target, hold)
+			}
+		default:
+			err = fmt.Errorf("nothing to mount for %s", job.Destination.Type)
+		}
+		if err != nil {
+			ready <- held{err: err}
+		}
+	}()
+	got := <-ready
+	if got.err != nil {
+		<-done
+		return "", nil, got.err
+	}
+	var once sync.Once
+	return got.dir, func() {
+		once.Do(func() {
+			close(free)
+			<-done
+		})
+	}, nil
 }

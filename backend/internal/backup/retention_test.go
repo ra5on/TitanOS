@@ -1,6 +1,8 @@
 package backup
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/usb"
 )
 
 // runs makes two runs a day, at 03:00 and 15:00, for days days up to now.
@@ -187,5 +191,70 @@ func TestChosenVersionsAreForgottenByID(t *testing.T) {
 	}
 	if strings.Contains(e.calls(), "--keep-daily") {
 		t.Fatal("restic's own keep rules used as well")
+	}
+}
+
+func TestEncryptedVersionsOnUSBHoldTheDrive(t *testing.T) {
+	e := newEnv(t)
+	drive := t.TempDir()
+	holding := false
+	e.m.WithUSB = func(ctx context.Context, id string, work func(*os.Root) error) error {
+		if id != "ABCD-1234" {
+			return errors.New("wrong drive")
+		}
+		root, err := os.OpenRoot(drive)
+		if err != nil {
+			return err
+		}
+		defer root.Close()
+		holding = true
+		defer func() { holding = false }()
+		return work(root)
+	}
+	job := Job{ID: "usb", Sources: []string{"media"}, Enabled: true, Every: "daily", Time: "02:00", Destination: Destination{Type: "usb", DeviceID: "ABCD-1234", DeviceName: "Backup-HDD", Folder: "titanos"}}
+	if err := e.m.Create(job, volumes); err != nil {
+		t.Fatal(err)
+	}
+	e.m.Start("usb")
+	if got := e.result(t); got != "usb: ok" {
+		t.Fatal(got)
+	}
+	if !strings.Contains(e.calls(), "repo="+filepath.Join(drive, "titanos")+" ") {
+		t.Fatalf("calls: %s", e.calls())
+	}
+	if holding {
+		t.Fatal("drive still held after the run")
+	}
+	// Listing versions holds it only while it looks.
+	if _, err := e.m.Snapshots(context.Background(), "usb"); err != nil || holding {
+		t.Fatalf("snapshots: %v, held %v", err, holding)
+	}
+	e.m.WithUSB = func(context.Context, string, func(*os.Root) error) error { return usb.ErrNotFound }
+	if _, err := e.m.Snapshots(context.Background(), "usb"); !errors.Is(err, usb.ErrNotFound) {
+		t.Fatalf("missing drive: %v", err)
+	}
+}
+
+func TestReadableCopyToAnotherVolume(t *testing.T) {
+	e := newEnv(t)
+	os.WriteFile(filepath.Join(e.m.mountRoot, "tank/media/a.txt"), []byte("a"), 0o600)
+	mounts := filepath.Join(t.TempDir(), "mounts")
+	os.WriteFile(mounts, []byte("/dev/md1 "+filepath.Join(e.m.mountRoot, "cold")+" ext4 rw 0 0\n"), 0o644)
+	e.m.mountsFile = mounts
+	job := Job{ID: "kopie", Sources: []string{"media"}, Every: "daily", Time: "02:00", Destination: Destination{Type: "local-copy", Volume: "cold", Folder: "kopie"}}
+	if err := e.m.Create(job, volumes); err != nil {
+		t.Fatal(err)
+	}
+	e.m.Start("kopie")
+	if got := e.result(t); got != "kopie: ok" {
+		t.Fatal(got)
+	}
+	if data, err := os.ReadFile(filepath.Join(e.m.mountRoot, "cold/kopie/media/a.txt")); err != nil || string(data) != "a" {
+		t.Fatalf("copy: %q %v", data, err)
+	}
+	job.Destination.Volume = "tank"
+	job.ID = "same"
+	if err := e.m.Create(job, volumes); err == nil {
+		t.Fatal("copy onto the volume of its shares accepted")
 	}
 }

@@ -128,7 +128,7 @@ func (s *Server) handleMaintenanceSet(w http.ResponseWriter, r *http.Request) {
 			found := false
 			if s.opts.Backup != nil {
 				for _, v := range s.opts.Backup.CachedViews() {
-					if v.Job.ID == j.Target && v.Job.Destination.Type != "usb-copy" && v.Job.Destination.Type != "smb-copy" {
+					if v.Job.ID == j.Target && !backup.PlainCopy(v.Job.Destination.Type) {
 						found = true
 					}
 				}

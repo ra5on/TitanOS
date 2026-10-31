@@ -67,7 +67,8 @@ var (
 
 // Destination is where a backup goes.
 type Destination struct {
-	// Type is local, usb-copy, s3, sftp or rest.
+	// Type is local, usb, smb (encrypted versions), local-copy, usb-copy,
+	// smb-copy (readable copies), titanos, s3, sftp or rest.
 	Type     string `json:"type"`
 	DeviceID string `json:"deviceId,omitempty"`
 	// DeviceName is the name the drive had when the job was saved, only
@@ -436,7 +437,18 @@ func check(job Job, shares []Source, volumes []string) error {
 				return invalid("USB copy patterns must match single file or folder names")
 			}
 		}
-	case "local":
+	case "usb", "smb":
+		// Encrypted versions on a drive or an SMB share (0.41.0).
+		if (d.Type == "usb" && !regexp.MustCompile(`^[A-Za-z0-9-]{4,80}$`).MatchString(d.DeviceID)) || (d.Type == "smb" && !naming.ValidBackup(d.TargetID)) || !relative(d.Folder) {
+			return invalid("USB identity, SMB target or folder")
+		}
+		if len(d.DeviceName) > 64 || strings.ContainsFunc(d.DeviceName, func(r rune) bool { return r < ' ' || r == 0x7f }) {
+			return invalid("drive name")
+		}
+	case "local", "local-copy":
+		if d.Type == "local-copy" && len(job.Extras) != 0 {
+			return invalid("unsupported extra source")
+		}
 		if !slices.Contains(volumes, d.Volume) {
 			return invalid("volume")
 		}
@@ -869,6 +881,13 @@ func (m *Manager) repository(job Job) (repo string, args, env []string, cleanup 
 		args = append(args, "--no-cache")
 	}
 	switch d.Type {
+	case "usb", "smb":
+		dir, release, err := m.holdTarget(job)
+		if err != nil {
+			return "", nil, nil, cleanup, err
+		}
+		cleanup = release
+		repo = filepath.Join(dir, d.Folder)
 	case "local":
 		if !slices.ContainsFunc(m.mounted(), func(volume string) bool { return volume == d.Volume }) {
 			return "", nil, nil, cleanup, fmt.Errorf("the volume %s of the backup is not mounted", d.Volume)
@@ -1125,6 +1144,9 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 				return err
 			}
 			return m.withSMB(ctx, target, func(root *os.Root) error { return m.copyTo(ctx, job, root) })
+		}
+		if job.Destination.Type == "local-copy" {
+			return m.copyLocal(ctx, job)
 		}
 		return m.copyUSB(ctx, job)
 	}
@@ -1394,7 +1416,7 @@ func (m *Manager) Plugged(deviceID string) {
 	jobs := slices.Clone(m.jobs)
 	m.mu.Unlock()
 	for _, job := range jobs {
-		if job.Destination.Type != "usb-copy" || job.Destination.DeviceID != deviceID || !job.Enabled || m.stateFile(job) == "" {
+		if (job.Destination.Type != "usb-copy" && job.Destination.Type != "usb") || job.Destination.DeviceID != deviceID || !job.Enabled || m.stateFile(job) == "" {
 			continue
 		}
 		if state := m.state(job); state.Running || state.FailingSince == nil {
@@ -1447,7 +1469,13 @@ func (m *Manager) tellOverdue(job Job, running, late bool) {
 	}
 }
 
-func plainCopy(kind string) bool { return kind == "usb-copy" || kind == "smb-copy" }
+// PlainCopy reports whether a kind of destination holds readable copies
+// rather than restic versions.
+func PlainCopy(kind string) bool { return plainCopy(kind) }
+
+func plainCopy(kind string) bool {
+	return kind == "usb-copy" || kind == "smb-copy" || kind == "local-copy"
+}
 
 // Busy reports whether a backup or a restore runs right now.
 func (m *Manager) Busy() bool {
