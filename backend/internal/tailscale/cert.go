@@ -46,10 +46,10 @@ type HTTPSStatus struct {
 	Name string `json:"name,omitempty"`
 	// State: "off" (switched off in TitanOS), "inactive" (plugin off or not
 	// connected), "disabled" (HTTPS is off in the tailnet), "ok" or "error".
-	State    string     `json:"state"`
+	State string `json:"state"`
 	// Enabled is the switch in TitanOS (Settings.HTTPSCertificate, or what
 	// a missing switch means).
-	Enabled bool `json:"enabled"`
+	Enabled  bool       `json:"enabled"`
 	NotAfter *time.Time `json:"notAfter,omitempty"`
 	Error    string     `json:"error,omitempty"`
 	// EnableURL turns HTTPS on in the tailnet with one click at Tailscale
