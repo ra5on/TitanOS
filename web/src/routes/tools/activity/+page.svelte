@@ -239,7 +239,7 @@
 			><span>{t('ops.budget')}</span><input
 				class="field"
 				type="number"
-				min="9"
+				min="8"
 				max="268"
 				bind:value={
 					() => mibToMB(settings?.maxMiB ?? 0), (mb) => settings && (settings.maxMiB = mbToMiB(mb))
