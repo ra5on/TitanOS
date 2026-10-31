@@ -111,6 +111,9 @@ func newTestServerWith(t *testing.T, change func(*Options)) *testServer {
 	t.Cleanup(srv.Close)
 	ts := &testServer{server: handler, t: t, url: srv.URL, store: store, users: users, power: power, update: updater, disks: disks, shares: shareManager, home: home}
 	ts.client = ts.newClient()
+	// Kept logins are written to the stick in the background; wait for them
+	// before the temporary directory is removed (cleanups run last-in first).
+	t.Cleanup(func() { ts.server.sessions.Flush() })
 	return ts
 }
 
