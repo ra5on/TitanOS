@@ -17,6 +17,20 @@ import (
 
 const bellFile = "bell.json"
 
+// goKeepBell saves the messages in the background; WaitBell waits for it.
+func (m *Manager) goKeepBell() {
+	m.bellPending.Add(1)
+	go func() {
+		defer m.bellPending.Done()
+		m.keepBell()
+	}()
+}
+
+// WaitBell waits until the messages handed to the background are saved.
+func (m *Manager) WaitBell() {
+	m.bellPending.Wait()
+}
+
 // keepBell saves the messages; called without m.mu held. Writes go one
 // after the other, each with the messages of its moment.
 func (m *Manager) keepBell() {

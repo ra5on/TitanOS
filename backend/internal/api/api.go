@@ -198,6 +198,16 @@ type Server struct {
 	loadMu      sync.Mutex
 	lastLoadTry time.Time
 	ipv64       ipv64Area
+
+	// ctx is the root context of the server: it ends with Close (or with
+	// the context given to Start), and with it every job the server
+	// started on its own. jobs counts those jobs, so Close can wait.
+	ctx    context.Context
+	cancel context.CancelFunc
+	jobs   sync.WaitGroup
+	// pending are the stand-ins New made for missing managers; Start
+	// loads their settings.
+	pending []func(context.Context) error
 }
 
 // New returns the handler for all requests.
@@ -209,6 +219,7 @@ func New(opts Options) *Server {
 		prefs:    newPreferences(opts.Store),
 		tokens:   auth.NewTokens(opts.Store),
 	}
+	s.ctx, s.cancel = context.WithCancel(context.Background())
 	if s.sessions == nil {
 		s.sessions = auth.NewSessions()
 	}
@@ -226,15 +237,17 @@ func New(opts Options) *Server {
 		s.opts.Firewall = firewall.NewManager(opts.Store)
 		s.opts.Firewall.Disabled = true
 	}
+	// Managers that were not given are made as switched-off stand-ins
+	// here; reading their settings is left to Start.
 	if s.opts.WireGuard == nil {
 		s.opts.WireGuard = wgserver.New(opts.Store)
 		s.opts.WireGuard.Disabled = true
-		s.opts.WireGuard.Load()
+		s.pending = append(s.pending, func(context.Context) error { return s.opts.WireGuard.Load() })
 	}
 	if s.opts.Fans == nil {
 		s.opts.Fans = fans.New(opts.Store)
 		s.opts.Fans.Disabled = true
-		s.opts.Fans.Load()
+		s.pending = append(s.pending, func(context.Context) error { return s.opts.Fans.Load() })
 	}
 	if s.opts.HealthReport == nil {
 		s.opts.HealthReport = healthreport.New(opts.Store)
@@ -245,11 +258,11 @@ func New(opts Options) *Server {
 			}
 			return s.opts.Notify.SendReport(title, text)
 		}
-		s.opts.HealthReport.Load()
+		s.pending = append(s.pending, func(context.Context) error { return s.opts.HealthReport.Load() })
 	}
 	if s.opts.WebPush == nil {
 		s.opts.WebPush = webpush.New(opts.Store)
-		s.opts.WebPush.Load()
+		s.pending = append(s.pending, func(context.Context) error { return s.opts.WebPush.Load() })
 	}
 	if s.opts.IPv64 == nil {
 		s.opts.IPv64 = ipv64.NewManager(opts.Store)
@@ -265,7 +278,7 @@ func New(opts Options) *Server {
 			}
 			return ddns, le
 		}
-		s.opts.IPv64.Load(context.Background())
+		s.pending = append(s.pending, s.opts.IPv64.Load)
 	}
 	s.manual = toolcatalog.NewManual(nil)
 	if s.opts.UI != nil {

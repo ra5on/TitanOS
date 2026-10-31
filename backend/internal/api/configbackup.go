@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net"
@@ -191,12 +192,12 @@ func (s *Server) restored(w http.ResponseWriter, r *http.Request, source string)
 	}
 	slog.Info("configuration restored, restarting", "from", source, "ip", remoteIP(r))
 	w.WriteHeader(http.StatusAccepted)
-	go func() {
+	s.goJob(func(context.Context) {
 		time.Sleep(time.Second)
 		if err := s.opts.Power.Reboot(); err != nil {
 			slog.Error("restart after the restore failed", "err", err)
 		}
-	}()
+	})
 }
 
 func (s *Server) handleSetupRestore(w http.ResponseWriter, r *http.Request) {

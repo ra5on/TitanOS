@@ -171,11 +171,13 @@ func (s *Server) handlePower(w http.ResponseWriter, r *http.Request) {
 		busy := s.rebuildingNow(check)
 		cancel()
 		if busy {
-			ctx, cancel := context.WithCancel(context.Background())
+			// The wait outlives the request; it ends when it is replaced,
+			// cancelled or the server closes.
+			ctx, cancel := context.WithCancel(s.ctx)
 			s.power.action, s.power.by, s.power.since, s.power.cancel = req.Action, currentUser(r).Name, time.Now().UTC(), cancel
 			s.powerMu.Unlock()
 			slog.Info("power action waits for the rebuild", "action", req.Action, "user", currentUser(r).Name, "ip", remoteIP(r))
-			go s.waitForRebuild(ctx, req.Action, run)
+			s.goJob(func(context.Context) { s.waitForRebuild(ctx, req.Action, run) })
 			writeJSON(w, http.StatusAccepted, map[string]any{"pending": true})
 			return
 		}
@@ -185,10 +187,11 @@ func (s *Server) handlePower(w http.ResponseWriter, r *http.Request) {
 	slog.Info("power action requested", "action", req.Action, "user", currentUser(r).Name, "ip", remoteIP(r))
 	w.WriteHeader(http.StatusAccepted)
 	// Give the response time to reach the browser before the system goes down.
-	go func() {
+	// The action runs even while the server closes: it was asked for.
+	s.goJob(func(context.Context) {
 		time.Sleep(time.Second)
 		run()
-	}()
+	})
 }
 
 // waitForRebuild runs the action once no volume is rebuilt or checked, unless

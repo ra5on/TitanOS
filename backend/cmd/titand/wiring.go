@@ -1374,6 +1374,14 @@ func (w *titand) wireAPI() error {
 		Activity:           w.audit,
 		Cluster:            w.nodes,
 	})
+	if err := w.handler.Start(ctx); err != nil {
+		slog.Warn("API settings not read", "err", err)
+	}
+	// The jobs of the API end with the daemon; waitServices bounds the wait.
+	w.background(func() {
+		<-ctx.Done()
+		w.handler.Close()
+	})
 
 	// Watches that Home Assistant keeps putting its backups on the NAS.
 	w.background(func() { w.handler.RunHAStorage(ctx) })

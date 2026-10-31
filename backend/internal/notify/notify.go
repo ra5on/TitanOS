@@ -173,6 +173,8 @@ type Manager struct {
 	// bellLoaded says the kept messages were read (bell_keep.go).
 	bellLoaded bool
 	bellWrite  sync.Mutex
+	// bellPending counts bell writes still running in the background.
+	bellPending sync.WaitGroup
 	// pending are the messages waiting for the daily summary (RAM only).
 	pending    []Message
 	digestSent time.Time
@@ -349,7 +351,7 @@ func (m *Manager) Dismiss(ids []int) {
 	m.messages = slices.DeleteFunc(m.messages, func(message Message) bool { return slices.Contains(ids, message.ID) })
 	if len(m.messages) != before {
 		m.nextID++ // Also refresh the list in other open browsers.
-		go m.keepBell()
+		m.goKeepBell()
 	}
 }
 
@@ -377,7 +379,7 @@ func (m *Manager) Notify(severity, kind, subject string) {
 	m.mu.Unlock()
 	slog.Info("notification", "severity", severity, "kind", kind, "subject", subject)
 	go m.tellPeople(message)
-	go m.keepBell()
+	m.goKeepBell()
 	if m.Urgent != nil && rank[severity] >= rank[Warning] {
 		m.Urgent()
 	}
