@@ -74,7 +74,7 @@ Grundsätze (Kurzfassung; vollständiger Wortlaut mit SSD-Cache, Verschlüsselun
 - **Im Entwicklungsmodus (`titand -dev`) verändert titand keine Platten.**
 - Split-Lock-Erkennung bleibt aktiv; keine Bootparameter/Sysctls automatisch setzen oder Boot-Einträge anpassen.
 - Treiber, die Debians Kernel nicht baut, nur als signierte Treiber-Plugins, nicht im Grundsystem; ein Kernelwechsel bleibt Entscheidung des Projektinhabers.
-- journald im RAM mit Größenbegrenzung.
+- journald im RAM mit Größenbegrenzung; seit 0.41.0 schreibt titand das Journal zusätzlich auf ein Daten-Volume (`.titanos/logs/<boot>.log`, begrenzt), nie auf den Stick (Entscheidung 31.10.2026, `docs/rules/SYSTEM.md`).
 
 ## Repo-Struktur (wichtige Einstiegspunkte)
 

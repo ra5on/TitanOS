@@ -60,3 +60,8 @@ Bereich: Rollen, Anmeldung, 2FA, Passkeys, Sitzungen, SSH/Zertifikate, Terminal 
 
 - Paket `internal/activity`, Seite Werkzeuge › Aktivität (nur Besitzer/Admin, nicht per API-Token). Middleware `activityLog` um den Mux: jede POST/PUT/PATCH/DELETE eines angemeldeten Kontos, ausgewählte Konsolen-/Download-GETs (`activityReads`), dazu `login`, `logout`, `login_failed`, `login_blocked`, `setup`. `requireUser` meldet Konto und `r.Pattern` per `noteActivity`; Handler ergänzen Ziele nur mit `noteTarget` (Namen und Pfade, nie Inhalte, Links nur Schema+Server). Request-Bodies nie speichern. Häufige/private Routen in `activityQuiet` ausnehmen statt Einträge zu filtern. Herkunft (`via`): `web`, `token`, `mcp` („per MCP“, je `tools/call` genau ein Eintrag), `homeassistant` (Knöpfe/Schalter aus Home Assistant, in-process über `inProcessIdentity`), `cluster`, `system`, `ssh`.
 - Tägliche JSONL unter `.titanos/activity/` auf dem gewählten oder ersten eingebundenen Volume, nie auf dem Stick; 30/90/365 Tage, 8–256 MiB, Standard an/90/64. Ohne Volume 500 Einträge Anzeige, bis 5.000 wartend im RAM. Kein manipulationssicheres Revisionsprotokoll, keine Löschfunktion in der UI. Siehe `docs/ACTIVITY.md`.
+
+## Härtung (0.41.0)
+
+- Strengere Content-Security-Policy für die Weboberfläche (Plan 6h); der UI-Durchlauf läuft auch mit aktiver CSP ohne Befund.
+- Freigabe-Links für Dateien gibt es nicht mehr (Plan 6c).

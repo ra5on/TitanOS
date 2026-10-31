@@ -43,3 +43,7 @@ Bereich: Signierte sysext-Plugins, Community-Plugins, NVIDIA-Bau auf dem NAS.
 - NVIDIA-InRelease/GPG und Paketprüfsummen prüfen; fertiges lokales Image mit NAS-eigenem Schlüssel authentifizieren, in der UI „Auf diesem NAS gebaut“, niemals als offiziell signiert ausgeben. API-Status liest keine Konfiguration vom Stick. Details: `docs/NVIDIA-LOCAL-BUILD.md`.
 - Das Bauprotokoll liegt außerhalb der Sandbox im privaten Bauordner und wird je Lauf frisch angelegt; alles, was die Sandbox erzeugt (Status, Ergebnis, Manifest), liest titand ohne Links zu folgen und nur als gewöhnliche Datei mit Größengrenze; Links, Geräte und Hardlinks im Ergebnis werden abgelehnt. Der SDK-Download setzt per HTTP-Range fort, bricht nur nach zwei Minuten ohne Daten ab und hat keine Gesamtfrist; die Zwei-Stunden-Frist gilt nur dem Compilerlauf.
 - Das Plugin-Repository baut die passende Bauumgebung je Kernel-Satz und prüft den realen Buildpfad (ebenso die TitanOS-Release-CI mit dem übernommenen Satz); titand gibt dem Bau seine Version mit (`--setenv=TITANOS_VERSION`), weil das SDK aus einem älteren Release mit gleichem Kernel stammen kann. Fertig gebaute Zusatztreiber nur manuell über `nvidia-driver.yml` im Plugin-Repository. Hardwareaktivierung/CUDA/NVENC weiter auf echtem NAS prüfen.
+
+## Herkunft (0.41.0)
+
+- Plugins und Plugin-Kataloge werden nur noch über `https://` geladen (Plan 6d); Adressen mit `http://` werden abgelehnt. Signaturprüfung bleibt unverändert Pflicht.
