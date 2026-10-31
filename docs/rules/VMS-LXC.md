@@ -83,7 +83,7 @@ Bereich: VM-Erstellung, Firmware, Konsole, Snapshots, App-Vorlagen, Hardware und
 
 ## LXC-Systemcontainer
 
-- Reiter „Container“ (`/lxc`, nur Besitzer/Administratoren), Paket `internal/lxc`, Routen `/api/v1/lxc…`, Doku `docs/LXC.md`. Mittelweg zwischen Docker-Apps und VMs: ganzes Linux-System mit dem Kernel des NAS.
+- Reiter „LXC“ (bis 0.40 „Container“, Entscheidung 31.10.2026; `/lxc`, nur Besitzer/Administratoren), Paket `internal/lxc`, Routen `/api/v1/lxc…`, Doku `docs/LXC.md`. Mittelweg zwischen Docker-Apps und VMs: ganzes Linux-System mit dem Kernel des NAS.
 - Einstellungen je Container in `/config/lxc/<name>.json` (neue Datei, nur optionale Zusatzfelder); lxcpath `/mnt/<volume>/lxc`, Root-Dateisystem `/mnt/<volume>/lxc/<name>/rootfs`. Die LXC-Konfiguration `<lxcpath>/<name>/config` wird vor jedem Start aus `/config` neu geschrieben; Änderungen dort gehen verloren.
 - Abbilder nur von images.linuxcontainers.org über das `download`-Template (Liste sechs Stunden im RAM). Anlegen als Hintergrundauftrag mit Phasen; `LXC_CACHE_PATH` und `TMPDIR` zeigen auf das Volume, nie RAM/Overlay. Vorhandene Ordner werden nie überschrieben.
 - Ab Werk unprivilegiert (IDs 0–65535 → 100000–165535, Gruppe 100 des Containers = `users` des NAS für Schreibzugriff auf Freigaben); privilegiert nur ausdrücklich beim Anlegen mit Warnung, danach fest. Ohne `apparmor_parser` `lxc.apparmor.profile = unconfined`.
