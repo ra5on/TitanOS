@@ -8,6 +8,7 @@ zum Kernel seiner Systembasis:
 | Plugin | Inhalt | Voraussetzung |
 | --- | --- | --- |
 | `nvidia` | offene NVIDIA-Kernelmodule, CUDA/NVENC/NVDEC-Bibliotheken, NVML und CDI für Docker, siehe [NVIDIA](NVIDIA.md) | NVIDIA-GPU ab Turing |
+| `nvidia-legacy` | proprietäres NVIDIA-Kernelmodul der Reihe 580 mit denselben Bibliotheken, NVML und CDI, siehe [NVIDIA](NVIDIA.md#ältere-karten-nvidia-legacy) | NVIDIA-GPU der Generation Maxwell, Pascal oder Volta; nie zusammen mit `nvidia` |
 | `intel-gpu-tools` | Debian Intel GPU Tools, unter anderem `intel_gpu_top`, zusätzliche Bibliotheken und deren Lizenz-/Quellverzeichnis | Intel-GPU mit funktionierendem Kernel-Treiber; einzelne Tools benötigen bestimmte Generationen |
 | `coral-usb` | USB-Erkennung und `titanos-coral-info`, Zuordnung für Container | Coral USB; die verwendete App bringt die TPU-Laufzeit mit |
 | `tailscale` | Tailscale mit Subnet-Routing und Exit Node, siehe [Tailscale](TAILSCALE.md) | Tailscale-Konto |
@@ -15,6 +16,8 @@ zum Kernel seiner Systembasis:
 | `wangxun-nic` | Treiber `ngbe`/`txgbe` (mit `libwx`) aus den Kernelquellen des Systems | Netzwerkkarte mit Wangxun WX1860 (1 GbE) oder SP1000/WX1820 (10 GbE) |
 | `intel-qat` | Treiber `qat_4xxx`/`qat_420xx` und Firmware `qat_4xxx*.bin` aus linux-firmware | Intel QuickAssist Gen 4 (PCI 8086:4940/4942/4944/4946) |
 | `it87-extended` | externer Sensortreiber `it87` (frankcrawford/it87, fester Commit), ersetzt den it87 des Systems | Mainboard mit neuerem ITE-Super-I/O-Chip (z. B. IT8689E, IT8696E) |
+| `r8125` | Realteks Herstellertreiber `r8125`; übernimmt nur diese Chips von `r8169` und gibt sie beim Ausschalten zurück | RTL8125 (2,5 GbE, 10ec:8125) oder Killer E3000 (10ec:3000), wenn `r8169` Probleme macht |
+| `r8126` | Realteks Herstellertreiber `r8126`, ebenso | RTL8126 (5 GbE, 10ec:8126), wenn `r8169` Probleme macht |
 
 Unter **Plugins** erscheint der offizielle Katalog des laufenden TitanOS-Releases.
 TitanOS prüft die Signaturen des Release-Inventars und der Plugin-Beschreibungen,
@@ -169,7 +172,7 @@ gewohnten Installationsdialog.
 
 `scripts/make-driver-plugins.py` im
 [Plugin-Repository](https://github.com/ra5on/TitanOS-Plugins) baut
-`wangxun-nic`, `intel-qat` und `it87-extended` für jeden Kernel-Satz gegen den
+`wangxun-nic`, `intel-qat`, `it87-extended`, `r8125` und `r8126` für jeden Kernel-Satz gegen den
 exakten Kernel des TitanOS-Abbilds:
 
 - In einem Wegwerf-mkosi-Root (`plugins/drivers/build` dort) werden
@@ -212,6 +215,38 @@ Firmware und Treiber gleichzeitig auf den Chip zu, sind falsche Werte,
 Lüfterprobleme oder ein instabiles System möglich. Wer das bewusst testen will,
 kann es bis zum nächsten Neustart in der NAS-Shell tun:
 `modprobe -r it87; modprobe -d /run/titanos-plugin-modules it87 ignore_resource_conflict=1`.
+
+
+### Realtek-Herstellertreiber (`r8125`, `r8126`)
+
+Debians Kernel treibt RTL8125/RTL8126 bereits mit `r8169`. Bei manchen 2,5-
+und 5-GbE-Karten läuft Realteks eigener Treiber stabiler; die Plugins sind
+dafür eine Ausweichmöglichkeit, keine Voraussetzung.
+
+- Quelle: Realteks unveränderter Herstellertreiber über die Spiegel
+  `openwrt/rtl8125` bzw. `openwrt/rtl8126`, festgelegt auf Commit und SHA-256
+  in `plugins/drivers/drivers.json` des Plugin-Repositorys. Leere Werte heißen
+  „noch nicht festgelegt“: dann bricht der Bau mit Hinweis auf
+  `scripts/pin-driver-source.py` ab. Gebaut wird mit dem Makefile des
+  Herstellers (`src/`); die übersetzten Dateien liegen als
+  `<name>-sources.tar.gz` bei.
+- Übergabe: Der Dienst `titanos-r8125` bzw. `titanos-r8126` sucht PCI-Geräte
+  von Realtek mit genau den IDs des Plugins (r8125: 8125, 3000; r8126: 8126),
+  die `r8169` oder kein Treiber hält, setzt `driver_override`, löst sie von
+  `r8169` und lässt den Herstellertreiber sie übernehmen. Nimmt er ein Gerät
+  nicht an, bekommt `r8169` es zurück und der Dienst meldet einen Fehler.
+  Ausschalten gibt die Geräte an `r8169` zurück. `r8169` wird nie gesperrt,
+  andere Realtek-Chips (z. B. RTL8111 auf dem Mainboard) und Geräte einer VM
+  (`vfio-pci`) bleiben, wo sie sind.
+- Empfehlung: Die Hardware-Regeln tragen `unbound`. Weil `r8169` die Chips beim
+  Start übernimmt, schlägt TitanOS die Plugins nicht von selbst vor; die
+  Plugin-Seite zeigt erkannte Chips trotzdem an.
+- Grenzen: Plugins laden erst nach dem Einbinden des Daten-Volumes. Bis dahin
+  läuft der Anschluss mit `r8169`; bei der Übergabe ist er kurz getrennt.
+  Geprüft sind die Übergabe-Logik mit einem nachgebildeten sysfs
+  (`scripts/tests/test_realtek.py` im Plugin-Repository), Katalog und
+  Empfehlungsregeln; Bau, Laden im QEMU-Storage-Test und echte Karten sind
+  bis zur Festlegung der Quellen nicht geprüft.
 
 ## Katalogangaben im Manifest
 

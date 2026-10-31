@@ -11,7 +11,7 @@
       "when": "Wenn eine NVIDIA-Grafikkarte ab Turing im NAS steckt und Container sie für CUDA, Transkodierung (NVENC/NVDEC) oder KI nutzen sollen. Für eine Karte, die nur an eine VM durchgereicht wird, ist das Plugin nicht nötig.",
       "hardware": [
         "NVIDIA-GPUs ab Turing mit den offenen Kernelmodulen, z. B. GeForce RTX 20/30/40/50, GTX 16 und Rechenzentrumskarten derselben Generationen",
-        "Nicht unterstützt: Pascal, Maxwell und älter (z. B. GTX 10, GTX 9), Volta",
+        "Nicht unterstützt: Pascal, Maxwell und älter (z. B. GTX 10, GTX 9), Volta; für Maxwell, Pascal und Volta gibt es das Plugin „NVIDIA (ältere Karten)“",
         "Erkannt werden NVIDIA-Grafikgeräte mit PCI-Geräte-IDs ab 1E00, ohne gebundenen Treiber"
       ],
       "changes": "Lädt die offenen NVIDIA-Kernelmodule und startet titanos-nvidia.service, das die CDI-Geräte für Docker im RAM erzeugt. Bringt CUDA-, NVENC/NVDEC-Bibliotheken, NVML, nvidia-smi, GSP-Firmware und das Container Toolkit mit. Optional lässt sich ein neuerer Treiber auf dem NAS bauen (Treiber vorbereiten).",
@@ -26,7 +26,7 @@
       "when": "When an NVIDIA graphics card from Turing on is in the NAS and containers should use it for CUDA, transcoding (NVENC/NVDEC) or AI. A card that is only passed through to a VM does not need the plugin.",
       "hardware": [
         "NVIDIA GPUs from Turing on with the open kernel modules, e.g. GeForce RTX 20/30/40/50, GTX 16 and data center cards of the same generations",
-        "Not supported: Pascal, Maxwell and older (e.g. GTX 10, GTX 9), Volta",
+        "Not supported: Pascal, Maxwell and older (e.g. GTX 10, GTX 9), Volta; Maxwell, Pascal and Volta have the plugin \"NVIDIA (ältere Karten)\" (older cards)",
         "Detected are NVIDIA display devices with PCI device IDs from 1E00 on, without a bound driver"
       ],
       "changes": "Loads the open NVIDIA kernel modules and starts titanos-nvidia.service, which creates the CDI devices for Docker in RAM. Brings CUDA and NVENC/NVDEC libraries, NVML, nvidia-smi, GSP firmware and the Container Toolkit. Optionally a newer driver can be built on the NAS (Prepare driver).",
