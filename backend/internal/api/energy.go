@@ -83,11 +83,5 @@ func (s *Server) PowerBusy() (bool, string) {
 	if s.storageBusy(ctx) {
 		return true, "volume rebuild or check"
 	}
-	s.agentMu.Lock()
-	jobs := len(s.agentJobs)
-	s.agentMu.Unlock()
-	if jobs > 0 {
-		return true, "assistant task"
-	}
 	return false, ""
 }

@@ -18,7 +18,6 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/activity"
 	"github.com/ra5on/TitanOS/backend/internal/appbackup"
 	"github.com/ra5on/TitanOS/backend/internal/appproxy"
-	"github.com/ra5on/TitanOS/backend/internal/assistant"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/backup"
 	"github.com/ra5on/TitanOS/backend/internal/backuptarget"
@@ -56,6 +55,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/terminal"
 	"github.com/ra5on/TitanOS/backend/internal/thumbs"
 	"github.com/ra5on/TitanOS/backend/internal/tlscert"
+	"github.com/ra5on/TitanOS/backend/internal/toolcatalog"
 	"github.com/ra5on/TitanOS/backend/internal/update"
 	"github.com/ra5on/TitanOS/backend/internal/ups"
 	"github.com/ra5on/TitanOS/backend/internal/usb"
@@ -154,8 +154,6 @@ type Options struct {
 	SecureCookies bool
 	// Sessions are the logins; nil starts with none, kept in memory only.
 	Sessions *auth.Sessions
-	// Assistant is the chat with a model from Ollama; nil makes one that is off.
-	Assistant *assistant.Manager
 	// Activity records who changed what; nil records nothing.
 	Activity *activity.Manager
 	// Cluster is the membership in a cluster of NAS; nil in development
@@ -181,25 +179,17 @@ type Server struct {
 	haStore   haStorageState
 	handler   http.Handler
 	// patterns are all routes of the mux, for tests that compare them
-	// with the route lists of the assistant and the public API.
-	patterns    []string
-	knowledge   *assistant.Knowledge
-	automations *assistant.Automations
-	chats       *assistant.Chats
-	agentMu     sync.Mutex
+	// with the route list of the public API.
+	patterns []string
+	// manual is the documentation for docs_search and docs_read over MCP.
+	manual *toolcatalog.Manual
 	// power is a restart or shutdown that waits for a rebuild; see system.go.
 	powerMu sync.Mutex
 	power   pendingPower
 	// rebuilding replaces the rebuild check in tests.
 	rebuilding func() bool
-	scheduleMu sync.Mutex
-	agentJobs  map[string]*agentJob
-	agentSlots chan struct{}
-	// push holds the one-time tokens of buttons in notifications.
-	push           pushTokens
-	assistSessions assistSessions
-	haUndo         haUndoStore
-	passkeys       passkeyChallenges
+	haUndo     haUndoStore
+	passkeys   passkeyChallenges
 
 	loadMu      sync.Mutex
 	lastLoadTry time.Time
@@ -223,9 +213,6 @@ func New(opts Options) *Server {
 	}
 	if c := s.opts.Cluster; c != nil {
 		c.Applied, c.Status, c.Notify = s.clusterApplied, s.ClusterStatus, s.clusterNotify
-	}
-	if s.opts.Assistant == nil {
-		s.opts.Assistant = assistant.NewManager(opts.Store)
 	}
 	if s.opts.LXC == nil {
 		s.opts.LXC = lxc.NewManager(opts.Store, shares.UsersGID)
@@ -276,25 +263,17 @@ func New(opts Options) *Server {
 		}
 		s.opts.IPv64.Load(context.Background())
 	}
+	s.manual = toolcatalog.NewManual(nil)
 	if s.opts.UI != nil {
 		// The manual is built into the web UI (see web/vite.config.ts).
 		if manual, err := fs.Sub(s.opts.UI, "manual"); err == nil {
-			s.opts.Assistant.Manual = assistant.NewManual(manual)
+			s.manual = toolcatalog.NewManual(manual)
 		}
 	}
-	s.chats = assistant.NewChats(s.chatsDir)
-	s.automations = assistant.NewAutomations(s.chatsDir)
-	s.knowledge = assistant.NewKnowledge(s.chatsDir)
 	if s.opts.Notify != nil {
-		s.opts.Notify.SetPersonalDataDir(s.chatsDir)
+		s.opts.Notify.SetPersonalDataDir(s.notifyDir)
 	}
-	s.agentJobs = map[string]*agentJob{}
 	s.haStore.check = make(chan struct{}, 1)
-	s.agentSlots = make(chan struct{}, 1)
-	if s.opts.HomeAssistant != nil {
-		s.opts.HomeAssistant.OnEvent("mobile_app_notification_action", s.handleHANotificationAction)
-		s.opts.HomeAssistant.OnEvent("titanos_ask", s.handleAssist)
-	}
 
 	mux := &routeMux{ServeMux: http.NewServeMux()}
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
@@ -450,6 +429,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("PUT /api/v1/files/text", s.requireUser(s.handleFileText))
 	mux.HandleFunc("POST /api/v1/files/inspect", s.requireUser(s.handleFileInspect))
 	mux.HandleFunc("POST /api/v1/files/copy", s.requireUser(s.handleFileCopy))
+	mux.HandleFunc("POST /api/v1/files/write-document", s.requireUser(s.handleWriteDocument))
+	mux.HandleFunc("POST /api/v1/files/move-many", s.requireUser(s.handleMoveMany))
 	mux.HandleFunc("POST /api/v1/files/url-download/probe", s.requireUser(s.handleFileDownloadProbe))
 	mux.HandleFunc("POST /api/v1/files/url-download", s.requireUser(s.handleFileURLDownload))
 	mux.HandleFunc("POST /api/v1/files/jobs/{id}/control", s.requireUser(s.handleFileJobControl))
@@ -693,46 +674,6 @@ func New(opts Options) *Server {
 	s.ipv64Routes(mux)
 	mux.HandleFunc("PUT /api/v1/system/timezone", s.requireAdmin(s.handleTimezone))
 	mux.HandleFunc("PUT /api/v1/system/hostname", s.requireAdmin(s.handleHostname))
-	// The chat in the web UI. Its settings are for administrators; who may
-	// chat says requireAssistant.
-	mux.HandleFunc("GET /api/v1/assistant/automations", s.requireAssistant(s.handleAutomations))
-	mux.HandleFunc("GET /api/v1/assistant/knowledge", s.requireAssistant(s.handleKnowledge))
-	mux.HandleFunc("POST /api/v1/assistant/knowledge", s.requireAssistant(s.handleKnowledgeSave))
-	mux.HandleFunc("POST /api/v1/assistant/knowledge/search", s.requireAssistant(s.handleKnowledgeSearch))
-	mux.HandleFunc("POST /api/v1/assistant/knowledge/delete", s.requireAssistant(s.handleKnowledgeDelete))
-	mux.HandleFunc("POST /api/v1/assistant/automations", s.requireAssistant(s.handleAutomationSave))
-	mux.HandleFunc("POST /api/v1/assistant/automations/preview", s.requireAssistant(s.handleAutomationPreview))
-	mux.HandleFunc("DELETE /api/v1/assistant/automations/{automation}", s.requireAssistant(s.handleAutomationDelete))
-	mux.HandleFunc("POST /api/v1/assistant/automations/{automation}/run", s.requireAssistant(s.handleAutomationRun))
-	mux.HandleFunc("GET /api/v1/assistant/status", s.requireUser(s.handleAssistantStatus))
-	mux.HandleFunc("GET /api/v1/assistant", s.requireAdmin(s.handleAssistant))
-	mux.HandleFunc("PUT /api/v1/assistant", s.requireAdmin(s.handleAssistantChange))
-	mux.HandleFunc("GET /api/v1/assistant/prompt", s.requireAdmin(s.handleAgentPrompt))
-	mux.HandleFunc("POST /api/v1/assistant/probe", s.requireAdmin(s.handleAgentProbe))
-	mux.HandleFunc("POST /api/v1/assistant/chats/{id}/control", s.requireAssistant(s.handleAgentControl))
-	mux.HandleFunc("PUT /api/v1/assistant/chats/{id}/schedule", s.requireAssistant(s.handleAgentSchedule))
-	mux.HandleFunc("GET /api/v1/assistant/chats/{id}/diagnostics", s.requireAssistant(s.handleAgentDiagnostics))
-	mux.HandleFunc("POST /api/v1/assistant/models", s.requireAdmin(s.handleAssistantModels))
-	mux.HandleFunc("POST /api/v1/assistant/models/pull", s.requireAdmin(s.handleAssistantPull))
-	mux.HandleFunc("POST /api/v1/assistant/models/delete", s.requireAdmin(s.handleAssistantModelDelete))
-	mux.HandleFunc("GET /api/v1/assistant/ollama-apps", s.requireAdmin(s.handleAssistantOllamaApps))
-	mux.HandleFunc("GET /api/v1/assistant/ollama-setup", s.requireAdmin(s.handleAssistantOllamaSetup))
-	mux.HandleFunc("GET /api/v1/assistant/models", s.requireAssistant(s.handleAssistantChatModels))
-	mux.HandleFunc("GET /api/v1/assistant/chats", s.requireAssistant(s.handleAssistantChats))
-	mux.HandleFunc("POST /api/v1/assistant/chats", s.requireAssistant(s.handleAssistantChatCreate))
-	// The buttons of a notification: the one-time token is the permission.
-	mux.HandleFunc("POST /api/v1/assistant/push/{token}/{decision}", s.handlePushDecision)
-	mux.HandleFunc("DELETE /api/v1/assistant/chats", s.requireAssistant(s.handleAssistantChatsDelete))
-	mux.HandleFunc("GET /api/v1/assistant/chats/{id}", s.requireAssistant(s.handleAssistantChatGet))
-	mux.HandleFunc("PUT /api/v1/assistant/chats/{id}", s.requireAssistant(s.handleAssistantChatRename))
-	mux.HandleFunc("DELETE /api/v1/assistant/chats/{id}", s.requireAssistant(s.handleAssistantChatDelete))
-	mux.HandleFunc("POST /api/v1/assistant/chats/{id}/messages", s.requireAssistant(s.handleAssistantMessage))
-	mux.HandleFunc("POST /api/v1/assistant/chats/{id}/regenerate", s.requireAssistant(s.handleAssistantRegenerate))
-	mux.HandleFunc("POST /api/v1/assistant/chats/{id}/actions/{action}", s.requireAssistant(s.handleAssistantAction))
-	// What the assistant writes and moves in the file manager, once confirmed.
-	mux.HandleFunc("POST /api/v1/assistant/files/edit", s.requireAssistant(s.handleDocumentEdit))
-	mux.HandleFunc("POST /api/v1/assistant/files/write", s.requireAssistant(s.handleAssistantWrite))
-	mux.HandleFunc("POST /api/v1/assistant/files/move", s.requireAssistant(s.handleAssistantMove))
 
 	// Plugins become part of the system: administrators only.
 	mux.HandleFunc("GET /api/v1/plugins/tailscale", s.requireAdmin(s.handleTailscale))
@@ -932,7 +873,7 @@ func (s *Server) authenticate(r *http.Request) (auth.User, bool) {
 		return s.activeUser(name)
 	}
 	// Only in-process requests can carry this unexported context key.
-	if name, ok := r.Context().Value(agentIdentity{}).(string); ok {
+	if name, ok := r.Context().Value(inProcessIdentity{}).(string); ok {
 		return s.activeUser(name)
 	}
 	// Signed by another node of the cluster on behalf of this account.

@@ -54,7 +54,7 @@ func (s *Server) handleFirewallChange(w http.ResponseWriter, r *http.Request) {
 	// The assistant has no address of a web session to keep in; it changes
 	// rules only, never the switch, and a person confirms in the web UI.
 	var err error
-	if _, agent := r.Context().Value(agentIdentity{}).(string); agent {
+	if _, agent := r.Context().Value(inProcessIdentity{}).(string); agent {
 		err = s.opts.Firewall.ChangeFromAssistant(r.Context(), cfg)
 	} else {
 		err = s.opts.Firewall.Change(r.Context(), cfg, remoteIP(r))

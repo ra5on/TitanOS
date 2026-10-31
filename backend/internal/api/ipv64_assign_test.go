@@ -123,7 +123,7 @@ func TestIPv64Assignments(t *testing.T) {
 	if res, _ := ts.request("PUT", "/api/v1/ipv64/assignments/nas.example.org", map[string]string{"target": "nas"}); res.StatusCode != http.StatusNotFound {
 		t.Fatalf("foreign domain: %d", res.StatusCode)
 	}
-	req := httptest.NewRequest("DELETE", "/api/v1/ipv64/assignments/nas.ipv64.de", nil).WithContext(context.WithValue(context.Background(), agentIdentity{}, "alex"))
+	req := httptest.NewRequest("DELETE", "/api/v1/ipv64/assignments/nas.ipv64.de", nil).WithContext(context.WithValue(context.Background(), inProcessIdentity{}, "alex"))
 	rec := httptest.NewRecorder()
 	ts.server.ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {

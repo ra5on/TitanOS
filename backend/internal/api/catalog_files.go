@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,17 +14,16 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/ra5on/TitanOS/backend/internal/assistant"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/office"
+	"github.com/ra5on/TitanOS/backend/internal/toolcatalog"
 )
 
-// Working with files for the assistant: writing documents (text, Word,
-// Excel, PDF), moving many files at once, copying between roots and
-// searching. Writing and moving run through the routes below, which the
-// browser calls once the person confirms the card; they work with the
-// rights of the account like the file manager.
+// Working with files over MCP: writing documents (text, Word, Excel, PDF),
+// moving many files at once, copying between roots and searching. Writing
+// and moving run through the routes below, with the rights of the account
+// like the file manager.
 
 // formats are what file_write makes, by file extension.
 var formats = map[string]string{
@@ -86,21 +84,21 @@ func normalizeWrite(req *writeRequest) error {
 	}
 	want, known := formatExtension[req.Format]
 	if !known {
-		return assistant.Errorf("format must be text, markdown, csv, json, docx, xlsx or pdf")
+		return toolcatalog.Errorf("format must be text, markdown, csv, json, docx, xlsx or pdf")
 	}
 	if ext == "" {
 		req.Path += want
 	} else if formats[ext] != req.Format && !(req.Format == "text" && formats[ext] != "") {
-		return assistant.Errorf("the name %s does not fit the format %s; use the extension %s", path.Base(req.Path), req.Format, want)
+		return toolcatalog.Errorf("the name %s does not fit the format %s; use the extension %s", path.Base(req.Path), req.Format, want)
 	}
 	if len(req.Content) > maxDocument {
-		return assistant.Errorf("the content is too large (at most 4 MB)")
+		return toolcatalog.Errorf("the content is too large (at most 4 MB)")
 	}
 	return nil
 }
 
-func (s *Server) fileTools(user auth.User) []assistant.Tool {
-	read := func(name, description string, parameters map[string]any, call func(context.Context, json.RawMessage) (any, error)) assistant.Tool {
+func (s *Server) fileTools(user auth.User) []toolcatalog.Tool {
+	read := func(name, description string, parameters map[string]any, call func(context.Context, json.RawMessage) (any, error)) toolcatalog.Tool {
 		return reading(name, description, parameters, true, call)
 	}
 	moves := map[string]any{"type": "array", "maxItems": 500, "description": "The moves, each from and to a path inside the root.",
@@ -110,28 +108,28 @@ func (s *Server) fileTools(user auth.User) []assistant.Tool {
 			"name": str("Name of the sheet."), "header": map[string]any{"type": "boolean"},
 			"rows": map[string]any{"type": "array", "items": map[string]any{"type": "array"}},
 		}}}
-	return []assistant.Tool{
+	return []toolcatalog.Tool{
 		read("document_read", "Read a PDF page range with source page numbers. Up to 20 pages and 50 MiB per call. Empty/scanned pages need OCR; missing text is not proof of missing content.", schema(map[string]any{"root": str("Exact file root"), "path": str("PDF path"), "ocr": map[string]any{"type": "boolean", "description": "Explicit OCR for scans, at most five pages; requires OCR setting"}, "first": map[string]any{"type": "integer", "minimum": 1, "maximum": 10000}, "last": map[string]any{"type": "integer", "minimum": 1, "maximum": 10000}}, "root", "path", "first", "last"), func(ctx context.Context, args json.RawMessage) (any, error) {
 			var q struct {
 				Root, Path  string
 				OCR         bool
 				First, Last int
 			}
-			if err := assistant.DecodeArgs(args, &q); err != nil {
+			if err := toolcatalog.DecodeArgs(args, &q); err != nil {
 				return nil, err
 			}
-			root, err := s.assistantRoot(user, q.Root)
+			root, err := s.catalogRoot(user, q.Root)
 			if err != nil {
 				return nil, err
 			}
 			if hiddenPath(q.Path) {
-				return nil, assistant.ErrInvalid
+				return nil, toolcatalog.ErrInvalid
 			}
 			return s.readPDF(ctx, root, q.Path, q.First, q.Last, q.OCR)
 		}),
 		read("files_search", "Search files recursively inside one exact root returned by files_list. For photos use extension=images and omit query; query matches file names literally, not file types. Repeat for other accessible roots as needed.",
 			schema(map[string]any{"root": str("Root ID such as share/Media."), "query": str("Part of the name."), "path": str("Folder to search in, empty for the whole root."), "extension": str("File extension, comma-separated extensions, or images for all common photo/image formats."), "offset": map[string]any{"type": "integer", "minimum": 0, "description": "Next result offset from previous response."}}, "root"),
-			s.assistantFilesSearch(user)),
+			s.catalogFilesSearch(user)),
 		actionTool("file_write", "Propose to write a file: plain text, Markdown, CSV, JSON, or a Word (.docx), Excel (.xlsx) or PDF document. For docx and pdf, write the content as Markdown (headings, lists, tables, bold, italic). For xlsx, give sheets or CSV content.",
 			map[string]any{"root": str("Root ID such as share/Documents."), "path": str("Path of the file inside the root; missing folders are created."),
 				"format":  enum("Format; taken from the extension if left out.", "text", "markdown", "csv", "json", "docx", "xlsx", "pdf"),
@@ -147,37 +145,10 @@ func (s *Server) fileTools(user auth.User) []assistant.Tool {
 	}
 }
 
-func (s *Server) taskTool() assistant.Tool {
-	return actionTool("start_task", "Propose a task with several changes as a plan the person approves once. After approval, the actions of this task run without asking again, except destructive ones. Use it before sorting or renaming many files, writing several documents, setting up an app or cleaning up.",
-		map[string]any{"title": str("What the task does, in one line."), "steps": map[string]any{"type": "array", "minItems": 1, "maxItems": 30, "items": map[string]any{"type": "string"}, "description": "The steps, each in one short line."}},
-		[]string{"title", "steps"},
-		func(ctx context.Context, args json.RawMessage) (*assistant.Action, error) {
-			var req struct {
-				Title string
-				Steps []string
-			}
-			if err := assistant.DecodeArgs(args, &req); err != nil {
-				return nil, err
-			}
-			req.Title = strings.TrimSpace(req.Title)
-			if req.Title == "" || len(req.Steps) == 0 || len(req.Steps) > 30 {
-				return nil, assistant.Errorf("a task needs a title and 1 to 30 steps")
-			}
-			for i, step := range req.Steps {
-				if r := []rune(strings.TrimSpace(step)); len(r) > 300 {
-					req.Steps[i] = string(r[:300]) + " …"
-				}
-			}
-			a := card("task", map[string]string{"title": req.Title}, "", "", nil)
-			a.Path, a.Steps = "", req.Steps
-			return a, nil
-		})
-}
-
 func (s *Server) planWrite(user auth.User) plan {
-	return func(ctx context.Context, args json.RawMessage) (*assistant.Action, error) {
+	return func(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
 		var req writeRequest
-		if err := assistant.DecodeArgs(args, &req); err != nil {
+		if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 			return nil, err
 		}
 		if err := normalizeWrite(&req); err != nil {
@@ -189,16 +160,16 @@ func (s *Server) planWrite(user auth.User) plan {
 		}
 		req.Path = p
 		if _, err := req.render(); err != nil {
-			return nil, assistant.Errorf("%v", err)
+			return nil, toolcatalog.Errorf("%v", err)
 		}
-		root, _ := s.assistantRoot(user, req.Root)
+		root, _ := s.catalogRoot(user, req.Root)
 		exists := false
 		if f, _, err := s.opts.Files.Open(root, p); err == nil {
 			f.Close()
 			exists = true
 		}
 		if exists && !req.Replace {
-			return nil, assistant.Errorf("%s exists; set replace to true to replace it (the old version is kept as .prev), or choose another name", p)
+			return nil, toolcatalog.Errorf("%s exists; set replace to true to replace it (the old version is kept as .prev), or choose another name", p)
 		}
 		preview := req.Content
 		if req.Format == "xlsx" && len(req.Sheets) > 0 {
@@ -210,9 +181,9 @@ func (s *Server) planWrite(user auth.User) plan {
 		}
 		params := map[string]string{"root": req.Root, "path": p, "format": req.Format, "preview": preview}
 		if exists {
-			return withLevel(card("file.replace", params, "POST", "/assistant/files/write", req), assistant.LevelDanger, "", ""), nil
+			return withLevel(card("file.replace", params, "POST", "/files/write-document", req), toolcatalog.LevelDanger, "", ""), nil
 		}
-		return card("file.write", params, "POST", "/assistant/files/write", req), nil
+		return card("file.write", params, "POST", "/files/write-document", req), nil
 	}
 }
 
@@ -225,13 +196,13 @@ type moveRequest struct {
 }
 
 func (s *Server) planMoves(user auth.User) plan {
-	return func(ctx context.Context, args json.RawMessage) (*assistant.Action, error) {
+	return func(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
 		var req moveRequest
-		if err := assistant.DecodeArgs(args, &req); err != nil {
+		if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 			return nil, err
 		}
 		if len(req.Moves) == 0 || len(req.Moves) > 500 {
-			return nil, assistant.Errorf("give 1 to 500 moves")
+			return nil, toolcatalog.Errorf("give 1 to 500 moves")
 		}
 		var lines []string
 		for i := range req.Moves {
@@ -252,22 +223,22 @@ func (s *Server) planMoves(user auth.User) plan {
 			lines = append(lines, fmt.Sprintf("… (%d more)", len(req.Moves)-len(lines)))
 		}
 		return card("files.move", map[string]string{"root": req.Root, "count": fmt.Sprint(len(req.Moves)), "preview": strings.Join(lines, "\n")},
-			"POST", "/assistant/files/move", req), nil
+			"POST", "/files/move-many", req), nil
 	}
 }
 
 func (s *Server) planCopy(user auth.User) plan {
-	return func(ctx context.Context, args json.RawMessage) (*assistant.Action, error) {
+	return func(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
 		var req struct {
 			Root, ToRoot, ToDir string
 			Paths               []string
 			Move                bool
 		}
-		if err := assistant.DecodeArgs(args, &req); err != nil {
+		if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 			return nil, err
 		}
 		if len(req.Paths) == 0 || len(req.Paths) > 500 {
-			return nil, assistant.Errorf("give 1 to 500 paths")
+			return nil, toolcatalog.Errorf("give 1 to 500 paths")
 		}
 		for i, p := range req.Paths {
 			clean, err := s.fileTarget(user, req.Root, p, req.Move)
@@ -276,16 +247,16 @@ func (s *Server) planCopy(user auth.User) plan {
 			}
 			req.Paths[i] = clean
 		}
-		dst, err := s.assistantRoot(user, req.ToRoot)
+		dst, err := s.catalogRoot(user, req.ToRoot)
 		if err != nil {
 			return nil, err
 		}
 		if !dst.Writable {
-			return nil, assistant.Errorf("this account may not write in %s", dst.Name)
+			return nil, toolcatalog.Errorf("this account may not write in %s", dst.Name)
 		}
 		dir := strings.TrimPrefix(path.Clean("/"+req.ToDir), "/")
 		if hiddenPath(dir) {
-			return nil, assistant.Errorf("invalid folder %q", req.ToDir)
+			return nil, toolcatalog.Errorf("invalid folder %q", req.ToDir)
 		}
 		key := "files.copy"
 		if req.Move {
@@ -297,26 +268,26 @@ func (s *Server) planCopy(user auth.User) plan {
 	}
 }
 
-func (s *Server) assistantFilesSearch(user auth.User) func(context.Context, json.RawMessage) (any, error) {
+func (s *Server) catalogFilesSearch(user auth.User) func(context.Context, json.RawMessage) (any, error) {
 	return func(ctx context.Context, args json.RawMessage) (any, error) {
 		var req struct {
 			Root, Query, Path, Extension string
 			Offset                       int
 		}
-		if err := assistant.DecodeArgs(args, &req); err != nil {
+		if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 			return nil, err
 		}
-		root, err := s.assistantRoot(user, req.Root)
+		root, err := s.catalogRoot(user, req.Root)
 		if err != nil {
 			return nil, err
 		}
 		if hiddenPath(req.Path) {
-			return nil, assistant.Errorf("this folder is not shown to the assistant")
+			return nil, toolcatalog.Errorf("this folder is not shown over MCP")
 		}
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 		if req.Offset < 0 {
-			return nil, assistant.ErrInvalid
+			return nil, toolcatalog.ErrInvalid
 		}
 		extension := strings.ToLower(strings.TrimSpace(req.Extension))
 		if extension == "images" || extension == "photos" {
@@ -328,7 +299,7 @@ func (s *Server) assistantFilesSearch(user auth.User) func(context.Context, json
 		}
 		result, err := s.opts.Files.Search(ctx, root, opt)
 		if err != nil {
-			return nil, assistantFileError(err)
+			return nil, catalogFileError(err)
 		}
 		found := []files.FoundEntry{}
 		for _, e := range result.Entries {
@@ -366,9 +337,8 @@ func (s *Server) readDocument(root files.Root, p string) (string, error) {
 	return office.Text(p, data)
 }
 
-// handleAssistantWrite writes a file the assistant made, once the person
-// confirmed it.
-func (s *Server) handleAssistantWrite(w http.ResponseWriter, r *http.Request) {
+// handleWriteDocument writes a file that an MCP client made.
+func (s *Server) handleWriteDocument(w http.ResponseWriter, r *http.Request) {
 	var req writeRequest
 	r.Body = http.MaxBytesReader(w, r.Body, 2*maxDocument)
 	if !readJSONBody(w, r, &req) {
@@ -396,13 +366,13 @@ func (s *Server) handleAssistantWrite(w http.ResponseWriter, r *http.Request) {
 		writeFileError(w, err)
 		return
 	}
-	slog.Info("file written by the assistant", "root", root.ID, "path", req.Path, "format", req.Format, "bytes", len(data), "by", user.Name, "ip", remoteIP(r))
+	slog.Info("file written over MCP", "root", root.ID, "path", req.Path, "format", req.Format, "bytes", len(data), "by", user.Name, "ip", remoteIP(r))
 	writeJSON(w, http.StatusCreated, map[string]any{"root": root.ID, "path": req.Path, "bytes": len(data), "sha256": fmt.Sprintf("%x", sha256.Sum256(data))})
 }
 
-// handleAssistantMove moves many files within one root, creating missing
+// handleMoveMany moves many files within one root, creating missing
 // folders. It stops at the first that fails and says how far it got.
-func (s *Server) handleAssistantMove(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleMoveMany(w http.ResponseWriter, r *http.Request) {
 	var req moveRequest
 	if !readJSON(w, r, &req) {
 		return
@@ -440,60 +410,6 @@ func (s *Server) handleAssistantMove(w http.ResponseWriter, r *http.Request) {
 		}
 		done++
 	}
-	slog.Info("files moved by the assistant", "root", root.ID, "count", done, "by", user.Name, "ip", remoteIP(r))
+	slog.Info("files moved in one batch", "root", root.ID, "count", done, "by", user.Name, "ip", remoteIP(r))
 	writeJSON(w, http.StatusOK, map[string]any{"moved": done})
-}
-
-// nasAttachment reads a file of the file manager as an attachment: an
-// image as is, Word and Excel as text, any other as text if it is one.
-func (s *Server) nasAttachment(user auth.User, a assistant.Attachment) (assistant.Attachment, error) {
-	root, err := s.assistantRoot(user, a.Root)
-	if err != nil || hiddenPath(a.Path) {
-		return a, errors.New("no such file")
-	}
-	name := path.Base(a.Path)
-	ext := strings.ToLower(path.Ext(name))
-	switch ext {
-	case ".pdf":
-		reading, err := s.readPDF(context.Background(), root, a.Path, 1, 20, false)
-		if err != nil {
-			return a, err
-		}
-		data, _ := json.Marshal(reading)
-		if len(data) > assistant.MaxTextAttachment {
-			return a, errors.New("PDF excerpt too large; use document_read for smaller page ranges")
-		}
-		return assistant.Attachment{Name: name, Kind: "text", Text: string(data)}, nil
-	case ".docx", ".xlsx":
-		text, err := s.readDocument(root, a.Path)
-		if err != nil {
-			return a, err
-		}
-		if len(text) > assistant.MaxTextAttachment {
-			text = text[:assistant.MaxTextAttachment]
-		}
-		return assistant.Attachment{Name: name, Kind: "text", Text: strings.ToValidUTF8(text, "")}, nil
-	case ".png", ".jpg", ".jpeg", ".webp", ".gif":
-		f, info, err := s.opts.Files.Open(root, a.Path)
-		if err != nil {
-			return a, err
-		}
-		defer f.Close()
-		if info.Size() > assistant.MaxImageAttachment {
-			return a, errors.New("the image is larger than 4 MB")
-		}
-		data, err := io.ReadAll(f)
-		if err != nil {
-			return a, err
-		}
-		return assistant.Attachment{Name: name, Kind: "image", Image: base64.StdEncoding.EncodeToString(data)}, nil
-	}
-	text, err := s.opts.Files.ReadText(root, a.Path)
-	if err != nil {
-		return a, fmt.Errorf("only text, PDF, Word, Excel and image files can be attached: %w", err)
-	}
-	if len(text.Content) > assistant.MaxTextAttachment {
-		return a, errors.New("the file is larger than 256 KiB")
-	}
-	return assistant.Attachment{Name: name, Kind: "text", Text: text.Content}, nil
 }

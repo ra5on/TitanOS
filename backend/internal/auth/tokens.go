@@ -18,7 +18,16 @@ import (
 
 const tokenFile = "users/api-tokens.json"
 
-var TokenScopes = []string{"system:read", "files:read", "files:write", "docker:read", "docker:write", "vms:read", "vms:write", "mcp"}
+// TokenScopes are the scopes a token can have. system:write lets MCP
+// manage the NAS (storage, shares, backups, accounts, plugins, firewall,
+// updates, power, Home Assistant); older versions ignore it.
+var TokenScopes = []string{"system:read", "system:write", "files:read", "files:write", "docker:read", "docker:write", "vms:read", "vms:write", "mcp"}
+
+// AdminScope reports whether only owners and administrators may hold a scope.
+func AdminScope(scope string) bool {
+	return scope == "system:write" || strings.HasPrefix(scope, "docker:") || strings.HasPrefix(scope, "vms:")
+}
+
 var ErrInvalidToken = errors.New("invalid token name, scopes or token limit")
 
 type APIToken struct {
@@ -100,7 +109,7 @@ func (t *Tokens) Create(user User, name string, scopes []string) (APIToken, stri
 	}
 	scopes = slices.Compact(slices.Sorted(slices.Values(scopes)))
 	for _, scope := range scopes {
-		if !slices.Contains(TokenScopes, scope) || (!user.Role.CanAdminister() && (strings.HasPrefix(scope, "docker:") || strings.HasPrefix(scope, "vms:"))) {
+		if !slices.Contains(TokenScopes, scope) || (!user.Role.CanAdminister() && AdminScope(scope)) {
 			return APIToken{}, "", ErrInvalidToken
 		}
 	}

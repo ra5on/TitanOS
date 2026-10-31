@@ -1,4 +1,4 @@
-package assistant
+package toolcatalog
 
 import (
 	"io/fs"
@@ -10,8 +10,8 @@ import (
 )
 
 // Manual is the documentation of TitanOS (README and docs/*.md), built
-// into titand with the web UI, so that the assistant answers questions on
-// how to set something up from it instead of guessing.
+// into titand with the web UI, so that MCP clients can look up
+// how to set something up instead of guessing.
 type Manual struct {
 	files fs.FS
 }

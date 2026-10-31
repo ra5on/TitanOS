@@ -366,9 +366,6 @@ func (s *Server) clusterApplied(before auth.User, existed bool, after auth.User,
 		s.sessions.DeleteUser(name, "")
 		s.prefs.forget(name)
 		s.opts.Notify.ForgetPersonal(name)
-		if err := s.chats.ForgetUser(name); err != nil {
-			slog.Error("remove chats of the account", "user", name, "err", err)
-		}
 		if err := s.opts.Shares.ForgetUser(name); err != nil {
 			slog.Error("remove account from shares", "user", name, "err", err)
 		}

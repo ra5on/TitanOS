@@ -79,7 +79,7 @@ func (a *ipv64Area) testAllowed(key string, now time.Time) bool {
 func (s *Server) browserOnly(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		_, token := r.Context().Value(apiTokenIdentity{}).(string)
-		_, agent := r.Context().Value(agentIdentity{}).(string)
+		_, agent := r.Context().Value(inProcessIdentity{}).(string)
 		if token || agent {
 			writeError(w, http.StatusForbidden, "browser_session_required", "this needs a web session")
 			return

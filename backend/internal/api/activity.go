@@ -135,7 +135,7 @@ func noteActivity(r *http.Request, user auth.User) {
 		rec.via = activity.ViaMCP
 	} else if _, ok := r.Context().Value(apiTokenIdentity{}).(string); ok {
 		rec.via = activity.ViaToken
-	} else if _, ok := r.Context().Value(agentIdentity{}).(string); ok {
+	} else if _, ok := r.Context().Value(inProcessIdentity{}).(string); ok {
 		rec.via = activity.ViaAgent
 	} else if viaCluster(r) {
 		rec.via = activity.ViaCluster

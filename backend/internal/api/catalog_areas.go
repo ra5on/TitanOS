@@ -4,19 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"path"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/ra5on/TitanOS/backend/internal/assistant"
 	"github.com/ra5on/TitanOS/backend/internal/backup"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/firewall"
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
+	"github.com/ra5on/TitanOS/backend/internal/toolcatalog"
 )
 
 // Tools of the areas added on 29.10.2026 (decision of the owner): plugins,
@@ -30,15 +29,15 @@ import (
 // plugins by name from the signed catalog), changing the network,
 // switching the firewall on or off, confirming a change on trial.
 
-func (s *Server) areaTools() []assistant.Tool {
+func (s *Server) areaTools() []toolcatalog.Tool {
 	mounted := func() []string { return s.opts.Storage.Mounted() }
-	return []assistant.Tool{
+	return []toolcatalog.Tool{
 		// plugins
 		reading("plugins_list", "Installed plugins (version, on/off, active, official or community, problem, an update found in a share) and official plugins that can be installed from the signed catalog of this TitanOS version. refresh loads the catalog anew from the release and looks for plugin files in the shares.",
 			schema(map[string]any{"refresh": map[string]any{"type": "boolean", "description": "Load the catalog anew (takes a moment)."}}), true,
 			func(ctx context.Context, args json.RawMessage) (any, error) {
 				var req struct{ Refresh bool }
-				if err := assistant.DecodeArgs(args, &req); err != nil {
+				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
 				if req.Refresh {
@@ -53,39 +52,39 @@ func (s *Server) areaTools() []assistant.Tool {
 		actionTool("plugin_install", "Propose to install an official plugin by its name from plugins_list (installable true). Community plugins, files and addresses are never installed by the assistant. A plugin becomes part of the system with full rights.",
 			map[string]any{"name": str("Name as plugins_list shows it."), "volume": str("Volume for the plugin files; only needed while no plugin is installed yet."),
 				"activate": map[string]any{"type": "boolean", "description": "Switch it on right away (default true)."}}, []string{"name"},
-			func(ctx context.Context, args json.RawMessage) (*assistant.Action, error) {
+			func(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
 				var req struct {
 					Name, Volume string
 					Activate     *bool
 				}
-				if err := assistant.DecodeArgs(args, &req); err != nil {
+				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
 				return planPluginInstall(s.opts.Plugins.Status(mounted()), mounted(), req.Name, req.Volume, req.Activate)
 			}),
 		actionTool("plugin_switch", "Propose to switch an installed plugin on or off.",
 			map[string]any{"name": str("Name as plugins_list shows it."), "action": enum("What to do.", "enable", "disable")}, []string{"name", "action"},
-			func(ctx context.Context, args json.RawMessage) (*assistant.Action, error) {
+			func(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
 				var req struct{ Name, Action string }
-				if err := assistant.DecodeArgs(args, &req); err != nil {
+				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
 				return planPluginSwitch(s.opts.Plugins.Status(mounted()), req.Name, req.Action)
 			}),
 		actionTool("plugin_update", "Propose to replace an installed plugin with the newer version plugins_list names under update (found in a share). A version that is not official needs the strongest confirmation.",
 			map[string]any{"name": str("Name as plugins_list shows it.")}, []string{"name"},
-			func(ctx context.Context, args json.RawMessage) (*assistant.Action, error) {
+			func(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
 				var req struct{ Name string }
-				if err := assistant.DecodeArgs(args, &req); err != nil {
+				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
 				return planPluginUpdate(s.opts.Plugins.Status(mounted()), req.Name)
 			}),
 		actionTool("plugin_remove", "Propose to remove an installed plugin: it is switched off and its files are deleted.",
 			map[string]any{"name": str("Name as plugins_list shows it.")}, []string{"name"},
-			func(ctx context.Context, args json.RawMessage) (*assistant.Action, error) {
+			func(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
 				var req struct{ Name string }
-				if err := assistant.DecodeArgs(args, &req); err != nil {
+				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
 				return planPluginRemove(s.opts.Plugins.Status(mounted()), req.Name)
@@ -109,9 +108,9 @@ func (s *Server) areaTools() []assistant.Tool {
 				"comment":     map[string]any{"type": "string", "maxLength": 80, "description": "Short note shown with the rule."},
 				"position":    map[string]any{"type": "integer", "minimum": 0, "description": "Where in the cell, 0 is first; at the end if left out."},
 			}, []string{"from", "to", "action"},
-			func(ctx context.Context, args json.RawMessage) (*assistant.Action, error) {
+			func(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
 				var req ruleRequest
-				if err := assistant.DecodeArgs(args, &req); err != nil {
+				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
 				a, cfg, err := planFirewallRuleAdd(s.opts.Firewall.Status(""), req)
@@ -123,12 +122,12 @@ func (s *Server) areaTools() []assistant.Tool {
 		actionTool("firewall_rule_remove", "Propose to remove one rule of a cell of the firewall, by its number in firewall_status. A change of a switched-on firewall runs 2 minutes on trial; a person confirms it in the web UI.",
 			map[string]any{"from": str("Source zone ID."), "to": str("Destination: nas, apps or a zone ID."),
 				"index": map[string]any{"type": "integer", "minimum": 0, "description": "Number of the rule in the cell, as firewall_status shows it."}}, []string{"from", "to", "index"},
-			func(ctx context.Context, args json.RawMessage) (*assistant.Action, error) {
+			func(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
 				var req struct {
 					From, To string
 					Index    int
 				}
-				if err := assistant.DecodeArgs(args, &req); err != nil {
+				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
 				a, cfg, err := planFirewallRuleRemove(s.opts.Firewall.Status(""), req.From, req.To, req.Index)
@@ -139,9 +138,9 @@ func (s *Server) areaTools() []assistant.Tool {
 			}),
 		actionTool("firewall_unblock", "Propose to release an address the automatic blocking locked out after failed logins.",
 			map[string]any{"address": str("Address as firewall_status lists it under blocked.")}, []string{"address"},
-			func(ctx context.Context, args json.RawMessage) (*assistant.Action, error) {
+			func(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
 				var req struct{ Address string }
-				if err := assistant.DecodeArgs(args, &req); err != nil {
+				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
 				return planFirewallUnblock(s.opts.Firewall.Status(""), req.Address)
@@ -151,12 +150,12 @@ func (s *Server) areaTools() []assistant.Tool {
 			schema(map[string]any{"job": str("ID as backup_status shows it.")}, "job"), false,
 			func(ctx context.Context, args json.RawMessage) (any, error) {
 				var req struct{ Job string }
-				if err := assistant.DecodeArgs(args, &req); err != nil {
+				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
 				list, err := s.opts.Backup.Snapshots(ctx, req.Job)
 				if err != nil {
-					return nil, assistant.Errorf("saved states of %q unavailable: %v", req.Job, err)
+					return nil, toolcatalog.Errorf("saved states of %q unavailable: %v", req.Job, err)
 				}
 				return map[string]any{"job": req.Job, "snapshots": list, "observedAt": time.Now()}, nil
 			}),
@@ -169,14 +168,14 @@ func (s *Server) areaTools() []assistant.Tool {
 					Job, Snapshot, Path string
 					Offset              int
 				}
-				if err := assistant.DecodeArgs(args, &req); err != nil {
+				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
 				bounded, cancel := context.WithTimeout(ctx, 2*time.Minute)
 				defer cancel()
 				entries, total, cut, err := s.opts.Backup.Files(bounded, req.Job, req.Snapshot, req.Path, req.Offset)
 				if err != nil {
-					return nil, assistant.Errorf("folder of the saved state unavailable: %v", err)
+					return nil, toolcatalog.Errorf("folder of the saved state unavailable: %v", err)
 				}
 				if entries == nil {
 					entries = []backup.Entry{}
@@ -189,12 +188,12 @@ func (s *Server) areaTools() []assistant.Tool {
 			}),
 		actionTool("backup_check", "Propose to check the repository of a backup job in the background (restic check); readData reads back that percent of the data. The result is lastCheck/checkError in backup_status.",
 			map[string]any{"job": str("ID as backup_status shows it."), "readData": map[string]any{"type": "integer", "minimum": 0, "maximum": 100, "description": "Percent of the data to read back, 0 checks the structure only."}}, []string{"job"},
-			func(ctx context.Context, args json.RawMessage) (*assistant.Action, error) {
+			func(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
 				var req struct {
 					Job      string
 					ReadData int
 				}
-				if err := assistant.DecodeArgs(args, &req); err != nil {
+				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
 				return planBackupCheck(s.opts.Backup.List(), req.Job, req.ReadData)
@@ -202,21 +201,21 @@ func (s *Server) areaTools() []assistant.Tool {
 		actionTool("backup_restore_files", "Propose to restore files and folders of a saved state into a new folder restored/<job>-<time> on a volume. Nothing is overwritten; the shares stay as they are.",
 			map[string]any{"job": str("ID as backup_status shows it."), "snapshot": str("ID from backup_snapshots."), "volume": str("Volume for the new folder."),
 				"paths": map[string]any{"type": "array", "minItems": 1, "maxItems": 200, "items": map[string]any{"type": "string"}, "description": "Absolute paths in the saved state from backup_files."}}, []string{"job", "snapshot", "volume", "paths"},
-			func(ctx context.Context, args json.RawMessage) (*assistant.Action, error) {
+			func(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
 				var req struct {
 					Job, Snapshot, Volume string
 					Paths                 []string
 				}
-				if err := assistant.DecodeArgs(args, &req); err != nil {
+				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
 				return planBackupRestore(s.opts.Backup.List(), s.opts.Storage.Mounted(), req.Job, req.Snapshot, req.Volume, req.Paths)
 			}),
 		actionTool("backup_schedule", "Propose to pause the schedule of a backup job (no more automatic runs) or to resume it.",
 			map[string]any{"job": str("ID as backup_status shows it."), "action": enum("What to do.", "pause", "resume")}, []string{"job", "action"},
-			func(ctx context.Context, args json.RawMessage) (*assistant.Action, error) {
+			func(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
 				var req struct{ Job, Action string }
-				if err := assistant.DecodeArgs(args, &req); err != nil {
+				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
 				return planBackupSchedule(s.opts.Backup.List(), req.Job, req.Action)
@@ -229,14 +228,14 @@ func (s *Server) areaTools() []assistant.Tool {
 				"time":     str("New time of the window, HH:MM; the current one if left out."),
 				"weekdays": map[string]any{"type": "array", "maxItems": 7, "items": map[string]any{"type": "integer", "minimum": 0, "maximum": 6}, "description": "New weekdays of the window, 0 is Sunday; empty means every day; the current ones if left out."}},
 			[]string{"app", "enabled"},
-			func(ctx context.Context, args json.RawMessage) (*assistant.Action, error) {
+			func(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
 				var req struct {
 					App      string
 					Enabled  bool
 					Time     *string
 					Weekdays *[]int
 				}
-				if err := assistant.DecodeArgs(args, &req); err != nil {
+				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
 				return planAutoUpdate(s.opts.Docker.AutoUpdates().Settings, s.opts.Docker.Status(ctx).Apps, req.App, req.Enabled, req.Time, req.Weekdays)
@@ -283,7 +282,7 @@ func pluginsView(st plugins.Status) map[string]any {
 		}
 		if !p.Installed && !item.Installable {
 			// A loose file in a share: shown, never installed by the assistant.
-			item.Problem = strings.TrimSpace(item.Problem + " not_installable_by_assistant")
+			item.Problem = strings.TrimSpace(item.Problem + " not_installable_over_mcp")
 		}
 		list = append(list, item)
 	}
@@ -308,24 +307,24 @@ func findPlugin(st plugins.Status, name string) (plugins.Plugin, bool) {
 	return st.Plugins[i], true
 }
 
-func planPluginInstall(st plugins.Status, mounted []string, name, volume string, activate *bool) (*assistant.Action, error) {
+func planPluginInstall(st plugins.Status, mounted []string, name, volume string, activate *bool) (*toolcatalog.Action, error) {
 	p, ok := findPlugin(st, name)
 	switch {
 	case !ok:
-		return nil, assistant.Errorf("no plugin %q; plugins_list (refresh true) shows the catalog", name)
+		return nil, toolcatalog.Errorf("no plugin %q; plugins_list (refresh true) shows the catalog", name)
 	case p.Installed:
-		return nil, assistant.Errorf("plugin %s is installed already", name)
+		return nil, toolcatalog.Errorf("plugin %s is installed already", name)
 	case !officialDownload(p):
-		return nil, assistant.CodedErrorf("plugin_not_official", "plugin %s is not an official plugin of the release catalog; the assistant installs only those, the plugin page offers the rest", name)
+		return nil, toolcatalog.CodedErrorf("plugin_not_official", "plugin %s is not an official plugin of the release catalog; the assistant installs only those, the plugin page offers the rest", name)
 	}
 	if st.Volume != "" && slices.Contains(mounted, st.Volume) {
 		if volume != "" && volume != st.Volume {
-			return nil, assistant.Errorf("plugins live on volume %s", st.Volume)
+			return nil, toolcatalog.Errorf("plugins live on volume %s", st.Volume)
 		}
 		volume = st.Volume
 	}
 	if !slices.Contains(mounted, volume) {
-		return nil, assistant.Errorf("choose a mounted volume for the plugin files: %v", mounted)
+		return nil, toolcatalog.Errorf("choose a mounted volume for the plugin files: %v", mounted)
 	}
 	on := activate == nil || *activate
 	key := "plugin.install"
@@ -333,84 +332,53 @@ func planPluginInstall(st plugins.Status, mounted []string, name, volume string,
 		key = "plugin.installOff"
 	}
 	body := map[string]any{"name": p.Name, "volume": volume, "activate": on}
-	return withLevel(card(key, map[string]string{"name": p.Name, "title": p.Title, "version": p.Version, "volume": volume}, "POST", "/plugins", body), assistant.LevelDanger, "", ""), nil
+	return withLevel(card(key, map[string]string{"name": p.Name, "title": p.Title, "version": p.Version, "volume": volume}, "POST", "/plugins", body), toolcatalog.LevelDanger, "", ""), nil
 }
 
-func planPluginSwitch(st plugins.Status, name, action string) (*assistant.Action, error) {
+func planPluginSwitch(st plugins.Status, name, action string) (*toolcatalog.Action, error) {
 	p, ok := findPlugin(st, name)
 	if !ok || !p.Installed {
-		return nil, assistant.Errorf("no installed plugin %q; plugins_list shows them", name)
+		return nil, toolcatalog.Errorf("no installed plugin %q; plugins_list shows them", name)
 	}
 	if action != "enable" && action != "disable" {
-		return nil, assistant.Errorf("action must be enable or disable")
+		return nil, toolcatalog.Errorf("action must be enable or disable")
 	}
 	if (action == "enable") == p.Enabled {
-		return nil, assistant.Errorf("plugin %s is already %sd", name, action)
+		return nil, toolcatalog.Errorf("plugin %s is already %sd", name, action)
 	}
-	return withLevel(card("plugin."+action, map[string]string{"name": p.Name, "title": p.Title}, "POST", "/plugins/"+esc(p.Name)+"/"+action, nil), assistant.LevelDanger, "", ""), nil
+	return withLevel(card("plugin."+action, map[string]string{"name": p.Name, "title": p.Title}, "POST", "/plugins/"+esc(p.Name)+"/"+action, nil), toolcatalog.LevelDanger, "", ""), nil
 }
 
-func planPluginUpdate(st plugins.Status, name string) (*assistant.Action, error) {
+func planPluginUpdate(st plugins.Status, name string) (*toolcatalog.Action, error) {
 	p, ok := findPlugin(st, name)
 	if !ok || !p.Installed {
-		return nil, assistant.Errorf("no installed plugin %q; plugins_list shows them", name)
+		return nil, toolcatalog.Errorf("no installed plugin %q; plugins_list shows them", name)
 	}
 	if p.Update == nil {
-		return nil, assistant.Errorf("no newer version of %s was found in a share; official versions come with TitanOS updates", name)
+		return nil, toolcatalog.Errorf("no newer version of %s was found in a share; official versions come with TitanOS updates", name)
 	}
 	params := map[string]string{"name": p.Name, "title": p.Title, "from": p.Version, "version": p.Update.Version}
 	body := map[string]any{"path": p.Update.Path}
 	if p.Update.Official {
-		return withLevel(card("plugin.update", params, "POST", "/plugins/"+esc(p.Name)+"/update", body), assistant.LevelDanger, "", ""), nil
+		return withLevel(card("plugin.update", params, "POST", "/plugins/"+esc(p.Name)+"/update", body), toolcatalog.LevelDanger, "", ""), nil
 	}
 	// Not signed: the plugin page asks for the name as well.
-	return withLevel(card("plugin.updateCommunity", params, "POST", "/plugins/"+esc(p.Name)+"/update", body), assistant.LevelDestroy, p.Name, "body:confirm"), nil
+	return withLevel(card("plugin.updateCommunity", params, "POST", "/plugins/"+esc(p.Name)+"/update", body), toolcatalog.LevelDestroy, p.Name, "body:confirm"), nil
 }
 
-func planPluginRemove(st plugins.Status, name string) (*assistant.Action, error) {
+func planPluginRemove(st plugins.Status, name string) (*toolcatalog.Action, error) {
 	p, ok := findPlugin(st, name)
 	if !ok || !p.Installed {
-		return nil, assistant.Errorf("no installed plugin %q; plugins_list shows them", name)
+		return nil, toolcatalog.Errorf("no installed plugin %q; plugins_list shows them", name)
 	}
-	return withLevel(card("plugin.remove", map[string]string{"name": p.Name, "title": p.Title}, "DELETE", "/plugins/"+esc(p.Name), nil), assistant.LevelDestroy, p.Name, ""), nil
-}
-
-// verifyPlugin compares the plugins after an action with what it was for.
-func verifyPlugin(a *assistant.Action, st plugins.Status) map[string]any {
-	out := map[string]any{"observedAt": time.Now(), "state": "mismatch"}
-	name := a.Params["name"]
-	p, found := findPlugin(st, name)
-	installed := found && p.Installed
-	out["plugin"] = map[string]any{"name": name, "installed": installed, "enabled": p.Enabled, "active": p.Active, "version": p.Version, "problem": p.Problem}
-	ok := false
-	switch a.Key {
-	case "plugin.install":
-		ok = installed && p.Enabled && p.Active
-	case "plugin.installOff":
-		ok = installed && !p.Enabled
-	case "plugin.enable":
-		ok = installed && p.Enabled && p.Active
-	case "plugin.disable":
-		ok = installed && !p.Enabled && !p.Active
-	case "plugin.update", "plugin.updateCommunity":
-		ok = installed && p.Version == a.Params["version"]
-	case "plugin.remove":
-		ok = !installed
-	}
-	if ok {
-		out["state"] = "verified"
-		out["next"] = "The plugin state matches the request."
-	} else {
-		out["next"] = "The plugin state does not match the request (see problem); report that, do not repeat the change on your own."
-	}
-	return out
+	return withLevel(card("plugin.remove", map[string]string{"name": p.Name, "title": p.Title}, "DELETE", "/plugins/"+esc(p.Name), nil), toolcatalog.LevelDestroy, p.Name, ""), nil
 }
 
 // --- network
 
 func (s *Server) toolNetworkDiagnostics(ctx context.Context, args json.RawMessage) (any, error) {
 	var req struct{ Network string }
-	if err := assistant.DecodeArgs(args, &req); err != nil {
+	if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 		return nil, err
 	}
 	type item struct {
@@ -428,9 +396,9 @@ func (s *Server) toolNetworkDiagnostics(ctx context.Context, args json.RawMessag
 	checks, err := s.opts.Network.Diagnostics(ctx, req.Network)
 	switch {
 	case errors.Is(err, network.ErrInvalid):
-		return nil, assistant.Errorf("no network %q; networks: %v", req.Network, known)
+		return nil, toolcatalog.Errorf("no network %q; networks: %v", req.Network, known)
 	case err != nil:
-		return nil, assistant.Errorf("diagnostics unavailable: %v", err)
+		return nil, toolcatalog.Errorf("diagnostics unavailable: %v", err)
 	}
 	failed := 0
 	for _, c := range checks {
@@ -498,15 +466,15 @@ type ruleRequest struct {
 // first has to be confirmed or undone in the web UI.
 func firewallTarget(st firewall.Status, from, to string) (firewall.Config, int, error) {
 	if st.Pending != nil {
-		return firewall.Config{}, 0, assistant.CodedErrorf("firewall_pending", "a firewall change is on trial; a person confirms or undoes it in the web UI first")
+		return firewall.Config{}, 0, toolcatalog.CodedErrorf("firewall_pending", "a firewall change is on trial; a person confirms or undoes it in the web UI first")
 	}
 	cfg := st.Config
 	if _, ok := cfg.Zone(firewall.Zone(from)); !ok {
-		return cfg, 0, assistant.Errorf("no zone %q; firewall_status lists the zones", from)
+		return cfg, 0, toolcatalog.Errorf("no zone %q; firewall_status lists the zones", from)
 	}
 	if to != firewall.ToNAS && to != firewall.ToApps {
 		if _, ok := cfg.Zone(firewall.Zone(to)); !ok || !cfg.Hosted(firewall.Zone(from)) {
-			return cfg, 0, assistant.Errorf("no cell %s → %s: destinations are nas, apps, and zones only from zones with networks behind the NAS", from, to)
+			return cfg, 0, toolcatalog.Errorf("no cell %s → %s: destinations are nas, apps, and zones only from zones with networks behind the NAS", from, to)
 		}
 	}
 	i := slices.IndexFunc(cfg.Cells, func(c firewall.Cell) bool { return string(c.From) == from && c.To == to })
@@ -551,14 +519,14 @@ func describeRule(p firewall.Policy) string {
 	return strings.Join(what, " ")
 }
 
-func firewallCard(key string, cfg firewall.Config, params map[string]string) *assistant.Action {
+func firewallCard(key string, cfg firewall.Config, params map[string]string) *toolcatalog.Action {
 	if cfg.Enabled {
 		params["trial"] = "2"
 	}
-	return withLevel(card(key, params, "PUT", "/firewall", cfg), assistant.LevelDanger, "", "")
+	return withLevel(card(key, params, "PUT", "/firewall", cfg), toolcatalog.LevelDanger, "", "")
 }
 
-func planFirewallRuleAdd(st firewall.Status, req ruleRequest) (*assistant.Action, firewall.Config, error) {
+func planFirewallRuleAdd(st firewall.Status, req ruleRequest) (*toolcatalog.Action, firewall.Config, error) {
 	cfg, i, err := firewallTarget(st, req.From, req.To)
 	if err != nil {
 		return nil, cfg, err
@@ -571,11 +539,11 @@ func planFirewallRuleAdd(st firewall.Status, req ruleRequest) (*assistant.Action
 	}
 	switch {
 	case p.Service != "" && req.To != firewall.ToNAS, p.App != "" && req.To != firewall.ToApps:
-		return nil, cfg, assistant.Errorf("a service belongs to cells to nas, an app to cells to apps")
+		return nil, cfg, toolcatalog.Errorf("a service belongs to cells to nas, an app to cells to apps")
 	case p.Destination != "" && (req.To == firewall.ToNAS || req.To == firewall.ToApps):
-		return nil, cfg, assistant.Errorf("a destination address is only for cells to a zone")
+		return nil, cfg, toolcatalog.Errorf("a destination address is only for cells to a zone")
 	case p.Service != "" && !slices.ContainsFunc(st.Services, func(s firewall.Service) bool { return s.ID == p.Service }):
-		return nil, cfg, assistant.Errorf("no service %q; firewall_status lists the services", p.Service)
+		return nil, cfg, toolcatalog.Errorf("no service %q; firewall_status lists the services", p.Service)
 	}
 	policies := cfg.Cells[i].Policies
 	at := len(policies)
@@ -587,7 +555,7 @@ func planFirewallRuleAdd(st firewall.Status, req ruleRequest) (*assistant.Action
 	return firewallCard("firewall.ruleAdd", cfg, params), cfg, nil
 }
 
-func planFirewallRuleRemove(st firewall.Status, from, to string, index int) (*assistant.Action, firewall.Config, error) {
+func planFirewallRuleRemove(st firewall.Status, from, to string, index int) (*toolcatalog.Action, firewall.Config, error) {
 	cfg, i, err := firewallTarget(st, from, to)
 	if err != nil {
 		return nil, cfg, err
@@ -595,19 +563,19 @@ func planFirewallRuleRemove(st firewall.Status, from, to string, index int) (*as
 	cfg = copyConfig(cfg)
 	policies := cfg.Cells[i].Policies
 	if index < 0 || index >= len(policies) {
-		return nil, cfg, assistant.Errorf("cell %s → %s has %d rules; firewall_status shows their numbers", from, to, len(policies))
+		return nil, cfg, toolcatalog.Errorf("cell %s → %s has %d rules; firewall_status shows their numbers", from, to, len(policies))
 	}
 	params := map[string]string{"from": from, "to": to, "rule": describeRule(policies[index]), "position": strconv.Itoa(index)}
 	cfg.Cells[i].Policies = slices.Delete(slices.Clone(policies), index, index+1)
 	return firewallCard("firewall.ruleRemove", cfg, params), cfg, nil
 }
 
-func planFirewallUnblock(st firewall.Status, address string) (*assistant.Action, error) {
+func planFirewallUnblock(st firewall.Status, address string) (*toolcatalog.Action, error) {
 	address = strings.TrimSpace(address)
 	if !slices.ContainsFunc(st.Blocked, func(b firewall.Block) bool { return b.Address == address }) {
-		return nil, assistant.Errorf("%q is not blocked; firewall_status lists the blocked addresses", address)
+		return nil, toolcatalog.Errorf("%q is not blocked; firewall_status lists the blocked addresses", address)
 	}
-	return withLevel(card("firewall.unblock", map[string]string{"address": address}, "POST", "/firewall/unblock", map[string]string{"address": address}), assistant.LevelDanger, "", ""), nil
+	return withLevel(card("firewall.unblock", map[string]string{"address": address}, "POST", "/firewall/unblock", map[string]string{"address": address}), toolcatalog.LevelDanger, "", ""), nil
 }
 
 func firewallProposalError(err error) error {
@@ -615,52 +583,15 @@ func firewallProposalError(err error) error {
 	case err == nil:
 		return nil
 	case errors.Is(err, firewall.ErrSwitchManual):
-		return assistant.CodedErrorf("firewall_switch_manual", "switching the firewall on or off is only done by a person in the web UI")
+		return toolcatalog.CodedErrorf("firewall_switch_manual", "switching the firewall on or off is only done by a person in the web UI")
 	case errors.Is(err, firewall.ErrClosesWebUI):
-		return assistant.CodedErrorf("firewall_closes_webui", "the change would close the web UI for the home network or the VPN; not proposed")
+		return toolcatalog.CodedErrorf("firewall_closes_webui", "the change would close the web UI for the home network or the VPN; not proposed")
 	case errors.Is(err, firewall.ErrPending):
-		return assistant.CodedErrorf("firewall_pending", "a firewall change is on trial; a person confirms or undoes it in the web UI first")
+		return toolcatalog.CodedErrorf("firewall_pending", "a firewall change is on trial; a person confirms or undoes it in the web UI first")
 	case errors.Is(err, firewall.ErrDisabled):
-		return assistant.CodedErrorf("read_only", "the firewall cannot be changed in development mode")
+		return toolcatalog.CodedErrorf("read_only", "the firewall cannot be changed in development mode")
 	}
-	return assistant.Errorf("%v", err)
-}
-
-// verifyFirewall reads the firewall after a change: rules of a switched-on
-// firewall are on trial until a person confirms them, which is not done.
-func verifyFirewall(a *assistant.Action, st firewall.Status) map[string]any {
-	out := map[string]any{"observedAt": time.Now(), "state": "mismatch"}
-	if a.Key == "firewall.unblock" {
-		if !slices.ContainsFunc(st.Blocked, func(b firewall.Block) bool { return b.Address == a.Params["address"] }) {
-			out["state"], out["next"] = "verified", "The address is no longer blocked."
-		} else {
-			out["next"] = "The address is still blocked."
-		}
-		return out
-	}
-	var want firewall.Config
-	b, _ := json.Marshal(a.Body)
-	if json.Unmarshal(b, &want) != nil {
-		return out
-	}
-	from, to := firewall.Zone(a.Params["from"]), a.Params["to"]
-	same := func(cfg firewall.Config) bool {
-		x, _ := json.Marshal(cfg.Cell(from, to).Policies)
-		y, _ := json.Marshal(want.Cell(from, to).Policies)
-		return string(x) == string(y)
-	}
-	switch {
-	case st.Pending != nil && same(*st.Pending):
-		out["state"] = "on_trial"
-		out["pendingSeconds"] = st.PendingSeconds
-		out["next"] = fmt.Sprintf("The rules are on trial for %d seconds. Tell the person to confirm them in the web UI (Einstellungen › Firewall), otherwise they go back. Never claim they are kept.", st.PendingSeconds)
-	case st.Pending == nil && same(st.Config):
-		out["state"] = "verified"
-		out["next"] = "The rules of the cell are stored as requested."
-	default:
-		out["next"] = "The rules of the cell differ from the request (perhaps the trial ended without confirmation). Read firewall_status."
-	}
-	return out
+	return toolcatalog.Errorf("%v", err)
 }
 
 // --- backups
@@ -673,33 +604,33 @@ func findJob(views []backup.View, id string) (backup.View, bool) {
 	return views[i], true
 }
 
-func planBackupCheck(views []backup.View, id string, readData int) (*assistant.Action, error) {
+func planBackupCheck(views []backup.View, id string, readData int) (*toolcatalog.Action, error) {
 	view, ok := findJob(views, id)
 	if !ok {
-		return nil, assistant.Errorf("no backup job %q; backup_status shows them", id)
+		return nil, toolcatalog.Errorf("no backup job %q; backup_status shows them", id)
 	}
 	if readData < 0 || readData > 100 {
-		return nil, assistant.Errorf("readData is 0 to 100")
+		return nil, toolcatalog.Errorf("readData is 0 to 100")
 	}
 	return card("backup.check", map[string]string{"name": view.Job.ID, "readData": strconv.Itoa(readData)}, "POST", "/backups/"+esc(view.Job.ID)+"/check", map[string]any{"readData": readData}), nil
 }
 
-func planBackupRestore(views []backup.View, mounted []string, id, snapshot, volume string, paths []string) (*assistant.Action, error) {
+func planBackupRestore(views []backup.View, mounted []string, id, snapshot, volume string, paths []string) (*toolcatalog.Action, error) {
 	view, ok := findJob(views, id)
 	switch {
 	case !ok:
-		return nil, assistant.Errorf("no backup job %q; backup_status shows them", id)
+		return nil, toolcatalog.Errorf("no backup job %q; backup_status shows them", id)
 	case strings.TrimSpace(snapshot) == "":
-		return nil, assistant.Errorf("snapshot is required; backup_snapshots lists them")
+		return nil, toolcatalog.Errorf("snapshot is required; backup_snapshots lists them")
 	case !slices.Contains(mounted, volume):
-		return nil, assistant.Errorf("no mounted volume %q; volumes: %v", volume, mounted)
+		return nil, toolcatalog.Errorf("no mounted volume %q; volumes: %v", volume, mounted)
 	case len(paths) == 0 || len(paths) > 200:
-		return nil, assistant.Errorf("give 1 to 200 paths")
+		return nil, toolcatalog.Errorf("give 1 to 200 paths")
 	}
 	clean := []string{}
 	for _, p := range paths {
 		if !strings.HasPrefix(p, "/") || slices.Contains(strings.Split(p, "/"), "..") || path.Clean(p) != p {
-			return nil, assistant.CodedErrorf("invalid_path", "paths are absolute paths of the saved state without ..: %q", p)
+			return nil, toolcatalog.CodedErrorf("invalid_path", "paths are absolute paths of the saved state without ..: %q", p)
 		}
 		clean = append(clean, p)
 	}
@@ -707,17 +638,17 @@ func planBackupRestore(views []backup.View, mounted []string, id, snapshot, volu
 	return card("backup.restoreFiles", params, "POST", "/backups/"+esc(view.Job.ID)+"/restore", map[string]any{"snapshot": snapshot, "volume": volume, "paths": clean}), nil
 }
 
-func planBackupSchedule(views []backup.View, id, action string) (*assistant.Action, error) {
+func planBackupSchedule(views []backup.View, id, action string) (*toolcatalog.Action, error) {
 	view, ok := findJob(views, id)
 	if !ok {
-		return nil, assistant.Errorf("no backup job %q; backup_status shows them", id)
+		return nil, toolcatalog.Errorf("no backup job %q; backup_status shows them", id)
 	}
 	if action != "pause" && action != "resume" {
-		return nil, assistant.Errorf("action must be pause or resume")
+		return nil, toolcatalog.Errorf("action must be pause or resume")
 	}
 	on := action == "resume"
 	if view.Job.Enabled == on {
-		return nil, assistant.Errorf("the schedule of %s is already %s", id, map[bool]string{true: "running", false: "paused"}[on])
+		return nil, toolcatalog.Errorf("the schedule of %s is already %s", id, map[bool]string{true: "running", false: "paused"}[on])
 	}
 	// The job as the page has it, without secrets: an empty secret keeps
 	// the stored one for the same destination.
@@ -726,26 +657,13 @@ func planBackupSchedule(views []backup.View, id, action string) (*assistant.Acti
 	return card("backup."+action, map[string]string{"name": job.ID}, "PUT", "/backups/"+esc(job.ID), job), nil
 }
 
-func verifyBackupSchedule(a *assistant.Action, views []backup.View) map[string]any {
-	out := map[string]any{"observedAt": time.Now(), "state": "mismatch", "next": "The job is not in the requested state; read backup_status."}
-	view, ok := findJob(views, a.Params["name"])
-	if ok {
-		out["enabled"] = view.Job.Enabled
-		out["next_run"] = view.Next
-		if view.Job.Enabled == (a.Key == "backup.resume") {
-			out["state"], out["next"] = "verified", "The schedule is as requested."
-		}
-	}
-	return out
-}
-
 // --- automatic updates of Docker apps
 
-func planAutoUpdate(current docker.AutoUpdateSettings, apps []string, app string, on bool, at *string, weekdays *[]int) (*assistant.Action, error) {
+func planAutoUpdate(current docker.AutoUpdateSettings, apps []string, app string, on bool, at *string, weekdays *[]int) (*toolcatalog.Action, error) {
 	known := slices.Contains(apps, app)
 	listed := slices.Contains(current.Apps, app)
 	if !known && !(listed && !on) {
-		return nil, assistant.Errorf("no app %q; docker_list shows the app of each container", app)
+		return nil, toolcatalog.Errorf("no app %q; docker_list shows the app of each container", app)
 	}
 	next := docker.AutoUpdateSettings{Apps: slices.DeleteFunc(slices.Clone(current.Apps), func(a string) bool { return a == app }), Weekdays: slices.Clone(current.Weekdays), Time: current.Time}
 	if on {
@@ -767,10 +685,10 @@ func planAutoUpdate(current docker.AutoUpdateSettings, apps []string, app string
 		next.Weekdays = []int{}
 	}
 	if len(next.Time) != 5 || next.Time[2] != ':' {
-		return nil, assistant.Errorf("time is HH:MM")
+		return nil, toolcatalog.Errorf("time is HH:MM")
 	}
 	if listed == on && at == nil && weekdays == nil {
-		return nil, assistant.Errorf("the automatic update of %s is already %s", app, map[bool]string{true: "on", false: "off"}[on])
+		return nil, toolcatalog.Errorf("the automatic update of %s is already %s", app, map[bool]string{true: "on", false: "off"}[on])
 	}
 	key := "docker.autoUpdateOff"
 	if on {
@@ -782,62 +700,4 @@ func planAutoUpdate(current docker.AutoUpdateSettings, apps []string, app string
 	}
 	params := map[string]string{"name": app, "time": next.Time, "weekdays": strings.Join(days, ",")}
 	return card(key, params, "PUT", "/docker/auto-update", next), nil
-}
-
-func verifyAutoUpdate(a *assistant.Action, st docker.AutoUpdateStatus) map[string]any {
-	out := map[string]any{"observedAt": time.Now(), "state": "mismatch", "settings": st.Settings, "next": "The settings differ from the request; read docker_auto_updates."}
-	on := slices.Contains(st.Settings.Apps, a.Params["name"])
-	if on == (a.Key == "docker.autoUpdateOn") && st.Settings.Time == a.Params["time"] {
-		out["state"] = "verified"
-		out["next"] = "Stored. Updates happen only in the window and only for newer images; results appear in docker_auto_updates."
-		if st.Next != nil {
-			out["nextWindow"] = st.Next
-		}
-	}
-	return out
-}
-
-// verifyAreaAction observes the outcome of the actions of this file and of
-// the update check; nil for actions it does not know.
-func (s *Server) verifyAreaAction(ctx context.Context, a *assistant.Action) any {
-	switch {
-	case strings.HasPrefix(a.Key, "plugin."):
-		return verifyPlugin(a, s.opts.Plugins.Status(s.opts.Storage.Mounted()))
-	case strings.HasPrefix(a.Key, "firewall."):
-		return verifyFirewall(a, s.opts.Firewall.Status(""))
-	case a.Key == "backup.pause" || a.Key == "backup.resume":
-		return verifyBackupSchedule(a, s.opts.Backup.List())
-	case a.Key == "backup.check" || a.Key == "backup.restoreFiles":
-		out := map[string]any{"observedAt": time.Now(), "state": "accepted",
-			"next": "Started in the background. backup_status shows the end: lastCheck/checkError for a check; a restore ends in a new folder under restored/ (or with restoreError). Wait with agent_wait."}
-		if view, ok := findJob(s.opts.Backup.List(), a.Params["name"]); ok {
-			out["running"] = view.State.Running
-			out["phase"] = view.State.Phase
-		}
-		return out
-	case strings.HasPrefix(a.Key, "docker.autoUpdate"):
-		return verifyAutoUpdate(a, s.opts.Docker.AutoUpdates())
-	case a.Key == "update.check" && s.opts.Update != nil:
-		st := s.opts.Update.Status()
-		return verifyUpdateCheck(st.LastCheck, st.CheckError, st.Available != nil)
-	}
-	return nil
-}
-
-// verifyUpdateCheck reports what the check found. A failed check is not
-// "no update".
-func verifyUpdateCheck(lastCheck *time.Time, checkError string, available bool) map[string]any {
-	out := map[string]any{"observedAt": time.Now(), "lastCheck": lastCheck}
-	switch {
-	case checkError != "":
-		out["state"], out["checkError"] = "failed", checkError
-		out["next"] = "The check failed: whether an update exists is unknown. Never say there is none."
-	case lastCheck == nil:
-		out["state"], out["next"] = "not_verified", "No finished check observed yet; read update_status."
-	case available:
-		out["state"], out["next"] = "verified", "An update was found; update_status names it. Installing it is up to the person."
-	default:
-		out["state"], out["next"] = "verified", "The check finished without a newer release."
-	}
-	return out
 }

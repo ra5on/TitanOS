@@ -4,16 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/http"
 	"path"
 	"slices"
 	"strings"
 	"syscall"
 
-	"github.com/ra5on/TitanOS/backend/internal/assistant"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/office"
+	"github.com/ra5on/TitanOS/backend/internal/toolcatalog"
 	"io"
 	"time"
 )
@@ -36,7 +35,7 @@ func schema(properties map[string]any, required ...string) map[string]any {
 func noArgs(call func(ctx context.Context) (any, error)) func(context.Context, json.RawMessage) (any, error) {
 	return func(ctx context.Context, args json.RawMessage) (any, error) {
 		var none struct{}
-		if err := assistant.DecodeArgs(args, &none); err != nil {
+		if err := toolcatalog.DecodeArgs(args, &none); err != nil {
 			return nil, err
 		}
 		return call(ctx)
@@ -51,17 +50,17 @@ func clampLines(lines int) int {
 	return min(lines, 200)
 }
 
-func reading(name, description string, parameters map[string]any, untrusted bool, call func(context.Context, json.RawMessage) (any, error)) assistant.Tool {
+func reading(name, description string, parameters map[string]any, untrusted bool, call func(context.Context, json.RawMessage) (any, error)) toolcatalog.Tool {
 	if parameters == nil {
 		parameters = schema(nil)
 	}
-	return assistant.Tool{Name: name, Description: description, Parameters: parameters, Untrusted: untrusted,
-		Read: func(ctx context.Context, args json.RawMessage) (assistant.Result, error) {
+	return toolcatalog.Tool{Name: name, Description: description, Parameters: parameters, Untrusted: untrusted,
+		Read: func(ctx context.Context, args json.RawMessage) (toolcatalog.Result, error) {
 			v, err := call(ctx, args)
 			if err != nil {
-				return assistant.Result{}, err
+				return toolcatalog.Result{}, err
 			}
-			return assistant.JSON(v)
+			return toolcatalog.JSON(v)
 		}}
 }
 
@@ -73,104 +72,61 @@ func enum(description string, values ...string) map[string]any {
 	return map[string]any{"type": "string", "enum": values, "description": description}
 }
 
-// assistantAllowed reports whether an account may chat at all.
-func (s *Server) assistantAllowed(user auth.User) bool {
-	settings := s.opts.Assistant.Settings()
-	return settings.Enabled && (user.Role.CanAdminister() || settings.Users)
-}
-
-// assistantWeb reports whether an account may search the web.
-func (s *Server) assistantWeb(user auth.User) bool {
-	settings := s.opts.Assistant.Settings()
-	return settings.Web && (user.Role.CanAdminister() || settings.WebUsers)
-}
-
-// toolAreas says which part of the NAS a tool belongs to, for the settings
-// of what the assistant may do there. Tools not listed are always there.
+// toolAreas says which part of the NAS a tool belongs to, for grouping the
+// tools on the MCP page.
 var toolAreas = map[string]string{
-	"knowledge_list": assistant.AreaFiles, "knowledge_save": assistant.AreaFiles, "knowledge_delete": assistant.AreaFiles, "knowledge_search": assistant.AreaFiles, "files_list": assistant.AreaFiles, "document_read": assistant.AreaFiles, "file_read": assistant.AreaFiles, "file_jobs": assistant.AreaFiles, "files_search": assistant.AreaFiles,
-	"folder_create": assistant.AreaFiles, "file_rename": assistant.AreaFiles, "file_delete": assistant.AreaFiles,
-	"document_edit": assistant.AreaFiles, "file_write": assistant.AreaFiles, "files_move": assistant.AreaFiles, "file_copy": assistant.AreaFiles,
-	"system_status": assistant.AreaSystem, "notifications": assistant.AreaSystem, "nas_info": assistant.AreaSystem, "my_shares": assistant.AreaFiles,
-	"network_status": assistant.AreaSystem, "hardware_status": assistant.AreaSystem, "logs_search": assistant.AreaSystem, "ups_status": assistant.AreaSystem,
-	"update_status": assistant.AreaUpdates, "update_action": assistant.AreaUpdates, "power_action": assistant.AreaUpdates,
-	"storage_overview": assistant.AreaStorage, "disk_tests": assistant.AreaStorage, "volume_action": assistant.AreaStorage,
-	"volume_create": assistant.AreaStorage, "disk_test": assistant.AreaStorage,
-	"shares_list": assistant.AreaShares, "share_create": assistant.AreaShares, "share_delete": assistant.AreaShares,
-	"docker_list": assistant.AreaDocker, "container_logs": assistant.AreaDocker, "container_action": assistant.AreaDocker,
-	"app_action": assistant.AreaDocker, "apps_update_all": assistant.AreaDocker, "docker_check_updates": assistant.AreaDocker,
-	"vm_list": assistant.AreaVMs, "vm_action": assistant.AreaVMs,
-	"backup_status": assistant.AreaBackups, "backup_action": assistant.AreaBackups, "stick_backup": assistant.AreaBackups,
-	"accounts_list": assistant.AreaAccounts, "account_action": assistant.AreaAccounts,
-	"plugins_list": assistant.AreaPlugins, "plugin_install": assistant.AreaPlugins, "plugin_switch": assistant.AreaPlugins, "plugin_update": assistant.AreaPlugins, "plugin_remove": assistant.AreaPlugins,
-	"network_diagnostics": assistant.AreaNetwork, "firewall_status": assistant.AreaNetwork, "firewall_rule_add": assistant.AreaNetwork, "firewall_rule_remove": assistant.AreaNetwork, "firewall_unblock": assistant.AreaNetwork,
-	"backup_snapshots": assistant.AreaBackups, "backup_files": assistant.AreaBackups, "backup_check": assistant.AreaBackups, "backup_restore_files": assistant.AreaBackups, "backup_schedule": assistant.AreaBackups,
-	"docker_auto_updates": assistant.AreaDocker, "docker_auto_update": assistant.AreaDocker,
-	"ha_diagnostics": assistant.AreaHome, "ha_capabilities": assistant.AreaHome, "ha_undo": assistant.AreaHome, "ha_history": assistant.AreaHome, "ha_entities": assistant.AreaHome, "ha_state": assistant.AreaHome, "ha_call": assistant.AreaHome,
+	"docs_search": toolcatalog.AreaSystem, "docs_read": toolcatalog.AreaSystem, "files_list": toolcatalog.AreaFiles, "document_read": toolcatalog.AreaFiles, "file_read": toolcatalog.AreaFiles, "file_jobs": toolcatalog.AreaFiles, "files_search": toolcatalog.AreaFiles,
+	"folder_create": toolcatalog.AreaFiles, "file_rename": toolcatalog.AreaFiles, "file_delete": toolcatalog.AreaFiles,
+	"file_write": toolcatalog.AreaFiles, "files_move": toolcatalog.AreaFiles, "file_copy": toolcatalog.AreaFiles,
+	"system_status": toolcatalog.AreaSystem, "notifications": toolcatalog.AreaSystem, "nas_info": toolcatalog.AreaSystem, "my_shares": toolcatalog.AreaFiles,
+	"network_status": toolcatalog.AreaSystem, "hardware_status": toolcatalog.AreaSystem, "logs_search": toolcatalog.AreaSystem, "ups_status": toolcatalog.AreaSystem,
+	"update_status": toolcatalog.AreaUpdates, "update_action": toolcatalog.AreaUpdates, "power_action": toolcatalog.AreaUpdates,
+	"storage_overview": toolcatalog.AreaStorage, "disk_tests": toolcatalog.AreaStorage, "volume_action": toolcatalog.AreaStorage,
+	"volume_create": toolcatalog.AreaStorage, "disk_test": toolcatalog.AreaStorage,
+	"shares_list": toolcatalog.AreaShares, "share_create": toolcatalog.AreaShares, "share_delete": toolcatalog.AreaShares,
+	"docker_list": toolcatalog.AreaDocker, "container_logs": toolcatalog.AreaDocker, "container_action": toolcatalog.AreaDocker,
+	"app_action": toolcatalog.AreaDocker, "apps_update_all": toolcatalog.AreaDocker, "docker_check_updates": toolcatalog.AreaDocker,
+	"vm_list": toolcatalog.AreaVMs, "vm_action": toolcatalog.AreaVMs,
+	"backup_status": toolcatalog.AreaBackups, "backup_action": toolcatalog.AreaBackups, "stick_backup": toolcatalog.AreaBackups,
+	"accounts_list": toolcatalog.AreaAccounts, "account_action": toolcatalog.AreaAccounts,
+	"plugins_list": toolcatalog.AreaPlugins, "plugin_install": toolcatalog.AreaPlugins, "plugin_switch": toolcatalog.AreaPlugins, "plugin_update": toolcatalog.AreaPlugins, "plugin_remove": toolcatalog.AreaPlugins,
+	"network_diagnostics": toolcatalog.AreaNetwork, "firewall_status": toolcatalog.AreaNetwork, "firewall_rule_add": toolcatalog.AreaNetwork, "firewall_rule_remove": toolcatalog.AreaNetwork, "firewall_unblock": toolcatalog.AreaNetwork,
+	"backup_snapshots": toolcatalog.AreaBackups, "backup_files": toolcatalog.AreaBackups, "backup_check": toolcatalog.AreaBackups, "backup_restore_files": toolcatalog.AreaBackups, "backup_schedule": toolcatalog.AreaBackups,
+	"docker_auto_updates": toolcatalog.AreaDocker, "docker_auto_update": toolcatalog.AreaDocker,
+	"ha_diagnostics": toolcatalog.AreaHome, "ha_capabilities": toolcatalog.AreaHome, "ha_undo": toolcatalog.AreaHome, "ha_history": toolcatalog.AreaHome, "ha_entities": toolcatalog.AreaHome, "ha_state": toolcatalog.AreaHome, "ha_call": toolcatalog.AreaHome,
 }
 
-// assistantTools are the tools of an account: those of its role, in the
-// areas the settings allow, and only reading ones where they allow reading.
-// r is the request of the chat, whose login api_read uses.
-func (s *Server) assistantTools(user auth.User, r *http.Request) []assistant.Tool {
-	settings := s.opts.Assistant.Settings()
-	var kept []assistant.Tool
-	writes := false
-	for _, tool := range s.allAssistantTools(user, r) {
-		if tool.Name == "api_change" && !slices.ContainsFunc(s.allowedRoutes(), func(route apiRoute) bool { return route.Method != http.MethodGet }) {
-			continue
-		}
-		if area := toolAreas[tool.Name]; area != "" {
-			tool.Area = area
-			switch settings.Access(area) {
-			case assistant.AccessOff:
-				continue
-			case assistant.AccessRead:
-				if tool.Plan != nil {
-					continue
-				}
-			}
-		}
-		writes = writes || tool.Plan != nil
-		kept = append(kept, tool)
-	}
-	if writes {
-		kept = append(kept, s.taskTool())
-	}
-	return kept
-}
-
-func (s *Server) allAssistantTools(user auth.User, r *http.Request) []assistant.Tool {
-	tools := []assistant.Tool{
+// catalogTools are all tools of the fixed catalog for an account: those of
+// its role, each with its area. The tools check the account themselves as
+// well, every time they run.
+func (s *Server) catalogTools(user auth.User) []toolcatalog.Tool {
+	tools := []toolcatalog.Tool{
 		reading("docs_search", "Search the TitanOS manual (README and documentation) for how something works or is set up. Returns the best matching sections.",
 			schema(map[string]any{"query": str("Words to look for, in English or German.")}, "query"), false, s.toolDocsSearch),
 		reading("docs_read", "Read one document of the TitanOS manual, or only its sections whose heading contains the given text.",
 			schema(map[string]any{"file": str("File name as docs_search shows it, e.g. docs/NETWORKING.md."), "heading": str("Part of a heading, optional.")}, "file"), false, s.toolDocsRead),
 	}
 	tools = append(tools, s.statusTools(user)...)
-	if s.assistantWeb(user) {
-		tools = append(tools, s.webTools()...)
-	}
 	tools = append(tools, s.fileTools(user)...)
 	if user.Role.CanAdminister() {
-		tools = append(tools, s.apiTools(user, r)...)
 		tools = append(tools, s.areaTools()...)
+		tools = append(tools, s.haTools(user)...)
 	}
-	tools = append(tools, s.haTools(user)...)
-	tools = append(tools, s.knowledgeTools(user)...)
-	tools = append(tools, s.documentEditTool(user))
-	return append(tools, s.assistantActions(user)...)
+	tools = append(tools, s.catalogActions(user)...)
+	for i := range tools {
+		tools[i].Area = toolAreas[tools[i].Name]
+	}
+	return tools
 }
 
 // statusTools are the reading tools of the fixed catalog about the state of
-// the NAS and the files of the account. The assistant and the MCP server
-// (mcp_tools.go) offer them both.
-func (s *Server) statusTools(user auth.User) []assistant.Tool {
-	tools := []assistant.Tool{
+// the NAS and the files of the account.
+func (s *Server) statusTools(user auth.User) []toolcatalog.Tool {
+	tools := []toolcatalog.Tool{
 		reading("files_list", "List a folder in the file manager: the shares this account may open (root share/<name>) and, for administrators, volumes (volume/<name>) and USB drives. Without root, lists the roots.",
-			schema(map[string]any{"root": str("Root ID such as share/Media, from the list of roots."), "path": str("Folder inside the root, empty for its top."), "offset": map[string]any{"type": "integer", "minimum": 0, "description": "Next page from nextOffset when cut is true."}}), true, s.assistantFilesList(user)),
+			schema(map[string]any{"root": str("Root ID such as share/Media, from the list of roots."), "path": str("Folder inside the root, empty for its top."), "offset": map[string]any{"type": "integer", "minimum": 0, "description": "Next page from nextOffset when cut is true."}}), true, s.catalogFilesList(user)),
 		reading("file_read", "Read a text file (txt, md, json, yaml, conf, log, csv …) or a Word (.docx) Excel (.xlsx) or PDF document (first 20 pages; document_read for further pages) from the file manager, with the rights of this account.",
-			schema(map[string]any{"root": str("Root ID such as share/Media."), "path": str("Path of the file inside the root.")}, "root", "path"), true, s.assistantFileRead(user)),
+			schema(map[string]any{"root": str("Root ID such as share/Media."), "path": str("Path of the file inside the root.")}, "root", "path"), true, s.catalogFileRead(user)),
 		reading("file_jobs", "Copy and move jobs of this account in the file manager, with progress.",
 			nil, false, noArgs(func(ctx context.Context) (any, error) {
 				return map[string]any{"jobs": s.opts.Files.Jobs(user.Name)}, nil
@@ -234,14 +190,14 @@ func (s *Server) statusTools(user auth.User) []assistant.Tool {
 				return map[string]any{"hostname": s.opts.Monitor.Info().Hostname, "version": s.opts.Version}, nil
 			})),
 			reading("my_shares", "The shares this account may open, whether it may write, and the free space of each.", nil, false, noArgs(func(ctx context.Context) (any, error) {
-				return s.assistantMyShares(user), nil
+				return s.catalogMyShares(user), nil
 			})),
 		)
 	}
 	return tools
 }
 
-func (s *Server) assistantMyShares(user auth.User) map[string]any {
+func (s *Server) catalogMyShares(user auth.User) map[string]any {
 	type share struct {
 		Root      string `json:"root"`
 		Name      string `json:"name"`
@@ -278,7 +234,7 @@ func hiddenPath(p string) bool {
 
 // Preserve error categories without putting paths or file contents in the
 // default diagnostic export. The model still receives actionable details.
-func assistantFileError(err error) error {
+func catalogFileError(err error) error {
 	code, next := "file_failed", "Inspect the target and its availability before retrying."
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
@@ -294,12 +250,12 @@ func assistantFileError(err error) error {
 	case errors.Is(err, files.ErrNoSpace):
 		code = "file_no_space"
 	}
-	return assistant.CodedErrorf(code, "%v. %s", err, next)
+	return toolcatalog.CodedErrorf(code, "%v. %s", err, next)
 }
 
 // assistantRoot finds a root of the file manager for the assistant: the
 // same as the account has, without the stick.
-func (s *Server) assistantRoot(user auth.User, id string) (files.Root, error) {
+func (s *Server) catalogRoot(user auth.User, id string) (files.Root, error) {
 	for _, root := range s.fileRoots(user) {
 		if root.ID == id && root.Kind != "stick" {
 			return root, nil
@@ -311,16 +267,16 @@ func (s *Server) assistantRoot(user auth.User, id string) (files.Root, error) {
 			ids = append(ids, root.ID)
 		}
 	}
-	return files.Root{}, assistant.CodedErrorf("root_not_found", "no root %q; use an exact root ID from %v. Call files_list with {} first. A root such as volume/nvme is one value; do not split it into root=volume and path=nvme", id, ids)
+	return files.Root{}, toolcatalog.CodedErrorf("root_not_found", "no root %q; use an exact root ID from %v. Call files_list with {} first. A root such as volume/nvme is one value; do not split it into root=volume and path=nvme", id, ids)
 }
 
-func (s *Server) assistantFilesList(user auth.User) func(context.Context, json.RawMessage) (any, error) {
+func (s *Server) catalogFilesList(user auth.User) func(context.Context, json.RawMessage) (any, error) {
 	return func(ctx context.Context, args json.RawMessage) (any, error) {
 		var req struct {
 			Root, Path string
 			Offset     int
 		}
-		if err := assistant.DecodeArgs(args, &req); err != nil {
+		if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 			return nil, err
 		}
 		if req.Root == "" {
@@ -339,16 +295,16 @@ func (s *Server) assistantFilesList(user auth.User) func(context.Context, json.R
 			}
 			return map[string]any{"roots": roots}, nil
 		}
-		root, err := s.assistantRoot(user, req.Root)
+		root, err := s.catalogRoot(user, req.Root)
 		if err != nil {
 			return nil, err
 		}
 		if hiddenPath(req.Path) {
-			return nil, assistant.Errorf("this folder is not shown to the assistant")
+			return nil, toolcatalog.Errorf("this folder is not shown over MCP")
 		}
 		entries, err := s.opts.Files.List(root, req.Path)
 		if err != nil {
-			return nil, assistantFileError(err)
+			return nil, catalogFileError(err)
 		}
 		entries = slices.DeleteFunc(entries, func(e files.Entry) bool { return hiddenPath(e.Name) })
 		offset := max(0, min(req.Offset, len(entries)))
@@ -357,23 +313,23 @@ func (s *Server) assistantFilesList(user auth.User) func(context.Context, json.R
 	}
 }
 
-func (s *Server) assistantFileRead(user auth.User) func(context.Context, json.RawMessage) (any, error) {
+func (s *Server) catalogFileRead(user auth.User) func(context.Context, json.RawMessage) (any, error) {
 	return func(ctx context.Context, args json.RawMessage) (any, error) {
 		var req struct{ Root, Path string }
-		if err := assistant.DecodeArgs(args, &req); err != nil {
+		if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 			return nil, err
 		}
-		root, err := s.assistantRoot(user, req.Root)
+		root, err := s.catalogRoot(user, req.Root)
 		if err != nil {
 			return nil, err
 		}
 		if hiddenPath(req.Path) {
-			return nil, assistant.Errorf("this file is not shown to the assistant")
+			return nil, toolcatalog.Errorf("this file is not shown over MCP")
 		}
 		if ext := strings.ToLower(path.Ext(req.Path)); ext == ".docx" || ext == ".xlsx" {
 			text, err := s.readDocument(root, req.Path)
 			if err != nil {
-				return nil, assistantFileError(err)
+				return nil, catalogFileError(err)
 			}
 			return map[string]any{"root": root.ID, "path": req.Path, "content": text}, nil
 		}
@@ -382,7 +338,7 @@ func (s *Server) assistantFileRead(user auth.User) func(context.Context, json.Ra
 		}
 		text, err := s.opts.Files.ReadText(root, req.Path)
 		if err != nil {
-			return nil, assistantFileError(err)
+			return nil, catalogFileError(err)
 		}
 		return map[string]any{"root": root.ID, "path": req.Path, "content": text.Content}, nil
 	}
@@ -390,12 +346,12 @@ func (s *Server) assistantFileRead(user auth.User) func(context.Context, json.Ra
 
 func (s *Server) toolDocsSearch(ctx context.Context, args json.RawMessage) (any, error) {
 	var req struct{ Query string }
-	if err := assistant.DecodeArgs(args, &req); err != nil {
+	if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 		return nil, err
 	}
-	manual := s.opts.Assistant.Manual
+	manual := s.manual
 	if len(manual.Files()) == 0 {
-		return nil, assistant.Errorf("the manual is not part of this build of titand")
+		return nil, toolcatalog.Errorf("the manual is not part of this build of titand")
 	}
 	sections := manual.Search(req.Query, 6)
 	if len(sections) == 0 {
@@ -406,64 +362,14 @@ func (s *Server) toolDocsSearch(ctx context.Context, args json.RawMessage) (any,
 
 func (s *Server) toolDocsRead(ctx context.Context, args json.RawMessage) (any, error) {
 	var req struct{ File, Heading string }
-	if err := assistant.DecodeArgs(args, &req); err != nil {
+	if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 		return nil, err
 	}
-	text, ok := s.opts.Assistant.Manual.Read(req.File, req.Heading)
+	text, ok := s.manual.Read(req.File, req.Heading)
 	if !ok {
-		return nil, assistant.Errorf("no document %q with that heading; documents: %s", req.File, strings.Join(s.opts.Assistant.Manual.Files(), ", "))
+		return nil, toolcatalog.Errorf("no document %q with that heading; documents: %s", req.File, strings.Join(s.manual.Files(), ", "))
 	}
 	return map[string]any{"file": req.File, "text": text}, nil
-}
-
-func (s *Server) webTools() []assistant.Tool {
-	web := s.opts.Assistant.Web
-	return []assistant.Tool{
-		{
-			Name:        "web_search",
-			Description: "Search the web with DuckDuckGo. Returns titles, addresses and short excerpts; read a page with web_read for details.",
-			Parameters:  schema(map[string]any{"query": str("What to search for.")}, "query"),
-			Untrusted:   true,
-			Read: func(ctx context.Context, args json.RawMessage) (assistant.Result, error) {
-				var req struct{ Query string }
-				if err := assistant.DecodeArgs(args, &req); err != nil {
-					return assistant.Result{}, err
-				}
-				results, err := web.Search(ctx, s.opts.Version, req.Query)
-				if err != nil {
-					return assistant.Result{}, assistantFileError(err)
-				}
-				res, err := assistant.JSON(map[string]any{"query": req.Query, "results": results})
-				for _, r := range results[:min(len(results), 5)] {
-					res.Sources = append(res.Sources, assistant.Source{Title: r.Title, URL: r.URL})
-				}
-				return res, err
-			},
-		},
-		{
-			Name:        "web_read",
-			Description: "Read the text of one web page (http or https). Pages on the home network cannot be read.",
-			Parameters:  schema(map[string]any{"url": str("Address of the page.")}, "url"),
-			Untrusted:   true,
-			Read: func(ctx context.Context, args json.RawMessage) (assistant.Result, error) {
-				var req struct{ URL string }
-				if err := assistant.DecodeArgs(args, &req); err != nil {
-					return assistant.Result{}, err
-				}
-				page, err := web.Read(ctx, s.opts.Version, req.URL)
-				if err != nil {
-					return assistant.Result{}, err
-				}
-				res, err := assistant.JSON(page)
-				title := page.Title
-				if title == "" {
-					title = page.URL
-				}
-				res.Sources = []assistant.Source{{Title: title, URL: page.URL}}
-				return res, err
-			},
-		},
-	}
 }
 
 func (s *Server) readPDF(ctx context.Context, root files.Root, path string, first, last int, ocr ...bool) (any, error) {
@@ -473,7 +379,7 @@ func (s *Server) readPDF(ctx context.Context, root files.Root, path string, firs
 	}
 	defer f.Close()
 	if info.Size() > 50<<20 {
-		return nil, assistant.Errorf("PDF exceeds 50 MiB")
+		return nil, toolcatalog.Errorf("PDF exceeds 50 MiB")
 	}
 	data, err := io.ReadAll(io.LimitReader(f, (50<<20)+1))
 	if err != nil {
@@ -481,9 +387,6 @@ func (s *Server) readPDF(ctx context.Context, root files.Root, path string, firs
 	}
 	var result office.PDFReading
 	if len(ocr) > 0 && ocr[0] {
-		if !s.opts.Assistant.Settings().OCR {
-			return nil, assistant.Errorf("OCR is disabled")
-		}
 		result, err = office.OCRPDF(ctx, data, first, last)
 	} else {
 		result, err = office.ReadPDF(ctx, data, first, last)

@@ -19,7 +19,6 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/app"
 	"github.com/ra5on/TitanOS/backend/internal/appbackup"
 	"github.com/ra5on/TitanOS/backend/internal/appproxy"
-	"github.com/ra5on/TitanOS/backend/internal/assistant"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/backup"
 	"github.com/ra5on/TitanOS/backend/internal/backuptarget"
@@ -78,7 +77,6 @@ type titand struct {
 
 	store            *config.Store
 	users            *auth.Users
-	chat             *assistant.Manager
 	base             string
 	settings         *system.Settings
 	connection       *network.Manager
@@ -157,11 +155,6 @@ func (w *titand) wireBase() error {
 		// Not fatal: the web UI says that /config is missing and titand
 		// tries again when someone opens it.
 		slog.Warn("accounts not readable, is the stick plugged in?", "config", w.opts.configDir, "err", err)
-	}
-	// The chat in the web UI talks to Ollama.
-	w.chat = assistant.NewManager(w.store)
-	if err := w.chat.Load(); err != nil {
-		slog.Warn("assistant settings not readable from /config", "err", err)
 	}
 
 	// The version of the system image; version.Version is newer when an
@@ -476,7 +469,7 @@ func (w *titand) wireNotifications() error {
 	}
 	// Once per plugin and kind of device; installing stays a click.
 	w.extensions.Notify = func(title string) { w.notifier.Notify(notify.Info, "plugin_recommended", title) }
-	// Home Assistant: the assistant switches entities released to it, and
+	// Home Assistant: MCP clients switch entities released to them, and
 	// messages can go to the Home Assistant app.
 	w.home = homeassistant.NewManager(w.store)
 	if err := w.home.Load(); err != nil {
@@ -1307,12 +1300,10 @@ func (w *titand) wireAPI() error {
 		ShareDir:           w.shareDir,
 		SecureCookies:      !w.opts.dev,
 		Sessions:           w.sessions,
-		Assistant:          w.chat,
 		Activity:           w.audit,
 		Cluster:            w.nodes,
 	})
 
-	w.background(func() { w.handler.RunAssistant(ctx) })
 	// Watches that Home Assistant keeps putting its backups on the NAS.
 	w.background(func() { w.handler.RunHAStorage(ctx) })
 	w.background(func() { w.home.RunMQTT(ctx, w.handler.HASnapshot, w.handler.HACommand) })

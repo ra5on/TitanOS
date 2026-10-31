@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ra5on/TitanOS/backend/internal/assistant"
 	"github.com/ra5on/TitanOS/backend/internal/diagnose"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
+	"github.com/ra5on/TitanOS/backend/internal/toolcatalog"
 )
 
 // The reading tools of the assistant for owners and administrators. Each
@@ -60,13 +60,13 @@ func (s *Server) toolNotifications(ctx context.Context, args json.RawMessage) (a
 		Limit       int    `json:"limit"`
 		MinSeverity string `json:"minSeverity"`
 	}
-	if err := assistant.DecodeArgs(args, &req); err != nil {
+	if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 		return nil, err
 	}
 	rank := map[string]int{notify.Info: 0, notify.Warning: 1, notify.Error: 2}
 	least, known := rank[req.MinSeverity]
 	if req.MinSeverity != "" && !known {
-		return nil, assistant.Errorf("minSeverity must be info, warning or error")
+		return nil, toolcatalog.Errorf("minSeverity must be info, warning or error")
 	}
 	if req.Limit <= 0 {
 		req.Limit = 20
@@ -255,7 +255,7 @@ func (s *Server) toolContainerLogs(ctx context.Context, args json.RawMessage) (a
 		Container string `json:"container"`
 		Lines     int    `json:"lines"`
 	}
-	if err := assistant.DecodeArgs(args, &req); err != nil {
+	if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 		return nil, err
 	}
 	name := strings.TrimPrefix(strings.TrimSpace(req.Container), "/")
@@ -267,7 +267,7 @@ func (s *Server) toolContainerLogs(ctx context.Context, args json.RawMessage) (a
 		}
 	}
 	if id == "" {
-		return nil, assistant.Errorf("no container %q; docker_list shows the names", req.Container)
+		return nil, toolcatalog.Errorf("no container %q; docker_list shows the names", req.Container)
 	}
 	logs, err := s.opts.Docker.Logs(ctx, id, clampLines(req.Lines))
 	if err != nil {
@@ -339,22 +339,22 @@ func (s *Server) toolLogs(ctx context.Context, args json.RawMessage) (any, error
 		Search   string `json:"search"`
 		Lines    int    `json:"lines"`
 	}
-	if err := assistant.DecodeArgs(args, &req); err != nil {
+	if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 		return nil, err
 	}
 	if req.Source == "all" {
 		req.Source = ""
 	}
 	if _, known := diagnose.Sources[req.Source]; !known {
-		return nil, assistant.Errorf("unknown source %q", req.Source)
+		return nil, toolcatalog.Errorf("unknown source %q", req.Source)
 	}
 	priority := map[string]int{"": 6, "info": 6, "warning": 4, "error": 3}
 	level, known := priority[req.MinLevel]
 	if !known {
-		return nil, assistant.Errorf("minLevel must be error, warning or info")
+		return nil, toolcatalog.Errorf("minLevel must be error, warning or info")
 	}
 	if len(req.Search) > 200 {
-		return nil, assistant.Errorf("search is too long")
+		return nil, toolcatalog.Errorf("search is too long")
 	}
 	logs, err := s.opts.Diagnose.Logs(ctx, diagnose.Query{Source: req.Source, Priority: level, Search: req.Search, Lines: clampLines(req.Lines)})
 	if err != nil {
