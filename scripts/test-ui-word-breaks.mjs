@@ -5,7 +5,9 @@
 // ("Home-Bildschirm") are fine. The headless Chromium of the tests has no
 // hyphenation dictionaries, so a word that `hyphens: auto` would split
 // correctly on a phone counts as broken here too: labels must fit or stand
-// above their value. Isolated API data only.
+// above their value. Alongside, every visible search and input field must
+// have a name for screen readers (label, aria-label; owner request 10g).
+// Isolated API data only.
 // PLAYWRIGHT_MODULE=/abs/playwright/index.mjs UI_URL=http://127.0.0.1:5182 node scripts/test-ui-word-breaks.mjs
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
@@ -64,6 +66,19 @@ function brokenWords() {
   return found;
 }
 
+function unnamedFields() {
+  return [...document.querySelectorAll("input:not([type=hidden]):not([type=checkbox]):not([type=radio]),select,textarea")]
+    .filter((e) => e.offsetParent !== null)
+    .filter(
+      (e) =>
+        !(e.labels?.length && [...e.labels].some((l) => l.textContent.trim())) &&
+        !e.getAttribute("aria-label") &&
+        !e.getAttribute("aria-labelledby") &&
+        !e.title,
+    )
+    .map((e) => e.outerHTML.slice(0, 120));
+}
+
 const problems = [];
 for (const locale of ["de", "en"]) {
   for (const font of [100, 120]) {
@@ -75,6 +90,8 @@ for (const locale of ["de", "en"]) {
       await f.page.waitForTimeout(1200);
       for (const word of await f.page.evaluate(brokenWords))
         problems.push(`${locale} ${font}% ${path}: ${word}`);
+      for (const field of await f.page.evaluate(unnamedFields))
+        problems.push(`${locale} ${path}: field without a name ${field}`);
       if (path === "/")
         await f.page.screenshot({ path: `${out}/dashboard-${locale}-${font}.png`, fullPage: true });
     }
@@ -83,4 +100,4 @@ for (const locale of ["de", "en"]) {
 }
 await browser.close();
 assert.deepEqual(problems, [], problems.join("\n"));
-console.log(`ui-word-breaks: ${pages.length} pages × de/en × 100/120 % without broken words`);
+console.log(`ui-word-breaks: ${pages.length} pages × de/en × 100/120 % without broken words or unnamed fields`);
