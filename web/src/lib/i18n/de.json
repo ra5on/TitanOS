@@ -2492,6 +2492,7 @@
 	"plugins.driverState.unavailable": "Für diese TitanOS-Version ist noch keine passende Bauumgebung verfügbar",
 	"plugins.driverState.error": "Prüfung fehlgeschlagen; bisheriger Treiber bleibt erhalten",
 	"error.plugin_driver_pending": "Ein Treiberwechsel wartet auf den Neustart. Starte das NAS neu oder nimm die Auswahl im NVIDIA-Plugin zurück, bevor du Plugins änderst.",
+	"error.plugin_conflict": "Dieses Plugin kann nicht zusammen mit einem anderen eingeschalteten Plugin laufen (zum Beispiel zwei NVIDIA-Treiber). Schalte das andere Plugin zuerst aus.",
 	"plugins.driverRecommended": "Empfohlen",
 	"system.memoryAvailable": "Verfügbar: {value}",
 	"temperatures.title": "Temperaturen",

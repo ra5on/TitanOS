@@ -59,6 +59,8 @@ var (
 	ErrDownloading   = errors.New("plugins: this plugin is already being downloaded")
 	ErrDriverPending = errors.New("plugins: cancel the scheduled driver activation or reboot before changing plugins")
 	ErrUpdatePending = errors.New("plugins: finish or cancel the system update before changing plugins")
+	// ErrConflict means an enabled plugin excludes the one to be enabled.
+	ErrConflict = errors.New("plugins: another enabled plugin excludes this one")
 )
 
 var nameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`)
@@ -88,6 +90,9 @@ type Manifest struct {
 	// Modules are loaded and Services started once the plugin is in place.
 	Modules  []string `json:"modules"`
 	Services []string `json:"services"`
+	// Conflicts names plugins that must not be enabled together with this
+	// one (conflicts.go). Optional; older TitanOS ignore it.
+	Conflicts []string `json:"conflicts,omitempty"`
 	// Catalog information, all optional; older TitanOS ignore it. The
 	// signature of the manifest covers it like everything else.
 	Catalog
@@ -709,6 +714,9 @@ func (m *Manager) install(ctx context.Context, manifestPath, volume, confirm str
 	if _, exists := m.installed(settings.Volume)[manifest.Name]; exists {
 		return ErrExists
 	}
+	if other := m.enabledConflict(manifest); activate && other != "" {
+		return conflictError(manifest.Name, other)
+	}
 	if activate && m.compatible(manifest) {
 		tr.expect(activationSteps(manifest)...)
 	}
@@ -871,6 +879,11 @@ func (m *Manager) setEnabled(ctx context.Context, name string, enabled bool, mou
 	if err := m.ensureReleaseSet(settings.Volume); err != nil {
 		return err
 	}
+	if enabled && !slices.Contains(settings.Enabled, name) {
+		if other := m.enabledConflict(m.installed(settings.Volume)[name]); other != "" {
+			return conflictError(name, other)
+		}
+	}
 	if !enabled {
 		if err := m.deactivate(ctx, name); err != nil {
 			return err
@@ -990,6 +1003,7 @@ func (m *Manager) apply(ctx context.Context, mounted []string) (err error) {
 			}
 		}
 	}
+	m.withoutConflicts(settings.Enabled, wanted)
 	names := make([]string, 0, len(wanted))
 	for name := range wanted {
 		names = append(names, name)

@@ -24,6 +24,7 @@ var pluginErrors = []struct {
 	{plugins.ErrInvalid, http.StatusBadRequest, "invalid_plugin"},
 	{plugins.ErrNotConfirmed, http.StatusBadRequest, "not_confirmed"},
 	{plugins.ErrDriverPending, http.StatusConflict, "plugin_driver_pending"},
+	{plugins.ErrConflict, http.StatusConflict, "plugin_conflict"},
 	{plugins.ErrBusy, http.StatusConflict, "plugin_busy"},
 	{plugins.ErrDownloading, http.StatusConflict, "plugin_downloading"},
 	{plugins.ErrUpdatePending, http.StatusConflict, "plugin_update_pending"},
