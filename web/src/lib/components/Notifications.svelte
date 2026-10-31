@@ -17,7 +17,8 @@
 	import Icon from './Icon.svelte';
 	import Dialog from './Dialog.svelte';
 
-	let { compact = false }: { compact?: boolean } = $props();
+	/** `side`: in the sidebar, the list opens to the right of it, upwards. */
+	let { compact = false, side = false }: { compact?: boolean; side?: boolean } = $props();
 	let open = $state(false);
 	let busy = $state(false);
 	let error = $state('');
@@ -93,7 +94,7 @@
 	}}
 />
 
-<div class="notifications" class:compact bind:this={root}>
+<div class="notifications" class:compact class:side bind:this={root}>
 	<button
 		type="button"
 		class="trigger"
@@ -367,6 +368,15 @@
 	}
 	.foot {
 		font-size: 0.75rem;
+	}
+	.side .panel {
+		position: fixed;
+		top: auto;
+		right: auto;
+		left: calc(var(--side-nav-width, 236px) + 8px);
+		bottom: 12px;
+		max-width: calc(100vw - var(--side-nav-width, 236px) - 24px);
+		max-height: calc(100dvh - 24px);
 	}
 	@media (max-width: 760px) {
 		.panel {

@@ -85,8 +85,8 @@
 	}
 	.settings-aside {
 		position: sticky;
-		top: calc(60px + var(--page-pad));
-		max-height: calc(100dvh - 60px - 2 * var(--page-pad));
+		top: calc(var(--header-height, 60px) + var(--page-pad));
+		max-height: calc(100dvh - var(--header-height, 60px) - 2 * var(--page-pad));
 		overflow-y: auto;
 		/* At its end the wheel moves the page on (no overscroll-behavior: contain). */
 		/* A surface of its own keeps the list readable over a background image. */

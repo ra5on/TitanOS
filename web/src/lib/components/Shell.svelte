@@ -3,7 +3,6 @@
 	import type { Snippet } from 'svelte';
 	import { page } from '$app/state';
 	import ConnectionBanner from './ConnectionBanner.svelte';
-	import TasksPanel from './TasksPanel.svelte';
 	import { session } from '#lib/session.svelte.ts';
 	import { shell } from '#lib/shell.svelte.ts';
 	import { watchStorage } from '#lib/storage.svelte.ts';
@@ -32,7 +31,27 @@
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 
 	let shortcutsOpen = $state(false);
-	const side = $derived(appearance.current.nav.layout === 'side');
+	// The sidebar only on the desktop; phones keep the head line with the menu.
+	let desktop = $state(matchMedia('(min-width: 761px)').matches);
+	$effect(() => {
+		const query = matchMedia('(min-width: 761px)');
+		const change = () => (desktop = query.matches);
+		query.addEventListener('change', change);
+		return () => query.removeEventListener('change', change);
+	});
+	const side = $derived(appearance.current.nav.layout === 'side' && desktop);
+	// Without head line and status bar nothing sticks below or above them.
+	$effect(() => {
+		const root = document.documentElement.style;
+		root.setProperty('--header-height', side ? '0px' : '60px');
+		root.setProperty('--status-height', side ? '0px' : '34px');
+		return () => {
+			root.removeProperty('--header-height');
+			root.removeProperty('--status-height');
+		};
+	});
+	// The VM pages have their own entry for running tasks.
+	const ownTasks = $derived(['/vms', '/vms/screen'].includes(page.url.pathname));
 
 	// The nodes of the cluster, for the switcher; once per page load.
 	$effect(() => {
@@ -119,23 +138,20 @@
 	</div>
 {/if}
 <div class="frame" class:side>
-	{#if side}<SideNav />{/if}
+	{#if side}<SideNav tasks={!ownTasks} note={shell.statusNote} />{/if}
 	<div
 		class="shell"
 		style:padding-bottom={admin && terminal.open && !terminal.full
 			? `${terminal.height}px`
 			: undefined}
 	>
-		<Header {side} />
+		{#if !side}<Header tasks={!ownTasks} />{/if}
 		<main class:readable={!dockerPage} class:dashboard={page.url.pathname === '/'}>
 			<ClusterBanner />
-			{#if !dockerPage}<ConnectionBanner
-				/>{#if !['/', '/vms', '/vms/screen'].includes(page.url.pathname)}<TasksPanel
-						hideEmptyMobile={page.url.pathname === '/files'}
-					/>{/if}{/if}
+			{#if !dockerPage}<ConnectionBanner />{/if}
 			{@render children()}
 		</main>
-		<StatusBar note={shell.statusNote} />
+		{#if !side}<StatusBar note={shell.statusNote} />{/if}
 	</div>
 </div>
 {#if admin}<TerminalPanel />{/if}

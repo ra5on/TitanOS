@@ -10,10 +10,12 @@
 	import { vmLabel } from '#lib/vm-name.ts';
 	import type { MediaJob } from '#lib/media.ts';
 	import Dialog from './Dialog.svelte';
-	let {
-		compact = false,
-		hideEmptyMobile = false,
-	}: { compact?: boolean; hideEmptyMobile?: boolean } = $props();
+	import Icon from './Icon.svelte';
+	/**
+	 * `badge`: only a small badge with the number while something runs (head
+	 * line, sidebar status), nothing otherwise.
+	 */
+	let { compact = false, badge = false }: { compact?: boolean; badge?: boolean } = $props();
 
 	type Task = {
 		id: string;
@@ -163,17 +165,24 @@
 	] as Task[]);
 </script>
 
-<div
-	class="tasks-entry"
-	class:compact
-	class:hide-empty-mobile={hideEmptyMobile && !all.length && !failed}
->
-	<button class="btn" type="button" onclick={() => (open = true)}
-		>{t('ui.tasks')} <span class="mono">{loaded ? all.length : '…'}</span>{#if failed}<span
-				aria-label={t('ui.tasksPartial')}>!</span
-			>{/if}</button
-	>
-</div>
+{#if badge}
+	{#if all.length > 0}<button
+			class="tasks-badge"
+			type="button"
+			title={t('ui.tasksBadge', { count: all.length })}
+			aria-label={t('ui.tasksBadge', { count: all.length })}
+			onclick={() => (open = true)}
+			><Icon name="activity" size={14} /><span class="count mono">{all.length}</span></button
+		>{/if}
+{:else}
+	<div class="tasks-entry" class:compact>
+		<button class="btn" type="button" onclick={() => (open = true)}
+			>{t('ui.tasks')} <span class="mono">{loaded ? all.length : '…'}</span>{#if failed}<span
+					aria-label={t('ui.tasksPartial')}>!</span
+				>{/if}</button
+		>
+	</div>
+{/if}
 {#if open}
 	<Dialog title={t('ui.tasks')} onclose={() => (open = false)}>
 		<p class="muted">{t('ui.tasksHint')}</p>
@@ -222,10 +231,45 @@
 		font-size: 0.75rem;
 		color: var(--muted);
 	}
+	.tasks-badge {
+		flex: none;
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		height: 28px;
+		padding: 0 4px 0 6px;
+		border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--accent) 12%, transparent);
+		color: var(--text);
+		font: inherit;
+		font-size: 0.75rem;
+		white-space: nowrap;
+		cursor: pointer;
+	}
+	.tasks-badge :global(svg) {
+		color: var(--accent);
+	}
+	.tasks-badge:hover {
+		background: color-mix(in srgb, var(--accent) 20%, transparent);
+	}
+	.tasks-badge:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	.tasks-badge .count {
+		min-width: 20px;
+		height: 20px;
+		padding: 0 5px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 999px;
+		background: var(--accent);
+		color: var(--on-accent);
+		font-weight: 600;
+	}
 	@media (max-width: 760px) {
-		.tasks-entry.hide-empty-mobile {
-			display: none;
-		}
 		.tasks-entry.compact {
 			flex: 1 1 100%;
 			justify-content: flex-start;

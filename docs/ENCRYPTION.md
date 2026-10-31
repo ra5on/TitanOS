@@ -26,7 +26,7 @@ Freigaben zugreifen.
 - Nach dem Start gibt es einmal die Meldung `volume_locked` („Volume … wartet
   auf sein Passwort“), sobald die Platten des Volumes da sind. Die Meldung und
   die Volume-Kachel des Dashboards führen zum Volume auf der Speicher-Seite,
-  die Statusleiste zeigt es als „gesperrt“.
+  die Statusleiste (bei seitlicher Navigation der Status unten in der Seitenleiste) zeigt es als „gesperrt“.
 - Ein Neustart von titand (etwa durch ein App-Update) sperrt nichts: Die
   geöffneten Geräte bleiben offen.
 - Der Boot-Check nach einem Systemupdate zählt ein gesperrtes Volume als
