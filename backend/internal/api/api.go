@@ -332,6 +332,7 @@ func New(opts Options) *Server {
 	mux.HandleFunc("GET /api/v1/storage/disk-sleep", s.requireAdmin(s.handleDiskSleep))
 	mux.HandleFunc("PUT /api/v1/storage/disk-sleep", s.requireAdmin(s.handleSetDiskSleep))
 	mux.HandleFunc("PUT /api/v1/storage/volumes/{name}/quotas", s.requireAdmin(s.handleSetShareQuotas))
+	mux.HandleFunc("PUT /api/v1/storage/volumes/{name}/sync-speed", s.requireAdmin(s.handleSetSyncSpeed))
 	mux.HandleFunc("POST /api/v1/storage/rescan", s.requireAdmin(s.handleStorageRescan))
 	mux.HandleFunc("GET /api/v1/storage/smart", s.requireAdmin(s.handleSmart))
 	mux.HandleFunc("POST /api/v1/storage/smart/refresh", s.requireAdmin(s.handleSmartRefresh))

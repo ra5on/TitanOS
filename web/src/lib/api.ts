@@ -269,7 +269,11 @@ export type Volume = {
 	cache?: VolumeCache;
 	/** LUKS2 encryption (internal/storage crypt.go), set for encrypted volumes. */
 	encryption?: VolumeEncryption;
+	/** Rebuild speed of the RAID array (storage/syncspeed.go); missing for Btrfs and RAID 0. */
+	syncSpeed?: SyncSpeed;
 };
+
+export type SyncSpeed = 'gentle' | 'normal' | 'fast';
 
 export type VolumeEncryption = {
 	/** Waits for its password; nothing on it runs. */
