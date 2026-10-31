@@ -25,16 +25,19 @@ set titanos_extra=""
 # firmware's runtime services crash some of these firmwares early in boot
 # (seen with OVMF ia32, 31.10.2026); TitanOS needs none of them there, as
 # GRUB keeps its state in grubenv, not in EFI variables.
+# A variable of its own, so that custom.cfg cannot drop it.
+set titanos_platform=""
 if [ "$grub_platform" = "efi" ]; then
-    set titanos_extra="efi=noruntime"
+    set titanos_platform="efi=noruntime"
 fi
 # Manual additions for this stick only, e.g. a serial console:
-#   set titanos_extra="$titanos_extra console=ttyS0,115200"
+#   set titanos_extra="console=ttyS0,115200"
 if [ -f /boot/grub/custom.cfg ]; then
     source /boot/grub/custom.cfg
 fi
 export titanos_loader
 export titanos_extra
+export titanos_platform
 
 set titanos_trial=""
 set titanos_count=0
@@ -131,7 +134,7 @@ function titanos_boot {
         set titanos_options="@OPTIONS@"
     fi
     echo "TitanOS: System $1"
-    linux "/titanos/$1/vmlinuz" $titanos_options titanos.loader=$titanos_loader $titanos_extra
+    linux "/titanos/$1/vmlinuz" $titanos_options titanos.loader=$titanos_loader $titanos_platform $titanos_extra
     initrd "/titanos/$1/initrd.img"
     boot
     # Only reached if the system could not be loaded: start over, so that
