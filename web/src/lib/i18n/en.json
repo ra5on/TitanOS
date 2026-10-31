@@ -4821,7 +4821,7 @@
 	"tools.range.1h": "Last hour",
 	"tools.range.15m": "Last 15 minutes",
 	"tools.copyLines": "Copy lines",
-	"tools.exportLines": "Save as .txt",
+	"tools.exportLines": "Download (up to 50,000 lines)",
 	"tools.copied": "The lines shown are on the clipboard.",
 	"tools.copyFailed": "Copying did not work: the browser does not allow access to the clipboard. “Save as .txt” always works.",
 	"tools.lineCount": "{count} lines",
@@ -7030,5 +7030,6 @@
 	"common.day5": "Friday",
 	"common.day6": "Saturday",
 	"activity.via.homeassistant": "Home Assistant",
-	"activity.via.agent": "internal"
+	"activity.via.agent": "internal",
+	"tools.harmless": "Known to be harmless: the router has PCP switched off; Tailscale still connects through UPnP or a relay. Switch PCP on in the router to get rid of the message."
 }

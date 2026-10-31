@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import { parseLogs, type LogEntry as Entry } from '#lib/logs.ts';
 	import { api, ApiError } from '#lib/api.ts';
+	import { apiPath } from '#lib/cluster-node.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
@@ -153,15 +154,19 @@
 		}
 		copiedTimer = setTimeout(() => (copied = ''), 4000);
 	}
+	/** Downloads up to 50,000 lines of this start for the chosen filter and
+	 *  range, not only the lines on the page. */
 	function exportLines() {
+		const params = new URLSearchParams({ source, priority: String(priority) });
+		if (RANGES[range]) params.set('since', String(Math.floor(Date.now() / 1000) - RANGES[range]));
 		const link = document.createElement('a');
-		link.href = URL.createObjectURL(
-			new Blob([logText(0, entries.length) + '\n'], { type: 'text/plain;charset=utf-8' }),
-		);
-		link.download = `titanos-log-${new Date().toISOString().slice(0, 19).replaceAll(':', '-')}.txt`;
+		link.href = apiPath('/logs/export?' + params);
 		link.click();
-		setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
 	}
+
+	// Messages known to be harmless: shown, but quiet, with a note why.
+	const HARMLESS = [/portmapper: failed to get PCP mapping/, /PCP is implemented but not enabled/];
+	const harmless = (entry: Entry) => HARMLESS.some((pattern) => pattern.test(entry.message));
 
 	function level(priority: number): 'error' | 'warn' | '' {
 		return priority <= 3 ? 'error' : priority === 4 ? 'warn' : '';
@@ -238,7 +243,11 @@
 			tabindex="0"
 		>
 			{#each entries as entry, index (index)}
-				<div class="line {level(entry.priority)}">
+				<div
+					class="line {level(entry.priority)}"
+					class:harmless={harmless(entry)}
+					title={harmless(entry) ? t('tools.harmless') : undefined}
+				>
 					<time datetime={entry.time}>{clock.format(new Date(entry.time))}</time>
 					<span class="source">{entry.source}</span>
 					<span class="message"
@@ -324,6 +333,9 @@
 		position: absolute;
 		right: 16px;
 		bottom: 12px;
+	}
+	.line.harmless {
+		opacity: 0.55;
 	}
 	.lines {
 		height: min(60vh, 640px);

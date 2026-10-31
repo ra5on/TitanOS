@@ -84,7 +84,7 @@ Platzhalter `*.<domain>` – für die HTTPS-Namen der Apps, und erneuert es selb
 
 `GET`/`PUT /api/v1/system/letsencrypt` (Einstellungen mit `clearSecrets`),
 `POST /api/v1/system/letsencrypt/renew`. Nur Besitzer/Administratoren, nicht im
-Assistenten-Katalog und nicht in der öffentlichen API.
+MCP-Werkzeugkatalog und nicht in der öffentlichen API.
 
 ## Technik und Lizenz
 

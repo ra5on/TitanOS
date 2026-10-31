@@ -21,9 +21,8 @@ bleiben Eigentum des jeweiligen Kontos. LUKS-Verschlüsselung ist nicht vorgeseh
 - **Werkzeuge › Aufträge:** laufende Datei-, Backup-, Speicher-, Docker- und
   VM-Arbeit, Fehler, nächste Termine sowie Prüfung unterbrochener Vorgänge.
   Das Dashboard zeigt dieselben handlungsrelevanten Zustände in kompakter Form.
-  Seit 0.17.0: Alle/Aktiv/Geplant/Abgeschlossen/Fehler, Suche, eigene KI-Aufträge
-  und aktivierte Automationen, registrierte Uploads und unterstützte direkte
-  Steuerung. Ereignis-Automationen ohne Termin bleiben wartend. Angezeigt werden
+  Seit 0.17.0: Alle/Aktiv/Geplant/Abgeschlossen/Fehler, Suche, registrierte
+  Uploads und unterstützte direkte Steuerung. Angezeigt werden
   die je Fachbereich vorhandenen Ergebnisse (Wartung 100, Datei-Aufträge begrenzt,
   sonst letzte bekannte Zustände), kein unbegrenztes neues Gesamtarchiv. Eigene
   Uploads benötigen zum Fortsetzen weiterhin die Browser-Dateiobjekte.
@@ -146,7 +145,7 @@ Freigeben führt den Auftrag nicht sofort aus. Bei fehlendem Daten-Volume lässt
 sich eine sonst unveränderte Konfiguration deaktivieren; ungeklärte Zustände
 bleiben gesperrt. Abbrechen im Auftragsdialog verwirft auch die dortige Volume-Wahl.
 Globale ungespeicherte Einstellungen werden beim Navigieren geschützt. Fehler erscheinen auch als
-Administrator-Benachrichtigung ohne Chatinhalte.
+Administrator-Benachrichtigung.
 
 Ein SMART-Langtest wird nur als bestanden gemeldet, wenn sein Lauf zuerst
 beobachtet und danach ein erfolgreicher Abschluss gemeldet wurde. Nicht

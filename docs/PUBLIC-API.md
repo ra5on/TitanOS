@@ -38,10 +38,10 @@ Ein `*:write`-Bereich schließt `*:read` nicht automatisch ein.
 
 Die freigegebenen Routen stehen als eine Liste in
 `backend/internal/api/public_routes.go` (`publicRoutes`); Tokenprüfung,
-OpenAPI-Datei und die ändernden MCP-Werkzeuge entstehen daraus.
+OpenAPI-Datei und ein Teil der MCP-Werkzeuge entstehen daraus.
 
 Tokens öffnen weder Konten/Geheimnisse, Sitzungen oder Shells noch Updates,
-Netzwerk- und Firewall-Bestätigung, Firewall-Änderungen, Assistent oder beliebige neue API-Routen. Verwaltung der
+Netzwerk- und Firewall-Bestätigung, Firewall-Änderungen oder beliebige neue API-Routen. Verwaltung der
 Tokens selbst erfordert eine normale angemeldete Sitzung. Eine fehlerhafte
 Authorization-Kopfzeile fällt nicht auf Browser-Cookies zurück.
 
@@ -98,8 +98,12 @@ seit 29.10.2026 einen MCP-Server unter `POST /mcp` auf demselben Port. Ab Werk
 aus; Besitzer/Administratoren schalten ihn unter Einstellungen › API und CLI
 ein. Er nimmt dieselben persönlichen Tokens mit dem zusätzlichen Bereich `mcp`;
 die übrigen Bereiche des Tokens und die aktuelle Rolle bestimmen die
-Werkzeuge, die genau die Routen dieser Seite (und Lesewerkzeuge aus dem festen
-Katalog des Assistenten) mit denselben Rechteprüfungen aufrufen. Zerstörende
-Werkzeuge verlangen `confirm: true`; jeder Aufruf steht im Aktivitätsprotokoll
-als „per MCP“. `titanosctl mcp` ist eine stdio-Brücke für Clients ohne
+Werkzeuge: die Routen dieser Seite und die Lese- und Aktionswerkzeuge des
+festen Werkzeugkatalogs (Speicher, Freigaben, Sicherungen, Firewall-Regeln,
+Konten, Plugins, Updates, Home Assistant …), alle mit denselben
+Rechteprüfungen wie die Weboberfläche. Verwaltungsaktionen brauchen den
+Bereich `system:write` (nur Besitzer/Administratoren). Gefährliche Aufrufe
+sind ab Werk gesperrt und laufen erst, wenn das Werkzeug in
+`/config/system/mcp.json` auf „all“ steht, und dann nur mit `confirm: true`;
+jeder Aufruf steht im Aktivitätsprotokoll als „per MCP“. `titanosctl mcp` ist eine stdio-Brücke für Clients ohne
 HTTP-Transport. Einzelheiten: `docs/MCP.md`.

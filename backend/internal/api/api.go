@@ -608,6 +608,7 @@ func New(opts Options) *Server {
 	mux.HandleFunc("POST /api/v1/config-backup/run", s.requireAdmin(s.handleConfigBackupRun))
 	mux.HandleFunc("GET /api/v1/config-backup/download", s.requireAdmin(s.handleConfigBackupDownload))
 	mux.HandleFunc("GET /api/v1/logs", s.requireAdmin(s.handleLogs))
+	mux.HandleFunc("GET /api/v1/logs/export", s.requireAdmin(s.handleLogsExport))
 	mux.HandleFunc("GET /api/v1/activity", s.requireAdmin(s.handleActivity))
 	mux.HandleFunc("PUT /api/v1/activity", s.requireAdmin(s.handleActivitySettings))
 	mux.HandleFunc("GET /api/v1/diagnostics/bundle", s.requireAdmin(s.handleDiagnosticBundle))

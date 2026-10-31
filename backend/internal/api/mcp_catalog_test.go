@@ -78,6 +78,9 @@ func TestMCPSettingsListToolsAndCheckModes(t *testing.T) {
 	if res, body := ts.request("PUT", "/api/v1/system/mcp", map[string]any{"enabled": true, "tools": map[string]string{"vm_action": "all", "docker_list": "on"}}); res.StatusCode != 200 || strings.Contains(string(body), "docker_list") {
 		t.Fatalf("save: %d %s", res.StatusCode, body)
 	}
+	// Switching MCP off and on keeps the tools.
+	ts.request("PUT", "/api/v1/system/mcp", map[string]any{"enabled": false})
+	ts.request("PUT", "/api/v1/system/mcp", map[string]any{"enabled": true})
 	res, body := ts.request("GET", "/api/v1/system/mcp", nil)
 	var view struct {
 		Tools []mcpToolView `json:"tools"`

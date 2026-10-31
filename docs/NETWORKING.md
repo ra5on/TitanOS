@@ -247,7 +247,7 @@ Loopback, Link-local, Docker-, VM- und VPN-Schnittstellen), **Tailscale**
   die Beschränkung auf; titand wird dafür kurz gestoppt und wieder gestartet.
 - Route: `PUT /api/v1/system/ssh/networks` mit `{"networks": [...], "confirm": false}`,
   nur Besitzer/Administratoren in einer Websitzung (nicht über API-Tokens, nicht
-  im Assistenten-Katalog). `GET /api/v1/system/ssh` liefert zusätzlich
+  im MCP-Werkzeugkatalog). `GET /api/v1/system/ssh` liefert zusätzlich
   `allowedNetworks`, `networksError`, `homeNetworks`, `tailscaleNetworks`,
   `netbirdNetworks` und `clientAddress`.
 - Geprüft mit Unit-Tests (Normalisierung, Adressabdeckung, erzeugte Datei,

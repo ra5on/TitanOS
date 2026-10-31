@@ -74,7 +74,7 @@ Wer einen Knoten verwaltet, kann alle verwalten. Wer einen Knoten übernimmt, al
 
 **Nur auf dem Knoten selbst** gehen das Ändern und Bestätigen von Netzwerk und Firewall (`cluster_local_only`). Die Bestätigung soll zeigen, dass der Browser das NAS noch erreicht. Über einen anderen Knoten zeigt sie das nicht.
 
-**Weitergeleitet werden nur Websitzungen**, keine API-Tokens, kein MCP und nicht der Assistent. Eine Anfrage, die schon von einem anderen Knoten kommt, wird nicht weitergereicht. Cluster-Routen nehmen sie nicht an.
+**Weitergeleitet werden nur Websitzungen**, keine API-Tokens und kein MCP. Eine Anfrage, die schon von einem anderen Knoten kommt, wird nicht weitergereicht. Cluster-Routen nehmen sie nicht an.
 
 ## Rollen und Rechte
 
@@ -95,7 +95,7 @@ Wer einen Knoten verwaltet, kann alle verwalten. Wer einen Knoten übernimmt, al
 - **Übernahme:** Übernommene Änderungen wirken wie lokale:
   - Bei neuem Passwort, Zwei-Faktor-Wechsel, entferntem Passkey oder Sperre enden die Sitzungen.
   - Samba und sshd ziehen nach.
-  - Ein gelöschtes Konto verliert auch hier Einstellungen, Chats und Freigaberechte.
+  - Ein gelöschtes Konto verliert auch hier Einstellungen und Freigaberechte.
 - **Einmal-Codes:** Benutzte TOTP-Schritte und Wiederherstellungscodes gehen mit. Dass ein Code nur einmal gilt, ist clusterweit „best effort“: In den Sekunden bis zur Verteilung könnte derselbe Code auf zwei Knoten angenommen werden.
 - **Konflikte:** Zwei Knoten, die gleichzeitig dasselbe Konto ändern, entscheidet die Version (letzter Schreiber).
 - **Gleichzeitige Beitritte:** Zwei gleichzeitige Beitritte an zwei verschiedenen Knoten können sich überschreiben. Dann einen der beiden Knoten neu beitreten lassen.

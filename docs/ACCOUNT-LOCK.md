@@ -40,8 +40,8 @@ Regeln (serverseitig in `auth.Users.SetDisabled` und `api.handleLockUser`):
 |---|---|
 | Weboberfläche | alle Sitzungen des Kontos enden sofort; neue Anmeldung wird abgelehnt |
 | API-Tokens | werden abgelehnt (`401`), solange das Konto gesperrt ist |
-| Assistent, Automationen, Freigabe aus Benachrichtigungen | laufen nicht als gesperrtes Konto (`activeUser`) |
-| Home Assistant | ein gesperrtes Konto als HA-Konto gilt wie kein Konto (keine Knöpfe, keine Assist-Antworten in dessen Namen) |
+| MCP | Tokens des Kontos werden abgelehnt wie alle API-Tokens |
+| Home Assistant | ein gesperrtes Konto als HA-Konto gilt wie kein Konto (keine Knöpfe in dessen Namen) |
 | Konsolen (NAS, Docker, VM-Bildschirm, seriell) | offene Konsolen enden mit der nächsten Prüfung (alle 3 Sekunden) |
 | SSH | Konto verlässt `titanos-ssh`, Schlüsseldatei entfällt, laufende Sitzungen enden (`loginctl terminate-user`) |
 | SMB | Samba-Konto mit Flag `D` (Import-Datei und zusätzlich `smbpasswd -d`), offene SMB-Verbindungen des Kontos werden beendet (`smbstatus --processes --json`, `kill -TERM` des zugehörigen smbd-Prozesses) |

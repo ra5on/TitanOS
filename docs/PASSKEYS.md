@@ -49,7 +49,7 @@ eingegeben (auffindbare Passkeys, `residentKey: required`).
   (Passwort, Code), `POST /api/v1/account/passkeys`,
   `DELETE /api/v1/account/passkeys/{id}`, öffentlich
   `POST /api/v1/login/passkey/begin` und `POST /api/v1/login/passkey`.
-  Nicht im Assistenten-Katalog, nicht über API-Tokens.
+  Nicht im MCP-Werkzeugkatalog, nicht über API-Tokens.
 
 ## Prüfstand
 

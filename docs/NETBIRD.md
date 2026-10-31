@@ -86,8 +86,8 @@ Nur Besitzer und Administratoren; Änderungen laufen über die Plugin-Sperre
 | `POST /api/v1/plugins/netbird/control/{connect,disconnect,logout,confirm,undo}` | Verbindung und Probe |
 | `GET /api/v1/plugins/netbird/peers` | Geräte für die Dashboard-Kachel |
 
-Der KI-Assistent kennt nur das Lesen und das Ändern der Einstellungen auf Probe,
-nicht den Setup-Key.
+Der MCP-Werkzeugkatalog hat keine eigenen NetBird-Werkzeuge; der Setup-Key ist
+über MCP nie erreichbar.
 
 ## Ablage und Netzwerk
 

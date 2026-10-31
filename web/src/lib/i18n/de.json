@@ -4821,7 +4821,7 @@
 	"tools.range.1h": "Letzte Stunde",
 	"tools.range.15m": "Letzte 15 Minuten",
 	"tools.copyLines": "Zeilen kopieren",
-	"tools.exportLines": "Als .txt speichern",
+	"tools.exportLines": "Herunterladen (bis 50.000 Zeilen)",
 	"tools.copied": "Die angezeigten Zeilen sind in der Zwischenablage.",
 	"tools.copyFailed": "Kopieren ging nicht: Der Browser erlaubt keinen Zugriff auf die Zwischenablage. „Als .txt speichern“ geht immer.",
 	"tools.lineCount": "{count} Zeilen",
@@ -7030,5 +7030,6 @@
 	"common.day5": "Freitag",
 	"common.day6": "Samstag",
 	"activity.via.homeassistant": "Home Assistant",
-	"activity.via.agent": "intern"
+	"activity.via.agent": "intern",
+	"tools.harmless": "Bekannt harmlos: Der Router hat PCP ausgeschaltet; Tailscale verbindet trotzdem über UPnP oder ein Relais. Wer die Meldung loswerden will, schaltet PCP im Router ein."
 }

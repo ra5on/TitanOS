@@ -137,6 +137,12 @@ func (s *Server) handleMCPSettingsSet(w http.ResponseWriter, r *http.Request) {
 	m := &s.mcp
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	// A client that only switches MCP on or off (the switch under API and
+	// CLI, older web UIs) sends no tools: they stay as they are.
+	if req.Tools == nil {
+		s.mcpLoadLocked()
+		req.Tools = m.settings.Tools
+	}
 	if err := s.opts.Store.WriteJSON(mcpSettingsFile, req); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 		return

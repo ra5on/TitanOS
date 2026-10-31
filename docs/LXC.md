@@ -80,7 +80,7 @@ Nichts davon liegt im RAM-Overlay oder auf dem Stick, außer der kleinen JSON-Da
 | `GET /api/v1/lxc/{name}/config` | erzeugte LXC-Konfiguration |
 | `GET/POST /api/v1/lxc/{name}/snapshots`, `POST …/snapshots/{id}/restore`, `DELETE …/snapshots/{id}` | Snapshots |
 
-Alles nur für Besitzer/Administratoren; Anlegen und Snapshot-Aktionen über die gemeinsame Aufnahme schwerer Vorgänge. Nicht im Katalog des Assistenten und nicht in der öffentlichen API.
+Alles nur für Besitzer/Administratoren; Anlegen und Snapshot-Aktionen über die gemeinsame Aufnahme schwerer Vorgänge. Nicht im MCP-Werkzeugkatalog und nicht in der öffentlichen API.
 
 ## Abbild
 

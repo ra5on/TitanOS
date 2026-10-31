@@ -47,10 +47,10 @@ geschlossen wird.
   Weiterleitung; ein Name, der zwischen Prüfung und Verbindung auf eine andere
   Adresse zeigt, hilft nicht. Höchstens zehn Weiterleitungen, nur `http`/`https`
   ohne Zugangsdaten, nach `https` nie wieder `http`. Kein Proxy.
-- Nicht im API-Katalog des KI-Assistenten: Der Assistent liest Webseiten und
-  andere fremde Inhalte; eine eingebettete Anweisung dürfte das NAS nicht dazu
+- Nicht im MCP-Werkzeugkatalog und nicht in der öffentlichen API: KI-Clients
+  lesen fremde Inhalte; eine eingebettete Anweisung dürfte das NAS nicht dazu
   bringen, beliebige Dateien aus dem Internet oder dem Heimnetz in Freigaben zu
-  laden. Die festen Dateiwerkzeuge des Assistenten bleiben unverändert.
+  laden.
 
 ## Schreiben, Prüfen, Veröffentlichen
 
