@@ -178,7 +178,10 @@ jobs:
             package=$(python3 scripts/plugin-set.py package "$image")
             fetch() { python3 scripts/plugin-set.py fetch --base "$VERSION" --kernel "$kernel" --kernel-package "$package" --dest "$dest"; }
             status=0; fetch || status=$?
-            if [ "$status" = 3 ] && [ "$GITHUB_EVENT_NAME" = push ]; then
+            # A set for the newer kernel is only fetched, never requested:
+            # the plugin repository builds those once it handles
+            # kernelVariant (patch prepared 31.10.2026, applied by its owner).
+            if [ "$status" = 3 ] && [ "$GITHUB_EVENT_NAME" = push ] && [ -z "$variant" ]; then
               if [ -z "$GH_TOKEN" ]; then
                 echo "no plugin set for $kernel ($package) and no PLUGINS_DISPATCH_TOKEN to request one" >&2
                 exit 1

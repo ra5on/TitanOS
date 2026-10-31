@@ -35,3 +35,7 @@ Die Wahl steht im optionalen Feld `kernel` von `/config/system/update.json` (`"n
 - `make test-release`: Release mit Variante packen, signieren und prüfen (Manipulation erkannt), falsches Abbild abgelehnt, App-Release übernimmt die Variante.
 - UI-Screenshots mit isolierten Testdaten.
 - `mkosi summary` mit dem Profil `kernel-new` ist geprüft (Sandbox-Baum, Ausgabeordner). **Nicht gelaufen:** der echte Image-Build mit Backports (braucht root und Netz), ein Boot des neuen Kernels, Plugin-Sätze für den neuen Kernel, die CI-Schritte und die Behandlung von `kernelVariant` im Plugin-Repository (Patch liegt bei). Ob die Firmware-Pakete in trixie-backports neuer sind, entscheidet apt beim Bau. Ohne Backports-Fassung bleibt die aus trixie.
+
+## Stand der Treiber-Plugins für den neuen Kernel (31.10.2026)
+
+Das Plugin-Repository baut Sätze für den neuen Kernel erst, wenn es `kernelVariant` versteht. Die Änderungen dafür liegen als Patch vor und werden vom Projektinhaber im Plugin-Repository eingespielt (dort sind auch die Quellen von `r8125`/`r8126` festzulegen und `nvidia-legacy/packages.lock.json` zu erzeugen). Bis dahin holt der Release-Workflow für den neuen Kernel nur einen schon vorhandenen Satz und warnt sonst; ein NAS mit Kernel „Neu“ kann dann keine Kernel-Plugins (NVIDIA, Netzwerktreiber) nutzen. Der Standard-Kernel ist davon nicht betroffen.
