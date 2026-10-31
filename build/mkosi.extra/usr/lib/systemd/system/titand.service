@@ -16,6 +16,12 @@ StartLimitBurst=10
 ExecStart=/usr/bin/titand
 Restart=on-failure
 RestartSec=2
+# titand manages disks, mounts, the network, users and kernel modules as
+# root, so most sandbox settings would break it. What it never needs is
+# closed. Helpers that parse files from the shares run in their own,
+# tight sandbox (package sandbox).
+LockPersonality=yes
+RestrictRealtime=yes
 
 [Install]
 WantedBy=multi-user.target

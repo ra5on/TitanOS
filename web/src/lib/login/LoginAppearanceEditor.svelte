@@ -440,7 +440,7 @@
 						type="text"
 						lang={locale}
 						maxlength={LOGIN_TITLE_MAX}
-						placeholder={locale === 'de' ? 'Anmelden' : 'Sign in'}
+						placeholder={locale === 'de' ? 'Anmelden' : 'Log in'}
 						value={text.title}
 						oninput={(e) => setText(locale, 'title', e.currentTarget.value)}
 					/></label
@@ -480,7 +480,7 @@
 
 <style>
 	.hint {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.frame {
 		position: relative;
@@ -532,7 +532,7 @@
 		background: var(--chip);
 		color: var(--text);
 		font: inherit;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		text-align: left;
 		cursor: pointer;
 	}
@@ -558,7 +558,7 @@
 		background: var(--bg);
 		border: 1px dashed var(--border);
 		border-radius: var(--radius-ctl);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.upload span {
 		flex: 1 1 180px;
@@ -588,14 +588,14 @@
 	}
 	.lang {
 		grid-column: 1 / -1;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		font-weight: 600;
 	}
 	.language small {
-		font-size: 0.6875rem;
+		font-size: var(--text-xs);
 	}
 	.state {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		color: var(--muted);
 	}
 	.state.warn {

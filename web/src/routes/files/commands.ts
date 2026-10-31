@@ -30,7 +30,6 @@ export type FileCommand =
 	| 'openFolder'
 	| 'preview'
 	| 'edit'
-	| 'assistant'
 	| 'download'
 	| 'archive'
 	| 'properties'

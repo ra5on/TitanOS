@@ -217,13 +217,14 @@ func (m *Manager) Clone(ctx context.Context, name string, req CloneRequest, moun
 		if err := volumedata.WriteJSON(root, op.ID+"/operation.json", op); err != nil {
 			return err
 		}
-		return m.publishClone(root, &op)
+		// Publishing must not stop halfway because the request ended.
+		return m.publishClone(context.WithoutCancel(ctx), root, &op)
 	}, lock)
 	return nil
 }
-func (m *Manager) publishClone(root *os.Root, op *CloneOperation) error {
+func (m *Manager) publishClone(ctx context.Context, root *os.Root, op *CloneOperation) error {
 	v := op.VM
-	if err := m.validClone(v, v.Volume); err != nil {
+	if err := m.validClone(ctx, v, v.Volume); err != nil {
 		return err
 	}
 	parent := filepath.Join(m.mountRoot, v.Volume, "vms")
@@ -286,7 +287,7 @@ func (m *Manager) publishClone(root *os.Root, op *CloneOperation) error {
 		if err := m.snapshotPath(p, false); err != nil {
 			return err
 		}
-		if _, err := m.imageInfo(context.Background(), p); err != nil {
+		if _, err := m.imageInfo(ctx, p); err != nil {
 			return err
 		}
 	}
@@ -354,7 +355,7 @@ func (m *Manager) CloneOperations(volume string, mounted []string) ([]CloneOpera
 	}
 	return out, nil
 }
-func (m *Manager) RecoverClone(volume, id, action, confirm string, mounted []string) error {
+func (m *Manager) RecoverClone(ctx context.Context, volume, id, action, confirm string, mounted []string) error {
 	if m.Disabled {
 		return ErrDisabled
 	}
@@ -399,15 +400,15 @@ func (m *Manager) RecoverClone(volume, id, action, confirm string, mounted []str
 		return ErrInvalid
 	}
 	if action == "finish" && (op.Phase == "verified" || op.Phase == "publishing") {
-		if err := m.validClone(op.VM, volume); err != nil {
+		if err := m.validClone(ctx, op.VM, volume); err != nil {
 			return err
 		}
-		return m.publishClone(root, &op)
+		return m.publishClone(ctx, root, &op)
 	}
 	return ErrInvalid
 }
 
-func (m *Manager) validClone(v VM, volume string) error {
+func (m *Manager) validClone(ctx context.Context, v VM, volume string) error {
 	mac, err := net.ParseMAC(v.MAC)
 	if err != nil || len(mac) != 6 || !snapshotID.MatchString(v.UUID) || v.Volume != volume || v.Directory != "" || v.Autostart || v.Exclusive || len(v.CPUPin) > 0 || len(v.PCI) > 0 || len(v.USB) > 0 || len(v.Folders) > 0 || v.AutoGPU || v.ISO != "" || len(v.Disks) == 0 {
 		return ErrInvalid
@@ -417,5 +418,5 @@ func (m *Manager) validClone(v VM, volume string) error {
 			return ErrInvalid
 		}
 	}
-	return m.prepare(context.Background(), &v, []string{volume})
+	return m.prepare(ctx, &v, []string{volume})
 }

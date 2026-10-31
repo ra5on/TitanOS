@@ -15,7 +15,10 @@
 		autoInstall: boolean;
 		installTime: string;
 		checkEvery?: number;
+		/** Kernel choice: '' (or missing) Debian's kernel, 'new' the newer one of trixie-backports. */
+		kernel?: '' | 'stable' | 'new';
 	};
+	type Variant = { kernel: string; files: { size: number }[] };
 	type Manifest = {
 		version: string;
 		channel: string;
@@ -25,6 +28,7 @@
 		changelog: string;
 		files: { size: number }[];
 		app?: { base: string; size: number };
+		variants?: { new?: Variant };
 	};
 	type Slot = {
 		name: string;
@@ -33,6 +37,9 @@
 		complete: boolean;
 		next: boolean;
 		triesLeft: number | null;
+		/** Kernel release in the slot and its kernel variant, if known. */
+		kernel?: string;
+		variant?: '' | 'stable' | 'new';
 	};
 	type Status = {
 		version: string;
@@ -62,6 +69,14 @@
 		/** How the available release would be installed: titand alone, or a whole system. */
 		kind: '' | 'app' | 'system';
 		app: { current: string; previous: string; trial: boolean; canRollback: boolean };
+		/** Kernel variant of the running system. */
+		variant: 'stable' | 'new';
+		/** What started this system: systemd-boot, or GRUB for legacy BIOS / 32-bit UEFI. */
+		bootLoader: string;
+		/** The available release is the running version with the other kernel. */
+		kernelSwitch?: boolean;
+		/** A newer release without a system with the chosen kernel. */
+		kernelMissing?: string;
 	};
 
 	let status = $state<Status | null>(null);
@@ -114,7 +129,8 @@
 	// draft compares equal to what the server sent.
 	function normal(settings: Settings): Settings {
 		const every = settings.checkEvery ?? 0;
-		return { ...settings, checkEvery: every === 24 * 60 ? 0 : every };
+		const kernel = settings.kernel === 'new' ? 'new' : '';
+		return { ...settings, checkEvery: every === 24 * 60 ? 0 : every, kernel };
 	}
 
 	function showEvery(every: number) {
@@ -233,7 +249,10 @@
 		saved = false;
 		error = null;
 		try {
-			take(await api.put<Status>('/update/settings', draft));
+			// Stable is the default and left out, as before the choice existed.
+			take(
+				await api.put<Status>('/update/settings', { ...draft, kernel: draft.kernel || undefined }),
+			);
 			draft = { ...status!.settings };
 			saved = true;
 			showEvery(draft.checkEvery ?? 0);
@@ -244,10 +263,24 @@
 	}
 
 	const appUpdate = $derived(status?.kind === 'app' && !!status.available?.app);
+	// A system update installs the files of the chosen kernel.
+	const chosen = $derived(
+		status?.settings.kernel === 'new' && status.available?.variants?.new
+			? status.available.variants.new
+			: status?.available,
+	);
 	const size = $derived(
 		appUpdate
 			? (status?.available?.app?.size ?? 0)
-			: (status?.available?.files.reduce((sum, file) => sum + file.size, 0) ?? 0),
+			: (chosen?.files.reduce((sum, file) => sum + file.size, 0) ?? 0),
+	);
+	const running = $derived(status?.slots.find((slot) => slot.running));
+	const loaderKey = $derived(
+		status?.bootLoader === 'grub-i386-pc'
+			? 'update.boot.bios'
+			: status?.bootLoader === 'grub-i386-efi'
+				? 'update.boot.ia32'
+				: '',
 	);
 	// Where going back from an app update leads: the app before, or the titand of the system image.
 	const appTarget = $derived(
@@ -280,6 +313,11 @@
 			>{#if status.base && status.base !== status.version}<span class="muted base"
 					>{t('update.app.onBase', { version: status.base })}</span
 				>{/if}
+		</p>
+		<p class="muted">
+			{t(status.variant === 'new' ? 'update.kernel.runningNew' : 'update.kernel.runningStable', {
+				kernel: running?.kernel || '–',
+			})}{#if loaderKey}{' · '}{t(loaderKey as 'update.boot.bios')}{/if}
 		</p>
 		{#if restartedTo}<p class="notice-ok" role="status">
 				{t('update.app.restarted', { version: restartedTo })}
@@ -347,7 +385,13 @@
 		{#if status.available && !status.pending && !working}
 			<div class="available">
 				<div class="head">
-					<span class="name">TitanOS {status.available.version}</span>
+					<span class="name"
+						>TitanOS {status.available.version}{#if status.kernelSwitch}{' · '}{t(
+								status.settings.kernel === 'new'
+									? 'update.kernel.withNew'
+									: 'update.kernel.withStable',
+							)}{/if}</span
+					>
 					<span class="chips">
 						{#if appUpdate}<span class="chip ok">{t('update.app.noRestart')}</span>{/if}
 						<span class="chip info"
@@ -362,7 +406,7 @@
 				<p class="muted">
 					{t('update.availableMeta', {
 						date: formatDateTime(new Date(status.available.released)),
-						kernel: status.available.kernel,
+						kernel: chosen?.kernel ?? status.available.kernel,
 						size: formatBytes(size),
 					})}
 				</p>
@@ -373,11 +417,15 @@
 						type="button"
 						class="btn btn-primary"
 						disabled={busy !== '' || status.unconfirmed || status.app.trial}
-						onclick={() => (asking = 'install')}>{t('update.install')}</button
+						onclick={() => (asking = 'install')}
+						>{t(status.kernelSwitch ? 'update.kernel.switch' : 'update.install')}</button
 					>
 				</div>
 			</div>
 		{:else if status.canVerify && !status.pending && !working}
+			{#if status.kernelMissing}<p class="notice-warn" role="status">
+					{t('update.kernel.missing', { version: status.kernelMissing })}
+				</p>{/if}
 			<div class="row">
 				<button type="button" class="btn" disabled={busy !== ''} onclick={() => act('check')}
 					>{t(busy === 'check' ? 'update.checking' : 'update.check')}</button
@@ -433,6 +481,11 @@
 					<li>
 						<span class="mono name">{t('update.slot', { name: slot.name.toUpperCase() })}</span>
 						<span class="mono">{slot.complete || slot.running ? slot.version || '–' : '–'}</span>
+						{#if slot.kernel}<span class="mono muted kernel"
+								>{t(slot.variant === 'new' ? 'update.kernel.slotNew' : 'update.kernel.slotStable', {
+									kernel: slot.kernel,
+								})}</span
+							>{/if}
 						<span class="grow muted"
 							>{slotState(slot)}{#if slot.triesLeft !== null && slot.triesLeft > 0}{' · '}{t(
 									'update.slot.tries',
@@ -501,6 +554,24 @@
 					? t('update.nextCheckSoon')
 					: t('update.nextCheck', { time: formatDateTime(nextCheck) })}
 			</p>{/if}
+		<fieldset class="kernel-choice">
+			<legend>{t('update.kernel.title')}</legend>
+			<label class="check"
+				><input type="radio" name="kernel" value="" bind:group={draft.kernel} /><span
+					><strong>{t('update.kernel.stable')}</strong><span class="muted"
+						>{t('update.kernel.stableText')}</span
+					></span
+				></label
+			>
+			<label class="check"
+				><input type="radio" name="kernel" value="new" bind:group={draft.kernel} /><span
+					><strong>{t('update.kernel.new')}</strong><span class="muted"
+						>{t('update.kernel.newText')}</span
+					></span
+				></label
+			>
+			<p class="muted">{t('update.kernel.hint')}</p>
+		</fieldset>
 		<label class="check"
 			><input type="checkbox" bind:checked={draft.autoInstall} disabled={manual} /><span
 				>{t('update.auto')}</span
@@ -534,17 +605,22 @@
 
 {#if asking === 'install' && status?.available}
 	<Dialog
-		title={t('update.confirmTitle', { version: status.available.version })}
+		title={status.kernelSwitch
+			? t('update.kernel.switchTitle')
+			: t('update.confirmTitle', { version: status.available.version })}
 		onclose={() => (asking = '')}
 	>
 		<p>
 			{t(appUpdate ? 'update.app.confirmText' : 'update.confirmText', { size: formatBytes(size) })}
 		</p>
+		{#if status.kernelSwitch}<p>
+				{t('update.kernel.confirm', { kernel: chosen?.kernel ?? '' })}
+			</p>{/if}
 		<p class="muted">{t(appUpdate ? 'update.app.confirmSafe' : 'update.confirmSafe')}</p>
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={() => (asking = '')}>{t('common.cancel')}</button>
 			<button type="button" class="btn btn-primary" onclick={() => act('install')}
-				>{t('update.install')}</button
+				>{t(status.kernelSwitch ? 'update.kernel.switch' : 'update.install')}</button
 			>
 		</div>
 	</Dialog>
@@ -594,7 +670,7 @@
 <style>
 	section,
 	form {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	p {
 		max-width: 60rem;
@@ -617,10 +693,10 @@
 		flex-wrap: wrap;
 		align-items: baseline;
 		gap: 4px 12px;
-		font-size: 1.125rem;
+		font-size: var(--text-lg);
 	}
 	.base {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.chips {
 		display: flex;
@@ -640,7 +716,7 @@
 		font-weight: 600;
 	}
 	.available .name {
-		font-size: 1rem;
+		font-size: var(--text-lg);
 	}
 	.changelog {
 		max-height: 18rem;
@@ -652,7 +728,7 @@
 	pre {
 		margin: 0;
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 	}
@@ -691,7 +767,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);
@@ -722,5 +798,30 @@
 	}
 	.check > span {
 		color: var(--text);
+	}
+	.kernel-choice {
+		margin: 0;
+		padding: 0;
+		border: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	.kernel-choice legend {
+		padding: 0;
+		margin-bottom: 4px;
+		font-size: var(--text-base);
+		color: var(--muted);
+	}
+	.kernel-choice label.check {
+		align-items: flex-start;
+	}
+	.kernel-choice label.check > span {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+	.slots .kernel {
+		font-size: var(--text-sm);
 	}
 </style>

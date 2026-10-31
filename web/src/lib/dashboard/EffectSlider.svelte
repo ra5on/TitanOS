@@ -59,7 +59,7 @@
 	.effect-label {
 		display: flex;
 		justify-content: space-between;
-		font-size: 13px;
+		font-size: var(--text-base);
 		margin-bottom: 10px;
 		align-items: center;
 		gap: 8px;
@@ -68,7 +68,7 @@
 		font-family: var(--font-mono);
 		background: var(--chip);
 		color: var(--text);
-		font-size: 12px;
+		font-size: var(--text-sm);
 		padding: 3px 7px;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-small);
@@ -86,7 +86,7 @@
 	small {
 		display: block;
 		color: var(--muted);
-		font-size: 11px;
+		font-size: var(--text-xs);
 		line-height: 1.45;
 	}
 </style>

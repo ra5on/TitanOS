@@ -127,7 +127,7 @@ func TestLockAccounts(t *testing.T) {
 }
 
 // An open console notices a lock even where no session ends (API token or
-// assistant identity).
+// in-process identity).
 func TestConsoleEndsWithTheLock(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()

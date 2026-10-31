@@ -495,7 +495,7 @@
 
 <style>
 	section {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.head {
 		display: flex;
@@ -516,7 +516,7 @@
 	}
 	.networks h3 {
 		margin: 0;
-		font-size: 0.9375rem;
+		font-size: var(--text-md);
 	}
 	.networks textarea {
 		max-width: 32rem;
@@ -526,14 +526,14 @@
 	}
 	dt {
 		color: var(--muted);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	dd {
 		margin: 2px 0 0;
 		overflow-wrap: anywhere;
 	}
 	.small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	form {
 		display: flex;
@@ -543,18 +543,18 @@
 	textarea {
 		height: auto;
 		padding: 10px 12px;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		resize: vertical;
 	}
 	input[type='file'] {
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		color: var(--muted);
 	}
 	pre {
 		margin: 6px 0 0;
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 	}

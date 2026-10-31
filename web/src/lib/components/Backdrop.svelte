@@ -59,12 +59,12 @@
 		pointer-events: none;
 	}
 	.backdrop.dashboard {
-		inset: 60px 0 34px;
+		inset: var(--header-height, 60px) 0 var(--status-height, 34px);
 	}
 	.backdrop.scrolling {
 		position: absolute;
 		bottom: auto;
-		height: calc(100svh - 94px);
+		height: calc(100svh - var(--header-height, 60px) - var(--status-height, 34px));
 	}
 	.backdrop.contained {
 		position: absolute;

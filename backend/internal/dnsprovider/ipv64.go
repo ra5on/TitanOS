@@ -93,7 +93,7 @@ func ipv64Error(status int, header http.Header, data []byte) error {
 		Code       string `json:"code"`
 		RetryAfter int    `json:"retry_after"`
 	}
-	json.Unmarshal(data, &problem)
+	_ = json.Unmarshal(data, &problem) // a value that cannot be read leaves the zero value, which the code handles
 	e := &APIError{Provider: "IPv64", Status: status, Message: problem.Detail, Code: problem.Code}
 	if e.Message == "" {
 		e.Message = short(data)

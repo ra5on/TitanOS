@@ -117,7 +117,7 @@ func (m *Manager) localDriver(dir string) (Manifest, error) {
 	return manifest, nil
 }
 func (m *Manager) buildDir(volume string) string {
-	return filepath.Join(m.baseDir(volume), "nvidia-build", m.Release)
+	return filepath.Join(m.baseDir(volume), "nvidia-build", m.key())
 }
 
 // The extracted SDK is reused between builds. Its parent directories must
@@ -129,7 +129,7 @@ func (m *Manager) secureBuildDir(volume string) error {
 	}
 	defer root.Close()
 	path := ""
-	for _, part := range []string{".titanos", "plugins", "nvidia-build", m.Release} {
+	for _, part := range []string{".titanos", "plugins", "nvidia-build", m.key()} {
 		path = filepath.Join(path, part)
 		if err := root.Mkdir(path, 0700); err != nil && !errors.Is(err, fs.ErrExist) {
 			return err

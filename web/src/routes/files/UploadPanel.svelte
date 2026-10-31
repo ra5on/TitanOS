@@ -153,7 +153,7 @@
 		flex-direction: column;
 		gap: 10px;
 		padding: calc(var(--row-pad) + 2px) var(--tile-pad);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.head,
 	.line {
@@ -185,7 +185,7 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.state {
 		display: inline-flex;
@@ -204,7 +204,7 @@
 	.small {
 		height: 1.875rem;
 		padding: 0 0.625rem;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.icon {
 		width: 30px;

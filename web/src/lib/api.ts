@@ -1,6 +1,8 @@
 // Thin wrapper around fetch for the titand API.
 
 import { apiPath } from './cluster-node.ts';
+import type { Virtualization } from './hwcheck.ts';
+import { RESTART_WAIT_MS, restartPause, waitForNode } from './node-restart.ts';
 
 export class ApiError extends Error {
 	readonly status: number;
@@ -22,13 +24,77 @@ export class ApiError extends Error {
 
 type Body = Record<string, unknown> | Blob | FormData | undefined;
 
+/**
+ * A raw request to the API of the chosen node, for what is no JSON exchange:
+ * streams, chunked uploads, probes. A lost connection rejects as fetch does
+ * (callers that retry tell it apart from an ApiError); an error answer is
+ * returned as it is, see responseError.
+ */
+export function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+	return fetch(apiPath(path), { credentials: 'same-origin', ...init });
+}
+
+/** The ApiError of an answer that is not ok, from titand's JSON error body when there is one. */
+export async function responseError(res: Response): Promise<ApiError> {
+	let code = 'internal';
+	let message = `HTTP ${res.status}`;
+	let retryAfter = 0;
+	try {
+		const data = await res.json();
+		code = data.error.code ?? code;
+		message = data.error.message ?? message;
+		retryAfter = data.error.retryAfter ?? 0;
+	} catch {
+		// Not a JSON error body, e.g. an answer from a proxy.
+	}
+	return new ApiError(res.status, code, message, retryAfter);
+}
+
+/** The file name a Content-Disposition header gives, if any. */
+export function dispositionName(header: string | null): string {
+	return /filename="([^"]+)"/.exec(header ?? '')?.[1] ?? '';
+}
+
+/** Hands a blob to the browser to save under a name. */
+export function saveBlob(blob: Blob, name: string) {
+	const link = document.createElement('a');
+	link.href = URL.createObjectURL(blob);
+	link.download = name;
+	link.click();
+	setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
+}
+
+/**
+ * Downloads an API answer as a file: fetched as a blob first, so a failure
+ * becomes an ApiError instead of an error page in the browser. The file gets
+ * `name`, or with `serverName` the name titand sends (`name` if it sends none).
+ */
+async function download(
+	path: string,
+	name: string,
+	options: { serverName?: boolean; signal?: AbortSignal } = {},
+): Promise<void> {
+	let res: Response;
+	try {
+		res = await apiFetch(path, { signal: options.signal });
+	} catch {
+		throw new ApiError(0, 'unreachable', 'titand is not reachable');
+	}
+	if (!res.ok) throw await responseError(res);
+	const blob = await res.blob();
+	saveBlob(
+		blob,
+		(options.serverName && dispositionName(res.headers.get('Content-Disposition'))) || name,
+	);
+}
+
 async function request<T>(
 	method: string,
 	path: string,
 	body?: Body,
 	signal?: AbortSignal,
 ): Promise<T> {
-	const init: RequestInit = { method, credentials: 'same-origin', signal };
+	const init: RequestInit = { method, signal };
 	if (body instanceof Blob || body instanceof FormData) {
 		init.body = body;
 	} else if (body !== undefined) {
@@ -37,26 +103,41 @@ async function request<T>(
 	}
 
 	let res: Response;
+	// A node of the cluster that is starting again refused the connection,
+	// so the request never reached it: wait and ask again (node-restart.ts).
+	const started = Date.now();
+	let stopWaiting: (() => void) | undefined;
 	try {
-		res = await fetch(apiPath(path), init);
-	} catch {
-		throw new ApiError(0, 'unreachable', 'titand is not reachable');
+		for (;;) {
+			try {
+				res = await apiFetch(path, init);
+			} catch {
+				throw new ApiError(0, 'unreachable', 'titand is not reachable');
+			}
+			if (res.status !== 503 || Date.now() - started > RESTART_WAIT_MS || signal?.aborted) break;
+			const answer = await res
+				.clone()
+				.json()
+				.catch(() => null);
+			if (answer?.error?.code !== 'cluster_restarting') break;
+			stopWaiting ??= waitForNode();
+			await new Promise<void>((resolve) => {
+				const timer = setTimeout(resolve, restartPause(Number(answer.error.retryAfter)));
+				signal?.addEventListener(
+					'abort',
+					() => {
+						clearTimeout(timer);
+						resolve();
+					},
+					{ once: true },
+				);
+			});
+		}
+	} finally {
+		stopWaiting?.();
 	}
 
-	if (!res.ok) {
-		let code = 'internal';
-		let message = `HTTP ${res.status}`;
-		let retryAfter = 0;
-		try {
-			const data = await res.json();
-			code = data.error.code ?? code;
-			message = data.error.message ?? message;
-			retryAfter = data.error.retryAfter ?? 0;
-		} catch {
-			// Not a JSON error body, e.g. an answer from a proxy.
-		}
-		throw new ApiError(res.status, code, message, retryAfter);
-	}
+	if (!res.ok) throw await responseError(res);
 	// Many actions answer without a body (201, 202, 204).
 	const text = await res.text();
 	if (!text) return undefined as T;
@@ -83,6 +164,7 @@ export const api = {
 		request<T>('PATCH', path, body),
 	delete: <T = unknown>(path: string, body?: Body): Promise<NoInfer<T>> =>
 		request<T>('DELETE', path, body),
+	download,
 };
 
 export type Role = 'owner' | 'admin' | 'user';
@@ -181,7 +263,6 @@ export type Preferences = {
 	sound: Record<string, unknown> | null;
 	appearance: Record<string, unknown> | null;
 	dashboard: Record<string, unknown> | null;
-	assistant: Record<string, unknown> | null;
 	bell: Record<string, unknown> | null;
 };
 
@@ -249,7 +330,11 @@ export type Volume = {
 	cache?: VolumeCache;
 	/** LUKS2 encryption (internal/storage crypt.go), set for encrypted volumes. */
 	encryption?: VolumeEncryption;
+	/** Rebuild speed of the RAID array (storage/syncspeed.go); missing for Btrfs and RAID 0. */
+	syncSpeed?: SyncSpeed;
 };
+
+export type SyncSpeed = 'gentle' | 'normal' | 'fast';
 
 export type VolumeEncryption = {
 	/** Waits for its password; nothing on it runs. */
@@ -634,7 +719,13 @@ export type DiskImage = {
 	usedBy: string;
 };
 export type WholeDisk = { path: string; device: string; usedBy: string };
-export type VMHost = { cpus: HostCPU[]; images: DiskImage[]; disks: WholeDisk[] };
+export type VMHost = {
+	cpus: HostCPU[];
+	images: DiskImage[];
+	disks: WholeDisk[];
+	/** VT-x/AMD-V and IOMMU; older titand leave it out. */
+	virt?: Virtualization | null;
+};
 
 export type PCIDevice = {
 	address: string;

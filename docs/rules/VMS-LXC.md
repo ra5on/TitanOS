@@ -7,6 +7,7 @@ Bereich: VM-Erstellung, Firmware, Konsole, Snapshots, App-Vorlagen, Hardware und
 ## VMs und Hardware (aus Abschnitt „Öffentliche API, VM-Medien und Plugin-Aufräumen“)
 
 **VMs: Stand der Umsetzung**
+- Virtualisierungsprüfung (Plan 5h): `GET /api/v1/vms/host` liefert `virt` (`hwcheck.Virtualization`: vmx/svm in cpuinfo, `/dev/kvm`, Kernelmeldung „disabled by BIOS“ nur bei Fehlen gelesen, IOMMU-Gruppen, ACPI-Tabelle DMAR/IVRS). Das VM-Formular nennt herstellerbezogen, was im BIOS/UEFI einzuschalten ist (VT-x/SVM, VT-d/AMD-Vi); bietet die Firmware eine IOMMU an, die der Kernel nicht nutzt, nennt es `intel_iommu=on` bzw. `amd_iommu=on`, setzt den Parameter aber nie selbst.
 - Erstellen/Bearbeiten verwenden den bestätigten Kachelentwurf vom 24. Oktober 2026: Allgemein, CPU/RAM, Datenträger, Installation/Start sowie Netzwerk/Erweiterungen; Zusammenfassung rechts, mobil darunter. VM-Ordner, Firmware, Größenvorgaben, Datenträgerhinweise, PCI/USB und NAS-Ordner sind am passenden Ort aufklappbar. Bestehende Funktions- und Laufzeitbeschränkungen gelten weiter.
 - Umgesetzt: QEMU/KVM hinter libvirt (Debian-Pakete `qemu-system-x86`, `qemu-utils`, `ovmf`, `libvirt-daemon-system`, `libvirt-clients`; das Abbild wächst dadurch um rund 40 MB). VMs anlegen (Vorlagen Linux, Windows, Andere; vCPUs, RAM, neue Platten qcow2/raw auf wählbarem Volume, Installationsmedium), starten, herunterfahren, neu starten, Ausschalten erzwingen, bearbeiten, entfernen (Platten nur auf Wunsch per Häkchen, mit Warnung im Bestätigungsdialog), Autostart, Bildschirm per noVNC mit drei Anzeigemodi, Vollbild, Strg+Alt+Entf, Text einfügen, Screenshot.
 - Was eine VM ausmacht, steht in `/config/vms/<name>.json`. libvirt kennt eine VM nur, solange sie läuft (`virsh create`, flüchtige Domain): seine eigene Konfiguration läge im RAM. Platten und die Einstellungen der Firmware (`nvram.fd`) liegen in `/mnt/<volume>/vms/<name>/` (bzw. `directory`).
@@ -51,6 +52,8 @@ Bereich: VM-Erstellung, Firmware, Konsole, Snapshots, App-Vorlagen, Hardware und
 - **Lüfter** (seit 0.35.0, Paket `fans`, `docs/FANS.md`, Einstellungen › Temperaturen, nur Besitzer/Admin): ab Werk alle beim BIOS; je Lüfter fest oder Kurve (2–8 steigende Punkte, Sensor hwmon oder wärmste Platte aus dem SMART-Cache, 2 °C Hysterese), Minimum 20–100 % (Vorgabe 30). Sensor nicht lesbar → 100 %. Originaler `pwmN_enable` in `/run/titanos/fans-original.json`, zurück beim Umschalten auf BIOS und beim Beenden von titand (war manuell → 255). Alle 5 s, Schreiben nur bei Änderung; Entwicklungsmodus nur lesend. `/config/system/fans.json`.
 - Keine pauschale Neustartpflicht für Gerätezuordnungen. **Lokal vorbereitete NVIDIA-Treiber** werden dagegen ausdrücklich beim nächsten NAS-Neustart aktiviert (siehe eigenen Abschnitt).
 
+- **Größen in GB** (Entscheidung 31.10.2026, Einzelheiten `docs/rules/WEB-UI.md` › Einheiten): VM-Assistent und LXC-Formular zeigen RAM und Platten dezimal (GB bzw. MB). Gespeichert bleibt `memoryMiB`; umgerechnet wird nur beim Ändern (`Math.round(GB·1000³/1024²)`), ein unveränderter Wert bleibt bitgenau. Neue Platten und Vergrößern schicken `sizeBytes` = GB·1000³ (ganzzahlige GB sind immer ein Vielfaches von 512 Byte); die kleinste neue Platte ist 1 GB (`vm.go`, vorher 1 GiB). Neue VMs starten mit 2 GB (1907 MiB). Windows 11 verlangt 4096 MiB; bei der Windows-Vorlage warnt das Formular unter 4,3 GB. Geprüft: `go test ./internal/vm`, svelte-check, Screenshots des Assistenten; kein Lauf auf echter Hardware.
+
 ## VM-Snapshots und App-Vorlagen
 
 - VM-Snapshots: eigener Reiter, manuelle Aufnahme, Wiederherstellung,
@@ -83,7 +86,7 @@ Bereich: VM-Erstellung, Firmware, Konsole, Snapshots, App-Vorlagen, Hardware und
 
 ## LXC-Systemcontainer
 
-- Reiter „Container“ (`/lxc`, nur Besitzer/Administratoren), Paket `internal/lxc`, Routen `/api/v1/lxc…`, Doku `docs/LXC.md`. Mittelweg zwischen Docker-Apps und VMs: ganzes Linux-System mit dem Kernel des NAS.
+- Reiter „LXC“ (bis 0.40 „Container“, Entscheidung 31.10.2026; `/lxc`, nur Besitzer/Administratoren), Paket `internal/lxc`, Routen `/api/v1/lxc…`, Doku `docs/LXC.md`. Mittelweg zwischen Docker-Apps und VMs: ganzes Linux-System mit dem Kernel des NAS.
 - Einstellungen je Container in `/config/lxc/<name>.json` (neue Datei, nur optionale Zusatzfelder); lxcpath `/mnt/<volume>/lxc`, Root-Dateisystem `/mnt/<volume>/lxc/<name>/rootfs`. Die LXC-Konfiguration `<lxcpath>/<name>/config` wird vor jedem Start aus `/config` neu geschrieben; Änderungen dort gehen verloren.
 - Abbilder nur von images.linuxcontainers.org über das `download`-Template (Liste sechs Stunden im RAM). Anlegen als Hintergrundauftrag mit Phasen; `LXC_CACHE_PATH` und `TMPDIR` zeigen auf das Volume, nie RAM/Overlay. Vorhandene Ordner werden nie überschrieben.
 - Ab Werk unprivilegiert (IDs 0–65535 → 100000–165535, Gruppe 100 des Containers = `users` des NAS für Schreibzugriff auf Freigaben); privilegiert nur ausdrücklich beim Anlegen mit Warnung, danach fest. Ohne `apparmor_parser` `lxc.apparmor.profile = unconfined`.

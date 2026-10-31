@@ -2,7 +2,9 @@
 
 `current/` enthält die aktuellen Aufnahmen für die Projekt-README und die Fachdokumente.
 
-**Aufnahmestand:** alle Bilder in `current/` zeigen die gebaute Svelte-WebUI von **TitanOS 0.31.0**, Quellstand [`e923e2c`](https://github.com/ra5on/TitanOS/commit/e923e2c1ea538e2e7a854b76d2613487299377a0), aufgenommen am **28. Oktober 2026** mit Chromium (Playwright), Theme Graphit, blauer Akzent, Glasflächen, Deutsch.
+**Aufnahmestand:** die Bilder aus `capture.mjs` sowie Firewall, VM erstellen, Protokoll, Dateien ersetzen und Dateiaufträge zeigen die gebaute Svelte-WebUI von **TitanOS 0.41.0** (Stand vor der Veröffentlichung, Zweig `grossumbau-0.41`), aufgenommen am **31. Oktober 2026** mit Chromium (Playwright), Theme Graphit, blauer Akzent, Glasflächen, Deutsch. Die Statuszeile von Firewall, VM erstellen und Protokoll nennt die Version der jeweiligen Prüfskripte. Einstellungen, Arbeitsspeicher, App-Images, Netzwerk, Docker-LAN, API-Zugänge, VM-Medien und Plugin-Aufräumen sind noch Aufnahmen von **0.31.0**: `test-ui-firewall.mjs` liefert für die Übersicht derzeit keine brauchbare Aufnahme, `test-ui-memory-images.mjs` und `test-ui-023.mjs` scheitern an veralteten Erwartungen der Skripte (beides nachzuziehen).
+
+**Veraltet (Prüfung 31.10.2026, Plan 9f):** `einstellungen.png` zeigt noch die Übersicht mit zweiter Liste und `docker.png` die frühere Tabelle mit Spalte „PORTS“. Die WebUI zeigt beides so nicht mehr (Übersicht nur „Braucht Aufmerksamkeit“ und „Dieses NAS“, Docker-Liste als Kacheln); die Bilder werden mit der nächsten vollständigen Aufnahme ersetzt.
 
 Alle NAS-Antworten werden durch isolierte Demonstrationsdaten ersetzt. Hostname, Konten, Dateien, Laufwerke, Adressen und Messwerte sind Beispiele. Es werden weder echte NAS-Geräte angesprochen noch Container oder VMs gestartet. Die sichtbaren App-Icons sind die konfigurierten Originalbilder der jeweiligen Projekte. Ihre Quellen und SHA-256-Werte stehen in [icon-sources.json](icon-sources.json); Namen und Logos gehören den jeweiligen Projekten. Keine nachträgliche Bildbearbeitung oder eingebauten Design-Mockups. Die Bilder ersetzen keine Funktions- oder Hardwareprüfung.
 

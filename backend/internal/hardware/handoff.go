@@ -110,7 +110,7 @@ func (m *Manager) PrepareHandoff(pci []string) (bool, error) {
 	if detached {
 		// Only what TitanOS took is given back later.
 		if err := os.MkdirAll(m.state, 0o755); err == nil {
-			os.WriteFile(m.consoleNote(), nil, 0o644)
+			_ = os.WriteFile(m.consoleNote(), nil, 0o644) // marks what was taken, best effort: without it the console is simply not given back
 		}
 	}
 	return detached, nil
@@ -136,7 +136,7 @@ func (m *Manager) RestoreConsole() {
 	}
 	for _, console := range m.framebufferConsoles() {
 		if m.read(console, "bind") == "0" {
-			os.WriteFile(filepath.Join(console, "bind"), []byte("1"), 0)
+			_ = os.WriteFile(filepath.Join(console, "bind"), []byte("1"), 0) // giving the console back as far as it goes; nothing else is left to try
 		}
 	}
 	os.Remove(m.consoleNote())

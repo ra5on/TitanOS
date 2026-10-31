@@ -7,7 +7,8 @@ echter Hardware geprüft werden.
 ## Unterstützte Geräte und Umfang
 
 - NVIDIA **Turing und neuer**, beispielsweise RTX 20/30/40/50, mit den offenen
-  NVIDIA-Kernelmodulen. Ältere Pascal-/Maxwell-Karten werden nicht unterstützt.
+  NVIDIA-Kernelmodulen. Maxwell, Pascal und Volta: Plugin `nvidia-legacy`,
+  siehe [Ältere Karten](#ältere-karten-nvidia-legacy).
 - Treiber **615.71.09**, passend zum **exakten Kernel des jeweiligen Releases**
   (Kernel-Satz im [Plugin-Repository](https://github.com/ra5on/TitanOS-Plugins);
   neuere Treiber erscheinen dort als Treiberupdate).
@@ -29,6 +30,44 @@ geladen. Sein Abbild wird nicht mit dem Grundsystem in den RAM kopiert;
 geladene Module, Bibliotheken und der Dateicache benötigen trotzdem RAM.
 Nouveau wird im Grundsystem nicht automatisch geladen, damit es die Karte
 nicht vor dem NVIDIA-Plugin belegt. Die UEFI-Textkonsole bleibt verfügbar.
+
+
+## Ältere Karten (`nvidia-legacy`)
+
+Entscheidung des Projektinhabers vom 31.10.2026: Für Maxwell, Pascal und Volta
+(z. B. GTX 750 Ti, GTX 9xx, GTX 10xx, Titan V) gibt es das Plugin
+`nvidia-legacy` mit dem **proprietären** Kernelmodul der Reihe 580, der letzten
+mit Unterstützung für diese Karten. Die offenen Module gibt es erst ab Turing.
+
+- Erkennung: NVIDIA-Grafikgeräte (PCI-Klasse 03) mit Geräte-IDs 1300–1DFF ohne
+  gebundenen Treiber. `nvidia` (ab 1E00) und `nvidia-legacy` überschneiden
+  sich nicht.
+- Inhalt wie `nvidia`, aber ohne GSP-Firmware: CUDA-Treiberbibliotheken,
+  NVENC/NVDEC, NVML, `nvidia-smi`, Container Toolkit und dieselbe Laufzeit
+  (`titanos-nvidia.service`, CDI unter `/run/cdi/titanos-nvidia.yaml`). Docker,
+  Leistungslimit, Dashboard-Kachel und VM-Wechsel arbeiten über den
+  Kerneltreiber `nvidia` und gelten damit für beide Plugins.
+- Bau im Plugin-Repository: `NVIDIA_PLUGIN=nvidia-legacy
+  scripts/make-nvidia-plugin.sh` gegen exakt den Kernel des Satzes, Pakete aus
+  `plugins/nvidia-legacy/packages.lock.json` (Zweig 580; füllen bzw.
+  aktualisieren mit `update-nvidia-lock.py --plugin nvidia-legacy`, das den
+  signierten NVIDIA-Index prüft). Ein leeres Lock lässt den Bau abbrechen.
+- Nie zusammen mit `nvidia`: Beide bringen ein Modul `nvidia`. Einschalten
+  oder aktive Installation, während das andere eingeschaltet ist, scheitert mit
+  einer Meldung; Einstellungen mit beiden laden nur das zuerst eingeschaltete.
+- Kein „Treiber vorbereiten“ (NAS-Bau) und keine eigenen Treiberupdates; der
+  Treiber wechselt mit dem Plugin-Satz des Kernels.
+- Lizenz: Kernmodul und Bibliotheken unter NVIDIAs Lizenz, die Kernel-
+  Schnittstelle offen. Die übersetzten Modulquellen samt NVIDIAs Binärteil
+  liegen als `nvidia-legacy-sources.tar.gz` bei, die originalen Lizenztexte im
+  Lizenzarchiv. Ein vorgebautes proprietäres Modul zu verteilen ist eine
+  bewusste Entscheidung des Projektinhabers.
+- Kepler (GTX 600/700) bräuchte die eingestellte Reihe 470, die nicht für
+  Kernel 6.12 freigegeben ist: nicht unterstützt.
+- Geprüft: Katalogregeln, Ausschluss beider Plugins (Go-Tests),
+  Paketauswahl und Metadaten (Tests im Plugin-Repository). Nicht geprüft:
+  Bau mit echten Paketen (Lock noch leer), Laden, CUDA und NVENC auf echten
+  Karten.
 
 ## Installation
 

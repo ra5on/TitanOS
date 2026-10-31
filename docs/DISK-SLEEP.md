@@ -30,7 +30,7 @@ Eine Platte ohne eindeutige Seriennummer und ohne WWN (oder mit derselben Serien
 ## API
 
 - `GET /api/v1/storage/disk-sleep`: Einstellung (`idleMinutes`, `volumes`, `disks`), `available`, `errors`, dazu `volumeStatus` und `diskStatus` (Name, Modell, Seriennummer, Größe, Volume, eigener Wert oder `null`, wirksamer Wert, Herkunft, Zustand `asleep`/`active` aus dem RAM, letzter Standby-Fehler) sowie `missingVolumes`/`missingDisks`. Die Platten kommen aus `lsblk` wie auf der Speicherseite; keine Platte wird gelesen oder geweckt. Dieselben Felder stehen in `diskSleep` von `GET /api/v1/storage`.
-- `PUT /api/v1/storage/disk-sleep`: `idleMinutes` ist Pflicht. `volumes` und `disks` ersetzen, wenn angegeben, alle Ausnahmen dieser Art; fehlen sie, bleiben die gespeicherten (ältere Oberflächen, Assistent). Werte wie beim Standard, sonst `invalid_disk_idle_time`. Ein neuer oder geänderter Eintrag für ein unbekanntes Volume oder eine nicht vorhandene bzw. nicht unterstützte Platte (SSD, NVMe …) sowie ein Schlüssel ohne `serial:`/`wwn:` ergibt `unknown_disk_sleep_target` (400); ein unverändert gespeicherter Eintrag einer gerade fehlenden Platte bleibt erlaubt.
+- `PUT /api/v1/storage/disk-sleep`: `idleMinutes` ist Pflicht. `volumes` und `disks` ersetzen, wenn angegeben, alle Ausnahmen dieser Art; fehlen sie, bleiben die gespeicherten (ältere Oberflächen). Werte wie beim Standard, sonst `invalid_disk_idle_time`. Ein neuer oder geänderter Eintrag für ein unbekanntes Volume oder eine nicht vorhandene bzw. nicht unterstützte Platte (SSD, NVMe …) sowie ein Schlüssel ohne `serial:`/`wwn:` ergibt `unknown_disk_sleep_target` (400); ein unverändert gespeicherter Eintrag einer gerade fehlenden Platte bleibt erlaubt.
 
 ## Verhalten
 

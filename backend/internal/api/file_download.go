@@ -14,7 +14,7 @@ import (
 // Downloads from a link into the current folder. The root is resolved with
 // the account's current rights like every file request; accounts with the
 // role "user" only reach public addresses, owners and administrators also
-// their home network. Not part of the assistant's API catalog: a model that
+// their home network. Not part of the MCP tools: a model that
 // reads web pages must not make the NAS fetch what a page tells it to.
 
 // handleFileDownloadProbe asks a link for its file name and size.

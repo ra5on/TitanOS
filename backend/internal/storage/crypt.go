@@ -442,17 +442,17 @@ func (m *Manager) unlockBtrfs(ctx context.Context, volume VolumeConfig, password
 		if err := m.luksOpen(ctx, password, entry[1], mapper, false); err != nil {
 			// All members share the password: close what this call opened.
 			for _, done := range opened {
-				m.luksClose(ctx, done)
+				_ = m.luksClose(ctx, done) // cleanup, best effort: nothing more can be done if it fails
 			}
 			return err
 		}
 		opened = append(opened, mapper)
-		m.runner.Run(ctx, "", "btrfs", "device", "scan", m.mapperPath(mapper))
+		_, _ = m.runner.Run(ctx, "", "btrfs", "device", "scan", m.mapperPath(mapper)) // only waits for the kernel and udev; the next step checks the result
 	}
 	if m.readMounts()[m.MountPoint(volume.Name)] {
 		return nil
 	}
-	m.runner.Run(ctx, "", "udevadm", "settle")
+	_, _ = m.runner.Run(ctx, "", "udevadm", "settle") // only waits for the kernel and udev; the next step checks the result
 	devices, err := m.blockDevices(ctx)
 	if err != nil {
 		return err
@@ -948,7 +948,7 @@ func (m *Manager) encryptNewMember(ctx context.Context, volume VolumeConfig, par
 		}
 		v.Encryption = &EncryptionConfig{UUIDs: append(uuids, uuid)}
 	}); err != nil {
-		m.luksClose(ctx, cryptName(volume, uuid))
+		_ = m.luksClose(ctx, cryptName(volume, uuid)) // cleanup, best effort: nothing more can be done if it fails
 		return "", err
 	}
 	return device, nil

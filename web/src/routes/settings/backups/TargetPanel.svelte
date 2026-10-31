@@ -176,7 +176,7 @@
 					bind:value={name}
 					pattern="[A-Za-z][A-Za-z0-9\-]*"
 					maxlength="31"
-					placeholder="keller"
+					placeholder={t('backup.targetNameExample')}
 					autocapitalize="none"
 					spellcheck="false"
 					required

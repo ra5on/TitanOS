@@ -683,7 +683,7 @@ func lookupIPv4(ctx context.Context, address string) (netip.Addr, error) {
 	defer res.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(res.Body, 256))
 	// Read what is left (bounded) so the connection can be used again.
-	io.Copy(io.Discard, io.LimitReader(res.Body, 64<<10))
+	_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 64<<10)) // draining the body for connection reuse only
 	if res.StatusCode != http.StatusOK {
 		return netip.Addr{}, fmt.Errorf("%s: HTTP %d", req.URL.Host, res.StatusCode)
 	}

@@ -1,0 +1,57 @@
+// Calls whose errors titand deliberately does not check (errcheck -exclude).
+// Closing what was only read, best-effort cleanup of temporary files and
+// writes into memory or to a response cannot be handled any better.
+(io.Closer).Close
+(io.ReadCloser).Close
+(io.WriteCloser).Close
+(io.ReadWriteCloser).Close
+(*os.File).Close
+(*os.Root).Close
+(net.Conn).Close
+(net.Listener).Close
+(*net.TCPConn).Close
+(*net.UnixConn).Close
+(*net.UDPConn).Close
+(*archive/zip.ReadCloser).Close
+(*compress/gzip.Reader).Close
+(*os/exec.Cmd).Wait
+os.Remove
+os.RemoveAll
+(*os.Root).Remove
+(*os.Root).RemoveAll
+fmt.Fprint
+fmt.Fprintf
+fmt.Fprintln
+(*bytes.Buffer).Write
+(*bytes.Buffer).WriteString
+(*bytes.Buffer).WriteByte
+(*bytes.Buffer).WriteRune
+(*strings.Builder).Write
+(*strings.Builder).WriteString
+(*strings.Builder).WriteByte
+(*strings.Builder).WriteRune
+(hash.Hash).Write
+(net/http.ResponseWriter).Write
+io.WriteString
+(*encoding/json.Encoder).Encode
+(net.Conn).SetDeadline
+(net.Conn).SetReadDeadline
+(net.Conn).SetWriteDeadline
+(*os.File).SetDeadline
+(*os.File).SetReadDeadline
+(*os.File).SetWriteDeadline
+(*net/http.ResponseController).SetReadDeadline
+(*net/http.ResponseController).SetWriteDeadline
+(*net/http.ResponseController).Flush
+// Closing a WebSocket or a raw descriptor that is done with.
+(*github.com/coder/websocket.Conn).Close
+(*github.com/coder/websocket.Conn).CloseNow
+golang.org/x/sys/unix.Close
+// Only hints to the kernel's page cache.
+golang.org/x/sys/unix.Fadvise
+// Writers into memory: errors show at Flush/Error or cannot happen.
+(*encoding/csv.Writer).Write
+encoding/xml.EscapeText
+(*math/rand/v2.ChaCha8).Read
+(*mime/multipart.Writer).Close
+(*bufio.Reader).Discard

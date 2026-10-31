@@ -67,7 +67,7 @@ export function tileTemperatures(
 		return {
 			id,
 			chip: sensor?.chip ?? known?.chip ?? '',
-			label: sensor?.label ?? known?.label ?? id,
+			label: friendlySensor(sensor?.chip ?? known?.chip ?? '', sensor?.label ?? known?.label ?? id),
 			sensor,
 		};
 	});
@@ -85,4 +85,16 @@ export function cpuTemperature(
 			(s.chip === 'coretemp' && s.label === 'Package id 0') ||
 			((s.chip === 'k10temp' || s.chip === 'zenpower') && s.label === 'Tctl'),
 	);
+}
+
+/** A plain name for the sensors everyone has; others keep the driver's label. */
+export function friendlySensor(chip: string, label: string): string {
+	if (
+		(chip === 'coretemp' && label === 'Package id 0') ||
+		((chip === 'k10temp' || chip === 'zenpower') && label === 'Tctl')
+	)
+		return 'CPU';
+	if (chip === 'nvme' && label === 'Composite') return 'NVMe';
+	if (chip === 'amdgpu' && label === 'edge') return 'GPU';
+	return label;
 }

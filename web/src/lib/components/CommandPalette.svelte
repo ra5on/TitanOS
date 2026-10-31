@@ -5,7 +5,6 @@
 	import { session } from '#lib/session.svelte.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { findPaletteEntries, palettePages, type PaletteEntry } from '#lib/command-palette.ts';
-	import { assistant } from '#lib/assistant.svelte.ts';
 	import { recentPages, rememberPage } from '#lib/palette.svelte.ts';
 	import { containerLabel, type LXCList } from '#lib/lxc.ts';
 	import Dialog from './Dialog.svelte';
@@ -17,10 +16,7 @@
 		index = $state(0);
 	let disposed = false;
 	const role = $derived(session.data?.user?.role ?? 'user');
-	const all = $derived([
-		...palettePages(role, t, { assistant: !!assistant.status?.available }),
-		...dynamic,
-	]);
+	const all = $derived([...palettePages(role, t), ...dynamic]);
 	// Without a query, the pages opened last in this page session come first (RAM only).
 	const recent = $derived(
 		query.trim()
@@ -164,7 +160,7 @@
 	.search {
 		display: grid;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.results {
 		display: flex;
@@ -181,7 +177,7 @@
 		min-height: 40px;
 		text-align: left;
 		font: inherit;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		background: none;
 		border: 0;
 		border-radius: var(--radius-ctl);
@@ -198,14 +194,14 @@
 	}
 	.results small {
 		color: var(--muted);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		text-align: right;
 	}
 	p {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.keys {
 		margin: 0;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 </style>

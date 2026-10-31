@@ -36,6 +36,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/naming"
+	"github.com/ra5on/TitanOS/backend/internal/retention"
 )
 
 const (
@@ -67,10 +68,14 @@ var (
 
 // Destination is where a backup goes.
 type Destination struct {
-	// Type is local, usb-copy, s3, sftp or rest.
+	// Type is local, usb, smb (encrypted versions), local-copy, usb-copy,
+	// smb-copy (readable copies), titanos, s3, sftp or rest.
 	Type     string `json:"type"`
 	DeviceID string `json:"deviceId,omitempty"`
-	TargetID string `json:"targetId,omitempty"`
+	// DeviceName is the name the drive had when the job was saved, only
+	// for showing; older versions ignore it.
+	DeviceName string `json:"deviceName,omitempty"`
+	TargetID   string `json:"targetId,omitempty"`
 	// local: a folder on another volume.
 	Volume string `json:"volume,omitempty"`
 	Folder string `json:"folder,omitempty"`
@@ -91,13 +96,8 @@ type Destination struct {
 	Password string `json:"password,omitempty"`
 }
 
-// Keep says how many backups stay: the newest of each of that many days,
-// weeks and months. All zero keeps everything.
-type Keep struct {
-	Daily   int `json:"daily"`
-	Weekly  int `json:"weekly"`
-	Monthly int `json:"monthly"`
-}
+// Keep says which versions stay, see internal/retention.
+type Keep = retention.Keep
 
 // Job is one backup: what, where to, when.
 type Application struct {
@@ -122,13 +122,18 @@ type Job struct {
 	ID string `json:"id"`
 	// Sources are shares, by name; see selection.go for what else picks
 	// out what is saved.
-	Sources     []string            `json:"sources"`
-	Folders     map[string][]string `json:"folders,omitempty"`
-	Skip        []string            `json:"skip,omitempty"`
-	Patterns    []string            `json:"patterns,omitempty"`
-	Extras      []string            `json:"extras,omitempty"`
-	Destination Destination         `json:"destination"`
-	Enabled     bool                `json:"enabled"`
+	Sources  []string            `json:"sources"`
+	Folders  map[string][]string `json:"folders,omitempty"`
+	Skip     []string            `json:"skip,omitempty"`
+	Patterns []string            `json:"patterns,omitempty"`
+	Extras   []string            `json:"extras,omitempty"`
+	// Volumes are whole volumes and Places folders on a volume outside
+	// the shares ("volume/folder"), both since 0.41.0. Older versions
+	// ignore them; a job with nothing else fails there visibly.
+	Volumes     []string    `json:"volumes,omitempty"`
+	Places      []string    `json:"places,omitempty"`
+	Destination Destination `json:"destination"`
+	Enabled     bool        `json:"enabled"`
 	// Every is hourly, daily, weekly or monthly; see schedule.go. Time,
 	// Weekday (0 = Sunday) are the first time and the one weekday; the lists
 	// carry more of them. WindowFrom and WindowTo limit when runs start.
@@ -142,6 +147,9 @@ type Job struct {
 	WindowFrom string   `json:"windowFrom,omitempty"`
 	WindowTo   string   `json:"windowTo,omitempty"`
 	Keep       Keep     `json:"keep"`
+	// Copy holds the options of readable copies; nil is a plain copy that
+	// only adds and replaces. Older versions ignore it.
+	Copy *CopyOptions `json:"copy,omitempty"`
 	// Bandwidth limits how fast a run moves data; nil is no limit.
 	Bandwidth *Bandwidth `json:"bandwidth,omitempty"`
 	// Password encrypts the backup. It is made once and never changes.
@@ -155,7 +163,9 @@ type State struct {
 	Probe              *ProbeResult              `json:"probe,omitempty"`
 	Running            bool                      `json:"running"`
 	// Phase is backup, cleanup or restore while Running.
-	Phase      string  `json:"phase"`
+	Phase string `json:"phase"`
+	// Queued is set while a started job waits for another one to end.
+	Queued     bool    `json:"queued,omitempty"`
 	Percent    float64 `json:"percent"`
 	BytesDone  uint64  `json:"bytesDone"`
 	BytesTotal uint64  `json:"bytesTotal"`
@@ -166,6 +176,9 @@ type State struct {
 	LastRun   *time.Time `json:"lastRun"`
 	LastOK    *time.Time `json:"lastOK"`
 	LastError string     `json:"lastError"`
+	// LastErrorCode names known causes of LastError, so that the page can
+	// say it in the language of the viewer; empty for others.
+	LastErrorCode string `json:"lastErrorCode,omitempty"`
 	// FailingSince is the first failed attempt after the last backup that
 	// worked; empty while backups work.
 	FailingSince *time.Time `json:"failingSince,omitempty"`
@@ -222,8 +235,15 @@ type Manager struct {
 	PrepareApplications func(context.Context, Job, string, []string) ([]string, func() error, error)
 	// WithUSB pins a mounted filesystem for the complete copy operation.
 	WithUSB func(context.Context, string, func(*os.Root) error) error
-	// OnResult is told how each scheduled or started backup ended.
-	OnResult func(job string, err error)
+	// OnResult is told of each backup that worked and of the first failure
+	// of a series; OnRecovered when a job works again after failing.
+	OnResult    func(job string, err error)
+	OnRecovered func(job string)
+	// OnFreed is told how many old versions a run removed because the
+	// target was full.
+	OnFreed func(job string, versions int)
+	// ended is told of every run; tests wait for it.
+	ended func(job string, err error)
 	// OnCheck hears how a check of a repository ended.
 	OnCheck func(job string, err error)
 	OnProbe func(job string, err error)
@@ -365,6 +385,20 @@ func check(job Job, shares []Source, volumes []string) error {
 		}
 		sourceVolumes = append(sourceVolumes, shares[at].Volume)
 	}
+	// Whole volumes and folders outside shares (0.41.0).
+	for _, volume := range job.Volumes {
+		if !slices.Contains(volumes, volume) {
+			return invalid("volume %q is not there", volume)
+		}
+		sourceVolumes = append(sourceVolumes, volume)
+	}
+	for _, place := range job.Places {
+		volume, _, _ := strings.Cut(place, "/")
+		if !slices.Contains(volumes, volume) {
+			return invalid("volume %q is not there", volume)
+		}
+		sourceVolumes = append(sourceVolumes, volume)
+	}
 	if err := checkSchedule(job); err != nil {
 		return err
 	}
@@ -376,18 +410,38 @@ func check(job Job, shares []Source, volumes []string) error {
 			return invalid("how many to keep")
 		}
 	}
+	if err := retention.Check(job.Keep); err != nil {
+		return invalid("%s", strings.TrimPrefix(err.Error(), "retention: invalid: "))
+	}
+	if c := job.Copy; c != nil && (!plainCopy(job.Destination.Type) || c.MirrorDays < 0 || c.MirrorDays > 3650) {
+		return invalid("options of the readable copy")
+	}
 	d := job.Destination
 	switch d.Type {
 	case "usb-copy", "smb-copy":
 		if (d.Type == "usb-copy" && !regexp.MustCompile(`^[A-Za-z0-9-]{4,80}$`).MatchString(d.DeviceID)) || (d.Type == "smb-copy" && !naming.ValidBackup(d.TargetID)) || !relative(d.Folder) || len(job.Extras) != 0 {
 			return invalid("USB identity, folder or unsupported extra source")
 		}
+		if len(d.DeviceName) > 64 || strings.ContainsFunc(d.DeviceName, func(r rune) bool { return r < ' ' || r == 0x7f }) {
+			return invalid("drive name")
+		}
 		for _, pattern := range job.Patterns {
 			if _, err := path.Match(pattern, ""); err != nil || strings.Contains(pattern, "/") || strings.Contains(pattern, "**") {
 				return invalid("USB copy patterns must match single file or folder names")
 			}
 		}
-	case "local":
+	case "usb", "smb":
+		// Encrypted versions on a drive or an SMB share (0.41.0).
+		if (d.Type == "usb" && !regexp.MustCompile(`^[A-Za-z0-9-]{4,80}$`).MatchString(d.DeviceID)) || (d.Type == "smb" && !naming.ValidBackup(d.TargetID)) || !relative(d.Folder) {
+			return invalid("USB identity, SMB target or folder")
+		}
+		if len(d.DeviceName) > 64 || strings.ContainsFunc(d.DeviceName, func(r rune) bool { return r < ' ' || r == 0x7f }) {
+			return invalid("drive name")
+		}
+	case "local", "local-copy":
+		if d.Type == "local-copy" && len(job.Extras) != 0 {
+			return invalid("unsupported extra source")
+		}
 		if !slices.Contains(volumes, d.Volume) {
 			return invalid("volume")
 		}
@@ -820,6 +874,13 @@ func (m *Manager) repository(job Job) (repo string, args, env []string, cleanup 
 		args = append(args, "--no-cache")
 	}
 	switch d.Type {
+	case "usb", "smb":
+		dir, release, err := m.holdTarget(job)
+		if err != nil {
+			return "", nil, nil, cleanup, err
+		}
+		cleanup = release
+		repo = filepath.Join(dir, d.Folder)
 	case "local":
 		if !slices.ContainsFunc(m.mounted(), func(volume string) bool { return volume == d.Volume }) {
 			return "", nil, nil, cleanup, fmt.Errorf("the volume %s of the backup is not mounted", d.Volume)
@@ -935,7 +996,7 @@ func (m *Manager) runFiles(ctx context.Context, env, args []string, line func(st
 			line(scanner.Text())
 		}
 	}
-	io.Copy(io.Discard, stdout)
+	_, _ = io.Copy(io.Discard, stdout) // draining the body for connection reuse only
 	err = cmd.Wait()
 	return strings.TrimSpace(problems.String()), err
 }
@@ -948,7 +1009,7 @@ type limited struct {
 
 func (l *limited) Write(p []byte) (int, error) {
 	if take := min(len(p), l.left); take > 0 {
-		l.w.Write(p[:take])
+		_, _ = l.w.Write(p[:take]) // a sink for the first lines of output; losing them loses nothing
 		l.left -= take
 	}
 	return len(p), nil
@@ -993,21 +1054,23 @@ func (m *Manager) begin(job Job, phase string, work func(context.Context) error)
 		return ErrRunning
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	state.Running, state.Phase, state.Percent, state.BytesDone, state.BytesTotal, state.BandwidthLimit = true, phase, 0, 0, 0, 0
+	state.Running, state.Queued, state.Phase, state.Percent, state.BytesDone, state.BytesTotal, state.BandwidthLimit = true, true, phase, 0, 0, 0, 0
 	m.cancels[job.ID] = cancel
 	m.mu.Unlock()
 	go func() {
 		m.queue.Lock()
+		m.update(job, func(s *State) { s.Queued = false })
 		err := work(ctx)
 		m.queue.Unlock()
 		cancelled := ctx.Err() != nil
+		var firstFailure, recovered bool
 		cancel()
 		now := m.now()
 		m.mu.Lock()
 		delete(m.cancels, job.ID)
 		m.mu.Unlock()
 		m.update(job, func(s *State) {
-			s.Running, s.Phase, s.Percent, s.BandwidthLimit = false, "", 0, 0
+			s.Running, s.Queued, s.Phase, s.Percent, s.BandwidthLimit = false, false, "", 0, 0
 			if phase != "backup" {
 				// A failed check is kept as CheckError, a failed restore as
 				// RestoreError: neither is a failed backup.
@@ -1021,24 +1084,34 @@ func (m *Manager) begin(job Job, phase string, work func(context.Context) error)
 				}
 				return
 			}
-			s.LastRun, s.LastError = &now, ""
+			s.LastRun, s.LastError, s.LastErrorCode = &now, "", ""
 			switch {
 			case cancelled:
 				s.LastError = errCancelled
 			case err != nil:
-				s.LastError = err.Error()
+				s.LastError, s.LastErrorCode = err.Error(), errorCode(err)
 				if s.FailingSince == nil {
-					s.FailingSince = &now
+					s.FailingSince, firstFailure = &now, true
 				}
 			default:
+				recovered = s.FailingSince != nil
 				s.LastOK, s.FailingSince = &now, nil
 			}
 		})
 		if err != nil && !cancelled {
 			slog.Warn("backup job failed", "job", job.ID, "phase", phase, "err", err)
 		}
-		if phase == "backup" && !cancelled && m.OnResult != nil {
+		// One message when a job starts failing and one when it works again,
+		// not one per attempt: an hourly job with its drive unplugged
+		// would otherwise report every hour.
+		if phase == "backup" && !cancelled && m.OnResult != nil && (err == nil || firstFailure) {
 			m.OnResult(job.ID, err)
+		}
+		if recovered && m.OnRecovered != nil {
+			m.OnRecovered(job.ID)
+		}
+		if phase == "backup" && !cancelled && m.ended != nil {
+			m.ended(job.ID, err)
 		}
 	}()
 	return nil
@@ -1064,6 +1137,9 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 				return err
 			}
 			return m.withSMB(ctx, target, func(root *os.Root) error { return m.copyTo(ctx, job, root) })
+		}
+		if job.Destination.Type == "local-copy" {
+			return m.copyLocal(ctx, job)
 		}
 		return m.copyUSB(ctx, job)
 	}
@@ -1098,7 +1174,7 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 		}
 	}
 	// What a run that was cut short left locked.
-	m.run(ctx, env, append(slices.Clone(base), "unlock"), nil)
+	_, _ = m.run(ctx, env, append(slices.Clone(base), "unlock"), nil) // there may be no stale lock; the backup below reports real errors
 
 	if len(job.Applications) > 0 {
 		extra, finish, err := m.PrepareApplications(ctx, job, m.homeVolume(job), sel.paths)
@@ -1120,35 +1196,40 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 	}
 	args = append(args, paths...)
 	var total uint64
-	out, err := m.run(ctx, env, args, func(line string) {
-		var message struct {
-			Type    string  `json:"message_type"`
-			Percent float64 `json:"percent_done"`
-			Done    uint64  `json:"bytes_done"`
-			Total   uint64  `json:"total_bytes"`
-			Size    uint64  `json:"total_bytes_processed"`
+	var freed []string
+	var out string
+	for {
+		out, err = m.runBackup(ctx, job, env, args, &total)
+		// A full target: with the job's leave, the oldest version goes
+		// and the run starts again, until it fits or one version is left.
+		if err == nil || ctx.Err() != nil || !noSpace(out) || !job.Keep.DropsOldest() {
+			break
 		}
-		if json.Unmarshal([]byte(line), &message) != nil {
-			return
+		gone, ferr := m.dropOldest(ctx, job, env, base)
+		if ferr != nil || gone == "" {
+			break
 		}
-		switch message.Type {
-		case "status":
-			m.update(job, func(s *State) {
-				s.Percent, s.BytesDone, s.BytesTotal = 100*message.Percent, message.Done, message.Total
-			})
-		case "summary":
-			total = message.Size
-		}
-	})
+		freed = append(freed, gone)
+		slog.Warn("backup target full, oldest version removed", "job", job.ID, "version", gone)
+	}
+	if len(freed) > 0 && m.OnFreed != nil {
+		m.OnFreed(job.ID, len(freed))
+	}
 	warning := ""
+	if len(freed) > 0 {
+		warning = fmt.Sprintf("The target was full; removed the oldest %d version(s): %s", len(freed), strings.Join(freed, ", "))
+	}
 	var exit *exec.ExitError
 	switch {
 	case errors.As(err, &exit) && exit.ExitCode() == 3:
 		// A backup was made, but some files could not be read.
-		warning = lastLines(out, job.Password)
+		warning = strings.TrimSpace(warning + "\n" + lastLines(out, job.Password))
 	case err != nil:
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+		if noSpace(out) {
+			return fmt.Errorf("%w:\n%s", errNoSpace, lastLines(out, job.Password))
 		}
 		return errors.New(lastLines(out, job.Password))
 	}
@@ -1167,7 +1248,11 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 		m.OnIncomplete(job.ID)
 	}
 
-	if job.Keep.Daily+job.Keep.Weekly+job.Keep.Monthly > 0 && len(sel.missing) == 0 {
+	if job.Keep.Chosen() && len(sel.missing) == 0 {
+		if err := m.forgetChosen(ctx, job, env, base); err != nil && ctx.Err() == nil {
+			m.update(job, func(s *State) { s.Warning = strings.TrimSpace(s.Warning + "\n" + err.Error()) })
+		}
+	} else if job.Keep.Daily+job.Keep.Weekly+job.Keep.Monthly > 0 && len(sel.missing) == 0 {
 		args := append(slices.Clone(base), "forget", "--tag", "titanos", "--group-by", "tags", "--prune")
 		for flag, count := range map[string]int{"--keep-daily": job.Keep.Daily, "--keep-weekly": job.Keep.Weekly, "--keep-monthly": job.Keep.Monthly} {
 			if count > 0 {
@@ -1181,6 +1266,30 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 	}
 	slog.Info("backup finished", "job", job.ID, "bytes", total)
 	return nil
+}
+
+// runBackup runs restic backup once and reports progress and the size.
+func (m *Manager) runBackup(ctx context.Context, job Job, env, args []string, total *uint64) (string, error) {
+	return m.run(ctx, env, args, func(line string) {
+		var message struct {
+			Type    string  `json:"message_type"`
+			Percent float64 `json:"percent_done"`
+			Done    uint64  `json:"bytes_done"`
+			Total   uint64  `json:"total_bytes"`
+			Size    uint64  `json:"total_bytes_processed"`
+		}
+		if json.Unmarshal([]byte(line), &message) != nil {
+			return
+		}
+		switch message.Type {
+		case "status":
+			m.update(job, func(s *State) {
+				s.Percent, s.BytesDone, s.BytesTotal = 100*message.Percent, message.Done, message.Total
+			})
+		case "summary":
+			*total = message.Size
+		}
+	})
 }
 
 // Snapshots lists the backups of a job, the newest first.
@@ -1289,6 +1398,30 @@ func (m *Manager) Run(ctx context.Context) {
 	}
 }
 
+// Plugged starts the USB copies to a drive that was just plugged in whose
+// last attempt failed, for example because the drive was not there. Jobs
+// run by hand only are left alone.
+func (m *Manager) Plugged(deviceID string) {
+	if m.Disabled {
+		return
+	}
+	m.mu.Lock()
+	jobs := slices.Clone(m.jobs)
+	m.mu.Unlock()
+	for _, job := range jobs {
+		if (job.Destination.Type != "usb-copy" && job.Destination.Type != "usb") || job.Destination.DeviceID != deviceID || !job.Enabled || m.stateFile(job) == "" {
+			continue
+		}
+		if state := m.state(job); state.Running || state.FailingSince == nil {
+			continue
+		}
+		slog.Info("backup drive plugged in, catching up", "job", job.ID)
+		if err := m.Start(job.ID); err != nil && !errors.Is(err, ErrRunning) {
+			slog.Warn("backup not started", "job", job.ID, "err", err)
+		}
+	}
+}
+
 // checkOverdue tells OnOverdue when a job became overdue.
 func (m *Manager) checkOverdue(job Job, state State) {
 	m.tellOverdue(job, state.Running, overdue(job, state, m.local(m.now())))
@@ -1329,7 +1462,13 @@ func (m *Manager) tellOverdue(job Job, running, late bool) {
 	}
 }
 
-func plainCopy(kind string) bool { return kind == "usb-copy" || kind == "smb-copy" }
+// PlainCopy reports whether a kind of destination holds readable copies
+// rather than restic versions.
+func PlainCopy(kind string) bool { return plainCopy(kind) }
+
+func plainCopy(kind string) bool {
+	return kind == "usb-copy" || kind == "smb-copy" || kind == "local-copy"
+}
 
 // Busy reports whether a backup or a restore runs right now.
 func (m *Manager) Busy() bool {

@@ -44,9 +44,6 @@ var activityQuiet = []string{
 	"POST /api/v1/storage/smart/refresh",
 	"POST /api/v1/files/usage",
 	"POST /api/v1/files/url-download/probe",
-	"POST /api/v1/assistant/knowledge/search",
-	"POST /api/v1/assistant/automations/preview",
-	"POST /api/v1/assistant/probe",
 	"PUT /api/v1/preferences/{kind}",
 	"PUT /api/v1/background",
 	"DELETE /api/v1/background",
@@ -125,7 +122,7 @@ func noteActivity(r *http.Request, user auth.User) {
 		if !contains(activityReads, action) {
 			return
 		}
-	} else if contains(activityQuiet, action) || strings.HasPrefix(action, "POST /api/v1/assistant/chats") || strings.HasPrefix(action, "PUT /api/v1/assistant/chats") || strings.HasPrefix(action, "DELETE /api/v1/assistant/chats") {
+	} else if contains(activityQuiet, action) {
 		return
 	}
 	rec.user = user.Name
@@ -135,8 +132,8 @@ func noteActivity(r *http.Request, user auth.User) {
 		rec.via = activity.ViaMCP
 	} else if _, ok := r.Context().Value(apiTokenIdentity{}).(string); ok {
 		rec.via = activity.ViaToken
-	} else if _, ok := r.Context().Value(agentIdentity{}).(string); ok {
-		rec.via = activity.ViaAgent
+	} else if _, ok := r.Context().Value(inProcessIdentity{}).(string); ok {
+		rec.via = activity.ViaHomeAssistant
 	} else if viaCluster(r) {
 		rec.via = activity.ViaCluster
 	}
@@ -254,7 +251,7 @@ func (s *Server) handleActivity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	f := activity.Filter{Days: 7, Limit: 200, User: q.Get("user"), Text: q.Get("q"), Failed: q.Get("failed") == "1"}
+	f := activity.Filter{Days: 7, Limit: 200, User: q.Get("user"), Via: q.Get("via"), Text: q.Get("q"), Failed: q.Get("failed") == "1"}
 	if v := q.Get("days"); v != "" {
 		f.Days, _ = strconv.Atoi(v)
 	}

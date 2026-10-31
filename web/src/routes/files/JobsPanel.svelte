@@ -34,7 +34,7 @@
 	import { poll } from '#lib/poll.ts';
 	import { transferSample, transferProblem, type TransferSample } from '#lib/transfer-progress.ts';
 	import { api, type CopyJob } from '#lib/api.ts';
-	import { formatBytes } from '#lib/format.ts';
+	import { MB, formatBytes } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 
 	type Props = {
@@ -259,12 +259,12 @@
 								disabled={!!controlling}
 								type="number"
 								min="0"
-								max="1024"
+								max="1073"
 								step="1"
-								value={(job.rate ?? 0) / 1048576}
+								value={Math.round((job.rate ?? 0) / MB)}
 								onchange={(e) => {
 									if (e.currentTarget.checkValidity())
-										control(job, { rate: Number(e.currentTarget.value) * 1048576 });
+										control(job, { rate: Number(e.currentTarget.value) * MB });
 								}}
 							/></label
 						>
@@ -357,7 +357,7 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.controls input {
 		width: 6rem;
@@ -380,7 +380,7 @@
 		accent-color: var(--accent);
 	}
 	.small {
-		font-size: 0.8rem;
+		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
 	}
 	.what {

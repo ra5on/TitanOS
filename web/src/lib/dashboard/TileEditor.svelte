@@ -545,11 +545,11 @@
 		gap: 12px;
 	}
 	.eyebrow {
-		font-size: 0.7rem;
+		font-size: var(--text-xs);
 		color: var(--muted);
 	}
 	h2 {
-		font-size: 1.1rem;
+		font-size: var(--text-lg);
 		font-weight: 500;
 		margin-top: 6px;
 		overflow-wrap: anywhere;
@@ -572,7 +572,7 @@
 		color: var(--muted);
 		background: transparent;
 		cursor: pointer;
-		font-size: 0.8rem;
+		font-size: var(--text-sm);
 	}
 	.editor-tabs .chosen {
 		color: var(--text);
@@ -588,7 +588,7 @@
 	}
 	label {
 		display: block;
-		font-size: 0.8rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	label > .field {
@@ -612,7 +612,7 @@
 	legend {
 		padding: 0 8px 0 0;
 		color: var(--text);
-		font-size: 0.85rem;
+		font-size: var(--text-base);
 	}
 	.check {
 		display: flex;
@@ -621,14 +621,14 @@
 		color: var(--text);
 	}
 	.reset {
-		font-size: 0.8rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.part-order {
 		display: flex;
 		gap: 5px;
 		align-items: center;
-		font-size: 0.8rem;
+		font-size: var(--text-sm);
 	}
 	.part-order span {
 		flex: 1;
@@ -641,14 +641,14 @@
 		transform: rotate(180deg);
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--text-sm);
 		line-height: 1.6;
 	}
 	.inspector-footer {
 		border-top: 1px solid var(--border);
 		padding: 14px 18px;
 		color: var(--muted);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	@media (max-width: 760px) {
 		.inspector {

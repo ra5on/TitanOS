@@ -1,12 +1,11 @@
 <script lang="ts">
-	import { apiPath } from '#lib/cluster-node.ts';
 	import { onMount } from 'svelte';
 	import NavigationGuard from '#lib/operations/NavigationGuard.svelte';
 	import { api, type Account, type StorageStatus } from '#lib/api.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
-	import { formatDateTime } from '#lib/format.ts';
+	import { formatDateTime, mbToMiB, mibToMB } from '#lib/format.ts';
 	import { operationError } from '#lib/operations.ts';
 	import {
 		activityLabel,
@@ -101,15 +100,7 @@
 		try {
 			const q = query();
 			q.set('format', format);
-			const response = await fetch(apiPath(`/activity?${q}`), { credentials: 'same-origin' });
-			if (!response.ok)
-				throw new Error((await response.json()).error?.message ?? response.statusText);
-			const url = URL.createObjectURL(await response.blob());
-			const link = document.createElement('a');
-			link.href = url;
-			link.download = `titanos-activity-${days}d.${format}`;
-			link.click();
-			setTimeout(() => URL.revokeObjectURL(url), 1000);
+			await api.download(`/activity?${q}`, `titanos-activity-${days}d.${format}`);
 		} catch (e) {
 			error = operationError(e, t);
 		} finally {
@@ -240,8 +231,10 @@
 				class="field"
 				type="number"
 				min="8"
-				max="256"
-				bind:value={settings.maxMiB}
+				max="268"
+				bind:value={
+					() => mibToMB(settings?.maxMiB ?? 0), (mb) => settings && (settings.maxMiB = mbToMiB(mb))
+				}
 				required
 			/></label
 		>
@@ -262,7 +255,7 @@
 		gap: 14px;
 		padding: var(--tile-pad);
 		margin: var(--gap) 0;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.settings {
 		flex-flow: row wrap;
@@ -293,7 +286,7 @@
 		flex-direction: column;
 		gap: 6px;
 		min-width: 0;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);
@@ -332,7 +325,7 @@
 	}
 	.via {
 		display: block;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.what {
 		display: flex;
@@ -345,7 +338,7 @@
 	}
 	.raw {
 		color: var(--muted);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
 	}
 	.failed strong,
@@ -354,7 +347,7 @@
 	}
 	.tag {
 		font-weight: 600;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	@media (max-width: 640px) {
 		.entries li {

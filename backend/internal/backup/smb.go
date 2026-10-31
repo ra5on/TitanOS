@@ -207,7 +207,7 @@ func (m *Manager) withSMB(ctx context.Context, t SMBTarget, work func(*os.Root) 
 	// to unmount the private mountpoint, even when the helper reports failure.
 	defer func() {
 		if err := unix.Unmount(mount, 0); err != nil && !errors.Is(err, unix.EINVAL) && !errors.Is(err, unix.ENOENT) {
-			unix.Unmount(mount, unix.MNT_DETACH)
+			_ = unix.Unmount(mount, unix.MNT_DETACH) // cleanup, best effort: nothing more can be done if it fails
 			if result == nil {
 				result = fmt.Errorf("SMB backup finished but unmount failed")
 			}

@@ -180,14 +180,14 @@
 	}
 	.hint {
 		margin: 0;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.addresses {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 6px 14px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		overflow-wrap: anywhere;
 	}
 	.actions {
@@ -195,12 +195,12 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 10px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.small {
 		height: 2.25rem;
 		padding: 0 0.75rem;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.domain {
 		display: flex;

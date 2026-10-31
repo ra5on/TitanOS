@@ -57,7 +57,7 @@ func (m *Manager) ImportCandidates(ctx context.Context) ([]ImportCandidate, erro
 		return nil, err
 	}
 	arrays := m.arrays(ctx)
-	status := m.status(devices, arrays)
+	status := m.status(ctx, devices, arrays)
 	registered := map[string]bool{}
 	for _, v := range m.configured() {
 		registered[normalizeUUID(v.ArrayUUID)] = true
@@ -256,7 +256,7 @@ func (m *Manager) openImport(ctx context.Context, c *ImportCandidate, password [
 	uuid, _ := m.runner.Run(ctx, "", "blkid", "--match-tag", "UUID", "--output", "value", device)
 	c.Filesystem, c.FilesystemUUID = strings.TrimSpace(fsType), strings.TrimSpace(uuid)
 	if !slices.Contains([]string{"ext4", "xfs"}, c.Filesystem) || !validUUID(c.FilesystemUUID) {
-		m.luksClose(ctx, mapper)
+		_ = m.luksClose(ctx, mapper) // cleanup, best effort: nothing more can be done if it fails
 		return fmt.Errorf("%w: unsupported-filesystem", ErrNotPossible)
 	}
 	c.device = device
@@ -275,7 +275,7 @@ func (m *Manager) previewImport(ctx context.Context, c ImportCandidate, password
 		if err := m.openImport(ctx, &c, password, mapper, true); err != nil {
 			return ImportPreview{Candidate: c, Folders: []string{}, ReadOnly: true}, err
 		}
-		defer m.luksClose(context.WithoutCancel(ctx), mapper)
+		defer func() { _ = m.luksClose(context.WithoutCancel(ctx), mapper) }() // cleanup, best effort: nothing more can be done if it fails
 	}
 	preview = ImportPreview{Candidate: c, Folders: []string{}, ReadOnly: true}
 	point, err := os.MkdirTemp("", "titanos-import-")
@@ -401,7 +401,7 @@ func (m *Manager) Import(ctx context.Context, req ImportRequest) error {
 			return err
 		}
 		if c.FilesystemUUID != v.FilesystemUUID {
-			m.luksClose(ctx, cryptName(v, ""))
+			_ = m.luksClose(ctx, cryptName(v, "")) // cleanup, best effort: nothing more can be done if it fails
 			return fmt.Errorf("%w: device identity changed", ErrDiskUnavailable)
 		}
 	}

@@ -120,7 +120,7 @@
 		gap: 10px;
 		min-height: 60vh;
 		margin: 0;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		/* Only after a moment, so that a quick start does not flash. */
 		animation: appear 0.2s 0.4s both;
 	}

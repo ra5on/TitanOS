@@ -160,10 +160,11 @@ func (m *Manager) SetKernelParam(name, value string) (ParamState, error) {
 		if err := writeFile(e.path, []byte(next)); err != nil {
 			return state, err
 		}
+		m.writeBootEnv(slot, next)
 		changed = true
 	}
 	if changed {
-		syncDir(filepath.Join(m.bootDir, "loader/entries"))
+		_ = syncDir(filepath.Join(m.bootDir, "loader/entries")) // the data are written; the sync only hurries them to disk
 		unix.Sync()
 		m.forget()
 		slog.Info("kernel parameter written to the boot entries", "name", name, "value", value)

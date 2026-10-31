@@ -23,9 +23,12 @@ MODULES = (
     "qla2xxx", "mpt3sas", "megaraid_sas", "aacraid", "hpsa",
     "nvme", "nvme_core", "vmd", "ahci", "ata_piix", "sata_mv", "sata_sil24",
     "sd_mod", "scsi_mod", "usb_storage", "uas", "xhci_pci",
-    "ntfs3", "fuse", "exfat", "vfat", "ext4", "xfs", "btrfs", "dm_crypt",
+    "fuse", "exfat", "vfat", "ext4", "xfs", "btrfs", "dm_crypt",
     "virtio_pci", "virtio_blk", "virtio_net", "vfio_pci", "kvm_intel", "kvm_amd",
 )
+# One of each group is enough: Linux 7 replaced ntfs3 with a new driver
+# named ntfs (kernel choice "Neu", docs/KERNEL.md).
+ANY_OF = (("ntfs3", "ntfs"),)
 
 
 def check_microcode(initrd):
@@ -82,6 +85,7 @@ def check_image(root, kernel):
     if builtin.exists():
         names.update(Path(line).name.removesuffix(".ko").replace("-", "_") for line in builtin.read_text().splitlines())
     missing = set(MODULES) - names
+    missing.update("/".join(group) for group in ANY_OF if not names.intersection(group))
     if missing:
         raise ValueError("required NAS kernel modules missing: " + ", ".join(sorted(missing)))
     check_microcode(root / "boot" / ("initrd.img-" + kernel))

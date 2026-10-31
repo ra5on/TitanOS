@@ -55,7 +55,7 @@ func TestIPv64AreaNeedsKeyRoleAndSession(t *testing.T) {
 	// The assistant (or Home Assistant) acting as the owner may read, but
 	// never change anything at IPv64.
 	agent := func(method, path string) int {
-		req := httptest.NewRequest(method, path, strings.NewReader(`{"name":"x","expiresIn":60}`)).WithContext(context.WithValue(context.Background(), agentIdentity{}, "alex"))
+		req := httptest.NewRequest(method, path, strings.NewReader(`{"name":"x","expiresIn":60}`)).WithContext(context.WithValue(context.Background(), inProcessIdentity{}, "alex"))
 		rec := httptest.NewRecorder()
 		ts.server.ServeHTTP(rec, req)
 		return rec.Code

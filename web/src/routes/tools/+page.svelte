@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { apiPath } from '#lib/cluster-node.ts';
+	import { api } from '#lib/api.ts';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -14,6 +14,7 @@
 		{ href: '/tools/monitoring', label: 'ops.monitoring', icon: 'activity' },
 		{ href: '/tools/activity', label: 'ops.activity', icon: 'clock' },
 		{ href: '/tools/logs', label: 'tools.logs', icon: 'fileText' },
+		{ href: '/tools/hardware', label: 'hwcheck.title', icon: 'chip' },
 	];
 
 	// Saved links to the journal pointed at a section of this page.
@@ -29,17 +30,7 @@
 		packing = true;
 		packError = '';
 		try {
-			const res = await fetch(apiPath('/diagnostics/bundle'), { credentials: 'same-origin' });
-			if (!res.ok) throw new Error(String(res.status));
-			const blob = await res.blob();
-			const name =
-				/filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ??
-				'titanos-diagnose.zip';
-			const link = document.createElement('a');
-			link.href = URL.createObjectURL(blob);
-			link.download = name;
-			link.click();
-			setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
+			await api.download('/diagnostics/bundle', 'titanos-diagnose.zip', { serverName: true });
 		} catch {
 			packError = t('tools.bundleFailed');
 		}
@@ -109,7 +100,7 @@
 		flex-direction: column;
 		gap: 14px;
 		padding: 18px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	section p {
 		margin: 0;

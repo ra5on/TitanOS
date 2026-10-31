@@ -41,9 +41,10 @@ func networkRecovery(dir string) error {
 	if err := unix.IoctlSetTermios(fd, unix.TCSETS, &private); err != nil {
 		return err
 	}
-	defer unix.IoctlSetTermios(fd, unix.TCSETS, term)
+	// Echo back on; if that fails the terminal stays as it is.
+	defer func() { _ = unix.IoctlSetTermios(fd, unix.TCSETS, term) }()
 	password, readErr := read("Passwort / Password: ")
-	unix.IoctlSetTermios(fd, unix.TCSETS, term)
+	_ = unix.IoctlSetTermios(fd, unix.TCSETS, term) // the terminal works on with the previous settings
 	fmt.Println()
 	if readErr != nil {
 		return readErr
@@ -93,17 +94,8 @@ func networkRecovery(dir string) error {
 	if err != nil || !(confirm == "JA" || confirm == "YES") {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	defer cancel()
-	if out, err := exec.CommandContext(ctx, "systemctl", "stop", "titand.service").CombinedOutput(); err != nil {
-		return fmt.Errorf("stop daemon: %w: %s", err, out)
-	}
-	defer func() {
-		if out, err := exec.Command("systemctl", "start", "titand.service").CombinedOutput(); err != nil {
-			fmt.Fprintf(os.Stderr, "start daemon: %v: %s\n", err, out)
-		}
-	}()
-	if err := m.Recover(ctx, port); err != nil {
+	err = withTitandStopped(func(ctx context.Context) error { return m.Recover(ctx, port) })
+	if err != nil {
 		return err
 	}
 	fmt.Println("Konfiguration wiederhergestellt / Configuration restored")
@@ -118,17 +110,12 @@ func clearSSHNetworks(store *config.Store, read func(string) (string, error)) er
 	if err != nil || !(confirm == "JA" || confirm == "YES") {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	defer cancel()
-	if out, err := exec.CommandContext(ctx, "systemctl", "stop", "titand.service").CombinedOutput(); err != nil {
-		return fmt.Errorf("stop daemon: %w: %s", err, out)
-	}
-	defer func() {
-		if out, err := exec.Command("systemctl", "start", "titand.service").CombinedOutput(); err != nil {
-			fmt.Fprintf(os.Stderr, "start daemon: %v: %s\n", err, out)
-		}
-	}()
-	changed, err := sshd.ClearNetworks(store)
+	var changed bool
+	err = withTitandStopped(func(context.Context) error {
+		var err error
+		changed, err = sshd.ClearNetworks(store)
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -138,4 +125,34 @@ func clearSSHNetworks(store *config.Store, read func(string) (string, error)) er
 		fmt.Println("SSH war nicht auf Netze beschränkt / SSH was not limited to networks")
 	}
 	return nil
+}
+
+// titandStepTimeout bounds stopping and starting titand and the action in
+// between.
+const titandStepTimeout = 90 * time.Second
+
+// systemctl runs systemctl for the recovery tools; tests replace it.
+var systemctl = func(ctx context.Context, args ...string) ([]byte, error) {
+	return exec.CommandContext(ctx, "systemctl", args...).CombinedOutput()
+}
+
+// withTitandStopped stops titand, runs action and starts titand again,
+// also when the action failed. titand keeps its settings in memory and
+// would otherwise write the old ones back with its next change. The action
+// gets a context that ends after titandStepTimeout; starting again has a
+// context of its own, as the first may have run out by then.
+func withTitandStopped(action func(ctx context.Context) error) error {
+	ctx, cancel := context.WithTimeout(context.Background(), titandStepTimeout)
+	defer cancel()
+	if out, err := systemctl(ctx, "stop", "titand.service"); err != nil {
+		return fmt.Errorf("stop daemon: %w: %s", err, out)
+	}
+	defer func() {
+		start, cancel := context.WithTimeout(context.Background(), titandStepTimeout)
+		defer cancel()
+		if out, err := systemctl(start, "start", "titand.service"); err != nil {
+			fmt.Fprintf(os.Stderr, "start daemon: %v: %s\n", err, out)
+		}
+	}()
+	return action(ctx)
 }

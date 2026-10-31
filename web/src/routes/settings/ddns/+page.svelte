@@ -235,14 +235,14 @@
 
 <style>
 	form {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.hint {
 		margin: 0;
 	}
 	h3 {
 		margin: 0;
-		font-size: 0.9375rem;
+		font-size: var(--text-md);
 	}
 	.divided {
 		display: flex;

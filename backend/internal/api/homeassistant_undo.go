@@ -5,9 +5,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/ra5on/TitanOS/backend/internal/assistant"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
+	"github.com/ra5on/TitanOS/backend/internal/toolcatalog"
 	"net/http"
 	"strings"
 	"sync"
@@ -79,7 +79,7 @@ func (s *Server) undoReceipt(user, id string) (haUndoReceipt, error) {
 	r, ok := s.haUndo.Entries[id]
 	settings, _ := s.opts.HomeAssistant.Settings()
 	if !ok || r.User != user || time.Now().After(r.Expires) || settings.URL != r.URL {
-		return r, assistant.ErrInvalid
+		return r, toolcatalog.ErrInvalid
 	}
 	service := "turn_" + r.Before
 	if !s.opts.HomeAssistant.CanCall(r.Entity, service) {
@@ -87,12 +87,12 @@ func (s *Server) undoReceipt(user, id string) (haUndoReceipt, error) {
 	}
 	return r, nil
 }
-func (s *Server) haUndoTool(u auth.User) assistant.Tool {
-	return actionTool("ha_undo", "Undo a previously verified single switch action ONLY using its undoReceipt returned by ha_call. Expires after 30 minutes or a service restart. Rejects intervening state changes and current access restrictions. Never undo scenes, doors or arbitrary actions.", map[string]any{"receipt": str("Exact undoReceipt from ha_call")}, []string{"receipt"}, func(ctx context.Context, args json.RawMessage) (*assistant.Action, error) {
+func (s *Server) haUndoTool(u auth.User) toolcatalog.Tool {
+	return actionTool("ha_undo", "Undo a previously verified single switch action ONLY using its undoReceipt returned by ha_call. Expires after 30 minutes or a service restart. Rejects intervening state changes and current access restrictions. Never undo scenes, doors or arbitrary actions.", map[string]any{"receipt": str("Exact undoReceipt from ha_call")}, []string{"receipt"}, func(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
 		var q struct {
 			Receipt string `json:"receipt"`
 		}
-		if err := assistant.DecodeArgs(args, &q); err != nil {
+		if err := toolcatalog.DecodeArgs(args, &q); err != nil {
 			return nil, err
 		}
 		receipt, err := s.undoReceipt(u.Name, q.Receipt)
@@ -114,7 +114,7 @@ func (s *Server) handleHAUndo(w http.ResponseWriter, r *http.Request) {
 	}
 	saved, err := s.undoReceipt(currentUser(r).Name, q.Receipt)
 	if err != nil {
-		writeAssistantError(w, err)
+		writeError(w, http.StatusBadRequest, "invalid_receipt", "the undo receipt is not valid or has expired")
 		return
 	}
 	current, err := s.opts.HomeAssistant.State(r.Context(), saved.Entity)
@@ -132,7 +132,7 @@ func (s *Server) handleHAUndo(w http.ResponseWriter, r *http.Request) {
 	delete(s.haUndo.Entries, q.Receipt)
 	s.haUndo.Unlock()
 	if !exists {
-		writeAssistantError(w, assistant.ErrInvalid)
+		writeError(w, http.StatusBadRequest, "invalid_receipt", "the undo receipt is not valid or has expired")
 		return
 	}
 	service := "turn_" + saved.Before

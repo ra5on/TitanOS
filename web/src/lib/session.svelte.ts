@@ -3,7 +3,6 @@ import { sound, resetSound } from './sound.svelte.ts';
 import { sanitizeSound } from './sounds.ts';
 import { useAppearance } from './theme/appearance.svelte.ts';
 import { sanitizeAppearance } from './theme/themes.ts';
-import { resetAssistant, useAssistantPrefs } from './assistant.svelte.ts';
 import { bell } from './notifications.svelte.ts';
 import { sanitizeBell } from './notify-groups.ts';
 
@@ -15,7 +14,17 @@ export const session = $state<{
 	dashboard: Record<string, unknown> | null;
 	docker: Record<string, unknown> | null;
 	vnc: Record<string, unknown> | null;
-}>({ status: 'loading', data: null, shares: null, dashboard: null, docker: null, vnc: null });
+	/** Settings › Services: docker, vms and lxc, false when switched off. */
+	services: Record<string, boolean>;
+}>({
+	status: 'loading',
+	data: null,
+	shares: null,
+	dashboard: null,
+	docker: null,
+	vnc: null,
+	services: {},
+});
 
 async function loadPreferences() {
 	try {
@@ -28,7 +37,6 @@ async function loadPreferences() {
 		bell.settings = sanitizeBell(prefs.bell);
 		if (prefs.appearance)
 			useAppearance(sanitizeAppearance(prefs.appearance, prefs.dashboard?.visual));
-		useAssistantPrefs(prefs.assistant);
 	} catch {
 		// The UI works with defaults; saving will report the problem.
 		session.shares = null;
@@ -38,15 +46,28 @@ async function loadPreferences() {
 	}
 }
 
+/** Which services run; the tabs of switched-off ones are hidden. */
+export async function loadServices() {
+	try {
+		// Not longer than a few seconds: a managed node that is restarting
+		// must not hold up the start of the web interface (node-restart.ts).
+		session.services = await api.get<Record<string, boolean>>(
+			'/services/state',
+			AbortSignal.timeout(5000),
+		);
+	} catch {
+		session.services = {};
+	}
+}
+
 /** Asks the NAS who we are. Called at start and after anything that changes it. */
 export async function refreshSession() {
 	try {
 		const data = await api.get<Session>('/session');
 		if (data.user?.name !== session.data?.user?.name) {
 			resetSound();
-			resetAssistant();
 		}
-		if (data.user) await loadPreferences();
+		if (data.user) await Promise.all([loadPreferences(), loadServices()]);
 		session.data = data;
 		session.status = 'ready';
 	} catch {
@@ -70,13 +91,11 @@ export async function logout() {
 	} catch (err) {
 		if (!(err instanceof ApiError)) throw err;
 	}
-	resetAssistant();
 	await refreshSession();
 }
 
 /** Called when the NAS says the session is gone (restart, timeout). */
 export function sessionExpired() {
 	resetSound();
-	resetAssistant();
 	if (session.data) session.data = { ...session.data, user: null };
 }

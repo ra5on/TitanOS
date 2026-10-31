@@ -72,8 +72,11 @@ export function sanitizeNav(input: unknown): NavPrefs {
 	};
 }
 
-export function navForRole(role: Role): NavItem[] {
-	return NAV.filter((item) => !item.roles || item.roles.includes(role));
+export function navForRole(role: Role, services: Record<string, boolean> = {}): NavItem[] {
+	// A service switched off under Settings › Services has no tab.
+	return NAV.filter(
+		(item) => (!item.roles || item.roles.includes(role)) && services[item.id] !== false,
+	);
 }
 
 /**

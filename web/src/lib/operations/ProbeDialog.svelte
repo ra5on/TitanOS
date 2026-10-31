@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { api } from '#lib/api.ts';
+	import { MB } from '#lib/format.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { operationError } from '#lib/operations.ts';
 	let { job, onclose, onstarted }: { job: string; onclose: () => void; onstarted: () => void } =
 		$props();
-	let mib = $state(64),
+	let mb = $state(64),
 		files = $state(20),
 		busy = $state(false),
 		error = $state('');
@@ -14,7 +15,7 @@
 		error = '';
 		try {
 			await api.post(`/backups/${encodeURIComponent(job)}/probe`, {
-				maxBytes: mib * 1048576,
+				maxBytes: mb * MB,
 				maxFiles: files,
 			});
 			onstarted();
@@ -40,9 +41,9 @@
 			>{t('ops.maxMiB')}<input
 				class="field"
 				type="number"
-				bind:value={mib}
+				bind:value={mb}
 				min="1"
-				max="1024"
+				max="1073"
 				required
 			/></label
 		><label
@@ -77,6 +78,6 @@
 		flex-direction: column;
 		gap: 6px;
 		flex: 1 1 170px;
-		font-size: 0.85rem;
+		font-size: var(--text-base);
 	}
 </style>

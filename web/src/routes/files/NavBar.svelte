@@ -269,7 +269,7 @@
 		padding: 0 4px;
 		border: 1px solid transparent;
 		border-radius: var(--radius-ctl);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		cursor: text;
 	}
 	.crumbs:hover {
@@ -306,7 +306,7 @@
 		margin: 0;
 		padding: 6px 14px;
 		border-bottom: 1px solid var(--panel-border);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.search {
 		flex: 0 1 260px;

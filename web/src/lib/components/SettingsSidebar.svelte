@@ -81,7 +81,7 @@
 	.settings-sidebar {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 		min-width: 0;
 	}
 	.groups {
@@ -89,15 +89,15 @@
 		flex-direction: column;
 	}
 	.overview {
-		margin-top: 8px;
+		margin-top: var(--space-2);
 	}
 	.note {
-		margin: 8px 8px 0;
-		font-size: 0.8125rem;
+		margin: var(--space-2) var(--space-2) 0;
+		font-size: var(--text-base);
 	}
 	.group-title {
-		margin: 16px 8px 4px;
-		font-size: 0.6875rem;
+		margin: var(--space-4) var(--space-2) var(--space-1);
+		font-size: var(--text-xs);
 		font-weight: 600;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
@@ -116,11 +116,11 @@
 		align-items: center;
 		gap: 10px;
 		min-height: 2rem;
-		padding: 4px 8px;
+		padding: var(--space-1) var(--space-2);
 		border-radius: var(--radius-ctl);
 		color: var(--text);
 		text-decoration: none;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		line-height: 1.25;
 	}
 	a :global(svg) {
@@ -153,7 +153,7 @@
 		border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
 		border-radius: var(--radius-small);
 		color: color-mix(in srgb, var(--accent) 60%, var(--text));
-		font-size: 0.6875rem;
+		font-size: var(--text-xs);
 		font-weight: 500;
 		line-height: 1.4;
 	}

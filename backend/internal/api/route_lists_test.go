@@ -6,20 +6,16 @@ import (
 	"testing"
 )
 
-// A {parameter} in a route of the assistant or the public API must not
-// stand for a path the mux gives to a more specific handler: the route list
-// would then allow that handler with the level and scope of another one.
-// POST /plugins/{name}/{action} once let the assistant reach
-// POST /plugins/{name}/update as "switch a plugin on or off".
+// A {parameter} in a route of the public API must not stand for a path the
+// mux gives to a more specific handler: the route list would then allow
+// that handler with the scope of another one. POST /plugins/{name}/{action}
+// once reached POST /plugins/{name}/update as "switch a plugin on or off".
 func TestRouteListsDoNotShadowOtherHandlers(t *testing.T) {
 	ts := newTestServer(t)
 	param := regexp.MustCompile(`\{[^}]+\}`)
 
 	type listed struct{ list, method, path string }
 	var routes []listed
-	for _, r := range apiRoutes {
-		routes = append(routes, listed{"apiRoutes", r.Method, r.Path})
-	}
 	for _, r := range publicRoutes {
 		routes = append(routes, listed{"publicRoutes", r.Method, r.Path})
 	}

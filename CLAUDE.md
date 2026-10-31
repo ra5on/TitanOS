@@ -4,7 +4,7 @@ Ein schlankes NAS-Betriebssystem, das vom USB-Stick bootet und komplett im RAM l
 
 > **Diese Datei enthält nur Kernregeln; Fachregeln stehen in `docs/rules/` bzw. den verlinkten Dokumenten. Vor Arbeiten an einem Bereich dessen Regeldatei lesen. Neue Regeln in die passende Regeldatei, nicht hier anhängen.** Verzeichnis: Abschnitt „Fachregeln“ unten und `docs/rules/README.md`.
 
-Stand: **0.40.0** (Release-Prüfstand siehe docs/releases/v0.40.0.md). Diese Datei und die Regeldateien beschreiben die aktuell geltenden Entscheidungen, nicht die Reihenfolge ihrer Einführung. Historische Release- und Testberichte stehen in `docs/releases/` und den Fachdokumenten. Bei Änderungen die betroffene Regel dort aktualisieren, wo sie steht, statt widersprechende Nachträge anzuhängen.
+Stand: **0.41.0** (Release-Prüfstand siehe docs/releases/v0.41.0.md). Diese Datei und die Regeldateien beschreiben die aktuell geltenden Entscheidungen, nicht die Reihenfolge ihrer Einführung. Historische Release- und Testberichte stehen in `docs/releases/` und den Fachdokumenten. Bei Änderungen die betroffene Regel dort aktualisieren, wo sie steht, statt widersprechende Nachträge anzuhängen.
 
 Eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen aus anderen Projekten übernehmen.
 
@@ -13,7 +13,7 @@ Eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen aus ande
 | Bereich | Entscheidung |
 |---|---|
 | Basis | Debian 13 (trixie) minimal, amd64 |
-| Boot | nur UEFI, systemd-boot, Secure Boot aus |
+| Boot | 64-Bit-UEFI mit systemd-boot; seit 0.41 zusätzlich GRUB für 32-Bit-UEFI und Legacy-BIOS mit denselben A/B-Einträgen (`docs/BOOT.md`); Secure Boot aus |
 | Stick | FAT32, Label `TITANOS` |
 | Systemabbild | squashfs (zstd), wird beim Boot **komprimiert** in den RAM (tmpfs) kopiert, darüber overlayfs mit größenbegrenzter tmpfs-Schicht (512 MiB) |
 | Nach dem Boot | Stick wird nur noch für Konfigurationsänderungen und Updates beschrieben |
@@ -45,7 +45,7 @@ Eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen aus ande
 - Umgesetzt: Ersteinrichtung, Konten/Rollen und TOTP, SMB/NFS, Dateimanager, mdadm und Btrfs-Spiegel, Docker/Apps, VMs, LXC-Systemcontainer, Plugins, Netzwerk mit Rückfall, Firewall (ab Werk aus), Backups, USV, Benachrichtigungen, Diagnose, Aktivitätsprotokoll, SSH/Zertifikate und Themes. Die jeweiligen Abschnitte unten nennen Grenzen und Prüfstand.
 - Ersteinrichtung: frei gewähltes Besitzerkonto, danach `/welcome` mit Sprache, Hostname, Zeitzone, automatischer Heimnetz-Bridge und nächsten Schritten (Einrichtungsliste mit Erledigt-Zustand: Volume, ggf. Treiber, Freigabe, 2FA, Benachrichtigungen, Stick-Sicherung, Datensicherung, Fernzugriff per Tailscale/WireGuard, Mitteilungen aufs Handy, Apps; jederzeit über Einstellungen › Über TitanOS bzw. `/welcome?step=3`). Das erste Volume wird auf der Speicher-Seite angelegt.
 - Deutsch und Englisch; alle Oberflächentexte über Übersetzungsdateien.
-- Seit 0.8.0 App-Updates; seit 0.11.0 integrierter KI-Assistent mit Aufträgen und Dokumenten; seit 0.14.0 persönliche Benachrichtigungen, Home Assistant, Energie-Zeitplan mit Wake-on-LAN sowie Prüfen und Einzeldatei-Wiederherstellung von Backups. Einzelheiten in den eigenen Abschnitten.
+- Seit 0.8.0 App-Updates; seit 0.14.0 persönliche Benachrichtigungen, Home Assistant, Energie-Zeitplan mit Wake-on-LAN sowie Prüfen und Einzeldatei-Wiederherstellung von Backups. KI-Clients arbeiten ausschließlich über den MCP-Server mit dem festen Werkzeugkatalog (ab Werk aus, Entscheidung des Projektinhabers vom 31.10.2026, `docs/rules/API.md`, `docs/MCP.md`). Einzelheiten in den eigenen Abschnitten.
 - Zurückgestellt bzw. offen: ZFS und weitere Fernzugriffsarten. Let's Encrypt und dynamisches DNS sind umgesetzt (`docs/LETSENCRYPT.md`, `docs/DDNS.md`). **Tailscale, NetBird sowie kurze und optionale längere Monitoring-Verläufe sind umgesetzt**, siehe `docs/TAILSCALE.md`, `docs/NETBIRD.md` und `docs/MONITORING.md`.
 - LUKS2-Volume-Verschlüsselung ist seit der Entscheidung des Projektinhabers vom 28.10.2026 als Option umgesetzt (je Volume beim Anlegen, ab Werk aus; siehe Grundsätze und `docs/ENCRYPTION.md`). Die Befehlspalette (Strg/⌘+K) ist seit 0.16.0 umgesetzt: nur Navigation, rollenabhängig, keine Mutationen.
 - README: den aktuellen Gesamtumfang nach Funktionsbereichen beschreiben, keine „Neu in Version …“-Abschnitte anhängen. Aktuelle echte WebUI-Screenshots mit isolierten Beispieldaten unter `docs/screenshots/current/` pflegen; Herkunft und Aufnahme in `docs/screenshots/README.md` dokumentieren. Versionshistorie und Prüfberichte bleiben in den Releases.
@@ -55,26 +55,28 @@ Eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen aus ande
 
 ```
 TITANOS (FAT32)
-├── EFI/BOOT/BOOTX64.EFI          # systemd-boot
+├── EFI/BOOT/BOOTX64.EFI          # systemd-boot (64-Bit-UEFI)
+├── EFI/BOOT/BOOTIA32.EFI         # GRUB für 32-Bit-UEFI (ab 0.41)
+├── boot/grub/                    # grub.cfg, grubenv, i386-pc/ (Legacy-BIOS), stick-bios.py (ab 0.41)
 ├── loader/
 │   ├── loader.conf
 │   └── entries/
 │       ├── titanos-a.conf
 │       └── titanos-b.conf         # erst nach dem ersten Update; auf Probe: titanos-b+3.conf
 ├── titanos/
-│   ├── a/  vmlinuz, initrd.img, filesystem.squashfs, version, app/
+│   ├── a/  vmlinuz, initrd.img, filesystem.squashfs, version, app/, bootenv (Kommandozeile für GRUB)
 │   └── b/  (zweiter System-Slot; optional ebenfalls app/)
 └── config/                        # persistente Konfiguration, Konten und Geheimnisse
 ```
 
 Grundsätze (Kurzfassung; vollständiger Wortlaut mit SSD-Cache, Verschlüsselung, Firmware/Treiber-Plugins und RAM-Ziel in `docs/rules/STORAGE.md`):
-- Rootfs bei jedem Boot frisch. Persistente Systemkonfiguration nur in `/config` auf dem Stick (atomar per temp-Datei + rename, selten); Nutzdaten, Chats, Plugin-Dateien, Betriebsdaten und schwere Daten (Docker, VM-Images, große Logs) auf Daten-Volumes, nie im Overlay. Configs für Samba, NFS, Netzwerk usw. werden beim Start aus `/config` erzeugt.
+- Rootfs bei jedem Boot frisch. Persistente Systemkonfiguration nur in `/config` auf dem Stick (atomar per temp-Datei + rename, selten); Nutzdaten, Plugin-Dateien, Betriebsdaten und schwere Daten (Docker, VM-Images, große Logs) auf Daten-Volumes, nie im Overlay. Configs für Samba, NFS, Netzwerk usw. werden beim Start aus `/config` erzeugt.
 - Stick per systemd-Automount auf `/efi` ohne Leerlauf-Zeitlimit (`/config` → `/efi/config`), kein Einbinden beim Boot (`auto`/`nofail`). titand liest `/config` beim Start und hält es im RAM: **kein Zugriff auf `/config` in zyklischen Abfragen, keine offenen Dateien dort, keine periodischen Stick-Schreibzugriffe.**
 - Volumes werden über UUIDs in `/config/storage/volumes.json` zugeordnet, nie über Gerätenamen wie `sda`. Arrays setzt udev nach dem Start zusammen, nicht das initramfs.
 - **Im Entwicklungsmodus (`titand -dev`) verändert titand keine Platten.**
 - Split-Lock-Erkennung bleibt aktiv; keine Bootparameter/Sysctls automatisch setzen oder Boot-Einträge anpassen.
-- Treiber, die Debians Kernel nicht baut, nur als signierte Treiber-Plugins, nicht im Grundsystem; ein Kernelwechsel bleibt Entscheidung des Projektinhabers.
-- journald im RAM mit Größenbegrenzung.
+- Treiber, die Debians Kernel nicht baut, nur als signierte Treiber-Plugins, nicht im Grundsystem; ein Kernelwechsel bleibt Entscheidung des Projektinhabers. Seit 0.41 wählt man unter Updates zwischen Kernel „Stabil“ (Debian) und „Neu“ (trixie-backports), Entscheidung vom 31.10.2026 (`docs/KERNEL.md`).
+- journald im RAM mit Größenbegrenzung; seit 0.41.0 schreibt titand das Journal zusätzlich auf ein Daten-Volume (`.titanos/logs/<boot>.log`, begrenzt), nie auf den Stick (Entscheidung 31.10.2026, `docs/rules/SYSTEM.md`).
 
 ## Repo-Struktur (wichtige Einstiegspunkte)
 
@@ -102,7 +104,7 @@ titanos/
 │       ├── vm/             # libvirt über virsh, QEMU-Abbilder über qemu-img
 │       ├── lxc/            # LXC-Systemcontainer über lxc-create/systemctl, cgroup-Messwerte
 │       ├── update/, app/   # System-/App-Updates und Rückfall
-│       ├── assistant/      # Ollama, Chat-Ablauf, Verlauf, Websuche, Handbuch
+│       ├── toolcatalog/    # Werkzeugtypen, Argumentprüfung, Handbuch für MCP (Werkzeuge in api/catalog*.go, api/mcp_tools.go)
 │       ├── office/         # Word-, Excel-, PDF-Erzeugung und Dokumentlesen
 │       ├── files/, backup/, configbackup/, backuptarget/
 │       ├── plugins/, hardware/, tailscale/, netbird/, usb/, ups/
@@ -132,7 +134,7 @@ titanos/
 
 - Quelle nur GitHub Releases von `ra5on/TitanOS`, **nur Stable**, Manifest direkt ohne GitHub-API. **Ohne gültige Signatur keine Installation, auch nicht mit Warnung oder manuell**; danach Größe und SHA-256 jeder Datei.
 - Neue Konfigurationsfelder müssen von Basis und voriger App-Version weiterhin lesbar sein; keine inkompatiblen Umbenennungen/Pflichtfelder. Rückwege einschließlich Plugin-Einstellungen erhalten.
-- Volle Systemupdates: A/B-Slots mit drei Probestarts und Boot-Check über `/api/v1/health` (**kein `systemd-bless-boot`**); `EFI/BOOT/BOOTX64.EFI` wird nicht ersetzt.
+- Volle Systemupdates: A/B-Slots mit drei Probestarts und Boot-Check über `/api/v1/health` (**kein `systemd-bless-boot`**); Bootloader (`EFI/BOOT/BOOTX64.EFI`, `EFI/BOOT/BOOTIA32.EFI`, `boot/grub/`) werden nicht ersetzt.
 - App-Updates: nur titand mit Weboberfläche bei passender Basis-Version, Probe und Rückfall ohne NAS-Neustart; Installation wartet auf laufende dauerhafte Aufträge. Plugin-Katalog, NVIDIA-Bauumgebung und Treiber richten sich nach der **Basis-Version**.
 
 ### Release-Prüfung und Grenzen
@@ -156,10 +158,10 @@ Wortlaut und Einzelheiten in der jeweiligen Regeldatei; bei Widerspruch gilt die
 - **Private Betriebsdaten** unter `.titanos/<funktion>` gehören root, sind nicht von anderen beschreibbar oder verlinkt; ein verschwundenes Volume ist nie ein beschreibbarer RAM-/Overlay-Ersatz (`docs/rules/STORAGE.md`).
 - **Bestätigungen:** Zerstörende Aktionen mit einfachem Bestätigungsdialog (`Dialog.svelte`, `.dialog-actions`), gefährlicher Knopf links von „Abbrechen“, Enter/Autofokus lösen ihn nie aus. **Nirgends einen Namen oder eine Kennung eintippen lassen**; erwartet die API einen Bestätigungswert, schickt ihn die Oberfläche selbst (`docs/rules/WEB-UI.md`).
 - **Konsolen:** Alle Konsolen (NAS-Shell, Docker, VM-Bildschirm, serielle VM-Konsole, LXC) nutzen die bestehende Anmeldung ohne zweite Passwort-/2FA-Abfrage; keine erneute Bestätigung einführen. 15 Minuten Inaktivitätsabbruch, Protokollierung und Abschaltbarkeit bleiben (`docs/rules/ACCOUNTS-ACCESS.md`).
-- **Rechte:** Rollen Besitzer/Administrator/Benutzer, Prüfung immer serverseitig gegen aktuelle Konten-/Share-Rechte. root ist gesperrt, SSH ab Werk aus. API-Tokens und MCP nur über die explizite Routenliste `publicRoutes`, keine Geheimnisse/Shells/Updates/Netzwerkbestätigung (`docs/rules/ACCOUNTS-ACCESS.md`, `docs/rules/API.md`).
-- **Geheimnisse:** Passwörter (z. B. Volume-Passwörter) nie auf der Kommandozeile, nie protokolliert, nie im Assistenten-/Token-Katalog; Cluster-Geheimnisse nicht im Diagnosepaket.
-- **Aufträge:** Das Backend besitzt Aufträge und führt Änderungen aus; Browserergebnisse nie als Ausführungsnachweis. RAM-Aufträge und offene Verbindungen nicht als dauerhaft behandeln (`docs/rules/ASSISTANT.md`, `docs/rules/UPDATES.md`).
-- **Ab Werk aus:** Firewall, SSH, Verschlüsselung, SSD-Cache, KI-Assistent, MCP-Server, Wartung, längere Monitoring-Verläufe und andere optionale Funktionen laut Regeldatei.
+- **Rechte:** Rollen Besitzer/Administrator/Benutzer, Prüfung immer serverseitig gegen aktuelle Konten-/Share-Rechte. root ist gesperrt, SSH ab Werk aus. API-Tokens nur über die explizite Routenliste `publicRoutes`, MCP zusätzlich über den festen Werkzeugkatalog (`toolcatalog`, `api/catalog*.go`) mit dem Konto des Tokens; nie Geheimnisse, Passwörter/2FA/Passkeys, Tokenverwaltung, Shells/Konsolen oder Netzwerkbestätigung (`docs/rules/ACCOUNTS-ACCESS.md`, `docs/rules/API.md`).
+- **Geheimnisse:** Passwörter (z. B. Volume-Passwörter) nie auf der Kommandozeile, nie protokolliert, nie im MCP-/Token-Katalog; Cluster-Geheimnisse nicht im Diagnosepaket.
+- **Aufträge:** Das Backend besitzt Aufträge und führt Änderungen aus; Browserergebnisse nie als Ausführungsnachweis. RAM-Aufträge und offene Verbindungen nicht als dauerhaft behandeln (`docs/rules/STORAGE.md`, `docs/rules/UPDATES.md`).
+- **Ab Werk aus:** Firewall, SSH, Verschlüsselung, SSD-Cache, MCP-Server, Wartung, längere Monitoring-Verläufe und andere optionale Funktionen laut Regeldatei.
 - **Plugins:** Vor der Installation auf volle Systemrechte hinweisen; keine Plugin-Sandbox behaupten (`docs/rules/PLUGINS.md`).
 - **Oberfläche:** Status nie nur über Farbe; Kontrast mindestens 4,5:1; Farben aus Theme-Variablen; alle Texte über Übersetzungsdateien (Deutsch/Englisch). Reale Messwerte, Beispieldaten nur in isolierten Tests.
 - **Prüfstände:** Getestetes immer mit Umfang und Grenzen dokumentieren; frühere Hardwaremeldungen sind keine pauschale Abnahme neuer Funktionen.
@@ -186,7 +188,6 @@ Verbindliche Detailregeln je Bereich. Vor Arbeiten an einem Bereich die Datei le
 |---|---|
 | `docs/rules/STORAGE.md` | Stick/`/config`, Volumes, mdadm/Btrfs, SSD-Cache, Verschlüsselung, Firmware/Treiber, Ruhemodus, RAM-/Upload-Budget, Übernahme/Erweiterung, Wartung, Auftragsabläufe, Anwendungssicherungen, Restore-Proben, VM-Klon, Speicherverbrauch |
 | `docs/rules/UPDATES.md` | Update-Quelle, Signaturen, Update-Einstellungen, A/B-Systemupdates, App-Updates, Boot-/App-Check |
-| `docs/rules/ASSISTANT.md` | KI-Assistent, Modellanbieter, Aufträge/Freigaben, Automationen, Werkzeugkatalog |
 | `docs/rules/WEB-UI.md` | Kopfzeile, Konto-Menü, Bestätigungsdialoge, Marke, Einstellungsseiten mit Seitenleiste, Dashboard, Themes/Farben/Glas, gemeinsame UI, mobile Navigation, Befehlspalette |
 | `docs/rules/ACCOUNTS-ACCESS.md` | Konten/Rollen, 2FA, Passkeys, Sitzungen/„Angemeldet bleiben“, Konten sperren, SSH/Zertifikate (Zugang), Terminal und Konsolen, Aktivitätsprotokoll |
 | `docs/rules/SYSTEM.md` | Energie, Zeitplan/Wake-on-LAN, USV, Werkzeuge-Reiter, Benachrichtigungen, Monitoring/CPU-Leistung, Ein-/Ausschalter, Tailscale, NetBird |
@@ -194,7 +195,7 @@ Verbindliche Detailregeln je Bereich. Vor Arbeiten an einem Bereich die Datei le
 | `docs/rules/BACKUPS.md` | Datensicherung, Sicherung des Sticks, USB-Kopie, SMB-Kopie, Meldungstöne |
 | `docs/rules/SHARES-FILES.md` | Shares, Freigabe samt Daten löschen, Kontingente, Dateimanager, Datei-Editor, USB-Uploads, Namensregeln, Vorschau/Suche, Link-Downloads |
 | `docs/rules/CLUSTER.md` | Cluster (Beitritt, Proxy, Kontenabgleich, Backups) |
-| `docs/rules/API.md` | Öffentliche API/Tokens, titanosctl, MCP-Server, VM-Medien-Import, Plugin-Aufräumen |
+| `docs/rules/API.md` | Öffentliche API/Tokens, titanosctl, MCP-Server und Werkzeugkatalog, VM-Medien-Import, Plugin-Aufräumen |
 | `docs/rules/DOCKER.md` | Docker-Übersicht, Container bearbeiten, App-Store/Katalog, Docker-Layout |
 | `docs/rules/VMS-LXC.md` | VMs (Erstellen, Firmware, Konsole, Snapshots), App-Vorlagen, Hardware-Durchreichung, LXC-Systemcontainer |
 | `docs/rules/PLUGINS.md` | Plugins, Community-Plugins, NVIDIA-Treiberbau |

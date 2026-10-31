@@ -4,33 +4,44 @@
 	let cloning = $state<VM | null>(null);
 	// VMs: the list on the left, the chosen VM on the right with the tabs
 	// Overview, Screen and Snapshots.
-	import ContextMenu from '#lib/components/ContextMenu.svelte';
-	import Dialog from '#lib/components/Dialog.svelte';
 	import Dropdown from '#lib/components/Dropdown.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import TasksPanel from '#lib/components/TasksPanel.svelte';
-	import { api, ApiError, type VM, type VMStatus } from '#lib/api.ts';
+	import { api, type VM, type VMStatus } from '#lib/api.ts';
 	import { poll, type Poller } from '#lib/poll.ts';
-	import { apiErrorText, errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
-	import { session } from '#lib/session.svelte.ts';
+	import { i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 	import { addVmConsole } from '#lib/terminal.svelte.ts';
 	import { vmLabel } from '#lib/vm-name.ts';
 	import { nextScheduled } from '#lib/vm-schedule.ts';
 	import { formatDateTime } from '#lib/format.ts';
-	import { fitHeight, VNC_HEIGHT, vncHeight, vncWidth } from '#lib/vnc-size.ts';
+	import { VNC_HEIGHT } from '#lib/vnc-size.ts';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { SvelteSet } from 'svelte/reactivity';
 	import Overview from './Overview.svelte';
 	import Snapshots from './Snapshots.svelte';
 	import VncScreen, { type ScaleMode, type ConnectionPhase } from './VncScreen.svelte';
+	import VmActionDialog, { type VmDialogDraft, type VmDialogKind } from './VmActionDialog.svelte';
+	import VmRowMenu, { type RowChoice } from './VmRowMenu.svelte';
+	import VmXmlDialog from './VmXmlDialog.svelte';
+	import { ConsoleSize } from './console-size.svelte.ts';
+	import {
+		KEYS,
+		keyLabel,
+		lowSpaceVolumes,
+		MODES,
+		noticeClass,
+		problem,
+		vmNotices,
+		type Failure,
+		type Problem,
+	} from './vm-page.ts';
 
 	type Tab = 'overview' | 'screen' | 'snapshots';
 	type Filter = 'all' | 'running' | 'stopped';
-	type Problem = { text: string; detail: string };
 
 	let status = $state<VMStatus | null>(null);
 	// The first load failed: nothing to show but the error.
@@ -42,12 +53,10 @@
 	// VMs with a request on its way; the others stay usable meanwhile.
 	const busyNames = new SvelteSet<string>();
 	const isBusy = (vm: VM | undefined) => !!vm && busyNames.has(vm.name);
-	// Requests of the dialogs (remove, power off, paste).
-	let dialogBusy = $state(false);
 	let pending = $state<Record<string, string>>({});
 	let feedback = $state('');
 	// The failed action of each VM, shown only with that VM.
-	let failures = $state<Record<string, { problem: Problem; action: string }>>({});
+	let failures = $state<Record<string, Failure>>({});
 	let search = $state('');
 	let filter = $state<Filter>('all');
 	// On a phone the list folds away behind the name of the chosen VM.
@@ -60,49 +69,17 @@
 	// Adjusting the guest's resolution is the default; guests that cannot do it scale.
 	let mode = $state<ScaleMode>('remote');
 	let sidebar = $state(true);
-	let fullscreen = $state(false);
 	let dialog = $state<
 		| { kind: 'remove' | 'poweroff'; vm: string }
 		| { kind: 'paste' }
 		| { kind: 'xml'; text: string }
 		| null
 	>(null);
-	let draft = $state({ deleteDisks: false, text: '' });
 	// "VM übernehmen": copies of VM settings on the volumes; read only on request.
 	let adopting = $state(false);
-	let dialogError = $state<Problem | null>(null);
 	let screen = $state<VncScreen>();
 	let connectionPhase = $state<ConnectionPhase>('connecting');
-	let frame = $state<HTMLElement>();
-	let height = $state(vncHeight(session.vnc));
-	let width = $state(vncWidth(session.vnc));
-	let sizeError = $state('');
-	// Room for the console when its toolbar sits right below the header,
-	// with the line below it: then all of the picture is in view at once.
-	let room = $state(0);
-	const fitted = $derived(fitHeight(height, room));
-
-	// What lies between the top of the window and the console when the page
-	// is scrolled to its toolbar: the sticky header and the toolbar itself.
-	function above(element: HTMLElement): number {
-		const header = document.querySelector('header')?.getBoundingClientRect().height ?? 60;
-		const toolbar = element.closest('.vm-page')?.querySelector<HTMLElement>('.command-bar');
-		const fromToolbar = toolbar
-			? element.getBoundingClientRect().top - toolbar.getBoundingClientRect().top
-			: 0;
-		return header + 8 + fromToolbar;
-	}
-
-	function measureRoom() {
-		if (!frame || fullscreen) return;
-		const below =
-			frame.nextElementSibling instanceof HTMLElement
-				? frame.nextElementSibling.offsetHeight + 24
-				: 16;
-		// Fit where the frame actually starts, keeping the heading and tabs visible.
-		const top = Math.max(above(frame), frame.getBoundingClientRect().top);
-		room = Math.max(1, window.innerHeight - top - below);
-	}
+	const size = new ConsoleSize();
 
 	// Opening the screen of a VM brings all of it into view: if its bottom
 	// would be cut off, the page scrolls once so that the toolbar sits below
@@ -110,75 +87,12 @@
 	let shownFor = '';
 	$effect(() => {
 		const key = tab === 'screen' && current ? current.name : '';
-		if (!key || key === shownFor || !frame) return;
+		if (!key || key === shownFor || !size.frame) return;
 		shownFor = key;
-		const element = frame;
-		requestAnimationFrame(() => {
-			const box = element.getBoundingClientRect();
-			if (box.bottom <= window.innerHeight) return;
-			const toolbar =
-				element.closest('.vm-page')?.querySelector<HTMLElement>('.command-bar') ?? element;
-			const header = document.querySelector('header')?.getBoundingClientRect().height ?? 60;
-			window.scrollTo({
-				top: toolbar.getBoundingClientRect().top + window.scrollY - header - 8,
-				behavior: 'smooth',
-			});
-		});
+		size.bringIntoView();
 	});
 
-	$effect(() => {
-		if (!frame) return;
-		const element = frame;
-		measureRoom();
-		// Notices above the console move it down; the window may change too.
-		const sizes = new ResizeObserver(measureRoom);
-		if (element.parentElement) sizes.observe(element.parentElement);
-		const workspace = element.closest('.vm-page');
-		if (workspace) sizes.observe(workspace);
-		window.addEventListener('resize', measureRoom);
-		return () => {
-			sizes.disconnect();
-			window.removeEventListener('resize', measureRoom);
-		};
-	});
-
-	// Width and height are dragged at the corner. They are stored when the
-	// mouse lets go, not while dragging, so the stick is written once per change.
-	let dragFrom: { width: number; height: number } | null = null;
-	function dragStart() {
-		const box = frame?.getBoundingClientRect();
-		dragFrom = box ? { width: box.width, height: box.height } : null;
-	}
-	async function dragEnd() {
-		if (!dragFrom || !frame || fullscreen) return;
-		const box = frame.getBoundingClientRect();
-		const moved =
-			Math.abs(box.width - dragFrom.width) >= 2 || Math.abs(box.height - dragFrom.height) >= 2;
-		dragFrom = null;
-		if (!moved) return;
-		// Dragged to the full column again: follow the column from now on.
-		const column = frame.parentElement?.clientWidth ?? 0;
-		const nextWidth = box.width >= column - 2 ? null : vncWidth({ width: box.width });
-		// A height at the limit of the window keeps what was stored, so a
-		// larger window later shows more again.
-		const nextHeight =
-			Math.abs(box.height - fitted) < 2 && fitted < height
-				? height
-				: vncHeight({ height: box.height });
-		if (nextWidth === width && nextHeight === height) return;
-		height = nextHeight;
-		width = nextWidth;
-		const value = width === null ? { height } : { height, width };
-		const previous = session.vnc;
-		session.vnc = value;
-		sizeError = '';
-		try {
-			await api.put('/preferences/vnc', value);
-		} catch (err) {
-			session.vnc = previous;
-			sizeError = apiErrorText(err);
-		}
-	}
+	$effect(() => size.observe());
 
 	const vms = $derived(status?.vms ?? []);
 	const counts = $derived({
@@ -203,27 +117,7 @@
 		`/vms?vm=${encodeURIComponent(vm.name)}${next ? `&tab=${next}` : ''}`;
 	const canStart = (vm: VM) => vm.available && !!status?.kvm && !vm.job;
 
-	const lowSpace = $derived(
-		(storage.status?.volumes ?? [])
-			.filter(
-				(volume) =>
-					volume.mounted &&
-					volume.sizeBytes > 0 &&
-					volume.usedBytes / volume.sizeBytes >= 0.9 &&
-					current?.disks.some(
-						(disk) => disk.volume === volume.name || disk.path?.startsWith(`/mnt/${volume.name}/`),
-					),
-			)
-			.map((volume) => volume.name),
-	);
-
-	function problem(err: unknown): Problem {
-		const code = err instanceof ApiError ? err.code : 'internal';
-		return {
-			text: errorText(code),
-			detail: code === 'vm_failed' && err instanceof ApiError ? err.message : '',
-		};
-	}
+	const lowSpace = $derived(lowSpaceVolumes(storage.status?.volumes ?? [], current));
 
 	// Every refresh goes through the poller: runs never overlap, and one asked
 	// for during a run follows it, so an older answer never wins.
@@ -276,55 +170,12 @@
 			busyNames.delete(vm.name);
 		}
 	}
-	const pendingText = (action: string) =>
-		t(action === 'start' ? 'ui.starting' : action === 'shutdown' ? 'ui.stopping' : 'ui.rebooting');
+	const notices = $derived(
+		vmNotices({ current, status, vms, failures, pending, lowSpace, feedback }),
+	);
 
-	// One line of notices above the tabs; the most serious first, the rest
-	// behind "+N more".
-	type Notice = {
-		level: 'error' | 'warn' | 'info' | 'ok';
-		text: string;
-		detail?: string;
-		retry?: boolean;
-	};
-	const notices = $derived.by<Notice[]>(() => {
-		if (!current) return [];
-		const list: Notice[] = [];
-		const failure = failures[current.name];
-		if (failure)
-			list.push({
-				level: 'error',
-				text: failure.problem.text,
-				detail: failure.problem.detail,
-				retry: !!failure.action,
-			});
-		if (current.job?.state === 'failed')
-			list.push({ level: 'error', text: t('vms.jobFailed'), detail: current.job.text });
-		if (status && !status.kvm) list.push({ level: 'warn', text: t('vms.noKvm') });
-		if (!current.available) list.push({ level: 'warn', text: t('vms.unavailable') });
-		if (current.job?.state === 'running')
-			list.push({ level: 'warn', text: t('vms.jobRunning', { file: current.job.text }) });
-		if (lowSpace.length)
-			list.push({ level: 'warn', text: t('vms.lowSpace', { volumes: lowSpace.join(', ') }) });
-		for (const [name, action] of Object.entries(pending))
-			list.push({
-				level: 'info',
-				text: `${vmLabel(vms.find((vm) => vm.name === name) ?? current)}: ${pendingText(action)}`,
-			});
-		if (feedback) list.push({ level: 'ok', text: feedback });
-		return list;
-	});
-	const noticeClass = {
-		error: 'notice-error',
-		warn: 'notice-warn',
-		info: 'notice-info',
-		ok: 'notice-ok',
-	} as const;
-
-	function open(kind: 'remove' | 'poweroff' | 'paste', vm = current) {
+	function open(kind: VmDialogKind, vm = current) {
 		if (!vm) return;
-		draft = { deleteDisks: false, text: '' };
-		dialogError = null;
 		dialog = kind === 'paste' ? { kind } : { kind, vm: vm.name };
 	}
 	const dialogVM = $derived.by(() => {
@@ -344,14 +195,12 @@
 		}
 	}
 
-	// Runs only from the dialog's button, never from Enter in the form.
-	async function submit() {
+	// Errors are shown by the dialog.
+	async function submit(draft: VmDialogDraft) {
 		const vm = dialogVM;
-		if (!vm || !dialog || dialogBusy) return;
-		dialogBusy = true;
+		if (!vm || !dialog || dialog.kind === 'xml') return;
 		const marks = dialog.kind !== 'paste';
 		if (marks) busyNames.add(vm.name);
-		dialogError = null;
 		try {
 			if (dialog.kind === 'remove') {
 				await api.delete(`/vms/${encodeURIComponent(vm.name)}`, {
@@ -367,10 +216,7 @@
 			}
 			dialog = null;
 			await load();
-		} catch (err) {
-			dialogError = problem(err);
 		} finally {
-			dialogBusy = false;
 			if (marks) busyNames.delete(vm.name);
 		}
 	}
@@ -394,27 +240,6 @@
 		);
 	}
 
-	// Key combinations the browser or the NAS's own desktop would keep for
-	// themselves; as X keysyms with the codes of the keys.
-	const CTRL: [number, string] = [0xffe3, 'ControlLeft'];
-	const ALT: [number, string] = [0xffe9, 'AltLeft'];
-	const KEYS: { label: string; keys: [number, string][] }[] = [
-		{ label: 'Strg+Alt+Entf', keys: [CTRL, ALT, [0xffff, 'Delete']] },
-		{ label: 'Strg+Alt+⌫', keys: [CTRL, ALT, [0xff08, 'Backspace']] },
-		...[1, 2, 3, 7].map((n) => ({
-			label: `Strg+Alt+F${n}`,
-			keys: [CTRL, ALT, [0xffbd + n, `F${n}`]] as [number, string][],
-		})),
-		{ label: 'Alt+Tab', keys: [ALT, [0xff09, 'Tab']] },
-		{ label: 'Win', keys: [[0xffeb, 'MetaLeft']] },
-		{ label: 'Druck', keys: [[0xff61, 'PrintScreen']] },
-	];
-	const keyLabel = (label: string) =>
-		i18n.locale === 'en'
-			? label.replace('Strg', 'Ctrl').replace('Entf', 'Del').replace('Druck', 'Print')
-			: label;
-
-	const MODES: ScaleMode[] = ['scale', 'remote', 'full'];
 	// Only the virtio graphics of the Linux template can take a resolution
 	// from the browser.
 	const modeHint = (entry: ScaleMode) =>
@@ -445,6 +270,14 @@
 		if (vm) action(vm);
 	}
 
+	function rowChoice(vm: VM, choice: RowChoice) {
+		if (choice === 'shutdown' || choice === 'reboot' || choice === 'start') act(vm, choice);
+		else if (choice === 'screen' || choice === 'snapshots') goto(link(vm, choice));
+		else if (choice === 'edit') goto(`/vms/edit?vm=${encodeURIComponent(vm.name)}`);
+		else if (choice === 'clone') cloning = vm;
+		else open(choice, vm);
+	}
+
 	function rowContext(vm: VM, event: MouseEvent) {
 		event.preventDefault();
 		rowMenu = { vm, x: event.clientX, y: event.clientY };
@@ -455,13 +288,15 @@
 	}
 </script>
 
-<svelte:document onfullscreenchange={() => (fullscreen = document.fullscreenElement === frame)} />
+<svelte:document
+	onfullscreenchange={() => (size.fullscreen = document.fullscreenElement === size.frame)}
+/>
 <!-- The corner belongs to the frame itself; clicks into the picture land on noVNC's canvas. -->
 <svelte:window
 	onpointerdown={(event) => {
-		if (event.target === frame) dragStart();
+		if (event.target === size.frame) size.dragStart();
 	}}
-	onpointerup={dragEnd}
+	onpointerup={size.dragEnd}
 />
 
 {#if !status && error}
@@ -670,7 +505,7 @@
 										onclick={() => {
 											close();
 											screen?.sendKeys(entry.keys);
-										}}><span>{keyLabel(entry.label)}</span></button
+										}}><span>{keyLabel(entry.label, i18n.locale)}</span></button
 									>
 								{/each}
 								<hr />
@@ -744,7 +579,8 @@
 							class="tool icon-tool strong"
 							aria-label={t('vms.fullscreen')}
 							title={t('vms.fullscreen')}
-							onclick={() => frame?.requestFullscreen()}><Icon name="maximize" size={16} /></button
+							onclick={() => size.frame?.requestFullscreen()}
+							><Icon name="maximize" size={16} /></button
 						>
 					{:else}<span class="grow"></span>
 						<button
@@ -865,19 +701,19 @@
 				{:else if tab === 'snapshots'}
 					<Snapshots vm={current} />
 				{:else}
-					{#if sizeError}<p class="notice-error" role="alert">
+					{#if size.error}<p class="notice-error" role="alert">
 							{t('vms.size.failed')}
-							{sizeError}
+							{size.error}
 						</p>{/if}
 					<div
 						class="frame"
-						style:height={fullscreen ? null : `${fitted}px`}
-						style:width={fullscreen || width === null ? null : `${width}px`}
-						style:max-height={fullscreen || room <= 0
+						style:height={size.fullscreen ? null : `${size.fitted}px`}
+						style:width={size.fullscreen || size.width === null ? null : `${size.width}px`}
+						style:max-height={size.fullscreen || size.room <= 0
 							? null
-							: `${Math.max(VNC_HEIGHT.min, Math.floor(room))}px`}
-						class:fullscreen
-						bind:this={frame}
+							: `${Math.max(VNC_HEIGHT.min, Math.floor(size.room))}px`}
+						class:fullscreen={size.fullscreen}
+						bind:this={size.frame}
 					>
 						{#if current.state === 'running'}
 							{#key current.name}
@@ -922,168 +758,26 @@
 
 {#if rowMenu}
 	{@const vm = rowMenu.vm}
-	<ContextMenu
-		label={t('vms.actionsFor', { name: vmLabel(vm) })}
+	<VmRowMenu
+		{vm}
 		x={rowMenu.x}
 		y={rowMenu.y}
+		busy={isBusy(vm)}
+		canStart={canStart(vm)}
 		onclose={() => (rowMenu = null)}
-	>
-		{#if vm.state === 'running'}
-			<button
-				type="button"
-				role="menuitem"
-				disabled={isBusy(vm)}
-				onclick={() =>
-					rowAction((vm) => {
-						act(vm, 'shutdown');
-					})}><Icon name="stop" size={16} /><span>{t('vms.shutdown')}</span></button
-			>
-			<button
-				type="button"
-				role="menuitem"
-				disabled={isBusy(vm)}
-				onclick={() =>
-					rowAction((vm) => {
-						act(vm, 'reboot');
-					})}><Icon name="restart" size={16} /><span>{t('vms.reboot')}</span></button
-			>
-			<button
-				type="button"
-				role="menuitem"
-				onclick={() =>
-					rowAction((vm) => {
-						goto(link(vm, 'screen'));
-					})}><Icon name="monitor" size={16} /><span>{t('vms.tab.screen')}</span></button
-			>
-		{:else}
-			<button
-				type="button"
-				role="menuitem"
-				disabled={isBusy(vm) || !canStart(vm)}
-				onclick={() =>
-					rowAction((vm) => {
-						act(vm, 'start');
-					})}><Icon name="play" size={16} /><span>{t('vms.start')}</span></button
-			>
-		{/if}
-		<button
-			type="button"
-			role="menuitem"
-			onclick={() =>
-				rowAction((vm) => {
-					goto(`/vms/edit?vm=${encodeURIComponent(vm.name)}`);
-				})}><Icon name="edit" size={16} /><span>{t('vms.edit')}</span></button
-		>
-		{#if vm.state === 'stopped'}<button
-				type="button"
-				role="menuitem"
-				disabled={isBusy(vm) || !!vm.job}
-				onclick={() =>
-					rowAction((vm) => {
-						cloning = vm;
-					})}><Icon name="copy" size={16} /><span>{t('ops.clone')}</span></button
-			>{/if}
-		<button
-			type="button"
-			role="menuitem"
-			onclick={() =>
-				rowAction((vm) => {
-					goto(link(vm, 'snapshots'));
-				})}><Icon name="camera" size={16} /><span>{t('snapshots.title')}</span></button
-		>
-		<hr />
-		{#if vm.state === 'running'}
-			<button
-				type="button"
-				role="menuitem"
-				class="danger"
-				disabled={isBusy(vm)}
-				onclick={() =>
-					rowAction((vm) => {
-						open('poweroff', vm);
-					})}><Icon name="power" size={16} /><span>{t('vms.poweroff')}</span></button
-			>
-		{:else}
-			<button
-				type="button"
-				role="menuitem"
-				class="danger"
-				disabled={isBusy(vm)}
-				onclick={() =>
-					rowAction((vm) => {
-						open('remove', vm);
-					})}><Icon name="trash" size={16} /><span>{t('vms.remove')}</span></button
-			>
-		{/if}
-	</ContextMenu>
+		onchoose={(choice) => rowAction((vm) => rowChoice(vm, choice))}
+	/>
 {/if}
 
 {#if dialog?.kind === 'xml'}
-	<Dialog title={t('vms.showXml')} wide onclose={() => (dialog = null)}>
-		<pre class="xml">{dialog.text}</pre>
-		<div class="dialog-actions">
-			<button type="button" class="btn btn-primary" onclick={() => (dialog = null)}
-				>{t('common.done')}</button
-			>
-		</div>
-	</Dialog>
+	<VmXmlDialog text={dialog.text} onclose={() => (dialog = null)} />
 {:else if dialog && dialogVM}
-	{@const kind = dialog.kind}
-	{@const vm = dialogVM}
-	<Dialog
-		title={t(`vms.dialog.${kind}`, { name: vmLabel(vm) })}
-		locked={dialogBusy}
+	<VmActionDialog
+		kind={dialog.kind}
+		vm={dialogVM}
 		onclose={() => (dialog = null)}
-	>
-		<form onsubmit={(event) => event.preventDefault()}>
-			{#if kind === 'remove'}
-				<p class="text">{t('vms.removeText')}</p>
-				<label class="check"
-					><input type="checkbox" bind:checked={draft.deleteDisks} disabled={dialogBusy} /><span
-						>{t('vms.deleteDisks')}</span
-					></label
-				>
-				{#if draft.deleteDisks}
-					<p class="notice-error">
-						{t('vms.deleteDisksWarning', {
-							disks:
-								vm.disks
-									.filter((disk) => !disk.path)
-									.map((disk) => disk.file)
-									.join(', ') || '–',
-						})}
-					</p>
-				{/if}
-			{:else if kind === 'poweroff'}
-				<p class="text">{t('vms.poweroffText')}</p>
-			{:else if kind === 'paste'}
-				<p class="text">{t('vms.pasteText')}</p>
-				<!-- svelte-ignore a11y_autofocus -->
-				<textarea class="field mono" rows="5" bind:value={draft.text} spellcheck="false" autofocus
-				></textarea>
-			{/if}
-			{#if dialogError}
-				<div class="notice-error" role="alert">
-					{dialogError.text}{#if dialogError.detail}<pre>{dialogError.detail}</pre>{/if}
-				</div>
-			{/if}
-			<div class="dialog-actions">
-				<button type="button" class="btn" disabled={dialogBusy} onclick={() => (dialog = null)}
-					>{t('common.cancel')}</button
-				>
-				<button
-					type="button"
-					class="btn {kind === 'paste'
-						? 'btn-primary'
-						: kind === 'remove' && draft.deleteDisks
-							? 'btn-danger'
-							: 'btn-warn'}"
-					disabled={dialogBusy}
-					onclick={submit}>{t(`vms.submit.${kind}`)}</button
-				>
-			</div>
-		</form>
-	</Dialog>
+		onsubmit={submit}
+	/>
 {/if}
 
 {#if adopting}<AdoptDialog
@@ -1173,7 +867,7 @@
 		border-radius: 999px;
 		color: var(--muted);
 		font: inherit;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		cursor: pointer;
 	}
 	.filter[aria-pressed='true'] {
@@ -1187,7 +881,7 @@
 	.vm-empty {
 		margin: 0;
 		padding: 4px 14px 12px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.vm {
 		display: flex;
@@ -1216,7 +910,7 @@
 	}
 	.vm-name {
 		overflow: hidden;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		font-weight: 500;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -1226,7 +920,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 4px 6px;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.autostart {
 		display: inline-flex;
@@ -1292,7 +986,7 @@
 		gap: 10px;
 	}
 	.description {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.buttons {
 		display: flex;
@@ -1325,14 +1019,14 @@
 		border: 0;
 		color: inherit;
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		text-decoration: underline;
 		cursor: pointer;
 	}
 	.btn.small {
 		height: 2rem;
 		padding: 0 10px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.tabs {
 		display: flex;
@@ -1348,7 +1042,7 @@
 		padding: 0 2px;
 		border-bottom: 2px solid transparent;
 		color: var(--muted);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		text-decoration: none;
 		white-space: nowrap;
 	}
@@ -1366,7 +1060,7 @@
 		min-width: 0;
 		align-items: center;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.toolbar::before {
 		content: '';
@@ -1412,7 +1106,7 @@
 		resize: none;
 	}
 	.hint {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.screen-footer {
 		display: flex;
@@ -1425,57 +1119,21 @@
 		flex-wrap: wrap;
 		gap: 12px;
 	}
-	form {
-		display: flex;
-		flex-direction: column;
-		gap: 14px;
-	}
 	label {
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);
 	}
-	.check {
-		flex-direction: row;
-		align-items: center;
-		gap: 10px;
-		font-size: 0.875rem;
-	}
-	.check span {
-		color: var(--text);
-	}
-	.check input {
-		width: 18px;
-		height: 18px;
-		margin: 0;
-	}
-	.text {
-		font-size: 0.875rem;
-	}
-	textarea {
-		height: auto;
-		padding: 10px 12px;
-		font-size: 0.8125rem;
-	}
 	pre {
 		margin: 8px 0 0;
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		white-space: pre-wrap;
 		word-break: break-word;
-	}
-	.xml {
-		max-height: 60vh;
-		margin: 0;
-		padding: 12px;
-		overflow: auto;
-		background: var(--bg);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-ctl);
 	}
 	@media (max-width: 1100px) {
 		.command-bar {

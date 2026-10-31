@@ -32,7 +32,7 @@
 		border-radius: var(--radius-ctl);
 		color: var(--muted);
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		cursor: pointer;
 	}
 	button[aria-checked='true'] {

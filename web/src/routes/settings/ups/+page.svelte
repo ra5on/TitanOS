@@ -340,7 +340,7 @@
 <style>
 	section,
 	form {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	p {
 		max-width: 60rem;
@@ -359,7 +359,7 @@
 	}
 	dt {
 		color: var(--muted);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	dd {
 		margin: 2px 0 0;
@@ -388,13 +388,13 @@
 	.small {
 		height: 2rem;
 		padding: 0 12px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	fieldset {
 		gap: 10px;
 	}
 	legend {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		font-weight: 600;
 		letter-spacing: 0.04em;
 		text-transform: uppercase;
@@ -404,7 +404,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);
@@ -442,7 +442,7 @@
 		border-radius: var(--radius-ctl);
 		color: var(--text);
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		cursor: pointer;
 	}
 	.segments button[aria-checked='true'] {
@@ -452,7 +452,7 @@
 	pre {
 		margin: 0;
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		white-space: pre-wrap;
 	}
 </style>

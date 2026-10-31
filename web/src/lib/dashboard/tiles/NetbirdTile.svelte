@@ -111,7 +111,7 @@
 		gap: 10px;
 		flex-wrap: wrap;
 		color: var(--muted);
-		font-size: 11px;
+		font-size: var(--text-xs);
 		margin-top: 10px;
 	}
 	ul {
@@ -156,14 +156,15 @@
 		min-width: 0;
 	}
 	.name {
-		font: var(--tile-value-weight, 400) var(--tile-value-size, 14px)/1.35 var(--tile-value-font);
+		font: var(--tile-value-weight, 400) var(--tile-value-size, var(--text-md))/1.35
+			var(--tile-value-font);
 		color: var(--tile-value-color, var(--text));
 		overflow-wrap: anywhere;
 		margin-right: auto;
 		font-weight: 600;
 	}
 	.chip {
-		font-size: 0.6875rem;
+		font-size: var(--text-xs);
 	}
 	dl {
 		margin: 0;
@@ -182,7 +183,8 @@
 		grid-template-columns: minmax(0, 1fr);
 	}
 	dt {
-		font: var(--tile-label-weight, 400) var(--tile-label-size, 12px) var(--tile-label-font);
+		font: var(--tile-label-weight, 400) var(--tile-label-size, var(--text-sm))
+			var(--tile-label-font);
 		color: var(--tile-label-color, var(--muted));
 		text-align: var(--tile-label-align);
 		overflow-wrap: anywhere;
@@ -191,7 +193,7 @@
 		margin: 0;
 		min-width: 0;
 		overflow-wrap: anywhere;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		color: var(--tile-value-color, var(--text));
 		text-align: var(--tile-align);
 	}
@@ -200,7 +202,7 @@
 	}
 	.note,
 	.link-note {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.note {
 		margin-bottom: 8px;

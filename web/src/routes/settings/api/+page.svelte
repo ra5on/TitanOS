@@ -19,6 +19,7 @@
 	type Token = { id: string; name: string; scopes: string[]; created: string; lastUsed?: string };
 	const labels: Record<string, MessageKey> = {
 		'system:read': 'api.scope.systemRead',
+		'system:write': 'api.scope.systemWrite',
 		'files:read': 'api.scope.filesRead',
 		'files:write': 'api.scope.filesWrite',
 		'docker:read': 'api.scope.dockerRead',
@@ -111,6 +112,11 @@
 		void load();
 		void loadMCP();
 	});
+	// From the MCP page: open the dialog for a new token with MCP at once.
+	$effect(() => {
+		if (typeof location !== 'undefined' && new URLSearchParams(location.search).get('mcp') === '1')
+			startCreate(mcpTokenScopes(admin), 'Claude');
+	});
 	async function create(e: SubmitEvent) {
 		e.preventDefault();
 		busy = true;
@@ -202,6 +208,7 @@
 <section class="tile panel" id="api-mcp" aria-labelledby="api-mcp-title">
 	<h2 class="tile-title" id="api-mcp-title">{t('mcp.title')}</h2>
 	<p class="muted">{t('mcp.intro')}</p>
+	{#if admin}<p>{t('mcp.moved')} <a href="/settings/mcp">{t('mcp.movedLink')}</a></p>{/if}
 	{#if mcp}
 		{#if admin}<label class="check"
 				><input

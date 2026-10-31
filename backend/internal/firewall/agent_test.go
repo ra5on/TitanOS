@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestAssistantProposals(t *testing.T) {
+func TestInProcessChanges(t *testing.T) {
 	m, _, store := newTestManager(t)
 	cfg := Defaults()
 	cfg.Enabled = true
@@ -18,7 +18,7 @@ func TestAssistantProposals(t *testing.T) {
 	if err := m.CheckProposal(off); !errors.Is(err, ErrSwitchManual) {
 		t.Fatalf("switching off allowed: %v", err)
 	}
-	if err := m.ChangeFromAssistant(context.Background(), off); !errors.Is(err, ErrSwitchManual) || !m.Enabled() {
+	if err := m.ChangeInProcess(context.Background(), off); !errors.Is(err, ErrSwitchManual) || !m.Enabled() {
 		t.Fatalf("switched off: %v", err)
 	}
 	closed := withPolicies(cfg, Home, ToNAS, Policy{Action: Deny, Protocol: "any", Service: "webui"})
@@ -46,7 +46,7 @@ func TestAssistantProposals(t *testing.T) {
 		t.Fatal(err)
 	}
 	ssh := withPolicies(cfg, Internet, ToNAS, Policy{Action: Allow, Protocol: "any", Service: "ssh", Comment: "agent"})
-	if err := m.ChangeFromAssistant(context.Background(), ssh); err != nil {
+	if err := m.ChangeInProcess(context.Background(), ssh); err != nil {
 		t.Fatal(err)
 	}
 	status := m.Status("")
@@ -64,13 +64,13 @@ func TestAssistantProposals(t *testing.T) {
 	}
 }
 
-func TestAssistantProposalsWhileOff(t *testing.T) {
+func TestInProcessChangesWhileOff(t *testing.T) {
 	m, _, store := newTestManager(t)
 	if err := m.Load(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	cfg := withPolicies(Defaults(), Home, ToNAS, Policy{Action: Deny, Protocol: "tcp", Ports: "8080"})
-	if err := m.ChangeFromAssistant(context.Background(), cfg); err != nil {
+	if err := m.ChangeInProcess(context.Background(), cfg); err != nil {
 		t.Fatal(err)
 	}
 	status := m.Status("")

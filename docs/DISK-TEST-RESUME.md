@@ -95,7 +95,7 @@ Hinweise blendet „Ausblenden“ aus (`DELETE /api/v1/storage/test-notices`).
 - Neue Felder je Prüfung: `autoResume`, `persistent`, `notPersistent`
   (`no_serial`, `no_volume`, `write_failed`), `resumed`, `resumes`; neues
   Ergebnis `interrupted`. Ältere Oberflächen ignorieren die Felder.
-- Nicht im Katalog des KI-Assistenten: Fortsetzen eines Überschreibtests
+- Nicht im MCP-Werkzeugkatalog: Fortsetzen eines Überschreibtests
   bleibt eine Entscheidung in der Oberfläche.
 
 ## Geprüft und Grenzen

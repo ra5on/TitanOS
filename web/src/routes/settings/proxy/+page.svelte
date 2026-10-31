@@ -566,7 +566,7 @@
 		gap: 10px;
 	}
 	.hint {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.option {
 		display: flex;
@@ -577,7 +577,7 @@
 		padding-left: 28px;
 	}
 	.small {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.rule {
 		border-top: 1px solid var(--panel-border);
@@ -587,7 +587,7 @@
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.head-switch input {
 		width: 18px;
@@ -627,7 +627,7 @@
 		flex-wrap: wrap;
 		align-items: baseline;
 		gap: 4px 12px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		overflow-wrap: anywhere;
 	}
 	.details {
@@ -640,7 +640,7 @@
 		border: 0;
 		color: var(--accent);
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		cursor: pointer;
 	}
 	.more:hover {
@@ -654,7 +654,7 @@
 	}
 	details.explain:not(.tile) summary {
 		color: var(--accent);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.edit {
 		display: flex;

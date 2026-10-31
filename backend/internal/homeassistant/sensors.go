@@ -28,7 +28,6 @@ type BackupValues struct {
 type WorkValues struct {
 	Busy   bool
 	Copies int
-	Agents int
 }
 
 type Snapshot struct {
@@ -211,7 +210,6 @@ func entities(snap Snapshot, q MQTT, base string) []entity {
 	if w := snap.Work; w != nil && slices.Contains(q.Groups, "work") {
 		add("binary_sensor", "work_busy", "NAS busy", onOff(w.Busy), nil)
 		sensor("work_copies", "Account file transfers", fmt.Sprint(w.Copies), "", "")
-		sensor("work_agents", "Account active assistant tasks", fmt.Sprint(w.Agents), "", "")
 	}
 	commandTopic := func(kind, name string) string {
 		return base + "/cmd/" + kind + "/" + strings.TrimPrefix(identity(kind, name), kind+"_")
@@ -495,13 +493,13 @@ func (m *Manager) mqttSession(ctx context.Context, id string, q MQTT, source Sou
 	for {
 		select {
 		case <-ctx.Done():
-			client.Publish(availability, []byte("offline"), true)
+			_ = client.Publish(availability, []byte("offline"), true) // the broker marks the device offline by its last will anyway
 			return nil
 		case <-changed:
 			// Entities of groups switched off go away; the new session sends
 			// what is still wanted.
 			for topic := range published {
-				client.Publish(topic, nil, true)
+				_ = client.Publish(topic, nil, true) // the new session publishes again; stale entities expire
 			}
 			return nil
 		case err := <-client.errs:

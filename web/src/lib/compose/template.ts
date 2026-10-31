@@ -26,6 +26,8 @@ export type Template = {
 	listening: { port: number; protocol: string }[];
 	/** Devices of the template this NAS does not have. */
 	missingDevices: string[];
+	/** Instruction sets (avx, x86-64-v3 …) the app needs and the CPU lacks; older titand leave it out. */
+	cpuMissing?: string[];
 };
 
 export type ShareRef = { name: string; path: string };

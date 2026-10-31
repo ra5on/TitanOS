@@ -3,11 +3,12 @@
 	import NavigationGuard from '#lib/operations/NavigationGuard.svelte';
 	import { onMount } from 'svelte';
 	import { api, type StorageStatus } from '#lib/api.ts';
-	import { formatDateTime } from '#lib/format.ts';
+	import { MB, formatDateTime } from '#lib/format.ts';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { problemText, requestProblem, type Problem } from '../problem.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import KeepChoice, { keepChoicePayload } from '#lib/components/KeepChoice.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import {
 		newMaintenanceJob,
@@ -36,9 +37,16 @@
 			...new Set([nasZone, settings?.timezone, 'UTC', ...Intl.supportedValuesOf('timeZone')]),
 		].filter((zone): zone is string => !!zone),
 	);
-	const kinds = ['raid-check', 'smart-long', 'backup-check', 'restore-probe', 'snapshot'] as const;
+	const kinds = [
+		'raid-check',
+		'smart-short',
+		'smart-long',
+		'backup-check',
+		'restore-probe',
+		'snapshot',
+	] as const;
 	const targets = $derived(
-		draft?.kind === 'smart-long'
+		draft?.kind === 'smart-long' || draft?.kind === 'smart-short'
 			? (storage?.disks ?? [])
 					.filter((d) => d.serial && d.role !== 'stick')
 					.map((d) => ({ id: d.serial, name: `${d.model} · ${d.serial}` }))
@@ -100,6 +108,7 @@
 			draft.dependsOn ??= '';
 			draft.weekdays ??= [0];
 			draft.monthDay ||= 1;
+			draft.everyHours ||= 6;
 		}
 		// The dialog starts from what is stored, not from unsaved changes above it.
 		draftVolume = stored()?.volume ?? '';
@@ -141,8 +150,12 @@
 		}
 	}
 	async function saveJob() {
-		const job = draft ? $state.snapshot(draft) : null;
-		if (!job) return;
+		const snapshot = draft ? $state.snapshot(draft) : null;
+		if (!snapshot) return;
+		const job =
+			snapshot.kind === 'snapshot'
+				? { ...snapshot, ...keepChoicePayload(snapshot.keep, snapshot.versions, 1, 100) }
+				: { ...snapshot, versions: undefined };
 		await saveJobs((jobs) => [...jobs.filter((j) => j.id !== job.id), job], draftVolume);
 	}
 	async function action(id: string, kind: string) {
@@ -363,11 +376,28 @@
 			<p class="muted">{t('tasks.sharedVolume')}</p>
 			<label
 				>{t('ops.every')}<select class="field" bind:value={draft.every}
-					>{#each ['daily', 'weekly', 'monthly'] as every (every)}<option value={every}
+					>{#each ['hours', 'daily', 'weekly', 'monthly'] as every (every)}<option value={every}
 							>{t(`ops.${every}` as MessageKey)}</option
 						>{/each}</select
 				></label
 			>
+			{#if draft.every === 'hours'}<label
+					>{t('ops.everyHours')}<input
+						class="field"
+						type="number"
+						bind:value={draft.everyHours}
+						min="1"
+						max="168"
+						required
+					/></label
+				>
+				<p class="muted small">
+					{t(
+						draft.kind === 'raid-check' || draft.kind === 'smart-long'
+							? 'ops.everyHoursLong'
+							: 'ops.everyHoursHint',
+					)}
+				</p>{/if}
 			{#if draft.every === 'weekly'}<fieldset>
 					<legend>{t('ops.weekdays')}</legend>
 					<div class="actions">
@@ -420,10 +450,10 @@
 						class="field"
 						type="number"
 						min="1"
-						max="1024"
-						value={draft.maxBytes / 1048576}
+						max="1073"
+						value={Math.round(draft.maxBytes / MB)}
 						onchange={(e) => {
-							if (draft) draft.maxBytes = Number(e.currentTarget.value) * 1048576;
+							if (draft) draft.maxBytes = Number(e.currentTarget.value) * MB;
 						}}
 					/></label
 				><label
@@ -435,15 +465,17 @@
 						bind:value={draft.maxFiles}
 					/></label
 				>{/if}
-			{#if draft.kind === 'snapshot'}<label
-					>{t('ops.keep')}<input
-						class="field"
-						type="number"
-						min="1"
-						max="100"
-						bind:value={draft.keep}
-					/></label
-				><label
+			{#if draft.kind === 'snapshot'}<div class="keep-block">
+					<span>{t('ops.keep')}</span>
+					<KeepChoice
+						bind:count={draft.keep}
+						bind:versions={draft.versions}
+						min={1}
+						max={100}
+						unit={t('keep.unit.snapshots')}
+					/>
+				</div>
+				<label
 					>{t('ops.lockDays')}<input
 						class="field"
 						type="number"
@@ -512,7 +544,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.85rem;
+		font-size: var(--text-base);
 		flex: 1 1 170px;
 		min-width: 0;
 	}
@@ -537,7 +569,7 @@
 	table {
 		width: 100%;
 		border-collapse: collapse;
-		font-size: 0.85rem;
+		font-size: var(--text-base);
 	}
 	th,
 	td {
@@ -567,7 +599,7 @@
 	.detail {
 		display: block;
 		margin-top: 4px;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
 	}
 	.schedules {

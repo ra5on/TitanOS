@@ -213,7 +213,7 @@
 		gap: 0.6rem;
 	}
 	.small {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		overflow-wrap: anywhere;
 	}
 	.notice-warn p {

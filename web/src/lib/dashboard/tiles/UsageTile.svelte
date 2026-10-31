@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { formatBytes } from '#lib/format.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
+	import HelpTip from '#lib/components/HelpTip.svelte';
 	import { system, systemHistory } from '#lib/system.svelte.ts';
 	import { memoryParts } from '#lib/memory.ts';
 	import type { TileOptions } from '../options.ts';
@@ -117,13 +118,11 @@
 						>{!system.reachable || !ram ? '–' : formatBytes(ram.occupied)}</b
 					>
 				</div>
-				<div>
-					<span>{t('memoryPolicy.pressure')}</span><b
-						>{!system.reachable || !info.memory.pressure
-							? t('common.unavailable')
-							: `${info.memory.pressure.someAvg10.toFixed(1)} % / ${info.memory.pressure.fullAvg10.toFixed(1)} %`}</b
-					>
-				</div>
+				{#if system.reachable && info.memory.pressure}<div>
+						<span>{t('memoryPolicy.pressure')}<HelpTip term="psi" /></span><b
+							>{`${info.memory.pressure.someAvg10.toFixed(1)} % / ${info.memory.pressure.fullAvg10.toFixed(1)} %`}</b
+						>
+					</div>{/if}
 			</div>{/if}
 		{#if part === 'details' && kind === 'cpu' && options.details && info.cpu.threadUsage?.length}<div
 				class="core-grid"
@@ -155,7 +154,7 @@
 <style>
 	.memory-occupancy {
 		margin-top: 10px;
-		font-size: var(--tile-label-size, 12px);
+		font-size: var(--tile-label-size, var(--text-sm));
 		color: var(--tile-label-color, var(--muted));
 	}
 	.memory-occupancy p {
@@ -211,7 +210,7 @@
 		grid-template-columns: minmax(0, max-content) minmax(12px, 1fr) max-content;
 		align-items: center;
 		gap: 7px;
-		font-size: var(--tile-label-size, 12px);
+		font-size: var(--tile-label-size, var(--text-sm));
 		min-width: 0;
 	}
 	.core > span:first-child {
@@ -260,7 +259,7 @@
 		justify-content: space-between;
 		flex-wrap: wrap;
 		gap: 5px 12px;
-		font-size: var(--tile-label-size, 12px);
+		font-size: var(--tile-label-size, var(--text-sm));
 		color: var(--tile-label-color, var(--muted));
 		overflow-wrap: anywhere;
 	}

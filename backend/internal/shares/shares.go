@@ -1023,7 +1023,7 @@ func (m *Manager) sweepRecycle(mounted []string, now time.Time) {
 		cutoff := now.AddDate(0, 0, -share.Recycle.Days)
 		removed := 0
 		var dirs []string
-		filepath.WalkDir(bin, func(path string, entry fs.DirEntry, err error) error {
+		_ = filepath.WalkDir(bin, func(path string, entry fs.DirEntry, err error) error { // the callback collects what it can; unreadable entries are skipped
 			if err != nil || path == bin {
 				return nil
 			}

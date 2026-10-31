@@ -111,7 +111,7 @@ func openDB(root *os.Root) (*bolt.DB, error) {
 		return nil
 	})
 	if err != nil {
-		db.Close()
+		_ = db.Close() // cleanup, best effort: nothing more can be done if it fails
 		return nil, err
 	}
 	return db, nil

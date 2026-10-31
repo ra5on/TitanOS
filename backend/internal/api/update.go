@@ -55,7 +55,7 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		writeUpdateError(w, err)
 		return
 	}
-	slog.Info("update settings changed", "channel", settings.Channel, "auto", settings.AutoInstall, "checkEvery", settings.CheckEvery, "by", currentUser(r).Name, "ip", remoteIP(r))
+	slog.Info("update settings changed", "channel", settings.Channel, "auto", settings.AutoInstall, "checkEvery", settings.CheckEvery, "kernel", settings.Kernel, "by", currentUser(r).Name, "ip", remoteIP(r))
 	s.handleUpdate(w, r)
 }
 

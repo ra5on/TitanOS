@@ -3,9 +3,11 @@
 Seit der Entscheidung des Projektinhabers vom 29.10.2026 hat TitanOS einen
 MCP-Server: Externe KI-Clients wie Claude Desktop, Claude Code oder andere
 Programme mit dem Model Context Protocol arbeiten damit am NAS – mit genau den
-Rechten eines persönlichen API-Tokens und des Kontos dahinter. Der integrierte
-KI-Assistent (`docs/ASSISTANT.md`) bleibt davon getrennt; der MCP-Server
-erweitert ihn nicht und nutzt keine seiner Einstellungen.
+Rechten eines persönlichen API-Tokens und des Kontos dahinter. Seit der
+Entscheidung des Projektinhabers vom 31.10.2026 ist MCP der einzige Weg für
+KI-Aktionen am NAS: Er bietet alle Lese- und Aktionswerkzeuge des festen
+Werkzeugkatalogs an. Einen eingebauten Chat oder ein eigenes Modell hat TitanOS
+nicht.
 
 ## Einschalten
 
@@ -16,7 +18,9 @@ erweitert ihn nicht und nutzt keine seiner Einstellungen.
 2. „Token für MCP erstellen“ legt ein persönliches Token an, vorbelegt mit
    `mcp`, `system:read`, `files:read` und für Besitzer/Administratoren
    zusätzlich `docker:read` und `vms:read`. Schreibrechte (`files:write`,
-   `docker:write`, `vms:write`) nur bewusst dazunehmen. Das Geheimnis erscheint
+   `docker:write`, `vms:write` und `system:write` für Verwaltungsaktionen) nur
+   bewusst dazunehmen; `system:write`, `docker:*` und `vms:*` gibt es nur für
+   Besitzer/Administratoren. Das Geheimnis erscheint
    einmal; der Dialog zeigt dabei den fertigen Befehl für Claude Code.
 3. Den Client mit einem der Ausschnitte von der Seite einrichten (siehe unten).
 
@@ -58,62 +62,99 @@ Protokoll), `mcp_tools.go` (Werkzeuge), ausschließlich Standardbibliothek.
 
 ## Werkzeuge
 
-Es gibt keine eigene Werkzeugliste. Die Werkzeuge entstehen bei jedem
-`tools/list` und `tools/call` aus zwei bestehenden Listen:
+Es gibt keine eigene MCP-Werkzeugliste. Die Werkzeuge entstehen bei jedem
+`tools/list` und `tools/call` aus zwei bestehenden Listen (`mcpAvailable` in
+`mcp_tools.go`):
 
-- **Lesewerkzeuge aus dem festen Katalog des Assistenten**
-  (`statusTools` in `assistant_registry.go`, Ausgaben aus `assistant_tools.go`).
-  `mcpCatalog` in `mcp_tools.go` wählt aus und nennt den nötigen Tokenbereich.
-  Welche es gibt, entscheidet wie beim Assistenten die **aktuelle Rolle**:
-  - Besitzer/Administratoren: `system_status`, `notifications`, `ups_status`,
-    `storage_overview`, `disk_tests`, `backup_status` (`system:read`),
-    `shares_list` (`files:read`), `docker_list`, `container_logs`
-    (`docker:read`), `vm_list` (`vms:read`).
-  - Benutzer: `nas_info` (`system:read`), `my_shares` (`files:read`).
-  - Alle: `files_list`, `file_read`, `file_jobs` (`files:read`) – nur die
-    Wurzeln des Kontos, ohne Stick, ohne `.titanos`, `.env` und Teildateien.
+- **Fester Werkzeugkatalog** (`catalogTools` in `api/catalog.go`, Werkzeuge in
+  `catalog_actions.go`, `catalog_areas.go`, `catalog_files.go`,
+  `catalog_status.go` und `homeassistant*.go`; Typen, Argumentprüfung und
+  Handbuch im Paket `backend/internal/toolcatalog`). Lesewerkzeuge liefern
+  Daten; Aktionswerkzeuge beschreiben genau einen Aufruf der Web-API, den
+  titand in-process mit dem Konto des Tokens ausführt (`inProcessIdentity`,
+  dieselbe Handler-Kette wie `/api/v1`).
 - **Routen der öffentlichen API** (`publicRoutes` in `public_routes.go`, dieselbe
   Liste, aus der Tokenprüfung und OpenAPI entstehen), sofern sie ein Werkzeug
-  nennen. Pfadparameter, Abfrage- und Body-Felder werden zum Eingabeschema;
-  der Aufruf läuft als Anfrage an genau diese Route durch dieselbe
-  Handler-Kette wie `/api/v1`, mit dem Konto des Tokens:
-  - `files_read_text` (`files:read`; wie im Editor nur mit Schreibrecht auf die
-    Freigabe), `files_mkdir`, `files_create`, `files_rename`, `files_delete`,
-    `files_copy`, `files_write_text` (`files:write`),
-  - `docker_container_start|stop|restart`, `docker_app_network`
-    (`docker:write`, nur Besitzer/Administratoren),
-  - `vm_start`, `vm_shutdown`, `vm_reboot` (`vms:write`, nur
-    Besitzer/Administratoren).
+  nennen: `files_read_text`, `files_mkdir`, `files_create`, `files_rename`,
+  `files_delete`, `files_copy`, `files_write_text`,
+  `docker_container_start|stop|restart`, `docker_app_network`, `vm_start`,
+  `vm_shutdown`, `vm_reboot`. Pfadparameter, Abfrage- und Body-Felder werden
+  zum Eingabeschema.
 
-Ein Werkzeug erscheint nur, wenn das Token den Bereich hat und die Rolle ihn
-erlaubt; die Handler prüfen Rolle, Freigaberechte und Wurzeln bei jedem Aufruf
-erneut. Wird ein Konto herabgestuft, gesperrt, gelöscht oder sein Passwort
-geändert, gilt das sofort auch für MCP.
+Doppelte Katalogwerkzeuge lässt MCP aus (`mcpSkip`): `folder_create`,
+`file_rename`, `file_delete` und `container_action`; dafür gibt es
+`files_mkdir`, `files_rename`, `files_delete` und
+`docker_container_start|stop|restart`.
+
+Welche Werkzeuge ein Token bekommt, entscheiden seine Bereiche und die
+**aktuelle Rolle** des Kontos (`mcpToolScope`):
+
+| Bereich | Werkzeuge (Auswahl) | Wer |
+|---|---|---|
+| `system:read` | `docs_search`, `docs_read` (Handbuch); `system_status`, `notifications`, `update_status`, `ups_status`, `storage_overview`, `disk_tests`, `backup_status`, `backup_snapshots`, `backup_files`, `network_status`, `network_diagnostics`, `hardware_status`, `firewall_status`, `accounts_list`, `plugins_list`, `logs_search`, `ha_entities`, `ha_state`, `ha_history`, `ha_capabilities`, `ha_diagnostics`; für Benutzer `nas_info` | alle; die meisten nur Besitzer/Administratoren |
+| `system:write` | `volume_create`, `volume_action`, `disk_test`, `share_create`, `share_delete`, `backup_action`, `backup_check`, `backup_restore_files`, `backup_schedule`, `stick_backup`, `firewall_rule_add`, `firewall_rule_remove`, `firewall_unblock`, `account_action`, `plugin_install`, `plugin_switch`, `plugin_update`, `plugin_remove`, `update_action`, `power_action`, `ha_call`, `ha_undo` | nur Besitzer/Administratoren |
+| `files:read` | `files_list`, `file_read`, `document_read`, `files_search`, `file_jobs`, `shares_list`, `my_shares`, `files_read_text` | alle, nur eigene Wurzeln |
+| `files:write` | `file_write`, `files_move`, `file_copy` und die `files_*`-Routen | alle, nur eigene Wurzeln |
+| `docker:read` / `docker:write` | `docker_list`, `container_logs`, `docker_auto_updates` / `app_action`, `apps_update_all`, `docker_check_updates`, `docker_auto_update` und die `docker_*`-Routen | nur Besitzer/Administratoren |
+| `vms:read` / `vms:write` | `vm_list` / `vm_action` und die `vm_*`-Routen | nur Besitzer/Administratoren |
+
+Dateiwerkzeuge sehen nur die Wurzeln des Kontos, ohne Stick, ohne `.titanos`,
+`.env` und Teildateien. Die Handler prüfen Rolle, Freigaberechte und Wurzeln bei
+jedem Aufruf erneut. Wird ein Konto herabgestuft, gesperrt, gelöscht oder sein
+Passwort geändert, gilt das sofort auch für MCP.
+
+### Schaltung je Werkzeug
+
+Jedes Werkzeug hat in `/config/system/mcp.json` (Feld `tools`, Name → Modus)
+einen von drei Modi; ein nicht genanntes Werkzeug steht auf „on“:
+
+- **`off`:** Das Werkzeug fehlt in `tools/list` und lässt sich nicht aufrufen.
+- **`on`** (ab Werk): Lesen und normale Änderungen sind erlaubt; Aufrufe der
+  Stufe „Gefahr“ oder „Zerstörung“ lehnt TitanOS ab (`403`).
+- **`all`:** Auch gefährliche und zerstörende Aufrufe sind erlaubt – dann aber
+  nur mit `confirm: true` vom Client.
+
+Die Stufe eines Aufrufs bestimmt TitanOS aus dem Ziel und den Argumenten (zum
+Beispiel Löschen, Ersetzen, Container stoppen, Plugin entfernen, Konto löschen,
+Neustart, gefährliche Home-Assistant-Domänen), nie der Client. Den
+Bestätigungswert, den eine Route für zerstörende Aktionen erwartet, setzt der
+Server selbst. Eine weitere Freigabe per Klick oder per Handy gibt es nicht.
+
+`GET /api/v1/system/mcp` liefert neben `enabled`, `path`, `protocolVersions` und
+`scope` die Liste `tools` mit `name`, `area`, `scope`, `kind` (`read`/`change`),
+`dangerous` und `mode` für alle Werkzeuge, die ein Konto dieser Rolle
+erreichen könnte. `PUT /api/v1/system/mcp` (nur Besitzer/Administratoren)
+speichert `enabled` und `tools`; ungültige Modi ergeben
+`400 invalid_tool_mode`. Der PUT ersetzt die ganze Einstellung: Wer nur
+`enabled` schickt, setzt alle Werkzeuge auf „on“ zurück. Heute liegt in der
+Weboberfläche nur der Ein-/Ausschalter unter Einstellungen › API und CLI.
 
 **Nicht enthalten** sind Geheimnisse (Backup-Passwörter, `.env`, Schlüssel,
-Sticksicherungen), Shells und Konsolen, Updates, Netzwerk-/Firewall-Bestätigung
-und -Änderungen, Konten, Passwörter, Zwei-Faktor und Passkeys, die Verwaltung
-der Tokens selbst, die Einstellungen des Assistenten sowie Datei-Downloads als
-Binärdaten. Diese Routen stehen in keiner der beiden Listen;
-`TestMCPToolsComeOnlyFromTheExplicitLists` prüft das.
+Sticksicherungen), Passwörter, Zwei-Faktor und Passkeys, die Verwaltung der
+Tokens selbst, Shells und Konsolen, die Bestätigung von Netzwerk- und
+Firewall-Änderungen, Firewall ein/aus, die MCP-Einstellungen selbst sowie
+Datei-Downloads als Binärdaten. Diese Routen stehen in keiner der beiden
+Listen; Routen mit Web-Sitzungspflicht (`web_session_required`, `browserOnly`,
+z. B. Volume-Passwörter, IPv64, Konsolen) lehnen In-Process-Aufrufe zusätzlich
+ab. `TestMCPToolsComeOnlyFromTheExplicitLists` und
+`TestCatalogEntireToolCatalog` prüfen das.
 
-**Bestätigung:** Werkzeuge der Stufe „Gefahr“ oder „Zerstörung“ (Löschen,
-Kopieren/Verschieben mit Ersetzen, Text überschreiben, Container stoppen/neu
-starten, App-Netz, VM herunterfahren/neu starten) verlangen das Argument
-`confirm`, das im Schema Pflicht ist, nur `true` erlaubt und beschreibt, dass es
-erst nach ausdrücklicher Zustimmung der Person gesetzt werden darf. Die
-Annotationen `readOnlyHint`/`destructiveHint` sagen dasselbe. Das ist eine
-Absicherung für den Client, keine zweite Freigabestufe in TitanOS:
-Ob der Client vorher fragt, entscheidet er.
+**Bestätigung:** Gefährliche und zerstörende Werkzeuge bieten das Argument
+`confirm` an (nur `true`), dessen Beschreibung sagt, dass es erst nach
+ausdrücklicher Zustimmung der Person gesetzt werden darf; bei den
+Routenwerkzeugen ist es im Schema Pflicht. Die Annotationen
+`readOnlyHint`/`destructiveHint` sagen dasselbe. Ob der Client vorher fragt,
+entscheidet er; TitanOS erzwingt nur Modus „all“ und `confirm: true`.
 
 **Ergebnisse** sind Daten, keine Anweisungen (Beschreibung jedes Werkzeugs und
 `instructions` von `initialize`, Deutsch und Englisch). Text als
 `content[0].text`, mit Protokoll `2025-06-18` zusätzlich `structuredContent`.
 Fehler der Route oder ungültige Argumente (zentrale Schemaprüfung
-`assistant.ValidateArguments`, unbekannte Felder abgelehnt) ergeben
+`toolcatalog.ValidateArguments`, unbekannte Felder abgelehnt) ergeben
 `isError: true` mit der Meldung; unbekannte Werkzeuge `-32602`. Ein Aufruf darf
-zwei Minuten dauern, Antworten höchstens 4 MiB. `202` (Kopieraufträge) heißt
-nur gestartet; den Endzustand über `file_jobs` abfragen.
+zwei Minuten dauern, Antworten höchstens 4 MiB.
+`202` (Kopieraufträge) heißt nur gestartet; den Endzustand über `file_jobs`
+abfragen.
 
 ## Aktivitätsprotokoll
 
@@ -123,7 +164,7 @@ der Route genannten Zielen (Pfade, Namen; nie Inhalte). Änderungen tragen die
 Route als Aktion (z. B. `POST /api/v1/files/delete`), Lesewerkzeuge `mcp_tool`.
 Abgelehnte Aufrufe (fehlende Bestätigung, Rechte) stehen als fehlgeschlagen
 darin, auch Aufrufe eines Werkzeugs, das der Token nicht hat (Status 403). `initialize`, `ping` und `tools/list` werden nicht protokolliert. Das
-Ein-/Ausschalten selbst ist `PUT /api/v1/system/mcp`.
+Ein-/Ausschalten und die Werkzeugschaltung sind `PUT /api/v1/system/mcp`.
 
 ## Clients einrichten
 
@@ -184,13 +225,16 @@ andere Betriebssysteme bauen es mit `go build ./cmd/titanosctl`.
 ## Prüfstand und Grenzen
 
 Geprüft mit Go-Tests (`backend/internal/api/mcp_test.go`,
+`mcp_catalog_test.go`, `catalog_*_test.go`,
 `backend/cmd/titanosctl/mcp_test.go`) und Webtests (`web/tests/mcp.test.mjs`):
 Handshake mit beiden Versionen, Benachrichtigung, Stapel, SSE, falsche
 Protokollversion, Fremdherkunft, Schalter aus/an, fehlender Bereich, Werkzeuge
 nach Rolle und Bereich (Benutzer gegen Besitzer, herabgestuftes Konto,
 Fremdfreigabe), schreibgeschützte Freigabe, Pfadausbruch aus einer Route,
-Bestätigungspflicht, Aktivitätseinträge, keine geheimen Routen, Rate-Limit und
-die stdio-Brücke gegen einen nachgebauten Server.
+Bestätigungspflicht, Werkzeugmodi off/on/all und die Werkzeugliste von
+`GET /api/v1/system/mcp`, Katalogaktionen in-process, Aktivitätseinträge,
+keine geheimen Routen, Rate-Limit und die stdio-Brücke gegen einen
+nachgebauten Server.
 
 Nicht geprüft: echte Clients (Claude Desktop, Claude Code, mcp-remote) gegen
 ein echtes NAS, Windows-/macOS-Builds von `titanosctl` und das Verhalten von

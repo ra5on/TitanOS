@@ -12,7 +12,7 @@ import (
 // MaxWrite is the largest file WriteFile accepts.
 const MaxWrite = 64 << 20
 
-// WriteFile writes a whole file, as the assistant creates documents: it
+// WriteFile writes a whole file, as MCP clients create documents: it
 // creates missing folders, and replaces an existing file only with
 // replace, keeping the old contents as <name>.prev. The data goes to a
 // hidden part file first and becomes visible at once when complete.

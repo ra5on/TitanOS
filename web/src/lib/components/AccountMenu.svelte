@@ -6,6 +6,12 @@
 	import LanguageSwitch from './LanguageSwitch.svelte';
 	import PowerDialog from './PowerDialog.svelte';
 
+	/**
+	 * `side`: in the sidebar; the menu opens to the right of it, upwards.
+	 * `folded`: only the avatar.
+	 */
+	let { side = false, folded = false }: { side?: boolean; folded?: boolean } = $props();
+
 	const user = $derived(session.data?.user);
 	const initial = $derived(user?.name.charAt(0).toUpperCase() ?? '');
 	const canAdminister = $derived(user?.role === 'owner' || user?.role === 'admin');
@@ -36,18 +42,20 @@
 <svelte:window onclick={onWindowClick} onkeydown={onKeydown} />
 
 {#if user}
-	<div class="account" bind:this={root}>
+	<div class="account" class:side class:folded bind:this={root}>
 		<button
 			type="button"
 			class="trigger"
 			class:open
 			aria-haspopup="menu"
 			aria-expanded={open}
+			aria-label={folded ? user.name : undefined}
+			title={folded ? user.name : undefined}
 			onclick={() => (open = !open)}
 		>
 			<span class="avatar" aria-hidden="true">{initial}</span>
-			<span class="name">{user.name}</span>
-			<Icon name="chevronDown" size={14} />
+			{#if !folded}<span class="name">{user.name}</span>
+				<Icon name={side ? 'chevronRight' : 'chevronDown'} size={14} />{/if}
 		</button>
 
 		{#if open}
@@ -106,7 +114,7 @@
 		border-radius: var(--radius-ctl);
 		color: var(--text);
 		font: inherit;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		cursor: pointer;
 	}
 	.trigger.open,
@@ -122,14 +130,14 @@
 		border-radius: calc(var(--radius-ctl) * 0.8);
 		background: var(--accent);
 		color: var(--on-accent);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		font-weight: 700;
 	}
 	.avatar.large {
 		width: 40px;
 		height: 40px;
 		border-radius: var(--radius-ctl);
-		font-size: 1rem;
+		font-size: var(--text-lg);
 	}
 	.menu {
 		position: absolute;
@@ -141,6 +149,33 @@
 		display: flex;
 		flex-direction: column;
 		padding: 6px;
+	}
+	.side .menu {
+		position: fixed;
+		top: auto;
+		right: auto;
+		left: calc(var(--side-nav-width, 236px) + 8px);
+		bottom: 12px;
+		max-height: calc(100dvh - 24px);
+		overflow-y: auto;
+	}
+	.side .trigger {
+		max-width: 100%;
+	}
+	.side .name {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.folded .trigger {
+		width: 46px;
+		justify-content: center;
+		padding: 0;
+	}
+	.side .trigger:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
 	}
 	.who {
 		display: flex;
@@ -155,11 +190,11 @@
 		min-width: 0;
 	}
 	.who-name {
-		font-size: 0.9375rem;
+		font-size: var(--text-md);
 		font-weight: 600;
 	}
 	.who-role {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	hr {
@@ -169,13 +204,19 @@
 		background: var(--border);
 	}
 	.menu button,
+	.menu a,
 	.language {
 		min-height: 40px;
 		display: flex;
 		align-items: center;
 		gap: 12px;
 		padding: 0 10px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
+	}
+	.menu a {
+		border-radius: var(--radius-ctl);
+		color: var(--text);
+		text-decoration: none;
 	}
 	.menu button {
 		background: transparent;
@@ -183,10 +224,11 @@
 		border-radius: var(--radius-ctl);
 		color: var(--text);
 		font: inherit;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		text-align: left;
 		cursor: pointer;
 	}
+	.menu a:hover,
 	.menu button:hover {
 		background: var(--chip);
 	}

@@ -67,7 +67,8 @@ func (i *inwx) session(ctx context.Context, fn func(s *inwxSession) error) error
 	if _, err := s.call(ctx, "account.login", map[string]any{"user": i.user, "pass": i.password}, &login); err != nil {
 		return err
 	}
-	defer s.call(context.WithoutCancel(ctx), "account.logout", map[string]any{}, nil)
+	// Logging out is best effort: the session expires on its own.
+	defer func() { _, _ = s.call(context.WithoutCancel(ctx), "account.logout", map[string]any{}, nil) }()
 	if tfa, ok := login.TFA.(string); ok && tfa != "" && tfa != "0" {
 		return &APIError{Provider: "INWX", Message: "the account asks for a second factor, which TitanOS cannot give; use an account without two-factor sign-in"}
 	}

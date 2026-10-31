@@ -7,9 +7,23 @@ import (
 	"time"
 )
 
-// LongSMART addresses the unique serial number, not the Linux device name which
-// can change after a reboot. A previous test result is never accepted as this run.
-func (m *Manager) LongSMART(ctx context.Context, serial string) (result error) {
+// LongSMART runs the long SMART self-test of a disk; see SelfTest.
+func (m *Manager) LongSMART(ctx context.Context, serial string) error {
+	return m.SelfTest(ctx, serial, "long")
+}
+
+// ShortSMART runs the short SMART self-test (about two minutes).
+func (m *Manager) ShortSMART(ctx context.Context, serial string) error {
+	return m.SelfTest(ctx, serial, "short")
+}
+
+// SelfTest runs a SMART self-test ("short" or "long"). It addresses the
+// unique serial number, not the Linux device name which can change after a
+// reboot. A previous test result is never accepted as this run.
+func (m *Manager) SelfTest(ctx context.Context, serial, kind string) (result error) {
+	if kind != "short" && kind != "long" {
+		return ErrNotPossible
+	}
 	m.actions.Lock()
 	if m.ReadOnly || m.GrowthPending() {
 		m.actions.Unlock()
@@ -44,7 +58,7 @@ func (m *Manager) LongSMART(ctx context.Context, serial string) (result error) {
 	}
 	testCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	test := &DiskTest{Disk: disk.Name, Serial: disk.Serial, Model: disk.Model, SizeBytes: disk.SizeBytes, Mode: "smart-long", Phase: PhaseSmart, Started: time.Now(), RemainingSeconds: -1, cancel: cancel, Notes: []TestNote{}}
+	test := &DiskTest{Disk: disk.Name, Serial: disk.Serial, Model: disk.Model, SizeBytes: disk.SizeBytes, Mode: "smart-" + kind, Phase: PhaseSmart, Started: time.Now(), RemainingSeconds: -1, cancel: cancel, Notes: []TestNote{}}
 	m.testMu.Lock()
 	if m.tests == nil {
 		m.tests = map[string]*DiskTest{}
@@ -79,12 +93,17 @@ func (m *Manager) LongSMART(ctx context.Context, serial string) (result error) {
 	if state, ok := parseSelfTest(before); ok && state.running {
 		return errors.New("a SMART self-test is already running")
 	}
-	if _, err := command("--json=c", "--test=long", disk.Path); err != nil {
-		return fmt.Errorf("long SMART test could not start: %w", err)
+	if _, err := command("--json=c", "--test="+kind, disk.Path); err != nil {
+		return fmt.Errorf("%s SMART test could not start: %w", kind, err)
 	}
 	interval := m.smartPoll
 	if interval == 0 {
 		interval = 30 * time.Second
+		if kind == "short" {
+			// A short test can be over within a minute: look often enough
+			// to see it running.
+			interval = 5 * time.Second
+		}
 	}
 	seen := false
 	started := time.Now()
@@ -97,7 +116,7 @@ func (m *Manager) LongSMART(ctx context.Context, serial string) (result error) {
 				for _, d := range fresh.Disks {
 					if d.Serial == serial && d.Path == disk.Path {
 						cleanup, stop := context.WithTimeout(context.Background(), 30*time.Second)
-						m.runner.Run(cleanup, "", "smartctl", "--abort", disk.Path)
+						_, _ = m.runner.Run(cleanup, "", "smartctl", "--abort", disk.Path) // cleanup, best effort: nothing more can be done if it fails
 						stop()
 					}
 				}

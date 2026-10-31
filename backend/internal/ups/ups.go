@@ -372,7 +372,7 @@ func (m *Manager) Apply(ctx context.Context) error {
 	}
 
 	// Stopped first, so that nothing runs with half the new configuration.
-	m.runner.Run(ctx, "", "systemctl", "stop", "nut-monitor.service", "nut-server.service", "nut-driver.target", "nut-driver-enumerator.path")
+	_, _ = m.runner.Run(ctx, "", "systemctl", "stop", "nut-monitor.service", "nut-server.service", "nut-driver.target", "nut-driver-enumerator.path") // cleanup, best effort: nothing more can be done if it fails
 	if err := os.MkdirAll(m.etcDir, 0o755); err != nil {
 		return err
 	}
@@ -384,7 +384,7 @@ func (m *Manager) Apply(ctx context.Context) error {
 		if err := os.WriteFile(filepath.Join(m.etcDir, name), []byte(content), 0o640); err != nil {
 			return err
 		}
-		m.runner.Run(ctx, "", "chgrp", "nut", filepath.Join(m.etcDir, name))
+		_, _ = m.runner.Run(ctx, "", "chgrp", "nut", filepath.Join(m.etcDir, name)) // without the group only root reads the file; NUT then reports it
 	}
 	switch settings.Mode {
 	case "local":

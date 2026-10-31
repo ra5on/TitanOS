@@ -73,21 +73,16 @@ func (s *Server) handlePowerScheduleChange(w http.ResponseWriter, r *http.Reques
 }
 
 // PowerBusy says whether work is running that a scheduled shutdown would
-// break off: copies, backups, disk tests, a rebuild, or an assistant task.
+// break off: copies, backups, disk tests or a rebuild.
 func (s *Server) PowerBusy() (bool, string) {
 	if s.opts.Update != nil && s.opts.Update.Working != nil && s.opts.Update.Working() {
 		return true, "copies, backups or disk tests"
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// Asked by the power schedule, not by a request: the root context.
+	ctx, cancel := context.WithTimeout(s.ctx, 10*time.Second)
 	defer cancel()
 	if s.storageBusy(ctx) {
 		return true, "volume rebuild or check"
-	}
-	s.agentMu.Lock()
-	jobs := len(s.agentJobs)
-	s.agentMu.Unlock()
-	if jobs > 0 {
-		return true, "assistant task"
 	}
 	return false, ""
 }

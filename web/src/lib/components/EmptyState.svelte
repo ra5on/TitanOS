@@ -56,10 +56,10 @@
 		display: flex;
 		flex-direction: column;
 		align-items: flex-start;
-		gap: 4px;
+		gap: var(--space-1);
 		width: 100%;
 		padding: 28px 22px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.empty p {
 		margin: 0;
@@ -69,11 +69,11 @@
 		font-weight: 500;
 	}
 	.art {
-		margin-bottom: 8px;
+		margin-bottom: var(--space-2);
 	}
 	.inline {
 		margin: 0;
 		padding: 28px 14px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 </style>

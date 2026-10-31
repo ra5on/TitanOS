@@ -87,7 +87,7 @@
 		flex: none;
 		order: 2;
 		white-space: nowrap;
-		font: var(--tile-value-weight, 400) min(var(--tile-value-size, 18px), 32cqi)/1.2
+		font: var(--tile-value-weight, 400) min(var(--tile-value-size, var(--text-lg)), 32cqi)/1.2
 			var(--tile-value-font, 'IBM Plex Mono');
 		color: var(--tile-value-color, var(--text));
 	}
@@ -96,7 +96,7 @@
 		color: var(--tile-label-color, var(--muted));
 	}
 	.label {
-		font-size: var(--tile-label-size, 12px);
+		font-size: var(--tile-label-size, var(--text-sm));
 		color: var(--tile-label-color, var(--muted));
 		overflow-wrap: anywhere;
 		min-width: 0;
@@ -106,8 +106,8 @@
 			100%,
 			max(
 				150px,
-				calc(var(--tile-value-size, 18px) * 3.6),
-				calc(var(--tile-label-size, 12px) * 11.2)
+				calc(var(--tile-value-size, var(--text-lg)) * 3.6),
+				calc(var(--tile-label-size, var(--text-sm)) * 11.2)
 			)
 		);
 		aspect-ratio: 1;
@@ -137,13 +137,13 @@
 	}
 	.ring .reading {
 		order: 0;
-		font-size: min(var(--tile-value-size, 18px), 28cqi);
+		font-size: min(var(--tile-value-size, var(--text-lg)), 28cqi);
 		text-align: center;
 	}
 	.ring .label {
 		max-width: 70%;
 		text-align: center;
-		font-size: min(var(--tile-label-size, 12px), 9cqi);
+		font-size: min(var(--tile-label-size, var(--text-sm)), 9cqi);
 	}
 	.compact {
 		align-items: center;
@@ -154,7 +154,7 @@
 		margin-top: 0;
 	}
 	.compact .reading {
-		font-size: min(var(--tile-value-size, 18px), 27cqi);
+		font-size: min(var(--tile-value-size, var(--text-lg)), 27cqi);
 	}
 	.compact-label.compact .label {
 		display: block;

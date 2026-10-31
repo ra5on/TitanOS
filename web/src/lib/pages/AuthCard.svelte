@@ -207,7 +207,7 @@
 		text-align: center;
 	}
 	h1 {
-		font-size: 1.375rem;
+		font-size: var(--text-xl);
 		font-weight: 600;
 		overflow-wrap: anywhere;
 	}
@@ -215,11 +215,11 @@
 		padding: 3px 8px;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-small);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.welcome {
-		font-size: 0.9375rem;
+		font-size: var(--text-md);
 		text-align: center;
 		overflow-wrap: anywhere;
 	}
@@ -236,7 +236,16 @@
 		line-height: 1.1;
 	}
 	.clock span {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
+	}
+	/* Phones: less frame around the card, more room for the fields. */
+	@media (max-width: 480px) {
+		main {
+			padding: 16px;
+		}
+		.card {
+			padding: 28px 20px 24px;
+		}
 	}
 	@media (max-width: 760px) {
 		main.left,

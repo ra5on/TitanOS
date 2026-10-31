@@ -47,7 +47,7 @@ func (c *IPv64) PublicIP(ctx context.Context, network string) (netip.Addr, error
 			IP string `json:"ip"`
 		} `json:"data"`
 	}
-	json.Unmarshal(data, &answer)
+	_ = json.Unmarshal(data, &answer) // a value that cannot be read leaves the zero value, which the code handles
 	addr, err := netip.ParseAddr(answer.Data.IP)
 	if err != nil {
 		return netip.Addr{}, &APIError{Provider: "IPv64", Message: "no address in the answer"}

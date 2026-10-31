@@ -149,7 +149,7 @@
 	}
 	.dropdown-panel.panel {
 		gap: 10px;
-		padding: 12px;
+		padding: var(--space-3);
 	}
 	.chevron {
 		display: inline-flex;

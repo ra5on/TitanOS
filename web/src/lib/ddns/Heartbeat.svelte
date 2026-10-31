@@ -280,7 +280,7 @@
 	}
 	h3 {
 		margin: 0;
-		font-size: 0.9375rem;
+		font-size: var(--text-md);
 	}
 	.hint {
 		margin: 0;
@@ -293,7 +293,7 @@
 	}
 	dt {
 		color: var(--muted);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	dd {
 		margin: 2px 0 0;

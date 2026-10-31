@@ -203,7 +203,7 @@
 		gap: 6px 12px;
 	}
 	.small {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		margin: 0;
 	}
 	.order {

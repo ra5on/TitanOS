@@ -240,7 +240,7 @@ func TestSnapshotFolderRestorePathSafety(t *testing.T) {
 		{Path: "../data", Mode: RestoreOriginal, Conflict: RestoreSkip},
 		{Path: "/photos", Mode: RestoreOriginal, Conflict: RestoreSkip},
 		{Path: "photos/../photos", Mode: RestoreOriginal, Conflict: RestoreSkip},
-		{Path: ".titanos/assistant", Mode: RestoreOriginal, Conflict: RestoreSkip},
+		{Path: ".titanos/notify", Mode: RestoreOriginal, Conflict: RestoreSkip},
 		{Path: "photos/.recycle", Mode: RestoreOriginal, Conflict: RestoreSkip},
 		{Path: "link", Mode: RestoreOriginal, Conflict: RestoreSkip},
 		{Path: "photos/escape", Mode: RestoreOriginal, Conflict: RestoreSkip},
@@ -284,7 +284,7 @@ func TestSnapshotFolderRestorePathSafety(t *testing.T) {
 		t.Fatal("folder not kept next to the link")
 	}
 	// Excluded names are not restored, and the snapshot holds the private tree.
-	if _, err := os.Stat(filepath.Join(snap, ".titanos", "assistant", "private")); err != nil {
+	if _, err := os.Stat(filepath.Join(snap, ".titanos", "notify", "private")); err != nil {
 		t.Fatal(err)
 	}
 }

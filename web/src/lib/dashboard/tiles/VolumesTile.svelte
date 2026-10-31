@@ -103,7 +103,7 @@
 		gap: 10px;
 		flex-wrap: wrap;
 		color: var(--muted);
-		font-size: 11px;
+		font-size: var(--text-xs);
 		margin-top: 10px;
 	}
 	table.grid {
@@ -152,7 +152,7 @@
 	table {
 		width: 100%;
 		border-collapse: collapse;
-		font-size: var(--tile-label-size, 12px);
+		font-size: var(--tile-label-size, var(--text-sm));
 		table-layout: auto;
 	}
 	th {
@@ -160,12 +160,13 @@
 		color: var(--muted);
 		text-align: left;
 		padding: 0 9px 7px 0;
-		font-size: var(--tile-label-size, 12px);
+		font-size: var(--tile-label-size, var(--text-sm));
 	}
 	td {
 		border-top: 1px solid var(--border);
 		padding: 7px 9px 7px 0;
-		overflow-wrap: anywhere;
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	td:last-child,
 	th:last-child {
@@ -181,8 +182,8 @@
 		cursor: pointer;
 		color: var(--tile-value-color, var(--text));
 		padding: 0;
-		font: var(--tile-value-weight) var(--tile-value-size, 14px) var(--tile-value-font);
-		overflow-wrap: anywhere;
+		font: var(--tile-value-weight) var(--tile-value-size, var(--text-md)) var(--tile-value-font);
+		overflow-wrap: break-word;
 		text-align: left;
 		white-space: normal;
 	}
@@ -204,7 +205,7 @@
 		background: var(--accent);
 	}
 	.mono {
-		font-size: var(--tile-label-size, 12px);
+		font-size: var(--tile-label-size, var(--text-sm));
 		font-family: var(--tile-value-font);
 	}
 </style>

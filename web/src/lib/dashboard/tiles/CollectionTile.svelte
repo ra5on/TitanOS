@@ -10,6 +10,7 @@
 	import { session } from '#lib/session.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
 	import { vmLabel } from '#lib/vm-name.ts';
+	import { vmOsIcon } from '#lib/vm-os.ts';
 	import { dockerName } from '#lib/docker-name.ts';
 	import AppIcon from '#lib/components/AppIcon.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -248,7 +249,7 @@
 						aria-haspopup="menu"
 						onclick={(e) => open(e, { kind: 'vm', vm })}
 						><span class="app-icon"
-							><Icon name="monitor" size={Math.max(16, options.iconSize - 8)} /></span
+							><Icon name={vmOsIcon(vm)} size={Math.max(16, options.iconSize - 8)} /></span
 						><span class="identity"
 							><span class="entry-name" data-edit-part="value" title={vmLabel(vm)}
 								>{vmLabel(vm)}</span
@@ -418,7 +419,7 @@
 		align-items: center;
 		justify-content: center;
 		color: var(--accent);
-		font-size: 12px;
+		font-size: var(--text-sm);
 	}
 	.identity {
 		display: flex;
@@ -435,7 +436,8 @@
 		overflow: hidden;
 		min-width: 0;
 		overflow-wrap: anywhere;
-		font: var(--tile-value-weight, 400) var(--tile-value-size, 14px)/1.35 var(--tile-value-font);
+		font: var(--tile-value-weight, 400) var(--tile-value-size, var(--text-md))/1.35
+			var(--tile-value-font);
 		color: var(--tile-value-color, var(--text));
 		text-align: var(--tile-align);
 		white-space: normal;
@@ -445,7 +447,7 @@
 		gap: 5px;
 		align-items: center;
 		color: var(--tile-label-color, var(--muted));
-		font-size: var(--tile-label-size, 12px);
+		font-size: var(--tile-label-size, var(--text-sm));
 		overflow-wrap: anywhere;
 		min-width: 0;
 	}
@@ -489,7 +491,7 @@
 		color: var(--muted);
 		text-align: left;
 		cursor: pointer;
-		font-size: var(--tile-label-size, 12px);
+		font-size: var(--tile-label-size, var(--text-sm));
 		overflow-wrap: anywhere;
 		min-width: 0;
 	}
@@ -511,7 +513,7 @@
 		gap: 10px;
 		flex-wrap: wrap;
 		align-items: center;
-		font-size: 11px;
+		font-size: var(--text-xs);
 		color: var(--muted);
 		margin-top: 12px;
 	}
@@ -540,12 +542,12 @@
 		display: flex;
 		gap: 5px;
 		align-items: center;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	table {
 		width: 100%;
 		border-collapse: collapse;
-		font-size: var(--tile-label-size, 12px);
+		font-size: var(--tile-label-size, var(--text-sm));
 	}
 	th {
 		font-weight: 400;

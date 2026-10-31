@@ -491,14 +491,14 @@
 		flex-direction: column;
 		gap: 14px;
 		padding: 18px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	p {
 		margin: 0;
 	}
 	h3 {
 		margin: 4px 0 0;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		font-weight: 600;
 	}
 	ul {
@@ -543,7 +543,7 @@
 	.small {
 		height: 2rem;
 		padding: 0 12px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.bad {
 		color: var(--error-text);
@@ -552,7 +552,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 14px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	fieldset {
 		display: flex;
@@ -565,7 +565,7 @@
 	legend {
 		padding: 0;
 		margin-bottom: 8px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		color: var(--muted);
 	}
 	label {
@@ -590,13 +590,13 @@
 		gap: 2px;
 	}
 	small {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		color: var(--muted);
 	}
 	pre {
 		margin: 6px 0 0;
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 	}

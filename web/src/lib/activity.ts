@@ -10,7 +10,7 @@ export type ActivityStatus = {
 export type ActivityEntry = {
 	at: string;
 	user: string;
-	via: 'web' | 'token' | 'agent' | 'system' | 'ssh';
+	via: 'web' | 'token' | 'agent' | 'system' | 'ssh' | 'mcp' | 'cluster' | 'homeassistant';
 	ip?: string;
 	action: string;
 	target?: string;
@@ -147,7 +147,6 @@ const areas: Record<string, string> = {
 	backups: 'backups',
 	'config-backup': 'backups',
 	update: 'updates',
-	assistant: 'assistant',
 	homeassistant: 'homeassistant',
 	terminal: 'console',
 	activity: 'activity',

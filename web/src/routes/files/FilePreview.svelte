@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { apiPath } from '#lib/cluster-node.ts';
+	import { apiFetch } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { previewKind } from '#lib/file-actions.ts';
@@ -52,8 +53,7 @@
 					return;
 				}
 				if (!kind) throw new Error('unsupported');
-				const res = await fetch(apiPath('/files/download?' + new URLSearchParams({ root, path })), {
-					credentials: 'same-origin',
+				const res = await apiFetch('/files/download?' + new URLSearchParams({ root, path }), {
 					signal: controller.signal,
 				});
 				if (!res.ok || Number(res.headers.get('content-length')) > limit || !res.body)
@@ -174,6 +174,6 @@
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 		font-family: var(--font-mono, monospace);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 </style>

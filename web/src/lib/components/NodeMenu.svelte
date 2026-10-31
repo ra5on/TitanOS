@@ -153,7 +153,7 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.badge .trigger {
 		position: relative;
@@ -164,7 +164,7 @@
 		background: color-mix(in srgb, var(--accent) 12%, transparent);
 	}
 	.badge .initials {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		font-weight: 600;
 	}
 	.badge .trigger > .dot {
@@ -187,7 +187,7 @@
 		border: 1.5px solid var(--muted);
 	}
 	.small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.menu {
 		position: absolute;
@@ -238,7 +238,7 @@
 		background: transparent;
 		color: var(--text);
 		font: inherit;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		text-align: left;
 		text-decoration: none;
 		cursor: pointer;

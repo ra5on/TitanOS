@@ -3,10 +3,12 @@ export type MaintenanceJob = {
 	dependsOn?: string;
 	id: string;
 	name: string;
-	kind: 'raid-check' | 'smart-long' | 'backup-check' | 'restore-probe' | 'snapshot';
+	kind: 'raid-check' | 'smart-short' | 'smart-long' | 'backup-check' | 'restore-probe' | 'snapshot';
 	target: string;
 	enabled: boolean;
-	every: 'daily' | 'weekly' | 'monthly';
+	every: 'hours' | 'daily' | 'weekly' | 'monthly';
+	/** Distance of jobs every few hours, 1 to 168. */
+	everyHours?: number;
 	weekdays: number[];
 	monthDay: number;
 	time: string;
@@ -18,6 +20,8 @@ export type MaintenanceJob = {
 	allowPrune: boolean;
 	/** Days each snapshot of the job cannot be deleted; absent or 0 for none. */
 	lockDays?: number;
+	/** Snapshot jobs: keep by day, week and month (0.41.0); keep is the count older versions use. */
+	versions?: import('#lib/components/KeepVersions.svelte').Keep | null;
 };
 export type MaintenanceSettings = {
 	backupsFirst?: boolean;
@@ -125,21 +129,6 @@ export type Operations = {
 	growthError?: string;
 	uploads?: { id: string; name: string; size: number; offset: number; busy?: boolean }[];
 	applicationRecovery?: { operation: { id: string; job: string } | null; active: boolean };
-	assistant?: {
-		id: string;
-		title: string;
-		updated: string;
-		run?: { state: string; detail?: string };
-	}[];
-	automations?: {
-		id: string;
-		name: string;
-		enabled: boolean;
-		next?: string;
-		kind?: string;
-		pending?: boolean;
-		detail?: string;
-	}[];
 	maintenance?: MaintenanceStatus;
 	transfers: CopyJob[];
 	backups?: BackupView[];
@@ -167,7 +156,7 @@ export function newMaintenanceJob(): MaintenanceJob {
 		time: '03:00',
 		missed: 'window',
 		readData: 5,
-		maxBytes: 64 * 1048576,
+		maxBytes: 64 * 1000 * 1000,
 		maxFiles: 20,
 		keep: 7,
 		allowPrune: false,

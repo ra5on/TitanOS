@@ -2,7 +2,7 @@
 
 Systemcontainer (LXC) liegen zwischen Docker-Apps und VMs: ein ganzes Linux-System mit eigenem init, eigenen Diensten und eigener Paketverwaltung, das den Kernel des NAS mitbenutzt. Sie starten in Sekunden, brauchen kein KVM und kaum RAM über das hinaus, was ihre Programme selbst belegen.
 
-Reiter **Container** (`/lxc`), nur für Besitzer und Administratoren. Backend-Paket `backend/internal/lxc`, API unter `/api/v1/lxc`.
+Reiter **LXC** (`/lxc`, bis 0.40 „Container“), nur für Besitzer und Administratoren. Backend-Paket `backend/internal/lxc`, API unter `/api/v1/lxc`.
 
 ## Ablage
 
@@ -80,7 +80,7 @@ Nichts davon liegt im RAM-Overlay oder auf dem Stick, außer der kleinen JSON-Da
 | `GET /api/v1/lxc/{name}/config` | erzeugte LXC-Konfiguration |
 | `GET/POST /api/v1/lxc/{name}/snapshots`, `POST …/snapshots/{id}/restore`, `DELETE …/snapshots/{id}` | Snapshots |
 
-Alles nur für Besitzer/Administratoren; Anlegen und Snapshot-Aktionen über die gemeinsame Aufnahme schwerer Vorgänge. Nicht im Katalog des Assistenten und nicht in der öffentlichen API.
+Alles nur für Besitzer/Administratoren; Anlegen und Snapshot-Aktionen über die gemeinsame Aufnahme schwerer Vorgänge. Nicht im MCP-Werkzeugkatalog und nicht in der öffentlichen API.
 
 ## Abbild
 

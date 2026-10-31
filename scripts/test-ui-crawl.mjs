@@ -15,11 +15,10 @@ const only = process.env.UI_ROUTES?.split(",");
 await mkdir(out, { recursive: true });
 
 const routes = [
-  "/", "/account", "/apps", "/assistant", "/assistant/automations",
-  "/assistant/knowledge", "/assistant/tasks", "/docker", "/docker/apps/web",
+  "/", "/account", "/apps", "/docker", "/docker/apps/web",
   "/docker/networks", "/files", "/plugins", "/plugins/cleanup", "/settings",
   "/settings/about", "/settings/access", "/settings/api",
-  "/settings/appearance", "/settings/assistant", "/settings/backups",
+  "/settings/appearance", "/settings/backups",
   "/settings/backups/applications", "/settings/backups/configuration",
   "/settings/backups/coverage", "/settings/backups/data",
   "/settings/backups/restore", "/settings/energy", "/settings/hardware",

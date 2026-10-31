@@ -105,7 +105,7 @@ func (m *Manager) syncShadow(ctx context.Context, volume string, wanted bool, mo
 		if info, err := os.Lstat(dir); err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 			return fmt.Errorf("%s is not a folder", dir)
 		}
-		os.Chmod(dir, 0o755)
+		_ = os.Chmod(dir, 0o755) // permissions and times are a convenience; the data are there either way
 		entries, _ := os.ReadDir(snapshots)
 		mirrored := map[string]bool{}
 		for _, original := range index {

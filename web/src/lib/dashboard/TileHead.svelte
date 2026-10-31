@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { t } from '#lib/i18n/index.svelte.ts';
-	import Icon from '#lib/components/Icon.svelte';
+	import Icon, { type IconName } from '#lib/components/Icon.svelte';
 	import type { TileOptions } from './options.ts';
 
 	// The head of a dashboard tile: grip and buttons in the editor, collapse otherwise.
@@ -8,6 +8,7 @@
 		title,
 		summary,
 		settings,
+		osIcon = 'monitor',
 		editing,
 		locked,
 		saving,
@@ -21,6 +22,8 @@
 		title: string;
 		summary: string;
 		settings: TileOptions;
+		/** The mark for the icon choice "operating system" (tiles of one VM). */
+		osIcon?: IconName;
 		editing: boolean;
 		locked: boolean;
 		saving: boolean;
@@ -43,7 +46,10 @@
 			onkeydown={onkeymove}><Icon name="grip" size={16} /></button
 		>{/if}
 	{#if settings.showIcon}<span class="tile-symbol"
-			><Icon name={settings.icon} size={settings.titleSize + 3} /></span
+			><Icon
+				name={settings.icon === 'os' ? osIcon : settings.icon}
+				size={settings.titleSize + 3}
+			/></span
 		>{/if}
 	<h2 class="tile-title" data-edit-part="heading">
 		{settings.showTitle ? title : ''}
@@ -84,7 +90,7 @@
 	.tile-head {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		flex: none;
 		min-height: 35px;
 		padding: 5px 10px;
@@ -102,7 +108,7 @@
 	.tile-title {
 		flex: 1;
 		min-width: 0;
-		font-size: var(--tile-title-size, 13px);
+		font-size: var(--tile-title-size, var(--text-base));
 		font-weight: var(--tile-title-weight, 500);
 		font-family: var(--tile-title-font);
 		color: var(--tile-title-color, var(--text));
@@ -117,7 +123,7 @@
 	}
 	.tile-summary {
 		color: var(--muted);
-		font-size: 11px;
+		font-size: var(--text-xs);
 		min-width: 0;
 		overflow-wrap: anywhere;
 		text-align: right;

@@ -174,13 +174,6 @@ func (s *Server) HASnapshot(ctx context.Context) homeassistant.Snapshot {
 				}
 			}
 		}
-		s.agentMu.Lock()
-		for key := range s.agentJobs {
-			if strings.HasPrefix(key, user.Name+"/") {
-				work.Agents++
-			}
-		}
-		s.agentMu.Unlock()
 		snap.Work = work
 	}
 	s.haAdditional(&snap)
@@ -265,7 +258,7 @@ func (s *Server) internalAs(ctx context.Context, user auth.User, method, route s
 	if body != nil {
 		data, _ = json.Marshal(body)
 	}
-	req, err := http.NewRequestWithContext(context.WithValue(ctx, agentIdentity{}, user.Name), method, route, bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(context.WithValue(ctx, inProcessIdentity{}, user.Name), method, route, bytes.NewReader(data))
 	if err != nil {
 		return http.StatusInternalServerError, err.Error()
 	}

@@ -183,7 +183,7 @@ func (m *Manager) cached(volume, key string) ([]byte, bool) {
 		return nil, false
 	}
 	if now := m.now(); now.Sub(st.ModTime()) > 24*time.Hour {
-		root.Chtimes(name, now, now)
+		_ = root.Chtimes(name, now, now) // permissions and times are a convenience; the data are there either way
 	}
 	return data, true
 }

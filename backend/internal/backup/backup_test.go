@@ -33,16 +33,30 @@ done
 case "$command" in
   cat) [ -e "$dir/initialized" ] || { echo "Fatal: repository does not exist" >&2; exit 10; } ;;
   init) [ -e "$dir/unreachable" ] && { echo "Fatal: dial tcp: connection refused" >&2; exit 1; }; touch "$dir/initialized" ;;
-  unlock|forget) ;;
+  unlock) ;;
+  forget)
+    # With a list of versions, forget removes the IDs it is given.
+    if [ -e "$dir/versions" ]; then
+      for arg in "$@"; do
+        case "$arg" in -*|forget) ;; *) grep -v "^$arg " "$dir/versions" > "$dir/versions.new"; mv "$dir/versions.new" "$dir/versions" ;; esac
+      done
+    fi ;;
   backup)
     echo '{"message_type":"status","percent_done":0.5,"total_bytes":2000,"bytes_done":1000}'
     # Replace the shell: a foreground child can inherit ignored SIGINT and
     # defer the shell trap until its sleep ends. Real restic is one process.
     [ -e "$dir/slow" ] && exec sleep 30
+    # "full" holds how many versions fit: more and the target is full.
+    if [ -e "$dir/full" ] && [ "$(wc -l < "$dir/versions")" -gt "$(cat "$dir/full")" ]; then echo "Fatal: unable to save snapshot: write /repo/data/ab: no space left on device" >&2; exit 1; fi
     if [ -e "$dir/broken" ]; then echo "Fatal: unable to save snapshot: server said no (password $RESTIC_PASSWORD)" >&2; exit 1; fi
     echo '{"message_type":"summary","total_bytes_processed":2000,"snapshot_id":"abcdef0123"}'
     if [ -e "$dir/unreadable" ]; then echo "error: open /mnt/tank/media/locked: permission denied" >&2; exit 3; fi ;;
   snapshots)
+    if [ -e "$dir/versions" ]; then
+      printf '['; sep=
+      while read id t; do printf '%s{"id":"%s","short_id":"%s","time":"%s","tags":["titanos"],"paths":["/mnt/tank/media"]}' "$sep" "$id" "$id" "$t"; sep=,; done < "$dir/versions"
+      echo ']'; exit 0
+    fi
     echo '[{"time":"2026-10-12T02:30:00Z","short_id":"11111111","paths":["/mnt/tank/media"]},{"time":"2026-10-13T02:30:00Z","short_id":"22222222","paths":["/mnt/tank/media"],"summary":{"total_bytes_processed":2000}}]' ;;
   restore)
     target=
@@ -90,7 +104,8 @@ func newEnv(t *testing.T) *env {
 	e.m.Sources = func() []Source {
 		return []Source{{Name: "media", Volume: "tank", Path: filepath.Join(root, "mnt/tank/media")}, {Name: "photos", Volume: "tank", Path: filepath.Join(root, "mnt/tank/photos")}}
 	}
-	e.m.OnResult = func(job string, err error) {
+	// Every run, also repeated failures that send no message.
+	e.m.ended = func(job string, err error) {
 		if err != nil {
 			e.results <- job + ": " + err.Error()
 		} else {

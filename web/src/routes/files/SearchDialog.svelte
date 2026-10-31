@@ -2,7 +2,7 @@
 	import { api, type FileRoot, type FileEntry } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
-	import { formatBytes, formatDateTime } from '#lib/format.ts';
+	import { MB, formatBytes, formatDateTime } from '#lib/format.ts';
 	let {
 		root,
 		dir,
@@ -50,8 +50,8 @@
 					query,
 					...(content ? { content: true } : {}),
 					extension,
-					minSize: Math.round((minimum ?? 0) * 1024 * 1024),
-					maxSize: Math.round((maximum ?? 0) * 1024 * 1024),
+					minSize: Math.round((minimum ?? 0) * MB),
+					maxSize: Math.round((maximum ?? 0) * MB),
 					...(after ? { after: new Date(after).toISOString() } : {}),
 					...(before ? { before: new Date(before).toISOString() } : {}),
 					showHidden,

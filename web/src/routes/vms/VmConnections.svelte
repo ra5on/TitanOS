@@ -241,7 +241,7 @@
 	}
 	summary {
 		cursor: pointer;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.advanced-body {
 		display: flex;
@@ -260,28 +260,28 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);
 	}
 	small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.warn {
 		color: var(--warn-text);
 	}
 	.note {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.small {
 		height: 2rem;
 		padding: 0 0.625rem;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.path {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
 	}
 	.add {
@@ -293,7 +293,7 @@
 		border-radius: var(--radius-ctl);
 		color: var(--text);
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		cursor: pointer;
 	}
 	fieldset {
@@ -305,7 +305,7 @@
 		flex-direction: row;
 		align-items: center;
 		gap: 10px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.check span {
 		color: var(--text);
@@ -326,7 +326,7 @@
 	}
 	.ids {
 		padding-left: 28px;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.device small {
 		padding-left: 28px;

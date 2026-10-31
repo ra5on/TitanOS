@@ -273,7 +273,7 @@
 	}
 	.sleep-heading {
 		margin: 0 0 8px;
-		font-size: 0.9rem;
+		font-size: var(--text-md);
 	}
 	.sleep-list {
 		list-style: none;
@@ -305,7 +305,7 @@
 		flex-wrap: wrap;
 	}
 	.small {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	p {
 		margin: 0;

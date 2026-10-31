@@ -25,6 +25,7 @@
 		type VarField,
 	} from '#lib/compose/template.ts';
 	import { apiErrorText, errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
+	import { needList } from '#lib/hwcheck.ts';
 	import { system } from '#lib/system.svelte.ts';
 
 	type Props = {
@@ -326,8 +327,13 @@
 			{/if}
 		</div>
 
-		{#if form.risks.length > 0 || form.missingDevices.length > 0 || localize(form.tips, i18n.locale)}
+		{#if form.risks.length > 0 || form.missingDevices.length > 0 || (tpl.cpuMissing?.length ?? 0) > 0 || localize(form.tips, i18n.locale)}
 			<div class="body notes">
+				{#if tpl.cpuMissing?.length}
+					<p class="notice-warn" role="note">
+						{t('apps.cpuMissing', { list: needList(tpl.cpuMissing) })}
+					</p>
+				{/if}
 				{#if form.risks.length > 0}
 					<div class="notice-warn" role="note">
 						{t('apps.risks')}
@@ -697,7 +703,7 @@
 		justify-content: center;
 		border-radius: var(--radius-ctl);
 		color: var(--text);
-		font-size: 1.25rem;
+		font-size: var(--text-xl);
 		font-weight: 600;
 	}
 	.about {
@@ -708,14 +714,14 @@
 		gap: 4px;
 	}
 	h2 {
-		font-size: 1.125rem;
+		font-size: var(--text-lg);
 		font-weight: 600;
 	}
 	.text {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.meta {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
 	}
 	.icon {
@@ -731,7 +737,7 @@
 		gap: 8px;
 		padding: 16px 20px;
 		border-bottom: 1px solid var(--panel-border);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.summary p {
 		display: flex;
@@ -754,7 +760,7 @@
 		gap: 10px;
 	}
 	h3 {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		font-weight: 600;
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
@@ -765,7 +771,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.box {
 		padding: 12px;
@@ -779,7 +785,7 @@
 		gap: 8px;
 	}
 	.key {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.joined {
 		display: flex;
@@ -807,7 +813,7 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	small.warn {
@@ -822,11 +828,11 @@
 		border-radius: var(--radius-ctl);
 		color: var(--text);
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		cursor: pointer;
 	}
 	.note {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.notes {
 		gap: 10px;
@@ -837,19 +843,19 @@
 		padding-left: 1.25rem;
 	}
 	summary {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		cursor: pointer;
 	}
 	.tips {
 		font-family: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		line-height: 1.5;
 	}
 	.yaml {
 		min-height: 24rem;
 		height: auto;
 		padding: 12px 14px;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		line-height: 1.55;
 		resize: vertical;
 		tab-size: 2;
@@ -873,13 +879,13 @@
 		border: 0;
 		color: var(--accent);
 		font: inherit;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		cursor: pointer;
 	}
 	pre {
 		margin: 8px 0 0;
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		white-space: pre-wrap;
 		word-break: break-word;
 	}

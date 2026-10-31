@@ -1,0 +1,63 @@
+{
+  "title": "Realtek RTL8126 (Herstellertreiber)",
+  "description": {
+    "de": "Realteks eigener Treiber r8126 für 5-GbE-Netzwerkchips RTL8126, als Alternative zum Kerneltreiber r8169.",
+    "en": "Realtek's own r8126 driver for 5 GbE RTL8126 network chips, as an alternative to the kernel driver r8169."
+  },
+  "contains": {
+    "de": [
+      "Kernelmodul r8126 (GPL-2.0), unveränderte Herstellerquellen",
+      "Dienst titanos-r8126, der nur diese Chips von r8169 übernimmt und beim Ausschalten zurückgibt"
+    ],
+    "en": [
+      "Kernel module r8126 (GPL-2.0), unmodified vendor sources",
+      "Service titanos-r8126 that moves only these chips from r8169 and hands them back when switched off"
+    ]
+  },
+  "category": "network",
+  "license": "GPL-2.0-only",
+  "upstream": {
+    "name": "Realtek r8126 vendor driver (mirrored unchanged by OpenWrt)",
+    "url": "https://github.com/openwrt/rtl8126"
+  },
+  "details": {
+    "de": {
+      "when": "Nur wenn eine 5-GbE-Karte mit RTL8126 mit dem eingebauten Treiber r8169 Probleme macht (Abbrüche, „link down“, schwankende Geschwindigkeit). Der Chip funktioniert bereits ohne Plugin; deshalb schlägt TitanOS es nicht von selbst vor.",
+      "hardware": [
+        "RTL8126 (5 GbE), z. B. 5-GbE-Steckkarten und neuere Mainboards",
+        "PCI-IDs 10ec:8126; andere Realtek-Chips (z. B. RTL8111 auf dem Mainboard) bleiben bei r8169"
+      ],
+      "changes": "Legt das Modul r8126 in /usr/lib/modules/<kernel>/updates/ ab und lädt es. Der Dienst titanos-r8126 gibt jeden passenden Chip, den r8169 hält, an r8126 weiter (driver_override). Die Verbindung dieser Anschlüsse ist dabei kurz unterbrochen; die Netzwerkeinstellungen bleiben. Beim Ausschalten bekommt r8169 die Chips zurück. r8169 wird nicht gesperrt.",
+      "limits": [
+        "Herstellertreiber außerhalb des Linux-Kernels; auf echter Hardware mit TitanOS noch nicht geprüft.",
+        "Plugins werden erst nach dem Einbinden des Daten-Volumes geladen: bis dahin läuft der Anschluss mit r8169. Als einziger Verwaltungsanschluss geht er beim Wechsel kurz offline.",
+        "Ein Chip, der einer VM gehört (vfio-pci), wird nicht angefasst.",
+        "Die Module sind nicht mit dem Debian-Schlüssel signiert; der Kernel meldet beim Laden „tainted“ (Secure Boot ist bei TitanOS aus).",
+        "Gebaut je Kernel (Stabil und Neu) aus derselben festgelegten Quelle."
+      ],
+      "footprint": "Modulcode des Treibers (nicht gemessen); dazu Empfangs-/Sendepuffer je Anschluss."
+    },
+    "en": {
+      "when": "Only when a 5 GbE card with RTL8126 has problems with the built-in r8169 driver (drop-outs, \"link down\", unstable speed). The chip already works without the plugin; TitanOS therefore does not suggest it on its own.",
+      "hardware": [
+        "RTL8126 (5 GbE), e.g. 5 GbE add-in cards and newer mainboards",
+        "PCI IDs 10ec:8126; other Realtek chips (e.g. on-board RTL8111) stay with r8169"
+      ],
+      "changes": "Places the module r8126 in /usr/lib/modules/<kernel>/updates/ and loads it. The service titanos-r8126 hands every matching chip held by r8169 over to r8126 (driver_override). The connection of these ports drops briefly; network settings stay. When switched off, r8169 gets the chips back. r8169 is not blacklisted.",
+      "limits": [
+        "Vendor driver outside the Linux kernel; not yet tested with TitanOS on real hardware.",
+        "Plugins load only after the data volume is mounted: until then the port runs with r8169. As the only management port it goes offline briefly during the hand-over.",
+        "A chip that belongs to a VM (vfio-pci) is left alone.",
+        "The modules are not signed with Debian's key; the kernel reports \"tainted\" when loading them (Secure Boot is off on TitanOS).",
+        "Built per kernel (Stable and New) from the same pinned source."
+      ],
+      "footprint": "The driver's module code (not measured), plus receive/transmit buffers per port."
+    }
+  },
+  "hardware": [
+    {
+      "modalias": "pci:v000010ECd00008126sv*sd*bc*sc*i*",
+      "unbound": true
+    }
+  ]
+}

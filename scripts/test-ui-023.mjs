@@ -48,7 +48,7 @@ try {
   if(width===390){
    const toolbar=page.locator('.mobile-file-actions');await toolbar.waitFor({state:'visible'});
    for(const b of await toolbar.locator(':scope > button,:scope > .dropdown > button').all())assert.ok((await b.boundingBox()).height>=44);
-   await toolbar.getByRole('button',{name:locale==='de'?'Suche':'Search',exact:true}).click();
+   await toolbar.getByRole('button',{name:locale==='de'?'Suchen':'Search',exact:true}).click();
    const search=page.locator('#mobile-file-search input');await search.fill('Notizen');
    assert.equal(await page.locator('[data-file-name]').count(),1);await search.fill('');
    await page.locator('#mobile-file-search button').click();

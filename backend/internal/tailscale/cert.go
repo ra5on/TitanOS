@@ -16,28 +16,40 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/naming"
 )
 
 // The certificate of the NAS's own name in the tailnet
 // (https://<name>.<tailnet>.ts.net). Tailscale gets it from Let's Encrypt
-// once "HTTPS Certificates" is on in the admin console; titand serves it
-// for that name only (tlscert.Manager.SetTailnet), so phones and browsers
-// in the tailnet see a trusted certificate: no warning, and passkeys and
-// web push work. Nothing to switch on in TitanOS: turning on HTTPS in the
-// tailnet is the owner's choice (it puts the name into the public
-// certificate logs). While it is off, the plugin hands out the one-click
-// link of Tailscale to turn it on (LocalAPI query-feature, the same link
-// `tailscale serve` shows). tailscaled keeps and renews the certificate in
-// its state on the data volume; titand asks for it at the start and twice a
-// day and holds it in RAM only.
+// once "HTTPS Certificates" (and MagicDNS) is on in the admin console;
+// titand serves it for that name only (tlscert.Manager.SetTailnet), so
+// phones and browsers in the tailnet see a trusted certificate: no
+// warning, and passkeys and web push work. IP addresses and .local keep
+// the NAS's own certificate.
+//
+// Since 0.41.0 (decided 31.10.2026, PLAN 12b) it is a switch in the
+// Tailscale settings, off by default, because getting the certificate puts
+// the name into the public Certificate Transparency logs. Settings stored
+// by an older version have no switch; there it stays on if tailscaled
+// already holds a certificate for the name (an earlier version got one, the
+// name is public already), else off. While HTTPS is off in the tailnet, the
+// plugin hands out the one-click link of Tailscale to turn it on (LocalAPI
+// query-feature, the same link `tailscale serve` shows). tailscaled keeps
+// and renews the certificate in its state on the data volume; titand asks
+// for it at the start and twice a day and holds it in RAM only, nothing
+// lands on the boot stick.
 
 // HTTPSStatus tells the settings page about the certificate.
 type HTTPSStatus struct {
 	// Name is the name of the NAS in the tailnet, if known.
 	Name string `json:"name,omitempty"`
-	// State: "inactive" (plugin off or not connected), "disabled" (HTTPS
-	// is off in the tailnet), "ok" or "error".
-	State    string     `json:"state"`
+	// State: "off" (switched off in TitanOS), "inactive" (plugin off or not
+	// connected), "disabled" (HTTPS is off in the tailnet), "ok" or "error".
+	State string `json:"state"`
+	// Enabled is the switch in TitanOS (Settings.HTTPSCertificate, or what
+	// a missing switch means).
+	Enabled  bool       `json:"enabled"`
 	NotAfter *time.Time `json:"notAfter,omitempty"`
 	Error    string     `json:"error,omitempty"`
 	// EnableURL turns HTTPS on in the tailnet with one click at Tailscale
@@ -46,6 +58,7 @@ type HTTPSStatus struct {
 }
 
 type certState struct {
+	enabled   bool
 	name      string
 	state     string
 	notAfter  time.Time
@@ -57,7 +70,7 @@ type certState struct {
 }
 
 func (c certState) status() HTTPSStatus {
-	s := HTTPSStatus{Name: c.name, State: c.state, Error: c.err, EnableURL: c.enableURL}
+	s := HTTPSStatus{Name: c.name, State: c.state, Error: c.err, EnableURL: c.enableURL, Enabled: c.enabled}
 	if s.State == "" {
 		s.State = "inactive"
 	}
@@ -209,9 +222,12 @@ func (m *Manager) fetchCertificate(ctx context.Context, name string) (*tls.Certi
 // one when only this attempt failed and it is still valid.
 func (m *Manager) refreshCertificate(ctx context.Context, previous *tls.Certificate) (*tls.Certificate, bool) {
 	name, err := m.certificateName()
-	next := certState{name: name}
+	enabled := m.httpsWanted(name)
+	next := certState{name: name, enabled: enabled}
 	var cert *tls.Certificate
 	switch {
+	case !enabled:
+		next.state = "off"
 	case errors.Is(err, ErrUnavailable):
 		next.state = "inactive"
 	case errors.Is(err, errNoHTTPS):
@@ -236,6 +252,52 @@ func (m *Manager) refreshCertificate(ctx context.Context, previous *tls.Certific
 	m.cert = next
 	m.mu.Unlock()
 	return cert, next.state == "ok"
+}
+
+// httpsWanted tells whether the certificate is switched on. Without a
+// stored switch (settings of an older version) it is on only if tailscaled
+// already keeps a certificate for name in its state folder on the volume.
+func (m *Manager) httpsWanted(name string) bool {
+	m.mu.Lock()
+	on, volume := m.settings.HTTPSCertificate, m.volume
+	m.mu.Unlock()
+	if on != nil {
+		return *on
+	}
+	if name == "" || !certName.MatchString(name) || !naming.ValidVolume(volume) {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(m.mountRoot, volume, ".titanos/tailscale/certs", name+".crt"))
+	return err == nil
+}
+
+// SetHTTPSCertificate switches the certificate on or off and stores the
+// choice at once (no trial: access by IP address never depends on it).
+func (m *Manager) SetHTTPSCertificate(on bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.Disabled || !m.loaded {
+		return ErrUnavailable
+	}
+	if m.pending != nil {
+		return ErrPending
+	}
+	next := m.settings
+	next.Routes = slices.Clone(m.settings.Routes)
+	next.HTTPSCertificate = &on
+	if err := m.store.WriteJSON(settingsFile, next); err != nil {
+		return err
+	}
+	m.settings = next
+	m.cert.enabled = on
+	if !on {
+		m.cert.state, m.cert.err, m.cert.enableURL, m.cert.notAfter = "off", "", "", time.Time{}
+	}
+	select {
+	case m.cert.kick <- struct{}{}:
+	default:
+	}
+	return nil
 }
 
 // RunCertificate keeps use supplied with the certificate of the NAS's own

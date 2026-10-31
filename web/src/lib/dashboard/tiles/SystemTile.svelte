@@ -2,6 +2,7 @@
 	import { api } from '#lib/api.ts';
 	import { formatBytes, formatBytesOf, formatDuration } from '#lib/format.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
+	import HelpTip from '#lib/components/HelpTip.svelte';
 	import { system } from '#lib/system.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import type { TileOptions } from '../options.ts';
@@ -89,7 +90,7 @@
 	>
 		{#each options.systemFields as field}<div>
 				{#if options.showLabels}<dt data-edit-part="labels">
-						{t(`dashboard.field.${field}`)}
+						{t(`dashboard.field.${field}`)}{#if field === 'slot'}<HelpTip term="slot" />{/if}
 					</dt>{/if}
 				<dd class:hostname={field === 'hostname'} data-edit-part="value">{value(field)}</dd>
 			</div>{/each}
@@ -110,16 +111,20 @@
 		min-width: 0;
 	}
 	dt {
-		font: var(--tile-label-weight, 400) var(--tile-label-size, 12px) var(--tile-label-font);
+		font: var(--tile-label-weight, 400) var(--tile-label-size, var(--text-sm))
+			var(--tile-label-font);
 		color: var(--tile-label-color, var(--muted));
 		text-align: var(--tile-label-align);
-		overflow-wrap: anywhere;
+		/* Long labels ("Betriebssystem") break only at hyphenation points. */
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	dd {
 		margin: 0;
 		min-width: 0;
 		overflow-wrap: anywhere;
-		font: var(--tile-value-weight, 400) var(--tile-value-size, 14px)/1.45 var(--tile-value-font);
+		font: var(--tile-value-weight, 400) var(--tile-value-size, var(--text-md))/1.45
+			var(--tile-value-font);
 		color: var(--tile-value-color, var(--text));
 		text-align: var(--tile-align);
 	}
@@ -127,5 +132,12 @@
 	.unlabelled div {
 		grid-template-columns: minmax(0, 1fr);
 		gap: 2px;
+	}
+	/* Narrow tiles (phones): the label stands above its value. */
+	@container (max-width: 420px) {
+		dl div {
+			grid-template-columns: minmax(0, 1fr);
+			gap: 0;
+		}
 	}
 </style>

@@ -6,7 +6,7 @@ import (
 	"net/netip"
 )
 
-// Changes the assistant proposes. It has no web session whose address
+// Changes an MCP client asks for. It has no web session whose address
 // could be kept in, so the checks are of their own: the switch stays where
 // it is (on and off only in the web UI), and whoever in the home network or
 // the VPN reached the web UI without a rule of their own still does. A
@@ -21,7 +21,7 @@ var (
 	ErrClosesWebUI = errors.New("firewall: the change would close the web UI for the home network or the VPN")
 )
 
-// CheckProposal checks settings the assistant wants to propose against the
+// CheckProposal checks settings an MCP client wants to make against the
 // settings in force now, without changing anything.
 func (m *Manager) CheckProposal(cfg Config) error {
 	if m.Disabled {
@@ -33,9 +33,9 @@ func (m *Manager) CheckProposal(cfg Config) error {
 	return err
 }
 
-// ChangeFromAssistant applies settings the assistant proposed and a person
+// ChangeInProcess applies settings an MCP client asked for and a person
 // (or the direct mode) approved, after the same checks as CheckProposal.
-func (m *Manager) ChangeFromAssistant(ctx context.Context, cfg Config) error {
+func (m *Manager) ChangeInProcess(ctx context.Context, cfg Config) error {
 	if m.Disabled {
 		return ErrDisabled
 	}

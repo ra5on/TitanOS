@@ -4,10 +4,10 @@
 	import { page } from '$app/state';
 	import { parseLogs, type LogEntry as Entry } from '#lib/logs.ts';
 	import { api, ApiError } from '#lib/api.ts';
+	import { apiPath } from '#lib/cluster-node.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
-	import { askAbout, assistant } from '#lib/assistant.svelte.ts';
 
 	const SOURCES = [
 		'',
@@ -141,16 +141,6 @@
 			)
 			.join('\n');
 	}
-	function askLog() {
-		askAbout(t('assistant.askLog'), [
-			{ name: 'log.txt', kind: 'text', text: logText(entries.length - 400, entries.length) },
-		]);
-	}
-	function askLine(index: number) {
-		askAbout(t('assistant.askLogLine', { line: entries[index].message.slice(0, 300) }), [
-			{ name: 'log.txt', kind: 'text', text: logText(index - 30, index + 10) },
-		]);
-	}
 
 	let copied = $state<'' | 'ok' | 'failed'>('');
 	let copiedTimer: ReturnType<typeof setTimeout> | undefined;
@@ -164,15 +154,30 @@
 		}
 		copiedTimer = setTimeout(() => (copied = ''), 4000);
 	}
+	/** Downloads up to 50,000 lines of this start for the chosen filter and
+	 *  range, not only the lines on the page. */
 	function exportLines() {
+		const params = new URLSearchParams({ source, priority: String(priority) });
+		if (RANGES[range]) params.set('since', String(Math.floor(Date.now() / 1000) - RANGES[range]));
 		const link = document.createElement('a');
-		link.href = URL.createObjectURL(
-			new Blob([logText(0, entries.length) + '\n'], { type: 'text/plain;charset=utf-8' }),
-		);
-		link.download = `titanos-log-${new Date().toISOString().slice(0, 19).replaceAll(':', '-')}.txt`;
+		link.href = apiPath('/logs/export?' + params);
 		link.click();
-		setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
 	}
+
+	let noPrevious = $state(false);
+	/** The kept log of the start before this one, from the volume. */
+	async function exportPrevious() {
+		noPrevious = false;
+		try {
+			await api.download('/logs/export?boot=previous', 'titanos-log-previous-start.txt');
+		} catch {
+			noPrevious = true;
+		}
+	}
+
+	// Messages known to be harmless: shown, but quiet, with a note why.
+	const HARMLESS = [/portmapper: failed to get PCP mapping/, /PCP is implemented but not enabled/];
+	const harmless = (entry: Entry) => HARMLESS.some((pattern) => pattern.test(entry.message));
 
 	function level(priority: number): 'error' | 'warn' | '' {
 		return priority <= 3 ? 'error' : priority === 4 ? 'warn' : '';
@@ -225,9 +230,7 @@
 		<button type="button" class="btn" disabled={entries.length === 0} onclick={exportLines}
 			>{t('tools.exportLines')}</button
 		>
-		{#if assistant.status?.available && entries.length > 0}
-			<button type="button" class="btn" onclick={askLog}>{t('assistant.askLogButton')}</button>
-		{/if}
+		<button type="button" class="btn" onclick={exportPrevious}>{t('tools.exportPrevious')}</button>
 		<span class="muted count" role="status"
 			>{#if copied === 'ok'}{t('tools.copied')}{:else if copied === 'failed'}{t(
 					'tools.copyFailed',
@@ -240,6 +243,7 @@
 				>{t('ui.retry')}</button
 			>
 		</p>{/if}
+	{#if noPrevious}<p class="notice-warn" role="status">{t('tools.noPrevious')}</p>{/if}
 	<div class="frame">
 		<!-- A region that scrolls must be reachable with the keyboard. -->
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -252,7 +256,11 @@
 			tabindex="0"
 		>
 			{#each entries as entry, index (index)}
-				<div class="line {level(entry.priority)}">
+				<div
+					class="line {level(entry.priority)}"
+					class:harmless={harmless(entry)}
+					title={harmless(entry) ? t('tools.harmless') : undefined}
+				>
 					<time datetime={entry.time}>{clock.format(new Date(entry.time))}</time>
 					<span class="source">{entry.source}</span>
 					<span class="message"
@@ -263,13 +271,6 @@
 							>
 						{/if}{entry.message}</span
 					>
-					{#if level(entry.priority) && assistant.status?.available}<button
-							type="button"
-							class="ask"
-							title={t('assistant.ask')}
-							aria-label={t('assistant.askLine')}
-							onclick={() => askLine(index)}>?</button
-						>{/if}
 				</div>
 			{:else}
 				<EmptyState inline title={loading ? t('tools.loading') : t('tools.noLines')} />
@@ -290,7 +291,7 @@
 		flex-direction: column;
 		gap: 14px;
 		padding: 18px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	section p {
 		margin: 0;
@@ -307,13 +308,13 @@
 		gap: 8px 10px;
 	}
 	.count {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label {
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);
@@ -346,6 +347,9 @@
 		right: 16px;
 		bottom: 12px;
 	}
+	.line.harmless {
+		opacity: 0.55;
+	}
 	.lines {
 		height: min(60vh, 640px);
 		overflow: auto;
@@ -353,7 +357,7 @@
 		background: var(--track);
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-ctl);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		line-height: 1.55;
 		scrollbar-width: thin;
 		scrollbar-color: var(--muted) transparent;
@@ -362,20 +366,6 @@
 		display: grid;
 		grid-template-columns: 9.5rem 9rem 1fr auto;
 		gap: 0 12px;
-	}
-	.ask {
-		width: 20px;
-		height: 20px;
-		padding: 0;
-		border: 1px solid var(--border);
-		border-radius: 50%;
-		background: transparent;
-		color: var(--muted);
-		font-size: 0.6875rem;
-		cursor: pointer;
-	}
-	.ask:hover {
-		color: var(--text);
 	}
 	.line time,
 	.source {
@@ -398,7 +388,7 @@
 		font-weight: 600;
 	}
 	.note {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	/* Narrow screens: time and source above the message instead of a wide row. */
 	@media (max-width: 760px) {
@@ -410,10 +400,6 @@
 		.message {
 			grid-column: 1 / -1;
 			grid-row: 2;
-		}
-		.ask {
-			grid-column: 3;
-			grid-row: 1;
 		}
 	}
 </style>

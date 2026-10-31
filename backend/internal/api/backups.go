@@ -204,10 +204,18 @@ func (s *Server) handleBackupKey(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"publicKey": key})
 }
 
-// handleBackupFolders lists the folders in a folder of a share, for choosing
-// what a backup saves.
+// handleBackupFolders lists the folders in a folder of a share, or of a
+// volume (?volume=) for folders outside the shares, for choosing what a
+// backup saves.
 func (s *Server) handleBackupFolders(w http.ResponseWriter, r *http.Request) {
-	folders, err := s.opts.Backup.Folders(r.URL.Query().Get("share"), r.URL.Query().Get("dir"))
+	query := r.URL.Query()
+	var folders []string
+	var err error
+	if volume := query.Get("volume"); volume != "" {
+		folders, err = s.opts.Backup.VolumeFolders(volume, query.Get("dir"))
+	} else {
+		folders, err = s.opts.Backup.Folders(query.Get("share"), query.Get("dir"))
+	}
 	if err != nil {
 		writeBackupJobError(w, err)
 		return

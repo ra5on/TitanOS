@@ -70,6 +70,19 @@ func (ts *testServer) mcpOn() {
 	}
 }
 
+// mcpAllow sets tools to "all" on the MCP page, so that their dangerous
+// calls run with confirm=true.
+func (ts *testServer) mcpAllow(tools ...string) {
+	ts.t.Helper()
+	modes := map[string]string{}
+	for _, tool := range tools {
+		modes[tool] = mcpAll
+	}
+	if res, body := ts.request("PUT", "/api/v1/system/mcp", map[string]any{"enabled": true, "tools": modes}); res.StatusCode != 200 {
+		ts.t.Fatalf("allow: %d %s", res.StatusCode, body)
+	}
+}
+
 func rpc(id int, method string, params any) string {
 	data, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": id, "method": method, "params": params})
 	return string(data)
@@ -283,6 +296,11 @@ func TestMCPToolsFollowAccountRights(t *testing.T) {
 	if text, isErr, _ := ts.mcpCall(owner, "files_write_text", map[string]any{"root": "share/Docs", "path": "hello.txt", "content": "neu", "version": version}); !isErr {
 		t.Fatalf("written without confirm: %s", text)
 	}
+	// Dangerous calls are off on the MCP page until allowed there.
+	if text, isErr, _ := ts.mcpCall(owner, "files_write_text", map[string]any{"root": "share/Docs", "path": "hello.txt", "content": "neu", "version": version, "confirm": true}); !isErr || !strings.Contains(text, "MCP") {
+		t.Fatalf("written while not allowed: %s", text)
+	}
+	ts.mcpAllow("files_write_text")
 	if text, isErr, _ := ts.mcpCall(owner, "files_write_text", map[string]any{"root": "share/Docs", "path": "hello.txt", "content": "neu", "version": version, "confirm": true}); isErr {
 		t.Fatalf("write: %s", text)
 	}
@@ -364,6 +382,10 @@ func TestMCPDestructiveNeedsConfirmAndIsLogged(t *testing.T) {
 			t.Fatal("file gone without confirmation")
 		}
 	}
+	if text, isErr, _ := ts.mcpCall(plain, "files_delete", map[string]any{"root": "share/Docs", "paths": []string{"weg.txt"}, "permanent": true, "confirm": true}); !isErr {
+		t.Fatalf("deleted while not allowed on the MCP page: %s", text)
+	}
+	ts.mcpAllow("files_delete")
 	if text, isErr, _ := ts.mcpCall(plain, "files_delete", map[string]any{"root": "share/Docs", "paths": []string{"weg.txt"}, "permanent": true, "confirm": true}); isErr {
 		t.Fatalf("delete: %s", text)
 	}
@@ -395,7 +417,9 @@ func TestMCPDestructiveNeedsConfirmAndIsLogged(t *testing.T) {
 			t.Fatalf("MCP call recorded twice: %+v", e)
 		}
 	}
-	if refused != 4 {
+	// Three without confirm=true, one while not allowed on the MCP page and
+	// the unknown tool.
+	if refused != 5 {
 		t.Fatalf("refused calls recorded: %d", refused)
 	}
 	if !slices.ContainsFunc(rows, func(e activity.Entry) bool {
@@ -420,11 +444,16 @@ func TestMCPToolsComeOnlyFromTheExplicitLists(t *testing.T) {
 			routeTools[route.Tool] = route
 		}
 	}
-	forbidden := []string{"terminal", "shell", "console", "serial", "screen", "update", "password", "2fa", "totp", "passkey", "token", "account", "user", "ssh", "network_", "firewall", "assistant", "secret", "key", "power", "backup_action", "luks", "config"}
+	// Accounts, updates, power, firewall and backups are tools now (decided
+	// 31.10.2026); secrets, shells, consoles, tokens and second factors never.
+	forbidden := []string{"terminal", "shell", "console", "serial", "screen", "password", "2fa", "totp", "passkey", "token", "ssh", "secret", "key", "luks", "config", "mcp"}
+	catalog := map[string]bool{}
+	for _, tool := range ts.server.catalogTools(mustUser(t, ts, "alex")) {
+		catalog[tool.Name] = true
+	}
 	for _, name := range names {
-		_, catalog := mcpCatalog[name]
 		route, isRoute := routeTools[name]
-		if catalog == isRoute {
+		if catalog[name] == isRoute {
 			t.Errorf("%s: not exactly one source", name)
 		}
 		if isRoute && publicScope(route.Method, "/api/v1"+route.Path) != route.Scope {
@@ -447,21 +476,21 @@ func TestMCPToolsComeOnlyFromTheExplicitLists(t *testing.T) {
 			}
 		}
 	}
-	// Every catalog entry exists for one of the roles.
+	// Every German line belongs to a catalog tool.
 	all := map[string]bool{}
-	for _, tool := range ts.server.statusTools(mustUser(t, ts, "alex")) {
+	for _, tool := range ts.server.catalogTools(auth.User{Name: "u", Role: auth.RoleUser}) {
 		all[tool.Name] = true
 	}
-	for _, tool := range ts.server.statusTools(auth.User{Name: "u", Role: auth.RoleUser}) {
-		all[tool.Name] = true
+	for name := range catalog {
+		all[name] = true
 	}
-	for name := range mcpCatalog {
+	for name := range mcpGerman {
 		if !all[name] {
-			t.Errorf("catalog entry %s matches no tool", name)
+			t.Errorf("German line %s matches no tool", name)
 		}
 	}
 	// Results never carry the routes the public API leaves out.
-	for _, p := range []string{"/api/v1/terminal/shell", "/api/v1/account/tokens", "/api/v1/update/install", "/api/v1/network/confirm", "/api/v1/assistant/settings", "/api/v1/users", "/api/v1/config-backup/download", "/api/v1/system/mcp"} {
+	for _, p := range []string{"/api/v1/terminal/shell", "/api/v1/account/tokens", "/api/v1/update/install", "/api/v1/network/confirm", "/api/v1/users", "/api/v1/config-backup/download", "/api/v1/system/mcp"} {
 		for _, method := range []string{"GET", "POST", "PUT", "DELETE"} {
 			if publicScope(method, p) != "" {
 				t.Errorf("%s %s is public", method, p)

@@ -1,4 +1,38 @@
 // Shared isolated API fixtures. No requests reach a NAS.
+import { execFileSync } from "node:child_process";
+import { readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// The release the screenshots show: the newest tag of the repository, or
+// without tags (shallow CI checkout) the newest docs/releases/vX.Y.Z.md.
+// There is no VERSION file; the build takes its version from git too.
+export function releaseVersion() {
+  const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+  const pattern = /^v?(\d+)\.(\d+)\.(\d+)$/;
+  try {
+    const tag = execFileSync(
+      "git",
+      ["describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"],
+      { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+    ).trim();
+    if (pattern.test(tag)) return tag.replace(/^v/, "");
+  } catch {
+    // No git or no tags: fall back to the release notes.
+  }
+  try {
+    const versions = readdirSync(join(root, "docs", "releases"))
+      .map((name) => /^v(\d+)\.(\d+)\.(\d+)\.md$/.exec(name))
+      .filter(Boolean)
+      .map((m) => m.slice(1, 4).map(Number))
+      .sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]);
+    if (versions.length) return versions.at(-1).join(".");
+  } catch {
+    // Nothing readable: keep a neutral value.
+  }
+  return "0.0.0";
+}
+
 export function fixtureFactory(browser, errors) {
   const time = "2026-10-23T16:00:00Z";
   const volume = {
@@ -17,7 +51,7 @@ export function fixtureFactory(browser, errors) {
   };
   const system = {
     hostname: "titan-test",
-    version: "0.16.0",
+    version: releaseVersion(),
     kernel: "test",
     uptimeSeconds: 1000,
     cpu: { model: "Test CPU", threads: 8, usagePercent: 12 },
@@ -208,6 +242,8 @@ export function fixtureFactory(browser, errors) {
         base: "0.24.0",
         kind: "",
         app: { current: "", previous: "", trial: false, canRollback: false },
+        variant: "stable",
+        bootLoader: "systemd-boot",
       },
       updateChecks: 0,
       updatePuts: [],
@@ -256,6 +292,21 @@ export function fixtureFactory(browser, errors) {
       // GET /plugins/netbird; the handlers below change it like titand.
       netbird: netbirdStatus(),
       netbirdCalls: [],
+      // role "setup": a fresh stick. The session asks for the owner account
+      // until POST /setup; setupBackups is what GET /setup/backups finds on
+      // the disks (scripts may fill it), setupCalls records what was sent.
+      setupDone: role !== "setup",
+      setupBackups: [],
+      setupCalls: [],
+      // GET /network for the bridge step of /welcome (setup variant only).
+      network: {
+        config: { bridge: false },
+        configured: false,
+        bridgeReady: false,
+        pending: null,
+        pendingSeconds: 0,
+        interfaces: [{ name: "enp3s0", carrier: true }],
+      },
     };
     await ctx.route("**/api/v1/**", async (route) => {
       const url = new URL(route.request().url()),
@@ -526,10 +577,40 @@ export function fixtureFactory(browser, errors) {
       if (path === "/session")
         return json({
           configAvailable: true,
-          setupRequired: false,
-          user: { name: "alex", role, twoFactor: false },
+          setupRequired: !data.setupDone,
+          user: data.setupDone
+            ? {
+                name: "alex",
+                role: role === "setup" ? "owner" : role,
+                twoFactor: false,
+              }
+            : null,
           hostname: "titan-test",
         });
+      if (path === "/setup" && method === "POST") {
+        const body = route.request().postDataJSON();
+        data.setupCalls.push(["setup", body]);
+        data.setupDone = true;
+        return json({ name: body.name, role: "owner" });
+      }
+      if (path === "/setup/backups")
+        return json({ backups: data.setupBackups });
+      if (path.startsWith("/setup/restore")) {
+        data.setupCalls.push(["restore", path]);
+        return json({});
+      }
+      // Only for the setup variant; other scripts keep their own answers.
+      if (role === "setup" && path === "/network" && method === "GET")
+        return json({ network: data.network });
+      if (role === "setup" && path === "/network/bridge" && method === "POST") {
+        data.network = {
+          ...data.network,
+          config: { bridge: true },
+          configured: true,
+          bridgeReady: true,
+        };
+        return json({ network: data.network });
+      }
       if (path === "/preferences") return json(data.prefs);
       if (path === "/preferences/shares") {
         data.prefs.shares = route.request().postDataJSON();
@@ -741,7 +822,6 @@ export function fixtureFactory(browser, errors) {
       if (path === "/notifications") return json({ messages: [] });
       if (path === "/terminal") return json({ enabled: true });
       if (path === "/session/confirmed") return json({ confirmed: true });
-      if (path === "/assistant") return json({ available: false });
       // Formatting drives: tests set data.usbDisks and data.formatError and
       // read data.formats; data.usbJob is the job the NAS reports.
       if (path === "/usb/disks" && method === "GET")
@@ -979,6 +1059,7 @@ export function fixtureFactory(browser, errors) {
           });
         const settings = { ...body, checkEvery: every === 24 * 60 ? 0 : every };
         if (!settings.checkEvery) delete settings.checkEvery;
+        if (settings.kernel !== "new") delete settings.kernel;
         const next = new Date(
           Date.parse(data.update.lastCheck) +
             (every > 0 ? every : 24 * 60) * 60e3,

@@ -71,10 +71,11 @@ Wer einen Knoten verwaltet, kann alle verwalten. Wer einen Knoten übernimmt, al
 - **Protokoll:** Im Aktivitätsprotokoll des Knotens steht die Herkunft „per Cluster“.
 - **Lokal bleiben:** Anmeldung, das eigene Konto, die Darstellung und die Cluster-Einstellungen bleiben auf dem eigenen NAS.
 - **Anzeige:** Ein Balken unter der Kopfzeile zeigt, welcher Knoten gerade verwaltet wird, und führt zurück. Die Wahl gilt je Browser-Tab.
+- **Knoten startet neu** (seit 0.41.0): Lehnt der Knoten die Verbindung ab (`connection refused`, typisch für die Sekunden eines App-Updates oder Neustarts von titand), antwortet die Weiterleitung mit `503 cluster_restarting` und `Retry-After: 3` statt `502 cluster_unreachable`. Die Oberfläche (`web/src/lib/api.ts`, `node-restart.ts`) wartet dann und fragt bis zu zwei Minuten von selbst erneut; die Anfrage hat den Knoten nie erreicht, deshalb gilt das für alle Methoden. Solange gewartet wird, sagt der Balken „Knoten startet neu, gleich wieder da“. Beim Laden der Oberfläche wartet nur die Dienste-Abfrage (`/services/state`) höchstens fünf Sekunden, damit ein neu startender Knoten den Start nicht aufhält. Dauert es länger, erscheint derselbe Satz als Fehlermeldung. Die Übersicht unter Einstellungen › Cluster nennt den Knoten genauso. Im Protokoll steht dazu eine Info-Zeile („node is restarting“), kein Fehler. Andere Verbindungsfehler (Zeitüberschreitung, keine Route) bleiben „nicht erreichbar“.
 
 **Nur auf dem Knoten selbst** gehen das Ändern und Bestätigen von Netzwerk und Firewall (`cluster_local_only`). Die Bestätigung soll zeigen, dass der Browser das NAS noch erreicht. Über einen anderen Knoten zeigt sie das nicht.
 
-**Weitergeleitet werden nur Websitzungen**, keine API-Tokens, kein MCP und nicht der Assistent. Eine Anfrage, die schon von einem anderen Knoten kommt, wird nicht weitergereicht. Cluster-Routen nehmen sie nicht an.
+**Weitergeleitet werden nur Websitzungen**, keine API-Tokens und kein MCP. Eine Anfrage, die schon von einem anderen Knoten kommt, wird nicht weitergereicht. Cluster-Routen nehmen sie nicht an.
 
 ## Rollen und Rechte
 
@@ -95,7 +96,7 @@ Wer einen Knoten verwaltet, kann alle verwalten. Wer einen Knoten übernimmt, al
 - **Übernahme:** Übernommene Änderungen wirken wie lokale:
   - Bei neuem Passwort, Zwei-Faktor-Wechsel, entferntem Passkey oder Sperre enden die Sitzungen.
   - Samba und sshd ziehen nach.
-  - Ein gelöschtes Konto verliert auch hier Einstellungen, Chats und Freigaberechte.
+  - Ein gelöschtes Konto verliert auch hier Einstellungen und Freigaberechte.
 - **Einmal-Codes:** Benutzte TOTP-Schritte und Wiederherstellungscodes gehen mit. Dass ein Code nur einmal gilt, ist clusterweit „best effort“: In den Sekunden bis zur Verteilung könnte derselbe Code auf zwei Knoten angenommen werden.
 - **Konflikte:** Zwei Knoten, die gleichzeitig dasselbe Konto ändern, entscheidet die Version (letzter Schreiber).
 - **Gleichzeitige Beitritte:** Zwei gleichzeitige Beitritte an zwei verschiedenen Knoten können sich überschreiben. Dann einen der beiden Knoten neu beitreten lassen.
@@ -129,7 +130,9 @@ Der Ordner ist im Stick-Dateimanager ausgeblendet und nicht im Diagnosepaket. Ä
   - Löschen, Weiterleitung ohne Cookie,
   - Übersicht, Backup-Relais,
   - Entfernen mit neuem Geheimnis und Schlüssel, Verlassen,
-  - Wiederholung, falsches Geheimnis, Internet-Absender, Sperre gegen Raten.
+  - Wiederholung, falsches Geheimnis, Internet-Absender, Sperre gegen Raten,
+  - Knoten, der neu startet (geschlossener Port): `503 cluster_restarting` aus Weiterleitung, Zwischenspeicher und Übersicht.
+- **`node --test tests/node-restart.test.mjs`:** Warten und erneutes Fragen der Oberfläche, Balken an und aus, andere 503-Antworten sofort als Fehler.
 - **`go test ./internal/api/ -run TestClusterThroughTheAPI`:**
   - zwei vollständige API-Server, Beitritt über die Routen,
   - Steuern von B über A,
@@ -140,4 +143,5 @@ Der Ordner ist im Stick-Dateimanager ausgeblendet und nicht im Diagnosepaket. Ä
   - zwei echte NAS,
   - echte Wege über Tailscale, NetBird, WireGuard oder das Internet,
   - Konsolen und VM-Bildschirm über die Weiterleitung,
-  - restic über das Relais gegen einen echten Knoten.
+  - restic über das Relais gegen einen echten Knoten,
+  - „Knoten startet neu“ während eines echten App-Updates (nur mit geschlossenem Port im Test nachgestellt).

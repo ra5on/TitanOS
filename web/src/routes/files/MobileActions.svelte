@@ -238,7 +238,7 @@
 		.mobile-file-actions > .btn {
 			min-width: 0;
 			padding: 0 6px;
-			font-size: 0.8125rem;
+			font-size: var(--text-base);
 			gap: 5px;
 			height: 44px;
 		}
@@ -251,7 +251,7 @@
 			height: 44px;
 			padding: 0 5px;
 			gap: 4px;
-			font-size: 0.8125rem;
+			font-size: var(--text-base);
 		}
 		.mobile-file-actions :global(.chevron) {
 			display: none;
@@ -282,7 +282,7 @@
 		}
 		.mobile-selection > span {
 			flex: 1;
-			font-size: 0.8125rem;
+			font-size: var(--text-base);
 		}
 		.mobile-selection .btn {
 			width: 44px;

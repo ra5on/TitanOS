@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
-	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/appbackup"
 	"github.com/ra5on/TitanOS/backend/internal/backup"
@@ -109,7 +108,7 @@ func (s *Server) handleMaintenanceSet(w http.ResponseWriter, r *http.Request) {
 				featureError(w, errors.New("choose a compatible volume"))
 				return
 			}
-		case "smart-long":
+		case "smart-short", "smart-long":
 			status, err := s.opts.Storage.Status(r.Context())
 			if err != nil {
 				featureError(w, err)
@@ -129,7 +128,7 @@ func (s *Server) handleMaintenanceSet(w http.ResponseWriter, r *http.Request) {
 			found := false
 			if s.opts.Backup != nil {
 				for _, v := range s.opts.Backup.CachedViews() {
-					if v.Job.ID == j.Target && v.Job.Destination.Type != "usb-copy" && v.Job.Destination.Type != "smb-copy" {
+					if v.Job.ID == j.Target && !backup.PlainCopy(v.Job.Destination.Type) {
 						found = true
 					}
 				}
@@ -418,7 +417,7 @@ func (s *Server) handleVMCloneRecover(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.VMs.RecoverClone(r.PathValue("volume"), r.PathValue("id"), req.Action, req.Confirm, s.opts.Storage.Mounted()); err != nil {
+	if err := s.opts.VMs.RecoverClone(context.WithoutCancel(r.Context()), r.PathValue("volume"), r.PathValue("id"), req.Action, req.Confirm, s.opts.Storage.Mounted()); err != nil {
 		writeVMError(w, err)
 		return
 	}
@@ -438,40 +437,6 @@ func (s *Server) handleOperations(w http.ResponseWriter, r *http.Request) {
 	problems := []string{}
 	if s.opts.Media != nil {
 		out["media"] = s.opts.Media.List()
-	}
-	if s.chats != nil {
-		list, err := s.chats.List(user.Name, "")
-		if err == nil {
-			out["assistant"] = list
-		} else {
-			problems = append(problems, "assistant")
-		}
-	}
-	if s.automations != nil && s.chats != nil && s.chats.Persistent() {
-		list, err := s.automations.List(user.Name)
-		if err == nil {
-			type automationSummary struct {
-				ID      string     `json:"id"`
-				Name    string     `json:"name"`
-				Enabled bool       `json:"enabled"`
-				Pending bool       `json:"pending"`
-				Detail  string     `json:"detail,omitempty"`
-				Kind    string     `json:"kind"`
-				Next    *time.Time `json:"next,omitempty"`
-			}
-			summaries := []automationSummary{}
-			for _, a := range list {
-				item := automationSummary{ID: a.ID, Name: a.Name, Enabled: a.Enabled, Pending: a.Pending, Detail: a.Detail, Kind: a.Trigger.Kind}
-				if !a.Next.IsZero() {
-					next := a.Next
-					item.Next = &next
-				}
-				summaries = append(summaries, item)
-			}
-			out["automations"] = summaries
-		} else {
-			problems = append(problems, "automations")
-		}
 	}
 	if s.opts.ApplicationBackups != nil {
 		op, active := s.opts.ApplicationBackups.Status()

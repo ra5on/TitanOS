@@ -3,7 +3,6 @@
 	import type { Snippet } from 'svelte';
 	import { page } from '$app/state';
 	import ConnectionBanner from './ConnectionBanner.svelte';
-	import TasksPanel from './TasksPanel.svelte';
 	import { session } from '#lib/session.svelte.ts';
 	import { shell } from '#lib/shell.svelte.ts';
 	import { watchStorage } from '#lib/storage.svelte.ts';
@@ -19,8 +18,6 @@
 	import ClusterBanner from './ClusterBanner.svelte';
 	import { loadClusterNodes } from '#lib/cluster.svelte.ts';
 	import TerminalPanel from './TerminalPanel.svelte';
-	import Icon from './Icon.svelte';
-	import { assistant, loadAssistant, toggleAssistant } from '#lib/assistant.svelte.ts';
 	import ShortcutsDialog from './ShortcutsDialog.svelte';
 	import { appearance } from '#lib/theme/appearance.svelte.ts';
 	import { effectOn } from '#lib/theme/themes.ts';
@@ -34,7 +31,27 @@
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 
 	let shortcutsOpen = $state(false);
-	const side = $derived(appearance.current.nav.layout === 'side');
+	// The sidebar only on the desktop; phones keep the head line with the menu.
+	let desktop = $state(matchMedia('(min-width: 761px)').matches);
+	$effect(() => {
+		const query = matchMedia('(min-width: 761px)');
+		const change = () => (desktop = query.matches);
+		query.addEventListener('change', change);
+		return () => query.removeEventListener('change', change);
+	});
+	const side = $derived(appearance.current.nav.layout === 'side' && desktop);
+	// Without head line and status bar nothing sticks below or above them.
+	$effect(() => {
+		const root = document.documentElement.style;
+		root.setProperty('--header-height', side ? '0px' : '60px');
+		root.setProperty('--status-height', side ? '0px' : '34px');
+		return () => {
+			root.removeProperty('--header-height');
+			root.removeProperty('--status-height');
+		};
+	});
+	// The VM pages have their own entry for running tasks.
+	const ownTasks = $derived(['/vms', '/vms/screen'].includes(page.url.pathname));
 
 	// The nodes of the cluster, for the switcher; once per page load.
 	$effect(() => {
@@ -84,18 +101,6 @@
 			event.preventDefault();
 			toggleTerminal();
 		}
-		// Ctrl+J opens and closes the chat with the assistant.
-		if (
-			assistant.status?.available &&
-			event.ctrlKey &&
-			!event.altKey &&
-			!event.metaKey &&
-			!event.shiftKey &&
-			event.code === 'KeyJ'
-		) {
-			event.preventDefault();
-			toggleAssistant();
-		}
 	}
 
 	const pendingSeconds = $derived(system.info?.networkPendingSeconds ?? 0);
@@ -112,13 +117,6 @@
 
 	$effect(() => watchSystem());
 	$effect(() => watchStorage());
-	// Whether this account may chat decides the buttons for the assistant.
-	$effect(() => {
-		if (session.data?.user?.name) loadAssistant();
-	});
-	const fab = $derived(
-		!!assistant.status?.available && assistant.prefs.floating && page.url.pathname !== '/assistant',
-	);
 </script>
 
 <svelte:window onkeydown={hotkey} />
@@ -140,46 +138,25 @@
 	</div>
 {/if}
 <div class="frame" class:side>
-	{#if side}<SideNav />{/if}
+	{#if side}<SideNav tasks={!ownTasks} note={shell.statusNote} />{/if}
 	<div
 		class="shell"
 		style:padding-bottom={admin && terminal.open && !terminal.full
 			? `${terminal.height}px`
 			: undefined}
 	>
-		<Header {side} />
+		{#if !side}<Header tasks={!ownTasks} />{/if}
 		<main class:readable={!dockerPage} class:dashboard={page.url.pathname === '/'}>
 			<ClusterBanner />
-			{#if !dockerPage}<ConnectionBanner
-				/>{#if !['/', '/vms', '/vms/screen'].includes(page.url.pathname)}<TasksPanel
-						hideEmptyMobile={page.url.pathname === '/files'}
-					/>{/if}{/if}
+			{#if !dockerPage}<ConnectionBanner />{/if}
 			{@render children()}
 		</main>
-		<StatusBar note={shell.statusNote} />
+		{#if !side}<StatusBar note={shell.statusNote} />{/if}
 	</div>
 </div>
 {#if admin}<TerminalPanel />{/if}
 {#if palette.open}<CommandPalette onclose={() => (palette.open = false)} />{/if}
-{#if shortcutsOpen}<ShortcutsDialog
-		{admin}
-		assistant={!!assistant.status?.available}
-		onclose={() => (shortcutsOpen = false)}
-	/>{/if}
-{#if fab}
-	<button
-		type="button"
-		class="fab"
-		style:bottom={admin && terminal.open && !terminal.full
-			? `${terminal.height + 16}px`
-			: undefined}
-		aria-label={t('assistant.title')}
-		title={t('assistant.shortcut')}
-		onclick={toggleAssistant}
-	>
-		<Icon name="chat" size={22} />
-	</button>
-{/if}
+{#if shortcutsOpen}<ShortcutsDialog {admin} onclose={() => (shortcutsOpen = false)} />{/if}
 
 <style>
 	/* As an app on the home screen the phone's home indicator lies over
@@ -187,9 +164,6 @@
 	@media (display-mode: standalone) {
 		.shell {
 			padding-bottom: env(safe-area-inset-bottom);
-		}
-		.fab {
-			bottom: calc(44px + env(safe-area-inset-bottom));
 		}
 	}
 	.trial {
@@ -235,38 +209,9 @@
 	main.dashboard {
 		padding-top: 12px;
 	}
-	.fab {
-		position: fixed;
-		right: 20px;
-		bottom: 44px;
-		z-index: 29;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 52px;
-		height: 52px;
-		padding: 0;
-		border: 0;
-		border-radius: 50%;
-		background: var(--accent);
-		color: var(--on-accent);
-		box-shadow: var(--shadow-menu);
-		cursor: pointer;
-	}
-	.fab:hover {
-		filter: brightness(1.08);
-	}
-	.fab:focus-visible {
-		outline: 2px solid var(--text);
-		outline-offset: 2px;
-	}
 	@media (max-width: 760px) {
 		main.dashboard {
 			padding-top: 12px;
-		}
-		.fab {
-			right: 14px;
-			bottom: 40px;
 		}
 		main {
 			padding: 16px var(--page-pad) 24px;

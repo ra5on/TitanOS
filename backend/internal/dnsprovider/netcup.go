@@ -68,7 +68,10 @@ func (n *netcup) session(ctx context.Context, fn func(session string) error) err
 	if _, err := n.call(ctx, "login", map[string]any{"apipassword": n.password}, &login); err != nil {
 		return err
 	}
-	defer n.call(context.WithoutCancel(ctx), "logout", map[string]any{"apisessionid": login.Session}, nil)
+	// Logging out is best effort: the session expires on its own.
+	defer func() {
+		_, _ = n.call(context.WithoutCancel(ctx), "logout", map[string]any{"apisessionid": login.Session}, nil)
+	}()
 	return fn(login.Session)
 }
 

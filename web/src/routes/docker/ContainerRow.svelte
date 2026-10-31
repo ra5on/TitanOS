@@ -96,7 +96,7 @@
 		column-gap: 10px;
 		row-gap: 1px;
 		height: 3.25rem;
-		padding: 0 12px 0 14px;
+		padding: 0 var(--space-3) 0 14px;
 		box-sizing: border-box;
 		border: 1px solid var(--panel-border);
 		border-radius: 14px;
@@ -106,7 +106,7 @@
 		box-shadow:
 			inset 4px 0 0 var(--accent),
 			var(--panel-shadow);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.row.stopped {
 		box-shadow:
@@ -126,7 +126,7 @@
 		border-radius: var(--radius-ctl);
 		background: none;
 		color: var(--text);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		font-weight: 600;
 		cursor: pointer;
 	}
@@ -157,13 +157,13 @@
 	}
 	.chip {
 		flex: none;
-		font-size: 0.6875rem;
+		font-size: var(--text-xs);
 	}
 	.values {
 		overflow: hidden;
 		white-space: nowrap;
 		color: var(--muted);
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 </style>

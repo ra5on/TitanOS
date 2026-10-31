@@ -2,7 +2,7 @@
 	// Settings › Appearance › App symbol (for the whole NAS): the symbol of
 	// TitanOS on the home screen and, outside iOS, in notifications.
 	import { onMount } from 'svelte';
-	import { api, ApiError } from '#lib/api.ts';
+	import { api, apiFetch, ApiError } from '#lib/api.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 
 	type Icon = { kind: 'default' | 'color' | 'image'; color?: string; version: number };
@@ -33,11 +33,10 @@
 		error = '';
 		saved = false;
 		try {
-			const res = await fetch('/api/v1/app-icon', {
+			const res = await apiFetch('/app-icon', {
 				method: 'PUT',
 				body,
 				headers: { 'Content-Type': type },
-				credentials: 'same-origin',
 			});
 			const answer = await res.json().catch(() => ({}));
 			if (!res.ok)

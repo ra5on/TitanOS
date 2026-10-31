@@ -93,7 +93,7 @@
 					aria-pressed={entry.days.includes(day)}
 					disabled={busy || !entry.enabled}
 					onclick={() => toggleDay(entry, day)}
-					>{t(`automation.day${day}` as MessageKey).slice(0, 2)}</button
+					>{t(`common.day${day}` as MessageKey).slice(0, 2)}</button
 				>
 			{/each}
 		</div>
@@ -169,7 +169,7 @@
 		margin: 0;
 	}
 	.small {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.row {
 		display: flex;
@@ -181,7 +181,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);
@@ -193,7 +193,7 @@
 		flex-direction: row;
 		align-items: center;
 		gap: 10px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		font-weight: 600;
 	}
 	.check > span {
@@ -231,7 +231,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 8px 16px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.actions {
 		display: flex;

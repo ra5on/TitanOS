@@ -439,10 +439,10 @@
 		grid-template-columns: 2.5rem minmax(0, 1fr) auto;
 		align-items: center;
 		gap: 10px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.value {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.bar {
 		height: 6px;
@@ -460,7 +460,7 @@
 		grid-template-columns: auto minmax(0, 1fr);
 		gap: 6px 14px;
 		margin: 0;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	dt {
 		color: var(--muted);
@@ -475,7 +475,7 @@
 		overflow-wrap: anywhere;
 	}
 	.mono {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.rows {
 		display: flex;
@@ -484,7 +484,7 @@
 		margin: 0;
 		padding: 0;
 		list-style: none;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.rows li {
 		display: flex;
@@ -505,12 +505,12 @@
 		gap: 6px;
 	}
 	.small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.btn.small {
 		height: 2rem;
 		padding: 0 10px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	p {
 		margin: 0;

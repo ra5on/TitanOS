@@ -3,12 +3,14 @@
 	import type { Volume } from '#lib/api.ts';
 	import Snapshots from './Snapshots.svelte';
 	import Icon from '#lib/components/Icon.svelte';
+	import HelpTip from '#lib/components/HelpTip.svelte';
 	import { formatDiskBytes, formatDuration, formatPercent } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { stateTone } from './labels.ts';
 	import { api } from '#lib/api.ts';
 	import { canShrink, takesDisk } from './btrfs.ts';
 	import CachePanel from './CachePanel.svelte';
+	import SyncSpeedPanel from './SyncSpeedPanel.svelte';
 	import EncryptionPanel from './EncryptionPanel.svelte';
 	import { isLocked, lockedBlocks } from './crypt.ts';
 	import { refreshStorage } from '#lib/storage.svelte.ts';
@@ -100,7 +102,7 @@
 >
 	<div class="head">
 		<span class="mono name">{volume.name}</span>
-		<span class="chip">{t(`level.${volume.level}`)}</span>
+		<span class="chip">{t(`level.${volume.level}`)}</span><HelpTip term="raid" />
 		<span class="chip">{t(`fs.${volume.filesystem}`)}</span>
 		<span class="chip {tone}">{t(`state.${volume.state}`)}</span>
 		{#if volume.encryption}<span class="chip" class:warn={locked}
@@ -194,6 +196,7 @@
 			>
 		</div>
 	{/if}
+	{#if canAdminister && volume.syncSpeed}<SyncSpeedPanel {volume} {busy} />{/if}
 	{#if volume.mismatches > 0}
 		<p class="notice-warn">
 			{t('storage.mismatches')}: <span class="mono">{volume.mismatches}</span>
@@ -235,7 +238,14 @@
 					onclick={onprofile}
 					disabled={busy}>{t('btrfs.profileChange')}</button
 				>{/if}
-			<button type="button" class="btn delete" onclick={ondelete} disabled={busy}
+		</div>
+		<!-- Destroying actions stand apart from maintenance, in red. -->
+		<div class="danger-zone">
+			<div>
+				<strong>{t('ui.dangerZone')}</strong>
+				<p class="muted">{t('storage.deleteHint')}</p>
+			</div>
+			<button type="button" class="btn btn-danger" onclick={ondelete} disabled={busy}
 				>{t('storage.delete')}</button
 			>
 		</div>
@@ -286,12 +296,12 @@
 		gap: 8px 10px;
 	}
 	.name {
-		font-size: 1.25rem;
+		font-size: var(--text-xl);
 		font-weight: 500;
 	}
 	.mount {
 		margin-left: auto;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		color: var(--muted);
 	}
 	.sync {
@@ -313,13 +323,13 @@
 		gap: 6px 16px;
 	}
 	.sync-top {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.sync-bottom {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.percent {
-		font-size: 1.375rem;
+		font-size: var(--text-xl);
 		font-weight: 500;
 	}
 	.track {
@@ -340,7 +350,7 @@
 		gap: 8px;
 	}
 	.label {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.members {
@@ -356,7 +366,7 @@
 		background: var(--chip);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.member.building {
 		border-color: var(--warn-border);
@@ -383,7 +393,7 @@
 		display: flex;
 		justify-content: space-between;
 		gap: 12px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.actions {
 		display: flex;
@@ -391,7 +401,24 @@
 		gap: 8px;
 		padding-top: 4px;
 	}
-	.delete {
-		margin-left: auto;
+	.danger-zone {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px 16px;
+		margin-top: 6px;
+		padding-top: 12px;
+		border-top: 1px solid var(--border);
+	}
+	.danger-zone strong {
+		color: var(--status-error);
+		font-size: var(--text-base);
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+	}
+	.danger-zone p {
+		margin: 4px 0 0;
+		font-size: var(--text-base);
 	}
 </style>

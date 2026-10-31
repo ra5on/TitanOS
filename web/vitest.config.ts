@@ -3,8 +3,9 @@ import { defineConfig } from 'vitest/config';
 
 const here = (path: string) => new URL(path, import.meta.url).pathname;
 
-// Component tests (tests/components) run in jsdom with the plain Svelte
-// plugin; the node:test suite (tests/*.test.mjs) stays as it is.
+// Component tests (tests/components) and unit tests of lib modules that need
+// runes or the DOM (tests/lib, tests/routes for logic taken out of pages) run in jsdom with the plain Svelte plugin; the
+// node:test suite (tests/*.test.mjs) stays as it is.
 export default defineConfig({
 	plugins: [svelte()],
 	resolve: {
@@ -18,7 +19,11 @@ export default defineConfig({
 	},
 	test: {
 		environment: 'jsdom',
-		include: ['tests/components/**/*.test.ts'],
+		include: [
+			'tests/components/**/*.test.ts',
+			'tests/lib/**/*.test.ts',
+			'tests/routes/**/*.test.ts',
+		],
 		setupFiles: ['tests/components/setup.ts'],
 	},
 });

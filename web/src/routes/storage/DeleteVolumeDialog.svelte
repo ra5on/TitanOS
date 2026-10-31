@@ -1,6 +1,5 @@
 <script lang="ts">
-	import { apiPath } from '#lib/cluster-node.ts';
-	import { ApiError, type Volume } from '#lib/api.ts';
+	import { api, ApiError, type Volume } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 
@@ -19,16 +18,7 @@
 		try {
 			// DELETE with a body: the API still expects the volume name as the
 			// confirmation; the dialog sends it once the button is clicked.
-			const res = await fetch(apiPath(`/storage/volumes/${volume.name}`), {
-				method: 'DELETE',
-				credentials: 'same-origin',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ confirm: volume.name }),
-			});
-			if (!res.ok) {
-				const data = await res.json().catch(() => null);
-				throw new ApiError(res.status, data?.error?.code ?? 'internal', data?.error?.message ?? '');
-			}
+			await api.delete(`/storage/volumes/${volume.name}`, { confirm: volume.name });
 			ondone();
 		} catch (err) {
 			const code = err instanceof ApiError ? err.code : 'unreachable';
@@ -85,7 +75,7 @@
 		gap: 16px;
 	}
 	.affected {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.affected p,
 	.affected ul {
@@ -98,7 +88,7 @@
 	pre {
 		margin: 8px 0 0;
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		white-space: pre-wrap;
 		word-break: break-word;
 	}

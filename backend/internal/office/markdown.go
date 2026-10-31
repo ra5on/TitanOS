@@ -1,4 +1,4 @@
-// Package office writes and reads the documents the assistant works with:
+// Package office writes and reads the documents MCP clients work with:
 // Word (.docx), Excel (.xlsx) and PDF, made from Markdown or tables, and
 // the text inside existing Word and Excel files. Only the standard
 // library; the formats are kept to what Word, Excel and LibreOffice open.
@@ -71,7 +71,7 @@ func cells(line string) [][]Span {
 	return row
 }
 
-// Parse reads the Markdown the assistant writes into blocks.
+// Parse reads the Markdown a client writes into blocks.
 func Parse(markdown string) []Block {
 	lines := strings.Split(strings.ReplaceAll(markdown, "\r\n", "\n"), "\n")
 	var blocks []Block

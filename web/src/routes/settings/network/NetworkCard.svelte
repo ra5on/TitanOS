@@ -158,7 +158,7 @@
 		overflow-wrap: anywhere;
 	}
 	.title .muted {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.chips {
 		display: flex;
@@ -170,7 +170,7 @@
 		grid-template-columns: auto 1fr;
 		gap: 4px 12px;
 		margin: 0;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	dl > div {
 		display: contents;

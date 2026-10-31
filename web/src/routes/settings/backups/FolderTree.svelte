@@ -4,6 +4,8 @@
 
 	type Props = {
 		share: string;
+		/** Set: folders of this volume outside the shares, instead of a share. */
+		volume?: string;
 		/** all: everything is saved, unchecking leaves a folder out. only: nothing is, checking adds a folder. */
 		mode: 'all' | 'only';
 		/** Folders saved in mode only, relative to the share. */
@@ -12,7 +14,7 @@
 		skip: string[];
 		onchange: (folders: string[], skip: string[]) => void;
 	};
-	let { share, mode, folders, skip, onchange }: Props = $props();
+	let { share, volume, mode, folders, skip, onchange }: Props = $props();
 
 	let children = $state<Record<string, string[]>>({});
 	let open = $state<Record<string, boolean>>({});
@@ -52,7 +54,9 @@
 		if (!open[dir] || children[dir]) return;
 		try {
 			const res = await api.get<{ folders: string[] }>(
-				`/backups/folders?share=${encodeURIComponent(share)}&dir=${encodeURIComponent(dir)}`,
+				volume
+					? `/backups/folders?volume=${encodeURIComponent(volume)}&dir=${encodeURIComponent(dir)}`
+					: `/backups/folders?share=${encodeURIComponent(share)}&dir=${encodeURIComponent(dir)}`,
 			);
 			children[dir] = res.folders;
 			delete failed[dir];

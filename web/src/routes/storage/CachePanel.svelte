@@ -2,6 +2,7 @@
 	// SSD cache of an mdadm volume: off unless switched on; read cache or
 	// read and write cache. Takes effect with the next start.
 	import { api, type CacheMode, type Disk, type Volume } from '#lib/api.ts';
+	import HelpTip from '#lib/components/HelpTip.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { formatDiskBytes } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
@@ -63,7 +64,7 @@
 </script>
 
 <div class="cache">
-	<span class="label">{t('cache.title')}</span>
+	<span class="label">{t('cache.title')}<HelpTip term="cache" /></span>
 	{#if !cache}
 		<span class="muted">{t('cache.off')}</span>
 		<button type="button" class="btn small" onclick={() => open('enable')}
@@ -179,7 +180,7 @@
 		align-items: center;
 		gap: 6px 12px;
 		margin-top: 12px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.label {
 		font-weight: 600;
@@ -199,7 +200,7 @@
 	}
 	p {
 		margin: 0;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.modes {
 		display: grid;

@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/ra5on/TitanOS/backend/internal/retention"
 	"io"
 	"log/slog"
 	"net/http"
@@ -80,6 +81,9 @@ type Job struct {
 	Keep int `json:"keep"`
 	// LimitMiB caps the transfer in MiB/s; 0 is no limit.
 	LimitMiB int `json:"limitMiB,omitempty"`
+	// Versions picks which snapshots the other NAS keeps by day, week and
+	// month (0.41.0); a receiver before 0.41.0 keeps the newest Keep.
+	Versions *retention.Keep `json:"versions,omitempty"`
 }
 
 // State is what is known about the runs of a job; it lives in RAM.
@@ -185,6 +189,8 @@ type Request struct {
 	EveryHours int    `json:"everyHours"`
 	Keep       int    `json:"keep"`
 	LimitMiB   int    `json:"limitMiB"`
+	// Versions, optional: see Job.
+	Versions *retention.Keep `json:"versions,omitempty"`
 }
 
 // Save adds a job (id empty) or changes one.
@@ -200,10 +206,13 @@ func (m *Manager) Save(id string, req Request) (string, error) {
 	if req.EveryHours < 1 || req.EveryHours > 168 || req.Keep < 2 || req.Keep > 365 || req.LimitMiB < 0 || req.LimitMiB > 10000 {
 		return "", fmt.Errorf("%w: schedule, keep or limit", ErrInvalid)
 	}
+	if v := req.Versions; v != nil && (v.Mode != "" || v.WhenFull != "" || retention.Check(*v) != nil) {
+		return "", fmt.Errorf("%w: versions", ErrInvalid)
+	}
 	if m.Filesystem != nil && m.Filesystem(req.Volume) != "btrfs" {
 		return "", ErrNotBtrfs
 	}
-	job := Job{Name: req.Name, Enabled: req.Enabled, Volume: req.Volume, EveryHours: req.EveryHours, Keep: req.Keep, LimitMiB: req.LimitMiB}
+	job := Job{Name: req.Name, Enabled: req.Enabled, Volume: req.Volume, EveryHours: req.EveryHours, Keep: req.Keep, LimitMiB: req.LimitMiB, Versions: req.Versions}
 	jobs := slices.Clone(m.settings.Jobs)
 	index := slices.IndexFunc(jobs, func(j Job) bool { return j.ID == id })
 	switch {
@@ -329,7 +338,7 @@ func (m *Manager) Run(ctx context.Context) {
 		m.mu.Lock()
 		if !m.loaded {
 			m.mu.Unlock()
-			m.Load()
+			_ = m.Load() // Load keeps its own state; a failure shows up as not loaded
 			m.mu.Lock()
 		}
 		var due []string
@@ -344,7 +353,7 @@ func (m *Manager) Run(ctx context.Context) {
 		}
 		m.mu.Unlock()
 		for _, id := range due {
-			m.Start(ctx, id)
+			_ = m.Start(ctx, id) // a job that already runs or was removed meanwhile is skipped
 		}
 		select {
 		case <-ctx.Done():
@@ -448,7 +457,7 @@ func (m *Manager) send(ctx context.Context, job Job, progress func(int64)) (stri
 	args = append(args, filepath.Join(dir, name))
 	if err := m.stream(ctx, job, name, args, progress); err != nil {
 		// The new snapshot is useless without its copy on the other side.
-		btrfs(context.WithoutCancel(ctx), m.runner, "subvolume", "delete", filepath.Join(dir, name))
+		_, _ = btrfs(context.WithoutCancel(ctx), m.runner, "subvolume", "delete", filepath.Join(dir, name)) // cleanup, best effort: nothing more can be done if it fails
 		return "", err
 	}
 	// Keep the snapshot just sent (the next parent) and the one before.
@@ -554,7 +563,7 @@ func (m *Manager) stream(ctx context.Context, job Job, name string, args []strin
 				watchdog.Reset(m.stall)
 			}
 		}}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, fmt.Sprintf("%s/_replica/%s?keep=%d", job.URL, name, job.Keep), body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, replicaURL(job, name), body)
 	if err != nil {
 		return finish(err)
 	}
@@ -711,7 +720,7 @@ func (r *Receiver) receive(w http.ResponseWriter, req *http.Request, source, dir
 	incoming := filepath.Join(dir, ".incoming")
 	if leftovers, _ := os.ReadDir(incoming); len(leftovers) > 0 {
 		for _, entry := range leftovers {
-			btrfs(req.Context(), r.runner, "subvolume", "delete", filepath.Join(incoming, entry.Name()))
+			_, _ = btrfs(req.Context(), r.runner, "subvolume", "delete", filepath.Join(incoming, entry.Name())) // cleanup, best effort: nothing more can be done if it fails
 		}
 	}
 	if err := os.MkdirAll(incoming, 0o700); err != nil {
@@ -722,7 +731,7 @@ func (r *Receiver) receive(w http.ResponseWriter, req *http.Request, source, dir
 	cmd.Stdin = req.Body
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		btrfs(context.WithoutCancel(req.Context()), r.runner, "subvolume", "delete", filepath.Join(incoming, name))
+		_, _ = btrfs(context.WithoutCancel(req.Context()), r.runner, "subvolume", "delete", filepath.Join(incoming, name)) // cleanup, best effort: nothing more can be done if it fails
 		slog.Warn("replica not received", "source", source, "snapshot", name, "err", err, "output", strings.TrimSpace(string(output)))
 		http.Error(w, "receive failed", http.StatusInternalServerError)
 		return
@@ -734,13 +743,53 @@ func (r *Receiver) receive(w http.ResponseWriter, req *http.Request, source, dir
 	slog.Info("replica received", "source", source, "snapshot", name)
 	// Old snapshots beyond keep go; the newest stays the parent of the next.
 	keep := 7
-	fmt.Sscan(req.URL.Query().Get("keep"), &keep)
+	_, _ = fmt.Sscan(req.URL.Query().Get("keep"), &keep) // a value that cannot be read leaves the zero value, which the code handles
 	keep = min(max(keep, 2), 365)
 	all := received(dir)
-	for _, old := range all[:max(0, len(all)-keep)] {
-		btrfs(context.WithoutCancel(req.Context()), r.runner, "subvolume", "delete", filepath.Join(dir, old))
+	for _, old := range keepReceived(all, keep, req.URL.Query().Get("versions"), time.Now()) {
+		_, _ = btrfs(context.WithoutCancel(req.Context()), r.runner, "subvolume", "delete", filepath.Join(dir, old)) // cleanup, best effort: nothing more can be done if it fails
 	}
 	w.WriteHeader(http.StatusCreated)
+}
+
+// replicaURL is where a snapshot goes, with what the other NAS keeps.
+func replicaURL(job Job, name string) string {
+	address := fmt.Sprintf("%s/_replica/%s?keep=%d", job.URL, name, job.Keep)
+	if job.Versions != nil {
+		if data, err := json.Marshal(job.Versions); err == nil {
+			address += "&versions=" + url.QueryEscape(string(data))
+		}
+	}
+	return address
+}
+
+// keepReceived returns the received snapshots that go: by the rules of
+// the sender when it sent them (0.41.0), else beyond the newest keep.
+func keepReceived(all []string, keep int, rules string, now time.Time) []string {
+	var versions *retention.Keep
+	if rules != "" && len(rules) <= 2048 {
+		var parsed retention.Keep
+		if json.Unmarshal([]byte(rules), &parsed) == nil && parsed.Mode == "" && parsed.WhenFull == "" && retention.Check(parsed) == nil {
+			versions = &parsed
+		}
+	}
+	if versions == nil {
+		return all[:max(0, len(all)-keep)]
+	}
+	var list []retention.Version
+	for _, name := range all {
+		if at, err := time.Parse("20060102T150405Z", name); err == nil {
+			list = append(list, retention.Version{ID: name, Time: at.In(time.Local)})
+		}
+	}
+	stays := retention.Select(*versions, list, now)
+	var gone []string
+	for _, v := range list {
+		if !stays[v.ID] {
+			gone = append(gone, v.ID)
+		}
+	}
+	return gone
 }
 
 // Replica is a received snapshot as the receiving NAS shows it.

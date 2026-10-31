@@ -205,7 +205,7 @@
 	}
 	article p {
 		overflow-wrap: anywhere;
-		font-size: 0.85rem;
+		font-size: var(--text-base);
 	}
 	article div {
 		min-width: 0;
@@ -215,7 +215,7 @@
 		flex-direction: column;
 		gap: 6px;
 		margin-top: 14px;
-		font-size: 0.85rem;
+		font-size: var(--text-base);
 	}
 	li {
 		overflow-wrap: anywhere;

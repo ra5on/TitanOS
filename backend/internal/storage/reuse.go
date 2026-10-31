@@ -163,7 +163,7 @@ func (m *Manager) releaseOldArrays(ctx context.Context, devices []blockDevice, s
 	if err != nil {
 		return nil, err
 	}
-	status := m.status(current, m.arrays(ctx))
+	status := m.status(ctx, current, m.arrays(ctx))
 	for _, name := range selected {
 		before, _ := findDevice(devices, name)
 		after, found := findDevice(current, name)

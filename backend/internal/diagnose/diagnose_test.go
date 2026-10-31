@@ -225,3 +225,21 @@ func TestBundleHoldsSMART(t *testing.T) {
 		t.Errorf("smart.json: %q", smart)
 	}
 }
+
+func TestExportAsksForTextOfOneBoot(t *testing.T) {
+	m, system, _ := newManager(t, map[string]string{"journalctl": "2026-10-31T10:00:00+01:00 nas titand[1]: started\n"})
+	text, err := m.Export(context.Background(), ExportQuery{Source: "", Priority: 6, Since: time.Unix(1700000000, 0)})
+	if err != nil || !strings.Contains(text, "started") {
+		t.Fatalf("%q %v", text, err)
+	}
+	if call := system.calls[0]; !strings.Contains(call, "-o short-iso") || !strings.Contains(call, "-b 0") || !strings.Contains(call, "--since=@1700000000") || !strings.Contains(call, "-n 50000") {
+		t.Fatalf("call: %s", call)
+	}
+	m.Export(context.Background(), ExportQuery{Source: "", Priority: 3, Previous: true})
+	if call := system.calls[1]; !strings.Contains(call, "-b -1") {
+		t.Fatalf("previous boot: %s", call)
+	}
+	if _, err := m.Export(context.Background(), ExportQuery{Source: "nope", Priority: 6}); !errors.Is(err, ErrInvalid) {
+		t.Fatal("unknown source accepted")
+	}
+}

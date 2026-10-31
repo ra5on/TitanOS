@@ -155,6 +155,12 @@ type Manager struct {
 	ha HASender
 	// Push sends to subscribed browsers (package webpush); nil without.
 	Push func(message Message, title string)
+	// Urgent is told about every warning and error, so that the kept
+	// journal is written soon (package logkeep); nil without.
+	Urgent func()
+	// Audience are the accounts that may get notifications of the NAS on
+	// their own channels (owners and administrators); nil sends none.
+	Audience func() []string
 	// now is the clock; tests replace it.
 	now    func() time.Time
 	people personalStore
@@ -164,6 +170,11 @@ type Manager struct {
 	settings Settings
 	messages []Message
 	nextID   int
+	// bellLoaded says the kept messages were read (bell_keep.go).
+	bellLoaded bool
+	bellWrite  sync.Mutex
+	// bellPending counts bell writes still running in the background.
+	bellPending sync.WaitGroup
 	// pending are the messages waiting for the daily summary (RAM only).
 	pending    []Message
 	digestSent time.Time
@@ -310,8 +321,13 @@ func (m *Manager) SetSettings(settings Settings, clear ...string) error {
 
 // Messages returns the messages kept for the web UI, the newest first.
 func (m *Manager) Messages() []Message {
+	// The folder first: m.mu is never held while asking for it.
+	dir := m.bellDir()
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if dir != "" {
+		m.loadBellLocked(dir)
+	}
 	list := make([]Message, len(m.messages))
 	for i, message := range m.messages {
 		list[len(list)-1-i] = message
@@ -335,6 +351,7 @@ func (m *Manager) Dismiss(ids []int) {
 	m.messages = slices.DeleteFunc(m.messages, func(message Message) bool { return slices.Contains(ids, message.ID) })
 	if len(m.messages) != before {
 		m.nextID++ // Also refresh the list in other open browsers.
+		m.goKeepBell()
 	}
 }
 
@@ -361,11 +378,16 @@ func (m *Manager) Notify(severity, kind, subject string) {
 	}
 	m.mu.Unlock()
 	slog.Info("notification", "severity", severity, "kind", kind, "subject", subject)
+	go m.tellPeople(message)
+	m.goKeepBell()
+	if m.Urgent != nil && rank[severity] >= rank[Warning] {
+		m.Urgent()
+	}
 	if rank[severity] >= rank[settings.MinSeverity] {
 		if m.collect(settings, message) {
 			return
 		}
-		m.deliver(settings, message, nil)
+		_ = m.deliver(settings, message, nil) // without a single channel deliver sends in the background and returns nil
 		if m.Push != nil {
 			hostname, _ := os.Hostname()
 			m.Push(message, "["+hostname+"] "+message.Title)
@@ -388,7 +410,7 @@ func (m *Manager) SendReport(title, text string) error {
 	if !any && m.Push == nil {
 		return ErrNoChannel
 	}
-	m.deliver(settings, message, nil)
+	_ = m.deliver(settings, message, nil) // without a single channel deliver sends in the background and returns nil
 	if m.Push != nil {
 		hostname, _ := os.Hostname()
 		m.Push(message, "["+hostname+"] "+title)
@@ -570,7 +592,7 @@ func sendMail(cfg Email, message []byte) error {
 		conn.Close()
 		return err
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }() // the mail was handed over already or failed before
 	if cfg.Security == "starttls" {
 		if err := client.StartTLS(&tls.Config{ServerName: cfg.Host}); err != nil {
 			return err

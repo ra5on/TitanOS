@@ -382,3 +382,35 @@ func (m *Manager) Bundle(ctx context.Context, w io.Writer, accounts []string) er
 	}
 	return archive.Close()
 }
+
+// ExportQuery asks for the journal as text, for the download in the web UI.
+type ExportQuery struct {
+	Source   string
+	Priority int
+	// Since limits to recent lines; zero is everything of the chosen boot.
+	Since time.Time
+	// Previous is the start before this one (with a kept journal).
+	Previous bool
+}
+
+// maxExportLines bounds a download: a day of a busy NAS fits.
+const maxExportLines = 50000
+
+// Export returns the journal as text lines (short-iso), the oldest first.
+func (m *Manager) Export(ctx context.Context, q ExportQuery) (string, error) {
+	source, known := Sources[q.Source]
+	if !known || q.Priority < 0 || q.Priority > 7 {
+		return "", ErrInvalid
+	}
+	args := []string{"--no-pager", "-o", "short-iso", "-p", strconv.Itoa(q.Priority), "-n", strconv.Itoa(maxExportLines)}
+	if q.Previous {
+		args = append(args, "-b", "-1")
+	} else {
+		args = append(args, "-b", "0")
+	}
+	args = append(args, source...)
+	if !q.Since.IsZero() {
+		args = append(args, "--since=@"+strconv.FormatInt(q.Since.Unix(), 10))
+	}
+	return m.runner.Run(ctx, "", "journalctl", args...)
+}
