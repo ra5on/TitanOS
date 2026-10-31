@@ -67,10 +67,10 @@ func TestCloneRecoveryDoesNotReplayCopyOrOverwrite(t *testing.T) {
 		t.Fatal(ops, err)
 	}
 	m.store = store
-	if err := m.RecoverClone("fast", ops[0].ID, "finish", "wrong", []string{"fast"}); err == nil {
+	if err := m.RecoverClone(context.Background(), "fast", ops[0].ID, "finish", "wrong", []string{"fast"}); err == nil {
 		t.Fatal("unconfirmed recovery")
 	}
-	if err := m.RecoverClone("fast", ops[0].ID, "finish", ops[0].ID, []string{"fast"}); err != nil {
+	if err := m.RecoverClone(context.Background(), "fast", ops[0].ID, "finish", ops[0].ID, []string{"fast"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := m.get("copy"); err != nil {
@@ -121,7 +121,7 @@ func TestCloneRecoveryRejectsExternalDiskPaths(t *testing.T) {
 	v.Disks[0].SizeBytes = 3 * gib
 	v.Disks[0].File = "../../outside.raw"
 	v.Autostart = false
-	if err := m.validClone(v, "data"); err == nil {
+	if err := m.validClone(context.Background(), v, "data"); err == nil {
 		t.Fatal("unsafe recovered disk accepted")
 	}
 }
@@ -201,7 +201,7 @@ func TestClonePublishConflictKeepsForeignFolderAndCanBeDiscarded(t *testing.T) {
 	if err != nil || len(ops) != 1 || ops[0].Phase != "conflict" || !strings.Contains(ops[0].Error, "already exists") {
 		t.Fatal(ops, err)
 	}
-	if err := m.RecoverClone("fast", ops[0].ID, "finish", ops[0].ID, []string{"fast"}); !errors.Is(err, ErrBadFolder) {
+	if err := m.RecoverClone(context.Background(), "fast", ops[0].ID, "finish", ops[0].ID, []string{"fast"}); !errors.Is(err, ErrBadFolder) {
 		t.Fatal("finish over a foreign folder", err)
 	}
 	if _, err := m.get("copy"); err == nil {
@@ -230,7 +230,7 @@ func TestClonePublishConflictKeepsForeignFolderAndCanBeDiscarded(t *testing.T) {
 	if ops, _ := m.CloneOperations("fast", []string{"fast"}); len(ops) != 1 || ops[0].Phase != "publishing" {
 		t.Fatal("journal not rewritten", ops)
 	}
-	if err := m.RecoverClone("fast", ops[0].ID, "discard", ops[0].ID, []string{"fast"}); err != nil {
+	if err := m.RecoverClone(context.Background(), "fast", ops[0].ID, "discard", ops[0].ID, []string{"fast"}); err != nil {
 		t.Fatal(err)
 	}
 	if ops, err := m.CloneOperations("fast", []string{"fast"}); err != nil || len(ops) != 0 {
@@ -262,10 +262,10 @@ func TestCloneDiscardWhilePublishingOnlyBeforeRename(t *testing.T) {
 		t.Fatal(ops, err)
 	}
 	// The rename already happened: the published folder is the only copy.
-	if err := m.RecoverClone("fast", ops[0].ID, "discard", ops[0].ID, []string{"fast"}); !errors.Is(err, ErrInvalid) {
+	if err := m.RecoverClone(context.Background(), "fast", ops[0].ID, "discard", ops[0].ID, []string{"fast"}); !errors.Is(err, ErrInvalid) {
 		t.Fatal("discard after publication", err)
 	}
-	if err := m.RecoverClone("fast", ops[0].ID, "finish", ops[0].ID, []string{"fast"}); err != nil {
+	if err := m.RecoverClone(context.Background(), "fast", ops[0].ID, "finish", ops[0].ID, []string{"fast"}); err != nil {
 		t.Fatal(err)
 	}
 }

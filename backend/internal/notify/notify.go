@@ -173,6 +173,8 @@ type Manager struct {
 	// bellLoaded says the kept messages were read (bell_keep.go).
 	bellLoaded bool
 	bellWrite  sync.Mutex
+	// bellPending counts bell writes still running in the background.
+	bellPending sync.WaitGroup
 	// pending are the messages waiting for the daily summary (RAM only).
 	pending    []Message
 	digestSent time.Time
@@ -349,7 +351,7 @@ func (m *Manager) Dismiss(ids []int) {
 	m.messages = slices.DeleteFunc(m.messages, func(message Message) bool { return slices.Contains(ids, message.ID) })
 	if len(m.messages) != before {
 		m.nextID++ // Also refresh the list in other open browsers.
-		go m.keepBell()
+		m.goKeepBell()
 	}
 }
 
@@ -377,7 +379,7 @@ func (m *Manager) Notify(severity, kind, subject string) {
 	m.mu.Unlock()
 	slog.Info("notification", "severity", severity, "kind", kind, "subject", subject)
 	go m.tellPeople(message)
-	go m.keepBell()
+	m.goKeepBell()
 	if m.Urgent != nil && rank[severity] >= rank[Warning] {
 		m.Urgent()
 	}
@@ -385,7 +387,7 @@ func (m *Manager) Notify(severity, kind, subject string) {
 		if m.collect(settings, message) {
 			return
 		}
-		m.deliver(settings, message, nil)
+		_ = m.deliver(settings, message, nil) // without a single channel deliver sends in the background and returns nil
 		if m.Push != nil {
 			hostname, _ := os.Hostname()
 			m.Push(message, "["+hostname+"] "+message.Title)
@@ -408,7 +410,7 @@ func (m *Manager) SendReport(title, text string) error {
 	if !any && m.Push == nil {
 		return ErrNoChannel
 	}
-	m.deliver(settings, message, nil)
+	_ = m.deliver(settings, message, nil) // without a single channel deliver sends in the background and returns nil
 	if m.Push != nil {
 		hostname, _ := os.Hostname()
 		m.Push(message, "["+hostname+"] "+title)
@@ -590,7 +592,7 @@ func sendMail(cfg Email, message []byte) error {
 		conn.Close()
 		return err
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }() // the mail was handed over already or failed before
 	if cfg.Security == "starttls" {
 		if err := client.StartTLS(&tls.Config{ServerName: cfg.Host}); err != nil {
 			return err

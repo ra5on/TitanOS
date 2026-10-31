@@ -291,5 +291,5 @@ func (c *mqttClient) Ping() error {
 
 // Close says goodbye; the broker then does not send the last will.
 func (c *mqttClient) Close() {
-	c.closeOnce.Do(func() { close(c.done); c.write([]byte{mqttDisconnect << 4, 0}); c.conn.Close() })
+	c.closeOnce.Do(func() { close(c.done); _ = c.write([]byte{mqttDisconnect << 4, 0}); c.conn.Close() }) // cleanup, best effort: nothing more can be done if it fails
 }

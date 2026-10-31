@@ -397,7 +397,7 @@ func (m *Manager) sendTo(ctx context.Context, d stored, msg Message) error {
 	switch {
 	case resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone:
 		m.mu.Lock()
-		m.removeLocked(func(s stored) bool { return s.ID == d.ID })
+		_ = m.removeLocked(func(s stored) bool { return s.ID == d.ID }) // cleanup, best effort: nothing more can be done if it fails
 		m.mu.Unlock()
 		return ErrGone
 	case resp.StatusCode >= 300:

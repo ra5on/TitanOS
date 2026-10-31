@@ -274,7 +274,7 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 		loaded := m.loaded
 		m.mu.Unlock()
 		if !loaded {
-			m.Load()
+			_ = m.Load() // Load keeps its own state; a failure shows up as not loaded
 		} else if !m.Disabled {
 			if err := m.reconcile(ctx, mounted()); err != nil {
 				slog.Error("docker engine", "err", err)
@@ -285,7 +285,7 @@ func (m *Manager) Run(ctx context.Context, mounted func() []string) {
 			due := m.applied != "" && time.Since(m.updatesChecked) > updateInterval
 			m.mu.Unlock()
 			if due {
-				m.CheckUpdates(ctx)
+				_ = m.CheckUpdates(ctx) // only refreshes the update hints; the next round tries again
 			}
 		}
 		select {
@@ -343,7 +343,7 @@ func (m *Manager) reconcile(ctx context.Context, mounted []string) error {
 				// the engine takes that one without a restart.
 				if string(current) != string(daemon) {
 					if err := os.WriteFile(m.daemonConfig, daemon, 0o644); err == nil {
-						m.runner.Run(ctx, "", "systemctl", "reload", "docker.service")
+						_, _ = m.runner.Run(ctx, "", "systemctl", "reload", "docker.service") // the engine keeps running with the old settings until its next start
 					}
 				}
 				m.mu.Lock()
@@ -468,7 +468,7 @@ func (m *Manager) sample(ctx context.Context) {
 	for _, c := range containers {
 		seen[c.ID] = true
 		var inspect apiInspect
-		m.api.getJSON(ctx, "/containers/"+c.ID+"/json", nil, &inspect)
+		_ = m.api.getJSON(ctx, "/containers/"+c.ID+"/json", nil, &inspect) // a container that cannot be inspected keeps the zero time
 		since := inspect.State.FinishedAt
 		var stats apiStats
 		if c.State == "running" {
@@ -741,7 +741,7 @@ func (m *Manager) Console(ctx context.Context, id, shell, user string) (io.ReadW
 	}
 	resize := func(cols, rows int) {
 		if cols > 0 && rows > 0 && cols <= 1000 && rows <= 1000 {
-			m.api.execResize(context.WithoutCancel(ctx), exec, cols, rows)
+			_ = m.api.execResize(context.WithoutCancel(ctx), exec, cols, rows) // a failed resize keeps the old terminal size
 		}
 	}
 	return stream, resize, nil

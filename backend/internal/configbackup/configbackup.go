@@ -310,11 +310,11 @@ func readManifestOf(file string) (Manifest, bool, error) {
 	defer f.Close()
 	head := make([]byte, len(encMagic))
 	if n, _ := io.ReadFull(f, head); n == len(head) && encrypted(head) {
-		f.Seek(0, io.SeekStart)
+		_, _ = f.Seek(0, io.SeekStart) // the offset was just read from the same file; the copy checks what it reads
 		manifest, err := sealedManifest(f)
 		return manifest, true, err
 	}
-	f.Seek(0, io.SeekStart)
+	_, _ = f.Seek(0, io.SeekStart) // the offset was just read from the same file; the copy checks what it reads
 	manifest, err := plainManifest(f)
 	return manifest, false, err
 }
@@ -535,7 +535,7 @@ func (m *Manager) create(volume string) (string, error) {
 	// The new name has to survive a power cut too: it is what a new
 	// stick looks for.
 	if d, err := os.Open(dir); err == nil {
-		d.Sync()
+		_ = d.Sync() // the data are written; the sync only hurries them to disk
 		d.Close()
 	}
 	slog.Info("configuration saved", "volume", volume, "backup", name, "files", len(files))
@@ -732,7 +732,7 @@ func (m *Manager) restore(r io.ReadSeeker, password string) (Manifest, error) {
 	}
 	head := make([]byte, len(encMagic))
 	if n, _ := io.ReadFull(r, head); n == len(head) && encrypted(head) {
-		r.Seek(0, io.SeekStart)
+		_, _ = r.Seek(0, io.SeekStart) // the offset was just read from the same file; the copy checks what it reads
 		data, err := io.ReadAll(io.LimitReader(r, maxArchive+1))
 		if err != nil {
 			return Manifest{}, err

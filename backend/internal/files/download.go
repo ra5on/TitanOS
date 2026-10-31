@@ -708,12 +708,12 @@ func (m *Manager) publishDownload(job *Job) error {
 	}
 	if err != nil {
 		// Keep the part file trusted for a retry.
-		r.Lchown(d.part, os.Geteuid(), os.Getegid())
-		r.Chmod(d.part, 0o600)
+		_ = r.Lchown(d.part, os.Geteuid(), os.Getegid()) // permissions and times are a convenience; the data are there either way
+		_ = r.Chmod(d.part, 0o600)                       // permissions and times are a convenience; the data are there either way
 		return mapError(err)
 	}
 	if parent, err := r.Open(d.dir); err == nil {
-		parent.Sync()
+		_ = parent.Sync() // the data are written; the sync only hurries them to disk
 		parent.Close()
 	}
 	m.forgetUpload(d.root, d.id)

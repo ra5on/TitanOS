@@ -282,7 +282,7 @@ func (m *Manager) refresh(ctx context.Context) {
 		}
 	} else if m.current().Enabled && (m.dockerUser != "" || m.dockerUserErr != "") {
 		check, cancel := context.WithTimeout(ctx, 5*time.Second)
-		m.syncDockerUser(check, dockerPairs(m.current(), m.networks), true)
+		_ = m.syncDockerUser(check, dockerPairs(m.current(), m.networks), true) // syncDockerUser keeps its error in m.dockerUserErr
 		cancel()
 	}
 	m.flushPermanent(now, false)
@@ -334,7 +334,7 @@ func (m *Manager) changeLocked(ctx context.Context, cfg Config, addr netip.Addr)
 		m.active = cfg
 		if err := m.applyLocked(ctx); err != nil {
 			m.active = before
-			m.applyLocked(ctx)
+			_ = m.applyLocked(ctx) // going back to the rules before; the first error is returned
 			return err
 		}
 		if err := m.store.WriteJSON(settingsFile, toFile(cfg)); err != nil {
@@ -346,7 +346,7 @@ func (m *Manager) changeLocked(ctx context.Context, cfg Config, addr netip.Addr)
 	m.before, m.pending, m.admin = m.active, &cfg, addr
 	if err := m.applyLocked(ctx); err != nil {
 		m.pending = nil
-		m.applyLocked(ctx)
+		_ = m.applyLocked(ctx) // going back to the rules before; the first error is returned
 		return err
 	}
 	m.deadline = m.now().Add(m.trial)
@@ -649,7 +649,7 @@ func (m *Manager) SetAppZones(ctx context.Context, key string, zones Zones) (boo
 	m.active = cfg
 	if err := m.applyLocked(ctx); err != nil {
 		m.active = before
-		m.applyLocked(ctx)
+		_ = m.applyLocked(ctx) // going back to the rules before; the first error is returned
 		return false, err
 	}
 	slog.Info("firewall zones of an app changed", "app", key, "internet", zones.Internet)

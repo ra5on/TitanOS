@@ -187,9 +187,9 @@ func (m *Manager) SetCustom(certPEM, keyPEM []byte) error {
 	}
 	if err := m.store.Write(customCertFile, certPEM); err != nil {
 		if keyErr == nil {
-			m.store.Write(customKeyFile, oldKey)
+			_ = m.store.Write(customKeyFile, oldKey) // going back to the old key; the first error is returned
 		} else {
-			m.store.Remove(customKeyFile)
+			_ = m.store.Remove(customKeyFile) // cleanup, best effort: nothing more can be done if it fails
 		}
 		return err
 	}

@@ -187,7 +187,7 @@ func (m *Manager) RestoreSnapshot(ctx context.Context, name, id string) error {
 		return err
 	}
 	if err := os.Rename(restored, rootfs); err != nil {
-		os.Rename(old, rootfs)
+		_ = os.Rename(old, rootfs) // going back to the old root file system; the first error is returned
 		return err
 	}
 	_, err = m.runner.Run(ctx, "", "btrfs", "subvolume", "delete", old)

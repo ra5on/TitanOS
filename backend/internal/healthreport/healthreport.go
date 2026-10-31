@@ -423,7 +423,7 @@ func (m *Manager) SendNow() (Report, error) {
 // lastDue is the latest scheduled time at or before now.
 func lastDue(s Settings, now time.Time) time.Time {
 	var hour, minute int
-	fmt.Sscanf(s.Time, "%d:%d", &hour, &minute)
+	_, _ = fmt.Sscanf(s.Time, "%d:%d", &hour, &minute) // a value that cannot be read leaves the zero value, which the code handles
 	day := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, now.Location())
 	if s.Every == "monthly" {
 		due := time.Date(now.Year(), now.Month(), s.Day, hour, minute, 0, 0, now.Location())
@@ -511,6 +511,6 @@ func readSent(path string) (time.Time, error) {
 
 func writeSent(path string, at time.Time) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err == nil {
-		os.WriteFile(path, []byte(at.UTC().Format(time.RFC3339)+"\n"), 0o644)
+		_ = os.WriteFile(path, []byte(at.UTC().Format(time.RFC3339)+"\n"), 0o644) // a runtime or state file only; without it the default applies
 	}
 }

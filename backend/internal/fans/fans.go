@@ -175,7 +175,7 @@ func (m *Manager) Load() error {
 		return err
 	}
 	if data, err := os.ReadFile(m.runtime); err == nil {
-		json.Unmarshal(data, &m.original)
+		_ = json.Unmarshal(data, &m.original) // a value that cannot be read leaves the zero value, which the code handles
 	}
 	m.settings, m.loaded = s, true
 	return nil
@@ -385,20 +385,20 @@ func (m *Manager) restore(ch channel) {
 	}
 	if mode == "" || mode == "1" {
 		// It was manual before: leave it at full speed, the safe side.
-		os.WriteFile(ch.pwm, []byte("255"), 0o644)
+		_ = os.WriteFile(ch.pwm, []byte("255"), 0o644) // full speed is the safe side; nothing else is left to try
 		return
 	}
 	if err := os.WriteFile(ch.enable, []byte(mode), 0o644); err != nil {
 		slog.Warn("fan not given back to the BIOS", "fan", ch.label, "err", err)
-		os.WriteFile(ch.pwm, []byte("255"), 0o644)
+		_ = os.WriteFile(ch.pwm, []byte("255"), 0o644) // full speed is the safe side; nothing else is left to try
 	}
 }
 
 // saveOriginal keeps the original modes in /run; called with mu held.
 func (m *Manager) saveOriginal() {
 	if data, err := json.Marshal(m.original); err == nil {
-		os.MkdirAll(filepath.Dir(m.runtime), 0o755)
-		os.WriteFile(m.runtime, data, 0o600)
+		_ = os.MkdirAll(filepath.Dir(m.runtime), 0o755) // a runtime or state file only; without it the default applies
+		_ = os.WriteFile(m.runtime, data, 0o600)        // a runtime or state file only; without it the default applies
 	}
 }
 

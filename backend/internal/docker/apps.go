@@ -188,7 +188,7 @@ func (m *Manager) CreateApp(ctx context.Context, name, compose string, env map[s
 	m.jobs[name] = job
 	m.mu.Unlock()
 	abandon := func(err error) error {
-		m.store.RemoveAll(appsDir + "/" + name)
+		_ = m.store.RemoveAll(appsDir + "/" + name) // cleanup, best effort: nothing more can be done if it fails
 		m.mu.Lock()
 		delete(m.jobs, name)
 		m.appList = nil
@@ -244,7 +244,7 @@ func (m *Manager) startJob(ctx context.Context, volume, name string, job *Job, p
 		}
 		if pull && err == nil {
 			// The hints are stale now; ask again what is current.
-			m.CheckUpdates(ctx)
+			_ = m.CheckUpdates(ctx) // only refreshes the update hints; the pull itself succeeded
 		}
 		m.mu.Lock()
 		defer m.mu.Unlock()

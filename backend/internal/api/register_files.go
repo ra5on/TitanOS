@@ -1,0 +1,58 @@
+package api
+
+// registerFiles registers the routes of the file manager.
+func (s *Server) registerFiles(mux *routeMux) {
+	// The file manager. Every request names a root the account has access to.
+	mux.HandleFunc("GET /api/v1/files/roots", s.requireUser(s.handleFileRoots))
+	mux.HandleFunc("GET /api/v1/files/undo", s.requireUser(s.handleFileUndoList))
+	mux.HandleFunc("POST /api/v1/files/undo/{id}", s.requireUser(s.handleFileUndo))
+	mux.HandleFunc("POST /api/v1/files/rename-preview", s.requireUser(s.handleFileRenamePreview))
+	mux.HandleFunc("POST /api/v1/files/rename-batch", s.requireUser(s.handleFileRenameBatch))
+	mux.HandleFunc("POST /api/v1/files/archive", s.requireUser(s.handleFileArchiveList))
+	mux.HandleFunc("POST /api/v1/files/extract", s.requireUser(s.handleFileExtract))
+	mux.HandleFunc("GET /api/v1/files/text/previous", s.requireUser(s.handleFilePrevious))
+	mux.HandleFunc("POST /api/v1/files/duplicates", s.requireUser(s.handleFileDuplicates))
+	mux.HandleFunc("POST /api/v1/files/search", s.requireUser(s.handleFileSearch))
+	mux.HandleFunc("GET /api/v1/files/thumb", s.requireUser(s.handleFileThumb))
+	mux.HandleFunc("GET /api/v1/files/photos", s.requireUser(s.handleFilePhotos))
+	mux.HandleFunc("GET /api/v1/files/index", s.requireAdmin(s.handleFileIndex))
+	mux.HandleFunc("PUT /api/v1/files/index", s.requireAdmin(s.handleSetFileIndex))
+	mux.HandleFunc("POST /api/v1/files/index/run", s.requireAdmin(s.handleFileIndexRun))
+	mux.HandleFunc("DELETE /api/v1/files/index/{volume}", s.requireAdmin(s.handleFileIndexRemove))
+	mux.HandleFunc("DELETE /api/v1/files/thumbs/{volume}", s.requireAdmin(s.handleThumbCacheClear))
+	mux.HandleFunc("POST /api/v1/files/compare", s.requireUser(s.handleFileCompare))
+	mux.HandleFunc("GET /api/v1/files/properties", s.requireUser(s.handleFileProperties))
+	mux.HandleFunc("GET /api/v1/files/list", s.requireUser(s.handleFileList))
+	mux.HandleFunc("GET /api/v1/files/download", s.requireUser(s.handleFileDownload))
+	mux.HandleFunc("GET /api/v1/files/zip", s.requireUser(s.handleFileZip))
+	mux.HandleFunc("POST /api/v1/files/create", s.requireUser(s.handleFileCreate))
+	mux.HandleFunc("POST /api/v1/files/mkdir", s.requireUser(s.handleFileMkdir))
+	mux.HandleFunc("POST /api/v1/files/rename", s.requireUser(s.handleFileRename))
+	mux.HandleFunc("POST /api/v1/files/delete", s.requireUser(s.handleFileDelete))
+	mux.HandleFunc("GET /api/v1/files/trash", s.requireUser(s.handleTrashList))
+	mux.HandleFunc("POST /api/v1/files/trash/{action}", s.requireUser(s.handleTrash))
+	mux.HandleFunc("GET /api/v1/files/text", s.requireUser(s.handleReadFileText))
+	mux.HandleFunc("PUT /api/v1/files/text", s.requireUser(s.handleFileText))
+	mux.HandleFunc("POST /api/v1/files/inspect", s.requireUser(s.handleFileInspect))
+	mux.HandleFunc("POST /api/v1/files/copy", s.requireUser(s.handleFileCopy))
+	mux.HandleFunc("POST /api/v1/files/write-document", s.requireUser(s.handleWriteDocument))
+	mux.HandleFunc("POST /api/v1/files/move-many", s.requireUser(s.handleMoveMany))
+	mux.HandleFunc("POST /api/v1/files/url-download/probe", s.requireUser(s.handleFileDownloadProbe))
+	mux.HandleFunc("POST /api/v1/files/url-download", s.requireUser(s.handleFileURLDownload))
+	mux.HandleFunc("POST /api/v1/files/jobs/{id}/control", s.requireUser(s.handleFileJobControl))
+	mux.HandleFunc("POST /api/v1/files/usage", s.requireUser(s.handleFileUsage))
+	mux.HandleFunc("GET /api/v1/files/jobs", s.requireUser(s.handleFileJobs))
+	mux.HandleFunc("POST /api/v1/files/jobs/{id}/retry", s.requireUser(s.handleFileJobRetry))
+	mux.HandleFunc("POST /api/v1/files/jobs/{id}/cancel", s.requireUser(s.handleFileJobCancel))
+}
+
+// registerUploads registers the routes of uploads into the file manager.
+func (s *Server) registerUploads(mux *routeMux) {
+	mux.HandleFunc("GET /api/v1/files/uploads", s.requireUser(s.handleUploads))
+	mux.HandleFunc("POST /api/v1/files/uploads/{id}/verify", s.requireUser(s.handleUploadVerify))
+	mux.HandleFunc("POST /api/v1/files/uploads", s.requireUser(s.handleUploadStart))
+	mux.HandleFunc("GET /api/v1/files/uploads/{id}", s.requireUser(s.handleUploadStatus))
+	mux.HandleFunc("PATCH /api/v1/files/uploads/{id}", s.requireUser(s.handleUploadChunk))
+	mux.HandleFunc("POST /api/v1/files/uploads/{id}/finish", s.requireUser(s.handleUploadFinish))
+	mux.HandleFunc("DELETE /api/v1/files/uploads/{id}", s.requireUser(s.handleUploadAbort))
+}

@@ -73,7 +73,7 @@ func (s *Settings) apply(timezone string) error {
 		if err := os.Rename(temporary, s.localtime); err != nil {
 			return err
 		}
-		os.WriteFile(s.timezoneFile, []byte(timezone+"\n"), 0o644)
+		_ = os.WriteFile(s.timezoneFile, []byte(timezone+"\n"), 0o644) // a runtime or state file only; without it the default applies
 	}
 	s.timezone = timezone
 	return nil

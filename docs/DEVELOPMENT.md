@@ -150,6 +150,37 @@ Die Versionsangabe ohne führendes `v` entspricht dem Release-Skript und dem
 Smoke-Test. Ein lokaler Build wird damit **nicht** signiert oder veröffentlicht.
 Für Veröffentlichungen gilt ausschließlich [RELEASING.md](RELEASING.md).
 
+## Codeprüfung und Aufbau des Backends
+
+`make lint` prüft das Backend mit staticcheck (alle Prüfungen außer dem Stil
+der Doc-Kommentare, siehe `backend/staticcheck.conf`) und errcheck (Code außer
+Tests). Fehler, die bewusst nicht behandelt werden, werden an `_` zugewiesen
+und am Zeilenende begründet, z. B. `_ = os.Remove(tmp) // cleanup, best
+effort …`. Aufrufe, deren Fehler grundsätzlich nichts ändern (Schließen nach
+dem Lesen, Aufräumen temporärer Dateien, Schreiben in den Speicher, Hinweise an
+den Seitencache), stehen gesammelt in `backend/.errcheck-excludes`. Stand
+31.10.2026: beide Prüfungen ohne Befund; geprüft mit staticcheck 2026.2.2 und
+errcheck v1.30.0.
+
+Regeln für Go-Code:
+
+- `api.New` hat keine Seiteneffekte. Was Einstellungen liest oder etwas
+  startet, gehört in `Server.Start(ctx)`; `Server.Close()` beendet den
+  Root-Kontext des Servers und wartet auf seine Hintergrundaufträge
+  (`goJob`). titand ruft beides in `wireAPI` auf.
+- Routen stehen je Bereich in `backend/internal/api/register_<bereich>.go`;
+  `api.New` ruft die Bereiche in fester Reihenfolge auf. Neue Routen kommen in
+  die Datei ihres Bereichs.
+- Jedes `exec.Command` außerhalb von `internal/run` braucht ein Zeitlimit
+  (`exec.CommandContext` mit `context.WithTimeout`). Ausnahme mit Kommentar:
+  die Terminal-Shell, die mit ihrer Konsole endet.
+- Im Anfragepfad den Kontext der Anfrage verwenden. Arbeit, die die Anfrage
+  überdauern muss (Änderungen an Platten, Veröffentlichen eines Klons), nimmt
+  `context.WithoutCancel(r.Context())`, nicht `context.Background()`.
+- „titand stoppen → Aktion → starten“ (lokale Netzwerk- und
+  SSH-Wiederherstellung) läuft über `withTitandStopped` in
+  `cmd/titand/network_recovery.go`.
+
 ## Tests auf Fedora
 
 [scripts/fedora-dev.sh](../scripts/fedora-dev.sh) stellt nur für den gestarteten

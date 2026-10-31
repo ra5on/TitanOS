@@ -262,7 +262,7 @@ func (m *Manager) ReconcileLAN(ctx context.Context) {
 			m.lanErrors[n.Name] = "NAS network is unavailable or on trial"
 			continue
 		}
-		m.ensureLAN(ctx, n, dev)
+		_ = m.ensureLAN(ctx, n, dev) // ensureLAN notes its failure in m.lanErrors
 	}
 }
 
@@ -325,7 +325,7 @@ func (m *Manager) RemoveLAN(ctx context.Context, name string) error {
 		if e != nil {
 			return e
 		}
-		io.Copy(io.Discard, res.Body)
+		_, _ = io.Copy(io.Discard, res.Body) // draining the body for connection reuse only
 		res.Body.Close()
 	} else {
 		var ae *apiError

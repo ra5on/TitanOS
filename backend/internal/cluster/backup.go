@@ -214,7 +214,7 @@ func (m *Manager) RunRelay(ctx context.Context) {
 		mu.Lock()
 		defer mu.Unlock()
 		if srv != nil {
-			srv.Close()
+			_ = srv.Close() // cleanup, best effort: nothing more can be done if it fails
 			srv = nil
 		}
 	}
@@ -236,7 +236,7 @@ func (m *Manager) RunRelay(ctx context.Context) {
 			mu.Lock()
 			srv = s
 			mu.Unlock()
-			go s.Serve(ln)
+			go func() { _ = s.Serve(ln) }() // ends with Close; the error then says only that
 		case !in && running:
 			stop()
 		}

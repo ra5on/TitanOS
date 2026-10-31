@@ -269,7 +269,7 @@ func (m *Manager) apply(s Settings) error {
 	defer cancel()
 	_, err := m.runner.Run(ctx, "", "/usr/libexec/titanos-tailscale-runtime", "apply")
 	if err != nil {
-		m.writeRuntime(old)
+		_ = m.writeRuntime(old) // going back to the settings before; the first error is returned
 		return fmt.Errorf("apply Tailscale settings: %w", err)
 	}
 	return nil
@@ -292,7 +292,7 @@ func (m *Manager) Set(s Settings) error {
 			previous := m.settings
 			m.pending = &previous
 			m.deadline = time.Now()
-			m.timer = time.AfterFunc(10*time.Second, func() { m.Undo() })
+			m.timer = time.AfterFunc(10*time.Second, func() { _ = m.Undo() }) // Undo keeps its error in m.problem and tries again
 			err = errors.Join(err, rollbackErr)
 		}
 		m.problem = err.Error()
@@ -302,7 +302,7 @@ func (m *Manager) Set(s Settings) error {
 	m.pending = &previous
 	m.settings = s
 	m.deadline = time.Now().Add(2 * time.Minute)
-	m.timer = time.AfterFunc(2*time.Minute, func() { m.Undo() })
+	m.timer = time.AfterFunc(2*time.Minute, func() { _ = m.Undo() }) // Undo keeps its error in m.problem and tries again
 	m.problem = ""
 	return nil
 }
@@ -331,7 +331,7 @@ func (m *Manager) Undo() error {
 	}
 	if err := m.apply(*m.pending); err != nil {
 		m.problem = err.Error()
-		m.timer = time.AfterFunc(10*time.Second, func() { m.Undo() })
+		m.timer = time.AfterFunc(10*time.Second, func() { _ = m.Undo() }) // Undo keeps its error in m.problem and tries again
 		return err
 	}
 	m.settings = *m.pending

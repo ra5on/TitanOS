@@ -167,7 +167,7 @@ func (m *Manager) Run(ctx context.Context) {
 		loaded := m.loaded
 		m.mu.Unlock()
 		if !loaded {
-			m.Load()
+			_ = m.Load() // Load keeps its own state; a failure shows up as not loaded
 		} else {
 			m.refresh(ctx, false)
 		}

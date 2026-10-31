@@ -95,7 +95,7 @@ func (Exec) RunSecret(ctx context.Context, stdin []byte, extra [][]byte, name st
 		// A pipe holds 64 KiB; passphrases are far smaller, but write in
 		// the background anyway so that a large one cannot block.
 		go func(w *os.File, secret []byte) {
-			w.Write(secret)
+			_, _ = w.Write(secret) // a short write shows as a failing command
 			w.Close()
 		}(w, secret)
 	}

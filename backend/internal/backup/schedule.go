@@ -57,7 +57,7 @@ func (j Job) weekdays() []int {
 }
 
 func clock(text string) (hour, minute int) {
-	fmt.Sscanf(text, "%d:%d", &hour, &minute)
+	_, _ = fmt.Sscanf(text, "%d:%d", &hour, &minute) // a value that cannot be read leaves the zero value, which the code handles
 	return
 }
 

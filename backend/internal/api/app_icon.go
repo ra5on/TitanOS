@@ -258,7 +258,7 @@ func (s *Server) handlePutAppIcon(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else if a.settings.Kind == "image" {
-		s.opts.Store.Remove(appIconImage)
+		_ = s.opts.Store.Remove(appIconImage) // cleanup, best effort: nothing more can be done if it fails
 	}
 	if err := s.opts.Store.WriteJSON(appIconFile, settings); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())

@@ -25,6 +25,8 @@ func newManager(t *testing.T) (*Manager, string) {
 	dir := t.TempDir()
 	m := NewManager(config.Open(dir))
 	m.retryPause = time.Millisecond
+	// Bell writes run in the background; they must end before the temporary folders go.
+	t.Cleanup(m.WaitBell)
 	if err := m.Load(); err != nil {
 		t.Fatal(err)
 	}

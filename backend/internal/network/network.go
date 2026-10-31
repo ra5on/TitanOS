@@ -456,7 +456,7 @@ func (m *Manager) apply(ctx context.Context, cfg Config) error {
 			slog.Warn("hostname not set", "err", err)
 		}
 		// What announces the NAS in the network does so by its name.
-		m.runner.Run(ctx, "", "systemctl", "try-restart", "avahi-daemon.service", "smbd.service", "nmbd.service", "wsdd2.service")
+		_, _ = m.runner.Run(ctx, "", "systemctl", "try-restart", "avahi-daemon.service", "smbd.service", "nmbd.service", "wsdd2.service") // announcing the new name is a convenience; the services take it at their next start
 	}
 	sort.Strings(names)
 	slog.Info("network configuration in place", "device", device(cfg), "dhcp", cfg.DHCP, "address", cfg.Address, "files", names, "changed", changed)

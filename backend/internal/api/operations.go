@@ -417,7 +417,7 @@ func (s *Server) handleVMCloneRecover(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.VMs.RecoverClone(r.PathValue("volume"), r.PathValue("id"), req.Action, req.Confirm, s.opts.Storage.Mounted()); err != nil {
+	if err := s.opts.VMs.RecoverClone(context.WithoutCancel(r.Context()), r.PathValue("volume"), r.PathValue("id"), req.Action, req.Confirm, s.opts.Storage.Mounted()); err != nil {
 		writeVMError(w, err)
 		return
 	}

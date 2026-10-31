@@ -255,7 +255,7 @@ func (m *Manager) grow(ctx context.Context, root *os.Root, g Growth, diskName st
 			if err != nil {
 				return err
 			}
-			status := m.status(devices, m.arrays(ctx))
+			status := m.status(ctx, devices, m.arrays(ctx))
 			disk, err := m.usable(status, diskName)
 			if err != nil || disk.Serial != g.DiskSerial {
 				return ErrDiskUnavailable

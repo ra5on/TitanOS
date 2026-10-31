@@ -101,7 +101,7 @@ func relayMCP(client *http.Client, endpoint, token, version string, msg []byte) 
 	case contentType == "text/event-stream":
 		answers = sseData(data)
 	case json.Valid(data) && bytes.HasPrefix(bytes.TrimSpace(data), []byte("[")):
-		json.Unmarshal(data, &answers)
+		_ = json.Unmarshal(data, &answers) // checked with json.Valid or answered as a parse error below
 	case json.Valid(data) && strings.Contains(string(data), `"jsonrpc"`):
 		answers = []json.RawMessage{data}
 	}
@@ -156,13 +156,13 @@ func failedAnswers(msg []byte, failure error) []json.RawMessage {
 		Method string          `json:"method"`
 	}
 	if bytes.HasPrefix(msg, []byte("[")) {
-		json.Unmarshal(msg, &requests)
+		_ = json.Unmarshal(msg, &requests) // only the IDs are tracked here; the server checks the message itself
 	} else {
 		requests = make([]struct {
 			ID     json.RawMessage `json:"id"`
 			Method string          `json:"method"`
 		}, 1)
-		json.Unmarshal(msg, &requests[0])
+		_ = json.Unmarshal(msg, &requests[0]) // only the IDs are tracked here; the server checks the message itself
 	}
 	var answers []json.RawMessage
 	for _, r := range requests {

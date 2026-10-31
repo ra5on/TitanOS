@@ -179,7 +179,7 @@ func parse(source string, files map[string]string) ([]App, string, error) {
 func readCasaOS(app *App, meta map[string]yaml.Node) bool {
 	field := func(key string, into any) {
 		if node, ok := meta[key]; ok {
-			node.Decode(into)
+			_ = node.Decode(into) // a value that cannot be read leaves the zero value, which the code handles
 		}
 	}
 	var architectures []string

@@ -116,7 +116,7 @@ func (m *Manager) syncDockerUser(ctx context.Context, pairs [][2]string, check b
 	}
 	err := m.loadDockerUser(ctx, "iptables", pairs)
 	if err == nil {
-		m.loadDockerUser(ctx, "ip6tables", pairs)
+		_ = m.loadDockerUser(ctx, "ip6tables", pairs) // IPv6 is optional; the IPv4 rules decide
 		m.dockerUser, m.dockerUserErr, m.dockerUserClean = key, "", false
 		return nil
 	}
@@ -167,6 +167,6 @@ func (m *Manager) removeDockerUser(ctx context.Context, tool string) {
 			break
 		}
 	}
-	run("-F", dockerUserChain)
-	run("-X", dockerUserChain)
+	_ = run("-F", dockerUserChain) // cleanup, best effort: an absent chain is fine
+	_ = run("-X", dockerUserChain) // cleanup, best effort: an absent chain is fine
 }

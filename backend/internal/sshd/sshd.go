@@ -248,9 +248,9 @@ func (m *Manager) Apply(ctx context.Context, users []auth.User) (bool, error) {
 		if _, err := m.runner.Run(ctx, "", "gpasswd", "--delete", name, group); err != nil {
 			return false, err
 		}
-		m.runner.Run(ctx, "", "usermod", "--shell", "/usr/sbin/nologin", name)
+		_, _ = m.runner.Run(ctx, "", "usermod", "--shell", "/usr/sbin/nologin", name) // cleanup, best effort: nothing more can be done if it fails
 		// Whoever is logged in over SSH right now is logged out.
-		m.runner.Run(ctx, "", "loginctl", "terminate-user", name)
+		_, _ = m.runner.Run(ctx, "", "loginctl", "terminate-user", name) // cleanup, best effort: nothing more can be done if it fails
 		slog.Info("SSH access taken away", "user", name)
 	}
 	if entries, err := os.ReadDir(keysDir); err == nil {
@@ -262,7 +262,7 @@ func (m *Manager) Apply(ctx context.Context, users []auth.User) (bool, error) {
 	}
 
 	if !enabled {
-		m.runner.Run(ctx, "", "systemctl", "stop", service)
+		_, _ = m.runner.Run(ctx, "", "systemctl", "stop", service) // cleanup, best effort: nothing more can be done if it fails
 		m.mu.Lock()
 		m.running, m.accounts = false, nil
 		m.mu.Unlock()
@@ -301,7 +301,7 @@ func (m *Manager) Apply(ctx context.Context, users []auth.User) (bool, error) {
 		// (a lost laptop): such sessions end, the account logs in again.
 		for line := range strings.SplitSeq(string(before), "\n") {
 			if line = strings.TrimSpace(line); line != "" && !slices.Contains(user.SSHKeys, line) {
-				m.runner.Run(ctx, "", "loginctl", "terminate-user", user.Name)
+				_, _ = m.runner.Run(ctx, "", "loginctl", "terminate-user", user.Name) // cleanup, best effort: nothing more can be done if it fails
 				slog.Info("SSH sessions ended after a key was removed", "user", user.Name)
 				break
 			}

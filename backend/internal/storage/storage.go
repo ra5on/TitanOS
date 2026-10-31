@@ -387,7 +387,7 @@ func (m *Manager) Status(ctx context.Context) (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	status := m.status(devices, m.arrays(ctx))
+	status := m.status(ctx, devices, m.arrays(ctx))
 	status.DiskSleep = m.diskSleepStatus(devices)
 	return status, nil
 }
@@ -414,7 +414,7 @@ func volumesByUUID(configured []VolumeConfig) map[string]string {
 	return volumeByArray
 }
 
-func (m *Manager) status(devices []blockDevice, arrays []array) Status {
+func (m *Manager) status(ctx context.Context, devices []blockDevice, arrays []array) Status {
 	configured := m.configured()
 	volumeByArray := volumesByUUID(configured)
 	status := Status{Disks: []Disk{}, Volumes: []Volume{}, DiskSleep: m.DiskSleep()}
@@ -472,7 +472,7 @@ func (m *Manager) status(devices []blockDevice, arrays []array) Status {
 			m.btrfsStatus(&volume, &status, devices, cfg)
 		}
 		if cfg.Cache != nil {
-			volume.Cache = m.cacheView(cfg)
+			volume.Cache = m.cacheView(ctx, cfg)
 			// The cache SSD belongs to the volume: never offered elsewhere.
 			for _, device := range devices {
 				device.walk(func(node blockDevice) {

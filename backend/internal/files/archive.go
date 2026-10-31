@@ -279,7 +279,7 @@ func (m *Manager) extractArchive(ctx context.Context, job *Job, dr *os.Root, sta
 		}
 		m.own(dr, target, uid, false)
 		if !entry.Modified.IsZero() {
-			dr.Chtimes(target, entry.Modified, entry.Modified)
+			_ = dr.Chtimes(target, entry.Modified, entry.Modified) // permissions and times are a convenience; the data are there either way
 		}
 		job.c.count.Add(1)
 	}

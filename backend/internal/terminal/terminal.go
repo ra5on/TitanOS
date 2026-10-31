@@ -169,8 +169,10 @@ func start(command []string) (*Session, error) {
 		return fail(err)
 	}
 	defer slave.Close()
-	unix.IoctlSetWinsize(int(master.Fd()), unix.TIOCSWINSZ, &unix.Winsize{Col: 80, Row: 24})
+	_ = unix.IoctlSetWinsize(int(master.Fd()), unix.TIOCSWINSZ, &unix.Winsize{Col: 80, Row: 24}) // the terminal works on with the previous settings
 
+	// No timeout on purpose: the shell lives as long as its console. The
+	// console ends it (Session.Close) after 15 minutes without input.
 	cmd := exec.Command(command[0], command[1:]...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
 	cmd.Env = []string{
@@ -212,7 +214,7 @@ func (s *Session) Write(p []byte) (int, error) { return s.master.Write(p) }
 // Resize tells the shell the size of the terminal.
 func (s *Session) Resize(cols, rows int) {
 	if cols > 0 && rows > 0 && cols <= 1000 && rows <= 1000 {
-		unix.IoctlSetWinsize(int(s.master.Fd()), unix.TIOCSWINSZ, &unix.Winsize{Col: uint16(cols), Row: uint16(rows)})
+		_ = unix.IoctlSetWinsize(int(s.master.Fd()), unix.TIOCSWINSZ, &unix.Winsize{Col: uint16(cols), Row: uint16(rows)}) // the terminal works on with the previous settings
 	}
 }
 
@@ -220,12 +222,12 @@ func (s *Session) Resize(cols, rows int) {
 func (s *Session) Close() error {
 	s.once.Do(func() {
 		// The whole session gets the hangup a closed terminal window sends.
-		syscall.Kill(-s.cmd.Process.Pid, syscall.SIGHUP)
+		_ = syscall.Kill(-s.cmd.Process.Pid, syscall.SIGHUP) // cleanup, best effort: nothing more can be done if it fails
 		s.master.Close()
 		go func() {
 			if s.cmd.Wait() != nil {
 				// Whatever ignored the hangup.
-				syscall.Kill(-s.cmd.Process.Pid, syscall.SIGKILL)
+				_ = syscall.Kill(-s.cmd.Process.Pid, syscall.SIGKILL) // cleanup, best effort: nothing more can be done if it fails
 			}
 		}()
 	})

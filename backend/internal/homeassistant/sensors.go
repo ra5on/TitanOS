@@ -493,13 +493,13 @@ func (m *Manager) mqttSession(ctx context.Context, id string, q MQTT, source Sou
 	for {
 		select {
 		case <-ctx.Done():
-			client.Publish(availability, []byte("offline"), true)
+			_ = client.Publish(availability, []byte("offline"), true) // the broker marks the device offline by its last will anyway
 			return nil
 		case <-changed:
 			// Entities of groups switched off go away; the new session sends
 			// what is still wanted.
 			for topic := range published {
-				client.Publish(topic, nil, true)
+				_ = client.Publish(topic, nil, true) // the new session publishes again; stale entities expire
 			}
 			return nil
 		case err := <-client.errs:

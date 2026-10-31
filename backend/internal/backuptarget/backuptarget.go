@@ -321,7 +321,7 @@ func (m *Manager) measure(name string) stat {
 		return cached
 	}
 	st := stat{at: time.Now()}
-	filepath.WalkDir(m.repoDir(m.settings.Volume, name), func(path string, entry fs.DirEntry, err error) error {
+	_ = filepath.WalkDir(m.repoDir(m.settings.Volume, name), func(path string, entry fs.DirEntry, err error) error { // the callback collects what it can; unreadable entries are skipped
 		if err != nil || entry.IsDir() {
 			return nil
 		}
@@ -381,7 +381,7 @@ func (m *Manager) reconcile() {
 	settings, loaded := m.settings, m.loaded
 	m.mu.Unlock()
 	if !loaded {
-		m.Load()
+		_ = m.Load() // Load keeps its own state; a failure shows up as not loaded
 		return
 	}
 	var want []string
@@ -418,7 +418,7 @@ func (m *Manager) reconcile() {
 		m.mu.Lock()
 		m.servers[address] = server
 		m.mu.Unlock()
-		go server.Serve(listener)
+		go func() { _ = server.Serve(listener) }() // ends with Close; the error then says only that
 		slog.Info("backup target listening", "address", address)
 	}
 }
@@ -449,7 +449,7 @@ func (m *Manager) stop(keep []string) {
 	}
 	m.mu.Unlock()
 	for _, server := range gone {
-		server.Close()
+		_ = server.Close() // cleanup, best effort: nothing more can be done if it fails
 	}
 }
 
@@ -508,7 +508,7 @@ func (m *Manager) serveRepo(w http.ResponseWriter, r *http.Request, repo *os.Roo
 			}
 		}
 		for i := range 256 {
-			repo.MkdirAll(filepath.Join("data", fmt.Sprintf("%02x", i)), 0o700)
+			_ = repo.MkdirAll(filepath.Join("data", fmt.Sprintf("%02x", i)), 0o700) // a runtime or state file only; without it the default applies
 		}
 	case rest == "config":
 		m.serveFile(w, r, repo, "config", true)
