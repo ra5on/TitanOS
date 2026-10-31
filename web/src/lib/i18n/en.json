@@ -7095,6 +7095,8 @@
 	"error.cluster_node_unknown": "The cluster has no such node.",
 	"error.cluster_node_self": "That is this NAS itself.",
 	"error.cluster_unreachable": "The node is not reachable.",
+	"error.cluster_restarting": "The node is restarting and will be back shortly.",
+	"cluster.restarting": "The node is restarting and will be back shortly. TitanOS keeps trying by itself.",
 	"error.cluster_unauthorized": "The node does not take the request for one of the cluster.",
 	"error.cluster_local_only": "This is only possible on the web interface of the node itself.",
 	"error.cluster_backups_off": "The node takes no backups of other NAS. Turn on “Take backups of other TitanOS” there under Backups › Data backup.",

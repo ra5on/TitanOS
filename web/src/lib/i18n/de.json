@@ -7095,6 +7095,8 @@
 	"error.cluster_node_unknown": "Diesen Knoten gibt es im Cluster nicht.",
 	"error.cluster_node_self": "Das ist dieses NAS selbst.",
 	"error.cluster_unreachable": "Der Knoten ist nicht erreichbar.",
+	"error.cluster_restarting": "Knoten startet neu, gleich wieder da.",
+	"cluster.restarting": "Knoten startet neu, gleich wieder da. TitanOS versucht es von selbst weiter.",
 	"error.cluster_unauthorized": "Der Knoten erkennt die Anfrage nicht als eine des Clusters an.",
 	"error.cluster_local_only": "Das geht nur direkt in der Weboberfläche dieses Knotens.",
 	"error.cluster_backups_off": "Der Knoten nimmt keine Backups anderer NAS an. Dort unter Sicherungen › Datensicherung „Backups anderer TitanOS annehmen“ einschalten.",

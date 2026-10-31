@@ -1,6 +1,7 @@
 // Thin wrapper around fetch for the titand API.
 
 import { apiPath } from './cluster-node.ts';
+import { RESTART_WAIT_MS, restartPause, waitForNode } from './node-restart.ts';
 
 export class ApiError extends Error {
 	readonly status: number;
@@ -37,10 +38,30 @@ async function request<T>(
 	}
 
 	let res: Response;
+	// A node of the cluster that is starting again refused the connection,
+	// so the request never reached it: wait and ask again (node-restart.ts).
+	const started = Date.now();
+	let stopWaiting: (() => void) | undefined;
 	try {
-		res = await fetch(apiPath(path), init);
-	} catch {
-		throw new ApiError(0, 'unreachable', 'titand is not reachable');
+		for (;;) {
+			try {
+				res = await fetch(apiPath(path), init);
+			} catch {
+				throw new ApiError(0, 'unreachable', 'titand is not reachable');
+			}
+			if (res.status !== 503 || Date.now() - started > RESTART_WAIT_MS || signal?.aborted) break;
+			const answer = await res
+				.clone()
+				.json()
+				.catch(() => null);
+			if (answer?.error?.code !== 'cluster_restarting') break;
+			stopWaiting ??= waitForNode();
+			await new Promise((resolve) =>
+				setTimeout(resolve, restartPause(Number(answer.error.retryAfter))),
+			);
+		}
+	} finally {
+		stopWaiting?.();
 	}
 
 	if (!res.ok) {
