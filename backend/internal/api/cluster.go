@@ -44,6 +44,11 @@ func (s *Server) clusterAccess(next http.Handler) http.Handler {
 			writeError(w, http.StatusUnauthorized, "cluster_unauthorized", "request not signed by the cluster")
 			return
 		}
+		// Only the admin node and the nodes it allowed manage this one.
+		if !c.MayManage(id.Node) {
+			writeError(w, http.StatusForbidden, "cluster_not_permitted", "the node may not manage this one")
+			return
+		}
 		r.Header.Del("Cookie")
 		r.Header.Del("Authorization")
 		next.ServeHTTP(w, r.WithContext(cluster.WithIdentity(r.Context(), id)))
@@ -100,8 +105,10 @@ func (s *Server) routeCluster(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/cluster/preview", s.requireOwner(s.requireOwnSession(s.handleClusterPreview)))
 	mux.HandleFunc("POST /api/v1/cluster/join", s.requireOwner(s.requireOwnSession(s.handleClusterJoin)))
 	mux.HandleFunc("POST /api/v1/cluster/leave", s.requireOwner(s.requireOwnSession(s.handleClusterLeave)))
+	mux.HandleFunc("POST /api/v1/cluster/join-info", s.requireAdmin(s.requireOwnSession(s.handleClusterJoinInfo)))
 	mux.HandleFunc("POST /api/v1/cluster/join-key", s.requireAdmin(s.requireOwnSession(s.handleClusterJoinKey)))
 	mux.HandleFunc("DELETE /api/v1/cluster/nodes/{id}", s.requireOwner(s.requireOwnSession(s.handleClusterRemove)))
+	mux.HandleFunc("PUT /api/v1/cluster/nodes/{id}/manage", s.requireOwner(s.requireOwnSession(s.handleClusterManage)))
 	mux.HandleFunc("POST /api/v1/cluster/nodes/{id}/backup-pair", s.requireAdmin(s.requireOwnSession(s.handleClusterBackupPair)))
 	mux.HandleFunc("/api/v1/cluster/nodes/{id}/api/{path...}", s.requireUser(s.requireOwnSession(s.handleClusterProxy)))
 }
@@ -135,7 +142,8 @@ func (s *Server) handleCluster(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleClusterNodes lists the nodes for switching between them; every
-// account may see them, the other node decides what it may do there.
+// account may see them, the other node decides what it may do there. A
+// member manages nobody: manages is false and the switcher stays away.
 func (s *Server) handleClusterNodes(w http.ResponseWriter, r *http.Request) {
 	type node struct {
 		ID      string `json:"id"`
@@ -145,8 +153,10 @@ func (s *Server) handleClusterNodes(w http.ResponseWriter, r *http.Request) {
 		Version string `json:"version,omitempty"`
 	}
 	out := []node{}
-	if s.opts.Cluster != nil {
-		for _, v := range s.opts.Cluster.Overview(r.Context()) {
+	manages := false
+	if c := s.opts.Cluster; c != nil {
+		manages = c.Manages()
+		for _, v := range c.Overview(r.Context()) {
 			n := node{ID: v.ID, Name: v.Name, Self: v.Self, Online: v.Online}
 			if v.Status != nil {
 				n.Version = v.Status.Version
@@ -154,7 +164,7 @@ func (s *Server) handleClusterNodes(w http.ResponseWriter, r *http.Request) {
 			out = append(out, n)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"nodes": out, "version": s.opts.Version})
+	writeJSON(w, http.StatusOK, map[string]any{"nodes": out, "version": s.opts.Version, "manages": manages})
 }
 
 func (s *Server) handleClusterCreate(w http.ResponseWriter, r *http.Request) {
@@ -182,6 +192,15 @@ func (s *Server) handleClusterSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c := s.opts.Cluster
+	// A member sets its own addresses; name and internet only change from
+	// a node that may manage, so unchanged values are left alone.
+	view := c.View()
+	if req.Name != nil && strings.TrimSpace(*req.Name) == view.Name {
+		req.Name = nil
+	}
+	if req.Internet != nil && *req.Internet == view.Internet {
+		req.Internet = nil
+	}
 	if req.Extra != nil {
 		if err := c.SetExtra(r.Context(), *req.Extra); err != nil {
 			writeClusterError(w, err)
@@ -250,6 +269,30 @@ func (s *Server) handleClusterLeave(w http.ResponseWriter, r *http.Request) {
 	s.handleCluster(w, r)
 }
 
+// handleClusterJoinInfo hands out the join information after password (and
+// code) or a passkey: whoever has it may add a node that sees everything.
+func (s *Server) handleClusterJoinInfo(w http.ResponseWriter, r *http.Request) {
+	var req proof
+	if !s.clusterAvailable(w) || !readJSON(w, r, &req) {
+		return
+	}
+	user := currentUser(r)
+	if !s.reconfirmProof(w, user, req) {
+		return
+	}
+	info := s.opts.Cluster.JoinInfo()
+	if info == "" && s.opts.Cluster.InCluster() {
+		writeError(w, http.StatusForbidden, "cluster_not_permitted", "only a node that may manage admits new ones")
+		return
+	}
+	if info == "" {
+		writeError(w, http.StatusConflict, "cluster_none", "this node is in no cluster")
+		return
+	}
+	slog.Info("cluster join information shown", "by", user.Name, "ip", remoteIP(r))
+	writeJSON(w, http.StatusOK, map[string]string{"joinInfo": info})
+}
+
 func (s *Server) handleClusterJoinKey(w http.ResponseWriter, r *http.Request) {
 	if !s.clusterAvailable(w) {
 		return
@@ -271,6 +314,23 @@ func (s *Server) handleClusterRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("cluster node removed", "node", r.PathValue("id"), "by", currentUser(r).Name, "ip", remoteIP(r))
+	s.handleCluster(w, r)
+}
+
+// handleClusterManage allows a node to manage the others, or takes it
+// back; only on the admin node.
+func (s *Server) handleClusterManage(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Manage bool `json:"manage"`
+	}
+	if !s.clusterAvailable(w) || !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.opts.Cluster.SetManage(r.Context(), r.PathValue("id"), req.Manage); err != nil {
+		writeClusterError(w, err)
+		return
+	}
+	slog.Info("cluster node may manage", "node", r.PathValue("id"), "manage", req.Manage, "by", currentUser(r).Name, "ip", remoteIP(r))
 	s.handleCluster(w, r)
 }
 

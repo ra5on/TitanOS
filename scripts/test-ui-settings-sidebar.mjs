@@ -1,6 +1,6 @@
 // Settings sidebar (decision of 28 Oct 2026, "Entwurf A – Seitenleiste"):
 // sidebar beside every settings page, active item, search with keyboard,
-// overview list, phone list with a way back, no horizontal scroll, contrast
+// overview with what needs attention (desktop), phone list with a way back, no horizontal scroll, contrast
 // in the light theme, states read once. Isolated API data only.
 // PLAYWRIGHT_MODULE=/abs/playwright/index.mjs UI_URL=http://127.0.0.1:5190 node scripts/test-ui-settings-sidebar.mjs
 import assert from "node:assert/strict";
@@ -97,12 +97,22 @@ try {
       (await current.getAttribute("title")) ?? (await current.locator(".marker").getAttribute("title")),
       /Update verfügbar/,
     );
-    assert.equal(await nav(page).locator(".group-title").count(), 6);
+    assert.equal(await nav(page).locator(".group-title").count(), 7);
     assert.deepEqual(
       (await nav(page).locator(".group-title").allTextContents()).map((s) => s.trim()),
-      ["System", "Hardware und Energie", "Netzwerk und Zugriff", "Daten", "Integrationen", "Persönlich"],
+      [
+        "System",
+        "Netzwerk",
+        "Sicherheit und Fernzugriff",
+        "Hardware und Energie",
+        "Daten und Speicher",
+        "Integrationen",
+        "Persönlich",
+      ],
     );
-    assert.equal(await nav(page).locator("a").count(), allAreas);
+    // Every area plus the overview on top.
+    assert.equal(await nav(page).locator("a").count(), allAreas + 1);
+    assert.equal(await nav(page).locator("a").first().getAttribute("href"), "/settings");
     // The location is in the sidebar: no breadcrumb, no way back on desktop.
     assert.equal(await page.locator(".crumbs").first().isVisible(), false);
     assert.equal(await page.locator(".settings-back").isVisible(), false);
@@ -130,10 +140,8 @@ try {
     await search.press("Enter");
     await page.waitForURL("**/settings/network#network-dns");
     assert.equal(await search.inputValue(), "");
-    assert.equal(
-      await nav(page).locator('a[aria-current="page"]').getAttribute("href"),
-      "/settings/network",
-    );
+    // The sidebar follows the navigation a moment later.
+    await nav(page).locator('a[aria-current="page"][href="/settings/network"]').waitFor();
     // Arrow keys move through the results, Enter opens the highlighted one.
     await search.fill("power");
     const hrefs = await nav(page)
@@ -150,13 +158,13 @@ try {
     await search.fill("kein-treffer-xyz");
     await nav(page).getByText("Keine passenden Einstellungen gefunden.").waitFor();
     await search.press("Escape");
-    assert.equal(await nav(page).locator("a").count(), allAreas);
+    assert.equal(await nav(page).locator("a").count(), allAreas + 1);
 
     // The states were read once when the settings opened, not per page.
     await page.goto(base + "/settings");
     const upsReads = () =>
       data.requests.filter(([m, p]) => m === "GET" && p === "/ups").length;
-    await page.locator(".settings-group").first().waitFor();
+    await page.locator(".desk-overview").waitFor();
     const before = upsReads();
     await nav(page).getByRole("link", { name: "Hardware", exact: true }).click();
     await page.waitForURL("**/settings/hardware");
@@ -164,18 +172,23 @@ try {
     await page.waitForURL("**/settings/power-button");
     assert.equal(upsReads(), before, "states are not read again per page");
 
-    // Overview: every area as a row with its state, in the content column.
+    // Overview (desktop): no second list, only what needs attention and this NAS.
     await nav(page).getByRole("link", { name: "Über TitanOS", exact: true }).click();
     await page.goto(base + "/settings");
-    await page.locator(".settings-group").first().waitFor();
-    assert.equal(await page.locator(".settings-group").count(), 6);
-    assert.equal(await page.locator(".settings-page .areas a").count(), allAreas);
-    await page
-      .locator('.settings-page .areas a[href="/settings/updates"] .chip')
-      .getByText("Update verfügbar")
-      .waitFor();
+    await page.locator(".desk-overview").waitFor();
+    assert.equal(await page.locator(".settings-page .areas a").first().isVisible(), false);
+    const attention = page.locator(".desk-overview .attention li");
+    await attention.getByText("Update verfügbar").waitFor();
+    assert.equal(
+      await attention.filter({ hasText: "Update verfügbar" }).locator("a").getAttribute("href"),
+      "/settings/updates",
+    );
+    await page.locator(".desk-overview .facts").getByText("titan-test").waitFor();
     assert.equal(await page.getByRole("searchbox").count(), 1, "one visible search on desktop");
-    assert.equal(await nav(page).locator('a[aria-current="page"]').count(), 0);
+    assert.equal(
+      await nav(page).locator('a[aria-current="page"]').getAttribute("href"),
+      "/settings",
+    );
     await fonts(page);
     await page.screenshot({ path: `${out}/desktop-overview.png`, fullPage: true });
     // Old deep links keep working.
@@ -194,7 +207,8 @@ try {
     await page.goto(base + "/settings");
     await page.locator(".settings-group").first().waitFor();
     assert.equal(await nav(page).isVisible(), false);
-    assert.equal(await page.locator(".settings-group").count(), 6);
+    assert.equal(await page.locator(".settings-group").count(), 7);
+    assert.equal(await page.locator(".desk-overview").isVisible(), false);
     assert.ok((await overflow(page)) <= 0, "no horizontal scroll on the overview");
     const search = page.getByRole("searchbox", { name: "Einstellungen suchen" });
     await search.fill("SSH");
@@ -236,8 +250,8 @@ try {
     }
     await page.screenshot({ path: `${out}/desktop-updates-hell.png` });
     await page.goto(base + "/settings");
-    await page.locator(".settings-group").first().waitFor();
-    for (const selector of [".settings-page .areas .name", ".settings-page .tile-title"]) {
+    await page.locator(".desk-overview").waitFor();
+    for (const selector of [".desk-overview .tile-title", ".desk-overview dt", ".desk-overview dd"]) {
       const ratio = await contrast(page, selector);
       assert.ok(ratio >= 4.5, `${selector}: contrast ${ratio.toFixed(2)}`);
     }
@@ -249,7 +263,7 @@ try {
     const { ctx, page } = await create("user");
     await page.goto(base + "/settings/appearance");
     await nav(page).waitFor();
-    assert.equal(await nav(page).locator("a").count(), userAreas);
+    assert.equal(await nav(page).locator("a").count(), userAreas + 1, "their areas and the overview");
     await nav(page).getByRole("searchbox").fill("SSH");
     assert.equal(await nav(page).locator("a").count(), 0);
     await ctx.close();

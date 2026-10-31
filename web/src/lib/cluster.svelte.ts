@@ -11,6 +11,8 @@ export type ClusterNode = {
 	cert: string;
 	joined: string;
 	updated: string;
+	/** Allowed by the admin node to manage the others. */
+	manage?: boolean;
 };
 
 export type NodeStatus = {
@@ -44,7 +46,9 @@ export type ClusterView = {
 	name?: string;
 	internet: boolean;
 	nodes: ClusterNode[];
-	joinInfo?: string;
+	/** The admin node, and whether this node may manage the others. */
+	admin?: string;
+	manages: boolean;
 	extra: string[];
 	found: string[];
 };
@@ -55,7 +59,7 @@ export type JoinPreview = {
 	cluster: string;
 	nodes: string[];
 	replaced: string[];
-	added: string[];
+	local: string[];
 	taken: string[];
 };
 
@@ -76,8 +80,12 @@ export const clusterNodes = $state<{ nodes: SwitchNode[]; version: string; loade
 
 export async function loadClusterNodes() {
 	try {
-		const res = await api.get<{ nodes: SwitchNode[]; version: string }>('/cluster/nodes');
-		clusterNodes.nodes = res.nodes;
+		const res = await api.get<{ nodes: SwitchNode[]; version: string; manages: boolean }>(
+			'/cluster/nodes',
+		);
+		// A member manages nobody: no switcher, and a tab that still
+		// manages another node goes home (ClusterBanner).
+		clusterNodes.nodes = res.manages ? res.nodes : [];
 		clusterNodes.version = res.version;
 	} catch {
 		clusterNodes.nodes = [];

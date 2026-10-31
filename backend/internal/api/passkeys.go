@@ -31,8 +31,11 @@ type passkeyChallenge struct {
 	origin    string
 	expires   time.Time
 	// source is who asked: the address (IPv6 by /64) of a login, the
-	// account of a registration.
+	// account of a registration or confirmation.
 	source string
+	// confirm marks a challenge for reconfirmProof: it proves who sits at
+	// the browser and never registers a passkey.
+	confirm bool
 }
 
 const (
@@ -272,7 +275,7 @@ func (s *Server) handlePasskeyFinish(w http.ResponseWriter, r *http.Request) {
 	}
 	user := currentUser(r)
 	c, ok := s.passkeys.take(req.ChallengeID)
-	if !ok || c.user != user.Name {
+	if !ok || c.user != user.Name || c.confirm {
 		writeError(w, http.StatusBadRequest, "passkey_expired", "the request expired, start again")
 		return
 	}
@@ -314,6 +317,50 @@ func (s *Server) handlePasskeyDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("passkey removed", "user", user.Name, "ip", remoteIP(r))
 	writeJSON(w, http.StatusOK, map[string]any{"passkeys": passkeyList(updated)})
+}
+
+// handlePasskeyConfirmBegin hands out a challenge for one of the account's
+// own passkeys of this host name, as proof for reconfirmProof.
+func (s *Server) handlePasskeyConfirmBegin(w http.ResponseWriter, r *http.Request) {
+	user, _ := s.opts.Users.Get(currentUser(r).Name)
+	if s.sessionToken(r) == "" {
+		writeError(w, http.StatusBadRequest, "session_required", "only possible from a logged-in browser")
+		return
+	}
+	rpID, origin, ok := passkeyOrigin(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "passkey_address", "passkeys need a host name with a trusted HTTPS certificate, not an IP address")
+		return
+	}
+	allow := []map[string]string{}
+	for _, key := range user.Passkeys {
+		if key.RPID == rpID {
+			allow = append(allow, map[string]string{"type": "public-key", "id": key.ID})
+		}
+	}
+	if len(allow) == 0 {
+		writeError(w, http.StatusConflict, "no_passkey", "the account has no passkey for this address")
+		return
+	}
+	if wait := s.limiter.RetryAfter("user:" + user.Name); wait > 0 {
+		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
+		return
+	}
+	id, challenge, ok := s.passkeys.put(passkeyChallenge{user: user.Name, rpID: rpID, origin: origin, source: "user:" + user.Name, confirm: true})
+	if !ok {
+		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many passkey requests, try again later")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"challengeId": id,
+		"publicKey": map[string]any{
+			"challenge":        webauthn.Encoding.EncodeToString(challenge),
+			"rpId":             rpID,
+			"timeout":          int(passkeyChallengeTTL / time.Millisecond),
+			"userVerification": "required",
+			"allowCredentials": allow,
+		},
+	})
 }
 
 // handlePasskeyLoginBegin hands out a challenge for a login. Nothing about

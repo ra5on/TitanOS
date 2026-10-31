@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -39,12 +40,16 @@ func (m *Manager) joinInfoLocked() string {
 	if m.state == nil || m.secrets.JoinKey == "" {
 		return ""
 	}
+	// Only nodes that may manage admit new ones; a member shows nothing.
+	if !m.mayManageLocked(m.self.ID) {
+		return ""
+	}
 	info := joinInfo{V: 1, ID: m.state.ID, Name: m.state.Name, Key: m.secrets.JoinKey}
 	// This node first: it is the one whose page the information came from.
 	me := m.selfNodeLocked()
 	info.Nodes = append(info.Nodes, joinNode{Addresses: me.Addresses, Cert: me.Cert})
 	for _, n := range m.state.Nodes {
-		if n.ID != me.ID {
+		if n.ID != me.ID && m.mayManageLocked(n.ID) {
 			info.Nodes = append(info.Nodes, joinNode{Addresses: n.Addresses, Cert: n.Cert})
 		}
 	}
@@ -107,7 +112,7 @@ func (m *Manager) Create(name string) error {
 	now := time.Now().UTC().Truncate(time.Second)
 	me := m.selfNodeLocked()
 	me.Joined, me.Updated = now, now
-	state := &State{ID: id, Name: name, Nodes: []Node{me}, Accounts: map[string]AccountVersion{}, Created: now}
+	state := &State{ID: id, Name: name, Nodes: []Node{me}, Accounts: map[string]AccountVersion{}, Created: now, Admin: me.ID}
 	for _, user := range m.Users.List() {
 		state.Accounts[user.Name] = accountVersion(user, me.ID, now)
 	}
@@ -121,8 +126,9 @@ type Preview struct {
 	// Replaced are accounts of this node the cluster has under the same
 	// name: they become those of the cluster (password, two-factor login).
 	Replaced []string `json:"replaced"`
-	// Added are accounts only this node has: they come into the cluster.
-	Added []string `json:"added"`
+	// Local are accounts only this node has: they stay here and do not
+	// go to the cluster.
+	Local []string `json:"local"`
 	// Taken are accounts only the cluster has: they come to this node.
 	Taken []string `json:"taken"`
 }
@@ -182,14 +188,14 @@ func (m *Manager) Preview(ctx context.Context, text string) (Preview, error) {
 	if res.Version != m.Version {
 		return Preview{}, fmt.Errorf("%w: %s", ErrVersion, res.Version)
 	}
-	p := Preview{Cluster: res.Name, Nodes: res.Nodes, Replaced: []string{}, Added: []string{}, Taken: []string{}}
+	p := Preview{Cluster: res.Name, Nodes: res.Nodes, Replaced: []string{}, Local: []string{}, Taken: []string{}}
 	local := map[string]bool{}
 	for _, u := range m.Users.List() {
 		local[u.Name] = true
 		if slices.Contains(res.Accounts, u.Name) {
 			p.Replaced = append(p.Replaced, u.Name)
 		} else {
-			p.Added = append(p.Added, u.Name)
+			p.Local = append(p.Local, u.Name)
 		}
 	}
 	for _, name := range res.Accounts {
@@ -214,8 +220,8 @@ type joinResponse struct {
 }
 
 // Join makes this node a member of the cluster in info. The accounts of
-// the cluster replace those of the same name here; accounts only this node
-// has go to the cluster.
+// the admin node replace those of the same name here; accounts only this
+// node has stay here and do not go to the cluster.
 func (m *Manager) Join(ctx context.Context, text string) error {
 	info, err := parseJoinInfo(text)
 	if err != nil {
@@ -240,22 +246,12 @@ func (m *Manager) Join(ctx context.Context, text string) error {
 		return fmt.Errorf("%w: answer of the cluster", ErrInvalid)
 	}
 	// The accounts of the cluster first, then this node is a member.
-	clusterNames := map[string]bool{}
 	for _, user := range res.Accounts {
-		clusterNames[user.Name] = true
 		m.importAccount(user)
 	}
 	state := res.State
 	if state.Accounts == nil {
 		state.Accounts = map[string]AccountVersion{}
-	}
-	now := time.Now().UTC()
-	var added []string
-	for _, user := range m.Users.List() {
-		if !clusterNames[user.Name] {
-			state.Accounts[user.Name] = accountVersion(user, me.ID, now)
-			added = append(added, user.Name)
-		}
 	}
 	m.mu.Lock()
 	err = m.saveLocked(&state, secrets{Secret: res.Secret, JoinKey: res.JoinKey})
@@ -264,9 +260,6 @@ func (m *Manager) Join(ctx context.Context, text string) error {
 		return err
 	}
 	slog.Info("cluster joined", "cluster", state.Name, "nodes", len(state.Nodes))
-	for _, name := range added {
-		go m.pushAccount(context.WithoutCancel(ctx), name)
-	}
 	return nil
 }
 
@@ -309,7 +302,12 @@ func (m *Manager) admit(ctx context.Context, remote string, req joinRequest) (jo
 	if err := m.checkJoinKey(remote, req.Key); err != nil {
 		return joinResponse{}, err
 	}
+	if err := m.managing(); err != nil {
+		return joinResponse{}, err
+	}
 	n := req.Node
+	// A new node is a member; only the admin node allows it more.
+	n.Manage = false
 	if len(n.ID) != 32 || !validName(n.Name) || len(n.Cert) != 64 || len(n.Addresses) > maxAddresses {
 		return joinResponse{}, fmt.Errorf("%w: node", ErrInvalid)
 	}
@@ -333,6 +331,7 @@ func (m *Manager) admit(ctx context.Context, remote string, req joinRequest) (jo
 	now := time.Now().UTC().Truncate(time.Second)
 	n.Joined, n.Updated = now, now
 	next := cloneState(state)
+	next.Admin = adminOf(state)
 	next.Nodes = append(next.Nodes, n)
 	sec := m.secrets
 	if err := m.saveLocked(next, sec); err != nil {
@@ -345,8 +344,7 @@ func (m *Manager) admit(ctx context.Context, remote string, req joinRequest) (jo
 		m.Notify("cluster_node_joined", n.Name)
 	}
 	go m.announce(context.WithoutCancel(ctx), "")
-	accounts := m.Users.List()
-	return joinResponse{State: *next, Secret: sec.Secret, JoinKey: sec.JoinKey, Accounts: accounts}, nil
+	return joinResponse{State: *next, Secret: sec.Secret, JoinKey: sec.JoinKey, Accounts: m.clusterAccounts(next)}, nil
 }
 
 // membership is what all nodes get when nodes come or go.
@@ -359,6 +357,8 @@ type membership struct {
 	Name   string `json:"name"`
 	// Internet is whether the cluster allows nodes on the internet.
 	Internet bool `json:"internet"`
+	// Admin is the admin node; with Node.Manage only it may change it.
+	Admin string `json:"admin,omitempty"`
 }
 
 // announce sends the members, the join key and, after a removal, the new
@@ -369,7 +369,7 @@ func (m *Manager) announce(ctx context.Context, skip string) {
 		m.mu.Unlock()
 		return
 	}
-	msg := membership{Nodes: slices.Clone(m.state.Nodes), JoinKey: m.secrets.JoinKey, Generation: m.state.Generation, Name: m.state.Name, Internet: m.state.Internet}
+	msg := membership{Nodes: slices.Clone(m.state.Nodes), JoinKey: m.secrets.JoinKey, Generation: m.state.Generation, Name: m.state.Name, Internet: m.state.Internet, Admin: m.adminLocked()}
 	m.mu.Unlock()
 	for _, n := range m.others() {
 		if n.ID == skip {
@@ -381,8 +381,9 @@ func (m *Manager) announce(ctx context.Context, skip string) {
 	}
 }
 
-// takeMembership takes over the members another node sent.
-func (m *Manager) takeMembership(msg membership) error {
+// takeMembership takes over the members node from sent. Only a node that
+// may manage changes the members, and only the admin node who else may.
+func (m *Manager) takeMembership(from string, msg membership) error {
 	if len(msg.Nodes) == 0 || len(msg.Nodes) > MaxNodes || len(msg.JoinKey) != 64 || !validName(msg.Name) {
 		return ErrInvalid
 	}
@@ -390,6 +391,22 @@ func (m *Manager) takeMembership(msg membership) error {
 	defer m.mu.Unlock()
 	if m.state == nil {
 		return ErrNoCluster
+	}
+	if !m.mayManageLocked(from) {
+		return ErrNotPermitted
+	}
+	admin := m.adminLocked()
+	if from != admin {
+		// Who may manage stays as the admin node set it.
+		manage := map[string]bool{}
+		for _, n := range m.state.Nodes {
+			manage[n.ID] = n.Manage
+		}
+		msg.Nodes = slices.Clone(msg.Nodes)
+		for i := range msg.Nodes {
+			msg.Nodes[i].Manage = manage[msg.Nodes[i].ID]
+		}
+		msg.Admin = m.state.Admin
 	}
 	sec := m.secrets
 	next := cloneState(m.state)
@@ -409,10 +426,13 @@ func (m *Manager) takeMembership(msg membership) error {
 	nodes := slices.Clone(msg.Nodes)
 	if me >= 0 {
 		if i := slices.IndexFunc(nodes, func(n Node) bool { return n.ID == m.self.ID }); i >= 0 {
+			// Except whether it may manage: that is the admin node's call.
+			manage := nodes[i].Manage
 			nodes[i] = next.Nodes[me]
+			nodes[i].Manage = manage
 		}
 	}
-	next.Nodes, next.Name, next.Internet = nodes, msg.Name, msg.Internet
+	next.Nodes, next.Name, next.Internet, next.Admin = nodes, msg.Name, msg.Internet, msg.Admin
 	sec.JoinKey = msg.JoinKey
 	return m.saveLocked(next, sec)
 }
@@ -420,6 +440,9 @@ func (m *Manager) takeMembership(msg membership) error {
 // NewJoinKey replaces the join key: the old join information stops
 // working, the members stay.
 func (m *Manager) NewJoinKey(ctx context.Context) error {
+	if err := m.managing(); err != nil {
+		return err
+	}
 	key, err := randomHex(32)
 	if err != nil {
 		return err
@@ -442,6 +465,9 @@ func (m *Manager) NewJoinKey(ctx context.Context) error {
 
 // SetInternet allows or forbids addresses on the internet for the nodes.
 func (m *Manager) SetInternet(ctx context.Context, on bool) error {
+	if err := m.managing(); err != nil {
+		return err
+	}
 	m.mu.Lock()
 	if m.state == nil {
 		m.mu.Unlock()
@@ -464,6 +490,9 @@ func (m *Manager) Rename(ctx context.Context, name string) error {
 	if !validName(name) {
 		return fmt.Errorf("%w: name", ErrInvalid)
 	}
+	if err := m.managing(); err != nil {
+		return err
+	}
 	m.mu.Lock()
 	if m.state == nil {
 		m.mu.Unlock()
@@ -485,7 +514,23 @@ func (m *Manager) Rename(ctx context.Context, name string) error {
 // again with what it knew. A node that is away during this has to join
 // again.
 func (m *Manager) Remove(ctx context.Context, id string) error {
+	if m.isAdmin(id) {
+		// The admin node leaves itself; nobody else takes it out.
+		return ErrNotPermitted
+	}
+	return m.remove(ctx, id)
+}
+
+// remove takes node id out of the cluster; see Remove. A node that leaves
+// asks for it itself, the admin node as well.
+func (m *Manager) remove(ctx context.Context, id string) error {
+	if err := m.managing(); err != nil {
+		return err
+	}
 	removed, err := m.node(id)
+	if errors.Is(err, ErrSelf) {
+		removed, err = m.selfNode(), nil
+	}
 	if err != nil {
 		return err
 	}
@@ -505,7 +550,9 @@ func (m *Manager) Remove(ctx context.Context, id string) error {
 	next := cloneState(m.state)
 	next.Nodes = slices.DeleteFunc(next.Nodes, func(n Node) bool { return n.ID == id })
 	next.Generation++
-	msg := membership{Nodes: next.Nodes, JoinKey: key, Generation: next.Generation, Secret: secret, Name: next.Name, Internet: next.Internet}
+	// When the admin node left, the node that joined first after it.
+	next.Admin = adminOf(next)
+	msg := membership{Nodes: next.Nodes, JoinKey: key, Generation: next.Generation, Secret: secret, Name: next.Name, Internet: next.Internet, Admin: next.Admin}
 	m.mu.Unlock()
 	// The others first, signed with the secret they still have; then this
 	// node switches. The removed node hears it with the old secret too.
@@ -515,7 +562,12 @@ func (m *Manager) Remove(ctx context.Context, id string) error {
 		}
 	}
 	m.mu.Lock()
-	err = m.saveLocked(next, secrets{Secret: secret, JoinKey: key})
+	if id == m.self.ID {
+		// A node that may manage left on its own: it keeps its accounts.
+		err = m.saveLocked(nil, secrets{})
+	} else {
+		err = m.saveLocked(next, secrets{Secret: secret, JoinKey: key})
+	}
 	m.mu.Unlock()
 	if err != nil {
 		return err
@@ -534,7 +586,12 @@ func (m *Manager) Leave(ctx context.Context) error {
 	if !m.InCluster() {
 		return ErrNoCluster
 	}
-	for _, n := range m.others() {
+	// A node that may manage tells the others itself, so that the admin
+	// node leaves even when no other node may manage.
+	if m.Manages() {
+		return m.remove(ctx, m.ID())
+	}
+	for _, n := range m.managersFirst(m.others()) {
 		if err := m.call(ctx, n, "POST", "/api/v1/cluster/peer/leave", "", struct{}{}, nil); err == nil {
 			break
 		}

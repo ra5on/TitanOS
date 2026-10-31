@@ -166,21 +166,17 @@ try {
     const acme = { value: acmeData("http-01") };
     await routes(ctx, fw, acme);
 
-    // The overview lists the four new areas under "Netzwerk und Zugriff",
+    // The sidebar lists the firewall under "Sicherheit und Fernzugriff",
     // in order and with the "neu" badge.
-    await page.goto(base + "/settings");
-    await page.locator(".settings-page .areas a").first().waitFor();
-    await page.screenshot({ path: `${out}/settings-overview-desktop.png`, fullPage: true });
-    const overview = await page.locator(".settings-page .areas a").evaluateAll((links) => links.map((a) => a.getAttribute("href")));
-    assert.ok(overview.indexOf("/settings/firewall") === overview.indexOf("/settings/network") + 1, "overview order");
     await page.goto(base + "/settings/network");
     await nav(page).waitFor();
-    const group = nav(page).locator(".group-title", { hasText: "Netzwerk und Zugriff" });
+    const group = nav(page).locator(".group-title", { hasText: "Sicherheit und Fernzugriff" });
     await group.waitFor();
+    await page.screenshot({ path: `${out}/settings-overview-desktop.png`, fullPage: true });
     const hrefs = await nav(page).locator("a").evaluateAll((links) => links.map((a) => a.getAttribute("href")));
-    const network = hrefs.slice(hrefs.indexOf("/settings/network"), hrefs.indexOf("/settings/access") + 1);
-    assert.deepEqual(network, [
-      "/settings/network", "/settings/firewall", "/settings/letsencrypt", "/settings/ddns", "/settings/wireguard", "/settings/proxy", "/settings/access",
+    const security = hrefs.slice(hrefs.indexOf("/settings/access"), hrefs.indexOf("/settings/wireguard") + 1);
+    assert.deepEqual(security, [
+      "/settings/access", "/settings/firewall", "/settings/letsencrypt", "/settings/wireguard",
     ]);
     for (const area of ["firewall", "letsencrypt", "ddns"])
       assert.equal(await nav(page).locator(`a[href="/settings/${area}"]`).getByText("neu", { exact: true }).count(), 1, area);

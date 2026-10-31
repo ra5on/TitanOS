@@ -2,8 +2,8 @@
 
 Mehrere TitanOS lassen sich zu einem **Cluster** verbinden, ähnlich wie bei Proxmox:
 
-- Alle Knoten vertrauen sich **vollständig**. Von der Weboberfläche jedes Knotens aus lassen sich alle Knoten verwalten.
-- Die **Konten sind auf allen Knoten dieselben**: Passwort, Zwei-Faktor-Anmeldung, Passkeys, Rolle, Sperre und SSH-Schlüssel.
+- Der **Admin-Knoten** (der Knoten, der den Cluster erstellt hat) verwaltet alle anderen. Er kann einzelnen Knoten erlauben mitzuverwalten („Verwalten erlauben“, ab Werk aus). Alle übrigen Knoten sind **Mitglieder**: Sie werden verwaltet, verwalten aber selbst keinen anderen Knoten.
+- Die **Konten des Admin-Knotens gelten auf allen Knoten**: Passwort, Zwei-Faktor-Anmeldung, Passkeys, Rolle, Sperre und SSH-Schlüssel. Eigene Konten eines Mitglieds bleiben auf ihm und kommen nie auf den Admin-Knoten oder andere Knoten.
 - **Backups und Replikation** gehen von Knoten zu Knoten, ohne Kopplungscode von Hand und auf jedem Weg, der den anderen Knoten erreicht.
 
 Nicht dabei sind Ausfallschutz (HA), Quorum und gemeinsamer Speicher. Fehlen die anderen Knoten, arbeitet jeder Knoten für sich weiter. VMs und Apps lassen sich noch nicht zwischen Knoten verschieben.
@@ -13,16 +13,16 @@ Einstellung: **Einstellungen › Cluster** (Besitzer und Administratoren). Code:
 ## Erstellen und beitreten
 
 1. Auf dem ersten NAS: **Cluster erstellen** und einen Namen vergeben.
-2. Die Seite zeigt ab jetzt dauerhaft die **Beitrittsinformation**. Das ist ein Text `titanos-cluster:…` mit:
+2. Unter **Beitrittsinformation anzeigen** bestätigt man mit dem eigenen Passwort (und ggf. einem Code) oder mit einem Passkey des Kontos für diese Adresse; erst dann zeigt die Seite die **Beitrittsinformation**. Sie verschwindet nach fünf Minuten, beim Verlassen der Seite und bei „Ausblenden“ wieder und steht nie in der normalen Antwort der Seite (`GET /api/v1/cluster`), sondern nur in `POST /api/v1/cluster/join-info`. Das ist ein Text `titanos-cluster:…` mit:
    - dem Namen des Clusters,
    - den Adressen der Knoten,
    - den Fingerabdrücken ihrer Cluster-Zertifikate,
    - dem **Beitrittsschlüssel** (32 Byte).
 
-   Ein Passwort oder Konto steht nicht darin. Jeder Knoten zeigt dieselbe Information.
+   Ein Passwort oder Konto steht nicht darin. Nur der Admin-Knoten und Knoten mit seiner Freigabe zeigen sie und nehmen neue Knoten auf; sie enthält nur deren Adressen.
 3. Auf dem neuen NAS die Information einfügen und **Prüfen**. Die Vorschau zeigt:
    - welche Konten des neuen NAS durch die gleichnamigen des Clusters **ersetzt** werden,
-   - welche von ihm in den Cluster gehen,
+   - welche nur auf ihm bleiben (sie gehen nicht in den Cluster),
    - welche aus dem Cluster dazukommen.
 4. **Beitreten**, mit einem einfachen Bestätigungsdialog.
 
@@ -65,7 +65,7 @@ Wer einen Knoten verwaltet, kann alle verwalten. Wer einen Knoten übernimmt, al
 
 ## Einen anderen Knoten verwalten
 
-- **Knoten wählen:** in der Statusleiste („Knoten ▾“) oder unter Einstellungen › Cluster › **Verwalten**.
+- **Knoten wählen:** über das TitanOS-Symbol oben links (kleiner Pfeil, auch auf dem Handy), in der seitlichen Navigation über die Knoten-Karte oben, oder unter Einstellungen › Cluster › **Verwalten**.
 - **Weiterleitung:** Der Browser bleibt auf dem eigenen NAS. Dessen titand leitet `/api/v1/cluster/nodes/<id>/api/…` an den Knoten weiter, auch WebSockets (Terminal, Konsolen, VM-Bildschirm), Uploads und Downloads.
 - **Konto und Rechte:** Der andere Knoten prüft Konto und Rechte selbst, mit seinem synchronisierten Konto.
 - **Protokoll:** Im Aktivitätsprotokoll des Knotens steht die Herkunft „per Cluster“.
@@ -76,10 +76,20 @@ Wer einen Knoten verwaltet, kann alle verwalten. Wer einen Knoten übernimmt, al
 
 **Weitergeleitet werden nur Websitzungen**, keine API-Tokens, kein MCP und nicht der Assistent. Eine Anfrage, die schon von einem anderen Knoten kommt, wird nicht weitergereicht. Cluster-Routen nehmen sie nicht an.
 
+## Rollen und Rechte
+
+- **Admin-Knoten:** der Knoten, der den Cluster erstellt hat (`cluster.json` `admin`). Bei einem Cluster aus einer Version ohne Rollen, oder wenn der Admin-Knoten den Cluster verlassen hat, ist es der Knoten, der am frühesten beigetreten ist (bei gleicher Sekunde die kleinere ID); jeder Knoten kommt so auf denselben.
+- **Freigabe:** Nur der Admin-Knoten erlaubt einem anderen Knoten das Verwalten oder entzieht es (`PUT /api/v1/cluster/nodes/{id}/manage`, nur Besitzer, eigene Websitzung). Ein neu beigetretener Knoten hat sie nie.
+- **Was nur verwaltende Knoten dürfen:** andere Knoten über den Proxy verwalten, Beitrittsinformation zeigen und neue Knoten aufnehmen, Name/Internet-Option ändern, neuen Beitrittsschlüssel erstellen, Knoten entfernen, die Mitgliederliste verteilen. Den Admin-Knoten entfernt niemand; er verlässt den Cluster selbst und teilt das den anderen mit.
+- **Was jeder Knoten darf:** seine eigenen Adressen pflegen, den Cluster verlassen (ein verwaltender Knoten führt das Entfernen aus), den Zustand der anderen sehen und Backups an einen Knoten schicken, der sie annimmt.
+- **Durchsetzung beim Ziel:** Alle Knoten kennen dasselbe Geheimnis; deshalb prüft der angefragte Knoten zusätzlich, dass die TLS-Verbindung das Cluster-Zertifikat des Knotens zeigt, für den die Anfrage signiert ist (Client-Zertifikat, Fingerabdruck wie beim Server). Ein Mitglied kann sich so nicht als Admin-Knoten ausgeben. Nur der Entwicklungsmodus (HTTP) prüft das nicht.
+- Ein Mitglied zeigt keinen Knotenwechsler und keine Beitrittsinformation; die Cluster-Seite nennt seine Rolle.
+
 ## Konten
 
-- **Version:** Jede Kontoänderung auf einem Knoten bekommt eine Version aus Zeit und Knoten. Neuer gewinnt, bei gleicher Zeit die höhere Knoten-ID.
-- **Verteilung:** Der Knoten schickt die Änderung sofort an alle anderen. Jede Minute vergleichen die Knoten ihre Versionen, damit ein Knoten, der fehlte, nachzieht. Dabei wird nur der RAM verglichen; auf den Stick wird nur bei einer echten Änderung geschrieben.
+- **Richtung:** Konten gehen nur vom Admin-Knoten zu den anderen. Andere Knoten nehmen Konten nur vom Admin-Knoten an (`cluster_not_permitted` sonst). Ändert ein Mitglied ein übernommenes Konto selbst, bleibt die Änderung dort, bis der Admin-Knoten das Konto wieder ändert.
+- **Version:** Jede Kontoänderung auf dem Admin-Knoten bekommt eine Version aus Zeit und Knoten. Neuer gewinnt, bei gleicher Zeit die höhere Knoten-ID.
+- **Verteilung:** Der Admin-Knoten schickt die Änderung sofort an alle anderen. Jede Minute vergleicht er die Versionen, damit ein Knoten, der fehlte, nachzieht. Dabei wird nur der RAM verglichen; auf den Stick wird nur bei einer echten Änderung geschrieben.
 - **Löschen:** Gelöschte Konten bleiben als Grabstein in `cluster/cluster.json`.
 - **Linux-UID:** Jeder Knoten behält seine eigene Linux-UID je Konto, weil seine Dateien ihr gehören.
 - **Übernahme:** Übernommene Änderungen wirken wie lokale:

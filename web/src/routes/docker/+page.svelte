@@ -36,6 +36,7 @@
 	import { addContainerConsole } from '#lib/terminal.svelte.ts';
 	import { tailnetHost, type TailnetStatus } from '#lib/app-links.ts';
 	import AppIcon from '#lib/components/AppIcon.svelte';
+	import ContextMenu from '#lib/components/ContextMenu.svelte';
 	import ContainerCard from './ContainerCard.svelte';
 	import ContainerRow from './ContainerRow.svelte';
 	import { isRunning, webLinks, type ContainerActions } from './container.ts';
@@ -75,6 +76,18 @@
 	let filter = $state<'all' | 'running' | 'stopped' | 'updates'>('all');
 	// A stack is closed until the user opens it; filters reveal matching services.
 	let expanded = $state<Record<string, boolean>>({});
+	// The menu of a stack (addresses, problems, links, tailnet, editor), from its icon.
+	let stackMenu = $state<{ group: DockerGroup; x: number; y: number } | null>(null);
+	let stackMenuWasOpen = false;
+	function openStackMenu(group: DockerGroup, anchor: HTMLElement) {
+		if (stackMenuWasOpen) {
+			stackMenuWasOpen = false;
+			stackMenu = null;
+			return;
+		}
+		const rect = anchor.getBoundingClientRect();
+		stackMenu = { group, x: rect.left, y: rect.bottom + 4 };
+	}
 	const stackOpen = (id: string) => expanded[id] ?? (search.trim() !== '' || filter !== 'all');
 	let linkGroup = $state<DockerGroup | null>(null),
 		primaryService = $state('');
@@ -873,16 +886,30 @@
 
 	{#if shownGroups.length > 0}
 		{#if layout.view === 'list'}
-			<div class="list-wrap">
-				<div class="tile list" role="list" aria-label={t('docker.title')}>
-					<div class="head" aria-hidden="true">
-						<span>{t('docker.column.name')}</span><span>{t('docker.column.state')}</span><span
-							>{t('docker.cpu')}</span
-						><span>{t('docker.ram')}</span><span>{t('docker.column.ports')}</span><span></span>
-					</div>
-					{#each shownGroups as group (group.id)}
-						{#if isStack(group)}
-							<div class="stack" role="listitem" aria-label="{t('docker.stack')} {group.name}">
+			<div class="list" role="list" aria-label={t('docker.title')}>
+				{#each shownGroups as group (group.id)}
+					{#if isStack(group)}
+						<div class="stack" role="listitem" aria-label="{t('docker.stack')} {group.name}">
+							{@render stackHead(group)}
+							{#if stackOpen(group.id)}
+								<div class="members" role="list">
+									{#each shownMembers(group) as container (container.name)}
+										{@render row(container, true)}
+									{/each}
+								</div>
+							{/if}
+						</div>
+					{:else}
+						{@render row(group.members[0], false)}
+					{/if}
+				{/each}
+			</div>
+		{:else}
+			<div class="cards">
+				{#each shownGroups as group (group.id)}
+					{#if isStack(group)}
+						<section class="tile stack-card" aria-label="{t('docker.stack')} {group.name}">
+							<div class="list">
 								{@render stackHead(group)}
 								{#if stackOpen(group.id)}
 									<div class="members" role="list">
@@ -891,29 +918,6 @@
 										{/each}
 									</div>
 								{/if}
-							</div>
-						{:else}
-							{@render row(group.members[0], false)}
-						{/if}
-					{/each}
-				</div>
-			</div>
-		{:else}
-			<div class="cards">
-				{#each shownGroups as group (group.id)}
-					{#if isStack(group)}
-						<section class="tile stack-card" aria-label="{t('docker.stack')} {group.name}">
-							<div class="list-wrap">
-								<div class="list">
-									{@render stackHead(group)}
-									{#if stackOpen(group.id)}
-										<div class="members" role="list">
-											{#each shownMembers(group) as container (container.name)}
-												{@render row(container, true)}
-											{/each}
-										</div>
-									{/if}
-								</div>
 							</div>
 						</section>
 					{:else}
@@ -952,89 +956,129 @@
 
 {#snippet stackHead(group: DockerGroup)}
 	{@const running = group.members.filter(isRunning).length}
-	{@const primary = stackPrimary(group, layout.primaryServices)}
-	{@const links = primary ? webLinks(primary, host, tailscaleHost) : []}
-	{@const problemCount = group.members.filter(
-		(c) => !isRunning(c) || c.state === 'restarting',
-	).length}
-	<div class="stack-head">
+	{@const summary = t('docker.stackSummary', { running, total: group.members.length })}
+	<!-- A stack is a tile like a container: the icon opens its menu, the
+	     name unfolds the services as tiles behind it. -->
+	<div
+		class="stack-head"
+		class:stopped={running === 0}
+		title={search.trim() || filter !== 'all'
+			? t('docker.stackMatches', { count: shownMembers(group).length, total: group.members.length })
+			: undefined}
+		oncontextmenu={(event) => {
+			event.preventDefault();
+			stackMenu = { group, x: event.clientX, y: event.clientY };
+		}}
+		role="presentation"
+	>
+		<button
+			type="button"
+			class="stack-icon"
+			aria-label={t('docker.actionsFor', { name: group.name })}
+			aria-haspopup="menu"
+			onpointerdown={() => (stackMenuWasOpen = stackMenu?.group.id === group.id)}
+			onclick={(event) => openStackMenu(group, event.currentTarget)}
+			><AppIcon
+				src={group.members.find((container) => container.icon)?.icon ?? ''}
+				name={group.name}
+			/></button
+		>
 		<button
 			type="button"
 			class="stack-toggle"
 			aria-expanded={stackOpen(group.id)}
 			onclick={() => (expanded[group.id] = !stackOpen(group.id))}
+			><span class="stack-name">{group.name}</span><span class="sr-only">{t('docker.stack')}</span
+			>{#if group.members.some((container) => container.updateAvailable)}<span class="chip warn"
+					>{t('docker.update')}</span
+				>{/if}<span class="chevron" class:folded={!stackOpen(group.id)}
+				><Icon name="chevronDown" size={14} /></span
+			></button
 		>
-			<span class="stack-icon"
-				><AppIcon
-					src={group.members.find((container) => container.icon)?.icon ?? ''}
-					name={group.name}
-				/></span
-			>
-			<span class="stack-names">
-				<span class="stack-line"
-					><span class="stack-name">{group.name}</span><span class="chip">{t('docker.stack')}</span
-					>{#if group.members.some((container) => container.updateAvailable)}<span class="chip warn"
-							>{t('docker.update')}</span
-						>{/if}<span class="chevron" class:folded={!stackOpen(group.id)}
-						><Icon name="chevronDown" size={16} /></span
-					></span
-				>
-				<span class="stack-sub">{t('docker.stackServices', { count: group.members.length })}</span>
-			</span>
-		</button>
-		<span class="stack-state"
-			><span
-				class="dot"
-				class:ok={running === group.members.length}
-				class:warn={running > 0 && running < group.members.length}
-				aria-hidden="true"
-			></span>{t('docker.stackSummary', { running, total: group.members.length })}</span
-		>
-		<span class="mono stack-value"
-			><span class="label">{t('docker.cpu')}</span>{running
-				? formatPercent(sum(group, (container) => container.cpuPercent))
-				: '–'}</span
-		>
-		<span class="mono stack-value"
-			><span class="label">{t('docker.ram')}</span>{running
+		<span class="stack-values"
+			><span class="sr-only">{summary}, {t('docker.cpu')}</span><span aria-hidden="true"
+				>{`${running}/${group.members.length} · `}</span
+			>{running ? formatPercent(sum(group, (container) => container.cpuPercent)) : '–'}<span
+				class="sr-only">, {t('docker.ram')}</span
+			><span aria-hidden="true">{' · '}</span>{running
 				? formatBytes(sum(group, (container) => container.memoryBytes))
 				: '–'}</span
 		>
-		<div class="stack-links">
-			{#if problemCount}<button class="link stack-problems" onclick={() => showProblems(group)}
-					>{t('docker.stackProblems', { count: problemCount })}</button
-				>{/if}
-			{#if search.trim() || filter !== 'all'}<span class="muted matches"
-					>{t('docker.stackMatches', {
-						count: shownMembers(group).length,
-						total: group.members.length,
-					})}</span
-				>{/if}
-			{#each links as link (link.label)}<a
-					class="btn small"
+	</div>
+{/snippet}
+
+{#if stackMenu}
+	{@const group = stackMenu.group}
+	{@const primary = stackPrimary(group, layout.primaryServices)}
+	{@const links = primary ? webLinks(primary, host, tailscaleHost) : []}
+	{@const app = group.members.find((c) => c.managed && c.app)?.app ?? ''}
+	{@const problemCount = group.members.filter(
+		(c) => !isRunning(c) || c.state === 'restarting',
+	).length}
+	<ContextMenu
+		label={t('docker.actionsFor', { name: group.name })}
+		x={stackMenu.x}
+		y={stackMenu.y}
+		onclose={() => (stackMenu = null)}
+	>
+		{#if links.length > 0}
+			{#each links as link, index (`${index}:${link.href}`)}<a
+					role="menuitem"
 					href={link.href}
 					target="_blank"
 					rel="noreferrer"
-					title={link.label}><Icon name={link.icon} size={14} />{link.text}</a
+					title={link.label}
+					onclick={() => (stackMenu = null)}
+					><Icon name={link.icon} size={16} /><span>{link.text}</span></a
 				>{/each}
-			{#if layout.primaryServices[group.id] && !primary}<span class="notice-warn missing-primary"
-					>{t('docker.primaryMissing', { service: layout.primaryServices[group.id] })}</span
-				>{/if}
-			<button class="btn small" disabled={editing || savingLayout} onclick={() => editLinks(group)}
-				>{t('docker.stackLinks')}</button
+			<hr />
+		{/if}
+		{#if layout.primaryServices[group.id] && !primary}<p class="menu-title">
+				{t('docker.primaryMissing', { service: layout.primaryServices[group.id] })}
+			</p>{/if}
+		{#if problemCount}
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => {
+					stackMenu = null;
+					showProblems(group);
+				}}
+				><Icon name="activity" size={16} /><span
+					>{t('docker.stackProblems', { count: problemCount })}</span
+				></button
 			>
-			{#if proxy && group.members.some((c) => c.managed && c.app)}{@const app =
-					group.members.find((c) => c.managed && c.app)?.app ?? ''}<button
-					class="btn small"
-					disabled={editing}
-					onclick={() => openTailnet(app)}
-					><Icon name="tailnet" size={14} />{t(
-						appInTailnet(app) ? 'docker.tailnetUnpublish' : 'docker.tailnetPublish',
-					)}</button
-				>{/if}
-		</div>
-	</div>
-{/snippet}
+		{/if}
+		<button
+			type="button"
+			role="menuitem"
+			disabled={editing || savingLayout}
+			onclick={() => {
+				stackMenu = null;
+				editLinks(group);
+			}}><Icon name="globe" size={16} /><span>{t('docker.stackLinks')}</span></button
+		>
+		{#if proxy && app}
+			<button
+				type="button"
+				role="menuitem"
+				disabled={editing}
+				onclick={() => {
+					stackMenu = null;
+					openTailnet(app);
+				}}
+				><Icon name="tailnet" size={16} /><span
+					>{t(appInTailnet(app) ? 'docker.tailnetUnpublish' : 'docker.tailnetPublish')}</span
+				></button
+			>
+		{/if}
+		{#if app}
+			<a role="menuitem" href="/docker/apps/{app}" onclick={() => (stackMenu = null)}
+				><Icon name="edit" size={16} /><span>{t('docker.edit')}</span></a
+			>
+		{/if}
+	</ContextMenu>
+{/if}
 
 {#if linkGroup}
 	<Dialog
@@ -1311,29 +1355,6 @@
 	/>{/if}
 
 <style>
-	.stack-links {
-		grid-column: 1/-1;
-		display: flex;
-		align-items: center;
-		flex-wrap: wrap;
-		gap: 6px;
-		margin-top: 5px;
-	}
-	.stack-links .small {
-		min-height: 30px;
-		padding: 4px 8px;
-		font-size: 0.75rem;
-	}
-	.stack-problems {
-		color: var(--warn-text);
-	}
-	.missing-primary {
-		font-size: 0.75rem;
-		padding: 3px 6px;
-	}
-	.matches {
-		font-size: 0.75rem;
-	}
 	.field-row {
 		display: flex;
 		flex-direction: column;
@@ -1508,52 +1529,74 @@
 		flex: 1 1 auto;
 	}
 
-	/* The list: one grid whose columns every row and stack takes over
-	   (subgrid), so that values line up from top to bottom. */
-	.list-wrap {
-		container: docker-list / inline-size;
-	}
+	/* The list: tiles of one fixed width, as many side by side as fit
+	   (owner's design of 30 Oct 2026). A stack is a tile too; its services
+	   follow as tiles of their own when it is unfolded. */
 	.list {
 		display: grid;
-		grid-template-columns:
-			minmax(12rem, 2.4fr) minmax(8rem, auto) minmax(7rem, 1fr) minmax(5rem, auto)
-			minmax(0, 1.3fr) auto;
-		column-gap: 20px;
-	}
-	.head {
-		grid-column: 1 / -1;
-		display: grid;
-		grid-template-columns: subgrid;
-		padding: 10px var(--tile-pad) 8px;
-		color: var(--muted);
-		font-size: 0.6875rem;
-		font-weight: 600;
-		letter-spacing: 0.06em;
-		text-transform: uppercase;
+		grid-template-columns: repeat(auto-fill, 15rem);
+		gap: 10px;
 	}
 	.stack,
 	.members {
-		grid-column: 1 / -1;
-		display: grid;
-		grid-template-columns: subgrid;
+		display: contents;
+	}
+	.stack-card .list {
+		padding: var(--tile-pad);
 	}
 	.stack-head {
-		grid-column: 1 / -1;
 		display: grid;
-		grid-template-columns: subgrid;
-		align-items: center;
-		min-height: 3.5rem;
-		padding: 8px var(--tile-pad);
-		border-top: 1px solid var(--panel-border);
+		grid-template-columns: 30px minmax(0, 1fr);
+		grid-template-rows: auto auto;
+		align-content: center;
+		column-gap: 10px;
+		row-gap: 1px;
+		height: 3.25rem;
+		padding: 0 12px 0 14px;
+		box-sizing: border-box;
+		border: 1px solid var(--panel-border);
+		border-radius: 14px;
+		background: var(--panel-bg);
+		-webkit-backdrop-filter: var(--panel-backdrop);
+		backdrop-filter: var(--panel-backdrop);
+		box-shadow:
+			inset 4px 0 0 var(--accent),
+			var(--panel-shadow);
 		font-size: 0.875rem;
 	}
-	.stack-card .stack-head {
-		border-top: 0;
+	.stack-head.stopped {
+		box-shadow:
+			inset 4px 0 0 var(--muted),
+			var(--panel-shadow);
+	}
+	.stack-icon {
+		grid-row: 1 / span 2;
+		align-self: center;
+		display: grid;
+		place-items: center;
+		width: 30px;
+		height: 30px;
+		padding: 0;
+		overflow: hidden;
+		border: 0;
+		border-radius: var(--radius-ctl);
+		background: none;
+		color: var(--text);
+		font-size: 0.75rem;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.stack-icon :global(img) {
+		padding: 0;
+	}
+	.stack-icon:hover,
+	.stack-icon:focus-visible {
+		outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
 	}
 	.stack-toggle {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: 6px;
 		min-width: 0;
 		padding: 0;
 		background: transparent;
@@ -1563,35 +1606,18 @@
 		text-align: left;
 		cursor: pointer;
 	}
+	.stack-toggle .chip {
+		flex: none;
+		font-size: 0.6875rem;
+	}
 	.chevron {
 		display: inline-flex;
+		flex: none;
 		color: var(--muted);
 		transition: transform 0.15s ease;
 	}
 	.chevron.folded {
 		transform: rotate(-90deg);
-	}
-	.stack-icon {
-		width: 32px;
-		height: 32px;
-		flex: none;
-		overflow: hidden;
-		border-radius: var(--radius-ctl);
-		color: var(--text);
-		font-size: 0.8125rem;
-		font-weight: 600;
-	}
-	.stack-names {
-		display: flex;
-		flex-direction: column;
-		gap: 1px;
-		min-width: 0;
-	}
-	.stack-line {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		min-width: 0;
 	}
 	.stack-name {
 		overflow: hidden;
@@ -1599,33 +1625,12 @@
 		white-space: nowrap;
 		font-weight: 600;
 	}
-	.stack-line .chip {
-		flex: none;
-		font-size: 0.6875rem;
-	}
-	.stack-sub {
-		color: var(--muted);
-		font-size: 0.75rem;
-	}
-	.stack-state {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		white-space: nowrap;
-	}
-	.stack-value {
-		font-size: 0.8125rem;
-	}
-	.stack-value .label {
-		position: absolute;
-		width: 1px;
-		height: 1px;
+	.stack-values {
 		overflow: hidden;
-		clip-path: inset(50%);
 		white-space: nowrap;
-	}
-	.list .stack-head:hover {
-		background: color-mix(in srgb, var(--chip) 45%, transparent);
+		color: var(--muted);
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
 	}
 
 	.cards {
@@ -1644,33 +1649,10 @@
 			transition: none;
 		}
 	}
-	@container docker-list (max-width: 760px) {
-		.list,
-		.stack,
-		.members {
-			display: block;
-		}
-		.head {
-			display: none;
-		}
-		.stack-head {
-			display: flex;
-			flex-wrap: wrap;
-			gap: 6px 14px;
-			padding: 10px 12px;
-		}
-		.stack-toggle {
-			flex: 1 1 100%;
-		}
-		.stack-value .label {
-			position: static;
-			width: auto;
-			height: auto;
-			clip-path: none;
-			margin-right: 6px;
-			color: var(--muted);
-			font-family: var(--font-sans);
-			font-size: 0.75rem;
+	/* Phones: one tile per line. */
+	@media (max-width: 760px) {
+		.list {
+			grid-template-columns: minmax(0, 1fr);
 		}
 	}
 	@media (max-width: 760px) {

@@ -1,15 +1,18 @@
 <script lang="ts">
 	import { showsNew } from '#lib/settings-seen.svelte.ts';
-	// The overview: every area as a compact row with its state, in the groups
-	// and order of the sidebar. On phones it is the navigation, with the search
-	// above it; on wider screens the sidebar holds the search.
-	import { settingsEntries } from '#lib/settings-search.ts';
+	// On phones the overview is the navigation: every area as a compact row
+	// with its state, with the search above it. On wider screens the sidebar
+	// holds the list, so the page shows only what the sidebar does not: what
+	// needs attention and this NAS (owner's decision of 30 Oct 2026).
+	import { settingsAreas, settingsEntries } from '#lib/settings-search.ts';
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import SettingsSearch from '#lib/components/SettingsSearch.svelte';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { settingsSearch, settingsStates } from '#lib/settings-states.svelte.ts';
+	import { system } from '#lib/system.svelte.ts';
+	import { formatDuration } from '#lib/format.ts';
 
 	const prefix = 'settings-list';
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
@@ -21,6 +24,14 @@
 		searching && flat.length ? Math.min(settingsSearch.active, flat.length - 1) : -1,
 	);
 
+	// The areas with a state, in the order of the navigation.
+	const attention = $derived(
+		settingsAreas
+			.filter((area) => states[area.id] && (admin || !area.admin))
+			.map((area) => ({ area, state: states[area.id] })),
+	);
+	const info = $derived(system.info);
+
 	function clear() {
 		settingsSearch.query = '';
 		settingsSearch.active = 0;
@@ -28,6 +39,40 @@
 </script>
 
 <PageHead title={t('settings.title')} />
+
+<div class="desk-overview">
+	{#if admin}
+		<section class="tile panel" aria-labelledby="h-attention">
+			<h2 class="tile-title" id="h-attention">{t('settings.attention')}</h2>
+			{#if attention.length === 0}
+				<p class="all-good"><Icon name="check" size={16} />{t('settings.allGood')}</p>
+			{:else}
+				<ul class="attention">
+					{#each attention as { area, state } (area.id)}
+						<li>
+							<span class="dot {state.tone}" aria-hidden="true"></span>
+							<span class="what">{t(state.text)}</span>
+							<a class="btn small" href="/settings/{area.id}">{t(area.label)}</a>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</section>
+	{/if}
+	<section class="tile panel" aria-labelledby="h-this-nas">
+		<h2 class="tile-title" id="h-this-nas">{t('settings.thisNas')}</h2>
+		<dl class="facts">
+			<dt>{t('settings.nasName')}</dt>
+			<dd>{info?.hostname ?? '–'}</dd>
+			<dt>{t('about.version')}</dt>
+			<dd class="mono">{info ? `TitanOS ${info.version}` : '–'}</dd>
+			<dt>{t('settings.address')}</dt>
+			<dd class="mono">{location.host}</dd>
+			<dt>{t('system.uptime')}</dt>
+			<dd>{info ? formatDuration(info.uptimeSeconds) : '–'}</dd>
+		</dl>
+	</section>
+</div>
 
 <div class="phone-search">
 	<SettingsSearch results={flat} idPrefix={prefix} visibleLabel />
@@ -39,8 +84,8 @@
 			onclick={clear}>{t('ui.clear')}</button
 		>
 	</div>{/if}
-{#if searching && flat.length === 0}<p>{t('ui.noSettings')}</p>{/if}
-<div class="groups" id="{prefix}-results">
+{#if searching && flat.length === 0}<p class="phone-list">{t('ui.noSettings')}</p>{/if}
+<div class="groups phone-list" id="{prefix}-results">
 	{#each groups as group (group.group)}
 		{@const offset = flat.indexOf(group.entries[0])}
 		<section class="tile settings-group" aria-labelledby="group-{group.group}">
@@ -147,9 +192,62 @@
 		align-items: center;
 		gap: 12px;
 	}
-	/* Wider screens search in the sidebar. */
+	.desk-overview {
+		display: flex;
+		flex-direction: column;
+		gap: var(--gap);
+		max-width: 44rem;
+	}
+	.attention {
+		display: flex;
+		flex-direction: column;
+	}
+	.attention li {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 8px 0;
+	}
+	.attention li + li {
+		border-top: 1px solid var(--panel-border);
+	}
+	.what {
+		flex: 1;
+		min-width: 0;
+	}
+	.all-good {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin: 0;
+		color: var(--muted);
+	}
+	.all-good :global(svg) {
+		color: var(--accent);
+	}
+	.facts {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: 6px 18px;
+		margin: 0;
+		font-size: 0.875rem;
+	}
+	.facts dt {
+		color: var(--muted);
+	}
+	.facts dd {
+		margin: 0;
+	}
+	/* Wider screens search and navigate in the sidebar. */
 	@media (min-width: 761px) {
-		.phone-search {
+		.phone-search,
+		.phone-list,
+		.search-result {
+			display: none;
+		}
+	}
+	@media (max-width: 760px) {
+		.desk-overview {
 			display: none;
 		}
 	}

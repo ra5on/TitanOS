@@ -4,7 +4,8 @@ import type { IconName } from '#lib/components/Icon.svelte';
 const keywords: Record<string, string> = {
 	appearance:
 		'navigation reiter tabs leiste kopfzeile header reihenfolge order theme design farbe color font schrift hintergrund background app symbol icon home bildschirm screen menü menu fenster window dialog transparenz transparency glas glass',
-	network: 'ip dns gateway bridge vlan bonding netzwerk network',
+	network:
+		'ip dns gateway bridge vlan bonding netzwerk network hostname name nas-name rechnername umbenennen rename',
 	firewall:
 		'firewall paketfilter packet filter nftables port ports zone zonen heimnetz home vpn internet regel rule sperren block blockieren',
 	'firewall-zones': 'zone zonen matrix vlan eigene own docker netz network ziel destination',
@@ -95,7 +96,10 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 	],
 	api: [{ id: 'mcp', label: 'mcp.title', href: '/settings/api#api-mcp' }],
 	hardware: [{ id: 'intel-guc', label: 'intelGuc.title', href: '/settings/hardware#hw-intel' }],
-	network: [{ id: 'dns', label: 'netcfg.dns', href: '/settings/network#network-dns' }],
+	network: [
+		{ id: 'hostname', label: 'netcfg.hostname', href: '/settings/network#net-system' },
+		{ id: 'dns', label: 'netcfg.dns', href: '/settings/network#network-dns' },
+	],
 	letsencrypt: [
 		{
 			id: 'letsencrypt-status',
@@ -214,8 +218,9 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 /** The groups of the settings navigation, in the order they are shown. */
 export const settingsGroups = [
 	'system',
-	'hardware',
 	'network',
+	'security',
+	'hardware',
 	'data',
 	'integrations',
 	'personal',
@@ -235,6 +240,8 @@ export type SettingsArea = {
 // palette and the route guard. Within a group the areas appear in exactly
 // this order; adding an area is one line in the right place.
 export const settingsAreas: SettingsArea[] = [
+	// Order decided by the owner on 30 Oct 2026: from the everyday to the rare.
+	{ id: 'about', label: 'about.title', group: 'system', icon: 'fileText' },
 	{ id: 'updates', label: 'update.title', group: 'system', icon: 'download', admin: true },
 	{ id: 'timezone', label: 'settings.datetime', group: 'system', icon: 'clock', admin: true },
 	{
@@ -244,32 +251,9 @@ export const settingsAreas: SettingsArea[] = [
 		icon: 'bell',
 		admin: true,
 	},
-	{ id: 'about', label: 'about.title', group: 'system', icon: 'fileText' },
-	{ id: 'hardware', label: 'hardware.title', group: 'hardware', icon: 'monitor', admin: true },
-	{ id: 'temperatures', label: 'temperatures.title', group: 'hardware', icon: 'activity' },
-	{ id: 'memory', label: 'memoryPolicy.title', group: 'hardware', icon: 'grid', admin: true },
-	{ id: 'energy', label: 'energy.title', group: 'hardware', icon: 'zap', admin: true },
-	{ id: 'ups', label: 'ups.title', group: 'hardware', icon: 'battery', admin: true },
-	{ id: 'power-button', label: 'powerButton.title', group: 'hardware', icon: 'power', admin: true },
 	{ id: 'network', label: 'netcfg.title', group: 'network', icon: 'globe', admin: true },
-	{
-		id: 'firewall',
-		label: 'firewall.title',
-		group: 'network',
-		icon: 'shield',
-		admin: true,
-		isNew: true,
-	},
-	{
-		id: 'letsencrypt',
-		label: 'letsencrypt.title',
-		group: 'network',
-		icon: 'check',
-		admin: true,
-		isNew: true,
-	},
 	{ id: 'ddns', label: 'ddns.title', group: 'network', icon: 'refresh', admin: true, isNew: true },
-	{ id: 'wireguard', label: 'wg.title', group: 'network', icon: 'key', admin: true, isNew: true },
+	{ id: 'proxy', label: 'proxy.settingsTitle', group: 'network', icon: 'external', admin: true },
 	{
 		id: 'cluster',
 		label: 'cluster.title',
@@ -278,8 +262,30 @@ export const settingsAreas: SettingsArea[] = [
 		admin: true,
 		isNew: true,
 	},
-	{ id: 'proxy', label: 'proxy.settingsTitle', group: 'network', icon: 'external', admin: true },
-	{ id: 'access', label: 'access.title', group: 'network', icon: 'lock', admin: true },
+	{ id: 'access', label: 'access.title', group: 'security', icon: 'lock', admin: true },
+	{
+		id: 'firewall',
+		label: 'firewall.title',
+		group: 'security',
+		icon: 'shield',
+		admin: true,
+		isNew: true,
+	},
+	{
+		id: 'letsencrypt',
+		label: 'letsencrypt.title',
+		group: 'security',
+		icon: 'check',
+		admin: true,
+		isNew: true,
+	},
+	{ id: 'wireguard', label: 'wg.title', group: 'security', icon: 'key', admin: true, isNew: true },
+	{ id: 'hardware', label: 'hardware.title', group: 'hardware', icon: 'monitor', admin: true },
+	{ id: 'temperatures', label: 'temperatures.title', group: 'hardware', icon: 'activity' },
+	{ id: 'energy', label: 'energy.title', group: 'hardware', icon: 'zap', admin: true },
+	{ id: 'ups', label: 'ups.title', group: 'hardware', icon: 'battery', admin: true },
+	{ id: 'power-button', label: 'powerButton.title', group: 'hardware', icon: 'power', admin: true },
+	{ id: 'memory', label: 'memoryPolicy.title', group: 'data', icon: 'grid', admin: true },
 	{ id: 'backups', label: 'safeguard.title', group: 'data', icon: 'archive', admin: true },
 	{ id: 'files', label: 'fileIndex.title', group: 'data', icon: 'search', admin: true },
 	{ id: 'homeassistant', label: 'ha.title', group: 'integrations', icon: 'home', admin: true },

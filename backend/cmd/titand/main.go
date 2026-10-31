@@ -260,6 +260,9 @@ func run(opts options) error {
 				return w.certs.ForNames(hello.ServerName, names)
 			}
 			return w.certs.GetCertificate(hello)
+		}, GetConfigForClient: func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
+			// Other nodes show their own certificate (cluster.Verify).
+			return w.nodes.ServerConfig(hello), nil
 		}, MinVersion: tls.VersionTLS12}
 		serve(https, true)
 		if opts.httpAddr != "" {

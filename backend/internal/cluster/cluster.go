@@ -1,7 +1,10 @@
-// Package cluster joins several TitanOS NAS into a cluster in which every
-// node trusts the others fully, as in Proxmox: from the web interface of
-// any node all nodes can be managed, the accounts are the same on all of
-// them and backups go from one node to another without a pairing code.
+// Package cluster joins several TitanOS NAS into a cluster, as in Proxmox:
+// from the web interface of the admin node all nodes can be managed, its
+// accounts come to all of them and backups go from one node to another
+// without a pairing code. The admin node is the one that created the
+// cluster; it can allow other nodes to manage as well (Node.Manage). The
+// other nodes are members: they are managed but manage nobody, and their
+// own accounts stay with them (roles.go).
 //
 // There is no high availability, no quorum and no shared storage: every
 // node keeps working on its own when the others are away.
@@ -61,6 +64,7 @@ var (
 	ErrVersion      = errors.New("cluster: the node runs another version")
 	ErrDisabled     = errors.New("cluster: not available in development mode")
 	ErrUnauthorized = errors.New("cluster: request not signed by the cluster")
+	ErrNotPermitted = errors.New("cluster: this node may not manage the cluster")
 )
 
 // Node is a member of the cluster.
@@ -73,7 +77,10 @@ type Node struct {
 	Addresses []string `json:"addresses"`
 	Extra     []string `json:"extra,omitempty"`
 	// Cert is the SHA-256 of the cluster certificate of the node, in hex.
-	Cert    string    `json:"cert"`
+	Cert string `json:"cert"`
+	// Manage allows a node other than the admin node to manage the others;
+	// only the admin node sets it.
+	Manage  bool      `json:"manage,omitempty"`
 	Joined  time.Time `json:"joined"`
 	Updated time.Time `json:"updated"`
 }
@@ -99,7 +106,10 @@ type State struct {
 	// one was removed or missed its removal.
 	Generation int `json:"generation"`
 	// Internet allows addresses on the internet for the nodes.
-	Internet bool                      `json:"internet,omitempty"`
+	Internet bool `json:"internet,omitempty"`
+	// Admin is the ID of the admin node; see adminLocked for a cluster from
+	// before, or when it is gone.
+	Admin    string                    `json:"admin,omitempty"`
 	Nodes    []Node                    `json:"nodes"`
 	Accounts map[string]AccountVersion `json:"accounts"`
 	Created  time.Time                 `json:"created"`
@@ -280,8 +290,10 @@ type View struct {
 	Name     string `json:"name,omitempty"`
 	Internet bool   `json:"internet"`
 	Nodes    []Node `json:"nodes"`
-	// JoinInfo lets another node join; only owners and administrators see it.
-	JoinInfo string `json:"joinInfo,omitempty"`
+	// Admin is the ID of the admin node; Manages whether this node may
+	// manage the others.
+	Admin   string `json:"admin,omitempty"`
+	Manages bool   `json:"manages"`
 	// Extra are the addresses added for this node.
 	Extra []string `json:"extra"`
 	// Found are the addresses this node found itself.
@@ -299,9 +311,17 @@ func (m *Manager) View() View {
 	if m.state != nil {
 		view.Name, view.Internet = m.state.Name, m.state.Internet
 		view.Nodes = slices.Clone(m.state.Nodes)
-		view.JoinInfo = m.joinInfoLocked()
+		view.Admin, view.Manages = m.adminLocked(), m.mayManageLocked(m.self.ID)
 	}
 	return view
+}
+
+// JoinInfo lets another node join; it is empty outside a cluster. The
+// settings page shows it only after password or passkey, never with View.
+func (m *Manager) JoinInfo() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.joinInfoLocked()
 }
 
 // node returns a member other than this node.

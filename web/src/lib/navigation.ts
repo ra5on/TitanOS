@@ -1,31 +1,54 @@
 import type { Role } from './api.ts';
+import type { IconName } from './components/Icon.svelte';
 import type { MessageKey } from './i18n/index.svelte.ts';
 
-export type NavItem = { id: string; href: string; label: MessageKey; roles?: Role[] };
+export type NavItem = {
+	id: string;
+	href: string;
+	label: MessageKey;
+	icon: IconName;
+	roles?: Role[];
+};
 
 /** The tabs of the header in their standard order. A plain user only works with their own shares and files. */
 export const NAV: NavItem[] = [
-	{ id: 'dashboard', href: '/', label: 'nav.dashboard' },
-	{ id: 'storage', href: '/storage', label: 'nav.storage', roles: ['owner', 'admin'] },
-	{ id: 'shares', href: '/shares', label: 'nav.shares', roles: ['owner', 'admin'] },
-	{ id: 'files', href: '/files', label: 'nav.files' },
-	{ id: 'users', href: '/users', label: 'nav.users', roles: ['owner', 'admin'] },
-	{ id: 'docker', href: '/docker', label: 'nav.docker', roles: ['owner', 'admin'] },
-	{ id: 'vms', href: '/vms', label: 'nav.vms', roles: ['owner', 'admin'] },
-	{ id: 'lxc', href: '/lxc', label: 'nav.lxc', roles: ['owner', 'admin'] },
-	{ id: 'apps', href: '/apps', label: 'nav.apps', roles: ['owner', 'admin'] },
-	{ id: 'plugins', href: '/plugins', label: 'nav.plugins', roles: ['owner', 'admin'] },
-	{ id: 'settings', href: '/settings', label: 'nav.settings' },
-	{ id: 'tools', href: '/tools', label: 'nav.tools', roles: ['owner', 'admin'] },
+	{ id: 'dashboard', href: '/', label: 'nav.dashboard', icon: 'home' },
+	{
+		id: 'storage',
+		href: '/storage',
+		label: 'nav.storage',
+		icon: 'disk',
+		roles: ['owner', 'admin'],
+	},
+	{ id: 'shares', href: '/shares', label: 'nav.shares', icon: 'globe', roles: ['owner', 'admin'] },
+	{ id: 'files', href: '/files', label: 'nav.files', icon: 'folder' },
+	{ id: 'users', href: '/users', label: 'nav.users', icon: 'users', roles: ['owner', 'admin'] },
+	{ id: 'docker', href: '/docker', label: 'nav.docker', icon: 'box', roles: ['owner', 'admin'] },
+	{ id: 'vms', href: '/vms', label: 'nav.vms', icon: 'monitor', roles: ['owner', 'admin'] },
+	{ id: 'lxc', href: '/lxc', label: 'nav.lxc', icon: 'chip', roles: ['owner', 'admin'] },
+	{ id: 'apps', href: '/apps', label: 'nav.apps', icon: 'grid', roles: ['owner', 'admin'] },
+	{ id: 'plugins', href: '/plugins', label: 'nav.plugins', icon: 'zap', roles: ['owner', 'admin'] },
+	{ id: 'settings', href: '/settings', label: 'nav.settings', icon: 'gear' },
+	{ id: 'tools', href: '/tools', label: 'nav.tools', icon: 'tool', roles: ['owner', 'admin'] },
 ];
 
 /** Settings can never be hidden: it is the way back to this choice. */
 export const NAV_FIXED = 'settings';
 
-/** Own order and hidden tabs of an account; empty = standard. */
-export type NavPrefs = { order: string[]; hidden: string[] };
+/**
+ * Own order and hidden tabs of an account; empty = standard. `layout` puts
+ * them in the header (top, standard) or in a sidebar on the left (side);
+ * `magnify` enlarges the symbols of the folded sidebar under the pointer.
+ */
+export type NavPrefs = { order: string[]; hidden: string[]; layout: NavLayout; magnify: boolean };
+export type NavLayout = 'top' | 'side';
 
-export const defaultNav = (): NavPrefs => ({ order: [], hidden: [] });
+export const defaultNav = (): NavPrefs => ({
+	order: [],
+	hidden: [],
+	layout: 'top',
+	magnify: true,
+});
 
 // Unknown ids are kept, so a tab of a newer app version keeps its place
 // when an older version saves the appearance in between.
@@ -41,7 +64,12 @@ function ids(value: unknown): string[] {
 export function sanitizeNav(input: unknown): NavPrefs {
 	if (typeof input !== 'object' || input === null) return defaultNav();
 	const v = input as Record<string, unknown>;
-	return { order: ids(v.order), hidden: ids(v.hidden).filter((id) => id !== NAV_FIXED) };
+	return {
+		order: ids(v.order),
+		hidden: ids(v.hidden).filter((id) => id !== NAV_FIXED),
+		layout: v.layout === 'side' ? 'side' : 'top',
+		magnify: v.magnify !== false,
+	};
 }
 
 export function navForRole(role: Role): NavItem[] {

@@ -191,6 +191,11 @@ export type Appearance = {
 	menus: FloatingSurface;
 	/** Dialogs (Dialog.svelte) and the dimming behind them. */
 	dialogs: DialogSurface;
+	/**
+	 * Header, sidebar and status bar: opaque unless `own` (glass style only);
+	 * shine is not used there.
+	 */
+	bars: FloatingSurface;
 	/** Order and hidden tabs of the header navigation. */
 	nav: NavPrefs;
 };
@@ -244,6 +249,7 @@ export function defaultAppearance(): Appearance {
 		fx: defaultEffects(),
 		menus: defaultFloating(),
 		dialogs: { ...defaultFloating(), dim: 70 },
+		bars: defaultFloating(),
 		nav: defaultNav(),
 	};
 }
@@ -364,6 +370,7 @@ export function sanitizeAppearance(input: unknown, legacy?: unknown): Appearance
 		duration: inRange(v.duration, LIMITS.duration, d.duration),
 		fx: sanitizeEffects(v.fx),
 		menus: sanitizeFloating(v.menus),
+		bars: sanitizeFloating(v.bars),
 		dialogs: sanitizeDialogs(v.dialogs),
 		nav: sanitizeNav(v.nav),
 	};
@@ -460,6 +467,8 @@ export function cssVariables(a: Appearance, systemLight: boolean): Record<string
 	const menuAlpha = floatingAlpha(a, a.menus, p);
 	const dialog = floatingValues(a, a.dialogs);
 	const dialogAlpha = floatingAlpha(a, a.dialogs, p);
+	// The bars stay opaque unless they have own glass values.
+	const bars = a.style === 'glass' && a.bars.own;
 	return {
 		'--bg': p.bg,
 		'--surface': p.surface,
@@ -492,6 +501,8 @@ export function cssVariables(a: Appearance, systemLight: boolean): Record<string
 		'--dialog-shine': (dialog.shine / 100).toFixed(2),
 		'--glass-dialog': withAlpha(p.surface, dialogAlpha),
 		'--dialog-shine-color': shineColor(dialog.shine / 100, p.dark),
+		'--bar-bg': bars ? withAlpha(p.header, floatingAlpha(a, a.bars, p)) : p.header,
+		'--bar-backdrop': bars ? `blur(${a.bars.blur}px) saturate(160%)` : 'none',
 		'--glass-shadow': `rgba(0, 0, 0, ${p.dark ? 0.3 : 0.08})`,
 		'--outline-border': p.dark ? shade(p.border, 0.12) : shade(p.border, -0.15),
 		'--overlay': withAlpha(p.dark ? p.bg : p.text, a.dialogs.dim / 100),

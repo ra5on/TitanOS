@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
@@ -105,9 +106,17 @@ func (m *Manager) Verify(r *http.Request) (Identity, error) {
 	if d := time.Since(time.Unix(at, 0)); d > skew || d < -skew {
 		return Identity{}, ErrUnauthorized
 	}
-	known := false
+	known, cert := false, ""
 	for _, n := range state.Nodes {
-		known = known || n.ID == f["node"] && n.ID != m.ID()
+		if n.ID == f["node"] && n.ID != m.ID() {
+			known, cert = true, n.Cert
+		}
+	}
+	// The connection shows the certificate of the node it is signed for:
+	// the secret is the same on all nodes, the certificate is not. Only
+	// development and tests talk plain HTTP.
+	if !m.Insecure && !peerCertificate(r, cert) {
+		return Identity{}, ErrUnauthorized
 	}
 	want := signature(secret, r.Method, r.URL.RequestURI(), f["node"], gen, at, f["nonce"], f["user"])
 	if !known || !hmac.Equal([]byte(want), []byte(f["sig"])) {
@@ -176,4 +185,14 @@ func (n *nonces) fresh(key string, now time.Time) bool {
 // WithIdentity returns ctx carrying id, for the handlers behind Verify.
 func WithIdentity(ctx context.Context, id Identity) context.Context {
 	return context.WithValue(ctx, identityKey{}, id)
+}
+
+// peerCertificate reports whether the TLS connection of r showed the
+// certificate with fingerprint want.
+func peerCertificate(r *http.Request, want string) bool {
+	if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 || want == "" {
+		return false
+	}
+	got := fingerprint(r.TLS.PeerCertificates[0].Raw)
+	return subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
 }

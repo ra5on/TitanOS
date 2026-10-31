@@ -14,7 +14,12 @@
 	import { togglePalette } from '#lib/palette.svelte.ts';
 	import AccountMenu from './AccountMenu.svelte';
 	import Logo from './Logo.svelte';
+	import NodeMenu from './NodeMenu.svelte';
 	import Notifications from './Notifications.svelte';
+	import { clusterNodes } from '#lib/cluster.svelte.ts';
+
+	/** The tabs are in the sidebar (desktop); the header keeps the tools and names the area. */
+	let { side = false }: { side?: boolean } = $props();
 
 	const role = $derived(session.data?.user?.role ?? 'user');
 	const allItems = $derived(navForRole(role));
@@ -25,13 +30,7 @@
 	const currentLabel = $derived(
 		allItems.find((item) => isCurrent(item.href))?.label ?? 'nav.label',
 	);
-	// The app on the home screen has no back button of the browser: show
-	// one once there is a page to go back to (CSS shows it only there).
-	let visited = $state(false);
-	afterNavigate((navigation) => {
-		mobileMenu?.hidePopover();
-		if (navigation.type !== 'enter') visited = true;
-	});
+	afterNavigate(() => mobileMenu?.hidePopover());
 	onMount(() => {
 		const desktop = matchMedia('(min-width: 761px)');
 		const close = () => {
@@ -64,15 +63,13 @@
 	}
 </script>
 
-<header>
-	{#if visited && page.url.pathname !== '/'}<button
-			type="button"
-			class="app-back"
-			onclick={() => history.back()}
-			aria-label={t('nav.back')}
-			title={t('nav.back')}><Icon name="arrowLeft" size={20} /></button
+<header class="bar-surface" class:side>
+	{#if clusterNodes.nodes.length > 1}<div class="brand"><NodeMenu variant="logo" /></div>{:else}<a
+			class="brand"
+			href="/"
+			aria-label="TitanOS"><Logo size={28} /></a
 		>{/if}
-	<a class="brand" href="/" aria-label="TitanOS"><Logo size={28} /></a>
+	{#if side}<h1 class="area">{t(currentLabel)}</h1>{/if}
 	<button
 		class="mobile-nav-trigger"
 		type="button"
@@ -240,7 +237,6 @@
 		align-items: center;
 		gap: 16px;
 		padding: 8px 24px;
-		background: var(--header);
 		border-bottom: 1px solid var(--border);
 	}
 	header > :global(*) {
@@ -249,21 +245,24 @@
 	.brand {
 		display: flex;
 	}
-	.app-back {
+	.area {
 		display: none;
 	}
-	@media (display-mode: standalone) {
-		.app-back {
-			display: inline-flex;
-			align-items: center;
-			justify-content: center;
-			min-width: 44px;
-			min-height: 44px;
-			margin-left: -8px;
-			border: 0;
-			background: none;
-			color: var(--text);
-			cursor: pointer;
+	@media (min-width: 761px) {
+		header.side .brand,
+		header.side > .nav-shell {
+			display: none;
+		}
+		header.side .area {
+			display: block;
+			flex: 1 1 auto;
+			min-width: 0;
+			margin: 0;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+			font-size: 1.125rem;
+			font-weight: 600;
 		}
 	}
 	.quick-access {
@@ -470,7 +469,7 @@
 			gap: 10px;
 			padding: 8px 12px;
 		}
-		.brand :global(svg:last-child) {
+		.brand :global(.logo > svg:last-child) {
 			display: none;
 		}
 	}
