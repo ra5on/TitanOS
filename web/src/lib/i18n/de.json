@@ -7037,5 +7037,13 @@
 	"tools.exportPrevious": "Vorigen Start herunterladen",
 	"tools.noPrevious": "Vom vorigen Start wurde kein Protokoll aufbewahrt. TitanOS bewahrt Protokolle auf dem ersten Volume auf, sobald eines eingebunden ist.",
 	"notify.kind.stick_error.title": "Der Boot-Stick {subject} zeigt Fehler",
-	"notify.kind.stick_error.text": "Der Stick liest oder schreibt nicht mehr zuverlässig. Prüfe, ob die Sicherung des Sticks aktuell ist (Einstellungen › Sicherungen), und tausche den Stick bald gegen einen neuen."
+	"notify.kind.stick_error.text": "Der Stick liest oder schreibt nicht mehr zuverlässig. Prüfe, ob die Sicherung des Sticks aktuell ist (Einstellungen › Sicherungen), und tausche den Stick bald gegen einen neuen.",
+	"notify.kind.fan_stopped.title": "Lüfter {subject} steht",
+	"notify.kind.fan_stopped.text": "Der Lüfter {subject} hat sich gedreht und steht jetzt, obwohl er angesteuert wird. Prüfe Kabel und Lüfter, sonst wird das NAS zu warm.",
+	"notify.kind.temperature_critical.title": "Kritische Temperatur: {subject}",
+	"notify.kind.temperature_critical.text": "Ein Sensor nähert sich seinem kritischen Wert. Prüfe Lüftung und Lüfter; bei Überhitzung schaltet sich die Hardware selbst ab.",
+	"notify.kind.memory_corrected.title": "Arbeitsspeicher: korrigierte Fehler ({subject})",
+	"notify.kind.memory_corrected.text": "ECC hat Fehler im Arbeitsspeicher korrigiert. Einzelne sind unbedenklich; häufen sie sich, kündigt sich ein defektes Modul an.",
+	"notify.kind.memory_uncorrected.title": "Arbeitsspeicher: nicht korrigierbare Fehler ({subject})",
+	"notify.kind.memory_uncorrected.text": "Der Arbeitsspeicher hat Fehler, die ECC nicht korrigieren konnte. Daten können verfälscht werden: Speichermodul prüfen und tauschen."
 }

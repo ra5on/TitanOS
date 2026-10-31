@@ -1189,6 +1189,25 @@ func (w *titand) wireMaintenance() error {
 		slog.Warn("fan settings not readable from /config", "err", err)
 	}
 	w.background(func() { w.coolers.Run(ctx) })
+	// Fans that stopped, temperatures near their critical value, ECC errors.
+	hardware := notify.NewHardwareWatcher(w.notifier)
+	hardware.Fans = func() []notify.FanReading {
+		var list []notify.FanReading
+		for _, f := range w.coolers.Fans() {
+			list = append(list, notify.FanReading{ID: f.ID, Label: f.Label, RPM: f.RPM, Percent: f.Percent})
+		}
+		return list
+	}
+	hardware.Temperatures = func() []notify.TempReading {
+		var list []notify.TempReading
+		for _, t := range system.ReadTemperatures() {
+			list = append(list, notify.TempReading{ID: t.ID, Label: t.Label, Celsius: t.Celsius, Critical: t.CriticalC})
+		}
+		return list
+	}
+	if !w.opts.dev {
+		w.background(func() { hardware.Run(ctx) })
+	}
 	w.upkeep.Disabled = w.opts.dev
 	w.mediaImports = media.New(ctx, w.volumes.Mounted, shares.UsersGID)
 	w.mediaImports.Disabled = w.opts.dev

@@ -6,6 +6,10 @@ import "strings"
 // a volume or a disk. The web UI has its own texts for the same kinds.
 var texts = map[string]map[string][2]string{
 	"de": {
+		"fan_stopped":               {"Lüfter {s} steht", "Der Lüfter {s} hat sich gedreht und steht jetzt, obwohl er angesteuert wird. Prüfe Kabel und Lüfter, sonst wird das NAS zu warm."},
+		"temperature_critical":      {"Kritische Temperatur: {s}", "Ein Sensor nähert sich seinem kritischen Wert. Prüfe Lüftung und Lüfter; bei Überhitzung schaltet sich die Hardware selbst ab."},
+		"memory_corrected":          {"Arbeitsspeicher: korrigierte Fehler ({s})", "ECC hat Fehler im Arbeitsspeicher korrigiert. Einzelne sind unbedenklich; häufen sie sich, kündigt sich ein defektes Modul an."},
+		"memory_uncorrected":        {"Arbeitsspeicher: nicht korrigierbare Fehler ({s})", "Der Arbeitsspeicher hat Fehler, die ECC nicht korrigieren konnte. Daten können verfälscht werden: Speichermodul prüfen und tauschen."},
 		"stick_error":               {"Der Boot-Stick {s} zeigt Fehler", "Der Stick liest oder schreibt nicht mehr zuverlässig. Prüfe, ob die Sicherung des Sticks aktuell ist (Einstellungen › Sicherungen), und tausche den Stick bald gegen einen neuen."},
 		"unclean_shutdown":          {"Das NAS wurde nicht ordnungsgemäß heruntergefahren", "Der vorige Start endete ohne sauberes Herunterfahren (Stromausfall, Absturz oder Reset); letzte Spur {s}. Prüfe den Zustand der Volumes; das Protokoll des vorigen Starts gibt es unter Werkzeuge › Protokolle."},
 		"maintenance_failed":        {"Wartung {s} fehlgeschlagen", "Der Wartungsauftrag benötigt Aufmerksamkeit. Einzelheiten stehen unter Werkzeuge › Wartung."},
@@ -88,6 +92,10 @@ var texts = map[string]map[string][2]string{
 		"vm_schedule_forced":        {"{s} ausgeschaltet", "Der Gast der VM {s} ist nicht innerhalb der Wartezeit heruntergefahren. TitanOS hat die VM ausgeschaltet (wie Stecker ziehen)."},
 	},
 	"en": {
+		"fan_stopped":               {"Fan {s} stopped", "The fan {s} was turning and stands now although it is driven. Check the cable and the fan, or the NAS gets too warm."},
+		"temperature_critical":      {"Critical temperature: {s}", "A sensor is getting close to its critical value. Check the airflow and the fans; when overheating, the hardware switches itself off."},
+		"memory_corrected":          {"Memory: corrected errors ({s})", "ECC corrected errors in the memory. A few are harmless; if they pile up, a module is failing."},
+		"memory_uncorrected":        {"Memory: uncorrectable errors ({s})", "The memory has errors ECC could not correct. Data can be corrupted: check and replace the memory module."},
 		"stick_error":               {"The boot stick {s} shows errors", "The stick no longer reads or writes reliably. Check that the backup of the stick is up to date (Settings › Backups) and replace the stick with a new one soon."},
 		"unclean_shutdown":          {"The NAS was not shut down properly", "The previous start ended without a clean shutdown (power cut, crash or reset); last trace {s}. Check the state of the volumes; the log of the previous start is under Tools › Logs."},
 		"maintenance_failed":        {"Maintenance {s} failed", "The maintenance job needs attention. Details are under Tools › Maintenance."},

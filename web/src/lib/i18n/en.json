@@ -7037,5 +7037,13 @@
 	"tools.exportPrevious": "Download previous start",
 	"tools.noPrevious": "No log of the previous start was kept. TitanOS keeps logs on the first volume as soon as one is mounted.",
 	"notify.kind.stick_error.title": "The boot stick {subject} shows errors",
-	"notify.kind.stick_error.text": "The stick no longer reads or writes reliably. Check that the backup of the stick is up to date (Settings › Backups) and replace the stick with a new one soon."
+	"notify.kind.stick_error.text": "The stick no longer reads or writes reliably. Check that the backup of the stick is up to date (Settings › Backups) and replace the stick with a new one soon.",
+	"notify.kind.fan_stopped.title": "Fan {subject} stopped",
+	"notify.kind.fan_stopped.text": "The fan {subject} was turning and stands now although it is driven. Check the cable and the fan, or the NAS gets too warm.",
+	"notify.kind.temperature_critical.title": "Critical temperature: {subject}",
+	"notify.kind.temperature_critical.text": "A sensor is getting close to its critical value. Check the airflow and the fans; when overheating, the hardware switches itself off.",
+	"notify.kind.memory_corrected.title": "Memory: corrected errors ({subject})",
+	"notify.kind.memory_corrected.text": "ECC corrected errors in the memory. A few are harmless; if they pile up, a module is failing.",
+	"notify.kind.memory_uncorrected.title": "Memory: uncorrectable errors ({subject})",
+	"notify.kind.memory_uncorrected.text": "The memory has errors ECC could not correct. Data can be corrupted: check and replace the memory module."
 }
