@@ -1,7 +1,7 @@
 <script lang="ts">
 	// On a new stick: put a saved configuration back instead of setting
 	// the NAS up again. Shown on the setup page.
-	import { api, ApiError } from '#lib/api.ts';
+	import { api, apiFetch, ApiError } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
@@ -94,9 +94,8 @@
 			else if (!password) await api.post('/setup/restore/upload', source.file);
 			else {
 				// The password goes in a header: the body is the file itself.
-				const res = await fetch('/api/v1/setup/restore/upload', {
+				const res = await apiFetch('/setup/restore/upload', {
 					method: 'POST',
-					credentials: 'same-origin',
 					headers: { 'X-Backup-Password': password },
 					body: source.file,
 				});
@@ -132,8 +131,7 @@
 		const timer = setInterval(async () => {
 			slow = Date.now() - started > 120_000;
 			try {
-				const res = await fetch('/api/v1/session', {
-					credentials: 'same-origin',
+				const res = await apiFetch('/session', {
 					signal: AbortSignal.timeout(2500),
 				});
 				if (res.ok && wentDown) {

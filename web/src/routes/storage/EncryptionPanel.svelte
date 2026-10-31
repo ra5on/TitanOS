@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { apiPath } from '#lib/cluster-node.ts';
 	// LUKS2 encryption of a volume (internal/storage crypt.go): unlock with
 	// the password after a start, lock, passwords and the header backup.
 	// Plain confirmations; passwords stay only as long as a dialog is open.
@@ -49,22 +48,7 @@
 	}
 
 	async function downloadHeader() {
-		const res = await fetch(apiPath(`${base}/luks-header`), { credentials: 'same-origin' });
-		if (!res.ok) {
-			let code = 'internal';
-			try {
-				code = (await res.json())?.error?.code ?? code;
-			} catch {
-				/* not JSON */
-			}
-			throw new ApiError(res.status, code, '');
-		}
-		const blob = await res.blob();
-		const link = document.createElement('a');
-		link.href = URL.createObjectURL(blob);
-		link.download = `${volume.name}-luks-header.tar`;
-		link.click();
-		setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
+		await api.download(`${base}/luks-header`, `${volume.name}-luks-header.tar`);
 	}
 
 	// Runs only from a click on its button (or Enter in the password field
