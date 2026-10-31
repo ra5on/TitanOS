@@ -139,6 +139,34 @@ Request, der `build/debian-security.txt` anlegt oder ändert. Nach dem Merge
 wird der nächste Tag ein volles Release. In den Repository-Einstellungen muss
 dafür „Allow GitHub Actions to create and approve pull requests“ an sein.
 
+## Ab 0.41: zweiter Kernel, Stick-Abbild und GRUB
+
+- **Kernel „Neu“** ([KERNEL.md](KERNEL.md)): Ein volles Release baut das
+  Abbild zweimal, `scripts/make-zip.sh` und `scripts/make-zip.sh --kernel-new`
+  (mkosi-Profil `kernel-new`, Kernel und Firmware aus trixie-backports).
+  `make-release.sh` packt die zweite Fassung als
+  `titanos-<version>-new-{vmlinuz,initrd.img,filesystem.squashfs}` und
+  beschreibt sie im Manifest unter `variants.new`; `verify-release.py` prüft
+  sie mit. App-Releases übernehmen die Variante der Basis
+  (`repack-release.py`). Plugin-Sätze werden für beide Kernel geholt bzw.
+  bestellt (`kernelVariant=new` an das Plugin-Repository). Ins Release kommen
+  nur die Plugins des stabilen Kernels. Fehlt der Satz des neuen Kernels,
+  warnt der Workflow nur.
+- **Vor einem Release mit neuem Kernel-Satz** im Plugin-Repository die Quellen
+  von `r8125`/`r8126` festlegen (`python3 scripts/pin-driver-source.py <name>
+  <commit>`) und `plugins/nvidia-legacy/packages.lock.json` füllen
+  (`python3 scripts/update-nvidia-lock.py --plugin nvidia-legacy --output
+  plugins/nvidia-legacy/packages.lock.json`). Sonst bricht der Satzbau ab.
+- **GRUB** ([BOOT.md](BOOT.md)): Das Abbild baut `BOOTIA32.EFI` und den
+  BIOS-Kern von GRUB (`scripts/make-grub.sh` in `mkosi.postinst.chroot`).
+  `make-zip.sh` legt sie mit `boot/grub/grub.cfg` auf den Stick. Mit
+  `STICK_IMAGE=1` (im Workflow an) erzeugt `make-release.sh` zusätzlich
+  `titanos-<version>.img.xz` (4 GiB, MBR, GRUB im MBR) für Boards ohne UEFI.
+  Es steht in `SHA256SUMS`; die Prüfsummenliste ist signiert.
+- Der Workflow bootet zusätzlich die Variante mit neuem Kernel
+  (`smoke-release.py --kernel-new`) und das ZIP mit SeaBIOS und 32-Bit-OVMF
+  (`--firmware bios|ia32`), sofern das Release beides enthält.
+
 ## Probelauf ohne Veröffentlichung
 
 Änderungen an Build, Boot oder Release-Skripten lösen in Pull Requests den

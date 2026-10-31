@@ -27,7 +27,7 @@ TitanOS macht aus einem x86-64-PC einen zentralen Speicher und Anwendungsserver.
 
 Die Startseite passt du an deinen Alltag an: Welche Informationen du siehst, wie viel Platz sie bekommen und wie sie aussehen, bestimmst du selbst. Jede Person hat ihr eigenes Dashboard und ihre eigenen Darstellungseinstellungen.
 
-Das System basiert auf **Debian 13**, startet per UEFI von einem USB-Stick und läuft aus dem Arbeitsspeicher. Nutzdaten, Container und VM-Abbilder liegen auf separaten Daten-Volumes. Die Konfiguration bleibt auf dem Stick; automatische Konfigurationssicherungen helfen beim Austausch eines ausgefallenen Sticks.
+Das System basiert auf **Debian 13**, startet per UEFI (auch 32-Bit-UEFI) oder Legacy-BIOS von einem USB-Stick und läuft aus dem Arbeitsspeicher. Nutzdaten, Container und VM-Abbilder liegen auf separaten Daten-Volumes. Die Konfiguration bleibt auf dem Stick; automatische Konfigurationssicherungen helfen beim Austausch eines ausgefallenen Sticks.
 
 Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-Software-RAID und ist ein eigenständiges Projekt ohne Verbindung zu Lime Technology.
 
@@ -246,7 +246,7 @@ TitanOS nutzt einen **Stable-Kanal**. Die Weboberfläche prüft und installiert 
 
 | Bereich | Voraussetzung |
 |---|---|
-| Rechner | x86-64/amd64 mit UEFI; Secure Boot für das NAS ausgeschaltet |
+| Rechner | x86-64/amd64 mit UEFI, 32-Bit-UEFI oder Legacy-BIOS (dafür das Stick-Abbild oder `boot/grub/stick-bios.py`, siehe `docs/BOOT.md`); Secure Boot für das NAS ausgeschaltet |
 | Arbeitsspeicher | Für erste Tests 4 GB einplanen, zusätzlich RAM für Apps und VMs; keine pauschal abgenommene Hardware-Mindestgröße |
 | Bootmedium | USB-Stick mit 8–32 GB, FAT32, Label `TITANOS` |
 | Nutzdaten | Separate Laufwerke; ein neues Volume löscht die ausgewählten Platten |
