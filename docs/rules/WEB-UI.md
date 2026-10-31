@@ -78,6 +78,12 @@ Bedienkonzept angelehnt an Unraid, Gestaltung eigenständig.
   Details: `docs/APP-LINKS.md`, `docs/APP-PROXY.md`.
 - Storytold-Paketierung und App-Vorlagen bleiben ausschließlich in TitanOS-Apps.
 
+## Code-Aufbau der Weboberfläche
+
+- **API-Anfragen nur über `web/src/lib/api.ts`** (Code-Review 8i, 31.10.2026): JSON über `api.get/post/put/patch/delete`, Dateien über `api.download(pfad, name, { serverName })` (holt die Antwort als Blob, wirft bei Fehlern einen `ApiError` statt eine Fehlerseite zu speichern; mit `serverName` gilt der Name aus `Content-Disposition`), alles andere (Streams, Upload-Stücke, Gesundheitsprüfung beim Neustart) über `apiFetch` – Netzfehler bleiben dort `TypeError`, damit Uploads sie von Fehlerantworten unterscheiden; `responseError` macht aus einer Fehlerantwort den `ApiError`. Kein `fetch(apiPath(…))` und kein festes `/api/v1` in Seiten; Links (`href`, `src`) bauen weiter `apiPath`.
+- **Unit-Tests** (8j): reine Module in `web/tests/*.test.mjs` (node:test, importieren `src/lib/*.ts` direkt); Module, die Runes oder das DOM brauchen (`format.ts` über die Sprache, `radio-group.ts`), und aus Seiten herausgelöste Logik unter `web/tests/lib/` bzw. `web/tests/routes/` mit vitest/jsdom (`npm test` führt beides aus). Geprüft: `api.ts` mit Downloads, `trial`, `storage-view`, `file-drag`, `passkeys`, `media`, `format`, `radio-group` sowie die Seitenlogik von VMs, Plugins und Freigaben.
+- **Große Seiten** (8f): Logik in eigene Module neben der Seite (`.svelte.ts`, wenn sie Runes-Zustand hält, sonst `.ts`), Dialoge und Menüs als Komponenten mit ihrem eigenen Zustand. Umgesetzt für VMs (`console-size.svelte.ts`, `vm-page.ts`, `VmRowMenu`, `VmActionDialog`, `VmXmlDialog`), Plugins (`plugins.ts`, `RemoveDialog`, `UpdateDialog`, `LinkDialog`, `SourcesDialog`, `SourceRemoveDialog`, `ProblemNotice`) und Freigaben (`shares-page.ts`, `ShareMenu`, `ConnectDialog`, `DeleteShareDialog`, `UnlockDialog`). Aussehen und Verhalten blieben gleich: Bildschirmfotos aller drei Seiten mit ihren Dialogen (1280 und 390 px, isolierte Testdaten) vor und nach dem Umbau pixelweise verglichen, Abweichungen nur im Rauschen der Weichzeichnung (≤ 31 Pixel). Nicht zerlegt in diesem Schritt: Datensicherung, Docker-Liste, Dashboard und VM-Assistent (wurden parallel geändert) sowie die Dateien-Seite, die schon in viele Komponenten aufgeteilt ist.
+
 ## Katalog und mobile Navigation
 
 - Offizielle Quelle heißt „TitanOS-Apps“; interne ID `titanos` bleibt stabil.
