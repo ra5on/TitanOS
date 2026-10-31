@@ -143,8 +143,8 @@ func TestUnsupportedAndMissingHelper(t *testing.T) {
 	}
 }
 
-// The PDF helper gets the opened file as descriptor 3, never a path from
-// the request, and its PNG answer is scaled like any picture.
+// The PDF helper gets the opened file on stdin, never a path from the
+// request, and its PNG answer is scaled like any picture.
 func TestPDFThroughHelper(t *testing.T) {
 	dir := t.TempDir()
 	page := image.NewRGBA(image.Rect(0, 0, 300, 600))
@@ -153,7 +153,7 @@ func TestPDFThroughHelper(t *testing.T) {
 	pngFile := filepath.Join(dir, "page.png")
 	os.WriteFile(pngFile, buf.Bytes(), 0600)
 	script := filepath.Join(dir, "pdftoppm")
-	os.WriteFile(script, []byte("#!/bin/sh\nfor a; do last=$a; done\n[ \"$last\" = /dev/fd/3 ] || exit 3\nhead -c 5 /dev/fd/3 | grep -q '%PDF-' || exit 4\ncat "+pngFile+"\n"), 0700)
+	os.WriteFile(script, []byte("#!/bin/sh\nfor a; do last=$a; done\n[ \"$last\" = - ] || exit 3\nhead -c 5 | grep -q '%PDF-' || exit 4\ncat "+pngFile+"\n"), 0700)
 	m := New()
 	m.lookPath = func(name string) (string, error) {
 		if name == "pdftoppm" {

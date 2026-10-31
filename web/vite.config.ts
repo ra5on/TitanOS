@@ -34,10 +34,20 @@ export default defineConfig(({ mode }) => ({
 			// Single-page app: titand answers every unknown path with index.html.
 			adapter: adapter({ pages: out, assets: out, fallback: 'index.html' }),
 			// Only scripts that are part of the build may run. SvelteKit adds the
-			// hash of its own start script to the policy in index.html.
+			// hash of its own start script to the policy in index.html. Everything
+			// else stays on this NAS, except https pictures (app icons): after an
+			// injection nothing can be loaded from or sent to elsewhere.
 			csp: {
 				directives: {
+					'default-src': ['self'],
 					'script-src': ['self'],
+					'style-src': ['self', 'unsafe-inline'],
+					'img-src': ['self', 'data:', 'blob:', 'https:'],
+					'media-src': ['self', 'blob:'],
+					'font-src': ['self', 'data:'],
+					'connect-src': ['self'],
+					'worker-src': ['self', 'blob:'],
+					'frame-src': ['self'],
 					'object-src': ['none'],
 					'base-uri': ['self'],
 				},

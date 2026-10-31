@@ -118,13 +118,23 @@ func (m *Manager) Sources() []SourceState {
 	return states
 }
 
+// validLink accepts https links only: an unsigned plugin comes with its
+// checksum over the same connection, so plain http would let anyone on the
+// way swap both (decided 31.10.2026). Sources saved with http before stop
+// working with this error until they are added again with https.
 func validLink(raw string) (*url.URL, error) {
 	u, ok := httpfetch.ValidURL(strings.TrimSpace(raw))
 	if !ok || u.Fragment != "" {
-		return nil, fmt.Errorf("%w: not an http(s) link", ErrInvalid)
+		return nil, fmt.Errorf("%w: not an https link", ErrInvalid)
+	}
+	if u.Scheme != "https" && !insecureForTests {
+		return nil, fmt.Errorf("%w: only https links are allowed for plugins", ErrInvalid)
 	}
 	return u, nil
 }
+
+// insecureForTests lets tests use plain http test servers.
+var insecureForTests = false
 
 // AddSource checks that the address serves a plugin list and keeps it.
 func (m *Manager) AddSource(ctx context.Context, raw string) (SourceState, error) {
