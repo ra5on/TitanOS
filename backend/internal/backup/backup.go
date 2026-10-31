@@ -154,13 +154,18 @@ type Job struct {
 	ID string `json:"id"`
 	// Sources are shares, by name; see selection.go for what else picks
 	// out what is saved.
-	Sources     []string            `json:"sources"`
-	Folders     map[string][]string `json:"folders,omitempty"`
-	Skip        []string            `json:"skip,omitempty"`
-	Patterns    []string            `json:"patterns,omitempty"`
-	Extras      []string            `json:"extras,omitempty"`
-	Destination Destination         `json:"destination"`
-	Enabled     bool                `json:"enabled"`
+	Sources  []string            `json:"sources"`
+	Folders  map[string][]string `json:"folders,omitempty"`
+	Skip     []string            `json:"skip,omitempty"`
+	Patterns []string            `json:"patterns,omitempty"`
+	Extras   []string            `json:"extras,omitempty"`
+	// Volumes are whole volumes and Places folders on a volume outside
+	// the shares ("volume/folder"), both since 0.41.0. Older versions
+	// ignore them; a job with nothing else fails there visibly.
+	Volumes     []string    `json:"volumes,omitempty"`
+	Places      []string    `json:"places,omitempty"`
+	Destination Destination `json:"destination"`
+	Enabled     bool        `json:"enabled"`
 	// Every is hourly, daily, weekly or monthly; see schedule.go. Time,
 	// Weekday (0 = Sunday) are the first time and the one weekday; the lists
 	// carry more of them. WindowFrom and WindowTo limit when runs start.
@@ -411,6 +416,20 @@ func check(job Job, shares []Source, volumes []string) error {
 			return invalid("share %q is not there", name)
 		}
 		sourceVolumes = append(sourceVolumes, shares[at].Volume)
+	}
+	// Whole volumes and folders outside shares (0.41.0).
+	for _, volume := range job.Volumes {
+		if !slices.Contains(volumes, volume) {
+			return invalid("volume %q is not there", volume)
+		}
+		sourceVolumes = append(sourceVolumes, volume)
+	}
+	for _, place := range job.Places {
+		volume, _, _ := strings.Cut(place, "/")
+		if !slices.Contains(volumes, volume) {
+			return invalid("volume %q is not there", volume)
+		}
+		sourceVolumes = append(sourceVolumes, volume)
 	}
 	if err := checkSchedule(job); err != nil {
 		return err

@@ -146,14 +146,14 @@ func (m *Manager) keepRuns(job Job, target *os.Root, runs []datedRun) error {
 
 // mirror moves what is gone from the shares into the deleted folder and
 // empties days of it older than MirrorDays.
-func (m *Manager) mirror(ctx context.Context, job Job, target *os.Root, sources map[string]Source, problems *copyProblems) error {
+func (m *Manager) mirror(ctx context.Context, job Job, target *os.Root, sources map[string]Source, names []string, folderOf map[string][]string, problems *copyProblems) error {
 	days := job.Copy.MirrorDays
 	if days == 0 {
 		days = 30
 	}
 	now := m.local(m.now())
 	bin := path.Join(job.Destination.Folder, deletedFolder, now.Format("2006-01-02"))
-	for _, name := range job.Sources {
+	for _, name := range names {
 		source, ok := sources[name]
 		if !ok {
 			continue // not there: its copy stays as it is
@@ -162,7 +162,7 @@ func (m *Manager) mirror(ctx context.Context, job Job, target *os.Root, sources 
 		if err != nil {
 			continue
 		}
-		folders := job.Folders[name]
+		folders := folderOf[name]
 		if len(folders) == 0 {
 			folders = []string{"."}
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -145,4 +146,65 @@ func mustRoot(t *testing.T, dir string) *os.Root {
 	}
 	t.Cleanup(func() { root.Close() })
 	return root
+}
+
+func TestCopyTakesWholeVolumesAndFoldersOutsideShares(t *testing.T) {
+	m, _, target, _ := copyEnv(t)
+	vol := filepath.Join(m.mountRoot, "tank")
+	for _, dir := range []string{"scans/alt", ".titanos/backup", ".snapshots/x", "appdata"} {
+		os.MkdirAll(filepath.Join(vol, dir), 0o700)
+	}
+	os.WriteFile(filepath.Join(vol, "scans/alt/a.pdf"), []byte("a"), 0o600)
+	os.WriteFile(filepath.Join(vol, ".titanos/backup/secret"), []byte("s"), 0o600)
+	os.WriteFile(filepath.Join(vol, ".snapshots/x/old"), []byte("o"), 0o600)
+	os.WriteFile(filepath.Join(vol, "appdata/db"), []byte("d"), 0o600)
+	mounts := filepath.Join(t.TempDir(), "mounts")
+	os.WriteFile(mounts, []byte("/dev/md0 "+vol+" ext4 rw 0 0\n"), 0o644)
+	m.mountsFile = mounts
+	m.Sources = func() []Source { return nil }
+
+	job := Job{ID: "copy", Places: []string{"tank/scans"}, Destination: Destination{Type: "usb-copy", Folder: "b"}}
+	if err := runCopy(t, m, job, target); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(filepath.Join(target, "b/Volume-tank/scans/alt/a.pdf")); string(data) != "a" {
+		t.Fatal("folder outside shares not copied")
+	}
+	if _, err := os.Stat(filepath.Join(target, "b/Volume-tank/appdata")); !os.IsNotExist(err) {
+		t.Fatal("more than the chosen folder copied")
+	}
+	job.Places, job.Volumes = nil, []string{"tank"}
+	if err := runCopy(t, m, job, target); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(target, "b/Volume-tank/appdata/db")); err != nil {
+		t.Fatal("whole volume not copied")
+	}
+	for _, never := range []string{".titanos", ".snapshots"} {
+		if _, err := os.Stat(filepath.Join(target, "b/Volume-tank", never)); !os.IsNotExist(err) {
+			t.Fatalf("%s copied", never)
+		}
+	}
+	if checkSelection(Job{Volumes: []string{"tank"}, Places: []string{"tank/scans"}}) == nil {
+		t.Fatal("folder on a whole volume accepted twice")
+	}
+	if checkSelection(Job{Places: []string{"tank/.titanos"}}) == nil {
+		t.Fatal("private data accepted")
+	}
+}
+
+func TestResticSelectionOfVolumesAndLXC(t *testing.T) {
+	m, _, _, _ := copyEnv(t)
+	vol := filepath.Join(m.mountRoot, "tank")
+	os.MkdirAll(filepath.Join(vol, "lxc"), 0o700)
+	mounts := filepath.Join(t.TempDir(), "mounts")
+	os.WriteFile(mounts, []byte("/dev/md0 "+vol+" ext4 rw 0 0\n"), 0o644)
+	m.mountsFile = mounts
+	sel := m.selection(Job{Volumes: []string{"tank", "gone"}, Extras: []string{"lxc"}, Destination: Destination{Type: "s3"}})
+	if !slices.Contains(sel.paths, vol) || !slices.Contains(sel.paths, filepath.Join(vol, "lxc")) {
+		t.Fatalf("paths %v", sel.paths)
+	}
+	if !slices.Contains(sel.excludes, filepath.Join(vol, ".titanos")) || !slices.Contains(sel.missing, "gone") {
+		t.Fatalf("excludes %v missing %v", sel.excludes, sel.missing)
+	}
 }

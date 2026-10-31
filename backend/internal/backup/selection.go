@@ -17,9 +17,22 @@ import (
 //   - appdata: the data of the apps, /mnt/<volume>/appdata on every volume
 //   - vms: the disks of the VMs, /mnt/<volume>/vms
 //   - config: the settings on the stick, /config
+//   - lxc: the system containers, /mnt/<volume>/lxc
+//
+// Volumes take a whole volume, Places a folder on one ("volume/folder").
+// Private data (.titanos), recycle bins and snapshot folders are never
+// saved.
 
 // extras are the places a job may add to its shares.
-var extras = []string{"appdata", "vms", "config"}
+var extras = []string{"appdata", "vms", "config", "lxc"}
+
+// neverSaved are the folders at the top of a volume no backup takes.
+var neverSaved = []string{".titanos", ".snapshots", ".recycle"}
+
+// volumeName reports whether text names a volume.
+func volumeName(text string) bool {
+	return relative(text) && !strings.Contains(text, "/") && !strings.HasPrefix(text, ".")
+}
 
 const (
 	maxFolders  = 200
@@ -37,8 +50,22 @@ func relative(text string) bool {
 
 // checkSelection tells whether what a job picks out makes sense.
 func checkSelection(job Job) error {
-	if len(job.Sources) == 0 && len(job.Extras) == 0 && len(job.Applications) == 0 {
+	if len(job.Sources) == 0 && len(job.Extras) == 0 && len(job.Applications) == 0 && len(job.Volumes) == 0 && len(job.Places) == 0 {
 		return invalid("no share chosen")
+	}
+	for _, volume := range job.Volumes {
+		if !volumeName(volume) {
+			return invalid("volume")
+		}
+	}
+	for _, place := range job.Places {
+		volume, folder, ok := strings.Cut(place, "/")
+		if !ok || !volumeName(volume) || !relative(folder) || slices.Contains(job.Volumes, volume) || slices.Contains(neverSaved, strings.SplitN(folder, "/", 2)[0]) {
+			return invalid("folder on a volume")
+		}
+	}
+	if len(job.Volumes)+len(job.Places) > maxFolders {
+		return invalid("too many folders or patterns")
 	}
 	for _, extra := range job.Extras {
 		if !slices.Contains(extras, extra) {
@@ -135,10 +162,35 @@ func (m *Manager) selection(job Job) selection {
 			sel.excludes = append(sel.excludes, filepath.Join(source.Path, filepath.FromSlash(folder)))
 		}
 	}
+	mounted := m.mounted()
+	for _, volume := range job.Volumes {
+		if !slices.Contains(mounted, volume) {
+			sel.missing = append(sel.missing, volume)
+			continue
+		}
+		full := filepath.Join(m.mountRoot, volume)
+		add(full)
+		for _, never := range neverSaved {
+			sel.excludes = append(sel.excludes, filepath.Join(full, never))
+		}
+	}
+	for _, place := range job.Places {
+		volume, folder, _ := strings.Cut(place, "/")
+		if !slices.Contains(mounted, volume) {
+			sel.missing = append(sel.missing, place)
+			continue
+		}
+		full := filepath.Join(m.mountRoot, volume, filepath.FromSlash(folder))
+		if info, err := os.Lstat(full); err != nil || !info.IsDir() {
+			sel.notes = append(sel.notes, place)
+			continue
+		}
+		add(full)
+	}
 	sel.excludes = append(sel.excludes, job.Patterns...)
 	for _, extra := range job.Extras {
 		switch extra {
-		case "appdata", "vms":
+		case "appdata", "vms", "lxc":
 			volumes := m.mounted()
 			sort.Strings(volumes)
 			for _, volume := range volumes {
@@ -165,6 +217,13 @@ func (m *Manager) homeVolume(job Job) string {
 		if slices.Contains(job.Sources, source.Name) {
 			return source.Volume
 		}
+	}
+	if len(job.Volumes) > 0 {
+		return job.Volumes[0]
+	}
+	if len(job.Places) > 0 {
+		volume, _, _ := strings.Cut(job.Places[0], "/")
+		return volume
 	}
 	if len(job.Extras) > 0 || len(job.Applications) > 0 {
 		mounted := m.mounted()
@@ -213,6 +272,40 @@ func (m *Manager) Folders(share, dir string) ([]string, error) {
 		if entry.IsDir() && entry.Name() != ".recycle" && entry.Type()&os.ModeSymlink == 0 {
 			folders = append(folders, entry.Name())
 		}
+	}
+	sort.Strings(folders)
+	return folders, nil
+}
+
+// VolumeFolders lists the folders directly inside dir of a volume, for
+// choosing folders outside the shares.
+func (m *Manager) VolumeFolders(volume, dir string) ([]string, error) {
+	if !volumeName(volume) || !slices.Contains(m.mounted(), volume) {
+		return nil, ErrNotFound
+	}
+	if dir != "" && !relative(dir) {
+		return nil, ErrInvalid
+	}
+	root, err := os.OpenRoot(filepath.Join(m.mountRoot, volume))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrFolder, err)
+	}
+	defer root.Close()
+	handle, err := root.Open(filepath.FromSlash(orDot(dir)))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrFolder, err)
+	}
+	defer handle.Close()
+	entries, err := handle.ReadDir(-1)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrFolder, err)
+	}
+	folders := []string{}
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || (dir == "" && slices.Contains(neverSaved, entry.Name())) {
+			continue
+		}
+		folders = append(folders, entry.Name())
 	}
 	sort.Strings(folders)
 	return folders, nil

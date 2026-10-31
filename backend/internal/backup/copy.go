@@ -121,20 +121,12 @@ func caseInsensitive(target *os.Root, dir string) bool {
 }
 
 func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
-	sources := map[string]Source{}
-	for _, source := range m.sources() {
-		sources[source.Name] = source
-	}
+	sources, names, folderOf, missing := m.copyEntries(job)
 	var problems copyProblems
-	available := 0
-	for _, name := range job.Sources {
-		if _, ok := sources[name]; ok {
-			available++
-		} else {
-			problems.add("shares not available", name)
-		}
+	for _, name := range missing {
+		problems.add("shares not available", name)
 	}
-	if available == 0 {
+	if len(sources) == 0 {
 		return fmt.Errorf("none of the shares of this job is available")
 	}
 	if err := copyDirectories(target, job.Destination.Folder); err != nil {
@@ -161,7 +153,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 	// page a percentage and the run a check of the free space.
 	var items []copyItem
 	var planned, needed uint64
-	for _, name := range job.Sources {
+	for _, name := range names {
 		source, ok := sources[name]
 		if !ok {
 			continue
@@ -171,7 +163,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 			problems.add("shares not available", name)
 			continue
 		}
-		folders := job.Folders[name]
+		folders := folderOf[name]
 		if len(folders) == 0 {
 			folders = []string{"."}
 		}
@@ -191,7 +183,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 					}
 					return nil
 				}
-				excluded := entry.Name() == ".recycle" || entry.Name() == ".titanos" || strings.HasSuffix(entry.Name(), ".titanos-part")
+				excluded := entry.Name() == ".recycle" || entry.Name() == ".titanos" || entry.Name() == ".snapshots" || strings.HasSuffix(entry.Name(), ".titanos-part")
 				for _, skip := range job.Skip {
 					full := name + "/" + rel
 					excluded = excluded || full == skip || strings.HasPrefix(full, skip+"/")
@@ -334,7 +326,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		progress(total)
 	}
 	if job.Copy != nil && job.Copy.Mirror && !dated {
-		if err := m.mirror(ctx, job, target, sources, &problems); err != nil {
+		if err := m.mirror(ctx, job, target, sources, names, folderOf, &problems); err != nil {
 			return err
 		}
 	}
@@ -572,6 +564,56 @@ func sameCopy(ctx context.Context, input *os.File, target *os.Root, to string, p
 			return e1 == e2, nil
 		}
 	}
+}
+
+// copyEntries are the top folders of a readable copy: each share under its
+// name, each volume (whole, or the folders chosen on it) as
+// "Volume-<name>". It returns those that are there, in order, the folders
+// chosen within them, and the names of those that are not.
+func (m *Manager) copyEntries(job Job) (map[string]Source, []string, map[string][]string, []string) {
+	shares := map[string]Source{}
+	for _, source := range m.sources() {
+		shares[source.Name] = source
+	}
+	there := map[string]Source{}
+	folders := map[string][]string{}
+	var names, missing []string
+	for _, name := range job.Sources {
+		if source, ok := shares[name]; ok {
+			there[name] = source
+			names = append(names, name)
+			folders[name] = job.Folders[name]
+		} else {
+			missing = append(missing, name)
+		}
+	}
+	mounted := m.mounted()
+	volume := func(name string) (string, bool) {
+		key := "Volume-" + name
+		if !slices.Contains(mounted, name) {
+			return key, false
+		}
+		if _, ok := there[key]; !ok {
+			there[key] = Source{Name: key, Volume: name, Path: filepath.Join(m.mountRoot, name)}
+			names = append(names, key)
+		}
+		return key, true
+	}
+	for _, name := range job.Volumes {
+		if _, ok := volume(name); !ok {
+			missing = append(missing, name)
+		}
+	}
+	for _, place := range job.Places {
+		name, folder, _ := strings.Cut(place, "/")
+		key, ok := volume(name)
+		if !ok {
+			missing = append(missing, place)
+			continue
+		}
+		folders[key] = append(folders[key], folder)
+	}
+	return there, names, folders, missing
 }
 
 // copyLocal makes a readable copy in a folder of another volume.
