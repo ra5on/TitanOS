@@ -90,7 +90,7 @@ func (m *Manager) SetAutomaticDrivers(enabled bool) error {
 	return m.save(settings)
 }
 func (m *Manager) driverCache(volume string) string {
-	return filepath.Join(m.baseDir(volume), "driver-updates", m.Release)
+	return filepath.Join(m.baseDir(volume), "driver-updates", m.key())
 }
 func (m *Manager) validDriver(data []byte, sig []byte) (Manifest, error) {
 	if minisign.Verify(minisign.LoadKeys(m.keyDir), data, string(sig)) != nil {
@@ -502,7 +502,7 @@ func (m *Manager) SelectDriver(hash string, mounted []string) error {
 	var manifest Manifest
 	var err error
 	if hash == "bundled" {
-		source = m.releaseDir(settings.Volume, m.Release)
+		source = m.releaseDir(settings.Volume, m.key())
 		manifest, err = readManifest(filepath.Join(source, "nvidia"+manifestSuffix))
 		if err == nil && (!m.official(filepath.Join(source, "nvidia"+manifestSuffix)) || !m.compatible(manifest)) {
 			err = ErrInvalid
@@ -530,7 +530,7 @@ func (m *Manager) SelectDriver(hash string, mounted []string) error {
 		return err
 	}
 	id := hex.EncodeToString(random[:])
-	parent := filepath.Join(m.releaseDir(settings.Volume, m.Release), ".sets")
+	parent := filepath.Join(m.releaseDir(settings.Volume, m.key()), ".sets")
 	if err := os.MkdirAll(parent, 0o700); err != nil {
 		return err
 	}

@@ -14,6 +14,9 @@ import (
 
 var releaseVersion = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+(?:-[a-z0-9.]+)?$`)
 
+// variantRE accepts the kernel variants of a release.
+var variantRE = regexp.MustCompile(`^(|stable|new)$`)
+
 // Each release has a complete immutable-on-publication set. Choosing a set
 // depends on the running OS version, not on the next boot slot. Old TitanOS
 // versions still see the original files at the root of the plugin directory.
@@ -21,9 +24,22 @@ func (m *Manager) baseDir(volume string) string {
 	return filepath.Join(m.mountRoot, volume, ".titanos", "plugins")
 }
 
-func (m *Manager) releaseDir(volume, version string) string {
-	return filepath.Join(m.baseDir(volume), "releases", version)
+func (m *Manager) releaseDir(volume, key string) string {
+	return filepath.Join(m.baseDir(volume), "releases", key)
 }
+
+// releaseKey names the plugin set of a release: its version, with the kernel
+// variant behind a "+" when that is not the default kernel. Both variants of
+// one version can lie in the two boot slots at the same time.
+func releaseKey(version, variant string) string {
+	if variant == "" || variant == "stable" {
+		return version
+	}
+	return version + "+" + variant
+}
+
+// key is releaseKey of the running system.
+func (m *Manager) key() string { return releaseKey(m.Release, m.Variant) }
 
 // PrepareUpdate is called before the updater writes a bootable target slot.
 // fetch and download use the updater's bounded, resumable HTTP implementation.
@@ -32,7 +48,7 @@ func (m *Manager) releaseDir(volume, version string) string {
 // (kernelPackage comes from the target's signed manifest; older manifests
 // lack it, then only the common set fits). A plugin it does not have comes
 // from the target release as before.
-func (m *Manager) PrepareUpdate(ctx context.Context, version, kernel, kernelPackage, base string, assets map[string]string, mounted []string,
+func (m *Manager) PrepareUpdate(ctx context.Context, version, variant, kernel, kernelPackage, base string, assets map[string]string, mounted []string,
 	fetch func(context.Context, string, int64) ([]byte, error),
 	download func(context.Context, string, string, string, int64) error) error {
 	m.actions.Lock()
@@ -43,9 +59,10 @@ func (m *Manager) PrepareUpdate(ctx context.Context, version, kernel, kernelPack
 	if m.UpdateAllowed != nil && !m.UpdateAllowed() {
 		return ErrBusy
 	}
-	if !releaseVersion.MatchString(version) || version == m.Release {
+	if !releaseVersion.MatchString(version) || !variantRE.MatchString(variant) || releaseKey(version, variant) == m.key() {
 		return ErrInvalid
 	}
+	key := releaseKey(version, variant)
 	settings := m.current()
 	if settings.PendingDriver != nil {
 		return ErrDriverPending
@@ -53,7 +70,7 @@ func (m *Manager) PrepareUpdate(ctx context.Context, version, kernel, kernelPack
 	// A new OS gets its own bundled plugin set, never the old driver selection.
 	settings.DriverSet = ""
 	if settings.Volume == "" {
-		return m.store.WriteJSON(releaseSettingsPath(version), settings)
+		return m.store.WriteJSON(releaseSettingsPath(key), settings)
 	}
 	if !slices.Contains(mounted, settings.Volume) {
 		return ErrUnknownVolume
@@ -65,7 +82,7 @@ func (m *Manager) PrepareUpdate(ctx context.Context, version, kernel, kernelPack
 		}
 	}
 	if len(installed) == 0 {
-		return m.store.WriteJSON(releaseSettingsPath(version), settings)
+		return m.store.WriteJSON(releaseSettingsPath(key), settings)
 	}
 	parent := filepath.Join(m.baseDir(settings.Volume), "releases")
 	if err := os.MkdirAll(parent, 0o700); err != nil {
@@ -167,7 +184,7 @@ func (m *Manager) PrepareUpdate(ctx context.Context, version, kernel, kernelPack
 	if err := syncTree(stage); err != nil {
 		return err
 	}
-	dest := m.releaseDir(settings.Volume, version)
+	dest := m.releaseDir(settings.Volume, key)
 	// This is the inactive OS version only. Keep the current and fallback sets.
 	if _, err := os.Stat(dest); err == nil {
 		entries, err := os.ReadDir(stage)
@@ -185,7 +202,7 @@ func (m *Manager) PrepareUpdate(ctx context.Context, version, kernel, kernelPack
 		if err != nil || len(existing) != len(entries) {
 			return ErrExists
 		}
-		return m.store.WriteJSON(releaseSettingsPath(version), settings)
+		return m.store.WriteJSON(releaseSettingsPath(key), settings)
 	} else if !os.IsNotExist(err) {
 		return err
 	}
@@ -195,7 +212,7 @@ func (m *Manager) PrepareUpdate(ctx context.Context, version, kernel, kernelPack
 	if err := syncDirectory(parent); err != nil {
 		return err
 	}
-	return m.store.WriteJSON(releaseSettingsPath(version), settings)
+	return m.store.WriteJSON(releaseSettingsPath(key), settings)
 }
 
 func syncDirectory(path string) error {
@@ -241,7 +258,7 @@ func (m *Manager) Healthy() bool {
 func releaseSettingsPath(version string) string { return "plugins/releases/" + version + ".json" }
 func (m *Manager) settingsPath() string {
 	if releaseVersion.MatchString(m.Release) {
-		return releaseSettingsPath(m.Release)
+		return releaseSettingsPath(m.key())
 	}
 	return settingsFile
 }
@@ -279,7 +296,7 @@ func (m *Manager) ensureReleaseSet(volume string) error {
 	if err := syncTree(stage); err != nil {
 		return err
 	}
-	if err := os.Rename(stage, m.releaseDir(volume, m.Release)); err != nil {
+	if err := os.Rename(stage, m.releaseDir(volume, m.key())); err != nil {
 		return err
 	}
 	return syncDirectory(parent)

@@ -306,7 +306,7 @@ func TestRepoPrepareUpdateUsesSetOfTargetKernel(t *testing.T) {
 		return m.fetchMetadata(ctx, url, limit)
 	}
 	// A release that does not know the plugin repository brings no assets.
-	if err := m.PrepareUpdate(ctx, "0.2.0", "6.13.0-test", "6.13.0-1", m.releaseSource+"/releases/download/v0.2.0/", nil, []string{"data"}, fetch, download); err != nil {
+	if err := m.PrepareUpdate(ctx, "0.2.0", "", "6.13.0-test", "6.13.0-1", m.releaseSource+"/releases/download/v0.2.0/", nil, []string{"data"}, fetch, download); err != nil {
 		t.Fatal(err)
 	}
 	prepared, err := readManifest(filepath.Join(m.releaseDir("data", "0.2.0"), "intel-gpu-tools"+manifestSuffix))
@@ -315,7 +315,7 @@ func TestRepoPrepareUpdateUsesSetOfTargetKernel(t *testing.T) {
 	}
 	// Without the package version, no kernel set fits and the kernel plugin
 	// has no trusted build: the update is refused instead of dropping it.
-	if err := m.PrepareUpdate(ctx, "0.2.1", "6.13.0-test", "", m.releaseSource+"/releases/download/v0.2.1/", nil, []string{"data"}, fetch, download); !errors.Is(err, ErrInvalid) {
+	if err := m.PrepareUpdate(ctx, "0.2.1", "", "6.13.0-test", "", m.releaseSource+"/releases/download/v0.2.1/", nil, []string{"data"}, fetch, download); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("missing kernel set: %v", err)
 	}
 }

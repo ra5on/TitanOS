@@ -43,7 +43,7 @@ func TestUpdateStagesSignedPluginsAndKeepsRollback(t *testing.T) {
 		return copyFile(filepath.Join(remote, strings.TrimPrefix(url, "https://release/")), dest, 0o600)
 	}
 	prepare := func() error {
-		return m.PrepareUpdate(ctx, "0.1.0-beta.3", "new-kernel", "", "https://release/", map[string]string{"gpu": "gpu.plugin.json"}, []string{"data"}, fetch, download)
+		return m.PrepareUpdate(ctx, "0.1.0-beta.3", "", "new-kernel", "", "https://release/", map[string]string{"gpu": "gpu.plugin.json"}, []string{"data"}, fetch, download)
 	}
 	if err := prepare(); err != nil {
 		t.Fatal(err)
@@ -65,7 +65,7 @@ func TestUpdateStagesSignedPluginsAndKeepsRollback(t *testing.T) {
 	}
 	// Tampering with metadata must abort before download or publishing .ready.
 	os.WriteFile(newPath, []byte(`{"name":"gpu","size":100,"sha256":"bad"}`), 0o600)
-	if err := m.PrepareUpdate(ctx, "0.1.0-beta.4", "new-kernel", "", "https://release/", map[string]string{"gpu": "gpu.plugin.json"}, []string{"data"}, fetch, download); err == nil {
+	if err := m.PrepareUpdate(ctx, "0.1.0-beta.4", "", "new-kernel", "", "https://release/", map[string]string{"gpu": "gpu.plugin.json"}, []string{"data"}, fetch, download); err == nil {
 		t.Fatal("accepted unsigned replacement")
 	}
 	if _, err := os.Stat(filepath.Join(m.releaseDir("data", "0.1.0-beta.4"), ".ready")); !os.IsNotExist(err) {
@@ -79,13 +79,13 @@ func TestUpdateRefusesMissingKernelPluginAndOfflineVolume(t *testing.T) {
 	if err := m.Install(context.Background(), path, "data", "gpu", []string{"data"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.PrepareUpdate(context.Background(), "1.0.0", "other", "", "", nil, []string{"data"}, nil, nil); !errors.Is(err, ErrInvalid) {
+	if err := m.PrepareUpdate(context.Background(), "1.0.0", "", "other", "", "", nil, []string{"data"}, nil, nil); !errors.Is(err, ErrInvalid) {
 		t.Fatal("lost kernel plugin", err)
 	}
-	if err := m.PrepareUpdate(context.Background(), "1.0.0", m.kernel, "", "", nil, nil, nil, nil); !errors.Is(err, ErrUnknownVolume) {
+	if err := m.PrepareUpdate(context.Background(), "1.0.0", "", m.kernel, "", "", nil, nil, nil, nil); !errors.Is(err, ErrUnknownVolume) {
 		t.Fatal("wrote into RAM instead of volume", err)
 	}
-	if err := m.PrepareUpdate(context.Background(), "../../escape", m.kernel, "", "", nil, []string{"data"}, nil, nil); !errors.Is(err, ErrInvalid) {
+	if err := m.PrepareUpdate(context.Background(), "../../escape", "", m.kernel, "", "", nil, []string{"data"}, nil, nil); !errors.Is(err, ErrInvalid) {
 		t.Fatal(err)
 	}
 }
@@ -148,7 +148,60 @@ func TestRuntimeSettingsSerializeWithPluginLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.UpdateAllowed = func() bool { return false }
-	if err := m.PrepareUpdate(context.Background(), "1.0.0", m.kernel, "", "", nil, nil, nil, nil); !errors.Is(err, ErrBusy) {
+	if err := m.PrepareUpdate(context.Background(), "1.0.0", "", m.kernel, "", "", nil, nil, nil, nil); !errors.Is(err, ErrBusy) {
 		t.Fatal("update ignored routing trial", err)
+	}
+}
+
+// The same version with the newer kernel keeps a plugin set of its own:
+// both can lie in the two boot slots, each the fallback of the other.
+func TestKernelVariantsKeepTheirOwnPluginSets(t *testing.T) {
+	m, _ := newTestManager(t)
+	ctx := context.Background()
+	m.Release = "1.0.0"
+	if err := m.Load(); err != nil {
+		t.Fatal(err)
+	}
+	path := plugin(t, filepath.Join(m.mountRoot, "data/media"), "tools", nil)
+	if err := m.Install(ctx, path, "data", "tools", []string{"data"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.PrepareUpdate(ctx, "1.0.0", "", m.kernel, "", "", nil, []string{"data"}, nil, nil); !errors.Is(err, ErrInvalid) {
+		t.Fatal("the running set was prepared again", err)
+	}
+	if err := m.PrepareUpdate(ctx, "1.0.0", "rc", m.kernel, "", "", nil, []string{"data"}, nil, nil); !errors.Is(err, ErrInvalid) {
+		t.Fatal("unknown variant", err)
+	}
+	if err := m.PrepareUpdate(ctx, "1.0.0", "new", "6.16.0-test", "", "", nil, []string{"data"}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	newSet := filepath.Join(m.baseDir("data"), "releases", "1.0.0+new")
+	if _, err := os.Stat(filepath.Join(newSet, "tools.raw")); err != nil {
+		t.Fatal("no plugin set for the new kernel", err)
+	}
+	if _, err := os.Stat(filepath.Join(m.baseDir("data"), "releases", "1.0.0", ".ready")); err != nil {
+		t.Fatal("the stable set was touched", err)
+	}
+	// Started with the new kernel, the system uses its own set.
+	m.Variant = "new"
+	if err := m.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if m.dir("data") != newSet {
+		t.Errorf("dir: %s", m.dir("data"))
+	}
+	// Cleanup lists it under its version and protects it with it.
+	list, err := m.OldReleases([]string{"data"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, release := range list {
+		if release.Version == "1.0.0+new" {
+			found = release.Protected
+		}
+	}
+	if !found {
+		t.Errorf("set of the new kernel not protected: %+v", list)
 	}
 }

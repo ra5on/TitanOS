@@ -178,8 +178,13 @@ type Manager struct {
 	LocalBuilds bool // build updated open modules on the NAS, only on request
 	buildKey    []byte
 	Release     string // running TitanOS version; set before Load
-	Disabled    bool
-	mountRoot   string
+	// Variant is the kernel variant of the running image ("" or "stable"
+	// for the default kernel, "new" for the newer one, docs/KERNEL.md):
+	// its plugins are kept apart from those of the same version with the
+	// other kernel. Set before Load.
+	Variant   string
+	Disabled  bool
+	mountRoot string
 	// extDir is where systemd looks for extensions that are not part of
 	// the image: links to the plugins on the volume.
 	extDir string
@@ -355,7 +360,7 @@ func (m *Manager) save(settings Settings) error {
 
 func (m *Manager) dir(volume string) string {
 	if releaseVersion.MatchString(m.Release) {
-		dir := m.releaseDir(volume, m.Release)
+		dir := m.releaseDir(volume, m.key())
 		if id := m.current().DriverSet; id != "" {
 			return filepath.Join(dir, ".sets", id)
 		}
@@ -485,7 +490,7 @@ func (m *Manager) Status(mounted []string) Status {
 	status.Catalog = catalog
 	status.DriverUpdate = m.driverSnapshot(settings)
 	if status.DriverUpdate.CanRestore {
-		bundled, e := readManifest(filepath.Join(m.releaseDir(settings.Volume, m.Release), "nvidia"+manifestSuffix))
+		bundled, e := readManifest(filepath.Join(m.releaseDir(settings.Volume, m.key()), "nvidia"+manifestSuffix))
 		status.DriverUpdate.CanRestore = e == nil && bundled.SHA256 != m.installed(settings.Volume)["nvidia"].SHA256
 	}
 	downloads := map[string]int{}

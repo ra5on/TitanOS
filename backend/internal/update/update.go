@@ -114,6 +114,11 @@ type Settings struct {
 	// 0 (or missing) is once a day, CheckManual turns automatic checks off.
 	// Versions before it ignore the field and keep checking once a day.
 	CheckEvery int `json:"checkEvery,omitempty"`
+	// Kernel is the kernel variant updates install: "" or "stable" for
+	// Debian's kernel, "new" for the newer one from trixie-backports
+	// (variants.go). Versions before it ignore the field and install the
+	// stable variant.
+	Kernel string `json:"kernel,omitempty"`
 }
 
 const (
@@ -183,6 +188,9 @@ type Manifest struct {
 		Name  string `json:"name"`
 		Asset string `json:"asset"`
 	} `json:"plugins,omitempty"`
+	// Variants holds the same system with another kernel, by name ("new").
+	// Optional; older versions ignore it and install Files.
+	Variants map[string]Variant `json:"variants,omitempty"`
 }
 
 // Size returns how much the release takes on the stick.
@@ -206,6 +214,10 @@ type Slot struct {
 	Next bool `json:"next"`
 	// TriesLeft is set while the slot still has to prove itself.
 	TriesLeft *int `json:"triesLeft"`
+	// Kernel is the kernel release in the slot, Variant its kernel
+	// variant (stable or new); empty if unknown.
+	Kernel  string `json:"kernel,omitempty"`
+	Variant string `json:"variant,omitempty"`
 }
 
 // Progress is how far an installation is.
@@ -268,6 +280,14 @@ type Status struct {
 	Kind string `json:"kind"`
 	// App is what lies in the app folder of the running slot.
 	App AppStatus `json:"app"`
+	// Variant is the kernel variant of the running system.
+	Variant string `json:"variant"`
+	// KernelSwitch says that Available is the running version with the
+	// other kernel variant, as the settings ask for.
+	KernelSwitch bool `json:"kernelSwitch,omitempty"`
+	// KernelMissing names a newer release that has no system with the
+	// chosen kernel variant: it is not offered until the choice changes.
+	KernelMissing string `json:"kernelMissing,omitempty"`
 }
 
 // AppStatus tells about the app updates of the running slot.
@@ -303,6 +323,8 @@ type Manager struct {
 	// Disabled leaves the stick alone: in development mode titand runs
 	// on the developer's own machine.
 	Disabled bool
+	// Variant is the kernel variant of the running image (ReadVariant).
+	Variant string
 	// OnEvent is told what users should hear of: update_available,
 	// update_installed, update_failed, update_rolled_back.
 	OnEvent func(kind, subject string)
@@ -313,8 +335,10 @@ type Manager struct {
 	// Encrypted names the volumes with LUKS encryption. A system before
 	// encryptionSince cannot open them; going back to one must not wait for
 	// them, or its boot check fails and the stick returns to this system.
-	Encrypted      func() []string
-	PreparePlugins func(context.Context, string, string, string, string, map[string]string, func(context.Context, string, int64) ([]byte, error), func(context.Context, string, string, string, int64) error) error
+	Encrypted func() []string
+	// PreparePlugins gets version, kernel variant, kernel, kernel package,
+	// base version and the plugin assets of the target.
+	PreparePlugins func(context.Context, string, string, string, string, string, map[string]string, func(context.Context, string, int64) ([]byte, error), func(context.Context, string, string, string, int64) error) error
 	PluginsHealthy func() bool
 
 	// Base is the version of the system image; "" for one that knows no
@@ -342,6 +366,11 @@ type Manager struct {
 	// availableRaw and availableSig are the signed manifest as it came:
 	// an app keeps them next to it on the stick.
 	availableRaw, availableSig []byte
+	// found is the newest release the last check found, newer or not;
+	// evaluateLocked decides from it and the settings what is available.
+	found              *Manifest
+	foundRaw, foundSig []byte
+	kernelMissing      string
 	// appTrial is set while the app of this slot is on trial; appCache is
 	// what was read from the stick about it.
 	appTrial          bool
@@ -370,6 +399,7 @@ func NewManager(store *config.Store, version, slot string) *Manager {
 		store: store, client: &http.Client{}, bootDir: "/efi", keyDir: "/usr/share/titanos/update-keys",
 		version: version, slot: slot, bootID: strings.TrimSpace(string(bootID)), now: time.Now, stall: 90 * time.Second, retryPause: 3 * time.Second, restartDelay: 2 * time.Second,
 		settings: Settings{Channel: ChannelStable, InstallTime: "03:30"},
+		Variant:  VariantStable,
 		cmdline: func() string {
 			data, _ := os.ReadFile("/proc/cmdline")
 			return string(data)
@@ -452,7 +482,8 @@ func (m *Manager) settleApp() {
 
 // appKind tells whether a release can be installed as an app here.
 func (m *Manager) appKind(manifest *Manifest) bool {
-	return manifest != nil && manifest.App != nil && m.Apps != nil && m.Base != "" && manifest.App.Base == m.Base
+	return manifest != nil && manifest.App != nil && m.Apps != nil && m.Base != "" && manifest.App.Base == m.Base &&
+		m.wantedVariant() == normalVariant(m.Variant)
 }
 
 var clockTime = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
@@ -468,6 +499,13 @@ func (m *Manager) SetSettings(settings Settings) error {
 	// Installing by itself needs something that finds the update.
 	if settings.Manual() && settings.AutoInstall {
 		return ErrInvalid
+	}
+	if !validVariant(settings.Kernel) {
+		return ErrInvalid
+	}
+	// The default kernel is the default: leave the field out.
+	if settings.Kernel == VariantStable {
+		settings.Kernel = ""
 	}
 	// Once a day is the default: leave the field out so the file stays as
 	// it was before the field existed.
@@ -485,9 +523,12 @@ func (m *Manager) SetSettings(settings Settings) error {
 		return err
 	}
 	if settings.Channel != m.settings.Channel {
-		m.available = nil // found for the other channel
+		m.available, m.found = nil, nil // found for the other channel
 	}
 	m.settings = settings
+	// Another kernel choice can turn the last found release into an
+	// update, a kernel switch or nothing.
+	m.evaluateLocked(false)
 	return nil
 }
 
@@ -806,6 +847,10 @@ func (m *Manager) slots(fresh bool) []Slot {
 	for _, name := range []string{"a", "b"} {
 		e, hasEntry := entries[name]
 		slot := Slot{Name: name, Version: m.slotVersion(name), Running: name == m.slot, Complete: hasEntry && m.slotComplete(name), Next: name == next, TriesLeft: e.left}
+		if slot.Complete {
+			slot.Kernel = kernelRelease(filepath.Join(m.bootDir, "titanos", name, "vmlinuz"))
+			slot.Variant = kernelVariant(slot.Kernel)
+		}
 		if slot.Running && slot.Version == "" {
 			slot.Version = m.version
 		}
@@ -844,11 +889,14 @@ func (m *Manager) Status() Status {
 		status.NextCheck = &next
 	}
 	status.Base = m.Base
+	status.Variant = normalVariant(m.Variant)
+	status.KernelMissing = m.kernelMissing
 	if m.available != nil {
 		status.Kind = KindSystem
 		if m.appKind(m.available) {
 			status.Kind = KindApp
 		}
+		status.KernelSwitch = m.available.Version == m.version
 	}
 	if m.appCache != nil {
 		cache := *m.appCache
@@ -903,10 +951,12 @@ func (m *Manager) fetch(ctx context.Context, url string, limit int64) ([]byte, e
 }
 
 var (
-	assetName  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]{0,120}$`)
-	hexSHA256  = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	feedTag    = regexp.MustCompile(`/releases/tag/([A-Za-z0-9][A-Za-z0-9._+-]{0,120})"`)
-	cmdlineSet = regexp.MustCompile(`^[\x21-\x7e]+( [\x21-\x7e]+)*$`)
+	assetName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]{0,120}$`)
+	hexSHA256 = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	feedTag   = regexp.MustCompile(`/releases/tag/([A-Za-z0-9][A-Za-z0-9._+-]{0,120})"`)
+	// debianVersion is a Debian package version, e.g. 6.16.12-1~bpo13+1.
+	debianVersion = regexp.MustCompile(`^[0-9][0-9A-Za-z.+~:-]{0,79}$`)
+	cmdlineSet    = regexp.MustCompile(`^[\x21-\x7e]+( [\x21-\x7e]+)*$`)
 )
 
 // parseManifest reads a manifest and refuses whatever TitanOS would not
@@ -946,6 +996,21 @@ func parseManifest(data []byte) (Manifest, error) {
 	}
 	if len(names) != len(slotFiles) {
 		return bad("files")
+	}
+	for name, variant := range manifest.Variants {
+		if name != VariantNew || variant.Kernel == "" || !assetName.MatchString(variant.Kernel) || variant.KernelPackage != "" && !debianVersion.MatchString(variant.KernelPackage) {
+			return bad("variant " + name)
+		}
+		var names []string
+		for _, file := range variant.Files {
+			if !slices.Contains(slotFiles, file.Name) || slices.Contains(names, file.Name) || !assetName.MatchString(file.Asset) || !hexSHA256.MatchString(file.SHA256) || file.Size <= 0 || file.Size > maxFile {
+				return bad("variant file " + file.Name)
+			}
+			names = append(names, file.Name)
+		}
+		if len(names) != len(slotFiles) {
+			return bad("variant files")
+		}
 	}
 	plugins := map[string]bool{}
 	for _, plugin := range manifest.Plugins {
@@ -1030,17 +1095,43 @@ func (m *Manager) Check(ctx context.Context) error {
 		m.checkError = err.Error()
 		return err
 	}
-	found, _ := parseVersion(manifest.Version)
-	// A build that is not a release is older than any release.
-	if running, ok := parseVersion(m.version); ok && found.compare(running) <= 0 {
-		return nil
+	m.found, m.foundRaw, m.foundSig = &manifest, raw, signature
+	m.evaluateLocked(true)
+	return nil
+}
+
+// evaluateLocked decides from the release found last and the kernel choice
+// what can be installed: a newer release, the running version with the
+// other kernel, or nothing. m.mu is held.
+func (m *Manager) evaluateLocked(announce bool) {
+	m.available, m.availableRaw, m.availableSig, m.kernelMissing = nil, nil, nil, ""
+	manifest := m.found
+	if manifest == nil {
+		return
 	}
-	m.available, m.availableRaw, m.availableSig = &manifest, raw, signature
-	if m.announced != manifest.Version && m.OnEvent != nil {
+	found, _ := parseVersion(manifest.Version)
+	running, release := parseVersion(m.version)
+	wanted := m.wantedVariant()
+	_, hasVariant := manifest.forVariant(wanted)
+	switch {
+	// A build that is not a release is older than any release.
+	case !release || found.compare(running) > 0:
+		if !hasVariant && !m.appKind(manifest) {
+			m.kernelMissing = manifest.Version
+			return
+		}
+	case found.compare(running) == 0 && wanted != normalVariant(m.Variant) && hasVariant:
+		// The running version with the chosen kernel: no announcement.
+		m.available, m.availableRaw, m.availableSig = manifest, m.foundRaw, m.foundSig
+		return
+	default:
+		return
+	}
+	m.available, m.availableRaw, m.availableSig = manifest, m.foundRaw, m.foundSig
+	if announce && m.announced != manifest.Version && m.OnEvent != nil {
 		m.announced = manifest.Version
 		go m.OnEvent("update_available", manifest.Version)
 	}
-	return nil
 }
 
 // --- installing -------------------------------------------------------------
@@ -1070,6 +1161,14 @@ func (m *Manager) Install(ctx context.Context) error {
 	if m.appKind(manifest) {
 		return m.installApp(ctx, *manifest, raw, signature)
 	}
+	m.mu.Lock()
+	variant := m.wantedVariant()
+	m.mu.Unlock()
+	chosen, ok := manifest.forVariant(variant)
+	if !ok {
+		return fmt.Errorf("%w: the release has no system with the chosen kernel", ErrNothing)
+	}
+	manifest = &chosen
 	if manifest.MinVersion != "" {
 		minimum, _ := parseVersion(manifest.MinVersion)
 		if running, ok := parseVersion(m.version); ok && running.compare(minimum) < 0 {
@@ -1107,7 +1206,7 @@ func (m *Manager) Install(ctx context.Context) error {
 	m.setProgress(func(p *Progress) { *p = Progress{Phase: "download", FallbackRemoved: !staged} })
 	go func() {
 		defer m.work.Unlock()
-		err := m.install(context.WithoutCancel(ctx), *manifest, target, staged)
+		err := m.install(context.WithoutCancel(ctx), *manifest, variant, target, staged)
 		m.forget()
 		m.setProgress(func(p *Progress) {
 			if err != nil {
@@ -1187,8 +1286,8 @@ func dirSize(dir string) int64 {
 	return total
 }
 
-func (m *Manager) install(ctx context.Context, manifest Manifest, target string, staged bool) error {
-	slog.Info("installing update", "version", manifest.Version, "slot", target)
+func (m *Manager) install(ctx context.Context, manifest Manifest, variant, target string, staged bool) error {
+	slog.Info("installing update", "version", manifest.Version, "kernel", manifest.Kernel, "variant", variant, "slot", target)
 	base := m.source() + "/releases/download/" + manifest.Tag + "/"
 	// Plugins belong to the system image: a release that is an app on an
 	// older image brings that image's plugins.
@@ -1201,7 +1300,7 @@ func (m *Manager) install(ctx context.Context, manifest Manifest, target string,
 		for _, plugin := range manifest.Plugins {
 			assets[plugin.Name] = plugin.Asset
 		}
-		if err := m.PreparePlugins(ctx, release, manifest.Kernel, manifest.KernelPackage, base, assets, m.fetch,
+		if err := m.PreparePlugins(ctx, release, variant, manifest.Kernel, manifest.KernelPackage, base, assets, m.fetch,
 			func(ctx context.Context, url, dest, sum string, size int64) error {
 				return m.download(ctx, url, dest, File{SHA256: sum, Size: size}, func(done int64, speed uint64) {
 					m.setProgress(func(p *Progress) { p.File = filepath.Base(dest); p.SpeedBytesPerSecond = speed })
