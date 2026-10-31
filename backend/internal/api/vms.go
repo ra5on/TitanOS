@@ -243,6 +243,8 @@ func (s *Server) handleVMHost(w http.ResponseWriter, r *http.Request) {
 		"cpus":   s.opts.VMs.CPUs("/sys"),
 		"images": s.opts.VMs.Images(r.Context(), s.opts.Storage.Mounted()),
 		"disks":  s.opts.VMs.WholeDisks(),
+		// VT-x/AMD-V and the IOMMU, with what to switch on where.
+		"virt": s.vmVirtualization(r),
 	})
 }
 
@@ -261,6 +263,13 @@ func (s *Server) handleVMGrow(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("disk of a VM grown", "vm", name, "disk", req.Disk, "bytes", req.SizeBytes, "by", currentUser(r).Name, "ip", remoteIP(r))
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) vmVirtualization(r *http.Request) any {
+	if s.opts.HWCheck == nil {
+		return nil
+	}
+	return s.opts.HWCheck.Virtualization(r.Context())
 }
 
 // handleHardware lists the devices that can be handed to VMs, with the

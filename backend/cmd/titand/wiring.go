@@ -1353,6 +1353,7 @@ func (w *titand) wireAPI() error {
 		ReplicaReceiver:    w.replicaReceiver,
 		Diagnose:           w.diagnostics,
 		LogKeep:            w.logs,
+		HWCheck:            w.hardwareCheck(),
 		SSH:                w.access,
 		Update:             w.updates,
 		Backup:             w.backups,

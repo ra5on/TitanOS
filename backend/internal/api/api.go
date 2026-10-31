@@ -35,6 +35,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/healthreport"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
+	"github.com/ra5on/TitanOS/backend/internal/hwcheck"
 	"github.com/ra5on/TitanOS/backend/internal/ipv64"
 	"github.com/ra5on/TitanOS/backend/internal/letsencrypt"
 	"github.com/ra5on/TitanOS/backend/internal/logkeep"
@@ -166,6 +167,8 @@ type Options struct {
 	FileIndex *fileindex.Manager
 	// LogKeep keeps the journal on a volume; nil offers only this start.
 	LogKeep *logkeep.Manager
+	// HWCheck reads the hardware compatibility report; nil switches it off.
+	HWCheck *hwcheck.Checker
 }
 
 // Server answers all HTTP requests.
@@ -532,6 +535,8 @@ func New(opts Options) *Server {
 	mux.HandleFunc("PUT /api/v1/hardware/nvidia/{address}", s.requireAdmin(s.handleNvidiaSet))
 	mux.HandleFunc("GET /api/v1/hardware/intel-gpu", s.requireAdmin(s.handleIntelGuc))
 	mux.HandleFunc("PUT /api/v1/hardware/intel-gpu", s.requireAdmin(s.handleIntelGucSet))
+	mux.HandleFunc("GET /api/v1/hardware/report", s.requireAdmin(s.handleHardwareReport))
+	mux.HandleFunc("GET /api/v1/hardware/disks", s.requireAdmin(s.handleHardwareDisks))
 	mux.HandleFunc("GET /api/v1/vms/{name}/snapshots", s.requireAdmin(s.handleVMSnapshots))
 	mux.HandleFunc("POST /api/v1/vms/{name}/snapshots", s.requireHeavyAppAdmin(s.handleVMSnapshotCreate))
 	mux.HandleFunc("PUT /api/v1/vms/{name}/snapshot-schedule", s.requireAppAdmin(s.handleVMSnapshotSchedule))
