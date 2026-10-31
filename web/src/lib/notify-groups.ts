@@ -6,7 +6,6 @@ export const bellGroups = [
 	'updates',
 	'ups',
 	'usb',
-	'assistant',
 	'system',
 ] as const;
 export type BellGroup = (typeof bellGroups)[number];
@@ -22,7 +21,6 @@ const prefixes: [string, BellGroup][] = [
 	['update_', 'updates'],
 	['ups_', 'ups'],
 	['usb_', 'usb'],
-	['assistant_', 'assistant'],
 ];
 
 /** The group of a kind of notification; unknown kinds belong to system. */

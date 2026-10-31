@@ -47,17 +47,7 @@ async function noOverlap(p) {
 }
 try {
   const { ctx, page, data } = await factory("owner", "graphit", 1600);
-  await ctx.route("**/api/v1/assistant/status", (r) =>
-    r.fulfill({
-      json: {
-        available: true,
-        enabled: true,
-        model: "fixture",
-        web: false,
-        persistent: false,
-      },
-    }),
-  );
+
   const vms = Array.from({ length: 4 }, (_, i) => ({
     name: "vm" + i,
     displayName:

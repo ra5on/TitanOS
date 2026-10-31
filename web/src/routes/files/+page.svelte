@@ -65,7 +65,6 @@
 	import { fileKeys, type KeyboardHost } from './keyboard.ts';
 	import { FilePreferenceStore } from './preferences.svelte.ts';
 	import { UsbDrives } from './usb.svelte.ts';
-	import { askAbout, readAttachment } from '#lib/assistant.svelte.ts';
 
 	const canAdminister = $derived(
 		session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin',
@@ -621,24 +620,6 @@
 
 	// --- Actions --------------------------------------------------------------
 
-	/** Gives a text file or an image to the assistant with a question about it. */
-	async function showAssistant(name: string) {
-		try {
-			const res = await fetch(
-				apiPath('/files/download?' + new URLSearchParams({ root: rootId, path: join(dir, name) })),
-				{ credentials: 'same-origin' },
-			);
-			if (!res.ok) throw new Error(String(res.status));
-			const blob = await res.blob();
-			const file = new File([blob], name, {
-				type: previewKind(name, blob.size) === 'image' ? blob.type || 'image/png' : 'text/plain',
-			});
-			await askAbout(t('assistant.askFile', { name }), [await readAttachment(file)]);
-		} catch {
-			error = t('assistant.askFileFailed');
-		}
-	}
-
 	function download() {
 		if (!entries || selected.length === 0) return;
 		const single =
@@ -710,9 +691,6 @@
 				return;
 			case 'edit':
 				editing = join(dir, selected[0]);
-				return;
-			case 'assistant':
-				if (entry) void showAssistant(entry.name);
 				return;
 			case 'download':
 				return download();

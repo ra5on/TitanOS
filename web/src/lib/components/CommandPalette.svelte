@@ -5,7 +5,6 @@
 	import { session } from '#lib/session.svelte.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { findPaletteEntries, palettePages, type PaletteEntry } from '#lib/command-palette.ts';
-	import { assistant } from '#lib/assistant.svelte.ts';
 	import { recentPages, rememberPage } from '#lib/palette.svelte.ts';
 	import { containerLabel, type LXCList } from '#lib/lxc.ts';
 	import Dialog from './Dialog.svelte';
@@ -17,10 +16,7 @@
 		index = $state(0);
 	let disposed = false;
 	const role = $derived(session.data?.user?.role ?? 'user');
-	const all = $derived([
-		...palettePages(role, t, { assistant: !!assistant.status?.available }),
-		...dynamic,
-	]);
+	const all = $derived([...palettePages(role, t), ...dynamic]);
 	// Without a query, the pages opened last in this page session come first (RAM only).
 	const recent = $derived(
 		query.trim()

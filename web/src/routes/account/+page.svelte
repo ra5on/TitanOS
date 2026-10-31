@@ -358,7 +358,7 @@
 	</section>
 {/if}
 
-<PersonalNotifications />
+{#if user?.role === 'owner' || user?.role === 'admin'}<PersonalNotifications />{/if}
 {#if user?.role === 'owner' || user?.role === 'admin'}<BellSettings />{/if}
 <SoundSettings />
 

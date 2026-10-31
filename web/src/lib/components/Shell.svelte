@@ -19,8 +19,6 @@
 	import ClusterBanner from './ClusterBanner.svelte';
 	import { loadClusterNodes } from '#lib/cluster.svelte.ts';
 	import TerminalPanel from './TerminalPanel.svelte';
-	import Icon from './Icon.svelte';
-	import { assistant, loadAssistant, toggleAssistant } from '#lib/assistant.svelte.ts';
 	import ShortcutsDialog from './ShortcutsDialog.svelte';
 	import { appearance } from '#lib/theme/appearance.svelte.ts';
 	import { effectOn } from '#lib/theme/themes.ts';
@@ -84,18 +82,6 @@
 			event.preventDefault();
 			toggleTerminal();
 		}
-		// Ctrl+J opens and closes the chat with the assistant.
-		if (
-			assistant.status?.available &&
-			event.ctrlKey &&
-			!event.altKey &&
-			!event.metaKey &&
-			!event.shiftKey &&
-			event.code === 'KeyJ'
-		) {
-			event.preventDefault();
-			toggleAssistant();
-		}
 	}
 
 	const pendingSeconds = $derived(system.info?.networkPendingSeconds ?? 0);
@@ -112,13 +98,6 @@
 
 	$effect(() => watchSystem());
 	$effect(() => watchStorage());
-	// Whether this account may chat decides the buttons for the assistant.
-	$effect(() => {
-		if (session.data?.user?.name) loadAssistant();
-	});
-	const fab = $derived(
-		!!assistant.status?.available && assistant.prefs.floating && page.url.pathname !== '/assistant',
-	);
 </script>
 
 <svelte:window onkeydown={hotkey} />
@@ -161,25 +140,7 @@
 </div>
 {#if admin}<TerminalPanel />{/if}
 {#if palette.open}<CommandPalette onclose={() => (palette.open = false)} />{/if}
-{#if shortcutsOpen}<ShortcutsDialog
-		{admin}
-		assistant={!!assistant.status?.available}
-		onclose={() => (shortcutsOpen = false)}
-	/>{/if}
-{#if fab}
-	<button
-		type="button"
-		class="fab"
-		style:bottom={admin && terminal.open && !terminal.full
-			? `${terminal.height + 16}px`
-			: undefined}
-		aria-label={t('assistant.title')}
-		title={t('assistant.shortcut')}
-		onclick={toggleAssistant}
-	>
-		<Icon name="chat" size={22} />
-	</button>
-{/if}
+{#if shortcutsOpen}<ShortcutsDialog {admin} onclose={() => (shortcutsOpen = false)} />{/if}
 
 <style>
 	/* As an app on the home screen the phone's home indicator lies over
@@ -187,9 +148,6 @@
 	@media (display-mode: standalone) {
 		.shell {
 			padding-bottom: env(safe-area-inset-bottom);
-		}
-		.fab {
-			bottom: calc(44px + env(safe-area-inset-bottom));
 		}
 	}
 	.trial {
@@ -235,38 +193,9 @@
 	main.dashboard {
 		padding-top: 12px;
 	}
-	.fab {
-		position: fixed;
-		right: 20px;
-		bottom: 44px;
-		z-index: 29;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 52px;
-		height: 52px;
-		padding: 0;
-		border: 0;
-		border-radius: 50%;
-		background: var(--accent);
-		color: var(--on-accent);
-		box-shadow: var(--shadow-menu);
-		cursor: pointer;
-	}
-	.fab:hover {
-		filter: brightness(1.08);
-	}
-	.fab:focus-visible {
-		outline: 2px solid var(--text);
-		outline-offset: 2px;
-	}
 	@media (max-width: 760px) {
 		main.dashboard {
 			padding-top: 12px;
-		}
-		.fab {
-			right: 14px;
-			bottom: 40px;
 		}
 		main {
 			padding: 16px var(--page-pad) 24px;

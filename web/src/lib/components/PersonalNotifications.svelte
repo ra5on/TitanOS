@@ -1,12 +1,12 @@
 <script lang="ts">
-	// Where the assistant reaches this account: its own channels, which may
-	// carry a short summary because nobody else reads them.
+	// Where the NAS reaches this account (owners and administrators): its
+	// own channels for the kinds of messages it chooses, with quiet hours.
 	import { api, ApiError } from '#lib/api.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 	import { formatDateTime } from '#lib/format.ts';
 
 	type Channel = 'email' | 'ntfy' | 'telegram' | 'discord' | 'homeAssistant';
-	type Event = 'confirmation' | 'done' | 'blocked' | 'agent';
+	type Event = 'storage' | 'backups' | 'updates' | 'system';
 	type Personal = {
 		persistQuiet?: boolean;
 		fallback?: string;
@@ -28,7 +28,7 @@
 		mailServer: boolean;
 	};
 
-	const events: Event[] = ['confirmation', 'done', 'blocked', 'agent'];
+	const events: Event[] = ['storage', 'backups', 'updates', 'system'];
 	const channels: Channel[] = ['email', 'ntfy', 'telegram', 'discord', 'homeAssistant'];
 
 	let delivery = $state<Answer['delivery']>({});

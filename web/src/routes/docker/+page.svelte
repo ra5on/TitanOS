@@ -30,7 +30,6 @@
 	import { inTailnet, tailnetPort } from '#lib/app-proxy.ts';
 	import { formatBytes, formatPercent } from '#lib/format.ts';
 	import { apiErrorText, errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
-	import { askAbout, assistant } from '#lib/assistant.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
 	import { addContainerConsole } from '#lib/terminal.svelte.ts';
@@ -703,17 +702,6 @@
 						onclick={() => run(appKey(app), () => api.delete(`/docker/apps/${app}/job`), app)}
 						>{t('docker.jobDismiss')}</button
 					>
-					{#if assistant.status?.available}<button
-							type="button"
-							class="btn"
-							onclick={() =>
-								askAbout(
-									t('assistant.askAppSetup', { app }),
-									job.output
-										? [{ name: `${app}-setup.log`, kind: 'text', text: job.output.slice(-200000) }]
-										: [],
-								)}>{t('assistant.ask')}</button
-						>{/if}
 				</div>
 			{/if}
 		</div>

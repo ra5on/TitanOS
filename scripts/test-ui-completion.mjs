@@ -67,17 +67,6 @@ try {
         job: { state: "failed", text: "fixture VM failure" },
       },
     ],
-    assistant: [
-      {
-        id: "mine",
-        title: "Own AI task",
-        updated: at,
-        run: { state: "confirmation", detail: "fixture approval" },
-      },
-    ],
-    automations: [
-      { id: "auto", name: "Own automation", enabled: true, next: at },
-    ],
     uploads: [
       { id: "upload", name: "browser-file", size: 100, offset: 30, busy: true },
     ],

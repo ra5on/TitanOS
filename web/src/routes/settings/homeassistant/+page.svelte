@@ -1,6 +1,7 @@
 <script lang="ts">
-	// The connection to Home Assistant and what of it is released to the
-	// assistant. The token never comes back from the NAS.
+	// The connection to Home Assistant, storage for it on the NAS, sensors and
+	// buttons over MQTT, and what MCP clients may switch. The token never
+	// comes back from the NAS.
 	import PageHead from '#lib/components/PageHead.svelte';
 	import HAStorage from './HAStorage.svelte';
 	import { api, ApiError } from '#lib/api.ts';
@@ -36,7 +37,6 @@
 		domains: string[];
 		entities: string[];
 		account?: string;
-		assist?: boolean;
 		mqtt: MQTT;
 	};
 	type Status = { watching: boolean; watchError: string; mqtt: boolean; mqttError: string };
@@ -222,78 +222,251 @@
 	</div>{/if}
 
 {#if draft}
-	<form onsubmit={save}>
-		<section class="tile panel" id="connection">
+	<div class="ha-page">
+		<form id="ha-form" class="ha-form" onsubmit={save}>
+			<section class="tile panel" id="connection">
+				<div class="head">
+					<h2 class="tile-title">{t('ha.connection')}</h2>
+					<label class="check"
+						><input type="checkbox" bind:checked={draft.enabled} /><span>{t('notify.enabled')}</span
+						></label
+					>
+				</div>
+				<div class="row">
+					<label class="wide"
+						><span>{t('ha.url')}</span><input
+							class="field mono"
+							type="url"
+							bind:value={draft.url}
+							placeholder="http://homeassistant.local:8123"
+							spellcheck="false"
+							autocapitalize="none"
+							required={draft.enabled}
+						/></label
+					>
+				</div>
+				<div class="row">
+					<label class="wide"
+						><span>{t('ha.token')}</span>
+						<input
+							class="field mono"
+							type="password"
+							bind:value={draft.token}
+							autocomplete="new-password"
+							placeholder={tokenSet && !clear.includes('token') ? t('notify.secretStored') : ''}
+							required={draft.enabled && !tokenSet}
+						/>
+						{#if tokenSet}<button type="button" class="link" onclick={() => toggleClear('token')}
+								>{clear.includes('token')
+									? t('notify.secretRemoved')
+									: t('notify.secretRemove')}</button
+							>{/if}
+					</label>
+				</div>
+				<p class="muted small">{t('ha.tokenHint')}</p>
+				<details>
+					<summary>{t('ha.fingerprint')}</summary>
+					<label class="wide"
+						><span>{t('ha.fingerprintLabel')}</span><input
+							class="field mono"
+							type="text"
+							bind:value={draft.fingerprint}
+							placeholder="AB:CD:…"
+							spellcheck="false"
+						/></label
+					>
+					<p class="muted small">{t('ha.fingerprintHint')}</p>
+				</details>
+				<div class="test">
+					<button type="button" class="btn" disabled={busy !== null} onclick={check}
+						>{t(busy === 'check' ? 'ha.checking' : 'ha.check')}</button
+					>
+					{#if checked}<p class="notice-ok" role="status">
+							{t('ha.checkOk', { version: checked.version, location: checked.location })}
+						</p>{/if}
+					{#if checkError}<div class="notice-error" role="alert">
+							{t('ha.checkFailed')}
+							<pre>{checkError}</pre>
+						</div>{/if}
+				</div>
+			</section>
+		</form>
+		{#if diagnostics}<section class="tile panel">
+				<h2 class="tile-title">{t('ha.diagnostics')}</h2>
+				<p>
+					{t('ha.lastConnected')}: {diagnostics.lastConnected &&
+					!diagnostics.lastConnected.startsWith('0001-')
+						? formatDateTime(new Date(diagnostics.lastConnected))
+						: '—'}
+				</p>
+				<p>
+					{t('ha.lastDisconnected')}: {diagnostics.lastDisconnected &&
+					!diagnostics.lastDisconnected.startsWith('0001-')
+						? formatDateTime(new Date(diagnostics.lastDisconnected))
+						: '—'}
+				</p>
+				<p>{t('ha.evicted')}: {diagnostics.evictedTransitions}</p>
+				<p class="muted">{t('ha.gaps')}</p>
+			</section>{/if}
+		<HAStorage />
+		<section class="tile panel" id="mqtt">
 			<div class="head">
-				<h2 class="tile-title">{t('ha.connection')}</h2>
+				<h2 class="tile-title">{t('ha.mqtt')}</h2>
 				<label class="check"
-					><input type="checkbox" bind:checked={draft.enabled} /><span>{t('notify.enabled')}</span
+					><input type="checkbox" bind:checked={draft.mqtt.enabled} /><span
+						>{t('notify.enabled')}</span
 					></label
 				>
 			</div>
+			<p class="muted">{t('ha.mqttIntro')}</p>
 			<div class="row">
-				<label class="wide"
-					><span>{t('ha.url')}</span><input
+				<label class="narrow"
+					><span>{t('ha.mqttHost')}</span><input
 						class="field mono"
-						type="url"
-						bind:value={draft.url}
-						placeholder="http://homeassistant.local:8123"
+						type="text"
+						bind:value={draft.mqtt.host}
+						placeholder="homeassistant.local"
 						spellcheck="false"
 						autocapitalize="none"
-						required={draft.enabled}
+						required={draft.mqtt.enabled}
+						form="ha-form"
 					/></label
+				>
+				<label class="tiny"
+					><span>{t('notify.port')}</span><input
+						class="field mono"
+						type="number"
+						form="ha-form"
+						min="1"
+						max="65535"
+						bind:value={draft.mqtt.port}
+					/></label
+				>
+				<label class="check tls"
+					><input type="checkbox" bind:checked={draft.mqtt.tls} /><span>TLS</span></label
 				>
 			</div>
 			<div class="row">
-				<label class="wide"
-					><span>{t('ha.token')}</span>
+				<label class="narrow"
+					><span>{t('notify.username')}</span><input
+						class="field mono"
+						type="text"
+						bind:value={draft.mqtt.username}
+						autocomplete="off"
+						spellcheck="false"
+						autocapitalize="none"
+					/></label
+				>
+				<label class="narrow"
+					><span>{t('notify.password')}</span>
 					<input
 						class="field mono"
 						type="password"
-						bind:value={draft.token}
+						bind:value={draft.mqtt.password}
 						autocomplete="new-password"
-						placeholder={tokenSet && !clear.includes('token') ? t('notify.secretStored') : ''}
-						required={draft.enabled && !tokenSet}
+						placeholder={mqttPasswordSet && !clear.includes('mqtt') ? t('notify.secretStored') : ''}
 					/>
-					{#if tokenSet}<button type="button" class="link" onclick={() => toggleClear('token')}
-							>{clear.includes('token')
+					{#if mqttPasswordSet}<button
+							type="button"
+							class="link"
+							onclick={() => toggleClear('mqtt')}
+							>{clear.includes('mqtt')
 								? t('notify.secretRemoved')
 								: t('notify.secretRemove')}</button
 						>{/if}
 				</label>
-			</div>
-			<p class="muted small">{t('ha.tokenHint')}</p>
-			<details>
-				<summary>{t('ha.fingerprint')}</summary>
-				<label class="wide"
-					><span>{t('ha.fingerprintLabel')}</span><input
+				<label class="narrow"
+					><span>{t('ha.mqttPrefix')}</span><input
 						class="field mono"
 						type="text"
-						bind:value={draft.fingerprint}
-						placeholder="AB:CD:…"
+						bind:value={draft.mqtt.prefix}
 						spellcheck="false"
 					/></label
 				>
-				<p class="muted small">{t('ha.fingerprintHint')}</p>
-			</details>
-			<div class="test">
-				<button type="button" class="btn" disabled={busy !== null} onclick={check}
-					>{t(busy === 'check' ? 'ha.checking' : 'ha.check')}</button
-				>
-				{#if checked}<p class="notice-ok" role="status">
-						{t('ha.checkOk', { version: checked.version, location: checked.location })}
-					</p>{/if}
-				{#if checkError}<div class="notice-error" role="alert">
-						{t('ha.checkFailed')}
-						<pre>{checkError}</pre>
-					</div>{/if}
 			</div>
-		</section>
+			<fieldset>
+				<legend>{t('ha.sensorGroups')}</legend>
+				{#each sensorGroups as group}
+					<label class="check"
+						><input
+							type="checkbox"
+							checked={draft.mqtt.groups.includes(group)}
+							onchange={() => (draft!.mqtt.groups = toggle(draft!.mqtt.groups, group))}
+						/><span>{t(`ha.group.${group}` as MessageKey)}</span></label
+					>
+				{/each}
+			</fieldset>
+			{#each sensorGroups.filter((g) => draft?.mqtt.groups.includes(g)) as group}
+				{@const devices = mqttDevices.filter((d) => d.group === group)}
+				{#if !['system', 'work'].includes(group)}<details class="device-selection">
+						<summary>{t(`ha.group.${group}` as MessageKey)} · {t('ha.deviceSelection')}</summary>
+						<label class="check"
+							><input
+								type="checkbox"
+								checked={!draft.mqtt.devices || !(group in draft.mqtt.devices)}
+								onchange={(e) => {
+									const next = { ...draft!.mqtt.devices };
+									if (e.currentTarget.checked) delete next[group];
+									else next[group] = devices.map((d) => d.id);
+									draft!.mqtt.devices = next;
+								}}
+							/>{t('ha.allDevices')}</label
+						>
+						{#if draft.mqtt.devices && group in draft.mqtt.devices}
+							{#each [...new Set( [...devices.map((d) => d.id), ...draft.mqtt.devices[group]] )] as id}
+								<label class="check"
+									><input
+										type="checkbox"
+										checked={draft.mqtt.devices[group].includes(id)}
+										onchange={() =>
+											(draft!.mqtt.devices = {
+												...draft!.mqtt.devices,
+												[group]: toggle(draft!.mqtt.devices![group], id),
+											})}
+									/>{devices.find((d) => d.id === id)?.name ?? id}</label
+								>
+							{/each}
+						{/if}
+					</details>{/if}
+			{/each}
 
+			<p class="muted small">{t('ha.accountIntro')}</p>
+			<label class="account"
+				><span>{t('ha.accountLabel')}</span>
+				<select class="field" bind:value={draft.account}>
+					<option value="">{t('ha.accountNone')}</option>
+					{#each accounts as account (account.name)}<option value={account.name}
+							>{account.name}</option
+						>{/each}
+				</select>
+			</label>
+			<fieldset>
+				<legend>{t('ha.commandGroups')}</legend>
+				{#each commandGroups as group}
+					<label class="check"
+						><input
+							type="checkbox"
+							checked={draft.mqtt.commands.includes(group)}
+							onchange={() => (draft!.mqtt.commands = toggle(draft!.mqtt.commands, group))}
+						/><span>{t(`ha.command.${group}` as MessageKey)}</span></label
+					>
+				{/each}
+			</fieldset>
+			{#if draft.mqtt.commands.length}
+				<p class="notice-warn">{t('ha.commandsWarning')}</p>
+				{#if !draft.account}<p class="notice-warn">{t('ha.commandsNoAccount')}</p>{/if}
+			{/if}
+			{#if status?.mqtt}<p class="notice-ok" role="status">
+					{t('ha.mqttConnected')}
+				</p>{:else if status?.mqttError}<div class="notice-error" role="alert">
+					{t('ha.mqttFailed')}
+					<pre>{status.mqttError}</pre>
+				</div>{/if}
+		</section>
 		<section class="tile panel" id="release">
 			<h2 class="tile-title">{t('ha.release')}</h2>
 			<p class="muted">
-				{t('ha.releaseIntro')} <a href="/settings/assistant">{t('ha.releaseArea')}</a>
+				{t('ha.releaseIntro')}
 			</p>
 			<fieldset>
 				<legend>{t('ha.domains')}</legend>
@@ -403,215 +576,27 @@
 				{/if}
 			</div>
 		</section>
-
-		<section class="tile panel" id="account">
-			<h2 class="tile-title">{t('ha.account')}</h2>
-			<p>{t('ha.nasID')}: <span class="mono">{draft.mqtt.id ?? '—'}</span></p>
-			<p class="muted">{t('ha.accountIntro')}</p>
-			<label class="narrow"
-				><span>{t('ha.accountLabel')}</span>
-				<select class="field" bind:value={draft.account}>
-					<option value="">{t('ha.accountNone')}</option>
-					{#each accounts as account (account.name)}<option value={account.name}
-							>{account.name}</option
-						>{/each}
-				</select>
-			</label>
-			<label class="check"
-				><input type="checkbox" bind:checked={draft.assist} disabled={!draft.account} /><span
-					>{t('ha.assist')}</span
-				></label
-			>
-			<p class="muted small">
-				{t('ha.assistHint')}
-				<a
-					href="https://github.com/ra5on/TitanOS/blob/main/docs/homeassistant/titanos-assist.yaml"
-					target="_blank"
-					rel="noopener noreferrer">{t('ha.assistBlueprint')}</a
-				>
-			</p>
-			{#if status?.watching}<p class="muted small">
-					{t('ha.watching')}
-				</p>{:else if status?.watchError}<p class="notice-warn">
-					{t('ha.watchError')} <span class="mono">{status.watchError}</span>
-				</p>{/if}
-		</section>
-
-		{#if diagnostics}<section class="tile panel">
-				<h2 class="tile-title">{t('ha.diagnostics')}</h2>
-				<p>
-					{t('ha.lastConnected')}: {diagnostics.lastConnected &&
-					!diagnostics.lastConnected.startsWith('0001-')
-						? formatDateTime(new Date(diagnostics.lastConnected))
-						: '—'}
-				</p>
-				<p>
-					{t('ha.lastDisconnected')}: {diagnostics.lastDisconnected &&
-					!diagnostics.lastDisconnected.startsWith('0001-')
-						? formatDateTime(new Date(diagnostics.lastDisconnected))
-						: '—'}
-				</p>
-				<p>{t('ha.evicted')}: {diagnostics.evictedTransitions}</p>
-				<p class="muted">{t('ha.gaps')}</p>
-			</section>{/if}
-		<section class="tile panel" id="mqtt">
-			<div class="head">
-				<h2 class="tile-title">{t('ha.mqtt')}</h2>
-				<label class="check"
-					><input type="checkbox" bind:checked={draft.mqtt.enabled} /><span
-						>{t('notify.enabled')}</span
-					></label
-				>
-			</div>
-			<p class="muted">{t('ha.mqttIntro')}</p>
-			<div class="row">
-				<label class="narrow"
-					><span>{t('ha.mqttHost')}</span><input
-						class="field mono"
-						type="text"
-						bind:value={draft.mqtt.host}
-						placeholder="homeassistant.local"
-						spellcheck="false"
-						autocapitalize="none"
-						required={draft.mqtt.enabled}
-					/></label
-				>
-				<label class="tiny"
-					><span>{t('notify.port')}</span><input
-						class="field mono"
-						type="number"
-						min="1"
-						max="65535"
-						bind:value={draft.mqtt.port}
-					/></label
-				>
-				<label class="check tls"
-					><input type="checkbox" bind:checked={draft.mqtt.tls} /><span>TLS</span></label
-				>
-			</div>
-			<div class="row">
-				<label class="narrow"
-					><span>{t('notify.username')}</span><input
-						class="field mono"
-						type="text"
-						bind:value={draft.mqtt.username}
-						autocomplete="off"
-						spellcheck="false"
-						autocapitalize="none"
-					/></label
-				>
-				<label class="narrow"
-					><span>{t('notify.password')}</span>
-					<input
-						class="field mono"
-						type="password"
-						bind:value={draft.mqtt.password}
-						autocomplete="new-password"
-						placeholder={mqttPasswordSet && !clear.includes('mqtt') ? t('notify.secretStored') : ''}
-					/>
-					{#if mqttPasswordSet}<button
-							type="button"
-							class="link"
-							onclick={() => toggleClear('mqtt')}
-							>{clear.includes('mqtt')
-								? t('notify.secretRemoved')
-								: t('notify.secretRemove')}</button
-						>{/if}
-				</label>
-				<label class="narrow"
-					><span>{t('ha.mqttPrefix')}</span><input
-						class="field mono"
-						type="text"
-						bind:value={draft.mqtt.prefix}
-						spellcheck="false"
-					/></label
-				>
-			</div>
-			<fieldset>
-				<legend>{t('ha.sensorGroups')}</legend>
-				{#each sensorGroups as group}
-					<label class="check"
-						><input
-							type="checkbox"
-							checked={draft.mqtt.groups.includes(group)}
-							onchange={() => (draft!.mqtt.groups = toggle(draft!.mqtt.groups, group))}
-						/><span>{t(`ha.group.${group}` as MessageKey)}</span></label
-					>
-				{/each}
-			</fieldset>
-			{#each sensorGroups.filter((g) => draft?.mqtt.groups.includes(g)) as group}
-				{@const devices = mqttDevices.filter((d) => d.group === group)}
-				{#if !['system', 'work'].includes(group)}<details class="device-selection">
-						<summary>{t(`ha.group.${group}` as MessageKey)} · {t('ha.deviceSelection')}</summary>
-						<label class="check"
-							><input
-								type="checkbox"
-								checked={!draft.mqtt.devices || !(group in draft.mqtt.devices)}
-								onchange={(e) => {
-									const next = { ...draft!.mqtt.devices };
-									if (e.currentTarget.checked) delete next[group];
-									else next[group] = devices.map((d) => d.id);
-									draft!.mqtt.devices = next;
-								}}
-							/>{t('ha.allDevices')}</label
-						>
-						{#if draft.mqtt.devices && group in draft.mqtt.devices}
-							{#each [...new Set( [...devices.map((d) => d.id), ...draft.mqtt.devices[group]] )] as id}
-								<label class="check"
-									><input
-										type="checkbox"
-										checked={draft.mqtt.devices[group].includes(id)}
-										onchange={() =>
-											(draft!.mqtt.devices = {
-												...draft!.mqtt.devices,
-												[group]: toggle(draft!.mqtt.devices![group], id),
-											})}
-									/>{devices.find((d) => d.id === id)?.name ?? id}</label
-								>
-							{/each}
-						{/if}
-					</details>{/if}
-			{/each}
-
-			<fieldset>
-				<legend>{t('ha.commandGroups')}</legend>
-				{#each commandGroups as group}
-					<label class="check"
-						><input
-							type="checkbox"
-							checked={draft.mqtt.commands.includes(group)}
-							onchange={() => (draft!.mqtt.commands = toggle(draft!.mqtt.commands, group))}
-						/><span>{t(`ha.command.${group}` as MessageKey)}</span></label
-					>
-				{/each}
-			</fieldset>
-			{#if draft.mqtt.commands.length}
-				<p class="notice-warn">{t('ha.commandsWarning')}</p>
-				{#if !draft.account}<p class="notice-warn">{t('ha.commandsNoAccount')}</p>{/if}
-			{/if}
-			{#if status?.mqtt}<p class="notice-ok" role="status">
-					{t('ha.mqttConnected')}
-				</p>{:else if status?.mqttError}<div class="notice-error" role="alert">
-					{t('ha.mqttFailed')}
-					<pre>{status.mqttError}</pre>
-				</div>{/if}
-		</section>
-
 		<div class="actions">
 			{#if saved}<p class="notice-ok" role="status">{t('notify.saved')}</p>{/if}
-			<button type="submit" class="btn btn-primary" disabled={busy !== null}
+			<button type="submit" form="ha-form" class="btn btn-primary" disabled={busy !== null}
 				>{t(busy === 'save' ? 'notify.saving' : 'notify.save')}</button
 			>
 		</div>
-	</form>
-	<HAStorage />
+	</div>
 {/if}
 
 <style>
+	.ha-page,
 	form {
 		display: flex;
 		flex-direction: column;
 		gap: var(--gap);
+	}
+	/* Stacked under its hint, never stretched by the column (flex-basis
+	   would become the height there). */
+	.account {
+		flex: none;
+		width: min(100%, 320px);
 	}
 	section {
 		font-size: 0.875rem;

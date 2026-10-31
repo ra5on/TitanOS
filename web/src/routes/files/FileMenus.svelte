@@ -1,6 +1,5 @@
 <script lang="ts">
 	import type { FileEntry, FileRoot } from '#lib/api.ts';
-	import { assistant } from '#lib/assistant.svelte.ts';
 	import ContextMenu from '#lib/components/ContextMenu.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { previewKind, type FileView } from '#lib/file-actions.ts';
@@ -69,11 +68,6 @@
 		{#if editable}<button type="button" role="menuitem" onclick={() => oncommand('edit', entry)}
 				><Icon name="edit" size={16} /><span>{t('files.edit')}</span></button
 			>{/if}
-		{#if one && !entry.dir && root.kind !== 'stick' && assistant.status?.available && ((previewKind(entry.name, entry.size) === 'text' && entry.size <= 256 << 10) || (previewKind(entry.name, entry.size) === 'image' && entry.size <= 4 << 20))}
-			<button type="button" role="menuitem" onclick={() => oncommand('assistant', entry)}
-				><Icon name="chat" size={16} /><span>{t('assistant.askFileMenu')}</span></button
-			>
-		{/if}
 		<button type="button" role="menuitem" onclick={() => oncommand('download', entry)}
 			><Icon name="download" size={16} /><span>{t('files.download')}</span></button
 		>

@@ -16,7 +16,6 @@
 	import { system } from '#lib/system.svelte.ts';
 	import Icon from './Icon.svelte';
 	import Dialog from './Dialog.svelte';
-	import { askAbout, assistant } from '#lib/assistant.svelte.ts';
 
 	let { compact = false }: { compact?: boolean } = $props();
 	let open = $state(false);
@@ -181,22 +180,6 @@
 											onclick={() => (open = false)}>{t('notify.inLogs')}</a
 										>{/if}
 								</span>
-							{/if}
-							{#if assistant.status?.available}
-								<button
-									type="button"
-									class="notice-link ask"
-									onclick={() => {
-										open = false;
-										askAbout(
-											t('assistant.askNotice', {
-												title: text.title,
-												text: text.text,
-												time: formatDateTime(new Date(notice.time)),
-											}),
-										);
-									}}>{t('assistant.ask')}</button
-								>
 							{/if}
 						</li>
 					{/each}

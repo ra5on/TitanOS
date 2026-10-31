@@ -194,7 +194,6 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 				'volumes',
 				'disks',
 				'temperatures',
-				'assistant',
 				'tailscale',
 				'netbird',
 			].includes(idSource)
@@ -235,7 +234,7 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 		valueFont: choice(
 			'valueFont',
 			['mono', 'sans'],
-			['docker', 'vms', 'shares', 'assistant'].includes(idSource) ? 'sans' : 'mono',
+			['docker', 'vms', 'shares'].includes(idSource) ? 'sans' : 'mono',
 		),
 		titleFont: choice('titleFont', ['mono', 'sans'], 'sans'),
 		labelFont: choice('labelFont', ['mono', 'sans'], 'sans'),

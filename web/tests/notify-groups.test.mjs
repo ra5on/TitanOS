@@ -5,18 +5,18 @@ import { bellGroup, bellShows, sanitizeBell } from '../src/lib/notify-groups.ts'
 test('kinds map to groups, unknown ones to system', () => {
 	assert.equal(bellGroup('volume_degraded'), 'storage');
 	assert.equal(bellGroup('config_backup_failed'), 'backups');
-	assert.equal(bellGroup('assistant_done'), 'assistant');
+	assert.equal(bellGroup('assistant_done'), 'system');
 	assert.equal(bellGroup('certificate_expiring'), 'system');
 });
 
 test('defaults show everything; malformed settings are bounded', () => {
 	const settings = sanitizeBell({
 		minSeverity: 'loud',
-		groups: { usb: 'no', assistant: false, evil: false },
+		groups: { usb: 'no', updates: false, evil: false },
 	});
 	assert.equal(settings.minSeverity, 'info');
 	assert.equal(settings.groups.usb, true);
-	assert.equal(settings.groups.assistant, false);
+	assert.equal(settings.groups.updates, false);
 	assert.equal('evil' in settings.groups, false);
 });
 

@@ -57,15 +57,13 @@ type Settings struct {
 	// Fingerprint is the SHA-256 of the server's certificate in hex. With
 	// it, a self-signed certificate is accepted, but only that one.
 	Fingerprint string `json:"fingerprint,omitempty"`
-	// Domains and Entities are what the assistant may see and switch.
+	// Domains and Entities are what MCP clients may see and switch.
 	Domains  []string                `json:"domains"`
 	Entities []string                `json:"entities"`
 	Policies map[string]EntityPolicy `json:"policies,omitempty"`
-	// Account is the TitanOS account that buttons in Home Assistant and
-	// questions from Home Assistant Assist act for. Its rights apply.
+	// Account is the TitanOS account that buttons in Home Assistant act
+	// for. Its rights apply.
 	Account string `json:"account,omitempty"`
-	// Assist answers questions from Home Assistant Assist (event titanos_ask).
-	Assist bool `json:"assist,omitempty"`
 	// MQTT publishes sensors of the NAS to Home Assistant.
 	MQTT MQTT `json:"mqtt"`
 }

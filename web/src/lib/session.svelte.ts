@@ -3,7 +3,6 @@ import { sound, resetSound } from './sound.svelte.ts';
 import { sanitizeSound } from './sounds.ts';
 import { useAppearance } from './theme/appearance.svelte.ts';
 import { sanitizeAppearance } from './theme/themes.ts';
-import { resetAssistant, useAssistantPrefs } from './assistant.svelte.ts';
 import { bell } from './notifications.svelte.ts';
 import { sanitizeBell } from './notify-groups.ts';
 
@@ -28,7 +27,6 @@ async function loadPreferences() {
 		bell.settings = sanitizeBell(prefs.bell);
 		if (prefs.appearance)
 			useAppearance(sanitizeAppearance(prefs.appearance, prefs.dashboard?.visual));
-		useAssistantPrefs(prefs.assistant);
 	} catch {
 		// The UI works with defaults; saving will report the problem.
 		session.shares = null;
@@ -44,7 +42,6 @@ export async function refreshSession() {
 		const data = await api.get<Session>('/session');
 		if (data.user?.name !== session.data?.user?.name) {
 			resetSound();
-			resetAssistant();
 		}
 		if (data.user) await loadPreferences();
 		session.data = data;
@@ -70,13 +67,11 @@ export async function logout() {
 	} catch (err) {
 		if (!(err instanceof ApiError)) throw err;
 	}
-	resetAssistant();
 	await refreshSession();
 }
 
 /** Called when the NAS says the session is gone (restart, timeout). */
 export function sessionExpired() {
 	resetSound();
-	resetAssistant();
 	if (session.data) session.data = { ...session.data, user: null };
 }

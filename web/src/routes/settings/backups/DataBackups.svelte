@@ -30,7 +30,6 @@
 	import TargetPanel from './TargetPanel.svelte';
 	import ReplicationPanel from './ReplicationPanel.svelte';
 	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
-	import { askAbout, assistant } from '#lib/assistant.svelte.ts';
 
 	type Kind = 'smb-copy' | 'usb-copy' | 'local' | 's3' | 'sftp' | 'rest' | 'titanos';
 	type Destination = {
@@ -809,14 +808,6 @@
 				>
 					{t('backup.lastError')}
 					<pre>{state.lastError}</pre>
-					{#if assistant.status?.available}<button
-							type="button"
-							class="btn"
-							onclick={() =>
-								askAbout(t('assistant.askBackup', { job: job.id }), [
-									{ name: `${job.id}-error.txt`, kind: 'text', text: state.lastError },
-								])}><Icon name="chat" size={14} />{t('assistant.ask')}</button
-						>{/if}
 				</div>{/if}
 			{#if !state.running && state.warning}<div class="notice-warn">
 					{t('backup.warning')}

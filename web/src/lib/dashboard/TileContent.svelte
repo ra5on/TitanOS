@@ -13,7 +13,6 @@
 	import DisksTile from './tiles/DisksTile.svelte';
 	import VolumesTile from './tiles/VolumesTile.svelte';
 	import TemperaturesTile from './tiles/TemperaturesTile.svelte';
-	import AssistantTile from './tiles/AssistantTile.svelte';
 	import TailscaleTile from './tiles/TailscaleTile.svelte';
 	import NetbirdTile from './tiles/NetbirdTile.svelte';
 
@@ -22,7 +21,6 @@
 		volumes: VolumesTile,
 		disks: DisksTile,
 		temperatures: TemperaturesTile,
-		assistant: AssistantTile,
 	};
 	let {
 		id,

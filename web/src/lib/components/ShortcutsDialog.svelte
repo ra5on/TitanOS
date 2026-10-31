@@ -3,8 +3,8 @@
 	import Dialog from './Dialog.svelte';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 
-	type Props = { admin: boolean; assistant: boolean; onclose: () => void };
-	let { admin, assistant, onclose }: Props = $props();
+	type Props = { admin: boolean; onclose: () => void };
+	let { admin, onclose }: Props = $props();
 
 	const mac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 	const mod = mac ? '⌘' : 'Strg';
@@ -14,7 +14,6 @@
 			[
 				{ keys: [mod, 'K'], label: 'shortcuts.palette', show: true },
 				{ keys: ['Strg', '`'], label: 'shortcuts.terminal', show: admin },
-				{ keys: ['Strg', 'J'], label: 'shortcuts.assistant', show: assistant },
 				{ keys: ['?'], label: 'shortcuts.help', show: true },
 				{ keys: [mod, 'Z'], label: 'shortcuts.dashboardUndo', show: true },
 				{ keys: [mod, 'S'], label: 'shortcuts.dashboardSave', show: true },

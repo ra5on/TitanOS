@@ -741,7 +741,6 @@ export function fixtureFactory(browser, errors) {
       if (path === "/notifications") return json({ messages: [] });
       if (path === "/terminal") return json({ enabled: true });
       if (path === "/session/confirmed") return json({ confirmed: true });
-      if (path === "/assistant") return json({ available: false });
       // Formatting drives: tests set data.usbDisks and data.formatError and
       // read data.formats; data.usbJob is the job the NAS reports.
       if (path === "/usb/disks" && method === "GET")

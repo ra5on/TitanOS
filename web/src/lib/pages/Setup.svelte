@@ -1,5 +1,5 @@
 <script lang="ts">
-	// First start: create the owner account. The assistant at /welcome
+	// First start: create the owner account. The wizard at /welcome
 	// takes over from there (name of the NAS, time zone, what to do next).
 	import { goto } from '$app/navigation';
 	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';

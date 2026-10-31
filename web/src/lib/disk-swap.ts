@@ -1,4 +1,4 @@
-// The assistant for swapping a disk (Storage › Swap a disk,
+// The wizard for swapping a disk (Storage › Swap a disk,
 // docs/DISK-SWAP.md): which way a disk of a volume can be swapped.
 import type { Disk, Volume } from './api.ts';
 
@@ -50,7 +50,7 @@ export function swapCandidates(volume: Volume, disks: Disk[]): SwapCandidate[] {
 	return list;
 }
 
-/** Volumes missing a disk come first: the assistant offers them at once. */
+/** Volumes missing a disk come first: the wizard offers them at once. */
 export function needsSwap(volume: Volume): boolean {
 	return (
 		volume.state === 'degraded' ||
@@ -73,7 +73,7 @@ export function replacementDisks(disks: Disk[], old: Disk | undefined, smallest:
 	);
 }
 
-/** Disks that showed up since the assistant started looking. */
+/** Disks that showed up since the wizard started looking. */
 export function newlyAttached(before: string[], now: Disk[]): Disk[] {
 	return now.filter((d) => !before.includes(d.identity ?? d.name));
 }

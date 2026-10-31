@@ -125,21 +125,6 @@ export type Operations = {
 	growthError?: string;
 	uploads?: { id: string; name: string; size: number; offset: number; busy?: boolean }[];
 	applicationRecovery?: { operation: { id: string; job: string } | null; active: boolean };
-	assistant?: {
-		id: string;
-		title: string;
-		updated: string;
-		run?: { state: string; detail?: string };
-	}[];
-	automations?: {
-		id: string;
-		name: string;
-		enabled: boolean;
-		next?: string;
-		kind?: string;
-		pending?: boolean;
-		detail?: string;
-	}[];
 	maintenance?: MaintenanceStatus;
 	transfers: CopyJob[];
 	backups?: BackupView[];

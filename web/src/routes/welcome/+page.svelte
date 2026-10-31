@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The assistant after the first start: name of the NAS and time zone,
+	// The wizard after the first start: name of the NAS and time zone,
 	// a look at the network, and what to do next. Every step can be skipped.
 	import NetworkBridgeSetup from '#lib/components/NetworkBridgeSetup.svelte';
 	import { api, ApiError } from '#lib/api.ts';
@@ -141,7 +141,7 @@
 			step = 2;
 		} catch (err) {
 			const code = err instanceof ApiError ? err.code : 'internal';
-			// In development mode nothing is changed; the assistant still shows its steps.
+			// In development mode nothing is changed; the wizard still shows its steps.
 			if (code === 'read_only') step = 2;
 			else error = errorText(code);
 		}

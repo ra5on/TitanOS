@@ -20,8 +20,6 @@ const keywords: Record<string, string> = {
 	updates: 'version update rollback aktualisieren rückwechsel',
 	access:
 		'ssh https tls ssl zertifikat certificate schlüssel key zugang access angemeldet bleiben stay logged in anmeldung login sitzung session',
-	assistant:
-		'ki ai assistent assistant chat ollama modell model llm sprachmodell websuche web search duckduckgo',
 	backups:
 		'backup sicherung datensicherung restic usb smb s3 kopie copy stick config konfiguration wiederherstellung restore',
 	stick: 'stick usb config konfiguration configuration wiederherstellen restore',
@@ -289,13 +287,6 @@ export const settingsAreas: SettingsArea[] = [
 	{ id: 'backups', label: 'safeguard.title', group: 'data', icon: 'archive', admin: true },
 	{ id: 'files', label: 'fileIndex.title', group: 'data', icon: 'search', admin: true },
 	{ id: 'homeassistant', label: 'ha.title', group: 'integrations', icon: 'home', admin: true },
-	{
-		id: 'assistant',
-		label: 'assistant.settingsTitle',
-		group: 'integrations',
-		icon: 'chat',
-		admin: true,
-	},
 	{ id: 'api', label: 'api.title', group: 'integrations', icon: 'key' },
 	{ id: 'appearance', label: 'menu.appearance', group: 'personal', icon: 'palette' },
 ];

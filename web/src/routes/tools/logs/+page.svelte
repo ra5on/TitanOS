@@ -7,7 +7,6 @@
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
-	import { askAbout, assistant } from '#lib/assistant.svelte.ts';
 
 	const SOURCES = [
 		'',
@@ -141,16 +140,6 @@
 			)
 			.join('\n');
 	}
-	function askLog() {
-		askAbout(t('assistant.askLog'), [
-			{ name: 'log.txt', kind: 'text', text: logText(entries.length - 400, entries.length) },
-		]);
-	}
-	function askLine(index: number) {
-		askAbout(t('assistant.askLogLine', { line: entries[index].message.slice(0, 300) }), [
-			{ name: 'log.txt', kind: 'text', text: logText(index - 30, index + 10) },
-		]);
-	}
 
 	let copied = $state<'' | 'ok' | 'failed'>('');
 	let copiedTimer: ReturnType<typeof setTimeout> | undefined;
@@ -225,9 +214,6 @@
 		<button type="button" class="btn" disabled={entries.length === 0} onclick={exportLines}
 			>{t('tools.exportLines')}</button
 		>
-		{#if assistant.status?.available && entries.length > 0}
-			<button type="button" class="btn" onclick={askLog}>{t('assistant.askLogButton')}</button>
-		{/if}
 		<span class="muted count" role="status"
 			>{#if copied === 'ok'}{t('tools.copied')}{:else if copied === 'failed'}{t(
 					'tools.copyFailed',
@@ -263,13 +249,6 @@
 							>
 						{/if}{entry.message}</span
 					>
-					{#if level(entry.priority) && assistant.status?.available}<button
-							type="button"
-							class="ask"
-							title={t('assistant.ask')}
-							aria-label={t('assistant.askLine')}
-							onclick={() => askLine(index)}>?</button
-						>{/if}
 				</div>
 			{:else}
 				<EmptyState inline title={loading ? t('tools.loading') : t('tools.noLines')} />
@@ -363,20 +342,6 @@
 		grid-template-columns: 9.5rem 9rem 1fr auto;
 		gap: 0 12px;
 	}
-	.ask {
-		width: 20px;
-		height: 20px;
-		padding: 0;
-		border: 1px solid var(--border);
-		border-radius: 50%;
-		background: transparent;
-		color: var(--muted);
-		font-size: 0.6875rem;
-		cursor: pointer;
-	}
-	.ask:hover {
-		color: var(--text);
-	}
 	.line time,
 	.source {
 		color: var(--muted);
@@ -410,10 +375,6 @@
 		.message {
 			grid-column: 1 / -1;
 			grid-row: 2;
-		}
-		.ask {
-			grid-column: 3;
-			grid-row: 1;
 		}
 	}
 </style>

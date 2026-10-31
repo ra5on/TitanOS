@@ -9,7 +9,6 @@
 	import { session } from '#lib/session.svelte.ts';
 	import { horizontalNav } from '#lib/horizontal-nav.ts';
 	import { terminal, toggleTerminal } from '#lib/terminal.svelte.ts';
-	import { assistant, toggleAssistant } from '#lib/assistant.svelte.ts';
 	import Icon from './Icon.svelte';
 	import { togglePalette } from '#lib/palette.svelte.ts';
 	import AccountMenu from './AccountMenu.svelte';
@@ -199,18 +198,6 @@
 					stroke-linejoin="round"
 					aria-hidden="true"><path d="m5 7 5 5-5 5M12 17h7"></path></svg
 				>
-			</button>
-		{/if}
-		{#if assistant.status?.available}
-			<button
-				type="button"
-				class="terminal"
-				aria-pressed={page.url.pathname === '/assistant'}
-				aria-label={t('assistant.title')}
-				title={t('assistant.shortcut')}
-				onclick={toggleAssistant}
-			>
-				<Icon name="chat" size={18} />
 			</button>
 		{/if}
 		{#if role !== 'user'}<Notifications compact />{/if}
