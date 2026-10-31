@@ -232,9 +232,45 @@ export type SettingsArea = {
 	group: SettingsGroup;
 	icon: IconName;
 	admin?: boolean;
-	/** Shows a small "new" badge next to the area in the navigation. */
-	isNew?: boolean;
+	/**
+	 * Shows a small "new" badge next to the area in the navigation: the
+	 * release the area first shipped in and that release's date. The badge
+	 * goes away by itself, see stillNew.
+	 */
+	newSince?: NewSince;
 };
+
+/** The release an area first shipped in (version "x.y.z", date "YYYY-MM-DD"). */
+export type NewSince = { version: string; date: string };
+
+/** How long a "new" badge stays: two minor versions or 30 days, whichever ends first. */
+export const NEW_FOR_VERSIONS = 2;
+export const NEW_FOR_DAYS = 30;
+
+function minorOf(version: string): [number, number] | null {
+	const m = /^v?(\d+)\.(\d+)\./.exec(version.trim());
+	return m ? [Number(m[1]), Number(m[2])] : null;
+}
+
+/**
+ * Whether a "new" badge still shows: until the system runs the second minor
+ * version after the one the area came with (0.41.x → gone from 0.43.0 on)
+ * and for at most 30 days after that release. Patch versions do not count.
+ * Without a readable version (dev builds, no data yet) only the date counts.
+ */
+export function stillNew(
+	since: NewSince,
+	currentVersion: string | undefined,
+	now: number,
+): boolean {
+	const start = Date.parse(`${since.date}T00:00:00Z`);
+	if (Number.isNaN(start) || now >= start + NEW_FOR_DAYS * 86_400_000) return false;
+	const from = minorOf(since.version);
+	const current = minorOf(currentVersion ?? '');
+	if (!from || !current) return true;
+	if (current[0] !== from[0]) return current[0] < from[0];
+	return current[1] - from[1] < NEW_FOR_VERSIONS;
+}
 
 // One list for the settings navigation (sidebar and overview), the command
 // palette and the route guard. Within a group the areas appear in exactly
@@ -250,7 +286,7 @@ export const settingsAreas: SettingsArea[] = [
 		group: 'system',
 		icon: 'box',
 		admin: true,
-		isNew: true,
+		newSince: { version: '0.41.0', date: '2026-10-31' },
 	},
 	{
 		id: 'notifications',
@@ -260,7 +296,14 @@ export const settingsAreas: SettingsArea[] = [
 		admin: true,
 	},
 	{ id: 'network', label: 'netcfg.title', group: 'network', icon: 'globe', admin: true },
-	{ id: 'ddns', label: 'ddns.title', group: 'network', icon: 'refresh', admin: true, isNew: true },
+	{
+		id: 'ddns',
+		label: 'ddns.title',
+		group: 'network',
+		icon: 'refresh',
+		admin: true,
+		newSince: { version: '0.31.0', date: '2026-10-28' },
+	},
 	{ id: 'proxy', label: 'proxy.settingsTitle', group: 'network', icon: 'external', admin: true },
 	{
 		id: 'cluster',
@@ -268,7 +311,7 @@ export const settingsAreas: SettingsArea[] = [
 		group: 'network',
 		icon: 'tailnet',
 		admin: true,
-		isNew: true,
+		newSince: { version: '0.38.0', date: '2026-10-30' },
 	},
 	{ id: 'access', label: 'access.title', group: 'security', icon: 'lock', admin: true },
 	{
@@ -277,7 +320,7 @@ export const settingsAreas: SettingsArea[] = [
 		group: 'security',
 		icon: 'shield',
 		admin: true,
-		isNew: true,
+		newSince: { version: '0.31.0', date: '2026-10-28' },
 	},
 	{
 		id: 'letsencrypt',
@@ -285,9 +328,16 @@ export const settingsAreas: SettingsArea[] = [
 		group: 'security',
 		icon: 'check',
 		admin: true,
-		isNew: true,
+		newSince: { version: '0.31.0', date: '2026-10-28' },
 	},
-	{ id: 'wireguard', label: 'wg.title', group: 'security', icon: 'key', admin: true, isNew: true },
+	{
+		id: 'wireguard',
+		label: 'wg.title',
+		group: 'security',
+		icon: 'key',
+		admin: true,
+		newSince: { version: '0.34.0', date: '2026-10-28' },
+	},
 	{ id: 'hardware', label: 'hardware.title', group: 'hardware', icon: 'monitor', admin: true },
 	{ id: 'temperatures', label: 'temperatures.title', group: 'hardware', icon: 'activity' },
 	{ id: 'energy', label: 'energy.title', group: 'hardware', icon: 'zap', admin: true },
@@ -303,7 +353,7 @@ export const settingsAreas: SettingsArea[] = [
 		group: 'integrations',
 		icon: 'chat',
 		admin: true,
-		isNew: true,
+		newSince: { version: '0.41.0', date: '2026-10-31' },
 	},
 	{ id: 'api', label: 'api.title', group: 'integrations', icon: 'key' },
 	{ id: 'appearance', label: 'menu.appearance', group: 'personal', icon: 'palette' },
@@ -327,7 +377,7 @@ export type SettingsEntry = {
 	label: string;
 	group: SettingsGroup;
 	icon: IconName;
-	isNew?: boolean;
+	newSince?: NewSince;
 	section?: boolean;
 };
 
@@ -345,7 +395,7 @@ export function settingsEntries(
 	const entries = settingsAreas
 		.filter((area) => !area.admin || admin)
 		.flatMap((area): SettingsEntry[] => {
-			const base = { id: area.id, group: area.group, icon: area.icon, isNew: area.isNew };
+			const base = { id: area.id, group: area.group, icon: area.icon, newSince: area.newSince };
 			const sections = searching
 				? (settingSections[area.id] ?? []).filter((section) =>
 						matchesSetting(
