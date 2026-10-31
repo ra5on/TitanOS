@@ -78,10 +78,10 @@
 		gap: 2px;
 		min-width: 0;
 		overflow-wrap: anywhere;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	dd {
-		font-size: var(--tile-value-size, 16px);
+		font-size: var(--tile-value-size, var(--text-lg));
 		font-family: var(--tile-value-font);
 		font-weight: var(--tile-value-weight);
 		margin: 0;
@@ -92,13 +92,13 @@
 	.note,
 	a,
 	.critical {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.critical {
 		display: block;
 	}
 	.hot dd {
-		font-size: var(--tile-value-size, 16px);
+		font-size: var(--tile-value-size, var(--text-lg));
 		font-family: var(--tile-value-font);
 		font-weight: var(--tile-value-weight);
 		color: var(--warn-text);

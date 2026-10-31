@@ -92,14 +92,14 @@
 		padding-bottom: 22px;
 	}
 	small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.zone {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 6px 12px;
 		align-items: baseline;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	@media (max-width: 760px) {
 		.row .row-actions {

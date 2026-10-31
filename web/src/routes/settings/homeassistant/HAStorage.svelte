@@ -598,10 +598,10 @@
 <style>
 	.hint,
 	.account {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.small {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.warn {
 		color: var(--warn-text);
@@ -680,7 +680,7 @@
 	}
 	.usage legend {
 		margin-bottom: 6px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.folder-row {
 		display: flex;
@@ -708,7 +708,7 @@
 		grid-template-columns: max-content minmax(0, 1fr);
 		gap: 6px 16px;
 		margin: 0;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.values dt {
 		color: var(--muted);

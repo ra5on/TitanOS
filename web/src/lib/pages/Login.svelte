@@ -146,12 +146,12 @@
 		gap: 16px;
 	}
 	.hint {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	label {
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 </style>

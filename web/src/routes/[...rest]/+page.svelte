@@ -18,7 +18,7 @@
 		text-align: center;
 	}
 	h1 {
-		font-size: 1.25rem;
+		font-size: var(--text-xl);
 		font-weight: 600;
 	}
 </style>

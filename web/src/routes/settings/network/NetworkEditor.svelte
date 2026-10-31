@@ -277,7 +277,7 @@
 	}
 	small,
 	.hint {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	legend label {
 		font: inherit;

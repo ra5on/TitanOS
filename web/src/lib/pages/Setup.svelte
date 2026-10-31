@@ -95,7 +95,7 @@
 
 <style>
 	.intro {
-		font-size: 0.9375rem;
+		font-size: var(--text-md);
 		color: var(--muted);
 		text-align: center;
 	}
@@ -108,10 +108,10 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 </style>

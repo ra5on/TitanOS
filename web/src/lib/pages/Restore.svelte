@@ -250,14 +250,14 @@
 		background: color-mix(in srgb, var(--accent) 10%, transparent);
 		border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
 		border-radius: var(--radius-ctl);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	p {
 		margin: 0;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.name {
-		font-size: 0.9375rem;
+		font-size: var(--text-md);
 		font-weight: 600;
 	}
 	label {
@@ -266,7 +266,7 @@
 		gap: 6px;
 	}
 	details {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	summary {
 		cursor: pointer;
@@ -281,11 +281,11 @@
 		color: var(--text);
 	}
 	.or {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		text-align: center;
 	}
 	.what {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		overflow-wrap: anywhere;
 	}
 </style>

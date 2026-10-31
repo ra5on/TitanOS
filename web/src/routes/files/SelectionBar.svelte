@@ -123,7 +123,7 @@
 	}
 	.count {
 		margin-right: auto;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 
 	@media (max-width: 760px) {

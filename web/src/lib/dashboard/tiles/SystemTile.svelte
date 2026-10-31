@@ -111,7 +111,8 @@
 		min-width: 0;
 	}
 	dt {
-		font: var(--tile-label-weight, 400) var(--tile-label-size, 12px) var(--tile-label-font);
+		font: var(--tile-label-weight, 400) var(--tile-label-size, var(--text-sm))
+			var(--tile-label-font);
 		color: var(--tile-label-color, var(--muted));
 		text-align: var(--tile-label-align);
 		overflow-wrap: anywhere;
@@ -120,7 +121,8 @@
 		margin: 0;
 		min-width: 0;
 		overflow-wrap: anywhere;
-		font: var(--tile-value-weight, 400) var(--tile-value-size, 14px)/1.45 var(--tile-value-font);
+		font: var(--tile-value-weight, 400) var(--tile-value-size, var(--text-md))/1.45
+			var(--tile-value-font);
 		color: var(--tile-value-color, var(--text));
 		text-align: var(--tile-align);
 	}

@@ -76,7 +76,7 @@
 		flex-wrap: wrap;
 	}
 	.head span {
-		font-size: 0.85rem;
+		font-size: var(--text-base);
 	}
 	svg {
 		width: 100%;
@@ -98,7 +98,7 @@
 		fill: var(--accent);
 	}
 	.scale {
-		font-size: 0.7rem;
+		font-size: var(--text-xs);
 		color: var(--muted);
 		margin-bottom: -20px;
 	}
@@ -106,7 +106,7 @@
 		display: flex;
 		justify-content: space-between;
 		gap: 10px;
-		font-size: 0.7rem;
+		font-size: var(--text-xs);
 		color: var(--muted);
 	}
 </style>

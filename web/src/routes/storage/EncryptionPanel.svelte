@@ -227,7 +227,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 6px 12px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.label {
 		font-weight: 600;
@@ -253,10 +253,10 @@
 	}
 	.body p {
 		margin: 0;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.problem {
 		color: var(--warn-text);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 </style>

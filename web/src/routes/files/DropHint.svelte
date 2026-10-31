@@ -25,7 +25,7 @@
 		padding: 12px;
 		border: 1px dashed var(--outline-border);
 		border-radius: var(--radius-ctl);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		color: var(--muted);
 	}
 	.drop.active {

@@ -224,7 +224,7 @@
 
 <style>
 	section {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.fields {
 		display: flex;

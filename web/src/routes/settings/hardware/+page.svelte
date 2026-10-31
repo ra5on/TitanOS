@@ -114,7 +114,7 @@
 <style>
 	.hint {
 		max-width: 60rem;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.device {
 		display: flex;
@@ -123,7 +123,7 @@
 		gap: 10px 20px;
 		padding-top: 14px;
 		border-top: 1px solid var(--panel-border);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.main {
 		flex: 2 1 320px;
@@ -133,7 +133,7 @@
 		gap: 3px;
 	}
 	.main .mono {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
 	}
 	.name {
@@ -145,10 +145,10 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 8px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.use {
 		flex: 1 1 260px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 </style>

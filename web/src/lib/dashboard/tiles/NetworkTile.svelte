@@ -88,7 +88,7 @@
 		display: none;
 	}
 	dl.compact dt {
-		font-size: 11px;
+		font-size: var(--text-xs);
 	}
 	.rates {
 		display: grid;
@@ -109,11 +109,11 @@
 		flex-basis: 100%;
 	}
 	.label {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.value {
-		font-size: 1.2rem;
+		font-size: var(--text-xl);
 		font-weight: 500;
 		overflow-wrap: anywhere;
 	}
@@ -122,7 +122,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	dl div {
 		display: flex;

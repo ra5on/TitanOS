@@ -154,7 +154,7 @@
 <style>
 	.memory-occupancy {
 		margin-top: 10px;
-		font-size: var(--tile-label-size, 12px);
+		font-size: var(--tile-label-size, var(--text-sm));
 		color: var(--tile-label-color, var(--muted));
 	}
 	.memory-occupancy p {
@@ -210,7 +210,7 @@
 		grid-template-columns: minmax(0, max-content) minmax(12px, 1fr) max-content;
 		align-items: center;
 		gap: 7px;
-		font-size: var(--tile-label-size, 12px);
+		font-size: var(--tile-label-size, var(--text-sm));
 		min-width: 0;
 	}
 	.core > span:first-child {
@@ -259,7 +259,7 @@
 		justify-content: space-between;
 		flex-wrap: wrap;
 		gap: 5px 12px;
-		font-size: var(--tile-label-size, 12px);
+		font-size: var(--tile-label-size, var(--text-sm));
 		color: var(--tile-label-color, var(--muted));
 		overflow-wrap: anywhere;
 	}

@@ -471,7 +471,7 @@
 		flex-direction: column;
 		gap: 12px;
 		padding: 18px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.who {
 		display: flex;
@@ -492,11 +492,11 @@
 		background: var(--accent);
 		border-radius: var(--radius-ctl);
 		color: var(--on-accent);
-		font-size: 1.125rem;
+		font-size: var(--text-lg);
 		font-weight: 600;
 	}
 	.name {
-		font-size: 0.9375rem;
+		font-size: var(--text-md);
 		font-weight: 600;
 	}
 	.row {
@@ -536,7 +536,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);
@@ -567,14 +567,14 @@
 		min-width: 0;
 	}
 	.device .mono {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
 	}
 	.note {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.text {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.codes {
 		margin: 12px 0;
@@ -583,7 +583,7 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 		font-family: var(--font-mono);
-		font-size: 0.9375rem;
+		font-size: var(--text-md);
 		line-height: 1.7;
 		columns: 2;
 	}

@@ -599,7 +599,7 @@
 		width: min(100%, 320px);
 	}
 	section {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.head {
 		display: flex;
@@ -612,7 +612,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);
@@ -643,13 +643,13 @@
 	}
 	.small {
 		margin: 0;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.check {
 		flex-direction: row;
 		align-items: center;
 		gap: 10px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.check > span {
 		color: var(--text);
@@ -672,10 +672,10 @@
 		grid-column: 1 / -1;
 		margin-bottom: 8px;
 		color: var(--muted);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.domain .chip {
-		font-size: 0.6875rem;
+		font-size: var(--text-xs);
 	}
 	details {
 		display: flex;
@@ -727,7 +727,7 @@
 		border: 0;
 		color: var(--muted);
 		font: inherit;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		text-decoration: underline;
 		cursor: pointer;
 	}
@@ -754,7 +754,7 @@
 	pre {
 		margin: 6px 0 0;
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 	}

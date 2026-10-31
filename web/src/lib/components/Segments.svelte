@@ -35,7 +35,7 @@
 		display: inline-flex;
 		flex-wrap: wrap;
 		align-self: flex-start;
-		gap: 4px;
+		gap: var(--space-1);
 		padding: 3px;
 		border: 1px solid var(--panel-border, var(--border));
 		border-radius: var(--radius-ctl);
@@ -48,7 +48,7 @@
 		border-radius: var(--radius-ctl);
 		color: var(--text);
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		cursor: pointer;
 	}
 	.segments button[aria-checked='true'] {

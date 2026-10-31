@@ -367,21 +367,21 @@
 		gap: 8px;
 	}
 	.label {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		font-weight: 500;
 	}
 	.field {
 		max-width: 16rem;
 	}
 	small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	small.problem {
 		color: var(--warn-text);
 	}
 	.small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.options {
 		display: grid;
@@ -412,7 +412,7 @@
 		border-color: var(--accent);
 	}
 	.option-name {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		font-weight: 600;
 	}
 	.capacity {
@@ -422,25 +422,25 @@
 		padding: 12px 14px;
 		background: var(--chip);
 		border-radius: var(--radius-ctl);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.confirm {
 		display: flex;
 		gap: 8px;
 		align-items: flex-start;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.working {
 		order: -2;
 		margin-right: auto;
 		align-self: center;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		color: var(--muted);
 	}
 	pre {
 		margin: 8px 0 0;
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		white-space: pre-wrap;
 		word-break: break-word;
 	}

@@ -229,7 +229,7 @@
 
 <style>
 	section {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.part {
 		display: flex;
@@ -238,7 +238,7 @@
 	}
 	h3 {
 		margin: 0;
-		font-size: 0.9375rem;
+		font-size: var(--text-md);
 	}
 	.hint {
 		margin: 0;

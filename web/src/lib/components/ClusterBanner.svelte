@@ -34,7 +34,7 @@
 		box-sizing: border-box;
 		margin-bottom: 16px;
 		padding: 4px 4px 4px 14px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		border: 1px solid var(--accent);
 		border-radius: var(--radius-tile);
 		background: color-mix(in srgb, var(--accent) 14%, transparent);

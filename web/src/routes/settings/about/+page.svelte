@@ -78,7 +78,7 @@
 
 <style>
 	section {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	dl {
 		display: grid;
@@ -88,7 +88,7 @@
 	}
 	dt {
 		color: var(--muted);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	dd {
 		margin: 2px 0 0;
@@ -104,7 +104,7 @@
 		background: var(--track);
 		border-radius: var(--radius-ctl);
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		line-height: 1.5;
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;

@@ -116,7 +116,7 @@
 	}
 	.head a {
 		color: var(--accent);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.toolbar {
 		margin-bottom: 12px;
@@ -127,7 +127,7 @@
 		max-width: 300px;
 	}
 	h3 {
-		font-size: 0.85rem;
+		font-size: var(--text-base);
 		margin-top: 18px;
 	}
 </style>

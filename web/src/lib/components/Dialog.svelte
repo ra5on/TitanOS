@@ -84,20 +84,20 @@
 	dialog[open] {
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: var(--space-4);
 	}
 	dialog::backdrop {
 		background: var(--overlay);
 	}
 	h2 {
-		font-size: 1.1875rem;
+		font-size: var(--text-lg);
 		font-weight: 600;
 	}
 	dialog :global(.dialog-actions) {
 		display: flex;
 		flex-wrap: wrap;
 		justify-content: flex-end;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	/* The dangerous action stands left of "Cancel". Only the picture moves:
 	   in the markup "Cancel" stays first, so it gets the focus and Tab
@@ -109,7 +109,7 @@
 		display: flex;
 		align-items: flex-start;
 		gap: 10px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	dialog :global(.confirm input) {
 		width: 18px;

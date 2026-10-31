@@ -257,7 +257,7 @@
 		flex-direction: column;
 		gap: 18px;
 		padding: 28px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.head {
 		display: flex;
@@ -267,11 +267,11 @@
 		gap: 12px;
 	}
 	h1 {
-		font-size: 1.375rem;
+		font-size: var(--text-xl);
 		font-weight: 600;
 	}
 	h2 {
-		font-size: 1.0625rem;
+		font-size: var(--text-lg);
 		font-weight: 600;
 	}
 	form,
@@ -284,13 +284,13 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);
 	}
 	small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.actions {

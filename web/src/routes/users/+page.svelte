@@ -527,13 +527,13 @@
 		width: 100%;
 		min-width: 840px;
 		border-collapse: collapse;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	th {
 		padding: calc(var(--row-pad) + 2px) var(--tile-pad);
 		border-bottom: 1px solid var(--panel-border);
 		text-align: left;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		font-weight: 500;
 		color: var(--muted);
 	}
@@ -560,7 +560,7 @@
 		border-radius: var(--radius-ctl);
 		background: var(--accent);
 		color: var(--on-accent);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		font-weight: 700;
 	}
 	.name {
@@ -571,13 +571,13 @@
 	}
 	.sub {
 		display: block;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.role {
 		width: auto;
 		height: 2.25rem;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.failed {
 		display: flex;
@@ -594,7 +594,7 @@
 		margin: 2px 4px 2px 0;
 		color: var(--text);
 		text-decoration: none;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.reach a:hover {
 		text-decoration: underline;
@@ -616,13 +616,13 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.text {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 </style>

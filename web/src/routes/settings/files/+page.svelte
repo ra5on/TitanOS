@@ -277,7 +277,7 @@
 		padding-left: 28px;
 	}
 	.hint {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.time input {
 		max-width: 10rem;

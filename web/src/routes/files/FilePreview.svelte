@@ -174,6 +174,6 @@
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 		font-family: var(--font-mono, monospace);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 </style>

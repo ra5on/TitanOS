@@ -112,7 +112,7 @@
 	}
 	h2 {
 		margin: 0 0 12px;
-		font-size: 1rem;
+		font-size: var(--text-lg);
 	}
 	ul {
 		list-style: none;
@@ -142,7 +142,7 @@
 	}
 	p {
 		margin: 4px 0;
-		font-size: 0.85rem;
+		font-size: var(--text-base);
 	}
 	progress {
 		width: 100%;

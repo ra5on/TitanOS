@@ -160,7 +160,7 @@
 	.search {
 		display: grid;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.results {
 		display: flex;
@@ -177,7 +177,7 @@
 		min-height: 40px;
 		text-align: left;
 		font: inherit;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		background: none;
 		border: 0;
 		border-radius: var(--radius-ctl);
@@ -194,14 +194,14 @@
 	}
 	.results small {
 		color: var(--muted);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		text-align: right;
 	}
 	p {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.keys {
 		margin: 0;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 </style>

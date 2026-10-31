@@ -206,7 +206,7 @@
 		outline: 2px solid var(--accent);
 	}
 	.caption {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 		text-align: center;
 	}

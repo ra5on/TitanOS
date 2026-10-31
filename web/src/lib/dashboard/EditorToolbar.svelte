@@ -107,7 +107,7 @@
 		border-radius: var(--radius-ctl);
 		padding: 8px 12px;
 		margin-bottom: 12px;
-		font-size: 0.8rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	.flow-controls {
@@ -136,7 +136,7 @@
 	}
 	@media (max-width: 760px) {
 		.editbar {
-			font-size: 0.75rem;
+			font-size: var(--text-sm);
 		}
 	}
 </style>

@@ -378,7 +378,7 @@
 		gap: 14px;
 		padding: var(--tile-pad);
 		margin-block: var(--gap);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.personal > p {
 		margin: 0;
@@ -399,13 +399,13 @@
 	legend {
 		margin-bottom: 8px;
 		color: var(--muted);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label {
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);
@@ -414,7 +414,7 @@
 		flex-direction: row;
 		align-items: center;
 		gap: 10px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.check > span {
 		color: var(--text);
@@ -450,7 +450,7 @@
 	}
 	.small {
 		margin: 0;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.channel {
 		display: flex;
@@ -466,7 +466,7 @@
 		border: 0;
 		color: var(--muted);
 		font: inherit;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		text-decoration: underline;
 		cursor: pointer;
 	}
@@ -493,7 +493,7 @@
 	pre {
 		margin: 6px 0 0;
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 	}

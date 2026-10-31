@@ -137,13 +137,13 @@
 	}
 	p {
 		margin: 0;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label {
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		min-width: 0;
 	}
 	.check {

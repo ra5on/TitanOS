@@ -106,7 +106,7 @@
 		border-radius: var(--radius-ctl);
 		color: var(--text);
 		font: inherit;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		cursor: pointer;
 	}
 	.trigger.open,
@@ -122,14 +122,14 @@
 		border-radius: calc(var(--radius-ctl) * 0.8);
 		background: var(--accent);
 		color: var(--on-accent);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		font-weight: 700;
 	}
 	.avatar.large {
 		width: 40px;
 		height: 40px;
 		border-radius: var(--radius-ctl);
-		font-size: 1rem;
+		font-size: var(--text-lg);
 	}
 	.menu {
 		position: absolute;
@@ -155,11 +155,11 @@
 		min-width: 0;
 	}
 	.who-name {
-		font-size: 0.9375rem;
+		font-size: var(--text-md);
 		font-weight: 600;
 	}
 	.who-role {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	hr {
@@ -175,7 +175,7 @@
 		align-items: center;
 		gap: 12px;
 		padding: 0 10px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.menu button {
 		background: transparent;
@@ -183,7 +183,7 @@
 		border-radius: var(--radius-ctl);
 		color: var(--text);
 		font: inherit;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		text-align: left;
 		cursor: pointer;
 	}

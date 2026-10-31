@@ -461,20 +461,20 @@
 		gap: var(--gap);
 	}
 	section {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.head {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 8px 16px;
+		gap: var(--space-2) var(--space-4);
 	}
 	label {
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label > span {
 		color: var(--muted);
@@ -494,7 +494,7 @@
 	.row {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 16px 24px;
+		gap: var(--space-4) var(--space-5);
 	}
 	.check {
 		flex-direction: row;
@@ -509,7 +509,7 @@
 		border: 0;
 		color: var(--muted);
 		font: inherit;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		text-decoration: underline;
 		cursor: pointer;
 	}
@@ -517,7 +517,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 10px 16px;
+		gap: 10px var(--space-4);
 	}
 	.test > :global(.notice-ok),
 	.test > :global(.notice-error) {
@@ -528,7 +528,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 10px 16px;
+		gap: 10px var(--space-4);
 	}
 	.row-actions p {
 		margin: 0;
@@ -536,7 +536,7 @@
 	pre {
 		margin: 6px 0 0;
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 	}

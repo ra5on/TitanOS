@@ -350,7 +350,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 12px 28px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.facts > div,
 	.address {
@@ -383,7 +383,7 @@
 		background: none;
 		color: var(--muted);
 		font: inherit;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		cursor: pointer;
 	}
 	.tabs button.active {
@@ -396,7 +396,7 @@
 		overflow-x: auto;
 		border-radius: var(--radius-ctl);
 		background: var(--chip);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		white-space: pre-wrap;
 		word-break: break-all;
 	}
@@ -458,12 +458,12 @@
 		border-top: 1px solid var(--border);
 	}
 	.tool .name {
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		overflow-wrap: anywhere;
 	}
 	.tool select {
 		height: 32px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.chip {
 		white-space: nowrap;
@@ -471,7 +471,7 @@
 	.calls {
 		width: 100%;
 		border-collapse: collapse;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.calls td {
 		padding: 6px 8px 6px 0;

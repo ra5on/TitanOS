@@ -469,7 +469,7 @@
 	}
 	.list button small {
 		grid-column: 2;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.list button.current,
 	.list button:hover {
@@ -493,16 +493,16 @@
 	}
 	h2 {
 		margin: 0;
-		font-size: 1.125rem;
+		font-size: var(--text-lg);
 		overflow-wrap: anywhere;
 	}
 	h3 {
 		margin: 0;
-		font-size: 0.9375rem;
+		font-size: var(--text-md);
 	}
 	header p {
 		margin: 2px 0 0;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.actions {
 		display: flex;
@@ -514,7 +514,7 @@
 		grid-template-columns: max-content 1fr;
 		gap: 6px 16px;
 		margin: 0;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	dt {
 		color: var(--muted);
@@ -540,13 +540,13 @@
 	}
 	.snapshot span {
 		flex: 1;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	pre {
 		margin: 6px 0 0;
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.config {
 		padding: 10px;
@@ -556,13 +556,13 @@
 	}
 	summary {
 		cursor: pointer;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	label.check {
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	p {
 		margin: 0;

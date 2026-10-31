@@ -1435,7 +1435,7 @@
 	.list-footer {
 		margin: 0;
 		padding: 10px 14px 0;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.saving {
 		position: fixed;
@@ -1449,7 +1449,7 @@
 		border-radius: var(--radius-ctl);
 		box-shadow: var(--shadow-menu);
 		color: var(--muted);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.trash-configure {
 		align-self: center;
@@ -1457,7 +1457,7 @@
 	}
 	.none {
 		padding: 20px 14px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 
 	@media (max-width: 1100px) {

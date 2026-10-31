@@ -573,7 +573,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.sub {
 		padding-left: 22px;

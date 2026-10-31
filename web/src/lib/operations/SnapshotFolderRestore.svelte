@@ -167,14 +167,14 @@
 		gap: 6px;
 	}
 	legend {
-		font-size: 0.85rem;
+		font-size: var(--text-base);
 		padding: 0 4px;
 	}
 	.check {
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.summary p,
 	fieldset p {

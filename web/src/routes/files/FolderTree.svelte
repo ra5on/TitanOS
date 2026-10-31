@@ -147,7 +147,7 @@
 		padding-left: 3px;
 	}
 	.children > span {
-		font-size: 0.8rem;
+		font-size: var(--text-sm);
 	}
 	.node {
 		min-width: 0;

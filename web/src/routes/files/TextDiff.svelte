@@ -105,7 +105,7 @@
 	.lines {
 		position: relative;
 		min-width: 100%;
-		font-size: 0.85rem;
+		font-size: var(--text-base);
 	}
 	.line {
 		position: absolute;
@@ -147,7 +147,7 @@
 		background: color-mix(in srgb, var(--accent) 15%, var(--bg));
 	}
 	.legend {
-		font-size: 0.85rem;
+		font-size: var(--text-base);
 		color: var(--muted);
 	}
 	@media (max-width: 760px) {

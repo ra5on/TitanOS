@@ -583,7 +583,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		font-size: 0.85rem;
+		font-size: var(--text-base);
 		min-width: 0;
 	}
 	.results {
@@ -622,7 +622,7 @@
 	table {
 		border-collapse: collapse;
 		width: 100%;
-		font-size: 0.85rem;
+		font-size: var(--text-base);
 	}
 	th,
 	td {

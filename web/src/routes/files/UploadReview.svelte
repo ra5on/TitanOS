@@ -185,7 +185,7 @@
 		overflow-wrap: anywhere;
 	}
 	span {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		color: var(--muted);
 	}
 </style>

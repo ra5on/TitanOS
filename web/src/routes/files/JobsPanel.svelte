@@ -357,7 +357,7 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	.controls input {
 		width: 6rem;
@@ -380,7 +380,7 @@
 		accent-color: var(--accent);
 	}
 	.small {
-		font-size: 0.8rem;
+		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
 	}
 	.what {

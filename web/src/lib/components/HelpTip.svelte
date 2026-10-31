@@ -96,14 +96,14 @@
 		flex: none;
 		width: 20px;
 		height: 20px;
-		margin: 0 0 0 4px;
+		margin: 0 0 0 var(--space-1);
 		padding: 0;
 		border: 1px solid var(--border);
 		border-radius: 50%;
 		background: var(--chip);
 		color: var(--muted);
 		font: inherit;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		font-weight: 600;
 		line-height: 1;
 		vertical-align: middle;
@@ -123,13 +123,13 @@
 		inset: auto;
 		margin: 0;
 		width: min(320px, calc(100vw - 16px));
-		padding: 12px 14px;
+		padding: var(--space-3) 14px;
 		border-radius: var(--radius-tile);
 		color: var(--text);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		line-height: 1.45;
 	}
 	.help-panel p {
-		margin: 4px 0 0;
+		margin: var(--space-1) 0 0;
 	}
 </style>

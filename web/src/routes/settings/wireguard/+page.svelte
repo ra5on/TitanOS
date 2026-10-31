@@ -367,7 +367,7 @@
 	.config {
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		max-height: 14rem;
 		overflow: auto;
 	}

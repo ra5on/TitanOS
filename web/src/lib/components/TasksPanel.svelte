@@ -219,7 +219,7 @@
 		padding: 0 4px;
 		border: 0;
 		background: transparent;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		color: var(--muted);
 	}
 	@media (max-width: 760px) {

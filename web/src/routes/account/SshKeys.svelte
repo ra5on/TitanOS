@@ -172,7 +172,7 @@
 		flex-direction: column;
 		gap: 12px;
 		padding: 18px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	p {
 		margin: 0;
@@ -194,7 +194,7 @@
 		min-width: 0;
 	}
 	.key .mono {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
 	}
 	.name {
@@ -209,11 +209,11 @@
 	textarea {
 		height: auto;
 		padding: 10px 12px;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		resize: vertical;
 	}
 	.small {
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.failed {
 		display: flex;

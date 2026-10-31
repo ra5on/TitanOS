@@ -100,6 +100,6 @@
 		flex: 1 1 12rem;
 	}
 	h2 {
-		font-size: 1rem;
+		font-size: var(--text-lg);
 	}
 </style>

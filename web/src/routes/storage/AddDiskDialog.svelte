@@ -171,7 +171,7 @@
 		gap: 16px;
 	}
 	p {
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.profile {
 		display: flex;
@@ -181,7 +181,7 @@
 	pre {
 		margin: 8px 0 0;
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		white-space: pre-wrap;
 		word-break: break-word;
 	}

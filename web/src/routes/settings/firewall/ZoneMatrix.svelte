@@ -92,7 +92,7 @@
 	}
 	.matrix th[scope='row'] {
 		color: var(--text);
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 		font-weight: 400;
 		min-width: 8rem;
 	}
@@ -119,7 +119,7 @@
 		background: transparent;
 		color: var(--text);
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		text-align: left;
 	}
 	button.cell {
@@ -130,7 +130,7 @@
 	}
 	.cell .small {
 		color: var(--muted);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.cell.allow {
 		border-color: var(--ok-border);

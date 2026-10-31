@@ -329,13 +329,13 @@
 	label {
 		display: grid;
 		gap: 4px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	label.check {
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	fieldset {
 		display: flex;
@@ -348,7 +348,7 @@
 	}
 	legend {
 		padding: 0 6px;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		font-weight: 600;
 	}
 	.row {
@@ -369,7 +369,7 @@
 	}
 	.small {
 		margin: 0;
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 	}
 	p {
 		margin: 0;

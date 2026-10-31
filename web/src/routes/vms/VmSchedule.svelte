@@ -115,7 +115,7 @@
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	.check input {
 		width: 18px;
@@ -165,7 +165,7 @@
 		padding: 3px 7px;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
-		font-size: 0.8125rem;
+		font-size: var(--text-base);
 		cursor: pointer;
 	}
 	.day:has(input:checked) {

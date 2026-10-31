@@ -275,7 +275,7 @@
 		flex-direction: column;
 		gap: 6px;
 		min-width: 0;
-		font-size: 0.85rem;
+		font-size: var(--text-base);
 	}
 	.settings label {
 		flex: 1 1 150px;
@@ -303,7 +303,7 @@
 	.detail {
 		display: block;
 		margin-top: 4px;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
 	}
 </style>

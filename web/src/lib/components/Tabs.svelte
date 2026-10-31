@@ -47,7 +47,7 @@
 		border-bottom: 2px solid var(--accent);
 	}
 	.badge {
-		font-size: 0.6875rem;
+		font-size: var(--text-xs);
 		padding: 1px 6px;
 		border-radius: 999px;
 		background: var(--border);
@@ -60,7 +60,7 @@
 		}
 		.tabs button {
 			white-space: nowrap;
-			padding: 0 8px;
+			padding: 0 var(--space-2);
 		}
 	}
 </style>

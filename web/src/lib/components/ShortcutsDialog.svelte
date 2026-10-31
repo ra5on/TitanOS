@@ -47,7 +47,7 @@
 		grid-template-columns: max-content 1fr;
 		gap: 10px 18px;
 		margin: 0;
-		font-size: 0.875rem;
+		font-size: var(--text-md);
 	}
 	dt {
 		display: flex;
@@ -66,15 +66,15 @@
 		border-bottom-width: 2px;
 		border-radius: var(--radius-small);
 		font-family: 'IBM Plex Mono', monospace;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 		text-align: center;
 	}
 	.plus {
 		color: var(--muted);
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 	.hint {
 		margin: 0;
-		font-size: 0.75rem;
+		font-size: var(--text-sm);
 	}
 </style>
