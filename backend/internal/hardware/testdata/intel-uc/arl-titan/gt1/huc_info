@@ -1,0 +1,4 @@
+HuC firmware: i915/mtl_huc_gsc.bin
+	status: RUNNING
+	version: found 8.5.4
+HuC status: 0x00090001

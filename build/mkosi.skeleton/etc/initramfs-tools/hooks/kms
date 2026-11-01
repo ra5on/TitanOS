@@ -1,0 +1,17 @@
+#!/bin/sh
+# Replaces live-boot's hook of the same name, which copies i915, radeon and
+# nouveau with their firmware into the initramfs.
+#
+# The initramfs only has to find the stick. Graphics drivers load later from
+# the system together with the modules they work with (mei_gsc_proxy,
+# mei_pxp, mei_hdcp on newer Intel graphics). Loaded from the initramfs,
+# i915 waits for a partner that only arrives with the system and gives up
+# ("GSC proxy component didn't bind within the expected timeout"). The text
+# console keeps the UEFI framebuffer until then.
+#
+# scripts/check-initrd.sh fails the build if a graphics driver is back.
+
+case "$1" in
+    prereqs) exit 0 ;;
+esac
+exit 0

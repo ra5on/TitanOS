@@ -25,12 +25,22 @@
 					version: device.kernel ?? '',
 					driver: device.driver ?? '',
 				});
+			case 'driver_failed': {
+				const parts = [t('hwcheck.hint.driver_failed', { driver: device.driver ?? '' })];
+				if (device.kernel) parts.push(t('hwcheck.hint.driverFixed', { version: device.kernel }));
+				if (device.driver === 'vmd') parts.push(t('hwcheck.hint.driverVmd'));
+				return parts.join(' ');
+			}
 			default:
 				return t(`hwcheck.hint.${device.hint}`);
 		}
 	}
 	const chipClass = (device: UnboundDevice) =>
-		device.hint === 'plugin' ? 'info' : device.hint === 'unsupported' ? 'warn' : '';
+		device.hint === 'plugin'
+			? 'info'
+			: device.hint === 'unsupported' || device.hint === 'driver_failed'
+				? 'warn'
+				: '';
 </script>
 
 {#snippet row(device: UnboundDevice)}
@@ -49,6 +59,13 @@
 			>
 			<span>{hintText(device)}</span>
 			{#if device.hint === 'plugin'}<a href="/plugins">{t('hwcheck.openPlugins')}</a>{/if}
+			{#if device.messages?.length}
+				<ul class="messages">
+					{#each device.messages as message, index (index)}<li class="mono muted">
+							{message}
+						</li>{/each}
+				</ul>
+			{/if}
 		</div>
 	</li>
 {/snippet}
@@ -127,6 +144,12 @@
 		flex-wrap: wrap;
 		align-items: baseline;
 		gap: 6px 10px;
+	}
+	.messages {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		flex-basis: 100%;
 	}
 	.sub {
 		margin: 6px 0 0;

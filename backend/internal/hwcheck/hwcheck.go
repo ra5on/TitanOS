@@ -34,7 +34,12 @@ type Checker struct {
 	Proc   string
 	Dev    string
 	PCIIDs string
-	Runner run.Runner
+	// Modules holds the module directories per kernel release
+	// (/lib/modules), Modprobe the modprobe.d directories whose blacklist
+	// entries count.
+	Modules  string
+	Modprobe []string
+	Runner   run.Runner
 	// Plugins returns, per modalias, the plugins that match it. Optional.
 	Plugins func(aliases []string) map[string][]PluginHint
 
@@ -44,7 +49,8 @@ type Checker struct {
 
 // New returns a checker for the real system.
 func New() *Checker {
-	return &Checker{Sys: "/sys", Proc: "/proc", Dev: "/dev", PCIIDs: "/usr/share/misc/pci.ids", Runner: run.Exec{}}
+	return &Checker{Sys: "/sys", Proc: "/proc", Dev: "/dev", PCIIDs: "/usr/share/misc/pci.ids", Modules: "/lib/modules",
+		Modprobe: []string{"/etc/modprobe.d", "/run/modprobe.d", "/usr/lib/modprobe.d", "/lib/modprobe.d"}, Runner: run.Exec{}}
 }
 
 func readTrim(path string) string {
@@ -144,13 +150,29 @@ type UnboundDevice struct {
 	ID    string `json:"id"`
 	Class string `json:"class"`
 	Name  string `json:"name"`
-	// Hint is plugin, kernel, not_needed or unsupported.
+	// Hint is plugin, kernel, driver_failed, not_needed or unsupported.
+	// driver_failed: a module of the running kernel is made for the device
+	// but did not take it; Messages are its kernel lines about the device.
 	Hint    string       `json:"hint"`
 	Plugins []PluginHint `json:"plugins,omitempty"`
-	// Kernel is the first Linux version that drives the device (hint kernel).
-	Kernel   string `json:"kernel,omitempty"`
-	Driver   string `json:"driver,omitempty"`
+	// Kernel is the first Linux version that drives the device (hint kernel)
+	// or that fixes the failure (hint driver_failed).
+	Kernel   string   `json:"kernel,omitempty"`
+	Driver   string   `json:"driver,omitempty"`
+	Messages []string `json:"messages,omitempty"`
 	modalias string
+}
+
+// kernelFixes are failures of a driver of Linux 6.12 that a newer kernel
+// fixes, recognised by the driver's kernel message.
+var kernelFixes = []struct {
+	driver  string
+	message *regexp.Regexp
+	version string
+}{
+	// Arrow Lake-HX boards set bus offset 3; "PCI: vmd: Handle
+	// BUS_RESTRICT_CFG value 3 for Arrow Lake-HX", first in Linux 7.3.
+	{"vmd", regexp.MustCompile(`Unknown Bus Offset Setting \(3\)`), "7.3"},
 }
 
 // newerKernel lists devices Linux 6.12 does not drive but a newer kernel
@@ -175,8 +197,11 @@ var newerKernel = map[string]struct{ version, driver string }{
 
 // noDriverNeeded are PCI classes that usually work without a driver of
 // their own: memory controllers, host/ISA/other bridges, system
-// peripherals and processors.
-var noDriverNeeded = []string{"05", "0600", "0601", "0680", "0880", "0b"}
+// peripherals, processors, other serial bus controllers (mostly the SPI
+// flash of the BIOS, whose driver Debian leaves out on purpose) and other
+// signal processing controllers (chipset thermal sensors; the CPU
+// temperature comes from coretemp/k10temp).
+var noDriverNeeded = []string{"05", "0600", "0601", "0680", "0880", "0b", "0c80", "1180"}
 
 // kernelAtLeast compares the release of the running kernel with "6.16".
 func kernelAtLeast(release, version string) bool {
@@ -196,8 +221,13 @@ func kernelAtLeast(release, version string) bool {
 }
 
 // Unbound lists PCI devices without a driver and USB devices none of whose
-// interfaces has one, with a hint for each.
-func (c *Checker) Unbound() []UnboundDevice {
+// interfaces has one, with a hint for each. The kernel log is read only if
+// a driver of the running kernel failed on a device.
+func (c *Checker) Unbound(ctx context.Context) []UnboundDevice {
+	return c.unbound(func() string { return c.kernelLog(ctx) })
+}
+
+func (c *Checker) unbound(kernelLog func() string) []UnboundDevice {
 	devices := []UnboundDevice{}
 	root := filepath.Join(c.Sys, "bus/pci/devices")
 	entries, _ := os.ReadDir(root)
@@ -282,6 +312,8 @@ func (c *Checker) Unbound() []UnboundDevice {
 		matches = c.Plugins(aliases)
 	}
 	release := c.kernelRelease()
+	aliases := c.moduleAliases(release)
+	log, logRead := "", false
 	for i := range devices {
 		device := &devices[i]
 		for _, alias := range strings.Split(device.modalias, "\n") {
@@ -292,11 +324,24 @@ func (c *Checker) Unbound() []UnboundDevice {
 			}
 		}
 		newer, known := newerKernel[device.ID]
+		module := aliases.module(device.modalias)
 		switch {
 		case len(device.Plugins) > 0:
 			device.Hint = "plugin"
 		case device.Bus == "pci" && known && !kernelAtLeast(release, newer.version):
 			device.Hint, device.Kernel, device.Driver = "kernel", newer.version, newer.driver
+		case module != "":
+			if !logRead {
+				log, logRead = kernelLog(), true
+			}
+			device.Hint, device.Driver = "driver_failed", module
+			device.Messages = driverMessages(log, module, device.Address)
+			for _, fix := range kernelFixes {
+				if fix.driver == module && !kernelAtLeast(release, fix.version) &&
+					slices.ContainsFunc(device.Messages, fix.message.MatchString) {
+					device.Kernel = fix.version
+				}
+			}
 		case device.Bus == "pci" && slices.ContainsFunc(noDriverNeeded, func(prefix string) bool { return strings.HasPrefix(device.Class, prefix) }):
 			device.Hint = "not_needed"
 		default:
@@ -401,7 +446,9 @@ func (names pciNames) name(vendor, device string) string {
 	product, maker := names[vendor+":"+device], names[vendor]
 	switch {
 	case product != "" && maker != "":
-		return maker + " " + product
+		// Some entries repeat the maker at the end ("... RAID Controller
+		// Intel Corporation"); name it once.
+		return maker + " " + strings.TrimSpace(strings.TrimSuffix(product, maker))
 	case product != "":
 		return product
 	}
