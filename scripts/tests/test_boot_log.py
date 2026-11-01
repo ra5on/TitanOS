@@ -16,6 +16,7 @@ class BootLogTest(unittest.TestCase):
             "\x1b[0;1;31m[FAILED]\x1b[0m Failed to start \x1b[0;1;39mdocker.service\x1b[0m.",
             "[    2.0] RAS: Correctable Errors collector initialized.",
             "[  100.0] watchdog: watchdog0: watchdog did not stop!",
+            "[    0.9] clocksource: Watchdog remote CPU 1 read timed out",
             "[    0.5] vmd 0000:00:0e.0: Unknown Bus Offset Setting (3)",
             "[    3.0] usb 1-1: new high-speed USB device number 2 using xhci_hcd",
         ])

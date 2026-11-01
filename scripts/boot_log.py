@@ -24,6 +24,7 @@ KNOWN = [
     (r"watchdog: watchdog0: watchdog did not stop", "QEMU's iTCO watchdog at shutdown"),
     (r"RAS: Correctable Errors collector initialized", "not an error"),
     (r"hung_task_timeout_secs", "a kernel setting, not a hang"),
+    (r"clocksource: Watchdog remote CPU \d+ read timed out", "emulated CPUs (QEMU without KVM, as on GitHub) answer the clocksource check late"),
     (r"x-systemd\.device-timeout", "an fstab option in a message, not a timeout"),
 ]
 KNOWN_RE = [(re.compile(pattern), reason) for pattern, reason in KNOWN]
