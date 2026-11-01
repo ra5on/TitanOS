@@ -24,7 +24,7 @@
 		type Bandwidth,
 		type BandwidthForm,
 	} from '#lib/backup-bandwidth.ts';
-	import FolderPicker from './FolderPicker.svelte';
+	import FolderPicker from '#lib/components/FolderPicker.svelte';
 	import { selectionOfIn, shareOfIn, type Chosen } from './selection.ts';
 	import KeepVersions, {
 		keepPayload,

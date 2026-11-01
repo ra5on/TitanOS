@@ -75,6 +75,25 @@ func TestCombined(t *testing.T) {
 	}
 }
 
+func TestCombinedLines(t *testing.T) {
+	var lines []string
+	out, err := CombinedLines(context.Background(), Exec{}, func(line string) { lines = append(lines, line) },
+		"sh", "-c", `printf ' a Pulling \n'; printf 'b 1\rb 2\r\n' >&2; printf 'end'`)
+	if err != nil || !strings.Contains(out, "a Pulling") || !strings.HasSuffix(out, "end") {
+		t.Fatalf("%q %v", out, err)
+	}
+	if strings.Join(lines, "|") != "a Pulling|b 1|b 2|end" {
+		t.Fatalf("lines %q", lines)
+	}
+	lines = nil
+	if out, _ := CombinedLines(context.Background(), onlyRun{}, func(line string) { lines = append(lines, line) }, "x"); out != "plain" || strings.Join(lines, "|") != "plain" {
+		t.Fatalf("fallback: %q %q", out, lines)
+	}
+	if _, err := CombinedLines(context.Background(), Exec{}, func(string) {}, "sh", "-c", "echo broken; exit 3"); err == nil || !strings.Contains(err.Error(), "broken") {
+		t.Fatalf("failure: %v", err)
+	}
+}
+
 func TestRunGivesUpOnAProcessThatDoesNotEnd(t *testing.T) {
 	old := abandonAfter
 	abandonAfter = 100 * time.Millisecond

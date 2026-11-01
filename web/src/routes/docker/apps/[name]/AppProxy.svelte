@@ -28,7 +28,14 @@
 		app,
 		members,
 		version = 0,
-	}: { app: string; members: DockerContainer[]; version?: number } = $props();
+		embedded = false,
+	}: {
+		app: string;
+		members: DockerContainer[];
+		version?: number;
+		/** A line of the app form, without the tile, heading and introduction. */
+		embedded?: boolean;
+	} = $props();
 
 	let status = $state<AppProxyStatus | null>(null);
 	let loadError = $state('');
@@ -37,6 +44,8 @@
 	let busy = $state(false);
 	let error = $state('');
 	let notice = $state('');
+	// Embedded in the app form, the fields open on demand.
+	let open = $state(false);
 
 	function take(next: AppProxyStatus) {
 		status = next;
@@ -118,9 +127,14 @@
 	}
 </script>
 
-<section class="tile" aria-labelledby="h-proxy">
-	<h2 class="tile-title" id="h-proxy">{t('proxy.title')}</h2>
-	<p class="muted hint">{t('proxy.intro')}</p>
+<section
+	class:tile={!embedded}
+	class:embedded
+	aria-labelledby={embedded ? undefined : 'h-proxy'}
+	aria-label={embedded ? t('proxy.title') : undefined}
+>
+	{#if !embedded}<h2 class="tile-title" id="h-proxy">{t('proxy.title')}</h2>
+		<p class="muted hint">{t('proxy.intro')}</p>{/if}
 	{#if loadError}
 		<div class="notice-error row-note" role="alert">
 			<span>{loadError}</span><button type="button" class="btn small" onclick={() => load()}
@@ -129,6 +143,20 @@
 		</div>
 	{:else if !status}
 		<p class="muted loading" role="status">{t('common.loading')}</p>
+	{:else if embedded && !open}
+		<div class="summary">
+			{#if saved?.enabled && !status.off && saved.urls.length}
+				<a class="mono" href={saved.urls[0]} target="_blank" rel="noreferrer">{saved.urls[0]}</a>
+				{#if saved.urls.length > 1}<span class="muted"
+						>{t('appform.moreAddresses', { count: saved.urls.length - 1 })}</span
+					>{/if}
+			{:else}
+				<span class="muted">{t(status.off ? 'proxy.allOffHint' : 'appform.httpsNone')}</span>
+			{/if}
+			<button type="button" class="btn small" onclick={() => (open = true)}
+				>{t(saved ? 'appform.change' : 'appform.setUp')}</button
+			>
+		</div>
 	{:else}
 		{#if status.off}<p class="notice-warn">{t('proxy.allOffHint')}</p>{/if}
 		<ProxyRouteFields
@@ -177,6 +205,19 @@
 		flex-direction: column;
 		gap: 12px;
 		padding: 18px;
+	}
+	section.embedded {
+		max-width: 46rem;
+		padding: 4px 0 0;
+	}
+	.summary {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px 12px;
+		min-height: var(--control-height);
+		font-size: var(--text-md);
+		overflow-wrap: anywhere;
 	}
 	.hint {
 		margin: 0;

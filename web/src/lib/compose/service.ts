@@ -8,6 +8,8 @@ import { validImage } from './image.ts';
 export type PathRow = { host: string; container: string; readOnly: boolean; raw?: unknown };
 export type PortRow = { host: string; container: string; protocol: 'tcp' | 'udp'; raw?: unknown };
 export type Pair = { name: string; value: string };
+/** A device the container gets ("/dev/dri:/dev/dri"); other forms stay as they are. */
+export type DeviceRow = { value: string; raw?: unknown };
 
 export type ServiceForm = {
 	image: string;
@@ -21,6 +23,11 @@ export type ServiceForm = {
 	ports: PortRow[];
 	env: Pair[];
 	labels: Pair[];
+	devices: DeviceRow[];
+	/** CPUs the container may use ("8-11", "0,2"); empty for all. */
+	cpuset: string;
+	/** Memory limit as Compose writes it ("4g", "512m"); empty for none. */
+	memLimit: string;
 };
 
 export const WEBUI_LABEL = 'titanos.webui';
@@ -86,6 +93,11 @@ export function readService(doc: Document, service: string): ServiceForm {
 		publicUrl: labels.find((label) => label.name === PUBLIC_URL_LABEL)?.value ?? '',
 		labels: labels.filter((label) => label.name !== WEBUI_LABEL && label.name !== PUBLIC_URL_LABEL),
 		env: pairs(at('environment')),
+		devices: list(at('devices')).map((entry): DeviceRow =>
+			typeof entry === 'string' ? { value: entry } : { value: '', raw: entry },
+		),
+		cpuset: text('cpuset'),
+		memLimit: text('mem_limit'),
 		paths: list(at('volumes')).map((entry): PathRow => {
 			if (typeof entry === 'string') {
 				const parts = entry.split(':');
@@ -266,6 +278,15 @@ export function writeService(doc: Document, service: string, form: ServiceForm) 
 			),
 		);
 	}
+	if (!same('devices'))
+		set(
+			'devices',
+			form.devices
+				.filter((row) => row.raw !== undefined || row.value.trim())
+				.map((row) => row.raw ?? row.value.trim()),
+		);
+	if (!same('cpuset')) set('cpuset', form.cpuset.trim() || undefined);
+	if (!same('memLimit')) set('mem_limit', form.memLimit.trim() || undefined);
 	if (!same('env'))
 		set(
 			'environment',

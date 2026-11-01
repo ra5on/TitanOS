@@ -39,6 +39,52 @@ func Combined(ctx context.Context, r Runner, stdin string, name string, args ...
 	return r.Run(ctx, stdin, name, args...)
 }
 
+// LineRunner is a CombinedRunner that also hands over every line of the
+// output as it is printed, for the progress of commands that take minutes.
+type LineRunner interface {
+	RunCombinedLines(ctx context.Context, onLine func(string), name string, args ...string) (string, error)
+}
+
+// CombinedLines runs a command like Combined and calls onLine with every
+// line of its output, without surrounding blanks: as the line is printed
+// when r can do that, otherwise all at the end. Lines end at "\n" or "\r".
+func CombinedLines(ctx context.Context, r Runner, onLine func(string), name string, args ...string) (string, error) {
+	if l, ok := r.(LineRunner); ok {
+		return l.RunCombinedLines(ctx, onLine, name, args...)
+	}
+	out, err := Combined(ctx, r, "", name, args...)
+	w := &lineWriter{onLine: onLine}
+	_, _ = w.Write([]byte(out)) // writes into memory, cannot fail
+	w.flush()
+	return out, err
+}
+
+// lineWriter keeps everything written and calls onLine for every line.
+type lineWriter struct {
+	all    bytes.Buffer
+	part   []byte
+	onLine func(string)
+}
+
+func (w *lineWriter) Write(p []byte) (int, error) {
+	w.all.Write(p)
+	for _, b := range p {
+		if b == '\n' || b == '\r' {
+			w.flush()
+			continue
+		}
+		w.part = append(w.part, b)
+	}
+	return len(p), nil
+}
+
+func (w *lineWriter) flush() {
+	if line := strings.TrimSpace(string(w.part)); line != "" {
+		w.onLine(line)
+	}
+	w.part = w.part[:0]
+}
+
 // Exec runs commands on the real system.
 type Exec struct{}
 
@@ -66,6 +112,24 @@ func (Exec) RunCombined(ctx context.Context, stdin string, name string, args ...
 		return output.String(), &CommandError{Command: commandLine(name, args), Output: strings.TrimSpace(output.String()), Err: err}
 	}
 	return output.String(), nil
+}
+
+// RunCombinedLines is RunCombined that also calls onLine for every line as
+// the command prints it. stdout and stderr share one writer, so onLine is
+// never called twice at the same time.
+func (Exec) RunCombinedLines(ctx context.Context, onLine func(string), name string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	output := &lineWriter{onLine: onLine}
+	cmd.Stdout, cmd.Stderr = output, output
+	if err := wait(ctx, cmd); err != nil {
+		if errors.Is(err, ErrAbandoned) {
+			return "", &CommandError{Command: commandLine(name, args), Err: err}
+		}
+		output.flush()
+		return output.all.String(), &CommandError{Command: commandLine(name, args), Output: strings.TrimSpace(output.all.String()), Err: err}
+	}
+	output.flush()
+	return output.all.String(), nil
 }
 
 // RunSecret runs a command that needs secrets, such as the passphrase of an

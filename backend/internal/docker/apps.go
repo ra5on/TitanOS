@@ -216,13 +216,28 @@ func (m *Manager) CreateApp(ctx context.Context, name, compose string, env map[s
 
 // startJob brings an app up in the background, pulling newer images first
 // if pull is set. Pulling can take minutes; it must not end with the request.
+//
+// The output of the job grows while it runs, so the page can show what is
+// downloaded. Without pull, images that are still missing are pulled first
+// with progress; that is what "up" would do anyway, only quietly.
 func (m *Manager) startJob(ctx context.Context, volume, name string, job *Job, pull bool) {
 	ctx = context.WithoutCancel(ctx)
 	go func() {
-		var out string
+		var log jobLog
+		progress := func(line string) {
+			m.mu.Lock()
+			log.add(line)
+			job.Output = log.String()
+			m.mu.Unlock()
+		}
 		var err error
 		if pull {
-			out, err = run.Combined(ctx, m.runner, "", "docker", m.compose(volume, name, "pull", "--quiet")...)
+			_, err = run.CombinedLines(ctx, m.runner, progress, "docker", m.compose(volume, name, "pull", "--quiet")...)
+		} else {
+			args := m.compose(volume, name, "pull", "--policy", "missing", "--ignore-buildable", "--ignore-pull-failures")
+			args = slices.Insert(args, 1, "--progress", "plain")
+			// Best effort: "up" pulls what is left and says why it cannot.
+			_, _ = run.CombinedLines(ctx, m.runner, progress, "docker", args...)
 		}
 		if err == nil {
 			// Resolve hardware against the leases under hardwareMu, but run
@@ -235,11 +250,9 @@ func (m *Manager) startJob(ctx context.Context, volume, name string, job *Job, p
 			if err == nil {
 				args := m.compose(volume, name, "up", "--detach", "--remove-orphans", "--quiet-pull")
 				args[4] = path
-				var up string
-				up, err = run.Combined(ctx, m.runner, "", "docker", args...)
+				_, err = run.CombinedLines(ctx, m.runner, progress, "docker", args...)
 				cleanup()
 				m.endCompose(name)
-				out += up
 			}
 		}
 		if pull && err == nil {
@@ -248,7 +261,7 @@ func (m *Manager) startJob(ctx context.Context, volume, name string, job *Job, p
 		}
 		m.mu.Lock()
 		defer m.mu.Unlock()
-		job.Output = tail(out, 4000)
+		job.Output = log.String()
 		if err != nil {
 			job.State = "failed"
 			if job.Output == "" {
@@ -260,6 +273,38 @@ func (m *Manager) startJob(ctx context.Context, volume, name string, job *Job, p
 			slog.Info("app up", "app", name, "pulled", pull)
 		}
 	}()
+}
+
+// jobOutputMax is how much of a job's output the page gets.
+const jobOutputMax = 8000
+
+// progressLine is a line of Compose's plain progress: an image or a layer,
+// then its state. A later line of the same one takes its place.
+var progressLine = regexp.MustCompile(`^(\S+) (Pulling|Pulled|Waiting|Downloading|Download complete|Verifying Checksum|Extracting|Pull complete|Already exists|Skipped|Interrupted|Error)\b`)
+
+// jobLog is the output of a job the way a terminal shows Compose's
+// progress: one line per image and layer, updated in place.
+type jobLog struct {
+	lines []string
+	at    map[string]int
+}
+
+func (l *jobLog) add(line string) {
+	if match := progressLine.FindStringSubmatch(line); match != nil {
+		if i, ok := l.at[match[1]]; ok {
+			l.lines[i] = line
+			return
+		}
+		if l.at == nil {
+			l.at = map[string]int{}
+		}
+		l.at[match[1]] = len(l.lines)
+	}
+	l.lines = append(l.lines, line)
+}
+
+func (l *jobLog) String() string {
+	return tail(strings.Join(l.lines, "\n"), jobOutputMax)
 }
 
 func (m *Manager) beginCompose(ctx context.Context, name string) (string, func(), error) {

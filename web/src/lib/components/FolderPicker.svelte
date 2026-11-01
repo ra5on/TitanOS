@@ -1,12 +1,12 @@
 <script lang="ts">
-	// Settings › Backups › job: one folder browser for everything (decided
-	// 31.10.2026). It starts with the volumes; shares are simply folders on
-	// their volume. Private data, snapshots and recycle bins are not listed.
+	// One folder browser for everything (decided 31.10.2026): backups and the
+	// folders of apps. It starts with the volumes; shares are simply folders
+	// on their volume. Private data, snapshots and recycle bins are not listed.
 	import Dialog from '#lib/components/Dialog.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { api } from '#lib/api.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
-	import type { Chosen } from './selection.ts';
+	type Chosen = { volume: string; path: string };
 
 	let {
 		volumes,
