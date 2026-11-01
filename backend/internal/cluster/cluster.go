@@ -241,7 +241,7 @@ type Manager struct {
 	// that no older one overtakes a newer one.
 	pushing    sync.Mutex
 	announcing sync.Mutex
-	proxy   *httputil.ReverseProxy
+	proxy      *httputil.ReverseProxy
 	// returnTried is when the preferred way was last tried per node.
 	returnTried map[string]time.Time
 	// down is since when a node did not answer, alerted whether that was
