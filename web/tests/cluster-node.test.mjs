@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { apiPath } from '../src/lib/cluster-node.ts';
+import { apiPath, compareVersions } from '../src/lib/cluster-node.ts';
 
 test('requests go to the chosen node, login, own account and the cluster stay here', () => {
 	assert.equal(apiPath('/storage'), '/api/v1/storage');
@@ -28,4 +28,11 @@ test('requests go to the chosen node, login, own account and the cluster stay he
 		assert.equal(apiPath(local, 'abc'), '/api/v1' + local, local);
 	}
 	assert.equal(apiPath('/users', 'a/b'), '/api/v1/cluster/nodes/a%2Fb/api/users');
+});
+
+test('versions are ordered by their numbers, unknown ones count as equal', () => {
+	assert.ok(compareVersions('0.42.0', '0.43.0') < 0);
+	assert.ok(compareVersions('0.43.0', '0.9.0') > 0);
+	assert.equal(compareVersions('1.2.3', '1.2.3'), 0);
+	assert.equal(compareVersions('dev', '0.43.0'), 0);
 });

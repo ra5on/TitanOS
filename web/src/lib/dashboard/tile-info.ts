@@ -90,6 +90,17 @@ export function tileSummary(id: TileId, { options, data, info, storage, dashboar
 					).length,
 				})
 			: '–';
+	if (kind === 'cluster') {
+		const page = data.cluster;
+		if (!page || data.clusterError) return '–';
+		if (!page.cluster.name) return t('tile.clusterNone');
+		const o = tileOptions(options, id),
+			list = page.nodes.filter((n) => o.items === null || o.items.includes(n.id));
+		return t('tile.clusterSummary', {
+			online: list.filter((n) => n.online).length,
+			count: list.length,
+		});
+	}
 	if (kind === 'netbird') {
 		const peers = data.netbirdPeers;
 		if (!peers || data.netbirdPeersError) return '–';
@@ -141,6 +152,8 @@ export function inspectorItems(
 			return data.shares.map((s) => ({ id: s.name, name: s.name }));
 		case 'volumes':
 			return (storage?.volumes ?? []).map((v) => ({ id: v.name, name: v.name }));
+		case 'cluster':
+			return (data.cluster?.nodes ?? []).map((n) => ({ id: n.id, name: n.name }));
 		case 'netbird':
 			return (data.netbirdPeers?.peers ?? []).map((p) => ({
 				id: p.id,

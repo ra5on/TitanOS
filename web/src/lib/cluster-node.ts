@@ -30,15 +30,17 @@ export function activeNode(): string | null {
 	}
 }
 
-/** Chooses another node, or this NAS with null, and loads the page anew. */
-export function switchNode(id: string | null) {
+/** Chooses another node, or this NAS with null, and loads the page anew,
+ * or the page at `to` (a path of the web interface). */
+export function switchNode(id: string | null, to?: string) {
 	try {
 		if (id) sessionStorage.setItem(KEY, id);
 		else sessionStorage.removeItem(KEY);
 	} catch {
 		// Without storage the choice cannot hold; this NAS it is.
 	}
-	location.reload();
+	if (to) location.assign(to);
+	else location.reload();
 }
 
 /** The URL path of an API path (with query) on the chosen node. */
@@ -50,4 +52,17 @@ export function apiPath(path: string, node = activeNode()): string {
 /** The WebSocket URL of an API path on the chosen node. */
 export function apiSocket(path: string): string {
 	return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${apiPath(path)}`;
+}
+
+/** Orders two versions like 0.42.0 < 0.43.0; unknown ones count as equal. */
+export function compareVersions(a: string, b: string): number {
+	const pa = a.split('.').map(Number);
+	const pb = b.split('.').map(Number);
+	for (let i = 0; i < 3; i++) {
+		const x = pa[i] ?? 0;
+		const y = pb[i] ?? 0;
+		if (Number.isNaN(x) || Number.isNaN(y)) return 0;
+		if (x !== y) return x - y;
+	}
+	return 0;
 }

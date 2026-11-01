@@ -17,6 +17,10 @@ type cachedStatus struct {
 	at     time.Time
 	status *Status
 	err    string
+	// millis is the time for the answer, skew how far the clock of the
+	// node is ahead of this one (seconds).
+	millis int64
+	skew   int64
 	// restarting: the node refused the connection, titand there is
 	// starting again (an app update, a restart).
 	restarting bool
@@ -61,12 +65,31 @@ type NodeView struct {
 	Status *Status `json:"status,omitempty"`
 	// Error says why a node did not answer.
 	Error string `json:"error,omitempty"`
-	// Address is the way it was reached last.
+	// Address is the way it was reached last, Way its kind and Millis the
+	// time of the last answer.
 	Address string `json:"address,omitempty"`
+	Way     string `json:"way,omitempty"`
+	Millis  int64  `json:"millis,omitempty"`
+	// Preferred is the way chosen for the node when it is reached on
+	// another one (Fallback), "" for automatic.
+	Preferred string `json:"preferred,omitempty"`
+	Fallback  bool   `json:"fallback,omitempty"`
+	// Compatible is whether the node speaks the protocol of this one; else
+	// only updating, looking and switching off go through.
+	Compatible bool `json:"compatible"`
+	// ClockSkew is how many seconds the clock of the node is ahead
+	// (negative: behind), set when the comparison is on and it is off by
+	// more than a minute.
+	ClockSkew int64 `json:"clockSkew,omitempty"`
+	// DownSince is when the node stopped answering.
+	DownSince *time.Time `json:"downSince,omitempty"`
 }
 
 // statusTTL is how long the overview of a node is kept.
 const statusTTL = 15 * time.Second
+
+// clockLimit is the difference of the clocks the overview reports.
+const clockLimit = 60
 
 // Overview returns all nodes with their state, asking those whose answer
 // is older than statusTTL.
@@ -76,15 +99,16 @@ func (m *Manager) Overview(ctx context.Context) []NodeView {
 		m.mu.Unlock()
 		return []NodeView{}
 	}
-	nodes, selfID := append([]Node(nil), m.state.Nodes...), m.self.ID
+	nodes, selfID, clockOff := append([]Node(nil), m.state.Nodes...), m.self.ID, m.state.Ways.ClockOff
 	m.mu.Unlock()
 	views := make([]NodeView, len(nodes))
 	var wg sync.WaitGroup
 	for i, n := range nodes {
-		views[i] = NodeView{Node: n, Self: n.ID == selfID}
+		views[i] = NodeView{Node: n, Self: n.ID == selfID, Compatible: true}
 		if n.ID == selfID {
 			if m.Status != nil {
 				st := m.Status(ctx)
+				st.Protocol = Protocol
 				views[i].Status = &st
 			}
 			views[i].Online = true
@@ -94,13 +118,32 @@ func (m *Manager) Overview(ctx context.Context) []NodeView {
 		go func() {
 			defer wg.Done()
 			st, err := m.peerStatus(ctx, n)
-			views[i].Status, views[i].Online = st, err == nil
+			v := &views[i]
+			v.Status, v.Online = st, err == nil
 			if err != nil {
-				_, views[i].Error = ErrorCode(err)
+				_, v.Error = ErrorCode(err)
+			} else {
+				v.Compatible = Compatible(st.Protocol)
 			}
 			m.mu.Lock()
-			views[i].Address = m.reach[n.ID]
+			v.Address = m.reach[n.ID]
+			c := m.status[n.ID]
+			if since, ok := m.down[n.ID]; ok && err != nil {
+				v.DownSince = &since
+			}
+			way, _ := m.routeLocked(n.ID, forManage)
 			m.mu.Unlock()
+			if v.Address != "" {
+				v.Way = wayOf(n, v.Address)
+			}
+			if err == nil {
+				v.Millis = c.millis
+				if !clockOff && (c.skew > clockLimit || c.skew < -clockLimit) {
+					v.ClockSkew = c.skew
+				}
+			}
+			v.Preferred = way
+			v.Fallback = way != WayAuto && v.Way != "" && v.Way != way
 		}()
 	}
 	wg.Wait()
@@ -120,15 +163,31 @@ func (m *Manager) peerStatus(ctx context.Context, n Node) (*Status, error) {
 		}
 		return c.status, nil
 	}
+	return m.freshStatus(ctx, n)
+}
+
+// freshStatus asks node n for its status now.
+func (m *Manager) freshStatus(ctx context.Context, n Node) (*Status, error) {
 	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 	var st Status
-	err := m.call(ctx, n, "GET", PeerPrefix+"status", "", nil, &st)
+	var millis int64
+	err := m.tryAddresses(ctx, n, m.candidates(n, forManage), n.ID, func(ctx context.Context, address string) (*http.Response, error) {
+		start := time.Now()
+		res, err := m.sendSigned(ctx, n, address, "GET", PeerPrefix+"status", "", nil)
+		millis = time.Since(start).Milliseconds()
+		return res, err
+	}, &st)
 	m.mu.Lock()
 	if err != nil {
 		m.status[n.ID] = cachedStatus{at: time.Now(), err: err.Error(), restarting: errors.Is(err, ErrRestarting)}
 	} else {
-		m.status[n.ID] = cachedStatus{at: time.Now(), status: &st}
+		var skew int64
+		if st.Time != 0 {
+			// The node read its clock about halfway through the answer.
+			skew = st.Time - time.Now().Add(-time.Duration(millis/2)*time.Millisecond).Unix()
+		}
+		m.status[n.ID] = cachedStatus{at: time.Now(), status: &st, millis: max(millis, 1), skew: skew}
 	}
 	m.mu.Unlock()
 	if err != nil {
@@ -166,11 +225,11 @@ func (m *Manager) Proxy(w http.ResponseWriter, r *http.Request, id, user, path s
 		writeUnreachable(w, err)
 		return
 	}
-	if st.Version != m.Version {
+	if !Compatible(st.Protocol) && !limited(r.Method, path) {
 		writeError(w, http.StatusConflict, "cluster_version", "the node runs version "+st.Version)
 		return
 	}
-	address, err := m.reachable(r.Context(), n)
+	address, err := m.reachable(r.Context(), n, forManage)
 	if err != nil {
 		writeUnreachable(w, err)
 		return

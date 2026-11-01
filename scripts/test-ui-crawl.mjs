@@ -18,7 +18,7 @@ const routes = [
   "/", "/account", "/apps", "/docker", "/docker/apps/web",
   "/docker/networks", "/files", "/plugins", "/plugins/cleanup", "/settings",
   "/settings/about", "/settings/access", "/settings/api",
-  "/settings/appearance", "/settings/backups",
+  "/settings/appearance", "/settings/backups", "/settings/cluster",
   "/settings/backups/applications", "/settings/backups/configuration",
   "/settings/backups/coverage", "/settings/backups/data",
   "/settings/backups/restore", "/settings/energy", "/settings/hardware",

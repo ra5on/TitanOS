@@ -1,6 +1,6 @@
 // Thin wrapper around fetch for the titand API.
 
-import { apiPath } from './cluster-node.ts';
+import { activeNode, apiPath } from './cluster-node.ts';
 import type { Virtualization } from './hwcheck.ts';
 import { RESTART_WAIT_MS, restartPause, waitForNode } from './node-restart.ts';
 
@@ -47,6 +47,15 @@ export async function responseError(res: Response): Promise<ApiError> {
 	} catch {
 		// Not a JSON error body, e.g. an answer from a proxy.
 	}
+	// Another node of the cluster that does not know the route runs an
+	// older version: say so instead of "not found".
+	if (
+		res.status === 404 &&
+		code === 'not_found' &&
+		message === 'no such API endpoint' &&
+		activeNode()
+	)
+		code = 'cluster_feature_missing';
 	return new ApiError(res.status, code, message, retryAfter);
 }
 

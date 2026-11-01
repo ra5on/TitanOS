@@ -142,6 +142,7 @@ type previewResponse struct {
 	Nodes    []string `json:"nodes"`
 	Accounts []string `json:"accounts"`
 	Version  string   `json:"version"`
+	Protocol int      `json:"protocol,omitempty"`
 }
 
 // candidateNodes turns the nodes of join information into nodes to call.
@@ -158,7 +159,7 @@ func (info joinInfo) candidateNodes() []Node {
 func (m *Manager) askCluster(ctx context.Context, info joinInfo, path string, in, out any) error {
 	lastErr := ErrUnreachable
 	for _, n := range info.candidateNodes() {
-		err := m.try(ctx, n, func(ctx context.Context, address string) (*http.Response, error) {
+		err := m.tryAddresses(ctx, n, n.Addresses, "", func(ctx context.Context, address string) (*http.Response, error) {
 			return m.postJSON(ctx, n, address, path, in)
 		}, out)
 		if err == nil {
@@ -185,7 +186,7 @@ func (m *Manager) Preview(ctx context.Context, text string) (Preview, error) {
 	if err := m.askCluster(ctx, info, "/api/v1/cluster/peer/preview", previewRequest{Key: info.Key}, &res); err != nil {
 		return Preview{}, err
 	}
-	if res.Version != m.Version {
+	if !Compatible(res.Protocol) {
 		return Preview{}, fmt.Errorf("%w: %s", ErrVersion, res.Version)
 	}
 	p := Preview{Cluster: res.Name, Nodes: res.Nodes, Replaced: []string{}, Local: []string{}, Taken: []string{}}
@@ -207,9 +208,10 @@ func (m *Manager) Preview(ctx context.Context, text string) (Preview, error) {
 }
 
 type joinRequest struct {
-	Key     string `json:"key"`
-	Node    Node   `json:"node"`
-	Version string `json:"version"`
+	Key      string `json:"key"`
+	Node     Node   `json:"node"`
+	Version  string `json:"version"`
+	Protocol int    `json:"protocol,omitempty"`
 }
 
 type joinResponse struct {
@@ -239,7 +241,7 @@ func (m *Manager) Join(ctx context.Context, text string) error {
 	me := m.selfNodeLocked()
 	m.mu.Unlock()
 	var res joinResponse
-	if err := m.askCluster(ctx, info, "/api/v1/cluster/peer/join", joinRequest{Key: info.Key, Node: me, Version: m.Version}, &res); err != nil {
+	if err := m.askCluster(ctx, info, "/api/v1/cluster/peer/join", joinRequest{Key: info.Key, Node: me, Version: m.Version, Protocol: Protocol}, &res); err != nil {
 		return err
 	}
 	if res.State.ID != info.ID || len(res.Secret) != 64 || !slices.ContainsFunc(res.State.Nodes, func(n Node) bool { return n.ID == me.ID }) {
@@ -311,7 +313,7 @@ func (m *Manager) admit(ctx context.Context, remote string, req joinRequest) (jo
 	if len(n.ID) != 32 || !validName(n.Name) || len(n.Cert) != 64 || len(n.Addresses) > maxAddresses {
 		return joinResponse{}, fmt.Errorf("%w: node", ErrInvalid)
 	}
-	if req.Version != m.Version {
+	if !Compatible(req.Protocol) {
 		return joinResponse{}, fmt.Errorf("%w: %s", ErrVersion, req.Version)
 	}
 	m.mu.Lock()
@@ -357,19 +359,34 @@ type membership struct {
 	Name   string `json:"name"`
 	// Internet is whether the cluster allows nodes on the internet.
 	Internet bool `json:"internet"`
-	// Admin is the admin node; with Node.Manage only it may change it.
-	Admin string `json:"admin,omitempty"`
+	// Admin is the admin node; with Node.Manage only it may change it,
+	// or a handover with a higher AdminGen.
+	Admin    string `json:"admin,omitempty"`
+	AdminGen int    `json:"adminGen,omitempty"`
+	// Ways, Routes and Tunnel are nil from older nodes: then they stay.
+	Ways   *Ways            `json:"ways,omitempty"`
+	Routes map[string]Route `json:"routes,omitempty"`
+	Tunnel *Tunnel          `json:"tunnel,omitempty"`
+}
+
+// membershipLocked is the message announce sends for state s. m.mu is held.
+func (m *Manager) membershipLocked(s *State, sec secrets) membership {
+	ways, tunnel := s.Ways, s.Tunnel
+	return membership{Nodes: slices.Clone(s.Nodes), JoinKey: sec.JoinKey, Generation: s.Generation, Name: s.Name, Internet: s.Internet,
+		Admin: adminOf(s), AdminGen: s.AdminGen, Ways: &ways, Routes: s.Routes, Tunnel: &tunnel}
 }
 
 // announce sends the members, the join key and, after a removal, the new
 // secret to every other node. skip is a node not to tell.
 func (m *Manager) announce(ctx context.Context, skip string) {
+	m.announcing.Lock()
+	defer m.announcing.Unlock()
 	m.mu.Lock()
 	if m.state == nil {
 		m.mu.Unlock()
 		return
 	}
-	msg := membership{Nodes: slices.Clone(m.state.Nodes), JoinKey: m.secrets.JoinKey, Generation: m.state.Generation, Name: m.state.Name, Internet: m.state.Internet, Admin: m.adminLocked()}
+	msg := m.membershipLocked(m.state, m.secrets)
 	m.mu.Unlock()
 	for _, n := range m.others() {
 		if n.ID == skip {
@@ -396,7 +413,8 @@ func (m *Manager) takeMembership(from string, msg membership) error {
 		return ErrNotPermitted
 	}
 	admin := m.adminLocked()
-	if from != admin {
+	handover := msg.AdminGen > m.state.AdminGen && slices.ContainsFunc(msg.Nodes, func(n Node) bool { return n.ID == msg.Admin })
+	if from != admin && !handover {
 		// Who may manage stays as the admin node set it.
 		manage := map[string]bool{}
 		for _, n := range m.state.Nodes {
@@ -433,6 +451,23 @@ func (m *Manager) takeMembership(from string, msg membership) error {
 		}
 	}
 	next.Nodes, next.Name, next.Internet, next.Admin = nodes, msg.Name, msg.Internet, msg.Admin
+	if msg.AdminGen > next.AdminGen {
+		next.AdminGen = msg.AdminGen
+	}
+	if msg.Ways != nil && msg.Ways.check() == nil {
+		next.Ways = *msg.Ways
+		next.Routes = map[string]Route{}
+		for k, v := range msg.Routes {
+			if v.check() == nil {
+				next.Routes[k] = v
+			}
+		}
+		// Other ways may apply now: look for each node again.
+		clear(m.reach)
+	}
+	if msg.Tunnel != nil && msg.Tunnel.check() == nil {
+		next.Tunnel = *msg.Tunnel
+	}
 	sec.JoinKey = msg.JoinKey
 	return m.saveLocked(next, sec)
 }
@@ -542,6 +577,8 @@ func (m *Manager) remove(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
+	m.announcing.Lock()
+	defer m.announcing.Unlock()
 	m.mu.Lock()
 	if m.state == nil {
 		m.mu.Unlock()
@@ -552,7 +589,8 @@ func (m *Manager) remove(ctx context.Context, id string) error {
 	next.Generation++
 	// When the admin node left, the node that joined first after it.
 	next.Admin = adminOf(next)
-	msg := membership{Nodes: next.Nodes, JoinKey: key, Generation: next.Generation, Secret: secret, Name: next.Name, Internet: next.Internet, Admin: next.Admin}
+	msg := m.membershipLocked(next, secrets{JoinKey: key})
+	msg.Secret = secret
 	m.mu.Unlock()
 	// The others first, signed with the secret they still have; then this
 	// node switches. The removed node hears it with the old secret too.

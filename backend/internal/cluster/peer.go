@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // PeerPrefix is where the other nodes talk to this one.
@@ -111,10 +112,12 @@ func (m *Manager) PeerHandler() http.Handler {
 		switch {
 		case r.Method == "GET" && path == "status":
 			if m.Status == nil {
-				writeJSON(w, http.StatusOK, Status{Version: m.Version})
+				writeJSON(w, http.StatusOK, Status{Version: m.Version, Protocol: Protocol, Time: time.Now().Unix()})
 				return
 			}
-			writeJSON(w, http.StatusOK, m.Status(r.Context()))
+			st := m.Status(r.Context())
+			st.Protocol, st.Time = Protocol, time.Now().Unix()
+			writeJSON(w, http.StatusOK, st)
 		case r.Method == "GET" && path == "accounts":
 			writeJSON(w, http.StatusOK, m.versions())
 		case r.Method == "POST" && path == "accounts":
@@ -205,7 +208,7 @@ func (m *Manager) peerPreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.mu.Lock()
-	res := previewResponse{Name: m.state.Name, Version: m.Version, Nodes: []string{}, Accounts: []string{}}
+	res := previewResponse{Name: m.state.Name, Version: m.Version, Protocol: Protocol, Nodes: []string{}, Accounts: []string{}}
 	for _, n := range m.state.Nodes {
 		res.Nodes = append(res.Nodes, n.Name)
 	}

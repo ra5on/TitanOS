@@ -1,9 +1,11 @@
 <script lang="ts">
 	// While this tab manages another node of the cluster, a strip says so and
-	// leads back. A node that left the cluster sends the tab back home.
+	// leads back. A node of another version is managed as well; the strip
+	// names both versions and leads to its updates. A node that left the
+	// cluster sends the tab back home.
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { activeNode, switchNode } from '#lib/cluster-node.ts';
-	import { clusterNodes, homeNode } from '#lib/cluster.svelte.ts';
+	import { clusterNodes, compareVersions, homeNode, otherVersion } from '#lib/cluster.svelte.ts';
 	import { onNodeRestart } from '#lib/node-restart.ts';
 
 	const id = activeNode();
@@ -11,6 +13,8 @@
 	let restarting = $state(false);
 	$effect(() => onNodeRestart((value) => (restarting = value)));
 	const node = $derived(id ? clusterNodes.nodes.find((n) => n.id === id) : undefined);
+	const differs = $derived(!!node && otherVersion(node, clusterNodes.version));
+	const older = $derived(differs && compareVersions(node?.version ?? '', clusterNodes.version) < 0);
 
 	$effect(() => {
 		if (id && clusterNodes.loaded && !node) switchNode(null);
@@ -18,9 +22,19 @@
 </script>
 
 {#if id && node}
-	<div class="cluster-banner" role="status">
+	<div class="cluster-banner" class:differs role="status">
 		<span>{t('cluster.managing', { name: node.name })}</span>
+		{#if differs}<span class="versions"
+				>{t(node.compatible === false ? 'cluster.versionsLimited' : 'cluster.versions', {
+					name: node.name,
+					version: node.version ?? '',
+					own: clusterNodes.version,
+				})}</span
+			>{/if}
 		{#if restarting}<span class="restarting">{t('cluster.restarting')}</span>{/if}
+		{#if older}<a class="btn small btn-primary" href="/settings/updates"
+				>{t('cluster.updateNamed', { name: node.name })}</a
+			>{/if}
 		<button type="button" class="btn small" onclick={() => switchNode(null)}
 			>{t('cluster.back', { name: homeNode()?.name ?? '' })}</button
 		>
@@ -46,7 +60,12 @@
 		color: var(--text);
 		font-weight: 500;
 	}
-	.restarting {
+	.restarting,
+	.versions {
 		font-weight: 400;
+	}
+	.differs {
+		border-color: var(--warn-border);
+		background: var(--warn-bg);
 	}
 </style>

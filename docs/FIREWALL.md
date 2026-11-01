@@ -15,7 +15,7 @@ Reihenfolge (die erste passende gilt):
 |---|---|
 | eigene Zonen (bis 16, in der Reihenfolge der Liste) | Netze des NAS, die der Zone zugeordnet sind (Anschluss **und** Subnetz, siehe unten), und ihre Quellnetze (Adressen/Netze, egal über welchen Anschluss) |
 | Docker | alle Docker-Bridge-Netze (`docker0`, `br-<id>`), die keiner eigenen Zone gehören – auch jedes neu angelegte |
-| VPN | Schnittstellen `tailscale0`, `wt0`, `titanoswg` (WireGuard-Server des NAS, `docs/WIREGUARD.md`) sowie `ipv64wg` (Tunnel zu einem IPv64 Cloud Router, `docs/IPV64.md`), Bereiche `100.64.0.0/10` und `fd7a:115c:a1e0::/48` (Tailscale, NetBird) |
+| VPN | Schnittstellen `tailscale0`, `wt0`, `titanoswg` (WireGuard-Server des NAS, `docs/WIREGUARD.md`) sowie `ipv64wg` (Tunnel zu einem IPv64 Cloud Router, `docs/IPV64.md`) und `titanoscl` (Tunnel zwischen den Knoten eines Clusters, `docs/CLUSTER.md`), Bereiche `100.64.0.0/10` und `fd7a:115c:a1e0::/48` (Tailscale, NetBird) |
 | Heimnetz | private Bereiche (10/8, 172.16/12, 192.168/16, 169.254/16, `fc00::/7`, `fe80::/10`) und die Netze der eigenen Anschlüsse des NAS (Bridge `br0`, VLANs, Bonds), damit auch das öffentliche IPv6-Präfix des Heimnetzes |
 | Internet | alles andere, ausdrücklich auch öffentliche IPv6-Adressen außerhalb des eigenen Präfixes |
 
@@ -95,7 +95,7 @@ Heimnetz/VPN/Internet → NAS):
 | Ping | ICMP/ICMPv6 Echo | ja | ja | nein |
 | USV im Netzwerk (NUT) | TCP 3493 | ja | ja | nein |
 | Backups anderer TitanOS | TCP 8750 | ja | ja | nein |
-| VPN-Tunnel | UDP 41641 (Tailscale), 51820 (NetBird) | ja | ja | **ja** |
+| VPN-Tunnel | UDP 41641 (Tailscale), 51820 (NetBird, WireGuard-Server), 51821 (Tunnel des Clusters) | ja | ja | **ja** |
 
 Let's Encrypt über HTTP-01 braucht Port 80 aus dem Internet. Bei
 eingeschalteter Firewall gehört Port 80 zum Dienst „Weboberfläche“, der im

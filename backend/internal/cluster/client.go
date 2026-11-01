@@ -78,17 +78,18 @@ func (m *Manager) scheme() string {
 	return "https"
 }
 
-// candidates returns the addresses of n in the order to try: the one that
-// worked last first.
-func (m *Manager) candidates(n Node) []string {
+// candidates returns the addresses of n for p in the order to try: the
+// one that worked last first, as long as it is still allowed.
+func (m *Manager) candidates(n Node, p purpose) []string {
+	order := m.ordered(n, p)
 	m.mu.Lock()
-	last := m.reach[n.ID]
+	last := m.reach[p.key(n.ID)]
 	m.mu.Unlock()
-	out := []string{}
-	if last != "" && slices.Contains(n.Addresses, last) {
-		out = append(out, last)
+	if last == "" || !slices.Contains(order, last) {
+		return order
 	}
-	for _, a := range n.Addresses {
+	out := []string{last}
+	for _, a := range order {
 		if a != last {
 			out = append(out, a)
 		}
@@ -96,9 +97,11 @@ func (m *Manager) candidates(n Node) []string {
 	return out
 }
 
-func (m *Manager) reached(id, address string) {
+// reached remembers address as the way to key (a node, or a node for
+// backups) and when that way is not the preferred one.
+func (m *Manager) reached(key, address string) {
 	m.mu.Lock()
-	m.reach[id] = address
+	m.reach[key] = address
 	m.mu.Unlock()
 }
 
@@ -113,27 +116,33 @@ func (m *Manager) call(ctx context.Context, n Node, method, path, user string, i
 			return err
 		}
 	}
-	return m.try(ctx, n, func(ctx context.Context, address string) (*http.Response, error) {
-		req, err := http.NewRequestWithContext(ctx, method, m.scheme()+"://"+address+path, bytes.NewReader(body))
-		if err != nil {
-			return nil, err
-		}
-		if in != nil {
-			req.Header.Set("Content-Type", "application/json")
-		}
-		if err := m.sign(req, user); err != nil {
-			return nil, err
-		}
-		return (&http.Client{Transport: m.transport(n.Cert), Timeout: 30 * time.Second}).Do(req)
+	return m.tryAddresses(ctx, n, m.candidates(n, forManage), n.ID, func(ctx context.Context, address string) (*http.Response, error) {
+		return m.sendSigned(ctx, n, address, method, path, user, body)
 	}, out)
 }
 
-// try runs send against the addresses of n in turn. A connection error
-// moves on to the next address; an answer, also an error, ends.
-func (m *Manager) try(ctx context.Context, n Node, send func(context.Context, string) (*http.Response, error), out any) error {
+// sendSigned sends one signed request to address of node n.
+func (m *Manager) sendSigned(ctx context.Context, n Node, address, method, path, user string, body []byte) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, m.scheme()+"://"+address+path, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if err := m.sign(req, user); err != nil {
+		return nil, err
+	}
+	return (&http.Client{Transport: m.transport(n.Cert), Timeout: 30 * time.Second}).Do(req)
+}
+
+// tryAddresses runs send against addresses in turn. A connection error
+// moves on to the next address; an answer, also an error, ends. The
+// address that answered is remembered for key, unless key is empty.
+func (m *Manager) tryAddresses(ctx context.Context, n Node, addresses []string, key string, send func(context.Context, string) (*http.Response, error), out any) error {
 	lastErr := ErrUnreachable
 	restarting := false
-	for _, address := range m.candidates(n) {
+	for _, address := range addresses {
 		res, err := send(ctx, address)
 		if err != nil {
 			if ctx.Err() != nil {
@@ -143,7 +152,9 @@ func (m *Manager) try(ctx context.Context, n Node, send func(context.Context, st
 			restarting = restarting || refused(err)
 			continue
 		}
-		m.reached(n.ID, address)
+		if key != "" {
+			m.reached(key, address)
+		}
 		defer res.Body.Close()
 		if res.StatusCode >= 300 {
 			return peerError(res)

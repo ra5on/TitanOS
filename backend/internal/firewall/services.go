@@ -68,9 +68,10 @@ func Services(web *WebPorts) []Service {
 		// "Another TitanOS" (listens on Tailscale addresses only).
 		{ID: "ups", Ports: []PortSet{{"tcp", []string{"3493"}}}, Default: local},
 		{ID: "backuptarget", Ports: []PortSet{{"tcp", []string{"8750"}}}, Default: local},
-		// The encrypted tunnels of Tailscale and NetBird. Their peers come
-		// from the internet; the VPN authenticates them itself.
-		{ID: "vpn", Ports: []PortSet{{"udp", []string{"41641", "51820"}}}, Default: Zones{Home: true, VPN: true, Internet: true}},
+		// The encrypted tunnels of Tailscale and NetBird, the WireGuard
+		// server and the tunnel of the cluster. Their peers come from the
+		// internet; the VPN authenticates them itself.
+		{ID: "vpn", Ports: []PortSet{{"udp", []string{"41641", "51820", "51821"}}}, Default: Zones{Home: true, VPN: true, Internet: true}},
 	}
 }
 

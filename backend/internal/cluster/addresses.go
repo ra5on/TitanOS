@@ -4,23 +4,27 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net"
 	"net/netip"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/ra5on/TitanOS/backend/internal/netguard"
 )
 
 // foundLocked returns the addresses of this node on its network
-// interfaces, home network first, then the VPNs: Tailscale and NetBird
-// (100.64.0.0/10), WireGuard and other tunnels with private addresses.
-// m.mu is held.
-func (m *Manager) foundLocked() []string {
+// interfaces, home network first, then the VPNs: the tunnel of the
+// cluster, WireGuard, Tailscale and NetBird; with the way of each. m.mu is
+// held.
+func (m *Manager) foundLocked() ([]string, map[string]string) {
+	kinds := map[string]string{}
 	if m.Local != nil {
-		return m.Local()
+		out := m.Local()
+		for _, a := range out {
+			kinds[a] = wayOf(Node{}, a)
+		}
+		return out, kinds
 	}
 	internet := m.state != nil && m.state.Internet
 	var private, vpn, public []string
@@ -45,14 +49,18 @@ func (m *Manager) foundLocked() []string {
 				continue
 			}
 			host := net.JoinHostPort(ip.String(), strconv.Itoa(m.Port))
+			way := wayOfInterface(iface.Name, ip)
 			switch {
-			case cgnat.Contains(ip) || tailscale6.Contains(ip):
+			case way != WayHome && way != WayInternet:
 				vpn = append(vpn, host)
-			case netguard.Local(ip):
+			case way == WayHome:
 				private = append(private, host)
-			case internet && netguard.Public(ip):
+			case internet:
 				public = append(public, host)
+			default:
+				continue
 			}
+			kinds[host] = way
 		}
 	}
 	// IPv4 before IPv6 within each kind: home routers hand out changing
@@ -62,11 +70,20 @@ func (m *Manager) foundLocked() []string {
 			return boolInt(strings.Contains(a, "[")) - boolInt(strings.Contains(b, "["))
 		})
 	}
+	// The MagicDNS name of Tailscale outlives a new address: it comes
+	// after the IPs, a node that cannot resolve it loses nothing.
+	if m.TailscaleName != nil {
+		if name := m.TailscaleName(); name != "" {
+			host := net.JoinHostPort(name, strconv.Itoa(m.Port))
+			vpn = append(vpn, host)
+			kinds[host] = WayTailscale
+		}
+	}
 	out := append(append(private, vpn...), public...)
 	if len(out) > maxAddresses {
 		out = out[:maxAddresses]
 	}
-	return out
+	return out, kinds
 }
 
 var (
@@ -82,18 +99,30 @@ func boolInt(b bool) int {
 }
 
 // ownAddressesLocked returns the addresses of this node as the others see
-// them: the added ones first, then the found ones. m.mu is held.
-func (m *Manager) ownAddressesLocked() []string {
+// them: the added ones first, then the found ones; with their ways. m.mu
+// is held.
+func (m *Manager) ownAddressesLocked() ([]string, map[string]string) {
 	out := slices.Clone(m.self.Extra)
-	for _, a := range m.foundLocked() {
+	kinds := map[string]string{}
+	for _, a := range out {
+		kinds[a] = WayExtra
+	}
+	found, foundKinds := m.foundLocked()
+	for _, a := range found {
 		if !slices.Contains(out, a) {
 			out = append(out, a)
+			kinds[a] = foundKinds[a]
 		}
 	}
 	if len(out) > maxAddresses {
 		out = out[:maxAddresses]
 	}
-	return out
+	for a := range kinds {
+		if !slices.Contains(out, a) {
+			delete(kinds, a)
+		}
+	}
+	return out, kinds
 }
 
 // selfNodeLocked returns this node as a member. m.mu is held.
@@ -102,7 +131,12 @@ func (m *Manager) selfNodeLocked() Node {
 	if m.Name != nil {
 		name = m.Name()
 	}
-	return Node{ID: m.self.ID, Name: name, Addresses: m.ownAddressesLocked(), Extra: slices.Clone(m.self.Extra), Cert: m.cert.fingerprint}
+	addrs, kinds := m.ownAddressesLocked()
+	n := Node{ID: m.self.ID, Name: name, Addresses: addrs, Ways: kinds, Extra: slices.Clone(m.self.Extra), Cert: m.cert.fingerprint}
+	if m.self.TunnelKey != "" {
+		n.TunnelKey, _ = publicKey(m.self.TunnelKey)
+	}
+	return n
 }
 
 // NormalizeAddress checks an address the administrator adds: a host name
@@ -172,11 +206,16 @@ func (m *Manager) refreshAddresses(ctx context.Context) error {
 		return nil
 	}
 	old := m.state.Nodes[i]
-	if slices.Equal(old.Addresses, me.Addresses) && slices.Equal(old.Extra, me.Extra) && old.Name == me.Name && old.Cert == me.Cert {
+	if slices.Equal(old.Addresses, me.Addresses) && slices.Equal(old.Extra, me.Extra) && old.Name == me.Name && old.Cert == me.Cert &&
+		maps.Equal(old.Ways, me.Ways) && old.TunnelKey == me.TunnelKey {
 		m.mu.Unlock()
 		return nil
 	}
-	me.Joined, me.Updated = old.Joined, time.Now().UTC().Truncate(time.Second)
+	me.Joined, me.Updated, me.Manage = old.Joined, time.Now().UTC().Truncate(time.Second), old.Manage
+	if !me.Updated.After(old.Updated) {
+		// Two changes in one second: the others take only a newer entry.
+		me.Updated = old.Updated.Add(time.Second)
+	}
 	next := cloneState(m.state)
 	next.Nodes[i] = me
 	if err := m.saveLocked(next, m.secrets); err != nil {
@@ -194,7 +233,8 @@ func (m *Manager) refreshAddresses(ctx context.Context) error {
 
 // updateNode takes over the new entry another node sent of itself.
 func (m *Manager) updateNode(from string, n Node) error {
-	if n.ID != from || len(n.Addresses) > maxAddresses || !validName(n.Name) || len(n.Cert) != 64 {
+	if n.ID != from || len(n.Addresses) > maxAddresses || len(n.Ways) > maxAddresses || !validName(n.Name) || len(n.Cert) != 64 ||
+		(n.TunnelKey != "" && !validKey(n.TunnelKey)) {
 		return ErrInvalid
 	}
 	m.mu.Lock()
@@ -209,7 +249,8 @@ func (m *Manager) updateNode(from string, n Node) error {
 	if !n.Updated.After(m.state.Nodes[i].Updated) {
 		return nil
 	}
-	n.Joined = m.state.Nodes[i].Joined
+	// Whether it may manage is the admin node's call, not its own.
+	n.Joined, n.Manage = m.state.Nodes[i].Joined, m.state.Nodes[i].Manage
 	next := cloneState(m.state)
 	next.Nodes[i] = n
 	return m.saveLocked(next, m.secrets)

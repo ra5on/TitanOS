@@ -15,6 +15,7 @@
 	import TemperaturesTile from './tiles/TemperaturesTile.svelte';
 	import TailscaleTile from './tiles/TailscaleTile.svelte';
 	import NetbirdTile from './tiles/NetbirdTile.svelte';
+	import ClusterTile from './tiles/ClusterTile.svelte';
 
 	// The content of a dashboard tile, picked by its kind.
 	const CONTENT: Partial<Record<StaticTileId, Component<{ options?: TileOptions }>>> = {
@@ -84,6 +85,11 @@
 		options={settings}
 		value={data.netbirdPeers}
 		error={data.netbirdPeersError}
+	/>
+{:else if source === 'cluster'}<ClusterTile
+		options={settings}
+		value={data.cluster}
+		error={data.clusterError}
 	/>
 {:else if source === 'tailscale'}<TailscaleTile
 		options={settings}
