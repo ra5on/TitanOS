@@ -1486,6 +1486,12 @@ func TestAppStore(t *testing.T) {
 	if !strings.Contains(tpl.Compose, "services:") || tpl.Timezone == "" || tpl.UID < 2000 || tpl.GID != 100 || tpl.MissingDevices == nil {
 		t.Errorf("template = %+v", tpl)
 	}
+	// An own container starts from a blank template with the same details.
+	res, body = ts.request("GET", "/api/v1/apps/blank", nil)
+	tpl.Compose = ""
+	if err := json.Unmarshal(body, &tpl); err != nil || res.StatusCode != http.StatusOK || !strings.Contains(tpl.Compose, "image: \"\"") || tpl.Timezone == "" {
+		t.Errorf("blank template: %d %s", res.StatusCode, body)
+	}
 	if res, body := ts.request("GET", "/api/v1/apps/sources/titanos/apps/nope", nil); res.StatusCode != http.StatusNotFound || errorCode(t, body) != "source_not_found" {
 		t.Errorf("unknown template: %d %s", res.StatusCode, body)
 	}
@@ -1504,6 +1510,7 @@ func TestAppStore(t *testing.T) {
 		{"POST", "/api/v1/apps/refresh"},
 		{"POST", "/api/v1/apps/sources"},
 		{"GET", "/api/v1/apps/sources/titanos/apps/" + app.ID},
+		{"GET", "/api/v1/apps/blank"},
 	} {
 		if res, _ := ts.do(guest, tc[0], tc[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
 			t.Errorf("%s %s as a plain user: %d, want 403", tc[0], tc[1], res.StatusCode)

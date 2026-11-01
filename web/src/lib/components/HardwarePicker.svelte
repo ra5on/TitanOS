@@ -47,57 +47,84 @@
 	}
 </script>
 
-<fieldset>
-	<legend>{t('hardware.containerTitle')}</legend>
-	<p class="muted">{t('hardware.containerHint')}</p>
+<div class="devices" role="group" aria-label={t('hardware.containerTitle')}>
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	{#each devices as device (device.id)}
-		<label class="check"
+		{@const on = selected.includes(device.id)}
+		<label class="device" class:on
 			><input
 				type="checkbox"
-				checked={selected.includes(device.id)}
-				disabled={!device.available && !selected.includes(device.id)}
+				checked={on}
+				disabled={!device.available && !on}
 				onchange={() => toggle(device.id)}
 			/>
-			<span
-				>{device.title} · {t(
-					device.kind === 'nvidia'
-						? 'hardware.kind.gpu'
-						: device.kind === 'coral'
-							? 'hardware.coralKind'
-							: `hardware.kind.${device.kind}`,
-				)}{#if device.warning === 'usb_bus'}
-					— {t('hardware.coralUSBWarning')}{/if}{#if !device.available}
-					— {t(device.reason === 'vm' ? 'hardware.inVm' : 'hardware.noDriver')}{/if}</span
+			<span class="what"
+				>{device.title}<small
+					>{t(
+						device.kind === 'nvidia'
+							? 'hardware.kind.gpu'
+							: device.kind === 'coral'
+								? 'hardware.coralKind'
+								: `hardware.kind.${device.kind}`,
+					)}{#if device.warning === 'usb_bus'}
+						· {t('hardware.coralUSBWarning')}{/if}</small
+				></span
+			><span class="chip" class:ok={device.available}
+				>{device.available
+					? t('appform.deviceFree')
+					: t(device.reason === 'vm' ? 'hardware.inVm' : 'hardware.noDriver')}</span
 			>
 		</label>
 	{/each}
 	{#each selected.filter((id) => !devices.some((device) => device.id === id)) as id (id)}
-		<label class="check"
-			><input type="checkbox" checked onchange={() => toggle(id)} /><span class="mono">{id}</span
+		<label class="device on"
+			><input type="checkbox" checked onchange={() => toggle(id)} /><span class="what mono"
+				>{id}</span
 			></label
 		>
 	{/each}
-	{#if !devices.length && !selected.length && !error}<p class="muted">
+	{#if !devices.length && !selected.length && !error}<p class="muted none">
 			{t('hardware.nonePci')}
 		</p>{/if}
-</fieldset>
+</div>
 
 <style>
-	fieldset {
-		border: 0;
-		padding: 0;
+	.devices {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: 6px;
+		max-width: 40rem;
 		min-width: 0;
 	}
-	legend {
-		font-weight: 600;
-		margin-bottom: 10px;
+	.device {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr) auto;
+		align-items: center;
+		gap: 10px;
+		padding: 8px 12px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-ctl);
+		background: var(--bg);
+		font-size: var(--text-md);
+		cursor: pointer;
 	}
-	p,
-	label {
+	.device.on {
+		border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+		background: color-mix(in srgb, var(--accent) 8%, var(--bg));
+	}
+	.what {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.what small {
+		color: var(--muted);
+		font-size: var(--text-sm);
+	}
+	.none {
+		margin: 0;
+		padding-top: 0.5rem;
 		font-size: var(--text-md);
 	}
 </style>

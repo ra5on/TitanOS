@@ -36,6 +36,22 @@ Sortieren per Griff/Pfeilen, Anzeigeoptionen, Speichern/Abbrechen/Standard.
 Kleine Bildschirme stapeln; Theme-Werte bleiben die aus `Appearance.dc.html`.
 Die ursprüngliche Entwurfsdatei dokumentiert weiterhin die Container-Aktionen.
 
+### App-Formular und Docker-Kopf (0.43.0)
+
+Vom Projektinhaber am 1. November 2026 nach drei Screenshot-Runden bestätigt
+(„Ja, jetzt haben wir es. Das ist top.“ bzw. „Passt“). Installieren und
+Bearbeiten einer App zeigen dasselbe einspaltige Formular: Bezeichnung links,
+Feld rechts, grauer Hinweis darunter, Abschnitte „Netzwerk und Zugriff“,
+„Grafikkarte und Geräte“, „Pfade, Ports und Variablen“, Schalter
+Basis/Erweitert oben rechts, nach „Installieren“ eine Protokollseite. Die
+Docker-Seite hat eine Kopfzeile (Suche, Ansicht, Zahnrad, „App installieren“
+mit Pfeil), Filter in der Statuszeile und Sammelaktionen unter der Liste; die
+Liste selbst bleibt unverändert. Verworfen: Assistent mit Schritten, Reiter
+mit langen Schiebereglern, Kacheln unterschiedlicher Höhe. Regeln und Umfang:
+`docs/rules/DOCKER.md`, Prüfung `scripts/test-ui-appform.mjs`. Die älteren
+Entwürfe `DockerEdit.dc.html` und `AppStore.dc.html` gelten für Aufbau und
+Anordnung nicht mehr, nur noch für Herkunft je Feld und Live-Prüfungen.
+
 ### Bedienung und Rückmeldungen (0.6.0)
 
 Auf Wunsch des Projektinhabers bleibt die gesamte Docker-Oberfläche auf dem

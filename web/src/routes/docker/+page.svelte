@@ -564,6 +564,42 @@
 		}
 	});
 
+	// The menus of the head: the gear (settings, LAN, updates, layout) and the
+	// arrow next to "Install app" (catalog, compose file, own container).
+	let pageMenu = $state<'settings' | 'install' | null>(null);
+	let pageMenuAt = $state<{ x: number; y: number } | null>(null);
+	let pageMenuWasOpen = false;
+	function openPageMenu(kind: 'settings' | 'install', anchor: HTMLElement) {
+		if (pageMenuWasOpen) {
+			pageMenuWasOpen = false;
+			pageMenu = null;
+			return;
+		}
+		const rect = anchor.getBoundingClientRect();
+		pageMenuAt = { x: Math.max(8, rect.right - 280), y: rect.bottom + 4 };
+		pageMenu = kind;
+	}
+	function pick(action: () => void) {
+		pageMenu = null;
+		action();
+	}
+	const checkUpdates = () =>
+		run('global', async () => (status = await api.post<DockerStatus>('/docker/updates/check')));
+	// Start and stop everything, one container after the other like by hand.
+	let confirmStopAll = $state(false);
+	const startAll = () =>
+		run('global', async () => {
+			for (const container of containers.filter((entry) => !isRunning(entry)))
+				await api.post(`/docker/containers/${encodeURIComponent(container.id)}/start`);
+		});
+	function stopAll() {
+		confirmStopAll = false;
+		void run('global', async () => {
+			for (const container of containers.filter(isRunning))
+				await api.post(`/docker/containers/${encodeURIComponent(container.id)}/stop`);
+		});
+	}
+
 	const enable = () =>
 		run('global', () =>
 			api.put('/docker/settings', { enabled: true, volume: draft.volume || volumes[0] }),
@@ -571,57 +607,167 @@
 </script>
 
 <PageHead title={t('docker.title')}>
-	{#if status?.running}
-		<p class="muted summary">
-			<span
-				><span class="dot ok" aria-hidden="true"></span>{t('docker.running', {
-					count: runCount,
-				})}</span
-			>
-			<span
-				><span class="dot" aria-hidden="true"></span>{t('docker.stopped', {
-					count: containers.length - runCount,
-				})}</span
-			>
-			<span class="mono">{totals}</span>
-			<span>{t('docker.version', { version: status.version })}</span>
-			<span>{checked}</span>
-			<button
-				type="button"
-				class="link"
-				onclick={() =>
-					run(
-						'global',
-						async () => (status = await api.post<DockerStatus>('/docker/updates/check')),
-					)}
-				disabled={globalBusy}>{t('docker.checkUpdates')}</button
-			>
-		</p>
-	{/if}
 	{#snippet actions()}
-		<a class="btn" href="/docker/networks">{t('lan.title')}</a>
+		{#if status?.running && containers.length > 0}
+			<span class="search-box"
+				><Icon name="search" size={15} /><input
+					class="field search"
+					type="search"
+					disabled={editing}
+					bind:value={search}
+					oninput={() => (expanded = {})}
+					placeholder={t('docker.search')}
+					aria-label={t('docker.search')}
+				/></span
+			>
+			<div class="segmented icons" role="group" aria-label={t('docker.layout.view')}>
+				{#each [['list', t('docker.layout.list'), 'list'], ['cards', t('docker.layout.cards'), 'grid']] as const as [id, label, icon] (id)}
+					<button
+						type="button"
+						aria-pressed={layout.view === id}
+						aria-label={label}
+						title={label}
+						disabled={savingLayout}
+						onclick={() => setView(id)}><Icon name={icon} size={16} /></button
+					>
+				{/each}
+			</div>
+		{/if}
+		<button
+			type="button"
+			class="btn icon-btn"
+			aria-label={t('docker.pageMenu')}
+			title={t('docker.pageMenu')}
+			aria-haspopup="menu"
+			aria-expanded={!!pageMenu}
+			onpointerdown={() => (pageMenuWasOpen = pageMenu === 'settings')}
+			onclick={(event) => openPageMenu('settings', event.currentTarget)}
+			><Icon name="gear" size={17} /></button
+		>
 		{#if status?.settings.enabled}
-			<button type="button" class="btn" onclick={() => open('settings')}
-				>{t('docker.settings')}</button
-			>
-			<button type="button" class="btn" onclick={() => open('import')} disabled={!status.running}
-				>{t('docker.import')}</button
-			>
-			{#if updatable}
-				<button type="button" class="btn" onclick={askUpdates} disabled={globalBusy}
-					>{t('docker.updateAll')}</button
+			<span class="split">
+				<a class="btn btn-primary" href="/apps"
+					><Icon name="plus" size={15} />{t('docker.installApp')}</a
+				><button
+					type="button"
+					class="btn btn-primary"
+					aria-label={t('docker.installMenu')}
+					title={t('docker.installMenu')}
+					aria-haspopup="menu"
+					aria-expanded={pageMenu === 'install'}
+					onpointerdown={() => (pageMenuWasOpen = pageMenu === 'install')}
+					onclick={(event) => openPageMenu('install', event.currentTarget)}
+					><Icon name="chevronDown" size={15} /></button
 				>
-			{/if}
-			<button
-				type="button"
-				class="btn"
-				onclick={() => (autoUpdates = true)}
-				disabled={!status.running}>{t('autoUpdate.button')}</button
-			>
-			<a class="btn btn-primary" href="/apps">{t('docker.installApp')}</a>
+			</span>
 		{/if}
 	{/snippet}
 </PageHead>
+
+{#if status?.running && containers.length > 0}
+	<div class="status-line">
+		<div class="filters" role="group" aria-label={t('docker.filter')}>
+			{#each [['all', containers.length, ''], ['running', runCount, 'ok'], ['stopped', containers.length - runCount, 'off'], ['updates', updateCount, 'warn']] as const as [id, count, tone] (id)}
+				{#if id !== 'updates' || count > 0 || filter === 'updates'}
+					<button
+						type="button"
+						class="filter {tone}"
+						aria-pressed={filter === id}
+						disabled={editing}
+						onclick={() => {
+							filter = id;
+							expanded = {};
+						}}
+						>{#if tone}<span class="dot {tone}" aria-hidden="true"></span>{/if}{#if id === 'all'}{t(
+								'docker.filterAll',
+							)} <b class="mono">{count}</b>{:else}<b class="mono">{count}</b>
+							{t(
+								id === 'running'
+									? 'docker.filterRunningCount'
+									: id === 'stopped'
+										? 'docker.filterStoppedCount'
+										: 'docker.filterUpdatesCount',
+							)}{/if}</button
+					>
+				{/if}
+			{/each}
+		</div>
+		<p class="meta">
+			<span class="mono">{totals}</span><span>{checked}</span><button
+				type="button"
+				class="icon-link"
+				aria-label={t('docker.checkUpdates')}
+				title={t('docker.checkUpdates')}
+				onclick={checkUpdates}
+				disabled={globalBusy}><Icon name="refresh" size={14} /></button
+			>
+		</p>
+	</div>
+{/if}
+
+{#if pageMenu && pageMenuAt}
+	<ContextMenu
+		label={t(pageMenu === 'settings' ? 'docker.pageMenu' : 'docker.installMenu')}
+		x={pageMenuAt.x}
+		y={pageMenuAt.y}
+		onclose={() => (pageMenu = null)}
+	>
+		{#if pageMenu === 'settings'}
+			<div class="menu-title">{t('docker.title')}</div>
+			{#if status?.settings.enabled}
+				<button type="button" role="menuitem" onclick={() => pick(() => open('settings'))}
+					><Icon name="gear" size={16} /><span
+						>{t('docker.settings')}<small>{t('docker.settingsHint')}</small></span
+					></button
+				>
+			{/if}
+			<a role="menuitem" href="/docker/networks" onclick={() => (pageMenu = null)}
+				><Icon name="globe" size={16} /><span
+					>{t('lan.title')}<small>{t('docker.lanHint')}</small></span
+				></a
+			>
+			{#if status?.settings.enabled}
+				<button
+					type="button"
+					role="menuitem"
+					disabled={!status.running}
+					onclick={() => pick(() => (autoUpdates = true))}
+					><Icon name="clock" size={16} /><span
+						>{t('autoUpdate.button')}<small>{t('docker.autoUpdateHint')}</small></span
+					></button
+				>
+			{/if}
+			{#if containers.length > 0}
+				<hr />
+				<button type="button" role="menuitem" disabled={editing} onclick={() => pick(startEditing)}
+					><Icon name="edit" size={16} /><span
+						>{t('docker.layout.edit')}<small>{t('docker.layoutHint')}</small></span
+					></button
+				>
+			{/if}
+		{:else}
+			<a role="menuitem" href="/apps" onclick={() => (pageMenu = null)}
+				><Icon name="grid" size={16} /><span
+					>{t('docker.fromCatalog')}<small>{t('docker.fromCatalogHint')}</small></span
+				></a
+			>
+			<button
+				type="button"
+				role="menuitem"
+				disabled={!status?.running}
+				onclick={() => pick(() => open('import'))}
+				><Icon name="fileText" size={16} /><span
+					>{t('docker.import')}<small>{t('docker.importHint')}</small></span
+				></button
+			>
+			<a role="menuitem" href="/apps/new" onclick={() => (pageMenu = null)}
+				><Icon name="box" size={16} /><span
+					>{t('docker.ownContainer')}<small>{t('docker.ownContainerHint')}</small></span
+				></a
+			>
+		{/if}
+	</ContextMenu>
+{/if}
 
 {#if error}
 	<div class="notice-error" role="alert">
@@ -730,71 +876,6 @@
 	{/each}
 
 	{#if containers.length > 0}
-		<div class="controls">
-			<input
-				class="field search"
-				type="search"
-				disabled={editing}
-				bind:value={search}
-				oninput={() => (expanded = {})}
-				placeholder={t('docker.search')}
-				aria-label={t('docker.search')}
-			/>
-			<div class="segmented" role="group" aria-label={t('docker.filter')}>
-				{#each [['all', containers.length], ['running', runCount], ['stopped', containers.length - runCount], ['updates', updateCount]] as [id, count] (id)}
-					<button
-						type="button"
-						aria-pressed={filter === id}
-						disabled={editing}
-						onclick={() => {
-							filter = id as typeof filter;
-							expanded = {};
-						}}
-					>
-						{t(
-							id === 'all'
-								? 'docker.filterAll'
-								: id === 'running'
-									? 'docker.filterRunning'
-									: id === 'stopped'
-										? 'docker.filterStopped'
-										: 'docker.filterUpdates',
-						)}<span class="mono count">{count}</span>
-					</button>
-				{/each}
-			</div>
-			<div class="view-tools">
-				<div class="segmented" role="group" aria-label={t('docker.layout.view')}>
-					{#each [['list', t('docker.layout.list')], ['cards', t('docker.layout.cards')]] as [id, label] (id)}
-						<button
-							type="button"
-							aria-pressed={layout.view === id}
-							disabled={savingLayout}
-							onclick={() => setView(id as DockerView)}
-						>
-							<svg
-								width="14"
-								height="14"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								aria-hidden="true"
-								><path
-									d={id === 'list'
-										? 'M4 6h16M4 12h16M4 18h16'
-										: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z'}
-								/></svg
-							>{label}
-						</button>
-					{/each}
-				</div>
-				<button type="button" class="btn" onclick={startEditing} disabled={editing}
-					><Icon name="edit" size={16} />{t('docker.layout.edit')}</button
-				>
-			</div>
-		</div>
 		{#if layoutError && !editing}<p class="notice-error" role="alert">{layoutError}</p>{/if}
 		{#if layoutSaved}<p class="muted saved" role="status">{t('docker.layout.saved')}</p>{/if}
 	{/if}
@@ -928,6 +1009,51 @@
 	{:else if visible.length === 0 && containers.length > 0}
 		<EmptyState title={t('docker.noMatch')} />
 	{/if}
+	{#if containers.length > 0}
+		<div class="bulk">
+			<button
+				type="button"
+				class="btn"
+				disabled={globalBusy || editing || runCount === containers.length}
+				onclick={startAll}><Icon name="play" size={15} />{t('docker.startAll')}</button
+			>
+			<button
+				type="button"
+				class="btn"
+				disabled={globalBusy || editing || runCount === 0}
+				onclick={() => (confirmStopAll = true)}
+				><Icon name="stop" size={15} />{t('docker.stopAll')}</button
+			>
+			<button type="button" class="btn" disabled={globalBusy} onclick={checkUpdates}
+				><Icon name="refresh" size={15} />{t('docker.checkUpdates')}</button
+			>
+			{#if updatable}
+				<button type="button" class="btn" onclick={askUpdates} disabled={globalBusy}
+					><Icon name="download" size={15} />{t('docker.updateAllCount', {
+						count: updateApps.length,
+					})}</button
+				>
+			{/if}
+			<span class="spacer"></span>
+			<span class="muted engine"
+				>{t('docker.version', { version: status.version })} · {t('docker.onVolume', {
+					volume: status.settings.volume,
+				})}</span
+			>
+		</div>
+	{/if}
+{/if}
+
+{#if confirmStopAll}
+	<Dialog title={t('docker.stopAllTitle')} onclose={() => (confirmStopAll = false)}>
+		<p>{t('docker.stopAllText', { count: runCount })}</p>
+		<div class="dialog-actions">
+			<button type="button" class="btn btn-warn" onclick={stopAll}>{t('docker.stopAll')}</button
+			><button type="button" class="btn" onclick={() => (confirmStopAll = false)}
+				>{t('common.cancel')}</button
+			>
+		</div>
+	</Dialog>
 {/if}
 
 {#snippet row(container: DockerContainer, member: boolean)}
@@ -1355,17 +1481,6 @@
 		gap: var(--space-2);
 	}
 
-	.summary {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 6px 18px;
-		font-size: var(--text-md);
-	}
-	.summary span {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-	}
 	.buttons {
 		display: flex;
 		flex-wrap: wrap;
@@ -1373,14 +1488,6 @@
 	}
 	.job-actions {
 		margin-top: 10px;
-	}
-	.link {
-		padding: 0;
-		background: none;
-		border: 0;
-		color: var(--accent);
-		font: inherit;
-		cursor: pointer;
 	}
 	.setup {
 		display: flex;
@@ -1408,22 +1515,137 @@
 		gap: 6px;
 		font-size: var(--text-md);
 	}
-	.controls {
-		display: flex;
-		flex-wrap: wrap;
+	.search-box {
+		position: relative;
+		display: inline-flex;
 		align-items: center;
-		gap: 10px;
+		width: 15rem;
+		max-width: 100%;
+		color: var(--muted);
+	}
+	.search-box :global(svg) {
+		position: absolute;
+		left: 10px;
+		pointer-events: none;
 	}
 	.search {
-		flex: 1 1 240px;
-		max-width: 360px;
+		width: 100%;
+		padding-left: 32px;
 	}
-	.view-tools {
+	.segmented.icons button {
+		padding: 0 8px;
+	}
+	.icon-btn {
+		width: var(--control-height);
+		padding: 0;
+	}
+	.split {
+		display: inline-flex;
+	}
+	.split > :first-child {
+		border-top-right-radius: 0;
+		border-bottom-right-radius: 0;
+	}
+	.split > :last-child {
+		width: 2.25rem;
+		padding: 0;
+		border-top-left-radius: 0;
+		border-bottom-left-radius: 0;
+		border-left: 1px solid color-mix(in srgb, var(--on-accent) 25%, transparent);
+	}
+	.status-line {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 10px;
-		margin-left: auto;
+		gap: var(--space-2) var(--space-3);
+	}
+	.filters {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+	}
+	.filter {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		min-height: 2rem;
+		padding: 0 10px;
+		background: transparent;
+		border: 1px solid transparent;
+		border-radius: 999px;
+		color: var(--muted);
+		font: inherit;
+		font-size: var(--text-md);
+		cursor: pointer;
+	}
+	.filter b {
+		color: var(--text);
+		font-weight: 600;
+	}
+	.filter.warn,
+	.filter.warn b {
+		color: var(--warn-text);
+	}
+	.filter:hover:not(:disabled) {
+		color: var(--text);
+	}
+	.filter[aria-pressed='true'] {
+		background: var(--chip);
+		border-color: var(--border);
+		color: var(--text);
+	}
+	.filter .dot.off {
+		background: var(--status-inactive);
+	}
+	.meta {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 4px 12px;
+		margin: 0 0 0 auto;
+		color: var(--muted);
+		font-size: var(--text-sm);
+	}
+	.icon-link {
+		display: inline-flex;
+		padding: 2px;
+		background: none;
+		border: 0;
+		color: var(--accent);
+		cursor: pointer;
+	}
+	.icon-link:disabled {
+		opacity: 0.5;
+		cursor: default;
+	}
+	.bulk {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-2);
+		padding-top: var(--space-3);
+		border-top: 1px solid var(--border);
+	}
+	.bulk .spacer {
+		flex: 1;
+	}
+	.engine {
+		font-size: var(--text-sm);
+	}
+	:global(.dropdown-panel) [role^='menuitem'] small {
+		display: block;
+		color: var(--muted);
+		font-size: var(--text-sm);
+		white-space: normal;
+	}
+	@media (max-width: 760px) {
+		.search-box {
+			flex: 1 1 10rem;
+			width: auto;
+		}
+		.meta {
+			margin-left: 0;
+		}
 	}
 	.segmented {
 		display: flex;
@@ -1459,10 +1681,6 @@
 		background: var(--chip);
 		color: var(--text);
 		font-weight: 500;
-	}
-	.count {
-		font-size: var(--text-sm);
-		opacity: 0.8;
 	}
 	.saved {
 		font-size: var(--text-base);

@@ -45,4 +45,5 @@ func (s *Server) registerAppStore(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/apps/sources", s.requireAdmin(s.handleSourceAdd))
 	mux.HandleFunc("DELETE /api/v1/apps/sources/{id}", s.requireAdmin(s.handleSourceRemove))
 	mux.HandleFunc("GET /api/v1/apps/sources/{source}/apps/{app}", s.requireAdmin(s.handleAppTemplate))
+	mux.HandleFunc("GET /api/v1/apps/blank", s.requireAdmin(s.handleBlankTemplate))
 }

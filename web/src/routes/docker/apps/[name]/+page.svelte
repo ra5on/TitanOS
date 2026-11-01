@@ -7,8 +7,18 @@
 	import { dockerName } from '#lib/docker-name.ts';
 	import { publicURL } from '#lib/app-links.ts';
 	import HardwarePicker from '#lib/components/HardwarePicker.svelte';
-	import ImageField from '#lib/components/ImageField.svelte';
 	import LANAssignment from '#lib/components/LANAssignment.svelte';
+	import AddEntryDialog, { type NewEntry } from '#lib/components/appform/AddEntryDialog.svelte';
+	import CpuPicker from '#lib/components/appform/CpuPicker.svelte';
+	import FormRow from '#lib/components/appform/FormRow.svelte';
+	import FormSection from '#lib/components/appform/FormSection.svelte';
+	import MemoryLimit from '#lib/components/appform/MemoryLimit.svelte';
+	import PathField from '#lib/components/appform/PathField.svelte';
+	import Toggle from '#lib/components/appform/Toggle.svelte';
+	import ViewSwitch, { storedAdvanced } from '#lib/components/appform/ViewSwitch.svelte';
+	import { where } from '#lib/components/appform/where.ts';
+	import { validImage } from '#lib/compose/image.ts';
+	import { validCpuset, validDevice, validMemLimit } from '#lib/compose/template.ts';
 	import { parseDocument, type Document } from 'yaml';
 	import { page } from '$app/state';
 	import {
@@ -59,6 +69,36 @@
 	let result = $state<{ ok: boolean; text: string; detail: string } | null>(null);
 
 	let doc: Document | undefined;
+	let advanced = $state(storedAdvanced());
+	let adding = $state(false);
+
+	// The service as it was when the page opened, to mark what changed.
+	const before = $derived.by(() => {
+		if (!original || !service) return null;
+		const parsed = parseDocument(original, { merge: true });
+		return parsed.errors.length || !serviceNames(parsed).includes(service)
+			? null
+			: readService(parsed, service);
+	});
+	const differs = (key: keyof ServiceForm) =>
+		!!before && !!form && JSON.stringify(before[key]) !== JSON.stringify(form[key]);
+	const envChanged = (pair: { name: string; value: string }) =>
+		!!before && before.env.find((entry) => entry.name === pair.name)?.value !== pair.value;
+	const rowChanged = (key: 'paths' | 'ports', index: number) =>
+		!!before && !!form && JSON.stringify(before[key][index]) !== JSON.stringify(form[key][index]);
+
+	function addEntry(entry: NewEntry) {
+		adding = false;
+		if (!form) return;
+		if (entry.kind === 'path')
+			form.paths.push({ host: entry.host, container: entry.container, readOnly: entry.readOnly });
+		else if (entry.kind === 'port')
+			form.ports.push({ host: entry.host, container: entry.container, protocol: entry.protocol });
+		else if (entry.kind === 'variable') form.env.push({ name: entry.name, value: entry.value });
+		else if (entry.kind === 'label') form.labels.push({ name: entry.name, value: entry.value });
+		else form.devices.push({ value: entry.device });
+		commit();
+	}
 
 	/** Reads the text into the form. Returns false if it is not valid YAML. */
 	function parse(): boolean {
@@ -229,7 +269,17 @@
 		if (pendingURL) void goto(pendingURL);
 	}
 
-	const blocked = $derived(applying || !changed || (view === 'form' ? !!problems?.any : false));
+	const limitsBad = $derived(
+		!!form &&
+			(!validCpuset(form.cpuset) ||
+				!validMemLimit(form.memLimit) ||
+				form.devices.some((row) => row.raw === undefined && !validDevice(row.value))),
+	);
+	const blocked = $derived(
+		applying || !changed || (view === 'form' ? !!problems?.any || limitsBad : false),
+	);
+	const updateAvailable = $derived(members.some((container) => container.updateAvailable));
+	const hiddenCount = $derived(form ? 4 + form.labels.length : 0);
 
 	// Leaving the page ends the wait for the outcome of an apply.
 	let destroyed = false;
@@ -286,22 +336,7 @@
 	title={t('editor.title', { name })}
 	parent={{ href: '/docker', label: t('docker.title') }}
 >
-	<p class="muted mono location">
-		{t('editor.location', { path: `/config/apps/${name}/compose.yaml` })}
-	</p>
-	{#snippet actions()}
-		<div class="segments" role="radiogroup">
-			<button type="button" role="radio" aria-checked={view === 'form'} onclick={() => show('form')}
-				>{t('editor.form')}</button
-			>
-			<button
-				type="button"
-				role="radio"
-				aria-checked={view === 'compose'}
-				onclick={() => show('compose')}>{t('editor.compose')}</button
-			>
-		</div>
-	{/snippet}
+	{#snippet actions()}<ViewSwitch bind:advanced />{/snippet}
 </PageHead>
 
 <section class="tile app-head" aria-label={t('editor.appState')}>
@@ -401,261 +436,445 @@
 		<pre>{yamlError}</pre>
 	</div>{/if}
 
-{#if view === 'compose'}
-	<textarea
-		class="field mono yaml"
-		bind:value={text}
-		spellcheck="false"
-		aria-label={t('editor.compose')}></textarea>
-{:else if form && problems}
-	{#if services.length > 1}
-		<div class="segments services" role="radiogroup" aria-label={t('editor.service')}>
-			{#each services as entry (entry)}
-				<button
-					type="button"
-					role="radio"
-					aria-checked={service === entry}
-					onclick={() => pickService(entry)}>{entry}</button
-				>
-			{/each}
-		</div>
-	{/if}
-
-	<section class="tile" aria-labelledby="h-general">
-		<h2 class="tile-title" id="h-general">{t('editor.general')}</h2>
-		<div class="grid">
-			<ImageField bind:image={form.image} onchange={commit} />
-			<label
-				><span>{t('editor.restart')}</span>
-				<select class="field" bind:value={form.restart} onchange={commit}
-					>{#each RESTART_POLICIES as policy (policy)}<option value={policy}
-							>{t(`editor.restart.${policy}` as 'editor.restart.no')}</option
-						>{/each}{#if !RESTART_POLICIES.includes(form.restart)}<option value={form.restart}
-							>{form.restart}</option
-						>{/if}</select
-				>
-			</label>
-			<label
-				><span>{t('editor.network')}</span>
-				<select class="field" bind:value={form.network} onchange={commit}
-					>{#each NETWORKS as mode (mode)}<option value={mode}
-							>{t(`editor.network.${mode}` as 'editor.network.host')}</option
-						>{/each}{#if !NETWORKS.includes(form.network)}<option value={form.network}
-							>{form.network}</option
-						>{/if}</select
-				>
-			</label>
-			<label
-				><span>{t('editor.publicUrl')}</span><input
-					class="field mono"
-					type="url"
-					bind:value={form.publicUrl}
-					oninput={commit}
-					placeholder="https://app.example.org"
-					spellcheck="false"
-				/><small>{t('editor.publicUrlHint')}</small
-				>{#if form.publicUrl.trim() && !publicURL(form.publicUrl)}<small
-						class="notice-error"
-						role="alert">{t('editor.publicUrlInvalid')}</small
-					>{/if}</label
-			>
-			<label
-				><span>{t('editor.webui')}</span><input
-					class="field mono"
-					type="text"
-					bind:value={form.webui}
-					oninput={commit}
-					placeholder="8096"
-					spellcheck="false"
-				/><small>{t('editor.webuiHint')}</small></label
-			>
-		</div>
-		<label class="check"
-			><input type="checkbox" bind:checked={form.privileged} onchange={commit} /><span
-				>{t('editor.privileged')}</span
-			></label
-		>
-		{#if form.privileged}<p class="notice-warn" role="alert">
-				{t('editor.privilegedWarning')}
-			</p>{/if}
-	</section>
-
-	<section class="tile"><HardwarePicker bind:selected={form.hardware} onchange={commit} /></section>
-	<section class="tile" aria-labelledby="h-paths">
-		<div class="section-head">
-			<h2 class="tile-title" id="h-paths">{t('editor.paths')}</h2>
+{#if form && problems && view === 'form' && services.length > 1}
+	<div class="segments services" role="radiogroup" aria-label={t('editor.service')}>
+		{#each services as entry (entry)}
 			<button
 				type="button"
-				class="btn small"
-				onclick={() => (
-					form!.paths.push({ host: './data', container: '/data', readOnly: false }),
-					commit()
-				)}>{t('editor.addPath')}</button
+				role="radio"
+				aria-checked={service === entry}
+				onclick={() => pickService(entry)}>{entry}</button
 			>
-		</div>
-		{#each form.paths as row, index (index)}
-			<div class="row">
-				{#if row.raw !== undefined}
-					<span class="mono raw"
-						>{typeof row.raw === 'string' ? row.raw : JSON.stringify(row.raw)}</span
-					><span class="muted small-text">{t('editor.rawEntry')}</span>
-				{:else}
-					<label class="grow"
-						><span>{t('editor.hostPath')}</span><input
-							class="field mono"
-							type="text"
-							bind:value={row.host}
-							oninput={commit}
-							spellcheck="false"
-						/></label
-					>
-					<label class="grow"
-						><span>{t('editor.containerPath')}</span><input
-							class="field mono"
-							type="text"
-							bind:value={row.container}
-							oninput={commit}
-							spellcheck="false"
-						/></label
-					>
-					<label
-						><span>&nbsp;</span>
-						<select
-							class="field"
-							value={row.readOnly ? 'ro' : 'rw'}
-							onchange={(event) => ((row.readOnly = event.currentTarget.value === 'ro'), commit())}
-							><option value="rw">{t('editor.readWrite')}</option><option value="ro"
-								>{t('editor.readOnly')}</option
-							></select
-						>
-					</label>
-				{/if}
-				<button
-					type="button"
-					class="btn small remove"
-					aria-label={t('editor.remove')}
-					onclick={() => (form!.paths.splice(index, 1), commit())}>✕</button
-				>
-				{#if problems.paths[index]}<p class="problem" role="alert">{problems.paths[index]}</p>{/if}
-			</div>
-		{:else}<p class="muted small-text">{t('editor.none')}</p>{/each}
-	</section>
-
-	{#if form.network !== 'host' && form.network !== 'none'}
-		<LANAssignment
-			{text}
-			{service}
-			onchange={(next) => {
-				text = next;
-				parse();
-			}}
-		/>
-		<section class="tile" aria-labelledby="h-ports">
-			<div class="section-head">
-				<h2 class="tile-title" id="h-ports">{t('editor.ports')}</h2>
-				<button
-					type="button"
-					class="btn small"
-					onclick={() => (form!.ports.push({ host: '', container: '', protocol: 'tcp' }), commit())}
-					>{t('editor.addPort')}</button
-				>
-			</div>
-			{#each form.ports as row, index (index)}
-				<div class="row">
-					{#if row.raw !== undefined}
-						<span class="mono raw"
-							>{typeof row.raw === 'string' ? row.raw : JSON.stringify(row.raw)}</span
-						><span class="muted small-text">{t('editor.rawEntry')}</span>
-					{:else}
-						<label
-							><span>{t('editor.hostPort')}</span><input
-								class="field mono port"
-								type="text"
-								inputmode="numeric"
-								bind:value={row.host}
-								oninput={commit}
-							/></label
-						>
-						<label
-							><span>{t('editor.containerPort')}</span><input
-								class="field mono port"
-								type="text"
-								inputmode="numeric"
-								bind:value={row.container}
-								oninput={commit}
-							/></label
-						>
-						<label
-							><span>&nbsp;</span><select class="field" bind:value={row.protocol} onchange={commit}
-								><option value="tcp">TCP</option><option value="udp">UDP</option></select
-							></label
-						>
-						<span class="grow"></span>
-					{/if}
-					<button
-						type="button"
-						class="btn small remove"
-						aria-label={t('editor.remove')}
-						onclick={() => (form!.ports.splice(index, 1), commit())}>✕</button
-					>
-					{#if problems.ports[index]}<p class="problem" role="alert">
-							{problems.ports[index]}
-						</p>{/if}
-				</div>
-			{:else}<p class="muted small-text">{t('editor.none')}</p>{/each}
-		</section>
-	{/if}
-
-	{#each [['env', 'editor.env', 'editor.addEnv'], ['labels', 'editor.labels', 'editor.addLabel']] as [key, title, add] (key)}
-		{@const rows = key === 'env' ? form.env : form.labels}
-		<section class="tile" aria-labelledby="h-{key}">
-			<div class="section-head">
-				<h2 class="tile-title" id="h-{key}">{t(title as 'editor.env')}</h2>
-				<button
-					type="button"
-					class="btn small"
-					onclick={() => (rows.push({ name: '', value: '' }), commit())}
-					>{t(add as 'editor.addEnv')}</button
-				>
-			</div>
-			{#each rows as pair, index (index)}
-				<div class="row">
-					<label class="grow"
-						><span>{t('editor.envName')}</span><input
-							class="field mono"
-							type="text"
-							bind:value={pair.name}
-							oninput={commit}
-							spellcheck="false"
-						/></label
-					>
-					<label class="grow"
-						><span>{t('editor.envValue')}</span><input
-							class="field mono"
-							type="text"
-							bind:value={pair.value}
-							oninput={commit}
-							spellcheck="false"
-						/></label
-					>
-					<button
-						type="button"
-						class="btn small remove"
-						aria-label={t('editor.remove')}
-						onclick={() => (rows.splice(index, 1), commit())}>✕</button
-					>
-					{#if key === 'env' && problems.env[index]}<p class="problem" role="alert">
-							{problems.env[index]}
-						</p>{/if}
-				</div>
-			{:else}<p class="muted small-text">{t('editor.none')}</p>{/each}
-		</section>
-	{/each}
-{:else if !loadError && !yamlError && original}
-	<p class="notice-warn">{t('editor.noServices')}</p>
+		{/each}
+	</div>
 {/if}
 
-{#if loaded}<AppProxy app={name} {members} version={proxyVersion} /><AppIpv64 app={name} />{/if}
+{#if loaded}
+	<section class="tile form" aria-label={t('editor.title', { name })}>
+		<FormRow
+			label={t('apps.name')}
+			hint={t('editor.location', { path: `/config/apps/${name}/compose.yaml` })}
+		>
+			<p class="text mono">
+				{name}{#if services.length > 1}<span class="muted"> · {service}</span>{/if}
+			</p>
+		</FormRow>
+		{#if view === 'compose'}
+			<FormRow label={t('appform.composeFile')}>
+				<textarea
+					class="field mono yaml"
+					bind:value={text}
+					spellcheck="false"
+					aria-label={t('editor.compose')}></textarea>
+			</FormRow>
+		{:else if form && problems}
+			<FormRow
+				label={t('appform.repository')}
+				id="image"
+				changed={differs('image')}
+				hint={!validImage(form.image)
+					? t('editor.imageInvalid')
+					: updateAvailable
+						? t('appform.updateAvailable')
+						: ''}
+				tone={!validImage(form.image) ? 'error' : updateAvailable ? 'warn' : ''}
+			>
+				<div class="line">
+					<input
+						id="image"
+						class="field mono"
+						bind:value={form.image}
+						oninput={commit}
+						spellcheck="false"
+						aria-invalid={!validImage(form.image)}
+					/>
+				</div>
+			</FormRow>
+			<FormRow
+				label={t('editor.webui')}
+				id="webui"
+				changed={differs('webui')}
+				hint={t('editor.webuiHint')}
+			>
+				<div class="line">
+					<input
+						id="webui"
+						class="field mono"
+						bind:value={form.webui}
+						oninput={commit}
+						placeholder="8096"
+						spellcheck="false"
+					/>
+				</div>
+			</FormRow>
+			<FormRow label={t('editor.restart')} id="restart" changed={differs('restart')}>
+				<div class="line">
+					<select id="restart" class="field" bind:value={form.restart} onchange={commit}
+						>{#each RESTART_POLICIES as policy (policy)}<option value={policy}
+								>{t(`editor.restart.${policy}` as 'editor.restart.no')}</option
+							>{/each}{#if !RESTART_POLICIES.includes(form.restart)}<option value={form.restart}
+								>{form.restart}</option
+							>{/if}</select
+					>
+				</div>
+			</FormRow>
+			{#if advanced}
+				<FormRow
+					label={t('editor.publicUrl')}
+					id="public-url"
+					changed={differs('publicUrl')}
+					hint={form.publicUrl.trim() && !publicURL(form.publicUrl)
+						? t('editor.publicUrlInvalid')
+						: t('editor.publicUrlHint')}
+					tone={form.publicUrl.trim() && !publicURL(form.publicUrl) ? 'error' : ''}
+				>
+					<div class="line">
+						<input
+							id="public-url"
+							class="field mono"
+							type="url"
+							bind:value={form.publicUrl}
+							oninput={commit}
+							placeholder="https://app.example.org"
+							spellcheck="false"
+						/>
+					</div>
+				</FormRow>
+				<FormRow
+					label={t('appform.cpus')}
+					changed={differs('cpuset')}
+					hint={validCpuset(form.cpuset) ? t('appform.cpusHint') : t('appform.cpusInvalid')}
+					tone={validCpuset(form.cpuset) ? '' : 'error'}
+				>
+					<CpuPicker
+						bind:cpuset={form.cpuset}
+						threads={system.info?.cpu.threads ?? 0}
+						onchange={commit}
+					/>
+				</FormRow>
+				<FormRow
+					label={t('appform.memory')}
+					id="memory"
+					changed={differs('memLimit')}
+					hint={validMemLimit(form.memLimit) ? t('appform.memoryHint') : t('appform.memoryInvalid')}
+					tone={validMemLimit(form.memLimit) ? '' : 'error'}
+				>
+					<MemoryLimit id="memory" bind:value={form.memLimit} onchange={commit} />
+				</FormRow>
+			{/if}
+
+			<FormSection title={t('appform.sectionAccess')} />
+			<FormRow
+				label={t('editor.network')}
+				id="network"
+				changed={differs('network')}
+				hint={t('appform.networkHint')}
+			>
+				<div class="line">
+					<select id="network" class="field" bind:value={form.network} onchange={commit}
+						>{#each NETWORKS as mode (mode)}<option value={mode}
+								>{t(`editor.network.${mode}` as 'editor.network.host')}</option
+							>{/each}{#if !NETWORKS.includes(form.network)}<option value={form.network}
+								>{form.network}</option
+							>{/if}</select
+					>
+				</div>
+			</FormRow>
+			{#if form.network !== 'host' && form.network !== 'none'}
+				<FormRow label={t('lan.title')}>
+					<LANAssignment
+						{text}
+						{service}
+						onchange={(next) => {
+							text = next;
+							parse();
+						}}
+					/>
+				</FormRow>
+			{/if}
+			<FormRow label={t('appform.httpsName')}>
+				<AppProxy app={name} {members} version={proxyVersion} embedded />
+			</FormRow>
+			{#if proxy}
+				<FormRow
+					label={t('appform.tailscale')}
+					hint={published ? t('appform.tailnetOnHint') : t('appform.tailnetOffHint')}
+					tone={published ? 'ok' : ''}
+				>
+					<div class="line">
+						<span class="state-text">{t(published ? 'appform.on' : 'appform.off')}</span>
+						<button
+							type="button"
+							class="btn"
+							onclick={() => (tailnetDialog = published ? 'remove' : 'publish')}
+							><Icon name="tailnet" size={15} />{t(
+								published ? 'docker.tailnetUnpublish' : 'docker.tailnetPublish',
+							)}</button
+						>
+					</div>
+				</FormRow>
+			{/if}
+			<FormRow label={t('appform.ipv64')}>
+				<AppIpv64 app={name} embedded />
+			</FormRow>
+			<FormRow
+				label={t('editor.privileged')}
+				changed={differs('privileged')}
+				hint={form.privileged ? t('editor.privilegedWarning') : ''}
+				tone={form.privileged ? 'warn' : ''}
+			>
+				<Toggle bind:checked={form.privileged} label={t('editor.privileged')} onchange={commit} />
+			</FormRow>
+
+			<FormSection title={t('appform.sectionDevices')} />
+			<FormRow
+				label={t('appform.gpu')}
+				changed={differs('hardware')}
+				hint={t('hardware.containerHint')}
+			>
+				<HardwarePicker bind:selected={form.hardware} onchange={commit} />
+			</FormRow>
+			{#each form.devices as row, index (index)}
+				{#if row.raw !== undefined}
+					<FormRow label={t('appform.device')} hint={t('editor.rawEntry')}>
+						<p class="text mono">{JSON.stringify(row.raw)}</p>
+					</FormRow>
+				{:else}
+					<FormRow
+						label={t('appform.device')}
+						changed={differs('devices')}
+						hint={validDevice(row.value) ? '' : t('appform.addDeviceHint')}
+						tone={validDevice(row.value) ? '' : 'error'}
+					>
+						<div class="line">
+							<input
+								class="field mono"
+								bind:value={row.value}
+								oninput={commit}
+								aria-label={t('appform.device')}
+								spellcheck="false"
+							/>
+							{#if advanced}<button
+									type="button"
+									class="btn"
+									onclick={() => (form!.devices.splice(index, 1), commit())}
+									>{t('editor.remove')}</button
+								>{/if}
+						</div>
+					</FormRow>
+				{/if}
+			{/each}
+
+			<FormSection title={t('appform.sectionEntries')} />
+			{#each form.paths as row, index (index)}
+				{#if row.raw !== undefined}
+					<FormRow label={t('editor.paths')} hint={t('editor.rawEntry')}>
+						<p class="text mono">
+							{typeof row.raw === 'string' ? row.raw : JSON.stringify(row.raw)}
+						</p>
+					</FormRow>
+				{:else}
+					<FormRow
+						label={row.container || t('apps.ownPath')}
+						changed={rowChanged('paths', index)}
+						hint={problems.paths[index] ||
+							[
+								t('appform.containerPathHint', { path: row.container }),
+								where(row.host),
+								row.readOnly ? t('editor.readOnly') : '',
+							]
+								.filter(Boolean)
+								.join(' · ')}
+						tone={problems.paths[index] ? 'error' : ''}
+					>
+						<PathField label={row.container} bind:value={row.host} oninput={commit} />
+						{#if advanced}
+							<div class="line">
+								<input
+									class="field mono"
+									bind:value={row.container}
+									oninput={commit}
+									aria-label={t('editor.containerPath')}
+									spellcheck="false"
+								/>
+								<select
+									class="field ro"
+									value={row.readOnly ? 'ro' : 'rw'}
+									aria-label={t('editor.readOnly')}
+									onchange={(event) => (
+										(row.readOnly = event.currentTarget.value === 'ro'),
+										commit()
+									)}
+									><option value="rw">{t('editor.readWrite')}</option><option value="ro"
+										>{t('editor.readOnly')}</option
+									></select
+								>
+								<button
+									type="button"
+									class="btn"
+									onclick={() => (form!.paths.splice(index, 1), commit())}
+									>{t('editor.remove')}</button
+								>
+							</div>
+						{/if}
+					</FormRow>
+				{/if}
+			{/each}
+			{#if form.network !== 'host' && form.network !== 'none'}
+				{#each form.ports as row, index (index)}
+					{#if row.raw !== undefined}
+						<FormRow label={t('editor.ports')} hint={t('editor.rawEntry')}>
+							<p class="text mono">
+								{typeof row.raw === 'string' ? row.raw : JSON.stringify(row.raw)}
+							</p>
+						</FormRow>
+					{:else}
+						<FormRow
+							label={t('apps.portDefault', { port: row.container || '?' })}
+							changed={rowChanged('ports', index)}
+							hint={problems.ports[index] ||
+								t('appform.containerPortHint', { port: `${row.container}/${row.protocol}` })}
+							tone={problems.ports[index] ? 'error' : ''}
+						>
+							<div class="line">
+								<input
+									class="field mono short"
+									inputmode="numeric"
+									bind:value={row.host}
+									oninput={commit}
+									aria-label={t('editor.hostPort')}
+								/>
+								{#if advanced}
+									<input
+										class="field mono short"
+										inputmode="numeric"
+										bind:value={row.container}
+										oninput={commit}
+										aria-label={t('editor.containerPort')}
+									/>
+									<select
+										class="field short"
+										bind:value={row.protocol}
+										onchange={commit}
+										aria-label={t('apps.protocol')}
+										><option value="tcp">TCP</option><option value="udp">UDP</option></select
+									>
+									<button
+										type="button"
+										class="btn"
+										onclick={() => (form!.ports.splice(index, 1), commit())}
+										>{t('editor.remove')}</button
+									>
+								{/if}
+							</div>
+						</FormRow>
+					{/if}
+				{/each}
+			{/if}
+			{#each form.env as pair, index (index)}
+				<FormRow
+					label={pair.name || t('apps.ownVar')}
+					changed={envChanged(pair)}
+					hint={problems.env[index] || t('appform.variable', { name: pair.name })}
+					tone={problems.env[index] ? 'error' : ''}
+				>
+					<div class="line">
+						{#if advanced}<input
+								class="field mono short-name"
+								bind:value={pair.name}
+								oninput={commit}
+								aria-label={t('editor.envName')}
+								spellcheck="false"
+							/>{/if}
+						<input
+							class="field mono"
+							bind:value={pair.value}
+							oninput={commit}
+							aria-label={pair.name}
+							spellcheck="false"
+						/>
+						{#if advanced}<button
+								type="button"
+								class="btn"
+								onclick={() => (form!.env.splice(index, 1), commit())}>{t('editor.remove')}</button
+							>{/if}
+					</div>
+				</FormRow>
+			{/each}
+			{#if advanced}
+				{#each form.labels as pair, index (index)}
+					<FormRow
+						label={pair.name || t('appform.label')}
+						changed={differs('labels')}
+						hint={t('appform.label')}
+					>
+						<div class="line">
+							<input
+								class="field mono short-name"
+								bind:value={pair.name}
+								oninput={commit}
+								aria-label={t('editor.envName')}
+								spellcheck="false"
+							/>
+							<input
+								class="field mono"
+								bind:value={pair.value}
+								oninput={commit}
+								aria-label={t('editor.envValue')}
+								spellcheck="false"
+							/>
+							<button
+								type="button"
+								class="btn"
+								onclick={() => (form!.labels.splice(index, 1), commit())}
+								>{t('editor.remove')}</button
+							>
+						</div>
+					</FormRow>
+				{/each}
+			{/if}
+			<div class="links">
+				<button type="button" class="link" onclick={() => (advanced = !advanced)}
+					>{advanced ? t('appform.fewer') : t('appform.more', { count: hiddenCount })}</button
+				>
+				<button type="button" class="link" onclick={() => (adding = true)}
+					><Icon name="plus" size={14} />{t('appform.addEntry')}</button
+				>
+			</div>
+		{:else if !loadError && !yamlError && original}
+			<p class="notice-warn">{t('editor.noServices')}</p>
+		{/if}
+
+		{#if result}
+			<div class="result {result.ok ? 'notice-ok' : 'notice-error'}" role="status">
+				{result.text}{#if result.detail}<pre>{result.detail}</pre>{/if}
+			</div>
+		{/if}
+		<div class="apply">
+			<button type="button" class="btn btn-primary" onclick={apply} disabled={blocked}
+				>{t('editor.apply')}</button
+			>
+			<button
+				type="button"
+				class="btn"
+				disabled={!changed || applying}
+				onclick={() => (confirmDiscard = true)}>{t('editor.discard')}</button
+			>
+			<a class="btn" href="/docker">{t('common.done')}</a>
+			<span class="muted note" role="status"
+				>{applying
+					? t('editor.applying')
+					: changed
+						? t('editor.applyNote')
+						: t('editor.unchanged')}</span
+			>
+			<button type="button" class="link" onclick={() => show(view === 'form' ? 'compose' : 'form')}
+				>{t(view === 'form' ? 'appform.editCompose' : 'apps.asForm')}</button
+			>
+		</div>
+	</section>
+{/if}
+
 {#if tailnetDialog}<TailnetDialog
 		app={name}
 		mode={tailnetDialog}
@@ -668,31 +887,7 @@
 		}}
 	/>{/if}
 
-{#if result}
-	<div class={result.ok ? 'notice-ok' : 'notice-error'} role="status">
-		{result.text}{#if result.detail}<pre>{result.detail}</pre>{/if}
-	</div>
-{/if}
-{#if loaded}
-	<div class="apply">
-		<span class="muted note" role="status"
-			>{applying
-				? t('editor.applying')
-				: changed
-					? t('editor.applyNote')
-					: t('editor.unchanged')}</span
-		>
-		<button
-			type="button"
-			class="btn"
-			disabled={!changed || applying}
-			onclick={() => (confirmDiscard = true)}>{t('editor.discard')}</button
-		>
-		<button type="button" class="btn btn-primary" onclick={apply} disabled={blocked}
-			>{t('editor.apply')}</button
-		>
-	</div>
-{/if}
+{#if adding}<AddEntryDialog onadd={addEntry} onclose={() => (adding = false)} />{/if}
 
 {#if confirmDiscard}<Dialog
 		title={t('editor.discardTitle')}
@@ -761,9 +956,6 @@
 	</Dialog>{/if}
 
 <style>
-	.location {
-		font-size: var(--text-base);
-	}
 	.segments {
 		display: inline-flex;
 		align-self: flex-start;
@@ -788,89 +980,6 @@
 	.segments button[aria-checked='true'] {
 		background: var(--accent);
 		color: var(--on-accent);
-	}
-	section {
-		display: flex;
-		flex-direction: column;
-		gap: 12px;
-		padding: 18px;
-	}
-	.section-head {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 12px;
-	}
-	.grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-		gap: 14px;
-	}
-	label {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		font-size: var(--text-base);
-	}
-	label > span {
-		color: var(--muted);
-	}
-	small {
-		font-size: var(--text-sm);
-		color: var(--muted);
-	}
-	.check {
-		flex-direction: row;
-		align-items: center;
-		gap: 10px;
-		font-size: var(--text-md);
-	}
-	.check span {
-		color: var(--text);
-	}
-	.check input {
-		width: 18px;
-		height: 18px;
-		margin: 0;
-	}
-	.row {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-end;
-		gap: 10px;
-		padding-top: 12px;
-		border-top: 1px solid var(--panel-border);
-	}
-	.grow {
-		flex: 1 1 200px;
-		min-width: 0;
-	}
-	.port {
-		width: 8rem;
-	}
-	.raw {
-		flex: 1 1 200px;
-		align-self: center;
-		font-size: var(--text-base);
-		overflow-wrap: anywhere;
-	}
-	.small {
-		height: 2.25rem;
-		padding: 0 0.75rem;
-		font-size: var(--text-base);
-	}
-	.small-text {
-		align-self: center;
-		font-size: var(--text-base);
-	}
-	.remove {
-		height: 2.75rem;
-		color: var(--muted);
-	}
-	.problem {
-		flex: 1 1 100%;
-		font-size: var(--text-base);
-		color: var(--warn-text);
 	}
 	.yaml {
 		min-height: 60vh;
@@ -901,7 +1010,11 @@
 		font-size: var(--text-md);
 	}
 	.quick {
-		gap: 8px;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px 16px;
+		font-size: var(--text-md);
 	}
 	.state {
 		display: inline-flex;
@@ -929,25 +1042,6 @@
 		border-radius: var(--radius-ctl);
 		line-height: 1.5;
 	}
-	/* Always in reach at the bottom of the window while editing. */
-	.apply {
-		position: sticky;
-		bottom: 0;
-		z-index: 5;
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: flex-end;
-		gap: 12px;
-		padding: 10px var(--tile-pad);
-		background: var(--surface);
-		border: 1px solid var(--panel-border);
-		border-radius: var(--radius-tile);
-		box-shadow: var(--panel-shadow);
-	}
-	.apply .note {
-		flex: 1 1 16rem;
-	}
 	.note {
 		font-size: var(--text-base);
 	}
@@ -958,16 +1052,78 @@
 		white-space: pre-wrap;
 		word-break: break-word;
 	}
+	.segments.services {
+		margin-bottom: calc(-1 * var(--space-2));
+	}
+	.form {
+		padding: var(--space-2) 0 0;
+	}
+	.text {
+		margin: 0;
+		padding-top: 0.5rem;
+		font-size: var(--text-md);
+	}
+	.state-text {
+		min-width: 3rem;
+		font-size: var(--text-md);
+	}
+	.form :global(.line > .field.ro) {
+		flex: 0 1 12rem;
+	}
+	.form :global(.short-name) {
+		flex: 0 1 12rem;
+	}
+	.links {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: var(--space-2);
+		padding: var(--space-3) var(--space-4) var(--space-2) calc(min(17rem, 30%) + 2 * var(--space-4));
+	}
+	.link {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 0;
+		background: none;
+		border: 0;
+		color: var(--accent);
+		font: inherit;
+		font-size: var(--text-md);
+		cursor: pointer;
+	}
+	.link:hover {
+		text-decoration: underline;
+	}
+	.result {
+		margin: var(--space-2) var(--space-4);
+	}
+	/* Always in reach at the bottom of the window while editing. */
+	.apply {
+		position: sticky;
+		bottom: 0;
+		z-index: 5;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-2) 12px;
+		margin-top: var(--space-2);
+		padding: var(--space-3) var(--space-4) var(--space-3) calc(min(17rem, 30%) + 2 * var(--space-4));
+		background: var(--surface);
+		border-top: 1px solid var(--border);
+		border-radius: 0 0 var(--radius-tile) var(--radius-tile);
+	}
+	.apply .note {
+		flex: 1 1 12rem;
+		text-align: right;
+	}
 	@media (max-width: 760px) {
-		.grid {
-			grid-template-columns: minmax(0, 1fr);
+		.links,
+		.apply {
+			padding-left: var(--space-3);
 		}
-		.row {
-			flex-wrap: wrap;
-		}
-		.row > label {
-			min-width: 0;
-			flex: 1 1 100%;
+		.apply .note {
+			text-align: left;
 		}
 	}
 </style>

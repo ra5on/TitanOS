@@ -77,6 +77,20 @@ func (s *Server) handleAppTemplate(w http.ResponseWriter, r *http.Request) {
 		writeCatalogError(w, err)
 		return
 	}
+	s.writeTemplate(w, r, compose)
+}
+
+// blankTemplate is where an own container starts: one service whose image
+// the form asks for.
+const blankTemplate = "services:\n  app:\n    image: \"\"\n    restart: unless-stopped\n"
+
+// handleBlankTemplate answers like a template of the catalog, for an own
+// container that is set up in the same form.
+func (s *Server) handleBlankTemplate(w http.ResponseWriter, r *http.Request) {
+	s.writeTemplate(w, r, blankTemplate)
+}
+
+func (s *Server) writeTemplate(w http.ResponseWriter, r *http.Request, compose string) {
 	appdata := ""
 	if settings := s.opts.Docker.Current(); settings.Enabled && settings.Volume != "" {
 		appdata = filepath.Join(s.opts.Storage.MountPoint(settings.Volume), "appdata")

@@ -2,7 +2,7 @@ import { publicURL } from '../app-links.ts';
 // Turns a template from the app store into the fields of the install
 // panel and, with what was entered there, into the compose file of the app.
 
-import { isScalar, isSeq, parseDocument } from 'yaml';
+import { parseDocument } from 'yaml';
 import { readService, serviceNames, WEBUI_LABEL, writeService, type Pair } from './service.ts';
 import { validImage } from './image.ts';
 
@@ -98,7 +98,10 @@ export type InstallForm = {
 	vars: VarField[];
 	paths: PathField[];
 	ports: PortField[];
-	own: { vars: Pair[]; paths: OwnPath[]; ports: OwnPort[] };
+	/** CPUs and memory of the main service (advanced view); empty for no limit. */
+	cpuset: string;
+	memLimit: string;
+	own: { vars: Pair[]; paths: OwnPath[]; ports: OwnPort[]; labels: Pair[]; devices: string[] };
 };
 
 type Meta = {
@@ -217,7 +220,9 @@ export function readTemplate(
 		vars: [],
 		paths: [],
 		ports: [],
-		own: { vars: [], paths: [], ports: [] },
+		cpuset: '',
+		memLimit: '',
+		own: { vars: [], paths: [], ports: [], labels: [], devices: [] },
 	};
 	const reserved = new Set<string>();
 	const risks = new Set<Risk>();
@@ -346,6 +351,9 @@ export function readTemplate(
 		});
 	}
 	form.risks = [...risks];
+	const mainEntries = readService(doc, form.main);
+	form.cpuset = mainEntries.cpuset;
+	form.memLimit = mainEntries.memLimit;
 	return form;
 }
 
@@ -360,6 +368,9 @@ export type Problems = {
 	ownVars: ('' | 'empty' | 'invalid' | 'duplicate' | 'replaces')[];
 	ownPaths: ('' | 'invalid' | 'volatile')[];
 	ownPorts: ('' | 'empty' | 'invalid' | 'duplicate' | 'inUse')[];
+	ownDevices: ('' | 'invalid')[];
+	cpuset: boolean;
+	memLimit: boolean;
 	/** Number of required fields that are still empty. */
 	missing: number;
 	blocking: boolean;
@@ -373,6 +384,16 @@ const SYSTEM_PATHS =
 
 const validPort = (value: string) =>
 	/^\d{1,5}$/.test(value) && Number(value) >= 1 && Number(value) <= 65535;
+
+/** CPUs as Compose's cpuset takes them: "3", "8-11", "0,2,4-5"; empty for all. */
+export const validCpuset = (value: string) =>
+	value.trim() === '' || /^\d+(-\d+)?(,\d+(-\d+)?)*$/.test(value.trim());
+/** A memory limit: bytes or a number with b, k, m or g; empty for none. */
+export const validMemLimit = (value: string) =>
+	value.trim() === '' || /^\d+(\.\d+)?[bkmg]?$/i.test(value.trim());
+/** A device of the host, optionally with its path in the container and permissions. */
+export const validDevice = (value: string) =>
+	/^\/dev\/[^\s:]+(:\/[^\s:]+(:[rwm]+)?)?$/.test(value.trim());
 
 function pathProblem(host: string, container: string): '' | 'invalid' | 'volatile' {
 	if (!host.trim() || !container.trim().startsWith('/')) return 'invalid';
@@ -411,6 +432,9 @@ export function check(form: InstallForm, installed: string[], used: Map<string, 
 				? 'empty'
 				: portProblem(row.host, row.container, form.ports.length + at),
 		),
+		ownDevices: form.own.devices.map((device) => (validDevice(device) ? '' : 'invalid')),
+		cpuset: !validCpuset(form.cpuset),
+		memLimit: !validMemLimit(form.memLimit),
 		missing: 0,
 		blocking: false,
 	};
@@ -422,7 +446,10 @@ export function check(form: InstallForm, installed: string[], used: Map<string, 
 		problems.missing > 0 ||
 		[...problems.paths, ...problems.ownPaths].includes('invalid') ||
 		[...problems.ports, ...problems.ownPorts].some(Boolean) ||
-		problems.ownVars.some((problem) => problem !== '' && problem !== 'replaces');
+		problems.ownVars.some((problem) => problem !== '' && problem !== 'replaces') ||
+		problems.ownDevices.some(Boolean) ||
+		problems.cpuset ||
+		problems.memLimit;
 	return problems;
 }
 
@@ -497,14 +524,9 @@ export function build(
 		}
 
 		// A device the NAS does not have would keep the container from starting.
-		const devices = doc.getIn(['services', service, 'devices']);
-		if (isSeq(devices) && form.missingDevices.length > 0) {
-			devices.items = devices.items.filter(
-				(item) =>
-					!(isScalar(item) && form.missingDevices.includes(String(item.value).split(':')[0])),
-			);
-			if (devices.items.length === 0) doc.deleteIn(['services', service, 'devices']);
-		}
+		entries.devices = entries.devices.filter(
+			(row) => row.raw !== undefined || !form.missingDevices.includes(row.value.split(':')[0]),
+		);
 
 		if (service === form.main) {
 			for (const pair of form.own.vars) {
@@ -525,6 +547,12 @@ export function build(
 						protocol: row.protocol,
 					});
 			}
+			for (const pair of form.own.labels)
+				if (pair.name.trim()) entries.labels.push({ name: pair.name.trim(), value: pair.value });
+			for (const device of form.own.devices)
+				if (device.trim()) entries.devices.push({ value: device.trim() });
+			entries.cpuset = form.cpuset.trim();
+			entries.memLimit = form.memLimit.trim();
 		}
 		writeService(doc, service, entries);
 	}

@@ -324,6 +324,11 @@ func TestApps(t *testing.T) {
 	if !slices.Contains(runner.commands, up) {
 		t.Errorf("missing %q in %v", up, runner.commands)
 	}
+	// Missing images are pulled first with progress, before "up".
+	all := strings.Join(runner.commands, "\n")
+	if pull := strings.Index(all, "compose --progress plain --project-name whoami"); pull < 0 || !strings.Contains(all, "pull --policy missing --ignore-buildable --ignore-pull-failures") || pull > strings.Index(all, " up --detach") {
+		t.Errorf("no pull with progress before up:\n%s", all)
+	}
 	if stored, err := m.Compose("whoami"); err != nil || stored != compose {
 		t.Errorf("stored compose file = %q, %v", stored, err)
 	}
@@ -607,4 +612,23 @@ func (r updateFailTransport) RoundTrip(req *http.Request) (*http.Response, error
 		return nil, errors.New("registry unavailable")
 	}
 	return r.base.RoundTrip(req)
+}
+
+func TestJobLogKeepsOneLinePerImageAndLayer(t *testing.T) {
+	var log jobLog
+	for _, line := range []string{
+		"web Pulling",
+		"034d6572bf28 Pulling fs layer",
+		"034d6572bf28 Downloading [>     ]  32.1kB/2.206MB",
+		"034d6572bf28 Downloading [===>  ]  1.703MB/2.206MB",
+		"Container web-1 Created",
+		"034d6572bf28 Pull complete",
+		"web Pulled",
+	} {
+		log.add(line)
+	}
+	want := "web Pulled\n034d6572bf28 Pull complete\nContainer web-1 Created"
+	if got := log.String(); got != want {
+		t.Errorf("log = %q, want %q", got, want)
+	}
 }

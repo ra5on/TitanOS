@@ -10,11 +10,9 @@
 		type Share,
 	} from '#lib/api.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
-	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { localize } from '#lib/compose/template.ts';
 	import { errorText, i18n, t, tOr } from '#lib/i18n/index.svelte.ts';
-	import InstallPanel from './InstallPanel.svelte';
 
 	// The order the categories are offered in; what a source calls differently follows.
 	const CATEGORIES = [
@@ -54,7 +52,6 @@
 	let category = $state('all');
 	let from = $state('all');
 	let sourcesOpen = $state(false);
-	let selected = $state<CatalogApp | null>(null);
 	let draft = $state({ url: '', name: '' });
 	let sourceError = $state('');
 	let busy = $state(false);
@@ -66,21 +63,6 @@
 		void [search, category, from, onlyInstalled];
 		limit = PAGE;
 	});
-	// The open install form has entries of the user; switching or closing asks first.
-	let panelDirty = $state(false);
-	let switching = $state<{ app: CatalogApp | null } | null>(null);
-	function choose(app: CatalogApp | null) {
-		if (app && selected && app.id === selected.id && app.source === selected.source) return;
-		if (panelDirty && selected) switching = { app };
-		else selected = app;
-	}
-	function confirmSwitch() {
-		if (!switching) return;
-		panelDirty = false;
-		selected = switching.app;
-		switching = null;
-	}
-
 	const code = (err: unknown) => (err instanceof ApiError ? err.code : 'internal');
 
 	$effect(() => {
@@ -176,7 +158,6 @@
 	}
 
 	async function removeSource(source: AppSource) {
-		if (selected?.source === source.id) selected = null;
 		if (from === source.id) from = 'all';
 		await change(() => api.delete<AppStore>(`/apps/sources/${source.id}`));
 	}
@@ -338,11 +319,9 @@
 			</div>
 			<div class="cards">
 				{#each visible.slice(0, limit) as app (`${app.source}/${app.id}`)}
-					<button
-						type="button"
+					<a
 						class="tile card"
-						aria-pressed={selected?.id === app.id && selected.source === app.source}
-						onclick={() => choose(app)}
+						href="/apps/install/{encodeURIComponent(app.source)}/{encodeURIComponent(app.id)}"
 					>
 						<span class="card-head">
 							<span class="monogram" aria-hidden="true"
@@ -361,7 +340,7 @@
 								>{t(installed(app) ? 'apps.installed' : 'apps.install')}</span
 							>
 						</span>
-					</button>
+					</a>
 				{/each}
 			</div>
 			{#if visible.length > limit}
@@ -374,34 +353,7 @@
 			{/if}
 			{#if visible.length === 0}<EmptyState inline title={t('apps.none')} />{/if}
 		</div>
-
-		{#if selected}
-			{#key `${selected.source}/${selected.id}`}
-				<InstallPanel
-					app={selected}
-					source={sourceName(selected.source)}
-					description={describe(selected)}
-					{docker}
-					{shares}
-					bind:dirty={panelDirty}
-					onclose={() => choose(null)}
-				/>
-			{/key}
-		{/if}
 	</div>
-{/if}
-
-{#if switching}
-	<Dialog title={t('apps.discardTitle')} onclose={() => (switching = null)}>
-		<p>{t('apps.discardText', { name: selected?.name ?? '' })}</p>
-		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (switching = null)}
-				>{t('shares.keepEditing')}</button
-			><button type="button" class="btn btn-warn" onclick={confirmSwitch}
-				>{t('shares.discard')}</button
-			>
-		</div>
-	</Dialog>
 {/if}
 
 <style>
@@ -592,6 +544,7 @@
 		color: var(--text);
 		font: inherit;
 		text-align: left;
+		text-decoration: none;
 		cursor: pointer;
 		transition:
 			border-color 0.15s ease,
@@ -599,9 +552,6 @@
 	}
 	.card:hover {
 		transform: translateY(-1px);
-	}
-	.card[aria-pressed='true'] {
-		border-color: var(--accent);
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.card {
