@@ -106,6 +106,21 @@ class ImageHardwareTest(unittest.TestCase):
         self.module("kernel/drivers/net/wireless/intel/iwlwifi/iwlwifi.ko.xz", "iwlwifi-100-5.ucode")
         hardware.check_image(self.root, self.kernel)
 
+    def test_links_are_followed_inside_the_image(self):
+        # Debian's alternatives: firmware/regulatory.db -> /etc/alternatives/... -> /lib/firmware/regulatory.db-debian,
+        # all absolute. They must resolve in the image, not on the build machine.
+        firmware = self.root / "usr/lib/firmware"
+        (firmware / "regulatory.db").unlink()
+        alternatives = self.root / "etc/alternatives"
+        alternatives.mkdir(parents=True)
+        (alternatives / "regulatory.db").symlink_to("/lib/firmware/regulatory.db-debian")
+        (firmware / "regulatory.db").symlink_to("/etc/alternatives/regulatory.db")
+        (self.root / "lib").symlink_to("usr/lib")
+        with self.assertRaisesRegex(ValueError, "regulatory.db"):
+            hardware.check_image(self.root, self.kernel)
+        (firmware / "regulatory.db-debian").write_bytes(b"db")
+        hardware.check_image(self.root, self.kernel)
+
     def test_regulatory_db_is_required(self):
         (self.root / "usr/lib/firmware/regulatory.db").unlink()
         with self.assertRaisesRegex(ValueError, "regulatory.db"):

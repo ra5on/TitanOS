@@ -136,10 +136,25 @@ def check_image(root, kernel):
     check_initrd_without_graphics(initrd)
 
 
-def firmware_present(firmware, name):
+def in_image(root, path):
+    """Whether path exists in the image at root. Links are followed inside
+    the image: an absolute target (regulatory.db -> /etc/alternatives/...)
+    means the image's file, never the build machine's."""
+    root = Path(root)
+    for _ in range(20):
+        if path.is_symlink():
+            target = Path(path.readlink())
+            path = root / target.relative_to("/") if target.is_absolute() else path.parent / target
+            continue
+        return path.exists()
+    return False
+
+
+def firmware_present(firmware, name, root=None):
+    root = root or firmware.parents[2]  # <root>/usr/lib/firmware
     if any(char in name for char in "*?["):
-        return any(firmware.glob(name))
-    return any((firmware / (name + suffix)).exists() for suffix in ("", ".zst", ".xz"))
+        return any(in_image(root, path) for path in firmware.glob(name))
+    return any(in_image(root, firmware / (name + suffix)) for suffix in ("", ".zst", ".xz"))
 
 
 def blacklisted(root):
