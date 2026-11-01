@@ -257,6 +257,9 @@ type Manager struct {
 	// btrfsSeen is when mountAll first saw a member of an unmounted Btrfs
 	// mirror (protected by actions). clock replaces time.Now in tests.
 	btrfsSeen map[string]time.Time
+	// cacheSeen is when mountAll first missed the read cache SSD of a
+	// volume (protected by actions).
+	cacheSeen map[string]time.Time
 	// btrfsRemoving names the disk being taken out of a Btrfs volume.
 	btrfsRemoving map[string]string
 	// OnReshaped is told when taking a disk out of a Btrfs volume ended.
@@ -623,7 +626,8 @@ func (m *Manager) refreshSmart(ctx context.Context) {
 // Run mounts the configured volumes as their arrays appear and keeps the
 // SMART values fresh, until ctx is done.
 func (m *Manager) Run(ctx context.Context) {
-	m.RefreshSmart(ctx)
+	// SMART is read after the first round of mounting (stale below): one
+	// slow USB bridge or many SAS disks must not hold up the volumes.
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {

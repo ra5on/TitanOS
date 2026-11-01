@@ -227,7 +227,19 @@ func TestReadCacheWithoutSSDIsMarkedStaleAndStartsEmpty(t *testing.T) {
 	m.saveVolumes(m.volumes)
 	cachedArray(t, m)
 
-	// Without the SSD the array is mounted directly, and that is recorded.
+	// The SSD may come later: first the volume waits for it.
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	now := start
+	m.clock = func() time.Time { return now }
+	if _, err := m.mountSource(ctx, m.volumes[0]); !errors.Is(err, ErrNotPossible) || missing != "" {
+		t.Fatal("did not wait for the SSD:", err, missing)
+	}
+	if !m.btrfsWaiting() {
+		t.Fatal("the volumes count as settled while a cache SSD is awaited")
+	}
+	now = start.Add(cacheGrace)
+
+	// Then the array is mounted directly, and that is recorded.
 	source, err := m.mountSource(ctx, m.volumes[0])
 	if err != nil || source != "UUID=fs" || missing != "tank" {
 		t.Fatal(source, err, missing)

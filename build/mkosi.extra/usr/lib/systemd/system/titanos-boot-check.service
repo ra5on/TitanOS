@@ -12,10 +12,10 @@ FailureAction=reboot
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-# Waits up to five minutes for titand to have its configuration and the
+# Waits up to 15 minutes for titand to have its configuration and the
 # volumes that were mounted before the update.
 ExecStart=/usr/bin/titand -check-boot
-TimeoutStartSec=6min
+TimeoutStartSec=16min
 
 [Install]
 WantedBy=multi-user.target

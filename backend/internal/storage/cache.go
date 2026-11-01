@@ -132,6 +132,11 @@ func (m *Manager) lowerDevice(ctx context.Context, volume VolumeConfig, plain st
 	// the SSD such a volume stays unmounted.
 	mayBeDirty := volume.Cache.Mode == "writeback" || volume.Cache.Removing
 	if !m.cachePresent(volume.Cache) {
+		// A read cache SSD may show up after the array: wait cacheGrace
+		// before mounting without it.
+		if !mayBeDirty && m.cacheWaiting(volume.Name) {
+			return "", fmt.Errorf("%w: waiting for the cache SSD of %s", ErrNotPossible, volume.Name)
+		}
 		if m.OnCacheMissing != nil {
 			m.OnCacheMissing(volume.Name)
 		}
@@ -144,6 +149,7 @@ func (m *Manager) lowerDevice(ctx context.Context, volume VolumeConfig, plain st
 		}
 		return plain, nil
 	}
+	delete(m.cacheSeen, volume.Name)
 	a, ok := m.arrayOf(ctx, volume)
 	if !ok || a.sectors == 0 {
 		return "", fmt.Errorf("%w: array of %s not running", ErrNotPossible, volume.Name)
@@ -701,3 +707,17 @@ func (m *Manager) updateVolume(name string, change func(*VolumeConfig)) error {
 
 // ErrCacheConfigured keeps grow and import away from cached volumes.
 var ErrCacheConfigured = errors.New("storage: switch the SSD cache off first")
+
+// cacheWaiting reports whether the cache SSD of a volume is still within
+// its grace, counted from the first time mountAll missed it.
+func (m *Manager) cacheWaiting(name string) bool {
+	if m.cacheSeen == nil {
+		m.cacheSeen = map[string]time.Time{}
+	}
+	first, seen := m.cacheSeen[name]
+	if !seen {
+		first = m.now()
+		m.cacheSeen[name] = first
+	}
+	return m.now().Sub(first) < cacheGrace
+}

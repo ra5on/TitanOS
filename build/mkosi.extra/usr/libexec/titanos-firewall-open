@@ -13,23 +13,23 @@ flock 9
 accept_first() {
     chain=$1
     rule="-A $chain -m comment --comment titanos-firewall-open -j ACCEPT"
-    first=$("$firewall" -w 5 -S "$chain" | sed -n '2p')
+    first=$("$firewall" -w 30 -S "$chain" | sed -n '2p')
     [ "$first" != "$rule" ] || return 0
     # Move our existing rule to the front if another service changed the order.
-    while "$firewall" -w 5 -C "$chain" -m comment --comment titanos-firewall-open -j ACCEPT 2>/dev/null; do
-        "$firewall" -w 5 -D "$chain" -m comment --comment titanos-firewall-open -j ACCEPT
+    while "$firewall" -w 30 -C "$chain" -m comment --comment titanos-firewall-open -j ACCEPT 2>/dev/null; do
+        "$firewall" -w 30 -D "$chain" -m comment --comment titanos-firewall-open -j ACCEPT
     done
-    "$firewall" -w 5 -I "$chain" 1 -m comment --comment titanos-firewall-open -j ACCEPT
+    "$firewall" -w 30 -I "$chain" 1 -m comment --comment titanos-firewall-open -j ACCEPT
 }
 
 for firewall in iptables ip6tables; do
     for chain in INPUT FORWARD OUTPUT; do
-        "$firewall" -w 5 -P "$chain" ACCEPT
+        "$firewall" -w 30 -P "$chain" ACCEPT
         accept_first "$chain"
     done
     # Docker may prepend its own FORWARD hooks when creating another network.
     # DOCKER-USER is its supported entry point before isolation/filtering rules.
-    "$firewall" -w 5 -S DOCKER-USER >/dev/null 2>&1 || "$firewall" -w 5 -N DOCKER-USER
+    "$firewall" -w 30 -S DOCKER-USER >/dev/null 2>&1 || "$firewall" -w 30 -N DOCKER-USER
     accept_first DOCKER-USER
 done
 

@@ -805,7 +805,7 @@ func (m *Manager) waitNode(ctx context.Context, disk, part string) error {
 		if err == nil && len(nodes) == 1 && slices.ContainsFunc(nodes[0].Children, func(c node) bool { return c.Name == part }) {
 			return nil
 		}
-		if try == 20 {
+		if try == nodeTries {
 			return fmt.Errorf("the new partition %s does not show up", part)
 		}
 		select {

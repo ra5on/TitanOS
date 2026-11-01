@@ -63,15 +63,26 @@ func (m *Manager) createBtrfs(ctx context.Context, req CreateRequest, devices []
 
 const (
 	// btrfsGrace is how long mountAll waits for every member of a mirror
-	// to appear before it mounts with one missing.
-	btrfsGrace = 60 * time.Second
+	// to appear before it mounts with one missing. Disks that spin up one
+	// after another, HBAs with expanders and USB enclosures can take
+	// minutes; a healthy mirror mounted degraded writes one copy only.
+	btrfsGrace = 3 * time.Minute
+	// cacheGrace is how long a read cache waits for its SSD before the
+	// volume mounts without it (which empties the cache on the next start).
+	cacheGrace = 2 * time.Minute
 )
 
-// btrfsWaiting reports whether a mirror is still within its grace.
+// btrfsWaiting reports whether a mirror, or a volume missing its read
+// cache SSD, is still within its grace.
 func (m *Manager) btrfsWaiting() bool {
 	now := m.now()
 	for _, first := range m.btrfsSeen {
 		if now.Sub(first) < btrfsGrace {
+			return true
+		}
+	}
+	for _, first := range m.cacheSeen {
+		if now.Sub(first) < cacheGrace {
 			return true
 		}
 	}

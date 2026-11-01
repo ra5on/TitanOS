@@ -396,11 +396,15 @@ func (m *Manager) Apply(ctx context.Context) error {
 				return err
 			}
 		}
-		if _, err := m.runner.Run(ctx, "", "systemctl", "start", "nut-driver@"+upsName+".service"); err != nil {
-			return fmt.Errorf("the driver does not reach the UPS: %w", err)
-		}
+		// A USB UPS can show up after titand: the driver unit then fails
+		// but restarts by itself. Server and monitor start anyway and
+		// wait for it, so the NAS still shuts down on a low battery.
+		_, driverErr := m.runner.Run(ctx, "", "systemctl", "start", "nut-driver@"+upsName+".service")
 		if _, err := m.runner.Run(ctx, "", "systemctl", "start", "nut-server.service", "nut-monitor.service"); err != nil {
 			return err
+		}
+		if driverErr != nil {
+			return fmt.Errorf("the driver does not reach the UPS: %w", driverErr)
 		}
 	case "network":
 		if _, err := m.runner.Run(ctx, "", "systemctl", "start", "nut-monitor.service"); err != nil {
@@ -565,8 +569,22 @@ func (m *Manager) Run(ctx context.Context) {
 	if m.Disabled {
 		return
 	}
-	if err := m.Apply(ctx); err != nil {
-		slog.Warn("UPS not set up", "err", err)
+	apply := func() bool {
+		err := m.Apply(ctx)
+		if err != nil {
+			slog.Warn("UPS not set up", "err", err)
+			m.mu.Lock()
+			m.status.Error = err.Error()
+			m.mu.Unlock()
+		}
+		return err == nil
+	}
+	// At boot the UPS may answer late (USB): try again every minute for
+	// the first ten minutes instead of staying unprotected until the
+	// settings are saved again.
+	retryUntil, nextTry := time.Time{}, time.Time{}
+	if !apply() {
+		retryUntil, nextTry = time.Now().Add(10*time.Minute), time.Now().Add(time.Minute)
 	}
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
@@ -575,13 +593,15 @@ func (m *Manager) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-m.kick:
-			if err := m.Apply(ctx); err != nil {
-				slog.Warn("UPS not set up", "err", err)
-				m.mu.Lock()
-				m.status.Error = err.Error()
-				m.mu.Unlock()
-			}
+			retryUntil = time.Time{}
+			apply()
 		case <-ticker.C:
+			if now := time.Now(); now.Before(retryUntil) && !now.Before(nextTry) {
+				if apply() {
+					retryUntil = time.Time{}
+				}
+				nextTry = now.Add(time.Minute)
+			}
 		}
 		m.look(ctx)
 	}

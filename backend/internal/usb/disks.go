@@ -486,15 +486,25 @@ func (m *Manager) format(ctx context.Context, job *FormatJob, d Disk, req Format
 		return "", err
 	}
 	_, _ = m.runner.Run(ctx, "", "udevadm", "settle", "--timeout=10") // only waits for the kernel and udev; the next step checks the result
-	devices, err := m.List(ctx)
-	if err != nil {
-		return "", err
+	var id string
+	for try := 0; ; try++ {
+		devices, err := m.List(ctx)
+		if err != nil {
+			return "", err
+		}
+		if i := slices.IndexFunc(devices, func(device Device) bool { return device.path == part }); i >= 0 {
+			id = devices[i].ID
+			break
+		}
+		if try == nodeTries {
+			return "", fmt.Errorf("the new filesystem on %s does not show up", part)
+		}
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(m.retryPause()):
+		}
 	}
-	i := slices.IndexFunc(devices, func(device Device) bool { return device.path == part })
-	if i < 0 {
-		return "", fmt.Errorf("the new filesystem on %s does not show up", part)
-	}
-	id := devices[i].ID
 	if req.Mount {
 		m.phase(job, "mount")
 		if err := m.mount(ctx, id); err != nil {
@@ -503,6 +513,10 @@ func (m *Manager) format(ctx context.Context, job *FormatJob, d Disk, req Format
 	}
 	return id, nil
 }
+
+// nodeTries is how often a new partition or filesystem is looked for, one
+// retryPause apart: 30 s, slow USB bridges need more than a few seconds.
+const nodeTries = 120
 
 // newPartition waits for the kernel to show the partition sfdisk made.
 func (m *Manager) newPartition(ctx context.Context, disk string) (string, error) {
@@ -520,7 +534,7 @@ func (m *Manager) newPartition(ctx context.Context, disk string) (string, error)
 				return parts[0], nil
 			}
 		}
-		if try == 20 {
+		if try == nodeTries {
 			return "", fmt.Errorf("the new partition on %s does not show up", disk)
 		}
 		select {

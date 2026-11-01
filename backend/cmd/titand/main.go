@@ -88,7 +88,9 @@ func main() {
 		if !trial.OnTrial() {
 			return
 		}
-		if err := waitReady(opts.httpsAddr, 5*time.Minute); err != nil {
+		// Generous: slow or many disks, a late HBA or a Btrfs mirror waiting
+		// for its members must not send a good update back.
+		if err := waitReady(opts.httpsAddr, 15*time.Minute); err != nil {
 			fmt.Fprintln(os.Stderr, "titand is not ready, this system stays on trial:", err)
 			os.Exit(1)
 		}
@@ -308,7 +310,13 @@ func waitReady(httpsAddr string, patience time.Duration) error {
 	client := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
 	deadline := time.Now().Add(patience)
 	last := errors.New("no answer")
+	reported := time.Now()
 	for time.Now().Before(deadline) {
+		// The journal says what the check is waiting for.
+		if time.Since(reported) >= time.Minute {
+			fmt.Fprintln(os.Stderr, "still waiting for titand:", last)
+			reported = time.Now()
+		}
 		res, err := client.Get("https://" + net.JoinHostPort("127.0.0.1", port) + "/api/v1/health")
 		if err == nil {
 			var health struct{ Ready bool }
