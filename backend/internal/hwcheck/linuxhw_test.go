@@ -42,12 +42,12 @@ var nasClasses = []string{"01", "02", "03", "0c03", "12"}
 // The PCI devices of about 800 real x86-64 machines (testdata/linuxhw, CC-BY-4.0
 // linux-hardware.org) as TitanOS's kernel (the modules of the QEMU
 // snapshot, Debian 6.12) sees them, if no driver had taken them:
-// - a device whose driver on that machine is a module of ours and that a
-//   pattern of ours matches is never "not supported";
-// - storage, network, display, USB and accelerator devices that had a
-//   driver there but have none in 6.12 are listed with the hint TitanOS
-//   shows (testdata/linuxhw/missing-6.12.txt). A new kernel, plugin or
-//   table entry changes the list on purpose: run with -update.
+//   - a device whose driver on that machine is a module of ours and that a
+//     pattern of ours matches is never "not supported";
+//   - storage, network, display, USB and accelerator devices that had a
+//     driver there but have none in 6.12 are listed with the hint TitanOS
+//     shows (testdata/linuxhw/missing-6.12.txt). A new kernel, plugin or
+//     table entry changes the list on purpose: run with -update.
 func TestLinuxHardwareCorpus(t *testing.T) {
 	file, err := os.Open("testdata/linuxhw/lspci-sample.json.gz")
 	if err != nil {
