@@ -21,6 +21,7 @@ CPU microcode             vendor-specific         Debian intel-microcode / amd64
 PCI ID list (pci.ids)     GPL-2.0-or-later or     github.com/pciutils/pciids at the commit in
                           BSD-3-Clause            build/pci-ids.lock (replaces Debian's pci.ids file)
 wireless-regdb            ISC                     Debian source packages
+linuxhw/LsPCI sample      CC-BY-4.0               github.com/linuxhw/LsPCI (test data only, not in the image)
 systemd / systemd-boot    LGPL-2.1-or-later       Debian source packages
 mdadm                     GPL-2.0-or-later        Debian source packages
 btrfs-progs               GPL-2.0-only and others Debian source packages

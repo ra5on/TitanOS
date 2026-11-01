@@ -325,36 +325,44 @@ func (c *Checker) unbound(kernelLog func() string) []UnboundDevice {
 				}
 			}
 		}
-		newer, known := newerKernel[device.ID]
-		module := aliases.module(device.modalias)
-		switch {
-		case len(device.Plugins) > 0:
-			device.Hint = "plugin"
-		case device.Bus == "pci" && known && !kernelAtLeast(release, newer.version):
-			device.Hint, device.Kernel, device.Driver = "kernel", newer.version, newer.driver
-		case module != "":
+		classify(device, aliases, release, func() string {
 			if !logRead {
 				log, logRead = kernelLog(), true
 			}
-			device.Hint, device.Driver = "driver_failed", module
-			device.Messages = driverMessages(log, module, device.Address)
-			for _, fix := range kernelFixes {
-				if fix.driver == module && !kernelAtLeast(release, fix.version) &&
-					slices.ContainsFunc(device.Messages, fix.message.MatchString) {
-					device.Kernel = fix.version
-				}
-			}
-		case device.Bus == "pci" && slices.ContainsFunc(noDriverNeeded, func(prefix string) bool { return strings.HasPrefix(device.Class, prefix) }):
-			device.Hint = "not_needed"
-		default:
-			device.Hint = "unsupported"
-		}
+			return log
+		})
 	}
 	// What needs attention first; devices that need no driver last.
 	sort.SliceStable(devices, func(i, j int) bool {
 		return (devices[i].Hint == "not_needed") != (devices[j].Hint == "not_needed") && devices[j].Hint == "not_needed"
 	})
 	return devices
+}
+
+// classify sets the hint of a device without a driver; its Plugins are
+// already known. kernelLog is asked only for a failed driver.
+func classify(device *UnboundDevice, aliases *moduleAliases, release string, kernelLog func() string) {
+	newer, known := newerKernel[device.ID]
+	module := aliases.module(device.modalias)
+	switch {
+	case len(device.Plugins) > 0:
+		device.Hint = "plugin"
+	case device.Bus == "pci" && known && !kernelAtLeast(release, newer.version):
+		device.Hint, device.Kernel, device.Driver = "kernel", newer.version, newer.driver
+	case module != "":
+		device.Hint, device.Driver = "driver_failed", module
+		device.Messages = driverMessages(kernelLog(), module, device.Address)
+		for _, fix := range kernelFixes {
+			if fix.driver == module && !kernelAtLeast(release, fix.version) &&
+				slices.ContainsFunc(device.Messages, fix.message.MatchString) {
+				device.Kernel = fix.version
+			}
+		}
+	case device.Bus == "pci" && slices.ContainsFunc(noDriverNeeded, func(prefix string) bool { return strings.HasPrefix(device.Class, prefix) }):
+		device.Hint = "not_needed"
+	default:
+		device.Hint = "unsupported"
+	}
 }
 
 // FirmwareMissing is a firmware file a driver asked for and did not get.

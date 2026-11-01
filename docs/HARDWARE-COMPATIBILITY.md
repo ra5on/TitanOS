@@ -334,6 +334,18 @@ Schnappschüsse von echten NAS (thor, titan, …) kommen nach dem Update dazu.
   Condition 3); `sdparm` wird nicht benötigt (Begründung in
   `docs/rules/STORAGE.md`, „Platten-Hinweise“).
 
+### Echte Rechner von linux-hardware.org (Plan 24j)
+
+`backend/internal/hwcheck/testdata/linuxhw/` enthält die PCI-Geräte von 799
+zufällig gewählten Modellen (Desktops, Server, Mini-PCs, Firewalls mit Kernel
+6.x) aus [linuxhw/LsPCI](https://github.com/linuxhw/LsPCI), CC BY 4.0,
+ohne Probe-Kennungen. `TestLinuxHardwareCorpus` ordnet jedes der 10.936
+verschiedenen Geräte der 786 x86-64-Rechner mit den Modulen des Debian-Kernels
+6.12 ein. Ergebnis vom 1.11.2026: Für Speicher, Netzwerk, Grafik, USB und
+Beschleuniger fehlt in 6.12 nur bei einem Gerät der Treiber (10ec:8125 in der
+Variante RTL8125D/BP), und dort zeigt die Seite schon „ab Kernel 6.14“. Ändert
+sich diese Liste (`missing-6.12.txt`), scheitert der Test.
+
 ### Prüfungen beim Bau und Start (Plan 24e–24n)
 
 - **Abbild** (`scripts/check-image-hardware.py`, in `mkosi.finalize`):

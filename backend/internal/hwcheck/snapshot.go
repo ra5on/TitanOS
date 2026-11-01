@@ -212,17 +212,24 @@ func (c *Checker) Snapshot(ctx context.Context, w io.Writer, version string) err
 		}
 	}
 	release := c.kernelRelease()
-	if release != "" && c.Modules != "" {
+	for _, name := range []string{"modules.alias", "modules.builtin.alias"} {
+		if release == "" || c.Modules == "" {
+			break
+		}
 		// Only the PCI and USB lines: what moduleAliases reads.
-		if data, err := readLimited(filepath.Join(c.Modules, release, "modules.alias"), 32<<20); err == nil {
+		if data, err := readLimited(filepath.Join(c.Modules, release, name), 32<<20); err == nil {
 			var lines []string
 			for _, line := range strings.Split(string(data), "\n") {
 				if strings.HasPrefix(line, "alias pci:") || strings.HasPrefix(line, "alias usb:") {
 					lines = append(lines, line)
 				}
 			}
-			s.file(filepath.Join("modules", release, "modules.alias"), []byte(strings.Join(lines, "\n")+"\n"))
+			s.file(filepath.Join("modules", release, name), []byte(strings.Join(lines, "\n")+"\n"))
 		}
+	}
+	// Which drivers are built into the kernel (names only).
+	if data, err := readLimited(filepath.Join(c.Modules, release, "modules.builtin"), 4<<20); err == nil && release != "" {
+		s.file(filepath.Join("modules", release, "modules.builtin"), data)
 	}
 	for _, dir := range c.Modprobe {
 		confs, _ := filepath.Glob(filepath.Join(dir, "*.conf"))
