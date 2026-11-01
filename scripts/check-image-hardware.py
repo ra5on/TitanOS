@@ -168,6 +168,28 @@ def blacklisted(root):
     return names
 
 
+def chip_of(name):
+    """The chip a firmware file belongs to: its directory and the name up to
+    the last part that holds a number (amdgpu/gc_11_5_4_mec.bin ->
+    amdgpu/gc_11_5_4, intel/vpu/vpu_60xx_v1.bin -> intel/vpu/vpu_60xx)."""
+    directory, _, base = name.rpartition("/")
+    parts = base.split(".")[0].split("_")
+    numbered = [index for index, part in enumerate(parts[:-1]) if part[:1].isdigit()]
+    stem = "_".join(parts[: numbered[-1] + 1]) if numbered else parts[0]
+    return f"{directory}/{stem}" if directory else stem
+
+
+def chip_unknown(firmware, name):
+    """True when the firmware packages have no file at all for the chip of
+    name: the kernel is newer than the firmware (kernel choice "Neu"), not
+    a file lost in packaging."""
+    directory = firmware / name.rpartition("/")[0]
+    if not directory.is_dir():
+        return True
+    stem = chip_of(name).rpartition("/")[2]
+    return not any(directory.glob(stem + "_*")) and not any(directory.glob(stem + ".*"))
+
+
 def decompress(data):
     """The content of a module or initramfs: plain, gzip, xz or zstd."""
     if data[:2] == b"\x1f\x8b":
@@ -201,7 +223,12 @@ def check_firmware(root, kernel):
             raise ValueError("required firmware missing: " + name)
     directory = root / "usr/lib/modules" / kernel
     blocked = blacklisted(root)
-    problems, others = [], 0
+    problems, others, newer_chips = [], 0, set()
+    # Only the newer kernel (kernel choice "Neu") may know chips the
+    # firmware packages have nothing for yet. On the default kernel a missing
+    # chip means a missing package, which must fail.
+    variant = root / "usr/share/titanos/kernel-variant"
+    newer_kernel = variant.is_file() and variant.read_text().strip() == "new"
     for path in sorted(directory.rglob("*.ko*")):
         relative = path.relative_to(directory).as_posix()
         # A blacklisted module never asks for its firmware (nouveau: NVIDIA
@@ -215,6 +242,9 @@ def check_firmware(root, kernel):
             others += 1
             continue
         unexplained = [name for name in missing if not any(fnmatch.fnmatch(name, pattern) for pattern in EXPECTED_MISSING)]
+        newer = [name for name in unexplained if newer_kernel and chip_unknown(firmware, name)]
+        newer_chips.update(chip_of(name) for name in newer)
+        unexplained = [name for name in unexplained if name not in newer]
         if unexplained:
             files = sorted(set(unexplained))
             more = f" and {len(files) - 5} more" if len(files) > 5 else ""
@@ -222,6 +252,8 @@ def check_firmware(root, kernel):
     if problems:
         raise ValueError("firmware missing for network, storage or graphics drivers (add it or explain it in EXPECTED_MISSING): " + "; ".join(problems))
     print(f"Firmware: all NAS drivers complete; {others} other modules (WLAN, Bluetooth, TV, sound, serial) miss some files")
+    if newer_chips:
+        print(f"Firmware: the kernel knows {len(newer_chips)} chips the firmware packages have no files for yet: {', '.join(sorted(newer_chips))}")
 
 
 def initrd_names(initrd):

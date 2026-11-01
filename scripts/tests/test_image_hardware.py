@@ -121,6 +121,31 @@ class ImageHardwareTest(unittest.TestCase):
         (firmware / "regulatory.db-debian").write_bytes(b"db")
         hardware.check_image(self.root, self.kernel)
 
+    def test_a_chip_newer_than_the_firmware_is_reported_not_fatal(self):
+        firmware = self.root / "usr/lib/firmware/amdgpu"
+        firmware.mkdir(parents=True, exist_ok=True)
+        (firmware / "gc_11_5_0_me.bin").write_bytes(b"x")
+        # No file at all for gc 11.5.4 or the new NPU directory: newer than the packages.
+        self.module("kernel/drivers/gpu/drm/amd/amdgpu/amdgpu.ko.xz", "amdgpu/gc_11_5_4_me.bin", "amdgpu/gc_11_5_4_mec.bin")
+        self.module("kernel/drivers/accel/amdxdna/amdxdna.ko.xz", "amdnpu/17f0_20/npu.sbin")
+        # On the default kernel that is a missing package.
+        with self.assertRaisesRegex(ValueError, "gc_11_5_4_me.bin"):
+            hardware.check_image(self.root, self.kernel)
+        variant = self.root / "usr/share/titanos/kernel-variant"
+        variant.parent.mkdir(parents=True)
+        variant.write_text("new\n")
+        hardware.check_image(self.root, self.kernel)
+        # A chip with some files but not all: a packaging error.
+        self.module("kernel/drivers/gpu/drm/amd/amdgpu/amdgpu.ko.xz", "amdgpu/gc_11_5_0_me.bin", "amdgpu/gc_11_5_0_mec.bin")
+        with self.assertRaisesRegex(ValueError, "gc_11_5_0_mec.bin"):
+            hardware.check_image(self.root, self.kernel)
+
+    def test_chip_of(self):
+        self.assertEqual(hardware.chip_of("amdgpu/gc_11_5_4_mes1.bin"), "amdgpu/gc_11_5_4")
+        self.assertEqual(hardware.chip_of("amdgpu/dcn_4_2_1_dmcub.bin"), "amdgpu/dcn_4_2_1")
+        self.assertEqual(hardware.chip_of("intel/vpu/vpu_60xx_v1.bin"), "intel/vpu/vpu_60xx")
+        self.assertEqual(hardware.chip_of("rtl_nic/rtl8125b-2.fw"), "rtl_nic/rtl8125b-2")
+
     def test_regulatory_db_is_required(self):
         (self.root / "usr/lib/firmware/regulatory.db").unlink()
         with self.assertRaisesRegex(ValueError, "regulatory.db"):

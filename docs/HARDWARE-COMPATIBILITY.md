@@ -356,6 +356,11 @@ sich diese Liste (`missing-6.12.txt`), scheitert der Test.
   1990ern, Gaudi, NPU ab Lunar Lake). Andere Module (WLAN, Bluetooth, TV,
   Sound, serielle Adapter) werden nur gezählt (Stand 01.11.2026: 137).
   Blacklist-Module (nouveau) zählen nicht. Kein Grafiktreiber im Initramfs.
+  Beim Abbild mit Kernel „Neu“ (`kernel-variant` = `new`) gilt ein Chip, für
+  den die Firmware-Pakete gar keine Datei haben (z. B. `amdgpu/gc_11_5_4_*`,
+  `intel/vpu/vpu_60xx*`, `amdnpu/17f0_20/`), als neuer als die Firmware: Er
+  wird gemeldet, lässt den Bau aber nicht scheitern. Fehlt nur ein Teil der
+  Dateien eines Chips, scheitert er weiter; beim stabilen Kernel immer.
 - **Startprotokoll** (`scripts/boot_log.py`): `smoke-release.py` und
   `smoke-hardware.py` lassen den Test scheitern bei Zeilen zu fehlender
   Firmware, Treiberfehlern, Zeitüberschreitungen, gescheiterten Units oder
