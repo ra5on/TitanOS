@@ -39,7 +39,9 @@ type Checker struct {
 	// entries count.
 	Modules  string
 	Modprobe []string
-	Runner   run.Runner
+	// Debug is debugfs (GuC/HuC state for snapshots); may be "".
+	Debug  string
+	Runner run.Runner
 	// Plugins returns, per modalias, the plugins that match it. Optional.
 	Plugins func(aliases []string) map[string][]PluginHint
 
@@ -50,7 +52,7 @@ type Checker struct {
 // New returns a checker for the real system.
 func New() *Checker {
 	return &Checker{Sys: "/sys", Proc: "/proc", Dev: "/dev", PCIIDs: "/usr/share/misc/pci.ids", Modules: "/lib/modules",
-		Modprobe: []string{"/etc/modprobe.d", "/run/modprobe.d", "/usr/lib/modprobe.d", "/lib/modprobe.d"}, Runner: run.Exec{}}
+		Modprobe: []string{"/etc/modprobe.d", "/run/modprobe.d", "/usr/lib/modprobe.d", "/lib/modprobe.d"}, Debug: "/sys/kernel/debug", Runner: run.Exec{}}
 }
 
 func readTrim(path string) string {

@@ -2517,6 +2517,8 @@
 	"hwcheck.again": "Erneut prüfen",
 	"hwcheck.exportText": "Als Text speichern",
 	"hwcheck.exportJson": "Als JSON speichern",
+	"hwcheck.exportSnapshot": "Schnappschuss speichern",
+	"hwcheck.exportSnapshotHint": "Gerätedaten, Kernelprotokoll und Treiberliste als Archiv: für eine Fehlermeldung zu Hardware. Ohne Seriennummern, MAC- und IP-Adressen.",
 	"hwcheck.exportNote": "Der Bericht enthält keine Seriennummern und keine MAC-Adressen. Lies ihn trotzdem durch, bevor du ihn weitergibst.",
 	"hwcheck.exportFailed": "Der Bericht konnte nicht gespeichert werden.",
 	"hwcheck.generated": "Geprüft am {time}",

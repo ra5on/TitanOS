@@ -2517,6 +2517,8 @@
 	"hwcheck.again": "Check again",
 	"hwcheck.exportText": "Save as text",
 	"hwcheck.exportJson": "Save as JSON",
+	"hwcheck.exportSnapshot": "Save snapshot",
+	"hwcheck.exportSnapshotHint": "Device data, kernel log and driver list as an archive, for a hardware bug report. Without serial numbers, MAC and IP addresses.",
 	"hwcheck.exportNote": "The report contains no serial numbers and no MAC addresses. Read it anyway before you pass it on.",
 	"hwcheck.exportFailed": "The report could not be saved.",
 	"hwcheck.generated": "Checked on {time}",

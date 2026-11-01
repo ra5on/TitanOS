@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -32,6 +33,26 @@ func (s *Server) handleHardwareReport(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusOK, report)
 	}
+}
+
+// handleHardwareSnapshot sends the hardware snapshot (tar.gz): what the
+// hardware page reads from sysfs, the kernel log and the module aliases,
+// without serial numbers, MAC or IP addresses. A reported machine becomes a
+// test case (backend/internal/hwcheck/testdata/snapshots).
+func (s *Server) handleHardwareSnapshot(w http.ResponseWriter, r *http.Request) {
+	if s.opts.HWCheck == nil {
+		writeError(w, http.StatusServiceUnavailable, "hwcheck_unavailable", "the hardware check is not available")
+		return
+	}
+	var archive bytes.Buffer
+	if err := s.opts.HWCheck.Snapshot(r.Context(), &archive, s.opts.Version); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal", "the snapshot could not be made")
+		return
+	}
+	name := "titanos-hardware-snapshot-" + time.Now().Format("2006-01-02T15-04-05")
+	w.Header().Set("Content-Type", "application/gzip")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`.tar.gz"`)
+	w.Write(archive.Bytes())
 }
 
 // handleHardwareDisks lists the disks with SMR, UAS and SAS hints, from

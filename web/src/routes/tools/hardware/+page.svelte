@@ -26,9 +26,15 @@
 	}
 
 	// The server writes the file; the browser saves it.
-	async function save(format: 'text' | 'json') {
+	async function save(format: 'text' | 'json' | 'snapshot') {
 		saveError = '';
 		try {
+			if (format === 'snapshot') {
+				await api.download('/hardware/snapshot', 'titanos-hardware-snapshot.tar.gz', {
+					serverName: true,
+				});
+				return;
+			}
 			await api.download(
 				`/hardware/report?format=${format}`,
 				`titanos-hardware.${format === 'text' ? 'txt' : 'json'}`,
@@ -65,6 +71,12 @@
 		<button type="button" class="btn" onclick={() => save('text')}>{t('hwcheck.exportText')}</button
 		>
 		<button type="button" class="btn" onclick={() => save('json')}>{t('hwcheck.exportJson')}</button
+		>
+		<button
+			type="button"
+			class="btn"
+			title={t('hwcheck.exportSnapshotHint')}
+			onclick={() => save('snapshot')}>{t('hwcheck.exportSnapshot')}</button
 		>
 	{/if}
 </div>

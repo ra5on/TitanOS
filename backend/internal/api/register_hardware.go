@@ -17,6 +17,7 @@ func (s *Server) registerHardware(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/hardware/intel-gpu", s.requireAdmin(s.handleIntelGuc))
 	mux.HandleFunc("PUT /api/v1/hardware/intel-gpu", s.requireAdmin(s.handleIntelGucSet))
 	mux.HandleFunc("GET /api/v1/hardware/report", s.requireAdmin(s.handleHardwareReport))
+	mux.HandleFunc("GET /api/v1/hardware/snapshot", s.requireAdmin(s.handleHardwareSnapshot))
 	mux.HandleFunc("GET /api/v1/hardware/disks", s.requireAdmin(s.handleHardwareDisks))
 }
 

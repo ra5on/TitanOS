@@ -1,0 +1,13 @@
+{
+  "kernel": "6.12.113+deb13-amd64",
+  "board": "(QEMU Standard PC (Q35 + ICH9, 2009))",
+  "unbound": {
+    "pci 0000:00:00.0 8086:29c0": "not_needed "
+  },
+  "graphics": {
+    "0000:00:01.0 1af4:1050": "virtio-pci"
+  },
+  "disks": {
+    "vda": "virtio"
+  }
+}

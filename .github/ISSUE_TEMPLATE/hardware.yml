@@ -1,0 +1,49 @@
+name: Hardware-Problem / hardware problem
+description: Ein Gerät läuft nicht, wird falsch erkannt oder meldet Fehler. / A device does not work, is detected wrongly or reports errors.
+labels: ["hardware"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke! Mit dem Schnappschuss wird dein Rechner zu einem automatischen Test, damit der Fehler behoben bleibt.
+        Thanks! With the snapshot your machine becomes an automatic test, so the bug stays fixed.
+
+        **Schnappschuss / snapshot:** Diagnose › Hardware prüfen › „Schnappschuss speichern“ (`titanos-hardware-snapshot-….tar.gz`).
+        Er enthält Gerätedaten, Kernelprotokoll und Treiberliste, aber keine Seriennummern, MAC- oder IP-Adressen. Bitte trotzdem kurz ansehen, bevor du ihn hochlädst.
+        It holds device data, the kernel log and the driver list, but no serial numbers, MAC or IP addresses. Please look at it before you upload it.
+  - type: input
+    id: version
+    attributes:
+      label: TitanOS-Version / version
+      description: Einstellungen › Über TitanOS
+      placeholder: "0.45.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: kernel
+    attributes:
+      label: Kernel
+      options:
+        - Stabil / stable
+        - Neu / new
+    validations:
+      required: true
+  - type: input
+    id: board
+    attributes:
+      label: Mainboard / Rechner (board / machine)
+      placeholder: "ASRock Z890 Pro, Intel Core Ultra 7 265"
+  - type: textarea
+    id: problem
+    attributes:
+      label: Was passiert? / What happens?
+      description: Was erwartest du, was passiert stattdessen? Welche Meldung steht auf der Hardware-Seite oder in der Glocke? / What do you expect, what happens instead? Which message shows on the hardware page or in the bell?
+    validations:
+      required: true
+  - type: textarea
+    id: snapshot
+    attributes:
+      label: Schnappschuss / snapshot
+      description: Die .tar.gz-Datei hierher ziehen. / Drag the .tar.gz file here.
+    validations:
+      required: true

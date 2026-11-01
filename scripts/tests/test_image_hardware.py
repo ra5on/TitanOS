@@ -35,6 +35,9 @@ class ImageHardwareTest(unittest.TestCase):
         self.initrd.parent.mkdir()
         early = b"".join(archive([(name, b"test microcode")]) for name in hardware.MICROCODE)
         self.initrd.write_bytes(early + gzip.compress(archive([("init", b"test init")])) )
+        for name in hardware.REQUIRED_FILES:
+            (self.root / "usr/lib/firmware").mkdir(parents=True, exist_ok=True)
+            (self.root / "usr/lib/firmware" / name).write_bytes(b"test")
         for pattern in hardware.FIRMWARE:
             path = self.root / "usr/lib/firmware" / pattern.replace("*", "test")
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -81,6 +84,43 @@ class ImageHardwareTest(unittest.TestCase):
         (self.modules / "modules.builtin").write_text("")
         with self.assertRaisesRegex(ValueError, "kernel modules missing"):
             hardware.check_image(self.root, self.kernel)
+
+    def module(self, relative, *firmware):
+        """A module whose .modinfo names the firmware files, xz-compressed."""
+        import lzma
+        path = self.modules / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        info = b"".join(b"firmware=" + name.encode() + b"\0" for name in firmware)
+        path.write_bytes(lzma.compress(b"\x7fELF\0license=GPL\0" + info))
+
+    def test_firmware_of_nas_drivers_must_be_there_or_explained(self):
+        self.module("kernel/drivers/net/ethernet/realtek/r8169.ko.xz", "rtl_nic/rtl8125b-2.fw")
+        with self.assertRaisesRegex(ValueError, "r8169: rtl_nic/rtl8125b-2.fw"):
+            hardware.check_image(self.root, self.kernel)
+        firmware = self.root / "usr/lib/firmware/rtl_nic/rtl8125b-2.fw.zst"
+        firmware.parent.mkdir(parents=True)
+        firmware.write_bytes(b"compressed is fine")
+        hardware.check_image(self.root, self.kernel)
+        # Known gaps with a reason, and WLAN, are not the gate's business.
+        self.module("kernel/drivers/gpu/drm/amd/amdgpu/amdgpu.ko.xz", "amdgpu/vega10_ip_discovery.bin")
+        self.module("kernel/drivers/net/wireless/intel/iwlwifi/iwlwifi.ko.xz", "iwlwifi-100-5.ucode")
+        hardware.check_image(self.root, self.kernel)
+
+    def test_regulatory_db_is_required(self):
+        (self.root / "usr/lib/firmware/regulatory.db").unlink()
+        with self.assertRaisesRegex(ValueError, "regulatory.db"):
+            hardware.check_image(self.root, self.kernel)
+
+    def test_no_graphics_driver_in_the_initramfs(self):
+        early = b"".join(archive([(name, b"test microcode")]) for name in hardware.MICROCODE)
+        main = archive([("init", b"x")]) + archive([("usr/lib/modules/k/kernel/drivers/gpu/drm/i915/i915.ko.xz", b"x")])
+        self.initrd.write_bytes(early + gzip.compress(main))
+        with self.assertRaisesRegex(ValueError, "graphics drivers in the initramfs.*i915"):
+            hardware.check_image(self.root, self.kernel)
+        # Two archives one after the other are both read; xhci is fine.
+        main = archive([("init", b"x")]) + archive([("usr/lib/modules/k/kernel/drivers/usb/host/xhci-pci.ko.xz", b"x")])
+        self.initrd.write_bytes(early + gzip.compress(main))
+        hardware.check_image(self.root, self.kernel)
 
 
 if __name__ == "__main__":
