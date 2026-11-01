@@ -197,7 +197,7 @@ def run_variant(name, variant, archive, timeout, logs):
                     except subprocess.TimeoutExpired:
                         process.kill()
                         process.wait()
-        boot_log.check(log)
+        boot_log.check(log, emulated=accel[1] == "tcg")
         print(f"{name}: boot log clean", flush=True)
 
 

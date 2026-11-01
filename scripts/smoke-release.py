@@ -270,7 +270,7 @@ def smoke(archive, timeout, log, plugins=None, force_tcg=False, firmware="uefi",
                             process.kill()
                             process.wait()
         # No new firmware, driver, timeout or unit failures on the console.
-        boot_log.check(log)
+        boot_log.check(log, emulated=accel[1] == "tcg")
         print("Boot log: no unexplained firmware, driver, timeout or unit problems", flush=True)
         print("Release ZIP smoke test passed", flush=True)
 

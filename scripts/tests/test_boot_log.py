@@ -16,7 +16,6 @@ class BootLogTest(unittest.TestCase):
             "\x1b[0;1;31m[FAILED]\x1b[0m Failed to start \x1b[0;1;39mdocker.service\x1b[0m.",
             "[    2.0] RAS: Correctable Errors collector initialized.",
             "[  100.0] watchdog: watchdog0: watchdog did not stop!",
-            "[    0.9] clocksource: Watchdog remote CPU 1 read timed out",
             "[    0.5] vmd 0000:00:0e.0: Unknown Bus Offset Setting (3)",
             "[    3.0] usb 1-1: new high-speed USB device number 2 using xhci_hcd",
         ])
@@ -27,6 +26,19 @@ class BootLogTest(unittest.TestCase):
             "[FAILED] Failed to start docker.service.",
             "vmd 0000:00:0e.0: Unknown Bus Offset Setting (3)",
         ])
+
+    def test_late_emulated_cpus_count_only_without_kvm(self):
+        log = "\n".join([
+            "[   30.1] watchdog: BUG: soft lockup - CPU#1 stuck for 23s! [systemd:1]",
+            "[   30.1] Call Trace:",
+            "[    0.9] clocksource: Watchdog remote CPU 1 read timed out",
+            "[   40.0] rcu: INFO: rcu_preempt self-detected stall on CPU",
+        ])
+        self.assertEqual(len(boot_log.problems(log)), 4)
+        self.assertEqual(boot_log.problems(log, emulated=True), [])
+        # A real Oops still counts under emulation.
+        self.assertEqual(boot_log.problems(log + "\n[ 50.0] Oops: general protection fault", emulated=True),
+                         ["Oops: general protection fault"])
 
     def test_check_raises_with_the_lines(self):
         import tempfile
