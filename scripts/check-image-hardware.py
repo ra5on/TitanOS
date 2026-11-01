@@ -171,10 +171,14 @@ def blacklisted(root):
 def chip_of(name):
     """The chip a firmware file belongs to: its directory and the name up to
     the last part that holds a number (amdgpu/gc_11_5_4_mec.bin ->
-    amdgpu/gc_11_5_4, intel/vpu/vpu_60xx_v1.bin -> intel/vpu/vpu_60xx)."""
+    amdgpu/gc_11_5_4, amdgpu/vcn_5_0_2.bin -> amdgpu/vcn_5_0_2,
+    intel/vpu/vpu_60xx_v1.bin -> intel/vpu/vpu_60xx)."""
     directory, _, base = name.rpartition("/")
     parts = base.split(".")[0].split("_")
-    numbered = [index for index, part in enumerate(parts[:-1]) if part[:1].isdigit()]
+    # A last part that is a word names the file of the chip (_me, _mec,
+    # _v1); a last part that is a number belongs to the chip (vcn_5_0_2).
+    named = parts[:-1] if len(parts) > 1 and not parts[-1][:1].isdigit() else parts
+    numbered = [index for index, part in enumerate(named) if part[:1].isdigit()]
     stem = "_".join(parts[: numbered[-1] + 1]) if numbered else parts[0]
     return f"{directory}/{stem}" if directory else stem
 

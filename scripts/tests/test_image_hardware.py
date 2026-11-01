@@ -125,6 +125,8 @@ class ImageHardwareTest(unittest.TestCase):
         firmware = self.root / "usr/lib/firmware/amdgpu"
         firmware.mkdir(parents=True, exist_ok=True)
         (firmware / "gc_11_5_0_me.bin").write_bytes(b"x")
+        (firmware / "vcn_5_0_0.bin").write_bytes(b"x")
+        self.module("kernel/drivers/gpu/drm/amd/amdgpu/amdgpu_vcn.ko.xz", "amdgpu/vcn_5_0_2.bin")
         # No file at all for gc 11.5.4 or the new NPU directory: newer than the packages.
         self.module("kernel/drivers/gpu/drm/amd/amdgpu/amdgpu.ko.xz", "amdgpu/gc_11_5_4_me.bin", "amdgpu/gc_11_5_4_mec.bin")
         self.module("kernel/drivers/accel/amdxdna/amdxdna.ko.xz", "amdnpu/17f0_20/npu.sbin")
@@ -145,6 +147,9 @@ class ImageHardwareTest(unittest.TestCase):
         self.assertEqual(hardware.chip_of("amdgpu/dcn_4_2_1_dmcub.bin"), "amdgpu/dcn_4_2_1")
         self.assertEqual(hardware.chip_of("intel/vpu/vpu_60xx_v1.bin"), "intel/vpu/vpu_60xx")
         self.assertEqual(hardware.chip_of("rtl_nic/rtl8125b-2.fw"), "rtl_nic/rtl8125b-2")
+        # A number at the end belongs to the chip: vcn_5_0_2 is not vcn_5_0_0.
+        self.assertEqual(hardware.chip_of("amdgpu/vcn_5_0_2.bin"), "amdgpu/vcn_5_0_2")
+        self.assertEqual(hardware.chip_of("amdgpu/psp_13_0_0_sos_kicker.bin"), "amdgpu/psp_13_0_0")
 
     def test_regulatory_db_is_required(self):
         (self.root / "usr/lib/firmware/regulatory.db").unlink()
