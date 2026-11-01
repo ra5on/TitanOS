@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -127,21 +128,25 @@ func (m *Manager) PairBackup(ctx context.Context, id string) (string, error) {
 	return "titanos-backup:" + base64.RawURLEncoding.EncodeToString(payload), nil
 }
 
-// reachable returns an address of n that answers, the last good one if
-// there is one.
-func (m *Manager) reachable(ctx context.Context, n Node) (string, error) {
+// reachable returns an address of n that answers for p, the last good
+// one if there is one.
+func (m *Manager) reachable(ctx context.Context, n Node, p purpose) (string, error) {
+	key := p.key(n.ID)
 	m.mu.Lock()
-	last := m.reach[n.ID]
+	last := m.reach[key]
 	m.mu.Unlock()
-	if last != "" {
+	if last != "" && slices.Contains(m.ordered(n, p), last) {
 		return last, nil
 	}
-	if err := m.call(ctx, n, "GET", PeerPrefix+"status", "", nil, nil); err != nil {
+	err := m.tryAddresses(ctx, n, m.candidates(n, p), key, func(ctx context.Context, address string) (*http.Response, error) {
+		return m.sendSigned(ctx, n, address, "GET", PeerPrefix+"status", "", nil)
+	}, nil)
+	if err != nil {
 		return "", err
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.reach[n.ID], nil
+	return m.reach[key], nil
 }
 
 // Relay passes the requests of restic to the nodes: /<node>/<rest>.
@@ -171,7 +176,7 @@ func (m *Manager) Relay() http.Handler {
 			http.Error(w, "unknown node", http.StatusNotFound)
 			return
 		}
-		address, err := m.reachable(r.Context(), n)
+		address, err := m.reachable(r.Context(), n, forBackup)
 		if err != nil {
 			http.Error(w, "node not reachable", http.StatusBadGateway)
 			return
@@ -197,7 +202,7 @@ func (t relayTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	if err != nil {
 		// The next request looks for a way again.
 		t.m.mu.Lock()
-		delete(t.m.reach, n.node.ID)
+		delete(t.m.reach, forBackup.key(n.node.ID))
 		t.m.mu.Unlock()
 	}
 	return res, err

@@ -270,7 +270,7 @@ func TestRenderDefaults(t *testing.T) {
 	if !strings.Contains(vpn, `tcp dport 22 accept`) || strings.Contains(vpn, "discovery") {
 		t.Errorf("vpn zone:\n%s", vpn)
 	}
-	if strings.Contains(internet, "webui") || strings.Contains(internet, "ssh") || !strings.Contains(internet, `udp dport { 41641, 51820 } accept comment "vpn"`) {
+	if strings.Contains(internet, "webui") || strings.Contains(internet, "ssh") || !strings.Contains(internet, `udp dport { 41641, 51820, 51821 } accept comment "vpn"`) {
 		t.Errorf("internet zone:\n%s", internet)
 	}
 	if !strings.Contains(zone("app_internet"), "goto drop_app_internet") || !strings.Contains(zone("app_home"), `accept comment "new apps"`) {

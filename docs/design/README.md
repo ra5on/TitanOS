@@ -36,6 +36,24 @@ Sortieren per Griff/Pfeilen, Anzeigeoptionen, Speichern/Abbrechen/Standard.
 Kleine Bildschirme stapeln; Theme-Werte bleiben die aus `Appearance.dc.html`.
 Die ursprüngliche Entwurfsdatei dokumentiert weiterhin die Container-Aktionen.
 
+### Cluster: Wege, Versionen, Alle aktualisieren (0.44.0)
+
+Vom Projektinhaber am 1. November 2026 nach Screenshots bestätigt („Los“,
+Leitlinie „freie Wahl, wie bei allem“). Einstellungen › Cluster: oben die
+Knotenliste (Punkt für den Zustand, Rolle und Versions-Chips, „über <Weg> ·
+n ms“, Warnung bei Ausweichweg und Uhrzeit, rechts „Verwalten“,
+„Aktualisieren“ bei älterer Version und „⋯“ mit Weg je Knoten, Verwalten
+erlauben, Admin-Rolle, Entfernen; im Kopf „Wege prüfen“ und „Alle
+aktualisieren“), darunter ein einspaltiges Formular wie das App-Formular
+(`FormRow`/`FormSection`/`Toggle`) mit den Abschnitten Einstellungen,
+Verbindung zwischen den Knoten, Wege, Meldungen; Beitrittsinformation und
+Verlassen unverändert darunter. „Wege prüfen“, „Weg zu <Knoten>“ und „Alle
+Knoten aktualisieren“ (nacheinander vorausgewählt) sind einfache Dialoge.
+Ein Knoten mit anderer Version ist verwaltbar; der Balken oben nennt beide
+Versionen. Updates zeigt die Knoten des Clusters als Tabelle; das Dashboard
+hat die Kachel „Cluster“. Prüfung `scripts/test-ui-cluster.mjs`, Regeln
+`docs/rules/CLUSTER.md`.
+
 ### App-Formular und Docker-Kopf (0.43.0)
 
 Vom Projektinhaber am 1. November 2026 nach drei Screenshot-Runden bestätigt

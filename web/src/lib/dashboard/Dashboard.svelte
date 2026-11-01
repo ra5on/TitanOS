@@ -202,11 +202,15 @@
 	const watchesNetbird = $derived(
 		admin && (editing || shown.some((p) => sourceId(p.id) === 'netbird')),
 	);
+	const watchesCluster = $derived(
+		admin && (editing || shown.some((p) => sourceId(p.id) === 'cluster')),
+	);
 	const watchesShares = $derived(editing || shown.some((p) => sourceId(p.id) === 'shares'));
 	const data = dashboardData({
 		workloads: () => watched,
 		tailnet: () => watchesTailnet,
 		netbird: () => watchesNetbird,
+		cluster: () => watchesCluster,
 		shares: () => watchesShares,
 	});
 	const workloadGroups = $derived(groupsOf(data));

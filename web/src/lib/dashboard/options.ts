@@ -187,6 +187,7 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 					network: 'globe',
 					tailscale: 'globe',
 					netbird: 'globe',
+					cluster: 'globe',
 					temperatures: 'activity',
 				} as Record<string, (typeof EDITOR_ICONS)[number]>
 			)[idSource] ?? (idSource.startsWith('vm:') ? 'os' : 'chip'),
@@ -204,6 +205,7 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 				'temperatures',
 				'tailscale',
 				'netbird',
+				'cluster',
 			].includes(idSource)
 				? 14
 				: 18,

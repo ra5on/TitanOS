@@ -5,6 +5,8 @@
 	import { api, ApiError } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import ClusterUpdates from '#lib/components/cluster/ClusterUpdates.svelte';
+	import { activeNode } from '#lib/cluster-node.ts';
 	import PowerDialog from '#lib/components/PowerDialog.svelte';
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
@@ -441,6 +443,8 @@
 			{#if status.checkError}<pre class="muted">{status.checkError}</pre>{/if}
 		{/if}
 	</section>
+
+	{#if !activeNode()}<ClusterUpdates />{/if}
 
 	{#if status.app.current || status.app.previous}
 		<section class="tile panel" aria-labelledby="upd-app">

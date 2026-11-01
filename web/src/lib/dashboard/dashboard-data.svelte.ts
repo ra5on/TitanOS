@@ -11,6 +11,7 @@ import { poll } from '#lib/poll.ts';
 import type { TailnetStatus } from '#lib/app-links.ts';
 import type { TailnetDevices } from './tailscale.ts';
 import type { NetbirdPeers } from './netbird.ts';
+import type { ClusterPage } from '#lib/cluster.svelte.ts';
 
 /** Which data the dashboard needs right now; each getter is read inside an effect. */
 export type DashboardWatch = {
@@ -18,6 +19,7 @@ export type DashboardWatch = {
 	workloads: () => boolean;
 	tailnet: () => boolean;
 	netbird: () => boolean;
+	cluster: () => boolean;
 	shares: () => boolean;
 };
 
@@ -32,6 +34,8 @@ export class DashboardData {
 	tailnetDevicesError = $state('');
 	netbirdPeers = $state<NetbirdPeers | null>(null);
 	netbirdPeersError = $state('');
+	cluster = $state<ClusterPage | null>(null);
+	clusterError = $state('');
 	containersReady = $state(false);
 	vmsReady = $state(false);
 	sharesReady = $state(false);
@@ -113,6 +117,11 @@ export function dashboardData(watch: DashboardWatch): DashboardData {
 	follow<NetbirdPeers>(watch.netbird, '/plugins/netbird/peers', (value, problem) => {
 		if (value) data.netbirdPeers = value;
 		data.netbirdPeersError = problem;
+	});
+	// The nodes of the cluster, always those of this NAS (a local path).
+	follow<ClusterPage>(watch.cluster, '/cluster', (value, problem) => {
+		if (value) data.cluster = value;
+		data.clusterError = problem;
 	});
 	follow<Share[]>(watch.shares, '/shares', (value, problem) => {
 		if (value) {

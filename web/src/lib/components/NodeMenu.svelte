@@ -2,11 +2,11 @@
 	// Chooses the node of the cluster this tab manages (lib/cluster-node.ts):
 	// at the symbol in the header ("logo"), as a card at the top of the
 	// sidebar ("card") or as a badge in the folded sidebar ("badge"). Shown
-	// only in a cluster; nodes that are away or run another version cannot
-	// be chosen.
+	// only in a cluster; nodes that are away cannot be chosen, nodes of
+	// another version can.
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { activeNode, switchNode } from '#lib/cluster-node.ts';
-	import { clusterNodes, manageable } from '#lib/cluster.svelte.ts';
+	import { clusterNodes, manageable, otherVersion } from '#lib/cluster.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import Icon from './Icon.svelte';
 	import Logo from './Logo.svelte';
@@ -33,7 +33,8 @@
 	function nodeState(node: (typeof clusterNodes.nodes)[number]): string {
 		if (node.self) return t('cluster.thisNode');
 		if (!node.online) return t('cluster.offline');
-		if (node.version !== clusterNodes.version) return t('cluster.otherVersionShort');
+		if (otherVersion(node, clusterNodes.version))
+			return t('cluster.versionShort', { version: node.version ?? '' });
 		return t('cluster.online');
 	}
 
@@ -82,7 +83,7 @@
 	{#if open}
 		<div class="menu floating-menu" id="{id}-menu" role="menu" aria-label={t('cluster.switch')}>
 			{#each clusterNodes.nodes as node (node.id)}
-				{@const usable = manageable(node, clusterNodes.version)}
+				{@const usable = manageable(node)}
 				<button
 					type="button"
 					role="menuitemradio"

@@ -55,7 +55,7 @@ table inet titanos {
 		ip6 saddr fe80::/10 udp sport 547 udp dport 546 accept
 		iifname "wt0" ct status dnat accept comment "netbird"
 		ip saddr 192.168.1.20 accept comment "admin on trial"
-		iifname { "tailscale0", "wt0", "titanoswg", "ipv64wg" } goto vpn
+		iifname { "tailscale0", "wt0", "titanoswg", "ipv64wg", "titanoscl" } goto vpn
 		ip saddr 100.64.0.0/10 goto vpn
 		ip6 saddr fd7a:115c:a1e0::/48 goto vpn
 		ip saddr @home4 goto home
@@ -78,7 +78,7 @@ table inet titanos {
 		meta l4proto ipv6-icmp icmpv6 type echo-request accept comment "ping"
 		tcp dport 3493 accept comment "ups"
 		tcp dport 8750 accept comment "backuptarget"
-		udp dport { 41641, 51820 } accept comment "vpn"
+		udp dport { 41641, 51820, 51821 } accept comment "vpn"
 		tcp dport { 53, 8053 } accept comment "app container:pihole"
 		udp dport 53 accept comment "app container:pihole"
 		tcp dport 2283 accept comment "app immich"
@@ -104,7 +104,7 @@ table inet titanos {
 		meta l4proto ipv6-icmp icmpv6 type echo-request accept comment "ping"
 		tcp dport 3493 accept comment "ups"
 		tcp dport 8750 accept comment "backuptarget"
-		udp dport { 41641, 51820 } accept comment "vpn"
+		udp dport { 41641, 51820, 51821 } accept comment "vpn"
 		tcp dport 2283 accept comment "app immich"
 		tcp dport 8096 accept comment "app jellyfin"
 		udp dport 7359 accept comment "app jellyfin"
@@ -120,7 +120,7 @@ table inet titanos {
 		ip6 saddr @blocklist6 goto drop_internet comment "v64 blocklist"
 		ip saddr 203.0.113.0/24 tcp dport 8443 accept comment "office"
 		udp dport 60000-60100 accept
-		udp dport { 41641, 51820 } accept comment "vpn"
+		udp dport { 41641, 51820, 51821 } accept comment "vpn"
 		tcp dport 8096 accept comment "app jellyfin"
 		udp dport 7359 accept comment "app jellyfin"
 		goto drop_internet
@@ -138,7 +138,7 @@ table inet titanos {
 		ct state new ct status dnat jump published
 	}
 	chain published {
-		iifname { "tailscale0", "wt0", "titanoswg", "ipv64wg" } goto app_vpn
+		iifname { "tailscale0", "wt0", "titanoswg", "ipv64wg", "titanoscl" } goto app_vpn
 		ip saddr 100.64.0.0/10 goto app_vpn
 		ip6 saddr fd7a:115c:a1e0::/48 goto app_vpn
 		ip saddr @home4 goto app_home

@@ -27,6 +27,11 @@ type testNode struct {
 	store  *config.Store
 	mu     sync.Mutex
 	backup []string // paths the fake backup target saw
+	// api, if set, answers signed requests of other nodes first; it
+	// reports whether it did.
+	api func(w http.ResponseWriter, r *http.Request, id Identity) bool
+	// version, if set, is what the node reports instead of m.Version.
+	version string
 }
 
 type fakeTarget struct{ n *testNode }
@@ -65,7 +70,15 @@ func newTestNode(t *testing.T, name string, accounts map[string]string) *testNod
 	n := &testNode{m: m, users: users, store: store}
 	m.Users, m.Version, m.Loopback, m.Backups = users, "1.0.0", true, fakeTarget{n}
 	m.Name = func() string { return name }
-	m.Status = func(context.Context) Status { return Status{Name: name, Version: m.Version} }
+	m.Status = func(context.Context) Status {
+		n.mu.Lock()
+		defer n.mu.Unlock()
+		v := m.Version
+		if n.version != "" {
+			v = n.version
+		}
+		return Status{Name: name, Version: v}
+	}
 	m.Applied = func(auth.User, bool, auth.User, bool) {}
 	users.Changed = m.AccountChanged
 	if err := m.Load(); err != nil {
@@ -82,6 +95,9 @@ func newTestNode(t *testing.T, name string, accounts map[string]string) *testNod
 		// As api.clusterAccess: only a node that may manage gets through.
 		if !m.MayManage(id.Node) {
 			http.Error(w, "not permitted", http.StatusForbidden)
+			return
+		}
+		if n.api != nil && n.api(w, r, id) {
 			return
 		}
 		io.WriteString(w, id.User+" "+r.URL.Path+" cookie="+r.Header.Get("Cookie"))

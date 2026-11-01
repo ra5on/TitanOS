@@ -78,6 +78,11 @@ type Node struct {
 	Extra     []string `json:"extra,omitempty"`
 	// Cert is the SHA-256 of the cluster certificate of the node, in hex.
 	Cert string `json:"cert"`
+	// Ways names the way of each address (ways.go); older nodes send none.
+	Ways map[string]string `json:"ways,omitempty"`
+	// TunnelKey is the public WireGuard key of the node for the tunnel of
+	// the cluster (tunnel.go).
+	TunnelKey string `json:"tunnelKey,omitempty"`
 	// Manage allows a node other than the admin node to manage the others;
 	// only the admin node sets it.
 	Manage  bool      `json:"manage,omitempty"`
@@ -109,8 +114,15 @@ type State struct {
 	Internet bool `json:"internet,omitempty"`
 	// Admin is the ID of the admin node; see adminLocked for a cluster from
 	// before, or when it is gone.
-	Admin    string                    `json:"admin,omitempty"`
-	Nodes    []Node                    `json:"nodes"`
+	Admin string `json:"admin,omitempty"`
+	// AdminGen counts the handovers of the admin role; the higher one wins.
+	AdminGen int    `json:"adminGen,omitempty"`
+	Nodes    []Node `json:"nodes"`
+	// Ways are the settings for the connections, Routes the exceptions per
+	// node (ways.go); Tunnel is the WireGuard tunnel of TitanOS (tunnel.go).
+	Ways     Ways                      `json:"ways"`
+	Routes   map[string]Route          `json:"routes,omitempty"`
+	Tunnel   Tunnel                    `json:"tunnel"`
 	Accounts map[string]AccountVersion `json:"accounts"`
 	Created  time.Time                 `json:"created"`
 }
@@ -127,6 +139,8 @@ type self struct {
 	Cert string `json:"cert"` // PEM of certificate and key
 	// Extra are the addresses the administrator added for this node.
 	Extra []string `json:"extra,omitempty"`
+	// TunnelKey is the private WireGuard key for the tunnel of the cluster.
+	TunnelKey string `json:"tunnelKey,omitempty"`
 }
 
 // Account is what the cluster needs of the accounts of this node.
@@ -139,8 +153,13 @@ type Accounts interface {
 
 // Status is what a node tells the others about itself for the overview.
 type Status struct {
-	Name     string   `json:"name"`
-	Version  string   `json:"version"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	// Protocol is the level of the cluster protocol (Protocol); older
+	// nodes send none and speak level 1.
+	Protocol int `json:"protocol,omitempty"`
+	// Time is the clock of the node (Unix seconds), for the comparison.
+	Time     int64    `json:"time,omitempty"`
 	Hostname string   `json:"hostname"`
 	Uptime   int64    `json:"uptimeSeconds"`
 	CPU      *float64 `json:"cpuPercent"`
@@ -194,6 +213,14 @@ type Manager struct {
 	Notify func(kind, subject string)
 	// Backups is the receiving end of backups from other nodes.
 	Backups BackupTarget
+	// TailscaleName returns the MagicDNS name of this node, "" without
+	// Tailscale; it is passed on as an address besides the IPs.
+	TailscaleName func() string
+	// Update checks for a release and installs it on this node (Update all
+	// nodes); it returns the running and the new version, "" for none.
+	Update func(ctx context.Context) (from, to string, err error)
+	// Runner runs ip and wg for the tunnel; nil leaves the network alone.
+	Runner Runner
 
 	mu      sync.Mutex
 	loaded  bool
@@ -209,15 +236,31 @@ type Manager struct {
 	nonces *nonces
 	// limiter slows down guessing the join key.
 	limiter *auth.Limiter
-	// pushing serializes the account changes sent to the others.
-	pushing sync.Mutex
-	proxy   *httputil.ReverseProxy
+	// pushing serializes the account changes sent to the others,
+	// announcing the members: a message is built and sent under it, so
+	// that no older one overtakes a newer one.
+	pushing    sync.Mutex
+	announcing sync.Mutex
+	proxy      *httputil.ReverseProxy
+	// returnTried is when the preferred way was last tried per node.
+	returnTried map[string]time.Time
+	// down is since when a node did not answer, alerted whether that was
+	// reported.
+	down    map[string]time.Time
+	alerted map[string]bool
+	// run is the last "update all nodes".
+	run *UpdateRun
+	// tunnelUp is the configuration last applied to the tunnel, tunnelErr
+	// why the last try failed.
+	tunnelUp  string
+	tunnelErr string
 }
 
 // NewManager returns the cluster of the node with the settings in store.
 func NewManager(store *config.Store) *Manager {
 	m := &Manager{
 		store: store, reach: map[string]string{}, status: map[string]cachedStatus{},
+		returnTried: map[string]time.Time{}, down: map[string]time.Time{}, alerted: map[string]bool{},
 		nonces: newNonces(), limiter: auth.NewLimiter(),
 	}
 	m.proxy = m.newProxy()
@@ -296,15 +339,26 @@ type View struct {
 	Manages bool   `json:"manages"`
 	// Extra are the addresses added for this node.
 	Extra []string `json:"extra"`
-	// Found are the addresses this node found itself.
-	Found []string `json:"found"`
+	// Found are the addresses this node found itself, FoundWays their ways.
+	Found     []string          `json:"found"`
+	FoundWays map[string]string `json:"foundWays"`
+	// Ways and Routes are the way settings (ways.go), Tunnel the tunnel of
+	// TitanOS with the state on this node (tunnel.go).
+	Ways   Ways             `json:"ways"`
+	Routes map[string]Route `json:"routes"`
+	Tunnel TunnelView       `json:"tunnel"`
+	// Version and Protocol are those of this node.
+	Version  string `json:"version"`
+	Protocol int    `json:"protocol"`
 }
 
 // View returns the cluster for the settings page.
 func (m *Manager) View() View {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	view := View{Self: m.self.ID, Nodes: []Node{}, Extra: slices.Clone(m.self.Extra), Found: m.foundLocked()}
+	found, kinds := m.foundLocked()
+	view := View{Self: m.self.ID, Nodes: []Node{}, Extra: slices.Clone(m.self.Extra), Found: found, FoundWays: kinds,
+		Routes: map[string]Route{}, Version: m.Version, Protocol: Protocol}
 	if view.Extra == nil {
 		view.Extra = []string{}
 	}
@@ -312,6 +366,11 @@ func (m *Manager) View() View {
 		view.Name, view.Internet = m.state.Name, m.state.Internet
 		view.Nodes = slices.Clone(m.state.Nodes)
 		view.Admin, view.Manages = m.adminLocked(), m.mayManageLocked(m.self.ID)
+		view.Ways = m.state.Ways
+		for k, v := range m.state.Routes {
+			view.Routes[k] = v
+		}
+		view.Tunnel = m.tunnelViewLocked()
 	}
 	return view
 }
@@ -381,6 +440,14 @@ func (m *Manager) saveLocked(state *State, sec secrets) error {
 func cloneState(s *State) *State {
 	next := *s
 	next.Nodes = slices.Clone(s.Nodes)
+	next.Routes = make(map[string]Route, len(s.Routes))
+	for k, v := range s.Routes {
+		next.Routes[k] = v
+	}
+	next.Tunnel.Addresses = make(map[string]string, len(s.Tunnel.Addresses))
+	for k, v := range s.Tunnel.Addresses {
+		next.Tunnel.Addresses[k] = v
+	}
 	next.Accounts = make(map[string]AccountVersion, len(s.Accounts))
 	for k, v := range s.Accounts {
 		next.Accounts[k] = v
@@ -429,4 +496,7 @@ func (m *Manager) reconcile(ctx context.Context) {
 		slog.Warn("cluster: addresses of this node not passed on", "err", err)
 	}
 	m.syncAccounts(ctx)
+	m.applyTunnel(ctx)
+	m.returnToPreferred(ctx)
+	m.watchNodes(ctx)
 }

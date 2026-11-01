@@ -60,7 +60,7 @@ table inet titanos {
 		iifname "br-ba9876543210" ip6 saddr fd00:19::/64 goto zmedia
 		iifname "docker0" ip saddr 172.17.0.0/16 goto docker
 		iifname "br-0123456789ab" ip saddr 172.18.0.0/16 goto docker
-		iifname { "tailscale0", "wt0", "titanoswg", "ipv64wg" } goto vpn
+		iifname { "tailscale0", "wt0", "titanoswg", "ipv64wg", "titanoscl" } goto vpn
 		ip saddr 100.64.0.0/10 goto vpn
 		ip6 saddr fd7a:115c:a1e0::/48 goto vpn
 		ip saddr @home4 goto home
@@ -81,7 +81,7 @@ table inet titanos {
 		meta l4proto ipv6-icmp icmpv6 type echo-request accept comment "ping"
 		tcp dport 3493 accept comment "ups"
 		tcp dport 8750 accept comment "backuptarget"
-		udp dport { 41641, 51820 } accept comment "vpn"
+		udp dport { 41641, 51820, 51821 } accept comment "vpn"
 		tcp dport { 53, 8053 } accept comment "app container:pihole"
 		udp dport 53 accept comment "app container:pihole"
 		tcp dport 2283 accept comment "app immich"
@@ -106,7 +106,7 @@ table inet titanos {
 		meta l4proto ipv6-icmp icmpv6 type echo-request accept comment "ping"
 		tcp dport 3493 accept comment "ups"
 		tcp dport 8750 accept comment "backuptarget"
-		udp dport { 41641, 51820 } accept comment "vpn"
+		udp dport { 41641, 51820, 51821 } accept comment "vpn"
 		tcp dport { 53, 8053 } accept comment "app container:pihole"
 		udp dport 53 accept comment "app container:pihole"
 		tcp dport 2283 accept comment "app immich"
@@ -122,7 +122,7 @@ table inet titanos {
 	chain internet {
 		ip saddr @blocklist4 goto drop_internet comment "v64 blocklist"
 		ip6 saddr @blocklist6 goto drop_internet comment "v64 blocklist"
-		udp dport { 41641, 51820 } accept comment "vpn"
+		udp dport { 41641, 51820, 51821 } accept comment "vpn"
 		goto drop_internet
 	}
 	chain drop_internet {
@@ -181,7 +181,7 @@ table inet titanos {
 		iifname "br-ba9876543210" ip6 saddr fd00:19::/64 goto app_zmedia
 		iifname "docker0" ip saddr 172.17.0.0/16 goto app_docker
 		iifname "br-0123456789ab" ip saddr 172.18.0.0/16 goto app_docker
-		iifname { "tailscale0", "wt0", "titanoswg", "ipv64wg" } goto app_vpn
+		iifname { "tailscale0", "wt0", "titanoswg", "ipv64wg", "titanoscl" } goto app_vpn
 		ip saddr 100.64.0.0/10 goto app_vpn
 		ip6 saddr fd7a:115c:a1e0::/48 goto app_vpn
 		ip saddr @home4 goto app_home
@@ -272,7 +272,7 @@ table inet titanos {
 		ip daddr 10.20.0.0/16 goto fwd_zmedia_ziot
 		oifname "br-ba9876543210" goto fwd_zmedia_zmedia
 		oifname { "docker0", "br-0123456789ab" } goto fwd_zmedia_docker
-		oifname { "tailscale0", "wt0", "titanoswg", "ipv64wg" } goto fwd_zmedia_vpn
+		oifname { "tailscale0", "wt0", "titanoswg", "ipv64wg", "titanoscl" } goto fwd_zmedia_vpn
 		ip daddr 100.64.0.0/10 goto fwd_zmedia_vpn
 		ip6 daddr fd7a:115c:a1e0::/48 goto fwd_zmedia_vpn
 		ip daddr @home4 goto fwd_zmedia_home
@@ -308,7 +308,7 @@ table inet titanos {
 		ip daddr 10.20.0.0/16 goto fwd_docker_ziot
 		oifname "br-ba9876543210" goto fwd_docker_zmedia
 		oifname { "docker0", "br-0123456789ab" } goto fwd_docker_docker
-		oifname { "tailscale0", "wt0", "titanoswg", "ipv64wg" } goto fwd_docker_vpn
+		oifname { "tailscale0", "wt0", "titanoswg", "ipv64wg", "titanoscl" } goto fwd_docker_vpn
 		ip daddr 100.64.0.0/10 goto fwd_docker_vpn
 		ip6 daddr fd7a:115c:a1e0::/48 goto fwd_docker_vpn
 		ip daddr @home4 goto fwd_docker_home

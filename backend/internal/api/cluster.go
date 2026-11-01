@@ -110,6 +110,11 @@ func (s *Server) routeCluster(mux *routeMux) {
 	mux.HandleFunc("DELETE /api/v1/cluster/nodes/{id}", s.requireOwner(s.requireOwnSession(s.handleClusterRemove)))
 	mux.HandleFunc("PUT /api/v1/cluster/nodes/{id}/manage", s.requireOwner(s.requireOwnSession(s.handleClusterManage)))
 	mux.HandleFunc("POST /api/v1/cluster/nodes/{id}/backup-pair", s.requireAdmin(s.requireOwnSession(s.handleClusterBackupPair)))
+	mux.HandleFunc("PUT /api/v1/cluster/nodes/{id}/route", s.requireAdmin(s.requireOwnSession(s.handleClusterRoute)))
+	mux.HandleFunc("POST /api/v1/cluster/nodes/{id}/admin", s.requireOwner(s.requireOwnSession(s.handleClusterHandOver)))
+	mux.HandleFunc("POST /api/v1/cluster/probe", s.requireAdmin(s.requireOwnSession(s.handleClusterProbe)))
+	mux.HandleFunc("GET /api/v1/cluster/update", s.requireAdmin(s.handleClusterUpdateRun))
+	mux.HandleFunc("POST /api/v1/cluster/update", s.requireAdmin(s.requireOwnSession(s.handleClusterUpdateAll)))
 	mux.HandleFunc("/api/v1/cluster/nodes/{id}/api/{path...}", s.requireUser(s.requireOwnSession(s.handleClusterProxy)))
 }
 
@@ -151,13 +156,15 @@ func (s *Server) handleClusterNodes(w http.ResponseWriter, r *http.Request) {
 		Self    bool   `json:"self"`
 		Online  bool   `json:"online"`
 		Version string `json:"version,omitempty"`
+		// Compatible: managed fully; else only update, logs and power.
+		Compatible bool `json:"compatible"`
 	}
 	out := []node{}
 	manages := false
 	if c := s.opts.Cluster; c != nil {
 		manages = c.Manages()
 		for _, v := range c.Overview(r.Context()) {
-			n := node{ID: v.ID, Name: v.Name, Self: v.Self, Online: v.Online}
+			n := node{ID: v.ID, Name: v.Name, Self: v.Self, Online: v.Online, Compatible: v.Compatible}
 			if v.Status != nil {
 				n.Version = v.Status.Version
 			}
@@ -184,9 +191,11 @@ func (s *Server) handleClusterCreate(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleClusterSettings(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name     *string   `json:"name"`
-		Internet *bool     `json:"internet"`
-		Extra    *[]string `json:"extra"`
+		Name     *string       `json:"name"`
+		Internet *bool         `json:"internet"`
+		Extra    *[]string     `json:"extra"`
+		Ways     *cluster.Ways `json:"ways"`
+		Tunnel   *bool         `json:"tunnel"`
 	}
 	if !s.clusterAvailable(w) || !readJSON(w, r, &req) {
 		return
@@ -200,6 +209,12 @@ func (s *Server) handleClusterSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Internet != nil && *req.Internet == view.Internet {
 		req.Internet = nil
+	}
+	if req.Ways != nil && *req.Ways == view.Ways {
+		req.Ways = nil
+	}
+	if req.Tunnel != nil && *req.Tunnel == view.Tunnel.Enabled {
+		req.Tunnel = nil
 	}
 	if req.Extra != nil {
 		if err := c.SetExtra(r.Context(), *req.Extra); err != nil {
@@ -219,8 +234,91 @@ func (s *Server) handleClusterSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if req.Ways != nil {
+		if err := c.SetWays(r.Context(), *req.Ways); err != nil {
+			writeClusterError(w, err)
+			return
+		}
+	}
+	if req.Tunnel != nil {
+		if err := c.SetTunnel(r.Context(), *req.Tunnel); err != nil {
+			writeClusterError(w, err)
+			return
+		}
+	}
 	slog.Info("cluster settings changed", "by", currentUser(r).Name, "ip", remoteIP(r))
 	s.handleCluster(w, r)
+}
+
+// handleClusterRoute sets the way to one node, an exception to the
+// settings of the cluster; all fields empty remove it.
+func (s *Server) handleClusterRoute(w http.ResponseWriter, r *http.Request) {
+	var req cluster.Route
+	if !s.clusterAvailable(w) || !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.opts.Cluster.SetRoute(r.Context(), r.PathValue("id"), req); err != nil {
+		writeClusterError(w, err)
+		return
+	}
+	slog.Info("cluster way to node changed", "node", r.PathValue("id"), "way", req.Manage, "only", req.Only, "backup", req.Backup, "by", currentUser(r).Name, "ip", remoteIP(r))
+	s.handleCluster(w, r)
+}
+
+// handleClusterHandOver gives the admin role to a node, or takes it while
+// the admin node does not answer.
+func (s *Server) handleClusterHandOver(w http.ResponseWriter, r *http.Request) {
+	if !s.clusterAvailable(w) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	if err := s.opts.Cluster.HandOver(ctx, r.PathValue("id")); err != nil {
+		writeClusterError(w, err)
+		return
+	}
+	slog.Info("cluster admin role handed over", "node", r.PathValue("id"), "by", currentUser(r).Name, "ip", remoteIP(r))
+	s.handleCluster(w, r)
+}
+
+// handleClusterProbe asks every node on each of its ways.
+func (s *Server) handleClusterProbe(w http.ResponseWriter, r *http.Request) {
+	if !s.clusterAvailable(w) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	writeJSON(w, http.StatusOK, map[string]any{"nodes": s.opts.Cluster.Probes(ctx), "checked": time.Now().UTC()})
+}
+
+func (s *Server) handleClusterUpdateRun(w http.ResponseWriter, r *http.Request) {
+	if !s.clusterAvailable(w) {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"run": s.opts.Cluster.UpdateRunState()})
+}
+
+// handleClusterUpdateAll updates the chosen nodes, one after the other or
+// all at once; this node last.
+func (s *Server) handleClusterUpdateAll(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Nodes    []string `json:"nodes"`
+		Parallel bool     `json:"parallel"`
+	}
+	if !s.clusterAvailable(w) || !readJSON(w, r, &req) {
+		return
+	}
+	user := currentUser(r).Name
+	if err := s.opts.Cluster.UpdateAll(r.Context(), user, req.Nodes, req.Parallel); err != nil {
+		if errors.Is(err, cluster.ErrRunning) {
+			writeError(w, http.StatusConflict, "cluster_update_running", err.Error())
+			return
+		}
+		writeClusterError(w, err)
+		return
+	}
+	slog.Info("cluster update of nodes started", "nodes", len(req.Nodes), "parallel", req.Parallel, "by", user, "ip", remoteIP(r))
+	s.handleClusterUpdateRun(w, r)
 }
 
 func (s *Server) handleClusterPreview(w http.ResponseWriter, r *http.Request) {
@@ -409,10 +507,11 @@ func (s *Server) ClusterStatus(ctx context.Context) cluster.Status {
 	return st
 }
 
-// clusterNotify reports joins and removals.
+// clusterNotify reports joins, removals and nodes that stopped answering.
 func (s *Server) clusterNotify(kind, subject string) {
 	severity := notify.Info
-	if kind == "cluster_node_removed" {
+	switch kind {
+	case "cluster_node_removed", "cluster_node_unreachable":
 		severity = notify.Warning
 	}
 	s.opts.Notify.Notify(severity, kind, subject)

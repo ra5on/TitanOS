@@ -25,6 +25,7 @@ export const TILE_IDS = [
 	'shares',
 	'tailscale',
 	'netbird',
+	'cluster',
 ] as const;
 export type StaticTileId = (typeof TILE_IDS)[number];
 export type SourceId = StaticTileId | `vm:${string}` | `container:${string}` | `app:${string}`;
@@ -50,10 +51,17 @@ export const TILES: Record<StaticTileId, TileSpec> = {
 	shares: { title: 'nav.shares', minW: 3, minH: 2 },
 	tailscale: { title: 'tile.tailscale', minW: 3, minH: 2 },
 	netbird: { title: 'tile.netbird', minW: 3, minH: 2 },
+	cluster: { title: 'tile.cluster', minW: 3, minH: 2 },
 };
 
 /** Tiles only owners and administrators can add; their data needs those rights. */
-export const ADMIN_TILES: readonly StaticTileId[] = ['docker', 'vms', 'tailscale', 'netbird'];
+export const ADMIN_TILES: readonly StaticTileId[] = [
+	'docker',
+	'vms',
+	'tailscale',
+	'netbird',
+	'cluster',
+];
 
 /** Hardware tiles: all devices together, or one kind of device each. */
 export const HARDWARE_TILES: readonly StaticTileId[] = ['accelerators', 'igpu', 'npu', 'nvidia'];

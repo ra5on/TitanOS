@@ -823,6 +823,21 @@ func (w *titand) wireBackups() error {
 		devAddr := w.opts.devAddr
 		w.nodes.Local = func() []string { return []string{devAddr} }
 	}
+	if !w.opts.dev {
+		// The WireGuard tunnel of the cluster, when it is switched on.
+		w.nodes.Runner = command.Exec{}
+	}
+	w.nodes.TailscaleName = cachedTailscaleName(w.tailnet)
+	w.nodes.Update = func(ctx context.Context) (string, string, error) {
+		if err := w.updates.Check(ctx); err != nil {
+			return version.Version, "", err
+		}
+		st := w.updates.Status()
+		if st.Available == nil || st.Available.Version == st.Version {
+			return st.Version, "", nil
+		}
+		return st.Version, st.Available.Version, w.updates.Install(ctx)
+	}
 	if err := w.nodes.Load(); err != nil {
 		slog.Warn("cluster settings not readable from /config", "err", err)
 	}
@@ -1449,5 +1464,27 @@ func (w *titand) waitServices(ctx context.Context) {
 	case <-done:
 	case <-ctx.Done():
 		slog.Warn("background services did not stop in time")
+	}
+}
+
+// cachedTailscaleName returns the MagicDNS name of this NAS for the
+// cluster, asking tailscale at most every five minutes.
+func cachedTailscaleName(t *tailscale.Manager) func() string {
+	var (
+		mu   sync.Mutex
+		name string
+		at   time.Time
+	)
+	return func() string {
+		mu.Lock()
+		defer mu.Unlock()
+		if time.Since(at) > 5*time.Minute {
+			st := t.Status()
+			name, at = "", time.Now()
+			if st.State == "Running" {
+				name = st.Name
+			}
+		}
+		return name
 	}
 }
