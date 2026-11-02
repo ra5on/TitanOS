@@ -23,6 +23,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
+import boot_log
 from network_smoke import check_network
 from tailscale_smoke import check_tailscale
 from netbird_smoke import check_netbird
@@ -268,6 +269,9 @@ def smoke(archive, timeout, log, plugins=None, force_tcg=False, firmware="uefi",
                         except subprocess.TimeoutExpired:
                             process.kill()
                             process.wait()
+        # No new firmware, driver, timeout or unit failures on the console.
+        boot_log.check(log, emulated=accel[1] == "tcg")
+        print("Boot log: no unexplained firmware, driver, timeout or unit problems", flush=True)
         print("Release ZIP smoke test passed", flush=True)
 
 

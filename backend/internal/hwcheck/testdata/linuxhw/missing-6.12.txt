@@ -1,0 +1,3 @@
+# 10936 different PCI devices of 786 machines; storage, network, display, USB and
+# accelerator devices with a driver there and none in Debian's 6.12, with the hint TitanOS shows.
+10ec:8125 class 020000  kernel 6.14 r8169  (there: r8169, newer ID)

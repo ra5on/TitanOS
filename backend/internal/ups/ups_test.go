@@ -16,10 +16,15 @@ import (
 type fakeSystem struct {
 	upsc  string
 	calls []string
+	// failing makes calls containing it fail.
+	failing string
 }
 
 func (f *fakeSystem) Run(_ context.Context, _ string, name string, args ...string) (string, error) {
 	f.calls = append(f.calls, name+" "+strings.Join(args, " "))
+	if f.failing != "" && strings.Contains(name+" "+strings.Join(args, " "), f.failing) {
+		return "", errors.New("exit status 1")
+	}
 	switch name {
 	case "upsc":
 		if f.upsc == "" {
@@ -276,5 +281,22 @@ func TestPasswordsWithNUTSyntax(t *testing.T) {
 	}
 	if quote("plain-Base64_value") != "plain-Base64_value" {
 		t.Fatal("a plain password changed")
+	}
+}
+
+// A USB UPS that shows up late: the driver fails at first, but the server
+// and the monitor run, so a low battery still shuts the NAS down once the
+// driver (which restarts by itself) reaches the UPS.
+func TestLateUSBUPSStillStartsTheMonitor(t *testing.T) {
+	m, system, _ := newManager(t)
+	if err := m.SetSettings(Settings{Mode: "local", ShutdownAfter: 5}); err != nil {
+		t.Fatal(err)
+	}
+	system.failing = "nut-driver@"
+	if err := m.Apply(context.Background()); err == nil || !strings.Contains(err.Error(), "does not reach the UPS") {
+		t.Fatalf("apply: %v", err)
+	}
+	if !system.ran("systemctl start nut-server.service nut-monitor.service") {
+		t.Errorf("monitor not started: %v", system.calls)
 	}
 }

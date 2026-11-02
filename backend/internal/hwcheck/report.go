@@ -82,7 +82,10 @@ func (c *Checker) Report(ctx context.Context) Report {
 	report := Report{Generated: time.Now().UTC(), Kernel: c.kernelRelease(), Boot: "bios",
 		CPU: c.CPU(), Virtualization: c.Virtualization(ctx), Memory: c.memory(),
 		Controllers: c.Controllers(), Disks: c.Disks(), Network: c.network(), Graphics: c.graphics(),
-		Sensors: c.sensors(), Unbound: c.Unbound(), FirmwareMissing: ParseFirmwareMissing(c.kernelLog(ctx))}
+		Sensors: c.sensors()}
+	log := c.kernelLog(ctx)
+	report.Unbound = c.unbound(func() string { return log })
+	report.FirmwareMissing = ParseFirmwareMissing(log)
 	if _, err := os.Stat(filepath.Join(c.Sys, "firmware/efi")); err == nil {
 		report.Boot = "uefi"
 	}
@@ -296,8 +299,16 @@ func (r Report) Text(version string) string {
 			extra = " plugin " + strings.Join(names, ",")
 		case "kernel":
 			extra = " from Linux " + device.Kernel + " (" + device.Driver + ")"
+		case "driver_failed":
+			extra = " (" + device.Driver + ")"
+			if device.Kernel != "" {
+				extra += " fixed in Linux " + device.Kernel
+			}
 		}
 		line("  %s %s  %s  class %s  %s  -> %s%s", device.Bus, device.Address, device.ID, device.Class, device.Name, device.Hint, extra)
+		for _, message := range device.Messages {
+			line("      %s", message)
+		}
 	}
 	line("Missing firmware")
 	for _, firmware := range r.FirmwareMissing {

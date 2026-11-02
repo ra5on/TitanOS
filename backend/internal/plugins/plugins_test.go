@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
 )
@@ -600,5 +601,52 @@ func TestNewerVersion(t *testing.T) {
 		if got := newerVersion(c.found, c.installed); got != c.newer {
 			t.Errorf("%s newer than %s: %v", c.found, c.installed, got)
 		}
+	}
+}
+
+// Right after the start a GPU may not be ready: a failed activation is
+// tried again three times on its own, then left alone.
+func TestFailedActivationIsRetriedThreeTimes(t *testing.T) {
+	m, r := newTestManager(t)
+	path := plugin(t, filepath.Join(m.mountRoot, "data/media"), "gpu", func(p *Manifest) {
+		p.Modules = []string{"nvidia"}
+	})
+	r.fail = "modprobe "
+	if err := m.Install(context.Background(), path, "data", "gpu", []string{"data"}); err == nil {
+		t.Fatal("failed activation was ignored")
+	}
+	probes := func() int {
+		count := 0
+		for _, command := range r.commands {
+			if strings.HasPrefix(command, "modprobe ") && strings.HasSuffix(command, " nvidia") {
+				count++
+			}
+		}
+		return count
+	}
+	before := probes()
+	for range 5 {
+		if m.retryAt.IsZero() {
+			break
+		}
+		m.retryAt = time.Now().Add(-time.Second) // the pause is over
+		m.Apply(context.Background(), []string{"data"})
+	}
+	if got := probes() - before; got != 3 {
+		t.Errorf("retried %d times, want 3", got)
+	}
+	if !m.retryAt.IsZero() {
+		t.Error("still retrying after three tries")
+	}
+	// The device is ready on a later try: active, problem gone.
+	m2, r2 := newTestManager(t)
+	path = plugin(t, filepath.Join(m2.mountRoot, "data/media"), "gpu", func(p *Manifest) { p.Modules = []string{"nvidia"} })
+	r2.fail = "modprobe "
+	m2.Install(context.Background(), path, "data", "gpu", []string{"data"})
+	r2.fail = ""
+	m2.retryAt = time.Now().Add(-time.Second)
+	m2.Apply(context.Background(), []string{"data"})
+	if status := m2.Status([]string{"data"}).Plugins[0]; !status.Active || status.Problem != "" || !m2.retryAt.IsZero() {
+		t.Errorf("after the device came: %+v", status)
 	}
 }

@@ -77,7 +77,7 @@ func (m *Manager) apply(ctx context.Context, mounted []string) (err error) {
 	for _, name := range names {
 		key += name + "=" + wanted[name].SHA256 + ";"
 	}
-	if key == m.applied {
+	if key == m.applied && (m.retryAt.IsZero() || time.Now().Before(m.retryAt)) {
 		return nil
 	}
 	defer func() {
@@ -184,7 +184,10 @@ func (m *Manager) apply(ctx context.Context, mounted []string) (err error) {
 			if failure != nil {
 				break
 			}
-			if _, failure = m.runner.Run(ctx, "", "modprobe", "-d", m.moduleRoot, module); failure != nil {
+			call, cancel := context.WithTimeout(ctx, activationLimit)
+			_, failure = m.runner.Run(call, "", "modprobe", "-d", m.moduleRoot, module)
+			cancel()
+			if failure != nil {
 				break
 			}
 		}
@@ -193,7 +196,10 @@ func (m *Manager) apply(ctx context.Context, mounted []string) (err error) {
 				tr.begin(StepServices)
 			}
 			for _, service := range manifest.Services {
-				if _, failure = m.runner.Run(ctx, "", "systemctl", "start", service); failure != nil {
+				call, cancel := context.WithTimeout(ctx, activationLimit)
+				_, failure = m.runner.Run(call, "", "systemctl", "start", service)
+				cancel()
+				if failure != nil {
 					break
 				}
 			}
@@ -209,9 +215,20 @@ func (m *Manager) apply(ctx context.Context, mounted []string) (err error) {
 			delete(m.problems, name)
 		}
 	}
-	// Failed activation remains visible; an explicit Enable retries it. Do not
-	// keep probing absent GPUs or restarting failed services every five seconds.
+	// Failed activation remains visible; an explicit Enable retries it. A
+	// device may just not be ready yet after the start, so it is tried
+	// again three times (after 30, 60 and 90 s), then left alone: do not
+	// keep probing absent GPUs or restarting failed services for good.
 	m.applied = key
+	switch {
+	case len(activationErrors) == 0:
+		m.retryAt, m.retries = time.Time{}, 0
+	case m.retries < 3:
+		m.retries++
+		m.retryAt = time.Now().Add(time.Duration(m.retries) * 30 * time.Second)
+	default:
+		m.retryAt = time.Time{}
+	}
 	return errors.Join(activationErrors...)
 }
 
@@ -284,3 +301,7 @@ func (m *Manager) prepareModules(ctx context.Context) error {
 	_, err := m.runner.Run(ctx, "", "depmod", "-b", m.moduleRoot, m.kernel)
 	return err
 }
+
+// activationLimit bounds loading one module or starting one service of a
+// plugin: a hanging modprobe must not block the plugins for good.
+const activationLimit = 2 * time.Minute

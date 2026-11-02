@@ -94,7 +94,7 @@ func (n *NvidiaControl) apply(ctx context.Context, address string, settings Nvid
 	if !available {
 		return ErrUnknown
 	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	output, err := n.runner.Run(ctx, "", "nvidia-smi", "--id="+address, "--query-gpu=power.min_limit,power.max_limit,power.default_limit", "--format=csv,noheader,nounits")
 	if err != nil {

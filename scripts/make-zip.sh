@@ -69,6 +69,9 @@ install -m 0644 boot/grub-early.cfg "$extra/usr/share/titanos/grub-early.cfg"
 # recommends a plugin for its hardware without asking GitHub first.
 install -d "$extra/usr/share/titanos/plugin-catalog"
 install -m 0644 plugins/catalog/*.json "$extra/usr/share/titanos/plugin-catalog/"
+# A newer pci.ids than Debian's: names for new chipsets on the hardware page
+# and in lspci. Replaces the file of the pci.ids package in the image.
+scripts/fetch-pci-ids.sh "$extra/usr/share/misc/pci.ids"
 
 # Without root, mkosi would map everything to a single user and every file in
 # the image would end up owned by root. A user namespace with the full subuid

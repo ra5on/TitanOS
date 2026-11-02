@@ -14,12 +14,19 @@ esac
 
 . /scripts/functions
 
+# 90 s: hubs, card readers and some USB 3 controllers take long to
+# enumerate a stick; the console says every 10 s that it is still waiting.
 stick=/dev/disk/by-label/TITANOS
+limit=90
 waited=0
-while [ ! -b "$stick" ] && [ "$waited" -lt 30 ]; do
+while [ ! -b "$stick" ] && [ "$waited" -lt "$limit" ]; do
+    if [ "$waited" -gt 0 ] && [ $((waited % 10)) -eq 0 ]; then
+        log_begin_msg "TitanOS: waiting for the stick with the label TITANOS ($waited s)"
+        log_end_msg
+    fi
     sleep 1
     waited=$((waited + 1))
 done
 if [ ! -b "$stick" ]; then
-    log_warning_msg "TitanOS: no stick with the label TITANOS found after 30 s"
+    log_warning_msg "TitanOS: no stick with the label TITANOS found after $limit s; is it plugged in and named TITANOS?"
 fi

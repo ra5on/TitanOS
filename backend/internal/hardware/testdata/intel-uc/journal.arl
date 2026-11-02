@@ -1,0 +1,7 @@
+i915 0000:00:02.0: [drm] GT1: HuC firmware i915/mtl_huc_gsc.bin version 8.5.4
+i915 0000:00:02.0: [drm] GT1: HuC: authenticated for clear media
+i915 0000:00:02.0: [drm] GT1: Loaded GSC firmware i915/mtl_gsc_1.bin (cv1.0, r102.1.15.1926, svn 1)
+i915 0000:00:02.0: [drm] GT1: HuC: authenticated for all workloads
+i915 0000:00:02.0: [drm] *ERROR* GT1: GSC proxy component didn't bind within the expected timeout
+i915 0000:00:02.0: [drm] *ERROR* GT1: GSC proxy handler failed to init
+mei_gsc_proxy 0000:80:16.0-0f73db04-97ab-4125-b893-e904ad0d5464: bound 0000:00:02.0 (ops i915_gsc_proxy_component_ops [i915])

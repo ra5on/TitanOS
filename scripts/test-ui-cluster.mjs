@@ -142,7 +142,23 @@ async function open(width, path, node = "") {
   });
   await ctx.route("**/api/v1/cluster/nodes/n2/api/update", (r) => r.fulfill({ json: update("0.43.0", "0.44.0") }));
   await ctx.route("**/api/v1/cluster/nodes/n3/api/update", (r) => r.fulfill({ json: update("0.44.0", null) }));
-  await ctx.route("**/api/v1/cluster/nodes/n2/api/notifications**", (r) => r.fulfill({ json: { messages: [] } }));
+  // thor's own messages, read and deleted through the proxy (PLAN 25a).
+  const ago = (minutes) => new Date(Date.now() - minutes * 60000).toISOString();
+  state.notices = [
+    { id: 11, time: ago(5), severity: "error", kind: "volume_degraded", subject: "Data", title: "Volume Data ist beeinträchtigt", text: "Eine Platte fehlt." },
+    { id: 12, time: ago(16), severity: "error", kind: "disk_failed", subject: "sdb", title: "Platte sdb meldet Fehler", text: "SMART: 8 nicht korrigierbare Sektoren." },
+    { id: 13, time: ago(30), severity: "warning", kind: "ups_battery", subject: "", title: "USV-Akku schwach", text: "" },
+    { id: 14, time: ago(40), severity: "info", kind: "update_done", subject: "", title: "Update installiert", text: "" },
+    { id: 15, time: ago(60 * 30), severity: "error", kind: "old", subject: "", title: "Älter als ein Tag", text: "" },
+  ];
+  await ctx.route("**/api/v1/cluster/nodes/n2/api/notifications**", (r) => {
+    if (r.request().method() === "POST") {
+      const ids = r.request().postDataJSON().ids;
+      state.dismissed = [...(state.dismissed ?? []), ...ids];
+      state.notices = state.notices.filter((n) => !ids.includes(n.id));
+    }
+    return r.fulfill({ json: { messages: state.notices } });
+  });
   await ctx.route("**/api/v1/cluster/nodes/n2/api/docker", (r) => r.fulfill({ json: { settings: { enabled: true, volume: "Data" }, running: true, version: "27.5.1", containers: [], apps: [], jobs: {} } }));
   if (node) await ctx.addInitScript((id) => sessionStorage.setItem("titanos.cluster.node", id), node);
   await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
@@ -194,6 +210,39 @@ try {
 
     // A node of another version is managed, not greyed out.
     assert.equal(await list.getByRole("button", { name: "Verwalten" }).first().isEnabled(), true);
+    await ctx.close();
+  }
+  {
+    // thor's errors and warnings unfold under it and can be deleted there.
+    const { ctx, page, state } = await open(1440, "/settings/cluster");
+    state.page.nodes[1].status.errors = 2;
+    state.page.nodes[1].status.warnings = 1;
+    await page.reload();
+    const list = page.locator("#cluster-nodes");
+    await list.getByRole("button", { name: /2 Fehler/ }).click();
+    const box = page.getByRole("region", { name: "Meldungen von thor" });
+    await box.getByText("Platte sdb meldet Fehler").waitFor();
+    assert.equal(await box.getByRole("listitem").count(), 3, "warnings and errors of the last 24 hours only");
+    await shot(page, out + "/9-meldungen.png");
+    await box.getByRole("button", { name: /Platte sdb meldet Fehler/ }).click();
+    await box.getByText("Platte sdb meldet Fehler").waitFor({ state: "detached" });
+    assert.deepEqual(state.dismissed, [12]);
+    await box.getByRole("button", { name: "Angezeigte Meldungen löschen" }).click();
+    const confirm = page.getByRole("dialog", { name: "Angezeigte Meldungen löschen?" });
+    await confirm.getByText("2 Meldungen werden auf thor gelöscht").waitFor();
+    await confirm.getByRole("button", { name: "Löschen" }).click();
+    await box.getByText("Keine Warnungen oder Fehler mehr").waitFor();
+    assert.deepEqual(state.dismissed, [12, 11, 13]);
+    await ctx.close();
+  }
+  {
+    const { ctx, page, state } = await open(390, "/settings/cluster");
+    state.page.nodes[1].status.errors = 2;
+    await page.reload();
+    await page.locator("#cluster-nodes").getByRole("button", { name: /2 Fehler/ }).click();
+    await page.getByRole("region", { name: "Meldungen von thor" }).getByText("Platte sdb meldet Fehler").waitFor();
+    assert.ok((await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)) <= 0, "no sideways scroll");
+    await shot(page, out + "/10-meldungen-handy.png");
     await ctx.close();
   }
   {

@@ -385,6 +385,9 @@ func (m *Manager) mount(ctx context.Context, id string) error {
 	if m.Disabled {
 		return ErrDisabled
 	}
+	// A dying drive must not hang the mount, and with it every USB action.
+	ctx, cancel := context.WithTimeout(ctx, commandLimit)
+	defer cancel()
 	d, err := m.find(ctx, id)
 	if err != nil {
 		return err
@@ -471,6 +474,8 @@ func (m *Manager) Eject(ctx context.Context, id string) error {
 	if !d.Mounted {
 		return ErrNotMounted
 	}
+	ctx, cancel := context.WithTimeout(ctx, commandLimit)
+	defer cancel()
 	_, _ = m.runner.Run(ctx, "", "sync") // only waits for the kernel and udev; the next step checks the result
 	if _, err := m.runner.Run(ctx, "", "umount", d.Dir); err != nil {
 		var cmd *run.CommandError
@@ -493,11 +498,18 @@ func (m *Manager) Watch(ctx context.Context) {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	var last string
+	// After a change udev may still be reading the new drive (no file
+	// system or UUID yet): look again on the next ticks, 30 s in all.
+	again := 0
 	for {
 		m.pollMedia()
 		listing := m.blockListing()
 		if listing != last {
 			last = listing
+			again = 6
+			m.look(ctx)
+		} else if again > 0 {
+			again--
 			m.look(ctx)
 		}
 		select {
@@ -718,3 +730,8 @@ func (m *Manager) readOnly(dir string) bool {
 	}
 	return false
 }
+
+// commandLimit bounds mounting and unmounting a drive: long enough for a
+// slow or large one (sync of a full write cache), short enough that a
+// dying drive does not block all USB actions for good.
+const commandLimit = 5 * time.Minute

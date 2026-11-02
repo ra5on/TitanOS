@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -438,30 +439,72 @@ func (g *IntelGuc) firmwarePresent(file string) bool {
 	return false
 }
 
-// fromDebugfs reads gt0/uc of the GPU's DRM directory in debugfs. Its name
-// is the minor of the card; older kernels have no gt0 level.
+// fromDebugfs reads the uc directory of every GT of the GPU in debugfs. The
+// DRM directory is named after the minor of the card; older kernels have no
+// gtN level. From Meteor Lake on the HuC belongs to the media GT (gt1) and
+// gt0 reports it as not supported, so each firmware is taken from the GT
+// where it does the most.
 func (g *IntelGuc) fromDebugfs(gpu *IntelGPU) {
 	if gpu.Card == "" {
 		return
 	}
 	minor := strings.TrimPrefix(gpu.Card, "card")
-	for _, dir := range []string{
-		filepath.Join(g.debug, "dri", minor, "gt0/uc"),
-		filepath.Join(g.debug, "dri", gpu.Address, "gt0/uc"),
-		filepath.Join(g.debug, "dri", minor, "gt/uc"),
-	} {
-		huc, hucErr := os.ReadFile(filepath.Join(dir, "huc_info"))
-		guc, gucErr := os.ReadFile(filepath.Join(dir, "guc_info"))
+	var dirs []string
+	for _, base := range []string{filepath.Join(g.debug, "dri", minor), filepath.Join(g.debug, "dri", gpu.Address)} {
+		found, _ := filepath.Glob(filepath.Join(base, "gt[0-9]*", "uc"))
+		sort.Strings(found)
+		if len(found) > 0 {
+			dirs = found
+			break
+		}
+	}
+	if len(dirs) == 0 {
+		dirs = []string{filepath.Join(g.debug, "dri", minor, "gt/uc")}
+	}
+	guc, huc := gpu.GuC, gpu.HuC
+	for i, dir := range dirs {
+		hucText, hucErr := os.ReadFile(filepath.Join(dir, "huc_info"))
+		gucText, gucErr := os.ReadFile(filepath.Join(dir, "guc_info"))
 		usage, usageErr := os.ReadFile(filepath.Join(dir, "usage"))
 		if hucErr != nil && gucErr != nil && usageErr != nil {
 			continue
 		}
 		gpu.Source = "debugfs"
-		parseUCInfo(string(huc), "HuC", &gpu.HuC)
-		parseUCInfo(string(guc), "GuC", &gpu.GuC)
-		parseUCUsage(string(usage), gpu)
-		return
+		gtGuC, gtHuC := gpu.GuC, gpu.HuC
+		parseUCInfo(string(hucText), "HuC", &gtHuC)
+		parseUCInfo(string(gucText), "GuC", &gtGuC)
+		gt := IntelGPU{GuC: gtGuC, HuC: gtHuC}
+		parseUCUsage(string(usage), &gt)
+		// Submission is a matter of the primary GT.
+		if i == 0 || gpu.SubmissionUsed == nil {
+			gpu.SubmissionUsed = gt.SubmissionUsed
+		}
+		guc, huc = betterUC(guc, gt.GuC), betterUC(huc, gt.HuC)
 	}
+	gpu.GuC, gpu.HuC = guc, huc
+}
+
+// betterUC returns the firmware state that says more: running and
+// authenticated before any other state, any state before "disabled" and
+// "disabled" before unknown.
+func betterUC(current, next UCFirmware) UCFirmware {
+	rank := func(fw UCFirmware) int {
+		switch {
+		case fw.Authenticated:
+			return 4
+		case fw.State == "RUNNING":
+			return 3
+		case fw.State != "" && fw.State != "disabled":
+			return 2
+		case fw.State == "disabled":
+			return 1
+		}
+		return 0
+	}
+	if rank(next) > rank(current) {
+		return next
+	}
+	return current
 }
 
 var (
@@ -547,7 +590,7 @@ var (
 	logFirmware  = regexp.MustCompile(`(GuC|HuC) firmware (i915/\S+) version (\d+\.\d+\.\d+)`)
 	logHucAuth   = regexp.MustCompile(`(?i)HuC: authenticated`)
 	logSubmit    = regexp.MustCompile(`(?i)GuC: submission (enabled|disabled)`)
-	logProblem   = regexp.MustCompile(`(?i)(GuC|HuC).*(fail|error|missing)|Incompatible option enable_guc`)
+	logProblem   = regexp.MustCompile(`(?i)(GuC|HuC|GSC).*(fail|error|missing|timeout)|Incompatible option enable_guc`)
 	logAddress   = regexp.MustCompile(`\b[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-9a-f]\b`)
 	maxMessages  = 8
 	maxLineBytes = 300
@@ -561,7 +604,7 @@ func parseKernelLog(log string, gpu *IntelGPU) {
 	found := false
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		if !strings.Contains(line, "GuC") && !strings.Contains(line, "HuC") && !strings.Contains(line, "GUC") && !strings.Contains(line, "enable_guc") {
+		if !strings.Contains(line, "GuC") && !strings.Contains(line, "HuC") && !strings.Contains(line, "GUC") && !strings.Contains(line, "GSC") && !strings.Contains(line, "enable_guc") {
 			continue
 		}
 		if address := logAddress.FindString(line); address != "" && address != gpu.Address {

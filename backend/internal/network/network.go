@@ -139,6 +139,9 @@ type Manager struct {
 	dir, sys string
 	// trial is how long a change waits for confirmation.
 	trial time.Duration
+	// portWait is how long Load waits for the configured ports to appear
+	// (slow drivers, firmware loading, USB adapters, late renames).
+	portWait time.Duration
 
 	mu         sync.Mutex
 	loaded     bool
@@ -157,7 +160,7 @@ type Manager struct {
 
 // NewManager returns a manager working on the real system.
 func NewManager(store *config.Store) *Manager {
-	return &Manager{store: store, runner: run.Exec{}, dir: "/etc/systemd/network", sys: "/sys", trial: trial}
+	return &Manager{store: store, runner: run.Exec{}, dir: "/etc/systemd/network", sys: "/sys", trial: trial, portWait: 90 * time.Second}
 }
 
 func defaults() Config {
@@ -180,6 +183,9 @@ func (m *Manager) Load(ctx context.Context) error {
 		cfg, missing = topology, false
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return err
+	}
+	if !missing && !m.Disabled {
+		m.waitPorts(ctx, normal(cfg))
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -829,4 +835,55 @@ func (m *Manager) Status(ctx context.Context) Status {
 		}
 	}
 	return status
+}
+
+// configuredPorts are the Ethernet ports a configuration is built on.
+func configuredPorts(cfg Config) []string {
+	ports := slices.Clone(cfg.Ports)
+	for _, b := range cfg.Bonds {
+		ports = append(ports, b.Ports...)
+	}
+	for _, n := range cfg.Networks {
+		if n.Parent != "" && !strings.HasPrefix(n.Parent, "bond:") {
+			ports = append(ports, n.Parent)
+		}
+	}
+	return ports
+}
+
+// waitPorts waits up to portWait for the configured ports: at boot titand
+// may start before a slow driver has created them. A port that does not
+// come is left to validate, which then refuses the configuration.
+func (m *Manager) waitPorts(ctx context.Context, cfg Config) {
+	wanted := configuredPorts(cfg)
+	missing := func() []string {
+		known := m.Interfaces()
+		var absent []string
+		for _, port := range wanted {
+			if !slices.ContainsFunc(known, func(i Interface) bool { return i.Name == port }) {
+				absent = append(absent, port)
+			}
+		}
+		return absent
+	}
+	absent := missing()
+	if len(absent) == 0 || m.portWait <= 0 {
+		return
+	}
+	slog.Info("waiting for network ports", "ports", absent, "for", m.portWait)
+	deadline := time.Now().Add(m.portWait)
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		if absent = missing(); len(absent) == 0 {
+			slog.Info("network ports are there")
+			return
+		}
+	}
+	slog.Warn("network ports did not appear, the configuration cannot be put in place", "ports", absent)
 }

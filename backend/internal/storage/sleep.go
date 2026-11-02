@@ -567,7 +567,7 @@ func (m *Manager) sleepIdleDisks(ctx context.Context, now time.Time) error {
 			if err != nil || fresh != io || m.sleepIdentity(device) != identity {
 				continue
 			}
-			commandCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			commandCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			_, err = m.runner.Run(commandCtx, "", "hd-idle", args...)
 			cancel()
 			previous.attempted = true

@@ -9,10 +9,13 @@ export type UnboundDevice = {
 	id: string;
 	class: string;
 	name: string;
-	hint: 'plugin' | 'kernel' | 'not_needed' | 'unsupported';
+	hint: 'plugin' | 'kernel' | 'driver_failed' | 'not_needed' | 'unsupported';
 	plugins?: PluginHint[];
+	/** hint kernel: first kernel with a driver; driver_failed: first kernel with the fix. */
 	kernel?: string;
 	driver?: string;
+	/** hint driver_failed: the driver's kernel lines about the device. */
+	messages?: string[];
 };
 
 export type FirmwareMissing = { file: string; device?: string };

@@ -298,14 +298,14 @@ func TestBtrfsWaitsForAllMembersBeforeMountingDegraded(t *testing.T) {
 	m.clock = func() time.Time { return now }
 	m.volumes = []VolumeConfig{{Name: "mirror", Level: "raid1", Filesystem: "btrfs", FilesystemUUID: "fs"}}
 	ctx := context.Background()
-	for _, after := range []time.Duration{0, 30 * time.Second, 59 * time.Second} {
+	for _, after := range []time.Duration{0, 60 * time.Second, 179 * time.Second} {
 		now = start.Add(after)
 		m.mountAll(ctx)
 		if len(runner.commands) != 0 {
 			t.Fatalf("mounted after %v with one member: %v", after, runner.commands)
 		}
 	}
-	now = start.Add(61 * time.Second)
+	now = start.Add(181 * time.Second)
 	m.mountAll(ctx)
 	if len(runner.commands) != 1 || !strings.Contains(runner.commands[0], "subvolid=5,degraded") {
 		t.Fatal(runner.commands)

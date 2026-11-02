@@ -37,6 +37,9 @@ on:
       - 'scripts/third-party-licenses.py'
       - 'scripts/licenses/**'
       - 'scripts/smoke-release.py'
+      - 'scripts/smoke-hardware.py'
+      - 'scripts/boot_log.py'
+      - 'scripts/fetch-pci-ids.sh'
       - 'scripts/smoke-app-update.py'
       - 'scripts/repack-release.py'
       - 'scripts/release-kind.py'
@@ -263,6 +266,13 @@ jobs:
         run: |
           python3 scripts/smoke-app-update.py out/release/titanos-${{ steps.version.outputs.version }}.zip --release out/release --key "$RUNNER_TEMP/rehearsal.key" --timeout 420
           rm "$RUNNER_TEMP/rehearsal.key"
+
+      - name: Different virtual hardware, slow disks and a late USB disk
+        # Network cards, disk controllers and timing beyond the default VM;
+        # every boot log must stay free of unexplained problems.
+        if: steps.kind.outputs.kind == 'system'
+        timeout-minutes: 60
+        run: python3 scripts/smoke-hardware.py out/release/titanos-${{ steps.version.outputs.version }}.zip --logs out
 
       - name: VM RAM snapshots, Btrfs recovery, replacement and optional tools
         # An app release keeps image and plugins of its base, which were tested then.

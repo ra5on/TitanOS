@@ -56,7 +56,9 @@ func (m *Manager) containerDevices(ctx context.Context, runner run.Runner, devRo
 		}
 		if pci.Vendor == "10de" {
 			device.Kind = "nvidia"
-			queryCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+			// The first nvidia-smi after the driver loaded (no persistence
+			// mode, several GPUs) can take far longer than a few seconds.
+			queryCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 			out, err := runner.Run(queryCtx, "", "nvidia-smi", "--id="+pci.Address, "--query-gpu=uuid,index", "--format=csv,noheader,nounits")
 			cancel()
 			rows, parseErr := csv.NewReader(strings.NewReader(strings.TrimSpace(out))).ReadAll()

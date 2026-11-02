@@ -432,3 +432,37 @@ func TestRestartOfTitandLeavesTheNetworkAlone(t *testing.T) {
 		}
 	}
 }
+
+// At boot a slow driver may create the port after titand started: Load
+// waits for it instead of refusing the configuration.
+func TestLoadWaitsForLatePorts(t *testing.T) {
+	m, _ := newTestManager(t)
+	ctx := context.Background()
+	m.portWait = 5 * time.Second
+	if err := m.store.WriteJSON(configFile, Config{Hostname: "nas", Ports: []string{"enp3s0"}, DHCP: true}); err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		time.Sleep(1200 * time.Millisecond)
+		for file, content := range map[string]string{"address": "52:54:00:aa:bb:03", "type": "1", "device/x": ""} {
+			path := filepath.Join(m.sys, "class/net/enp3s0", file)
+			os.MkdirAll(filepath.Dir(path), 0o755)
+			os.WriteFile(path, []byte(content+"\n"), 0o644)
+		}
+	}()
+	started := time.Now()
+	if err := m.Load(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if waited := time.Since(started); waited < time.Second || waited > 4*time.Second {
+		t.Errorf("waited %v", waited)
+	}
+
+	// A port that never comes: refused after the wait, as before.
+	gone, _ := newTestManager(t)
+	gone.portWait = 1500 * time.Millisecond
+	gone.store.WriteJSON(configFile, Config{Hostname: "nas", Ports: []string{"enp9s0"}, DHCP: true})
+	if err := gone.Load(ctx); !errors.Is(err, ErrInvalid) {
+		t.Errorf("missing port: %v", err)
+	}
+}

@@ -1,0 +1,4 @@
+Arrow Lake-S (8086:7d67) as reported by titan on 01.11.2026 (kernel
+6.12.113): the HuC belongs to the media GT. Reconstructed from its kernel
+log ("GT1: HuC firmware i915/mtl_huc_gsc.bin version 8.5.4", "GT1: HuC:
+authenticated for all workloads"), not a copy of its debugfs.

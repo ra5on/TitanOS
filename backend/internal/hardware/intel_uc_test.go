@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -371,5 +372,48 @@ func TestIntelGucFallsBackToTheKernelLog(t *testing.T) {
 	gpu := g.Status(context.Background()).GPUs[0]
 	if gpu.Source != "journal" || !gpu.HuC.Authenticated || gpu.HuC.Version != "4.0.0" || len(gpu.Messages) != 1 {
 		t.Errorf("journal: %+v", gpu)
+	}
+}
+
+// From Meteor Lake on the HuC belongs to the media GT: gt0 calls it not
+// supported, gt1 runs it (titan, Arrow Lake, 01.11.2026).
+func TestIntelGucReadsEveryGT(t *testing.T) {
+	g, _, root := intelSystem(t, "7d67", "i915")
+	if err := g.Load(); err != nil {
+		t.Fatal(err)
+	}
+	for _, gt := range []string{"gt0", "gt1"} {
+		uc := filepath.Join(root, "debug/dri/0", gt, "uc")
+		os.MkdirAll(uc, 0o755)
+		for _, name := range []string{"huc_info", "guc_info", "usage"} {
+			os.WriteFile(filepath.Join(uc, name), []byte(fixture(t, filepath.Join("arl-titan", gt, name))), 0o644)
+		}
+	}
+	gpu := g.Status(context.Background()).GPUs[0]
+	if gpu.Source != "debugfs" || gpu.HuC.State != "RUNNING" || !gpu.HuC.Authenticated ||
+		gpu.HuC.Loaded != "i915/mtl_huc_gsc.bin" || gpu.HuC.Version != "8.5.4" {
+		t.Errorf("huc: %+v", gpu.HuC)
+	}
+	if gpu.GuC.State != "RUNNING" || gpu.GuC.Version != "70.36.0" || gpu.SubmissionUsed == nil || !*gpu.SubmissionUsed {
+		t.Errorf("guc: %+v %v", gpu.GuC, gpu.SubmissionUsed)
+	}
+
+	// Only gt0 (older kernels and Gen9 to Gen12): as before.
+	os.RemoveAll(filepath.Join(root, "debug/dri/0/gt1"))
+	if gpu := g.Status(context.Background()).GPUs[0]; gpu.HuC.State != "disabled" || gpu.HuC.Authenticated {
+		t.Errorf("gt0 only: %+v", gpu.HuC)
+	}
+}
+
+// titan's kernel log: the HuC runs; the late GSC proxy is worth showing.
+// The mei line belongs to the MEI device it names first.
+func TestParseKernelLogArrowLake(t *testing.T) {
+	gpu := IntelGPU{Address: "0000:00:02.0", Messages: []string{}}
+	parseKernelLog(fixture(t, "journal.arl"), &gpu)
+	if gpu.Source != "journal" || !gpu.HuC.Authenticated || gpu.HuC.Loaded != "i915/mtl_huc_gsc.bin" || gpu.HuC.Version != "8.5.4" {
+		t.Errorf("huc: %+v", gpu)
+	}
+	if len(gpu.Messages) != 2 || !strings.Contains(gpu.Messages[0], "GSC proxy component didn't bind") {
+		t.Errorf("messages: %q", gpu.Messages)
 	}
 }

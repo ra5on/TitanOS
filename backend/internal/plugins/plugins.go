@@ -236,7 +236,12 @@ type Manager struct {
 	keys     []minisign.PublicKey
 	keysFrom time.Time
 	// applied is what was last handed to systemd, to notice changes.
-	applied        string
+	applied string
+	// retryAt is when a failed activation is tried again on its own;
+	// retries counts those tries (a driver whose device is not ready yet
+	// right after the start). Zero: no automatic retry.
+	retryAt        time.Time
+	retries        int
 	driverRequests chan string
 	driverActions  sync.Mutex
 	driverStatus   DriverUpdateStatus

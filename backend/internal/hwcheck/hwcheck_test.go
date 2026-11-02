@@ -76,7 +76,8 @@ func (tr *tree) pci(address, vendor, device, class, driver string) {
 
 func (tr *tree) checker() *Checker {
 	tr.file("pci.ids", "10ec  Realtek Semiconductor Co., Ltd.\n\t8127  RTL8127 10GbE\n\t8168  RTL8111/8168\n8086  Intel Corporation\n\t2822  SATA Controller [RAID mode]\n1000  Broadcom / LSI\n\t005d  MegaRAID SAS-3 3108\nC 00  Unclassified device")
-	return &Checker{Sys: filepath.Join(tr.root, "sys"), Proc: filepath.Join(tr.root, "proc"), Dev: filepath.Join(tr.root, "dev"), PCIIDs: filepath.Join(tr.root, "pci.ids"), Runner: &fakeRunner{}}
+	return &Checker{Sys: filepath.Join(tr.root, "sys"), Proc: filepath.Join(tr.root, "proc"), Dev: filepath.Join(tr.root, "dev"), PCIIDs: filepath.Join(tr.root, "pci.ids"),
+		Modules: filepath.Join(tr.root, "modules"), Modprobe: []string{filepath.Join(tr.root, "modprobe.d")}, Runner: &fakeRunner{}}
 }
 
 const cpuinfoOld = `processor	: 0
@@ -217,7 +218,7 @@ func TestUnbound(t *testing.T) {
 		}
 		return result
 	}
-	devices := c.Unbound()
+	devices := c.Unbound(context.Background())
 	hints := map[string]string{}
 	for _, device := range devices {
 		hints[device.Address] = device.Hint
@@ -255,7 +256,7 @@ func TestUnbound(t *testing.T) {
 	}
 	// A kernel that drives it already: the hint does not apply.
 	tr.file("proc/sys/kernel/osrelease", "6.16.3+bpo-amd64")
-	for _, device := range c.Unbound() {
+	for _, device := range c.Unbound(context.Background()) {
 		if device.Address == "0000:03:00.0" && device.Hint != "unsupported" {
 			t.Errorf("6.16: %+v", device)
 		}
@@ -460,5 +461,92 @@ func TestReport(t *testing.T) {
 	// The report is meant to be shared: no MAC addresses.
 	if strings.Contains(text, "aa:bb:cc") {
 		t.Error("MAC address in the text")
+	}
+}
+
+// titan (Arrow Lake, 01.11.2026): vmd is in the kernel and matches the
+// VMD controller but gives up on it; the SPI flash and the chipset sensor
+// need no driver; a blacklisted module does not count as a driver.
+func TestUnboundDriverFailed(t *testing.T) {
+	tr := newTree(t)
+	tr.file("proc/sys/kernel/osrelease", "6.12.113+deb13-amd64")
+	tr.pci("0000:00:0e.0", "8086", "ad0b", "010400", "") // VMD
+	tr.pci("0000:80:1f.5", "8086", "ae23", "0c8000", "") // SPI flash
+	tr.pci("0000:00:14.2", "8086", "a3b1", "118000", "") // PCH thermal (thor)
+	tr.pci("0000:80:14.5", "8086", "7f2f", "000000", "") // unknown
+	tr.pci("0000:01:00.0", "10de", "2d04", "030000", "") // NVIDIA, nouveau blacklisted
+	tr.file("modules/6.12.113+deb13-amd64/modules.alias", "# Aliases extracted from modules themselves.\n"+
+		"alias pci:v00008086d0000AD0Bsv*sd*bc*sc*i* vmd\n"+
+		"alias pci:v000010DEd*sv*sd*bc03sc*i* nouveau\n"+
+		"alias acpi*:INT3400:* int3400_thermal\n"+
+		"alias pci:v00008086d0000A3B1sv*sd*bc*sc*i* intel-pch-thermal-test")
+	tr.file("modprobe.d/titanos-gpu.conf", "# keep nouveau away\nblacklist nouveau")
+	c := tr.checker()
+	runner := &fakeRunner{output: "pci 0000:00:0e.0: [8086:ad0b] type 00 class 0x010400 conventional PCI endpoint\n" +
+		"vmd 0000:00:0e.0: Unknown Bus Offset Setting (3)\n" +
+		"i915 0000:00:02.0: [drm] GT1: HuC: authenticated for all workloads"}
+	c.Runner = runner
+	byAddress := map[string]UnboundDevice{}
+	for _, device := range c.Unbound(context.Background()) {
+		byAddress[device.Address] = device
+	}
+	vmd := byAddress["0000:00:0e.0"]
+	if vmd.Hint != "driver_failed" || vmd.Driver != "vmd" || vmd.Kernel != "7.3" ||
+		!slices.Equal(vmd.Messages, []string{"vmd 0000:00:0e.0: Unknown Bus Offset Setting (3)"}) {
+		t.Errorf("vmd: %+v", vmd)
+	}
+	// A matching module counts even in a class that needs no driver.
+	if thermal := byAddress["0000:00:14.2"]; thermal.Hint != "driver_failed" || thermal.Driver != "intel_pch_thermal_test" || thermal.Kernel != "" {
+		t.Errorf("thermal: %+v", thermal)
+	}
+	for address, hint := range map[string]string{"0000:80:1f.5": "not_needed", "0000:80:14.5": "unsupported", "0000:01:00.0": "unsupported"} {
+		if byAddress[address].Hint != hint {
+			t.Errorf("%s: %+v, want %s", address, byAddress[address], hint)
+		}
+	}
+	if runner.calls != 1 {
+		t.Errorf("kernel log read %d times", runner.calls)
+	}
+
+	// Without a failing driver the kernel log is not read; a kernel with
+	// the fix drops the version hint.
+	tr.file("proc/sys/kernel/osrelease", "7.3.1+bpo-amd64")
+	runner.calls = 0
+	for _, device := range c.Unbound(context.Background()) {
+		if device.Address == "0000:00:0e.0" && device.Hint != "unsupported" {
+			t.Errorf("7.3 without modules.alias: %+v", device)
+		}
+	}
+	if runner.calls != 0 {
+		t.Errorf("kernel log read without need: %d", runner.calls)
+	}
+	tr.file("modules/7.3.1+bpo-amd64/modules.alias", "alias pci:v00008086d0000AD0Bsv*sd*bc*sc*i* vmd")
+	for _, device := range c.Unbound(context.Background()) {
+		if device.Address == "0000:00:0e.0" && (device.Hint != "driver_failed" || device.Kernel != "") {
+			t.Errorf("7.3: %+v", device)
+		}
+	}
+}
+
+func TestDriverMessages(t *testing.T) {
+	log := "xhci_hcd 0000:00:14.0: can't setup: -110\npci 0000:00:14.0: enabling device\n" +
+		"xhci_hcd 0000:00:14.0: init 0000:00:14.0 fail, -110\nxhci_hcd 0000:00:15.0: other device"
+	// The module xhci_pci registers the driver xhci_hcd.
+	got := driverMessages(log, "xhci_pci", "0000:00:14.0")
+	if len(got) != 2 || !strings.HasPrefix(got[0], "xhci_hcd 0000:00:14.0: can't setup") {
+		t.Errorf("fallback: %q", got)
+	}
+	if got := driverMessages(strings.Repeat("vmd 0000:00:0e.0: x\n", 5), "vmd", "0000:00:0e.0"); len(got) != 3 {
+		t.Errorf("limit: %q", got)
+	}
+}
+
+func TestPCINameWithoutRepeatedMaker(t *testing.T) {
+	names := pciNames{"8086": "Intel Corporation", "8086:ad0b": "Volume Management Device NVMe RAID Controller Intel Corporation"}
+	if got := names.name("8086", "ad0b"); got != "Intel Corporation Volume Management Device NVMe RAID Controller" {
+		t.Errorf("name: %q", got)
+	}
+	if got := names.name("8086", "ffff"); got != "PCI 8086:ffff" {
+		t.Errorf("unknown: %q", got)
 	}
 }

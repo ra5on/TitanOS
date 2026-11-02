@@ -125,4 +125,11 @@ chmod 0440 /etc/sudoers.d/titanos
 rm -f /usr/share/initramfs-tools/hooks/mdadm \
     /usr/share/initramfs-tools/scripts/local-block/mdadm \
     /usr/share/initramfs-tools/scripts/local-bottom/mdadm
+# No graphics drivers either: live-boot's kms hook copies i915, radeon and
+# nouveau with their firmware into the initramfs. The initramfs only has to
+# find the stick. Loaded from there, i915 waits for MEI modules that only
+# come with the system and gives up ("GSC proxy component didn't bind
+# within the expected timeout"); the console keeps the UEFI framebuffer.
+# check-image-hardware.py fails the build if one is back.
+rm -f /usr/share/initramfs-tools/hooks/kms
 update-initramfs -u -k all

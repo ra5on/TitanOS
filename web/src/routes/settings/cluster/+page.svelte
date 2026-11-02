@@ -21,6 +21,7 @@
 	import ProbeDialog from '#lib/components/cluster/ProbeDialog.svelte';
 	import RouteDialog from '#lib/components/cluster/RouteDialog.svelte';
 	import UpdateAllDialog from '#lib/components/cluster/UpdateAllDialog.svelte';
+	import NodeNotices from '#lib/components/cluster/NodeNotices.svelte';
 	import {
 		WAYS,
 		compareVersions,
@@ -70,6 +71,8 @@
 	let routing = $state<NodeView | null>(null);
 	let updating = $state(false);
 	let handing = $state<NodeView | null>(null);
+	// The node whose warnings and errors are unfolded under it.
+	let noticesOf = $state('');
 
 	const owner = $derived(session.data?.user?.role === 'owner');
 	const cluster = $derived(page?.cluster);
@@ -430,12 +433,35 @@
 							{#if route?.manage}<span class="chip info"
 									>{t('cluster.ownWay', { way: wayLabel(route.manage) })}</span
 								>{/if}
-							{#if node.status?.errors}<span class="chip error"
-									>{t('cluster.errors', { count: node.status.errors })}</span
-								>{/if}
-							{#if node.status?.warnings}<span class="chip warn"
-									>{t('cluster.warnings', { count: node.status.warnings })}</span
-								>{/if}
+							{#if node.status?.errors || node.status?.warnings}
+								{#if node.self || (manages && manageable(node))}
+									<button
+										type="button"
+										class="chip-button"
+										aria-expanded={noticesOf === node.id}
+										aria-controls="notices-{node.id}"
+										title={t('cluster.noticesShow')}
+										onclick={() => (noticesOf = noticesOf === node.id ? '' : node.id)}
+									>
+										{#if node.status.errors}<span class="chip error"
+												>{t('cluster.errors', { count: node.status.errors })}</span
+											>{/if}
+										{#if node.status.warnings}<span class="chip warn"
+												>{t('cluster.warnings', { count: node.status.warnings })}</span
+											>{/if}
+										<span class="fold" class:open={noticesOf === node.id}
+											><Icon name="chevronDown" size={14} /></span
+										>
+									</button>
+								{:else}
+									{#if node.status.errors}<span class="chip error"
+											>{t('cluster.errors', { count: node.status.errors })}</span
+										>{/if}
+									{#if node.status.warnings}<span class="chip warn"
+											>{t('cluster.warnings', { count: node.status.warnings })}</span
+										>{/if}
+								{/if}
+							{/if}
 						</div>
 						<p class="line">
 							{#if node.self}
@@ -487,6 +513,11 @@
 										})}</span
 									>{/if}
 							</p>
+						{/if}
+						{#if noticesOf === node.id}
+							<div id="notices-{node.id}">
+								<NodeNotices node={node.id} self={node.self} name={node.name} onchange={load} />
+							</div>
 						{/if}
 					</div>
 					<div class="actions">
@@ -911,6 +942,29 @@
 {/if}
 
 <style>
+	.chip-button {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 0;
+		border: 0;
+		background: none;
+		color: inherit;
+		font: inherit;
+		cursor: pointer;
+	}
+	.fold {
+		display: inline-flex;
+		transition: transform 0.15s;
+	}
+	.fold.open {
+		transform: rotate(180deg);
+	}
+	.chip-button:focus-visible {
+		outline: 2px solid var(--focus, var(--accent));
+		outline-offset: 2px;
+		border-radius: 6px;
+	}
 	.nodes-tile {
 		padding: 0;
 	}

@@ -49,13 +49,20 @@ GuC-Submission gibt es erst ab Gen11 (`__guc_submission_supported`:
 HuC; die Seite weist darauf hin.
 
 **Mechanismus:** Der Parameter steht in der `options`-Zeile der Boot-Einträge
-auf dem Stick, nicht in `modprobe.d`. `i915.ko` und die GuC/HuC-Firmware
-liegen im Initramfs (am Stick-Abbild 0.23.3 mit `lsinitramfs` geprüft:
-`kernel/drivers/gpu/drm/i915/i915.ko.xz`, `firmware/i915/skl_huc_2.0.0.bin`
-usw.), udev lädt i915 dort beim ersten Gerätescan. Eine Datei, die titand im
-laufenden System erzeugt, käme zu spät; eine Datei im Abbild wäre für alle
-NAS gleich. `module.param=` auf der Kernel-Kommandozeile gilt dagegen, egal ob
-das Modul im Initramfs oder später geladen wird.
+auf dem Stick, nicht in `modprobe.d`. Seit 0.45 liegen keine Grafiktreiber
+mehr im Initramfs (`mkosi.postinst.chroot` entfernt den kms-Hook von
+live-boot): i915 lädt aus dem System, zusammen mit den MEI-Modulen, die es ab
+Meteor Lake für die HuC braucht (GSC-Proxy). Aus dem Initramfs geladen wartete
+i915 vergeblich auf `mei_gsc_proxy` („GSC proxy component didn't bind within
+the expected timeout“, titan, Arrow Lake, 01.11.2026). `module.param=` auf der
+Kernel-Kommandozeile gilt, egal wann das Modul geladen wird;
+`check-image-hardware.py` lässt den Bau scheitern, wenn ein Grafiktreiber
+wieder im Initramfs liegt.
+
+**Ab Meteor Lake** sitzt die HuC auf der Medien-GT (`gt1`); `gt0` meldet sie
+als nicht unterstützt. Die Seite liest alle `gt*/uc` aus debugfs und zeigt
+je Firmware die GT, auf der sie läuft (bis 0.44 stand dort fälschlich „HuC
+nicht geladen“).
 
 - Die Einstellung liegt in `/config/system/intel-gpu.json` (`{"mode":"auto|huc|guc"}`).
   Fehlt die Datei, fasst TitanOS die Boot-Einträge nicht an; ein von Hand
@@ -258,10 +265,46 @@ Dateinamen). Hinweis je Gerät:
    E610 (8086:57ae–57b2, 6.14), Wangxun AML (8088:5010/5110/5025/5125/5040/5140,
    6.15). Alle laufen mit dem optional wählbaren neueren Kernel (6.16 oder neuer,
    Plan 5a). Läuft bereits ein Kernel dieser Version, entfällt der Hinweis.
-3. **Braucht meist keinen Treiber:** PCI-Klassen 05 (Speicher-Controller),
-   0600/0601/0680 (Brücken), 0880 (Systemperipherie), 0b (Prozessoren); unter
-   „Systembausteine anzeigen“ eingeklappt.
-4. **Nicht unterstützt:** alles andere.
+3. **Treiber gescheitert** (seit 0.45): Ein Modul des laufenden Kernels passt
+   laut `modules.alias` zum Gerät (ohne Module auf der Blacklist in
+   `modprobe.d`, z. B. nouveau), hat es aber nicht übernommen. Dazu bis zu drei
+   Kernelzeilen des Treibers über das Gerät. Behebt ein neuerer Kernel den
+   erkannten Fehler, steht die Version dabei (Tabelle `kernelFixes`: VMD mit
+   „Unknown Bus Offset Setting (3)“ auf Arrow Lake-HX-Boards, behoben ab Linux
+   7.3, „PCI: vmd: Handle BUS_RESTRICT_CFG value 3 for Arrow Lake-HX“). Bei VMD
+   der Hinweis, VMD/RST im BIOS auszuschalten, wenn kein Intel-RAID gebraucht wird.
+4. **Braucht meist keinen Treiber:** PCI-Klassen 05 (Speicher-Controller),
+   0600/0601/0680 (Brücken), 0880 (Systemperipherie), 0b (Prozessoren), 0c80
+   (sonstige serielle Busse, meist der SPI-Flash des BIOS; `spi-intel-pci` ist
+   bei Debian bewusst aus) und 1180 (Chipsatz-Thermik; die CPU-Temperatur kommt
+   von coretemp/k10temp); unter „Systembausteine anzeigen“ eingeklappt.
+5. **Nicht unterstützt:** alles andere.
+
+Gerätenamen kommen aus einer `pci.ids` von pciutils/pciids, im Bau auf einen
+Commit und eine SHA-256 festgelegt (`build/pci-ids.lock`, aktualisieren mit
+`scripts/fetch-pci-ids.sh --update`). Sie ersetzt die ältere Datei des
+Debian-Pakets, auch für `lspci`. Wiederholt ein Eintrag den Hersteller am Ende,
+erscheint er nur einmal.
+
+### Hardware-Schnappschuss (Plan 24h, 24i)
+
+Werkzeuge › Hardware prüfen › „Schnappschuss speichern“ (`GET
+/api/v1/hardware/snapshot`, Besitzer und Administratoren) speichert als
+`tar.gz`, was die Hardware-Seite liest: Gerätedateien aus `/sys` (nur eine
+feste Liste von Attributen wie `vendor`, `device`, `class`, `modalias`,
+`idVendor`, `model`; keine Konfigurationsbereiche, ROMs oder Seriennummern),
+Treiber-Verknüpfungen, `/sys/class/dmi/id` ohne Seriennummern, hwmon-Werte,
+`/proc/cpuinfo`, `meminfo`, `cmdline`, GuC/HuC aus debugfs, die PCI-/USB-Zeilen
+von `modules.alias`, die `modprobe.d`-Dateien und das Kernelprotokoll dieses
+Starts. Aus dem Protokoll fallen Zeilen mit Seriennummern; MAC-, IPv4- und
+IPv6-Adressen werden ersetzt. Die GitHub-Vorlage „Hardware-Problem“ fragt
+nach dem Schnappschuss.
+
+Jeder Schnappschuss unter `backend/internal/hwcheck/testdata/snapshots/` ist
+ein Testfall (`TestSnapshots`): Die Hardware-Seite muss dasselbe sagen wie
+beim Hinzufügen (`<name>.json`), und kein Gerät, zu dem ein Modul passt, darf
+„nicht unterstützt“ heißen. Bisher liegt dort nur eine QEMU-Maschine; die
+Schnappschüsse von echten NAS (thor, titan, …) kommen nach dem Update dazu.
 
 ### CPU und Virtualisierung (5h)
 
@@ -290,6 +333,42 @@ Dateinamen). Hinweis je Gerät:
 - **SAS-Ruhezustand:** über den bestehenden Ruhemodus (`hd-idle`, SCSI Power
   Condition 3); `sdparm` wird nicht benötigt (Begründung in
   `docs/rules/STORAGE.md`, „Platten-Hinweise“).
+
+### Echte Rechner von linux-hardware.org (Plan 24j)
+
+`backend/internal/hwcheck/testdata/linuxhw/` enthält die PCI-Geräte von 799
+zufällig gewählten Modellen (Desktops, Server, Mini-PCs, Firewalls mit Kernel
+6.x) aus [linuxhw/LsPCI](https://github.com/linuxhw/LsPCI), CC BY 4.0,
+ohne Probe-Kennungen. `TestLinuxHardwareCorpus` ordnet jedes der 10.936
+verschiedenen Geräte der 786 x86-64-Rechner mit den Modulen des Debian-Kernels
+6.12 ein. Ergebnis vom 1.11.2026: Für Speicher, Netzwerk, Grafik, USB und
+Beschleuniger fehlt in 6.12 nur bei einem Gerät der Treiber (10ec:8125 in der
+Variante RTL8125D/BP), und dort zeigt die Seite schon „ab Kernel 6.14“. Ändert
+sich diese Liste (`missing-6.12.txt`), scheitert der Test.
+
+### Prüfungen beim Bau und Start (Plan 24e–24n)
+
+- **Abbild** (`scripts/check-image-hardware.py`, in `mkosi.finalize`):
+  `regulatory.db`; jede Firmware-Datei, die ein Modul für Netzwerk, Speicher,
+  Grafik, Beschleuniger, USB-Hosts, Thunderbolt oder MEI verlangt, liegt im
+  Abbild oder steht mit Begründung in `EXPECTED_MISSING` (amdgpu-Zusatzdateien,
+  nicht weitergebbare Dateien wie `renesas_usb_fw.mem`, Karten aus den
+  1990ern, Gaudi, NPU ab Lunar Lake). Andere Module (WLAN, Bluetooth, TV,
+  Sound, serielle Adapter) werden nur gezählt (Stand 01.11.2026: 137).
+  Blacklist-Module (nouveau) zählen nicht. Kein Grafiktreiber im Initramfs.
+  Beim Abbild mit Kernel „Neu“ (`kernel-variant` = `new`) gilt ein Chip, für
+  den die Firmware-Pakete gar keine Datei haben (z. B. `amdgpu/gc_11_5_4_*`,
+  `intel/vpu/vpu_60xx*`, `amdnpu/17f0_20/`), als neuer als die Firmware: Er
+  wird gemeldet, lässt den Bau aber nicht scheitern. Fehlt nur ein Teil der
+  Dateien eines Chips, scheitert er weiter; beim stabilen Kernel immer.
+- **Startprotokoll** (`scripts/boot_log.py`): `smoke-release.py` und
+  `smoke-hardware.py` lassen den Test scheitern bei Zeilen zu fehlender
+  Firmware, Treiberfehlern, Zeitüberschreitungen, gescheiterten Units oder
+  Kernelfehlern, die nicht in `KNOWN` mit Begründung stehen.
+- **Virtuelle Hardware** (`scripts/smoke-hardware.py`, im Release-Workflow für
+  Systemreleases): Intel e1000e mit AHCI und NVMe; Realtek rtl8139 und Intel
+  e1000 nebeneinander mit virtio-scsi; Platten mit 10 Operationen pro Sekunde
+  und eine USB-Platte, die erst nach dem Start eingesteckt wird.
 
 ### Prüfstand und Grenzen
 

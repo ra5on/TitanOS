@@ -61,7 +61,7 @@ Einzelheiten in [ENCRYPTION.md](ENCRYPTION.md).
 
 Ältere App-Versionen (Rückweg auf 0.28.x) kennen nur Spiegel aus zwei Platten:
 Ein Volume mit einer oder drei Platten zeigen sie als degradiert bzw. lassen es
-nicht löschen; ein einzelnes Volume binden sie nach 60 Sekunden degradiert ein.
+nicht löschen; ein einzelnes Volume binden sie nach drei Minuten degradiert ein.
 Daten gehen dabei nicht verloren.
 
 ## Snapshots
@@ -91,7 +91,7 @@ Die Volume-Prüfung startet einen Btrfs-Scrub. Nicht korrigierbare Fehler werden
 als Fehlerzähler angezeigt; ein Scrub ist kein Ersatz für ein Backup.
 
 Mit einer fehlenden Platte bindet TitanOS ein Volume mit mindestens zwei Kopien
-nach 60 Sekunden degradiert ein. Unter **Platte hinzufügen** eine mindestens
+nach drei Minuten degradiert ein. Unter **Platte hinzufügen** eine mindestens
 ausreichend große Ersatzplatte auswählen und das Löschen bestätigen. TitanOS
 verwendet `btrfs replace`, damit die Kopien erhalten bleiben. Die bisherige,
 entfernte Platte nicht gleichzeitig wieder anschließen. Hot-Spares gibt es bei

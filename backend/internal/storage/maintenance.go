@@ -85,7 +85,8 @@ func (m *Manager) SelfTest(ctx context.Context, serial, kind string) (result err
 		}
 	}()
 	command := func(args ...string) (string, error) {
-		call, stop := context.WithTimeout(testCtx, 30*time.Second)
+		// A sleeping disk behind an expander can take well over 30 s to spin up.
+		call, stop := context.WithTimeout(testCtx, 2*time.Minute)
 		defer stop()
 		return m.runner.Run(call, "", "smartctl", args...)
 	}

@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"maps"
 	"os"
@@ -155,6 +156,9 @@ type titand struct {
 // wireBase wires configuration, accounts, time zone, network, firewall and volumes: everything after relies on them.
 func (w *titand) wireBase() error {
 	ctx := w.ctx
+	if !w.opts.dev {
+		waitForConfig(ctx, w.opts.configDir, 2*time.Minute)
+	}
 	w.store = config.Open(w.opts.configDir)
 	w.users = auth.NewUsers(w.store)
 	if err := w.users.Load(); err != nil {
@@ -1486,5 +1490,37 @@ func cachedTailscaleName(t *tailscale.Manager) func() string {
 			}
 		}
 		return name
+	}
+}
+
+// waitForConfig waits until /config can be read: the stick is mounted on
+// first access (automount) and a slow USB controller can make that fail at
+// boot. Every part of titand reads its settings once at start, so reading
+// too early would leave them at their defaults until the next start. A
+// missing config directory (a new stick) does not count as "not ready".
+func waitForConfig(ctx context.Context, dir string, patience time.Duration) {
+	deadline := time.Now().Add(patience)
+	logged := false
+	for {
+		_, err := os.Stat(dir)
+		if err == nil || errors.Is(err, fs.ErrNotExist) {
+			if logged {
+				slog.Info("stick readable", "config", dir)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			slog.Warn("stick still not readable, going on without it", "config", dir, "err", err)
+			return
+		}
+		if !logged {
+			slog.Info("waiting for the stick", "config", dir, "err", err)
+			logged = true
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(2 * time.Second):
+		}
 	}
 }
