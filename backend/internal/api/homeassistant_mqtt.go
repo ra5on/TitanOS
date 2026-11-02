@@ -43,7 +43,7 @@ func (s *Server) HASnapshot(ctx context.Context) homeassistant.Snapshot {
 		status := m.Rec.Status()
 		root := m.Root()
 		for _, c := range m.Store.Cameras() {
-			snap.Cameras = append(snap.Cameras, homeassistant.RunValues{Name: c.Name, Running: status[c.ID].Recording})
+			snap.Cameras = append(snap.Cameras, homeassistant.RunValues{Name: c.Name, Running: status[c.ID].Recording && c.Mode() != "off"})
 			var used int64
 			var last *string
 			if root != "" {
@@ -315,6 +315,12 @@ func (s *Server) haCamera(name, action string) error {
 			continue
 		}
 		c.Record = action == "start"
+		switch {
+		case action == "stop":
+			c.RecordMode = "off"
+		case c.RecordMode == "" || c.RecordMode == "off":
+			c.RecordMode = "continuous"
+		}
 		if _, err := s.opts.NVR.Store.Update(c, nil); err != nil {
 			return err
 		}

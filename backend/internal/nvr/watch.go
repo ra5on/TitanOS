@@ -80,7 +80,7 @@ func (w *Watcher) Apply(ctx context.Context, enabled bool) {
 	want := map[string]string{}
 	if enabled && root != "" {
 		for _, c := range w.Store.Cameras() {
-			if c.Detect {
+			if c.Watched() {
 				want[c.ID] = strings.Join([]string{w.Store.Full(c, true), itoa(c.Sensitivity), root}, "\x00")
 			}
 		}

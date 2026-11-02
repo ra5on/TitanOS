@@ -7923,5 +7923,20 @@
 	"nvrArm.bySchedule": "by schedule",
 	"nvrArm.arm": "Arm",
 	"nvrArm.disarm": "Disarm",
-	"nvrArm.settings": "Settings"
+	"nvrArm.settings": "Settings",
+	"nvr.fieldMode": "Recording",
+	"nvr.modeEvents": "Only around events",
+	"nvr.modeContinuous": "Continuous",
+	"nvr.modeOff": "Off",
+	"nvr.modeEventsHint": "Recording runs all the time, but only what lies around an event is kept (a minute before and after, in 5-minute files). The motion check runs for this even if it is off below.",
+	"nvr.fieldEventKeepDays": "Keep events (days)",
+	"nvr.eventKeepDays": "Keep events (days)",
+	"nvr.privacyHint": "Filming public areas or neighbouring property is subject to data protection rules (sign, short retention). This is not legal advice.",
+	"nvr.privacyMore": "More in the handbook",
+	"notify.kind.nvr_camera_offline.title": "Camera {subject} sends no picture",
+	"notify.kind.nvr_camera_offline.text": "Nothing has come from the camera {subject} for three minutes; nothing is recorded. Check power, network (Wi-Fi) and the login. TitanOS keeps trying.",
+	"notify.kind.nvr_camera_online.title": "Camera {subject} is back",
+	"notify.kind.nvr_camera_online.text": "The camera {subject} sends pictures again; recording runs.",
+	"notify.kind.nvr_retention_short.title": "Retention shortened: {subject}",
+	"notify.kind.nvr_retention_short.text": "Space ran short: the camera now has only the days before the slash, the days after it were wanted. The oldest recordings were deleted."
 }

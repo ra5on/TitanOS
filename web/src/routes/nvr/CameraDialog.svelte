@@ -9,6 +9,7 @@
 	import {
 		discoveryProblem,
 		resolution,
+		modeOf,
 		SENSITIVITY,
 		sensitivityChoice,
 		type Camera,
@@ -27,7 +28,9 @@
 	let password = $state('');
 	let link = $state('');
 	let vendor = $state(initial?.vendor ?? '');
-	let record = $state(initial?.record ?? true);
+	// New cameras: "only around events" is the suggestion, not a rule.
+	let mode = $state<'off' | 'continuous' | 'events'>(initial ? modeOf(initial) : 'events');
+	let eventKeepDays = $state(initial?.eventKeepDays ? String(initial.eventKeepDays) : '');
 	let detect = $state(initial?.detect ?? false);
 	let sensitivity = $state(sensitivityChoice(initial?.sensitivity));
 	let audio = $state(initial?.audio ?? false);
@@ -74,7 +77,9 @@
 			vendor,
 			mainUrl: main,
 			subUrl: sub,
-			record,
+			record: mode !== 'off',
+			recordMode: mode,
+			eventKeepDays: eventKeepDays ? Number(eventKeepDays) : 0,
 			audio,
 			detect,
 			sensitivity,
@@ -161,6 +166,11 @@
 				<input class="field" type="number" min="1" max="3650" bind:value={keepDays} />
 				<small class="muted">{t('nvr.keepDaysHint')}</small>
 			</label>
+			<label
+				><span>{t('nvr.fieldEventKeepDays')}</span>
+				<input class="field" type="number" min="1" max="3650" bind:value={eventKeepDays} />
+				<small class="muted">{t('nvr.keepDaysHint')}</small>
+			</label>
 		</details>
 
 		<div class="row-actions">
@@ -192,9 +202,15 @@
 		{/if}
 		{#if error}<div class="notice-error" role="alert">{error}</div>{/if}
 
-		<label class="check"
-			><input type="checkbox" bind:checked={record} /><span>{t('nvr.fieldRecord')}</span></label
-		>
+		<label
+			><span>{t('nvr.fieldMode')}</span>
+			<select class="field" bind:value={mode}>
+				<option value="events">{t('nvr.modeEvents')}</option>
+				<option value="continuous">{t('nvr.modeContinuous')}</option>
+				<option value="off">{t('nvr.modeOff')}</option>
+			</select>
+			{#if mode === 'events'}<small class="muted">{t('nvr.modeEventsHint')}</small>{/if}
+		</label>
 		<label class="check"
 			><input type="checkbox" bind:checked={detect} /><span>{t('nvr.fieldDetect')}</span></label
 		>
@@ -207,6 +223,15 @@
 				</select>
 			</label>
 		{/if}
+
+		{#if !editing}<p class="muted small">
+				{t('nvr.privacyHint')}
+				<a
+					href="https://github.com/ra5on/TitanOS/blob/main/docs/NVR.md#datenschutz"
+					target="_blank"
+					rel="noopener noreferrer">{t('nvr.privacyMore')}</a
+				>
+			</p>{/if}
 
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={onclose} disabled={saving}

@@ -15,6 +15,8 @@ export type Camera = {
 	mainUrl: string;
 	subUrl?: string;
 	record: boolean;
+	recordMode?: 'off' | 'continuous' | 'events';
+	eventKeepDays?: number;
 	audio: boolean;
 	keepDays?: number;
 	onvifPort?: number;
@@ -33,6 +35,7 @@ export type NvrSettings = {
 	enabled: boolean;
 	volume?: string;
 	keepDays: number;
+	eventKeepDays?: number;
 	reserveGB: number;
 	arming: Arming;
 };
@@ -194,3 +197,13 @@ export type Arming = {
 	cameras?: string[];
 	quietMinutes?: number;
 };
+
+/** The effective recording mode (cameras of 0.46.0 only have `record`). */
+export function modeOf(c: {
+	record: boolean;
+	recordMode?: string;
+}): 'off' | 'continuous' | 'events' {
+	if (c.recordMode === 'off' || c.recordMode === 'continuous' || c.recordMode === 'events')
+		return c.recordMode;
+	return c.record ? 'continuous' : 'off';
+}

@@ -102,7 +102,7 @@ func (r *Recorder) Apply(ctx context.Context, enabled bool) {
 	want := map[string]string{}
 	if enabled && root != "" {
 		for _, c := range r.Store.Cameras() {
-			if c.Record {
+			if c.Mode() != "off" {
 				// The spec changes when anything that matters for the process does.
 				want[c.ID] = strings.Join([]string{r.Store.Full(c, false), fmt.Sprint(c.Audio), root}, "\x00")
 			}

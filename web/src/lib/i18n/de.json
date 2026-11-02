@@ -7923,5 +7923,20 @@
 	"nvrArm.bySchedule": "nach Zeitplan",
 	"nvrArm.arm": "Scharf schalten",
 	"nvrArm.disarm": "Unscharf schalten",
-	"nvrArm.settings": "Einstellungen"
+	"nvrArm.settings": "Einstellungen",
+	"nvr.fieldMode": "Aufnahme",
+	"nvr.modeEvents": "Nur bei Ereignissen",
+	"nvr.modeContinuous": "Dauerhaft",
+	"nvr.modeOff": "Aus",
+	"nvr.modeEventsHint": "Aufgenommen wird laufend, behalten wird nur, was um ein Ereignis herum liegt (eine Minute davor und danach, in 5-Minuten-Dateien). Dafür läuft die Bewegungserkennung, auch wenn sie unten aus ist.",
+	"nvr.fieldEventKeepDays": "Ereignisse aufbewahren (Tage)",
+	"nvr.eventKeepDays": "Ereignisse aufbewahren (Tage)",
+	"nvr.privacyHint": "Wer öffentliche Bereiche oder Nachbargrundstücke filmt, muss die Datenschutzregeln beachten (Hinweisschild, kurze Speicherdauer). Das ist keine Rechtsberatung.",
+	"nvr.privacyMore": "Mehr im Handbuch",
+	"notify.kind.nvr_camera_offline.title": "Kamera {subject} liefert kein Bild",
+	"notify.kind.nvr_camera_offline.text": "Seit drei Minuten kommt von der Kamera {subject} nichts an; es wird nicht aufgenommen. Prüfe Strom, Netz (WLAN) und die Zugangsdaten. TitanOS versucht es weiter.",
+	"notify.kind.nvr_camera_online.title": "Kamera {subject} wieder da",
+	"notify.kind.nvr_camera_online.text": "Die Kamera {subject} liefert wieder Bilder; die Aufnahme läuft.",
+	"notify.kind.nvr_retention_short.title": "Aufbewahrung verkürzt: {subject}",
+	"notify.kind.nvr_retention_short.text": "Der Platz reichte nicht: Für die Kamera sind jetzt nur noch so viele Tage da wie vor dem Schrägstrich angegeben, gewünscht sind die Tage danach. Die ältesten Aufnahmen wurden gelöscht."
 }

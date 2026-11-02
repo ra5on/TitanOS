@@ -14,6 +14,7 @@
 	import {
 		clockOf,
 		fileOf,
+		modeOf,
 		pictureUrl,
 		type Camera,
 		type NvrEvent,
@@ -41,6 +42,7 @@
 	// General settings, edited in place.
 	let volume = $state('');
 	let keepDays = $state(7);
+	let eventKeepDays = $state(30);
 	let reserveGB = $state(20);
 	let touched = false;
 
@@ -51,6 +53,7 @@
 			if (!touched) {
 				volume = nvr.settings.volume ?? '';
 				keepDays = nvr.settings.keepDays;
+				eventKeepDays = nvr.settings.eventKeepDays || 30;
 				reserveGB = nvr.settings.reserveGB;
 			}
 		} catch (e) {
@@ -62,7 +65,12 @@
 	async function saveSettings() {
 		busy = true;
 		try {
-			nvr = await api.put<NvrState>('/nvr/settings', { volume, keepDays, reserveGB });
+			nvr = await api.put<NvrState>('/nvr/settings', {
+				volume,
+				keepDays,
+				eventKeepDays,
+				reserveGB,
+			});
 			touched = false;
 			error = '';
 		} catch (e) {
@@ -198,6 +206,7 @@
 		nvr !== null &&
 			(volume !== (nvr.settings.volume ?? '') ||
 				keepDays !== nvr.settings.keepDays ||
+				eventKeepDays !== (nvr.settings.eventKeepDays || 30) ||
 				reserveGB !== nvr.settings.reserveGB),
 	);
 </script>
@@ -240,6 +249,17 @@
 					min="1"
 					max="3650"
 					bind:value={keepDays}
+					oninput={() => (touched = true)}
+				/>
+			</label>
+			<label
+				><span>{t('nvr.eventKeepDays')}</span>
+				<input
+					class="field"
+					type="number"
+					min="1"
+					max="3650"
+					bind:value={eventKeepDays}
 					oninput={() => (touched = true)}
 				/>
 			</label>
@@ -302,9 +322,14 @@
 					<span class="chip {camera.status.recording ? 'ok' : ''}"
 						>{camera.status.recording
 							? '● ' + t('nvr.recording')
-							: camera.record
+							: modeOf(camera) !== 'off'
 								? '○ ' + t('nvr.notRecording')
 								: '○ ' + t('nvr.recordOff')}</span
+					>
+					<span class="chip"
+						>{t(
+							`nvr.mode${modeOf(camera) === 'events' ? 'Events' : modeOf(camera) === 'continuous' ? 'Continuous' : 'Off'}` as 'nvr.modeOff',
+						)}</span
 					>
 					<p class="muted small">
 						{#if camera.watch.motion}<strong>{t('nvr.motionNow')}</strong> ·
@@ -327,7 +352,7 @@
 						onclick={() => (live = live === camera.id ? '' : camera.id)}
 						>{live === camera.id ? t('nvr.liveStop') : t('nvr.live')}</button
 					>
-					{#if camera.detect}
+					{#if camera.detect || modeOf(camera) === 'events'}
 						<button
 							type="button"
 							class="btn"

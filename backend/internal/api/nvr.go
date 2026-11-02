@@ -94,9 +94,10 @@ func (s *Server) handleNVR(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleNVRSettings(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Volume    string `json:"volume"`
-		KeepDays  int    `json:"keepDays"`
-		ReserveGB int    `json:"reserveGB"`
+		Volume        string `json:"volume"`
+		KeepDays      int    `json:"keepDays"`
+		EventKeepDays int    `json:"eventKeepDays"`
+		ReserveGB     int    `json:"reserveGB"`
 	}
 	if !s.nvrOK(w) || !readJSON(w, r, &req) {
 		return
@@ -106,7 +107,7 @@ func (s *Server) handleNVRSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_nvr", "the volume is not mounted")
 		return
 	}
-	cur.Volume, cur.KeepDays, cur.ReserveGB = req.Volume, req.KeepDays, req.ReserveGB
+	cur.Volume, cur.KeepDays, cur.EventKeepDays, cur.ReserveGB = req.Volume, req.KeepDays, req.EventKeepDays, req.ReserveGB
 	if err := s.opts.NVR.Store.SetSettings(cur); err != nil {
 		s.nvrError(w, err)
 		return

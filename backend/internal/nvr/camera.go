@@ -40,8 +40,14 @@ type Camera struct {
 	Vendor  string `json:"vendor,omitempty"`
 	MainURL string `json:"mainUrl"`
 	SubURL  string `json:"subUrl,omitempty"`
-	// Record switches recording of the main stream on.
+	// Record switches recording of the main stream on (0.46.0); RecordMode
+	// replaces it when set.
 	Record bool `json:"record"`
+	// RecordMode is "off", "continuous" or "events" (only what lies around
+	// an event is kept; needs the motion check, which then runs).
+	RecordMode string `json:"recordMode,omitempty"`
+	// EventKeepDays overrides how long events and their pictures stay.
+	EventKeepDays int `json:"eventKeepDays,omitempty"`
 	// Audio is off unless the person asks for it.
 	Audio bool `json:"audio"`
 	// ONVIFPort is the port ONVIF answered on at the search, 0 if none did.
@@ -71,6 +77,8 @@ type Settings struct {
 	Armed bool `json:"armed,omitempty"`
 	// Arming decides when movement is reported. Off by default.
 	Arming Arming `json:"arming"`
+	// EventKeepDays is how long events and their pictures stay; 0 means 30.
+	EventKeepDays int `json:"eventKeepDays,omitempty"`
 	// ReserveGB is the space kept free; the oldest recordings go first when
 	// it runs short.
 	ReserveGB int `json:"reserveGB"`
@@ -135,6 +143,9 @@ func (s *Store) Settings() Settings {
 
 // SetSettings validates and stores the general settings.
 func (s *Store) SetSettings(v Settings) error {
+	if v.EventKeepDays < 0 || v.EventKeepDays > maxKeepDays {
+		return fmt.Errorf("%w: retention out of range", ErrInvalid)
+	}
 	if v.KeepDays < 1 || v.KeepDays > maxKeepDays || v.ReserveGB < 0 || v.ReserveGB > maxReserveGB {
 		return fmt.Errorf("%w: retention or reserve out of range", ErrInvalid)
 	}
@@ -216,6 +227,14 @@ func validateCamera(c Camera) error {
 	}
 	if c.Sensitivity < 0 || c.Sensitivity > 100 {
 		return fmt.Errorf("%w: sensitivity", ErrInvalid)
+	}
+	switch c.RecordMode {
+	case "", "off", "continuous", "events":
+	default:
+		return fmt.Errorf("%w: recording mode", ErrInvalid)
+	}
+	if c.EventKeepDays < 0 || c.EventKeepDays > maxKeepDays {
+		return fmt.Errorf("%w: retention", ErrInvalid)
 	}
 	if c.KeepDays < 0 || c.KeepDays > maxKeepDays {
 		return fmt.Errorf("%w: retention", ErrInvalid)
@@ -433,4 +452,41 @@ func (s *Store) SetQualityOriginal(id, token string, orig *QualityChange) error 
 		return nil
 	}
 	return ErrNotFound
+}
+
+// DefaultEventKeep is how long events stay without a setting, in days.
+const DefaultEventKeep = 30
+
+// Mode is the effective recording mode.
+func (c Camera) Mode() string {
+	switch c.RecordMode {
+	case "off", "continuous", "events":
+		return c.RecordMode
+	}
+	if c.Record {
+		return "continuous"
+	}
+	return "off"
+}
+
+// Watched reports whether the motion check runs for the camera.
+func (c Camera) Watched() bool { return c.Detect || c.Mode() == "events" }
+
+// EventKeep is the retention of events in days.
+func (c Camera) EventKeep(st Settings) int {
+	switch {
+	case c.EventKeepDays > 0:
+		return c.EventKeepDays
+	case st.EventKeepDays > 0:
+		return st.EventKeepDays
+	}
+	return DefaultEventKeep
+}
+
+// Keep is the retention of recordings in days.
+func (c Camera) Keep(st Settings) int {
+	if c.KeepDays > 0 {
+		return c.KeepDays
+	}
+	return st.KeepDays
 }
