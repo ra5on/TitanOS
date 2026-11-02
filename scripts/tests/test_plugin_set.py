@@ -120,3 +120,46 @@ class PluginSetTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DownloadRetryTest(unittest.TestCase):
+    """GitHub answered a release download once with 500 (v0.45.0)."""
+
+    def serve(self, answers):
+        calls = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                calls.append(self.path)
+                code = answers[min(len(calls), len(answers)) - 1]
+                self.send_response(code)
+                self.end_headers()
+                if code == 200:
+                    self.wfile.write(b"set")
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.shutdown)
+        return f"http://127.0.0.1:{server.server_address[1]}/asset", calls
+
+    def test_server_errors_are_tried_again(self):
+        url, calls = self.serve([500, 502, 200])
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp) / "asset"
+            self.assertTrue(plugin_set.download(url, dest, pause=0))
+            self.assertEqual(dest.read_bytes(), b"set")
+        self.assertEqual(len(calls), 3)
+
+    def test_missing_is_not_retried_and_lasting_errors_give_up(self):
+        url, calls = self.serve([404])
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertFalse(plugin_set.download(url, Path(tmp) / "asset", pause=0))
+        self.assertEqual(len(calls), 1)
+        url, calls = self.serve([500])
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(plugin_set.urllib.error.HTTPError):
+                plugin_set.download(url, Path(tmp) / "asset", pause=0)
+        self.assertEqual(len(calls), 4)
