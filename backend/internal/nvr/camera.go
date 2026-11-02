@@ -75,6 +75,7 @@ type Settings struct {
 type state struct {
 	Settings Settings `json:"settings"`
 	Cameras  []Camera `json:"cameras"`
+	Views    []View   `json:"views,omitempty"`
 }
 
 // Store keeps the cameras and their passwords.
@@ -277,8 +278,104 @@ func (s *Store) Remove(id string) error {
 		if s.st.Cameras[i].ID == id {
 			s.st.Cameras = slices.Delete(s.st.Cameras, i, i+1)
 			delete(s.secrets, id)
+			for vi := range s.st.Views {
+				s.st.Views[vi].Tiles = slices.DeleteFunc(s.st.Views[vi].Tiles, func(t Tile) bool { return t.Camera == id })
+			}
 			return s.save()
 		}
 	}
 	return ErrNotFound
+}
+
+// Views are arrangements of live pictures. The grid has a fixed number of
+// columns; a cell that no camera covers stays empty.
+const (
+	ViewColumns = 6
+	maxViews    = 12
+	maxTiles    = 24
+	maxRows     = 12
+)
+
+// Tile places one camera in a view: columns X..X+W-1 of the grid, rows
+// Y..Y+H-1 (all counted from 0).
+type Tile struct {
+	Camera string `json:"camera"`
+	X      int    `json:"x"`
+	Y      int    `json:"y"`
+	W      int    `json:"w"`
+	H      int    `json:"h"`
+}
+
+// View is a named arrangement.
+type View struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Tiles []Tile `json:"tiles"`
+}
+
+// Views returns the saved views.
+func (s *Store) Views() []View {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.load()
+	return slices.Clone(s.st.Views)
+}
+
+// SetViews replaces all views after checking them: known cameras, tiles
+// inside the grid and not overlapping.
+func (s *Store) SetViews(views []View) error {
+	if len(views) > maxViews {
+		return fmt.Errorf("%w: too many views", ErrInvalid)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.load()
+	if !s.loaded {
+		return errors.New("nvr: settings not loaded from /config")
+	}
+	known := map[string]bool{}
+	for _, c := range s.st.Cameras {
+		known[c.ID] = true
+	}
+	ids := map[string]bool{}
+	out := make([]View, 0, len(views))
+	for _, v := range views {
+		v.Name = strings.TrimSpace(v.Name)
+		if v.Name == "" || len([]rune(v.Name)) > maxNameLen || strings.ContainsAny(v.Name, "\x00\r\n") {
+			return fmt.Errorf("%w: view name", ErrInvalid)
+		}
+		if v.ID == "" {
+			b := make([]byte, 5)
+			_, _ = rand.Read(b)
+			v.ID = "view-" + hex.EncodeToString(b)
+		}
+		if ids[v.ID] {
+			return fmt.Errorf("%w: view id", ErrInvalid)
+		}
+		ids[v.ID] = true
+		if len(v.Tiles) > maxTiles {
+			return fmt.Errorf("%w: too many tiles", ErrInvalid)
+		}
+		for i, t := range v.Tiles {
+			if !known[t.Camera] || t.W < 1 || t.H < 1 || t.X < 0 || t.Y < 0 || t.X+t.W > ViewColumns || t.Y+t.H > maxRows {
+				return fmt.Errorf("%w: tile", ErrInvalid)
+			}
+			for _, o := range v.Tiles[:i] {
+				if t.X < o.X+o.W && o.X < t.X+t.W && t.Y < o.Y+o.H && o.Y < t.Y+t.H {
+					return fmt.Errorf("%w: tiles overlap", ErrInvalid)
+				}
+			}
+		}
+		if v.Tiles == nil {
+			v.Tiles = []Tile{}
+		}
+		out = append(out, v)
+	}
+	old := s.st.Views
+	s.st.Views = out
+	if err := s.save(); err != nil {
+		s.st.Views = old
+		return err
+	}
+	return nil
 }

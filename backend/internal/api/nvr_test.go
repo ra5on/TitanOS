@@ -66,3 +66,25 @@ func TestNVRIsForAdministratorsOnly(t *testing.T) {
 		t.Fatalf("without login: %d", res.StatusCode)
 	}
 }
+
+func TestNVRViewsAreSavedAndChecked(t *testing.T) {
+	ts := newNVRTestServer(t)
+	ts.setup()
+	res, b := ts.request("POST", "/api/v1/nvr/cameras", map[string]any{"name": "Hof", "host": "192.168.1.5", "user": "v", "mainUrl": "rtsp://192.168.1.5/main"})
+	if res.StatusCode != 201 {
+		t.Fatalf("add: %d %s", res.StatusCode, b)
+	}
+	var state struct {
+		Cameras []struct{ ID string } `json:"cameras"`
+	}
+	json.Unmarshal(b, &state)
+	id := state.Cameras[0].ID
+	ok := map[string]any{"views": []map[string]any{{"name": "Haus", "tiles": []map[string]any{{"camera": id, "x": 0, "y": 0, "w": 3, "h": 2}}}}}
+	if res, b := ts.request("PUT", "/api/v1/nvr/views", ok); res.StatusCode != 200 || !strings.Contains(string(b), `"Haus"`) {
+		t.Fatalf("save: %d %s", res.StatusCode, b)
+	}
+	bad := map[string]any{"views": []map[string]any{{"name": "x", "tiles": []map[string]any{{"camera": id, "x": 5, "y": 0, "w": 3, "h": 1}}}}}
+	if res, _ := ts.request("PUT", "/api/v1/nvr/views", bad); res.StatusCode != 400 {
+		t.Fatalf("tile outside the grid: %d", res.StatusCode)
+	}
+}

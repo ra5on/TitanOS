@@ -177,6 +177,7 @@
 <PageHead title={t('nvr.title')}>
 	<p class="muted">{t('nvr.intro')}</p>
 	{#snippet actions()}
+		<a class="btn" href="/nvr/views">{t('nvr.viewsLink')}</a>
 		<button type="button" class="btn btn-primary" onclick={() => (editing = 'new')}
 			><Icon name="plus" size={16} /> {t('nvr.add')}</button
 		>

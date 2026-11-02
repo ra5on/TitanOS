@@ -171,3 +171,32 @@ func TestPruneNeverRemovesNewestWhenOutOfSpace(t *testing.T) {
 		t.Fatalf("removed %d, left %+v", files, left)
 	}
 }
+
+func TestViewsAreCheckedAndFollowCameras(t *testing.T) {
+	s := newTestStore(t)
+	a, _ := s.Add(Camera{Name: "A", MainURL: "rtsp://192.168.1.5/a"}, "")
+	b, _ := s.Add(Camera{Name: "B", MainURL: "rtsp://192.168.1.6/b"}, "")
+	ok := []View{{Name: "Haus", Tiles: []Tile{{Camera: a.ID, X: 0, Y: 0, W: 4, H: 2}, {Camera: b.ID, X: 4, Y: 0, W: 2, H: 1}}}}
+	if err := s.SetViews(ok); err != nil {
+		t.Fatal(err)
+	}
+	if v := s.Views(); len(v) != 1 || v[0].ID == "" {
+		t.Fatalf("views: %+v", v)
+	}
+	for name, bad := range map[string][]Tile{
+		"outside the grid": {{Camera: a.ID, X: 5, W: 2, H: 1}},
+		"overlap":          {{Camera: a.ID, X: 0, W: 3, H: 1}, {Camera: b.ID, X: 2, W: 2, H: 1}},
+		"unknown camera":   {{Camera: "cam-nope", W: 1, H: 1}},
+		"empty size":       {{Camera: a.ID, W: 0, H: 1}},
+	} {
+		if err := s.SetViews([]View{{Name: "x", Tiles: bad}}); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+	if err := s.Remove(a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if tiles := s.Views()[0].Tiles; len(tiles) != 1 || tiles[0].Camera != b.ID {
+		t.Fatalf("tiles after removing a camera: %+v", tiles)
+	}
+}

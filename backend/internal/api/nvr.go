@@ -36,6 +36,7 @@ type nvrView struct {
 	FreeBytes int64           `json:"freeBytes"`
 	UsedBytes int64           `json:"usedBytes"`
 	Vendors   []string        `json:"vendors"`
+	Views     []nvr.View      `json:"views"`
 }
 
 func (s *Server) nvrOK(w http.ResponseWriter) bool {
@@ -49,7 +50,10 @@ func (s *Server) nvrOK(w http.ResponseWriter) bool {
 func (s *Server) nvrState() nvrView {
 	m := s.opts.NVR
 	st := m.Store.Settings()
-	view := nvrView{Settings: st, Volumes: s.opts.Storage.Mounted(), Cameras: []nvrCameraView{}}
+	view := nvrView{Settings: st, Volumes: s.opts.Storage.Mounted(), Cameras: []nvrCameraView{}, Views: m.Store.Views()}
+	if view.Views == nil {
+		view.Views = []nvr.View{}
+	}
 	for _, v := range nvr.Vendors {
 		view.Vendors = append(view.Vendors, v.Name)
 	}
@@ -368,9 +372,24 @@ func (s *Server) handleNVREventPicture(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, nvr.SnapshotPath(root, c.ID, day, file))
 }
 
+func (s *Server) handleNVRViews(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Views []nvr.View `json:"views"`
+	}
+	if !s.nvrOK(w) || !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.opts.NVR.Store.SetViews(req.Views); err != nil {
+		s.nvrError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.nvrState())
+}
+
 func (s *Server) registerNVR(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/nvr", s.requireAdmin(s.handleNVR))
 	mux.HandleFunc("PUT /api/v1/nvr/settings", s.requireAdmin(s.handleNVRSettings))
+	mux.HandleFunc("PUT /api/v1/nvr/views", s.requireAdmin(s.handleNVRViews))
 	mux.HandleFunc("POST /api/v1/nvr/discover", s.requireAdmin(s.handleNVRDiscover))
 	mux.HandleFunc("POST /api/v1/nvr/cameras", s.requireAdmin(s.handleNVRCameraAdd))
 	mux.HandleFunc("PUT /api/v1/nvr/cameras/{id}", s.requireAdmin(s.handleNVRCameraSet))

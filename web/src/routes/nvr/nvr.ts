@@ -44,6 +44,7 @@ export type NvrState = {
 	freeBytes: number;
 	usedBytes: number;
 	vendors: string[];
+	views: View[];
 };
 
 export type FoundStream = {
@@ -123,4 +124,34 @@ export function sensitivityChoice(value: number | undefined): number {
 export function pictureUrl(camera: string, id: string): string {
 	const [day = '', file = ''] = id.split('/');
 	return `/api/v1/nvr/cameras/${camera}/events/${day}/${file}.jpg`;
+}
+
+export const VIEW_COLUMNS = 6;
+export const VIEW_ROWS = 12;
+
+export type Tile = { camera: string; x: number; y: number; w: number; h: number };
+export type View = { id: string; name: string; tiles: Tile[] };
+
+const overlaps = (a: Tile, b: Tile) =>
+	a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+/** Whether the tile fits the grid and touches none of the others. */
+export function tileFits(tile: Tile, others: Tile[]): boolean {
+	return (
+		tile.w >= 1 &&
+		tile.h >= 1 &&
+		tile.x >= 0 &&
+		tile.y >= 0 &&
+		tile.x + tile.w <= VIEW_COLUMNS &&
+		tile.y + tile.h <= VIEW_ROWS &&
+		!others.some((o) => overlaps(tile, o))
+	);
+}
+
+/** The first free place of the given size, row by row; null if the grid is full. */
+export function freeSpot(tiles: Tile[], w: number, h: number): { x: number; y: number } | null {
+	for (let y = 0; y + h <= VIEW_ROWS; y++)
+		for (let x = 0; x + w <= VIEW_COLUMNS; x++)
+			if (tileFits({ camera: '', x, y, w, h }, tiles)) return { x, y };
+	return null;
 }
