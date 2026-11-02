@@ -7878,5 +7878,18 @@
 	"nvr.tileRemove": "Remove",
 	"nvr.tileAdd": "Add camera",
 	"nvr.tileChoose": "Choose camera …",
-	"nvr.tileNoFit": "That does not fit: outside the grid or on another cell."
+	"nvr.tileNoFit": "That does not fit: outside the grid or on another cell.",
+	"nvr.quality": "Quality",
+	"nvr.qualityTitle": "{name}: resolution and bit rate",
+	"nvr.qualityIntro": "Less resolution, frames per second or bit rate saves space. The camera is changed over ONVIF and the stream may drop briefly. TitanOS remembers the original values so you can reset them.",
+	"nvr.qualityLoading": "Reading the camera's settings …",
+	"nvr.qualityResolution": "Resolution",
+	"nvr.qualityFps": "Frames per second",
+	"nvr.qualityBitrate": "Bit rate (kbit/s)",
+	"nvr.qualityEstimate": "About {now} a day and camera now, {next} after. Less if the camera itself only sends on motion.",
+	"nvr.qualityConfirm": "The setting is changed in the camera and stays there. The stream drops briefly.",
+	"nvr.qualityApply": "Change",
+	"nvr.qualityResetBtn": "Reset",
+	"nvr.qualityDone": "The camera has been changed.",
+	"nvr.qualityReset": "The original values are restored."
 }

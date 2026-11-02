@@ -18,6 +18,7 @@ export type Camera = {
 	audio: boolean;
 	keepDays?: number;
 	onvifPort?: number;
+	qualityOriginal?: Record<string, QualityChange>;
 	timeSync: boolean;
 	detect: boolean;
 	sensitivity?: number;
@@ -154,4 +155,32 @@ export function freeSpot(tiles: Tile[], w: number, h: number): { x: number; y: n
 		for (let x = 0; x + w <= VIEW_COLUMNS; x++)
 			if (tileFits({ camera: '', x, y, w, h }, tiles)) return { x, y };
 	return null;
+}
+
+export type Resolution = { width: number; height: number };
+export type Quality = {
+	token: string;
+	name: string;
+	codec: string;
+	width: number;
+	height: number;
+	fps: number;
+	bitrateKb: number;
+	resolutions?: Resolution[];
+	fpsMin?: number;
+	fpsMax?: number;
+	bitrateMin?: number;
+	bitrateMax?: number;
+};
+export type QualityChange = {
+	token: string;
+	width: number;
+	height: number;
+	fps: number;
+	bitrateKb: number;
+};
+
+/** Gigabytes a day at a bit rate in kbit/s (one camera, recording all day). */
+export function gbPerDay(bitrateKb: number): number {
+	return (bitrateKb * 1000 * 86400) / 8 / 1e9;
 }

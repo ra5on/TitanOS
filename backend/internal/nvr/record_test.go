@@ -200,3 +200,36 @@ func TestViewsAreCheckedAndFollowCameras(t *testing.T) {
 		t.Fatalf("tiles after removing a camera: %+v", tiles)
 	}
 }
+
+func TestQualityOriginalIsKeptOnceAndSurvivesEdits(t *testing.T) {
+	s := newTestStore(t)
+	c, _ := s.Add(Camera{Name: "A", MainURL: "rtsp://192.168.1.5/a"}, "")
+	first := QualityChange{Token: "enc", Width: 2560, Height: 1440, FPS: 25, BitrateKb: 6144}
+	second := QualityChange{Token: "enc", Width: 1280, Height: 720, FPS: 15, BitrateKb: 1024}
+	if err := s.SetQualityOriginal(c.ID, "enc", &first); err != nil {
+		t.Fatal(err)
+	}
+	// A second change must not overwrite what the camera had originally.
+	if err := s.SetQualityOriginal(c.ID, "enc", &second); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := s.Camera(c.ID)
+	if got.QualityOriginal["enc"] != first {
+		t.Fatalf("original: %+v", got.QualityOriginal)
+	}
+	// An edit from the page (which does not know the field) keeps it.
+	got.QualityOriginal = nil
+	got.Name = "B"
+	if _, err := s.Update(got, nil); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := s.Camera(c.ID); again.QualityOriginal["enc"] != first {
+		t.Fatalf("edit lost the original: %+v", again.QualityOriginal)
+	}
+	if err := s.SetQualityOriginal(c.ID, "enc", nil); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := s.Camera(c.ID); len(again.QualityOriginal) != 0 {
+		t.Fatalf("not cleared: %+v", again.QualityOriginal)
+	}
+}

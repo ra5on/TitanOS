@@ -26,6 +26,7 @@ type fakeCamera struct {
 	onvifAddr      string
 	lockAfter      int32
 	ntp, timeType  string
+	setEnc         string
 }
 
 func (c *fakeCamera) reject() bool {
@@ -138,6 +139,13 @@ func (c *fakeCamera) serveONVIF(w http.ResponseWriter, r *http.Request, rtspPort
 		return
 	}
 	switch {
+	case strings.Contains(body, "GetVideoEncoderConfigurationOptions"):
+		reply(`<GetVideoEncoderConfigurationOptionsResponse><Options><H264><ResolutionsAvailable><Width>2560</Width><Height>1440</Height></ResolutionsAvailable><ResolutionsAvailable><Width>1280</Width><Height>720</Height></ResolutionsAvailable><FrameRateRange><Min>1</Min><Max>25</Max></FrameRateRange></H264><Extension><H264><BitrateRange><Min>256</Min><Max>8192</Max></BitrateRange></H264></Extension></Options></GetVideoEncoderConfigurationOptionsResponse>`)
+	case strings.Contains(body, "SetVideoEncoderConfiguration"):
+		c.setEnc = body
+		reply(`<SetVideoEncoderConfigurationResponse/>`)
+	case strings.Contains(body, "GetVideoEncoderConfigurations"):
+		reply(`<GetVideoEncoderConfigurationsResponse><Configurations token="enc_main"><Name>main</Name><UseCount>1</UseCount><Encoding>H264</Encoding><Resolution><Width>2560</Width><Height>1440</Height></Resolution><Quality>5</Quality><RateControl><FrameRateLimit>25</FrameRateLimit><EncodingInterval>1</EncodingInterval><BitrateLimit>6144</BitrateLimit></RateControl><H264><GovLength>50</GovLength><H264Profile>High</H264Profile></H264></Configurations></GetVideoEncoderConfigurationsResponse>`)
 	case strings.Contains(body, "<SetNTP"):
 		c.ntp = body
 		reply(`<SetNTPResponse/>`)

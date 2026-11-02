@@ -386,6 +386,126 @@ func (s *Server) handleNVRViews(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.nvrState())
 }
 
+// nvrQualityCall runs a video-settings call for a camera and answers errors.
+func (s *Server) nvrQualityTarget(w http.ResponseWriter, r *http.Request) (nvr.Camera, string, bool) {
+	c, ok := s.nvrCamera(w, r)
+	if !ok {
+		return c, "", false
+	}
+	host, _, _, err := nvr.AddressOf(c.MainURL)
+	if err != nil {
+		s.nvrError(w, nvr.ErrInvalid)
+		return c, "", false
+	}
+	return c, host, true
+}
+
+func (s *Server) nvrQualityError(w http.ResponseWriter, o nvr.Outcome, err error) {
+	switch {
+	case o == nvr.OutcomeLocked:
+		writeError(w, http.StatusBadGateway, "nvr_locked", "the camera reports a locked account")
+	case o == nvr.OutcomeUnauthorized:
+		writeError(w, http.StatusBadGateway, "nvr_login_refused", "the camera refused the login")
+	case errors.Is(err, nvr.ErrOutsideOptions):
+		writeError(w, http.StatusBadRequest, "invalid_nvr", err.Error())
+	case errors.Is(err, nvr.ErrQualityUnsupported):
+		writeError(w, http.StatusBadGateway, "nvr_quality_unsupported", err.Error())
+	default:
+		s.nvrError(w, err)
+	}
+}
+
+func (s *Server) handleNVRQuality(w http.ResponseWriter, r *http.Request) {
+	c, host, ok := s.nvrQualityTarget(w, r)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	list, o, err := s.opts.NVR.Prober.ReadQuality(ctx, host, c.ONVIFPort, c.User, s.opts.NVR.Store.Password(c.ID))
+	if err != nil {
+		s.nvrQualityError(w, o, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"streams": list, "original": c.QualityOriginal})
+}
+
+// handleNVRQualitySet changes the video setting of one stream. The page
+// asks first; the original setting is kept for "reset".
+func (s *Server) handleNVRQualitySet(w http.ResponseWriter, r *http.Request) {
+	var change nvr.QualityChange
+	if !s.nvrOK(w) || !readJSON(w, r, &change) {
+		return
+	}
+	c, host, ok := s.nvrQualityTarget(w, r)
+	if !ok {
+		return
+	}
+	m := s.opts.NVR
+	ctx, cancel := context.WithTimeout(r.Context(), 40*time.Second)
+	defer cancel()
+	password := m.Store.Password(c.ID)
+	if _, kept := c.QualityOriginal[change.Token]; !kept {
+		list, o, err := m.Prober.ReadQuality(ctx, host, c.ONVIFPort, c.User, password)
+		if err != nil {
+			s.nvrQualityError(w, o, err)
+			return
+		}
+		for _, q := range list {
+			if q.Token == change.Token {
+				orig := nvr.QualityChange{Token: q.Token, Width: q.Width, Height: q.Height, FPS: q.FPS, BitrateKb: q.BitrateKb}
+				if err := m.Store.SetQualityOriginal(c.ID, q.Token, &orig); err != nil {
+					s.nvrError(w, err)
+					return
+				}
+			}
+		}
+	}
+	next, o, err := m.Prober.WriteQuality(ctx, host, c.ONVIFPort, c.User, password, change)
+	noteTarget(r, c.Name)
+	if err != nil {
+		s.nvrQualityError(w, o, err)
+		return
+	}
+	slog.Info("nvr: video setting changed", "camera", c.ID, "stream", change.Token, "by", currentUser(r).Name)
+	writeJSON(w, http.StatusOK, next)
+}
+
+// handleNVRQualityReset puts a stream back to what it was before TitanOS
+// changed it.
+func (s *Server) handleNVRQualityReset(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Token string `json:"token"`
+	}
+	if !s.nvrOK(w) || !readJSON(w, r, &req) {
+		return
+	}
+	c, host, ok := s.nvrQualityTarget(w, r)
+	if !ok {
+		return
+	}
+	orig, kept := c.QualityOriginal[req.Token]
+	if !kept {
+		writeError(w, http.StatusNotFound, "not_found", "nothing to reset")
+		return
+	}
+	m := s.opts.NVR
+	ctx, cancel := context.WithTimeout(r.Context(), 40*time.Second)
+	defer cancel()
+	next, o, err := m.Prober.WriteQuality(ctx, host, c.ONVIFPort, c.User, m.Store.Password(c.ID), orig)
+	noteTarget(r, c.Name)
+	if err != nil {
+		s.nvrQualityError(w, o, err)
+		return
+	}
+	if err := m.Store.SetQualityOriginal(c.ID, req.Token, nil); err != nil {
+		s.nvrError(w, err)
+		return
+	}
+	slog.Info("nvr: video setting reset", "camera", c.ID, "stream", req.Token, "by", currentUser(r).Name)
+	writeJSON(w, http.StatusOK, next)
+}
+
 func (s *Server) registerNVR(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/nvr", s.requireAdmin(s.handleNVR))
 	mux.HandleFunc("PUT /api/v1/nvr/settings", s.requireAdmin(s.handleNVRSettings))
@@ -394,6 +514,9 @@ func (s *Server) registerNVR(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/nvr/cameras", s.requireAdmin(s.handleNVRCameraAdd))
 	mux.HandleFunc("PUT /api/v1/nvr/cameras/{id}", s.requireAdmin(s.handleNVRCameraSet))
 	mux.HandleFunc("DELETE /api/v1/nvr/cameras/{id}", s.requireAdmin(s.handleNVRCameraRemove))
+	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/quality", s.requireAdmin(s.handleNVRQuality))
+	mux.HandleFunc("PUT /api/v1/nvr/cameras/{id}/quality", s.requireAdmin(s.handleNVRQualitySet))
+	mux.HandleFunc("POST /api/v1/nvr/cameras/{id}/quality/reset", s.requireAdmin(s.handleNVRQualityReset))
 	mux.HandleFunc("POST /api/v1/nvr/cameras/{id}/time", s.requireAdmin(s.handleNVRTime))
 	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/snapshot", s.requireAdmin(s.handleNVRSnapshot))
 	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/live", s.requireAdmin(s.handleNVRLive))

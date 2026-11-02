@@ -50,6 +50,9 @@ type Camera struct {
 	Detect bool `json:"detect"`
 	// Sensitivity of the motion check, 1 (hard) to 100 (easy); 0 means 50.
 	Sensitivity int `json:"sensitivity,omitempty"`
+	// QualityOriginal keeps the video setting a stream had before TitanOS
+	// first changed it, so the change can be undone. Set by the server only.
+	QualityOriginal map[string]QualityChange `json:"qualityOriginal,omitempty"`
 	// TimeSync is set once the camera was pointed at this NAS as its time server.
 	TimeSync bool `json:"timeSync"`
 	// KeepDays overrides the general retention; 0 means the general value.
@@ -251,6 +254,7 @@ func (s *Store) Update(c Camera, password *string) (Camera, error) {
 	for i := range s.st.Cameras {
 		if s.st.Cameras[i].ID == c.ID {
 			old, oldPass := s.st.Cameras[i], s.secrets[c.ID]
+			c.QualityOriginal = old.QualityOriginal
 			s.st.Cameras[i] = c
 			if password != nil {
 				s.secrets[c.ID] = *password
@@ -378,4 +382,40 @@ func (s *Store) SetViews(views []View) error {
 		return err
 	}
 	return nil
+}
+
+// SetQualityOriginal records or clears (nil) the original setting of a stream.
+func (s *Store) SetQualityOriginal(id, token string, orig *QualityChange) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.load()
+	if !s.loaded {
+		return errors.New("nvr: settings not loaded from /config")
+	}
+	for i := range s.st.Cameras {
+		c := &s.st.Cameras[i]
+		if c.ID != id {
+			continue
+		}
+		old := c.QualityOriginal
+		next := map[string]QualityChange{}
+		for k, v := range old {
+			next[k] = v
+		}
+		if orig == nil {
+			delete(next, token)
+		} else if _, kept := next[token]; !kept {
+			next[token] = *orig
+		}
+		if len(next) == 0 {
+			next = nil
+		}
+		c.QualityOriginal = next
+		if err := s.save(); err != nil {
+			c.QualityOriginal = old
+			return err
+		}
+		return nil
+	}
+	return ErrNotFound
 }

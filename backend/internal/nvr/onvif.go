@@ -228,3 +228,43 @@ func parseCameraClock(data []byte) time.Duration {
 	cam := time.Date(x.Year, time.Month(x.Month), x.Day, x.Hour, x.Minute, x.Second, 0, time.UTC)
 	return time.Until(cam)
 }
+
+// session is a logged-in conversation with the media service of a camera.
+type session struct {
+	p        *Prober
+	client   *http.Client
+	media    string
+	user     string
+	password string
+	offset   time.Duration
+	outcome  Outcome
+}
+
+// openSession finds the media service and checks the login. A refused login
+// is reported in outcome, not as an error, so the caller can count it.
+func (p *Prober) openSession(ctx context.Context, host string, port int, user, password string) (*session, error) {
+	s := &session{p: p, client: p.httpClient(), user: user, password: password}
+	device := "http://" + hostPort(host, port) + "/onvif/device_service"
+	if st, data, err := p.soap(ctx, s.client, device, "", "", 0, `<GetSystemDateAndTime xmlns="http://www.onvif.org/ver10/device/wsdl"/>`); err == nil && st == 200 {
+		s.offset = parseCameraClock(data)
+	} else if err != nil {
+		return s, err
+	}
+	s.media = "http://" + hostPort(host, port) + "/onvif/media_service"
+	st, data, err := p.soap(ctx, s.client, device, user, password, s.offset,
+		`<GetCapabilities xmlns="http://www.onvif.org/ver10/device/wsdl"><Category>Media</Category></GetCapabilities>`)
+	if err != nil {
+		return s, err
+	}
+	if s.outcome = soapOutcome(st, data); s.outcome != OutcomeOK {
+		return s, nil
+	}
+	if x := xaddrOf(data); x != "" {
+		s.media = onSameHost(x, host, port)
+	}
+	return s, nil
+}
+
+func (s *session) call(ctx context.Context, body string) (int, []byte, error) {
+	return s.p.soap(ctx, s.client, s.media, s.user, s.password, s.offset, body)
+}

@@ -10,6 +10,7 @@
 	import { poll } from '#lib/poll.ts';
 	import { onMount } from 'svelte';
 	import CameraDialog from './CameraDialog.svelte';
+	import QualityDialog from './QualityDialog.svelte';
 	import {
 		clockOf,
 		fileOf,
@@ -33,6 +34,7 @@
 	let events = $state<NvrEvent[]>([]);
 	let busy = $state(false);
 	let timing = $state<Camera | null>(null);
+	let tuning = $state<Camera | null>(null);
 	let timeDone = $state('');
 
 	// General settings, edited in place.
@@ -307,6 +309,11 @@
 					<button type="button" class="btn" onclick={() => (timing = camera)}
 						>{camera.timeSync ? t('nvr.timeAgain') : t('nvr.timeSet')}</button
 					>
+					{#if camera.onvifPort}
+						<button type="button" class="btn" onclick={() => (tuning = camera)}
+							>{t('nvr.quality')}</button
+						>
+					{/if}
 					<button type="button" class="btn" onclick={() => (editing = camera)}
 						>{t('nvr.edit')}</button
 					>
@@ -386,6 +393,10 @@
 			void load();
 		}}
 	/>
+{/if}
+
+{#if tuning}
+	<QualityDialog camera={tuning} onclose={() => (tuning = null)} />
 {/if}
 
 {#if timing}

@@ -7878,5 +7878,18 @@
 	"nvr.tileRemove": "Entfernen",
 	"nvr.tileAdd": "Kamera hinzufügen",
 	"nvr.tileChoose": "Kamera wählen …",
-	"nvr.tileNoFit": "Das passt nicht: außerhalb des Rasters oder auf einem anderen Feld."
+	"nvr.tileNoFit": "Das passt nicht: außerhalb des Rasters oder auf einem anderen Feld.",
+	"nvr.quality": "Qualität",
+	"nvr.qualityTitle": "{name}: Auflösung und Bitrate",
+	"nvr.qualityIntro": "Weniger Auflösung, Bilder pro Sekunde oder Bitrate sparen Speicherplatz. Die Kamera wird über ONVIF umgestellt, der Stream kann dabei kurz unterbrechen. TitanOS merkt sich die ursprünglichen Werte, damit du sie zurücksetzen kannst.",
+	"nvr.qualityLoading": "Einstellungen der Kamera werden gelesen …",
+	"nvr.qualityResolution": "Auflösung",
+	"nvr.qualityFps": "Bilder pro Sekunde",
+	"nvr.qualityBitrate": "Bitrate (kbit/s)",
+	"nvr.qualityEstimate": "Etwa {now} pro Tag und Kamera jetzt, {next} danach. Bei Bewegungsaufnahme der Kamera weniger.",
+	"nvr.qualityConfirm": "Die Einstellung wird in der Kamera geändert und bleibt dort gespeichert. Der Stream unterbricht kurz.",
+	"nvr.qualityApply": "Ändern",
+	"nvr.qualityResetBtn": "Zurücksetzen",
+	"nvr.qualityDone": "Die Kamera ist umgestellt.",
+	"nvr.qualityReset": "Die ursprünglichen Werte sind wiederhergestellt."
 }
