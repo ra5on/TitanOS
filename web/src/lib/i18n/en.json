@@ -2432,9 +2432,7 @@
 	"storage.sleepVolumeWholeHint": "Default for all disks in it",
 	"storage.sleepSave": "Save",
 	"storage.sleepCancel": "Cancel",
-	"storage.sleepDefaultOption": "Like default",
 	"storage.sleepVolumeOption": "Like volume",
-	"storage.sleepOnlyRaid": "An access to the RAID wakes the sleeping members as well.",
 	"error.unknown_disk_sleep_target": "This volume or disk does not exist (any more). Please reload the storage page.",
 	"error.invalid_disk_idle_time": "Please select one of the available idle timeouts.",
 	"common.save": "Save",
@@ -7779,5 +7777,6 @@
 	"keep.rolling.replica": "Keep until space runs short on the other NAS",
 	"keep.rollingHint.backups": "Every backup stays. Only when space runs out is the oldest deleted.",
 	"keep.rollingHint.snapshots": "Every snapshot stays. Only when space runs out is the oldest deleted.",
-	"keep.rollingHint.replica": "Every state stays. When less than 10 % of the volume on the other NAS is free, the oldest go before the next run; the newest always stays."
+	"keep.rollingHint.replica": "Every state stays. When less than 10 % of the volume on the other NAS is free, the oldest go before the next run; the newest always stays.",
+	"storage.sleepPartly": "partly asleep"
 }

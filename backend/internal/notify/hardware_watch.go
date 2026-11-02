@@ -106,9 +106,15 @@ func (w *HardwareWatcher) look() {
 	if w.Temperatures != nil {
 		for _, t := range w.Temperatures() {
 			if t.Celsius == nil {
+				// No reading breaks a run: the two hot looks must be in a row.
+				delete(w.hotLooks, t.ID)
 				continue
 			}
-			if t.Critical == nil && t.Chip != "" && !reliableChips[t.Chip] {
+			// A chip not known as reliable counts only with a critical value of
+			// its own; a missing or meaningless one (≤ 40 °C, as unused inputs
+			// of Super-I/O chips report) does not make it trustworthy.
+			ownCritical := t.Critical != nil && *t.Critical > 40
+			if !ownCritical && t.Chip != "" && !reliableChips[t.Chip] {
 				continue
 			}
 			limit := 95.0

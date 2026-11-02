@@ -2432,9 +2432,7 @@
 	"storage.sleepVolumeWholeHint": "Standard für alle Platten darin",
 	"storage.sleepSave": "Speichern",
 	"storage.sleepCancel": "Abbrechen",
-	"storage.sleepDefaultOption": "Wie Standard",
 	"storage.sleepVolumeOption": "Wie Volume",
-	"storage.sleepOnlyRaid": "Ein Zugriff auf das RAID weckt die schlafenden Mitglieder mit auf.",
 	"error.unknown_disk_sleep_target": "Dieses Volume oder diese Platte gibt es nicht (mehr). Bitte die Speicherseite neu laden.",
 	"error.invalid_disk_idle_time": "Bitte eine angebotene Ruhezeit auswählen.",
 	"common.save": "Speichern",
@@ -7779,5 +7777,6 @@
 	"keep.rolling.replica": "Behalten, bis auf dem anderen NAS der Platz knapp wird",
 	"keep.rollingHint.backups": "Jede Sicherung bleibt. Erst wenn der Platz nicht mehr reicht, wird die älteste gelöscht.",
 	"keep.rollingHint.snapshots": "Jeder Snapshot bleibt. Erst wenn der Platz nicht mehr reicht, wird der älteste gelöscht.",
-	"keep.rollingHint.replica": "Jeder Stand bleibt. Sind auf dem Volume des anderen NAS weniger als 10 % frei, werden vor dem nächsten Lauf die ältesten gelöscht; der neueste bleibt immer."
+	"keep.rollingHint.replica": "Jeder Stand bleibt. Sind auf dem Volume des anderen NAS weniger als 10 % frei, werden vor dem nächsten Lauf die ältesten gelöscht; der neueste bleibt immer.",
+	"storage.sleepPartly": "teils schlafend"
 }

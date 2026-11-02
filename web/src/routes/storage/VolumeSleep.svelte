@@ -89,9 +89,11 @@
 				{/if}
 			{:else}
 				<span class="muted">{t('storage.sleepNoSleeper')}</span>
-				<button type="button" class="btn small" onclick={onopen}
-					>{t('storage.sleepOpenHint')}</button
-				>
+				{#if canAdminister}
+					<button type="button" class="btn small" onclick={onopen}
+						>{t('storage.sleepOpenHint')}</button
+					>
+				{/if}
 			{/if}
 		</div>
 		{#if info.total === 0 && unavailable.length}
@@ -103,11 +105,16 @@
 		{/if}
 		{#if editing}
 			<div class="editor">
-				<label for="sleep-volume-{volume}">
+				<label for="sleep-edit-volume-{volume}">
 					{t('storage.sleepVolumeWhole')}
 					<span class="muted small">{t('storage.sleepVolumeWholeHint')}</span>
 				</label>
-				<select id="sleep-volume-{volume}" class="field" bind:value={draftVolume} disabled={busy}>
+				<select
+					id="sleep-edit-volume-{volume}"
+					class="field"
+					bind:value={draftVolume}
+					disabled={busy}
+				>
 					<option value={INHERIT}>{t('storage.sleepInherit')}</option>
 					{#each minutes as value}<option value={String(value)}>{sleepDuration(value)}</option
 						>{/each}
