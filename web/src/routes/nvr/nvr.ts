@@ -24,6 +24,9 @@ export type Camera = {
 	qualityOriginal?: Record<string, QualityChange>;
 	timeSync: boolean;
 	detect: boolean;
+	zones?: Area[];
+	masks?: Area[];
+	viewers?: string[];
 	sensitivity?: number;
 	watch: { watching: boolean; motion: boolean };
 	status: CameraStatus;
@@ -75,7 +78,7 @@ export type Discovery = {
 export type Recordings = {
 	days: string[];
 	segments: { name: string; start: string; size: number }[];
-	protected: { name: string; start: string; size: number }[];
+	protected?: { name: string; start: string; size: number }[];
 };
 
 /** Why a search found nothing, as a message key. */
@@ -208,4 +211,19 @@ export function modeOf(c: {
 	if (c.recordMode === 'off' || c.recordMode === 'continuous' || c.recordMode === 'events')
 		return c.recordMode;
 	return c.record ? 'continuous' : 'off';
+}
+
+/** A rectangle in shares of the picture (0..1). */
+export type Area = { x: number; y: number; w: number; h: number };
+export const MAX_AREAS = 16;
+
+/** The rectangle between two points, or null when it is too small to mean anything. */
+export function normArea(d: { x0: number; y0: number; x1: number; y1: number }): Area | null {
+	const x = Math.min(d.x0, d.x1);
+	const y = Math.min(d.y0, d.y1);
+	const w = Math.abs(d.x1 - d.x0);
+	const h = Math.abs(d.y1 - d.y0);
+	if (w < 0.01 || h < 0.01) return null;
+	const r = (v: number) => Math.round(v * 10000) / 10000;
+	return { x: r(x), y: r(y), w: r(Math.min(w, 1 - x)), h: r(Math.min(h, 1 - y)) };
 }

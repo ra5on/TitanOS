@@ -7941,5 +7941,15 @@
 	"notify.kind.nvr_retention_short.text": "Der Platz reichte nicht: Für die Kamera sind jetzt nur noch so viele Tage da wie vor dem Schrägstrich angegeben, gewünscht sind die Tage danach. Die ältesten Aufnahmen wurden gelöscht.",
 	"nvr.perDay": "{size} in den letzten 24 Stunden",
 	"nvr.qualityResetConfirm": "Die ursprünglichen Werte werden in die Kamera geschrieben. Der Stream unterbricht kurz.",
-	"nvr.loginRefused": "Die Kamera hat die Anmeldung abgelehnt. TitanOS wartet jetzt (bis zu 30 Minuten), damit das Konto nicht gesperrt wird. Prüfe das Passwort unter „Bearbeiten“; nach dem Speichern wird sofort neu versucht."
+	"nvr.loginRefused": "Die Kamera hat die Anmeldung abgelehnt. TitanOS wartet jetzt (bis zu 30 Minuten), damit das Konto nicht gesperrt wird. Prüfe das Passwort unter „Bearbeiten“; nach dem Speichern wird sofort neu versucht.",
+	"nvr.areas": "Bereiche",
+	"nvr.areasTitle": "{name}: Bereiche für die Bewegung",
+	"nvr.areasIntro": "Auf dem Bild ziehen, um ein Rechteck zu zeichnen. Masken (rot) schließen Straße, Bäume oder Nachbargrundstück von der Bewegungserkennung aus; Zonen (grün) beschränken sie auf diese Flächen. Die Aufnahme selbst bleibt unverändert.",
+	"nvr.areasKind": "Art",
+	"nvr.areaMask": "Maske",
+	"nvr.areaZone": "Zone",
+	"nvr.areasFull": "Höchstens 16 Zonen und 16 Masken.",
+	"nvr.areasNoPicture": "Kein Bild der Kamera; die Bereiche lassen sich trotzdem zeichnen.",
+	"nvr.viewers": "Zuschauer",
+	"nvr.viewersHint": "Diese Konten (ohne Administratorrechte) dürfen die Kamera live, ihre Aufnahmen und Ereignisse sehen, aber nichts ändern."
 }

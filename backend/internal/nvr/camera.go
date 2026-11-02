@@ -57,6 +57,13 @@ type Camera struct {
 	ONVIFPort int `json:"onvifPort,omitempty"`
 	// Detect switches the motion check on (and with it events).
 	Detect bool `json:"detect"`
+	// Zones limit the motion check to these areas (empty: the whole picture);
+	// Masks are left out of it (trees, a street, the neighbour's garden).
+	Zones []Area `json:"zones,omitempty"`
+	Masks []Area `json:"masks,omitempty"`
+	// Viewers are accounts without admin rights that may watch this camera
+	// (live, recordings, events). Administrators always may.
+	Viewers []string `json:"viewers,omitempty"`
 	// Sensitivity of the motion check, 1 (hard) to 100 (easy); 0 means 50.
 	Sensitivity int `json:"sensitivity,omitempty"`
 	// QualityOriginal keeps the video setting a stream had before TitanOS
@@ -246,6 +253,14 @@ func validateCamera(c Camera) error {
 	}
 	if c.Sensitivity < 0 || c.Sensitivity > 100 {
 		return fmt.Errorf("%w: sensitivity", ErrInvalid)
+	}
+	if len(c.Zones) > maxAreas || len(c.Masks) > maxAreas || len(c.Viewers) > 64 {
+		return fmt.Errorf("%w: too many areas or viewers", ErrInvalid)
+	}
+	for _, a := range append(slices.Clone(c.Zones), c.Masks...) {
+		if !a.valid() {
+			return fmt.Errorf("%w: area", ErrInvalid)
+		}
 	}
 	switch c.RecordMode {
 	case "", "off", "continuous", "events":
@@ -592,3 +607,22 @@ func (s *Store) SetTimeSync(id string, on bool) error {
 	}
 	return ErrNotFound
 }
+
+// Area is a rectangle in the picture, in shares of width and height (0..1),
+// so it fits main and sub stream alike.
+type Area struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+	W float64 `json:"w"`
+	H float64 `json:"h"`
+}
+
+const maxAreas = 16
+
+func (a Area) valid() bool {
+	return a.X >= 0 && a.Y >= 0 && a.W > 0 && a.H > 0 && a.X+a.W <= 1.0001 && a.Y+a.H <= 1.0001
+}
+
+// MayView reports whether an account may watch the camera; administrators
+// are checked by the caller.
+func (c Camera) MayView(user string) bool { return slices.Contains(c.Viewers, user) }

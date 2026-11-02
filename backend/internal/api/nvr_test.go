@@ -88,3 +88,58 @@ func TestNVRViewsAreSavedAndChecked(t *testing.T) {
 		t.Fatalf("tile outside the grid: %d", res.StatusCode)
 	}
 }
+
+func TestNVRViewersSeeOnlyTheirCameras(t *testing.T) {
+	ts := newNVRTestServer(t)
+	ts.setup()
+	ts.request("PUT", "/api/v1/services/nvr", map[string]any{"enabled": true})
+	if res, b := ts.request("POST", "/api/v1/users", map[string]any{"name": "pia", "password": testPassword, "role": "user"}); res.StatusCode != 201 {
+		t.Fatalf("user: %d %s", res.StatusCode, b)
+	}
+	add := func(name string, viewers []string) string {
+		res, b := ts.request("POST", "/api/v1/nvr/cameras", map[string]any{"name": name, "host": "192.168.1.5", "user": "v", "password": "geheim-1", "mainUrl": "rtsp://192.168.1.5/" + name, "viewers": viewers})
+		if res.StatusCode != 201 {
+			t.Fatalf("add: %d %s", res.StatusCode, b)
+		}
+		var st struct {
+			Cameras []struct{ ID, Name string } `json:"cameras"`
+		}
+		json.Unmarshal(b, &st)
+		for _, c := range st.Cameras {
+			if c.Name == name {
+				return c.ID
+			}
+		}
+		return ""
+	}
+	door := add("Haustuer", []string{"pia"})
+	garden := add("Garten", nil)
+
+	pia := ts.newClient()
+	if res, _ := ts.do(pia, "POST", "/api/v1/login", credentials{Name: "pia", Password: testPassword}); res.StatusCode != 200 {
+		t.Fatalf("login: %d", res.StatusCode)
+	}
+	res, b := ts.do(pia, "GET", "/api/v1/nvr", nil)
+	if res.StatusCode != 200 || !strings.Contains(string(b), "Haustuer") || strings.Contains(string(b), "Garten") {
+		t.Fatalf("list: %d %s", res.StatusCode, b)
+	}
+	if strings.Contains(string(b), "rtsp://") || strings.Contains(string(b), "192.168.1.5") {
+		t.Fatalf("viewer sees addresses: %s", b)
+	}
+	_, b = ts.do(pia, "GET", "/api/v1/services/state", nil)
+	if !strings.Contains(string(b), `"nvr":true`) {
+		t.Fatalf("tab hidden for a viewer: %s", b)
+	}
+	if res, _ := ts.do(pia, "GET", "/api/v1/nvr/cameras/"+door+"/recordings", nil); res.StatusCode != 200 {
+		t.Fatalf("own camera: %d", res.StatusCode)
+	}
+	if res, _ := ts.do(pia, "GET", "/api/v1/nvr/cameras/"+garden+"/recordings", nil); res.StatusCode != 404 {
+		t.Fatalf("other camera: %d", res.StatusCode)
+	}
+	if res, _ := ts.do(pia, "PUT", "/api/v1/nvr/settings", map[string]any{"keepDays": 1}); res.StatusCode != 403 {
+		t.Fatalf("settings as viewer: %d", res.StatusCode)
+	}
+	if res, _ := ts.do(pia, "POST", "/api/v1/nvr/discover", map[string]any{"host": "192.168.1.9", "user": "u"}); res.StatusCode != 403 {
+		t.Fatalf("search as viewer: %d", res.StatusCode)
+	}
+}

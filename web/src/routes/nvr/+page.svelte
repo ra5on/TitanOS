@@ -11,6 +11,8 @@
 	import { onMount } from 'svelte';
 	import CameraDialog from './CameraDialog.svelte';
 	import QualityDialog from './QualityDialog.svelte';
+	import AreaDialog from './AreaDialog.svelte';
+	import { session } from '#lib/session.svelte.ts';
 	import {
 		clockOf,
 		fileOf,
@@ -38,6 +40,11 @@
 	let busy = $state(false);
 	let timing = $state<Camera | null>(null);
 	let tuning = $state<Camera | null>(null);
+	let areas = $state<Camera | null>(null);
+	// Accounts without admin rights only watch the cameras they were given.
+	const admin = $derived(
+		session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin',
+	);
 	let timeDone = $state('');
 
 	// General settings, edited in place.
@@ -219,9 +226,11 @@
 	<p class="muted">{t('nvr.intro')}</p>
 	{#snippet actions()}
 		<a class="btn" href="/nvr/views">{t('nvr.viewsLink')}</a>
-		<button type="button" class="btn btn-primary" onclick={() => (editing = 'new')}
-			><Icon name="plus" size={16} /> {t('nvr.add')}</button
-		>
+		{#if admin}
+			<button type="button" class="btn btn-primary" onclick={() => (editing = 'new')}
+				><Icon name="plus" size={16} /> {t('nvr.add')}</button
+			>
+		{/if}
 	{/snippet}
 </PageHead>
 
@@ -229,86 +238,88 @@
 {#if timeDone}<div class="notice-ok" role="status">{timeDone}</div>{/if}
 
 {#if nvr}
-	<section class="tile panel">
-		<h2 class="tile-title">{t('nvr.storageTitle')}</h2>
-		{#if noVolume}<div class="notice-warn">{t('nvr.noVolume')}</div>{/if}
-		<div class="grid">
-			<label
-				><span>{t('nvr.volume')}</span>
-				<select
-					class="field"
-					bind:value={volume}
-					onchange={() => (touched = true)}
-					disabled={nvr.volumes.length === 0}
+	{#if admin}
+		<section class="tile panel">
+			<h2 class="tile-title">{t('nvr.storageTitle')}</h2>
+			{#if noVolume}<div class="notice-warn">{t('nvr.noVolume')}</div>{/if}
+			<div class="grid">
+				<label
+					><span>{t('nvr.volume')}</span>
+					<select
+						class="field"
+						bind:value={volume}
+						onchange={() => (touched = true)}
+						disabled={nvr.volumes.length === 0}
+					>
+						<option value="">{t('nvr.volumeNone')}</option>
+						{#each nvr.volumes as v (v)}<option value={v}>{v}</option>{/each}
+					</select>
+				</label>
+				<label
+					><span>{t('nvr.keepDays')}</span>
+					<input
+						class="field"
+						type="number"
+						min="1"
+						max="3650"
+						bind:value={keepDays}
+						oninput={() => (touched = true)}
+					/>
+				</label>
+				<label
+					><span>{t('nvr.eventKeepDays')}</span>
+					<input
+						class="field"
+						type="number"
+						min="1"
+						max="3650"
+						bind:value={eventKeepDays}
+						oninput={() => (touched = true)}
+					/>
+				</label>
+				<label
+					><span>{t('nvr.reserve')}</span>
+					<input
+						class="field"
+						type="number"
+						min="0"
+						bind:value={reserveGB}
+						oninput={() => (touched = true)}
+					/>
+				</label>
+			</div>
+			<p class="muted small">
+				{t('nvr.storageHint')}
+				{#if nvr.root}· {t('nvr.usage', {
+						used: formatBytes(nvr.usedBytes),
+						free: formatBytes(nvr.freeBytes),
+					})}{/if}
+			</p>
+			<div class="row-actions">
+				<button
+					type="button"
+					class="btn btn-primary"
+					onclick={saveSettings}
+					disabled={busy || !settingsChanged}>{t('common.save')}</button
 				>
-					<option value="">{t('nvr.volumeNone')}</option>
-					{#each nvr.volumes as v (v)}<option value={v}>{v}</option>{/each}
-				</select>
-			</label>
-			<label
-				><span>{t('nvr.keepDays')}</span>
-				<input
-					class="field"
-					type="number"
-					min="1"
-					max="3650"
-					bind:value={keepDays}
-					oninput={() => (touched = true)}
-				/>
-			</label>
-			<label
-				><span>{t('nvr.eventKeepDays')}</span>
-				<input
-					class="field"
-					type="number"
-					min="1"
-					max="3650"
-					bind:value={eventKeepDays}
-					oninput={() => (touched = true)}
-				/>
-			</label>
-			<label
-				><span>{t('nvr.reserve')}</span>
-				<input
-					class="field"
-					type="number"
-					min="0"
-					bind:value={reserveGB}
-					oninput={() => (touched = true)}
-				/>
-			</label>
-		</div>
-		<p class="muted small">
-			{t('nvr.storageHint')}
-			{#if nvr.root}· {t('nvr.usage', {
-					used: formatBytes(nvr.usedBytes),
-					free: formatBytes(nvr.freeBytes),
-				})}{/if}
-		</p>
-		<div class="row-actions">
-			<button
-				type="button"
-				class="btn btn-primary"
-				onclick={saveSettings}
-				disabled={busy || !settingsChanged}>{t('common.save')}</button
-			>
-		</div>
-	</section>
+			</div>
+		</section>
 
-	<section class="tile panel armbar">
-		<span class="chip {nvr.armedNow ? 'ok' : ''}"
-			>{nvr.armedNow ? '● ' + t('nvrArm.armedNow') : '○ ' + t('nvrArm.disarmedNow')}</span
-		>
-		{#if nvr.settings.arming.mode === 'schedule'}<span class="muted small"
-				>{t('nvrArm.bySchedule')}</span
-			>{/if}
-		<div class="row-actions">
-			<button type="button" class="btn" onclick={() => arm(!nvr?.armedNow)} disabled={busy}
-				>{nvr.armedNow ? t('nvrArm.disarm') : t('nvrArm.arm')}</button
+		<section class="tile panel armbar">
+			<span class="chip {nvr.armedNow ? 'ok' : ''}"
+				>{nvr.armedNow ? '● ' + t('nvrArm.armedNow') : '○ ' + t('nvrArm.disarmedNow')}</span
 			>
-			<a class="btn" href="/settings/notifications">{t('nvrArm.settings')}</a>
-		</div>
-	</section>
+			{#if nvr.settings.arming.mode === 'schedule'}<span class="muted small"
+					>{t('nvrArm.bySchedule')}</span
+				>{/if}
+			<div class="row-actions">
+				<button type="button" class="btn" onclick={() => arm(!nvr?.armedNow)} disabled={busy}
+					>{nvr.armedNow ? t('nvrArm.disarm') : t('nvrArm.arm')}</button
+				>
+				<a class="btn" href="/settings/notifications">{t('nvrArm.settings')}</a>
+			</div>
+		</section>
+	{/if}
 
 	{#if !nvr.settings.enabled}
 		<div class="notice-warn">{t('nvr.off')}</div>
@@ -374,20 +385,27 @@
 						aria-expanded={browsing === camera.id}
 						onclick={() => browse(camera)}>{t('nvr.recordings')}</button
 					>
-					<button type="button" class="btn" onclick={() => (timing = camera)}
-						>{camera.timeSync ? t('nvr.timeAgain') : t('nvr.timeSet')}</button
-					>
-					{#if camera.onvifPort}
-						<button type="button" class="btn" onclick={() => (tuning = camera)}
-							>{t('nvr.quality')}</button
+					{#if admin}
+						{#if camera.detect || modeOf(camera) === 'events'}
+							<button type="button" class="btn" onclick={() => (areas = camera)}
+								>{t('nvr.areas')}</button
+							>
+						{/if}
+						<button type="button" class="btn" onclick={() => (timing = camera)}
+							>{camera.timeSync ? t('nvr.timeAgain') : t('nvr.timeSet')}</button
+						>
+						{#if camera.onvifPort}
+							<button type="button" class="btn" onclick={() => (tuning = camera)}
+								>{t('nvr.quality')}</button
+							>
+						{/if}
+						<button type="button" class="btn" onclick={() => (editing = camera)}
+							>{t('nvr.edit')}</button
+						>
+						<button type="button" class="btn btn-danger-outline" onclick={() => (removing = camera)}
+							>{t('nvr.remove')}</button
 						>
 					{/if}
-					<button type="button" class="btn" onclick={() => (editing = camera)}
-						>{t('nvr.edit')}</button
-					>
-					<button type="button" class="btn btn-danger-outline" onclick={() => (removing = camera)}
-						>{t('nvr.remove')}</button
-					>
 				</div>
 			</div>
 
@@ -435,10 +453,10 @@
 								>
 							{/each}
 						</div>
-						{#if recordings.protected.length > 0}
+						{#if (recordings.protected ?? []).length > 0}
 							<p class="muted small">{t('nvr.protectedList')}</p>
 							<div class="segments">
-								{#each recordings.protected as seg (seg.name)}
+								{#each recordings.protected ?? [] as seg (seg.name)}
 									<button
 										type="button"
 										class="btn"
@@ -460,14 +478,14 @@
 								autoplay
 								src={`/api/v1/nvr/cameras/${camera.id}/recordings/${f.day}/${f.file}${playingProtected ? '?protected=1' : ''}`}
 							></video>
-							<div class="row-actions">
-								<button
-									type="button"
-									class="btn"
-									onclick={() => protect(camera, playing, playingProtected ? false : true)}
-									>{playingProtected ? t('nvr.unprotect') : t('nvr.protect')}</button
-								>
-							</div>
+							{#if admin}<div class="row-actions">
+									<button
+										type="button"
+										class="btn"
+										onclick={() => protect(camera, playing, playingProtected ? false : true)}
+										>{playingProtected ? t('nvr.unprotect') : t('nvr.protect')}</button
+									>
+								</div>{/if}
 						{/if}
 					{:else if recordings}
 						<p class="muted">{t('nvr.noRecordings')}</p>
@@ -485,6 +503,17 @@
 		onclose={() => (editing = null)}
 		onsaved={() => {
 			editing = null;
+			void load();
+		}}
+	/>
+{/if}
+
+{#if areas}
+	<AreaDialog
+		camera={areas}
+		onclose={() => (areas = null)}
+		onsaved={() => {
+			areas = null;
 			void load();
 		}}
 	/>
@@ -531,8 +560,9 @@
 {/if}
 
 <style>
-	.armbar {
+	.armbar.panel {
 		display: flex;
+		flex-direction: row;
 		flex-wrap: wrap;
 		gap: 12px;
 		align-items: center;

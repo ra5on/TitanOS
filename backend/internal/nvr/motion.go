@@ -18,6 +18,11 @@ const (
 type Motion struct {
 	// Sensitivity is 1 (hard to trigger) to 100 (easy); 0 means 50.
 	Sensitivity int
+	// Zones and Masks choose the pixels that count (see Camera).
+	Zones, Masks []Area
+
+	counted []bool // nil: every pixel counts
+	total   int
 
 	bg      []float32
 	active  bool
@@ -63,6 +68,7 @@ func (m *Motion) Feed(frame []byte, at time.Time) *MotionEvent {
 		return nil
 	}
 	if m.bg == nil {
+		m.counted, m.total = areaMask(m.Zones, m.Masks)
 		m.bg = make([]float32, len(frame))
 		for i, v := range frame {
 			m.bg[i] = float32(v)
@@ -72,13 +78,20 @@ func (m *Motion) Feed(frame []byte, at time.Time) *MotionEvent {
 	delta, share := m.thresholds()
 	// A change of light over the whole picture is not movement: take the
 	// average shift out before comparing.
+	// Only the pixels that count: a car in a masked street must not shift
+	// the average of the rest.
 	var shift float32
 	for i, v := range frame {
-		shift += float32(v) - m.bg[i]
+		if m.counted == nil || m.counted[i] {
+			shift += float32(v) - m.bg[i]
+		}
 	}
-	shift /= float32(len(frame))
+	shift /= float32(m.total)
 	changed := 0
 	for i, v := range frame {
+		if m.counted != nil && !m.counted[i] {
+			continue
+		}
 		d := float32(v) - m.bg[i] - shift
 		if d < 0 {
 			d = -d
@@ -87,7 +100,7 @@ func (m *Motion) Feed(frame []byte, at time.Time) *MotionEvent {
 			changed++
 		}
 	}
-	score := float64(changed) / float64(len(frame))
+	score := float64(changed) / float64(m.total)
 	moving := score >= share
 	// The background follows slowly; faster while nothing moves.
 	rate := float32(0.02)
@@ -116,4 +129,40 @@ func (m *Motion) Feed(frame []byte, at time.Time) *MotionEvent {
 		}
 	}
 	return nil
+}
+
+// areaMask marks the pixels the motion check looks at: inside a zone (or
+// anywhere without zones) and outside every mask.
+func areaMask(zones, masks []Area) ([]bool, int) {
+	n := MotionW * MotionH
+	if len(zones) == 0 && len(masks) == 0 {
+		return nil, n
+	}
+	inside := func(a Area, x, y int) bool {
+		fx, fy := (float64(x)+0.5)/MotionW, (float64(y)+0.5)/MotionH
+		return fx >= a.X && fx < a.X+a.W && fy >= a.Y && fy < a.Y+a.H
+	}
+	out := make([]bool, n)
+	total := 0
+	for y := 0; y < MotionH; y++ {
+		for x := 0; x < MotionW; x++ {
+			ok := len(zones) == 0
+			for _, z := range zones {
+				ok = ok || inside(z, x, y)
+			}
+			for _, mk := range masks {
+				if inside(mk, x, y) {
+					ok = false
+				}
+			}
+			out[y*MotionW+x] = ok
+			if ok {
+				total++
+			}
+		}
+	}
+	if total == 0 {
+		total = 1 // everything masked: nothing can move
+	}
+	return out, total
 }

@@ -96,3 +96,45 @@ func TestMotionSensitivity(t *testing.T) {
 		t.Fatal("a large change must trigger at the default")
 	}
 }
+
+// blobAt paints a bright rectangle at the given share of the picture.
+func blobAt(base byte, a Area) []byte {
+	f := gray(base)
+	for y := 0; y < MotionH; y++ {
+		for x := 0; x < MotionW; x++ {
+			fx, fy := (float64(x)+0.5)/MotionW, (float64(y)+0.5)/MotionH
+			if fx >= a.X && fx < a.X+a.W && fy >= a.Y && fy < a.Y+a.H {
+				f[y*MotionW+x] = 255
+			}
+		}
+	}
+	return f
+}
+
+func TestMotionMasksAndZones(t *testing.T) {
+	street := Area{X: 0, Y: 0, W: 1, H: 0.3}       // top: the street
+	garden := Area{X: 0.5, Y: 0.5, W: 0.5, H: 0.5} // bottom right
+	moves := func(m *Motion, a Area) bool {
+		at := time.Unix(0, 0)
+		m.Feed(gray(60), at)
+		for i := 0; i < 4; i++ {
+			at = at.Add(500 * time.Millisecond)
+			if ev := m.Feed(blobAt(60, a), at); ev != nil && ev.Start {
+				return true
+			}
+		}
+		return false
+	}
+	if !moves(&Motion{}, street) {
+		t.Fatal("a car on the street must count without masks")
+	}
+	if moves(&Motion{Masks: []Area{street}}, street) {
+		t.Fatal("masked street still triggers")
+	}
+	if moves(&Motion{Zones: []Area{garden}}, street) {
+		t.Fatal("movement outside the zone triggers")
+	}
+	if !moves(&Motion{Zones: []Area{garden}}, Area{X: 0.6, Y: 0.6, W: 0.2, H: 0.2}) {
+		t.Fatal("movement in the zone must count")
+	}
+}

@@ -3,6 +3,7 @@ package nvr
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -81,7 +82,7 @@ func (w *Watcher) Apply(ctx context.Context, enabled bool) {
 	if enabled && root != "" {
 		for _, c := range w.Store.Cameras() {
 			if c.Watched() {
-				want[c.ID] = strings.Join([]string{w.Store.Full(c, true), itoa(c.Sensitivity), root}, "\x00") // the spec only, never passed on
+				want[c.ID] = strings.Join([]string{w.Store.Full(c, true), itoa(c.Sensitivity), fmt.Sprint(c.Zones, c.Masks), root}, "\x00") // the spec only, never passed on
 			}
 		}
 	}
@@ -174,7 +175,7 @@ func (w *Watcher) once(ctx context.Context, cur *run, c Camera, root string) err
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	m := &Motion{Sensitivity: c.Sensitivity}
+	m := &Motion{Sensitivity: c.Sensitivity, Zones: c.Zones, Masks: c.Masks}
 	r := bufio.NewReaderSize(out, 4*MotionW*MotionH)
 	frame := make([]byte, MotionW*MotionH)
 	var open *Event

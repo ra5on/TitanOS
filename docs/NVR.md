@@ -1,6 +1,6 @@
 # NVR (Kamerarekorder)
 
-Der NVR nimmt Netzwerkkameras auf, zeigt sie live und meldet Bewegung. Er ist ab Werk aus. Einschalten unter **Einstellungen › Dienste › NVR**; danach erscheint der Menüpunkt **NVR**. Nur Besitzer und Administratoren sehen ihn. Die festgelegten Regeln stehen in [rules/NVR.md](rules/NVR.md).
+Der NVR nimmt Netzwerkkameras auf, zeigt sie live und meldet Bewegung. Er ist ab Werk aus. Einschalten unter **Einstellungen › Dienste › NVR**; danach erscheint der Menüpunkt **NVR**. Besitzer und Administratoren richten ihn ein; andere Konten sehen nur Kameras, für die sie als Zuschauer eingetragen sind. Die festgelegten Regeln stehen in [rules/NVR.md](rules/NVR.md).
 
 ## Einrichten
 
@@ -27,7 +27,12 @@ Der NVR nimmt Netzwerkkameras auf, zeigt sie live und meldet Bewegung. Er ist ab
 - **Bewegung erkennen** je Kamera, Empfindlichkeit niedrig/mittel/hoch. Helligkeitswechsel über das ganze Bild (Licht, Wolken) zählen nicht.
 - **Scharfschaltung** unter **Einstellungen › Meldungen › Kameras (NVR)**: aus, an oder nach Zeitplan; Auswahl der Kameras; Ruhezeit je Kamera. Die NVR-Seite zeigt den Zustand und schaltet schnell um.
 - Meldungen gehen über die Wege, die unter Einstellungen › Meldungen eingerichtet sind. Außerdem: Kamera liefert kein Bild (nach drei Minuten) und wieder da.
+- **Bereiche:** Masken (rot) nehmen Straße, Bäume oder Nachbargrundstück aus der Bewegungserkennung, Zonen (grün) beschränken sie darauf. Gezogen wird auf einem aktuellen Bild der Kamera.
 - **Objekterkennung** (Person, Fahrzeug, Paket, Tier, Kennzeichen) ist noch nicht eingebaut.
+
+## Zuschauer
+
+Unter „Bearbeiten“ einer Kamera lassen sich Konten ohne Administratorrechte als Zuschauer eintragen. Sie sehen dann diese Kamera live, ihre Aufnahmen und Ereignisse, aber keine Adressen, keine Einstellungen und keine anderen Kameras.
 
 ## Home Assistant
 
@@ -54,4 +59,5 @@ Das ist keine Rechtsberatung. Im Zweifel die Landesdatenschutzbehörde fragen.
 - Live ist Bewegt-JPEG über die Weboberfläche, nicht WebRTC; H.265-Aufnahmen spielt nicht jeder Browser ab.
 - ffmpeg läuft als Kindprozess von titand; eine eigene gehärtete Einheit folgt.
 - Keine Objekterkennung, kein Ton im Live-Bild, kein Gegensprechen.
+- Masken wirken nur auf die Bewegungserkennung; das Video selbst wird nicht geschwärzt.
 - An echten Kameras ist das meiste noch nicht geprüft (siehe Release-Notizen).

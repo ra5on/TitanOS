@@ -7941,5 +7941,15 @@
 	"notify.kind.nvr_retention_short.text": "Space ran short: the camera now has only the days before the slash, the days after it were wanted. The oldest recordings were deleted.",
 	"nvr.perDay": "{size} in the last 24 hours",
 	"nvr.qualityResetConfirm": "The original values are written to the camera. The stream drops briefly.",
-	"nvr.loginRefused": "The camera refused the login. TitanOS now waits (up to 30 minutes) so the account does not get locked. Check the password under \"Edit\"; after saving it tries again at once."
+	"nvr.loginRefused": "The camera refused the login. TitanOS now waits (up to 30 minutes) so the account does not get locked. Check the password under \"Edit\"; after saving it tries again at once.",
+	"nvr.areas": "Areas",
+	"nvr.areasTitle": "{name}: areas for motion",
+	"nvr.areasIntro": "Drag on the picture to draw a rectangle. Masks (red) leave a street, trees or the neighbour's garden out of motion detection; zones (green) limit it to these areas. The recording itself stays unchanged.",
+	"nvr.areasKind": "Kind",
+	"nvr.areaMask": "Mask",
+	"nvr.areaZone": "Zone",
+	"nvr.areasFull": "At most 16 zones and 16 masks.",
+	"nvr.areasNoPicture": "No picture from the camera; areas can be drawn anyway.",
+	"nvr.viewers": "Viewers",
+	"nvr.viewersHint": "These accounts (without admin rights) may watch the camera live and see its recordings and events, but change nothing."
 }
