@@ -499,7 +499,7 @@ func TestUnboundDriverFailed(t *testing.T) {
 	if thermal := byAddress["0000:00:14.2"]; thermal.Hint != "driver_failed" || thermal.Driver != "intel_pch_thermal_test" || thermal.Kernel != "" {
 		t.Errorf("thermal: %+v", thermal)
 	}
-	for address, hint := range map[string]string{"0000:80:1f.5": "not_needed", "0000:80:14.5": "unsupported", "0000:01:00.0": "unsupported"} {
+	for address, hint := range map[string]string{"0000:80:1f.5": "not_needed", "0000:80:14.5": "unclassified", "0000:01:00.0": "unsupported"} {
 		if byAddress[address].Hint != hint {
 			t.Errorf("%s: %+v, want %s", address, byAddress[address], hint)
 		}
@@ -508,8 +508,9 @@ func TestUnboundDriverFailed(t *testing.T) {
 		t.Errorf("kernel log read %d times", runner.calls)
 	}
 
-	// Without a failing driver the kernel log is not read; a kernel with
-	// the fix drops the version hint.
+	// Without a failing driver the kernel log is read only for the one
+	// unclassified chipset function; a kernel with the fix drops the
+	// version hint.
 	tr.file("proc/sys/kernel/osrelease", "7.3.1+bpo-amd64")
 	runner.calls = 0
 	for _, device := range c.Unbound(context.Background()) {
@@ -517,8 +518,8 @@ func TestUnboundDriverFailed(t *testing.T) {
 			t.Errorf("7.3 without modules.alias: %+v", device)
 		}
 	}
-	if runner.calls != 0 {
-		t.Errorf("kernel log read without need: %d", runner.calls)
+	if runner.calls != 1 {
+		t.Errorf("kernel log read %d times, want once for the unclassified function", runner.calls)
 	}
 	tr.file("modules/7.3.1+bpo-amd64/modules.alias", "alias pci:v00008086d0000AD0Bsv*sd*bc*sc*i* vmd")
 	for _, device := range c.Unbound(context.Background()) {
@@ -548,5 +549,33 @@ func TestPCINameWithoutRepeatedMaker(t *testing.T) {
 	}
 	if got := names.name("8086", "ffff"); got != "PCI 8086:ffff" {
 		t.Errorf("unknown: %q", got)
+	}
+}
+
+func TestUnclassifiedChipset(t *testing.T) {
+	tr := newTree(t)
+	tr.file("proc/sys/kernel/osrelease", "6.12.113+deb13-amd64")
+	tr.file("modules/6.12.113+deb13-amd64/modules.alias", "# none\n")
+	tr.pci("0000:80:14.5", "8086", "7f2f", "000000", "") // Intel, no class
+	tr.pci("0000:05:00.0", "1234", "0001", "000000", "") // other maker, no class
+	c := tr.checker()
+	c.Runner = &fakeRunner{output: "pci 0000:80:14.5: [8086:7f2f] type 00 class 0x000000 PCIe Root Complex Integrated Endpoint\n"}
+	byAddress := map[string]UnboundDevice{}
+	for _, device := range c.Unbound(context.Background()) {
+		byAddress[device.Address] = device
+	}
+	if hint := byAddress["0000:80:14.5"].Hint; hint != "unclassified" {
+		t.Errorf("Intel function without class: %s", hint)
+	}
+	if hint := byAddress["0000:05:00.0"].Hint; hint != "unsupported" {
+		t.Errorf("function of another maker: %s", hint)
+	}
+
+	// The kernel complaining about the device is no quiet chipset function.
+	c.Runner = &fakeRunner{output: "pci 0000:80:14.5: failed to claim resources\n"}
+	for _, device := range c.Unbound(context.Background()) {
+		if device.Address == "0000:80:14.5" && device.Hint != "unsupported" {
+			t.Errorf("with a kernel complaint: %s", device.Hint)
+		}
 	}
 }
