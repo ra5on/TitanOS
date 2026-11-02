@@ -11,6 +11,13 @@ Speicher › Weitere Optionen › Ruhemodus für Festplatten, nur Besitzer und A
 
 Eine Platte ohne eindeutige Seriennummer und ohne WWN (oder mit derselben Seriennummer wie eine andere Platte, wie es manche USB-Gehäuse melden) bekommt keinen eigenen Wert; sie übernimmt den ihres Volumes bzw. den Standard. So gilt ein Wert nie unbemerkt für eine andere Platte.
 
+## Wo man ihn sieht und einstellt (seit 0.46)
+
+- **Speicher › Volumes** und **Laufwerke:** Spalte „Ruhemodus“ mit Wert, Zustand (schläft/aktiv) und Herkunft; bei einem Volume „2 von 4 Platten schlafen“. Ein Klick auf die Zelle öffnet den Dialog mit diesem Volume bzw. dieser Platte markiert. Volume- und Plattennamen sind unterstrichene Verweise mit `›`, die ganze Zeile ist anklickbar.
+- **Volume-Details:** Abschnitt „Ruhemodus“ mit dem Wert, dem Zustand jeder Platte und einem kleinen Editor („Ändern …“) für das Volume und seine Platten; er sendet dieselbe Anfrage wie der Dialog. Hat ein Volume keine Platte, die schlafen kann, steht das mit dem Grund je Platte da.
+- **Dialog** (Speicher › Weitere Optionen › Ruhemodus): unverändert die zentrale Stelle; neu der Abschnitt „Platten ohne Ruhemodus“ mit Grund (SSD, NVMe, Wechseldatenträger, Bootstick, kein SATA-/SAS-Laufwerk, Anschluss ohne Standby).
+- Vorher blendete der Dialog die Volume- und Plattenlisten aus, wenn keine Platte schlafen konnte (leere Listen fehlten in der Antwort, `omitempty`). `listed: true` sagt jetzt, dass die Platten gelesen wurden.
+
 ## Datei
 
 `/config/storage/disk-sleep.json`, nur bei einer Änderung durch die Person atomar geschrieben:
@@ -29,7 +36,7 @@ Eine Platte ohne eindeutige Seriennummer und ohne WWN (oder mit derselben Serien
 
 ## API
 
-- `GET /api/v1/storage/disk-sleep`: Einstellung (`idleMinutes`, `volumes`, `disks`), `available`, `errors`, dazu `volumeStatus` und `diskStatus` (Name, Modell, Seriennummer, Größe, Volume, eigener Wert oder `null`, wirksamer Wert, Herkunft, Zustand `asleep`/`active` aus dem RAM, letzter Standby-Fehler) sowie `missingVolumes`/`missingDisks`. Die Platten kommen aus `lsblk` wie auf der Speicherseite; keine Platte wird gelesen oder geweckt. Dieselben Felder stehen in `diskSleep` von `GET /api/v1/storage`.
+- `GET /api/v1/storage/disk-sleep`: Einstellung (`idleMinutes`, `volumes`, `disks`), `available`, `errors`, dazu `listed`, `unavailable` (Platten, die nicht schlafen können, mit Grund `ssd`/`nvme`/`removable`/`stick`/`name`/`transport`), `volumeStatus` und `diskStatus` (Name, Modell, Seriennummer, Größe, Volume, eigener Wert oder `null`, wirksamer Wert, Herkunft, Zustand `asleep`/`active` aus dem RAM, letzter Standby-Fehler) sowie `missingVolumes`/`missingDisks`. Die Platten kommen aus `lsblk` wie auf der Speicherseite; keine Platte wird gelesen oder geweckt. Dieselben Felder stehen in `diskSleep` von `GET /api/v1/storage`.
 - `PUT /api/v1/storage/disk-sleep`: `idleMinutes` ist Pflicht. `volumes` und `disks` ersetzen, wenn angegeben, alle Ausnahmen dieser Art; fehlen sie, bleiben die gespeicherten (ältere Oberflächen). Werte wie beim Standard, sonst `invalid_disk_idle_time`. Ein neuer oder geänderter Eintrag für ein unbekanntes Volume oder eine nicht vorhandene bzw. nicht unterstützte Platte (SSD, NVMe …) sowie ein Schlüssel ohne `serial:`/`wwn:` ergibt `unknown_disk_sleep_target` (400); ein unverändert gespeicherter Eintrag einer gerade fehlenden Platte bleibt erlaubt.
 
 ## Verhalten

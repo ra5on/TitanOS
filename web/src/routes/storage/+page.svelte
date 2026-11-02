@@ -30,6 +30,12 @@
 	import CreateVolumeDialog from './CreateVolumeDialog.svelte';
 	import DeleteVolumeDialog from './DeleteVolumeDialog.svelte';
 	import DiskSleepDialog from './DiskSleepDialog.svelte';
+	import {
+		diskSleep as diskSleepOf,
+		sleepDuration,
+		sleepOrigin,
+		volumeSleep,
+	} from './sleep-view.ts';
 	import { diskStatus, diskType, smartText } from './labels.ts';
 	import VolumeCard from './VolumeCard.svelte';
 
@@ -61,7 +67,8 @@
 	let pendingDisk = $state('');
 	let selected = $state(navigation.selected),
 		selectedDisk = $state(navigation.disk),
-		sleepOpen = $state(false);
+		sleepOpen = $state(false),
+		sleepFocus = $state<{ kind: 'volume' | 'disk'; key: string } | undefined>();
 	const detail = $derived(volumes.find((v) => v.name === selected));
 	const diskDetail = $derived(
 		disks.find((d) => (d.identity || d.serial || d.name) === selectedDisk),
@@ -378,16 +385,24 @@
 					><tr
 						><th>{t('storage.volumes')}</th><th>{t('disk.status')}</th><th
 							>RAID / {t('storage.filesystem')}</th
-						><th>{t('storage.used')}</th><th class="num">{t('storage.disks')}</th></tr
+						><th>{t('storage.used')}</th><th class="num">{t('storage.disks')}</th><th
+							>{t('storage.sleepColumn')}</th
+						></tr
 					></thead
 				><tbody>
-					{#each visibleVolumes as volume (volume.name)}
-						<tr class:selected={selected === volume.name}>
+					{#each visibleVolumes as volume (volume.name)}{@const sleep = volumeSleep(
+							diskSleep,
+							volume.name,
+						)}
+						<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+						<tr
+							class="clickable"
+							class:selected={selected === volume.name}
+							onclick={() => (selected = selected === volume.name ? '' : volume.name)}
+						>
 							<td
-								><button
-									class="row-name mono"
-									onclick={() => (selected = selected === volume.name ? '' : volume.name)}
-									>{volume.name}</button
+								><button class="row-name mono" aria-expanded={selected === volume.name}
+									>{volume.name}<span class="chev" aria-hidden="true">›</span></button
 								></td
 							>
 							<td
@@ -415,9 +430,41 @@
 									</div>{:else}<span class="muted">{t('storage.notMounted')}</span>{/if}</td
 							>
 							<td class="num mono">{volume.members.length}</td>
+							<td>
+								{#if sleep}
+									<button
+										type="button"
+										class="sleep-cell"
+										title={t('storage.sleepOpenHint')}
+										onclick={(event) => {
+											event.stopPropagation();
+											sleepFocus = { kind: 'volume', key: volume.name };
+											sleepOpen = true;
+										}}
+									>
+										{#if sleep.total > 0}
+											<span>{sleepDuration(sleep.minutes)}</span>
+											<span class="chip" class:ok={sleep.asleep > 0}
+												>{sleep.asleep > 0
+													? t('storage.sleepAsleep')
+													: t('storage.sleepAwake')}</span
+											>
+											<span class="sub"
+												>{t('storage.sleepCount', {
+													asleep: sleep.asleep,
+													total: sleep.total,
+												})}</span
+											>
+										{:else}
+											<span class="muted">–</span>
+											<span class="sub">{t('storage.sleepNoSleeper')}</span>
+										{/if}
+									</button>
+								{:else}<span class="muted">–</span>{/if}
+							</td>
 						</tr>
 					{:else}<tr
-							><td colspan="5"
+							><td colspan="6"
 								><EmptyState
 									inline
 									title={t(volumes.length ? 'ui.noResults' : 'storage.noVolumes')}
@@ -434,20 +481,26 @@
 							>{t('disk.size')}</th
 						><th class="num">{t('disk.temp')}</th><th>{t('disk.smart')}</th><th
 							>{t('disk.volume')}</th
-						></tr
+						><th>{t('storage.sleepColumn')}</th></tr
 					></thead
 				><tbody>
 					{#each visibleDisks as disk (disk.identity || disk.serial || disk.name)}{@const status =
-							diskStatus(disk)}
-						<tr class:selected={selectedDisk === (disk.identity || disk.serial || disk.name)}>
+							diskStatus(disk)}{@const sleep = diskSleepOf(diskSleep, disk.name)}
+						<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+						<tr
+							class="clickable"
+							class:selected={selectedDisk === (disk.identity || disk.serial || disk.name)}
+							onclick={() =>
+								(selectedDisk =
+									selectedDisk === (disk.identity || disk.serial || disk.name)
+										? ''
+										: disk.identity || disk.serial || disk.name)}
+						>
 							<td
 								><button
 									class="row-name mono"
-									onclick={() =>
-										(selectedDisk =
-											selectedDisk === (disk.identity || disk.serial || disk.name)
-												? ''
-												: disk.identity || disk.serial || disk.name)}>{disk.name}</button
+									aria-expanded={selectedDisk === (disk.identity || disk.serial || disk.name)}
+									>{disk.name}<span class="chev" aria-hidden="true">›</span></button
 								><span class="sub">{disk.model || diskType(disk)}</span></td
 							>
 							<td
@@ -460,9 +513,34 @@
 										? t('storage.unassigned')
 										: disk.contents?.join(', ') || '–')}</td
 							>
+							<td>
+								{#if sleep?.disk}
+									<button
+										type="button"
+										class="sleep-cell"
+										title={t('storage.sleepOpenHint')}
+										onclick={(event) => {
+											event.stopPropagation();
+											sleepFocus = { kind: 'disk', key: disk.name };
+											sleepOpen = true;
+										}}
+									>
+										<span>{sleepDuration(sleep.disk.effective)}</span>
+										<span class="chip" class:ok={sleep.disk.state === 'asleep'}
+											>{sleep.disk.state === 'asleep'
+												? t('storage.sleepAsleep')
+												: t('storage.sleepAwake')}</span
+										>
+										<span class="sub">{sleepOrigin(sleep.disk.origin)}</span>
+									</button>
+								{:else if sleep?.reason}
+									<span class="muted">–</span>
+									<span class="sub">{t(`storage.sleepReason.${sleep.reason}`)}</span>
+								{:else}<span class="muted">–</span>{/if}
+							</td>
 						</tr>
 					{:else}<tr
-							><td colspan="6"
+							><td colspan="7"
 								><EmptyState
 									inline
 									title={t(disks.length ? 'ui.noResults' : 'storage.noDisks')}
@@ -488,6 +566,14 @@
 				oncheck={(start) => check(detail, start)}
 				onadd={() => (dialog = { kind: 'add', volume: detail.name })}
 				onprofile={() => (dialog = { kind: 'profile', volume: detail.name })}
+				{diskSleep}
+				onsleepsaved={(updated) => {
+					if (storage.status) storage.status.diskSleep = updated;
+				}}
+				onsleepopen={() => {
+					sleepFocus = { kind: 'volume', key: detail.name };
+					sleepOpen = true;
+				}}
 				ondelete={() => (dialog = { kind: 'delete', volume: detail.name })}
 				onremove={(disk) => (
 					(error = null),
@@ -607,7 +693,8 @@
 </div>
 {#if sleepOpen}<DiskSleepDialog
 		status={diskSleep}
-		onclose={() => (sleepOpen = false)}
+		focus={sleepFocus}
+		onclose={() => ((sleepOpen = false), (sleepFocus = undefined))}
 		onsaved={(updated: DiskSleepStatus) => {
 			if (storage.status) storage.status.diskSleep = updated;
 		}}
@@ -735,12 +822,47 @@
 		background: transparent;
 		padding: 0;
 		cursor: pointer;
-		color: var(--text);
+		color: var(--accent);
 		font-weight: 500;
 		text-align: left;
+		white-space: nowrap;
+		text-decoration: underline;
+		text-underline-offset: 3px;
+		text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
 	}
 	.row-name:hover {
-		color: var(--accent);
+		text-decoration-color: currentColor;
+	}
+	.chev {
+		margin-left: 6px;
+		text-decoration: none;
+		display: inline-block;
+	}
+	tr.clickable {
+		cursor: pointer;
+	}
+	tr.clickable:hover {
+		background: color-mix(in srgb, var(--accent) 6%, transparent);
+	}
+	.sleep-cell {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 4px 8px;
+		border: 0;
+		background: transparent;
+		padding: 0;
+		color: var(--text);
+		cursor: pointer;
+		text-align: left;
+		font: inherit;
+	}
+	.sleep-cell:hover > span:first-child {
+		text-decoration: underline;
+	}
+	.sleep-cell .sub {
+		flex-basis: 100%;
+		margin-top: 0;
 	}
 	.sub {
 		display: block;

@@ -189,10 +189,44 @@ type DiskSleepDisk struct {
 	Error string `json:"error,omitempty"`
 }
 
+// DiskSleepUnavailable is a disk that cannot be put to sleep, with the
+// reason, so that the settings explain what is missing from the list.
+type DiskSleepUnavailable struct {
+	Name      string `json:"name"`
+	Model     string `json:"model"`
+	SizeBytes uint64 `json:"sizeBytes"`
+	Volume    string `json:"volume,omitempty"`
+	// Reason is ssd, nvme, removable, stick, name or transport.
+	Reason string `json:"reason"`
+}
+
+// sleepUnavailableReason says why standbyArgs gives a disk nothing.
+func sleepUnavailableReason(device blockDevice) string {
+	switch {
+	case classify(device, nil).Role == RoleStick:
+		return "stick"
+	case device.Removable:
+		return "removable"
+	case device.Transport == "nvme" || strings.HasPrefix(device.Name, "/dev/nvme"):
+		return "nvme"
+	case !device.Rota:
+		return "ssd"
+	case !sleepDeviceName.MatchString(device.Name):
+		return "name"
+	default:
+		return "transport"
+	}
+}
+
 type DiskSleepStatus struct {
 	DiskSleepSettings
 	Available bool             `json:"available"`
 	Errors    []DiskSleepError `json:"errors"`
+	// Listed is true where the disks were listed, also when the lists below
+	// are empty (omitempty drops empty lists from the answer).
+	Listed bool `json:"listed,omitempty"`
+	// Unavailable are the disks that cannot sleep, with the reason.
+	Unavailable []DiskSleepUnavailable `json:"unavailable,omitempty"`
 	// Set only where disks were listed (storage status, the disk sleep
 	// routes). VolumeStatus and DiskStatus list what exists now;
 	// MissingVolumes and MissingDisks are stored overrides without their
@@ -274,8 +308,14 @@ func (m *Manager) diskSleepStatus(devices []blockDevice) DiskSleepStatus {
 	byUUID := volumesByUUID(configured)
 	present := map[string]bool{}
 	status.DiskStatus = []DiskSleepDisk{}
+	status.Listed = true
 	for _, device := range devices {
-		if !isDisk(device) || standbyArgs(device) == nil {
+		if !isDisk(device) {
+			continue
+		}
+		if standbyArgs(device) == nil {
+			disk := classify(device, byUUID)
+			status.Unavailable = append(status.Unavailable, DiskSleepUnavailable{Name: disk.Name, Model: disk.Model, SizeBytes: disk.SizeBytes, Volume: disk.Volume, Reason: sleepUnavailableReason(device)})
 			continue
 		}
 		disk := classify(device, byUUID)
@@ -299,6 +339,7 @@ func (m *Manager) diskSleepStatus(devices []blockDevice) DiskSleepStatus {
 	sort.Strings(status.MissingVolumes)
 	sort.Strings(status.MissingDisks)
 	sort.Slice(status.DiskStatus, func(i, j int) bool { return status.DiskStatus[i].Name < status.DiskStatus[j].Name })
+	sort.Slice(status.Unavailable, func(i, j int) bool { return status.Unavailable[i].Name < status.Unavailable[j].Name })
 	return status
 }
 

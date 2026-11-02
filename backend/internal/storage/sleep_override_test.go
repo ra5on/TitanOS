@@ -337,3 +337,34 @@ func TestDiskSleepUpdatesAtOnceKeepEachOther(t *testing.T) {
 		}
 	}
 }
+
+// A disk that cannot sleep is listed with its reason, and a system without
+// any disk that can sleep still reports that the disks were listed (the empty
+// lists are left out of the JSON).
+func TestDiskSleepStatusExplainsDisksThatCannotSleep(t *testing.T) {
+	m, runner, _ := overrideManager(t)
+	status, err := m.DiskSleepStatus(context.Background())
+	if err != nil || !status.Listed {
+		t.Fatalf("listed: %v, %v", status.Listed, err)
+	}
+	if len(status.Unavailable) != 1 || status.Unavailable[0].Name != "sdh" || status.Unavailable[0].Reason != "ssd" {
+		t.Fatalf("unavailable: %+v", status.Unavailable)
+	}
+
+	runner.disks = `{"blockdevices":[{"name":"/dev/sdh","kname":"/dev/sdh","type":"disk","size":1000000,"rota":false,"tran":"sata","model":"SSD","serial":"H1"},{"name":"/dev/nvme0n1","kname":"/dev/nvme0n1","type":"disk","size":1000000,"rota":false,"tran":"nvme","model":"NVMe","serial":"N1"}]}`
+	status, err = m.DiskSleepStatus(context.Background())
+	if err != nil || !status.Listed || len(status.DiskStatus) != 0 {
+		t.Fatalf("no disk can sleep: %+v, %v", status, err)
+	}
+	reasons := map[string]string{}
+	for _, disk := range status.Unavailable {
+		reasons[disk.Name] = disk.Reason
+	}
+	if reasons["sdh"] != "ssd" || reasons["nvme0n1"] != "nvme" {
+		t.Fatalf("reasons: %v", reasons)
+	}
+	data, _ := json.Marshal(status)
+	if !strings.Contains(string(data), `"listed":true`) || strings.Contains(string(data), "diskStatus") {
+		t.Fatalf("json: %s", data)
+	}
+}
