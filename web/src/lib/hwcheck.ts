@@ -9,7 +9,7 @@ export type UnboundDevice = {
 	id: string;
 	class: string;
 	name: string;
-	hint: 'plugin' | 'kernel' | 'driver_failed' | 'not_needed' | 'unsupported';
+	hint: 'plugin' | 'kernel' | 'driver_failed' | 'not_needed' | 'unclassified' | 'unsupported';
 	plugins?: PluginHint[];
 	/** hint kernel: first kernel with a driver; driver_failed: first kernel with the fix. */
 	kernel?: string;
@@ -127,5 +127,5 @@ export function virtAdvice(v: Virtualization): VirtAdvice[] {
 
 /** Devices that need attention (leaves out those that need no driver). */
 export function attention(devices: UnboundDevice[]): UnboundDevice[] {
-	return devices.filter((device) => device.hint !== 'not_needed');
+	return devices.filter((device) => device.hint !== 'not_needed' && device.hint !== 'unclassified');
 }

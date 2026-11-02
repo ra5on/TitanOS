@@ -152,7 +152,9 @@ type UnboundDevice struct {
 	ID    string `json:"id"`
 	Class string `json:"class"`
 	Name  string `json:"name"`
-	// Hint is plugin, kernel, driver_failed, not_needed or unsupported.
+	// Hint is plugin, kernel, driver_failed, not_needed, unclassified or
+	// unsupported. unclassified: an Intel chipset function without class that
+	// no kernel driver claims and the kernel log does not complain about.
 	// driver_failed: a module of the running kernel is made for the device
 	// but did not take it; Messages are its kernel lines about the device.
 	Hint    string       `json:"hint"`
@@ -334,10 +336,13 @@ func (c *Checker) unbound(kernelLog func() string) []UnboundDevice {
 	}
 	// What needs attention first; devices that need no driver last.
 	sort.SliceStable(devices, func(i, j int) bool {
-		return (devices[i].Hint == "not_needed") != (devices[j].Hint == "not_needed") && devices[j].Hint == "not_needed"
+		return quietHint(devices[i].Hint) != quietHint(devices[j].Hint) && quietHint(devices[j].Hint)
 	})
 	return devices
 }
+
+// quietHint tells the hints that need no attention.
+func quietHint(hint string) bool { return hint == "not_needed" || hint == "unclassified" }
 
 // classify sets the hint of a device without a driver; its Plugins are
 // already known. kernelLog is asked only for a failed driver.
@@ -360,9 +365,28 @@ func classify(device *UnboundDevice, aliases *moduleAliases, release string, ker
 		}
 	case device.Bus == "pci" && slices.ContainsFunc(noDriverNeeded, func(prefix string) bool { return strings.HasPrefix(device.Class, prefix) }):
 		device.Hint = "not_needed"
+	case unclassifiedChipset(device, kernelLog):
+		device.Hint = "unclassified"
 	default:
 		device.Hint = "unsupported"
 	}
+}
+
+// unclassifiedChipset tells an Intel PCI function without a class code
+// (class 000000, e.g. 8086:7f2f on Arrow Lake boards) from a device that
+// is really unsupported: nothing claims it and the kernel log has no
+// complaint about it. Such functions usually need no driver.
+func unclassifiedChipset(device *UnboundDevice, kernelLog func() string) bool {
+	if device.Bus != "pci" || device.Class != "000000" || !strings.HasPrefix(device.ID, "8086:") {
+		return false
+	}
+	for _, line := range strings.Split(kernelLog(), "\n") {
+		lower := strings.ToLower(line)
+		if strings.Contains(line, device.Address) && (strings.Contains(lower, "fail") || strings.Contains(lower, "error") || strings.Contains(lower, "unable")) {
+			return false
+		}
+	}
+	return true
 }
 
 // FirmwareMissing is a firmware file a driver asked for and did not get.
