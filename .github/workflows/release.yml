@@ -78,8 +78,9 @@ jobs:
     name: Release image
     runs-on: ubuntu-24.04
     # A tag may wait for the plugin set of a new kernel (built and approved
-    # in the plugin repository).
-    timeout-minutes: ${{ github.event_name == 'push' && 360 || 90 }}
+    # in the plugin repository). A pull request runs every QEMU test under
+    # TCG, which since the hardware variants takes about 90 minutes.
+    timeout-minutes: ${{ github.event_name == 'push' && 360 || 150 }}
     outputs:
       version: ${{ steps.version.outputs.version }}
       channel: ${{ steps.version.outputs.channel }}
