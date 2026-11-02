@@ -8,8 +8,8 @@
 	import { loadServices } from '#lib/session.svelte.ts';
 
 	type Service = { enabled: boolean; running: number; total: number; available: boolean };
-	type Name = 'docker' | 'vms' | 'lxc';
-	const NAMES: Name[] = ['docker', 'vms', 'lxc'];
+	type Name = 'docker' | 'vms' | 'lxc' | 'nvr';
+	const NAMES: Name[] = ['docker', 'vms', 'lxc', 'nvr'];
 
 	let services = $state<Partial<Record<Name, Service>>>({});
 	let error = $state('');

@@ -40,6 +40,8 @@ type Snapshot struct {
 	System            *SystemValues
 	Volumes           []VolumeValues
 	Disks             []DiskValues
+	// Cameras: name and whether it records.
+	Cameras []RunValues
 	// Containers and VMs: name and whether it runs.
 	Containers []RunValues
 	VMs        []RunValues
@@ -220,14 +222,14 @@ func entities(snap Snapshot, q MQTT, base string) []entity {
 		items []RunValues
 		on    string
 		off   string
-	}{{"containers", "container", snap.Containers, "start", "stop"}, {"vms", "vm", snap.VMs, "start", "shutdown"}} {
+	}{{"containers", "container", snap.Containers, "start", "stop"}, {"vms", "vm", snap.VMs, "start", "shutdown"}, {"cameras", "camera", snap.Cameras, "start", "stop"}} {
 		sensors, commands := slices.Contains(q.Groups, group.name), slices.Contains(q.Commands, group.name)
 		for _, item := range group.items {
 			if !SelectedDevice(q, group.name, item.Name) {
 				continue
 			}
 			k := identity(group.kind, item.Name)
-			label := map[string]string{"container": "Container ", "vm": "VM "}[group.kind] + item.Name
+			label := map[string]string{"container": "Container ", "vm": "VM ", "camera": "Camera "}[group.kind] + item.Name
 			if commands {
 				list = append(list, entity{component: "switch", key: k, kind: group.kind, name: item.Name, state: onOff(item.Running),
 					config: map[string]any{"name": label, "command_topic": commandTopic(group.kind, item.Name), "payload_on": group.on, "payload_off": group.off, "state_on": "ON", "state_off": "OFF"}})
@@ -665,6 +667,8 @@ func allowedCommand(q MQTT, kind, name, action string) bool {
 		return slices.Contains(q.Commands, "backups") && action == "run"
 	case "container":
 		return slices.Contains(q.Commands, "containers") && slices.Contains([]string{"start", "stop", "restart"}, action)
+	case "camera":
+		return slices.Contains(q.Commands, "cameras") && (action == "start" || action == "stop")
 	case "vm":
 		return slices.Contains(q.Commands, "vms") && slices.Contains([]string{"start", "shutdown"}, action)
 	case "system":

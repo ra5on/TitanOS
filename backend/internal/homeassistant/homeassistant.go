@@ -95,8 +95,8 @@ type MQTT struct {
 // SensorGroups and CommandGroups are the choices in MQTT.
 var (
 	legacySensorGroups = []string{"system", "volumes", "disks", "containers", "vms", "ups", "backups", "work"}
-	SensorGroups       = append(slices.Clone(legacySensorGroups), "network", "maintenance", "stacks", "gpu", "igpu", "npu", "capacity")
-	CommandGroups      = []string{"containers", "vms", "backups", "updates", "power"}
+	SensorGroups       = append(slices.Clone(legacySensorGroups), "network", "maintenance", "stacks", "gpu", "igpu", "npu", "capacity", "cameras")
+	CommandGroups      = []string{"containers", "vms", "backups", "updates", "power", "cameras"}
 )
 
 // Levels of a service call, as the assistant's actions know them.

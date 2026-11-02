@@ -26,6 +26,7 @@ export const NAV: NavItem[] = [
 	{ id: 'docker', href: '/docker', label: 'nav.docker', icon: 'box', roles: ['owner', 'admin'] },
 	{ id: 'vms', href: '/vms', label: 'nav.vms', icon: 'monitor', roles: ['owner', 'admin'] },
 	{ id: 'lxc', href: '/lxc', label: 'nav.lxc', icon: 'chip', roles: ['owner', 'admin'] },
+	{ id: 'nvr', href: '/nvr', label: 'nav.nvr', icon: 'camera', roles: ['owner', 'admin'] },
 	{ id: 'apps', href: '/apps', label: 'nav.apps', icon: 'grid', roles: ['owner', 'admin'] },
 	{ id: 'plugins', href: '/plugins', label: 'nav.plugins', icon: 'zap', roles: ['owner', 'admin'] },
 	{ id: 'settings', href: '/settings', label: 'nav.settings', icon: 'gear' },
