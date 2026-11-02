@@ -9,7 +9,7 @@
 	let { unbound, firmware }: Props = $props();
 
 	const important = $derived(attention(unbound));
-	const quiet = $derived(unbound.filter((device) => device.hint === 'not_needed'));
+	const quiet = $derived(unbound.filter((device) => device.hint === 'not_needed' || device.hint === 'unclassified'));
 
 	function hintText(device: UnboundDevice): string {
 		switch (device.hint) {

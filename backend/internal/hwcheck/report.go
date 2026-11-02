@@ -115,7 +115,7 @@ func summarize(r Report) []Finding {
 		add("warn", "old_cpu", "")
 	}
 	for _, device := range r.Unbound {
-		if device.Hint != "not_needed" {
+		if !quietHint(device.Hint) {
 			add("warn", "unbound_"+device.Hint, device.Name)
 		}
 	}

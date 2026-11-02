@@ -278,7 +278,15 @@ Dateinamen). Hinweis je Gerät:
    (sonstige serielle Busse, meist der SPI-Flash des BIOS; `spi-intel-pci` ist
    bei Debian bewusst aus) und 1180 (Chipsatz-Thermik; die CPU-Temperatur kommt
    von coretemp/k10temp); unter „Systembausteine anzeigen“ eingeklappt.
-5. **Nicht unterstützt:** alles andere.
+5. **Nicht klassifiziert** (seit 0.46): Eine Intel-PCI-Funktion mit Klasse
+   `000000` (z. B. `8086:7f2f` auf Arrow-Lake-S-Boards, `80:14.5`), die kein
+   Treiber im laufenden Kernel beansprucht und zu der das Kernelprotokoll keinen
+   Fehler nennt. Solche Chipsatz-Bausteine brauchen üblicherweise keinen Treiber;
+   die Funktion ist weder in `pci.ids` noch in einer Kernel-Quelle benannt
+   (Recherche 2.11.2026). Wie Punkt 4 eingeklappt, kein Eintrag im Bericht.
+   Meldet das Kernelprotokoll einen Fehler zur Adresse, bleibt es „nicht
+   unterstützt“.
+6. **Nicht unterstützt:** alles andere.
 
 Gerätenamen kommen aus einer `pci.ids` von pciutils/pciids, im Bau auf einen
 Commit und eine SHA-256 festgelegt (`build/pci-ids.lock`, aktualisieren mit
