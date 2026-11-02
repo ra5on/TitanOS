@@ -184,13 +184,6 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 					return nil
 				}
 				excluded := entry.Name() == ".recycle" || entry.Name() == ".titanos" || entry.Name() == ".snapshots" || strings.HasSuffix(entry.Name(), ".titanos-part")
-				if !excluded && entry.IsDir() && entry.Name() == "nvr" {
-					// NVR recordings are not backed up (docs/rules/NVR.md); the marker
-					// keeps a folder of the same name that someone made themselves.
-					if _, err := root.Lstat(path.Join(rel, NVRMarker)); err == nil {
-						excluded = true
-					}
-				}
 				for _, skip := range job.Skip {
 					full := name + "/" + rel
 					excluded = excluded || full == skip || strings.HasPrefix(full, skip+"/")

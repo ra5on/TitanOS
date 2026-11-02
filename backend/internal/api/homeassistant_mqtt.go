@@ -10,12 +10,10 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
-	"github.com/ra5on/TitanOS/backend/internal/nvr"
 )
 
 // HASnapshot gathers the values Home Assistant gets by MQTT, from what titand
@@ -37,35 +35,6 @@ func (s *Server) HASnapshot(ctx context.Context) homeassistant.Snapshot {
 		sys.UpdateAvailable = s.opts.Update.Status().Available != nil
 	}
 	snap.System = sys
-	if m := s.opts.NVR; m != nil && m.Store.Settings().Enabled {
-		armed := m.Store.Settings().Arming.Active(time.Now())
-		snap.NVRArmed = &armed
-		status := m.Rec.Status()
-		root := m.Root()
-		for _, c := range m.Store.Cameras() {
-			snap.Cameras = append(snap.Cameras, homeassistant.RunValues{Name: c.Name, Running: status[c.ID].Recording && c.Mode() != "off"})
-			var used int64
-			var last *string
-			if root != "" {
-				u := nvr.CameraUsage(root, m.Store.Cameras(), time.Now())[c.ID]
-				used = u.Bytes
-				if !u.Latest.IsZero() {
-					v := u.Latest.UTC().Format(time.RFC3339)
-					last = &v
-				}
-			}
-			motion := "OFF"
-			if m.Watch.Status()[c.ID].Motion {
-				motion = "ON"
-			}
-			gb := fmt.Sprintf("%.2f", float64(used)/1e9)
-			snap.Telemetry = append(snap.Telemetry, homeassistant.DeviceValues{Group: "cameras", ID: c.Name, Name: "Camera " + c.Name, Metrics: []homeassistant.MetricValue{
-				{Key: "storage", Name: "recordings", Unit: "GB", Class: "data_size", StateClass: "measurement", Value: &gb},
-				{Key: "motion", Name: "motion", Class: "motion", Binary: true, Value: &motion},
-				{Key: "last_recording", Name: "last recording", Class: "timestamp", Value: last},
-			}})
-		}
-	}
 	add := func(group, id, name string, metrics ...homeassistant.MetricValue) {
 		snap.Telemetry = append(snap.Telemetry, homeassistant.DeviceValues{Group: group, ID: id, Name: name, Metrics: metrics})
 	}
@@ -240,10 +209,6 @@ func (s *Server) HACommand(ctx context.Context, kind, name, action string) error
 			return fmt.Errorf("container %s not found", name)
 		}
 		method, route = http.MethodPost, "/api/v1/docker/containers/"+url.PathEscape(id)+"/"+action
-	case "camera":
-		return s.haCamera(name, action)
-	case "nvr":
-		return s.haArm(action)
 	case "vm":
 		method, route = http.MethodPost, "/api/v1/vms/"+url.PathEscape(name)+"/"+action
 	case "system":
@@ -301,45 +266,4 @@ func (s *Server) internalAs(ctx context.Context, user auth.User, method, route s
 	rec := httptest.NewRecorder()
 	s.handler.ServeHTTP(rec, req)
 	return rec.Code, rec.Body.String()
-}
-
-// haCamera switches the recording of a camera on or off for Home Assistant.
-func (s *Server) haCamera(name, action string) error {
-	if s.opts.NVR == nil || action != "start" && action != "stop" {
-		return fmt.Errorf("unknown camera command")
-	}
-	for _, c := range s.opts.NVR.Store.Cameras() {
-		if c.Name != name {
-			continue
-		}
-		c.Record = action == "start"
-		switch {
-		case action == "stop":
-			c.RecordMode = "off"
-		case c.RecordMode == "" || c.RecordMode == "off":
-			c.RecordMode = "continuous"
-		}
-		if _, err := s.opts.NVR.Store.Update(c, nil); err != nil {
-			return err
-		}
-		s.opts.NVR.Reload()
-		slog.Info("command from Home Assistant", "kind", "camera", "name", name, "action", action)
-		return nil
-	}
-	return fmt.Errorf("camera %s not found", name)
-}
-
-// haArm arms or disarms the NVR from Home Assistant (presence: "nobody home").
-// It switches the mode to on or off; a schedule set on the page is replaced.
-func (s *Server) haArm(action string) error {
-	if s.opts.NVR == nil || action != "on" && action != "off" {
-		return fmt.Errorf("unknown NVR command")
-	}
-	st := s.opts.NVR.Store.Settings()
-	st.Arming.Mode = action
-	if err := s.opts.NVR.Store.SetSettings(st); err != nil {
-		return err
-	}
-	slog.Info("command from Home Assistant", "kind", "nvr", "name", "armed", "action", action)
-	return nil
 }

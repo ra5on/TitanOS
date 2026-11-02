@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -235,9 +234,7 @@ func TestRenderGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := render(sampleRuleset())
-	// The NVR time server (service ntp) is newer than version 1.
-	withoutNTP := regexp.MustCompile(`(?m)^.*comment "ntp"\n`).ReplaceAllString(got, "")
-	if sortAppRuns(withoutNTP) != sortAppRuns(string(v1)) {
+	if sortAppRuns(got) != sortAppRuns(string(v1)) {
 		t.Errorf("migrated settings render differently from version 1:\n%s", got)
 	}
 	golden(t, "migrated.nft", got)

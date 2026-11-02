@@ -117,9 +117,8 @@ var (
 var (
 	// A host name, an address, a network (192.168.1.0/24) or a pattern (*.lan).
 	clientRE = regexp.MustCompile(`^[A-Za-z0-9*][A-Za-z0-9.:/*_-]{0,99}$`)
-	// Names Samba gives a meaning of their own, and "nvr": the folder of that
-	// name on a volume holds the NVR recordings (administrators only).
-	reservedNames = []string{"global", "homes", "printers", "print", "ipc", "nvr"}
+	// Names Samba gives a meaning of their own.
+	reservedNames = []string{"global", "homes", "printers", "print", "ipc"}
 )
 
 // maxNameLength is in characters; longer names get cut off in the

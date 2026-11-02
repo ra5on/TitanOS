@@ -208,29 +208,3 @@ func TestResticSelectionOfVolumesAndLXC(t *testing.T) {
 		t.Fatalf("excludes %v missing %v", sel.excludes, sel.missing)
 	}
 }
-
-// NVR recordings are large and replaceable: a folder "nvr" that carries the
-// NVR marker is not copied, one somebody made themselves is.
-func TestCopySkipsNVRRecordingsButNotAnOrdinaryNvrFolder(t *testing.T) {
-	m, _, target, _ := copyEnv(t)
-	vol := filepath.Join(m.mountRoot, "tank")
-	os.MkdirAll(filepath.Join(vol, "nvr/cam-1"), 0o700)
-	os.WriteFile(filepath.Join(vol, "nvr", NVRMarker), []byte("x"), 0o600)
-	os.WriteFile(filepath.Join(vol, "nvr/cam-1/a.mp4"), []byte("v"), 0o600)
-	os.MkdirAll(filepath.Join(vol, "docs/nvr"), 0o700)
-	os.WriteFile(filepath.Join(vol, "docs/nvr/notes.txt"), []byte("mine"), 0o600)
-	mounts := filepath.Join(t.TempDir(), "mounts")
-	os.WriteFile(mounts, []byte("/dev/md0 "+vol+" ext4 rw 0 0\n"), 0o644)
-	m.mountsFile = mounts
-	m.Sources = func() []Source { return nil }
-	job := Job{ID: "copy", Volumes: []string{"tank"}, Destination: Destination{Type: "usb-copy", Folder: "b"}}
-	if err := runCopy(t, m, job, target); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(target, "b/Volume-tank/nvr")); !os.IsNotExist(err) {
-		t.Fatal("NVR recordings were copied")
-	}
-	if data, _ := os.ReadFile(filepath.Join(target, "b/Volume-tank/docs/nvr/notes.txt")); string(data) != "mine" {
-		t.Fatal("an ordinary folder called nvr was skipped")
-	}
-}

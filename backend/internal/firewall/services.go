@@ -63,8 +63,6 @@ func Services(web *WebPorts) []Service {
 		// mDNS (avahi), WS-Discovery (wsdd2) and LLMNR (resolved) only make sense
 		// where the NAS can be seen: in the home network.
 		{ID: "discovery", Ports: []PortSet{{"udp", []string{"3702", "5353", "5355"}}, {"tcp", []string{"5355", "5357"}}}, Default: homeOnly},
-		// The time server for cameras of the NVR; only answers while a camera uses it.
-		{ID: "ntp", Ports: []PortSet{{"udp", []string{"123"}}}, Default: local},
 		{ID: "ping", Ports: []PortSet{{"icmp", nil}}, Default: local},
 		// NUT for other devices on the same UPS, the receiving side of
 		// "Another TitanOS" (listens on Tailscale addresses only).

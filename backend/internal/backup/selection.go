@@ -29,10 +29,6 @@ var extras = []string{"appdata", "vms", "config", "lxc"}
 // neverSaved are the folders at the top of a volume no backup takes.
 var neverSaved = []string{".titanos", ".snapshots", ".recycle"}
 
-// NVRMarker is the file that tells a folder "nvr" holds NVR recordings; such
-// a folder is not saved (the recordings are large and replaceable).
-const NVRMarker = ".titanos-nvr"
-
 // volumeName reports whether text names a volume.
 func volumeName(text string) bool {
 	return relative(text) && !strings.Contains(text, "/") && !strings.HasPrefix(text, ".")
@@ -176,9 +172,6 @@ func (m *Manager) selection(job Job) selection {
 		add(full)
 		for _, never := range neverSaved {
 			sel.excludes = append(sel.excludes, filepath.Join(full, never))
-		}
-		if _, err := os.Stat(filepath.Join(full, "nvr", NVRMarker)); err == nil {
-			sel.excludes = append(sel.excludes, filepath.Join(full, "nvr"))
 		}
 	}
 	for _, place := range job.Places {
