@@ -26,6 +26,8 @@ type nvrCameraView struct {
 	Segments int   `json:"segments"`
 	Bytes    int64 `json:"bytes"`
 	Latest   int64 `json:"latest,omitempty"`
+	// DayBytes is what the last 24 hours took (measured, for the estimate).
+	DayBytes int64 `json:"dayBytes"`
 }
 
 type nvrView struct {
@@ -73,8 +75,12 @@ func (s *Server) nvrState() nvrView {
 		if root != "" {
 			segs := nvr.Segments(root, c.ID)
 			cv.Segments = len(segs)
+			dayAgo := time.Now().Add(-24 * time.Hour)
 			for _, sg := range segs {
 				cv.Bytes += sg.Size
+				if sg.Start.After(dayAgo) {
+					cv.DayBytes += sg.Size
+				}
 			}
 			if n := len(segs); n > 0 {
 				cv.Latest = segs[n-1].Start.Unix()

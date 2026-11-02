@@ -29,6 +29,7 @@ export type Camera = {
 	segments: number;
 	bytes: number;
 	latest?: number;
+	dayBytes: number;
 };
 
 export type NvrSettings = {

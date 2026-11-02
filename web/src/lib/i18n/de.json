@@ -7938,5 +7938,6 @@
 	"notify.kind.nvr_camera_online.title": "Kamera {subject} wieder da",
 	"notify.kind.nvr_camera_online.text": "Die Kamera {subject} liefert wieder Bilder; die Aufnahme läuft.",
 	"notify.kind.nvr_retention_short.title": "Aufbewahrung verkürzt: {subject}",
-	"notify.kind.nvr_retention_short.text": "Der Platz reichte nicht: Für die Kamera sind jetzt nur noch so viele Tage da wie vor dem Schrägstrich angegeben, gewünscht sind die Tage danach. Die ältesten Aufnahmen wurden gelöscht."
+	"notify.kind.nvr_retention_short.text": "Der Platz reichte nicht: Für die Kamera sind jetzt nur noch so viele Tage da wie vor dem Schrägstrich angegeben, gewünscht sind die Tage danach. Die ältesten Aufnahmen wurden gelöscht.",
+	"nvr.perDay": "{size} in den letzten 24 Stunden"
 }

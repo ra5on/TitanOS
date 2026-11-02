@@ -337,7 +337,8 @@
 						{/if}{camera.host} · {t('nvr.stored', {
 							size: formatBytes(camera.bytes),
 							count: camera.segments,
-						})} · {t('nvr.latest')}
+						})}{#if camera.dayBytes > 0}
+							· {t('nvr.perDay', { size: formatBytes(camera.dayBytes) })}{/if} · {t('nvr.latest')}
 						{since(camera)}
 					</p>
 					{#if camera.status.lastError && !camera.status.recording}

@@ -7938,5 +7938,6 @@
 	"notify.kind.nvr_camera_online.title": "Camera {subject} is back",
 	"notify.kind.nvr_camera_online.text": "The camera {subject} sends pictures again; recording runs.",
 	"notify.kind.nvr_retention_short.title": "Retention shortened: {subject}",
-	"notify.kind.nvr_retention_short.text": "Space ran short: the camera now has only the days before the slash, the days after it were wanted. The oldest recordings were deleted."
+	"notify.kind.nvr_retention_short.text": "Space ran short: the camera now has only the days before the slash, the days after it were wanted. The oldest recordings were deleted.",
+	"nvr.perDay": "{size} in the last 24 hours"
 }
