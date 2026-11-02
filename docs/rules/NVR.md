@@ -14,7 +14,8 @@ Fertig und getestet (gegen Nachbau-Kameras und einen Ersatz-ffmpeg, nicht an ech
 
 **Abweichungen vom Plan, bewusst und offen:**
 - ffmpeg läuft als Kindprozess von titand, nicht in einer eigenen gehärteten Einheit `titan-nvr`; Zugangsdaten stehen dabei in der ffmpeg-Befehlszeile (`/proc`). Eigene Einheit mit eigenem Benutzer folgt.
-- Noch nicht gebaut: Erkennung (Person, Fahrzeug, Paket, Kennzeichen), Ereignisse, MQTT/Home Assistant, Scharfschaltung, Zeitserver für Kameras, Qualität/Bitrate per ONVIF, Ansichten mit festem Raster, Gegensprechen, go2rtc/WebRTC, geschützte Clips, Ausschluss aus Sicherungen. Siehe Plan 26.
+- MQTT/Home Assistant (Gruppe „Kameras (NVR)“ in den MQTT-Einstellungen): Sensoren für Aufnahme an/aus, belegter Platz und letzte Aufnahme je Kamera; mit der Befehlsgruppe „Kameras“ ein Schalter, der die Aufnahme ein- und ausschaltet (nur Start/Stopp, kein Bild, kein Video über MQTT).
+- Noch nicht gebaut: Erkennung (Person, Fahrzeug, Paket, Kennzeichen), Ereignisse, Scharfschaltung, Zeitserver für Kameras, Qualität/Bitrate per ONVIF, Ansichten mit festem Raster, Gegensprechen, go2rtc/WebRTC, geschützte Clips, Ausschluss aus Sicherungen. Siehe Plan 26.
 - Die Herstellertabelle ist an keinem Gerät geprüft; die vier Messungen (NPU, Kennzeichen, Geschwindigkeit, Cache) stehen aus und brauchen die Kamera und titan.
 
 ## Entscheidungen

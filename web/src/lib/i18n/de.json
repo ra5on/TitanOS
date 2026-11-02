@@ -7835,5 +7835,7 @@
 	"nvr.day": "Tag",
 	"nvr.noRecordings": "Noch keine Aufnahmen.",
 	"nvr.removeTitle": "{name} entfernen",
-	"nvr.removeText": "Die Kamera und ihr Passwort werden entfernt. Vorhandene Aufnahmen bleiben, bis die Aufbewahrungszeit abläuft."
+	"nvr.removeText": "Die Kamera und ihr Passwort werden entfernt. Vorhandene Aufnahmen bleiben, bis die Aufbewahrungszeit abläuft.",
+	"ha.group.cameras": "Kameras (NVR)",
+	"ha.command.cameras": "Aufnahme der Kameras ein- und ausschalten"
 }

@@ -7835,5 +7835,7 @@
 	"nvr.day": "Day",
 	"nvr.noRecordings": "No recordings yet.",
 	"nvr.removeTitle": "Remove {name}",
-	"nvr.removeText": "The camera and its password are removed. Existing recordings stay until their retention ends."
+	"nvr.removeText": "The camera and its password are removed. Existing recordings stay until their retention ends.",
+	"ha.group.cameras": "Cameras (NVR)",
+	"ha.command.cameras": "Switch camera recording on and off"
 }
