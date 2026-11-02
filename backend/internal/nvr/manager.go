@@ -20,9 +20,8 @@ type Manager struct {
 	VolumePath func(name string) (string, bool)
 	Prober     *Prober
 
-	mu     sync.Mutex
-	ctx    context.Context
-	pruned time.Time
+	mu  sync.Mutex
+	ctx context.Context
 }
 
 func NewManager(cfg *config.Store, volumePath func(string) (string, bool)) *Manager {

@@ -107,20 +107,6 @@ func soapOutcome(status int, body []byte) Outcome {
 	return OutcomeOther
 }
 
-type xmlEnvelope struct {
-	Body struct {
-		Inner []byte `xml:",innerxml"`
-	} `xml:"Body"`
-}
-
-func bodyOf(data []byte) []byte {
-	var e xmlEnvelope
-	if err := xml.Unmarshal(data, &e); err != nil {
-		return nil
-	}
-	return e.Body.Inner
-}
-
 // ProbeONVIF lists the profiles and their stream addresses of the camera at
 // host:port. A wrong login is reported as OutcomeUnauthorized so the caller
 // can count it against its budget.
