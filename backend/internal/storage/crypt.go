@@ -339,9 +339,16 @@ func (m *Manager) headerDevices(ctx context.Context, volume VolumeConfig, all bo
 		if !ok || a.state == "inactive" || a.state == "clear" {
 			return nil, fmt.Errorf("%w: the array of %s is not running", ErrNotPossible, volume.Name)
 		}
-		device, err := m.lowerDevice(ctx, volume, "/dev/"+a.device)
-		if err != nil {
-			return nil, err
+		device := "/dev/" + a.device
+		if !m.mapperOpen(cryptName(volume, "")) {
+			var err error
+			if device, err = m.lowerDevice(ctx, volume, device); err != nil {
+				return nil, err
+			}
+		} else if volume.Cache != nil && m.cacheActive(ctx, volume) {
+			// Open already: read the header where the volume lies now. A
+			// cache added since takes effect with the next mount only.
+			device = "/dev/mapper/" + cacheName(volume.Name)
 		}
 		return map[string]string{volume.Encryption.UUIDs[0]: device}, nil
 	}
