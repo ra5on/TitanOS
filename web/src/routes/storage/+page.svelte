@@ -435,7 +435,8 @@
 									<button
 										type="button"
 										class="sleep-cell"
-										title={t('storage.sleepOpenHint')}
+										title={canAdminister ? t('storage.sleepOpenHint') : undefined}
+										disabled={!canAdminister}
 										onclick={(event) => {
 											event.stopPropagation();
 											sleepFocus = { kind: 'volume', key: volume.name };
@@ -444,10 +445,12 @@
 									>
 										{#if sleep.total > 0}
 											<span>{sleepDuration(sleep.minutes)}</span>
-											<span class="chip" class:ok={sleep.asleep > 0}
-												>{sleep.asleep > 0
+											<span class="chip" class:ok={sleep.asleep === sleep.total}
+												>{sleep.asleep === sleep.total
 													? t('storage.sleepAsleep')
-													: t('storage.sleepAwake')}</span
+													: sleep.asleep > 0
+														? t('storage.sleepPartly')
+														: t('storage.sleepAwake')}</span
 											>
 											<span class="sub"
 												>{t('storage.sleepCount', {
@@ -518,7 +521,8 @@
 									<button
 										type="button"
 										class="sleep-cell"
-										title={t('storage.sleepOpenHint')}
+										title={canAdminister ? t('storage.sleepOpenHint') : undefined}
+										disabled={!canAdminister}
 										onclick={(event) => {
 											event.stopPropagation();
 											sleepFocus = { kind: 'disk', key: disk.name };
@@ -559,27 +563,30 @@
 					><Icon name="close" size={16} /></button
 				>
 			</div>
-			<VolumeCard
-				volume={detail}
-				{canAdminister}
-				{busy}
-				oncheck={(start) => check(detail, start)}
-				onadd={() => (dialog = { kind: 'add', volume: detail.name })}
-				onprofile={() => (dialog = { kind: 'profile', volume: detail.name })}
-				{diskSleep}
-				onsleepsaved={(updated) => {
-					if (storage.status) storage.status.diskSleep = updated;
-				}}
-				onsleepopen={() => {
-					sleepFocus = { kind: 'volume', key: detail.name };
-					sleepOpen = true;
-				}}
-				ondelete={() => (dialog = { kind: 'delete', volume: detail.name })}
-				onremove={(disk) => (
-					(error = null),
-					(dialog = { kind: 'remove', volume: detail.name, disk })
-				)}
-			/>
+			<!-- A new instance per volume: an open editor must not carry over. -->
+			{#key detail.name}
+				<VolumeCard
+					volume={detail}
+					{canAdminister}
+					{busy}
+					oncheck={(start) => check(detail, start)}
+					onadd={() => (dialog = { kind: 'add', volume: detail.name })}
+					onprofile={() => (dialog = { kind: 'profile', volume: detail.name })}
+					{diskSleep}
+					onsleepsaved={(updated) => {
+						if (storage.status) storage.status.diskSleep = updated;
+					}}
+					onsleepopen={() => {
+						sleepFocus = { kind: 'volume', key: detail.name };
+						sleepOpen = true;
+					}}
+					ondelete={() => (dialog = { kind: 'delete', volume: detail.name })}
+					onremove={(disk) => (
+						(error = null),
+						(dialog = { kind: 'remove', volume: detail.name, disk })
+					)}
+				/>
+			{/key}
 			{#if canAdminister}{@const used = usageFor(detail.name)}
 				<section class="tile usage" aria-labelledby="volume-usage">
 					<h3 id="volume-usage">{t('storage.onVolume')}</h3>
@@ -857,8 +864,12 @@
 		text-align: left;
 		font: inherit;
 	}
-	.sleep-cell:hover > span:first-child {
+	.sleep-cell:hover:not(:disabled) > span:first-child {
 		text-decoration: underline;
+	}
+	.sleep-cell:disabled {
+		cursor: default;
+		opacity: 1;
 	}
 	.sleep-cell .sub {
 		flex-basis: 100%;

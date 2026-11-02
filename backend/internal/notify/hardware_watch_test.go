@@ -98,3 +98,34 @@ func TestHardwareWatcherTemperatureJumpResets(t *testing.T) {
 		t.Fatalf("a jump now and then raised %d messages", n)
 	}
 }
+
+// A board sensor with a meaningless critical value (0 °C) is as
+// untrustworthy as one without; and a missing reading breaks the run of
+// hot looks.
+func TestHardwareWatcherMeaninglessCriticalAndGaps(t *testing.T) {
+	m, _ := newManager(t)
+	w := NewHardwareWatcher(m)
+	w.edac = t.TempDir()
+	zero, hot := 0.0, 126.0
+	var readings []TempReading
+	w.Temperatures = func() []TempReading { return readings }
+	readings = []TempReading{{ID: "board", Chip: "nct6798", Label: "temp8", Celsius: &hot, Critical: &zero}}
+	w.look()
+	w.look()
+	if n := len(m.Messages()); n != 0 {
+		t.Fatalf("board sensor with crit 0 raised %d messages", n)
+	}
+	cpu := TempReading{ID: "cpu", Chip: "coretemp", Label: "Package id 0", Celsius: &hot}
+	gap := TempReading{ID: "cpu", Chip: "coretemp", Label: "Package id 0"}
+	for _, r := range []TempReading{cpu, gap, cpu} {
+		readings = []TempReading{r}
+		w.look()
+	}
+	if n := len(m.Messages()); n != 0 {
+		t.Fatalf("hot, gap, hot raised %d messages; the looks were not in a row", n)
+	}
+	w.look()
+	if n := len(m.Messages()); n != 1 {
+		t.Fatalf("two hot looks in a row: %d messages", n)
+	}
+}

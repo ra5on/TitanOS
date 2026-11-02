@@ -139,7 +139,6 @@ const areas: Record<string, string> = {
 	vms: 'vms',
 	'vm-clones': 'vms',
 	lxc: 'lxc',
-	nvr: 'nvr',
 	plugins: 'plugins',
 	network: 'network',
 	firewall: 'network',

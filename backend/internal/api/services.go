@@ -69,10 +69,7 @@ type servicesState struct {
 
 // servicesOn are the switches for everyone, for the navigation.
 func (s *Server) servicesOn() map[string]bool {
-	on := map[string]bool{"docker": true, "vms": true, "lxc": true, "nvr": false}
-	if s.opts.NVR != nil {
-		on["nvr"] = s.opts.NVR.Store.Settings().Enabled
-	}
+	on := map[string]bool{"docker": true, "vms": true, "lxc": true}
 	if s.opts.Docker != nil {
 		on["docker"] = !s.readServices().DockerOff
 	}
@@ -86,19 +83,7 @@ func (s *Server) servicesOn() map[string]bool {
 }
 
 func (s *Server) handleServicesState(w http.ResponseWriter, r *http.Request) {
-	on := s.servicesOn()
-	// The NVR tab shows for an account without admin rights only when it
-	// was given a camera.
-	if user := currentUser(r); on["nvr"] && !user.Role.CanAdminister() {
-		on["nvr"] = false
-		for _, c := range s.opts.NVR.Store.Cameras() {
-			if c.MayView(user.Name) {
-				on["nvr"] = true
-				break
-			}
-		}
-	}
-	writeJSON(w, http.StatusOK, on)
+	writeJSON(w, http.StatusOK, s.servicesOn())
 }
 
 func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
@@ -119,16 +104,6 @@ func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
 	}
 	if m := s.opts.LXC; m != nil {
 		out["lxc"] = serviceView{Enabled: !m.Off(), Running: len(m.RunningNames()), Total: len(m.List(mounted)), Available: m.Installed()}
-	}
-	if m := s.opts.NVR; m != nil {
-		cams := m.Store.Cameras()
-		running := 0
-		for _, st := range m.Rec.Status() {
-			if st.Recording {
-				running++
-			}
-		}
-		out["nvr"] = serviceView{Enabled: m.Store.Settings().Enabled, Running: running, Total: len(cams), Available: true}
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -182,19 +157,6 @@ func (s *Server) handleServiceSet(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "service_switch_failed", err.Error())
 			return
 		}
-	case "nvr":
-		// Off stops all recording; cameras and recordings stay.
-		if s.opts.NVR == nil {
-			writeError(w, http.StatusNotFound, "not_found", "no such service")
-			return
-		}
-		settings := s.opts.NVR.Store.Settings()
-		settings.Enabled = req.Enabled
-		if err := s.opts.NVR.Store.SetSettings(settings); err != nil {
-			s.nvrError(w, err)
-			return
-		}
-		s.opts.NVR.Reload()
 	default:
 		writeError(w, http.StatusNotFound, "not_found", "no such service")
 		return

@@ -46,7 +46,6 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/netbird"
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
-	"github.com/ra5on/TitanOS/backend/internal/nvr"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/replication"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
@@ -130,8 +129,6 @@ type Options struct {
 	// at the addresses of the NAS. Both nil leave the pages without data.
 	LetsEncrypt *letsencrypt.Manager
 	DDNS        *ddns.Manager
-	// NVR records cameras; nil leaves the page without data.
-	NVR *nvr.Manager
 	// Update installs new versions into the other slot of the stick.
 	Update *update.Manager
 	// Backup copies shares to another volume, server or the cloud.
@@ -315,7 +312,6 @@ func New(opts Options) *Server {
 	s.registerUSB(mux)
 	s.registerUploads(mux)
 	s.registerDocker(mux)
-	s.registerNVR(mux)
 	s.registerAppStore(mux)
 	s.registerVMs(mux)
 	s.registerHardware(mux)

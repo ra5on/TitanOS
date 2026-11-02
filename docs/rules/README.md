@@ -28,6 +28,5 @@ Verbindliche Detailregeln je Bereich. Vor Arbeiten an einem Bereich die Datei le
 | `docs/rules/VMS-LXC.md` | VMs (Erstellen, Firmware, Konsole, Snapshots), App-Vorlagen, Hardware-Durchreichung, LXC-Systemcontainer |
 | `docs/rules/PLUGINS.md` | Plugins, Community-Plugins, NVIDIA-Treiberbau |
 | `docs/rules/HOME-ASSISTANT.md` | Home-Assistant-Anbindung |
-| `docs/rules/NVR.md` | NVR (Kamerarekorder): Kern, Kamerasuche und ihre Sicherheit, Herstellertabelle, Aufnahmen, Datenschutz |
 
 Weitere maßgebliche Dokumente: `docs/design/README.md` (UI-Entwürfe), `docs/RELEASING.md` (Release-Ablauf), `docs/WORKFLOWS.md` (Speicher-/Wartungsabläufe), sowie die Fachdokumente `docs/<BEREICH>.md`, auf die die Regeldateien verweisen.

@@ -2,8 +2,6 @@
 	import PushDevices from '#lib/components/PushDevices.svelte';
 	import HealthReport from '#lib/components/HealthReport.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
-	import { session } from '#lib/session.svelte.ts';
-	import NvrArming from './NvrArming.svelte';
 	import { api, ApiError } from '#lib/api.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 
@@ -171,7 +169,6 @@
 
 <PushDevices />
 <HealthReport />
-{#if session.services.nvr}<NvrArming />{/if}
 
 {#if draft}
 	<form onsubmit={save}>

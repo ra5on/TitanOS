@@ -47,7 +47,6 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/netbird"
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
-	"github.com/ra5on/TitanOS/backend/internal/nvr"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
 	"github.com/ra5on/TitanOS/backend/internal/replication"
 	command "github.com/ra5on/TitanOS/backend/internal/run"
@@ -143,7 +142,6 @@ type titand struct {
 	acmeCerts       *letsencrypt.Manager
 	kickFolders     func()
 	dynamicDNS      *ddns.Manager
-	cameras         *nvr.Manager
 	account64       *ipv64.Manager
 	vpnServer       *wgserver.Manager
 	report          *healthreport.Manager
@@ -1123,15 +1121,6 @@ func (w *titand) wireRemoteAccess() error {
 		slog.Warn("dynamic DNS settings not readable from /config", "err", err)
 	}
 	w.background(func() { w.dynamicDNS.Run(ctx) })
-	// NVR: off until switched on in Settings › Services.
-	w.cameras = nvr.NewManager(w.store, func(name string) (string, bool) {
-		if !slices.Contains(w.volumes.Mounted(), name) {
-			return "", false
-		}
-		return w.volumes.MountPoint(name), true
-	})
-	w.cameras.Notify = func(severity, kind, subject string) { w.notifier.Notify(severity, kind, subject) }
-	w.background(func() { w.cameras.Run(ctx) })
 	w.beforePowerOff = func() { w.dynamicDNS.PauseForShutdown(context.Background()) }
 	// The IPv64.net account beyond dynamic DNS: notifications from polling,
 	// the v64 blocklist for the firewall and the WireGuard tunnel into a
@@ -1411,7 +1400,6 @@ func (w *titand) wireAPI() error {
 		Certificate:        w.certs,
 		LetsEncrypt:        w.acmeCerts,
 		DDNS:               w.dynamicDNS,
-		NVR:                w.cameras,
 		Settings:           w.settings,
 		Energy:             w.energy,
 		PowerSchedule:      w.schedule,
