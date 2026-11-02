@@ -1,6 +1,21 @@
 # NVR (Kamerarekorder)
 
-Festgelegte Entscheidungen des Projektinhabers vom 2.11.2026 (Plan 26). Der NVR ist im Aufbau; diese Datei nennt, was gilt, und wird mit jedem Baustein ergänzt. Gebaut ist bisher nur `backend/internal/nvr` (Suchregeln, Adressen, Herstellertabelle, Versuchsbudget).
+Festgelegte Entscheidungen des Projektinhabers vom 2.11.2026 (Plan 26). Der NVR ist im Aufbau; diese Datei nennt, was gilt, und wird mit jedem Baustein ergänzt. Gebaut ist `backend/internal/nvr` mit Suchregeln, Kamerasuche (ONVIF, RTSP, Herstellertabelle), Kameraverwaltung, Aufnahme, Aufbewahrung und Live-Bild, dazu API `/api/v1/nvr/*`, Dienste-Schalter und die Seite „NVR“ (`web/src/routes/nvr`).
+
+## Stand der Umsetzung (2.11.2026)
+
+Fertig und getestet (gegen Nachbau-Kameras und einen Ersatz-ffmpeg, nicht an echter Hardware):
+- Suche: ONVIF (WS-Security-Digest, Uhr der Kamera), RTSP-DESCRIBE (Digest/Basic), Herstellertabelle als Rückfall, eigener RTSP-Link; Hauptstream = größtes, Nebenstream = kleinstes Bild; Adresse der Kamera in Antworten wird durch die erreichte Adresse ersetzt.
+- Verwaltung: Kameras in `/config/nvr/cameras.json`, Passwörter getrennt in `/config/nvr/secrets.json`, nie in Antworten.
+- Aufnahme: je Kamera ein ffmpeg (`-c:v copy`, Ton nur auf Wunsch, 5-Minuten-Dateien als fragmentiertes MP4 unter `<Volume>/nvr/<Kamera>/<Tag>/<Uhrzeit>.mp4`), Neustart mit Wartezeit, Statusmeldungen ohne Passwort. Der Ordner ist auf Btrfs ein eigenes Subvolume, also nicht in Snapshots.
+- Aufbewahrung: je Kamera oder allgemein in Tagen; reicht der freie Platz nicht, gehen die ältesten Dateien zuerst; die jeweils neueste Datei bleibt. Ordner entfernter Kameras altern mit dem allgemeinen Wert aus.
+- Live: Bewegt-JPEG (ffmpeg, höchstens sechs gleichzeitig); Wiedergabe der Aufnahmen mit Bereichsanfragen.
+- Schalter unter Einstellungen › Dienste (ab Werk aus), Menüpunkt nur bei „an“.
+
+**Abweichungen vom Plan, bewusst und offen:**
+- ffmpeg läuft als Kindprozess von titand, nicht in einer eigenen gehärteten Einheit `titan-nvr`; Zugangsdaten stehen dabei in der ffmpeg-Befehlszeile (`/proc`). Eigene Einheit mit eigenem Benutzer folgt.
+- Noch nicht gebaut: Erkennung (Person, Fahrzeug, Paket, Kennzeichen), Ereignisse, MQTT/Home Assistant, Scharfschaltung, Zeitserver für Kameras, Qualität/Bitrate per ONVIF, Ansichten mit festem Raster, Gegensprechen, go2rtc/WebRTC, geschützte Clips, Ausschluss aus Sicherungen. Siehe Plan 26.
+- Die Herstellertabelle ist an keinem Gerät geprüft; die vier Messungen (NPU, Kennzeichen, Geschwindigkeit, Cache) stehen aus und brauchen die Kamera und titan.
 
 ## Entscheidungen
 
