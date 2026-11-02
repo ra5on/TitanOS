@@ -392,6 +392,13 @@ export type DiskSleepDisk = {
 	state: 'asleep' | 'active';
 	error?: string;
 };
+export type DiskSleepUnavailable = {
+	name: string;
+	model: string;
+	sizeBytes: number;
+	volume?: string;
+	reason: 'ssd' | 'nvme' | 'removable' | 'stick' | 'name' | 'transport';
+};
 export type DiskSleepStatus = {
 	idleMinutes: number;
 	/** Overrides by volume name and by disk id; a missing entry inherits. */
@@ -399,6 +406,10 @@ export type DiskSleepStatus = {
 	disks?: Record<string, number>;
 	available: boolean;
 	errors: { disk: string; message: string }[];
+	/** True when the disks could be listed, also if the lists are empty. */
+	listed?: boolean;
+	/** Disks that cannot sleep, with the reason. */
+	unavailable?: DiskSleepUnavailable[];
 	/** Only present when the disks could be listed. */
 	volumeStatus?: DiskSleepVolume[];
 	diskStatus?: DiskSleepDisk[];

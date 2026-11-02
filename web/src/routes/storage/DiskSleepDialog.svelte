@@ -8,13 +8,16 @@
 	import { formatDiskBytes } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { effectiveSleep, overridesFrom, shortSerial } from './disk-sleep.ts';
+	import { sleepListed } from './sleep-view.ts';
 
 	type Props = {
 		status: DiskSleepStatus | undefined;
 		onclose: () => void;
 		onsaved: (status: DiskSleepStatus) => void;
+		/** Opened from a volume or disk row: scroll to it and mark it. */
+		focus?: { kind: 'volume' | 'disk'; key: string };
 	};
-	let { status, onclose, onsaved }: Props = $props();
+	let { status, onclose, onsaved, focus }: Props = $props();
 
 	const idleMinutes = [0, 5, 10, 15, 30, 60, 120, 180];
 	const INHERIT = 'inherit';
@@ -30,7 +33,9 @@
 	let error = $state('');
 	let saved = $state(false);
 
-	const listed = $derived(status?.volumeStatus !== undefined && status?.diskStatus !== undefined);
+	// Lists with no entry are left out of the answer: listed says that the
+	// disks were read, so that one empty list does not hide the other.
+	const listed = $derived(sleepListed(status));
 	const volumes = $derived(status?.volumeStatus ?? []);
 	const disks = $derived(status?.diskStatus ?? []);
 	const missing = $derived(
@@ -67,6 +72,12 @@
 			}) ||
 			(listed && missing > 0),
 	);
+
+	$effect(() => {
+		if (!focus || !listed) return;
+		const element = document.getElementById(`sleep-${focus.kind}-${focus.key}`);
+		element?.scrollIntoView({ block: 'center' });
+	});
 
 	function duration(minutes: number): string {
 		return minutes === 0
@@ -136,7 +147,10 @@
 					{#each volumes as volume (volume.name)}
 						{@const own = draftVolumes[volume.name]}
 						{@const effective = own ?? draftDefault}
-						<li>
+						<li
+							id="sleep-volume-{volume.name}"
+							class:focused={focus?.kind === 'volume' && focus.key === volume.name}
+						>
 							<div class="sleep-name">
 								<strong>{volume.name}</strong>
 								<span class="muted small"
@@ -175,7 +189,10 @@
 						{#each disks as disk (disk.name)}
 							{@const own = disk.id ? draftDisks[disk.id] : undefined}
 							{@const result = effectiveSleep(draftDefault, draftVolumes, disk.volume, own)}
-							<li>
+							<li
+								id="sleep-disk-{disk.name}"
+								class:focused={focus?.kind === 'disk' && focus.key === disk.name}
+							>
 								<div class="sleep-name">
 									<strong>{disk.model || disk.name}</strong>
 									<span class="muted small">
@@ -226,6 +243,28 @@
 						{t('storage.sleepMissing', { count: missing })}
 					</p>{/if}
 			</section>
+			{#if status?.unavailable?.length}
+				<section aria-labelledby="sleep-unavailable">
+					<h3 id="sleep-unavailable" class="sleep-heading">{t('storage.sleepUnavailableTitle')}</h3>
+					<ul class="sleep-list">
+						{#each status.unavailable as disk (disk.name)}
+							<li>
+								<div class="sleep-name">
+									<strong>{disk.model || disk.name}</strong>
+									<span class="muted small">
+										<span class="mono">{disk.name}</span>
+										· {formatDiskBytes(disk.sizeBytes)}
+										· {disk.volume
+											? t('storage.sleepInVolume', { volume: disk.volume })
+											: t('storage.sleepNoVolume')}
+									</span>
+								</div>
+								<span class="muted small">{t(`storage.sleepReason.${disk.reason}`)}</span>
+							</li>
+						{/each}
+					</ul>
+				</section>
+			{/if}
 		{/if}
 
 		<p class="muted small">{t('storage.sleepDetails')}</p>
@@ -292,6 +331,11 @@
 	}
 	.sleep-list li:first-child {
 		border-top: 0;
+	}
+	.sleep-list li.focused {
+		background: color-mix(in srgb, var(--accent) 10%, transparent);
+		border-radius: var(--radius-small);
+		padding-inline: 8px;
 	}
 	.sleep-name {
 		display: grid;
