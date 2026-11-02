@@ -23,6 +23,7 @@ import json
 import re
 import shutil
 import subprocess
+import time
 import sys
 import tempfile
 import urllib.error
@@ -56,22 +57,33 @@ def numbers(version):
     return tuple(int(n) for n in re.findall(r"[0-9]+", version.split("-")[0]))
 
 
-def download(url, dest, limit=None):
-    try:
-        with urllib.request.urlopen(url, timeout=300) as response, open(dest, "wb") as out:
-            if not response.url.startswith("https://") and url.startswith("https://"):
-                raise SystemExit("insecure redirect: " + url)
-            total = 0
-            while block := response.read(1 << 20):
-                total += len(block)
-                if limit and total > limit:
-                    raise SystemExit("larger than expected: " + url)
-                out.write(block)
-    except urllib.error.HTTPError as error:
-        if error.code == 404:
-            return False
-        raise
-    return True
+def download(url, dest, limit=None, attempts=4, pause=5):
+    """Downloads url to dest; False if it does not exist (404). A server
+    error or a broken connection is tried again (GitHub answered a release
+    download of 0.45.0 once with 500)."""
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(url, timeout=300) as response, open(dest, "wb") as out:
+                if not response.url.startswith("https://") and url.startswith("https://"):
+                    raise SystemExit("insecure redirect: " + url)
+                total = 0
+                while block := response.read(1 << 20):
+                    total += len(block)
+                    if limit and total > limit:
+                        raise SystemExit("larger than expected: " + url)
+                    out.write(block)
+            return True
+        except urllib.error.HTTPError as error:
+            if error.code == 404:
+                return False
+            if error.code < 500 or attempt == attempts:
+                raise
+        except (urllib.error.URLError, TimeoutError, ConnectionError):
+            if attempt == attempts:
+                raise
+        print(f"download failed, trying again ({attempt}/{attempts - 1}): {url}", file=sys.stderr, flush=True)
+        time.sleep(pause * attempt)
+    return False
 
 
 def check_index(directory, keys):

@@ -385,6 +385,31 @@ func TestEncryptionSitsAboveTheSSDCache(t *testing.T) {
 	}
 }
 
+func TestOpenVolumeDoesNotSetUpACacheAddedSince(t *testing.T) {
+	ctx := context.Background()
+	m, _, runner := encryptedArray(t)
+	if err := m.Unlock(ctx, "tank", []byte(goodPassword)); err != nil {
+		t.Fatal(err)
+	}
+	// A cache enabled while the volume is open takes effect with the next
+	// mount; reading the LUKS header meanwhile must not set it up below.
+	m.partUUIDDir = t.TempDir()
+	for _, uuid := range []string{"aaaa-meta", "bbbb-data"} {
+		os.WriteFile(filepath.Join(m.partUUIDDir, uuid), nil, 0o600)
+	}
+	m.volumes[0].Cache = &CacheConfig{Mode: "writeback", MetaUUID: "aaaa-meta", DataUUID: "bbbb-data"}
+	if err := m.ChangePassword(ctx, "tank", []byte(goodPassword), []byte(otherPassword)); err != nil {
+		t.Fatal(err)
+	}
+	crypt := runner.commands()
+	if strings.Contains(crypt, "dmsetup create titanos-cache-tank") {
+		t.Fatalf("cache set up below an open volume:\n%s", crypt)
+	}
+	if !strings.Contains(crypt, "luksAddKey --pbkdf argon2id --pbkdf-memory 262144 --pbkdf-parallel 4 --iter-time 2000 --key-file=- /dev/md127 /dev/fd/3") {
+		t.Fatalf("header not read on the array the volume lies on:\n%s", crypt)
+	}
+}
+
 func TestChangePasswordAddsBeforeItRemoves(t *testing.T) {
 	ctx := context.Background()
 	m, tree, runner := encryptedArray(t)

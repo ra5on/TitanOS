@@ -103,7 +103,10 @@ ip -n titan-peer link set peer30 up
     trial = json.loads(json.dumps(cfg)); trial['networks'][1]['vlan'] = 31
     apply(trial, False)
     assert json.loads(remote('ip -j -d link show tvapps'))[0]['linkinfo']['info_data']['id'] == 31
-    request('/network/revert', {})
+    try:
+        request('/network/revert', {})
+    except OSError:
+        pass  # the rollback may drop the connection before the answer, as apply does
     wait(lambda: json.loads(remote('ip -j -d link show tvapps'))[0]['linkinfo']['info_data']['id'] == 30, 'VLAN rollback')
     remote('systemctl restart titand')
     wait(lambda: request('/health').get('ready'), 'daemon restart')
