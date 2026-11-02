@@ -34,7 +34,7 @@ export type NvrSettings = {
 	volume?: string;
 	keepDays: number;
 	reserveGB: number;
-	armed: boolean;
+	arming: Arming;
 };
 
 export type NvrState = {
@@ -46,6 +46,7 @@ export type NvrState = {
 	usedBytes: number;
 	vendors: string[];
 	views: View[];
+	armedNow: boolean;
 };
 
 export type FoundStream = {
@@ -185,3 +186,11 @@ export type QualityChange = {
 export function gbPerDay(bitrateKb: number): number {
 	return (bitrateKb * 1000 * 86400) / 8 / 1e9;
 }
+
+export type ArmWindow = { days: number[]; from: string; to: string };
+export type Arming = {
+	mode: 'off' | 'on' | 'schedule';
+	schedule?: ArmWindow[];
+	cameras?: string[];
+	quietMinutes?: number;
+};

@@ -167,19 +167,18 @@ func (m *Manager) Prune(now time.Time) {
 	}
 }
 
-// notifyEvery is the least time between two notifications of one camera.
-const notifyEvery = 5 * time.Minute
-
-// onEvent sends a notification when an event starts and the NVR is armed.
+// onEvent sends a notification when an event starts while the NVR is armed
+// for that camera, at most once per quiet period.
 func (m *Manager) onEvent(c Camera, e Event) {
-	if !e.End.IsZero() || m.Notify == nil || !m.Store.Settings().Armed {
+	arming := m.Store.Settings().Arming
+	if !e.End.IsZero() || m.Notify == nil || !arming.Active(time.Now()) || !arming.Watches(c.ID) {
 		return
 	}
 	m.mu.Lock()
 	if m.notified == nil {
 		m.notified = map[string]time.Time{}
 	}
-	if last, ok := m.notified[c.ID]; ok && time.Since(last) < notifyEvery {
+	if last, ok := m.notified[c.ID]; ok && time.Since(last) < arming.quiet() {
 		m.mu.Unlock()
 		return
 	}

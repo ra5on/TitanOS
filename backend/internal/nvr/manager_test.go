@@ -18,7 +18,7 @@ func TestOnEventNotifiesOnlyWhenArmedAndNotTooOften(t *testing.T) {
 		t.Fatalf("notified while disarmed: %v", got)
 	}
 	st := s.Settings()
-	st.Armed = true
+	st.Arming = Arming{Mode: "on"}
 	if err := s.SetSettings(st); err != nil {
 		t.Fatal(err)
 	}

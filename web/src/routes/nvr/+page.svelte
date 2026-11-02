@@ -42,7 +42,6 @@
 	let volume = $state('');
 	let keepDays = $state(7);
 	let reserveGB = $state(20);
-	let armed = $state(false);
 	let touched = false;
 
 	async function load() {
@@ -53,7 +52,6 @@
 				volume = nvr.settings.volume ?? '';
 				keepDays = nvr.settings.keepDays;
 				reserveGB = nvr.settings.reserveGB;
-				armed = nvr.settings.armed;
 			}
 		} catch (e) {
 			error = apiErrorText(e);
@@ -64,9 +62,24 @@
 	async function saveSettings() {
 		busy = true;
 		try {
-			nvr = await api.put<NvrState>('/nvr/settings', { volume, keepDays, reserveGB, armed });
+			nvr = await api.put<NvrState>('/nvr/settings', { volume, keepDays, reserveGB });
 			touched = false;
 			error = '';
+		} catch (e) {
+			error = apiErrorText(e);
+		} finally {
+			busy = false;
+		}
+	}
+
+	async function arm(on: boolean) {
+		if (!nvr) return;
+		busy = true;
+		try {
+			nvr = await api.put<NvrState>('/nvr/arming', {
+				...nvr.settings.arming,
+				mode: on ? 'on' : 'off',
+			});
 		} catch (e) {
 			error = apiErrorText(e);
 		} finally {
@@ -185,8 +198,7 @@
 		nvr !== null &&
 			(volume !== (nvr.settings.volume ?? '') ||
 				keepDays !== nvr.settings.keepDays ||
-				reserveGB !== nvr.settings.reserveGB ||
-				armed !== nvr.settings.armed),
+				reserveGB !== nvr.settings.reserveGB),
 	);
 </script>
 
@@ -242,12 +254,6 @@
 				/>
 			</label>
 		</div>
-		<label class="check"
-			><input type="checkbox" bind:checked={armed} onchange={() => (touched = true)} /><span
-				>{t('nvr.armed')}</span
-			></label
-		>
-		<p class="muted small">{t('nvr.armedHint')}</p>
 		<p class="muted small">
 			{t('nvr.storageHint')}
 			{#if nvr.root}· {t('nvr.usage', {
@@ -262,6 +268,21 @@
 				onclick={saveSettings}
 				disabled={busy || !settingsChanged}>{t('common.save')}</button
 			>
+		</div>
+	</section>
+
+	<section class="tile panel armbar">
+		<span class="chip {nvr.armedNow ? 'ok' : ''}"
+			>{nvr.armedNow ? '● ' + t('nvrArm.armedNow') : '○ ' + t('nvrArm.disarmedNow')}</span
+		>
+		{#if nvr.settings.arming.mode === 'schedule'}<span class="muted small"
+				>{t('nvrArm.bySchedule')}</span
+			>{/if}
+		<div class="row-actions">
+			<button type="button" class="btn" onclick={() => arm(!nvr?.armedNow)} disabled={busy}
+				>{nvr.armedNow ? t('nvrArm.disarm') : t('nvrArm.arm')}</button
+			>
+			<a class="btn" href="/settings/notifications">{t('nvrArm.settings')}</a>
 		</div>
 	</section>
 
@@ -477,6 +498,15 @@
 {/if}
 
 <style>
+	.armbar {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 12px;
+		align-items: center;
+	}
+	.armbar .row-actions {
+		margin-left: auto;
+	}
 	.grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

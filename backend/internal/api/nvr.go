@@ -37,6 +37,8 @@ type nvrView struct {
 	UsedBytes int64           `json:"usedBytes"`
 	Vendors   []string        `json:"vendors"`
 	Views     []nvr.View      `json:"views"`
+	// ArmedNow says whether movement is reported at this moment.
+	ArmedNow bool `json:"armedNow"`
 }
 
 func (s *Server) nvrOK(w http.ResponseWriter) bool {
@@ -54,6 +56,7 @@ func (s *Server) nvrState() nvrView {
 	if view.Views == nil {
 		view.Views = []nvr.View{}
 	}
+	view.ArmedNow = st.Arming.Active(time.Now())
 	for _, v := range nvr.Vendors {
 		view.Vendors = append(view.Vendors, v.Name)
 	}
@@ -92,7 +95,6 @@ func (s *Server) handleNVR(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleNVRSettings(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Volume    string `json:"volume"`
-		Armed     bool   `json:"armed"`
 		KeepDays  int    `json:"keepDays"`
 		ReserveGB int    `json:"reserveGB"`
 	}
@@ -104,7 +106,7 @@ func (s *Server) handleNVRSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_nvr", "the volume is not mounted")
 		return
 	}
-	cur.Volume, cur.KeepDays, cur.ReserveGB, cur.Armed = req.Volume, req.KeepDays, req.ReserveGB, req.Armed
+	cur.Volume, cur.KeepDays, cur.ReserveGB = req.Volume, req.KeepDays, req.ReserveGB
 	if err := s.opts.NVR.Store.SetSettings(cur); err != nil {
 		s.nvrError(w, err)
 		return
@@ -408,6 +410,22 @@ func (s *Server) handleNVREventPicture(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, nvr.SnapshotPath(root, c.ID, day, file))
 }
 
+// handleNVRArming sets when movement is reported (Settings › Notifications).
+func (s *Server) handleNVRArming(w http.ResponseWriter, r *http.Request) {
+	var req nvr.Arming
+	if !s.nvrOK(w) || !readJSON(w, r, &req) {
+		return
+	}
+	cur := s.opts.NVR.Store.Settings()
+	cur.Arming = req
+	if err := s.opts.NVR.Store.SetSettings(cur); err != nil {
+		s.nvrError(w, err)
+		return
+	}
+	noteTarget(r, req.Mode)
+	writeJSON(w, http.StatusOK, s.nvrState())
+}
+
 func (s *Server) handleNVRViews(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Views []nvr.View `json:"views"`
@@ -545,6 +563,7 @@ func (s *Server) handleNVRQualityReset(w http.ResponseWriter, r *http.Request) {
 func (s *Server) registerNVR(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/nvr", s.requireAdmin(s.handleNVR))
 	mux.HandleFunc("PUT /api/v1/nvr/settings", s.requireAdmin(s.handleNVRSettings))
+	mux.HandleFunc("PUT /api/v1/nvr/arming", s.requireAdmin(s.handleNVRArming))
 	mux.HandleFunc("PUT /api/v1/nvr/views", s.requireAdmin(s.handleNVRViews))
 	mux.HandleFunc("POST /api/v1/nvr/discover", s.requireAdmin(s.handleNVRDiscover))
 	mux.HandleFunc("POST /api/v1/nvr/cameras", s.requireAdmin(s.handleNVRCameraAdd))

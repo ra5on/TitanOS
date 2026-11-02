@@ -42,6 +42,8 @@ type Snapshot struct {
 	Disks             []DiskValues
 	// Cameras: name and whether it records.
 	Cameras []RunValues
+	// NVRArmed is set when the NVR is switched on: whether it reports movement.
+	NVRArmed *bool
 	// Containers and VMs: name and whether it runs.
 	Containers []RunValues
 	VMs        []RunValues
@@ -242,6 +244,14 @@ func entities(snap Snapshot, q MQTT, base string) []entity {
 				add("binary_sensor", k, label, onOff(item.Running), map[string]any{"device_class": "running"})
 				unknown(!item.Unavailable)
 			}
+		}
+	}
+	if snap.NVRArmed != nil {
+		if slices.Contains(q.Commands, "cameras") {
+			list = append(list, entity{component: "switch", key: "nvr_armed", kind: "nvr", name: "armed", state: onOff(*snap.NVRArmed),
+				config: map[string]any{"name": "NVR armed", "command_topic": base + "/cmd/nvr/armed", "payload_on": "on", "payload_off": "off", "state_on": "ON", "state_off": "OFF"}})
+		} else if slices.Contains(q.Groups, "cameras") {
+			add("binary_sensor", "nvr_armed", "NVR armed", onOff(*snap.NVRArmed), nil)
 		}
 	}
 	if u := snap.UPS; u != nil && slices.Contains(q.Groups, "ups") && SelectedDevice(q, "ups", "ups") {
@@ -669,6 +679,8 @@ func allowedCommand(q MQTT, kind, name, action string) bool {
 		return slices.Contains(q.Commands, "containers") && slices.Contains([]string{"start", "stop", "restart"}, action)
 	case "camera":
 		return slices.Contains(q.Commands, "cameras") && (action == "start" || action == "stop")
+	case "nvr":
+		return slices.Contains(q.Commands, "cameras") && name == "armed" && (action == "on" || action == "off")
 	case "vm":
 		return slices.Contains(q.Commands, "vms") && slices.Contains([]string{"start", "shutdown"}, action)
 	case "system":

@@ -67,9 +67,10 @@ type Settings struct {
 	Volume string `json:"volume,omitempty"`
 	// KeepDays is the retention for cameras without their own value.
 	KeepDays int `json:"keepDays"`
-	// Armed sends a notification when a camera with the motion check sees
-	// something. Off by default.
-	Armed bool `json:"armed"`
+	// Armed is the switch of 0.46.0; it is read once into Arming.
+	Armed bool `json:"armed,omitempty"`
+	// Arming decides when movement is reported. Off by default.
+	Arming Arming `json:"arming"`
 	// ReserveGB is the space kept free; the oldest recordings go first when
 	// it runs short.
 	ReserveGB int `json:"reserveGB"`
@@ -107,6 +108,13 @@ func (s *Store) load() {
 	if s.st.Settings.KeepDays <= 0 {
 		s.st.Settings.KeepDays = DefaultKeep
 	}
+	if s.st.Settings.Arming.Mode == "" {
+		s.st.Settings.Arming.Mode = "off"
+		if s.st.Settings.Armed {
+			s.st.Settings.Arming.Mode = "on"
+		}
+	}
+	s.st.Settings.Armed = false
 	s.loaded = true
 }
 
@@ -130,6 +138,13 @@ func (s *Store) SetSettings(v Settings) error {
 	if v.KeepDays < 1 || v.KeepDays > maxKeepDays || v.ReserveGB < 0 || v.ReserveGB > maxReserveGB {
 		return fmt.Errorf("%w: retention or reserve out of range", ErrInvalid)
 	}
+	if err := v.Arming.Validate(); err != nil {
+		return err
+	}
+	if v.Arming.Mode == "" {
+		v.Arming.Mode = "off"
+	}
+	v.Armed = false
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.load()
