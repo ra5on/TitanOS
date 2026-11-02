@@ -6,6 +6,12 @@ signieren und veröffentlichen. Kernel-Updates gehören dazu. Entscheidung des
 Projektinhabers vom 3.11.2026: voll automatisch, ohne Freigabe, ohne
 Staffelung (alle NAS bekommen das Update sofort).
 
+**Wichtig für Kernel-Updates:** Ein neuer Kernel braucht neue Plugin-Sätze.
+Ohne `AUTOPILOT_PLUGINS=on` wartet das Release auf die Freigabe der
+Plugin-Signatur, nach rund fünf Stunden bricht es ab (Issue), und der
+Autopilot wartet auf diesen Tag. Kernel-Updates laufen also nur mit
+`AUTOPILOT_PLUGINS=on` wirklich ohne den Inhaber.
+
 ## Ablauf
 
 1. **Prüfen** (`.github/workflows/autopilot.yml`, jede Nacht 02:23 UTC):
@@ -35,7 +41,11 @@ Staffelung (alle NAS bekommen das Update sofort).
    Release den Plugin-Satz beim Plugin-Repository und wartet darauf. Danach
    laufen alle Tests des Release-Workflows: Abbildprüfung, QEMU-Starts mit
    UEFI, Legacy-BIOS, 32-Bit-UEFI und Kernel „Neu“, Hardware-Varianten,
-   Speicher, SSD-Cache, Plugins.
+   Speicher, SSD-Cache, Plugins. Zusätzlich prüft `scripts/autopilot.py
+   verify`, dass jedes Update der Liste in den gebauten Abbildern steckt
+   (gleiche oder neuere Version laut `components.json`, je Abbild). Fehlt
+   eines, wird nicht veröffentlicht: Sonst fände die nächste Nacht dasselbe
+   Update wieder und schnitte dasselbe Release noch einmal.
 5. **Veröffentlichen ohne Freigabe:** `scripts/autopilot.py guard` prüft aus
    git, ob der Tag ein Sicherheits-Release ist. Nur dann signiert der
    Publish-Job im Environment `security-release` (ohne Freigabe), sonst wie
@@ -110,8 +120,11 @@ installiert haben, behalten es; über Einstellungen › Updates geht es zurück.
 - `scripts/tests/test_autopilot.py`: Tag-Wahl (nächster freier Patch,
   vorhandene und alte Tags, eigener offener Tag, frischer Tag des Inhabers,
   verworfener alter Tag wie 0.46.0, Vorabversion), wartender Tag für die
-  Plugin-Signatur, die Bedingungen der Veröffentlichung ohne Freigabe und die
-  git-Abfragen an einem echten Wegwerf-Repository.
+  Plugin-Signatur, die Bedingungen der Veröffentlichung ohne Freigabe, die
+  Prüfung der gebauten Pakete gegen die Liste und die git-Abfragen an einem
+  echten Wegwerf-Repository. `verify` zusätzlich gegen das lokale Abbild
+  (`components.json`, Kernel 6.12.113-1): eine erfüllte Liste geht durch, eine
+  mit 6.12.115-2 scheitert.
 - `scripts/tests/test_debian_security.py`: Abschnitte der Quellenliste
   (Backports-Kernel überschreibt den Standard-Kernel nicht), Point-Release
   und Backports, Zusammenführen der Paketquellen.

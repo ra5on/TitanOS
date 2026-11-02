@@ -111,6 +111,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # The same updates noted on main already (the date line aside):
+          # the owner's next full release brings them.
+          packages() { grep -E '^(Image with|[a-z0-9][a-z0-9.+-]*: )' "$1" 2>/dev/null || true; }
+          if [ -f build/debian-security.txt ] && [ "$(packages build/debian-security.txt)" = "$(packages "$RUNNER_TEMP/debian-security.txt")" ]; then
+            echo "already noted on main; the next full release brings the updates"
+            exit 0
+          fi
           cp "$RUNNER_TEMP/debian-security.txt" build/debian-security.txt
           if [ "$(gh pr list --state open --label debian-security --json number --jq length)" != 0 ]; then
             echo "a pull request for the updates is open already"

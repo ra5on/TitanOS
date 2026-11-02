@@ -10,6 +10,10 @@ guard    For the release workflow: may this tag be published without the
          release tag, the version is a later patch of that release and the
          commit changes build/debian-security.txt alone. Prints
          autopilot=true|false. The tag message plays no part.
+verify   For the release workflow, after the build: every update listed in
+         build/debian-security.txt is in the built image, at that version or
+         newer. Otherwise the next night would find it again and cut the
+         same release once more.
 pending  For the plugin signing: the autopilot tag that waits for its
          release, if any. Prints pending=<tag> or pending=.
 
@@ -17,6 +21,7 @@ Usage:
   autopilot.py plan --latest <version> [--source URL]
   autopilot.py guard <version> [--source URL]
   autopilot.py pending [--source URL]
+  autopilot.py verify <list> <components.json> [<components.json of the image with the newer kernel>]
 """
 import argparse
 import json
@@ -103,6 +108,35 @@ def pending(tags, is_published):
     return ""
 
 
+LISTED = re.compile(r"([a-z0-9][a-z0-9.+-]*): (\S+) -> (\S+)")
+
+
+def listed(text):
+    """The updates of build/debian-security.txt: (default, newer kernel),
+    each [(name, version)]."""
+    base, variant = [], []
+    current = base
+    for line in text.splitlines():
+        if line.startswith("Image with the newer kernel"):
+            current = variant
+            continue
+        match = LISTED.fullmatch(line.strip())
+        if match:
+            current.append((match[1], match[3]))
+    return base, variant
+
+
+def missing(updates, components, at_least):
+    """Updates the image does not have: [(name, wanted, found or None)]."""
+    have = {c["name"]: c["version"] for c in components if c.get("ecosystem") == "Debian"}
+    return [(name, version, have.get(name)) for name, version in updates
+            if name not in have or not at_least(have[name], version)]
+
+
+def dpkg_at_least(a, b):
+    return subprocess.run(["dpkg", "--compare-versions", a, "ge", b]).returncode == 0
+
+
 def guard(version, head_parents, parent_tags, changed, is_published):
     """Returns (allowed, reason). parent_tags are the tags on the parent commit."""
     own = stable(version)
@@ -130,7 +164,24 @@ def main():
     g.add_argument("--source", default="https://github.com/ra5on/TitanOS")
     w = sub.add_parser("pending")
     w.add_argument("--source", default="https://github.com/ra5on/TitanOS")
+    v = sub.add_parser("verify")
+    v.add_argument("list")
+    v.add_argument("components")
+    v.add_argument("components_new", nargs="?")
     args = parser.parse_args()
+    if args.command == "verify":
+        base, variant = listed(open(args.list, encoding="utf-8").read())
+        if variant and not args.components_new:
+            raise SystemExit("updates for the image with the newer kernel, but no such image")
+        wrong = missing(base, json.load(open(args.components, encoding="utf-8")), dpkg_at_least)
+        if variant:
+            wrong += missing(variant, json.load(open(args.components_new, encoding="utf-8")), dpkg_at_least)
+        for name, wanted, found in wrong:
+            print(f"{name}: wanted {wanted}, the image has {found or 'nothing'}", file=sys.stderr)
+        if wrong:
+            raise SystemExit("the image lacks listed updates; publishing it would repeat the release every night")
+        print(f"all {len(base) + len(variant)} listed updates are in the image")
+        return
     source = args.source.rstrip("/")
     check = lambda tag: published(source, tag)  # noqa: E731
     if args.command == "plan":

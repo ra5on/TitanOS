@@ -1,6 +1,7 @@
 """Which tag the autopilot cuts, and what it may publish without the owner."""
 import importlib.util
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -77,6 +78,36 @@ class GuardTest(unittest.TestCase):
         self.assertFalse(self.guard(pub=()))  # the parent was never published
         self.assertFalse(self.guard(tags=()))  # the parent is no release at all
         self.assertFalse(self.guard(parents=("a", "b")))  # a merge
+
+
+class VerifyTest(unittest.TestCase):
+    LIST = """Debian updates for the image of TitanOS 0.45.1 (latest release 0.45.1).
+A full release (not an app release) brings them.
+Checked on 2026-11-03.
+
+linux-image-amd64: 6.12.113-1 -> 6.12.115-2
+openssl: 3.5.1-1 -> 3.5.1-1+deb13u1
+
+Image with the newer kernel (trixie-backports):
+linux-image-amd64: 7.2.11-1~bpo13+1 -> 7.2.13-1~bpo13+1
+"""
+
+    def test_sections_of_the_list(self):
+        base, variant = autopilot.listed(self.LIST)
+        self.assertEqual(base, [("linux-image-amd64", "6.12.115-2"), ("openssl", "3.5.1-1+deb13u1")])
+        self.assertEqual(variant, [("linux-image-amd64", "7.2.13-1~bpo13+1")])
+
+    @unittest.skipUnless(shutil.which("dpkg"), "dpkg compares Debian versions")
+    def test_an_image_without_the_update_fails(self):
+        base, _ = autopilot.listed(self.LIST)
+        image = [{"ecosystem": "Debian", "name": "linux-image-amd64", "version": "6.12.113-1"},
+                 {"ecosystem": "Debian", "name": "openssl", "version": "3.5.1-1+deb13u2"}]
+        self.assertEqual(autopilot.missing(base, image, autopilot.dpkg_at_least),
+                         [("linux-image-amd64", "6.12.115-2", "6.12.113-1")])
+        image[0]["version"] = "6.12.115-2"
+        self.assertEqual(autopilot.missing(base, image, autopilot.dpkg_at_least), [])
+        self.assertEqual(autopilot.missing(base, image[:1], autopilot.dpkg_at_least),
+                         [("openssl", "3.5.1-1+deb13u1", None)])
 
 
 class GitTest(unittest.TestCase):

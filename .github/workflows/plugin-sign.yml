@@ -78,6 +78,7 @@ jobs:
           if [ -n "$pending" ] && ! jq -e 'any(.[]; startswith("pending-nvidia-"))' <<<"$TAGS" >/dev/null; then
             echo "Kernel and common sets for $pending of the autopilot."
             echo "auto=true" >> "$GITHUB_OUTPUT"
+            echo "tag=$pending" >> "$GITHUB_OUTPUT"
           else
             echo "auto=false" >> "$GITHUB_OUTPUT"
           fi
@@ -86,6 +87,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           AUTO: ${{ steps.auto.outputs.auto == 'true' }}
+          PENDING: ${{ steps.auto.outputs.tag }}
         run: |
           execution_tag=
           while IFS= read -r tag; do
@@ -108,8 +110,10 @@ jobs:
                 exit 0
               fi
             done
-            gh workflow run plugin-sign.yml --repo "$GITHUB_REPOSITORY" --ref "$execution_tag" -f auto=true
-            echo "Signing run started from $execution_tag without approval (autopilot)."
+            # From the autopilot tag itself: newer tags of the owner may
+            # predate the input auto.
+            gh workflow run plugin-sign.yml --repo "$GITHUB_REPOSITORY" --ref "$PENDING" -f auto=true
+            echo "Signing run started from $PENDING without approval (autopilot)."
             exit 0
           fi
           # A run that already waits for approval is enough.

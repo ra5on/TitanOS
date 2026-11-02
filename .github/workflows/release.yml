@@ -188,6 +188,14 @@ jobs:
           VERSION=${{ steps.version.outputs.version }} MKOSI_SUDO=1 scripts/make-zip.sh --kernel-new
           sudo chown -R "$(id -u):$(id -g)" out build/mkosi.output-new
 
+      - name: The security release has the updates it lists
+        # Otherwise the next night would find them again and cut the same
+        # release once more. No publish, the issue opens, the autopilot waits.
+        if: steps.autopilot.outputs.autopilot == 'true'
+        run: |
+          titanos=rootfs/usr/share/titanos/components.json
+          python3 scripts/autopilot.py verify build/debian-security.txt "build/mkosi.output/$titanos" "build/mkosi.output-new/$titanos"
+
       - name: The image of the base release with the new titand
         if: steps.kind.outputs.kind == 'app'
         run: python3 scripts/repack-release.py --base ${{ steps.kind.outputs.base }} --version ${{ steps.version.outputs.version }}
