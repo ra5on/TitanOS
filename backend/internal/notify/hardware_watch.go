@@ -24,7 +24,9 @@ type HardwareWatcher struct {
 	spun    map[string]bool
 	stopped map[string]int
 	hot     map[string]bool
-	ce, ue  map[string]int64
+	// hotLooks counts looks in a row at or above the limit.
+	hotLooks map[string]int
+	ce, ue   map[string]int64
 }
 
 // FanReading is one fan with a speed sensor.
@@ -37,9 +39,22 @@ type FanReading struct {
 
 // TempReading is one temperature sensor.
 type TempReading struct {
-	ID, Label         string
+	ID, Label string
+	// Chip is the hwmon driver name (coretemp, nvme, nct6798 ...).
+	Chip              string
 	Celsius, Critical *float64
 }
+
+// reliableChips are drivers whose sensors measure a real component, so a
+// reading above the fixed limit is believed even without a critical value
+// of their own. Inputs of other chips (Super-I/O, ACPI) are often unused
+// and read nonsense, so they only raise an alarm with a critical value
+// the chip itself reports.
+var reliableChips = map[string]bool{"coretemp": true, "k10temp": true, "zenpower": true, "nvme": true, "drivetemp": true, "amdgpu": true, "radeon": true, "nouveau": true}
+
+// hotLooksNeeded is how many looks in a row must be too hot, so that a
+// reading that jumps once is no alarm.
+const hotLooksNeeded = 2
 
 // hotMargin is how close to the critical value counts as too hot, and
 // coolMargin how far below it the warning is over.
@@ -47,7 +62,7 @@ const hotMargin, coolMargin = 5.0, 15.0
 
 // NewHardwareWatcher returns a watcher that reports through m.
 func NewHardwareWatcher(m *Manager) *HardwareWatcher {
-	return &HardwareWatcher{notify: m, edac: "/sys/devices/system/edac/mc", spun: map[string]bool{}, stopped: map[string]int{}, hot: map[string]bool{}, ce: map[string]int64{}, ue: map[string]int64{}}
+	return &HardwareWatcher{notify: m, edac: "/sys/devices/system/edac/mc", spun: map[string]bool{}, stopped: map[string]int{}, hot: map[string]bool{}, hotLooks: map[string]int{}, ce: map[string]int64{}, ue: map[string]int64{}}
 }
 
 // Run looks every minute until ctx is done.
@@ -93,6 +108,9 @@ func (w *HardwareWatcher) look() {
 			if t.Celsius == nil {
 				continue
 			}
+			if t.Critical == nil && t.Chip != "" && !reliableChips[t.Chip] {
+				continue
+			}
 			limit := 95.0
 			if t.Critical != nil && *t.Critical > 40 {
 				limit = *t.Critical - hotMargin
@@ -101,11 +119,21 @@ func (w *HardwareWatcher) look() {
 			if name == "" {
 				name = t.ID
 			}
-			if *t.Celsius >= limit && !w.hot[t.ID] {
-				w.hot[t.ID] = true
-				w.notify.Notify(Error, "temperature_critical", name+" ("+strconv.Itoa(int(*t.Celsius))+" °C)")
-			} else if *t.Celsius < limit-coolMargin {
-				delete(w.hot, t.ID)
+			if t.Chip != "" {
+				name = t.Chip + " " + name
+			}
+			switch {
+			case *t.Celsius >= limit:
+				w.hotLooks[t.ID]++
+				if w.hotLooks[t.ID] >= hotLooksNeeded && !w.hot[t.ID] {
+					w.hot[t.ID] = true
+					w.notify.Notify(Error, "temperature_critical", name+" ("+strconv.Itoa(int(*t.Celsius))+" °C)")
+				}
+			default:
+				w.hotLooks[t.ID] = 0
+				if *t.Celsius < limit-coolMargin {
+					delete(w.hot, t.ID)
+				}
 			}
 		}
 	}
