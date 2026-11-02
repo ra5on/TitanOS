@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { revealTarget } from '#lib/reveal-target.ts';
-	import type { Volume } from '#lib/api.ts';
+	import type { DiskSleepStatus, Volume } from '#lib/api.ts';
 	import Snapshots from './Snapshots.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import HelpTip from '#lib/components/HelpTip.svelte';
@@ -11,6 +11,7 @@
 	import { canShrink, takesDisk } from './btrfs.ts';
 	import CachePanel from './CachePanel.svelte';
 	import SyncSpeedPanel from './SyncSpeedPanel.svelte';
+	import VolumeSleep from './VolumeSleep.svelte';
 	import EncryptionPanel from './EncryptionPanel.svelte';
 	import { isLocked, lockedBlocks } from './crypt.ts';
 	import { refreshStorage } from '#lib/storage.svelte.ts';
@@ -24,9 +25,23 @@
 		ondelete: () => void;
 		onremove: (disk: string) => void;
 		onprofile: () => void;
+		diskSleep?: DiskSleepStatus;
+		onsleepsaved: (status: DiskSleepStatus) => void;
+		onsleepopen: () => void;
 	};
-	let { volume, canAdminister, busy, oncheck, onadd, ondelete, onremove, onprofile }: Props =
-		$props();
+	let {
+		volume,
+		canAdminister,
+		busy,
+		oncheck,
+		onadd,
+		ondelete,
+		onremove,
+		onprofile,
+		diskSleep,
+		onsleepsaved,
+		onsleepopen,
+	}: Props = $props();
 
 	const tone = $derived(stateTone(volume));
 	let quotaBusy = $state(false),
@@ -162,6 +177,14 @@
 			{/each}
 		</div>
 	</div>
+
+	<VolumeSleep
+		volume={volume.name}
+		status={diskSleep}
+		{canAdminister}
+		onsaved={onsleepsaved}
+		onopen={onsleepopen}
+	/>
 
 	{#if volume.mounted}
 		<div class="block">
