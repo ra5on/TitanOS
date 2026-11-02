@@ -1,6 +1,29 @@
 # NVR (Kamerarekorder)
 
-Festgelegte Entscheidungen des Projektinhabers vom 2.11.2026 (Plan 26). Der NVR ist im Aufbau; diese Datei nennt, was gilt, und wird mit jedem Baustein ergänzt. Gebaut ist bisher nur `backend/internal/nvr` (Suchregeln, Adressen, Herstellertabelle, Versuchsbudget).
+Festgelegte Entscheidungen des Projektinhabers vom 2.11.2026 (Plan 26). Der NVR ist im Aufbau; diese Datei nennt, was gilt, und wird mit jedem Baustein ergänzt. Gebaut ist `backend/internal/nvr` mit Suchregeln, Kamerasuche (ONVIF, RTSP, Herstellertabelle), Kameraverwaltung, Aufnahme, Aufbewahrung und Live-Bild, dazu API `/api/v1/nvr/*`, Dienste-Schalter und die Seite „NVR“ (`web/src/routes/nvr`).
+
+## Stand der Umsetzung (2.11.2026)
+
+Fertig und getestet (gegen Nachbau-Kameras und einen Ersatz-ffmpeg, nicht an echter Hardware):
+- Suche: ONVIF (WS-Security-Digest, Uhr der Kamera), RTSP-DESCRIBE (Digest/Basic), Herstellertabelle als Rückfall, eigener RTSP-Link; Hauptstream = größtes, Nebenstream = kleinstes Bild; Adresse der Kamera in Antworten wird durch die erreichte Adresse ersetzt.
+- Verwaltung: Kameras in `/config/nvr/cameras.json`, Passwörter getrennt in `/config/nvr/secrets.json`, nie in Antworten.
+- Aufnahme: je Kamera ein ffmpeg (`-c:v copy`, Ton nur auf Wunsch, 5-Minuten-Dateien als fragmentiertes MP4 unter `<Volume>/nvr/<Kamera>/<Tag>/<Uhrzeit>.mp4`), Neustart mit Wartezeit, Statusmeldungen ohne Passwort. Der Ordner ist auf Btrfs ein eigenes Subvolume, also nicht in Snapshots.
+- Aufbewahrung: je Kamera oder allgemein in Tagen; reicht der freie Platz nicht, gehen die ältesten Dateien zuerst; die jeweils neueste Datei bleibt. Ordner entfernter Kameras altern mit dem allgemeinen Wert aus.
+- Live: Bewegt-JPEG (ffmpeg, höchstens sechs gleichzeitig); Wiedergabe der Aufnahmen mit Bereichsanfragen.
+- Schalter unter Einstellungen › Dienste (ab Werk aus), Menüpunkt nur bei „an“.
+
+**Abweichungen vom Plan, bewusst und offen:**
+- ffmpeg läuft als Kindprozess von titand, nicht in einer eigenen gehärteten Einheit `titan-nvr`; Zugangsdaten stehen dabei in der ffmpeg-Befehlszeile (`/proc`). Eigene Einheit mit eigenem Benutzer folgt.
+- MQTT/Home Assistant (Gruppe „Kameras (NVR)“ in den MQTT-Einstellungen): Sensoren für Aufnahme an/aus, belegter Platz und letzte Aufnahme je Kamera; mit der Befehlsgruppe „Kameras“ ein Schalter, der die Aufnahme ein- und ausschaltet (nur Start/Stopp, kein Bild, kein Video über MQTT).
+- Zeitserver: titand beantwortet NTP-Anfragen (SNTP, UDP 123) nur von Heimnetz-Adressen, höchstens fünf auf einmal und dann eine je Sekunde, und nur solange der NVR an ist und eine Kamera ihn nutzt. „Zeit von TitanOS“ stellt die Kamera um: ONVIF (`SetNTP`, `SetSystemDateAndTime`), sonst Hikvision (ISAPI) oder Dahua (CGI) mit HTTP-Digest; höchstens drei abgelehnte Anmeldungen. Firewall-Dienst `ntp` (UDP 123, wie andere Dienste für das lokale Netz). An Kameras ungeprüft.
+- Bewegung und Ereignisse: je Kamera (Schalter „Bewegung erkennen“, Empfindlichkeit niedrig/mittel/hoch) ein ffmpeg am Nebenstream, 2 Bilder/s in 160×90 Grau; reines Go-Verfahren (`motion.go`) mit nachlaufendem Hintergrund, Ausgleich von Helligkeitswechseln über das ganze Bild, zwei Bilder zum Start und zehn ruhige Sekunden zum Ende. Ein Ereignis (`events/<Tag>/<Uhrzeit>.json` und `.jpg` neben den Aufnahmen) hat ein Bild vom Beginn; Klick springt in die Aufnahme. Ereignisse altern mit der Aufbewahrung aus. „Scharf“ (Seite NVR, nicht unter Einstellungen › Meldungen) sendet höchstens eine Meldung `nvr_motion` je Kamera und fünf Minuten über die vorhandenen Meldewege; in Home Assistant ein Bewegungs-Sensor.
+- Ansichten (`/nvr/views`): Raster mit **sechs Spalten**, bis zu 12 Ansichten und 24 Feldern; je Feld Kamera, Spalte, Zeile, Breite, Höhe (frei wählbar, keine Überlappung, Prüfung im Backend `SetViews`); Felder ohne Kamera bleiben leer; Bearbeiten über Auswahllisten, kein Ziehen. Live-Bilder (Bewegt-JPEG) laufen nur auf der offenen Seite, höchstens sechs; entfernt man eine Kamera, verschwinden ihre Felder.
+- Qualität (Knopf „Qualität“, nur mit ONVIF): Auflösung, Bilder/s und Bitrate je Stream über `GetVideoEncoderConfigurations`/`…Options`/`SetVideoEncoderConfiguration`; Werte außerhalb der Auswahl der Kamera werden nicht gesendet; Bestätigung in der Oberfläche; die ursprünglichen Werte bleiben in `qualityOriginal` (vom Server geführt, bleiben bei Bearbeitung erhalten) für „Zurücksetzen"; Anzeige der geschätzten Tagesmenge. Am Gerät ungeprüft; Kameras ohne Media-Einstellungen über ONVIF melden das.
+- Geschützte Clips: „Clip schützen“ verschiebt eine Aufnahmedatei (nicht die gerade geschriebene) nach `<Kamera>/protected/…`; Aufbewahrung und Platzmangel löschen dort nie; „Schutz aufheben“ legt sie zurück.
+- Sicherungen: Ein Ordner `nvr` an der Wurzel eines Volumes mit der Markierungsdatei `.titanos-nvr` (legt der NVR an) wird von Sicherungen (restic und Kopie) übersprungen; ein selbst angelegter Ordner `nvr` ohne Markierung nicht. Aufnahmen liegen in keinem Papierkorb (der NVR löscht selbst) und auf Btrfs nicht in Snapshots (Subvolume).
+- Objekterkennung: Schnittstelle `Detector` (Beschriftungen wie person, vehicle, package, animal, plate) ist vorgesehen und wird auf das Ereignisbild angewendet; **es ist keine Erkennung eingebaut** (Modelle und Laufzeiten sollen als Plugins kommen, Messungen stehen aus).
+- Noch nicht gebaut: Objekterkennung selbst (Modelle), Gegensprechen, go2rtc/WebRTC, geschützte Clips. Siehe Plan 26.
+- Die Herstellertabelle ist an keinem Gerät geprüft; die vier Messungen (NPU, Kennzeichen, Geschwindigkeit, Cache) stehen aus und brauchen die Kamera und titan.
 
 ## Entscheidungen
 

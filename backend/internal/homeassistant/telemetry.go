@@ -86,6 +86,9 @@ func legacyIdentity(snap Snapshot) func(string, string) string {
 	for _, v := range snap.VMs {
 		remember("vm", v.Name)
 	}
+	for _, v := range snap.Cameras {
+		remember("camera", v.Name)
+	}
 	return func(kind, name string) string {
 		k := key(kind, name)
 		if len(names[k]) > 1 {
@@ -104,8 +107,8 @@ func retainedSelected(q MQTT, group, entityKey string) bool {
 	if !restricted {
 		return true
 	}
-	kinds := map[string]string{"volumes": "volume", "disks": "disk", "backups": "backup", "containers": "container", "vms": "vm"}
-	suffixes := map[string][]string{"volumes": {"_state", "_used", "_free"}, "disks": {"_temperature", "_problem"}, "backups": {"_running", "_problem", "_progress", "_last_success", "_next", "_run"}, "containers": {"", "_restart"}, "vms": {""}, "ups": {"_status", "_charge"}}
+	kinds := map[string]string{"volumes": "volume", "disks": "disk", "backups": "backup", "containers": "container", "vms": "vm", "cameras": "camera"}
+	suffixes := map[string][]string{"volumes": {"_state", "_used", "_free"}, "disks": {"_temperature", "_problem"}, "backups": {"_running", "_problem", "_progress", "_last_success", "_next", "_run"}, "containers": {"", "_restart"}, "vms": {""}, "cameras": {""}, "ups": {"_status", "_charge"}}
 	for _, id := range ids {
 		sum := sha256.Sum256([]byte(group + "\x00" + id))
 		if strings.HasPrefix(entityKey, fmt.Sprintf("%s_%x_", key(group), sum[:6])) {
