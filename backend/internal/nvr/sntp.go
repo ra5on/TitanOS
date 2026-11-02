@@ -95,7 +95,7 @@ func (s *SNTPServer) Serve(ctx context.Context) {
 	if conn == nil {
 		return
 	}
-	go func() { <-ctx.Done(); conn.Close() }()
+	go func() { <-ctx.Done(); _ = conn.Close() }()
 	buf := make([]byte, 128)
 	for {
 		n, from, err := conn.ReadFrom(buf)
@@ -134,7 +134,7 @@ func (s *SNTPServer) Close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.conn != nil {
-		s.conn.Close()
+		_ = s.conn.Close()
 	}
 }
 
