@@ -36,6 +36,8 @@ Fertig und getestet (gegen Nachbau-Kameras und einen Ersatz-ffmpeg, nicht an ech
 - Qualität (Knopf „Qualität“, nur mit ONVIF): Auflösung, Bilder/s und Bitrate je Stream über `GetVideoEncoderConfigurations`/`…Options`/`SetVideoEncoderConfiguration`; Werte außerhalb der Auswahl der Kamera werden nicht gesendet; Bestätigung in der Oberfläche; die ursprünglichen Werte bleiben in `qualityOriginal` (vom Server geführt, bleiben bei Bearbeitung erhalten) für „Zurücksetzen"; Anzeige der geschätzten Tagesmenge. Am Gerät ungeprüft; Kameras ohne Media-Einstellungen über ONVIF melden das.
 - Geschützte Clips: „Clip schützen“ verschiebt eine Aufnahmedatei (nicht die gerade geschriebene) nach `<Kamera>/protected/…`; Aufbewahrung und Platzmangel löschen dort nie; „Schutz aufheben“ legt sie zurück.
 - Sicherungen: Ein Ordner `nvr` an der Wurzel eines Volumes mit der Markierungsdatei `.titanos-nvr` (legt der NVR an) wird von Sicherungen (restic und Kopie) übersprungen; ein selbst angelegter Ordner `nvr` ohne Markierung nicht. Aufnahmen liegen in keinem Papierkorb (der NVR löscht selbst) und auf Btrfs nicht in Snapshots (Subvolume).
+- Zonen und Masken je Kamera (Knopf „Bereiche“, auf einem aktuellen Bild gezogen, je höchstens 16, in Anteilen des Bildes): Masken nehmen Flächen aus der Bewegungserkennung, Zonen beschränken sie darauf; der Helligkeitsausgleich rechnet nur über die gezählten Flächen. Die Aufnahme selbst bleibt unverändert (keine Schwärzung im Video).
+- Rechte je Kamera: „Zuschauer“ sind Konten ohne Administratorrechte, die eine Kamera live, ihre Aufnahmen und Ereignisse sehen dürfen; sie sehen nur diese Kameras, ohne Adresse, Benutzer, Bereiche und Einstellungen. Fremde Kameras antworten wie nicht vorhanden (404). Der Menüpunkt NVR erscheint für sie nur, wenn sie eine Kamera haben (`optIn` in der Navigation).
 - Objekterkennung: Schnittstelle `Detector` (Beschriftungen wie person, vehicle, package, animal, plate) ist vorgesehen und wird auf das Ereignisbild angewendet; **es ist keine Erkennung eingebaut** (Modelle und Laufzeiten sollen als Plugins kommen, Messungen stehen aus).
 - Noch nicht gebaut: Objekterkennung selbst (Modelle), Gegensprechen, go2rtc/WebRTC, geschützte Clips. Siehe Plan 26.
 - Die Herstellertabelle ist an keinem Gerät geprüft; die vier Messungen (NPU, Kennzeichen, Geschwindigkeit, Cache) stehen aus und brauchen die Kamera und titan.
@@ -52,7 +54,7 @@ Fertig und getestet (gegen Nachbau-Kameras und einen Ersatz-ffmpeg, nicht an ech
 
 ## Sicherheit der Kamerasuche (gilt ab dem ersten Code)
 
-- Nur Besitzer und Administratoren.
+- Nur Besitzer und Administratoren (Suche, Einstellungen, Kameras ändern).
 - Ziele nur im Heimnetz: private Adressen und die Bereiche von Tailscale/NetBird (`nvr.AllowedAddr`); nie Loopback, Link-Local (auch Cloud-Metadaten `169.254.169.254`), Multicast, unspezifiziert oder öffentlich. Namen werden aufgelöst, und **jede** Adresse muss erlaubt sein (`nvr.Resolve`, schützt vor DNS-Rebinding); bei jedem Verbindungsaufbau erneut prüfen.
 - Nur die eingegebene Adresse wird untersucht. „Im Netz suchen“ nur im Subnetz der gewählten Schnittstelle und nur auf Knopfdruck.
 - Höchstens drei abgelehnte Anmeldungen je Suche (`nvr.AuthBudget`); sofortiger Halt bei Kontosperre; die Person erfährt es. TitanOS probiert **keine** Standardpasswörter.

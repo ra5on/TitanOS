@@ -86,7 +86,19 @@ func (s *Server) servicesOn() map[string]bool {
 }
 
 func (s *Server) handleServicesState(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.servicesOn())
+	on := s.servicesOn()
+	// The NVR tab shows for an account without admin rights only when it
+	// was given a camera.
+	if user := currentUser(r); on["nvr"] && !user.Role.CanAdminister() {
+		on["nvr"] = false
+		for _, c := range s.opts.NVR.Store.Cameras() {
+			if c.MayView(user.Name) {
+				on["nvr"] = true
+				break
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, on)
 }
 
 func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {

@@ -91,9 +91,45 @@ func (s *Server) nvrState() nvrView {
 }
 
 func (s *Server) handleNVR(w http.ResponseWriter, r *http.Request) {
-	if s.nvrOK(w) {
-		writeJSON(w, http.StatusOK, s.nvrState())
+	if !s.nvrOK(w) {
+		return
 	}
+	view := s.nvrState()
+	if user := currentUser(r); !user.Role.CanAdminister() {
+		view = viewerState(view, user.Name)
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+// viewerState is what an account without admin rights sees: only its
+// cameras, without addresses, logins, volumes or settings.
+func viewerState(v nvrView, user string) nvrView {
+	out := nvrView{Cameras: []nvrCameraView{}, Views: []nvr.View{}, ArmedNow: v.ArmedNow}
+	out.Settings.Enabled = v.Settings.Enabled
+	allowed := map[string]bool{}
+	for _, c := range v.Cameras {
+		if !c.MayView(user) {
+			continue
+		}
+		allowed[c.ID] = true
+		c.Host, c.User, c.MainURL, c.SubURL, c.Viewers = "", "", "", "", nil
+		c.QualityOriginal, c.Zones, c.Masks = nil, nil, nil
+		c.Status.LastError = ""
+		out.Cameras = append(out.Cameras, c)
+	}
+	for _, view := range v.Views {
+		var tiles []nvr.Tile
+		for _, t := range view.Tiles {
+			if allowed[t.Camera] {
+				tiles = append(tiles, t)
+			}
+		}
+		if len(tiles) > 0 {
+			view.Tiles = tiles
+			out.Views = append(out.Views, view)
+		}
+	}
+	return out
 }
 
 func (s *Server) handleNVRSettings(w http.ResponseWriter, r *http.Request) {
@@ -259,6 +295,11 @@ func (s *Server) nvrCamera(w http.ResponseWriter, r *http.Request) (nvr.Camera, 
 		return nvr.Camera{}, false
 	}
 	c, ok := s.opts.NVR.Store.Camera(r.PathValue("id"))
+	// Accounts without admin rights see only the cameras they were given;
+	// others look as if they did not exist.
+	if user := currentUser(r); ok && !user.Role.CanAdminister() && !c.MayView(user.Name) {
+		ok = false
+	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "not_found", "no such camera")
 	}
@@ -579,8 +620,10 @@ func (s *Server) handleNVRQualityReset(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, next)
 }
 
+// registerNVR: watching (list, live, pictures, recordings, events) is open to
+// accounts that were given the camera; everything else is for administrators.
 func (s *Server) registerNVR(mux *routeMux) {
-	mux.HandleFunc("GET /api/v1/nvr", s.requireAdmin(s.handleNVR))
+	mux.HandleFunc("GET /api/v1/nvr", s.requireUser(s.handleNVR))
 	mux.HandleFunc("PUT /api/v1/nvr/settings", s.requireAdmin(s.handleNVRSettings))
 	mux.HandleFunc("PUT /api/v1/nvr/arming", s.requireAdmin(s.handleNVRArming))
 	mux.HandleFunc("PUT /api/v1/nvr/views", s.requireAdmin(s.handleNVRViews))
@@ -592,14 +635,14 @@ func (s *Server) registerNVR(mux *routeMux) {
 	mux.HandleFunc("PUT /api/v1/nvr/cameras/{id}/quality", s.requireAdmin(s.handleNVRQualitySet))
 	mux.HandleFunc("POST /api/v1/nvr/cameras/{id}/quality/reset", s.requireAdmin(s.handleNVRQualityReset))
 	mux.HandleFunc("POST /api/v1/nvr/cameras/{id}/time", s.requireAdmin(s.handleNVRTime))
-	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/snapshot", s.requireAdmin(s.handleNVRSnapshot))
-	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/live", s.requireAdmin(s.handleNVRLive))
-	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/events", s.requireAdmin(s.handleNVREvents))
-	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/events/{day}/{file}", s.requireAdmin(s.handleNVREventPicture))
-	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/recordings", s.requireAdmin(s.handleNVRRecordings))
+	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/snapshot", s.requireUser(s.handleNVRSnapshot))
+	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/live", s.requireUser(s.handleNVRLive))
+	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/events", s.requireUser(s.handleNVREvents))
+	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/events/{day}/{file}", s.requireUser(s.handleNVREventPicture))
+	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/recordings", s.requireUser(s.handleNVRRecordings))
 	mux.HandleFunc("POST /api/v1/nvr/cameras/{id}/recordings/{day}/{file}/protect", s.requireAdmin(s.handleNVRProtect))
 	mux.HandleFunc("DELETE /api/v1/nvr/cameras/{id}/recordings/{day}/{file}/protect", s.requireAdmin(s.handleNVRProtect))
-	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/recordings/{day}/{file}", s.requireAdmin(s.handleNVRRecording))
+	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/recordings/{day}/{file}", s.requireUser(s.handleNVRRecording))
 }
 
 // handleNVRTime points a camera at the time server of this NAS. The page

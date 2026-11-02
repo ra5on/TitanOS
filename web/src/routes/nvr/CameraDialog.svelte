@@ -4,6 +4,7 @@
 	// stops when the camera reports a locked account.
 	import { untrack } from 'svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import { onMount } from 'svelte';
 	import { api } from '#lib/api.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import {
@@ -35,12 +36,24 @@
 	let sensitivity = $state(sensitivityChoice(initial?.sensitivity));
 	let audio = $state(initial?.audio ?? false);
 	let keepDays = $state(initial?.keepDays ? String(initial.keepDays) : '');
+	let viewers = $state<string[]>($state.snapshot(initial?.viewers ?? []));
+	let accounts = $state<string[]>([]);
 	let found = $state<Discovery | null>(null);
 	let searching = $state(false);
 	let saving = $state(false);
 	let error = $state('');
 
 	const editing = initial !== undefined;
+
+	// Accounts without admin rights can be allowed to watch this camera.
+	onMount(async () => {
+		try {
+			const list = await api.get<{ name: string; role: string }[]>('/users');
+			accounts = list.filter((a) => a.role === 'user').map((a) => a.name);
+		} catch {
+			accounts = [];
+		}
+	});
 	const problem = $derived(found ? discoveryProblem(found) : '');
 	const canSearch = $derived(
 		!searching && user.trim() !== '' && (host.trim() !== '' || link.trim() !== ''),
@@ -91,6 +104,10 @@
 			audio,
 			detect,
 			sensitivity,
+			viewers,
+			// Areas are edited in their own dialog and kept here.
+			zones: initial?.zones ?? [],
+			masks: initial?.masks ?? [],
 			onvifPort: found ? (found.onvifPort ?? 0) : (initial?.onvifPort ?? 0),
 			keepDays: keepDays ? Number(keepDays) : 0,
 			// An empty field keeps the stored password when editing.
@@ -231,6 +248,23 @@
 			</label>
 		{/if}
 
+		{#if accounts.length > 0}
+			<fieldset class="viewers">
+				<legend>{t('nvr.viewers')}</legend>
+				{#each accounts as a (a)}
+					<label class="check"
+						><input
+							type="checkbox"
+							checked={viewers.includes(a)}
+							onchange={() =>
+								(viewers = viewers.includes(a) ? viewers.filter((v) => v !== a) : [...viewers, a])}
+						/><span>{a}</span></label
+					>
+				{/each}
+				<small class="muted">{t('nvr.viewersHint')}</small>
+			</fieldset>
+		{/if}
+
 		{#if !editing}<p class="muted small">
 				{t('nvr.privacyHint')}
 				<a
@@ -265,6 +299,13 @@
 		display: flex;
 		gap: 8px;
 		align-items: center;
+	}
+	.viewers {
+		border: 0;
+		padding: 0;
+		margin: 0;
+		display: grid;
+		gap: 6px;
 	}
 	details {
 		display: grid;
