@@ -342,8 +342,50 @@ func (s *Server) registerNVR(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/nvr/cameras", s.requireAdmin(s.handleNVRCameraAdd))
 	mux.HandleFunc("PUT /api/v1/nvr/cameras/{id}", s.requireAdmin(s.handleNVRCameraSet))
 	mux.HandleFunc("DELETE /api/v1/nvr/cameras/{id}", s.requireAdmin(s.handleNVRCameraRemove))
+	mux.HandleFunc("POST /api/v1/nvr/cameras/{id}/time", s.requireAdmin(s.handleNVRTime))
 	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/snapshot", s.requireAdmin(s.handleNVRSnapshot))
 	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/live", s.requireAdmin(s.handleNVRLive))
 	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/recordings", s.requireAdmin(s.handleNVRRecordings))
 	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/recordings/{day}/{file}", s.requireAdmin(s.handleNVRRecording))
+}
+
+// handleNVRTime points a camera at the time server of this NAS. The page
+// asks for confirmation first; the change shows in the activity log.
+func (s *Server) handleNVRTime(w http.ResponseWriter, r *http.Request) {
+	c, ok := s.nvrCamera(w, r)
+	if !ok {
+		return
+	}
+	m := s.opts.NVR
+	host, _, _, err := nvr.AddressOf(c.MainURL)
+	if err != nil {
+		s.nvrError(w, nvr.ErrInvalid)
+		return
+	}
+	server, err := nvr.LocalAddrFor(host)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "nvr_time_failed", "no route to the camera")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 40*time.Second)
+	defer cancel()
+	res, err := m.Prober.SetTimeServer(ctx, host, c.ONVIFPort, c.Vendor, c.User, m.Store.Password(c.ID), server)
+	noteTarget(r, c.Name)
+	if err != nil {
+		slog.Info("nvr: camera time not set", "camera", c.ID, "rejected", res.Rejected, "locked", res.Locked)
+		code := "nvr_time_failed"
+		if res.Locked {
+			code = "nvr_locked"
+		}
+		writeError(w, http.StatusBadGateway, code, err.Error())
+		return
+	}
+	c.TimeSync = true
+	if _, err := m.Store.Update(c, nil); err != nil {
+		s.nvrError(w, err)
+		return
+	}
+	m.Reload()
+	slog.Info("nvr: camera time server set", "camera", c.ID, "method", res.Method, "by", currentUser(r).Name)
+	writeJSON(w, http.StatusOK, map[string]any{"method": res.Method, "server": server})
 }

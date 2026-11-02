@@ -25,6 +25,7 @@ type fakeCamera struct {
 	rtspAddr       string
 	onvifAddr      string
 	lockAfter      int32
+	ntp, timeType  string
 }
 
 func (c *fakeCamera) reject() bool {
@@ -137,6 +138,12 @@ func (c *fakeCamera) serveONVIF(w http.ResponseWriter, r *http.Request, rtspPort
 		return
 	}
 	switch {
+	case strings.Contains(body, "<SetNTP"):
+		c.ntp = body
+		reply(`<SetNTPResponse/>`)
+	case strings.Contains(body, "SetSystemDateAndTime"):
+		c.timeType = body
+		reply(`<SetSystemDateAndTimeResponse/>`)
 	case strings.Contains(body, "GetCapabilities"):
 		reply(`<GetCapabilitiesResponse><Capabilities><Media><XAddr>http://10.9.9.9/onvif/media_service</XAddr></Media></Capabilities></GetCapabilitiesResponse>`)
 	case strings.Contains(body, "GetProfiles"):
@@ -173,6 +180,8 @@ func (c *fakeCamera) validDigest(body string) bool {
 	h.Write([]byte(c.password))
 	return pick("wsse:Username") == c.user && pick("wsse:Password") == base64.StdEncoding.EncodeToString(h.Sum(nil))
 }
+
+func loopbackOnly(a netip.Addr) bool { return a.IsLoopback() }
 
 func loopbackProber(c *fakeCamera) *Prober {
 	_, rtspPort, _ := net.SplitHostPort(c.rtspAddr)

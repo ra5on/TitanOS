@@ -20,8 +20,13 @@ type Manager struct {
 	VolumePath func(name string) (string, bool)
 	Prober     *Prober
 
-	mu  sync.Mutex
-	ctx context.Context
+	// TimeAddr is the listen address of the time server; empty means ":123".
+	TimeAddr string
+
+	mu         sync.Mutex
+	ctx        context.Context
+	sntp       *SNTPServer
+	sntpCancel context.CancelFunc
 }
 
 func NewManager(cfg *config.Store, volumePath func(string) (string, bool)) *Manager {
@@ -76,6 +81,39 @@ func (m *Manager) Reload() {
 		prepareRoot(ctx, m.Root())
 	}
 	m.Rec.Apply(ctx, m.Store.Settings().Enabled)
+	m.syncTimeServer(ctx)
+}
+
+// syncTimeServer runs the time server while the NVR is on and a camera
+// takes its time from it, and stops it otherwise.
+func (m *Manager) syncTimeServer(ctx context.Context) {
+	want := false
+	if m.Store.Settings().Enabled {
+		for _, c := range m.Store.Cameras() {
+			want = want || c.TimeSync
+		}
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !want {
+		if m.sntpCancel != nil {
+			m.sntpCancel()
+			m.sntp.Close()
+			m.sntp, m.sntpCancel = nil, nil
+		}
+		return
+	}
+	if m.sntp != nil {
+		return
+	}
+	s := &SNTPServer{Addr: m.TimeAddr}
+	if _, err := s.Listen(); err != nil {
+		slog.Warn("nvr: time server not started", "err", err)
+		return
+	}
+	sctx, cancel := context.WithCancel(ctx)
+	m.sntp, m.sntpCancel = s, cancel
+	go s.Serve(sctx)
 }
 
 // prepareRoot creates the recordings folder. On Btrfs it is a subvolume of

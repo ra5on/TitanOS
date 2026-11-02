@@ -22,6 +22,8 @@
 	let day = $state('');
 	let playing = $state('');
 	let busy = $state(false);
+	let timing = $state<Camera | null>(null);
+	let timeDone = $state('');
 
 	// General settings, edited in place.
 	let volume = $state('');
@@ -67,6 +69,25 @@
 			removing = null;
 		} catch (e) {
 			error = apiErrorText(e);
+		} finally {
+			busy = false;
+		}
+	}
+
+	async function setTime() {
+		if (!timing) return;
+		busy = true;
+		error = '';
+		try {
+			const res = await api.post<{ method: string; server: string }>(
+				`/nvr/cameras/${timing.id}/time`,
+			);
+			timeDone = t('nvr.timeDone', { name: timing.name, server: res.server });
+			timing = null;
+			await load();
+		} catch (e) {
+			error = apiErrorText(e);
+			timing = null;
 		} finally {
 			busy = false;
 		}
@@ -118,6 +139,7 @@
 </PageHead>
 
 {#if error}<div class="notice-error" role="alert">{error}</div>{/if}
+{#if timeDone}<div class="notice-ok" role="status">{timeDone}</div>{/if}
 
 {#if nvr}
 	<section class="tile panel">
@@ -196,7 +218,8 @@
 								: '○ ' + t('nvr.recordOff')}</span
 					>
 					<p class="muted small">
-						{camera.host} · {t('nvr.stored', {
+						{#if camera.timeSync}{t('nvr.timeFromNas')} ·
+						{/if}{camera.host} · {t('nvr.stored', {
 							size: formatBytes(camera.bytes),
 							count: camera.segments,
 						})} · {t('nvr.latest')}
@@ -219,6 +242,9 @@
 						class="btn"
 						aria-expanded={browsing === camera.id}
 						onclick={() => browse(camera)}>{t('nvr.recordings')}</button
+					>
+					<button type="button" class="btn" onclick={() => (timing = camera)}
+						>{camera.timeSync ? t('nvr.timeAgain') : t('nvr.timeSet')}</button
 					>
 					<button type="button" class="btn" onclick={() => (editing = camera)}
 						>{t('nvr.edit')}</button
@@ -282,6 +308,24 @@
 			void load();
 		}}
 	/>
+{/if}
+
+{#if timing}
+	<Dialog
+		title={t('nvr.timeTitle', { name: timing.name })}
+		locked={busy}
+		onclose={() => (timing = null)}
+	>
+		<p>{t('nvr.timeText')}</p>
+		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={() => (timing = null)} disabled={busy}
+				>{t('common.cancel')}</button
+			>
+			<button type="button" class="btn btn-primary" onclick={setTime} disabled={busy}
+				>{t('nvr.timeSet')}</button
+			>
+		</div>
+	</Dialog>
 {/if}
 
 {#if removing}

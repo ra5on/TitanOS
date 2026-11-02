@@ -66,6 +66,8 @@
 			subUrl: sub,
 			record,
 			audio,
+			onvifPort: found?.onvifPort ?? initial?.onvifPort ?? 0,
+			timeSync: initial?.timeSync ?? false,
 			keepDays: keepDays ? Number(keepDays) : 0,
 			// An empty field keeps the stored password when editing.
 			...(password !== '' || !editing ? { password } : {}),

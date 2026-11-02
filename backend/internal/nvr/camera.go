@@ -44,6 +44,10 @@ type Camera struct {
 	Record bool `json:"record"`
 	// Audio is off unless the person asks for it.
 	Audio bool `json:"audio"`
+	// ONVIFPort is the port ONVIF answered on at the search, 0 if none did.
+	ONVIFPort int `json:"onvifPort,omitempty"`
+	// TimeSync is set once the camera was pointed at this NAS as its time server.
+	TimeSync bool `json:"timeSync"`
 	// KeepDays overrides the general retention; 0 means the general value.
 	KeepDays int `json:"keepDays,omitempty"`
 }

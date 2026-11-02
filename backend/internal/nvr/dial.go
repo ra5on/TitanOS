@@ -19,6 +19,7 @@ type Prober struct {
 	Timeout  time.Duration
 	// ONVIFPorts and Table replace the vendor table; for tests only.
 	ONVIFPorts []int
+	HTTPPort   int
 	Table      []Candidate
 }
 
@@ -81,4 +82,18 @@ func (p *Prober) dialAddr(ctx context.Context, addr string) (net.Conn, error) {
 		return nil, err
 	}
 	return p.dialer().DialContext(ctx, "tcp", net.JoinHostPort(host, portStr))
+}
+
+// netDialUDP returns the local address the system would use towards host.
+func netDialUDP(host string) (string, error) {
+	c, err := net.Dial("udp", net.JoinHostPort(host, "9"))
+	if err != nil {
+		return "", err
+	}
+	defer c.Close()
+	ap, err := netip.ParseAddrPort(c.LocalAddr().String())
+	if err != nil {
+		return "", err
+	}
+	return ap.Addr().Unmap().String(), nil
 }

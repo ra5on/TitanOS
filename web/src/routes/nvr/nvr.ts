@@ -17,6 +17,8 @@ export type Camera = {
 	record: boolean;
 	audio: boolean;
 	keepDays?: number;
+	onvifPort?: number;
+	timeSync: boolean;
 	status: CameraStatus;
 	segments: number;
 	bytes: number;

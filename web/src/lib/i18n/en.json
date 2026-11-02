@@ -7837,5 +7837,12 @@
 	"nvr.removeTitle": "Remove {name}",
 	"nvr.removeText": "The camera and its password are removed. Existing recordings stay until their retention ends.",
 	"ha.group.cameras": "Cameras (NVR)",
-	"ha.command.cameras": "Switch camera recording on and off"
+	"ha.command.cameras": "Switch camera recording on and off",
+	"firewall.svc.ntp": "Time server for cameras",
+	"nvr.timeSet": "Time from TitanOS",
+	"nvr.timeAgain": "Set time server again",
+	"nvr.timeTitle": "{name}: take time from TitanOS",
+	"nvr.timeText": "The camera then asks this NAS for its time, like a time server on the network. TitanOS changes the camera's time setting for this (ONVIF, or the own interface of Hikvision and Dahua) and tries to log in at most three times. If the firewall is on, UDP 123 from the camera's network must be allowed (Settings › Firewall, service \"Time server for cameras\").",
+	"nvr.timeDone": "{name} now takes its time from {server}.",
+	"nvr.timeFromNas": "Time from TitanOS"
 }
