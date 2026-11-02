@@ -12,6 +12,9 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/config"
 )
 
+// Marker is the file that tells the backups this folder holds recordings.
+const Marker = ".titanos-nvr"
+
 // Manager ties the store, the recorder and the retention together.
 type Manager struct {
 	Store *Store
@@ -129,14 +132,18 @@ func prepareRoot(ctx context.Context, root string) {
 	if root == "" {
 		return
 	}
-	if _, err := os.Stat(root); err == nil {
-		return
+	if _, err := os.Stat(root); err != nil {
+		if exec.CommandContext(ctx, "btrfs", "subvolume", "create", root).Run() != nil {
+			if err := os.MkdirAll(root, 0o755); err != nil {
+				slog.Warn("nvr: recordings folder not created", "err", err)
+				return
+			}
+		}
 	}
-	if err := exec.CommandContext(ctx, "btrfs", "subvolume", "create", root).Run(); err == nil {
-		return
-	}
-	if err := os.MkdirAll(root, 0o755); err != nil {
-		slog.Warn("nvr: recordings folder not created", "err", err)
+	// Backups skip a folder "nvr" with this marker.
+	marker := filepath.Join(root, Marker)
+	if _, err := os.Stat(marker); err != nil {
+		_ = os.WriteFile(marker, []byte("NVR recordings: not part of backups\n"), 0o644)
 	}
 }
 
