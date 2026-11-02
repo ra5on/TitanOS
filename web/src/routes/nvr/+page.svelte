@@ -30,6 +30,7 @@
 	let recordings = $state<Recordings | null>(null);
 	let day = $state('');
 	let playing = $state('');
+	let playingProtected = $state(false);
 	let eventsOf = $state('');
 	let events = $state<NvrEvent[]>([]);
 	let busy = $state(false);
@@ -159,6 +160,19 @@
 		} catch (e) {
 			error = apiErrorText(e);
 			return null;
+		}
+	}
+
+	async function protect(camera: Camera, name: string, on: boolean) {
+		const f = fileOf(name);
+		const url = `/nvr/cameras/${camera.id}/recordings/${f.day}/${f.file}/protect`;
+		try {
+			if (on) await api.post(url);
+			else await api.delete(url);
+			playing = '';
+			await loadDay(camera, day);
+		} catch (e) {
+			error = apiErrorText(e);
 		}
 	}
 
@@ -359,11 +373,30 @@
 									type="button"
 									class="btn"
 									class:active={playing === seg.name}
-									onclick={() => (playing = seg.name)}
+									onclick={() => {
+										playing = seg.name;
+										playingProtected = false;
+									}}
 									>{clockOf(seg.name)} <small class="muted">{formatBytes(seg.size)}</small></button
 								>
 							{/each}
 						</div>
+						{#if recordings.protected.length > 0}
+							<p class="muted small">{t('nvr.protectedList')}</p>
+							<div class="segments">
+								{#each recordings.protected as seg (seg.name)}
+									<button
+										type="button"
+										class="btn"
+										class:active={playing === seg.name && playingProtected}
+										onclick={() => {
+											playing = seg.name;
+											playingProtected = true;
+										}}>{seg.name.replace('.mp4', '')}</button
+									>
+								{/each}
+							</div>
+						{/if}
 						{#if playing}
 							{@const f = fileOf(playing)}
 							<!-- svelte-ignore a11y_media_has_caption -->
@@ -371,8 +404,16 @@
 								class="player"
 								controls
 								autoplay
-								src={`/api/v1/nvr/cameras/${camera.id}/recordings/${f.day}/${f.file}`}
+								src={`/api/v1/nvr/cameras/${camera.id}/recordings/${f.day}/${f.file}${playingProtected ? '?protected=1' : ''}`}
 							></video>
+							<div class="row-actions">
+								<button
+									type="button"
+									class="btn"
+									onclick={() => protect(camera, playing, playingProtected ? false : true)}
+									>{playingProtected ? t('nvr.unprotect') : t('nvr.protect')}</button
+								>
+							</div>
 						{/if}
 					{:else if recordings}
 						<p class="muted">{t('nvr.noRecordings')}</p>

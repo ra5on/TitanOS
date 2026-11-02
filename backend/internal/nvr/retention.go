@@ -1,6 +1,7 @@
 package nvr
 
 import (
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -23,7 +24,13 @@ func segments(root, camera string) []Segment {
 	var out []Segment
 	base := filepath.Join(root, camera)
 	_ = filepath.WalkDir(base, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(d.Name(), ".mp4") {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() && path != base && (d.Name() == ProtectedDir || d.Name() == "events") {
+			return fs.SkipDir // protected clips and event pictures are not recordings to prune
+		}
+		if d.IsDir() || !strings.HasSuffix(d.Name(), ".mp4") {
 			return nil
 		}
 		rel, _ := filepath.Rel(base, path)
@@ -141,4 +148,67 @@ func DiskUse(root string, cameras []Camera) int64 {
 		}
 	}
 	return total
+}
+
+// ProtectedDir holds clips that retention never removes.
+const ProtectedDir = "protected"
+
+var errNotSegment = errors.New("nvr: no such recording")
+
+func segmentPath(root, camera, day, file string) string {
+	return filepath.Join(root, camera, day, file)
+}
+
+// Protect moves one recording into the protected folder of its camera, where
+// neither age nor lack of space removes it. The file being written right now
+// (the newest) cannot be protected.
+func Protect(root, camera, day, file string) error {
+	src := segmentPath(root, camera, day, file)
+	segs := segments(root, camera)
+	if len(segs) == 0 || segs[len(segs)-1].Name == day+"/"+file {
+		return errNotSegment
+	}
+	if info, err := os.Stat(src); err != nil || !info.Mode().IsRegular() {
+		return errNotSegment
+	}
+	dst := filepath.Join(root, camera, ProtectedDir, day, file)
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	return os.Rename(src, dst)
+}
+
+// Unprotect puts a protected clip back where retention applies again.
+func Unprotect(root, camera, day, file string) error {
+	src := filepath.Join(root, camera, ProtectedDir, day, file)
+	if info, err := os.Stat(src); err != nil || !info.Mode().IsRegular() {
+		return errNotSegment
+	}
+	dst := segmentPath(root, camera, day, file)
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	return os.Rename(src, dst)
+}
+
+// Protected lists the protected clips of a camera, oldest first.
+func Protected(root, camera string) []Segment {
+	var out []Segment
+	base := filepath.Join(root, camera, ProtectedDir)
+	_ = filepath.WalkDir(base, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(d.Name(), ".mp4") {
+			return nil
+		}
+		rel, _ := filepath.Rel(base, path)
+		start, err := time.ParseInLocation("2006-01-02/15-04-05", strings.TrimSuffix(filepath.ToSlash(rel), ".mp4"), time.Local)
+		if err != nil {
+			return nil
+		}
+		if info, err := d.Info(); err == nil {
+			out = append(out, Segment{Camera: camera, Name: filepath.ToSlash(rel), Start: start, Size: info.Size()})
+		}
+		return nil
+	})
+	sort.Slice(out, func(i, j int) bool { return out[i].Start.Before(out[j].Start) })
+	return out
 }

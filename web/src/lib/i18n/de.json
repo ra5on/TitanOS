@@ -7891,5 +7891,8 @@
 	"nvr.qualityApply": "Ändern",
 	"nvr.qualityResetBtn": "Zurücksetzen",
 	"nvr.qualityDone": "Die Kamera ist umgestellt.",
-	"nvr.qualityReset": "Die ursprünglichen Werte sind wiederhergestellt."
+	"nvr.qualityReset": "Die ursprünglichen Werte sind wiederhergestellt.",
+	"nvr.protect": "Clip schützen",
+	"nvr.unprotect": "Schutz aufheben",
+	"nvr.protectedList": "Geschützte Clips (werden nie automatisch gelöscht):"
 }

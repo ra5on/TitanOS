@@ -233,3 +233,30 @@ func TestQualityOriginalIsKeptOnceAndSurvivesEdits(t *testing.T) {
 		t.Fatalf("not cleared: %+v", again.QualityOriginal)
 	}
 }
+
+func TestProtectedClipsSurviveRetentionAndCanBeReleased(t *testing.T) {
+	root := t.TempDir()
+	now := time.Date(2026, 11, 10, 12, 0, 0, 0, time.Local)
+	old := now.AddDate(0, 0, -30)
+	writeSeg(t, root, "cam-a", old, 10)
+	writeSeg(t, root, "cam-a", now, 10)
+	day, file := old.Format("2006-01-02"), old.Format("15-04-05")+".mp4"
+	if err := Protect(root, "cam-a", day, file); err != nil {
+		t.Fatal(err)
+	}
+	// The newest file may still be open.
+	if err := Protect(root, "cam-a", now.Format("2006-01-02"), now.Format("15-04-05")+".mp4"); err == nil {
+		t.Fatal("protected the file being written")
+	}
+	Prune(root, []Camera{{ID: "cam-a"}}, 7, 1<<40, now, func(string) (int64, error) { return 0, nil })
+	if got := Protected(root, "cam-a"); len(got) != 1 || got[0].Name != day+"/"+file {
+		t.Fatalf("protected clip lost: %+v", got)
+	}
+	if err := Unprotect(root, "cam-a", day, file); err != nil {
+		t.Fatal(err)
+	}
+	Prune(root, []Camera{{ID: "cam-a"}}, 7, 0, now, nil)
+	if len(Protected(root, "cam-a")) != 0 || len(segments(root, "cam-a")) != 1 {
+		t.Fatal("released clip not subject to retention again")
+	}
+}

@@ -300,9 +300,10 @@ func (s *Server) handleNVRRecordings(w http.ResponseWriter, r *http.Request) {
 	}
 	root := s.opts.NVR.Root()
 	out := struct {
-		Days     []string      `json:"days"`
-		Segments []nvr.Segment `json:"segments"`
-	}{Days: []string{}, Segments: []nvr.Segment{}}
+		Days      []string      `json:"days"`
+		Segments  []nvr.Segment `json:"segments"`
+		Protected []nvr.Segment `json:"protected"`
+	}{Days: []string{}, Segments: []nvr.Segment{}, Protected: []nvr.Segment{}}
 	if root != "" {
 		day := r.URL.Query().Get("day")
 		if day != "" && !nvrDay.MatchString(day) {
@@ -321,6 +322,10 @@ func (s *Server) handleNVRRecordings(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		sort.Sort(sort.Reverse(sort.StringSlice(out.Days)))
+		out.Protected = nvr.Protected(root, c.ID)
+		if out.Protected == nil {
+			out.Protected = []nvr.Segment{}
+		}
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -339,7 +344,38 @@ func (s *Server) handleNVRRecording(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "video/mp4")
 	w.Header().Set("Cache-Control", "private, no-store")
+	if r.URL.Query().Get("protected") == "1" {
+		http.ServeFile(w, r, filepath.Join(root, c.ID, nvr.ProtectedDir, day, file))
+		return
+	}
 	http.ServeFile(w, r, filepath.Join(root, c.ID, day, file))
+}
+
+// handleNVRProtect keeps one recording from being deleted by retention;
+// DELETE releases it again.
+func (s *Server) handleNVRProtect(w http.ResponseWriter, r *http.Request) {
+	c, ok := s.nvrCamera(w, r)
+	if !ok {
+		return
+	}
+	day, file := r.PathValue("day"), r.PathValue("file")
+	root := s.opts.NVR.Root()
+	if root == "" || !nvrDay.MatchString(day) || !nvrFile.MatchString(file) {
+		writeError(w, http.StatusNotFound, "not_found", "no such recording")
+		return
+	}
+	var err error
+	if r.Method == http.MethodDelete {
+		err = nvr.Unprotect(root, c.ID, day, file)
+	} else {
+		err = nvr.Protect(root, c.ID, day, file)
+	}
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "no such recording")
+		return
+	}
+	noteTarget(r, c.Name, day+"/"+file)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 // handleNVREvents lists the latest events of a camera.
@@ -523,6 +559,8 @@ func (s *Server) registerNVR(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/events", s.requireAdmin(s.handleNVREvents))
 	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/events/{day}/{file}", s.requireAdmin(s.handleNVREventPicture))
 	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/recordings", s.requireAdmin(s.handleNVRRecordings))
+	mux.HandleFunc("POST /api/v1/nvr/cameras/{id}/recordings/{day}/{file}/protect", s.requireAdmin(s.handleNVRProtect))
+	mux.HandleFunc("DELETE /api/v1/nvr/cameras/{id}/recordings/{day}/{file}/protect", s.requireAdmin(s.handleNVRProtect))
 	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/recordings/{day}/{file}", s.requireAdmin(s.handleNVRRecording))
 }
 

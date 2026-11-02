@@ -69,6 +69,7 @@ export type Discovery = {
 export type Recordings = {
 	days: string[];
 	segments: { name: string; start: string; size: number }[];
+	protected: { name: string; start: string; size: number }[];
 };
 
 /** Why a search found nothing, as a message key. */
