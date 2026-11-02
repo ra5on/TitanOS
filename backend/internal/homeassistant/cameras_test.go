@@ -17,6 +17,14 @@ func TestCameraEntitiesAndCommands(t *testing.T) {
 	if len(entities(snap, MQTT{}, "base")) != 0 {
 		t.Fatal("cameras published without the group")
 	}
+	armed := true
+	list = entities(Snapshot{NVRArmed: &armed}, MQTT{Commands: []string{"cameras"}}, "base")
+	if len(list) != 1 || list[0].kind != "nvr" || list[0].state != "ON" {
+		t.Fatalf("armed switch: %+v", list)
+	}
+	if !allowedCommand(MQTT{Commands: []string{"cameras"}}, "nvr", "armed", "off") || allowedCommand(MQTT{Commands: []string{"cameras"}}, "nvr", "armed", "maybe") {
+		t.Fatal("armed command")
+	}
 	if !allowedCommand(MQTT{Commands: []string{"cameras"}}, "camera", "Hof", "stop") ||
 		allowedCommand(MQTT{Commands: []string{"vms"}}, "camera", "Hof", "stop") ||
 		allowedCommand(MQTT{Commands: []string{"cameras"}}, "camera", "Hof", "delete") {

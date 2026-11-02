@@ -29,7 +29,7 @@ func TestReadAndWriteQualityOverONVIF(t *testing.T) {
 	if err != nil || next.Width != 1280 || next.BitrateKb != 2048 || next.FPS != 25 {
 		t.Fatalf("write: %+v %v", next, err)
 	}
-	for _, want := range []string{`token="enc_main"`, "<Width>1280</Width>", "<BitrateLimit>2048</BitrateLimit>", "<FrameRateLimit>25</FrameRateLimit>", "<H264Profile>High</H264Profile>", "<ForcePersistence>true"} {
+	for _, want := range []string{`token="enc_main"`, "<Width>1280</Width>", "<BitrateLimit>2048</BitrateLimit>", "<FrameRateLimit>25</FrameRateLimit>", "<H264Profile>High</H264Profile>", "<ForcePersistence>true", "<IPv4Address>239.0.0.1</IPv4Address>", "<SessionTimeout xmlns=\"http://www.onvif.org/ver10/schema\">PT30S</SessionTimeout>"} {
 		if !strings.Contains(c.setEnc, want) {
 			t.Errorf("request lacks %s:\n%s", want, c.setEnc)
 		}

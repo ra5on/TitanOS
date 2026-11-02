@@ -35,6 +35,10 @@ type Resolution struct {
 }
 
 type encoderConfig struct {
+	// Multicast and SessionTimeout are required by the schema and written
+	// back as the camera sent them.
+	Multicast               *node
+	SessionTimeout          string
 	Name, Encoding, Quality string
 	UseCount                int
 	Interval                int
@@ -91,6 +95,8 @@ func qualityOf(c *node) Quality {
 	}
 	q.raw.Name, q.raw.Encoding, q.raw.Quality = q.Name, c.child("Encoding").text(), c.child("Quality").text()
 	q.raw.UseCount = c.num("UseCount")
+	q.raw.Multicast = c.child("Multicast")
+	q.raw.SessionTimeout = c.child("SessionTimeout").text()
 	for _, codec := range []string{"H264", "H265", "MPEG4"} {
 		if e := c.child(codec); e != nil {
 			q.raw.GovLength = e.num("GovLength")
@@ -103,19 +109,23 @@ func qualityOf(c *node) Quality {
 	return q
 }
 
+// applyOptions takes the choices of the stream's own codec only: the
+// answer lists JPEG, MPEG4 and H264 side by side, usually JPEG first.
 func applyOptions(q *Quality, doc *node) {
-	for _, codec := range doc.find("GetVideoEncoderConfigurationOptionsResponse", "Options") {
-		for _, r := range codec.find("ResolutionsAvailable") {
-			q.Resolutions = append(q.Resolutions, Resolution{Width: r.num("Width"), Height: r.num("Height")})
-		}
-		if fr := codec.find("FrameRateRange"); len(fr) > 0 {
-			q.FPSMin, q.FPSMax = fr[0].num("Min"), fr[0].num("Max")
-		}
-		if br := codec.find("BitrateRange"); len(br) > 0 {
-			q.BitrateMin, q.BitrateMax = br[0].num("Min"), br[0].num("Max")
+	codec := strings.ToUpper(q.raw.Encoding)
+	for _, opts := range doc.find("GetVideoEncoderConfigurationOptionsResponse", "Options") {
+		for _, block := range codecBlocks(opts, codec) {
+			for _, r := range block.find("ResolutionsAvailable") {
+				q.Resolutions = append(q.Resolutions, Resolution{Width: r.num("Width"), Height: r.num("Height")})
+			}
+			if fr := block.child("FrameRateRange"); fr != nil {
+				q.FPSMin, q.FPSMax = fr.num("Min"), fr.num("Max")
+			}
+			if br := block.child("BitrateRange"); br != nil {
+				q.BitrateMin, q.BitrateMax = br.num("Min"), br.num("Max")
+			}
 		}
 	}
-	// Several codecs repeat the same sizes.
 	seen := map[Resolution]bool{}
 	var uniq []Resolution
 	for _, r := range q.Resolutions {
@@ -125,6 +135,22 @@ func applyOptions(q *Quality, doc *node) {
 		}
 	}
 	q.Resolutions = uniq
+}
+
+// codecBlocks are the option blocks of one codec: the direct child
+// (Options/H264) and the one under Extension (Options/Extension/H264,
+// where Profile T cameras put the bit rate).
+func codecBlocks(opts *node, codec string) []*node {
+	var out []*node
+	if b := opts.child(codec); b != nil {
+		out = append(out, b)
+	}
+	if ext := opts.child("Extension"); ext != nil {
+		if b := ext.child(codec); b != nil {
+			out = append(out, b)
+		}
+	}
+	return out
 }
 
 // QualityChange is a new setting for one stream; zero fields stay as they are.
@@ -212,5 +238,29 @@ func setEncoderBody(q Quality) string {
 		`<Resolution xmlns="http://www.onvif.org/ver10/schema"><Width>` + strconv.Itoa(q.Width) + `</Width><Height>` + strconv.Itoa(q.Height) + `</Height></Resolution>` +
 		`<Quality xmlns="http://www.onvif.org/ver10/schema">` + xmlEscape(orStr(r.Quality, "5")) + `</Quality>` +
 		`<RateControl xmlns="http://www.onvif.org/ver10/schema"><FrameRateLimit>` + strconv.Itoa(q.FPS) + `</FrameRateLimit><EncodingInterval>` + strconv.Itoa(max(r.Interval, 1)) + `</EncodingInterval><BitrateLimit>` + strconv.Itoa(q.BitrateKb) + `</BitrateLimit></RateControl>` +
-		codecXML + `</Configuration><ForcePersistence>true</ForcePersistence></SetVideoEncoderConfiguration>`
+		codecXML + multicastXML(r) + `</Configuration><ForcePersistence>true</ForcePersistence></SetVideoEncoderConfiguration>`
+}
+
+// multicastXML writes Multicast and SessionTimeout back unchanged (with
+// harmless defaults when the camera left them out).
+func multicastXML(r encoderConfig) string {
+	const ns = ` xmlns="http://www.onvif.org/ver10/schema"`
+	m := r.Multicast
+	addrType, addr, port, ttl, auto := "IPv4", "0.0.0.0", "0", "1", "false"
+	if m != nil {
+		if a := m.child("Address"); a != nil {
+			addrType = orStr(a.child("Type").text(), addrType)
+			addr = orStr(a.child("IPv4Address").text(), orStr(a.child("IPv6Address").text(), addr))
+		}
+		port = orStr(m.child("Port").text(), port)
+		ttl = orStr(m.child("TTL").text(), ttl)
+		auto = orStr(m.child("AutoStart").text(), auto)
+	}
+	field := "IPv4Address"
+	if addrType == "IPv6" {
+		field = "IPv6Address"
+	}
+	return `<Multicast` + ns + `><Address><Type>` + xmlEscape(addrType) + `</Type><` + field + `>` + xmlEscape(addr) + `</` + field + `></Address>` +
+		`<Port>` + xmlEscape(port) + `</Port><TTL>` + xmlEscape(ttl) + `</TTL><AutoStart>` + xmlEscape(auto) + `</AutoStart></Multicast>` +
+		`<SessionTimeout` + ns + `>` + xmlEscape(orStr(r.SessionTimeout, "PT60S")) + `</SessionTimeout>`
 }

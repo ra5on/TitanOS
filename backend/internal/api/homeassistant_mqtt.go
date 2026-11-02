@@ -38,19 +38,19 @@ func (s *Server) HASnapshot(ctx context.Context) homeassistant.Snapshot {
 	}
 	snap.System = sys
 	if m := s.opts.NVR; m != nil && m.Store.Settings().Enabled {
+		armed := m.Store.Settings().Arming.Active(time.Now())
+		snap.NVRArmed = &armed
 		status := m.Rec.Status()
 		root := m.Root()
 		for _, c := range m.Store.Cameras() {
-			snap.Cameras = append(snap.Cameras, homeassistant.RunValues{Name: c.Name, Running: status[c.ID].Recording})
+			snap.Cameras = append(snap.Cameras, homeassistant.RunValues{Name: c.Name, Running: status[c.ID].Recording && c.Mode() != "off"})
 			var used int64
 			var last *string
 			if root != "" {
-				segs := nvr.Segments(root, c.ID)
-				for _, sg := range segs {
-					used += sg.Size
-				}
-				if n := len(segs); n > 0 {
-					v := segs[n-1].Start.UTC().Format(time.RFC3339)
+				u := nvr.CameraUsage(root, m.Store.Cameras(), time.Now())[c.ID]
+				used = u.Bytes
+				if !u.Latest.IsZero() {
+					v := u.Latest.UTC().Format(time.RFC3339)
 					last = &v
 				}
 			}
@@ -242,6 +242,8 @@ func (s *Server) HACommand(ctx context.Context, kind, name, action string) error
 		method, route = http.MethodPost, "/api/v1/docker/containers/"+url.PathEscape(id)+"/"+action
 	case "camera":
 		return s.haCamera(name, action)
+	case "nvr":
+		return s.haArm(action)
 	case "vm":
 		method, route = http.MethodPost, "/api/v1/vms/"+url.PathEscape(name)+"/"+action
 	case "system":
@@ -311,6 +313,12 @@ func (s *Server) haCamera(name, action string) error {
 			continue
 		}
 		c.Record = action == "start"
+		switch {
+		case action == "stop":
+			c.RecordMode = "off"
+		case c.RecordMode == "" || c.RecordMode == "off":
+			c.RecordMode = "continuous"
+		}
 		if _, err := s.opts.NVR.Store.Update(c, nil); err != nil {
 			return err
 		}
@@ -319,4 +327,19 @@ func (s *Server) haCamera(name, action string) error {
 		return nil
 	}
 	return fmt.Errorf("camera %s not found", name)
+}
+
+// haArm arms or disarms the NVR from Home Assistant (presence: "nobody home").
+// It switches the mode to on or off; a schedule set on the page is replaced.
+func (s *Server) haArm(action string) error {
+	if s.opts.NVR == nil || action != "on" && action != "off" {
+		return fmt.Errorf("unknown NVR command")
+	}
+	st := s.opts.NVR.Store.Settings()
+	st.Arming.Mode = action
+	if err := s.opts.NVR.Store.SetSettings(st); err != nil {
+		return err
+	}
+	slog.Info("command from Home Assistant", "kind", "nvr", "name", "armed", "action", action)
+	return nil
 }

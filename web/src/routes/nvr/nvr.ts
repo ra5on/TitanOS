@@ -4,6 +4,7 @@ export type CameraStatus = {
 	since?: string;
 	restarts: number;
 	lastError?: string;
+	loginRefused?: boolean;
 };
 
 export type Camera = {
@@ -15,6 +16,8 @@ export type Camera = {
 	mainUrl: string;
 	subUrl?: string;
 	record: boolean;
+	recordMode?: 'off' | 'continuous' | 'events';
+	eventKeepDays?: number;
 	audio: boolean;
 	keepDays?: number;
 	onvifPort?: number;
@@ -27,14 +30,16 @@ export type Camera = {
 	segments: number;
 	bytes: number;
 	latest?: number;
+	dayBytes: number;
 };
 
 export type NvrSettings = {
 	enabled: boolean;
 	volume?: string;
 	keepDays: number;
+	eventKeepDays?: number;
 	reserveGB: number;
-	armed: boolean;
+	arming: Arming;
 };
 
 export type NvrState = {
@@ -46,6 +51,7 @@ export type NvrState = {
 	usedBytes: number;
 	vendors: string[];
 	views: View[];
+	armedNow: boolean;
 };
 
 export type FoundStream = {
@@ -184,4 +190,22 @@ export type QualityChange = {
 /** Gigabytes a day at a bit rate in kbit/s (one camera, recording all day). */
 export function gbPerDay(bitrateKb: number): number {
 	return (bitrateKb * 1000 * 86400) / 8 / 1e9;
+}
+
+export type ArmWindow = { days: number[]; from: string; to: string };
+export type Arming = {
+	mode: 'off' | 'on' | 'schedule';
+	schedule?: ArmWindow[];
+	cameras?: string[];
+	quietMinutes?: number;
+};
+
+/** The effective recording mode (cameras of 0.46.0 only have `record`). */
+export function modeOf(c: {
+	record: boolean;
+	recordMode?: string;
+}): 'off' | 'continuous' | 'events' {
+	if (c.recordMode === 'off' || c.recordMode === 'continuous' || c.recordMode === 'events')
+		return c.recordMode;
+	return c.record ? 'continuous' : 'off';
 }

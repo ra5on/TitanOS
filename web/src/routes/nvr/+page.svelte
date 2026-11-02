@@ -14,6 +14,7 @@
 	import {
 		clockOf,
 		fileOf,
+		modeOf,
 		pictureUrl,
 		type Camera,
 		type NvrEvent,
@@ -32,7 +33,8 @@
 	let playing = $state('');
 	let playingProtected = $state(false);
 	let eventsOf = $state('');
-	let events = $state<NvrEvent[]>([]);
+	// Events per camera: a late answer for one camera never shows under another.
+	let events = $state<Record<string, NvrEvent[]>>({});
 	let busy = $state(false);
 	let timing = $state<Camera | null>(null);
 	let tuning = $state<Camera | null>(null);
@@ -41,8 +43,8 @@
 	// General settings, edited in place.
 	let volume = $state('');
 	let keepDays = $state(7);
+	let eventKeepDays = $state(30);
 	let reserveGB = $state(20);
-	let armed = $state(false);
 	let touched = false;
 
 	async function load() {
@@ -52,8 +54,8 @@
 			if (!touched) {
 				volume = nvr.settings.volume ?? '';
 				keepDays = nvr.settings.keepDays;
+				eventKeepDays = nvr.settings.eventKeepDays || 30;
 				reserveGB = nvr.settings.reserveGB;
-				armed = nvr.settings.armed;
 			}
 		} catch (e) {
 			error = apiErrorText(e);
@@ -64,9 +66,29 @@
 	async function saveSettings() {
 		busy = true;
 		try {
-			nvr = await api.put<NvrState>('/nvr/settings', { volume, keepDays, reserveGB, armed });
+			nvr = await api.put<NvrState>('/nvr/settings', {
+				volume,
+				keepDays,
+				eventKeepDays,
+				reserveGB,
+			});
 			touched = false;
 			error = '';
+		} catch (e) {
+			error = apiErrorText(e);
+		} finally {
+			busy = false;
+		}
+	}
+
+	async function arm(on: boolean) {
+		if (!nvr) return;
+		busy = true;
+		try {
+			nvr = await api.put<NvrState>('/nvr/arming', {
+				...nvr.settings.arming,
+				mode: on ? 'on' : 'off',
+			});
 		} catch (e) {
 			error = apiErrorText(e);
 		} finally {
@@ -115,7 +137,9 @@
 		}
 		eventsOf = camera.id;
 		try {
-			events = (await api.get<{ events: NvrEvent[] }>(`/nvr/cameras/${camera.id}/events`)).events;
+			const list = (await api.get<{ events: NvrEvent[] }>(`/nvr/cameras/${camera.id}/events`))
+				.events;
+			events = { ...events, [camera.id]: list };
 		} catch (e) {
 			error = apiErrorText(e);
 		}
@@ -130,6 +154,7 @@
 		const start = new Date(ev.start).getTime();
 		const hit = loaded?.segments.filter((s) => new Date(s.start).getTime() <= start).at(-1);
 		playing = hit?.name ?? '';
+		playingProtected = false;
 	}
 
 	function eventTitle(ev: NvrEvent): string {
@@ -185,8 +210,8 @@
 		nvr !== null &&
 			(volume !== (nvr.settings.volume ?? '') ||
 				keepDays !== nvr.settings.keepDays ||
-				reserveGB !== nvr.settings.reserveGB ||
-				armed !== nvr.settings.armed),
+				eventKeepDays !== (nvr.settings.eventKeepDays || 30) ||
+				reserveGB !== nvr.settings.reserveGB),
 	);
 </script>
 
@@ -232,6 +257,17 @@
 				/>
 			</label>
 			<label
+				><span>{t('nvr.eventKeepDays')}</span>
+				<input
+					class="field"
+					type="number"
+					min="1"
+					max="3650"
+					bind:value={eventKeepDays}
+					oninput={() => (touched = true)}
+				/>
+			</label>
+			<label
 				><span>{t('nvr.reserve')}</span>
 				<input
 					class="field"
@@ -242,12 +278,6 @@
 				/>
 			</label>
 		</div>
-		<label class="check"
-			><input type="checkbox" bind:checked={armed} onchange={() => (touched = true)} /><span
-				>{t('nvr.armed')}</span
-			></label
-		>
-		<p class="muted small">{t('nvr.armedHint')}</p>
 		<p class="muted small">
 			{t('nvr.storageHint')}
 			{#if nvr.root}· {t('nvr.usage', {
@@ -262,6 +292,21 @@
 				onclick={saveSettings}
 				disabled={busy || !settingsChanged}>{t('common.save')}</button
 			>
+		</div>
+	</section>
+
+	<section class="tile panel armbar">
+		<span class="chip {nvr.armedNow ? 'ok' : ''}"
+			>{nvr.armedNow ? '● ' + t('nvrArm.armedNow') : '○ ' + t('nvrArm.disarmedNow')}</span
+		>
+		{#if nvr.settings.arming.mode === 'schedule'}<span class="muted small"
+				>{t('nvrArm.bySchedule')}</span
+			>{/if}
+		<div class="row-actions">
+			<button type="button" class="btn" onclick={() => arm(!nvr?.armedNow)} disabled={busy}
+				>{nvr.armedNow ? t('nvrArm.disarm') : t('nvrArm.arm')}</button
+			>
+			<a class="btn" href="/settings/notifications">{t('nvrArm.settings')}</a>
 		</div>
 	</section>
 
@@ -281,9 +326,14 @@
 					<span class="chip {camera.status.recording ? 'ok' : ''}"
 						>{camera.status.recording
 							? '● ' + t('nvr.recording')
-							: camera.record
+							: modeOf(camera) !== 'off'
 								? '○ ' + t('nvr.notRecording')
 								: '○ ' + t('nvr.recordOff')}</span
+					>
+					<span class="chip"
+						>{t(
+							`nvr.mode${modeOf(camera) === 'events' ? 'Events' : modeOf(camera) === 'continuous' ? 'Continuous' : 'Off'}` as 'nvr.modeOff',
+						)}</span
 					>
 					<p class="muted small">
 						{#if camera.watch.motion}<strong>{t('nvr.motionNow')}</strong> ·
@@ -291,9 +341,13 @@
 						{/if}{camera.host} · {t('nvr.stored', {
 							size: formatBytes(camera.bytes),
 							count: camera.segments,
-						})} · {t('nvr.latest')}
+						})}{#if camera.dayBytes > 0}
+							· {t('nvr.perDay', { size: formatBytes(camera.dayBytes) })}{/if} · {t('nvr.latest')}
 						{since(camera)}
 					</p>
+					{#if camera.status.loginRefused}
+						<p class="small error-text">{t('nvr.loginRefused')}</p>
+					{/if}
 					{#if camera.status.lastError && !camera.status.recording}
 						<p class="small error-text">{camera.status.lastError}</p>
 					{/if}
@@ -306,7 +360,7 @@
 						onclick={() => (live = live === camera.id ? '' : camera.id)}
 						>{live === camera.id ? t('nvr.liveStop') : t('nvr.live')}</button
 					>
-					{#if camera.detect}
+					{#if camera.detect || modeOf(camera) === 'events'}
 						<button
 							type="button"
 							class="btn"
@@ -343,7 +397,7 @@
 
 			{#if eventsOf === camera.id}
 				<div class="events">
-					{#each events as ev (ev.id)}
+					{#each events[camera.id] ?? [] as ev (ev.id)}
 						<button type="button" class="event" onclick={() => playEvent(camera, ev)}>
 							{#if ev.snapshot}
 								<img src={pictureUrl(camera.id, ev.id)} alt="" loading="lazy" />
@@ -477,6 +531,15 @@
 {/if}
 
 <style>
+	.armbar {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 12px;
+		align-items: center;
+	}
+	.armbar .row-actions {
+		margin-left: auto;
+	}
 	.grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

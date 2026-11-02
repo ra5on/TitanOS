@@ -1,13 +1,16 @@
 package nvr
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/netip"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -40,8 +43,14 @@ type Camera struct {
 	Vendor  string `json:"vendor,omitempty"`
 	MainURL string `json:"mainUrl"`
 	SubURL  string `json:"subUrl,omitempty"`
-	// Record switches recording of the main stream on.
+	// Record switches recording of the main stream on (0.46.0); RecordMode
+	// replaces it when set.
 	Record bool `json:"record"`
+	// RecordMode is "off", "continuous" or "events" (only what lies around
+	// an event is kept; needs the motion check, which then runs).
+	RecordMode string `json:"recordMode,omitempty"`
+	// EventKeepDays overrides how long events and their pictures stay.
+	EventKeepDays int `json:"eventKeepDays,omitempty"`
 	// Audio is off unless the person asks for it.
 	Audio bool `json:"audio"`
 	// ONVIFPort is the port ONVIF answered on at the search, 0 if none did.
@@ -65,11 +74,16 @@ type Settings struct {
 	Enabled bool `json:"enabled"`
 	// Volume holds the recordings, below its "nvr" folder. Empty: not chosen.
 	Volume string `json:"volume,omitempty"`
+	// FormerVolumes held recordings before; their retention still runs.
+	FormerVolumes []string `json:"formerVolumes,omitempty"`
 	// KeepDays is the retention for cameras without their own value.
 	KeepDays int `json:"keepDays"`
-	// Armed sends a notification when a camera with the motion check sees
-	// something. Off by default.
-	Armed bool `json:"armed"`
+	// Armed is the switch of 0.46.0; it is read once into Arming.
+	Armed bool `json:"armed,omitempty"`
+	// Arming decides when movement is reported. Off by default.
+	Arming Arming `json:"arming"`
+	// EventKeepDays is how long events and their pictures stay; 0 means 30.
+	EventKeepDays int `json:"eventKeepDays,omitempty"`
 	// ReserveGB is the space kept free; the oldest recordings go first when
 	// it runs short.
 	ReserveGB int `json:"reserveGB"`
@@ -83,6 +97,10 @@ type state struct {
 
 // Store keeps the cameras and their passwords.
 type Store struct {
+	// Allow decides which camera addresses ffmpeg may reach; nil means
+	// AllowedAddr. For tests only.
+	Allow func(netip.Addr) bool
+
 	mu      sync.Mutex
 	cfg     *config.Store
 	loaded  bool
@@ -96,17 +114,27 @@ func (s *Store) load() {
 	if s.loaded {
 		return
 	}
-	s.st = state{Settings: Settings{KeepDays: DefaultKeep, ReserveGB: DefaultFree}}
-	if err := s.cfg.ReadJSON(camerasFile, &s.st); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return // unreadable: stay unloaded so nothing is overwritten
+	// Both files are read before anything is used: cameras without their
+	// passwords would be tried with empty ones (and lock the account).
+	st := state{Settings: Settings{KeepDays: DefaultKeep, ReserveGB: DefaultFree}}
+	if err := s.cfg.ReadJSON(camerasFile, &st); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return // unreadable: stay unloaded, show nothing, overwrite nothing
 	}
-	s.secrets = map[string]string{}
-	if err := s.cfg.ReadJSON(secretsFile, &s.secrets); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	secrets := map[string]string{}
+	if err := s.cfg.ReadJSON(secretsFile, &secrets); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return
 	}
+	s.st, s.secrets = st, secrets
 	if s.st.Settings.KeepDays <= 0 {
 		s.st.Settings.KeepDays = DefaultKeep
 	}
+	if s.st.Settings.Arming.Mode == "" {
+		s.st.Settings.Arming.Mode = "off"
+		if s.st.Settings.Armed {
+			s.st.Settings.Arming.Mode = "on"
+		}
+	}
+	s.st.Settings.Armed = false
 	s.loaded = true
 }
 
@@ -127,14 +155,31 @@ func (s *Store) Settings() Settings {
 
 // SetSettings validates and stores the general settings.
 func (s *Store) SetSettings(v Settings) error {
+	if v.EventKeepDays < 0 || v.EventKeepDays > maxKeepDays {
+		return fmt.Errorf("%w: retention out of range", ErrInvalid)
+	}
 	if v.KeepDays < 1 || v.KeepDays > maxKeepDays || v.ReserveGB < 0 || v.ReserveGB > maxReserveGB {
 		return fmt.Errorf("%w: retention or reserve out of range", ErrInvalid)
 	}
+	if err := v.Arming.Validate(); err != nil {
+		return err
+	}
+	if v.Arming.Mode == "" {
+		v.Arming.Mode = "off"
+	}
+	v.Armed = false
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.load()
 	if !s.loaded {
 		return errors.New("nvr: settings not loaded from /config")
+	}
+	if old := s.st.Settings.Volume; old != "" && old != v.Volume && !slices.Contains(v.FormerVolumes, old) {
+		v.FormerVolumes = append(v.FormerVolumes, old)
+	}
+	v.FormerVolumes = slices.DeleteFunc(v.FormerVolumes, func(x string) bool { return x == v.Volume })
+	if len(v.FormerVolumes) > 8 {
+		v.FormerVolumes = v.FormerVolumes[len(v.FormerVolumes)-8:]
 	}
 	s.st.Settings = v
 	return s.save()
@@ -202,6 +247,14 @@ func validateCamera(c Camera) error {
 	if c.Sensitivity < 0 || c.Sensitivity > 100 {
 		return fmt.Errorf("%w: sensitivity", ErrInvalid)
 	}
+	switch c.RecordMode {
+	case "", "off", "continuous", "events":
+	default:
+		return fmt.Errorf("%w: recording mode", ErrInvalid)
+	}
+	if c.EventKeepDays < 0 || c.EventKeepDays > maxKeepDays {
+		return fmt.Errorf("%w: retention", ErrInvalid)
+	}
 	if c.KeepDays < 0 || c.KeepDays > maxKeepDays {
 		return fmt.Errorf("%w: retention", ErrInvalid)
 	}
@@ -254,7 +307,14 @@ func (s *Store) Update(c Camera, password *string) (Camera, error) {
 	for i := range s.st.Cameras {
 		if s.st.Cameras[i].ID == c.ID {
 			old, oldPass := s.st.Cameras[i], s.secrets[c.ID]
+			// Fields the server owns. The time setting belongs to the device:
+			// a new address ("replace camera") starts without it.
 			c.QualityOriginal = old.QualityOriginal
+			sameDevice := hostOf(old.MainURL) == hostOf(c.MainURL)
+			c.TimeSync = old.TimeSync && sameDevice
+			if !sameDevice {
+				c.QualityOriginal = nil
+			}
 			s.st.Cameras[i] = c
 			if password != nil {
 				s.secrets[c.ID] = *password
@@ -283,8 +343,10 @@ func (s *Store) Remove(id string) error {
 			s.st.Cameras = slices.Delete(s.st.Cameras, i, i+1)
 			delete(s.secrets, id)
 			for vi := range s.st.Views {
-				s.st.Views[vi].Tiles = slices.DeleteFunc(s.st.Views[vi].Tiles, func(t Tile) bool { return t.Camera == id })
+				// Cloned first: copies handed out by Views share the array.
+				s.st.Views[vi].Tiles = slices.DeleteFunc(slices.Clone(s.st.Views[vi].Tiles), func(t Tile) bool { return t.Camera == id })
 			}
+			s.st.Settings.Arming.Cameras = slices.DeleteFunc(slices.Clone(s.st.Settings.Arming.Cameras), func(x string) bool { return x == id })
 			return s.save()
 		}
 	}
@@ -361,7 +423,7 @@ func (s *Store) SetViews(views []View) error {
 			return fmt.Errorf("%w: too many tiles", ErrInvalid)
 		}
 		for i, t := range v.Tiles {
-			if !known[t.Camera] || t.W < 1 || t.H < 1 || t.X < 0 || t.Y < 0 || t.X+t.W > ViewColumns || t.Y+t.H > maxRows {
+			if !known[t.Camera] || t.W < 1 || t.H < 1 || t.W > ViewColumns || t.H > maxRows || t.X < 0 || t.Y < 0 || t.X >= ViewColumns || t.Y >= maxRows || t.X+t.W > ViewColumns || t.Y+t.H > maxRows {
 				return fmt.Errorf("%w: tile", ErrInvalid)
 			}
 			for _, o := range v.Tiles[:i] {
@@ -416,6 +478,117 @@ func (s *Store) SetQualityOriginal(id, token string, orig *QualityChange) error 
 			return err
 		}
 		return nil
+	}
+	return ErrNotFound
+}
+
+// DefaultEventKeep is how long events stay without a setting, in days.
+const DefaultEventKeep = 30
+
+// Mode is the effective recording mode.
+func (c Camera) Mode() string {
+	switch c.RecordMode {
+	case "off", "continuous", "events":
+		return c.RecordMode
+	}
+	if c.Record {
+		return "continuous"
+	}
+	return "off"
+}
+
+// Watched reports whether the motion check runs for the camera.
+func (c Camera) Watched() bool { return c.Detect || c.Mode() == "events" }
+
+// EventKeep is the retention of events in days.
+func (c Camera) EventKeep(st Settings) int {
+	switch {
+	case c.EventKeepDays > 0:
+		return c.EventKeepDays
+	case st.EventKeepDays > 0:
+		return st.EventKeepDays
+	}
+	return DefaultEventKeep
+}
+
+// Keep is the retention of recordings in days.
+func (c Camera) Keep(st Settings) int {
+	if c.KeepDays > 0 {
+		return c.KeepDays
+	}
+	return st.KeepDays
+}
+
+// Pinned is the stream address for ffmpeg: credentials added, the host
+// resolved now and checked against the home network, and for plain RTSP the
+// name replaced by the address, so a name that changes its address later
+// (DNS rebinding) cannot send ffmpeg elsewhere.
+func (s *Store) Pinned(ctx context.Context, c Camera, sub bool) (string, error) {
+	raw := c.MainURL
+	if sub && c.SubURL != "" {
+		raw = c.SubURL
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Hostname() == "" {
+		return "", fmt.Errorf("%w: stream address", ErrInvalid)
+	}
+	host := u.Hostname()
+	addr, err := netip.ParseAddr(host)
+	if err != nil {
+		addrs, err := Resolve(ctx, nil, host)
+		if err != nil {
+			return "", err
+		}
+		addr = addrs[0]
+	}
+	allow := AllowedAddr
+	if s.Allow != nil {
+		allow = s.Allow
+	}
+	if !allow(addr.Unmap()) {
+		return "", fmt.Errorf("%w: %s", ErrTargetNotAllowed, addr)
+	}
+	if u.Scheme == "rtsp" {
+		u.Host = hostPort(addr.Unmap().String(), portOf(u))
+	}
+	if c.User != "" {
+		u.User = url.UserPassword(c.User, s.Password(c.ID))
+	}
+	return u.String(), nil
+}
+
+func portOf(u *url.URL) int {
+	p, _ := strconv.Atoi(u.Port())
+	return p
+}
+
+func hostOf(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return u.Hostname()
+}
+
+// SetTimeSync marks a camera as taking its time from the NAS, changing
+// nothing else (the request that set it ran for a while).
+func (s *Store) SetTimeSync(id string, on bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.load()
+	if !s.loaded {
+		return errors.New("nvr: settings not loaded from /config")
+	}
+	for i := range s.st.Cameras {
+		if s.st.Cameras[i].ID == id {
+			old := s.st.Cameras[i].TimeSync
+			s.st.Cameras[i].TimeSync = on
+			if err := s.save(); err != nil {
+				s.st.Cameras[i].TimeSync = old
+				return err
+			}
+			return nil
+		}
 	}
 	return ErrNotFound
 }

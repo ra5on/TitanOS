@@ -80,8 +80,8 @@ func (w *Watcher) Apply(ctx context.Context, enabled bool) {
 	want := map[string]string{}
 	if enabled && root != "" {
 		for _, c := range w.Store.Cameras() {
-			if c.Detect {
-				want[c.ID] = strings.Join([]string{w.Store.Full(c, true), itoa(c.Sensitivity), root}, "\x00")
+			if c.Watched() {
+				want[c.ID] = strings.Join([]string{w.Store.Full(c, true), itoa(c.Sensitivity), root}, "\x00") // the spec only, never passed on
 			}
 		}
 	}
@@ -122,9 +122,19 @@ func (w *Watcher) Apply(ctx context.Context, enabled bool) {
 
 func (w *Watcher) loop(ctx context.Context, cur *run, c Camera, root string) {
 	defer close(cur.done)
+	defer cur.pictures.Wait() // pictures of events still being written
 	for ctx.Err() == nil {
+		if w.Root != nil && w.Root() != root {
+			return
+		}
+		if wait := w.Rec.blockedFor(c.ID); wait > 0 {
+			if !sleep(ctx, wait) {
+				return
+			}
+			continue
+		}
 		w.set(c.ID, func(s *WatchStatus) { s.Watching = true })
-		err := w.once(ctx, c, root)
+		err := w.once(ctx, cur, c, root)
 		w.set(c.ID, func(s *WatchStatus) { s.Watching, s.Motion = false, false })
 		if ctx.Err() != nil {
 			return
@@ -140,12 +150,16 @@ func (w *Watcher) loop(ctx context.Context, cur *run, c Camera, root string) {
 	}
 }
 
-func (w *Watcher) once(ctx context.Context, c Camera, root string) error {
+func (w *Watcher) once(ctx context.Context, cur *run, c Camera, root string) error {
+	input, err := w.Store.Pinned(ctx, c, true)
+	if err != nil {
+		return err
+	}
 	prog := w.Rec.program()
 	cmd := exec.CommandContext(ctx, prog,
 		"-hide_banner", "-nostdin", "-loglevel", "error",
 		"-rtsp_transport", "tcp", "-timeout", "10000000",
-		"-i", w.Store.Full(c, true),
+		"-i", input,
 		"-an", "-vf", "fps="+itoa(MotionFPS)+",scale="+itoa(MotionW)+":"+itoa(MotionH)+",format=gray",
 		"-f", "rawvideo", "pipe:1")
 	cmd.Cancel = func() error { return cmd.Process.Kill() }
@@ -154,7 +168,9 @@ func (w *Watcher) once(ctx context.Context, c Camera, root string) error {
 	if err != nil {
 		return err
 	}
-	cmd.Stderr = io.Discard
+	cmd.Env = ffmpegEnv()
+	tail := &lastLine{}
+	cmd.Stderr = tail
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -175,7 +191,7 @@ func (w *Watcher) once(ctx context.Context, c Camera, root string) error {
 			e := Event{ID: eventID(ev.At), Camera: c.ID, Kind: "motion", Start: ev.At}
 			open = &e
 			w.set(c.ID, func(s *WatchStatus) { s.Motion, s.LastAt = true, ev.At })
-			w.begin(ctx, c, root, open)
+			w.begin(ctx, cur, c, root, open)
 		} else if open != nil {
 			open.End = ev.At
 			*open = w.finish(root, *open)
@@ -193,18 +209,24 @@ func (w *Watcher) once(ctx context.Context, c Camera, root string) error {
 			w.OnEvent(c, *open)
 		}
 	}
-	return cmd.Wait()
+	err = cmd.Wait()
+	if tail.refused {
+		w.Rec.noteLogin(c.ID, true, 0)
+	}
+	return err
 }
 
 // begin stores the event at once and adds the picture and labels in the
 // background: asking the camera for a picture takes a moment.
-func (w *Watcher) begin(ctx context.Context, c Camera, root string, e *Event) {
+func (w *Watcher) begin(ctx context.Context, cur *run, c Camera, root string, e *Event) {
 	_ = WriteEvent(root, *e)
 	if w.OnEvent != nil {
 		w.OnEvent(c, *e)
 	}
 	snapshot := *e
+	cur.pictures.Add(1)
 	go func() {
+		defer cur.pictures.Done()
 		jpeg, err := w.Rec.Snapshot(ctx, c)
 		if err != nil || len(jpeg) == 0 {
 			return

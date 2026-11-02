@@ -15,13 +15,21 @@ import (
 func (r *Recorder) Snapshot(ctx context.Context, c Camera) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
+	if r.Blocked(c.ID) {
+		return nil, ErrLoginPaused
+	}
+	input, err := r.Store.Pinned(ctx, c, true)
+	if err != nil {
+		return nil, err
+	}
 	cmd := exec.CommandContext(ctx, r.program(),
 		"-hide_banner", "-nostdin", "-loglevel", "error",
 		"-rtsp_transport", "tcp", "-timeout", "10000000",
-		"-i", r.Store.Full(c, true),
+		"-i", input,
 		"-frames:v", "1", "-vf", "scale='min(1280,iw)':-2", "-q:v", "4", "-f", "image2pipe", "-c:v", "mjpeg", "pipe:1")
 	var out bytes.Buffer
 	cmd.Stdout = &out
+	cmd.Env = ffmpegEnv()
 	if err := cmd.Run(); err != nil || out.Len() == 0 {
 		return nil, errors.New("nvr: no picture from the camera")
 	}
@@ -36,6 +44,10 @@ const maxLive = 6
 
 var liveSlots = make(chan struct{}, maxLive)
 
+// ErrLoginPaused is returned while logins to the camera are paused after
+// it refused one.
+var ErrLoginPaused = errors.New("nvr: the camera refused the login; trying again later")
+
 // ErrTooManyLive is returned when all live slots are in use.
 var ErrTooManyLive = errors.New("nvr: too many live views")
 
@@ -47,12 +59,20 @@ func (r *Recorder) Live(ctx context.Context, c Camera, w io.Writer) error {
 	default:
 		return ErrTooManyLive
 	}
+	if r.Blocked(c.ID) {
+		return ErrLoginPaused
+	}
+	input, err := r.Store.Pinned(ctx, c, true)
+	if err != nil {
+		return err
+	}
 	cmd := exec.CommandContext(ctx, r.program(),
 		"-hide_banner", "-nostdin", "-loglevel", "error",
 		"-rtsp_transport", "tcp", "-timeout", "10000000",
-		"-i", r.Store.Full(c, true),
+		"-i", input,
 		"-an", "-r", "5", "-vf", "scale='min(960,iw)':-2", "-q:v", "6", "-f", "mpjpeg", "-boundary_tag", LiveBoundary, "pipe:1")
 	cmd.Stdout = w
+	cmd.Env = ffmpegEnv()
 	cmd.Cancel = func() error { return cmd.Process.Kill() }
 	cmd.WaitDelay = 3 * time.Second
 	return cmd.Run()
