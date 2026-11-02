@@ -59,7 +59,7 @@ func (a Arming) Validate() error {
 	for _, w := range a.Schedule {
 		_, ok1 := clock(w.From)
 		_, ok2 := clock(w.To)
-		if !ok1 || !ok2 || len(w.Days) == 0 || len(w.Days) > 7 {
+		if !ok1 || !ok2 || w.From == w.To || len(w.Days) == 0 || len(w.Days) > 7 {
 			return fmt.Errorf("%w: arming window", ErrInvalid)
 		}
 		for _, d := range w.Days {

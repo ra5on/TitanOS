@@ -57,6 +57,8 @@
 				password,
 				streamUrl: link.trim(),
 				vendor,
+				// Editing: an empty password field means the stored password.
+				camera: initial?.id ?? '',
 			});
 			if (!name.trim()) name = host.trim() || t('nvr.defaultName');
 		} catch (e) {
@@ -68,8 +70,14 @@
 
 	async function save() {
 		error = '';
-		const main = found?.streams.find((s) => s.role === 'main')?.url ?? initial?.mainUrl ?? '';
-		const sub = found?.streams.find((s) => s.role === 'sub')?.url ?? initial?.subUrl ?? '';
+		// After a new search only what it found counts; old addresses of
+		// another device must not stay behind.
+		const main = found
+			? (found.streams.find((s) => s.role === 'main')?.url ?? '')
+			: (initial?.mainUrl ?? '');
+		const sub = found
+			? (found.streams.find((s) => s.role === 'sub')?.url ?? '')
+			: (initial?.subUrl ?? '');
 		const body = {
 			name: name.trim(),
 			host: host.trim(),
@@ -83,8 +91,7 @@
 			audio,
 			detect,
 			sensitivity,
-			onvifPort: found?.onvifPort ?? initial?.onvifPort ?? 0,
-			timeSync: initial?.timeSync ?? false,
+			onvifPort: found ? (found.onvifPort ?? 0) : (initial?.onvifPort ?? 0),
 			keepDays: keepDays ? Number(keepDays) : 0,
 			// An empty field keeps the stored password when editing.
 			...(password !== '' || !editing ? { password } : {}),

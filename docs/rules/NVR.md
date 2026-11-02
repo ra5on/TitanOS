@@ -16,6 +16,17 @@ Fertig und getestet (gegen Nachbau-Kameras und einen Ersatz-ffmpeg, nicht an ech
 - Live: Bewegt-JPEG (ffmpeg, höchstens sechs gleichzeitig); Wiedergabe der Aufnahmen mit Bereichsanfragen.
 - Schalter unter Einstellungen › Dienste (ab Werk aus), Menüpunkt nur bei „an“.
 
+**Festgelegt nach der Code-Prüfung (2.11.2026):**
+- Abgelehnte Anmeldung (ffmpeg meldet 401/403/„locked“): die Kamera wird in Ruhe gelassen, 1 Minute, dann doppelt so lang bis 30 Minuten; Rekorder, Bewegungsprüfung, Bild und Live halten sich daran; Hinweis auf der Seite; Speichern der Kamera hebt die Pause auf. Suche beim Bearbeiten nutzt das gespeicherte Passwort, nie ein leeres.
+- Vor jedem ffmpeg-Start wird die Adresse der Kamera neu aufgelöst und geprüft; bei RTSP bekommt ffmpeg die IP statt des Namens (DNS-Rebinding). Offen: RTSP-Weiterleitungen (3xx) kann ffmpeg selbst befolgen.
+- ffmpeg liest die Meldungen ohne Puffergrenze (nur die letzte Zeile bleibt), friert also nie ein.
+- Dateinamen von Aufnahmen und Ereignissen in **UTC** (ffmpeg mit `TZ=UTC`), damit die doppelte Stunde bei Zeitumstellung nichts überschreibt. Aufnahmen aus 0.46.0 tragen Ortszeit im Namen und erscheinen um die Zeitzonenverschiebung versetzt.
+- Platzmangel: das Defizit wird einmal gemessen und durch Dateigrößen gedeckt (Btrfs meldet Freigaben erst nach dem Commit).
+- Ablauf läuft auch bei ausgeschaltetem NVR, auf früheren Volumes (`formerVolumes`) und für Ereignisse entfernter Kameras.
+- Ein vorhandener Ordner `nvr` mit fremden Dateien wird nie übernommen; der Freigabename `nvr` ist reserviert.
+- Qualität: Auswahl nur aus dem Block des eigenen Codecs; `Multicast` und `SessionTimeout` werden zurückgeschrieben. Zeit per ONVIF behält die Sommerzeit-Einstellung der Kamera. RTSP nimmt Digest, wenn die Kamera es anbietet; HTTP-Digest kennt MD5 und SHA-256.
+- Belegung je Kamera wird 30 Sekunden zwischengespeichert.
+
 **Abweichungen vom Plan, bewusst und offen:**
 - ffmpeg läuft als Kindprozess von titand, nicht in einer eigenen gehärteten Einheit `titan-nvr`; Zugangsdaten stehen dabei in der ffmpeg-Befehlszeile (`/proc`). Eigene Einheit mit eigenem Benutzer folgt.
 - MQTT/Home Assistant (Gruppe „Kameras (NVR)“ in den MQTT-Einstellungen): Sensoren für Aufnahme an/aus, belegter Platz und letzte Aufnahme je Kamera; mit der Befehlsgruppe „Kameras“ ein Schalter, der die Aufnahme ein- und ausschaltet (nur Start/Stopp, kein Bild, kein Video über MQTT).

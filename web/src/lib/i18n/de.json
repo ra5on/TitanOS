@@ -7939,5 +7939,7 @@
 	"notify.kind.nvr_camera_online.text": "Die Kamera {subject} liefert wieder Bilder; die Aufnahme läuft.",
 	"notify.kind.nvr_retention_short.title": "Aufbewahrung verkürzt: {subject}",
 	"notify.kind.nvr_retention_short.text": "Der Platz reichte nicht: Für die Kamera sind jetzt nur noch so viele Tage da wie vor dem Schrägstrich angegeben, gewünscht sind die Tage danach. Die ältesten Aufnahmen wurden gelöscht.",
-	"nvr.perDay": "{size} in den letzten 24 Stunden"
+	"nvr.perDay": "{size} in den letzten 24 Stunden",
+	"nvr.qualityResetConfirm": "Die ursprünglichen Werte werden in die Kamera geschrieben. Der Stream unterbricht kurz.",
+	"nvr.loginRefused": "Die Kamera hat die Anmeldung abgelehnt. TitanOS wartet jetzt (bis zu 30 Minuten), damit das Konto nicht gesperrt wird. Prüfe das Passwort unter „Bearbeiten“; nach dem Speichern wird sofort neu versucht."
 }

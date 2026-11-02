@@ -15,6 +15,7 @@
 	let original = $state<Record<string, QualityChange>>({});
 	let edit = $state<Record<string, { res: string; fps: number; bitrate: number }>>({});
 	let asking = $state('');
+	let askingReset = $state('');
 	let loading = $state(true);
 	let busy = $state(false);
 	let error = $state('');
@@ -79,6 +80,7 @@
 		done = '';
 		try {
 			await api.post(`/nvr/cameras/${camera.id}/quality/reset`, { token: q.token });
+			askingReset = '';
 			done = t('nvr.qualityReset');
 			await load();
 		} catch (e) {
@@ -170,10 +172,29 @@
 								onclick={() => (asking = q.token)}>{t('nvr.qualityApply')}</button
 							>
 							{#if original[q.token]}
-								<button type="button" class="btn" disabled={busy} onclick={() => reset(q)}
-									>{t('nvr.qualityResetBtn')}</button
+								<button
+									type="button"
+									class="btn"
+									disabled={busy}
+									onclick={() => (askingReset = q.token)}>{t('nvr.qualityResetBtn')}</button
 								>
 							{/if}
+						</div>
+					{/if}
+					{#if askingReset === q.token}
+						<div class="notice-warn" role="alert">
+							<p>{t('nvr.qualityResetConfirm')}</p>
+							<div class="row-actions">
+								<button
+									type="button"
+									class="btn btn-primary"
+									onclick={() => reset(q)}
+									disabled={busy}>{t('nvr.qualityResetBtn')}</button
+								>
+								<button type="button" class="btn" onclick={() => (askingReset = '')} disabled={busy}
+									>{t('common.cancel')}</button
+								>
+							</div>
 						</div>
 					{/if}
 				</section>

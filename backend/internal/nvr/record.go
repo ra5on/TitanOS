@@ -1,10 +1,9 @@
 package nvr
 
 import (
-	"bufio"
+	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -25,6 +24,8 @@ type CameraStatus struct {
 	Restarts  int       `json:"restarts"`
 	// LastError is the last line ffmpeg complained about, passwords removed.
 	LastError string `json:"lastError,omitempty"`
+	// LoginRefused is set while logins are paused after the camera refused one.
+	LoginRefused bool `json:"loginRefused,omitempty"`
 }
 
 // Recorder runs one ffmpeg per recording camera and restarts it when it
@@ -37,10 +38,13 @@ type Recorder struct {
 	Root func() string
 	// Backoff is the wait before a restart; zero means 10 seconds.
 	Backoff time.Duration
+	// ExtraEnv is added to ffmpeg's environment; for tests only.
+	ExtraEnv []string
 
 	mu     sync.Mutex
 	runs   map[string]*run
 	status map[string]CameraStatus
+	logins map[string]*loginState
 	parent context.Context
 }
 
@@ -48,6 +52,8 @@ type run struct {
 	cancel context.CancelFunc
 	done   chan struct{}
 	spec   string
+	// pictures counts event pictures still being written (motion check).
+	pictures sync.WaitGroup
 }
 
 func (r *Recorder) program() string {
@@ -150,8 +156,20 @@ func (r *Recorder) Stop() { r.Apply(context.Background(), false) }
 func (r *Recorder) loop(ctx context.Context, cur *run, c Camera, root string) {
 	defer close(cur.done)
 	for ctx.Err() == nil {
+		// The volume may have gone: never write into a bare mount point.
+		if r.Root != nil && r.Root() != root {
+			r.setStatus(c.ID, func(s *CameraStatus) { s.Recording, s.LastError = false, "recordings folder not available" })
+			return
+		}
+		if wait := r.blockedFor(c.ID); wait > 0 {
+			if !sleep(ctx, wait) {
+				return
+			}
+			continue
+		}
 		r.setStatus(c.ID, func(s *CameraStatus) { s.Recording, s.Since = true, time.Now() })
-		err := r.runOnce(ctx, c, root)
+		started := time.Now()
+		refused, err := r.runOnce(ctx, c, root)
 		r.setStatus(c.ID, func(s *CameraStatus) { s.Recording = false })
 		if ctx.Err() != nil {
 			return
@@ -159,23 +177,103 @@ func (r *Recorder) loop(ctx context.Context, cur *run, c Camera, root string) {
 		if err != nil {
 			slog.Warn("nvr: recording ended", "camera", c.ID, "err", Redact(err.Error()))
 		}
+		r.noteLogin(c.ID, refused, time.Since(started))
 		r.setStatus(c.ID, func(s *CameraStatus) { s.Restarts++ })
-		select {
-		case <-ctx.Done():
+		if !sleep(ctx, r.backoff()) {
 			return
-		case <-time.After(r.backoff()):
 		}
 	}
 }
 
+func sleep(ctx context.Context, d time.Duration) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(d):
+		return true
+	}
+}
+
+// After a refused login the camera is left alone for a while, doubling up to
+// half an hour: cameras lock the account after a few wrong logins, and a
+// password changed on the camera would otherwise be tried every few seconds
+// by the recorder, the motion check and every snapshot.
+const (
+	firstLoginPause = time.Minute
+	maxLoginPause   = 30 * time.Minute
+)
+
+type loginState struct {
+	pause time.Duration
+	until time.Time
+}
+
+// noteLogin records how a run ended: refused logins lengthen the pause,
+// a run that lasted a while clears it.
+func (r *Recorder) noteLogin(id string, refused bool, ran time.Duration) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.logins == nil {
+		r.logins = map[string]*loginState{}
+	}
+	st := r.logins[id]
+	if st == nil {
+		st = &loginState{}
+		r.logins[id] = st
+	}
+	switch {
+	case refused:
+		st.pause = min(max(st.pause*2, firstLoginPause), maxLoginPause)
+		st.until = time.Now().Add(st.pause)
+		if r.status == nil {
+			r.status = map[string]CameraStatus{}
+		}
+		s := r.status[id]
+		s.LoginRefused = true
+		r.status[id] = s
+	case ran > time.Minute:
+		st.pause, st.until = 0, time.Time{}
+		s := r.status[id]
+		s.LoginRefused = false
+		r.status[id] = s
+	}
+}
+
+// blockedFor is how long the camera must still be left alone.
+func (r *Recorder) blockedFor(id string) time.Duration {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if st := r.logins[id]; st != nil {
+		return time.Until(st.until)
+	}
+	return 0
+}
+
+// Blocked reports whether logins to the camera are paused (for the motion
+// check and snapshots, which use the same password).
+func (r *Recorder) Blocked(id string) bool { return r.blockedFor(id) > 0 }
+
+// ClearLogin lifts a pause, after the password or address was changed.
+func (r *Recorder) ClearLogin(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.logins, id)
+	if s, ok := r.status[id]; ok {
+		s.LoginRefused = false
+		r.status[id] = s
+	}
+}
+
 // args is the ffmpeg command line: copy video (and audio only if asked),
-// cut into fragmented MP4 files that stay playable even if cut short.
-func (r *Recorder) args(c Camera, root string) []string {
+// cut into fragmented MP4 files that stay playable even if cut short. File
+// names are in UTC (the process runs with TZ=UTC), so the hour that repeats
+// when the clocks go back does not overwrite recordings.
+func (r *Recorder) args(c Camera, root, input string) []string {
 	dir := filepath.Join(root, c.ID)
 	args := []string{
 		"-hide_banner", "-nostdin", "-loglevel", "warning",
 		"-rtsp_transport", "tcp", "-timeout", "10000000",
-		"-i", r.Store.Full(c, false),
+		"-i", input,
 		"-map", "0:v:0",
 	}
 	if c.Audio {
@@ -192,29 +290,84 @@ func (r *Recorder) args(c Camera, root string) []string {
 	)
 }
 
-func (r *Recorder) runOnce(ctx context.Context, c Camera, root string) error {
-	if err := os.MkdirAll(filepath.Join(root, c.ID), 0o755); err != nil {
-		return err
+// ffmpegEnv is the environment of every ffmpeg the NVR starts.
+func ffmpegEnv() []string { return []string{"PATH=/usr/bin:/bin", "LC_ALL=C", "TZ=UTC"} }
+
+// runOnce runs ffmpeg once. refused is set when the camera turned the login
+// down or reported a locked account.
+func (r *Recorder) runOnce(ctx context.Context, c Camera, root string) (refused bool, err error) {
+	// The folder of the recordings must exist (made when the NVR started on
+	// this volume); only the camera's own folder is made here.
+	if info, err := os.Stat(root); err != nil || !info.IsDir() {
+		return false, fmt.Errorf("recordings folder not available")
 	}
-	cmd := exec.CommandContext(ctx, r.program(), r.args(c, root)...)
+	if err := os.MkdirAll(filepath.Join(root, c.ID), 0o755); err != nil {
+		return false, err
+	}
+	input, err := r.Store.Pinned(ctx, c, false)
+	if err != nil {
+		r.setStatus(c.ID, func(s *CameraStatus) { s.LastError = scrub(err.Error(), "") })
+		return false, err
+	}
+	cmd := exec.CommandContext(ctx, r.program(), r.args(c, root, input)...)
+	cmd.Env = append(ffmpegEnv(), r.ExtraEnv...)
 	cmd.Cancel = func() error { return cmd.Process.Signal(os.Interrupt) } // lets ffmpeg close the file
 	cmd.WaitDelay = 15 * time.Second
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return err
-	}
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	secret := r.Store.Password(c.ID)
-	go func() {
-		sc := bufio.NewScanner(io.LimitReader(stderr, 4<<20))
-		for sc.Scan() {
-			line := scrub(sc.Text(), secret)
-			r.setStatus(c.ID, func(s *CameraStatus) { s.LastError = line })
+	tail := &lastLine{secret: r.Store.Password(c.ID), set: func(line string) {
+		r.setStatus(c.ID, func(s *CameraStatus) { s.LastError = line })
+	}}
+	cmd.Stderr = tail
+	err = cmd.Run()
+	return tail.refused, err
+}
+
+// lastLine takes ffmpeg's messages without ever blocking it: it keeps only
+// the latest line (passwords removed) and notes refused logins.
+type lastLine struct {
+	mu      sync.Mutex
+	secret  string
+	partial []byte
+	refused bool
+	set     func(string)
+}
+
+func (l *lastLine) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.partial = append(l.partial, p...)
+	for {
+		i := bytes.IndexByte(l.partial, '\n')
+		if i < 0 {
+			break
 		}
-	}()
-	return cmd.Wait()
+		l.line(string(l.partial[:i]))
+		l.partial = l.partial[i+1:]
+	}
+	if len(l.partial) > 4096 { // a line without end: keep its end only
+		l.partial = l.partial[len(l.partial)-1024:]
+	}
+	return len(p), nil
+}
+
+func (l *lastLine) line(text string) {
+	text = strings.TrimRight(text, "\r")
+	if text == "" {
+		return
+	}
+	if loginRefused(text) {
+		l.refused = true
+	}
+	if l.set != nil {
+		l.set(scrub(text, l.secret))
+	}
+}
+
+// loginRefused recognises ffmpeg's report of a rejected or locked login.
+func loginRefused(line string) bool {
+	low := strings.ToLower(line)
+	return strings.Contains(low, "401 unauthorized") || strings.Contains(low, "403 forbidden") ||
+		strings.Contains(low, "server returned 401") || strings.Contains(low, "server returned 403") ||
+		strings.Contains(low, "locked")
 }
 
 var urlCreds = regexp.MustCompile(`(rtsps?://[^:/@\s]*:)[^@\s]*@`)

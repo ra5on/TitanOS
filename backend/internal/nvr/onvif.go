@@ -95,14 +95,15 @@ func (p *Prober) soap(ctx context.Context, client *http.Client, endpoint, user, 
 // answer a wrong login with 400 or 401 and a "NotAuthorized" fault; a locked
 // account is told in the fault text by some makers.
 func soapOutcome(status int, body []byte) Outcome {
+	if status == 200 {
+		return OutcomeOK
+	}
 	text := strings.ToLower(string(body))
 	switch {
 	case strings.Contains(text, "locked") || strings.Contains(text, "lockout") || strings.Contains(text, "too many"):
 		return OutcomeLocked
 	case status == 401 || strings.Contains(text, "notauthorized") || strings.Contains(text, "sender not authorized"):
 		return OutcomeUnauthorized
-	case status == 200:
-		return OutcomeOK
 	}
 	return OutcomeOther
 }

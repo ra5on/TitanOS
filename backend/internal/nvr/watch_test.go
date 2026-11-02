@@ -42,6 +42,7 @@ func TestWatcherStoresMotionEventsWithPicture(t *testing.T) {
 	s := newTestStore(t)
 	c, _ := s.Add(Camera{Name: "Hof", User: "v", MainURL: "rtsp://192.168.1.5/main", SubURL: "rtsp://192.168.1.5/sub", Detect: true}, "pw")
 	root := filepath.Join(dir, "rec")
+	os.MkdirAll(root, 0o755)
 	var mu sync.Mutex
 	var seen []Event
 	w := &Watcher{Store: s, Rec: &Recorder{Store: s, FFmpeg: prog}, Root: func() string { return root }, Detector: labelled{}, Backoff: time.Hour,

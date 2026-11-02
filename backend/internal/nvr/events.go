@@ -37,8 +37,8 @@ func eventPath(root string, e Event) string {
 	return filepath.Join(eventDir(root, e.Camera), filepath.FromSlash(e.ID))
 }
 
-// eventID names an event by its start time, like the recordings.
-func eventID(t time.Time) string { return t.Format("2006-01-02/15-04-05") }
+// eventID names an event by its start time in UTC, like the recordings.
+func eventID(t time.Time) string { return t.UTC().Format("2006-01-02/15-04-05") }
 
 // WriteEvent stores (or replaces) the description of an event.
 func WriteEvent(root string, e Event) error {
@@ -108,7 +108,7 @@ func pruneEvents(root, camera string, keep int, now time.Time) int {
 		if !day.IsDir() {
 			continue
 		}
-		t, err := time.ParseInLocation("2006-01-02", day.Name(), time.Local)
+		t, err := time.ParseInLocation("2006-01-02", day.Name(), time.UTC)
 		if err != nil || now.Sub(t.AddDate(0, 0, 1)) <= time.Duration(keep)*24*time.Hour {
 			continue
 		}

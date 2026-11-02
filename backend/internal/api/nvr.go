@@ -70,20 +70,18 @@ func (s *Server) nvrState() nvrView {
 		}
 	}
 	status, watch := m.Rec.Status(), m.Watch.Status()
-	for _, c := range m.Store.Cameras() {
+	cams := m.Store.Cameras()
+	var usage map[string]nvr.Usage
+	if root != "" {
+		usage = nvr.CameraUsage(root, cams, time.Now())
+	}
+	for _, c := range cams {
 		cv := nvrCameraView{Camera: c, Status: status[c.ID], Watch: watch[c.ID]}
 		if root != "" {
-			segs := nvr.Segments(root, c.ID)
-			cv.Segments = len(segs)
-			dayAgo := time.Now().Add(-24 * time.Hour)
-			for _, sg := range segs {
-				cv.Bytes += sg.Size
-				if sg.Start.After(dayAgo) {
-					cv.DayBytes += sg.Size
-				}
-			}
-			if n := len(segs); n > 0 {
-				cv.Latest = segs[n-1].Start.Unix()
+			u := usage[c.ID]
+			cv.Segments, cv.Bytes, cv.DayBytes = u.Segments, u.Bytes, u.DayBytes
+			if !u.Latest.IsZero() {
+				cv.Latest = u.Latest.Unix()
 			}
 		}
 		view.UsedBytes += cv.Bytes
@@ -144,9 +142,17 @@ func (s *Server) handleNVRDiscover(w http.ResponseWriter, r *http.Request) {
 		Password  string `json:"password"`
 		StreamURL string `json:"streamUrl"`
 		Vendor    string `json:"vendor"`
+		// Camera, when editing: an empty password then means the stored
+		// one, never an empty login (which would only spend the attempts).
+		Camera string `json:"camera"`
 	}
 	if !s.nvrOK(w) || !readJSON(w, r, &req) {
 		return
+	}
+	if req.Password == "" && req.Camera != "" {
+		if _, ok := s.opts.NVR.Store.Camera(req.Camera); ok {
+			req.Password = s.opts.NVR.Store.Password(req.Camera)
+		}
 	}
 	if req.User == "" {
 		writeError(w, http.StatusBadRequest, "invalid_nvr", "user name missing")
@@ -207,6 +213,8 @@ func (s *Server) handleNVRCameraSet(w http.ResponseWriter, r *http.Request) {
 		s.nvrError(w, err)
 		return
 	}
+	// New password or address: try again at once instead of after the pause.
+	s.opts.NVR.Rec.ClearLogin(c.ID)
 	noteTarget(r, c.Name)
 	s.opts.NVR.Reload()
 	writeJSON(w, http.StatusOK, s.nvrState())
@@ -263,6 +271,10 @@ func (s *Server) handleNVRSnapshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data, err := s.opts.NVR.Rec.Snapshot(r.Context(), c)
+	if errors.Is(err, nvr.ErrLoginPaused) {
+		writeError(w, http.StatusBadGateway, "nvr_login_refused", err.Error())
+		return
+	}
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "nvr_no_picture", "no picture from the camera")
 		return
@@ -621,8 +633,7 @@ func (s *Server) handleNVRTime(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, code, err.Error())
 		return
 	}
-	c.TimeSync = true
-	if _, err := m.Store.Update(c, nil); err != nil {
+	if err := m.Store.SetTimeSync(c.ID, true); err != nil {
 		s.nvrError(w, err)
 		return
 	}

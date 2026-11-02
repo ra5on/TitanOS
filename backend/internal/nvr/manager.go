@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -59,7 +60,26 @@ func (m *Manager) Root() string {
 	if !ok {
 		return ""
 	}
-	return filepath.Join(p, "nvr")
+	root := filepath.Join(p, "nvr")
+	if !usableRoot(root) {
+		return ""
+	}
+	return root
+}
+
+// usableRoot reports whether the NVR may use the folder: it does not exist
+// yet, is empty, or carries the NVR marker. A folder "nvr" somebody made
+// with own files is never taken over (backups would skip it otherwise).
+func usableRoot(root string) bool {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return os.IsNotExist(err)
+	}
+	if len(entries) == 0 {
+		return true
+	}
+	_, err = os.Stat(filepath.Join(root, Marker))
+	return err == nil
 }
 
 // Run applies the recordings and prunes every ten minutes until ctx ends.
@@ -159,18 +179,40 @@ func prepareRoot(ctx context.Context, root string) {
 	}
 }
 
-// Prune applies the retention once.
+// Prune applies the retention once. Expiry runs also while the NVR is off
+// and on volumes that held recordings before: "deleted after N days" must
+// hold either way. Only the space reserve needs the NVR on.
 func (m *Manager) Prune(now time.Time) {
-	root := m.Root()
 	st := m.Store.Settings()
-	if root == "" || !st.Enabled {
+	for _, old := range st.FormerVolumes {
+		if m.VolumePath == nil || old == st.Volume {
+			continue
+		}
+		if p, ok := m.VolumePath(old); ok {
+			oldRoot := filepath.Join(p, "nvr")
+			if _, err := os.Stat(filepath.Join(oldRoot, Marker)); err == nil {
+				PruneAll(oldRoot, nil, st.KeepDays, 0, now, nil)
+				pruneOrphanEvents(oldRoot, nil, st, now)
+			}
+		}
+	}
+	root := m.Root()
+	if root == "" {
 		return
 	}
+	if _, err := os.Stat(root); err != nil {
+		return
+	}
+	reserve := int64(st.ReserveGB) << 30
+	if !st.Enabled {
+		reserve = 0
+	}
 	cams := m.Store.Cameras()
-	res := PruneAll(root, cams, st.KeepDays, int64(st.ReserveGB)<<30, now, nil)
+	res := PruneAll(root, cams, st.KeepDays, reserve, now, nil)
 	for _, c := range cams {
 		pruneEvents(root, c.ID, c.EventKeep(st), now)
 	}
+	pruneOrphanEvents(root, cams, st, now)
 	if res.Files > 0 {
 		slog.Info("nvr: old recordings removed", "files", res.Files, "bytes", res.Bytes, "shortened", len(res.Shortened))
 	}
@@ -253,6 +295,25 @@ func (m *Manager) CheckOnline(now time.Time) {
 			m.Notify("warning", "nvr_camera_offline", c.Name)
 		case !down && was:
 			m.Notify("info", "nvr_camera_online", c.Name)
+		}
+	}
+}
+
+// pruneOrphanEvents ages out the events (pictures of people) of cameras
+// that were removed, with the general event retention.
+func pruneOrphanEvents(root string, cams []Camera, st Settings, now time.Time) {
+	known := map[string]bool{}
+	for _, c := range cams {
+		known[c.ID] = true
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return
+	}
+	keep := Camera{}.EventKeep(st)
+	for _, e := range entries {
+		if e.IsDir() && !known[e.Name()] && strings.HasPrefix(e.Name(), "cam-") {
+			pruneEvents(root, e.Name(), keep, now)
 		}
 	}
 }

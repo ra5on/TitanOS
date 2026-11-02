@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -34,7 +35,7 @@ func segments(root, camera string) []Segment {
 			return nil
 		}
 		rel, _ := filepath.Rel(base, path)
-		start, err := time.ParseInLocation("2006-01-02/15-04-05", strings.TrimSuffix(filepath.ToSlash(rel), ".mp4"), time.Local)
+		start, err := time.ParseInLocation("2006-01-02/15-04-05", strings.TrimSuffix(filepath.ToSlash(rel), ".mp4"), time.UTC)
 		if err != nil {
 			return nil // not ours
 		}
@@ -152,13 +153,23 @@ func PruneAll(root string, cameras []Camera, defaultKeep int, reserve int64, now
 		removeEmptyDays(filepath.Join(root, c.ID))
 	}
 	if reserve > 0 {
+		// The deficit is measured once and covered by adding up file sizes:
+		// on Btrfs freed space shows in statfs only after the next commit,
+		// so asking again after each file would delete nearly everything.
+		var deficit int64
+		if f, err := free(root); err == nil && f < reserve {
+			deficit = reserve - f
+		}
 		sort.Slice(all, func(i, j int) bool { return all[i].seg.Start.Before(all[j].seg.Start) })
 		for _, it := range all {
-			if f, err := free(root); err != nil || f >= reserve {
+			if deficit <= 0 {
 				break
 			}
-			if remove(it.path, it.seg) && !orphan[it.camera] {
-				res.Shortened[it.camera] = it.keep
+			if remove(it.path, it.seg) {
+				deficit -= it.seg.Size
+				if !orphan[it.camera] {
+					res.Shortened[it.camera] = it.keep
+				}
 			}
 		}
 		// Say how many days are left for the cameras that lost recordings.
@@ -232,6 +243,9 @@ func Protect(root, camera, day, file string) error {
 		return errNotSegment
 	}
 	dst := filepath.Join(root, camera, ProtectedDir, day, file)
+	if _, err := os.Lstat(dst); err == nil {
+		return errNotSegment
+	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
@@ -245,6 +259,9 @@ func Unprotect(root, camera, day, file string) error {
 		return errNotSegment
 	}
 	dst := segmentPath(root, camera, day, file)
+	if _, err := os.Lstat(dst); err == nil {
+		return errNotSegment // never overwrite a recording of the same name
+	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
@@ -260,7 +277,7 @@ func Protected(root, camera string) []Segment {
 			return nil
 		}
 		rel, _ := filepath.Rel(base, path)
-		start, err := time.ParseInLocation("2006-01-02/15-04-05", strings.TrimSuffix(filepath.ToSlash(rel), ".mp4"), time.Local)
+		start, err := time.ParseInLocation("2006-01-02/15-04-05", strings.TrimSuffix(filepath.ToSlash(rel), ".mp4"), time.UTC)
 		if err != nil {
 			return nil
 		}
@@ -284,4 +301,52 @@ func LatestWrite(root, camera string) time.Time {
 		return time.Time{}
 	}
 	return info.ModTime()
+}
+
+// Usage is what lies on disk for one camera.
+type Usage struct {
+	Segments int
+	Bytes    int64
+	DayBytes int64 // of the last 24 hours
+	Latest   time.Time
+}
+
+type usageCache struct {
+	mu   sync.Mutex
+	root string
+	at   time.Time
+	data map[string]Usage
+}
+
+var cachedUsage usageCache
+
+// CameraUsage sums the recordings of each camera. The answer is kept for
+// 30 seconds: the page and Home Assistant ask often, and walking every
+// recording file of every camera each time is costly.
+func CameraUsage(root string, cameras []Camera, now time.Time) map[string]Usage {
+	c := &cachedUsage
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.root == root && now.Sub(c.at) < 30*time.Second && c.data != nil {
+		return c.data
+	}
+	out := map[string]Usage{}
+	dayAgo := now.Add(-24 * time.Hour)
+	for _, cam := range cameras {
+		var u Usage
+		segs := segments(root, cam.ID)
+		u.Segments = len(segs)
+		for _, s := range segs {
+			u.Bytes += s.Size
+			if s.Start.After(dayAgo) {
+				u.DayBytes += s.Size
+			}
+		}
+		if len(segs) > 0 {
+			u.Latest = segs[len(segs)-1].Start
+		}
+		out[cam.ID] = u
+	}
+	c.root, c.at, c.data = root, now, out
+	return out
 }

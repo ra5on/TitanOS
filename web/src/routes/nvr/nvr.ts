@@ -4,6 +4,7 @@ export type CameraStatus = {
 	since?: string;
 	restarts: number;
 	lastError?: string;
+	loginRefused?: boolean;
 };
 
 export type Camera = {

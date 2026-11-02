@@ -24,7 +24,7 @@ func TestEventsModeKeepsOnlyWhatLiesAroundEvents(t *testing.T) {
 	left := segments(root, "cam-a")
 	var names []string
 	for _, s := range left {
-		names = append(names, s.Start.Format("15:04"))
+		names = append(names, s.Start.In(time.Local).Format("15:04"))
 	}
 	// Kept: 10:30 (event) and everything younger than the grace period
 	// (from 11:40 on, because its end 11:45 is within 15 minutes), plus the newest.
@@ -54,9 +54,9 @@ func TestShortenedRetentionIsReported(t *testing.T) {
 	for d := 5; d >= 0; d-- {
 		writeSeg(t, root, "cam-a", now.AddDate(0, 0, -d), 10)
 	}
-	// Space runs short until two files have gone.
-	calls := 0
-	free := func(string) (int64, error) { calls++; return map[bool]int64{true: 0, false: 1 << 40}[calls <= 2], nil }
+	// 15 bytes are missing, and statfs does not notice deletions (Btrfs
+	// before its commit): exactly two files of 10 bytes go, not all.
+	free := func(string) (int64, error) { return 1<<30 - 15, nil }
 	res := PruneAll(root, []Camera{{ID: "cam-a", KeepDays: 14}}, 7, 1<<30, now, free)
 	if res.Files != 2 {
 		t.Fatalf("removed %d", res.Files)
@@ -73,6 +73,8 @@ func TestCheckOnlineReportsSilenceAndReturn(t *testing.T) {
 	if err := s.SetSettings(Settings{Enabled: true, Volume: "v", KeepDays: 7}); err != nil {
 		t.Fatal(err)
 	}
+	os.MkdirAll(filepath.Join(dir, "nvr"), 0o755)
+	os.WriteFile(filepath.Join(dir, "nvr", Marker), nil, 0o644)
 	m := &Manager{Store: s, VolumePath: func(string) (string, bool) { return dir, true }}
 	var got []string
 	m.Notify = func(_, kind, subject string) { got = append(got, kind) }
@@ -81,7 +83,7 @@ func TestCheckOnlineReportsSilenceAndReturn(t *testing.T) {
 	m.since = now.Add(-time.Hour)
 	// A file last written ten minutes ago: offline.
 	writeSeg(t, root, c.ID, now.Add(-15*time.Minute), 10)
-	p := filepath.Join(root, c.ID, now.Add(-15*time.Minute).Format("2006-01-02"), now.Add(-15*time.Minute).Format("15-04-05")+".mp4")
+	p := filepath.Join(root, c.ID, now.Add(-15*time.Minute).UTC().Format("2006-01-02"), now.Add(-15*time.Minute).UTC().Format("15-04-05")+".mp4")
 	old := now.Add(-10 * time.Minute)
 	os.Chtimes(p, old, old)
 	m.CheckOnline(now)

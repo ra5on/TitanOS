@@ -3,6 +3,7 @@ package nvr
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -71,8 +72,13 @@ func (p *Prober) onvifSetNTP(ctx context.Context, host string, port int, user, p
 	client := p.httpClient()
 	device := "http://" + hostPort(host, port) + "/onvif/device_service"
 	var offset time.Duration
+	dst := "false"
 	if st, data, err := p.soap(ctx, client, device, "", "", 0, `<GetSystemDateAndTime xmlns="http://www.onvif.org/ver10/device/wsdl"/>`); err == nil && st == 200 {
 		offset = parseCameraClock(data)
+		// Keep the camera's own daylight saving setting.
+		if v := parseTree(data).find("SystemDateAndTime", "DaylightSavings"); len(v) > 0 && v[0].text() == "true" {
+			dst = "true"
+		}
 	}
 	kind := "IPv4"
 	field := "IPv4Address"
@@ -89,7 +95,7 @@ func (p *Prober) onvifSetNTP(ctx context.Context, host string, port int, user, p
 	}
 	// The camera takes its time from the server only once the type is NTP.
 	st, data, err = p.soap(ctx, client, device, user, password, offset,
-		`<SetSystemDateAndTime xmlns="http://www.onvif.org/ver10/device/wsdl"><DateTimeType>NTP</DateTimeType><DaylightSavings>false</DaylightSavings></SetSystemDateAndTime>`)
+		`<SetSystemDateAndTime xmlns="http://www.onvif.org/ver10/device/wsdl"><DateTimeType>NTP</DateTimeType><DaylightSavings>`+dst+`</DaylightSavings></SetSystemDateAndTime>`)
 	if err != nil {
 		return OutcomeOther, err
 	}
@@ -101,12 +107,12 @@ func (p *Prober) hikvisionNTP(ctx context.Context, host, user, password, server 
 	if strings.Contains(server, ":") {
 		addrType = "ipv6address"
 	}
-	ntp := `<?xml version="1.0" encoding="UTF-8"?><NTPServer><id>1</id><addressingFormatType>` + addrType + `</addressingFormatType><ipAddress>` + xmlEscape(server) + `</ipAddress><portNo>123</portNo><synchronizeInterval>60</synchronizeInterval></NTPServer>`
+	ntp := `<?xml version="1.0" encoding="UTF-8"?><NTPServer version="2.0" xmlns="http://www.hikvision.com/ver20/XMLSchema"><id>1</id><addressingFormatType>` + addrType + `</addressingFormatType><ipAddress>` + xmlEscape(server) + `</ipAddress><portNo>123</portNo><synchronizeInterval>60</synchronizeInterval></NTPServer>`
 	o, err := p.digestRequest(ctx, host, http.MethodPut, "/ISAPI/System/time/ntpServers/1", ntp, "application/xml", user, password)
 	if err != nil || o != OutcomeOK {
 		return o, err
 	}
-	return p.digestRequest(ctx, host, http.MethodPut, "/ISAPI/System/time", `<?xml version="1.0" encoding="UTF-8"?><Time><timeMode>NTP</timeMode></Time>`, "application/xml", user, password)
+	return p.digestRequest(ctx, host, http.MethodPut, "/ISAPI/System/time", `<?xml version="1.0" encoding="UTF-8"?><Time version="2.0" xmlns="http://www.hikvision.com/ver20/XMLSchema"><timeMode>NTP</timeMode></Time>`, "application/xml", user, password)
 }
 
 func (p *Prober) dahuaNTP(ctx context.Context, host, user, password, server string) (Outcome, error) {
@@ -174,17 +180,26 @@ func httpDigest(challenge, user, password, method, uri string) string {
 	}
 	params := parseAuthParams(challenge[len("digest"):])
 	realm, nonce, opaque := params["realm"], params["nonce"], params["opaque"]
+	hash := md5hex
+	algorithm := strings.ToUpper(params["algorithm"])
+	switch algorithm {
+	case "", "MD5":
+	case "SHA-256":
+		hash = sha256hex
+	default:
+		return "" // MD5-sess and others: not offered by cameras we know
+	}
 	cnonceRaw := make([]byte, 8)
 	_, _ = rand.Read(cnonceRaw)
 	cnonce := hex.EncodeToString(cnonceRaw)
-	ha1 := md5hex(user + ":" + realm + ":" + password)
-	ha2 := md5hex(method + ":" + uri)
+	ha1 := hash(user + ":" + realm + ":" + password)
+	ha2 := hash(method + ":" + uri)
 	var resp, qop string
 	if strings.Contains(params["qop"], "auth") {
 		qop = "auth"
-		resp = md5hex(ha1 + ":" + nonce + ":00000001:" + cnonce + ":auth:" + ha2)
+		resp = hash(ha1 + ":" + nonce + ":00000001:" + cnonce + ":auth:" + ha2)
 	} else {
-		resp = md5hex(ha1 + ":" + nonce + ":" + ha2)
+		resp = hash(ha1 + ":" + nonce + ":" + ha2)
 	}
 	out := fmt.Sprintf(`Digest username=%q, realm=%q, nonce=%q, uri=%q, response=%q`, user, realm, nonce, uri, resp)
 	if qop != "" {
@@ -193,9 +208,14 @@ func httpDigest(challenge, user, password, method, uri string) string {
 	if opaque != "" {
 		out += fmt.Sprintf(`, opaque=%q`, opaque)
 	}
+	if algorithm != "" {
+		out += ", algorithm=" + algorithm
+	}
 	return out
 }
 
 // LocalAddrFor is the address of this machine that the camera sees: the one
 // the system would use to reach it. Nothing is sent.
 func LocalAddrFor(host string) (string, error) { return netDialUDP(host) }
+
+func sha256hex(s string) string { return fmt.Sprintf("%x", sha256.Sum256([]byte(s))) }

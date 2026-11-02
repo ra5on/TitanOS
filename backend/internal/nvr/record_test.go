@@ -83,7 +83,8 @@ func TestRecorderStartsRestartsAndStops(t *testing.T) {
 	s := newTestStore(t)
 	c, _ := s.Add(Camera{Name: "Hof", User: "view", MainURL: "rtsp://192.168.1.5/main", Record: true}, "s3cret")
 	root := filepath.Join(dir, "rec")
-	r := &Recorder{Store: s, FFmpeg: prog, Root: func() string { return root }, Backoff: 10 * time.Millisecond}
+	os.MkdirAll(root, 0o755)
+	r := &Recorder{Store: s, FFmpeg: prog, Root: func() string { return root }, Backoff: 10 * time.Millisecond, ExtraEnv: []string{"FAKE_ARGS=" + argsFile}}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -123,7 +124,7 @@ func waitFor(t *testing.T, ok func() bool) {
 
 func writeSeg(t *testing.T, root, cam string, at time.Time, size int) {
 	t.Helper()
-	p := filepath.Join(root, cam, at.Format("2006-01-02"), at.Format("15-04-05")+".mp4")
+	p := filepath.Join(root, cam, at.UTC().Format("2006-01-02"), at.UTC().Format("15-04-05")+".mp4")
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +153,7 @@ func TestPruneByAgeKeepsNewestAndOwnRetention(t *testing.T) {
 	if got := len(segments(root, "cam-b")); got != 1 {
 		t.Fatalf("cam-b keeps %d", got)
 	}
-	if _, err := os.Stat(filepath.Join(root, "cam-gone", now.AddDate(0, 0, -30).Format("2006-01-02"))); err == nil {
+	if _, err := os.Stat(filepath.Join(root, "cam-gone", now.AddDate(0, 0, -30).UTC().Format("2006-01-02"))); err == nil {
 		t.Fatal("empty day folder stays")
 	}
 }
@@ -163,7 +164,7 @@ func TestPruneNeverRemovesNewestWhenOutOfSpace(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		writeSeg(t, root, "cam-a", now.Add(-time.Duration(i)*time.Hour), 10)
 	}
-	// Never enough space: everything but the newest file goes, oldest first.
+	// A deficit larger than all files: everything but the newest file goes.
 	free := func(string) (int64, error) { return 0, nil }
 	files, _ := Prune(root, []Camera{{ID: "cam-a"}}, 7, 1<<30, now, free)
 	left := segments(root, "cam-a")
@@ -240,12 +241,12 @@ func TestProtectedClipsSurviveRetentionAndCanBeReleased(t *testing.T) {
 	old := now.AddDate(0, 0, -30)
 	writeSeg(t, root, "cam-a", old, 10)
 	writeSeg(t, root, "cam-a", now, 10)
-	day, file := old.Format("2006-01-02"), old.Format("15-04-05")+".mp4"
+	day, file := old.UTC().Format("2006-01-02"), old.UTC().Format("15-04-05")+".mp4"
 	if err := Protect(root, "cam-a", day, file); err != nil {
 		t.Fatal(err)
 	}
 	// The newest file may still be open.
-	if err := Protect(root, "cam-a", now.Format("2006-01-02"), now.Format("15-04-05")+".mp4"); err == nil {
+	if err := Protect(root, "cam-a", now.UTC().Format("2006-01-02"), now.UTC().Format("15-04-05")+".mp4"); err == nil {
 		t.Fatal("protected the file being written")
 	}
 	Prune(root, []Camera{{ID: "cam-a"}}, 7, 1<<40, now, func(string) (int64, error) { return 0, nil })
@@ -258,5 +259,62 @@ func TestProtectedClipsSurviveRetentionAndCanBeReleased(t *testing.T) {
 	Prune(root, []Camera{{ID: "cam-a"}}, 7, 0, now, nil)
 	if len(Protected(root, "cam-a")) != 0 || len(segments(root, "cam-a")) != 1 {
 		t.Fatal("released clip not subject to retention again")
+	}
+}
+
+func TestStderrNeverBlocksAndNoticesRefusedLogins(t *testing.T) {
+	var last string
+	l := &lastLine{secret: "hunter2", set: func(s string) { last = s }}
+	// Far more than a pipe buffer, with a line without end in between.
+	big := strings.Repeat("x", 200000)
+	for i := 0; i < 50; i++ {
+		l.Write([]byte("[rtsp] Non-monotonous DTS\n"))
+	}
+	l.Write([]byte(big))
+	l.Write([]byte("\nrtsp://view:hunter2@1.2.3.4/x: Server returned 401 Unauthorized (authorization failed)\n"))
+	if !l.refused || strings.Contains(last, "hunter2") || !strings.Contains(last, "401") {
+		t.Fatalf("refused=%v last=%q", l.refused, last)
+	}
+	if len(l.partial) > 4096 {
+		t.Fatalf("kept %d bytes of an endless line", len(l.partial))
+	}
+}
+
+func TestRefusedLoginsPauseTheCamera(t *testing.T) {
+	r := &Recorder{}
+	r.noteLogin("cam", true, 0)
+	if w := r.blockedFor("cam"); w < 50*time.Second || w > time.Minute {
+		t.Fatalf("first pause %v", w)
+	}
+	r.noteLogin("cam", true, 0)
+	if w := r.blockedFor("cam"); w < 110*time.Second {
+		t.Fatalf("second pause %v, want it doubled", w)
+	}
+	for i := 0; i < 10; i++ {
+		r.noteLogin("cam", true, 0)
+	}
+	if w := r.blockedFor("cam"); w > maxLoginPause {
+		t.Fatalf("pause %v above the limit", w)
+	}
+	if !r.Status()["cam"].LoginRefused {
+		t.Fatal("status does not say the login was refused")
+	}
+	r.ClearLogin("cam")
+	if r.Blocked("cam") || r.Status()["cam"].LoginRefused {
+		t.Fatal("not cleared")
+	}
+}
+
+func TestPinnedChecksTheAddressAtEveryStart(t *testing.T) {
+	s := newTestStore(t)
+	c, _ := s.Add(Camera{Name: "A", User: "v", MainURL: "rtsp://192.168.1.5:554/a"}, "p@ss")
+	got, err := s.Pinned(context.Background(), c, false)
+	if err != nil || got != "rtsp://v:p%40ss@192.168.1.5:554/a" {
+		t.Fatalf("%q %v", got, err)
+	}
+	// A stored address that is (or became) outside the home network is refused.
+	c.MainURL = "rtsp://127.0.0.1/a"
+	if _, err := s.Pinned(context.Background(), c, false); err == nil {
+		t.Fatal("loopback accepted")
 	}
 }

@@ -7939,5 +7939,7 @@
 	"notify.kind.nvr_camera_online.text": "The camera {subject} sends pictures again; recording runs.",
 	"notify.kind.nvr_retention_short.title": "Retention shortened: {subject}",
 	"notify.kind.nvr_retention_short.text": "Space ran short: the camera now has only the days before the slash, the days after it were wanted. The oldest recordings were deleted.",
-	"nvr.perDay": "{size} in the last 24 hours"
+	"nvr.perDay": "{size} in the last 24 hours",
+	"nvr.qualityResetConfirm": "The original values are written to the camera. The stream drops briefly.",
+	"nvr.loginRefused": "The camera refused the login. TitanOS now waits (up to 30 minutes) so the account does not get locked. Check the password under \"Edit\"; after saving it tries again at once."
 }

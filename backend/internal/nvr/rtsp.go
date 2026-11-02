@@ -95,7 +95,11 @@ func readRTSPResponse(r *bufio.Reader) (int, map[string]string, string, error) {
 		}
 		if k, v, ok := strings.Cut(l, ":"); ok {
 			k = strings.ToLower(strings.TrimSpace(k))
-			if _, dup := head[k]; !dup {
+			switch _, dup := head[k]; {
+			case k == "www-authenticate" && dup:
+				// Cameras may offer several methods, one header each.
+				head[k] += "\n" + strings.TrimSpace(v)
+			case !dup:
 				head[k] = strings.TrimSpace(v)
 			}
 		}
@@ -128,18 +132,19 @@ func sdpVideo(sdp string) string {
 	return ""
 }
 
-// rtspAuth answers a challenge, Digest preferred.
-func rtspAuth(challenge, user, password, method, uri string) string {
-	lower := strings.ToLower(challenge)
-	if strings.HasPrefix(lower, "digest") {
-		params := parseAuthParams(challenge[len("digest"):])
-		realm, nonce := params["realm"], params["nonce"]
-		ha1 := md5hex(user + ":" + realm + ":" + password)
-		ha2 := md5hex(method + ":" + uri)
-		resp := md5hex(ha1 + ":" + nonce + ":" + ha2)
-		return fmt.Sprintf(`Digest username=%q, realm=%q, nonce=%q, uri=%q, response=%q`, user, realm, nonce, uri, resp)
+// rtspAuth answers a challenge. Digest is preferred whenever the camera
+// offers it: Basic sends the password readable over plain TCP.
+func rtspAuth(challenges, user, password, method, uri string) string {
+	var basic bool
+	for _, ch := range strings.Split(challenges, "\n") {
+		ch = strings.TrimSpace(ch)
+		low := strings.ToLower(ch)
+		if strings.HasPrefix(low, "digest") {
+			return httpDigest(ch, user, password, method, uri)
+		}
+		basic = basic || strings.HasPrefix(low, "basic")
 	}
-	if strings.HasPrefix(lower, "basic") {
+	if basic {
 		return "Basic " + base64.StdEncoding.EncodeToString([]byte(user+":"+password))
 	}
 	return ""

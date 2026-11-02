@@ -140,12 +140,12 @@ func (c *fakeCamera) serveONVIF(w http.ResponseWriter, r *http.Request, rtspPort
 	}
 	switch {
 	case strings.Contains(body, "GetVideoEncoderConfigurationOptions"):
-		reply(`<GetVideoEncoderConfigurationOptionsResponse><Options><H264><ResolutionsAvailable><Width>2560</Width><Height>1440</Height></ResolutionsAvailable><ResolutionsAvailable><Width>1280</Width><Height>720</Height></ResolutionsAvailable><FrameRateRange><Min>1</Min><Max>25</Max></FrameRateRange></H264><Extension><H264><BitrateRange><Min>256</Min><Max>8192</Max></BitrateRange></H264></Extension></Options></GetVideoEncoderConfigurationOptionsResponse>`)
+		reply(`<GetVideoEncoderConfigurationOptionsResponse><Options><JPEG><ResolutionsAvailable><Width>640</Width><Height>480</Height></ResolutionsAvailable><FrameRateRange><Min>1</Min><Max>5</Max></FrameRateRange></JPEG><H264><ResolutionsAvailable><Width>2560</Width><Height>1440</Height></ResolutionsAvailable><ResolutionsAvailable><Width>1280</Width><Height>720</Height></ResolutionsAvailable><FrameRateRange><Min>1</Min><Max>25</Max></FrameRateRange></H264><Extension><H264><BitrateRange><Min>256</Min><Max>8192</Max></BitrateRange></H264></Extension></Options></GetVideoEncoderConfigurationOptionsResponse>`)
 	case strings.Contains(body, "SetVideoEncoderConfiguration"):
 		c.setEnc = body
 		reply(`<SetVideoEncoderConfigurationResponse/>`)
 	case strings.Contains(body, "GetVideoEncoderConfigurations"):
-		reply(`<GetVideoEncoderConfigurationsResponse><Configurations token="enc_main"><Name>main</Name><UseCount>1</UseCount><Encoding>H264</Encoding><Resolution><Width>2560</Width><Height>1440</Height></Resolution><Quality>5</Quality><RateControl><FrameRateLimit>25</FrameRateLimit><EncodingInterval>1</EncodingInterval><BitrateLimit>6144</BitrateLimit></RateControl><H264><GovLength>50</GovLength><H264Profile>High</H264Profile></H264></Configurations></GetVideoEncoderConfigurationsResponse>`)
+		reply(`<GetVideoEncoderConfigurationsResponse><Configurations token="enc_main"><Name>main</Name><UseCount>1</UseCount><Encoding>H264</Encoding><Resolution><Width>2560</Width><Height>1440</Height></Resolution><Quality>5</Quality><RateControl><FrameRateLimit>25</FrameRateLimit><EncodingInterval>1</EncodingInterval><BitrateLimit>6144</BitrateLimit></RateControl><H264><GovLength>50</GovLength><H264Profile>High</H264Profile></H264><Multicast><Address><Type>IPv4</Type><IPv4Address>239.0.0.1</IPv4Address></Address><Port>5000</Port><TTL>2</TTL><AutoStart>false</AutoStart></Multicast><SessionTimeout>PT30S</SessionTimeout></Configurations></GetVideoEncoderConfigurationsResponse>`)
 	case strings.Contains(body, "<SetNTP"):
 		c.ntp = body
 		reply(`<SetNTPResponse/>`)
@@ -282,5 +282,18 @@ func TestDiscoverRefusesOutsideHomeNetwork(t *testing.T) {
 	}
 	if _, err := p.Discover(context.Background(), Request{StreamURL: "rtsp://8.8.8.8/x", User: "u"}); err == nil {
 		t.Fatal("link outside the home network must be refused")
+	}
+}
+
+func TestRTSPAuthPrefersDigestOverBasic(t *testing.T) {
+	got := rtspAuth("Basic realm=\"cam\"\nDigest realm=\"cam\", nonce=\"n\"", "u", "p", "DESCRIBE", "rtsp://x/y")
+	if !strings.HasPrefix(got, "Digest ") {
+		t.Fatalf("password sent as %q", got)
+	}
+	if got := rtspAuth("Basic realm=\"cam\"", "u", "p", "DESCRIBE", "rtsp://x/y"); !strings.HasPrefix(got, "Basic ") {
+		t.Fatalf("basic only: %q", got)
+	}
+	if got := httpDigest(`Digest realm="r", nonce="n", qop="auth", algorithm=SHA-256`, "u", "p", "GET", "/"); !strings.Contains(got, "algorithm=SHA-256") {
+		t.Fatalf("sha-256: %q", got)
 	}
 }

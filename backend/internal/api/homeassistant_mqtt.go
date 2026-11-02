@@ -47,12 +47,10 @@ func (s *Server) HASnapshot(ctx context.Context) homeassistant.Snapshot {
 			var used int64
 			var last *string
 			if root != "" {
-				segs := nvr.Segments(root, c.ID)
-				for _, sg := range segs {
-					used += sg.Size
-				}
-				if n := len(segs); n > 0 {
-					v := segs[n-1].Start.UTC().Format(time.RFC3339)
+				u := nvr.CameraUsage(root, m.Store.Cameras(), time.Now())[c.ID]
+				used = u.Bytes
+				if !u.Latest.IsZero() {
+					v := u.Latest.UTC().Format(time.RFC3339)
 					last = &v
 				}
 			}

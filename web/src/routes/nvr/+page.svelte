@@ -33,7 +33,8 @@
 	let playing = $state('');
 	let playingProtected = $state(false);
 	let eventsOf = $state('');
-	let events = $state<NvrEvent[]>([]);
+	// Events per camera: a late answer for one camera never shows under another.
+	let events = $state<Record<string, NvrEvent[]>>({});
 	let busy = $state(false);
 	let timing = $state<Camera | null>(null);
 	let tuning = $state<Camera | null>(null);
@@ -136,7 +137,9 @@
 		}
 		eventsOf = camera.id;
 		try {
-			events = (await api.get<{ events: NvrEvent[] }>(`/nvr/cameras/${camera.id}/events`)).events;
+			const list = (await api.get<{ events: NvrEvent[] }>(`/nvr/cameras/${camera.id}/events`))
+				.events;
+			events = { ...events, [camera.id]: list };
 		} catch (e) {
 			error = apiErrorText(e);
 		}
@@ -151,6 +154,7 @@
 		const start = new Date(ev.start).getTime();
 		const hit = loaded?.segments.filter((s) => new Date(s.start).getTime() <= start).at(-1);
 		playing = hit?.name ?? '';
+		playingProtected = false;
 	}
 
 	function eventTitle(ev: NvrEvent): string {
@@ -341,6 +345,9 @@
 							· {t('nvr.perDay', { size: formatBytes(camera.dayBytes) })}{/if} · {t('nvr.latest')}
 						{since(camera)}
 					</p>
+					{#if camera.status.loginRefused}
+						<p class="small error-text">{t('nvr.loginRefused')}</p>
+					{/if}
 					{#if camera.status.lastError && !camera.status.recording}
 						<p class="small error-text">{camera.status.lastError}</p>
 					{/if}
@@ -390,7 +397,7 @@
 
 			{#if eventsOf === camera.id}
 				<div class="events">
-					{#each events as ev (ev.id)}
+					{#each events[camera.id] ?? [] as ev (ev.id)}
 						<button type="button" class="event" onclick={() => playEvent(camera, ev)}>
 							{#if ev.snapshot}
 								<img src={pictureUrl(camera.id, ev.id)} alt="" loading="lazy" />
