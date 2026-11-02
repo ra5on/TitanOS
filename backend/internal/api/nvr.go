@@ -21,6 +21,7 @@ import (
 type nvrCameraView struct {
 	nvr.Camera
 	Status nvr.CameraStatus `json:"status"`
+	Watch  nvr.WatchStatus  `json:"watch"`
 	// Segments and Bytes describe the recordings on disk.
 	Segments int   `json:"segments"`
 	Bytes    int64 `json:"bytes"`
@@ -59,9 +60,9 @@ func (s *Server) nvrState() nvrView {
 			view.FreeBytes = free
 		}
 	}
-	status := m.Rec.Status()
+	status, watch := m.Rec.Status(), m.Watch.Status()
 	for _, c := range m.Store.Cameras() {
-		cv := nvrCameraView{Camera: c, Status: status[c.ID]}
+		cv := nvrCameraView{Camera: c, Status: status[c.ID], Watch: watch[c.ID]}
 		if root != "" {
 			segs := nvr.Segments(root, c.ID)
 			cv.Segments = len(segs)
@@ -87,6 +88,7 @@ func (s *Server) handleNVR(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleNVRSettings(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Volume    string `json:"volume"`
+		Armed     bool   `json:"armed"`
 		KeepDays  int    `json:"keepDays"`
 		ReserveGB int    `json:"reserveGB"`
 	}
@@ -98,7 +100,7 @@ func (s *Server) handleNVRSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_nvr", "the volume is not mounted")
 		return
 	}
-	cur.Volume, cur.KeepDays, cur.ReserveGB = req.Volume, req.KeepDays, req.ReserveGB
+	cur.Volume, cur.KeepDays, cur.ReserveGB, cur.Armed = req.Volume, req.KeepDays, req.ReserveGB, req.Armed
 	if err := s.opts.NVR.Store.SetSettings(cur); err != nil {
 		s.nvrError(w, err)
 		return
@@ -282,6 +284,7 @@ func (f flushWriter) Write(p []byte) (int, error) {
 }
 
 var nvrDay = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+var nvrEventFile = regexp.MustCompile(`^\d{2}-\d{2}-\d{2}\.jpg$`)
 var nvrFile = regexp.MustCompile(`^\d{2}-\d{2}-\d{2}\.mp4$`)
 
 // handleNVRRecordings lists a camera's recordings of one day, or the days
@@ -335,6 +338,36 @@ func (s *Server) handleNVRRecording(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, filepath.Join(root, c.ID, day, file))
 }
 
+// handleNVREvents lists the latest events of a camera.
+func (s *Server) handleNVREvents(w http.ResponseWriter, r *http.Request) {
+	c, ok := s.nvrCamera(w, r)
+	if !ok {
+		return
+	}
+	events := []nvr.Event{}
+	if root := s.opts.NVR.Root(); root != "" {
+		events = nvr.Events(root, c.ID, 50)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"events": events})
+}
+
+// handleNVREventPicture serves the picture of an event.
+func (s *Server) handleNVREventPicture(w http.ResponseWriter, r *http.Request) {
+	c, ok := s.nvrCamera(w, r)
+	if !ok {
+		return
+	}
+	day, file := r.PathValue("day"), r.PathValue("file")
+	root := s.opts.NVR.Root()
+	if root == "" || !nvrDay.MatchString(day) || !nvrEventFile.MatchString(file) {
+		writeError(w, http.StatusNotFound, "not_found", "no such picture")
+		return
+	}
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Cache-Control", "private, max-age=3600")
+	http.ServeFile(w, r, nvr.SnapshotPath(root, c.ID, day, file))
+}
+
 func (s *Server) registerNVR(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/nvr", s.requireAdmin(s.handleNVR))
 	mux.HandleFunc("PUT /api/v1/nvr/settings", s.requireAdmin(s.handleNVRSettings))
@@ -345,6 +378,8 @@ func (s *Server) registerNVR(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/nvr/cameras/{id}/time", s.requireAdmin(s.handleNVRTime))
 	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/snapshot", s.requireAdmin(s.handleNVRSnapshot))
 	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/live", s.requireAdmin(s.handleNVRLive))
+	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/events", s.requireAdmin(s.handleNVREvents))
+	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/events/{day}/{file}", s.requireAdmin(s.handleNVREventPicture))
 	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/recordings", s.requireAdmin(s.handleNVRRecordings))
 	mux.HandleFunc("GET /api/v1/nvr/cameras/{id}/recordings/{day}/{file}", s.requireAdmin(s.handleNVRRecording))
 }

@@ -19,6 +19,9 @@ type Manager struct {
 	// VolumePath returns the mount path of a volume by name.
 	VolumePath func(name string) (string, bool)
 	Prober     *Prober
+	Watch      *Watcher
+	// Notify sends a notification; nil sends none.
+	Notify func(severity, kind, subject string)
 
 	// TimeAddr is the listen address of the time server; empty means ":123".
 	TimeAddr string
@@ -27,11 +30,13 @@ type Manager struct {
 	ctx        context.Context
 	sntp       *SNTPServer
 	sntpCancel context.CancelFunc
+	notified   map[string]time.Time
 }
 
 func NewManager(cfg *config.Store, volumePath func(string) (string, bool)) *Manager {
 	m := &Manager{Store: NewStore(cfg), VolumePath: volumePath, Prober: &Prober{}}
 	m.Rec = &Recorder{Store: m.Store, Root: m.Root}
+	m.Watch = &Watcher{Store: m.Store, Rec: m.Rec, Root: m.Root, OnEvent: m.onEvent}
 	return m
 }
 
@@ -60,6 +65,7 @@ func (m *Manager) Run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			m.Watch.Apply(context.Background(), false)
 			m.Rec.Stop()
 			return
 		case <-t.C:
@@ -81,6 +87,7 @@ func (m *Manager) Reload() {
 		prepareRoot(ctx, m.Root())
 	}
 	m.Rec.Apply(ctx, m.Store.Settings().Enabled)
+	m.Watch.Apply(ctx, m.Store.Settings().Enabled)
 	m.syncTimeServer(ctx)
 }
 
@@ -141,7 +148,35 @@ func (m *Manager) Prune(now time.Time) {
 		return
 	}
 	files, bytes := Prune(root, m.Store.Cameras(), st.KeepDays, int64(st.ReserveGB)<<30, now, nil)
+	for _, c := range m.Store.Cameras() {
+		keep := c.KeepDays
+		if keep <= 0 {
+			keep = st.KeepDays
+		}
+		pruneEvents(root, c.ID, keep, now)
+	}
 	if files > 0 {
 		slog.Info("nvr: old recordings removed", "files", files, "bytes", bytes)
 	}
+}
+
+// notifyEvery is the least time between two notifications of one camera.
+const notifyEvery = 5 * time.Minute
+
+// onEvent sends a notification when an event starts and the NVR is armed.
+func (m *Manager) onEvent(c Camera, e Event) {
+	if !e.End.IsZero() || m.Notify == nil || !m.Store.Settings().Armed {
+		return
+	}
+	m.mu.Lock()
+	if m.notified == nil {
+		m.notified = map[string]time.Time{}
+	}
+	if last, ok := m.notified[c.ID]; ok && time.Since(last) < notifyEvery {
+		m.mu.Unlock()
+		return
+	}
+	m.notified[c.ID] = time.Now()
+	m.mu.Unlock()
+	m.Notify("info", "nvr_motion", c.Name)
 }

@@ -19,6 +19,9 @@ export type Camera = {
 	keepDays?: number;
 	onvifPort?: number;
 	timeSync: boolean;
+	detect: boolean;
+	sensitivity?: number;
+	watch: { watching: boolean; motion: boolean };
 	status: CameraStatus;
 	segments: number;
 	bytes: number;
@@ -30,6 +33,7 @@ export type NvrSettings = {
 	volume?: string;
 	keepDays: number;
 	reserveGB: number;
+	armed: boolean;
 };
 
 export type NvrState = {
@@ -88,4 +92,35 @@ export function clockOf(name: string): string {
 export function fileOf(name: string): { day: string; file: string } {
 	const [day = '', file = ''] = name.split('/');
 	return { day, file };
+}
+
+export type NvrEvent = {
+	id: string;
+	camera: string;
+	kind: string;
+	start: string;
+	end?: string;
+	labels?: string[];
+	snapshot: boolean;
+};
+
+/** Sensitivity choices of the motion check. */
+export const SENSITIVITY = [
+	{ value: 25, key: 'nvr.sensLow' },
+	{ value: 50, key: 'nvr.sensMid' },
+	{ value: 80, key: 'nvr.sensHigh' },
+] as const;
+
+/** The nearest choice for a stored value (0 means the default, medium). */
+export function sensitivityChoice(value: number | undefined): number {
+	if (!value) return 50;
+	return SENSITIVITY.reduce((best, c) =>
+		Math.abs(c.value - value) < Math.abs(best.value - value) ? c : best,
+	).value;
+}
+
+/** Address of an event's picture. */
+export function pictureUrl(camera: string, id: string): string {
+	const [day = '', file = ''] = id.split('/');
+	return `/api/v1/nvr/cameras/${camera}/events/${day}/${file}.jpg`;
 }

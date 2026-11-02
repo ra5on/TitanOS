@@ -10,7 +10,15 @@
 	import { poll } from '#lib/poll.ts';
 	import { onMount } from 'svelte';
 	import CameraDialog from './CameraDialog.svelte';
-	import { clockOf, fileOf, type Camera, type NvrState, type Recordings } from './nvr.ts';
+	import {
+		clockOf,
+		fileOf,
+		pictureUrl,
+		type Camera,
+		type NvrEvent,
+		type NvrState,
+		type Recordings,
+	} from './nvr.ts';
 
 	let nvr = $state<NvrState | null>(null);
 	let error = $state('');
@@ -21,6 +29,8 @@
 	let recordings = $state<Recordings | null>(null);
 	let day = $state('');
 	let playing = $state('');
+	let eventsOf = $state('');
+	let events = $state<NvrEvent[]>([]);
 	let busy = $state(false);
 	let timing = $state<Camera | null>(null);
 	let timeDone = $state('');
@@ -29,6 +39,7 @@
 	let volume = $state('');
 	let keepDays = $state(7);
 	let reserveGB = $state(20);
+	let armed = $state(false);
 	let touched = false;
 
 	async function load() {
@@ -39,6 +50,7 @@
 				volume = nvr.settings.volume ?? '';
 				keepDays = nvr.settings.keepDays;
 				reserveGB = nvr.settings.reserveGB;
+				armed = nvr.settings.armed;
 			}
 		} catch (e) {
 			error = apiErrorText(e);
@@ -49,7 +61,7 @@
 	async function saveSettings() {
 		busy = true;
 		try {
-			nvr = await api.put<NvrState>('/nvr/settings', { volume, keepDays, reserveGB });
+			nvr = await api.put<NvrState>('/nvr/settings', { volume, keepDays, reserveGB, armed });
 			touched = false;
 			error = '';
 		} catch (e) {
@@ -93,6 +105,36 @@
 		}
 	}
 
+	async function showEvents(camera: Camera) {
+		if (eventsOf === camera.id) {
+			eventsOf = '';
+			return;
+		}
+		eventsOf = camera.id;
+		try {
+			events = (await api.get<{ events: NvrEvent[] }>(`/nvr/cameras/${camera.id}/events`)).events;
+		} catch (e) {
+			error = apiErrorText(e);
+		}
+	}
+
+	/** Opens the recording file that holds the moment of an event. */
+	async function playEvent(camera: Camera, ev: NvrEvent) {
+		browsing = camera.id;
+		recordings = null;
+		const day = ev.id.split('/')[0] ?? '';
+		const loaded = await loadDay(camera, day);
+		const start = new Date(ev.start).getTime();
+		const hit = loaded?.segments.filter((s) => new Date(s.start).getTime() <= start).at(-1);
+		playing = hit?.name ?? '';
+	}
+
+	function eventTitle(ev: NvrEvent): string {
+		const time = new Date(ev.start).toLocaleTimeString();
+		const what = ev.labels?.length ? ev.labels.join(', ') : t('nvr.motion');
+		return `${time} · ${what}`;
+	}
+
 	async function browse(camera: Camera) {
 		if (browsing === camera.id) {
 			browsing = '';
@@ -104,15 +146,17 @@
 		await loadDay(camera, '');
 	}
 
-	async function loadDay(camera: Camera, wanted: string) {
+	async function loadDay(camera: Camera, wanted: string): Promise<Recordings | null> {
 		try {
 			const first = await api.get<Recordings>(`/nvr/cameras/${camera.id}/recordings`);
 			day = wanted || first.days[0] || '';
 			recordings = day
 				? await api.get<Recordings>(`/nvr/cameras/${camera.id}/recordings?day=${day}`)
 				: first;
+			return recordings;
 		} catch (e) {
 			error = apiErrorText(e);
+			return null;
 		}
 	}
 
@@ -125,7 +169,8 @@
 		nvr !== null &&
 			(volume !== (nvr.settings.volume ?? '') ||
 				keepDays !== nvr.settings.keepDays ||
-				reserveGB !== nvr.settings.reserveGB),
+				reserveGB !== nvr.settings.reserveGB ||
+				armed !== nvr.settings.armed),
 	);
 </script>
 
@@ -180,6 +225,12 @@
 				/>
 			</label>
 		</div>
+		<label class="check"
+			><input type="checkbox" bind:checked={armed} onchange={() => (touched = true)} /><span
+				>{t('nvr.armed')}</span
+			></label
+		>
+		<p class="muted small">{t('nvr.armedHint')}</p>
 		<p class="muted small">
 			{t('nvr.storageHint')}
 			{#if nvr.root}· {t('nvr.usage', {
@@ -218,7 +269,8 @@
 								: '○ ' + t('nvr.recordOff')}</span
 					>
 					<p class="muted small">
-						{#if camera.timeSync}{t('nvr.timeFromNas')} ·
+						{#if camera.watch.motion}<strong>{t('nvr.motionNow')}</strong> ·
+						{/if}{#if camera.timeSync}{t('nvr.timeFromNas')} ·
 						{/if}{camera.host} · {t('nvr.stored', {
 							size: formatBytes(camera.bytes),
 							count: camera.segments,
@@ -237,6 +289,14 @@
 						onclick={() => (live = live === camera.id ? '' : camera.id)}
 						>{live === camera.id ? t('nvr.liveStop') : t('nvr.live')}</button
 					>
+					{#if camera.detect}
+						<button
+							type="button"
+							class="btn"
+							aria-expanded={eventsOf === camera.id}
+							onclick={() => showEvents(camera)}>{t('nvr.events')}</button
+						>
+					{/if}
 					<button
 						type="button"
 						class="btn"
@@ -257,6 +317,23 @@
 
 			{#if live === camera.id}
 				<img class="live" src={`/api/v1/nvr/cameras/${camera.id}/live`} alt={camera.name} />
+			{/if}
+
+			{#if eventsOf === camera.id}
+				<div class="events">
+					{#each events as ev (ev.id)}
+						<button type="button" class="event" onclick={() => playEvent(camera, ev)}>
+							{#if ev.snapshot}
+								<img src={pictureUrl(camera.id, ev.id)} alt="" loading="lazy" />
+							{:else}
+								<span class="nopic"><Icon name="camera" size={20} /></span>
+							{/if}
+							<span class="small">{eventTitle(ev)}</span>
+						</button>
+					{:else}
+						<p class="muted">{t('nvr.noEvents')}</p>
+					{/each}
+				</div>
 			{/if}
 
 			{#if browsing === camera.id}
@@ -386,6 +463,32 @@
 		flex-wrap: wrap;
 		gap: 6px;
 		margin: 8px 0;
+	}
+	.events {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+		gap: 8px;
+	}
+	.event {
+		display: grid;
+		gap: 4px;
+		text-align: left;
+		padding: 6px;
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		background: none;
+		color: inherit;
+		cursor: pointer;
+	}
+	.event img,
+	.nopic {
+		width: 100%;
+		aspect-ratio: 16 / 9;
+		object-fit: cover;
+		border-radius: 6px;
+		background: #000;
+		display: grid;
+		place-items: center;
 	}
 	.segments .active {
 		outline: 2px solid var(--accent, currentColor);

@@ -54,9 +54,14 @@ func (s *Server) HASnapshot(ctx context.Context) homeassistant.Snapshot {
 					last = &v
 				}
 			}
+			motion := "OFF"
+			if m.Watch.Status()[c.ID].Motion {
+				motion = "ON"
+			}
 			gb := fmt.Sprintf("%.2f", float64(used)/1e9)
 			snap.Telemetry = append(snap.Telemetry, homeassistant.DeviceValues{Group: "cameras", ID: c.Name, Name: "Camera " + c.Name, Metrics: []homeassistant.MetricValue{
 				{Key: "storage", Name: "recordings", Unit: "GB", Class: "data_size", StateClass: "measurement", Value: &gb},
+				{Key: "motion", Name: "motion", Class: "motion", Binary: true, Value: &motion},
 				{Key: "last_recording", Name: "last recording", Class: "timestamp", Value: last},
 			}})
 		}

@@ -46,6 +46,10 @@ type Camera struct {
 	Audio bool `json:"audio"`
 	// ONVIFPort is the port ONVIF answered on at the search, 0 if none did.
 	ONVIFPort int `json:"onvifPort,omitempty"`
+	// Detect switches the motion check on (and with it events).
+	Detect bool `json:"detect"`
+	// Sensitivity of the motion check, 1 (hard) to 100 (easy); 0 means 50.
+	Sensitivity int `json:"sensitivity,omitempty"`
 	// TimeSync is set once the camera was pointed at this NAS as its time server.
 	TimeSync bool `json:"timeSync"`
 	// KeepDays overrides the general retention; 0 means the general value.
@@ -60,6 +64,9 @@ type Settings struct {
 	Volume string `json:"volume,omitempty"`
 	// KeepDays is the retention for cameras without their own value.
 	KeepDays int `json:"keepDays"`
+	// Armed sends a notification when a camera with the motion check sees
+	// something. Off by default.
+	Armed bool `json:"armed"`
 	// ReserveGB is the space kept free; the oldest recordings go first when
 	// it runs short.
 	ReserveGB int `json:"reserveGB"`
@@ -187,6 +194,9 @@ func validateCamera(c Camera) error {
 	}
 	if c.MainURL == "" {
 		return fmt.Errorf("%w: stream address", ErrInvalid)
+	}
+	if c.Sensitivity < 0 || c.Sensitivity > 100 {
+		return fmt.Errorf("%w: sensitivity", ErrInvalid)
 	}
 	if c.KeepDays < 0 || c.KeepDays > maxKeepDays {
 		return fmt.Errorf("%w: retention", ErrInvalid)

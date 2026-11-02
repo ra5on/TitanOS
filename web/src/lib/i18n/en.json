@@ -7844,5 +7844,18 @@
 	"nvr.timeTitle": "{name}: take time from TitanOS",
 	"nvr.timeText": "The camera then asks this NAS for its time, like a time server on the network. TitanOS changes the camera's time setting for this (ONVIF, or the own interface of Hikvision and Dahua) and tries to log in at most three times. If the firewall is on, UDP 123 from the camera's network must be allowed (Settings › Firewall, service \"Time server for cameras\").",
 	"nvr.timeDone": "{name} now takes its time from {server}.",
-	"nvr.timeFromNas": "Time from TitanOS"
+	"nvr.timeFromNas": "Time from TitanOS",
+	"nvr.fieldDetect": "Detect motion",
+	"nvr.fieldSensitivity": "Sensitivity",
+	"nvr.sensLow": "Low",
+	"nvr.sensMid": "Medium",
+	"nvr.sensHigh": "High",
+	"nvr.armed": "Armed: notify on motion",
+	"nvr.armedHint": "Applies to all cameras with motion detection, at most one notice per camera every five minutes. The notice uses the ways set under Settings › Notifications.",
+	"nvr.events": "Events",
+	"nvr.noEvents": "No events yet.",
+	"nvr.motion": "Motion",
+	"nvr.motionNow": "Motion",
+	"notify.kind.nvr_motion.title": "Motion: {subject}",
+	"notify.kind.nvr_motion.text": "The camera {subject} saw movement. Picture and recording are in the NVR."
 }

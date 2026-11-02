@@ -6,7 +6,15 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { api } from '#lib/api.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
-	import { discoveryProblem, resolution, type Camera, type Discovery } from './nvr.ts';
+	import {
+		discoveryProblem,
+		resolution,
+		SENSITIVITY,
+		sensitivityChoice,
+		type Camera,
+		type Discovery,
+	} from './nvr.ts';
+	import type { MessageKey } from '#lib/i18n/index.svelte.ts';
 
 	type Props = { camera?: Camera; vendors: string[]; onclose: () => void; onsaved: () => void };
 	let { camera, vendors, onclose, onsaved }: Props = $props();
@@ -20,6 +28,8 @@
 	let link = $state('');
 	let vendor = $state(initial?.vendor ?? '');
 	let record = $state(initial?.record ?? true);
+	let detect = $state(initial?.detect ?? false);
+	let sensitivity = $state(sensitivityChoice(initial?.sensitivity));
 	let audio = $state(initial?.audio ?? false);
 	let keepDays = $state(initial?.keepDays ? String(initial.keepDays) : '');
 	let found = $state<Discovery | null>(null);
@@ -66,6 +76,8 @@
 			subUrl: sub,
 			record,
 			audio,
+			detect,
+			sensitivity,
 			onvifPort: found?.onvifPort ?? initial?.onvifPort ?? 0,
 			timeSync: initial?.timeSync ?? false,
 			keepDays: keepDays ? Number(keepDays) : 0,
@@ -183,6 +195,18 @@
 		<label class="check"
 			><input type="checkbox" bind:checked={record} /><span>{t('nvr.fieldRecord')}</span></label
 		>
+		<label class="check"
+			><input type="checkbox" bind:checked={detect} /><span>{t('nvr.fieldDetect')}</span></label
+		>
+		{#if detect}
+			<label
+				><span>{t('nvr.fieldSensitivity')}</span>
+				<select class="field" bind:value={sensitivity}>
+					{#each SENSITIVITY as c (c.value)}<option value={c.value}>{t(c.key as MessageKey)}</option
+						>{/each}
+				</select>
+			</label>
+		{/if}
 
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={onclose} disabled={saving}

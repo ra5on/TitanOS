@@ -1130,6 +1130,7 @@ func (w *titand) wireRemoteAccess() error {
 		}
 		return w.volumes.MountPoint(name), true
 	})
+	w.cameras.Notify = func(severity, kind, subject string) { w.notifier.Notify(severity, kind, subject) }
 	w.background(func() { w.cameras.Run(ctx) })
 	w.beforePowerOff = func() { w.dynamicDNS.PauseForShutdown(context.Background()) }
 	// The IPv64.net account beyond dynamic DNS: notifications from polling,
