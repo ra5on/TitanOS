@@ -38,7 +38,7 @@ Die Wahl steht im optionalen Feld `kernel` von `/config/system/update.json` (`"n
 
 ## Stand der Treiber-Plugins für den neuen Kernel (3.11.2026)
 
-Der Release-Workflow bestellt die Sätze für beide Kernel. Das Plugin-Repository versteht `kernelVariant=new` (ra5on/TitanOS-Plugins#4): Es baut dann das Abbild mit dem Kernel aus trixie-backports und die Kernel-Plugins dagegen; Header und `linux-source` kommen aus trixie-backports. Bis dieser PR gemergt ist, scheitert die Bestellung für den neuen Kernel. Die Plugins `r8125`/`r8126` und `nvidia-legacy` liegen getrennt (Branch `realtek-nvidia-legacy` im Plugin-Repository), bis ihre Quellen festgelegt und `nvidia-legacy/packages.lock.json` erzeugt ist. **Nicht gelaufen:** ein echter Satz für den neuen Kernel (NVIDIA und die Treiber gegen 7.2) und sein Start in QEMU.
+Das Plugin-Repository versteht `kernelVariant=new` (ra5on/TitanOS-Plugins#4): Es baut dann das Abbild mit dem Kernel aus trixie-backports und die Kernel-Plugins dagegen; Header und `linux-source` kommen aus trixie-backports. Der Release-Workflow bestellt den Satz für den neuen Kernel trotzdem noch nicht: Sein Tag enthielte die Tilde aus `7.2.11-1~bpo13+1`, die git in Tag-Namen ablehnt (`kernel-7.2.11-1~bpo13_1-1`). Erst ein geändertes Namensschema (TitanOS und Plugin-Repository) macht die Bestellung möglich. Die Plugins `r8125`/`r8126` und `nvidia-legacy` liegen getrennt (Branch `realtek-nvidia-legacy` im Plugin-Repository), bis ihre Quellen festgelegt und `nvidia-legacy/packages.lock.json` erzeugt ist. **Nicht gelaufen:** ein echter Satz für den neuen Kernel (NVIDIA und die Treiber gegen 7.2) und sein Start in QEMU.
 
 ## NTFS mit dem neuen Kernel
 

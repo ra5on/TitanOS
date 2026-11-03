@@ -35,6 +35,8 @@ func (s *Server) registerUpdate(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/update", s.requireAdmin(s.handleUpdate))
 	mux.HandleFunc("GET /api/v1/update/progress", s.requireAdmin(s.handleUpdateProgress))
 	mux.HandleFunc("PUT /api/v1/update/settings", s.requireAdmin(s.handleUpdateSettings))
+	mux.HandleFunc("GET /api/v1/update/versions", s.requireAdmin(s.handleUpdateVersions))
+	mux.HandleFunc("POST /api/v1/update/install-version", s.requireAdmin(s.handleUpdateInstallVersion))
 	mux.HandleFunc("POST /api/v1/update/{action}", s.requireAdmin(s.handleUpdateAction))
 }
 

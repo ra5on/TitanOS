@@ -16,6 +16,13 @@ const manifest = { version: '0.8.1', channel: 'stable', kernel: '6.12.48', relea
 let state;
 let installs = 0, appRollbacks = 0, failRestart = 0;
 let volumes = [];
+// Releases to choose from (Settings › Updates › Choose a version).
+const versions = [
+	{ version: '0.46.5', channel: 'stable', released: '2026-11-12T03:00:00Z', kernel: '6.12.117', size: 412e6, changelog: '# TitanOS 0.46.5 — Sicherheitsupdate (Autopilot)', running: false, newest: true },
+	{ version: '0.8.0', channel: 'stable', released: '2026-11-05T03:00:00Z', kernel: '6.12.115', size: 410e6, changelog: '# TitanOS 0.8.0 — Läuft', running: true, newest: false },
+	{ version: '0.46.2', channel: 'stable', released: '2026-11-03T08:00:00Z', kernel: '6.12.115', size: 409e6, changelog: '# TitanOS 0.46.2 — Kernel 6.12.115, neue Signierschlüssel\n\nMehr.', running: false, newest: false },
+];
+const chosenVersions = [];
 const progress = (phase) => ({ phase, file: '', percent: phase === 'restart' ? 100 : 0, speedBytesPerSecond: 0, error: '' });
 function reset() {
 	state = { version: '0.8.0', release: true, slots, settings: { channel: 'stable', autoInstall: false, installTime: '03:30' }, canVerify: true, available: manifest, lastCheck: time, checkError: '', progress: progress(''), pending: null, canRollback: true, unconfirmed: false, base: '0.8.0', kind: 'app', app: { current: '', previous: '', trial: false, canRollback: false } };
@@ -47,6 +54,13 @@ async function context(theme = 'graphit', width = 1440) {
 				failRestart = 1;
 				state = { ...state, version: '0.8.1', available: null, kind: '', progress: progress(''), app: { current: '0.8.1', previous: '', trial: true, canRollback: false } };
 			}, 300);
+			return json(state);
+		}
+		if (path === '/update/versions') return json({ floor: '0.46.2', versions });
+		if (path === '/update/install-version') {
+			const body = route.request().postDataJSON();
+			chosenVersions.push(body.version);
+			state = { ...state, settings: { ...state.settings, autoInstall: false }, pending: { kind: 'update', version: body.version, slot: 'b' } };
 			return json(state);
 		}
 		if (path === '/update/app-rollback') {
@@ -130,6 +144,38 @@ try {
 		await second.page.waitForTimeout(500);
 		assert.equal(await second.page.getByTestId('rollback-encrypted').count(), 0);
 		await second.ctx.close();
+	}
+	{
+		// Choose a version: an older one switches installing by itself off.
+		reset();
+		state = { ...state, available: null, kind: '', settings: { ...state.settings, autoInstall: true } };
+		const { ctx, page } = await context();
+		await page.goto(`${base}/settings/updates`);
+		const select = page.getByLabel('Version', { exact: true });
+		await select.waitFor();
+		assert.equal(await select.inputValue(), '0.46.5');
+		assert.ok(await page.getByText('Sicherheitsupdate (Autopilot)', { exact: true }).isVisible());
+		await select.selectOption('0.46.2');
+		assert.ok(await page.getByText('Kernel 6.12.115, neue Signierschlüssel', { exact: true }).isVisible());
+		await page.screenshot({ path: `${out}/choose-graphit-1440.png`, fullPage: true });
+		await page.getByRole('button', { name: 'TitanOS 0.46.2 installieren …' }).click();
+		assert.ok(await page.getByText('wird ausgeschaltet', { exact: false }).isVisible());
+		await page.screenshot({ path: `${out}/choose-confirm-graphit-1440.png` });
+		await page.locator('.dialog-actions .btn-primary').click();
+		await page.getByText('0.46.2', { exact: false }).first().waitFor();
+		assert.deepEqual(chosenVersions, ['0.46.2']);
+		assert.equal(await page.getByLabel('Updates von selbst installieren').isChecked(), false);
+		// The running version cannot be installed again.
+		await select.selectOption('0.8.0');
+		assert.ok(await page.getByRole('button', { name: 'TitanOS 0.8.0 installieren …' }).isDisabled());
+		await ctx.close();
+		const phone = await context('hell', 390);
+		await phone.page.goto(`${base}/settings/updates`);
+		await phone.page.getByLabel('Version', { exact: true }).waitFor();
+		const overflow = await phone.page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+		assert.ok(overflow <= 0, `page scrolls sideways by ${overflow}px`);
+		await phone.page.screenshot({ path: `${out}/choose-hell-390.png`, fullPage: true });
+		await phone.ctx.close();
 	}
 	assert.deepEqual(errors, []);
 	console.log(`ok – screenshots in ${out}`);

@@ -387,6 +387,11 @@ type Manager struct {
 	// kernelParams are the kernel parameters settings of the NAS ask for;
 	// every boot entry written carries them. "" means: take it out.
 	kernelParams map[string]string
+	// choices is the last list of versions to choose from (Versions), for
+	// choicesChannel, made at choicesAt.
+	choices        []Choice
+	choicesChannel string
+	choicesAt      time.Time
 }
 
 // NewManager returns a manager for the system that is running: its

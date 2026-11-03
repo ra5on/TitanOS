@@ -88,3 +88,29 @@ func (s *Server) handleUpdateAction(w http.ResponseWriter, r *http.Request) {
 	}
 	s.handleUpdate(w, r)
 }
+
+// handleUpdateVersions lists the releases that can be chosen.
+func (s *Server) handleUpdateVersions(w http.ResponseWriter, r *http.Request) {
+	versions, err := s.opts.Update.Versions(r.Context())
+	if err != nil {
+		writeUpdateError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"versions": versions, "floor": update.ChoiceFloor})
+}
+
+// handleUpdateInstallVersion installs a chosen release, newer or older.
+func (s *Server) handleUpdateInstallVersion(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Version string `json:"version"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.opts.Update.InstallVersion(r.Context(), req.Version); err != nil {
+		writeUpdateError(w, err)
+		return
+	}
+	slog.Info("update action", "action", "install-version", "version", req.Version, "by", currentUser(r).Name, "ip", remoteIP(r))
+	s.handleUpdate(w, r)
+}

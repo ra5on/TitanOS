@@ -8,7 +8,7 @@
 	import ClusterUpdates from '#lib/components/cluster/ClusterUpdates.svelte';
 	import { activeNode } from '#lib/cluster-node.ts';
 	import PowerDialog from '#lib/components/PowerDialog.svelte';
-	import { formatBytes, formatDateTime } from '#lib/format.ts';
+	import { formatBytes, formatDate, formatDateTime } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 
 	/** checkEvery: minutes between automatic checks; 0 or missing is once a day, -1 manual only. */
@@ -81,12 +81,64 @@
 		kernelMissing?: string;
 	};
 
+	/** A release that can be chosen (GET /update/versions). */
+	type Choice = {
+		version: string;
+		channel: string;
+		released: string;
+		kernel: string;
+		size: number;
+		changelog: string;
+		running: boolean;
+		newest: boolean;
+	};
+
 	let status = $state<Status | null>(null);
 	let draft = $state<Settings | null>(null);
 	let saved = $state(false);
 	let error = $state<{ text: string; detail: string } | null>(null);
 	let busy = $state<'' | 'check' | 'save' | 'action'>('');
-	let asking = $state<'' | 'install' | 'rollback' | 'app-rollback'>('');
+	let asking = $state<'' | 'install' | 'rollback' | 'app-rollback' | 'choose'>('');
+	// Versions to choose from, from the oldest one with the current keys on.
+	let versions = $state<Choice[] | null>(null);
+	let versionsFailed = $state(false);
+	let floor = $state('');
+	let picked = $state('');
+	async function loadVersions() {
+		versionsFailed = false;
+		try {
+			const res = await api.get<{ versions: Choice[]; floor: string }>('/update/versions');
+			versions = res.versions ?? [];
+			floor = res.floor ?? '';
+			if (!versions.some((v) => v.version === picked)) {
+				picked = (versions.find((v) => !v.running) ?? versions[0])?.version ?? '';
+			}
+		} catch {
+			versionsFailed = true;
+		}
+	}
+	$effect(() => {
+		loadVersions();
+	});
+	const pick = $derived(versions?.find((v) => v.version === picked));
+	// The first line of the release notes without the version: "Kernel 6.12.115, …".
+	function summary(changelog: string): string {
+		const first = changelog.split('\n').find((line) => line.trim()) ?? '';
+		const text = first.replace(/^#+\s*/, '');
+		const dash = text.indexOf(' — ');
+		return dash >= 0 ? text.slice(dash + 3) : text;
+	}
+	function versionNumbers(v: string): number[] {
+		return v.split('-')[0].split('.').map(Number);
+	}
+	function olderThan(a: string, b: string): boolean {
+		const [x, y] = [versionNumbers(a), versionNumbers(b)];
+		for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] < y[i];
+		return a.includes('-') && !b.includes('-');
+	}
+	const pickOlder = $derived(
+		!!pick && !!status && (olderThan(pick.version, status.version) || !pick.newest),
+	);
 	let restarting = $state(false);
 	// Encrypted volumes, looked up when going back is asked for: a system
 	// before 0.31.0 cannot open them (they stay unmounted there).
@@ -217,6 +269,22 @@
 		const fast = working;
 		return poll(load, { interval: fast ? 1500 : 15_000 });
 	});
+
+	async function installVersion() {
+		busy = 'action';
+		error = null;
+		asking = '';
+		restartedTo = '';
+		try {
+			take(await api.post<Status>('/update/install-version', { version: picked }));
+			// The settings may have changed: automatic installation off.
+			draft = { ...status!.settings };
+		} catch (err) {
+			problem(err);
+			load();
+		}
+		busy = '';
+	}
 
 	async function act(action: 'check' | 'install' | 'rollback' | 'cancel' | 'app-rollback') {
 		busy = action === 'check' ? 'check' : 'action';
@@ -444,6 +512,55 @@
 		{/if}
 	</section>
 
+	{#if status.canVerify}
+		<section class="tile panel" aria-labelledby="upd-choose">
+			<h2 class="tile-title" id="upd-choose">{t('update.choose.title')}</h2>
+			<p class="muted">{t('update.choose.text', { floor: floor || '0.46.2' })}</p>
+			{#if versionsFailed}
+				<p class="muted" role="status">{t('update.choose.failed')}</p>
+			{:else if !versions}
+				<p class="muted" role="status">{t('update.choose.loading')}</p>
+			{:else if versions.length === 0}
+				<p class="muted" role="status">{t('update.choose.none', { floor })}</p>
+			{:else}
+				<label class="narrow choose"
+					><span>{t('update.choose.version')}</span>
+					<select class="field" bind:value={picked} aria-label={t('update.choose.version')}>
+						{#each versions as v (v.version)}<option value={v.version}
+								>TitanOS {v.version} · {formatDate(new Date(v.released))}{#if v.running}{' · '}{t(
+										'update.choose.running',
+									)}{:else if v.newest}{' · '}{t('update.choose.newest')}{/if}</option
+							>{/each}
+					</select>
+				</label>
+				{#if pick}
+					<p class="muted">
+						{t('update.choose.meta', {
+							date: formatDate(new Date(pick.released)),
+							kernel: pick.kernel,
+							size: formatBytes(pick.size),
+						})}
+					</p>
+					{#if summary(pick.changelog)}<p>{summary(pick.changelog)}</p>{/if}
+					<div>
+						<button
+							type="button"
+							class="btn"
+							disabled={pick.running ||
+								busy !== '' ||
+								working ||
+								!!status.pending ||
+								status.unconfirmed ||
+								status.app.trial}
+							onclick={() => (asking = 'choose')}
+							>{t('update.choose.install', { version: pick.version })}</button
+						>
+					</div>
+				{/if}
+			{/if}
+		</section>
+	{/if}
+
 	{#if !activeNode()}<ClusterUpdates />{/if}
 
 	{#if status.app.current || status.app.previous}
@@ -630,6 +747,28 @@
 	</Dialog>
 {/if}
 
+{#if asking === 'choose' && pick && status}
+	<Dialog
+		title={t('update.choose.confirmTitle', { version: pick.version })}
+		onclose={() => (asking = '')}
+	>
+		<p>{t('update.confirmText', { size: formatBytes(pick.size) })}</p>
+		{#if olderThan(pick.version, status.version)}<p class="notice-warn">
+				{t('update.rollbackWarn')}
+			</p>{/if}
+		{#if pickOlder && status.settings.autoInstall}<p class="notice-warn">
+				{t('update.choose.autoOff')}
+			</p>{/if}
+		<p class="muted">{t('update.confirmSafe')}</p>
+		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={() => (asking = '')}>{t('common.cancel')}</button>
+			<button type="button" class="btn btn-primary" onclick={installVersion}
+				>{t('update.choose.do')}</button
+			>
+		</div>
+	</Dialog>
+{/if}
+
 {#if asking === 'rollback' && other}
 	<Dialog
 		title={t('update.rollbackTitle', { version: other.version || '?' })}
@@ -778,6 +917,11 @@
 	}
 	.narrow {
 		max-width: 320px;
+	}
+	.choose {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
 	}
 	.interval {
 		display: flex;
