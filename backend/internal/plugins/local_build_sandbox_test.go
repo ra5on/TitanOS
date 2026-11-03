@@ -43,7 +43,7 @@ func TestBuildLogIgnoresPlantedSymlink(t *testing.T) {
 	root := sandboxRoot(t)
 	secret := filepath.Join(t.TempDir(), "sessions.json")
 	os.WriteFile(secret, []byte("SECRET-TOKEN"), 0600)
-	args := strings.Join(buildCommand(root, "build", "1.0.0"), "\n")
+	args := strings.Join(buildCommand(root, "build", "1.0.0", ""), "\n")
 	if strings.Contains(args, filepath.Join(root, "work")) || !strings.Contains(args, "append:"+filepath.Join(filepath.Dir(root), "build.log")) {
 		t.Fatal("build log is inside the sandbox-writable tree:", args)
 	}
@@ -52,7 +52,7 @@ func TestBuildLogIgnoresPlantedSymlink(t *testing.T) {
 	os.Symlink(secret, buildLogPath(root))
 	m, _ := newTestManager(t)
 	m.runner = &logRunner{log: buildLogPath(root)}
-	_, err := m.runBuildJob(context.Background(), root, "build")
+	_, err := m.runBuildJob(context.Background(), root, "build", "")
 	if err == nil || !strings.Contains(err.Error(), "compiler failed") || strings.Contains(err.Error(), "SECRET") {
 		t.Fatalf("unexpected error %v", err)
 	}

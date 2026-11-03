@@ -1119,10 +1119,21 @@ func TestNotificationsKeepTheirSecrets(t *testing.T) {
 	if res, body := ts.request("GET", "/api/v1/notifications", nil); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"messages":[]`) {
 		t.Errorf("messages: %d %s", res.StatusCode, body)
 	}
+	// Heat notifications: muted sensors are kept, an odd ID is refused.
+	sensor := "00112233445566778899aabbccddeeff"
+	if res, body := ts.request("PUT", "/api/v1/notifications/temperatures", map[string]any{"muted": []string{sensor}}); res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"muted":["`+sensor+`"]`) || !strings.Contains(string(body), `"sensors":[`) {
+		t.Errorf("mute: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("PUT", "/api/v1/notifications/temperatures", map[string]any{"muted": []string{"temp8"}}); res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "invalid_notify_settings" {
+		t.Errorf("odd sensor: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("GET", "/api/v1/notifications/temperatures", nil); res.StatusCode != http.StatusOK || !strings.Contains(string(body), sensor) {
+		t.Errorf("list: %d %s", res.StatusCode, body)
+	}
 	ts.users.Create("gast", testPassword, auth.RoleUser)
 	guest := ts.newClient()
 	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
-	for _, tc := range [][2]string{{"GET", "/api/v1/notifications"}, {"GET", "/api/v1/notifications/settings"}, {"PUT", "/api/v1/notifications/settings"}, {"POST", "/api/v1/notifications/test"}} {
+	for _, tc := range [][2]string{{"GET", "/api/v1/notifications"}, {"GET", "/api/v1/notifications/settings"}, {"PUT", "/api/v1/notifications/settings"}, {"POST", "/api/v1/notifications/test"}, {"GET", "/api/v1/notifications/temperatures"}, {"PUT", "/api/v1/notifications/temperatures"}} {
 		if res, _ := ts.do(guest, tc[0], tc[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
 			t.Errorf("%s %s as a plain user: %d, want 403", tc[0], tc[1], res.StatusCode)
 		}

@@ -48,6 +48,18 @@ type DriverUpdateStatus struct {
 	Checked    string            `json:"checked,omitempty"`
 	Pending    *DriverActivation `json:"pending,omitempty"`
 	CanRestore bool              `json:"canRestore"`
+	// Drivers are all NVIDIA versions the last check found, newest first;
+	// empty with a build environment that cannot list them (driver_choice.go).
+	Drivers []string `json:"drivers,omitempty"`
+	// Chosen is the version the owner chose ("" the shipped one), Bundled
+	// the driver shipped with this release, Running the one in use and
+	// RunningLocal whether it was built on this NAS.
+	Chosen       string `json:"chosen"`
+	Bundled      string `json:"bundled,omitempty"`
+	Running      string `json:"running,omitempty"`
+	RunningLocal bool   `json:"runningLocal,omitempty"`
+	// Target is the version being built or whose build failed last.
+	Target string `json:"target,omitempty"`
 }
 
 var driverSetRE = regexp.MustCompile(`^[0-9a-f]{32}$`)
@@ -77,6 +89,7 @@ func (m *Manager) driverSnapshot(s Settings) DriverUpdateStatus {
 	}
 	status.Automatic = s.AutomaticDrivers == nil || *s.AutomaticDrivers
 	status.Pending, status.CanRestore = s.PendingDriver, s.DriverSet != ""
+	status.Chosen = s.NvidiaDriver
 	return status
 }
 func (m *Manager) SetAutomaticDrivers(enabled bool) error {
@@ -176,7 +189,7 @@ func (m *Manager) newestCached(volume string) (Manifest, error) {
 // Downloading only writes an isolated cache directory, never live plugins.
 func (m *Manager) CheckDriverUpdate(ctx context.Context, mounted []string) error {
 	if m.LocalBuilds {
-		return m.checkLocalDriver(ctx, mounted, false)
+		return m.checkLocalDriver(ctx, mounted, true, false, "")
 	}
 	return m.checkDriverUpdate(ctx, mounted, "")
 }
@@ -455,13 +468,18 @@ func (m *Manager) runDriverUpdates(ctx context.Context, mounted func() []string)
 		if loaded && due && (settings.AutomaticDrivers == nil || *settings.AutomaticDrivers) {
 			_ = m.CheckDriverUpdate(ctx, mounted())
 		}
+		if loaded {
+			m.rebuildChoice(ctx, mounted())
+		}
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
 		case hash := <-m.driverRequests:
-			if m.LocalBuilds {
-				_ = m.checkLocalDriver(ctx, mounted(), hash == "prepare")
+			if driver, ok := strings.CutPrefix(hash, "choose:"); ok {
+				m.buildChoice(ctx, mounted(), driver)
+			} else if m.LocalBuilds {
+				_ = m.checkLocalDriver(ctx, mounted(), hash != "prepare", hash == "prepare", "")
 			} else {
 				_ = m.checkDriverUpdate(ctx, mounted(), hash)
 			}

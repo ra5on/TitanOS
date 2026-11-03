@@ -394,16 +394,23 @@ func writeFresh(path string, data []byte) error {
 
 // The build SDK may come from a plugin set made for an earlier release with
 // the same kernel; the release the driver is built for is passed explicitly.
-func buildCommand(root, action, release string) []string {
+// driver is the NVIDIA version to download, "" the newest.
+func buildCommand(root, action, release, driver string) []string {
 	args := []string{"--wait", "--collect", "--quiet", "--unit=titanos-nvidia-build", "--property=RootDirectory=" + root, "--property=WorkingDirectory=/usr/lib/titanos/nvidia-build", "--property=PrivateDevices=yes", "--property=PrivateTmp=yes", "--property=ProtectSystem=strict", "--property=ReadWritePaths=+/work", "--property=NoNewPrivileges=yes", "--property=CapabilityBoundingSet=", "--property=ProtectKernelTunables=yes", "--property=ProtectControlGroups=yes", "--property=RestrictSUIDSGID=yes", "--property=MemoryMax=2G", "--property=CPUQuota=200%", "--property=TasksMax=256", "--property=RuntimeMaxSec=7200", "--property=Nice=10", "--property=StandardOutput=append:" + buildLogPath(root), "--property=StandardError=inherit"}
 	if action == "build" {
 		args = append(args, "--property=PrivateNetwork=yes")
 	} else {
 		args = append(args, "--property=BindReadOnlyPaths=/etc/resolv.conf")
 	}
+	if driver != "" {
+		args = append(args, "--setenv=TITANOS_NVIDIA_DRIVER="+driver)
+	}
 	return append(args, "--setenv=TITANOS_VERSION="+release, "python3", "/usr/lib/titanos/nvidia-build/scripts/nvidia-nas-build.py", action)
 }
-func (m *Manager) checkLocalDriver(ctx context.Context, mounted []string, prepare bool) (err error) {
+
+// checkLocalDriver downloads the sources of driver ("" the newest; check)
+// and builds them (build); with build alone it builds what was downloaded.
+func (m *Manager) checkLocalDriver(ctx context.Context, mounted []string, check, build bool, driver string) (err error) {
 	if !m.driverActions.TryLock() {
 		return ErrBusy
 	}
@@ -454,32 +461,33 @@ func (m *Manager) checkLocalDriver(ctx context.Context, mounted []string, prepar
 	}
 	operation, cancel := context.WithTimeout(ctx, 2*time.Hour)
 	defer cancel()
-	if !prepare {
+	if check {
 		m.buildPhase("downloading")
-		if _, err = m.runBuildJob(operation, root, "check"); err != nil {
+		if _, err = m.runBuildJob(operation, root, "check", driver); err != nil {
 			return err
 		}
+		m.readDrivers(root)
 	}
 	data, err := readSandboxFile(root, "source-status.json", 1<<20)
 	if err != nil {
 		return err
 	}
 	var source DriverSource
-	if json.Unmarshal(data, &source) != nil || source.Kernel != m.kernel || source.Version != m.Release || !source.Downloaded {
+	if json.Unmarshal(data, &source) != nil || source.Kernel != m.kernel || source.Version != m.Release || !source.Downloaded || driver != "" && source.Driver != driver {
 		return ErrInvalid
 	}
 	m.mu.Lock()
 	m.driverStatus.Source = &source
 	m.driverStatus.State = "sourceReady"
 	m.mu.Unlock()
-	if !prepare {
+	if !build {
 		return nil
 	}
 	if err = m.ensureBuildKey(); err != nil {
 		return err
 	}
 	m.buildPhase("building")
-	if _, err = m.runBuildJob(operation, root, "build"); err != nil {
+	if _, err = m.runBuildJob(operation, root, "build", ""); err != nil {
 		return err
 	}
 	result := filepath.Join(root, "work/result")
@@ -564,12 +572,12 @@ func (m *Manager) RequestDriverBuild(mounted []string) error {
 	return nil
 }
 
-func (m *Manager) runBuildJob(ctx context.Context, root, action string) (string, error) {
+func (m *Manager) runBuildJob(ctx context.Context, root, action, driver string) (string, error) {
 	logPath := buildLogPath(root)
 	if err := resetBuildLog(logPath); err != nil {
 		return "", err
 	}
-	output, err := m.runner.Run(ctx, "", "systemd-run", buildCommand(root, action, m.Release)...)
+	output, err := m.runner.Run(ctx, "", "systemd-run", buildCommand(root, action, m.Release, driver)...)
 	if ctx.Err() != nil {
 		cleanup, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()

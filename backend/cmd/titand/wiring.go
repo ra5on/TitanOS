@@ -516,6 +516,13 @@ func (w *titand) wireNotifications() error {
 	}
 	// Once per plugin and kind of device; installing stays a click.
 	w.extensions.Notify = func(title string) { w.notifier.Notify(notify.Info, "plugin_recommended", title) }
+	w.extensions.DriverBuilt = func(version string, err error) {
+		if err != nil {
+			w.notifier.Notify(notify.Warning, "nvidia_build_failed", version)
+			return
+		}
+		w.notifier.Notify(notify.Info, "nvidia_built", version)
+	}
 	// Home Assistant: MCP clients switch entities released to them, and
 	// messages can go to the Home Assistant app.
 	w.home = homeassistant.NewManager(w.store)

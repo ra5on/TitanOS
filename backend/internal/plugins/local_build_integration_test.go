@@ -36,7 +36,7 @@ func TestRealNASBuildEnvironment(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 	for _, action := range []string{"check", "build"} {
-		if _, err := m.runBuildJob(ctx, root, action); err != nil {
+		if _, err := m.runBuildJob(ctx, root, action, ""); err != nil {
 			t.Fatal(action, err)
 		}
 	}

@@ -235,6 +235,8 @@ func (s *Server) handleDriverUpdate(w http.ResponseWriter, r *http.Request) {
 		Action    string `json:"action"`
 		SHA256    string `json:"sha256"`
 		Automatic bool   `json:"automatic"`
+		// Version is the NVIDIA version to choose, "" the shipped one.
+		Version string `json:"version"`
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -252,6 +254,11 @@ func (s *Server) handleDriverUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		err = s.opts.Plugins.SelectDriver(req.SHA256, s.opts.Storage.Mounted())
+	case "choose":
+		if !s.pluginsEditable(w) {
+			return
+		}
+		err = s.opts.Plugins.ChooseDriver(req.Version, s.opts.Storage.Mounted())
 	default:
 		writeError(w, http.StatusBadRequest, "invalid_plugin", "unknown driver action")
 		return
@@ -260,7 +267,7 @@ func (s *Server) handleDriverUpdate(w http.ResponseWriter, r *http.Request) {
 		writePluginError(w, err)
 		return
 	}
-	slog.Info("NVIDIA driver update action", "action", req.Action, "by", currentUser(r).Name)
+	slog.Info("NVIDIA driver update action", "action", req.Action, "version", req.Version, "by", currentUser(r).Name)
 	s.handlePlugins(w, r)
 }
 
