@@ -62,14 +62,29 @@ try {
   await ctx.close();
  }
  const f=await fixture(); const {page,ctx,tokens}=f;
+ // Owner with two-factor login: a new token asks for password and code (reconfirm()).
+ await ctx.route('**/api/v1/session',route=>route.fulfill({json:{configAvailable:true,setupRequired:false,user:{name:'alex',role:'owner',twoFactor:true},hostname:'titan-test'}}));
  await page.goto(base+'/settings/api');
+ const mcpLink=page.locator('#api-mcp').getByRole('link',{name:'MCP-Server',exact:true});
+ assert.equal(await mcpLink.getAttribute('href'),'/settings/mcp');
  await page.getByRole('button',{name:'Token erstellen',exact:true}).click();
  let dialog=page.getByRole('dialog');
  assert.equal(await dialog.locator('input[type=checkbox]:checked').count(),1);
+ await dialog.getByRole('button',{name:'Was bedeutet „Token-Bereiche“?',exact:true}).click();
+ await page.getByRole('note').filter({hasText:'Token-Bereiche'}).waitFor();
+ await page.keyboard.press('Escape');
+ await page.getByRole('note').waitFor({state:'detached'});
+ await dialog.waitFor();
+ const submit=dialog.getByRole('button',{name:'Token erstellen',exact:true});
  await dialog.getByRole('textbox',{name:'Bezeichnung',exact:true}).fill('CLI-Test');
- await dialog.getByRole('button',{name:'Token erstellen',exact:true}).click();
+ assert.ok(await submit.isDisabled(),'token without password');
+ await dialog.getByLabel('Passwort',{exact:true}).fill('fixture-password');
+ assert.ok(await submit.isDisabled(),'token without two-factor code');
+ await dialog.getByRole('textbox',{name:'Code aus der Authenticator-App',exact:true}).fill('123456');
+ await submit.click();
  await page.getByRole('dialog',{name:'Token erstellt',exact:true}).waitFor();
  assert.deepEqual(tokens[0].scopes,['system:read']);
+ assert.equal(tokens[0].password,'fixture-password'); assert.equal(tokens[0].code,'123456');
  await page.getByRole('button',{name:'Schließen',exact:true}).click();
  await page.getByRole('button',{name:'Widerrufen',exact:true}).click();
  await page.getByRole('dialog').getByRole('button',{name:'Widerrufen',exact:true}).click();
@@ -112,5 +127,5 @@ try {
  }
  assert.deepEqual(errors,[]);
  await writeFile(out+'/results.json',JSON.stringify({fixtureData:true,evidence,errors},null,2)+'\n');
- console.log('PASS mobile first row, themes, font120, no overflow, scoped token defaults/revoke, network edit, LAN/media dialogs and protected plugin cleanup');
+ console.log('PASS mobile first row, themes, font120, no overflow, scoped token defaults with password/TOTP reconfirm, scope help and MCP link, revoke, network edit, LAN/media dialogs and protected plugin cleanup');
 } finally {await browser.close();}

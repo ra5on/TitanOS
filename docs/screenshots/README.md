@@ -2,7 +2,7 @@
 
 `current/` enthält die aktuellen Aufnahmen für die Projekt-README und die Fachdokumente.
 
-**Aufnahmestand:** die Bilder aus `capture.mjs` (einschließlich Einstellungen) sowie Firewall, VM erstellen, Protokoll, Dateien ersetzen, Dateiaufträge und Navigation auf dem Handy zeigen die gebaute Svelte-WebUI von **TitanOS 0.47.1** (Stand nach 0.47.1, Zweig `feat/kleine-punkte-c`), aufgenommen am **3. November 2026** mit Chromium (Playwright), Theme Graphit, blauer Akzent, Glasflächen, Deutsch. Die Statuszeile von Firewall, VM erstellen und Protokoll nennt die Version der jeweiligen Prüfskripte. Arbeitsspeicher, App-Images, Netzwerk, Docker-LAN, API-Zugänge, VM-Medien und Plugin-Aufräumen sind noch Aufnahmen von **0.31.0**: `test-ui-memory-images.mjs` und `test-ui-023.mjs` scheitern an veralteten Erwartungen der Skripte (nachzuziehen).
+**Aufnahmestand:** die Bilder aus `capture.mjs` (einschließlich Einstellungen) sowie Firewall, VM erstellen, Protokoll, Dateien ersetzen, Dateiaufträge und Navigation auf dem Handy zeigen die gebaute Svelte-WebUI von **TitanOS 0.47.1** (Stand nach 0.47.1, Zweig `feat/kleine-punkte-c`), aufgenommen am **3. November 2026** mit Chromium (Playwright), Theme Graphit, blauer Akzent, Glasflächen, Deutsch. Die Statuszeile von Firewall, VM erstellen und Protokoll nennt die Version der jeweiligen Prüfskripte.
 
 Alle NAS-Antworten werden durch isolierte Demonstrationsdaten ersetzt. Hostname, Konten, Dateien, Laufwerke, Adressen und Messwerte sind Beispiele. Es werden weder echte NAS-Geräte angesprochen noch Container oder VMs gestartet. Die sichtbaren App-Icons sind die konfigurierten Originalbilder der jeweiligen Projekte. Ihre Quellen und SHA-256-Werte stehen in [icon-sources.json](icon-sources.json); Namen und Logos gehören den jeweiligen Projekten. Keine nachträgliche Bildbearbeitung oder eingebauten Design-Mockups. Die Bilder ersetzen keine Funktions- oder Hardwareprüfung.
 
@@ -39,18 +39,10 @@ Nicht in der README eingebunden; die VM- und Protokollbilder verlinkt [VM-CREATE
 | [vm-erstellen.png](current/vm-erstellen.png) | VM-Formular mit sechs Kacheln (einschließlich Zeitplan) und Zusammenfassung | Desktop 1600, vollständige Seite |
 | [vm-erstellen-mobil.png](current/vm-erstellen-mobil.png) | Dasselbe Formular in Lesereihenfolge gestapelt | Smartphone 390, vollständige Seite |
 | [protokoll.png](current/protokoll.png) | Systemprotokoll mit Filter und originaler historischer Versionsmeldung „TitanOS 0.19.0 started“ als Journalbeispiel | Desktop 1600, vollständige Seite |
-| [arbeitsspeicher.png](current/arbeitsspeicher.png) | Verfügbarer RAM trotz hoher Cachebelegung | Desktop 1440, vollständige Seite |
-| [app-images.png](current/app-images.png) | Eigene Image-Tags je Compose-Dienst | Desktop 1440, vollständige Seite |
-| [app-images-mobil.png](current/app-images-mobil.png) | Image-Tags im Installationspanel | Smartphone 390, vollständige Seite |
 | [dateien-ersetzen.png](current/dateien-ersetzen.png) | Ersetzen-Bestätigung vor dem ersten Kopierklick | Desktop 1440 × 1000 |
 | [dateien-auftraege-1440.png](current/dateien-auftraege-1440.png) | Interne Laufwerke, Restzeit und Entfernen einzelner/aller beendeten Aufträge | Desktop 1440, vollständige Seite |
 | [dateien-auftraege-390.png](current/dateien-auftraege-390.png) | Dieselben Funktionen mit geöffneter Ortsauswahl | Smartphone 390, vollständige Seite |
-| [netzwerk.png](current/netzwerk.png) | Mehrere NAS-Netze in der Einstellungsseitenleiste | Desktop 1440, vollständige Seite |
 | [netzwerk-mobil.png](current/netzwerk-mobil.png) / [Hell](current/netzwerk-mobil-hell.png) | Netzwerk, Graphit/Hell | Smartphone 390 |
-| [docker-lan.png](current/docker-lan.png) | Docker-LAN-Pool | Desktop 1440 × 1000 |
-| [api-zugaenge.png](current/api-zugaenge.png) | Persönliche API-Zugänge in der Einstellungsseitenleiste | Desktop 1440, vollständige Seite |
-| [vm-medien-mobil.png](current/vm-medien-mobil.png) | Medienimport | Smartphone 390 × 844 |
-| [plugin-aufraeumen.png](current/plugin-aufraeumen.png) | Geschützte und auswählbare Plugin-Versionen | Desktop 1440 × 1000 |
 
 ## Herkunft je Bild
 
@@ -61,10 +53,8 @@ Nicht in der README eingebunden; die VM- und Protokollbilder verlinkt [VM-CREATE
 | `scripts/test-ui-firewall.mjs` | `firewall-desktop-on.png` → `firewall.png` |
 | `scripts/test-ui-mobile-side-nav.mjs` | `offen-graphit-390.png` → `navigation-mobil.png` |
 | `scripts/test-ui-vm-create.mjs` | `graphit-1600-de.png` → `vm-erstellen.png`, `graphit-390-de.png` → `vm-erstellen-mobil.png`, `system-logs.png` → `protokoll.png` |
-| `scripts/test-ui-memory-images.mjs` | `ram-cache.png` → `arbeitsspeicher.png`, `stack-images.png` → `app-images.png`, `stack-images-mobile.png` → `app-images-mobil.png` |
 | `scripts/test-ui-copy-confirmation.mjs` | `replace-before-copy.png` → `dateien-ersetzen.png` |
 | `scripts/test-ui-drive-transfers.mjs` | `dateien-auftraege-1440.png`, `dateien-auftraege-390.png` (gleiche Namen) |
-| `scripts/test-ui-023.mjs` | `settings-network-1440-graphit.png` → `netzwerk.png`, `settings-network-390-graphit.png` → `netzwerk-mobil.png`, `settings-network-390-hell.png` → `netzwerk-mobil-hell.png`, `docker-networks-1440-graphit.png` → `docker-lan.png`, `settings-api-1440-graphit.png` → `api-zugaenge.png`, `vms-media-390-graphit.png` → `vm-medien-mobil.png`, `plugins-cleanup-1440-graphit.png` → `plugin-aufraeumen.png` |
 
 Die Anmeldeseite nimmt `capture.mjs` in einem eigenen, abgemeldeten Browserkontext mit isolierten Werten für `/api/v1/login-appearance` auf (wie `scripts/test-ui-login-appearance.mjs`); Texte werden nur als Text angezeigt. Bei der Aufnahme werden geladene Schriftdateien, alle 13 Docker-Logos, fehlender horizontaler Überlauf auf dem Smartphone und JavaScript-Laufzeitfehler geprüft.
 

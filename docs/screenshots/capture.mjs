@@ -604,28 +604,19 @@ try {
     "dateien-mobil",
     "dashboard-mobil",
     "anmeldeseite",
+    "einstellungen",
   ];
   // Images taken by the UI test scripts and copied unchanged into this
   // folder (see README.md); recorded here so one file lists every image.
   const copied = {
-    "einstellungen.png": ["scripts/test-ui-firewall.mjs", "settings-overview-desktop.png"],
     "firewall.png": ["scripts/test-ui-firewall.mjs", "firewall-desktop-on.png"],
     "vm-erstellen.png": ["scripts/test-ui-vm-create.mjs", "graphit-1600-de.png"],
     "vm-erstellen-mobil.png": ["scripts/test-ui-vm-create.mjs", "graphit-390-de.png"],
     "protokoll.png": ["scripts/test-ui-vm-create.mjs", "system-logs.png"],
-    "arbeitsspeicher.png": ["scripts/test-ui-memory-images.mjs", "ram-cache.png"],
-    "app-images.png": ["scripts/test-ui-memory-images.mjs", "stack-images.png"],
-    "app-images-mobil.png": ["scripts/test-ui-memory-images.mjs", "stack-images-mobile.png"],
     "dateien-ersetzen.png": ["scripts/test-ui-copy-confirmation.mjs", "replace-before-copy.png"],
     "dateien-auftraege-1440.png": ["scripts/test-ui-drive-transfers.mjs", "dateien-auftraege-1440.png"],
     "dateien-auftraege-390.png": ["scripts/test-ui-drive-transfers.mjs", "dateien-auftraege-390.png"],
-    "netzwerk.png": ["scripts/test-ui-023.mjs", "settings-network-1440-graphit.png"],
-    "netzwerk-mobil.png": ["scripts/test-ui-023.mjs", "settings-network-390-graphit.png"],
-    "netzwerk-mobil-hell.png": ["scripts/test-ui-023.mjs", "settings-network-390-hell.png"],
-    "docker-lan.png": ["scripts/test-ui-023.mjs", "docker-networks-1440-graphit.png"],
-    "api-zugaenge.png": ["scripts/test-ui-023.mjs", "settings-api-1440-graphit.png"],
-    "vm-medien-mobil.png": ["scripts/test-ui-023.mjs", "vms-media-390-graphit.png"],
-    "plugin-aufraeumen.png": ["scripts/test-ui-023.mjs", "plugins-cleanup-1440-graphit.png"],
+    "navigation-mobil.png": ["scripts/test-ui-mobile-side-nav.mjs", "offen-graphit-390.png"],
   };
   const images = [];
   for (const file of [...names.map((n) => n + ".png"), ...Object.keys(copied)]) {

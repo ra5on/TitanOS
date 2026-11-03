@@ -1,5 +1,5 @@
 {
-  "source": "b5856149019cc2c636395618ee0f305904c1f69b",
+  "source": "52737da2f5f139370c28e5ca83da51999b3829f2",
   "version": "0.47.1",
   "captured": "2026-10-31",
   "demoData": true,
@@ -12,16 +12,16 @@
       "script": "docs/screenshots/capture.mjs",
       "width": 1600,
       "height": 1416,
-      "bytes": 727468,
-      "sha256": "b43a79c8fed14417c0a9eaaa2851d71eb0d599b1a8a8defac9fd2ad6b7691c0e"
+      "bytes": 727532,
+      "sha256": "b0f96eeec34e9f5231eadc71084faf35b04f3f5b5d0be266f155bbf0c477c7a8"
     },
     {
       "file": "dashboard-editor.png",
       "script": "docs/screenshots/capture.mjs",
       "width": 1600,
       "height": 1546,
-      "bytes": 833230,
-      "sha256": "ab6bc315996d6dc1e2f7f592b610f27bd81e9a245eff8996a386036704da4b1f"
+      "bytes": 833149,
+      "sha256": "3f5cd2829d4e66e239bb259e30283245f3ecd68024ec9b6fef65d6f471a31973"
     },
     {
       "file": "darstellung.png",
@@ -36,8 +36,8 @@
       "script": "docs/screenshots/capture.mjs",
       "width": 1600,
       "height": 1000,
-      "bytes": 608507,
-      "sha256": "445d4fae8fd30fc08e7f37f6a1300fd2ee95d9d60353851e63e544c69813e4fa"
+      "bytes": 608513,
+      "sha256": "db329507ed006220006c491c10c85b1f83bf18c8ab2af0eba00d9854c0175535"
     },
     {
       "file": "dashboard-bild-upload.png",
@@ -52,8 +52,8 @@
       "script": "docs/screenshots/capture.mjs",
       "width": 1600,
       "height": 1783,
-      "bytes": 743309,
-      "sha256": "a6a31067b05b5684f2357f60a7dbc618623f2d36725346880e1c6c332e3929b0"
+      "bytes": 743213,
+      "sha256": "36f300f180a8eb117b7d8bbf38c19a182e4953a00eda8b5e13782873ab35152a"
     },
     {
       "file": "speicher.png",
@@ -92,8 +92,8 @@
       "script": "docs/screenshots/capture.mjs",
       "width": 1600,
       "height": 938,
-      "bytes": 583726,
-      "sha256": "50d7be1277e40a34ec1cf501fea7e67de01966faf7f157e48600a32420b4b6c4"
+      "bytes": 583735,
+      "sha256": "b742b72155020cd204ebcdc1ec2ba25bffd1934e644711be4cef26a111f826ce"
     },
     {
       "file": "dateien-mobil.png",
@@ -108,8 +108,8 @@
       "script": "docs/screenshots/capture.mjs",
       "width": 390,
       "height": 844,
-      "bytes": 99224,
-      "sha256": "4939c6a16e5b1b1b5052c94e8d8595d1b67a334658849de4fb36982b0ad78b0a"
+      "bytes": 99220,
+      "sha256": "486438a3e2460d95cdd1d2abf34b8f71d2d229580e49b6012eb17fa124e8142c"
     },
     {
       "file": "anmeldeseite.png",
@@ -121,8 +121,7 @@
     },
     {
       "file": "einstellungen.png",
-      "script": "scripts/test-ui-firewall.mjs",
-      "scriptOutput": "settings-overview-desktop.png",
+      "script": "docs/screenshots/capture.mjs",
       "width": 1440,
       "height": 1047,
       "bytes": 768075,
@@ -165,33 +164,6 @@
       "sha256": "d67229e20e51e3a5959ce5882e65decbabcd82ac3b05e0fd7c50dfdac3a493ab"
     },
     {
-      "file": "arbeitsspeicher.png",
-      "script": "scripts/test-ui-memory-images.mjs",
-      "scriptOutput": "ram-cache.png",
-      "width": 1440,
-      "height": 1186,
-      "bytes": 383546,
-      "sha256": "10782c436a3444a6b378b3b88ee4434e1dc6342012e222ee62b4d6bfabb1a5d3"
-    },
-    {
-      "file": "app-images.png",
-      "script": "scripts/test-ui-memory-images.mjs",
-      "scriptOutput": "stack-images.png",
-      "width": 1440,
-      "height": 2296,
-      "bytes": 396319,
-      "sha256": "2a2b6acd4dc98b52a366e0285c4d0ba029ac3ef7aab48673ddc8bf1049d408f0"
-    },
-    {
-      "file": "app-images-mobil.png",
-      "script": "scripts/test-ui-memory-images.mjs",
-      "scriptOutput": "stack-images-mobile.png",
-      "width": 390,
-      "height": 3329,
-      "bytes": 265996,
-      "sha256": "8123fbec5ce659f70492a0bd1cc6ce9136dcf8340f5262c14b60e213f545fede"
-    },
-    {
       "file": "dateien-ersetzen.png",
       "script": "scripts/test-ui-copy-confirmation.mjs",
       "scriptOutput": "replace-before-copy.png",
@@ -219,67 +191,13 @@
       "sha256": "4a15f2bb429f4afab25acf9a43a8b45d2855ab5280afd4d159ca6d470d77acae"
     },
     {
-      "file": "netzwerk.png",
-      "script": "scripts/test-ui-023.mjs",
-      "scriptOutput": "settings-network-1440-graphit.png",
-      "width": 1440,
-      "height": 1095,
-      "bytes": 346977,
-      "sha256": "ce868b5a40c602d371002287210229cfcccc49a2c445e800a091237ce4d72ec6"
-    },
-    {
-      "file": "netzwerk-mobil.png",
-      "script": "scripts/test-ui-023.mjs",
-      "scriptOutput": "settings-network-390-graphit.png",
-      "width": 390,
-      "height": 1007,
-      "bytes": 152578,
-      "sha256": "5e42454d08be242d70679db846b010854903c17b86181bf2798db6c02c4ed486"
-    },
-    {
-      "file": "netzwerk-mobil-hell.png",
-      "script": "scripts/test-ui-023.mjs",
-      "scriptOutput": "settings-network-390-hell.png",
-      "width": 390,
-      "height": 1007,
-      "bytes": 166585,
-      "sha256": "2f16a53db4953f010232b74bd0daac68b0b1645f53ecb82a96f9afb795d03afb"
-    },
-    {
-      "file": "docker-lan.png",
-      "script": "scripts/test-ui-023.mjs",
-      "scriptOutput": "docker-networks-1440-graphit.png",
-      "width": 1440,
-      "height": 1000,
-      "bytes": 261435,
-      "sha256": "8addff745adee346c20271b07eba636ad643ae1001509e363a55765f754a1dde"
-    },
-    {
-      "file": "api-zugaenge.png",
-      "script": "scripts/test-ui-023.mjs",
-      "scriptOutput": "settings-api-1440-graphit.png",
-      "width": 1440,
-      "height": 1095,
-      "bytes": 341277,
-      "sha256": "2544a5f2c93e018a26b9175ed1e24970ce78c0c798f5aca8ed2918068ad29c03"
-    },
-    {
-      "file": "vm-medien-mobil.png",
-      "script": "scripts/test-ui-023.mjs",
-      "scriptOutput": "vms-media-390-graphit.png",
+      "file": "navigation-mobil.png",
+      "script": "scripts/test-ui-mobile-side-nav.mjs",
+      "scriptOutput": "offen-graphit-390.png",
       "width": 390,
       "height": 844,
-      "bytes": 146477,
-      "sha256": "5d20750b8e8d755806624760138f2f56ee9feb726ad8e5d9cc8b8778ec9dd65f"
-    },
-    {
-      "file": "plugin-aufraeumen.png",
-      "script": "scripts/test-ui-023.mjs",
-      "scriptOutput": "plugins-cleanup-1440-graphit.png",
-      "width": 1440,
-      "height": 1000,
-      "bytes": 276379,
-      "sha256": "6e7beed30a636fbeb03f12f093226185f94f49e661ed97ed6fd0fc4f0a338aa1"
+      "bytes": 45180,
+      "sha256": "55129b74a550b0f1e6a5fd3baba07b1269d9e7c2299dc5bce5614c253049967e"
     }
   ]
 }
