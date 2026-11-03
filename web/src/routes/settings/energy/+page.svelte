@@ -1,8 +1,12 @@
 <script lang="ts">
-	import { api } from '#lib/api.ts';
+	import { api, type DiskSleepStatus } from '#lib/api.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import PowerSchedule from '#lib/components/PowerSchedule.svelte';
 	import { apiErrorText, t, tOr } from '#lib/i18n/index.svelte.ts';
+	// Disk sleep stays set in its one dialog (Plan 28b): this page only links
+	// to it, so there are never two places with their own values.
+	import DiskSleepDialog from '../../storage/DiskSleepDialog.svelte';
+	import { sleepDuration, sleepListed } from '../../storage/sleep-view.ts';
 	type Settings = { governor: string; preference: string; platform: string };
 	type Control = { key: keyof Settings; choices: string[]; current: string; mixed: boolean };
 	type Status = {
@@ -28,6 +32,15 @@
 	$effect(() => {
 		api.get<Status>('/system/energy').then(take, fail);
 	});
+	let sleep = $state<DiskSleepStatus | null>(null);
+	let sleepError = $state('');
+	let sleepOpen = $state(false);
+	$effect(() => {
+		api.get<DiskSleepStatus>('/storage/disk-sleep').then(
+			(result) => (sleep = result),
+			(err) => (sleepError = apiErrorText(err)),
+		);
+	});
 	async function save(event: SubmitEvent) {
 		event.preventDefault();
 		busy = true;
@@ -42,6 +55,14 @@
 			busy = false;
 		}
 	}
+	const sleepSummary = $derived.by(() => {
+		if (!sleep) return '';
+		const current = t('energy.diskSleepCurrent', { value: sleepDuration(sleep.idleMinutes) });
+		const disks = sleepListed(sleep) ? (sleep.diskStatus ?? []) : [];
+		if (!disks.length) return current;
+		const asleep = disks.filter((disk) => disk.state === 'asleep').length;
+		return `${current} · ${t('storage.sleepCount', { asleep, total: disks.length })}`;
+	});
 </script>
 
 <PageHead title={t('energy.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
@@ -96,6 +117,22 @@
 		</form>
 	{/if}
 {:else if !error}<p>{t('common.loading')}</p>{/if}
+<section class="tile panel" aria-labelledby="energy-disk-sleep">
+	<h2 id="energy-disk-sleep" class="tile-title">{t('energy.diskSleep')}</h2>
+	<p class="muted hint">{t('energy.diskSleepHint')}</p>
+	{#if sleepError}<p class="notice-error" role="alert">{sleepError}</p>
+	{:else if sleep}<p class="muted current">{sleepSummary}</p>{/if}
+	<div class="actions">
+		<button type="button" class="btn" disabled={!sleep} onclick={() => (sleepOpen = true)}
+			>{t('energy.diskSleepOpen')}</button
+		>
+	</div>
+</section>
+{#if sleepOpen && sleep}<DiskSleepDialog
+		status={sleep}
+		onclose={() => (sleepOpen = false)}
+		onsaved={(updated: DiskSleepStatus) => (sleep = updated)}
+	/>{/if}
 <PowerSchedule />
 
 <style>

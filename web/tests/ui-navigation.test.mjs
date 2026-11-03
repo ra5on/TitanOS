@@ -101,7 +101,12 @@ test('the settings navigation keeps its fixed groups, order and role filter', as
 		'mcp',
 	]);
 	const user = settingsEntries('', false, label).flatMap((g) => g.entries.map((e) => e.id));
-	assert.deepEqual(user, ['about', 'temperatures', 'api', 'appearance']);
+	assert.deepEqual(user, ['about', 'temperatures', 'mcp', 'api', 'appearance']);
+	// MCP is one page for everyone, no longer a section of API and CLI.
+	assert.deepEqual(
+		settingsEntries('mcp', false, label).flatMap((g) => g.entries.map((e) => e.href)),
+		['/settings/mcp'],
+	);
 	const ssh = settingsEntries('SSH', true, label).flatMap((g) => g.entries);
 	assert.deepEqual(
 		ssh.map((e) => [e.href, e.section]),

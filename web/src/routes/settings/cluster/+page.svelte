@@ -5,6 +5,7 @@
 	import { poll } from '#lib/poll.ts';
 	import { onMount } from 'svelte';
 	import { api, ApiError } from '#lib/api.ts';
+	import DangerZone from '#lib/components/DangerZone.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import ReconfirmFields, { reconfirmComplete } from '#lib/components/ReconfirmFields.svelte';
 	import { confirmWithPasskey, hasPasskeyHere } from '#lib/passkeys.ts';
@@ -787,15 +788,12 @@
 		</section>{/if}
 
 	{#if owner}
-		<section class="tile panel">
-			<h2 class="tile-title">{t('cluster.leave')}</h2>
-			<p class="muted">{t('cluster.leaveHint')}</p>
-			<div class="row-actions">
-				<button class="btn btn-danger" disabled={busy} onclick={() => (confirmLeave = true)}
-					>{t('cluster.leaveButton')}</button
-				>
-			</div>
-		</section>
+		<!-- Leaving is the destroying action of this page: its own tile at the end. -->
+		<DangerZone tile hint={t('cluster.leaveHint')}>
+			<button class="btn btn-danger" disabled={busy} onclick={() => (confirmLeave = true)}
+				>{t('cluster.leaveButton')}</button
+			>
+		</DangerZone>
 	{/if}
 {/if}
 
@@ -945,7 +943,7 @@
 	.chip-button {
 		display: inline-flex;
 		align-items: center;
-		gap: 4px;
+		gap: var(--space-1);
 		padding: 0;
 		border: 0;
 		background: none;
@@ -972,7 +970,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px 10px;
+		gap: var(--space-2) 10px;
 		padding: var(--space-3) var(--space-4) 6px;
 	}
 	.nodes-head h2 {
@@ -988,9 +986,9 @@
 	.nodes li {
 		display: grid;
 		grid-template-columns: 12px minmax(0, 1fr) auto;
-		gap: 4px 14px;
+		gap: var(--space-1) 14px;
 		align-items: start;
-		padding: 12px var(--space-4);
+		padding: var(--space-3) var(--space-4);
 		border-top: 1px solid var(--border);
 	}
 	.nodes li:first-child {
@@ -1019,7 +1017,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px 8px;
+		gap: 6px var(--space-2);
 	}
 	.name {
 		font-weight: 600;
@@ -1055,14 +1053,14 @@
 		max-width: 34rem;
 	}
 	.form-error {
-		margin: 8px var(--space-4);
+		margin: var(--space-2) var(--space-4);
 	}
 	.form-foot {
 		display: grid;
 		grid-template-columns: minmax(10rem, 17rem) minmax(0, 1fr);
 		gap: 0 var(--space-4);
-		margin-top: 8px;
-		padding: 14px var(--space-4) 8px;
+		margin-top: var(--space-2);
+		padding: 14px var(--space-4) var(--space-2);
 		border-top: 1px solid var(--border);
 	}
 	.form-foot > div {
@@ -1074,14 +1072,14 @@
 	.reveal {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.join-info {
 		width: 100%;
 		word-break: break-all;
 	}
 	.preview {
-		margin-top: 12px;
+		margin-top: var(--space-3);
 	}
 	.warn-text {
 		color: var(--warn-text);
@@ -1092,7 +1090,7 @@
 	@media (max-width: 760px) {
 		.nodes li {
 			grid-template-columns: 12px minmax(0, 1fr);
-			padding: 12px var(--space-3);
+			padding: var(--space-3) var(--space-3);
 		}
 		.actions {
 			grid-column: 2;

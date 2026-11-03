@@ -572,8 +572,8 @@
 	.toolbar {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
-		margin-bottom: 16px;
+		gap: var(--space-2);
+		margin-bottom: var(--space-4);
 	}
 	.volume {
 		max-width: 500px;
@@ -591,14 +591,14 @@
 		margin-top: var(--gap);
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: var(--space-4);
 	}
 	.results form,
 	form.results {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: end;
-		gap: 16px;
+		gap: var(--space-4);
 	}
 	.results form label,
 	form.results label {
@@ -611,7 +611,7 @@
 	.folder {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.check span {
 		overflow-wrap: anywhere;

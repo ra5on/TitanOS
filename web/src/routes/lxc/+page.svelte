@@ -2,6 +2,7 @@
 	// System containers (LXC): the list on the left, the chosen container on
 	// the right with its actions, settings and snapshots.
 	import { poll } from '#lib/poll.ts';
+	import DangerZone from '#lib/components/DangerZone.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
@@ -260,14 +261,6 @@
 						disabled={busy === c.name || c.job?.state === 'running'}
 						onclick={() => (form = { existing: c })}>{t('lxc.edit')}</button
 					>
-					<button
-						class="btn"
-						disabled={readOnly ||
-							busy === c.name ||
-							c.state === 'running' ||
-							c.job?.state === 'running'}
-						onclick={() => ((deleteData = false), (removing = c))}>{t('lxc.remove')}</button
-					>
 				</div>
 
 				<dl>
@@ -376,6 +369,17 @@
 					<summary>{t('lxc.showConfig')}</summary>
 					{#if config}<pre class="mono config">{config}</pre>{/if}
 				</details>
+
+				<DangerZone hint={t('lxc.removeHint')}>
+					<button
+						class="btn btn-danger"
+						disabled={readOnly ||
+							busy === c.name ||
+							c.state === 'running' ||
+							c.job?.state === 'running'}
+						onclick={() => ((deleteData = false), (removing = c))}>{t('lxc.remove')}</button
+					>
+				</DangerZone>
 			</section>
 		{/if}
 	</div>
@@ -435,7 +439,7 @@
 	.layout {
 		display: grid;
 		grid-template-columns: minmax(200px, 280px) 1fr;
-		gap: 16px;
+		gap: var(--space-4);
 		align-items: start;
 	}
 	@media (max-width: 760px) {
@@ -489,7 +493,7 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: flex-start;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	h2 {
 		margin: 0;
@@ -507,12 +511,12 @@
 	.actions {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	dl {
 		display: grid;
 		grid-template-columns: max-content 1fr;
-		gap: 6px 16px;
+		gap: 6px var(--space-4);
 		margin: 0;
 		font-size: var(--text-md);
 	}
@@ -530,13 +534,13 @@
 	.snapshots {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.snapshot {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.snapshot span {
 		flex: 1;
@@ -561,7 +565,7 @@
 	label.check {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		font-size: var(--text-md);
 	}
 	p {

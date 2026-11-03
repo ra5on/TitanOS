@@ -571,7 +571,7 @@
 	.option {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	.option .hint {
 		padding-left: 28px;
@@ -598,8 +598,8 @@
 		display: grid;
 		grid-template-columns: auto minmax(0, 1fr) auto;
 		align-items: start;
-		gap: 4px 12px;
-		padding-top: 12px;
+		gap: var(--space-1) var(--space-3);
+		padding-top: var(--space-3);
 		border-top: 1px solid var(--panel-border);
 	}
 	.route > .check,
@@ -612,27 +612,27 @@
 	.route-text {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 		min-width: 0;
 	}
 	.route-name {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px 8px;
+		gap: 6px var(--space-2);
 	}
 	.urls,
 	.details {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: baseline;
-		gap: 4px 12px;
+		gap: var(--space-1) var(--space-3);
 		font-size: var(--text-md);
 		overflow-wrap: anywhere;
 	}
 	.details {
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	.more {
 		padding: 0;
@@ -650,7 +650,7 @@
 		cursor: pointer;
 	}
 	.explain[open] summary {
-		margin-bottom: 4px;
+		margin-bottom: var(--space-1);
 	}
 	details.explain:not(.tile) summary {
 		color: var(--accent);

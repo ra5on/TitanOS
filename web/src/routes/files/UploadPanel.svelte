@@ -160,7 +160,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px 12px;
+		gap: 6px var(--space-3);
 	}
 	.title {
 		margin-right: auto;
@@ -190,7 +190,7 @@
 	.state {
 		display: inline-flex;
 		align-items: center;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	.state.ok {
 		color: var(--ok-text);

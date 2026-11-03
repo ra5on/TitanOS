@@ -252,7 +252,7 @@
 	}
 	td {
 		text-align: left;
-		padding: 6px 8px;
+		padding: 6px var(--space-2);
 		border-bottom: 1px solid var(--border);
 		vertical-align: middle;
 	}

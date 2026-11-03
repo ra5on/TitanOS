@@ -980,7 +980,7 @@
 		overflow-y: auto;
 		overflow-x: auto;
 		scrollbar-gutter: auto;
-		padding: var(--tile-padding, 12px);
+		padding: var(--tile-padding, var(--space-3));
 		display: flex;
 		flex-direction: column;
 		gap: var(--tile-gap, 10px);

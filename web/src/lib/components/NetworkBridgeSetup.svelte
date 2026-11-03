@@ -175,7 +175,7 @@
 	.actions {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	label {
 		display: flex;

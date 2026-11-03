@@ -53,11 +53,11 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: flex-end;
-		gap: 8px 12px;
+		gap: var(--space-2) var(--space-3);
 	}
 	.pair label {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 </style>

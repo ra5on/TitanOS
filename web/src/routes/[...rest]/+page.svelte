@@ -14,7 +14,7 @@
 		padding: 40px 32px;
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 		text-align: center;
 	}
 	h1 {

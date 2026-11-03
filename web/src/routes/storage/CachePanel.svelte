@@ -178,8 +178,8 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px 12px;
-		margin-top: 12px;
+		gap: 6px var(--space-3);
+		margin-top: var(--space-3);
 		font-size: var(--text-md);
 	}
 	.label {
@@ -204,13 +204,13 @@
 	}
 	.modes {
 		display: grid;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.option {
 		display: flex;
 		gap: 10px;
 		align-items: flex-start;
-		padding: 10px 12px;
+		padding: 10px var(--space-3);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 		cursor: pointer;
@@ -220,7 +220,7 @@
 	}
 	.confirm {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		align-items: flex-start;
 	}
 </style>

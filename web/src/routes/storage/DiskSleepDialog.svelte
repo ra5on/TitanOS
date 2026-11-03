@@ -8,7 +8,7 @@
 	import { formatDiskBytes } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { effectiveSleep, overridesFrom, shortSerial } from './disk-sleep.ts';
-	import { sleepListed } from './sleep-view.ts';
+	import { sleepListed, sleepSince } from './sleep-view.ts';
 
 	type Props = {
 		status: DiskSleepStatus | undefined;
@@ -217,6 +217,7 @@
 												disk.state === 'asleep' ? 'storage.sleepAsleep' : 'storage.sleepAwake',
 											)}</span
 										>
+										{#if sleepSince(disk)}<span class="muted small">{sleepSince(disk)}</span>{/if}
 										{#if disk.error}<span class="chip error" title={disk.error}
 												>{t('storage.sleepStandbyFailed')}</span
 											>{/if}
@@ -297,7 +298,7 @@
 <style>
 	.disk-sleep {
 		display: grid;
-		gap: 16px;
+		gap: var(--space-4);
 	}
 	.sleep-default {
 		display: flex;
@@ -311,7 +312,7 @@
 		max-width: 100%;
 	}
 	.sleep-heading {
-		margin: 0 0 8px;
+		margin: 0 0 var(--space-2);
 		font-size: var(--text-md);
 	}
 	.sleep-list {
@@ -324,9 +325,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 12px;
+		gap: var(--space-3);
 		flex-wrap: wrap;
-		padding: 8px 0;
+		padding: var(--space-2) 0;
 		border-top: 1px solid var(--border);
 	}
 	.sleep-list li:first-child {
@@ -335,7 +336,7 @@
 	.sleep-list li.focused {
 		background: color-mix(in srgb, var(--accent) 10%, transparent);
 		border-radius: var(--radius-small);
-		padding-inline: 8px;
+		padding-inline: var(--space-2);
 	}
 	.sleep-name {
 		display: grid;

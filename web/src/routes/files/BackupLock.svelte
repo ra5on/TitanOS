@@ -51,8 +51,8 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
-		padding: 10px 12px;
+		gap: var(--space-2);
+		padding: 10px var(--space-3);
 		border-bottom: 1px solid var(--panel-border);
 	}
 	.toolbar .btn {

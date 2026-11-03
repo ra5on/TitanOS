@@ -1,6 +1,7 @@
 <script lang="ts">
 	// Adds or edits one network of the draft. Nothing is applied here; the
 	// page tests the whole draft on trial afterwards.
+	import HelpTip from '#lib/components/HelpTip.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import Segments from '#lib/components/Segments.svelte';
@@ -91,7 +92,7 @@
 					></label
 				>
 				{#if vlans || n.vlan}<label class="stack"
-						><span>{t('netx.vlan')}</span><input
+						><span>{t('netx.vlan')}<HelpTip term="vlan" /></span><input
 							class="field mono"
 							type="number"
 							min="0"
@@ -110,7 +111,9 @@
 			>
 			{#if wasManagement}<p class="muted hint">{t('netx.preferredHint')}</p>{/if}
 			<label class="check"
-				><input type="checkbox" bind:checked={n.bridge} /><span>{t('netx.bridge')}</span></label
+				><input type="checkbox" bind:checked={n.bridge} /><span
+					>{t('netx.bridge')}<HelpTip term="bridge" /></span
+				></label
 			>
 		</fieldset>
 
@@ -261,7 +264,7 @@
 	.grid {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
-		gap: 10px 16px;
+		gap: 10px var(--space-4);
 	}
 	.grid .stack {
 		max-width: none;
@@ -269,7 +272,7 @@
 	.route {
 		display: grid;
 		grid-template-columns: 1fr 1fr 6rem auto;
-		gap: 8px;
+		gap: var(--space-2);
 		align-items: end;
 	}
 	.route .stack {

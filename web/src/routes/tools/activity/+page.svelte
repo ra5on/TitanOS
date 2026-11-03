@@ -273,13 +273,13 @@
 	.row {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.filters {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: flex-end;
-		gap: 12px 16px;
+		gap: var(--space-3) var(--space-4);
 	}
 	label {
 		display: flex;
@@ -297,7 +297,7 @@
 	.check {
 		flex-direction: row;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		height: 2.75rem;
 	}
 	.check span {
@@ -311,7 +311,7 @@
 	.entries li {
 		display: grid;
 		grid-template-columns: 10.5rem 9rem minmax(0, 1fr);
-		gap: 4px 14px;
+		gap: var(--space-1) 14px;
 		padding: 10px 0;
 		border-bottom: 1px solid var(--border);
 	}

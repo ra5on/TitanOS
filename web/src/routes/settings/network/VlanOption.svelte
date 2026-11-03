@@ -2,6 +2,7 @@
 	// "Use VLANs": off by default, because VLANs need a router or switch that
 	// understands them. Switching on asks once; switching off is refused
 	// while a network still uses a VLAN.
+	import HelpTip from '#lib/components/HelpTip.svelte';
 	import { api } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
@@ -39,7 +40,7 @@
 </script>
 
 <section class="tile panel" aria-labelledby="net-vlans" id="vlans">
-	<h2 class="tile-title" id="net-vlans">{t('netx.vlans.title')}</h2>
+	<h2 class="tile-title" id="net-vlans">{t('netx.vlans.title')}<HelpTip term="vlan" /></h2>
 	<label class="check">
 		<input
 			type="checkbox"

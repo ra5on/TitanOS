@@ -107,9 +107,17 @@ type mcpToolView struct {
 func (s *Server) handleMCPSettings(w http.ResponseWriter, r *http.Request) {
 	settings := s.mcpSettings()
 	tools := []mcpToolView{}
+	// Every account sees the state and the endpoint (Settings › MCP server
+	// opens for users too, 19b). The tools and their switches belong to the
+	// administration of the server: users get an empty list.
+	user := currentUser(r)
+	if !user.Role.CanAdminister() {
+		writeJSON(w, http.StatusOK, map[string]any{"enabled": settings.Enabled, "path": mcpPath, "protocolVersions": mcpVersions, "scope": mcpScope, "tools": tools})
+		return
+	}
 	// Every tool an account with this role could reach, whatever scopes its
 	// tokens have.
-	for _, tool := range s.mcpAvailable(currentUser(r), auth.TokenScopes) {
+	for _, tool := range s.mcpAvailable(user, auth.TokenScopes) {
 		kind := "change"
 		if tool.ReadOnly {
 			kind = "read"

@@ -119,12 +119,12 @@
 	table.grid tbody {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr));
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	table.grid tr {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 		border: 1px solid var(--border);
 		border-radius: 4px;
 		padding: 10px;
@@ -176,7 +176,7 @@
 	.name {
 		display: flex;
 		align-items: center;
-		gap: 4px;
+		gap: var(--space-1);
 		border: 0;
 		background: none;
 		cursor: pointer;

@@ -45,7 +45,7 @@
 		'restore-probe',
 		'snapshot',
 	] as const;
-	const targets = $derived(
+	const targets = $derived<{ id: string; name: string; disabled?: boolean }[]>(
 		draft?.kind === 'smart-long' || draft?.kind === 'smart-short'
 			? (storage?.disks ?? [])
 					.filter((d) => d.serial && d.role !== 'stick')
@@ -54,9 +54,16 @@
 				? backups
 						.filter((b) => !['usb-copy', 'smb-copy'].includes(b.job.destination.type))
 						.map((b) => ({ id: b.job.id, name: b.job.id }))
-				: (storage?.volumes ?? [])
-						.filter((v) => draft?.kind !== 'snapshot' || v.filesystem === 'btrfs')
-						.map((v) => ({ id: v.name, name: v.name })),
+				: (storage?.volumes ?? []).map((v) =>
+						// ext4/XFS have no snapshots (plan 7h): listed, but not to be chosen.
+						draft?.kind === 'snapshot' && v.filesystem !== 'btrfs'
+							? {
+									id: v.name,
+									name: `${v.name} · ${t('ops.noSnapshots', { filesystem: v.filesystem === 'xfs' ? 'XFS' : 'ext4' })}`,
+									disabled: true,
+								}
+							: { id: v.name, name: v.name },
+					),
 	);
 	async function load() {
 		try {
@@ -361,10 +368,12 @@
 			<label
 				>{t('ops.target')}<select class="field" bind:value={draft.target} required
 					><option value="">{t('ops.choose')}</option>{#each targets as target (target.id)}<option
-							value={target.id}>{target.name}</option
+							value={target.id}
+							disabled={target.disabled}>{target.name}</option
 						>{/each}</select
 				></label
 			>
+			{#if draft.kind === 'snapshot'}<p class="muted">{t('ops.snapshotBtrfsOnly')}</p>{/if}
 			<label
 				>{t('tasks.dependsOn')}<select class="field" bind:value={draft.dependsOn}
 					><option value="">{t('tasks.noDependency')}</option
@@ -573,7 +582,7 @@
 	}
 	th,
 	td {
-		padding: 12px;
+		padding: var(--space-3);
 		text-align: left;
 		border-bottom: 1px solid var(--border);
 		vertical-align: top;
@@ -589,7 +598,7 @@
 	.result {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 12px;
+		gap: var(--space-3);
 		padding: 10px 0;
 		border-bottom: 1px solid var(--border);
 	}
@@ -598,7 +607,7 @@
 	}
 	.detail {
 		display: block;
-		margin-top: 4px;
+		margin-top: var(--space-1);
 		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
 	}

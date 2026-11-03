@@ -50,7 +50,7 @@ func TestTemperatureMissingFaultySleepingAndDiskSensors(t *testing.T) {
 	for _, value := range []string{"not a number", "", "-999999999"} {
 		os.WriteFile(filepath.Join(root, "temp1_input"), []byte(value), 0o600)
 		got := readTemperatures(sys)
-		if len(got) != 1 || got[0].Celsius != nil || got[0].Label != "temp1" {
+		if len(got) != 1 || got[0].Celsius != nil || got[0].Label != "temp1" || got[0].Channel != "temp1" {
 			t.Fatalf("invalid/disks/unlabelled: %+v", got)
 		}
 	}

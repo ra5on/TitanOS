@@ -1,4 +1,4 @@
-// Settings › API und CLI › MCP: the MCP server of the NAS (backend mcp.go,
+// Settings › MCP server and the MCP token of Settings › API und CLI: the MCP
 // docs/MCP.md) and the configuration snippets for AI clients.
 
 export type MCPStatus = {

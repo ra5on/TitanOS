@@ -119,13 +119,13 @@
 	.snapshots {
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: var(--space-4);
 	}
 	form,
 	.row {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	form {
 		align-items: flex-end;

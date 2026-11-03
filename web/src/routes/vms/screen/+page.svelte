@@ -102,8 +102,8 @@
 		flex: none;
 		display: flex;
 		align-items: center;
-		gap: 4px;
-		padding: 4px 12px;
+		gap: var(--space-1);
+		padding: var(--space-1) var(--space-3);
 		border-top: 1px solid var(--border);
 		font-size: var(--text-base);
 	}

@@ -2,6 +2,7 @@
 	import { poll } from '#lib/poll.ts';
 	import { beforeNavigate, goto } from '$app/navigation';
 	import { onDestroy, untrack } from 'svelte';
+	import DangerZone from '#lib/components/DangerZone.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { dockerName } from '#lib/docker-name.ts';
@@ -38,6 +39,7 @@
 	import { isRunning, webLinks } from '../../container.ts';
 	import AppProxy from './AppProxy.svelte';
 	import TailnetDialog from '../../TailnetDialog.svelte';
+	import RemoveAppDialog from '../../RemoveAppDialog.svelte';
 	import { inTailnet, tailnetPort } from '#lib/app-proxy.ts';
 	import AppIpv64 from './AppIpv64.svelte';
 	import {
@@ -263,6 +265,27 @@
 			leaving = true;
 		}
 	});
+	// Removing the app (danger zone): afterwards the app is gone, so the page
+	// returns to the Docker overview without asking about unsaved changes.
+	let removing = $state(false),
+		removeBusy = $state(false),
+		removeError = $state('');
+	async function removeApp(purge: boolean) {
+		removeBusy = true;
+		removeError = '';
+		try {
+			await api.delete(
+				`/docker/apps/${encodeURIComponent(name)}${purge ? `?deleteData=${encodeURIComponent(name)}` : ''}`,
+			);
+			removing = false;
+			allowNavigation = true;
+			await goto('/docker');
+		} catch (err) {
+			removeError = apiErrorText(err);
+		} finally {
+			removeBusy = false;
+		}
+	}
 	function discard() {
 		allowNavigation = true;
 		leaving = false;
@@ -872,8 +895,27 @@
 				>{t(view === 'form' ? 'appform.editCompose' : 'apps.asForm')}</button
 			>
 		</div>
+		<div class="danger">
+			<DangerZone hint={t('docker.appRemoveHint')}>
+				<button
+					type="button"
+					class="btn btn-danger"
+					disabled={applying || removeBusy}
+					onclick={() => ((removeError = ''), (removing = true))}>{t('docker.remove')}</button
+				>
+			</DangerZone>
+		</div>
 	</section>
 {/if}
+
+{#if removing}<RemoveAppDialog
+		app={name}
+		volume={status?.settings.volume ?? ''}
+		busy={removeBusy}
+		error={removeError}
+		onclose={() => (removing = false)}
+		onremove={removeApp}
+	/>{/if}
 
 {#if tailnetDialog}<TailnetDialog
 		app={name}
@@ -959,7 +1001,7 @@
 	.segments {
 		display: inline-flex;
 		align-self: flex-start;
-		gap: 4px;
+		gap: var(--space-1);
 		padding: 3px;
 		background: var(--panel-bg);
 		border: 1px solid var(--panel-border);
@@ -998,28 +1040,28 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 10px 16px;
-		padding: 12px 18px;
+		gap: 10px var(--space-4);
+		padding: var(--space-3) 18px;
 	}
 	.app-state,
 	.quick {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px 16px;
+		gap: var(--space-2) var(--space-4);
 		font-size: var(--text-md);
 	}
 	.quick {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px 16px;
+		gap: var(--space-2) var(--space-4);
 		font-size: var(--text-md);
 	}
 	.state {
 		display: inline-flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.value {
 		font-size: var(--text-base);
@@ -1030,12 +1072,12 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.logs {
 		max-height: 60vh;
 		margin: 0;
-		padding: 12px 14px;
+		padding: var(--space-3) 14px;
 		overflow: auto;
 		background: var(--bg);
 		border: 1px solid var(--border);
@@ -1046,7 +1088,7 @@
 		font-size: var(--text-base);
 	}
 	pre {
-		margin: 8px 0 0;
+		margin: var(--space-2) 0 0;
 		font-family: var(--font-mono);
 		font-size: var(--text-sm);
 		white-space: pre-wrap;
@@ -1099,6 +1141,9 @@
 		margin: var(--space-2) var(--space-4);
 	}
 	/* Always in reach at the bottom of the window while editing. */
+	.danger {
+		padding: 0 var(--space-4) var(--space-3);
+	}
 	.apply {
 		position: sticky;
 		bottom: 0;
@@ -1106,7 +1151,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: var(--space-2) 12px;
+		gap: var(--space-2) var(--space-3);
 		margin-top: var(--space-2);
 		padding: var(--space-3) var(--space-4) var(--space-3) calc(min(17rem, 30%) + 2 * var(--space-4));
 		background: var(--surface);

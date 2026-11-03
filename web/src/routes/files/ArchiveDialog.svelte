@@ -205,7 +205,7 @@
 	}
 	label {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		flex-wrap: wrap;
 		align-items: center;
 		margin: 10px 0;
@@ -223,7 +223,7 @@
 		grid-template-columns: 20px minmax(0, 1fr) auto;
 		gap: 10px;
 		border-bottom: 1px solid var(--border);
-		padding: 8px 0;
+		padding: var(--space-2) 0;
 	}
 	.mono {
 		overflow-wrap: anywhere;

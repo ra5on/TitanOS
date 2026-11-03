@@ -57,6 +57,17 @@ Die NAS-Ausgaben vom 15.10.2026 bestätigten i915 auf `8086:7d67`, intel_vpu auf
 Die Auslastungswerte der neuen Implementierung unter echter GPU-/NPU-Last sind
 weiter auf dem NAS zu prüfen; synthetische Zähler ersetzen diese Prüfung nicht.
 
+## Protokolle über einen Neustart (seit 0.41.0)
+
+Das Systemprotokoll läuft im RAM. Zusätzlich schreibt TitanOS es je Start in
+eine Datei auf dem ersten gesunden Volume (`.titanos/logs/`, Größe begrenzt,
+die ältesten Starts fallen weg), nie auf den Stick. Unter Werkzeuge ›
+Protokolle lässt sich deshalb auch der **vorige Start** ansehen, etwa nach
+einem Absturz; der Download liefert bis 50.000 Zeilen. Absturzdaten des
+Kernels (pstore) werden beim nächsten Start dorthin gesichert. Auch die
+Meldungen der Glocke überstehen so einen Neustart. Ohne Volume bleibt nur das
+Protokoll im RAM.
+
 ## Temperaturen
 
 Unter Einstellungen → Temperaturen wählt jedes Konto seine Sensoren und die

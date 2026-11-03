@@ -1,12 +1,16 @@
 <script lang="ts">
 	// Settings › MCP server (decided 31.10.2026): status, how to connect a
 	// client, the tools grouped by area with their switch (off, on, on with
-	// dangerous calls) and the last calls from the activity log.
+	// dangerous calls) and the last calls from the activity log. Every account
+	// opens it (PLAN 19b): users see the state, the endpoint, how
+	// to connect and the token button; the switch, the tools and the last calls
+	// stay with owners and administrators (the server checks the same).
 	import PageHead from '#lib/components/PageHead.svelte';
 	import HelpTip from '#lib/components/HelpTip.svelte';
 	import { api } from '#lib/api.ts';
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { formatDateTime } from '#lib/format.ts';
+	import { session } from '#lib/session.svelte.ts';
 	import {
 		claudeCodeCommand,
 		desktopBridgeConfig,
@@ -53,6 +57,7 @@
 	let copied = $state('');
 	let open = $state<Record<string, boolean>>({});
 
+	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 	const origin = typeof location === 'undefined' ? '' : location.origin;
 	const endpoint = $derived(mcpEndpoint(origin, status?.path));
 	const snippet = $derived(
@@ -87,6 +92,7 @@
 		} catch {
 			tokens = 0;
 		}
+		if (!admin) return;
 		try {
 			const res = await api.get<{ entries: Call[] }>('/activity?via=mcp&days=1&limit=20');
 			calls = res.entries;
@@ -168,14 +174,14 @@
 	<section class="tile panel" aria-labelledby="mcp-status">
 		<div class="head">
 			<h2 class="tile-title" id="mcp-status">{t('mcp.status')}</h2>
-			<label class="check"
-				><input
-					type="checkbox"
-					checked={status.enabled}
-					disabled={saving}
-					onchange={(e) => save(e.currentTarget.checked)}
-				/><span>{t('mcp.enabled')}</span></label
-			>
+			{#if admin}<label class="check"
+					><input
+						type="checkbox"
+						checked={status.enabled}
+						disabled={saving}
+						onchange={(e) => save(e.currentTarget.checked)}
+					/><span>{t('mcp.enabled')}</span></label
+				>{/if}
 		</div>
 		<div class="facts">
 			<div>
@@ -184,13 +190,13 @@
 					>{status.enabled ? '● ' + t('mcp.ready') : '○ ' + t('mcp.off')}</span
 				>
 			</div>
-			<div>
-				<span class="muted">{t('mcp.callsToday')}</span>
-				<span
-					><strong>{today.length}</strong>{#if today.some((c) => !c.ok)}
-						· {t('mcp.refused', { count: today.filter((c) => !c.ok).length })}{/if}</span
-				>
-			</div>
+			{#if admin}<div>
+					<span class="muted">{t('mcp.callsToday')}</span>
+					<span
+						><strong>{today.length}</strong>{#if today.some((c) => !c.ok)}
+							· {t('mcp.refused', { count: today.filter((c) => !c.ok).length })}{/if}</span
+					>
+				</div>{/if}
 			<div>
 				<span class="muted">{t('mcp.tokens')}</span>
 				<strong>{tokens}</strong>
@@ -230,109 +236,111 @@
 			<a class="btn btn-primary" href="/settings/api?mcp=1">{t('mcp.createToken')}</a>
 		</div>
 		<p class="muted small">{t('mcp.tokenHint')}</p>
+		<p class="muted small">{t('mcp.placeholder')}</p>
+		{#if tab === 'bridge'}<p class="muted small">{t('mcp.bridgeHint')}</p>{/if}
 	</section>
 
-	<section class="tile panel" aria-labelledby="mcp-tools">
-		<div class="head">
-			<h2 class="tile-title" id="mcp-tools">{t('mcp.tools')}</h2>
-			<div class="quick" role="group" aria-label={t('mcp.quick')}>
-				<span class="muted small">{t('mcp.quick')}</span>
-				<button type="button" class="btn small" disabled={saving} onclick={() => quick('read')}
-					>{t('mcp.quickRead')}</button
-				>
-				<button
-					type="button"
-					class="btn small"
-					class:chosen={isStandard}
-					disabled={saving}
-					onclick={() => quick('standard')}>{t('mcp.quickStandard')}</button
-				>
-				<button type="button" class="btn small" disabled={saving} onclick={() => quick('all')}
-					>{t('mcp.quickAll')}</button
-				>
-			</div>
-		</div>
-		<p class="muted small">{t('mcp.toolsIntro')}</p>
-		{#if saved}<p class="notice-ok" role="status">{t('mcp.saved')}</p>{/if}
-		<div class="groups">
-			{#each groups as group (group.area)}
-				{@const on = group.tools.some((tool) => modes[tool.name] !== 'off')}
-				<div class="group">
-					<div class="group-head">
-						<input
-							type="checkbox"
-							checked={on}
-							disabled={saving}
-							aria-label={t(`mcp.area.${group.area}` as MessageKey)}
-							onchange={(e) => setGroup(group.tools, e.currentTarget.checked)}
-						/>
-						<button
-							type="button"
-							class="group-toggle"
-							aria-expanded={!!open[group.area]}
-							onclick={() => (open[group.area] = !open[group.area])}
-						>
-							<strong>{t(`mcp.area.${group.area}` as MessageKey)}</strong>
-							<span class="muted small">{groupLine(group.tools)}</span>
-							<span class="muted" aria-hidden="true">{open[group.area] ? '▾' : '▸'}</span>
-						</button>
-					</div>
-					{#if open[group.area]}
-						<div class="tools">
-							{#each group.tools as tool (tool.name)}
-								<div class="tool">
-									<span class="mono name">{tool.name}</span>
-									<span class="muted small">{t(`mcp.tool.${tool.name}` as MessageKey)}</span>
-									<span
-										class="chip {kind(tool) === 'read'
-											? 'info'
-											: kind(tool) === 'danger'
-												? 'warn'
-												: ''}"
-										>{kind(tool) === 'read' ? '◉' : kind(tool) === 'danger' ? '⚠' : '✎'}
-										{t(kindLabel[kind(tool)])}</span
-									>
-									<select
-										class="field"
-										value={modes[tool.name]}
-										disabled={saving}
-										aria-label={tool.name}
-										onchange={(e) => setMode(tool.name, e.currentTarget.value as Mode)}
-									>
-										<option value="off">{t('mcp.modeOff')}</option>
-										<option value="on">{t('mcp.modeOn')}</option>
-										{#if tool.dangerous}<option value="all">{t('mcp.modeAll')}</option>{/if}
-									</select>
-								</div>
-							{/each}
-						</div>
-					{/if}
+	{#if admin}<section class="tile panel" aria-labelledby="mcp-tools">
+			<div class="head">
+				<h2 class="tile-title" id="mcp-tools">{t('mcp.tools')}</h2>
+				<div class="quick" role="group" aria-label={t('mcp.quick')}>
+					<span class="muted small">{t('mcp.quick')}</span>
+					<button type="button" class="btn small" disabled={saving} onclick={() => quick('read')}
+						>{t('mcp.quickRead')}</button
+					>
+					<button
+						type="button"
+						class="btn small"
+						class:chosen={isStandard}
+						disabled={saving}
+						onclick={() => quick('standard')}>{t('mcp.quickStandard')}</button
+					>
+					<button type="button" class="btn small" disabled={saving} onclick={() => quick('all')}
+						>{t('mcp.quickAll')}</button
+					>
 				</div>
-			{/each}
-		</div>
-	</section>
-
-	<section class="tile panel" aria-labelledby="mcp-recent">
-		<h2 class="tile-title" id="mcp-recent">{t('mcp.recent')}</h2>
-		{#if calls.length === 0}<p class="muted">{t('mcp.recentNone')}</p>{:else}
-			<table class="calls">
-				<tbody>
-					{#each calls.slice(0, 10) as call, i (i)}
-						<tr>
-							<td class="mono">{formatDateTime(new Date(call.at))}</td>
-							<td class="mono">{call.target ?? ''}</td>
-							<td class="result"
-								><span class="chip {call.ok ? 'ok' : 'error'}"
-									>{call.ok ? 'ok' : (call.status ?? '–')}</span
-								></td
+			</div>
+			<p class="muted small">{t('mcp.toolsIntro')}</p>
+			{#if saved}<p class="notice-ok" role="status">{t('mcp.saved')}</p>{/if}
+			<div class="groups">
+				{#each groups as group (group.area)}
+					{@const on = group.tools.some((tool) => modes[tool.name] !== 'off')}
+					<div class="group">
+						<div class="group-head">
+							<input
+								type="checkbox"
+								checked={on}
+								disabled={saving}
+								aria-label={t(`mcp.area.${group.area}` as MessageKey)}
+								onchange={(e) => setGroup(group.tools, e.currentTarget.checked)}
+							/>
+							<button
+								type="button"
+								class="group-toggle"
+								aria-expanded={!!open[group.area]}
+								onclick={() => (open[group.area] = !open[group.area])}
 							>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		{/if}
-		<a href="/tools/activity">{t('mcp.recentAll')}</a>
-	</section>
+								<strong>{t(`mcp.area.${group.area}` as MessageKey)}</strong>
+								<span class="muted small">{groupLine(group.tools)}</span>
+								<span class="muted" aria-hidden="true">{open[group.area] ? '▾' : '▸'}</span>
+							</button>
+						</div>
+						{#if open[group.area]}
+							<div class="tools">
+								{#each group.tools as tool (tool.name)}
+									<div class="tool">
+										<span class="mono name">{tool.name}</span>
+										<span class="muted small">{t(`mcp.tool.${tool.name}` as MessageKey)}</span>
+										<span
+											class="chip {kind(tool) === 'read'
+												? 'info'
+												: kind(tool) === 'danger'
+													? 'warn'
+													: ''}"
+											>{kind(tool) === 'read' ? '◉' : kind(tool) === 'danger' ? '⚠' : '✎'}
+											{t(kindLabel[kind(tool)])}</span
+										>
+										<select
+											class="field"
+											value={modes[tool.name]}
+											disabled={saving}
+											aria-label={tool.name}
+											onchange={(e) => setMode(tool.name, e.currentTarget.value as Mode)}
+										>
+											<option value="off">{t('mcp.modeOff')}</option>
+											<option value="on">{t('mcp.modeOn')}</option>
+											{#if tool.dangerous}<option value="all">{t('mcp.modeAll')}</option>{/if}
+										</select>
+									</div>
+								{/each}
+							</div>
+						{/if}
+					</div>
+				{/each}
+			</div>
+		</section>
+
+		<section class="tile panel" aria-labelledby="mcp-recent">
+			<h2 class="tile-title" id="mcp-recent">{t('mcp.recent')}</h2>
+			{#if calls.length === 0}<p class="muted">{t('mcp.recentNone')}</p>{:else}
+				<table class="calls">
+					<tbody>
+						{#each calls.slice(0, 10) as call, i (i)}
+							<tr>
+								<td class="mono">{formatDateTime(new Date(call.at))}</td>
+								<td class="mono">{call.target ?? ''}</td>
+								<td class="result"
+									><span class="chip {call.ok ? 'ok' : 'error'}"
+										>{call.ok ? 'ok' : (call.status ?? '–')}</span
+									></td
+								>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			{/if}
+			<a href="/tools/activity">{t('mcp.recentAll')}</a>
+		</section>{/if}
 {/if}
 
 <style>
@@ -341,7 +349,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 8px 16px;
+		gap: var(--space-2) var(--space-4);
 	}
 	.head h2 {
 		margin: 0;
@@ -349,14 +357,14 @@
 	.facts {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 12px 28px;
+		gap: var(--space-3) 28px;
 		font-size: var(--text-md);
 	}
 	.facts > div,
 	.address {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	.address {
 		flex: 1;
@@ -364,7 +372,7 @@
 	}
 	.copy-row {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.copy-row input {
 		flex: 1;
@@ -373,11 +381,11 @@
 	.tabs {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px;
+		gap: var(--space-1);
 		border-bottom: 1px solid var(--border);
 	}
 	.tabs button {
-		padding: 8px 12px;
+		padding: var(--space-2) var(--space-3);
 		border: 0;
 		border-radius: var(--radius-ctl) var(--radius-ctl) 0 0;
 		background: none;
@@ -392,7 +400,7 @@
 	}
 	.snippet {
 		margin: 0;
-		padding: 12px;
+		padding: var(--space-3);
 		overflow-x: auto;
 		border-radius: var(--radius-ctl);
 		background: var(--chip);
@@ -416,12 +424,12 @@
 	.group {
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
-		padding: 0 12px;
+		padding: 0 var(--space-3);
 	}
 	.group-head {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.group-head input {
 		width: 18px;
@@ -432,7 +440,7 @@
 		flex: 1;
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 		min-height: 44px;
 		padding: 0;
 		border: 0;
@@ -452,7 +460,7 @@
 	.tool {
 		display: grid;
 		grid-template-columns: minmax(150px, 190px) 1fr auto 170px;
-		gap: 12px;
+		gap: var(--space-3);
 		align-items: center;
 		padding: 6px 0;
 		border-top: 1px solid var(--border);
@@ -474,7 +482,7 @@
 		font-size: var(--text-base);
 	}
 	.calls td {
-		padding: 6px 8px 6px 0;
+		padding: 6px var(--space-2) 6px 0;
 		border-top: 1px solid var(--border);
 	}
 	.calls .result {

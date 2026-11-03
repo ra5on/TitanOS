@@ -835,7 +835,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: baseline;
-		gap: 4px 12px;
+		gap: var(--space-1) var(--space-3);
 		font-size: var(--text-lg);
 	}
 	.base {
@@ -864,7 +864,7 @@
 	.changelog {
 		max-height: 18rem;
 		overflow-y: auto;
-		padding: 10px 12px;
+		padding: 10px var(--space-3);
 		background: var(--track);
 		border-radius: var(--radius-ctl);
 	}
@@ -881,7 +881,7 @@
 	.progress {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.slots {
 		margin: 0;
@@ -889,14 +889,14 @@
 		list-style: none;
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.slots li {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 6px 18px;
-		padding: 10px 12px;
+		padding: 10px var(--space-3);
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-ctl);
 	}
@@ -927,7 +927,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: flex-end;
-		gap: 10px 12px;
+		gap: 10px var(--space-3);
 	}
 	.interval .narrow {
 		flex: 1 1 220px;
@@ -953,11 +953,11 @@
 		border: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.kernel-choice legend {
 		padding: 0;
-		margin-bottom: 4px;
+		margin-bottom: var(--space-1);
 		font-size: var(--text-base);
 		color: var(--muted);
 	}

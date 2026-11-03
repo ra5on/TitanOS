@@ -8,6 +8,9 @@
 	type Props = { unbound: UnboundDevice[]; firmware: FirmwareMissing[] };
 	let { unbound, firmware }: Props = $props();
 
+	// Issue form for hardware reports (.github/ISSUE_TEMPLATE/hardware.yml).
+	const hardwareIssue = 'https://github.com/ra5on/TitanOS/issues/new?template=hardware.yml';
+
 	const important = $derived(attention(unbound));
 	const quiet = $derived(
 		unbound.filter((device) => device.hint === 'not_needed' || device.hint === 'unclassified'),
@@ -68,6 +71,11 @@
 			>
 			<span>{hintText(device)}</span>
 			{#if device.hint === 'plugin'}<a href="/plugins">{t('hwcheck.openPlugins')}</a>{/if}
+			{#if device.hint === 'unclassified'}<a
+					href={hardwareIssue}
+					target="_blank"
+					rel="noopener noreferrer">{t('hwcheck.reportUnclassified')}</a
+				>{/if}
 			{#if device.messages?.length}
 				<ul class="messages">
 					{#each device.messages as message, index (index)}<li class="mono muted">
@@ -127,8 +135,8 @@
 	.device {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px 20px;
-		padding: 12px 0;
+		gap: var(--space-2) 20px;
+		padding: var(--space-3) 0;
 		border-top: 1px solid var(--panel-border);
 		font-size: var(--text-md);
 	}

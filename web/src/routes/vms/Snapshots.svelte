@@ -338,7 +338,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.scope {
 		flex: 1 1 320px;
@@ -350,18 +350,18 @@
 	.buttons {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.schedule {
 		margin: 0;
 		font-size: var(--text-md);
-		padding: 12px 16px;
+		padding: var(--space-3) var(--space-4);
 		background: var(--glass-surface);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 	}
 	.list {
-		padding: 0 16px;
+		padding: 0 var(--space-4);
 	}
 	.row {
 		display: flex;
@@ -378,7 +378,7 @@
 		display: flex;
 		flex: 1 1 260px;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 		min-width: 0;
 		overflow-wrap: anywhere;
 		font-size: var(--text-md);
@@ -389,7 +389,7 @@
 	form {
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: var(--space-4);
 	}
 	label {
 		display: flex;
@@ -399,7 +399,7 @@
 	.check {
 		flex-direction: row;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.check input {
 		flex: none;
@@ -410,18 +410,18 @@
 	.week {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 16px;
+		gap: var(--space-4);
 	}
 	.fields > label {
 		flex: 1;
 	}
 	fieldset {
-		padding: 12px;
+		padding: var(--space-3);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 	}
 	pre {
-		margin-top: 8px;
+		margin-top: var(--space-2);
 		font-size: var(--text-sm);
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;

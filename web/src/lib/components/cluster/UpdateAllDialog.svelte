@@ -150,16 +150,16 @@
 		border-bottom: 1px solid var(--border);
 	}
 	td {
-		padding: 8px 10px;
+		padding: var(--space-2) 10px;
 		border-bottom: 1px solid var(--border);
 	}
 	td .chip {
-		margin-left: 8px;
+		margin-left: var(--space-2);
 	}
 	.order {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 		margin: 14px 0 6px;
 		padding: 0;
 		border: 0;

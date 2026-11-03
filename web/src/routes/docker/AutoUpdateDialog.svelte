@@ -126,7 +126,7 @@
 <style>
 	fieldset {
 		border: 0;
-		margin: 0 0 12px;
+		margin: 0 0 var(--space-3);
 		padding: 0;
 		display: flex;
 		flex-direction: column;
@@ -134,7 +134,7 @@
 	}
 	legend {
 		font-weight: 500;
-		margin-bottom: 4px;
+		margin-bottom: var(--space-1);
 	}
 	.app {
 		flex-wrap: wrap;

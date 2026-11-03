@@ -160,8 +160,8 @@
 	}
 	.gallery {
 		display: flex;
-		gap: 8px;
-		margin: 12px 0;
+		gap: var(--space-2);
+		margin: var(--space-3) 0;
 	}
 	img {
 		max-width: 100%;

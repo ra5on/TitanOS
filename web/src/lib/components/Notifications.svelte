@@ -225,7 +225,7 @@
 		cursor: pointer;
 	}
 	.clear {
-		margin: 0 16px 8px;
+		margin: 0 var(--space-4) var(--space-2);
 	}
 	.dismiss {
 		margin-left: auto;
@@ -286,7 +286,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		padding: 0 4px;
+		padding: 0 var(--space-1);
 		border-radius: 999px;
 		background: var(--accent);
 		color: var(--on-accent);
@@ -317,15 +317,15 @@
 		display: flex;
 		align-items: baseline;
 		justify-content: space-between;
-		gap: 12px;
-		padding: 12px 14px;
+		gap: var(--space-3);
+		padding: var(--space-3) 14px;
 		border-bottom: 1px solid var(--menu-border);
 	}
 	.links,
 	.notice-links {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px 14px;
+		gap: var(--space-1) 14px;
 	}
 	.name {
 		font-size: var(--text-md);
@@ -340,8 +340,8 @@
 	li {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
-		padding: 12px 14px;
+		gap: var(--space-1);
+		padding: var(--space-3) 14px;
 		border-bottom: 1px solid var(--menu-border);
 		border-left: 3px solid transparent;
 	}
@@ -364,7 +364,7 @@
 	.empty,
 	.foot {
 		margin: 0;
-		padding: 12px 14px;
+		padding: var(--space-3) 14px;
 	}
 	.foot {
 		font-size: var(--text-sm);

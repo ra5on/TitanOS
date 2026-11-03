@@ -34,6 +34,8 @@ nicht vor dem NVIDIA-Plugin belegt. Die UEFI-Textkonsole bleibt verfügbar.
 
 ## Ältere Karten (`nvidia-legacy`)
 
+> **Stand 3.11.2026:** Das Plugin wird derzeit nicht gebaut. NVIDIAs Archiv für Debian 13 führt die Reihe 580 nicht mehr; eine andere Quelle ist noch nicht gewählt. Der folgende Abschnitt beschreibt den geplanten Umfang.
+
 Entscheidung des Projektinhabers vom 31.10.2026: Für Maxwell, Pascal und Volta
 (z. B. GTX 750 Ti, GTX 9xx, GTX 10xx, Titan V) gibt es das Plugin
 `nvidia-legacy` mit dem **proprietären** Kernelmodul der Reihe 580, der letzten

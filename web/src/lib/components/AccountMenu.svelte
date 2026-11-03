@@ -180,8 +180,8 @@
 	.who {
 		display: flex;
 		align-items: center;
-		gap: 12px;
-		padding: 10px 10px 12px;
+		gap: var(--space-3);
+		padding: 10px 10px var(--space-3);
 	}
 	.lines {
 		display: flex;
@@ -199,7 +199,7 @@
 	}
 	hr {
 		height: 1px;
-		margin: 6px 4px;
+		margin: 6px var(--space-1);
 		border: 0;
 		background: var(--border);
 	}
@@ -209,7 +209,7 @@
 		min-height: 40px;
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 		padding: 0 10px;
 		font-size: var(--text-md);
 	}

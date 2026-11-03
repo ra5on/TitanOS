@@ -47,12 +47,12 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px 12px;
+		gap: var(--space-2) var(--space-3);
 		width: fit-content;
 		max-width: 100%;
 		box-sizing: border-box;
-		margin-bottom: 16px;
-		padding: 4px 4px 4px 14px;
+		margin-bottom: var(--space-4);
+		padding: var(--space-1) var(--space-1) var(--space-1) 14px;
 		font-size: var(--text-md);
 		border: 1px solid var(--accent);
 		border-radius: var(--radius-tile);

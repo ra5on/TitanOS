@@ -30,6 +30,12 @@ func TestAlarmLimit(t *testing.T) {
 		{"nct6798", &low, 0, false},
 		{"nct6798", &crit, 95, true},
 		{"", nil, 95, true},
+		// Kinds of chips without a value of their own get their own default.
+		{"drivetemp", nil, 60, true},
+		{"nvme", nil, 85, true},
+		{"k10temp", nil, 95, true},
+		// The chip's own value comes first, also for disks.
+		{"nvme", &crit, 95, true},
 	} {
 		limit, alarms := AlarmLimit(c.chip, c.critical)
 		if limit != c.limit || alarms != c.alarms {

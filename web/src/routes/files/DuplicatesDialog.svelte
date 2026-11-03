@@ -168,10 +168,10 @@
 	}
 	.row {
 		display: flex;
-		gap: 12px;
+		gap: var(--space-3);
 		justify-content: space-between;
 		align-items: center;
-		padding: 8px 0;
+		padding: var(--space-2) 0;
 	}
 	.row label {
 		overflow-wrap: anywhere;
@@ -181,6 +181,6 @@
 	}
 	section {
 		border-top: 1px solid var(--border);
-		margin-top: 12px;
+		margin-top: var(--space-3);
 	}
 </style>

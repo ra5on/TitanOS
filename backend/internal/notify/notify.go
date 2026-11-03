@@ -432,6 +432,13 @@ func (m *Manager) Wording(kind, subject string) (string, string) {
 	return wording(language, kind, subject)
 }
 
+// language is the language of what is sent out.
+func (m *Manager) language() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.settings.Language
+}
+
 // Test sends a test message through one channel and reports what went wrong.
 func (m *Manager) Test(channel string) error {
 	m.mu.Lock()

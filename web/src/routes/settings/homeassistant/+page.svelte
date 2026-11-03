@@ -606,7 +606,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 8px 16px;
+		gap: var(--space-2) var(--space-4);
 	}
 	label {
 		display: flex;
@@ -620,7 +620,7 @@
 	.row {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 16px 24px;
+		gap: var(--space-4) var(--space-5);
 	}
 	.end {
 		align-items: flex-end;
@@ -663,14 +663,14 @@
 	fieldset {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr));
-		gap: 10px 24px;
+		gap: 10px var(--space-5);
 		margin: 0;
 		padding: 0;
 		border: 0;
 	}
 	legend {
 		grid-column: 1 / -1;
-		margin-bottom: 8px;
+		margin-bottom: var(--space-2);
 		color: var(--muted);
 		font-size: var(--text-base);
 	}
@@ -680,7 +680,7 @@
 	details {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	summary {
 		cursor: pointer;
@@ -704,8 +704,8 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 12px;
-		padding: 8px 12px;
+		gap: var(--space-3);
+		padding: var(--space-2) var(--space-3);
 		border-bottom: 1px solid var(--border);
 	}
 	li:last-child {
@@ -735,7 +735,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 10px 16px;
+		gap: 10px var(--space-4);
 	}
 	.test > :global(.notice-ok),
 	.test > :global(.notice-error) {
@@ -746,7 +746,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: flex-end;
-		gap: 16px;
+		gap: var(--space-4);
 	}
 	.actions p {
 		margin: 0;

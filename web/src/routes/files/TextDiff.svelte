@@ -87,13 +87,13 @@
 	.versions {
 		display: grid;
 		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.versions section {
 		min-width: 0;
 	}
 	h4 {
-		margin: 8px 0;
+		margin: var(--space-2) 0;
 	}
 	.scroll {
 		height: 280px;

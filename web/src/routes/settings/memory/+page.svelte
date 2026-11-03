@@ -148,7 +148,7 @@
 	dl div {
 		display: flex;
 		justify-content: space-between;
-		gap: 16px;
+		gap: var(--space-4);
 		flex-wrap: wrap;
 	}
 	dd {

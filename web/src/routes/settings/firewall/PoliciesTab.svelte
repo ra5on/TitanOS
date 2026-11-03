@@ -101,7 +101,7 @@
 	.filters {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.filters .stack {
 		flex: 1 1 12rem;
@@ -109,7 +109,7 @@
 	.policies {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 		margin: 0;
 		padding: 0;
 	}

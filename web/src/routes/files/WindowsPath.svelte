@@ -84,7 +84,7 @@
 	.content {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 		font-size: var(--text-md);
 	}
 	label {

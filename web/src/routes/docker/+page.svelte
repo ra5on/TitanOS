@@ -26,6 +26,7 @@
 	} from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import AutoUpdateDialog from './AutoUpdateDialog.svelte';
+	import RemoveAppDialog from './RemoveAppDialog.svelte';
 	import TailnetDialog from './TailnetDialog.svelte';
 	import { inTailnet, tailnetPort } from '#lib/app-proxy.ts';
 	import { formatBytes, formatPercent } from '#lib/format.ts';
@@ -160,7 +161,7 @@
 		| { kind: 'logs'; container: DockerContainer; text: string | null }
 		| { kind: 'updates'; selected: string[]; failed: { app: string; text: string }[] }
 		| { kind: 'remove'; container: DockerContainer }
-		| { kind: 'removeApp'; app: string; purge: boolean }
+		| { kind: 'removeApp'; app: string }
 		| null
 	>(null);
 	let draft = $state({ name: '', compose: '', enabled: true, volume: '' });
@@ -501,7 +502,7 @@
 
 	function askRemoveApp(app: string) {
 		dialogError = null;
-		dialog = { kind: 'removeApp', app, purge: false };
+		dialog = { kind: 'removeApp', app };
 	}
 
 	async function removeApp(app: string, purge: boolean) {
@@ -1351,37 +1352,14 @@
 	</Dialog>
 {:else if dialog?.kind === 'removeApp'}
 	{@const app = dialog.app}
-	<Dialog
-		title={t('docker.removeTitle', { name: app })}
-		locked={dialogBusy}
+	<RemoveAppDialog
+		{app}
+		volume={status?.settings.volume ?? ''}
+		busy={dialogBusy}
+		error={dialogError?.text ?? ''}
 		onclose={() => (dialog = null)}
-	>
-		{@const path = `/mnt/${status?.settings.volume}/appdata/${app}`}
-		<p class="text">
-			{t(dialog.purge ? 'docker.removeAppPurge' : 'docker.removeApp', { app, path })}
-		</p>
-		{#if dialogError}<p class="notice-error" role="alert">{dialogError.text}</p>{/if}
-		<label class="check"
-			><input type="checkbox" bind:checked={dialog.purge} disabled={dialogBusy} /><span
-				>{t('docker.removeData', { path })}</span
-			></label
-		>
-		{#if dialog.purge}
-			<p class="notice-error">{t('docker.removeDataWarning')}</p>
-		{/if}
-		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={dialogBusy} onclick={() => (dialog = null)}
-				>{t('common.cancel')}</button
-			>
-			<button
-				type="button"
-				disabled={dialogBusy}
-				class="btn {dialog.purge ? 'btn-danger' : 'btn-warn'}"
-				onclick={() => dialog?.kind === 'removeApp' && removeApp(app, dialog.purge)}
-				>{t(dialog.purge ? 'docker.removeDataSubmit' : 'docker.removeSubmit')}</button
-			>
-		</div>
-	</Dialog>
+		onremove={(purge) => removeApp(app, purge)}
+	/>
 {:else if dialog}
 	{@const kind = dialog.kind}
 	<Dialog
@@ -1533,7 +1511,7 @@
 		padding-left: 32px;
 	}
 	.segmented.icons button {
-		padding: 0 8px;
+		padding: 0 var(--space-2);
 	}
 	.icon-btn {
 		width: var(--control-height);
@@ -1562,7 +1540,7 @@
 	.filters {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	.filter {
 		display: inline-flex;
@@ -1601,7 +1579,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 4px 12px;
+		gap: var(--space-1) var(--space-3);
 		margin: 0 0 0 auto;
 		color: var(--muted);
 		font-size: var(--text-sm);

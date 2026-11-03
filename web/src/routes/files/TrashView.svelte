@@ -405,8 +405,8 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
-		padding: 12px 14px;
+		gap: var(--space-2);
+		padding: var(--space-3) 14px;
 		border-bottom: 1px solid var(--panel-border);
 	}
 	.toolbar .btn {
@@ -418,11 +418,11 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 4px;
+		gap: var(--space-1);
 		font-size: var(--text-md);
 	}
 	.crumbs button {
-		padding: 4px 6px;
+		padding: var(--space-1) 6px;
 		background: transparent;
 		border: 0;
 		border-radius: var(--radius-small);
@@ -446,7 +446,7 @@
 		display: grid;
 		grid-template-columns: 22px minmax(0, 1fr) 90px 170px;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 		padding: 9px 14px;
 		border-bottom: 1px solid var(--panel-border);
 		font-size: var(--text-md);
@@ -495,7 +495,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		padding: 10px 14px;
 		background: var(--chip);
 		border-bottom: 1px solid var(--panel-border);

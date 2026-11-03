@@ -75,7 +75,7 @@
 		display: flex;
 		align-items: baseline;
 		justify-content: space-between;
-		gap: 8px;
+		gap: var(--space-2);
 		min-width: 0;
 		width: 100%;
 		container-type: inline-size;
@@ -115,7 +115,7 @@
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		gap: 4px;
+		gap: var(--space-1);
 		flex: none;
 	}
 	.ring-svg {

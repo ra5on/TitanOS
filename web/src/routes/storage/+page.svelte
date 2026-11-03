@@ -30,14 +30,18 @@
 	import CreateVolumeDialog from './CreateVolumeDialog.svelte';
 	import DeleteVolumeDialog from './DeleteVolumeDialog.svelte';
 	import DiskSleepDialog from './DiskSleepDialog.svelte';
+	import DiskSleepSection from './DiskSleepSection.svelte';
 	import {
 		diskSleep as diskSleepOf,
 		sleepDuration,
 		sleepOrigin,
+		sleepSince,
 		volumeSleep,
 	} from './sleep-view.ts';
 	import { diskStatus, diskType, smartText } from './labels.ts';
 	import VolumeCard from './VolumeCard.svelte';
+	import type { MaintenanceStatus } from '#lib/operations.ts';
+	import { checksHintVolumes, sanitizeHints, uncheckedVolumes } from './checks-hint.ts';
 
 	const canAdminister = $derived(
 		session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin',
@@ -161,7 +165,45 @@
 		if (!location.hash && !location.search)
 			requestAnimationFrame(() => window.scrollTo({ top: navigation.scroll }));
 		if (!storage.status) void loadStatus();
+		if (canAdminister) void loadMaintenance();
 	});
+
+	// One-time hint for volumes without regular checks (plan 7a). Shown only
+	// once storage and maintenance are both known, so it does not flash.
+	let maintenance = $state<MaintenanceStatus | null>(null),
+		hintBusy = $state(false),
+		hintError = $state('');
+	async function loadMaintenance() {
+		try {
+			maintenance = await api.get<MaintenanceStatus>('/maintenance');
+		} catch {
+			// Without the plan the hint stays away; the maintenance page reports problems.
+		}
+	}
+	const checksHint = $derived(
+		canAdminister && storage.status && maintenance
+			? checksHintVolumes(
+					uncheckedVolumes(volumes, disks, maintenance.settings),
+					sanitizeHints(session.hints),
+				)
+			: [],
+	);
+	async function dismissChecksHint() {
+		hintBusy = true;
+		hintError = '';
+		const hints = sanitizeHints(session.hints);
+		const value = {
+			...hints,
+			checksDismissed: [...new Set([...(hints.checksDismissed ?? []), ...checksHint])],
+		};
+		try {
+			await api.put('/preferences/hints', value);
+			session.hints = value;
+		} catch (err) {
+			hintError = apiErrorText(err);
+		}
+		hintBusy = false;
+	}
 
 	// The shared poller stays quiet about failures; the first load here shows
 	// them, so an empty list never stands for "no volumes".
@@ -328,6 +370,24 @@
 {#if error}<div class="notice-error" role="alert">
 		{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
 	</div>{/if}
+{#if checksHint.length > 0}<section
+		class="notice-warn checks-hint"
+		aria-labelledby="checks-hint-title"
+	>
+		<strong id="checks-hint-title">{t('storage.checksHint.title')}</strong>
+		<p>
+			{t(checksHint.length === 1 ? 'storage.checksHint.one' : 'storage.checksHint.many', {
+				volumes: checksHint.join(', '),
+			})}
+		</p>
+		{#if hintError}<p role="alert">{hintError}</p>{/if}
+		<div class="row-actions">
+			<a class="btn btn-primary" href="/tools/maintenance">{t('storage.checksHint.setup')}</a>
+			<button class="btn" disabled={hintBusy} onclick={dismissChecksHint}
+				>{t('storage.checksHint.dismiss')}</button
+			>
+		</div>
+	</section>{/if}
 <div class="storage-toolbar">
 	<div class="tabs" role="group" aria-label={t('storage.title')}>
 		<button
@@ -536,6 +596,8 @@
 												: t('storage.sleepAwake')}</span
 										>
 										<span class="sub">{sleepOrigin(sleep.disk.origin)}</span>
+										{#if sleepSince(sleep.disk)}<span class="sub">{sleepSince(sleep.disk)}</span
+											>{/if}
 									</button>
 								{:else if sleep?.reason}
 									<span class="muted">–</span>
@@ -667,6 +729,18 @@
 					</dd>
 				</div>
 			</dl>
+			<DiskSleepSection
+				name={diskDetail.name}
+				status={diskSleep}
+				{canAdminister}
+				onsaved={(updated) => {
+					if (storage.status) storage.status.diskSleep = updated;
+				}}
+				onopen={() => {
+					sleepFocus = { kind: 'disk', key: diskDetail.name };
+					sleepOpen = true;
+				}}
+			/>
 			{#if canAdminister}{@const disk = diskDetail}
 				<div class="disk-actions">
 					<a class="btn" href="/storage/smart?disk={encodeURIComponent(disk.name)}"
@@ -762,6 +836,19 @@
 {/if}
 
 <style>
+	.checks-hint {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+	}
+	.checks-hint p {
+		margin: 0;
+	}
+	.checks-hint .row-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 10px;
+	}
 	.storage-toolbar,
 	.tabs,
 	.sync-inline,
@@ -772,14 +859,14 @@
 		flex-wrap: wrap;
 	}
 	.storage-toolbar {
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.tabs {
 		gap: 3px;
 		border-bottom: 1px solid var(--border);
 	}
 	.tabs button {
-		padding: 12px;
+		padding: var(--space-3);
 		border: 0;
 		background: transparent;
 		color: var(--muted);
@@ -819,7 +906,7 @@
 		width: 100%;
 	}
 	td {
-		padding: 14px 16px;
+		padding: 14px var(--space-4);
 	}
 	tr.selected {
 		background: color-mix(in srgb, var(--accent) 8%, transparent);
@@ -855,7 +942,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 4px 8px;
+		gap: var(--space-1) var(--space-2);
 		border: 0;
 		background: transparent;
 		padding: 0;
@@ -879,7 +966,7 @@
 		display: block;
 		font-size: var(--text-sm);
 		color: var(--muted);
-		margin-top: 4px;
+		margin-top: var(--space-1);
 	}
 	.num {
 		text-align: right;
@@ -905,7 +992,7 @@
 	}
 	.detail-heading {
 		justify-content: space-between;
-		margin-bottom: 12px;
+		margin-bottom: var(--space-3);
 	}
 	.detail-heading h2 {
 		font-size: var(--text-lg);
@@ -923,20 +1010,20 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.disk-actions {
 		margin-top: 18px;
 	}
 	.table-state {
 		justify-content: space-between;
-		margin: 16px;
+		margin: var(--space-4);
 	}
 	.usage {
-		margin-top: 16px;
-		padding: 16px 20px;
+		margin-top: var(--space-4);
+		padding: var(--space-4) 20px;
 		display: grid;
-		gap: 12px;
+		gap: var(--space-3);
 		font-size: var(--text-md);
 	}
 	.usage h3 {
@@ -958,12 +1045,12 @@
 	}
 	.disk-details dl {
 		display: grid;
-		gap: 16px;
+		gap: var(--space-4);
 		margin: 0;
 	}
 	.disk-details dl > div {
 		display: grid;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	.disk-details dt {
 		color: var(--muted);
@@ -994,7 +1081,7 @@
 			flex-basis: 100%;
 		}
 		td {
-			padding: 12px;
+			padding: var(--space-3);
 		}
 		.tabs {
 			width: 100%;

@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The steps of a plugin installation, update or removal as the NAS reports
 	// them: a mark per step, the download bar and the error of a failed step.
+	import HelpTip from '#lib/components/HelpTip.svelte';
 	import { formatBytes, formatMegabytesPerSecond } from '#lib/format.ts';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { downloadPercent, pluginStepKey, type PluginProgress } from '#lib/plugin-progress.ts';
@@ -23,7 +24,9 @@
 			<li class={step.state} aria-current={step.state === 'running' ? 'step' : undefined}>
 				<span class="mark" aria-hidden="true">{marks[step.state] ?? '○'}</span>
 				<span class="label"
-					>{t(pluginStepKey(step.id))}<span class="sr-only">
+					>{t(pluginStepKey(step.id))}{#if step.id === 'sysext'}<HelpTip term="sysext" />{/if}<span
+						class="sr-only"
+					>
 						– {t(stateKey(step.state))}</span
 					>{#if step.state === 'skipped'}<span class="muted">
 							· {t(stateKey(step.state))}</span
@@ -77,7 +80,7 @@
 		display: flex;
 		flex-direction: column;
 		align-items: flex-start;
-		gap: 8px;
+		gap: var(--space-2);
 		font-size: var(--text-base);
 	}
 	ol {
@@ -123,15 +126,15 @@
 	.download {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
-		margin-top: 4px;
+		gap: var(--space-1);
+		margin-top: var(--space-1);
 	}
 	.download progress {
 		width: 100%;
 		accent-color: var(--accent);
 	}
 	pre {
-		margin: 4px 0 0;
+		margin: var(--space-1) 0 0;
 		font-family: var(--font-mono);
 		font-size: var(--text-sm);
 		white-space: pre-wrap;

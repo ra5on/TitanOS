@@ -20,9 +20,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		gap: 8px;
-		margin: 12px;
-		padding: 12px;
+		gap: var(--space-2);
+		margin: var(--space-3);
+		padding: var(--space-3);
 		border: 1px dashed var(--outline-border);
 		border-radius: var(--radius-ctl);
 		font-size: var(--text-base);

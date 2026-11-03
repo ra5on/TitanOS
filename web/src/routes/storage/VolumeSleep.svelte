@@ -5,7 +5,7 @@
 	import { api, type DiskSleepStatus } from '#lib/api.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { overridesFrom } from './disk-sleep.ts';
-	import { sleepDuration, sleepOrigin, volumeSleep } from './sleep-view.ts';
+	import { sleepDuration, sleepOrigin, sleepSince, volumeSleep } from './sleep-view.ts';
 
 	type Props = {
 		volume: string;
@@ -158,6 +158,7 @@
 						<span class="chip" class:ok={disk.state === 'asleep'}
 							>{disk.state === 'asleep' ? t('storage.sleepAsleep') : t('storage.sleepAwake')}</span
 						>
+						{#if sleepSince(disk)}<span class="muted">{sleepSince(disk)}</span>{/if}
 						<span class="muted">{sleepDuration(disk.effective)} · {sleepOrigin(disk.origin)}</span>
 					</li>
 				{/each}
@@ -171,7 +172,7 @@
 		display: grid;
 		gap: 10px;
 		border-top: 1px solid var(--border);
-		padding-top: 12px;
+		padding-top: var(--space-3);
 	}
 	.head {
 		display: flex;
@@ -202,7 +203,7 @@
 	.editor {
 		display: grid;
 		grid-template-columns: 1fr auto;
-		gap: 8px 12px;
+		gap: var(--space-2) var(--space-3);
 		align-items: center;
 	}
 	.editor label {
@@ -215,7 +216,7 @@
 	}
 	.actions {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	p {
 		margin: 0;

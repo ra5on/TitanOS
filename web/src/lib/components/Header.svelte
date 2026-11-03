@@ -181,7 +181,7 @@
 		flex-wrap: nowrap;
 		align-items: center;
 		gap: 10px;
-		padding: 8px 16px;
+		padding: var(--space-2) var(--space-4);
 		border-bottom: 1px solid var(--border);
 	}
 	header > :global(*) {
@@ -195,7 +195,7 @@
 		min-width: 0;
 		display: flex;
 		align-items: center;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	.nav-arrow {
 		flex: none;
@@ -243,7 +243,7 @@
 	}
 	.nav-shell nav a {
 		flex: none;
-		padding: 10px 8px;
+		padding: 10px var(--space-2);
 		border-radius: var(--radius-ctl);
 		font-size: 0.875rem;
 		text-decoration: none;
@@ -269,7 +269,7 @@
 		width: auto;
 		max-height: calc(100dvh - 84px - env(safe-area-inset-bottom));
 		overflow-y: auto;
-		padding: 12px;
+		padding: var(--space-3);
 		/* Surface from .floating-menu (app.css), like every other menu. */
 		border-radius: var(--radius-tile);
 		color: var(--text);
@@ -278,8 +278,8 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 8px;
-		margin-bottom: 8px;
+		gap: var(--space-2);
+		margin-bottom: var(--space-2);
 	}
 	.mobile-nav-close {
 		width: 44px;
@@ -294,7 +294,7 @@
 	.mobile-links {
 		display: grid;
 		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.mobile-links a {
 		display: flex;
@@ -326,8 +326,8 @@
 			min-width: 0;
 			height: 44px;
 			align-items: center;
-			gap: 8px;
-			padding: 0 8px;
+			gap: var(--space-2);
+			padding: 0 var(--space-2);
 			border: 1px solid var(--border);
 			border-radius: var(--radius-ctl);
 			background: var(--chip);
@@ -346,7 +346,7 @@
 
 		header {
 			gap: 10px;
-			padding: 8px 12px;
+			padding: var(--space-2) var(--space-3);
 		}
 		.brand :global(.logo > svg:last-child) {
 			display: none;
@@ -354,8 +354,8 @@
 	}
 	@media (max-width: 480px) {
 		header {
-			gap: 4px;
-			padding: 8px;
+			gap: var(--space-1);
+			padding: var(--space-2);
 		}
 		.nav-arrow {
 			width: 28px;

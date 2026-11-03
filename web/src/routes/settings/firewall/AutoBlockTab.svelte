@@ -200,7 +200,7 @@
 	.numbers {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.numbers .stack {
 		flex: 1 1 10rem;

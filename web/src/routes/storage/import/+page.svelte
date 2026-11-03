@@ -200,7 +200,7 @@
 		align-items: center;
 		flex-wrap: wrap;
 		gap: 14px;
-		padding: 16px 0;
+		padding: var(--space-4) 0;
 		border-bottom: 1px solid var(--border);
 	}
 	article p {

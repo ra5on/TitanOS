@@ -147,7 +147,7 @@
 		color: var(--text);
 	}
 	.nav.current {
-		padding: 6px 12px;
+		padding: 6px var(--space-3);
 		border-radius: var(--radius-ctl);
 	}
 	.account {
@@ -214,7 +214,7 @@
 		width: min(320px, calc(100% - 24px));
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 		padding: var(--tile-pad);
 		background: var(--dialog-bg);
 		border: 1px solid var(--dialog-border);
@@ -227,7 +227,7 @@
 		justify-content: flex-end;
 	}
 	.menu-head {
-		padding: 8px 10px;
+		padding: var(--space-2) 10px;
 		font-size: 0.92em;
 		color: var(--muted);
 	}
@@ -237,7 +237,7 @@
 	}
 	.buttons {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.buttons .btn {
 		height: 40px;

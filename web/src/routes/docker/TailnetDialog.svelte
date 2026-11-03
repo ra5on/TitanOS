@@ -339,7 +339,7 @@
 
 <style>
 	p {
-		margin: 0 0 12px;
+		margin: 0 0 var(--space-3);
 	}
 	.small-text {
 		font-size: var(--text-base);
@@ -349,11 +349,11 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
-		margin-bottom: 12px;
+		gap: var(--space-2);
+		margin-bottom: var(--space-3);
 	}
 	.stack {
-		margin-bottom: 8px;
+		margin-bottom: var(--space-2);
 	}
 	.steps {
 		display: flex;
@@ -377,13 +377,13 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
-		margin-bottom: 12px;
+		gap: var(--space-2);
+		margin-bottom: var(--space-3);
 		overflow-wrap: anywhere;
 	}
 	.small {
 		min-height: 30px;
-		padding: 4px 8px;
+		padding: var(--space-1) var(--space-2);
 		font-size: var(--text-sm);
 	}
 </style>

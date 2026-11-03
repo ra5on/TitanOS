@@ -79,7 +79,7 @@
 	.operation-links a {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 		padding: 18px;
 		color: var(--text);
 		text-decoration: none;
@@ -108,7 +108,7 @@
 	.lists {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-		gap: 12px 24px;
+		gap: var(--space-3) var(--space-5);
 	}
 	.name {
 		font-weight: 600;

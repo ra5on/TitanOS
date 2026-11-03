@@ -909,7 +909,7 @@
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	[aria-pressed='true'] {
 		color: var(--accent);

@@ -115,7 +115,7 @@
 	.service {
 		display: grid;
 		grid-template-columns: 1fr auto;
-		gap: 6px 16px;
+		gap: 6px var(--space-4);
 		align-items: center;
 		padding: 14px 0;
 		border-top: 1px solid var(--border);
@@ -125,12 +125,12 @@
 		padding-top: 0;
 	}
 	.service p {
-		margin: 4px 0 0;
+		margin: var(--space-1) 0 0;
 	}
 	.service .check {
 		justify-self: end;
 	}
 	.notice-warn p {
-		margin: 0 0 8px;
+		margin: 0 0 var(--space-2);
 	}
 </style>

@@ -140,9 +140,9 @@
 	.driver-updates {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 		border-top: 1px solid var(--border);
-		padding-top: 16px;
+		padding-top: var(--space-4);
 	}
 	p {
 		margin: 0;
@@ -158,13 +158,13 @@
 	.check {
 		flex-direction: row;
 		align-items: flex-start;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.row {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	select {
 		width: 100%;

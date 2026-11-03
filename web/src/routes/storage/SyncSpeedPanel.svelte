@@ -66,7 +66,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 8px 16px;
+		gap: var(--space-2) var(--space-4);
 		font-size: var(--text-md);
 	}
 	.text {
@@ -85,7 +85,7 @@
 	}
 	.segments {
 		display: inline-flex;
-		gap: 4px;
+		gap: var(--space-1);
 		padding: 3px;
 		background: var(--panel-bg);
 		border: 1px solid var(--panel-border);

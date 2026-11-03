@@ -334,12 +334,12 @@
 	table.grid tbody {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr));
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	table.grid tr {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 		border: 1px solid var(--border);
 		border-radius: 4px;
 		padding: 10px;
@@ -376,7 +376,7 @@
 			auto-fill,
 			minmax(min(var(--tile-entry-width, 170px), 100%), 1fr)
 		);
-		gap: var(--tile-row-gap, 10px) 16px;
+		gap: var(--tile-row-gap, 10px) var(--space-4);
 	}
 	.workload {
 		min-width: 0;
@@ -384,14 +384,14 @@
 	}
 	.entry {
 		display: flex;
-		gap: 4px;
+		gap: var(--space-1);
 		min-width: 0;
 		align-items: center;
 	}
 	.trigger {
 		border: 0;
 		background: transparent;
-		padding: 4px;
+		padding: var(--space-1);
 		display: flex;
 		align-items: center;
 		gap: 9px;
@@ -478,8 +478,8 @@
 		display: grid;
 		gap: 5px;
 		border-top: 1px solid var(--border);
-		padding: 8px 0 0 12px;
-		margin-top: 8px;
+		padding: var(--space-2) 0 0 var(--space-3);
+		margin-top: var(--space-2);
 	}
 	.member {
 		display: flex;
@@ -515,7 +515,7 @@
 		align-items: center;
 		font-size: var(--text-xs);
 		color: var(--muted);
-		margin-top: 12px;
+		margin-top: var(--space-3);
 	}
 	.running-filter {
 		margin-left: auto;

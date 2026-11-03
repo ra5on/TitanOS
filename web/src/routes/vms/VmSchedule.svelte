@@ -109,7 +109,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
-		padding: 16px;
+		padding: var(--space-4);
 	}
 	.check {
 		display: flex;
@@ -126,7 +126,7 @@
 	.rules {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 		margin: 0;
 		padding: 0;
 		list-style: none;
@@ -135,7 +135,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.rules li.off {
 		opacity: 0.6;
@@ -152,7 +152,7 @@
 	.week {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px;
+		gap: var(--space-1);
 		margin: 0;
 		padding: 0;
 		border: 0;
@@ -187,14 +187,14 @@
 	.stop {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 		border-top: 1px solid var(--panel-border);
 		padding-top: 10px;
 	}
 	.stop label:not(.check) {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 		max-width: 22rem;
 	}
 </style>

@@ -676,7 +676,7 @@
 	.open-points {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 		font-size: var(--text-base);
 		color: var(--warn-text);
 	}
@@ -688,7 +688,7 @@
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) 310px;
 		align-items: start;
-		gap: 16px;
+		gap: var(--space-4);
 	}
 	.steps {
 		min-width: 0;
@@ -721,8 +721,8 @@
 	.advanced-body {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
-		padding-top: 12px;
+		gap: var(--space-3);
+		padding-top: var(--space-3);
 		min-width: 0;
 	}
 	@media (max-width: 1100px) {
@@ -744,8 +744,8 @@
 	.step {
 		display: flex;
 		align-items: center;
-		gap: 12px;
-		padding: 10px 16px;
+		gap: var(--space-3);
+		padding: 10px var(--space-4);
 		border-bottom: 1px solid var(--panel-border);
 	}
 	h2 {
@@ -757,8 +757,8 @@
 	.content {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
-		padding: 16px;
+		gap: var(--space-3);
+		padding: var(--space-4);
 	}
 	.templates {
 		display: grid;
@@ -768,8 +768,8 @@
 	.templates button {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
-		padding: 12px 14px;
+		gap: var(--space-1);
+		padding: var(--space-3) 14px;
 		background: transparent;
 		border: 2px solid var(--border);
 		border-radius: var(--radius-ctl);
@@ -827,20 +827,20 @@
 		top: 80px;
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 		padding: 18px;
 	}
 	dl {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 		margin: 0;
 		font-size: var(--text-base);
 	}
 	dl div {
 		display: flex;
 		justify-content: space-between;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	dt {
 		color: var(--muted);
@@ -851,7 +851,7 @@
 		overflow-wrap: anywhere;
 	}
 	pre {
-		margin: 8px 0 0;
+		margin: var(--space-2) 0 0;
 		font-family: var(--font-mono);
 		font-size: var(--text-sm);
 		white-space: pre-wrap;

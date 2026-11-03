@@ -453,7 +453,7 @@
 	.dialog-actions {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		flex-wrap: wrap;
 	}
 	.row {
@@ -503,7 +503,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.files {
 		padding: var(--tile-pad);
@@ -520,9 +520,9 @@
 	.file-list li {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) auto minmax(8rem, auto);
-		gap: 4px 16px;
+		gap: var(--space-1) var(--space-4);
 		align-items: center;
-		padding: 8px 0;
+		padding: var(--space-2) 0;
 		border-top: 1px solid var(--panel-border);
 		font-size: var(--text-base);
 	}

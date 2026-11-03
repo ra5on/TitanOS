@@ -127,7 +127,7 @@
 		align-items: center;
 		justify-content: center;
 		gap: 20px;
-		padding: 24px;
+		padding: var(--space-5);
 	}
 	main.scoped {
 		background: var(--bg);
@@ -212,7 +212,7 @@
 		overflow-wrap: anywhere;
 	}
 	.host {
-		padding: 3px 8px;
+		padding: 3px var(--space-2);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-small);
 		font-size: var(--text-sm);
@@ -241,17 +241,17 @@
 	/* Phones: less frame around the card, more room for the fields. */
 	@media (max-width: 480px) {
 		main {
-			padding: 16px;
+			padding: var(--space-4);
 		}
 		.card {
-			padding: 28px 20px 24px;
+			padding: 28px 20px var(--space-5);
 		}
 	}
 	@media (max-width: 760px) {
 		main.left,
 		main.right {
 			align-items: center;
-			padding: 24px 16px;
+			padding: var(--space-5) var(--space-4);
 		}
 	}
 </style>

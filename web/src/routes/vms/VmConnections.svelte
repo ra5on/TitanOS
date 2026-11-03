@@ -246,15 +246,15 @@
 	.advanced-body {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
-		padding-top: 12px;
+		gap: var(--space-3);
+		padding-top: var(--space-3);
 		min-width: 0;
 	}
 	.content {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
-		padding: 16px;
+		gap: var(--space-3);
+		padding: var(--space-4);
 	}
 	label {
 		display: flex;
@@ -287,7 +287,7 @@
 	.add {
 		align-self: flex-start;
 		height: 2.25rem;
-		padding: 0 12px;
+		padding: 0 var(--space-3);
 		background: transparent;
 		border: 1px dashed var(--border);
 		border-radius: var(--radius-ctl);
@@ -319,8 +319,8 @@
 	.device {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
-		padding: 12px 14px;
+		gap: var(--space-1);
+		padding: var(--space-3) 14px;
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-ctl);
 	}
@@ -335,7 +335,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.path-field {
 		flex: 2 1 260px;

@@ -349,12 +349,12 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	dl {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-		gap: 12px 24px;
+		gap: var(--space-3) var(--space-5);
 		margin: 0;
 	}
 	dt {
@@ -365,7 +365,7 @@
 		margin: 2px 0 0;
 	}
 	.share {
-		padding: 12px 14px;
+		padding: var(--space-3) 14px;
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-ctl);
 	}
@@ -373,21 +373,21 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 12px 20px;
+		gap: var(--space-3) 20px;
 	}
 	.found {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 8px 14px;
-		padding: 10px 12px;
+		gap: var(--space-2) 14px;
+		padding: 10px var(--space-3);
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-ctl);
 	}
 	.small {
 		height: 2rem;
-		padding: 0 12px;
+		padding: 0 var(--space-3);
 		font-size: var(--text-base);
 	}
 	fieldset {
@@ -416,7 +416,7 @@
 	label.check {
 		flex-direction: row;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.check > span {
 		color: var(--text);
@@ -429,7 +429,7 @@
 		display: inline-flex;
 		flex-wrap: wrap;
 		align-self: flex-start;
-		gap: 4px;
+		gap: var(--space-1);
 		padding: 3px;
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-ctl);

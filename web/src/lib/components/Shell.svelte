@@ -310,8 +310,8 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: center;
-		gap: 10px 16px;
-		padding: 10px 16px;
+		gap: 10px var(--space-4);
+		padding: 10px var(--space-4);
 		background: var(--warn-bg);
 		border-bottom: 1px solid var(--warn-border);
 		color: var(--warn-text);
@@ -343,11 +343,11 @@
 		gap: var(--gap);
 	}
 	main.dashboard {
-		padding-top: 12px;
+		padding-top: var(--space-3);
 	}
 	@media (max-width: 760px) {
 		main.dashboard {
-			padding-top: 12px;
+			padding-top: var(--space-3);
 		}
 		main {
 			padding: 16px var(--page-pad) calc(24px + var(--fab-clear, 0px));

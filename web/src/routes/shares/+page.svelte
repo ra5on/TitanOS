@@ -483,7 +483,7 @@
 	.locked {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 		align-items: center;
 		margin-bottom: 10px;
 	}
@@ -518,7 +518,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.search {
 		width: 16rem;
@@ -599,7 +599,7 @@
 	}
 	.chips {
 		display: flex;
-		gap: 4px;
+		gap: var(--space-1);
 		flex-wrap: wrap;
 	}
 	.chip {
@@ -636,14 +636,14 @@
 		color: var(--muted);
 	}
 	.detail {
-		padding: 16px;
+		padding: var(--space-4);
 		min-width: 0;
 	}
 	.detail-head {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.detail h2 {
 		font-size: var(--text-lg);
@@ -651,9 +651,9 @@
 	}
 	.tabs {
 		display: flex;
-		gap: 16px;
+		gap: var(--space-4);
 		border-bottom: 1px solid var(--panel-border);
-		margin: 12px 0;
+		margin: var(--space-3) 0;
 	}
 	.tabs button {
 		background: none;
@@ -672,7 +672,7 @@
 	dl {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
-		gap: 12px;
+		gap: var(--space-3);
 		font-size: var(--text-base);
 	}
 	dt {
@@ -685,18 +685,18 @@
 	}
 	.detail-actions {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		flex-wrap: wrap;
 		margin-top: 20px;
 	}
 	.hint {
 		font-size: var(--text-sm);
-		margin-top: 12px;
+		margin-top: var(--space-3);
 	}
 	.notice-error {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 		align-items: center;
 	}
 	.sr-only {

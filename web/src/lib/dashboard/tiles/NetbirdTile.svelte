@@ -135,7 +135,7 @@
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	li + li {
 		border-top: 1px solid var(--border);
@@ -205,6 +205,6 @@
 		font-size: var(--text-sm);
 	}
 	.note {
-		margin-bottom: 8px;
+		margin-bottom: var(--space-2);
 	}
 </style>

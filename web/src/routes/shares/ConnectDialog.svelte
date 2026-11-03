@@ -64,7 +64,7 @@
 	.address {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 		align-items: center;
 		font-size: var(--text-base);
 	}
@@ -73,7 +73,7 @@
 		width: 100%;
 	}
 	.via {
-		margin: 4px 0 0;
+		margin: var(--space-1) 0 0;
 		font-size: var(--text-base);
 		font-weight: 600;
 	}

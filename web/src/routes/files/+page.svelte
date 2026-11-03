@@ -1391,7 +1391,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		padding: 8px;
+		padding: var(--space-2);
 		position: sticky;
 		top: calc(var(--header-height, 60px) + var(--gap));
 		max-height: calc(100vh - var(--header-height, 60px) - 2 * var(--gap) - 40px);
@@ -1410,7 +1410,7 @@
 	.pane-actions {
 		grid-column: 1 / -1;
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		flex-wrap: wrap;
 	}
 	.browser {
@@ -1425,8 +1425,8 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
-		padding: 10px 12px;
+		gap: var(--space-2);
+		padding: 10px var(--space-3);
 		border-bottom: 1px solid var(--panel-border);
 	}
 	.toolbar .btn {
@@ -1443,7 +1443,7 @@
 		bottom: 44px;
 		z-index: 50;
 		margin: 0;
-		padding: 6px 12px;
+		padding: 6px var(--space-3);
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
@@ -1453,7 +1453,7 @@
 	}
 	.trash-configure {
 		align-self: center;
-		margin-bottom: 16px;
+		margin-bottom: var(--space-4);
 	}
 	.none {
 		padding: 20px 14px;
@@ -1468,7 +1468,7 @@
 	@media (max-width: 760px) {
 		.layout {
 			grid-template-columns: minmax(0, 1fr);
-			gap: 8px;
+			gap: var(--space-2);
 		}
 		.places {
 			display: none;

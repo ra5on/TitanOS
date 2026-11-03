@@ -176,25 +176,25 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 12px;
-		margin-bottom: 12px;
+		gap: var(--space-3);
+		margin-bottom: var(--space-3);
 	}
 	.bar label {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-		gap: 8px;
+		gap: var(--space-2);
 		max-height: 65vh;
 		overflow: auto;
 	}
 	.cell {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 		padding: 6px;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
@@ -213,7 +213,7 @@
 	.viewer {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 		background: var(--surface);
 		touch-action: pan-y;
 	}
@@ -234,7 +234,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: center;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.info {
 		min-width: 0;

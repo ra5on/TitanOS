@@ -208,8 +208,8 @@ data.shares = ["Dokumente", "Medien", "Fotos", "Projekte"].map((name, i) => ({
 data.system = {
   ...data.system,
   hostname: "titan-nas",
-  version: "0.41.0",
-  kernel: "6.12.113+deb13-amd64",
+  version: "0.47.1",
+  kernel: "6.12.115+deb13.1-amd64",
   uptimeSeconds: 20 * 3600 + 41 * 60,
   inventory: { mainboard: "ASRock B560M Pro4", bios: "P2.30 · 12.09.2025" },
 };
@@ -498,6 +498,10 @@ try {
   await page.goto(base + "/docker");
   await page.getByText("Jellyfin", { exact: true }).first().waitFor();
   await shot("docker");
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(base + "/settings");
+  await page.locator("main h1").first().waitFor();
+  await shot("einstellungen");
   await page.setViewportSize({ width: 1600, height: 800 });
   await page.goto(base + "/vms?vm=vm1&tab=overview");
   await page.locator("#vm-title").waitFor();

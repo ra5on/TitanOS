@@ -249,20 +249,20 @@
 	.option {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	.option small {
 		padding-left: 28px;
 	}
 	textarea {
 		resize: vertical;
-		padding-block: 8px;
+		padding-block: var(--space-2);
 	}
 	.addresses {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 4px 14px;
+		gap: var(--space-1) 14px;
 		font-size: var(--text-base);
 		overflow-wrap: anywhere;
 	}

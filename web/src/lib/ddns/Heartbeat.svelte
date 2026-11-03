@@ -288,7 +288,7 @@
 	dl {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-		gap: 12px 24px;
+		gap: var(--space-3) var(--space-5);
 		margin: 0;
 	}
 	dt {
@@ -305,7 +305,7 @@
 	fieldset {
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
-		padding: 8px 12px;
+		padding: var(--space-2) var(--space-3);
 		display: flex;
 		flex-direction: column;
 		gap: 6px;

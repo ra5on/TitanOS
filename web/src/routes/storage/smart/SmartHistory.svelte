@@ -179,7 +179,7 @@
 	figure {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	figcaption {
 		font-size: var(--text-base);
@@ -233,7 +233,7 @@
 	}
 	th,
 	td {
-		padding: 6px 8px;
+		padding: 6px var(--space-2);
 		border-bottom: 1px solid var(--panel-border);
 		text-align: left;
 		white-space: nowrap;
@@ -260,7 +260,7 @@
 	@media (max-width: 600px) {
 		th,
 		td {
-			padding: 6px 4px;
+			padding: 6px var(--space-1);
 		}
 		.summary th {
 			white-space: normal;

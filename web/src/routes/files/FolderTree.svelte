@@ -135,7 +135,7 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		padding: 4px;
+		padding: var(--space-1);
 	}
 	.current,
 	button:hover {

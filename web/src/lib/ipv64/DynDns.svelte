@@ -546,7 +546,7 @@
 	}
 	.url {
 		margin: 0;
-		padding: 8px 10px;
+		padding: var(--space-2) 10px;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 		white-space: pre-wrap;

@@ -33,7 +33,7 @@
 	.form-row {
 		display: grid;
 		grid-template-columns: minmax(10rem, 17rem) minmax(0, 1fr);
-		gap: 4px var(--space-4);
+		gap: var(--space-1) var(--space-4);
 		align-items: start;
 		padding: 7px var(--space-4);
 	}
@@ -58,7 +58,7 @@
 		display: inline-block;
 		width: 6px;
 		height: 6px;
-		margin-right: 8px;
+		margin-right: var(--space-2);
 		border-radius: 50%;
 		background: var(--accent);
 		vertical-align: middle;
@@ -66,7 +66,7 @@
 	.value {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 		min-width: 0;
 	}
 	.hint {
@@ -114,7 +114,7 @@
 			padding: 6px var(--space-3);
 		}
 		.name {
-			padding-top: 4px;
+			padding-top: var(--space-1);
 			text-align: left;
 		}
 	}

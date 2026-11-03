@@ -189,14 +189,14 @@
 		width: 28px;
 		height: 28px;
 		vertical-align: middle;
-		margin-right: 8px;
+		margin-right: var(--space-2);
 	}
 	.where {
 		color: var(--muted);
 		font-size: var(--text-sm);
 	}
 	.ports {
-		margin: 4px 0 0;
+		margin: var(--space-1) 0 0;
 		white-space: normal;
 	}
 	.wrap {

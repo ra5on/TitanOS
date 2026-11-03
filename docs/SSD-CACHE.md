@@ -12,7 +12,8 @@ Eine freie SSD kann ein mdadm-Volume (ext4/XFS) beschleunigen. Der Cache ist
 | **Lese- und Schreibcache** | `writeback` | noch nicht zurückgeschriebene Daten gehen verloren, das Dateisystem kann beschädigt werden; ohne SSD bleibt das Volume **ausgehängt** |
 
 Der Schreibcache ist eine bewusste Wahl mit Warnung im Dialog; empfohlen nur
-mit zuverlässiger SSD und USV. Der Modus lässt sich im laufenden Betrieb
+mit USV und aktueller Datensicherung. Der Cache nutzt genau eine SSD, einen
+Spiegel dafür gibt es nicht; die Warnung verspricht auch keinen (Plan 7d). Der Modus lässt sich im laufenden Betrieb
 wechseln (`dmsetup reload` mit kurzem `suspend`/`resume`).
 
 ## Technik

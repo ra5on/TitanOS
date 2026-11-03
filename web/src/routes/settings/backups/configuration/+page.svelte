@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { apiPath } from '#lib/cluster-node.ts';
-	import { api, ApiError } from '#lib/api.ts';
+	import { api, ApiError, type StorageStatus } from '#lib/api.ts';
 	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
@@ -88,6 +88,33 @@
 	$effect(() => {
 		load();
 	});
+
+	// Which volumes are encrypted (plan 6e): the hints below appear only when
+	// this is known, never on a guess.
+	let encrypted = $state<Map<string, boolean> | null>(null);
+	async function loadVolumes() {
+		try {
+			const storage = await api.get<StorageStatus>('/storage');
+			encrypted = new Map(storage.volumes.map((volume) => [volume.name, !!volume.encryption]));
+		} catch {
+			encrypted = null;
+		}
+	}
+	$effect(() => {
+		loadVolumes();
+	});
+	/** The backups go without password to a volume that is not encrypted. */
+	const plainTarget = $derived(
+		!!status &&
+			!status.settings.encrypt &&
+			!!status.target &&
+			encrypted?.get(status.target) === false,
+	);
+	function volumeLabel(volume: string) {
+		if (!encrypted?.has(volume)) return volume;
+		return `${volume} · ${t(encrypted.get(volume) ? 'stick.volumeEncrypted' : 'stick.volumePlain')}`;
+	}
+	const plainBackups = $derived(!!status?.backups.some((backup) => !backup.encrypted));
 	$effect(() => {
 		if (saved) {
 			const timer = setTimeout(() => (saved = false), 5000);
@@ -213,6 +240,9 @@
 		{:else}
 			<p class="muted">{t('stick.none')}</p>
 		{/if}
+		{#if plainTarget}<p class="notice-warn" role="status">
+				{t('stick.plainVolume', { volume: status.target })}
+			</p>{/if}
 		<dl>
 			<div>
 				<dt>{t('stick.target')}</dt>
@@ -290,7 +320,8 @@
 				><span>{t('stick.volume')}</span>
 				<select class="field" bind:value={draft.volume}>
 					<option value="">{t('stick.volumeAuto')}</option>
-					{#each volumes as volume (volume)}<option value={volume}>{volume}</option>{/each}
+					{#each volumes as volume (volume)}<option value={volume}>{volumeLabel(volume)}</option
+						>{/each}
 				</select>
 			</label>
 		</div>
@@ -354,6 +385,8 @@
 			<p class="muted">{t('stick.none')}</p>
 		{:else}
 			<p class="muted">{t('stick.downloadHint')}</p>
+			{#if plainBackups}<p class="notice-warn" role="status">{t('stick.downloadPlain')}</p>
+			{:else}<p class="muted">{t('stick.downloadEncrypted')}</p>{/if}
 			<div class="scroll">
 				<table>
 					<thead
@@ -402,7 +435,7 @@
 	dl {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-		gap: 12px 24px;
+		gap: var(--space-3) var(--space-5);
 		margin: 0;
 	}
 	dt {
@@ -424,12 +457,12 @@
 	.row {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 16px 24px;
+		gap: var(--space-4) var(--space-5);
 	}
 	.option {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	.option small {
 		padding-left: 28px;
@@ -445,7 +478,7 @@
 	}
 	th,
 	td {
-		padding: 8px 12px 8px 0;
+		padding: var(--space-2) var(--space-3) var(--space-2) 0;
 		text-align: left;
 		border-bottom: 1px solid var(--panel-border);
 		white-space: nowrap;
@@ -460,7 +493,7 @@
 	}
 	.small {
 		height: 2rem;
-		padding: 0 12px;
+		padding: 0 var(--space-3);
 		font-size: 0.8125rem;
 	}
 	pre {

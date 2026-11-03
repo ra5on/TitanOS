@@ -92,7 +92,7 @@
 		padding-left: 1.25rem;
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	.sources {
 		list-style: none;

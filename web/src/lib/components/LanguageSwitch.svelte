@@ -18,7 +18,7 @@
 <style>
 	.switch {
 		display: inline-flex;
-		gap: 4px;
+		gap: var(--space-1);
 		padding: 3px;
 		background: var(--bg);
 		border: 1px solid var(--border);

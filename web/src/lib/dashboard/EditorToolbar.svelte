@@ -100,13 +100,13 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 		flex-wrap: wrap;
 		border: 1px solid var(--border);
 		background: var(--surface);
 		border-radius: var(--radius-ctl);
-		padding: 8px 12px;
-		margin-bottom: 12px;
+		padding: var(--space-2) var(--space-3);
+		margin-bottom: var(--space-3);
 		font-size: var(--text-sm);
 		color: var(--muted);
 	}
@@ -118,7 +118,7 @@
 	}
 	.flow-controls label {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		align-items: center;
 	}
 	.flow-controls .field {
@@ -129,7 +129,7 @@
 		display: flex;
 		justify-content: flex-end;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.icon-btn {
 		padding-inline: 9px;
