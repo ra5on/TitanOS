@@ -38,6 +38,8 @@
 	} from './sleep-view.ts';
 	import { diskStatus, diskType, smartText } from './labels.ts';
 	import VolumeCard from './VolumeCard.svelte';
+	import type { MaintenanceStatus } from '#lib/operations.ts';
+	import { checksHintVolumes, sanitizeHints, uncheckedVolumes } from './checks-hint.ts';
 
 	const canAdminister = $derived(
 		session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin',
@@ -161,7 +163,45 @@
 		if (!location.hash && !location.search)
 			requestAnimationFrame(() => window.scrollTo({ top: navigation.scroll }));
 		if (!storage.status) void loadStatus();
+		if (canAdminister) void loadMaintenance();
 	});
+
+	// One-time hint for volumes without regular checks (plan 7a). Shown only
+	// once storage and maintenance are both known, so it does not flash.
+	let maintenance = $state<MaintenanceStatus | null>(null),
+		hintBusy = $state(false),
+		hintError = $state('');
+	async function loadMaintenance() {
+		try {
+			maintenance = await api.get<MaintenanceStatus>('/maintenance');
+		} catch {
+			// Without the plan the hint stays away; the maintenance page reports problems.
+		}
+	}
+	const checksHint = $derived(
+		canAdminister && storage.status && maintenance
+			? checksHintVolumes(
+					uncheckedVolumes(volumes, disks, maintenance.settings),
+					sanitizeHints(session.hints),
+				)
+			: [],
+	);
+	async function dismissChecksHint() {
+		hintBusy = true;
+		hintError = '';
+		const hints = sanitizeHints(session.hints);
+		const value = {
+			...hints,
+			checksDismissed: [...new Set([...(hints.checksDismissed ?? []), ...checksHint])],
+		};
+		try {
+			await api.put('/preferences/hints', value);
+			session.hints = value;
+		} catch (err) {
+			hintError = apiErrorText(err);
+		}
+		hintBusy = false;
+	}
 
 	// The shared poller stays quiet about failures; the first load here shows
 	// them, so an empty list never stands for "no volumes".
@@ -328,6 +368,24 @@
 {#if error}<div class="notice-error" role="alert">
 		{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
 	</div>{/if}
+{#if checksHint.length > 0}<section
+		class="notice-warn checks-hint"
+		aria-labelledby="checks-hint-title"
+	>
+		<strong id="checks-hint-title">{t('storage.checksHint.title')}</strong>
+		<p>
+			{t(checksHint.length === 1 ? 'storage.checksHint.one' : 'storage.checksHint.many', {
+				volumes: checksHint.join(', '),
+			})}
+		</p>
+		{#if hintError}<p role="alert">{hintError}</p>{/if}
+		<div class="row-actions">
+			<a class="btn btn-primary" href="/tools/maintenance">{t('storage.checksHint.setup')}</a>
+			<button class="btn" disabled={hintBusy} onclick={dismissChecksHint}
+				>{t('storage.checksHint.dismiss')}</button
+			>
+		</div>
+	</section>{/if}
 <div class="storage-toolbar">
 	<div class="tabs" role="group" aria-label={t('storage.title')}>
 		<button
@@ -762,6 +820,19 @@
 {/if}
 
 <style>
+	.checks-hint {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	.checks-hint p {
+		margin: 0;
+	}
+	.checks-hint .row-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 10px;
+	}
 	.storage-toolbar,
 	.tabs,
 	.sync-inline,

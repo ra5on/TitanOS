@@ -273,6 +273,8 @@ export type Preferences = {
 	appearance: Record<string, unknown> | null;
 	dashboard: Record<string, unknown> | null;
 	bell: Record<string, unknown> | null;
+	/** Dismissed one-time hints; missing on NAS versions before it. */
+	hints?: Record<string, unknown> | null;
 };
 
 export type Temperature = {
