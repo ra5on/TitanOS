@@ -132,3 +132,14 @@ func kernelVariant(release string) string {
 	}
 	return VariantStable
 }
+
+// NewestKernels returns the kernel releases of the newest release the last
+// check found, for the kernel choices "Stabil" and "Neu"; "" if unknown.
+func (m *Manager) NewestKernels() (stable, newer string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.found == nil {
+		return "", ""
+	}
+	return m.found.Kernel, m.found.Variants[VariantNew].Kernel
+}

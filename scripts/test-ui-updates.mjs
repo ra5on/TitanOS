@@ -17,7 +17,7 @@ let state;
 let installs = 0, appRollbacks = 0, failRestart = 0;
 let volumes = [];
 // Releases to choose from (Settings › Updates › Choose a version).
-const versions = [
+let versions = [
 	{ version: '0.46.5', channel: 'stable', released: '2026-11-12T03:00:00Z', kernel: '6.12.117', size: 412e6, changelog: '# TitanOS 0.46.5 — Sicherheitsupdate (Autopilot)', running: false, newest: true },
 	{ version: '0.8.0', channel: 'stable', released: '2026-11-05T03:00:00Z', kernel: '6.12.115', size: 410e6, changelog: '# TitanOS 0.8.0 — Läuft', running: true, newest: false },
 	{ version: '0.46.2', channel: 'stable', released: '2026-11-03T08:00:00Z', kernel: '6.12.115', size: 409e6, changelog: '# TitanOS 0.46.2 — Kernel 6.12.115, neue Signierschlüssel\n\nMehr.', running: false, newest: false },
@@ -161,8 +161,10 @@ try {
 		await page.getByRole('button', { name: 'TitanOS 0.46.2 installieren …' }).click();
 		assert.ok(await page.getByText('wird ausgeschaltet', { exact: false }).isVisible());
 		await page.screenshot({ path: `${out}/choose-confirm-graphit-1440.png` });
+		const installed = page.waitForResponse((res) => res.url().endsWith('/update/install-version'));
 		await page.locator('.dialog-actions .btn-primary').click();
-		await page.getByText('0.46.2', { exact: false }).first().waitFor();
+		await installed;
+		await page.getByRole('dialog').waitFor({ state: 'detached' });
 		assert.deepEqual(chosenVersions, ['0.46.2']);
 		assert.equal(await page.getByLabel('Updates von selbst installieren').isChecked(), false);
 		// The running version cannot be installed again.
@@ -176,6 +178,37 @@ try {
 		assert.ok(overflow <= 0, `page scrolls sideways by ${overflow}px`);
 		await phone.page.screenshot({ path: `${out}/choose-hell-390.png`, fullPage: true });
 		await phone.ctx.close();
+	}
+	{
+		// Running 0.46.3: an older version warns about newer settings, the
+		// newest one keeps installing by itself and warns about nothing.
+		reset();
+		const listed = versions;
+		versions = [
+			{ ...listed[0] },
+			{ version: '0.46.3', channel: 'stable', released: '2026-11-04T03:00:00Z', kernel: '6.12.115', size: 410e6, changelog: '# TitanOS 0.46.3 — Sicherheitsupdate (Autopilot)', running: true, newest: false },
+			{ ...listed[2] },
+		];
+		state = { ...state, version: '0.46.3', base: '0.46.3', available: null, kind: '', settings: { ...state.settings, autoInstall: true }, slots: [{ ...slots[0], version: '0.46.3' }, { ...slots[1], version: '0.46.2' }] };
+		const { ctx, page } = await context();
+		await page.goto(`${base}/settings/updates`);
+		const select = page.getByLabel('Version', { exact: true });
+		await select.waitFor();
+		await select.selectOption('0.46.2');
+		await page.getByRole('button', { name: 'TitanOS 0.46.2 installieren …' }).click();
+		const dialog = page.getByRole('dialog');
+		assert.ok(await dialog.getByText('Eine ältere Version kennt Einstellungen nicht', { exact: false }).isVisible());
+		assert.ok(await dialog.getByText('wird ausgeschaltet', { exact: false }).isVisible());
+		await page.screenshot({ path: `${out}/choose-older-graphit-1440.png`, animations: 'disabled' });
+		await dialog.getByRole('button', { name: 'Abbrechen' }).click();
+		await select.selectOption('0.46.5');
+		await page.getByRole('button', { name: 'TitanOS 0.46.5 installieren …' }).click();
+		assert.equal(await dialog.getByText('Eine ältere Version kennt Einstellungen nicht', { exact: false }).count(), 0);
+		assert.equal(await dialog.getByText('wird ausgeschaltet', { exact: false }).count(), 0);
+		await dialog.getByRole('button', { name: 'Abbrechen' }).click();
+		assert.deepEqual(chosenVersions, ['0.46.2']); // only the earlier block installed
+		await ctx.close();
+		versions = listed;
 	}
 	assert.deepEqual(errors, []);
 	console.log(`ok – screenshots in ${out}`);

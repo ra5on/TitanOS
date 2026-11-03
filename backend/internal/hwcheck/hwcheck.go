@@ -44,6 +44,9 @@ type Checker struct {
 	Runner run.Runner
 	// Plugins returns, per modalias, the plugins that match it. Optional.
 	Plugins func(aliases []string) map[string][]PluginHint
+	// NewKernel returns the kernel release of the kernel choice "Neu" in the
+	// newest release, "" if unknown. Optional.
+	NewKernel func() string
 
 	cpuOnce sync.Once
 	cpu     CPU
@@ -161,10 +164,14 @@ type UnboundDevice struct {
 	Plugins []PluginHint `json:"plugins,omitempty"`
 	// Kernel is the first Linux version that drives the device (hint kernel)
 	// or that fixes the failure (hint driver_failed).
-	Kernel   string   `json:"kernel,omitempty"`
-	Driver   string   `json:"driver,omitempty"`
-	Messages []string `json:"messages,omitempty"`
-	modalias string
+	Kernel string `json:"kernel,omitempty"`
+	// NewKernel is the kernel of the choice "Neu" in the newest release, if
+	// known, and NewKernelFixes whether it is at least Kernel.
+	NewKernel      string   `json:"newKernel,omitempty"`
+	NewKernelFixes bool     `json:"newKernelFixes,omitempty"`
+	Driver         string   `json:"driver,omitempty"`
+	Messages       []string `json:"messages,omitempty"`
+	modalias       string
 }
 
 // kernelFixes are failures of a driver of Linux 6.12 that a newer kernel
@@ -333,6 +340,11 @@ func (c *Checker) unbound(kernelLog func() string) []UnboundDevice {
 			}
 			return log
 		})
+		if device.Kernel != "" && c.NewKernel != nil {
+			if newer := c.NewKernel(); newer != "" {
+				device.NewKernel, device.NewKernelFixes = newer, kernelAtLeast(newer, device.Kernel)
+			}
+		}
 	}
 	// What needs attention first; devices that need no driver last.
 	sort.SliceStable(devices, func(i, j int) bool {
