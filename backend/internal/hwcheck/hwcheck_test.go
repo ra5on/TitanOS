@@ -507,6 +507,23 @@ func TestUnboundDriverFailed(t *testing.T) {
 	if runner.calls != 1 {
 		t.Errorf("kernel log read %d times", runner.calls)
 	}
+	if vmd.NewKernel != "" {
+		t.Errorf("new kernel without a known release: %+v", vmd)
+	}
+
+	// The kernel choice "Neu" of the newest release, with or without the fix.
+	for newer, fixes := range map[string]bool{"7.2.11+deb13-amd64": false, "7.3.2+deb13-amd64": true} {
+		c.NewKernel = func() string { return newer }
+		for _, device := range c.Unbound(context.Background()) {
+			if device.Address == "0000:00:0e.0" && (device.NewKernel != newer || device.NewKernelFixes != fixes) {
+				t.Errorf("%s: %+v", newer, device)
+			}
+			if device.Kernel == "" && device.NewKernel != "" {
+				t.Errorf("new kernel without a fix version: %+v", device)
+			}
+		}
+	}
+	c.NewKernel = nil
 
 	// Without a failing driver the kernel log is read only for the one
 	// unclassified chipset function; a kernel with the fix drops the
