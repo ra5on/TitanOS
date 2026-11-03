@@ -120,11 +120,10 @@ PLAN.md Punkt 31).
   (`docs/RELEASING.md`). Ein Fehler, den diese Tests nicht finden, erreicht
   alle NAS gleichzeitig; A/B fängt einen Fehlstart ab.
 - **Kernel „Neu“:** Ein Autopilot für beide Kernel; jedes Release trägt
-  beide Abbilder. Plugin-Sätze bestellt der Release-Workflow aber nur für den
-  Standard-Kernel: Der Tag eines Satzes für den Backports-Kernel enthielte die
-  Tilde aus `7.2.11-1~bpo13+1`, die git in Tag-Namen nicht erlaubt. Bis das
-  Namensschema geändert ist, erscheint ein Release mit einer Warnung, und ein
-  NAS mit Kernel „Neu“ und Kernel-Plugins kann es nicht vorbereiten.
+  beide Abbilder, und der Release-Workflow bestellt die Plugin-Sätze für
+  beide (seit 0.47.0; das `~` der Backports-Version wird im Tag zu `_`,
+  z. B. `kernel-7.2.11-1_bpo13_1-1`). Der Satz für „Neu“ verlängert den
+  Lauf um einen zweiten Plugin-Bau.
 - **Plugin-Signatur ohne Freigabe** (`AUTOPILOT_PLUGINS=on`) heißt: Was das
   Plugin-Repository baut, wird als Kernelmodul signiert und an alle NAS
   verteilt. Das Repository muss dafür so vertrauenswürdig sein wie dieses.
