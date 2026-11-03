@@ -173,7 +173,7 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		gap: 16px;
+		gap: var(--space-4);
 		min-height: 40px;
 		text-align: left;
 		font: inherit;
@@ -181,7 +181,7 @@
 		background: none;
 		border: 0;
 		border-radius: var(--radius-ctl);
-		padding: 8px 10px;
+		padding: var(--space-2) 10px;
 		color: var(--text);
 		cursor: pointer;
 	}

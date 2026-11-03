@@ -143,7 +143,7 @@
 	form {
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: var(--space-4);
 	}
 	.hint {
 		font-size: var(--text-md);

@@ -120,9 +120,9 @@
 		display: flex;
 		flex-direction: column;
 		align-items: flex-start;
-		gap: 8px;
-		margin-top: 8px;
-		padding: 10px 12px;
+		gap: var(--space-2);
+		margin-top: var(--space-2);
+		padding: 10px var(--space-3);
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-sm, 8px);
 		width: 100%;
@@ -138,7 +138,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 3px;
-		padding: 8px 0;
+		padding: var(--space-2) 0;
 		border-top: 1px solid var(--panel-border);
 		min-width: 0;
 	}
@@ -149,7 +149,7 @@
 	.line {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.dismiss {
 		margin-left: auto;

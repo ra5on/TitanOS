@@ -171,7 +171,7 @@
 		overflow: hidden;
 	}
 	.kinds button {
-		padding: 7px 12px;
+		padding: 7px var(--space-3);
 		background: transparent;
 		border: 0;
 		color: var(--muted);

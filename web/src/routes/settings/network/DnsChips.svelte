@@ -67,7 +67,7 @@
 		max-width: 32rem;
 	}
 	.chip {
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	.chip button {
 		padding: 0 2px;

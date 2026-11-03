@@ -210,7 +210,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px 12px;
+		gap: 6px var(--space-3);
 		font-size: var(--text-md);
 	}
 	.label {

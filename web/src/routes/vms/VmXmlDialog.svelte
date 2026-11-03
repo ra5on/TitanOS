@@ -17,7 +17,7 @@
 	.xml {
 		max-height: 60vh;
 		margin: 0;
-		padding: 12px;
+		padding: var(--space-3);
 		overflow: auto;
 		background: var(--bg);
 		border: 1px solid var(--border);

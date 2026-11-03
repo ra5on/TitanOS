@@ -163,7 +163,7 @@
 	:global(.ipv64-tab) {
 		display: flex;
 		flex-direction: column;
-		gap: var(--gap, 16px);
+		gap: var(--gap, var(--space-4));
 		font-size: var(--text-md);
 	}
 	:global(.ipv64-tab .table-wrap) {
@@ -176,7 +176,7 @@
 	:global(.ipv64-tab th),
 	:global(.ipv64-tab td) {
 		text-align: left;
-		padding: 6px 8px;
+		padding: 6px var(--space-2);
 		border-bottom: 1px solid var(--border);
 		vertical-align: middle;
 	}
@@ -208,7 +208,7 @@
 	:global(.ipv64-tab dl) {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-		gap: 12px 24px;
+		gap: var(--space-3) var(--space-5);
 		margin: 0;
 	}
 	:global(.ipv64-tab dt) {
@@ -238,7 +238,7 @@
 	:global(.ipv64-tab fieldset) {
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
-		padding: 8px 12px;
+		padding: var(--space-2) var(--space-3);
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
@@ -248,7 +248,7 @@
 		border-radius: var(--radius-bar);
 		background: var(--track);
 		overflow: hidden;
-		margin-top: 4px;
+		margin-top: var(--space-1);
 	}
 	:global(.ipv64-tab .meter > span) {
 		display: block;

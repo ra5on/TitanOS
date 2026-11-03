@@ -122,14 +122,14 @@
 	.crumbs {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px;
+		gap: var(--space-1);
 		align-items: center;
-		margin-bottom: 8px;
+		margin-bottom: var(--space-2);
 	}
 	.link {
 		background: none;
 		border: 0;
-		padding: 2px 4px;
+		padding: 2px var(--space-1);
 		color: var(--accent);
 		cursor: pointer;
 		font: inherit;
@@ -147,14 +147,14 @@
 		border-top: 1px solid var(--border);
 	}
 	.list .muted {
-		padding: 10px 12px;
+		padding: 10px var(--space-3);
 	}
 	.row {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		align-items: center;
 		width: 100%;
-		padding: 10px 12px;
+		padding: 10px var(--space-3);
 		background: none;
 		border: 0;
 		color: inherit;

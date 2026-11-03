@@ -873,7 +873,7 @@
 	.title {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	.intro {
 		max-width: 60rem;
@@ -882,7 +882,7 @@
 	.empty {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 		padding: 32px;
 		font-size: var(--text-md);
 	}
@@ -890,14 +890,14 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: flex-start;
-		gap: 24px;
+		gap: var(--space-5);
 	}
 	.list {
 		flex: 1 1 520px;
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.card {
 		display: flex;
@@ -911,7 +911,7 @@
 		cursor: pointer;
 	}
 	.recommended {
-		margin-bottom: 16px;
+		margin-bottom: var(--space-4);
 	}
 	.recommendations {
 		list-style: none;
@@ -925,20 +925,20 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 12px;
-		padding: 12px 0;
+		gap: var(--space-3);
+		padding: var(--space-3) 0;
 		border-top: 1px solid var(--panel-border);
 	}
 	.filters {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.filters input {
 		flex: 1 1 14rem;
 	}
 	.group {
-		margin-top: 8px;
+		margin-top: var(--space-2);
 		font-size: var(--text-sm);
 		font-weight: 600;
 		letter-spacing: 0.06em;
@@ -948,7 +948,7 @@
 	.facts {
 		display: grid;
 		grid-template-columns: max-content 1fr;
-		gap: 6px 12px;
+		gap: 6px var(--space-3);
 		margin: 0;
 	}
 	.facts dt {
@@ -993,7 +993,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: baseline;
-		gap: 4px 10px;
+		gap: var(--space-1) 10px;
 	}
 	.name {
 		font-size: var(--text-md);
@@ -1035,14 +1035,14 @@
 	.body {
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: var(--space-4);
 		padding: var(--tile-pad);
 		font-size: var(--text-md);
 	}
 	.block {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	h3 {
 		font-size: var(--text-sm);
@@ -1061,24 +1061,24 @@
 		padding-left: 1.25rem;
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	.row {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.update {
-		padding: 10px 12px;
+		padding: 10px var(--space-3);
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-ctl);
 	}
 	.confirm {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	label {
 		display: flex;
@@ -1107,7 +1107,7 @@
 		font-size: var(--text-md);
 	}
 	pre {
-		margin: 8px 0 0;
+		margin: var(--space-2) 0 0;
 		font-family: var(--font-mono);
 		font-size: var(--text-sm);
 		white-space: pre-wrap;

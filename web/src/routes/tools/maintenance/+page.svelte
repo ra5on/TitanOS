@@ -582,7 +582,7 @@
 	}
 	th,
 	td {
-		padding: 12px;
+		padding: var(--space-3);
 		text-align: left;
 		border-bottom: 1px solid var(--border);
 		vertical-align: top;
@@ -598,7 +598,7 @@
 	.result {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 12px;
+		gap: var(--space-3);
 		padding: 10px 0;
 		border-bottom: 1px solid var(--border);
 	}
@@ -607,7 +607,7 @@
 	}
 	.detail {
 		display: block;
-		margin-top: 4px;
+		margin-top: var(--space-1);
 		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
 	}

@@ -100,7 +100,7 @@
 		font-style: italic;
 	}
 	.matrix td {
-		padding: 4px;
+		padding: var(--space-1);
 	}
 	.cell {
 		/* Keeps the screen-reader text inside the scrolling table. */
@@ -113,7 +113,7 @@
 		width: 100%;
 		min-width: 6.5rem;
 		min-height: 2.75rem;
-		padding: 4px 8px;
+		padding: var(--space-1) var(--space-2);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 		background: transparent;

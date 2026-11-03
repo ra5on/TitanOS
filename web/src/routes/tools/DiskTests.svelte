@@ -497,7 +497,7 @@
 		margin: 0;
 	}
 	h3 {
-		margin: 4px 0 0;
+		margin: var(--space-1) 0 0;
 		font-size: var(--text-md);
 		font-weight: 600;
 	}
@@ -507,11 +507,11 @@
 		list-style: none;
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.disks li,
 	.tests li {
-		padding: 12px 14px;
+		padding: var(--space-3) 14px;
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-ctl);
 	}
@@ -519,7 +519,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px 14px;
+		gap: var(--space-2) 14px;
 	}
 	.tests li {
 		display: flex;
@@ -538,11 +538,11 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 8px 14px;
+		gap: var(--space-2) 14px;
 	}
 	.small {
 		height: 2rem;
-		padding: 0 12px;
+		padding: 0 var(--space-3);
 		font-size: var(--text-base);
 	}
 	.bad {
@@ -564,7 +564,7 @@
 	}
 	legend {
 		padding: 0;
-		margin-bottom: 8px;
+		margin-bottom: var(--space-2);
 		font-size: var(--text-base);
 		color: var(--muted);
 	}

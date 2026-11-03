@@ -140,7 +140,7 @@
 	form {
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: var(--space-4);
 	}
 	label {
 		display: flex;
@@ -162,7 +162,7 @@
 	.check {
 		flex-direction: row;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		margin-top: -4px;
 		font-size: var(--text-base);
 		color: var(--muted);

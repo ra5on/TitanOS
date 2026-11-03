@@ -301,11 +301,11 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: flex-end;
-		gap: 12px 16px;
+		gap: var(--space-3) var(--space-4);
 	}
 	.actions {
 		align-items: center;
-		gap: 8px 10px;
+		gap: var(--space-2) 10px;
 	}
 	.count {
 		font-size: var(--text-base);
@@ -328,7 +328,7 @@
 	.check {
 		flex-direction: row;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		height: 2.75rem;
 	}
 	.check span {
@@ -353,7 +353,7 @@
 	.lines {
 		height: min(60vh, 640px);
 		overflow: auto;
-		padding: 10px 12px;
+		padding: 10px var(--space-3);
 		background: var(--track);
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-ctl);
@@ -365,7 +365,7 @@
 	.line {
 		display: grid;
 		grid-template-columns: 9.5rem 9rem 1fr auto;
-		gap: 0 12px;
+		gap: 0 var(--space-3);
 	}
 	.line time,
 	.source {
@@ -394,7 +394,7 @@
 	@media (max-width: 760px) {
 		.line {
 			grid-template-columns: auto 1fr auto;
-			padding: 4px 0;
+			padding: var(--space-1) 0;
 			border-bottom: 1px solid var(--border);
 		}
 		.message {

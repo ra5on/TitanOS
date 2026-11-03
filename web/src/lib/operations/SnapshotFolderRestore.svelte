@@ -160,20 +160,20 @@
 	fieldset {
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
-		padding: 10px 12px;
-		margin: 0 0 12px;
+		padding: 10px var(--space-3);
+		margin: 0 0 var(--space-3);
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
 	}
 	legend {
 		font-size: var(--text-base);
-		padding: 0 4px;
+		padding: 0 var(--space-1);
 	}
 	.check {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		font-size: var(--text-md);
 	}
 	.summary p,

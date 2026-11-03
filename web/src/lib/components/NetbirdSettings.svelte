@@ -251,7 +251,7 @@
 	fieldset {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 		min-width: 0;
 	}
 	.mesh {

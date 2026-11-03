@@ -255,7 +255,7 @@
 		gap: 0;
 	}
 	.tokens h2 {
-		margin-bottom: 4px;
+		margin-bottom: var(--space-1);
 	}
 	.token {
 		display: flex;
@@ -300,7 +300,7 @@
 	}
 	.dialog-actions {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		justify-content: flex-end;
 		margin-top: var(--gap);
 	}
@@ -308,7 +308,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px var(--gap);
+		gap: var(--space-2) var(--gap);
 	}
 	.snippet > span {
 		font-weight: 600;

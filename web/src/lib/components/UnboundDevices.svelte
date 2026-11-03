@@ -135,8 +135,8 @@
 	.device {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px 20px;
-		padding: 12px 0;
+		gap: var(--space-2) 20px;
+		padding: var(--space-3) 0;
 		border-top: 1px solid var(--panel-border);
 		font-size: var(--text-md);
 	}

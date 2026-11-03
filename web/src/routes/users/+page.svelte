@@ -509,12 +509,12 @@
 	.toolbar {
 		display: flex;
 		justify-content: flex-end;
-		margin-bottom: 12px;
+		margin-bottom: var(--space-3);
 	}
 	.toolbar label {
 		flex-direction: row;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.filter {
 		width: auto;
@@ -538,7 +538,7 @@
 		color: var(--muted);
 	}
 	td {
-		padding: 10px 16px;
+		padding: 10px var(--space-4);
 		border-bottom: 1px solid var(--panel-border);
 		vertical-align: middle;
 	}
@@ -548,7 +548,7 @@
 	.who {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.avatar {
 		width: 32px;
@@ -567,7 +567,7 @@
 		font-weight: 500;
 	}
 	.you {
-		margin-left: 8px;
+		margin-left: var(--space-2);
 	}
 	.sub {
 		display: block;
@@ -591,7 +591,7 @@
 	}
 	.reach a {
 		display: inline-block;
-		margin: 2px 4px 2px 0;
+		margin: 2px var(--space-1) 2px 0;
 		color: var(--text);
 		text-decoration: none;
 		font-size: var(--text-sm);
@@ -610,7 +610,7 @@
 	form {
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: var(--space-4);
 	}
 	label {
 		display: flex;

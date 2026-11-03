@@ -175,7 +175,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: flex-end;
-		gap: 12px 20px;
+		gap: var(--space-3) 20px;
 	}
 	label {
 		display: flex;
@@ -207,7 +207,7 @@
 	.days {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	.day {
 		min-width: 2.5rem;
@@ -230,13 +230,13 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px 16px;
+		gap: var(--space-2) var(--space-4);
 		font-size: var(--text-base);
 	}
 	.actions {
 		display: flex;
 		align-items: center;
 		justify-content: flex-end;
-		gap: 16px;
+		gap: var(--space-4);
 	}
 </style>

@@ -97,7 +97,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
-		padding: 14px 16px;
+		padding: 14px var(--space-4);
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-tile);
 	}
@@ -116,7 +116,7 @@
 		font-weight: 500;
 	}
 	.needs ul {
-		margin: 4px 0 0;
+		margin: var(--space-1) 0 0;
 		padding-left: 20px;
 	}
 	.mono {

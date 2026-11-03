@@ -203,18 +203,18 @@
 	section {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 		padding: 18px;
 	}
 	section.embedded {
 		max-width: 46rem;
-		padding: 4px 0 0;
+		padding: var(--space-1) 0 0;
 	}
 	.summary {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px 12px;
+		gap: 6px var(--space-3);
 		min-height: var(--control-height);
 		font-size: var(--text-md);
 		overflow-wrap: anywhere;
@@ -246,14 +246,14 @@
 	.domain {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px 10px;
-		padding-top: 12px;
+		gap: var(--space-1) 10px;
+		padding-top: var(--space-3);
 		border-top: 1px solid var(--panel-border);
 	}
 	.row-note {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 </style>

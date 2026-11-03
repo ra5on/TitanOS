@@ -39,7 +39,7 @@
 	.image-fields {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px 12px;
+		gap: var(--space-2) var(--space-3);
 		min-width: 0;
 	}
 	label {

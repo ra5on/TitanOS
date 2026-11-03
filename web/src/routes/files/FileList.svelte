@@ -235,8 +235,8 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 8px;
-		margin: 12px;
+		gap: var(--space-2);
+		margin: var(--space-3);
 	}
 	.file-entries {
 		min-height: 120px;
@@ -245,7 +245,7 @@
 		display: grid;
 		grid-template-columns: 22px minmax(0, 1fr) 96px 170px 36px;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 		cursor: pointer;
 		padding: 7px 14px;
 		border-bottom: 1px solid var(--panel-border);
@@ -263,8 +263,8 @@
 		position: sticky;
 		top: var(--header-height, 60px);
 		z-index: 2;
-		padding-top: 4px;
-		padding-bottom: 4px;
+		padding-top: var(--space-1);
+		padding-bottom: var(--space-1);
 		background: var(--surface);
 		font-size: var(--text-sm);
 		color: var(--muted);
@@ -281,9 +281,9 @@
 	.sort {
 		display: inline-flex;
 		align-items: center;
-		gap: 4px;
+		gap: var(--space-1);
 		min-width: 0;
-		padding: 4px 6px;
+		padding: var(--space-1) 6px;
 		margin: 0 -6px;
 		background: transparent;
 		border: 0;
@@ -354,13 +354,13 @@
 	/* Symbol views: the header keeps the checkbox and the sort buttons in one line. */
 	.file-entries.small,
 	.file-entries.large {
-		padding: 0 12px 12px;
+		padding: 0 var(--space-3) var(--space-3);
 	}
 	.small .row.header,
 	.large .row.header {
 		display: flex;
-		gap: 16px;
-		margin: 0 -12px 8px;
+		gap: var(--space-4);
+		margin: 0 -12px var(--space-2);
 		padding-left: 26px;
 	}
 	.small .row:not(.header),
@@ -369,7 +369,7 @@
 		border-radius: var(--radius-ctl);
 		padding: 10px;
 		grid-template-columns: 18px minmax(0, 1fr) 32px;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.small .row:not(.header) > .num,
 	.large .row:not(.header) > .num {

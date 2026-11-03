@@ -52,7 +52,7 @@
 	dt {
 		display: flex;
 		align-items: center;
-		gap: 4px;
+		gap: var(--space-1);
 		white-space: nowrap;
 	}
 	dd {

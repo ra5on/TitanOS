@@ -168,7 +168,7 @@
 	form {
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: var(--space-4);
 	}
 	p {
 		font-size: var(--text-md);
@@ -179,7 +179,7 @@
 		gap: 6px;
 	}
 	pre {
-		margin: 8px 0 0;
+		margin: var(--space-2) 0 0;
 		font-family: var(--font-mono);
 		font-size: var(--text-sm);
 		white-space: pre-wrap;

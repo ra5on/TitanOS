@@ -812,7 +812,7 @@
 	.command-bar {
 		display: flex;
 		align-items: center;
-		gap: 24px;
+		gap: var(--space-5);
 		min-height: 48px;
 		border-bottom: 1px solid var(--border);
 	}
@@ -820,7 +820,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: flex-start;
-		gap: 24px;
+		gap: var(--space-5);
 	}
 	aside {
 		flex: 0 0 260px;
@@ -832,7 +832,7 @@
 	.aside-head {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		min-height: 50px;
 		padding: 14px;
 		border-bottom: 1px solid var(--panel-border);
@@ -851,12 +851,12 @@
 	}
 	.vm-search {
 		display: block;
-		margin: 12px 12px 8px;
+		margin: var(--space-3) var(--space-3) var(--space-2);
 	}
 	.filters {
 		display: flex;
-		gap: 4px;
-		padding: 0 12px 10px;
+		gap: var(--space-1);
+		padding: 0 var(--space-3) 10px;
 	}
 	.filter {
 		display: inline-flex;
@@ -882,14 +882,14 @@
 	}
 	.vm-empty {
 		margin: 0;
-		padding: 4px 14px 12px;
+		padding: var(--space-1) 14px var(--space-3);
 		font-size: var(--text-base);
 	}
 	.vm {
 		display: flex;
 		align-items: center;
-		gap: 4px;
-		padding-right: 8px;
+		gap: var(--space-1);
+		padding-right: var(--space-2);
 		border-left: 3px solid transparent;
 		min-height: 74px;
 	}
@@ -904,7 +904,7 @@
 		display: flex;
 		flex: 1;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 		min-width: 0;
 		padding: 14px 6px 14px 14px;
 		color: var(--text);
@@ -921,7 +921,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 4px 6px;
+		gap: var(--space-1) 6px;
 		font-size: var(--text-sm);
 	}
 	.autostart {
@@ -961,7 +961,7 @@
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.head {
 		display: flex;
@@ -969,7 +969,7 @@
 		align-items: center;
 		min-height: 58px;
 		justify-content: space-between;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	h1 {
 		font-size: var(--text-page);
@@ -978,7 +978,7 @@
 	.title {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 		min-width: 0;
 	}
 	.name-row {
@@ -994,7 +994,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.icon-btn {
 		width: 2.375rem;
@@ -1004,13 +1004,13 @@
 	.notices {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.notice-line {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px 12px;
+		gap: 6px var(--space-3);
 	}
 	.notice-text {
 		flex: 1 1 16rem;
@@ -1113,13 +1113,13 @@
 	.screen-footer {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.screen-state {
 		display: flex;
 		align-items: center;
 		flex-wrap: wrap;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	label {
 		display: flex;
@@ -1131,7 +1131,7 @@
 		color: var(--muted);
 	}
 	pre {
-		margin: 8px 0 0;
+		margin: var(--space-2) 0 0;
 		font-family: var(--font-mono);
 		font-size: var(--text-sm);
 		white-space: pre-wrap;
@@ -1140,14 +1140,14 @@
 	@media (max-width: 1100px) {
 		.command-bar {
 			flex-wrap: wrap;
-			gap: 8px;
+			gap: var(--space-2);
 		}
 		.tabs {
 			min-height: 44px;
 		}
 		.toolbar {
 			flex: 1 1 100%;
-			padding-bottom: 8px;
+			padding-bottom: var(--space-2);
 			flex-wrap: wrap;
 		}
 		.toolbar::before {

@@ -424,7 +424,7 @@
 		color: var(--muted);
 		border: 0;
 		border-bottom: 2px solid transparent;
-		padding: 8px 0;
+		padding: var(--space-2) 0;
 		cursor: pointer;
 	}
 	.tabs button[aria-selected='true'] {
@@ -434,8 +434,8 @@
 	.close-options {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
-		margin-top: 12px;
+		gap: var(--space-2);
+		margin-top: var(--space-3);
 	}
 
 	form {
@@ -446,7 +446,7 @@
 	.two {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-		gap: 16px;
+		gap: var(--space-4);
 	}
 	.field-row {
 		display: flex;
@@ -460,7 +460,7 @@
 	}
 	legend {
 		padding: 0;
-		margin-bottom: 4px;
+		margin-bottom: var(--space-1);
 	}
 	fieldset {
 		margin: 0;
@@ -495,7 +495,7 @@
 	.inline {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 		font-size: var(--text-md);
 	}
 	.number {
@@ -511,8 +511,8 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px 12px;
-		padding: 8px 12px;
+		gap: var(--space-2) var(--space-3);
+		padding: var(--space-2) var(--space-3);
 		background: var(--bg);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
@@ -524,7 +524,7 @@
 	}
 	.segments {
 		display: flex;
-		gap: 4px;
+		gap: var(--space-1);
 		padding: 3px;
 		background: var(--surface);
 		border: 1px solid var(--border);

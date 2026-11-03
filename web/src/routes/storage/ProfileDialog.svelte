@@ -103,13 +103,13 @@
 	}
 	.options {
 		display: grid;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.option {
 		display: flex;
 		gap: 10px;
 		align-items: flex-start;
-		padding: 10px 12px;
+		padding: 10px var(--space-3);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 		cursor: pointer;

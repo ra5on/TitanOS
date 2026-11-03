@@ -236,14 +236,14 @@
 		margin: 0;
 		display: grid;
 		grid-template-columns: 1fr 1fr;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	dt {
 		color: var(--tile-label-color, var(--muted));
 		font-size: var(--tile-label-size, var(--text-sm));
 	}
 	dd {
-		margin: 4px 0 0;
+		margin: var(--space-1) 0 0;
 		font-size: var(--tile-label-size, var(--text-sm));
 		font-family: var(--tile-value-font);
 		overflow-wrap: anywhere;

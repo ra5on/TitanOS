@@ -188,8 +188,8 @@
 		list-style: none;
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
-		padding: 10px 12px;
+		gap: var(--space-2);
+		padding: 10px var(--space-3);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 	}
@@ -200,7 +200,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px 12px;
+		gap: 6px var(--space-3);
 	}
 	.small {
 		font-size: var(--text-base);
@@ -221,12 +221,12 @@
 		white-space: nowrap;
 	}
 	.buttons .btn + .btn {
-		margin-left: 4px;
+		margin-left: var(--space-1);
 	}
 	.fields {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
-		gap: 8px 12px;
+		gap: var(--space-2) var(--space-3);
 	}
 	.fields .note {
 		grid-column: span 2;

@@ -213,11 +213,11 @@
 	.screen {
 		flex: 1 1 auto;
 		min-height: 0;
-		padding: 8px 12px;
+		padding: var(--space-2) var(--space-3);
 		overflow: hidden;
 	}
 	.ended {
-		padding: 6px 16px;
+		padding: 6px var(--space-4);
 		background: var(--warn-bg);
 		color: var(--warn-text);
 		font-size: var(--text-base);

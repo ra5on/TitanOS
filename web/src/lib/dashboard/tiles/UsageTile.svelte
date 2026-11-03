@@ -160,7 +160,7 @@
 	.memory-occupancy p {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 2px 12px;
+		gap: 2px var(--space-3);
 		margin: 5px 0 0;
 	}
 	.memory-occupancy p span {
@@ -219,7 +219,7 @@
 	.memory-details > div {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 		flex: 1;
 		min-width: 0;
 	}
@@ -258,7 +258,7 @@
 		display: flex;
 		justify-content: space-between;
 		flex-wrap: wrap;
-		gap: 5px 12px;
+		gap: 5px var(--space-3);
 		font-size: var(--tile-label-size, var(--text-sm));
 		color: var(--tile-label-color, var(--muted));
 		overflow-wrap: anywhere;

@@ -51,7 +51,7 @@
 		display: flex;
 		align-items: start;
 		justify-content: space-between;
-		gap: 16px;
+		gap: var(--space-4);
 		padding: 14px 0;
 		border-bottom: 1px solid var(--border);
 		font-size: var(--text-md);
@@ -71,7 +71,7 @@
 	.meta {
 		color: var(--muted);
 		font-size: var(--text-sm);
-		margin-top: 4px;
+		margin-top: var(--space-1);
 	}
 	.problem strong {
 		color: var(--warn-text);
@@ -100,7 +100,7 @@
 		flex-wrap: wrap;
 	}
 	progress {
-		margin-top: 8px;
+		margin-top: var(--space-2);
 		width: min(100%, 300px);
 		accent-color: var(--accent);
 	}

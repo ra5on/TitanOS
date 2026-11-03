@@ -289,7 +289,7 @@
 		margin: 0;
 	}
 	.plan li {
-		margin: 8px 0;
+		margin: var(--space-2) 0;
 		overflow-wrap: anywhere;
 	}
 	.mono {

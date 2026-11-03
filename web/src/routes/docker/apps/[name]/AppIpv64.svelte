@@ -235,7 +235,7 @@
 	}
 	section.embedded {
 		max-width: 46rem;
-		padding: 4px 0 0;
+		padding: var(--space-1) 0 0;
 	}
 	.fields {
 		display: flex;

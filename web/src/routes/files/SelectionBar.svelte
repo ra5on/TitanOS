@@ -107,10 +107,10 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		/* Beside the round menu button of "Side" navigation on a phone. */
 		margin: 0 12px 12px calc(12px + var(--fab-clear, 0px));
-		padding: 8px 10px 8px 14px;
+		padding: var(--space-2) 10px var(--space-2) 14px;
 		background: var(--surface);
 		border: 1px solid var(--accent);
 		border-radius: var(--radius-ctl);

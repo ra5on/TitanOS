@@ -217,7 +217,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.row span {
 		overflow-wrap: anywhere;

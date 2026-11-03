@@ -107,12 +107,12 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.policies {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 		margin: 0;
 		padding: 0;
 	}
@@ -123,6 +123,6 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px 12px;
+		gap: var(--space-2) var(--space-3);
 	}
 </style>

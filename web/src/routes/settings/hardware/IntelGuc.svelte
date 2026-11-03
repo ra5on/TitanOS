@@ -227,7 +227,7 @@
 	.gpu {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 		font-size: var(--text-md);
 	}
 	.name {
@@ -252,7 +252,7 @@
 	dl {
 		display: grid;
 		grid-template-columns: max-content 1fr;
-		gap: 4px 14px;
+		gap: var(--space-1) 14px;
 		margin: 6px 0 0;
 		font-size: var(--text-base);
 	}
@@ -269,7 +269,7 @@
 	form {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	fieldset {
 		border: 0;
@@ -282,7 +282,7 @@
 	legend {
 		font-weight: 600;
 		padding: 0;
-		margin-bottom: 4px;
+		margin-bottom: var(--space-1);
 	}
 	.row {
 		display: flex;

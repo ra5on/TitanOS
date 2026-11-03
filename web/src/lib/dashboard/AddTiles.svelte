@@ -91,7 +91,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	/* The same heading and close button as the tile heads on the dashboard. */
 	.tile-title {
@@ -120,7 +120,7 @@
 	.tile-choices {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.add-tiles label {
 		display: flex;

@@ -93,11 +93,11 @@
 	.content {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
-		padding: 16px;
+		gap: var(--space-3);
+		padding: var(--space-4);
 	}
 	.start-options {
-		padding: 0 16px 16px;
+		padding: 0 var(--space-4) var(--space-4);
 	}
 	label {
 		display: flex;
@@ -115,7 +115,7 @@
 	.medium {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 		font-size: var(--text-base);
 	}
 	.medium label {
@@ -123,7 +123,7 @@
 	}
 	.medium-pick {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.medium-pick input {
 		flex: 1;

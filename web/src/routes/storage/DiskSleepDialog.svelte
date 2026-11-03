@@ -298,7 +298,7 @@
 <style>
 	.disk-sleep {
 		display: grid;
-		gap: 16px;
+		gap: var(--space-4);
 	}
 	.sleep-default {
 		display: flex;
@@ -312,7 +312,7 @@
 		max-width: 100%;
 	}
 	.sleep-heading {
-		margin: 0 0 8px;
+		margin: 0 0 var(--space-2);
 		font-size: var(--text-md);
 	}
 	.sleep-list {
@@ -325,9 +325,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 12px;
+		gap: var(--space-3);
 		flex-wrap: wrap;
-		padding: 8px 0;
+		padding: var(--space-2) 0;
 		border-top: 1px solid var(--border);
 	}
 	.sleep-list li:first-child {
@@ -336,7 +336,7 @@
 	.sleep-list li.focused {
 		background: color-mix(in srgb, var(--accent) 10%, transparent);
 		border-radius: var(--radius-small);
-		padding-inline: 8px;
+		padding-inline: var(--space-2);
 	}
 	.sleep-name {
 		display: grid;

@@ -219,13 +219,13 @@
 	}
 	.tasks-entry.compact {
 		align-items: center;
-		margin-right: 12px;
-		padding-right: 16px;
+		margin-right: var(--space-3);
+		padding-right: var(--space-4);
 		border-right: 1px solid var(--border);
 	}
 	.compact > .btn {
 		height: 32px;
-		padding: 0 4px;
+		padding: 0 var(--space-1);
 		border: 0;
 		background: transparent;
 		font-size: var(--text-sm);
@@ -235,9 +235,9 @@
 		flex: none;
 		display: inline-flex;
 		align-items: center;
-		gap: 4px;
+		gap: var(--space-1);
 		height: 28px;
-		padding: 0 4px 0 6px;
+		padding: 0 var(--space-1) 0 6px;
 		border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
 		border-radius: 999px;
 		background: color-mix(in srgb, var(--accent) 12%, transparent);
@@ -281,9 +281,9 @@
 	ul {
 		list-style: none;
 		padding: 0;
-		margin: 12px 0;
+		margin: var(--space-3) 0;
 		display: grid;
-		gap: 16px;
+		gap: var(--space-4);
 		max-height: 55vh;
 		overflow: auto;
 	}
@@ -291,14 +291,14 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		border-top: 1px solid var(--border);
-		padding-top: 12px;
+		padding-top: var(--space-3);
 	}
 	li > div {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 		width: 100%;
 		overflow-wrap: anywhere;
 	}

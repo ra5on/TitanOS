@@ -829,7 +829,7 @@
 	.setup {
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
-		padding: 8px 12px;
+		padding: var(--space-2) var(--space-3);
 	}
 	.setup ul {
 		margin: 6px 0;
@@ -838,7 +838,7 @@
 	.policy {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.icon {
 		width: 20px;
@@ -852,6 +852,6 @@
 	}
 	textarea {
 		height: auto;
-		padding: 8px 12px;
+		padding: var(--space-2) var(--space-3);
 	}
 </style>

@@ -300,7 +300,7 @@
 		display: flex;
 		gap: 10px;
 		flex-wrap: wrap;
-		padding: 12px;
+		padding: var(--space-3);
 		border-bottom: 1px solid var(--border);
 	}
 	.controls label {

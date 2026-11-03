@@ -525,7 +525,7 @@
 	}
 	td,
 	th {
-		padding: 8px;
+		padding: var(--space-2);
 		text-align: left;
 		border-bottom: 1px solid var(--border);
 		overflow-wrap: anywhere;
@@ -538,7 +538,7 @@
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: var(--space-4);
 	}
 	.crumbs {
 		display: flex;

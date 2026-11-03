@@ -23,7 +23,7 @@
 
 <style>
 	.file-properties dd {
-		margin: 0 0 8px;
+		margin: 0 0 var(--space-2);
 		overflow-wrap: anywhere;
 	}
 	.file-properties dt {

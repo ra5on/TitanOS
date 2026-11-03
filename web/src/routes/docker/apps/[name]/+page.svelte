@@ -1001,7 +1001,7 @@
 	.segments {
 		display: inline-flex;
 		align-self: flex-start;
-		gap: 4px;
+		gap: var(--space-1);
 		padding: 3px;
 		background: var(--panel-bg);
 		border: 1px solid var(--panel-border);
@@ -1040,28 +1040,28 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 10px 16px;
-		padding: 12px 18px;
+		gap: 10px var(--space-4);
+		padding: var(--space-3) 18px;
 	}
 	.app-state,
 	.quick {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px 16px;
+		gap: var(--space-2) var(--space-4);
 		font-size: var(--text-md);
 	}
 	.quick {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px 16px;
+		gap: var(--space-2) var(--space-4);
 		font-size: var(--text-md);
 	}
 	.state {
 		display: inline-flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.value {
 		font-size: var(--text-base);
@@ -1072,12 +1072,12 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.logs {
 		max-height: 60vh;
 		margin: 0;
-		padding: 12px 14px;
+		padding: var(--space-3) 14px;
 		overflow: auto;
 		background: var(--bg);
 		border: 1px solid var(--border);
@@ -1088,7 +1088,7 @@
 		font-size: var(--text-base);
 	}
 	pre {
-		margin: 8px 0 0;
+		margin: var(--space-2) 0 0;
 		font-family: var(--font-mono);
 		font-size: var(--text-sm);
 		white-space: pre-wrap;
@@ -1151,7 +1151,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: var(--space-2) 12px;
+		gap: var(--space-2) var(--space-3);
 		margin-top: var(--space-2);
 		padding: var(--space-3) var(--space-4) var(--space-3) calc(min(17rem, 30%) + 2 * var(--space-4));
 		background: var(--surface);

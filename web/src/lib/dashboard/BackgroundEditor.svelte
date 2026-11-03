@@ -368,7 +368,7 @@
 
 <style>
 	h2 {
-		margin: 4px 0 5px;
+		margin: var(--space-1) 0 5px;
 		font-size: var(--text-xl);
 	}
 	p {
@@ -379,7 +379,7 @@
 	}
 	.selected-wallpaper {
 		display: flex;
-		gap: 12px;
+		gap: var(--space-3);
 		align-items: center;
 		margin: 15px 0;
 	}
@@ -410,7 +410,7 @@
 	.wide-btn {
 		width: 100%;
 		justify-content: center;
-		margin: 0 0 16px;
+		margin: 0 0 var(--space-4);
 	}
 	.effect-field {
 		display: block;
@@ -419,11 +419,11 @@
 		color: var(--text);
 	}
 	.effect-field select {
-		margin-top: 8px;
+		margin-top: var(--space-2);
 		width: 100%;
 	}
 	.hint {
-		padding: 12px;
+		padding: var(--space-3);
 		border-radius: var(--radius-small);
 		background: var(--chip);
 		border: 1px solid var(--border);
@@ -432,9 +432,9 @@
 	.effects-check {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		font-size: var(--text-sm);
-		margin: 16px 0;
+		margin: var(--space-4) 0;
 	}
 	.effects-check input {
 		accent-color: var(--accent);
@@ -442,18 +442,18 @@
 	.background-modes {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 12px;
+		gap: var(--space-3);
 		margin-bottom: 15px;
 	}
 	.gallery-head {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.source-tabs {
 		display: flex;
-		gap: 24px;
+		gap: var(--space-5);
 		border-bottom: 1px solid var(--border);
 	}
 	.source-tabs button {
@@ -481,8 +481,8 @@
 	.gallery-content {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) 245px;
-		gap: 24px;
-		padding: 8px 0;
+		gap: var(--space-5);
+		padding: var(--space-2) 0;
 	}
 	.wallpaper-grid {
 		display: grid;
@@ -574,7 +574,7 @@
 		text-align: center;
 		padding: 22px;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.drop-zone.dragging {
 		background: var(--chip);
@@ -634,7 +634,7 @@
 		background: none;
 		border: 0;
 		color: var(--muted);
-		padding: 4px;
+		padding: var(--space-1);
 		cursor: pointer;
 	}
 	button:focus-visible {

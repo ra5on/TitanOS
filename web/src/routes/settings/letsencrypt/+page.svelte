@@ -434,7 +434,7 @@
 	.head {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.hint {
 		margin: 0;
@@ -451,7 +451,7 @@
 	dl {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-		gap: 12px 24px;
+		gap: var(--space-3) var(--space-5);
 		margin: 0;
 	}
 	.wide {
@@ -467,7 +467,7 @@
 	}
 	textarea {
 		height: auto;
-		padding: 10px 12px;
+		padding: 10px var(--space-3);
 		max-width: 32rem;
 		resize: vertical;
 	}

@@ -86,7 +86,7 @@
 
 <style>
 	.unfinished {
-		padding: 12px var(--tile-pad);
+		padding: var(--space-3) var(--tile-pad);
 		border-bottom: 1px solid var(--border);
 	}
 	.unfinished-row {

@@ -72,7 +72,7 @@
 
 <style>
 	fieldset {
-		padding: 16px;
+		padding: var(--space-4);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 		min-width: 0;
@@ -83,7 +83,7 @@
 		gap: 10px;
 		flex-wrap: wrap;
 		align-items: center;
-		margin: 12px 0;
+		margin: var(--space-3) 0;
 	}
 	.select select,
 	.application select {
@@ -96,7 +96,7 @@
 	}
 	.check {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		align-items: center;
 		font-size: var(--text-base);
 	}

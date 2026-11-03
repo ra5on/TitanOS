@@ -194,12 +194,12 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px 12px;
-		padding: 8px 0;
+		gap: 6px var(--space-3);
+		padding: var(--space-2) 0;
 	}
 	.name {
 		display: inline-flex;
-		gap: 8px;
+		gap: var(--space-2);
 		align-items: center;
 		font-weight: 500;
 	}

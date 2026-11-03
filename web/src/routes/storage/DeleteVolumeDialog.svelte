@@ -72,7 +72,7 @@
 	.body {
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: var(--space-4);
 	}
 	.affected {
 		font-size: var(--text-md);
@@ -86,7 +86,7 @@
 		overflow-wrap: anywhere;
 	}
 	pre {
-		margin: 8px 0 0;
+		margin: var(--space-2) 0 0;
 		font-family: var(--font-mono);
 		font-size: var(--text-sm);
 		white-space: pre-wrap;

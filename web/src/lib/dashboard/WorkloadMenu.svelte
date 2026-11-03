@@ -348,7 +348,7 @@
 		width: 28px;
 		height: 28px;
 		vertical-align: middle;
-		margin-right: 8px;
+		margin-right: var(--space-2);
 	}
 	pre {
 		font:

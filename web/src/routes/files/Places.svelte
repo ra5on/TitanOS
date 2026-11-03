@@ -284,7 +284,7 @@
 <style>
 	.group {
 		display: block;
-		padding: 10px 10px 4px;
+		padding: 10px 10px var(--space-1);
 		font-size: var(--text-sm);
 		color: var(--muted);
 	}
@@ -292,7 +292,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding-right: 4px;
+		padding-right: var(--space-1);
 	}
 	.icon {
 		display: inline-flex;
@@ -368,8 +368,8 @@
 	.space {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
-		margin: 2px 10px 8px 34px;
+		gap: var(--space-1);
+		margin: 2px 10px var(--space-2) 34px;
 		font-size: var(--text-sm);
 		color: var(--muted);
 	}
@@ -405,7 +405,7 @@
 	}
 	.eject {
 		align-self: flex-end;
-		margin: -4px 10px 4px;
+		margin: -4px 10px var(--space-1);
 	}
 	.drive-description {
 		flex: 1;
@@ -432,7 +432,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 3px;
-		padding: 0 10px 8px 36px;
+		padding: 0 10px var(--space-2) 36px;
 		font-size: var(--text-sm);
 		color: var(--muted);
 	}
@@ -449,7 +449,7 @@
 		overflow-wrap: anywhere;
 	}
 	.note {
-		padding: 4px 10px;
+		padding: var(--space-1) 10px;
 		font-size: var(--text-base);
 	}
 	.link {

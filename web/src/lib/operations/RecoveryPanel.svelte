@@ -217,7 +217,7 @@
 	.head {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 12px;
+		gap: var(--space-3);
 		align-items: center;
 	}
 	.head {

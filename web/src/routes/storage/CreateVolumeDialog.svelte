@@ -375,7 +375,7 @@
 	.field-row {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.label {
 		font-size: var(--text-md);
@@ -397,7 +397,7 @@
 	.options {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.options.two {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -405,8 +405,8 @@
 	.option {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
-		padding: 12px;
+		gap: var(--space-1);
+		padding: var(--space-3);
 		text-align: left;
 		background: var(--bg);
 		border: 2px solid var(--border);
@@ -429,15 +429,15 @@
 	.capacity {
 		display: flex;
 		justify-content: space-between;
-		gap: 12px;
-		padding: 12px 14px;
+		gap: var(--space-3);
+		padding: var(--space-3) 14px;
 		background: var(--chip);
 		border-radius: var(--radius-ctl);
 		font-size: var(--text-md);
 	}
 	.confirm {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		align-items: flex-start;
 		font-size: var(--text-md);
 	}
@@ -449,7 +449,7 @@
 		color: var(--muted);
 	}
 	pre {
-		margin: 8px 0 0;
+		margin: var(--space-2) 0 0;
 		font-family: var(--font-mono);
 		font-size: var(--text-sm);
 		white-space: pre-wrap;
@@ -457,9 +457,9 @@
 	}
 	.checks {
 		display: grid;
-		gap: 8px;
+		gap: var(--space-2);
 		margin: 0;
-		padding: 12px 14px;
+		padding: var(--space-3) 14px;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 	}

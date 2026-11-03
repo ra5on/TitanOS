@@ -154,20 +154,20 @@
 	fieldset {
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
-		padding: 8px 12px;
+		padding: var(--space-2) var(--space-3);
 		margin: 0;
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
 	}
 	legend {
-		padding: 0 4px;
+		padding: 0 var(--space-1);
 		font-weight: 500;
 	}
 	.column {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.small {
 		font-size: var(--text-base);

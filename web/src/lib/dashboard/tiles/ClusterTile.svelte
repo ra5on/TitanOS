@@ -71,19 +71,19 @@
 		list-style: none;
 		display: flex;
 		flex-direction: column;
-		gap: var(--tile-row-gap, 8px);
+		gap: var(--tile-row-gap, var(--space-2));
 		min-width: 0;
 	}
 	li {
 		display: grid;
 		grid-template-columns: 10px auto minmax(0, 1fr);
 		align-items: baseline;
-		gap: 8px;
+		gap: var(--space-2);
 		min-width: 0;
 	}
 	li + li {
 		border-top: 1px solid var(--border);
-		padding-top: var(--tile-row-gap, 8px);
+		padding-top: var(--tile-row-gap, var(--space-2));
 	}
 	.dot {
 		width: 8px;

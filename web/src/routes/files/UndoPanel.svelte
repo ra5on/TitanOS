@@ -65,8 +65,8 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		gap: 12px;
-		padding: 8px 0;
+		gap: var(--space-3);
+		padding: var(--space-2) 0;
 		border-top: 1px solid var(--border);
 	}
 	p {

@@ -91,7 +91,7 @@
 		margin-left: auto;
 	}
 	.vm-inline {
-		margin-top: 8px;
+		margin-top: var(--space-2);
 	}
 	section {
 		border: 1px solid var(--border);
@@ -104,7 +104,7 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 10px;
-		padding: 10px 12px;
+		padding: 10px var(--space-3);
 		background: var(--chip);
 		border-bottom: 1px solid var(--border);
 	}
@@ -120,9 +120,9 @@
 	dl {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
-		gap: 7px 12px;
+		gap: 7px var(--space-3);
 		margin: 0;
-		padding: 12px;
+		padding: var(--space-3);
 		font-size: var(--text-sm);
 	}
 	dt {
@@ -138,7 +138,7 @@
 	}
 	a {
 		display: block;
-		padding: 0 12px 12px;
+		padding: 0 var(--space-3) var(--space-3);
 		font-size: var(--text-sm);
 	}
 </style>

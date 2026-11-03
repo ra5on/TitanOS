@@ -416,7 +416,7 @@
 	.zones-list div {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px 12px;
+		gap: var(--space-1) var(--space-3);
 	}
 	.zones-list dt {
 		font-weight: 500;
@@ -428,7 +428,7 @@
 		flex: 1 1 12rem;
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px 12px;
+		gap: var(--space-1) var(--space-3);
 		align-items: center;
 	}
 	.buttons {
@@ -436,7 +436,7 @@
 		white-space: nowrap;
 	}
 	.buttons .btn + .btn {
-		margin-left: 4px;
+		margin-left: var(--space-1);
 	}
 	.start {
 		justify-content: flex-start;

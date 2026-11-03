@@ -85,7 +85,7 @@
 
 <style>
 	.node {
-		margin: 12px 0 4px;
+		margin: var(--space-3) 0 var(--space-1);
 		font-size: var(--text-md);
 	}
 	.table-wrap {
@@ -105,7 +105,7 @@
 		border-bottom: 1px solid var(--border);
 	}
 	td {
-		padding: 8px 10px;
+		padding: var(--space-2) 10px;
 		border-bottom: 1px solid var(--border);
 		white-space: nowrap;
 	}

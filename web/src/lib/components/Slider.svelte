@@ -27,7 +27,7 @@
 	.row {
 		display: flex;
 		justify-content: space-between;
-		gap: 12px;
+		gap: var(--space-3);
 		font-size: var(--text-md);
 	}
 	.row span {
