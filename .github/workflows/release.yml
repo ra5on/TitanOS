@@ -13,6 +13,12 @@ name: Release
 # A tag on which only titand changed since the last full release becomes an
 # app release (scripts/release-kind.py, docs/APP-UPDATES.md): the published
 # image of that release gets the new titand, without mkosi and new plugins.
+#
+# The autopilot (autopilot.yml, docs/AUTOPILOT.md) pushes its tag with the
+# workflow token, which starts no push run, and starts this workflow on the
+# tag with publish=true instead. Such a run is a tag build like a push.
+# scripts/autopilot.py guard decides from git alone whether the tag may be
+# published through the environment security-release without an approval.
 
 on:
   push:
@@ -43,6 +49,7 @@ on:
       - 'scripts/smoke-app-update.py'
       - 'scripts/repack-release.py'
       - 'scripts/release-kind.py'
+      - 'scripts/autopilot.py'
       - 'scripts/smoke-storage.py'
       - 'scripts/smoke-cache.py'
       - 'backend/internal/storage/cache.go'
@@ -65,6 +72,10 @@ on:
         description: 'Version for a build/sign/boot rehearsal (never publishes)'
         required: true
         default: '0.2.0-beta.4'
+      publish:
+        description: 'Started on a v* tag: build and publish that tag like a push (the autopilot uses this)'
+        type: boolean
+        default: false
 
 concurrency:
   group: release-${{ github.ref }}
@@ -73,6 +84,11 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # "true" for a tag that is built to be published: a pushed v* tag, or a
+  # v* tag started by hand or by the autopilot with publish=true.
+  REAL_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish)) && 'true' || 'false' }}
+
 jobs:
   build:
     name: Release image
@@ -80,12 +96,13 @@ jobs:
     # A tag may wait for the plugin set of a new kernel (built and approved
     # in the plugin repository). A pull request runs every QEMU test under
     # TCG, which since the hardware variants takes about 90 minutes.
-    timeout-minutes: ${{ github.event_name == 'push' && 360 || 150 }}
+    timeout-minutes: ${{ startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || inputs.publish) && 360 || 150 }}
     outputs:
       version: ${{ steps.version.outputs.version }}
       channel: ${{ steps.version.outputs.channel }}
       kind: ${{ steps.kind.outputs.kind }}
       base: ${{ steps.kind.outputs.base }}
+      autopilot: ${{ steps.autopilot.outputs.autopilot }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -97,7 +114,7 @@ jobs:
         env:
           REHEARSAL_VERSION: ${{ inputs.version || '0.2.0-beta.4' }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" = push ]; then
+          if [ "$REAL_TAG" = true ]; then
             version=${GITHUB_REF_NAME#v}
             git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > changelog.txt
           else
@@ -117,11 +134,22 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" = push ]; then
+          if [ "$REAL_TAG" = true ]; then
             python3 scripts/release-kind.py "$VERSION" --tag-message changelog.txt >> "$GITHUB_OUTPUT"
           else
             # Rehearsals build the full image and try app updates on it in QEMU.
             printf 'kind=system\nbase=%s\n' "$VERSION" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: May the autopilot publish this tag without an approval
+        id: autopilot
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [ "$REAL_TAG" = true ]; then
+            python3 scripts/autopilot.py guard "$VERSION" >> "$GITHUB_OUTPUT"
+          else
+            echo "autopilot=false" >> "$GITHUB_OUTPUT"
           fi
 
       - uses: ./.github/actions/image-tools
@@ -129,7 +157,7 @@ jobs:
       - name: Signing keys for the image
         run: |
           keys=build/mkosi.extra/usr/share/titanos/update-keys
-          if [ "$GITHUB_EVENT_NAME" = push ]; then
+          if [ "$REAL_TAG" = true ]; then
             python3 scripts/check-release-keys.py "$keys"
           else
             # No production secrets are available in this job, including on PRs.
@@ -160,6 +188,14 @@ jobs:
           VERSION=${{ steps.version.outputs.version }} MKOSI_SUDO=1 scripts/make-zip.sh --kernel-new
           sudo chown -R "$(id -u):$(id -g)" out build/mkosi.output-new
 
+      - name: The security release has the updates it lists
+        # Otherwise the next night would find them again and cut the same
+        # release once more. No publish, the issue opens, the autopilot waits.
+        if: steps.autopilot.outputs.autopilot == 'true'
+        run: |
+          titanos=rootfs/usr/share/titanos/components.json
+          python3 scripts/autopilot.py verify build/debian-security.txt "build/mkosi.output/$titanos" "build/mkosi.output-new/$titanos"
+
       - name: The image of the base release with the new titand
         if: steps.kind.outputs.kind == 'app'
         run: python3 scripts/repack-release.py --base ${{ steps.kind.outputs.base }} --version ${{ steps.version.outputs.version }}
@@ -182,10 +218,9 @@ jobs:
             package=$(python3 scripts/plugin-set.py package "$image")
             fetch() { python3 scripts/plugin-set.py fetch --base "$VERSION" --kernel "$kernel" --kernel-package "$package" --dest "$dest"; }
             status=0; fetch || status=$?
-            # A set for the newer kernel is only fetched, never requested:
-            # the plugin repository builds those once it handles
-            # kernelVariant (patch prepared 31.10.2026, applied by its owner).
-            if [ "$status" = 3 ] && [ "$GITHUB_EVENT_NAME" = push ] && [ -z "$variant" ]; then
+            # Both kernels' sets are requested; the plugin repository builds
+            # the one for the newer kernel against the image of its variant.
+            if [ "$status" = 3 ] && [ "$REAL_TAG" = true ]; then
               if [ -z "$GH_TOKEN" ]; then
                 echo "no plugin set for $kernel ($package) and no PLUGINS_DISPATCH_TOKEN to request one" >&2
                 exit 1
@@ -240,7 +275,7 @@ jobs:
         run: scripts/make-release.sh ${{ steps.version.outputs.version }} ${{ steps.version.outputs.channel }} changelog.txt
 
       - name: Exercise signing and verification with a disposable key
-        if: github.event_name != 'push'
+        if: env.REAL_TAG != 'true'
         run: |
           scripts/sign-release.sh out/release "$RUNNER_TEMP/rehearsal.key"
           python3 scripts/verify-release.py ${{ (github.event_name == 'pull_request' || steps.plugins.outputs.ready == 'false') && '--without-plugins' || '' }} out/release build/mkosi.extra/usr/share/titanos/update-keys
@@ -263,7 +298,7 @@ jobs:
           fi
 
       - name: App update, its failure and the way back in UEFI QEMU
-        if: github.event_name != 'push'
+        if: env.REAL_TAG != 'true'
         run: |
           python3 scripts/smoke-app-update.py out/release/titanos-${{ steps.version.outputs.version }}.zip --release out/release --key "$RUNNER_TEMP/rehearsal.key" --timeout 420
           rm "$RUNNER_TEMP/rehearsal.key"
@@ -303,18 +338,20 @@ jobs:
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ${{ github.event_name == 'push' && 'release' || 'release-rehearsal' }}
+          name: ${{ env.REAL_TAG == 'true' && 'release' || 'release-rehearsal' }}
           path: out/release/
           if-no-files-found: error
           retention-days: 7
 
   publish:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish))
     needs: [build]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    # The environment asks for an approval and holds the signing key.
-    environment: release
+    # Both environments hold the signing key. release asks for an approval;
+    # security-release does not and takes only what the guard allowed: a
+    # patch on a published release that changes build/debian-security.txt.
+    environment: ${{ needs.build.outputs.autopilot == 'true' && 'security-release' || 'release' }}
     permissions:
       contents: write
     steps:
@@ -334,7 +371,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends minisign
           if [ -z "$MINISIGN_SECRET_KEY" ]; then
-            echo "the environment 'release' holds no MINISIGN_SECRET_KEY" >&2
+            echo "the environment of this job holds no MINISIGN_SECRET_KEY" >&2
             exit 1
           fi
           key=$(mktemp)
@@ -372,3 +409,28 @@ jobs:
           if [ "$CHANNEL" = beta ]; then prerelease=--prerelease; fi
           gh release create "$GITHUB_REF_NAME" release/* \
             --title "TitanOS $VERSION" --notes-file notes.md --verify-tag $prerelease
+
+  autopilot-failed:
+    # A tag of the autopilot that did not make it: one issue for the owner.
+    # NAS stay on the release they have.
+    if: failure() && github.event_name == 'workflow_dispatch' && inputs.publish && startsWith(github.ref, 'refs/tags/v')
+    needs: [build, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create autopilot --color B60205 --description 'The autopilot needs the owner' 2>/dev/null || true
+          issue=$(gh issue list --state open --label autopilot --json number --jq '.[0].number // empty')
+          text="$GITHUB_REF_NAME wurde nicht veröffentlicht: $RUN. Der Autopilot schneidet kein neues Release, solange dieser Tag ohne Release besteht. Nach der Klärung den Tag löschen oder den Lauf wiederholen."
+          if [ -n "$issue" ]; then
+            gh issue comment "$issue" --body "$text"
+          else
+            gh issue create --label autopilot --title "Autopilot: $GITHUB_REF_NAME nicht veröffentlicht" --body "$text"
+          fi

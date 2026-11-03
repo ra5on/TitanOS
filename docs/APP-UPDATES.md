@@ -222,7 +222,7 @@ Erwartete Dauer: etwa 15 Minuten statt etwa 60.
 - `scripts/release-kind.py` entscheidet die Art des Releases.
 - `scripts/repack-release.py` packt das Abbild der Basis mit dem neuen titand neu.
 - `make-release.sh` legt `titanos-<version>-titand` und `app` ins Manifest. `verify-release.py` prüft beides; Plugins und das NVIDIA-SDK müssen zur Basis passen.
-- `debian-security.yml` (mit `scripts/debian-security.py`) läuft wöchentlich.
+- `autopilot.yml` (mit `scripts/debian-security.py` und `scripts/autopilot.py`) läuft jede Nacht, siehe [AUTOPILOT.md](AUTOPILOT.md).
 - Siehe [RELEASING.md](RELEASING.md).
 
 **Geprüft**

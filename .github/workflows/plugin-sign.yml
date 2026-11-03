@@ -13,11 +13,22 @@ name: Plugin sets
 # then asks the owner for approval. A tag, not a published release: the full
 # release that asks for its kernel set waits for exactly this signature
 # before it can be published.
+#
+# With the repository variable AUTOPILOT_PLUGINS=on (off by default) the
+# plugin sets of a security release of the autopilot (docs/AUTOPILOT.md) are
+# signed without an approval, through the environment security-release: only
+# while an autopilot tag waits for its release, and only kernel and common
+# sets. NVIDIA driver updates always keep the approval.
 
 on:
   schedule:
     - cron: '*/15 * * * *'
   workflow_dispatch:
+    inputs:
+      auto:
+        description: 'Sign the kernel and common sets of an autopilot release without an approval'
+        type: boolean
+        default: false
 
 concurrency:
   group: plugin-sign-${{ github.ref_type }}
@@ -51,10 +62,32 @@ jobs:
           tags=$(gh api "repos/$PLUGINS/releases?per_page=100" --jq "$DRAFTS")
           echo "Drafts: $tags"
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.drafts.outputs.tags != '[]' && vars.AUTOPILOT_PLUGINS == 'on'
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Sets of an autopilot release
+        id: auto
+        if: steps.drafts.outputs.tags != '[]' && vars.AUTOPILOT_PLUGINS == 'on'
+        env:
+          TAGS: ${{ steps.drafts.outputs.tags }}
+        run: |
+          pending=$(python3 scripts/autopilot.py pending | sed -n 's/^pending=//p')
+          # Driver updates in the drafts keep the approval for all of them.
+          if [ -n "$pending" ] && ! jq -e 'any(.[]; startswith("pending-nvidia-"))' <<<"$TAGS" >/dev/null; then
+            echo "Kernel and common sets for $pending of the autopilot."
+            echo "auto=true" >> "$GITHUB_OUTPUT"
+            echo "tag=$pending" >> "$GITHUB_OUTPUT"
+          else
+            echo "auto=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Sign them from the newest release tag
         if: steps.drafts.outputs.tags != '[]'
         env:
           GH_TOKEN: ${{ github.token }}
+          AUTO: ${{ steps.auto.outputs.auto == 'true' }}
+          PENDING: ${{ steps.auto.outputs.tag }}
         run: |
           execution_tag=
           while IFS= read -r tag; do
@@ -69,6 +102,20 @@ jobs:
             echo "No release tag contains scripts/sign-plugin-set.py yet." >&2
             exit 1
           fi
+          if [ "$AUTO" = true ]; then
+            # One automatic run at a time; it signs every set it finds.
+            for state in queued in_progress; do
+              if [ "$(gh run list --workflow plugin-sign.yml --event workflow_dispatch --status "$state" --json databaseId --jq length)" != 0 ]; then
+                echo "A signing run is $state already."
+                exit 0
+              fi
+            done
+            # From the autopilot tag itself: newer tags of the owner may
+            # predate the input auto.
+            gh workflow run plugin-sign.yml --repo "$GITHUB_REPOSITORY" --ref "$PENDING" -f auto=true
+            echo "Signing run started from $PENDING without approval (autopilot)."
+            exit 0
+          fi
           # A run that already waits for approval is enough.
           if [ "$(gh run list --workflow plugin-sign.yml --event workflow_dispatch --status waiting --json databaseId --jq length)" != 0 ]; then
             echo "A signing run is already waiting for approval."
@@ -81,10 +128,13 @@ jobs:
     if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    # The environment asks for an approval and holds the signing key.
-    environment: release
+    # Both environments hold the signing key; release asks for an approval.
+    # security-release only for auto=true, which the dispatch job above sets
+    # only with AUTOPILOT_PLUGINS=on and an autopilot tag waiting.
+    environment: ${{ inputs.auto && vars.AUTOPILOT_PLUGINS == 'on' && 'security-release' || 'release' }}
     env:
       GH_TOKEN: ${{ secrets.PLUGINS_DISPATCH_TOKEN }}
+      AUTO: ${{ inputs.auto && vars.AUTOPILOT_PLUGINS == 'on' }}
     steps:
       # The signer (scripts/sign-plugin-set.py) and the public keys of the
       # image, from this tag. Nothing of the plugin repository is checked out
@@ -101,7 +151,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends minisign
           if [ -z "$MINISIGN_SECRET_KEY" ] || [ -z "$GH_TOKEN" ]; then
-            echo "the environment 'release' holds no MINISIGN_SECRET_KEY, or PLUGINS_DISPATCH_TOKEN is missing" >&2
+            echo "the environment of this job holds no MINISIGN_SECRET_KEY, or PLUGINS_DISPATCH_TOKEN is missing" >&2
             exit 1
           fi
           python3 scripts/check-release-keys.py build/mkosi.extra/usr/share/titanos/update-keys
@@ -111,6 +161,10 @@ jobs:
           releases=$(gh api "repos/$PLUGINS/releases?per_page=100")
           # Kernel sets before the common set before driver updates.
           for tag in $(jq -r "$DRAFTS | sort_by(if startswith(\"kernel-\") then 0 elif startswith(\"common-\") then 1 else 2 end) | .[]" <<<"$releases"); do
+            if [ "$AUTO" = true ] && [[ $tag == pending-nvidia-* ]]; then
+              echo "$tag keeps the approval (driver update)."
+              continue
+            fi
             id=$(jq -r --arg t "$tag" '.[] | select(.draft and .tag_name == $t) | .id' <<<"$releases")
             dir=$(mktemp -d)
             while IFS=$'\t' read -r asset name; do

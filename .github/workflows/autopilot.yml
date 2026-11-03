@@ -1,0 +1,161 @@
+name: Autopilot
+
+# Security releases without the owner (docs/AUTOPILOT.md). Every night this
+# compares the Debian packages of the latest release with trixie,
+# trixie-updates, trixie-security and, for the image with the newer kernel,
+# trixie-backports. Kernel updates count.
+#
+# With the repository variable AUTOPILOT=on it cuts the next patch release
+# from the latest published release tag: one commit that changes
+# build/debian-security.txt alone, a tag "Sicherheitsupdate (Autopilot)",
+# and the release workflow started on that tag. There scripts/autopilot.py
+# guard checks the commit again and only then publishes through the
+# environment security-release, without an approval. Everything else keeps
+# the approval in the environment release.
+#
+# Without AUTOPILOT=on (the default), and while the latest release predates
+# the autopilot, it does what the weekly check did: a pull request that
+# makes the next tag of the owner a full release.
+#
+# A failure opens (or comments on) one issue with the label autopilot.
+
+on:
+  schedule:
+    - cron: '23 2 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: autopilot
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The release tags, to cut the security release from the latest one.
+          fetch-depth: 0
+
+      - name: Debian updates for the latest release
+        id: check
+        run: python3 scripts/debian-security.py --out "$RUNNER_TEMP/debian-security.txt" >> "$GITHUB_OUTPUT"
+
+      - name: Which tag, if any
+        id: plan
+        if: steps.check.outputs.updates == 'true' && vars.AUTOPILOT == 'on'
+        env:
+          LATEST: ${{ steps.check.outputs.version }}
+        run: |
+          # The release workflow runs in the version of the tag. A release
+          # from before the autopilot has neither its start nor its guard:
+          # then the pull request below, as without the autopilot.
+          if ! git cat-file -e "v$LATEST:scripts/autopilot.py" 2>/dev/null; then
+            echo "v$LATEST predates the autopilot; the owner's next release brings it." >> "$GITHUB_STEP_SUMMARY"
+            echo "action=old" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python3 scripts/autopilot.py plan --latest "$LATEST" >> "$GITHUB_OUTPUT"
+
+      - name: Cut the security release and start its release workflow
+        if: steps.plan.outputs.action == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.plan.outputs.tag }}
+          FROM: ${{ steps.plan.outputs.from }}
+          KERNEL: ${{ steps.check.outputs.kernel }}
+        run: |
+          version=${TAG#v}
+          previous=${FROM#v}
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch --detach "$FROM"
+          cp "$RUNNER_TEMP/debian-security.txt" build/debian-security.txt
+          git add build/debian-security.txt
+          git commit -m "Sicherheitsupdate $version: Debian-Pakete seit $previous"
+          kernel_note=
+          if [ "$KERNEL" = true ]; then
+            kernel_note=' Der Kernel ist dabei; die Treiber-Plugins sind für ihn neu gebaut.'
+          fi
+          {
+            echo 'Sicherheitsupdate (Autopilot)'
+            echo
+            echo "Ein **volles Systemupdate** (neues Abbild, Neustart des NAS, A/B-Rückfall) mit den Debian-Updates seit $previous.$kernel_note Neue Funktionen und neue Konfigurationsfelder kommen nicht dazu."
+            echo
+            echo '```'
+            grep -E '^(Image with|[a-z0-9][a-z0-9.+-]*: )' build/debian-security.txt
+            echo '```'
+            echo
+            echo "Rückweg auf $previous über Einstellungen › Updates."
+            echo
+            echo '- Vom Autopilot gebaut und geprüft: alle Tests und QEMU-Starts des Release-Workflows (UEFI, Legacy-BIOS, 32-Bit-UEFI, Kernel „Neu“, Speicher, SSD-Cache, Plugins).'
+            echo
+            echo '**Nicht auf echter Hardware geprüft.**'
+          } > "$RUNNER_TEMP/tag-message.txt"
+          git tag -a "$TAG" -F "$RUNNER_TEMP/tag-message.txt"
+          # A tag pushed with this token starts no workflow; the release
+          # workflow is started explicitly, on the tag, to publish.
+          git push origin "refs/tags/$TAG"
+          gh workflow run release.yml --ref "$TAG" -f publish=true -f "version=$version"
+          echo "$TAG cut from $FROM; release workflow started." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Without the autopilot, a pull request for the owner's next release
+        if: steps.check.outputs.updates == 'true' && (vars.AUTOPILOT != 'on' || steps.plan.outputs.action == 'old')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The same updates noted on main already (the date line aside):
+          # the owner's next full release brings them.
+          packages() { grep -E '^(Image with|[a-z0-9][a-z0-9.+-]*: )' "$1" 2>/dev/null || true; }
+          if [ -f build/debian-security.txt ] && [ "$(packages build/debian-security.txt)" = "$(packages "$RUNNER_TEMP/debian-security.txt")" ]; then
+            echo "already noted on main; the next full release brings the updates"
+            exit 0
+          fi
+          cp "$RUNNER_TEMP/debian-security.txt" build/debian-security.txt
+          if [ "$(gh pr list --state open --label debian-security --json number --jq length)" != 0 ]; then
+            echo "a pull request for the updates is open already"
+            exit 0
+          fi
+          branch="debian-security/$(date -u +%Y-%m-%d)"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c "$branch"
+          git add build/debian-security.txt
+          git commit -m 'Debian updates: next release must be a full one'
+          git push origin "$branch"
+          gh label create debian-security --color B60205 --description 'Debian updates need a full release' 2>/dev/null || true
+          {
+            echo 'Im Abbild des letzten Releases gibt es Pakete, für die Debian neuere Versionen hat:'
+            echo
+            echo '```'
+            cat build/debian-security.txt
+            echo '```'
+            echo
+            # Backticks are Markdown here, not a command.
+            # shellcheck disable=SC2016
+            echo 'Nach dem Merge wird der nächste Tag ein volles Release (neues Systemabbild mit mkosi, Neustart des NAS). Veröffentlicht wird erst nach deiner Freigabe im Environment `release`. Mit der Repository-Variable `AUTOPILOT=on` erledigt das der Autopilot von selbst (docs/AUTOPILOT.md).'
+          } > body.md
+          gh pr create --base main --head "$branch" --label debian-security \
+            --title 'Debian-Updates: nächstes Release als volles Release' --body-file body.md
+
+      - name: Report a failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create autopilot --color B60205 --description 'The autopilot needs the owner' 2>/dev/null || true
+          issue=$(gh issue list --state open --label autopilot --json number --jq '.[0].number // empty')
+          text="Der nächtliche Autopilot-Lauf ist gescheitert: $RUN"
+          if [ -n "$issue" ]; then
+            gh issue comment "$issue" --body "$text"
+          else
+            gh issue create --label autopilot --title 'Autopilot: Lauf gescheitert' --body "$text"
+          fi

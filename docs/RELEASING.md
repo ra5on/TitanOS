@@ -132,12 +132,18 @@ eines, das läuft (ohne Neustart, Anmeldung bleibt, nach einem Neustart des
 NAS noch da), eines, das nicht startet (nach drei Starts zurück), und den Weg
 zurück zum titand des Systemabbilds.
 
-**Debian-Sicherheitsupdates:** App-Releases behalten die Debian-Pakete ihrer
-Basis. `debian-security.yml` vergleicht jeden Montag die Pakete des neuesten
-Releases mit trixie-security und öffnet bei neueren Versionen einen Pull
-Request, der `build/debian-security.txt` anlegt oder ändert. Nach dem Merge
-wird der nächste Tag ein volles Release. In den Repository-Einstellungen muss
-dafür „Allow GitHub Actions to create and approve pull requests“ an sein.
+**Debian-Updates und Autopilot:** App-Releases behalten die Debian-Pakete
+ihrer Basis. `autopilot.yml` vergleicht jede Nacht die Pakete des neuesten
+Releases mit trixie, trixie-updates, trixie-security und (Kernel „Neu“)
+trixie-backports. Mit der Variable `AUTOPILOT=on` baut und veröffentlicht er
+daraus selbst ein Patch-Release, ohne Freigabe, über das Environment
+`security-release`. **Für diese Sicherheits-Releases ersetzen die QEMU-Tests
+des Release-Workflows den Test auf dem echten Stick** (Entscheidung
+3.11.2026). Ohne die Variable öffnet er wie früher einen Pull Request, der
+`build/debian-security.txt` anlegt oder ändert; nach dem Merge wird der
+nächste Tag ein volles Release. In den Repository-Einstellungen muss dafür
+„Allow GitHub Actions to create and approve pull requests“ an sein.
+Einzelheiten, Einrichtung und Grenzen: [AUTOPILOT.md](AUTOPILOT.md).
 
 ## Ab 0.41: zweiter Kernel, Stick-Abbild und GRUB
 
