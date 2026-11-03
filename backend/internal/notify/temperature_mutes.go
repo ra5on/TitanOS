@@ -19,18 +19,28 @@ const maxMutes = 256
 var sensorID = regexp.MustCompile(`^[0-9a-f]{32}$`)
 
 // AlarmLimit is the temperature from which a sensor raises an alarm, and
-// false if it never does: chips not known as reliable count only with a
-// critical value of their own above 40 °C (unused inputs of Super-I/O
-// chips read nonsense), then 5 °C below it; reliable ones else at 95 °C.
+// false if it never does. A critical value of the chip itself above 40 °C
+// comes first: 5 °C below it. Without one, reliable chips use the limit
+// of their kind (chipLimits, else 95 °C); other chips never alarm, since
+// unused inputs of Super-I/O chips read nonsense.
 func AlarmLimit(chip string, critical *float64) (float64, bool) {
-	own := critical != nil && *critical > 40
+	limit, _, ok := AlarmLimitSource(chip, critical)
+	return limit, ok
+}
+
+// AlarmLimitSource is AlarmLimit and whether the limit comes from the
+// chip's own critical value (true) or from the default of its kind.
+func AlarmLimitSource(chip string, critical *float64) (limit float64, own, alarms bool) {
 	switch {
-	case own:
-		return *critical - hotMargin, true
+	case critical != nil && *critical > 40:
+		return *critical - hotMargin, true, true
 	case chip == "" || reliableChips[chip]:
-		return 95, true
+		if limit, ok := chipLimits[chip]; ok {
+			return limit, false, true
+		}
+		return defaultLimit, false, true
 	}
-	return 0, false
+	return 0, false, false
 }
 
 func (m *Manager) loadMutesLocked() error {

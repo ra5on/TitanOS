@@ -283,7 +283,9 @@ Dateinamen). Hinweis je Gerät:
    Treiber im laufenden Kernel beansprucht und zu der das Kernelprotokoll keinen
    Fehler nennt. Solche Chipsatz-Bausteine brauchen üblicherweise keinen Treiber;
    die Funktion ist weder in `pci.ids` noch in einer Kernel-Quelle benannt
-   (Recherche 2.11.2026). Wie Punkt 4 eingeklappt, kein Eintrag im Bericht.
+   (Recherche 2.11.2026). Wie Punkt 4 eingeklappt, kein Eintrag im Bericht;
+   dazu ein Link auf die Issue-Vorlage „Hardware-Problem“
+   (`.github/ISSUE_TEMPLATE/hardware.yml`), damit Nutzer die ID melden.
    Meldet das Kernelprotokoll einen Fehler zur Adresse, bleibt es „nicht
    unterstützt“.
 6. **Nicht unterstützt:** alles andere.
@@ -291,7 +293,11 @@ Dateinamen). Hinweis je Gerät:
 Gerätenamen kommen aus einer `pci.ids` von pciutils/pciids, im Bau auf einen
 Commit und eine SHA-256 festgelegt (`build/pci-ids.lock`, aktualisieren mit
 `scripts/fetch-pci-ids.sh --update`). Sie ersetzt die ältere Datei des
-Debian-Pakets, auch für `lspci`. Wiederholt ein Eintrag den Hersteller am Ende,
+Debian-Pakets, auch für `lspci`. Kennt auch sie ein Gerät nicht, nennt eine
+kleine eigene Tabelle (`localPCINames` in `backend/internal/hwcheck`) es, aber
+nur so weit eine Quelle trägt: `8086:7f2f` heißt „800 Series Chipset Family,
+unnamed function“, weil `pci.ids` die Nachbarn `7f20`–`7f2b` und den xHCI
+`7f6e` daneben so benennt; die Funktion selbst bleibt unbenannt. Wiederholt ein Eintrag den Hersteller am Ende,
 erscheint er nur einmal.
 
 ### Hardware-Schnappschuss (Plan 24h, 24i)

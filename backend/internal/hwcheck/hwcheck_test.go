@@ -567,6 +567,15 @@ func TestPCINameWithoutRepeatedMaker(t *testing.T) {
 	if got := names.name("8086", "ffff"); got != "PCI 8086:ffff" {
 		t.Errorf("unknown: %q", got)
 	}
+	// pci.ids lacks 8086:7f2f; the own table names its family.
+	if got := names.name("8086", "7f2f"); got != "Intel Corporation 800 Series Chipset Family, unnamed function" {
+		t.Errorf("own table: %q", got)
+	}
+	// A name in pci.ids takes precedence over the own table.
+	names["8086:7f2f"] = "800 Series Chipset Family Something"
+	if got := names.name("8086", "7f2f"); got != "Intel Corporation 800 Series Chipset Family Something" {
+		t.Errorf("pci.ids first: %q", got)
+	}
 }
 
 func TestUnclassifiedChipset(t *testing.T) {

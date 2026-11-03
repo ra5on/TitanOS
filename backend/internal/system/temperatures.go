@@ -13,9 +13,12 @@ import (
 // Temperature is an actual hwmon channel. Labels belong to the driver;
 // an unlabelled motherboard input must not be guessed to be a CPU sensor.
 type Temperature struct {
-	ID        string   `json:"id"`
-	Chip      string   `json:"chip"`
-	Label     string   `json:"label"`
+	ID    string `json:"id"`
+	Chip  string `json:"chip"`
+	Label string `json:"label"`
+	// Channel is the hwmon channel (temp8); Label equals it when the
+	// channel has no label of its own.
+	Channel   string   `json:"channel"`
 	Device    string   `json:"device"`
 	Celsius   *float64 `json:"celsius"`
 	CriticalC *float64 `json:"criticalC"`
@@ -83,7 +86,7 @@ func readTemperatures(sys string) []Temperature {
 			if label == "" {
 				label = channel
 			}
-			sensor := Temperature{ID: hex.EncodeToString(digest[:16]), Chip: chip, Label: label, Device: relative}
+			sensor := Temperature{ID: hex.EncodeToString(digest[:16]), Chip: chip, Label: label, Channel: channel, Device: relative}
 			if readable {
 				sensor.CriticalC = temperatureValue(filepath.Join(path, channel+"_crit"))
 				if readTrimmed(filepath.Join(path, channel+"_fault")) != "1" && readTrimmed(filepath.Join(path, channel+"_enable")) != "0" {

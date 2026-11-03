@@ -458,6 +458,20 @@ func ParseFirmwareMissing(log string) []FirmwareMissing {
 // pciNames maps "vvvv" and "vvvv:dddd" to names from pci.ids.
 type pciNames map[string]string
 
+// localPCINames names devices that pci.ids does not know, only as far as
+// a source shows; they are used when pci.ids has no entry of its own.
+//
+// 8086:7f2f: an unclassified function (class 000000, "PCIe Root Complex
+// Integrated Endpoint") on bus 0x80 of Arrow Lake-S boards (titan
+// 2.11.2026, Core Ultra 235/265K in forum.proxmox.com thread 167607). Its
+// function is named nowhere: not in pci.ids (pciids commit
+// 19e7dfd4, 31.10.2026), Linux or Intel documents. The family is shown by
+// its neighbours: pci.ids names 8086:7f20–7f2b and 7f6e (the xHCI on
+// 80:14.0 next to it) "800 Series Chipset Family".
+var localPCINames = map[string]string{
+	"8086:7f2f": "800 Series Chipset Family, unnamed function",
+}
+
 // readPCIIDs keeps only the wanted entries of pci.ids.
 func readPCIIDs(path string, wanted map[string]bool) pciNames {
 	names := pciNames{}
@@ -490,6 +504,9 @@ func readPCIIDs(path string, wanted map[string]bool) pciNames {
 
 func (names pciNames) name(vendor, device string) string {
 	product, maker := names[vendor+":"+device], names[vendor]
+	if product == "" {
+		product = localPCINames[vendor+":"+device]
+	}
 	switch {
 	case product != "" && maker != "":
 		// Some entries repeat the maker at the end ("... RAID Controller

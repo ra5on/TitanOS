@@ -5,14 +5,16 @@
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
 
-	type Alarm = { id: string; limit: number | null; muted: boolean };
+	// own: the limit comes from the chip's critical value, else from the
+	// default for its kind of chip (notify.AlarmLimitSource).
+	type Alarm = { id: string; limit: number | null; own?: boolean; muted: boolean };
 	type Alarms = { sensors: Alarm[]; muted: string[] };
 	const sensors = $derived(system.info?.temperatures ?? []);
 	let alarms = $state<Alarms | null>(null);
 	let busy = $state(false);
 	let error = $state('');
 	let saved = $state(false);
-	const limitOf = (id: string) => alarms?.sensors.find((alarm) => alarm.id === id)?.limit ?? null;
+	const alarmOf = (id: string) => alarms?.sensors.find((alarm) => alarm.id === id);
 
 	async function load() {
 		try {
@@ -47,7 +49,8 @@
 	<p class="muted">{t('temperatures.alarmHint')}</p>
 	<div class="sensors">
 		{#each sensors as sensor (sensor.id)}
-			{@const limit = limitOf(sensor.id)}
+			{@const alarm = alarmOf(sensor.id)}
+			{@const limit = alarm?.limit ?? null}
 			{@const muted = !!alarms?.muted.includes(sensor.id)}
 			<div class="sensor">
 				<span class="name"
@@ -60,7 +63,10 @@
 								? t('temperatures.alarmNever')
 								: muted
 									? t('temperatures.alarmMuted')
-									: t('temperatures.alarmAt', { celsius: limit.toFixed(0) })}</span
+									: t(alarm?.own ? 'temperatures.alarmAtOwn' : 'temperatures.alarmAtDefault', {
+											celsius: limit.toFixed(0),
+											chip: sensor.chip,
+										})}</span
 					></span
 				>
 				<span class="mono value"

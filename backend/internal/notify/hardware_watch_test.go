@@ -129,3 +129,59 @@ func TestHardwareWatcherMeaninglessCriticalAndGaps(t *testing.T) {
 		t.Fatalf("two hot looks in a row: %d messages", n)
 	}
 }
+
+// The message names the sensor so that it can be found: chip, label or
+// channel, "no label" when the channel has none, and the sysfs path.
+func TestHardwareWatcherSubjectFindsTheSensor(t *testing.T) {
+	hot, crit := 126.0, 110.0
+	cases := []struct {
+		language string
+		reading  TempReading
+		want     string
+	}{
+		{"de", TempReading{ID: "a", Label: "temp8", Channel: "temp8", Device: "devices/platform/nct6775.656", Chip: "nct6798", Celsius: &hot, Critical: &crit},
+			"nct6798 temp8 (126 °C, ohne Bezeichnung) – /sys/devices/platform/nct6775.656"},
+		{"en", TempReading{ID: "b", Label: "temp8", Channel: "temp8", Device: "devices/platform/nct6775.656", Chip: "nct6798", Celsius: &hot, Critical: &crit},
+			"nct6798 temp8 (126 °C, no label) – /sys/devices/platform/nct6775.656"},
+		{"de", TempReading{ID: "c", Label: "Package id 0", Channel: "temp1", Device: "devices/platform/coretemp.0", Chip: "coretemp", Celsius: &hot},
+			"coretemp Package id 0 (126 °C) – /sys/devices/platform/coretemp.0"},
+	}
+	for _, c := range cases {
+		m, _ := newManager(t)
+		settings, _ := m.Settings()
+		settings.Language = c.language
+		if err := m.SetSettings(settings); err != nil {
+			t.Fatal(err)
+		}
+		w := NewHardwareWatcher(m)
+		w.edac = t.TempDir()
+		w.Temperatures = func() []TempReading { return []TempReading{c.reading} }
+		w.look()
+		w.look()
+		messages := m.Messages()
+		if len(messages) != 1 || messages[0].Subject != c.want {
+			t.Fatalf("%s: %+v, want %q", c.language, messages, c.want)
+		}
+	}
+}
+
+// Disks without a critical value of their own alarm at their own limit,
+// not at the 95 °C of a CPU.
+func TestHardwareWatcherDiskLimit(t *testing.T) {
+	m, _ := newManager(t)
+	w := NewHardwareWatcher(m)
+	w.edac = t.TempDir()
+	warm := 62.0
+	w.Temperatures = func() []TempReading {
+		return []TempReading{
+			{ID: "disk", Label: "temp1", Channel: "temp1", Chip: "drivetemp", Celsius: &warm},
+			{ID: "cpu", Label: "Tctl", Channel: "temp1", Chip: "k10temp", Celsius: &warm},
+		}
+	}
+	w.look()
+	w.look()
+	messages := m.Messages()
+	if len(messages) != 1 || !strings.HasPrefix(messages[0].Subject, "drivetemp ") {
+		t.Fatalf("messages: %+v", messages)
+	}
+}
