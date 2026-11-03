@@ -17,14 +17,11 @@ Configured public keys (2026-10-14):
   titanos-recovery-1.pub  Minisign key ID E58A91B20B598ABB
 Added during rotation (2026-11-03, TitanOS 0.46.2):
   titanos-release-2.pub   Minisign key ID 10239C7F77392DC9
-  The private part of titanos-release-1 was no longer found; 0.46.2 is still
-  signed with it and teaches the NAS the new key. Releases after 0.46.2 are
-  signed with titanos-release-2. titanos-release-1 is removed in a later
-  version.
-
-Both key pairs have been verified locally. The release secret is configured
-in GitHub's protected release environment. The project owner confirmed an
-external backup of the keys and passphrases on 2026-10-14. Offline custody
-of the recovery secret is still unconfirmed; a cloud copy is not offline.
+  titanos-recovery-2.pub  Minisign key ID 725EF673B860F5F6
+  The private parts of titanos-release-1 and titanos-recovery-1 were no
+  longer found. 0.46.2 is signed with titanos-release-2, so a NAS before
+  0.46.2 cannot verify it and gets 0.46.2 from a newly written stick once.
+  titanos-recovery-2 is kept offline, never at GitHub. The two old public
+  keys are removed in a later version.
 
 See docs/RELEASING.md in the repository.
