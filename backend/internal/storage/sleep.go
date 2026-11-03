@@ -186,6 +186,11 @@ type DiskSleepDisk struct {
 	// State is "asleep" after a standby command without activity since,
 	// "active" otherwise.
 	State string `json:"state"`
+	// Since is when the disk went to standby while asleep, or when activity
+	// was first seen after its last standby (woken) while active. Zero when
+	// unknown, e.g. since the start of titand. RAM only; older interfaces
+	// ignore it.
+	Since time.Time `json:"since,omitzero"`
 	Error string `json:"error,omitempty"`
 }
 
@@ -302,7 +307,7 @@ func (m *Manager) diskSleepStatus(devices []blockDevice) DiskSleepStatus {
 		errorsByDisk[problem.Disk] = problem.Message
 	}
 	m.mu.RLock()
-	asleep := m.diskSleepAsleep
+	asleep, times := m.diskSleepAsleep, m.diskSleepTimes
 	m.mu.RUnlock()
 	ids := sleepDiskIDs(devices)
 	byUUID := volumesByUUID(configured)
@@ -322,13 +327,13 @@ func (m *Manager) diskSleepStatus(devices []blockDevice) DiskSleepStatus {
 		id := ids[device.Name]
 		present[id] = true
 		minutes, origin := settings.effective(id, disk.Volume)
-		state := "active"
+		state, since := "active", times[disk.Name].wokenAt
 		if asleep[disk.Name] {
-			state = "asleep"
+			state, since = "asleep", times[disk.Name].asleepSince
 		}
 		status.DiskStatus = append(status.DiskStatus, DiskSleepDisk{
 			ID: id, Name: disk.Name, Model: disk.Model, Serial: disk.Serial, SizeBytes: disk.SizeBytes, Volume: disk.Volume,
-			Override: override(settings.Disks, id), Effective: minutes, Origin: origin, State: state, Error: errorsByDisk[disk.Name],
+			Override: override(settings.Disks, id), Effective: minutes, Origin: origin, State: state, Since: since, Error: errorsByDisk[disk.Name],
 		})
 	}
 	for id := range settings.Disks {
@@ -498,6 +503,15 @@ func readDiskIO(path string) (diskIO, error) {
 	return io, nil
 }
 
+// sleepTimes are the moments the settings show for a disk. They outlive the
+// samples, which are dropped on every activity, gap or reset, and are kept
+// only while the kernel's device identity stays the same.
+type sleepTimes struct {
+	identity    string
+	asleepSince time.Time // the successful standby command; zero after a reset
+	wokenAt     time.Time // first activity seen after a successful standby
+}
+
 type sleepSample struct {
 	identity        string
 	io              diskIO
@@ -571,8 +585,17 @@ func (m *Manager) sleepIdleDisks(ctx context.Context, now time.Time) error {
 	m.mu.RUnlock()
 	next := map[string]sleepSample{}
 	var problems []DiskSleepError
+	m.mu.RLock()
+	previousTimes := m.diskSleepTimes
+	m.mu.RUnlock()
+	times := map[string]sleepTimes{}
 	for _, device := range devices {
 		name := filepath.Base(device.Name)
+		// Times of a disk that is gone or was replaced under the same name
+		// are dropped; sysfs only, no disk access.
+		if entry, ok := previousTimes[name]; ok && entry.identity == m.sleepIdentity(device) {
+			times[name] = entry
+		}
 		args := standbyArgs(device)
 		device.walk(func(part blockDevice) {
 			if busyParts[filepath.Base(part.KName)] || part.FSType == "btrfs" && busyBtrfs[part.UUID] {
@@ -597,6 +620,14 @@ func (m *Manager) sleepIdleDisks(ctx context.Context, now time.Time) error {
 		identity := m.sleepIdentity(device)
 		previous, known := m.sleepSamples[name]
 		if !known || previous.identity != identity || previous.io.counters != io.counters || io.inFlight != 0 || now.Sub(previous.sampled) > 30*time.Second || now.Before(previous.sampled) {
+			// Activity right after a confirmed standby woke the disk. A gap
+			// or another device is no wake: nothing is known about it.
+			if known && previous.identity == identity && previous.attempted && previous.err == "" &&
+				!now.Before(previous.sampled) && now.Sub(previous.sampled) <= 30*time.Second {
+				entry := times[name]
+				entry.identity, entry.asleepSince, entry.wokenAt = identity, time.Time{}, now.Truncate(time.Second)
+				times[name] = entry
+			}
 			next[name] = sleepSample{identity: identity, io: io, lastIO: now, sampled: now}
 			continue
 		}
@@ -617,6 +648,9 @@ func (m *Manager) sleepIdleDisks(ctx context.Context, now time.Time) error {
 				slog.Warn("disk standby failed", "disk", name, "err", err)
 			} else {
 				slog.Info("disk entered standby", "disk", name, "idleMinutes", minutes)
+				entry := times[name]
+				entry.identity, entry.asleepSince = identity, now.Truncate(time.Second)
+				times[name] = entry
 			}
 		}
 		if previous.err != "" {
@@ -633,16 +667,25 @@ func (m *Manager) sleepIdleDisks(ctx context.Context, now time.Time) error {
 		}
 	}
 	m.mu.Lock()
-	m.diskSleepErrors, m.diskSleepAsleep = problems, asleep
+	m.diskSleepErrors, m.diskSleepAsleep, m.diskSleepTimes = problems, asleep, times
 	m.mu.Unlock()
 	return nil
 }
 
 // resetSleepSamples starts every timer afresh (caller holds actions). What
-// is known to sleep is forgotten too: without a sample it is unknown.
+// is known to sleep is forgotten too: without a sample it is unknown. The
+// time of the last wake stays, it happened all the same.
 func (m *Manager) resetSleepSamples() {
 	m.sleepSamples = nil
 	m.mu.Lock()
 	m.diskSleepAsleep = nil
+	times := map[string]sleepTimes{}
+	for name, entry := range m.diskSleepTimes {
+		if !entry.wokenAt.IsZero() {
+			entry.asleepSince = time.Time{}
+			times[name] = entry
+		}
+	}
+	m.diskSleepTimes = times
 	m.mu.Unlock()
 }

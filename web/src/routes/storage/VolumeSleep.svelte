@@ -5,7 +5,7 @@
 	import { api, type DiskSleepStatus } from '#lib/api.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { overridesFrom } from './disk-sleep.ts';
-	import { sleepDuration, sleepOrigin, volumeSleep } from './sleep-view.ts';
+	import { sleepDuration, sleepOrigin, sleepSince, volumeSleep } from './sleep-view.ts';
 
 	type Props = {
 		volume: string;
@@ -158,6 +158,7 @@
 						<span class="chip" class:ok={disk.state === 'asleep'}
 							>{disk.state === 'asleep' ? t('storage.sleepAsleep') : t('storage.sleepAwake')}</span
 						>
+						{#if sleepSince(disk)}<span class="muted">{sleepSince(disk)}</span>{/if}
 						<span class="muted">{sleepDuration(disk.effective)} · {sleepOrigin(disk.origin)}</span>
 					</li>
 				{/each}

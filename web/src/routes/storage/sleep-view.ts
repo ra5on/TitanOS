@@ -4,6 +4,7 @@ import type {
 	DiskSleepStatus,
 	DiskSleepUnavailable,
 } from '#lib/api.ts';
+import { formatDateTime, formatTime } from '#lib/format.ts';
 import { t } from '#lib/i18n/index.svelte.ts';
 
 /** "nach 30 Minuten", "Aus" ... for an idle time in minutes. */
@@ -71,4 +72,18 @@ export function diskSleep(
 	if (disk) return { disk };
 	const unavailable = status?.unavailable?.find((entry) => entry.name === name);
 	return { reason: unavailable?.reason };
+}
+
+/**
+ * "schläft seit 14:02" or "zuletzt geweckt 14:02" for a disk, with the date
+ * when it was not today; undefined when titand knows no time (RAM only, so
+ * nothing before its start). `now` is for tests.
+ */
+export function sleepSince(disk: DiskSleepDisk, now = new Date()): string | undefined {
+	if (!disk.since) return undefined;
+	const since = new Date(disk.since);
+	if (Number.isNaN(since.getTime())) return undefined;
+	const time =
+		since.toDateString() === now.toDateString() ? formatTime(since) : formatDateTime(since);
+	return t(disk.state === 'asleep' ? 'storage.sleepAsleepSince' : 'storage.sleepWokenAt', { time });
 }

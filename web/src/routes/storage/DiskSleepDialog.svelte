@@ -8,7 +8,7 @@
 	import { formatDiskBytes } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { effectiveSleep, overridesFrom, shortSerial } from './disk-sleep.ts';
-	import { sleepListed } from './sleep-view.ts';
+	import { sleepListed, sleepSince } from './sleep-view.ts';
 
 	type Props = {
 		status: DiskSleepStatus | undefined;
@@ -217,6 +217,7 @@
 												disk.state === 'asleep' ? 'storage.sleepAsleep' : 'storage.sleepAwake',
 											)}</span
 										>
+										{#if sleepSince(disk)}<span class="muted small">{sleepSince(disk)}</span>{/if}
 										{#if disk.error}<span class="chip error" title={disk.error}
 												>{t('storage.sleepStandbyFailed')}</span
 											>{/if}

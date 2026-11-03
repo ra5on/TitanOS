@@ -30,10 +30,12 @@
 	import CreateVolumeDialog from './CreateVolumeDialog.svelte';
 	import DeleteVolumeDialog from './DeleteVolumeDialog.svelte';
 	import DiskSleepDialog from './DiskSleepDialog.svelte';
+	import DiskSleepSection from './DiskSleepSection.svelte';
 	import {
 		diskSleep as diskSleepOf,
 		sleepDuration,
 		sleepOrigin,
+		sleepSince,
 		volumeSleep,
 	} from './sleep-view.ts';
 	import { diskStatus, diskType, smartText } from './labels.ts';
@@ -536,6 +538,8 @@
 												: t('storage.sleepAwake')}</span
 										>
 										<span class="sub">{sleepOrigin(sleep.disk.origin)}</span>
+										{#if sleepSince(sleep.disk)}<span class="sub">{sleepSince(sleep.disk)}</span
+											>{/if}
 									</button>
 								{:else if sleep?.reason}
 									<span class="muted">–</span>
@@ -667,6 +671,18 @@
 					</dd>
 				</div>
 			</dl>
+			<DiskSleepSection
+				name={diskDetail.name}
+				status={diskSleep}
+				{canAdminister}
+				onsaved={(updated) => {
+					if (storage.status) storage.status.diskSleep = updated;
+				}}
+				onopen={() => {
+					sleepFocus = { kind: 'disk', key: diskDetail.name };
+					sleepOpen = true;
+				}}
+			/>
 			{#if canAdminister}{@const disk = diskDetail}
 				<div class="disk-actions">
 					<a class="btn" href="/storage/smart?disk={encodeURIComponent(disk.name)}"
