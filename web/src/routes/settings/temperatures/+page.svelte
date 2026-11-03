@@ -4,6 +4,7 @@
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import FanControl from '#lib/components/FanControl.svelte';
+	import TempAlarms from './TempAlarms.svelte';
 	import { system } from '#lib/system.svelte.ts';
 	import { sanitizeLayout } from '#lib/dashboard/tiles.ts';
 	import {
@@ -106,8 +107,8 @@
 		><a class="btn" href="/">{t('dashboard.title')}</a>
 	</div>
 </section>
-{#if session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin'}<FanControl
-	/>{/if}
+{#if session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin'}<TempAlarms
+	/><FanControl />{/if}
 
 <style>
 	p {

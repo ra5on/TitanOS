@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
 
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 )
@@ -127,4 +128,52 @@ func (s *Server) handleAccountNotifyTest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// temperatureAlarm is one sensor of Settings › Temperatures › Heat
+// notifications: from which temperature it notifies (nil: never, a chip
+// without a limit of its own) and whether it is muted.
+type temperatureAlarm struct {
+	ID    string   `json:"id"`
+	Limit *float64 `json:"limit"`
+	Muted bool     `json:"muted"`
+}
+
+// handleTemperatureAlarms lists the sensors with their limits and the
+// muted ones, also those that are not there now.
+func (s *Server) handleTemperatureAlarms(w http.ResponseWriter, r *http.Request) {
+	muted := s.opts.Notify.MutedTemperatures()
+	sensors := []temperatureAlarm{}
+	if s.opts.Monitor != nil {
+		for _, t := range s.opts.Monitor.Info().Temperatures {
+			alarm := temperatureAlarm{ID: t.ID, Muted: slices.Contains(muted, t.ID)}
+			if limit, ok := notify.AlarmLimit(t.Chip, t.CriticalC); ok {
+				alarm.Limit = &limit
+			}
+			sensors = append(sensors, alarm)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"sensors": sensors, "muted": muted})
+}
+
+func (s *Server) handleTemperatureAlarmsChange(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Muted []string `json:"muted"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if err := s.opts.Notify.SetMutedTemperatures(req.Muted); err != nil {
+		switch {
+		case errors.Is(err, notify.ErrInvalid):
+			writeError(w, http.StatusBadRequest, "invalid_notify_settings", err.Error())
+		case errors.Is(err, notify.ErrNotLoaded):
+			writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
+		default:
+			writeError(w, http.StatusInternalServerError, "config_write_failed", err.Error())
+		}
+		return
+	}
+	slog.Info("temperature notifications changed", "muted", len(req.Muted), "by", currentUser(r).Name, "ip", remoteIP(r))
+	s.handleTemperatureAlarms(w, r)
 }
