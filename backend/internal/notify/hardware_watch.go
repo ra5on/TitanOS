@@ -40,17 +40,60 @@ type FanReading struct {
 // TempReading is one temperature sensor.
 type TempReading struct {
 	ID, Label string
+	// Channel is the hwmon channel (temp8); a Label equal to it means the
+	// channel has none. Device is the sysfs path of the chip below /sys.
+	Channel, Device string
 	// Chip is the hwmon driver name (coretemp, nvme, nct6798 ...).
 	Chip              string
 	Celsius, Critical *float64
 }
 
+// unlabelled says in the language of the notifications that a channel
+// has no label, so that "temp8" does not read like a name.
+var unlabelled = map[string]string{"de": "ohne Bezeichnung", "en": "no label"}
+
+// subject names a hot sensor so that it can be found: chip, label or
+// channel, the reading, and the sysfs path of the chip.
+func (t TempReading) subject(language string) string {
+	name := t.Label
+	if name == "" {
+		name = t.ID
+	}
+	if t.Chip != "" {
+		name = t.Chip + " " + name
+	}
+	inside := strconv.Itoa(int(*t.Celsius)) + " °C"
+	if t.Channel != "" && (t.Label == "" || t.Label == t.Channel) {
+		word, ok := unlabelled[language]
+		if !ok {
+			word = unlabelled["en"]
+		}
+		inside += ", " + word
+	}
+	name += " (" + inside + ")"
+	if t.Device != "" {
+		name += " – /sys/" + t.Device
+	}
+	return name
+}
+
 // reliableChips are drivers whose sensors measure a real component, so a
-// reading above the fixed limit is believed even without a critical value
-// of their own. Inputs of other chips (Super-I/O, ACPI) are often unused
+// reading above the limit of their kind (chipLimits) is believed even
+// without a critical value of their own. Inputs of other chips (Super-I/O, ACPI) are often unused
 // and read nonsense, so they only raise an alarm with a critical value
 // the chip itself reports.
 var reliableChips = map[string]bool{"coretemp": true, "k10temp": true, "zenpower": true, "nvme": true, "drivetemp": true, "amdgpu": true, "radeon": true, "nouveau": true}
+
+// chipLimits are the alarm limits of reliable chips that report no
+// critical value of their own: hard disks are specified up to about
+// 60 °C, NVMe drives throttle at around 80–85 °C. Other reliable chips
+// use defaultLimit. Disk channels reach the watcher only if someone feeds
+// them in; system.ReadTemperatures leaves disks to the storage monitor
+// (disk_hot), so that reading them does not wake sleeping disks.
+var chipLimits = map[string]float64{"drivetemp": 60, "nvme": 85}
+
+// defaultLimit is the limit of reliable chips without a value of their own.
+const defaultLimit = 95.0
 
 // hotLooksNeeded is how many looks in a row must be too hot, so that a
 // reading that jumps once is no alarm.
@@ -116,19 +159,12 @@ func (w *HardwareWatcher) look() {
 				delete(w.hot, t.ID)
 				continue
 			}
-			name := t.Label
-			if name == "" {
-				name = t.ID
-			}
-			if t.Chip != "" {
-				name = t.Chip + " " + name
-			}
 			switch {
 			case *t.Celsius >= limit:
 				w.hotLooks[t.ID]++
 				if w.hotLooks[t.ID] >= hotLooksNeeded && !w.hot[t.ID] {
 					w.hot[t.ID] = true
-					w.notify.Notify(Error, "temperature_critical", name+" ("+strconv.Itoa(int(*t.Celsius))+" °C)")
+					w.notify.Notify(Error, "temperature_critical", t.subject(w.notify.language()))
 				}
 			default:
 				w.hotLooks[t.ID] = 0

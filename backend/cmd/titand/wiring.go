@@ -1255,7 +1255,7 @@ func (w *titand) wireMaintenance() error {
 	hardware.Temperatures = func() []notify.TempReading {
 		var list []notify.TempReading
 		for _, t := range system.ReadTemperatures() {
-			list = append(list, notify.TempReading{ID: t.ID, Label: t.Label, Chip: t.Chip, Celsius: t.Celsius, Critical: t.CriticalC})
+			list = append(list, notify.TempReading{ID: t.ID, Label: t.Label, Channel: t.Channel, Device: t.Device, Chip: t.Chip, Celsius: t.Celsius, Critical: t.CriticalC})
 		}
 		return list
 	}

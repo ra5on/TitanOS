@@ -136,7 +136,10 @@ func (s *Server) handleAccountNotifyTest(w http.ResponseWriter, r *http.Request)
 type temperatureAlarm struct {
 	ID    string   `json:"id"`
 	Limit *float64 `json:"limit"`
-	Muted bool     `json:"muted"`
+	// Own: the limit comes from the chip's critical value, else from the
+	// default for its kind of chip.
+	Own   bool `json:"own"`
+	Muted bool `json:"muted"`
 }
 
 // handleTemperatureAlarms lists the sensors with their limits and the
@@ -147,8 +150,8 @@ func (s *Server) handleTemperatureAlarms(w http.ResponseWriter, r *http.Request)
 	if s.opts.Monitor != nil {
 		for _, t := range s.opts.Monitor.Info().Temperatures {
 			alarm := temperatureAlarm{ID: t.ID, Muted: slices.Contains(muted, t.ID)}
-			if limit, ok := notify.AlarmLimit(t.Chip, t.CriticalC); ok {
-				alarm.Limit = &limit
+			if limit, own, ok := notify.AlarmLimitSource(t.Chip, t.CriticalC); ok {
+				alarm.Limit, alarm.Own = &limit, own
 			}
 			sensors = append(sensors, alarm)
 		}
