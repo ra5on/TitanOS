@@ -35,7 +35,8 @@ Secrets `MINISIGN_SECRET_KEY` und `MINISIGN_PASSWORD` eingerichtet:
 |---|---|---|
 | `titanos-release-1.pub` | `8EAABC2A42904C1D` | reguläre Releases, privater Teil verschlüsselt im Environment `release` |
 | `titanos-recovery-1.pub` | `E58A91B20B598ABB` | Reserve; privater Teil wird nicht bei GitHub hinterlegt |
-| `titanos-release-2.pub` | `10239C7F77392DC9` | ab 3.11.2026 im Environment `security-release` (Autopilot), nach 0.46.2 auch in `release` |
+| `titanos-release-2.pub` | `10239C7F77392DC9` | ab 3.11.2026 in den Environments `release` und `security-release` |
+| `titanos-recovery-2.pub` | `725EF673B860F5F6` | Reserve ab 3.11.2026; offline beim Inhaber, nicht bei GitHub |
 
 Beide Schlüssel wurden lokal erzeugt und durch Signaturprüfung getestet.
 Der Projektinhaber hat am 14. Oktober 2026 die externe Sicherung der Schlüssel
@@ -339,27 +340,15 @@ Die oben genannten Tests mit echtem Stick, HDDs und GPUs/NPUs stehen weiterhin a
 
 ## Schlüsselwechsel und Verlust
 
-**Wechsel am 3. November 2026:** Der private Teil von `titanos-release-1` war
-lokal nicht mehr auffindbar (die Sicherung vom 14.10. wurde nicht geprüft).
-`titanos-release-2` wurde neu erzeugt und mit 0.46.2 eingebaut. 0.46.2 ist
-noch mit `titanos-release-1` aus dem Environment `release` signiert. Danach
-trägt der Inhaber `titanos-release-2` auch in `release` ein. Ein NAS vor 0.46.2
-muss zuerst 0.46.2 installieren, sonst kann es spätere Releases nicht prüfen.
-`titanos-release-1.pub` wird erst in einer späteren Version mit `MIN_VERSION`
-entfernt.
-
-Einen neuen öffentlichen Schlüssel zuerst per Update verteilen, noch mit
-dem alten Schlüssel signiert. Erst danach das GitHub-Secret wechseln.
-Den alten Schlüssel erst in einer späteren Version entfernen und mit
-`MIN_VERSION` sicherstellen, dass ältere Installationen den Zwischenschritt
-einhalten.
-
-Bei Verlust oder Diebstahl des normalen Schlüssels kann der bereits im
-Abbild enthaltene Offline-Reserve-Schlüssel ein Ersatz-Update signieren,
-das den kompromittierten Schlüssel entfernt. GitHub-Secrets und
-Repository-Zugriff ebenfalls prüfen. Ohne irgendeinen verbliebenen
-vertrauenswürdigen privaten Schlüssel müssen Nutzer einen neuen Stick
-erstellen und ihre Konfiguration wiederherstellen.
+**Wechsel am 3. November 2026:** Die privaten Teile von `titanos-release-1`
+und `titanos-recovery-1` waren nicht mehr auffindbar, auch nicht in der
+Sicherung. `titanos-release-2` und `titanos-recovery-2` wurden neu erzeugt
+und kommen mit 0.46.2 ins Abbild. Weil kein vertrauter alter Schlüssel mehr da
+ist, ist 0.46.2 schon mit `titanos-release-2` signiert: Ein NAS vor 0.46.2 kann
+es nicht prüfen und bekommt 0.46.2 einmalig über einen neu geschriebenen Stick
+mit Rücksicherung der Konfiguration. Die alten öffentlichen Schlüssel werden in
+einer späteren Version entfernt. Der neue Reserveschlüssel liegt offline beim
+Inhaber; seine Sicherung an zwei Orten ist vom Inhaber zu bestätigen.
 
 ## Neue Regressionen im Entwicklungsstand
 
