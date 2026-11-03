@@ -67,7 +67,7 @@ Bereich: Datensicherung, Stick-/Konfigurationssicherung, USB-Kopie, SMB-Kopie, M
   Anstecken seines Laufwerks sofort. Bekannte Ursachen haben einen Code
   (`state.lastErrorCode`) mit übersetztem Text. Siehe
   `docs/USB-COPY-BACKUPS.md`; Tests niemals auf Host-Platten ausführen.
-- Stick-Konfiguration verschlüsselt (0.41.0, Plan 6e, `configbackup/crypt.go`): optional mit Passwort (`encrypt` in `system/backup.json`, Passwort in `system/backup-password` auf dem Stick); scrypt + XChaCha20-Poly1305, das Manifest bleibt lesbar. Wiederherstellen fragt dann nach dem Passwort (Upload-Kopf `X-Backup-Password`). Ältere Versionen ignorieren `encrypt` und sichern unverschlüsselt.
+- Stick-Konfiguration verschlüsselt (0.41.0, Plan 6e, `configbackup/crypt.go`): optional mit Passwort (`encrypt` in `system/backup.json`, Passwort in `system/backup-password` auf dem Stick); scrypt + XChaCha20-Poly1305, das Manifest bleibt lesbar. Wiederherstellen fragt dann nach dem Passwort (Upload-Kopf `X-Backup-Password`). Ältere Versionen ignorieren `encrypt` und sichern unverschlüsselt. Hinweise nur bei Bedarf: Liegt die Sicherung ohne Passwort auf einem unverschlüsselten Volume (laut Speicherstatus), warnt der Zustandsbereich; die Volume-Auswahl nennt verschlüsselt/unverschlüsselt. Über der Liste warnt die Seite nur, wenn Kopien ohne Passwort darunter sind (Klartext-Geheimnisse beim Herunterladen). Ist der Speicherstatus nicht lesbar, erscheint kein Volume-Hinweis.
 - Stick-Konfiguration: zusätzlicher täglicher/wöchentlicher Zeitplan in
   `/config/system/backup.json`; NAS-Zeitzone, Startsicherung und Änderungsbündelung
   bleiben aktiv. Unveränderte Konfiguration wird nicht doppelt archiviert.

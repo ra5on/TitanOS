@@ -283,6 +283,11 @@
 						><strong>{t('create.checkSnapshots')}</strong>
 						<span class="muted small">{t('create.checkSnapshotsHint')}</span></span
 					></label
+				>{:else}<label class="confirm unavailable"
+					><input type="checkbox" checked={false} disabled aria-describedby="no-snapshots" /><span
+						><strong>{t('create.checkSnapshots')}</strong>
+						<span class="muted small" id="no-snapshots">{t('create.noSnapshots')}</span></span
+					></label
 				>{/if}
 		</fieldset>
 
@@ -460,5 +465,8 @@
 	}
 	.checks p {
 		margin: 0;
+	}
+	.unavailable strong {
+		color: var(--muted);
 	}
 </style>

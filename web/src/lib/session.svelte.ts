@@ -14,6 +14,8 @@ export const session = $state<{
 	dashboard: Record<string, unknown> | null;
 	docker: Record<string, unknown> | null;
 	vnc: Record<string, unknown> | null;
+	/** Dismissed one-time hints of the account (storage/checks-hint.ts). */
+	hints: Record<string, unknown> | null;
 	/** Settings › Services: docker, vms and lxc, false when switched off. */
 	services: Record<string, boolean>;
 }>({
@@ -23,6 +25,7 @@ export const session = $state<{
 	dashboard: null,
 	docker: null,
 	vnc: null,
+	hints: null,
 	services: {},
 });
 
@@ -33,6 +36,7 @@ async function loadPreferences() {
 		session.dashboard = prefs.dashboard;
 		session.docker = prefs.docker;
 		session.vnc = prefs.vnc;
+		session.hints = prefs.hints ?? null;
 		sound.settings = sanitizeSound(prefs.sound);
 		bell.settings = sanitizeBell(prefs.bell);
 		if (prefs.appearance)
@@ -43,6 +47,7 @@ async function loadPreferences() {
 		session.dashboard = null;
 		session.docker = null;
 		session.vnc = null;
+		session.hints = null;
 	}
 }
 
