@@ -56,7 +56,13 @@
 		!button?.contains(event.target as Node) &&
 		!panel?.contains(event.target as Node) &&
 		close()}
-	onkeydown={(event) => open && event.key === 'Escape' && close(true)}
+	onkeydowncapture={(event) => {
+		// Escape closes only the explanation, not a dialog around it.
+		if (!open || event.key !== 'Escape') return;
+		event.preventDefault();
+		event.stopPropagation();
+		close(true);
+	}}
 />
 
 <button

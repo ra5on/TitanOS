@@ -230,7 +230,30 @@ func TestMCPSwitchNeedsAdministrator(t *testing.T) {
 	if res, _ := ts.do(reader, "PUT", "/api/v1/system/mcp", map[string]any{"enabled": true}); res.StatusCode != http.StatusForbidden {
 		t.Fatal(res.StatusCode)
 	}
-	if res, _ := ts.do(reader, "GET", "/api/v1/system/mcp", nil); res.StatusCode != http.StatusOK {
+	// Users read the state and the endpoint for the MCP page, nothing more:
+	// the tools and their switches stay with owners and administrators.
+	res, body := ts.do(reader, "GET", "/api/v1/system/mcp", nil)
+	if res.StatusCode != http.StatusOK {
+		t.Fatal(res.StatusCode)
+	}
+	var status struct {
+		Enabled *bool            `json:"enabled"`
+		Path    string           `json:"path"`
+		Tools   []map[string]any `json:"tools"`
+	}
+	if err := json.Unmarshal(body, &status); err != nil || status.Enabled == nil || status.Path != mcpPath || status.Tools == nil || len(status.Tools) != 0 {
+		t.Fatalf("user status: %s", body)
+	}
+	for _, field := range []string{"mode", "dangerous", "area"} {
+		if strings.Contains(string(body), field) {
+			t.Fatalf("user sees %s: %s", field, body)
+		}
+	}
+	if _, body := ts.request("GET", "/api/v1/system/mcp", nil); !strings.Contains(string(body), `"mode"`) {
+		t.Fatalf("administrator without tools: %s", body)
+	}
+	// Changing tool modes needs an administrator too.
+	if res, _ := ts.do(reader, "PUT", "/api/v1/system/mcp", map[string]any{"enabled": false, "tools": map[string]string{"system_status": "off"}}); res.StatusCode != http.StatusForbidden {
 		t.Fatal(res.StatusCode)
 	}
 }
