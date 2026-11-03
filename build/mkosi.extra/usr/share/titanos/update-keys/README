@@ -15,6 +15,12 @@ rehearsal.pub is a disposable test key, ignored by Git. Tag builds reject it.
 Configured public keys (2026-10-14):
   titanos-release-1.pub   Minisign key ID 8EAABC2A42904C1D
   titanos-recovery-1.pub  Minisign key ID E58A91B20B598ABB
+Added during rotation (2026-11-03, TitanOS 0.46.2):
+  titanos-release-2.pub   Minisign key ID 10239C7F77392DC9
+  The private part of titanos-release-1 was no longer found; 0.46.2 is still
+  signed with it and teaches the NAS the new key. Releases after 0.46.2 are
+  signed with titanos-release-2. titanos-release-1 is removed in a later
+  version.
 
 Both key pairs have been verified locally. The release secret is configured
 in GitHub's protected release environment. The project owner confirmed an
