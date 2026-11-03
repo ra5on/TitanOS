@@ -36,9 +36,9 @@ Die Wahl steht im optionalen Feld `kernel` von `/config/system/update.json` (`"n
 - UI-Screenshots mit isolierten Testdaten.
 - `mkosi summary` mit dem Profil `kernel-new` ist geprüft (Sandbox-Baum, Ausgabeordner). **Nicht gelaufen:** der echte Image-Build mit Backports (braucht root und Netz), ein Boot des neuen Kernels, Plugin-Sätze für den neuen Kernel, die CI-Schritte und die Behandlung von `kernelVariant` im Plugin-Repository (Patch liegt bei). Ob die Firmware-Pakete in trixie-backports neuer sind, entscheidet apt beim Bau. Ohne Backports-Fassung bleibt die aus trixie.
 
-## Stand der Treiber-Plugins für den neuen Kernel (31.10.2026)
+## Stand der Treiber-Plugins für den neuen Kernel (3.11.2026)
 
-Das Plugin-Repository baut Sätze für den neuen Kernel erst, wenn es `kernelVariant` versteht. Die Änderungen dafür liegen als Patch vor und werden vom Projektinhaber im Plugin-Repository eingespielt (dort sind auch die Quellen von `r8125`/`r8126` festzulegen und `nvidia-legacy/packages.lock.json` zu erzeugen). Bis dahin holt der Release-Workflow für den neuen Kernel nur einen schon vorhandenen Satz und warnt sonst; ein NAS mit Kernel „Neu“ kann dann keine Kernel-Plugins (NVIDIA, Netzwerktreiber) nutzen. Der Standard-Kernel ist davon nicht betroffen.
+Der Release-Workflow bestellt die Sätze für beide Kernel. Das Plugin-Repository versteht `kernelVariant=new` (ra5on/TitanOS-Plugins#4): Es baut dann das Abbild mit dem Kernel aus trixie-backports und die Kernel-Plugins dagegen; Header und `linux-source` kommen aus trixie-backports. Bis dieser PR gemergt ist, scheitert die Bestellung für den neuen Kernel. Die Plugins `r8125`/`r8126` und `nvidia-legacy` liegen getrennt (Branch `realtek-nvidia-legacy` im Plugin-Repository), bis ihre Quellen festgelegt und `nvidia-legacy/packages.lock.json` erzeugt ist. **Nicht gelaufen:** ein echter Satz für den neuen Kernel (NVIDIA und die Treiber gegen 7.2) und sein Start in QEMU.
 
 ## NTFS mit dem neuen Kernel
 

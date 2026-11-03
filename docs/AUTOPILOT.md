@@ -86,10 +86,11 @@ installiert haben, behalten es; über Einstellungen › Updates geht es zurück.
   QEMU-Tests des Release-Workflows den Test auf dem echten Stick
   (`docs/RELEASING.md`). Ein Fehler, den diese Tests nicht finden, erreicht
   alle NAS gleichzeitig; A/B fängt einen Fehlstart ab.
-- **Kernel „Neu“:** Das Plugin-Repository baut Sätze für den neuen Kernel
-  erst, wenn es `kernelVariant` versteht (`docs/KERNEL.md`). Bis dahin
-  veröffentlicht auch der Autopilot mit einer Warnung, und ein NAS mit Kernel
-  „Neu“ und Kernel-Plugins kann ein solches Update nicht vorbereiten.
+- **Kernel „Neu“:** Ein Autopilot für beide Kernel. Jedes Release trägt
+  beide Abbilder, und der Release-Workflow bestellt die Plugin-Sätze für
+  beide (`docs/KERNEL.md`). Das Plugin-Repository baut den Satz für den neuen
+  Kernel, sobald ra5on/TitanOS-Plugins#4 gemergt ist; bis dahin scheitert
+  jedes volle Release an dieser Bestellung.
 - **Plugin-Signatur ohne Freigabe** (`AUTOPILOT_PLUGINS=on`) heißt: Was das
   Plugin-Repository baut, wird als Kernelmodul signiert und an alle NAS
   verteilt. Das Repository muss dafür so vertrauenswürdig sein wie dieses.
