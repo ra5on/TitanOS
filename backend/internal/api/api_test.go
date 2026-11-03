@@ -1315,7 +1315,7 @@ func TestUpdatesAreForAdministrators(t *testing.T) {
 	ts.users.Create("gast", testPassword, auth.RoleUser)
 	guest := ts.newClient()
 	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
-	for _, tc := range [][2]string{{"GET", "/api/v1/update"}, {"GET", "/api/v1/update/progress"}, {"PUT", "/api/v1/update/settings"}, {"POST", "/api/v1/update/check"}, {"POST", "/api/v1/update/install"}, {"POST", "/api/v1/update/rollback"}} {
+	for _, tc := range [][2]string{{"GET", "/api/v1/update"}, {"GET", "/api/v1/update/progress"}, {"PUT", "/api/v1/update/settings"}, {"POST", "/api/v1/update/check"}, {"POST", "/api/v1/update/install"}, {"POST", "/api/v1/update/rollback"}, {"GET", "/api/v1/update/versions"}, {"POST", "/api/v1/update/install-version"}} {
 		if res, _ := ts.do(guest, tc[0], tc[1], map[string]any{}); res.StatusCode != http.StatusForbidden {
 			t.Errorf("%s %s as a plain user: %d, want 403", tc[0], tc[1], res.StatusCode)
 		}
