@@ -31,6 +31,9 @@ ALLOWED = (
     "scripts/test-files-ui.mjs",
     # QEMU test of the key plugin route; runs in CI, not part of the image.
     "scripts/test-key-plugin-update.py",
+    # This decision and its tests run only in CI.
+    "scripts/release-kind.py",
+    "scripts/tests/test_release_kind.py",
     # The example agent is published as its own image, not in the system.
     "examples/",
     ".github/workflows/agent.yml",
