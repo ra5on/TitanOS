@@ -70,11 +70,44 @@ Tag löschen oder den Release-Lauf wiederholen.
 | Repository-Variable | Wirkung |
 |---|---|
 | `AUTOPILOT=on` | Der Autopilot schneidet und veröffentlicht. Ohne die Variable (ab Werk) öffnet der Lauf wie früher die wöchentliche Prüfung nur einen PR mit dem Label `debian-security`, der den nächsten Tag des Inhabers zu einem vollen Release macht. Das ist zugleich die Notbremse. |
-| `AUTOPILOT_PLUGINS=on` | Plugin-Sätze (Kernel- und gemeinsame Sätze) eines wartenden Autopilot-Releases werden ohne Freigabe signiert (`plugin-sign.yml`, Environment `security-release`). NVIDIA-Treiber-Updates behalten immer die Freigabe. Ohne die Variable wartet ein Release mit neuem Kernel auf deine Freigabe der Plugin-Signatur. |
+| `AUTOPILOT_PLUGINS=on` | Ohne Freigabe signiert (`plugin-sign.yml`, Environment `security-release`): die Kernel- und gemeinsamen Sätze eines wartenden Autopilot-Releases, und ein gemeinsamer Satz des nächtlichen Laufs für neue Plugin-Versionen, der sich nur in neueren Versionen von Tailscale oder NetBird unterscheidet. NVIDIA-Treiber-Updates behalten immer die Freigabe. Ohne die Variable wartet ein Release mit neuem Kernel auf deine Freigabe der Plugin-Signatur. |
 
 Ein veröffentlichtes Release lässt sich wie jedes andere zurückziehen
 (Release auf GitHub löschen oder als Entwurf setzen). NAS, die es schon
 installiert haben, behalten es; über Einstellungen › Updates geht es zurück.
+
+## Neue Plugin-Versionen (Tailscale, NetBird)
+
+Entscheidung des Inhabers vom 3.11.2026: neue Versionen der Plugins mit
+festgehaltener Herstellerdatei kommen ohne Freigabe zu allen NAS.
+
+1. **Nachtlauf im Plugin-Repository** (`.github/workflows/upstream.yml`,
+   04:47 UTC): `scripts/upstream.py check` vergleicht Tailscale (stabile
+   Pakete von pkgs.tailscale.com) und NetBird (neuestes Release auf GitHub,
+   keine Vorabversion) mit den Lock-Dateien.
+2. **Anheben:** `scripts/upstream.py bump` hält Archiv-URL, Größe und
+   SHA-256 fest und holt die Lizenztexte. Die Lizenz des Programms selbst
+   muss wortgleich bleiben; ändert sie sich, hebt der Lauf nichts an und
+   öffnet ein Issue mit dem Label `upstream`. Die Listen der Fremdlizenzen
+   werden erneuert (NetBird: aus dem Binary erzeugt).
+3. **Bauen:** Commit auf `main`, dann `release.yml` mit `sets=common`. Nur die
+   geänderten Plugins werden neu gebaut, alle Plugins mit dem Abbild in QEMU
+   getestet; der Satz wird ein Entwurf.
+4. **Signieren:** `plugin-sign.yml` prüft den Entwurf mit
+   `scripts/plugin-guard.py` gegen den signierten veröffentlichten
+   gemeinsamen Satz: gleiche Plugins, gleiche Kernel- und Debian-Angaben,
+   jedes andere Plugin unverändert, Tailscale oder NetBird nur mit neuerer
+   Herstellerversion. Dann signiert es ohne Freigabe, und zwar wie immer von
+   einem Release-Tag `v*` aus (kein eigener Tag je Satz, Entscheidung
+   3.11.2026), sonst mit Freigabe. Die Prüfung läuft vor dem Start und noch
+   einmal im Job mit dem Schlüssel.
+5. **Auf dem NAS:** Der Katalog nennt den neuen Satz; installierte Plugins
+   werden über die Plugin-Seite aktualisiert.
+
+Ohne Freigabe geht das erst ab dem ersten Release, das
+`scripts/plugin-guard.py` enthält (0.46.3); bis dahin fragt `plugin-sign`
+wie bisher. NVIDIA-Treiber baut jedes NAS selbst (`docs/NVIDIA-LOCAL-BUILD.md`,
+PLAN.md Punkt 31).
 
 ## Grenzen
 

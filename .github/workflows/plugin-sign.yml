@@ -14,11 +14,15 @@ name: Plugin sets
 # release that asks for its kernel set waits for exactly this signature
 # before it can be published.
 #
-# With the repository variable AUTOPILOT_PLUGINS=on (off by default) the
-# plugin sets of a security release of the autopilot (docs/AUTOPILOT.md) are
-# signed without an approval, through the environment security-release: only
-# while an autopilot tag waits for its release, and only kernel and common
-# sets. NVIDIA driver updates always keep the approval.
+# With the repository variable AUTOPILOT_PLUGINS=on (off by default) two
+# kinds of sets are signed without an approval, through the environment
+# security-release (docs/AUTOPILOT.md):
+# - the kernel and common sets of a security release of the autopilot, while
+#   its tag waits for the release;
+# - a common set of the nightly upstream run of the plugin repository that
+#   differs from the published one only in newer Tailscale or NetBird
+#   versions (scripts/plugin-guard.py, checked here and again next to the key).
+# NVIDIA driver updates always keep the approval.
 
 on:
   schedule:
@@ -67,18 +71,28 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Sets of an autopilot release
+      - name: Sets of an autopilot release, or a common set of newer upstream versions
         id: auto
         if: steps.drafts.outputs.tags != '[]' && vars.AUTOPILOT_PLUGINS == 'on'
         env:
           TAGS: ${{ steps.drafts.outputs.tags }}
+          GH_TOKEN: ${{ secrets.PLUGINS_DISPATCH_TOKEN }}
         run: |
           pending=$(python3 scripts/autopilot.py pending | sed -n 's/^pending=//p')
           # Driver updates in the drafts keep the approval for all of them.
-          if [ -n "$pending" ] && ! jq -e 'any(.[]; startswith("pending-nvidia-"))' <<<"$TAGS" >/dev/null; then
+          if jq -e 'any(.[]; startswith("pending-nvidia-"))' <<<"$TAGS" >/dev/null; then
+            echo "auto=false" >> "$GITHUB_OUTPUT"
+          elif [ -n "$pending" ]; then
             echo "Kernel and common sets for $pending of the autopilot."
             echo "auto=true" >> "$GITHUB_OUTPUT"
             echo "tag=$pending" >> "$GITHUB_OUTPUT"
+          elif [ "$(jq -r 'length' <<<"$TAGS")" = 1 ] && jq -e '.[0] | startswith("common-")' <<<"$TAGS" >/dev/null; then
+            sudo apt-get install -y --no-install-recommends minisign >/dev/null
+            if scripts/plugin-common-check.sh "$(jq -r '.[0]' <<<"$TAGS")"; then
+              echo "auto=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "auto=false" >> "$GITHUB_OUTPUT"
+            fi
           else
             echo "auto=false" >> "$GITHUB_OUTPUT"
           fi
@@ -102,6 +116,15 @@ jobs:
             echo "No release tag contains scripts/sign-plugin-set.py yet." >&2
             exit 1
           fi
+          if [ "$AUTO" = true ] && [ -z "$PENDING" ]; then
+            # A common set of newer upstream versions: from the newest tag,
+            # if it knows the check; an older one keeps the approval.
+            if gh api "repos/$GITHUB_REPOSITORY/contents/scripts/plugin-guard.py?ref=$execution_tag" >/dev/null 2>&1; then
+              PENDING=$execution_tag
+            else
+              AUTO=false
+            fi
+          fi
           if [ "$AUTO" = true ]; then
             # One automatic run at a time; it signs every set it finds.
             for state in queued in_progress; do
@@ -110,10 +133,10 @@ jobs:
                 exit 0
               fi
             done
-            # From the autopilot tag itself: newer tags of the owner may
-            # predate the input auto.
+            # From the autopilot tag itself (newer tags of the owner may
+            # predate the input auto), or the newest tag for upstream versions.
             gh workflow run plugin-sign.yml --repo "$GITHUB_REPOSITORY" --ref "$PENDING" -f auto=true
-            echo "Signing run started from $PENDING without approval (autopilot)."
+            echo "Signing run started from $PENDING without approval."
             exit 0
           fi
           # A run that already waits for approval is enough.
@@ -142,6 +165,9 @@ jobs:
       # accepts leaves the job.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # The tags: without the approval, kernel sets only for a waiting
+          # autopilot release (scripts/autopilot.py pending).
+          fetch-depth: 0
           persist-credentials: false
       - name: Sign and publish
         env:
@@ -155,6 +181,10 @@ jobs:
             exit 1
           fi
           python3 scripts/check-release-keys.py build/mkosi.extra/usr/share/titanos/update-keys
+          pending=
+          if [ "$AUTO" = true ]; then
+            pending=$(python3 scripts/autopilot.py pending | sed -n 's/^pending=//p')
+          fi
           key=$(mktemp)
           trap 'rm -f "$key"' EXIT
           printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key"
@@ -163,6 +193,12 @@ jobs:
           for tag in $(jq -r "$DRAFTS | sort_by(if startswith(\"kernel-\") then 0 elif startswith(\"common-\") then 1 else 2 end) | .[]" <<<"$releases"); do
             if [ "$AUTO" = true ] && [[ $tag == pending-nvidia-* ]]; then
               echo "$tag keeps the approval (driver update)."
+              continue
+            fi
+            # Without an approval: the sets of a waiting autopilot release, or
+            # a common set that only brings newer upstream versions.
+            if [ "$AUTO" = true ] && [ -z "$pending" ] && { [[ $tag != common-* ]] || ! scripts/plugin-common-check.sh "$tag"; }; then
+              echo "$tag keeps the approval."
               continue
             fi
             id=$(jq -r --arg t "$tag" '.[] | select(.draft and .tag_name == $t) | .id' <<<"$releases")
