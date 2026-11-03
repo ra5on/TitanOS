@@ -1118,9 +1118,12 @@
 		text-align: right;
 	}
 	@media (max-width: 760px) {
-		.links,
-		.apply {
+		.links {
 			padding-left: var(--space-3);
+		}
+		/* Beside the round menu button of "Side" navigation. */
+		.apply {
+			padding-left: calc(var(--space-3) + var(--fab-clear, 0px));
 		}
 		.apply .note {
 			text-align: left;

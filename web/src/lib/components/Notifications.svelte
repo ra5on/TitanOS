@@ -386,5 +386,14 @@
 			max-width: calc(100vw - 24px);
 			max-height: calc(100dvh - 76px);
 		}
+		/* In the phone's drawer: across the bottom of the screen. */
+		.side .panel {
+			top: auto;
+			left: 12px;
+			right: 12px;
+			bottom: calc(12px + env(safe-area-inset-bottom));
+			max-width: none;
+			max-height: calc(100dvh - 24px);
+		}
 	}
 </style>

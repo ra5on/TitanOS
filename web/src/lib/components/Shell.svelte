@@ -21,6 +21,9 @@
 	import ShortcutsDialog from './ShortcutsDialog.svelte';
 	import { appearance } from '#lib/theme/appearance.svelte.ts';
 	import { effectOn } from '#lib/theme/themes.ts';
+	import { afterNavigate } from '$app/navigation';
+	import Icon from './Icon.svelte';
+	import { navForRole } from '#lib/navigation.ts';
 
 	let { children }: { children: Snippet } = $props();
 
@@ -31,7 +34,8 @@
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 
 	let shortcutsOpen = $state(false);
-	// The sidebar only on the desktop; phones keep the head line with the menu.
+	// The sidebar on the desktop; on a phone "Side" means a round menu
+	// button at the bottom left that slides the same sidebar in.
 	let desktop = $state(matchMedia('(min-width: 761px)').matches);
 	$effect(() => {
 		const query = matchMedia('(min-width: 761px)');
@@ -40,11 +44,58 @@
 		return () => query.removeEventListener('change', change);
 	});
 	const side = $derived(appearance.current.nav.layout === 'side' && desktop);
+	// The area the page belongs to, for the button's name.
+	const pageLabel = $derived(
+		navForRole(session.data?.user?.role ?? 'user', session.services).find((item) =>
+			item.href === '/'
+				? page.url.pathname === '/'
+				: page.url.pathname === item.href || page.url.pathname.startsWith(item.href + '/'),
+		)?.label ?? 'nav.label',
+	);
+	const sidePhone = $derived(appearance.current.nav.layout === 'side' && !desktop);
+	let drawer = $state<HTMLDialogElement>();
+	let drawerOpen = $state(false);
+	const openDrawer = () => drawer?.showModal();
+	const closeDrawer = () => drawer?.close();
+	afterNavigate(() => closeDrawer());
+	$effect(() => {
+		if (!sidePhone) closeDrawer();
+	});
+	// The button is hidden while the terminal covers the bottom of the window.
+	const fab = $derived(sidePhone && !(admin && terminal.open));
+	// Room for the button: pages end above it, bars at the bottom start beside it.
+	$effect(() => {
+		const root = document.documentElement.style;
+		if (fab) root.setProperty('--fab-clear', '76px');
+		else root.removeProperty('--fab-clear');
+		return () => root.removeProperty('--fab-clear');
+	});
+	// A swipe from the left edge opens the menu, a swipe to the left closes it.
+	let swipe: { x: number; y: number; open: boolean } | null = null;
+	function swipeStart(event: TouchEvent) {
+		if (!sidePhone || event.touches.length !== 1) return;
+		const { clientX: x, clientY: y } = event.touches[0];
+		const open = drawer?.open ?? false;
+		swipe = open || x <= 24 ? { x, y, open } : null;
+	}
+	function swipeMove(event: TouchEvent) {
+		if (!swipe) return;
+		const dx = event.touches[0].clientX - swipe.x;
+		const dy = Math.abs(event.touches[0].clientY - swipe.y);
+		if (dy > Math.abs(dx)) swipe = null;
+		else if (!swipe.open && dx > 50) {
+			swipe = null;
+			openDrawer();
+		} else if (swipe.open && dx < -50) {
+			swipe = null;
+			closeDrawer();
+		}
+	}
 	// Without head line and status bar nothing sticks below or above them.
 	$effect(() => {
 		const root = document.documentElement.style;
-		root.setProperty('--header-height', side ? '0px' : '60px');
-		root.setProperty('--status-height', side ? '0px' : '34px');
+		root.setProperty('--header-height', side || sidePhone ? '0px' : '60px');
+		root.setProperty('--status-height', side || sidePhone ? '0px' : '34px');
 		return () => {
 			root.removeProperty('--header-height');
 			root.removeProperty('--status-height');
@@ -119,7 +170,12 @@
 	$effect(() => watchStorage());
 </script>
 
-<svelte:window onkeydown={hotkey} />
+<svelte:window
+	onkeydown={hotkey}
+	ontouchstart={swipeStart}
+	ontouchmove={swipeMove}
+	ontouchend={() => (swipe = null)}
+/>
 
 <!-- The page ends above the open terminal, so that all of it can be scrolled into view. -->
 {#if admin && pendingSeconds > 0}
@@ -145,15 +201,44 @@
 			? `${terminal.height}px`
 			: undefined}
 	>
-		{#if !side}<Header tasks={!ownTasks} />{/if}
+		{#if !side && !sidePhone}<Header tasks={!ownTasks} />{/if}
 		<main class:readable={!dockerPage} class:dashboard={page.url.pathname === '/'}>
 			<ClusterBanner />
 			{#if !dockerPage}<ConnectionBanner />{/if}
 			{@render children()}
 		</main>
-		{#if !side}<StatusBar note={shell.statusNote} />{/if}
+		{#if !side && !sidePhone}<StatusBar note={shell.statusNote} />{/if}
 	</div>
 </div>
+{#if sidePhone}
+	{#if fab}<button
+			type="button"
+			class="fab"
+			aria-label={t('nav.openMenu', { page: t(pageLabel) })}
+			aria-haspopup="dialog"
+			aria-expanded={drawerOpen}
+			onclick={openDrawer}><Icon name="menu" size={24} /></button
+		>{/if}
+	<!-- Modal: Escape closes it, focus stays inside; a tap beside it closes it too. -->
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+	<dialog
+		class="drawer"
+		aria-label={t('nav.label')}
+		bind:this={drawer}
+		onclose={() => (drawerOpen = false)}
+		ontoggle={() => (drawerOpen = drawer?.open ?? false)}
+		onclick={(event) => {
+			if (event.target === drawer) closeDrawer();
+		}}
+	>
+		{#if drawerOpen}<SideNav
+				drawer
+				tasks={!ownTasks}
+				note={shell.statusNote}
+				onclose={closeDrawer}
+			/>{/if}
+	</dialog>
+{/if}
 {#if admin}<TerminalPanel />{/if}
 {#if palette.open}<CommandPalette onclose={() => (palette.open = false)} />{/if}
 {#if shortcutsOpen}<ShortcutsDialog {admin} onclose={() => (shortcutsOpen = false)} />{/if}
@@ -164,6 +249,57 @@
 	@media (display-mode: standalone) {
 		.shell {
 			padding-bottom: env(safe-area-inset-bottom);
+		}
+	}
+	.fab {
+		position: fixed;
+		left: 16px;
+		bottom: calc(16px + env(safe-area-inset-bottom));
+		z-index: 25;
+		display: grid;
+		place-items: center;
+		width: 52px;
+		height: 52px;
+		border: 1px solid var(--border);
+		border-radius: 50%;
+		background: var(--menu-bg, var(--surface));
+		backdrop-filter: var(--menu-backdrop, none);
+		box-shadow: var(--shadow-menu);
+		color: var(--text);
+		cursor: pointer;
+	}
+	.fab:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	.drawer {
+		position: fixed;
+		inset: 0 auto 0 0;
+		width: auto;
+		max-width: none;
+		height: 100dvh;
+		max-height: none;
+		margin: 0;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		box-shadow: var(--shadow-menu);
+		color: inherit;
+	}
+	.drawer::backdrop {
+		background: var(--overlay, rgb(0 0 0 / 0.5));
+	}
+	.drawer[open] {
+		animation: slide-in 180ms ease-out;
+	}
+	@keyframes slide-in {
+		from {
+			transform: translateX(-100%);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.drawer[open] {
+			animation: none;
 		}
 	}
 	.trial {
@@ -214,7 +350,7 @@
 			padding-top: 12px;
 		}
 		main {
-			padding: 16px var(--page-pad) 24px;
+			padding: 16px var(--page-pad) calc(24px + var(--fab-clear, 0px));
 		}
 	}
 </style>

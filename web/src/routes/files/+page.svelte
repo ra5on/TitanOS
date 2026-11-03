@@ -1439,7 +1439,7 @@
 	}
 	.saving {
 		position: fixed;
-		left: 16px;
+		left: calc(16px + var(--fab-clear, 0px));
 		bottom: 44px;
 		z-index: 50;
 		margin: 0;
