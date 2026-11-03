@@ -27,9 +27,9 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 8px 16px;
+		gap: var(--space-2) var(--space-4);
 		margin-top: 6px;
-		padding-top: 12px;
+		padding-top: var(--space-3);
 		border-top: 1px solid var(--border);
 	}
 	.danger-zone.tile {
@@ -48,12 +48,12 @@
 		text-transform: uppercase;
 	}
 	p {
-		margin: 4px 0 0;
+		margin: var(--space-1) 0 0;
 		font-size: var(--text-base);
 	}
 	.danger-actions {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 </style>

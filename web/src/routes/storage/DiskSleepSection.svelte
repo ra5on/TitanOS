@@ -118,9 +118,9 @@
 <style>
 	.sleep {
 		display: grid;
-		gap: 8px;
+		gap: var(--space-2);
 		border-top: 1px solid var(--border);
-		padding-top: 12px;
+		padding-top: var(--space-3);
 	}
 	.head {
 		display: flex;
@@ -140,7 +140,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px 12px;
+		gap: var(--space-2) var(--space-3);
 	}
 	.editor select {
 		width: auto;
@@ -149,7 +149,7 @@
 	.actions {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	p {
 		margin: 0;
