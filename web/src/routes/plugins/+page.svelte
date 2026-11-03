@@ -2,6 +2,7 @@
 	import { poll } from '#lib/poll.ts';
 	import { tick, untrack } from 'svelte';
 	import { api } from '#lib/api.ts';
+	import DangerZone from '#lib/components/DangerZone.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import TailscaleSettings from '#lib/components/TailscaleSettings.svelte';
@@ -742,9 +743,6 @@
 								onchange={(event) => toggle(current.name, event.currentTarget)}
 							/><span>{t('plugins.enabled')}</span></label
 						>
-						<button type="button" class="btn" onclick={() => openRemove(current)} disabled={locked}
-							>{t('plugins.remove')}</button
-						>
 					</div>
 					<p class="muted note">{t('plugins.enabledNote')}</p>
 					{#if current.update}
@@ -785,6 +783,14 @@
 							onclick={() => run(() => api.post<Status>(`/plugins/${current.name}/enable`))}
 							>{t('plugins.retry')}</button
 						>{/if}
+					<DangerZone hint={t('plugins.removeHint')}>
+						<button
+							type="button"
+							class="btn btn-danger"
+							onclick={() => openRemove(current)}
+							disabled={locked}>{t('plugins.remove')}</button
+						>
+					</DangerZone>
 				{/if}
 			</div>
 		</aside>

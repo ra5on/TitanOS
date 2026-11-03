@@ -2,6 +2,7 @@
 	// System containers (LXC): the list on the left, the chosen container on
 	// the right with its actions, settings and snapshots.
 	import { poll } from '#lib/poll.ts';
+	import DangerZone from '#lib/components/DangerZone.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
@@ -260,14 +261,6 @@
 						disabled={busy === c.name || c.job?.state === 'running'}
 						onclick={() => (form = { existing: c })}>{t('lxc.edit')}</button
 					>
-					<button
-						class="btn"
-						disabled={readOnly ||
-							busy === c.name ||
-							c.state === 'running' ||
-							c.job?.state === 'running'}
-						onclick={() => ((deleteData = false), (removing = c))}>{t('lxc.remove')}</button
-					>
 				</div>
 
 				<dl>
@@ -376,6 +369,17 @@
 					<summary>{t('lxc.showConfig')}</summary>
 					{#if config}<pre class="mono config">{config}</pre>{/if}
 				</details>
+
+				<DangerZone hint={t('lxc.removeHint')}>
+					<button
+						class="btn btn-danger"
+						disabled={readOnly ||
+							busy === c.name ||
+							c.state === 'running' ||
+							c.job?.state === 'running'}
+						onclick={() => ((deleteData = false), (removing = c))}>{t('lxc.remove')}</button
+					>
+				</DangerZone>
 			</section>
 		{/if}
 	</div>

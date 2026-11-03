@@ -4,6 +4,7 @@
 	import Snapshots from './Snapshots.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import HelpTip from '#lib/components/HelpTip.svelte';
+	import DangerZone from '#lib/components/DangerZone.svelte';
 	import { formatDiskBytes, formatDuration, formatPercent } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { stateTone } from './labels.ts';
@@ -262,22 +263,20 @@
 					disabled={busy}>{t('btrfs.profileChange')}</button
 				>{/if}
 		</div>
-		<!-- Destroying actions stand apart from maintenance, in red. -->
-		<div class="danger-zone">
-			<div>
-				<strong>{t('ui.dangerZone')}</strong>
-				<p class="muted">{t('storage.deleteHint')}</p>
-			</div>
-			<button type="button" class="btn btn-danger" onclick={ondelete} disabled={busy}
-				>{t('storage.delete')}</button
-			>
-		</div>
 	{/if}
 	{#if canAdminister && volume.encryption}<EncryptionPanel {volume} {busy} />{/if}
 	{#if canAdminister && volume.filesystem !== 'btrfs'}<CachePanel {volume} />{/if}
 	{#if canAdminister && volume.mounted && volume.filesystem === 'btrfs'}<Snapshots
 			volume={volume.name}
 		/>{/if}
+	{#if canAdminister}
+		<!-- Destroying actions stand apart from maintenance, in red, at the end. -->
+		<DangerZone hint={t('storage.deleteHint')}>
+			<button type="button" class="btn btn-danger" onclick={ondelete} disabled={busy}
+				>{t('storage.delete')}</button
+			>
+		</DangerZone>
+	{/if}
 </article>
 
 <style>
@@ -423,25 +422,5 @@
 		flex-wrap: wrap;
 		gap: 8px;
 		padding-top: 4px;
-	}
-	.danger-zone {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: 8px 16px;
-		margin-top: 6px;
-		padding-top: 12px;
-		border-top: 1px solid var(--border);
-	}
-	.danger-zone strong {
-		color: var(--status-error);
-		font-size: var(--text-base);
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-	}
-	.danger-zone p {
-		margin: 4px 0 0;
-		font-size: var(--text-base);
 	}
 </style>

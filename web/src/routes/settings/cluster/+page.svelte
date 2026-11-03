@@ -5,6 +5,7 @@
 	import { poll } from '#lib/poll.ts';
 	import { onMount } from 'svelte';
 	import { api, ApiError } from '#lib/api.ts';
+	import DangerZone from '#lib/components/DangerZone.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import ReconfirmFields, { reconfirmComplete } from '#lib/components/ReconfirmFields.svelte';
 	import { confirmWithPasskey, hasPasskeyHere } from '#lib/passkeys.ts';
@@ -787,15 +788,12 @@
 		</section>{/if}
 
 	{#if owner}
-		<section class="tile panel">
-			<h2 class="tile-title">{t('cluster.leave')}</h2>
-			<p class="muted">{t('cluster.leaveHint')}</p>
-			<div class="row-actions">
-				<button class="btn btn-danger" disabled={busy} onclick={() => (confirmLeave = true)}
-					>{t('cluster.leaveButton')}</button
-				>
-			</div>
-		</section>
+		<!-- Leaving is the destroying action of this page: its own tile at the end. -->
+		<DangerZone tile hint={t('cluster.leaveHint')}>
+			<button class="btn btn-danger" disabled={busy} onclick={() => (confirmLeave = true)}
+				>{t('cluster.leaveButton')}</button
+			>
+		</DangerZone>
 	{/if}
 {/if}
 

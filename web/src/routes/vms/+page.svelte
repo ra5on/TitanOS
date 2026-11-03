@@ -4,6 +4,7 @@
 	let cloning = $state<VM | null>(null);
 	// VMs: the list on the left, the chosen VM on the right with the tabs
 	// Overview, Screen and Snapshots.
+	import DangerZone from '#lib/components/DangerZone.svelte';
 	import Dropdown from '#lib/components/Dropdown.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -430,17 +431,6 @@
 									cloning = current;
 								}}><Icon name="copy" size={16} /><span>{t('ops.clone')}</span></button
 							>
-							<hr />
-							<button
-								type="button"
-								role="menuitem"
-								class="danger"
-								disabled={isBusy(current)}
-								onclick={() => {
-									close();
-									open('remove');
-								}}><Icon name="trash" size={16} /><span>{t('vms.remove')}</span></button
-							>
 						{/if}
 					{/snippet}
 				</Dropdown>
@@ -698,6 +688,18 @@
 						onchanged={load}
 						onsnapshots={() => goto(link(current, 'snapshots'), { replaceState: true })}
 					/>
+					<!-- Removing stands apart, at the end of the overview. -->
+					<DangerZone
+						tile
+						hint={t(current.state === 'running' ? 'vms.removeStopFirst' : 'vms.removeHint')}
+					>
+						<button
+							type="button"
+							class="btn btn-danger"
+							disabled={isBusy(current) || current.state === 'running'}
+							onclick={() => open('remove')}>{t('vms.remove')}</button
+						>
+					</DangerZone>
 				{:else if tab === 'snapshots'}
 					<Snapshots vm={current} />
 				{:else}
