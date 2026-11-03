@@ -251,6 +251,9 @@ type Manager struct {
 	// diskSleepAsleep are the disks sent to standby without activity
 	// since, by device name (RAM only).
 	diskSleepAsleep map[string]bool
+	// diskSleepTimes are when each disk went to standby and when activity
+	// was last seen after one, by device name (RAM only, protected by mu).
+	diskSleepTimes map[string]sleepTimes
 	// sleepSamples is protected by actions, never persisted on the stick.
 	sleepSamples  map[string]sleepSample
 	btrfsProgress map[string]btrfsProgress

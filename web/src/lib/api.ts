@@ -392,6 +392,8 @@ export type DiskSleepDisk = {
 	effective: number;
 	origin: DiskSleepOrigin;
 	state: 'asleep' | 'active';
+	/** RFC 3339: since when asleep, or when last woken while active; absent when unknown. */
+	since?: string;
 	error?: string;
 };
 export type DiskSleepUnavailable = {
