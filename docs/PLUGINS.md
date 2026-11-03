@@ -8,7 +8,7 @@ zum Kernel seiner Systembasis:
 | Plugin | Inhalt | Voraussetzung |
 | --- | --- | --- |
 | `nvidia` | offene NVIDIA-Kernelmodule, CUDA/NVENC/NVDEC-Bibliotheken, NVML und CDI für Docker, siehe [NVIDIA](NVIDIA.md) | NVIDIA-GPU ab Turing |
-| `nvidia-legacy` | proprietäres NVIDIA-Kernelmodul der Reihe 580 mit denselben Bibliotheken, NVML und CDI, siehe [NVIDIA](NVIDIA.md#ältere-karten-nvidia-legacy) | NVIDIA-GPU der Generation Maxwell, Pascal oder Volta; nie zusammen mit `nvidia` |
+| `nvidia-legacy` | proprietäres NVIDIA-Kernelmodul der Reihe 580 mit denselben Bibliotheken, NVML und CDI, siehe [NVIDIA](NVIDIA.md#ältere-karten-nvidia-legacy); **derzeit nicht gebaut** (NVIDIAs Debian-13-Archiv führt die Reihe 580 nicht mehr, Entscheidung 3.11.2026) | NVIDIA-GPU der Generation Maxwell, Pascal oder Volta; nie zusammen mit `nvidia` |
 | `intel-gpu-tools` | Debian Intel GPU Tools, unter anderem `intel_gpu_top`, zusätzliche Bibliotheken und deren Lizenz-/Quellverzeichnis | Intel-GPU mit funktionierendem Kernel-Treiber; einzelne Tools benötigen bestimmte Generationen |
 | `coral-usb` | USB-Erkennung und `titanos-coral-info`, Zuordnung für Container | Coral USB; die verwendete App bringt die TPU-Laufzeit mit |
 | `tailscale` | Tailscale mit Subnet-Routing und Exit Node, siehe [Tailscale](TAILSCALE.md) | Tailscale-Konto |

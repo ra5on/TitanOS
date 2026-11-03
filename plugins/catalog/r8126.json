@@ -33,7 +33,7 @@
         "Plugins werden erst nach dem Einbinden des Daten-Volumes geladen: bis dahin läuft der Anschluss mit r8169. Als einziger Verwaltungsanschluss geht er beim Wechsel kurz offline.",
         "Ein Chip, der einer VM gehört (vfio-pci), wird nicht angefasst.",
         "Die Module sind nicht mit dem Debian-Schlüssel signiert; der Kernel meldet beim Laden „tainted“ (Secure Boot ist bei TitanOS aus).",
-        "Gebaut je Kernel (Stabil und Neu) aus derselben festgelegten Quelle."
+        "Nur für Kernel „Stabil“: Die festgelegte Realtek-Quelle baut nicht gegen Linux ab 6.16, beim Kernel „Neu“ gibt es das Plugin daher nicht."
       ],
       "footprint": "Modulcode des Treibers (nicht gemessen); dazu Empfangs-/Sendepuffer je Anschluss."
     },
@@ -49,7 +49,7 @@
         "Plugins load only after the data volume is mounted: until then the port runs with r8169. As the only management port it goes offline briefly during the hand-over.",
         "A chip that belongs to a VM (vfio-pci) is left alone.",
         "The modules are not signed with Debian's key; the kernel reports \"tainted\" when loading them (Secure Boot is off on TitanOS).",
-        "Built per kernel (Stable and New) from the same pinned source."
+        "Only for kernel \"Stable\": the pinned Realtek source does not build against Linux 6.16 or later, so there is no plugin with kernel \"New\"."
       ],
       "footprint": "The driver's module code (not measured), plus receive/transmit buffers per port."
     }
