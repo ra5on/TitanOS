@@ -12,6 +12,7 @@
 	// Backups of shares to another volume, another server or the cloud.
 	import { api, ApiError } from '#lib/api.ts';
 	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
+	import DangerZone from '#lib/components/DangerZone.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -941,15 +942,19 @@
 							class="btn"
 							aria-label={t('backup.editNamed', { name: job.id })}
 							onclick={() => edit(view)}>{t('backup.edit')}</button
-						>
-						<button
-							type="button"
-							class="btn"
-							aria-label={t('backup.removeNamed', { name: job.id })}
-							onclick={() => ((removing = job), (removeError = ''))}>{t('backup.remove')}</button
 						>{/if}
 				{/if}
 			</div>
+			{#if !state.running && !restoreOnly}
+				<DangerZone hint={t('backup.removeHint')}>
+					<button
+						type="button"
+						class="btn btn-danger"
+						aria-label={t('backup.removeNamed', { name: job.id })}
+						onclick={() => ((removing = job), (removeError = ''))}>{t('backup.remove')}</button
+					>
+				</DangerZone>
+			{/if}
 		</section>
 	{:else}
 		{#if !draft}<div class="tile panel"><p class="muted">{t('backup.none')}</p></div>{/if}

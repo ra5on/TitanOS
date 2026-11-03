@@ -3,6 +3,7 @@
 	// networks/VLANs, Docker, VM/LXC NAT) and source networks. A network is
 	// in at most one zone; picking it here takes it out of another one.
 	import type { FirewallConfig, FirewallNetwork, FirewallZoneDef } from '#lib/api.ts';
+	import DangerZone from '#lib/components/DangerZone.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { zoneOfNetwork, zoneProblem } from '#lib/firewall.ts';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
@@ -119,12 +120,14 @@
 		>
 		<p class="muted small">{t('firewall.zoneSourcesHint')}</p>
 		{#if problem}<p class="notice-warn" role="alert">{t(problem as MessageKey)}</p>{/if}
+		{#if onremove}
+			<DangerZone hint={t('firewall.zoneRemoveHint')}>
+				<button type="button" class="btn btn-danger" onclick={() => (confirmRemove = true)}
+					>{t('firewall.zoneRemove')}</button
+				>
+			</DangerZone>
+		{/if}
 		<div class="dialog-actions">
-			{#if onremove}<button
-					type="button"
-					class="btn btn-warn"
-					onclick={() => (confirmRemove = true)}>{t('firewall.zoneRemove')}</button
-				>{/if}
 			<button type="button" class="btn" onclick={onclose}>{t('common.cancel')}</button>
 			<button type="submit" class="btn btn-primary" disabled={!!problem}
 				>{t('firewall.zoneApply')}</button
