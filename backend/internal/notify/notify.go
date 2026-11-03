@@ -168,6 +168,8 @@ type Manager struct {
 	mu       sync.Mutex
 	loaded   bool
 	settings Settings
+	// mutes are the temperature sensors that raise no notification.
+	mutes    map[string]bool
 	messages []Message
 	nextID   int
 	// bellLoaded says the kept messages were read (bell_keep.go).
@@ -219,6 +221,9 @@ func (m *Manager) Load() error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.loadMutesLocked(); err != nil {
+		return err
+	}
 	m.settings, m.loaded = settings, true
 	return nil
 }

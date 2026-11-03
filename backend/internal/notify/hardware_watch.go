@@ -110,16 +110,11 @@ func (w *HardwareWatcher) look() {
 				delete(w.hotLooks, t.ID)
 				continue
 			}
-			// A chip not known as reliable counts only with a critical value of
-			// its own; a missing or meaningless one (≤ 40 °C, as unused inputs
-			// of Super-I/O chips report) does not make it trustworthy.
-			ownCritical := t.Critical != nil && *t.Critical > 40
-			if !ownCritical && t.Chip != "" && !reliableChips[t.Chip] {
+			limit, alarms := AlarmLimit(t.Chip, t.Critical)
+			if !alarms || w.notify.TemperatureMuted(t.ID) {
+				delete(w.hotLooks, t.ID)
+				delete(w.hot, t.ID)
 				continue
-			}
-			limit := 95.0
-			if t.Critical != nil && *t.Critical > 40 {
-				limit = *t.Critical - hotMargin
 			}
 			name := t.Label
 			if name == "" {
