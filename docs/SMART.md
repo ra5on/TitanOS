@@ -53,6 +53,16 @@ Seit 0.41.0 (Entscheidung des Projektinhabers vom 31.10.2026, PLAN 7e) behält T
 - **Zeitpunkt:** drei Minuten nach dem Start, danach stündlicher Blick; geschrieben wird höchstens einmal je Platte und Tag. Im Entwicklungsmodus wird nichts geschrieben und nichts gelesen.
 - **Anzeige:** In der SMART-Übersicht zeigt das Detail einer Platte den Abschnitt „Verlauf“: die Temperatur als Linie (mit Text für Screenreader), eine Tabelle mit erstem und neuestem Wert je Zähler und „gestiegen, zuerst am …“ (Text, nicht nur Farbe) und auf Wunsch die letzten 14 Tage.
 
+## Kurz- und Langtest als Wartung
+
+Seit 0.41.0 ist der **SMART-Kurztest** eine eigene Wartungsart neben dem
+Langtest (Werkzeuge › Wartung). Beide laufen als gewöhnliche Wartungsaufträge
+nach Zeitplan, auf Wunsch auch alle N Stunden (1–168). Beim Anlegen eines
+Volumes sind Kurztest wöchentlich, Langtest und RAID-Prüfung bzw. Scrub
+monatlich vorausgewählt und abwählbar. Ein fehlgeschlagener Auftrag erzeugt
+die Meldung „Wartung … fehlgeschlagen“ mit Einzelheiten unter Werkzeuge ›
+Wartung.
+
 ## Diagnosepaket
 
 Das Diagnosepaket (Werkzeuge) enthält seit 0.28.0 `smart.json`: je Platte Zustand, `sleeping`, `checkedAt`, `readAt` und die vollständige smartctl-Antwort der angezeigten Werte. Vor dem Packen werden wache Platten über den 30-Sekunden-Cache neu gelesen (höchstens zwei Minuten); schlafende werden nicht geweckt und liefern ihre letzten Werte oder keine. Seriennummern, WWN, `logical_unit_id`, EUI-64/NGUID und die lokale Uhrzeit werden aus dem JSON entfernt, danach läuft der übliche Redaktor darüber.

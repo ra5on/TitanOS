@@ -162,6 +162,14 @@ mit `"content": true` sucht dann im Index:
 - `ffmpeg` gehört ab dieser Version zum Systemabbild; das erfordert ein volles
   Systemrelease. Auf einer älteren Basis bleiben Videos ohne Vorschaubild.
 
+### Schutz beim Lesen fremder Dateien
+
+Vorschaubilder (ffmpeg), PDF-Werkzeuge und Texterkennung (tesseract)
+verarbeiten Dateien, die Nutzer hochladen. Seit 0.41.0 laufen sie deshalb in
+einer Sandbox: eigener Wegwerf-Benutzer, kein Netzwerk, nur lesender Zugriff
+auf die eine Eingabedatei, das übrige System schreibgeschützt. Eine präparierte
+Datei kann so weder Daten verändern noch etwas nach außen schicken.
+
 ## Prüfstand
 
 Go-Tests: `internal/thumbs` (EXIF-Ausrichtung und -Datum, Transparenz,

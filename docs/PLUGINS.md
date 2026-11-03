@@ -74,6 +74,9 @@ nach dem Aktualisieren.
 Neben dem offiziellen Katalog und Dateien in Freigaben lassen sich Plugins aus
 dem Internet hinzufügen (nur Besitzer/Administratoren):
 
+Plugins und Plugin-Kataloge lädt TitanOS seit 0.41.0 nur über `https://`;
+Adressen mit `http://` werden abgelehnt. Die Signaturprüfung gilt unverändert.
+
 - **Von Link hinzufügen …:** Link auf `<name>.plugin.json`; das Abbild
   `<name>.raw` (und optional `<name>.plugin.json.minisig`) liegt im selben
   Ordner. **Prüfen** liest nur das Manifest; **Herunterladen und installieren**
