@@ -236,8 +236,15 @@
 		flex: 1 1 auto;
 	}
 	@media (max-width: 760px) {
-		.name {
+		.account:not(.side) .name {
 			display: none;
+		}
+		/* In the phone's drawer: across the bottom of the screen. */
+		.side .menu {
+			left: 12px;
+			right: 12px;
+			bottom: calc(12px + env(safe-area-inset-bottom));
+			width: auto;
 		}
 	}
 </style>

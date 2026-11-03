@@ -1,6 +1,7 @@
 <script lang="ts" module>
 	// Line icons drawn for TitanOS on a 24 px grid; they take the text color.
 	const PATHS = {
+		menu: 'M4 6h16M4 12h16M4 18h16',
 		activity: 'M3 12h4l3-8 4 16 3-8h4',
 		clock: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM12 7v5l3 2',
 		chip: 'M6 6h12v12H6ZM9 9h6v6H9ZM9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3',

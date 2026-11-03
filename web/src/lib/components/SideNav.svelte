@@ -4,6 +4,8 @@
 	// header. There is no head line and no status bar then; their content
 	// sits at the bottom: status, tools, account, "Collapse". Folded it
 	// shows only the symbols; whether it is folded is remembered per browser.
+	// On a phone (`drawer`) the same sidebar slides in from the left, always
+	// unfolded, with a close button instead of "Collapse".
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
@@ -19,17 +21,23 @@
 	import AccountMenu from './AccountMenu.svelte';
 
 	/** `tasks`: the badge for running tasks; `note` replaces the volume state. */
-	let { tasks = true, note = '' }: { tasks?: boolean; note?: string } = $props();
+	let {
+		tasks = true,
+		note = '',
+		drawer = false,
+		onclose,
+	}: { tasks?: boolean; note?: string; drawer?: boolean; onclose?: () => void } = $props();
 
 	const KEY = 'titanos.nav.folded';
 
 	const role = $derived(session.data?.user?.role ?? 'user');
 	const items = $derived(visibleNav(navForRole(role, session.services), appearance.current.nav));
-	let folded = $state(false);
+	let foldedChoice = $state(false);
+	const folded = $derived(!drawer && foldedChoice);
 
 	onMount(() => {
 		try {
-			folded = localStorage.getItem(KEY) === '1';
+			foldedChoice = localStorage.getItem(KEY) === '1';
 		} catch {
 			// Without storage the sidebar starts unfolded.
 		}
@@ -37,6 +45,7 @@
 
 	// Menus beside the sidebar and the terminal panel start where it ends.
 	$effect(() => {
+		if (drawer) return;
 		const root = document.documentElement.style;
 		root.setProperty('--side-nav-width', folded ? '68px' : '236px');
 		return () => root.removeProperty('--side-nav-width');
@@ -54,9 +63,9 @@
 	}
 
 	function toggle() {
-		folded = !folded;
+		foldedChoice = !foldedChoice;
 		try {
-			localStorage.setItem(KEY, folded ? '1' : '0');
+			localStorage.setItem(KEY, foldedChoice ? '1' : '0');
 		} catch {
 			// Only this page view keeps the choice.
 		}
@@ -71,10 +80,19 @@
 <aside
 	class="side-nav bar-surface"
 	class:folded
+	class:drawer
 	class:magnify={appearance.current.nav.magnify}
 	aria-label={t('nav.label')}
 >
-	<a class="brand" href="/" aria-label="TitanOS"><Logo size={28} wordmark={!folded} /></a>
+	<div class="head">
+		<a class="brand" href="/" aria-label="TitanOS"><Logo size={28} wordmark={!folded} /></a>
+		{#if drawer}<button
+				type="button"
+				class="close"
+				aria-label={t('nav.closeMenu')}
+				onclick={onclose}><Icon name="close" size={20} /></button
+			>{/if}
+	</div>
 	{#if clusterNodes.nodes.length > 1}<NodeMenu variant={folded ? 'badge' : 'card'} />{/if}
 	<nav onpointerover={placeLabel} onfocusin={placeLabel} ontransitionend={placeLabel}>
 		{#each items as item (item.href)}
@@ -91,17 +109,17 @@
 		<QuickTools side stacked={folded} />
 		<AccountMenu side {folded} />
 	</div>
-	<button
-		type="button"
-		class="fold"
-		aria-expanded={!folded}
-		aria-label={t(folded ? 'nav.unfold' : 'nav.fold')}
-		title={t(folded ? 'nav.unfold' : 'nav.fold')}
-		onclick={toggle}
-		><Icon name={folded ? 'chevronRight' : 'chevronLeft'} size={19} /><span class="label"
-			>{t('nav.fold')}</span
-		></button
-	>
+	{#if !drawer}<button
+			type="button"
+			class="fold"
+			aria-expanded={!folded}
+			aria-label={t(folded ? 'nav.unfold' : 'nav.fold')}
+			title={t(folded ? 'nav.unfold' : 'nav.fold')}
+			onclick={toggle}
+			><Icon name={folded ? 'chevronRight' : 'chevronLeft'} size={19} /><span class="label"
+				>{t('nav.fold')}</span
+			></button
+		>{/if}
 </aside>
 
 <style>
@@ -118,6 +136,31 @@
 		gap: 8px;
 		padding: 14px 12px;
 		border-right: 1px solid var(--border);
+	}
+	.head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+	}
+	.close {
+		display: grid;
+		place-items: center;
+		width: 44px;
+		height: 44px;
+		margin: -5px -6px -5px 0;
+		border: 0;
+		border-radius: var(--radius-ctl);
+		background: transparent;
+		color: var(--muted);
+		cursor: pointer;
+	}
+	.close:hover {
+		background: var(--chip);
+		color: var(--text);
+	}
+	.close:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
 	}
 	.brand {
 		display: flex;
@@ -198,6 +241,9 @@
 		align-items: center;
 		padding: 14px 10px;
 	}
+	.folded .head {
+		justify-content: center;
+	}
 	.folded .brand {
 		padding: 0;
 		justify-content: center;
@@ -274,9 +320,21 @@
 		}
 	}
 	@media (max-width: 760px) {
-		.side-nav {
+		.side-nav:not(.drawer) {
 			display: none;
 		}
+	}
+	/* The phone's drawer: as high as the screen, rows tall enough for a finger. */
+	.drawer {
+		position: static;
+		width: min(300px, 84vw);
+		height: 100%;
+		border-right: 0;
+		padding-top: calc(14px + env(safe-area-inset-top));
+		padding-bottom: calc(14px + env(safe-area-inset-bottom));
+	}
+	.drawer nav a {
+		height: 44px;
 	}
 	@media print {
 		.side-nav {

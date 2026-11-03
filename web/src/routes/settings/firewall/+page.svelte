@@ -447,5 +447,7 @@
 		position: sticky;
 		bottom: 12px;
 		z-index: 2;
+		/* Beside the round menu button of "Side" navigation on a phone. */
+		margin-left: var(--fab-clear, 0px);
 	}
 </style>
