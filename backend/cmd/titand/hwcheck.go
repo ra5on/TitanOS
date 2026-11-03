@@ -16,5 +16,12 @@ func (w *titand) hardwareCheck() *hwcheck.Checker {
 		}
 		return result
 	}
+	checker.NewKernel = func() string {
+		if w.updates == nil {
+			return ""
+		}
+		_, newer := w.updates.NewestKernels()
+		return newer
+	}
 	return checker
 }

@@ -13,6 +13,12 @@
 		unbound.filter((device) => device.hint === 'not_needed' || device.hint === 'unclassified'),
 	);
 
+	// Whether the kernel choice "Neu" brings the fix; "7.2.11+deb13-amd64" reads as 7.2.11.
+	const newKernelText = (device: UnboundDevice) =>
+		t(device.newKernelFixes ? 'hwcheck.hint.newKernelFixes' : 'hwcheck.hint.newKernelLacks', {
+			kernel: device.newKernel?.match(/^[0-9]+(\.[0-9]+)*/)?.[0] ?? device.newKernel ?? '',
+		});
+
 	function hintText(device: UnboundDevice): string {
 		switch (device.hint) {
 			case 'plugin': {
@@ -22,14 +28,15 @@
 					plugins: (device.plugins ?? []).map((plugin) => plugin.title).join(', '),
 				});
 			}
-			case 'kernel':
-				return t('hwcheck.hint.kernel', {
-					version: device.kernel ?? '',
-					driver: device.driver ?? '',
-				});
+			case 'kernel': {
+				const args = { version: device.kernel ?? '', driver: device.driver ?? '' };
+				if (!device.newKernel) return t('hwcheck.hint.kernel', args);
+				return t('hwcheck.hint.kernelFrom', args) + ' ' + newKernelText(device);
+			}
 			case 'driver_failed': {
 				const parts = [t('hwcheck.hint.driver_failed', { driver: device.driver ?? '' })];
 				if (device.kernel) parts.push(t('hwcheck.hint.driverFixed', { version: device.kernel }));
+				if (device.kernel && device.newKernel) parts.push(newKernelText(device));
 				if (device.driver === 'vmd') parts.push(t('hwcheck.hint.driverVmd'));
 				return parts.join(' ');
 			}

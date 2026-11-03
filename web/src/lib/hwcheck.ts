@@ -13,6 +13,9 @@ export type UnboundDevice = {
 	plugins?: PluginHint[];
 	/** hint kernel: first kernel with a driver; driver_failed: first kernel with the fix. */
 	kernel?: string;
+	/** The kernel of the choice "Neu" in the newest release, if known, and whether it is at least kernel. */
+	newKernel?: string;
+	newKernelFixes?: boolean;
 	driver?: string;
 	/** hint driver_failed: the driver's kernel lines about the device. */
 	messages?: string[];

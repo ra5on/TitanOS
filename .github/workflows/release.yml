@@ -218,11 +218,7 @@ jobs:
             package=$(python3 scripts/plugin-set.py package "$image")
             fetch() { python3 scripts/plugin-set.py fetch --base "$VERSION" --kernel "$kernel" --kernel-package "$package" --dest "$dest"; }
             status=0; fetch || status=$?
-            # A set for the newer kernel is only fetched, not requested: its
-            # tag would carry the "~" of the backports version
-            # (7.2.11-1~bpo13+1), which git refuses (PLAN.md 30). The plugin
-            # repository can build it (kernelVariant) once the name is fixed.
-            if [ "$status" = 3 ] && [ "$REAL_TAG" = true ] && [ -z "$variant" ]; then
+            if [ "$status" = 3 ] && [ "$REAL_TAG" = true ]; then
               if [ -z "$GH_TOKEN" ]; then
                 echo "no plugin set for $kernel ($package) and no PLUGINS_DISPATCH_TOKEN to request one" >&2
                 exit 1
