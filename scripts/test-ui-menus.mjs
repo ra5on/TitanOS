@@ -207,7 +207,7 @@ try {
     const { ctx, page } = await open("owner", { theme: "graphit", style: "glass", bg: "shapes" });
     await page.goto(base + "/settings/appearance");
     const section = page.locator("#menus");
-    await section.getByRole("heading", { name: "Menüs und Fenster" }).waitFor();
+    await section.getByRole("heading", { name: "Menüs, Fenster und Leisten" }).waitFor();
     const preview = page.locator(".preview .menu.floating-menu");
     assert.match((await surface(preview)).backdrop, /blur\(18px\)/);
     await section.getByRole("radiogroup", { name: "Menüs" }).getByRole("radio", { name: "Eigene Werte" }).click();
