@@ -48,7 +48,7 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 - **Tailnet im Blick:** Die Kachel „Tailscale“ (Besitzer/Administratoren) zeigt die Geräte des Tailnets. Pro Kachel wählst du Geräte und sortierbare Angaben: Online/Offline, Tailscale-IPv4/IPv6, Hostname, MagicDNS-Name, zuletzt gesehen, Betriebssystem, Exit Node, Subnet-Routen und eine Markierung für dieses NAS.
 - **NetBird-Netz im Blick:** Die Kachel „NetBird“ (Besitzer/Administratoren) zeigt die Geräte des NetBird-Netzes mit wählbaren, sortierbaren Angaben: verbunden, dieses NAS, NetBird-IP/IPv6, Name (FQDN), letzter Handshake, Verbindungsart (direkt oder über Relay) und Netze; optional nur verbundene Geräte.
 - **Direkt am Eintrag handeln:** passende Klickmenüs für Docker, VMs, Shares und Volumes. Docker zeigt die konfigurierten App-Icons; Stacks sind zunächst geschlossen. Details einer VM öffnen sich unmittelbar unter dieser VM.
-- **Klare Rückfragen statt Eintippen:** Löschen, Überschreiben, Plattentests, Zwei-Faktor-Zurücksetzen, SSH-Schlüssel und Zertifikate entfernen bestätigt man in einem Dialog, der genau nennt, was passiert. Namen müssen nirgends eingetippt werden; „Abbrechen“ hat den Fokus, Enter löst nie die gefährliche Aktion aus.
+- **Klare Rückfragen statt Eintippen:** Löschen, Überschreiben, Plattentests, Zwei-Faktor-Zurücksetzen, SSH-Schlüssel und Zertifikate entfernen bestätigt man in einem Dialog, der genau nennt, was passiert. Namen müssen nirgends eingetippt werden; „Abbrechen“ hat den Fokus, Enter löst nie die gefährliche Aktion aus. Zerstörende Knöpfe stehen auf Detailseiten gesammelt in einer abgesetzten „Gefahrenzone“ am Ende. Fachbegriffe wie Write-Intent-Bitmap, Bridge, VLAN oder Token-Bereiche erklärt ein „?“ direkt daneben.
 - **Visueller Editor mit Vorschau:** eine haftende Leiste bündelt Kachel hinzufügen, Spalten, Mindestbreite, Rückgängig, Wiederholen, Standard, Abbrechen und Speichern (auch per Strg/⌘+Z/Y/S); Änderungen siehst du sofort.
 
 [![Dashboard-Editor mit haftender Editorleiste und den Inhaltsoptionen der ausgewählten Docker-Kachel](docs/screenshots/current/dashboard-editor.png)](docs/screenshots/current/dashboard-editor.png)
@@ -65,7 +65,7 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 - **SSD-Cache:** eine SSD vor ein bestehendes RAID setzen, ohne Neuformatieren. Wahlweise nur als Lesecache (sicher, falls die SSD ausfällt) oder als Lese- und Schreibcache; ab Werk aus. [Einzelheiten](docs/SSD-CACHE.md).
 - **Verschlüsselung (optional):** ein Volume beim Anlegen mit LUKS2 verschlüsseln, ab Werk aus. Nach jedem Start bleibt es gesperrt, bis jemand das Passwort in der Weboberfläche eingibt; erst dann starten Freigaben, Apps, VMs und Container darauf. Passwörter ändern oder ergänzen, sperren und Header-Sicherung herunterladen auf der Speicher-Seite. [Einzelheiten](docs/ENCRYPTION.md).
 - **Platte tauschen:** ein Assistent führt durch den Tausch einer ausgefallenen, fehlenden oder alternden Platte; eine noch arbeitende Platte eines mdadm-Volumes wird im laufenden Betrieb kopiert, ohne dass das Volume seine Redundanz verliert. „Platte finden“ lässt die Aktivitätsanzeige flackern. [Einzelheiten](docs/DISK-SWAP.md).
-- **Plattenzustand und Vorbereitung:** SMART, Temperatur, Betriebsstunden, Fehler und Verschleiß; neue Laufwerke vollständig lesen oder überschreiben und zurücklesen, anschließend einen langen Selbsttest ausführen. Ruhezustand der Festplatten als Standard und abweichend je Volume oder je Platte. [Einzelheiten](docs/DISK-SLEEP.md).
+- **Plattenzustand und Vorbereitung:** SMART, Temperatur, Betriebsstunden, Fehler und Verschleiß; neue Laufwerke vollständig lesen oder überschreiben und zurücklesen, anschließend einen langen Selbsttest ausführen. Ruhezustand der Festplatten als Standard und abweichend je Volume oder je Platte, mit „schläft seit“ bzw. „zuletzt geweckt“ je Platte; erreichbar auch unter Einstellungen › Energie. [Einzelheiten](docs/DISK-SLEEP.md).
 - **Verbrauch verstehen:** kompakte Volume- und Laufwerkslisten mit Details auf Auswahl, Speicheranalyse auf Anforderung und optionale Kapazitätsprognosen aus gültigen Monitoring-Verläufen.
 
 [![Speicherübersicht mit drei Volumes und den Details eines RAID5-Volumes](docs/screenshots/current/speicher.png)](docs/screenshots/current/speicher.png)
@@ -195,7 +195,7 @@ Die VM-Einrichtung zeigt kompakte Kacheln mit einer gemeinsamen Zusammenfassung.
 
 - **Persönliche API-Zugänge:** benannte, widerrufbare Tokens mit bewusst gewählten Bereichen und aktuellen Konto-/Share-Rechten. Standard nur lesend, Geheimnis einmalig sichtbar, ausschließlich sein Hash wird gespeichert.
 - **OpenAPI und CLI:** dokumentierter API-Vertrag und statisches `titanosctl` für Status, Dateien sowie erlaubte Docker-/VM-Aktionen. [Verwendung](docs/PUBLIC-API.md).
-- **MCP-Server (optional, ab Werk aus):** Claude Desktop, Claude Code und andere MCP-Clients arbeiten mit den Rechten eines persönlichen Tokens am NAS: Zustand, Speicher, Freigaben, Dateien und Dokumente (Word, Excel, PDF), Docker, VMs, Sicherungen, Firewall-Regeln, Konten, Plugins, Updates, Neustart/Ausschalten, freigegebene Home-Assistant-Geräte und das Handbuch. Verwaltungsaktionen brauchen den Token-Bereich `system:write` (nur Besitzer/Administratoren). Jedes Werkzeug lässt sich einzeln ausschalten; gefährliche und zerstörende Aufrufe sind ab Werk gesperrt und laufen erst nach ausdrücklicher Freischaltung und mit Bestätigung des Clients. Geheimnisse, Passwörter, Konsolen und Netzwerkbestätigung bleiben außen vor; jeder Aufruf steht im Aktivitätsprotokoll. [Einrichtung](docs/MCP.md).
+- **MCP-Server (optional, ab Werk aus):** Claude Desktop, Claude Code und andere MCP-Clients arbeiten mit den Rechten eines persönlichen Tokens am NAS: Zustand, Speicher, Freigaben, Dateien und Dokumente (Word, Excel, PDF), Docker, VMs, Sicherungen, Firewall-Regeln, Konten, Plugins, Updates, Neustart/Ausschalten, freigegebene Home-Assistant-Geräte und das Handbuch. Verwaltungsaktionen brauchen den Token-Bereich `system:write` (nur Besitzer/Administratoren). Jedes Werkzeug lässt sich einzeln ausschalten; gefährliche und zerstörende Aufrufe sind ab Werk gesperrt und laufen erst nach ausdrücklicher Freischaltung und mit Bestätigung des Clients. Geheimnisse, Passwörter, Konsolen und Netzwerkbestätigung bleiben außen vor; jeder Aufruf steht im Aktivitätsprotokoll. Die eigene MCP-Seite unter Einstellungen zeigt allen Konten Zustand, Endpunkt und Verbindungsanleitung samt Token-Knopf; Schalter, Werkzeuge und letzte Aufrufe sehen nur Besitzer und Administratoren. [Einrichtung](docs/MCP.md).
 
 ### Netzwerk, Energie und Systemzugang
 
@@ -225,15 +225,16 @@ Die VM-Einrichtung zeigt kompakte Kacheln mit einer gemeinsamen Zusammenfassung.
 - **Navigation oben oder seitlich:** Reiter oben oder eine einklappbare Seitenleiste ohne Kopf- und Statusleiste; auf dem Handy dann ein runder Menüknopf unten links, der die Seitenleiste hereinschiebt (auch per Wischen vom Rand). Reihenfolge und ausgeblendete Bereiche je Konto.
 - **Dienste nach Bedarf:** Docker, VMs und LXC lassen sich unter Einstellungen › Dienste ausschalten; ihr Reiter verschwindet, die Daten bleiben.
 
-[![Einstellungen mit Seitenleiste und sechs Gruppen; Firewall, Let's Encrypt, Dynamisches DNS und IPv64 als neu markiert](docs/screenshots/current/einstellungen.png)](docs/screenshots/current/einstellungen.png)
+[![Einstellungen mit Seitenleiste in sieben Gruppen, „Braucht Aufmerksamkeit“ und „Dieses NAS“](docs/screenshots/current/einstellungen.png)](docs/screenshots/current/einstellungen.png)
 
 [![Gestaltete Anmeldeseite: Glaskarte mit Uhr und Begrüßung „Willkommen zu Hause“ über dem Motiv Nordlicht](docs/screenshots/current/anmeldeseite.png)](docs/screenshots/current/anmeldeseite.png)
 
 [Einstellungen › Darstellung mit Seitenleiste, Theme, Akzent und Vorschau](docs/screenshots/current/darstellung.png) · [Anmeldeseite gestalten](docs/LOGIN-APPEARANCE.md)
 
 <p align="center">
-  <a href="docs/screenshots/current/dashboard-mobil.png"><img src="docs/screenshots/current/dashboard-mobil.png" alt="Dashboard auf einem Smartphone" width="300"></a>
-  <a href="docs/screenshots/current/dateien-mobil.png"><img src="docs/screenshots/current/dateien-mobil.png" alt="Dateimanager auf einem Smartphone" width="300"></a>
+  <a href="docs/screenshots/current/dashboard-mobil.png"><img src="docs/screenshots/current/dashboard-mobil.png" alt="Dashboard auf einem Smartphone" width="260"></a>
+  <a href="docs/screenshots/current/dateien-mobil.png"><img src="docs/screenshots/current/dateien-mobil.png" alt="Dateimanager auf einem Smartphone" width="260"></a>
+  <a href="docs/screenshots/current/navigation-mobil.png"><img src="docs/screenshots/current/navigation-mobil.png" alt="Navigation „Seitlich“ auf dem Smartphone: Seitenleiste als Schublade von links" width="260"></a>
 </p>
 
 ### Updates mit geprüftem Rückfall

@@ -2,9 +2,7 @@
 
 `current/` enthält die aktuellen Aufnahmen für die Projekt-README und die Fachdokumente.
 
-**Aufnahmestand:** die Bilder aus `capture.mjs` sowie Firewall, VM erstellen, Protokoll, Dateien ersetzen und Dateiaufträge zeigen die gebaute Svelte-WebUI von **TitanOS 0.41.0** (Stand vor der Veröffentlichung, Zweig `grossumbau-0.41`), aufgenommen am **31. Oktober 2026** mit Chromium (Playwright), Theme Graphit, blauer Akzent, Glasflächen, Deutsch. Die Statuszeile von Firewall, VM erstellen und Protokoll nennt die Version der jeweiligen Prüfskripte. Einstellungen, Arbeitsspeicher, App-Images, Netzwerk, Docker-LAN, API-Zugänge, VM-Medien und Plugin-Aufräumen sind noch Aufnahmen von **0.31.0**: `test-ui-firewall.mjs` liefert für die Übersicht derzeit keine brauchbare Aufnahme, `test-ui-memory-images.mjs` und `test-ui-023.mjs` scheitern an veralteten Erwartungen der Skripte (beides nachzuziehen).
-
-**Veraltet (Prüfung 31.10.2026, Plan 9f):** `einstellungen.png` zeigt noch die Übersicht mit zweiter Liste und `docker.png` die frühere Tabelle mit Spalte „PORTS“. Die WebUI zeigt beides so nicht mehr (Übersicht nur „Braucht Aufmerksamkeit“ und „Dieses NAS“, Docker-Liste als Kacheln); die Bilder werden mit der nächsten vollständigen Aufnahme ersetzt.
+**Aufnahmestand:** die Bilder aus `capture.mjs` (einschließlich Einstellungen) sowie Firewall, VM erstellen, Protokoll, Dateien ersetzen, Dateiaufträge und Navigation auf dem Handy zeigen die gebaute Svelte-WebUI von **TitanOS 0.47.1** (Stand nach 0.47.1, Zweig `feat/kleine-punkte-c`), aufgenommen am **3. November 2026** mit Chromium (Playwright), Theme Graphit, blauer Akzent, Glasflächen, Deutsch. Die Statuszeile von Firewall, VM erstellen und Protokoll nennt die Version der jeweiligen Prüfskripte. Arbeitsspeicher, App-Images, Netzwerk, Docker-LAN, API-Zugänge, VM-Medien und Plugin-Aufräumen sind noch Aufnahmen von **0.31.0**: `test-ui-memory-images.mjs` und `test-ui-023.mjs` scheitern an veralteten Erwartungen der Skripte (nachzuziehen).
 
 Alle NAS-Antworten werden durch isolierte Demonstrationsdaten ersetzt. Hostname, Konten, Dateien, Laufwerke, Adressen und Messwerte sind Beispiele. Es werden weder echte NAS-Geräte angesprochen noch Container oder VMs gestartet. Die sichtbaren App-Icons sind die konfigurierten Originalbilder der jeweiligen Projekte. Ihre Quellen und SHA-256-Werte stehen in [icon-sources.json](icon-sources.json); Namen und Logos gehören den jeweiligen Projekten. Keine nachträgliche Bildbearbeitung oder eingebauten Design-Mockups. Die Bilder ersetzen keine Funktions- oder Hardwareprüfung.
 
@@ -25,11 +23,12 @@ Alle NAS-Antworten werden durch isolierte Demonstrationsdaten ersetzt. Hostname,
 | [dateien.png](current/dateien.png) | Dateimanager mit Ordnern und Dokumenten | Desktop 1600, vollständige Seite |
 | [docker.png](current/docker.png) | Geschlossene Stacks und einzelne Container | Desktop 1600, vollständige Seite |
 | [vms.png](current/vms.png) | Liste und Übersicht einer ausgewählten VM | Desktop 1600, vollständige Seite |
-| [einstellungen.png](current/einstellungen.png) | Einstellungsübersicht mit Seitenleiste, sechs Gruppen und „neu“-Abzeichen | Desktop 1440, vollständige Seite |
+| [einstellungen.png](current/einstellungen.png) | Einstellungsübersicht mit Seitenleiste in sieben Gruppen, „Braucht Aufmerksamkeit“ und „Dieses NAS“ | Desktop 1440, vollständige Seite |
 | [firewall.png](current/firewall.png) | Firewall eingeschaltet: Zonen und Dienste, Docker-Apps, eigene Regeln, automatisches Sperren, zuletzt verworfene Pakete | Desktop 1440, vollständige Seite |
 | [anmeldeseite.png](current/anmeldeseite.png) | Gestaltete Anmeldeseite (abgemeldet): Theme Mitternacht, Akzent Türkis, Glaskarte über dem Motiv Nordlicht, Uhr, Überschrift „Willkommen zu Hause“, Hinweis „Nur für die Familie.“ | Desktop 1600 × 900 |
 | [dashboard-mobil.png](current/dashboard-mobil.png) | Oberer Ausschnitt der gestapelten Startseite | Smartphone 390 × 844 |
 | [dateien-mobil.png](current/dateien-mobil.png) | Ortsauswahl und Dateiliste | Smartphone 390 × 844 |
+| [navigation-mobil.png](current/navigation-mobil.png) | Navigation „Seitlich“ auf dem Handy: geöffnete Schublade mit Bereichen, Status, Werkzeugen und Konto | Smartphone 390 × 844 |
 
 ## Weitere Aufnahmen
 
@@ -55,11 +54,12 @@ Nicht in der README eingebunden; die VM- und Protokollbilder verlinkt [VM-CREATE
 
 ## Herkunft je Bild
 
-`docs/screenshots/capture.mjs` nimmt die README-Bilder außer Einstellungen und Firewall auf. Die übrigen Bilder stammen unverändert aus der Ausgabe der Browserprüfungen, die dabei zugleich ihre Funktionsprüfungen bestehen müssen:
+`docs/screenshots/capture.mjs` nimmt die README-Bilder außer Firewall und Navigation auf dem Handy auf. Die übrigen Bilder stammen unverändert aus der Ausgabe der Browserprüfungen, die dabei zugleich ihre Funktionsprüfungen bestehen müssen:
 
 | Skript | Ausgabe → Datei in `current/` |
 |---|---|
-| `scripts/test-ui-firewall.mjs` | `settings-overview-desktop.png` → `einstellungen.png`, `firewall-desktop-on.png` → `firewall.png` |
+| `scripts/test-ui-firewall.mjs` | `firewall-desktop-on.png` → `firewall.png` |
+| `scripts/test-ui-mobile-side-nav.mjs` | `offen-graphit-390.png` → `navigation-mobil.png` |
 | `scripts/test-ui-vm-create.mjs` | `graphit-1600-de.png` → `vm-erstellen.png`, `graphit-390-de.png` → `vm-erstellen-mobil.png`, `system-logs.png` → `protokoll.png` |
 | `scripts/test-ui-memory-images.mjs` | `ram-cache.png` → `arbeitsspeicher.png`, `stack-images.png` → `app-images.png`, `stack-images-mobile.png` → `app-images-mobil.png` |
 | `scripts/test-ui-copy-confirmation.mjs` | `replace-before-copy.png` → `dateien-ersetzen.png` |
