@@ -94,7 +94,6 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 		{ id: 'terminal', label: 'settings.consoles', href: '/settings/access#access-terminal' },
 		{ id: 'webdav', label: 'webdav.title', href: '/settings/access#access-webdav' },
 	],
-	api: [{ id: 'mcp', label: 'mcp.title', href: '/settings/api#api-mcp' }],
 	hardware: [{ id: 'intel-guc', label: 'intelGuc.title', href: '/settings/hardware#hw-intel' }],
 	network: [
 		{ id: 'hostname', label: 'netcfg.hostname', href: '/settings/network#net-system' },
@@ -352,7 +351,6 @@ export const settingsAreas: SettingsArea[] = [
 		label: 'mcp.pageTitle',
 		group: 'integrations',
 		icon: 'chat',
-		admin: true,
 		newSince: { version: '0.41.0', date: '2026-10-31' },
 	},
 	{ id: 'api', label: 'api.title', group: 'integrations', icon: 'key' },

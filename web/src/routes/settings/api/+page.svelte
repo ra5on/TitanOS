@@ -8,14 +8,8 @@
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { formatDate, formatDateTime } from '#lib/format.ts';
 	import { session } from '#lib/session.svelte.ts';
-	import {
-		claudeCodeCommand,
-		desktopBridgeConfig,
-		desktopRemoteConfig,
-		mcpEndpoint,
-		mcpTokenScopes,
-		type MCPStatus,
-	} from '#lib/mcp.ts';
+	import HelpTip from '#lib/components/HelpTip.svelte';
+	import { claudeCodeCommand, mcpEndpoint, mcpTokenScopes, type MCPStatus } from '#lib/mcp.ts';
 	type Token = { id: string; name: string; scopes: string[]; created: string; lastUsed?: string };
 	const labels: Record<string, MessageKey> = {
 		'system:read': 'api.scope.systemRead',
@@ -46,39 +40,18 @@
 		// A new token opens another way into the account: password (and code) first.
 		password = $state(''),
 		code = $state('');
+	// Only the path of the endpoint, for the snippet after creating an MCP
+	// token; the MCP server has its own page (Settings › MCP server).
 	let mcp = $state<MCPStatus | null>(null),
-		mcpBusy = $state(false),
-		mcpError = $state(''),
 		copiedSnippet = $state('');
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 	const origin = typeof location === 'undefined' ? '' : location.origin;
 	const endpoint = $derived(mcpEndpoint(origin, mcp?.path));
-	const snippets = $derived([
-		{ id: 'code', label: t('mcp.claudeCode'), text: claudeCodeCommand(endpoint) },
-		{ id: 'remote', label: t('mcp.desktopRemote'), text: desktopRemoteConfig(endpoint) },
-		{
-			id: 'bridge',
-			label: t('mcp.desktopBridge'),
-			text: desktopBridgeConfig(origin, '/home/me/.config/titanos-token'),
-		},
-	]);
 	async function loadMCP() {
 		try {
 			mcp = await api.get<MCPStatus>('/system/mcp');
-		} catch (e) {
-			mcpError = apiErrorText(e);
-		}
-	}
-	async function setMCP(enabled: boolean) {
-		mcpBusy = true;
-		mcpError = '';
-		try {
-			await api.put('/system/mcp', { enabled });
-			await loadMCP();
-		} catch (e) {
-			mcpError = apiErrorText(e);
-		} finally {
-			mcpBusy = false;
+		} catch {
+			// Without an answer the endpoint keeps the default path.
 		}
 	}
 	async function copySnippet(id: string, text: string) {
@@ -207,45 +180,7 @@
 </section>
 <section class="tile panel" id="api-mcp" aria-labelledby="api-mcp-title">
 	<h2 class="tile-title" id="api-mcp-title">{t('mcp.title')}</h2>
-	<p class="muted">{t('mcp.intro')}</p>
-	{#if admin}<p>{t('mcp.moved')} <a href="/settings/mcp">{t('mcp.movedLink')}</a></p>{/if}
-	{#if mcp}
-		{#if admin}<label class="check"
-				><input
-					type="checkbox"
-					checked={mcp.enabled}
-					disabled={mcpBusy}
-					onchange={(e) => setMCP(e.currentTarget.checked)}
-				/><span>{t('mcp.enabled')}</span></label
-			>{:else}<p>{t(mcp.enabled ? 'mcp.stateOn' : 'mcp.stateOff')}</p>
-			<p class="muted">{t('mcp.adminOnly')}</p>{/if}
-	{/if}
-	{#if mcpError}<div class="notice-error" role="alert">{mcpError}</div>{/if}
-	<div class="snippet">
-		<span>{t('mcp.endpoint')}</span>
-		<code class="mono">{endpoint}</code>
-		<button class="btn" onclick={() => copySnippet('endpoint', endpoint)}
-			>{t(copiedSnippet === 'endpoint' ? 'mcp.copied' : 'mcp.copy')}</button
-		>
-	</div>
-	<div class="row-actions">
-		<button class="btn" onclick={() => startCreate(mcpTokenScopes(admin), 'Claude')}
-			>{t('mcp.createToken')}</button
-		>
-	</div>
-	<p class="muted">{t('mcp.tokenHint')}</p>
-	{#each snippets as snippet (snippet.id)}
-		<div class="snippet block">
-			<span>{snippet.label}</span>
-			<pre class="mono">{snippet.text}</pre>
-			<button class="btn" onclick={() => copySnippet(snippet.id, snippet.text)}
-				>{t(copiedSnippet === snippet.id ? 'mcp.copied' : 'mcp.copy')}</button
-			>
-		</div>
-	{/each}
-	<p class="muted">{t('mcp.placeholder')}</p>
-	<p class="muted">{t('mcp.bridgeHint')}</p>
-	<p class="muted">{t('mcp.safety')}</p>
+	<p class="muted">{t('api.mcpMoved')} <a href="/settings/mcp">{t('mcp.pageTitle')}</a></p>
 </section>
 <p class="muted">{t('api.security')}</p>
 
@@ -260,7 +195,7 @@
 				/></label
 			>
 			<fieldset>
-				<legend>{t('api.scopes')}</legend
+				<legend>{t('api.scopes')}<HelpTip term="scopes" /></legend
 				>{#each scopes.filter((s) => admin || s.startsWith('files:') || s === 'system:read' || s === 'mcp') as scope}<label
 						class="check"
 						><input type="checkbox" bind:group={selected} value={scope} /><span
@@ -377,9 +312,6 @@
 	}
 	.snippet > span {
 		font-weight: 600;
-	}
-	.snippet code {
-		overflow-wrap: anywhere;
 	}
 	.snippet.block {
 		display: grid;

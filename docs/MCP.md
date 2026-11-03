@@ -11,8 +11,11 @@ nicht.
 
 ## Einschalten
 
-1. **Einstellungen › API und CLI › MCP für KI-Clients**: „MCP-Server für dieses
-   NAS einschalten“ (nur Besitzer und Administratoren; ab Werk aus). Die
+1. **Einstellungen › MCP-Server**: „MCP-Server für dieses NAS einschalten“
+   (nur Besitzer und Administratoren; ab Werk aus). Die Seite öffnet jedes
+   Konto; Benutzer sehen dort den Zustand, den Endpunkt, die Verbinden-Reiter
+   und „Token für MCP erstellen“, aber nicht den Schalter, die Werkzeuge und
+   die letzten Aufrufe. Die
    Einstellung liegt in `/config/system/mcp.json` und gilt sofort; Ausschalten
    weist auch laufende Clients beim nächsten Aufruf ab (`403 mcp_disabled`).
 2. „Token für MCP erstellen“ legt ein persönliches Token an, vorbelegt mit
@@ -120,14 +123,15 @@ Neustart, gefährliche Home-Assistant-Domänen), nie der Client. Den
 Bestätigungswert, den eine Route für zerstörende Aktionen erwartet, setzt der
 Server selbst. Eine weitere Freigabe per Klick oder per Handy gibt es nicht.
 
-`GET /api/v1/system/mcp` liefert neben `enabled`, `path`, `protocolVersions` und
-`scope` die Liste `tools` mit `name`, `area`, `scope`, `kind` (`read`/`change`),
-`dangerous` und `mode` für alle Werkzeuge, die ein Konto dieser Rolle
-erreichen könnte. `PUT /api/v1/system/mcp` (nur Besitzer/Administratoren)
+`GET /api/v1/system/mcp` (jedes angemeldete Konto) liefert neben `enabled`,
+`path`, `protocolVersions` und `scope` die Liste `tools` mit `name`, `area`,
+`scope`, `kind` (`read`/`change`), `dangerous` und `mode` für alle Werkzeuge,
+die ein Konto dieser Rolle erreichen könnte; für Benutzer ohne Admin-Rechte
+ist die Liste leer. `PUT /api/v1/system/mcp` (nur Besitzer/Administratoren)
 speichert `enabled` und `tools`; ungültige Modi ergeben
-`400 invalid_tool_mode`. Der PUT ersetzt die ganze Einstellung: Wer nur
-`enabled` schickt, setzt alle Werkzeuge auf „on“ zurück. Heute liegt in der
-Weboberfläche nur der Ein-/Ausschalter unter Einstellungen › API und CLI.
+`400 invalid_tool_mode`. Wer nur `enabled` schickt, lässt die Werkzeuge, wie
+sie sind. In der Weboberfläche liegen Schalter und Werkzeuge unter
+Einstellungen › MCP-Server.
 
 **Nicht enthalten** sind Geheimnisse (Backup-Passwörter, `.env`, Schlüssel,
 Sticksicherungen), Passwörter, Zwei-Faktor und Passkeys, die Verwaltung der

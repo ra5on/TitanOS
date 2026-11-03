@@ -232,7 +232,11 @@
 					</button>
 				{/each}
 			</div>
-			{#if filesystem === 'btrfs'}<p class="muted small">{t('create.btrfsProfiles')}</p>{/if}
+			{#if filesystem === 'btrfs'}<p class="muted small">
+					{t('create.btrfsProfiles')}
+				</p>{:else if level !== 'raid0' && level !== 'single'}<p class="muted small">
+					{t('create.bitmap')}<HelpTip term="bitmap" />
+				</p>{/if}
 			{#if level === 'raid0' || level === 'single'}<p class="notice-warn" role="alert">
 					{t(level === 'single' ? 'create.singleWarning' : 'create.raid0Warning')}
 				</p>{/if}

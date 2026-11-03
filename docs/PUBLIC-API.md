@@ -95,7 +95,7 @@ Textänderungen brauchen die durch `GET /files/text` gelieferte `version`.
 
 Für KI-Clients (Claude Desktop, Claude Code und andere MCP-Clients) gibt es
 seit 29.10.2026 einen MCP-Server unter `POST /mcp` auf demselben Port. Ab Werk
-aus; Besitzer/Administratoren schalten ihn unter Einstellungen › API und CLI
+aus; Besitzer/Administratoren schalten ihn unter Einstellungen › MCP-Server
 ein. Er nimmt dieselben persönlichen Tokens mit dem zusätzlichen Bereich `mcp`;
 die übrigen Bereiche des Tokens und die aktuelle Rolle bestimmen die
 Werkzeuge: die Routen dieser Seite und die Lese- und Aktionswerkzeuge des

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import HelpTip from '#lib/components/HelpTip.svelte';
 	import { onMount } from 'svelte';
 	import { api } from '#lib/api.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
@@ -66,7 +67,8 @@
 							: device.kind === 'coral'
 								? 'hardware.coralKind'
 								: `hardware.kind.${device.kind}`,
-					)}{#if device.warning === 'usb_bus'}
+					)}{#if device.kind === 'nvidia'}
+						· {t('hardware.viaCdi')}<HelpTip term="cdi" />{/if}{#if device.warning === 'usb_bus'}
 						· {t('hardware.coralUSBWarning')}{/if}</small
 				></span
 			><span class="chip" class:ok={device.available}
