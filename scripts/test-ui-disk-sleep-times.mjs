@@ -179,14 +179,23 @@ try {
     const { ctx, page, puts } = await open();
     await page.goto(`${base}/storage?tab=disks`);
     const row = (name) => page.locator("tr", { hasText: name }).first();
-    await row("sda").getByText(`schläft seit ${hhmm(asleepAt)}`).waitFor();
-    await row("sdb").getByText(`zuletzt geweckt ${hhmm(wokenAt)}`).waitFor();
+    await row("sda")
+      .getByText(`schläft seit ${hhmm(asleepAt)}`)
+      .waitFor();
+    await row("sdb")
+      .getByText(`zuletzt geweckt ${hhmm(wokenAt)}`)
+      .waitFor();
     assert.equal(
-      await row("sdc").getByText(/schläft seit|zuletzt geweckt/).count(),
+      await row("sdc")
+        .getByText(/schläft seit|zuletzt geweckt/)
+        .count(),
       0,
       "no time when titand knows none",
     );
-    await page.screenshot({ path: `${out}/laufwerke-1440.png`, fullPage: true });
+    await page.screenshot({
+      path: `${out}/laufwerke-1440.png`,
+      fullPage: true,
+    });
 
     // Disk details: the section with value, state and time.
     await row("sdb").locator("button").first().click();
@@ -247,16 +256,39 @@ try {
       .getByText("Standard: 15 Minuten · 1 von 3 Platten schlafen")
       .waitFor()
       .catch(async (err) => {
-        await page.screenshot({ path: `${out}/failed-energy.png`, fullPage: true });
+        await page.screenshot({
+          path: `${out}/failed-energy.png`,
+          fullPage: true,
+        });
         throw err;
       });
     await tile.screenshot({ path: `${out}/energie-${theme}-${width}.png` });
     if (width === 1440 && theme === "graphit")
-      await page.screenshot({ path: `${out}/energie-seite-${width}.png`, fullPage: true });
+      await page.screenshot({
+        path: `${out}/energie-seite-${width}.png`,
+        fullPage: true,
+      });
     await tile.getByRole("button", { name: "Ruhemodus einstellen …" }).click();
     const dialog = page.getByRole("dialog");
     await dialog.getByText(`zuletzt geweckt ${hhmm(wokenAt)}`).waitFor();
-    await page.screenshot({ path: `${out}/energie-dialog-${theme}-${width}.png` });
+    await page.screenshot({
+      path: `${out}/energie-dialog-${theme}-${width}.png`,
+    });
+    await ctx.close();
+  }
+  // Volume details: the members with their times.
+  for (const [theme, width] of [
+    ["graphit", 390],
+    ["hell", 1440],
+  ]) {
+    const { ctx, page } = await open(theme, width);
+    await page.goto(`${base}/storage#volume-Data`);
+    const members = page.locator(".block.sleep .members-sleep");
+    await members.getByText(`schläft seit ${hhmm(asleepAt)}`).waitFor();
+    await members.getByText(`zuletzt geweckt ${hhmm(wokenAt)}`).waitFor();
+    await page
+      .locator(".block.sleep")
+      .screenshot({ path: `${out}/volumedetails-${theme}-${width}.png` });
     await ctx.close();
   }
   // Narrow and light storage views.
@@ -266,8 +298,14 @@ try {
   ]) {
     const { ctx, page } = await open(theme, width);
     await page.goto(`${base}/storage?tab=disks`);
-    await page.getByText(`schläft seit ${hhmm(asleepAt)}`).first().waitFor();
-    await page.screenshot({ path: `${out}/laufwerke-${theme}-${width}.png`, fullPage: true });
+    await page
+      .getByText(`schläft seit ${hhmm(asleepAt)}`)
+      .first()
+      .waitFor();
+    await page.screenshot({
+      path: `${out}/laufwerke-${theme}-${width}.png`,
+      fullPage: true,
+    });
     await page
       .locator("tr", { hasText: "sda" })
       .first()
@@ -275,8 +313,13 @@ try {
       .first()
       .click();
     const details = page.locator("aside.disk-details");
-    await details.locator("section.sleep").getByText(`schläft seit ${hhmm(asleepAt)}`).waitFor();
-    await details.screenshot({ path: `${out}/plattendetails-${theme}-${width}.png` });
+    await details
+      .locator("section.sleep")
+      .getByText(`schläft seit ${hhmm(asleepAt)}`)
+      .waitFor();
+    await details.screenshot({
+      path: `${out}/plattendetails-${theme}-${width}.png`,
+    });
     await ctx.close();
   }
   assert.deepEqual(errors, []);

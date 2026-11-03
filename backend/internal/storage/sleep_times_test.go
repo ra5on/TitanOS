@@ -65,6 +65,14 @@ func TestDiskSleepTimes(t *testing.T) {
 	if disk := sleepDisk(t, m, "sde"); disk.State != "asleep" || !disk.Since.Equal(again) {
 		t.Fatalf("asleep again since %v: %+v", again, disk)
 	}
+	// A reset while asleep forgets the state; the earlier wake is no
+	// longer the last thing that happened, so no time is shown.
+	if err := m.SetDiskSleep(context.Background(), DiskSleepSettings{IdleMinutes: 5}); err != nil {
+		t.Fatal(err)
+	}
+	if disk := sleepDisk(t, m, "sde"); disk.State != "active" || !disk.Since.IsZero() {
+		t.Fatalf("stale wake after a reset while asleep: %+v", disk)
+	}
 	if len(runner.standbyCalls()) != 2 {
 		t.Fatalf("standby calls: %v", runner.standbyCalls())
 	}
@@ -83,6 +91,21 @@ func TestDiskSleepTimesGap(t *testing.T) {
 	sleepTicks(t, m, now.Add(10*time.Minute), 0)
 	if disk := sleepDisk(t, m, "sde"); disk.State != "active" || !disk.Since.IsZero() {
 		t.Fatalf("gap counted as wake: %+v", disk)
+	}
+	// Woken, asleep again, then a gap: the old wake is not shown.
+	sleepTicks(t, m, now.Add(10*time.Minute+10*time.Second), 5*time.Minute)
+	sleepStat(t, m, 3, 1, 0, 0)
+	sleepTicks(t, m, now.Add(15*time.Minute+20*time.Second), 0)
+	if disk := sleepDisk(t, m, "sde"); disk.Since.IsZero() {
+		t.Fatalf("wake not seen: %+v", disk)
+	}
+	sleepTicks(t, m, now.Add(15*time.Minute+30*time.Second), 5*time.Minute)
+	if disk := sleepDisk(t, m, "sde"); disk.State != "asleep" {
+		t.Fatalf("asleep again: %+v", disk)
+	}
+	sleepTicks(t, m, now.Add(30*time.Minute), 0)
+	if disk := sleepDisk(t, m, "sde"); disk.State != "active" || !disk.Since.IsZero() {
+		t.Fatalf("stale wake after a gap: %+v", disk)
 	}
 }
 

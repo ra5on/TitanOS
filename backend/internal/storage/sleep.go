@@ -191,7 +191,7 @@ type DiskSleepDisk struct {
 	// unknown, e.g. since the start of titand. RAM only; older interfaces
 	// ignore it.
 	Since time.Time `json:"since,omitzero"`
-	Error string `json:"error,omitempty"`
+	Error string    `json:"error,omitempty"`
 }
 
 // DiskSleepUnavailable is a disk that cannot be put to sleep, with the
@@ -649,7 +649,9 @@ func (m *Manager) sleepIdleDisks(ctx context.Context, now time.Time) error {
 			} else {
 				slog.Info("disk entered standby", "disk", name, "idleMinutes", minutes)
 				entry := times[name]
-				entry.identity, entry.asleepSince = identity, now.Truncate(time.Second)
+				// A wake before this standby is history: an asleep state
+				// forgotten later (reset, gap, busy) must not show it again.
+				entry.identity, entry.asleepSince, entry.wokenAt = identity, now.Truncate(time.Second), time.Time{}
 				times[name] = entry
 			}
 		}
