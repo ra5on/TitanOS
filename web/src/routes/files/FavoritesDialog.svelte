@@ -76,9 +76,9 @@
 	}
 	.favorite {
 		display: grid;
-		gap: 8px;
+		gap: var(--space-2);
 		border-bottom: 1px solid var(--border);
-		padding: 12px 0;
+		padding: var(--space-3) 0;
 	}
 	.favorite span {
 		overflow-wrap: anywhere;

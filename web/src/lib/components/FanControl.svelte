@@ -205,8 +205,8 @@
 	.fan {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
-		padding: 12px 0;
+		gap: var(--space-2);
+		padding: var(--space-3) 0;
 		border-bottom: 1px solid var(--panel-border);
 	}
 	.head {
@@ -217,19 +217,19 @@
 	}
 	.modes {
 		display: flex;
-		gap: 16px;
+		gap: var(--space-4);
 		flex-wrap: wrap;
 	}
 	.points {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px 16px;
+		gap: var(--space-2) var(--space-4);
 		align-items: center;
 	}
 	.point {
 		display: inline-flex;
 		align-items: center;
-		gap: 4px;
+		gap: var(--space-1);
 		font-size: var(--text-base);
 	}
 	.point input {

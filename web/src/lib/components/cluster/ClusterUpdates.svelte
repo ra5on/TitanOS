@@ -112,7 +112,7 @@
 		align-items: center;
 		gap: 10px;
 		flex-wrap: wrap;
-		margin-bottom: 8px;
+		margin-bottom: var(--space-2);
 	}
 	.head h2 {
 		margin: 0 auto 0 0;
@@ -134,11 +134,11 @@
 		border-bottom: 1px solid var(--border);
 	}
 	td {
-		padding: 8px 10px;
+		padding: var(--space-2) 10px;
 		border-bottom: 1px solid var(--border);
 	}
 	td .chip {
-		margin-left: 8px;
+		margin-left: var(--space-2);
 	}
 	.ok-text {
 		color: var(--ok-text);

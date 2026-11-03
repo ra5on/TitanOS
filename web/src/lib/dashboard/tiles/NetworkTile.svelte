@@ -93,14 +93,14 @@
 	.rates {
 		display: grid;
 		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.rates div {
 		display: flex;
 		flex-direction: row;
 		flex-wrap: wrap;
 		align-items: baseline;
-		gap: 4px;
+		gap: var(--space-1);
 		padding: 0;
 		background: none;
 		border-radius: var(--radius-ctl);
@@ -127,7 +127,7 @@
 	dl div {
 		display: flex;
 		justify-content: space-between;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	dt {
 		color: var(--muted);

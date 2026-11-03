@@ -122,7 +122,7 @@
 
 <style>
 	.speed {
-		margin-left: 8px;
+		margin-left: var(--space-2);
 		font-size: var(--text-base);
 	}
 	td.actions {

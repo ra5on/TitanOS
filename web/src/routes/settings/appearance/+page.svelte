@@ -658,7 +658,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
-		padding-left: 4px;
+		padding-left: var(--space-1);
 	}
 	.check.fx {
 		align-items: flex-start;
@@ -686,14 +686,14 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: flex-start;
-		gap: 24px;
+		gap: var(--space-5);
 	}
 	.editor {
 		flex: 1 1 460px;
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: var(--space-4);
 	}
 	.preview {
 		flex: 1 1 520px;
@@ -708,7 +708,7 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: baseline;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.small {
 		font-size: var(--text-sm);
@@ -725,13 +725,13 @@
 	.three {
 		display: grid;
 		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.option {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
-		padding: 12px;
+		gap: var(--space-1);
+		padding: var(--space-3);
 		text-align: left;
 		background: var(--bg);
 		border: 2px solid var(--border);
@@ -744,8 +744,8 @@
 		border-color: var(--accent);
 	}
 	.option.theme {
-		gap: 8px;
-		padding: 8px;
+		gap: var(--space-2);
+		padding: var(--space-2);
 	}
 	.option.center {
 		align-items: center;
@@ -757,7 +757,7 @@
 	.swatch {
 		height: 44px;
 		display: flex;
-		gap: 4px;
+		gap: var(--space-1);
 		padding: 6px;
 		border: 1px solid;
 		border-radius: var(--radius-small);
@@ -787,7 +787,7 @@
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		padding: 8px 10px;
+		padding: var(--space-2) 10px;
 		background: var(--bg);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
@@ -814,7 +814,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: flex-start;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.accent {
 		width: 58px;
@@ -848,7 +848,7 @@
 	}
 	.segments {
 		display: flex;
-		gap: 4px;
+		gap: var(--space-1);
 		padding: 3px;
 		background: var(--bg);
 		border: 1px solid var(--border);
@@ -876,7 +876,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 10px;
-		padding: 10px 12px;
+		padding: 10px var(--space-3);
 		background: var(--bg);
 		border: 1px dashed var(--border);
 		border-radius: var(--radius-ctl);
@@ -911,8 +911,8 @@
 	.layouts {
 		display: grid;
 		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 12px;
-		margin: 0 0 12px;
+		gap: var(--space-3);
+		margin: 0 0 var(--space-3);
 		padding: 0;
 		border: 0;
 	}
@@ -920,7 +920,7 @@
 	   so that the two sketches stand side by side below it. */
 	.layouts legend {
 		grid-column: 1 / -1;
-		margin-bottom: 8px;
+		margin-bottom: var(--space-2);
 		padding: 0;
 		font-weight: 500;
 	}
@@ -928,8 +928,8 @@
 		position: relative;
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
-		padding: 12px;
+		gap: var(--space-1);
+		padding: var(--space-3);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 		cursor: pointer;
@@ -991,6 +991,6 @@
 	}
 	.nav-list label {
 		flex: 1;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 </style>

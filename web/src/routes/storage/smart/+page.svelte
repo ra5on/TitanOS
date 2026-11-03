@@ -365,7 +365,7 @@
 
 <style>
 	.intro {
-		margin: 0 0 16px;
+		margin: 0 0 var(--space-4);
 		font-size: var(--text-md);
 	}
 	.state-line {
@@ -373,8 +373,8 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 8px;
-		margin: 16px;
+		gap: var(--space-2);
+		margin: var(--space-4);
 	}
 	.smart-layout {
 		display: grid;
@@ -393,7 +393,7 @@
 		width: 100%;
 	}
 	td {
-		padding: 12px 14px;
+		padding: var(--space-3) 14px;
 	}
 	tr.selected {
 		background: color-mix(in srgb, var(--accent) 8%, transparent);
@@ -414,7 +414,7 @@
 		display: block;
 		font-size: var(--text-sm);
 		color: var(--muted);
-		margin-top: 4px;
+		margin-top: var(--space-1);
 	}
 	.num {
 		text-align: right;
@@ -450,13 +450,13 @@
 		min-height: 30px;
 	}
 	.detail h3 {
-		margin: 0 0 8px;
+		margin: 0 0 var(--space-2);
 		font-size: var(--text-md);
 	}
 	.detail dl {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-		gap: 12px;
+		gap: var(--space-3);
 		margin: 0;
 	}
 	.detail dt {
@@ -475,11 +475,11 @@
 	.links {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 		margin: 0;
 	}
 	.attr-table td {
-		padding: 6px 8px;
+		padding: 6px var(--space-2);
 		font-size: var(--text-base);
 	}
 	.warn-row {

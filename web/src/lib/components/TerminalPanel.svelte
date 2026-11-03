@@ -461,12 +461,12 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
-		padding: 0 16px 8px;
+		gap: var(--space-2);
+		padding: 0 var(--space-4) var(--space-2);
 		border-bottom: 1px solid var(--border);
 	}
 	.panel.full .toolbar {
-		padding-top: 8px;
+		padding-top: var(--space-2);
 	}
 	.tabs {
 		position: relative;
@@ -474,7 +474,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	.tab {
 		display: flex;
@@ -492,9 +492,9 @@
 	.tab button {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		height: 100%;
-		padding: 0 6px 0 12px;
+		padding: 0 6px 0 var(--space-3);
 		background: transparent;
 		border: 0;
 		color: inherit;
@@ -504,7 +504,7 @@
 		cursor: pointer;
 	}
 	.tab .x {
-		padding: 0 10px 0 4px;
+		padding: 0 10px 0 var(--space-1);
 		color: var(--muted);
 	}
 	.kind {
@@ -559,7 +559,7 @@
 		align-items: center;
 		gap: 10px;
 		min-height: 2.5rem;
-		padding: 0 12px;
+		padding: 0 var(--space-3);
 		background: transparent;
 		border: 0;
 		border-radius: var(--radius-ctl);
@@ -581,7 +581,7 @@
 	}
 	.heading,
 	.none {
-		padding: 6px 12px;
+		padding: 6px var(--space-3);
 		font-size: var(--text-sm);
 	}
 	.shell {
@@ -607,7 +607,7 @@
 	.tool {
 		min-width: 2.25rem;
 		height: 2.25rem;
-		padding: 0 8px;
+		padding: 0 var(--space-2);
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -645,7 +645,7 @@
 		position: absolute;
 		inset: 0;
 		z-index: 2;
-		padding: 20px 24px;
+		padding: 20px var(--space-5);
 		background: var(--bg);
 		font-size: var(--text-md);
 	}
@@ -654,7 +654,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		justify-content: space-between;
-		gap: 4px 20px;
+		gap: var(--space-1) 20px;
 		padding: 6px 20px;
 		border-top: 1px solid var(--border);
 		color: var(--muted);

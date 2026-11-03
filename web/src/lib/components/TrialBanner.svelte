@@ -40,7 +40,7 @@
 	.trial {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.trial p {
 		margin: 0;
@@ -48,7 +48,7 @@
 	.row-actions {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 		justify-content: flex-end;
 	}
 </style>

@@ -176,8 +176,8 @@
 	}
 	.conflict {
 		display: grid;
-		gap: 8px;
-		padding: 12px 0;
+		gap: var(--space-2);
+		padding: var(--space-3) 0;
 		border-top: 1px solid var(--border);
 	}
 	p,

@@ -522,7 +522,7 @@
 	.motifs {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.motifs button {
 		padding: 0;
@@ -547,14 +547,14 @@
 	}
 	.motifs span {
 		display: block;
-		padding: 4px 6px;
+		padding: var(--space-1) 6px;
 	}
 	.upload {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 10px;
-		padding: 10px 12px;
+		padding: 10px var(--space-3);
 		background: var(--bg);
 		border: 1px dashed var(--border);
 		border-radius: var(--radius-ctl);
@@ -568,7 +568,7 @@
 	.two {
 		display: grid;
 		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.texts {
 		margin: 0;
@@ -578,13 +578,13 @@
 	}
 	.texts legend {
 		padding: 0;
-		margin-bottom: 8px;
+		margin-bottom: var(--space-2);
 	}
 	.language {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
-		gap: 6px 12px;
-		margin-bottom: 12px;
+		gap: 6px var(--space-3);
+		margin-bottom: var(--space-3);
 	}
 	.lang {
 		grid-column: 1 / -1;

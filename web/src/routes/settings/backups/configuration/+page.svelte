@@ -402,7 +402,7 @@
 	dl {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-		gap: 12px 24px;
+		gap: var(--space-3) var(--space-5);
 		margin: 0;
 	}
 	dt {
@@ -424,12 +424,12 @@
 	.row {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 16px 24px;
+		gap: var(--space-4) var(--space-5);
 	}
 	.option {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	.option small {
 		padding-left: 28px;
@@ -445,7 +445,7 @@
 	}
 	th,
 	td {
-		padding: 8px 12px 8px 0;
+		padding: var(--space-2) var(--space-3) var(--space-2) 0;
 		text-align: left;
 		border-bottom: 1px solid var(--panel-border);
 		white-space: nowrap;
@@ -460,7 +460,7 @@
 	}
 	.small {
 		height: 2rem;
-		padding: 0 12px;
+		padding: 0 var(--space-3);
 		font-size: 0.8125rem;
 	}
 	pre {

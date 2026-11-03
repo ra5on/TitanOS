@@ -250,7 +250,7 @@
 			width: 100%;
 			height: 44px;
 			padding: 0 5px;
-			gap: 4px;
+			gap: var(--space-1);
 			font-size: var(--text-base);
 		}
 		.mobile-file-actions :global(.chevron) {
@@ -266,7 +266,7 @@
 		}
 		.mobile-file-search {
 			display: flex;
-			gap: 8px;
+			gap: var(--space-2);
 			align-items: center;
 			min-width: 0;
 		}

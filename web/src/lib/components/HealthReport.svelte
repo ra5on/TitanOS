@@ -152,14 +152,14 @@
 <style>
 	.row {
 		display: flex;
-		gap: 12px;
+		gap: var(--space-3);
 		flex-wrap: wrap;
 	}
 	.preview {
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
-		padding: 12px;
+		padding: var(--space-3);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 	}

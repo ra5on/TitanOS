@@ -112,7 +112,7 @@
 	.check {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		min-height: 44px;
 	}
 	.check input {
@@ -121,7 +121,7 @@
 	}
 	.drivers > label:not(.check) {
 		display: grid;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.drivers input {
 		min-width: 0;

@@ -67,7 +67,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: end;
-		gap: 8px;
+		gap: var(--space-2);
 		margin-bottom: 10px;
 	}
 	p {

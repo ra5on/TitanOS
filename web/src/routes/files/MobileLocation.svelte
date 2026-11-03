@@ -62,7 +62,7 @@
 		}
 		.mobile-location {
 			display: flex;
-			gap: 8px;
+			gap: var(--space-2);
 			align-items: center;
 			min-width: 0;
 		}

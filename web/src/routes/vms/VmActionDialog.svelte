@@ -121,11 +121,11 @@
 	}
 	textarea {
 		height: auto;
-		padding: 10px 12px;
+		padding: 10px var(--space-3);
 		font-size: var(--text-base);
 	}
 	pre {
-		margin: 8px 0 0;
+		margin: var(--space-2) 0 0;
 		font-family: var(--font-mono);
 		font-size: var(--text-sm);
 		white-space: pre-wrap;

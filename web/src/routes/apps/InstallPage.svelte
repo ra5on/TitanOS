@@ -962,7 +962,7 @@
 		flex-direction: column;
 		gap: var(--space-2);
 		max-width: 46rem;
-		padding-top: 4px;
+		padding-top: var(--space-1);
 		font-size: var(--text-md);
 	}
 	.notes p,

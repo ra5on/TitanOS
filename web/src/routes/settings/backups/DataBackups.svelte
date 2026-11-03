@@ -1784,7 +1784,7 @@
 	.mode {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px 20px;
+		gap: var(--space-2) 20px;
 		margin: 0;
 		padding: 0;
 		border: 0;
@@ -1792,7 +1792,7 @@
 	.mode .check {
 		flex-direction: row;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.targets {
 		display: grid;
@@ -1815,7 +1815,7 @@
 		display: flex;
 		align-items: flex-start;
 		justify-content: space-between;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.name {
 		font-size: 1rem;
@@ -1828,7 +1828,7 @@
 	dl {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-		gap: 12px 24px;
+		gap: var(--space-3) var(--space-5);
 		margin: 0;
 	}
 	dt {
@@ -1841,10 +1841,10 @@
 	.row {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 12px 20px;
+		gap: var(--space-3) 20px;
 	}
 	fieldset {
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	label {
 		display: flex;
@@ -1874,7 +1874,7 @@
 	label.check {
 		flex-direction: row;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		font-size: 0.875rem;
 	}
 	.check > span {
@@ -1887,13 +1887,13 @@
 	}
 	.picked {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		align-items: center;
 		margin-bottom: 6px;
 	}
 	.pickfield {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		align-items: center;
 		flex: 1;
 		min-width: 0;
@@ -1906,7 +1906,7 @@
 		white-space: nowrap;
 	}
 	.more {
-		margin-top: 8px;
+		margin-top: var(--space-2);
 	}
 	.more summary {
 		cursor: pointer;
@@ -1917,7 +1917,7 @@
 		border: 0;
 		color: inherit;
 		cursor: pointer;
-		padding: 0 0 0 4px;
+		padding: 0 0 0 var(--space-1);
 	}
 	.formats {
 		display: grid;
@@ -1926,11 +1926,11 @@
 	}
 	.format {
 		display: grid;
-		gap: 4px;
+		gap: var(--space-1);
 		align-content: start;
 		border: 1px solid var(--border);
 		border-radius: 10px;
-		padding: 12px 14px;
+		padding: var(--space-3) 14px;
 	}
 	.format.on {
 		border-color: var(--accent);
@@ -1939,7 +1939,7 @@
 	.format .dated {
 		display: flex;
 		flex-direction: row;
-		gap: 8px;
+		gap: var(--space-2);
 		align-items: center;
 		justify-content: flex-start;
 		text-align: left;
@@ -1947,16 +1947,16 @@
 	}
 	.format .dated {
 		align-items: flex-start;
-		margin: 6px 0 0 24px;
+		margin: 6px 0 0 var(--space-5);
 	}
 	.format > .muted {
-		margin-left: 24px;
+		margin-left: var(--space-5);
 	}
 	.small {
 		font-size: 0.8125rem;
 	}
 	.indent {
-		margin: 0 0 0 24px;
+		margin: 0 0 0 var(--space-5);
 	}
 	.days-input {
 		width: 4.5rem;
@@ -1971,7 +1971,7 @@
 		display: inline-flex;
 		flex-wrap: wrap;
 		align-self: flex-start;
-		gap: 4px;
+		gap: var(--space-1);
 		padding: 3px;
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-ctl);
@@ -1993,7 +1993,7 @@
 	}
 	.key {
 		height: auto;
-		padding: 10px 12px;
+		padding: 10px var(--space-3);
 		font-size: 0.75rem;
 		resize: none;
 	}

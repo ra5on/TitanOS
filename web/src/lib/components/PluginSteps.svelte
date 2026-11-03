@@ -77,7 +77,7 @@
 		display: flex;
 		flex-direction: column;
 		align-items: flex-start;
-		gap: 8px;
+		gap: var(--space-2);
 		font-size: var(--text-base);
 	}
 	ol {
@@ -123,15 +123,15 @@
 	.download {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
-		margin-top: 4px;
+		gap: var(--space-1);
+		margin-top: var(--space-1);
 	}
 	.download progress {
 		width: 100%;
 		accent-color: var(--accent);
 	}
 	pre {
-		margin: 4px 0 0;
+		margin: var(--space-1) 0 0;
 		font-family: var(--font-mono);
 		font-size: var(--text-sm);
 		white-space: pre-wrap;

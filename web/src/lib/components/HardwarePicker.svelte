@@ -101,7 +101,7 @@
 		grid-template-columns: auto minmax(0, 1fr) auto;
 		align-items: center;
 		gap: 10px;
-		padding: 8px 12px;
+		padding: var(--space-2) var(--space-3);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 		background: var(--bg);

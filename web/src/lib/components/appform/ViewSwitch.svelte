@@ -43,7 +43,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 10px;
-		padding: 4px 2px;
+		padding: var(--space-1) 2px;
 		background: none;
 		border: 0;
 		color: var(--muted);

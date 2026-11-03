@@ -617,7 +617,7 @@
 	.entries li {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 		padding: 10px 0;
 		border-top: 1px solid var(--panel-border);
 	}
@@ -628,7 +628,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px 8px;
+		gap: 6px var(--space-2);
 	}
 	.entry-head .name {
 		font-weight: 600;
@@ -641,12 +641,12 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px 16px;
+		gap: 6px var(--space-4);
 	}
 	.age {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		color: var(--muted);
 	}
 	.age select {
@@ -655,13 +655,13 @@
 	.setup {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 		min-width: min(36rem, 100%);
 	}
 	.grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.mode,
 	.usage {
@@ -672,11 +672,11 @@
 	}
 	.mode {
 		flex-wrap: wrap;
-		gap: 8px 20px;
+		gap: var(--space-2) 20px;
 	}
 	.usage {
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.usage legend {
 		margin-bottom: 6px;
@@ -684,7 +684,7 @@
 	}
 	.folder-row {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.folder-row .path {
 		flex: 1;
@@ -706,7 +706,7 @@
 	.values {
 		display: grid;
 		grid-template-columns: max-content minmax(0, 1fr);
-		gap: 6px 16px;
+		gap: 6px var(--space-4);
 		margin: 0;
 		font-size: var(--text-md);
 	}
@@ -721,7 +721,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.crumbs {
 		margin: 0;
@@ -741,7 +741,7 @@
 	}
 	.dir {
 		width: 100%;
-		padding: 8px 10px;
+		padding: var(--space-2) 10px;
 		background: none;
 		border: 0;
 		border-radius: var(--radius-small);

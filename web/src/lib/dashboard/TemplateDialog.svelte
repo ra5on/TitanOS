@@ -41,13 +41,13 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		margin: 8px 0;
+		margin: var(--space-2) 0;
 	}
 	.choice {
 		display: flex;
 		gap: 10px;
 		align-items: flex-start;
-		padding: 8px 10px;
+		padding: var(--space-2) 10px;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 		cursor: pointer;

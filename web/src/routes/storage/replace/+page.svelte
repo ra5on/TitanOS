@@ -365,11 +365,11 @@
 <style>
 	.steps {
 		display: flex;
-		gap: 8px 16px;
+		gap: var(--space-2) var(--space-4);
 		flex-wrap: wrap;
 		list-style: none;
 		padding: 0;
-		margin: 0 0 12px;
+		margin: 0 0 var(--space-3);
 		color: var(--muted);
 		font-size: var(--text-base);
 	}
@@ -387,14 +387,14 @@
 	}
 	legend {
 		font-weight: 500;
-		margin-bottom: 4px;
+		margin-bottom: var(--space-1);
 	}
 	.choice {
 		display: flex;
 		align-items: center;
 		gap: 10px;
 		flex-wrap: wrap;
-		padding: 8px 10px;
+		padding: var(--space-2) 10px;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 	}
@@ -407,7 +407,7 @@
 	}
 	.find {
 		display: flex;
-		gap: 12px;
+		gap: var(--space-3);
 		align-items: center;
 		flex-wrap: wrap;
 	}

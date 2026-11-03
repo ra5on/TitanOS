@@ -237,7 +237,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 10px;
-		padding: 12px 0;
+		padding: var(--space-3) 0;
 		border-top: 1px solid var(--border);
 	}
 	p {

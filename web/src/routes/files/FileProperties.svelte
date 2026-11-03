@@ -127,7 +127,7 @@
 	dl {
 		display: grid;
 		grid-template-columns: auto minmax(0, 1fr);
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	dt {
 		color: var(--muted);

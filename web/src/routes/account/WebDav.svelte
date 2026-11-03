@@ -118,8 +118,8 @@
 	.grid {
 		display: grid;
 		grid-template-columns: auto 1fr;
-		gap: 4px 12px;
-		margin: 8px 0;
+		gap: var(--space-1) var(--space-3);
+		margin: var(--space-2) 0;
 	}
 	dd {
 		margin: 0;

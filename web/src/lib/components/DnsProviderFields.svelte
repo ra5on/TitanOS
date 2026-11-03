@@ -116,7 +116,7 @@
 	.fields {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.hint {
 		margin: 0;

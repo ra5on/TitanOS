@@ -361,11 +361,11 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 		font-size: var(--text-base);
 	}
 	.num {
-		margin-left: 4px;
+		margin-left: var(--space-1);
 		font-family: var(--font-mono);
 		font-size: var(--text-sm);
 		opacity: 0.75;
@@ -394,8 +394,8 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px 16px;
-		padding: 12px 18px;
+		gap: var(--space-2) var(--space-4);
+		padding: var(--space-3) 18px;
 		border-bottom: 1px solid var(--panel-border);
 		font-size: var(--text-base);
 	}
@@ -411,8 +411,8 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 10px 16px;
-		padding: 12px 18px;
+		gap: 10px var(--space-4);
+		padding: var(--space-3) 18px;
 		border-bottom: 1px solid var(--panel-border);
 		font-size: var(--text-md);
 	}
@@ -445,7 +445,7 @@
 	}
 	.known > .muted {
 		display: block;
-		padding: 12px 18px 0;
+		padding: var(--space-3) 18px 0;
 		font-size: var(--text-base);
 	}
 	.when.wide {
@@ -459,8 +459,8 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: flex-end;
-		gap: 12px;
-		padding: 16px 18px;
+		gap: var(--space-3);
+		padding: var(--space-4) 18px;
 	}
 	.add label {
 		display: flex;
@@ -483,20 +483,20 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: flex-start;
-		gap: 24px;
+		gap: var(--space-5);
 	}
 	.catalog {
 		flex: 1 1 560px;
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: var(--space-4);
 	}
 	.find {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.search {
 		flex: 1 1 260px;
@@ -538,8 +538,8 @@
 	.card {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
-		padding: 16px;
+		gap: var(--space-3);
+		padding: var(--space-4);
 		border-width: 2px;
 		color: var(--text);
 		font: inherit;
@@ -564,7 +564,7 @@
 	.card-head {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.monogram {
 		width: 48px;
@@ -608,7 +608,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 8px;
+		gap: var(--space-2);
 		margin-top: auto;
 	}
 	.source-label {

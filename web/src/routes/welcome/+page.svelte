@@ -332,7 +332,7 @@
 	.head {
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: var(--space-4);
 		padding-bottom: 18px;
 		border-bottom: 1px solid var(--border);
 	}
@@ -361,9 +361,9 @@
 	.step {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		width: 100%;
-		padding: 6px 8px 8px 0;
+		padding: 6px var(--space-2) var(--space-2) 0;
 		background: none;
 		border: 0;
 		border-bottom: 2px solid var(--border);
@@ -407,7 +407,7 @@
 	.body {
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: var(--space-4);
 	}
 	label,
 	.group {
@@ -440,8 +440,8 @@
 	.panel {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
-		padding: 14px 16px;
+		gap: var(--space-2);
+		padding: 14px var(--space-4);
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-ctl);
 	}
@@ -450,14 +450,14 @@
 		flex-wrap: wrap;
 		justify-content: flex-end;
 		gap: 10px;
-		margin-top: 4px;
+		margin-top: var(--space-1);
 	}
 	.row {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 8px 12px;
+		gap: var(--space-2) var(--space-3);
 	}
 	.progress {
 		font-weight: 500;
@@ -473,10 +473,10 @@
 	.todo {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 		height: 100%;
 		box-sizing: border-box;
-		padding: 12px 14px;
+		padding: var(--space-3) 14px;
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-ctl);
 		color: var(--text);

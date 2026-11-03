@@ -343,8 +343,8 @@
 	.content {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
-		padding: 16px;
+		gap: var(--space-3);
+		padding: var(--space-4);
 	}
 	label {
 		display: flex;
@@ -367,7 +367,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 8px 12px;
+		gap: var(--space-2) var(--space-3);
 	}
 	input[type='range'] {
 		width: 100%;
@@ -379,7 +379,7 @@
 	.disk {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 		padding: 14px;
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-ctl);
@@ -395,7 +395,7 @@
 	.segments {
 		display: inline-flex;
 		flex-wrap: wrap;
-		gap: 4px;
+		gap: var(--space-1);
 		padding: 3px;
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-ctl);
@@ -403,7 +403,7 @@
 	.segments button,
 	.presets button {
 		height: 2rem;
-		padding: 0 12px;
+		padding: 0 var(--space-3);
 		background: transparent;
 		border: 0;
 		border-radius: var(--radius-ctl);
@@ -464,7 +464,7 @@
 	.add {
 		align-self: flex-start;
 		height: 2.25rem;
-		padding: 0 12px;
+		padding: 0 var(--space-3);
 		background: transparent;
 		border: 1px dashed var(--border);
 		border-radius: var(--radius-ctl);
@@ -481,6 +481,6 @@
 	.adds {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 </style>

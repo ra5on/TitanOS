@@ -106,7 +106,7 @@
 	dl div {
 		display: grid;
 		grid-template-columns: minmax(95px, 0.65fr) minmax(0, 1.5fr);
-		gap: 12px;
+		gap: var(--space-3);
 		align-items: baseline;
 		min-width: 0;
 	}

@@ -336,7 +336,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 10px;
-		padding: 12px;
+		padding: var(--space-3);
 		margin-top: var(--gap);
 		background: var(--chip);
 		border: 1px solid var(--border);

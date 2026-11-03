@@ -542,7 +542,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.eyebrow {
 		font-size: var(--text-xs);
@@ -563,7 +563,7 @@
 	.editor-tabs {
 		display: flex;
 		border-bottom: 1px solid var(--border);
-		padding: 0 12px;
+		padding: 0 var(--space-3);
 	}
 	.editor-tabs button {
 		padding: 11px;
@@ -583,7 +583,7 @@
 		overflow-y: auto;
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: var(--space-4);
 		scrollbar-gutter: stable;
 	}
 	label {
@@ -604,20 +604,20 @@
 		margin: 0;
 		border: 0;
 		border-top: 1px solid var(--border);
-		padding: 16px 0 0;
+		padding: var(--space-4) 0 0;
 		display: grid;
-		gap: 16px;
+		gap: var(--space-4);
 		min-width: 0;
 	}
 	legend {
-		padding: 0 8px 0 0;
+		padding: 0 var(--space-2) 0 0;
 		color: var(--text);
 		font-size: var(--text-base);
 	}
 	.check {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		color: var(--text);
 	}
 	.reset {

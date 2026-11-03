@@ -62,7 +62,7 @@
 		font-size: var(--text-base);
 		margin-bottom: 10px;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	output {
 		font-family: var(--font-mono);

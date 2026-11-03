@@ -101,15 +101,15 @@
 		flex: none;
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
-		padding: 4px 10px 8px;
+		gap: var(--space-1);
+		padding: var(--space-1) 10px var(--space-2);
 		font-size: var(--text-sm);
 		color: var(--text);
 	}
 	.head {
 		display: flex;
 		align-items: flex-start;
-		gap: 8px;
+		gap: var(--space-2);
 		min-width: 0;
 	}
 	.head > .dot {
@@ -144,7 +144,7 @@
 	.folded {
 		align-items: center;
 		gap: 6px;
-		padding: 4px 0 8px;
+		padding: var(--space-1) 0 var(--space-2);
 	}
 	.dot-wrap {
 		position: relative;

@@ -146,14 +146,14 @@
 <style>
 	.check {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		align-items: center;
-		margin-top: 8px;
+		margin-top: var(--space-2);
 	}
 	.purge {
 		display: grid;
-		gap: 8px;
-		margin-top: 8px;
+		gap: var(--space-2);
+		margin-top: var(--space-2);
 	}
 	.purge p,
 	.purge ul {
@@ -171,7 +171,7 @@
 	.notice-error {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 		align-items: center;
 	}
 </style>

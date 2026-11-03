@@ -83,7 +83,7 @@
 	dl {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-		gap: 12px 24px;
+		gap: var(--space-3) var(--space-5);
 		margin: 0;
 	}
 	dt {
@@ -100,7 +100,7 @@
 	}
 	pre {
 		margin: 10px 0 0;
-		padding: 12px;
+		padding: var(--space-3);
 		background: var(--track);
 		border-radius: var(--radius-ctl);
 		font-family: var(--font-mono);

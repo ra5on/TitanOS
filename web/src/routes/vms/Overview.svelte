@@ -388,7 +388,7 @@
 	.tiles {
 		display: grid;
 		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 16px;
+		gap: var(--space-4);
 	}
 	.card {
 		display: flex;
@@ -404,7 +404,7 @@
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) auto;
 		align-items: center;
-		gap: 12px 24px;
+		gap: var(--space-3) var(--space-5);
 	}
 	.snapshot-card > h2,
 	.snapshot-card > p {
@@ -414,10 +414,10 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.snapshot-card > dl > dd {
-		margin-right: 24px;
+		margin-right: var(--space-5);
 	}
 	@media (max-width: 1100px) {
 		.tiles {
@@ -469,7 +469,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 4px 8px;
+		gap: var(--space-1) var(--space-2);
 		margin: 0;
 		min-width: 0;
 		overflow-wrap: anywhere;
@@ -480,7 +480,7 @@
 	.rows {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 		margin: 0;
 		padding: 0;
 		list-style: none;

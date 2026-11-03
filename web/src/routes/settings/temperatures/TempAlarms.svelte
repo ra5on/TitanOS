@@ -95,8 +95,8 @@
 	.sensor {
 		display: flex;
 		align-items: center;
-		gap: 12px;
-		padding: 12px 0;
+		gap: var(--space-3);
+		padding: var(--space-3) 0;
 		border-bottom: 1px solid var(--panel-border);
 	}
 	.name {
@@ -104,7 +104,7 @@
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 		overflow-wrap: anywhere;
 	}
 	.name strong {

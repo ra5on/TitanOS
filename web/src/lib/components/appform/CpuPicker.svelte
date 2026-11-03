@@ -44,7 +44,7 @@
 		flex-wrap: wrap;
 		gap: 6px;
 		max-width: 34rem;
-		padding-top: 4px;
+		padding-top: var(--space-1);
 	}
 	.cpu {
 		display: inline-flex;

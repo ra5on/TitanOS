@@ -54,7 +54,7 @@
 		transform: translateX(-50%);
 		z-index: 2;
 		margin: 0;
-		padding: 4px 12px;
+		padding: var(--space-1) var(--space-3);
 		border-radius: 999px;
 		background: var(--accent);
 		color: var(--on-accent);

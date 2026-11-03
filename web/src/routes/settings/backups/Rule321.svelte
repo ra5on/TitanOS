@@ -75,7 +75,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 8px 12px;
+		gap: var(--space-2) var(--space-3);
 	}
 	h2,
 	p {
@@ -92,7 +92,7 @@
 		display: grid;
 		grid-template-columns: 24px minmax(0, 1fr) auto;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 		padding: 10px 0;
 		border-top: 1px solid var(--panel-border);
 	}

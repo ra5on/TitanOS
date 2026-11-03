@@ -279,7 +279,7 @@
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.findings li {
 		display: flex;
@@ -290,8 +290,8 @@
 	.row {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
-		padding-top: 12px;
+		gap: var(--space-2);
+		padding-top: var(--space-3);
 		border-top: 1px solid var(--panel-border);
 	}
 	.main {

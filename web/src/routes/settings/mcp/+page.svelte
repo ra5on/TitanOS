@@ -341,7 +341,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 8px 16px;
+		gap: var(--space-2) var(--space-4);
 	}
 	.head h2 {
 		margin: 0;
@@ -349,14 +349,14 @@
 	.facts {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 12px 28px;
+		gap: var(--space-3) 28px;
 		font-size: var(--text-md);
 	}
 	.facts > div,
 	.address {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	.address {
 		flex: 1;
@@ -364,7 +364,7 @@
 	}
 	.copy-row {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.copy-row input {
 		flex: 1;
@@ -373,11 +373,11 @@
 	.tabs {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px;
+		gap: var(--space-1);
 		border-bottom: 1px solid var(--border);
 	}
 	.tabs button {
-		padding: 8px 12px;
+		padding: var(--space-2) var(--space-3);
 		border: 0;
 		border-radius: var(--radius-ctl) var(--radius-ctl) 0 0;
 		background: none;
@@ -392,7 +392,7 @@
 	}
 	.snippet {
 		margin: 0;
-		padding: 12px;
+		padding: var(--space-3);
 		overflow-x: auto;
 		border-radius: var(--radius-ctl);
 		background: var(--chip);
@@ -416,12 +416,12 @@
 	.group {
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
-		padding: 0 12px;
+		padding: 0 var(--space-3);
 	}
 	.group-head {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.group-head input {
 		width: 18px;
@@ -432,7 +432,7 @@
 		flex: 1;
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 		min-height: 44px;
 		padding: 0;
 		border: 0;
@@ -452,7 +452,7 @@
 	.tool {
 		display: grid;
 		grid-template-columns: minmax(150px, 190px) 1fr auto 170px;
-		gap: 12px;
+		gap: var(--space-3);
 		align-items: center;
 		padding: 6px 0;
 		border-top: 1px solid var(--border);
@@ -474,7 +474,7 @@
 		font-size: var(--text-base);
 	}
 	.calls td {
-		padding: 6px 8px 6px 0;
+		padding: 6px var(--space-2) 6px 0;
 		border-top: 1px solid var(--border);
 	}
 	.calls .result {

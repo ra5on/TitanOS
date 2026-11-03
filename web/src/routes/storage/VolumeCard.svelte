@@ -286,7 +286,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 8px 16px;
+		gap: var(--space-2) var(--space-4);
 	}
 	.quotas > div {
 		display: flex;
@@ -316,7 +316,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px 10px;
+		gap: var(--space-2) 10px;
 	}
 	.name {
 		font-size: var(--text-xl);
@@ -330,8 +330,8 @@
 	.sync {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
-		padding: 16px;
+		gap: var(--space-2);
+		padding: var(--space-4);
 		background: var(--warn-bg);
 		border: 1px solid var(--warn-border);
 		border-radius: var(--radius-ctl);
@@ -343,7 +343,7 @@
 		flex-wrap: wrap;
 		justify-content: space-between;
 		align-items: baseline;
-		gap: 6px 16px;
+		gap: 6px var(--space-4);
 	}
 	.sync-top {
 		font-size: var(--text-md);
@@ -370,7 +370,7 @@
 	.block {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.label {
 		font-size: var(--text-sm);
@@ -379,12 +379,12 @@
 	.members {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.member {
 		display: inline-flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		padding: 6px 10px;
 		background: var(--chip);
 		border: 1px solid var(--border);
@@ -415,23 +415,23 @@
 	.usage {
 		display: flex;
 		justify-content: space-between;
-		gap: 12px;
+		gap: var(--space-3);
 		font-size: var(--text-base);
 	}
 	.actions {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
-		padding-top: 4px;
+		gap: var(--space-2);
+		padding-top: var(--space-1);
 	}
 	.danger-zone {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 8px 16px;
+		gap: var(--space-2) var(--space-4);
 		margin-top: 6px;
-		padding-top: 12px;
+		padding-top: var(--space-3);
 		border-top: 1px solid var(--border);
 	}
 	.danger-zone strong {
@@ -441,7 +441,7 @@
 		text-transform: uppercase;
 	}
 	.danger-zone p {
-		margin: 4px 0 0;
+		margin: var(--space-1) 0 0;
 		font-size: var(--text-base);
 	}
 </style>

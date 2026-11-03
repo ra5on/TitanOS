@@ -600,7 +600,7 @@
 		flex-basis: 0;
 		font-family: inherit;
 		min-width: 6px;
-		padding: 0 4px;
+		padding: 0 var(--space-1);
 		overflow: hidden;
 		font-size: var(--text-sm);
 		white-space: nowrap;
@@ -643,7 +643,7 @@
 	}
 	th,
 	td {
-		padding: 6px 8px;
+		padding: 6px var(--space-2);
 		text-align: left;
 		vertical-align: top;
 		border-bottom: 1px solid var(--border);
@@ -665,18 +665,18 @@
 		background: var(--chip);
 	}
 	.compact {
-		padding: 3px 8px;
+		padding: 3px var(--space-2);
 		font-size: var(--text-base);
 	}
 	.actions {
 		min-width: 14rem;
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px;
+		gap: var(--space-1);
 		align-items: center;
 	}
 	.notice-info {
-		padding: 10px 12px;
+		padding: 10px var(--space-3);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-sm, 8px);
 		background: var(--surface-2, var(--surface));

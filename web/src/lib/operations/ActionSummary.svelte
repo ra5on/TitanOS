@@ -119,7 +119,7 @@
 		font-size: var(--text-md);
 	}
 	.toolbar {
-		margin-bottom: 12px;
+		margin-bottom: var(--space-3);
 	}
 	.toolbar input {
 		flex: 1;

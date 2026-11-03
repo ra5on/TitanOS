@@ -256,7 +256,7 @@
 	}
 	.trends > div {
 		border-bottom: 1px solid var(--border);
-		padding: 12px 0;
+		padding: var(--space-3) 0;
 	}
 	.settings {
 		display: flex;
@@ -283,8 +283,8 @@
 		display: flex;
 		align-items: end;
 		flex-wrap: wrap;
-		gap: 16px;
-		margin: 20px 0 12px;
+		gap: var(--space-4);
+		margin: 20px 0 var(--space-3);
 	}
 	.toolbar select {
 		width: auto;
@@ -297,7 +297,7 @@
 	}
 	.detail {
 		display: block;
-		margin-top: 4px;
+		margin-top: var(--space-1);
 		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
 	}

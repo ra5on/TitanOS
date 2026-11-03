@@ -58,7 +58,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		justify-content: space-between;
-		gap: 6px 24px;
+		gap: 6px var(--space-5);
 		padding: 10px 32px;
 		border-top: 1px solid var(--border);
 		font-size: 0.75rem;
@@ -66,7 +66,7 @@
 	}
 	@media (max-width: 760px) {
 		footer {
-			padding: 10px 16px;
+			padding: 10px var(--space-4);
 		}
 	}
 	footer span {

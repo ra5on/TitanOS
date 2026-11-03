@@ -244,9 +244,9 @@
 	nav a {
 		display: flex;
 		justify-content: space-between;
-		gap: 12px;
+		gap: var(--space-3);
 		align-items: center;
-		padding: 12px 0;
+		padding: var(--space-3) 0;
 		border-top: 1px solid var(--panel-border);
 		color: var(--text);
 		text-decoration: none;
@@ -256,7 +256,7 @@
 		color: var(--accent);
 	}
 	.notice-error a {
-		margin-right: 12px;
+		margin-right: var(--space-3);
 	}
 	@media (max-width: 900px) {
 		.summary,

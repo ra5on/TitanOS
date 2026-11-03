@@ -132,14 +132,14 @@
 	}
 	.logo .trigger {
 		height: 44px;
-		padding: 0 6px 0 4px;
+		padding: 0 6px 0 var(--space-1);
 		margin-left: -4px;
 		color: var(--muted);
 	}
 	.card .trigger {
 		width: 100%;
 		gap: 10px;
-		padding: 8px 10px;
+		padding: var(--space-2) 10px;
 		border-color: var(--border);
 		background: var(--chip);
 		text-align: left;
@@ -266,7 +266,7 @@
 	}
 	.menu hr {
 		width: 100%;
-		margin: 4px 0;
+		margin: var(--space-1) 0;
 		border: 0;
 		border-top: 1px solid var(--border);
 	}

@@ -1533,7 +1533,7 @@
 		padding-left: 32px;
 	}
 	.segmented.icons button {
-		padding: 0 8px;
+		padding: 0 var(--space-2);
 	}
 	.icon-btn {
 		width: var(--control-height);
@@ -1562,7 +1562,7 @@
 	.filters {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	.filter {
 		display: inline-flex;
@@ -1601,7 +1601,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 4px 12px;
+		gap: var(--space-1) var(--space-3);
 		margin: 0 0 0 auto;
 		color: var(--muted);
 		font-size: var(--text-sm);

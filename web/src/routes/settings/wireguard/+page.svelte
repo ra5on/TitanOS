@@ -327,7 +327,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.choice {
 		border: 0;
@@ -339,7 +339,7 @@
 	}
 	legend {
 		font-weight: 500;
-		margin-bottom: 4px;
+		margin-bottom: var(--space-1);
 	}
 	.peers {
 		list-style: none;
@@ -350,8 +350,8 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px 12px;
-		padding: 8px 0;
+		gap: 6px var(--space-3);
+		padding: var(--space-2) 0;
 	}
 	.peers .name {
 		font-weight: 500;
@@ -362,7 +362,7 @@
 	.qr {
 		display: flex;
 		justify-content: center;
-		margin: 8px 0;
+		margin: var(--space-2) 0;
 	}
 	.config {
 		white-space: pre-wrap;

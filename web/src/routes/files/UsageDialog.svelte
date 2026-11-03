@@ -95,7 +95,7 @@
 	}
 	.row {
 		display: flex;
-		gap: 12px;
+		gap: var(--space-3);
 		align-items: center;
 		flex-wrap: wrap;
 		padding: 10px 0;

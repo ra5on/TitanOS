@@ -205,7 +205,7 @@
 	.picker {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.text,
 	.chosen {
@@ -214,7 +214,7 @@
 	}
 	.chosen {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		flex-wrap: wrap;
 		overflow-wrap: anywhere;
 	}
@@ -224,7 +224,7 @@
 	.search {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.search input {
 		flex: 1;
@@ -239,13 +239,13 @@
 		font-size: var(--text-base);
 	}
 	.small-btn {
-		gap: 4px;
+		gap: var(--space-1);
 		height: 28px;
 		padding: 0 10px;
 		font-size: var(--text-sm);
 	}
 	.crumb {
-		padding: 2px 4px;
+		padding: 2px var(--space-1);
 		background: transparent;
 		border: 0;
 		border-radius: var(--radius-small);
@@ -275,14 +275,14 @@
 		border-bottom: 0;
 	}
 	.list > .muted {
-		padding: 10px 12px;
+		padding: 10px var(--space-3);
 	}
 	.row {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		width: 100%;
-		padding: 8px 12px;
+		padding: var(--space-2) var(--space-3);
 		background: transparent;
 		border: 0;
 		color: var(--text);

@@ -44,7 +44,7 @@
 	}
 	ul {
 		display: flex;
-		gap: 12px 24px;
+		gap: var(--space-3) var(--space-5);
 		flex-wrap: wrap;
 		list-style: none;
 		padding: 0;

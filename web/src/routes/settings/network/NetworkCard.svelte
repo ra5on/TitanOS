@@ -148,7 +148,7 @@
 		display: flex;
 		align-items: flex-start;
 		justify-content: space-between;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.title {
 		display: flex;
@@ -168,7 +168,7 @@
 	dl {
 		display: grid;
 		grid-template-columns: auto 1fr;
-		gap: 4px 12px;
+		gap: var(--space-1) var(--space-3);
 		margin: 0;
 		font-size: var(--text-md);
 	}

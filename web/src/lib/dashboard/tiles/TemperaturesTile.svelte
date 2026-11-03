@@ -53,16 +53,16 @@
 		margin: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	dl.grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(min(130px, 100%), 1fr));
-		gap: 16px;
+		gap: var(--space-4);
 	}
 	dl.grid > div {
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	dl.grid dd {
 		text-align: left;
@@ -70,7 +70,7 @@
 	dl > div {
 		display: flex;
 		justify-content: space-between;
-		gap: 16px;
+		gap: var(--space-4);
 	}
 	dt {
 		display: flex;

@@ -330,7 +330,7 @@
 		align-items: center;
 		gap: 10px;
 		width: 100%;
-		padding: 8px 10px;
+		padding: var(--space-2) 10px;
 		text-align: left;
 		background: var(--surface);
 		color: var(--text);
@@ -368,7 +368,7 @@
 		margin: 0 0 0.4rem;
 	}
 	.notice-info {
-		padding: 10px 12px;
+		padding: 10px var(--space-3);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-sm, 8px);
 		background: var(--surface-2, var(--surface));

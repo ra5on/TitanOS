@@ -469,7 +469,7 @@
 	section {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 		padding: 18px;
 		font-size: var(--text-md);
 	}
@@ -504,13 +504,13 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.setup {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 20px;
-		padding-top: 12px;
+		padding-top: var(--space-3);
 		border-top: 1px solid var(--panel-border);
 	}
 	.qr {
@@ -530,7 +530,7 @@
 		flex: 1 1 320px;
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	label {
 		display: flex;
@@ -544,7 +544,7 @@
 	.buttons {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.actions {
 		display: flex;
@@ -557,7 +557,7 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 10px;
-		padding-top: 12px;
+		padding-top: var(--space-3);
 		border-top: 1px solid var(--panel-border);
 	}
 	.device div {
@@ -577,7 +577,7 @@
 		font-size: var(--text-md);
 	}
 	.codes {
-		margin: 12px 0;
+		margin: var(--space-3) 0;
 		padding: calc(var(--row-pad) + 2px) var(--tile-pad);
 		background: var(--bg);
 		border: 1px solid var(--border);

@@ -119,14 +119,14 @@
 		gap: 6px;
 		border: 1px solid var(--border);
 		border-radius: 10px;
-		padding: 12px 14px;
+		padding: var(--space-3) 14px;
 	}
 	.mode.on {
 		border-color: var(--accent);
 	}
 	.line {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		align-items: center;
 		justify-content: flex-start;
 		flex-wrap: wrap;
@@ -136,6 +136,6 @@
 		text-align: center;
 	}
 	.indent {
-		margin-left: 24px;
+		margin-left: var(--space-5);
 	}
 </style>

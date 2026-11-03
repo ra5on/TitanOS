@@ -88,13 +88,13 @@
 	fieldset {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 10px 24px;
+		gap: 10px var(--space-5);
 		margin: 0;
 		padding: 0;
 		border: 0;
 	}
 	legend {
-		margin-bottom: 8px;
+		margin-bottom: var(--space-2);
 		color: var(--muted);
 		font-size: var(--text-base);
 	}
@@ -120,6 +120,6 @@
 		display: flex;
 		align-items: center;
 		justify-content: flex-end;
-		gap: 16px;
+		gap: var(--space-4);
 	}
 </style>

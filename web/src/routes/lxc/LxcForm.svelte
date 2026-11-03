@@ -335,13 +335,13 @@
 	}
 	label {
 		display: grid;
-		gap: 4px;
+		gap: var(--space-1);
 		font-size: var(--text-base);
 	}
 	label.check {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		font-size: var(--text-md);
 	}
 	fieldset {
@@ -349,7 +349,7 @@
 		flex-direction: column;
 		gap: 10px;
 		margin: 0;
-		padding: 12px;
+		padding: var(--space-3);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 	}
@@ -367,7 +367,7 @@
 		display: grid;
 		grid-template-columns: 2fr 1.5fr auto auto;
 		align-items: end;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	@media (max-width: 760px) {
 		.mount {

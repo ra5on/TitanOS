@@ -160,10 +160,10 @@
 	fieldset {
 		border: 0;
 		padding: 0;
-		margin: 0 0 12px;
+		margin: 0 0 var(--space-3);
 		display: grid;
 		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	label {
 		display: flex;
@@ -181,7 +181,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 10px;
-		padding: 12px 0;
+		padding: var(--space-3) 0;
 		border-top: 1px solid var(--border);
 	}
 	.result .mono {

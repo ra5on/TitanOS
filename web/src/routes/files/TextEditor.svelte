@@ -193,7 +193,7 @@
 
 <style>
 	section {
-		margin: 16px 0;
+		margin: var(--space-4) 0;
 	}
 	textarea {
 		width: 100%;

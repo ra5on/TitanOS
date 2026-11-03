@@ -42,9 +42,9 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	p {
-		margin-top: 4px;
+		margin-top: var(--space-1);
 	}
 </style>

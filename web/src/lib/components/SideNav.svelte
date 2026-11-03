@@ -133,8 +133,8 @@
 		height: 100dvh;
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
-		padding: 14px 12px;
+		gap: var(--space-2);
+		padding: 14px var(--space-3);
 		border-right: 1px solid var(--border);
 	}
 	.head {
@@ -167,7 +167,7 @@
 		align-items: center;
 		height: 34px;
 		padding: 0 6px;
-		margin-bottom: 4px;
+		margin-bottom: var(--space-1);
 	}
 	nav {
 		flex: 1;
@@ -184,7 +184,7 @@
 		flex: none;
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 		height: 38px;
 		padding: 0 10px;
 		border: 0;
@@ -217,18 +217,18 @@
 		outline-offset: -2px;
 	}
 	.fold {
-		margin-top: 4px;
+		margin-top: var(--space-1);
 		border-top: 1px solid var(--border);
 		border-radius: 0;
-		padding-top: 4px;
+		padding-top: var(--space-1);
 		height: 46px;
 	}
 	.bottom {
 		flex: none;
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
-		padding-top: 8px;
+		gap: var(--space-2);
+		padding-top: var(--space-2);
 		border-top: 1px solid var(--border);
 	}
 	.folded .bottom {

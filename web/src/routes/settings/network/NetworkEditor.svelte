@@ -261,7 +261,7 @@
 	.grid {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
-		gap: 10px 16px;
+		gap: 10px var(--space-4);
 	}
 	.grid .stack {
 		max-width: none;
@@ -269,7 +269,7 @@
 	.route {
 		display: grid;
 		grid-template-columns: 1fr 1fr 6rem auto;
-		gap: 8px;
+		gap: var(--space-2);
 		align-items: end;
 	}
 	.route .stack {

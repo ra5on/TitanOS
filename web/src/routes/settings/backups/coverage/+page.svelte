@@ -108,7 +108,7 @@
 	.dates {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 12px;
+		gap: var(--space-3);
 		align-items: center;
 		justify-content: space-between;
 	}
@@ -127,7 +127,7 @@
 	.dates {
 		justify-content: start;
 		color: var(--muted);
-		margin-top: 8px;
+		margin-top: var(--space-2);
 		font-size: 0.8rem;
 	}
 	.job a {

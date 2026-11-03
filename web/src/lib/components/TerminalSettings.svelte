@@ -81,7 +81,7 @@
 <style>
 	.option {
 		display: grid;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	.option > p {
 		padding-left: 28px;

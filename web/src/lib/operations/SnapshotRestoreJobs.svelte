@@ -111,7 +111,7 @@
 		margin-top: var(--gap);
 	}
 	h2 {
-		margin: 0 0 12px;
+		margin: 0 0 var(--space-3);
 		font-size: var(--text-lg);
 	}
 	ul {
@@ -120,11 +120,11 @@
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	li {
 		border-bottom: 1px solid var(--border);
-		padding-bottom: 12px;
+		padding-bottom: var(--space-3);
 	}
 	li:last-child {
 		border-bottom: 0;
@@ -133,7 +133,7 @@
 	.head {
 		display: flex;
 		justify-content: space-between;
-		gap: 12px;
+		gap: var(--space-3);
 		flex-wrap: wrap;
 	}
 	.mono,
@@ -141,7 +141,7 @@
 		overflow-wrap: anywhere;
 	}
 	p {
-		margin: 4px 0;
+		margin: var(--space-1) 0;
 		font-size: var(--text-base);
 	}
 	progress {
@@ -149,7 +149,7 @@
 	}
 	.actions {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		flex-wrap: wrap;
 		margin-top: 6px;
 	}

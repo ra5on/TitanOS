@@ -64,7 +64,7 @@
 		align-items: center;
 		gap: 0;
 		height: 44px;
-		padding: 3px 4px;
+		padding: 3px var(--space-1);
 		box-sizing: border-box;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
@@ -80,7 +80,7 @@
 		flex-direction: column;
 		width: 46px;
 		height: auto;
-		padding: 4px 3px;
+		padding: var(--space-1) 3px;
 		gap: 2px;
 		--quick-button-size: 38px;
 	}

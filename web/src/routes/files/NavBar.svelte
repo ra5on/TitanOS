@@ -238,8 +238,8 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
-		padding: 10px 12px;
+		gap: var(--space-2);
+		padding: 10px var(--space-3);
 		border-bottom: 1px solid var(--panel-border);
 	}
 	.toolbar .btn {
@@ -256,7 +256,7 @@
 	}
 	.nav-buttons {
 		display: flex;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	.crumbs {
 		flex: 1 1 240px;
@@ -266,7 +266,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 2px;
-		padding: 0 4px;
+		padding: 0 var(--space-1);
 		border: 1px solid transparent;
 		border-radius: var(--radius-ctl);
 		font-size: var(--text-md);
@@ -276,7 +276,7 @@
 		border-color: var(--border);
 	}
 	.crumbs button {
-		padding: 4px 6px;
+		padding: var(--space-1) 6px;
 		background: transparent;
 		border: 0;
 		border-radius: var(--radius-small);

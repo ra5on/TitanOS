@@ -89,13 +89,13 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: flex-end;
-		gap: 10px 16px;
+		gap: 10px var(--space-4);
 	}
 	.row .stack {
 		flex: 1 1 16rem;
 	}
 	pre {
-		margin: 4px 0 0;
+		margin: var(--space-1) 0 0;
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 		font-size: var(--text-sm);

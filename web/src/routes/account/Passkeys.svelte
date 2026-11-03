@@ -201,7 +201,7 @@
 	section {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 		padding: 18px;
 		font-size: var(--text-md);
 	}
@@ -213,8 +213,8 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 10px 16px;
-		padding: 10px 12px;
+		gap: 10px var(--space-4);
+		padding: 10px var(--space-3);
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-ctl);
 	}

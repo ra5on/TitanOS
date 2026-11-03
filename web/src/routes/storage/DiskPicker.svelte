@@ -64,8 +64,8 @@
 	label {
 		display: flex;
 		align-items: center;
-		gap: 12px;
-		padding: 10px 12px;
+		gap: var(--space-3);
+		padding: 10px var(--space-3);
 		background: var(--bg);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
