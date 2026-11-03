@@ -103,6 +103,10 @@ type Settings struct {
 	AutomaticDrivers *bool             `json:"automaticDrivers,omitempty"`
 	DriverSet        string            `json:"driverSet,omitempty"`
 	PendingDriver    *DriverActivation `json:"pendingDriver,omitempty"`
+	// NvidiaDriver is the upstream NVIDIA version the owner chose, built on
+	// the NAS and rebuilt after a kernel update (driver_choice.go); "" is the
+	// driver shipped with TitanOS. Older versions ignore it.
+	NvidiaDriver string `json:"nvidiaDriver,omitempty"`
 }
 
 // Plugin is a plugin as shown in the UI.
@@ -243,11 +247,14 @@ type Manager struct {
 	retryAt        time.Time
 	retries        int
 	driverRequests chan string
-	driverActions  sync.Mutex
-	driverStatus   DriverUpdateStatus
-	driverAttempt  time.Time
-	driverVolume   string
-	bootID         string
+	// choiceTried is the release, kernel and version the chosen NVIDIA
+	// driver was last built for by itself (driver_choice.go).
+	choiceTried   string
+	driverActions sync.Mutex
+	driverStatus  DriverUpdateStatus
+	driverAttempt time.Time
+	driverVolume  string
+	bootID        string
 	// Hardware recommendations (recommend.go): sysfs root, pci.ids and the
 	// image's catalog table; empty paths switch detection off (tests).
 	sysRoot      string
@@ -257,6 +264,9 @@ type Manager struct {
 	hw           hardwareState
 	// Notify is told the title of a plugin newly recommended for hardware.
 	Notify func(title string)
+	// DriverBuilt is told how building the chosen NVIDIA version ended;
+	// nil tells nobody.
+	DriverBuilt func(version string, err error)
 }
 
 // RuntimeAction keeps configuration changes from racing sysext removal or an

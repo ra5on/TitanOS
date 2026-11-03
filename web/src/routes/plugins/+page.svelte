@@ -7,6 +7,7 @@
 	import TailscaleSettings from '#lib/components/TailscaleSettings.svelte';
 	import NetbirdSettings from '#lib/components/NetbirdSettings.svelte';
 	import DriverUpdates from '#lib/components/DriverUpdates.svelte';
+	import DriverChoice from '#lib/components/DriverChoice.svelte';
 	import PluginSteps from '#lib/components/PluginSteps.svelte';
 	import { latestFor, type PluginProgress } from '#lib/plugin-progress.ts';
 	import { formatBytes } from '#lib/format.ts';
@@ -768,7 +769,11 @@
 					{#if current.name === 'netbird'}<NetbirdSettings
 							onpending={(value) => (netbirdPending = value)}
 						/>{/if}
-					{#if current.name === 'nvidia' && (current.official || current.local) && status.driverUpdate}<DriverUpdates
+					{#if current.name === 'nvidia' && (current.official || current.local) && status.driverUpdate?.drivers?.length}<DriverChoice
+							status={status.driverUpdate}
+							{busy}
+							action={(data) => run(() => api.post<Status>('/plugins/nvidia/updates', data))}
+						/>{:else if current.name === 'nvidia' && (current.official || current.local) && status.driverUpdate}<DriverUpdates
 							status={status.driverUpdate}
 							{busy}
 							action={(data) => run(() => api.post<Status>('/plugins/nvidia/updates', data))}

@@ -18,6 +18,15 @@
 		checked?: string;
 		pending?: { version: string };
 		canRestore: boolean;
+		/** All NVIDIA versions of the last check, newest first; empty with an older build environment. */
+		drivers?: string[];
+		/** The chosen version ('' the shipped one), the shipped and the running driver. */
+		chosen?: string;
+		bundled?: string;
+		running?: string;
+		runningLocal?: boolean;
+		/** The version being built, or whose build failed last. */
+		target?: string;
 		source?: { driver: string; toolkit: string; downloaded: boolean };
 		versions:
 			| {

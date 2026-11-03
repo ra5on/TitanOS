@@ -4,7 +4,8 @@ Ab dem Entwicklungsstand nach Beta 5 bezieht TitanOS neue Treiber direkt aus
 NVIDIAs öffentlichem Debian-Archiv. Es baut die offenen Kernelmodule für den
 exakten laufenden TitanOS-Kernel auf dem NAS. Originale NVIDIA-Bibliotheken,
 GSP-Firmware und Container-Werkzeuge bleiben unveränderte Herstellerdateien.
-Ältere Archivversionen werden nicht zusätzlich angeboten.
+Seit 0.47.0 ist jede vollständige Version des Archivs wählbar (Abschnitt
+„Version wählen“).
 
 1. **Neue NVIDIA-Version prüfen** authentifiziert den Paketindex mit dem festen
    NVIDIA-GPG-Schlüssel und lädt einen vollständigen Paketstand auf das
@@ -22,6 +23,28 @@ GSP-Firmware und Container-Werkzeuge bleiben unveränderte Herstellerdateien.
 ausgelieferter Treiber** bleibt als Rückkehrmöglichkeit erhalten. Während ein
 Treiberwechsel auf den Neustart wartet, sind andere Plugin-Mutationen und die
 Vorbereitung eines Systemupdates gesperrt. Alte Dateien werden nicht gelöscht.
+
+## Version wählen
+
+Die Prüfung schreibt alle Treiberversionen, deren Pakete im Archiv
+vollständig vorliegen, in `versions.json`. Unter Plugins › NVIDIA stehen sie
+in einer Auswahl neben dem mit TitanOS ausgelieferten Treiber. **Bauen und beim
+nächsten Neustart verwenden** lädt die gewählte Version (`TITANOS_NVIDIA_DRIVER`
+für die Bauumgebung), baut sie und wählt sie für den nächsten Neustart, in
+einem Auftrag. Die Wahl steht in `/config/plugins/settings.json`
+(`nvidiaDriver`).
+
+Nach einem Kernel- oder Systemupdate passt der lokale Bau nicht mehr; der neue
+Satz bringt den ausgelieferten Treiber. titand baut die gewählte Version dann
+von selbst für den neuen Kernel, einmal je Release, Kernel und Version, und wählt
+sie für den nächsten Neustart. Schlägt der Bau fehl, läuft weiter der
+ausgelieferte Treiber, die Seite zeigt den Fehler und eine Meldung
+(`nvidia_build_failed`) geht raus. Ältere Treiberreihen als die ausgelieferte
+bauen mit neuen Kerneln oft nicht; die Auswahl weist darauf hin.
+
+Bauumgebungen aus Kernel-Sätzen vor dieser Änderung liefern keine Liste. Dann
+zeigt die Seite die bisherige Bedienung (neueste Version prüfen, vorbereiten,
+auswählen).
 
 ## Herkunft und Bauumgebung
 
