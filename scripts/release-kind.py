@@ -33,6 +33,10 @@ ALLOWED = (
     # This decision and its tests run only in CI.
     "scripts/release-kind.py",
     "scripts/tests/test_release_kind.py",
+    # The release workflow runs only in CI and is not in the image; an app
+    # release repacks the base image anyway (decision of 4.11.2026). Changes
+    # meant for the image itself need "[system]" in the tag message.
+    ".github/workflows/release.yml",
     # The example agent is published as its own image, not in the system.
     "examples/",
     ".github/workflows/agent.yml",

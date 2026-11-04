@@ -32,8 +32,12 @@ class ReleaseKindTest(unittest.TestCase):
         result = self.decide("0.8.2", ["backend/x.go", "examples/agent/agent.py", ".github/workflows/agent.yml"])
         self.assertEqual(result[:2], ("app", "0.8.0"))
 
+    def test_the_release_workflow_is_not_part_of_the_image(self):
+        result = self.decide("0.8.2", ["web/src/app.css", ".github/workflows/release.yml"])
+        self.assertEqual(result[:2], ("app", "0.8.0"))
+
     def test_changes_to_the_image_make_a_full_release(self):
-        for path in ["build/mkosi.conf", "boot/entry.conf.in", "scripts/make-zip.sh", ".github/workflows/release.yml", "Makefile"]:
+        for path in ["build/mkosi.conf", "boot/entry.conf.in", "scripts/make-zip.sh", ".github/actions/image-tools/action.yml", "Makefile"]:
             with self.subTest(path=path):
                 result = self.decide("0.8.2", ["backend/main.go", path])
                 self.assertEqual(result[:2], ("system", "0.8.2"))
