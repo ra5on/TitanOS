@@ -71,6 +71,8 @@
 			error = null;
 			if (!settings) {
 				settings = structuredClone($state.snapshot(status!.settings));
+				// Before 0.47.2 the API left backupsFirst out when false; the checkbox would add it.
+				settings.backupsFirst = !!settings.backupsFirst;
 				savedSettings = JSON.stringify(settings);
 			}
 		} catch (e) {
@@ -98,6 +100,8 @@
 		try {
 			status = await api.put<MaintenanceStatus>('/maintenance', next);
 			settings = structuredClone($state.snapshot(status!.settings));
+			// Before 0.47.2 the API left backupsFirst out when false; the checkbox would add it.
+			settings.backupsFirst = !!settings.backupsFirst;
 			draft = null;
 			savedSettings = JSON.stringify(settings);
 			saved = true;

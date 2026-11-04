@@ -3,6 +3,7 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { formatBytes } from '#lib/format.ts';
+	import { deletePaths, inTrash } from './commands.ts';
 	let {
 		root,
 		dir,
@@ -26,6 +27,10 @@
 		review = $state(false),
 		confirmed = $state(false),
 		permanent = $state(false);
+	// In a volume only paths inside a share with a bin go to a bin.
+	const binned = $derived(selected.filter((p) => inTrash(root, p)));
+	const recyclable = $derived(binned.length > 0);
+	const mixed = $derived(recyclable && binned.length < selected.length);
 	let controller: AbortController | undefined;
 	$effect(() => () => controller?.abort());
 	async function scan() {
@@ -56,12 +61,7 @@
 		error = '';
 		try {
 			const versions = Object.assign({}, ...(result?.groups.map((g) => g.versions) ?? []));
-			await api.post('/files/delete', {
-				root: root.id,
-				paths: selected,
-				permanent: !root.recycle || permanent,
-				versions,
-			});
+			await deletePaths(root, selected, permanent, { versions });
 			result = null;
 			selected = [];
 			review = false;
@@ -123,7 +123,7 @@
 		{#if review}<ul>
 				{#each selected as path}<li class="mono">{path}</li>{/each}
 			</ul>
-			{#if root.recycle}<label
+			{#if recyclable}<label
 					><input
 						type="checkbox"
 						bind:checked={permanent}
@@ -131,7 +131,14 @@
 					/>{t('files.duplicatesPermanent')}</label
 				>{/if}
 			<p class="notice-warn">
-				{t(root.recycle && !permanent ? 'files.duplicatesTrashHint' : 'files.duplicatesDeleteHint')}
+				{recyclable && !permanent && mixed
+					? t('files.deleteMixed', {
+							binned: binned.length,
+							rest: selected.length - binned.length,
+						})
+					: t(
+							recyclable && !permanent ? 'files.duplicatesTrashHint' : 'files.duplicatesDeleteHint',
+						)}
 			</p>
 			<label><input type="checkbox" bind:checked={confirmed} />{t('files.duplicatesConfirm')}</label
 			>
@@ -143,7 +150,9 @@
 					disabled={busy || !confirmed || !root.writable}
 					onclick={remove}
 					>{t(
-						root.recycle && !permanent ? 'files.duplicatesTrash' : 'files.duplicatesPermanent',
+						recyclable && !permanent && !mixed
+							? 'files.duplicatesTrash'
+							: 'files.duplicatesPermanent',
 					)}</button
 				>
 			</div>

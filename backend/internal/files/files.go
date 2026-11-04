@@ -37,6 +37,10 @@ type Root struct {
 	Recycle bool `json:"recycle"`
 	// RecycleDays is how long the bin keeps what was deleted.
 	RecycleDays int `json:"recycleDays,omitempty"`
+	// Bins are, for a volume, the folders of shares on it whose recycle bin
+	// is on, relative to the volume. What is deleted or replaced inside one
+	// goes to that share's bin, as if it had been deleted in the share.
+	Bins []string `json:"bins,omitempty"`
 	// Editable allows saving text files (SaveText) although the root is read-only.
 	Editable bool `json:"editable"`
 	// Hide lists top-level names that do not exist as far as users can tell;
@@ -78,6 +82,21 @@ func (r Root) secret(rel string) bool {
 		}
 	}
 	return true
+}
+
+// binFor returns the folder (relative to the root, "." for a share) whose
+// recycle bin takes p, if there is one. A share folder itself, seen from its
+// volume, has no bin: the bin is inside it.
+func (r Root) binFor(p string) (string, bool) {
+	if r.Recycle {
+		return ".", true
+	}
+	for _, bin := range r.Bins {
+		if strings.HasPrefix(p, bin+"/") {
+			return bin, true
+		}
+	}
+	return "", false
 }
 
 // Entry is a file or folder in a listing.
@@ -188,7 +207,11 @@ type Manager struct {
 	mu      sync.Mutex
 	textMu  sync.Mutex
 	uploads map[string]*upload
-	now     func() time.Time
+	// planHook, if set, sees every file the planning walk counts (tests).
+	planHook func(string)
+	// copyParts are the part files running copies write (copy_parts.go).
+	copyParts map[string]bool
+	now       func() time.Time
 }
 
 // NewManager returns a file manager that gives new files the group gid.
@@ -324,18 +347,22 @@ func (m *Manager) Rename(root Root, from, to string) error {
 	return mapError(publishNewFile(r, from, to))
 }
 
-// Delete removes files and folders. In a root with a recycle bin they are
-// moved there; anywhere else the caller has to confirm deleting for good.
+// Delete removes files and folders. Inside a share with a recycle bin
+// (also seen from its volume) they are moved there; anywhere else the caller
+// has to confirm deleting for good.
 func (m *Manager) Delete(root Root, paths []string, user string, permanent bool) error {
 	if !root.Writable {
 		return ErrReadOnly
 	}
-	if !root.Recycle && !permanent {
-		return ErrConfirm
-	}
 	for _, p := range paths {
 		if m.protected(root, p) {
 			return ErrProtected
+		}
+		if cleaned, err := clean(p); !permanent && (err != nil || !root.recyclable(cleaned)) {
+			if err != nil {
+				return ErrInvalid
+			}
+			return ErrConfirm
 		}
 	}
 	r, err := os.OpenRoot(root.Dir)
@@ -351,27 +378,63 @@ func (m *Manager) Delete(root Root, paths []string, user string, permanent bool)
 		if _, err := r.Lstat(p); err != nil {
 			return mapError(err)
 		}
-		if permanent || !root.Recycle {
+		if permanent {
 			if err := r.RemoveAll(p); err != nil {
 				return mapError(err)
 			}
 			continue
 		}
-		if err := m.recycle(r, p, user); err != nil {
+		if err := m.recycle(r, root, p, user); err != nil {
 			return mapError(err)
 		}
 	}
 	return nil
 }
 
-// recycle moves p to .recycle/<user>/<p>, the same place Samba uses.
-func (m *Manager) recycle(r *os.Root, p, user string) error {
-	_, err := m.recyclePath(r, p, user)
+// recyclable reports whether deleting p can go to a recycle bin.
+func (r Root) recyclable(p string) bool {
+	_, ok := r.binFor(p)
+	return ok
+}
+
+// Recyclable reports whether deleting p (relative to the root) goes to a
+// recycle bin.
+func (r Root) Recyclable(p string) bool {
+	p, err := clean(p)
+	return err == nil && r.recyclable(p)
+}
+
+// BinRoot returns the share folder bin of a volume as a root of its own,
+// for the recycle bin view.
+func (r Root) BinRoot(bin string) (Root, bool) {
+	if r.Kind != "volume" || !slices.Contains(r.Bins, bin) {
+		return Root{}, false
+	}
+	return Root{ID: r.ID, Name: path.Base(bin), Kind: "share", Dir: filepath.Join(r.Dir, filepath.FromSlash(bin)), Volume: r.Volume, Writable: r.Writable, Recycle: true}, true
+}
+
+// recycle moves p to the bin that takes it.
+func (m *Manager) recycle(r *os.Root, root Root, p, user string) error {
+	_, err := m.recyclePath(r, root, p, user)
 	return err
 }
 
-func (m *Manager) recyclePath(r *os.Root, p, user string) (string, error) {
-	target := path.Join(RecycleDir, user, p)
+func (m *Manager) recyclePath(r *os.Root, root Root, p, user string) (string, error) {
+	bin, ok := root.binFor(p)
+	if !ok {
+		return "", ErrConfirm
+	}
+	return m.recycleIn(r, bin, p, user)
+}
+
+// recycleIn moves p to <bin>/.recycle/<user>/<p inside bin>, the same place
+// Samba uses.
+func (m *Manager) recycleIn(r *os.Root, bin, p, user string) (string, error) {
+	original := p
+	if bin != "." {
+		original = strings.TrimPrefix(p, bin+"/")
+	}
+	target := path.Join(bin, RecycleDir, user, original)
 	if err := r.MkdirAll(path.Dir(target), 0o770); err != nil {
 		return "", err
 	}
@@ -385,7 +448,7 @@ func (m *Manager) recyclePath(r *os.Root, p, user string) (string, error) {
 	}
 	// The time of deletion decides when the bin drops the file.
 	now := m.now()
-	rememberTrash(r, target, p, now)
+	rememberTrash(r, target, original, now)
 	_ = r.Chtimes(target, now, now) // permissions and times are a convenience; the data are there either way
 	return target, nil
 }

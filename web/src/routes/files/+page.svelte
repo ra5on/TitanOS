@@ -13,6 +13,7 @@
 	} from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
+	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { folderPath, rangeSelection, previewKind, selectionType } from '#lib/file-actions.ts';
 	import { beginFileDrag, hasFileDrag, takeFileDrag, type FileDrag } from '#lib/file-drag.ts';
@@ -84,10 +85,17 @@
 	let anchor = $state('');
 	let error = $state('');
 	let trash = $state(false);
+	/** A volume shows the recycle bin of one of its shares: that share's folder. */
+	let trashBin = $state('');
 	/** On narrow screens the list of places is folded away behind a button. */
 	let placesOpen = $state(false);
 
 	const root = $derived(roots?.find((candidate) => candidate.id === rootId));
+	const bins = $derived(root?.kind === 'volume' ? (root.bins ?? []) : []);
+	const openBin = $derived(trashBin || (bins.length === 1 ? bins[0] : ''));
+	const binRoot = $derived(
+		root && openBin ? { ...root, name: openBin, kind: 'share' as const, recycle: true } : undefined,
+	);
 	let appliedLocation = '';
 	$effect(() => {
 		const requested = page.url.searchParams.get('root') ?? '';
@@ -735,6 +743,7 @@
 				return;
 			case 'trash':
 				trash = true;
+				trashBin = '';
 				selected = [];
 				return;
 			case 'twoPanes':
@@ -956,6 +965,46 @@
 								loadRoots();
 							}}
 						/>
+					{:else if binRoot}
+						<TrashView
+							root={binRoot}
+							bin={openBin}
+							user={session.data?.user?.name ?? ''}
+							admin={canAdminister}
+							onclose={() => {
+								if (trashBin && bins.length > 1) trashBin = '';
+								else {
+									trash = false;
+									load();
+								}
+							}}
+							onchanged={() => {
+								load();
+								loadRoots();
+							}}
+						/>
+					{:else if bins.length}
+						<div class="toolbar">
+							<button
+								type="button"
+								class="btn"
+								onclick={() => {
+									trash = false;
+									load();
+								}}>{t('files.trashBack')}</button
+							>
+						</div>
+						<section class="bin-choice" aria-label={t('files.trashChoose')}>
+							<h2 class="tile-title">{t('files.trashChoose')}</h2>
+							<p class="muted">{t('files.trashChooseHint', { name: root.name })}</p>
+							{#each bins as bin (bin)}<button
+									type="button"
+									class="btn bin"
+									onclick={() => (trashBin = bin)}
+									><Icon name="trash" size={16} /><span class="mono">{root.name}/{bin}</span
+									></button
+								>{/each}
+						</section>
 					{:else}
 						<div class="toolbar">
 							<button
@@ -1450,6 +1499,17 @@
 		box-shadow: var(--shadow-menu);
 		color: var(--muted);
 		font-size: var(--text-base);
+	}
+	.bin-choice {
+		display: flex;
+		flex-direction: column;
+		align-items: stretch;
+		gap: var(--space-2);
+		padding: var(--space-3) var(--space-4) var(--space-4);
+	}
+	.bin-choice .bin {
+		justify-content: flex-start;
+		gap: var(--space-2);
 	}
 	.trash-configure {
 		align-self: center;

@@ -31,7 +31,7 @@ func TestTransferRecoveryRequiresAccessIdentityAndKnownPublication(t *testing.T)
 	sr, _ := os.OpenRoot(src.Dir)
 	defer sr.Close()
 	j := &Job{ID: "0123456789abcdef", From: src.ID, To: dst.ID, Names: []string{"a"}, Dir: ".", State: JobRunning, Files: 1, Bytes: 1, user: "alex", c: &counters{}, completed: map[string]bool{}, completedTop: map[string]bool{}, targets: map[string]string{}, conflict: ConflictRename, sourceDir: src.Dir, destinationDir: dst.Dir}
-	if err := m.prepareTransfer(j, src, dst, sr); err != nil {
+	if err := m.prepareTransfer(j, src, dst, planOf(j, sr)); err != nil {
 		t.Fatal(err)
 	}
 	restored := NewManager(os.Getgid())
@@ -81,15 +81,17 @@ func TestTransferChangedSourceAndTargetAreRetained(t *testing.T) {
 	j := &Job{ID: "0123456789abcdef", From: src.ID, To: dst.ID, Names: []string{"a"}, Dir: ".", State: JobRunning, user: "alex", c: &counters{}, completed: map[string]bool{}, completedTop: map[string]bool{}, targets: map[string]string{}, conflict: ConflictRename, sourceDir: src.Dir, destinationDir: dst.Dir}
 	j.Files = 1
 	j.Bytes = 3
-	m.prepareTransfer(j, src, dst, sr)
+	m.prepareTransfer(j, src, dst, planOf(j, sr))
+	// F2: a source that changed after planning is copied as it is now,
+	// not refused for ever.
 	os.WriteFile(filepath.Join(src.Dir, "a"), []byte("changed"), 0600)
-	if err := m.copyEntry(context.Background(), j, sr, dr, "a", "a", ConflictRename, os.Getuid()); err == nil {
-		t.Fatal("changed source accepted")
+	if err := m.copyEntry(context.Background(), j, sr, dr, "a", "a", ConflictRename, os.Getuid()); err != nil || j.Failed != 0 {
+		t.Fatal("changed source refused", err, j.Problems)
 	}
 	root, _ := volumedata.Open(m.MountRoot, "data", "transfers", m.Mounted())
 	defer root.Close()
-	if _, err := os.Stat(filepath.Join(dst.Dir, "a")); !os.IsNotExist(err) {
-		t.Fatal("destination unexpectedly written")
+	if read(t, filepath.Join(dst.Dir, "a")) != "changed" {
+		t.Fatal("destination does not have the current source")
 	}
 }
 
@@ -101,7 +103,7 @@ func TestTransferLogKeepsTornCompletionBlockedAndCleansOnlyKnownTemporaryInode(t
 	dr, _ := os.OpenRoot(dst.Dir)
 	defer dr.Close()
 	j := &Job{ID: "0123456789abcdef", From: src.ID, To: dst.ID, Names: []string{"a"}, Dir: ".", State: JobRunning, Files: 1, Bytes: 1, user: "alex", c: &counters{}, completed: map[string]bool{}, completedTop: map[string]bool{}, targets: map[string]string{}, conflict: ConflictRename, sourceDir: src.Dir, destinationDir: dst.Dir}
-	if err := m.prepareTransfer(j, src, dst, sr); err != nil {
+	if err := m.prepareTransfer(j, src, dst, planOf(j, sr)); err != nil {
 		t.Fatal(err)
 	}
 	// Retain coverage of the old append journal's torn-tail import.
@@ -187,7 +189,7 @@ func TestLargeTransferPlanAndRecovery(t *testing.T) {
 	}
 	defer sr.Close()
 	j := &Job{ID: "0123456789abcdef", user: "alex", Names: []string{"photos"}, Files: count, State: JobRunning, c: &counters{}, completed: map[string]bool{}, completedTop: map[string]bool{}, targets: map[string]string{}}
-	if err := m.prepareTransfer(j, src, dst, sr); err != nil {
+	if err := m.prepareTransfer(j, src, dst, planOf(j, sr)); err != nil {
 		t.Fatal(err)
 	}
 	restored := NewManager(os.Getgid())
@@ -215,7 +217,7 @@ func TestForgetAndClearTransfersPersistAndKeepUserFiles(t *testing.T) {
 	defer sr.Close()
 	for i := range 8 {
 		j := &Job{ID: fmt.Sprintf("%016x", i), user: "alex", Names: []string{"original"}, Files: 1, Bytes: 6, State: JobDone, c: &counters{}, completed: map[string]bool{}, completedTop: map[string]bool{}, targets: map[string]string{}}
-		if err := m.prepareTransfer(j, src, dst, sr); err != nil {
+		if err := m.prepareTransfer(j, src, dst, planOf(j, sr)); err != nil {
 			t.Fatal(err)
 		}
 		m.jobs.list = append(m.jobs.list, j)
@@ -269,7 +271,7 @@ func TestClearTransferRetainsFailuresForRetry(t *testing.T) {
 	sr, _ := os.OpenRoot(src.Dir)
 	defer sr.Close()
 	j := &Job{ID: "0123456789abcdef", user: "alex", Names: []string{"a"}, Files: 1, Bytes: 1, State: JobDone, c: &counters{}}
-	if err := m.prepareTransfer(j, src, dst, sr); err != nil {
+	if err := m.prepareTransfer(j, src, dst, planOf(j, sr)); err != nil {
 		t.Fatal(err)
 	}
 	m.jobs.list = append(m.jobs.list, j)

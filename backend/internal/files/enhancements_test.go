@@ -118,14 +118,14 @@ func TestCompareCopyPreservesNestedPathAndRejectsStaleTargets(t *testing.T) {
 	if read(t, filepath.Join(dst.Dir, choice.Target)) != "strand" {
 		t.Fatal("nested path lost")
 	}
-	if end := start(choice); end.State != JobFailed {
+	if end := start(choice); end.Failed != 1 || problemCodes(end)["urlaub/strand.jpg"] != "changed_target" {
 		t.Fatal("occupied destination replaced", end)
 	}
 	targetInfo, _ := os.Stat(filepath.Join(dst.Dir, choice.Target))
 	choice.Action = "replace"
 	choice.TargetVersion = entryVersion(targetInfo)
 	os.WriteFile(filepath.Join(dst.Dir, choice.Target), []byte("externally changed"), 0600)
-	if end := start(choice); end.State != JobFailed {
+	if end := start(choice); end.Failed != 1 || problemCodes(end)["urlaub/strand.jpg"] != "changed_target" {
 		t.Fatal("stale target replaced", end)
 	}
 	if read(t, filepath.Join(dst.Dir, choice.Target)) != "externally changed" {
@@ -153,7 +153,7 @@ func TestCopyChoiceRechecksDestinationBeforePublishing(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if end := finish(t, m, job.ID); end.State != JobFailed {
+	if end := finish(t, m, job.ID); end.Failed != 1 || problemCodes(end)["notiz.txt"] != "changed_target" {
 		t.Fatal(end)
 	}
 	if read(t, dest) != "concurrent writer" {
