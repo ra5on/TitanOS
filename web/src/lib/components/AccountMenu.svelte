@@ -239,12 +239,12 @@
 		.account:not(.side) .name {
 			display: none;
 		}
-		/* In the phone's drawer: across the bottom of the screen. */
+		/* In the phone's drawer: across its bottom, as wide as the drawer. */
 		.side .menu {
 			left: 12px;
-			right: 12px;
+			right: auto;
 			bottom: calc(12px + env(safe-area-inset-bottom));
-			width: auto;
+			width: calc(var(--drawer-width, 300px) - 24px);
 		}
 	}
 </style>
