@@ -845,7 +845,7 @@
 	"docker.settingsHint": "Where apps keep their data, service",
 	"docker.lanHint": "Own home-network addresses for containers",
 	"docker.autoUpdateHint": "Update apps on a schedule",
-	"docker.layoutHint": "Order and details of the list",
+	"docker.layoutHint": "Order (custom or A–Z) and details",
 	"docker.fromCatalog": "From the app catalog",
 	"docker.fromCatalogHint": "Templates with all settings",
 	"docker.importHint": "Paste a docker-compose.yaml",

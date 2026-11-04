@@ -845,7 +845,7 @@
 	"docker.settingsHint": "Speicherort der Apps, Dienst",
 	"docker.lanHint": "Eigene Adressen im Heimnetz für Container",
 	"docker.autoUpdateHint": "Apps nach Zeitplan aktualisieren",
-	"docker.layoutHint": "Reihenfolge und Details der Liste",
+	"docker.layoutHint": "Reihenfolge (eigene oder A–Z) und Details",
 	"docker.fromCatalog": "Aus dem App-Katalog",
 	"docker.fromCatalogHint": "Vorlagen mit allen Einstellungen",
 	"docker.importHint": "Eine docker-compose.yaml einfügen",

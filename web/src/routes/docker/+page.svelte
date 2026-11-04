@@ -164,6 +164,11 @@
 		dragged = id;
 		cancelDrag = dragPointer(event, {
 			move: (e) => {
+				// Near the top or bottom edge the page follows (phones show few cards).
+				const edge = 60;
+				if (e.clientY < edge) window.scrollBy(0, -Math.ceil((edge - e.clientY) / 3));
+				else if (e.clientY > innerHeight - edge)
+					window.scrollBy(0, Math.ceil((e.clientY - innerHeight + edge) / 3));
 				const over = document
 					.elementFromPoint(e.clientX, e.clientY)
 					?.closest<HTMLElement>('[data-group]')?.dataset.group;
