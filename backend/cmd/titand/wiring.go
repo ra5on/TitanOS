@@ -51,6 +51,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/replication"
 	command "github.com/ra5on/TitanOS/backend/internal/run"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
+	"github.com/ra5on/TitanOS/backend/internal/scripts"
 	"github.com/ra5on/TitanOS/backend/internal/shutdown"
 	"github.com/ra5on/TitanOS/backend/internal/smarthistory"
 	"github.com/ra5on/TitanOS/backend/internal/sshd"
@@ -117,6 +118,7 @@ type titand struct {
 	slot            string
 	updates         *update.Manager
 	upkeep          *maintenance.Manager
+	userScripts     *scripts.Manager
 	backups         *backup.Manager
 	appBackups      *appbackup.Manager
 	backupTarget    *backuptarget.Manager
@@ -685,6 +687,13 @@ func (w *titand) wireUpdates() error {
 		Containers:  w.containers.RunningContainers,
 		StopDocker:  w.containers.StopEngine,
 		StartDocker: w.containers.StartEngine,
+		// The person's shutdown scripts, before the guests end (Tools ›
+		// Scripts); w.userScripts is wired further down.
+		Scripts: func(ctx context.Context, progress func(name, state string, err error)) {
+			if w.userScripts != nil {
+				w.userScripts.RunShutdown(ctx, progress)
+			}
+		},
 	})
 	// Nobody watches these: after the waiting time they go on by themselves.
 	w.unattended = func(action, by string, run func() error) func() error {
@@ -1316,9 +1325,22 @@ func (w *titand) wireMaintenance() error {
 	}
 	w.background(func() { w.upkeep.Run(ctx) })
 
+	// Own scripts (Tools › Scripts): on a data volume, run by hand, on a
+	// schedule, at start once the volume is mounted and at shutdown.
+	w.userScripts = scripts.New(w.store)
+	w.userScripts.Disabled = w.opts.dev
+	w.userScripts.Mounted = w.volumes.Mounted
+	w.userScripts.DefaultVolume = w.extensions.Volume
+	w.userScripts.Timezone = w.settings.CurrentTimezone
+	w.userScripts.Notify = func(severity, kind, subject string) { w.notifier.Notify(severity, kind, subject) }
+	if err := w.userScripts.Load(); err != nil {
+		slog.Warn("script settings unavailable", "err", err)
+	}
+	w.background(func() { w.userScripts.Loop(ctx) })
+
 	// An app update restarts titand: it waits for work that would break off.
 	w.updates.Working = func() bool {
-		return w.upkeep.Busy() || w.appBackups.Busy() || w.volumes.ActionsRunning() || w.volumes.SnapshotRestoresRunning() || w.volumes.GrowthPending() || w.volumes.Reshaping() || w.replicas.Busy() || w.fileManager.Busy() || w.backups.Busy() || w.volumes.TestsRunning() || w.machines.Busy() || w.systemContainers.Busy() || w.extensions.Busy() || w.mediaImports.Working() || w.folders.PurgeBusy()
+		return w.upkeep.Busy() || w.userScripts.Busy() || w.appBackups.Busy() || w.volumes.ActionsRunning() || w.volumes.SnapshotRestoresRunning() || w.volumes.GrowthPending() || w.volumes.Reshaping() || w.replicas.Busy() || w.fileManager.Busy() || w.backups.Busy() || w.volumes.TestsRunning() || w.machines.Busy() || w.systemContainers.Busy() || w.extensions.Busy() || w.mediaImports.Working() || w.folders.PurgeBusy()
 	}
 	// Settings › Services: what was switched off stays off, before anything
 	// is started automatically.
@@ -1362,6 +1384,7 @@ func (w *titand) wireAPI() error {
 		Monitor:            w.monitor,
 		Monitoring:         w.history,
 		Maintenance:        w.upkeep,
+		Scripts:            w.userScripts,
 		ApplicationBackups: w.appBackups,
 		Storage:            w.volumes,
 		SmartHistory:       w.smartHistory,

@@ -41,6 +41,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/logkeep"
 	"github.com/ra5on/TitanOS/backend/internal/lxc"
 	"github.com/ra5on/TitanOS/backend/internal/maintenance"
+	"github.com/ra5on/TitanOS/backend/internal/scripts"
 	"github.com/ra5on/TitanOS/backend/internal/media"
 	"github.com/ra5on/TitanOS/backend/internal/monitoring"
 	"github.com/ra5on/TitanOS/backend/internal/netbird"
@@ -76,6 +77,7 @@ type Options struct {
 	Monitoring         *monitoring.Manager
 	Media              *media.Manager
 	Maintenance        *maintenance.Manager
+	Scripts            *scripts.Manager
 	ApplicationBackups *appbackup.Manager
 	Monitor            *system.Monitor
 	Storage            *storage.Manager
@@ -333,6 +335,7 @@ func New(opts Options) *Server {
 	s.registerSystemSettings(mux)
 	s.registerPlugins(mux)
 	s.registerTerminal(mux)
+	s.registerScripts(mux)
 
 	s.routeCluster(mux)
 
