@@ -1505,7 +1505,7 @@
 		flex-direction: column;
 		align-items: stretch;
 		gap: var(--space-2);
-		padding: var(--space-3) 0;
+		padding: var(--space-3) var(--space-4) var(--space-4);
 	}
 	.bin-choice .bin {
 		justify-content: flex-start;

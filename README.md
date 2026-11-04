@@ -100,7 +100,7 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 
 [![Dateimanager mit Ortsauswahl, Ordnern, Dokumenten und Werkzeugleiste](docs/screenshots/current/dateien.png)](docs/screenshots/current/dateien.png)
 
-[Texteditor und USB-Dateisysteme](docs/FILE-EDITOR.md) · [Vorschaubilder und Volltextsuche](docs/FILE-SEARCH.md) · [Partitionseditor](docs/PARTITIONS.md) · [Von Link herunterladen](docs/FILE-DOWNLOADS.md) · [RAM und Uploads](docs/MEMORY.md) · [Lange Windows-SMB-Pfade](docs/WINDOWS-SMB.md)
+[Texteditor und USB-Dateisysteme](docs/FILE-EDITOR.md) · [Vorschaubilder und Volltextsuche](docs/FILE-SEARCH.md) · [Partitionseditor](docs/PARTITIONS.md) · [Von Link herunterladen](docs/FILE-DOWNLOADS.md) · [Kopieren und Verschieben](docs/FILE-COPY.md) · [RAM und Uploads](docs/MEMORY.md) · [Lange Windows-SMB-Pfade](docs/WINDOWS-SMB.md)
 
 ### Docker und App-Store
 
@@ -284,7 +284,7 @@ Die Datenplatten nicht als neue Volumes anlegen oder formatieren. Ohne Konfigura
 | Thema | Einstieg |
 |---|---|
 | Speicher, Sicherungen und Wartung | [Abläufe und Grenzen](docs/WORKFLOWS.md), [Btrfs](docs/BTRFS.md), [VM-Snapshots](docs/VM-SNAPSHOTS.md), [LXC-Container](docs/LXC.md) |
-| Dateien und Übertragungen | [Dateieditor](docs/FILE-EDITOR.md), [RAM/Uploads](docs/MEMORY.md), [Windows-SMB](docs/WINDOWS-SMB.md) |
+| Dateien und Übertragungen | [Dateieditor](docs/FILE-EDITOR.md), [Kopieren/Verschieben](docs/FILE-COPY.md), [RAM/Uploads](docs/MEMORY.md), [Windows-SMB](docs/WINDOWS-SMB.md) |
 | Hardware und Fernzugriff | [Plugins](docs/PLUGINS.md), [NVIDIA](docs/NVIDIA.md), [Tailscale](docs/TAILSCALE.md), [NetBird](docs/NETBIRD.md), [Netzwerk](docs/NETWORKING.md), [Cluster](docs/CLUSTER.md) |
 | API und Medien | [Öffentliche API/CLI](docs/PUBLIC-API.md), [VM-Medien](docs/VM-MEDIA.md), [Plugin-Aufräumen](docs/PLUGIN-CLEANUP.md) |
 | Integrationen | [Home Assistant/MQTT](docs/HOME-ASSISTANT.md), [MCP-Server](docs/MCP.md) |
