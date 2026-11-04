@@ -7,18 +7,12 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import DangerZone from '#lib/components/DangerZone.svelte';
 	import HelpTip from '#lib/components/HelpTip.svelte';
-	import {
-		EVERY,
-		TRIGGERS,
-		draftBody,
-		draftOf,
-		newDraft,
-		type Draft,
-		type Script,
-	} from './scripts.ts';
+	import ScheduleField from '#lib/components/ScheduleField.svelte';
+	import { parseCron } from '#lib/schedule.ts';
+	import { TRIGGERS, draftBody, draftOf, newDraft, type Draft, type Script } from './scripts.ts';
 
-	type Props = { id: string; onclose: () => void; onsaved: () => void };
-	let { id, onclose, onsaved }: Props = $props();
+	type Props = { id: string; timezone?: string; onclose: () => void; onsaved: () => void };
+	let { id, timezone, onclose, onsaved }: Props = $props();
 
 	let draft = $state<Draft | null>(null);
 	let initial = $state('');
@@ -84,8 +78,6 @@
 		if (dirty) discard = true;
 		else onclose();
 	}
-	const days = Array.from({ length: 28 }, (_, i) => i + 1);
-	const weekdays = [1, 2, 3, 4, 5, 6, 0];
 </script>
 
 <Dialog title={t(id ? 'scripts.edit' : 'scripts.add')} wide locked={dirty || busy} onclose={close}>
@@ -118,50 +110,7 @@
 			>
 			{#if draft.trigger === 'schedule'}<fieldset class="schedule">
 					<legend>{t('scripts.schedule')}</legend>
-					<label class="stack"
-						>{t('scripts.every')}<select class="field" bind:value={draft.schedule.every}
-							>{#each EVERY as every (every)}<option value={every}
-									>{t(`scripts.every.${every}` as MessageKey)}</option
-								>{/each}</select
-						></label
-					>
-					{#if draft.schedule.every === 'hourly'}<label class="stack"
-							>{t('scripts.minute')}<input
-								class="field"
-								type="number"
-								min="0"
-								max="59"
-								required
-								bind:value={draft.schedule.minute}
-							/></label
-						>{:else if draft.schedule.every === 'custom'}<label class="stack cron"
-							><span>{t('scripts.cron')}<HelpTip term="cron" /></span><input
-								class="field mono"
-								bind:value={draft.schedule.cron}
-								required
-								autocomplete="off"
-								spellcheck="false"
-								placeholder={t('scripts.cronExample')}
-							/></label
-						>{:else}<label class="stack"
-							>{t('scripts.time')}<input
-								class="field"
-								type="time"
-								required
-								bind:value={draft.schedule.time}
-							/></label
-						>{/if}
-					{#if draft.schedule.every === 'weekly'}<label class="stack"
-							>{t('scripts.weekday')}<select class="field" bind:value={draft.schedule.weekday}
-								>{#each weekdays as day (day)}<option value={day}
-										>{t(`backup.weekday.${day}` as MessageKey)}</option
-									>{/each}</select
-							></label
-						>{:else if draft.schedule.every === 'monthly'}<label class="stack"
-							>{t('scripts.monthDay')}<select class="field" bind:value={draft.schedule.monthDay}
-								>{#each days as day (day)}<option value={day}>{day}.</option>{/each}</select
-							></label
-						>{/if}
+					<ScheduleField bind:cron={draft.cron} {timezone} />
 				</fieldset>{/if}
 			{#if draft.trigger === 'shutdown'}<p class="muted">{t('scripts.shutdownHint')}</p>{/if}
 			{#if draft.trigger === 'start'}<p class="muted">{t('scripts.startHint')}</p>{/if}
@@ -192,8 +141,11 @@
 					<button
 						type="submit"
 						class="btn btn-primary"
-						disabled={busy || !draft.name.trim() || tooLarge || (!!id && !dirty)}
-						>{t('ops.save')}</button
+						disabled={busy ||
+							!draft.name.trim() ||
+							tooLarge ||
+							(draft.trigger === 'schedule' && !parseCron(draft.cron)) ||
+							(!!id && !dirty)}>{t('ops.save')}</button
 					>
 				</div>
 			{/if}
@@ -237,7 +189,7 @@
 	}
 	.schedule {
 		display: flex;
-		flex-wrap: wrap;
+		flex-direction: column;
 		gap: var(--space-3);
 		margin: 0;
 		padding: var(--space-3);
@@ -247,12 +199,6 @@
 	.schedule legend {
 		padding: 0 var(--space-1);
 		font-weight: 600;
-	}
-	.schedule label {
-		flex: 1 1 10rem;
-	}
-	.schedule .cron {
-		flex-basis: 16rem;
 	}
 	textarea {
 		font-family: var(--font-mono);

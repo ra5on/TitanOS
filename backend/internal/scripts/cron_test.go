@@ -77,3 +77,30 @@ func TestScheduleExpressions(t *testing.T) {
 		}
 	}
 }
+
+func TestCronLastDayOfTheMonth(t *testing.T) {
+	c, err := parseCron("0 3 L * *")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for when, want := range map[string]bool{"2026-02-28 03:00": true, "2028-02-28 03:00": false, "2028-02-29 03:00": true, "2026-11-30 03:00": true, "2026-12-30 03:00": false, "2026-12-31 03:00": true} {
+		v, _ := time.Parse("2006-01-02 15:04", when)
+		if c.matches(v) != want {
+			t.Errorf("%s = %v", when, !want)
+		}
+	}
+	both, err := parseCron("0 3 1,L * *")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, _ := time.Parse("2006-01-02 15:04", "2026-11-01 03:00")
+	last, _ := time.Parse("2006-01-02 15:04", "2026-11-30 03:00")
+	if !both.matches(first) || !both.matches(last) {
+		t.Error("1,L")
+	}
+	for _, bad := range []string{"0 3 LL * *", "0 3 L-2 * *", "0 3 * * L", "0 3 , * *", "0 3 L, * *"} {
+		if _, err := parseCron(bad); err == nil {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+}
