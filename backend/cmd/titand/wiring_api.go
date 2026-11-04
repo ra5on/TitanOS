@@ -110,6 +110,8 @@ func (w *titand) wireAPI() error {
 	w.background(func() { w.handler.RunHAStorage(ctx) })
 	// Leftovers of the AI chat removed in 0.41.0, once.
 	w.background(func() { w.handler.RemoveRetiredAssistant(ctx) })
+	// The KI-Agent: interrupted runs, recurring tasks, triggers.
+	w.background(func() { w.handler.AgentScheduler(ctx) })
 	w.background(func() { w.logs.Run(ctx) })
 	if !w.opts.dev {
 		w.background(func() { w.stick.Follow(ctx) })

@@ -1,0 +1,309 @@
+package api
+
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/activity"
+	"github.com/ra5on/TitanOS/backend/internal/agent"
+	"github.com/ra5on/TitanOS/backend/internal/auth"
+)
+
+// agentOllama is a fake Ollama: /api/chat answers with the replies in
+// order (each a message object), and it keeps what it got.
+type agentOllama struct {
+	mu      sync.Mutex
+	replies []string
+	got     []map[string]any
+}
+
+func (f *agentOllama) start(t *testing.T) string {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/version":
+			w.Write([]byte(`{"version":"0.40.14"}`))
+		case "/api/tags":
+			w.Write([]byte(`{"models":[{"name":"gpt-oss:20b","size":1,"details":{"context_length":131072},"capabilities":["completion","tools","thinking"]}]}`))
+		case "/api/show":
+			w.Write([]byte(`{"capabilities":["completion","tools","thinking"],"thinking":{"values":["low","medium","high"],"default":"medium"}}`))
+		case "/api/ps":
+			w.Write([]byte(`{"models":[]}`))
+		case "/api/chat":
+			var body map[string]any
+			json.NewDecoder(r.Body).Decode(&body)
+			f.mu.Lock()
+			f.got = append(f.got, body)
+			reply := `{"role":"assistant","content":"Fertig."}`
+			if len(f.replies) > 0 {
+				reply, f.replies = f.replies[0], f.replies[1:]
+			}
+			f.mu.Unlock()
+			w.Write([]byte(`{"message":` + reply + `,"done":false}` + "\n" + `{"message":{"role":"assistant","content":""},"done":true}` + "\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+func toolCall(name string, args any) string {
+	data, _ := json.Marshal(args)
+	return `{"role":"assistant","content":"","tool_calls":[{"function":{"name":"` + name + `","arguments":` + string(data) + `}}]}`
+}
+
+func agentServer(t *testing.T, fake *agentOllama, policy agent.Policy) *testServer {
+	t.Helper()
+	ts := newTestServer(t)
+	ts.setup()
+	dir := t.TempDir()
+	ts.server.agentOpen = func() (*os.Root, error) { return os.OpenRoot(dir) }
+	settings := map[string]any{"enabled": true, "ollama": fake.start(t), "model": "gpt-oss:20b", "think": "high", "policy": policy}
+	if res, body := ts.request("PUT", "/api/v1/agent/settings", settings); res.StatusCode != http.StatusOK {
+		t.Fatalf("settings: %d %s", res.StatusCode, body)
+	}
+	return ts
+}
+
+// waitChat polls a chat until it no longer runs.
+func waitChat(t *testing.T, ts *testServer, client *http.Client, id string) agent.Chat {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		res, body := ts.do(client, "GET", "/api/v1/agent/chats/"+id, nil)
+		var chat agent.Chat
+		json.Unmarshal(body, &chat)
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("chat: %d %s", res.StatusCode, body)
+		}
+		if chat.State != agent.StateRunning && !ts.server.agentRunning("alex", id) && !ts.server.agentRunning("gast", id) {
+			return chat
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("chat still running: %+v", chat)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestAgentSettingsAndAccess(t *testing.T) {
+	fake := &agentOllama{}
+	ts := agentServer(t, fake, agent.Policy{})
+	for _, bad := range []map[string]any{
+		{"enabled": true},
+		{"ollama": "ftp://x"},
+		{"policy": map[string]any{"preset": "everything"}},
+		{"policy": map[string]any{"areas": map[string]string{"files": "sometimes"}}},
+		{"policy": map[string]any{"areas": map[string]string{"nowhere": "allow"}}},
+		{"users": []string{"nobody"}},
+		{"maxSteps": 1000},
+		{"homeassistant": map[string]any{"notify": []string{"mail.me"}}},
+	} {
+		if res, _ := ts.request("PUT", "/api/v1/agent/settings", bad); res.StatusCode != http.StatusBadRequest {
+			t.Errorf("accepted %v: %d", bad, res.StatusCode)
+		}
+	}
+	res, body := ts.request("GET", "/api/v1/agent/status", nil)
+	if res.StatusCode != 200 || !strings.Contains(string(body), `"reachable":true`) || !strings.Contains(string(body), `"levels":["low","medium","high"]`) {
+		t.Fatalf("status: %d %s", res.StatusCode, body)
+	}
+	// A user without "KI-Agent erlaubt" sees nothing of the agent.
+	ts.users.Create("gast", testPassword, auth.RoleUser)
+	guest := ts.newClient()
+	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
+	for _, route := range []struct{ method, path string }{{"GET", "/agent/chats"}, {"POST", "/agent/chats"}, {"GET", "/agent/memory"}, {"GET", "/agent/projects"}} {
+		if res, _ := ts.do(guest, route.method, "/api/v1"+route.path, map[string]any{"message": "x"}); res.StatusCode != http.StatusForbidden {
+			t.Errorf("guest %s: %d", route.path, res.StatusCode)
+		}
+	}
+	for _, path := range []string{"/agent/settings", "/agent/tools"} {
+		if res, _ := ts.do(guest, "GET", "/api/v1"+path, nil); res.StatusCode != http.StatusForbidden {
+			t.Errorf("guest %s: %d", path, res.StatusCode)
+		}
+	}
+	// Allowed: its own chats, never the owner's.
+	_, body = ts.request("GET", "/api/v1/agent/settings", nil)
+	var settings map[string]any
+	json.Unmarshal(body, &settings)
+	settings["users"] = []string{"gast"}
+	if res, body := ts.request("PUT", "/api/v1/agent/settings", settings); res.StatusCode != 200 {
+		t.Fatalf("allow: %d %s", res.StatusCode, body)
+	}
+	res, body = ts.request("POST", "/api/v1/agent/chats", map[string]any{"message": "Hallo"})
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("owner chat: %d %s", res.StatusCode, body)
+	}
+	var chat agent.Chat
+	json.Unmarshal(body, &chat)
+	waitChat(t, ts, ts.client, chat.ID)
+	if res, _ := ts.do(guest, "GET", "/api/v1/agent/chats/"+chat.ID, nil); res.StatusCode != http.StatusNotFound {
+		t.Fatalf("guest reads the owner's chat: %d", res.StatusCode)
+	}
+	if res, _ := ts.do(guest, "GET", "/api/v1/agent/chats", nil); res.StatusCode != http.StatusOK {
+		t.Fatalf("guest list: %d", res.StatusCode)
+	}
+	// The user's toolbox has no administration tools.
+	box := ts.server.newAgentToolbox(mustUser(t, ts, "gast"), ts.server.agentSettings())
+	for _, name := range []string{"system_status", "docker_list", "vm_action", "power_action", "account_action"} {
+		if _, ok := box.tools[name]; ok {
+			t.Errorf("user agent has %s", name)
+		}
+	}
+	// Removing the old assistant leaves the agent alone.
+	ts.server.removeRetiredAssistant()
+	if _, err := ts.store.Read(agentSettingsFile); err != nil {
+		t.Fatalf("agent settings removed: %v", err)
+	}
+	if _, err := ts.server.agentStore().Chat("alex", chat.ID); err != nil {
+		t.Fatalf("agent chat removed: %v", err)
+	}
+}
+
+func TestAgentRunsToolsAsksAndLogs(t *testing.T) {
+	fake := &agentOllama{}
+	ts := agentServer(t, fake, agent.Policy{Preset: agent.PresetStandard, Folders: []agent.FolderRule{{Root: "share/Docs", Path: "Privat", Mode: agent.ModeDeny}}})
+	log := activity.New(ts.store)
+	ts.server.opts.Activity = log
+	dir := ts.withShare()
+	os.WriteFile(filepath.Join(dir, "liste.md"), []byte("alt"), 0o644)
+	os.MkdirAll(filepath.Join(dir, "Privat"), 0o755)
+	os.WriteFile(filepath.Join(dir, "Privat", "geheim.txt"), []byte("x"), 0o644)
+	fake.replies = []string{
+		toolCall("files_list", map[string]any{"root": "share/Docs"}),
+		toolCall("file_read", map[string]any{"root": "share/Docs", "path": "Privat/geheim.txt"}),
+		toolCall("file_write", map[string]any{"root": "share/Docs", "path": "Übersicht.docx", "content": "# Apps\n\nKeine."}),
+		toolCall("file_write", map[string]any{"root": "share/Docs", "path": "liste.md", "content": "neu", "replace": true}),
+		`{"role":"assistant","content":"Ersetzt."}`,
+	}
+	res, body := ts.request("POST", "/api/v1/agent/chats", map[string]any{"message": "Mach eine Übersicht und ersetze die Liste"})
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("start: %d %s", res.StatusCode, body)
+	}
+	var started agent.Chat
+	json.Unmarshal(body, &started)
+	chat := waitChat(t, ts, ts.client, started.ID)
+	// Thinking level of the model, never set by the model.
+	if fake.got[0]["think"] != "high" {
+		t.Fatalf("think: %v", fake.got[0]["think"])
+	}
+	// No tool offered to the model has confirm.
+	for _, tool := range fake.got[0]["tools"].([]any) {
+		params, _ := json.Marshal(tool.(map[string]any)["function"].(map[string]any)["parameters"])
+		if strings.Contains(string(params), `"confirm"`) {
+			t.Fatalf("tool with confirm: %s", params)
+		}
+	}
+	steps := map[string]agent.Entry{}
+	for _, e := range chat.Entries {
+		if e.Role == "tool" {
+			steps[e.Tool+":"+string(e.Args)] = e
+		}
+	}
+	var listed, private, created string
+	for k, e := range steps {
+		switch {
+		case strings.HasPrefix(k, "files_list"):
+			listed = e.Result
+		case strings.HasPrefix(k, "file_read"):
+			private = e.Result
+		case strings.HasPrefix(k, "file_write") && strings.Contains(k, "docx"):
+			created = e.Result
+		}
+	}
+	if !strings.Contains(listed, "liste.md") || strings.Contains(listed, "Privat") {
+		t.Fatalf("locked folder listed: %s", listed)
+	}
+	if !strings.Contains(private, "gesperrt") {
+		t.Fatalf("locked file read: %s", private)
+	}
+	if !strings.HasPrefix(created, "{") {
+		t.Fatalf("new document: %s", created)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "Übersicht.docx")); err != nil {
+		t.Fatal("document not written")
+	}
+	// Replacing waits for the person; nothing was replaced yet.
+	if chat.State != agent.StateWaiting || chat.Pending == nil || chat.Pending.Tool != "file_write" {
+		t.Fatalf("not waiting: %s %+v", chat.State, chat.Pending)
+	}
+	if data, _ := os.ReadFile(filepath.Join(dir, "liste.md")); string(data) != "alt" {
+		t.Fatal("replaced before approval")
+	}
+	// Approval works only in the web session of the owner of the chat.
+	if res, _ := ts.request("POST", "/api/v1/agent/chats/"+chat.ID+"/decide", map[string]any{"id": "x", "approve": true}); res.StatusCode != http.StatusConflict {
+		t.Fatalf("wrong id: %d", res.StatusCode)
+	}
+	if res, body := ts.request("POST", "/api/v1/agent/chats/"+chat.ID+"/decide", map[string]any{"id": chat.Pending.ID, "approve": true}); res.StatusCode != http.StatusAccepted {
+		t.Fatalf("approve: %d %s", res.StatusCode, body)
+	}
+	chat = waitChat(t, ts, ts.client, chat.ID)
+	if data, _ := os.ReadFile(filepath.Join(dir, "liste.md")); string(data) != "neu" {
+		t.Fatalf("not replaced after approval: %q", data)
+	}
+	if chat.State != agent.StateIdle || chat.Entries[len(chat.Entries)-1].Content != "Ersetzt." {
+		t.Fatalf("end: %s %+v", chat.State, chat.Entries[len(chat.Entries)-1])
+	}
+	// The writes show up as "KI-Agent" in the activity log.
+	var agentWrites int
+	for _, e := range activityEntries(t, log) {
+		if e.Via == activity.ViaAgent && strings.Contains(e.Action, "write-document") {
+			agentWrites++
+		}
+	}
+	if agentWrites != 2 {
+		t.Fatalf("agent writes in the log: %d", agentWrites)
+	}
+}
+
+func TestAgentDeniedToolsAreNotOffered(t *testing.T) {
+	fake := &agentOllama{replies: []string{toolCall("file_write", map[string]any{"root": "share/Docs", "path": "x.txt", "content": "x"})}}
+	ts := agentServer(t, fake, agent.Policy{Preset: agent.PresetRead})
+	ts.withShare()
+	res, body := ts.request("POST", "/api/v1/agent/chats", map[string]any{"message": "schreib"})
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("start: %d %s", res.StatusCode, body)
+	}
+	var chat agent.Chat
+	json.Unmarshal(body, &chat)
+	chat = waitChat(t, ts, ts.client, chat.ID)
+	for _, tool := range fake.got[0]["tools"].([]any) {
+		if name := tool.(map[string]any)["function"].(map[string]any)["name"]; name == "file_write" || name == "files_delete" {
+			t.Fatalf("read-only agent offered %s", name)
+		}
+	}
+	for _, e := range chat.Entries {
+		if e.Role == "tool" && e.Tool == "file_write" && !strings.Contains(e.Result, "not allowed") {
+			t.Fatalf("denied tool ran: %+v", e)
+		}
+	}
+}
+
+func TestAgentScheduleDue(t *testing.T) {
+	at := func(s string) time.Time { v, _ := time.Parse("2006-01-02 15:04", s); return v }
+	daily := agent.Schedule{Enabled: true, Every: "daily", At: "08:00"}
+	if !agentDue(daily, at("2026-11-09 08:03")) || agentDue(daily, at("2026-11-09 07:59")) || agentDue(daily, at("2026-11-09 08:15")) {
+		t.Fatal("daily window")
+	}
+	daily.LastRun = at("2026-11-09 08:01")
+	if agentDue(daily, at("2026-11-09 08:03")) {
+		t.Fatal("ran twice")
+	}
+	weekly := agent.Schedule{Enabled: true, Every: "weekly", At: "08:00", Weekday: 1}
+	if !agentDue(weekly, at("2026-11-09 08:00")) || agentDue(weekly, at("2026-11-10 08:00")) {
+		t.Fatal("weekly")
+	}
+	hourly := agent.Schedule{Enabled: true, Every: "hourly"}
+	if !agentDue(hourly, at("2026-11-09 13:02")) || agentDue(hourly, at("2026-11-09 13:30")) {
+		t.Fatal("hourly")
+	}
+	if agentDue(agent.Schedule{Every: "daily", At: "08:00"}, at("2026-11-09 08:00")) {
+		t.Fatal("disabled ran")
+	}
+}

@@ -158,6 +158,9 @@ type Manager struct {
 	// Urgent is told about every warning and error, so that the kept
 	// journal is written soon (package logkeep); nil without.
 	Urgent func()
+	// Observer is told about every warning and error (the KI-Agent may
+	// look into it, PLAN 44); nil without. It must not block.
+	Observer func(Message)
 	// Audience are the accounts that may get notifications of the NAS on
 	// their own channels (owners and administrators); nil sends none.
 	Audience func() []string
@@ -387,6 +390,9 @@ func (m *Manager) Notify(severity, kind, subject string) {
 	m.goKeepBell()
 	if m.Urgent != nil && rank[severity] >= rank[Warning] {
 		m.Urgent()
+	}
+	if m.Observer != nil && rank[severity] >= rank[Warning] {
+		go m.Observer(message)
 	}
 	if rank[severity] >= rank[settings.MinSeverity] {
 		if m.collect(settings, message) {

@@ -1,0 +1,41 @@
+package api
+
+// registerAgent registers the routes of the KI-Agent (PLAN 44). Settings
+// belong to owners and administrators; chats, projects, memory, skills
+// and recurring tasks to every account that may use the agent, each only
+// its own.
+func (s *Server) registerAgent(mux *routeMux) {
+	mux.HandleFunc("GET /api/v1/agent/status", s.requireUser(s.handleAgentStatus))
+	mux.HandleFunc("GET /api/v1/agent/settings", s.requireAdmin(s.handleAgentSettings))
+	mux.HandleFunc("PUT /api/v1/agent/settings", s.requireAdmin(s.handleAgentSettingsSet))
+	mux.HandleFunc("POST /api/v1/agent/check", s.requireAdmin(s.handleAgentCheck))
+	mux.HandleFunc("GET /api/v1/agent/tools", s.requireAdmin(s.handleAgentTools))
+
+	mux.HandleFunc("GET /api/v1/agent/chats", s.requireAgent(s.handleAgentChats))
+	mux.HandleFunc("POST /api/v1/agent/chats", s.requireAgent(s.handleAgentChatNew))
+	mux.HandleFunc("GET /api/v1/agent/chats/{id}", s.requireAgent(s.handleAgentChat))
+	mux.HandleFunc("PATCH /api/v1/agent/chats/{id}", s.requireAgent(s.handleAgentChatPatch))
+	mux.HandleFunc("DELETE /api/v1/agent/chats/{id}", s.requireAgent(s.handleAgentChatDelete))
+	mux.HandleFunc("POST /api/v1/agent/chats/{id}/messages", s.requireAgent(s.handleAgentMessage))
+	mux.HandleFunc("POST /api/v1/agent/chats/{id}/decide", s.requireAgent(s.handleAgentDecide))
+	mux.HandleFunc("POST /api/v1/agent/chats/{id}/stop", s.requireAgent(s.handleAgentStop))
+	mux.HandleFunc("GET /api/v1/agent/chats/{id}/events", s.requireAgent(s.handleAgentEvents))
+
+	mux.HandleFunc("GET /api/v1/agent/projects", s.requireAgent(s.handleAgentProjects))
+	mux.HandleFunc("POST /api/v1/agent/projects", s.requireAgent(s.handleAgentProjectNew))
+	mux.HandleFunc("PUT /api/v1/agent/projects/{id}", s.requireAgent(s.handleAgentProjectSet))
+	mux.HandleFunc("DELETE /api/v1/agent/projects/{id}", s.requireAgent(s.handleAgentProjectDelete))
+
+	mux.HandleFunc("GET /api/v1/agent/memory", s.requireAgent(s.handleAgentMemory))
+	mux.HandleFunc("PUT /api/v1/agent/memory/{id}", s.requireAgent(s.handleAgentMemorySet))
+	mux.HandleFunc("DELETE /api/v1/agent/memory/{id}", s.requireAgent(s.handleAgentMemoryDelete))
+
+	mux.HandleFunc("GET /api/v1/agent/skills", s.requireAgent(s.handleAgentSkills))
+	mux.HandleFunc("PUT /api/v1/agent/skills/{id}", s.requireAgent(s.handleAgentSkillSet))
+	mux.HandleFunc("DELETE /api/v1/agent/skills/{id}", s.requireAgent(s.handleAgentSkillDelete))
+
+	mux.HandleFunc("GET /api/v1/agent/schedules", s.requireAgent(s.handleAgentSchedules))
+	mux.HandleFunc("PUT /api/v1/agent/schedules/{id}", s.requireAgent(s.handleAgentScheduleSet))
+	mux.HandleFunc("DELETE /api/v1/agent/schedules/{id}", s.requireAgent(s.handleAgentScheduleDelete))
+	mux.HandleFunc("POST /api/v1/agent/schedules/{id}/run", s.requireAgent(s.handleAgentScheduleRun))
+}

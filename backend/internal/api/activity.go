@@ -128,7 +128,9 @@ func noteActivity(r *http.Request, user auth.User) {
 	rec.user = user.Name
 	rec.action = action
 	rec.via = activity.ViaWeb
-	if _, ok := r.Context().Value(mcpCallKey{}).(*mcpCall); ok {
+	if _, ok := r.Context().Value(agentCallKey{}).(string); ok {
+		rec.via = activity.ViaAgent
+	} else if _, ok := r.Context().Value(mcpCallKey{}).(*mcpCall); ok {
 		rec.via = activity.ViaMCP
 	} else if _, ok := r.Context().Value(apiTokenIdentity{}).(string); ok {
 		rec.via = activity.ViaToken
