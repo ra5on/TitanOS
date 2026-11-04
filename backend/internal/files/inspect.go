@@ -110,7 +110,8 @@ func (m *Manager) Inspect(ctx context.Context, src Root, paths []string, dst *Ro
 				return ErrNotFound
 			}
 			// A target that cannot be read counts as missing; the job decides again.
-			if existing, e := dr.Lstat(target); e == nil && !(info.IsDir() && existing.IsDir()) {
+			// The source itself (copying into its own folder) is no conflict.
+			if existing, e := dr.Lstat(target); e == nil && !(info.IsDir() && existing.IsDir()) && !os.SameFile(info, existing) {
 				identical := sameContent(info, existing)
 				switch {
 				case identical:

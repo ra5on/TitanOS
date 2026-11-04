@@ -4,6 +4,7 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { formatBytes } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
+	import { deletePaths, inTrash } from './commands.ts';
 
 	type Props = {
 		/** A new folder, renaming the one selected entry, or deleting the selection. */
@@ -49,8 +50,7 @@
 	let confirmed = $state(false);
 	// A share has its bin; in a volume, paths inside a share with a bin go
 	// to that share's bin. USB drives and the stick have none.
-	const inBin = (p: string) =>
-		!!root?.recycle || !!root?.bins?.some((bin) => p.startsWith(bin + '/'));
+	const inBin = (p: string) => inTrash(root, p);
 	const paths = $derived(selected.map((name) => join(dir, name)));
 	const binned = $derived(paths.filter(inBin));
 	const recyclable = $derived(binned.length > 0);
@@ -76,14 +76,7 @@
 				});
 			} else {
 				if ((permanent || mixed) && !confirmed) return;
-				if (permanent) {
-					await api.post('/files/delete', { root: rootId, paths, permanent: true });
-				} else {
-					await api.post('/files/delete', { root: rootId, paths: binned, permanent: false });
-					const rest = paths.filter((p) => !inBin(p));
-					if (rest.length)
-						await api.post('/files/delete', { root: rootId, paths: rest, permanent: true });
-				}
+				await deletePaths(root ?? ({ id: rootId } as FileRoot), paths, permanent);
 			}
 			await ondone();
 		} catch (err) {

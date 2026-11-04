@@ -645,6 +645,10 @@ func (m *Manager) copyOne(ctx context.Context, job *Job, sr, dr *os.Root, rel, t
 	if entry.Target != "" {
 		target = entry.Target
 	}
+	// Never write over (or recycle) what a VM holds or the root hides.
+	if m.protected(job.destinationRoot, target) || job.destinationRoot.secret(target) {
+		return ErrProtected
+	}
 	m.setCurrent(job, rel)
 	if err := ctx.Err(); err != nil {
 		return err
@@ -715,6 +719,9 @@ func (m *Manager) copyDir(ctx context.Context, job *Job, sr, dr *os.Root, rel, t
 		default:
 			return failure("type_mismatch", ErrExists)
 		}
+	}
+	if m.protected(job.destinationRoot, target) || job.destinationRoot.secret(target) {
+		return ErrProtected
 	}
 	if _, err := dr.Lstat(target); errors.Is(err, fs.ErrNotExist) {
 		if err := dr.Mkdir(target, 0o770); err != nil {

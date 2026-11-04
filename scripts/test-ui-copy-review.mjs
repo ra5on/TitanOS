@@ -102,10 +102,16 @@ function fileRoutes(ctx, state) {
     const url = new URL(route.request().url()),
       path = url.pathname;
     if (path.endsWith("/roots")) return route.fulfill({ json: roots });
-    if (path.endsWith("/list"))
+    if (path.endsWith("/list")) {
+      const dir = url.searchParams.get("path") ?? "";
       return route.fulfill({
-        json: url.searchParams.get("path") ? [] : [folder, file],
+        json: dir === "Documents" ? [file] : dir ? [] : [folder, file],
       });
+    }
+    if (path.endsWith("/delete")) {
+      (state.deletes ??= []).push(route.request().postDataJSON());
+      return route.fulfill({ json: { undo: "" } });
+    }
     if (path.endsWith("/jobs")) return route.fulfill({ json: state.jobs });
     if (path.endsWith("/trash"))
       return route.fulfill({
@@ -409,9 +415,83 @@ try {
     await ctx.close();
   }
 
+  // 6. Copying into the folder the file is in: "keep both" stays chosen,
+  // even if the check were to report the file itself as identical.
+  {
+    const { ctx, page } = await create();
+    const state = { pending: [], copies: [], jobs: [] };
+    await fileRoutes(ctx, state);
+    await page.goto(base + "/files?root=share%2FDocuments");
+    await page
+      .getByRole("checkbox", { name: "report.txt auswählen", exact: true })
+      .check();
+    await page
+      .getByRole("button", { name: "Kopieren nach …", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog");
+    let own;
+    for (let i = 0; i < 200 && !own; i++) {
+      own = state.pending.shift();
+      if (!own) await new Promise((r) => setTimeout(r, 25));
+    }
+    assert.equal(own.request.toDir, "");
+    await own.respond(
+      inspection({ identical: 1, identicalBytes: 12 }),
+    );
+    const rule = dialog.getByLabel("Gibt es den Namen schon", { exact: true });
+    await dialog.getByText("Kopien benötigen", { exact: false }).or(
+      dialog.getByText("Eine Kopie geht hier nur", { exact: false }),
+    ).waitFor();
+    assert.equal(await rule.inputValue(), "rename");
+    const copy = dialog.getByRole("button", { name: "Hierher kopieren", exact: true });
+    assert.equal(await copy.isEnabled(), true, "duplicate in the same folder blocked");
+    await rule.selectOption("replace");
+    assert.equal(await copy.isDisabled(), true, "replace onto itself allowed");
+    await ctx.close();
+  }
+
+  // 7. Delete dialogs: no bin on USB drives; in a volume only inside a
+  // share folder with a bin.
+  {
+    const { ctx, page } = await create();
+    const state = { pending: [], copies: [], jobs: [] };
+    await fileRoutes(ctx, state);
+    const openDelete = async (url) => {
+      await page.goto(base + url);
+      await page
+        .getByRole("checkbox", { name: "report.txt auswählen", exact: true })
+        .check();
+      await page.getByRole("button", { name: "Löschen", exact: true }).first().click();
+      return page.getByRole("dialog");
+    };
+    let dialog = await openDelete("/files?root=usb%2Fstick");
+    await dialog.getByText("Hier gibt es keinen Papierkorb", { exact: false }).waitFor();
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: out + "/usb-loeschen-kein-papierkorb.png" });
+    await dialog.getByRole("button", { name: "Abbrechen", exact: true }).click();
+    dialog = await openDelete("/files?root=volume%2FData");
+    await dialog.getByText("Hier gibt es keinen Papierkorb", { exact: false }).waitFor();
+    await dialog
+      .getByText("In der Volume-Ansicht landen nur Einträge", { exact: false })
+      .waitFor();
+    await dialog.getByRole("button", { name: "Abbrechen", exact: true }).click();
+    dialog = await openDelete("/files?root=volume%2FData&path=Documents");
+    await dialog
+      .getByText("in den Papierkorb der Freigabe verschoben", { exact: false })
+      .waitFor();
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: out + "/volume-loeschen-papierkorb.png" });
+    await dialog.getByRole("button", { name: "In den Papierkorb", exact: true }).click();
+    await dialog.waitFor({ state: "hidden" });
+    assert.deepEqual(state.deletes, [
+      { root: "volume/Data", paths: ["Documents/report.txt"], permanent: false },
+    ]);
+    await ctx.close();
+  }
+
   assert.deepEqual(errors, []);
   console.log(
-    "Missing-or-changed preselection, conflict notice instead of a silent click, rules after an inspection timeout, job error list, copy missing after a restart and recycle bin buttons passed",
+    "Missing-or-changed preselection, conflict notice instead of a silent click, rules after an inspection timeout, job error list, copy missing after a restart, recycle bin buttons, same-folder duplicate and delete dialogs on USB/volume passed",
   );
 } finally {
   await browser.close();

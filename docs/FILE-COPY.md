@@ -43,8 +43,9 @@ Seite beschreibt den Ablauf seit der Überarbeitung vom 4.11.2026
 - Kommt die Prüfung erst beim Klick zurück und findet gleiche Namen, startet
   noch nichts: ein Hinweis nennt die Anzahl, die Liste wird ins Bild
   gescrollt, der zweite Klick startet.
-- In den eigenen Ordner kopieren geht nur mit „Beide behalten“ (oder
-  Einzelentscheidungen mit neuem Namen); Verschieben dorthin ist gesperrt.
+- In den eigenen Ordner kopieren geht nur mit „Beide behalten“; Verschieben
+  dorthin ist gesperrt. Die Prüfung zählt die ausgewählten Dateien dort nicht
+  als Konflikt oder als gleich, „Beide behalten“ bleibt also gewählt.
   titand antwortet sonst mit `copy_same_folder`, ein Ordner in sich selbst
   mit `copy_into_itself`.
 
@@ -69,7 +70,13 @@ Seite beschreibt den Ablauf seit der Überarbeitung vom 4.11.2026
   und steht in der Liste: übersprungen, Verknüpfung (Symlink), Sonderdatei,
   interne Datei, während des Verschiebens hinzugekommen, nach dem Kopieren
   geändert. Bei „Nur fehlende oder geänderte“ gilt eine gleiche Datei am Ziel
-  als schon verschoben: ihre Quelle wird entfernt.
+  (Größe und Änderungszeit ±2 s) als schon verschoben: ihre Quelle wird
+  entfernt, ohne den Inhalt zu vergleichen – wie `rsync --remove-source-files`.
+  Diese Festlegung ist noch vom Projektinhaber zu bestätigen; die Alternative
+  wäre, solche Quellen als „an der Quelle belassen“ zu melden.
+- Pfade, die eine VM belegt (`Protected`), werden nie überschrieben oder in
+  den Papierkorb gelegt, auch nicht mit „Ersetzen“; sie stehen als
+  „Geschützter Pfad“ in der Liste.
 - Interne Teildateien (`.titanos-copy-*.titanos-part`) eines unterbrochenen
   Vorgangs werden in einer verschobenen Quelle entfernt, wenn sie älter als
   24 Stunden sind und zu keinem laufenden Auftrag gehören; jüngere bleiben und

@@ -162,9 +162,7 @@
 			(target.recycle || !!target.bins?.some((bin) => dir === bin || dir.startsWith(bin + '/'))),
 	);
 	// Into its own folder only "keep both" (or single decisions) makes sense.
-	const sameFolderBlocked = $derived(
-		!restore && sameFolder && (move || (conflict !== 'rename' && conflict !== 'individual')),
-	);
+	const sameFolderBlocked = $derived(!restore && sameFolder && (move || conflict !== 'rename'));
 	// What will really be written, as far as the comparison knows.
 	const writeBytes = $derived.by(() => {
 		if (!scope) return null;
@@ -261,7 +259,7 @@
 				replaceConfirmed = false;
 				// Identical files at the target: copy only what is missing,
 				// unless a rule was chosen already.
-				if (!conflictTouched && result.identical > 0) conflict = 'missing';
+				if (!conflictTouched && !sameFolder && result.identical > 0) conflict = 'missing';
 				decisions = Object.fromEntries(
 					result.conflicts.map((c) => [
 						c.sourcePath ?? c.source.name,

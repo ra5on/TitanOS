@@ -603,3 +603,38 @@ func TestVolumeDeleteUsesTheShareBin(t *testing.T) {
 		t.Fatal(err, tree(base))
 	}
 }
+
+// A copy never writes over, or moves to the recycle bin, a path a virtual
+// machine holds – also with "replace" and without individual choices.
+func TestCopyLeavesVMFilesAlone(t *testing.T) {
+	m, share, base := newRoot(t)
+	usb := Root{ID: "usb/stick", Kind: "usb", Dir: filepath.Join(base, "usb"), Writable: true}
+	put(t, filepath.Join(usb.Dir, "vm.img"), "new image")
+	put(t, filepath.Join(usb.Dir, "other.txt"), "other")
+	put(t, filepath.Join(share.Dir, "ziel/vm.img"), "running disk")
+	m.Protected = func(p string) bool { return p == filepath.Join(share.Dir, "ziel/vm.img") }
+	for _, mode := range []string{ConflictReplace, ConflictMissing} {
+		job, err := m.StartCopy(usb, []string{"vm.img", "other.txt"}, share, "ziel", false, mode, "alex", os.Getuid())
+		if err != nil {
+			t.Fatal(err)
+		}
+		job = finish(t, m, job.ID)
+		if job.State != JobDone || problemCodes(job)["vm.img"] != "protected" || read(t, filepath.Join(share.Dir, "ziel/other.txt")) != "other" {
+			t.Fatalf("%s: %+v", mode, job)
+		}
+		if read(t, filepath.Join(share.Dir, "ziel/vm.img")) != "running disk" || exists(filepath.Join(share.Dir, ".recycle")) {
+			t.Fatalf("%s: VM file touched: %s", mode, tree(share.Dir))
+		}
+	}
+}
+
+// Copying into the folder the selection is in: the inspection reports the
+// files themselves neither as conflicts nor as identical, so the dialog
+// keeps "keep both".
+func TestInspectIntoOwnFolderFindsNoConflicts(t *testing.T) {
+	m, src, _ := twoRoots(t)
+	result, err := m.Inspect(context.Background(), src, []string{"urlaub", "notiz.txt"}, &src, ".")
+	if err != nil || len(result.Conflicts) != 0 || result.Identical != 0 || result.Files != 2 {
+		t.Fatalf("%+v %v", result, err)
+	}
+}
