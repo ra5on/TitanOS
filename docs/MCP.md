@@ -4,7 +4,7 @@ Seit der Entscheidung des Projektinhabers vom 29.10.2026 hat TitanOS einen
 MCP-Server: Externe KI-Clients wie Claude Desktop, Claude Code oder andere
 Programme mit dem Model Context Protocol arbeiten damit am NAS – mit genau den
 Rechten eines persönlichen API-Tokens und des Kontos dahinter. Seit der
-Entscheidung des Projektinhabers vom 31.10.2026 ist MCP der einzige Weg für
+Entscheidung des Projektinhabers vom 31.10.2026 war MCP der einzige Weg für
 KI-Aktionen am NAS: Er bietet alle Lese- und Aktionswerkzeuge des festen
 Werkzeugkatalogs an. Einen eingebauten Chat oder ein eigenes Modell hat TitanOS
 nicht.
