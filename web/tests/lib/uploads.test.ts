@@ -44,7 +44,8 @@ vi.mock('../../src/lib/api.ts', async (original) => {
 const queue = await import('#lib/uploads.svelte.ts');
 const root = { id: 'share/data', name: 'data' };
 const file = () => new File(['hello'], 'a.txt');
-const settled = () => vi.waitFor(() => expect(queue.uploads.items.every((i) => !i.busy)).toBe(true));
+const settled = () =>
+	vi.waitFor(() => expect(queue.uploads.items.every((i) => !i.busy)).toBe(true));
 
 beforeEach(() => {
 	Object.assign(nas, { calls: [], exists: false, received: 0, fail: '' });

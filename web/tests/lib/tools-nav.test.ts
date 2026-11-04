@@ -21,7 +21,8 @@ test('every tools row leads to a page and has texts in both languages', () => {
 });
 
 test('old anchors point to existing tools pages', () => {
-	for (const target of Object.values(toolsAnchors)) expect(existsSync(page(target)), target).toBe(true);
+	for (const target of Object.values(toolsAnchors))
+		expect(existsSync(page(target)), target).toBe(true);
 });
 
 test('a row is current on its page and sub-pages, not on a sibling with the same prefix', () => {
