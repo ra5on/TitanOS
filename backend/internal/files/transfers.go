@@ -82,9 +82,13 @@ func (m *Manager) transferRoot(volume, user string) (*os.Root, error) {
 	}
 	return root.OpenRoot(account)
 }
-func (m *Manager) prepareTransfer(job *Job, src, dst Root, sr *os.Root) error {
+// prepareTransfer makes the durable plan of a job whose target is on a data
+// volume and fills it with one walk of the selection. Other jobs get the walk
+// alone. transferMu is held only while the plan is created, not while the
+// tree is walked, so the job list stays responsive.
+func (m *Manager) prepareTransfer(job *Job, src, dst Root, walk func(add func(string, transferEntry) error) error) error {
 	if m.Mounted == nil || dst.Volume == "" {
-		return nil
+		return walk(func(string, transferEntry) error { return nil })
 	}
 	source, err := transferIdentity(src.Dir)
 	if err != nil {
@@ -98,22 +102,31 @@ func (m *Manager) prepareTransfer(job *Job, src, dst Root, sr *os.Root) error {
 	if err != nil {
 		return err
 	}
-	t := &transfer{User: job.user, Volume: dst.Volume, Boot: strings.TrimSpace(string(boot)), SourceDir: src.Dir, DestinationDir: dst.Dir, SourceIdentity: source, DestinationIdentity: destination, Conflict: job.conflict, Choices: job.choices, Skipped: map[string]bool{}, Completed: job.completed, CompletedTop: job.completedTop, Targets: job.targets, Sources: map[string]string{}, Destinations: map[string]string{}}
+	t := &transfer{User: job.user, Volume: dst.Volume, Boot: strings.TrimSpace(string(boot)), SourceDir: src.Dir, DestinationDir: dst.Dir, SourceIdentity: source, DestinationIdentity: destination, Conflict: job.conflict, Choices: job.choices}
+	m.transferMu.Lock()
 	root, err := m.transferRoot(t.Volume, t.User)
 	if err != nil {
+		m.transferMu.Unlock()
 		return err
 	}
 	err = pruneTransfers(root)
 	root.Close()
 	if err != nil {
+		m.transferMu.Unlock()
 		return err
 	}
 	t.Format = 2
-	t.Sources, t.Destinations, t.Skipped, t.Completed, t.CompletedTop, t.Targets = nil, nil, nil, nil, nil, nil
 	t.store = &transferStore{manager: m, volume: t.Volume, user: t.User, id: job.ID}
+	m.jobs.mu.Lock()
 	job.durable = t
 	job.Durable = true
-	if err := t.store.initialize(job, sr, func() error { return m.saveTransfer(job, "") }); err != nil {
+	m.jobs.mu.Unlock()
+	err = t.store.create(func() error { return m.saveTransfer(job, "") })
+	m.transferMu.Unlock()
+	if err == nil {
+		err = t.store.fill(job, walk)
+	}
+	if err != nil {
 		if t.store.created {
 			if root, e := m.transferRoot(t.Volume, t.User); e == nil {
 				root.Remove(job.ID + ".json")
@@ -122,8 +135,10 @@ func (m *Manager) prepareTransfer(job *Job, src, dst Root, sr *os.Root) error {
 				root.Close()
 			}
 		}
+		m.jobs.mu.Lock()
 		job.durable = nil
 		job.Durable = false
+		m.jobs.mu.Unlock()
 		return mapError(err)
 	}
 	return nil
@@ -160,7 +175,9 @@ func (m *Manager) saveTransfer(job *Job, pending string) error {
 	t.initialized = true
 	return nil
 }
-func (m *Manager) finishTransfer(job *Job, dr *os.Root, rel, final string, top ...bool) error {
+// finishTransfer records an entry that is at its target now. source is the
+// version of the source file that was copied ("" for a rename).
+func (m *Manager) finishTransfer(job *Job, dr *os.Root, rel, final, source string) error {
 	if job.durable == nil {
 		return nil
 	}
@@ -171,17 +188,22 @@ func (m *Manager) finishTransfer(job *Job, dr *os.Root, rel, final string, top .
 	if err != nil {
 		return err
 	}
-	version := entryVersion(info)
+	version := ""
+	if info.Mode().IsRegular() {
+		version = entryVersion(info)
+	}
+	complete := info.Mode().IsRegular()
 	if !job.paged() {
-		job.durable.Destinations[final] = version
+		if version != "" {
+			job.durable.Destinations[final] = version
+		}
+		if source != "" {
+			job.durable.Sources[rel] = source
+		}
+		complete = job.completed[rel] || complete
 	}
 	empty := ""
-	complete, isTop := job.completed[rel], job.completedTop[rel]
-	if job.paged() {
-		complete = info.Mode().IsRegular()
-		isTop = len(top) > 0 && top[0]
-	}
-	return m.appendTransfer(job, transferEvent{Pending: &empty, Part: &transferPart{}, Rel: rel, Target: final, Version: version, Complete: complete, Top: isTop})
+	return m.appendTransfer(job, transferEvent{Pending: &empty, Part: &transferPart{}, Rel: rel, Target: final, Version: version, Complete: complete, Source: source})
 }
 func (m *Manager) loadTransfers(user string) {
 	if m.Mounted == nil {
@@ -262,6 +284,8 @@ func (m *Manager) loadTransfers(user string) {
 			j.conflict = t.Conflict
 			j.completed = t.Completed
 			j.completedTop = t.CompletedTop
+			j.skipped = map[string]bool{}
+			j.planned = true
 			j.targets = t.Targets
 			j.completedSource = map[string]fs.FileInfo{}
 			j.undoEligible = map[string]bool{}
@@ -274,12 +298,18 @@ func (m *Manager) loadTransfers(user string) {
 			if j.State == JobRunning {
 				j.State = JobFailed
 				j.Error = "Transfer interrupted; recheck current access and resume incomplete files."
-				j.Retryable = true
+				j.ErrorCode = "interrupted"
+			}
+			// After a restart of the NAS the saved state cannot be trusted
+			// for a retry; the job offers copying the missing files instead.
+			if boot, err := os.ReadFile("/proc/sys/kernel/random/boot_id"); err == nil && strings.TrimSpace(string(boot)) != t.Boot {
+				j.Rebooted = true
 			}
 			if t.Pending != "" {
 				j.Blocked = true
 				j.Retryable = false
 				j.Error = "Publication outcome is unknown: " + t.Pending + ". Inspect source and destination before starting a new transfer."
+				j.ErrorCode = "unknown_outcome"
 			}
 			m.jobs.mu.Lock()
 			m.jobs.list = append(m.jobs.list, &j)
@@ -301,7 +331,7 @@ func (m *Manager) verifyTransfer(job *Job, src, dst Root, dr *os.Root) error {
 		return err
 	}
 	if strings.TrimSpace(string(boot)) != t.Boot {
-		return errors.New("NAS reboot changed the transfer session; inspect files before starting another transfer")
+		return ErrRebooted
 	}
 	source, err := transferIdentity(src.Dir)
 	if err != nil {
@@ -314,26 +344,11 @@ func (m *Manager) verifyTransfer(job *Job, src, dst Root, dr *os.Root) error {
 	if source != t.SourceIdentity || destination != t.DestinationIdentity {
 		return ErrTextConflict
 	}
-	checkDestination := func(p, version string) error {
-		info, err := dr.Lstat(p)
-		if err != nil || entryVersion(info) != version || m.protected(dst, p) || dst.secret(p) {
-			return ErrTextConflict
-		}
-		return nil
-	}
-	if t.store != nil {
-		if err := t.store.verifyDestinations(checkDestination); err != nil {
-			return err
-		}
-	} else {
-		for p, version := range t.Destinations {
-			if err := checkDestination(p, version); err != nil {
-				return err
-			}
-		}
-	}
+	// Destinations are checked entry by entry where it matters: before a
+	// move removes a source (destinationIntact). A target file someone
+	// edited since does not stop the remaining files.
 	if t.Part != "" {
-		if !regexp.MustCompile(`^\.titanos-copy-[0-9a-f]{12}\.titanos-part$`).MatchString(path.Base(t.Part)) || m.protected(dst, t.Part) {
+		if !copyPartName.MatchString(path.Base(t.Part)) || m.protected(dst, t.Part) {
 			return ErrProtected
 		}
 		if info, err := dr.Lstat(t.Part); err == nil {
@@ -432,6 +447,31 @@ func (m *Manager) removeTransfer(j *Job) error {
 		}
 	}
 	return syncTransferParent(root, j.ID+".json")
+}
+// copyPartName is the name of a copy's part file (12 hex digits before 4.11.2026).
+var copyPartName = regexp.MustCompile(`^\.titanos-copy-([0-9a-f]{12}|[0-9a-f]{24})\.titanos-part$`)
+
+// destinationIntact reports whether the copy of a completed file is still
+// the one that was published, so that a move may remove its source.
+func (m *Manager) destinationIntact(job *Job, dr *os.Root, entry transferEntry) bool {
+	if job.durable == nil {
+		return true // RAM jobs remove the source right after the copy
+	}
+	if entry.Target == "" {
+		return false
+	}
+	var recorded string
+	if job.paged() {
+		v, err := job.durable.store.destination(entry.Target)
+		if err != nil {
+			return false
+		}
+		recorded = v
+	} else {
+		recorded = job.durable.Destinations[entry.Target]
+	}
+	info, err := dr.Lstat(entry.Target)
+	return err == nil && recorded != "" && entryVersion(info) == recorded
 }
 func (m *Manager) transferAvailable(job *Job) error {
 	if m.Available != nil {

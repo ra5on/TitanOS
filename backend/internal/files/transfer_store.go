@@ -3,7 +3,6 @@ package files
 import (
 	"encoding/json"
 	"errors"
-	"io/fs"
 	"os"
 	"sync"
 	"syscall"
@@ -161,13 +160,14 @@ func (s *transferStore) summary() (transferStoreState, error) {
 	})
 	return state, err
 }
-func (s *transferStore) initialize(job *Job, sr *os.Root, publish func() error) error {
+// create makes the plan database and publishes the descriptor. The database
+// stays open for fill.
+func (s *transferStore) create(publish func() error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.open(true); err != nil {
 		return err
 	}
-	defer func() { _ = s.closeLocked() }() // closing what was only read
 	if err := s.db.Update(func(tx *bolt.Tx) error {
 		for _, name := range [][]byte{entryBucket, destinationBucket, stateBucket} {
 			if _, err := tx.CreateBucket(name); err != nil {
@@ -176,13 +176,26 @@ func (s *transferStore) initialize(job *Job, sr *os.Root, publish func() error) 
 		}
 		return nil
 	}); err != nil {
+		_ = s.closeLocked() // closing after a failed start
 		return err
 	}
 	if err := publish(); err != nil {
+		_ = s.closeLocked() // closing after a failed start
 		return err
 	}
-	// Every transaction and directory read is bounded, independently of the
-	// total file count. The descriptor is published only after Ready is durable.
+	return nil
+}
+
+// fill writes the plan entries the walk finds and marks the plan ready.
+// Every transaction and directory read is bounded, independently of the
+// total file count.
+func (s *transferStore) fill(job *Job, walk func(add func(string, transferEntry) error) error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	defer func() { _ = s.closeLocked() }() // closing what was only written
+	if s.db == nil {
+		return errors.New("transfer plan is not open")
+	}
 	batch := make(map[string]transferEntry, 1024)
 	flush := func() error {
 		if len(batch) == 0 {
@@ -200,30 +213,21 @@ func (s *transferStore) initialize(job *Job, sr *os.Root, publish func() error) 
 		clear(batch)
 		return err
 	}
-	var count, size int64
-	for _, rel := range job.Names {
-		if err := walkEntries(sr, rel, func(p string, info fs.FileInfo) error {
-			if !info.Mode().IsRegular() {
-				return nil
-			}
-			batch[p] = transferEntry{Source: entryVersion(info)}
-			count++
-			size += info.Size()
-			if len(batch) >= 1024 {
-				return flush()
-			}
-			return nil
-		}); err != nil {
-			return err
+	if err := walk(func(rel string, entry transferEntry) error {
+		batch[rel] = entry
+		if len(batch) >= 1024 {
+			return flush()
 		}
-	}
-	if count != job.Files || size != job.Bytes {
-		return ErrTextConflict
+		return nil
+	}); err != nil {
+		return err
 	}
 	if err := flush(); err != nil {
 		return err
 	}
+	s.manager.jobs.mu.Lock()
 	state := transferStoreState{ID: s.id, User: s.user, Volume: s.volume, Ready: true, Progress: progressLocked(job)}
+	s.manager.jobs.mu.Unlock()
 	if err := s.db.Update(func(tx *bolt.Tx) error {
 		data, err := json.Marshal(state)
 		if err != nil {
@@ -234,6 +238,20 @@ func (s *transferStore) initialize(job *Job, sr *os.Root, publish func() error) 
 		return err
 	}
 	return syncTransferParent(s.root, s.id+".db")
+}
+
+// destination returns the version recorded for a published target.
+func (s *transferStore) destination(target string) (string, error) {
+	var version string
+	err := s.transaction(false, func(tx *bolt.Tx) error {
+		b := tx.Bucket(destinationBucket)
+		if b == nil {
+			return errors.New("missing transfer destinations")
+		}
+		version = string(b.Get([]byte(target)))
+		return nil
+	})
+	return version, err
 }
 func (s *transferStore) apply(event transferEvent) error {
 	return s.transaction(true, func(tx *bolt.Tx) error {
@@ -256,6 +274,9 @@ func (s *transferStore) apply(event transferEvent) error {
 			}
 			if event.Target != "" {
 				entry.Target = event.Target
+			}
+			if event.Source != "" {
+				entry.Source = event.Source
 			}
 			entry.Complete = entry.Complete || event.Complete
 			entry.Skip = entry.Skip || event.Skip
@@ -297,10 +318,10 @@ func (j *Job) entry(rel string) (transferEntry, error) {
 	if j.paged() {
 		return j.durable.store.entry(rel)
 	}
-	entry := transferEntry{Target: j.targets[rel], Complete: j.completed[rel], Top: j.completedTop[rel]}
+	entry := transferEntry{Target: j.targets[rel], Complete: j.completed[rel], Top: j.completedTop[rel], Skip: j.skipped[rel]}
 	if j.durable != nil {
 		entry.Source = j.durable.Sources[rel]
-		entry.Skip = j.durable.Skipped[rel]
+		entry.Skip = entry.Skip || j.durable.Skipped[rel]
 	}
 	return entry, nil
 }

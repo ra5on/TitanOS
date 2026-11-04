@@ -23,7 +23,7 @@ func newStoreFixture(t *testing.T) (*Manager, *Job, Root, Root) {
 	}
 	defer sr.Close()
 	job := &Job{ID: "0123456789abcdef", From: src.ID, To: dst.ID, Names: []string{"a"}, Files: 1, Bytes: 1, State: JobRunning, user: "alex", c: &counters{}, completed: map[string]bool{}, completedTop: map[string]bool{}, targets: map[string]string{}}
-	if err := m.prepareTransfer(job, src, dst, sr); err != nil {
+	if err := m.prepareTransfer(job, src, dst, planOf(job, sr)); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(job.closeStore)
@@ -186,8 +186,12 @@ func TestCopyLargerThanFreeSpaceDoesNotWriteUserData(t *testing.T) {
 		t.Skip(err)
 	}
 	file.Close()
-	if _, err := m.StartCopy(src, []string{"too-large"}, dst, ".", false, ConflictRename, "alex", os.Getuid()); err != ErrNoSpace {
-		t.Fatal("insufficient target space accepted", err)
+	job, err := m.StartCopy(src, []string{"too-large"}, dst, ".", false, ConflictRename, "alex", os.Getuid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job = finish(t, m, job.ID); job.State != JobFailed || job.ErrorCode != "no_space" {
+		t.Fatal("insufficient target space accepted", job)
 	}
 	entries, err := os.ReadDir(dst.Dir)
 	if err != nil || len(entries) != 0 {

@@ -129,7 +129,7 @@ func (m *Manager) TrashRestore(root Root, paths []string, user string, uid int, 
 				ext = ""
 			}
 			target = fmt.Sprintf("%s (%s)%s", strings.TrimSuffix(target, ext), m.now().Format("2006-01-02 15.04.05"), ext)
-			target, err = m.settle(r, target, ConflictRename)
+			target, _, err = m.settle(r, target, ConflictRename, nil)
 			if err != nil {
 				return err
 			}
