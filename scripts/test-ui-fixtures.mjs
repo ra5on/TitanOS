@@ -1112,6 +1112,7 @@ function scriptFixtures(time) {
   return {
     scripts: {
       volume: "Data",
+      timezone: "UTC",
       chosen: true,
       available: true,
       disabled: false,

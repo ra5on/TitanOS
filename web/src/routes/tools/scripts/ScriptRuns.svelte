@@ -12,8 +12,8 @@
 		type ScriptView,
 	} from './scripts.ts';
 
-	type Props = { script: ScriptView; onclose: () => void };
-	let { script, onclose }: Props = $props();
+	type Props = { script: ScriptView; timezone?: string; onclose: () => void };
+	let { script, timezone, onclose }: Props = $props();
 
 	const when = (run: ScriptRun) =>
 		[
@@ -43,7 +43,7 @@
 							><span class="chip {outcomeTone(run.outcome)}"
 								>{runLabel(run, (key, values) => t(key as MessageKey, values))}</span
 							>
-							<span>{formatDateTime(new Date(run.started))}</span>
+							<span>{formatDateTime(new Date(run.started), timezone || undefined)}</span>
 							<span class="muted">{when(run)}</span></summary
 						>
 						{#if run.error}<p class="notice-warn">{run.error}</p>{/if}

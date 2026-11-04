@@ -192,9 +192,6 @@ func TestShutdownScriptsHaveATimeLimitAndAreNotified(t *testing.T) {
 	if notes := n.all(); len(notes) != 1 || notes[0] != "error script_failed hängt" {
 		t.Fatalf("notes = %v", notes)
 	}
-	if names := m.ShutdownScripts(); len(names) != 2 {
-		t.Fatalf("names = %v", names)
-	}
 }
 
 func TestRunLogKeepsTheLastTen(t *testing.T) {

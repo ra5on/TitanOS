@@ -85,6 +85,8 @@ Minuten zu spät (hohe Last), holt er höchstens die letzten zehn Minuten nach.
 - Die Liste zeigt je Skript den Auslöser, das Ergebnis des letzten Laufs
   (erfolgreich, fehlgeschlagen mit Exit-Code, Zeit abgelaufen, abgebrochen,
   nicht gestartet, unterbrochen), Startzeit, Dauer und den nächsten Termin.
+  Alle Zeiten stehen in der Zeitzone des NAS, in der auch die Zeitpläne
+  laufen.
 - **Protokoll** zeigt die letzten zehn Läufe mit Startzeit, Dauer, Auslöser,
   Ergebnis und Ausgabe.
 - Wurde TitanOS während eines Laufs beendet, steht der Lauf danach als
@@ -120,7 +122,9 @@ direkt, siehe `docs/POWER-BUTTON.md`) und natürlich bei Stromausfall.
   seinem Inhalt.
 - Löschen entfernt Skript und Protokoll vom Volume, nach einem einfachen
   Bestätigungsdialog in der Gefahrenzone des Editors.
-- Ein App-Update wartet, bis kein Skript mehr läuft.
+- Ein App-Update wartet nicht auf laufende Skripte (ein Skript in einer
+  Endlosschleife würde es sonst für immer aufhalten). Es beendet sie mit dem
+  Neustart von TitanOS; im Protokoll stehen sie danach als „unterbrochen“.
 
 ## Schreiben und Aufwecken von Platten
 

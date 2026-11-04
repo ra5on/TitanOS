@@ -384,22 +384,6 @@ func (m *Manager) RunShutdown(ctx context.Context, progress func(name, state str
 	m.runAll(ctx, Shutdown, m.ShutdownLimit, progress)
 }
 
-// ShutdownScripts names the scripts that run at shutdown (for the dialog).
-func (m *Manager) ShutdownScripts() []string {
-	if m.Disabled || m.ensure() != nil {
-		return nil
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	var names []string
-	for _, s := range m.scripts {
-		if s.Trigger == Shutdown {
-			names = append(names, s.Name)
-		}
-	}
-	return names
-}
-
 func bootID() string {
 	data, _ := os.ReadFile("/proc/sys/kernel/random/boot_id")
 	return strings.TrimSpace(string(data))

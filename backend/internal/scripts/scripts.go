@@ -113,6 +113,9 @@ type Status struct {
 	Available bool   `json:"available"`
 	Disabled  bool   `json:"disabled"`
 	Error     string `json:"error,omitempty"`
+	// Timezone is the zone of the NAS the schedules run in, for showing
+	// times; empty when unknown.
+	Timezone string `json:"timezone,omitempty"`
 	// Volumes are the mounted data volumes to choose from.
 	Volumes []string `json:"volumes"`
 	Scripts []View   `json:"scripts"`
@@ -337,6 +340,9 @@ func (m *Manager) Status() Status {
 	out := Status{Volume: m.volumeLocked(), Chosen: m.volume != "", Available: err == nil && m.loaded != "", Disabled: m.Disabled, Error: m.problem, Volumes: append([]string{}, m.mounted()...), Scripts: []View{}}
 	if err != nil && !errors.Is(err, ErrUnavailable) {
 		out.Error = err.Error()
+	}
+	if name := loc.String(); name != "Local" {
+		out.Timezone = name
 	}
 	now := time.Now().In(loc)
 	for _, s := range m.scripts {

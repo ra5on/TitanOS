@@ -92,7 +92,8 @@
 		const text = whenText(script, weekday);
 		return t(text.key as MessageKey, text.values);
 	}
-	const time = (value?: string) => (value ? formatDateTime(new Date(value)) : '—');
+	const time = (value?: string) =>
+		value ? formatDateTime(new Date(value), status?.timezone || undefined) : '—';
 	const tr = (key: string, values?: Record<string, string | number>) =>
 		t(key as MessageKey, values);
 	const outcomeLabel = (run: ScriptRun) => runLabel(run, tr);
@@ -221,7 +222,11 @@
 			void load();
 		}}
 	/>{/if}
-{#if history}<ScriptRuns script={history} onclose={() => (history = null)} />{/if}
+{#if history}<ScriptRuns
+		script={history}
+		timezone={status?.timezone}
+		onclose={() => (history = null)}
+	/>{/if}
 
 <style>
 	.column {

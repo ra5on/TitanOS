@@ -43,6 +43,8 @@ export type ScriptsStatus = {
 	available: boolean;
 	disabled: boolean;
 	error?: string;
+	/** Zone of the NAS: times are shown in it, as the schedules run in it. */
+	timezone?: string;
 	volumes: string[];
 	scripts: ScriptView[];
 };
