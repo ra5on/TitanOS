@@ -104,13 +104,14 @@ func TestMoveRetainsFilesAddedWhileCopyWasInProgress(t *testing.T) {
 		t.Fatal(err)
 	}
 	end := finish(t, m, job.ID)
-	if end.State != JobFailed {
+	if end.State != JobDone || end.Kept != 1 || problemCodes(end)["urlaub/new.txt"] != "kept_new" {
 		t.Fatal(end)
 	}
 	if read(t, filepath.Join(src.Dir, "urlaub/new.txt")) != "new data" {
 		t.Fatal("new source data lost")
 	}
-	if read(t, filepath.Join(src.Dir, "urlaub/strand.jpg")) != "strand" {
-		t.Fatal("original removed")
+	// The copied file went; the new one stays with its folder.
+	if exists(filepath.Join(src.Dir, "urlaub/strand.jpg")) || read(t, filepath.Join(dst.Dir, "ziel/urlaub/strand.jpg")) != "strand" {
+		t.Fatal("copied original not moved")
 	}
 }

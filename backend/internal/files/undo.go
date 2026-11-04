@@ -281,6 +281,9 @@ func (m *Manager) undoAcrossFilesystems(ctx context.Context, sr, dr *os.Root, mo
 	if e := m.copyEntry(ctx, job, sr, dr, move.Current, target, ConflictSkip, uid); e != nil {
 		return e
 	}
+	if job.Failed > 0 {
+		return ErrTextConflict
+	}
 	stamp, e := treeStamp(ctx, sr, move.Current, false)
 	if e != nil {
 		return e
@@ -295,7 +298,13 @@ func (m *Manager) undoAcrossFilesystems(ctx context.Context, sr, dr *os.Root, mo
 }
 
 func (m *Manager) DeleteWithUndo(root Root, paths []string, user string, permanent bool) (string, error) {
-	if permanent || !root.Recycle {
+	recyclable := len(paths) > 0
+	for _, p := range paths {
+		if cleaned, err := clean(p); err != nil || !root.recyclable(cleaned) {
+			recyclable = false
+		}
+	}
+	if permanent || !recyclable {
 		return "", m.Delete(root, paths, user, permanent)
 	}
 	if !root.Writable || len(root.Hide) > 0 {
@@ -318,7 +327,7 @@ func (m *Manager) DeleteWithUndo(root Root, paths []string, user string, permane
 			result = mapError(e)
 			break
 		}
-		target, e := m.recyclePath(r, cleaned, user)
+		target, e := m.recyclePath(r, root, cleaned, user)
 		r.Close()
 		if e != nil {
 			result = mapError(e)

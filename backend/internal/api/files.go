@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -26,6 +27,13 @@ var fileErrors = []struct {
 	code   string
 }{
 	{files.ErrNameTooLong, http.StatusBadRequest, "file_name_too_long"},
+	// Copy-specific errors wrap generic ones and come first.
+	{files.ErrIntoItself, http.StatusBadRequest, "copy_into_itself"},
+	{files.ErrSameFolder, http.StatusConflict, "copy_same_folder"},
+	{files.ErrSourceProtected, http.StatusForbidden, "copy_source_protected"},
+	{files.ErrSourceChanged, http.StatusConflict, "copy_source_changed"},
+	{files.ErrRebooted, http.StatusConflict, "copy_rebooted"},
+	{files.ErrAccess, http.StatusForbidden, "file_access_denied"},
 	{files.ErrTextConflict, http.StatusConflict, "text_conflict"},
 	{files.ErrInvalidJSON, http.StatusBadRequest, "invalid_json"},
 	{files.ErrNotText, http.StatusBadRequest, "not_text"},
@@ -91,10 +99,44 @@ func (s *Server) fileRoots(user auth.User) []files.Root {
 		roots = append(roots, files.Root{ID: "stick", Name: "TITANOS", Kind: "stick", Dir: s.opts.Store.Dir(), Editable: true,
 			Hide: stickHidden, Show: stickShown})
 		for _, volume := range mounted {
-			roots = append(roots, files.Root{ID: "volume/" + volume, Name: volume, Kind: "volume", Dir: s.opts.Storage.MountPoint(volume), Volume: volume, Writable: true})
+			dir := s.opts.Storage.MountPoint(volume)
+			roots = append(roots, files.Root{ID: "volume/" + volume, Name: volume, Kind: "volume", Dir: dir, Volume: volume, Writable: true, Bins: s.volumeBins(volume, dir)})
 		}
 	}
 	return roots
+}
+
+// volumeBins are the folders of shares on a volume whose recycle bin is on,
+// relative to the volume: what an administrator deletes or replaces there
+// goes to that share's bin.
+func (s *Server) volumeBins(volume, dir string) []string {
+	var bins []string
+	for _, share := range s.opts.Shares.List() {
+		if share.Volume != volume || !share.Recycle.Enabled {
+			continue
+		}
+		rel, err := filepath.Rel(dir, s.opts.Shares.Path(share))
+		if err != nil || rel == "." || !filepath.IsLocal(rel) {
+			continue
+		}
+		bins = append(bins, filepath.ToSlash(rel))
+	}
+	slices.Sort(bins)
+	return bins
+}
+
+// trashRoot resolves the root of a recycle bin request: a share, or the
+// folder of a share inside a volume (bin) for administrators.
+func (s *Server) trashRoot(w http.ResponseWriter, r *http.Request, id, bin string) (files.Root, bool) {
+	root, ok := s.fileRoot(w, r, id)
+	if !ok || bin == "" {
+		return root, ok
+	}
+	share, ok := root.BinRoot(bin)
+	if !ok {
+		writeError(w, http.StatusNotFound, "file_not_found", "no such recycle bin")
+	}
+	return share, ok
 }
 
 // stickHidden are folders of the stick that hold password hashes, keys
@@ -241,12 +283,12 @@ func (s *Server) handleFileDelete(w http.ResponseWriter, r *http.Request) {
 		writeFileError(w, err)
 		return
 	}
-	slog.Info("files deleted", "root", root.ID, "paths", req.Paths, "permanent", req.Permanent || !root.Recycle, "user", user.Name, "ip", remoteIP(r))
+	slog.Info("files deleted", "root", root.ID, "paths", req.Paths, "permanent", req.Permanent || undo == "", "user", user.Name, "ip", remoteIP(r))
 	writeJSON(w, http.StatusOK, map[string]string{"undo": undo})
 }
 
 func (s *Server) handleTrashList(w http.ResponseWriter, r *http.Request) {
-	root, ok := s.fileRoot(w, r, r.URL.Query().Get("root"))
+	root, ok := s.trashRoot(w, r, r.URL.Query().Get("root"), r.URL.Query().Get("bin"))
 	if !ok {
 		return
 	}
@@ -274,14 +316,14 @@ func (s *Server) handleTrashList(w http.ResponseWriter, r *http.Request) {
 // from it for good.
 func (s *Server) handleTrash(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Root  string
-		Paths []string
+		Root, Bin string
+		Paths     []string
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
 	noteTarget(r, filePlaces(req.Root, req.Paths)...)
-	root, ok := s.fileRoot(w, r, req.Root)
+	root, ok := s.trashRoot(w, r, req.Root, req.Bin)
 	if !ok {
 		return
 	}

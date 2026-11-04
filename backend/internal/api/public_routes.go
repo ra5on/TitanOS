@@ -78,7 +78,7 @@ var publicRoutes = []publicRoute{
 		Body: map[string]any{"root": str("Source root ID."), "paths": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "minItems": 1, "description": "Source paths."},
 			"toRoot": str("Target root ID."), "toDir": str("Target folder inside the target root."),
 			"move":     map[string]any{"type": "boolean", "default": false, "description": "Move instead of copy."},
-			"conflict": map[string]any{"type": "string", "enum": []string{"rename", "skip", "replace"}, "default": "rename", "description": "What happens to an existing name."}},
+			"conflict": map[string]any{"type": "string", "enum": []string{"rename", "skip", "replace", "missing"}, "default": "rename", "description": "What happens to an existing name. missing copies only files that are not at the target or differ in size or modification time."}},
 		Required: []string{"root", "paths", "toRoot", "toDir"}},
 	{Method: "PUT", Path: "/files/text", Scope: "files:write", Tool: "files_write_text", Level: toolcatalog.LevelDanger,
 		En:       "Replace the content of a text file; the old content stays as <name>.prev. Needs the version from files_read_text; a changed file is rejected.",

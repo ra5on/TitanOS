@@ -45,7 +45,9 @@ try {
       path = url.pathname;
     if (path.endsWith("/list"))
       return route.fulfill({
-        json: url.searchParams.get("path") ? [] : [file],
+        json: url.searchParams.get("path")
+          ? []
+          : [{ ...file, name: "Archiv", dir: true, size: 0 }, file],
       });
     if (path.endsWith("/inspect")) {
       const request = route.request().postDataJSON();
@@ -74,10 +76,15 @@ try {
     }
     return route.fallback();
   });
+  // Checks of the folder the file is in are answered and dropped: copying
+  // into it only works with "keep both" since 4.11.2026.
   async function next() {
     for (let i = 0; i < 200; i++) {
-      if (pending.length) return pending.shift();
-      await new Promise((r) => setTimeout(r, 25));
+      const item = pending.shift();
+      if (item?.request.toRoot === "share/Documents" && !item.request.toDir)
+        await item.respond();
+      else if (item) return item;
+      else await new Promise((r) => setTimeout(r, 25));
     }
     throw Error("no automatic conflict inspection");
   }
@@ -89,6 +96,7 @@ try {
     .getByRole("button", { name: "Kopieren nach …", exact: true })
     .click();
   const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Archiv", exact: true }).click();
   await dialog
     .getByLabel("Gibt es den Namen schon", { exact: true })
     .selectOption("replace");

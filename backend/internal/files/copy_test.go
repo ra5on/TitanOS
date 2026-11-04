@@ -1,28 +1,19 @@
 package files
 
 import (
-	"context"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 // finish waits for a job to leave the running state.
+// It also waits until a durable job has saved how it ended: until then it is
+// "finishing" and neither retryable nor removable.
 func finish(t *testing.T, m *Manager, id string) Job {
 	t.Helper()
-	for range 400 {
-		for _, job := range m.Jobs("alex") {
-			if job.ID == id && job.State != JobRunning {
-				return job
-			}
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("the job did not finish")
-	return Job{}
+	return finishJob(t, m, "alex", id)
 }
 
 func twoRoots(t *testing.T) (*Manager, Root, Root) {
@@ -51,10 +42,13 @@ func TestCopyFolderBetweenRoots(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if !job.Planning {
+		t.Errorf("the job did not start with its planning walk: %+v", job)
+	}
+	job = finish(t, m, job.ID)
 	if job.Files != 2 || job.Bytes != int64(len("strand")+len("notiz")) {
 		t.Errorf("plan = %+v", job)
 	}
-	job = finish(t, m, job.ID)
 	if job.State != JobDone || job.Copied != job.Bytes || job.Done != 2 {
 		t.Fatalf("job = %+v", job)
 	}
@@ -226,30 +220,26 @@ func TestRestoreUSBCopyIntoSeparateFolder(t *testing.T) {
 	}
 }
 
+// F5: a move that skips a conflict leaves that source in place, reports it as
+// kept and moves everything else.
 func TestSkippedConflictDuringCopyMoveKeepsSource(t *testing.T) {
 	m, src, dst := twoRoots(t)
 	if err := os.WriteFile(filepath.Join(dst.Dir, "ziel/notiz.txt"), []byte("existing"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	sr, err := os.OpenRoot(src.Dir)
+	job, err := m.StartCopy(src, []string{"notiz.txt", "urlaub"}, dst, "ziel", true, ConflictSkip, "alex", os.Getuid())
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer sr.Close()
-	dr, err := os.OpenRoot(dst.Dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer dr.Close()
-	// Exercise the copy path used across filesystems, without depending on a
-	// second filesystem on the test host.
-	job := &Job{Move: true, c: &counters{}}
-	err = m.copyEntry(context.Background(), job, sr, dr, "notiz.txt", "ziel/notiz.txt", ConflictSkip, os.Getuid())
-	if err == nil {
-		t.Fatal("skip allowed subsequent source removal")
+	job = finish(t, m, job.ID)
+	if job.State != JobDone || job.Failed != 0 || job.Kept != 1 || problemCodes(job)["notiz.txt"] != "kept_skipped" {
+		t.Fatalf("job = %+v", job)
 	}
 	if read(t, filepath.Join(src.Dir, "notiz.txt")) != "notiz" || read(t, filepath.Join(dst.Dir, "ziel/notiz.txt")) != "existing" {
 		t.Fatal("skip changed files")
+	}
+	if exists(filepath.Join(src.Dir, "urlaub")) || read(t, filepath.Join(dst.Dir, "ziel/urlaub/strand.jpg")) != "strand" {
+		t.Fatal("the rest was not moved")
 	}
 }
 
@@ -270,7 +260,8 @@ func TestRetryCopySkipsCommittedFiles(t *testing.T) {
 				t.Fatal(err)
 			}
 			job = finish(t, m, job.ID)
-			if job.State != JobFailed || job.Done != 1 || !job.Retryable {
+			// F1: the failing file is listed, the job ends "with errors".
+			if job.State != JobDone || job.Failed != 1 || job.Done != 1 || !job.Retryable || len(job.Problems) != 1 {
 				t.Fatalf("failed job: %+v", job)
 			}
 			// A later target edit must not get replaced or duplicated by the retry.
@@ -326,7 +317,7 @@ func TestRetryWithinRenamedDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	job = finish(t, m, job.ID)
-	if job.State != JobFailed {
+	if job.State != JobDone || job.Failed != 1 {
 		t.Fatal(job)
 	}
 	_, err = m.RetryCopy("alex", job.ID, src, dst, os.Getuid())
@@ -367,7 +358,7 @@ func TestRetryMoveRetainsChangedSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	job = finish(t, m, job.ID)
-	if job.State != JobFailed {
+	if job.State != JobDone || job.Failed != 1 {
 		t.Fatal(job)
 	}
 	os.WriteFile(filepath.Join(src.Dir, "urlaub/strand.jpg"), []byte("changed since interrupted move"), 0600)
@@ -375,8 +366,11 @@ func TestRetryMoveRetainsChangedSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	job = finish(t, m, job.ID)
-	if job.State != JobFailed {
+	if job.State != JobDone || job.Failed != 0 || problemCodes(job)["urlaub/strand.jpg"] != "kept_changed" {
 		t.Fatalf("changed source not detected: %+v", job)
+	}
+	if exists(filepath.Join(src.Dir, "urlaub/z.txt")) || read(t, filepath.Join(dst.Dir, "ziel/urlaub/z.txt")) != "second" {
+		t.Fatal("the retry did not move the remaining file")
 	}
 	if read(t, filepath.Join(src.Dir, "urlaub/strand.jpg")) != "changed since interrupted move" {
 		t.Fatal("modified source lost")
@@ -397,8 +391,12 @@ func TestCrossRootMoveKeepsUncopiedEntries(t *testing.T) {
 				t.Fatal(err)
 			}
 			job = finish(t, m, job.ID)
-			if job.State != JobFailed {
+			want := map[string]string{"link": "kept_link", ".upload.titanos-part": "kept_internal"}[name]
+			if job.State != JobDone || job.Kept != 1 || problemCodes(job)["urlaub/"+name] != want {
 				t.Fatalf("move silently skipped data: %+v", job)
+			}
+			if exists(filepath.Join(src.Dir, "urlaub/strand.jpg")) || read(t, filepath.Join(dst.Dir, "ziel/urlaub/strand.jpg")) != "strand" {
+				t.Fatal("the regular file was not moved")
 			}
 			if _, err = os.Lstat(filepath.Join(src.Dir, "urlaub", name)); err != nil {
 				t.Fatal("source entry lost", err)
@@ -432,7 +430,11 @@ func TestStreamingCopyRejectsAliasedDescendant(t *testing.T) {
 	}
 	// A separate root aliases a descendant of the selected source directory.
 	dst := Root{ID: "volume/alias", Kind: "volume", Dir: filepath.Join(src.Dir, "urlaub", "nested"), Writable: true}
-	if _, err := m.StartCopy(src, []string{"urlaub"}, dst, ".", false, ConflictRename, "alex", os.Getuid()); !errors.Is(err, ErrInvalid) {
-		t.Fatal("aliased self-recursion accepted", err)
+	job, err := m.StartCopy(src, []string{"urlaub"}, dst, ".", false, ConflictRename, "alex", os.Getuid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job = finish(t, m, job.ID); job.State != JobFailed || job.ErrorCode != "into_itself" {
+		t.Fatal("aliased self-recursion accepted", job)
 	}
 }

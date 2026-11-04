@@ -116,8 +116,8 @@ func (d *davFS) RemoveAll(_ context.Context, raw string) error {
 	if _, err := r.Lstat(p); err != nil {
 		return err
 	}
-	if d.root.Recycle {
-		return d.m.recycle(r, p, d.user)
+	if d.root.recyclable(p) {
+		return d.m.recycle(r, d.root, p, d.user)
 	}
 	return r.RemoveAll(p)
 }

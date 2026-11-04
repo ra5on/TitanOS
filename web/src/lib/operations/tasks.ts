@@ -91,6 +91,7 @@ export function taskItems(data: Operations): TaskItem[] {
 			progress: deletionPercent(job),
 		});
 	for (const job of data.transfers ?? []) {
+		// Done "with errors" needs a look like a failure.
 		const state = job.blocked
 			? 'blocked'
 			: job.state === 'running'
@@ -99,7 +100,9 @@ export function taskItems(data: Operations): TaskItem[] {
 					: job.waiting
 						? 'waiting'
 						: 'running'
-				: job.state;
+				: job.state === 'done' && (job.failed ?? 0) > 0
+					? 'failed'
+					: job.state;
 		const actions: TaskAction[] = [];
 		if (job.state === 'running' && (!job.operation || ['copy', 'move'].includes(job.operation))) {
 			actions.push({
