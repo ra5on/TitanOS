@@ -44,8 +44,10 @@ groß; ein Compose-Stack ist eine zugeklappte Karte (x/y laufen, CPU/RAM,
 gemeinsamer CPU-Verlauf, Dienste als Chips, „Dienste“, Alle starten/stoppen,
 Links), aufgeklappt folgen die Dienste als normale Karten mit Akzentlinie.
 Reihenfolge in der Bearbeiten-Leiste „Eigene Anordnung | A–Z“, Karten per Griff
-ziehen oder mit den Pfeiltasten verschieben. Verworfen: Variante A
-(Stack-Karte mit Dienstliste und Größen S/M/L). Regeln `docs/rules/DOCKER.md`
+ziehen oder mit den Pfeiltasten verschieben. Folgeentscheidung am selben Tag:
+Kartengröße S/M/L in der Bearbeiten-Leiste, gemeinsam für alle Karten (nur
+mehr oder weniger Karten je Zeile, keine Einzelgrößen). Verworfen: Variante A
+(Stack-Karte mit Dienstliste und Einzelgrößen S/M/L je Karte). Regeln `docs/rules/DOCKER.md`
 („Docker-Layout“), Prüfung `scripts/test-ui-docker-cards.mjs`.
 
 ### Cluster: Wege, Versionen, Alle aktualisieren (0.44.0)

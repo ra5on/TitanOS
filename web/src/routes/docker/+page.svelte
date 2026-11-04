@@ -1016,6 +1016,19 @@
 					]}
 					onchange={setSort}
 				/>
+				{#if layout.view === 'cards'}
+					<span class="editor-label">{t('docker.layout.size')}</span>
+					<Segments
+						label={t('docker.layout.size')}
+						bind:value={layout.size}
+						disabled={savingLayout}
+						options={[
+							{ value: 's', label: 'S', hint: t('docker.layout.sizeS') },
+							{ value: 'm', label: 'M', hint: t('docker.layout.sizeM') },
+							{ value: 'l', label: 'L', hint: t('docker.layout.sizeL') },
+						]}
+					/>
+				{/if}
 				<label class="check"
 					><input type="checkbox" bind:checked={layout.details} disabled={savingLayout} />{t(
 						'docker.layout.details',
@@ -1122,7 +1135,7 @@
 			</div>
 		{:else}
 			<div
-				class="cards"
+				class="cards size-{layout.size}"
 				class:editing
 				class:sorting={editing && layout.sort === 'own'}
 				role="list"
@@ -2037,10 +2050,21 @@
 
 	/* Cards (owner's decision of 4 Nov 2026, variant B): all of one size,
 	   a stack is one card; opened, its services follow as cards. */
+	/* One size for all cards (owner's decision of 4 Nov 2026): S puts more,
+	   L fewer side by side; the services of an opened stack follow it. */
+	.cards {
+		--card-min: 17rem;
+	}
+	.cards.size-s {
+		--card-min: 14rem;
+	}
+	.cards.size-l {
+		--card-min: 23rem;
+	}
 	.cards,
 	.drawer-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+		grid-template-columns: repeat(auto-fill, minmax(min(var(--card-min), 100%), 1fr));
 		gap: var(--gap);
 	}
 	.cell {
@@ -2053,6 +2077,8 @@
 		flex: 1;
 		display: flex;
 		flex-direction: column;
+		/* The cards fit their content to this width (container queries). */
+		container-type: inline-size;
 	}
 	.body > :global(article) {
 		flex: 1;

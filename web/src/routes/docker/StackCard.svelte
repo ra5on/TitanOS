@@ -356,6 +356,16 @@
 			transition: none;
 		}
 	}
+	/* Size S: narrow cards keep CPU and RAM readable. */
+	@container (max-width: 16rem) {
+		.card {
+			padding: 10px 12px;
+		}
+		.stats {
+			grid-template-columns: minmax(0, 1fr) 3.25rem 4rem;
+			gap: var(--space-2);
+		}
+	}
 	@media (max-width: 760px) {
 		.small,
 		.more {

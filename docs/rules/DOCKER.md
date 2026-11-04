@@ -72,7 +72,8 @@ Bereich: Container bearbeiten, Übersicht, App-Store/Katalog, Docker-Layout.
   Kachelbreiten gibt es seit 553de39 nicht mehr; gespeicherte Breiten werden
   ignoriert, ein gespeichertes „minimal“ wird zur Liste.
 - „Seite anpassen“ (Zahnrad-Menü) öffnet die Bearbeiten-Leiste über der
-  Übersicht: „Reihenfolge: Eigene Anordnung | A–Z“, Image/CPU-Verlauf,
+  Übersicht: „Reihenfolge: Eigene Anordnung | A–Z“, in der Kartenansicht
+  „Kartengröße: S | M | L“, Image/CPU-Verlauf,
   Standard wiederherstellen, Abbrechen, Layout speichern. Kein neues
   Bedienelement im Seitenkopf. Suche und Filter sind beim Bearbeiten aus.
   - **Eigene Anordnung:** In der Kartenansicht trägt jede Karte (Stack oder
@@ -90,9 +91,15 @@ Bereich: Container bearbeiten, Übersicht, App-Store/Katalog, Docker-Layout.
     wieder.
 - **Karten** (Entscheidung des Projektinhabers vom 4.11.2026, Variante B nach
   Screenshot-Abstimmung): alle Karten gleich groß (die höchste Karte setzt die
-  Höhe für alle, auch für die Dienste eines geöffneten Stacks; keine Größen
-  S/M/L, Regel „keine ungleichen Kacheln“), so viele nebeneinander wie passen
-  (mindestens 17rem), Handy eine Spalte mit gleichem Verhalten. Ein
+  Höhe für alle, auch für die Dienste eines geöffneten Stacks; Regel „keine
+  ungleichen Kacheln“), so viele nebeneinander wie passen, Handy eine Spalte
+  mit gleichem Verhalten. **Kartengröße** (Folgeentscheidung vom 4.11.2026):
+  ein Umschalter S/M/L für **alle Karten gemeinsam**, keine Einzelgrößen je
+  Karte. Er ändert nur die Mindestbreite (S 14rem, M 17rem wie bisher, L 23rem)
+  und damit, wie viele Karten nebeneinander stehen; alle bleiben gleich groß,
+  der Inhalt passt sich an (Container-Abfragen: schmale Karten verdichten die
+  Werte, die Laufzeit steht dann nur im Tooltip). Stack- und Dienstkarten
+  folgen derselben Größe; am Handy immer eine Spalte. Ein
   Compose-Stack ist **eine** Karte (`StackCard.svelte`), ab Werk zugeklappt:
   Name mit Update-Chip, „Stack · n Dienste“, „x/y laufen“ (Punkt grün/gelb/grau
   plus Text), Summe CPU/RAM der laufenden Dienste, gemeinsamer CPU-Verlauf
@@ -128,9 +135,9 @@ Bereich: Container bearbeiten, Übersicht, App-Store/Katalog, Docker-Layout.
   es nicht mehr (der Screenshot `docs/screenshots/current/docker.png` von 0.31.0
   zeigt noch sie).
 - Pro Konto in `/config/users/<name>/docker.json`, über die vorhandene atomare
-  Preferences-API mit RAM-Cache (`view`, `sort` = `own`/`az`, `order`,
-  `details`, `primaryServices`; ältere Fassungen ohne `sort` lesen als
-  „Eigene Anordnung“). Nur ausdrückliches Speichern schreibt, und nur bei einer
+  Preferences-API mit RAM-Cache (`view`, `sort` = `own`/`az`, `size` =
+  `s`/`m`/`l`, `order`, `details`, `primaryServices`; ältere Fassungen ohne
+  `sort` lesen als „Eigene Anordnung“, ohne `size` als M). Nur ausdrückliches Speichern schreibt, und nur bei einer
   Änderung; unverändertes Speichern schließt die Leiste ohne Schreibzugriff.
   Zuordnung über `app:<Compose-Projekt>` oder `container:<Name>`, nicht die
   nach Updates wechselnde Container-ID. Temporär fehlende Einträge bleiben
