@@ -113,7 +113,9 @@ type Status struct {
 	Available bool   `json:"available"`
 	Disabled  bool   `json:"disabled"`
 	Error     string `json:"error,omitempty"`
-	Scripts   []View `json:"scripts"`
+	// Volumes are the mounted data volumes to choose from.
+	Volumes []string `json:"volumes"`
+	Scripts []View   `json:"scripts"`
 }
 
 // Draft is what the person sends to create or change a script.
@@ -332,7 +334,7 @@ func (m *Manager) Status() Status {
 	loc := m.location()
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	out := Status{Volume: m.volumeLocked(), Chosen: m.volume != "", Available: err == nil && m.loaded != "", Disabled: m.Disabled, Error: m.problem, Scripts: []View{}}
+	out := Status{Volume: m.volumeLocked(), Chosen: m.volume != "", Available: err == nil && m.loaded != "", Disabled: m.Disabled, Error: m.problem, Volumes: append([]string{}, m.mounted()...), Scripts: []View{}}
 	if err != nil && !errors.Is(err, ErrUnavailable) {
 		out.Error = err.Error()
 	}
