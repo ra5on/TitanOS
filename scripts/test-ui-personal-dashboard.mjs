@@ -109,34 +109,22 @@ try {
     .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
     .click();
   await tile(page, "docker").locator(".identity .entry-name").first().click();
+  // In edit mode a click on an entry does not navigate.
   assert.equal(new URL(page.url()).pathname, "/");
-  assert.equal(
-    await inspector(page)
-      .getByRole("combobox", { name: "Ausgewähltes Element", exact: true })
-      .inputValue(),
-    "value",
-  );
+  // Tiles have no design of their own since 27 Oct 2026 (fonts, colors and
+  // surfaces come from Settings › Appearance); the editor keeps content,
+  // display mode and size. Undo/redo with the display mode.
   await tile(page, "cpu")
     .getByRole("button", { name: "Kachel anpassen: Prozessor", exact: true })
     .click();
   await inspector(page)
-    .getByRole("combobox", { name: "Ausgewähltes Element", exact: true })
-    .selectOption("value");
-  await slider(page, "Schriftgröße", 56);
-  assert.equal(
-    await tile(page, "cpu")
-      .locator(".reading")
-      .evaluate((e) => getComputedStyle(e).fontSize),
-    "56px",
-  );
+    .getByRole("combobox", { name: "Messwertdarstellung", exact: true })
+    .selectOption("ring");
+  assert.equal(await tile(page, "cpu").locator("svg.ring-svg").count(), 1);
   await page.getByRole("button", { name: "Rückgängig", exact: true }).click();
-  assert.equal(
-    await tile(page, "cpu")
-      .locator(".reading")
-      .evaluate((e) => getComputedStyle(e).fontSize),
-    "18px",
-  );
+  assert.equal(await tile(page, "cpu").locator("svg.ring-svg").count(), 0);
   await page.getByRole("button", { name: "Wiederholen", exact: true }).click();
+  assert.equal(await tile(page, "cpu").locator("svg.ring-svg").count(), 1);
   await tile(page, "cpu").locator(".grip").focus();
   await page.keyboard.press("ArrowDown");
   await page.waitForFunction(() =>
@@ -146,10 +134,13 @@ try {
   await page.waitForFunction(() =>
     document.activeElement?.classList.contains("grip"),
   );
-  await inspector(page)
-    .getByRole("combobox", { name: "Messwertdarstellung", exact: true })
-    .selectOption("ring");
-  assert.equal(await tile(page, "cpu").locator("svg.ring-svg").count(), 1);
+  // The inspector stays on the tile after moving it with the keyboard.
+  assert.equal(
+    await inspector(page)
+      .getByRole("combobox", { name: "Messwertdarstellung", exact: true })
+      .inputValue(),
+    "ring",
+  );
   await inspector(page)
     .getByRole("button", { name: "Inhalt", exact: true })
     .click();
@@ -181,7 +172,7 @@ try {
     .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
     .waitFor();
   assert.equal(data.prefs.dashboard.version, 6);
-  assert.equal(data.prefs.dashboard.tileOptions.cpu.valueSize, 56);
+  assert.equal(data.prefs.dashboard.tileOptions.cpu.display, "ring");
   assert.equal(data.prefs.dashboard.tiles.find((t) => t.id === "cpu").h, 4);
   assert.equal(
     data.prefs.dashboard.tiles.find((t) => t.id === "cpu").autoHeight,
@@ -364,20 +355,39 @@ try {
     .waitFor();
   await page.screenshot({ path: out + "/storage.png", fullPage: true });
   await page.goto(base + "/settings");
-  await page.locator(".settings-group").first().waitFor();
-  // Six groups in the fixed order of settings-search.ts (decision of 28 Oct 2026).
-  assert.equal(await page.locator(".settings-group").count(), 6);
+  // On the desktop the sidebar lists the areas: seven groups in the fixed
+  // order of settings-search.ts (owner's decision of 30 Oct 2026).
+  const side = page.getByRole("navigation", {
+    name: "Einstellungsbereiche",
+    exact: true,
+  });
+  await side.locator(".group-title").first().waitFor();
+  assert.deepEqual(await side.locator(".group-title").allTextContents(), [
+    "System",
+    "Netzwerk",
+    "Sicherheit und Fernzugriff",
+    "Hardware und Energie",
+    "Daten und Speicher",
+    "Integrationen",
+    "Persönlich",
+  ]);
   assert.deepEqual(
-    await page
-      .locator(".settings-group:first-child .name")
-      .allTextContents(),
-    ["Updates", "Datum und Uhrzeit", "Benachrichtigungen", "Über TitanOS"],
+    (
+      await side
+        .locator('ul[aria-labelledby="settings-side-group-system"] .label')
+        .allTextContents()
+    ).map((name) => name.trim()),
+    [
+      "Über TitanOS",
+      "Updates",
+      "Datum und Uhrzeit",
+      "Dienste",
+      "Benachrichtigungen",
+    ],
   );
-  await page.getByRole("searchbox").fill("SSH");
-  await page
-    .locator('.settings-page a[href="/settings/access#access-ssh"]')
-    .waitFor();
-  await page.getByRole("searchbox").fill("");
+  await side.getByRole("searchbox").fill("SSH");
+  await side.locator('a[href="/settings/access#access-ssh"]').waitFor();
+  await side.getByRole("searchbox").fill("");
   await page.screenshot({ path: out + "/settings.png", fullPage: true });
   data.ha = {
     settings: {

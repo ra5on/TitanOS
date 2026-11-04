@@ -245,14 +245,23 @@ async function context(theme = "graphit", width = 1600, locale = "de") {
         this.readyState = 3;
       }
     }
-    window.WebSocket = RfbPeer;
+    // Only the NAS's own sockets get the peer; Vite's HMR socket in the dev
+    // server stays real, else its error forwarding fails and floods the console.
+    const Native = window.WebSocket;
+    function Socket(url, protocols) {
+      return /^vite-hmr/.test(String(protocols ?? ""))
+        ? new Native(url, protocols)
+        : new RfbPeer(url);
+    }
+    Object.assign(Socket, { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3 });
+    window.WebSocket = Socket;
   });
   return { ...result, vms };
 }
 
 async function connected(page) {
   await page.waitForFunction(() => {
-    const canvas = document.querySelector(".frame canvas");
+    const canvas = document.querySelector("main .frame canvas");
     return (
       canvas?.width === 640 &&
       !document.querySelector(".screen-footer [role=status]")
@@ -260,11 +269,11 @@ async function connected(page) {
   });
 }
 async function clearFrame(page) {
-  assert.equal(await page.locator(".frame").innerText(), "");
+  assert.equal(await page.locator("main .frame").innerText(), "");
   assert.equal(
     await page
       .locator(
-        ".frame button,.frame p,.frame span,.frame .resolution,.frame .fsbar,.frame [role=status]",
+        "main .frame button,main .frame p,main .frame span,main .frame .resolution,main .frame .fsbar,main .frame [role=status]",
       )
       .count(),
     0,
@@ -294,7 +303,7 @@ try {
       };
       return {
         list: rect(".layout>aside"),
-        frame: rect(".frame"),
+        frame: rect("main .frame"),
         tabs: rect(".command-bar>.tabs"),
         tools: rect(".command-bar>.toolbar"),
         head: rect(".vm-page>.head"),
@@ -323,7 +332,7 @@ try {
     vms[2].available = false;
     await page.locator(".vm-page>.notices").waitFor();
     await page.waitForFunction(() => {
-      const frame = document.querySelector(".frame").getBoundingClientRect();
+      const frame = document.querySelector("main .frame").getBoundingClientRect();
       const footer = document
         .querySelector(".screen-footer")
         .getBoundingClientRect();
@@ -342,7 +351,7 @@ try {
     );
     await page.evaluate(() => window.__vncFixture.latest.resize(800, 450));
     await page.waitForFunction(
-      () => document.querySelector(".frame canvas")?.width === 800,
+      () => document.querySelector("main .frame canvas")?.width === 800,
     );
     await clearFrame(page);
     await page.getByRole("button", { name: "Vollbild", exact: true }).click();
@@ -444,7 +453,7 @@ try {
     console.error(
       await lastPage.evaluate(() => ({
         peer: window.__vncFixture?.latest?.step,
-        size: [...document.querySelectorAll(".frame canvas")].map((c) => [
+        size: [...document.querySelectorAll("main .frame canvas")].map((c) => [
           c.width,
           c.height,
         ]),

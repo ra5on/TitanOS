@@ -636,6 +636,11 @@ export function fixtureFactory(browser, errors) {
         if (method === "PUT") data.ha.settings = route.request().postDataJSON();
         return json(data.ha ?? {});
       }
+      // Appearance is kept like titand does, so a reload shows what was applied.
+      if (path === "/preferences/appearance" && method === "PUT") {
+        data.prefs.appearance = route.request().postDataJSON();
+        return route.fulfill({ status: 204 });
+      }
       if (path.startsWith("/preferences/"))
         return route.fulfill({ status: 204 });
       if (path === "/system") return json(data.system);
@@ -974,6 +979,22 @@ export function fixtureFactory(browser, errors) {
           writable: true,
           gpus: [],
           problem: "",
+        });
+      // Settings › Hardware: no device without a driver, no missing firmware.
+      if (path === "/hardware/report")
+        return json({
+          generated: time,
+          kernel: "6.12.0-test",
+          board: "",
+          boot: "uefi",
+          controllers: [],
+          disks: [],
+          network: [],
+          graphics: [],
+          sensors: [],
+          unbound: [],
+          firmwareMissing: [],
+          summary: [],
         });
       if (path === "/hardware")
         return json({

@@ -370,7 +370,7 @@ try {
 
   // The app editor: publish through IPv64 behind a warning.
   await page.goto(base + "/docker/apps/photos");
-  await page.getByRole("heading", { name: "Öffentlich über IPv64" }).waitFor();
+  await page.getByRole("region", { name: "Öffentlich über IPv64" }).waitFor();
   await page.getByRole("button", { name: "Öffentlich machen …" }).click();
   dialog = page.getByRole("dialog");
   await dialog.getByText("Jeder im Internet kann https://nas.ipv64.de aufrufen.").waitFor();
@@ -382,7 +382,7 @@ try {
   assert.equal(d.publish.port, 2283);
   assert.equal(d.publish.confirm, true);
   assert.equal(d.publish.firewall, true);
-  await page.getByRole("heading", { name: "Öffentlich über IPv64" }).scrollIntoViewIfNeeded();
+  await page.getByRole("region", { name: "Öffentlich über IPv64" }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${out}/8-app-published.png` });
 
   // Phone width: no horizontal scroll of the page.
