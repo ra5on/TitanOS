@@ -462,6 +462,9 @@ func (m *Manager) Open(root Root, name string) (*os.File, fs.FileInfo, error) {
 	if root.secret(name) {
 		return nil, nil, ErrNotFound
 	}
+	if name, err = root.followLink(name); err != nil {
+		return nil, nil, err
+	}
 	r, err := os.OpenRoot(root.Dir)
 	if err != nil {
 		return nil, nil, mapError(err)

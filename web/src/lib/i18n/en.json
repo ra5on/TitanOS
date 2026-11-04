@@ -629,6 +629,7 @@
 	"notify.kind.share_data_delete_failed.text": "Deleting did not run through. Tools › Tasks gives the reason and whether the data is still there.",
 	"error.file_not_found": "The file or folder was not found.",
 	"error.file_exists": "A file or folder with this name already exists.",
+	"error.file_link_outside": "This file is a link to a place outside this folder and cannot be opened here.",
 	"error.invalid_path": "This name is not allowed.",
 	"error.read_only_share": "You may only read on this share.",
 	"error.no_space": "There is not enough free space on the volume.",
