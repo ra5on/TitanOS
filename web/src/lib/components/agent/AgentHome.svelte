@@ -293,13 +293,11 @@
 		display: flex;
 		gap: 10px;
 		overflow-x: auto;
-		scroll-snap-type: x proximity;
 		padding: 2px 0 4px;
 		scrollbar-width: none;
 	}
 	.ptile {
 		flex: none;
-		scroll-snap-align: start;
 		width: 136px;
 		height: 112px;
 		border-radius: 18px;
