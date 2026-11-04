@@ -3528,7 +3528,7 @@
 	"files.incoming": "Incoming file",
 	"files.existing": "Existing file",
 	"files.folderType": "Folder",
-	"files.conflictTruncated": "More than 200 conflicts. Replace is disabled; choose Rename or Skip, or select fewer items.",
+	"files.conflictTruncated": "More than 200 conflicts; the first 200 are listed. Replace, Rename and Skip apply to all of them; choosing one by one works up to 200.",
 	"files.replaceConfirm": "I confirm replacing existing files.",
 	"files.targetUnavailable": "This destination is protected or not writable.",
 	"files.retryRemaining": "Retry remaining files",
