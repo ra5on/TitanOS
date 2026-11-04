@@ -101,6 +101,9 @@ func newEnv(t *testing.T) *env {
 	e.m = NewManager(config.Open(filepath.Join(root, "config")))
 	e.m.restic, e.m.mountRoot, e.m.workDir = filepath.Join(e.dir, "restic"), filepath.Join(root, "mnt"), filepath.Join(root, "run")
 	e.m.now = func() time.Time { return e.now }
+	// A job writes its state after it shows as finished; wait for that
+	// before t.TempDir is removed.
+	t.Cleanup(e.m.runs.Wait)
 	e.m.Sources = func() []Source {
 		return []Source{{Name: "media", Volume: "tank", Path: filepath.Join(root, "mnt/tank/media")}, {Name: "photos", Volume: "tank", Path: filepath.Join(root, "mnt/tank/photos")}}
 	}

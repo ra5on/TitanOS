@@ -265,6 +265,9 @@ type Manager struct {
 
 	// queue lets one job work at a time.
 	queue sync.Mutex
+	// runs counts the started jobs until their state is written; tests
+	// wait for it before their temporary directory goes away.
+	runs sync.WaitGroup
 	// hostsMu keeps two calls from writing known_hosts at once.
 	hostsMu sync.Mutex
 
@@ -1057,7 +1060,9 @@ func (m *Manager) begin(job Job, phase string, work func(context.Context) error)
 	state.Running, state.Queued, state.Phase, state.Percent, state.BytesDone, state.BytesTotal, state.BandwidthLimit = true, true, phase, 0, 0, 0, 0
 	m.cancels[job.ID] = cancel
 	m.mu.Unlock()
+	m.runs.Add(1)
 	go func() {
+		defer m.runs.Done()
 		m.queue.Lock()
 		m.update(job, func(s *State) { s.Queued = false })
 		err := work(ctx)

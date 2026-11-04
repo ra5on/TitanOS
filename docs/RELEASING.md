@@ -134,6 +134,13 @@ eines, das läuft (ohne Neustart, Anmeldung bleibt, nach einem Neustart des
 NAS noch da), eines, das nicht startet (nach drei Starts zurück), und den Weg
 zurück zum titand des Systemabbilds.
 
+Der Probelauf startet nur, wenn ein Pull Request Dateien aus der Liste
+`paths` in `release.yml` ändert (Abbild, Boot, Plugin-Katalog, QEMU-Prüfungen).
+Release-Notizen unter `docs/releases/` gehören nicht dazu: Sie werden erst beim
+Veröffentlichen aus der Tag-Nachricht gelesen. Pflicht vor dem Merge ist nur
+`build`; ein Pull Request muss nicht auf dem neuesten `main` stehen (seit
+4.11.2026). `main` wird nach jedem Merge erneut geprüft.
+
 **Debian-Updates und Autopilot:** App-Releases behalten die Debian-Pakete
 ihrer Basis. `autopilot.yml` vergleicht jede Nacht die Pakete des neuesten
 Releases mit trixie, trixie-updates, trixie-security und (Kernel „Neu“)
