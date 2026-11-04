@@ -286,6 +286,12 @@
 		box-shadow: var(--shadow-menu);
 		color: inherit;
 	}
+	/* showModal() focuses the dialog itself (the sidebar inside is rendered
+	   just after); Safari then draws the focus ring, a line along its right edge. */
+	.drawer:focus,
+	.drawer:focus-visible {
+		outline: none;
+	}
 	.drawer::backdrop {
 		background: var(--overlay, rgb(0 0 0 / 0.5));
 	}

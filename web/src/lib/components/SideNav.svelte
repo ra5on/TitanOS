@@ -324,10 +324,13 @@
 			display: none;
 		}
 	}
-	/* The phone's drawer: as high as the screen, rows tall enough for a finger. */
+	/* The phone's drawer: as high as the screen, rows tall enough for a finger.
+	   Menus inside it (notifications, account) take --drawer-width, so they
+	   stay inside the drawer: iOS cuts off anything beyond its edge. */
 	.drawer {
+		--drawer-width: min(300px, 84vw);
 		position: static;
-		width: min(300px, 84vw);
+		width: var(--drawer-width);
 		height: 100%;
 		border-right: 0;
 		padding-top: calc(14px + env(safe-area-inset-top));

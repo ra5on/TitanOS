@@ -1,7 +1,7 @@
 // Navigation "Side" on a phone (390 px) against isolated fixtures: no head
 // line and no status bar, a round menu button at the bottom left that slides
 // the sidebar in (button, swipe from the left edge, Escape, tap beside it,
-// following a link), account menu inside the screen; "Top" and the desktop
+// following a link), notifications and account menu inside the drawer; "Top" and the desktop
 // stay as they are.
 // PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs node scripts/test-ui-mobile-side-nav.mjs
 import assert from 'node:assert/strict';
@@ -17,6 +17,23 @@ const context = fixtureFactory(browser, errors);
 
 async function open({ layout = 'side', width = 390, theme = 'graphit', path = '/' } = {}) {
 	const { ctx, page, data } = await context('owner', theme, width);
+	await page.route('**/api/v1/notifications', (route) =>
+		route.fulfill({
+			json: {
+				messages: [
+					{
+						id: 1,
+						time: new Date().toISOString(),
+						severity: 'warning',
+						kind: 'unclean-shutdown',
+						subject: 'boot',
+						title: 'Das NAS wurde nicht ordnungsgemäß heruntergefahren',
+						text: 'Der vorige Start endete ohne sauberes Herunterfahren. Prüfe den Zustand der Volumes.',
+					},
+				],
+			},
+		}),
+	);
 	data.prefs.appearance = { theme, nav: { layout } };
 	await ctx.addInitScript(
 		({ theme, layout }) => localStorage.setItem('titanos.appearance', JSON.stringify({ theme, nav: { layout } })),
@@ -71,11 +88,24 @@ try {
 		assert.ok(panel.x === 0 && panel.width <= 330, `drawer from the left (${panel.x}, ${panel.width})`);
 		await page.screenshot({ path: `${out}/offen-graphit-390.png` });
 
-		// The account menu stays inside the screen.
+		// showModal() focuses the dialog itself; it draws no focus ring (Safari
+		// showed it as a line along the right edge).
+		assert.equal(await drawer(page).evaluate((d) => getComputedStyle(d).outlineStyle), 'none', 'no focus ring on the drawer');
+
+		// Notifications and the account menu stay inside the drawer (iOS cuts
+		// off what reaches beyond its edge).
+		await drawer(page).locator('.notifications .trigger').click();
+		await drawer(page).locator('.notifications .panel').waitFor();
+		const bell = await drawer(page).locator('.notifications .panel').boundingBox();
+		assert.ok(bell.x >= 0 && bell.x + bell.width <= panel.width, `notifications inside the drawer (${bell.x}, ${bell.width})`);
+		await page.screenshot({ path: `${out}/meldungen-graphit-390.png` });
+		await page.mouse.click(215, 32);
+		await drawer(page).locator('.notifications .panel').waitFor({ state: 'detached' });
+
 		await drawer(page).locator('.account .trigger').click();
 		await drawer(page).locator('.account .menu').waitFor();
 		const menu = await drawer(page).locator('.account .menu').boundingBox();
-		assert.ok(menu.x >= 0 && menu.x + menu.width <= 390, `account menu inside (${menu.x}, ${menu.width})`);
+		assert.ok(menu.x >= 0 && menu.x + menu.width <= panel.width, `account menu inside the drawer (${menu.x}, ${menu.width})`);
 		await page.screenshot({ path: `${out}/konto-graphit-390.png` });
 		await page.keyboard.press('Escape');
 		if (await drawer(page).evaluate((d) => d.open)) await page.keyboard.press('Escape');

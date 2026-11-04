@@ -386,14 +386,21 @@
 			max-width: calc(100vw - 24px);
 			max-height: calc(100dvh - 76px);
 		}
-		/* In the phone's drawer: across the bottom of the screen. */
+		/* In the phone's drawer: across its bottom, as wide as the drawer. */
 		.side .panel {
 			top: auto;
 			left: 12px;
-			right: 12px;
+			right: auto;
 			bottom: calc(12px + env(safe-area-inset-bottom));
+			width: calc(var(--drawer-width, 300px) - 24px);
 			max-width: none;
+			/* Without the tile padding of the global .panel: the drawer is narrow. */
+			padding: 0;
+			gap: 0;
 			max-height: calc(100dvh - 24px);
+		}
+		.side .clear {
+			margin-top: var(--space-2);
 		}
 	}
 </style>
