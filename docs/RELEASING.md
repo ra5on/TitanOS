@@ -160,11 +160,6 @@ Einzelheiten, Einrichtung und Grenzen: [AUTOPILOT.md](AUTOPILOT.md).
   bestellt (`kernelVariant=new` an das Plugin-Repository). Ins Release kommen
   nur die Plugins des stabilen Kernels. Fehlt der Satz des neuen Kernels,
   warnt der Workflow nur.
-- **Vor einem Release mit neuem Kernel-Satz** im Plugin-Repository die Quellen
-  von `r8125`/`r8126` festlegen (`python3 scripts/pin-driver-source.py <name>
-  <commit>`) und `plugins/nvidia-legacy/packages.lock.json` füllen
-  (`python3 scripts/update-nvidia-lock.py --plugin nvidia-legacy --output
-  plugins/nvidia-legacy/packages.lock.json`). Sonst bricht der Satzbau ab.
 - **GRUB** ([BOOT.md](BOOT.md)): Das Abbild baut `BOOTIA32.EFI` und den
   BIOS-Kern von GRUB (`scripts/make-grub.sh` in `mkosi.postinst.chroot`).
   `make-zip.sh` legt sie mit `boot/grub/grub.cfg` auf den Stick. Mit
