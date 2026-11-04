@@ -126,3 +126,56 @@ func TestEditingALinkKeepsTheLink(t *testing.T) {
 		t.Fatalf("previous version beside the target: %v", err)
 	}
 }
+
+// A folder linked with an absolute path in the middle of the path: listing,
+// opening and saving go through it; a linked folder out of the place stays
+// closed.
+func TestLinkedFolderInThePath(t *testing.T) {
+	m, root, app := linkFixture(t)
+	if err := os.Symlink(filepath.Join(app, "conf"), filepath.Join(app, "cfg")); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "x.yaml"), []byte("x: 1\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(app, "ext")); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := m.List(root, "appdata/app/cfg")
+	if err != nil || len(entries) != 1 || entries[0].Name != "real.yaml" {
+		t.Fatalf("list through the link: %v %v", entries, err)
+	}
+	f, _, err := m.Open(root, "appdata/app/cfg/real.yaml")
+	if err != nil {
+		t.Fatalf("open through the link: %v", err)
+	}
+	f.Close()
+	text, err := m.ReadText(root, "appdata/app/cfg/real.yaml")
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if _, err := m.SaveTextVersion(root, "appdata/app/cfg/real.yaml", "a: 3\n", text.Version); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if data, _ := os.ReadFile(filepath.Join(app, "conf", "real.yaml")); string(data) != "a: 3\n" {
+		t.Fatalf("saved %q", data)
+	}
+	if info, err := os.Lstat(filepath.Join(app, "cfg")); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("folder link replaced: %v", err)
+	}
+	if _, err := m.List(root, "appdata/app/ext"); !errors.Is(err, ErrLinkOutside) {
+		t.Fatalf("list out of the place: %v", err)
+	}
+	if _, _, err := m.Open(root, "appdata/app/ext/x.yaml"); !errors.Is(err, ErrLinkOutside) {
+		t.Fatalf("open out of the place: %v", err)
+	}
+	// In a share, a folder link to another folder of the volume is outside.
+	share := Root{ID: "share/conf", Kind: "share", Dir: filepath.Join(app, "conf"), Writable: true}
+	if err := os.Symlink(filepath.Join(root.Dir, "appdata"), filepath.Join(share.Dir, "up")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.List(share, "up"); !errors.Is(err, ErrLinkOutside) {
+		t.Fatalf("share folder link out: %v", err)
+	}
+}
