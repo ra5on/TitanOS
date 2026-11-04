@@ -78,7 +78,7 @@
 </script>
 
 <aside
-	class="side-nav bar-surface"
+	class="side-nav bar-surface sidebar-surface"
 	class:folded
 	class:drawer
 	class:magnify={appearance.current.nav.magnify}
