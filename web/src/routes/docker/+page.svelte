@@ -1387,8 +1387,10 @@
 				type="button"
 				role="menuitem"
 				onclick={() => {
+					// group comes from stackMenu: read it before the menu closes.
+					const target = group;
 					stackMenu = null;
-					showProblems(group);
+					showProblems(target);
 				}}
 				><Icon name="activity" size={16} /><span
 					>{t('docker.stackProblems', { count: problemCount })}</span
@@ -1400,8 +1402,9 @@
 			role="menuitem"
 			disabled={editing || savingLayout}
 			onclick={() => {
+				const target = group;
 				stackMenu = null;
-				editLinks(group);
+				editLinks(target);
 			}}><Icon name="globe" size={16} /><span>{t('docker.stackLinks')}</span></button
 		>
 		{#if proxy && app}
@@ -1410,8 +1413,9 @@
 				role="menuitem"
 				disabled={editing}
 				onclick={() => {
+					const target = app;
 					stackMenu = null;
-					openTailnet(app);
+					openTailnet(target);
 				}}
 				><Icon name="tailnet" size={16} /><span
 					>{t(appInTailnet(app) ? 'docker.tailnetUnpublish' : 'docker.tailnetPublish')}</span
