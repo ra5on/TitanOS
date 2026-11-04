@@ -665,7 +665,8 @@ Prüfung: `scripts/test-ui-workflows.mjs`, wie die übrigen Browserprüfungen mi
 ### Speicher, Wartung und Aufträge (0.16.0)
 
 Der bestätigte Gesamtentwurf wird mit gemeinsamen PageHead-/Dialog-/Kachelmustern
-und Theme-Variablen umgesetzt. Werkzeuge verlinkt Aufträge, Wartung, Monitoring und
+und Theme-Variablen umgesetzt. Werkzeuge (seit 4.11.2026 mit Seitenleiste wie die Einstellungen,
+siehe `docs/rules/SYSTEM.md`) verlinkt Aufträge, Wartung, Monitoring und
 Speicherübernahme. Aufträge bündelt aktuelle Arbeit, Fehler, nächste Termine und
 Wiederanlauf. Seit 0.18.0 liegt dieser Handlungsbereich ausschließlich auf der Auftragsseite.
 

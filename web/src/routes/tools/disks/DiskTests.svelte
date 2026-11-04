@@ -193,8 +193,8 @@
 	}
 </script>
 
-<section class="tile" aria-labelledby="tools-disks">
-	<h2 class="tile-title" id="tools-disks">{t('disktest.title')}</h2>
+<!-- The page title names it; the lists below are its sections. -->
+<section class="tile" id="tools-disks" aria-label={t('disktest.title')}>
 	<p class="muted">{t('disktest.intro')}</p>
 	{#if error && !chosen && !stopping && !resuming}<div class="notice-error" role="alert">
 			{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
@@ -227,7 +227,7 @@
 		</p>{/if}
 
 	{#if tests.length > 0}
-		<h3>{t('disktest.running')}</h3>
+		<h2>{t('disktest.running')}</h2>
 		<ul class="tests">
 			{#each tests as test (test.disk)}
 				<li>
@@ -332,7 +332,7 @@
 		</ul>
 	{/if}
 
-	<h3>{t('disktest.candidates')}</h3>
+	<h2>{t('disktest.candidates')}</h2>
 	{#if candidates.length === 0}
 		<p class="muted">{t('disktest.none')}</p>
 	{:else}
@@ -496,7 +496,7 @@
 	p {
 		margin: 0;
 	}
-	h3 {
+	h2 {
 		margin: var(--space-1) 0 0;
 		font-size: var(--text-md);
 		font-weight: 600;
