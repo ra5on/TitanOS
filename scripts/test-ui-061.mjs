@@ -118,7 +118,8 @@ try {
  failLoad=true;await page.goto(base+'/settings/access#access-terminal');await page.locator('#access-terminal').getByRole('button',{name:'Erneut versuchen'}).waitFor();
  failLoad=false;await page.locator('#access-terminal').getByRole('button',{name:'Erneut versuchen'}).click();
  const enabled=page.getByRole('checkbox',{name:'Terminal und Konsolen erlauben',exact:true});await enabled.waitFor();
- failTerminal=true;await enabled.uncheck();await page.locator('#access-terminal [role=alert]').waitFor();assert.equal(await enabled.isChecked(),true);
+ // A refused change flips the box back, so click instead of uncheck (which insists on the new state).
+ failTerminal=true;await enabled.click();await page.locator('#access-terminal [role=alert]').waitFor();assert.equal(await enabled.isChecked(),true);
  failTerminal=false;await enabled.uncheck();await page.locator('#access-terminal').getByText('Gespeichert',{exact:true}).waitFor();assert.equal(await enabled.isChecked(),false);
  await page.clock.runFor(5100);assert.equal(await page.locator('#access-terminal').getByText('Gespeichert',{exact:true}).count(),0);
  await page.getByRole('checkbox',{name:'Passwort vor dem Herunterladen von Stick-Sicherungen erneut abfragen',exact:true}).check();await page.locator('#access-terminal').getByText('Gespeichert',{exact:true}).waitFor();
