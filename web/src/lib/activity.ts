@@ -152,6 +152,7 @@ const areas: Record<string, string> = {
 	activity: 'activity',
 	notifications: 'notifications',
 	maintenance: 'maintenance',
+	scripts: 'scripts',
 	monitoring: 'monitoring',
 	ups: 'ups',
 	usb: 'usb',

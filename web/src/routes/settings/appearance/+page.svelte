@@ -21,6 +21,8 @@
 		THEME_IDS,
 		type Appearance,
 		type CustomColors,
+		type BarMode,
+		type BarSurface,
 		type FloatingSurface,
 		type ThemeId,
 	} from '#lib/theme/themes.ts';
@@ -43,6 +45,13 @@
 	let draft = $state<Appearance>($state.snapshot(appearance.current));
 	let saving = $state(false);
 	let message = $state<{ text: string; warn: boolean } | null>(null);
+	// Errors of the last "Apply", one line per area that could not be saved.
+	let failures = $state<string[]>([]);
+	// The app symbol and the login page (owners/admins) are saved by the same bar.
+	let iconEditor = $state<AppIconEditor>();
+	let loginEditor = $state<LoginAppearanceEditor>();
+	let iconDirty = $state(false);
+	let loginDirty = $state(false);
 	let themeFile: HTMLInputElement;
 	let imageFile = $state<HTMLInputElement>();
 
@@ -70,9 +79,8 @@
 	const canAdminister = $derived(
 		session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin',
 	);
-	const dirty = $derived(
-		JSON.stringify(draft) !== JSON.stringify(appearance.current) || visualDirty,
-	);
+	const appearanceDirty = $derived(JSON.stringify(draft) !== JSON.stringify(appearance.current));
+	const dirty = $derived(appearanceDirty || visualDirty || iconDirty || loginDirty);
 	const palette = $derived(resolvePalette(draft, appearance.systemLight));
 	const ratio = $derived(textContrast(palette));
 
@@ -99,33 +107,68 @@
 		}
 		surface.own = own;
 	}
-	const FLOATING_GROUPS = ['menus', 'dialogs', 'bars'] as const;
+	const FLOATING_GROUPS = ['menus', 'dialogs'] as const;
 	const ownOptions = $derived([
 		{ value: 'inherit', label: t('appearance.floating.inherit') },
 		{ value: 'own', label: t('appearance.floating.own') },
 	]);
-	// The bars are opaque unless they get own values.
+	// Header/status bar and side navigation: like the tiles, opaque or own values.
 	const barOptions = $derived([
-		{ value: 'inherit', label: t('appearance.floating.opaqueBars') },
+		{ value: 'tiles', label: t('appearance.floating.inherit') },
+		{ value: 'opaque', label: t('appearance.floating.opaqueBars') },
 		{ value: 'own', label: t('appearance.floating.own') },
 	]);
+	/** Own values start from what the bar showed before (tiles' values). */
+	function setBarMode(bar: BarSurface, mode: BarMode) {
+		if (mode === 'own' && bar.mode !== 'own') {
+			bar.glass = draft.glass;
+			bar.blur = draft.blur;
+			bar.shine = draft.shine;
+		}
+		bar.mode = mode;
+		bar.own = mode === 'own';
+	}
 
 	function fail(err: unknown) {
 		message = { text: apiErrorText(err), warn: true };
 	}
 
+	/**
+	 * The page's one "Apply": saves every area with changes (appearance,
+	 * dashboard background, app symbol, login page). One failing area does not
+	 * stop the others; each failure is named with its area.
+	 */
 	async function apply() {
 		saving = true;
 		message = null;
-		try {
-			if (visualDirty) await saveVisual();
-			await saveAppearance($state.snapshot(draft));
-			message = { text: t('appearance.saved'), warn: false };
-		} catch (err) {
-			fail(err);
-		} finally {
-			saving = false;
+		failures = [];
+		const steps: [string, boolean, () => Promise<unknown>][] = [
+			[t('appearance.title'), appearanceDirty, () => saveAppearance($state.snapshot(draft))],
+			[t('dashboard.visual.background'), visualDirty, saveVisual],
+			[t('appIcon.title'), iconDirty, async () => iconEditor?.save()],
+			[t('loginLook.title'), loginDirty, async () => loginEditor?.save()],
+		];
+		for (const [area, changed, save] of steps) {
+			if (!changed) continue;
+			try {
+				await save();
+			} catch (err) {
+				failures.push(t('appearance.saveFailed', { area, error: apiErrorText(err) }));
+			}
 		}
+		if (!failures.length) message = { text: t('appearance.saved'), warn: false };
+		saving = false;
+	}
+
+	/** Drops every unsaved change on the page. */
+	function discard() {
+		draft = $state.snapshot(appearance.current);
+		visual = dashboardVisual(session.dashboard?.visual);
+		pendingImages.clear();
+		iconEditor?.discard();
+		loginEditor?.discard();
+		message = null;
+		failures = [];
 	}
 
 	async function saveVisual() {
@@ -202,9 +245,42 @@
 	}
 </script>
 
+{#snippet barFields(key: 'bars' | 'sidebar', label: string, shine: boolean)}
+	<Segments
+		{label}
+		options={barOptions}
+		value={draft[key].mode}
+		onchange={(value) => setBarMode(draft[key], value as BarMode)}
+	/>
+	{#if draft[key].mode === 'own'}
+		<Slider
+			id="{key}-glass"
+			label={t('appearance.transparency')}
+			bind:value={draft[key].glass}
+			limit={LIMITS.glass}
+			unit="%"
+		/>
+		<Slider
+			id="{key}-blur"
+			label={t('appearance.blur')}
+			bind:value={draft[key].blur}
+			limit={LIMITS.blur}
+			unit="px"
+		/>
+		{#if shine}<Slider
+				id="{key}-shine"
+				label={t('appearance.shine')}
+				bind:value={draft[key].shine}
+				limit={LIMITS.shine}
+				unit="%"
+			/>{/if}
+	{/if}
+{/snippet}
+
 <PageHead title={t('appearance.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
 	<p class="muted">{t('appearance.intro')}</p>
 	{#snippet actions()}
+		<button type="button" class="btn" onclick={reset}>{t('appearance.reset')}</button>
 		<button type="button" class="btn" onclick={exportTheme}>{t('appearance.export')}</button>
 		<button type="button" class="btn" onclick={() => themeFile.click()}
 			>{t('appearance.import')}</button
@@ -352,7 +428,7 @@
 						<p class="hint muted">{t(`appearance.floating.${key}Desc`)}</p>
 						<Segments
 							label={t(`appearance.floating.${key}`)}
-							options={key === 'bars' ? barOptions : ownOptions}
+							options={ownOptions}
 							value={draft[key].own ? 'own' : 'inherit'}
 							onchange={(value) => setOwn(draft[key], value === 'own')}
 						/>
@@ -371,17 +447,21 @@
 								limit={LIMITS.blur}
 								unit="px"
 							/>
-							{#if key !== 'bars'}
-								<Slider
-									id="{key}-shine"
-									label={t('appearance.shine')}
-									bind:value={draft[key].shine}
-									limit={LIMITS.shine}
-									unit="%"
-								/>{/if}
+							<Slider
+								id="{key}-shine"
+								label={t('appearance.shine')}
+								bind:value={draft[key].shine}
+								limit={LIMITS.shine}
+								unit="%"
+							/>
 						{/if}
 					</fieldset>
 				{/each}
+				<fieldset class="divided">
+					<legend>{t('appearance.floating.bars')}</legend>
+					<p class="hint muted">{t('appearance.floating.barsDesc')}</p>
+					{@render barFields('bars', t('appearance.floating.bars'), false)}
+				</fieldset>
 				<p class="hint muted">{t('appearance.floating.hint')}</p>
 			{:else}
 				<p class="hint muted">{t('appearance.floating.opaque')}</p>
@@ -519,6 +599,17 @@
 					>
 				{/each}
 			</fieldset>
+			{#if draft.nav.layout === 'side'}
+				<fieldset class="sidebar-look" id="sidebar">
+					<legend>{t('appearance.sidebar.title')}</legend>
+					{#if draft.style === 'glass'}
+						<p class="hint muted">{t('appearance.sidebar.desc')}</p>
+						{@render barFields('sidebar', t('appearance.sidebar.title'), true)}
+					{:else}
+						<p class="hint muted">{t('appearance.sidebar.opaque')}</p>
+					{/if}
+				</fieldset>
+			{/if}
 			{#if draft.nav.layout === 'side'}<label class="check magnify"
 					><input type="checkbox" bind:checked={draft.nav.magnify} />{t(
 						'appearance.nav.magnify',
@@ -631,17 +722,10 @@
 			}}
 		/>
 
-		<div class="apply">
-			<button type="button" class="btn btn-primary" onclick={apply} disabled={saving || !dirty}
-				>{t('appearance.apply')}</button
-			>
-			<button type="button" class="btn" onclick={reset}>{t('appearance.reset')}</button>
-			<span class="state" class:warn={message?.warn} role="status">
-				{#if message}{message.text}{:else if dirty}{t('appearance.unsaved')}{/if}
-			</span>
-		</div>
-
-		{#if canAdminister}<AppIconEditor /><LoginAppearanceEditor />{/if}
+		{#if canAdminister}<AppIconEditor
+				bind:this={iconEditor}
+				bind:dirty={iconDirty}
+			/><LoginAppearanceEditor bind:this={loginEditor} bind:dirty={loginDirty} />{/if}
 	</div>
 
 	<section class="preview" aria-labelledby="h-preview">
@@ -652,6 +736,28 @@
 		<Preview {draft} />
 	</section>
 </div>
+
+<!-- One bar for the whole page; it sticks to the bottom while something is unsaved. -->
+{#if dirty || message || failures.length}<div
+		class="save-bar"
+		class:pinned={dirty}
+		class:notice-warn={dirty}
+	>
+		<span class="state" class:warn={message?.warn} role="status"
+			>{#if saving}{t('ui.saving')}{:else if dirty}{t(
+					'appearance.unsaved',
+				)}{:else if message}{message.text}{/if}</span
+		>
+		{#each failures as failure (failure)}<p class="notice-error" role="alert">{failure}</p>{/each}
+		{#if message?.warn && dirty}<p class="notice-error" role="alert">{message.text}</p>{/if}
+		{#if dirty}<div class="row-actions">
+				<button type="button" class="btn" disabled={saving} onclick={discard}
+					>{t('appearance.discard')}</button
+				><button type="button" class="btn btn-primary" disabled={saving} onclick={apply}
+					>{t('appearance.apply')}</button
+				>
+			</div>{/if}
+	</div>{/if}
 
 <style>
 	.fx-list {
@@ -889,11 +995,23 @@
 		height: 2.25rem;
 	}
 
-	.apply {
+	.save-bar {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2) var(--space-3);
+		margin-top: var(--space-4);
+	}
+	.save-bar .row-actions {
+		margin-left: auto;
+	}
+	/* Only unsaved changes stick to the bottom (like the firewall's bar). */
+	.save-bar.pinned {
+		position: sticky;
+		bottom: 12px;
+		z-index: 5;
+		/* Beside the round menu button of "Side" navigation on a phone. */
+		margin-left: var(--fab-clear, 0px);
 	}
 	.state {
 		font-size: var(--text-base);

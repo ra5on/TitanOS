@@ -9,9 +9,9 @@
 	let { action, onclose }: Props = $props();
 
 	type Item = {
-		kind: 'vm' | 'lxc' | 'docker';
+		kind: 'script' | 'vm' | 'lxc' | 'docker';
 		name: string;
-		state: 'stopping' | 'stopped' | 'failed';
+		state: 'running' | 'stopping' | 'stopped' | 'failed';
 		error?: string;
 	};
 	type Preparing = {
@@ -35,7 +35,11 @@
 	const preparing = $derived(status?.preparing ?? null);
 	// A preparation under way decides which way the NAS goes, not the button.
 	const restart = $derived(preparing ? preparing.action === 'reboot' : action === 'restart');
-	const stuck = $derived(preparing?.items.filter((item) => item.state !== 'stopped') ?? []);
+	// Shutdown scripts (Tools › Scripts) run first and have their own time
+	// limit: a failed one is shown, but no guest that keeps the NAS up.
+	const stuck = $derived(
+		preparing?.items.filter((item) => item.kind !== 'script' && item.state !== 'stopped') ?? [],
+	);
 
 	async function load() {
 		try {

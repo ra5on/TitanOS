@@ -19,6 +19,7 @@ export const pages: { href: string; label: MessageKey; admin?: boolean }[] = [
 	{ href: '/tools/logs', label: 'tools.logs', admin: true },
 	{ href: '/tools/tasks', label: 'ops.tasks', admin: true },
 	{ href: '/tools/maintenance', label: 'ops.maintenance', admin: true },
+	{ href: '/tools/scripts', label: 'scripts.title', admin: true },
 	{ href: '/tools/monitoring', label: 'ops.monitoring', admin: true },
 	{ href: '/tools/activity', label: 'ops.activity', admin: true },
 	{ href: '/storage/import', label: 'ops.import', admin: true },
