@@ -41,6 +41,8 @@ const pages = [
   "/settings/notifications",
   "/tools",
   "/tools/monitoring",
+  "/tools/disks",
+  "/tools/bundle",
 ];
 
 function brokenWords() {

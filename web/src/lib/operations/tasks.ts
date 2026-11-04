@@ -257,7 +257,7 @@ export function taskItems(data: Operations): TaskItem[] {
 							: 'failed',
 			detail: job.result || job.phase,
 			progress: job.percent,
-			href: '/tools',
+			href: '/tools/disks',
 		});
 	for (const operation of data.plugins ?? []) {
 		const step = currentStep(operation);

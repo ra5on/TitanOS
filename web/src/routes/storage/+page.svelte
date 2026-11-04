@@ -757,7 +757,7 @@
 							}}>{t('storage.openVolume', { volume: disk.volume })}</button
 						>
 					{:else if disk.role === 'free'}
-						<a class="btn" href="/tools#tools-disks">{t('storage.testDisk')}</a>
+						<a class="btn" href="/tools/disks">{t('storage.testDisk')}</a>
 						{#each addTargets as volume (volume.name)}
 							<button
 								class="btn"
