@@ -85,3 +85,10 @@ test('the stack curve adds the services up at their newest values', () => {
 	);
 	assert.deepEqual(stackCpuHistory([]), []);
 });
+test('one card size for all, medium when missing or unknown', () => {
+	assert.equal(sanitizeDockerLayout({}).size, 'm');
+	assert.equal(sanitizeDockerLayout({ size: 's' }).size, 's');
+	assert.equal(sanitizeDockerLayout({ size: 'l' }).size, 'l');
+	assert.equal(sanitizeDockerLayout({ size: 'xl' }).size, 'm');
+	assert.equal(sanitizeDockerLayout({ size: { 'app:a': 'l' } }).size, 'm');
+});

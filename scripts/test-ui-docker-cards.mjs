@@ -2,7 +2,8 @@
 // size, a Compose stack is one card (closed: running/total, CPU/RAM, services
 // as chips; open: its services follow as cards), order "Custom | A–Z" in the
 // editor, cards dragged at their handle or moved with the arrow keys, saved in
-// the docker preference only on a change. Desktop and 390 px, graphit/hell.
+// the docker preference only on a change; one card size S/M/L for all cards.
+// Desktop and 390 px, graphit/hell.
 // Isolated API data only.
 // PLAYWRIGHT_MODULE=/abs/playwright/index.mjs UI_URL=http://127.0.0.1:5373 node scripts/test-ui-docker-cards.mjs
 import assert from "node:assert/strict";
@@ -204,7 +205,55 @@ try {
     await ctx.close();
   }
 
-  // 4. Screenshots and the phone: one column, same behaviour.
+  // 4. One card size for all (S/M/L): more or fewer cards per row, still equal;
+  //    saved as `size` only on a change; phones keep one column.
+  {
+    const columns = (page) =>
+      page.locator(".cards > .cell").evaluateAll((cells) => new Set(cells.map((cell) => Math.round(cell.getBoundingClientRect().x))).size);
+    const { ctx, page, data } = await open("graphit", 1440);
+    const counts = {};
+    await customize(page);
+    for (const size of ["S", "M", "L"]) {
+      await page.getByRole("radio", { name: new RegExp(`^${{ S: "Klein", M: "Mittel", L: "Groß" }[size]}`) }).click();
+      await page.waitForTimeout(200);
+      counts[size] = await columns(page);
+      const heights = await cardHeights(page);
+      assert.equal(new Set(heights).size, 1, `size ${size}: equal heights ${heights}`);
+      assert.ok(await noScroll(page));
+    }
+    assert.ok(counts.S > counts.M && counts.M > counts.L, `columns ${JSON.stringify(counts)}`);
+    // Back on M: nothing changed, nothing written.
+    await page.getByRole("radio", { name: /^Mittel/ }).click();
+    await page.getByRole("button", { name: "Layout speichern" }).click();
+    await page.locator(".layout-editor").waitFor({ state: "detached" });
+    assert.equal(data.putDocker.length, 0, "unchanged size must not write");
+    for (const [size, label] of [["s", "Klein"], ["l", "Groß"]]) {
+      await customize(page);
+      await page.getByRole("radio", { name: new RegExp(`^${label}`) }).click();
+      await page.getByRole("button", { name: "Layout speichern" }).click();
+      await page.locator(".layout-editor").waitFor({ state: "detached" });
+      assert.equal(data.putDocker.at(-1).size, size);
+      await page.reload();
+      await page.locator(".cards .cell").first().waitFor();
+      assert.ok(await page.locator(`.cards.size-${size}`).count(), `size ${size} kept after reload`);
+    }
+    await ctx.close();
+    for (const width of [1440, 390])
+      for (const size of ["s", "m", "l"]) {
+        const made = await open("graphit", width, { size });
+        await made.page.getByRole("article", { name: "Compose-Stack paperless" }).getByRole("button", { name: "Dienste" }).click();
+        await made.page.locator(".drawer").waitFor();
+        await made.page.waitForTimeout(200);
+        const heights = await cardHeights(made.page);
+        assert.equal(new Set(heights).size, 1, `size ${size} ${width}: equal heights with open stack ${heights}`);
+        if (width === 390) assert.equal(await columns(made.page), 1, `size ${size}: one column on the phone`);
+        assert.ok(await noScroll(made.page));
+        await made.page.screenshot({ path: `${out}/groesse-${size}-graphit-${width}.png`, fullPage: true });
+        await made.ctx.close();
+      }
+  }
+
+  // 5. Screenshots and the phone: one column, same behaviour.
   for (const theme of ["graphit", "hell"])
     for (const width of [1440, 390]) {
       const { ctx, page } = await open(theme, width);

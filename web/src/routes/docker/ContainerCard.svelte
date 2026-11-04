@@ -276,6 +276,19 @@
 		gap: 6px;
 		font-size: var(--text-base);
 	}
+	/* Size S: narrow cards keep CPU and RAM readable, the age moves to the tooltip. */
+	@container (max-width: 16rem) {
+		.card {
+			padding: 10px 12px;
+		}
+		.stats {
+			grid-template-columns: minmax(0, 1fr) 3.25rem 4rem;
+			gap: var(--space-2);
+		}
+		.age {
+			display: none;
+		}
+	}
 	@media (max-width: 760px) {
 		.small {
 			min-height: 2.75rem;
