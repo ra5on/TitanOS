@@ -262,6 +262,27 @@
 	backdrop-filter: var(--sidebar-backdrop);
 	box-shadow: var(--sidebar-edge);
 }
+/* Without backdrop-filter or with reduced transparency the bars and the
+   sidebar are opaque like menus and dialogs. The values come inline on
+   <html>, so the layer itself is overridden. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+	.bar-surface::before,
+	.sidebar-surface::before {
+		background: var(--header);
+		-webkit-backdrop-filter: none;
+		backdrop-filter: none;
+		box-shadow: none;
+	}
+}
+@media (prefers-reduced-transparency: reduce) {
+	.bar-surface::before,
+	.sidebar-surface::before {
+		background: var(--header);
+		-webkit-backdrop-filter: none;
+		backdrop-filter: none;
+		box-shadow: none;
+	}
+}
 
 *,
 *::before,

@@ -277,6 +277,19 @@ test('sidebar: the side navigation uses its own variables', async () => {
 		'utf8',
 	);
 	assert.match(nav, /class="side-nav bar-surface sidebar-surface"/);
+	// Opaque without backdrop-filter and with reduced transparency.
+	for (const start of [
+		'/* Without backdrop-filter or with reduced transparency the bars',
+		'@media (prefers-reduced-transparency: reduce) {\n\t.bar-surface',
+	]) {
+		const at = css.indexOf(start);
+		assert.notEqual(at, -1, start);
+		const part = css.slice(at, css.indexOf('}\n}', at));
+		assert.match(part, /\.sidebar-surface::before/);
+		assert.match(part, /background: var\(--header\)/);
+		assert.match(part, /backdrop-filter: none/);
+		assert.match(part, /box-shadow: none/);
+	}
 	for (const file of ['Header', 'StatusBar']) {
 		const source = await readFile(
 			new URL(`../src/lib/components/${file}.svelte`, import.meta.url),
