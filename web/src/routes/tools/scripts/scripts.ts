@@ -158,3 +158,18 @@ export function shortDuration(ms: number): string {
 	const m = Math.floor(s / 60);
 	return `${m} min ${s % 60} s`;
 }
+
+type Translate = (key: string, values?: Record<string, string | number>) => string;
+
+/** The result of a run as one line: outcome, exit code of a failure, duration. */
+export function runLabel(
+	run: Pick<ScriptRun, 'outcome' | 'exit' | 'durationMs'>,
+	tr: Translate,
+	withDuration = false,
+): string {
+	const parts = [tr(`scripts.outcome.${run.outcome}`)];
+	if (run.exit !== undefined && run.outcome === 'failed')
+		parts[0] += ` (${tr('scripts.exit', { code: run.exit })})`;
+	if (withDuration && run.durationMs) parts.push(shortDuration(run.durationMs));
+	return parts.join(' · ');
+}

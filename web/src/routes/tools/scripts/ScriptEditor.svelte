@@ -31,8 +31,11 @@
 
 	$effect(() => {
 		if (!id) {
-			draft = newDraft();
-			initial = JSON.stringify(draft);
+			// The plain object, not the state: reading draft here would make
+			// this effect depend on what it writes.
+			const fresh = newDraft();
+			initial = JSON.stringify(fresh);
+			draft = fresh;
 			return;
 		}
 		api
@@ -252,6 +255,7 @@
 		flex-basis: 16rem;
 	}
 	textarea {
+		font-family: var(--font-mono);
 		width: 100%;
 		box-sizing: border-box;
 		min-height: 14rem;

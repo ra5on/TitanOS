@@ -4,7 +4,7 @@
 	import { api } from '#lib/api.ts';
 	import { poll } from '#lib/poll.ts';
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
-	import { outcomeTone, shortDuration, type ScriptOutput } from './scripts.ts';
+	import { outcomeTone, runLabel, type ScriptOutput } from './scripts.ts';
 
 	type Props = { id: string; name: string; running: boolean; onended: () => void };
 	let { id, name, running, onended }: Props = $props();
@@ -64,9 +64,7 @@
 		<span class="muted">{t('scripts.outputOf', { name })}</span>
 		{#if live}<span class="chip info" role="status">{t('scripts.outcome.running')}</span
 			>{:else if result}<span class="chip {outcomeTone(result.outcome)}" role="status"
-				>{t(`scripts.outcome.${result.outcome}` as MessageKey)}{#if result.exit !== undefined}
-					· {t('scripts.exit', { code: result.exit })}{/if}
-				· {shortDuration(result.durationMs)}</span
+				>{runLabel(result, (key, values) => t(key as MessageKey, values), true)}</span
 			>{/if}
 	</div>
 	{#if skipped}<p class="muted">{t('scripts.outputSkipped')}</p>{/if}

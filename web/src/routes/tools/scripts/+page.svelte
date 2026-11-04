@@ -13,8 +13,10 @@
 	import ScriptRuns from './ScriptRuns.svelte';
 	import {
 		outcomeTone,
+		runLabel,
 		shortDuration,
 		whenText,
+		type ScriptRun,
 		type ScriptView,
 		type ScriptsStatus,
 	} from './scripts.ts';
@@ -91,6 +93,21 @@
 		return t(text.key as MessageKey, text.values);
 	}
 	const time = (value?: string) => (value ? formatDateTime(new Date(value)) : '—');
+	const tr = (key: string, values?: Record<string, string | number>) =>
+		t(key as MessageKey, values);
+	const outcomeLabel = (run: ScriptRun) => runLabel(run, tr);
+	function meta(script: ScriptView) {
+		const parts = [
+			script.last
+				? t('scripts.lastRun', {
+						time: time(script.last.started),
+						duration: shortDuration(script.last.durationMs),
+					})
+				: t('scripts.neverRun'),
+		];
+		if (script.next) parts.push(t('scripts.nextRun', { time: time(script.next) }));
+		return parts.join(' · ');
+	}
 	const volumeChanged = $derived(!!status && volume !== '' && volume !== status.volume);
 </script>
 
@@ -161,21 +178,11 @@
 										>{t('scripts.outcome.running')}</span
 									>{:else if script.last}<span
 										class="chip {outcomeTone(script.last.outcome)}"
-										title={script.last.error}
-										>{t(
-											`scripts.outcome.${script.last.outcome}` as MessageKey,
-										)}{#if script.last.exit !== undefined && script.last.outcome === 'failed'}
-											({t('scripts.exit', { code: script.last.exit })}){/if}</span
+										title={script.last.error}>{outcomeLabel(script.last)}</span
 									>{/if}
 							</div>
 						</div>
-						<p class="meta muted">
-							{#if script.last}{t('scripts.lastRun', {
-									time: time(script.last.started),
-									duration: shortDuration(script.last.durationMs),
-								})}{:else}{t('scripts.neverRun')}{/if}{#if script.next}
-								· {t('scripts.nextRun', { time: time(script.next) })}{/if}
-						</p>
+						<p class="meta muted">{meta(script)}</p>
 						<div class="row-actions">
 							{#if script.running}<button class="btn" onclick={() => cancel(script)}
 									>{t('scripts.cancel')}</button

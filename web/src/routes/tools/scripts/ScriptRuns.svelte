@@ -4,11 +4,24 @@
 	import { formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
-	import { outcomeTone, shortDuration, type ScriptRun, type ScriptView } from './scripts.ts';
+	import {
+		outcomeTone,
+		runLabel,
+		shortDuration,
+		type ScriptRun,
+		type ScriptView,
+	} from './scripts.ts';
 
 	type Props = { script: ScriptView; onclose: () => void };
 	let { script, onclose }: Props = $props();
 
+	const when = (run: ScriptRun) =>
+		[
+			t(`scripts.trigger.${run.trigger}` as MessageKey),
+			run.durationMs ? shortDuration(run.durationMs) : '',
+		]
+			.filter(Boolean)
+			.join(' · ');
 	let runs = $state<ScriptRun[] | null>(null);
 	let error = $state('');
 	$effect(() => {
@@ -28,16 +41,10 @@
 					<details>
 						<summary
 							><span class="chip {outcomeTone(run.outcome)}"
-								>{t(
-									`scripts.outcome.${run.outcome}` as MessageKey,
-								)}{#if run.exit !== undefined && run.outcome === 'failed'}
-									· {t('scripts.exit', { code: run.exit })}{/if}</span
+								>{runLabel(run, (key, values) => t(key as MessageKey, values))}</span
 							>
 							<span>{formatDateTime(new Date(run.started))}</span>
-							<span class="muted"
-								>{t(`scripts.trigger.${run.trigger}` as MessageKey)}{#if run.durationMs}
-									· {shortDuration(run.durationMs)}{/if}</span
-							></summary
+							<span class="muted">{when(run)}</span></summary
 						>
 						{#if run.error}<p class="notice-warn">{run.error}</p>{/if}
 						{#if run.truncated}<p class="muted">{t('scripts.outputTruncated')}</p>{/if}
