@@ -200,7 +200,9 @@ func (s *Server) agentScheduleResult(user, id string, chat *agent.Chat) {
 			list[i].LastOK = chat.State == agent.StateIdle
 		}
 	}
-	store.SaveSchedules(user, list)
+	if err := store.SaveSchedules(user, list); err != nil {
+		slog.Warn("result of a recurring task not saved", "schedule", id, "err", err)
+	}
 	s.agentHANotify(chat)
 }
 

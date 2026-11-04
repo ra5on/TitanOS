@@ -194,7 +194,9 @@ func (r *Runner) Run(ctx context.Context, chat *Chat) error {
 			return r.stopped(chat)
 		}
 		if steps >= maxSteps {
-			r.add(chat, Entry{Role: "note", Note: "limit", Content: fmt.Sprintf("%d", maxSteps)})
+			if err := r.add(chat, Entry{Role: "note", Note: "limit", Content: fmt.Sprintf("%d", maxSteps)}); err != nil {
+				return err
+			}
 			r.setState(chat, StateIdle, "")
 			return r.save(chat)
 		}
@@ -213,9 +215,10 @@ func (r *Runner) Run(ctx context.Context, chat *Chat) error {
 			if ctx.Err() != nil {
 				return r.stopped(chat)
 			}
-			r.add(chat, Entry{Role: "note", Note: "error", Content: err.Error()})
+			// The error of the model is what counts; saving is best effort.
+			_ = r.add(chat, Entry{Role: "note", Note: "error", Content: err.Error()})
 			r.setState(chat, StateError, err.Error())
-			r.save(chat)
+			_ = r.save(chat)
 			return err
 		}
 		st := stats
@@ -255,7 +258,9 @@ func lastUserIndex(chat *Chat) int {
 
 func (r *Runner) stopped(chat *Chat) error {
 	chat.Pending = nil
-	r.add(chat, Entry{Role: "note", Note: "stopped"})
+	if err := r.add(chat, Entry{Role: "note", Note: "stopped"}); err != nil {
+		return err
+	}
 	r.setState(chat, StateIdle, "")
 	return r.save(chat)
 }
@@ -307,7 +312,9 @@ func (r *Runner) execute(ctx context.Context, chat *Chat, p Prepared, step Entry
 		}
 	}
 	if len(out.Choices) > 0 {
-		r.add(chat, Entry{Role: "assistant", Content: out.Question, Choices: out.Choices})
+		if err := r.add(chat, Entry{Role: "assistant", Content: out.Question, Choices: out.Choices}); err != nil {
+			return false, err
+		}
 		r.setState(chat, StateIdle, "")
 		return true, r.save(chat)
 	}
@@ -323,10 +330,14 @@ func (r *Runner) Decide(ctx context.Context, chat *Chat, id string, approve bool
 	}
 	chat.Pending = nil
 	if !approve {
-		r.add(chat, Entry{Role: "note", Note: "declined", Tool: p.Tool, Summary: p.Summary})
+		if err := r.add(chat, Entry{Role: "note", Note: "declined", Tool: p.Tool, Summary: p.Summary}); err != nil {
+			return err
+		}
 		return r.Run(ctx, chat)
 	}
-	r.add(chat, Entry{Role: "note", Note: "approved", Tool: p.Tool, Summary: p.Summary})
+	if err := r.add(chat, Entry{Role: "note", Note: "approved", Tool: p.Tool, Summary: p.Summary}); err != nil {
+		return err
+	}
 	r.setState(chat, StateRunning, "")
 	step := Entry{ID: NewID(), At: r.now(), Role: "tool", Tool: p.Tool, Args: p.Args}
 	r.emit(Event{Type: "step", Step: &step})

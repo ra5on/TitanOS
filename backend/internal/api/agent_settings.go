@@ -202,7 +202,7 @@ func (s *Server) checkAgentSettings(req *agentSettings) error {
 	}
 	for _, n := range req.HA.Notify {
 		if !strings.HasPrefix(n, "notify.") || len(n) > 120 {
-			return errors.New("notify services start with notify.")
+			return errors.New("notify services start with notify")
 		}
 	}
 	return nil

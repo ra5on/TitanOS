@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -133,7 +134,9 @@ func (s *Server) handleAgentProjectDelete(w http.ResponseWriter, r *http.Request
 		}
 		if chat, err := store.Chat(user, info.ID); err == nil {
 			chat.Project = ""
-			store.SaveChat(user, chat)
+			if err := store.SaveChat(user, chat); err != nil {
+				slog.Warn("chat keeps a removed project", "chat", chat.ID, "err", err)
+			}
 		}
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -461,7 +464,9 @@ func (s *Server) agentSnapshot(ctx context.Context, box *agentToolbox) string {
 			return nil
 		}
 		var out map[string]any
-		json.Unmarshal([]byte(res.Text), &out)
+		if json.Unmarshal([]byte(res.Text), &out) != nil {
+			return nil
+		}
 		return out
 	}
 	names := func(v any, field, state string) []string {
