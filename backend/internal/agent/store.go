@@ -1,0 +1,548 @@
+package agent
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"io/fs"
+	"os"
+	"regexp"
+	"slices"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/volumedata"
+)
+
+// Everything an account has with the agent lives on a data volume, below
+// .titanos/agent/<account>/, never on the stick and never in the RAM in
+// place of a missing volume (docs/rules/STORAGE.md). The directory name is
+// "agent", not "assistant": api/retired.go removes .titanos/assistant.
+
+// ErrNoVolume means no data volume is mounted: the agent is unavailable.
+var ErrNoVolume = errors.New("agent: no data volume mounted")
+
+// ErrNotFound is a chat, project or entry that does not exist.
+var ErrNotFound = errors.New("agent: not found")
+
+const (
+	maxChatFile  = 16 << 20
+	maxIndexFile = 4 << 20
+	// MaxChats an account keeps; the oldest unpinned chats go first.
+	MaxChats = 2000
+)
+
+var (
+	idPattern      = regexp.MustCompile(`^[a-z0-9]{8,32}$`)
+	accountPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
+)
+
+// NewID returns a random identifier.
+func NewID() string {
+	var b [8]byte
+	_, _ = rand.Read(b[:])
+	return hex.EncodeToString(b[:])
+}
+
+// ValidID reports whether an identifier could be one of ours.
+func ValidID(id string) bool { return idPattern.MatchString(id) }
+
+// Project groups chats with its own instructions and a default place.
+type Project struct {
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	Icon         string    `json:"icon,omitempty"`
+	Color        string    `json:"color,omitempty"`
+	Instructions string    `json:"instructions,omitempty"`
+	Location     string    `json:"location,omitempty"`
+	Created      time.Time `json:"created"`
+}
+
+// Source is a web page an answer used.
+type Source struct {
+	Title string `json:"title,omitempty"`
+	URL   string `json:"url"`
+}
+
+// FileRef is a file the agent made or changed.
+type FileRef struct {
+	Root string `json:"root"`
+	Path string `json:"path"`
+	Size int64  `json:"size,omitempty"`
+}
+
+// Entry is one line of a chat as the person sees it; the messages for the
+// model are built from it (messages in loop.go).
+type Entry struct {
+	ID   string    `json:"id"`
+	At   time.Time `json:"at"`
+	Role string    `json:"role"` // user, assistant, tool, note
+	// Content is the text; Thinking what the model thought before.
+	Content  string     `json:"content,omitempty"`
+	Thinking string     `json:"thinking,omitempty"`
+	Calls    []ToolCall `json:"calls,omitempty"`
+	// A tool step.
+	Tool     string          `json:"tool,omitempty"`
+	Args     json.RawMessage `json:"args,omitempty"`
+	Result   string          `json:"result,omitempty"`
+	OK       bool            `json:"ok,omitempty"`
+	Level    string          `json:"level,omitempty"`
+	Summary  string          `json:"summary,omitempty"`
+	Duration int64           `json:"durationMs,omitempty"`
+	// Choices the agent offers as buttons with its question.
+	Choices []string  `json:"choices,omitempty"`
+	Sources []Source  `json:"sources,omitempty"`
+	Files   []FileRef `json:"files,omitempty"`
+	// Note entries: "memory" (something it remembered), "approved",
+	// "declined", "stopped", "interrupted", "error", "limit".
+	Note string `json:"note,omitempty"`
+	// Stats of the round that wrote an assistant entry.
+	Stats *Stats `json:"stats,omitempty"`
+}
+
+// Pending is a step that waits for the person: the call as it was planned,
+// so that "Ausführen" runs exactly that and the model does not plan again.
+type Pending struct {
+	ID      string          `json:"id"`
+	Tool    string          `json:"tool"`
+	Args    json.RawMessage `json:"args"`
+	Plan    json.RawMessage `json:"plan,omitempty"`
+	Level   string          `json:"level"`
+	Summary string          `json:"summary"`
+	Area    string          `json:"area,omitempty"`
+	At      time.Time       `json:"at"`
+}
+
+// States of a chat.
+const (
+	StateIdle        = "idle"
+	StateRunning     = "running"
+	StateWaiting     = "waiting"
+	StateInterrupted = "interrupted"
+	StateError       = "error"
+)
+
+// Chat is one conversation.
+type Chat struct {
+	ID      string    `json:"id"`
+	Title   string    `json:"title"`
+	Project string    `json:"project,omitempty"`
+	Pinned  bool      `json:"pinned,omitempty"`
+	Created time.Time `json:"created"`
+	Updated time.Time `json:"updated"`
+	// Model and Think as chosen in the chat; empty uses the settings.
+	Model string `json:"model,omitempty"`
+	Think string `json:"think,omitempty"`
+	// Origin: "web", "schedule", "event", "homeassistant".
+	Origin  string   `json:"origin,omitempty"`
+	State   string   `json:"state"`
+	Error   string   `json:"error,omitempty"`
+	Pending *Pending `json:"pending,omitempty"`
+	// Tainted: the chat has read content from outside TitanOS (files,
+	// logs, web pages). Web tools then need the person's approval.
+	Tainted bool    `json:"tainted,omitempty"`
+	Entries []Entry `json:"entries"`
+}
+
+// ChatInfo is a chat in the list, without its entries.
+type ChatInfo struct {
+	ID      string    `json:"id"`
+	Title   string    `json:"title"`
+	Project string    `json:"project,omitempty"`
+	Pinned  bool      `json:"pinned,omitempty"`
+	Created time.Time `json:"created"`
+	Updated time.Time `json:"updated"`
+	State   string    `json:"state"`
+	Origin  string    `json:"origin,omitempty"`
+	// Preview is the start of the last answer.
+	Preview string `json:"preview,omitempty"`
+}
+
+// Info returns the list entry of a chat.
+func (c *Chat) Info() ChatInfo {
+	info := ChatInfo{ID: c.ID, Title: c.Title, Project: c.Project, Pinned: c.Pinned, Created: c.Created, Updated: c.Updated, State: c.State, Origin: c.Origin}
+	for i := len(c.Entries) - 1; i >= 0; i-- {
+		e := c.Entries[i]
+		if e.Role == "assistant" && strings.TrimSpace(e.Content) != "" {
+			info.Preview = preview(e.Content, 140)
+			break
+		}
+	}
+	return info
+}
+
+func preview(s string, n int) string {
+	s = strings.Join(strings.Fields(strings.NewReplacer("**", "", "`", "", "#", "").Replace(s)), " ")
+	if r := []rune(s); len(r) > n {
+		return string(r[:n-1]) + "…"
+	}
+	return s
+}
+
+// Memory is something the agent remembered, with where it came from.
+type Memory struct {
+	ID      string    `json:"id"`
+	Text    string    `json:"text"`
+	Project string    `json:"project,omitempty"`
+	Chat    string    `json:"chat,omitempty"`
+	At      time.Time `json:"at"`
+	// Untrusted: the chat had read outside content when it was saved.
+	Untrusted bool `json:"untrusted,omitempty"`
+}
+
+// Skill is a procedure the agent follows for a kind of task.
+type Skill struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	When        string    `json:"when"`
+	Steps       string    `json:"steps"`
+	BuiltIn     bool      `json:"builtIn,omitempty"`
+	Chat        string    `json:"chat,omitempty"`
+	Untrusted   bool      `json:"untrusted,omitempty"`
+	Updated     time.Time `json:"updated"`
+	Disabled    bool      `json:"disabled,omitempty"`
+	Description string    `json:"description,omitempty"`
+}
+
+// Schedule is a task the agent runs again and again.
+type Schedule struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Task    string `json:"task"`
+	Project string `json:"project,omitempty"`
+	// Every: "daily", "weekly", "monthly", "hourly"; At "HH:MM";
+	// Weekday 0–6 (Sunday 0) for weekly, Day 1–28 for monthly.
+	Every   string    `json:"every"`
+	At      string    `json:"at,omitempty"`
+	Weekday int       `json:"weekday,omitempty"`
+	Day     int       `json:"day,omitempty"`
+	Enabled bool      `json:"enabled"`
+	LastRun time.Time `json:"lastRun,omitempty"`
+	LastOK  bool      `json:"lastOk,omitempty"`
+	Chat    string    `json:"chat,omitempty"`
+	// Trigger "homeassistant": runs when an entity reaches a state.
+	Trigger *Trigger  `json:"trigger,omitempty"`
+	Created time.Time `json:"created"`
+}
+
+// Trigger starts a schedule from Home Assistant.
+type Trigger struct {
+	Entity string `json:"entity"`
+	State  string `json:"state"`
+	// For keeps the state that long (minutes) before it counts.
+	For int `json:"for,omitempty"`
+}
+
+// Store keeps the files of all accounts.
+type Store struct {
+	// Open returns .titanos/agent on a data volume.
+	Open func() (*os.Root, error)
+	mu   sync.Mutex
+}
+
+func (s *Store) userRoot(user string, create bool) (*os.Root, func(), error) {
+	if !accountPattern.MatchString(user) {
+		return nil, nil, ErrNotFound
+	}
+	if s.Open == nil {
+		return nil, nil, ErrNoVolume
+	}
+	base, err := s.Open()
+	if err != nil {
+		if errors.Is(err, volumedata.ErrUnavailable) {
+			return nil, nil, ErrNoVolume
+		}
+		return nil, nil, err
+	}
+	for _, dir := range []string{user, user + "/chats"} {
+		if !create {
+			break
+		}
+		if err := base.Mkdir(dir, 0700); err != nil && !errors.Is(err, fs.ErrExist) {
+			base.Close()
+			return nil, nil, err
+		}
+		st, err := base.Lstat(dir)
+		if err != nil || !st.IsDir() || st.Mode()&os.ModeSymlink != 0 {
+			base.Close()
+			return nil, nil, errors.New("agent: unsafe account directory")
+		}
+	}
+	if st, err := base.Lstat(user); err != nil || !st.IsDir() || st.Mode()&os.ModeSymlink != 0 {
+		base.Close()
+		return nil, nil, ErrNotFound
+	}
+	root, err := base.OpenRoot(user)
+	base.Close()
+	if err != nil {
+		return nil, nil, err
+	}
+	return root, func() { root.Close() }, nil
+}
+
+func (s *Store) read(user, name string, target any, limit int64) error {
+	root, done, err := s.userRoot(user, false)
+	if err != nil {
+		return err
+	}
+	defer done()
+	err = volumedata.ReadJSON(root, name, target, limit)
+	if errors.Is(err, fs.ErrNotExist) {
+		return ErrNotFound
+	}
+	return err
+}
+
+func (s *Store) write(user, name string, value any) error {
+	root, done, err := s.userRoot(user, true)
+	if err != nil {
+		return err
+	}
+	defer done()
+	return volumedata.WriteJSON(root, name, value)
+}
+
+// Available reports whether the agent has a place for its files.
+func (s *Store) Available() error {
+	if s.Open == nil {
+		return ErrNoVolume
+	}
+	root, err := s.Open()
+	if err != nil {
+		return ErrNoVolume
+	}
+	root.Close()
+	return nil
+}
+
+// Chat reads one chat.
+func (s *Store) Chat(user, id string) (*Chat, error) {
+	if !ValidID(id) {
+		return nil, ErrNotFound
+	}
+	var c Chat
+	if err := s.read(user, "chats/"+id+".json", &c, maxChatFile); err != nil {
+		return nil, err
+	}
+	if c.Entries == nil {
+		c.Entries = []Entry{}
+	}
+	return &c, nil
+}
+
+// SaveChat writes a chat and its line in the index.
+func (s *Store) SaveChat(user string, c *Chat) error {
+	if !ValidID(c.ID) {
+		return ErrNotFound
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.write(user, "chats/"+c.ID+".json", c); err != nil {
+		return err
+	}
+	index, _ := s.indexLocked(user)
+	info := c.Info()
+	replaced := false
+	for i := range index {
+		if index[i].ID == c.ID {
+			index[i], replaced = info, true
+		}
+	}
+	if !replaced {
+		index = append(index, info)
+	}
+	removed := s.trimLocked(&index)
+	if err := s.write(user, "chats.json", index); err != nil {
+		return err
+	}
+	for _, id := range removed {
+		s.removeFile(user, "chats/"+id+".json")
+	}
+	return nil
+}
+
+// trimLocked keeps at most MaxChats, dropping the oldest unpinned ones.
+func (s *Store) trimLocked(index *[]ChatInfo) []string {
+	if len(*index) <= MaxChats {
+		return nil
+	}
+	sort.SliceStable(*index, func(i, j int) bool { return (*index)[i].Updated.After((*index)[j].Updated) })
+	var removed []string
+	kept := (*index)[:0]
+	for i, c := range *index {
+		if i >= MaxChats && !c.Pinned {
+			removed = append(removed, c.ID)
+			continue
+		}
+		kept = append(kept, c)
+	}
+	*index = kept
+	return removed
+}
+
+func (s *Store) removeFile(user, name string) {
+	root, done, err := s.userRoot(user, false)
+	if err != nil {
+		return
+	}
+	defer done()
+	_ = root.Remove(name)
+}
+
+func (s *Store) indexLocked(user string) ([]ChatInfo, error) {
+	var index []ChatInfo
+	if err := s.read(user, "chats.json", &index, maxIndexFile); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return []ChatInfo{}, nil
+		}
+		return nil, err
+	}
+	return index, nil
+}
+
+// Chats lists the chats of an account, newest first, pinned ones on top.
+func (s *Store) Chats(user string) ([]ChatInfo, error) {
+	s.mu.Lock()
+	index, err := s.indexLocked(user)
+	s.mu.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	sort.SliceStable(index, func(i, j int) bool {
+		if index[i].Pinned != index[j].Pinned {
+			return index[i].Pinned
+		}
+		return index[i].Updated.After(index[j].Updated)
+	})
+	return index, nil
+}
+
+// DeleteChat removes a chat.
+func (s *Store) DeleteChat(user, id string) error {
+	if !ValidID(id) {
+		return ErrNotFound
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	index, err := s.indexLocked(user)
+	if err != nil {
+		return err
+	}
+	n := len(index)
+	index = slices.DeleteFunc(index, func(c ChatInfo) bool { return c.ID == id })
+	if len(index) == n {
+		return ErrNotFound
+	}
+	if err := s.write(user, "chats.json", index); err != nil {
+		return err
+	}
+	s.removeFile(user, "chats/"+id+".json")
+	return nil
+}
+
+// Projects of an account.
+func (s *Store) Projects(user string) ([]Project, error) {
+	var list []Project
+	if err := s.read(user, "projects.json", &list, maxIndexFile); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return []Project{}, nil
+		}
+		return nil, err
+	}
+	return list, nil
+}
+
+// SaveProjects writes the projects of an account.
+func (s *Store) SaveProjects(user string, list []Project) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.write(user, "projects.json", list)
+}
+
+// Memories of an account.
+func (s *Store) Memories(user string) ([]Memory, error) {
+	var list []Memory
+	if err := s.read(user, "memory.json", &list, maxIndexFile); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return []Memory{}, nil
+		}
+		return nil, err
+	}
+	return list, nil
+}
+
+// SaveMemories writes the memory of an account.
+func (s *Store) SaveMemories(user string, list []Memory) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.write(user, "memory.json", list)
+}
+
+// Skills the account added or the agent wrote (built-in ones are not
+// stored, see skills.go).
+func (s *Store) Skills(user string) ([]Skill, error) {
+	var list []Skill
+	if err := s.read(user, "skills.json", &list, maxIndexFile); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return []Skill{}, nil
+		}
+		return nil, err
+	}
+	return list, nil
+}
+
+// SaveSkills writes the skills of an account.
+func (s *Store) SaveSkills(user string, list []Skill) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.write(user, "skills.json", list)
+}
+
+// Schedules of an account.
+func (s *Store) Schedules(user string) ([]Schedule, error) {
+	var list []Schedule
+	if err := s.read(user, "schedules.json", &list, maxIndexFile); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return []Schedule{}, nil
+		}
+		return nil, err
+	}
+	return list, nil
+}
+
+// SaveSchedules writes the schedules of an account.
+func (s *Store) SaveSchedules(user string, list []Schedule) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.write(user, "schedules.json", list)
+}
+
+// Accounts lists the accounts that have files, for the start-up check of
+// interrupted runs and for schedules.
+func (s *Store) Accounts() []string {
+	if s.Open == nil {
+		return nil
+	}
+	root, err := s.Open()
+	if err != nil {
+		return nil
+	}
+	defer root.Close()
+	dir, err := root.Open(".")
+	if err != nil {
+		return nil
+	}
+	defer dir.Close()
+	names, _ := dir.Readdirnames(-1)
+	var out []string
+	for _, n := range names {
+		if accountPattern.MatchString(n) {
+			out = append(out, n)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
