@@ -45,6 +45,7 @@
 	import { dashboardScene } from './scene.svelte.ts';
 	import TileEditor, { type EditPart } from './TileEditor.svelte';
 	import TileContent from './TileContent.svelte';
+	import { dragPointer } from '#lib/pointer-drag.ts';
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 	const hardwareKinds = () => [
 		...new Set<StaticTileId>(
@@ -511,7 +512,6 @@
 		if (!editing || saving || current.locked || event.button !== 0 || !board) return;
 		// No text selection or native drag while the pointer holds the tile.
 		event.preventDefault();
-		const handle = event.currentTarget as HTMLElement;
 		const start = { x: event.clientX, y: event.clientY },
 			r = boardRects[id];
 		const cell = (availableWidth + 12) / actualColumns;
@@ -521,9 +521,7 @@
 			: columnOrder(structuredClone($state.snapshot(shown)), columns);
 		const base = Object.fromEntries(Object.entries(boardRects).map(([id, r]) => [id, { ...r }]));
 		const history = snapshot();
-		let changed = false,
-			preview = '';
-		handle.setPointerCapture(event.pointerId);
+		let preview = '';
 		moving = id;
 		const dropped = (g: NonNullable<typeof ghost>) =>
 			dropLayout(
@@ -537,8 +535,6 @@
 		function move(e: PointerEvent) {
 			const dx = e.clientX - start.x,
 				dy = e.clientY - start.y;
-			if (Math.abs(dx) + Math.abs(dy) < 5 && !changed) return;
-			changed = true;
 			const span = resize
 				? Math.max(1, Math.min(actualColumns, r.span + Math.round(dx / cell)))
 				: r.span;
@@ -576,18 +572,12 @@
 			}
 		}
 		function cleanup() {
-			window.removeEventListener('pointermove', onMove);
-			window.removeEventListener('pointerup', onUp);
-			window.removeEventListener('pointercancel', onCancel);
-			window.removeEventListener('blur', abort);
-			document.removeEventListener('keydown', escapeMove);
-			if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
 			moving = null;
 			ghost = null;
 			cancelPointer = null;
 		}
 		function end() {
-			if (changed && ghost) {
+			if (ghost) {
 				if (!resize) rebuild(dropped(ghost));
 				if (JSON.stringify(shown) !== JSON.stringify(original)) {
 					undo = [...undo.slice(-39), history];
@@ -597,27 +587,11 @@
 			cleanup();
 		}
 		function abort() {
-			if (changed) rebuild(original);
+			rebuild(original);
 			cleanup();
 		}
-		// On the window, not the handle: the live preview reorders the tiles, which moves the
-		// dragged tile's node and takes the pointer capture away from its handle.
-		const onMove = (e: PointerEvent) => e.pointerId === event.pointerId && move(e);
-		const onUp = (e: PointerEvent) => e.pointerId === event.pointerId && end();
-		const onCancel = (e: PointerEvent) => e.pointerId === event.pointerId && abort();
-		window.addEventListener('pointermove', onMove);
-		window.addEventListener('pointerup', onUp);
-		window.addEventListener('pointercancel', onCancel);
-		// Switching windows mid-drag loses the pointerup; never stay half-dragged.
-		window.addEventListener('blur', abort);
-		cancelPointer = abort;
-		function escapeMove(e: KeyboardEvent) {
-			if (e.key === 'Escape') {
-				e.preventDefault();
-				abort();
-			}
-		}
-		document.addEventListener('keydown', escapeMove);
+		// Shared with the Docker cards: window listeners, threshold, Escape/blur abort.
+		cancelPointer = dragPointer(event, { move, end, abort, none: cleanup });
 	}
 	async function runtimeOption(id: TileId, key: keyof TileOptions, value: unknown) {
 		if (saving) return;

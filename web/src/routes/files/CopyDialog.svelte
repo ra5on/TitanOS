@@ -280,7 +280,7 @@
 					busy = false;
 					return;
 				}
-				if (replaces && (!replaceConfirmed || compared?.truncated)) {
+				if (replaces && !replaceConfirmed) {
 					busy = false;
 					return;
 				}
@@ -471,11 +471,9 @@
 						>{t('common.retry')}</button
 					>{/if}
 				{#if replaces}<label
-						><input
-							type="checkbox"
-							bind:checked={replaceConfirmed}
-							disabled={compared?.truncated || !compared}
-						/>{t('files.replaceConfirm')}</label
+						><input type="checkbox" bind:checked={replaceConfirmed} disabled={!compared} />{t(
+							'files.replaceConfirm',
+						)}</label
 					>{/if}
 			{/if}
 			{#if move && !restore}<p class="muted">{t('files.moveHint')}</p>{/if}
@@ -497,8 +495,8 @@
 						invalidChoices ||
 						(!restore &&
 							((replaces && (!compared || !replaceConfirmed)) ||
-								((replaces || conflict === 'individual') &&
-									(compared?.truncated || !!inspectionError))))}
+								(replaces && !!inspectionError) ||
+								(conflict === 'individual' && (compared?.truncated || !!inspectionError))))}
 					>{t(restore ? 'files.restoreStart' : move ? 'files.moveHere' : 'files.copyHere')}</button
 				>
 			</div>

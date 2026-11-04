@@ -36,6 +36,22 @@ Sortieren per Griff/Pfeilen, Anzeigeoptionen, Speichern/Abbrechen/Standard.
 Kleine Bildschirme stapeln; Theme-Werte bleiben die aus `Appearance.dc.html`.
 Die ursprüngliche Entwurfsdatei dokumentiert weiterhin die Container-Aktionen.
 
+### Docker-Karten (4. November 2026)
+
+Vom Projektinhaber nach Screenshots (Variante B) bestätigt; ersetzt für die
+Kartenansicht das 12-Spalten-Raster mit Breiten 3/4/8 oben. Alle Karten gleich
+groß; ein Compose-Stack ist eine zugeklappte Karte (x/y laufen, CPU/RAM,
+gemeinsamer CPU-Verlauf, Dienste als Chips, „Dienste“, Alle starten/stoppen,
+Links); geöffnet stehen Stack-Karte und Dienstkarten zusammen in einem
+getönten Rahmen auf den Spalten des Rasters (Variante C „Rahmen im Raster“,
+ebenfalls 4. November 2026).
+Reihenfolge in der Bearbeiten-Leiste „Eigene Anordnung | A–Z“, Karten per Griff
+ziehen oder mit den Pfeiltasten verschieben. Folgeentscheidung am selben Tag:
+Kartengröße S/M/L in der Bearbeiten-Leiste, gemeinsam für alle Karten (nur
+mehr oder weniger Karten je Zeile, keine Einzelgrößen). Verworfen: Variante A
+(Stack-Karte mit Dienstliste und Einzelgrößen S/M/L je Karte). Regeln `docs/rules/DOCKER.md`
+(„Docker-Layout“), Prüfung `scripts/test-ui-docker-cards.mjs`.
+
 ### Cluster: Wege, Versionen, Alle aktualisieren (0.44.0)
 
 Vom Projektinhaber am 1. November 2026 nach Screenshots bestätigt („Los“,

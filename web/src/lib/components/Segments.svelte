@@ -7,7 +7,8 @@
 		disabled = false,
 		onchange,
 	}: {
-		options: { value: T; label: string }[];
+		/** `hint`: the full name when the label is short ("S"), for screen readers and the tooltip. */
+		options: { value: T; label: string; hint?: string }[];
 		value: T;
 		label: string;
 		disabled?: boolean;
@@ -21,6 +22,8 @@
 			type="button"
 			role="radio"
 			aria-checked={value === option.value}
+			aria-label={option.hint}
+			title={option.hint}
 			{disabled}
 			onclick={() => {
 				value = option.value;

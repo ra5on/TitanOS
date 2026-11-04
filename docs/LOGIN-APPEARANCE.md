@@ -20,7 +20,7 @@ Die Einstellungen gelten für die Anmeldung samt Zwei-Faktor-Schritt und für al
 
 - `/config/system/login-appearance.json` – neue Datei, ältere titand ignorieren sie.
 - Eigenes Bild daneben als `/config/system/login-background-<sha256>`. JPEG, PNG oder WebP bis 5 MiB; titand dekodiert es, verkleinert es auf höchstens 3840 px Kantenlänge und speichert es neu (JPEG, mit Transparenz PNG) – Metadaten wie Ort oder Kamera fallen weg. Das alte Bild wird nach dem erfolgreichen Speichern entfernt, ebenso wenn kein eigenes Bild mehr gewählt ist.
-- Geschrieben wird nur beim ausdrücklichen Speichern (atomar). titand liest Datei und Bild beim ersten Bedarf einmal und hält sie danach im RAM.
+- Geschrieben wird nur beim ausdrücklichen Speichern (atomar): mit „Übernehmen“ in der gemeinsamen Speichern-Leiste unten auf Einstellungen › Darstellung (seit 4.11.2026 kein eigener Knopf mehr im Abschnitt). titand liest Datei und Bild beim ersten Bedarf einmal und hält sie danach im RAM.
 
 ## Schnittstelle
 

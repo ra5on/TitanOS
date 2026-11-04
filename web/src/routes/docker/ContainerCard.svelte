@@ -17,12 +17,22 @@
 		tailscaleHost: string;
 		busy: boolean;
 		details: boolean;
+		/** A service of an opened stack: named after the service. */
+		member?: boolean;
 	};
-	let { container, host, tailscaleHost, busy, details, ...actions }: Props = $props();
+	let {
+		container,
+		host,
+		tailscaleHost,
+		busy,
+		details,
+		member = false,
+		...actions
+	}: Props = $props();
 
 	let menu: ReturnType<typeof ContainerMenu> | undefined = $state();
 	const MAX_PORTS = 3;
-	const name = $derived(dockerName(container));
+	const name = $derived(dockerName(container, member ? 'service' : 'app'));
 	const running = $derived(isRunning(container));
 	const links = $derived(webLinks(container, host, tailscaleHost));
 	const ports = $derived(portLabels(container));
@@ -30,6 +40,7 @@
 </script>
 
 <article
+	id={`docker-container-${encodeURIComponent(container.name)}`}
 	class="tile card"
 	class:stopped={!running}
 	aria-label={name}
@@ -52,7 +63,10 @@
 						href="/docker/apps/{container.app}"
 						title={container.name}>{name}</a
 					>{:else}<span class="name" title={container.name}>{name}</span>{/if}
-				{#if container.updateAvailable}<span class="chip warn">{t('docker.update')}</span>{/if}
+				{#if container.updateAvailable}<span class="chip warn update" title={t('docker.update')}
+						><span class="arrow-icon" aria-hidden="true"><Icon name="arrowUp" size={12} /></span
+						><span class="word">{t('docker.update')}</span></span
+					>{/if}
 			</span>
 			{#if details}<span class="mono image" title={container.image}>{container.image}</span>{/if}
 		</div>
@@ -95,10 +109,19 @@
 	     stand on the right, also when there are no ports. -->
 	<div class="bottom">
 		{#if ports.length > 0}<span class="ports">
-				{#each ports.slice(0, MAX_PORTS) as port (port)}<span class="chip mono">{port}</span>{/each}
-				{#if ports.length > MAX_PORTS}<span
+				{#each ports.slice(0, MAX_PORTS) as port, index (port)}<span
 						class="chip mono"
+						class:later={index > 0}>{port}</span
+					>{/each}
+				{#if ports.length > MAX_PORTS}<span
+						class="chip mono wide-more"
 						title={ports.slice(MAX_PORTS).join(', ')}>+{ports.length - MAX_PORTS}</span
+					>{/if}
+				<!-- Narrow cards show the first port and "+n" for the rest, never a cut chip. -->
+				{#if ports.length > 1}<span class="chip mono narrow-more" title={ports.slice(1).join(', ')}
+						>+{ports.length - 1}<span class="sr-only"
+							>, {t('docker.morePorts', { ports: ports.slice(1).join(', ') })}</span
+						></span
 					>{/if}
 			</span>{/if}
 		<button
@@ -240,9 +263,9 @@
 	.ports {
 		flex: 1 1 auto;
 		display: flex;
+		flex-wrap: wrap;
 		gap: var(--space-1);
 		min-width: 0;
-		overflow: hidden;
 	}
 	.actions {
 		display: flex;
@@ -264,6 +287,48 @@
 		padding: 0 0.625rem;
 		gap: 6px;
 		font-size: var(--text-base);
+	}
+	/* The update chip: "Update", in narrow cards only an arrow (the word
+	   stays for screen readers, the tooltip names it). */
+	.update .arrow-icon {
+		display: none;
+	}
+	.narrow-more {
+		display: none;
+	}
+	/* Size S: narrow cards keep CPU and RAM readable, the age moves to the tooltip. */
+	@container (max-width: 16rem) {
+		.update {
+			padding-inline: 4px;
+		}
+		.update .arrow-icon {
+			display: inline-flex;
+		}
+		.update .word {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			overflow: hidden;
+			clip-path: inset(50%);
+			white-space: nowrap;
+		}
+		.ports .later,
+		.ports .wide-more {
+			display: none;
+		}
+		.ports .narrow-more {
+			display: inline-flex;
+		}
+		.card {
+			padding: 10px 12px;
+		}
+		.stats {
+			grid-template-columns: minmax(0, 1fr) 3.25rem 4rem;
+			gap: var(--space-2);
+		}
+		.age {
+			display: none;
+		}
 	}
 	@media (max-width: 760px) {
 		.small {

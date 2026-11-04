@@ -9,12 +9,15 @@
 		defaultDockerLayout,
 		sanitizeDockerLayout,
 		dockerGroups,
-		orderedDockerGroups,
+		arrangedDockerGroups,
 		moveDockerGroup,
 		stackPrimary,
 		type DockerGroup,
+		type DockerSort,
 		type DockerView,
 	} from '#lib/docker-layout.ts';
+	import { dragPointer } from '#lib/pointer-drag.ts';
+	import Segments from '#lib/components/Segments.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { dockerName } from '#lib/docker-name.ts';
 	import {
@@ -38,6 +41,7 @@
 	import AppIcon from '#lib/components/AppIcon.svelte';
 	import ContextMenu from '#lib/components/ContextMenu.svelte';
 	import ContainerCard from './ContainerCard.svelte';
+	import StackCard from './StackCard.svelte';
 	import ContainerRow from './ContainerRow.svelte';
 	import { isRunning, webLinks, type ContainerActions } from './container.ts';
 
@@ -135,15 +139,88 @@
 		const target = groups[groups.findIndex((group) => group.id === id) + offset];
 		if (target) move(id, target.id);
 	}
+	// Screen readers hear where a moved card now stands.
+	let moveStatus = $state('');
+	function announce(id: string) {
+		const index = groups.findIndex((group) => group.id === id);
+		if (index >= 0)
+			moveStatus = t('docker.layout.position', {
+				name: groups[index].name,
+				position: index + 1,
+				count: groups.length,
+			});
+	}
+	// Cards are moved at their handle (pointer, also touch) like the
+	// dashboard tiles; the other cards make room while dragging.
+	let cancelDrag: (() => void) | null = null;
+	function dragCard(event: PointerEvent, id: string) {
+		if (!editing || savingLayout || layout.sort !== 'own' || event.button !== 0) return;
+		event.preventDefault();
+		const before = [...layout.order];
+		const stop = () => {
+			dragged = null;
+			cancelDrag = null;
+		};
+		dragged = id;
+		cancelDrag = dragPointer(event, {
+			move: (e) => {
+				// Near the top or bottom edge the page follows (phones show few cards).
+				const edge = 60;
+				if (e.clientY < edge) window.scrollBy(0, -Math.ceil((edge - e.clientY) / 3));
+				else if (e.clientY > innerHeight - edge)
+					window.scrollBy(0, Math.ceil((e.clientY - innerHeight + edge) / 3));
+				const over = document
+					.elementFromPoint(e.clientX, e.clientY)
+					?.closest<HTMLElement>('[data-group]')?.dataset.group;
+				if (over && over !== id) move(id, over);
+			},
+			end: () => {
+				stop();
+				announce(id);
+			},
+			abort: () => {
+				layout.order = before;
+				stop();
+			},
+			none: stop,
+		});
+	}
+	// Keyboard alternative: the arrow keys move the focused handle's card.
+	async function keyMove(event: KeyboardEvent, id: string) {
+		const offset = (
+			{ ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 } as Record<string, number>
+		)[event.key];
+		if (!offset || savingLayout || layout.sort !== 'own') return;
+		event.preventDefault();
+		moveBy(id, offset);
+		await tick();
+		document
+			.querySelector<HTMLElement>(`.cards [data-group="${CSS.escape(id)}"] .handle`)
+			?.focus({ preventScroll: false });
+		announce(id);
+	}
+	function setSort(sort: DockerSort) {
+		cancelDrag?.();
+		layout.sort = sort;
+		moveStatus = '';
+	}
 	function cancelLayout() {
+		cancelDrag?.();
 		layout = sanitizeDockerLayout(savedLayout);
 		editing = false;
 		layoutError = '';
 	}
 	async function saveLayout() {
-		savingLayout = true;
+		cancelDrag?.();
 		layoutError = '';
 		const value = sanitizeDockerLayout(layout);
+		// Only a change is written to the stick.
+		if (JSON.stringify(value) === JSON.stringify(sanitizeDockerLayout(savedLayout))) {
+			layout = value;
+			editing = false;
+			return;
+		}
+		savingLayout = true;
 		try {
 			await api.put('/preferences/docker', value);
 			session.docker = value;
@@ -191,7 +268,7 @@
 						.includes(search.toLowerCase())),
 		),
 	);
-	const groups = $derived(orderedDockerGroups(dockerGroups(containers), layout.order));
+	const groups = $derived(arrangedDockerGroups(dockerGroups(containers), layout, i18n.locale));
 	const visibleIDs = $derived(new Set(visible.map((container) => container.id)));
 	const shownGroups = $derived(
 		groups.filter((group) => group.members.some((container) => visibleIDs.has(container.id))),
@@ -202,6 +279,49 @@
 		group.members.length > 1 || !!layout.primaryServices[group.id];
 	const sum = (group: DockerGroup, value: (container: DockerContainer) => number) =>
 		group.members.filter(isRunning).reduce((total, container) => total + value(container), 0);
+	const stackBusy = (group: DockerGroup) =>
+		busyKeys.has(appKey(group.name)) ||
+		group.members.some((container) => busyKeys.has(containerKey(container)));
+	// "Start all"/"Stop all" of one stack: its services one after the other.
+	function stackAction(group: DockerGroup, action: 'start' | 'stop') {
+		const targets = group.members.filter((container) =>
+			action === 'start' ? !isRunning(container) : isRunning(container),
+		);
+		void run(
+			appKey(group.name),
+			async () => {
+				for (const container of targets)
+					await api.post(`/docker/containers/${encodeURIComponent(container.id)}/${action}`);
+			},
+			group.name,
+		);
+	}
+	const drawerId = (group: DockerGroup) => `docker-services-${encodeURIComponent(group.name)}`;
+	// All cards share one height (owner rule "no unequal tiles"): the tallest
+	// card sets it, also for the services of an opened stack.
+	function equalCards(node: HTMLElement) {
+		let frame = 0;
+		const measure = () => {
+			frame = 0;
+			node.style.removeProperty('--card-h');
+			const cards = node.querySelectorAll<HTMLElement>('.body > article');
+			const height = Math.max(0, ...[...cards].map((card) => card.offsetHeight));
+			if (height) node.style.setProperty('--card-h', `${height}px`);
+		};
+		const schedule = () => {
+			if (!frame) frame = requestAnimationFrame(measure);
+		};
+		const resized = new ResizeObserver(schedule);
+		resized.observe(node);
+		const changed = new MutationObserver(schedule);
+		changed.observe(node, { childList: true, subtree: true, characterData: true });
+		schedule();
+		return () => {
+			cancelAnimationFrame(frame);
+			resized.disconnect();
+			changed.disconnect();
+		};
+	}
 	const updateCount = $derived(containers.filter((container) => container.updateAvailable).length);
 	const updatable = $derived(
 		containers.some((container) => container.updateAvailable && container.managed),
@@ -295,6 +415,7 @@
 		return () => {
 			current();
 			if (poller === current) poller = undefined;
+			cancelDrag?.();
 		};
 	});
 
@@ -883,74 +1004,112 @@
 
 	{#if editing}
 		<section class="tile layout-editor" aria-label={t('docker.layout.edit')}>
-			<p>{t('docker.layout.hint')}</p>
-			<label class="check"
-				><input type="checkbox" bind:checked={layout.details} disabled={savingLayout} />{t(
-					'docker.layout.details',
-				)}</label
-			>
-			<ol class="order">
-				{#each groups as group, index (group.id)}
-					<li
-						class:dragging={dragged === group.id}
-						ondragover={(event) => {
-							if (dragged && !savingLayout) event.preventDefault();
-						}}
-						ondrop={(event) => {
-							event.preventDefault();
-							if (dragged && !savingLayout) move(dragged, group.id);
-							dragged = null;
-						}}
-					>
-						<button
-							type="button"
-							class="btn grip"
-							draggable={!savingLayout}
-							disabled={savingLayout}
-							aria-label={t('dashboard.move', { tile: group.name })}
-							ondragstart={(event) => {
-								dragged = group.id;
-								event.dataTransfer?.setData('text/plain', group.id);
-							}}
-							ondragend={() => (dragged = null)}><Icon name="grip" size={16} /></button
-						>
-						<span class="order-name">{group.name}</span>
-						{#if isStack(group)}<span class="chip">{t('docker.stack')}</span>{/if}
-						<button
-							type="button"
-							class="btn arrow"
-							disabled={savingLayout || index === 0}
-							aria-label={t('docker.layout.before', { name: group.name })}
-							onclick={() => moveBy(group.id, -1)}>↑</button
-						>
-						<button
-							type="button"
-							class="btn arrow"
-							disabled={savingLayout || index === groups.length - 1}
-							aria-label={t('docker.layout.after', { name: group.name })}
-							onclick={() => moveBy(group.id, 1)}>↓</button
-						>
-					</li>
-				{/each}
-			</ol>
-			{#if layoutError}<p class="notice-error" role="alert">{layoutError}</p>{/if}
-			<div class="buttons">
-				<button
-					type="button"
-					class="btn"
+			<div class="editor-row">
+				<span class="editor-label">{t('docker.layout.sort')}</span>
+				<Segments
+					label={t('docker.layout.sort')}
+					value={layout.sort}
 					disabled={savingLayout}
-					onclick={() => {
-						layout = { ...defaultDockerLayout(), view: layout.view };
-					}}>{t('dashboard.restore')}</button
+					options={[
+						{ value: 'own', label: t('docker.layout.sortOwn') },
+						{ value: 'az', label: t('docker.layout.sortAz') },
+					]}
+					onchange={setSort}
+				/>
+				{#if layout.view === 'cards'}
+					<span class="editor-label">{t('docker.layout.size')}</span>
+					<Segments
+						label={t('docker.layout.size')}
+						bind:value={layout.size}
+						disabled={savingLayout}
+						options={[
+							{ value: 's', label: 'S', hint: t('docker.layout.sizeS') },
+							{ value: 'm', label: 'M', hint: t('docker.layout.sizeM') },
+							{ value: 'l', label: 'L', hint: t('docker.layout.sizeL') },
+						]}
+					/>
+				{/if}
+				<label class="check"
+					><input type="checkbox" bind:checked={layout.details} disabled={savingLayout} />{t(
+						'docker.layout.details',
+					)}</label
 				>
 				<span class="spacer"></span>
-				<button type="button" class="btn" disabled={savingLayout} onclick={cancelLayout}
-					>{t('common.cancel')}</button
-				>
-				<button type="button" class="btn btn-primary" disabled={savingLayout} onclick={saveLayout}
-					>{t('docker.layout.save')}</button
-				>
+				<div class="buttons">
+					<button
+						type="button"
+						class="btn"
+						disabled={savingLayout}
+						onclick={() => {
+							cancelDrag?.();
+							layout = { ...defaultDockerLayout(), view: layout.view };
+						}}>{t('dashboard.restore')}</button
+					>
+					<button type="button" class="btn" disabled={savingLayout} onclick={cancelLayout}
+						>{t('common.cancel')}</button
+					>
+					<button type="button" class="btn btn-primary" disabled={savingLayout} onclick={saveLayout}
+						>{t('docker.layout.save')}</button
+					>
+				</div>
 			</div>
+			<p class="muted editor-hint" id="docker-move-hint">
+				{t(
+					layout.sort === 'az'
+						? 'docker.layout.hintAz'
+						: layout.view === 'cards'
+							? 'docker.layout.hintCards'
+							: 'docker.layout.hint',
+				)}
+			</p>
+			<p class="sr-only" role="status">{moveStatus}</p>
+			{#if layout.view === 'list' && layout.sort === 'own'}
+				<ol class="order">
+					{#each groups as group, index (group.id)}
+						<li
+							class:dragging={dragged === group.id}
+							ondragover={(event) => {
+								if (dragged && !savingLayout) event.preventDefault();
+							}}
+							ondrop={(event) => {
+								event.preventDefault();
+								if (dragged && !savingLayout) move(dragged, group.id);
+								dragged = null;
+							}}
+						>
+							<button
+								type="button"
+								class="btn grip"
+								draggable={!savingLayout}
+								disabled={savingLayout}
+								aria-label={t('dashboard.move', { tile: group.name })}
+								ondragstart={(event) => {
+									dragged = group.id;
+									event.dataTransfer?.setData('text/plain', group.id);
+								}}
+								ondragend={() => (dragged = null)}><Icon name="grip" size={16} /></button
+							>
+							<span class="order-name">{group.name}</span>
+							{#if isStack(group)}<span class="chip">{t('docker.stack')}</span>{/if}
+							<button
+								type="button"
+								class="btn arrow"
+								disabled={savingLayout || index === 0}
+								aria-label={t('docker.layout.before', { name: group.name })}
+								onclick={() => moveBy(group.id, -1)}>↑</button
+							>
+							<button
+								type="button"
+								class="btn arrow"
+								disabled={savingLayout || index === groups.length - 1}
+								aria-label={t('docker.layout.after', { name: group.name })}
+								onclick={() => moveBy(group.id, 1)}>↓</button
+							>
+						</li>
+					{/each}
+				</ol>
+			{/if}
+			{#if layoutError}<p class="notice-error" role="alert">{layoutError}</p>{/if}
 		</section>
 	{/if}
 
@@ -975,31 +1134,50 @@
 				{/each}
 			</div>
 		{:else}
-			<div class="cards">
+			<div
+				class="cards size-{layout.size}"
+				class:editing
+				class:sorting={editing && layout.sort === 'own'}
+				role="list"
+				aria-label={t('docker.title')}
+				{@attach equalCards}
+			>
 				{#each shownGroups as group (group.id)}
-					{#if isStack(group)}
-						<section class="tile stack-card" aria-label="{t('docker.stack')} {group.name}">
-							<div class="list">
-								{@render stackHead(group)}
-								{#if stackOpen(group.id)}
-									<div class="members" role="list">
-										{#each shownMembers(group) as container (container.name)}
-											{@render row(container, true)}
-										{/each}
+					{#if isStack(group) && stackOpen(group.id) && !editing}
+						<!-- An opened stack (owner's decision of 4 Nov 2026, variant C): one
+						     frame in the same grid, the stack card first, its services right
+						     beside it in the same columns; rows wrap inside the frame. -->
+						<section
+							class="stack-frame"
+							role="listitem"
+							id={drawerId(group)}
+							aria-label={t('docker.servicesOf', { name: group.name })}
+							title={search.trim() || filter !== 'all'
+								? t('docker.stackMatches', {
+										count: shownMembers(group).length,
+										total: group.members.length,
+									})
+								: undefined}
+						>
+							{@render groupCell(group, true)}
+							{#each shownMembers(group) as container (container.name)}
+								<div class="cell">
+									<div class="body">
+										<ContainerCard
+											{container}
+											{host}
+											{tailscaleHost}
+											busy={containerBusy(container)}
+											details={layout.details}
+											member
+											{...actionsFor(container)}
+										/>
 									</div>
-								{/if}
-							</div>
+								</div>
+							{/each}
 						</section>
 					{:else}
-						{@const container = group.members[0]}
-						<ContainerCard
-							{container}
-							{host}
-							{tailscaleHost}
-							busy={containerBusy(container)}
-							details={layout.details}
-							{...actionsFor(container)}
-						/>
+						{@render groupCell(group, false)}
 					{/if}
 				{/each}
 			</div>
@@ -1119,6 +1297,59 @@
 				? formatBytes(sum(group, (container) => container.memoryBytes))
 				: '–'}</span
 		>
+	</div>
+{/snippet}
+
+{#snippet groupCell(group: DockerGroup, framed: boolean)}
+	{@const stack = isStack(group)}
+	<div
+		class="cell"
+		class:dragging={dragged === group.id}
+		role={framed ? undefined : 'listitem'}
+		data-group={group.id}
+	>
+		{#if editing && layout.sort === 'own'}
+			<button
+				type="button"
+				class="handle"
+				aria-label={t('docker.layout.move', { name: group.name })}
+				aria-describedby="docker-move-hint"
+				disabled={savingLayout}
+				onpointerdown={(event) => dragCard(event, group.id)}
+				onkeydown={(event) => keyMove(event, group.id)}
+				><Icon name="grip" size={15} /><span>{t('docker.layout.handle')}</span></button
+			>
+		{/if}
+		<div class="body" inert={editing}>
+			{#if stack}
+				<StackCard
+					{group}
+					primary={stackPrimary(group, layout.primaryServices)}
+					{host}
+					{tailscaleHost}
+					busy={stackBusy(group)}
+					details={layout.details}
+					open={stackOpen(group.id) && !editing}
+					drawer={drawerId(group)}
+					ontoggle={() => (expanded[group.id] = !stackOpen(group.id))}
+					onmenu={(anchor) => openStackMenu(group, anchor)}
+					onmenuat={(event) => (stackMenu = { group, x: event.clientX, y: event.clientY })}
+					onmenupress={() => (stackMenuWasOpen = stackMenu?.group.id === group.id)}
+					onstartall={() => stackAction(group, 'start')}
+					onstopall={() => stackAction(group, 'stop')}
+				/>
+			{:else}
+				{@const container = group.members[0]}
+				<ContainerCard
+					{container}
+					{host}
+					{tailscaleHost}
+					busy={containerBusy(container)}
+					details={layout.details}
+					{...actionsFor(container)}
+				/>
+			{/if}
+		</div>
 	</div>
 {/snippet}
 
@@ -1725,9 +1956,6 @@
 	.members {
 		display: contents;
 	}
-	.stack-card .list {
-		padding: var(--tile-pad);
-	}
 	.stack-head {
 		display: grid;
 		grid-template-columns: 30px minmax(0, 1fr);
@@ -1817,15 +2045,106 @@
 		font-size: var(--text-sm);
 	}
 
+	/* Cards (owner's decision of 4 Nov 2026, variant B): all of one size,
+	   a stack is one card; opened, its services follow as cards. */
+	/* One size for all cards (owner's decision of 4 Nov 2026): S puts more,
+	   L fewer side by side; the services of an opened stack follow it. */
+	.cards {
+		--card-min: 17rem;
+	}
+	.cards.size-s {
+		/* Also one column more than M beside the side navigation at 1440 px. */
+		--card-min: 12.5rem;
+	}
+	.cards.size-l {
+		--card-min: 23rem;
+	}
 	.cards {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+		grid-template-columns: repeat(auto-fill, minmax(min(var(--card-min), 100%), 1fr));
 		gap: var(--gap);
 	}
-	.stack-card {
+	.cell {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		min-width: 0;
+	}
+	.body {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		/* The cards fit their content to this width (container queries). */
+		container-type: inline-size;
+	}
+	.body > :global(article) {
+		flex: 1;
+		min-height: var(--card-h, auto);
+	}
+	.sorting .cell {
+		border-radius: var(--radius-tile);
+		outline: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+		outline-offset: 3px;
+		user-select: none;
+	}
+	.sorting .cell.dragging {
+		outline: 2px solid var(--accent);
+	}
+	.cell.dragging .body {
+		opacity: 0.85;
+	}
+	.handle {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		min-height: 2rem;
+		padding: 0 10px;
+		border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+		border-radius: var(--radius-ctl);
+		background: color-mix(in srgb, var(--accent) 14%, var(--panel-bg));
+		color: var(--text);
+		font: inherit;
+		font-size: var(--text-sm);
+		cursor: grab;
+		touch-action: none;
+	}
+	.handle :global(svg) {
+		color: var(--accent);
+	}
+	.handle:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	.dragging .handle {
+		cursor: grabbing;
+	}
+	/* The opened stack: a tinted frame around the stack card and its
+	   services, on the columns of the page grid (subgrid), so every card
+	   keeps the width of all others. The negative margin keeps the cards
+	   inside on the outer grid lines. */
+	.stack-frame {
 		grid-column: 1 / -1;
-		position: relative;
-		padding-bottom: var(--space-1);
+		display: grid;
+		grid-template-columns: subgrid;
+		gap: var(--gap);
+		margin: calc(var(--space-2) * -1);
+		padding: var(--space-2);
+		border-radius: calc(var(--radius-tile) + var(--space-2));
+		background: color-mix(in srgb, var(--accent) 12%, transparent);
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+	}
+	.layout-editor .editor-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-3);
+	}
+	.editor-label {
+		font-weight: 600;
+	}
+	.editor-hint {
+		margin: 0;
+		font-size: var(--text-sm);
 	}
 
 	@media (prefers-reduced-motion: reduce) {
@@ -1835,8 +2154,12 @@
 	}
 	/* Phones: one tile per line. */
 	@media (max-width: 760px) {
-		.list {
+		.list,
+		.cards {
 			grid-template-columns: minmax(0, 1fr);
+		}
+		.handle {
+			min-height: 2.75rem;
 		}
 	}
 	@media (max-width: 760px) {

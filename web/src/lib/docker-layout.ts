@@ -1,9 +1,15 @@
 import type { DockerContainer } from './api.ts';
 
 export type DockerView = 'list' | 'cards';
+/** "own": the saved order (dragged by hand); "az": by name, stacks among containers. */
+export type DockerSort = 'own' | 'az';
+/** One card size for all cards: fewer (L) or more (S) side by side. */
+export type DockerSize = 's' | 'm' | 'l';
 export type DockerLayout = {
 	version: 1;
 	view: DockerView;
+	sort: DockerSort;
+	size: DockerSize;
 	order: string[];
 	details: boolean;
 	primaryServices: Record<string, string>;
@@ -11,7 +17,15 @@ export type DockerLayout = {
 export type DockerGroup = { id: string; name: string; members: DockerContainer[] };
 
 export function defaultDockerLayout(): DockerLayout {
-	return { version: 1, view: 'list', order: [], details: true, primaryServices: {} };
+	return {
+		version: 1,
+		view: 'list',
+		sort: 'own',
+		size: 'm',
+		order: [],
+		details: true,
+		primaryServices: {},
+	};
 }
 
 /** Names survive container recreation during updates. Prefixes separate apps from standalone containers. */
@@ -38,6 +52,8 @@ export function sanitizeDockerLayout(value: unknown): DockerLayout {
 	// Earlier versions also had a "minimal" view that unfolded tiles on a
 	// click; the list replaces it. Saved tile widths are no longer used.
 	if (input.view === 'cards') result.view = 'cards';
+	if (input.sort === 'az') result.sort = 'az';
+	if (input.size === 's' || input.size === 'l') result.size = input.size;
 	if (typeof input.details === 'boolean') result.details = input.details;
 	if (Array.isArray(input.order))
 		result.order = [...new Set(input.order.filter(validID))].slice(0, 2000);
@@ -61,6 +77,26 @@ export function sanitizeDockerLayout(value: unknown): DockerLayout {
 export function orderedDockerGroups(groups: DockerGroup[], order: string[]): DockerGroup[] {
 	const ranks = new Map(order.map((id, index) => [id, index]));
 	return [...groups].sort((a, b) => (ranks.get(a.id) ?? Infinity) - (ranks.get(b.id) ?? Infinity));
+}
+
+/** The order the page shows. A–Z never changes the saved order, so switching back restores it. */
+export function arrangedDockerGroups(
+	groups: DockerGroup[],
+	layout: Pick<DockerLayout, 'sort' | 'order'>,
+	locale?: string,
+): DockerGroup[] {
+	if (layout.sort !== 'az') return orderedDockerGroups(groups, layout.order);
+	const collator = new Intl.Collator(locale, { numeric: true, sensitivity: 'base' });
+	return [...groups].sort((a, b) => collator.compare(a.name, b.name) || a.id.localeCompare(b.id));
+}
+
+/** The CPU curve of a stack: the running services added up, aligned at the newest value. */
+export function stackCpuHistory(members: Pick<DockerContainer, 'cpuHistory'>[]): number[] {
+	const lists = members.map((member) => member.cpuHistory ?? []).filter((list) => list.length);
+	const length = Math.max(0, ...lists.map((list) => list.length));
+	return Array.from({ length }, (_, index) =>
+		lists.reduce((total, list) => total + (list[list.length - length + index] ?? 0), 0),
+	);
 }
 
 /** Reorder the full saved sequence, retaining entries temporarily absent from Docker. */

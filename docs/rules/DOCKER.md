@@ -58,7 +58,7 @@ Bereich: Container bearbeiten, Übersicht, App-Store/Katalog, Docker-Layout.
 - Unter der Liste: Alle starten, Alle stoppen (einfache Bestätigung), Nach Updates suchen, Alle aktualisieren (n); daneben Docker-Version und Volume. Start/Stopp laufen nacheinander über die vorhandenen Container-Aktionen.
 
 **Docker-Übersicht und App-Store**
-- Aktuelles gemeinsames Raster für Container und Compose-Stacks mit Karten/Liste/Minimal und persönlichen Layouts: siehe „Docker-Layout“ unten. Das Layout bleibt auf dem bestätigten Stand; weitere Änderungen nur auf Auftrag. Beauftragt und umgesetzt (0.27.0): Belegt-Zustand und Aktionsfehler je Container/App statt seitenweit, Container-Menü in der Top-Layer (`ContextMenu.svelte`; öffnet sich per Klick aufs App-Symbol und per Rechtsklick auf Kachel/Karte wie bei den VMs, Wunsch des Projektinhabers vom 30.10.2026; Aufbau gleich auf Docker-Seite und Dashboard: Kopf mit Symbol und Name, Start/Stopp, Adressen mit Ziel, Logs, Konsole, Bearbeiten, Neustarten, Update, Entfernen; nur seitenspezifisch zusätzlich Tailnet bzw. Container anzeigen/Anheften), Logs mit Mitlaufen/Suche/Download, „Alle aktualisieren“ mit Auswahl je App (nacheinander `POST /docker/apps/{app}/update`), App-Editor mit Kopfbereich (Status, CPU/RAM, WebUI/Logs/Konsole/Neustarten) und haftender Leiste Übernehmen/Verwerfen.
+- Container und Compose-Stacks als Liste oder Karten mit persönlicher Reihenfolge (eigene Anordnung oder A–Z): siehe „Docker-Layout“ unten. Das Layout bleibt auf dem bestätigten Stand (Karten: Entscheidung vom 4.11.2026); weitere Änderungen nur auf Auftrag. Beauftragt und umgesetzt (0.27.0): Belegt-Zustand und Aktionsfehler je Container/App statt seitenweit, Container-Menü in der Top-Layer (`ContextMenu.svelte`; öffnet sich per Klick aufs App-Symbol und per Rechtsklick auf Kachel/Karte wie bei den VMs, Wunsch des Projektinhabers vom 30.10.2026; Aufbau gleich auf Docker-Seite und Dashboard: Kopf mit Symbol und Name, Start/Stopp, Adressen mit Ziel, Logs, Konsole, Bearbeiten, Neustarten, Update, Entfernen; nur seitenspezifisch zusätzlich Tailnet bzw. Container anzeigen/Anheften), Logs mit Mitlaufen/Suche/Download, „Alle aktualisieren“ mit Auswahl je App (nacheinander `POST /docker/apps/{app}/update`), App-Editor mit Kopfbereich (Status, CPU/RAM, WebUI/Logs/Konsole/Neustarten) und haftender Leiste Übernehmen/Verwerfen.
 - Suche/Filter, Status, CPU/RAM, Ports, WebUI, Start/Stopp und Schnellaktionen bleiben erhalten. Eigene Quellen werden täglich/per Knopf aktualisiert, externe Stores nur ausdrücklich hinzugefügt.
 - Installationspanel mit Herkunft je Feld, eigenen Variablen/Pfaden/Ports und erweiterten Rechtehinweisen. Daten auf dem ausgewählten Docker-Volume, niemals im RAM-Overlay; GPU-Nutzung ausdrücklich je Dienst.
 - Webadressen über `titanos.webui`, optional `titanos.public-url` und aktiven Tailscale-Host; `titanos.public-url` richtet keinen Tunnel ein. Siehe `docs/APP-LINKS.md` und `docs/NATIVE-APPS.md`.
@@ -67,11 +67,66 @@ Bereich: Container bearbeiten, Übersicht, App-Store/Katalog, Docker-Layout.
 
 ## Docker-Layout
 
-- Vom Projektinhaber bestätigter Entwurf: gemeinsames Raster für Container und
-  Compose-Stacks; Karten, Liste und Minimal. Minimal klappt per Namensknopf auf.
-- „Seite anpassen“: Reihenfolge per Griff oder Pfeilen, Breiten 3/4/8 von 12
-  Spalten (Schmal/Normal/Breit), Image/CPU-Verlauf wählbar, Speichern/Abbrechen/
-  Standard. Kleine Bildschirme stapeln automatisch.
+- Zwei Ansichten für Container und Compose-Stacks: Liste und Karten (Wechsel
+  über die zwei Symbole im Seitenkopf, sofort gespeichert). „Minimal“ und
+  Kachelbreiten gibt es seit 553de39 nicht mehr; gespeicherte Breiten werden
+  ignoriert, ein gespeichertes „minimal“ wird zur Liste.
+- „Seite anpassen“ (Zahnrad-Menü) öffnet die Bearbeiten-Leiste über der
+  Übersicht: „Reihenfolge: Eigene Anordnung | A–Z“, in der Kartenansicht
+  „Kartengröße: S | M | L“, Image/CPU-Verlauf,
+  Standard wiederherstellen, Abbrechen, Layout speichern. Kein neues
+  Bedienelement im Seitenkopf. Suche und Filter sind beim Bearbeiten aus.
+  - **Eigene Anordnung:** In der Kartenansicht trägt jede Karte (Stack oder
+    Container) oben einen Griff „Verschieben“; Ziehen mit Maus oder Finger
+    ordnet live um (dieselbe Zeigerlogik wie der Dashboard-Editor,
+    `web/src/lib/pointer-drag.ts`; Escape, Fensterwechsel oder Abbruch legen die
+    Karte zurück). Tastatur: Griff fokussieren, Pfeiltasten verschieben um eine
+    Stelle, die neue Position wird angesagt. Der Karteninhalt ist beim
+    Bearbeiten nicht bedienbar (`inert`), geöffnete Stacks klappen zu. In der
+    Listenansicht bleibt die Reihenfolgeliste mit Griff und Pfeilknöpfen.
+    Beide ändern dieselbe gespeicherte Reihenfolge (`order`, `moveDockerGroup`).
+  - **A–Z:** sortiert nach Namen (Stacks unter den Containern einsortiert,
+    natürliche Zahlenfolge), in Liste und Karten; Ziehen und Griffe sind aus.
+    Die eigene Reihenfolge bleibt gespeichert und gilt nach dem Zurückschalten
+    wieder.
+- **Karten** (Entscheidung des Projektinhabers vom 4.11.2026, Variante B nach
+  Screenshot-Abstimmung): alle Karten gleich groß (die höchste Karte setzt die
+  Höhe für alle, auch für die Dienste eines geöffneten Stacks; Regel „keine
+  ungleichen Kacheln“), so viele nebeneinander wie passen, Handy eine Spalte
+  mit gleichem Verhalten. **Kartengröße** (Folgeentscheidung vom 4.11.2026):
+  ein Umschalter S/M/L für **alle Karten gemeinsam**, keine Einzelgrößen je
+  Karte. Er ändert nur die Mindestbreite (S 12,5rem, M 17rem wie bisher, L 23rem; S ergibt
+  auch neben der Seitenleisten-Navigation bei 1440 px eine Spalte mehr als M)
+  und damit, wie viele Karten nebeneinander stehen; alle bleiben gleich groß,
+  der Inhalt passt sich an (Container-Abfragen: schmale Karten verdichten die
+  Werte, die Laufzeit steht dann nur im Tooltip; der Update-Chip wird zum
+  Pfeil mit Tooltip und Screenreader-Text „Update“, damit der Name Platz hat;
+  Ports zeigen den ersten Port und „+n“ mit den übrigen im Tooltip, nie einen
+  angeschnittenen Chip; breitere Karten brechen Ports notfalls um). Stack- und Dienstkarten
+  folgen derselben Größe; am Handy immer eine Spalte. Ein
+  Compose-Stack ist **eine** Karte (`StackCard.svelte`), ab Werk zugeklappt:
+  Name mit Update-Chip, „Stack · n Dienste“, „x/y laufen“ (Punkt grün/gelb/grau
+  plus Text), Summe CPU/RAM der laufenden Dienste, gemeinsamer CPU-Verlauf
+  (Summe, am neuesten Wert ausgerichtet), die Dienste als Chips mit
+  Zustandspunkt und Update-Pfeil (Zustand auch als Screenreader-Text), Knopf
+  „Dienste“, Stack-Aktion „Alle starten“ (sobald ein Dienst steht) bzw. „Alle
+  stoppen“ (nacheinander über die Container-Aktionen, ohne Rückfrage wie beim
+  einzelnen Container), Links des Hauptdienstes (WebUI/Tailscale/öffentlich).
+  Symbol, ⋯ und Rechtsklick öffnen das Stack-Menü. **Geöffneter Stack**
+  (Entscheidung des Projektinhabers vom 4.11.2026, Variante C „Rahmen im
+  Raster“, nach Screenshots; vorher wirkten die Dienste in eigener Zeile mit
+  Überschrift abgetrennt): „Dienste“ öffnet einen getönten Rahmen über die
+  ganze Breite. Darin bleibt die Stack-Karte unverändert die erste Karte, die
+  Dienste folgen direkt daneben als normale Containerkarten auf denselben
+  Spalten wie alle anderen Karten (CSS-Subgrid, gleiche Breite und Höhe);
+  reichen die Spalten nicht, bricht die Zeile innerhalb des Rahmens um. Der
+  Rahmen beginnt eine eigene Zeile, die nächste Karte folgt darunter. „Dienste“
+  auf der Stack-Karte klappt wieder zu (`aria-controls` auf den Rahmen). Die
+  Dienstkarten heißen nach dem Dienst (`dockerName(…, 'service')`). Verworfen:
+  eigene Kopfzeile statt der Karte (A) und Dienste ohne Rahmen frei im Raster
+  (B, reißt am Zeilenende auseinander).
+  Prüfung `scripts/test-ui-docker-cards.mjs`, Screenshots unter
+  `out/validation/docker-karten/`.
 - **Liste als Kacheln** (Entscheidung des Projektinhabers vom 30.10.2026 nach
   Screenshot-Abstimmung): jeder Container eine eigene abgerundete Kachel, alle
   gleich breit (15rem) und 52 px hoch, so viele nebeneinander wie passen
@@ -93,7 +148,10 @@ Bereich: Container bearbeiten, Übersicht, App-Store/Katalog, Docker-Layout.
   es nicht mehr (der Screenshot `docs/screenshots/current/docker.png` von 0.31.0
   zeigt noch sie).
 - Pro Konto in `/config/users/<name>/docker.json`, über die vorhandene atomare
-  Preferences-API mit RAM-Cache. Nur ausdrückliches Speichern schreibt.
+  Preferences-API mit RAM-Cache (`view`, `sort` = `own`/`az`, `size` =
+  `s`/`m`/`l`, `order`, `details`, `primaryServices`; ältere Fassungen ohne
+  `sort` lesen als „Eigene Anordnung“, ohne `size` als M). Nur ausdrückliches Speichern schreibt, und nur bei einer
+  Änderung; unverändertes Speichern schließt die Leiste ohne Schreibzugriff.
   Zuordnung über `app:<Compose-Projekt>` oder `container:<Name>`, nicht die
   nach Updates wechselnde Container-ID. Temporär fehlende Einträge bleiben
   gespeichert; neue Apps werden angehängt. Keine App wird durch Layouts versteckt.

@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Settings › Appearance › Login page: one look for the whole NAS, only for
-	// owners and administrators. Saved on its own, independent of "Apply" for
-	// the account's appearance.
+	// owners and administrators. Saved by the page's one "Apply" bar together
+	// with the rest: it reads `dirty` and calls save()/discard().
 	import { onDestroy, onMount } from 'svelte';
 	import { api } from '#lib/api.ts';
 	import Slider from '#lib/components/Slider.svelte';
@@ -42,6 +42,8 @@
 	} from './look.ts';
 	import { loadLoginLook, loginLook, PREVIEW_KEY, useLoginLook } from './state.svelte.ts';
 
+	let { dirty = $bindable(false) }: { dirty?: boolean } = $props();
+
 	const initial = sanitizeLoginLook(loginLook.value ?? defaultLoginLook());
 	let saved = $state<LoginLook>(structuredClone(initial));
 	let draft = $state<LoginLook>(structuredClone(initial));
@@ -54,7 +56,7 @@
 
 	onMount(async () => {
 		await loadLoginLook();
-		if (!dirty) {
+		if (!changed) {
 			saved = loginLook.value ?? defaultLoginLook();
 			draft = structuredClone($state.snapshot(saved));
 		}
@@ -63,7 +65,10 @@
 		if (pending) URL.revokeObjectURL(pending.url);
 	});
 
-	const dirty = $derived(pending !== null || JSON.stringify(draft) !== JSON.stringify(saved));
+	const changed = $derived(pending !== null || JSON.stringify(draft) !== JSON.stringify(saved));
+	$effect(() => {
+		dirty = changed;
+	});
 	const effective = $derived(loginAppearance(draft, appearance.current).appearance);
 	const palette = $derived(resolvePalette(effective, appearance.systemLight));
 	const picture = $derived(loginBackgroundURL(draft, pending?.url));
@@ -178,7 +183,9 @@
 		}
 	}
 
-	async function save() {
+	/** Saves the login page; throws so that the page can name this area in its message. */
+	export async function save() {
+		if (!changed) return;
 		saving = true;
 		message = null;
 		try {
@@ -203,12 +210,20 @@
 			pending = null;
 			saved = next ?? defaultLoginLook();
 			draft = structuredClone($state.snapshot(saved));
-			message = { text: t('loginLook.saved'), warn: false };
 		} catch (err) {
 			message = { text: apiErrorText(err), warn: true };
+			throw err;
 		} finally {
 			saving = false;
 		}
+	}
+
+	/** Back to the saved look. */
+	export function discard() {
+		if (pending) URL.revokeObjectURL(pending.url);
+		pending = null;
+		draft = structuredClone($state.snapshot(saved));
+		message = null;
 	}
 
 	function reset() {
@@ -466,15 +481,11 @@
 	</fieldset>
 
 	<div class="row-actions">
-		<button type="button" class="btn btn-primary" onclick={save} disabled={saving || !dirty}
-			>{t('loginLook.save')}</button
-		>
 		<button type="button" class="btn" onclick={reset} disabled={saving}
 			>{t('loginLook.reset')}</button
 		>
-		<span class="state" class:warn={message?.warn} role="status">
-			{#if message}{message.text}{:else if dirty}{t('loginLook.unsaved')}{/if}
-		</span>
+		{#if message}<span class="state" class:warn={message.warn} role="status">{message.text}</span
+			>{/if}
 	</div>
 </section>
 
