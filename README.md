@@ -154,6 +154,7 @@ Die VM-Einrichtung zeigt kompakte Kacheln mit einer gemeinsamen Zusammenfassung.
 
 ### Wartung, Monitoring und Diagnose
 
+- **Eigene Skripte:** Werkzeuge › Skripte führt eigene Skripte als root aus – per Knopf mit Live-Ausgabe, nach Zeitplan (auch Cron), einmal beim Start nach dem Einbinden der Volumes oder beim Herunterfahren vor dem Beenden der Apps. Sie liegen auf einem Daten-Volume, die letzten zehn Läufe bleiben mit Ausgabe erhalten, fehlgeschlagene automatische Läufe melden sich. Nur für Besitzer/Administratoren, nicht über API-Tokens oder MCP. [Einzelheiten](docs/SCRIPTS.md)
 - **Wartungspläne:** gemeinsame Zeitfenster mit Zeitzone, auf Wunsch alle N Stunden; RAID-Prüfungen, Btrfs-Scrub, SMART-Kurz- und Langtests (beim Anlegen eines Volumes vorausgewählt), Backup-Prüfungen, Wiederherstellungsproben und Snapshot-Aufbewahrung. Abhängigkeiten, optionaler Backup-Vorrang und sichtbare Wartegründe.
 - **Auftragsübersicht:** laufende und bekannte abgeschlossene Vorgänge filtern, Fehler prüfen und unterstützte Aufträge pausieren, abbrechen oder fortsetzen. Eigene Uploads einsehen.
 - **Live-Monitoring:** CPU und Threads, RAM, Netzverkehr, Volumes, Laufwerke, Temperaturen und Beschleuniger. Kurze Verläufe im RAM; optional sieben oder 30 Tage auf einem Daten-Volume, mit CSV-/JSON-Export. Fehlende Werte bleiben unbekannt.
