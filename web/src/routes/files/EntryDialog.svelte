@@ -47,7 +47,15 @@
 	// The page opens the dialog anew for each use, so these start from what it got.
 	let typed = $state(untrack(() => (dialog.kind === 'rename' ? dialog.name : '')));
 	let confirmed = $state(false);
-	let permanent = $state(untrack(() => !root?.recycle));
+	// A share has its bin; in a volume, paths inside a share with a bin go
+	// to that share's bin. USB drives and the stick have none.
+	const inBin = (p: string) =>
+		!!root?.recycle || !!root?.bins?.some((bin) => p.startsWith(bin + '/'));
+	const paths = $derived(selected.map((name) => join(dir, name)));
+	const binned = $derived(paths.filter(inBin));
+	const recyclable = $derived(binned.length > 0);
+	const mixed = $derived(binned.length > 0 && binned.length < paths.length);
+	let permanent = $state(untrack(() => !selected.some((name) => inBin(join(dir, name)))));
 	let error = $state('');
 
 	// Enter submits only "new folder" and "rename"; deleting runs from its button alone.
@@ -67,12 +75,15 @@
 					to: join(dir, typed.trim()),
 				});
 			} else {
-				if (permanent && !confirmed) return;
-				await api.post('/files/delete', {
-					root: rootId,
-					paths: selected.map((name) => join(dir, name)),
-					permanent,
-				});
+				if ((permanent || mixed) && !confirmed) return;
+				if (permanent) {
+					await api.post('/files/delete', { root: rootId, paths, permanent: true });
+				} else {
+					await api.post('/files/delete', { root: rootId, paths: binned, permanent: false });
+					const rest = paths.filter((p) => !inBin(p));
+					if (rest.length)
+						await api.post('/files/delete', { root: rootId, paths: rest, permanent: true });
+				}
 			}
 			await ondone();
 		} catch (err) {
@@ -111,7 +122,7 @@
 						</p>{/if}
 				{/if}
 			</div>
-			{#if root?.recycle}
+			{#if recyclable}
 				<label class="field-row"
 					><span>{t('files.deleteAction')}</span>
 					<select
@@ -127,16 +138,17 @@
 					</select>
 				</label>
 			{/if}
-			<p class={permanent ? 'notice-error' : 'text'}>
-				{t(
-					permanent
-						? root?.recycle
-							? 'files.trashForeverText'
-							: 'files.deletePermanent'
-						: 'files.deleteRecycle',
-				)}
+			{#if !recyclable && root?.kind === 'volume'}<p class="muted">
+					{t('files.noTrashVolume')}
+				</p>{/if}
+			<p class={permanent || mixed ? 'notice-error' : 'text'}>
+				{permanent
+					? t(recyclable ? 'files.trashForeverText' : 'files.deletePermanent')
+					: mixed
+						? t('files.deleteMixed', { binned: binned.length, rest: paths.length - binned.length })
+						: t('files.deleteRecycle')}
 			</p>
-			{#if permanent}
+			{#if permanent || mixed}
 				<label class="confirm"
 					><input type="checkbox" bind:checked={confirmed} disabled={busy} /><span
 						>{t('files.deleteConfirm')}</span
@@ -169,8 +181,8 @@
 			{#if kind === 'delete'}
 				<button
 					type="button"
-					class="btn {permanent ? 'btn-danger' : 'btn-warn'}"
-					disabled={(permanent && !confirmed) || busy}
+					class="btn {permanent || mixed ? 'btn-danger' : 'btn-warn'}"
+					disabled={((permanent || mixed) && !confirmed) || busy}
 					onclick={() => submit()}
 					>{t(permanent ? 'files.trashDeleteForever' : 'files.moveToTrash')}</button
 				>

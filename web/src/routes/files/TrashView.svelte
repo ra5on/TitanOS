@@ -14,10 +14,18 @@
 		root,
 		user,
 		admin,
+		bin = '',
 		onclose,
 		onchanged,
-	}: { root: FileRoot; user: string; admin: boolean; onclose: () => void; onchanged: () => void } =
-		$props();
+	}: {
+		root: FileRoot;
+		/** For a volume: the folder of the share whose bin is shown. */
+		bin?: string;
+		user: string;
+		admin: boolean;
+		onclose: () => void;
+		onchanged: () => void;
+	} = $props();
 
 	const base = $derived(admin ? '' : user);
 	let path = $state('');
@@ -86,6 +94,7 @@
 		try {
 			restorePreview = await api.post<RestoreTarget[]>('/files/trash/preview', {
 				root: root.id,
+				bin,
 				paths: selected,
 			});
 		} catch (err) {
@@ -120,7 +129,7 @@
 			mode = flat;
 		try {
 			const list = await api.get<TrashEntry[]>(
-				`/files/trash?root=${encodeURIComponent(root.id)}&path=${encodeURIComponent(requested)}&flat=${mode ? 1 : 0}`,
+				`/files/trash?root=${encodeURIComponent(root.id)}&path=${encodeURIComponent(requested)}&flat=${mode ? 1 : 0}${bin ? `&bin=${encodeURIComponent(bin)}` : ''}`,
 			);
 			if (requested !== path || mode !== flat) return;
 			entries = list;
@@ -152,7 +161,7 @@
 		busy = true;
 		error = '';
 		try {
-			await api.post(`/files/trash/${action}`, { root: root.id, paths });
+			await api.post(`/files/trash/${action}`, { root: root.id, bin, paths });
 			selected = [];
 			onchanged();
 		} catch (err) {

@@ -4,7 +4,7 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
-	import { untrack } from 'svelte';
+	import { tick, untrack } from 'svelte';
 
 	type Props = {
 		roots: FileRoot[];
@@ -54,11 +54,9 @@
 	);
 	let folders = $state<string[]>([]);
 	let conflict = $state('rename');
+	// Set once the user picks a rule; the dialog then never changes it itself.
+	let conflictTouched = $state(false);
 	let decisions = $state<Record<string, { action: string; name: string }>>({});
-	const replaces = $derived(
-		conflict === 'replace' ||
-			(conflict === 'individual' && Object.values(decisions).some((c) => c.action === 'replace')),
-	);
 	const invalidChoices = $derived(
 		conflict === 'individual' &&
 			Object.values(decisions).some(
@@ -68,7 +66,10 @@
 			),
 	);
 	type Inspection = {
+		files: number;
+		bytes: number;
 		conflicts: {
+			identical?: boolean;
 			path: string;
 			sourcePath: string;
 			sourceVersion: string;
@@ -77,12 +78,28 @@
 			target: FileEntry;
 		}[];
 		truncated: boolean;
+		identical: number;
+		identicalBytes: number;
+		different: number;
+		differentBytes: number;
+		typeMismatch: number;
+		unreadable: string[];
+		unreadableCount: number;
 	};
 	let inspection = $state<Inspection | null>(null),
 		inspectionKey = $state(''),
-		replaceConfirmed = $state(false);
+		replaceConfirmed = $state(false),
+		// Shown when a click found names that exist and the table needs a look.
+		reviewNotice = $state(false),
+		conflictTable = $state<HTMLElement | undefined>();
 	const targetKey = $derived(JSON.stringify([from.id, paths, toRoot, dir]));
 	const compared = $derived(inspectionKey === targetKey ? inspection : null);
+	// "Missing or changed" replaces files that differ; with an unknown target it may.
+	const replaces = $derived(
+		conflict === 'replace' ||
+			(conflict === 'missing' && (!compared || compared.different > 0)) ||
+			(conflict === 'individual' && Object.values(decisions).some((c) => c.action === 'replace')),
+	);
 	$effect(() => {
 		targetKey;
 		replaceConfirmed = false;
@@ -90,6 +107,7 @@
 		inspection = null;
 		inspectionError = '';
 		inspectionDeferred = false;
+		reviewNotice = false;
 		decisions = {};
 	});
 	let inspecting = $state(false),
@@ -98,13 +116,13 @@
 	let pendingKey = '',
 		pendingInspection: Promise<boolean> | null = null;
 	let inspectionController: AbortController | undefined;
+	// The target is checked as soon as it is chosen, for every rule: the
+	// dialog shows conflicts and identical files before anything starts.
 	$effect(() => {
-		const key = targetKey,
-			review = conflict === 'replace' || conflict === 'individual';
+		const key = targetKey;
 		untrack(() => {
 			if (pendingKey && pendingKey !== key) inspectionController?.abort();
-			if (!restore && review && toRoot && !nestedTarget && !(move && sameFolder))
-				void inspectTarget();
+			if (!restore && toRoot && !nestedTarget && !(move && sameFolder)) void inspectTarget();
 		});
 	});
 	$effect(() => () => inspectionController?.abort());
@@ -138,6 +156,36 @@
 			paths.every((p) => p.split('/').slice(0, -1).join('/') === dir),
 	);
 	const target = $derived(targets.find((r) => r.id === toRoot));
+	// Replaced files go to the recycle bin of the share the target folder is in.
+	const targetBin = $derived(
+		!!target &&
+			(target.recycle || !!target.bins?.some((bin) => dir === bin || dir.startsWith(bin + '/'))),
+	);
+	// Into its own folder only "keep both" (or single decisions) makes sense.
+	const sameFolderBlocked = $derived(
+		!restore && sameFolder && (move || (conflict !== 'rename' && conflict !== 'individual')),
+	);
+	// What will really be written, as far as the comparison knows.
+	const writeBytes = $derived.by(() => {
+		if (!scope) return null;
+		if (!compared) return scope.bytes;
+		if (conflict === 'skip')
+			return Math.max(0, scope.bytes - compared.identicalBytes - compared.differentBytes);
+		if (conflict === 'missing') return Math.max(0, scope.bytes - compared.identicalBytes);
+		return scope.bytes;
+	});
+	// Why "decide for each file" is not available.
+	const individualBlocked = $derived(
+		compared?.truncated
+			? 'truncated'
+			: inspectionDeferred
+				? 'timeout'
+				: inspectionError
+					? 'error'
+					: '',
+	);
+	// A rule that may replace needs a finished comparison or one that took too long.
+	const replaceReady = $derived(!!compared || (inspectionDeferred && !inspecting));
 	$effect(() => {
 		const source = from.id,
 			selection = [...paths];
@@ -211,6 +259,9 @@
 				inspection = result;
 				inspectionKey = key;
 				replaceConfirmed = false;
+				// Identical files at the target: copy only what is missing,
+				// unless a rule was chosen already.
+				if (!conflictTouched && result.identical > 0) conflict = 'missing';
 				decisions = Object.fromEntries(
 					result.conflicts.map((c) => [
 						c.sourcePath ?? c.source.name,
@@ -222,8 +273,7 @@
 			.catch((err) => {
 				if (!controller.signal.aborted && key === targetKey) {
 					inspectionDeferred = err instanceof ApiError && err.code === 'file_scan_timeout';
-					inspectionError =
-						inspectionDeferred && !replaces && conflict !== 'individual' ? '' : apiErrorText(err);
+					inspectionError = inspectionDeferred ? '' : apiErrorText(err);
 				}
 				return false;
 			})
@@ -243,7 +293,14 @@
 		if (!(replaces && !restore)) submit();
 	}
 	async function submit() {
-		if (busy || (!scope && !scopeDeferred) || nestedTarget || (move && sameFolder)) return;
+		if (
+			busy ||
+			(!scope && !scopeDeferred) ||
+			nestedTarget ||
+			(move && sameFolder) ||
+			sameFolderBlocked
+		)
+			return;
 		if (
 			restore &&
 			(!restoreName ||
@@ -263,24 +320,27 @@
 					error = t('files.targetUnavailable');
 					return;
 				}
-				if (inspectionKey !== targetKey) {
-					if (
-						!(await inspectTarget()) &&
-						!(inspectionDeferred && !replaces && conflict !== 'individual')
-					) {
+				if (inspectionKey !== targetKey && !inspectionDeferred) {
+					// The comparison was not back yet: wait for it. If it
+					// finds names that exist, show them before anything starts.
+					const done = await inspectTarget();
+					if (!done && !inspectionDeferred && conflict === 'individual') {
 						busy = false;
 						return;
 					}
 					if (compared?.conflicts.length) {
 						busy = false;
+						reviewNotice = true;
+						await tick();
+						conflictTable?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 						return;
 					}
 				}
-				if (invalidChoices || (conflict === 'individual' && compared?.truncated)) {
+				if (invalidChoices || (conflict === 'individual' && (!compared || compared.truncated))) {
 					busy = false;
 					return;
 				}
-				if (replaces && !replaceConfirmed) {
+				if (replaces && (!replaceConfirmed || !replaceReady || inspectionError)) {
 					busy = false;
 					return;
 				}
@@ -357,12 +417,17 @@
 						{t('files.measuring')}
 					</p>{/if}
 				{#if target}<p>{t('files.summaryFree', { size: formatBytes(target.freeBytes) })}</p>{/if}
-				{#if scope && target && scope.bytes > target.freeBytes}<p class="notice-warn">
+				{#if compared && writeBytes !== null && scope && writeBytes < scope.bytes}<p>
+						{t('files.summaryWrite', { size: formatBytes(writeBytes) })}
+					</p>{/if}
+				{#if writeBytes !== null && target && writeBytes > target.freeBytes && !(move && from.id === toRoot)}<p
+						class="notice-warn"
+					>
 						{t('files.summarySpaceWarning')}
 					</p>{/if}
 				{#if nestedTarget}<p class="notice-error" role="alert">
 						{t('files.summaryNested')}
-					</p>{:else if sameFolder}<p class="notice-warn">
+					</p>{:else if sameFolder}<p class={sameFolderBlocked ? 'notice-error' : 'notice-warn'}>
 						{t(move ? 'files.summarySameMove' : 'files.summarySameCopy')}
 					</p>{/if}
 				<p class="muted">{t('files.summaryHint')}</p>
@@ -414,17 +479,50 @@
 						class="field"
 						aria-label={t('files.conflict')}
 						bind:value={conflict}
-						onchange={() => (replaceConfirmed = false)}
+						onchange={() => {
+							replaceConfirmed = false;
+							conflictTouched = true;
+							reviewNotice = false;
+						}}
 					>
-						<option value="individual">{t('files.conflictIndividual')}</option>
+						<option value="individual" disabled={!!individualBlocked}
+							>{t('files.conflictIndividual')}</option
+						>
 						<option value="rename">{t('files.conflict.rename')}</option>
+						<option value="missing">{t('files.conflict.missing')}</option>
 						<option value="skip">{t('files.conflict.skip')}</option>
 						<option value="replace">{t('files.conflict.replace')}</option>
 					</select>
 				</label>
+				<p class="muted">{t(`files.conflictHint.${conflict}` as 'files.conflictHint.rename')}</p>
+				{#if individualBlocked}<p class="muted">
+						{t(
+							`files.individualUnavailable.${individualBlocked}` as 'files.individualUnavailable.timeout',
+						)}
+					</p>{/if}
+				{#if inspectionDeferred}<p class="notice-warn" role="status">
+						{t('files.inspectTimeout')}
+					</p>{/if}
+				{#if compared && compared.identical > 0}<p role="status">
+						{t('files.identicalFound', {
+							count: compared.identical,
+							size: formatBytes(compared.identicalBytes),
+						})}
+					</p>{/if}
+				{#if compared && compared.unreadableCount > 0}<div class="notice-warn">
+						<p>{t('files.unreadableFolders', { count: compared.unreadableCount })}</p>
+						<ul class="mono">
+							{#each compared.unreadable as folder (folder)}<li>{folder}</li>{/each}
+						</ul>
+					</div>{/if}
+				{#if reviewNotice && compared?.conflicts.length}<p class="notice-warn" role="alert">
+						{t('files.reviewConflicts', {
+							count: compared.truncated ? '200+' : compared.conflicts.length,
+						})}
+					</p>{/if}
 				{#if compared && compared.conflicts.length}
 					<p>{t('files.conflictHelp')}</p>
-					<div class="conflicts">
+					<div class="conflicts" bind:this={conflictTable}>
 						<table>
 							<thead
 								><tr
@@ -434,7 +532,11 @@
 								></thead
 							><tbody>
 								{#each compared.conflicts as item (item.path)}<tr
-										><td>{item.path}</td><td
+										><td
+											>{item.path}{#if item.identical}<br /><span class="chip"
+													>{t('files.identicalChip')}</span
+												>{/if}</td
+										><td
 											>{item.source.dir ? t('files.folderType') : formatBytes(item.source.size)}<br
 											/>{formatDateTime(new Date(item.source.modified))}</td
 										><td
@@ -470,10 +572,15 @@
 					<button type="button" class="btn" disabled={inspecting} onclick={() => inspectTarget()}
 						>{t('common.retry')}</button
 					>{/if}
-				{#if replaces}<label
-						><input type="checkbox" bind:checked={replaceConfirmed} disabled={!compared} />{t(
-							'files.replaceConfirm',
-						)}</label
+				{#if replaces}<p class={targetBin ? 'muted' : 'notice-warn'}>
+						{t(targetBin ? 'files.replaceToBin' : 'files.replaceFinal')}
+					</p>
+					<label
+						><input
+							type="checkbox"
+							bind:checked={replaceConfirmed}
+							disabled={!replaceReady || !!inspectionError}
+						/>{t('files.replaceConfirm')}</label
 					>{/if}
 			{/if}
 			{#if move && !restore}<p class="muted">{t('files.moveHint')}</p>{/if}
@@ -491,12 +598,13 @@
 						(!scope && !scopeDeferred) ||
 						nestedTarget ||
 						(move && sameFolder) ||
+						sameFolderBlocked ||
 						!toRoot ||
 						invalidChoices ||
 						(!restore &&
-							((replaces && (!compared || !replaceConfirmed)) ||
+							((replaces && (!replaceReady || !replaceConfirmed)) ||
 								(replaces && !!inspectionError) ||
-								(conflict === 'individual' && (compared?.truncated || !!inspectionError))))}
+								(conflict === 'individual' && (!!individualBlocked || !compared))))}
 					>{t(restore ? 'files.restoreStart' : move ? 'files.moveHere' : 'files.copyHere')}</button
 				>
 			</div>

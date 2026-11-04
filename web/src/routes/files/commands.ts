@@ -1,7 +1,12 @@
 // Commands of the file manager's bars and menus. The page carries them out,
 // so the toolbars, the mobile bar and the menus all do the same thing.
 
+import type { FileRoot } from '#lib/api.ts';
 import type { FileView } from '#lib/file-actions.ts';
+
+/** A share has its recycle bin; a volume shows the bins of its shares. USB and the stick have none. */
+export const hasTrash = (root: FileRoot | undefined) =>
+	root?.kind === 'share' || (root?.kind === 'volume' && !!root.bins?.length);
 
 export const views = [
 	{ mode: 'list', icon: 'list', label: 'files.view.list' },

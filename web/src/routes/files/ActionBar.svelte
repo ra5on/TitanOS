@@ -4,7 +4,7 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import type { FileView } from '#lib/file-actions.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
-	import { views, type FileCommand } from './commands.ts';
+	import { hasTrash, views, type FileCommand } from './commands.ts';
 
 	type Props = {
 		root: FileRoot | undefined;
@@ -152,7 +152,7 @@
 					>{/if}
 			{/snippet}
 		</Dropdown>
-		{#if root.kind === 'share'}
+		{#if hasTrash(root)}
 			<button
 				type="button"
 				class="btn"
