@@ -2,7 +2,7 @@
 	// A Compose stack as one card of the same size as a container card
 	// (owner's decision of 4 Nov 2026, variant B): running/total, the CPU
 	// and RAM of the stack, its combined CPU curve, the services as chips,
-	// "Services" unfolds them as cards right after this one.
+	// "Services" opens a frame with this card and its services beside it.
 	import type { DockerContainer } from '#lib/api.ts';
 	import AppIcon from '#lib/components/AppIcon.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -83,7 +83,10 @@
 		<div class="names">
 			<span class="line"
 				><span class="name" title={group.name}>{group.name}</span>{#if update}<span
-						class="chip warn">{t('docker.update')}</span
+						class="chip warn update"
+						title={t('docker.update')}
+						><span class="arrow-icon" aria-hidden="true"><Icon name="arrowUp" size={12} /></span
+						><span class="word">{t('docker.update')}</span></span
 					>{/if}</span
 			>
 			<span class="sub">{t('docker.stackKind', { count: total })}</span>
@@ -356,8 +359,27 @@
 			transition: none;
 		}
 	}
+	/* The update chip: "Update", in narrow cards only an arrow (the word
+	   stays for screen readers, the tooltip names it). */
+	.update .arrow-icon {
+		display: none;
+	}
 	/* Size S: narrow cards keep CPU and RAM readable. */
 	@container (max-width: 16rem) {
+		.update {
+			padding-inline: 4px;
+		}
+		.update .arrow-icon {
+			display: inline-flex;
+		}
+		.update .word {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			overflow: hidden;
+			clip-path: inset(50%);
+			white-space: nowrap;
+		}
 		.card {
 			padding: 10px 12px;
 		}

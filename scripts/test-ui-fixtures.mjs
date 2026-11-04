@@ -190,6 +190,9 @@ export function fixtureFactory(browser, errors) {
         available: true,
         error: "",
       },
+      // Tools › Scripts, shaped like GET /scripts; scriptContent, scriptRuns
+      // and scriptCalls belong to it (see scriptFixtures).
+      ...scriptFixtures(time),
       growStart: 0,
       importCount: 0,
       restoreCount: 0,
@@ -353,6 +356,8 @@ export function fixtureFactory(browser, errors) {
         });
         return json(data.maintenance);
       }
+      if (path === "/scripts" || path.startsWith("/scripts/"))
+        return scriptRoute(data, path, method, route, time);
       // Activity log: tests may replace data.activity; queries are kept.
       if (path === "/activity") {
         const log = (data.activity ??= {
@@ -1095,4 +1100,187 @@ export function fixtureFactory(browser, errors) {
   }
 
   return context;
+}
+
+// Isolated data for Tools › Scripts: four scripts on the volume "Data",
+// one per trigger, with kept runs. A started run prints two lines and ends
+// after the output was asked for three times (or when it is canceled).
+function scriptFixtures(time) {
+  const run = (outcome, extra = {}) => ({
+    trigger: "schedule",
+    started: time,
+    durationMs: 4200,
+    outcome,
+    ...extra,
+  });
+  return {
+    scripts: {
+      volume: "Data",
+      timezone: "UTC",
+      chosen: true,
+      available: true,
+      disabled: false,
+      volumes: ["Data", "Fast"],
+      scripts: [
+        {
+          id: "a1a1a1a1a1a1a1a1",
+          name: "Fotos sichern",
+          description: "rsync der Handyfotos auf das zweite Volume",
+          trigger: "schedule",
+          schedule: { every: "daily", time: "03:00" },
+          changed: time,
+          running: false,
+          last: run("ok", { exit: 0 }),
+          next: "2026-10-24T03:00:00Z",
+        },
+        {
+          id: "b2b2b2b2b2b2b2b2",
+          name: "Docker aufräumen",
+          description: "",
+          trigger: "schedule",
+          schedule: { every: "custom", cron: "0 4 * * 0" },
+          changed: time,
+          running: false,
+          last: run("failed", { exit: 1, durationMs: 800 }),
+          next: "2026-10-25T04:00:00Z",
+        },
+        {
+          id: "c3c3c3c3c3c3c3c3",
+          name: "Lüfterkurve setzen",
+          description: "",
+          trigger: "start",
+          changed: time,
+          running: false,
+          last: run("ok", { exit: 0, trigger: "start", durationMs: 300 }),
+        },
+        {
+          id: "d4d4d4d4d4d4d4d4",
+          name: "Sync vor dem Ausschalten",
+          description: "",
+          trigger: "shutdown",
+          changed: time,
+          running: false,
+        },
+      ],
+    },
+    scriptContent: {
+      a1a1a1a1a1a1a1a1:
+        "#!/bin/bash\nset -e\nrsync -a /mnt/Data/Fotos/ /mnt/Fast/Fotos/\necho fertig\n",
+      b2b2b2b2b2b2b2b2: "docker image prune -af\n",
+      c3c3c3c3c3c3c3c3: "#!/bin/sh\necho 60 > /sys/class/hwmon/hwmon2/pwm1\n",
+      d4d4d4d4d4d4d4d4: "#!/bin/bash\nsync\n",
+    },
+    scriptRuns: {
+      a1a1a1a1a1a1a1a1: [
+        run("ok", { exit: 0, output: "sending incremental file list\nfertig\n" }),
+        run("timeout", { started: "2026-10-22T03:00:00Z", output: "" }),
+      ],
+      b2b2b2b2b2b2b2b2: [
+        run("failed", {
+          exit: 1,
+          durationMs: 800,
+          output: "Cannot connect to the Docker daemon\n",
+        }),
+      ],
+    },
+    scriptCalls: [],
+    scriptPolls: {},
+  };
+}
+
+function scriptRoute(data, path, method, route, time) {
+  const json = (value, status = 200) => route.fulfill({ status, json: value });
+  const status = data.scripts;
+  const parts = path.split("/").slice(2);
+  data.scriptCalls.push([method, path, route.request().postData() ?? ""]);
+  if (parts.length === 0) {
+    if (method === "POST") {
+      const body = route.request().postDataJSON();
+      const id = (status.scripts.length + 1).toString(16).padStart(16, "e");
+      const { content, ...rest } = body;
+      const script = { id, ...rest, changed: time, running: false };
+      status.scripts.push(script);
+      data.scriptContent[id] = content ?? "";
+      return json({ ...script, content }, 201);
+    }
+    return json(status);
+  }
+  if (parts[0] === "volume") {
+    const body = route.request().postDataJSON();
+    status.volume = body.volume;
+    status.chosen = true;
+    return json(status);
+  }
+  const script = status.scripts.find((s) => s.id === parts[0]);
+  if (!script)
+    return json({ error: { code: "script_not_found", message: "fixture" } }, 404);
+  const finish = (outcome, exit) => {
+    script.running = false;
+    const run = {
+      trigger: "manual",
+      started: time,
+      durationMs: 1500,
+      outcome,
+      ...(exit === undefined ? {} : { exit }),
+    };
+    script.last = run;
+    (data.scriptRuns[script.id] ??= []).unshift({
+      ...run,
+      output: "Sicherung beginnt …\n12 Dateien kopiert\n",
+    });
+  };
+  switch (`${method} ${parts[1] ?? ""}`) {
+    case "GET ":
+      return json({ ...script, content: data.scriptContent[script.id] ?? "" });
+    case "PUT ": {
+      const { content, ...rest } = route.request().postDataJSON();
+      Object.assign(script, rest);
+      if (rest.trigger !== "schedule") delete script.schedule;
+      if (content !== undefined) data.scriptContent[script.id] = content;
+      return json({ ...script, content: data.scriptContent[script.id] });
+    }
+    case "DELETE ":
+      status.scripts = status.scripts.filter((s) => s !== script);
+      return route.fulfill({ status: 204 });
+    case "POST run":
+      if (script.running)
+        return json({ error: { code: "script_running", message: "fixture" } }, 409);
+      script.running = true;
+      data.scriptPolls[script.id] = 0;
+      return route.fulfill({ status: 202 });
+    case "POST cancel":
+      if (!script.running)
+        return json({ error: { code: "script_not_running", message: "fixture" } }, 409);
+      finish("canceled");
+      return route.fulfill({ status: 202 });
+    case "GET runs":
+      return json({ runs: data.scriptRuns[script.id] ?? [] });
+    case "GET output": {
+      const from = Number(new URL(route.request().url()).searchParams.get("from") ?? 0);
+      const all = "Sicherung beginnt …\n12 Dateien kopiert\n";
+      if (script.running) {
+        const polls = ++data.scriptPolls[script.id];
+        const shown = polls < 2 ? all.indexOf("\n") + 1 : all.length;
+        if (polls >= 3 && !data.scriptHold) finish("ok", 0);
+        return json({
+          running: script.running,
+          text: all.slice(Math.min(from, shown), shown),
+          next: shown,
+          skipped: false,
+          run: script.running
+            ? { trigger: "manual", started: time, durationMs: 0, outcome: "running" }
+            : script.last,
+        });
+      }
+      const text = script.last ? all : "";
+      return json({
+        running: false,
+        text: text.slice(Math.min(from, text.length)),
+        next: text.length,
+        skipped: false,
+        ...(script.last ? { run: script.last } : {}),
+      });
+    }
+  }
+  return json({ error: { code: "not_found", message: "fixture" } }, 404);
 }
