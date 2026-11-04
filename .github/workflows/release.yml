@@ -63,7 +63,6 @@ on:
       - 'backend/internal/storage/quota.go'
       - 'backend/internal/shares/quota.go'
       - 'scripts/snapshot-guest.c'
-      - 'docs/releases/**'
       - '.github/actions/image-tools/**'
       - '.github/workflows/release.yml'
   workflow_dispatch:
