@@ -3528,7 +3528,7 @@
 	"files.incoming": "Neue Datei",
 	"files.existing": "Vorhandene Datei",
 	"files.folderType": "Ordner",
-	"files.conflictTruncated": "Mehr als 200 Konflikte. Ersetzen ist gesperrt; wähle Umbenennen oder Überspringen oder eine kleinere Auswahl.",
+	"files.conflictTruncated": "Mehr als 200 Konflikte, aufgelistet sind die ersten 200. Ersetzen, Umbenennen und Überspringen gelten für alle; einzeln wählen geht nur bis 200.",
 	"files.replaceConfirm": "Ich bestätige das Ersetzen vorhandener Dateien.",
 	"files.targetUnavailable": "Dieses Ziel ist geschützt oder nicht beschreibbar.",
 	"files.retryRemaining": "Offene Dateien erneut versuchen",

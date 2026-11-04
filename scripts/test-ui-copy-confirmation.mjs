@@ -138,12 +138,14 @@ try {
   await dialog
     .getByRole("button", { name: "Erneut versuchen", exact: true })
     .click();
+  // More than 200 conflicts: replacing all of them stays possible after
+  // the confirmation; only choosing one by one needs the full list.
   await (await next()).respond({ ...review, truncated: true });
-  assert.equal(
-    await checkbox.isDisabled(),
-    true,
-    "truncated comparison allowed replacement",
-  );
+  await dialog.getByText("Mehr als 200 Konflikte", { exact: false }).waitFor();
+  assert.equal(await checkbox.isEnabled(), true, "truncated comparison blocked replacement");
+  assert.equal(await copy.isDisabled(), true, "replacement without confirmation");
+  await checkbox.check();
+  assert.equal(await copy.isEnabled(), true);
   await dialog.getByRole("combobox").first().selectOption("share/Projects");
   await (await next()).respond();
   await checkbox.check();
@@ -159,7 +161,7 @@ try {
   assert.deepEqual(errors, []);
   await ctx.close();
   console.log(
-    "Replace confirmation before Copy, asynchronous preview, destination reset, stale replies, inspection failure/retry and truncated comparison passed",
+    "Replace confirmation before Copy, asynchronous preview, destination reset, stale replies, inspection failure/retry and replacing more than 200 conflicts passed",
   );
 } finally {
   await browser.close();
