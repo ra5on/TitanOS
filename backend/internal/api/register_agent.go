@@ -5,6 +5,8 @@ package api
 // and recurring tasks to every account that may use the agent, each only
 // its own.
 func (s *Server) registerAgent(mux *routeMux) {
+	// Assist: the Ollama routes Home Assistant's integration calls (agent_assist.go).
+	mux.HandleFunc(assistPrefix+"/", s.handleAgentOllama)
 	mux.HandleFunc("GET /api/v1/agent/status", s.requireUser(s.handleAgentStatus))
 	mux.HandleFunc("GET /api/v1/agent/settings", s.requireAdmin(s.handleAgentSettings))
 	mux.HandleFunc("PUT /api/v1/agent/settings", s.requireAdmin(s.handleAgentSettingsSet))

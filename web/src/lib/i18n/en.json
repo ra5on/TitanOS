@@ -8400,5 +8400,6 @@
 	"agent.area.accounts": "Accounts",
 	"agent.area.plugins": "Plugins",
 	"agent.area.home": "Home Assistant",
-	"agent.area.web": "Internet (DuckDuckGo)"
+	"agent.area.web": "Internet (DuckDuckGo)",
+	"agent.noteHA": "Saved in Home Assistant"
 }

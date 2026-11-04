@@ -47,7 +47,7 @@ const AreaAgent = "agent"
 // createTools only add something new; the standard preset runs them
 // without asking ("neue Dateien legt er frei an").
 var createTools = map[string]bool{
-	"folder_create": true, "files_mkdir": true, "files_create": true, "file_copy": true, "files_copy": true, "document_create": true,
+	"folder_create": true, "files_mkdir": true, "files_create": true, "file_copy": true, "files_copy": true,
 }
 
 // KindOf says what a tool does from what the catalog knows.

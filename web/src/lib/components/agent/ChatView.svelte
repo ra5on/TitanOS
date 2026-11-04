@@ -76,6 +76,7 @@
 		memory: 'agent.noteMemory',
 		skill: 'agent.noteSkill',
 		schedule: 'agent.noteSchedule',
+		homeassistant: 'agent.noteHA',
 		stopped: 'agent.noteStopped',
 		interrupted: 'agent.noteInterrupted',
 		error: 'agent.noteError',
@@ -153,7 +154,7 @@
 					{/if}
 				</div>
 			{:else if block.kind === 'note'}
-				{#if block.entry.note === 'memory' || block.entry.note === 'skill' || block.entry.note === 'schedule'}
+				{#if block.entry.note === 'memory' || block.entry.note === 'skill' || block.entry.note === 'schedule' || block.entry.note === 'homeassistant'}
 					<span class="learn">✦ {t(noteText[block.entry.note])}: {block.entry.content}</span>
 				{:else}
 					<div class="note" class:bad={block.entry.note === 'error'}>

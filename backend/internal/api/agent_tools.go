@@ -101,6 +101,9 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 	for _, t := range b.ownTools() {
 		add(t)
 	}
+	for _, t := range b.haTools() {
+		add(t)
+	}
 	return b
 }
 
@@ -189,7 +192,7 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 		// A new file only adds something; replacing one changes it.
 		if a.Key == "file.write" || a.Key == "folder.create" {
 			kind = agent.KindCreate
-		} else if a.Key == "file.replace" {
+		} else if a.Key == "file.replace" || a.Key == "files.moveTo" {
 			kind = agent.KindChange
 		}
 	} else if t.route != nil && t.route.Method != http.MethodGet {

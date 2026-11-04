@@ -307,3 +307,51 @@ func TestAgentScheduleDue(t *testing.T) {
 		t.Fatal("disabled ran")
 	}
 }
+
+func TestAgentAssistForHomeAssistantOnly(t *testing.T) {
+	fake := &agentOllama{replies: []string{`{"role":"assistant","content":"**Das Licht** ist aus.\n\n| a | b |\n|---|---|\n| x | y |"}`}}
+	ts := agentServer(t, fake, agent.Policy{})
+	post := func(path string, body any) (*http.Response, []byte) {
+		return ts.do(&http.Client{}, "POST", path, body)
+	}
+	// Off: refused, even from the right address.
+	if res, _ := post("/agent-ollama/api/chat", map[string]any{"messages": []any{}}); res.StatusCode != http.StatusForbidden {
+		t.Fatalf("assist off: %d", res.StatusCode)
+	}
+	_, body := ts.request("GET", "/api/v1/agent/settings", nil)
+	var settings map[string]any
+	json.Unmarshal(body, &settings)
+	settings["homeassistant"] = map[string]any{"assist": true}
+	if res, body := ts.request("PUT", "/api/v1/agent/settings", settings); res.StatusCode != 200 {
+		t.Fatalf("assist on: %d %s", res.StatusCode, body)
+	}
+	// On, but Home Assistant lives elsewhere: refused.
+	ha, _ := ts.home.Settings()
+	ha.URL = "http://192.0.2.10:8123"
+	if err := ts.home.SetSettings(ha); err != nil {
+		t.Fatal(err)
+	}
+	if res, _ := post("/agent-ollama/api/tags", nil); res.StatusCode != http.StatusForbidden {
+		t.Fatalf("other address: %d", res.StatusCode)
+	}
+	ha.URL = "http://127.0.0.1:8123"
+	ts.home.SetSettings(ha)
+	res, body := ts.do(&http.Client{}, "GET", "/agent-ollama/api/tags", nil)
+	if res.StatusCode != 200 || !strings.Contains(string(body), "titanos-agent") {
+		t.Fatalf("tags: %d %s", res.StatusCode, body)
+	}
+	stream := false
+	res, body = post("/agent-ollama/api/chat", map[string]any{"model": "titanos-agent:latest", "stream": stream, "messages": []map[string]string{{"role": "system", "content": "x"}, {"role": "user", "content": "Ist das Licht im Flur an?"}}})
+	var reply struct {
+		Message struct{ Content string } `json:"message"`
+		Done    bool                     `json:"done"`
+	}
+	json.Unmarshal(body, &reply)
+	if res.StatusCode != 200 || !reply.Done || reply.Message.Content != "Das Licht ist aus. a, b. x, y." {
+		t.Fatalf("chat: %d %s", res.StatusCode, body)
+	}
+	list, _ := ts.server.agentStore().Chats("alex")
+	if len(list) != 1 || list[0].Origin != "homeassistant" {
+		t.Fatalf("assist chat: %+v", list)
+	}
+}
