@@ -3,10 +3,13 @@ import type { DockerContainer } from './api.ts';
 export type DockerView = 'list' | 'cards';
 /** "own": the saved order (dragged by hand); "az": by name, stacks among containers. */
 export type DockerSort = 'own' | 'az';
+/** One card size for all cards: fewer (L) or more (S) side by side. */
+export type DockerSize = 's' | 'm' | 'l';
 export type DockerLayout = {
 	version: 1;
 	view: DockerView;
 	sort: DockerSort;
+	size: DockerSize;
 	order: string[];
 	details: boolean;
 	primaryServices: Record<string, string>;
@@ -14,7 +17,15 @@ export type DockerLayout = {
 export type DockerGroup = { id: string; name: string; members: DockerContainer[] };
 
 export function defaultDockerLayout(): DockerLayout {
-	return { version: 1, view: 'list', sort: 'own', order: [], details: true, primaryServices: {} };
+	return {
+		version: 1,
+		view: 'list',
+		sort: 'own',
+		size: 'm',
+		order: [],
+		details: true,
+		primaryServices: {},
+	};
 }
 
 /** Names survive container recreation during updates. Prefixes separate apps from standalone containers. */
@@ -42,6 +53,7 @@ export function sanitizeDockerLayout(value: unknown): DockerLayout {
 	// click; the list replaces it. Saved tile widths are no longer used.
 	if (input.view === 'cards') result.view = 'cards';
 	if (input.sort === 'az') result.sort = 'az';
+	if (input.size === 's' || input.size === 'l') result.size = input.size;
 	if (typeof input.details === 'boolean') result.details = input.details;
 	if (Array.isArray(input.order))
 		result.order = [...new Set(input.order.filter(validID))].slice(0, 2000);
