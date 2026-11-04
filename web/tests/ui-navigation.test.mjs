@@ -83,7 +83,7 @@ test('the settings navigation keeps its fixed groups, order and role filter', as
 			['security', ['access', 'firewall', 'letsencrypt', 'wireguard']],
 			['hardware', ['hardware', 'temperatures', 'energy', 'ups', 'power-button']],
 			['data', ['memory', 'backups', 'files']],
-			['integrations', ['homeassistant', 'mcp', 'api']],
+			['integrations', ['homeassistant', 'agent', 'mcp', 'api']],
 			['personal', ['appearance']],
 		],
 	);
@@ -98,6 +98,7 @@ test('the settings navigation keeps its fixed groups, order and role filter', as
 		'firewall',
 		'letsencrypt',
 		'wireguard',
+		'agent',
 		'mcp',
 	]);
 	const user = settingsEntries('', false, label).flatMap((g) => g.entries.map((e) => e.id));

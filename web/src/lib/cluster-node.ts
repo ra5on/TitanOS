@@ -19,6 +19,8 @@ const LOCAL = [
 	/^\/app-icon/,
 	/^\/restore/,
 	/^\/welcome/,
+	// The KI-Agent of the NAS the browser is on.
+	/^\/agent(\/|\?|$)/,
 ];
 
 /** The ID of the chosen other node, null for this NAS. */

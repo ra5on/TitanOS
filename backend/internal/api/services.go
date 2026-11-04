@@ -83,7 +83,14 @@ func (s *Server) servicesOn() map[string]bool {
 }
 
 func (s *Server) handleServicesState(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.servicesOn())
+	on := s.servicesOn()
+	out := make(map[string]bool, len(on)+1)
+	for k, v := range on {
+		out[k] = v
+	}
+	// The tab of the KI-Agent: switched on and allowed for this account.
+	out["agent"] = s.agentSettings().Enabled && s.agentAllowed(currentUser(r))
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {

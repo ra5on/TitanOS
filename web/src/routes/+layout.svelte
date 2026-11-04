@@ -26,6 +26,10 @@
 	import { pageTitle } from '#lib/page-title.svelte.ts';
 	import { registerServiceWorker } from '#lib/web-push.ts';
 
+	const agentRoute = $derived(
+		page.url.pathname === '/agent' || page.url.pathname.startsWith('/agent/'),
+	);
+
 	let { children } = $props();
 
 	onMount(() => {
@@ -84,6 +88,17 @@
 
 <svelte:head>
 	<title>{documentTitle}</title>
+	<!-- The KI-Agent installs as an app of its own (PLAN 44): its own
+	     manifest, icon and name on /agent, TitanOS everywhere else. -->
+	{#if agentRoute}
+		<link rel="manifest" href="/agent.webmanifest" />
+		<link rel="apple-touch-icon" href="/icons/agent-180.png" />
+		<meta name="apple-mobile-web-app-title" content="TitanOS Agent" />
+	{:else}
+		<link rel="manifest" href="/manifest.webmanifest" />
+		<link rel="apple-touch-icon" href="/icons/app-180.png" />
+		<meta name="apple-mobile-web-app-title" content="TitanOS" />
+	{/if}
 </svelte:head>
 
 {#if session.data?.user && (page.url.pathname === '/' || backgroundEverywhere)}<DashboardBackground

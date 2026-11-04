@@ -2,6 +2,10 @@
 	// Line icons drawn for TitanOS on a 24 px grid; they take the text color.
 	const PATHS = {
 		menu: 'M4 6h16M4 12h16M4 18h16',
+		sparkle:
+			'M12 3c.9 4.6 2.4 6.1 7 7-4.6.9-6.1 2.4-7 7-.9-4.6-2.4-6.1-7-7 4.6-.9 6.1-2.4 7-7ZM19 16c.3 1.5.8 2 2.3 2.3-1.5.3-2 .8-2.3 2.3-.3-1.5-.8-2-2.3-2.3 1.5-.3 2-.8 2.3-2.3Z',
+		pin: 'M9 4h6l-1 6 3 3H7l3-3-1-6ZM12 13v7',
+		bulb: 'M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9V16h7v-2.1A6 6 0 0 0 12 3Z',
 		activity: 'M3 12h4l3-8 4 16 3-8h4',
 		clock: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM12 7v5l3 2',
 		chip: 'M6 6h12v12H6ZM9 9h6v6H9ZM9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3',
