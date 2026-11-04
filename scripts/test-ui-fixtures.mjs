@@ -647,6 +647,8 @@ export function fixtureFactory(browser, errors) {
         quotas[decodeURIComponent(switched[1])] = on ? "pending" : "off";
         return route.fulfill({ status: 204 });
       }
+      if (path === "/storage/tests")
+        return json(data.storageTests ?? { tests: [], notices: [] });
       if (path === "/storage")
         return json({
           volumes: [
@@ -712,10 +714,12 @@ export function fixtureFactory(browser, errors) {
           settings: { enabled: true, volume: "Data" },
           running: true,
           version: "test",
-          containers: data.webMissing
-            ? [container("db", "exited")]
-            : [container("web"), container("db", "exited")],
-          apps: ["photos"],
+          containers:
+            data.dockerContainers ??
+            (data.webMissing
+              ? [container("db", "exited")]
+              : [container("web"), container("db", "exited")]),
+          apps: data.dockerApps ?? ["photos"],
           jobs: {},
           updatesChecked: time,
         });
