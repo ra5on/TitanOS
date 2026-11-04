@@ -160,6 +160,7 @@ func (s *transferStore) summary() (transferStoreState, error) {
 	})
 	return state, err
 }
+
 // create makes the plan database and publishes the descriptor. The database
 // stays open for fill.
 func (s *transferStore) create(publish func() error) error {

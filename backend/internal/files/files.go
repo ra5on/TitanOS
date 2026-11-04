@@ -211,7 +211,7 @@ type Manager struct {
 	planHook func(string)
 	// copyParts are the part files running copies write (copy_parts.go).
 	copyParts map[string]bool
-	now     func() time.Time
+	now       func() time.Time
 }
 
 // NewManager returns a file manager that gives new files the group gid.

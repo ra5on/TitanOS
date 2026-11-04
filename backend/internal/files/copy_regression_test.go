@@ -5,8 +5,8 @@ package files
 
 import (
 	"context"
-	"fmt"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"

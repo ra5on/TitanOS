@@ -82,6 +82,7 @@ func (m *Manager) transferRoot(volume, user string) (*os.Root, error) {
 	}
 	return root.OpenRoot(account)
 }
+
 // prepareTransfer makes the durable plan of a job whose target is on a data
 // volume and fills it with one walk of the selection. Other jobs get the walk
 // alone. transferMu is held only while the plan is created, not while the
@@ -175,6 +176,7 @@ func (m *Manager) saveTransfer(job *Job, pending string) error {
 	t.initialized = true
 	return nil
 }
+
 // finishTransfer records an entry that is at its target now. source is the
 // version of the source file that was copied ("" for a rename).
 func (m *Manager) finishTransfer(job *Job, dr *os.Root, rel, final, source string) error {
@@ -448,6 +450,7 @@ func (m *Manager) removeTransfer(j *Job) error {
 	}
 	return syncTransferParent(root, j.ID+".json")
 }
+
 // copyPartName is the name of a copy's part file (12 hex digits before 4.11.2026).
 var copyPartName = regexp.MustCompile(`^\.titanos-copy-([0-9a-f]{12}|[0-9a-f]{24})\.titanos-part$`)
 
