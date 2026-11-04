@@ -2,7 +2,7 @@
 	// A Compose stack as one card of the same size as a container card
 	// (owner's decision of 4 Nov 2026, variant B): running/total, the CPU
 	// and RAM of the stack, its combined CPU curve, the services as chips,
-	// "Services" unfolds them as cards right after this one.
+	// "Services" opens a frame with this card and its services beside it.
 	import type { DockerContainer } from '#lib/api.ts';
 	import AppIcon from '#lib/components/AppIcon.svelte';
 	import Icon from '#lib/components/Icon.svelte';
