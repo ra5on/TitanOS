@@ -29,8 +29,11 @@
 	} from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import AutoUpdateDialog from './AutoUpdateDialog.svelte';
+	import ComposeSettingsDialog from './ComposeSettingsDialog.svelte';
+	import LogsDialog from './LogsDialog.svelte';
 	import RemoveAppDialog from './RemoveAppDialog.svelte';
 	import TailnetDialog from './TailnetDialog.svelte';
+	import UpdatesDialog from './UpdatesDialog.svelte';
 	import { inTailnet, tailnetPort } from '#lib/app-proxy.ts';
 	import { formatBytes, formatPercent } from '#lib/format.ts';
 	import { apiErrorText, errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
@@ -235,7 +238,7 @@
 	}
 	let dialog = $state<
 		| { kind: 'import' | 'settings' }
-		| { kind: 'logs'; container: DockerContainer; text: string | null }
+		| { kind: 'logs'; container: DockerContainer }
 		| { kind: 'updates'; selected: string[]; failed: { app: string; text: string }[] }
 		| { kind: 'remove'; container: DockerContainer }
 		| { kind: 'removeApp'; app: string }
@@ -464,77 +467,8 @@
 		busyKeys.delete(key);
 	}
 
-	// Logs: only the answer to the latest request for the open container
-	// counts; a late answer for another container is dropped.
-	let logsRequest = 0;
-	let logsError = $state(''),
-		logsFollow = $state(false),
-		logsSearch = $state(''),
-		logsLoading = $state(false);
-	let logsBox: HTMLElement | undefined = $state();
-	const logsFor = (container: DockerContainer) =>
-		dialog?.kind === 'logs' && dialog.container.id === container.id;
-	async function showLogs(container: DockerContainer, again = false) {
-		const request = ++logsRequest;
-		if (!again || !logsFor(container)) {
-			dialog = { kind: 'logs', container, text: null };
-			logsFollow = false;
-			logsSearch = '';
-		}
-		logsError = '';
-		logsLoading = true;
-		try {
-			const res = await api.get<{ logs: string }>(
-				`/docker/containers/${container.id}/logs?tail=300`,
-			);
-			if (request !== logsRequest || !logsFor(container) || dialog?.kind !== 'logs') return;
-			dialog.text = res.logs;
-			if (logsFollow) {
-				await tick();
-				if (logsBox) logsBox.scrollTop = logsBox.scrollHeight;
-			}
-		} catch (err) {
-			if (request === logsRequest && logsFor(container)) logsError = problem(err).text;
-		} finally {
-			if (request === logsRequest) logsLoading = false;
-		}
-	}
-	// Following fetches the logs again every three seconds while the dialog is open.
-	$effect(() => {
-		const container = dialog?.kind === 'logs' ? dialog.container : null;
-		if (!container || !logsFollow) return;
-		return poll(() => showLogs(container, true), { interval: 3000, immediate: false });
-	});
-	type LogPart = { text: string; hit: boolean };
-	const logParts = $derived.by<LogPart[]>(() => {
-		const text = dialog?.kind === 'logs' ? (dialog.text ?? '') : '';
-		const query = logsSearch.trim().toLowerCase();
-		if (!query) return [{ text, hit: false }];
-		const parts: LogPart[] = [];
-		const lower = text.toLowerCase();
-		let at = 0;
-		for (let found = lower.indexOf(query); found >= 0; found = lower.indexOf(query, at)) {
-			if (found > at) parts.push({ text: text.slice(at, found), hit: false });
-			parts.push({ text: text.slice(found, found + query.length), hit: true });
-			at = found + query.length;
-		}
-		if (at < text.length) parts.push({ text: text.slice(at), hit: false });
-		return parts;
-	});
-	const logHits = $derived(logParts.filter((part) => part.hit).length);
-	$effect(() => {
-		// The first hit comes into view when the search changes.
-		if (!logsSearch.trim() || !logsBox) return;
-		void logHits;
-		tick().then(() => logsBox?.querySelector('mark')?.scrollIntoView({ block: 'nearest' }));
-	});
-	function downloadLogs(container: DockerContainer, text: string) {
-		const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
-		const anchor = document.createElement('a');
-		anchor.href = url;
-		anchor.download = `${dockerName(container, 'distinct').replace(/[^\w.-]+/g, '_')}-logs.txt`;
-		anchor.click();
-		setTimeout(() => URL.revokeObjectURL(url), 1000);
+	function showLogs(container: DockerContainer) {
+		dialog = { kind: 'logs', container };
 	}
 
 	// "Update all" asks which apps first; all with an update are ticked.
@@ -1463,107 +1397,18 @@
 	</Dialog>
 {/if}
 {#if dialog?.kind === 'logs'}
-	{@const container = dialog.container}
-	{@const text = dialog.text}
-	<Dialog
-		title={t('docker.logsTitle', { name: dockerName(container, 'distinct') })}
-		wide
-		onclose={() => (dialog = null)}
-	>
-		<div class="logs-tools">
-			<input
-				class="field logs-search"
-				type="search"
-				bind:value={logsSearch}
-				placeholder={t('docker.logsSearch')}
-				aria-label={t('docker.logsSearch')}
-			/>
-			{#if logsSearch.trim()}<span class="muted mono" role="status"
-					>{t('docker.logsHits', { count: logHits })}</span
-				>{/if}
-			<label class="check"
-				><input type="checkbox" bind:checked={logsFollow} /><span>{t('docker.logsFollow')}</span
-				></label
-			>
-		</div>
-		{#if logsError}<div class="notice-error logs-error" role="alert">
-				<span>{logsError}</span><button
-					type="button"
-					class="btn"
-					disabled={logsLoading}
-					onclick={() => showLogs(container, true)}>{t('common.retry')}</button
-				>
-			</div>{/if}
-		<pre class="logs" bind:this={logsBox}>{#if text === null}…{:else if !text}{t(
-					'docker.logsEmpty',
-				)}{:else}{#each logParts as part, index (index)}{#if part.hit}<mark>{part.text}</mark
-						>{:else}{part.text}{/if}{/each}{/if}</pre>
-		<div class="dialog-actions">
-			<button
-				type="button"
-				class="btn"
-				disabled={!text}
-				onclick={() => text && downloadLogs(container, text)}
-				><Icon name="download" size={16} />{t('docker.logsDownload')}</button
-			>
-			<button
-				type="button"
-				class="btn"
-				disabled={logsLoading}
-				onclick={() => showLogs(container, true)}>{t('docker.logsRefresh')}</button
-			>
-			<button type="button" class="btn btn-primary" onclick={() => (dialog = null)}
-				>{t('common.done')}</button
-			>
-		</div>
-	</Dialog>
+	<LogsDialog container={dialog.container} onclose={() => (dialog = null)} />
 {:else if dialog?.kind === 'updates'}
 	{@const target = dialog}
-	<Dialog title={t('docker.updatesTitle')} locked={dialogBusy} onclose={() => (dialog = null)}>
-		<p class="text">{t('docker.updatesText')}</p>
-		<div class="update-list">
-			{#each updateApps as entry (entry.app)}
-				<label class="check"
-					><input
-						type="checkbox"
-						disabled={dialogBusy}
-						checked={target.selected.includes(entry.app)}
-						onchange={(event) =>
-							(target.selected = event.currentTarget.checked
-								? [...target.selected, entry.app]
-								: target.selected.filter((app) => app !== entry.app))}
-					/>
-					<span
-						><span class="mono">{entry.app}</span
-						>{#if entry.names.length > 1 || entry.names[0] !== entry.app}
-							<span class="muted">· {entry.names.join(', ')}</span>{/if}</span
-					></label
-				>
-			{:else}<p class="muted">{t('docker.updatesNone')}</p>{/each}
-		</div>
-		{#if target.failed.length}<div class="notice-error" role="alert">
-				{t('docker.updatesFailed')}
-				<ul>
-					{#each target.failed as entry (entry.app)}<li>
-							<span class="mono">{entry.app}</span>: {entry.text}
-						</li>{/each}
-				</ul>
-			</div>{/if}
-		<div class="dialog-actions">
-			<button type="button" class="btn" disabled={dialogBusy} onclick={() => (dialog = null)}
-				>{t('common.cancel')}</button
-			>
-			<button
-				type="button"
-				class="btn btn-primary"
-				disabled={dialogBusy || target.selected.length === 0}
-				onclick={applyUpdates}
-				>{t(dialogBusy ? 'docker.updatesRunning' : 'docker.updatesSubmit', {
-					count: target.selected.length,
-				})}</button
-			>
-		</div>
-	</Dialog>
+	<UpdatesDialog
+		apps={updateApps}
+		selected={target.selected}
+		failed={target.failed}
+		busy={dialogBusy}
+		onselect={(selected) => (target.selected = selected)}
+		onclose={() => (dialog = null)}
+		onsubmit={applyUpdates}
+	/>
 {:else if dialog?.kind === 'remove'}
 	{@const container = dialog.container}
 	<Dialog
@@ -1596,74 +1441,16 @@
 		onremove={(purge) => removeApp(app, purge)}
 	/>
 {:else if dialog}
-	{@const kind = dialog.kind}
-	<Dialog
-		title={t(kind === 'import' ? 'docker.importTitle' : 'docker.settingsTitle')}
-		wide={kind === 'import'}
-		locked={dialogBusy}
+	<ComposeSettingsDialog
+		kind={dialog.kind}
+		bind:draft
+		{volumes}
+		appdata={`/mnt/${status?.settings.volume}/appdata`}
+		busy={dialogBusy}
+		error={dialogError}
 		onclose={() => (dialog = null)}
-	>
-		<form onsubmit={submit}>
-			{#if kind === 'import'}
-				<p class="notice-warn">{t('docker.importWarning')}</p>
-				<label
-					><span>{t('docker.importName')}</span>
-					<!-- svelte-ignore a11y_autofocus -->
-					<input
-						class="field mono name-field"
-						type="text"
-						bind:value={draft.name}
-						maxlength="32"
-						autocapitalize="none"
-						spellcheck="false"
-						required
-						autofocus
-					/>
-				</label>
-				<label
-					><span>{t('docker.importCompose')}</span>
-					<textarea
-						class="field mono"
-						rows="14"
-						bind:value={draft.compose}
-						spellcheck="false"
-						required
-						placeholder={'services:\n  web:\n    image: …'}></textarea>
-					<small
-						>{t('docker.importHint', {
-							path: `/mnt/${status?.settings.volume}/appdata/${draft.name || '<name>'}`,
-						})}</small
-					>
-				</label>
-			{:else}
-				<label class="check"
-					><input type="checkbox" bind:checked={draft.enabled} /><span>{t('docker.enabled')}</span
-					></label
-				>
-				<label
-					><span>{t('docker.volume')}</span>
-					<select class="field" bind:value={draft.volume} disabled={!draft.enabled}
-						>{#each volumes as volume (volume)}<option value={volume}>{volume}</option
-							>{/each}</select
-					>
-				</label>
-				<p class="muted note">{t('docker.disableNote')}</p>
-			{/if}
-			{#if dialogError}
-				<div class="notice-error" role="alert">
-					{dialogError.text}{#if dialogError.detail}<pre>{dialogError.detail}</pre>{/if}
-				</div>
-			{/if}
-			<div class="dialog-actions">
-				<button type="button" class="btn" onclick={() => (dialog = null)} disabled={dialogBusy}
-					>{t('common.cancel')}</button
-				>
-				<button type="submit" class="btn btn-primary" disabled={dialogBusy}
-					>{t(kind === 'import' ? 'docker.importSubmit' : 'docker.save')}</button
-				>
-			</div>
-		</form>
-	</Dialog>
+		onsubmit={submit}
+	/>
 {/if}
 
 {#if tailnetDialog}<TailnetDialog
@@ -2178,23 +1965,7 @@
 		}
 	}
 
-	form {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-4);
-	}
-	.name-field {
-		max-width: 18rem;
-	}
-	textarea {
-		height: auto;
-		padding: 0.625rem 0.75rem;
-		font-size: var(--text-base);
-		line-height: 1.5;
-		resize: vertical;
-	}
-	small,
-	.note {
+	small {
 		font-size: var(--text-sm);
 		color: var(--muted);
 	}
@@ -2218,58 +1989,11 @@
 		white-space: pre-wrap;
 		word-break: break-word;
 	}
-	.logs {
-		max-height: 60vh;
-		margin: 0;
-		padding: var(--space-3) 14px;
-		overflow: auto;
-		background: var(--bg);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-ctl);
-		line-height: 1.5;
-	}
 	.error-line {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--space-2);
-	}
-	.logs mark {
-		background: var(--warn-bg);
-		color: var(--warn-text);
-		outline: 1px solid var(--warn-border);
-		border-radius: var(--radius-small);
-	}
-	.logs-tools {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2) var(--space-4);
-		margin-bottom: 10px;
-	}
-	.logs-search {
-		flex: 1 1 14rem;
-		min-width: 0;
-	}
-	.logs-error {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: var(--space-2);
-		margin-bottom: 10px;
-	}
-	.update-list {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-		max-height: 50vh;
-		overflow: auto;
-		margin: var(--space-3) 0;
-	}
-	.notice-error ul {
-		margin: 6px 0 0;
-		padding-left: 1.1rem;
 	}
 </style>

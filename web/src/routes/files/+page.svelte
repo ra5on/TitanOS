@@ -13,7 +13,6 @@
 	} from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
-	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { folderPath, rangeSelection, previewKind, selectionType } from '#lib/file-actions.ts';
 	import { beginFileDrag, hasFileDrag, takeFileDrag, type FileDrag } from '#lib/file-drag.ts';
@@ -50,7 +49,7 @@
 	import ShortcutsDialog from './ShortcutsDialog.svelte';
 	import PhotoView from './PhotoView.svelte';
 	import TextEditor from './TextEditor.svelte';
-	import TrashView from './TrashView.svelte';
+	import TrashArea from './TrashArea.svelte';
 	import UndoPanel from './UndoPanel.svelte';
 	import UnfinishedUploads from './UnfinishedUploads.svelte';
 	import UploadPanel from './UploadPanel.svelte';
@@ -951,79 +950,23 @@
 				ondrop={dropped}
 			>
 				{#if trash && root}
-					{#if root.recycle}
-						<TrashView
-							{root}
-							user={session.data?.user?.name ?? ''}
-							admin={canAdminister}
-							onclose={() => {
-								trash = false;
-								load();
-							}}
-							onchanged={() => {
-								load();
-								loadRoots();
-							}}
-						/>
-					{:else if binRoot}
-						<TrashView
-							root={binRoot}
-							bin={openBin}
-							user={session.data?.user?.name ?? ''}
-							admin={canAdminister}
-							onclose={() => {
-								if (trashBin && bins.length > 1) trashBin = '';
-								else {
-									trash = false;
-									load();
-								}
-							}}
-							onchanged={() => {
-								load();
-								loadRoots();
-							}}
-						/>
-					{:else if bins.length}
-						<div class="toolbar">
-							<button
-								type="button"
-								class="btn"
-								onclick={() => {
-									trash = false;
-									load();
-								}}>{t('files.trashBack')}</button
-							>
-						</div>
-						<section class="bin-choice" aria-label={t('files.trashChoose')}>
-							<h2 class="tile-title">{t('files.trashChoose')}</h2>
-							<p class="muted">{t('files.trashChooseHint', { name: root.name })}</p>
-							{#each bins as bin (bin)}<button
-									type="button"
-									class="btn bin"
-									onclick={() => (trashBin = bin)}
-									><Icon name="trash" size={16} /><span class="mono">{root.name}/{bin}</span
-									></button
-								>{/each}
-						</section>
-					{:else}
-						<div class="toolbar">
-							<button
-								type="button"
-								class="btn"
-								onclick={() => {
-									trash = false;
-									load();
-								}}>{t('files.trashBack')}</button
-							>
-						</div>
-						<EmptyState
-							title={t('files.trashOf', { name: root.name })}
-							text={t('files.trashDisabled')}
-						/>
-						{#if canAdminister}<a class="btn trash-configure" href="/shares"
-								>{t('files.trashConfigure')}</a
-							>{/if}
-					{/if}
+					<TrashArea
+						{root}
+						{binRoot}
+						{bins}
+						{openBin}
+						bind:trashBin
+						user={session.data?.user?.name ?? ''}
+						admin={canAdminister}
+						onback={() => {
+							trash = false;
+							load();
+						}}
+						onchanged={() => {
+							load();
+							loadRoots();
+						}}
+					/>
 				{:else}
 					<NavBar
 						bind:this={navBar}
@@ -1470,17 +1413,6 @@
 	.browser.dragging {
 		border-color: var(--accent);
 	}
-	.toolbar {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2);
-		padding: 10px var(--space-3);
-		border-bottom: 1px solid var(--panel-border);
-	}
-	.toolbar .btn {
-		height: 2.375rem;
-	}
 	.list-footer {
 		margin: 0;
 		padding: 10px 14px 0;
@@ -1499,21 +1431,6 @@
 		box-shadow: var(--shadow-menu);
 		color: var(--muted);
 		font-size: var(--text-base);
-	}
-	.bin-choice {
-		display: flex;
-		flex-direction: column;
-		align-items: stretch;
-		gap: var(--space-2);
-		padding: var(--space-3) var(--space-4) var(--space-4);
-	}
-	.bin-choice .bin {
-		justify-content: flex-start;
-		gap: var(--space-2);
-	}
-	.trash-configure {
-		align-self: center;
-		margin-bottom: var(--space-4);
 	}
 	.none {
 		padding: 20px 14px;
@@ -1537,9 +1454,6 @@
 		}
 		.places.open {
 			display: flex;
-		}
-		.toolbar .btn {
-			height: 2.75rem;
 		}
 		.files-pagehead {
 			position: absolute;
