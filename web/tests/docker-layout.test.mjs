@@ -5,6 +5,8 @@ import {
 	sanitizeDockerLayout,
 	orderedDockerGroups,
 	moveDockerGroup,
+	arrangedDockerGroups,
+	stackCpuHistory,
 } from '../src/lib/docker-layout.ts';
 const container = (name, app = '', id = name) => ({ name, app, id });
 test('layout identities survive recreated containers and a single-service app gaining services', () => {
@@ -51,4 +53,35 @@ test('reordering retains absent apps and appends newly discovered apps', () => {
 		['app:c', 'app:a', 'app:new'],
 	);
 	assert.deepEqual(sanitizeDockerLayout({ order }).order, order);
+});
+test('A–Z sorts stacks among containers by name and keeps the own order untouched', () => {
+	const groups = dockerGroups([
+		container('paperless-web-1', 'paperless'),
+		container('paperless-db-1', 'paperless'),
+		container('Jellyfin'),
+		container('adguard'),
+		container('app10'),
+		container('app9'),
+	]);
+	const layout = { sort: 'own', order: ['container:Jellyfin', 'app:paperless'] };
+	assert.deepEqual(
+		arrangedDockerGroups(groups, layout).map((g) => g.name),
+		['Jellyfin', 'paperless', 'adguard', 'app10', 'app9'],
+	);
+	const az = { ...layout, sort: 'az' };
+	assert.deepEqual(
+		arrangedDockerGroups(groups, az, 'de').map((g) => g.name),
+		['adguard', 'app9', 'app10', 'Jellyfin', 'paperless'],
+	);
+	assert.deepEqual(az.order, ['container:Jellyfin', 'app:paperless']);
+	assert.equal(sanitizeDockerLayout({ sort: 'az' }).sort, 'az');
+	assert.equal(sanitizeDockerLayout({ sort: 'zz' }).sort, 'own');
+	assert.equal(sanitizeDockerLayout({}).sort, 'own');
+});
+test('the stack curve adds the services up at their newest values', () => {
+	assert.deepEqual(
+		stackCpuHistory([{ cpuHistory: [1, 2, 3] }, { cpuHistory: [10, 20] }, {}]),
+		[1, 12, 23],
+	);
+	assert.deepEqual(stackCpuHistory([]), []);
 });
