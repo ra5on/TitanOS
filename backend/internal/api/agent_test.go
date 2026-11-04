@@ -178,6 +178,8 @@ func TestAgentRunsToolsAsksAndLogs(t *testing.T) {
 	fake.replies = []string{
 		toolCall("files_list", map[string]any{"root": "share/Docs"}),
 		toolCall("file_read", map[string]any{"root": "share/Docs", "path": "Privat/geheim.txt"}),
+		toolCall("files_list", map[string]any{"root": "volume/tank", "path": "Docs"}),
+		toolCall("file_read", map[string]any{"root": "volume/tank", "path": "Docs/Privat/geheim.txt"}),
 		toolCall("file_write", map[string]any{"root": "share/Docs", "path": "Übersicht.docx", "content": "# Apps\n\nKeine."}),
 		toolCall("file_write", map[string]any{"root": "share/Docs", "path": "liste.md", "content": "neu", "replace": true}),
 		`{"role":"assistant","content":"Ersetzt."}`,
@@ -222,6 +224,26 @@ func TestAgentRunsToolsAsksAndLogs(t *testing.T) {
 	}
 	if !strings.Contains(private, "gesperrt") {
 		t.Fatalf("locked file read: %s", private)
+	}
+	// The same folder through the volume root is locked as well.
+	through := 0
+	for k := range steps {
+		if strings.Contains(k, "volume/tank") {
+			through++
+		}
+	}
+	if through != 2 {
+		t.Fatalf("volume steps: %d", through)
+	}
+	for k, e := range steps {
+		if strings.Contains(k, "volume/tank") {
+			if strings.HasPrefix(k, "files_list") && (strings.Contains(e.Result, "Privat") || !strings.Contains(e.Result, "liste.md")) {
+				t.Fatalf("locked folder listed through the volume: %s", e.Result)
+			}
+			if strings.HasPrefix(k, "file_read") && !strings.Contains(e.Result, "gesperrt") {
+				t.Fatalf("locked file read through the volume: %s", e.Result)
+			}
+		}
 	}
 	if !strings.HasPrefix(created, "{") {
 		t.Fatalf("new document: %s", created)
@@ -353,5 +375,129 @@ func TestAgentAssistForHomeAssistantOnly(t *testing.T) {
 	list, _ := ts.server.agentStore().Chats("alex")
 	if len(list) != 1 || list[0].Origin != "homeassistant" {
 		t.Fatalf("assist chat: %+v", list)
+	}
+}
+
+// The stream of a running chat goes through the whole handler chain of
+// /api/v1 (activity log included) and delivers pieces before the end.
+func TestAgentEventStream(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/show":
+			w.Write([]byte(`{"capabilities":["tools"]}`))
+		case "/api/chat":
+			w.Write([]byte(`{"message":{"role":"assistant","content":"Hal"},"done":false}` + "\n"))
+			w.(http.Flusher).Flush()
+			<-release
+			w.Write([]byte(`{"message":{"role":"assistant","content":"lo"},"done":false}` + "\n" + `{"message":{"role":"assistant","content":""},"done":true}` + "\n"))
+		default:
+			w.Write([]byte(`{}`))
+		}
+	}))
+	defer srv.Close()
+	defer func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	}()
+	ts := newTestServer(t)
+	ts.setup()
+	dir := t.TempDir()
+	ts.server.agentOpen = func() (*os.Root, error) { return os.OpenRoot(dir) }
+	ts.server.opts.Activity = activity.New(ts.store)
+	if res, body := ts.request("PUT", "/api/v1/agent/settings", map[string]any{"enabled": true, "ollama": srv.URL, "model": "m", "policy": map[string]any{}}); res.StatusCode != 200 {
+		t.Fatalf("settings: %d %s", res.StatusCode, body)
+	}
+	res, body := ts.request("POST", "/api/v1/agent/chats", map[string]any{"message": "Hallo"})
+	var chat agent.Chat
+	json.Unmarshal(body, &chat)
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("start: %d %s", res.StatusCode, body)
+	}
+	req, _ := http.NewRequest("GET", ts.url+"/api/v1/agent/chats/"+chat.ID+"/events", nil)
+	stream, err := ts.client.Do(req)
+	if err != nil || stream.StatusCode != 200 || !strings.HasPrefix(stream.Header.Get("Content-Type"), "text/event-stream") {
+		t.Fatalf("stream: %v %v", err, stream)
+	}
+	defer stream.Body.Close()
+	buf := make([]byte, 64<<10)
+	var got strings.Builder
+	deadline := time.Now().Add(5 * time.Second)
+	for !strings.Contains(got.String(), `"text":"Hal"`) {
+		if time.Now().After(deadline) {
+			t.Fatalf("no streamed piece before the end: %s", got.String())
+		}
+		n, err := stream.Body.Read(buf)
+		got.Write(buf[:n])
+		if err != nil {
+			t.Fatalf("stream ended: %v %s", err, got.String())
+		}
+	}
+	close(release)
+	for !strings.Contains(got.String(), "event: end") {
+		n, err := stream.Body.Read(buf)
+		got.Write(buf[:n])
+		if err != nil {
+			break
+		}
+	}
+	for _, want := range []string{"event: content", "event: entry", `"content":"Hallo"`, "event: end"} {
+		if !strings.Contains(got.String(), want) {
+			t.Errorf("stream lacks %s: %s", want, got.String())
+		}
+	}
+}
+
+func TestAgentHomeAssistantRules(t *testing.T) {
+	box := &agentToolbox{settings: agentSettings{Policy: agent.Policy{Preset: agent.PresetAll}}}
+	call := func(name string, args any) string {
+		data, _ := json.Marshal(args)
+		return box.haMode(name, data, agent.ModeAllow)
+	}
+	// Locks ask, also inside ha_call's list and deep inside an automation.
+	if got := call("ha_call", map[string]any{"domain": "lock", "service": "unlock", "entities": []string{"lock.haustuer"}}); got != agent.ModeAsk {
+		t.Fatalf("ha_call lock: %s", got)
+	}
+	auto := map[string]any{"id": "x", "config": map[string]any{"alias": "Tür", "actions": []any{map[string]any{"action": "lock.unlock", "target": map[string]any{"entity_id": "lock.haustuer"}}}}}
+	if got := call("ha_automation_save", auto); got != agent.ModeAsk {
+		t.Fatalf("automation with a lock: %s", got)
+	}
+	if got := call("ha_automation_save", map[string]any{"id": "x", "config": map[string]any{"alias": "?"}}); got != agent.ModeAsk {
+		t.Fatalf("automation without devices: %s", got)
+	}
+	if got := call("ha_call", map[string]any{"domain": "light", "service": "turn_on", "entities": []string{"light.flur"}}); got != agent.ModeAllow {
+		t.Fatalf("light: %s", got)
+	}
+	box.settings.HA.Entities = map[string]string{"entity:light.flur": agent.ModeDeny, "domain:lock": agent.ModeAllow}
+	if got := call("ha_call", map[string]any{"domain": "light", "service": "turn_on", "entities": []string{"light.flur"}}); got != agent.ModeDeny {
+		t.Fatalf("denied light: %s", got)
+	}
+	if got := call("ha_call", map[string]any{"domain": "lock", "service": "lock", "entities": []string{"lock.haustuer"}}); got != agent.ModeAllow {
+		t.Fatalf("lock allowed by the person: %s", got)
+	}
+}
+
+func TestAgentKeepsItsVolume(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	if v, ok := ts.server.agentVolume(nil); ok || v != "" {
+		t.Fatalf("no volume: %q %v", v, ok)
+	}
+	if v, ok := ts.server.agentVolume([]string{"tank", "fast"}); !ok || v != "fast" {
+		t.Fatalf("first: %q %v", v, ok)
+	}
+	// A new volume that sorts first does not move the chats.
+	if v, ok := ts.server.agentVolume([]string{"archiv", "fast", "tank"}); !ok || v != "fast" {
+		t.Fatalf("kept: %q %v", v, ok)
+	}
+	if v, ok := ts.server.agentVolume([]string{"archiv"}); ok || v != "fast" {
+		t.Fatalf("missing volume: %q %v", v, ok)
+	}
+	var stored agentSettings
+	if err := ts.store.ReadJSON(agentSettingsFile, &stored); err != nil || stored.Volume != "fast" {
+		t.Fatalf("stored: %+v %v", stored, err)
 	}
 }

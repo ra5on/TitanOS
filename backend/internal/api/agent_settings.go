@@ -44,6 +44,9 @@ type agentSettings struct {
 	ReactAs string `json:"reactAs,omitempty"`
 	// Skills switched off by name of the built-in ones.
 	SkillsOff []string `json:"skillsOff,omitempty"`
+	// Volume holds the chats; chosen once (the first mounted one) and
+	// kept, so that a new volume does not hide them.
+	Volume string `json:"volume,omitempty"`
 	// Home Assistant: modes per "area:<id>", "domain:<name>" or
 	// "entity:<id>"; notify services for messages; Assist.
 	HA agentHASettings `json:"homeassistant"`
@@ -118,6 +121,9 @@ func (s *Server) handleAgentSettingsSet(w http.ResponseWriter, r *http.Request) 
 	a := &s.agentConf
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if req.Volume == "" {
+		req.Volume = a.settings.Volume
+	}
 	if err := s.opts.Store.WriteJSON(agentSettingsFile, req); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 		return
@@ -337,4 +343,33 @@ func (s *Server) handleAgentTools(w http.ResponseWriter, r *http.Request) {
 		views = append(views, agentToolView{Name: t.name, Area: t.area, Kind: t.kind, Dangerous: mcpDangerous[t.name], Mode: settings.Policy.Mode(t.name, t.area, t.kind), Set: set})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"tools": views, "areas": agent.AgentAreas})
+}
+
+// agentVolume is the volume the chats live on: the one chosen before, or
+// at first use the first mounted volume, which is then kept (one write to
+// the stick). A chosen volume that is not mounted makes the agent
+// unavailable instead of starting empty somewhere else.
+func (s *Server) agentVolume(mounted []string) (string, bool) {
+	a := &s.agentConf
+	current := s.agentSettings()
+	if current.Volume != "" {
+		return current.Volume, slices.Contains(mounted, current.Volume)
+	}
+	if len(mounted) == 0 {
+		return "", false
+	}
+	sorted := slices.Sorted(slices.Values(mounted))
+	chosen := sorted[0]
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.loaded && a.settings.Volume == "" {
+		next := a.settings
+		next.Volume = chosen
+		if err := s.opts.Store.WriteJSON(agentSettingsFile, next); err == nil {
+			a.settings = next
+		} else {
+			slog.Warn("agent volume not kept", "err", err)
+		}
+	}
+	return chosen, true
 }

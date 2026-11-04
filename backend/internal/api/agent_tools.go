@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -48,6 +50,7 @@ type agentToolbox struct {
 	session  *mcpSession
 	web      *agent.Web
 	version  string
+	dirs     map[string]string
 }
 
 // newAgentToolbox collects the tools of an account.
@@ -218,7 +221,7 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 		mode = agent.Stricter(mode, agent.ModeAsk)
 	}
 	if t.area == toolcatalog.AreaHome {
-		mode = agent.Stricter(mode, b.haMode(args, mode))
+		mode = agent.Stricter(mode, b.haMode(name, args, mode))
 		if mode == agent.ModeDeny {
 			return agent.Prepared{}, errors.New("this device is not allowed for the agent")
 		}
@@ -307,11 +310,58 @@ func (b *agentToolbox) folderMode(args json.RawMessage) string {
 		if t.root == "" {
 			continue
 		}
-		if m := b.settings.Policy.FolderMode(t.root, t.path); m != "" {
+		if m := b.realFolderMode(t.root, t.path); m != "" {
 			if mode == "" {
 				mode = m
 			} else {
 				mode = agent.Stricter(mode, m)
+			}
+		}
+	}
+	return mode
+}
+
+// rootDir is the directory of a root of the file manager. Rules may name
+// roots this account does not see (an owner set them up); they resolve
+// through the roots of the owner.
+func (b *agentToolbox) rootDir(id string) string {
+	if b.dirs == nil {
+		b.dirs = map[string]string{}
+		for _, r := range b.s.fileRoots(b.user) {
+			b.dirs[r.ID] = r.Dir
+		}
+		if owner, ok := b.s.opts.Users.Get(b.s.firstOwner()); ok {
+			for _, r := range b.s.fileRoots(owner) {
+				if _, seen := b.dirs[r.ID]; !seen {
+					b.dirs[r.ID] = r.Dir
+				}
+			}
+		}
+	}
+	return b.dirs[id]
+}
+
+// realFolderMode applies the folder rules to the real directory a path
+// lies in, so that a rule on share/Documents also holds when the same
+// folder is reached through volume/tank/Documents.
+func (b *agentToolbox) realFolderMode(root, p string) string {
+	dir := b.rootDir(root)
+	if dir == "" {
+		return b.settings.Policy.FolderMode(root, p)
+	}
+	target := filepath.Join(dir, filepath.FromSlash(path.Clean("/"+p)))
+	mode := ""
+	for _, f := range b.settings.Policy.Folders {
+		base := b.rootDir(f.Root)
+		if base == "" {
+			continue
+		}
+		rule := filepath.Join(base, filepath.FromSlash(path.Clean("/"+f.Path)))
+		if target == rule || strings.HasPrefix(target, rule+string(filepath.Separator)) {
+			if mode == "" {
+				mode = f.Mode
+			} else {
+				mode = agent.Stricter(mode, f.Mode)
 			}
 		}
 	}
@@ -395,7 +445,7 @@ func (b *agentToolbox) filterHidden(text string) string {
 			name, _ := m["name"].(string)
 			p = strings.Trim(base+"/"+name, "/")
 		}
-		if !b.settings.Policy.FolderHidden(root, p) {
+		if b.realFolderMode(root, p) != agent.ModeDeny {
 			kept = append(kept, e)
 		}
 	}
@@ -407,50 +457,81 @@ func (b *agentToolbox) filterHidden(text string) string {
 	return string(data)
 }
 
-// haMode applies the Home Assistant rules of the agent to a call that
-// names an entity.
-func (b *agentToolbox) haMode(args json.RawMessage, mode string) string {
+// haMode applies the Home Assistant rules of the agent to a call: every
+// entity it names anywhere in its arguments (ha_call's entities, the
+// targets inside an automation) and the domain of a service. Locks and
+// alarm systems ask unless the person decided otherwise; saving an
+// automation or script whose devices cannot be told asks as well.
+func (b *agentToolbox) haMode(name string, args json.RawMessage, mode string) string {
 	rules := b.settings.HA.Entities
-	var fields map[string]any
+	var fields any
 	if json.Unmarshal(args, &fields) != nil {
 		return mode
 	}
-	var ids []string
-	for _, k := range []string{"entity_id", "entity", "entityId"} {
-		if v, ok := fields[k].(string); ok {
-			ids = append(ids, v)
-		}
-		if list, ok := fields[k].([]any); ok {
-			for _, v := range list {
-				if s, ok := v.(string); ok {
-					ids = append(ids, s)
+	var ids, domains []string
+	var walk func(key string, v any)
+	walk = func(key string, v any) {
+		switch x := v.(type) {
+		case map[string]any:
+			for k, vv := range x {
+				walk(k, vv)
+			}
+		case []any:
+			for _, vv := range x {
+				walk(key, vv)
+			}
+		case string:
+			switch key {
+			case "entity_id", "entity", "entities", "entityId":
+				for _, id := range strings.Split(x, ",") {
+					if id = strings.TrimSpace(id); id != "" {
+						ids = append(ids, id)
+					}
+				}
+			case "domain":
+				domains = append(domains, x)
+			case "service", "action":
+				if d, _, ok := strings.Cut(x, "."); ok {
+					domains = append(domains, d)
 				}
 			}
 		}
 	}
-	out := ""
-	for _, id := range ids {
-		m := ""
-		if v := rules["entity:"+id]; agent.ValidMode(v) {
-			m = v
-		} else if domain, _, ok := strings.Cut(id, "."); ok {
-			if v := rules["domain:"+domain]; agent.ValidMode(v) {
-				m = v
+	walk("", fields)
+	ruleFor := func(entity, domain string) string {
+		if entity != "" {
+			if v := rules["entity:"+entity]; agent.ValidMode(v) {
+				return v
 			}
 		}
+		if v := rules["domain:"+domain]; agent.ValidMode(v) {
+			return v
+		}
+		if domain == "lock" || domain == "alarm_control_panel" {
+			return agent.ModeAsk
+		}
+		return ""
+	}
+	out := ""
+	stricter := func(m string) {
 		if m == "" {
-			// Locks and alarm systems ask unless the person decided.
-			if domain, _, _ := strings.Cut(id, "."); domain == "lock" || domain == "alarm_control_panel" {
-				m = agent.ModeAsk
-			} else {
-				continue
-			}
+			return
 		}
 		if out == "" {
 			out = m
 		} else {
 			out = agent.Stricter(out, m)
 		}
+	}
+	for _, id := range ids {
+		domain, _, _ := strings.Cut(id, ".")
+		stricter(ruleFor(id, domain))
+	}
+	for _, d := range domains {
+		stricter(ruleFor("", d))
+	}
+	if (name == "ha_automation_save" || name == "ha_script_save") && len(ids) == 0 {
+		stricter(agent.ModeAsk)
 	}
 	if out == "" {
 		return mode

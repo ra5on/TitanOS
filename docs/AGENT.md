@@ -37,7 +37,7 @@ Der Agent nutzt **denselben Werkzeugkatalog wie der MCP-Server**, aber mit eigen
 - **Nie:** Passwörter, Tokens, 2FA/Passkeys, Konsolen, Netzwerkbestätigung, die Einstellungen von Agent und MCP. Diese Werkzeuge gibt es im Katalog nicht.
 - **Konten:** Besitzer immer; weitere Konten unter Einstellungen › KI-Agent. Jedes Konto hat eigene Chats, Projekte und eigenes Gedächtnis; Benutzer sehen nur ihre Freigaben und haben keine Verwaltungswerkzeuge.
 
-Jede Änderung steht im Aktivitätsprotokoll mit Herkunft **per KI-Agent**.
+Jede Änderung steht im Aktivitätsprotokoll mit Herkunft **per KI-Agent** (Aufrufe der TitanOS-API über die Handler-Kette; Automationen und Skripte in Home Assistant als eigener Eintrag).
 
 ## Ablageorte, Gedächtnis, Skills
 
@@ -50,7 +50,7 @@ Das Modell selbst lernt nicht dazu; „Lernen“ heißt: Gedächtnis und Skills 
 
 ## Internet
 
-Websuche und Seitenlesen über DuckDuckGo (ab Werk an, Bereich „Internet“). Adressen im Heimnetz und das NAS selbst sind gesperrt, auch nach Weiterleitungen. Hat ein Chat schon Dateien, Protokolle oder Webseiten gelesen, fragen Websuche und Seitenlesen für den Rest des Chats immer nach, damit nichts vom NAS nach außen gelangt. DuckDuckGo hat keine offizielle Such-API; ändert sich die Seite, meldet der Agent „Suche nicht verfügbar“.
+Websuche und Seitenlesen über DuckDuckGo (ab Werk an, Bereich „Internet“). Adressen im Heimnetz und das NAS selbst sind gesperrt, auch nach Weiterleitungen. Hat ein Chat schon Dateien, Protokolle oder Webseiten gelesen (oder wurde er durch eine Meldung des NAS gestartet), fragen Websuche und Seitenlesen für den Rest des Chats immer nach, damit nichts vom NAS nach außen gelangt. DuckDuckGo hat keine offizielle Such-API; ändert sich die Seite, meldet der Agent „Suche nicht verfügbar“.
 
 ## Geplante Aufträge und Eigeninitiative
 
@@ -61,10 +61,10 @@ Websuche und Seitenlesen über DuckDuckGo (ab Werk an, Bereich „Internet“). 
 
 Der Agent nutzt die Verbindung unter Einstellungen › Home Assistant:
 
-- Geräte lesen und schalten, Verläufe, Diagnose (Werkzeuge des MCP-Katalogs).
+- Geräte lesen und schalten, Verläufe, Diagnose (Werkzeuge des MCP-Katalogs). **Wichtig:** Diese Werkzeuge sehen nur Geräte, die unter Einstellungen › Home Assistant › „Geräte für MCP freigeben“ freigegeben sind. Die Geräte-Regeln des Agenten engen das weiter ein, öffnen aber nichts darüber hinaus.
 - `ha_statistics`: Langzeit-Statistik (z. B. Stromverbrauch pro Tag der letzten Woche).
 - `ha_automation_save`, `ha_script_save`: Automationen und Skripte anlegen und ändern, gekennzeichnet „vom TitanOS-Agent“; die vorherige Fassung steht im Ergebnis des Schritts.
-- **Geräte-Regeln** (`domain:`, `entity:`): können den Bereich nur strenger machen. Schlösser und Alarmanlagen fragen ab Werk nach.
+- **Geräte-Regeln** (`domain:`, `entity:`): können den Bereich nur strenger machen. Sie gelten für jedes Gerät, das ein Aufruf irgendwo nennt (auch in den Aktionen einer Automation). Schlösser und Alarmanlagen fragen ab Werk nach; eine Automation oder ein Skript ohne erkennbare Geräte fragt immer nach.
 - **Mitteilungen** über Notify-Dienste der Home-Assistant-App, zusätzlich zu Web Push.
 - **Assist:** In Home Assistant die eingebaute Integration **Ollama** hinzufügen, Adresse `https://<NAS>/agent-ollama`, Modell `titanos-agent`, dann unter Sprachassistenten als Gesprächsagent wählen. TitanOS beantwortet diese Schnittstelle nur, wenn Assist eingeschaltet ist und die Anfrage von der Adresse kommt, die unter Einstellungen › Home Assistant eingetragen ist. Fragen laufen als das gewählte Konto mit den Rechten des Agenten; dauert etwas länger als 45 Sekunden, antwortet er „Ich kümmere mich darum“ und meldet das Ergebnis.
 
@@ -73,14 +73,16 @@ Der Agent nutzt die Verbindung unter Einstellungen › Home Assistant:
 | Was | Wo |
 |---|---|
 | Einstellungen | `/config/system/agent.json` (Stick, nur beim Speichern) |
-| Chats, Projekte, Gedächtnis, Skills, geplante Aufträge | `.titanos/agent/<konto>/` auf dem ersten eingebundenen Daten-Volume |
+| Chats, Projekte, Gedächtnis, Skills, geplante Aufträge | `.titanos/agent/<konto>/` auf einem Daten-Volume: beim ersten Gebrauch das erste eingebundene, danach fest (`volume` in `agent.json`) |
 | Darstellung | `localStorage` des Browsers |
 
-Ohne eingebundenes Daten-Volume ist der Agent nicht verfügbar; er speichert nie im RAM oder auf dem Stick. Ein Auftrag, den titand nicht beenden konnte (Neustart, Update), wird beim nächsten Start als „unterbrochen“ markiert. App-Updates warten, solange ein Auftrag läuft.
+Ohne dieses Volume ist der Agent nicht verfügbar (er weicht nicht still auf ein anderes aus); er speichert nie im RAM oder auf dem Stick. Ein Auftrag, den titand nicht beenden konnte (Neustart, Update), wird beim nächsten Start als „unterbrochen“ markiert. App-Updates warten, solange ein Auftrag läuft.
 
 ## Prüfstand (5.11.2026)
 
 - Go-Tests: Ablauf, Freigaben, Rechte, Ordner-Regeln, Speicher, Websuche (mit nachgebautem Ollama und Testservern), API-Rechte, Aktivitätsprotokoll, Assist-Adressprüfung.
 - Live gegen Ollama 0.40.14 mit gpt-oss:20b (Fragen ohne Änderungen; `TITANOS_OLLAMA=… go test ./internal/api -run TestAgentLiveOllama`).
-- Oberfläche: `scripts/test-ui-agent.mjs` mit Testdaten (Desktop, Handy, eigene App, Einstellungen).
+- Ereignisstrom (SSE) durch die ganze Handler-Kette, Ordner-Regeln auch über Volume-Wurzeln, Home-Assistant-Regeln in tiefen Argumenten.
+- Oberfläche: `scripts/test-ui-agent.mjs` mit Testdaten (Desktop, Handy, eigene App, Einstellungen); Seiten-Crawl gegen `titand -dev` ohne Befund; Einstellungen gegen das echte Ollama über `titand -dev` (ohne Daten-Volume, daher keine Chats).
+- Kopfzeile: mit dem 13. Reiter passt bei 1366 px alles, bei 1280 px kommen die Pfeile.
 - **Nicht geprüft:** echtes Home Assistant (Assist über die Ollama-Integration, Konfigurations-API für Automationen, Langzeit-Statistik), echte Push-Mitteilungen, Installation als App auf echten Geräten.

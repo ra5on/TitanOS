@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/activity"
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/toolcatalog"
 )
@@ -90,7 +92,16 @@ func (b *agentToolbox) haSave(kind string) func(context.Context, *agent.Chat, js
 		if err != nil {
 			return agent.Outcome{}, err
 		}
-		if err := ha.SaveConfig(ctx, kind, req.ID, req.Config); err != nil {
+		err = ha.SaveConfig(ctx, kind, req.ID, req.Config)
+		// Not a route of TitanOS, so the activity log hears it from here.
+		if b.s.opts.Activity != nil {
+			status := http.StatusOK
+			if err != nil {
+				status = http.StatusBadGateway
+			}
+			b.s.opts.Activity.Record(activity.Entry{User: b.user.Name, Via: activity.ViaAgent, Action: "homeassistant_" + kind + "_save", Target: req.ID, Status: status, OK: err == nil})
+		}
+		if err != nil {
 			return agent.Outcome{}, err
 		}
 		out := map[string]any{"saved": kind + "." + req.ID}

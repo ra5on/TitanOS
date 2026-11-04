@@ -236,6 +236,9 @@ func (s *Server) agentObserve(m notify.Message) {
 	now := time.Now()
 	task := fmt.Sprintf("Das NAS hat gemeldet (%s, %s): %s\n%s\n\nFinde heraus, was los ist. Behebe es, soweit deine Rechte es erlauben, und berichte kurz, was du gefunden und getan hast.", m.Severity, m.Kind, m.Title, m.Text)
 	chat := &agent.Chat{ID: agent.NewID(), Title: "Von selbst: " + m.Title, Created: now, Updated: now, Origin: "event", State: agent.StateIdle,
+		// Notification texts can carry names others chose (USB labels,
+		// containers): web tools ask from the start.
+		Tainted: true,
 		Entries: []agent.Entry{{ID: agent.NewID(), At: now, Role: "user", Content: task}}}
 	if err := s.agentStore().SaveChat(user.Name, chat); err != nil {
 		slog.Warn("agent cannot look into a notification", "err", err)

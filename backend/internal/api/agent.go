@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -56,12 +55,12 @@ func (s *Server) agentStore() *agent.Store {
 			return nil, volumedata.ErrUnavailable
 		}
 		mounted := s.opts.Storage.Mounted()
-		if len(mounted) == 0 {
+		volume, ok := s.agentVolume(mounted)
+		if !ok {
 			return nil, volumedata.ErrUnavailable
 		}
-		slices.Sort(mounted)
-		point := s.opts.Storage.MountPoint(mounted[0])
-		return volumedata.Open(filepath.Dir(point), mounted[0], "agent", mounted)
+		point := s.opts.Storage.MountPoint(volume)
+		return volumedata.Open(filepath.Dir(point), volume, "agent", mounted)
 	}}
 }
 
@@ -502,11 +501,9 @@ func (s *Server) handleAgentEvents(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "not found")
 		return
 	}
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		writeError(w, http.StatusInternalServerError, "no_stream", "streaming not supported")
-		return
-	}
+	// The writers of the handler chain (activity log) unwrap to the real one.
+	rc := http.NewResponseController(w)
+	flusher := flushFunc(func() { _ = rc.Flush() })
 	key := runKey(user.Name, id)
 	s.agentWatch.mu.Lock()
 	if s.agentWatch.open == nil {
@@ -602,3 +599,7 @@ func (s *Server) AgentRunning() bool {
 	defer s.agentRT.mu.Unlock()
 	return len(s.agentRT.runs) > 0
 }
+
+type flushFunc func()
+
+func (f flushFunc) Flush() { f() }
