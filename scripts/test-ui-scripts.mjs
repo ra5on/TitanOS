@@ -46,7 +46,7 @@ try {
 		const { ctx, page, data } = await open();
 		assert.equal(await page.locator('li.script').count(), 4);
 		assert.ok(await row(page, 'Fotos sichern').getByText('Täglich um 03:00').isVisible());
-		assert.ok(await row(page, 'Docker aufräumen').getByText('Cron: 0 4 * * 0').isVisible());
+		assert.ok(await row(page, 'Docker aufräumen').getByText('Sonntags um 04:00 Uhr').isVisible());
 		assert.ok(await row(page, 'Docker aufräumen').getByText('fehlgeschlagen (Exit-Code 1)').isVisible());
 		assert.ok(await row(page, 'Lüfterkurve setzen').getByText('Beim Start').isVisible());
 		assert.ok(await row(page, 'Sync vor dem Ausschalten').getByText('Noch nicht gelaufen').isVisible());
@@ -89,8 +89,9 @@ try {
 		await editor.waitFor();
 		await editor.getByRole('textbox', { name: 'Name' }).fill('Nachts prüfen');
 		await editor.locator('select').first().selectOption('schedule');
-		await editor.getByRole('combobox', { name: 'Wie oft' }).selectOption('custom');
+		await editor.getByText('Erweitert').click();
 		await editor.locator('input.mono').fill('30 2 * * 1-5');
+		await editor.getByText('Läuft werktags (Montag bis Freitag) um 02:30 Uhr.').waitFor();
 		await editor.getByRole('button', { name: 'Was bedeutet „Cron-Ausdruck“?' }).click();
 		await page.getByText('Fünf Felder', { exact: false }).waitFor();
 		await page.keyboard.press('Escape');
@@ -102,7 +103,7 @@ try {
 		assert.deepEqual(posted.schedule, { every: 'custom', cron: '30 2 * * 1-5' });
 		assert.equal(posted.trigger, 'schedule');
 		assert.equal(posted.content, '#!/bin/bash\necho hallo\n');
-		await row(page, 'Nachts prüfen').getByText('Cron: 30 2 * * 1-5').waitFor();
+		await row(page, 'Nachts prüfen').getByText('Werktags (Montag bis Freitag) um 02:30 Uhr').waitFor();
 
 		// Delete: danger zone, plain confirmation, nothing to type.
 		await row(page, 'Sync vor dem Ausschalten').getByRole('button', { name: 'Bearbeiten' }).click();
