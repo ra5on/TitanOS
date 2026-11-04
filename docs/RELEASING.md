@@ -110,7 +110,10 @@ eingebauten Weboberfläche, ohne Neustart des NAS). Das entscheidet
   das Abbild ändern, braucht der Tag `[system]`. Jede andere Änderung, etwa unter
   `build/`, `boot/`, `scripts/` (außer Browserprüfungen), `.github/` (außer
   `release.yml`) oder am `Makefile`, ergibt ein volles Release.
-- Eine Tag-Nachricht mit `[system]` erzwingt ein volles Release.
+- Eine Tag-Nachricht mit `[system]` erzwingt ein volles Release. Das gilt überall in
+  der Nachricht, auch in erklärendem Text: Release-Notes eines App-Updates nennen
+  die Markierung deshalb nicht wörtlich (v0.47.3 lief so versehentlich als volles
+  Release).
 
 Ein App-Release baut kein Abbild. `scripts/repack-release.py` lädt alle
 Dateien der Basis von GitHub, prüft sie wie der Publish-Job mit den
