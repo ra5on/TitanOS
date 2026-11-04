@@ -224,6 +224,26 @@ try {
     "0s",
   );
   await page.emulateMedia({ reducedMotion: "no-preference" });
+  // The transparency of Settings › Appearance reaches the dashboard tiles.
+  const tileAlpha = async (glass) => {
+    await appearance();
+    await page.locator("#glass").fill(String(glass));
+    await apply();
+    await page.getByText("Gespeichert", { exact: true }).waitFor();
+    await page.goto(base + "/");
+    const color = await page
+      .locator("[gs-id=cpu] .dashboard-tile")
+      .evaluate((e) => getComputedStyle(e).backgroundColor);
+    const alpha = /rgba?\([^)]*,\s*([0-9.]+)\)$/.exec(color)?.[1];
+    assert.ok(alpha !== undefined, `tile surface without alpha: ${color}`);
+    return Number(alpha);
+  };
+  const solid = await tileAlpha(20),
+    clear = await tileAlpha(50);
+  assert.ok(
+    clear < solid,
+    `more transparency must make tiles more transparent (${solid} -> ${clear})`,
+  );
   const cpu = page.locator("[gs-id=cpu] .metric-level").first();
   const initial = await cpu.evaluate((e) => e.getBoundingClientRect().width);
   data.system.cpu.usagePercent = 82;
