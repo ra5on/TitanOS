@@ -305,15 +305,6 @@ func (s *transferStore) apply(event transferEvent) error {
 		return b.Put(stateKey, data)
 	})
 }
-func (s *transferStore) verifyDestinations(check func(string, string) error) error {
-	return s.transaction(false, func(tx *bolt.Tx) error {
-		b := tx.Bucket(destinationBucket)
-		if b == nil {
-			return errors.New("missing transfer destinations")
-		}
-		return b.ForEach(func(k, v []byte) error { return check(string(k), string(v)) })
-	})
-}
 func (j *Job) paged() bool { return j.durable != nil && j.durable.store != nil }
 func (j *Job) entry(rel string) (transferEntry, error) {
 	if j.paged() {

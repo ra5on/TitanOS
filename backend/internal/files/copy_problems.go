@@ -154,9 +154,6 @@ func jobErrorCode(err error) string {
 	return "other"
 }
 
-// kept reports whether a problem code means "left in place on purpose".
-func kept(code string) bool { return len(code) > 5 && code[:5] == "kept_" }
-
 // noteProblem records an entry the job could not transfer and goes on.
 func (m *Manager) noteProblem(job *Job, rel string, err error, op string) error {
 	code := problemCode(err, op)
