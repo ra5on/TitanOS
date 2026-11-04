@@ -1,3 +1,5 @@
+import { cronOfPreset, describe, type Translate } from '#lib/schedule.ts';
+
 // Types and helpers of Tools › Scripts (package scripts in titand).
 
 export type Trigger = 'manual' | 'schedule' | 'start' | 'shutdown';
@@ -61,87 +63,50 @@ export type Draft = {
 	name: string;
 	description: string;
 	trigger: Trigger;
-	schedule: Schedule;
+	/** The schedule as cron expression (lib/schedule.ts, ScheduleField). */
+	cron: string;
 	content: string;
 };
 
 export const TRIGGERS: Trigger[] = ['manual', 'schedule', 'start', 'shutdown'];
-export const EVERY: Every[] = ['hourly', 'daily', 'weekly', 'monthly', 'custom'];
 
 export function newDraft(): Draft {
-	return {
-		name: '',
-		description: '',
-		trigger: 'manual',
-		schedule: { every: 'daily', minute: 0, time: '03:00', weekday: 1, monthDay: 1, cron: '' },
-		content: '#!/bin/bash\n',
-	};
+	return { name: '', description: '', trigger: 'manual', cron: '', content: '#!/bin/bash\n' };
 }
 
 export function draftOf(script: Script, content: string): Draft {
-	const base = newDraft();
 	return {
 		name: script.name,
 		description: script.description,
 		trigger: script.trigger,
-		schedule: { ...base.schedule, ...(script.schedule ?? {}) },
+		cron: script.schedule ? cronOfPreset(script.schedule) : '',
 		content,
 	};
 }
 
-/** The body for POST/PUT: only the fields of the chosen frequency. */
+/** The body for POST/PUT. The schedule always goes as cron expression. */
 export function draftBody(draft: Draft) {
-	const s = draft.schedule;
-	const schedule: Schedule | undefined =
-		draft.trigger !== 'schedule'
-			? undefined
-			: s.every === 'hourly'
-				? { every: 'hourly', minute: Number(s.minute ?? 0) }
-				: s.every === 'daily'
-					? { every: 'daily', time: s.time }
-					: s.every === 'weekly'
-						? { every: 'weekly', time: s.time, weekday: Number(s.weekday ?? 0) }
-						: s.every === 'monthly'
-							? { every: 'monthly', time: s.time, monthDay: Number(s.monthDay ?? 1) }
-							: { every: 'custom', cron: (s.cron ?? '').trim() };
 	return {
 		name: draft.name.trim(),
 		description: draft.description,
 		trigger: draft.trigger,
-		schedule,
+		schedule:
+			draft.trigger === 'schedule'
+				? ({ every: 'custom', cron: draft.cron.trim() } satisfies Schedule)
+				: undefined,
 		content: draft.content,
 	};
 }
 
-/** What the list says about when a script runs: a message key and its values. */
+/** What the list says about when a script runs. */
 export function whenText(
 	script: Pick<Script, 'trigger' | 'schedule'>,
-	weekday: (day: number) => string = String,
-): {
-	key: string;
-	values?: Record<string, string | number>;
-} {
+	tr: Translate,
+	join: (items: string[]) => string,
+): string {
 	if (script.trigger !== 'schedule' || !script.schedule)
-		return { key: `scripts.trigger.${script.trigger}` };
-	const s = script.schedule;
-	switch (s.every) {
-		case 'hourly':
-			return {
-				key: 'scripts.when.hourly',
-				values: { minute: String(s.minute ?? 0).padStart(2, '0') },
-			};
-		case 'daily':
-			return { key: 'scripts.when.daily', values: { time: s.time ?? '' } };
-		case 'weekly':
-			return {
-				key: 'scripts.when.weekly',
-				values: { time: s.time ?? '', day: weekday(s.weekday ?? 0) },
-			};
-		case 'monthly':
-			return { key: 'scripts.when.monthly', values: { time: s.time ?? '', day: s.monthDay ?? 1 } };
-		default:
-			return { key: 'scripts.when.custom', values: { cron: s.cron ?? '' } };
-	}
+		return tr(`scripts.trigger.${script.trigger}`);
+	return describe(cronOfPreset(script.schedule), tr, join);
 }
 
 /** The chip class of an outcome (always shown with its text). */
@@ -160,8 +125,6 @@ export function shortDuration(ms: number): string {
 	const m = Math.floor(s / 60);
 	return `${m} min ${s % 60} s`;
 }
-
-type Translate = (key: string, values?: Record<string, string | number>) => string;
 
 /** The result of a run as one line: outcome, exit code of a failure, duration. */
 export function runLabel(

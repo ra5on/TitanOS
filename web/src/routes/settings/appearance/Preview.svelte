@@ -18,6 +18,7 @@
 			.join('; '),
 	);
 	const attributes = $derived(dataAttributes(draft, appearance.systemLight));
+	const side = $derived(draft.nav.layout === 'side');
 
 	const user = $derived(session.data?.user);
 	const info = $derived(system.info);
@@ -29,80 +30,93 @@
 <div class="preview" {style} {...attributes}>
 	<Backdrop appearance={draft} contained />
 
-	<div class="content">
-		<div class="tile bar-top">
-			<Logo size={24} />
-			<span class="spacer"></span>
-			<span class="nav current">{t('nav.dashboard')}</span>
-			<span class="nav">{t('nav.docker')}</span>
-			<span class="nav">{t('nav.vms')}</span>
-			<span class="account">{user?.name} ▾</span>
-		</div>
+	<div class="body" class:side>
+		{#if side}
+			<!-- The side navigation with its own look (Navigation › Sidebar). -->
+			<div class="side-sample bar-surface sidebar-surface" role="group" aria-label={t('nav.label')}>
+				<span class="brand"><Logo size={22} /></span>
+				<span class="nav current">{t('nav.dashboard')}</span>
+				<span class="nav">{t('nav.docker')}</span>
+				<span class="nav">{t('nav.vms')}</span>
+				<span class="spacer"></span>
+				<span class="account">{user?.name} ▾</span>
+			</div>
+		{/if}
+		<div class="content">
+			{#if !side}<div class="tile bar-top">
+					<Logo size={24} />
+					<span class="spacer"></span>
+					<span class="nav current">{t('nav.dashboard')}</span>
+					<span class="nav">{t('nav.docker')}</span>
+					<span class="nav">{t('nav.vms')}</span>
+					<span class="account">{user?.name} ▾</span>
+				</div>{/if}
 
-		<div class="two">
-			<div class="tile pad">
-				<span class="tile-title">{t('tile.system')}</span>
-				<div class="row">
-					<span>{t('system.cpu')}</span><span class="mono"
-						>{formatPercent(info?.cpu.usagePercent ?? 0)}</span
-					>
-				</div>
-				<div class="bar"><span style:width="{info?.cpu.usagePercent ?? 0}%"></span></div>
-				<div class="row">
-					<span>{t('system.memory')}</span><span class="mono"
-						>{info ? formatBytesOf(info.memory.usedBytes, info.memory.totalBytes) : '–'}</span
-					>
-				</div>
-				<div class="bar"><span style:width="{memoryPercent}%"></span></div>
-			</div>
-			<div class="tile pad">
-				<span class="tile-title">{t('preview.list')}</span>
-				{#each [1, 2, 3] as n (n)}
-					<div class="item">
-						<span class="dot" class:ok={n < 3} aria-hidden="true"></span>
-						<span class="grow">{t('preview.item', { n })}</span>
-						<span class="muted small">{t(n < 3 ? 'preview.running' : 'preview.stopped')}</span>
-					</div>
-				{/each}
-			</div>
-		</div>
-
-		<div class="wrap">
-			<div class="menu floating-menu" role="group" aria-label={t('preview.menu')}>
-				<span class="menu-head"
-					>{t('preview.signedIn', {
-						name: user?.name ?? '',
-						role: user ? t(`role.${user.role}`) : '',
-					})}</span
-				>
-				<span class="menu-item current">{t('menu.appearance')}</span>
-				<span class="menu-item">{t('menu.restart')}</span>
-				<span class="menu-item">{t('menu.logout')}</span>
-			</div>
-			<div class="buttons">
-				<span class="btn btn-primary">{t('appearance.apply')}</span>
-				<span class="btn tile">{t('common.cancel')}</span>
-			</div>
-		</div>
-
-		<!-- A dialog over the dimmed page, with the settings for dialog windows. -->
-		<div class="dialog-stage">
-			<div class="tile pad stage-content" aria-hidden="true">
-				{#each [1, 2] as n (n)}
-					<div class="item">
-						<span class="grow">{t('preview.item', { n })}</span><span class="muted small"
-							>{t('preview.running')}</span
+			<div class="two">
+				<div class="tile pad">
+					<span class="tile-title">{t('tile.system')}</span>
+					<div class="row">
+						<span>{t('system.cpu')}</span><span class="mono"
+							>{formatPercent(info?.cpu.usagePercent ?? 0)}</span
 						>
 					</div>
-				{/each}
+					<div class="bar"><span style:width="{info?.cpu.usagePercent ?? 0}%"></span></div>
+					<div class="row">
+						<span>{t('system.memory')}</span><span class="mono"
+							>{info ? formatBytesOf(info.memory.usedBytes, info.memory.totalBytes) : '–'}</span
+						>
+					</div>
+					<div class="bar"><span style:width="{memoryPercent}%"></span></div>
+				</div>
+				<div class="tile pad">
+					<span class="tile-title">{t('preview.list')}</span>
+					{#each [1, 2, 3] as n (n)}
+						<div class="item">
+							<span class="dot" class:ok={n < 3} aria-hidden="true"></span>
+							<span class="grow">{t('preview.item', { n })}</span>
+							<span class="muted small">{t(n < 3 ? 'preview.running' : 'preview.stopped')}</span>
+						</div>
+					{/each}
+				</div>
 			</div>
-			<span class="dim-layer" aria-hidden="true"></span>
-			<div class="dialog-sample" role="group" aria-label={t('preview.dialog')}>
-				<strong>{t('preview.dialog')}</strong>
-				<span class="muted">{t('preview.dialogText')}</span>
-				<div class="buttons end">
-					<span class="btn">{t('common.cancel')}</span>
+
+			<div class="wrap">
+				<div class="menu floating-menu" role="group" aria-label={t('preview.menu')}>
+					<span class="menu-head"
+						>{t('preview.signedIn', {
+							name: user?.name ?? '',
+							role: user ? t(`role.${user.role}`) : '',
+						})}</span
+					>
+					<span class="menu-item current">{t('menu.appearance')}</span>
+					<span class="menu-item">{t('menu.restart')}</span>
+					<span class="menu-item">{t('menu.logout')}</span>
+				</div>
+				<div class="buttons">
 					<span class="btn btn-primary">{t('appearance.apply')}</span>
+					<span class="btn tile">{t('common.cancel')}</span>
+				</div>
+			</div>
+
+			<!-- A dialog over the dimmed page, with the settings for dialog windows. -->
+			<div class="dialog-stage">
+				<div class="tile pad stage-content" aria-hidden="true">
+					{#each [1, 2] as n (n)}
+						<div class="item">
+							<span class="grow">{t('preview.item', { n })}</span><span class="muted small"
+								>{t('preview.running')}</span
+							>
+						</div>
+					{/each}
+				</div>
+				<span class="dim-layer" aria-hidden="true"></span>
+				<div class="dialog-sample" role="group" aria-label={t('preview.dialog')}>
+					<strong>{t('preview.dialog')}</strong>
+					<span class="muted">{t('preview.dialogText')}</span>
+					<div class="buttons end">
+						<span class="btn">{t('common.cancel')}</span>
+						<span class="btn btn-primary">{t('appearance.apply')}</span>
+					</div>
 				</div>
 			</div>
 		</div>
@@ -127,6 +141,37 @@
 		flex-direction: column;
 		gap: var(--gap);
 		padding: var(--gap);
+	}
+	.body.side {
+		display: flex;
+		min-height: 560px;
+	}
+	.body.side .content {
+		flex: 1 1 auto;
+		min-width: 0;
+	}
+	.side-sample {
+		position: relative;
+		z-index: 1;
+		flex: none;
+		width: 132px;
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+		padding: var(--space-3) var(--space-2);
+		border-right: 1px solid var(--border);
+	}
+	.side-sample .nav {
+		padding: 6px var(--space-2);
+		border-radius: var(--radius-ctl);
+	}
+	.side-sample .brand {
+		margin: 0 var(--space-1) var(--space-2);
+	}
+	.side-sample .account {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.bar-top {
 		display: flex;

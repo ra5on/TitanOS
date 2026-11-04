@@ -4,7 +4,7 @@
 	import { api } from '#lib/api.ts';
 	import { poll } from '#lib/poll.ts';
 	import { formatDateTime } from '#lib/format.ts';
-	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import HelpTip from '#lib/components/HelpTip.svelte';
@@ -87,11 +87,9 @@
 		shown = shown.includes(id) ? shown.filter((s) => s !== id) : [...shown, id];
 	}
 
-	const weekday = (day: number) => t(`backup.weekday.${day}` as MessageKey);
-	function when(script: ScriptView) {
-		const text = whenText(script, weekday);
-		return t(text.key as MessageKey, text.values);
-	}
+	const join = (items: string[]) =>
+		new Intl.ListFormat(i18n.locale, { type: 'conjunction' }).format(items);
+	const when = (script: ScriptView) => whenText(script, tr, join);
 	const time = (value?: string) =>
 		value ? formatDateTime(new Date(value), status?.timezone || undefined) : '—';
 	const tr = (key: string, values?: Record<string, string | number>) =>
@@ -216,6 +214,7 @@
 
 {#if editing !== null}<ScriptEditor
 		id={editing}
+		timezone={status?.timezone}
 		onclose={() => (editing = null)}
 		onsaved={() => {
 			editing = null;

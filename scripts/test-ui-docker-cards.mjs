@@ -49,18 +49,36 @@ const containers = () => [
 ];
 const apps = ["paperless", "jellyfin", "adguard", "mosquitto", "vaultwarden"];
 
-async function open(theme = "graphit", width = 1440, prefs = {}) {
+async function open(theme = "graphit", width = 1440, prefs = {}, nav = "top") {
   const made = await create("owner", theme, width);
   made.data.dockerContainers = containers();
   made.data.dockerApps = apps;
   made.data.prefs.docker = { version: 1, view: "cards", order: [], details: true, primaryServices: {}, ...prefs };
+  if (nav === "side") {
+    const appearance = { theme, nav: { layout: "side" } };
+    made.data.prefs.appearance = appearance;
+    await made.ctx.addInitScript((v) => localStorage.setItem("titanos.appearance", JSON.stringify(v)), appearance);
+  }
   await made.page.goto(base + "/docker");
   await made.page.locator(".cards .cell").first().waitFor();
   return made;
 }
 // The names of the top-level cards in reading order.
 const order = (page) =>
-  page.locator(".cards > .cell").evaluateAll((cells) => cells.map((cell) => cell.dataset.group));
+  page.locator(".cards [data-group]").evaluateAll((cells) => cells.map((cell) => cell.dataset.group));
+// Position and size of every card cell (top level and inside an opened stack).
+const boxes = (page, selector = ".cards .cell") =>
+  page.locator(selector).evaluateAll((cells) =>
+    cells.map((cell) => {
+      const r = cell.getBoundingClientRect();
+      return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), right: Math.round(r.right), bottom: Math.round(r.bottom) };
+    }),
+  );
+const box = (locator) =>
+  locator.evaluate((e) => {
+    const r = e.getBoundingClientRect();
+    return { x: r.x, y: r.y, right: r.right, bottom: r.bottom };
+  });
 const cardHeights = (page) =>
   page.locator(".cards .body > article").evaluateAll((cards) => cards.map((card) => Math.round(card.getBoundingClientRect().height)));
 const noScroll = (page) => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1);
@@ -83,7 +101,7 @@ try {
       ["webserver", "db", "broker"],
     );
     assert.equal(await stack.locator(".service .arrow").count(), 1, "update arrow on broker");
-    assert.equal(await page.locator(".drawer").count(), 0);
+    assert.equal(await page.locator(".stack-frame").count(), 0);
     assert.equal(await stack.getByRole("button", { name: "Dienste" }).getAttribute("aria-expanded"), "false");
     // Default own order without a saved order: Docker's order.
     assert.deepEqual(await order(page), ["app:paperless", "app:jellyfin", "app:adguard", "app:mosquitto", "app:vaultwarden"]);
@@ -92,19 +110,24 @@ try {
     assert.equal(new Set(heights).size, 1, `equal heights ${heights}`);
     await page.screenshot({ path: `${out}/b1-stack-zu-graphit-1440.png`, fullPage: true });
 
-    // 2. Open stack: the services as cards directly after it, named by service.
+    // 2. Open stack (variant C): one frame around the stack card, which stays
+    //    first, and its services beside it, named by service.
     await stack.getByRole("button", { name: "Dienste" }).click();
-    const drawer = page.locator(".drawer");
-    await drawer.waitFor();
-    assert.equal(await stack.getByRole("button", { name: "Dienste" }).getAttribute("aria-expanded"), "true");
-    assert.equal(
-      await page.evaluate(() => document.querySelector('[data-group="app:paperless"]').nextElementSibling.classList.contains("drawer")),
-      true,
-    );
-    assert.deepEqual(
-      await drawer.locator("article .name").allInnerTexts(),
-      ["webserver", "db", "broker"],
-    );
+    const frame = page.locator(".stack-frame");
+    await frame.waitFor();
+    const toggle = stack.getByRole("button", { name: "Dienste" });
+    assert.equal(await toggle.getAttribute("aria-expanded"), "true");
+    assert.equal(await toggle.getAttribute("aria-controls"), await frame.getAttribute("id"));
+    assert.equal(await frame.locator(":scope > .cell").first().getAttribute("data-group"), "app:paperless");
+    assert.deepEqual(await frame.locator(":scope > .cell article .name").allInnerTexts(), ["paperless", "webserver", "db", "broker"]);
+    // The frame encloses all four cards; they sit on the page's columns with the same width.
+    const outer = await box(frame);
+    const inner = await boxes(page, ".stack-frame > .cell");
+    for (const b of inner) assert.ok(b.x >= outer.x && b.right <= outer.right + 0.5 && b.y >= outer.y && b.bottom <= outer.bottom + 0.5, "card inside the frame");
+    const widths = (await boxes(page)).map((b) => b.w);
+    assert.ok(Math.max(...widths) - Math.min(...widths) <= 1, `same column width ${widths}`);
+    const columnsX = new Set((await boxes(page, ".cards > .cell")).map((b) => b.x));
+    for (const b of inner) assert.ok(columnsX.has(b.x), `framed card on a page column ${b.x} ${[...columnsX]}`);
     const all = await cardHeights(page);
     assert.equal(new Set(all).size, 1, `service cards same height ${all}`);
     await page.screenshot({ path: `${out}/b2-stack-offen-graphit-1440.png`, fullPage: true });
@@ -242,7 +265,7 @@ try {
       for (const size of ["s", "m", "l"]) {
         const made = await open("graphit", width, { size });
         await made.page.getByRole("article", { name: "Compose-Stack paperless" }).getByRole("button", { name: "Dienste" }).click();
-        await made.page.locator(".drawer").waitFor();
+        await made.page.locator(".stack-frame").waitFor();
         await made.page.waitForTimeout(200);
         const heights = await cardHeights(made.page);
         assert.equal(new Set(heights).size, 1, `size ${size} ${width}: equal heights with open stack ${heights}`);
@@ -253,21 +276,114 @@ try {
       }
   }
 
-  // 5. Screenshots and the phone: one column, same behaviour.
+  // 5. The frame wraps its rows inside itself (L: three columns, stack + 3
+  //    services = 4 cards), the next card starts below it; S has one column
+  //    more than M also beside the side navigation; the phone keeps one column.
+  {
+    const columns = (page) => page.locator(".cards > .cell").evaluateAll((cells) => new Set(cells.map((cell) => Math.round(cell.getBoundingClientRect().x))).size);
+    for (const nav of ["top", "side"]) {
+      const s = await open("graphit", 1440, { size: "s" }, nav);
+      const sCount = await columns(s.page);
+      // Narrow cards: the update chip is an arrow, so the name keeps its room;
+      // ports show the first one and "+n", nothing is cut off.
+      const narrow = await s.page.evaluate(() => {
+        const visible = (e) => e && getComputedStyle(e).display !== "none" && e.getBoundingClientRect().width > 2;
+        const stack = document.querySelector('[data-group="app:paperless"] article');
+        const name = stack.querySelector(".name");
+        const chip = stack.querySelector(".update");
+        const adguard = document.querySelector('[data-group="app:adguard"] article');
+        const ports = adguard.querySelector(".ports");
+        const shown = [...ports.querySelectorAll(".chip")].filter(visible);
+        const box = ports.getBoundingClientRect();
+        return {
+          nameCut: name.scrollWidth > name.clientWidth + 1,
+          arrow: visible(chip.querySelector(".arrow-icon")),
+          word: visible(chip.querySelector(".word")),
+          wordText: chip.textContent.trim(),
+          title: chip.title,
+          ports: shown.map((c) => c.firstChild.textContent.trim()),
+          more: shown.at(-1)?.title,
+          cut: shown.some((c) => {
+            const r = c.getBoundingClientRect();
+            return r.right > box.right + 0.5 || r.bottom > box.bottom + 0.5 || c.scrollWidth > c.clientWidth + 1;
+          }),
+        };
+      });
+      assert.equal(narrow.nameCut, false, `${nav}: stack name not cut`);
+      assert.equal(narrow.arrow, true, `${nav}: update arrow`);
+      assert.equal(narrow.word, false, `${nav}: update word hidden`);
+      assert.equal(narrow.wordText, "Update", "update word for screen readers");
+      assert.equal(narrow.title, "Update");
+      assert.deepEqual(narrow.ports, ["53/udp", "+1"], `${nav}: first port and +1`);
+      assert.equal(narrow.more, "3000");
+      assert.equal(narrow.cut, false, `${nav}: no cut port chip`);
+      await s.page.screenshot({ path: `${out}/rahmen-zu-S-${nav}-1440.png`, fullPage: true });
+      await s.page.getByRole("article", { name: "Compose-Stack paperless" }).getByRole("button", { name: "Dienste" }).click();
+      await s.page.locator(".stack-frame").waitFor();
+      await s.page.waitForTimeout(200);
+      assert.ok(await noScroll(s.page));
+      await s.page.screenshot({ path: `${out}/rahmen-offen-S-${nav}-1440.png`, fullPage: true });
+      await s.ctx.close();
+      const m = await open("graphit", 1440, { size: "m", order: ["app:jellyfin"] }, nav);
+      const mCount = await columns(m.page);
+      // Wide enough: the chip says "Update" and all ports show.
+      const wide = await m.page.evaluate(() => {
+        const visible = (e) => e && getComputedStyle(e).display !== "none" && e.getBoundingClientRect().width > 2;
+        const chip = document.querySelector('[data-group="app:paperless"] article .update');
+        const ports = [...document.querySelectorAll('[data-group="app:adguard"] .ports .chip')].filter(visible);
+        return { arrow: visible(chip.querySelector(".arrow-icon")), word: visible(chip.querySelector(".word")), ports: ports.map((c) => c.textContent.trim()) };
+      });
+      assert.deepEqual(wide, { arrow: false, word: true, ports: ["53/udp", "3000"] }, `${nav}: M chip and ports`);
+      assert.ok(sCount > mCount, `${nav}: S ${sCount} columns > M ${mCount}`);
+      await m.page.getByRole("article", { name: "Compose-Stack paperless" }).getByRole("button", { name: "Dienste" }).click();
+      await m.page.locator(".stack-frame").waitFor();
+      await m.page.waitForTimeout(200);
+      assert.ok(await noScroll(m.page));
+      await m.page.screenshot({ path: `${out}/rahmen-offen-M-${nav}-1440.png`, fullPage: true });
+      await m.ctx.close();
+    }
+    const { ctx, page } = await open("graphit", 1440, { size: "l" });
+    await page.getByRole("article", { name: "Compose-Stack paperless" }).getByRole("button", { name: "Dienste" }).click();
+    const frame = page.locator(".stack-frame");
+    await frame.waitFor();
+    await page.waitForTimeout(200);
+    const inner = await boxes(page, ".stack-frame > .cell");
+    assert.equal(inner.length, 4);
+    assert.equal(new Set(inner.map((b) => b.y)).size, 2, `two rows inside the frame ${JSON.stringify(inner)}`);
+    const outer = await box(frame);
+    for (const b of inner) assert.ok(b.bottom <= outer.bottom + 0.5 && b.right <= outer.right + 0.5, "wrapped card inside the frame");
+    const next = await boxes(page, ".stack-frame + .cell");
+    assert.ok(next[0].y > outer.bottom, "the next card follows below the frame");
+    const heights = await cardHeights(page);
+    assert.equal(new Set(heights).size, 1, `equal heights ${heights}`);
+    await page.screenshot({ path: `${out}/rahmen-offen-L-top-1440.png`, fullPage: true });
+    await ctx.close();
+    const phone = await open("graphit", 390, {}, "side");
+    await phone.page.getByRole("article", { name: "Compose-Stack paperless" }).getByRole("button", { name: "Dienste" }).click();
+    const pf = phone.page.locator(".stack-frame");
+    await pf.waitFor();
+    await phone.page.waitForTimeout(200);
+    const cells = await boxes(phone.page);
+    assert.equal(new Set(cells.map((b) => `${b.x},${b.w}`)).size, 1, `phone: one column ${JSON.stringify(cells)}`);
+    const pbox = await box(pf);
+    assert.ok(pbox.x >= 0 && pbox.right <= 390, `frame inside the phone screen ${JSON.stringify(pbox)}`);
+    assert.ok(await noScroll(phone.page));
+    await phone.page.screenshot({ path: `${out}/rahmen-offen-390.png`, fullPage: true });
+    await phone.ctx.close();
+  }
+
+  // 6. Screenshots and the phone: one column, same behaviour.
   for (const theme of ["graphit", "hell"])
     for (const width of [1440, 390]) {
       const { ctx, page } = await open(theme, width);
       if (width === 390) {
-        const boxes = await page.locator(".cards > .cell").evaluateAll((cells) => cells.map((cell) => {
-          const r = cell.getBoundingClientRect();
-          return [Math.round(r.x), Math.round(r.width)];
-        }));
-        assert.equal(new Set(boxes.map((b) => b.join())).size, 1, `one column ${JSON.stringify(boxes)}`);
+        const cells = await boxes(page, ".cards > .cell");
+        assert.equal(new Set(cells.map((b) => `${b.x},${b.w}`)).size, 1, `one column ${JSON.stringify(cells)}`);
       }
       assert.ok(await noScroll(page), "no horizontal scroll");
       await page.screenshot({ path: `${out}/karten-zu-${theme}-${width}.png`, fullPage: true });
       await page.getByRole("article", { name: "Compose-Stack paperless" }).getByRole("button", { name: "Dienste" }).click();
-      await page.locator(".drawer").waitFor();
+      await page.locator(".stack-frame").waitFor();
       assert.ok(await noScroll(page), "no horizontal scroll with open stack");
       await page.screenshot({ path: `${out}/karten-offen-${theme}-${width}.png`, fullPage: true });
       await customize(page);

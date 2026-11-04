@@ -42,7 +42,9 @@ Vom Projektinhaber nach Screenshots (Variante B) bestätigt; ersetzt für die
 Kartenansicht das 12-Spalten-Raster mit Breiten 3/4/8 oben. Alle Karten gleich
 groß; ein Compose-Stack ist eine zugeklappte Karte (x/y laufen, CPU/RAM,
 gemeinsamer CPU-Verlauf, Dienste als Chips, „Dienste“, Alle starten/stoppen,
-Links), aufgeklappt folgen die Dienste als normale Karten mit Akzentlinie.
+Links); geöffnet stehen Stack-Karte und Dienstkarten zusammen in einem
+getönten Rahmen auf den Spalten des Rasters (Variante C „Rahmen im Raster“,
+ebenfalls 4. November 2026).
 Reihenfolge in der Bearbeiten-Leiste „Eigene Anordnung | A–Z“, Karten per Griff
 ziehen oder mit den Pfeiltasten verschieben. Folgeentscheidung am selben Tag:
 Kartengröße S/M/L in der Bearbeiten-Leiste, gemeinsam für alle Karten (nur

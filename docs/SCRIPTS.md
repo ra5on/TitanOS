@@ -37,19 +37,44 @@ Die Skripte liegen auf einem **Daten-Volume**, nicht auf dem Stick:
 | Auslöser | Wann |
 |---|---|
 | Per Knopf | Nur wenn du auf **Starten** drückst. Die Ausgabe erscheint live unter dem Skript. |
-| Nach Zeitplan | Stündlich (zur gewählten Minute), täglich, wöchentlich (Wochentag) oder monatlich (Tag 1–28) zur gewählten Uhrzeit, oder ein eigener Cron-Ausdruck. Es gilt die Zeitzone des NAS. |
+| Nach Zeitplan | Einfache Auswahl ohne Cron (siehe unten) oder ein eigener Cron-Ausdruck unter „Erweitert“. Es gilt die Zeitzone des NAS. |
 | Beim Start | Einmal je Start des NAS, sobald das Volume eingebunden ist (auch spät, etwa nach dem Entsperren eines verschlüsselten Volumes). Ein Neustart von TitanOS selbst, etwa durch ein App-Update, startet sie nicht noch einmal. |
 | Beim Herunterfahren | Beim Neustarten und Herunterfahren **über TitanOS**, bevor VMs, LXC-Container und Docker beendet werden. Jedes Skript höchstens 60 Sekunden, dann wird es beendet. |
 
 Mehrere Skripte desselben Auslösers laufen nacheinander in der Reihenfolge der
 Liste.
 
-### Cron-Ausdruck
+### Zeitplan ohne Cron
+
+Wer „Nach Zeitplan“ wählt, stellt den Zeitplan in einem Formular ein
+(Wunsch des Projektinhabers vom 4.11.2026, Komponente `ScheduleField`):
+
+| Wann | Einstellung |
+|---|---|
+| Alle paar Minuten | alle 5, 10, 15 oder 30 Minuten |
+| Jede Stunde | zur Minute 0–59 |
+| Täglich | Uhrzeit |
+| An bestimmten Wochentagen | Mo Di Mi Do Fr Sa So als Umschalter, Uhrzeit |
+| Monatlich | am 1. bis 28. oder am letzten Tag des Monats, Uhrzeit |
+
+Darunter steht der Zeitplan als Satz („Läuft montags und donnerstags um
+03:00 Uhr.“) und die nächsten drei Ausführungen in der Zeitzone des NAS. Ohne
+Wochentag lässt sich nicht speichern.
+
+Gespeichert wird immer ein Cron-Ausdruck. Unter **Erweitert** (zugeklappt)
+steht er zum Ansehen und Ändern. Passt ein gespeicherter oder getippter
+Ausdruck in die einfache Auswahl (auch `1-5` oder `7` für Sonntag), erscheint
+er dort; sonst bleibt „Erweitert“ offen, die Auswahl zeigt „Eigener
+Cron-Ausdruck“, und Satz und nächste Ausführungen stehen trotzdem darunter.
+Ein ungültiger Ausdruck wird genannt und nicht gespeichert.
+
+### Cron-Ausdruck (Erweitert)
 
 Fünf Felder: Minute, Stunde, Tag im Monat, Monat, Wochentag (0 oder 7 =
 Sonntag). Erlaubt sind `*`, Zahlen, Bereiche (`1-5`), Listen (`1,15`) und
-Schritte (`*/15`, `0-30/10`). Namen wie `MON` und Kürzel wie `@daily` gibt es
-nicht. Sind Tag im Monat und Wochentag beide eingeschränkt, reicht wie bei
+Schritte (`*/15`, `0-30/10`). Im Tag des Monats steht `L` für den letzten
+Tag des Monats (auch in einer Liste, `1,L`). Namen wie `MON` und Kürzel wie
+`@daily` gibt es nicht. Sind Tag im Monat und Wochentag beide eingeschränkt, reicht wie bei
 jedem Cron eines von beiden: `0 3 1 * 1` läuft am Ersten jedes Monats und an
 jedem Montag.
 

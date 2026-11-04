@@ -95,10 +95,14 @@ Bereich: Container bearbeiten, Übersicht, App-Store/Katalog, Docker-Layout.
   ungleichen Kacheln“), so viele nebeneinander wie passen, Handy eine Spalte
   mit gleichem Verhalten. **Kartengröße** (Folgeentscheidung vom 4.11.2026):
   ein Umschalter S/M/L für **alle Karten gemeinsam**, keine Einzelgrößen je
-  Karte. Er ändert nur die Mindestbreite (S 14rem, M 17rem wie bisher, L 23rem)
+  Karte. Er ändert nur die Mindestbreite (S 12,5rem, M 17rem wie bisher, L 23rem; S ergibt
+  auch neben der Seitenleisten-Navigation bei 1440 px eine Spalte mehr als M)
   und damit, wie viele Karten nebeneinander stehen; alle bleiben gleich groß,
   der Inhalt passt sich an (Container-Abfragen: schmale Karten verdichten die
-  Werte, die Laufzeit steht dann nur im Tooltip). Stack- und Dienstkarten
+  Werte, die Laufzeit steht dann nur im Tooltip; der Update-Chip wird zum
+  Pfeil mit Tooltip und Screenreader-Text „Update“, damit der Name Platz hat;
+  Ports zeigen den ersten Port und „+n“ mit den übrigen im Tooltip, nie einen
+  angeschnittenen Chip; breitere Karten brechen Ports notfalls um). Stack- und Dienstkarten
   folgen derselben Größe; am Handy immer eine Spalte. Ein
   Compose-Stack ist **eine** Karte (`StackCard.svelte`), ab Werk zugeklappt:
   Name mit Update-Chip, „Stack · n Dienste“, „x/y laufen“ (Punkt grün/gelb/grau
@@ -108,10 +112,19 @@ Bereich: Container bearbeiten, Übersicht, App-Store/Katalog, Docker-Layout.
   „Dienste“, Stack-Aktion „Alle starten“ (sobald ein Dienst steht) bzw. „Alle
   stoppen“ (nacheinander über die Container-Aktionen, ohne Rückfrage wie beim
   einzelnen Container), Links des Hauptdienstes (WebUI/Tailscale/öffentlich).
-  Symbol, ⋯ und Rechtsklick öffnen das Stack-Menü. „Dienste“ klappt die Dienste
-  als normale Containerkarten direkt hinter dem Stack auf, über die ganze
-  Breite mit Akzentlinie links und Kopf „Stackname · n Dienste“ (Klick klappt
-  zu); die Dienstkarten heißen nach dem Dienst (`dockerName(…, 'service')`).
+  Symbol, ⋯ und Rechtsklick öffnen das Stack-Menü. **Geöffneter Stack**
+  (Entscheidung des Projektinhabers vom 4.11.2026, Variante C „Rahmen im
+  Raster“, nach Screenshots; vorher wirkten die Dienste in eigener Zeile mit
+  Überschrift abgetrennt): „Dienste“ öffnet einen getönten Rahmen über die
+  ganze Breite. Darin bleibt die Stack-Karte unverändert die erste Karte, die
+  Dienste folgen direkt daneben als normale Containerkarten auf denselben
+  Spalten wie alle anderen Karten (CSS-Subgrid, gleiche Breite und Höhe);
+  reichen die Spalten nicht, bricht die Zeile innerhalb des Rahmens um. Der
+  Rahmen beginnt eine eigene Zeile, die nächste Karte folgt darunter. „Dienste“
+  auf der Stack-Karte klappt wieder zu (`aria-controls` auf den Rahmen). Die
+  Dienstkarten heißen nach dem Dienst (`dockerName(…, 'service')`). Verworfen:
+  eigene Kopfzeile statt der Karte (A) und Dienste ohne Rahmen frei im Raster
+  (B, reißt am Zeilenende auseinander).
   Prüfung `scripts/test-ui-docker-cards.mjs`, Screenshots unter
   `out/validation/docker-karten/`.
 - **Liste als Kacheln** (Entscheidung des Projektinhabers vom 30.10.2026 nach

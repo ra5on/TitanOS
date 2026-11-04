@@ -3,6 +3,7 @@ package scripts
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -10,10 +11,14 @@ import (
 
 // cron is a parsed five-field cron expression: minute, hour, day of the
 // month, month and day of the week (0 or 7 = Sunday). Each field allows
-// "*", numbers, ranges (a-b), lists (a,b) and steps (*/n, a-b/n). Names of
-// months and weekdays and the @-shortcuts are not supported.
+// "*", numbers, ranges (a-b), lists (a,b) and steps (*/n, a-b/n). The day
+// of the month may also be "L", the last day of the month (alone or in a
+// list), which the simple schedule of the web UI offers. Names of months and
+// weekdays and the @-shortcuts are not supported.
 type cron struct {
 	minute, hour, dom, month, dow uint64
+	// lastDay: "L" in the day of the month.
+	lastDay bool
 	// Restricted day fields are joined with OR, as in every cron: "0 3 1 * 1"
 	// runs on the first of the month and on every Monday.
 	domAny, dowAny bool
@@ -34,8 +39,15 @@ func parseCron(expr string) (cron, error) {
 	if c.hour, err = cronField(fields[1], 0, 23); err != nil {
 		return cron{}, err
 	}
-	if c.dom, err = cronField(fields[2], 1, 31); err != nil {
-		return cron{}, err
+	days := strings.Split(fields[2], ",")
+	if slices.Contains(days, "L") {
+		c.lastDay = true
+		days = slices.DeleteFunc(days, func(p string) bool { return p == "L" })
+	}
+	if len(days) > 0 {
+		if c.dom, err = cronField(strings.Join(days, ","), 1, 31); err != nil {
+			return cron{}, err
+		}
 	}
 	if c.month, err = cronField(fields[3], 1, 12); err != nil {
 		return cron{}, err
@@ -98,7 +110,7 @@ func (c cron) matches(t time.Time) bool {
 	if c.minute&(1<<t.Minute()) == 0 || c.hour&(1<<t.Hour()) == 0 || c.month&(1<<int(t.Month())) == 0 {
 		return false
 	}
-	dom := c.dom&(1<<t.Day()) != 0
+	dom := c.dom&(1<<t.Day()) != 0 || c.lastDay && t.AddDate(0, 0, 1).Day() == 1
 	dow := c.dow&(1<<int(t.Weekday())) != 0
 	switch {
 	case c.domAny && c.dowAny:
