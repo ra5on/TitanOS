@@ -713,6 +713,7 @@
 	"files.copyProblem.kept_new": "Added while moving – stays at the source",
 	"files.copyProblem.kept_changed": "Changed after it was copied – the source is kept",
 	"files.copyProblem.kept_target_changed": "The copy at the target was changed meanwhile – the source is kept",
+	"files.copyProblem.kept_identical": "An identical file (size and modification time) is already at the target – the source is kept",
 	"files.copyProblem.other": "Could not be transferred (details in the log)",
 	"files.copyError.no_space": "There is not enough free space at the target.",
 	"files.copyError.unavailable": "Source or target is no longer mounted.",

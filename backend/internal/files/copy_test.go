@@ -6,22 +6,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 // finish waits for a job to leave the running state.
+// It also waits until a durable job has saved how it ended: until then it is
+// "finishing" and neither retryable nor removable.
 func finish(t *testing.T, m *Manager, id string) Job {
 	t.Helper()
-	for range 400 {
-		for _, job := range m.Jobs("alex") {
-			if job.ID == id && job.State != JobRunning {
-				return job
-			}
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("the job did not finish")
-	return Job{}
+	return finishJob(t, m, "alex", id)
 }
 
 func twoRoots(t *testing.T) (*Manager, Root, Root) {

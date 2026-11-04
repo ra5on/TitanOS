@@ -58,13 +58,29 @@ func exists(p string) bool {
 	return err == nil
 }
 
-// finishAll waits for a job of any account state to end.
+// finishing reports whether a job is still saving how it ended.
+func (m *Manager) finishing(id string) bool {
+	m.jobs.mu.Lock()
+	defer m.jobs.mu.Unlock()
+	for _, job := range m.jobs.list {
+		if job.ID == id {
+			return job.finishing
+		}
+	}
+	return false
+}
+
+// finishJob waits until a job of an account has ended and saved its end.
 func finishJob(t *testing.T, m *Manager, user, id string) Job {
 	t.Helper()
-	for range 600 {
-		for _, job := range m.Jobs(user) {
-			if job.ID == id && job.State != JobRunning {
-				return job
+	for range 1000 {
+		// State and "finishing" change under one lock: checked in this order,
+		// the snapshot below is the final one.
+		if !m.finishing(id) {
+			for _, job := range m.Jobs(user) {
+				if job.ID == id && job.State != JobRunning {
+					return job
+				}
 			}
 		}
 		time.Sleep(10 * time.Millisecond)

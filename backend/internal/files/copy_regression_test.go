@@ -638,3 +638,45 @@ func TestInspectIntoOwnFolderFindsNoConflicts(t *testing.T) {
 		t.Fatalf("%+v %v", result, err)
 	}
 }
+
+// Owner decision of 4.11.2026: a move with "missing or changed" keeps the
+// source of a file that looks identical at the target and reports it.
+func TestMoveMissingKeepsIdenticalSources(t *testing.T) {
+	check := func(t *testing.T, job Job, srcDir, dstDir string) {
+		t.Helper()
+		if job.State != JobDone || job.Failed != 0 || job.Identical != 1 || problemCodes(job)["m/same.jpg"] != "kept_identical" {
+			t.Fatalf("job = %+v", job)
+		}
+		if read(t, filepath.Join(srcDir, "m/same.jpg")) != "same" || read(t, filepath.Join(dstDir, "m/same.jpg")) != "same" {
+			t.Fatal("identical source removed:", tree(srcDir))
+		}
+		if exists(filepath.Join(srcDir, "m/new.jpg")) || read(t, filepath.Join(dstDir, "m/new.jpg")) != "new" {
+			t.Fatal("the rest was not moved:", tree(srcDir), tree(dstDir))
+		}
+	}
+	prepare := func(srcDir, dstDir string) {
+		put(t, filepath.Join(srcDir, "m/same.jpg"), "same")
+		put(t, filepath.Join(srcDir, "m/new.jpg"), "new")
+		put(t, filepath.Join(dstDir, "m/same.jpg"), "same")
+		stamp := time.Unix(1700000000, 0)
+		os.Chtimes(filepath.Join(srcDir, "m/same.jpg"), stamp, stamp)
+		os.Chtimes(filepath.Join(dstDir, "m/same.jpg"), stamp, stamp.Add(time.Second))
+	}
+	bothKinds(t, func(t *testing.T, m *Manager, src, dst Root) {
+		prepare(src.Dir, dst.Dir)
+		job, err := m.StartCopy(src, []string{"m"}, dst, ".", true, ConflictMissing, "alex", os.Getuid())
+		if err != nil {
+			t.Fatal(err)
+		}
+		check(t, finish(t, m, job.ID), src.Dir, dst.Dir)
+	})
+	t.Run("same share", func(t *testing.T) {
+		m, src, _ := durableRoots(t)
+		prepare(src.Dir, filepath.Join(src.Dir, "ziel"))
+		job, err := m.StartCopy(src, []string{"m"}, src, "ziel", true, ConflictMissing, "alex", os.Getuid())
+		if err != nil {
+			t.Fatal(err)
+		}
+		check(t, finish(t, m, job.ID), src.Dir, filepath.Join(src.Dir, "ziel"))
+	})
+}

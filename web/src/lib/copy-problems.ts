@@ -31,6 +31,7 @@ const problemCodes = [
 	'kept_new',
 	'kept_changed',
 	'kept_target_changed',
+	'kept_identical',
 	'other',
 ] as const;
 

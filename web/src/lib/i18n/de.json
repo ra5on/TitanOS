@@ -713,6 +713,7 @@
 	"files.copyProblem.kept_new": "Kam während des Verschiebens hinzu – bleibt an der Quelle",
 	"files.copyProblem.kept_changed": "Nach dem Kopieren geändert – Quelle bleibt erhalten",
 	"files.copyProblem.kept_target_changed": "Die Kopie am Ziel wurde inzwischen verändert – Quelle bleibt erhalten",
+	"files.copyProblem.kept_identical": "Am Ziel liegt schon eine gleiche Datei (Größe und Änderungszeit) – Quelle bleibt erhalten",
 	"files.copyProblem.other": "Konnte nicht übertragen werden (Details im Protokoll)",
 	"files.copyError.no_space": "Im Ziel ist nicht genug Speicher frei.",
 	"files.copyError.unavailable": "Quelle oder Ziel ist nicht mehr eingebunden.",

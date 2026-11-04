@@ -16,7 +16,8 @@ Seite beschreibt den Ablauf seit der Überarbeitung vom 4.11.2026
   - **Nur fehlende oder geänderte Dateien** (`missing`): Dateien mit gleicher
     Größe und einer Änderungszeit, die höchstens zwei Sekunden abweicht (FAT
     speichert in Zwei-Sekunden-Schritten), bleiben unberührt; geänderte
-    werden ersetzt, fehlende kopiert. Findet die Prüfung gleiche Dateien, ist
+    werden ersetzt, fehlende kopiert. Beim Verschieben bleibt die Quelle
+    gleicher Dateien liegen. Findet die Prüfung gleiche Dateien, ist
     diese Regel vorgewählt und der Dialog nennt Anzahl und Größe – außer der
     Nutzer hat schon selbst eine Regel gewählt. Kopien behalten die
     Änderungszeit, ein zweiter Lauf erkennt sie daher als gleich.
@@ -69,11 +70,11 @@ Seite beschreibt den Ablauf seit der Überarbeitung vom 4.11.2026
   dessen Kopie am Ziel noch unverändert ist. Alles andere bleibt an der Quelle
   und steht in der Liste: übersprungen, Verknüpfung (Symlink), Sonderdatei,
   interne Datei, während des Verschiebens hinzugekommen, nach dem Kopieren
-  geändert. Bei „Nur fehlende oder geänderte“ gilt eine gleiche Datei am Ziel
-  (Größe und Änderungszeit ±2 s) als schon verschoben: ihre Quelle wird
-  entfernt, ohne den Inhalt zu vergleichen – wie `rsync --remove-source-files`.
-  Diese Festlegung ist noch vom Projektinhaber zu bestätigen; die Alternative
-  wäre, solche Quellen als „an der Quelle belassen“ zu melden.
+  geändert. Bei „Nur fehlende oder geänderte“ bleibt die Quelle einer Datei,
+  die am Ziel gleich aussieht (Größe und Änderungszeit ±2 s), erhalten und
+  wird als „behalten“ gemeldet (`kept_identical`): Größe und Zeit beweisen
+  keinen gleichen Inhalt (Entscheidung des Projektinhabers vom 4.11.2026).
+  Das gilt auch für „Fehlende Dateien kopieren“ nach einem Neustart.
 - Pfade, die eine VM belegt (`Protected`), werden nie überschrieben oder in
   den Papierkorb gelegt, auch nicht mit „Ersetzen“; sie stehen als
   „Geschützter Pfad“ in der Liste.
@@ -132,7 +133,7 @@ Einzelne Einträge (`job.problems[].code`, Texte `files.copyProblem.*`):
 `same_folder`, `protected`, `type_mismatch`, `unreadable_folder`,
 `recycle_failed`, `remove_failed`, `other`; an der Quelle belassen:
 `kept_skipped`, `kept_link`, `kept_special`, `kept_internal`, `kept_new`,
-`kept_changed`, `kept_target_changed`.
+`kept_changed`, `kept_target_changed`, `kept_identical`.
 
 Ganzer Auftrag (`job.errorCode`, Texte `files.copyError.*`): `no_space`,
 `unavailable`, `store`, `into_itself`, `same_folder`, `rebooted`, `missing`,

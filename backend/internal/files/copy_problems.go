@@ -19,7 +19,8 @@ import (
 
 // ConflictMissing copies only files that are missing at the target or differ
 // from the file there in size or modification time. Identical files are left
-// alone; in a move their source is removed, as the target already has them.
+// alone; in a move their source stays and is reported as kept (decision of
+// the owner, 4.11.2026: size and time are no proof of equal content).
 const ConflictMissing = "missing"
 
 // mtimeTolerance covers FAT, which keeps modification times in two-second steps.

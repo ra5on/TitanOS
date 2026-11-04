@@ -689,6 +689,14 @@ func (m *Manager) copyOne(ctx context.Context, job *Job, sr, dr *os.Root, rel, t
 		m.jobs.mu.Lock()
 		job.Identical++
 		m.jobs.mu.Unlock()
+		if job.Move {
+			// Decision of the owner (4.11.2026): a move never deletes a
+			// source only because the target looks the same; it stays.
+			if err := m.markSkipped(job, rel); err != nil {
+				return err
+			}
+			return m.noteKept(job, rel, "kept_identical")
+		}
 		return m.markCopied(job, dr, rel, final, info)
 	}
 	return m.copyFile(ctx, job, sr, dr, rel, final, info, uid, how == settleReplace)
@@ -1112,17 +1120,14 @@ func (m *Manager) moveRenameOne(ctx context.Context, job *Job, r *os.Root, dst R
 			return failure("type_mismatch", ErrExists)
 		}
 		if action == ConflictMissing && sameContent(info, existing) {
-			// The target has it already; the source goes.
-			if err := r.Remove(rel); err != nil {
-				return failure("remove_failed", mapError(err))
-			}
+			// The target looks the same; the source stays (owner, 4.11.2026).
 			job.c.count.Add(1)
 			job.c.copied.Add(info.Size())
 			job.c.committed.Add(info.Size())
 			m.jobs.mu.Lock()
 			job.Identical++
 			m.jobs.mu.Unlock()
-			return nil
+			return m.noteKept(job, rel, "kept_identical")
 		}
 		return m.renameEntry(ctx, job, r, dst, rel, target, true, conflict, uid)
 	}
