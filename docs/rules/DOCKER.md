@@ -99,7 +99,10 @@ Bereich: Container bearbeiten, Übersicht, App-Store/Katalog, Docker-Layout.
   auch neben der Seitenleisten-Navigation bei 1440 px eine Spalte mehr als M)
   und damit, wie viele Karten nebeneinander stehen; alle bleiben gleich groß,
   der Inhalt passt sich an (Container-Abfragen: schmale Karten verdichten die
-  Werte, die Laufzeit steht dann nur im Tooltip). Stack- und Dienstkarten
+  Werte, die Laufzeit steht dann nur im Tooltip; der Update-Chip wird zum
+  Pfeil mit Tooltip und Screenreader-Text „Update“, damit der Name Platz hat;
+  Ports zeigen den ersten Port und „+n“ mit den übrigen im Tooltip, nie einen
+  angeschnittenen Chip; breitere Karten brechen Ports notfalls um). Stack- und Dienstkarten
   folgen derselben Größe; am Handy immer eine Spalte. Ein
   Compose-Stack ist **eine** Karte (`StackCard.svelte`), ab Werk zugeklappt:
   Name mit Update-Chip, „Stack · n Dienste“, „x/y laufen“ (Punkt grün/gelb/grau

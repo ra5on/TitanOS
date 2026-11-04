@@ -284,6 +284,39 @@ try {
     for (const nav of ["top", "side"]) {
       const s = await open("graphit", 1440, { size: "s" }, nav);
       const sCount = await columns(s.page);
+      // Narrow cards: the update chip is an arrow, so the name keeps its room;
+      // ports show the first one and "+n", nothing is cut off.
+      const narrow = await s.page.evaluate(() => {
+        const visible = (e) => e && getComputedStyle(e).display !== "none" && e.getBoundingClientRect().width > 2;
+        const stack = document.querySelector('[data-group="app:paperless"] article');
+        const name = stack.querySelector(".name");
+        const chip = stack.querySelector(".update");
+        const adguard = document.querySelector('[data-group="app:adguard"] article');
+        const ports = adguard.querySelector(".ports");
+        const shown = [...ports.querySelectorAll(".chip")].filter(visible);
+        const box = ports.getBoundingClientRect();
+        return {
+          nameCut: name.scrollWidth > name.clientWidth + 1,
+          arrow: visible(chip.querySelector(".arrow-icon")),
+          word: visible(chip.querySelector(".word")),
+          wordText: chip.textContent.trim(),
+          title: chip.title,
+          ports: shown.map((c) => c.firstChild.textContent.trim()),
+          more: shown.at(-1)?.title,
+          cut: shown.some((c) => {
+            const r = c.getBoundingClientRect();
+            return r.right > box.right + 0.5 || r.bottom > box.bottom + 0.5 || c.scrollWidth > c.clientWidth + 1;
+          }),
+        };
+      });
+      assert.equal(narrow.nameCut, false, `${nav}: stack name not cut`);
+      assert.equal(narrow.arrow, true, `${nav}: update arrow`);
+      assert.equal(narrow.word, false, `${nav}: update word hidden`);
+      assert.equal(narrow.wordText, "Update", "update word for screen readers");
+      assert.equal(narrow.title, "Update");
+      assert.deepEqual(narrow.ports, ["53/udp", "+1"], `${nav}: first port and +1`);
+      assert.equal(narrow.more, "3000");
+      assert.equal(narrow.cut, false, `${nav}: no cut port chip`);
       await s.page.screenshot({ path: `${out}/rahmen-zu-S-${nav}-1440.png`, fullPage: true });
       await s.page.getByRole("article", { name: "Compose-Stack paperless" }).getByRole("button", { name: "Dienste" }).click();
       await s.page.locator(".stack-frame").waitFor();
@@ -293,6 +326,14 @@ try {
       await s.ctx.close();
       const m = await open("graphit", 1440, { size: "m", order: ["app:jellyfin"] }, nav);
       const mCount = await columns(m.page);
+      // Wide enough: the chip says "Update" and all ports show.
+      const wide = await m.page.evaluate(() => {
+        const visible = (e) => e && getComputedStyle(e).display !== "none" && e.getBoundingClientRect().width > 2;
+        const chip = document.querySelector('[data-group="app:paperless"] article .update');
+        const ports = [...document.querySelectorAll('[data-group="app:adguard"] .ports .chip')].filter(visible);
+        return { arrow: visible(chip.querySelector(".arrow-icon")), word: visible(chip.querySelector(".word")), ports: ports.map((c) => c.textContent.trim()) };
+      });
+      assert.deepEqual(wide, { arrow: false, word: true, ports: ["53/udp", "3000"] }, `${nav}: M chip and ports`);
       assert.ok(sCount > mCount, `${nav}: S ${sCount} columns > M ${mCount}`);
       await m.page.getByRole("article", { name: "Compose-Stack paperless" }).getByRole("button", { name: "Dienste" }).click();
       await m.page.locator(".stack-frame").waitFor();

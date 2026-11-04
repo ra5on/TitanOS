@@ -3391,6 +3391,7 @@
 	"docker.stackRunning": "{running}/{total} running",
 	"docker.services": "Services",
 	"docker.servicesOf": "Services of {name}",
+	"docker.morePorts": "more ports: {ports}",
 	"docker.layout.viewFailed": "The view was not saved: {error}",
 	"ui.connectionLost": "Connection to NAS interrupted",
 	"ui.stale": "Displayed values may be out of date. Last updated {seconds} seconds ago.",
