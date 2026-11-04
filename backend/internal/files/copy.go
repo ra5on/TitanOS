@@ -328,6 +328,9 @@ func (m *Manager) planEntry(ctx context.Context, job *Job, sr, dr *os.Root, rel,
 	if !info.Mode().IsRegular() {
 		return nil
 	}
+	if m.planHook != nil {
+		m.planHook(rel)
+	}
 	totals.files++
 	totals.bytes += info.Size()
 	if err := add(rel, transferEntry{Source: copyVersion(info)}); err != nil {

@@ -476,7 +476,7 @@ func (s *Server) planDelete(user auth.User) plan {
 		root, _ := s.catalogRoot(user, req.Root)
 		params := map[string]string{"root": req.Root, "path": p}
 		body := map[string]any{"root": req.Root, "paths": []string{p}, "permanent": req.Permanent}
-		if req.Permanent || !root.Recycle {
+		if req.Permanent || !root.Recyclable(p) {
 			return withLevel(card("file.delete", params, "POST", "/files/delete", body), toolcatalog.LevelDestroy, path.Base(p), ""), nil
 		}
 		return withLevel(card("file.trash", params, "POST", "/files/delete", body), toolcatalog.LevelDanger, "", ""), nil

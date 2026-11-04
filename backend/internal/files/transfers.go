@@ -151,8 +151,8 @@ func (m *Manager) saveTransfer(job *Job, pending string) error {
 	if t.initialized {
 		return m.appendTransfer(job, transferEvent{Pending: &pending})
 	}
-	t.Pending = pending
 	m.jobs.mu.Lock()
+	t.Pending = pending
 	t.Job = snapshotLocked(job)
 	if t.Format == 2 {
 		t.Job.Operation = "checkpoint-v2"

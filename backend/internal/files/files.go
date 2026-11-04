@@ -207,6 +207,8 @@ type Manager struct {
 	mu      sync.Mutex
 	textMu  sync.Mutex
 	uploads map[string]*upload
+	// planHook, if set, sees every file the planning walk counts (tests).
+	planHook func(string)
 	// copyParts are the part files running copies write (copy_parts.go).
 	copyParts map[string]bool
 	now     func() time.Time
@@ -393,6 +395,22 @@ func (m *Manager) Delete(root Root, paths []string, user string, permanent bool)
 func (r Root) recyclable(p string) bool {
 	_, ok := r.binFor(p)
 	return ok
+}
+
+// Recyclable reports whether deleting p (relative to the root) goes to a
+// recycle bin.
+func (r Root) Recyclable(p string) bool {
+	p, err := clean(p)
+	return err == nil && r.recyclable(p)
+}
+
+// BinRoot returns the share folder bin of a volume as a root of its own,
+// for the recycle bin view.
+func (r Root) BinRoot(bin string) (Root, bool) {
+	if r.Kind != "volume" || !slices.Contains(r.Bins, bin) {
+		return Root{}, false
+	}
+	return Root{ID: r.ID, Name: path.Base(bin), Kind: "share", Dir: filepath.Join(r.Dir, filepath.FromSlash(bin)), Volume: r.Volume, Writable: r.Writable, Recycle: true}, true
 }
 
 // recycle moves p to the bin that takes it.
