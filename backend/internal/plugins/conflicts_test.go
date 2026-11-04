@@ -91,10 +91,9 @@ func TestConflictingIsSymmetric(t *testing.T) {
 	}
 }
 
-// The catalog entries of the image: the Realtek vendor drivers are shown for
-// a chip r8169 handles but never recommended for it; an unbound Pascal card
-// gets the legacy NVIDIA plugin and not the open one.
-func TestCatalogRulesForRealtekAndLegacyNVIDIA(t *testing.T) {
+// The catalog entries of the image: Realtek chips stay with r8169 and a
+// Pascal card is not matched by the open NVIDIA plugin.
+func TestCatalogRulesForRealtekAndOlderNVIDIA(t *testing.T) {
 	table := readCatalogTable(filepath.Join("..", "..", "..", "plugins", "catalog"))
 	if len(table) == 0 {
 		t.Fatal("catalog of the repository not found")
@@ -104,19 +103,11 @@ func TestCatalogRulesForRealtekAndLegacyNVIDIA(t *testing.T) {
 		{Key: "pci:10ec:8126", Bus: "pci", Address: "0000:04:00.0", Driver: "r8169", modalias: "pci:v000010ECd00008126sv000010ECsd00000123bc02sc00i00"},
 		{Key: "pci:10de:1b80", Bus: "pci", Address: "0000:05:00.0", modalias: "pci:v000010DEd00001B80sv00001043sd00008591bc03sc00i00"},
 	}
-	var names []string
-	for _, r := range recommend(table, map[string]bool{}, devices, nil) {
-		names = append(names, r.Plugin)
-	}
-	if !slices.Equal(names, []string{"nvidia-legacy"}) {
-		t.Fatalf("recommended: %v", names)
+	if found := recommend(table, map[string]bool{}, devices, nil); len(found) != 0 {
+		t.Fatalf("recommended: %v", found)
 	}
 	for _, m := range table {
-		want := map[string]string{"r8125": "0000:03:00.0", "r8126": "0000:04:00.0", "nvidia-legacy": "0000:05:00.0"}[m.Name]
-		if want == "" {
-			continue
-		}
-		if found := matching(m.Hardware, devices, false); len(found) != 1 || found[0].Address != want {
+		if found := matching(m.Hardware, devices, false); len(found) != 0 {
 			t.Errorf("%s shows %v", m.Name, found)
 		}
 	}
