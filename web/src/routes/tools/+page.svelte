@@ -11,6 +11,7 @@
 	const tools: { href: string; label: MessageKey; icon: IconName }[] = [
 		{ href: '/tools/tasks', label: 'ops.tasks', icon: 'list' },
 		{ href: '/tools/maintenance', label: 'ops.maintenance', icon: 'tool' },
+		{ href: '/tools/scripts', label: 'scripts.title', icon: 'terminal' },
 		{ href: '/tools/monitoring', label: 'ops.monitoring', icon: 'activity' },
 		{ href: '/tools/activity', label: 'ops.activity', icon: 'clock' },
 		{ href: '/tools/logs', label: 'tools.logs', icon: 'fileText' },

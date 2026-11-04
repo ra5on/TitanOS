@@ -35,13 +35,18 @@ type Workloads struct {
 	// as stopped on purpose and not come back after the restart.
 	StopDocker  func(ctx context.Context) error
 	StartDocker func(ctx context.Context) error
+	// Scripts runs the person's shutdown scripts (package scripts) one
+	// after the other, before the guests end, while the volumes and apps
+	// are still there. Each reports running, then stopped or failed; each
+	// has its own time limit. Optional.
+	Scripts func(ctx context.Context, progress func(name, state string, err error))
 }
 
 // Item is one guest on the way down.
 type Item struct {
-	Kind  string `json:"kind"` // vm, lxc, docker
+	Kind  string `json:"kind"` // script, vm, lxc, docker
 	Name  string `json:"name"`
-	State string `json:"state"` // stopping, stopped, failed
+	State string `json:"state"` // running (scripts), stopping, stopped, failed
 	Error string `json:"error,omitempty"`
 }
 
@@ -170,6 +175,12 @@ func (m *Manager) Cancel(ctx context.Context) error {
 
 func (m *Manager) run(ctx context.Context, now <-chan struct{}, power func() error) {
 	w := m.Workloads
+	if w.Scripts != nil {
+		m.runScripts(ctx, now)
+		if ctx.Err() != nil {
+			return
+		}
+	}
 	list := func(f func() []string) []string {
 		if f == nil {
 			return nil
@@ -262,7 +273,7 @@ func (m *Manager) run(ctx context.Context, now <-chan struct{}, power func() err
 		}
 		done := true
 		for _, it := range m.status.Items {
-			if it.State != "stopped" {
+			if it.Kind != "script" && it.State != "stopped" {
 				done = false
 			}
 		}
@@ -307,4 +318,42 @@ func (m *Manager) run(ctx context.Context, now <-chan struct{}, power func() err
 		}
 		m.mu.Unlock()
 	}
+}
+
+// runScripts runs the shutdown scripts and shows each as an item. "Now"
+// ends the one that runs and skips the rest. The guests get their full
+// waiting time afterwards.
+func (m *Manager) runScripts(ctx context.Context, now <-chan struct{}) {
+	scriptCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		select {
+		case <-now:
+			cancel()
+		case <-scriptCtx.Done():
+		}
+	}()
+	m.Workloads.Scripts(scriptCtx, func(name, state string, err error) {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		if m.status == nil {
+			return
+		}
+		item := Item{Kind: "script", Name: name, State: state}
+		if err != nil {
+			item.Error = err.Error()
+		}
+		for i := range m.status.Items {
+			if it := &m.status.Items[i]; it.Kind == "script" && it.Name == name && it.State == "running" {
+				*it = item
+				return
+			}
+		}
+		m.status.Items = append(m.status.Items, item)
+	})
+	m.mu.Lock()
+	if m.status != nil {
+		m.status.Deadline = time.Now().Add(m.Wait)
+	}
+	m.mu.Unlock()
 }
