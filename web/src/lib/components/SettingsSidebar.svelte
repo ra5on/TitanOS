@@ -43,8 +43,8 @@
 					>
 				</li>
 			</ul>{/if}
-		<!-- The overview says how many matched itself. -->
-		{#if searching && path !== '/settings'}<p class="muted note" role="status">
+		<!-- The overview's own count is for phones, where this sidebar is hidden. -->
+		{#if searching}<p class="muted note" role="status">
 				{flat.length ? t('ui.results', { count: flat.length }) : t('ui.noSettings')}
 			</p>{/if}
 		{#each groups as group (group.group)}

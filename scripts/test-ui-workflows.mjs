@@ -117,19 +117,27 @@ try {
   const stack = page.locator(".stack").first();
   await stack.waitFor();
   assert.equal(await stack.locator(".members").count(), 0);
-  await stack.getByRole("link", { name: "WebUI", exact: true }).waitFor();
+  // The stack tile has no buttons: its symbol opens the stack menu with the
+  // addresses, the problems, "Verknüpfungen", Tailnet and the editor.
+  const openStackMenu = async () => {
+    await stack.locator(".stack-icon").click();
+    const menu = page.getByRole("menu");
+    await menu.waitFor();
+    return menu;
+  };
+  let menu = await openStackMenu();
   assert.equal(
-    await stack
-      .getByRole("link", { name: "WebUI", exact: true })
+    await menu
+      .getByRole("menuitem", { name: "WebUI", exact: true })
       .getAttribute("href"),
     "http://192.168.1.20:2283/",
   );
   assert.equal(
-    await stack.getByRole("link", { name: "Öffentlich", exact: true }).count(),
+    await menu.getByRole("menuitem", { name: "Öffentlich", exact: true }).count(),
     1,
   );
-  await stack
-    .getByRole("button", { name: "Verknüpfungen", exact: true })
+  await menu
+    .getByRole("menuitem", { name: "Verknüpfungen", exact: true })
     .click();
   await page.getByRole("dialog").locator("select").selectOption("web");
   await page
@@ -146,8 +154,10 @@ try {
   await page
     .getByRole("searchbox", { name: "Container suchen …", exact: true })
     .fill("");
-  await stack
-    .getByRole("button", { name: "1 Dienste prüfen", exact: true })
+  await stack.locator(".members").waitFor({ state: "detached" });
+  menu = await openStackMenu();
+  await menu
+    .getByRole("menuitem", { name: "1 Dienste prüfen", exact: true })
     .click();
   assert.equal(await stack.locator(".row").count(), 2);
   data.failDocker = true;
@@ -159,10 +169,21 @@ try {
   await page
     .getByText(/Angezeigte Werte können veraltet sein/)
     .waitFor({ state: "hidden", timeout: 15000 });
+  // The menu says when the chosen service is gone; it shows the state of
+  // the moment it opened, so reopen it until the next refresh arrived.
   data.webMissing = true;
-  await page
-    .getByText("Der zugeordnete Dienst web fehlt.", { exact: true })
-    .waitFor({ timeout: 15000 });
+  const missing = page.getByText("Der zugeordnete Dienst web fehlt.", {
+    exact: true,
+  });
+  for (let i = 0; ; i++) {
+    menu = await openStackMenu();
+    if (await missing.count()) break;
+    assert.ok(i < 30, "missing service shown in the stack menu");
+    await page.keyboard.press("Escape");
+    await menu.waitFor({ state: "hidden" });
+    await page.waitForTimeout(500);
+  }
+  await page.keyboard.press("Escape");
   // Command palette loads only authorized roots and navigates, never runs a NAS action.
   await page.keyboard.press("Control+k");
   await page.getByRole("dialog").waitFor();

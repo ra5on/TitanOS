@@ -66,13 +66,17 @@ await ctx.route("**/api/v1/background?*", async (r) =>
     contentType: "image/webp",
   }),
 );
-const edit = async () => {
+// Since 27 Oct 2026 the dashboard has no design editor of its own: the
+// background gallery and the metric transitions live in Settings ›
+// Appearance, saved with its one "Übernehmen" bar.
+const appearance = async () => {
+  await page.goto(base + "/settings/appearance");
   await page
-    .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
-    .click();
-  await page
-    .getByRole("complementary", { name: "Gesamtes Dashboard", exact: true })
+    .getByRole("heading", { name: "Hintergrund des Dashboards", exact: true })
     .waitFor();
+};
+const apply = async () => {
+  await page.getByRole("button", { name: "Übernehmen", exact: true }).click();
 };
 const gallery = async () => {
   await page
@@ -95,7 +99,6 @@ const shot = async (name) => {
 try {
   await page.goto(base + "/");
   await page.locator("[gs-id=cpu]").waitFor();
-  await edit();
   assert.equal(
     await page
       .locator(".backdrop.dashboard .dim")
@@ -103,43 +106,7 @@ try {
     "0.15",
     "inherited image must use the dashboard dimming setting",
   );
-  const dimming = page.getByRole("slider", { name: "Abdunklung", exact: true });
-  await dimming.focus();
-  await dimming.press("ArrowRight");
-  assert.equal(
-    await page
-      .locator(".backdrop.dashboard .dim")
-      .evaluate((e) => getComputedStyle(e).opacity),
-    "0.16",
-  );
-  await page.getByRole("button", { name: "Rückgängig", exact: true }).click();
-  const slider = page.getByRole("slider", {
-    name: "Globale Transparenz",
-    exact: true,
-  });
-  await slider.focus();
-  await slider.press("ArrowRight");
-  assert.equal(await slider.inputValue(), "49");
-  await page.getByRole("button", { name: "Rückgängig", exact: true }).click();
-  assert.equal(await slider.inputValue(), "48");
-  await page.getByRole("button", { name: "Wiederholen", exact: true }).click();
-  assert.equal(await slider.inputValue(), "49");
-  const opaque = await page
-    .locator("[gs-id=cpu] .dashboard-tile")
-    .evaluate((e) => getComputedStyle(e).backgroundColor);
-  assert.match(
-    opaque,
-    /0\.5[01]/,
-    "global alpha must be applied to tile surfaces",
-  );
-  await slider.dispatchEvent("pointerdown");
-  await slider.fill("60");
-  const transparent = await page
-    .locator("[gs-id=cpu] .dashboard-tile")
-    .evaluate((e) => getComputedStyle(e).backgroundColor);
-  assert.match(transparent, /0\.4/);
-  await page.getByRole("button", { name: "Rückgängig", exact: true }).click();
-  assert.equal(await slider.inputValue(), "49");
+  await appearance();
   await gallery();
   assert.equal(await page.locator(".wallpaper-choice").count(), 10);
   await page
@@ -149,24 +116,31 @@ try {
     .getByRole("button", { name: "Hintergrund verwenden", exact: true })
     .click();
   await shot("editor");
+  assert.equal(writes.length, 0, "preview wrote preferences");
+  await page.getByText("Nicht gespeichert", { exact: true }).waitFor();
+  await apply();
+  await page.getByText("Gespeichert", { exact: true }).waitFor();
+  assert.equal(data.prefs.dashboard.visual.background.id, "nordlicht");
+  await page.goto(base + "/");
+  await page.locator(".dashboard-background").waitFor();
   assert.equal(
     await page
       .locator(".dashboard-background .picture")
       .evaluate((e) => getComputedStyle(e).backgroundSize),
     "contain",
   );
-  assert.equal(writes.length, 0, "preview wrote preferences");
-  await page.getByRole("button", { name: "Speichern", exact: true }).click();
-  assert.equal(data.prefs.dashboard.visual.background.id, "nordlicht");
-  await page.reload();
-  await page.locator(".dashboard-background").waitFor();
-  await edit();
+  assert.match(
+    await page.locator(".dashboard-background .picture").getAttribute("style"),
+    /nordlicht/,
+  );
+  await appearance();
   await gallery();
   await shot("backgrounds");
   await page
     .getByRole("button", { name: "Eigenes Bild hinzufügen", exact: true })
     .click();
   await page
+    .getByRole("dialog", { name: "Hintergrund auswählen", exact: true })
     .locator("input[type=file]")
     .setInputFiles("web/static/backgrounds/bergsee.webp");
   await page
@@ -176,64 +150,58 @@ try {
   await shot("upload");
   const before = writes.length;
   await page
+    .getByRole("dialog", { name: "Hintergrund auswählen", exact: true })
     .getByRole("button", { name: "Abbrechen", exact: true })
-    .last()
     .click();
   assert.equal(writes.length, before);
-  assert.match(
-    await page.locator(".dashboard-background .picture").getAttribute("style"),
-    /nordlicht/,
+  assert.equal(
+    await page.getByRole("button", { name: "Übernehmen", exact: true }).count(),
+    0,
+    "cancelling the gallery leaves nothing unsaved",
   );
   await gallery();
   await page
     .getByRole("button", { name: "Eigenes Bild hinzufügen", exact: true })
     .click();
   await page
+    .getByRole("dialog", { name: "Hintergrund auswählen", exact: true })
     .locator("input[type=file]")
     .setInputFiles("web/static/backgrounds/bergsee.webp");
   await page.locator(".personal-image").waitFor();
   await page
     .getByRole("button", { name: "Hintergrund verwenden", exact: true })
     .click();
-  await page.getByRole("button", { name: "Rückgängig", exact: true }).click();
-  assert.match(
-    await page.locator(".dashboard-background .picture").getAttribute("style"),
-    /nordlicht/,
-  );
-  await page.getByRole("button", { name: "Wiederholen", exact: true }).click();
-  assert.match(
-    await page.locator(".dashboard-background .picture").getAttribute("style"),
-    /blob:/,
-    "redo must retain the staged image",
-  );
+  // A failed save keeps the stored background and the staged image.
   data.failSave = true;
   data.saveDelay = 500;
-  await page.getByRole("button", { name: "Speichern", exact: true }).click();
-  assert.equal(
-    await page.locator(".dashboard-page").getAttribute("inert"),
-    "",
-    "editing must pause while its snapshot is being saved",
-  );
+  await apply();
   await page.getByRole("alert").waitFor();
+  assert.match(
+    await page.getByRole("alert").innerText(),
+    /^Hintergrund des Dashboards: /,
+  );
   assert.equal(data.prefs.dashboard.visual.background.id, "nordlicht");
   data.failSave = false;
   data.saveDelay = 0;
-  await page.getByRole("button", { name: "Speichern", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Dashboard bearbeiten", exact: true })
-    .waitFor();
+  await apply();
+  await page.getByText("Gespeichert", { exact: true }).waitFor();
   assert.equal(images.size, 1);
-  await page.reload();
+  await page.goto(base + "/");
   await page.locator(".dashboard-background").waitFor();
   assert.match(
     await page.locator(".dashboard-background .picture").getAttribute("style"),
     /api\/v1\/background\/[a-f0-9]{64}/,
   );
-  await edit();
-  await page.getByRole("tab", { name: "Animationen", exact: true }).click();
-  await page
-    .getByRole("checkbox", { name: "Sanfte Messwertübergänge", exact: true })
-    .uncheck();
+  // Smooth metric transitions: off, then on again, and never with reduced motion.
+  await appearance();
+  const smooth = page.getByRole("checkbox", {
+    name: "Sanfte Messwertübergänge",
+    exact: true,
+  });
+  await smooth.uncheck();
+  await apply();
+  await page.getByText("Gespeichert", { exact: true }).waitFor();
+  await page.goto(base + "/");
   assert.equal(
     await page
       .locator("[gs-id=cpu] .metric-level")
@@ -241,9 +209,12 @@ try {
       .evaluate((e) => getComputedStyle(e).transitionDuration),
     "0s",
   );
-  await page
-    .getByRole("checkbox", { name: "Sanfte Messwertübergänge", exact: true })
-    .check();
+  await appearance();
+  await smooth.check();
+  await apply();
+  await page.getByText("Gespeichert", { exact: true }).waitFor();
+  await page.goto(base + "/");
+  await page.locator("[gs-id=cpu] .metric-level").first().waitFor();
   await page.emulateMedia({ reducedMotion: "reduce" });
   assert.equal(
     await page
@@ -253,7 +224,26 @@ try {
     "0s",
   );
   await page.emulateMedia({ reducedMotion: "no-preference" });
-  await page.getByRole("button", { name: "Abbrechen", exact: true }).click();
+  // The transparency of Settings › Appearance reaches the dashboard tiles.
+  const tileAlpha = async (glass) => {
+    await appearance();
+    await page.locator("#glass").fill(String(glass));
+    await apply();
+    await page.getByText("Gespeichert", { exact: true }).waitFor();
+    await page.goto(base + "/");
+    const color = await page
+      .locator("[gs-id=cpu] .dashboard-tile")
+      .evaluate((e) => getComputedStyle(e).backgroundColor);
+    const alpha = /rgba?\([^)]*,\s*([0-9.]+)\)$/.exec(color)?.[1];
+    assert.ok(alpha !== undefined, `tile surface without alpha: ${color}`);
+    return Number(alpha);
+  };
+  const solid = await tileAlpha(20),
+    clear = await tileAlpha(50);
+  assert.ok(
+    clear < solid,
+    `more transparency must make tiles more transparent (${solid} -> ${clear})`,
+  );
   const cpu = page.locator("[gs-id=cpu] .metric-level").first();
   const initial = await cpu.evaluate((e) => e.getBoundingClientRect().width);
   data.system.cpu.usagePercent = 82;
@@ -269,8 +259,7 @@ try {
   });
   assert.ok(frames.length > 5, "CPU has no interpolated frames");
   await page.setViewportSize({ width: 390, height: 844 });
-  await edit();
-  await page.getByRole("tab", { name: "Oberfläche", exact: true }).click();
+  await appearance();
   await gallery();
   assert.ok(
     await page.evaluate(
@@ -284,7 +273,6 @@ try {
     JSON.stringify(
       {
         backgrounds: 10,
-        undoRedo: true,
         noWritesDuringPreview: true,
         uploadAndReload: true,
         failedSavePreservesSelection: true,

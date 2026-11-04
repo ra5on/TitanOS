@@ -88,6 +88,8 @@ try {
  await page.getByRole('button',{name:'Schließen',exact:true}).click();
  await page.getByRole('button',{name:'Widerrufen',exact:true}).click();
  await page.getByRole('dialog').getByRole('button',{name:'Widerrufen',exact:true}).click();
+ // The DELETE arrives a moment after the click; wait for it instead of racing it.
+ await page.getByRole('dialog').waitFor({state:'detached'});
  assert.equal(tokens.length,0);
  await page.goto(base+'/settings/network');
  assert.equal(await page.getByRole('textbox',{name:'Name des NAS'}).inputValue(),'titan-test');

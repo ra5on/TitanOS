@@ -38,7 +38,7 @@ async function context(role='owner',theme='graphit',width=1440) {
   if(path==='/storage')return json({volumes:role==='user'?[]:[volume],disks:[],diskSleep:{idleMinutes:0,available:true,errors:[]}});
   if(path==='/notifications')return json({messages:[{id:1,time,severity:'warning',kind:'volume_full',subject:'data',title:'Volume',text:'Full'}]});
   if(path==='/terminal') { if(failLoad || (method==='PUT' && failTerminal))return fail(); if(method==='PUT') {await new Promise(r=>setTimeout(r,200));terminalValue={...terminalValue,...route.request().postDataJSON()};} return json(terminalValue); }
-  if(path==='/system/ssh')return json({enabled:false,running:false,fingerprint:'',accounts:[],allowedNetworks:[],homeNetworks:[]});
+  if(path==='/system/ssh')return json({enabled:false,running:false,fingerprint:'',accounts:[],allowedNetworks:[],homeNetworks:[],tailscaleNetworks:['100.64.0.0/10','fd7a:115c:a1e0::/48'],netbirdNetworks:['100.64.0.0/10']});
   if(path==='/system/certificate')return json({kind:'self-signed',names:['nas'],issuer:'nas',notAfter:'2027-10-20T00:00:00Z',fingerprint:'abc'});
   if(path==='/config-backup') { if(failConfig)return fail(); return json({backup:{settings:{enabled:true,volume:'data',keep:7,schedule:'daily',time:'03:00',weekday:0},target:'data',lastCheck:time,lastError:'',backups:[{name:'test.tar.gz',volume:'data',time,sizeBytes:1234,hostname:'nas',version:'0.6.0'}],next:'2026-10-21T03:00:00Z'},volumes:['data']}); }
   if(path==='/backups/daily/snapshots')return json({snapshots:[{id:'abc123',time,paths:['documents'],bytes:100}]});
@@ -48,6 +48,8 @@ async function context(role='owner',theme='graphit',width=1440) {
   if(path==='/backups' && failTasks)return fail();
   if(path==='/backups')return json({smbTargets:[],jobs:[backup],shares:[{name:'documents',volume:'data'}],volumes:['data']});
   if(path==='/backups/daily/stop'){await new Promise(r=>setTimeout(r,500));backup.state.running=false;return json({smbTargets:[],jobs:[backup],shares:[],volumes:['data']});}
+  if(path==='/backups/application-recovery')return json({operation:null,active:false});
+  if(path==='/vm-clones/data')return json([]);
   if(path==='/backups/target')return json({target:{enabled:false,volume:'',port:0,sources:[],listening:[],problem:''},volumes:['data']});
   if(path==='/usb')return json([]);
   if(path==='/update/progress')return json({progress:{phase:'download',percent:40,file:'filesystem.squashfs'}});
@@ -101,12 +103,13 @@ try {
  await page.goto(base+'/settings');
  const search=page.getByRole('searchbox');await search.waitFor();
  assert.equal(await page.locator('main select, main input[type=checkbox]').count(),0);
- assert.equal(await page.locator('.settings-page .areas a').count(),allAreas);
+ // Desktop searches and lists the areas in the sidebar (the overview's list is for phones).
+ assert.equal(await page.getByRole('navigation',{name:'Einstellungsbereiche',exact:true}).locator('ul[aria-labelledby] a').count(),allAreas);
  for(const [query,href] of [['SSH','/settings/access#access-ssh'],['Zertifikat','/settings/access#access-cert'],['Terminal','/settings/access#access-terminal'],['DNS','/settings/network#network-dns'],['Zeitzone','/settings/timezone']]) {
   // The specific section is among the results; other areas may match too (HTTPS names know "Zertifikat" and mDNS).
-  await search.fill(query);assert.ok((await page.locator('.settings-page .areas a').evaluateAll(a=>a.map(x=>x.getAttribute('href')))).includes(href),query);
+  await search.fill(query);assert.ok((await page.getByRole('navigation',{name:'Einstellungsbereiche',exact:true}).locator('ul[aria-labelledby] a').evaluateAll(a=>a.map(x=>x.getAttribute('href')))).includes(href),query);
  }
- await search.fill('Backup');assert.ok(await page.locator('.areas a[href="/settings/backups/data"]').count());
+ await search.fill('Backup');assert.ok(await page.getByRole('navigation',{name:'Einstellungsbereiche',exact:true}).locator('ul[aria-labelledby] a[href="/settings/backups/data"]').count());
  await search.fill('');await page.screenshot({path:out+'/settings-desktop.png',fullPage:true});
  failLoad=true;await page.goto(base+'/settings/timezone');await page.getByRole('button',{name:'Erneut versuchen',exact:true}).waitFor();
  failLoad=false;await page.getByRole('button',{name:'Erneut versuchen',exact:true}).click();await page.locator('select').selectOption('UTC');await page.getByText('Gespeichert',{exact:true}).waitFor();
@@ -115,11 +118,12 @@ try {
  failLoad=true;await page.goto(base+'/settings/access#access-terminal');await page.locator('#access-terminal').getByRole('button',{name:'Erneut versuchen'}).waitFor();
  failLoad=false;await page.locator('#access-terminal').getByRole('button',{name:'Erneut versuchen'}).click();
  const enabled=page.getByRole('checkbox',{name:'Terminal und Konsolen erlauben',exact:true});await enabled.waitFor();
- failTerminal=true;await enabled.uncheck();await page.locator('#access-terminal [role=alert]').waitFor();assert.equal(await enabled.isChecked(),true);
+ // A refused change flips the box back, so click instead of uncheck (which insists on the new state).
+ failTerminal=true;await enabled.click();await page.locator('#access-terminal [role=alert]').waitFor();assert.equal(await enabled.isChecked(),true);
  failTerminal=false;await enabled.uncheck();await page.locator('#access-terminal').getByText('Gespeichert',{exact:true}).waitFor();assert.equal(await enabled.isChecked(),false);
  await page.clock.runFor(5100);assert.equal(await page.locator('#access-terminal').getByText('Gespeichert',{exact:true}).count(),0);
  await page.getByRole('checkbox',{name:'Passwort vor dem Herunterladen von Stick-Sicherungen erneut abfragen',exact:true}).check();await page.locator('#access-terminal').getByText('Gespeichert',{exact:true}).waitFor();
- await page.goto(base+'/settings/backups');await page.locator('.groups').waitFor();await page.getByText('Noch keine Sicherung',{exact:true}).waitFor({state:'hidden'});await page.getByText('Nicht verfügbar',{exact:true}).waitFor({state:'hidden'});
+ await page.goto(base+'/settings/backups');await page.locator('.settings-page .groups').waitFor();await page.getByText('Noch keine Sicherung',{exact:true}).waitFor({state:'hidden'});await page.getByText('Nicht verfügbar',{exact:true}).waitFor({state:'hidden'});
  const expectedNext=await page.evaluate(()=>new Intl.DateTimeFormat('de',{dateStyle:'medium',timeStyle:'short'}).format(new Date('2026-10-21T02:30:00Z')));
  assert.equal(await page.locator('.summary > div').nth(2).locator('strong').innerText(),expectedNext,'next backup compares instants across time zone offsets');
  await page.screenshot({path:out+'/backups-desktop.png',fullPage:true});
@@ -144,7 +148,7 @@ try {
   }
   await ctx.close();
  }
- const user=await context('user');await user.page.goto(base+'/settings');await user.page.getByRole('searchbox').waitFor();assert.equal(await user.page.locator('.settings-page .areas a').count(),userAreas);
+ const user=await context('user');await user.page.goto(base+'/settings');await user.page.getByRole('searchbox').waitFor();assert.equal(await user.page.getByRole('navigation',{name:'Einstellungsbereiche',exact:true}).locator('ul[aria-labelledby] a').count(),userAreas);
  for(const path of ['backups','backups/data','backups/configuration','backups/restore','timezone','access']) { await user.page.goto(base+'/settings/'+path);await user.page.getByText('Dafür fehlen diesem Konto die Rechte.',{exact:true}).waitFor(); }
  assert.ok(!requests.some(([role,,path])=>role==='user'&&['/backups','/config-backup','/network','/system/ssh','/system/certificate'].includes(path)));
  await user.ctx.close();assert.deepEqual(errors,[]);console.log('UI 0.6.1 checks passed: grouping, deep links, legacy links, restore dialog, errors/retry, local feedback, no archive polling, roles and responsive themes.');

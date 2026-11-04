@@ -26,8 +26,19 @@ const open = async (p, id, name) => {
     .click();
   await p.getByRole("menu").waitFor();
 };
+// After a resize the grid lays out again; under load that can take longer
+// than ready()'s pause, so the final layout gets up to two seconds.
 async function noOverlap(p) {
-  const bad = await p.locator(".dashboard-grid > [gs-id]").evaluateAll((es) => {
+  const deadline = Date.now() + 2000;
+  let bad = await overlaps(p);
+  while (bad.length && Date.now() < deadline) {
+    await p.waitForTimeout(100);
+    bad = await overlaps(p);
+  }
+  assert.deepEqual(bad, [], "tiles overlap");
+}
+async function overlaps(p) {
+  return p.locator(".dashboard-grid > [gs-id]").evaluateAll((es) => {
     const rs = es.map((e) => ({
       id: e.getAttribute("gs-id"),
       r: e.getBoundingClientRect(),
@@ -43,7 +54,6 @@ async function noOverlap(p) {
         .map((b) => [a.id, b.id]),
     );
   });
-  assert.deepEqual(bad, [], "tiles overlap");
 }
 try {
   const { ctx, page, data } = await factory("owner", "graphit", 1600);

@@ -39,7 +39,7 @@ try {
     assert.equal(await limit.inputValue(), "50");
     assert.match(await dialog.textContent(), /Windows sieht sie als Laufwerksgröße/);
     await limit.fill("0.001");
-    await dialog.getByText("mindestens 16 MiB").waitFor();
+    await dialog.getByText("mindestens 17 MB").waitFor();
     assert.equal(await dialog.getByRole("button", { name: "Speichern", exact: true }).isDisabled(), true);
     await limit.fill("120");
     await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
