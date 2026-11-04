@@ -9,7 +9,7 @@ test('notifications link to existing local destinations and encode untrusted sub
 	assert.equal(noticeLink('backup_failed', 'daily'), '/settings/backups/data#backup-daily');
 	assert.equal(noticeLink('config_backup_failed', 'data'), '/settings/backups/configuration');
 	assert.equal(noticeLink('update_available', '0.6.0'), '/settings/updates');
-	assert.equal(noticeLink('disk_test_failed', 'sda'), '/tools');
+	assert.equal(noticeLink('disk_test_failed', 'sda'), '/tools/disks');
 	assert.equal(noticeLink('volume_failed', 'x/#?"'), '/storage#volume-x%2F%23%3F%22');
 	assert.equal(noticeLink('unknown', 'https://evil.example'), null);
 	assert.equal(

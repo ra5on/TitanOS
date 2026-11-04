@@ -25,6 +25,14 @@ type transferProgress struct {
 	Paused   bool      `json:"paused"`
 	Priority int       `json:"priority"`
 	Rate     int64     `json:"rate"`
+	// Totals and problems, kept since 4.11.2026; older records lack them.
+	Files     int64         `json:"files,omitempty"`
+	Bytes     int64         `json:"bytes,omitempty"`
+	ErrorCode string        `json:"errorCode,omitempty"`
+	Failed    int64         `json:"failed,omitempty"`
+	Kept      int64         `json:"kept,omitempty"`
+	Identical int64         `json:"identical,omitempty"`
+	Problems  []CopyProblem `json:"problems,omitempty"`
 }
 type transferPart struct {
 	Path     string `json:"path"`
@@ -36,6 +44,7 @@ type transferEvent struct {
 	Rel      string           `json:"rel,omitempty"`
 	Target   string           `json:"target,omitempty"`
 	Version  string           `json:"version,omitempty"`
+	Source   string           `json:"source,omitempty"`
 	Skip     bool             `json:"skip,omitempty"`
 	Complete bool             `json:"complete,omitempty"`
 	Top      bool             `json:"top,omitempty"`
@@ -46,7 +55,12 @@ type transferEnd struct {
 }
 
 func progressLocked(job *Job) transferProgress {
-	return transferProgress{job.State, job.Error, job.Current, job.Finished, job.c.committed.Load(), job.c.count.Load(), job.Paused, job.Priority, job.Rate}
+	problems := job.Problems
+	if len(problems) > maxSavedProblems {
+		problems = problems[:maxSavedProblems]
+	}
+	return transferProgress{State: job.State, Error: job.Error, Current: job.Current, Finished: job.Finished, Copied: job.c.committed.Load(), Done: job.c.count.Load(), Paused: job.Paused, Priority: job.Priority, Rate: job.Rate,
+		Files: job.Files, Bytes: job.Bytes, ErrorCode: job.ErrorCode, Failed: job.Failed, Kept: job.Kept, Identical: job.Identical, Problems: append([]CopyProblem(nil), problems...)}
 }
 func (p transferProgress) apply(job *Job) {
 	job.State = p.State
@@ -58,6 +72,12 @@ func (p transferProgress) apply(job *Job) {
 	job.Paused = p.Paused
 	job.Priority = p.Priority
 	job.Rate = p.Rate
+	if p.Files > 0 || p.Bytes > 0 {
+		job.Files, job.Bytes = p.Files, p.Bytes
+	}
+	job.ErrorCode = p.ErrorCode
+	job.Failed, job.Kept, job.Identical = p.Failed, p.Kept, p.Identical
+	job.Problems = p.Problems
 }
 func repairTransferTail(file *os.File) error {
 	st, err := file.Stat()
@@ -234,6 +254,12 @@ func readTransferEvents(root *os.Root, id string, t *transfer) error {
 			}
 			if event.Version != "" {
 				t.Destinations[event.Target] = event.Version
+			}
+			if event.Source != "" {
+				if t.Sources == nil {
+					t.Sources = map[string]string{}
+				}
+				t.Sources[event.Rel] = event.Source
 			}
 		}
 		if event.Pending != nil {

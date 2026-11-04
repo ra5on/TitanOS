@@ -36,6 +36,7 @@
 	import { api, type CopyJob } from '#lib/api.ts';
 	import { MB, formatBytes } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
+	import { copyErrorKey, isKept, problemKey } from '#lib/copy-problems.ts';
 
 	type Props = {
 		/** Called when a job that was running has ended. */ onfinished: () => void;
@@ -63,6 +64,34 @@
 			await fetchJobs();
 		}
 	}
+	// After a restart of the NAS a saved job cannot be retried: a new job
+	// copies what is still missing (or changed) instead.
+	async function copyMissing(job: CopyJob) {
+		if (!canRetry(job) || retrying) return;
+		retrying = job.id;
+		pollRevision++;
+		retryError = '';
+		try {
+			await api.post('/files/copy', {
+				root: job.from,
+				paths: job.names,
+				toRoot: job.to,
+				toDir: job.dir,
+				move: job.move,
+				conflict: 'missing',
+			});
+		} catch (err) {
+			retryError = apiErrorText(err);
+		} finally {
+			retrying = '';
+			await fetchJobs();
+		}
+	}
+	const withErrors = (job: CopyJob) => job.state === 'done' && (job.failed ?? 0) > 0;
+	const stateText = (job: CopyJob) =>
+		withErrors(job)
+			? t('files.jobState.partial')
+			: t(`files.jobState.${job.state}` as 'files.jobState.done');
 	async function control(job: CopyJob, change: Partial<CopyJob>) {
 		if (controlling) return;
 		controlling = job.id;
@@ -166,7 +195,15 @@
 </script>
 
 {#each notices as notice (notice.id)}<div class="notice" role="status">
-		<strong>{t(notice.state === 'done' ? 'files.operationDone' : 'files.operationFailed')}</strong>
+		<strong
+			>{t(
+				withErrors(notice)
+					? 'files.operationPartial'
+					: notice.state === 'done'
+						? 'files.operationDone'
+						: 'files.operationFailed',
+			)}</strong
+		>
 		<span class="mono">{notice.to}/{notice.dir}</span>
 		<button class="btn" onclick={() => onopen(notice.to, notice.dir)}
 			>{t('files.openDestination')}</button
@@ -225,7 +262,7 @@
 							>{t('common.cancel')}</button
 						>
 					{:else}
-						<span class="chip">{t(`files.jobState.${job.state}` as 'files.jobState.done')}</span>
+						<span class="chip" class:chip-warn={withErrors(job)}>{stateText(job)}</span>
 					{/if}
 				</div>
 				{#if job.state === 'running' && !job.operation}<div class="line controls">
@@ -286,7 +323,15 @@
 						})}{/if}{#if job.state === 'running' && job.current}
 						· <span class="mono">{job.current}</span>{/if}
 				</div>
-				{#if job.state === 'running' && !job.paused && !job.waiting}<p class="small muted">
+				{#if job.state === 'running' && job.planning}<p class="small muted" role="status">
+						{t('files.jobPlanning')}
+					</p>{/if}
+				{#if (job.identical ?? 0) > 0}<p class="small muted">
+						{t('files.jobIdentical', { count: job.identical ?? 0 })}
+					</p>{/if}
+				{#if job.state === 'running' && !job.paused && !job.waiting && !job.planning}<p
+						class="small muted"
+					>
 						{#if samples[job.id]?.speed > 0}{formatBytes(
 								samples[job.id].speed,
 							)}/s{#if job.bytes > job.copied}
@@ -297,8 +342,31 @@
 									),
 								})}{/if}{:else}{t('files.speedPending')}{/if}
 					</p>{/if}
+				{#if job.problems?.length}
+					<details class="problems" open={job.problems.length <= 5}>
+						<summary
+							>{t('files.problemSummary', {
+								failed: job.failed ?? 0,
+								kept: job.kept ?? 0,
+							})}</summary
+						>
+						<ul>
+							{#each job.problems as problem, index (index)}<li class:kept={isKept(problem.code)}>
+									<span class="mono">{problem.path}</span><span>{t(problemKey(problem.code))}</span>
+								</li>{/each}
+						</ul>
+						{#if (job.failed ?? 0) + (job.kept ?? 0) > job.problems.length}<p class="muted small">
+								{t('files.problemsMore', {
+									count: (job.failed ?? 0) + (job.kept ?? 0) - job.problems.length,
+								})}
+							</p>{/if}
+					</details>
+				{/if}
 				{#if job.error}<div class="notice-warn">
-						<strong>{t(`files.transferProblem.${transferProblem(job.error)}`)}</strong
+						<strong
+							>{copyErrorKey(job.errorCode)
+								? t(copyErrorKey(job.errorCode) as 'files.copyError.other')
+								: t(`files.transferProblem.${transferProblem(job.error)}`)}</strong
 						>{#if job.current}<p class="mono">{job.current}</p>{/if}
 						<details>
 							<summary>{t('files.technicalDetails')}</summary>
@@ -313,9 +381,20 @@
 				{#if job.retryable}<button
 						class="btn"
 						disabled={retrying !== '' || !canRetry(job)}
-						onclick={() => retry(job)}>{t('files.retryRemaining')}</button
+						onclick={() => retry(job)}
+						>{t(withErrors(job) ? 'files.retryFailed' : 'files.retryRemaining')}</button
 					>
 					<p class="muted small">{t('files.retryHint')}</p>{/if}
+				{#if job.rebooted && job.state !== 'running' && !job.operation && !job.blocked}<p
+						class="muted small"
+					>
+						{t('files.rebootedHint')}
+					</p>
+					<button
+						class="btn"
+						disabled={retrying !== '' || !canRetry(job)}
+						onclick={() => copyMissing(job)}>{t('files.copyMissing')}</button
+					>{/if}
 				{#if job.state !== 'running'}<button
 						class="btn"
 						disabled={!!retrying}
@@ -385,5 +464,38 @@
 	}
 	.what {
 		overflow-wrap: anywhere;
+	}
+	.chip-warn {
+		background: var(--warn-bg);
+		border: 1px solid var(--warn-border);
+		color: var(--warn-text);
+	}
+	.problems {
+		margin: var(--space-2) 0;
+	}
+	.problems summary {
+		cursor: pointer;
+		font-weight: 600;
+	}
+	.problems ul {
+		list-style: none;
+		margin: var(--space-2) 0 0;
+		padding: 0;
+		max-height: 16rem;
+		overflow: auto;
+	}
+	.problems li {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-1) var(--space-3);
+		padding: var(--space-1) 0;
+		border-top: 1px solid var(--border);
+		font-size: var(--text-sm);
+	}
+	.problems li .mono {
+		overflow-wrap: anywhere;
+	}
+	.problems li.kept span:last-child {
+		color: var(--muted);
 	}
 </style>

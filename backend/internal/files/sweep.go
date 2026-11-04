@@ -110,7 +110,7 @@ func (m *Manager) sweepVolume(volume, dir string) {
 		m.mu.Lock()
 		_, active := m.uploads[id]
 		m.mu.Unlock()
-		if active || m.downloadKnown(id) {
+		if active || m.downloadKnown(id) || m.copyPartActive(id) {
 			continue
 		}
 		note := path.Join(uploadNotes, id)

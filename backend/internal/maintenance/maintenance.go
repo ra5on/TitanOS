@@ -52,7 +52,7 @@ type Job struct {
 	Versions *retention.Keep `json:"versions,omitempty"`
 }
 type Settings struct {
-	BackupsFirst bool   `json:"backupsFirst,omitempty"`
+	BackupsFirst bool   `json:"backupsFirst"`
 	Enabled      bool   `json:"enabled"`
 	Volume       string `json:"volume"`
 	Timezone     string `json:"timezone"`

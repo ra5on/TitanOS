@@ -4,7 +4,7 @@
 	import Dropdown from '#lib/components/Dropdown.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
-	import { views, type FileCommand } from './commands.ts';
+	import { hasTrash, views, type FileCommand } from './commands.ts';
 
 	type Props = {
 		root: FileRoot | undefined;
@@ -67,7 +67,12 @@
 </script>
 
 <!-- Phones: the bars of the list are hidden, these take their place. -->
-<div class="mobile-file-actions" role="toolbar" aria-label={t('files.moreActions')}>
+<div
+	class="mobile-file-actions"
+	class:with-trash={hasTrash(root)}
+	role="toolbar"
+	aria-label={t('files.moreActions')}
+>
 	<button
 		type="button"
 		class="btn btn-primary"
@@ -97,6 +102,13 @@
 		onclick={toggleMobileSearch}
 		><Icon name="search" size={16} /><span>{t('files.mobileSearch')}</span></button
 	>
+	{#if hasTrash(root)}<button
+			type="button"
+			class="btn icon trash"
+			aria-label={t('files.trash')}
+			title={t('files.trash')}
+			onclick={() => oncommand('trash')}><Icon name="trash" size={16} /></button
+		>{/if}
 	<Dropdown label={t('files.moreActions')} text={t('files.mobileMore')} icon="more" align="right"
 		>{#snippet children(close)}
 			<button type="button" role="menuitem" disabled={!dir} onclick={() => run(close, 'up')}
@@ -140,12 +152,6 @@
 					onclick={() => run(close, 'usage')}>{t('files.usageTitle')}</button
 				><button type="button" role="menuitem" onclick={() => run(close, 'duplicates')}
 					>{t('files.duplicatesTitle')}</button
-				>{/if}
-			{#if root?.kind === 'share'}<button
-					type="button"
-					role="menuitem"
-					onclick={() => run(close, 'trash')}
-					><Icon name="trash" size={16} />{t('files.trash')}</button
 				>{/if}
 			<hr />
 			{#each views as option}<button
@@ -234,6 +240,15 @@
 			grid-template-columns: repeat(4, minmax(0, 1fr));
 			gap: 6px;
 			min-width: 0;
+		}
+		/* The recycle bin as its own icon between search and "more". */
+		.mobile-file-actions.with-trash {
+			grid-template-columns: repeat(3, minmax(0, 1fr)) 44px minmax(0, 1fr);
+		}
+		.mobile-file-actions > .btn.trash {
+			width: 44px;
+			padding: 0;
+			justify-content: center;
 		}
 		.mobile-file-actions > .btn {
 			min-width: 0;

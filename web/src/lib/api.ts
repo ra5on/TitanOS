@@ -473,6 +473,8 @@ export type FileRoot = {
 	writable: boolean;
 	recycle: boolean;
 	recycleDays?: number;
+	/** Volumes: folders of shares on it whose recycle bin is on. */
+	bins?: string[];
 	/** Text files can be saved although the root is read-only (the stick). */
 	editable?: boolean;
 	totalBytes: number;
@@ -503,6 +505,19 @@ export type CopyJob = {
 	copied: number;
 	current: string;
 	error: string;
+	/** Why a job stopped (copy jobs), see files.copyError.* */
+	errorCode?: string;
+	/** Still walking the selection. */
+	planning?: boolean;
+	conflict?: string;
+	/** Entries not transferred, entries a move left at the source, identical files left alone. */
+	failed?: number;
+	kept?: number;
+	identical?: number;
+	/** The first of the failed and kept entries, with a code (files.copyProblem.*). */
+	problems?: { path: string; code: string }[];
+	/** A saved job after a restart of the NAS: no retry, copy the missing files instead. */
+	rebooted?: boolean;
 };
 
 export type UsbDevice = {

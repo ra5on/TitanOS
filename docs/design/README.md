@@ -236,11 +236,13 @@ Abschlussmeldungen verlinken den Zielordner; Fehler behalten den betroffenen
 Pfad. Die Auswahl zeigt ihre Dateigröße, ausgewählte Ordner werden nur auf
 Knopfdruck berechnet. Punktdateien lassen sich über eine im Konto gespeicherte
 Option anzeigen. Vor Kopierkonflikten zeigt der Dialog Quelle und Ziel mit
-Größe und Änderungszeit; Ersetzen benötigt eine zusätzliche Bestätigung. Bei
-Auswahl von Ersetzen oder Einzelentscheidungen startet die begrenzte Zielprüfung
-automatisch, ohne vorgeschalteten Kopierklick. Zielwechsel verwerfen Vorschau
-und Bestätigung, verspätete Antworten werden verworfen. Fehler bieten erneutes
-Prüfen; bei gekürztem Vergleich bleibt Ersetzen gesperrt.
+Größe und Änderungszeit; Ersetzen benötigt eine zusätzliche Bestätigung und
+sagt, ob ersetzte Dateien in den Papierkorb gehen. Die begrenzte Zielprüfung
+startet, sobald ein Ziel gewählt ist; gleiche Dateien wählen „Nur fehlende oder
+geänderte Dateien“ vor. Zielwechsel verwerfen Vorschau und Bestätigung,
+verspätete Antworten werden verworfen. Fehler bieten erneutes Prüfen; nach
+Zeitüberschreitung oder bei gekürztem Vergleich starten Regeln für alle, nur
+Einzelentscheidungen bleiben gesperrt (Stand 4.11.2026, `docs/FILE-COPY.md`).
 USB-Backup-Laufwerke sind in der Dateiseite zunächst gegen Änderungen
 geschützt. Ein Dialog schaltet Änderungen für den aktuellen Speicherort frei;
 Speicherortwechsel und Verlassen der Seite beenden diese Freischaltung.
@@ -404,8 +406,8 @@ Der Benutzer entscheidet, welche Kopie erhalten bleibt. Kein Hintergrundindex.
 Im Kopierdialog bietet „Für jede Datei entscheiden“ für die aufgelisteten
 Konflikte Überspringen, Ersetzen oder einen ausdrücklich eingegebenen anderen
 Namen. Größe/Datum beider Seiten bleiben sichtbar. Ersetzen braucht zusätzlich
-eine Bestätigung; bei abgeschnittener Vorschau sind Einzelentscheidungen und
-Ersetzen gesperrt. Ungeprüfte zusätzliche Konflikte werden übersprungen.
+eine Bestätigung; bei abgeschnittener Vorschau sind Einzelentscheidungen
+gesperrt, Ersetzen für alle bleibt nach Bestätigung möglich. Ungeprüfte zusätzliche Konflikte werden übersprungen.
 Benannte neue Ziele werden ohne Überschreiben veröffentlicht. Versionen von
 Quelle und vorhandenem Ziel werden erneut geprüft; ein zwischenzeitlicher
 Zielwechsel stoppt die betroffene Kopie. Bei übersprungenen Untereinträgen einer
@@ -663,7 +665,8 @@ Prüfung: `scripts/test-ui-workflows.mjs`, wie die übrigen Browserprüfungen mi
 ### Speicher, Wartung und Aufträge (0.16.0)
 
 Der bestätigte Gesamtentwurf wird mit gemeinsamen PageHead-/Dialog-/Kachelmustern
-und Theme-Variablen umgesetzt. Werkzeuge verlinkt Aufträge, Wartung, Monitoring und
+und Theme-Variablen umgesetzt. Werkzeuge (seit 4.11.2026 mit Seitenleiste wie die Einstellungen,
+siehe `docs/rules/SYSTEM.md`) verlinkt Aufträge, Wartung, Monitoring und
 Speicherübernahme. Aufträge bündelt aktuelle Arbeit, Fehler, nächste Termine und
 Wiederanlauf. Seit 0.18.0 liegt dieser Handlungsbereich ausschließlich auf der Auftragsseite.
 
