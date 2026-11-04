@@ -629,6 +629,7 @@
 	"notify.kind.share_data_delete_failed.text": "Das Löschen ist nicht durchgelaufen. Werkzeuge › Aufträge nennt den Grund und ob die Daten noch da sind.",
 	"error.file_not_found": "Die Datei oder der Ordner wurde nicht gefunden.",
 	"error.file_exists": "Eine Datei oder ein Ordner mit diesem Namen existiert schon.",
+	"error.file_link_outside": "Diese Datei ist ein Verweis auf einen Ort außerhalb dieses Ordners und kann hier nicht geöffnet werden.",
 	"error.invalid_path": "Dieser Name ist nicht erlaubt.",
 	"error.read_only_share": "Auf dieser Freigabe darfst du nur lesen.",
 	"error.no_space": "Auf dem Volume ist nicht genug Platz frei.",

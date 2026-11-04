@@ -23,6 +23,5 @@ func (s *Server) registerHardware(mux *routeMux) {
 
 // registerFans registers the routes of the fans.
 func (s *Server) registerFans(mux *routeMux) {
-	mux.HandleFunc("GET /api/v1/system/fans", s.requireAdmin(s.handleFans))
-	mux.HandleFunc("PUT /api/v1/system/fans", s.requireAdmin(s.handleFansSet))
+	fansArea{fans: s.opts.Fans}.register(mux, s.requireAdmin)
 }

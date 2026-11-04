@@ -32,7 +32,8 @@
 		lastOf,
 		type Keep,
 	} from '#lib/components/KeepVersions.svelte';
-	import SnapshotFiles from './SnapshotFiles.svelte';
+	import RestoreDialog from './RestoreDialog.svelte';
+	import ScheduleFields from './ScheduleFields.svelte';
 	import SmbTargets, { type SmbTarget } from './SmbTargets.svelte';
 	import TargetPanel from './TargetPanel.svelte';
 	import ReplicationPanel from './ReplicationPanel.svelte';
@@ -146,7 +147,6 @@
 		shares: { name: string; volume: string }[];
 		volumes: string[] | null;
 	};
-	type Snapshot = { id: string; time: string; paths: string[]; bytes: number };
 
 	let usbDrives = $state<{ id: string; name: string; supported: boolean }[]>([]);
 	let overview = $state<Overview | null>(null);
@@ -168,15 +168,7 @@
 	let secretSet = $state<Record<string, boolean>>({});
 	let publicKey = $state('');
 	let removing = $state<Job | null>(null);
-	let restoring = $state<{
-		job: Job;
-		snapshots: Snapshot[] | null;
-		snapshot: string;
-		volume: string;
-		target: string;
-		mode: 'all' | 'files';
-		paths: string[];
-	} | null>(null);
+	let restoring = $state<Job | null>(null);
 	let checking = $state<{ job: Job; readData: number } | null>(null);
 	let secret = $state<{ job: Job; password: string; asking: boolean } | null>(null);
 
@@ -228,7 +220,6 @@
 	});
 
 	const volumes = $derived(overview?.volumes ?? []);
-	const WEEKDAYS = [1, 2, 3, 4, 5, 6, 0];
 
 	function create() {
 		error = null;
@@ -335,24 +326,6 @@
 		if (!draft) return;
 		const list = draft.extras ?? [];
 		draft.extras = list.includes(extra) ? list.filter((e) => e !== extra) : [...list, extra];
-	}
-
-	function toggleDay(day: number) {
-		if (!draft) return;
-		const days = draft.weekdays ?? [];
-		// At least one day stays.
-		draft.weekdays = days.includes(day)
-			? days.length > 1
-				? days.filter((d) => d !== day)
-				: days
-			: [...days, day];
-	}
-
-	const needsTimes = (every: string) => every !== 'hourly';
-	const windowOn = $derived(!!draft?.windowFrom);
-	function toggleWindow(on: boolean) {
-		if (!draft) return;
-		[draft.windowFrom, draft.windowTo] = on ? ['01:00', '06:00'] : ['', ''];
 	}
 
 	/** A pairing code of another TitanOS: titanos-backup: and base64url JSON. */
@@ -606,58 +579,10 @@
 		}
 	}
 
-	// Each opening of the restore dialog has its number; a list of saved
-	// states that arrives late belongs to an earlier one and is dropped.
-	let restoreRequest = 0;
 	let dialogError = $state('');
-	async function openRestore(job: Job) {
+	function openRestore(job: Job) {
 		error = null;
-		dialogError = '';
-		const mine = ++restoreRequest;
-		restoring = {
-			job,
-			snapshots: null,
-			snapshot: '',
-			volume: volumes[0] ?? '',
-			target: '',
-			mode: 'all',
-			paths: [],
-		};
-		try {
-			const res = await api.get<{ snapshots: Snapshot[] }>(`/backups/${job.id}/snapshots`);
-			if (mine !== restoreRequest || !restoring) return;
-			restoring.snapshots = res.snapshots;
-			restoring.snapshot = res.snapshots[0]?.id ?? '';
-		} catch (err) {
-			if (mine !== restoreRequest) return;
-			problem(err);
-			restoring = null;
-		}
-	}
-	function closeRestore() {
-		restoreRequest++;
-		restoring = null;
-		dialogError = '';
-	}
-
-	async function restore(event: SubmitEvent) {
-		event.preventDefault();
-		if (!restoring || busy) return;
-		busy = true;
-		dialogError = '';
-		try {
-			const res = await api.post<{ target: string }>(`/backups/${restoring.job.id}/restore`, {
-				snapshot: restoring.snapshot,
-				volume: restoring.volume,
-				paths: restoring.mode === 'files' ? restoring.paths : undefined,
-			});
-			restoring.target = res.target;
-			load();
-		} catch (err) {
-			// The dialog stays with what was chosen; the reason is shown in it.
-			dialogError = apiErrorText(err);
-		}
-		busy = false;
+		restoring = job;
 	}
 
 	async function check(event: SubmitEvent) {
@@ -1369,122 +1294,7 @@
 					</p>{/if}
 			{/if}
 		</fieldset>
-		<fieldset class="divided">
-			<legend>{t('backup.schedule')}</legend>
-			<label class="check"
-				><input type="checkbox" bind:checked={draft.enabled} /><span>{t('backup.enabled')}</span
-				></label
-			>
-			{#if draft.enabled}
-				<div class="row">
-					<label class="narrow"
-						><span>{t('backup.every')}</span>
-						<select class="field" bind:value={draft.every}>
-							<option value="hourly">{t('backup.every.hourly')}</option>
-							<option value="daily">{t('backup.every.daily')}</option>
-							<option value="weekly">{t('backup.every.weekly')}</option>
-							<option value="monthly">{t('backup.every.monthly')}</option>
-						</select>
-					</label>
-					{#if draft.every === 'hourly'}
-						<label class="narrow"
-							><span>{t('backup.interval')}</span>
-							<select class="field" bind:value={draft.interval}>
-								{#each [1, 2, 3, 4, 6, 12] as hours (hours)}<option value={hours}
-										>{t('backup.intervalHours', { hours })}</option
-									>{/each}
-							</select>
-						</label>
-					{/if}
-					{#if draft.every === 'monthly'}
-						<label class="tiny"
-							><span>{t('backup.monthDay')}</span>
-							<select class="field mono" bind:value={draft.monthDay}>
-								{#each Array.from({ length: 28 }, (_, i) => i + 1) as day (day)}<option value={day}
-										>{t('backup.monthDayOption', { day })}</option
-									>{/each}
-							</select>
-						</label>
-					{/if}
-				</div>
-				{#if draft.every === 'weekly'}
-					<div class="days" role="group" aria-label={t('backup.weekdays')}>
-						{#each WEEKDAYS as day (day)}
-							<label class="check"
-								><input
-									type="checkbox"
-									checked={draft.weekdays?.includes(day)}
-									onchange={() => toggleDay(day)}
-								/><span>{t(`backup.dayShort.${day}` as 'backup.dayShort.0')}</span></label
-							>
-						{/each}
-					</div>
-				{/if}
-				{#if needsTimes(draft.every)}
-					<div class="row">
-						{#each draft.times ?? [] as _, i (i)}
-							<label class="tiny"
-								><span>{i === 0 ? t('update.autoTime') : ''}&nbsp;</span>
-								<span class="inline"
-									><input class="field mono" type="time" bind:value={draft.times![i]} required />
-									{#if (draft.times?.length ?? 0) > 1}<button
-											type="button"
-											class="btn small"
-											aria-label={t('backup.removeTime')}
-											onclick={() => (draft!.times = draft!.times!.filter((_, n) => n !== i))}
-											>✕</button
-										>{/if}
-								</span>
-							</label>
-						{/each}
-						{#if (draft.times?.length ?? 0) < 8}<button
-								type="button"
-								class="btn small"
-								onclick={() => (draft!.times = [...(draft!.times ?? []), '12:00'])}
-								>{t('backup.addTime')}</button
-							>{/if}
-					</div>
-				{:else}
-					<label class="tiny"
-						><span>{t('backup.minute')}</span><input
-							class="field mono"
-							type="time"
-							bind:value={draft.times![0]}
-							required
-						/></label
-					>
-				{/if}
-				<label class="check"
-					><input
-						type="checkbox"
-						checked={windowOn}
-						onchange={(e) => toggleWindow(e.currentTarget.checked)}
-					/><span>{t('backup.window')}</span></label
-				>
-				{#if windowOn}
-					<div class="row">
-						<label class="tiny"
-							><span>{t('backup.windowFrom')}</span><input
-								class="field mono"
-								type="time"
-								bind:value={draft.windowFrom}
-								required
-							/></label
-						>
-						<label class="tiny"
-							><span>{t('backup.windowTo')}</span><input
-								class="field mono"
-								type="time"
-								bind:value={draft.windowTo}
-								required
-							/></label
-						>
-					</div>
-					<p class="muted">{t('backup.windowHint')}</p>
-				{/if}
-				<p class="muted">{t('backup.catchUp')}</p>
-			{/if}
-		</fieldset>
+		<ScheduleFields bind:schedule={draft} />
 		<fieldset class="divided">
 			<legend>{t('backup.bandwidth')}</legend>
 			<label class="check"
@@ -1673,79 +1483,16 @@
 {/if}
 
 {#if restoring}
-	{@const r = restoring}
-	<Dialog title={t('backup.restoreTitle', { name: r.job.id })} locked={busy} onclose={closeRestore}>
-		{#if r.target}
-			<p>{t('backup.restoreStarted')}</p>
-			<p class="mono">{r.target}</p>
-			<p class="muted">{t('backup.restoreWhere')}</p>
-			<div class="dialog-actions">
-				<button type="button" class="btn btn-primary" onclick={closeRestore}
-					>{t('common.done')}</button
-				>
-			</div>
-		{:else if r.snapshots === null}
-			<p class="muted">{t('backup.restoreLoading')}</p>
-		{:else if r.snapshots.length === 0}
-			<p class="muted">{t('backup.restoreNone')}</p>
-			<div class="dialog-actions">
-				<button type="button" class="btn" onclick={closeRestore}>{t('common.cancel')}</button>
-			</div>
-		{:else}
-			<form class="plain" onsubmit={restore}>
-				<p class="muted">{t('backup.restoreText')}</p>
-				<label
-					><span>{t('backup.restoreWhich')}</span>
-					<select class="field" bind:value={r.snapshot}>
-						{#each r.snapshots as snapshot (snapshot.id)}<option value={snapshot.id}
-								>{formatDateTime(new Date(snapshot.time))}{snapshot.bytes
-									? ` · ${formatBytes(snapshot.bytes)}`
-									: ''}</option
-							>{/each}
-					</select>
-				</label>
-				<fieldset class="mode">
-					<label class="check"
-						><input type="radio" bind:group={r.mode} value="all" /><span
-							>{t('backup.restoreAll')}</span
-						></label
-					>
-					<label class="check"
-						><input type="radio" bind:group={r.mode} value="files" /><span
-							>{t('backup.restoreFiles')}</span
-						></label
-					>
-				</fieldset>
-				{#if r.mode === 'files'}
-					<SnapshotFiles
-						job={r.job.id}
-						snapshot={r.snapshot}
-						start={r.snapshots.find((s) => s.id === r.snapshot)?.paths?.[0] ?? '/'}
-						bind:selected={r.paths}
-					/>
-				{/if}
-				<label
-					><span>{t('backup.restoreVolume')}</span>
-					<select class="field" bind:value={r.volume} required>
-						{#each volumes as volume (volume)}<option value={volume}>{volume}</option>{/each}
-					</select>
-				</label>
-				{#if volumes.length === 0}<p class="notice-warn">{t('backup.noVolume')}</p>{/if}
-				{#if dialogError}<p class="notice-error" role="alert">{dialogError}</p>{/if}
-				<div class="dialog-actions">
-					<button type="button" class="btn" onclick={closeRestore} disabled={busy}
-						>{t('common.cancel')}</button
-					>
-					<button
-						type="submit"
-						class="btn btn-primary"
-						disabled={busy || !r.volume || (r.mode === 'files' && r.paths.length === 0)}
-						>{t('backup.restoreDo')}</button
-					>
-				</div>
-			</form>
-		{/if}
-	</Dialog>
+	<RestoreDialog
+		job={restoring.id}
+		{volumes}
+		onclose={() => (restoring = null)}
+		onfailed={(err) => {
+			problem(err);
+			restoring = null;
+		}}
+		onstarted={load}
+	/>
 {/if}
 
 {#if checking}
@@ -1786,19 +1533,6 @@
 	/>{/if}
 
 <style>
-	.mode {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-2) 20px;
-		margin: 0;
-		padding: 0;
-		border: 0;
-	}
-	.mode .check {
-		flex-direction: row;
-		align-items: center;
-		gap: var(--space-2);
-	}
 	.targets {
 		display: grid;
 		gap: var(--gap);
@@ -2008,11 +1742,6 @@
 		font-size: 0.75rem;
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
-	}
-	.days {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.25rem 1rem;
 	}
 	.inline {
 		display: flex;

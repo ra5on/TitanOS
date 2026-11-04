@@ -20,8 +20,5 @@ func (s *Server) registerHealthReport(mux *routeMux) {
 
 // registerPush registers the routes of push notifications to browsers.
 func (s *Server) registerPush(mux *routeMux) {
-	mux.HandleFunc("GET /api/v1/notifications/push", s.requireAdmin(s.handlePushDevices))
-	mux.HandleFunc("POST /api/v1/notifications/push", s.requireAdmin(s.handlePushSubscribe))
-	mux.HandleFunc("DELETE /api/v1/notifications/push/{id}", s.requireAdmin(s.handlePushRemove))
-	mux.HandleFunc("POST /api/v1/notifications/push/{id}/test", s.requireAdmin(s.handlePushTest))
+	pushArea{push: s.opts.WebPush, notify: s.opts.Notify}.register(mux, s.requireAdmin)
 }

@@ -40,6 +40,7 @@ var fileErrors = []struct {
 	{files.ErrProtected, http.StatusConflict, "vm_file_protected"},
 	{files.ErrNotFound, http.StatusNotFound, "file_not_found"},
 	{files.ErrExists, http.StatusConflict, "file_exists"},
+	{files.ErrLinkOutside, http.StatusForbidden, "file_link_outside"},
 	{files.ErrInvalid, http.StatusBadRequest, "invalid_path"},
 	{files.ErrScanLimit, http.StatusUnprocessableEntity, "file_scan_limit"},
 	{context.DeadlineExceeded, http.StatusRequestTimeout, "file_scan_timeout"},
@@ -373,16 +374,18 @@ func (s *Server) handleFileDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	attachment(w, info.Name())
+	// A link downloads under its own name, not that of its target.
+	name := path.Base(r.URL.Query().Get("path"))
+	attachment(w, name)
 	w.Header().Set("Content-Type", "application/octet-stream")
 	if r.URL.Query().Get("media") == "1" {
-		mediaType := map[string]string{".mp3": "audio/mpeg", ".wav": "audio/wav", ".ogg": "audio/ogg", ".m4a": "audio/mp4", ".flac": "audio/flac", ".mp4": "video/mp4", ".webm": "video/webm", ".ogv": "video/ogg"}[strings.ToLower(path.Ext(info.Name()))]
+		mediaType := map[string]string{".mp3": "audio/mpeg", ".wav": "audio/wav", ".ogg": "audio/ogg", ".m4a": "audio/mp4", ".flac": "audio/flac", ".mp4": "video/mp4", ".webm": "video/webm", ".ogv": "video/ogg"}[strings.ToLower(path.Ext(name))]
 		if mediaType == "" {
 			writeError(w, http.StatusBadRequest, "invalid_path", "unsupported media")
 			return
 		}
 		w.Header().Set("Content-Type", mediaType)
-		w.Header().Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{"filename": info.Name()}))
+		w.Header().Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{"filename": name}))
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
 	}

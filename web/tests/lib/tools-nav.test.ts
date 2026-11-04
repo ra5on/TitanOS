@@ -1,0 +1,34 @@
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { expect, test } from 'vitest';
+import de from '#lib/i18n/de.json';
+import en from '#lib/i18n/en.json';
+import { toolsAnchors, toolsCurrent, toolsGroups } from '#lib/tools-nav.ts';
+
+const entries = toolsGroups.flatMap((group) => group.entries);
+const page = (href: string) => resolve(process.cwd(), `src/routes${href}/+page.svelte`);
+
+test('every tools row leads to a page and has texts in both languages', () => {
+	expect(entries.length).toBeGreaterThan(5);
+	for (const entry of entries) {
+		expect(existsSync(page(entry.href)), entry.href).toBe(true);
+		for (const key of [entry.label, entry.text]) {
+			expect(de[key as keyof typeof de], key).toBeTruthy();
+			expect(en[key as keyof typeof en], key).toBeTruthy();
+		}
+	}
+	expect(new Set(entries.map((entry) => entry.href)).size).toBe(entries.length);
+});
+
+test('old anchors point to existing tools pages', () => {
+	for (const target of Object.values(toolsAnchors))
+		expect(existsSync(page(target)), target).toBe(true);
+});
+
+test('a row is current on its page and sub-pages, not on a sibling with the same prefix', () => {
+	expect(toolsCurrent('/tools/logs', '/tools/logs')).toBe(true);
+	expect(toolsCurrent('/tools/logs', '/tools/logs/')).toBe(true);
+	expect(toolsCurrent('/tools/logs', '/tools/logs/kernel')).toBe(true);
+	expect(toolsCurrent('/tools/disks', '/tools/disksx')).toBe(false);
+	expect(toolsCurrent('/tools/disks', '/tools')).toBe(false);
+});

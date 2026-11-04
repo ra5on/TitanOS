@@ -51,6 +51,11 @@ func (m *Manager) openTextVersion(root Root, name string, previous bool) (*os.Ro
 	if root.secret(name) {
 		return nil, nil, nil, nil, ErrNotFound
 	}
+	shownName := name
+	// A link is edited where it points, so saving keeps the link.
+	if name, err = root.followLink(name); err != nil {
+		return nil, nil, nil, nil, err
+	}
 	if m.protected(root, name) {
 		return nil, nil, nil, nil, ErrProtected
 	}
@@ -108,7 +113,7 @@ func (m *Manager) openTextVersion(root Root, name string, previous bool) (*os.Ro
 		f.Close()
 		return fail(mapError(err))
 	}
-	if len(data) > maxText || !utf8.Valid(data) || strings.ContainsRune(string(data), 0) || !textName(originalName) {
+	if len(data) > maxText || !utf8.Valid(data) || strings.ContainsRune(string(data), 0) || !textName(originalName) && !textName(shownName) {
 		f.Close()
 		return fail(ErrNotText)
 	}
@@ -137,6 +142,13 @@ func (m *Manager) SaveTextVersion(root Root, name, content, version string) (Tex
 	m.textMu.Lock()
 	defer m.textMu.Unlock()
 	name, cleanErr := clean(name)
+	if cleanErr != nil {
+		return TextFile{}, cleanErr
+	}
+	if root.secret(name) {
+		return TextFile{}, ErrNotFound
+	}
+	name, cleanErr = root.followLink(name)
 	if cleanErr != nil {
 		return TextFile{}, cleanErr
 	}

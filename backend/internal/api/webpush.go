@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/webpush"
 )
 
@@ -14,16 +15,30 @@ import (
 // from the level set under "send from". Owners and administrators only,
 // like the bell.
 
-func (s *Server) handlePushDevices(w http.ResponseWriter, r *http.Request) {
-	key, err := s.opts.WebPush.PublicKey()
+// pushArea needs the push subscriptions and, for the test message, the
+// wording of notifications (narrow dependencies, see fansArea).
+type pushArea struct {
+	push   *webpush.Manager
+	notify *notify.Manager
+}
+
+func (a pushArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/notifications/push", admin(a.handlePushDevices))
+	mux.HandleFunc("POST /api/v1/notifications/push", admin(a.handlePushSubscribe))
+	mux.HandleFunc("DELETE /api/v1/notifications/push/{id}", admin(a.handlePushRemove))
+	mux.HandleFunc("POST /api/v1/notifications/push/{id}/test", admin(a.handlePushTest))
+}
+
+func (a pushArea) handlePushDevices(w http.ResponseWriter, r *http.Request) {
+	key, err := a.push.PublicKey()
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"publicKey": key, "devices": s.opts.WebPush.Devices(currentUser(r).Name)})
+	writeJSON(w, http.StatusOK, map[string]any{"publicKey": key, "devices": a.push.Devices(currentUser(r).Name)})
 }
 
-func (s *Server) handlePushSubscribe(w http.ResponseWriter, r *http.Request) {
+func (a pushArea) handlePushSubscribe(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name         string               `json:"name"`
 		Subscription webpush.Subscription `json:"subscription"`
@@ -32,7 +47,7 @@ func (s *Server) handlePushSubscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	noteTarget(r, req.Name)
-	device, err := s.opts.WebPush.Subscribe(currentUser(r).Name, req.Name, req.Subscription)
+	device, err := a.push.Subscribe(currentUser(r).Name, req.Name, req.Subscription)
 	switch {
 	case errors.Is(err, webpush.ErrInvalid):
 		writeError(w, http.StatusBadRequest, "invalid_push_subscription", err.Error())
@@ -45,8 +60,8 @@ func (s *Server) handlePushSubscribe(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) handlePushRemove(w http.ResponseWriter, r *http.Request) {
-	err := s.opts.WebPush.Remove(currentUser(r).Name, r.PathValue("id"))
+func (a pushArea) handlePushRemove(w http.ResponseWriter, r *http.Request) {
+	err := a.push.Remove(currentUser(r).Name, r.PathValue("id"))
 	switch {
 	case errors.Is(err, webpush.ErrNotFound):
 		writeError(w, http.StatusNotFound, "push_device_not_found", err.Error())
@@ -57,11 +72,11 @@ func (s *Server) handlePushRemove(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) handlePushTest(w http.ResponseWriter, r *http.Request) {
+func (a pushArea) handlePushTest(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	title, text := s.opts.Notify.Wording("test", "")
-	err := s.opts.WebPush.Test(ctx, currentUser(r).Name, r.PathValue("id"), webpush.Message{Title: title, Body: text, Tag: "test", URL: "/settings/notifications"})
+	title, text := a.notify.Wording("test", "")
+	err := a.push.Test(ctx, currentUser(r).Name, r.PathValue("id"), webpush.Message{Title: title, Body: text, Tag: "test", URL: "/settings/notifications"})
 	switch {
 	case errors.Is(err, webpush.ErrNotFound):
 		writeError(w, http.StatusNotFound, "push_device_not_found", err.Error())

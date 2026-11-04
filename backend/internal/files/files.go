@@ -241,12 +241,18 @@ func (m *Manager) List(root Root, dir string) ([]Entry, error) {
 	if root.secret(dir) {
 		return nil, ErrNotFound
 	}
+	// The entries keep the names inside the linked folder, so only the
+	// folder itself is opened where it really is.
+	target, err := root.followLink(dir)
+	if err != nil {
+		return nil, err
+	}
 	r, err := os.OpenRoot(root.Dir)
 	if err != nil {
 		return nil, mapError(err)
 	}
 	defer r.Close()
-	f, err := r.Open(dir)
+	f, err := r.Open(target)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -461,6 +467,9 @@ func (m *Manager) Open(root Root, name string) (*os.File, fs.FileInfo, error) {
 	}
 	if root.secret(name) {
 		return nil, nil, ErrNotFound
+	}
+	if name, err = root.followLink(name); err != nil {
+		return nil, nil, err
 	}
 	r, err := os.OpenRoot(root.Dir)
 	if err != nil {
