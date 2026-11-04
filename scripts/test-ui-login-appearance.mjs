@@ -192,8 +192,8 @@ try {
     );
     await popup.close();
 
-    await section.getByRole("button", { name: "Anmeldeseite speichern" }).click();
-    await section.getByText("Anmeldeseite gespeichert.").waitFor();
+    await page.locator(".save-bar").getByRole("button", { name: "Übernehmen" }).click();
+    await page.locator(".save-bar").getByText("Gespeichert", { exact: true }).waitFor();
     saved = state.saves.at(-1);
     assert.equal(saved.theme, "mitternacht");
     assert.equal(saved.accent, "tuerkis");
@@ -318,14 +318,14 @@ try {
     await section.getByLabel(/^Hintergrund/).selectOption("custom");
     await (await chooser).setFiles({ name: "weltraum.webp", mimeType: "image/webp", buffer: picture });
     await section.getByText("Wird beim Speichern hochgeladen.").waitFor();
-    await section.getByRole("button", { name: "Anmeldeseite speichern" }).click();
-    await section.getByText("Anmeldeseite gespeichert.").waitFor();
+    await page.locator(".save-bar").getByRole("button", { name: "Übernehmen" }).click();
+    await page.locator(".save-bar").getByText("Gespeichert", { exact: true }).waitFor();
     assert.equal(state.uploads, 1);
     assert.equal(state.value.background.source, "custom");
     await section.getByRole("button", { name: "Standard", exact: true }).click();
     await section.getByText("Das gespeicherte eigene Bild wird beim Speichern entfernt.").waitFor();
-    await section.getByRole("button", { name: "Anmeldeseite speichern" }).click();
-    await section.getByText("Anmeldeseite gespeichert.").waitFor();
+    await page.locator(".save-bar").getByRole("button", { name: "Übernehmen" }).click();
+    await page.locator(".save-bar").getByText("Gespeichert", { exact: true }).waitFor();
     assert.equal(state.value.configured, false);
     await ctx.close();
   }
