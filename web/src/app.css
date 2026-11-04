@@ -14,6 +14,9 @@
 	--header: #12161a;
 	--bar-bg: var(--header);
 	--bar-backdrop: none;
+	--sidebar-bg: var(--header);
+	--sidebar-backdrop: none;
+	--sidebar-edge: none;
 	--border: #232a31;
 	--text: #e6e9ed;
 	--muted: #9aa3ad;
@@ -234,7 +237,8 @@
 	box-shadow: var(--menu-shadow);
 }
 
-/* Header, sidebar and status bar (Settings › Appearance › Bars). The glass
+/* Header, sidebar and status bar (Settings › Appearance › Bars, and
+   Navigation › Sidebar for .sidebar-surface). The glass
    lies on a layer behind the content: a backdrop-filter on the bar itself
    would make it a backdrop root, and its menus would no longer blur the
    page. The bar must be positioned and form a stacking context. */
@@ -251,6 +255,33 @@
 	-webkit-backdrop-filter: var(--bar-backdrop);
 	backdrop-filter: var(--bar-backdrop);
 	pointer-events: none;
+}
+.sidebar-surface::before {
+	background: var(--sidebar-bg);
+	-webkit-backdrop-filter: var(--sidebar-backdrop);
+	backdrop-filter: var(--sidebar-backdrop);
+	box-shadow: var(--sidebar-edge);
+}
+/* Without backdrop-filter or with reduced transparency the bars and the
+   sidebar are opaque like menus and dialogs. The values come inline on
+   <html>, so the layer itself is overridden. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+	.bar-surface::before,
+	.sidebar-surface::before {
+		background: var(--header);
+		-webkit-backdrop-filter: none;
+		backdrop-filter: none;
+		box-shadow: none;
+	}
+}
+@media (prefers-reduced-transparency: reduce) {
+	.bar-surface::before,
+	.sidebar-surface::before {
+		background: var(--header);
+		-webkit-backdrop-filter: none;
+		backdrop-filter: none;
+		box-shadow: none;
+	}
 }
 
 *,
