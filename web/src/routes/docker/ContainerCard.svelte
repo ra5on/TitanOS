@@ -17,12 +17,22 @@
 		tailscaleHost: string;
 		busy: boolean;
 		details: boolean;
+		/** A service of an opened stack: named after the service. */
+		member?: boolean;
 	};
-	let { container, host, tailscaleHost, busy, details, ...actions }: Props = $props();
+	let {
+		container,
+		host,
+		tailscaleHost,
+		busy,
+		details,
+		member = false,
+		...actions
+	}: Props = $props();
 
 	let menu: ReturnType<typeof ContainerMenu> | undefined = $state();
 	const MAX_PORTS = 3;
-	const name = $derived(dockerName(container));
+	const name = $derived(dockerName(container, member ? 'service' : 'app'));
 	const running = $derived(isRunning(container));
 	const links = $derived(webLinks(container, host, tailscaleHost));
 	const ports = $derived(portLabels(container));
@@ -30,6 +40,7 @@
 </script>
 
 <article
+	id={`docker-container-${encodeURIComponent(container.name)}`}
 	class="tile card"
 	class:stopped={!running}
 	aria-label={name}
