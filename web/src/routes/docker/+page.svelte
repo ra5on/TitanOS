@@ -1143,97 +1143,41 @@
 				{@attach equalCards}
 			>
 				{#each shownGroups as group (group.id)}
-					{@const stack = isStack(group)}
-					<div
-						class="cell"
-						class:dragging={dragged === group.id}
-						role="listitem"
-						data-group={group.id}
-					>
-						{#if editing && layout.sort === 'own'}
-							<button
-								type="button"
-								class="handle"
-								aria-label={t('docker.layout.move', { name: group.name })}
-								aria-describedby="docker-move-hint"
-								disabled={savingLayout}
-								onpointerdown={(event) => dragCard(event, group.id)}
-								onkeydown={(event) => keyMove(event, group.id)}
-								><Icon name="grip" size={15} /><span>{t('docker.layout.handle')}</span></button
-							>
-						{/if}
-						<div class="body" inert={editing}>
-							{#if stack}
-								<StackCard
-									{group}
-									primary={stackPrimary(group, layout.primaryServices)}
-									{host}
-									{tailscaleHost}
-									busy={stackBusy(group)}
-									details={layout.details}
-									open={stackOpen(group.id) && !editing}
-									drawer={drawerId(group)}
-									ontoggle={() => (expanded[group.id] = !stackOpen(group.id))}
-									onmenu={(anchor) => openStackMenu(group, anchor)}
-									onmenuat={(event) => (stackMenu = { group, x: event.clientX, y: event.clientY })}
-									onmenupress={() => (stackMenuWasOpen = stackMenu?.group.id === group.id)}
-									onstartall={() => stackAction(group, 'start')}
-									onstopall={() => stackAction(group, 'stop')}
-								/>
-							{:else}
-								{@const container = group.members[0]}
-								<ContainerCard
-									{container}
-									{host}
-									{tailscaleHost}
-									busy={containerBusy(container)}
-									details={layout.details}
-									{...actionsFor(container)}
-								/>
-							{/if}
-						</div>
-					</div>
-					{#if stack && stackOpen(group.id) && !editing}
-						<!-- The services follow their stack as ordinary cards, tied to it by the accent line. -->
+					{#if isStack(group) && stackOpen(group.id) && !editing}
+						<!-- An opened stack (owner's decision of 4 Nov 2026, variant C): one
+						     frame in the same grid, the stack card first, its services right
+						     beside it in the same columns; rows wrap inside the frame. -->
 						<section
-							class="drawer"
+							class="stack-frame"
 							role="listitem"
 							id={drawerId(group)}
 							aria-label={t('docker.servicesOf', { name: group.name })}
+							title={search.trim() || filter !== 'all'
+								? t('docker.stackMatches', {
+										count: shownMembers(group).length,
+										total: group.members.length,
+									})
+								: undefined}
 						>
-							<button
-								type="button"
-								class="drawer-head"
-								aria-expanded="true"
-								onclick={() => (expanded[group.id] = false)}
-								><Icon name="chevronDown" size={14} /><strong>{group.name}</strong><span
-									class="muted"
-									>{search.trim() || filter !== 'all'
-										? t('docker.stackMatches', {
-												count: shownMembers(group).length,
-												total: group.members.length,
-											})
-										: t('docker.stackServices', { count: group.members.length })}</span
-								></button
-							>
-							<div class="drawer-grid" role="list">
-								{#each shownMembers(group) as container (container.name)}
-									<div class="cell" role="listitem">
-										<div class="body">
-											<ContainerCard
-												{container}
-												{host}
-												{tailscaleHost}
-												busy={containerBusy(container)}
-												details={layout.details}
-												member
-												{...actionsFor(container)}
-											/>
-										</div>
+							{@render groupCell(group, true)}
+							{#each shownMembers(group) as container (container.name)}
+								<div class="cell">
+									<div class="body">
+										<ContainerCard
+											{container}
+											{host}
+											{tailscaleHost}
+											busy={containerBusy(container)}
+											details={layout.details}
+											member
+											{...actionsFor(container)}
+										/>
 									</div>
-								{/each}
-							</div>
+								</div>
+							{/each}
 						</section>
+					{:else}
+						{@render groupCell(group, false)}
 					{/if}
 				{/each}
 			</div>
@@ -1353,6 +1297,59 @@
 				? formatBytes(sum(group, (container) => container.memoryBytes))
 				: '–'}</span
 		>
+	</div>
+{/snippet}
+
+{#snippet groupCell(group: DockerGroup, framed: boolean)}
+	{@const stack = isStack(group)}
+	<div
+		class="cell"
+		class:dragging={dragged === group.id}
+		role={framed ? undefined : 'listitem'}
+		data-group={group.id}
+	>
+		{#if editing && layout.sort === 'own'}
+			<button
+				type="button"
+				class="handle"
+				aria-label={t('docker.layout.move', { name: group.name })}
+				aria-describedby="docker-move-hint"
+				disabled={savingLayout}
+				onpointerdown={(event) => dragCard(event, group.id)}
+				onkeydown={(event) => keyMove(event, group.id)}
+				><Icon name="grip" size={15} /><span>{t('docker.layout.handle')}</span></button
+			>
+		{/if}
+		<div class="body" inert={editing}>
+			{#if stack}
+				<StackCard
+					{group}
+					primary={stackPrimary(group, layout.primaryServices)}
+					{host}
+					{tailscaleHost}
+					busy={stackBusy(group)}
+					details={layout.details}
+					open={stackOpen(group.id) && !editing}
+					drawer={drawerId(group)}
+					ontoggle={() => (expanded[group.id] = !stackOpen(group.id))}
+					onmenu={(anchor) => openStackMenu(group, anchor)}
+					onmenuat={(event) => (stackMenu = { group, x: event.clientX, y: event.clientY })}
+					onmenupress={() => (stackMenuWasOpen = stackMenu?.group.id === group.id)}
+					onstartall={() => stackAction(group, 'start')}
+					onstopall={() => stackAction(group, 'stop')}
+				/>
+			{:else}
+				{@const container = group.members[0]}
+				<ContainerCard
+					{container}
+					{host}
+					{tailscaleHost}
+					busy={containerBusy(container)}
+					details={layout.details}
+					{...actionsFor(container)}
+				/>
+			{/if}
+		</div>
 	</div>
 {/snippet}
 
@@ -2056,13 +2053,13 @@
 		--card-min: 17rem;
 	}
 	.cards.size-s {
-		--card-min: 14rem;
+		/* Also one column more than M beside the side navigation at 1440 px. */
+		--card-min: 12.5rem;
 	}
 	.cards.size-l {
 		--card-min: 23rem;
 	}
-	.cards,
-	.drawer-grid {
+	.cards {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(min(var(--card-min), 100%), 1fr));
 		gap: var(--gap);
@@ -2121,27 +2118,20 @@
 	.dragging .handle {
 		cursor: grabbing;
 	}
-	.drawer {
+	/* The opened stack: a tinted frame around the stack card and its
+	   services, on the columns of the page grid (subgrid), so every card
+	   keeps the width of all others. The negative margin keeps the cards
+	   inside on the outer grid lines. */
+	.stack-frame {
 		grid-column: 1 / -1;
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-		padding: var(--space-1) 0 var(--space-1) var(--space-3);
-		border-left: 3px solid var(--accent);
-	}
-	.drawer-head {
-		display: inline-flex;
-		align-self: flex-start;
-		align-items: center;
-		gap: var(--space-2);
-		min-height: 2rem;
-		padding: 0;
-		border: 0;
-		background: none;
-		color: var(--text);
-		font: inherit;
-		font-size: var(--text-md);
-		cursor: pointer;
+		display: grid;
+		grid-template-columns: subgrid;
+		gap: var(--gap);
+		margin: calc(var(--space-2) * -1);
+		padding: var(--space-2);
+		border-radius: calc(var(--radius-tile) + var(--space-2));
+		background: color-mix(in srgb, var(--accent) 12%, transparent);
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
 	}
 	.layout-editor .editor-row {
 		display: flex;
@@ -2165,12 +2155,8 @@
 	/* Phones: one tile per line. */
 	@media (max-width: 760px) {
 		.list,
-		.cards,
-		.drawer-grid {
+		.cards {
 			grid-template-columns: minmax(0, 1fr);
-		}
-		.drawer {
-			padding-left: var(--space-2);
 		}
 		.handle {
 			min-height: 2.75rem;
