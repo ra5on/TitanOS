@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -144,7 +145,14 @@ func (m *agentMessage) check() error {
 	return nil
 }
 
+// fileRef is a line naming an attached file or a file of the NAS.
+var fileRef = regexp.MustCompile(`(?m)^\[(Anhang|Datei): [^\]\n]*\]\s*$`)
+
 func chatTitle(text string) string {
+	// The names of attached files are no title; the question after them is.
+	if rest := strings.TrimSpace(fileRef.ReplaceAllString(text, "")); rest != "" {
+		text = rest
+	}
 	text = strings.Join(strings.Fields(text), " ")
 	if r := []rune(text); len(r) > 60 {
 		cut := string(r[:60])

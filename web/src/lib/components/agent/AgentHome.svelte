@@ -1,13 +1,14 @@
 <script lang="ts">
 	// The start of the KI-Agent on the phone (PLAN 44, Bild 7): a greeting,
 	// the task that runs right now, the projects as tiles to swipe through and
-	// the latest chats with a preview. A chat row swipes to the left for
-	// "pin", "project" and "delete" (plain horizontal scrolling, so it works
-	// with touch, mouse and keyboard alike).
+	// all chats with a preview, searchable, pinned ones first and then by day
+	// like on the desktop. A chat row swipes to the left for "pin", "rename",
+	// "project" and "delete" (plain horizontal scrolling, so it works with
+	// touch, mouse and keyboard alike).
 	import Icon from '#lib/components/Icon.svelte';
 	import { formatTime } from '#lib/format.ts';
-	import { i18n, t } from '#lib/i18n/index.svelte.ts';
-	import { dayGroup, type ChatInfo, type Project } from '#lib/agent.ts';
+	import { i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { dayGroup, groupChats, type ChatInfo, type Project } from '#lib/agent.ts';
 
 	let {
 		user,
@@ -17,9 +18,11 @@
 		onproject,
 		onnewproject,
 		onpin,
+		onrename,
 		onmove,
 		ondelete,
 		onstop,
+		onmenu,
 	}: {
 		user: string;
 		chats: ChatInfo[];
@@ -28,9 +31,12 @@
 		onproject: (p: Project) => void;
 		onnewproject: () => void;
 		onpin: (c: ChatInfo) => void;
+		onrename: (c: ChatInfo) => void;
 		onmove: (c: ChatInfo) => void;
 		ondelete: (c: ChatInfo) => void;
 		onstop: (c: ChatInfo) => void;
+		/** Opens the TitanOS menu (phone, round menu layout). */
+		onmenu?: () => void;
 	} = $props();
 
 	const now = new Date();
@@ -49,9 +55,26 @@
 		}),
 	);
 	const active = $derived(chats.filter((c) => c.state === 'running' || c.state === 'waiting'));
-	const recent = $derived(
-		[...chats].sort((a, b) => b.updated.localeCompare(a.updated)).slice(0, 30),
-	);
+	let query = $state('');
+	const groups = $derived.by(() => {
+		const q = query.trim().toLowerCase();
+		const list = q
+			? chats.filter((c) => (c.title + ' ' + (c.preview ?? '')).toLowerCase().includes(q))
+			: chats;
+		return groupChats(list);
+	});
+	const groupLabel: Record<string, MessageKey> = {
+		pinned: 'agent.groupPinned',
+		today: 'agent.groupToday',
+		yesterday: 'agent.groupYesterday',
+		week: 'agent.groupWeek',
+		older: 'agent.groupOlder',
+	};
+	// After an action the row slides back.
+	function act(event: Event, run: () => void) {
+		(event.currentTarget as HTMLElement).closest('.swipe')?.scrollTo({ left: 0 });
+		run();
+	}
 	function when(iso: string): string {
 		const g = dayGroup(iso);
 		if (g === 'today') return formatTime(new Date(iso));
@@ -66,8 +89,19 @@
 
 <div class="home">
 	<header>
-		<small>{today}</small>
-		<h1>{hello}</h1>
+		{#if onmenu}
+			<button
+				type="button"
+				class="menu"
+				aria-label={t('nav.openMenu', { page: t('nav.agent') })}
+				aria-haspopup="dialog"
+				onclick={onmenu}><Icon name="menu" size={20} /></button
+			>
+		{/if}
+		<span>
+			<small>{today}</small>
+			<h1>{hello}</h1>
+		</span>
 	</header>
 
 	{#each active as chat (chat.id)}
@@ -113,38 +147,58 @@
 		>
 	</div>
 
-	<div class="h3">{t('agent.recent')}</div>
-	{#if recent.length === 0}
+	{#if chats.length === 0}
+		<div class="h3">{t('agent.recent')}</div>
 		<p class="muted">{t('agent.noChats')}</p>
 	{:else}
-		<ul class="list">
-			{#each recent as chat (chat.id)}
-				<li class="swipe">
-					<button type="button" class="row" onclick={() => onopen(chat.id)}>
-						<span class="pd" style:background={project(chat.project)?.color || 'var(--muted)'}
-						></span>
-						<span class="t">
-							<strong>{chat.pinned ? '📌 ' : ''}{chat.title}</strong>
-							<span>{chat.state === 'running' ? t('agent.working') : (chat.preview ?? '')}</span>
+		<label class="search">
+			<Icon name="search" size={16} />
+			<input
+				type="search"
+				bind:value={query}
+				placeholder={t('agent.searchChats')}
+				aria-label={t('agent.searchChats')}
+			/>
+		</label>
+		{#each groups as group (group.key)}
+			<div class="h3">{t(groupLabel[group.key])}</div>
+			<ul class="list">
+				{#each group.chats as chat (chat.id)}
+					<li class="swipe">
+						<button type="button" class="row" onclick={() => onopen(chat.id)}>
+							<span class="pd" style:background={project(chat.project)?.color || 'var(--muted)'}
+							></span>
+							<span class="t">
+								<strong
+									>{#if chat.pinned}<span class="pinned"><Icon name="pin" size={14} /></span
+										>{/if}{chat.title || t('agent.newChat')}</strong
+								>
+								<span>{chat.state === 'running' ? t('agent.working') : (chat.preview ?? '')}</span>
+							</span>
+							<span class="when">{when(chat.updated)}</span>
+						</button>
+						<span class="acts">
+							<button type="button" class="pin" onclick={(e) => act(e, () => onpin(chat))}
+								><Icon name="pin" size={16} />{chat.pinned
+									? t('agent.unpin')
+									: t('agent.pin')}</button
+							>
+							<button type="button" class="ren" onclick={(e) => act(e, () => onrename(chat))}
+								><Icon name="edit" size={16} />{t('agent.rename')}</button
+							>
+							<button type="button" class="move" onclick={(e) => act(e, () => onmove(chat))}
+								><Icon name="folder" size={16} />{t('agent.project')}</button
+							>
+							<button type="button" class="del" onclick={(e) => act(e, () => ondelete(chat))}
+								><Icon name="trash" size={16} />{t('agent.delete')}</button
+							>
 						</span>
-						<span class="when">{when(chat.updated)}</span>
-					</button>
-					<span class="acts">
-						<button type="button" class="pin" onclick={() => onpin(chat)}
-							><Icon name="pin" size={16} />{chat.pinned
-								? t('agent.unpin')
-								: t('agent.pin')}</button
-						>
-						<button type="button" class="move" onclick={() => onmove(chat)}
-							><Icon name="folder" size={16} />{t('agent.project')}</button
-						>
-						<button type="button" class="del" onclick={() => ondelete(chat)}
-							><Icon name="trash" size={16} />{t('agent.delete')}</button
-						>
-					</span>
-				</li>
-			{/each}
-		</ul>
+					</li>
+				{/each}
+			</ul>
+		{:else}
+			<p class="muted">{t('agent.searchNone')}</p>
+		{/each}
 	{/if}
 </div>
 
@@ -154,6 +208,56 @@
 		flex-direction: column;
 		gap: 14px;
 		padding: 4px 0 var(--space-4);
+	}
+	header {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+	header > span {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+	}
+	.menu {
+		width: 40px;
+		height: 40px;
+		flex: none;
+		border-radius: 50%;
+		display: grid;
+		place-items: center;
+		border: 0;
+		background: color-mix(in srgb, var(--text) 6%, transparent);
+		color: var(--text);
+		cursor: pointer;
+	}
+	.search {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 0 12px;
+		min-height: 44px;
+		border: 1px solid var(--border);
+		border-radius: 14px;
+		background: var(--surface);
+		color: var(--muted);
+	}
+	.search input {
+		flex: 1;
+		min-width: 0;
+		border: 0;
+		outline: none;
+		background: transparent;
+		color: var(--text);
+		font: inherit;
+		/* 16px: no zoom on iOS. */
+		font-size: max(16px, 1rem);
+	}
+	.pinned {
+		color: var(--accent);
+		display: inline-grid;
+		vertical-align: -2px;
+		margin-right: 4px;
 	}
 	header small {
 		color: var(--muted);
@@ -421,6 +525,10 @@
 	}
 	.acts .pin {
 		background: var(--accent);
+	}
+	.acts .ren {
+		background: color-mix(in srgb, var(--accent) 30%, var(--surface));
+		color: var(--text);
 	}
 	.acts .move {
 		background: color-mix(in srgb, var(--accent) 55%, var(--surface));

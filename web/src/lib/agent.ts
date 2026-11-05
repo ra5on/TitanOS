@@ -122,7 +122,24 @@ export type Model = {
 	defaultLevel?: string;
 };
 
+/** A node of the cluster that asked to use the admin node's model. */
+export type AgentShare = { node: string; name: string; allowed: boolean; asked: string };
+
+/** pending/off/unreachable/old/nocluster: why the admin node's model is not usable. */
+export type ShareState = 'allowed' | 'pending' | 'off' | 'unreachable' | 'old' | 'nocluster';
+
+/** What the cluster offers on the settings page. */
+export type ClusterInfo = {
+	member: boolean;
+	admin: boolean;
+	adminNode?: string;
+	state?: ShareState;
+};
+
 export type Status = {
+	/** The model of the admin node is used, with its state. */
+	source?: 'cluster';
+	share?: ShareState;
 	enabled: boolean;
 	allowed: boolean;
 	admin: boolean;
@@ -144,6 +161,10 @@ export type FolderRule = { root: string; path: string; mode: Mode };
 export type Settings = {
 	enabled: boolean;
 	ollama?: string;
+	/** '' this node's own Ollama, 'cluster' the model of the admin node (PLAN 47). */
+	source?: '' | 'cluster';
+	/** On the admin node: the nodes that asked for its model. */
+	shared?: AgentShare[];
 	model?: string;
 	think?: string;
 	context?: number;

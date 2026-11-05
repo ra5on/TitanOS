@@ -25,6 +25,7 @@
 	import Icon from './Icon.svelte';
 	import { navForRole } from '#lib/navigation.ts';
 	import { agentAppMode } from '#lib/agent-app.ts';
+	import { agentFull } from '#lib/agent-full.svelte.ts';
 
 	let { children }: { children: Snippet } = $props();
 
@@ -44,8 +45,11 @@
 		query.addEventListener('change', change);
 		return () => query.removeEventListener('change', change);
 	});
-	// The KI-Agent installed as an app of its own shows no TitanOS frame.
-	const agentApp = $derived(agentAppMode(page.url));
+	// The KI-Agent installed as an app of its own shows no TitanOS frame,
+	// nor does the agent switched to full screen (PLAN 47).
+	const agentApp = $derived(
+		agentAppMode(page.url) || (page.url.pathname.startsWith('/agent') && agentFull.on),
+	);
 	const side = $derived(appearance.current.nav.layout === 'side' && desktop && !agentApp);
 	// The area the page belongs to, for the button's name.
 	const pageLabel = $derived(
@@ -63,9 +67,12 @@
 	afterNavigate(() => closeDrawer());
 	$effect(() => {
 		if (!sidePhone) closeDrawer();
+		// A page with a menu button of its own (the KI-Agent) opens the same menu.
+		shell.openMenu = sidePhone ? openDrawer : null;
 	});
-	// The button is hidden while the terminal covers the bottom of the window.
-	const fab = $derived(sidePhone && !(admin && terminal.open));
+	// The button is hidden while the terminal covers the bottom of the window,
+	// and on pages that show their own menu button.
+	const fab = $derived(sidePhone && !shell.ownMenu && !(admin && terminal.open));
 	// Room for the button: pages end above it, bars at the bottom start beside it.
 	$effect(() => {
 		const root = document.documentElement.style;

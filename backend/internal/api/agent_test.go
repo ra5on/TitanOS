@@ -715,3 +715,64 @@ func TestAgentPullAndPreload(t *testing.T) {
 		t.Fatalf("preload: %d", res.StatusCode)
 	}
 }
+
+// The way the web page attaches: an empty chat first, the upload with the
+// browser's file type, then the message that names it; the agent reads
+// the attachment and a file of the NAS named as [Datei: root/path].
+func TestAgentAttachLikeTheBrowser(t *testing.T) {
+	fake := &agentOllama{}
+	ts := agentServer(t, fake, agent.Policy{Preset: agent.PresetStandard})
+	dir := ts.withShare()
+	os.MkdirAll(filepath.Join(dir, "Post"), 0o755)
+	os.WriteFile(filepath.Join(dir, "Post", "rechnung.txt"), []byte("Betrag 42 Euro"), 0o644)
+	fake.replies = []string{
+		toolCall("attachment_read", map[string]any{"name": "Notiz März.md"}),
+		toolCall("file_read", map[string]any{"root": "share/Docs", "path": "Post/rechnung.txt"}),
+		`{"role":"assistant","content":"Gelesen."}`,
+	}
+	res, body := ts.request("POST", "/api/v1/agent/chats", map[string]any{"draft": true, "model": "gpt-oss:20b", "think": "medium"})
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("draft: %d %s", res.StatusCode, body)
+	}
+	var draft agent.Chat
+	json.Unmarshal(body, &draft)
+	req, _ := http.NewRequest("POST", ts.url+"/api/v1/agent/chats/"+draft.ID+"/attachments?name="+url.QueryEscape("Notiz März.md"), strings.NewReader("# Notiz\nTermin am Freitag"))
+	req.Header.Set("Origin", ts.url)
+	req.Header.Set("Content-Type", "text/markdown")
+	up, err := ts.client.Do(req)
+	if err != nil || up.StatusCode != http.StatusCreated {
+		t.Fatalf("upload: %v %v", err, up)
+	}
+	message := "[Anhang: Notiz März.md]\n[Datei: share/Docs/Post/rechnung.txt]\n\nWas steht drin?"
+	if res, body := ts.request("POST", "/api/v1/agent/chats/"+draft.ID+"/messages", map[string]any{"message": message}); res.StatusCode != http.StatusAccepted {
+		t.Fatalf("message: %d %s", res.StatusCode, body)
+	}
+	chat := waitChat(t, ts, ts.client, draft.ID)
+	var read, nas string
+	for _, e := range chat.Entries {
+		switch e.Tool {
+		case "attachment_read":
+			read = e.Result
+		case "file_read":
+			nas = e.Result
+		}
+	}
+	if !strings.Contains(read, "Termin am Freitag") {
+		t.Fatalf("attachment: %q", read)
+	}
+	if !strings.Contains(nas, "42 Euro") {
+		t.Fatalf("file of the NAS: %q", nas)
+	}
+	if chat.Title == "" {
+		t.Fatal("a draft chat keeps no title after its first message")
+	}
+}
+
+func TestChatTitleSkipsFileNames(t *testing.T) {
+	if got := chatTitle("[Anhang: a.pdf]\n[Datei: share/Docs/b.txt]\n\nWas steht drin?"); got != "Was steht drin?" {
+		t.Fatalf("title %q", got)
+	}
+	if got := chatTitle("[Anhang: a.pdf]"); got != "[Anhang: a.pdf]" {
+		t.Fatalf("only a file: %q", got)
+	}
+}

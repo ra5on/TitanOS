@@ -17,8 +17,9 @@ Ab Werk ist der Agent aus. Eingeschaltet wird er unter **Einstellungen › KI-Ag
 ## Bedienung
 
 - **Desktop:** links neuer Chat, Suche, Projekte mit ihren Chats, darunter die übrigen Chats nach Tagen; rechts der Chat.
-- **Handy:** Startseite mit dem laufenden Auftrag, Projekten als Kacheln und den letzten Chats (Zeile nach links wischen: anheften, Projekt, löschen).
-- **Eigene App:** Auf `/agent` „Zum Home-Bildschirm“ (iOS) bzw. „App installieren“ (Chrome/Edge). Die App hat ein eigenes Symbol und Manifest (`/agent.webmanifest`, Start `/agent?app=1`) und zeigt keine TitanOS-Navigation.
+- **Handy:** Startseite mit dem laufenden Auftrag, Projekten als Kacheln, Suche und allen Chats wie auf dem Desktop: angeheftete oben, dann nach Tagen (Zeile nach links wischen: anheften, umbenennen, Projekt, löschen; danach klappt sie zu). Im Chat bündelt **⋯** alles, was der Desktop als Knöpfe zeigt: anheften, umbenennen, in ein Projekt verschieben, Export Markdown/PDF, Vollbild, löschen. Eingabefelder haben auf dem Handy 16 px Schrift, damit iOS beim Tippen nicht heranzoomt. Mit dem runden Handy-Menü (Darstellung „Seitlich“) sitzt im Agenten statt des runden Knopfs unten ein ☰ oben links (PLAN 47).
+- **Vollbild oder mit Menü** (PLAN 47): Über das TitanOS-Menü öffnet sich der Agent mit dem Menü; der Knopf „Vollbild“ (Desktop in der Kopfzeile, Handy oben bzw. im ⋯-Menü) blendet es aus, „Mit Menü“ wieder ein. Die Wahl gilt je Gerät (`localStorage`).
+- **Eigene App:** Auf `/agent` „Zum Home-Bildschirm“ (iOS) bzw. „App installieren“ (Chrome/Edge). Die App hat ein eigenes Symbol und Manifest (`/agent.webmanifest`, Start `/agent?app=1`) und zeigt nie die TitanOS-Navigation.
 - **Projekte** haben eigene Anweisungen und einen Standard-Ablageort.
 - **Schritte:** Jeder Werkzeugaufruf steht im Chat, zusammengefasst als „n Schritte“. Die Gedanken des Modells lassen sich aufklappen. Der runde Knopf hält den Auftrag an.
 - **Rückfragen:** Passt ein Name auf mehreres (Home Assistant als Docker-App und als VM), fragt der Agent mit Knöpfen.
@@ -35,12 +36,13 @@ Aufträge laufen auf dem NAS weiter, auch wenn die Seite zu ist. Ist er fertig o
 
 ## Mehr im Chat
 
-- **Anhänge:** Büroklammer im Eingabefeld (bis 20 MB je Datei, Text, Word, Excel, PDF) oder im Dateimanager per Rechtsklick „Mit KI-Agent …“. Anhänge liegen beim Chat und verschwinden mit ihm.
+- **Anhänge:** Die Büroklammer im Eingabefeld bietet „Vom Gerät hochladen“ (bis 20 MB je Datei, Text, Word, Excel, PDF; größere Dateien werden mit einer Meldung abgelehnt) und „Vom NAS wählen“: eine Dateiauswahl über die Freigaben, die das Konto im Dateimanager sieht (gleiche Rechte, Suche, bis 10 Dateien). Dateien vom NAS werden nicht kopiert, der Agent liest sie mit `file_read` an ihrem Ort (`[Datei: root/pfad]`), auch große. Dasselbe geht im Dateimanager per Rechtsklick „Mit KI-Agent …“. Hochgeladene Anhänge liegen beim Chat und verschwinden mit ihm. Der Titel eines Chats kommt aus der Frage, nicht aus den Dateinamen.
 - **Rückgängig** an Schritten, wo TitanOS es kann: ersetzte Datei (alte Fassung zurück, neue in den Papierkorb), gelöschte Dateien in einer Freigabe mit Papierkorb, Schalten in Home Assistant (innerhalb von 30 Minuten).
 - **Export** als Markdown oder PDF.
 - **Glocke:** „Agent ansehen lassen“ an jeder Meldung. **Dashboard:** Kachel „KI-Agent“ mit laufenden Aufträgen und Eingabefeld.
 - **Vorladen:** Beim Öffnen lädt Ollama das Modell schon; wie lange es geladen bleibt, stellt „Modell im Speicher halten“ ein. Neue Modelle lädt „Modell herunterladen“ direkt auf den Ollama-Server.
 - **Cluster:** Auf einem verwaltenden Knoten sieht der Agent die anderen Knoten (`cluster_nodes`, `cluster_read`) und startet/stoppt dort Container, VMs und Systemcontainer (`cluster_action`), als dein Konto über den Cluster-Proxy. Das ist bewusst mehr als bei Tokens und MCP (Entscheidung des Projektinhabers vom 5.11.2026).
+- **Agent eines anderen Knotens** (PLAN 47, Entscheidung 5.11.2026): Jeder Knoten eines Clusters wählt unter Einstellungen › KI-Agent „Eigener Agent“ oder „Agent von <Admin-Knoten>“. Mit dem Agenten des Admin-Knotens kommt nur das Modell von dort; Chats, Gedächtnis, Skills, Rechte und Ordner bleiben auf dem Knoten, er braucht keine eigene Ollama-Adresse. Der Knoten fragt mit „Freigabe anfragen“ an; der Admin-Knoten meldet das (`agent_cluster_request`) und gibt unter „Andere Knoten im Cluster“ frei, entzieht oder entfernt die Anfrage. Die Anfragen laufen signiert über den Cluster (`/agent/…` der Cluster-Routen, nur Admin-Knoten); weitergereicht werden nur `/api/version`, `/api/tags`, `/api/show`, `/api/ps` und `/api/chat` von Ollama, kein Herunterladen. Modelle lädt man auf dem Admin-Knoten.
 - **Knopf in Home Assistant:** Ein geplanter Auftrag mit Häkchen „Als Knopf in Home Assistant anbieten“ erscheint dort als Knopf (MQTT-Gruppe „KI-Agent“ unter Einstellungen › Home Assistant).
 - **Wochenbericht** (Einstellungen › KI-Agent): montags um 8 Uhr über die Benachrichtigungen, was der Agent geändert hat. Das Protokoll steht auch im Agenten.
 
@@ -90,7 +92,8 @@ Der Agent nutzt die Verbindung unter Einstellungen › Home Assistant:
 
 | Was | Wo |
 |---|---|
-| Einstellungen | `/config/system/agent.json` (Stick, nur beim Speichern) |
+| Einstellungen | `/config/system/agent.json` (Stick, nur beim Speichern); auf dem Admin-Knoten auch die Anfragen anderer Knoten (`shared`) |
+| Vollbild ja/nein | `localStorage` des Browsers (`titanos.agent.full`) |
 | Chats, Projekte, Gedächtnis, Skills, geplante Aufträge | `.titanos/agent/<konto>/` auf einem Daten-Volume: beim ersten Gebrauch das erste eingebundene, danach fest (`volume` in `agent.json`) |
 | Darstellung | `localStorage` des Browsers |
 
@@ -103,4 +106,5 @@ Ohne dieses Volume ist der Agent nicht verfügbar (er weicht nicht still auf ein
 - Ereignisstrom (SSE) durch die ganze Handler-Kette, Ordner-Regeln auch über Volume-Wurzeln, Home-Assistant-Regeln in tiefen Argumenten.
 - Oberfläche: `scripts/test-ui-agent.mjs` mit Testdaten (Desktop, Handy, eigene App, Einstellungen); Seiten-Crawl gegen `titand -dev` ohne Befund; Einstellungen gegen das echte Ollama über `titand -dev` (ohne Daten-Volume, daher keine Chats).
 - Kopfzeile: mit dem 13. Reiter passt bei 1366 px alles, bei 1280 px kommen die Pfeile.
-- **Nicht geprüft:** echtes Home Assistant (Assist über die Ollama-Integration, Konfigurations-API für Automationen, Langzeit-Statistik), echte Push-Mitteilungen, Installation als App auf echten Geräten.
+- PLAN 47: `test-ui-agent` prüft zusätzlich ☰ statt rundem Knopf, Suche und „Angeheftet“ auf dem Handy, 16 px im Eingabefeld, Dateiauswahl vom NAS bis zu den Kärtchen, Meldung bei zu großen Dateien, ⋯-Menü, Vollbild hin und zurück (auch nach Neuladen), Einstellungen für Mitglied und Admin-Knoten. Go-Tests: Anhängen wie der Browser (leerer Chat, Upload mit Dateityp, Nachricht, Lesen von Anhang und NAS-Datei), zwei echte API-Server im Cluster mit geteiltem Agenten (keine Freigabe, Anfrage, Freigabe, Chat bleibt auf dem Knoten, kein Herunterladen, Entziehen).
+- **Nicht geprüft:** geteilter Agent zwischen zwei echten NAS; echtes Home Assistant (Assist über die Ollama-Integration, Konfigurations-API für Automationen, Langzeit-Statistik), echte Push-Mitteilungen, Installation als App auf echten Geräten.

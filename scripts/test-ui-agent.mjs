@@ -82,7 +82,7 @@ const tools = [
 	['accounts_list', 'accounts', 'read'], ['plugins_list', 'plugins', 'read'], ['ha_state', 'home', 'read'], ['ha_call', 'home', 'change'], ['web_search', 'web', 'read'],
 ].map(([name, area, kind]) => ({ name, area, kind, dangerous: kind === 'change', mode: 'allow', set: false }));
 
-async function open(width, height, { theme = 'graphit', path = '/agent', look = null } = {}) {
+async function open(width, height, { theme = 'graphit', path = '/agent', look = null, cluster = null } = {}) {
 	const made = await create('owner', theme, width);
 	await made.page.setViewportSize({ width, height });
 	const appearance = { theme, nav: { layout: 'side' } };
@@ -105,8 +105,24 @@ async function open(width, height, { theme = 'graphit', path = '/agent', look = 
 			{ id: 'lock.haustuer', name: 'Haustür', area: 'Flur', state: 'locked', domain: 'lock' },
 			{ id: 'sensor.strom_tag', name: 'Strom heute', state: '4.2', domain: 'sensor' },
 		] });
+		if (p === '/files/list') {
+			const where = url.searchParams.get('path') ?? '';
+			const day = (d) => `2026-${d}T10:00:00Z`;
+			if (where === '') return json([{ name: 'Post', dir: true, size: 0, modified: day('11-04') }, { name: 'NAS', dir: true, size: 0, modified: day('11-04') }]);
+			if (where === 'Post') return json([
+				{ name: 'Versicherung', dir: true, size: 0, modified: day('10-01') },
+				{ name: 'Telekom 2026-10.pdf', dir: false, size: 186000, modified: day('11-04') },
+				{ name: 'Telekom 2026-09.pdf', dir: false, size: 183000, modified: day('10-03') },
+				{ name: 'Stadtwerke Abschlag.pdf', dir: false, size: 98000, modified: day('10-28') },
+			]);
+			return json([]);
+		}
+		if (p === '/files/search') return json({ entries: [{ name: 'Telekom 2026-10.pdf', path: 'Post/Telekom 2026-10.pdf', dir: false, size: 186000, modified: '2026-11-04T10:00:00Z' }], scanned: 40, truncated: false });
 		if (!p.startsWith('/agent')) return route.fallback();
 		if (p === '/agent/status') return json(status);
+		if (p === '/agent/cluster') return json(cluster ?? { member: false, admin: false });
+		if (p === '/agent/cluster/request') return json({ state: 'pending' });
+		if (p.startsWith('/agent/cluster/nodes/')) return json([{ node: 'n2', name: 'nas-keller', allowed: true, asked: at(9) }]);
 		if (p === '/agent/settings') {
 			if (method === 'PUT') {
 				seen.puts.push(route.request().postDataJSON());
@@ -212,14 +228,73 @@ try {
 		}
 		await ctx.close();
 	}
-	// Phone inside TitanOS (side navigation with the menu button).
+	// Phone inside TitanOS (round menu): the agent's own menu button at the
+	// top instead of the round one, search, pinned chats first (PLAN 47).
 	{
 		const { ctx, page } = await open(390, 844);
 		await page.goto(base + '/agent');
 		await page.getByRole('heading', { name: /Guten|Hallo/ }).waitFor();
 		await page.waitForTimeout(300);
+		assert.equal(await page.locator('.fab').count(), 0, 'no round menu button in the agent');
+		const groups = await page.locator('.home .h3').allTextContents();
+		assert.equal(groups[1].trim().toLowerCase(), 'angeheftet', 'pinned first: ' + groups);
 		await page.screenshot({ path: `${out}/10-phone-in-titanos.png` });
 		await noOverflow(page, 'phone in TitanOS');
+		const size = await page.locator('.composer textarea').evaluate((e) => parseFloat(getComputedStyle(e).fontSize));
+		assert.ok(size >= 16, `input font ${size}px zooms on iOS`);
+		await page.getByRole('searchbox', { name: 'Chats durchsuchen' }).fill('CPU');
+		assert.equal(await page.locator('.home .list .row').count(), 1, 'search');
+		await page.getByRole('searchbox', { name: 'Chats durchsuchen' }).fill('');
+		assert.ok(await page.locator('.acts .ren').first().count(), 'rename in the swipe actions');
+		await page.locator('.home header').getByRole('button', { name: /Navigation öffnen/ }).click();
+		await page.locator('dialog.drawer[open]').waitFor();
+		await page.waitForTimeout(300);
+		await page.screenshot({ path: `${out}/16-phone-menu.png` });
+		await page.keyboard.press('Escape');
+		// Files from the NAS through the clip menu.
+		await page.getByRole('button', { name: 'Datei anhängen' }).click();
+		await page.getByRole('menuitem', { name: 'Vom NAS wählen' }).click();
+		const picker = page.locator('dialog[open]');
+		await picker.getByRole('button', { name: /Documents/ }).click();
+		await picker.getByRole('button', { name: /Post/ }).click();
+		await picker.getByText('Telekom 2026-10.pdf').click();
+		await picker.getByText('Telekom 2026-09.pdf').click();
+		await page.waitForTimeout(200);
+		await page.screenshot({ path: `${out}/17-phone-nas-picker.png` });
+		await picker.getByRole('button', { name: 'Übernehmen (2)' }).click();
+		await page.locator('.composer .file', { hasText: 'Post/Telekom 2026-09.pdf' }).waitFor();
+		await page.screenshot({ path: `${out}/18-phone-nas-chips.png` });
+		// Too large to upload: a message instead of nothing.
+		await page.locator('.composer input[type=file]').setInputFiles({ name: 'gross.tar', mimeType: 'application/x-tar', buffer: Buffer.alloc(21 * 1024 * 1024) });
+		await page.getByRole('alert').filter({ hasText: 'gross.tar' }).waitFor();
+		// A chat: everything of the desktop buttons in the ⋯ menu.
+		await page.goto(base + '/agent?chat=' + docChat.id);
+		await page.getByRole('heading', { name: 'Docker-Übersicht als Word' }).waitFor();
+		await page.locator('.chat-head').getByRole('button', { name: /Navigation öffnen/ }).waitFor();
+		await page.locator('.chat-head').getByRole('button', { name: 'Weitere Aktionen' }).click();
+		for (const item of ['Anheften', 'Umbenennen', 'In Projekt verschieben', 'Als Markdown herunterladen', 'Als PDF herunterladen', 'Vollbild', 'Löschen'])
+			assert.ok(await page.getByRole('menuitem', { name: item }).count(), 'menu item ' + item);
+		await page.waitForTimeout(250);
+		await page.screenshot({ path: `${out}/19-phone-chat-menu.png` });
+		await page.getByRole('menuitem', { name: 'Vollbild' }).click();
+		await page.waitForTimeout(250);
+		assert.equal(await page.locator('.chat-head').getByRole('button', { name: /Navigation öffnen/ }).count(), 0, 'full screen: no menu button');
+		await ctx.close();
+	}
+	// Desktop: full screen and back.
+	{
+		const { ctx, page } = await open(1440, 900);
+		await page.goto(base + '/agent?chat=' + docChat.id);
+		await page.getByRole('heading', { name: 'Docker-Übersicht als Word' }).waitFor();
+		await page.locator('.chat-head').getByRole('button', { name: 'Vollbild' }).click();
+		await page.waitForTimeout(250);
+		assert.equal(await page.locator('.side-nav').count(), 0, 'full screen hides the menu');
+		await page.screenshot({ path: `${out}/20-desktop-full.png` });
+		await page.reload();
+		await page.getByRole('heading', { name: 'Docker-Übersicht als Word' }).waitFor();
+		assert.equal(await page.locator('.side-nav').count(), 0, 'full screen is remembered');
+		await page.locator('.chat-head').getByRole('button', { name: 'Mit Menü' }).click();
+		await page.locator('.side-nav').waitFor();
 		await ctx.close();
 	}
 	// Settings › KI-Agent.
@@ -248,6 +323,31 @@ try {
 		await noOverflow(phone.page, 'settings phone');
 		await phone.page.screenshot({ path: `${out}/12-settings-phone.png`, fullPage: true });
 		await phone.ctx.close();
+	}
+	// The agent across the cluster (PLAN 47): a member chooses, the admin
+	// node releases.
+	{
+		const member = await open(1440, 1100, { cluster: { member: true, admin: false, adminNode: 'nas-haupt', state: 'off' } });
+		await member.page.goto(base + '/settings/agent');
+		await member.page.getByRole('radio', { name: 'Agent von nas-haupt' }).click();
+		await member.page.getByRole('button', { name: 'Freigabe bei nas-haupt anfragen' }).click();
+		await member.page.getByText('Die Anfrage liegt bei nas-haupt').waitFor();
+		assert.equal(await member.page.getByPlaceholder('http://192.168.1.5:11434').count(), 0, 'no own address with the admin node');
+		await member.page.screenshot({ path: `${out}/21-settings-cluster-member.png` });
+		await member.ctx.close();
+		const admin = await open(1440, 1100, { cluster: { member: false, admin: true } });
+		await admin.page.route('**/api/v1/agent/settings', (route) =>
+			route.request().method() === 'GET'
+				? route.fulfill({ json: { ...settings, shared: [{ node: 'n2', name: 'nas-keller', allowed: false, asked: at(9) }] } })
+				: route.fallback(),
+		);
+		await admin.page.goto(base + '/settings/agent');
+		await admin.page.getByRole('heading', { name: 'Andere Knoten im Cluster' }).waitFor();
+		await admin.page.getByRole('button', { name: 'Freigeben' }).click();
+		await admin.page.getByRole('button', { name: 'Entziehen' }).waitFor();
+		await admin.page.getByRole('heading', { name: 'Andere Knoten im Cluster' }).scrollIntoViewIfNeeded();
+		await admin.page.screenshot({ path: `${out}/22-settings-cluster-admin.png` });
+		await admin.ctx.close();
 	}
 	const real = errors.filter((e) => !/favicon|ERR_ABORTED/.test(e));
 	assert.deepEqual(real, [], 'console errors');

@@ -523,6 +523,10 @@ func (s *Server) handleAgentPull(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
+	if s.agentSettings().Source == agentSourceCluster {
+		writeError(w, http.StatusConflict, "agent_cluster", "models are downloaded on the admin node")
+		return
+	}
 	req.Model = strings.TrimSpace(req.Model)
 	if req.Model == "" || len(req.Model) > 200 || strings.ContainsAny(req.Model, " \t\n") {
 		writeError(w, http.StatusBadRequest, "invalid_model", "a model name like gpt-oss:20b")

@@ -123,6 +123,10 @@ Wer einen Knoten verwaltet, kann alle verwalten. Wer einen Knoten übernimmt, al
 - **Konflikte:** Zwei Knoten, die gleichzeitig dasselbe Konto ändern, entscheidet die Version (letzter Schreiber).
 - **Gleichzeitige Beitritte:** Zwei gleichzeitige Beitritte an zwei verschiedenen Knoten können sich überschreiben. Dann einen der beiden Knoten neu beitreten lassen.
 
+## KI-Agent im Cluster
+
+Jeder Knoten hat seinen eigenen KI-Agenten oder nutzt das Modell des Admin-Knotens, nach dessen Freigabe (seit 0.50.0, PLAN 47). Chats und Rechte bleiben auf dem Knoten; über den Cluster gehen nur signierte Anfragen an Ollama auf dem Admin-Knoten (`/agent/…`, nur dort beantwortet). Einzelheiten: [AGENT.md](AGENT.md).
+
 ## Backups zwischen Knoten
 
 Im Backup-Editor (Ziel „Anderes TitanOS“) und bei der Replikation gibt es die Auswahl **Cluster-Knoten** mit „Kopplungscode holen“. So läuft es ab:

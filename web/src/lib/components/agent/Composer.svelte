@@ -2,6 +2,7 @@
 	// The input of the KI-Agent: the task, the model and the thinking level
 	// as the chosen model reports them (Ollama thinking.values), Enter sends,
 	// Shift+Enter a new line. While a run works, the round button stops it.
+	import Dropdown from '#lib/components/Dropdown.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { levelLabel, type Model } from '#lib/agent.ts';
@@ -16,6 +17,8 @@
 		attachments = $bindable([]),
 		onsend,
 		onstop,
+		onpicknas,
+		onerror,
 	}: {
 		models?: Model[];
 		model?: string;
@@ -27,6 +30,10 @@
 		attachments?: { name: string; file?: File; ref?: string }[];
 		onsend: (text: string) => void;
 		onstop?: () => void;
+		/** Opens the choice of files on the NAS (shares of the account). */
+		onpicknas?: () => void;
+		/** A file could not be taken, e.g. too large. */
+		onerror?: (message: string) => void;
 	} = $props();
 
 	let text = $state('');
@@ -47,10 +54,14 @@
 	let picker = $state<HTMLInputElement>();
 	function picked(event: Event) {
 		const files = (event.currentTarget as HTMLInputElement).files;
+		const big: string[] = [];
 		for (const file of files ?? []) {
-			if (file.size <= 20 * 1024 * 1024 && !attachments.some((a) => a.name === file.name))
+			if (file.size > 20 * 1024 * 1024) big.push(file.name);
+			else if (!attachments.some((a) => a.name === file.name))
 				attachments = [...attachments, { name: file.name, file }];
 		}
+		// Larger files are chosen from the NAS instead (nothing is copied).
+		if (big.length) onerror?.(t('agent.attachTooBig', { names: big.join(', ') }));
 		if (picker) picker.value = '';
 	}
 	function send() {
@@ -108,14 +119,39 @@
 		placeholder={placeholder || (busy ? t('agent.inputBusy') : t('agent.inputIdle'))}></textarea>
 	<div class="tools">
 		<input bind:this={picker} type="file" multiple hidden onchange={picked} />
-		<button
-			type="button"
-			class="round attach"
-			aria-label={t('agent.attach')}
-			title={t('agent.attach')}
-			disabled={busy || disabled}
-			onclick={() => picker?.click()}><Icon name="clip" size={16} /></button
-		>
+		{#if onpicknas}
+			<span class="attach-menu">
+				<Dropdown label={t('agent.attach')} icon="clip" disabled={busy || disabled}>
+					{#snippet children(close)}
+						<button
+							type="button"
+							role="menuitem"
+							onclick={() => {
+								close();
+								picker?.click();
+							}}><Icon name="upload" size={16} /><span>{t('agent.attachDevice')}</span></button
+						>
+						<button
+							type="button"
+							role="menuitem"
+							onclick={() => {
+								close();
+								onpicknas?.();
+							}}><Icon name="folder" size={16} /><span>{t('agent.attachNas')}</span></button
+						>
+					{/snippet}
+				</Dropdown>
+			</span>
+		{:else}
+			<button
+				type="button"
+				class="round attach"
+				aria-label={t('agent.attach')}
+				title={t('agent.attach')}
+				disabled={busy || disabled}
+				onclick={() => picker?.click()}><Icon name="clip" size={16} /></button
+			>
+		{/if}
 		{#if usable.length > 1}
 			<label class="pill">
 				<span class="muted">{t('agent.model')}</span>
@@ -230,6 +266,17 @@
 		width: 32px;
 		height: 32px;
 	}
+	/* The clip opens a menu: same round look as the plain button. */
+	.attach-menu :global(.btn) {
+		width: 32px;
+		height: 32px;
+		min-height: 32px;
+		padding: 0;
+		border-radius: 50%;
+		background: none;
+		border: 1px solid var(--border);
+		color: var(--muted);
+	}
 	.files {
 		display: flex;
 		flex-wrap: wrap;
@@ -266,7 +313,19 @@
 		background: var(--text);
 		color: var(--bg);
 	}
+	/* Under 16px iOS zooms into the field on a tap and stays zoomed. */
+	@media (max-width: 760px), (pointer: coarse) {
+		textarea,
+		.pill select {
+			font-size: max(16px, 1rem);
+		}
+	}
 	@media (max-width: 760px) {
+		.attach-menu :global(.btn) {
+			width: 40px;
+			height: 40px;
+			min-height: 40px;
+		}
 		.round {
 			width: 40px;
 			height: 40px;
