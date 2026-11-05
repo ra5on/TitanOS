@@ -7,6 +7,7 @@
 		unit = '%',
 		options,
 		history = [],
+		capacity = 90,
 		compact = false,
 		showCompactLabel = false,
 		bar = true,
@@ -16,6 +17,8 @@
 		unit?: string;
 		options: TileOptions;
 		history?: (number | null)[];
+		/** Points the history holds when full, so it spans the whole width. */
+		capacity?: number;
 		compact?: boolean;
 		showCompactLabel?: boolean;
 		/** false = the caller draws its own bar (RAM tile). */
@@ -67,7 +70,7 @@
 	>
 		<span class="metric-level" class:unknown={!known} style:width="{bounded}%"></span>
 	</div>{/if}
-{#if mode === 'history'}<History values={history} />{/if}
+{#if mode === 'history'}<History values={history} {capacity} />{/if}
 
 <style>
 	.metric {

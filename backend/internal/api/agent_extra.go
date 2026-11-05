@@ -505,7 +505,7 @@ type agentPull struct {
 	Total     int64     `json:"total,omitempty"`
 	Error     string    `json:"error,omitempty"`
 	Running   bool      `json:"running"`
-	Done      time.Time `json:"done,omitempty"`
+	Done      time.Time `json:"done,omitzero"`
 }
 
 func (s *Server) handleAgentPullState(w http.ResponseWriter, r *http.Request) {

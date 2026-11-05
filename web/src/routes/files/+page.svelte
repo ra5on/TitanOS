@@ -50,7 +50,6 @@
 	import SelectionBar from './SelectionBar.svelte';
 	import ShortcutsDialog from './ShortcutsDialog.svelte';
 	import PhotoView from './PhotoView.svelte';
-	import PhotosHub from './photos/PhotosHub.svelte';
 	import TextEditor from './TextEditor.svelte';
 	import TrashArea from './TrashArea.svelte';
 	import UndoPanel from './UndoPanel.svelte';
@@ -140,8 +139,6 @@
 		usage = $state(false),
 		duplicates = $state(false);
 	let photos = $state(false);
-	// Photos across the chosen folders (PLAN 52) in place of the folder list.
-	let photoView = $state<'' | 'timeline' | 'albums' | 'map'>('');
 	let deepSearch = $state(false),
 		comparison = $state(false),
 		batchRename = $state(false),
@@ -469,7 +466,6 @@
 		if (target) navigate(target.root, target.path, target);
 	}
 	function open(id: string, path: string) {
-		photoView = '';
 		steps.leave(rootId && (rootId !== id || dir !== path) ? captureLocation() : null);
 		placesOpen = false;
 		navigate(id, path);
@@ -865,7 +861,7 @@
 		>
 			<Places
 				{roots}
-				current={trash || photoView ? '' : rootId}
+				current={trash ? '' : rootId}
 				{dir}
 				showHidden={prefs.showHidden}
 				admin={canAdminister}
@@ -888,24 +884,9 @@
 				onremovefavorite={(favorite) =>
 					prefs.saveFavorites(prefs.favorites.filter((f) => f !== favorite))}
 				onformat={() => (formattingDrive = true)}
-				photos={photoView}
-				onphotos={(v) => {
-					photoView = v;
-					placesOpen = false;
-				}}
 			/>
 		</nav>
-		{#if photoView}
-			<section class="tile photos-area" aria-label={t('photos.title')}>
-				<PhotosHub
-					view={photoView}
-					onview={(v) => (photoView = v)}
-					onclose={() => (photoView = '')}
-					onfolder={(id, path) => open(id, path)}
-				/>
-			</section>
-		{/if}
-		{#if !trash && !photoView}
+		{#if !trash}
 			<MobileActions
 				{root}
 				{dir}
@@ -934,7 +915,7 @@
 			/>
 		{/if}
 
-		<div class="workspace" class:split={prefs.split} hidden={!!photoView}>
+		<div class="workspace" class:split={prefs.split}>
 			{#if prefs.split && !trash && (selected.length || right.selected.length) && root?.kind !== 'stick'}
 				<div class="pane-actions">
 					{#if selected.length}
@@ -1426,13 +1407,6 @@
 	}
 	.workspace.split {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
-	}
-	.workspace[hidden] {
-		display: none;
-	}
-	.photos-area {
-		min-width: 0;
-		padding: 0;
 	}
 	.pane-actions {
 		grid-column: 1 / -1;

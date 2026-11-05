@@ -1,4 +1,4 @@
-import type { StorageStatus, SystemInfo } from '#lib/api.ts';
+import type { Accelerator, StorageStatus, SystemInfo } from '#lib/api.ts';
 import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 import { dockerName } from '#lib/docker-name.ts';
 import { vmLabel } from '#lib/vm-name.ts';
@@ -18,10 +18,36 @@ export type TileContext = {
 	dashboard: Record<string, unknown> | null;
 };
 
-/** The title of a tile: its own, the name of its workload or the name of its kind. */
-export function tileTitle(id: TileId, { options, data }: Pick<TileContext, 'options' | 'data'>) {
+/** The graphics cards and NPUs a hardware tile shows. */
+export function tileAccelerators(
+	kind: string,
+	o: Pick<TileOptions, 'device'>,
+	list: Accelerator[] = [],
+): Accelerator[] {
+	return list.filter((d) =>
+		o.device
+			? d.address === o.device
+			: kind === 'accelerators'
+				? true
+				: kind === 'npu'
+					? d.kind === 'npu'
+					: d.kind !== 'npu' && (kind === 'nvidia' ? d.vendor === 'NVIDIA' : d.vendor !== 'NVIDIA'),
+	);
+}
+
+/** The title of a tile: its own, the name of its workload, the name of
+ * its one graphics card (PLAN 53) or the name of its kind. */
+export function tileTitle(
+	id: TileId,
+	{ options, data, info }: Pick<TileContext, 'options' | 'data'> & { info?: SystemInfo | null },
+) {
 	const o = tileOptions(options, id);
 	if (o.title) return o.title;
+	const kind = sourceId(id);
+	if (['accelerators', 'igpu', 'nvidia', 'npu'].includes(kind)) {
+		const devices = tileAccelerators(kind, o, info?.accelerators);
+		if (devices.length === 1 && devices[0].name) return devices[0].name;
+	}
 	const target = workload(id);
 	if (target) {
 		const vm = target.kind === 'vm' ? data.vms.find((v) => v.name === target.name) : undefined;

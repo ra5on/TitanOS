@@ -35,7 +35,7 @@
 	import AppIconEditor from '#lib/components/AppIconEditor.svelte';
 	import { onDestroy } from 'svelte';
 	import Icon from '#lib/components/Icon.svelte';
-	import { arrangeNav, moveNav, navForRole, NAV_FIXED } from '#lib/navigation.ts';
+	import { arrangeNav, moveNav, navForRole, NAV_BUTTONS, NAV_FIXED } from '#lib/navigation.ts';
 
 	const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 	const CUSTOM_FIELDS: (keyof CustomColors)[] = ['bg', 'surface', 'header', 'text', 'border'];
@@ -615,6 +615,26 @@
 						'appearance.nav.magnify',
 					)}</label
 				>{/if}
+			{#if draft.nav.layout === 'side'}
+				<fieldset class="corners">
+					<legend>{t('appearance.nav.button')}</legend>
+					<p class="hint muted">{t('appearance.nav.buttonHint')}</p>
+					<div class="corner-list">
+						{#each NAV_BUTTONS as corner (corner)}
+							<label class="corner" class:selected={draft.nav.button === corner}
+								><input
+									type="radio"
+									name="nav-button"
+									value={corner}
+									bind:group={draft.nav.button}
+								/><span class="phone {corner}" aria-hidden="true"><i></i></span><span
+									>{t(`appearance.nav.button.${corner}`)}</span
+								></label
+							>
+						{/each}
+					</div>
+				</fieldset>
+			{/if}
 			<ol class="nav-list">
 				{#each navArranged as item, index (item.id)}
 					<li>
@@ -1025,6 +1045,77 @@
 		.preview {
 			position: static;
 		}
+	}
+	.corners {
+		border: 0;
+		margin: 0;
+		padding: 0;
+		min-width: 0;
+	}
+	.corners legend {
+		font-weight: 600;
+		padding: 0;
+	}
+	.corner-list {
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 7rem));
+		gap: var(--space-2);
+		margin-top: var(--space-2);
+	}
+	.corner {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 6px;
+		padding: 8px 4px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md, 10px);
+		cursor: pointer;
+		font-size: var(--text-sm);
+		text-align: center;
+	}
+	.corner.selected {
+		border-color: var(--accent);
+		background: color-mix(in srgb, var(--accent) 10%, transparent);
+	}
+	.corner input {
+		position: absolute;
+		opacity: 0;
+		pointer-events: none;
+	}
+	.corner:has(input:focus-visible) {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	.phone {
+		position: relative;
+		width: 34px;
+		height: 58px;
+		border: 2px solid var(--muted);
+		border-radius: 8px;
+	}
+	.phone i {
+		position: absolute;
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		background: var(--accent);
+	}
+	.phone.tl i,
+	.phone.tr i {
+		top: 4px;
+	}
+	.phone.bl i,
+	.phone.br i {
+		bottom: 4px;
+	}
+	.phone.tl i,
+	.phone.bl i {
+		left: 4px;
+	}
+	.phone.tr i,
+	.phone.br i {
+		right: 4px;
 	}
 	.layouts {
 		display: grid;

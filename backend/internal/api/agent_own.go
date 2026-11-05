@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/ra5on/TitanOS/backend/internal/scripts"
-	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -65,11 +64,6 @@ func (b *agentToolbox) ownTools() []*agentTool {
 				"day":        intSchema("For monthly: day 1–28.", 1, 28),
 				"cron":       str("For cron: five fields, minute hour day month weekday, e.g. \"0 7 * * 1-5\".")}, "name", "task", "every"),
 			false, b.scheduleCreate),
-		own("photos_search", agent.AreaAgent, "Search the person's photos (their chosen photo folders) by what is on them, file name, folder or date, e.g. \"Hund am Strand\", \"Weihnachten 2025\", \"Telekom-Rechnung\". Returns root, path, date and description; look closer with image_view.",
-			schema(map[string]any{"query": str("What to look for."), "limit": intSchema("At most this many (default 20).", 1, 100)}, "query"), true, b.photosSearch),
-		own("photo_album_save", agent.AreaAgent, "Create a photo album or add photos to one of the person's albums (only references; nothing is copied or moved). Give the album name and the photos as root and path.",
-			schema(map[string]any{"name": str("Name of the album; an existing album of that name gets the photos."), "photos": map[string]any{"type": "array", "maxItems": 500, "items": map[string]any{"type": "object", "properties": map[string]any{"root": str("Root, e.g. share/Media."), "path": str("Path of the photo.")}, "required": []string{"root", "path"}}}}, "name", "photos"),
-			false, b.photoAlbumSave),
 		own("schedule_list", agent.AreaAgent, "The planned tasks and reminders of this account, with their next run.", schema(nil), false, b.scheduleList),
 	}
 	if b.settings.Policy.Mode("web_search", agent.AreaWeb, agent.KindRead) != agent.ModeDeny || b.settings.Policy.Mode("web_read", agent.AreaWeb, agent.KindRead) != agent.ModeDeny {
@@ -401,75 +395,4 @@ func (b *agentToolbox) scheduleList(context.Context, *agent.Chat, json.RawMessag
 	}
 	res, err := toolcatalog.JSON(map[string]any{"schedules": b.s.agentScheduleViews(list)})
 	return agent.Outcome{Text: res.Text}, err
-}
-
-func (b *agentToolbox) photosSearch(_ context.Context, _ *agent.Chat, args json.RawMessage) (agent.Outcome, error) {
-	var req struct {
-		Query string
-		Limit int
-	}
-	if err := json.Unmarshal(args, &req); err != nil || strings.TrimSpace(req.Query) == "" {
-		return agent.Outcome{}, toolcatalog.Errorf("give a query")
-	}
-	if req.Limit <= 0 || req.Limit > 100 {
-		req.Limit = 20
-	}
-	if b.settings.Policy.Mode("file_read", toolcatalog.AreaFiles, agent.KindRead) == agent.ModeDeny {
-		return agent.Outcome{}, toolcatalog.Errorf("reading files is not allowed for the agent")
-	}
-	list := b.s.photoList(b.user)
-	// Folder rules of the agent hold for photos as for files.
-	list = slices.DeleteFunc(list, func(p *photoItem) bool { return b.realFolderMode(p.Root, p.Path) == agent.ModeDeny })
-	if len(list) == 0 {
-		return agent.Outcome{Text: "The person has no photo folders chosen (Dateien › Fotos › Foto-Ordner)."}, nil
-	}
-	hits := photoSearch(list, req.Query, req.Limit)
-	type row struct {
-		Root  string `json:"root"`
-		Path  string `json:"path"`
-		Date  string `json:"date"`
-		Place string `json:"gps,omitempty"`
-		Desc  string `json:"description,omitempty"`
-	}
-	rows := make([]row, 0, len(hits))
-	for _, p := range hits {
-		r := row{Root: p.Root, Path: p.Path, Date: p.when().Format("2006-01-02 15:04"), Desc: p.Desc}
-		if p.GPS {
-			r.Place = fmt.Sprintf("%.4f,%.4f", p.Lat, p.Lon)
-		}
-		rows = append(rows, r)
-	}
-	described := 0
-	for _, p := range list {
-		if p.Desc != "" {
-			described++
-		}
-	}
-	res, err := toolcatalog.JSON(map[string]any{"photos": rows, "total": len(list), "described": described})
-	return agent.Outcome{Text: res.Text}, err
-}
-
-func (b *agentToolbox) photoAlbumSave(_ context.Context, _ *agent.Chat, args json.RawMessage) (agent.Outcome, error) {
-	var req struct {
-		Name   string
-		Photos []struct{ Root, Path string }
-	}
-	if err := json.Unmarshal(args, &req); err != nil || strings.TrimSpace(req.Name) == "" {
-		return agent.Outcome{}, toolcatalog.Errorf("give the album name and the photos")
-	}
-	id := "new"
-	for _, a := range b.s.photoAlbums(b.user.Name) {
-		if strings.EqualFold(a.Name, strings.TrimSpace(req.Name)) {
-			id = a.ID
-		}
-	}
-	add := make([]string, 0, len(req.Photos))
-	for _, p := range req.Photos {
-		add = append(add, p.Root+":"+strings.Trim(path.Clean("/"+p.Path), "/"))
-	}
-	a, err := b.s.photoAlbumSave(b.user, id, req.Name, nil, add, nil)
-	if err != nil {
-		return agent.Outcome{}, toolcatalog.Errorf("%v", err)
-	}
-	return agent.Outcome{Text: fmt.Sprintf("Album %q has %d photos.", a.Name, len(a.Items)), Note: "album", NoteText: fmt.Sprintf("„%s“, %d Fotos", a.Name, len(a.Items))}, nil
 }

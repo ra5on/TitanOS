@@ -1,7 +1,9 @@
 package agent
 
 import (
+	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -70,5 +72,16 @@ func TestSeenNeedsNoDiskWithoutChange(t *testing.T) {
 	s.MarkUnread("alex", list)
 	if list[0].Unread {
 		t.Fatal("old chat unread")
+	}
+}
+
+// A schedule that never ran carries no lastRun (it showed as "01.01.1").
+func TestScheduleNeverRanHasNoLastRun(t *testing.T) {
+	b, err := json.Marshal(Schedule{ID: "x", Every: "once"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "lastRun") {
+		t.Fatalf("zero lastRun marshaled: %s", b)
 	}
 }

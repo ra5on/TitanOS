@@ -43,14 +43,24 @@ export const NAV_FIXED = 'settings';
  * them in the header (top, standard) or in a sidebar on the left (side);
  * `magnify` enlarges the symbols of the folded sidebar under the pointer.
  */
-export type NavPrefs = { order: string[]; hidden: string[]; layout: NavLayout; magnify: boolean };
+export type NavPrefs = {
+	order: string[];
+	hidden: string[];
+	layout: NavLayout;
+	magnify: boolean;
+	/** Corner of the menu button with the side bar on a phone (PLAN 53). */
+	button: NavButton;
+};
 export type NavLayout = 'top' | 'side';
+export const NAV_BUTTONS = ['tl', 'tr', 'bl', 'br'] as const;
+export type NavButton = (typeof NAV_BUTTONS)[number];
 
 export const defaultNav = (): NavPrefs => ({
 	order: [],
 	hidden: [],
 	layout: 'top',
 	magnify: true,
+	button: 'tl',
 });
 
 // Unknown ids are kept, so a tab of a newer app version keeps its place
@@ -72,6 +82,7 @@ export function sanitizeNav(input: unknown): NavPrefs {
 		hidden: ids(v.hidden).filter((id) => id !== NAV_FIXED),
 		layout: v.layout === 'side' ? 'side' : 'top',
 		magnify: v.magnify !== false,
+		button: NAV_BUTTONS.includes(v.button as NavButton) ? (v.button as NavButton) : 'tl',
 	};
 }
 

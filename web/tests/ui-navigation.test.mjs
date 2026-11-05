@@ -67,42 +67,63 @@ test('the HTTPS names of apps have their own admin-only settings page', async ()
 		assert.ok(matchesSetting(q, 'HTTPS-Namen für Apps', 'proxy'), q);
 });
 
-test('the settings navigation keeps its fixed groups, order and role filter', async () => {
-	const { settingsEntries, settingsGroups } = await import('../src/lib/settings-search.ts');
-	const label = (key) => key;
+test('the settings navigation sorts groups and entries A–Z and filters by role', async () => {
+	const { settingsEntries } = await import('../src/lib/settings-search.ts');
+	const { readFileSync } = await import('node:fs');
+	const de = JSON.parse(readFileSync(new URL('../src/lib/i18n/de.json', import.meta.url), 'utf8'));
+	const label = (key) => de[key] ?? key;
 	const admin = settingsEntries('', true, label);
-	assert.deepEqual(
-		admin.map((g) => g.group),
-		[...settingsGroups],
-	);
-	assert.deepEqual(
-		admin.map((g) => [g.group, g.entries.map((e) => e.id)]),
-		[
-			['system', ['about', 'updates', 'timezone', 'services', 'notifications']],
-			['network', ['network', 'ddns', 'proxy', 'cluster']],
-			['security', ['access', 'firewall', 'letsencrypt', 'wireguard']],
-			['hardware', ['hardware', 'temperatures', 'energy', 'ups', 'power-button']],
-			['data', ['memory', 'backups', 'files']],
-			['integrations', ['homeassistant', 'agent', 'mcp', 'api']],
-			['personal', ['appearance']],
-		],
-	);
+	const titles = admin.map((g) => label(`settings.group.${g.group}`));
+	const order = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
+	assert.deepEqual(titles, [...titles].sort(order.compare));
+	for (const g of admin) {
+		const names = g.entries.map((e) => e.label);
+		assert.deepEqual(names, [...names].sort(order.compare), g.group);
+	}
+	assert.deepEqual(admin.flatMap((g) => g.entries.map((e) => e.id)).sort(), [
+		'about',
+		'access',
+		'agent',
+		'api',
+		'appearance',
+		'backups',
+		'cluster',
+		'ddns',
+		'energy',
+		'files',
+		'firewall',
+		'hardware',
+		'homeassistant',
+		'letsencrypt',
+		'mcp',
+		'memory',
+		'network',
+		'notifications',
+		'power-button',
+		'proxy',
+		'services',
+		'temperatures',
+		'timezone',
+		'updates',
+		'ups',
+		'wireguard',
+	]);
 	const fresh = admin
 		.flatMap((g) => g.entries)
 		.filter((e) => e.newSince)
 		.map((e) => e.id);
-	assert.deepEqual(fresh, [
-		'services',
-		'ddns',
+	assert.deepEqual(fresh.sort(), [
+		'agent',
 		'cluster',
+		'ddns',
 		'firewall',
 		'letsencrypt',
-		'wireguard',
-		'agent',
 		'mcp',
+		'services',
+		'wireguard',
 	]);
 	const user = settingsEntries('', false, label).flatMap((g) => g.entries.map((e) => e.id));
-	assert.deepEqual(user, ['about', 'temperatures', 'mcp', 'api', 'appearance']);
+	assert.deepEqual(user.sort(), ['about', 'api', 'appearance', 'mcp', 'temperatures']);
 	// MCP is one page for everyone, no longer a section of API and CLI.
 	assert.deepEqual(
 		settingsEntries('mcp', false, label).flatMap((g) => g.entries.map((e) => e.href)),

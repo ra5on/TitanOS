@@ -244,7 +244,7 @@ type Schedule struct {
 	// Report: what the morning report contains.
 	Report  *Report   `json:"report,omitempty"`
 	Enabled bool      `json:"enabled"`
-	LastRun time.Time `json:"lastRun,omitempty"`
+	LastRun time.Time `json:"lastRun,omitzero"`
 	LastOK  bool      `json:"lastOk,omitempty"`
 	Chat    string    `json:"chat,omitempty"`
 	// Trigger "homeassistant": runs when an entity reaches a state.

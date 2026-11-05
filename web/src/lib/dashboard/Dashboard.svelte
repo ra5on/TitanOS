@@ -230,7 +230,7 @@
 		saved = next;
 		rebuild(next);
 	});
-	const titleOf = (id: TileId) => tileTitle(id, { options, data });
+	const titleOf = (id: TileId) => tileTitle(id, { options, data, info: system.info });
 	const osIconOf = (id: TileId) => {
 		const target = workload(id);
 		const vm = target?.kind === 'vm' ? data.vms.find((v) => v.name === target.name) : undefined;

@@ -51,20 +51,31 @@ test('sanitizing keeps unknown but valid ids and drops junk', () => {
 		hidden: [],
 		layout: 'top',
 		magnify: true,
+		button: 'tl',
 	});
-	assert.deepEqual(sanitizeNav(null), { order: [], hidden: [], layout: 'top', magnify: true });
+	assert.deepEqual(sanitizeNav(null), {
+		order: [],
+		hidden: [],
+		layout: 'top',
+		magnify: true,
+		button: 'tl',
+	});
 	assert.deepEqual(defaultAppearance().nav, {
 		order: [],
 		hidden: [],
 		layout: 'top',
 		magnify: true,
+		button: 'tl',
 	});
 	assert.deepEqual(sanitizeAppearance({ nav: { order: ['tools'] } }).nav, {
 		order: ['tools'],
 		hidden: [],
 		layout: 'top',
 		magnify: true,
+		button: 'tl',
 	});
+	assert.equal(sanitizeNav({ button: 'br' }).button, 'br');
+	assert.equal(sanitizeNav({ button: 'middle' }).button, 'tl');
 });
 
 test('the sidebar is kept, anything else means the header', () => {

@@ -198,6 +198,8 @@
 	const needsTime = $derived(
 		['once', 'daily', 'days', 'weekdays', 'weekly', 'monthly'].includes(draft.every),
 	);
+	// A run before 2000 is the zero time older versions stored: never ran.
+	const ran = (s: { lastRun?: string }) => !!s.lastRun && new Date(s.lastRun).getFullYear() >= 2000;
 </script>
 
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
@@ -298,14 +300,18 @@
 			<span class="grow">
 				<strong>{s.name}</strong>
 				{#if !s.enabled}<span class="chip">{t('agent.off')}</span>{/if}
-				{#if s.every === 'once' && s.lastRun}<span class="chip">{t('agent.done')}</span>{/if}
+				{#if s.every === 'once' && ran(s)}<span class="chip">{t('agent.done')}</span>{/if}
 				<span class="muted small"
 					>{s.kind === 'reminder' ? t('agent.reminder') : t('agent.task')} · {s.when ??
 						s.every}{s.next && s.enabled
 						? ' · ' + t('agent.nextRun', { when: formatDateTime(new Date(s.next)) })
-						: ''}{s.lastRun
-						? ' · ' + t('agent.lastRun', { when: formatDateTime(new Date(s.lastRun)) })
-						: ''}{s.lastRun && s.kind !== 'reminder' ? (s.lastOk ? ' ✓' : ' !') : ''}</span
+						: ''}{ran(s)
+						? ' · ' + t('agent.lastRun', { when: formatDateTime(new Date(s.lastRun!)) })
+						: ' · ' + t('agent.neverRun')}{ran(s) && s.kind !== 'reminder'
+						? s.lastOk
+							? ' ✓'
+							: ' !'
+						: ''}</span
 				>
 			</span>
 			<span class="acts">
