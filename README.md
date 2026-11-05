@@ -199,6 +199,15 @@ Die VM-Einrichtung zeigt kompakte Kacheln mit einer gemeinsamen Zusammenfassung.
 - **KI-Agent (optional, ab Werk aus):** Aufträge in normaler Sprache, die er mit den Werkzeugen von TitanOS in mehreren Schritten erledigt – mit deinem Ollama (z. B. gpt-oss), Denkstufen des Modells, Projekten und Chats, Gedächtnis und Skills, Websuche, Word-Dokumenten, geplanten Aufträgen, Eigeninitiative bei Meldungen und Home Assistant samt Assist. Je Werkzeug, Bereich und Ordner einstellbar: ohne Nachfrage, mit Knopf im Chat oder verboten. Dateien aus deinen Freigaben direkt in den Chat; Oberfläche wie die großen Chat-Apps mit eigenem Menü, auf dem Handy als eigene App (auch auf dem Home-Bildschirm); Mitteilungen nur, solange du den Chat nicht schon offen hast; im Cluster nutzt ein Knoten auf Freigabe das Modell des Admin-Knotens. [Einzelheiten](docs/AGENT.md)
 - **MCP-Server (optional, ab Werk aus):** Claude Desktop, Claude Code und andere MCP-Clients arbeiten mit den Rechten eines persönlichen Tokens am NAS: Zustand, Speicher, Freigaben, Dateien und Dokumente (Word, Excel, PDF), Docker, VMs, Sicherungen, Firewall-Regeln, Konten, Plugins, Updates, Neustart/Ausschalten, freigegebene Home-Assistant-Geräte und das Handbuch. Verwaltungsaktionen brauchen den Token-Bereich `system:write` (nur Besitzer/Administratoren). Jedes Werkzeug lässt sich einzeln ausschalten; gefährliche und zerstörende Aufrufe sind ab Werk gesperrt und laufen erst nach ausdrücklicher Freischaltung und mit Bestätigung des Clients. Geheimnisse, Passwörter, Konsolen und Netzwerkbestätigung bleiben außen vor; jeder Aufruf steht im Aktivitätsprotokoll. Die eigene MCP-Seite unter Einstellungen zeigt allen Konten Zustand, Endpunkt und Verbindungsanleitung samt Token-Knopf; Schalter, Werkzeuge und letzte Aufrufe sehen nur Besitzer und Administratoren. [Einrichtung](docs/MCP.md).
 
+[![KI-Agent: eigenes Menü mit Projekten und Chats neben dem TitanOS-Menü, Start mit Begrüßung, Projekt-Kacheln, laufenden Aufträgen und Vorschlägen](docs/screenshots/current/ki-agent.png)](docs/screenshots/current/ki-agent.png)
+
+<p>
+  <a href="docs/screenshots/current/ki-agent-mobil.png"><img src="docs/screenshots/current/ki-agent-mobil.png" alt="KI-Agent auf dem Smartphone als eigene App: Modell oben, Begrüßung, Projekt-Kacheln und Eingabefeld" width="260"></a>
+  <a href="docs/screenshots/current/ki-agent-menue-mobil.png"><img src="docs/screenshots/current/ki-agent-menue-mobil.png" alt="Menü des KI-Agenten auf dem Smartphone mit Projekten, angehefteten Chats und „Zurück zu TitanOS“" width="260"></a>
+</p>
+
+[Chat mit Schritten, Tabelle und Freigabe-Karte](docs/screenshots/current/ki-agent-chat.png)
+
 ### Netzwerk, Energie und Systemzugang
 
 - **Netzwerk:** mehrere benannte Netze über Anschlüsse, Bonds und VLANs; IPv4-DHCP/feste Adressen, IPv6-SLAAC/DHCPv6/feste Adressen, DNS und Routen. Bevorzugter Verwaltungszugang, zweiminütiger Probelauf und authentifizierte lokale Wiederherstellung. Router und DHCP bleiben extern.
