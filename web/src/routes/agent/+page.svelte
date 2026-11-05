@@ -1,16 +1,21 @@
 <script lang="ts">
-	// The KI-Agent (PLAN 44): projects and chats on the left, the chat on the
-	// right, on the phone a start page with the running task, project tiles
-	// and the latest chats. Installed from here it is an app of its own
+	// The KI-Agent (PLAN 44, look of PLAN 48): its own menu on the left, the
+	// chat on the right, with model and thinking level at the top and a
+	// start page like the big chat apps. On the desktop the TitanOS menu
+	// stays beside it (or full screen); on the phone the agent is an app of
+	// its own whose menu slides in from the left, with the way back to
+	// TitanOS. Installed from here it is an app of its own too
 	// (/agent.webmanifest, start /agent?app=1, no TitanOS frame).
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
+	import { fade, fly } from 'svelte/transition';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import Dropdown from '#lib/components/Dropdown.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import NasPicker from '#lib/components/agent/NasPicker.svelte';
-	import AgentHome from '#lib/components/agent/AgentHome.svelte';
-	import ChatList from '#lib/components/agent/ChatList.svelte';
+	import AgentMenu from '#lib/components/agent/AgentMenu.svelte';
+	import AgentStart from '#lib/components/agent/AgentStart.svelte';
+	import ModelPicker from '#lib/components/agent/ModelPicker.svelte';
 	import ChatView from '#lib/components/agent/ChatView.svelte';
 	import Composer from '#lib/components/agent/Composer.svelte';
 	import KnowledgeDialog from '#lib/components/agent/KnowledgeDialog.svelte';
@@ -20,7 +25,7 @@
 	import { api, apiFetch, responseError } from '#lib/api.ts';
 	import { agentAppMode } from '#lib/agent-app.ts';
 	import { agentFull, setAgentFull } from '#lib/agent-full.svelte.ts';
-	import { shell } from '#lib/shell.svelte.ts';
+	import { clearAgentNotifications } from '#lib/web-push.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { pageTitle } from '#lib/page-title.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
@@ -39,6 +44,7 @@
 		type Pending,
 		type Project,
 		type Status,
+		type Suggestion,
 	} from '#lib/agent.ts';
 
 	const LOOK_KEY = 'titanos.agent.look';
@@ -76,17 +82,14 @@
 	let phone = $state(matchMedia('(max-width: 760px)').matches);
 	let stream: AbortController | null = null;
 
-	// Installed as an app it is always full screen; inside TitanOS full
-	// screen is a choice per device (PLAN 47).
+	let menuOpen = $state(false);
+
+	// Installed as an app and on the phone it is always full screen; on the
+	// desktop inside TitanOS full screen is a choice per device (PLAN 47/48).
 	const installed = $derived(agentAppMode(page.url));
-	const app = $derived(installed || agentFull.on);
-	// On the phone with the round menu the agent shows its own menu button
-	// at the top instead of the round one at the bottom.
-	const menuButton = $derived(phone && !app && !!shell.openMenu);
-	$effect(() => {
-		shell.ownMenu = menuButton;
-		return () => (shell.ownMenu = false);
-	});
+	const app = $derived(installed || phone || agentFull.on);
+	/** Back to TitanOS: a full load, so the TitanOS manifest is there again. */
+	const toTitanOS = () => location.assign('/');
 	const user = $derived(session.data?.user?.name ?? '');
 	const usable = $derived((status?.models ?? []).filter((m) => m.capabilities.includes('tools')));
 	const contextNow = $derived(
@@ -95,7 +98,10 @@
 
 	$effect(() => {
 		const query = matchMedia('(max-width: 760px)');
-		const change = () => (phone = query.matches);
+		const change = () => {
+			phone = query.matches;
+			if (!phone) menuOpen = false;
+		};
 		query.addEventListener('change', change);
 		return () => query.removeEventListener('change', change);
 	});
@@ -190,6 +196,7 @@
 	});
 
 	async function open(id: string, push = true) {
+		menuOpen = false;
 		stream?.abort();
 		busy = false;
 		live = { thinking: '', content: '', step: null };
@@ -208,6 +215,7 @@
 	}
 
 	function newChat(inProject = project) {
+		menuOpen = false;
 		stream?.abort();
 		current = null;
 		busy = false;
@@ -265,6 +273,7 @@
 			const fresh = await api.get<Chat>(`/agent/chats/${id}`);
 			if (current?.id === id) current = fresh;
 			if (fresh.state === 'idle') buzz(40);
+			if (current?.id === id) seen(id, true);
 		} catch {
 			// The list reload below shows the state.
 		}
@@ -327,21 +336,58 @@
 		}
 	}
 
-	// On the phone a swipe from the left edge goes back to the start.
+	// On the phone a swipe from the left edge opens the menu, a swipe to
+	// the left closes it again.
 	let swipeStart: { x: number; y: number } | null = null;
 	function touchStart(e: TouchEvent) {
 		const p = e.touches[0];
-		swipeStart = view === 'chat' && p.clientX <= 24 ? { x: p.clientX, y: p.clientY } : null;
+		swipeStart =
+			phone && (menuOpen || p.clientX <= 24) && !dialog ? { x: p.clientX, y: p.clientY } : null;
 	}
 	function touchMove(e: TouchEvent) {
 		if (!swipeStart) return;
 		const p = e.touches[0];
-		if (Math.abs(p.clientY - swipeStart.y) > Math.abs(p.clientX - swipeStart.x)) swipeStart = null;
-		else if (p.clientX - swipeStart.x > 60) {
+		const dx = p.clientX - swipeStart.x;
+		if (Math.abs(p.clientY - swipeStart.y) > Math.abs(dx)) swipeStart = null;
+		else if (!menuOpen && dx > 50) {
 			swipeStart = null;
-			newChat(current?.project ?? '');
+			menuOpen = true;
+		} else if (menuOpen && dx < -50) {
+			swipeStart = null;
+			menuOpen = false;
 		}
 	}
+
+	// Read state (PLAN 48): while a chat is on screen the page says so every
+	// 15 seconds. The NAS then counts it as read on all devices and sends no
+	// push message for it; notifications of it on this device go away.
+	function seen(id: string, visible: boolean) {
+		void apiFetch(`/agent/chats/${id}/seen`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ visible }),
+			keepalive: !visible,
+		}).catch(() => {});
+		if (visible) {
+			const listed = chats.find((c) => c.id === id);
+			if (listed?.unread) listed.unread = false;
+			void clearAgentNotifications(id);
+		}
+	}
+	$effect(() => {
+		const id = current?.id;
+		if (!id) return;
+		const visible = () => document.visibilityState === 'visible';
+		const ping = () => seen(id, visible());
+		ping();
+		const timer = setInterval(() => visible() && seen(id, true), 15000);
+		document.addEventListener('visibilitychange', ping);
+		return () => {
+			clearInterval(timer);
+			document.removeEventListener('visibilitychange', ping);
+			seen(id, false);
+		};
+	});
 
 	async function decide(p: Pending, approve: boolean) {
 		if (!current) return;
@@ -387,18 +433,100 @@
 		dialog = null;
 	}
 
-	const suggestions = $derived([
-		t('agent.suggestHealth'),
-		t('agent.suggestFind'),
-		t('agent.suggestDocument'),
-		t('agent.suggestBackup'),
+	const suggestions = $derived<Suggestion[]>([
+		{ title: t('agent.suggHealth'), sub: t('agent.suggHealthSub'), text: t('agent.suggestHealth') },
+		{ title: t('agent.suggFind'), sub: t('agent.suggFindSub'), text: t('agent.suggestFind') },
+		{
+			title: t('agent.suggDocument'),
+			sub: t('agent.suggDocumentSub'),
+			text: t('agent.suggestDocument'),
+		},
+		{ title: t('agent.suggBackup'), sub: t('agent.suggBackupSub'), text: t('agent.suggestBackup') },
 	]);
 	const currentInfo = $derived(current ? chats.find((c) => c.id === current!.id) : undefined);
 	const currentProject = $derived(projects.find((p) => p.id === (current?.project ?? project)));
-	const view = $derived(phone ? (current ? 'chat' : 'home') : 'desktop');
+	const menuProps = $derived({
+		chats,
+		projects,
+		current: current?.id,
+		project,
+		host: session.data?.hostname ?? '',
+		admin: status?.admin ?? false,
+		onopen: (id: string) => open(id),
+		onnew: () => newChat(''),
+		onproject: (id: string) => {
+			project = id;
+			// On the phone the menu stays open and shows the project's chats.
+			if (!phone && (!id || current?.project !== id)) newChat(id);
+		},
+		onnewproject: () => (dialog = { kind: 'project', project: null }),
+		oneditproject: (p: Project) => (dialog = { kind: 'project', project: p }),
+		onknowledge: () => (dialog = { kind: 'knowledge', tab: 'memory' }),
+		onlook: () => (dialog = { kind: 'look' }),
+		ontitanos: phone || installed ? toTitanOS : undefined,
+	});
 </script>
 
 <svelte:window ontouchstart={touchStart} ontouchmove={touchMove} />
+
+{#snippet chatMenu(info: ChatInfo)}
+	<span class="more">
+		<Dropdown label={t('ui.more')} icon="more" align="right">
+			{#snippet children(close)}
+				{#if phone}
+					<button
+						type="button"
+						role="menuitem"
+						onclick={() => {
+							close();
+							void patch(info, { pinned: !info.pinned });
+						}}
+						><Icon name="pin" size={16} /><span
+							>{info.pinned ? t('agent.unpin') : t('agent.pin')}</span
+						></button
+					>
+				{/if}
+				<button
+					type="button"
+					role="menuitem"
+					onclick={() => {
+						close();
+						dialog = { kind: 'rename', chat: info, title: info.title };
+					}}><Icon name="edit" size={16} /><span>{t('agent.rename')}</span></button
+				>
+				<button
+					type="button"
+					role="menuitem"
+					onclick={() => {
+						close();
+						dialog = { kind: 'move', chat: info };
+					}}><Icon name="folder" size={16} /><span>{t('agent.moveToProject')}</span></button
+				>
+				<hr />
+				<a role="menuitem" href={`/api/v1/agent/chats/${info.id}/export`} download onclick={close}
+					><Icon name="download" size={16} /><span>{t('agent.exportMd')}</span></a
+				>
+				<a
+					role="menuitem"
+					href={`/api/v1/agent/chats/${info.id}/export?format=pdf`}
+					download
+					onclick={close}><Icon name="fileText" size={16} /><span>{t('agent.exportPdf')}</span></a
+				>
+				<hr />
+				<button
+					type="button"
+					role="menuitem"
+					class="danger"
+					disabled={busy}
+					onclick={() => {
+						close();
+						dialog = { kind: 'delete', chat: info };
+					}}><Icon name="trash" size={16} /><span>{t('agent.delete')}</span></button
+				>
+			{/snippet}
+		</Dropdown>
+	</span>
+{/snippet}
 
 <div
 	class="agent"
@@ -411,35 +539,6 @@
 	data-bg={look.background}
 	style={lookStyle(look)}
 >
-	{#if app && view !== 'chat'}
-		<header class="appbar">
-			<Icon name="sparkle" size={20} />
-			<strong>{t('agent.appName')}</strong>
-			<span class="muted host">{session.data?.hostname}</span>
-			<span class="grow"></span>
-			{#if status?.reachable === false}<span class="chip warn">{t('agent.ollamaDown')}</span>{/if}
-			<button
-				type="button"
-				class="icon-btn"
-				aria-label={t('agent.look')}
-				onclick={() => (dialog = { kind: 'look' })}><Icon name="palette" size={18} /></button
-			>
-			{#if installed}
-				<a class="icon-btn" href="/?" aria-label={t('agent.toTitanOS')} title={t('agent.toTitanOS')}
-					><Icon name="external" size={18} /></a
-				>
-			{:else}
-				<button
-					type="button"
-					class="icon-btn"
-					aria-label={t('agent.withMenu')}
-					title={t('agent.withMenu')}
-					onclick={() => setAgentFull(false)}><Icon name="sidebar" size={18} /></button
-				>
-			{/if}
-		</header>
-	{/if}
-
 	{#if error}<div class="notice-error" role="alert">{error}</div>{/if}
 
 	{#if !status}
@@ -451,276 +550,79 @@
 			<p class="muted">{status.admin ? t('agent.offAdmin') : t('agent.offUser')}</p>
 			{#if status.admin}<a class="btn btn-primary" href="/settings/agent">{t('agent.toSettings')}</a
 				>{/if}
+			{#if phone || installed}<button type="button" class="btn" onclick={toTitanOS}
+					>{t('agent.toTitanOS')}</button
+				>{/if}
 		</div>
 	{:else if !status.allowed}
 		<div class="tile empty-state">
 			<h1>{t('agent.notAllowedTitle')}</h1>
 			<p class="muted">{t('agent.notAllowed')}</p>
+			{#if phone || installed}<button type="button" class="btn" onclick={toTitanOS}
+					>{t('agent.toTitanOS')}</button
+				>{/if}
 		</div>
 	{:else if !status.volume}
 		<div class="tile empty-state">
 			<h1>{t('agent.noVolumeTitle')}</h1>
 			<p class="muted">{t('agent.noVolume')}</p>
-		</div>
-	{:else if view === 'home'}
-		<div class="phone-home">
-			{#if !app}
-				<div class="phone-tools">
-					<button
-						type="button"
-						class="icon-btn"
-						aria-label={t('agent.knowledge')}
-						onclick={() => (dialog = { kind: 'knowledge', tab: 'memory' })}
-						><Icon name="bulb" size={18} /></button
-					>
-					<button
-						type="button"
-						class="icon-btn"
-						aria-label={t('agent.look')}
-						onclick={() => (dialog = { kind: 'look' })}><Icon name="palette" size={18} /></button
-					>
-					<button
-						type="button"
-						class="icon-btn"
-						aria-label={t('agent.fullScreen')}
-						title={t('agent.fullScreen')}
-						onclick={() => setAgentFull(true)}><Icon name="maximize" size={18} /></button
-					>
-				</div>
-			{/if}
-			<AgentHome
-				{user}
-				{chats}
-				{projects}
-				onmenu={menuButton ? () => shell.openMenu?.() : undefined}
-				onrename={(c) => (dialog = { kind: 'rename', chat: c, title: c.title })}
-				onopen={(id) => open(id)}
-				onproject={(p) => (dialog = { kind: 'sheet', project: p })}
-				onnewproject={() => (dialog = { kind: 'project', project: null })}
-				onpin={(c) => patch(c, { pinned: !c.pinned })}
-				onmove={(c) => (dialog = { kind: 'move', chat: c })}
-				ondelete={(c) => (dialog = { kind: 'delete', chat: c })}
-				onstop={(c) => stop(c.id)}
-			/>
-			{#if app}
-				<button
-					type="button"
-					class="btn knowledge-link"
-					onclick={() => (dialog = { kind: 'knowledge', tab: 'memory' })}
-					><Icon name="bulb" size={16} /> {t('agent.knowledge')}</button
-				>
-			{/if}
-		</div>
-		<div class="dock">
-			<div class="sugg">
-				{#each suggestions as s (s)}<button type="button" onclick={() => composer?.fill(s)}
-						>{s}</button
-					>{/each}
-			</div>
-			<Composer
-				bind:this={composer}
-				models={status.models}
-				bind:model
-				bind:think
-				bind:attachments
-				onsend={send}
-				onpicknas={() => (dialog = { kind: 'nas' })}
-				onerror={(m) => (error = m)}
-			/>
+			{#if phone || installed}<button type="button" class="btn" onclick={toTitanOS}
+					>{t('agent.toTitanOS')}</button
+				>{/if}
 		</div>
 	{:else}
-		<div class="layout" class:single={view === 'chat'}>
-			{#if view === 'desktop'}
-				<ChatList
-					{chats}
-					{projects}
-					current={current?.id}
-					{project}
-					onopen={(id) => open(id)}
-					onnew={() => newChat()}
-					onproject={(id) => {
-						project = id;
-						if (!id || current?.project !== id) newChat(id);
-					}}
-					onnewproject={() => (dialog = { kind: 'project', project: null })}
-					oneditproject={(p) => (dialog = { kind: 'project', project: p })}
-				/>
+		<div class="layout">
+			{#if !phone}
+				<aside class="side tile"><AgentMenu {...menuProps} /></aside>
 			{/if}
-			<section class="tile chat" aria-label={current?.title ?? t('agent.newChat')}>
-				{#if busy && view === 'chat'}
-					<div class="pill" role="status">
-						<span class="pill-dot" aria-hidden="true"></span>{t('agent.working')}
-						<button type="button" onclick={() => stop()} aria-label={t('agent.stop')}
-							><Icon name="stop" size={10} /></button
-						>
-					</div>
-				{/if}
-				<header class="chat-head">
-					{#if view === 'chat'}
-						{#if menuButton}
+			<section class="main tile" aria-label={current?.title ?? t('agent.newChat')}>
+				<header class="top">
+					<div class="left">
+						{#if phone}
 							<button
 								type="button"
 								class="icon-btn"
-								aria-label={t('nav.openMenu', { page: t('nav.agent') })}
+								aria-label={t('agent.menuOpen')}
 								aria-haspopup="dialog"
-								onclick={() => shell.openMenu?.()}><Icon name="menu" size={20} /></button
+								aria-expanded={menuOpen}
+								onclick={() => (menuOpen = true)}
+								><Icon
+									name="menu"
+									size={20}
+								/>{#if chats.some((c) => c.unread || c.state === 'waiting')}<span
+										class="badge"
+										aria-hidden="true"
+									></span>{/if}</button
 							>
 						{/if}
-						<button
-							type="button"
-							class="icon-btn"
-							aria-label={t('agent.back')}
-							onclick={() => newChat(current?.project ?? '')}
-							><Icon name="chevronLeft" size={20} /></button
-						>
-					{/if}
-					<div class="title">
-						<h1>
-							{current?.title ??
-								(currentProject
-									? t('agent.newChatIn', { name: currentProject.name })
-									: t('agent.newChat'))}
-						</h1>
-						<span class="muted sub">
-							{#if currentProject}{currentProject.icon ?? ''} {currentProject.name} ·
-							{/if}{model}{contextNow ? ' · ' + tokens(contextNow) : ''}
-						</span>
 					</div>
-					{#if currentInfo}
-						<button
-							type="button"
-							class="icon-btn wide-only"
-							aria-label={currentInfo.pinned ? t('agent.unpin') : t('agent.pin')}
-							title={currentInfo.pinned ? t('agent.unpin') : t('agent.pin')}
-							onclick={() => patch(currentInfo, { pinned: !currentInfo.pinned })}
-							><Icon name="pin" size={17} /></button
-						>
-						<button
-							type="button"
-							class="icon-btn wide-only"
-							aria-label={t('agent.rename')}
-							title={t('agent.rename')}
-							onclick={() =>
-								(dialog = { kind: 'rename', chat: currentInfo, title: currentInfo.title })}
-							><Icon name="edit" size={17} /></button
-						>
-						<button
-							type="button"
-							class="icon-btn wide-only"
-							aria-label={t('agent.moveToProject')}
-							title={t('agent.moveToProject')}
-							onclick={() => (dialog = { kind: 'move', chat: currentInfo })}
-							><Icon name="folder" size={17} /></button
-						>
-						<a
-							class="icon-btn wide-only"
-							href={`/api/v1/agent/chats/${currentInfo.id}/export`}
-							download
-							aria-label={t('agent.exportMd')}
-							title={t('agent.exportMd')}><Icon name="download" size={17} /></a
-						>
-						<a
-							class="icon-btn wide-only"
-							href={`/api/v1/agent/chats/${currentInfo.id}/export?format=pdf`}
-							download
-							aria-label={t('agent.exportPdf')}
-							title={t('agent.exportPdf')}><Icon name="fileText" size={17} /></a
-						>
-						<button
-							type="button"
-							class="icon-btn wide-only"
-							aria-label={t('agent.delete')}
-							title={t('agent.delete')}
-							disabled={busy}
-							onclick={() => (dialog = { kind: 'delete', chat: currentInfo })}
-							><Icon name="trash" size={17} /></button
-						>
-					{/if}
-					{#if view === 'chat'}
-						{@const info = currentInfo}
-						<!-- On the phone everything of the desktop buttons in one menu. -->
-						<span class="chat-more">
-							<Dropdown label={t('ui.more')} icon="more" align="right">
-								{#snippet children(close)}
-									{#if info}
-										<button
-											type="button"
-											role="menuitem"
-											onclick={() => {
-												close();
-												void patch(info, { pinned: !info.pinned });
-											}}
-											><Icon name="pin" size={16} /><span
-												>{info.pinned ? t('agent.unpin') : t('agent.pin')}</span
-											></button
-										>
-										<button
-											type="button"
-											role="menuitem"
-											onclick={() => {
-												close();
-												dialog = { kind: 'rename', chat: info, title: info.title };
-											}}><Icon name="edit" size={16} /><span>{t('agent.rename')}</span></button
-										>
-										<button
-											type="button"
-											role="menuitem"
-											onclick={() => {
-												close();
-												dialog = { kind: 'move', chat: info };
-											}}
-											><Icon name="folder" size={16} /><span>{t('agent.moveToProject')}</span
-											></button
-										>
-										<hr />
-										<a
-											role="menuitem"
-											href={`/api/v1/agent/chats/${info.id}/export`}
-											download
-											onclick={close}
-											><Icon name="download" size={16} /><span>{t('agent.exportMd')}</span></a
-										>
-										<a
-											role="menuitem"
-											href={`/api/v1/agent/chats/${info.id}/export?format=pdf`}
-											download
-											onclick={close}
-											><Icon name="fileText" size={16} /><span>{t('agent.exportPdf')}</span></a
-										>
-									{/if}
-									{#if !installed}
-										<hr />
-										<button
-											type="button"
-											role="menuitem"
-											onclick={() => {
-												close();
-												setAgentFull(!agentFull.on);
-											}}
-											><Icon name={agentFull.on ? 'sidebar' : 'maximize'} size={16} /><span
-												>{agentFull.on ? t('agent.withMenu') : t('agent.fullScreen')}</span
-											></button
-										>
-									{/if}
-									{#if info}
-										<hr />
-										<button
-											type="button"
-											role="menuitem"
-											class="danger"
-											disabled={busy}
-											onclick={() => {
-												close();
-												dialog = { kind: 'delete', chat: info };
-											}}><Icon name="trash" size={16} /><span>{t('agent.delete')}</span></button
-										>
-									{/if}
-								{/snippet}
-							</Dropdown>
-						</span>
-					{/if}
-					{#if view === 'desktop'}
-						{#if !installed}
+					<div class="mid">
+						{#if current}
+							<h1>{current.title}</h1>
+							<span class="sub">
+								{#if currentProject}<span class="proj"
+										>{currentProject.icon ?? ''} {currentProject.name} ·</span
+									>{/if}
+								<ModelPicker models={status.models} bind:model bind:think small {calm} />
+							</span>
+						{:else}
+							<ModelPicker models={status.models} bind:model bind:think {calm} />
+						{/if}
+					</div>
+					<div class="right">
+						{#if currentInfo && !phone}
+							<button
+								type="button"
+								class="icon-btn"
+								class:on={currentInfo.pinned}
+								aria-label={currentInfo.pinned ? t('agent.unpin') : t('agent.pin')}
+								aria-pressed={currentInfo.pinned}
+								title={currentInfo.pinned ? t('agent.unpin') : t('agent.pin')}
+								onclick={() => patch(currentInfo, { pinned: !currentInfo.pinned })}
+								><Icon name="pin" size={17} /></button
+							>
+						{/if}
+						{#if !phone && !installed}
 							<button
 								type="button"
 								class="icon-btn"
@@ -730,23 +632,17 @@
 								><Icon name={agentFull.on ? 'sidebar' : 'maximize'} size={17} /></button
 							>
 						{/if}
-						<span class="sep"></span>
-						<button
-							type="button"
-							class="icon-btn"
-							aria-label={t('agent.knowledge')}
-							title={t('agent.knowledge')}
-							onclick={() => (dialog = { kind: 'knowledge', tab: 'memory' })}
-							><Icon name="bulb" size={17} /></button
-						>
-						<button
-							type="button"
-							class="icon-btn"
-							aria-label={t('agent.look')}
-							title={t('agent.look')}
-							onclick={() => (dialog = { kind: 'look' })}><Icon name="palette" size={17} /></button
-						>
-					{/if}
+						{#if currentInfo}{@render chatMenu(currentInfo)}{/if}
+						{#if phone || current}
+							<button
+								type="button"
+								class="icon-btn"
+								aria-label={t('agent.newChat')}
+								title={t('agent.newChat')}
+								onclick={() => newChat(phone ? '' : project)}><Icon name="edit" size={18} /></button
+							>
+						{/if}
+					</div>
 				</header>
 				{#if status.reachable === false}
 					<p class="notice-warn">{t('agent.ollamaDownLong', { error: status.error ?? '' })}</p>
@@ -767,27 +663,26 @@
 						onundo={undo}
 					/>
 				{:else}
-					<div class="welcome">
-						<Icon name="sparkle" size={36} />
-						<h2>{t('agent.welcome')}</h2>
-						<p class="muted">{t('agent.welcomeText')}</p>
-						<div class="sugg wrap">
-							{#each suggestions as s (s)}<button type="button" onclick={() => composer?.fill(s)}
-									>{s}</button
-								>{/each}
-						</div>
-					</div>
+					<AgentStart
+						{user}
+						{chats}
+						{projects}
+						{project}
+						{suggestions}
+						onopen={(id) => open(id)}
+						onproject={(p) => (dialog = { kind: 'sheet', project: p })}
+						onnewproject={() => (dialog = { kind: 'project', project: null })}
+						onstop={(c) => stop(c.id)}
+						onfill={(text) => composer?.fill(text)}
+					/>
 				{/if}
-				<div class="chat-dock">
+				<div class="dock">
 					<Composer
 						bind:this={composer}
-						models={status.models}
-						bind:model
-						bind:think
 						{busy}
 						bind:attachments
 						disabled={!!current?.pending}
-						placeholder={current?.pending ? t('agent.inputPending') : ''}
+						placeholder={current?.pending ? t('agent.inputPending') : t('agent.inputShort')}
 						onsend={send}
 						onstop={() => stop()}
 						onpicknas={() => (dialog = { kind: 'nas' })}
@@ -796,6 +691,22 @@
 				</div>
 			</section>
 		</div>
+		{#if phone && menuOpen}
+			<button
+				type="button"
+				class="scrim"
+				aria-label={t('common.close')}
+				transition:fade={{ duration: calm ? 0 : 200 }}
+				onclick={() => (menuOpen = false)}
+			></button>
+			<aside
+				class="drawer"
+				aria-label={t('agent.menu')}
+				transition:fly={{ x: -340, duration: calm ? 0 : 260, opacity: 1 }}
+			>
+				<AgentMenu {...menuProps} />
+			</aside>
+		{/if}
 	{/if}
 </div>
 
@@ -919,6 +830,15 @@
 
 <style>
 	.agent {
+		--ag-orb: conic-gradient(
+			from 210deg,
+			var(--accent),
+			var(--ag-accent-2, var(--accent)),
+			color-mix(in srgb, var(--accent) 45%, #fff),
+			var(--accent)
+		);
+		position: relative;
+		isolation: isolate;
 		display: flex;
 		flex-direction: column;
 		gap: var(--gap);
@@ -926,10 +846,6 @@
 			100dvh - var(--header-height, 60px) - var(--status-height, 34px) - 2 * var(--page-pad)
 		);
 		min-height: 420px;
-	}
-	.agent {
-		position: relative;
-		isolation: isolate;
 	}
 	.agent[data-bg]:not([data-bg='none'])::before {
 		content: '';
@@ -970,238 +886,171 @@
 		height: 100dvh;
 		gap: 0;
 	}
-	.agent.phone {
-		height: calc(
-			100dvh - var(--header-height, 60px) - var(--status-height, 34px) - 40px -
-				var(--fab-clear, 0px)
-		);
-	}
-	.agent.app.phone {
-		height: 100dvh;
-	}
-	.appbar {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		padding: calc(env(safe-area-inset-top, 0px) + 10px) 16px 10px;
-		border-bottom: 1px solid var(--border);
-		background: var(--header);
-		color: var(--text);
-	}
-	.appbar :global(svg) {
-		color: var(--accent);
-	}
-	.appbar .host {
-		font-size: var(--text-sm);
-	}
-	.grow {
-		flex: 1;
-	}
-	.icon-btn {
-		width: 34px;
-		height: 34px;
-		border-radius: 50%;
-		display: grid;
-		place-items: center;
-		border: 0;
-		background: color-mix(in srgb, var(--text) 6%, transparent);
-		color: var(--text);
-		cursor: pointer;
-		flex: none;
-	}
-	.icon-btn:disabled {
-		opacity: 0.4;
-		cursor: default;
-	}
-	/* The ⋯ menu of a chat on the phone looks like the round buttons. */
-	.chat-more :global(.btn) {
-		width: 34px;
-		height: 34px;
-		min-height: 34px;
-		padding: 0;
-		border-radius: 50%;
-		border: 0;
-		background: color-mix(in srgb, var(--text) 6%, transparent);
-		color: var(--text);
-	}
 	.layout {
 		flex: 1;
 		min-height: 0;
 		display: grid;
-		grid-template-columns: 270px minmax(0, 1fr);
+		grid-template-columns: 280px minmax(0, 1fr);
 		gap: var(--gap);
-	}
-	.layout.single {
-		grid-template-columns: minmax(0, 1fr);
 	}
 	.agent.app .layout {
 		padding: 12px;
 	}
-	.agent.app.phone .layout {
+	.agent.phone .layout {
+		grid-template-columns: minmax(0, 1fr);
 		padding: 0;
 	}
-	.chat {
+	.side {
+		padding: 0;
+		overflow: hidden;
+		min-height: 0;
+	}
+	.agent.glass .side,
+	.agent.glass .main {
+		background: color-mix(in srgb, var(--surface) 55%, transparent);
+		backdrop-filter: blur(26px) saturate(160%);
+		border-color: var(--glass-border, var(--border));
+	}
+	.main {
 		display: flex;
 		flex-direction: column;
 		min-height: 0;
 		padding: 0;
 		overflow: hidden;
 	}
-	.pill {
-		align-self: center;
-		margin-top: calc(env(safe-area-inset-top, 0px) + 6px);
-		display: flex;
+	.agent.phone .main {
+		border: 0;
+		border-radius: 0;
+		background: transparent;
+		backdrop-filter: none;
+		box-shadow: none;
+	}
+	.top {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
 		align-items: center;
 		gap: 8px;
-		padding: 5px 6px 5px 12px;
-		border-radius: 999px;
-		background: var(--text);
-		color: var(--bg);
-		font-size: var(--text-sm);
+		min-height: 58px;
+		padding: 8px 12px;
+		border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
 	}
-	.agent.glow .pill {
-		box-shadow: 0 0 22px color-mix(in srgb, var(--accent) 55%, transparent);
+	.agent.phone .top {
+		padding: calc(env(safe-area-inset-top, 0px) + 6px) 8px 6px;
+		border-bottom: 0;
+		grid-template-columns: 44px minmax(0, 1fr) auto;
 	}
-	.pill-dot {
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		background: var(--accent);
-	}
-	.pill button {
-		width: 22px;
-		height: 22px;
-		border-radius: 50%;
-		border: 0;
-		display: grid;
-		place-items: center;
-		background: color-mix(in srgb, var(--bg) 20%, transparent);
-		color: var(--bg);
-		cursor: pointer;
-	}
-	.chat-head {
+	.left,
+	.right {
 		display: flex;
 		align-items: center;
-		gap: var(--space-2);
-		padding: 10px var(--space-4);
-		border-bottom: 1px solid var(--border);
+		gap: 4px;
 	}
-	.agent.app.phone .chat-head {
-		padding-top: calc(env(safe-area-inset-top, 0px) + 10px);
+	.right {
+		justify-content: flex-end;
 	}
-	.title {
-		flex: 1;
+	.mid {
 		min-width: 0;
+		max-width: min(560px, 60vw);
 		display: flex;
 		flex-direction: column;
+		align-items: center;
+		text-align: center;
 	}
-	.title h1 {
+	.agent.phone .mid {
+		max-width: none;
+	}
+	.mid h1 {
 		margin: 0;
-		font-size: var(--text-lg);
+		max-width: 100%;
+		font-size: var(--text-md);
 		font-weight: 600;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
-	.title .sub {
+	.sub {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 2px;
+		max-width: 100%;
 		font-size: var(--text-xs);
+		color: var(--muted);
+		white-space: nowrap;
 	}
-	.sep {
-		width: 1px;
-		height: 22px;
-		background: var(--border);
+	.proj {
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.icon-btn,
+	.more :global(.btn) {
+		position: relative;
+		width: 40px;
+		height: 40px;
+		min-height: 40px;
+		padding: 0;
+		border-radius: 50%;
+		display: grid;
+		place-items: center;
+		border: 0;
+		background: none;
+		color: var(--text);
+		cursor: pointer;
+		flex: none;
+		transition: background 0.15s ease;
+	}
+	.icon-btn:hover,
+	.more :global(.btn:hover) {
+		background: color-mix(in srgb, var(--text) 8%, transparent);
+	}
+	.icon-btn.on {
+		color: var(--accent);
+	}
+	.badge {
+		position: absolute;
+		top: 8px;
+		right: 8px;
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: var(--accent);
+		box-shadow: 0 0 8px var(--accent);
 	}
 	.notice-warn {
 		margin: var(--space-2) var(--space-4) 0;
 	}
-	.welcome {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		text-align: center;
-		gap: var(--space-2);
-		padding: var(--space-5);
-	}
-	.welcome :global(svg) {
-		color: var(--accent);
-	}
-	.welcome h2 {
-		margin: 0;
-		font-size: var(--text-xl);
-	}
-	.welcome p {
-		max-width: 520px;
-	}
-	.chat-dock {
+	.dock {
 		padding: var(--space-3) var(--space-5) var(--space-4);
 	}
-	.chat-dock :global(.composer) {
+	.dock :global(.composer) {
 		max-width: 800px;
 		margin: 0 auto;
 	}
-	.sugg {
-		display: flex;
-		gap: 6px;
-		overflow-x: auto;
-		scrollbar-width: none;
+	.agent.phone .dock {
+		padding: 6px 10px calc(env(safe-area-inset-bottom, 0px) + 10px);
 	}
-	.sugg.wrap {
-		flex-wrap: wrap;
-		justify-content: center;
-		margin-top: var(--space-2);
+	.scrim {
+		position: fixed;
+		inset: 0;
+		z-index: 50;
+		border: 0;
+		padding: 0;
+		background: rgb(0 0 0 / 0.5);
+		backdrop-filter: blur(3px);
+		cursor: default;
 	}
-	.sugg button {
-		flex: none;
-		border-radius: 999px;
-		padding: 6px 12px;
-		font: inherit;
-		font-size: var(--text-sm);
-		border: 1px solid var(--border);
-		background: var(--surface);
-		color: var(--text);
-		cursor: pointer;
-	}
-	.agent.glass .sugg button {
-		background: color-mix(in srgb, var(--surface) 75%, transparent);
-		backdrop-filter: blur(14px);
-		border-color: var(--glass-border);
-	}
-	.phone-home {
-		flex: 1;
-		min-height: 0;
-		overflow-y: auto;
-		position: relative;
-	}
-	.agent.app .phone-home {
-		padding: 12px 16px;
-	}
-	/* The greeting leaves room for the round buttons on the right. */
-	.phone-home:has(.phone-tools) :global(.home > header) {
-		padding-right: 124px;
-	}
-	.phone-tools {
-		position: absolute;
-		top: 4px;
-		right: 0;
-		display: flex;
-		gap: 6px;
-	}
-	.knowledge-link {
-		margin-top: var(--space-2);
-	}
-	.dock {
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-		padding-top: 6px;
-	}
-	.agent.app .dock {
-		padding: 6px 10px calc(env(safe-area-inset-bottom, 0px) + 12px);
-	}
-	.agent.phone .chat-dock {
-		padding: 8px 10px calc(env(safe-area-inset-bottom, 0px) + 10px);
+	.drawer {
+		position: fixed;
+		z-index: 51;
+		top: 0;
+		bottom: 0;
+		left: 0;
+		width: min(84%, 340px);
+		padding-top: env(safe-area-inset-top, 0px);
+		background: color-mix(in srgb, var(--surface) 78%, transparent);
+		backdrop-filter: blur(28px) saturate(170%);
+		border-right: 1px solid var(--glass-border, var(--border));
+		box-shadow: 20px 0 50px -20px rgb(0 0 0 / 0.7);
 	}
 	.empty-state {
 		display: flex;
@@ -1238,13 +1087,5 @@
 		gap: var(--space-2);
 		flex-wrap: wrap;
 		margin-top: var(--space-3);
-	}
-	@media (max-width: 760px) {
-		.chat-head {
-			padding: 8px 10px;
-		}
-		.wide-only {
-			display: none;
-		}
 	}
 </style>

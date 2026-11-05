@@ -61,6 +61,8 @@ export type Chat = {
 
 export type ChatInfo = Omit<Chat, 'entries' | 'model' | 'think' | 'pending' | 'tainted'> & {
 	preview?: string;
+	/** Changed since the person last looked, on any device (PLAN 48). */
+	unread?: boolean;
 };
 
 export type Project = {
@@ -535,6 +537,9 @@ export const ACCENTS: Record<Look['accent'], [string, string] | null> = {
 };
 
 /** CSS variables of a look for the root element of the agent. */
+/** A suggestion on the start page: a tile that fills the input. */
+export type Suggestion = { title: string; sub: string; text: string };
+
 export function lookStyle(look: Look): string {
 	const pair = ACCENTS[look.accent];
 	if (!pair) return '--ag-gradient: var(--accent); --ag-accent-2: var(--accent);';

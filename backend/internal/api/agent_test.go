@@ -776,3 +776,84 @@ func TestChatTitleSkipsFileNames(t *testing.T) {
 		t.Fatalf("only a file: %q", got)
 	}
 }
+
+// PLAN 48: a chat looked at on one device is read on all of them, and no
+// push message goes out while it is on screen or an older one is unread.
+func TestAgentReadStateAndPush(t *testing.T) {
+	fake := &agentOllama{}
+	ts := agentServer(t, fake, agent.Policy{Preset: agent.PresetStandard})
+	unread := func(id string) bool {
+		t.Helper()
+		_, body := ts.request("GET", "/api/v1/agent/chats", nil)
+		var list struct{ Chats []agent.ChatInfo }
+		json.Unmarshal(body, &list)
+		for _, c := range list.Chats {
+			if c.ID == id {
+				return c.Unread
+			}
+		}
+		t.Fatalf("chat %s not listed: %s", id, body)
+		return false
+	}
+	ts.request("GET", "/api/v1/agent/chats", nil) // read states begin
+	time.Sleep(5 * time.Millisecond)
+	fake.replies = []string{`{"role":"assistant","content":"Erste Antwort."}`}
+	res, body := ts.request("POST", "/api/v1/agent/chats", map[string]any{"message": "Hallo"})
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("new: %d %s", res.StatusCode, body)
+	}
+	var chat agent.Chat
+	json.Unmarshal(body, &chat)
+	waitChat(t, ts, ts.client, chat.ID)
+	if !unread(chat.ID) {
+		t.Fatal("a fresh answer is not unread")
+	}
+	// Not looked at: the end of the run went out as a message (agentDone);
+	// a second one waits until the person looked.
+	ts.server.agentWatch.mu.Lock()
+	_, sent := ts.server.agentWatch.pushed[runKey("alex", chat.ID)]
+	ts.server.agentWatch.mu.Unlock()
+	if !sent && !ts.server.agentShouldPush("alex", chat.ID) {
+		t.Fatal("first push suppressed")
+	}
+	if ts.server.agentShouldPush("alex", chat.ID) {
+		t.Fatal("second push while the first is unread")
+	}
+	// Seen on the desktop: read everywhere, and the chat may ring again.
+	if res, body := ts.request("POST", "/api/v1/agent/chats/"+chat.ID+"/seen", map[string]any{"visible": true}); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("seen: %d %s", res.StatusCode, body)
+	}
+	if unread(chat.ID) {
+		t.Fatal("still unread after seen")
+	}
+	// While it is on screen nothing goes out, also not for an approval.
+	if ts.server.agentShouldPush("alex", chat.ID) {
+		t.Fatal("push while visible")
+	}
+	ts.request("POST", "/api/v1/agent/chats/"+chat.ID+"/seen", map[string]any{"visible": false})
+	time.Sleep(5 * time.Millisecond)
+	fake.replies = []string{`{"role":"assistant","content":"Zweite Antwort."}`}
+	if res, body := ts.request("POST", "/api/v1/agent/chats/"+chat.ID+"/messages", map[string]any{"message": "Und?"}); res.StatusCode != http.StatusAccepted {
+		t.Fatalf("message: %d %s", res.StatusCode, body)
+	}
+	waitChat(t, ts, ts.client, chat.ID)
+	if !unread(chat.ID) {
+		t.Fatal("new answer not unread")
+	}
+	ts.server.agentWatch.mu.Lock()
+	last := ts.server.agentWatch.pushed[runKey("alex", chat.ID)]
+	ts.server.agentWatch.mu.Unlock()
+	if !last.After(ts.server.agentStore().SeenAt("alex", chat.ID)) && !ts.server.agentShouldPush("alex", chat.ID) {
+		t.Fatal("push after the person looked and left")
+	}
+	// Seen writes nothing when nothing changed (no disk wake-ups).
+	ts.request("POST", "/api/v1/agent/chats/"+chat.ID+"/seen", map[string]any{"visible": true})
+	before := ts.server.agentStore().SeenAt("alex", chat.ID)
+	ts.request("POST", "/api/v1/agent/chats/"+chat.ID+"/seen", map[string]any{"visible": true})
+	if after := ts.server.agentStore().SeenAt("alex", chat.ID); !after.Equal(before) {
+		t.Fatalf("seen rewritten without a change: %v -> %v", before, after)
+	}
+	if res, _ := ts.request("POST", "/api/v1/agent/chats/zzz/seen", map[string]any{"visible": true}); res.StatusCode != http.StatusNotFound {
+		t.Fatalf("bad id: %d", res.StatusCode)
+	}
+}

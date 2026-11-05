@@ -160,6 +160,9 @@ type ChatInfo struct {
 	Origin  string    `json:"origin,omitempty"`
 	// Preview is the start of the last answer.
 	Preview string `json:"preview,omitempty"`
+	// Unread: changed since the person last looked (only in the list
+	// answer, never stored).
+	Unread bool `json:"unread,omitempty"`
 }
 
 // Info returns the list entry of a chat.
@@ -252,6 +255,8 @@ type Store struct {
 	// awake (docs/rules/STORAGE.md, Ruhemodus).
 	schedules map[string][]Schedule
 	scanned   bool
+	// seen holds the read states once read (seen.go).
+	seen map[string]seenState
 }
 
 func (s *Store) userRoot(user string, create bool) (*os.Root, func(), error) {

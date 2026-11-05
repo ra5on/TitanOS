@@ -8,7 +8,7 @@
 
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { onNavigate } from '$app/navigation';
+	import { beforeNavigate, onNavigate } from '$app/navigation';
 	import DashboardBackground from '#lib/dashboard/DashboardBackground.svelte';
 	import { dashboardVisual } from '#lib/dashboard/visual.ts';
 	import { dashboardScene } from '#lib/dashboard/scene.svelte.ts';
@@ -24,11 +24,19 @@
 	import { appearance, initAppearance } from '#lib/theme/appearance.svelte.ts';
 	import { effectOn } from '#lib/theme/themes.ts';
 	import { pageTitle } from '#lib/page-title.svelte.ts';
-	import { registerServiceWorker } from '#lib/web-push.ts';
+	import { clearAgentNotifications, registerServiceWorker } from '#lib/web-push.ts';
 
-	const agentRoute = $derived(
-		page.url.pathname === '/agent' || page.url.pathname.startsWith('/agent/'),
-	);
+	const isAgent = (path: string) => path === '/agent' || path.startsWith('/agent/');
+	const agentRoute = $derived(isAgent(page.url.pathname));
+	// Safari reads the manifest only when a page loads: the step between
+	// TitanOS and the KI-Agent loads the page anew, so "Add to Home Screen"
+	// makes the right app on either side (PLAN 48).
+	beforeNavigate(({ from, to, type, cancel }) => {
+		if (type === 'leave' || !from || !to || to.url.origin !== location.origin) return;
+		if (isAgent(from.url.pathname) === isAgent(to.url.pathname)) return;
+		cancel();
+		location.assign(to.url.href);
+	});
 
 	let { children } = $props();
 
@@ -37,6 +45,14 @@
 		refreshSession();
 		loadLoginLook();
 		registerServiceWorker();
+		// Notifications of agent chats read elsewhere go away (PLAN 48).
+		const tidy = () => {
+			if (document.visibilityState === 'visible' && session.services?.agent)
+				void clearAgentNotifications();
+		};
+		setTimeout(tidy, 1500);
+		document.addEventListener('visibilitychange', tidy);
+		return () => document.removeEventListener('visibilitychange', tidy);
 	});
 
 	$effect(() => {

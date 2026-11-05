@@ -1,5 +1,5 @@
-// KI-Agent (PLAN 44): the page on the desktop and the phone, the app of its
-// own, the settings. Isolated API data only: no request reaches a NAS or an
+// KI-Agent (PLAN 44, look of PLAN 48): the page on the desktop and the
+// phone, the app of its own, the settings. Isolated API data only: no request reaches a NAS or an
 // Ollama server.
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
@@ -59,7 +59,7 @@ const chats = [
 	info(haChat, 'Wartet auf Freigabe: Update der VM HAOS'),
 	info(docChat, 'Fertig: Docker-Übersicht 2026-11-05.docx liegt in der NAS-Doku.'),
 	{ id: 'c1aaaaaaaaaa0003', title: 'Telekom-Rechnungen einsortieren', project: 'p1aaaaaaaaaa0003', created: at(11), updated: at(11, 2), state: 'running', origin: 'web', preview: '' },
-	{ id: 'c1aaaaaaaaaa0004', title: 'Warum ist die CPU so hoch?', created: at(8), updated: at(8, 1), state: 'idle', pinned: true, preview: 'plex transkodiert zwei Streams.' },
+	{ id: 'c1aaaaaaaaaa0004', title: 'Warum ist die CPU so hoch?', created: at(8), updated: at(8, 1), state: 'idle', pinned: true, unread: true, preview: 'plex transkodiert zwei Streams.' },
 	{ id: 'c1aaaaaaaaaa0005', title: 'Gesundheitscheck · 03.11. 08:00', created: '2026-11-03T08:00:00Z', updated: '2026-11-03T08:02:00Z', state: 'idle', origin: 'schedule', preview: 'Alles in Ordnung bis auf eine Platte mit 52 °C.' },
 	{ id: 'c1aaaaaaaaaa0006', title: 'Speicher aufräumen', created: '2026-11-02T18:00:00Z', updated: '2026-11-02T18:10:00Z', state: 'idle', preview: '182 GB doppelte Videos gefunden.' },
 ];
@@ -158,31 +158,42 @@ async function noOverflow(page, what) {
 }
 
 try {
-	// Desktop in TitanOS: list, chat with steps, answer, approval.
+	// Desktop in TitanOS: the agent menu beside the TitanOS menu, chat with
+	// steps, answer, approval, model choice at the top (PLAN 48).
 	{
-		const { ctx, page } = await open(1440, 1000, { path: '/agent' });
+		const { ctx, page, seen } = await open(1440, 1000, { path: '/agent' });
 		await page.goto(base + '/agent?chat=' + haChat.id);
 		await page.getByRole('heading', { name: 'Status Home Assistant' }).waitFor();
 		await page.getByRole('button', { name: 'Ausführen' }).waitFor();
 		assert.ok(await page.getByText('Freigabe nötig').isVisible());
 		assert.ok(await page.locator('.side-nav').getByText('KI-Agent').isVisible(), 'nav entry');
+		const menu = page.getByRole('navigation', { name: 'Menü des KI-Agenten' });
+		assert.ok(await menu.getByText('Freigabe').first().isVisible(), 'waiting chat marked in the menu');
 		await page.waitForTimeout(400);
 		await page.screenshot({ path: `${out}/1-desktop-chat.png` });
 		await noOverflow(page, 'desktop');
+		assert.ok(seen.posts.some((x) => x === `/agent/chats/${haChat.id}/seen`), 'open chat reports it is seen');
 		await page.goto(base + '/agent?chat=' + docChat.id);
 		await page.getByRole('heading', { name: 'Docker-Übersicht als Word' }).waitFor();
 		await page.getByText('Im Dateimanager').first().waitFor();
+		await page.getByRole('button', { name: 'Modell und Denkstufe wählen' }).click();
+		await page.getByRole('dialog', { name: 'Modell und Denkstufe wählen' }).getByRole('button', { name: /Hoch/ }).click();
+		await page.getByRole('button', { name: 'Modell und Denkstufe wählen' }).filter({ hasText: 'Hoch' }).waitFor();
 		await page.waitForTimeout(300);
 		await page.screenshot({ path: `${out}/2-desktop-document.png` });
 		await page.goto(base + '/agent');
-		await page.getByRole('heading', { name: 'Was soll ich erledigen?' }).waitFor();
+		await page.getByRole('heading', { name: /Guten|Hallo/ }).waitFor();
+		assert.ok(await page.locator('.ptile', { hasText: 'Home Assistant' }).isVisible(), 'project tiles on the start');
+		await page.locator('.sugg button', { hasText: 'Gesundheitscheck' }).click();
+		assert.match(await page.locator('.composer textarea').inputValue(), /Gesundheitscheck/, 'suggestion fills the input');
+		await page.waitForTimeout(300);
 		await page.screenshot({ path: `${out}/3-desktop-new.png` });
-		await page.locator('.chat-head').getByRole('button', { name: 'Darstellung' }).click();
+		await menu.getByRole('button', { name: 'Darstellung' }).click();
 		await page.locator('dialog[open]').waitFor();
 		await page.waitForTimeout(300);
 		await page.screenshot({ path: `${out}/4-desktop-look.png` });
 		await page.keyboard.press('Escape');
-		await page.locator('.chat-head').getByRole('button', { name: 'Gedächtnis, Skills, Geplant' }).click();
+		await menu.getByRole('button', { name: 'Wissen' }).click();
 		await page.locator('dialog[open]').getByText('Telekom-Rechnungen liegen').waitFor();
 		await page.waitForTimeout(300);
 		await page.screenshot({ path: `${out}/5-desktop-memory.png` });
@@ -192,6 +203,24 @@ try {
 		await page.screenshot({ path: `${out}/14-desktop-map.png` });
 		await ctx.close();
 	}
+	// Between TitanOS and the agent the page loads anew, so Safari takes the
+	// right manifest for "Add to Home Screen" (PLAN 48).
+	{
+		const { ctx, page } = await open(1440, 900);
+		await page.goto(base + '/');
+		assert.equal(await page.locator('link[rel=manifest]').getAttribute('href'), '/manifest.webmanifest');
+		await page.evaluate(() => ((window).__same = true));
+		await page.locator('.side-nav').getByText('KI-Agent').click();
+		await page.getByRole('heading', { name: /Guten|Hallo/ }).waitFor();
+		assert.equal(await page.evaluate(() => (window).__same ?? false), false, 'agent loaded anew');
+		assert.equal(await page.locator('link[rel=manifest]').getAttribute('href'), '/agent.webmanifest');
+		await page.evaluate(() => ((window).__same = true));
+		await page.locator('.side-nav').getByText('Dashboard').click();
+		await page.waitForURL(base + '/');
+		await page.waitForFunction(() => document.querySelector('link[rel=manifest]')?.getAttribute('href') === '/manifest.webmanifest');
+		assert.equal(await page.evaluate(() => (window).__same ?? false), false, 'TitanOS loaded anew');
+		await ctx.close();
+	}
 	// The app of its own on the desktop.
 	{
 		const { ctx, page } = await open(1440, 900);
@@ -199,11 +228,12 @@ try {
 		await page.getByRole('heading', { name: 'Status Home Assistant' }).waitFor();
 		assert.equal(await page.locator('.side-nav').count(), 0, 'app without TitanOS frame');
 		assert.equal(await page.locator('link[rel=manifest]').getAttribute('href'), '/agent.webmanifest');
+		await page.getByRole('button', { name: 'Zurück zu TitanOS' }).waitFor();
 		await page.waitForTimeout(300);
 		await page.screenshot({ path: `${out}/6-app-desktop.png` });
 		await ctx.close();
 	}
-	// Phone, installed app: start page, chat, project sheet; light theme too.
+	// Phone, installed app: start page, project sheet, menu, chat; light theme too.
 	for (const [theme, suffix] of [['graphit', ''], ['hell', '-hell']]) {
 		const { ctx, page } = await open(390, 844, { theme, look: { accent: 'aurora', style: 'bubbles', glass: true, glow: true, typing: true, vibrate: true, calm: false } });
 		await page.goto(base + '/agent?app=1');
@@ -220,37 +250,56 @@ try {
 			await page.locator('dialog[open]').getByText('haos-2026-11-05.tar').first().waitFor();
 			await page.screenshot({ path: `${out}/15-phone-project-files.png` });
 			await page.keyboard.press('Escape');
-			await page.locator('.list .row', { hasText: 'Status Home Assistant' }).click();
+			await page.getByRole('button', { name: 'Menü öffnen' }).click();
+			const drawer = page.locator('aside.drawer');
+			await drawer.waitFor();
+			await drawer.getByRole('button', { name: /Home Assistant/ }).first().click();
+			await drawer.getByRole('button', { name: /Status Home Assistant/ }).click();
 			await page.getByRole('button', { name: 'Ausführen' }).waitFor();
+			await drawer.waitFor({ state: 'detached' }); // the menu closes after choosing a chat
 			await page.waitForTimeout(400);
 			await page.screenshot({ path: `${out}/9-phone-chat.png` });
 			await noOverflow(page, 'phone chat');
 		}
 		await ctx.close();
 	}
-	// Phone inside TitanOS (round menu): the agent's own menu button at the
-	// top instead of the round one, search, pinned chats first (PLAN 47).
+	// Phone inside TitanOS: an app of its own as well, its own menu with the
+	// way back to TitanOS, no round TitanOS button (PLAN 48).
 	{
 		const { ctx, page } = await open(390, 844);
 		await page.goto(base + '/agent');
 		await page.getByRole('heading', { name: /Guten|Hallo/ }).waitFor();
 		await page.waitForTimeout(300);
-		assert.equal(await page.locator('.fab').count(), 0, 'no round menu button in the agent');
-		const groups = await page.locator('.home .h3').allTextContents();
-		assert.equal(groups[1].trim().toLowerCase(), 'angeheftet', 'pinned first: ' + groups);
-		await page.screenshot({ path: `${out}/10-phone-in-titanos.png` });
-		await noOverflow(page, 'phone in TitanOS');
+		assert.equal(await page.locator('.fab').count(), 0, 'no round TitanOS menu button in the agent');
+		assert.equal(await page.locator('header.bar-surface, .side-nav').count(), 0, 'no TitanOS frame on the phone');
 		const size = await page.locator('.composer textarea').evaluate((e) => parseFloat(getComputedStyle(e).fontSize));
 		assert.ok(size >= 16, `input font ${size}px zooms on iOS`);
-		await page.getByRole('searchbox', { name: 'Chats durchsuchen' }).fill('CPU');
-		assert.equal(await page.locator('.home .list .row').count(), 1, 'search');
-		await page.getByRole('searchbox', { name: 'Chats durchsuchen' }).fill('');
-		assert.ok(await page.locator('.acts .ren').first().count(), 'rename in the swipe actions');
-		await page.locator('.home header').getByRole('button', { name: /Navigation öffnen/ }).click();
-		await page.locator('dialog.drawer[open]').waitFor();
+		await page.screenshot({ path: `${out}/10-phone-in-titanos.png` });
+		await noOverflow(page, 'phone in TitanOS');
+		// Model and thinking level as a sheet from the bottom.
+		await page.getByRole('button', { name: 'Modell und Denkstufe wählen' }).click();
+		const sheet = page.getByRole('dialog', { name: 'Modell und Denkstufe wählen' });
+		await sheet.waitFor();
+		await page.waitForTimeout(300);
+		await page.screenshot({ path: `${out}/23-phone-model.png` });
+		await sheet.getByRole('button', { name: /Niedrig/ }).click();
+		await page.getByRole('button', { name: 'Modell und Denkstufe wählen' }).filter({ hasText: 'Niedrig' }).waitFor();
+		// The menu: pinned first, unread marked, search, back to TitanOS.
+		await page.getByRole('button', { name: 'Menü öffnen' }).click();
+		const drawer = page.locator('aside.drawer');
+		await drawer.waitFor();
+		const groups = await drawer.locator('.group').allTextContents();
+		assert.equal(groups[1].trim().toLowerCase(), 'angeheftet', 'pinned first: ' + groups);
+		assert.ok(await drawer.locator('.item.unread', { hasText: 'Warum ist die CPU so hoch?' }).count(), 'unread chat marked');
 		await page.waitForTimeout(300);
 		await page.screenshot({ path: `${out}/16-phone-menu.png` });
-		await page.keyboard.press('Escape');
+		await drawer.getByRole('searchbox', { name: 'Chats durchsuchen' }).fill('CPU');
+		assert.equal(await drawer.locator('.item', { hasText: 'Warum ist die CPU' }).count(), 1, 'search');
+		assert.equal(await drawer.locator('.item', { hasText: 'Speicher aufräumen' }).count(), 0, 'search filters');
+		await drawer.getByRole('searchbox', { name: 'Chats durchsuchen' }).fill('');
+		await drawer.getByRole('button', { name: 'Zurück zu TitanOS' }).waitFor();
+		await page.locator('button.scrim').click({ position: { x: 370, y: 400 } });
+		await drawer.waitFor({ state: 'detached' });
 		// Files from the NAS through the clip menu.
 		await page.getByRole('button', { name: 'Datei anhängen' }).click();
 		await page.getByRole('menuitem', { name: 'Vom NAS wählen' }).click();
@@ -270,15 +319,16 @@ try {
 		// A chat: everything of the desktop buttons in the ⋯ menu.
 		await page.goto(base + '/agent?chat=' + docChat.id);
 		await page.getByRole('heading', { name: 'Docker-Übersicht als Word' }).waitFor();
-		await page.locator('.chat-head').getByRole('button', { name: /Navigation öffnen/ }).waitFor();
-		await page.locator('.chat-head').getByRole('button', { name: 'Weitere Aktionen' }).click();
-		for (const item of ['Anheften', 'Umbenennen', 'In Projekt verschieben', 'Als Markdown herunterladen', 'Als PDF herunterladen', 'Vollbild', 'Löschen'])
+		await page.getByRole('button', { name: 'Weitere Aktionen' }).click();
+		for (const item of ['Anheften', 'Umbenennen', 'In Projekt verschieben', 'Als Markdown herunterladen', 'Als PDF herunterladen', 'Löschen'])
 			assert.ok(await page.getByRole('menuitem', { name: item }).count(), 'menu item ' + item);
 		await page.waitForTimeout(250);
 		await page.screenshot({ path: `${out}/19-phone-chat-menu.png` });
-		await page.getByRole('menuitem', { name: 'Vollbild' }).click();
-		await page.waitForTimeout(250);
-		assert.equal(await page.locator('.chat-head').getByRole('button', { name: /Navigation öffnen/ }).count(), 0, 'full screen: no menu button');
+		await page.keyboard.press('Escape');
+		// Back to TitanOS from the menu: a full load of the dashboard.
+		await page.getByRole('button', { name: 'Menü öffnen' }).click();
+		await page.locator('aside.drawer').getByRole('button', { name: 'Zurück zu TitanOS' }).click();
+		await page.waitForURL(base + '/');
 		await ctx.close();
 	}
 	// Desktop: full screen and back.
@@ -286,14 +336,14 @@ try {
 		const { ctx, page } = await open(1440, 900);
 		await page.goto(base + '/agent?chat=' + docChat.id);
 		await page.getByRole('heading', { name: 'Docker-Übersicht als Word' }).waitFor();
-		await page.locator('.chat-head').getByRole('button', { name: 'Vollbild' }).click();
+		await page.locator('header.top').getByRole('button', { name: 'Vollbild' }).click();
 		await page.waitForTimeout(250);
 		assert.equal(await page.locator('.side-nav').count(), 0, 'full screen hides the menu');
 		await page.screenshot({ path: `${out}/20-desktop-full.png` });
 		await page.reload();
 		await page.getByRole('heading', { name: 'Docker-Übersicht als Word' }).waitFor();
 		assert.equal(await page.locator('.side-nav').count(), 0, 'full screen is remembered');
-		await page.locator('.chat-head').getByRole('button', { name: 'Mit Menü' }).click();
+		await page.locator('header.top').getByRole('button', { name: 'Mit Menü' }).click();
 		await page.locator('.side-nav').waitFor();
 		await ctx.close();
 	}

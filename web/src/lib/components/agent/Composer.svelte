@@ -1,16 +1,13 @@
 <script lang="ts">
-	// The input of the KI-Agent: the task, the model and the thinking level
-	// as the chosen model reports them (Ollama thinking.values), Enter sends,
-	// Shift+Enter a new line. While a run works, the round button stops it.
+	// The input of the KI-Agent (PLAN 48): one pill with the clip, the task
+	// and the round send button, glass with a glowing edge. Enter sends,
+	// Shift+Enter a new line; while a run works the round button stops it.
+	// Model and thinking level sit at the top of the chat (ModelPicker).
 	import Dropdown from '#lib/components/Dropdown.svelte';
 	import Icon from '#lib/components/Icon.svelte';
-	import { i18n, t } from '#lib/i18n/index.svelte.ts';
-	import { levelLabel, type Model } from '#lib/agent.ts';
+	import { t } from '#lib/i18n/index.svelte.ts';
 
 	let {
-		models = [],
-		model = $bindable(''),
-		think = $bindable(''),
 		busy = false,
 		disabled = false,
 		placeholder = '',
@@ -20,9 +17,6 @@
 		onpicknas,
 		onerror,
 	}: {
-		models?: Model[];
-		model?: string;
-		think?: string;
 		busy?: boolean;
 		disabled?: boolean;
 		placeholder?: string;
@@ -38,13 +32,6 @@
 
 	let text = $state('');
 	let area = $state<HTMLTextAreaElement>();
-	const usable = $derived(models.filter((m) => m.capabilities.includes('tools')));
-	const chosen = $derived(usable.find((m) => m.name === model));
-	const levels = $derived(chosen?.levels ?? []);
-	// A level the model does not offer falls back to its default.
-	$effect(() => {
-		if (chosen && think && !levels.includes(think)) think = chosen.defaultLevel ?? '';
-	});
 
 	function grow() {
 		if (!area) return;
@@ -108,15 +95,7 @@
 			{/each}
 		</div>
 	{/if}
-	<textarea
-		bind:this={area}
-		bind:value={text}
-		oninput={grow}
-		onkeydown={key}
-		rows="1"
-		{disabled}
-		aria-label={t('agent.input')}
-		placeholder={placeholder || (busy ? t('agent.inputBusy') : t('agent.inputIdle'))}></textarea>
+
 	<div class="tools">
 		<input bind:this={picker} type="file" multiple hidden onchange={picked} />
 		{#if onpicknas}
@@ -152,27 +131,15 @@
 				onclick={() => picker?.click()}><Icon name="clip" size={16} /></button
 			>
 		{/if}
-		{#if usable.length > 1}
-			<label class="pill">
-				<span class="muted">{t('agent.model')}</span>
-				<select bind:value={model} aria-label={t('agent.model')}>
-					{#each usable as m (m.name)}<option value={m.name}>{m.name}</option>{/each}
-				</select>
-			</label>
-		{:else if chosen}
-			<span class="pill"><span class="muted">{t('agent.model')}</span> {chosen.name}</span>
-		{/if}
-		{#if levels.length > 0}
-			<label class="pill">
-				<span class="muted">{t('agent.think')}</span>
-				<select bind:value={think} aria-label={t('agent.think')}>
-					{#each levels as level (level)}<option value={level}
-							>{levelLabel(level, i18n.locale)}</option
-						>{/each}
-				</select>
-			</label>
-		{/if}
-		<span class="grow"></span>
+		<textarea
+			bind:this={area}
+			bind:value={text}
+			oninput={grow}
+			onkeydown={key}
+			rows="1"
+			{disabled}
+			aria-label={t('agent.input')}
+			placeholder={placeholder || (busy ? t('agent.inputBusy') : t('agent.inputIdle'))}></textarea>
 		{#if busy}
 			<button
 				type="button"
@@ -197,19 +164,33 @@
 	.composer {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-2);
-		padding: 10px 10px 10px 14px;
-		border: 1px solid var(--border);
-		border-radius: 20px;
-		background: var(--ag-input-bg, var(--bg));
+		gap: 6px;
+		padding: 6px;
+		border-radius: 26px;
+		border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+		background: color-mix(in srgb, var(--surface) 70%, transparent);
+		backdrop-filter: blur(22px) saturate(160%);
+		box-shadow:
+			0 0 0 1px color-mix(in srgb, var(--accent) 8%, transparent),
+			0 14px 40px -16px color-mix(in srgb, var(--accent) 45%, transparent);
+		transition:
+			border-color 0.2s ease,
+			box-shadow 0.2s ease;
 	}
-	:global(.agent.glass) .composer {
-		background: color-mix(in srgb, var(--surface) 72%, transparent);
-		backdrop-filter: blur(18px) saturate(140%);
-		border-color: var(--glass-border);
-		box-shadow: 0 12px 40px -16px rgb(0 0 0 / 0.55);
+	.composer:focus-within {
+		border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+		box-shadow:
+			0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent),
+			0 18px 48px -14px color-mix(in srgb, var(--accent) 60%, transparent);
+	}
+	:global(.agent:not(.glow)) .composer,
+	:global(.agent:not(.glow)) .composer:focus-within {
+		box-shadow: none;
 	}
 	textarea {
+		flex: 1;
+		min-width: 0;
+		align-self: center;
 		resize: none;
 		border: 0;
 		outline: none;
@@ -220,67 +201,39 @@
 		line-height: 1.45;
 		min-height: 24px;
 		max-height: 220px;
-		padding: 2px 0;
+		padding: 7px 4px;
 	}
 	.tools {
 		display: flex;
-		align-items: center;
+		align-items: flex-end;
 		gap: 6px;
-		flex-wrap: wrap;
-	}
-	.grow {
-		flex: 1;
-	}
-	.pill {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		border: 1px solid var(--border);
-		border-radius: 999px;
-		padding: 2px 10px;
-		font-size: var(--text-sm);
-		background: var(--surface);
-		min-height: 30px;
-	}
-	.pill select {
-		border: 0;
-		background: transparent;
-		color: var(--text);
-		font: inherit;
-		padding: 0;
-		cursor: pointer;
 	}
 	.round {
-		width: 36px;
-		height: 36px;
+		width: 38px;
+		height: 38px;
 		border-radius: 50%;
 		display: grid;
 		place-items: center;
 		border: 0;
 		cursor: pointer;
+		flex: none;
 	}
-	.attach {
-		background: none;
-		border: 1px solid var(--border);
-		color: var(--muted);
-		width: 32px;
-		height: 32px;
-	}
-	/* The clip opens a menu: same round look as the plain button. */
+	.attach,
 	.attach-menu :global(.btn) {
-		width: 32px;
-		height: 32px;
-		min-height: 32px;
+		width: 38px;
+		height: 38px;
+		min-height: 38px;
 		padding: 0;
 		border-radius: 50%;
-		background: none;
-		border: 1px solid var(--border);
-		color: var(--muted);
+		border: 0;
+		background: color-mix(in srgb, var(--text) 8%, transparent);
+		color: var(--text);
 	}
 	.files {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 6px;
+		padding: 4px 4px 0;
 	}
 	.file {
 		display: inline-flex;
@@ -304,10 +257,18 @@
 	.send {
 		background: var(--ag-gradient, var(--accent));
 		color: var(--on-accent);
+		box-shadow: 0 0 18px -2px color-mix(in srgb, var(--accent) 75%, transparent);
+		transition:
+			transform 0.15s ease,
+			opacity 0.15s ease;
+	}
+	.send:not(:disabled):hover {
+		transform: scale(1.06);
 	}
 	.send:disabled {
 		opacity: 0.45;
 		cursor: default;
+		box-shadow: none;
 	}
 	.stop {
 		background: var(--text);
@@ -315,23 +276,8 @@
 	}
 	/* Under 16px iOS zooms into the field on a tap and stays zoomed. */
 	@media (max-width: 760px), (pointer: coarse) {
-		textarea,
-		.pill select {
+		textarea {
 			font-size: max(16px, 1rem);
-		}
-	}
-	@media (max-width: 760px) {
-		.attach-menu :global(.btn) {
-			width: 40px;
-			height: 40px;
-			min-height: 40px;
-		}
-		.round {
-			width: 40px;
-			height: 40px;
-		}
-		.pill .muted {
-			display: none;
 		}
 	}
 </style>
