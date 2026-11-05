@@ -177,6 +177,7 @@ func (s *Server) HASnapshot(ctx context.Context) homeassistant.Snapshot {
 		snap.Work = work
 	}
 	s.haAdditional(&snap)
+	snap.AgentTasks = s.agentButtons()
 	return snap
 }
 
@@ -192,6 +193,9 @@ func (s *Server) HACommand(ctx context.Context, kind, name, action string) error
 	var method, route string
 	var body any
 	switch kind {
+	case "agent":
+		// A recurring task of the KI-Agent; it runs as its own account.
+		return s.agentButton(name, action)
 	case "backup":
 		if action != "run" || s.opts.Backup == nil {
 			return fmt.Errorf("unknown backup command")

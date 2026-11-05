@@ -12,10 +12,13 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/activity"
+	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/appbackup"
 	"github.com/ra5on/TitanOS/backend/internal/appproxy"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
@@ -203,6 +206,20 @@ type Server struct {
 	services   servicesState
 	passkeys   passkeyChallenges
 
+	// The KI-Agent (agent*.go): settings, the Ollama client, running
+	// chats and open pages. agentOpen and agentWebFactory replace the data
+	// volume and the web in tests.
+	agentConf       agentSettingsState
+	agentClient     atomic.Pointer[agent.Ollama]
+	agentRT         agentRuntime
+	agentWatch      agentWatchers
+	agentOpen       func() (*os.Root, error)
+	agentWebFactory func() *agent.Web
+	agentReact      agentReactState
+	agentStoreOnce  sync.Once
+	agentStoreOne   *agent.Store
+	agentPull       agentPull
+
 	loadMu      sync.Mutex
 	lastLoadTry time.Time
 	ipv64       ipv64Area
@@ -300,6 +317,9 @@ func New(opts Options) *Server {
 		s.opts.Notify.Audience = s.notifyAudience
 	}
 	s.haStore.check = make(chan struct{}, 1)
+	if s.opts.Notify != nil {
+		s.opts.Notify.Observer = s.agentObserve
+	}
 
 	mux := &routeMux{ServeMux: http.NewServeMux()}
 	// The routes by area (register_*.go), in the order they always had.
@@ -336,6 +356,7 @@ func New(opts Options) *Server {
 	s.registerPlugins(mux)
 	s.registerTerminal(mux)
 	s.registerScripts(mux)
+	s.registerAgent(mux)
 
 	s.routeCluster(mux)
 

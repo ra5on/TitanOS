@@ -383,3 +383,24 @@ func (s *Server) toolLogs(ctx context.Context, args json.RawMessage) (any, error
 	}
 	return map[string]any{"lines": lines}, nil
 }
+
+func (s *Server) toolLXC(ctx context.Context) (any, error) {
+	type container struct {
+		Name         string  `json:"name"`
+		DisplayName  string  `json:"displayName,omitempty"`
+		Description  string  `json:"description,omitempty"`
+		State        string  `json:"state"`
+		Available    bool    `json:"available"`
+		Distribution string  `json:"distribution"`
+		Release      string  `json:"release"`
+		CPUPercent   float64 `json:"cpuPercent"`
+		MemoryBytes  uint64  `json:"memoryBytes"`
+	}
+	list := []container{}
+	if s.opts.LXC != nil {
+		for _, c := range s.opts.LXC.List(s.opts.Storage.Mounted()) {
+			list = append(list, container{c.Name, c.DisplayName, c.Description, c.State, c.Available, c.Distribution, c.Release, math.Round(c.CPUPercent*10) / 10, c.MemoryBytes})
+		}
+	}
+	return map[string]any{"containers": list}, nil
+}

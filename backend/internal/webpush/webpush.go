@@ -347,6 +347,27 @@ func (m *Manager) Broadcast(msg Message) {
 	}
 }
 
+// SendTo sends a message to every device of one account, in the
+// background, like Broadcast. The KI-Agent uses it for "fertig" and
+// "wartet auf dich"; the message only opens the page, it never approves.
+func (m *Manager) SendTo(user string, msg Message) {
+	m.mu.Lock()
+	devices := slices.Clone(m.st.Devices)
+	m.mu.Unlock()
+	for _, d := range devices {
+		if d.User != user || (m.Allowed != nil && !m.Allowed(d.User)) {
+			continue
+		}
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			defer cancel()
+			if err := m.sendTo(ctx, d, msg); err != nil && !errors.Is(err, ErrGone) {
+				slog.Warn("web push not delivered", "device", d.ID, "service", d.Service, "err", err)
+			}
+		}()
+	}
+}
+
 // sendTo encrypts and posts one message; a subscription the push service
 // no longer knows is removed.
 func (m *Manager) sendTo(ctx context.Context, d stored, msg Message) error {

@@ -69,6 +69,8 @@ const (
 	ViaMCP = "mcp"
 	// ViaHomeAssistant is a button or switch pressed in Home Assistant.
 	ViaHomeAssistant = "homeassistant"
+	// ViaAgent is a step of the KI-Agent of TitanOS (PLAN 44).
+	ViaAgent = "agent"
 )
 
 type Status struct {

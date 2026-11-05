@@ -24,6 +24,7 @@
 	import { afterNavigate } from '$app/navigation';
 	import Icon from './Icon.svelte';
 	import { navForRole } from '#lib/navigation.ts';
+	import { agentAppMode } from '#lib/agent-app.ts';
 
 	let { children }: { children: Snippet } = $props();
 
@@ -43,7 +44,9 @@
 		query.addEventListener('change', change);
 		return () => query.removeEventListener('change', change);
 	});
-	const side = $derived(appearance.current.nav.layout === 'side' && desktop);
+	// The KI-Agent installed as an app of its own shows no TitanOS frame.
+	const agentApp = $derived(agentAppMode(page.url));
+	const side = $derived(appearance.current.nav.layout === 'side' && desktop && !agentApp);
 	// The area the page belongs to, for the button's name.
 	const pageLabel = $derived(
 		navForRole(session.data?.user?.role ?? 'user', session.services).find((item) =>
@@ -52,7 +55,7 @@
 				: page.url.pathname === item.href || page.url.pathname.startsWith(item.href + '/'),
 		)?.label ?? 'nav.label',
 	);
-	const sidePhone = $derived(appearance.current.nav.layout === 'side' && !desktop);
+	const sidePhone = $derived(appearance.current.nav.layout === 'side' && !desktop && !agentApp);
 	let drawer = $state<HTMLDialogElement>();
 	let drawerOpen = $state(false);
 	const openDrawer = () => drawer?.showModal();
@@ -94,8 +97,8 @@
 	// Without head line and status bar nothing sticks below or above them.
 	$effect(() => {
 		const root = document.documentElement.style;
-		root.setProperty('--header-height', side || sidePhone ? '0px' : '60px');
-		root.setProperty('--status-height', side || sidePhone ? '0px' : '34px');
+		root.setProperty('--header-height', side || sidePhone || agentApp ? '0px' : '60px');
+		root.setProperty('--status-height', side || sidePhone || agentApp ? '0px' : '34px');
 		return () => {
 			root.removeProperty('--header-height');
 			root.removeProperty('--status-height');
@@ -201,13 +204,17 @@
 			? `${terminal.height}px`
 			: undefined}
 	>
-		{#if !side && !sidePhone}<Header tasks={!ownTasks} />{/if}
-		<main class:readable={!dockerPage} class:dashboard={page.url.pathname === '/'}>
+		{#if !side && !sidePhone && !agentApp}<Header tasks={!ownTasks} />{/if}
+		<main
+			class:readable={!dockerPage}
+			class:dashboard={page.url.pathname === '/'}
+			class:agent-app={agentApp}
+		>
 			<ClusterBanner />
 			{#if !dockerPage}<ConnectionBanner />{/if}
 			{@render children()}
 		</main>
-		{#if !side && !sidePhone}<StatusBar note={shell.statusNote} />{/if}
+		{#if !side && !sidePhone && !agentApp}<StatusBar note={shell.statusNote} />{/if}
 	</div>
 </div>
 {#if sidePhone}
@@ -350,6 +357,9 @@
 	}
 	main.dashboard {
 		padding-top: var(--space-3);
+	}
+	main.agent-app {
+		padding: 0;
 	}
 	@media (max-width: 760px) {
 		main.dashboard {

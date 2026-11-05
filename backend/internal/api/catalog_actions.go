@@ -107,6 +107,9 @@ func (s *Server) catalogActions(user auth.User) []toolcatalog.Tool {
 		actionTool("vm_action", "Propose to start, shut down, reboot or force off a virtual machine, or to remove it, keeping or deleting its disks.",
 			map[string]any{"vm": str("Name as vm_list shows it."), "action": enum("What to do.", "start", "shutdown", "reboot", "poweroff", "remove", "remove_with_disks")}, []string{"vm", "action"},
 			s.planVM),
+		actionTool("lxc_action", "Propose to start, stop, restart or force off (kill) a system container (LXC).",
+			map[string]any{"container": str("Name as lxc_list shows it."), "action": enum("What to do.", "start", "stop", "restart", "kill")}, []string{"container", "action"},
+			s.planLXC),
 		actionTool("backup_action", "Propose to run a backup job now, or to stop a running one.",
 			map[string]any{"job": str("ID as backup_status shows it."), "action": enum("What to do.", "run", "stop")}, []string{"job", "action"},
 			s.planBackup),
@@ -481,4 +484,30 @@ func (s *Server) planDelete(user auth.User) plan {
 		}
 		return withLevel(card("file.trash", params, "POST", "/files/delete", body), toolcatalog.LevelDanger, "", ""), nil
 	}
+}
+
+func (s *Server) planLXC(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
+	var req struct{ Container, Action string }
+	if err := toolcatalog.DecodeArgs(args, &req); err != nil {
+		return nil, err
+	}
+	if s.opts.LXC == nil {
+		return nil, toolcatalog.Errorf("system containers are not available")
+	}
+	found := false
+	for _, c := range s.opts.LXC.List(s.opts.Storage.Mounted()) {
+		found = found || c.Name == req.Container
+	}
+	if !found {
+		return nil, toolcatalog.Errorf("no system container %q; lxc_list shows the names", req.Container)
+	}
+	params := map[string]string{"name": req.Container}
+	route := "/lxc/" + esc(req.Container) + "/" + req.Action
+	switch req.Action {
+	case "start", "stop", "restart":
+		return card("lxc."+req.Action, params, "POST", route, nil), nil
+	case "kill":
+		return withLevel(card("lxc.kill", params, "POST", route, nil), toolcatalog.LevelDanger, "", ""), nil
+	}
+	return nil, toolcatalog.Errorf("unknown action %q", req.Action)
 }

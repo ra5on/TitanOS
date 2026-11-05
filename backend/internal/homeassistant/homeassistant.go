@@ -96,7 +96,7 @@ type MQTT struct {
 var (
 	legacySensorGroups = []string{"system", "volumes", "disks", "containers", "vms", "ups", "backups", "work"}
 	SensorGroups       = append(slices.Clone(legacySensorGroups), "network", "maintenance", "stacks", "gpu", "igpu", "npu", "capacity")
-	CommandGroups      = []string{"containers", "vms", "backups", "updates", "power"}
+	CommandGroups      = []string{"containers", "vms", "backups", "updates", "power", "agent"}
 )
 
 // Levels of a service call, as the assistant's actions know them.
@@ -548,7 +548,11 @@ func (m *Manager) States(ctx context.Context, allowedOnly bool) ([]State, error)
 	settings := m.settings
 	m.mu.Unlock()
 	if allowedOnly {
-		states = slices.DeleteFunc(states, func(s State) bool { return !allowed(settings, s.EntityID) })
+		if r, own := releaseOf(ctx); own {
+			states = slices.DeleteFunc(states, func(s State) bool { return !r.allows(s.EntityID) })
+		} else {
+			states = slices.DeleteFunc(states, func(s State) bool { return !allowed(settings, s.EntityID) })
+		}
 	}
 	if areas, err := m.areas(ctx); err == nil {
 		for i := range states {
@@ -623,7 +627,11 @@ func (m *Manager) Call(ctx context.Context, domain, service string, entities []s
 	settings := m.settings
 	m.mu.Unlock()
 	for _, e := range entities {
-		if domainOf(e) != domain || !callAllowed(settings, e, service) {
+		ok := callAllowed(settings, e, service)
+		if r, own := releaseOf(ctx); own {
+			ok = r.allows(e)
+		}
+		if domainOf(e) != domain || !ok {
 			return nil, fmt.Errorf("%w: %s", ErrNotAllowed, e)
 		}
 	}

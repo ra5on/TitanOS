@@ -53,6 +53,7 @@ var mcpGerman = map[string]string{
 	"docker_list":      "Docker-Container mit ID, Zustand, Image, App, CPU, Speicher, Ports und verfügbaren Image-Updates.",
 	"container_logs":   "Die neuesten Protokollzeilen eines Containers; Adressen, Kontonamen und Geheimnisse ersetzt.",
 	"vm_list":          "Virtuelle Maschinen mit Zustand, vCPUs, Speicher, Last und Adressen.",
+	"lxc_list":         "Systemcontainer (LXC) mit Zustand, Distribution, CPU und Speicher.",
 }
 
 // mcpSkip are catalog tools MCP leaves out: the public API has a tool of
@@ -133,7 +134,7 @@ func mcpToolScope(tool toolcatalog.Tool) string {
 // level of each call; this list only says which tools the MCP page offers
 // "also dangerous actions" for.
 var mcpDangerous = map[string]bool{
-	"app_action": true, "apps_update_all": true, "vm_action": true, "volume_action": true, "volume_create": true,
+	"app_action": true, "apps_update_all": true, "vm_action": true, "lxc_action": true, "volume_action": true, "volume_create": true,
 	"disk_test": true, "share_delete": true, "account_action": true, "update_action": true, "power_action": true,
 	"file_write": true, "files_move": true, "file_copy": true, "backup_restore_files": true, "backup_schedule": true,
 	"firewall_rule_add": true, "firewall_rule_remove": true, "firewall_unblock": true,

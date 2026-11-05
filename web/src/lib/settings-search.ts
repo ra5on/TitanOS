@@ -70,6 +70,8 @@ const keywords: Record<string, string> = {
 	services:
 		'dienste services docker vm vms virtuelle maschinen lxc container ausschalten abschalten aus off',
 	mcp: 'mcp model context protocol ki ai claude desktop code client clients agent llm werkzeuge tools',
+	agent:
+		'ki agent assistent ai ollama chat projekte modell denken kontext rechte ablageorte gedächtnis skills zeitplan home assistant assist',
 	proxy:
 		'proxy reverse https name namen domain mdns avahi app apps adresse address docker zertifikat certificate',
 };
@@ -346,6 +348,14 @@ export const settingsAreas: SettingsArea[] = [
 	{ id: 'backups', label: 'safeguard.title', group: 'data', icon: 'archive', admin: true },
 	{ id: 'files', label: 'fileIndex.title', group: 'data', icon: 'search', admin: true },
 	{ id: 'homeassistant', label: 'ha.title', group: 'integrations', icon: 'home', admin: true },
+	{
+		id: 'agent',
+		label: 'agent.settingsTitle',
+		group: 'integrations',
+		icon: 'sparkle',
+		admin: true,
+		newSince: { version: '0.48.0', date: '2026-11-05' },
+	},
 	{
 		id: 'mcp',
 		label: 'mcp.pageTitle',

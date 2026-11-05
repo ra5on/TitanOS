@@ -58,6 +58,7 @@ export type FileCommand =
 	| 'download'
 	| 'archive'
 	| 'properties'
+	| 'agent'
 	| 'clipboardCopy'
 	| 'cut'
 	| 'paste'

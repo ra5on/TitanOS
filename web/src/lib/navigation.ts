@@ -8,6 +8,8 @@ export type NavItem = {
 	label: MessageKey;
 	icon: IconName;
 	roles?: Role[];
+	/** Shown only when the NAS says so in /services/state (the KI-Agent). */
+	optIn?: boolean;
 };
 
 /** The tabs of the header in their standard order. A plain user only works with their own shares and files. */
@@ -22,6 +24,7 @@ export const NAV: NavItem[] = [
 	},
 	{ id: 'shares', href: '/shares', label: 'nav.shares', icon: 'globe', roles: ['owner', 'admin'] },
 	{ id: 'files', href: '/files', label: 'nav.files', icon: 'folder' },
+	{ id: 'agent', href: '/agent', label: 'nav.agent', icon: 'sparkle', optIn: true },
 	{ id: 'users', href: '/users', label: 'nav.users', icon: 'users', roles: ['owner', 'admin'] },
 	{ id: 'docker', href: '/docker', label: 'nav.docker', icon: 'box', roles: ['owner', 'admin'] },
 	{ id: 'vms', href: '/vms', label: 'nav.vms', icon: 'monitor', roles: ['owner', 'admin'] },
@@ -75,7 +78,9 @@ export function sanitizeNav(input: unknown): NavPrefs {
 export function navForRole(role: Role, services: Record<string, boolean> = {}): NavItem[] {
 	// A service switched off under Settings › Services has no tab.
 	return NAV.filter(
-		(item) => (!item.roles || item.roles.includes(role)) && services[item.id] !== false,
+		(item) =>
+			(!item.roles || item.roles.includes(role)) &&
+			(item.optIn ? services[item.id] === true : services[item.id] !== false),
 	);
 }
 

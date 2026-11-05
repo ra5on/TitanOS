@@ -22,7 +22,7 @@ const routes = [
   "/settings/backups/applications", "/settings/backups/configuration",
   "/settings/backups/coverage", "/settings/backups/data",
   "/settings/backups/restore", "/settings/energy", "/settings/hardware",
-  "/settings/homeassistant", "/settings/memory", "/settings/network",
+  "/settings/homeassistant", "/settings/agent", "/agent", "/settings/memory", "/settings/network",
   "/settings/notifications", "/settings/power-button", "/settings/stick",
   "/settings/temperatures", "/settings/timezone", "/settings/updates",
   "/settings/ups", "/shares", "/storage", "/storage/import",

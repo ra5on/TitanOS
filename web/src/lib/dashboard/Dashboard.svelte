@@ -184,7 +184,13 @@
 	let ghost = $state<{ left: number; top: number; width: number; height: number } | null>(null);
 	const currentSettings = $derived(tileOptions(options, customize ?? 'cpu'));
 	const currentPlacement = $derived(shown.find((p) => p.id === customize));
-	const hidden = $derived(addableTiles(shown, { admin, hardware: hardwareKinds() }));
+	const hidden = $derived(
+		addableTiles(shown, {
+			admin,
+			hardware: hardwareKinds(),
+			agent: session.services.agent === true,
+		}),
+	);
 	const dirty = $derived(
 		editing &&
 			(JSON.stringify(shown) !== JSON.stringify(saved) ||

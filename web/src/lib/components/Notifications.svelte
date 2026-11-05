@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { api } from '#lib/api.ts';
+	import { goto } from '$app/navigation';
+	import { session } from '#lib/session.svelte.ts';
 	import { page } from '$app/state';
 	import { noticeLink } from '#lib/notice-link.ts';
 	import { armSound } from '#lib/sound.svelte.ts';
@@ -25,6 +28,21 @@
 	// The IDs "delete all" would remove, while its confirmation is open.
 	let confirmAll = $state<number[] | null>(null);
 	let trigger = $state<HTMLButtonElement>();
+	// "Agent ansehen lassen" (PLAN 44): a chat of the KI-Agent about this
+	// notification; the agent looks and reports, changes follow its rules.
+	async function askAgent(title: string, text: string, kind: string, subject?: string) {
+		try {
+			const chat = await api.post<{ id: string }>('/agent/chats', {
+				message: t('notify.askAgentMessage', { title, text, kind, subject: subject ?? '' }),
+			});
+			open = false;
+			void goto(`/agent?chat=${chat.id}`);
+		} catch {
+			// The agent page explains what is missing.
+			void goto('/agent');
+		}
+	}
+
 	async function dismiss(ids: number[]) {
 		busy = true;
 		error = '';
@@ -174,6 +192,12 @@
 									{#if href}<a class="notice-link" {href} onclick={() => (open = false)}
 											>{t('ui.open')}</a
 										>{/if}
+									{#if session.services.agent}<button
+											type="button"
+											class="notice-link as-link"
+											onclick={() => askAgent(text.title, text.text, notice.kind, notice.subject)}
+											>{t('notify.askAgent')}</button
+										>{/if}
 									{#if notice.subject}<a
 											class="notice-link"
 											href={'/tools/logs?' +
@@ -226,6 +250,13 @@
 	}
 	.clear {
 		margin: 0 var(--space-4) var(--space-2);
+	}
+	.as-link {
+		background: none;
+		border: 0;
+		padding: 0;
+		font: inherit;
+		cursor: pointer;
 	}
 	.dismiss {
 		margin-left: auto;
