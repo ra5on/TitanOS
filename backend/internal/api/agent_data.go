@@ -509,6 +509,9 @@ func (s *Server) agentSnapshot(ctx context.Context, box *agentToolbox) string {
 	if v := readTool("vm_list"); v != nil {
 		line("VMs", names(v["vms"], "name", "state"))
 	}
+	if l := readTool("lxc_list"); l != nil {
+		line("System containers (LXC)", names(l["containers"], "name", "state"))
+	}
 	if b.Len() == 0 {
 		return ""
 	}

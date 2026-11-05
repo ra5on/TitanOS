@@ -107,7 +107,7 @@ func BuildPrompt(in PromptInput) string {
 // BuiltInSkills come with TitanOS; the person can switch them off.
 var BuiltInSkills = []Skill{
 	{ID: "builtin-service-status", BuiltIn: true, Name: "Status of a service", When: "The person asks how something is doing (\"Wie ist der Status von Home Assistant/Plex/…?\")",
-		Steps: "1. Look for it everywhere: docker_list, vm_list, and for Home Assistant also ha_diagnostics.\n2. Several matches: ask_user which one, offer \"both\".\n3. For each: state, uptime, version and updates, address/ports, last backup, warnings in the logs of the last 24 h (container_logs / logs_search).\n4. Answer with a small table and one sentence what you recommend."},
+		Steps: "1. Look for it everywhere: docker_list, vm_list, lxc_list, and for Home Assistant also ha_diagnostics.\n2. Several matches: ask_user which one, offer \"both\".\n3. For each: state, uptime, version and updates, address/ports, last backup, warnings in the logs of the last 24 h (container_logs / logs_search).\n4. Answer with a small table and one sentence what you recommend."},
 	{ID: "builtin-health", BuiltIn: true, Name: "Health check", When: "Gesundheitscheck, \"ist alles ok?\", regular report",
 		Steps: "1. system_status, storage_overview, notifications, backup_status, update_status, disk_tests.\n2. Report only what needs attention first (failed disks, degraded RAID, overdue backups, full volumes > 85 %, high temperatures, updates), then one line \"everything else is fine\"."},
 	{ID: "builtin-find-file", BuiltIn: true, Name: "Find a file", When: "The person looks for a document, invoice, photo …",

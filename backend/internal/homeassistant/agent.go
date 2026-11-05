@@ -118,3 +118,8 @@ func (m *Manager) CanCallCtx(ctx context.Context, entity, service string) bool {
 	}
 	return m.CanCall(entity, service)
 }
+
+// Areas maps entity IDs to the name of their area (room).
+func (m *Manager) Areas(ctx context.Context) (map[string]string, error) {
+	return m.areas(ctx)
+}

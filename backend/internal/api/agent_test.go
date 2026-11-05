@@ -478,6 +478,15 @@ func TestAgentHomeAssistantRules(t *testing.T) {
 	if got := call("ha_call", map[string]any{"domain": "lock", "service": "lock", "entities": []string{"lock.haustuer"}}); got != agent.ModeAllow {
 		t.Fatalf("lock allowed by the person: %s", got)
 	}
+	// Rules by room: "Küche" matches area:kueche.
+	box.settings.HA.Entities = map[string]string{"area:kueche": agent.ModeAsk}
+	box.areas = map[string]string{"light.herd": "Küche"}
+	if got := call("ha_call", map[string]any{"domain": "light", "service": "turn_on", "entities": []string{"light.herd"}}); got != agent.ModeAsk {
+		t.Fatalf("area rule: %s", got)
+	}
+	if got := call("ha_call", map[string]any{"domain": "light", "service": "turn_on", "entities": []string{"light.flur"}}); got != agent.ModeAllow {
+		t.Fatalf("other room: %s", got)
+	}
 }
 
 func TestAgentKeepsItsVolume(t *testing.T) {

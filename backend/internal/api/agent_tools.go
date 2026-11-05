@@ -52,6 +52,8 @@ type agentToolbox struct {
 	web      *agent.Web
 	version  string
 	dirs     map[string]string
+	// areas maps Home Assistant entities to their room, for area: rules.
+	areas map[string]string
 }
 
 // newAgentToolbox collects the tools of an account.
@@ -223,6 +225,7 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 		mode = agent.Stricter(mode, agent.ModeAsk)
 	}
 	if t.area == toolcatalog.AreaHome {
+		b.loadAreas(ctx)
 		mode = agent.Stricter(mode, b.haMode(name, args, mode))
 		if mode == agent.ModeDeny {
 			return agent.Prepared{}, errors.New("this device is not allowed for the agent")
@@ -506,6 +509,13 @@ func (b *agentToolbox) haMode(name string, args json.RawMessage, mode string) st
 			if v := rules["entity:"+entity]; agent.ValidMode(v) {
 				return v
 			}
+			if area := b.areas[entity]; area != "" {
+				for key, v := range rules {
+					if name, ok := strings.CutPrefix(key, "area:"); ok && agent.ValidMode(v) && sameArea(name, area) {
+						return v
+					}
+				}
+			}
 		}
 		if v := rules["domain:"+domain]; agent.ValidMode(v) {
 			return v
@@ -548,4 +558,31 @@ func (b *agentToolbox) haContext(ctx context.Context, t *agentTool) context.Cont
 		return ctx
 	}
 	return homeassistant.WithRelease(ctx, b.settings.HA.Release)
+}
+
+// loadAreas reads the rooms of the entities once per run, only when a rule
+// names an area.
+func (b *agentToolbox) loadAreas(ctx context.Context) {
+	if b.areas != nil || b.s.opts.HomeAssistant == nil {
+		return
+	}
+	b.areas = map[string]string{}
+	for key := range b.settings.HA.Entities {
+		if strings.HasPrefix(key, "area:") {
+			if areas, err := b.s.opts.HomeAssistant.Areas(ctx); err == nil {
+				b.areas = areas
+			}
+			return
+		}
+	}
+}
+
+// sameArea compares an area of a rule with the name of a room loosely:
+// "kueche", "Küche" and "küche" are the same.
+func sameArea(rule, area string) bool {
+	norm := func(s string) string {
+		s = strings.ToLower(strings.TrimSpace(s))
+		return strings.NewReplacer("ä", "ae", "ö", "oe", "ü", "ue", "ß", "ss", " ", "_", "-", "_").Replace(s)
+	}
+	return norm(rule) == norm(area)
 }
