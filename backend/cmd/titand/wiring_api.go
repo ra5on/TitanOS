@@ -54,6 +54,7 @@ func (w *titand) wireAPI() error {
 		Hardware:           w.devices,
 		Nvidia:             w.nvidia,
 		IntelGuc:           w.intelGuc,
+		UASQuirks:          w.uasQuirks,
 		Accelerators:       hardware.NewAcceleratorMonitor(ctx, w.devices),
 		Plugins:            w.extensions,
 		Tailscale:          w.tailnet,

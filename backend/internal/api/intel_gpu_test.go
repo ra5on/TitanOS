@@ -46,3 +46,35 @@ func TestIntelGucRoutes(t *testing.T) {
 		t.Errorf("setting stored: %+v", stored)
 	}
 }
+
+func TestUASQuirkRoutes(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	if res, _ := ts.request("GET", "/api/v1/hardware/uas-quirks", nil); res.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("without the setting: %d", res.StatusCode)
+	}
+	quirks := hardware.NewUASQuirks(ts.store, nil, true)
+	if err := quirks.Load(); err != nil {
+		t.Fatal(err)
+	}
+	ts.server.opts.UASQuirks = quirks
+	ts.users.Create("gast", testPassword, auth.RoleUser)
+	guest := ts.newClient()
+	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
+	for _, method := range []string{"GET", "PUT"} {
+		if res, _ := ts.do(guest, method, "/api/v1/hardware/uas-quirks", map[string]any{"device": "152d:0578", "on": true}); res.StatusCode != http.StatusForbidden {
+			t.Errorf("guest %s: %d", method, res.StatusCode)
+		}
+	}
+	res, body := ts.request("GET", "/api/v1/hardware/uas-quirks", nil)
+	if res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"devices":[]`) || !strings.Contains(string(body), `"writable":false`) {
+		t.Errorf("status: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("PUT", "/api/v1/hardware/uas-quirks", map[string]any{"device": "152d:0578:u; reboot", "on": true}); res.StatusCode != http.StatusBadRequest {
+		t.Errorf("bad device: %d %s", res.StatusCode, body)
+	}
+	// Development mode never writes the boot entries.
+	if res, body := ts.request("PUT", "/api/v1/hardware/uas-quirks", map[string]any{"device": "152d:0578", "on": true}); res.StatusCode != http.StatusConflict || !strings.Contains(string(body), "uas_quirks_unavailable") {
+		t.Errorf("development mode: %d %s", res.StatusCode, body)
+	}
+}

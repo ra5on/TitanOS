@@ -20,6 +20,7 @@
 		prefix: string;
 		groups: string[];
 		commands: string[];
+		interval?: number;
 		id?: string;
 	};
 	type Policy = {
@@ -112,7 +113,11 @@
 		};
 	}
 
+	// The interval titand works with, not the one being typed.
+	let sentEvery = $state(30);
+
 	function take(res: Answer) {
+		sentEvery = res.settings.mqtt.interval || 30;
 		draft = {
 			...res.settings,
 			token: '',
@@ -147,7 +152,11 @@
 			take(
 				await api.put<Answer>('/homeassistant/settings', {
 					...draft,
-					mqtt: { ...draft.mqtt, port: Number(draft.mqtt.port) || 0 },
+					mqtt: {
+						...draft.mqtt,
+						port: Number(draft.mqtt.port) || 0,
+						interval: Number(draft.mqtt.interval) || 0,
+					},
 					clearSecrets: clear,
 				}),
 			);
@@ -383,6 +392,19 @@
 						spellcheck="false"
 					/></label
 				>
+				<label class="narrow"
+					><span>{t('ha.mqttInterval')}</span><input
+						class="field"
+						type="number"
+						min="5"
+						max="3600"
+						step="1"
+						placeholder="30"
+						bind:value={draft.mqtt.interval}
+						aria-describedby="ha-mqtt-interval-hint"
+					/><small class="muted" id="ha-mqtt-interval-hint">{t('ha.mqttIntervalHint')}</small
+					></label
+				>
 			</div>
 			<fieldset>
 				<legend>{t('ha.sensorGroups')}</legend>
@@ -457,7 +479,7 @@
 				{#if !draft.account}<p class="notice-warn">{t('ha.commandsNoAccount')}</p>{/if}
 			{/if}
 			{#if status?.mqtt}<p class="notice-ok" role="status">
-					{t('ha.mqttConnected')}
+					{t('ha.mqttConnected', { seconds: String(sentEvery) })}
 				</p>{:else if status?.mqttError}<div class="notice-error" role="alert">
 					{t('ha.mqttFailed')}
 					<pre>{status.mqttError}</pre>

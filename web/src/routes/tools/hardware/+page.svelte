@@ -13,6 +13,11 @@
 	let running = $state(false);
 	let error = $state('');
 	let saveError = $state('');
+	// usb-storage instead of uas, set on the owner's click (PLAN §45).
+	type UASStatus = { devices: string[]; active: string[]; pending: string[]; writable: boolean };
+	let quirks = $state<UASStatus | null>(null);
+	let quirkBusy = $state('');
+	let quirkError = $state('');
 
 	async function check() {
 		running = true;
@@ -22,7 +27,23 @@
 		} catch (err) {
 			error = apiErrorText(err);
 		}
+		try {
+			quirks = await api.get<UASStatus>('/hardware/uas-quirks');
+		} catch {
+			quirks = null;
+		}
 		running = false;
+	}
+
+	async function setQuirk(device: string, on: boolean) {
+		quirkBusy = device;
+		quirkError = '';
+		try {
+			quirks = await api.put<UASStatus>('/hardware/uas-quirks', { device, on });
+		} catch (err) {
+			quirkError = apiErrorText(err);
+		}
+		quirkBusy = '';
 	}
 
 	// The server writes the file; the browser saves it.
@@ -194,11 +215,29 @@
 					>
 						{hintText(hint, disk)}
 					</p>
+					{#if quirks?.writable && disk.usb && (hint.code === 'uas_quirk' || (hint.code === 'uas_quirk_active' && quirks.devices.includes(disk.usb)))}
+						{@const set = quirks.devices.includes(disk.usb)}
+						<div class="quirk">
+							{#if quirks.pending.includes(disk.usb)}
+								<span class="muted"
+									>{t(set ? 'hwcheck.uas.pendingOn' : 'hwcheck.uas.pendingOff')}</span
+								>
+							{/if}
+							<button
+								type="button"
+								class="btn small"
+								disabled={quirkBusy !== ''}
+								onclick={() => setQuirk(disk.usb ?? '', !set)}
+								>{t(set ? 'hwcheck.uas.undo' : 'hwcheck.uas.apply')}</button
+							>
+						</div>
+					{/if}
 				{/each}
 			</div>
 		{:else}
 			<p class="muted">{t('hwcheck.none')}</p>
 		{/each}
+		{#if quirkError}<p class="error" role="alert">{quirkError}</p>{/if}
 	</section>
 
 	<div class="grid">
@@ -309,6 +348,13 @@
 	}
 	.note {
 		font-size: var(--text-base);
+	}
+	.quirk {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px 12px;
+		margin-top: 6px;
 	}
 	.sub {
 		margin: 6px 0 0;

@@ -49,6 +49,13 @@ func (w *titand) wireHardware() error {
 		slog.Warn("Intel GuC/HuC setting unavailable", "err", err)
 	}
 	w.background(func() { w.intelGuc.Run(ctx) })
+	// usb-storage instead of uas for USB bridges with known trouble: only
+	// on the owner's click on the hardware page.
+	w.uasQuirks = hardware.NewUASQuirks(w.store, w.updates, w.opts.dev || w.updates.Disabled)
+	if err := w.uasQuirks.Load(); err != nil {
+		slog.Warn("USB quirks unavailable", "err", err)
+	}
+	w.background(func() { w.uasQuirks.Run(ctx) })
 	w.powerButton = system.NewPowerButtonManager(w.store)
 	w.powerButton.Disabled = w.opts.dev
 	if err := w.powerButton.Load(); err != nil {

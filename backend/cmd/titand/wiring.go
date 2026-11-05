@@ -122,6 +122,7 @@ type titand struct {
 	shareDir        string
 	nvidia          *hardware.NvidiaControl
 	intelGuc        *hardware.IntelGuc
+	uasQuirks       *hardware.UASQuirks
 	powerButton     *system.PowerButtonManager
 	energy          *system.EnergyManager
 	schedule        *system.PowerScheduler

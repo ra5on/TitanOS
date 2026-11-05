@@ -277,7 +277,12 @@ func (r Report) Text(version string) string {
 		if nic.SpeedMbs > 0 {
 			speed = fmt.Sprintf("%d Mbit/s", nic.SpeedMbs)
 		}
-		line("  %s  %s  %s  driver %s  link %s  %s", nic.Name, nic.Bus, nic.Address, dash(nic.Driver), yes(nic.Link), speed)
+		// A port without a cable is only information, never a problem.
+		link := "yes"
+		if !nic.Link {
+			link = "no (not connected)"
+		}
+		line("  %s  %s  %s  driver %s  link %s  %s", nic.Name, nic.Bus, nic.Address, dash(nic.Driver), link, speed)
 	}
 	line("Graphics and accelerators")
 	for _, device := range r.Graphics {
@@ -288,6 +293,9 @@ func (r Report) Text(version string) string {
 		line("  %s  %d temperatures, %d fans", sensor.Chip, sensor.Temps, sensor.Fans)
 	}
 	line("Devices without a driver")
+	if len(r.Unbound) == 0 {
+		line("  none")
+	}
 	for _, device := range r.Unbound {
 		extra := ""
 		switch device.Hint {
@@ -311,6 +319,9 @@ func (r Report) Text(version string) string {
 		}
 	}
 	line("Missing firmware")
+	if len(r.FirmwareMissing) == 0 {
+		line("  none")
+	}
 	for _, firmware := range r.FirmwareMissing {
 		line("  %s  %s", firmware.File, firmware.Device)
 	}

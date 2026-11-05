@@ -92,7 +92,7 @@ Voraussetzung ist ein MQTT-Broker, zum Beispiel das Mosquitto-Add-on, und die MQ
 | GPU, iGPU / weitere Grafik, NPU | Auslastung, Temperatur, Leistung, Speicher, Takt, Engines, Zustand/Treiber |
 | USV | Status, Ladung, Last, Restlaufzeit, Batterie-/Abschaltzustand |
 
-Die Werte kommen alle 30 Sekunden. TitanOS fragt dafür keine Platten zusätzlich ab; schlafende Platten bleiben schlafen. Topics:
+Die Werte kommen alle 30 Sekunden; das Intervall ist unter „Sensoren und Knöpfe“ von 5 bis 3600 Sekunden einstellbar (`mqtt.interval`, leer = 30). TitanOS fragt dafür keine Platten zusätzlich ab; schlafende Platten bleiben schlafen. Topics:
 
 - Discovery: `homeassistant/<component>/titanos_<id>/<key>/config`
 - Zustände: `titanos/<id>/state/<key>`
@@ -109,7 +109,7 @@ Unbekannte Messwerte bleiben unavailable/unknown. Ausfälle einer Zustandsquelle
 löschen keine zuvor bekannten Entitäten. Tatsächlich entfernte Entitäten werden
 auch nach Wiederverbindung aus der retained Discovery bereinigt. Home-Assistant-
 Birth kündigt aktuelle Entitäten erneut an. Zustände sind nicht retained; Sensorwerte
-laufen nach 95 Sekunden ab; globale Last-Will- und individuelle Verfügbarkeit
+laufen nach dreimal dem Intervall plus 5 Sekunden ab, mindestens nach 95 Sekunden; globale Last-Will- und individuelle Verfügbarkeit
 verhindern alte gesunde Werte. Sensoren, die Treiber nicht liefern, bleiben unbekannt.
 
 MQTT verwendet vorhandene günstige Statusquellen und RAM-Messwerte, ohne zusätzliche

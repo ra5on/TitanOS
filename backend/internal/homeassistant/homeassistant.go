@@ -87,6 +87,9 @@ type MQTT struct {
 	// Commands are groups of buttons and switches in Home Assistant:
 	// containers, vms, updates, power. None by default.
 	Commands []string `json:"commands"`
+	// Interval is how often states are published, in seconds (5 to 3600);
+	// 0, as in files of older versions, means 30.
+	Interval int `json:"interval,omitempty"`
 	// ID names this NAS in topics and unique IDs. It is made once and kept,
 	// because the machine ID of a system in RAM changes with every start.
 	ID string `json:"id,omitempty"`
@@ -351,6 +354,9 @@ func checkMQTT(q *MQTT, old string) error {
 	}
 	if !mqttID.MatchString(q.ID) {
 		return invalid("MQTT ID")
+	}
+	if q.Interval != 0 && (q.Interval < MinMQTTInterval || q.Interval > MaxMQTTInterval) {
+		return invalid("MQTT interval: %d to %d seconds", MinMQTTInterval, MaxMQTTInterval)
 	}
 	devices := make(map[string][]string, len(q.Devices))
 	for group, ids := range q.Devices {
