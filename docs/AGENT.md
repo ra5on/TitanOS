@@ -135,6 +135,54 @@ Ist der Agent eingeschaltet, legt TitanOS auf seinem Volume die Freigabe **„KI
 - **Vorlesen:** Lautsprecher-Knopf an jeder Antwort, wahlweise automatisch (Darstellung › „Antworten vorlesen“); Sprachausgabe des Geräts, ohne Server.
 - Messung des Inhabers (5.11.2026): `gemma4:12b` mit 256K Kontext belegt 12,6 GB von 16 GB (RTX 5060 Ti); Whisper turbo passt daneben.
 
+## Agent-App: Aussehen, Gesten, Einstellungen (PLAN 53)
+
+Seit 0.54.0 hat der Agent auf dem Handy und im Browser einen eigenen Auftritt. Er unterscheidet sich bewusst von TitanOS, das unverändert bleibt.
+
+**Aussehen**
+- Langsam bewegtes Polarlicht hinter Glas; Stärke des Glases einstellbar.
+- Leuchtende Kugel, Begrüßung mit Namen im Verlauf.
+- Projekte als kleine Chips statt der großen Kachel.
+- „Passt gerade“: höchstens drei Vorschläge.
+  - Zuerst Warnungen des NAS der letzten 48 Stunden (`GET /api/v1/agent/suggestions`, nur Besitzer und Administratoren, aus den Meldungen im RAM).
+  - Dann nach Tageszeit: morgens „Was ist über Nacht passiert?“, abends „Ist zu Hause alles zu?“.
+  - Dann wechselnd der Rest; „andere“ zeigt die nächsten.
+
+**Einstellungen im Agenten** (Zahnrad oben und im Menü, für jedes Konto)
+- Sprache:
+  - automatisch vorlesen an oder aus; aus heißt Knopf „Vorlesen“ an jeder Antwort;
+  - Tempo;
+  - Spracheingabe per Antippen oder Gedrückthalten;
+  - Stand von Whisper.
+- Modelle.
+- Geplant, Gedächtnis, Skills, Meine Anweisung, NAS-Landkarte, Protokoll: Jeder Teil öffnet sich einzeln, ohne Sammelfenster.
+- Darstellung und Gesten:
+  - Wischgesten an oder aus;
+  - was Wischen nach rechts oder links an einem Chat tut: Anheften, Löschen, Menü, Nichts;
+  - vom Rand wischen: links Chats, rechts Einstellungen;
+  - Ziehen zum Aktualisieren;
+  - Vibration;
+  - Animationen voll, reduziert oder aus; `prefers-reduced-motion` gilt immer;
+  - Akzent, Hintergrund, Glas mit Stärke, Leuchten, Schriftgröße, Stil der Antworten, kompakte Chatliste;
+  - beim Öffnen: neuer Chat, letzter Chat oder Übersicht;
+  - Vorschläge;
+  - Denkschritte und Werkzeuge zeigen;
+  - Tipp-Effekt;
+  - Bildschirm wach halten, solange der Agent arbeitet.
+- Für Besitzer ein Link zu Verbindung und Rechten unter TitanOS › Einstellungen › KI-Agent.
+
+**„Geplant“ im Menü** öffnet nur Aufträge und Erinnerungen. Eine Erinnerung, die noch nie lief, zeigt „noch nicht gelaufen“.
+
+**Menü eines Chats**
+- Erreichbar über Wischen mit „Menü“, langes Drücken oder Rechtsklick.
+- Anheften, Umbenennen, In Projekt verschieben, Markdown und PDF herunterladen, Löschen (mit einfacher Rückfrage).
+
+**Speicherort**
+- Die Einstellungen liegen je Konto auf dem NAS in `.titanos/agent/<konto>/prefs.json` (`GET`/`PUT /api/v1/agent/prefs`).
+  - Flaches Objekt mit kurzen Werten, höchstens 8 KiB, eine Ebene Unterobjekte. Die Oberfläche prüft die Felder.
+- Nur Vibration, Bildschirm wach halten und Schriftgröße gehören dem Gerät (`localStorage`).
+- Ältere Versionen ignorieren die Datei.
+
 ## Snapshot vor Änderungen (PLAN 51)
 
 Bevor der Agent eine App aktualisiert oder entfernt (`app_action`) oder Dateien verschiebt, umbenennt oder ersetzt (Gelöschtes landet im Papierkorb der Freigabe), legt TitanOS einen schreibgeschützten Btrfs-Snapshot `agent-JJJJMMTT-hhmmss` des betroffenen Volumes an (höchstens einer je Volume in 10 Minuten, 7 Tage aufbewahrt, nächtlich aufgeräumt). Der Chat zeigt ihn als Eintrag 📸. Einzelne Dateien holt man auf der Speicher-Seite unter Snapshots zurück (Wiederherstellen legt eine beschreibbare Kopie an; das Volume selbst wird nie zurückgesetzt). Volumes ohne Btrfs bekommen keinen, der Chat sagt das. Abschaltbar (`noSnapshots`). VM- und LXC-Snapshots legt der Agent nicht selbst an.

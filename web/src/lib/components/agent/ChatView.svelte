@@ -28,12 +28,15 @@
 		onretry,
 		onundo,
 		readonly = false,
+		showSteps = false,
 		onplanned,
 	}: {
 		/** Opens the overview of planned tasks (from a confirmation). */
 		onplanned?: () => void;
 		/** Another account's chat in a shared project: nothing to answer. */
 		readonly?: boolean;
+		/** Open thinking and tool steps by default (PLAN 53). */
+		showSteps?: boolean;
 		chat: Chat;
 		live: { thinking: string; content: string; step: Entry | null };
 		busy?: boolean;
@@ -128,13 +131,13 @@
 				<div class="user">{block.entry.content}</div>
 			{:else if block.kind === 'steps'}
 				{#if block.thinking}
-					<details class="thinking">
+					<details class="thinking" open={showSteps}>
 						<summary><Icon name="bulb" size={14} /> {t('agent.thoughts')}</summary>
 						<p>{block.thinking}</p>
 					</details>
 				{/if}
 				{#if block.steps.length}
-					<details class="steps" open={i === list.length - 1 && busy}>
+					<details class="steps" open={showSteps || (i === list.length - 1 && busy)}>
 						<summary>
 							<span class="ok">✓</span>
 							{t('agent.steps', {

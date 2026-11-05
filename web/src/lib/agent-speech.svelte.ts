@@ -22,7 +22,15 @@ export function speakable(markdown: string): string {
 }
 
 /** Reads a text aloud; the same id again stops it. */
-export function speak(id: string, markdown: string, locale: 'de' | 'en'): void {
+/** Speaking rate of the account (PLAN 53), set by the agent page. */
+export const speechPrefs = { rate: 1 };
+
+export function speak(
+	id: string,
+	markdown: string,
+	locale: 'de' | 'en',
+	rate = speechPrefs.rate,
+): void {
 	if (!canSpeak()) return;
 	const synth = window.speechSynthesis;
 	const again = speech.id === id;
@@ -35,6 +43,7 @@ export function speak(id: string, markdown: string, locale: 'de' | 'en'): void {
 	utterance.lang = locale === 'de' ? 'de-DE' : 'en-GB';
 	const voice = synth.getVoices().find((v) => v.lang.toLowerCase().startsWith(locale));
 	if (voice) utterance.voice = voice;
+	utterance.rate = Math.min(2, Math.max(0.5, rate));
 	utterance.onend = utterance.onerror = () => {
 		if (speech.id === id) speech.id = '';
 	};
