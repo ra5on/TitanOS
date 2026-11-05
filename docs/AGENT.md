@@ -61,7 +61,7 @@ Websuche und Seitenlesen über DuckDuckGo (ab Werk an, Bereich „Internet“). 
 
 Der Agent nutzt die Verbindung unter Einstellungen › Home Assistant:
 
-- Geräte lesen und schalten, Verläufe, Diagnose (Werkzeuge des MCP-Katalogs). **Wichtig:** Diese Werkzeuge sehen nur Geräte, die unter Einstellungen › Home Assistant › „Geräte für MCP freigeben“ freigegeben sind. Die Geräte-Regeln des Agenten engen das weiter ein, öffnen aber nichts darüber hinaus.
+- Geräte lesen und schalten, Verläufe, Diagnose (Werkzeuge des MCP-Katalogs). **Eigene Freigabeliste** (Entscheidung des Projektinhabers vom 5.11.2026): Unter Einstellungen › KI-Agent › Home Assistant › „Geräte für den Agenten“ gibst du ganze Bereiche (z. B. `sensor`) oder einzelne Geräte frei – getrennt von „Geräte für MCP freigeben“. Ab Werk ist nichts freigegeben. Die Nur-Lesen-/Dienste-Regeln von MCP gelten für den Agenten nicht; dafür gibt es seine Geräte-Regeln.
 - `ha_statistics`: Langzeit-Statistik (z. B. Stromverbrauch pro Tag der letzten Woche).
 - `ha_automation_save`, `ha_script_save`: Automationen und Skripte anlegen und ändern, gekennzeichnet „vom TitanOS-Agent“; die vorherige Fassung steht im Ergebnis des Schritts.
 - **Geräte-Regeln** (`domain:`, `entity:`): können den Bereich nur strenger machen. Sie gelten für jedes Gerät, das ein Aufruf irgendwo nennt (auch in den Aktionen einer Automation). Schlösser und Alarmanlagen fragen ab Werk nach; eine Automation oder ein Skript ohne erkennbare Geräte fragt immer nach.

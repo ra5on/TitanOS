@@ -22,7 +22,7 @@ type History struct {
 // nothing happened. No history is copied onto the boot stick.
 func (m *Manager) History(ctx context.Context, entity string, start, end time.Time, offset int) (History, error) {
 	out := History{Entity: entity, Start: start, End: end, States: []State{}, Source: "Home Assistant recorder"}
-	if !m.Allowed(entity) {
+	if !m.AllowedCtx(ctx, entity) {
 		return out, ErrNotAllowed
 	}
 	if start.IsZero() || !end.After(start) || end.Sub(start) > 24*time.Hour || end.After(time.Now().Add(time.Minute)) || offset < 0 || offset > 100000 {

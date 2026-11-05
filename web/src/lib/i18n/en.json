@@ -8401,5 +8401,12 @@
 	"agent.area.plugins": "Plugins",
 	"agent.area.home": "Home Assistant",
 	"agent.area.web": "Internet (DuckDuckGo)",
-	"agent.noteHA": "Saved in Home Assistant"
+	"agent.noteHA": "Saved in Home Assistant",
+	"agent.haRelease": "Devices for the agent",
+	"agent.haReleaseHint": "A list of its own, apart from \"Release devices for MCP\". The agent only sees and switches what is released here; the rules below make it stricter.",
+	"agent.haLoad": "Load devices from Home Assistant",
+	"agent.haReleased": "Released: {domains} domains, {entities} single devices",
+	"agent.haDomains": "Whole domains",
+	"agent.haSearch": "Search devices (name, ID, room)",
+	"agent.haNoEntities": "No devices found."
 }

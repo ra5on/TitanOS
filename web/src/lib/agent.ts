@@ -159,6 +159,8 @@ export type Settings = {
 	reactAs?: string;
 	skillsOff?: string[];
 	homeassistant: {
+		/** The agent's own list of released devices (apart from MCP). */
+		release?: { domains?: string[]; entities?: string[] };
 		entities?: Record<string, Mode>;
 		notify?: string[];
 		assist?: boolean;

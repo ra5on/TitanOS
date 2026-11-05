@@ -71,7 +71,7 @@ const settings = {
 		{ name: 'NAS-Doku', root: 'share/Documents', path: 'NAS', note: 'Anleitungen, Übersichten' },
 		{ name: 'Steuer 2026', root: 'share/Documents', path: 'Steuer/2026', note: 'Rechnungen und Belege' },
 	],
-	react: true, homeassistant: { notify: ['notify.mobile_app_iphone'], entities: { 'domain:lock': 'ask' }, assist: true },
+	react: true, homeassistant: { release: { domains: ['sensor'], entities: ['light.flur', 'lock.haustuer'] }, notify: ['notify.mobile_app_iphone'], entities: { 'domain:lock': 'ask' }, assist: true },
 };
 const tools = [
 	['system_status', 'system', 'read'], ['notifications', 'system', 'read'], ['logs_search', 'system', 'read'],
@@ -98,6 +98,13 @@ async function open(width, height, { theme = 'graphit', path = '/agent', look = 
 		const method = route.request().method();
 		const json = (value, status = 200) => route.fulfill({ status, json: value });
 		if (p === '/services/state') return json({ docker: true, vms: true, lxc: true, agent: true });
+		if (p === '/homeassistant/settings' && method === 'GET') return json({ domains: ['light', 'switch', 'lock', 'sensor', 'climate'], enabled: true });
+		if (p === '/homeassistant/entities') return json({ entities: [
+			{ id: 'light.flur', name: 'Flurlicht', area: 'Flur', state: 'off', domain: 'light' },
+			{ id: 'light.wohnzimmer', name: 'Wohnzimmer', area: 'Wohnzimmer', state: 'on', domain: 'light' },
+			{ id: 'lock.haustuer', name: 'Haustür', area: 'Flur', state: 'locked', domain: 'lock' },
+			{ id: 'sensor.strom_tag', name: 'Strom heute', state: '4.2', domain: 'sensor' },
+		] });
 		if (!p.startsWith('/agent')) return route.fallback();
 		if (p === '/agent/status') return json(status);
 		if (p === '/agent/settings') {
@@ -211,12 +218,18 @@ try {
 		await page.getByRole('heading', { name: 'Was der Agent darf' }).waitFor();
 		await page.waitForTimeout(500);
 		await page.screenshot({ path: `${out}/11-settings.png`, fullPage: true });
+		await page.getByRole('button', { name: 'Geräte aus Home Assistant laden' }).click();
+		await page.getByText('Haustür').waitFor();
+		await page.getByText('Geräte für den Agenten').scrollIntoViewIfNeeded();
+		await page.waitForTimeout(300);
+		await page.screenshot({ path: `${out}/13-settings-ha-release.png` });
 		await page.getByRole('button', { name: /Dateien/ }).first().click();
 		await page.getByText('files_delete').waitFor();
 		await page.getByRole('button', { name: 'Speichern' }).click();
 		await page.getByRole('status').waitFor();
 		assert.equal(seen.puts.length, 1);
 		assert.equal(seen.puts[0].ollama, 'http://192.168.10.5:11434');
+		assert.deepEqual(seen.puts[0].homeassistant.release.entities, ['light.flur', 'lock.haustuer']);
 		await ctx.close();
 		const phone = await open(390, 844);
 		await phone.page.goto(base + '/settings/agent');

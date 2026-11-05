@@ -10,7 +10,7 @@ import (
 // Capabilities reports the server's actual service fields and current entity
 // features. A domain service existing does not prove a device supports it.
 func (m *Manager) Capabilities(ctx context.Context, entity string) (any, error) {
-	if !m.Allowed(entity) {
+	if !m.AllowedCtx(ctx, entity) {
 		return nil, ErrNotAllowed
 	}
 	state, err := m.State(ctx, entity)

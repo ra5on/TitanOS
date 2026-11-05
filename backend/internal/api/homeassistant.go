@@ -246,7 +246,7 @@ func (s *Server) haTools(user auth.User) []toolcatalog.Tool {
 				if err := toolcatalog.DecodeArgs(args, &q); err != nil {
 					return nil, err
 				}
-				if !ha.Allowed(q.Entity) {
+				if !ha.AllowedCtx(ctx, q.Entity) {
 					return nil, homeassistant.ErrNotAllowed
 				}
 				return ha.State(ctx, q.Entity)
@@ -285,7 +285,7 @@ func (s *Server) haTools(user auth.User) []toolcatalog.Tool {
 					return nil, homeassistant.ErrNotAllowed
 				}
 				for _, e := range q.Entities {
-					if !strings.HasPrefix(e, q.Domain+".") || !ha.CanCall(e, q.Service) {
+					if !strings.HasPrefix(e, q.Domain+".") || !ha.CanCallCtx(ctx, e, q.Service) {
 						return nil, homeassistant.ErrNotAllowed
 					}
 				}

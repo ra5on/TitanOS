@@ -65,6 +65,11 @@ func (b *agentToolbox) haStatistics(ctx context.Context, _ *agent.Chat, args jso
 	if req.Days < 1 || req.Days > 365 {
 		return agent.Outcome{}, toolcatalog.Errorf("days: 1 to 365")
 	}
+	for _, e := range req.Entities {
+		if !b.s.opts.HomeAssistant.AllowedCtx(ctx, e) {
+			return agent.Outcome{}, toolcatalog.Errorf("%s is not released for the agent (Einstellungen › KI-Agent › Home Assistant)", e)
+		}
+	}
 	end := time.Now()
 	data, err := b.s.opts.HomeAssistant.Statistics(ctx, req.Entities, end.AddDate(0, 0, -req.Days), end, req.Period)
 	if err != nil {

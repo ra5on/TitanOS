@@ -13,6 +13,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 )
 
 // The settings of the KI-Agent (PLAN 44) live on the stick in
@@ -53,9 +54,12 @@ type agentSettings struct {
 }
 
 type agentHASettings struct {
-	Entities map[string]string `json:"entities,omitempty"`
-	Notify   []string          `json:"notify,omitempty"`
-	Assist   bool              `json:"assist,omitempty"`
+	// Release is the agent's own list of devices it may see and use
+	// (decision 5.11.2026), apart from "Geräte für MCP freigeben".
+	Release  homeassistant.Release `json:"release"`
+	Entities map[string]string     `json:"entities,omitempty"`
+	Notify   []string              `json:"notify,omitempty"`
+	Assist   bool                  `json:"assist,omitempty"`
 	// AssistAs is the account questions from Home Assistant run as.
 	AssistAs string `json:"assistAs,omitempty"`
 }
@@ -201,6 +205,19 @@ func (s *Server) checkAgentSettings(req *agentSettings) error {
 	for key, mode := range req.HA.Entities {
 		if !agent.ValidMode(mode) || len(key) > 200 || !(strings.HasPrefix(key, "area:") || strings.HasPrefix(key, "domain:") || strings.HasPrefix(key, "entity:")) {
 			return errors.New("invalid Home Assistant rule")
+		}
+	}
+	if len(req.HA.Release.Domains) > 50 || len(req.HA.Release.Entities) > 2000 {
+		return errors.New("too many released devices")
+	}
+	for _, d := range req.HA.Release.Domains {
+		if !slices.Contains(homeassistant.Domains(), d) {
+			return errors.New("unknown Home Assistant domain " + d)
+		}
+	}
+	for _, e := range req.HA.Release.Entities {
+		if !homeassistant.ValidEntity(e) {
+			return errors.New("invalid Home Assistant entity " + e)
 		}
 	}
 	if len(req.HA.Notify) > 20 {

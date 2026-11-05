@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -68,4 +69,52 @@ func (m *Manager) SaveConfig(ctx context.Context, kind, id string, config map[st
 		return err
 	}
 	return m.do(ctx, http.MethodPost, "/api/services/"+kind+"/reload", map[string]any{}, nil)
+}
+
+// Release is a list of released domains and entities of its own (PLAN 44,
+// decision 5.11.2026: the KI-Agent has its own list, apart from "Geräte für
+// MCP freigeben"). A context carrying one is checked against it instead of
+// the MCP release; the policies of MCP (read-only, service lists) do not
+// apply then, the agent has rules of its own.
+type Release struct {
+	Domains  []string `json:"domains,omitempty"`
+	Entities []string `json:"entities,omitempty"`
+}
+
+type releaseKey struct{}
+
+// WithRelease returns a context whose calls use r as the release.
+func WithRelease(ctx context.Context, r Release) context.Context {
+	return context.WithValue(ctx, releaseKey{}, r)
+}
+
+func releaseOf(ctx context.Context) (Release, bool) {
+	r, ok := ctx.Value(releaseKey{}).(Release)
+	return r, ok
+}
+
+func (r Release) allows(entity string) bool {
+	if !ValidEntity(entity) {
+		return false
+	}
+	if _, known := domainLevels[domainOf(entity)]; !known {
+		return false
+	}
+	return slices.Contains(r.Domains, domainOf(entity)) || slices.Contains(r.Entities, entity)
+}
+
+// AllowedCtx is Allowed with the release of the context, if it has one.
+func (m *Manager) AllowedCtx(ctx context.Context, entity string) bool {
+	if r, ok := releaseOf(ctx); ok {
+		return r.allows(entity)
+	}
+	return m.Allowed(entity)
+}
+
+// CanCallCtx is CanCall with the release of the context, if it has one.
+func (m *Manager) CanCallCtx(ctx context.Context, entity, service string) bool {
+	if r, ok := releaseOf(ctx); ok {
+		return r.allows(entity)
+	}
+	return m.CanCall(entity, service)
 }

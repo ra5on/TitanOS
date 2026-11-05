@@ -41,6 +41,43 @@
 	let open = $state<Record<string, boolean>>({});
 	let haNotify = $state('');
 	let haRules = $state<{ key: string; mode: Mode }[]>([]);
+	// Home Assistant: domains and entities for the agent's own release list.
+	let haDomains = $state<string[]>([]);
+	let haEntities = $state<{ id: string; name: string; area?: string; domain: string }[] | null>(
+		null,
+	);
+	let haQuery = $state('');
+	let haError = $state('');
+	async function loadHA() {
+		haError = '';
+		try {
+			const s = await api.get<{ domains: string[] }>('/homeassistant/settings');
+			haDomains = s.domains ?? [];
+			haEntities = (
+				await api.get<{ entities: { id: string; name: string; area?: string; domain: string }[] }>(
+					'/homeassistant/entities',
+				)
+			).entities;
+		} catch (e) {
+			haError = apiErrorText(e);
+		}
+	}
+	function toggleRelease(kind: 'domains' | 'entities', value: string) {
+		if (!settings) return;
+		const r = (settings.homeassistant.release ??= {});
+		const list = new Set(r[kind] ?? []);
+		if (list.has(value)) list.delete(value);
+		else list.add(value);
+		r[kind] = [...list].sort();
+	}
+	const haShown = $derived(
+		(haEntities ?? [])
+			.filter((e) => {
+				const q = haQuery.trim().toLowerCase();
+				return !q || (e.id + ' ' + e.name + ' ' + (e.area ?? '')).toLowerCase().includes(q);
+			})
+			.slice(0, 200),
+	);
 
 	async function load() {
 		error = '';
@@ -464,6 +501,61 @@
 		<h2 class="tile-title" id="ag-ha">{t('agent.sectionHA')}</h2>
 		<p class="muted">{t('agent.haIntro')}</p>
 		<div class="stack">
+			<span>{t('agent.haRelease')}</span>
+			<span class="muted">{t('agent.haReleaseHint')}</span>
+			{#if haEntities === null}
+				<span class="line"
+					><button type="button" class="btn" onclick={loadHA}>{t('agent.haLoad')}</button>
+					<span class="muted"
+						>{t('agent.haReleased', {
+							domains: settings.homeassistant.release?.domains?.length ?? 0,
+							entities: settings.homeassistant.release?.entities?.length ?? 0,
+						})}</span
+					></span
+				>
+				{#if haError}<p class="notice-warn">{haError}</p>{/if}
+			{:else}
+				<fieldset class="domains">
+					<legend>{t('agent.haDomains')}</legend>
+					{#each haDomains as d (d)}
+						<label class="check"
+							><input
+								type="checkbox"
+								checked={settings.homeassistant.release?.domains?.includes(d)}
+								onchange={() => toggleRelease('domains', d)}
+							/><span>{d}</span></label
+						>
+					{/each}
+				</fieldset>
+				<input
+					class="field"
+					type="search"
+					bind:value={haQuery}
+					placeholder={t('agent.haSearch')}
+					aria-label={t('agent.haSearch')}
+				/>
+				<div class="entities">
+					{#each haShown as e (e.id)}
+						{@const viaDomain = settings.homeassistant.release?.domains?.includes(e.domain)}
+						<label class="check"
+							><input
+								type="checkbox"
+								checked={viaDomain || settings.homeassistant.release?.entities?.includes(e.id)}
+								disabled={viaDomain}
+								onchange={() => toggleRelease('entities', e.id)}
+							/><span
+								>{e.name} <code>{e.id}</code>{#if e.area}<span class="muted">
+										· {e.area}</span
+									>{/if}</span
+							></label
+						>
+					{:else}
+						<p class="muted">{t('agent.haNoEntities')}</p>
+					{/each}
+				</div>
+			{/if}
+		</div>
+		<div class="stack">
 			<span>{t('agent.haRules')}</span>
 			{#each haRules as r, i (i)}
 				<div class="rule ha">
@@ -535,6 +627,11 @@
 		align-items: center;
 		flex-wrap: wrap;
 	}
+	.line .btn {
+		max-width: 100%;
+		white-space: normal;
+		height: auto;
+	}
 	.wide {
 		flex: 1;
 		min-width: 240px;
@@ -564,8 +661,29 @@
 		align-items: center;
 		margin-bottom: var(--space-2);
 	}
+	.rule :global(.segments) {
+		flex-wrap: nowrap;
+	}
 	.rule.ha {
 		grid-template-columns: minmax(200px, 1fr) auto auto;
+	}
+	.domains {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px 16px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-ctl);
+		padding: var(--space-2) var(--space-3);
+	}
+	.entities {
+		max-height: 320px;
+		overflow-y: auto;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-ctl);
+		padding: var(--space-2) var(--space-3);
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
 	}
 	.areas {
 		display: flex;
@@ -624,7 +742,8 @@
 	}
 	@media (max-width: 760px) {
 		.loc,
-		.rule {
+		.rule,
+		.rule.ha {
 			grid-template-columns: 1fr;
 			border-bottom: 1px solid var(--border);
 			padding-bottom: var(--space-2);

@@ -73,7 +73,7 @@ func (s *Server) afterHAUndo(ctx context.Context, u auth.User, q haCall, before 
 	s.haUndo.Entries[id] = haUndoReceipt{u.Name, settings.URL, q.Entities[0], before.State, after.State, after.LastChanged, time.Now().Add(30 * time.Minute)}
 	return id
 }
-func (s *Server) undoReceipt(user, id string) (haUndoReceipt, error) {
+func (s *Server) undoReceipt(ctx context.Context, user, id string) (haUndoReceipt, error) {
 	s.haUndo.Lock()
 	defer s.haUndo.Unlock()
 	r, ok := s.haUndo.Entries[id]
@@ -82,7 +82,7 @@ func (s *Server) undoReceipt(user, id string) (haUndoReceipt, error) {
 		return r, toolcatalog.ErrInvalid
 	}
 	service := "turn_" + r.Before
-	if !s.opts.HomeAssistant.CanCall(r.Entity, service) {
+	if !s.opts.HomeAssistant.CanCallCtx(ctx, r.Entity, service) {
 		return r, homeassistant.ErrNotAllowed
 	}
 	return r, nil
@@ -95,7 +95,7 @@ func (s *Server) haUndoTool(u auth.User) toolcatalog.Tool {
 		if err := toolcatalog.DecodeArgs(args, &q); err != nil {
 			return nil, err
 		}
-		receipt, err := s.undoReceipt(u.Name, q.Receipt)
+		receipt, err := s.undoReceipt(ctx, u.Name, q.Receipt)
 		if err != nil {
 			return nil, err
 		}
@@ -112,7 +112,7 @@ func (s *Server) handleHAUndo(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &q) {
 		return
 	}
-	saved, err := s.undoReceipt(currentUser(r).Name, q.Receipt)
+	saved, err := s.undoReceipt(r.Context(), currentUser(r).Name, q.Receipt)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_receipt", "the undo receipt is not valid or has expired")
 		return

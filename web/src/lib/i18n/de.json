@@ -8401,5 +8401,12 @@
 	"agent.area.plugins": "Plugins",
 	"agent.area.home": "Home Assistant",
 	"agent.area.web": "Internet (DuckDuckGo)",
-	"agent.noteHA": "In Home Assistant gespeichert"
+	"agent.noteHA": "In Home Assistant gespeichert",
+	"agent.haRelease": "Geräte für den Agenten",
+	"agent.haReleaseHint": "Eigene Liste, getrennt von „Geräte für MCP freigeben“. Nur was hier freigegeben ist, sieht und schaltet der Agent; die Regeln unten machen es noch strenger.",
+	"agent.haLoad": "Geräte aus Home Assistant laden",
+	"agent.haReleased": "Freigegeben: {domains} Bereiche, {entities} einzelne Geräte",
+	"agent.haDomains": "Ganze Bereiche",
+	"agent.haSearch": "Geräte suchen (Name, ID, Raum)",
+	"agent.haNoEntities": "Keine Geräte gefunden."
 }

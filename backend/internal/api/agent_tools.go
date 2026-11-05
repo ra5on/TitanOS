@@ -15,6 +15,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 	"github.com/ra5on/TitanOS/backend/internal/toolcatalog"
 )
 
@@ -174,6 +175,7 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 		}
 	}
 	p := agent.Prepared{Tool: name, Args: args, Area: t.area, Untrusted: t.untrusted}
+	ctx = b.haContext(ctx, t)
 	kind := t.kind
 	if t.plan != nil {
 		planned := args
@@ -379,6 +381,7 @@ func (b *agentToolbox) Execute(ctx context.Context, chat *agent.Chat, p agent.Pr
 		chatID = chat.ID
 	}
 	ctx = context.WithValue(ctx, agentCallKey{}, chatID)
+	ctx = b.haContext(ctx, t)
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
 	switch {
@@ -537,4 +540,12 @@ func (b *agentToolbox) haMode(name string, args json.RawMessage, mode string) st
 		return mode
 	}
 	return out
+}
+
+// haContext gives Home Assistant calls the agent's own release list.
+func (b *agentToolbox) haContext(ctx context.Context, t *agentTool) context.Context {
+	if t.area != toolcatalog.AreaHome {
+		return ctx
+	}
+	return homeassistant.WithRelease(ctx, b.settings.HA.Release)
 }
