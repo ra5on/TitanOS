@@ -317,7 +317,9 @@ func (m *Manager) RunMQTT(ctx context.Context, source Source, commands Commander
 	backoff := mqttRetry
 	// One runner for all sessions: a reconnect does not lift the limits on
 	// commands still running.
-	runner := newCommandRunner(commands)
+	runner := m.commandRunnerFor(commands)
+	// Buttons act for the account of this connection.
+	ctx = WithConnection(ctx, m)
 	for ctx.Err() == nil {
 		changed := m.Changed()
 		m.mu.Lock()

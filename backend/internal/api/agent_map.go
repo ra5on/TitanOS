@@ -180,17 +180,24 @@ func (s *Server) buildNASMap(ctx context.Context) (nasMap, error) {
 			m.Backups = append(m.Backups, nasMapItem{Name: name, Kind: str(j, "id"), Detail: str(j, "target")})
 		}
 	}
-	if ha := s.opts.HomeAssistant; ha != nil && ha.Active() {
-		if areas, err := ha.Areas(ctx); err == nil {
-			seen := map[string]bool{}
+	if hub := s.haHub(); hub != nil {
+		seen := map[string]bool{}
+		for _, ha := range hub.Active() {
+			areas, err := ha.Areas(ctx)
+			if err != nil {
+				continue
+			}
 			for _, a := range areas {
+				if label := haLabel(ha); label != "" {
+					a += " (" + label + ")"
+				}
 				if !seen[a] {
 					seen[a] = true
 					m.Rooms = append(m.Rooms, a)
 				}
 			}
-			sort.Strings(m.Rooms)
 		}
+		sort.Strings(m.Rooms)
 	}
 	return m, nil
 }

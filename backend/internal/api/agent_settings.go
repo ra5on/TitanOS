@@ -66,10 +66,13 @@ type agentSettings struct {
 type agentHASettings struct {
 	// Release is the agent's own list of devices it may see and use
 	// (decision 5.11.2026), apart from "Geräte für MCP freigeben".
-	Release  homeassistant.Release `json:"release"`
-	Entities map[string]string     `json:"entities,omitempty"`
-	Notify   []string              `json:"notify,omitempty"`
-	Assist   bool                  `json:"assist,omitempty"`
+	Release homeassistant.Release `json:"release"`
+	// Releases are those of the further connections by their ID (PLAN
+	// §45); older versions only know Release, the first connection's.
+	Releases map[string]homeassistant.Release `json:"releases,omitempty"`
+	Entities map[string]string                `json:"entities,omitempty"`
+	Notify   []string                         `json:"notify,omitempty"`
+	Assist   bool                             `json:"assist,omitempty"`
 	// AssistAs is the account questions from Home Assistant run as.
 	AssistAs string `json:"assistAs,omitempty"`
 }
@@ -223,23 +226,42 @@ func (s *Server) checkAgentSettings(req *agentSettings) error {
 			return errors.New("invalid Home Assistant rule")
 		}
 	}
-	if len(req.HA.Release.Domains) > 50 || len(req.HA.Release.Entities) > 2000 {
-		return errors.New("too many released devices")
+	if len(req.HA.Releases) >= homeassistant.MaxConnections {
+		return errors.New("too many Home Assistant connections")
 	}
-	for _, d := range req.HA.Release.Domains {
-		if !slices.Contains(homeassistant.Domains(), d) {
-			return errors.New("unknown Home Assistant domain " + d)
+	releases := []homeassistant.Release{req.HA.Release}
+	for id, r := range req.HA.Releases {
+		if !regexp.MustCompile(`^[a-z0-9]{8}$`).MatchString(id) {
+			return errors.New("invalid Home Assistant connection " + id)
 		}
+		releases = append(releases, r)
 	}
-	for _, e := range req.HA.Release.Entities {
-		if !homeassistant.ValidEntity(e) {
-			return errors.New("invalid Home Assistant entity " + e)
+	for _, r := range releases {
+		if len(r.Domains) > 50 || len(r.Entities) > 2000 {
+			return errors.New("too many released devices")
+		}
+		for _, d := range r.Domains {
+			if !slices.Contains(homeassistant.Domains(), d) {
+				return errors.New("unknown Home Assistant domain " + d)
+			}
+		}
+		for _, e := range r.Entities {
+			if !homeassistant.ValidEntity(e) {
+				return errors.New("invalid Home Assistant entity " + e)
+			}
 		}
 	}
 	if len(req.HA.Notify) > 20 {
 		return errors.New("too many notify services")
 	}
 	for _, n := range req.HA.Notify {
+		// "<connection>/notify.x" for a further connection.
+		if conn, service, found := strings.Cut(n, "/"); found {
+			if !regexp.MustCompile(`^[a-z0-9]{8}$`).MatchString(conn) {
+				return errors.New("invalid Home Assistant connection " + conn)
+			}
+			n = service
+		}
 		if !strings.HasPrefix(n, "notify.") || len(n) > 120 {
 			return errors.New("notify services start with notify")
 		}

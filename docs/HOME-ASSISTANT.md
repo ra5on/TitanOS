@@ -7,7 +7,18 @@ TitanOS arbeitet mit [Home Assistant](https://www.home-assistant.io/) zusammen:
 - **KI-Clients über MCP** lesen freigegebene Geräte und schalten sie (siehe [MCP-Server](MCP.md)).
 - **Benachrichtigungen** gehen über die Home-Assistant-App aufs Smartphone.
 
-Alles ist ab Werk aus. Einrichten können es nur Besitzer und Administratoren unter **Einstellungen › Home Assistant**. Die Seite ist in dieser Reihenfolge aufgebaut: Verbindung, Speicher für Home Assistant, Sensoren und Knöpfe (MQTT, mit „Handeln als“), Geräte für MCP freigeben.
+Alles ist ab Werk aus. Einrichten können es nur Besitzer und Administratoren unter **Einstellungen › Home Assistant**. Die Seite ist in dieser Reihenfolge aufgebaut: Verbindungen, Verbindung, Speicher für Home Assistant, Sensoren und Knöpfe (MQTT, mit „Handeln als“), Geräte für MCP freigeben.
+
+## Mehrere Verbindungen
+
+Seit 0.49.0 lassen sich bis zu acht Home-Assistant-Server verbinden, etwa Haus und Ferienwohnung (Wunsch des Projektinhabers vom 5.11.2026). Oben auf der Seite steht die Liste **Verbindungen**; „Verbindung hinzufügen“ legt eine neue mit Namen an. Alle Abschnitte darunter gehören zur gewählten Verbindung (✓). **Jede Verbindung hat alles für sich:** Adresse, Token, Fingerabdruck, Geräte für MCP, „Handeln als“, Speicher für Home Assistant (eigenes Konto) und MQTT mit eigener Kennung im Themenbaum, sodass zwei Verbindungen denselben Broker nutzen können.
+
+- Die erste Verbindung bleibt in `/config/homeassistant/settings.json` und `storage.json`, wie vor 0.49.0; ältere Versionen lesen sie unverändert. Weitere liegen in `/config/homeassistant/connections/<id>.json` und `<id>-storage.json`, ihre Liste in `connections.json`. Die erste lässt sich nicht entfernen, nur leeren.
+- **Entfernen** einer weiteren Verbindung (einfache Bestätigung) löscht ihre Einstellungen und Speicher-Einträge in TitanOS. Was in Home Assistant eingetragen ist, bleibt dort, ebenso Konten und Freigaben auf dem NAS.
+- **Werkzeuge** für MCP und den KI-Agenten (`ha_*`, `ha_statistics`, `ha_automation_save`, `ha_script_save`) nehmen bei mehreren Verbindungen das Argument `connection`; ohne Angabe gilt die erste, wie bisher. Die Rücknahme mit `ha_undo` gilt nur auf der Verbindung des ursprünglichen Aufrufs.
+- **Knöpfe** aus Home Assistant handeln als das „Handeln als“-Konto der Verbindung, aus der sie kamen. Höchstens zwei Befehle laufen gleichzeitig und je Ziel einer, über alle Verbindungen zusammen.
+- **Benachrichtigungen** wählen die Verbindung neben dem Dienst; der KI-Agent hat je Verbindung eine eigene Geräte-Freigabe, Auslöser von Zeitplänen nennen ihre Verbindung. Assist nimmt Fragen von jeder eingetragenen Adresse an.
+- Die API nimmt `?connection=<id>` an allen Routen unter `/api/v1/homeassistant/`; ohne Angabe die erste. `GET/POST /api/v1/homeassistant/connections`, `DELETE /api/v1/homeassistant/connections/{id}`.
 
 ## Verbindung
 
@@ -157,6 +168,7 @@ Geprüft mit nachgebauten Servern für REST, WebSocket und MQTT:
 - Token, Weiterleitungen und Fingerabdruck
 - Freigaben und Stufen der MCP-Werkzeuge
 - Discovery, Retain, Last Will und Befehle
+- Zwei Verbindungen nebeneinander (zwei nachgebaute Server): Einstellungen, Aufrufe, Werkzeuge, Mitteilungen und Speicher je Verbindung, Knöpfe mit dem Konto ihrer Verbindung, Entfernen (`api/ha_connections_test.go`, `homeassistant/hub_test.go`, `scripts/test-ui-ha-connections.mjs`)
 
 **Nicht geprüft:** ein echtes Home Assistant, ein echter Mosquitto-Broker und die Home-Assistant-App auf einem Smartphone.
 

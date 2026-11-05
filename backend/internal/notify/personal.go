@@ -242,6 +242,9 @@ func (m *Manager) SetPersonal(user string, p Personal, clear ...string) error {
 	if p.HomeAssistant.Enabled && !haService.MatchString(p.HomeAssistant.Service) {
 		return invalid("Home Assistant service, e.g. notify.mobile_app_phone")
 	}
+	if !haConnection.MatchString(p.HomeAssistant.Connection) {
+		return invalid("Home Assistant connection")
+	}
 	if p.Quiet.Enabled && (!clock.MatchString(p.Quiet.From) || !clock.MatchString(p.Quiet.To) || p.Quiet.From == p.Quiet.To) {
 		return invalid("quiet hours")
 	}
@@ -303,7 +306,7 @@ func (m *Manager) anyChannel(p Personal) bool {
 	mailServer := m.settings.Email.Host != ""
 	ha := m.ha
 	m.mu.Unlock()
-	haReady := p.HomeAssistant.Enabled && ha != nil && ha.Active()
+	haReady := p.HomeAssistant.Enabled && ha != nil && ha.ActiveOn(p.HomeAssistant.Connection)
 	return p.Email.Enabled && mailServer || p.Ntfy.Enabled || p.Telegram.Enabled || p.Discord.Enabled || haReady
 }
 

@@ -8,6 +8,11 @@
 	import { GB, formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 
+	// The Home Assistant connection this storage belongs to (PLAN §45).
+	let { connection = 'main' }: { connection?: string } = $props();
+	const on = (path: string) =>
+		connection === 'main' ? path : `${path}?connection=${encodeURIComponent(connection)}`;
+
 	type Usage = 'backup' | 'media' | 'share';
 	type Backup = {
 		checked: string;
@@ -86,7 +91,7 @@
 	async function load() {
 		loadError = '';
 		try {
-			take(await api.get<Status>('/homeassistant/storage'));
+			take(await api.get<Status>(on('/homeassistant/storage')));
 		} catch (err) {
 			loadError = apiErrorText(err);
 		}
@@ -146,7 +151,7 @@
 					readOnly,
 					register,
 				};
-		const made = await run('add', () => api.post<Answer>('/homeassistant/storage', body));
+		const made = await run('add', () => api.post<Answer>(on('/homeassistant/storage'), body));
 		if (made) {
 			adding = false;
 			result = made;
@@ -157,7 +162,7 @@
 	async function register() {
 		confirm = null;
 		const made = await run('register', () =>
-			api.post<Answer>('/homeassistant/storage/register', {}),
+			api.post<Answer>(on('/homeassistant/storage/register'), {}),
 		);
 		if (made) {
 			result = made;
@@ -169,7 +174,7 @@
 		confirm = null;
 		const done = await run('remove', () =>
 			api.delete<{ removedError: string }>(
-				`/homeassistant/storage/${encodeURIComponent(entry.mount)}`,
+				on(`/homeassistant/storage/${encodeURIComponent(entry.mount)}`),
 			),
 		);
 		if (done?.removedError)
@@ -178,14 +183,14 @@
 	}
 	async function setAge(entry: Entry, days: number) {
 		const next = await run('age', () =>
-			api.put<Status>(`/homeassistant/storage/${encodeURIComponent(entry.mount)}`, {
+			api.put<Status>(on(`/homeassistant/storage/${encodeURIComponent(entry.mount)}`), {
 				maxAgeDays: days,
 			}),
 		);
 		if (next) take(next);
 	}
 	async function check() {
-		const next = await run('check', () => api.post<Status>('/homeassistant/storage/check', {}));
+		const next = await run('check', () => api.post<Status>(on('/homeassistant/storage/check'), {}));
 		if (next) take(next);
 	}
 	async function copy(text: string) {

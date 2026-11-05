@@ -236,7 +236,8 @@ func checkSchedule(sc *agent.Schedule) error {
 	}
 	if sc.Trigger != nil {
 		t := sc.Trigger
-		if !regexp.MustCompile(`^[a-z_]+\.[a-z0-9_]+$`).MatchString(t.Entity) || t.State == "" || len(t.State) > 100 || t.For < 0 || t.For > 1440 {
+		if !regexp.MustCompile(`^[a-z_]+\.[a-z0-9_]+$`).MatchString(t.Entity) || t.State == "" || len(t.State) > 100 || t.For < 0 || t.For > 1440 ||
+			!regexp.MustCompile(`^(|main|[a-z0-9]{8})$`).MatchString(t.Connection) {
 			return toolcatalog.Errorf("a trigger needs an entity id like binary_sensor.door and a state")
 		}
 		sc.Every = "trigger"

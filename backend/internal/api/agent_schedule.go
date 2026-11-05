@@ -88,7 +88,8 @@ func (s *Server) agentTick(now time.Time) {
 	s.nightlyNASMap(now)
 	s.agentWeeklyReport(now.In(s.agentLocation()))
 	store := s.agentStore()
-	var watched []string
+	// The entities of triggers, per connection.
+	watched := map[string][]string{}
 	for _, name := range store.ScheduleAccounts() {
 		user, ok := s.opts.Users.Get(name)
 		if !ok || !s.agentAllowed(user) {
@@ -100,7 +101,11 @@ func (s *Server) agentTick(now time.Time) {
 		}
 		for _, sc := range list {
 			if sc.Enabled && sc.Trigger != nil {
-				watched = append(watched, sc.Trigger.Entity)
+				conn := sc.Trigger.Connection
+				if conn == "" {
+					conn = homeassistant.PrimaryID
+				}
+				watched[conn] = append(watched[conn], sc.Trigger.Entity)
 				if s.agentTriggered(name, sc, now) {
 					s.agentStartSchedule(user, sc.ID, now)
 				}
@@ -111,8 +116,10 @@ func (s *Server) agentTick(now time.Time) {
 			}
 		}
 	}
-	if s.opts.HomeAssistant != nil {
-		s.opts.HomeAssistant.SetWatched(watched)
+	if hub := s.haHub(); hub != nil {
+		for _, ha := range hub.All() {
+			ha.SetWatched(watched[ha.ID()])
+		}
 	}
 }
 
@@ -129,7 +136,7 @@ func (s *Server) agentLocation() *time.Location {
 // agentTriggered reports whether a Home Assistant entity reached the state
 // of a trigger since the last look (and kept it long enough).
 func (s *Server) agentTriggered(user string, sc agent.Schedule, now time.Time) bool {
-	ha := s.opts.HomeAssistant
+	ha := s.haConnection(sc.Trigger.Connection)
 	if ha == nil {
 		return false
 	}
@@ -273,8 +280,7 @@ func (s *Server) firstOwner() string {
 // of Home Assistant the owner chose.
 func (s *Server) agentHANotify(chat *agent.Chat) {
 	settings := s.agentSettings()
-	ha := s.opts.HomeAssistant
-	if len(settings.HA.Notify) == 0 || ha == nil || !ha.Active() {
+	if len(settings.HA.Notify) == 0 || s.haHub() == nil {
 		return
 	}
 	text := "Fertig."
@@ -296,7 +302,16 @@ func (s *Server) agentHANotify(chat *agent.Chat) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	for _, service := range settings.HA.Notify {
+	for _, entry := range settings.HA.Notify {
+		// "notify.x" goes to the first connection, "<id>/notify.x" to another.
+		conn, service, found := strings.Cut(entry, "/")
+		if !found {
+			conn, service = "", entry
+		}
+		ha := s.haConnection(conn)
+		if ha == nil || !ha.Active() {
+			continue
+		}
 		if err := ha.Notify(ctx, service, "KI-Agent: "+chat.Title, text, nil); err != nil {
 			slog.Warn("agent message to Home Assistant not sent", "service", service, "err", err)
 		}

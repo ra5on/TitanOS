@@ -34,16 +34,26 @@ const (
 // assistAllowed reports whether a request may use Assist.
 func (s *Server) assistAllowed(r *http.Request) bool {
 	settings := s.agentSettings()
-	if !settings.Enabled || !settings.HA.Assist || s.opts.HomeAssistant == nil {
-		return false
-	}
-	ha, _ := s.opts.HomeAssistant.Settings()
-	u, err := url.Parse(ha.URL)
-	if err != nil || u.Hostname() == "" {
+	if !settings.Enabled || !settings.HA.Assist || s.haHub() == nil {
 		return false
 	}
 	remote := net.ParseIP(remoteIP(r))
 	if remote == nil {
+		return false
+	}
+	// Any Home Assistant set up as a connection may ask.
+	for _, conn := range s.haHub().All() {
+		if ha, _ := conn.Settings(); s.assistFrom(r, ha.URL, remote) {
+			return true
+		}
+	}
+	return false
+}
+
+// assistFrom says whether remote is the Home Assistant at address.
+func (s *Server) assistFrom(r *http.Request, address string, remote net.IP) bool {
+	u, err := url.Parse(address)
+	if err != nil || u.Hostname() == "" {
 		return false
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)

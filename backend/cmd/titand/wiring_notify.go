@@ -101,8 +101,13 @@ func (w *titand) wireNotifications() error {
 	if err := w.home.Load(); err != nil {
 		slog.Warn("Home Assistant settings not readable from /config", "err", err)
 	}
-	w.notifier.SetHomeAssistant(w.home)
-	w.background(func() { w.home.Run(ctx) })
+	// Further connections (PLAN §45); the first one stays w.home.
+	w.homes = homeassistant.NewHub(w.store, w.home)
+	if err := w.homes.Load(); err != nil {
+		slog.Warn("further Home Assistant connections not readable from /config", "err", err)
+	}
+	w.notifier.SetHomeAssistant(w.homes)
+	w.background(func() { w.homes.Run(ctx, func(ctx context.Context, m *homeassistant.Manager) { m.Run(ctx) }) })
 	w.background(func() { notify.NewWatcher(w.notifier).Run(ctx, w.volumes.Status) })
 	w.volumes.OnSnapshotRestoreDone = func(job storage.SnapshotFolderJob) {
 		switch job.State {

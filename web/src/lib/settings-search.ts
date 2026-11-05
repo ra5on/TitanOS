@@ -25,7 +25,7 @@ const keywords: Record<string, string> = {
 	stick: 'stick usb config konfiguration configuration wiederherstellen restore',
 	ups: 'usv ups batterie battery strom power',
 	homeassistant:
-		'home assistant hass smart home licht light schalter switch mqtt sensoren sensors automation',
+		'home assistant hass smart home licht light schalter switch mqtt sensoren sensors automation verbindungen connections intervall interval',
 	hardware: 'gpu npu pci usb passthrough hardware',
 	'intel-guc': 'intel igpu grafik graphics guc huc firmware quick sync qsv i915 xe',
 	'power-button': 'power button taste knopf ausschalten shutdown',
@@ -198,6 +198,7 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 		},
 	],
 	homeassistant: [
+		{ id: 'connections', label: 'ha.conn.title', href: '/settings/homeassistant#connections' },
 		{ id: 'connection', label: 'ha.connection', href: '/settings/homeassistant#connection' },
 		{ id: 'release', label: 'ha.release', href: '/settings/homeassistant#release' },
 		{ id: 'mqtt', label: 'ha.mqtt', href: '/settings/homeassistant#mqtt' },

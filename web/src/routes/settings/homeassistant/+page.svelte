@@ -4,6 +4,7 @@
 	// comes back from the NAS.
 	import PageHead from '#lib/components/PageHead.svelte';
 	import HAStorage from './HAStorage.svelte';
+	import Dialog from '#lib/components/Dialog.svelte';
 	import { api, ApiError } from '#lib/api.ts';
 	import { errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { formatDateTime } from '#lib/format.ts';
@@ -30,6 +31,7 @@
 		description?: string;
 	};
 	type Settings = {
+		name?: string;
 		policies?: Record<string, Policy>;
 		enabled: boolean;
 		url: string;
@@ -79,6 +81,82 @@
 		'sun',
 		'zone',
 	];
+
+	// Several connections (PLAN §45): the page edits the chosen one.
+	type Connection = {
+		id: string;
+		name: string;
+		url: string;
+		enabled: boolean;
+		active: boolean;
+		mqtt: boolean;
+	};
+	let connections = $state<Connection[]>([]);
+	let maxConnections = $state(8);
+	let current = $state('main');
+	let adding = $state(false);
+	let newName = $state('');
+	let removing = $state<Connection | null>(null);
+	let listBusy = $state(false);
+	const on = (path: string) =>
+		current === 'main' ? path : `${path}?connection=${encodeURIComponent(current)}`;
+	const label = (c: Connection) =>
+		c.name || (c.id === 'main' ? t('ha.conn.first') : t('ha.conn.unnamed'));
+
+	async function loadConnections() {
+		try {
+			const res = await api.get<{ connections: Connection[]; max: number }>(
+				'/homeassistant/connections',
+			);
+			connections = res.connections ?? [];
+			maxConnections = res.max || 8;
+		} catch {
+			connections = [];
+		}
+	}
+	function choose(id: string, reload = false) {
+		if (id === current && !reload) return;
+		current = id;
+		draft = null;
+		entities = null;
+		checked = null;
+		checkError = '';
+		saved = false;
+		error = null;
+		api.get<Answer>(on('/homeassistant/settings')).then(take, problem);
+	}
+	async function addConnection(event: SubmitEvent) {
+		event.preventDefault();
+		listBusy = true;
+		try {
+			const res = await api.post<{ id: string; connections: Connection[] }>(
+				'/homeassistant/connections',
+				{ name: newName.trim() },
+			);
+			connections = res.connections;
+			adding = false;
+			newName = '';
+			choose(res.id);
+		} catch (err) {
+			problem(err);
+		}
+		listBusy = false;
+	}
+	async function removeConnection() {
+		if (!removing) return;
+		listBusy = true;
+		try {
+			const res = await api.delete<{ connections: Connection[] }>(
+				`/homeassistant/connections/${encodeURIComponent(removing.id)}`,
+			);
+			connections = res.connections;
+			if (current === removing.id) choose('main', true);
+			removing = null;
+		} catch (err) {
+			problem(err);
+		}
+		listBusy = false;
+	}
 
 	let draft = $state<Settings | null>(null);
 	let tokenSet = $state(false);
@@ -137,7 +215,8 @@
 	}
 
 	$effect(() => {
-		api.get<Answer>('/homeassistant/settings').then(take, problem);
+		api.get<Answer>(on('/homeassistant/settings')).then(take, problem);
+		void loadConnections();
 		api.get<{ name: string; role: string }[]>('/users').then(
 			(list) => (accounts = list.filter((a) => a.role === 'owner' || a.role === 'admin')),
 			() => {},
@@ -150,7 +229,7 @@
 		saved = false;
 		try {
 			take(
-				await api.put<Answer>('/homeassistant/settings', {
+				await api.put<Answer>(on('/homeassistant/settings'), {
 					...draft,
 					mqtt: {
 						...draft.mqtt,
@@ -160,6 +239,7 @@
 					clearSecrets: clear,
 				}),
 			);
+			void loadConnections();
 			return true;
 		} catch (err) {
 			problem(err);
@@ -180,7 +260,10 @@
 		checkError = '';
 		if (await store()) {
 			try {
-				checked = await api.post<{ version: string; location: string }>('/homeassistant/check', {});
+				checked = await api.post<{ version: string; location: string }>(
+					on('/homeassistant/check'),
+					{},
+				);
 			} catch (err) {
 				checkError = err instanceof ApiError ? err.message : errorText('internal');
 			}
@@ -191,7 +274,7 @@
 	async function loadEntities() {
 		busy = 'entities';
 		try {
-			entities = (await api.get<{ entities: Entity[] }>('/homeassistant/entities')).entities;
+			entities = (await api.get<{ entities: Entity[] }>(on('/homeassistant/entities'))).entities;
 		} catch (err) {
 			problem(err);
 		}
@@ -230,6 +313,49 @@
 		{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
 	</div>{/if}
 
+{#if connections.length}
+	<section class="tile panel conns" id="connections" aria-labelledby="ha-conns">
+		<div class="head">
+			<h2 class="tile-title" id="ha-conns">{t('ha.conn.title')}</h2>
+			<button
+				type="button"
+				class="btn small"
+				disabled={listBusy || connections.length >= maxConnections}
+				onclick={() => (adding = true)}>{t('ha.conn.add')}</button
+			>
+		</div>
+		<ul class="conn-list">
+			{#each connections as c (c.id)}
+				<li class:chosen={c.id === current}>
+					<button
+						type="button"
+						class="conn"
+						aria-current={c.id === current ? 'true' : undefined}
+						onclick={() => choose(c.id)}
+					>
+						<span class="conn-name">{label(c)}</span>
+						<span class="muted mono">{c.url || t('ha.conn.noUrl')}</span>
+					</button>
+					<span class="chip" class:ok={c.active}
+						>{t(c.active ? 'ha.conn.on' : c.url ? 'ha.conn.off' : 'ha.conn.empty')}{c.mqtt
+							? ' · MQTT'
+							: ''}</span
+					>
+					{#if c.id !== 'main'}
+						<button
+							type="button"
+							class="btn small"
+							disabled={listBusy}
+							onclick={() => (removing = c)}>{t('ha.conn.remove')}</button
+						>
+					{/if}
+				</li>
+			{/each}
+		</ul>
+		{#if connections.length > 1}<p class="muted">{t('ha.conn.hint')}</p>{/if}
+	</section>
+{/if}
+
 {#if draft}
 	<div class="ha-page">
 		<form id="ha-form" class="ha-form" onsubmit={save}>
@@ -239,6 +365,17 @@
 					<label class="check"
 						><input type="checkbox" bind:checked={draft.enabled} /><span>{t('notify.enabled')}</span
 						></label
+					>
+				</div>
+				<div class="row">
+					<label class="wide"
+						><span>{t('ha.conn.name')}</span><input
+							class="field"
+							type="text"
+							maxlength="40"
+							bind:value={draft.name}
+							placeholder={current === 'main' ? t('ha.conn.first') : ''}
+						/></label
 					>
 				</div>
 				<div class="row">
@@ -317,7 +454,7 @@
 				<p>{t('ha.evicted')}: {diagnostics.evictedTransitions}</p>
 				<p class="muted">{t('ha.gaps')}</p>
 			</section>{/if}
-		<HAStorage />
+		{#key current}<HAStorage connection={current} />{/key}
 		<section class="tile panel" id="mqtt">
 			<div class="head">
 				<h2 class="tile-title">{t('ha.mqtt')}</h2>
@@ -607,7 +744,97 @@
 	</div>
 {/if}
 
+{#if adding}
+	<Dialog title={t('ha.conn.add')} locked={listBusy} onclose={() => (adding = false)}>
+		<form onsubmit={addConnection}>
+			<label class="wide"
+				><span>{t('ha.conn.name')}</span><input
+					class="field"
+					type="text"
+					maxlength="40"
+					bind:value={newName}
+					placeholder={t('ha.conn.namePlaceholder')}
+				/></label
+			>
+			<p class="muted">{t('ha.conn.addHint')}</p>
+			<div class="dialog-actions">
+				<button type="button" class="btn" disabled={listBusy} onclick={() => (adding = false)}
+					>{t('common.cancel')}</button
+				>
+				<button class="btn btn-primary" disabled={listBusy}>{t('ha.conn.addButton')}</button>
+			</div>
+		</form>
+	</Dialog>
+{/if}
+
+{#if removing}
+	<Dialog title={t('ha.conn.removeTitle')} locked={listBusy} onclose={() => (removing = null)}>
+		<p>{t('ha.conn.removeText', { name: label(removing) })}</p>
+		<div class="dialog-actions">
+			<button type="button" class="btn" disabled={listBusy} onclick={() => (removing = null)}
+				>{t('common.cancel')}</button
+			>
+			<button type="button" class="btn btn-danger" disabled={listBusy} onclick={removeConnection}
+				>{t('ha.conn.remove')}</button
+			>
+		</div>
+	</Dialog>
+{/if}
+
 <style>
+	.conns {
+		margin-bottom: var(--gap);
+	}
+	.conn-list {
+		list-style: none;
+		margin: var(--space-3) 0 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+	}
+	.conn-list li {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-2) var(--space-3);
+		padding: var(--space-3) 0;
+		border-top: 1px solid var(--border);
+	}
+	.conn-list li:first-child {
+		border-top: 0;
+	}
+	.conn {
+		flex: 1 1 14rem;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		text-align: start;
+		background: none;
+		border: 0;
+		padding: var(--space-1) var(--space-2);
+		margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-2));
+		border-radius: var(--radius-small);
+		color: inherit;
+		font: inherit;
+		cursor: pointer;
+	}
+	.conn .mono {
+		overflow-wrap: anywhere;
+	}
+	.conn:hover,
+	.conn:focus-visible {
+		background: var(--chip);
+	}
+	.chosen .conn {
+		box-shadow: inset 3px 0 0 var(--accent);
+	}
+	.chosen .conn-name::after {
+		content: ' ✓';
+	}
+	.conn-name {
+		font-weight: 600;
+	}
 	.ha-page,
 	form {
 		display: flex;
