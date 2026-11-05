@@ -1057,8 +1057,8 @@
 		padding: 0;
 	}
 	.corner-list {
-		display: flex;
-		flex-wrap: wrap;
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 7rem));
 		gap: var(--space-2);
 		margin-top: var(--space-2);
 	}
@@ -1067,11 +1067,12 @@
 		flex-direction: column;
 		align-items: center;
 		gap: 6px;
-		padding: 8px 10px;
+		padding: 8px 4px;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-md, 10px);
 		cursor: pointer;
 		font-size: var(--text-sm);
+		text-align: center;
 	}
 	.corner.selected {
 		border-color: var(--accent);
