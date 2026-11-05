@@ -535,3 +535,51 @@ func TestAgentButtonInHomeAssistant(t *testing.T) {
 	}
 	waitChat(t, ts, ts.client, list[0].ID)
 }
+
+func TestAgentNASMapAndInstructions(t *testing.T) {
+	fake := &agentOllama{}
+	ts := agentServer(t, fake, agent.Policy{})
+	dir := ts.withShare()
+	os.MkdirAll(filepath.Join(dir, "Scans"), 0o755)
+	os.MkdirAll(filepath.Join(dir, "Steuer"), 0o755)
+	res, body := ts.request("POST", "/api/v1/agent/map/refresh", nil)
+	if res.StatusCode != 200 || !strings.Contains(string(body), `"Scans"`) || !strings.Contains(string(body), `"share/Docs"`) {
+		t.Fatalf("map: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("PUT", "/api/v1/agent/descriptions", map[string]string{"key": "folder:share/Docs/Scans", "text": "Scans vom Drucker"}); res.StatusCode != 200 {
+		t.Fatalf("description: %d %s", res.StatusCode, body)
+	}
+	if res, _ := ts.request("PUT", "/api/v1/agent/descriptions", map[string]string{"key": "nonsense", "text": "x"}); res.StatusCode != 400 {
+		t.Fatal("bad key accepted")
+	}
+	// Instruction of the owner and of the account go into the prompt, with the map.
+	_, body = ts.request("GET", "/api/v1/agent/settings", nil)
+	var settings map[string]any
+	json.Unmarshal(body, &settings)
+	settings["instruction"] = "Das ist unser Familien-NAS."
+	ts.request("PUT", "/api/v1/agent/settings", settings)
+	ts.request("PUT", "/api/v1/agent/profile", map[string]string{"instruction": "Antworte sehr kurz."})
+	res, body = ts.request("POST", "/api/v1/agent/chats", map[string]any{"message": "Wo liegen Scans?"})
+	var chat agent.Chat
+	json.Unmarshal(body, &chat)
+	waitChat(t, ts, ts.client, chat.ID)
+	system := fake.got[0]["messages"].([]any)[0].(map[string]any)["content"].(string)
+	for _, want := range []string{"Familien-NAS", "Antworte sehr kurz", "Share Docs (root share/Docs)", "Scans – Scans vom Drucker"} {
+		if !strings.Contains(system, want) {
+			t.Errorf("prompt lacks %q", want)
+		}
+	}
+	// A user without access to Docs sees no share in the map.
+	ts.users.Create("gast", testPassword, auth.RoleUser)
+	settings["users"] = []string{"gast"}
+	ts.request("PUT", "/api/v1/agent/settings", settings)
+	guest := ts.newClient()
+	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})
+	_, body = ts.do(guest, "GET", "/api/v1/agent/map", nil)
+	if strings.Contains(string(body), "Docs") || strings.Contains(string(body), "Scans vom Drucker") {
+		t.Fatalf("user sees other shares: %s", body)
+	}
+	if res, _ := ts.do(guest, "POST", "/api/v1/agent/map/refresh", nil); res.StatusCode != http.StatusForbidden {
+		t.Fatal("user rebuilt the map")
+	}
+}

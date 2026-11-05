@@ -28,6 +28,8 @@ const agentSettingsFile = "system/agent.json"
 type agentSettings struct {
 	Enabled bool   `json:"enabled"`
 	Ollama  string `json:"ollama,omitempty"`
+	// Instruction is the owner's top instruction for every chat.
+	Instruction string `json:"instruction,omitempty"`
 	Model   string `json:"model,omitempty"`
 	// Think is the default thinking level, as the model names it; empty
 	// uses the model's default.
@@ -147,6 +149,9 @@ func (s *Server) checkAgentSettings(req *agentSettings) error {
 	}
 	if req.Enabled && req.Ollama == "" {
 		return errors.New("the agent needs the address of an Ollama server")
+	}
+	if len(req.Instruction) > 8000 {
+		return errors.New("the instruction has at most 8000 characters")
 	}
 	if len(req.Model) > 200 || len(req.Think) > 40 {
 		return errors.New("model or level too long")

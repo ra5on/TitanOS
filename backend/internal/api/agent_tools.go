@@ -110,6 +110,9 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 	for _, t := range b.haTools() {
 		add(t)
 	}
+	for _, t := range b.mapTools() {
+		add(t)
+	}
 	return b
 }
 

@@ -601,3 +601,58 @@ func (s *Store) Accounts() []string {
 	sort.Strings(out)
 	return out
 }
+
+// ReadShared reads a file all accounts share (the NAS map, descriptions)
+// from .titanos/agent itself.
+func (s *Store) ReadShared(name string, target any) error {
+	if s.Open == nil {
+		return ErrNoVolume
+	}
+	root, err := s.Open()
+	if err != nil {
+		return ErrNoVolume
+	}
+	defer root.Close()
+	err = volumedata.ReadJSON(root, name, target, maxIndexFile)
+	if errors.Is(err, fs.ErrNotExist) {
+		return ErrNotFound
+	}
+	return err
+}
+
+// WriteShared writes a shared file.
+func (s *Store) WriteShared(name string, value any) error {
+	if s.Open == nil {
+		return ErrNoVolume
+	}
+	root, err := s.Open()
+	if err != nil {
+		return ErrNoVolume
+	}
+	defer root.Close()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return volumedata.WriteJSON(root, name, value)
+}
+
+// Profile is what an account tells the agent about itself.
+type Profile struct {
+	Instruction string `json:"instruction,omitempty"`
+}
+
+// Profile reads the profile of an account.
+func (s *Store) Profile(user string) (Profile, error) {
+	var p Profile
+	err := s.read(user, "profile.json", &p, maxIndexFile)
+	if errors.Is(err, ErrNotFound) {
+		return Profile{}, nil
+	}
+	return p, err
+}
+
+// SaveProfile writes the profile of an account.
+func (s *Store) SaveProfile(user string, p Profile) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.write(user, "profile.json", p)
+}

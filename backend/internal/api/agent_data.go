@@ -446,6 +446,11 @@ func (s *Server) agentPrompt(ctx context.Context, user auth.User, settings agent
 		}
 	}
 	in.Snapshot = s.agentSnapshot(ctx, box)
+	in.Instruction = settings.Instruction
+	if p, err := store.Profile(user.Name); err == nil {
+		in.Personal = p.Instruction
+	}
+	in.Map = s.mapPrompt(user)
 	return agent.BuildPrompt(in)
 }
 

@@ -36,6 +36,11 @@ func (s *Server) registerAgent(mux *routeMux) {
 	mux.HandleFunc("PUT /api/v1/agent/skills/{id}", s.requireAgent(s.handleAgentSkillSet))
 	mux.HandleFunc("DELETE /api/v1/agent/skills/{id}", s.requireAgent(s.handleAgentSkillDelete))
 
+	mux.HandleFunc("GET /api/v1/agent/map", s.requireAgent(s.handleAgentMap))
+	mux.HandleFunc("POST /api/v1/agent/map/refresh", s.requireAdmin(s.handleAgentMapRefresh))
+	mux.HandleFunc("PUT /api/v1/agent/descriptions", s.requireAdmin(s.handleAgentDescription))
+	mux.HandleFunc("GET /api/v1/agent/profile", s.requireAgent(s.handleAgentProfile))
+	mux.HandleFunc("PUT /api/v1/agent/profile", s.requireAgent(s.handleAgentProfileSet))
 	mux.HandleFunc("GET /api/v1/agent/schedules", s.requireAgent(s.handleAgentSchedules))
 	mux.HandleFunc("PUT /api/v1/agent/schedules/{id}", s.requireAgent(s.handleAgentScheduleSet))
 	mux.HandleFunc("DELETE /api/v1/agent/schedules/{id}", s.requireAgent(s.handleAgentScheduleDelete))
