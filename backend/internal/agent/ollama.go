@@ -131,14 +131,26 @@ func (o *Ollama) do(ctx context.Context, method, p string, body any, out any) er
 	return json.Unmarshal(data, out)
 }
 
+// StatusError is an answer of Ollama with an HTTP error status, so callers
+// can tell a bad request (one picture) from a server problem.
+type StatusError struct {
+	Status  int
+	Message string
+}
+
+func (e *StatusError) Error() string {
+	if e.Message != "" {
+		return "Ollama: " + e.Message
+	}
+	return fmt.Sprintf("Ollama answered HTTP %d", e.Status)
+}
+
 func ollamaError(status int, data []byte) error {
 	var e struct {
 		Error string `json:"error"`
 	}
-	if json.Unmarshal(data, &e) == nil && e.Error != "" {
-		return fmt.Errorf("Ollama: %s", e.Error)
-	}
-	return fmt.Errorf("Ollama answered HTTP %d", status)
+	_ = json.Unmarshal(data, &e)
+	return &StatusError{Status: status, Message: e.Error}
 }
 
 // Version is the version of the server.

@@ -24,6 +24,8 @@ type agentOllama struct {
 	mu      sync.Mutex
 	replies []string
 	got     []map[string]any
+	// failChat: /api/chat answers with this HTTP status (0: normally).
+	failChat int
 }
 
 func (f *agentOllama) start(t *testing.T) string {
@@ -44,6 +46,12 @@ func (f *agentOllama) start(t *testing.T) string {
 			json.NewDecoder(r.Body).Decode(&body)
 			f.mu.Lock()
 			f.got = append(f.got, body)
+			if f.failChat != 0 {
+				f.mu.Unlock()
+				w.WriteHeader(f.failChat)
+				w.Write([]byte(`{"error":"model runner has unexpectedly stopped"}`))
+				return
+			}
 			reply := `{"role":"assistant","content":"Fertig."}`
 			if len(f.replies) > 0 {
 				reply, f.replies = f.replies[0], f.replies[1:]

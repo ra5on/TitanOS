@@ -223,6 +223,7 @@ type Server struct {
 	agentWatch      agentWatchers
 	agentMirror     agentMirror
 	agentSnaps      agentSnapState
+	photos          photoState
 	agentOpen       func() (*os.Root, error)
 	agentWebFactory func() *agent.Web
 	agentReact      agentReactState

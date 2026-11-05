@@ -155,6 +155,15 @@ func (s *Store) ReadPrivate(user, name string, v any) error {
 	return s.read(user, name, v, maxSeenFile)
 }
 
+// ReadPrivateLimit reads a larger file of the account's private folder
+// (the photo index, PLAN 52).
+func (s *Store) ReadPrivateLimit(user, name string, v any, limit int64) error {
+	if !privateName.MatchString(name) {
+		return ErrNotFound
+	}
+	return s.read(user, name, v, limit)
+}
+
 // WritePrivate writes a small file of the account's private folder.
 func (s *Store) WritePrivate(user, name string, v any) error {
 	if !privateName.MatchString(name) {

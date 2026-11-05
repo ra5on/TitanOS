@@ -29,6 +29,9 @@
 		onmanagefavorites: () => void;
 		onremovefavorite: (favorite: Favorite) => void;
 		onformat: () => void;
+		/** The photo view that is open (PLAN 52), '' for none. */
+		photos?: string;
+		onphotos?: (view: 'timeline' | 'albums' | 'map') => void;
 	};
 	let {
 		roots,
@@ -51,6 +54,8 @@
 		onmanagefavorites,
 		onremovefavorite,
 		onformat,
+		photos = '',
+		onphotos,
 	}: Props = $props();
 
 	const kinds = ['share', 'volume', 'usb', 'stick'] as const;
@@ -71,6 +76,20 @@
 		roots.find((r) => r.id === favorite.root)?.name ||
 		favorite.root;
 </script>
+
+{#if onphotos}
+	<div class="group-head"><span class="group">{t('photos.title')}</span></div>
+	{#each [['timeline', 'photos.timeline', 'photo'], ['albums', 'photos.albums', 'list'], ['map', 'photos.map', 'grid']] as const as [id, label, icon] (id)}
+		<button
+			type="button"
+			class="place"
+			class:current={photos === id}
+			aria-current={photos === id ? 'page' : undefined}
+			onclick={() => onphotos(id)}
+			><Icon name={icon} size={16} /><span class="place-name">{t(label)}</span></button
+		>
+	{/each}
+{/if}
 
 {#if favorites.length}
 	<div class="group-head">
