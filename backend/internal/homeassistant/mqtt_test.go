@@ -230,6 +230,9 @@ func TestMQTTSettings(t *testing.T) {
 		{Host: "b", Commands: []string{"shell"}},
 		{Host: "b", Prefix: "../x"},
 		{Host: "b", Port: 70000},
+		{Host: "b", Interval: 4},
+		{Host: "b", Interval: 3601},
+		{Host: "b", Interval: -1},
 	} {
 		if err := m.SetSettings(Settings{MQTT: q}); err == nil {
 			t.Errorf("%+v accepted", q)
@@ -241,6 +244,18 @@ func TestMQTTSettings(t *testing.T) {
 	s, set := m.Settings()
 	if s.MQTT.Port != 8883 || s.MQTT.Prefix != "homeassistant" || s.MQTT.Password != "" || !set["mqtt"] {
 		t.Fatalf("%+v %v", s.MQTT, set)
+	}
+	if s.MQTT.Interval != 0 || publishEvery(s.MQTT) != mqttInterval || expireAfter(s.MQTT) != 95 {
+		t.Fatalf("default interval %d, expire %d", s.MQTT.Interval, expireAfter(s.MQTT))
+	}
+	if err := m.SetSettings(Settings{MQTT: MQTT{Host: "b", Interval: 600}}); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ = m.Settings(); s.MQTT.Interval != 600 || publishEvery(s.MQTT) != 10*time.Minute || expireAfter(s.MQTT) != 1805 {
+		t.Fatalf("interval %d, expire %d", s.MQTT.Interval, expireAfter(s.MQTT))
+	}
+	if expireAfter(MQTT{Interval: 5}) != 95 {
+		t.Fatal("short interval keeps 95 s")
 	}
 	if !allowedCommand(MQTT{Commands: []string{"power"}}, "system", "power", "poweroff") || allowedCommand(MQTT{Commands: []string{"updates"}}, "system", "power", "reboot") {
 		t.Fatal("power commands")

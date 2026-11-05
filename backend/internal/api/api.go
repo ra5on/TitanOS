@@ -99,7 +99,8 @@ type Options struct {
 	LXC          *lxc.Manager
 	Hardware     *hardware.Manager
 	Nvidia       *hardware.NvidiaControl
-	IntelGuc     *hardware.IntelGuc // GuC/HuC setting of Intel graphics; nil leaves it out
+	IntelGuc     *hardware.IntelGuc  // GuC/HuC setting of Intel graphics; nil leaves it out
+	UASQuirks    *hardware.UASQuirks // usb-storage instead of uas for USB bridges; nil leaves it out
 	Accelerators *hardware.AcceleratorMonitor
 	Plugins      *plugins.Manager
 	Tailscale    *tailscale.Manager

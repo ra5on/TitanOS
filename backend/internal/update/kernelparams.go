@@ -22,8 +22,8 @@ import (
 var (
 	// ErrParam is a parameter name or value TitanOS does not write.
 	ErrParam    = errors.New("update: invalid kernel parameter")
-	paramName   = regexp.MustCompile(`^[a-z0-9_]+\.[a-z0-9_]+$`)
-	paramValue  = regexp.MustCompile(`^[A-Za-z0-9_,.:-]{0,64}$`)
+	paramName   = regexp.MustCompile(`^[a-z0-9_-]+\.[a-z0-9_]+$`)
+	paramValue  = regexp.MustCompile(`^[A-Za-z0-9_,.:-]{0,128}$`)
 	optionsLine = regexp.MustCompile(`(?m)^options[ \t]+(.*?)[ \t]*$`)
 )
 

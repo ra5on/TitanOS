@@ -340,7 +340,12 @@ Schnappschüsse von echten NAS (thor, titan, …) kommen nach dem Update dazu.
 - **Hardware-RAID-Controller:** Empfehlung IT- bzw. HBA-Modus, bei Intel-SATA im
   RAID-Modus AHCI. Firmware wird nie geändert.
 - **UAS-Quirk:** für bekannte Problembrücken der genaue Kernelparameter
-  `usb-storage.quirks=<vid>:<pid>:u`; TitanOS setzt ihn nicht selbst.
+  `usb-storage.quirks=<vid>:<pid>:u`. Seit 0.49.0 trägt ihn der Knopf „Abhilfe
+  setzen“ auf der Hardware-Seite in alle Booteinträge ein (Entscheidung des
+  Projektinhabers vom 5.11.2026), wirksam nach dem Neustart; „Abhilfe
+  zurücknehmen“ nimmt ihn wieder heraus. Einträge für andere Geräte oder mit
+  anderen Flags, etwa von Hand gesetzt, bleiben stehen. Ohne Klick setzt TitanOS
+  nichts (`hardware/uas_quirks.go`, `/config/system/uas-quirks.json`).
 - **SAS-Ruhezustand:** über den bestehenden Ruhemodus (`hd-idle`, SCSI Power
   Condition 3); `sdparm` wird nicht benötigt (Begründung in
   `docs/rules/STORAGE.md`, „Platten-Hinweise“).

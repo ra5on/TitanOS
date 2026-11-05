@@ -285,8 +285,29 @@ func entities(snap Snapshot, q MQTT, base string) []entity {
 	return append(list, telemetryEntities(snap.Telemetry, q)...)
 }
 
-// mqttInterval is how often states are published.
+// mqttInterval is how often states are published unless the settings
+// say otherwise.
 var mqttInterval = 30 * time.Second
+
+// Bounds of the publish interval in the settings, in seconds.
+const (
+	MinMQTTInterval = 5
+	MaxMQTTInterval = 3600
+)
+
+// publishEvery is the interval of the settings.
+func publishEvery(q MQTT) time.Duration {
+	if q.Interval == 0 {
+		return mqttInterval
+	}
+	return time.Duration(q.Interval) * time.Second
+}
+
+// expireAfter is when Home Assistant takes a value as stale: three missed
+// publishes and a little, at least the 95 seconds of the default.
+func expireAfter(q MQTT) int {
+	return max(95, int(3*publishEvery(q)/time.Second)+5)
+}
 
 // mqttRetry is the first wait before reconnecting; it doubles up to 5 minutes.
 var mqttRetry = 5 * time.Second
@@ -432,7 +453,7 @@ func (m *Manager) mqttSession(ctx context.Context, id string, q MQTT, source Sou
 				}
 			}
 			if e.component == "sensor" || e.component == "binary_sensor" {
-				cfg["expire_after"] = 95
+				cfg["expire_after"] = expireAfter(q)
 			}
 			cfg["device"] = device(snap)
 			if e.component != "button" {
@@ -500,7 +521,7 @@ func (m *Manager) mqttSession(ctx context.Context, id string, q MQTT, source Sou
 	if err := client.Subscribe(q.Prefix + "/+/titanos_" + id + "/+/config"); err != nil {
 		return err
 	}
-	tick := time.NewTicker(mqttInterval)
+	tick := time.NewTicker(publishEvery(q))
 	defer tick.Stop()
 	ping := time.NewTicker(client.keepAlive / 2)
 	defer ping.Stop()
