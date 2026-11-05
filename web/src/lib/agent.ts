@@ -107,6 +107,7 @@ export type Schedule = {
 	lastOk?: boolean;
 	chat?: string;
 	trigger?: { entity: string; state: string; for?: number } | null;
+	button?: boolean;
 	created: string;
 };
 

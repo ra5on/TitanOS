@@ -224,7 +224,9 @@ type Schedule struct {
 	LastOK  bool      `json:"lastOk,omitempty"`
 	Chat    string    `json:"chat,omitempty"`
 	// Trigger "homeassistant": runs when an entity reaches a state.
-	Trigger *Trigger  `json:"trigger,omitempty"`
+	Trigger *Trigger `json:"trigger,omitempty"`
+	// Button offers the task as a button in Home Assistant (MQTT).
+	Button  bool      `json:"button,omitempty"`
 	Created time.Time `json:"created"`
 }
 
@@ -241,6 +243,11 @@ type Store struct {
 	// Open returns .titanos/agent on a data volume.
 	Open func() (*os.Root, error)
 	mu   sync.Mutex
+	// schedules are kept in RAM once read: the scheduler looks every
+	// minute, and reading the volume that often would keep its disks
+	// awake (docs/rules/STORAGE.md, Ruhemodus).
+	schedules map[string][]Schedule
+	scanned   bool
 }
 
 func (s *Store) userRoot(user string, create bool) (*os.Root, func(), error) {
@@ -501,23 +508,71 @@ func (s *Store) SaveSkills(user string, list []Skill) error {
 	return s.write(user, "skills.json", list)
 }
 
-// Schedules of an account.
+// Schedules of an account, from RAM once read.
 func (s *Store) Schedules(user string) ([]Schedule, error) {
+	s.mu.Lock()
+	if list, ok := s.schedules[user]; ok {
+		s.mu.Unlock()
+		return slices.Clone(list), nil
+	}
+	s.mu.Unlock()
 	var list []Schedule
 	if err := s.read(user, "schedules.json", &list, maxIndexFile); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return []Schedule{}, nil
+		if !errors.Is(err, ErrNotFound) {
+			return nil, err
 		}
-		return nil, err
+		list = []Schedule{}
 	}
-	return list, nil
+	s.mu.Lock()
+	if s.schedules == nil {
+		s.schedules = map[string][]Schedule{}
+	}
+	s.schedules[user] = list
+	s.mu.Unlock()
+	return slices.Clone(list), nil
 }
 
 // SaveSchedules writes the schedules of an account.
 func (s *Store) SaveSchedules(user string, list []Schedule) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.write(user, "schedules.json", list)
+	if err := s.write(user, "schedules.json", list); err != nil {
+		return err
+	}
+	if s.schedules == nil {
+		s.schedules = map[string][]Schedule{}
+	}
+	s.schedules[user] = slices.Clone(list)
+	return nil
+}
+
+// ScheduleAccounts are the accounts with recurring tasks. The volume is
+// read once; after that the list comes from RAM.
+func (s *Store) ScheduleAccounts() []string {
+	s.mu.Lock()
+	scanned := s.scanned
+	s.mu.Unlock()
+	if !scanned {
+		accounts := s.Accounts()
+		if len(accounts) > 0 || s.Available() == nil {
+			for _, a := range accounts {
+				_, _ = s.Schedules(a)
+			}
+			s.mu.Lock()
+			s.scanned = true
+			s.mu.Unlock()
+		}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []string
+	for user, list := range s.schedules {
+		if len(list) > 0 {
+			out = append(out, user)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Accounts lists the accounts that have files, for the start-up check of

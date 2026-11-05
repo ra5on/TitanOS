@@ -85,6 +85,7 @@
 			entity: s?.trigger?.entity ?? '',
 			state: s?.trigger?.state ?? '',
 			enabled: s ? String(s.enabled) : 'true',
+			button: String(!!s?.button),
 		};
 	}
 	function scheduleBody() {
@@ -97,6 +98,7 @@
 			weekday: Number(draft.weekday),
 			day: Number(draft.day),
 			enabled: draft.enabled !== 'false',
+			button: draft.button === 'true',
 			trigger,
 		};
 	}
@@ -406,6 +408,13 @@
 						checked={draft.enabled !== 'false'}
 						onchange={(e) => (draft.enabled = String(e.currentTarget.checked))}
 					/><span>{t('agent.on')}</span></label
+				>
+				<label class="check"
+					><input
+						type="checkbox"
+						checked={draft.button === 'true'}
+						onchange={(e) => (draft.button = String(e.currentTarget.checked))}
+					/><span>{t('agent.scheduleButton')}</span></label
 				>
 				<div class="row-actions">
 					<button

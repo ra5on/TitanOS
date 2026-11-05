@@ -12,6 +12,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 )
 
@@ -82,7 +83,7 @@ func (s *Server) agentTick(now time.Time) {
 	}
 	store := s.agentStore()
 	var watched []string
-	for _, name := range store.Accounts() {
+	for _, name := range store.ScheduleAccounts() {
 		user, ok := s.opts.Users.Get(name)
 		if !ok || !s.agentAllowed(user) {
 			continue
@@ -294,4 +295,53 @@ func (s *Server) agentHANotify(chat *agent.Chat) {
 			slog.Warn("agent message to Home Assistant not sent", "service", service, "err", err)
 		}
 	}
+}
+
+// agentButtons are the recurring tasks that have a button in Home Assistant.
+func (s *Server) agentButtons() []homeassistant.AgentTaskValues {
+	settings := s.agentSettings()
+	if !settings.Enabled || s.opts.Users == nil {
+		return nil
+	}
+	store := s.agentStore()
+	var out []homeassistant.AgentTaskValues
+	for _, name := range store.ScheduleAccounts() {
+		user, ok := s.opts.Users.Get(name)
+		if !ok || !s.agentAllowed(user) {
+			continue
+		}
+		list, err := store.Schedules(name)
+		if err != nil {
+			continue
+		}
+		for _, sc := range list {
+			if sc.Enabled && sc.Button {
+				out = append(out, homeassistant.AgentTaskValues{Key: name + "/" + sc.ID, Name: sc.Name})
+			}
+		}
+	}
+	return out
+}
+
+// agentButton runs the task behind a button pressed in Home Assistant.
+func (s *Server) agentButton(key, action string) error {
+	name, id, ok := strings.Cut(key, "/")
+	if !ok || action != "run" {
+		return fmt.Errorf("unknown agent command")
+	}
+	user, found := s.opts.Users.Get(name)
+	if !found || !s.agentAllowed(user) {
+		return fmt.Errorf("account may not use the agent")
+	}
+	list, err := s.agentStore().Schedules(name)
+	if err != nil {
+		return err
+	}
+	for _, sc := range list {
+		if sc.ID == id && sc.Enabled && sc.Button {
+			_, err := s.agentRunSchedule(user, id, time.Now())
+			return err
+		}
+	}
+	return fmt.Errorf("no such task with a button")
 }

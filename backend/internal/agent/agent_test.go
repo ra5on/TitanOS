@@ -354,3 +354,25 @@ func TestPromptHasRulesAndContext(t *testing.T) {
 		}
 	}
 }
+
+func TestSchedulesStayInRAM(t *testing.T) {
+	dir := t.TempDir()
+	opens := 0
+	s := &Store{Open: func() (*os.Root, error) { opens++; return os.OpenRoot(dir) }}
+	if err := s.SaveSchedules("alex", []Schedule{{ID: "a", Name: "Check", Every: "daily", At: "08:00", Enabled: true}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.ScheduleAccounts(); len(got) != 1 || got[0] != "alex" {
+		t.Fatalf("accounts %v", got)
+	}
+	before := opens
+	for range 5 {
+		if list, _ := s.Schedules("alex"); len(list) != 1 {
+			t.Fatal("schedule lost")
+		}
+		s.ScheduleAccounts()
+	}
+	if opens != before {
+		t.Fatalf("the volume was read %d more times", opens-before)
+	}
+}

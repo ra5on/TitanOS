@@ -8408,5 +8408,7 @@
 	"agent.haReleased": "Freigegeben: {domains} Bereiche, {entities} einzelne Geräte",
 	"agent.haDomains": "Ganze Bereiche",
 	"agent.haSearch": "Geräte suchen (Name, ID, Raum)",
-	"agent.haNoEntities": "Keine Geräte gefunden."
+	"agent.haNoEntities": "Keine Geräte gefunden.",
+	"agent.scheduleButton": "Als Knopf in Home Assistant anbieten (MQTT, Gruppe „KI-Agent“ unter Einstellungen › Home Assistant)",
+	"ha.command.agent": "Aufträge des KI-Agenten starten (je Auftrag ein Knopf)"
 }

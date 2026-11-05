@@ -8408,5 +8408,7 @@
 	"agent.haReleased": "Released: {domains} domains, {entities} single devices",
 	"agent.haDomains": "Whole domains",
 	"agent.haSearch": "Search devices (name, ID, room)",
-	"agent.haNoEntities": "No devices found."
+	"agent.haNoEntities": "No devices found.",
+	"agent.scheduleButton": "Offer as a button in Home Assistant (MQTT, group \"AI agent\" under Settings › Home Assistant)",
+	"ha.command.agent": "Start tasks of the AI agent (one button per task)"
 }

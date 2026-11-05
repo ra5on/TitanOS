@@ -40,10 +40,19 @@ type Snapshot struct {
 	System            *SystemValues
 	Volumes           []VolumeValues
 	Disks             []DiskValues
+	// AgentTasks are recurring tasks of the KI-Agent with a button.
+	AgentTasks []AgentTaskValues
 	// Containers and VMs: name and whether it runs.
 	Containers []RunValues
 	VMs        []RunValues
 	UPS        *UPSValues
+}
+
+// AgentTaskValues is a recurring task of the KI-Agent that has a button
+// in Home Assistant; Key is "<account>/<id>".
+type AgentTaskValues struct {
+	Key  string
+	Name string
 }
 
 type SystemValues struct {
@@ -256,6 +265,11 @@ func entities(snap Snapshot, q MQTT, base string) []entity {
 				continue
 			}
 			list = append(list, entity{component: "button", key: identity("backup", b.Name) + "_run", kind: "backup", name: b.Name, config: map[string]any{"name": "Run backup " + b.Name, "command_topic": commandTopic("backup", b.Name), "payload_press": "run"}})
+		}
+	}
+	if slices.Contains(q.Commands, "agent") {
+		for _, a := range snap.AgentTasks {
+			list = append(list, entity{component: "button", key: identity("agent", a.Key) + "_run", kind: "agent", name: a.Key, config: map[string]any{"name": "KI-Agent: " + a.Name, "command_topic": commandTopic("agent", a.Key), "payload_press": "run"}})
 		}
 	}
 	if slices.Contains(q.Commands, "updates") {
@@ -667,6 +681,8 @@ func allowedCommand(q MQTT, kind, name, action string) bool {
 		return slices.Contains(q.Commands, "containers") && slices.Contains([]string{"start", "stop", "restart"}, action)
 	case "vm":
 		return slices.Contains(q.Commands, "vms") && slices.Contains([]string{"start", "shutdown"}, action)
+	case "agent":
+		return slices.Contains(q.Commands, "agent") && action == "run"
 	case "system":
 		return name == "updates" && action == "check" && slices.Contains(q.Commands, "updates") ||
 			name == "power" && (action == "reboot" || action == "poweroff") && slices.Contains(q.Commands, "power")

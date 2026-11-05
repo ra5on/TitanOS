@@ -96,7 +96,7 @@ type MQTT struct {
 var (
 	legacySensorGroups = []string{"system", "volumes", "disks", "containers", "vms", "ups", "backups", "work"}
 	SensorGroups       = append(slices.Clone(legacySensorGroups), "network", "maintenance", "stacks", "gpu", "igpu", "npu", "capacity")
-	CommandGroups      = []string{"containers", "vms", "backups", "updates", "power"}
+	CommandGroups      = []string{"containers", "vms", "backups", "updates", "power", "agent"}
 )
 
 // Levels of a service call, as the assistant's actions know them.

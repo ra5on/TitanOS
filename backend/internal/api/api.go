@@ -216,6 +216,8 @@ type Server struct {
 	agentOpen       func() (*os.Root, error)
 	agentWebFactory func() *agent.Web
 	agentReact      agentReactState
+	agentStoreOnce  sync.Once
+	agentStoreOne   *agent.Store
 
 	loadMu      sync.Mutex
 	lastLoadTry time.Time

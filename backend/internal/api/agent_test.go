@@ -510,3 +510,28 @@ func TestAgentKeepsItsVolume(t *testing.T) {
 		t.Fatalf("stored: %+v %v", stored, err)
 	}
 }
+
+func TestAgentButtonInHomeAssistant(t *testing.T) {
+	fake := &agentOllama{}
+	ts := agentServer(t, fake, agent.Policy{})
+	store := ts.server.agentStore()
+	store.SaveSchedules("alex", []agent.Schedule{
+		{ID: "s1aaaaaaaaaa0001", Name: "Gesundheitscheck", Task: "Gesundheitscheck", Every: "weekly", At: "08:00", Enabled: true, Button: true},
+		{ID: "s1aaaaaaaaaa0002", Name: "Ohne Knopf", Task: "x", Every: "daily", At: "08:00", Enabled: true},
+	})
+	buttons := ts.server.agentButtons()
+	if len(buttons) != 1 || buttons[0].Key != "alex/s1aaaaaaaaaa0001" {
+		t.Fatalf("buttons: %+v", buttons)
+	}
+	if err := ts.server.agentButton("alex/s1aaaaaaaaaa0002", "run"); err == nil {
+		t.Fatal("task without a button ran")
+	}
+	if err := ts.server.agentButton("alex/s1aaaaaaaaaa0001", "run"); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := store.Chats("alex")
+	if len(list) != 1 || list[0].Origin != "schedule" {
+		t.Fatalf("chats: %+v", list)
+	}
+	waitChat(t, ts, ts.client, list[0].ID)
+}

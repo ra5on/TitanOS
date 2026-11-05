@@ -47,8 +47,13 @@ func runKey(user, chat string) string { return user + "/" + chat }
 // agentStore is where the chats live: .titanos/agent on the first mounted
 // volume.
 func (s *Server) agentStore() *agent.Store {
+	s.agentStoreOnce.Do(func() { s.agentStoreOne = s.newAgentStore() })
+	return s.agentStoreOne
+}
+
+func (s *Server) newAgentStore() *agent.Store {
 	if s.agentOpen != nil {
-		return &agent.Store{Open: s.agentOpen}
+		return &agent.Store{Open: func() (*os.Root, error) { return s.agentOpen() }}
 	}
 	return &agent.Store{Open: func() (*os.Root, error) {
 		if s.opts.Storage == nil {
