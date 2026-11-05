@@ -64,7 +64,7 @@ type agentInitiative struct {
 
 func defaultInitiative() agentInitiative {
 	return agentInitiative{Level: "suggest", Reflect: true, ReflectAt: "03:30", Confirm: true, MorningNote: true,
-		Watch: true, Forecast: true, Events: []string{"usb", "update", "crash", "ha"}, Wake: "wake", Search: []agentFolderRef{},
+		Watch: true, Forecast: true, Events: []string{"usb", "update"}, Wake: "wake", Search: []agentFolderRef{},
 		QuietFrom: "22:00", QuietTo: "07:00", GPUMinutes: 30, Weekly: true, MemoryAuto: true, Conflicts: true,
 		FadeMonths: 6, LearnSkills: true, Length: "normal", Tone: "casual"}
 }
@@ -88,7 +88,7 @@ func (in *agentInitiative) clean() error {
 		}
 	}
 	in.Events = slices.DeleteFunc(slices.Clone(in.Events), func(e string) bool {
-		return !slices.Contains([]string{"usb", "update", "crash", "ha"}, e)
+		return !slices.Contains([]string{"usb", "update"}, e)
 	})
 	if in.Search == nil {
 		in.Search = []agentFolderRef{}
@@ -104,25 +104,87 @@ func (in *agentInitiative) clean() error {
 	return nil
 }
 
-var agentInitMu sync.Mutex
-
-func (s *Server) agentInitiativeOf(user string) agentInitiative {
-	in := defaultInitiative()
-	if err := s.agentStore().ReadPrivate(user, "initiative.json", &in); err != nil && !errors.Is(err, agent.ErrNotFound) {
-		return defaultInitiative()
-	}
-	if in.clean() != nil {
-		return defaultInitiative()
-	}
-	return in
+// agentInitState keeps each account's initiative in RAM once read, so the
+// minute tick and notifications do not open files on the agent's volume,
+// and the suggestions found while that volume sleeps.
+type agentInitState struct {
+	mu      sync.Mutex
+	cache   map[string]agentInitiative
+	inboxMu sync.Mutex
+	pending map[string][]agentInboxItem
 }
 
-func (s *Server) saveAgentInitiative(user string, in agentInitiative) error {
-	return s.agentStore().WritePrivate(user, "initiative.json", in)
+const maxAgentPrivate = 512 << 10
+
+// agentInitiativeOf reads the account's settings: defaults if there are
+// none yet, an error if the file cannot be read (then nothing writes it).
+// Callers hold no lock.
+func (s *Server) agentInitiativeOf(user string) (agentInitiative, error) {
+	s.agentInit.mu.Lock()
+	defer s.agentInit.mu.Unlock()
+	return s.agentInitiativeLocked(user)
+}
+
+func (s *Server) agentInitiativeLocked(user string) (agentInitiative, error) {
+	if in, ok := s.agentInit.cache[user]; ok {
+		return in, nil
+	}
+	in := defaultInitiative()
+	if err := s.agentStore().ReadPrivateLimit(user, "initiative.json", &in, maxAgentPrivate); err != nil {
+		if !errors.Is(err, agent.ErrNotFound) {
+			return defaultInitiative(), err
+		}
+		in = defaultInitiative()
+	}
+	if in.clean() != nil {
+		return defaultInitiative(), errors.New("initiative.json is not valid")
+	}
+	if s.agentInit.cache == nil {
+		s.agentInit.cache = map[string]agentInitiative{}
+	}
+	s.agentInit.cache[user] = in
+	return in, nil
+}
+
+// agentInitiativeBG is for work in the background: only from RAM, or from
+// the volume while it is awake anyway.
+func (s *Server) agentInitiativeBG(user string) (agentInitiative, bool) {
+	s.agentInit.mu.Lock()
+	in, ok := s.agentInit.cache[user]
+	s.agentInit.mu.Unlock()
+	if ok {
+		return in, true
+	}
+	if s.agentVolumeAsleep() {
+		return agentInitiative{}, false
+	}
+	in, err := s.agentInitiativeOf(user)
+	return in, err == nil
+}
+
+// saveAgentInitiativeLocked writes and caches; agentInitMu is held.
+func (s *Server) saveAgentInitiativeLocked(user string, in agentInitiative) error {
+	if len(in.Learned) > 100 {
+		in.Learned = in.Learned[len(in.Learned)-100:]
+	}
+	if err := s.agentStore().WritePrivate(user, "initiative.json", in); err != nil {
+		return err
+	}
+	if s.agentInit.cache == nil {
+		s.agentInit.cache = map[string]agentInitiative{}
+	}
+	s.agentInit.cache[user] = in
+	return nil
 }
 
 func (s *Server) handleAgentInitiative(w http.ResponseWriter, r *http.Request) {
-	in := s.agentInitiativeOf(currentUser(r).Name)
+	in, err := s.agentInitiativeOf(currentUser(r).Name)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "agent_unreadable", "the settings of the agent cannot be read; nothing was changed")
+		return
+	}
+	// The weekly review is on by default: it appears with the first look.
+	s.agentWeeklySchedule(currentUser(r).Name, in.Weekly)
 	in.Learned, in.Flows = nil, nil
 	writeJSON(w, http.StatusOK, in)
 }
@@ -137,11 +199,13 @@ func (s *Server) handleAgentInitiativeSet(w http.ResponseWriter, r *http.Request
 		return
 	}
 	user := currentUser(r)
-	agentInitMu.Lock()
-	old := s.agentInitiativeOf(user.Name)
-	in.LastReflect, in.Learned, in.Flows = old.LastReflect, old.Learned, old.Flows
-	err := s.saveAgentInitiative(user.Name, in)
-	agentInitMu.Unlock()
+	s.agentInit.mu.Lock()
+	old, err := s.agentInitiativeLocked(user.Name)
+	if err == nil {
+		in.LastReflect, in.Learned, in.Flows = old.LastReflect, old.Learned, old.Flows
+		err = s.saveAgentInitiativeLocked(user.Name, in)
+	}
+	s.agentInit.mu.Unlock()
 	if err != nil {
 		agentStoreError(w, err)
 		return
@@ -163,8 +227,12 @@ func (s *Server) agentWeeklySchedule(user string, on bool) {
 	i := slices.IndexFunc(list, func(sc agent.Schedule) bool { return sc.ID == id })
 	switch {
 	case on && i < 0:
-		list = append(list, agent.Schedule{ID: id, Name: "Wochenrückblick", Every: "weekly", Weekday: 0, At: "18:00", Enabled: true, Created: time.Now().UTC(),
-			Task: "Wochenrückblick: Was lief auf dem NAS diese Woche (Backups, Meldungen, Updates, Speicher), was hast du als Agent getan, und was steht nächste Woche an? Kurz und mit Tabelle; ändere nichts."})
+		sc := agent.Schedule{ID: id, Name: "Wochenrückblick", Every: "weekly", Weekday: 0, At: "18:00", Enabled: true, Created: time.Now().UTC(),
+			Task: "Wochenrückblick: Was lief auf dem NAS diese Woche (Backups, Meldungen, Updates, Speicher), was hast du als Agent getan, und was steht nächste Woche an? Kurz und mit Tabelle; ändere nichts."}
+		if checkSchedule(&sc) != nil {
+			return
+		}
+		list = append(list, sc)
 	case !on && i >= 0:
 		list = slices.Delete(list, i, i+1)
 	default:
@@ -212,32 +280,76 @@ type agentInboxItem struct {
 
 const maxInbox = 100
 
-var agentInboxMu sync.Mutex
 
-func (s *Server) agentInbox(user string) []agentInboxItem {
+
+// agentInboxRead reads the list (agentInboxMu held) and adds what waited.
+func (s *Server) agentInboxRead(user string) ([]agentInboxItem, error) {
 	list := []agentInboxItem{}
-	_ = s.agentStore().ReadPrivate(user, "inbox.json", &list)
-	return list
+	if err := s.agentStore().ReadPrivateLimit(user, "inbox.json", &list, maxAgentPrivate); err != nil && !errors.Is(err, agent.ErrNotFound) {
+		return nil, err
+	}
+	if pending := s.agentInit.pending[user]; len(pending) > 0 {
+		for _, item := range pending {
+			list = mergeInbox(list, item)
+		}
+		if err := s.agentStore().WritePrivate(user, "inbox.json", list); err != nil {
+			return nil, err
+		}
+		delete(s.agentInit.pending, user)
+	}
+	return list, nil
 }
 
-// addAgentInbox keeps one item per kind and title; the oldest go first.
-func (s *Server) addAgentInbox(user string, item agentInboxItem) {
-	agentInboxMu.Lock()
-	defer agentInboxMu.Unlock()
-	list := s.agentInbox(user)
+func mergeInbox(list []agentInboxItem, item agentInboxItem) []agentInboxItem {
 	if slices.ContainsFunc(list, func(x agentInboxItem) bool { return x.Kind == item.Kind && x.Title == item.Title }) {
-		return
+		return list
 	}
-	item.ID, item.Created = agent.NewID(), time.Now().UTC()
 	list = append(list, item)
 	if len(list) > maxInbox {
 		list = list[len(list)-maxInbox:]
 	}
-	_ = s.agentStore().WritePrivate(user, "inbox.json", list)
+	return list
+}
+
+func (s *Server) agentInbox(user string) []agentInboxItem {
+	s.agentInit.inboxMu.Lock()
+	defer s.agentInit.inboxMu.Unlock()
+	list, err := s.agentInboxRead(user)
+	if err != nil {
+		return []agentInboxItem{}
+	}
+	return list
+}
+
+// addAgentInbox keeps one item per kind and title; the oldest go first.
+// While the agent's volume sleeps the item waits in RAM.
+func (s *Server) addAgentInbox(user string, item agentInboxItem) {
+	item.ID, item.Created = agent.NewID(), time.Now().UTC()
+	s.agentInit.inboxMu.Lock()
+	defer s.agentInit.inboxMu.Unlock()
+	if s.agentVolumeAsleep() {
+		if s.agentInit.pending == nil {
+			s.agentInit.pending = map[string][]agentInboxItem{}
+		}
+		s.agentInit.pending[user] = mergeInbox(s.agentInit.pending[user], item)
+		return
+	}
+	list, err := s.agentInboxRead(user)
+	if err != nil {
+		return
+	}
+	_ = s.agentStore().WritePrivate(user, "inbox.json", mergeInbox(list, item))
 }
 
 func (s *Server) handleAgentInbox(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"items": s.agentInbox(currentUser(r).Name)})
+	s.agentInit.inboxMu.Lock()
+	list, err := s.agentInboxRead(currentUser(r).Name)
+	s.agentInit.inboxMu.Unlock()
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "agent_unreadable", "the suggestions cannot be read")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": list})
 }
 
 // handleAgentInboxDecide takes a suggestion ({"accept": true}) or drops it.
@@ -251,18 +363,23 @@ func (s *Server) handleAgentInboxDecide(w http.ResponseWriter, r *http.Request) 
 	}
 	user := currentUser(r).Name
 	id := r.PathValue("id")
-	agentInboxMu.Lock()
-	list := s.agentInbox(user)
+	s.agentInit.inboxMu.Lock()
+	list, err := s.agentInboxRead(user)
+	if err != nil {
+		s.agentInit.inboxMu.Unlock()
+		writeError(w, http.StatusServiceUnavailable, "agent_unreadable", "the suggestions cannot be read")
+		return
+	}
 	i := slices.IndexFunc(list, func(x agentInboxItem) bool { return x.ID == id })
 	if i < 0 {
-		agentInboxMu.Unlock()
+		s.agentInit.inboxMu.Unlock()
 		writeError(w, http.StatusNotFound, "not_found", "no such suggestion")
 		return
 	}
 	item := list[i]
 	list = slices.Delete(list, i, i+1)
-	err := s.agentStore().WritePrivate(user, "inbox.json", list)
-	agentInboxMu.Unlock()
+	err = s.agentStore().WritePrivate(user, "inbox.json", list)
+	s.agentInit.inboxMu.Unlock()
 	if err != nil {
 		agentStoreError(w, err)
 		return
@@ -389,7 +506,10 @@ func (b *agentToolbox) initiativeCheck(ctx context.Context, chat *agent.Chat, na
 	}
 	var a struct{ Root string }
 	_ = json.Unmarshal(args, &a)
-	in := b.s.agentInitiativeOf(b.user.Name)
+	in, err := b.s.agentInitiativeOf(b.user.Name)
+	if err != nil {
+		in = defaultInitiative()
+	}
 	if name == "files_search" && len(in.Search) > 0 && a.Root != "" &&
 		!slices.ContainsFunc(in.Search, func(f agentFolderRef) bool { return f.Root == a.Root }) && !namedInChat(chat, a.Root) {
 		return toolcatalog.Errorf("%s is not one of the person's search places (Einstellungen › Eigeninitiative); search it only when the person names it", a.Root)
@@ -397,7 +517,7 @@ func (b *agentToolbox) initiativeCheck(ctx context.Context, chat *agent.Chat, na
 	if !b.s.agentAsleep(ctx, b.user, a.Root) {
 		return nil
 	}
-	background := chat == nil || chat.Origin == "event" || chat.Origin == "reflect"
+	background := chat == nil || chat.Origin == "event" || chat.Origin == "reflect" || isMorningReport(chat)
 	switch {
 	case background || in.Wake == "never":
 		return toolcatalog.Errorf("the disk of %s is asleep and must not be woken now; tell the person and try later", a.Root)
@@ -439,11 +559,11 @@ func (s *Server) agentInitiativeObserve(m notify.Message) {
 		if u.Disabled || (u.Role != auth.RoleOwner && u.Role != auth.RoleAdmin) || !s.agentAllowed(u) {
 			continue
 		}
-		in := s.agentInitiativeOf(u.Name)
-		if in.Level == "quiet" || (warning && !in.Watch) || (!warning && !slices.Contains(in.Events, event)) {
+		in, ok := s.agentInitiativeBG(u.Name)
+		if !ok || in.Level == "quiet" || (warning && !in.Watch) || (!warning && !slices.Contains(in.Events, event)) {
 			continue
 		}
-		if in.Level == "act" && !settings.React {
+		if in.Level == "act" && !settings.React && !inQuiet(in, time.Now().In(s.agentLocation())) {
 			s.agentObserveAs(u, m)
 			continue
 		}
@@ -453,12 +573,10 @@ func (s *Server) agentInitiativeObserve(m notify.Message) {
 
 func agentEventKind(kind string) string {
 	switch {
-	case strings.Contains(kind, "usb"):
+	case kind == "usb_plugged":
 		return "usb"
-	case strings.Contains(kind, "update_available"):
+	case kind == "update_available" || kind == "docker_auto_updated":
 		return "update"
-	case strings.Contains(kind, "crash") || strings.Contains(kind, "container_exit") || strings.Contains(kind, "app_down"):
-		return "crash"
 	}
 	return ""
 }
@@ -475,6 +593,7 @@ var agentForecast struct {
 	sync.Mutex
 	samples map[string][]volumeSample
 	day     string
+	loaded  bool
 }
 
 // agentForecastTick takes one sample of each volume a day (statfs from
@@ -490,10 +609,8 @@ func (s *Server) agentForecastTick(now time.Time) {
 		return
 	}
 	agentForecast.day = day
-	if agentForecast.samples == nil {
-		agentForecast.samples = map[string][]volumeSample{}
-	}
 	agentForecast.Unlock()
+	s.loadForecast()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	st, err := s.opts.Storage.Status(ctx)
@@ -516,6 +633,7 @@ func (s *Server) agentForecastTick(now time.Time) {
 		}
 	}
 	agentForecast.Unlock()
+	s.saveForecast()
 	if len(warn) == 0 || s.opts.Users == nil {
 		return
 	}
@@ -523,7 +641,7 @@ func (s *Server) agentForecastTick(now time.Time) {
 		if u.Disabled || (u.Role != auth.RoleOwner && u.Role != auth.RoleAdmin) || !s.agentAllowed(u) {
 			continue
 		}
-		if in := s.agentInitiativeOf(u.Name); !in.Forecast || in.Level == "quiet" {
+		if in, ok := s.agentInitiativeBG(u.Name); !ok || !in.Forecast || in.Level == "quiet" {
 			continue
 		}
 		for name, days := range warn {
@@ -563,17 +681,17 @@ func (s *Server) agentLearn(user string, chat *agent.Chat) {
 	if len(tools) < 3 || chat.Origin == "reflect" {
 		return
 	}
-	agentInitMu.Lock()
-	in := s.agentInitiativeOf(user)
-	if !in.LearnSkills || in.Level == "quiet" {
-		agentInitMu.Unlock()
+	s.agentInit.mu.Lock()
+	in, err := s.agentInitiativeLocked(user)
+	if err != nil || !in.LearnSkills || in.Level == "quiet" {
+		s.agentInit.mu.Unlock()
 		return
 	}
 	sig := slices.Clone(tools)
 	sort.Strings(sig)
 	key := strings.Join(sig, ",")
 	if slices.Contains(in.Learned, key) {
-		agentInitMu.Unlock()
+		s.agentInit.mu.Unlock()
 		return
 	}
 	if in.Flows == nil {
@@ -588,8 +706,8 @@ func (s *Server) agentLearn(user string, chat *agent.Chat) {
 	if len(in.Flows) > 50 {
 		in.Flows = map[string]int{key: in.Flows[key]}
 	}
-	_ = s.saveAgentInitiative(user, in)
-	agentInitMu.Unlock()
+	_ = s.saveAgentInitiativeLocked(user, in)
+	s.agentInit.mu.Unlock()
 	if !propose {
 		return
 	}
@@ -609,4 +727,61 @@ func (s *Server) agentLearn(user string, chat *agent.Chat) {
 	}
 	s.addAgentInbox(user, agentInboxItem{Kind: "skill", Title: chat.Title, Body: "Diesen Ablauf hast du zweimal gleich gemacht: " + strings.Join(tools, " → "),
 		Data: map[string]string{"when": when, "steps": strings.Join(steps, "\n"), "chat": chat.ID}})
+}
+
+// inQuiet: now lies in the account's quiet hours (may span midnight).
+func inQuiet(in agentInitiative, now time.Time) bool {
+	hm := now.Format("15:04")
+	if in.QuietFrom == in.QuietTo {
+		return false
+	}
+	if in.QuietFrom < in.QuietTo {
+		return hm >= in.QuietFrom && hm < in.QuietTo
+	}
+	return hm >= in.QuietFrom || hm < in.QuietTo
+}
+
+// isMorningReport: the morning report counts as work in the background.
+func isMorningReport(chat *agent.Chat) bool {
+	return chat != nil && chat.Origin == "schedule" && len(chat.Entries) > 0 && strings.HasPrefix(chat.Entries[0].Content, "Morgenbericht:")
+}
+
+// The samples of the forecast survive updates in the owner's agent folder,
+// read and written only while the agent's volume is awake.
+func (s *Server) loadForecast() {
+	agentForecast.Lock()
+	defer agentForecast.Unlock()
+	if agentForecast.samples == nil {
+		agentForecast.samples = map[string][]volumeSample{}
+	}
+	owner := s.firstOwner()
+	if agentForecast.loaded || owner == "" || s.agentVolumeAsleep() {
+		return
+	}
+	saved := map[string][]volumeSample{}
+	if err := s.agentStore().ReadPrivateLimit(owner, "forecast.json", &saved, maxAgentPrivate); err != nil && !errors.Is(err, agent.ErrNotFound) {
+		return
+	}
+	agentForecast.loaded = true
+	// Samples of today taken before reading stay; older ones come back.
+	for name, list := range saved {
+		cur := agentForecast.samples[name]
+		agentForecast.samples[name] = append(list, cur...)
+	}
+}
+
+func (s *Server) saveForecast() {
+	owner := s.firstOwner()
+	if owner == "" || s.agentVolumeAsleep() {
+		return
+	}
+	agentForecast.Lock()
+	data := map[string][]volumeSample{}
+	for k, v := range agentForecast.samples {
+		data[k] = slices.Clone(v)
+	}
+	agentForecast.Unlock()
+	if len(data) > 0 {
+		_ = s.agentStore().WritePrivate(owner, "forecast.json", data)
+	}
 }

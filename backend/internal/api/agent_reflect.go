@@ -37,8 +37,9 @@ func (s *Server) agentReflectTick(now time.Time) {
 		if u.Disabled || !s.agentAllowed(u) {
 			continue
 		}
-		in := s.agentInitiativeOf(u.Name)
-		if !in.Reflect || in.Level == "quiet" || !reflectDue(in, now) {
+		// From RAM, or from the volume only while it is awake anyway.
+		in, ok := s.agentInitiativeBG(u.Name)
+		if !ok || !in.Reflect || in.Level == "quiet" || !reflectDue(in, now) {
 			continue
 		}
 		if s.agentVolumeAsleep() {
@@ -143,11 +144,13 @@ func reflectNoise(fact string) bool {
 
 func (s *Server) agentReflect(user auth.User, in agentInitiative, now time.Time) {
 	finish := func() {
-		agentInitMu.Lock()
-		cur := s.agentInitiativeOf(user.Name)
-		cur.LastReflect = now.UTC()
-		_ = s.saveAgentInitiative(user.Name, cur)
-		agentInitMu.Unlock()
+		s.agentInit.mu.Lock()
+		if cur, err := s.agentInitiativeLocked(user.Name); err == nil {
+			cur.LastReflect = now.UTC()
+			_ = s.saveAgentInitiativeLocked(user.Name, cur)
+		}
+		s.agentInit.mu.Unlock()
+		s.saveForecast()
 	}
 	since := in.LastReflect
 	if since.IsZero() || now.Sub(since) > 36*time.Hour {

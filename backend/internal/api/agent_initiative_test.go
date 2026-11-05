@@ -36,7 +36,8 @@ func TestAgentInitiative(t *testing.T) {
 		t.Fatalf("weekly: %+v", list)
 	}
 	// Personality reaches the prompt.
-	style := agentStyle(ts.server.agentInitiativeOf("alex"))
+	ini, _ := ts.server.agentInitiativeOf("alex")
+	style := agentStyle(ini)
 	if !strings.Contains(style, "Titan") || !strings.Contains(style, "short") {
 		t.Fatalf("style: %s", style)
 	}
@@ -50,7 +51,8 @@ func TestAgentInitiative(t *testing.T) {
 		t.Fatal(err)
 	}
 	u, _ := ts.users.Get("alex")
-	ts.server.agentReflect(u, ts.server.agentInitiativeOf("alex"), now)
+	ini, _ = ts.server.agentInitiativeOf("alex")
+	ts.server.agentReflect(u, ini, now)
 	items := ts.server.agentInbox("alex")
 	texts := []string{}
 	for _, it := range items {
@@ -59,7 +61,7 @@ func TestAgentInitiative(t *testing.T) {
 	if len(items) != 2 || items[0].Title != "Die Backup-SSD hängt am USB-Hub im Flur" {
 		t.Fatalf("inbox: %v", texts)
 	}
-	if ts.server.agentInitiativeOf("alex").LastReflect.IsZero() {
+	if ini, _ := ts.server.agentInitiativeOf("alex"); ini.LastReflect.IsZero() {
 		t.Fatal("last run not kept")
 	}
 	if !strings.Contains(nightNote("alex"), "Backup-SSD") || nightNote("alex") != "" {
@@ -93,7 +95,7 @@ func TestAgentInitiative(t *testing.T) {
 	}
 	// Another account has its own settings and suggestions.
 	ts.users.Create("gast", testPassword, auth.RoleUser)
-	if ts.server.agentInitiativeOf("gast").Name != "" || len(ts.server.agentInbox("gast")) != 0 {
+	if g, _ := ts.server.agentInitiativeOf("gast"); g.Name != "" || len(ts.server.agentInbox("gast")) != 0 {
 		t.Fatal("settings leak between accounts")
 	}
 }

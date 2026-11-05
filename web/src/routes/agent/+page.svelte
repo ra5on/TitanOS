@@ -141,14 +141,16 @@
 	$effect(() => {
 		api
 			.get<Record<string, unknown>>('/agent/prefs')
+			// Saved only after a successful read, so a hiccup never overwrites
+			// the account's settings with this device's copy.
 			.then((saved) => {
 				if (saved && Object.keys(saved).length) {
 					const device = Object.fromEntries(DEVICE_LOOK.map((k) => [k, look[k]]));
 					look = sanitizeLook({ ...look, ...saved, ...device });
 				}
+				prefsLoaded = true;
 			})
-			.catch(() => {})
-			.finally(() => (prefsLoaded = true));
+			.catch(() => {});
 	});
 	$effect(() => {
 		const value = JSON.stringify(look);

@@ -230,7 +230,7 @@ Jedes Konto stellt in der Agent-App unter Einstellungen › Eigeninitiative und 
 
 **Wache und Ereignisse**
 - Warnungen des NAS werden für Besitzer und Administratoren mit eingeschalteter Wache zu Vorschlägen. Mit „Handelt selbst“ starten sie einen eigenen Chat.
-- Ereignisse (USB-Platte, Update verfügbar, Absturz) kommen auch als Info-Meldung an. Der Beobachter von `notify` erhält dafür jetzt alle Stufen; die bisherige Eigeninitiative reagiert weiter nur auf Warnungen.
+- Ereignisse (USB-Platte eingesteckt `usb_plugged`, Update verfügbar `update_available`/`docker_auto_updated`) kommen auch als Info-Meldung an. Der Beobachter von `notify` erhält dafür jetzt alle Stufen; die bisherige Eigeninitiative reagiert weiter nur auf Warnungen. Abstürze von Apps meldet TitanOS bisher nicht als eigene Meldung, deshalb gibt es dafür keinen Schalter.
 - Zustände in Home Assistant bleiben Auslöser geplanter Aufträge.
 
 **Vorausschau**
@@ -263,7 +263,16 @@ Jedes Konto stellt in der Agent-App unter Einstellungen › Eigeninitiative und 
 - Startet einen Chat, in dem der Agent die NAS-Landkarte ansieht, nach dem Wichtigsten fragt und drei Aufträge vorschlägt, die er erst nach Zustimmung anlegt.
 - Ohne Chats steht es als erster Vorschlag auf der Startseite.
 
-**Wochenrückblick:** ein normaler geplanter Auftrag (sonntags 18:00), den man verschieben kann.
+**Wochenrückblick:** ein normaler geplanter Auftrag (sonntags 18:00), den man verschieben kann. Er erscheint, sobald man die Eigeninitiative zum ersten Mal ansieht.
+
+**Ruhezeit:** In der Ruhezeit startet der Agent bei Meldungen keinen eigenen Chat, auch nicht mit „Handelt selbst“; die Meldung wird nur zum Vorschlag.
+
+**Ohne Plattenzugriff im Hintergrund:**
+- Die Einstellungen jedes Kontos liegen nach dem ersten Lesen im RAM.
+- Der Minutentakt und Meldungen lesen sie nur, solange das Agent-Volume ohnehin wach ist.
+- Vorschläge, die entstehen, während es schläft, warten im RAM und werden beim nächsten Öffnen von „Vorschläge“ oder beim nächtlichen Lauf geschrieben.
+- Die Werte der Vorausschau liegen im Ordner des Besitzers (`forecast.json`) und werden nur bei wachem Volume gelesen und geschrieben.
+- Ein unlesbares `initiative.json` oder `inbox.json` wird nie überschrieben: Die Seite meldet 503, Hintergrundarbeit lässt das Konto aus.
 
 ## Snapshot vor Änderungen (PLAN 51)
 

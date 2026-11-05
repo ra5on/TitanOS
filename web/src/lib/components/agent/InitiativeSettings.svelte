@@ -17,9 +17,13 @@
 	$effect(() => {
 		api
 			.get<unknown>('/agent/initiative')
-			.then((v) => (value = sanitizeInitiative(v)))
-			.catch((e) => (error = apiErrorText(e)))
-			.finally(() => (loaded = true));
+			// Saving starts only after the settings were read: an error never
+			// overwrites them with defaults.
+			.then((v) => {
+				value = sanitizeInitiative(v);
+				loaded = true;
+			})
+			.catch((e) => (error = apiErrorText(e)));
 		api
 			.get<FileRoot[]>('/files/roots')
 			.then((r) => (roots = r.filter((x) => x.kind !== 'stick')))
@@ -132,7 +136,7 @@
 			>
 			<input type="checkbox" class="switch" bind:checked={value.forecast} />
 		</label>
-		{#each ['usb', 'update', 'crash', 'ha'] as const as ev (ev)}
+		{#each ['usb', 'update'] as const as ev (ev)}
 			<label class="row">
 				<span class="t"><strong>{t(`agent.init.event.${ev}`)}</strong></span>
 				<input

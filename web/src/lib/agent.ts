@@ -685,7 +685,7 @@ export type Initiative = {
 	morningNote: boolean;
 	watch: boolean;
 	forecast: boolean;
-	events: ('usb' | 'update' | 'crash' | 'ha')[];
+	events: ('usb' | 'update')[];
 	wake: 'wake' | 'ask' | 'never';
 	search: { root: string; path: string }[];
 	quietFrom: string;
@@ -710,7 +710,7 @@ export const defaultInitiative = (): Initiative => ({
 	morningNote: true,
 	watch: true,
 	forecast: true,
-	events: ['usb', 'update', 'crash', 'ha'],
+	events: ['usb', 'update'],
 	wake: 'wake',
 	search: [],
 	quietFrom: '22:00',
@@ -739,7 +739,7 @@ export function sanitizeInitiative(v: unknown): Initiative {
 	const num = (x: unknown, lo: number, hi: number, def: number) =>
 		typeof x === 'number' && Number.isFinite(x) ? Math.min(hi, Math.max(lo, Math.round(x))) : def;
 	const events = Array.isArray(o.events)
-		? (o.events.filter((e) => ['usb', 'update', 'crash', 'ha'].includes(e)) as Initiative['events'])
+		? (o.events.filter((e) => ['usb', 'update'].includes(e)) as Initiative['events'])
 		: d.events;
 	const search = Array.isArray(o.search)
 		? o.search
