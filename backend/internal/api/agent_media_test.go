@@ -124,3 +124,39 @@ func fmtJSON(v any) string {
 	data, _ := json.Marshal(v)
 	return string(data)
 }
+
+// PLAN 51: which changes get a snapshot first; deletes go to the recycle
+// bin, volumes without Btrfs get none (and the chat says so).
+func TestAgentSnapshotTargets(t *testing.T) {
+	fake := &agentOllama{}
+	ts := agentServer(t, fake, agent.Policy{Preset: agent.PresetStandard})
+	ts.withShare()
+	u, _ := ts.users.Get("alex")
+	box := ts.server.newAgentToolbox(u, ts.server.agentSettings())
+	raw := func(v any) json.RawMessage { d, _ := json.Marshal(v); return d }
+	cases := map[string]struct {
+		tool string
+		args any
+		want string
+	}{
+		"move":         {"files_move", map[string]any{"root": "share/Docs"}, "tank"},
+		"replace":      {"file_write", map[string]any{"root": "share/Docs", "replace": true}, "tank"},
+		"new file":     {"file_write", map[string]any{"root": "share/Docs"}, ""},
+		"delete":       {"files_delete", map[string]any{"root": "share/Docs"}, ""},
+		"start an app": {"container_action", map[string]any{"action": "start"}, ""},
+		"foreign root": {"files_move", map[string]any{"root": "share/Fremd"}, ""},
+	}
+	for name, c := range cases {
+		if got := box.agentSnapTarget(c.tool, raw(c.args)); got != c.want {
+			t.Errorf("%s: %q, want %q", name, got, c.want)
+		}
+	}
+	note := box.agentSnapshotBefore(t.Context(), "files_move", raw(map[string]any{"root": "share/Docs"}))
+	if !strings.Contains(note, "kein Btrfs") {
+		t.Fatalf("ext4 volume: %q", note)
+	}
+	box.settings.NoSnapshots = true
+	if note := box.agentSnapshotBefore(t.Context(), "files_move", raw(map[string]any{"root": "share/Docs"})); note != "" {
+		t.Fatalf("switched off: %q", note)
+	}
+}

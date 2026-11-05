@@ -143,10 +143,41 @@ func (s *Server) agentReadableChat(user, author, id string) (*agent.Chat, error)
 				return nil, err
 			}
 			chat.Project = c.Project
-			return chat, nil
+			return foreignChat(chat), nil
 		}
 	}
 	return nil, agent.ErrNotFound
+}
+
+// foreignChat is what another member reads of a chat: the questions and
+// the answers, not the steps. Tool results, arguments, thoughts, files and
+// waiting approvals came from the author's rights (files, logs, admin
+// output) and stay with the author.
+func foreignChat(c *agent.Chat) *agent.Chat {
+	out := *c
+	out.Pending = nil
+	out.Entries = make([]agent.Entry, 0, len(c.Entries))
+	for _, e := range c.Entries {
+		switch e.Role {
+		case "user", "assistant":
+			e.Thinking, e.Calls, e.Files, e.Sources, e.Stats = "", nil, nil, nil, nil
+			if e.Role == "assistant" && strings.TrimSpace(e.Content) == "" {
+				continue
+			}
+		case "tool":
+			// Only that there was a step, for the "n Schritte" box.
+			e = agent.Entry{ID: e.ID, At: e.At, Role: "tool", Tool: e.Tool, OK: e.OK}
+		case "note":
+			if e.Note == "edited" || e.Note == "snapshot" || e.Note == "error" {
+				continue
+			}
+			e.Args, e.Result, e.Summary = nil, "", ""
+		default:
+			continue
+		}
+		out.Entries = append(out.Entries, e)
+	}
+	return &out
 }
 
 // handleAgentAccounts lists the other accounts of the agent, for members.

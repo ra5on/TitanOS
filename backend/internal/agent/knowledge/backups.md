@@ -73,7 +73,7 @@ Wiederherstellen schreibt **immer in einen neuen Ordner** unter `/mnt/VOLUME/res
 - Ein Snapshot ist schreibgeschützt und liegt auf **demselben Volume**. Er hilft gegen versehentliches Löschen, ersetzt aber kein Backup.
 - Verschachtelte Subvolumes (z. B. von Docker) sind im Snapshot leer.
 - Snapshots legst du auf der Volume-Kachel an; geplante Snapshots mit Aufbewahrung gibt es unter Werkzeuge › Wartung.
-- **Automatisch vor Änderungen des Agenten:** Bevor der Agent eine App aktualisiert oder entfernt oder Dateien löscht, verschiebt oder ersetzt, legt TitanOS einen Snapshot `agent-JJJJMMTT-hhmmss` des betroffenen Btrfs-Volumes an (höchstens einer je 10 Minuten, 7 Tage aufbewahrt, abschaltbar unter Einstellungen › KI-Agent).
+- **Automatisch vor Änderungen des Agenten:** Bevor der Agent eine App aktualisiert oder entfernt oder Dateien verschiebt, umbenennt oder ersetzt (Gelöschtes landet im Papierkorb der Freigabe), legt TitanOS einen Snapshot `agent-JJJJMMTT-hhmmss` des betroffenen Btrfs-Volumes an (höchstens einer je 10 Minuten, 7 Tage aufbewahrt, abschaltbar unter Einstellungen › KI-Agent).
 - **Wiederherstellen:** unter Speicher › Verwalten › Snapshots einen Ordner wählen und „Wiederherstellen …“: an den ursprünglichen Ort (vorhandene Dateien ab Werk überspringen) oder als neuer Ordner daneben. Eine Vorschau zeigt vorher Dateien und Konflikte.
 - In Windows erscheinen Snapshots einer Freigabe auf Wunsch als „Vorgängerversionen“.
 - Datenbanken und VMs vor einem Snapshot sauber stoppen, damit der Stand stimmig ist.

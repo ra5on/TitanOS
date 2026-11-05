@@ -125,6 +125,42 @@ func TestAgentShareFolders(t *testing.T) {
 	if !edited || !done.Tainted {
 		t.Fatalf("edit not taken as content: tainted=%v %+v", done.Tainted, done.Entries)
 	}
+	// The same change is taken once, also when the next task comes before
+	// the copy was written anew; then the copy has the note in it.
+	fake.replies = []string{`{"role":"assistant","content":"Noch einmal."}`}
+	ts.request("POST", "/api/v1/agent/chats/"+chat.ID+"/messages", map[string]any{"message": "Weiter"})
+	done = waitChat(t, ts, ts.client, chat.ID)
+	ts.server.agentSyncShare()
+	fake.replies = []string{`{"role":"assistant","content":"Und noch einmal."}`}
+	ts.request("POST", "/api/v1/agent/chats/"+chat.ID+"/messages", map[string]any{"message": "Weiter"})
+	done = waitChat(t, ts, ts.client, chat.ID)
+	count := 0
+	for _, e := range done.Entries {
+		if e.Note == "edited" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("edited notes: %d", count)
+	}
+	// A very long copy is not read back.
+	ts.server.agentSyncShare()
+	ts.server.agentMirror.mu.Lock()
+	file := ts.server.agentMirror.state["alex"].Chats[chat.ID].File
+	ts.server.agentMirror.mu.Unlock()
+	os.WriteFile(filepath.Join(home, file), []byte(strings.Repeat("Langer Text. ", 30000)), 0o660)
+	fake.replies = []string{`{"role":"assistant","content":"Gut."}`}
+	ts.request("POST", "/api/v1/agent/chats/"+chat.ID+"/messages", map[string]any{"message": "Weiter"})
+	done = waitChat(t, ts, ts.client, chat.ID)
+	count = 0
+	for _, e := range done.Entries {
+		if e.Note == "edited" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("a long file was read back: %d edited notes", count)
+	}
 
 	// Folders per account are not for shares made over the API.
 	if res, body := ts.request("POST", "/api/v1/shares", map[string]any{"name": "Privat", "volume": "tank", "smb": true, "perUser": true}); res.StatusCode != http.StatusCreated {
@@ -162,7 +198,10 @@ func TestAgentSharedProject(t *testing.T) {
 	if len(p.Members) != 1 || p.Members[0] != "maria" {
 		t.Fatalf("members: %+v", p.Members)
 	}
-	fake.replies = []string{`{"role":"assistant","content":"Fähre ab Kiel."}`}
+	fake.replies = []string{
+		`{"role":"assistant","content":"","thinking":"Erst im Dateisystem nachsehen.","tool_calls":[{"function":{"name":"files_list","arguments":{"root":"share/Docs","path":""}}}]}`,
+		`{"role":"assistant","content":"Fähre ab Kiel."}`,
+	}
 	_, body = ts.request("POST", "/api/v1/agent/chats", map[string]any{"message": "Wie kommen wir hin?", "project": p.ID})
 	var ownerChat agent.Chat
 	json.Unmarshal(body, &ownerChat)
@@ -184,6 +223,13 @@ func TestAgentSharedProject(t *testing.T) {
 	res, body = ts.do(maria, "GET", "/api/v1/agent/chats/"+ownerChat.ID+"?author=alex", nil)
 	if res.StatusCode != http.StatusOK || !strings.Contains(string(body), "Fähre ab Kiel") || !strings.Contains(string(body), `"readOnly":true`) {
 		t.Fatalf("read owner's chat: %d %s", res.StatusCode, body)
+	}
+	// Only questions and answers: no results, arguments or thoughts of the
+	// owner's steps (they came from the owner's rights).
+	for _, leak := range []string{`"result"`, `"args"`, `"thinking"`, `"files"`, `"pending"`, "Geheime Tabelle"} {
+		if strings.Contains(string(body), leak) {
+			t.Fatalf("foreign chat carries %s: %s", leak, body)
+		}
 	}
 	if res, _ := ts.do(maria, "POST", "/api/v1/agent/chats/"+ownerChat.ID+"/messages", map[string]any{"message": "x"}); res.StatusCode != http.StatusNotFound {
 		t.Fatalf("maria wrote into alex's chat: %d", res.StatusCode)

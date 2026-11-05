@@ -131,6 +131,9 @@ func (b *agentToolbox) imageView(ctx context.Context, chat *agent.Chat, args jso
 			return agent.Outcome{}, toolcatalog.Errorf("no attachment %q in this chat", req.Name)
 		}
 	case req.Root != "" && req.Path != "":
+		if b.settings.Policy.Mode("file_read", toolcatalog.AreaFiles, agent.KindRead) == agent.ModeDeny {
+			return agent.Outcome{}, toolcatalog.Errorf("reading files is not allowed for the agent")
+		}
 		name = req.Path
 		if data, err = b.readNASFile(req.Root, req.Path, maxImage); err != nil {
 			return agent.Outcome{}, err

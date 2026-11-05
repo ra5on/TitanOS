@@ -8618,7 +8618,7 @@
 	"agent.voiceDown": "Not reachable: {error}",
 	"agent.voiceHint": "Whisper runs best on the Ollama computer (graphics card), e.g. Speaches or faster-whisper-server as Docker with the OpenAI interface. The recording goes there through the NAS and is not kept. Guide in the documentation of the KI-Agent.",
 	"agent.snapshots": "Snapshot before changes",
-	"agent.snapshotsHint": "Before the agent updates or removes an app, or deletes, moves or replaces files, TitanOS takes a snapshot of the volume (Btrfs only, at most one in 10 minutes, kept 7 days). Single files come back on the storage page.",
+	"agent.snapshotsHint": "Before the agent updates or removes an app, or moves, renames or replaces files, TitanOS takes a snapshot of the volume (Btrfs only, at most one in 10 minutes, kept 7 days). Deleted files go to the recycle bin of the share anyway. Single files come back on the storage page.",
 	"agent.noteEdited": "Changed in the file in the folder KI-Agent – the agent reads the text as content",
 	"agent.readOnlyChat": "Chat of {name} – read only",
 	"agent.chatBy": "Chat of {name} (read only)",

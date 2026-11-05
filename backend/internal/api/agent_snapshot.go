@@ -11,7 +11,9 @@ import (
 )
 
 // Snapshot before changes (PLAN 51): before the agent updates or removes
-// an app, or deletes, moves or replaces files, titand takes a read-only
+// an app, or moves, renames or replaces files (deleted files go to the
+// recycle bin of the share; a snapshot would keep their space for a week
+// when the agent frees space), titand takes a read-only
 // Btrfs snapshot of the volume concerned, at most one per volume in ten
 // minutes. Single files come back from it on the storage page (restore
 // makes a writable copy; the volume itself is never rolled back). Agent
@@ -42,7 +44,7 @@ func (b *agentToolbox) agentSnapTarget(tool string, args json.RawMessage) string
 				return b.s.opts.Docker.Current().Volume
 			}
 		}
-	case "files_delete", "files_move", "file_rename", "files_rename":
+	case "files_move", "file_rename", "files_rename":
 		return b.rootVolume(str("root"))
 	case "file_write":
 		if replace, _ := a["replace"].(bool); replace {

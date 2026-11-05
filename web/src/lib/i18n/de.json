@@ -8618,7 +8618,7 @@
 	"agent.voiceDown": "Nicht erreichbar: {error}",
 	"agent.voiceHint": "Whisper läuft am besten auf dem Ollama-Rechner (Grafikkarte), z. B. Speaches oder faster-whisper-server als Docker mit OpenAI-Schnittstelle. Die Aufnahme geht über das NAS dorthin und wird nicht gespeichert. Anleitung in der Doku zum KI-Agenten.",
 	"agent.snapshots": "Snapshot vor Änderungen",
-	"agent.snapshotsHint": "Bevor der Agent eine App aktualisiert oder entfernt oder Dateien löscht, verschiebt oder ersetzt, legt TitanOS einen Snapshot des Volumes an (nur Btrfs, höchstens einer je 10 Minuten, 7 Tage aufbewahrt). Einzelne Dateien holst du auf der Speicher-Seite zurück.",
+	"agent.snapshotsHint": "Bevor der Agent eine App aktualisiert oder entfernt oder Dateien verschiebt, umbenennt oder ersetzt, legt TitanOS einen Snapshot des Volumes an (nur Btrfs, höchstens einer je 10 Minuten, 7 Tage aufbewahrt). Gelöschtes landet ohnehin im Papierkorb der Freigabe. Einzelne Dateien holst du auf der Speicher-Seite zurück.",
 	"agent.noteEdited": "In der Datei im Ordner KI-Agent geändert – der Agent liest den Text als Inhalt",
 	"agent.readOnlyChat": "Chat von {name} – nur lesen",
 	"agent.chatBy": "Chat von {name} (nur lesen)",

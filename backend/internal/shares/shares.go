@@ -77,7 +77,7 @@ type Share struct {
 	// read-only since then, until an administrator lifts it.
 	GuardLocked *GuardLock `json:"guardLocked,omitempty"`
 	// PerUser gives every account with access a folder of its own and
-	// shows it only that folder, over SMB (path …/%U) and in the file
+	// shows it only that folder, over SMB (path …/%u, the Unix user of the session) and in the file
 	// manager. Set by titand for the share of the KI-Agent (PLAN 49), never
 	// by the client; such a share has no NFS and no guests.
 	PerUser bool `json:"perUser,omitempty"`
@@ -389,7 +389,7 @@ func (m *Manager) UserFolder(share Share, user string) string {
 
 // userFolders makes the folder of every account with access in a share
 // with PerUser, owned by the account and closed to everyone else (0700):
-// even where a share is offered without %U (an older version after a
+// even where a share is offered without %u (an older version after a
 // way back), other accounts cannot open it over SMB.
 func (m *Manager) userFolders(share Share, path string, users []auth.User) error {
 	for _, u := range users {
@@ -856,7 +856,7 @@ func renderSMBConf(shares []Share, path func(Share) string, shadow func(Share) s
 		dir := path(share)
 		if share.PerUser {
 			// Each account lands in its own folder and sees no other.
-			dir += "/%U"
+			dir += "/%u"
 		}
 		options := [][2]string{
 			{"path", dir},

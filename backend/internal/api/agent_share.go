@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -412,19 +413,26 @@ func (s *Server) agentSyncUser(sh shares.Share, user auth.User) error {
 	return store.WritePrivate(user.Name, "mirror.json", st)
 }
 
+// maxReadBack: larger chat files are not read back (a long chat stays
+// as it is; the file is written anew with the next change).
+const maxReadBack = 256 << 10
+
 // agentReadBack takes a chat file the person changed into the chat: as a
-// note with the text, marking the chat as holding outside content.
-func (s *Server) agentReadBack(root *os.Root, user auth.User, chat *agent.Chat, prev agentMirrorChat) bool {
+// note with the text, marking the chat as holding outside content. It
+// returns the hash of what it read ("" when nothing was taken).
+func (s *Server) agentReadBack(root *os.Root, user auth.User, chat *agent.Chat, prev agentMirrorChat) string {
 	f, err := root.Open(prev.File)
 	if err != nil {
-		return false
+		return ""
 	}
 	defer f.Close()
-	buf := make([]byte, 64<<10)
-	n, _ := f.Read(buf)
-	data := buf[:n]
-	if agentHash(data) == prev.Hash || n == 0 {
-		return false
+	data, err := io.ReadAll(io.LimitReader(f, maxReadBack+1))
+	if err != nil || len(data) == 0 || len(data) > maxReadBack {
+		return ""
+	}
+	hash := agentHash(data)
+	if hash == prev.Hash {
+		return ""
 	}
 	text := string(data)
 	if r := []rune(text); len(r) > 20000 {
@@ -436,9 +444,9 @@ func (s *Server) agentReadBack(root *os.Root, user auth.User, chat *agent.Chat, 
 	chat.Updated = time.Now()
 	if err := s.agentStore().SaveChat(user.Name, chat); err != nil {
 		slog.Warn("changed chat file not taken", "chat", chat.ID, "err", err)
-		return false
+		return ""
 	}
-	return true
+	return hash
 }
 
 // agentCheckEdit looks, before a run, whether the person changed the copy
@@ -461,10 +469,12 @@ func (s *Server) agentCheckEdit(user auth.User, chat *agent.Chat) {
 		return
 	}
 	defer root.Close()
-	if s.agentReadBack(root, user, chat, prev) {
-		// The note is in the chat now; the next sync writes the file anew.
-		prev.Hash = ""
+	if hash := s.agentReadBack(root, user, chat, prev); hash != "" {
+		// The note is in the chat now; the same text is not taken twice.
+		// The next sync writes the file anew.
+		prev.Hash = hash
 		st.Chats[chat.ID] = prev
+		_ = s.agentStore().WritePrivate(user.Name, "mirror.json", st)
 	}
 }
 
