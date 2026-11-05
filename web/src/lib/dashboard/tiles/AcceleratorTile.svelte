@@ -140,7 +140,10 @@
 		><a role="menuitem" href="/settings/hardware">{t('dashboard.editor.device')}</a></ContextMenu
 	>{/if}
 {#if selected}<Dialog title={selected.name} onclose={() => (selected = null)}
-		>{#if view === 'history'}<History values={selected.history} capacity={ACCEL_HISTORY} />{:else}<dl>
+		>{#if view === 'history'}<History
+				values={selected.history}
+				capacity={ACCEL_HISTORY}
+			/>{:else}<dl>
 				<div>
 					<dt>PCI</dt>
 					<dd>{selected.address}</dd>

@@ -199,8 +199,7 @@
 		['once', 'daily', 'days', 'weekdays', 'weekly', 'monthly'].includes(draft.every),
 	);
 	// A run before 2000 is the zero time older versions stored: never ran.
-	const ran = (s: { lastRun?: string }) =>
-		!!s.lastRun && new Date(s.lastRun).getFullYear() >= 2000;
+	const ran = (s: { lastRun?: string }) => !!s.lastRun && new Date(s.lastRun).getFullYear() >= 2000;
 </script>
 
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
@@ -308,7 +307,11 @@
 						? ' · ' + t('agent.nextRun', { when: formatDateTime(new Date(s.next)) })
 						: ''}{ran(s)
 						? ' · ' + t('agent.lastRun', { when: formatDateTime(new Date(s.lastRun!)) })
-						: ' · ' + t('agent.neverRun')}{ran(s) && s.kind !== 'reminder' ? (s.lastOk ? ' ✓' : ' !') : ''}</span
+						: ' · ' + t('agent.neverRun')}{ran(s) && s.kind !== 'reminder'
+						? s.lastOk
+							? ' ✓'
+							: ' !'
+						: ''}</span
 				>
 			</span>
 			<span class="acts">

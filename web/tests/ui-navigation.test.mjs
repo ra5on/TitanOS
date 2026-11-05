@@ -80,15 +80,48 @@ test('the settings navigation sorts groups and entries A–Z and filters by role
 		const names = g.entries.map((e) => e.label);
 		assert.deepEqual(names, [...names].sort(order.compare), g.group);
 	}
-	assert.deepEqual(
-		admin.flatMap((g) => g.entries.map((e) => e.id)).sort(),
-		['about', 'access', 'agent', 'api', 'appearance', 'backups', 'cluster', 'ddns', 'energy', 'files', 'firewall', 'hardware', 'homeassistant', 'letsencrypt', 'mcp', 'memory', 'network', 'notifications', 'power-button', 'proxy', 'services', 'temperatures', 'timezone', 'updates', 'ups', 'wireguard'],
-	);
+	assert.deepEqual(admin.flatMap((g) => g.entries.map((e) => e.id)).sort(), [
+		'about',
+		'access',
+		'agent',
+		'api',
+		'appearance',
+		'backups',
+		'cluster',
+		'ddns',
+		'energy',
+		'files',
+		'firewall',
+		'hardware',
+		'homeassistant',
+		'letsencrypt',
+		'mcp',
+		'memory',
+		'network',
+		'notifications',
+		'power-button',
+		'proxy',
+		'services',
+		'temperatures',
+		'timezone',
+		'updates',
+		'ups',
+		'wireguard',
+	]);
 	const fresh = admin
 		.flatMap((g) => g.entries)
 		.filter((e) => e.newSince)
 		.map((e) => e.id);
-	assert.deepEqual(fresh.sort(), ['agent', 'cluster', 'ddns', 'firewall', 'letsencrypt', 'mcp', 'services', 'wireguard']);
+	assert.deepEqual(fresh.sort(), [
+		'agent',
+		'cluster',
+		'ddns',
+		'firewall',
+		'letsencrypt',
+		'mcp',
+		'services',
+		'wireguard',
+	]);
 	const user = settingsEntries('', false, label).flatMap((g) => g.entries.map((e) => e.id));
 	assert.deepEqual(user.sort(), ['about', 'api', 'appearance', 'mcp', 'temperatures']);
 	// MCP is one page for everyone, no longer a section of API and CLI.

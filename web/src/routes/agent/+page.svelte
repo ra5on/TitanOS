@@ -665,7 +665,8 @@
 								class="icon-btn"
 								aria-label={t('agent.newChat')}
 								title={t('agent.newChat')}
-								onclick={() => newChat(phone ? '' : project)}><Icon name="newChat" size={18} /></button
+								onclick={() => newChat(phone ? '' : project)}
+								><Icon name="newChat" size={18} /></button
 							>
 						{/if}
 					</div>

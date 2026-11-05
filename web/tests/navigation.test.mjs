@@ -53,7 +53,13 @@ test('sanitizing keeps unknown but valid ids and drops junk', () => {
 		magnify: true,
 		button: 'tl',
 	});
-	assert.deepEqual(sanitizeNav(null), { order: [], hidden: [], layout: 'top', magnify: true, button: 'tl' });
+	assert.deepEqual(sanitizeNav(null), {
+		order: [],
+		hidden: [],
+		layout: 'top',
+		magnify: true,
+		button: 'tl',
+	});
 	assert.deepEqual(defaultAppearance().nav, {
 		order: [],
 		hidden: [],
