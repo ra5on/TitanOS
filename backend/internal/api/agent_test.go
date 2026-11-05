@@ -563,7 +563,7 @@ func TestAgentNASMapAndInstructions(t *testing.T) {
 	settings["instruction"] = "Das ist unser Familien-NAS."
 	ts.request("PUT", "/api/v1/agent/settings", settings)
 	ts.request("PUT", "/api/v1/agent/profile", map[string]string{"instruction": "Antworte sehr kurz."})
-	res, body = ts.request("POST", "/api/v1/agent/chats", map[string]any{"message": "Wo liegen Scans?"})
+	_, body = ts.request("POST", "/api/v1/agent/chats", map[string]any{"message": "Wo liegen Scans?"})
 	var chat agent.Chat
 	json.Unmarshal(body, &chat)
 	waitChat(t, ts, ts.client, chat.ID)
