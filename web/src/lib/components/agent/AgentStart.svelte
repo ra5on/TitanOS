@@ -1,8 +1,9 @@
 <script lang="ts">
-	// The start of the KI-Agent (PLAN 48), a new chat like in the big chat
-	// apps, the same on the desktop and the phone: a greeting with the
-	// glowing agent orb, the projects as tiles to swipe through, the tasks
-	// that run or wait right now, and four suggestions as equal tiles.
+	// The start of the KI-Agent (PLAN 48, new look PLAN 53), the same on the
+	// desktop and the phone: the glowing orb with a greeting, the projects
+	// as small chips, the tasks that run or wait right now and up to three
+	// suggestions that fit the moment (warnings of the NAS, the time of
+	// day), with "andere" for a fresh pick.
 	import Icon from '#lib/components/Icon.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import type { ChatInfo, Project, Suggestion } from '#lib/agent.ts';
@@ -18,6 +19,9 @@
 		onnewproject,
 		onstop,
 		onfill,
+		onshuffle,
+		show = true,
+		status = '',
 	}: {
 		user: string;
 		chats: ChatInfo[];
@@ -30,7 +34,22 @@
 		onnewproject: () => void;
 		onstop: (c: ChatInfo) => void;
 		onfill: (text: string) => void;
+		/** Shows other suggestions. */
+		onshuffle?: () => void;
+		/** Suggestions switched on (Einstellungen › Darstellung). */
+		show?: boolean;
+		/** One line on how the NAS is doing. */
+		status?: string;
 	} = $props();
+	const [hi, name] = $derived.by(() => {
+		const i = hello.lastIndexOf(user);
+		return i > 0 ? [hello.slice(0, i), hello.slice(i)] : [hello, ''];
+	});
+	const today = new Intl.DateTimeFormat(undefined, {
+		weekday: 'long',
+		day: 'numeric',
+		month: 'long',
+	}).format(new Date());
 
 	const hour = new Date().getHours();
 	const hello = $derived(
@@ -48,37 +67,34 @@
 <div class="start">
 	<div class="hello">
 		<span class="orb" class:busy={active.some((c) => c.state === 'running')} aria-hidden="true"
-			><Icon name="sparkle" size={28} /></span
+			><Icon name="sparkle" size={32} /></span
 		>
-		<h1>{hello}</h1>
+		<h1>{hi}<span class="name">{name}</span></h1>
 		<p>
-			{inProject ? t('agent.startInProject', { name: inProject.name }) : t('agent.startQuestion')}
+			{inProject
+				? t('agent.startInProject', { name: inProject.name })
+				: status
+					? `${today} · ${status}`
+					: today}
 		</p>
 	</div>
 
-	<div class="tiles" role="group" aria-label={t('agent.projects')}>
+	<div class="chips" role="group" aria-label={t('agent.projects')}>
 		{#each projects as p (p.id)}
 			<button
 				type="button"
-				class="ptile"
+				class="chip-p"
 				class:on={p.id === project}
 				style:--tile={p.color || 'var(--accent)'}
+				title={count(p.id) === 1 ? t('agent.chatCountOne') : t('agent.chatCount', { count: count(p.id) })}
 				onclick={() => onproject(p)}
 			>
-				<span class="icon" aria-hidden="true">{p.icon || '📁'}</span>
-				<strong>{p.name}</strong>
-				<small
-					>{count(p.id) === 1
-						? t('agent.chatCountOne')
-						: t('agent.chatCount', { count: count(p.id) })}</small
-				>
+				<span class="em" aria-hidden="true">{p.icon || '📁'}</span>{p.name}
 			</button>
 		{/each}
-		<button type="button" class="ptile add" onclick={onnewproject}>
-			<span class="icon" aria-hidden="true"><Icon name="plus" size={20} /></span>
-			<strong>{t('agent.projectTile')}</strong>
-			<small>{t('agent.projectTileSub')}</small>
-		</button>
+		<button type="button" class="chip-p add" onclick={onnewproject}
+			><Icon name="plus" size={14} />{t('agent.projectChip')}</button
+		>
 	</div>
 
 	{#if active.length}
@@ -106,13 +122,31 @@
 		</div>
 	{/if}
 
-	<div class="sugg">
-		{#each suggestions as s (s.text)}
-			<button type="button" onclick={() => onfill(s.text)}
-				><strong>{s.title}</strong><small>{s.sub}</small></button
-			>
-		{/each}
-	</div>
+	{#if show && suggestions.length}
+		<div class="cap">
+			<span>{t('agent.fitsNow')}</span>
+			{#if onshuffle}<button type="button" class="other" onclick={onshuffle}
+					><Icon name="refresh" size={13} />{t('agent.otherSuggestions')}</button
+				>{/if}
+		</div>
+		<div class="sugg">
+			{#each suggestions as s, i (s.text)}
+				<button
+					type="button"
+					style:--i={i}
+					style:--c={s.color ?? 'var(--accent)'}
+					onclick={() => onfill(s.text)}
+				>
+					<span class="sq" aria-hidden="true"><Icon name={s.icon ?? 'sparkle'} size={18} /></span>
+					<span class="t">
+						{#if s.tag}<em class="why {s.tone ?? 'info'}">{s.tag}</em>{/if}
+						<strong>{s.title}</strong><small>{s.sub}</small>
+					</span>
+					<Icon name="chevronRight" size={16} />
+				</button>
+			{/each}
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -123,64 +157,70 @@
 		display: flex;
 		flex-direction: column;
 		width: 100%;
-		max-width: 800px;
+		max-width: 780px;
 		margin: 0 auto;
 		padding: 0 var(--ag-pad, 20px) 12px;
 	}
 	.hello {
-		flex: 1 0 auto;
 		display: flex;
 		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		text-align: center;
-		gap: 8px;
-		padding: 24px 0 18px;
+		align-items: flex-start;
+		gap: 6px;
+		padding: clamp(16px, 6vh, 56px) 0 18px;
 	}
 	.orb {
-		width: 64px;
-		height: 64px;
-		border-radius: 22px;
+		width: 72px;
+		height: 72px;
+		border-radius: 24px;
 		display: grid;
 		place-items: center;
+		margin-bottom: 12px;
 		color: #fff;
-		background: var(--ag-orb, var(--accent));
+		background: var(--ag-gradient, var(--accent));
 		box-shadow:
-			0 0 0 6px color-mix(in srgb, var(--accent) 12%, transparent),
-			0 0 60px 4px color-mix(in srgb, var(--accent) 50%, transparent);
-		margin-bottom: 6px;
+			0 20px 50px -14px color-mix(in srgb, var(--ag-accent-2, var(--accent)) 80%, transparent),
+			inset 0 1px 0 rgb(255 255 255 / 0.35);
+		position: relative;
+		animation: ag-float 6s ease-in-out infinite;
 	}
-	:global(.agent.glow) .orb {
-		animation: float 6s ease-in-out infinite;
+	.orb::after {
+		content: '';
+		position: absolute;
+		inset: -9px;
+		border-radius: 30px;
+		border: 1px solid color-mix(in srgb, var(--ag-accent-2, var(--accent)) 40%, transparent);
+		box-shadow: 0 0 40px color-mix(in srgb, var(--ag-accent-2, var(--accent)) 35%, transparent);
 	}
-	:global(.agent.glow) .orb.busy {
-		animation:
-			float 6s ease-in-out infinite,
-			breathe 1.8s ease-in-out infinite;
+	.orb.busy::after {
+		animation: ag-pulse 1.6s ease-in-out infinite;
 	}
-	:global(.agent.calm) .orb {
-		animation: none !important;
-	}
-	@keyframes float {
+	@keyframes ag-float {
 		50% {
-			transform: translateY(-5px);
+			transform: translateY(-4px);
 		}
 	}
-	@keyframes breathe {
+	@keyframes ag-pulse {
 		50% {
-			box-shadow:
-				0 0 0 12px color-mix(in srgb, var(--accent) 8%, transparent),
-				0 0 80px 14px color-mix(in srgb, var(--accent) 65%, transparent);
+			opacity: 0.35;
+			transform: scale(1.08);
 		}
+	}
+	:global(.agent.calm) .orb,
+	:global(.agent.calm) .orb::after {
+		animation: none;
 	}
 	h1 {
 		margin: 0;
-		font-size: clamp(24px, 3vw, 30px);
-		letter-spacing: -0.01em;
+		font-size: clamp(1.75rem, 5vw, 2.4rem);
+		font-weight: 800;
+		letter-spacing: -0.025em;
+		line-height: 1.1;
+	}
+	.name {
 		background: linear-gradient(
 			90deg,
-			var(--text),
-			color-mix(in srgb, var(--accent) 70%, var(--text))
+			color-mix(in srgb, var(--accent) 70%, #fff),
+			color-mix(in srgb, var(--ag-accent-2, var(--accent)) 60%, #fff)
 		);
 		-webkit-background-clip: text;
 		background-clip: text;
@@ -189,108 +229,79 @@
 	.hello p {
 		margin: 0;
 		color: var(--muted);
-		font-size: 15px;
 	}
-	.tiles {
+	.chips {
 		display: flex;
-		gap: 10px;
+		gap: 8px;
 		overflow-x: auto;
-		padding: 4px var(--ag-pad, 20px) 8px;
-		margin: 0 calc(-1 * var(--ag-pad, 20px)) 8px;
 		scrollbar-width: none;
+		margin: 0 calc(-1 * var(--ag-pad, 20px)) 16px;
+		padding: 2px var(--ag-pad, 20px);
 	}
-	.ptile {
+	.chip-p {
 		flex: none;
-		width: 124px;
-		height: 96px;
-		border-radius: 18px;
-		padding: 10px 12px;
-		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		justify-content: flex-end;
-		gap: 1px;
-		text-align: left;
-		font: inherit;
-		color: #fff;
-		cursor: pointer;
-		border: 1px solid color-mix(in srgb, var(--tile) 55%, transparent);
-		background: linear-gradient(
-			145deg,
-			color-mix(in srgb, var(--tile) 88%, transparent),
-			color-mix(in srgb, var(--tile) 38%, transparent)
-		);
-		box-shadow: 0 12px 30px -14px var(--tile);
-		transition:
-			transform 0.18s ease,
-			box-shadow 0.18s ease;
-	}
-	.ptile:hover {
-		transform: translateY(-2px);
-		box-shadow: 0 16px 34px -12px var(--tile);
-	}
-	.ptile.on {
-		outline: 2px solid var(--tile);
-		outline-offset: 2px;
-	}
-	.ptile .icon {
-		font-size: 20px;
-		margin-bottom: auto;
-		display: grid;
-	}
-	.ptile strong {
-		font-size: 14px;
-		max-width: 100%;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	.ptile small {
-		font-size: 12px;
-		opacity: 0.85;
-	}
-	.ptile.add {
-		--tile: var(--muted);
-		border: 1px dashed var(--border);
-		background: color-mix(in srgb, var(--surface) 50%, transparent);
+		display: inline-flex;
+		align-items: center;
+		gap: 7px;
+		min-height: 38px;
+		padding: 0 13px 0 8px;
+		border-radius: 999px;
+		border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+		background: color-mix(in srgb, var(--surface) 45%, transparent);
+		backdrop-filter: blur(16px);
 		color: var(--text);
-		box-shadow: none;
+		font: inherit;
+		font-size: var(--text-sm);
+		font-weight: 500;
+		white-space: nowrap;
+		cursor: pointer;
+	}
+	.chip-p .em {
+		width: 26px;
+		height: 26px;
+		border-radius: 50%;
+		display: grid;
+		place-items: center;
+		background: color-mix(in srgb, var(--tile) 35%, transparent);
+	}
+	.chip-p.on {
+		border-color: color-mix(in srgb, var(--tile) 70%, transparent);
+		background: color-mix(in srgb, var(--tile) 22%, transparent);
+	}
+	.chip-p.add {
+		padding-left: 12px;
+		border-style: dashed;
+		color: var(--muted);
 	}
 	.runs {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
-		margin-bottom: 10px;
+		gap: 6px;
+		margin-bottom: 14px;
 	}
 	.run {
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		padding: 4px 6px 4px 4px;
-		border-radius: 14px;
-		border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-		background: linear-gradient(
-			110deg,
-			color-mix(in srgb, var(--accent) 18%, var(--surface)),
-			color-mix(in srgb, var(--surface) 70%, transparent)
-		);
+		gap: 6px;
+		border-radius: 16px;
+		border: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+		background: color-mix(in srgb, var(--surface) 50%, transparent);
+		backdrop-filter: blur(18px);
 	}
 	.run.waiting {
-		border-color: var(--warn-border);
-		background: var(--warn-bg);
+		border-color: var(--warn-border, #f59e0b);
 	}
 	.open {
 		flex: 1;
-		min-width: 0;
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		padding: 8px;
+		min-height: 48px;
+		padding: 6px 12px;
 		border: 0;
 		background: none;
 		color: var(--text);
 		font: inherit;
-		font-size: var(--text-base);
 		text-align: left;
 		cursor: pointer;
 	}
@@ -298,90 +309,133 @@
 		width: 8px;
 		height: 8px;
 		border-radius: 50%;
-		flex: none;
 		background: var(--accent);
 		box-shadow: 0 0 10px var(--accent);
-		animation: pulse 1.8s ease-in-out infinite;
-	}
-	.run.waiting .dot {
-		background: var(--warn-text);
-		box-shadow: none;
-		animation: none;
-	}
-	:global(.agent.calm) .dot {
-		animation: none;
-	}
-	@keyframes pulse {
-		50% {
-			opacity: 0.4;
-		}
+		flex: none;
 	}
 	.t {
+		flex: 1;
 		min-width: 0;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		display: flex;
+		flex-direction: column;
 	}
 	.t small {
 		color: var(--muted);
-		margin-left: 8px;
-		font-size: var(--text-sm);
+		font-size: var(--text-xs);
 	}
 	.stop {
-		width: 30px;
-		height: 30px;
+		width: 34px;
+		height: 34px;
+		margin-right: 8px;
 		border-radius: 50%;
-		border: 0;
-		flex: none;
+		border: 1px solid var(--border);
+		background: none;
+		color: var(--text);
 		display: grid;
 		place-items: center;
-		background: color-mix(in srgb, var(--text) 12%, transparent);
-		color: var(--text);
 		cursor: pointer;
 	}
+	.cap {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin: 2px 2px 8px;
+		font-size: var(--text-xs);
+		font-weight: 600;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--muted);
+	}
+	.other {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		border: 0;
+		background: none;
+		color: var(--muted);
+		font: inherit;
+		font-size: var(--text-xs);
+		text-transform: none;
+		letter-spacing: 0;
+		cursor: pointer;
+		min-height: 32px;
+	}
 	.sugg {
-		display: grid;
-		grid-template-columns: repeat(4, minmax(0, 1fr));
+		display: flex;
+		flex-direction: column;
 		gap: 8px;
 	}
 	.sugg button {
 		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		min-height: 62px;
-		padding: 10px 12px;
-		border-radius: 14px;
-		border: 1px solid var(--border);
-		background: color-mix(in srgb, var(--surface) 70%, transparent);
-		backdrop-filter: blur(14px);
+		align-items: center;
+		gap: 12px;
+		padding: 12px;
+		border-radius: 18px;
+		border: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+		background: color-mix(in srgb, var(--surface) calc(var(--ag-alpha, 0.55) * 100%), transparent);
+		backdrop-filter: blur(22px) saturate(160%);
+		box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
 		color: var(--text);
 		font: inherit;
-		font-size: var(--text-base);
 		text-align: left;
 		cursor: pointer;
+		animation: ag-in 0.45s calc(var(--i) * 70ms) both cubic-bezier(0.2, 0.8, 0.2, 1);
 		transition:
-			border-color 0.18s ease,
-			transform 0.18s ease;
+			transform 0.15s,
+			border-color 0.15s;
 	}
 	.sugg button:hover {
-		border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
-		transform: translateY(-1px);
+		border-color: color-mix(in srgb, var(--c) 50%, transparent);
+	}
+	.sugg button:active {
+		transform: scale(0.985);
+	}
+	:global(.agent.calm) .sugg button {
+		animation: none;
+	}
+	@keyframes ag-in {
+		from {
+			opacity: 0;
+			transform: translateY(10px);
+		}
+	}
+	.sq {
+		width: 38px;
+		height: 38px;
+		border-radius: 12px;
+		flex: none;
+		display: grid;
+		place-items: center;
+		color: #fff;
+		background: linear-gradient(145deg, var(--c), color-mix(in srgb, var(--c) 45%, #0b1020));
+		box-shadow: 0 8px 18px -8px var(--c);
+	}
+	.sugg strong {
+		font-weight: 600;
 	}
 	.sugg small {
 		color: var(--muted);
-		font-size: var(--text-sm);
+		font-size: var(--text-xs);
 	}
-	@media (max-width: 900px) {
-		.sugg {
-			grid-template-columns: repeat(2, minmax(0, 1fr));
-		}
+	.why {
+		align-self: flex-start;
+		font-style: normal;
+		font-size: 11px;
+		font-weight: 600;
+		padding: 1px 7px;
+		border-radius: 999px;
+		margin-bottom: 3px;
 	}
-	@media (max-width: 760px) {
-		.start {
-			--ag-pad: 16px;
-		}
-		.hello {
-			padding-top: 8px;
-		}
+	.why.warn {
+		background: color-mix(in srgb, #fbbf24 18%, transparent);
+		color: color-mix(in srgb, #fbbf24 70%, var(--text));
+	}
+	.why.info {
+		background: color-mix(in srgb, var(--accent) 18%, transparent);
+		color: color-mix(in srgb, var(--accent) 65%, var(--text));
+	}
+	.why.ok {
+		background: color-mix(in srgb, #34d399 16%, transparent);
+		color: color-mix(in srgb, #34d399 70%, var(--text));
 	}
 </style>

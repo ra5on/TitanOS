@@ -1,3 +1,4 @@
+import type { IconName } from '#lib/components/Icon.svelte';
 // The KI-Agent (PLAN 44): types of the API, the event stream of a running
 // chat and small helpers the page and the settings share. No runes here,
 // so the helpers can be tested with node --test.
@@ -527,6 +528,7 @@ export function tokens(n: number): string {
 }
 
 /** The look of the agent, kept in this browser only (no stick writes). */
+export type Swipe = 'pin' | 'delete' | 'menu' | 'none';
 export type Look = {
 	accent: 'theme' | 'aurora' | 'ocean' | 'forest' | 'sunset' | 'rose';
 	style: 'bubbles' | 'clean' | 'compact';
@@ -536,12 +538,32 @@ export type Look = {
 	typing: boolean;
 	vibrate: boolean;
 	calm: boolean;
-	/** Read new answers aloud by themselves (PLAN 51). */
+	/** Read new answers aloud by themselves (PLAN 51); off: a button at each answer. */
 	read: boolean;
+	// PLAN 53: the agent app, kept per account on the NAS.
+	/** How much surfaces show through, 0–100. */
+	glassLevel: number;
+	fontSize: 's' | 'm' | 'l';
+	compact: boolean;
+	start: 'new' | 'last' | 'overview';
+	suggestions: boolean;
+	steps: boolean;
+	keepAwake: boolean;
+	gestures: boolean;
+	edge: boolean;
+	pull: boolean;
+	swipeLeft: Swipe;
+	swipeRight: Swipe;
+	motion: 'full' | 'reduced' | 'off';
+	rate: number;
+	mic: 'tap' | 'hold';
 };
 
+/** Settings that belong to the device, not the account. */
+export const DEVICE_LOOK: readonly (keyof Look)[] = ['vibrate', 'keepAwake', 'fontSize'];
+
 export const defaultLook = (): Look => ({
-	accent: 'theme',
+	accent: 'aurora',
 	style: 'bubbles',
 	background: 'aurora',
 	glass: true,
@@ -550,6 +572,21 @@ export const defaultLook = (): Look => ({
 	vibrate: true,
 	calm: false,
 	read: false,
+	glassLevel: 60,
+	fontSize: 'm',
+	compact: false,
+	start: 'new',
+	suggestions: true,
+	steps: false,
+	keepAwake: true,
+	gestures: true,
+	edge: true,
+	pull: true,
+	swipeLeft: 'delete',
+	swipeRight: 'pin',
+	motion: 'full',
+	rate: 1,
+	mic: 'tap',
 });
 
 export function sanitizeLook(v: unknown): Look {
@@ -559,6 +596,8 @@ export function sanitizeLook(v: unknown): Look {
 	const pick = <T extends string>(x: unknown, list: readonly T[], def: T): T =>
 		list.includes(x as T) ? (x as T) : def;
 	const bool = (x: unknown, def: boolean) => (typeof x === 'boolean' ? x : def);
+	const num = (x: unknown, min: number, max: number, def: number) =>
+		typeof x === 'number' && Number.isFinite(x) ? Math.min(max, Math.max(min, x)) : def;
 	return {
 		accent: pick(o.accent, ['theme', 'aurora', 'ocean', 'forest', 'sunset', 'rose'], d.accent),
 		style: pick(o.style, ['bubbles', 'clean', 'compact'], d.style),
@@ -569,7 +608,31 @@ export function sanitizeLook(v: unknown): Look {
 		vibrate: bool(o.vibrate, d.vibrate),
 		calm: bool(o.calm, d.calm),
 		read: bool(o.read, d.read),
+		glassLevel: num(o.glassLevel, 0, 100, d.glassLevel),
+		fontSize: pick(o.fontSize, ['s', 'm', 'l'], d.fontSize),
+		compact: bool(o.compact, d.compact),
+		start: pick(o.start, ['new', 'last', 'overview'], d.start),
+		suggestions: bool(o.suggestions, d.suggestions),
+		steps: bool(o.steps, d.steps),
+		keepAwake: bool(o.keepAwake, d.keepAwake),
+		gestures: bool(o.gestures, d.gestures),
+		edge: bool(o.edge, d.edge),
+		pull: bool(o.pull, d.pull),
+		swipeLeft: pick(o.swipeLeft, SWIPES, d.swipeLeft),
+		swipeRight: pick(o.swipeRight, SWIPES, d.swipeRight),
+		motion: pick(o.motion, ['full', 'reduced', 'off'], d.motion),
+		rate: num(o.rate, 0.5, 2, d.rate),
+		mic: pick(o.mic, ['tap', 'hold'], d.mic),
 	};
+}
+
+export const SWIPES: readonly Swipe[] = ['pin', 'delete', 'menu', 'none'];
+
+/** The part of a look that is saved for the account on the NAS. */
+export function accountLook(look: Look): Partial<Look> {
+	return Object.fromEntries(
+		Object.entries(look).filter(([k]) => !DEVICE_LOOK.includes(k as keyof Look)),
+	) as Partial<Look>;
 }
 
 /** The accents of the agent's look: theme accent or a two-color gradient. */
@@ -584,10 +647,25 @@ export const ACCENTS: Record<Look['accent'], [string, string] | null> = {
 
 /** CSS variables of a look for the root element of the agent. */
 /** A suggestion on the start page: a tile that fills the input. */
-export type Suggestion = { title: string; sub: string; text: string };
+export type Suggestion = {
+	title: string;
+	sub: string;
+	text: string;
+	/** PLAN 53: why it fits now, its symbol and color. */
+	tag?: string;
+	tone?: 'warn' | 'info' | 'ok';
+	icon?: IconName;
+	color?: string;
+};
+/** A warning of the NAS the agent could look into (GET /agent/suggestions). */
+export type NasHint = { kind: string; subject?: string; title: string; severity: string; time: string };
 
 export function lookStyle(look: Look): string {
 	const pair = ACCENTS[look.accent];
-	if (!pair) return '--ag-gradient: var(--accent); --ag-accent-2: var(--accent);';
-	return `--accent: ${pair[0]}; --ag-accent-2: ${pair[1]}; --ag-gradient: linear-gradient(135deg, ${pair[0]}, ${pair[1]}); --on-accent: #0b1622;`;
+	// PLAN 53: how much the glass shows through and the text size of the app.
+	const alpha = (0.32 + (1 - look.glassLevel / 100) * 0.6).toFixed(2);
+	const scale = { s: 0.93, m: 1, l: 1.1 }[look.fontSize];
+	const base = `--ag-alpha: ${alpha}; --ag-scale: ${scale};`;
+	if (!pair) return `${base} --ag-gradient: var(--accent); --ag-accent-2: var(--accent);`;
+	return `${base} --accent: ${pair[0]}; --ag-accent-2: ${pair[1]}; --ag-gradient: linear-gradient(135deg, ${pair[0]}, ${pair[1]}); --on-accent: #0b1622;`;
 }

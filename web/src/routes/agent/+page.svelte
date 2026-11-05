@@ -31,7 +31,9 @@
 	import { pageTitle } from '#lib/page-title.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import {
+		accountLook,
 		defaultLook,
+		DEVICE_LOOK,
 		follow,
 		lookStyle,
 		sanitizeLook,
@@ -46,6 +48,7 @@
 		type Project,
 		type Status,
 		type Suggestion,
+		type NasHint,
 	} from '#lib/agent.ts';
 
 	const LOOK_KEY = 'titanos.agent.look';
@@ -120,6 +123,23 @@
 			return defaultLook();
 		}
 	}
+	// PLAN 53: the look and the app settings belong to the account and live on
+	// the NAS; only device things (vibration, screen awake, text size) stay
+	// in this browser. The local copy shows the page before the answer comes.
+	let prefsLoaded = false;
+	let prefsTimer: ReturnType<typeof setTimeout> | undefined;
+	$effect(() => {
+		api
+			.get<Record<string, unknown>>('/agent/prefs')
+			.then((saved) => {
+				if (saved && Object.keys(saved).length) {
+					const device = Object.fromEntries(DEVICE_LOOK.map((k) => [k, look[k]]));
+					look = sanitizeLook({ ...look, ...saved, ...device });
+				}
+			})
+			.catch(() => {})
+			.finally(() => (prefsLoaded = true));
+	});
 	$effect(() => {
 		const value = JSON.stringify(look);
 		try {
@@ -127,9 +147,14 @@
 		} catch {
 			// Only remembered while the page is open.
 		}
+		if (!prefsLoaded) return;
+		const body = accountLook(look);
+		clearTimeout(prefsTimer);
+		prefsTimer = setTimeout(() => void api.put('/agent/prefs', body).catch(() => {}), 600);
 	});
 	const calm = $derived(
 		look.calm ||
+		look.motion !== 'full' ||
 			(typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches),
 	);
 	function buzz(pattern: number | number[]) {
@@ -456,16 +481,49 @@
 		dialog = null;
 	}
 
-	const suggestions = $derived<Suggestion[]>([
-		{ title: t('agent.suggHealth'), sub: t('agent.suggHealthSub'), text: t('agent.suggestHealth') },
-		{ title: t('agent.suggFind'), sub: t('agent.suggFindSub'), text: t('agent.suggestFind') },
-		{
-			title: t('agent.suggDocument'),
-			sub: t('agent.suggDocumentSub'),
-			text: t('agent.suggestDocument'),
-		},
-		{ title: t('agent.suggBackup'), sub: t('agent.suggBackupSub'), text: t('agent.suggestBackup') },
-	]);
+	// PLAN 53: suggestions that fit the moment – warnings of the NAS first,
+	// then by time of day, then a changing pick of the rest ("andere").
+	let hints = $state<NasHint[]>([]);
+	const seed = Math.floor(Math.random() * 100);
+	let shuffle = $state(0);
+	$effect(() => {
+		api
+			.get<{ suggestions: NasHint[] }>('/agent/suggestions')
+			.then((r) => (hints = r.suggestions ?? []))
+			.catch(() => (hints = []));
+	});
+	const suggestions = $derived.by<Suggestion[]>(() => {
+		const hour = new Date().getHours();
+		const fromNas: Suggestion[] = hints.map((h) => ({
+			title: h.title || h.kind,
+			sub: t('agent.suggNasSub'),
+			text: t('agent.suggestNas', { title: h.title || h.kind }),
+			tag: h.severity === 'error' ? t('agent.tagError') : h.kind === 'update_available' ? t('agent.tagUpdate') : t('agent.tagWarning'),
+			tone: h.kind === 'update_available' ? 'info' : 'warn',
+			icon: h.kind.startsWith('backup') ? 'archive' : h.kind.startsWith('update') ? 'download' : h.kind.startsWith('volume') || h.kind.startsWith('disk') ? 'disk' : 'bell',
+			color: h.kind === 'update_available' ? '#3b82f6' : '#f59e0b',
+		}));
+		const timed: Suggestion[] =
+			hour < 11
+				? [{ title: t('agent.suggNight'), sub: t('agent.suggNightSub'), text: t('agent.suggestNight'), tag: t('agent.tagMorning'), tone: 'ok', icon: 'clock', color: '#0ea5e9' }]
+				: hour >= 18
+					? [{ title: t('agent.suggHome'), sub: t('agent.suggHomeSub'), text: t('agent.suggestHome'), tag: t('agent.tagEvening'), tone: 'ok', icon: 'home', color: '#10b981' }]
+					: [];
+		const pool: Suggestion[] = [
+			{ title: t('agent.suggHealth'), sub: t('agent.suggHealthSub'), text: t('agent.suggestHealth'), icon: 'shield', color: '#22c55e' },
+			{ title: t('agent.suggFind'), sub: t('agent.suggFindSub'), text: t('agent.suggestFind'), icon: 'search', color: '#0ea5e9' },
+			{ title: t('agent.suggDocument'), sub: t('agent.suggDocumentSub'), text: t('agent.suggestDocument'), icon: 'fileText', color: '#8b5cf6' },
+			{ title: t('agent.suggBackup'), sub: t('agent.suggBackupSub'), text: t('agent.suggestBackup'), icon: 'archive', color: '#f59e0b' },
+			{ title: t('agent.suggUpdates'), sub: t('agent.suggUpdatesSub'), text: t('agent.suggestUpdates'), icon: 'download', color: '#3b82f6' },
+			{ title: t('agent.suggClean'), sub: t('agent.suggCleanSub'), text: t('agent.suggestClean'), icon: 'disk', color: '#ec4899' },
+			{ title: t('agent.suggApps'), sub: t('agent.suggAppsSub'), text: t('agent.suggestApps'), icon: 'box', color: '#6366f1' },
+			{ title: t('agent.suggEnergy'), sub: t('agent.suggEnergySub'), text: t('agent.suggestEnergy'), icon: 'zap', color: '#eab308' },
+		];
+		const start = seed % pool.length;
+		const all = [...fromNas, ...timed, ...pool.slice(start), ...pool.slice(0, start)];
+		const from = (shuffle * 3) % all.length;
+		return [...all.slice(from), ...all.slice(0, from)].slice(0, 3);
+	});
 	const currentInfo = $derived(
 		current && !readOnlyBy ? chats.find((c) => c.id === current!.id && !c.author) : undefined,
 	);
@@ -693,6 +751,8 @@
 					/>
 				{:else}
 					<AgentStart
+						onshuffle={() => (shuffle += 1)}
+						show={look.suggestions}
 						{user}
 						{chats}
 						{projects}
@@ -889,18 +949,56 @@
 		pointer-events: none;
 		border-radius: var(--radius-tile);
 	}
+	.agent {
+		overflow: hidden;
+		border-radius: var(--radius-tile);
+	}
+	.agent.app {
+		border-radius: 0;
+	}
+	/* PLAN 53: the agent has its own lively look – a slowly moving aurora
+	   behind glass. Motion off, calm or reduced motion keep it still. */
 	.agent[data-bg='aurora']::before {
+		inset: -12%;
+		filter: blur(48px) saturate(140%);
+		opacity: 0.9;
 		background:
 			radial-gradient(
-				60% 50% at 25% 15%,
-				color-mix(in srgb, var(--accent) 30%, transparent),
+				40% 35% at 18% 20%,
+				color-mix(in srgb, var(--accent) 55%, transparent),
 				transparent 70%
 			),
 			radial-gradient(
-				50% 40% at 85% 20%,
+				35% 30% at 85% 12%,
+				color-mix(in srgb, var(--ag-accent-2, var(--accent)) 45%, transparent),
+				transparent 70%
+			),
+			radial-gradient(45% 40% at 70% 88%, rgb(34 211 238 / 0.22), transparent 70%),
+			radial-gradient(
+				40% 35% at 8% 92%,
 				color-mix(in srgb, var(--ag-accent-2, var(--accent)) 25%, transparent),
 				transparent 70%
 			);
+		animation: ag-aurora 28s ease-in-out infinite alternate;
+	}
+	.agent.calm[data-bg]::before {
+		animation: none;
+	}
+	@keyframes ag-aurora {
+		0% {
+			transform: translate3d(0, 0, 0) scale(1);
+		}
+		50% {
+			transform: translate3d(3%, -2%, 0) scale(1.06) rotate(2deg);
+		}
+		100% {
+			transform: translate3d(-3%, 2%, 0) scale(1.03) rotate(-2deg);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.agent[data-bg]::before {
+			animation: none;
+		}
 	}
 	.agent[data-bg='ocean']::before {
 		background: linear-gradient(
@@ -941,9 +1039,15 @@
 	}
 	.agent.glass .side,
 	.agent.glass .main {
-		background: color-mix(in srgb, var(--surface) 55%, transparent);
-		backdrop-filter: blur(26px) saturate(160%);
-		border-color: var(--glass-border, var(--border));
+		background: color-mix(in srgb, var(--surface) calc(var(--ag-alpha, 0.55) * 100%), transparent);
+		backdrop-filter: blur(26px) saturate(170%);
+		border-color: color-mix(in srgb, var(--text) 10%, transparent);
+		box-shadow:
+			inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent),
+			0 20px 50px -25px rgb(0 0 0 / 0.7);
+	}
+	.layout {
+		zoom: var(--ag-scale, 1);
 	}
 	.main {
 		display: flex;
