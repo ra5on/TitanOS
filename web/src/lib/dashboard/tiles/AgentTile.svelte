@@ -2,6 +2,7 @@
 	// The KI-Agent on the dashboard (PLAN 44): tasks that run or wait for
 	// the person, the latest chats and a field that opens the agent with the
 	// task. It reads the list itself while the dashboard is open.
+	import { openAgent } from '#lib/agent-app.ts';
 	import { goto } from '$app/navigation';
 	import { api } from '#lib/api.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
@@ -35,7 +36,7 @@
 	function ask(event: SubmitEvent) {
 		event.preventDefault();
 		const value = text.trim();
-		void goto('/agent' + (value ? '?' + new URLSearchParams({ ask: value }).toString() : ''));
+		openAgent('/agent' + (value ? '?' + new URLSearchParams({ ask: value }).toString() : ''), goto);
 	}
 </script>
 

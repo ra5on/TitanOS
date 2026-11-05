@@ -111,3 +111,33 @@ export async function subscribe(publicKey: string, name: string): Promise<PushDe
 	});
 	return api.post<PushDevice>('/notifications/push', { name, subscription: subscription.toJSON() });
 }
+
+/** The chat of a notification of the KI-Agent ("agent-<chat>"), or ''. */
+export function agentTag(tag: string): string {
+	return /^agent-[a-f0-9]{16}$/.test(tag) ? tag.slice(6) : '';
+}
+
+/**
+ * Removes notifications of the KI-Agent for chats that are read by now,
+ * here or on another device (PLAN 48). iOS allows no silent push that
+ * could do this at once, so it happens when TitanOS or the agent opens.
+ * With `chat` only that chat's notifications go, without asking the NAS.
+ */
+export async function clearAgentNotifications(chat?: string): Promise<void> {
+	if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+	try {
+		const registration = await navigator.serviceWorker.getRegistration('/');
+		if (!registration?.getNotifications) return;
+		const shown = (await registration.getNotifications()).filter((n) => agentTag(n.tag ?? ''));
+		if (!shown.length) return;
+		let read: (id: string) => boolean = (id) => id === chat;
+		if (!chat) {
+			const list = await api.get<{ chats: { id: string; unread?: boolean }[] }>('/agent/chats');
+			const unread = new Set(list.chats.filter((c) => c.unread).map((c) => c.id));
+			read = (id) => !unread.has(id);
+		}
+		for (const n of shown) if (read(agentTag(n.tag))) n.close();
+	} catch {
+		// Without the agent or the API the notifications simply stay.
+	}
+}

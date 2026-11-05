@@ -16,16 +16,29 @@ Ab Werk ist der Agent aus. Eingeschaltet wird er unter **Einstellungen › KI-Ag
 
 ## Bedienung
 
-- **Desktop:** links neuer Chat, Suche, Projekte mit ihren Chats, darunter die übrigen Chats nach Tagen; rechts der Chat.
-- **Handy:** Startseite mit dem laufenden Auftrag, Projekten als Kacheln, Suche und allen Chats wie auf dem Desktop: angeheftete oben, dann nach Tagen (Zeile nach links wischen: anheften, umbenennen, Projekt, löschen; danach klappt sie zu). Im Chat bündelt **⋯** alles, was der Desktop als Knöpfe zeigt: anheften, umbenennen, in ein Projekt verschieben, Export Markdown/PDF, Vollbild, löschen. Eingabefelder haben auf dem Handy 16 px Schrift, damit iOS beim Tippen nicht heranzoomt. Mit dem runden Handy-Menü (Darstellung „Seitlich“) sitzt im Agenten statt des runden Knopfs unten ein ☰ oben links (PLAN 47).
-- **Vollbild oder mit Menü** (PLAN 47): Über das TitanOS-Menü öffnet sich der Agent mit dem Menü; der Knopf „Vollbild“ (Desktop in der Kopfzeile, Handy oben bzw. im ⋯-Menü) blendet es aus, „Mit Menü“ wieder ein. Die Wahl gilt je Gerät (`localStorage`).
+- **Aussehen (PLAN 48):** Handy und Desktop sehen gleich aus, angelehnt an die großen Chat-Apps.
+  - **Agent-Menü:** Suche, „Neuer Chat“, Projekte (Klick klappt ihre Chats auf), dann Angeheftet und die Chats nach Tagen. Laufende Chats leuchten, wartende zeigen „Freigabe“, ungelesene einen Punkt (auch bei zugeklapptem Projekt). Unten Wissen, Darstellung und Einstellungen (nur Admins).
+  - **Kopfzeile:** in der Mitte Modell und Denkstufe; Antippen öffnet die Auswahl (Desktop als Fenster unter dem Knopf, Handy als Blatt von unten). Im Chat stehen dort Titel, Projekt und Modell. Rechts Anheften (Desktop), Vollbild (Desktop), **⋯** (Umbenennen, In Projekt verschieben, Export Markdown/PDF, Löschen; am Handy auch Anheften) und ✎ Neuer Chat.
+  - **Start = neuer Chat:** Begrüßung mit leuchtendem Agent-Symbol (atmet, solange ein Auftrag läuft), Projekte als Kacheln (Antippen öffnet das Projekt), laufende und wartende Aufträge mit Stopp-Knopf, vier Vorschläge, die das Eingabefeld füllen.
+  - **Eingabefeld:** eine Pille mit Büroklammer, Text und Senden-Knopf, Glas mit Leuchtrand. Auf dem Handy 16 px Schrift, damit iOS nicht heranzoomt.
+  - **Effekte:** Glas, Leuchten, Verlaufsschrift, weiche Übergänge; „Leuchten“ und „Weniger Bewegung“ unter Darstellung schalten sie ab (auch die Systemeinstellung „Bewegung reduzieren“).
+- **Desktop:** Links bleibt das TitanOS-Menü, daneben das Agent-Menü, rechts der Chat (höchstens etwa 800 px breit, mittig). **Vollbild** in der Kopfzeile blendet das TitanOS-Menü aus, **Mit Menü** wieder ein; die Wahl gilt je Gerät (`localStorage`, PLAN 47).
+- **Handy:** Der Agent ist immer eine eigene Ansicht ohne TitanOS-Rahmen (PLAN 48). ☰ oben links (oder Wischen vom linken Rand) öffnet das Agent-Menü, Wischen nach links schließt es. Ganz unten im Menü führt **„Zurück zu TitanOS“** zum Dashboard.
+- **Home-Bildschirm:** Zwischen TitanOS und dem Agenten lädt die Seite neu. Safari liest das Manifest nur beim Laden. So legt „Zum Home-Bildschirm“ auf `/agent` das Agent-Symbol an und überall sonst das von TitanOS, auch wenn man über das Menü hingekommen ist.
 - **Eigene App:** Auf `/agent` „Zum Home-Bildschirm“ (iOS) bzw. „App installieren“ (Chrome/Edge). Die App hat ein eigenes Symbol und Manifest (`/agent.webmanifest`, Start `/agent?app=1`) und zeigt nie die TitanOS-Navigation.
 - **Projekte** haben eigene Anweisungen und einen Standard-Ablageort.
 - **Schritte:** Jeder Werkzeugaufruf steht im Chat, zusammengefasst als „n Schritte“. Die Gedanken des Modells lassen sich aufklappen. Der runde Knopf hält den Auftrag an.
 - **Rückfragen:** Passt ein Name auf mehreres (Home Assistant als Docker-App und als VM), fragt der Agent mit Knöpfen.
 - **Darstellung:** Akzent, Chat-Stil (Blasen/Klar/Kompakt), Glas, Leuchten, Schreibanimation, Vibration (nur Android), weniger Bewegung. Gespeichert nur im Browser.
 
-Aufträge laufen auf dem NAS weiter, auch wenn die Seite zu ist. Ist er fertig oder wartet er auf dich, kommt eine Push-Mitteilung (Web Push); sie öffnet nur den Chat und gibt nie etwas frei.
+Aufträge laufen auf dem NAS weiter, auch wenn die Seite zu ist. Ist er fertig, wartet er auf dich oder gab es einen Fehler, kommt eine Push-Mitteilung (Web Push); sie öffnet nur den Chat und gibt nie etwas frei.
+
+**Gelesen-Stand und Mitteilungen (PLAN 48, Entscheidung des Inhabers vom 5.11.2026):**
+- Solange ein Chat auf einem Gerät sichtbar offen ist, meldet die Seite das alle 15 Sekunden (`POST /api/v1/agent/chats/{id}/seen`). Der Chat gilt dann auf allen Geräten des Kontos als gelesen.
+- Endet ein Lauf, während der Chat irgendwo sichtbar ist (Meldung jünger als 40 Sekunden), geht **keine** Mitteilung raus, auch nicht bei Freigabe oder Fehler. Sonst geht sie sofort raus, ohne Wartezeit.
+- Je Chat höchstens eine ungelesene Mitteilung: Solange die letzte nicht angesehen wurde, kommt keine weitere (z. B. bei mehreren Freigaben in einem Lauf). Eine neue ersetzt die alte (gleicher Tag `agent-<chat>`).
+- Mitteilungen gelesener Chats verschwinden, sobald TitanOS oder der Agent auf dem Gerät geöffnet wird (Service Worker, `getNotifications`). Sofort beim Lesen auf einem anderen Gerät geht das nicht: iOS erlaubt keinen stillen Push.
+- Die Chat-Liste liefert `unread`. Gelesen-Stände liegen in `.titanos/agent/<konto>/seen.json` und werden nur geschrieben, wenn sich der Chat seit dem letzten Ansehen geändert hat; den letzten Stand der Chats hält titand im RAM, die 15-Sekunden-Meldung greift ohne Änderung nicht auf die Platte zu (Ruhemodus). Chats von vor dem Update gelten als gelesen.
 
 ## Grundanweisung, Landkarte, Beschreibungen
 
@@ -96,6 +109,7 @@ Der Agent nutzt die Verbindung unter Einstellungen › Home Assistant:
 | Vollbild ja/nein | `localStorage` des Browsers (`titanos.agent.full`) |
 | Chats, Projekte, Gedächtnis, Skills, geplante Aufträge | `.titanos/agent/<konto>/` auf einem Daten-Volume: beim ersten Gebrauch das erste eingebundene, danach fest (`volume` in `agent.json`) |
 | Darstellung | `localStorage` des Browsers |
+| Gelesen-Stand je Chat | `.titanos/agent/<konto>/seen.json` (nur bei Änderung geschrieben) |
 
 Ohne dieses Volume ist der Agent nicht verfügbar (er weicht nicht still auf ein anderes aus); er speichert nie im RAM oder auf dem Stick. Ein Auftrag, den titand nicht beenden konnte (Neustart, Update), wird beim nächsten Start als „unterbrochen“ markiert. App-Updates warten, solange ein Auftrag läuft.
 
@@ -107,4 +121,5 @@ Ohne dieses Volume ist der Agent nicht verfügbar (er weicht nicht still auf ein
 - Oberfläche: `scripts/test-ui-agent.mjs` mit Testdaten (Desktop, Handy, eigene App, Einstellungen); Seiten-Crawl gegen `titand -dev` ohne Befund; Einstellungen gegen das echte Ollama über `titand -dev` (ohne Daten-Volume, daher keine Chats).
 - Kopfzeile: mit dem 13. Reiter passt bei 1366 px alles, bei 1280 px kommen die Pfeile.
 - PLAN 47: `test-ui-agent` prüft zusätzlich ☰ statt rundem Knopf, Suche und „Angeheftet“ auf dem Handy, 16 px im Eingabefeld, Dateiauswahl vom NAS bis zu den Kärtchen, Meldung bei zu großen Dateien, ⋯-Menü, Vollbild hin und zurück (auch nach Neuladen), Einstellungen für Mitglied und Admin-Knoten. Go-Tests: Anhängen wie der Browser (leerer Chat, Upload mit Dateityp, Nachricht, Lesen von Anhang und NAS-Datei), zwei echte API-Server im Cluster mit geteiltem Agenten (keine Freigabe, Anfrage, Freigabe, Chat bleibt auf dem Knoten, kein Herunterladen, Entziehen).
-- **Nicht geprüft:** geteilter Agent zwischen zwei echten NAS; echtes Home Assistant (Assist über die Ollama-Integration, Konfigurations-API für Automationen, Langzeit-Statistik), echte Push-Mitteilungen, Installation als App auf echten Geräten.
+- PLAN 48: `test-ui-agent` prüft das Agent-Menü am Desktop (neben dem TitanOS-Menü, „Freigabe“ beim wartenden Chat) und am Handy (☰, Angeheftet zuerst, Ungelesen-Punkt, Suche, „Zurück zu TitanOS“ lädt das Dashboard), Modell und Denkstufe oben (Fenster bzw. Blatt), Vorschläge füllen das Eingabefeld, Handy ohne TitanOS-Rahmen auch ohne `?app=1`, Neuladen samt richtigem Manifest beim Wechsel TitanOS ↔ Agent in beide Richtungen (auch Zurück/Vor ohne Hin- und Herspringen), die Seen-Meldung des offenen Chats. Go-Test `TestAgentReadStateAndPush`: ungelesen nach einer Antwort, eine Mitteilung bis zum Ansehen, gelesen nach `seen`, keine Mitteilung bei sichtbarem Chat, wieder ungelesen nach neuer Antwort, kein Schreiben ohne Änderung; `TestSeenNeedsNoDiskWithoutChange`: wiederholtes Ansehen öffnet das Volume nicht.
+- **Nicht geprüft:** geteilter Agent zwischen zwei echten NAS; echtes Home Assistant (Assist über die Ollama-Integration, Konfigurations-API für Automationen, Langzeit-Statistik), echte Push-Mitteilungen (auch das Aufräumen in der Mitteilungszentrale), Installation als App auf echten Geräten (Home-Bildschirm-Symbol des Agenten auf dem iPhone).

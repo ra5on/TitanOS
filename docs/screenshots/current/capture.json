@@ -198,6 +198,50 @@
       "height": 844,
       "bytes": 45180,
       "sha256": "55129b74a550b0f1e6a5fd3baba07b1269d9e7c2299dc5bce5614c253049967e"
+    },
+    {
+      "file": "ki-agent.png",
+      "script": "scripts/test-ui-agent.mjs",
+      "scriptOutput": "3-desktop-new.png",
+      "version": "0.51.0",
+      "captured": "2026-11-05",
+      "width": 1440,
+      "height": 1000,
+      "bytes": 476462,
+      "sha256": "8ba826069141d3797b9936ff4c07878a2880698767f4e45511bfe06bd486f7be"
+    },
+    {
+      "file": "ki-agent-chat.png",
+      "script": "scripts/test-ui-agent.mjs",
+      "scriptOutput": "1-desktop-chat.png",
+      "version": "0.51.0",
+      "captured": "2026-11-05",
+      "width": 1440,
+      "height": 1000,
+      "bytes": 431986,
+      "sha256": "d21bc3867d1f9f0fd75290cf0e3cc8cecdc7f8ff31f2eedbe115c18fa33f80b5"
+    },
+    {
+      "file": "ki-agent-mobil.png",
+      "script": "scripts/test-ui-agent.mjs",
+      "scriptOutput": "10-phone-in-titanos.png",
+      "version": "0.51.0",
+      "captured": "2026-11-05",
+      "width": 390,
+      "height": 844,
+      "bytes": 239449,
+      "sha256": "4c330a465e76576664f8938cec8a4a8ffc302a54266f944573d9d859c9444e81"
+    },
+    {
+      "file": "ki-agent-menue-mobil.png",
+      "script": "scripts/test-ui-agent.mjs",
+      "scriptOutput": "16-phone-menu.png",
+      "version": "0.51.0",
+      "captured": "2026-11-05",
+      "width": 390,
+      "height": 844,
+      "bytes": 113263,
+      "sha256": "5060692e9c1b9668da9fc2b84aafe85d354041e8c1af6c0b3f8be5cf752add9a"
     }
   ]
 }

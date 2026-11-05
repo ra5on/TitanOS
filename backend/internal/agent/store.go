@@ -160,6 +160,9 @@ type ChatInfo struct {
 	Origin  string    `json:"origin,omitempty"`
 	// Preview is the start of the last answer.
 	Preview string `json:"preview,omitempty"`
+	// Unread: changed since the person last looked (only in the list
+	// answer, never stored).
+	Unread bool `json:"unread,omitempty"`
 }
 
 // Info returns the list entry of a chat.
@@ -252,6 +255,11 @@ type Store struct {
 	// awake (docs/rules/STORAGE.md, Ruhemodus).
 	schedules map[string][]Schedule
 	scanned   bool
+	// seen holds the read states once read (seen.go); updated the last
+	// change of each chat as the index says, so a "seen" from the page
+	// needs no read of the volume.
+	seen    map[string]seenState
+	updated map[string]map[string]time.Time
 }
 
 func (s *Store) userRoot(user string, create bool) (*os.Root, func(), error) {
@@ -369,6 +377,7 @@ func (s *Store) SaveChat(user string, c *Chat) error {
 	if err := s.write(user, "chats.json", index); err != nil {
 		return err
 	}
+	s.updatedLocked(user, index)
 	for _, id := range removed {
 		s.removeFile(user, "chats/"+id+".json")
 	}
@@ -407,11 +416,25 @@ func (s *Store) indexLocked(user string) ([]ChatInfo, error) {
 	var index []ChatInfo
 	if err := s.read(user, "chats.json", &index, maxIndexFile); err != nil {
 		if errors.Is(err, ErrNotFound) {
+			s.updatedLocked(user, nil)
 			return []ChatInfo{}, nil
 		}
 		return nil, err
 	}
+	s.updatedLocked(user, index)
 	return index, nil
+}
+
+// updatedLocked remembers the last change of every chat of the index.
+func (s *Store) updatedLocked(user string, index []ChatInfo) {
+	if s.updated == nil {
+		s.updated = map[string]map[string]time.Time{}
+	}
+	m := make(map[string]time.Time, len(index))
+	for _, c := range index {
+		m[c.ID] = c.Updated
+	}
+	s.updated[user] = m
 }
 
 // Chats lists the chats of an account, newest first, pinned ones on top.
@@ -450,6 +473,7 @@ func (s *Store) DeleteChat(user, id string) error {
 	if err := s.write(user, "chats.json", index); err != nil {
 		return err
 	}
+	s.updatedLocked(user, index)
 	s.removeFile(user, "chats/"+id+".json")
 	if root, done, err := s.userRoot(user, false); err == nil {
 		_ = root.RemoveAll("files/" + id)

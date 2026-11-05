@@ -112,6 +112,7 @@ func (s *Server) handleAgentChats(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.agentRT.mu.Unlock()
+	s.agentStore().MarkUnread(currentUser(r).Name, list)
 	writeJSON(w, http.StatusOK, map[string]any{"chats": list})
 }
 
@@ -482,9 +483,11 @@ func (s *Server) agentRunner(ctx context.Context, user auth.User, settings agent
 	}
 }
 
-// agentDone tells the person when a run ended without them watching.
+// agentDone tells the person when a run ended without them watching
+// (PLAN 48): nothing goes out while the chat is open and visible on one of
+// their devices, and only one message per chat until they look at it.
 func (s *Server) agentDone(user auth.User, chat *agent.Chat) {
-	if s.opts.WebPush == nil {
+	if s.opts.WebPush == nil || !s.agentShouldPush(user.Name, chat.ID) {
 		return
 	}
 	var body string
@@ -494,9 +497,6 @@ func (s *Server) agentDone(user auth.User, chat *agent.Chat) {
 	case agent.StateError:
 		body = "Fehler: " + chat.Error
 	default:
-		if chat.Origin == "web" && s.agentWatched(user.Name, chat.ID) {
-			return
-		}
 		body = "Fertig."
 		for i := len(chat.Entries) - 1; i >= 0; i-- {
 			if e := chat.Entries[i]; e.Role == "assistant" && strings.TrimSpace(e.Content) != "" {
@@ -511,16 +511,89 @@ func (s *Server) agentDone(user auth.User, chat *agent.Chat) {
 	s.opts.WebPush.SendTo(user.Name, webpush.Message{Title: "KI-Agent: " + chat.Title, Body: body, URL: "/agent?chat=" + chat.ID, Tag: "agent-" + chat.ID})
 }
 
-// agentWatched reports whether a page of the chat is open right now.
+// agentShouldPush decides whether the end of a run goes out as a push
+// message, and notes it when it does. A chat on screen counts as read.
+func (s *Server) agentShouldPush(user, chat string) bool {
+	store := s.agentStore()
+	if s.agentWatched(user, chat) {
+		_ = store.Seen(user, chat, time.Now())
+		return false
+	}
+	seen := store.SeenAt(user, chat)
+	key := runKey(user, chat)
+	s.agentWatch.mu.Lock()
+	defer s.agentWatch.mu.Unlock()
+	if last, sent := s.agentWatch.pushed[key]; sent && last.After(seen) {
+		// The last message is still unread; it says enough.
+		return false
+	}
+	if s.agentWatch.pushed == nil {
+		s.agentWatch.pushed = map[string]time.Time{}
+	}
+	s.agentWatch.pushed[key] = time.Now()
+	return true
+}
+
+// agentVisibleFor is how long a "visible" signal of a page holds; the page
+// repeats it every 15 seconds while the chat is on screen.
+const agentVisibleFor = 40 * time.Second
+
+// agentWatched reports whether the chat is on screen on one of the
+// person's devices right now.
 func (s *Server) agentWatched(user, chat string) bool {
 	s.agentWatch.mu.Lock()
 	defer s.agentWatch.mu.Unlock()
-	return s.agentWatch.open[runKey(user, chat)] > 0
+	at, ok := s.agentWatch.visible[runKey(user, chat)]
+	return ok && time.Since(at) < agentVisibleFor
+}
+
+// handleAgentSeen: the page shows a chat (visible) or no longer does. A
+// visible chat counts as read on all devices.
+func (s *Server) handleAgentSeen(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Visible bool `json:"visible"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	user := currentUser(r)
+	id := r.PathValue("id")
+	if !agent.ValidID(id) {
+		writeError(w, http.StatusNotFound, "not_found", "not found")
+		return
+	}
+	key := runKey(user.Name, id)
+	s.agentWatch.mu.Lock()
+	if s.agentWatch.visible == nil {
+		s.agentWatch.visible = map[string]time.Time{}
+	}
+	if req.Visible {
+		s.agentWatch.visible[key] = time.Now()
+	} else {
+		delete(s.agentWatch.visible, key)
+	}
+	for k, at := range s.agentWatch.visible {
+		if time.Since(at) > agentVisibleFor {
+			delete(s.agentWatch.visible, k)
+		}
+	}
+	s.agentWatch.mu.Unlock()
+	if req.Visible {
+		if err := s.agentStore().Seen(user.Name, id, time.Now()); err != nil {
+			agentStoreError(w, err)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 type agentWatchers struct {
 	mu   sync.Mutex
 	open map[string]int
+	// visible: chats on screen (handleAgentSeen); pushed: the last push
+	// message per chat.
+	visible map[string]time.Time
+	pushed  map[string]time.Time
 }
 
 // handleAgentEvents streams the events of a chat as server-sent events

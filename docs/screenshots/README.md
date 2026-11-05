@@ -2,7 +2,7 @@
 
 `current/` enthält die aktuellen Aufnahmen für die Projekt-README und die Fachdokumente.
 
-**Aufnahmestand:** die Bilder aus `capture.mjs` (einschließlich Einstellungen) sowie Firewall, VM erstellen, Protokoll, Dateien ersetzen, Dateiaufträge und Navigation auf dem Handy zeigen die gebaute Svelte-WebUI von **TitanOS 0.47.1** (Stand nach 0.47.1, Zweig `feat/kleine-punkte-c`), aufgenommen am **3. November 2026** mit Chromium (Playwright), Theme Graphit, blauer Akzent, Glasflächen, Deutsch. Die Statuszeile von Firewall, VM erstellen und Protokoll nennt die Version der jeweiligen Prüfskripte.
+**Aufnahmestand:** die Bilder aus `capture.mjs` (einschließlich Einstellungen) sowie Firewall, VM erstellen, Protokoll, Dateien ersetzen, Dateiaufträge und Navigation auf dem Handy zeigen die gebaute Svelte-WebUI von **TitanOS 0.47.1** (Stand nach 0.47.1, Zweig `feat/kleine-punkte-c`), aufgenommen am **3. November 2026** mit Chromium (Playwright), Theme Graphit, blauer Akzent, Glasflächen, Deutsch. Die Statuszeile von Firewall, VM erstellen und Protokoll nennt die Version der jeweiligen Prüfskripte. Die vier Bilder des KI-Agenten (`ki-agent*.png`) zeigen **0.51.0** (Zweig `feat/agent-48`), aufgenommen am **5. November 2026** mit der Seitenleisten-Navigation; ihre Testdaten setzt `scripts/test-ui-agent.mjs` (kein Ollama, kein NAS).
 
 Alle NAS-Antworten werden durch isolierte Demonstrationsdaten ersetzt. Hostname, Konten, Dateien, Laufwerke, Adressen und Messwerte sind Beispiele. Es werden weder echte NAS-Geräte angesprochen noch Container oder VMs gestartet. Die sichtbaren App-Icons sind die konfigurierten Originalbilder der jeweiligen Projekte. Ihre Quellen und SHA-256-Werte stehen in [icon-sources.json](icon-sources.json); Namen und Logos gehören den jeweiligen Projekten. Keine nachträgliche Bildbearbeitung oder eingebauten Design-Mockups. Die Bilder ersetzen keine Funktions- oder Hardwareprüfung.
 
@@ -29,6 +29,10 @@ Alle NAS-Antworten werden durch isolierte Demonstrationsdaten ersetzt. Hostname,
 | [dashboard-mobil.png](current/dashboard-mobil.png) | Oberer Ausschnitt der gestapelten Startseite | Smartphone 390 × 844 |
 | [dateien-mobil.png](current/dateien-mobil.png) | Ortsauswahl und Dateiliste | Smartphone 390 × 844 |
 | [navigation-mobil.png](current/navigation-mobil.png) | Navigation „Seitlich“ auf dem Handy: geöffnete Schublade mit Bereichen, Status, Werkzeugen und Konto | Smartphone 390 × 844 |
+| [ki-agent.png](current/ki-agent.png) | KI-Agent (0.51.0): Agent-Menü neben dem TitanOS-Menü, Start mit Begrüßung, Projekt-Kacheln, laufenden Aufträgen, Vorschlägen; Modell und Denkstufe oben | Desktop 1440 × 1000 |
+| [ki-agent-chat.png](current/ki-agent-chat.png) | KI-Agent: Chat mit Schritten, Tabelle und Freigabe-Karte, „Freigabe“ im Menü | Desktop 1440 × 1000 |
+| [ki-agent-mobil.png](current/ki-agent-mobil.png) | KI-Agent auf dem Handy als eigene App: Start | Smartphone 390 × 844 |
+| [ki-agent-menue-mobil.png](current/ki-agent-menue-mobil.png) | Menü des KI-Agenten auf dem Handy mit „Zurück zu TitanOS“ | Smartphone 390 × 844 |
 
 ## Weitere Aufnahmen
 
@@ -55,6 +59,7 @@ Nicht in der README eingebunden; die VM- und Protokollbilder verlinkt [VM-CREATE
 | `scripts/test-ui-vm-create.mjs` | `graphit-1600-de.png` → `vm-erstellen.png`, `graphit-390-de.png` → `vm-erstellen-mobil.png`, `system-logs.png` → `protokoll.png` |
 | `scripts/test-ui-copy-confirmation.mjs` | `replace-before-copy.png` → `dateien-ersetzen.png` |
 | `scripts/test-ui-drive-transfers.mjs` | `dateien-auftraege-1440.png`, `dateien-auftraege-390.png` (gleiche Namen) |
+| `scripts/test-ui-agent.mjs` | `3-desktop-new.png` → `ki-agent.png`, `1-desktop-chat.png` → `ki-agent-chat.png`, `10-phone-in-titanos.png` → `ki-agent-mobil.png`, `16-phone-menu.png` → `ki-agent-menue-mobil.png` |
 
 Die Anmeldeseite nimmt `capture.mjs` in einem eigenen, abgemeldeten Browserkontext mit isolierten Werten für `/api/v1/login-appearance` auf (wie `scripts/test-ui-login-appearance.mjs`); Texte werden nur als Text angezeigt. Bei der Aufnahme werden geladene Schriftdateien, alle 13 Docker-Logos, fehlender horizontaler Überlauf auf dem Smartphone und JavaScript-Laufzeitfehler geprüft.
 

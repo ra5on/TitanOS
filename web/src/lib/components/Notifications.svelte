@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { openAgent } from '#lib/agent-app.ts';
 	import { api } from '#lib/api.ts';
 	import { goto } from '$app/navigation';
 	import { session } from '#lib/session.svelte.ts';
@@ -36,10 +37,10 @@
 				message: t('notify.askAgentMessage', { title, text, kind, subject: subject ?? '' }),
 			});
 			open = false;
-			void goto(`/agent?chat=${chat.id}`);
+			openAgent(`/agent?chat=${chat.id}`, goto);
 		} catch {
 			// The agent page explains what is missing.
-			void goto('/agent');
+			openAgent('/agent', goto);
 		}
 	}
 

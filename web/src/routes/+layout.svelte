@@ -8,7 +8,8 @@
 
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { onNavigate } from '$app/navigation';
+	import { afterNavigate, beforeNavigate, onNavigate } from '$app/navigation';
+	import { isAgentPath } from '#lib/agent-app.ts';
 	import DashboardBackground from '#lib/dashboard/DashboardBackground.svelte';
 	import { dashboardVisual } from '#lib/dashboard/visual.ts';
 	import { dashboardScene } from '#lib/dashboard/scene.svelte.ts';
@@ -24,11 +25,24 @@
 	import { appearance, initAppearance } from '#lib/theme/appearance.svelte.ts';
 	import { effectOn } from '#lib/theme/themes.ts';
 	import { pageTitle } from '#lib/page-title.svelte.ts';
-	import { registerServiceWorker } from '#lib/web-push.ts';
+	import { clearAgentNotifications, registerServiceWorker } from '#lib/web-push.ts';
 
-	const agentRoute = $derived(
-		page.url.pathname === '/agent' || page.url.pathname.startsWith('/agent/'),
-	);
+	const agentRoute = $derived(isAgentPath(page.url.pathname));
+	// Safari reads the manifest only when a page loads: the step between
+	// TitanOS and the KI-Agent loads the page anew, so "Add to Home Screen"
+	// makes the right app on either side (PLAN 48). Links are turned into a
+	// full load; back and forward keep the browser's history and reload
+	// once they arrived.
+	const crosses = (a: URL, b: URL) => isAgentPath(a.pathname) !== isAgentPath(b.pathname);
+	beforeNavigate(({ from, to, type, cancel }) => {
+		if (type !== 'link' && type !== 'goto') return;
+		if (!from || !to || to.url.origin !== location.origin || !crosses(from.url, to.url)) return;
+		cancel();
+		location.assign(to.url.href);
+	});
+	afterNavigate(({ from, to, type }) => {
+		if (type === 'popstate' && from && to && crosses(from.url, to.url)) location.reload();
+	});
 
 	let { children } = $props();
 
@@ -37,6 +51,14 @@
 		refreshSession();
 		loadLoginLook();
 		registerServiceWorker();
+		// Notifications of agent chats read elsewhere go away (PLAN 48).
+		const tidy = () => {
+			if (document.visibilityState === 'visible' && session.services?.agent)
+				void clearAgentNotifications();
+		};
+		setTimeout(tidy, 1500);
+		document.addEventListener('visibilitychange', tidy);
+		return () => document.removeEventListener('visibilitychange', tidy);
 	});
 
 	$effect(() => {

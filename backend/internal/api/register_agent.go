@@ -29,6 +29,7 @@ func (s *Server) registerAgent(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/agent/chats/{id}/attachments", s.requireAgent(s.handleAgentAttach))
 	mux.HandleFunc("GET /api/v1/agent/chats/{id}/export", s.requireAgent(s.handleAgentExport))
 	mux.HandleFunc("POST /api/v1/agent/chats/{id}/undo", s.requireAgent(s.handleAgentUndo))
+	mux.HandleFunc("POST /api/v1/agent/chats/{id}/seen", s.requireAgent(s.handleAgentSeen))
 	mux.HandleFunc("GET /api/v1/agent/projects/{id}/files", s.requireAgent(s.handleAgentProjectFiles))
 	mux.HandleFunc("POST /api/v1/agent/preload", s.requireAgent(s.handleAgentPreload))
 	mux.HandleFunc("GET /api/v1/agent/models/pull", s.requireAdmin(s.handleAgentPullState))

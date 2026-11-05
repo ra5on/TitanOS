@@ -46,9 +46,11 @@
 		return () => query.removeEventListener('change', change);
 	});
 	// The KI-Agent installed as an app of its own shows no TitanOS frame,
-	// nor does the agent switched to full screen (PLAN 47).
+	// nor does the agent switched to full screen (PLAN 47). On the phone it
+	// is always an app of its own with its own menu (PLAN 48).
 	const agentApp = $derived(
-		agentAppMode(page.url) || (page.url.pathname.startsWith('/agent') && agentFull.on),
+		agentAppMode(page.url) ||
+			(page.url.pathname.startsWith('/agent') && (agentFull.on || !desktop)),
 	);
 	const side = $derived(appearance.current.nav.layout === 'side' && desktop && !agentApp);
 	// The area the page belongs to, for the button's name.

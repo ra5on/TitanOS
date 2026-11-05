@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { openAgent } from '#lib/agent-app.ts';
 	import { goto } from '$app/navigation';
 	import { poll } from '#lib/poll.ts';
 	import { apiPath } from '#lib/cluster-node.ts';
@@ -712,7 +713,7 @@
 				// Opens the KI-Agent with the chosen files attached (PLAN 44).
 				const names = selected.length ? selected : entry ? [entry.name] : [];
 				const attach = names.map((n) => `${rootId}:${join(dir, n)}`).join('|');
-				void goto('/agent?' + new URLSearchParams({ attach }).toString());
+				openAgent('/agent?' + new URLSearchParams({ attach }).toString(), goto);
 				return;
 			}
 			case 'clipboardCopy':
