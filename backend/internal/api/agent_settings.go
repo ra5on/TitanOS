@@ -30,7 +30,7 @@ type agentSettings struct {
 	Ollama  string `json:"ollama,omitempty"`
 	// Instruction is the owner's top instruction for every chat.
 	Instruction string `json:"instruction,omitempty"`
-	Model   string `json:"model,omitempty"`
+	Model       string `json:"model,omitempty"`
 	// Think is the default thinking level, as the model names it; empty
 	// uses the model's default.
 	Think string `json:"think,omitempty"`

@@ -12,14 +12,14 @@ import (
 
 // PromptInput is what the prompt is built from.
 type PromptInput struct {
-	Host     string
-	Version  string
+	Host    string
+	Version string
 	// Instruction is the owner's instruction for every chat; Personal the
 	// account's own. Both come from people, not from content.
 	Instruction string
 	Personal    string
 	// Map is the short NAS map with descriptions (built by package api).
-	Map string
+	Map      string
 	Account  string
 	Admin    bool
 	Language string
