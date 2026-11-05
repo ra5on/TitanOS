@@ -414,7 +414,12 @@ func (b *agentToolbox) photosSearch(_ context.Context, _ *agent.Chat, args json.
 	if req.Limit <= 0 || req.Limit > 100 {
 		req.Limit = 20
 	}
+	if b.settings.Policy.Mode("file_read", toolcatalog.AreaFiles, agent.KindRead) == agent.ModeDeny {
+		return agent.Outcome{}, toolcatalog.Errorf("reading files is not allowed for the agent")
+	}
 	list := b.s.photoList(b.user)
+	// Folder rules of the agent hold for photos as for files.
+	list = slices.DeleteFunc(list, func(p *photoItem) bool { return b.realFolderMode(p.Root, p.Path) == agent.ModeDeny })
 	if len(list) == 0 {
 		return agent.Outcome{Text: "The person has no photo folders chosen (Dateien › Fotos › Foto-Ordner)."}, nil
 	}

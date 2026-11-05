@@ -8710,5 +8710,6 @@
 	"photos.mapMarker": "{count} Fotos an diesem Ort",
 	"photos.zoomIn": "Vergrößern",
 	"photos.zoomOut": "Verkleinern",
-	"agent.noteAlbum": "Foto-Album"
+	"agent.noteAlbum": "Foto-Album",
+	"photos.broken": "Der Foto-Index ist nicht lesbar ({error}). Er bleibt unverändert liegen; Lesen und Beschreiben sind angehalten."
 }

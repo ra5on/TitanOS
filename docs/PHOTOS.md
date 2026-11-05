@@ -20,12 +20,15 @@ Seit 0.53.0 (PLAN 52, Entscheidungen des Projektinhabers vom 5.11.2026). Links i
 - Das Bild-Modell des KI-Agenten (Hauptmodell mit Bildern wie `gemma4:12b`, sonst das eigene Bild-Modell aus Einstellungen › KI-Agent) beschreibt jedes Foto in ein, zwei Sätzen mit Stichwörtern und dem wichtigsten Text im Bild. Personen werden nur gezählt, nicht benannt.
 - Voraussetzung: KI-Agent eingeschaltet und für das Konto erlaubt.
 - **Der erste Lauf startet per Knopf.** Danach wählt man: nur auf Knopfdruck, nachts (Zeitfenster, ab Werk 01–06 Uhr) oder nachts und sonst immer, wenn kein Chat läuft. Ein laufender Chat hat Vorrang: das Beschreiben wartet.
-- Ein Foto nach dem anderen; grob 2–5 Sekunden je Foto mit `gemma4:12b`. Fotos über 20 MB und Videos bekommen keine Beschreibung; was das Modell nicht beschreiben konnte, wird erst nach einer Änderung der Datei erneut versucht.
+- Ein Foto nach dem anderen; grob 2–5 Sekunden je Foto mit `gemma4:12b`. Beschreibungen sind höchstens 600 Bytes lang. Fotos über 20 MB und Videos bekommen keine.
+- Lehnt Ollama ein einzelnes Bild ab (HTTP 400), bleibt dieses Foto ausgenommen, bis sich die Datei oder das Bild-Modell ändert. Ist Ollama nicht erreichbar oder meldet es einen Server- oder Modellfehler, endet der Lauf nach höchstens drei Versuchen in Folge, ohne Fotos auszunehmen; die Meldung steht in der KI-Leiste.
+- Der Index wird während eines Laufs alle drei Minuten und am Ende gespeichert. Ist die Datei nicht lesbar (nicht: fehlt), bleibt sie unverändert liegen und Lesen und Beschreiben halten an.
+- Während Ordner gelesen oder Fotos beschrieben werden, fragt die Seite nur den Stand ab (`GET /photos?status=1`), nicht die ganze Liste.
 
 ## Alben
 
 - Alben sind Listen von Verweisen (höchstens 5.000 Fotos, 200 Alben je Konto); nichts wird kopiert oder verschoben.
-- Teilen mit anderen Konten: Sie sehen das Album, aber nur Fotos aus Freigaben, die sie selbst öffnen dürfen. Ändern und löschen kann nur der Besitzer.
+- Teilen mit anderen Konten: Sie sehen das Album, aber nur Fotos aus Freigaben, die sie selbst öffnen dürfen; Fotos aus der Freigabe „KI-Agent“ (jedes Konto sein eigener Ordner) nie. Ändern und löschen kann nur der Besitzer.
 - Der KI-Agent legt Alben an und füllt sie (`photo_album_save`), z. B. „Leg ein Album mit den Fotos vom Strandurlaub an“.
 
 ## Karte
@@ -35,7 +38,7 @@ Seit 0.53.0 (PLAN 52, Entscheidungen des Projektinhabers vom 5.11.2026). Links i
 
 ## KI-Agent
 
-- `photos_search`: findet Fotos über denselben Index (Ort, Datum, Beschreibung); `image_view` sieht sie sich genauer an.
+- `photos_search`: findet Fotos über denselben Index (Ort, Datum, Beschreibung); `image_view` sieht sie sich genauer an. Es gelten die Regeln des Agenten: mit „Dateien: verboten“ gar nicht, Fotos in einem verbotenen Ordner nie.
 - `photo_album_save`: Album anlegen oder Fotos hinzufügen.
 
 ## Daten

@@ -39,7 +39,9 @@ const (
 	photosFile       = "photos.json"
 	photoAlbumsFile  = "photoalbums.json"
 	photoPrefsFile   = "photoprefs.json"
-	maxPhotoIndex    = 32 << 20
+	maxPhotoIndex    = 64 << 20
+	maxPhotoDesc     = 600
+	photoSaveEvery   = 3 * time.Minute
 	maxPhotoItems    = 30000
 	maxPhotoFolders  = 20
 	maxPhotoFile     = 20 << 20
@@ -94,6 +96,9 @@ func (p *photoItem) when() time.Time {
 type photoIndex struct {
 	Items   map[string]*photoItem `json:"items"`
 	Scanned time.Time             `json:"scanned,omitzero"`
+	// Model that made the descriptions; another model tries the photos
+	// it could not describe once more.
+	Model string `json:"model,omitempty"`
 }
 
 type photoAlbum struct {
@@ -119,6 +124,9 @@ type photoUser struct {
 	total      int
 	lastError  string
 	model      string
+	// broken: the index file could not be read (not: does not exist);
+	// then nothing is scanned, described or written, so it is not lost.
+	broken error
 }
 
 type photoState struct {
@@ -160,7 +168,12 @@ func (s *Server) photoIndexOf(name string) *photoIndex {
 	u := s.photoUser(name)
 	if u.index == nil {
 		idx := &photoIndex{}
-		_ = s.agentStore().ReadPrivateLimit(name, photosFile, idx, maxPhotoIndex)
+		err := s.agentStore().ReadPrivateLimit(name, photosFile, idx, maxPhotoIndex)
+		if err != nil && !errors.Is(err, agent.ErrNotFound) {
+			slog.Warn("photo index not readable; it is kept and not changed", "account", name, "err", err)
+			u.broken = err
+			idx = &photoIndex{}
+		}
 		if idx.Items == nil {
 			idx.Items = map[string]*photoItem{}
 		}
@@ -169,8 +182,20 @@ func (s *Server) photoIndexOf(name string) *photoIndex {
 	return u.index
 }
 
+// photoBroken tells whether the account's index could not be read.
+func (s *Server) photoBroken(name string) error {
+	s.photoIndexOf(name)
+	s.photos.mu.Lock()
+	defer s.photos.mu.Unlock()
+	return s.photoUser(name).broken
+}
+
 func (s *Server) savePhotoIndex(name string) {
 	s.photos.mu.Lock()
+	if s.photoUser(name).broken != nil {
+		s.photos.mu.Unlock()
+		return
+	}
 	idx := s.photoUser(name).index
 	var data []byte
 	if idx != nil {
@@ -203,6 +228,9 @@ func hiddenName(name string) bool {
 // photoScan walks the chosen folders and brings the index up to date;
 // descriptions of unchanged files stay.
 func (s *Server) photoScan(user auth.User) {
+	if s.photoBroken(user.Name) != nil {
+		return
+	}
 	s.photos.mu.Lock()
 	u := s.photoUser(user.Name)
 	if u.scanning {
@@ -288,7 +316,17 @@ func (s *Server) photoScan(user auth.User) {
 	}
 	s.photos.mu.Lock()
 	u = s.photoUser(user.Name)
-	u.index = &photoIndex{Items: found, Scanned: time.Now()}
+	// Descriptions written while the folders were read are kept.
+	model := ""
+	if u.index != nil {
+		model = u.index.Model
+		for k, it := range found {
+			if cur := u.index.Items[k]; cur != nil && cur.Size == it.Size && cur.Modified.Equal(it.Modified) {
+				it.Desc, it.Failed = cur.Desc, cur.Failed
+			}
+		}
+	}
+	u.index = &photoIndex{Items: found, Scanned: time.Now(), Model: model}
 	s.photos.mu.Unlock()
 	s.savePhotoIndex(user.Name)
 }
@@ -393,6 +431,9 @@ func (s *Server) photoAI(ctx context.Context, user auth.User) (*agent.Ollama, st
 // schedule). It describes pictures without a description, newest first,
 // one after the other, and waits while a chat of the agent runs.
 func (s *Server) photoDescribe(user auth.User, byPlan bool) error {
+	if err := s.photoBroken(user.Name); err != nil {
+		return errors.New("der Foto-Index ist nicht lesbar und wird nicht verändert: " + err.Error())
+	}
 	ctx, cancel := context.WithTimeout(s.agentBase(), 10*time.Second)
 	client, model, err := s.photoAI(ctx, user)
 	cancel()
@@ -437,6 +478,15 @@ func (s *Server) photoDescribeRun(user auth.User, client *agent.Ollama, model st
 		s.photos.mu.Unlock()
 		s.savePhotoIndex(user.Name)
 	}()
+	// Another model tries the photos the previous one could not describe.
+	s.photos.mu.Lock()
+	if idx := s.photoUser(user.Name).index; idx != nil && idx.Model != model {
+		for _, it := range idx.Items {
+			it.Failed = false
+		}
+		idx.Model = model
+	}
+	s.photos.mu.Unlock()
 	list := s.photoList(user)
 	var todo []*photoItem
 	for _, p := range list {
@@ -450,6 +500,8 @@ func (s *Server) photoDescribeRun(user auth.User, client *agent.Ollama, model st
 	s.photos.mu.Unlock()
 	roots := s.photoRoots(user)
 	settings := s.agentSettings()
+	failures := 0
+	saved := time.Now()
 	for i, p := range todo {
 		for s.photoBusy() {
 			select {
@@ -464,23 +516,37 @@ func (s *Server) photoDescribeRun(user auth.User, client *agent.Ollama, model st
 		default:
 		}
 		desc, err := s.photoDescribeOne(roots, p, client, model, settings.KeepAlive)
+		// Only a request Ollama rejects (400: this picture) marks the photo;
+		// a server or model problem stops the run without marking anything.
+		var status *agent.StatusError
+		pictureFault := err != nil && errors.As(err, &status) && status.Status == http.StatusBadRequest
 		s.photos.mu.Lock()
 		u := s.photoUser(user.Name)
 		if it := u.index.Items[p.key()]; it != nil {
-			if err != nil {
-				it.Failed = true
-				u.lastError = err.Error()
-			} else {
+			switch {
+			case err == nil:
 				it.Desc = desc
+			case pictureFault:
+				it.Failed = true
 			}
+		}
+		if err != nil {
+			u.lastError = err.Error()
 		}
 		u.done = i + 1
 		s.photos.mu.Unlock()
-		if errors.Is(err, agent.ErrUnreachable) {
-			return
+		switch {
+		case err == nil || pictureFault:
+			failures = 0
+		default:
+			failures++
+			if failures >= 3 || errors.Is(err, agent.ErrUnreachable) {
+				return
+			}
 		}
-		if (i+1)%10 == 0 {
+		if time.Since(saved) > photoSaveEvery {
 			s.savePhotoIndex(user.Name)
+			saved = time.Now()
 		}
 	}
 }
@@ -510,10 +576,22 @@ func (s *Server) photoDescribeOne(roots map[string]string, p *photoItem, client 
 	if err != nil {
 		return "", err
 	}
-	if r := []rune(text); len(r) > 1200 {
-		text = string(r[:1200])
+	return clipBytes(strings.TrimSpace(text), maxPhotoDesc), nil
+}
+
+// clipBytes cuts a text to at most n bytes, at a rune boundary.
+func clipBytes(text string, n int) string {
+	if len(text) <= n {
+		return text
 	}
-	return strings.TrimSpace(text), nil
+	cut := 0
+	for i := range text {
+		if i > n {
+			break
+		}
+		cut = i
+	}
+	return strings.TrimSpace(text[:cut])
 }
 
 // photoTick runs the schedules of the description runs (every minute, with
@@ -574,17 +652,27 @@ func (s *Server) handlePhotos(w http.ResponseWriter, r *http.Request) {
 			described++
 		}
 	}
+	broken := ""
+	if err := s.photoBroken(user.Name); err != nil {
+		broken = err.Error()
+	}
 	s.photos.mu.Lock()
 	u := s.photoUser(user.Name)
 	state := map[string]any{"running": u.describing, "done": u.done, "total": u.total, "error": u.lastError, "model": u.model}
 	scanning, scanned := u.scanning || stale && len(prefs.Folders) > 0, idx.Scanned
 	s.photos.mu.Unlock()
 	settings := s.agentSettings()
-	writeJSON(w, http.StatusOK, map[string]any{
-		"prefs": prefs, "items": list, "described": described,
+	out := map[string]any{
+		"prefs": prefs, "items": list, "described": described, "count": len(list),
 		"scanning": scanning, "scanned": scanned, "describe": state,
-		"ai": settings.Enabled && s.agentAllowed(user),
-	})
+		"ai": settings.Enabled && s.agentAllowed(user), "broken": broken,
+	}
+	// The page asks for the state alone while folders are read or photos
+	// described, so the whole list is not sent every few seconds.
+	if r.URL.Query().Get("status") == "1" {
+		delete(out, "items")
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) handlePhotoPrefs(w http.ResponseWriter, r *http.Request) {
@@ -715,6 +803,22 @@ func (s *Server) photoAlbumsFor(user auth.User) []photoAlbum {
 		a.Items = items
 		return a
 	}
+	// Roots that point to every account's own folder (share KI-Agent)
+	// never show another account's items.
+	perUser := map[string]bool{}
+	for _, sh := range s.opts.Shares.List() {
+		if sh.PerUser {
+			perUser["share/"+sh.Name] = true
+		}
+	}
+	foreign := func(a photoAlbum) photoAlbum {
+		a = visible(a)
+		a.Items = slices.DeleteFunc(a.Items, func(k string) bool {
+			root, _, _ := strings.Cut(k, ":")
+			return perUser[root]
+		})
+		return a
+	}
 	var out []photoAlbum
 	for _, a := range s.photoAlbums(user.Name) {
 		out = append(out, visible(a))
@@ -726,7 +830,7 @@ func (s *Server) photoAlbumsFor(user auth.User) []photoAlbum {
 		for _, a := range s.photoAlbums(u.Name) {
 			if slices.Contains(a.Members, user.Name) {
 				a.Owner = u.Name
-				out = append(out, visible(a))
+				out = append(out, foreign(a))
 			}
 		}
 	}

@@ -32,6 +32,8 @@ export type PhotosAnswer = {
 	scanned?: string;
 	describe: { running: boolean; done: number; total: number; error?: string; model?: string };
 	ai: boolean;
+	/** The index file could not be read; it is kept and not changed. */
+	broken?: string;
 };
 
 export type PhotoAlbum = {

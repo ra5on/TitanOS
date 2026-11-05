@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -153,5 +154,109 @@ func TestPhotos(t *testing.T) {
 	}
 	if res, _ := ts.do(maria, "PUT", "/api/v1/photos/albums/"+albums.Albums[0].ID, map[string]any{"name": "Meins"}); res.StatusCode != http.StatusNotFound {
 		t.Fatalf("maria changed alex's album: %d", res.StatusCode)
+	}
+}
+
+// PLAN 52: Ollama failing for every photo stops the run after three tries
+// without excluding photos; an unreadable index is kept and not written;
+// a large index survives a restart; folder rules hold for photos_search.
+func TestPhotosRobust(t *testing.T) {
+	fake := &agentOllama{}
+	ts := agentServer(t, fake, agent.Policy{Preset: agent.PresetStandard})
+	docs := ts.withShare()
+	os.MkdirAll(filepath.Join(docs, "Fotos", "Privat"), 0o755)
+	for i := range 6 {
+		os.WriteFile(filepath.Join(docs, "Fotos", fmt.Sprintf("p%d.jpg", i)), thumbs.ExifJPEGForTest("X", "2026:01:02 10:00:00", 50, 8), 0o644)
+	}
+	os.WriteFile(filepath.Join(docs, "Fotos", "Privat", "beleg.jpg"), thumbs.ExifJPEGForTest("X", "2026:01:02 10:00:00", 50, 8), 0o644)
+	ts.request("PUT", "/api/v1/photos/prefs", map[string]any{"folders": []map[string]string{{"root": "share/Docs", "path": "Fotos"}}})
+	u, _ := ts.users.Get("alex")
+	ts.server.photoScan(u)
+	_, body := ts.request("GET", "/api/v1/agent/settings", nil)
+	var settings map[string]any
+	json.Unmarshal(body, &settings)
+	settings["vision"] = map[string]any{"enabled": true, "model": "gemma4:12b"}
+	settings["policy"] = map[string]any{"preset": "standard", "folders": []map[string]string{{"root": "share/Docs", "path": "Fotos/Privat", "mode": "deny"}}}
+	if res, body := ts.request("PUT", "/api/v1/agent/settings", settings); res.StatusCode != http.StatusOK {
+		t.Fatalf("settings: %d %s", res.StatusCode, body)
+	}
+
+	fake.mu.Lock()
+	fake.failChat = http.StatusInternalServerError
+	before := len(fake.got)
+	fake.mu.Unlock()
+	ts.request("POST", "/api/v1/photos/describe", map[string]any{"run": true})
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		_, body = ts.request("GET", "/api/v1/photos?status=1", nil)
+		var a photosAnswer
+		json.Unmarshal(body, &a)
+		if !a.Describe.Running && a.Describe.Error != "" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("run did not stop: %s", body)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if strings.Contains(string(body), `"items"`) {
+		t.Fatal("status answer carries the list")
+	}
+	fake.mu.Lock()
+	tries := len(fake.got) - before
+	fake.failChat = 0
+	fake.mu.Unlock()
+	if tries != 3 {
+		t.Fatalf("tries with a failing Ollama: %d", tries)
+	}
+	for _, p := range ts.server.photoList(u) {
+		if p.Failed {
+			t.Fatalf("photo excluded after a server error: %s", p.Path)
+		}
+	}
+
+	// Folder rules: the deny folder stays hidden from photos_search.
+	box := ts.server.newAgentToolbox(u, ts.server.agentSettings())
+	out, err := box.photosSearch(t.Context(), nil, json.RawMessage(`{"query":"Januar 2026","limit":100}`))
+	if err != nil || strings.Contains(out.Text, "beleg.jpg") || !strings.Contains(out.Text, "p0.jpg") {
+		t.Fatalf("photos_search with a deny folder: %v %s", err, out.Text)
+	}
+
+	// A large index (30,000 photos with long descriptions) survives a restart.
+	ts.server.photos.mu.Lock()
+	idx := ts.server.photoUser("alex").index
+	desc := strings.Repeat("Ä", maxPhotoDesc/2)
+	for i := range maxPhotoItems {
+		k := fmt.Sprintf("share/Docs:Fotos/gross/%05d.jpg", i)
+		idx.Items[k] = &photoItem{Root: "share/Docs", Path: k[len("share/Docs:"):], Kind: "image", Size: 4_000_000, Modified: time.Now(), Taken: time.Now(), Lat: 55.55, Lon: 8.08, GPS: true, Camera: "iPhone 15 Pro Max", Desc: desc}
+	}
+	ts.server.photos.mu.Unlock()
+	ts.server.savePhotoIndex("alex")
+	ts.server.photos.mu.Lock()
+	ts.server.photos.users = nil
+	ts.server.photos.mu.Unlock()
+	if n := len(ts.server.photoIndexOf("alex").Items); n < maxPhotoItems {
+		t.Fatalf("large index after restart: %d", n)
+	}
+
+	// An unreadable index is kept as it is.
+	root, _ := ts.server.agentOpen()
+	file := filepath.Join(root.Name(), "alex", photosFile)
+	root.Close()
+	os.WriteFile(file, []byte("{kaputt"), 0o600)
+	ts.server.photos.mu.Lock()
+	ts.server.photos.users = nil
+	ts.server.photos.mu.Unlock()
+	ts.server.photoScan(u)
+	ts.server.savePhotoIndex("alex")
+	if data, _ := os.ReadFile(file); string(data) != "{kaputt" {
+		t.Fatal("unreadable index overwritten")
+	}
+	if res, _ := ts.request("POST", "/api/v1/photos/describe", map[string]any{"run": true}); res.StatusCode != http.StatusConflict {
+		t.Fatalf("describe with a broken index: %d", res.StatusCode)
+	}
+	_, body = ts.request("GET", "/api/v1/photos?status=1", nil)
+	if !strings.Contains(string(body), `"broken":"`) || strings.Contains(string(body), `"broken":""`) {
+		t.Fatalf("broken not reported: %s", body)
 	}
 }

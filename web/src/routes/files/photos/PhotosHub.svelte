@@ -71,10 +71,25 @@
 	}
 	$effect(() => {
 		void loadAlbums();
-		// While the folders are read or photos described, the numbers move.
-		return poll(load, { interval: 6000 });
+		void load();
 	});
 	const busy = $derived(!!data && (data.scanning || data.describe.running));
+	// While folders are read or photos described, only the state is asked
+	// for; the list comes again once that has ended.
+	$effect(() => {
+		if (!busy) return;
+		return poll(
+			async () => {
+				const s = await api.get<Omit<PhotosAnswer, 'items'>>('/photos?status=1');
+				if (!data) return;
+				const ended =
+					(data.scanning && !s.scanning) || (data.describe.running && !s.describe.running);
+				data = { ...data, ...s, items: data.items };
+				if (ended) await load();
+			},
+			{ interval: 6000 },
+		);
+	});
 	const items = $derived(data?.items ?? []);
 	const months = $derived(byMonth(items));
 	const images = $derived(items.filter((p) => p.kind === 'image').length);
@@ -183,6 +198,9 @@
 	</div>
 
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+	{#if data?.broken}<p class="notice-error" role="alert">
+			{t('photos.broken', { error: data.broken })}
+		</p>{/if}
 
 	{#if data && data.ai && images > 0}
 		<div class="ai" class:running={data.describe.running}>

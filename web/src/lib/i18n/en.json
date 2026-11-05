@@ -8710,5 +8710,6 @@
 	"photos.mapMarker": "{count} photos at this place",
 	"photos.zoomIn": "Zoom in",
 	"photos.zoomOut": "Zoom out",
-	"agent.noteAlbum": "Photo album"
+	"agent.noteAlbum": "Photo album",
+	"photos.broken": "The photo index is not readable ({error}). It is kept unchanged; reading and describing are paused."
 }
