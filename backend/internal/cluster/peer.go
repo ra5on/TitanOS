@@ -171,6 +171,8 @@ func (m *Manager) PeerHandler() http.Handler {
 			}
 		case r.Method == "POST" && path == "backup/pair":
 			m.peerPair(w, r, id)
+		case strings.HasPrefix(path, "agent/"):
+			m.servePeerAgent(w, r, strings.TrimPrefix(path, "agent/"))
 		case strings.HasPrefix(path, "backup/"):
 			m.peerBackup(w, r, strings.TrimPrefix(path, "backup"))
 		default:

@@ -19,7 +19,9 @@
 		gb,
 		type Mode,
 		type Preset,
+		type ClusterInfo,
 		type Settings,
+		type ShareState,
 		type Status,
 		type ToolView,
 	} from '#lib/agent.ts';
@@ -39,6 +41,44 @@
 		models?: number;
 	} | null>(null);
 	let open = $state<Record<string, boolean>>({});
+	// The agent across the cluster (PLAN 47).
+	let clusterInfo = $state<ClusterInfo | null>(null);
+	let shareState = $state<ShareState | undefined>();
+	$effect(() => {
+		api.get<ClusterInfo>('/agent/cluster').then(
+			(c) => {
+				clusterInfo = c;
+				shareState = c.state;
+			},
+			() => (clusterInfo = null),
+		);
+	});
+	async function askAdmin() {
+		try {
+			shareState = (await api.post<{ state: ShareState }>('/agent/cluster/request')).state;
+		} catch (e) {
+			error = apiErrorText(e);
+		}
+	}
+	async function setShare(node: string, body: { allowed?: boolean; remove?: boolean }) {
+		if (!settings) return;
+		try {
+			settings.shared = await api.put<NonNullable<Settings['shared']>>(
+				`/agent/cluster/nodes/${encodeURIComponent(node)}`,
+				body,
+			);
+		} catch (e) {
+			error = apiErrorText(e);
+		}
+	}
+	const shareText: Record<ShareState, MessageKey> = {
+		allowed: 'agent.shareAllowed',
+		pending: 'agent.sharePending',
+		off: 'agent.shareOff',
+		unreachable: 'agent.shareUnreachable',
+		old: 'agent.shareOld',
+		nocluster: 'agent.shareNoCluster',
+	};
 	let haNotify = $state('');
 	let haRules = $state<{ key: string; mode: Mode }[]>([]);
 	// Home Assistant: domains and entities for the agent's own release list.
@@ -270,18 +310,53 @@
 			><input type="checkbox" bind:checked={settings.enabled} /><span>{t('agent.enabled')}</span
 			></label
 		>
-		<label class="stack">
-			<span>{t('agent.ollamaServer')}</span>
-			<span class="line">
-				<input
-					class="field wide"
-					bind:value={settings.ollama}
-					placeholder="http://192.168.1.5:11434"
+		{#if clusterInfo?.member}
+			<div class="stack">
+				<span>{t('agent.source')}</span>
+				<Segments
+					label={t('agent.source')}
+					value={settings.source ?? ''}
+					options={[
+						{ value: '', label: t('agent.sourceOwn') },
+						{
+							value: 'cluster',
+							label: t('agent.sourceCluster', { node: clusterInfo.adminNode ?? '' }),
+						},
+					]}
+					onchange={(v) => (settings!.source = v)}
 				/>
-				<button type="button" class="btn" onclick={test}>{t('agent.check')}</button>
-			</span>
-			<span class="muted">{t('agent.ollamaHint')}</span>
-		</label>
+				<span class="muted">{t('agent.sourceHint')}</span>
+			</div>
+		{/if}
+		{#if settings.source === 'cluster'}
+			<div class="stack">
+				<p class={shareState === 'allowed' ? 'notice-ok' : 'notice-warn'}>
+					{shareState
+						? t(shareText[shareState], { node: clusterInfo?.adminNode ?? '' })
+						: t('agent.shareNotAsked', { node: clusterInfo?.adminNode ?? '' })}
+				</p>
+				{#if shareState !== 'allowed'}
+					<span class="line"
+						><button type="button" class="btn" onclick={askAdmin}
+							>{t('agent.shareAsk', { node: clusterInfo?.adminNode ?? '' })}</button
+						></span
+					>
+				{/if}
+			</div>
+		{:else}
+			<label class="stack">
+				<span>{t('agent.ollamaServer')}</span>
+				<span class="line">
+					<input
+						class="field wide"
+						bind:value={settings.ollama}
+						placeholder="http://192.168.1.5:11434"
+					/>
+					<button type="button" class="btn" onclick={test}>{t('agent.check')}</button>
+				</span>
+				<span class="muted">{t('agent.ollamaHint')}</span>
+			</label>
+		{/if}
 		{#if check}
 			<p class={check.reachable ? 'notice-ok' : 'notice-warn'}>
 				{check.reachable
@@ -301,6 +376,40 @@
 		{/if}
 		{#if status && !status.volume}<p class="notice-warn">{t('agent.noVolume')}</p>{/if}
 	</section>
+
+	{#if clusterInfo?.admin}
+		<section class="tile panel" aria-labelledby="ag-nodes">
+			<h2 class="tile-title" id="ag-nodes">{t('agent.sectionNodes')}</h2>
+			<p class="muted">{t('agent.nodesIntro')}</p>
+			{#if settings.shared?.length}
+				<ul class="nodes">
+					{#each settings.shared as sh (sh.node)}
+						<li>
+							<span class="node-name"
+								><strong>{sh.name}</strong><small class="muted"
+									>{t('agent.nodeAsked', { date: new Date(sh.asked).toLocaleString() })}</small
+								></span
+							>
+							<span class="chip {sh.allowed ? 'ok' : 'warn'}"
+								>{sh.allowed ? t('agent.nodeAllowed') : t('agent.nodePending')}</span
+							>
+							<button
+								type="button"
+								class="btn {sh.allowed ? '' : 'btn-primary'}"
+								onclick={() => setShare(sh.node, { allowed: !sh.allowed })}
+								>{sh.allowed ? t('agent.nodeRevoke') : t('agent.nodeRelease')}</button
+							>
+							<button type="button" class="btn" onclick={() => setShare(sh.node, { remove: true })}
+								>{t('agent.nodeRemove')}</button
+							>
+						</li>
+					{/each}
+				</ul>
+			{:else}
+				<p class="muted">{t('agent.nodesNone')}</p>
+			{/if}
+		</section>
+	{/if}
 
 	<section class="tile panel" aria-labelledby="ag-model">
 		<h2 class="tile-title" id="ag-model">{t('agent.sectionModel')}</h2>
@@ -369,31 +478,31 @@
 			</select>
 			<span class="muted">{t('agent.keepAliveHint')}</span>
 		</label>
-		<div class="stack">
-			<span>{t('agent.pull')}</span>
-			<span class="line">
-				<input
-					class="field"
-					bind:value={pullName}
-					placeholder="qwen3:8b"
-					aria-label={t('agent.pull')}
-				/>
-				<button
-					type="button"
-					class="btn"
-					disabled={pull?.running || !pullName.trim()}
-					onclick={startPull}>{t('agent.pullStart')}</button
-				>
-			</span>
-			{#if pull?.model}
-				<span class="muted" role="status"
-					>{pull.model}: {pull.error ? pull.error : pull.status}{pull.total
-						? ` · ${Math.round(((pull.completed ?? 0) / pull.total) * 100)} %`
-						: ''}</span
-				>
-			{/if}
-			<span class="muted">{t('agent.pullHint')}</span>
-		</div>
+		{#if settings.source !== 'cluster'}<div class="stack">
+				<span>{t('agent.pull')}</span>
+				<span class="line">
+					<input
+						class="field"
+						bind:value={pullName}
+						placeholder="qwen3:8b"
+						aria-label={t('agent.pull')}
+					/>
+					<button
+						type="button"
+						class="btn"
+						disabled={pull?.running || !pullName.trim()}
+						onclick={startPull}>{t('agent.pullStart')}</button
+					>
+				</span>
+				{#if pull?.model}
+					<span class="muted" role="status"
+						>{pull.model}: {pull.error ? pull.error : pull.status}{pull.total
+							? ` · ${Math.round(((pull.completed ?? 0) / pull.total) * 100)} %`
+							: ''}</span
+					>
+				{/if}
+				<span class="muted">{t('agent.pullHint')}</span>
+			</div>{/if}
 	</section>
 
 	<section class="tile panel" aria-labelledby="ag-instruction">
@@ -873,5 +982,26 @@
 			border-bottom: 1px solid var(--border);
 			padding-bottom: var(--space-2);
 		}
+	}
+	.nodes {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+	}
+	.nodes li {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		flex-wrap: wrap;
+		padding: var(--space-2) 0;
+		border-top: 1px solid var(--border);
+	}
+	.node-name {
+		flex: 1;
+		min-width: 10rem;
+		display: flex;
+		flex-direction: column;
 	}
 </style>

@@ -10,6 +10,10 @@ func (s *Server) registerAgent(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/agent/status", s.requireUser(s.handleAgentStatus))
 	mux.HandleFunc("GET /api/v1/agent/settings", s.requireAdmin(s.handleAgentSettings))
 	mux.HandleFunc("PUT /api/v1/agent/settings", s.requireAdmin(s.handleAgentSettingsSet))
+	// The agent across the cluster (PLAN 47).
+	mux.HandleFunc("GET /api/v1/agent/cluster", s.requireAdmin(s.handleAgentClusterInfo))
+	mux.HandleFunc("POST /api/v1/agent/cluster/request", s.requireAdmin(s.handleAgentShareRequest))
+	mux.HandleFunc("PUT /api/v1/agent/cluster/nodes/{node}", s.requireAdmin(s.handleAgentShareSet))
 	mux.HandleFunc("POST /api/v1/agent/check", s.requireAdmin(s.handleAgentCheck))
 	mux.HandleFunc("GET /api/v1/agent/tools", s.requireAdmin(s.handleAgentTools))
 

@@ -328,6 +328,9 @@ func New(opts Options) *Server {
 	if s.opts.Notify != nil {
 		s.opts.Notify.Observer = s.agentObserve
 	}
+	if s.opts.Cluster != nil {
+		s.opts.Cluster.Agent = s.agentClusterHandler()
+	}
 
 	mux := &routeMux{ServeMux: http.NewServeMux()}
 	// The routes by area (register_*.go), in the order they always had.

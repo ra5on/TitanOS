@@ -6,7 +6,9 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import Dropdown from '#lib/components/Dropdown.svelte';
 	import Icon from '#lib/components/Icon.svelte';
+	import NasPicker from '#lib/components/agent/NasPicker.svelte';
 	import AgentHome from '#lib/components/agent/AgentHome.svelte';
 	import ChatList from '#lib/components/agent/ChatList.svelte';
 	import ChatView from '#lib/components/agent/ChatView.svelte';
@@ -17,6 +19,8 @@
 	import ProjectSheet from '#lib/components/agent/ProjectSheet.svelte';
 	import { api, apiFetch, responseError } from '#lib/api.ts';
 	import { agentAppMode } from '#lib/agent-app.ts';
+	import { agentFull, setAgentFull } from '#lib/agent-full.svelte.ts';
+	import { shell } from '#lib/shell.svelte.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { pageTitle } from '#lib/page-title.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
@@ -64,6 +68,7 @@
 		| { kind: 'rename'; chat: ChatInfo; title: string }
 		| { kind: 'delete'; chat: ChatInfo }
 		| { kind: 'sheet'; project: Project }
+		| { kind: 'nas' }
 		| null
 	>(null);
 	let composer = $state<{ fill: (text: string) => void }>();
@@ -71,7 +76,17 @@
 	let phone = $state(matchMedia('(max-width: 760px)').matches);
 	let stream: AbortController | null = null;
 
-	const app = $derived(agentAppMode(page.url));
+	// Installed as an app it is always full screen; inside TitanOS full
+	// screen is a choice per device (PLAN 47).
+	const installed = $derived(agentAppMode(page.url));
+	const app = $derived(installed || agentFull.on);
+	// On the phone with the round menu the agent shows its own menu button
+	// at the top instead of the round one at the bottom.
+	const menuButton = $derived(phone && !app && !!shell.openMenu);
+	$effect(() => {
+		shell.ownMenu = menuButton;
+		return () => (shell.ownMenu = false);
+	});
 	const user = $derived(session.data?.user?.name ?? '');
 	const usable = $derived((status?.models ?? []).filter((m) => m.capabilities.includes('tools')));
 	const contextNow = $derived(
@@ -409,9 +424,19 @@
 				aria-label={t('agent.look')}
 				onclick={() => (dialog = { kind: 'look' })}><Icon name="palette" size={18} /></button
 			>
-			<a class="icon-btn" href="/?" aria-label={t('agent.toTitanOS')} title={t('agent.toTitanOS')}
-				><Icon name="external" size={18} /></a
-			>
+			{#if installed}
+				<a class="icon-btn" href="/?" aria-label={t('agent.toTitanOS')} title={t('agent.toTitanOS')}
+					><Icon name="external" size={18} /></a
+				>
+			{:else}
+				<button
+					type="button"
+					class="icon-btn"
+					aria-label={t('agent.withMenu')}
+					title={t('agent.withMenu')}
+					onclick={() => setAgentFull(false)}><Icon name="sidebar" size={18} /></button
+				>
+			{/if}
 		</header>
 	{/if}
 
@@ -454,12 +479,21 @@
 						aria-label={t('agent.look')}
 						onclick={() => (dialog = { kind: 'look' })}><Icon name="palette" size={18} /></button
 					>
+					<button
+						type="button"
+						class="icon-btn"
+						aria-label={t('agent.fullScreen')}
+						title={t('agent.fullScreen')}
+						onclick={() => setAgentFull(true)}><Icon name="maximize" size={18} /></button
+					>
 				</div>
 			{/if}
 			<AgentHome
 				{user}
 				{chats}
 				{projects}
+				onmenu={menuButton ? () => shell.openMenu?.() : undefined}
+				onrename={(c) => (dialog = { kind: 'rename', chat: c, title: c.title })}
 				onopen={(id) => open(id)}
 				onproject={(p) => (dialog = { kind: 'sheet', project: p })}
 				onnewproject={() => (dialog = { kind: 'project', project: null })}
@@ -490,6 +524,8 @@
 				bind:think
 				bind:attachments
 				onsend={send}
+				onpicknas={() => (dialog = { kind: 'nas' })}
+				onerror={(m) => (error = m)}
 			/>
 		</div>
 	{:else}
@@ -521,6 +557,15 @@
 				{/if}
 				<header class="chat-head">
 					{#if view === 'chat'}
+						{#if menuButton}
+							<button
+								type="button"
+								class="icon-btn"
+								aria-label={t('nav.openMenu', { page: t('nav.agent') })}
+								aria-haspopup="dialog"
+								onclick={() => shell.openMenu?.()}><Icon name="menu" size={20} /></button
+							>
+						{/if}
 						<button
 							type="button"
 							class="icon-btn"
@@ -583,7 +628,7 @@
 						>
 						<button
 							type="button"
-							class="icon-btn"
+							class="icon-btn wide-only"
 							aria-label={t('agent.delete')}
 							title={t('agent.delete')}
 							disabled={busy}
@@ -591,7 +636,100 @@
 							><Icon name="trash" size={17} /></button
 						>
 					{/if}
+					{#if view === 'chat'}
+						{@const info = currentInfo}
+						<!-- On the phone everything of the desktop buttons in one menu. -->
+						<span class="chat-more">
+							<Dropdown label={t('ui.more')} icon="more" align="right">
+								{#snippet children(close)}
+									{#if info}
+										<button
+											type="button"
+											role="menuitem"
+											onclick={() => {
+												close();
+												void patch(info, { pinned: !info.pinned });
+											}}
+											><Icon name="pin" size={16} /><span
+												>{info.pinned ? t('agent.unpin') : t('agent.pin')}</span
+											></button
+										>
+										<button
+											type="button"
+											role="menuitem"
+											onclick={() => {
+												close();
+												dialog = { kind: 'rename', chat: info, title: info.title };
+											}}><Icon name="edit" size={16} /><span>{t('agent.rename')}</span></button
+										>
+										<button
+											type="button"
+											role="menuitem"
+											onclick={() => {
+												close();
+												dialog = { kind: 'move', chat: info };
+											}}
+											><Icon name="folder" size={16} /><span>{t('agent.moveToProject')}</span
+											></button
+										>
+										<hr />
+										<a
+											role="menuitem"
+											href={`/api/v1/agent/chats/${info.id}/export`}
+											download
+											onclick={close}
+											><Icon name="download" size={16} /><span>{t('agent.exportMd')}</span></a
+										>
+										<a
+											role="menuitem"
+											href={`/api/v1/agent/chats/${info.id}/export?format=pdf`}
+											download
+											onclick={close}
+											><Icon name="fileText" size={16} /><span>{t('agent.exportPdf')}</span></a
+										>
+									{/if}
+									{#if !installed}
+										<hr />
+										<button
+											type="button"
+											role="menuitem"
+											onclick={() => {
+												close();
+												setAgentFull(!agentFull.on);
+											}}
+											><Icon name={agentFull.on ? 'sidebar' : 'maximize'} size={16} /><span
+												>{agentFull.on ? t('agent.withMenu') : t('agent.fullScreen')}</span
+											></button
+										>
+									{/if}
+									{#if info}
+										<hr />
+										<button
+											type="button"
+											role="menuitem"
+											class="danger"
+											disabled={busy}
+											onclick={() => {
+												close();
+												dialog = { kind: 'delete', chat: info };
+											}}><Icon name="trash" size={16} /><span>{t('agent.delete')}</span></button
+										>
+									{/if}
+								{/snippet}
+							</Dropdown>
+						</span>
+					{/if}
 					{#if view === 'desktop'}
+						{#if !installed}
+							<button
+								type="button"
+								class="icon-btn"
+								aria-label={agentFull.on ? t('agent.withMenu') : t('agent.fullScreen')}
+								title={agentFull.on ? t('agent.withMenu') : t('agent.fullScreen')}
+								onclick={() => setAgentFull(!agentFull.on)}
+								><Icon name={agentFull.on ? 'sidebar' : 'maximize'} size={17} /></button
+							>
+						{/if}
 						<span class="sep"></span>
 						<button
 							type="button"
@@ -652,6 +790,8 @@
 						placeholder={current?.pending ? t('agent.inputPending') : ''}
 						onsend={send}
 						onstop={() => stop()}
+						onpicknas={() => (dialog = { kind: 'nas' })}
+						onerror={(m) => (error = m)}
 					/>
 				</div>
 			</section>
@@ -747,6 +887,17 @@
 			>
 		</div>
 	</Dialog>
+{:else if dialog?.kind === 'nas'}
+	<NasPicker
+		onclose={() => (dialog = null)}
+		onpick={(refs) => {
+			dialog = null;
+			const add = refs
+				.filter((ref) => !attachments.some((a) => a.ref === ref))
+				.map((ref) => ({ name: ref.slice(ref.indexOf(':') + 1), ref }));
+			attachments = [...attachments, ...add];
+		}}
+	/>
 {:else if dialog?.kind === 'sheet'}
 	{@const p = dialog.project}
 	<ProjectSheet
@@ -861,6 +1012,17 @@
 	.icon-btn:disabled {
 		opacity: 0.4;
 		cursor: default;
+	}
+	/* The ⋯ menu of a chat on the phone looks like the round buttons. */
+	.chat-more :global(.btn) {
+		width: 34px;
+		height: 34px;
+		min-height: 34px;
+		padding: 0;
+		border-radius: 50%;
+		border: 0;
+		background: color-mix(in srgb, var(--text) 6%, transparent);
+		color: var(--text);
 	}
 	.layout {
 		flex: 1;
@@ -1014,6 +1176,10 @@
 	}
 	.agent.app .phone-home {
 		padding: 12px 16px;
+	}
+	/* The greeting leaves room for the round buttons on the right. */
+	.phone-home:has(.phone-tools) :global(.home > header) {
+		padding-right: 124px;
 	}
 	.phone-tools {
 		position: absolute;

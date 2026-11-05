@@ -29,6 +29,7 @@ import (
 	"errors"
 	"io/fs"
 	"log/slog"
+	"net/http"
 	"net/http/httputil"
 	"slices"
 	"strings"
@@ -221,6 +222,9 @@ type Manager struct {
 	Update func(ctx context.Context) (from, to string, err error)
 	// Runner runs ip and wg for the tunnel; nil leaves the network alone.
 	Runner Runner
+	// Agent answers the KI-Agent requests of other nodes (agent.go); the
+	// identity of the asking node is in the context (FromContext).
+	Agent http.Handler
 
 	mu      sync.Mutex
 	loaded  bool

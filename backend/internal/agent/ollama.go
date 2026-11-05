@@ -53,6 +53,20 @@ func NewOllama(address string) (*Ollama, error) {
 	}}, nil
 }
 
+// ClusterAddress stands for the Ollama server of the admin node of a
+// cluster (PLAN 47); requests go through the cluster, never to this name.
+const ClusterAddress = "http://titanos-cluster-admin/ollama"
+
+// NewOllamaVia returns a client for the Ollama server of the admin node:
+// rt carries each request through the cluster.
+func NewOllamaVia(rt http.RoundTripper) *Ollama {
+	u, _ := url.Parse(ClusterAddress)
+	return &Ollama{base: u, client: &http.Client{
+		Transport:     rt,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}}
+}
+
 // ParseOllamaURL checks the address of an Ollama server.
 func ParseOllamaURL(address string) (*url.URL, error) {
 	address = strings.TrimSpace(address)

@@ -31,6 +31,12 @@ var keepAlivePattern = regexp.MustCompile(`^(-1|0|[1-9][0-9]{0,3}[mh])$`)
 type agentSettings struct {
 	Enabled bool   `json:"enabled"`
 	Ollama  string `json:"ollama,omitempty"`
+	// Source: "" this node's own Ollama, "cluster" the model of the admin
+	// node of the cluster (PLAN 47); chats and rights stay here.
+	Source string `json:"source,omitempty"`
+	// Shared are, on the admin node, the nodes that asked for its model,
+	// released or not. Changed only through their own routes.
+	Shared []agentShare `json:"shared,omitempty"`
 	// Instruction is the owner's top instruction for every chat.
 	Instruction string `json:"instruction,omitempty"`
 	Model       string `json:"model,omitempty"`
@@ -141,6 +147,7 @@ func (s *Server) handleAgentSettingsSet(w http.ResponseWriter, r *http.Request) 
 	if req.Volume == "" {
 		req.Volume = a.settings.Volume
 	}
+	req.Shared = a.settings.Shared
 	if err := s.opts.Store.WriteJSON(agentSettingsFile, req); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 		return
@@ -158,8 +165,18 @@ func (s *Server) checkAgentSettings(req *agentSettings) error {
 		}
 		req.Ollama = u.String()
 	}
-	if req.Enabled && req.Ollama == "" {
-		return errors.New("the agent needs the address of an Ollama server")
+	switch req.Source {
+	case agentSourceOwn:
+		if req.Enabled && req.Ollama == "" {
+			return errors.New("the agent needs the address of an Ollama server")
+		}
+	case agentSourceCluster:
+		c := s.opts.Cluster
+		if c == nil || !c.InCluster() || c.IsAdmin() {
+			return errors.New("only a node of a cluster other than the admin node uses the admin node's agent")
+		}
+	default:
+		return errors.New("unknown source " + req.Source)
 	}
 	if len(req.Instruction) > 8000 {
 		return errors.New("the instruction has at most 8000 characters")
@@ -272,6 +289,17 @@ func (s *Server) checkAgentSettings(req *agentSettings) error {
 // agentOllama returns the client for the configured server.
 func (s *Server) agentOllama() (*agent.Ollama, error) {
 	settings := s.agentSettings()
+	if settings.Source == agentSourceCluster {
+		if s.opts.Cluster == nil {
+			return nil, errors.New("no cluster")
+		}
+		if c := s.agentClient.Load(); c != nil && c.Address() == agent.ClusterAddress {
+			return c, nil
+		}
+		c := agent.NewOllamaVia(s.opts.Cluster.AgentTransport())
+		s.agentClient.Store(c)
+		return c, nil
+	}
 	if settings.Ollama == "" {
 		return nil, errors.New("no Ollama server set")
 	}
@@ -308,6 +336,15 @@ func (s *Server) handleAgentStatus(w http.ResponseWriter, r *http.Request) {
 	if !settings.Enabled || !s.agentAllowed(user) {
 		writeJSON(w, http.StatusOK, out)
 		return
+	}
+	if settings.Source == agentSourceCluster {
+		state := s.agentClusterCall(r.Context(), "GET", "/state")
+		out["source"], out["share"] = agentSourceCluster, state
+		if err := agentShareError(state); err != nil {
+			out["reachable"], out["error"] = false, err.Error()
+			writeJSON(w, http.StatusOK, out)
+			return
+		}
 	}
 	client, err := s.agentOllama()
 	if err != nil {
