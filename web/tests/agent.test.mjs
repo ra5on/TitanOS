@@ -96,7 +96,13 @@ test('levels, step details and the look', () => {
 	assert.equal(sanitizeLook({ accent: 'aurora', glow: false }).glow, false);
 	// PLAN 53: the agent has its own look by default and the app settings.
 	assert.equal(sanitizeLook(null).accent, 'aurora');
-	const app = sanitizeLook({ swipeLeft: 'menu', swipeRight: 'wat', glassLevel: 400, motion: 'off', rate: 9 });
+	const app = sanitizeLook({
+		swipeLeft: 'menu',
+		swipeRight: 'wat',
+		glassLevel: 400,
+		motion: 'off',
+		rate: 9,
+	});
 	assert.equal(app.swipeLeft, 'menu');
 	assert.equal(app.swipeRight, 'pin');
 	assert.equal(app.glassLevel, 100);
