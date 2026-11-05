@@ -8,6 +8,7 @@ import {
 	parseEvent,
 	presetOf,
 	sanitizeLook,
+	accountLook,
 	stepDetail,
 	toolMode,
 } from '../src/lib/agent.ts';
@@ -93,5 +94,14 @@ test('levels, step details and the look', () => {
 	assert.equal(stepDetail({ root: 'share/Docs', path: 'NAS' }), 'Docs › NAS');
 	assert.deepEqual(sanitizeLook({ accent: 'aurora', style: 'nope', glow: false }).style, 'bubbles');
 	assert.equal(sanitizeLook({ accent: 'aurora', glow: false }).glow, false);
-	assert.equal(sanitizeLook(null).accent, 'theme');
+	// PLAN 53: the agent has its own look by default and the app settings.
+	assert.equal(sanitizeLook(null).accent, 'aurora');
+	const app = sanitizeLook({ swipeLeft: 'menu', swipeRight: 'wat', glassLevel: 400, motion: 'off', rate: 9 });
+	assert.equal(app.swipeLeft, 'menu');
+	assert.equal(app.swipeRight, 'pin');
+	assert.equal(app.glassLevel, 100);
+	assert.equal(app.motion, 'off');
+	assert.equal(app.rate, 2);
+	assert.ok(!('vibrate' in accountLook(app)) && !('fontSize' in accountLook(app)));
+	assert.equal(accountLook(app).swipeLeft, 'menu');
 });

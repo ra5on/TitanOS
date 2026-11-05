@@ -9,6 +9,7 @@
 	import { apiFetch, responseError } from '#lib/api.ts';
 
 	let {
+		micHold = false,
 		busy = false,
 		disabled = false,
 		placeholder = '',
@@ -19,6 +20,8 @@
 		onerror,
 		voice = false,
 	}: {
+		/** PLAN 53: record while the button is held instead of tap on / tap off. */
+		micHold?: boolean;
 		busy?: boolean;
 		disabled?: boolean;
 		placeholder?: string;
@@ -211,7 +214,10 @@
 				aria-pressed={recording}
 				aria-label={recording ? t('agent.voiceStop') : t('agent.voiceStart')}
 				title={recording ? t('agent.voiceStop') : t('agent.voiceStart')}
-				onclick={toggleVoice}
+				onclick={() => micHold || toggleVoice()}
+				onpointerdown={() => micHold && !recording && toggleVoice()}
+				onpointerup={() => micHold && recording && toggleVoice()}
+				onpointerleave={() => micHold && recording && toggleVoice()}
 				>{#if transcribing}<span class="dots" aria-hidden="true">…</span>{:else}<Icon
 						name={recording ? 'stop' : 'mic'}
 						size={17}

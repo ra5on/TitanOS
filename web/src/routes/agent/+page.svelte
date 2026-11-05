@@ -20,13 +20,14 @@
 	import Composer from '#lib/components/agent/Composer.svelte';
 	import KnowledgeDialog from '#lib/components/agent/KnowledgeDialog.svelte';
 	import LookDialog from '#lib/components/agent/LookDialog.svelte';
+	import AgentSettings from '#lib/components/agent/AgentSettings.svelte';
 	import ProjectDialog from '#lib/components/agent/ProjectDialog.svelte';
 	import ProjectSheet from '#lib/components/agent/ProjectSheet.svelte';
 	import { api, apiFetch, responseError } from '#lib/api.ts';
 	import { agentAppMode } from '#lib/agent-app.ts';
 	import { agentFull, setAgentFull } from '#lib/agent-full.svelte.ts';
 	import { clearAgentNotifications } from '#lib/web-push.ts';
-	import { canSpeak, speak, stopSpeaking } from '#lib/agent-speech.svelte.ts';
+	import { canSpeak, speak, speechPrefs, stopSpeaking } from '#lib/agent-speech.svelte.ts';
 	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { pageTitle } from '#lib/page-title.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
@@ -48,6 +49,7 @@
 		type Project,
 		type Status,
 		type Suggestion,
+		type Swipe,
 		type NasHint,
 	} from '#lib/agent.ts';
 
@@ -74,8 +76,14 @@
 	let look = $state<Look>(readLook());
 	let dialog = $state<
 		| { kind: 'project'; project: Project | null }
-		| { kind: 'knowledge'; tab: 'memory' | 'skills' | 'schedules' | 'map' | 'me' | 'log' }
+		| {
+				kind: 'knowledge';
+				tab: 'memory' | 'skills' | 'schedules' | 'map' | 'me' | 'log';
+				only?: boolean;
+		  }
 		| { kind: 'look' }
+		| { kind: 'settings'; section?: 'list' | 'speech' | 'look' | 'models' }
+		| { kind: 'actions'; chat: ChatInfo }
 		| { kind: 'move'; chat: ChatInfo }
 		| { kind: 'rename'; chat: ChatInfo; title: string }
 		| { kind: 'delete'; chat: ChatInfo }
@@ -152,9 +160,30 @@
 		clearTimeout(prefsTimer);
 		prefsTimer = setTimeout(() => void api.put('/agent/prefs', body).catch(() => {}), 600);
 	});
+	$effect(() => {
+		speechPrefs.rate = look.rate;
+	});
+	// Keep the screen on while the agent works (device setting, PLAN 53).
+	$effect(() => {
+		const working = look.keepAwake && chats.some((c) => c.state === 'running');
+		const nav = navigator as Navigator & {
+			wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> };
+		};
+		if (!working || !nav.wakeLock) return;
+		let lock: { release: () => Promise<void> } | null = null;
+		let gone = false;
+		nav.wakeLock
+			.request('screen')
+			.then((l) => (gone ? void l.release() : (lock = l)))
+			.catch(() => {});
+		return () => {
+			gone = true;
+			void lock?.release().catch(() => {});
+		};
+	});
 	const calm = $derived(
 		look.calm ||
-		look.motion !== 'full' ||
+			look.motion !== 'full' ||
 			(typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches),
 	);
 	function buzz(pattern: number | number[]) {
@@ -200,6 +229,18 @@
 				void loadLocations();
 				const id = page.url.searchParams.get('chat');
 				if (id) void open(id, false, page.url.searchParams.get('author') ?? '');
+				else if (!page.url.searchParams.has('ask') && !page.url.searchParams.has('attach')) {
+					// PLAN 53: what opens first is a setting of the account.
+					const saved = await api
+						.get<{ start?: string }>('/agent/prefs')
+						.catch(() => ({}) as { start?: string });
+					const start = saved.start ?? look.start;
+					const last = [...chats]
+						.filter((c) => !c.author)
+						.sort((a, b) => b.updated.localeCompare(a.updated))[0];
+					if (start === 'last' && last) void open(last.id, false);
+					else if (start === 'overview' && phone) menuOpen = true;
+				}
 				// From the file manager, the dashboard or a notification.
 				const attach = page.url.searchParams.get('attach');
 				if (attach)
@@ -387,10 +428,17 @@
 	// On the phone a swipe from the left edge opens the menu, a swipe to
 	// the left closes it again.
 	let swipeStart: { x: number; y: number } | null = null;
+	// Swipes from the edge (PLAN 53, Einstellungen › Darstellung und Gesten):
+	// from the left the chats, from the right the settings; back again.
 	function touchStart(e: TouchEvent) {
 		const p = e.touches[0];
+		const edges = look.gestures && look.edge;
+		const left = p.clientX <= 24;
+		const right = p.clientX >= innerWidth - 24;
 		swipeStart =
-			phone && (menuOpen || p.clientX <= 24) && !dialog ? { x: p.clientX, y: p.clientY } : null;
+			phone && !dialog && (menuOpen || (edges && (left || right)))
+				? { x: p.clientX, y: p.clientY }
+				: null;
 	}
 	function touchMove(e: TouchEvent) {
 		if (!swipeStart) return;
@@ -400,6 +448,11 @@
 		else if (!menuOpen && dx > 50) {
 			swipeStart = null;
 			menuOpen = true;
+			buzz(8);
+		} else if (!menuOpen && dx < -50) {
+			swipeStart = null;
+			dialog = { kind: 'settings' };
+			buzz(8);
 		} else if (menuOpen && dx < -50) {
 			swipeStart = null;
 			menuOpen = false;
@@ -498,27 +551,108 @@
 			title: h.title || h.kind,
 			sub: t('agent.suggNasSub'),
 			text: t('agent.suggestNas', { title: h.title || h.kind }),
-			tag: h.severity === 'error' ? t('agent.tagError') : h.kind === 'update_available' ? t('agent.tagUpdate') : t('agent.tagWarning'),
+			tag:
+				h.severity === 'error'
+					? t('agent.tagError')
+					: h.kind === 'update_available'
+						? t('agent.tagUpdate')
+						: t('agent.tagWarning'),
 			tone: h.kind === 'update_available' ? 'info' : 'warn',
-			icon: h.kind.startsWith('backup') ? 'archive' : h.kind.startsWith('update') ? 'download' : h.kind.startsWith('volume') || h.kind.startsWith('disk') ? 'disk' : 'bell',
+			icon: h.kind.startsWith('backup')
+				? 'archive'
+				: h.kind.startsWith('update')
+					? 'download'
+					: h.kind.startsWith('volume') || h.kind.startsWith('disk')
+						? 'disk'
+						: 'bell',
 			color: h.kind === 'update_available' ? '#3b82f6' : '#f59e0b',
 		}));
 		const timed: Suggestion[] =
 			hour < 11
-				? [{ title: t('agent.suggNight'), sub: t('agent.suggNightSub'), text: t('agent.suggestNight'), tag: t('agent.tagMorning'), tone: 'ok', icon: 'clock', color: '#0ea5e9' }]
+				? [
+						{
+							title: t('agent.suggNight'),
+							sub: t('agent.suggNightSub'),
+							text: t('agent.suggestNight'),
+							tag: t('agent.tagMorning'),
+							tone: 'ok',
+							icon: 'clock',
+							color: '#0ea5e9',
+						},
+					]
 				: hour >= 18
-					? [{ title: t('agent.suggHome'), sub: t('agent.suggHomeSub'), text: t('agent.suggestHome'), tag: t('agent.tagEvening'), tone: 'ok', icon: 'home', color: '#10b981' }]
+					? [
+							{
+								title: t('agent.suggHome'),
+								sub: t('agent.suggHomeSub'),
+								text: t('agent.suggestHome'),
+								tag: t('agent.tagEvening'),
+								tone: 'ok',
+								icon: 'home',
+								color: '#10b981',
+							},
+						]
 					: [];
 		const pool: Suggestion[] = [
-			{ title: t('agent.suggHealth'), sub: t('agent.suggHealthSub'), text: t('agent.suggestHealth'), icon: 'shield', color: '#22c55e' },
-			{ title: t('agent.suggFind'), sub: t('agent.suggFindSub'), text: t('agent.suggestFind'), icon: 'search', color: '#0ea5e9' },
-			{ title: t('agent.suggDocument'), sub: t('agent.suggDocumentSub'), text: t('agent.suggestDocument'), icon: 'fileText', color: '#8b5cf6' },
-			{ title: t('agent.suggBackup'), sub: t('agent.suggBackupSub'), text: t('agent.suggestBackup'), icon: 'archive', color: '#f59e0b' },
-			{ title: t('agent.suggUpdates'), sub: t('agent.suggUpdatesSub'), text: t('agent.suggestUpdates'), icon: 'download', color: '#3b82f6' },
-			{ title: t('agent.suggClean'), sub: t('agent.suggCleanSub'), text: t('agent.suggestClean'), icon: 'disk', color: '#ec4899' },
-			{ title: t('agent.suggApps'), sub: t('agent.suggAppsSub'), text: t('agent.suggestApps'), icon: 'box', color: '#6366f1' },
-			{ title: t('agent.suggEnergy'), sub: t('agent.suggEnergySub'), text: t('agent.suggestEnergy'), icon: 'zap', color: '#eab308' },
+			{
+				title: t('agent.suggHealth'),
+				sub: t('agent.suggHealthSub'),
+				text: t('agent.suggestHealth'),
+				icon: 'shield',
+				color: '#22c55e',
+			},
+			{
+				title: t('agent.suggFind'),
+				sub: t('agent.suggFindSub'),
+				text: t('agent.suggestFind'),
+				icon: 'search',
+				color: '#0ea5e9',
+			},
+			{
+				title: t('agent.suggDocument'),
+				sub: t('agent.suggDocumentSub'),
+				text: t('agent.suggestDocument'),
+				icon: 'fileText',
+				color: '#8b5cf6',
+			},
+			{
+				title: t('agent.suggBackup'),
+				sub: t('agent.suggBackupSub'),
+				text: t('agent.suggestBackup'),
+				icon: 'archive',
+				color: '#f59e0b',
+			},
+			{
+				title: t('agent.suggUpdates'),
+				sub: t('agent.suggUpdatesSub'),
+				text: t('agent.suggestUpdates'),
+				icon: 'download',
+				color: '#3b82f6',
+			},
+			{
+				title: t('agent.suggClean'),
+				sub: t('agent.suggCleanSub'),
+				text: t('agent.suggestClean'),
+				icon: 'disk',
+				color: '#ec4899',
+			},
+			{
+				title: t('agent.suggApps'),
+				sub: t('agent.suggAppsSub'),
+				text: t('agent.suggestApps'),
+				icon: 'box',
+				color: '#6366f1',
+			},
+			{
+				title: t('agent.suggEnergy'),
+				sub: t('agent.suggEnergySub'),
+				text: t('agent.suggestEnergy'),
+				icon: 'zap',
+				color: '#eab308',
+			},
 		];
+		// The icon shows the kind; older texts carry an emoji in front.
+		for (const p of pool) p.title = p.title.replace(/^\p{Extended_Pictographic}\S*\s*/u, '');
 		const start = seed % pool.length;
 		const all = [...fromNas, ...timed, ...pool.slice(start), ...pool.slice(0, start)];
 		const from = (shuffle * 3) % all.length;
@@ -545,8 +679,21 @@
 		onnewproject: () => (dialog = { kind: 'project', project: null }),
 		oneditproject: (p: Project) => (dialog = { kind: 'project', project: p }),
 		onknowledge: () => (dialog = { kind: 'knowledge', tab: 'memory' }),
-		onplanned: () => (dialog = { kind: 'knowledge', tab: 'schedules' }),
-		onlook: () => (dialog = { kind: 'look' }),
+		onplanned: () => (dialog = { kind: 'knowledge', tab: 'schedules', only: true }),
+		onlook: () => (dialog = { kind: 'settings', section: 'look' }),
+		onsettings: () => (dialog = { kind: 'settings' }),
+		gestures: look.gestures,
+		pull: look.pull,
+		compact: look.compact,
+		onrefresh: () => void loadLists(),
+		swipeLeft: look.swipeLeft,
+		swipeRight: look.swipeRight,
+		onaction: (chat: ChatInfo, action: Swipe) => {
+			buzz(12);
+			if (action === 'pin') void patch(chat, { pinned: !chat.pinned });
+			else if (action === 'delete') dialog = { kind: 'delete', chat };
+			else if (action === 'menu') dialog = { kind: 'actions', chat };
+		},
 		ontitanos: phone || installed ? toTitanOS : undefined,
 	});
 </script>
@@ -717,6 +864,13 @@
 							>
 						{/if}
 						{#if currentInfo}{@render chatMenu(currentInfo)}{/if}
+						<button
+							type="button"
+							class="icon-btn"
+							aria-label={t('agent.set.title')}
+							title={t('agent.set.title')}
+							onclick={() => (dialog = { kind: 'settings' })}><Icon name="gear" size={18} /></button
+						>
 						{#if phone || current}
 							<button
 								type="button"
@@ -738,6 +892,7 @@
 				{/if}
 				{#if current}
 					<ChatView
+						showSteps={look.steps}
 						readonly={!!readOnlyBy}
 						onplanned={() => (dialog = { kind: 'knowledge', tab: 'schedules' })}
 						chat={current}
@@ -767,6 +922,7 @@
 				{/if}
 				<div class="dock">
 					<Composer
+						micHold={look.mic === 'hold'}
 						bind:this={composer}
 						{busy}
 						bind:attachments
@@ -819,6 +975,7 @@
 {:else if dialog?.kind === 'knowledge'}
 	<KnowledgeDialog
 		tab={dialog.tab}
+		only={dialog.only}
 		admin={status?.admin ?? false}
 		{projects}
 		onclose={() => (dialog = null)}
@@ -829,6 +986,64 @@
 	/>
 {:else if dialog?.kind === 'look'}
 	<LookDialog bind:look onclose={() => (dialog = null)} />
+{:else if dialog?.kind === 'actions'}
+	{@const chat = dialog.chat}
+	<!-- PLAN 53: everything you can do with a chat, as a sheet from below. -->
+	<div class="sheet-scrim" role="presentation" onclick={() => (dialog = null)}></div>
+	<div class="action-sheet" role="dialog" aria-modal="true" aria-label={chat.title}>
+		<span class="grab" aria-hidden="true"></span>
+		<strong class="sheet-title">{chat.title || t('agent.newChat')}</strong>
+		<div class="sheet-list">
+			<button
+				type="button"
+				onclick={() => {
+					dialog = null;
+					void patch(chat, { pinned: !chat.pinned });
+				}}
+				><span class="sq" style:--c="#3b82f6"><Icon name="pin" size={17} /></span>{chat.pinned
+					? t('agent.unpin')
+					: t('agent.pin')}</button
+			>
+			<button type="button" onclick={() => (dialog = { kind: 'rename', chat, title: chat.title })}
+				><span class="sq" style:--c="#64748b"><Icon name="edit" size={17} /></span>{t(
+					'agent.rename',
+				)}</button
+			>
+			<button type="button" onclick={() => (dialog = { kind: 'move', chat })}
+				><span class="sq" style:--c="#8b5cf6"><Icon name="folder" size={17} /></span>{t(
+					'agent.moveToProject',
+				)}</button
+			>
+			<a href={`/api/v1/agent/chats/${chat.id}/export`} download onclick={() => (dialog = null)}
+				><span class="sq" style:--c="#14b8a6"><Icon name="download" size={17} /></span>{t(
+					'agent.exportMd',
+				)}</a
+			>
+			<a
+				href={`/api/v1/agent/chats/${chat.id}/export?format=pdf`}
+				download
+				onclick={() => (dialog = null)}
+				><span class="sq" style:--c="#0ea5e9"><Icon name="fileText" size={17} /></span>{t(
+					'agent.exportPdf',
+				)}</a
+			>
+			<button type="button" class="danger" onclick={() => (dialog = { kind: 'delete', chat })}
+				><span class="sq" style:--c="#e11d48"><Icon name="trash" size={17} /></span>{t(
+					'agent.delete',
+				)}</button
+			>
+		</div>
+	</div>
+{:else if dialog?.kind === 'settings' && status}
+	<AgentSettings
+		bind:look
+		{status}
+		{user}
+		{calm}
+		start={dialog.section ?? 'list'}
+		onclose={() => (dialog = null)}
+		onopen={(part) => (dialog = { kind: 'knowledge', tab: part, only: true })}
+	/>
 {:else if dialog?.kind === 'move'}
 	{@const chat = dialog.chat}
 	<Dialog title={t('agent.moveToProject')} onclose={() => (dialog = null)}>
@@ -923,6 +1138,88 @@
 {/if}
 
 <style>
+	.sheet-scrim {
+		position: fixed;
+		inset: 0;
+		z-index: 70;
+		background: rgb(3 6 14 / 0.5);
+		backdrop-filter: blur(8px);
+	}
+	.action-sheet {
+		position: fixed;
+		z-index: 71;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		max-width: 520px;
+		margin: 0 auto;
+		padding: 8px 14px calc(env(safe-area-inset-bottom, 0px) + 18px);
+		border-radius: 26px 26px 0 0;
+		color: var(--text);
+		background: color-mix(in srgb, var(--surface) 82%, transparent);
+		backdrop-filter: blur(30px) saturate(170%);
+		border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+		animation: sheet-up 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+	}
+	@keyframes sheet-up {
+		from {
+			transform: translateY(100%);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.action-sheet {
+			animation: none;
+		}
+	}
+	.grab {
+		display: block;
+		width: 44px;
+		height: 5px;
+		border-radius: 3px;
+		margin: 2px auto 10px;
+		background: color-mix(in srgb, var(--text) 25%, transparent);
+	}
+	.sheet-title {
+		display: block;
+		padding: 0 6px 10px;
+		font-size: var(--text-md);
+	}
+	.sheet-list {
+		border-radius: 20px;
+		overflow: hidden;
+		border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+	}
+	.sheet-list > * {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		width: 100%;
+		min-height: 54px;
+		padding: 8px 12px;
+		border: 0;
+		border-top: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+		background: none;
+		color: var(--text);
+		font: inherit;
+		text-decoration: none;
+		text-align: left;
+		cursor: pointer;
+	}
+	.sheet-list > :first-child {
+		border-top: 0;
+	}
+	.sheet-list .danger {
+		color: var(--danger, #fb7185);
+	}
+	.sheet-list .sq {
+		width: 34px;
+		height: 34px;
+		border-radius: 11px;
+		display: grid;
+		place-items: center;
+		color: #fff;
+		background: linear-gradient(145deg, var(--c), color-mix(in srgb, var(--c) 45%, #0b1020));
+	}
 	.agent {
 		--ag-orb: conic-gradient(
 			from 210deg,

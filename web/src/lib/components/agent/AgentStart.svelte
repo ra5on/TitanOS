@@ -86,7 +86,9 @@
 				class="chip-p"
 				class:on={p.id === project}
 				style:--tile={p.color || 'var(--accent)'}
-				title={count(p.id) === 1 ? t('agent.chatCountOne') : t('agent.chatCount', { count: count(p.id) })}
+				title={count(p.id) === 1
+					? t('agent.chatCountOne')
+					: t('agent.chatCount', { count: count(p.id) })}
 				onclick={() => onproject(p)}
 			>
 				<span class="em" aria-hidden="true">{p.icon || '📁'}</span>{p.name}

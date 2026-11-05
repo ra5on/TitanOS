@@ -658,7 +658,13 @@ export type Suggestion = {
 	color?: string;
 };
 /** A warning of the NAS the agent could look into (GET /agent/suggestions). */
-export type NasHint = { kind: string; subject?: string; title: string; severity: string; time: string };
+export type NasHint = {
+	kind: string;
+	subject?: string;
+	title: string;
+	severity: string;
+	time: string;
+};
 
 export function lookStyle(look: Look): string {
 	const pair = ACCENTS[look.accent];

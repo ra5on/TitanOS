@@ -14,12 +14,15 @@
 
 	let {
 		tab: startTab = 'memory',
+		only = false,
 		admin = false,
 		projects = [],
 		onopenchat,
 		onclose,
 	}: {
 		tab?: 'memory' | 'skills' | 'schedules' | 'map' | 'me' | 'log';
+		/** PLAN 53: show only this part, without the tabs (from the settings or "Geplant"). */
+		only?: boolean;
 		admin?: boolean;
 		projects?: Project[];
 		onopenchat: (id: string) => void;
@@ -89,24 +92,37 @@
 	const projectName = (id?: string) => projects.find((p) => p.id === id)?.name ?? '';
 </script>
 
-<Dialog title={t('agent.knowledge')} wide {onclose}>
-	<Tabs
-		label={t('agent.knowledge')}
-		value={tab}
-		onchange={(id) => (tab = id)}
-		tabs={[
-			{ id: 'memory', label: t('agent.memory'), badge: memory.length || '' },
-			{
-				id: 'skills',
-				label: t('agent.skills'),
-				badge: skills.filter((s) => !s.builtIn).length || '',
-			},
-			{ id: 'schedules', label: t('agent.schedules'), badge: planned || '' },
-			{ id: 'map', label: t('agent.map') },
-			{ id: 'me', label: t('agent.me') },
-			...(admin ? [{ id: 'log' as const, label: t('agent.log') }] : []),
-		]}
-	/>
+<Dialog
+	title={only
+		? {
+				memory: t('agent.memory'),
+				skills: t('agent.skills'),
+				schedules: t('agent.schedules'),
+				map: t('agent.map'),
+				me: t('agent.me'),
+				log: t('agent.log'),
+			}[tab]
+		: t('agent.knowledge')}
+	wide
+	{onclose}
+>
+	{#if !only}<Tabs
+			label={t('agent.knowledge')}
+			value={tab}
+			onchange={(id) => (tab = id)}
+			tabs={[
+				{ id: 'memory', label: t('agent.memory'), badge: memory.length || '' },
+				{
+					id: 'skills',
+					label: t('agent.skills'),
+					badge: skills.filter((s) => !s.builtIn).length || '',
+				},
+				{ id: 'schedules', label: t('agent.schedules'), badge: planned || '' },
+				{ id: 'map', label: t('agent.map') },
+				{ id: 'me', label: t('agent.me') },
+				...(admin ? [{ id: 'log' as const, label: t('agent.log') }] : []),
+			]}
+		/>{/if}
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 
 	{#if tab === 'memory'}
