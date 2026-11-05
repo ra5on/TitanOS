@@ -50,7 +50,7 @@ func TestPhotos(t *testing.T) {
 		t.Fatalf("prefs: %d %s", res.StatusCode, body)
 	}
 	u, _ := ts.users.Get("alex")
-	ts.server.photoScan(u)
+	waitPhotoScan(t, ts, u, 3)
 	get := func(client *http.Client) photosAnswer {
 		t.Helper()
 		_, body := ts.do(client, "GET", "/api/v1/photos", nil)
@@ -171,7 +171,7 @@ func TestPhotosRobust(t *testing.T) {
 	os.WriteFile(filepath.Join(docs, "Fotos", "Privat", "beleg.jpg"), thumbs.ExifJPEGForTest("X", "2026:01:02 10:00:00", 50, 8), 0o644)
 	ts.request("PUT", "/api/v1/photos/prefs", map[string]any{"folders": []map[string]string{{"root": "share/Docs", "path": "Fotos"}}})
 	u, _ := ts.users.Get("alex")
-	ts.server.photoScan(u)
+	waitPhotoScan(t, ts, u, 7)
 	_, body := ts.request("GET", "/api/v1/agent/settings", nil)
 	var settings map[string]any
 	json.Unmarshal(body, &settings)
@@ -258,5 +258,19 @@ func TestPhotosRobust(t *testing.T) {
 	_, body = ts.request("GET", "/api/v1/photos?status=1", nil)
 	if !strings.Contains(string(body), `"broken":"`) || strings.Contains(string(body), `"broken":""`) {
 		t.Fatalf("broken not reported: %s", body)
+	}
+}
+
+// waitPhotoScan waits for the scan that saving the folders started (it
+// runs in the background) and scans once more, until want photos are there.
+func waitPhotoScan(t *testing.T, ts *testServer, u auth.User, want int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for len(ts.server.photoList(u)) < want {
+		if time.Now().After(deadline) {
+			t.Fatalf("scan: %d photos, want %d", len(ts.server.photoList(u)), want)
+		}
+		ts.server.photoScan(u)
+		time.Sleep(10 * time.Millisecond)
 	}
 }
