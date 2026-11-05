@@ -310,7 +310,7 @@
 			><input type="checkbox" bind:checked={settings.enabled} /><span>{t('agent.enabled')}</span
 			></label
 		>
-		{#if clusterInfo?.member}
+		{#if clusterInfo?.member || settings.source === 'cluster'}
 			<div class="stack">
 				<span>{t('agent.source')}</span>
 				<Segments
@@ -320,7 +320,7 @@
 						{ value: '', label: t('agent.sourceOwn') },
 						{
 							value: 'cluster',
-							label: t('agent.sourceCluster', { node: clusterInfo.adminNode ?? '' }),
+							label: t('agent.sourceCluster', { node: clusterInfo?.adminNode ?? '' }),
 						},
 					]}
 					onchange={(v) => (settings!.source = v)}

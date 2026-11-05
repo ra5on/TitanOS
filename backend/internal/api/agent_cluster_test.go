@@ -60,6 +60,9 @@ func TestAgentSharedByTheAdminNode(t *testing.T) {
 	if !strings.Contains(string(body), `"state":"pending"`) {
 		t.Fatalf("request: %s", body)
 	}
+	if !hasNotice(a, "agent_cluster_request") {
+		t.Fatal("the admin node was not told about the request")
+	}
 	_, body = a.request("GET", "/api/v1/agent/settings", nil)
 	if !strings.Contains(string(body), `"name":"nas-b"`) || !strings.Contains(string(body), `"allowed":false`) {
 		t.Fatalf("request on A: %s", body)
@@ -89,6 +92,18 @@ func TestAgentSharedByTheAdminNode(t *testing.T) {
 	}
 	if _, body := a.request("GET", "/api/v1/agent/chats", nil); strings.Contains(string(body), started.ID) {
 		t.Fatal("the chat of B is on A")
+	}
+	// Only reading Ollama paths and the chat go through, even released.
+	for _, path := range []string{"/ollama/api/pull", "/ollama/api/delete", "/ollama/api/create", "/ollama/../settings"} {
+		req, _ := http.NewRequestWithContext(t.Context(), "POST", "http://titanos-cluster-admin"+path, strings.NewReader(`{"model":"x"}`))
+		res, err := nodeB.AgentTransport().RoundTrip(req)
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		res.Body.Close()
+		if res.StatusCode != http.StatusForbidden && res.StatusCode != http.StatusNotFound {
+			t.Fatalf("%s went through: %d", path, res.StatusCode)
+		}
 	}
 	// No model download through the admin node.
 	if res, _ := b.request("POST", "/api/v1/agent/models/pull", map[string]string{"model": "x:1"}); res.StatusCode != http.StatusConflict {
