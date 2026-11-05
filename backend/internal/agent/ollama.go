@@ -356,6 +356,9 @@ type ChatRequest struct {
 	Think    any
 	// Context is num_ctx; 0 keeps what Ollama has set.
 	Context int
+	// KeepAlive is how long Ollama keeps the model loaded ("30m", "-1");
+	// empty keeps Ollama's setting.
+	KeepAlive string
 }
 
 // Stats are the counters Ollama returns at the end of a round.
@@ -382,6 +385,9 @@ func (o *Ollama) Chat(ctx context.Context, r ChatRequest, onChunk func(Chunk)) (
 	}
 	if r.Context > 0 {
 		body["options"] = map[string]any{"num_ctx": r.Context}
+	}
+	if r.KeepAlive != "" {
+		body["keep_alive"] = r.KeepAlive
 	}
 	data, err := json.Marshal(body)
 	if err != nil {
@@ -450,4 +456,56 @@ func (o *Ollama) Chat(ctx context.Context, r ChatRequest, onChunk func(Chunk)) (
 	msg.Content = content.String()
 	msg.Thinking = thinking.String()
 	return msg, stats, nil
+}
+
+// Preload asks Ollama to load a model now, so the first answer does not
+// wait for it. A chat without messages only loads.
+func (o *Ollama) Preload(ctx context.Context, model, keepAlive string, numCtx int) error {
+	body := map[string]any{"model": model, "messages": []any{}}
+	if keepAlive != "" {
+		body["keep_alive"] = keepAlive
+	}
+	if numCtx > 0 {
+		body["options"] = map[string]any{"num_ctx": numCtx}
+	}
+	return o.do(ctx, http.MethodPost, "/api/chat", body, nil)
+}
+
+// PullProgress is a line Ollama sends while it downloads a model.
+type PullProgress struct {
+	Status    string `json:"status"`
+	Completed int64  `json:"completed,omitempty"`
+	Total     int64  `json:"total,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+// Pull downloads a model and reports the progress.
+func (o *Ollama) Pull(ctx context.Context, model string, progress func(PullProgress)) error {
+	data, _ := json.Marshal(map[string]any{"model": model, "stream": true})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.endpoint("/api/pull"), bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := o.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrUnreachable, err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		data, _ := io.ReadAll(io.LimitReader(res.Body, 64<<10))
+		return ollamaError(res.StatusCode, data)
+	}
+	scanner := bufio.NewScanner(res.Body)
+	for scanner.Scan() {
+		var p PullProgress
+		if json.Unmarshal(scanner.Bytes(), &p) != nil {
+			continue
+		}
+		if p.Error != "" {
+			return fmt.Errorf("Ollama: %s", p.Error)
+		}
+		progress(p)
+	}
+	return scanner.Err()
 }

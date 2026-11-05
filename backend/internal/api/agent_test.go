@@ -1,9 +1,11 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,6 +37,8 @@ func (f *agentOllama) start(t *testing.T) string {
 			w.Write([]byte(`{"capabilities":["completion","tools","thinking"],"thinking":{"values":["low","medium","high"],"default":"medium"}}`))
 		case "/api/ps":
 			w.Write([]byte(`{"models":[]}`))
+		case "/api/pull":
+			w.Write([]byte(`{"status":"pulling manifest"}` + "\n" + `{"status":"downloading","completed":5,"total":10}` + "\n" + `{"status":"success"}` + "\n"))
 		case "/api/chat":
 			var body map[string]any
 			json.NewDecoder(r.Body).Decode(&body)
@@ -581,5 +585,133 @@ func TestAgentNASMapAndInstructions(t *testing.T) {
 	}
 	if res, _ := ts.do(guest, "POST", "/api/v1/agent/map/refresh", nil); res.StatusCode != http.StatusForbidden {
 		t.Fatal("user rebuilt the map")
+	}
+}
+
+func TestAgentUndoAttachExport(t *testing.T) {
+	fake := &agentOllama{}
+	ts := agentServer(t, fake, agent.Policy{Preset: agent.PresetAll})
+	dir := ts.withShare()
+	os.WriteFile(filepath.Join(dir, "liste.md"), []byte("alt"), 0o644)
+	os.WriteFile(filepath.Join(dir, "weg.txt"), []byte("bleib"), 0o644)
+	// The share needs its recycle bin for deleted files to come back.
+	_, shareBody := ts.request("GET", "/api/v1/shares", nil)
+	var shareList []map[string]any
+	json.Unmarshal(shareBody, &shareList)
+	for _, sh := range shareList {
+		if sh["name"] == "Docs" {
+			sh["recycle"] = map[string]any{"enabled": true, "days": 30}
+			if res, body := ts.request("PUT", "/api/v1/shares/Docs", sh); res.StatusCode >= 300 {
+				t.Fatalf("recycle bin: %d %s", res.StatusCode, body)
+			}
+		}
+	}
+	ts.request("POST", "/api/v1/agent/projects", map[string]any{"name": "Doku"})
+	_, body := ts.request("GET", "/api/v1/agent/projects", nil)
+	var projects struct{ Projects []agent.Project }
+	json.Unmarshal(body, &projects)
+	fake.replies = []string{
+		toolCall("file_write", map[string]any{"root": "share/Docs", "path": "liste.md", "content": "neu", "replace": true}),
+		toolCall("files_delete", map[string]any{"root": "share/Docs", "paths": []string{"weg.txt"}}),
+		`{"role":"assistant","content":"Erledigt."}`,
+	}
+	res, body := ts.request("POST", "/api/v1/agent/chats", map[string]any{"message": "Ersetze und lösche", "project": projects.Projects[0].ID})
+	var chat agent.Chat
+	json.Unmarshal(body, &chat)
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("start: %d %s", res.StatusCode, body)
+	}
+	chat = waitChat(t, ts, ts.client, chat.ID)
+	steps := map[string]string{}
+	for _, e := range chat.Entries {
+		if e.Role == "tool" && e.OK {
+			steps[e.Tool] = e.ID
+		}
+	}
+	if data, _ := os.ReadFile(filepath.Join(dir, "liste.md")); string(data) != "neu" {
+		for _, e := range chat.Entries {
+			t.Logf("%s %s %s", e.Role, e.Tool, e.Result)
+		}
+		t.Fatalf("not replaced: %q", data)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "weg.txt")); err == nil {
+		t.Fatal("not deleted")
+	}
+	// Files of the project.
+	_, body = ts.request("GET", "/api/v1/agent/projects/"+projects.Projects[0].ID+"/files", nil)
+	if !strings.Contains(string(body), "liste.md") {
+		t.Fatalf("project files: %s", body)
+	}
+	for _, tool := range []string{"file_write", "files_delete"} {
+		if res, body := ts.request("POST", "/api/v1/agent/chats/"+chat.ID+"/undo", map[string]string{"step": steps[tool]}); res.StatusCode != 200 {
+			t.Fatalf("undo %s: %d %s", tool, res.StatusCode, body)
+		}
+	}
+	if data, _ := os.ReadFile(filepath.Join(dir, "liste.md")); string(data) != "alt" {
+		t.Fatalf("replace not taken back: %q", data)
+	}
+	if data, _ := os.ReadFile(filepath.Join(dir, "weg.txt")); string(data) != "bleib" {
+		t.Fatalf("delete not taken back: %q", data)
+	}
+	// Attachments: up, read by the agent, away with the chat.
+	req, _ := http.NewRequest("POST", ts.url+"/api/v1/agent/chats/"+chat.ID+"/attachments?name=notiz.md", strings.NewReader("# Notiz\nGeheimzahl ist keine."))
+	req.Header.Set("Origin", ts.url)
+	up, err := ts.client.Do(req)
+	if err != nil || up.StatusCode != http.StatusCreated {
+		t.Fatalf("upload: %v %v", err, up)
+	}
+	for _, bad := range []string{"../x", ".hidden"} {
+		req, _ := http.NewRequest("POST", ts.url+"/api/v1/agent/chats/"+chat.ID+"/attachments?name="+url.QueryEscape(bad), strings.NewReader("x"))
+		req.Header.Set("Origin", ts.url)
+		if r, _ := ts.client.Do(req); r.StatusCode == http.StatusCreated && bad == ".hidden" {
+			t.Fatalf("name %q accepted", bad)
+		}
+	}
+	box := ts.server.newAgentToolbox(mustUser(t, ts, "alex"), ts.server.agentSettings())
+	out, err := box.tools["attachment_read"].own(context.Background(), &chat, json.RawMessage(`{"name":"notiz.md"}`))
+	if err != nil || !strings.Contains(out.Text, "Notiz") {
+		t.Fatalf("attachment read: %v %+v", err, out)
+	}
+	// Export as Markdown and PDF.
+	res, body = ts.request("GET", "/api/v1/agent/chats/"+chat.ID+"/export", nil)
+	if res.StatusCode != 200 || !strings.Contains(string(body), "Ersetze und lösche") || !strings.Contains(string(body), "Erledigt.") {
+		t.Fatalf("export: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("GET", "/api/v1/agent/chats/"+chat.ID+"/export?format=pdf", nil); res.StatusCode != 200 || !strings.HasPrefix(string(body), "%PDF") {
+		t.Fatalf("pdf: %d", res.StatusCode)
+	}
+	if res, _ := ts.request("DELETE", "/api/v1/agent/chats/"+chat.ID, nil); res.StatusCode != http.StatusNoContent {
+		t.Fatal("delete chat")
+	}
+	if _, err := ts.server.agentStore().Attachment("alex", chat.ID, "notiz.md"); err == nil {
+		t.Fatal("attachment outlived its chat")
+	}
+}
+
+func TestAgentPullAndPreload(t *testing.T) {
+	fake := &agentOllama{}
+	ts := agentServer(t, fake, agent.Policy{})
+	if res, body := ts.request("POST", "/api/v1/agent/models/pull", map[string]string{"model": "qwen3:8b"}); res.StatusCode != http.StatusAccepted {
+		t.Fatalf("pull: %d %s", res.StatusCode, body)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		_, body := ts.request("GET", "/api/v1/agent/models/pull", nil)
+		if strings.Contains(string(body), `"running":false`) {
+			if !strings.Contains(string(body), `"status":"success"`) {
+				t.Fatalf("pull state: %s", body)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("pull did not end")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if res, _ := ts.request("POST", "/api/v1/agent/models/pull", map[string]string{"model": "bad name"}); res.StatusCode != http.StatusBadRequest {
+		t.Fatal("bad model name accepted")
+	}
+	if res, _ := ts.request("POST", "/api/v1/agent/preload", map[string]string{}); res.StatusCode != http.StatusAccepted {
+		t.Fatalf("preload: %d", res.StatusCode)
 	}
 }

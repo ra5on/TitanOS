@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -22,6 +23,8 @@ import (
 
 const agentSettingsFile = "system/agent.json"
 
+var keepAlivePattern = regexp.MustCompile(`^(-1|0|[1-9][0-9]{0,3}[mh])$`)
+
 // agentSettings are the settings of the agent. New fields must stay
 // optional: older versions ignore them, and a missing field keeps its
 // default.
@@ -35,13 +38,18 @@ type agentSettings struct {
 	// uses the model's default.
 	Think string `json:"think,omitempty"`
 	// Context is num_ctx; 0 keeps what is set in Ollama.
-	Context  int `json:"context,omitempty"`
-	MaxSteps int `json:"maxSteps,omitempty"`
+	Context int `json:"context,omitempty"`
+	// KeepAlive: how long Ollama keeps the model loaded after a request
+	// ("5m", "30m", "2h", "-1" for always); empty keeps Ollama's own.
+	KeepAlive string `json:"keepAlive,omitempty"`
+	MaxSteps  int    `json:"maxSteps,omitempty"`
 	// Users are the accounts besides owners that may use the agent
 	// ("KI-Agent erlaubt" per account). Owners always may.
 	Users     []string         `json:"users,omitempty"`
 	Policy    agent.Policy     `json:"policy"`
 	Locations []agent.Location `json:"locations,omitempty"`
+	// WeeklyReport sends on Monday what the agent changed in the week.
+	WeeklyReport bool `json:"weeklyReport,omitempty"`
 	// React lets the agent act on notifications of the NAS as ReactAs.
 	React   bool   `json:"react,omitempty"`
 	ReactAs string `json:"reactAs,omitempty"`
@@ -155,6 +163,9 @@ func (s *Server) checkAgentSettings(req *agentSettings) error {
 	}
 	if len(req.Model) > 200 || len(req.Think) > 40 {
 		return errors.New("model or level too long")
+	}
+	if req.KeepAlive != "" && !keepAlivePattern.MatchString(req.KeepAlive) {
+		return errors.New("keep alive like 5m, 30m, 2h or -1")
 	}
 	if req.Context != 0 && (req.Context < 2048 || req.Context > 1<<20) {
 		return errors.New("context length out of range")

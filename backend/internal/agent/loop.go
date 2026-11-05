@@ -65,11 +65,12 @@ type Event struct {
 
 // Runner runs one chat.
 type Runner struct {
-	Ollama   *Ollama
-	Model    string
-	Think    any
-	Context  int
-	MaxSteps int
+	Ollama    *Ollama
+	Model     string
+	Think     any
+	Context   int
+	KeepAlive string
+	MaxSteps  int
 	// System is the system prompt for this run (prompt.go).
 	System string
 	Tools  Toolbox
@@ -202,7 +203,7 @@ func (r *Runner) Run(ctx context.Context, chat *Chat) error {
 		}
 		tools := r.Tools.Specs(chat)
 		var live strings.Builder
-		msg, stats, err := r.Ollama.Chat(ctx, ChatRequest{Model: r.Model, Messages: Messages(r.System, chat), Tools: tools, Think: r.Think, Context: r.Context}, func(c Chunk) {
+		msg, stats, err := r.Ollama.Chat(ctx, ChatRequest{Model: r.Model, Messages: Messages(r.System, chat), Tools: tools, Think: r.Think, Context: r.Context, KeepAlive: r.KeepAlive}, func(c Chunk) {
 			if c.Thinking != "" {
 				r.emit(Event{Type: "thinking", Text: c.Thinking})
 			}

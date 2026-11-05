@@ -26,8 +26,10 @@ type agentReactState struct {
 	last map[string]time.Time
 	// marks are the last seen Home Assistant transition per schedule.
 	marks map[string]string
-	// mapTried is when the nightly NAS map was last started.
-	mapTried time.Time
+	// mapTried is when the nightly NAS map was last started; reportSent
+	// when the weekly report went out.
+	mapTried   time.Time
+	reportSent time.Time
 }
 
 // agentDue reports whether a schedule should run at now, given its last run.
@@ -84,6 +86,7 @@ func (s *Server) agentTick(now time.Time) {
 		return
 	}
 	s.nightlyNASMap(now)
+	s.agentWeeklyReport(now.In(s.agentLocation()))
 	store := s.agentStore()
 	var watched []string
 	for _, name := range store.ScheduleAccounts() {

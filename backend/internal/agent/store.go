@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"regexp"
@@ -447,6 +448,10 @@ func (s *Store) DeleteChat(user, id string) error {
 		return err
 	}
 	s.removeFile(user, "chats/"+id+".json")
+	if root, done, err := s.userRoot(user, false); err == nil {
+		_ = root.RemoveAll("files/" + id)
+		done()
+	}
 	return nil
 }
 
@@ -655,4 +660,52 @@ func (s *Store) SaveProfile(user string, p Profile) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.write(user, "profile.json", p)
+}
+
+var attachmentName = regexp.MustCompile(`^[^/\\\x00-\x1f.][^/\\\x00-\x1f]{0,199}$`)
+
+// SaveAttachment keeps a file uploaded into a chat.
+func (s *Store) SaveAttachment(user, chat, name string, data []byte) error {
+	if !ValidID(chat) || !attachmentName.MatchString(name) {
+		return ErrNotFound
+	}
+	root, done, err := s.userRoot(user, true)
+	if err != nil {
+		return err
+	}
+	defer done()
+	dir := "files/" + chat
+	for _, d := range []string{"files", dir} {
+		if err := root.Mkdir(d, 0700); err != nil && !errors.Is(err, fs.ErrExist) {
+			return err
+		}
+	}
+	sub, err := root.OpenRoot(dir)
+	if err != nil {
+		return err
+	}
+	defer sub.Close()
+	return volumedata.Write(sub, name, data)
+}
+
+// Attachment reads a file of a chat.
+func (s *Store) Attachment(user, chat, name string) ([]byte, error) {
+	if !ValidID(chat) || !attachmentName.MatchString(name) {
+		return nil, ErrNotFound
+	}
+	root, done, err := s.userRoot(user, false)
+	if err != nil {
+		return nil, err
+	}
+	defer done()
+	f, err := root.Open("files/" + chat + "/" + name)
+	if err != nil {
+		return nil, ErrNotFound
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil || !st.Mode().IsRegular() || st.Size() > 32<<20 {
+		return nil, ErrNotFound
+	}
+	return io.ReadAll(f)
 }

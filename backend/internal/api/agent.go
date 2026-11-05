@@ -437,7 +437,7 @@ func (s *Server) agentRunner(ctx context.Context, user auth.User, settings agent
 		cancel()
 	}
 	return &agent.Runner{
-		Ollama: client, Model: model, Think: thinkValue, Context: settings.Context, MaxSteps: settings.MaxSteps,
+		Ollama: client, Model: model, Think: thinkValue, Context: settings.Context, KeepAlive: settings.KeepAlive, MaxSteps: settings.MaxSteps,
 		System: s.agentPrompt(ctx, user, settings, chat, box),
 		Tools:  box,
 		Save:   func(c *agent.Chat) error { return store.SaveChat(user.Name, c) },

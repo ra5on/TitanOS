@@ -22,6 +22,13 @@ func (s *Server) registerAgent(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/agent/chats/{id}/decide", s.requireAgent(s.handleAgentDecide))
 	mux.HandleFunc("POST /api/v1/agent/chats/{id}/stop", s.requireAgent(s.handleAgentStop))
 	mux.HandleFunc("GET /api/v1/agent/chats/{id}/events", s.requireAgent(s.handleAgentEvents))
+	mux.HandleFunc("POST /api/v1/agent/chats/{id}/attachments", s.requireAgent(s.handleAgentAttach))
+	mux.HandleFunc("GET /api/v1/agent/chats/{id}/export", s.requireAgent(s.handleAgentExport))
+	mux.HandleFunc("POST /api/v1/agent/chats/{id}/undo", s.requireAgent(s.handleAgentUndo))
+	mux.HandleFunc("GET /api/v1/agent/projects/{id}/files", s.requireAgent(s.handleAgentProjectFiles))
+	mux.HandleFunc("POST /api/v1/agent/preload", s.requireAgent(s.handleAgentPreload))
+	mux.HandleFunc("GET /api/v1/agent/models/pull", s.requireAdmin(s.handleAgentPullState))
+	mux.HandleFunc("POST /api/v1/agent/models/pull", s.requireAdmin(s.handleAgentPull))
 
 	mux.HandleFunc("GET /api/v1/agent/projects", s.requireAgent(s.handleAgentProjects))
 	mux.HandleFunc("POST /api/v1/agent/projects", s.requireAgent(s.handleAgentProjectNew))

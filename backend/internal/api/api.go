@@ -218,6 +218,7 @@ type Server struct {
 	agentReact      agentReactState
 	agentStoreOnce  sync.Once
 	agentStoreOne   *agent.Store
+	agentPull       agentPull
 
 	loadMu      sync.Mutex
 	lastLoadTry time.Time

@@ -113,6 +113,10 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 	for _, t := range b.mapTools() {
 		add(t)
 	}
+	for _, t := range b.clusterTools() {
+		add(t)
+	}
+	add(b.attachmentTool())
 	return b
 }
 
