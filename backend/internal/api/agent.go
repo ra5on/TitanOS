@@ -127,7 +127,7 @@ type agentMessage struct {
 	Message string `json:"message"`
 	// Draft makes an empty chat that does not run yet (to attach files
 	// before the first message).
-	Draft bool `json:"draft,omitempty"`
+	Draft   bool   `json:"draft,omitempty"`
 	Project string `json:"project,omitempty"`
 	Model   string `json:"model,omitempty"`
 	Think   string `json:"think,omitempty"`
