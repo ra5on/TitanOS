@@ -544,4 +544,3 @@ func (s *Server) agentNotes(user auth.User) []string {
 	}
 	return out
 }
-

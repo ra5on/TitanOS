@@ -5,7 +5,8 @@
 	// Model and thinking level sit at the top of the chat (ModelPicker).
 	import Dropdown from '#lib/components/Dropdown.svelte';
 	import Icon from '#lib/components/Icon.svelte';
-	import { t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
+	import { apiFetch, responseError } from '#lib/api.ts';
 
 	let {
 		busy = false,
@@ -16,6 +17,7 @@
 		onstop,
 		onpicknas,
 		onerror,
+		voice = false,
 	}: {
 		busy?: boolean;
 		disabled?: boolean;
@@ -28,7 +30,56 @@
 		onpicknas?: () => void;
 		/** A file could not be taken, e.g. too large. */
 		onerror?: (message: string) => void;
+		/** Speech input through Whisper is switched on (PLAN 49). */
+		voice?: boolean;
 	} = $props();
+
+	// Speech input: record in the browser, the NAS passes it to Whisper and
+	// the text lands in the field (not sent on its own).
+	let recording = $state(false);
+	let transcribing = $state(false);
+	let recorder: MediaRecorder | null = null;
+	let chunks: Blob[] = [];
+	async function toggleVoice() {
+		if (recording) {
+			recorder?.stop();
+			return;
+		}
+		try {
+			const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+			const type = ['audio/webm', 'audio/mp4', 'audio/ogg'].find(
+				(t) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported?.(t),
+			);
+			recorder = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+			chunks = [];
+			recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+			recorder.onstop = async () => {
+				stream.getTracks().forEach((t) => t.stop());
+				recording = false;
+				const blob = new Blob(chunks, { type: recorder?.mimeType || type || 'audio/webm' });
+				if (!blob.size) return;
+				transcribing = true;
+				try {
+					const res = await apiFetch(`/agent/transcribe?lang=${i18n.locale}`, {
+						method: 'POST',
+						headers: { 'Content-Type': blob.type },
+						body: blob,
+					});
+					if (!res.ok) throw await responseError(res);
+					const { text: said } = (await res.json()) as { text: string };
+					if (said) fill(text.trim() ? `${text.trim()} ${said}` : said);
+				} catch (e) {
+					onerror?.(apiErrorText(e));
+				} finally {
+					transcribing = false;
+				}
+			};
+			recorder.start();
+			recording = true;
+		} catch {
+			onerror?.(t('agent.voiceNoMic'));
+		}
+	}
 
 	let text = $state('');
 	let area = $state<HTMLTextAreaElement>();
@@ -151,6 +202,22 @@
 			{disabled}
 			aria-label={t('agent.input')}
 			placeholder={placeholder || (busy ? t('agent.inputBusy') : t('agent.inputIdle'))}></textarea>
+		{#if voice && !busy}
+			<button
+				type="button"
+				class="round mic"
+				class:on={recording}
+				disabled={disabled || transcribing}
+				aria-pressed={recording}
+				aria-label={recording ? t('agent.voiceStop') : t('agent.voiceStart')}
+				title={recording ? t('agent.voiceStop') : t('agent.voiceStart')}
+				onclick={toggleVoice}
+				>{#if transcribing}<span class="dots" aria-hidden="true">…</span>{:else}<Icon
+						name={recording ? 'stop' : 'mic'}
+						size={17}
+					/>{/if}</button
+			>
+		{/if}
 		{#if busy}
 			<button
 				type="button"
@@ -284,6 +351,23 @@
 	.stop {
 		background: var(--text);
 		color: var(--bg);
+	}
+	.mic {
+		background: color-mix(in srgb, var(--text) 8%, transparent);
+		color: var(--text);
+	}
+	.mic.on {
+		background: var(--status-error, #e5484d);
+		color: #fff;
+		animation: rec 1.2s ease-in-out infinite;
+	}
+	@keyframes rec {
+		50% {
+			box-shadow: 0 0 0 6px color-mix(in srgb, var(--status-error, #e5484d) 25%, transparent);
+		}
+	}
+	:global(.agent.calm) .mic.on {
+		animation: none;
 	}
 	/* Under 16px iOS zooms into the field on a tap and stays zoomed. */
 	@media (max-width: 760px), (pointer: coarse) {

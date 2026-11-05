@@ -455,6 +455,8 @@ export type Share = {
 	/** Ransomware guard over SMB; guardLocked is set by the NAS only. */
 	guard?: boolean;
 	guardLocked?: { at: string; user: string; reason: string; files: number };
+	/** Every account sees only its own folder (share of the KI-Agent, PLAN 49). */
+	perUser?: boolean;
 	path: string;
 	available: boolean;
 };

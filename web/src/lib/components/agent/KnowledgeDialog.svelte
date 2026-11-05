@@ -367,27 +367,9 @@
 		flex-direction: column;
 		gap: var(--space-2);
 	}
-	.box {
-		border: 1px solid var(--border);
-		border-radius: var(--radius-ctl);
-		padding: var(--space-3);
-	}
-	.stack {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-	}
-	.line {
-		display: flex;
-		gap: var(--space-2);
-		flex-wrap: wrap;
-	}
 	.me {
 		width: 100%;
 		margin: var(--space-2) 0;
-	}
-	.small-in {
-		width: 110px;
 	}
 	.row-actions {
 		display: flex;

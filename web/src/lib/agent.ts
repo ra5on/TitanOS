@@ -63,6 +63,8 @@ export type ChatInfo = Omit<Chat, 'entries' | 'model' | 'think' | 'pending' | 't
 	preview?: string;
 	/** Changed since the person last looked, on any device (PLAN 48). */
 	unread?: boolean;
+	/** Another account wrote it, in a shared project (read-only, PLAN 51). */
+	author?: string;
 };
 
 export type Project = {
@@ -73,6 +75,9 @@ export type Project = {
 	instructions?: string;
 	location?: string;
 	created: string;
+	/** Accounts that share the project; owner is set for a shared one. */
+	members?: string[];
+	owner?: string;
 };
 
 export type Memory = {
@@ -96,7 +101,13 @@ export type Skill = {
 };
 
 /** What the morning report contains (PLAN 49), set by each person. */
-export type Report = { nas?: boolean; backups?: boolean; today?: boolean; home?: boolean; extra?: string };
+export type Report = {
+	nas?: boolean;
+	backups?: boolean;
+	today?: boolean;
+	home?: boolean;
+	extra?: string;
+};
 
 export type Schedule = {
 	id: string;
@@ -176,6 +187,10 @@ export type Status = {
 	error?: string;
 	models?: Model[];
 	running?: { name: string; contextLength: number; vram: number }[];
+	/** Speech input through Whisper is on (PLAN 49). */
+	voice?: boolean;
+	/** The model that looks at pictures, '' for none. */
+	vision?: string;
 };
 
 export type Location = { name: string; root: string; path: string; note?: string };
@@ -216,6 +231,12 @@ export type Settings = {
 		assist?: boolean;
 		assistAs?: string;
 	};
+	/** Speech to text with a Whisper service on the Ollama computer (PLAN 49). */
+	voice?: { enabled?: boolean; url?: string; model?: string };
+	/** A model of its own for pictures, when the main model sees none. */
+	vision?: { enabled?: boolean; model?: string };
+	/** Switches off the Btrfs snapshot before changes (PLAN 51). */
+	noSnapshots?: boolean;
 };
 
 export type ToolView = {

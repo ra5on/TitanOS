@@ -81,7 +81,7 @@ func TestAgentVoiceAndPictures(t *testing.T) {
 	}
 
 	// A photo in the chat goes to the picture model.
-	res, body = ts.request("POST", "/api/v1/agent/chats", map[string]any{"draft": true})
+	_, body = ts.request("POST", "/api/v1/agent/chats", map[string]any{"draft": true})
 	var draft agent.Chat
 	json.Unmarshal(body, &draft)
 	req, _ := http.NewRequest("POST", ts.url+"/api/v1/agent/chats/"+draft.ID+"/attachments?name="+url.QueryEscape("typenschild.jpg"), strings.NewReader("\xff\xd8\xff-jpeg"))

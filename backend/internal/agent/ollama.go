@@ -11,10 +11,10 @@
 package agent
 
 import (
-	"encoding/base64"
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"

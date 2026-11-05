@@ -27,6 +27,16 @@
 	let color = $state(start?.color ?? '');
 	let location = $state(start?.location ?? '');
 	let instructions = $state(start?.instructions ?? '');
+	// Sharing with other accounts of the agent (PLAN 51).
+	let members = $state<string[]>([...(start?.members ?? [])]);
+	let accounts = $state<string[] | null>(null);
+	const shared = !!start?.owner;
+	$effect(() => {
+		api
+			.get<{ accounts: string[] }>('/agent/accounts')
+			.then((r) => (accounts = r.accounts))
+			.catch(() => (accounts = []));
+	});
 	let busy = $state(false);
 	let error = $state('');
 	let confirmRemove = $state(false);
@@ -35,7 +45,7 @@
 		event.preventDefault();
 		busy = true;
 		error = '';
-		const body = { name, icon, color, location, instructions };
+		const body = { name, icon, color, location, instructions, members };
 		try {
 			const saved = start
 				? await api.put<Project>(`/agent/projects/${start.id}`, body)
@@ -104,9 +114,37 @@
 				bind:value={instructions}
 				placeholder={t('agent.projectInstructionsHint')}></textarea>
 		</label>
+		{#if shared}
+			<p class="notice-warn">{t('agent.projectShared', { name: start?.owner ?? '' })}</p>
+		{:else}
+			<fieldset class="stack members">
+				<legend>{t('agent.members')}</legend>
+				{#if accounts === null}
+					<span class="muted">…</span>
+				{:else if accounts.length === 0}
+					<span class="muted">{t('agent.membersNone')}</span>
+				{:else}
+					<div class="names">
+						{#each accounts as a (a)}
+							<label class="check"
+								><input
+									type="checkbox"
+									checked={members.includes(a)}
+									onchange={(e) =>
+										(members = e.currentTarget.checked
+											? [...members, a]
+											: members.filter((m) => m !== a))}
+								/><span>{a}</span></label
+							>
+						{/each}
+					</div>
+				{/if}
+				<span class="muted">{t('agent.membersHint')}</span>
+			</fieldset>
+		{/if}
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 		<div class="dialog-actions">
-			{#if start}
+			{#if start && !shared}
 				{#if confirmRemove}
 					<button type="button" class="btn btn-danger" disabled={busy} onclick={remove}
 						>{t('agent.projectRemoveNow')}</button
@@ -123,7 +161,7 @@
 			<button type="button" class="btn" disabled={busy} onclick={onclose}
 				>{t('common.cancel')}</button
 			>
-			<button type="submit" class="btn btn-primary" disabled={busy || !name.trim()}
+			<button type="submit" class="btn btn-primary" disabled={busy || shared || !name.trim()}
 				>{t('common.save')}</button
 			>
 		</div>
@@ -132,6 +170,20 @@
 </Dialog>
 
 <style>
+	.members {
+		border: 0;
+		padding: 0;
+		margin: 0;
+	}
+	.members legend {
+		padding: 0;
+		margin-bottom: 4px;
+	}
+	.names {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px 16px;
+	}
 	.form {
 		display: flex;
 		flex-direction: column;

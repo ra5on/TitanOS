@@ -249,8 +249,7 @@
 					></label
 				>
 				<label class="check"
-					><input type="checkbox" bind:checked={report.home} /><span
-						>{t('agent.morningHome')}</span
+					><input type="checkbox" bind:checked={report.home} /><span>{t('agent.morningHome')}</span
 					></label
 				>
 			</div>
@@ -260,8 +259,7 @@
 				rows="2"
 				maxlength="1000"
 				bind:value={report.extra}
-				placeholder={t('agent.morningExtraHint')}
-			></textarea>
+				placeholder={t('agent.morningExtraHint')}></textarea>
 		</div>
 		<div class="row-actions">
 			<button
@@ -449,7 +447,12 @@
 			{#if draft.every === 'cron'}
 				<label class="label" for="plan-cron">{t('agent.cron')}</label>
 				<div>
-					<input id="plan-cron" class="field mono" bind:value={draft.cron} placeholder="0 7 * * 1-5" />
+					<input
+						id="plan-cron"
+						class="field mono"
+						bind:value={draft.cron}
+						placeholder="0 7 * * 1-5"
+					/>
 					<p class="muted small">{t('agent.cronHint')}</p>
 				</div>
 			{/if}

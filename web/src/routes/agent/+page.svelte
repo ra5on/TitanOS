@@ -55,6 +55,8 @@
 	let projects = $state<Project[]>([]);
 	let locations = $state<Location[]>([]);
 	let current = $state<Chat | null>(null);
+	/** The author when the open chat belongs to another account (read-only). */
+	let readOnlyBy = $state('');
 	let project = $state('');
 	let error = $state('');
 	let busy = $state(false);
@@ -172,7 +174,7 @@
 				await loadLists();
 				void loadLocations();
 				const id = page.url.searchParams.get('chat');
-				if (id) void open(id, false);
+				if (id) void open(id, false, page.url.searchParams.get('author') ?? '');
 				// From the file manager, the dashboard or a notification.
 				const attach = page.url.searchParams.get('attach');
 				if (attach)
@@ -196,7 +198,7 @@
 		return () => stream?.abort();
 	});
 
-	async function open(id: string, push = true) {
+	async function open(id: string, push = true, author = '') {
 		menuOpen = false;
 		stopSpeaking();
 		stream?.abort();
@@ -204,7 +206,17 @@
 		live = { thinking: '', content: '', step: null };
 		error = '';
 		try {
-			current = await api.get<Chat>(`/agent/chats/${id}`);
+			// Another account's chat in a shared project is only read (PLAN 51).
+			const fetched = await api.get<Chat & { author?: string; readOnly?: boolean }>(
+				`/agent/chats/${id}` + (author ? `?author=${encodeURIComponent(author)}` : ''),
+			);
+			readOnlyBy = fetched.readOnly ? (fetched.author ?? author) : '';
+			current = fetched;
+			if (readOnlyBy) {
+				if (fetched.project) project = fetched.project;
+				if (push) void goto(`/agent?chat=${id}&author=${encodeURIComponent(readOnlyBy)}`);
+				return;
+			}
 			if (current.model) model = current.model;
 			if (current.think) think = current.think;
 			if (current.project) project = current.project;
@@ -218,6 +230,7 @@
 
 	function newChat(inProject = project) {
 		menuOpen = false;
+		readOnlyBy = '';
 		stopSpeaking();
 		stream?.abort();
 		current = null;
@@ -386,7 +399,7 @@
 	}
 	$effect(() => {
 		const id = current?.id;
-		if (!id) return;
+		if (!id || readOnlyBy) return;
 		const visible = () => document.visibilityState === 'visible';
 		const ping = () => seen(id, visible());
 		ping();
@@ -453,7 +466,9 @@
 		},
 		{ title: t('agent.suggBackup'), sub: t('agent.suggBackupSub'), text: t('agent.suggestBackup') },
 	]);
-	const currentInfo = $derived(current ? chats.find((c) => c.id === current!.id) : undefined);
+	const currentInfo = $derived(
+		current && !readOnlyBy ? chats.find((c) => c.id === current!.id && !c.author) : undefined,
+	);
 	const currentProject = $derived(projects.find((p) => p.id === (current?.project ?? project)));
 	const menuProps = $derived({
 		chats,
@@ -462,7 +477,7 @@
 		project,
 		host: session.data?.hostname ?? '',
 		admin: status?.admin ?? false,
-		onopen: (id: string) => open(id),
+		onopen: (id: string, author?: string) => open(id, true, author ?? ''),
 		onnew: () => newChat(''),
 		onproject: (id: string) => {
 			project = id;
@@ -472,6 +487,7 @@
 		onnewproject: () => (dialog = { kind: 'project', project: null }),
 		oneditproject: (p: Project) => (dialog = { kind: 'project', project: p }),
 		onknowledge: () => (dialog = { kind: 'knowledge', tab: 'memory' }),
+		onplanned: () => (dialog = { kind: 'knowledge', tab: 'schedules' }),
 		onlook: () => (dialog = { kind: 'look' }),
 		ontitanos: phone || installed ? toTitanOS : undefined,
 	});
@@ -663,6 +679,8 @@
 				{/if}
 				{#if current}
 					<ChatView
+						readonly={!!readOnlyBy}
+						onplanned={() => (dialog = { kind: 'knowledge', tab: 'schedules' })}
 						chat={current}
 						live={look.typing ? live : { ...live, content: '' }}
 						{busy}
@@ -691,8 +709,13 @@
 						bind:this={composer}
 						{busy}
 						bind:attachments
-						disabled={!!current?.pending}
-						placeholder={current?.pending ? t('agent.inputPending') : t('agent.inputShort')}
+						disabled={!!current?.pending || !!readOnlyBy}
+						voice={!!status.voice}
+						placeholder={readOnlyBy
+							? t('agent.readOnlyChat', { name: readOnlyBy })
+							: current?.pending
+								? t('agent.inputPending')
+								: t('agent.inputShort')}
 						onsend={send}
 						onstop={() => stop()}
 						onpicknas={() => (dialog = { kind: 'nas' })}

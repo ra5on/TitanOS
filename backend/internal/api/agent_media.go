@@ -252,18 +252,18 @@ func whisperTranscribe(ctx context.Context, v agentVoice, audio []byte, contentT
 	req.Header.Set("Content-Type", form.FormDataContentType())
 	res, err := whisperClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("Whisper not reachable: %v", err)
+		return "", fmt.Errorf("whisper not reachable: %v", err)
 	}
 	defer res.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 	if res.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("Whisper answered HTTP %d", res.StatusCode)
+		return "", fmt.Errorf("whisper answered HTTP %d", res.StatusCode)
 	}
 	var out struct {
 		Text string `json:"text"`
 	}
 	if err := json.Unmarshal(data, &out); err != nil {
-		return "", errors.New("Whisper sent no text")
+		return "", errors.New("whisper sent no text")
 	}
 	return strings.TrimSpace(out.Text), nil
 }
