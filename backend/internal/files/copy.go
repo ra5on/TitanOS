@@ -212,8 +212,11 @@ func (m *Manager) StartCopyChoices(src Root, paths []string, dst Root, dir strin
 	m.jobs.mu.Lock()
 	m.jobs.list = append(m.jobs.list, job)
 	m.jobs.mu.Unlock()
+	// The answer shows the job as it starts; taken after the goroutine began,
+	// a small job could already be past its planning walk.
+	started := m.snapshot(job)
 	go m.runJob(ctx, job, sr, dr, src, dst, uid)
-	return m.snapshot(job), nil
+	return started, nil
 }
 
 // runJob plans (once) and carries out a job, then records how it ended.
@@ -1328,8 +1331,11 @@ func (m *Manager) RetryCopy(user, id string, src, dst Root, uid int) (Job, error
 	}
 	job.c.copied.Store(job.c.committed.Load())
 	m.jobs.mu.Unlock()
+	// The answer shows the job as it starts; taken after the goroutine began,
+	// a small job could already be past its planning walk.
+	started := m.snapshot(job)
 	go m.runJob(ctx, job, sr, dr, src, dst, uid)
-	return m.snapshot(job), nil
+	return started, nil
 }
 
 func (m *Manager) rememberMoveUndo(job *Job) {
