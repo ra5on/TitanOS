@@ -73,38 +73,63 @@
 	<p class="cap">{t('agent.init.night')}</p>
 	<div class="grp">
 		<label class="row">
-			<span class="t"><strong>{t('agent.init.reflect')}</strong><small>{t('agent.init.reflectHint')}</small></span>
+			<span class="t"
+				><strong>{t('agent.init.reflect')}</strong><small>{t('agent.init.reflectHint')}</small
+				></span
+			>
 			<input type="checkbox" class="switch" bind:checked={value.reflect} />
 		</label>
 		<label class="row" class:off={!value.reflect}>
 			<span class="t"><strong>{t('agent.init.at')}</strong></span>
-			<input type="time" class="field time" bind:value={value.reflectAt} disabled={!value.reflect} />
+			<input
+				type="time"
+				class="field time"
+				bind:value={value.reflectAt}
+				disabled={!value.reflect}
+			/>
 		</label>
 		<div class="row col" class:off={!value.reflect}>
-			<span class="t"><strong>{t('agent.init.take')}</strong><small>{t('agent.init.takeHint')}</small></span>
+			<span class="t"
+				><strong>{t('agent.init.take')}</strong><small>{t('agent.init.takeHint')}</small></span
+			>
 			<span class="seg" role="radiogroup" aria-label={t('agent.init.take')}>
 				<label class:on={value.confirm}
-					><input type="radio" bind:group={value.confirm} value={true} />{t('agent.init.confirm')}</label
+					><input type="radio" bind:group={value.confirm} value={true} />{t(
+						'agent.init.confirm',
+					)}</label
 				>
 				<label class:on={!value.confirm}
-					><input type="radio" bind:group={value.confirm} value={false} />{t('agent.init.direct')}</label
+					><input type="radio" bind:group={value.confirm} value={false} />{t(
+						'agent.init.direct',
+					)}</label
 				>
 			</span>
 		</div>
 		<label class="row" class:off={!value.reflect}>
 			<span class="t"><strong>{t('agent.init.morningNote')}</strong></span>
-			<input type="checkbox" class="switch" bind:checked={value.morningNote} disabled={!value.reflect} />
+			<input
+				type="checkbox"
+				class="switch"
+				bind:checked={value.morningNote}
+				disabled={!value.reflect}
+			/>
 		</label>
 	</div>
 
 	<p class="cap">{t('agent.init.watch')}</p>
 	<div class="grp">
 		<label class="row">
-			<span class="t"><strong>{t('agent.init.watchLabel')}</strong><small>{t('agent.init.watchHint')}</small></span>
+			<span class="t"
+				><strong>{t('agent.init.watchLabel')}</strong><small>{t('agent.init.watchHint')}</small
+				></span
+			>
 			<input type="checkbox" class="switch" bind:checked={value.watch} />
 		</label>
 		<label class="row">
-			<span class="t"><strong>{t('agent.init.forecast')}</strong><small>{t('agent.init.forecastHint')}</small></span>
+			<span class="t"
+				><strong>{t('agent.init.forecast')}</strong><small>{t('agent.init.forecastHint')}</small
+				></span
+			>
 			<input type="checkbox" class="switch" bind:checked={value.forecast} />
 		</label>
 		{#each ['usb', 'update', 'crash', 'ha'] as const as ev (ev)}
@@ -126,14 +151,21 @@
 	<p class="cap">{t('agent.init.disks')}</p>
 	<div class="grp">
 		<div class="row">
-			<span class="t"><strong>{t('agent.init.background')}</strong><small>{t('agent.init.backgroundHint')}</small></span>
+			<span class="t"
+				><strong>{t('agent.init.background')}</strong><small>{t('agent.init.backgroundHint')}</small
+				></span
+			>
 		</div>
 		<div class="row col">
-			<span class="t"><strong>{t('agent.init.wake')}</strong><small>{t('agent.init.wakeHint')}</small></span>
+			<span class="t"
+				><strong>{t('agent.init.wake')}</strong><small>{t('agent.init.wakeHint')}</small></span
+			>
 			<span class="seg" role="radiogroup" aria-label={t('agent.init.wake')}>
 				{#each ['wake', 'ask', 'never'] as const as w (w)}
 					<label class:on={value.wake === w}
-						><input type="radio" bind:group={value.wake} value={w} />{t(`agent.init.wake.${w}`)}</label
+						><input type="radio" bind:group={value.wake} value={w} />{t(
+							`agent.init.wake.${w}`,
+						)}</label
 					>
 				{/each}
 			</span>
@@ -159,16 +191,34 @@
 	<p class="cap">{t('agent.init.limits')}</p>
 	<div class="grp">
 		<div class="row">
-			<span class="t"><strong>{t('agent.init.quiet')}</strong><small>{t('agent.init.quietHint')}</small></span>
-			<input type="time" class="field time" bind:value={value.quietFrom} aria-label={t('agent.init.quietFrom')} />
-			<input type="time" class="field time" bind:value={value.quietTo} aria-label={t('agent.init.quietTo')} />
+			<span class="t"
+				><strong>{t('agent.init.quiet')}</strong><small>{t('agent.init.quietHint')}</small></span
+			>
+			<input
+				type="time"
+				class="field time"
+				bind:value={value.quietFrom}
+				aria-label={t('agent.init.quietFrom')}
+			/>
+			<input
+				type="time"
+				class="field time"
+				bind:value={value.quietTo}
+				aria-label={t('agent.init.quietTo')}
+			/>
 		</div>
 		<label class="row">
-			<span class="t"><strong>{t('agent.init.gpu')}</strong><small>{t('agent.init.gpuHint', { min: value.gpuMinutes })}</small></span>
+			<span class="t"
+				><strong>{t('agent.init.gpu')}</strong><small
+					>{t('agent.init.gpuHint', { min: value.gpuMinutes })}</small
+				></span
+			>
 			<input type="range" min="5" max="120" step="5" bind:value={value.gpuMinutes} />
 		</label>
 		<label class="row">
-			<span class="t"><strong>{t('agent.init.weekly')}</strong><small>{t('agent.init.weeklyHint')}</small></span>
+			<span class="t"
+				><strong>{t('agent.init.weekly')}</strong><small>{t('agent.init.weeklyHint')}</small></span
+			>
 			<input type="checkbox" class="switch" bind:checked={value.weekly} />
 		</label>
 	</div>
@@ -176,24 +226,43 @@
 	<p class="cap">{t('agent.memory')}</p>
 	<div class="grp">
 		<label class="row">
-			<span class="t"><strong>{t('agent.init.memoryAuto')}</strong><small>{t('agent.init.memoryAutoHint')}</small></span>
+			<span class="t"
+				><strong>{t('agent.init.memoryAuto')}</strong><small>{t('agent.init.memoryAutoHint')}</small
+				></span
+			>
 			<input type="checkbox" class="switch" bind:checked={value.memoryAuto} />
 		</label>
 		<label class="row">
-			<span class="t"><strong>{t('agent.init.conflicts')}</strong><small>{t('agent.init.conflictsHint')}</small></span>
+			<span class="t"
+				><strong>{t('agent.init.conflicts')}</strong><small>{t('agent.init.conflictsHint')}</small
+				></span
+			>
 			<input type="checkbox" class="switch" bind:checked={value.conflicts} />
 		</label>
 		<label class="row">
-			<span class="t"><strong>{t('agent.init.fade')}</strong><small>{value.fadeMonths ? t('agent.init.fadeHint', { months: value.fadeMonths }) : t('agent.init.fadeOff')}</small></span>
+			<span class="t"
+				><strong>{t('agent.init.fade')}</strong><small
+					>{value.fadeMonths
+						? t('agent.init.fadeHint', { months: value.fadeMonths })
+						: t('agent.init.fadeOff')}</small
+				></span
+			>
 			<input type="range" min="0" max="24" step="1" bind:value={value.fadeMonths} />
 		</label>
 		{#if confirmClear}
 			<div class="row">
 				<span class="t"><strong>{t('agent.init.clearSure')}</strong></span>
-				<button type="button" class="btn btn-danger" onclick={() => { confirmClear = false; void clearMemory(); }}
-					>{t('agent.init.clear')}</button
+				<button
+					type="button"
+					class="btn btn-danger"
+					onclick={() => {
+						confirmClear = false;
+						void clearMemory();
+					}}>{t('agent.init.clear')}</button
 				>
-				<button type="button" class="btn" onclick={() => (confirmClear = false)}>{t('common.cancel')}</button>
+				<button type="button" class="btn" onclick={() => (confirmClear = false)}
+					>{t('common.cancel')}</button
+				>
 			</div>
 		{:else}
 			<button type="button" class="row danger" onclick={() => (confirmClear = true)}
@@ -205,12 +274,16 @@
 	<p class="cap">{t('agent.init.skillsAndInbox')}</p>
 	<div class="grp">
 		<label class="row">
-			<span class="t"><strong>{t('agent.init.learn')}</strong><small>{t('agent.init.learnHint')}</small></span>
+			<span class="t"
+				><strong>{t('agent.init.learn')}</strong><small>{t('agent.init.learnHint')}</small></span
+			>
 			<input type="checkbox" class="switch" bind:checked={value.learnSkills} />
 		</label>
 		{#if onrestart}
 			<div class="row">
-				<span class="t"><strong>{t('agent.init.know')}</strong><small>{t('agent.init.knowHint')}</small></span>
+				<span class="t"
+					><strong>{t('agent.init.know')}</strong><small>{t('agent.init.knowHint')}</small></span
+				>
 				<button type="button" class="btn" onclick={onrestart}>{t('agent.init.knowStart')}</button>
 			</div>
 		{/if}
@@ -223,7 +296,9 @@
 			<span class="seg" role="radiogroup" aria-label={t('agent.init.length')}>
 				{#each ['short', 'normal', 'long'] as const as l (l)}
 					<label class:on={value.length === l}
-						><input type="radio" bind:group={value.length} value={l} />{t(`agent.init.length.${l}`)}</label
+						><input type="radio" bind:group={value.length} value={l} />{t(
+							`agent.init.length.${l}`,
+						)}</label
 					>
 				{/each}
 			</span>
@@ -233,13 +308,17 @@
 			<span class="seg" role="radiogroup" aria-label={t('agent.init.tone')}>
 				{#each ['casual', 'plain'] as const as tone (tone)}
 					<label class:on={value.tone === tone}
-						><input type="radio" bind:group={value.tone} value={tone} />{t(`agent.init.tone.${tone}`)}</label
+						><input type="radio" bind:group={value.tone} value={tone} />{t(
+							`agent.init.tone.${tone}`,
+						)}</label
 					>
 				{/each}
 			</span>
 		</div>
 		<label class="row">
-			<span class="t"><strong>{t('agent.init.name')}</strong><small>{t('agent.init.nameHint')}</small></span>
+			<span class="t"
+				><strong>{t('agent.init.name')}</strong><small>{t('agent.init.nameHint')}</small></span
+			>
 			<input class="field short" maxlength="24" bind:value={value.name} placeholder="Titan" />
 		</label>
 		<label class="row">

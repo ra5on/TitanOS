@@ -8,6 +8,7 @@
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { ACCENTS, SWIPES, type Look, type Status, type Swipe } from '#lib/agent.ts';
 	import { fly } from 'svelte/transition';
+	import InitiativeSettings from './InitiativeSettings.svelte';
 
 	type Part = 'memory' | 'skills' | 'schedules' | 'map' | 'me' | 'log';
 	let {
@@ -18,19 +19,24 @@
 		start = 'list',
 		onopen,
 		onclose,
+		onknow,
 	}: {
 		look: Look;
 		status: Status;
 		user: string;
 		calm?: boolean;
-		start?: 'list' | 'speech' | 'look' | 'models';
+		start?: 'list' | 'speech' | 'look' | 'models' | 'initiative' | 'mind';
 		onopen: (part: Part) => void;
 		onclose: () => void;
+		/** Starts getting to know the person again (PLAN 53). */
+		onknow?: () => void;
 	} = $props();
 
-	let section = $state<'list' | 'speech' | 'look' | 'models'>((() => start)());
+	let section = $state<'list' | 'speech' | 'look' | 'models' | 'initiative' | 'mind'>(
+		(() => start)(),
+	);
 	const rows: {
-		id: Part | 'speech' | 'look' | 'models';
+		id: Part | 'speech' | 'look' | 'models' | 'initiative' | 'mind';
 		icon: IconName;
 		color: string;
 		label: MessageKey;
@@ -50,7 +56,9 @@
 			label: 'agent.set.models',
 			sub: status.vision ? `${status.model} · ${status.vision}` : status.model,
 		},
+		{ id: 'initiative', icon: 'bulb', color: '#f97316', label: 'agent.set.initiative' },
 		{ id: 'schedules', icon: 'clock', color: '#0ea5e9', label: 'agent.schedules' },
+		{ id: 'mind', icon: 'users', color: '#ec4899', label: 'agent.set.mind' },
 		{ id: 'memory', icon: 'star', color: '#10b981', label: 'agent.memory' },
 		{ id: 'skills', icon: 'zap', color: '#eab308', label: 'agent.skills' },
 		{ id: 'me', icon: 'chat', color: '#14b8a6', label: 'agent.me' },
@@ -74,7 +82,8 @@
 		},
 	]);
 	function go(id: (typeof rows)[number]['id']) {
-		if (id === 'speech' || id === 'look' || id === 'models') section = id;
+		if (id === 'speech' || id === 'look' || id === 'models' || id === 'initiative' || id === 'mind')
+			section = id;
 		else onopen(id);
 	}
 	const swipeLabel = (s: Swipe) => t(`agent.set.swipe.${s}`);
@@ -83,9 +92,13 @@
 			? t('agent.set.speech')
 			: section === 'look'
 				? t('agent.set.look')
-				: section === 'models'
-					? t('agent.set.models')
-					: t('agent.set.title'),
+				: section === 'initiative'
+					? t('agent.set.initiative')
+					: section === 'mind'
+						? t('agent.set.mind')
+						: section === 'models'
+							? t('agent.set.models')
+							: t('agent.set.title'),
 	);
 </script>
 
@@ -178,6 +191,8 @@
 					</span>
 				</div>
 			</div>
+		{:else if section === 'initiative' || section === 'mind'}
+			<InitiativeSettings part={section} onrestart={onknow} />
 		{:else if section === 'models'}
 			<div class="grp">
 				<div class="row">

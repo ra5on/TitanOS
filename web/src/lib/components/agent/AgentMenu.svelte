@@ -32,6 +32,8 @@
 		swipeRight = 'none',
 		onaction,
 		onsettings,
+		inboxCount = 0,
+		oninbox,
 		onlook,
 		ontitanos,
 	}: {
@@ -61,6 +63,9 @@
 		onaction?: (chat: ChatInfo, action: Swipe) => void;
 		/** Opens the settings of the agent (PLAN 53). */
 		onsettings: () => void;
+		/** PLAN 53: open suggestions of the agent. */
+		inboxCount?: number;
+		oninbox?: () => void;
 		onlook: () => void;
 		/** Back to TitanOS (phone, installed app). */
 		ontitanos?: () => void;
@@ -194,6 +199,11 @@
 				>{t('agent.newChat')}</span
 			></button
 		>
+		{#if oninbox}<button type="button" class="item" onclick={oninbox}
+				><span class="em"><Icon name="bulb" size={17} /></span><span class="name"
+					>{t('agent.inbox.title')}</span
+				>{#if inboxCount}<span class="count">{inboxCount}</span>{/if}</button
+			>{/if}
 		<button type="button" class="item" onclick={onplanned}
 			><span class="em"><Icon name="clock" size={17} /></span><span class="name"
 				>{t('agent.planned')}</span
@@ -506,6 +516,17 @@
 		font-size: var(--text-xs);
 		text-decoration: none;
 		cursor: pointer;
+	}
+	.count {
+		margin-left: auto;
+		min-width: 22px;
+		padding: 1px 7px;
+		border-radius: 999px;
+		font-size: var(--text-xs);
+		font-weight: 700;
+		text-align: center;
+		color: var(--on-accent, #fff);
+		background: var(--ag-gradient, var(--accent));
 	}
 	.compact .item {
 		min-height: 30px;

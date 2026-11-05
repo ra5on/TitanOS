@@ -21,6 +21,7 @@
 	import KnowledgeDialog from '#lib/components/agent/KnowledgeDialog.svelte';
 	import LookDialog from '#lib/components/agent/LookDialog.svelte';
 	import AgentSettings from '#lib/components/agent/AgentSettings.svelte';
+	import InboxPanel from '#lib/components/agent/InboxPanel.svelte';
 	import ProjectDialog from '#lib/components/agent/ProjectDialog.svelte';
 	import ProjectSheet from '#lib/components/agent/ProjectSheet.svelte';
 	import { api, apiFetch, responseError } from '#lib/api.ts';
@@ -82,8 +83,9 @@
 				only?: boolean;
 		  }
 		| { kind: 'look' }
-		| { kind: 'settings'; section?: 'list' | 'speech' | 'look' | 'models' }
+		| { kind: 'settings'; section?: 'list' | 'speech' | 'look' | 'models' | 'initiative' | 'mind' }
 		| { kind: 'actions'; chat: ChatInfo }
+		| { kind: 'inbox' }
 		| { kind: 'move'; chat: ChatInfo }
 		| { kind: 'rename'; chat: ChatInfo; title: string }
 		| { kind: 'delete'; chat: ChatInfo }
@@ -536,6 +538,20 @@
 
 	// PLAN 53: suggestions that fit the moment – warnings of the NAS first,
 	// then by time of day, then a changing pick of the rest ("andere").
+	// Open suggestions of the agent (PLAN 53), shown as a number in the menu.
+	let inboxCount = $state(0);
+	$effect(() => {
+		api
+			.get<{ items: unknown[] }>('/agent/inbox')
+			.then((r) => (inboxCount = r.items?.length ?? 0))
+			.catch(() => (inboxCount = 0));
+	});
+	/** Getting to know: a new chat with the question to look at the NAS. */
+	function getToKnow() {
+		dialog = null;
+		newChat('');
+		void send(t('agent.knowAsk'));
+	}
 	let hints = $state<NasHint[]>([]);
 	const seed = Math.floor(Math.random() * 100);
 	let shuffle = $state(0);
@@ -653,6 +669,16 @@
 		];
 		// The icon shows the kind; older texts carry an emoji in front.
 		for (const p of pool) p.title = p.title.replace(/^\p{Extended_Pictographic}\S*\s*/u, '');
+		if (chats.length === 0)
+			timed.unshift({
+				title: t('agent.suggKnow'),
+				sub: t('agent.suggKnowSub'),
+				text: t('agent.knowAsk'),
+				tag: t('agent.tagNew'),
+				tone: 'ok',
+				icon: 'sparkle',
+				color: '#8b5cf6',
+			});
 		const start = seed % pool.length;
 		const all = [...fromNas, ...timed, ...pool.slice(start), ...pool.slice(0, start)];
 		const from = (shuffle * 3) % all.length;
@@ -682,6 +708,8 @@
 		onplanned: () => (dialog = { kind: 'knowledge', tab: 'schedules', only: true }),
 		onlook: () => (dialog = { kind: 'settings', section: 'look' }),
 		onsettings: () => (dialog = { kind: 'settings' }),
+		inboxCount,
+		oninbox: () => (dialog = { kind: 'inbox' }),
 		gestures: look.gestures,
 		pull: look.pull,
 		compact: look.compact,
@@ -1034,6 +1062,17 @@
 			>
 		</div>
 	</div>
+{:else if dialog?.kind === 'inbox'}
+	<InboxPanel
+		{calm}
+		onclose={() => (dialog = null)}
+		oncount={(n) => (inboxCount = n)}
+		onask={(text) => {
+			dialog = null;
+			newChat('');
+			void send(text);
+		}}
+	/>
 {:else if dialog?.kind === 'settings' && status}
 	<AgentSettings
 		bind:look
@@ -1041,6 +1080,7 @@
 		{user}
 		{calm}
 		start={dialog.section ?? 'list'}
+		onknow={getToKnow}
 		onclose={() => (dialog = null)}
 		onopen={(part) => (dialog = { kind: 'knowledge', tab: part, only: true })}
 	/>

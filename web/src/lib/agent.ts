@@ -675,3 +675,114 @@ export function lookStyle(look: Look): string {
 	if (!pair) return `${base} --ag-gradient: var(--accent); --ag-accent-2: var(--accent);`;
 	return `${base} --accent: ${pair[0]}; --ag-accent-2: ${pair[1]}; --ag-gradient: linear-gradient(135deg, ${pair[0]}, ${pair[1]}); --on-accent: #0b1622;`;
 }
+
+// PLAN 53: initiative, memory care and personality of an account (GET/PUT /agent/initiative).
+export type Initiative = {
+	level: 'quiet' | 'hints' | 'suggest' | 'act';
+	reflect: boolean;
+	reflectAt: string;
+	confirm: boolean;
+	morningNote: boolean;
+	watch: boolean;
+	forecast: boolean;
+	events: ('usb' | 'update' | 'crash' | 'ha')[];
+	wake: 'wake' | 'ask' | 'never';
+	search: { root: string; path: string }[];
+	quietFrom: string;
+	quietTo: string;
+	gpuMinutes: number;
+	weekly: boolean;
+	memoryAuto: boolean;
+	conflicts: boolean;
+	fadeMonths: number;
+	learnSkills: boolean;
+	length: 'short' | 'normal' | 'long';
+	tone: 'casual' | 'plain';
+	name: string;
+	icon: string;
+};
+
+export const defaultInitiative = (): Initiative => ({
+	level: 'suggest',
+	reflect: true,
+	reflectAt: '03:30',
+	confirm: true,
+	morningNote: true,
+	watch: true,
+	forecast: true,
+	events: ['usb', 'update', 'crash', 'ha'],
+	wake: 'wake',
+	search: [],
+	quietFrom: '22:00',
+	quietTo: '07:00',
+	gpuMinutes: 30,
+	weekly: true,
+	memoryAuto: true,
+	conflicts: true,
+	fadeMonths: 6,
+	learnSkills: true,
+	length: 'normal',
+	tone: 'casual',
+	name: '',
+	icon: '',
+});
+
+export function sanitizeInitiative(v: unknown): Initiative {
+	const d = defaultInitiative();
+	if (!v || typeof v !== 'object') return d;
+	const o = v as Record<string, unknown>;
+	const pick = <T extends string>(x: unknown, list: readonly T[], def: T): T =>
+		list.includes(x as T) ? (x as T) : def;
+	const bool = (x: unknown, def: boolean) => (typeof x === 'boolean' ? x : def);
+	const clock = (x: unknown, def: string) =>
+		typeof x === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(x) ? x : def;
+	const num = (x: unknown, lo: number, hi: number, def: number) =>
+		typeof x === 'number' && Number.isFinite(x) ? Math.min(hi, Math.max(lo, Math.round(x))) : def;
+	const events = Array.isArray(o.events)
+		? (o.events.filter((e) => ['usb', 'update', 'crash', 'ha'].includes(e)) as Initiative['events'])
+		: d.events;
+	const search = Array.isArray(o.search)
+		? o.search
+				.filter(
+					(s) => s && typeof s === 'object' && typeof (s as { root?: unknown }).root === 'string',
+				)
+				.map((s) => ({
+					root: (s as { root: string }).root,
+					path: String((s as { path?: unknown }).path ?? ''),
+				}))
+		: [];
+	return {
+		level: pick(o.level, ['quiet', 'hints', 'suggest', 'act'], d.level),
+		reflect: bool(o.reflect, d.reflect),
+		reflectAt: clock(o.reflectAt, d.reflectAt),
+		confirm: bool(o.confirm, d.confirm),
+		morningNote: bool(o.morningNote, d.morningNote),
+		watch: bool(o.watch, d.watch),
+		forecast: bool(o.forecast, d.forecast),
+		events,
+		wake: pick(o.wake, ['wake', 'ask', 'never'], d.wake),
+		search,
+		quietFrom: clock(o.quietFrom, d.quietFrom),
+		quietTo: clock(o.quietTo, d.quietTo),
+		gpuMinutes: num(o.gpuMinutes, 5, 120, d.gpuMinutes),
+		weekly: bool(o.weekly, d.weekly),
+		memoryAuto: bool(o.memoryAuto, d.memoryAuto),
+		conflicts: bool(o.conflicts, d.conflicts),
+		fadeMonths: num(o.fadeMonths, 0, 24, d.fadeMonths),
+		learnSkills: bool(o.learnSkills, d.learnSkills),
+		length: pick(o.length, ['short', 'normal', 'long'], d.length),
+		tone: pick(o.tone, ['casual', 'plain'], d.tone),
+		name: typeof o.name === 'string' ? o.name.slice(0, 24) : '',
+		icon: typeof o.icon === 'string' ? [...o.icon].slice(0, 4).join('') : '',
+	};
+}
+
+/** A suggestion of the agent waiting for a yes or no (GET /agent/inbox). */
+export type InboxItem = {
+	id: string;
+	kind: 'memory' | 'conflict' | 'fade' | 'skill' | 'forecast' | 'alert';
+	title: string;
+	body?: string;
+	data?: Record<string, string>;
+	created: string;
+};
