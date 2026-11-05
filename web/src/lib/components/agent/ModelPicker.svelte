@@ -57,9 +57,12 @@
 	const ms = $derived(calm ? 0 : 220);
 	let trigger = $state<HTMLElement>();
 	let at = $state({ top: 0, left: 0 });
+	let accent = $state('');
 	function toggle() {
 		if (!open && trigger) {
 			const r = trigger.getBoundingClientRect();
+			// The agent's own accent (Darstellung) lives on .agent, not on <body>.
+			accent = getComputedStyle(trigger).getPropertyValue('--accent').trim();
 			at = { top: r.bottom + 8, left: r.left + r.width / 2 };
 		}
 		open = !open;
@@ -95,7 +98,13 @@
 		<span class="trigger static"><strong>{model || '–'}</strong></span>
 	{/if}
 	{#if open}
-		<div class="layer" use:portal style:--top="{at.top}px" style:--left="{at.left}px">
+		<div
+			class="layer"
+			use:portal
+			style:--top="{at.top}px"
+			style:--left="{at.left}px"
+			style:--accent={accent || undefined}
+		>
 			<button
 				type="button"
 				class="scrim"

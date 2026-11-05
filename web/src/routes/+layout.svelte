@@ -8,7 +8,8 @@
 
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { beforeNavigate, onNavigate } from '$app/navigation';
+	import { afterNavigate, beforeNavigate, onNavigate } from '$app/navigation';
+	import { isAgentPath } from '#lib/agent-app.ts';
 	import DashboardBackground from '#lib/dashboard/DashboardBackground.svelte';
 	import { dashboardVisual } from '#lib/dashboard/visual.ts';
 	import { dashboardScene } from '#lib/dashboard/scene.svelte.ts';
@@ -26,16 +27,21 @@
 	import { pageTitle } from '#lib/page-title.svelte.ts';
 	import { clearAgentNotifications, registerServiceWorker } from '#lib/web-push.ts';
 
-	const isAgent = (path: string) => path === '/agent' || path.startsWith('/agent/');
-	const agentRoute = $derived(isAgent(page.url.pathname));
+	const agentRoute = $derived(isAgentPath(page.url.pathname));
 	// Safari reads the manifest only when a page loads: the step between
 	// TitanOS and the KI-Agent loads the page anew, so "Add to Home Screen"
-	// makes the right app on either side (PLAN 48).
+	// makes the right app on either side (PLAN 48). Links are turned into a
+	// full load; back and forward keep the browser's history and reload
+	// once they arrived.
+	const crosses = (a: URL, b: URL) => isAgentPath(a.pathname) !== isAgentPath(b.pathname);
 	beforeNavigate(({ from, to, type, cancel }) => {
-		if (type === 'leave' || !from || !to || to.url.origin !== location.origin) return;
-		if (isAgent(from.url.pathname) === isAgent(to.url.pathname)) return;
+		if (type !== 'link' && type !== 'goto') return;
+		if (!from || !to || to.url.origin !== location.origin || !crosses(from.url, to.url)) return;
 		cancel();
 		location.assign(to.url.href);
+	});
+	afterNavigate(({ from, to, type }) => {
+		if (type === 'popstate' && from && to && crosses(from.url, to.url)) location.reload();
 	});
 
 	let { children } = $props();

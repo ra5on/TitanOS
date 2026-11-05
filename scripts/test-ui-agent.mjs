@@ -214,6 +214,16 @@ try {
 		await page.getByRole('heading', { name: /Guten|Hallo/ }).waitFor();
 		assert.equal(await page.evaluate(() => (window).__same ?? false), false, 'agent loaded anew');
 		assert.equal(await page.locator('link[rel=manifest]').getAttribute('href'), '/agent.webmanifest');
+		// Back keeps the browser's history: one step back is TitanOS again
+		// (loaded anew), a second one leaves; no bouncing between the two.
+		await page.goBack();
+		await page.waitForURL(base + '/');
+		await page.waitForFunction(() => document.querySelector('link[rel=manifest]')?.getAttribute('href') === '/manifest.webmanifest');
+		await page.waitForTimeout(500);
+		assert.equal(new URL(page.url()).pathname, '/', 'back stays on TitanOS');
+		await page.goForward();
+		await page.getByRole('heading', { name: /Guten|Hallo/ }).waitFor();
+		await page.waitForFunction(() => document.querySelector('link[rel=manifest]')?.getAttribute('href') === '/agent.webmanifest');
 		await page.evaluate(() => ((window).__same = true));
 		await page.locator('.side-nav').getByText('Dashboard').click();
 		await page.waitForURL(base + '/');

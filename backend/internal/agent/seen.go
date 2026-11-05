@@ -85,33 +85,28 @@ func (s *Store) Seen(user, id string, at time.Time) error {
 	if err != nil {
 		return err
 	}
-	index, err := s.indexLocked(user)
-	if err != nil {
-		return err
-	}
-	var info *ChatInfo
-	for i := range index {
-		if index[i].ID == id {
-			info = &index[i]
+	// The last change from RAM; the index is read only once per account.
+	known, cached := s.updated[user]
+	if !cached {
+		if _, err := s.indexLocked(user); err != nil {
+			return err
 		}
+		known = s.updated[user]
 	}
-	if info == nil {
+	updated, ok := known[id]
+	if !ok {
 		return ErrNotFound
 	}
-	if prev, ok := st.Chats[id]; ok && !info.Updated.After(prev) {
+	if prev, ok := st.Chats[id]; ok && !updated.After(prev) {
 		return nil
 	}
-	if _, ok := st.Chats[id]; !ok && !info.Updated.After(st.Since) {
+	if _, ok := st.Chats[id]; !ok && !updated.After(st.Since) {
 		return nil
 	}
 	st.Chats[id] = at.UTC()
 	// Forget chats that no longer exist.
-	known := make(map[string]bool, len(index))
-	for _, c := range index {
-		known[c.ID] = true
-	}
 	for k := range st.Chats {
-		if !known[k] {
+		if _, ok := known[k]; !ok {
 			delete(st.Chats, k)
 		}
 	}
