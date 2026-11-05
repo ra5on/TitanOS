@@ -159,6 +159,10 @@ func (s *Server) photoPrefsOf(name string) *photoPrefs {
 	}
 	cp := *u.prefs
 	cp.Folders = slices.Clone(u.prefs.Folders)
+	if cp.Folders == nil {
+		// An empty list, never null, for the page.
+		cp.Folders = []photoFolder{}
+	}
 	return &cp
 }
 
@@ -708,6 +712,9 @@ func (s *Server) handlePhotoPrefs(w http.ResponseWriter, r *http.Request) {
 	if req.From < 0 || req.From > 23 || req.To < 0 || req.To > 23 {
 		writeError(w, http.StatusBadRequest, "invalid_photos", "hours 0–23")
 		return
+	}
+	if folders == nil {
+		folders = []photoFolder{}
 	}
 	req.Folders = folders
 	s.photos.mu.Lock()

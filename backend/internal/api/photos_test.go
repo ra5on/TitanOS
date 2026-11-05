@@ -43,6 +43,10 @@ func TestPhotos(t *testing.T) {
 	os.WriteFile(filepath.Join(docs, "Fotos", ".thumbs", "x.jpg"), []byte("hidden"), 0o644)
 	os.WriteFile(filepath.Join(docs, "anderswo.jpg"), []byte("not chosen"), 0o644)
 
+	// A new account: empty lists, never null (the page reads their length).
+	if _, body := ts.request("GET", "/api/v1/photos", nil); !strings.Contains(string(body), `"folders":[]`) || !strings.Contains(string(body), `"items":[]`) {
+		t.Fatalf("fresh answer: %s", body)
+	}
 	if res, _ := ts.request("PUT", "/api/v1/photos/prefs", map[string]any{"folders": []map[string]string{{"root": "share/Fremd", "path": ""}}}); res.StatusCode != http.StatusBadRequest {
 		t.Fatalf("foreign root: %d", res.StatusCode)
 	}

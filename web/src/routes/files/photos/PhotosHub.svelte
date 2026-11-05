@@ -56,7 +56,10 @@
 
 	async function load() {
 		try {
-			data = await api.get<PhotosAnswer>('/photos');
+			const d = await api.get<PhotosAnswer>('/photos');
+			d.items ??= [];
+			d.prefs.folders ??= [];
+			data = d;
 			error = '';
 		} catch (e) {
 			error = apiErrorText(e);
@@ -231,7 +234,7 @@
 
 	{#if !data}
 		<p class="muted pad">{t('common.loading')}</p>
-	{:else if data.prefs.folders.length === 0}
+	{:else if !data.prefs.folders?.length}
 		<div class="empty">
 			<Icon name="photo" size={36} />
 			<h3>{t('photos.startTitle')}</h3>
