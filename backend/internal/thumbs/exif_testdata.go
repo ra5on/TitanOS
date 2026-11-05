@@ -10,9 +10,11 @@ import (
 func ExifJPEGForTest(model, taken string, lat, lon float64) []byte {
 	le := binary.LittleEndian
 	var t bytes.Buffer
+	// put writes into a buffer, which never fails.
+	put := func(v any) { _ = binary.Write(&t, le, v) }
 	t.WriteString("II")
-	binary.Write(&t, le, uint16(42))
-	binary.Write(&t, le, uint32(8))
+	put(uint16(42))
+	put(uint32(8))
 	// Layout: IFD0 at 8 with 3 entries (Model, ExifIFD, GPSIFD).
 	ifd0 := 8
 	ifd0Size := 2 + 3*12 + 4
@@ -26,19 +28,19 @@ func ExifJPEGForTest(model, taken string, lat, lon float64) []byte {
 	latOff := takenOff + 20
 	lonOff := latOff + 24
 	entry := func(tag, kind uint16, num uint32, value uint32) {
-		binary.Write(&t, le, tag)
-		binary.Write(&t, le, kind)
-		binary.Write(&t, le, num)
-		binary.Write(&t, le, value)
+		put(tag)
+		put(kind)
+		put(num)
+		put(value)
 	}
-	binary.Write(&t, le, uint16(3))
+	put(uint16(3))
 	entry(0x0110, 2, uint32(len(model)+1), uint32(modelOff))
 	entry(0x8769, 4, 1, uint32(exif))
 	entry(0x8825, 4, 1, uint32(gps))
-	binary.Write(&t, le, uint32(0))
-	binary.Write(&t, le, uint16(1))
+	put(uint32(0))
+	put(uint16(1))
 	entry(0x9003, 2, 20, uint32(takenOff))
-	binary.Write(&t, le, uint32(0))
+	put(uint32(0))
 	ref := func(c byte) uint32 { return uint32(c) }
 	latRef, lonRef := byte('N'), byte('E')
 	if lat < 0 {
@@ -47,12 +49,12 @@ func ExifJPEGForTest(model, taken string, lat, lon float64) []byte {
 	if lon < 0 {
 		lonRef, lon = 'W', -lon
 	}
-	binary.Write(&t, le, uint16(4))
+	put(uint16(4))
 	entry(1, 2, 2, ref(latRef))
 	entry(2, 5, 3, uint32(latOff))
 	entry(3, 2, 2, ref(lonRef))
 	entry(4, 5, 3, uint32(lonOff))
-	binary.Write(&t, le, uint32(0))
+	put(uint32(0))
 	t.WriteString(model + "\x00")
 	t.WriteString(taken + "\x00")
 	rat := func(v float64) {
@@ -61,8 +63,8 @@ func ExifJPEGForTest(model, taken string, lat, lon float64) []byte {
 		mins := uint32(minf)
 		secs := uint32((minf - float64(mins)) * 60 * 1000)
 		for _, p := range [][2]uint32{{deg, 1}, {mins, 1}, {secs, 1000}} {
-			binary.Write(&t, le, p[0])
-			binary.Write(&t, le, p[1])
+			put(p[0])
+			put(p[1])
 		}
 	}
 	rat(lat)
@@ -70,7 +72,7 @@ func ExifJPEGForTest(model, taken string, lat, lon float64) []byte {
 	seg := append([]byte("Exif\x00\x00"), t.Bytes()...)
 	var j bytes.Buffer
 	j.Write([]byte{0xFF, 0xD8, 0xFF, 0xE1})
-	binary.Write(&j, binary.BigEndian, uint16(len(seg)+2))
+	j.Write(binary.BigEndian.AppendUint16(nil, uint16(len(seg)+2)))
 	j.Write(seg)
 	j.Write([]byte{0xFF, 0xD9})
 	return j.Bytes()
