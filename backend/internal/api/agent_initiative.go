@@ -280,8 +280,6 @@ type agentInboxItem struct {
 
 const maxInbox = 100
 
-
-
 // agentInboxRead reads the list (agentInboxMu held) and adds what waited.
 func (s *Server) agentInboxRead(user string) ([]agentInboxItem, error) {
 	list := []agentInboxItem{}
