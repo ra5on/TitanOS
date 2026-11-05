@@ -95,22 +95,43 @@ export type Skill = {
 	updated: string;
 };
 
+/** What the morning report contains (PLAN 49), set by each person. */
+export type Report = { nas?: boolean; backups?: boolean; today?: boolean; home?: boolean; extra?: string };
+
 export type Schedule = {
 	id: string;
 	name: string;
 	task: string;
 	project?: string;
-	every: 'hourly' | 'daily' | 'weekly' | 'monthly' | 'trigger';
+	/** '' a task, 'reminder' only a message, 'morning' the morning report. */
+	kind?: '' | 'reminder' | 'morning';
+	every:
+		| 'once'
+		| 'minutes'
+		| 'hours'
+		| 'days'
+		| 'hourly'
+		| 'daily'
+		| 'weekdays'
+		| 'weekly'
+		| 'monthly'
+		| 'cron'
+		| 'trigger';
 	at?: string;
+	date?: string;
+	interval?: number;
+	weekdays?: number[];
+	cron?: string;
 	weekday?: number;
 	day?: number;
+	report?: Report;
 	enabled: boolean;
 	lastRun?: string;
 	lastOk?: boolean;
 	chat?: string;
 	trigger?: { entity: string; state: string; for?: number; connection?: string } | null;
 	button?: boolean;
-	created: string;
+	created?: string;
 };
 
 export type Model = {

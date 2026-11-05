@@ -117,6 +117,7 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 		add(t)
 	}
 	add(b.attachmentTool())
+	add(b.imageTool())
 	return b
 }
 
@@ -408,11 +409,15 @@ func (b *agentToolbox) Execute(ctx context.Context, chat *agent.Chat, p agent.Pr
 		if err := json.Unmarshal(p.Plan, &a); err != nil {
 			return agent.Outcome{}, errors.New("the planned step is unreadable")
 		}
+		snap := b.agentSnapshotBefore(ctx, p.Tool, p.Args)
 		text, _, err := b.s.callAction(ctx, b.session, &a)
 		if err != nil {
 			return agent.Outcome{}, err
 		}
 		out := agent.Outcome{Text: text}
+		if snap != "" {
+			out.Note, out.NoteText = "snapshot", snap
+		}
 		if a.Key == "file.write" || a.Key == "file.replace" {
 			out.Files = []agent.FileRef{{Root: a.Params["root"], Path: a.Params["path"]}}
 		}

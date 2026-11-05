@@ -2,6 +2,8 @@ package agent
 
 import (
 	"errors"
+	"maps"
+	"regexp"
 	"time"
 )
 
@@ -126,4 +128,37 @@ func (s *Store) SeenAt(user, id string) time.Time {
 		return t
 	}
 	return st.Since
+}
+
+// KnownUpdates returns the last change of every chat of an account, from
+// RAM once the index was read (PLAN 49: the copy in the share looks every
+// minute without reading the volume).
+func (s *Store) KnownUpdates(user string) (map[string]time.Time, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if m, ok := s.updated[user]; ok {
+		return maps.Clone(m), nil
+	}
+	if _, err := s.indexLocked(user); err != nil {
+		return nil, err
+	}
+	return maps.Clone(s.updated[user]), nil
+}
+
+var privateName = regexp.MustCompile(`^[a-z]+\.json$`)
+
+// ReadPrivate reads a small file of the account's private folder.
+func (s *Store) ReadPrivate(user, name string, v any) error {
+	if !privateName.MatchString(name) {
+		return ErrNotFound
+	}
+	return s.read(user, name, v, maxSeenFile)
+}
+
+// WritePrivate writes a small file of the account's private folder.
+func (s *Store) WritePrivate(user, name string, v any) error {
+	if !privateName.MatchString(name) {
+		return ErrNotFound
+	}
+	return s.write(user, name, v)
 }
