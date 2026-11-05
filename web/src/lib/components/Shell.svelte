@@ -71,6 +71,7 @@
 		if (!sidePhone) closeDrawer();
 		// A page with a menu button of its own (the KI-Agent) opens the same menu.
 		shell.openMenu = sidePhone ? openDrawer : null;
+		shell.closeMenu = sidePhone ? closeDrawer : null;
 	});
 	// The button is hidden while the terminal covers the bottom of the window,
 	// and on pages that show their own menu button.

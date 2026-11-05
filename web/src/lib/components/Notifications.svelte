@@ -250,7 +250,7 @@
 		cursor: pointer;
 	}
 	.clear {
-		margin: 0 var(--space-4) var(--space-2);
+		margin: var(--space-2) var(--space-4) var(--space-2);
 	}
 	.as-link {
 		background: none;
@@ -344,6 +344,10 @@
 		display: flex;
 		flex-direction: column;
 		font-size: var(--text-base);
+		/* Without the tile padding of the global .panel: the rows bring their
+		   own (PLAN 50, like in the phone's drawer). */
+		padding: 0;
+		gap: 0;
 	}
 	.head {
 		display: flex;
@@ -426,13 +430,7 @@
 			bottom: calc(12px + env(safe-area-inset-bottom));
 			width: calc(var(--drawer-width, 300px) - 24px);
 			max-width: none;
-			/* Without the tile padding of the global .panel: the drawer is narrow. */
-			padding: 0;
-			gap: 0;
 			max-height: calc(100dvh - 24px);
-		}
-		.side .clear {
-			margin-top: var(--space-2);
 		}
 	}
 </style>

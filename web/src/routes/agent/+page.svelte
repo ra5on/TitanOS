@@ -26,7 +26,8 @@
 	import { agentAppMode } from '#lib/agent-app.ts';
 	import { agentFull, setAgentFull } from '#lib/agent-full.svelte.ts';
 	import { clearAgentNotifications } from '#lib/web-push.ts';
-	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
+	import { canSpeak, speak, stopSpeaking } from '#lib/agent-speech.svelte.ts';
+	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { pageTitle } from '#lib/page-title.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import {
@@ -197,6 +198,7 @@
 
 	async function open(id: string, push = true) {
 		menuOpen = false;
+		stopSpeaking();
 		stream?.abort();
 		busy = false;
 		live = { thinking: '', content: '', step: null };
@@ -216,6 +218,7 @@
 
 	function newChat(inProject = project) {
 		menuOpen = false;
+		stopSpeaking();
 		stream?.abort();
 		current = null;
 		busy = false;
@@ -273,6 +276,13 @@
 			const fresh = await api.get<Chat>(`/agent/chats/${id}`);
 			if (current?.id === id) current = fresh;
 			if (fresh.state === 'idle') buzz(40);
+			// Read the new answer aloud if wished (Darstellung, PLAN 51).
+			if (look.read && current?.id === id && document.visibilityState === 'visible' && canSpeak()) {
+				const last = [...fresh.entries]
+					.reverse()
+					.find((e) => e.role === 'assistant' && e.content?.trim());
+				if (last) speak(last.id, last.content ?? '', i18n.locale);
+			}
 			if (current?.id === id) seen(id, true);
 		} catch {
 			// The list reload below shows the state.

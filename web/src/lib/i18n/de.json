@@ -8557,5 +8557,11 @@
 	"agent.suggBackupSub": "Läuft alles wie geplant?",
 	"agent.inputShort": "Frag den Agenten …",
 	"agent.modelPick": "Modell und Denkstufe wählen",
-	"agent.chatCountOne": "1 Chat"
+	"agent.chatCountOne": "1 Chat",
+	"ui.tasksHintShort": "Übertragungen, Backups, Updates, VMs und Volumes",
+	"agent.readAloud": "Vorlesen",
+	"agent.readStop": "Vorlesen anhalten",
+	"agent.lookRead": "Antworten vorlesen",
+	"agent.lookReadHint": "Neue Antworten liest das Gerät selbst vor (Sprachausgabe des Geräts, ohne Server). Jede Antwort hat außerdem einen Lautsprecher-Knopf.",
+	"agent.attachPhoto": "Foto oder Kamera"
 }

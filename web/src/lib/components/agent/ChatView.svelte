@@ -6,7 +6,8 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import { chatMarkdown } from '#lib/chat-markdown.ts';
 	import { formatDateTime } from '#lib/format.ts';
-	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { canSpeak, speak, speech } from '#lib/agent-speech.svelte.ts';
+	import { i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import {
 		blocks,
 		stepDetail,
@@ -156,6 +157,19 @@
 					{#if block.entry.content}
 						<!-- eslint-disable-next-line svelte/no-at-html-tags -- chatMarkdown escapes everything first -->
 						<div class="md">{@html chatMarkdown(block.entry.content)}</div>
+						{#if canSpeak()}
+							{@const reading = speech.id === block.entry.id}
+							<button
+								type="button"
+								class="say"
+								class:on={reading}
+								aria-pressed={reading}
+								aria-label={reading ? t('agent.readStop') : t('agent.readAloud')}
+								title={reading ? t('agent.readStop') : t('agent.readAloud')}
+								onclick={() => speak(block.entry.id, block.entry.content ?? '', i18n.locale)}
+								><Icon name={reading ? 'stop' : 'volume'} size={15} /></button
+							>
+						{/if}
 					{/if}
 					{#if block.entry.choices?.length && block.entry.id === lastAnswer && !busy}
 						<div class="choices">
@@ -257,6 +271,23 @@
 </div>
 
 <style>
+	.say {
+		margin-top: 4px;
+		width: 30px;
+		height: 30px;
+		border-radius: 50%;
+		border: 0;
+		display: grid;
+		place-items: center;
+		background: none;
+		color: var(--muted);
+		cursor: pointer;
+	}
+	.say:hover,
+	.say.on {
+		background: color-mix(in srgb, var(--text) 8%, transparent);
+		color: var(--accent);
+	}
 	.messages {
 		flex: 1;
 		overflow-y: auto;

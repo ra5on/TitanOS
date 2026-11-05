@@ -4,6 +4,8 @@ export const shell = $state<{
 	statusNote: string;
 	/** Opens the phone menu (round menu layout); null when there is none. */
 	openMenu: (() => void) | null;
+	/** Closes the phone menu, e.g. before a sheet opens over the page. */
+	closeMenu: (() => void) | null;
 	/** The page shows its own menu button, so the round one is hidden. */
 	ownMenu: boolean;
-}>({ statusNote: '', openMenu: null, ownMenu: false });
+}>({ statusNote: '', openMenu: null, closeMenu: null, ownMenu: false });

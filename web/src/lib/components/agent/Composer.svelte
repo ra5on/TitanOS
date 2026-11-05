@@ -39,6 +39,7 @@
 		area.style.height = Math.min(area.scrollHeight, 220) + 'px';
 	}
 	let picker = $state<HTMLInputElement>();
+	let photoPicker = $state<HTMLInputElement>();
 	function picked(event: Event) {
 		const files = (event.currentTarget as HTMLInputElement).files;
 		const big: string[] = [];
@@ -49,7 +50,7 @@
 		}
 		// Larger files are chosen from the NAS instead (nothing is copied).
 		if (big.length) onerror?.(t('agent.attachTooBig', { names: big.join(', ') }));
-		if (picker) picker.value = '';
+		(event.currentTarget as HTMLInputElement).value = '';
 	}
 	function send() {
 		const value = text.trim() || (attachments.length ? t('agent.attachDefault') : '');
@@ -98,10 +99,20 @@
 
 	<div class="tools">
 		<input bind:this={picker} type="file" multiple hidden onchange={picked} />
+		<!-- Photos: on the phone this offers the camera and the photo library. -->
+		<input bind:this={photoPicker} type="file" accept="image/*" multiple hidden onchange={picked} />
 		{#if onpicknas}
 			<span class="attach-menu">
 				<Dropdown label={t('agent.attach')} icon="clip" disabled={busy || disabled}>
 					{#snippet children(close)}
+						<button
+							type="button"
+							role="menuitem"
+							onclick={() => {
+								close();
+								photoPicker?.click();
+							}}><Icon name="camera" size={16} /><span>{t('agent.attachPhoto')}</span></button
+						>
 						<button
 							type="button"
 							role="menuitem"

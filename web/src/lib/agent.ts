@@ -494,6 +494,8 @@ export type Look = {
 	typing: boolean;
 	vibrate: boolean;
 	calm: boolean;
+	/** Read new answers aloud by themselves (PLAN 51). */
+	read: boolean;
 };
 
 export const defaultLook = (): Look => ({
@@ -505,6 +507,7 @@ export const defaultLook = (): Look => ({
 	typing: true,
 	vibrate: true,
 	calm: false,
+	read: false,
 });
 
 export function sanitizeLook(v: unknown): Look {
@@ -523,6 +526,7 @@ export function sanitizeLook(v: unknown): Look {
 		typing: bool(o.typing, d.typing),
 		vibrate: bool(o.vibrate, d.vibrate),
 		calm: bool(o.calm, d.calm),
+		read: bool(o.read, d.read),
 	};
 }
 
