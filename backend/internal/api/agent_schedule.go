@@ -55,7 +55,6 @@ func (s *Server) agentTick(now time.Time) {
 	}
 	s.nightlyNASMap(now)
 	s.agentSyncShare()
-	s.photoTick(now)
 	s.agentWeeklyReport(now.In(s.agentLocation()))
 	store := s.agentStore()
 	// The entities of triggers, per connection.

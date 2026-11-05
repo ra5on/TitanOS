@@ -127,7 +127,7 @@
 	</label>
 	<div class="scroll">
 		<button type="button" class="item new" onclick={onnew}
-			><span class="em"><Icon name="edit" size={17} /></span><span class="name"
+			><span class="em"><Icon name="newChat" size={17} /></span><span class="name"
 				>{t('agent.newChat')}</span
 			></button
 		>

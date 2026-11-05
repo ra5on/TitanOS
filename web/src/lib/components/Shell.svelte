@@ -78,11 +78,18 @@
 	// and on pages that show their own menu button.
 	const fab = $derived(sidePhone && !shell.ownMenu && !(admin && terminal.open));
 	// Room for the button: pages end above it, bars at the bottom start beside it.
+	// On top (PLAN 53, ab Werk oben links) the page starts below it instead.
+	const fabTop = $derived(fab && appearance.current.nav.button.startsWith('t'));
 	$effect(() => {
 		const root = document.documentElement.style;
-		if (fab) root.setProperty('--fab-clear', '76px');
+		if (fab && !fabTop) root.setProperty('--fab-clear', '76px');
 		else root.removeProperty('--fab-clear');
-		return () => root.removeProperty('--fab-clear');
+		if (fabTop) root.setProperty('--fab-top', 'calc(58px + env(safe-area-inset-top))');
+		else root.removeProperty('--fab-top');
+		return () => {
+			root.removeProperty('--fab-clear');
+			root.removeProperty('--fab-top');
+		};
 	});
 	// A swipe from the left edge opens the menu, a swipe to the left closes it.
 	let swipe: { x: number; y: number; open: boolean } | null = null;
@@ -231,7 +238,7 @@
 {#if sidePhone}
 	{#if fab}<button
 			type="button"
-			class="fab"
+			class="fab {appearance.current.nav.button}"
 			aria-label={t('nav.openMenu', { page: t(pageLabel) })}
 			aria-haspopup="dialog"
 			aria-expanded={drawerOpen}
@@ -286,6 +293,19 @@
 		box-shadow: var(--shadow-menu);
 		color: var(--text);
 		cursor: pointer;
+	}
+	/* Corner chosen under Appearance (PLAN 53); on top the page moves down. */
+	.fab.tl,
+	.fab.tr {
+		top: calc(12px + env(safe-area-inset-top));
+		bottom: auto;
+		width: 46px;
+		height: 46px;
+	}
+	.fab.tr,
+	.fab.br {
+		left: auto;
+		right: 16px;
 	}
 	.fab:focus-visible {
 		outline: 2px solid var(--accent);
@@ -375,10 +395,10 @@
 	}
 	@media (max-width: 760px) {
 		main.dashboard {
-			padding-top: var(--space-3);
+			padding-top: calc(var(--space-3) + var(--fab-top, 0px));
 		}
 		main {
-			padding: 16px var(--page-pad) calc(24px + var(--fab-clear, 0px));
+			padding: calc(16px + var(--fab-top, 0px)) var(--page-pad) calc(24px + var(--fab-clear, 0px));
 		}
 	}
 </style>

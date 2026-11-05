@@ -425,7 +425,16 @@ export function settingsEntries(
 				? [{ ...base, href: `/settings/${area.id}`, label: translate(area.label) }]
 				: [];
 		});
+	// Groups and entries in alphabetical order of the page language (PLAN 53).
+	const order = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
+	const title = (group: SettingsGroup) => translate(`settings.group.${group}` as MessageKey);
 	return settingsGroups
-		.map((group) => ({ group, entries: entries.filter((entry) => entry.group === group) }))
-		.filter((group) => group.entries.length);
+		.map((group) => ({
+			group,
+			entries: entries
+				.filter((entry) => entry.group === group)
+				.sort((a, b) => order.compare(a.label, b.label)),
+		}))
+		.filter((group) => group.entries.length)
+		.sort((a, b) => order.compare(title(a.group), title(b.group)));
 }

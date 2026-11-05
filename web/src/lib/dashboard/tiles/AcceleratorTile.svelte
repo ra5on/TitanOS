@@ -11,22 +11,15 @@
 	import { tileOptions, type TileOptions } from '../options.ts';
 	import Metric from './Metric.svelte';
 	import History from './History.svelte';
+	import { tileAccelerators } from '../tile-info.ts';
 	let {
 		kind,
 		options = tileOptions(null, kind),
 	}: { kind: 'igpu' | 'npu' | 'nvidia' | 'accelerators'; options?: TileOptions } = $props();
-	const devices = $derived(
-		(system.info?.accelerators ?? []).filter((d) =>
-			options.device
-				? d.address === options.device
-				: kind === 'accelerators'
-					? true
-					: kind === 'npu'
-						? d.kind === 'npu'
-						: d.kind !== 'npu' &&
-							(kind === 'nvidia' ? d.vendor === 'NVIDIA' : d.vendor !== 'NVIDIA'),
-		),
-	);
+	const devices = $derived(tileAccelerators(kind, options, system.info?.accelerators));
+	// titand keeps the last 36 readings of each device (hardware/accelerators.go);
+	// a longer frame left the line on the right half only.
+	const ACCEL_HISTORY = 36;
 	const value = (v: number | null, unit: string) => (v === null ? '–' : `${Math.round(v)} ${unit}`);
 </script>
 
@@ -61,13 +54,14 @@
 						label={t('accelerator.usage')}
 						options={{ ...options, display: options.display === 'auto' ? 'bar' : options.display }}
 						history={device.history}
+						capacity={ACCEL_HISTORY}
 						compact={options.display === 'auto' || options.display === 'bar'}
 					/>
 				</div>
 			{:else if part === 'history' && options.history && options.display !== 'history'}<div
 					data-part="history"
 				>
-					<History values={device.history} />
+					<History values={device.history} capacity={ACCEL_HISTORY} />
 				</div>
 			{:else if part === 'details' && options.details}<dl
 					data-part="details"
@@ -146,7 +140,7 @@
 		><a role="menuitem" href="/settings/hardware">{t('dashboard.editor.device')}</a></ContextMenu
 	>{/if}
 {#if selected}<Dialog title={selected.name} onclose={() => (selected = null)}
-		>{#if view === 'history'}<History values={selected.history} />{:else}<dl>
+		>{#if view === 'history'}<History values={selected.history} capacity={ACCEL_HISTORY} />{:else}<dl>
 				<div>
 					<dt>PCI</dt>
 					<dd>{selected.address}</dd>
