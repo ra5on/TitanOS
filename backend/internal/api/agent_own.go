@@ -126,6 +126,11 @@ func (b *agentToolbox) memorySave(_ context.Context, chat *agent.Chat, args json
 			return agent.Outcome{Text: "Already remembered."}, nil
 		}
 	}
+	// PLAN 53: an older memory that says something else about the same
+	// thing goes to "Vorschläge" with the question whether it still holds.
+	if old := memoryConflict(list, text); old != nil && b.s.agentInitiativeOf(b.user.Name).Conflicts {
+		b.s.addAgentInbox(b.user.Name, agentInboxItem{Kind: "conflict", Title: old.Text, Body: "Neu gemerkt: „" + text + "“. Stimmt das Alte noch, oder soll es weg?", Data: map[string]string{"memory": old.ID}})
+	}
 	m := agent.Memory{ID: agent.NewID(), Text: text, At: time.Now()}
 	if chat != nil {
 		m.Chat, m.Untrusted = chat.ID, chat.Tainted

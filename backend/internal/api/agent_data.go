@@ -474,6 +474,10 @@ func (s *Server) agentPrompt(ctx context.Context, user auth.User, settings agent
 	if p, err := store.Profile(user.Name); err == nil {
 		in.Personal = p.Instruction
 	}
+	// PLAN 53: personality and memory settings of the account.
+	if style := agentStyle(s.agentInitiativeOf(user.Name)); style != "" {
+		in.Personal = strings.TrimSpace(in.Personal + "\n" + style)
+	}
 	in.Map = s.mapPrompt(user)
 	return agent.BuildPrompt(in)
 }

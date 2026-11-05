@@ -453,6 +453,7 @@ func (s *Server) agentStart(user auth.User, chat *agent.Chat, work func(*agent.R
 			slog.Warn("agent run ended with an error", "chat", chat.ID, "err", err)
 		}
 		s.agentDone(user, chat)
+		s.agentLearn(user.Name, chat)
 	}()
 	return nil
 }
