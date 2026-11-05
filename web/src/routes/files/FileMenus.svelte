@@ -4,6 +4,7 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import { previewKind, type FileView } from '#lib/file-actions.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
+	import { session } from '#lib/session.svelte.ts';
 	import { views, type FileCommand } from './commands.ts';
 
 	type Props = {
@@ -106,6 +107,10 @@
 					><i class="no-icon" aria-hidden="true"></i><span>{t('files.renameBatch')}</span></button
 				>{/if}
 		{/if}
+		{#if session.services.agent && root.kind !== 'stick'}<hr />
+			<button type="button" role="menuitem" onclick={() => oncommand('agent', entry)}
+				><Icon name="sparkle" size={16} /><span>{t('files.withAgent')}</span></button
+			>{/if}
 		{#if one}<hr />
 			<button type="button" role="menuitem" onclick={() => oncommand('properties', entry)}
 				><i class="no-icon" aria-hidden="true"></i><span>{t('files.properties')}</span></button

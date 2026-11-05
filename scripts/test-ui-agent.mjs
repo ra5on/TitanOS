@@ -120,6 +120,10 @@ async function open(width, height, { theme = 'graphit', path = '/agent', look = 
 		if (p === '/agent/chats/' + haChat.id) return json(haChat);
 		if (p === '/agent/chats/' + docChat.id) return json(docChat);
 		if (p.endsWith('/events')) return route.fulfill({ status: 200, contentType: 'text/event-stream', body: 'event: end\ndata: {}\n\n' });
+		if (p === '/agent/map') return json({ built: true, map: { built: at(3), shares: [{ name: 'Documents', root: 'share/Documents', volume: 'Data', folders: ['NAS', 'Post', 'Steuer', 'Verträge'] }, { name: 'Backup', root: 'share/Backup', volume: 'Data', folders: ['Home Assistant', 'PCs'] }], apps: [{ name: 'homeassistant', state: 'running', address: 'port 8124' }, { name: 'paperless', state: 'running', address: 'port 8000' }], vms: [{ name: 'HAOS', state: 'running', address: '192.168.1.40' }], lxc: [{ name: 'pihole', state: 'running', detail: 'debian trixie' }], backups: [{ name: 'Fotos nach USB', kind: 'b1' }], rooms: ['Flur', 'Küche', 'Wohnzimmer'] }, descriptions: { 'folder:share/Documents/Post': { text: 'Eingescannte Briefe und Rechnungen', by: 'alex', at: at(9) }, 'vm:HAOS': { text: 'Haupt-Installation von Home Assistant', by: 'agent', at: at(10) } } });
+		if (p === '/agent/profile') return json({ instruction: 'Antworte kurz.' });
+		if (p === '/agent/preload') return json({ loading: 'gpt-oss:20b' }, 202);
+		if (p.startsWith('/agent/projects/') && p.endsWith('/files')) return json({ files: [{ root: 'share/Backup', path: 'Home Assistant/haos-2026-11-05.tar', chat: haChat.id, at: at(10, 50) }] });
 		if (p === '/agent/memory') return json({ memory: [{ id: 'm1', text: 'Home Assistant läuft als VM HAOS (Haupt) und als Test-Container.', at: at(10, 42), chat: haChat.id }, { id: 'm2', text: 'Telekom-Rechnungen liegen in Documents › Post.', at: at(11, 1), untrusted: true }] });
 		if (p === '/agent/skills') return json({ skills: [{ id: 'builtin-health', name: 'Health check', when: 'Gesundheitscheck', steps: '1. …', builtIn: true, updated: at(1) }, { id: 's1', name: 'Rechnungen einsortieren', when: 'Rechnungen ablegen', steps: '1. files_search …', updated: at(11) }] });
 		if (p === '/agent/schedules') return json({ schedules: [{ id: 'sc1', name: 'Gesundheitscheck', task: 'Gesundheitscheck und Bericht', every: 'weekly', at: '08:00', weekday: 1, enabled: true, lastRun: '2026-11-03T08:00:00Z', lastOk: true, chat: 'c1aaaaaaaaaa0005', created: at(1) }] });
@@ -166,6 +170,10 @@ try {
 		await page.locator('dialog[open]').getByText('Telekom-Rechnungen liegen').waitFor();
 		await page.waitForTimeout(300);
 		await page.screenshot({ path: `${out}/5-desktop-memory.png` });
+		await page.locator('dialog[open]').getByRole('tab', { name: 'NAS-Landkarte' }).click();
+		await page.locator('dialog[open]').getByText('Eingescannte Briefe').waitFor();
+		await page.waitForTimeout(300);
+		await page.screenshot({ path: `${out}/14-desktop-map.png` });
 		await ctx.close();
 	}
 	// The app of its own on the desktop.
@@ -192,6 +200,9 @@ try {
 			await page.locator('dialog[open]').waitFor();
 			await page.waitForTimeout(300);
 			await page.screenshot({ path: `${out}/8-phone-project.png` });
+			await page.locator('dialog[open]').getByRole('tab', { name: 'Dateien' }).click();
+			await page.locator('dialog[open]').getByText('haos-2026-11-05.tar').first().waitFor();
+			await page.screenshot({ path: `${out}/15-phone-project-files.png` });
 			await page.keyboard.press('Escape');
 			await page.locator('.list .row', { hasText: 'Status Home Assistant' }).click();
 			await page.getByRole('button', { name: 'Ausführen' }).waitFor();

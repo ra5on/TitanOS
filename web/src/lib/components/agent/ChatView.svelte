@@ -25,6 +25,7 @@
 		ondecide,
 		onchoice,
 		onretry,
+		onundo,
 	}: {
 		chat: Chat;
 		live: { thinking: string; content: string; step: Entry | null };
@@ -33,7 +34,17 @@
 		ondecide: (pending: Pending, approve: boolean) => void;
 		onchoice: (choice: string) => void;
 		onretry?: () => void;
+		onundo?: (step: Entry) => void;
 	} = $props();
+	// Steps TitanOS can take back (agent_extra.go undoActions).
+	const UNDOABLE = ['file_write', 'files_delete', 'ha_call'];
+	const undone = $derived(
+		new Set(
+			chat.entries
+				.filter((e) => e.note === 'undone')
+				.map((e) => (e.tool ?? '') + '|' + (e.content ?? '')),
+		),
+	);
 
 	let scroller = $state<HTMLDivElement>();
 	let pinned = $state(true);
@@ -81,6 +92,7 @@
 		interrupted: 'agent.noteInterrupted',
 		error: 'agent.noteError',
 		limit: 'agent.noteLimit',
+		undone: 'agent.noteUndone',
 	};
 	const levelText: Record<string, MessageKey> = {
 		normal: 'agent.levelChange',
@@ -130,6 +142,11 @@
 								{#if step.durationMs}<span class="time"
 										>{(step.durationMs / 1000).toFixed(1).replace('.', ',')} s</span
 									>{/if}
+								{#if onundo && step.ok && step.tool && UNDOABLE.includes(step.tool) && !undone.has(step.tool + '|' + (step.summary ?? '')) && !busy}
+									<button type="button" class="undo" onclick={() => onundo(step)}
+										>{t('agent.undo')}</button
+									>
+								{/if}
 							</div>
 						{/each}
 					</details>
@@ -359,6 +376,16 @@
 		padding: 6px 12px;
 		border-top: 1px solid var(--border);
 		flex-wrap: wrap;
+	}
+	.undo {
+		border: 1px solid var(--border);
+		background: none;
+		color: var(--accent);
+		border-radius: 999px;
+		padding: 1px 8px;
+		font: inherit;
+		font-size: var(--text-xs);
+		cursor: pointer;
 	}
 	.step .time {
 		margin-left: auto;

@@ -188,6 +188,7 @@ export function tileOptions(input: unknown, id: TileId): TileOptions {
 					tailscale: 'globe',
 					netbird: 'globe',
 					cluster: 'globe',
+					agent: 'chip',
 					temperatures: 'activity',
 				} as Record<string, (typeof EDITOR_ICONS)[number]>
 			)[idSource] ?? (idSource.startsWith('vm:') ? 'os' : 'chip'),

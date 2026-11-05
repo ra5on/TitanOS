@@ -13,6 +13,7 @@
 		busy = false,
 		disabled = false,
 		placeholder = '',
+		attachments = $bindable([]),
 		onsend,
 		onstop,
 	}: {
@@ -22,6 +23,8 @@
 		busy?: boolean;
 		disabled?: boolean;
 		placeholder?: string;
+		/** Files to send with the message: uploads or files of the NAS. */
+		attachments?: { name: string; file?: File; ref?: string }[];
 		onsend: (text: string) => void;
 		onstop?: () => void;
 	} = $props();
@@ -41,8 +44,17 @@
 		area.style.height = 'auto';
 		area.style.height = Math.min(area.scrollHeight, 220) + 'px';
 	}
+	let picker = $state<HTMLInputElement>();
+	function picked(event: Event) {
+		const files = (event.currentTarget as HTMLInputElement).files;
+		for (const file of files ?? []) {
+			if (file.size <= 20 * 1024 * 1024 && !attachments.some((a) => a.name === file.name))
+				attachments = [...attachments, { name: file.name, file }];
+		}
+		if (picker) picker.value = '';
+	}
 	function send() {
-		const value = text.trim();
+		const value = text.trim() || (attachments.length ? t('agent.attachDefault') : '');
 		if (!value || busy || disabled) return;
 		onsend(value);
 		text = '';
@@ -71,6 +83,20 @@
 		send();
 	}}
 >
+	{#if attachments.length}
+		<div class="files">
+			{#each attachments as a (a.name)}
+				<span class="file"
+					><Icon name={a.file ? 'clip' : 'file'} size={13} />{a.name}<button
+						type="button"
+						aria-label={t('agent.attachRemove', { name: a.name })}
+						onclick={() => (attachments = attachments.filter((x) => x !== a))}
+						><Icon name="close" size={12} /></button
+					></span
+				>
+			{/each}
+		</div>
+	{/if}
 	<textarea
 		bind:this={area}
 		bind:value={text}
@@ -81,6 +107,15 @@
 		aria-label={t('agent.input')}
 		placeholder={placeholder || (busy ? t('agent.inputBusy') : t('agent.inputIdle'))}></textarea>
 	<div class="tools">
+		<input bind:this={picker} type="file" multiple hidden onchange={picked} />
+		<button
+			type="button"
+			class="round attach"
+			aria-label={t('agent.attach')}
+			title={t('agent.attach')}
+			disabled={busy || disabled}
+			onclick={() => picker?.click()}><Icon name="clip" size={16} /></button
+		>
 		{#if usable.length > 1}
 			<label class="pill">
 				<span class="muted">{t('agent.model')}</span>
@@ -114,7 +149,7 @@
 			<button
 				type="submit"
 				class="round send"
-				disabled={disabled || !text.trim()}
+				disabled={disabled || (!text.trim() && !attachments.length)}
 				aria-label={t('agent.send')}
 				title={t('agent.send')}><Icon name="arrowUp" size={18} /></button
 			>
@@ -187,6 +222,37 @@
 		place-items: center;
 		border: 0;
 		cursor: pointer;
+	}
+	.attach {
+		background: none;
+		border: 1px solid var(--border);
+		color: var(--muted);
+		width: 32px;
+		height: 32px;
+	}
+	.files {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+	}
+	.file {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		padding: 2px 4px 2px 8px;
+		border-radius: 999px;
+		background: var(--chip);
+		font-size: var(--text-sm);
+		max-width: 100%;
+		overflow-wrap: anywhere;
+	}
+	.file button {
+		border: 0;
+		background: none;
+		color: var(--muted);
+		cursor: pointer;
+		padding: 2px;
+		display: grid;
 	}
 	.send {
 		background: var(--ag-gradient, var(--accent));

@@ -5,6 +5,7 @@
 	// Entries written while the chat had read outside content carry a mark.
 	import Dialog from '#lib/components/Dialog.svelte';
 	import Tabs from '#lib/components/Tabs.svelte';
+	import NASMap from './NASMap.svelte';
 	import { api } from '#lib/api.ts';
 	import { formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
@@ -12,11 +13,13 @@
 
 	let {
 		tab: startTab = 'memory',
+		admin = false,
 		projects = [],
 		onopenchat,
 		onclose,
 	}: {
-		tab?: 'memory' | 'skills' | 'schedules';
+		tab?: 'memory' | 'skills' | 'schedules' | 'map' | 'me' | 'log';
+		admin?: boolean;
 		projects?: Project[];
 		onopenchat: (id: string) => void;
 		onclose: () => void;
@@ -29,6 +32,23 @@
 	let error = $state('');
 	let editing = $state<{ kind: 'memory' | 'skill' | 'schedule'; id: string } | null>(null);
 	let draft = $state<Record<string, string>>({});
+
+	let profile = $state('');
+	let log = $state<{ at: string; user: string; action: string; target?: string; ok: boolean }[]>(
+		[],
+	);
+	$effect(() => {
+		if (tab === 'me')
+			void api
+				.get<{ instruction?: string }>('/agent/profile')
+				.then((p) => (profile = p.instruction ?? ''))
+				.catch(() => {});
+		if (tab === 'log')
+			void api
+				.get<{ entries: typeof log }>('/activity?via=agent&days=30&limit=200')
+				.then((r) => (log = r.entries))
+				.catch(() => (log = []));
+	});
 
 	async function load() {
 		error = '';
@@ -117,6 +137,9 @@
 				badge: skills.filter((s) => !s.builtIn).length || '',
 			},
 			{ id: 'schedules', label: t('agent.schedules'), badge: schedules.length || '' },
+			{ id: 'map', label: t('agent.map') },
+			{ id: 'me', label: t('agent.me') },
+			...(admin ? [{ id: 'log' as const, label: t('agent.log') }] : []),
 		]}
 	/>
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
@@ -306,6 +329,40 @@
 				>
 			{/if}
 		</div>
+	{:else if tab === 'map'}
+		<NASMap {admin} />
+	{:else if tab === 'me'}
+		<p class="muted">{t('agent.meIntro')}</p>
+		<textarea
+			class="field me"
+			rows="6"
+			maxlength="4000"
+			bind:value={profile}
+			placeholder={t('agent.meHint')}></textarea>
+		<div class="row-actions">
+			<button
+				type="button"
+				class="btn btn-primary"
+				onclick={() => run(() => api.put('/agent/profile', { instruction: profile }))}
+				>{t('common.save')}</button
+			>
+		</div>
+	{:else if tab === 'log'}
+		<p class="muted">{t('agent.logIntro')}</p>
+		<ul class="rows">
+			{#each log as e, i (i)}
+				<li>
+					<span class="grow"
+						><strong>{e.action}</strong>
+						{e.target ?? ''}<span class="muted small"
+							>{formatDateTime(new Date(e.at))} · {e.user} · {e.ok ? '✓' : t('agent.failed')}</span
+						></span
+					>
+				</li>
+			{:else}
+				<li class="muted">{t('agent.logEmpty')}</li>
+			{/each}
+		</ul>
 	{:else}
 		<p class="muted">{t('agent.schedulesIntro')}</p>
 		<ul class="rows">
@@ -486,6 +543,10 @@
 		display: flex;
 		gap: var(--space-2);
 		flex-wrap: wrap;
+	}
+	.me {
+		width: 100%;
+		margin: var(--space-2) 0;
 	}
 	.small-in {
 		width: 110px;

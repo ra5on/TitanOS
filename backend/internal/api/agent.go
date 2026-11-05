@@ -125,6 +125,9 @@ func (s *Server) handleAgentChat(w http.ResponseWriter, r *http.Request) {
 
 type agentMessage struct {
 	Message string `json:"message"`
+	// Draft makes an empty chat that does not run yet (to attach files
+	// before the first message).
+	Draft bool `json:"draft,omitempty"`
 	Project string `json:"project,omitempty"`
 	Model   string `json:"model,omitempty"`
 	Think   string `json:"think,omitempty"`
@@ -159,6 +162,9 @@ func (s *Server) handleAgentChatNew(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
+	if req.Draft && strings.TrimSpace(req.Message) == "" {
+		req.Message = "-"
+	}
 	if err := req.check(); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_message", err.Error())
 		return
@@ -173,6 +179,15 @@ func (s *Server) handleAgentChatNew(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now()
 	chat := &agent.Chat{ID: agent.NewID(), Title: chatTitle(req.Message), Project: req.Project, Created: now, Updated: now, Model: req.Model, Think: req.Think, Origin: "web", State: agent.StateIdle, Entries: []agent.Entry{}}
+	if req.Draft {
+		chat.Title = ""
+		if err := store.SaveChat(user.Name, chat); err != nil {
+			agentStoreError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, chat)
+		return
+	}
 	chat.Entries = append(chat.Entries, agent.Entry{ID: agent.NewID(), At: now, Role: "user", Content: req.Message})
 	if err := store.SaveChat(user.Name, chat); err != nil {
 		agentStoreError(w, err)
@@ -219,6 +234,9 @@ func (s *Server) handleAgentMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	chat.Entries = append(chat.Entries, agent.Entry{ID: agent.NewID(), At: time.Now(), Role: "user", Content: req.Message})
 	chat.Updated = time.Now()
+	if chat.Title == "" {
+		chat.Title = chatTitle(req.Message)
+	}
 	if err := store.SaveChat(user.Name, chat); err != nil {
 		agentStoreError(w, err)
 		return

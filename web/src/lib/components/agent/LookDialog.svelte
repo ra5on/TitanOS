@@ -56,6 +56,19 @@
 		/>
 	</div>
 	<div class="opt">
+		<span class="label">{t('agent.lookBackground')}</span>
+		<Segments
+			label={t('agent.lookBackground')}
+			bind:value={look.background}
+			options={[
+				{ value: 'aurora', label: t('agent.bgAurora') },
+				{ value: 'ocean', label: t('agent.bgOcean') },
+				{ value: 'forest', label: t('agent.bgForest') },
+				{ value: 'none', label: t('agent.bgNone') },
+			]}
+		/>
+	</div>
+	<div class="opt">
 		<span class="label">{t('agent.lookEffects')}</span>
 		{#each effects as e (e.key)}
 			<label class="check effect">

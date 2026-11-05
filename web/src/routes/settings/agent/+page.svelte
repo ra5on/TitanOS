@@ -142,6 +142,35 @@
 		}
 	}
 
+	let pullName = $state('');
+	let pull = $state<{
+		model?: string;
+		status?: string;
+		completed?: number;
+		total?: number;
+		error?: string;
+		running?: boolean;
+	} | null>(null);
+	async function startPull() {
+		try {
+			await api.post('/agent/models/pull', { model: pullName.trim() });
+			pull = { model: pullName.trim(), status: 'starting', running: true };
+			const timer = setInterval(async () => {
+				try {
+					pull = await api.get<typeof pull>('/agent/models/pull');
+					if (!pull?.running) {
+						clearInterval(timer);
+						void api.get<Status>('/agent/status').then((s) => (status = s));
+					}
+				} catch {
+					clearInterval(timer);
+				}
+			}, 1500);
+		} catch (e) {
+			pull = { model: pullName, error: apiErrorText(e) };
+		}
+	}
+
 	async function test() {
 		check = null;
 		try {
@@ -305,6 +334,61 @@
 			<input class="field narrow" type="number" min="1" max="100" bind:value={settings.maxSteps} />
 			<span class="muted">{t('agent.maxStepsHint')}</span>
 		</label>
+		<label class="stack">
+			<span>{t('agent.keepAlive')}</span>
+			<select class="field" bind:value={settings.keepAlive}>
+				<option value="">{t('agent.keepAliveOllama')}</option>
+				{#each ['5m', '30m', '2h', '-1'] as k (k)}<option value={k}
+						>{t(`agent.keepAlive.${k}` as MessageKey)}</option
+					>{/each}
+			</select>
+			<span class="muted">{t('agent.keepAliveHint')}</span>
+		</label>
+		<div class="stack">
+			<span>{t('agent.pull')}</span>
+			<span class="line">
+				<input
+					class="field"
+					bind:value={pullName}
+					placeholder="qwen3:8b"
+					aria-label={t('agent.pull')}
+				/>
+				<button
+					type="button"
+					class="btn"
+					disabled={pull?.running || !pullName.trim()}
+					onclick={startPull}>{t('agent.pullStart')}</button
+				>
+			</span>
+			{#if pull?.model}
+				<span class="muted" role="status"
+					>{pull.model}: {pull.error ? pull.error : pull.status}{pull.total
+						? ` · ${Math.round(((pull.completed ?? 0) / pull.total) * 100)} %`
+						: ''}</span
+				>
+			{/if}
+			<span class="muted">{t('agent.pullHint')}</span>
+		</div>
+	</section>
+
+	<section class="tile panel" aria-labelledby="ag-instruction">
+		<h2 class="tile-title" id="ag-instruction">{t('agent.sectionInstruction')}</h2>
+		<p class="muted">{t('agent.instructionIntro')}</p>
+		<textarea
+			class="field"
+			rows="8"
+			maxlength="8000"
+			bind:value={settings.instruction}
+			aria-labelledby="ag-instruction"></textarea>
+		<div class="row-actions">
+			{#if !settings.instruction?.trim()}<button
+					type="button"
+					class="btn"
+					onclick={() => (settings!.instruction = t('agent.instructionTemplate'))}
+					>{t('agent.instructionUseTemplate')}</button
+				>{/if}
+			<span class="muted">{t('agent.instructionHint')}</span>
+		</div>
 	</section>
 
 	<section class="tile panel" aria-labelledby="ag-users">
@@ -488,6 +572,11 @@
 			><input type="checkbox" bind:checked={settings.react} /><span>{t('agent.react')}</span></label
 		>
 		<p class="muted">{t('agent.reactHint')}</p>
+		<label class="check"
+			><input type="checkbox" bind:checked={settings.weeklyReport} /><span
+				>{t('agent.weeklyReport')}</span
+			></label
+		>
 		<label class="stack">
 			<span>{t('agent.reactAs')}</span>
 			<select class="field" bind:value={settings.reactAs}>

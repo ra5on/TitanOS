@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { poll } from '#lib/poll.ts';
 	import { apiPath } from '#lib/cluster-node.ts';
 	import { untrack, tick, onMount } from 'svelte';
@@ -707,6 +708,13 @@
 			case 'properties':
 				if (entry && root) properties = { root, path: join(dir, entry.name) };
 				return;
+			case 'agent': {
+				// Opens the KI-Agent with the chosen files attached (PLAN 44).
+				const names = selected.length ? selected : entry ? [entry.name] : [];
+				const attach = names.map((n) => `${rootId}:${join(dir, n)}`).join('|');
+				void goto('/agent?' + new URLSearchParams({ attach }).toString());
+				return;
+			}
 			case 'clipboardCopy':
 			case 'cut':
 				return rememberSelection(action === 'cut');

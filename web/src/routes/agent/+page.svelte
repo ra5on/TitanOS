@@ -14,7 +14,8 @@
 	import KnowledgeDialog from '#lib/components/agent/KnowledgeDialog.svelte';
 	import LookDialog from '#lib/components/agent/LookDialog.svelte';
 	import ProjectDialog from '#lib/components/agent/ProjectDialog.svelte';
-	import { api } from '#lib/api.ts';
+	import ProjectSheet from '#lib/components/agent/ProjectSheet.svelte';
+	import { api, apiFetch, responseError } from '#lib/api.ts';
 	import { agentAppMode } from '#lib/agent-app.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { pageTitle } from '#lib/page-title.svelte.ts';
@@ -57,7 +58,7 @@
 	let look = $state<Look>(readLook());
 	let dialog = $state<
 		| { kind: 'project'; project: Project | null }
-		| { kind: 'knowledge'; tab: 'memory' | 'skills' | 'schedules' }
+		| { kind: 'knowledge'; tab: 'memory' | 'skills' | 'schedules' | 'map' | 'me' | 'log' }
 		| { kind: 'look' }
 		| { kind: 'move'; chat: ChatInfo }
 		| { kind: 'rename'; chat: ChatInfo; title: string }
@@ -66,6 +67,7 @@
 		| null
 	>(null);
 	let composer = $state<{ fill: (text: string) => void }>();
+	let attachments = $state<{ name: string; file?: File; ref?: string }[]>([]);
 	let phone = $state(matchMedia('(max-width: 760px)').matches);
 	let stream: AbortController | null = null;
 
@@ -149,6 +151,24 @@
 				void loadLocations();
 				const id = page.url.searchParams.get('chat');
 				if (id) void open(id, false);
+				// From the file manager, the dashboard or a notification.
+				const attach = page.url.searchParams.get('attach');
+				if (attach)
+					attachments = attach
+						.split('|')
+						.filter(Boolean)
+						.map((ref) => ({
+							name:
+								ref
+									.slice(ref.indexOf(':') + 1)
+									.split('/')
+									.pop() || ref,
+							ref,
+						}));
+				const ask = page.url.searchParams.get('ask');
+				if (ask || attach) queueMicrotask(() => composer?.fill(ask ?? ''));
+				// Ollama loads the model now, not with the first message.
+				void api.post('/agent/preload', { model }).catch(() => {});
 			}
 		})();
 		return () => stream?.abort();
@@ -238,24 +258,73 @@
 
 	async function send(text: string) {
 		error = '';
+		const files = attachments;
 		try {
-			if (current) {
-				const chat = await api.post<Chat>(`/agent/chats/${current.id}/messages`, {
-					message: text,
+			let target = current;
+			const uploads = files.filter((a) => a.file);
+			if (!target && uploads.length) {
+				// An empty chat first, so the files are there before it runs.
+				target = await api.post<Chat>('/agent/chats', { draft: true, project, model, think });
+			}
+			for (const a of uploads) {
+				const res = await apiFetch(
+					`/agent/chats/${target!.id}/attachments?name=${encodeURIComponent(a.name)}`,
+					{ method: 'POST', body: a.file },
+				);
+				if (!res.ok) throw await responseError(res);
+			}
+			const refs = files.map((a) =>
+				a.file ? `[Anhang: ${a.name}]` : `[Datei: ${(a.ref ?? '').replace(':', '/')}]`,
+			);
+			const message = refs.length ? `${refs.join('\n')}\n\n${text}` : text;
+			attachments = [];
+			if (target) {
+				const chat = await api.post<Chat>(`/agent/chats/${target.id}/messages`, {
+					message,
 					model,
 					think,
 				});
 				current = chat;
+				if (!chats.some((c) => c.id === chat.id)) chats = [chat, ...chats];
+				void goto(`/agent?chat=${chat.id}`);
 				watch(chat.id);
 			} else {
-				const chat = await api.post<Chat>('/agent/chats', { message: text, project, model, think });
+				const chat = await api.post<Chat>('/agent/chats', { message, project, model, think });
 				current = chat;
 				chats = [chat, ...chats];
 				void goto(`/agent?chat=${chat.id}`);
 				watch(chat.id);
 			}
 		} catch (e) {
+			attachments = files;
 			error = apiErrorText(e);
+		}
+	}
+
+	async function undo(step: Entry) {
+		if (!current) return;
+		error = '';
+		try {
+			await api.post(`/agent/chats/${current.id}/undo`, { step: step.id });
+			current = await api.get<Chat>(`/agent/chats/${current.id}`);
+		} catch (e) {
+			error = apiErrorText(e);
+		}
+	}
+
+	// On the phone a swipe from the left edge goes back to the start.
+	let swipeStart: { x: number; y: number } | null = null;
+	function touchStart(e: TouchEvent) {
+		const p = e.touches[0];
+		swipeStart = view === 'chat' && p.clientX <= 24 ? { x: p.clientX, y: p.clientY } : null;
+	}
+	function touchMove(e: TouchEvent) {
+		if (!swipeStart) return;
+		const p = e.touches[0];
+		if (Math.abs(p.clientY - swipeStart.y) > Math.abs(p.clientX - swipeStart.x)) swipeStart = null;
+		else if (p.clientX - swipeStart.x > 60) {
+			swipeStart = null;
+			newChat(current?.project ?? '');
 		}
 	}
 
@@ -314,6 +383,8 @@
 	const view = $derived(phone ? (current ? 'chat' : 'home') : 'desktop');
 </script>
 
+<svelte:window ontouchstart={touchStart} ontouchmove={touchMove} />
+
 <div
 	class="agent"
 	class:app
@@ -322,6 +393,7 @@
 	class:glow={look.glow && !calm}
 	class:calm
 	data-style={look.style}
+	data-bg={look.background}
 	style={lookStyle(look)}
 >
 	{#if app && view !== 'chat'}
@@ -411,7 +483,14 @@
 						>{s}</button
 					>{/each}
 			</div>
-			<Composer bind:this={composer} models={status.models} bind:model bind:think onsend={send} />
+			<Composer
+				bind:this={composer}
+				models={status.models}
+				bind:model
+				bind:think
+				bind:attachments
+				onsend={send}
+			/>
 		</div>
 	{:else}
 		<div class="layout" class:single={view === 'chat'}>
@@ -432,6 +511,14 @@
 				/>
 			{/if}
 			<section class="tile chat" aria-label={current?.title ?? t('agent.newChat')}>
+				{#if busy && view === 'chat'}
+					<div class="pill" role="status">
+						<span class="pill-dot" aria-hidden="true"></span>{t('agent.working')}
+						<button type="button" onclick={() => stop()} aria-label={t('agent.stop')}
+							><Icon name="stop" size={10} /></button
+						>
+					</div>
+				{/if}
 				<header class="chat-head">
 					{#if view === 'chat'}
 						<button
@@ -480,6 +567,20 @@
 							onclick={() => (dialog = { kind: 'move', chat: currentInfo })}
 							><Icon name="folder" size={17} /></button
 						>
+						<a
+							class="icon-btn wide-only"
+							href={`/api/v1/agent/chats/${currentInfo.id}/export`}
+							download
+							aria-label={t('agent.exportMd')}
+							title={t('agent.exportMd')}><Icon name="download" size={17} /></a
+						>
+						<a
+							class="icon-btn wide-only"
+							href={`/api/v1/agent/chats/${currentInfo.id}/export?format=pdf`}
+							download
+							aria-label={t('agent.exportPdf')}
+							title={t('agent.exportPdf')}><Icon name="fileText" size={17} /></a
+						>
 						<button
 							type="button"
 							class="icon-btn"
@@ -525,6 +626,7 @@
 						ondecide={decide}
 						onchoice={(c) => send(c)}
 						onretry={() => send(t('agent.continueMessage'))}
+						onundo={undo}
 					/>
 				{:else}
 					<div class="welcome">
@@ -545,6 +647,7 @@
 						bind:model
 						bind:think
 						{busy}
+						bind:attachments
 						disabled={!!current?.pending}
 						placeholder={current?.pending ? t('agent.inputPending') : ''}
 						onsend={send}
@@ -571,6 +674,7 @@
 {:else if dialog?.kind === 'knowledge'}
 	<KnowledgeDialog
 		tab={dialog.tab}
+		admin={status?.admin ?? false}
 		{projects}
 		onclose={() => (dialog = null)}
 		onopenchat={(id) => {
@@ -645,42 +749,21 @@
 	</Dialog>
 {:else if dialog?.kind === 'sheet'}
 	{@const p = dialog.project}
-	<Dialog title={(p.icon ? p.icon + ' ' : '') + p.name} onclose={() => (dialog = null)}>
-		{#if p.instructions}<div class="note">
-				<small>{t('agent.projectInstructions')}</small>
-				<p>{p.instructions}</p>
-			</div>{/if}
-		<ul class="sheet-list">
-			{#each chats.filter((c) => c.project === p.id) as c (c.id)}
-				<li>
-					<button
-						type="button"
-						class="row-btn"
-						onclick={() => {
-							dialog = null;
-							void open(c.id);
-						}}><strong>{c.title}</strong><span class="muted">{c.preview ?? ''}</span></button
-					>
-				</li>
-			{:else}
-				<li class="muted">{t('agent.projectEmpty')}</li>
-			{/each}
-		</ul>
-		<div class="dialog-actions">
-			<button type="button" class="btn" onclick={() => (dialog = { kind: 'project', project: p })}
-				>{t('agent.projectEdit')}</button
-			>
-			<button
-				type="button"
-				class="btn btn-primary"
-				onclick={() => {
-					dialog = null;
-					newChat(p.id);
-					project = p.id;
-				}}>{t('agent.newChatIn', { name: p.name })}</button
-			>
-		</div>
-	</Dialog>
+	<ProjectSheet
+		project={p}
+		{chats}
+		onclose={() => (dialog = null)}
+		onopen={(id) => {
+			dialog = null;
+			void open(id);
+		}}
+		onedit={() => (dialog = { kind: 'project', project: p })}
+		onnew={() => {
+			dialog = null;
+			newChat(p.id);
+			project = p.id;
+		}}
+	/>
 {/if}
 
 <style>
@@ -692,6 +775,45 @@
 			100dvh - var(--header-height, 60px) - var(--status-height, 34px) - 2 * var(--page-pad)
 		);
 		min-height: 420px;
+	}
+	.agent {
+		position: relative;
+		isolation: isolate;
+	}
+	.agent[data-bg]:not([data-bg='none'])::before {
+		content: '';
+		position: absolute;
+		inset: 0;
+		z-index: -1;
+		pointer-events: none;
+		border-radius: var(--radius-tile);
+	}
+	.agent[data-bg='aurora']::before {
+		background:
+			radial-gradient(
+				60% 50% at 25% 15%,
+				color-mix(in srgb, var(--accent) 30%, transparent),
+				transparent 70%
+			),
+			radial-gradient(
+				50% 40% at 85% 20%,
+				color-mix(in srgb, var(--ag-accent-2, var(--accent)) 25%, transparent),
+				transparent 70%
+			);
+	}
+	.agent[data-bg='ocean']::before {
+		background: linear-gradient(
+			170deg,
+			color-mix(in srgb, var(--accent) 18%, transparent),
+			transparent 60%
+		);
+	}
+	.agent[data-bg='forest']::before {
+		background: radial-gradient(
+			70% 60% at 50% 100%,
+			color-mix(in srgb, var(--ag-accent-2, var(--accent)) 22%, transparent),
+			transparent 70%
+		);
 	}
 	.agent.app {
 		height: 100dvh;
@@ -762,6 +884,38 @@
 		min-height: 0;
 		padding: 0;
 		overflow: hidden;
+	}
+	.pill {
+		align-self: center;
+		margin-top: calc(env(safe-area-inset-top, 0px) + 6px);
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 5px 6px 5px 12px;
+		border-radius: 999px;
+		background: var(--text);
+		color: var(--bg);
+		font-size: var(--text-sm);
+	}
+	.agent.glow .pill {
+		box-shadow: 0 0 22px color-mix(in srgb, var(--accent) 55%, transparent);
+	}
+	.pill-dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: var(--accent);
+	}
+	.pill button {
+		width: 22px;
+		height: 22px;
+		border-radius: 50%;
+		border: 0;
+		display: grid;
+		place-items: center;
+		background: color-mix(in srgb, var(--bg) 20%, transparent);
+		color: var(--bg);
+		cursor: pointer;
 	}
 	.chat-head {
 		display: flex;
@@ -918,46 +1072,6 @@
 		gap: var(--space-2);
 		flex-wrap: wrap;
 		margin-top: var(--space-3);
-	}
-	.note {
-		border-radius: var(--radius-ctl);
-		padding: 10px 12px;
-		background: color-mix(in srgb, var(--accent) 9%, transparent);
-		border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
-	}
-	.note small {
-		color: var(--muted);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		font-size: var(--text-xs);
-	}
-	.note p {
-		margin: 4px 0 0;
-		white-space: pre-wrap;
-	}
-	.sheet-list {
-		list-style: none;
-		padding: 0;
-		margin: var(--space-3) 0 0;
-		display: flex;
-		flex-direction: column;
-	}
-	.row-btn {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		width: 100%;
-		padding: 10px 0;
-		border: 0;
-		border-bottom: 1px solid var(--border);
-		background: none;
-		color: var(--text);
-		font: inherit;
-		text-align: left;
-		cursor: pointer;
-	}
-	.row-btn .muted {
-		font-size: var(--text-sm);
 	}
 	@media (max-width: 760px) {
 		.chat-head {

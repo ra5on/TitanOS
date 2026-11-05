@@ -147,6 +147,9 @@ export type Settings = {
 	model?: string;
 	think?: string;
 	context?: number;
+	keepAlive?: string;
+	instruction?: string;
+	weeklyReport?: boolean;
 	maxSteps?: number;
 	users?: string[];
 	policy: {
@@ -460,6 +463,7 @@ export function tokens(n: number): string {
 export type Look = {
 	accent: 'theme' | 'aurora' | 'ocean' | 'forest' | 'sunset' | 'rose';
 	style: 'bubbles' | 'clean' | 'compact';
+	background: 'none' | 'aurora' | 'ocean' | 'forest';
 	glass: boolean;
 	glow: boolean;
 	typing: boolean;
@@ -470,6 +474,7 @@ export type Look = {
 export const defaultLook = (): Look => ({
 	accent: 'theme',
 	style: 'bubbles',
+	background: 'aurora',
 	glass: true,
 	glow: true,
 	typing: true,
@@ -487,6 +492,7 @@ export function sanitizeLook(v: unknown): Look {
 	return {
 		accent: pick(o.accent, ['theme', 'aurora', 'ocean', 'forest', 'sunset', 'rose'], d.accent),
 		style: pick(o.style, ['bubbles', 'clean', 'compact'], d.style),
+		background: pick(o.background, ['none', 'aurora', 'ocean', 'forest'], d.background),
 		glass: bool(o.glass, d.glass),
 		glow: bool(o.glow, d.glow),
 		typing: bool(o.typing, d.typing),

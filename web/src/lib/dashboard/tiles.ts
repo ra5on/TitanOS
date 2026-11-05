@@ -26,6 +26,7 @@ export const TILE_IDS = [
 	'tailscale',
 	'netbird',
 	'cluster',
+	'agent',
 ] as const;
 export type StaticTileId = (typeof TILE_IDS)[number];
 export type SourceId = StaticTileId | `vm:${string}` | `container:${string}` | `app:${string}`;
@@ -52,6 +53,7 @@ export const TILES: Record<StaticTileId, TileSpec> = {
 	tailscale: { title: 'tile.tailscale', minW: 3, minH: 2 },
 	netbird: { title: 'tile.netbird', minW: 3, minH: 2 },
 	cluster: { title: 'tile.cluster', minW: 3, minH: 2 },
+	agent: { title: 'nav.agent', minW: 3, minH: 2 },
 };
 
 /** Tiles only owners and administrators can add; their data needs those rights. */
@@ -70,6 +72,8 @@ export type AddContext = {
 	admin: boolean;
 	/** Kinds of accelerators the NAS reports (`igpu`, `npu`, `nvidia`). */
 	hardware: readonly StaticTileId[];
+	/** The KI-Agent is on and allowed for the account. */
+	agent?: boolean;
 };
 
 /**
@@ -83,6 +87,7 @@ export function addableTiles(shown: readonly { id: TileId }[], context: AddConte
 	const kinds = new Set(context.hardware);
 	return TILE_IDS.filter((id) => {
 		if (present.has(id) || (!context.admin && ADMIN_TILES.includes(id))) return false;
+		if (id === 'agent' && !context.agent) return false;
 		if (HARDWARE_TILES.includes(id)) {
 			if (kinds.size > 1) return id === 'accelerators' || kinds.has(id);
 			return (
