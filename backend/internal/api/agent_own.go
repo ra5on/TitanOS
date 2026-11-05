@@ -466,5 +466,5 @@ func (b *agentToolbox) photoAlbumSave(_ context.Context, _ *agent.Chat, args jso
 	if err != nil {
 		return agent.Outcome{}, toolcatalog.Errorf("%v", err)
 	}
-	return agent.Outcome{Text: fmt.Sprintf("Album %q has %d photos.", a.Name, len(a.Items)), Note: "memory", NoteText: fmt.Sprintf("Album „%s“: %d Fotos", a.Name, len(a.Items))}, nil
+	return agent.Outcome{Text: fmt.Sprintf("Album %q has %d photos.", a.Name, len(a.Items)), Note: "album", NoteText: fmt.Sprintf("„%s“, %d Fotos", a.Name, len(a.Items))}, nil
 }

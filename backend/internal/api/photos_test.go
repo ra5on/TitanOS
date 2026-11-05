@@ -15,12 +15,16 @@ import (
 )
 
 type photosAnswer struct {
-	Prefs     photoPrefs   `json:"prefs"`
-	Items     []photoItem  `json:"items"`
-	Described int          `json:"described"`
-	Scanning  bool         `json:"scanning"`
-	Describe  struct{ Running bool; Done, Total int; Error string } `json:"describe"`
-	AI        bool         `json:"ai"`
+	Prefs     photoPrefs  `json:"prefs"`
+	Items     []photoItem `json:"items"`
+	Described int         `json:"described"`
+	Scanning  bool        `json:"scanning"`
+	Describe  struct {
+		Running     bool
+		Done, Total int
+		Error       string
+	} `json:"describe"`
+	AI bool `json:"ai"`
 }
 
 // PLAN 52: photos of the chosen folders as a timeline with date and GPS,

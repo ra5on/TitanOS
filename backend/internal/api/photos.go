@@ -813,6 +813,19 @@ func (s *Server) handlePhotoAlbumSet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a)
 }
 
+// handlePhotoAccounts lists the names of the other accounts, to share an
+// album with (names only).
+func (s *Server) handlePhotoAccounts(w http.ResponseWriter, r *http.Request) {
+	me := currentUser(r).Name
+	names := []string{}
+	for _, u := range s.opts.Users.List() {
+		if u.Name != me && !u.Disabled {
+			names = append(names, u.Name)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"accounts": names})
+}
+
 func (s *Server) handlePhotoAlbumDelete(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r)
 	list := s.photoAlbums(user.Name)

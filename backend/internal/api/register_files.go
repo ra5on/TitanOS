@@ -22,6 +22,7 @@ func (s *Server) registerFiles(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/photos/describe", s.requireUser(s.handlePhotoDescribe))
 	mux.HandleFunc("GET /api/v1/photos/search", s.requireUser(s.handlePhotoSearch))
 	mux.HandleFunc("GET /api/v1/photos/albums", s.requireUser(s.handlePhotoAlbums))
+	mux.HandleFunc("GET /api/v1/photos/accounts", s.requireUser(s.handlePhotoAccounts))
 	mux.HandleFunc("PUT /api/v1/photos/albums/{id}", s.requireUser(s.handlePhotoAlbumSet))
 	mux.HandleFunc("DELETE /api/v1/photos/albums/{id}", s.requireUser(s.handlePhotoAlbumDelete))
 	mux.HandleFunc("GET /api/v1/files/index", s.requireAdmin(s.handleFileIndex))
