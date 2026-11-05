@@ -12,6 +12,7 @@
 	import { terminal, toggleTerminal } from '#lib/terminal.svelte.ts';
 	import Header from './Header.svelte';
 	import SideNav from './SideNav.svelte';
+	import TasksPanel from './TasksPanel.svelte';
 	import CommandPalette from './CommandPalette.svelte';
 	import { palette, togglePalette } from '#lib/palette.svelte.ts';
 	import StatusBar from './StatusBar.svelte';
@@ -71,6 +72,7 @@
 		if (!sidePhone) closeDrawer();
 		// A page with a menu button of its own (the KI-Agent) opens the same menu.
 		shell.openMenu = sidePhone ? openDrawer : null;
+		shell.closeMenu = sidePhone ? closeDrawer : null;
 	});
 	// The button is hidden while the terminal covers the bottom of the window,
 	// and on pages that show their own menu button.
@@ -258,6 +260,7 @@
 {#if admin}<TerminalPanel />{/if}
 {#if palette.open}<CommandPalette onclose={() => (palette.open = false)} />{/if}
 {#if shortcutsOpen}<ShortcutsDialog {admin} onclose={() => (shortcutsOpen = false)} />{/if}
+{#if shell.tasksSheet}<TasksPanel sheetOnly />{/if}
 
 <style>
 	/* As an app on the home screen the phone's home indicator lies over

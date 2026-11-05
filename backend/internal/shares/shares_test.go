@@ -418,3 +418,18 @@ func TestDiscoveryForApps(t *testing.T) {
 		t.Fatalf("avahi not started for app names:\n%s", all)
 	}
 }
+
+// PLAN 49: the share of the KI-Agent gives every account its own folder;
+// over SMB the path ends in %u (the Unix user of the session, not the name the client typed), no guests, no NFS, and an update from the
+// client cannot take PerUser away.
+func TestPerUserShare(t *testing.T) {
+	path := func(s Share) string { return "/mnt/" + s.Volume + "/" + s.Name }
+	conf := renderSMBConf([]Share{{Name: "KI-Agent", Volume: "data", SMB: true, PerUser: true, Access: map[string]string{"alex": ReadWrite, "maria": ReadWrite}}}, path, nil)
+	if !strings.Contains(conf, "path = /mnt/data/KI-Agent/%u") || !strings.Contains(conf, "valid users = alex maria") {
+		t.Fatalf("smb.conf:\n%s", conf)
+	}
+	sh := Share{Name: "KI-Agent", Volume: "data", PerUser: true, Guest: true, NFS: NFS{Enabled: true, Clients: []string{"192.168.1.0/24"}}, Access: map[string]string{"alex": ReadWrite}}
+	if err := normalize(&sh, []string{"data"}, []string{"alex"}); err != nil || sh.Guest || sh.NFS.Enabled {
+		t.Fatalf("normalize: %v %+v", err, sh)
+	}
+}

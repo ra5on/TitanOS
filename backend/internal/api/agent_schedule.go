@@ -14,6 +14,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
+	"github.com/ra5on/TitanOS/backend/internal/webpush"
 )
 
 // Recurring tasks (PLAN 44, Runde 3), triggers from Home Assistant and the
@@ -30,39 +31,6 @@ type agentReactState struct {
 	// when the weekly report went out.
 	mapTried   time.Time
 	reportSent time.Time
-}
-
-// agentDue reports whether a schedule should run at now, given its last run.
-// It runs once in the ten minutes after its time, so a minute the ticker
-// missed is no lost run.
-func agentDue(sc agent.Schedule, now time.Time) bool {
-	if !sc.Enabled || sc.Trigger != nil {
-		return false
-	}
-	last := sc.LastRun
-	if sc.Every == "hourly" {
-		slot := now.Truncate(time.Hour)
-		return now.Sub(slot) < 10*time.Minute && last.Before(slot)
-	}
-	hh, mm := 0, 0
-	if _, err := fmt.Sscanf(sc.At, "%d:%d", &hh, &mm); err != nil {
-		return false
-	}
-	slot := time.Date(now.Year(), now.Month(), now.Day(), hh, mm, 0, 0, now.Location())
-	switch sc.Every {
-	case "weekly":
-		if int(now.Weekday()) != sc.Weekday {
-			return false
-		}
-	case "monthly":
-		if now.Day() != sc.Day {
-			return false
-		}
-	case "daily":
-	default:
-		return false
-	}
-	return !now.Before(slot) && now.Sub(slot) < 10*time.Minute && last.Before(slot)
 }
 
 // AgentScheduler runs recurring tasks and triggers until ctx ends.
@@ -86,6 +54,7 @@ func (s *Server) agentTick(now time.Time) {
 		return
 	}
 	s.nightlyNASMap(now)
+	s.agentSyncShare()
 	s.agentWeeklyReport(now.In(s.agentLocation()))
 	store := s.agentStore()
 	// The entities of triggers, per connection.
@@ -107,12 +76,12 @@ func (s *Server) agentTick(now time.Time) {
 				}
 				watched[conn] = append(watched[conn], sc.Trigger.Entity)
 				if s.agentTriggered(name, sc, now) {
-					s.agentStartSchedule(user, sc.ID, now)
+					s.agentStartSchedule(user, sc.ID, now, false)
 				}
 				continue
 			}
-			if agentDue(sc, now.In(s.agentLocation())) {
-				s.agentStartSchedule(user, sc.ID, now)
+			if due, late := agentDueAt(sc, now.In(s.agentLocation())); due {
+				s.agentStartSchedule(user, sc.ID, now, late)
 			}
 		}
 	}
@@ -123,8 +92,8 @@ func (s *Server) agentTick(now time.Time) {
 	}
 }
 
-func (s *Server) agentStartSchedule(user auth.User, id string, now time.Time) {
-	if _, err := s.agentRunSchedule(user, id, now); err != nil {
+func (s *Server) agentStartSchedule(user auth.User, id string, now time.Time, late bool) {
+	if _, err := s.agentRunSchedule(user, id, now, late); err != nil {
 		slog.Warn("recurring agent task not started", "account", user.Name, "schedule", id, "err", err)
 	}
 }
@@ -173,8 +142,10 @@ func (s *Server) agentTriggered(user string, sc agent.Schedule, now time.Time) b
 	return false
 }
 
-// agentRunSchedule starts a recurring task in a chat of its own.
-func (s *Server) agentRunSchedule(user auth.User, id string, now time.Time) (string, error) {
+// agentRunSchedule starts a planned task in a chat of its own. A reminder
+// only becomes a chat entry and a push message; late marks a missed run
+// that is caught up after a start of the NAS.
+func (s *Server) agentRunSchedule(user auth.User, id string, now time.Time, late bool) (string, error) {
 	store := s.agentStore()
 	list, err := store.Schedules(user.Name)
 	if err != nil {
@@ -186,14 +157,33 @@ func (s *Server) agentRunSchedule(user auth.User, id string, now time.Time) (str
 	}
 	sc := list[i]
 	origin := "schedule"
-	chat := &agent.Chat{ID: agent.NewID(), Title: sc.Name + " · " + now.In(s.agentLocation()).Format("02.01. 15:04"), Project: sc.Project, Created: now, Updated: now, Origin: origin, State: agent.StateIdle,
-		Entries: []agent.Entry{{ID: agent.NewID(), At: now, Role: "user", Content: sc.Task}}}
+	title := sc.Name + " · " + now.In(s.agentLocation()).Format("02.01. 15:04")
+	if late {
+		title += " (nachgeholt)"
+	}
+	task := sc.Task
+	if sc.Kind == "morning" {
+		task = agentMorningTask(sc.Report)
+	}
+	chat := &agent.Chat{ID: agent.NewID(), Title: title, Project: sc.Project, Created: now, Updated: now, Origin: origin, State: agent.StateIdle,
+		Entries: []agent.Entry{{ID: agent.NewID(), At: now, Role: "user", Content: task}}}
+	if sc.Kind == "reminder" {
+		chat.Origin = "reminder"
+		chat.Entries = []agent.Entry{{ID: agent.NewID(), At: now, Role: "assistant", Content: "⏰ **Erinnerung:** " + sc.Task}}
+	}
 	if err := store.SaveChat(user.Name, chat); err != nil {
 		return "", err
 	}
 	list[i].LastRun, list[i].Chat = now, chat.ID
+	if sc.Kind == "reminder" {
+		list[i].LastOK = true
+	}
 	if err := store.SaveSchedules(user.Name, list); err != nil {
 		return "", err
+	}
+	if sc.Kind == "reminder" {
+		s.agentRemind(user, chat, sc)
+		return chat.ID, nil
 	}
 	err = s.agentStart(user, chat, func(rn *agent.Runner, ctx context.Context) error {
 		err := rn.Run(ctx, chat)
@@ -201,6 +191,50 @@ func (s *Server) agentRunSchedule(user auth.User, id string, now time.Time) (str
 		return err
 	})
 	return chat.ID, err
+}
+
+// agentRemind sends a reminder to the person's devices and, if set, to the
+// notify services of Home Assistant. A reminder always goes out, also when
+// a page of the agent is open: it is what the person asked for.
+func (s *Server) agentRemind(user auth.User, chat *agent.Chat, sc agent.Schedule) {
+	if s.opts.WebPush != nil {
+		body := sc.Task
+		if r := []rune(body); len(r) > 180 {
+			body = string(r[:179]) + "…"
+		}
+		s.opts.WebPush.SendTo(user.Name, webpush.Message{Title: "⏰ " + sc.Name, Body: body, URL: "/agent?chat=" + chat.ID, Tag: "agent-" + chat.ID})
+	}
+	s.agentHANotify(chat)
+}
+
+// agentMorningTask is the task of the morning report from what the person
+// chose (PLAN 49).
+func agentMorningTask(r *agent.Report) string {
+	if r == nil {
+		r = &agent.Report{NAS: true, Backups: true, Today: true}
+	}
+	parts := []string{}
+	if r.NAS {
+		parts = append(parts, "den Zustand des NAS (Volumes, Platten mit SMART und Temperatur, freier Platz, Auffälliges der Nacht)")
+	}
+	if r.Backups {
+		parts = append(parts, "ob die Sicherungen gelaufen sind und welche Updates es gibt (TitanOS, Apps, Container)")
+	}
+	if r.Today {
+		parts = append(parts, "meine Erinnerungen und geplanten Aufträge für heute")
+	}
+	if r.Home {
+		parts = append(parts, "das Wichtigste aus Home Assistant (z. B. Strom von gestern, offene Fenster, schwache Batterien)")
+	}
+	text := "Morgenbericht: Gib mir einen kurzen Überblick für heute"
+	if len(parts) > 0 {
+		text += " über " + strings.Join(parts, "; ")
+	}
+	text += ". Kurz und übersichtlich, mit dem Wichtigsten zuerst; ändere nichts."
+	if extra := strings.TrimSpace(r.Extra); extra != "" {
+		text += "\nAußerdem: " + extra
+	}
+	return text
 }
 
 func (s *Server) agentScheduleResult(user, id string, chat *agent.Chat) {
@@ -360,7 +394,7 @@ func (s *Server) agentButton(key, action string) error {
 	}
 	for _, sc := range list {
 		if sc.ID == id && sc.Enabled && sc.Button {
-			_, err := s.agentRunSchedule(user, id, time.Now())
+			_, err := s.agentRunSchedule(user, id, time.Now(), false)
 			return err
 		}
 	}

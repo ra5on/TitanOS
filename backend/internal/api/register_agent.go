@@ -15,6 +15,7 @@ func (s *Server) registerAgent(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/agent/cluster/request", s.requireAdmin(s.handleAgentShareRequest))
 	mux.HandleFunc("PUT /api/v1/agent/cluster/nodes/{node}", s.requireAdmin(s.handleAgentShareSet))
 	mux.HandleFunc("POST /api/v1/agent/check", s.requireAdmin(s.handleAgentCheck))
+	mux.HandleFunc("POST /api/v1/agent/voice/check", s.requireAdmin(s.handleAgentVoiceCheck))
 	mux.HandleFunc("GET /api/v1/agent/tools", s.requireAdmin(s.handleAgentTools))
 
 	mux.HandleFunc("GET /api/v1/agent/chats", s.requireAgent(s.handleAgentChats))
@@ -30,12 +31,14 @@ func (s *Server) registerAgent(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/agent/chats/{id}/export", s.requireAgent(s.handleAgentExport))
 	mux.HandleFunc("POST /api/v1/agent/chats/{id}/undo", s.requireAgent(s.handleAgentUndo))
 	mux.HandleFunc("POST /api/v1/agent/chats/{id}/seen", s.requireAgent(s.handleAgentSeen))
+	mux.HandleFunc("POST /api/v1/agent/transcribe", s.requireAgent(s.handleAgentTranscribe))
 	mux.HandleFunc("GET /api/v1/agent/projects/{id}/files", s.requireAgent(s.handleAgentProjectFiles))
 	mux.HandleFunc("POST /api/v1/agent/preload", s.requireAgent(s.handleAgentPreload))
 	mux.HandleFunc("GET /api/v1/agent/models/pull", s.requireAdmin(s.handleAgentPullState))
 	mux.HandleFunc("POST /api/v1/agent/models/pull", s.requireAdmin(s.handleAgentPull))
 
 	mux.HandleFunc("GET /api/v1/agent/projects", s.requireAgent(s.handleAgentProjects))
+	mux.HandleFunc("GET /api/v1/agent/accounts", s.requireAgent(s.handleAgentAccounts))
 	mux.HandleFunc("POST /api/v1/agent/projects", s.requireAgent(s.handleAgentProjectNew))
 	mux.HandleFunc("PUT /api/v1/agent/projects/{id}", s.requireAgent(s.handleAgentProjectSet))
 	mux.HandleFunc("DELETE /api/v1/agent/projects/{id}", s.requireAgent(s.handleAgentProjectDelete))

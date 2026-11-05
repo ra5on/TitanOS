@@ -22,6 +22,7 @@
 		onnewproject,
 		oneditproject,
 		onknowledge,
+		onplanned,
 		onlook,
 		ontitanos,
 	}: {
@@ -32,12 +33,15 @@
 		project?: string;
 		host?: string;
 		admin?: boolean;
-		onopen: (id: string) => void;
+		/** author: another account's chat in a shared project (read-only). */
+		onopen: (id: string, author?: string) => void;
 		onnew: () => void;
 		onproject: (id: string) => void;
 		onnewproject: () => void;
 		oneditproject: (p: Project) => void;
 		onknowledge: () => void;
+		/** Opens the planned tasks, reminders and the morning report. */
+		onplanned: () => void;
 		onlook: () => void;
 		/** Back to TitanOS (phone, installed app). */
 		ontitanos?: () => void;
@@ -79,18 +83,23 @@
 		class:on={chat.id === current}
 		class:unread={chat.unread}
 		aria-current={chat.id === current ? 'page' : undefined}
-		onclick={() => onopen(chat.id)}
+		title={chat.author ? t('agent.chatBy', { name: chat.author }) : undefined}
+		onclick={() => onopen(chat.id, chat.author)}
 	>
 		{#if !sub}<span class="em" aria-hidden="true"
 				>{#if chat.pinned}<Icon name="pin" size={14} />{:else if chat.origin === 'schedule'}<Icon
 						name="clock"
 						size={14}
-					/>{:else if chat.origin === 'event'}<Icon name="bell" size={14} />{:else}<Icon
+					/>{:else if chat.origin === 'event'}<Icon
+						name="bell"
+						size={14}
+					/>{:else if chat.origin === 'reminder'}<span class="emoji">⏰</span>{:else}<Icon
 						name="chat"
 						size={14}
 					/>{/if}</span
 			>{/if}
 		<span class="name">{chat.title || t('agent.newChat')}</span>
+		{#if chat.author}<span class="by">{chat.author}</span>{/if}
 		{#if chat.state === 'running'}<span class="live" title={t('agent.running')}
 				><span class="sr-only">{t('agent.running')}</span></span
 			>{:else if chat.state === 'waiting'}<span class="wait">{t('agent.approvalShort')}</span
@@ -122,6 +131,11 @@
 				>{t('agent.newChat')}</span
 			></button
 		>
+		<button type="button" class="item" onclick={onplanned}
+			><span class="em"><Icon name="clock" size={17} /></span><span class="name"
+				>{t('agent.planned')}</span
+			></button
+		>
 		{#if found}
 			<div class="group">{t('agent.found', { count: found.length })}</div>
 			{#each found as chat (chat.id)}{@render row(chat)}{:else}
@@ -142,6 +156,13 @@
 							>{p.icon || '📁'}</span
 						>
 						<span class="name">{p.name}</span>
+						{#if p.owner}<span class="by" title={t('agent.sharedBy', { name: p.owner })}
+								>{p.owner}</span
+							>{:else if p.members?.length}<span
+								class="by"
+								title={t('agent.sharedWith', { names: p.members.join(', ') })}
+								>👥 {p.members.length}</span
+							>{/if}
 						{#if p.id !== project}
 							{@const st = stateIn(p.id)}
 							{#if st === 'waiting'}<span class="wait">{t('agent.approvalShort')}</span
@@ -153,13 +174,15 @@
 						{/if}
 						<span class="n">{count(p.id)}</span>
 					</button>
-					<button
-						type="button"
-						class="edit"
-						aria-label={t('agent.editProject', { name: p.name })}
-						title={t('agent.editProject', { name: p.name })}
-						onclick={() => oneditproject(p)}><Icon name="edit" size={13} /></button
-					>
+					{#if !p.owner}
+						<button
+							type="button"
+							class="edit"
+							aria-label={t('agent.editProject', { name: p.name })}
+							title={t('agent.editProject', { name: p.name })}
+							onclick={() => oneditproject(p)}><Icon name="edit" size={13} /></button
+						>
+					{/if}
 				</div>
 				{#if p.id === project}
 					{#each chats.filter((c) => c.project === p.id) as chat (chat.id)}{@render row(
@@ -336,6 +359,17 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+	.by {
+		flex: none;
+		font-size: var(--text-xs);
+		padding: 0 7px;
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--text) 8%, transparent);
+		color: var(--muted);
+	}
+	.emoji {
+		font-size: 13px;
 	}
 	.n {
 		color: var(--muted);

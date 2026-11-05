@@ -67,6 +67,14 @@ type agentSettings struct {
 	// Home Assistant: modes per "area:<id>", "domain:<name>" or
 	// "entity:<id>"; notify services for messages; Assist.
 	HA agentHASettings `json:"homeassistant"`
+	// Voice: speech to text with a Whisper service, off by default; Vision:
+	// a model of its own for pictures when the main model sees none
+	// (PLAN 49, agent_media.go).
+	Voice  agentVoice  `json:"voice"`
+	Vision agentVision `json:"vision"`
+	// NoSnapshots switches off the Btrfs snapshot before changes that
+	// can lose data (PLAN 51, agent_snapshot.go); on by default.
+	NoSnapshots bool `json:"noSnapshots,omitempty"`
 }
 
 type agentHASettings struct {
@@ -154,6 +162,8 @@ func (s *Server) handleAgentSettingsSet(w http.ResponseWriter, r *http.Request) 
 	}
 	a.settings, a.loaded = req, true
 	s.agentClient.Store(nil)
+	// The share of the agent follows (made, accounts updated).
+	go s.agentSyncShare()
 	writeJSON(w, http.StatusOK, req)
 }
 
@@ -192,6 +202,9 @@ func (s *Server) checkAgentSettings(req *agentSettings) error {
 	}
 	if req.MaxSteps < 0 || req.MaxSteps > agentMaxSteps {
 		return errors.New("steps per task: 1 to 100")
+	}
+	if err := checkAgentMedia(req); err != nil {
+		return err
 	}
 	if err := req.Policy.Check(); err != nil {
 		return err
@@ -384,6 +397,8 @@ func (s *Server) handleAgentStatus(w http.ResponseWriter, r *http.Request) {
 	if running, err := client.Running(ctx); err == nil {
 		out["running"] = running
 	}
+	out["voice"] = settings.Voice.Enabled && settings.Voice.URL != ""
+	out["vision"] = agentImageModel(settings, views)
 	writeJSON(w, http.StatusOK, out)
 }
 

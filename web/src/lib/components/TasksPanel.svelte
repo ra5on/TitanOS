@@ -9,13 +9,22 @@
 	import { taskPercent } from '#lib/task-progress.ts';
 	import { vmLabel } from '#lib/vm-name.ts';
 	import type { MediaJob } from '#lib/media.ts';
+	import { shell } from '#lib/shell.svelte.ts';
 	import Dialog from './Dialog.svelte';
 	import Icon from './Icon.svelte';
 	/**
 	 * `badge`: only a small badge with the number while something runs (head
 	 * line, sidebar status), nothing otherwise.
 	 */
-	let { compact = false, badge = false }: { compact?: boolean; badge?: boolean } = $props();
+	/**
+	 * `sheetOnly`: only the sheet of the phone, shown by the shell outside
+	 * the menu (the menu closes, and with it the badge inside it).
+	 */
+	let {
+		compact = false,
+		badge = false,
+		sheetOnly = false,
+	}: { compact?: boolean; badge?: boolean; sheetOnly?: boolean } = $props();
 
 	type Task = {
 		id: string;
@@ -32,7 +41,28 @@
 		}[];
 	};
 	type UpdateStatus = { progress: { phase: string; percent: number; file: string } };
-	let open = $state(false);
+	let open = $state((() => sheetOnly)());
+	// On the phone the tasks are a sheet from the bottom; the menu closes
+	// first, so the sheet does not sit on top of it (PLAN 46).
+	let phone = $state(matchMedia('(max-width: 760px)').matches);
+	$effect(() => {
+		const query = matchMedia('(max-width: 760px)');
+		const change = () => (phone = query.matches);
+		query.addEventListener('change', change);
+		return () => query.removeEventListener('change', change);
+	});
+	let sheet = $state<HTMLDialogElement>();
+	function show() {
+		if (phone) {
+			shell.tasksSheet = true;
+			shell.closeMenu?.();
+			return;
+		}
+		open = true;
+	}
+	$effect(() => {
+		if (open && phone && sheet && !sheet.open) sheet.showModal();
+	});
 	let tasks = $state<Task[]>([]);
 	let failed = $state(false);
 	let loaded = $state(false);
@@ -165,25 +195,77 @@
 	] as Task[]);
 </script>
 
-{#if badge}
+{#if sheetOnly}
+	<!-- nothing but the sheet below -->
+{:else if badge}
 	{#if all.length > 0}<button
 			class="tasks-badge"
 			type="button"
 			title={t('ui.tasksBadge', { count: all.length })}
 			aria-label={t('ui.tasksBadge', { count: all.length })}
-			onclick={() => (open = true)}
+			onclick={show}
 			><Icon name="activity" size={14} /><span class="count mono">{all.length}</span></button
 		>{/if}
 {:else}
 	<div class="tasks-entry" class:compact>
-		<button class="btn" type="button" onclick={() => (open = true)}
+		<button class="btn" type="button" onclick={show}
 			>{t('ui.tasks')} <span class="mono">{loaded ? all.length : '…'}</span>{#if failed}<span
 					aria-label={t('ui.tasksPartial')}>!</span
 				>{/if}</button
 		>
 	</div>
 {/if}
-{#if open}
+{#if open && phone}
+	<dialog
+		class="sheet"
+		bind:this={sheet}
+		aria-labelledby="tasks-sheet-title"
+		onclose={() => {
+			open = false;
+			shell.tasksSheet = false;
+		}}
+		onclick={(e) => {
+			if (e.target === sheet) sheet?.close();
+		}}
+	>
+		<div class="sheet-body">
+			<span class="grab" aria-hidden="true"></span>
+			<header>
+				<h2 id="tasks-sheet-title">{t('ui.tasks')}</h2>
+				<button
+					type="button"
+					class="x"
+					aria-label={t('common.close')}
+					onclick={() => sheet?.close()}><Icon name="close" size={18} /></button
+				>
+			</header>
+			<p class="muted short">{t('ui.tasksHintShort')}</p>
+			{#if failed || !system.reachable}<p class="notice-warn" role="status">
+					{t('ui.tasksPartial')}
+				</p>{/if}
+			{#if !loaded}<p role="status">{t('ui.working')}</p>
+			{:else if all.length === 0}<p>{t('ui.tasksEmpty')}</p>{/if}
+			<ul class="rows">
+				{#each all as task (task.id)}
+					<li>
+						<a href={task.href} onclick={() => sheet?.close()}>
+							<span class="what"
+								><strong>{t(task.kind)}</strong><span class="mono">{task.title}</span
+								>{#if task.attention}<span class="chip warn">{t('ui.taskAttention')}</span
+									>{/if}</span
+							>
+							<span class="pct mono"
+								>{task.percent === undefined ? '…' : `${Math.round(task.percent)} %`}</span
+							>
+							<Icon name="chevronRight" size={16} />
+							<progress value={task.percent} max="100" aria-label={t(task.kind)}></progress>
+						</a>
+					</li>
+				{/each}
+			</ul>
+		</div>
+	</dialog>
+{:else if open}
 	<Dialog title={t('ui.tasks')} onclose={() => (open = false)}>
 		<p class="muted">{t('ui.tasksHint')}</p>
 		{#if failed || !system.reachable}<p class="notice-warn" role="status">
@@ -308,5 +390,95 @@
 	}
 	li > a {
 		margin-left: auto;
+	}
+	.sheet {
+		margin: auto 0 0;
+		width: 100%;
+		max-width: 100%;
+		max-height: 80dvh;
+		padding: 0;
+		border: 1px solid var(--dialog-border, var(--border));
+		border-bottom: 0;
+		border-radius: 22px 22px 0 0;
+		background: var(--dialog-bg, var(--surface));
+		backdrop-filter: var(--dialog-backdrop, none);
+		color: var(--text);
+		outline: none;
+	}
+	.sheet::backdrop {
+		background: var(--overlay, rgb(0 0 0 / 0.5));
+	}
+	.sheet-body {
+		padding: 8px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+	}
+	.grab {
+		display: block;
+		width: 40px;
+		height: 5px;
+		border-radius: 3px;
+		background: var(--border);
+		margin: 0 auto 6px;
+	}
+	.sheet header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+	}
+	.sheet h2 {
+		margin: 0;
+		font-size: var(--text-lg);
+	}
+	.x {
+		width: 40px;
+		height: 40px;
+		border-radius: 50%;
+		border: 0;
+		display: grid;
+		place-items: center;
+		background: color-mix(in srgb, var(--text) 8%, transparent);
+		color: var(--text);
+		cursor: pointer;
+	}
+	.short {
+		margin: 2px 0 8px;
+		font-size: var(--text-sm);
+	}
+	.rows {
+		gap: 0;
+		margin: 0;
+	}
+	.rows li {
+		display: block;
+		padding: 0;
+	}
+	.rows a {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto auto;
+		align-items: center;
+		gap: 4px 10px;
+		padding: 12px 2px;
+		color: var(--text);
+		text-decoration: none;
+	}
+	.rows a :global(svg) {
+		color: var(--muted);
+	}
+	.what {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.what .mono {
+		font-size: var(--text-sm);
+		color: var(--muted);
+	}
+	.pct {
+		font-size: var(--text-sm);
+	}
+	.rows progress {
+		grid-column: 1 / -1;
+		height: 6px;
 	}
 </style>

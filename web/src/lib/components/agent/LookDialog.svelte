@@ -10,7 +10,7 @@
 
 	let { look = $bindable(), onclose }: { look: Look; onclose: () => void } = $props();
 	const effects: {
-		key: 'glass' | 'glow' | 'typing' | 'vibrate' | 'calm';
+		key: 'glass' | 'glow' | 'typing' | 'vibrate' | 'calm' | 'read';
 		label: string;
 		hint: string;
 	}[] = $derived([
@@ -19,6 +19,7 @@
 		{ key: 'typing', label: t('agent.lookTyping'), hint: t('agent.lookTypingHint') },
 		{ key: 'vibrate', label: t('agent.lookVibrate'), hint: t('agent.lookVibrateHint') },
 		{ key: 'calm', label: t('agent.lookCalm'), hint: t('agent.lookCalmHint') },
+		{ key: 'read', label: t('agent.lookRead'), hint: t('agent.lookReadHint') },
 	]);
 </script>
 

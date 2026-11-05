@@ -6,10 +6,11 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import Tabs from '#lib/components/Tabs.svelte';
 	import NASMap from './NASMap.svelte';
+	import Planned from './Planned.svelte';
 	import { api } from '#lib/api.ts';
 	import { formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
-	import type { Memory, Project, Schedule, Skill } from '#lib/agent.ts';
+	import type { Memory, Project, Skill } from '#lib/agent.ts';
 
 	let {
 		tab: startTab = 'memory',
@@ -28,9 +29,9 @@
 	let tab = $state((() => startTab)());
 	let memory = $state<Memory[]>([]);
 	let skills = $state<Skill[]>([]);
-	let schedules = $state<Schedule[]>([]);
+	let planned = $state(0);
 	let error = $state('');
-	let editing = $state<{ kind: 'memory' | 'skill' | 'schedule'; id: string } | null>(null);
+	let editing = $state<{ kind: 'memory' | 'skill'; id: string } | null>(null);
 	let draft = $state<Record<string, string>>({});
 	// Home Assistant connections for triggers (PLAN §45), by name.
 	let haConns = $state<{ id: string; name: string }[]>([]);
@@ -63,10 +64,9 @@
 	async function load() {
 		error = '';
 		try {
-			[memory, skills, schedules] = await Promise.all([
+			[memory, skills] = await Promise.all([
 				api.get<{ memory: Memory[] }>('/agent/memory').then((r) => r.memory),
 				api.get<{ skills: Skill[] }>('/agent/skills').then((r) => r.skills),
-				api.get<{ schedules: Schedule[] }>('/agent/schedules').then((r) => r.schedules),
 			]);
 		} catch (e) {
 			error = apiErrorText(e);
@@ -87,55 +87,6 @@
 		}
 	}
 	const projectName = (id?: string) => projects.find((p) => p.id === id)?.name ?? '';
-	const everyText: Record<string, MessageKey> = {
-		hourly: 'agent.everyHourly',
-		daily: 'agent.everyDaily',
-		weekly: 'agent.everyWeekly',
-		monthly: 'agent.everyMonthly',
-		trigger: 'agent.everyTrigger',
-	};
-	const weekdays = $derived(t('agent.weekdays').split(','));
-	function when(s: Schedule): string {
-		const base = t(everyText[s.every] ?? 'agent.everyDaily');
-		if (s.every === 'trigger' && s.trigger)
-			return `${base}: ${s.trigger.entity} = ${s.trigger.state}`;
-		if (s.every === 'weekly') return `${base} · ${weekdays[s.weekday ?? 0] ?? ''} ${s.at}`;
-		if (s.every === 'monthly') return `${base} · ${s.day}. · ${s.at}`;
-		return s.at ? `${base} · ${s.at}` : base;
-	}
-	function editSchedule(s?: Schedule) {
-		editing = { kind: 'schedule', id: s?.id ?? 'new' };
-		draft = {
-			name: s?.name ?? '',
-			task: s?.task ?? '',
-			every: s?.every ?? 'weekly',
-			at: s?.at ?? '08:00',
-			weekday: String(s?.weekday ?? 1),
-			day: String(s?.day ?? 1),
-			entity: s?.trigger?.entity ?? '',
-			conn: s?.trigger?.connection ?? '',
-			state: s?.trigger?.state ?? '',
-			enabled: s ? String(s.enabled) : 'true',
-			button: String(!!s?.button),
-		};
-	}
-	function scheduleBody() {
-		const trigger =
-			draft.every === 'trigger'
-				? { entity: draft.entity, state: draft.state, connection: draft.conn || undefined }
-				: null;
-		return {
-			name: draft.name,
-			task: draft.task,
-			every: draft.every === 'trigger' ? 'daily' : draft.every,
-			at: draft.at,
-			weekday: Number(draft.weekday),
-			day: Number(draft.day),
-			enabled: draft.enabled !== 'false',
-			button: draft.button === 'true',
-			trigger,
-		};
-	}
 </script>
 
 <Dialog title={t('agent.knowledge')} wide {onclose}>
@@ -150,7 +101,7 @@
 				label: t('agent.skills'),
 				badge: skills.filter((s) => !s.builtIn).length || '',
 			},
-			{ id: 'schedules', label: t('agent.schedules'), badge: schedules.length || '' },
+			{ id: 'schedules', label: t('agent.schedules'), badge: planned || '' },
 			{ id: 'map', label: t('agent.map') },
 			{ id: 'me', label: t('agent.me') },
 			...(admin ? [{ id: 'log' as const, label: t('agent.log') }] : []),
@@ -378,143 +329,7 @@
 			{/each}
 		</ul>
 	{:else}
-		<p class="muted">{t('agent.schedulesIntro')}</p>
-		<ul class="rows">
-			{#each schedules as s (s.id)}
-				<li>
-					<span class="grow">
-						<strong>{s.name}</strong>
-						{#if !s.enabled}<span class="chip">{t('agent.off')}</span>{/if}
-						<span class="muted small"
-							>{when(s)}{s.lastRun
-								? ' · ' + t('agent.lastRun', { when: formatDateTime(new Date(s.lastRun)) })
-								: ''}{s.lastRun ? (s.lastOk ? ' ✓' : ' !') : ''}</span
-						>
-					</span>
-					{#if s.chat}<button type="button" class="btn" onclick={() => onopenchat(s.chat!)}
-							>{t('agent.lastResult')}</button
-						>{/if}
-					<button
-						type="button"
-						class="btn"
-						onclick={() => run(() => api.post(`/agent/schedules/${s.id}/run`))}
-						>{t('agent.runNow')}</button
-					>
-					<button type="button" class="btn" onclick={() => editSchedule(s)}
-						>{t('agent.edit')}</button
-					>
-					<button
-						type="button"
-						class="btn btn-danger-outline"
-						onclick={() => run(() => api.delete(`/agent/schedules/${s.id}`))}
-						>{t('common.delete')}</button
-					>
-				</li>
-			{:else}
-				<li class="muted">{t('agent.schedulesEmpty')}</li>
-			{/each}
-		</ul>
-		{#if editing?.kind === 'schedule'}
-			<div class="form box">
-				<label class="stack"
-					><span>{t('agent.scheduleName')}</span><input
-						class="field"
-						bind:value={draft.name}
-						maxlength="80"
-					/></label
-				>
-				<label class="stack"
-					><span>{t('agent.scheduleTask')}</span><textarea
-						class="field"
-						rows="3"
-						bind:value={draft.task}></textarea></label
-				>
-				<div class="line">
-					<select class="field" bind:value={draft.every} aria-label={t('agent.scheduleEvery')}>
-						{#each ['hourly', 'daily', 'weekly', 'monthly', 'trigger'] as e (e)}<option value={e}
-								>{t(everyText[e])}</option
-							>{/each}
-					</select>
-					{#if draft.every === 'weekly'}
-						<select class="field" bind:value={draft.weekday} aria-label={t('agent.weekday')}>
-							{#each weekdays as d, i (i)}<option value={String(i)}>{d}</option>{/each}
-						</select>
-					{/if}
-					{#if draft.every === 'monthly'}
-						<input
-							class="field small-in"
-							type="number"
-							min="1"
-							max="28"
-							bind:value={draft.day}
-							aria-label={t('agent.day')}
-						/>
-					{/if}
-					{#if draft.every !== 'hourly' && draft.every !== 'trigger'}
-						<input
-							class="field small-in"
-							type="time"
-							bind:value={draft.at}
-							aria-label={t('agent.time')}
-						/>
-					{/if}
-					{#if draft.every === 'trigger'}
-						{#if haConns.length > 1}<select
-								class="field"
-								bind:value={draft.conn}
-								aria-label={t('notify.haConnection')}
-							>
-								{#each haConns as c (c.id)}<option value={c.id === 'main' ? '' : c.id}
-										>{c.name || t('ha.conn.first')}</option
-									>{/each}
-							</select>{/if}
-						<input
-							class="field"
-							bind:value={draft.entity}
-							placeholder="binary_sensor.haustuer"
-							aria-label={t('agent.triggerEntity')}
-						/>
-						<input
-							class="field small-in"
-							bind:value={draft.state}
-							placeholder="on"
-							aria-label={t('agent.triggerState')}
-						/>
-					{/if}
-				</div>
-				<label class="check"
-					><input
-						type="checkbox"
-						checked={draft.enabled !== 'false'}
-						onchange={(e) => (draft.enabled = String(e.currentTarget.checked))}
-					/><span>{t('agent.on')}</span></label
-				>
-				<label class="check"
-					><input
-						type="checkbox"
-						checked={draft.button === 'true'}
-						onchange={(e) => (draft.button = String(e.currentTarget.checked))}
-					/><span>{t('agent.scheduleButton')}</span></label
-				>
-				<div class="row-actions">
-					<button
-						type="button"
-						class="btn btn-primary"
-						onclick={() => run(() => api.put(`/agent/schedules/${editing!.id}`, scheduleBody()))}
-						>{t('common.save')}</button
-					>
-					<button type="button" class="btn" onclick={() => (editing = null)}
-						>{t('common.cancel')}</button
-					>
-				</div>
-			</div>
-		{:else}
-			<div class="row-actions">
-				<button type="button" class="btn" onclick={() => editSchedule()}
-					>{t('agent.scheduleAdd')}</button
-				>
-			</div>
-		{/if}
+		<Planned {projects} {onopenchat} oncount={(n) => (planned = n)} />
 	{/if}
 	<div class="dialog-actions end">
 		<button type="button" class="btn" onclick={onclose}>{t('common.close')}</button>
@@ -552,27 +367,9 @@
 		flex-direction: column;
 		gap: var(--space-2);
 	}
-	.box {
-		border: 1px solid var(--border);
-		border-radius: var(--radius-ctl);
-		padding: var(--space-3);
-	}
-	.stack {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-	}
-	.line {
-		display: flex;
-		gap: var(--space-2);
-		flex-wrap: wrap;
-	}
 	.me {
 		width: 100%;
 		margin: var(--space-2) 0;
-	}
-	.small-in {
-		width: 110px;
 	}
 	.row-actions {
 		display: flex;

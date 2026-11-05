@@ -6,7 +6,8 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import { chatMarkdown } from '#lib/chat-markdown.ts';
 	import { formatDateTime } from '#lib/format.ts';
-	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { canSpeak, speak, speech } from '#lib/agent-speech.svelte.ts';
+	import { i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import {
 		blocks,
 		stepDetail,
@@ -26,7 +27,13 @@
 		onchoice,
 		onretry,
 		onundo,
+		readonly = false,
+		onplanned,
 	}: {
+		/** Opens the overview of planned tasks (from a confirmation). */
+		onplanned?: () => void;
+		/** Another account's chat in a shared project: nothing to answer. */
+		readonly?: boolean;
 		chat: Chat;
 		live: { thinking: string; content: string; step: Entry | null };
 		busy?: boolean;
@@ -156,8 +163,21 @@
 					{#if block.entry.content}
 						<!-- eslint-disable-next-line svelte/no-at-html-tags -- chatMarkdown escapes everything first -->
 						<div class="md">{@html chatMarkdown(block.entry.content)}</div>
+						{#if canSpeak()}
+							{@const reading = speech.id === block.entry.id}
+							<button
+								type="button"
+								class="say"
+								class:on={reading}
+								aria-pressed={reading}
+								aria-label={reading ? t('agent.readStop') : t('agent.readAloud')}
+								title={reading ? t('agent.readStop') : t('agent.readAloud')}
+								onclick={() => speak(block.entry.id, block.entry.content ?? '', i18n.locale)}
+								><Icon name={reading ? 'stop' : 'volume'} size={15} /></button
+							>
+						{/if}
 					{/if}
-					{#if block.entry.choices?.length && block.entry.id === lastAnswer && !busy}
+					{#if block.entry.choices?.length && block.entry.id === lastAnswer && !busy && !readonly}
 						<div class="choices">
 							{#each block.entry.choices as choice, n (choice)}
 								<button
@@ -171,7 +191,24 @@
 					{/if}
 				</div>
 			{:else if block.kind === 'note'}
-				{#if block.entry.note === 'memory' || block.entry.note === 'skill' || block.entry.note === 'schedule' || block.entry.note === 'homeassistant'}
+				{#if block.entry.note === 'schedule' && block.entry.content?.includes('„')}
+					<div class="plan-card">
+						<span class="plan-ic" aria-hidden="true"
+							>{block.entry.content.startsWith('Erinnerung') ? '⏰' : '🗓️'}</span
+						>
+						<span class="plan-text">{block.entry.content}</span>
+						{#if onplanned}<button type="button" class="btn" onclick={onplanned}
+								>{t('agent.planned')}</button
+							>{/if}
+					</div>
+				{:else if block.entry.note === 'snapshot'}
+					<span class="learn snap">{block.entry.content}</span>
+				{:else if block.entry.note === 'edited'}
+					<details class="note edited">
+						<summary>{t('agent.noteEdited')}</summary>
+						<pre>{block.entry.content}</pre>
+					</details>
+				{:else if block.entry.note === 'memory' || block.entry.note === 'skill' || block.entry.note === 'schedule' || block.entry.note === 'homeassistant'}
 					<span class="learn">✦ {t(noteText[block.entry.note])}: {block.entry.content}</span>
 				{:else}
 					<div class="note" class:bad={block.entry.note === 'error'}>
@@ -224,7 +261,7 @@
 			{/if}
 		{/if}
 
-		{#if chat.pending && !busy}
+		{#if chat.pending && !busy && !readonly}
 			{@const p = chat.pending}
 			<div class="approval" role="group" aria-labelledby="pending-{p.id}">
 				<div class="row">
@@ -257,6 +294,53 @@
 </div>
 
 <style>
+	.plan-card {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		padding: 10px 12px;
+		border-radius: 14px;
+		border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+		background: linear-gradient(
+			120deg,
+			color-mix(in srgb, var(--accent) 16%, var(--surface)),
+			color-mix(in srgb, var(--surface) 80%, transparent)
+		);
+	}
+	.plan-ic {
+		font-size: 20px;
+		flex: none;
+	}
+	.plan-text {
+		flex: 1;
+		min-width: 0;
+	}
+	.learn.snap {
+		border-color: color-mix(in srgb, var(--ok, var(--accent)) 40%, var(--border));
+	}
+	.edited pre {
+		white-space: pre-wrap;
+		font-size: var(--text-sm);
+		max-height: 240px;
+		overflow: auto;
+	}
+	.say {
+		margin-top: 4px;
+		width: 30px;
+		height: 30px;
+		border-radius: 50%;
+		border: 0;
+		display: grid;
+		place-items: center;
+		background: none;
+		color: var(--muted);
+		cursor: pointer;
+	}
+	.say:hover,
+	.say.on {
+		background: color-mix(in srgb, var(--text) 8%, transparent);
+		color: var(--accent);
+	}
 	.messages {
 		flex: 1;
 		overflow-y: auto;

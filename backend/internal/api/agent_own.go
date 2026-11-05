@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/ra5on/TitanOS/backend/internal/scripts"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -49,12 +51,20 @@ func (b *agentToolbox) ownTools() []*agentTool {
 			false, b.skillSave),
 		own("locations_list", agent.AreaAgent, "The named locations of the person (name → root and folder) and the roots of the file manager this account may use.",
 			schema(nil), false, b.locationsList),
-		own("schedule_create", agent.AreaAgent, "Plan a task that runs again and again (e.g. every Monday at 08:00: health check and report). Only when the person asks for it.",
-			schema(map[string]any{"name": str("Short name."), "task": str("The task as the person would write it."),
-				"every": enum("How often.", "hourly", "daily", "weekly", "monthly"), "at": str("Time HH:MM (24 h), not for hourly."),
-				"weekday": intSchema("For weekly: 0 Sunday … 6 Saturday.", 0, 6), "day": intSchema("For monthly: day 1–28.", 1, 28)}, "name", "task", "every"),
+		own("schedule_create", agent.AreaAgent, "Plan a task or a reminder when the person asks for it: once (\"erinnere mich morgen um 9\", \"in 2 Stunden\", \"mach das bis Freitag 18 Uhr\"), again and again (every N minutes/hours/days, on weekdays, weekly, monthly) or by a cron line. kind reminder only sends the text as a message at that time; a task (no kind) is worked on by you at that time. Work out date and time from the current time in the system prompt; for \"in N minutes/hours\" use in_minutes.",
+			schema(map[string]any{"name": str("Short name."), "task": str("The task as the person would write it, or the text of the reminder."),
+				"kind":       enum("task (default) or reminder.", "task", "reminder"),
+				"every":      enum("How often.", "once", "minutes", "hours", "days", "hourly", "daily", "weekdays", "weekly", "monthly", "cron"),
+				"at":         str("Time HH:MM (24 h) for once, days, daily, weekdays, weekly, monthly."),
+				"date":       str("For once: YYYY-MM-DD."),
+				"in_minutes": intSchema("For once instead of date and at: in this many minutes from now.", 1, 525600),
+				"interval":   intSchema("For minutes (5–1440), hours (1–168), days (1–365): every this many.", 1, 1440),
+				"weekdays":   map[string]any{"type": "array", "items": map[string]any{"type": "integer", "minimum": 0, "maximum": 6}, "description": "For weekdays: 0 Sunday … 6 Saturday, e.g. [1,2,3,4,5] for Monday to Friday."},
+				"weekday":    intSchema("For weekly: 0 Sunday … 6 Saturday.", 0, 6),
+				"day":        intSchema("For monthly: day 1–28.", 1, 28),
+				"cron":       str("For cron: five fields, minute hour day month weekday, e.g. \"0 7 * * 1-5\".")}, "name", "task", "every"),
 			false, b.scheduleCreate),
-		own("schedule_list", agent.AreaAgent, "The recurring tasks of this account.", schema(nil), false, b.scheduleList),
+		own("schedule_list", agent.AreaAgent, "The planned tasks and reminders of this account, with their next run.", schema(nil), false, b.scheduleList),
 	}
 	if b.settings.Policy.Mode("web_search", agent.AreaWeb, agent.KindRead) != agent.ModeDeny || b.settings.Policy.Mode("web_read", agent.AreaWeb, agent.KindRead) != agent.ModeDeny {
 		tools = append(tools,
@@ -243,15 +253,76 @@ func checkSchedule(sc *agent.Schedule) error {
 		sc.Every = "trigger"
 		return nil
 	}
-	switch sc.Every {
-	case "hourly":
-		sc.At = ""
-	case "daily", "weekly", "monthly":
+	switch sc.Kind {
+	case "", "reminder", "morning":
+	default:
+		return toolcatalog.Errorf("kind must be task, reminder or morning")
+	}
+	if sc.Kind == "morning" && sc.Report == nil {
+		sc.Report = &agent.Report{NAS: true, Backups: true, Today: true}
+	}
+	if sc.Report != nil {
+		sc.Report.Extra = strings.TrimSpace(sc.Report.Extra)
+		if len(sc.Report.Extra) > 1000 {
+			return toolcatalog.Errorf("the extra wish of the report is too long")
+		}
+	}
+	needClock := func() error {
 		if !clock.MatchString(sc.At) {
 			return toolcatalog.Errorf("give the time as HH:MM")
 		}
+		return nil
+	}
+	switch sc.Every {
+	case "hourly":
+		sc.At = ""
+	case "once":
+		if err := needClock(); err != nil {
+			return err
+		}
+		if _, err := time.Parse("2006-01-02", sc.Date); err != nil {
+			return toolcatalog.Errorf("give the date as YYYY-MM-DD")
+		}
+	case "minutes":
+		if sc.Interval < agentMinMinutes || sc.Interval > 1440 {
+			return toolcatalog.Errorf("every %d to 1440 minutes", agentMinMinutes)
+		}
+	case "hours":
+		if sc.Interval < 1 || sc.Interval > 168 {
+			return toolcatalog.Errorf("every 1 to 168 hours")
+		}
+	case "days":
+		if sc.Interval < 1 || sc.Interval > 365 {
+			return toolcatalog.Errorf("every 1 to 365 days")
+		}
+		if err := needClock(); err != nil {
+			return err
+		}
+	case "weekdays":
+		if len(sc.Weekdays) == 0 || len(sc.Weekdays) > 7 {
+			return toolcatalog.Errorf("choose the weekdays (0 Sunday … 6 Saturday)")
+		}
+		for _, d := range sc.Weekdays {
+			if d < 0 || d > 6 {
+				return toolcatalog.Errorf("weekdays are 0 Sunday … 6 Saturday")
+			}
+		}
+		slices.Sort(sc.Weekdays)
+		sc.Weekdays = slices.Compact(sc.Weekdays)
+		if err := needClock(); err != nil {
+			return err
+		}
+	case "daily", "weekly", "monthly":
+		if err := needClock(); err != nil {
+			return err
+		}
+	case "cron":
+		sc.Cron = strings.Join(strings.Fields(sc.Cron), " ")
+		if _, err := scripts.NextCron(sc.Cron, time.Now()); err != nil {
+			return toolcatalog.Errorf("the cron line needs five fields: minute hour day month weekday")
+		}
 	default:
-		return toolcatalog.Errorf("every must be hourly, daily, weekly or monthly")
+		return toolcatalog.Errorf("every must be once, minutes, hours, days, hourly, daily, weekdays, weekly, monthly or cron")
 	}
 	if sc.Weekday < 0 || sc.Weekday > 6 || sc.Day < 0 || sc.Day > 28 {
 		return toolcatalog.Errorf("weekday 0–6, day 1–28")
@@ -263,16 +334,36 @@ func checkSchedule(sc *agent.Schedule) error {
 }
 
 func (b *agentToolbox) scheduleCreate(_ context.Context, chat *agent.Chat, args json.RawMessage) (agent.Outcome, error) {
-	var sc agent.Schedule
-	if err := json.Unmarshal(args, &sc); err != nil {
+	var req struct {
+		agent.Schedule
+		InMinutes int `json:"in_minutes"`
+	}
+	if err := json.Unmarshal(args, &req); err != nil {
 		return agent.Outcome{}, toolcatalog.Errorf("invalid arguments")
 	}
-	sc.ID, sc.Enabled, sc.Created, sc.LastRun, sc.Chat, sc.Trigger = agent.NewID(), true, time.Now(), time.Time{}, "", nil
+	sc := req.Schedule
+	if sc.Kind == "task" {
+		sc.Kind = ""
+	}
+	if sc.Kind == "morning" {
+		return agent.Outcome{}, toolcatalog.Errorf("the morning report is set in the overview Geplant")
+	}
+	loc := b.s.agentLocation()
+	now := time.Now().In(loc)
+	if req.InMinutes > 0 {
+		at := now.Add(time.Duration(req.InMinutes) * time.Minute)
+		sc.Every, sc.Date, sc.At = "once", at.Format("2006-01-02"), at.Format("15:04")
+	}
+	sc.ID, sc.Enabled, sc.Created, sc.LastRun, sc.Chat, sc.Trigger = agent.NewID(), true, now, time.Time{}, "", nil
 	if chat != nil {
 		sc.Project = chat.Project
 	}
 	if err := checkSchedule(&sc); err != nil {
 		return agent.Outcome{}, err
+	}
+	next, ok := agentNext(sc, now, loc)
+	if sc.Every == "once" && (!ok || !next.After(now)) {
+		return agent.Outcome{}, toolcatalog.Errorf("that time has passed already; it is now %s", now.Format("2006-01-02 15:04"))
 	}
 	store := b.s.agentStore()
 	list, err := store.Schedules(b.user.Name)
@@ -280,13 +371,21 @@ func (b *agentToolbox) scheduleCreate(_ context.Context, chat *agent.Chat, args 
 		return agent.Outcome{}, err
 	}
 	if len(list) >= maxSchedules {
-		return agent.Outcome{}, toolcatalog.Errorf("there are already %d recurring tasks", maxSchedules)
+		return agent.Outcome{}, toolcatalog.Errorf("there are already %d planned tasks", maxSchedules)
 	}
 	list = append(list, sc)
 	if err := store.SaveSchedules(b.user.Name, list); err != nil {
 		return agent.Outcome{}, err
 	}
-	return agent.Outcome{Text: fmt.Sprintf("Planned: %s (%s %s).", sc.Name, sc.Every, sc.At), Note: "schedule", NoteText: sc.Name}, nil
+	what := "Auftrag"
+	if sc.Kind == "reminder" {
+		what = "Erinnerung"
+	}
+	note := fmt.Sprintf("%s „%s“ – %s", what, sc.Name, agentWhen(sc))
+	if ok {
+		note += ", nächstes Mal " + next.Format("02.01. 15:04")
+	}
+	return agent.Outcome{Text: fmt.Sprintf("Planned %s: %s, next %s.", what, sc.Name, next.Format("2006-01-02 15:04")), Note: "schedule", NoteText: note}, nil
 }
 
 func (b *agentToolbox) scheduleList(context.Context, *agent.Chat, json.RawMessage) (agent.Outcome, error) {
@@ -294,6 +393,6 @@ func (b *agentToolbox) scheduleList(context.Context, *agent.Chat, json.RawMessag
 	if err != nil {
 		return agent.Outcome{}, err
 	}
-	res, err := toolcatalog.JSON(map[string]any{"schedules": list})
+	res, err := toolcatalog.JSON(map[string]any{"schedules": b.s.agentScheduleViews(list)})
 	return agent.Outcome{Text: res.Text}, err
 }

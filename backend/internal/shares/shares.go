@@ -76,6 +76,11 @@ type Share struct {
 	// GuardLocked is set by titand, never by the client: the share is
 	// read-only since then, until an administrator lifts it.
 	GuardLocked *GuardLock `json:"guardLocked,omitempty"`
+	// PerUser gives every account with access a folder of its own and
+	// shows it only that folder, over SMB (path …/%u, the Unix user of the session) and in the file
+	// manager. Set by titand for the share of the KI-Agent (PLAN 49), never
+	// by the client; such a share has no NFS and no guests.
+	PerUser bool `json:"perUser,omitempty"`
 }
 
 // NFS exports the share to the listed hosts or networks. NFS knows no
@@ -309,6 +314,10 @@ func normalize(share *Share, volumes, users []string) error {
 	if share.NFS.Enabled && len(clients) == 0 {
 		return fmt.Errorf("%w: NFS needs at least one host or network", ErrInvalidClient)
 	}
+	if share.PerUser {
+		// Every account its own folder: NFS knows no accounts, guests none.
+		share.NFS.Enabled, share.Guest = false, false
+	}
 	if share.Recycle.Days == 0 {
 		share.Recycle.Days = 30
 	}
@@ -358,12 +367,50 @@ func (m *Manager) Update(name string, share Share, volumes, users []string) erro
 	}
 	share.QuotaID = m.shares[i].QuotaID
 	share.GuardLocked = m.shares[i].GuardLocked
+	share.PerUser = m.shares[i].PerUser
+	if share.PerUser {
+		share.NFS.Enabled, share.Guest = false, false
+	}
 	if err := m.assignQuotaID(&share); err != nil {
 		return err
 	}
 	shares := slices.Clone(m.shares)
 	shares[i] = share
 	return m.save(shares)
+}
+
+// GID is the group that owns the files of the shares ("users").
+func (m *Manager) GID() int { return m.gid }
+
+// UserFolder is the folder of an account in a share with PerUser.
+func (m *Manager) UserFolder(share Share, user string) string {
+	return filepath.Join(m.Path(share), user)
+}
+
+// userFolders makes the folder of every account with access in a share
+// with PerUser, owned by the account and closed to everyone else (0700):
+// even where a share is offered without %u (an older version after a
+// way back), other accounts cannot open it over SMB.
+func (m *Manager) userFolders(share Share, path string, users []auth.User) error {
+	for _, u := range users {
+		if _, ok := share.Access[u.Name]; !ok || strings.ContainsAny(u.Name, "/\\") || u.Name == "" {
+			continue
+		}
+		dir := filepath.Join(path, u.Name)
+		if err := os.Mkdir(dir, 0o700); err != nil && !os.IsExist(err) {
+			return err
+		}
+		if st, err := os.Lstat(dir); err != nil || !st.IsDir() {
+			return fmt.Errorf("share %s: %s is no folder", share.Name, u.Name)
+		}
+		if err := os.Chown(dir, u.UID, m.gid); err != nil {
+			return err
+		}
+		if err := os.Chmod(dir, 0o700); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Delete removes a share. The files stay where they are.
@@ -538,6 +585,11 @@ func (m *Manager) Apply(ctx context.Context, state State) error {
 		}
 		if err := os.Chmod(path, 0o770|os.ModeSetgid); err != nil {
 			return err
+		}
+		if share.PerUser {
+			if err := m.userFolders(share, path, users); err != nil {
+				return err
+			}
 		}
 	}
 	if err := writeFile(m.sambaConf, smbConf); err != nil {
@@ -801,8 +853,13 @@ func renderSMBConf(shares []Share, path func(Share) string, shadow func(Share) s
 			continue
 		}
 		all, writers := accessLists(share)
+		dir := path(share)
+		if share.PerUser {
+			// Each account lands in its own folder and sees no other.
+			dir += "/%u"
+		}
 		options := [][2]string{
-			{"path", path(share)},
+			{"path", dir},
 			{"browseable", yesNo(share.Browseable)},
 			// Read-only for everyone except the write list.
 			{"read only", "yes"},

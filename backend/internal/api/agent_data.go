@@ -18,6 +18,9 @@ import (
 // system prompt with the short state report of the NAS.
 
 func (s *Server) agentProject(user, id string) (*agent.Project, error) {
+	if strings.Contains(id, ":") {
+		return s.agentSharedProject(user, id)
+	}
 	list, err := s.agentStore().Projects(user)
 	if err != nil {
 		return nil, err
@@ -31,11 +34,13 @@ func (s *Server) agentProject(user, id string) (*agent.Project, error) {
 }
 
 func (s *Server) handleAgentProjects(w http.ResponseWriter, r *http.Request) {
-	list, err := s.agentStore().Projects(currentUser(r).Name)
+	user := currentUser(r).Name
+	list, err := s.agentStore().Projects(user)
 	if err != nil {
 		agentStoreError(w, err)
 		return
 	}
+	list = append(list, s.agentSharedProjects(user)...)
 	writeJSON(w, http.StatusOK, map[string]any{"projects": list})
 }
 
@@ -57,6 +62,10 @@ func (s *Server) handleAgentProjectNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := currentUser(r).Name
+	if err := s.checkMembers(user, &p); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_project", err.Error())
+		return
+	}
 	store := s.agentStore()
 	list, err := store.Projects(user)
 	if err != nil {
@@ -86,6 +95,10 @@ func (s *Server) handleAgentProjectSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := currentUser(r).Name
+	if err := s.checkMembers(user, &p); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_project", err.Error())
+		return
+	}
 	store := s.agentStore()
 	list, err := store.Projects(user)
 	if err != nil {
@@ -338,7 +351,7 @@ func (s *Server) handleAgentSchedules(w http.ResponseWriter, r *http.Request) {
 		agentStoreError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"schedules": list})
+	writeJSON(w, http.StatusOK, map[string]any{"schedules": s.agentScheduleViews(list)})
 }
 
 func (s *Server) handleAgentScheduleSet(w http.ResponseWriter, r *http.Request) {
@@ -362,12 +375,20 @@ func (s *Server) handleAgentScheduleSet(w http.ResponseWriter, r *http.Request) 
 	for i := range list {
 		if list[i].ID == id {
 			req.ID, req.Created, req.LastRun, req.LastOK, req.Chat = list[i].ID, list[i].Created, list[i].LastRun, list[i].LastOK, list[i].Chat
+			// A one-off task with a new time runs again.
+			if req.Every == "once" && (req.Date != list[i].Date || req.At != list[i].At) {
+				req.LastRun = time.Time{}
+			}
 			list[i], found = req, true
 		}
 	}
 	if id == "new" {
 		if len(list) >= maxSchedules {
 			writeError(w, http.StatusBadRequest, "too_many", "too many recurring tasks")
+			return
+		}
+		if req.Kind == "morning" && slices.ContainsFunc(list, func(sc agent.Schedule) bool { return sc.Kind == "morning" }) {
+			writeError(w, http.StatusConflict, "morning_exists", "there is a morning report already")
 			return
 		}
 		req.ID, req.Created = agent.NewID(), time.Now()
@@ -381,7 +402,7 @@ func (s *Server) handleAgentScheduleSet(w http.ResponseWriter, r *http.Request) 
 		agentStoreError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"schedules": list})
+	writeJSON(w, http.StatusOK, map[string]any{"schedules": s.agentScheduleViews(list)})
 }
 
 func (s *Server) handleAgentScheduleDelete(w http.ResponseWriter, r *http.Request) {
@@ -408,7 +429,7 @@ func (s *Server) handleAgentScheduleDelete(w http.ResponseWriter, r *http.Reques
 // handleAgentScheduleRun runs a recurring task now.
 func (s *Server) handleAgentScheduleRun(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r)
-	chat, err := s.agentRunSchedule(user, r.PathValue("id"), time.Now())
+	chat, err := s.agentRunSchedule(user, r.PathValue("id"), time.Now(), false)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "agent_unavailable", err.Error())
 		return
@@ -423,6 +444,9 @@ func (s *Server) agentPrompt(ctx context.Context, user auth.User, settings agent
 		in.Host = s.opts.Monitor.Info().Hostname
 	}
 	in.Web = settings.Policy.Mode("web_search", agent.AreaWeb, agent.KindRead) != agent.ModeDeny
+	if _, ok := s.agentShare(); ok {
+		in.Folder, in.Notes = true, s.agentNotes(user)
+	}
 	store := s.agentStore()
 	if chat.Project != "" {
 		in.Project, _ = s.agentProject(user.Name, chat.Project)

@@ -113,10 +113,25 @@ func (s *Server) handleAgentChats(w http.ResponseWriter, r *http.Request) {
 	}
 	s.agentRT.mu.Unlock()
 	s.agentStore().MarkUnread(currentUser(r).Name, list)
+	// Chats of other accounts in shared projects (read-only, PLAN 51).
+	list = append(list, s.agentSharedChats(currentUser(r).Name)...)
 	writeJSON(w, http.StatusOK, map[string]any{"chats": list})
 }
 
 func (s *Server) handleAgentChat(w http.ResponseWriter, r *http.Request) {
+	if author := r.URL.Query().Get("author"); author != "" && author != currentUser(r).Name {
+		chat, err := s.agentReadableChat(currentUser(r).Name, author, r.PathValue("id"))
+		if err != nil {
+			agentStoreError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, struct {
+			*agent.Chat
+			Author   string `json:"author"`
+			ReadOnly bool   `json:"readOnly"`
+		}{chat, author, true})
+		return
+	}
 	chat, err := s.agentStore().Chat(currentUser(r).Name, r.PathValue("id"))
 	if err != nil {
 		agentStoreError(w, err)
@@ -397,6 +412,8 @@ func (s *Server) agentStart(user auth.User, chat *agent.Chat, work func(*agent.R
 	if err != nil {
 		return err
 	}
+	// A copy of the chat in the share the person changed is read back first.
+	s.agentCheckEdit(user, chat)
 	model := chat.Model
 	if model == "" {
 		model = settings.Model

@@ -88,6 +88,8 @@ func (s *Server) handleCreateShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	noteTarget(r, share.Name)
+	// Folders per account are only for the share of the KI-Agent.
+	share.PerUser, share.GuardLocked = false, nil
 	// Samba does not offer a share that no one may open. Unless the form
 	// says otherwise, whoever creates it can read and write.
 	if len(share.Access) == 0 && !share.Guest {

@@ -14,6 +14,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -342,6 +343,8 @@ type Message struct {
 	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
 	// ToolName names the tool a "tool" message answers.
 	ToolName string `json:"tool_name,omitempty"`
+	// Images (base64) for a model that sees pictures (PLAN 49).
+	Images []string `json:"images,omitempty"`
 }
 
 // ToolCall is a call the model wants made.
@@ -522,4 +525,21 @@ func (o *Ollama) Pull(ctx context.Context, model string, progress func(PullProgr
 		progress(p)
 	}
 	return scanner.Err()
+}
+
+// Look asks a model that sees pictures about one image and returns its
+// answer (PLAN 49). It does not stream: the agent waits for the whole text.
+func (o *Ollama) Look(ctx context.Context, model, prompt string, image []byte, keepAlive string) (string, error) {
+	body := map[string]any{"model": model, "stream": false,
+		"messages": []Message{{Role: "user", Content: prompt, Images: []string{base64.StdEncoding.EncodeToString(image)}}}}
+	if keepAlive != "" {
+		body["keep_alive"] = keepAlive
+	}
+	var out struct {
+		Message Message `json:"message"`
+	}
+	if err := o.do(ctx, http.MethodPost, "/api/chat", body, &out); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out.Message.Content), nil
 }

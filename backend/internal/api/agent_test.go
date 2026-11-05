@@ -49,6 +49,10 @@ func (f *agentOllama) start(t *testing.T) string {
 				reply, f.replies = f.replies[0], f.replies[1:]
 			}
 			f.mu.Unlock()
+			if stream, ok := body["stream"].(bool); ok && !stream {
+				w.Write([]byte(`{"message":` + reply + `,"done":true}`))
+				return
+			}
 			w.Write([]byte(`{"message":` + reply + `,"done":false}` + "\n" + `{"message":{"role":"assistant","content":""},"done":true}` + "\n"))
 		default:
 			http.NotFound(w, r)
@@ -855,5 +859,143 @@ func TestAgentReadStateAndPush(t *testing.T) {
 	}
 	if res, _ := ts.request("POST", "/api/v1/agent/chats/zzz/seen", map[string]any{"visible": true}); res.StatusCode != http.StatusNotFound {
 		t.Fatalf("bad id: %d", res.StatusCode)
+	}
+}
+
+// PLAN 49: planned tasks once, every few minutes/hours/days, on weekdays
+// and by cron; missed runs are caught up once.
+func TestAgentScheduleKinds(t *testing.T) {
+	loc := time.UTC
+	at := func(s string) time.Time { v, _ := time.ParseInLocation("2006-01-02 15:04", s, loc); return v }
+	created := at("2026-11-05 10:00")
+	cases := []struct {
+		sc    agent.Schedule
+		after string
+		want  string
+	}{
+		{agent.Schedule{Every: "once", Date: "2026-11-06", At: "09:00"}, "2026-11-05 10:00", "2026-11-06 09:00"},
+		{agent.Schedule{Every: "minutes", Interval: 15}, "2026-11-05 10:00", "2026-11-05 10:15"},
+		{agent.Schedule{Every: "minutes", Interval: 1}, "2026-11-05 10:00", "2026-11-05 10:05"},
+		{agent.Schedule{Every: "hours", Interval: 3}, "2026-11-05 10:00", "2026-11-05 13:00"},
+		{agent.Schedule{Every: "days", Interval: 2, At: "07:30"}, "2026-11-05 10:00", "2026-11-07 07:30"},
+		{agent.Schedule{Every: "weekdays", Weekdays: []int{1, 2, 3, 4, 5}, At: "07:00"}, "2026-11-06 08:00", "2026-11-09 07:00"},
+		{agent.Schedule{Every: "cron", Cron: "30 6 * * 1-5"}, "2026-11-07 00:00", "2026-11-09 06:30"},
+		{agent.Schedule{Every: "monthly", Day: 1, At: "08:00"}, "2026-11-05 10:00", "2026-12-01 08:00"},
+	}
+	for _, c := range cases {
+		c.sc.Created = created
+		next, ok := agentNext(c.sc, at(c.after), loc)
+		if !ok || !next.Equal(at(c.want)) {
+			t.Errorf("%s: next %v %v, want %s", c.sc.Every, next, ok, c.want)
+		}
+	}
+	// Once: due at its time, never again after it ran.
+	once := agent.Schedule{Enabled: true, Every: "once", Date: "2026-11-06", At: "09:00", Created: created}
+	if agentDue(once, at("2026-11-06 08:59")) || !agentDue(once, at("2026-11-06 09:00")) {
+		t.Fatal("once at its time")
+	}
+	once.LastRun = at("2026-11-06 09:00")
+	if agentDue(once, at("2026-11-06 09:05")) {
+		t.Fatal("once ran twice")
+	}
+	// Missed while the NAS was off: caught up once, marked late.
+	once.LastRun = time.Time{}
+	if due, late := agentDueAt(once, at("2026-11-06 14:00")); !due || !late {
+		t.Fatalf("missed one-off not caught up: %v %v", due, late)
+	}
+	if due, _ := agentDueAt(once, at("2026-11-20 14:00")); due {
+		t.Fatal("one-off caught up after more than 7 days")
+	}
+	daily := agent.Schedule{Enabled: true, Every: "daily", At: "08:00", Created: created, LastRun: at("2026-11-05 08:00")}
+	if due, late := agentDueAt(daily, at("2026-11-06 11:00")); !due || !late {
+		t.Fatalf("missed daily run not caught up: %v %v", due, late)
+	}
+	daily.LastRun = at("2026-11-06 11:00")
+	if agentDue(daily, at("2026-11-06 11:05")) {
+		t.Fatal("caught-up run repeated")
+	}
+	if !agentDue(daily, at("2026-11-07 08:00")) {
+		t.Fatal("next regular run")
+	}
+	// Checks of the input.
+	for _, bad := range []agent.Schedule{
+		{Name: "x", Task: "y", Every: "once", Date: "morgen", At: "09:00"},
+		{Name: "x", Task: "y", Every: "minutes", Interval: 1},
+		{Name: "x", Task: "y", Every: "weekdays", At: "07:00"},
+		{Name: "x", Task: "y", Every: "cron", Cron: "jeden Tag"},
+		{Name: "x", Task: "y", Every: "daily", At: "07:00", Kind: "alarm"},
+	} {
+		if err := checkSchedule(&bad); err == nil {
+			t.Errorf("accepted %+v", bad)
+		}
+	}
+	morning := agent.Schedule{Name: "Morgenbericht", Task: "x", Every: "weekdays", Weekdays: []int{5, 1, 1}, At: "07:00", Kind: "morning"}
+	if err := checkSchedule(&morning); err != nil || morning.Report == nil || len(morning.Weekdays) != 2 {
+		t.Fatalf("morning: %v %+v", err, morning)
+	}
+	if got := agentMorningTask(&agent.Report{NAS: true, Extra: "Wetter"}); !strings.Contains(got, "Zustand des NAS") || !strings.Contains(got, "Wetter") || strings.Contains(got, "Sicherungen") {
+		t.Fatalf("morning task: %s", got)
+	}
+}
+
+// A reminder planned in the chat becomes a chat entry at its time, without
+// a run of the model.
+func TestAgentReminder(t *testing.T) {
+	fake := &agentOllama{}
+	ts := agentServer(t, fake, agent.Policy{Preset: agent.PresetStandard})
+	fake.replies = []string{
+		toolCall("schedule_create", map[string]any{"name": "Müll", "task": "Mülltonne rausstellen", "kind": "reminder", "every": "once", "in_minutes": 120}),
+		`{"role":"assistant","content":"Mache ich."}`,
+	}
+	res, body := ts.request("POST", "/api/v1/agent/chats", map[string]any{"message": "Erinnere mich in 2 Stunden an die Mülltonne"})
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("new: %d %s", res.StatusCode, body)
+	}
+	var chat agent.Chat
+	json.Unmarshal(body, &chat)
+	done := waitChat(t, ts, ts.client, chat.ID)
+	note := ""
+	for _, e := range done.Entries {
+		if e.Role == "note" && e.Note == "schedule" {
+			note = e.Content
+		}
+	}
+	if !strings.Contains(note, "Erinnerung „Müll“") || !strings.Contains(note, "nächstes Mal") {
+		t.Fatalf("confirmation: %q in %+v", note, done.Entries)
+	}
+	_, body = ts.request("GET", "/api/v1/agent/schedules", nil)
+	var list struct {
+		Schedules []struct {
+			agent.Schedule
+			Next string
+			When string
+		}
+	}
+	json.Unmarshal(body, &list)
+	if len(list.Schedules) != 1 || list.Schedules[0].Kind != "reminder" || list.Schedules[0].Every != "once" || list.Schedules[0].Next == "" {
+		t.Fatalf("schedules: %s", body)
+	}
+	fake.mu.Lock()
+	calls := len(fake.got)
+	fake.mu.Unlock()
+	id, err := ts.server.agentRunSchedule(auth.User{Name: "alex", Role: auth.RoleOwner}, list.Schedules[0].ID, time.Now(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, body = ts.request("GET", "/api/v1/agent/chats/"+id, nil)
+	var reminder agent.Chat
+	json.Unmarshal(body, &reminder)
+	if reminder.Origin != "reminder" || len(reminder.Entries) != 1 || !strings.Contains(reminder.Entries[0].Content, "Mülltonne rausstellen") {
+		t.Fatalf("reminder chat: %s", body)
+	}
+	time.Sleep(50 * time.Millisecond)
+	fake.mu.Lock()
+	after := len(fake.got)
+	fake.mu.Unlock()
+	if after != calls {
+		t.Fatal("a reminder ran the model")
+	}
+	if agentDue(list.Schedules[0].Schedule, time.Now()) {
+		t.Fatal("reminder due again after it ran")
 	}
 }

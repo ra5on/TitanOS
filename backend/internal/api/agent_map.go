@@ -472,5 +472,6 @@ func (s *Server) nightlyNASMap(now time.Time) {
 		if _, err := s.refreshNASMap(ctx); err != nil {
 			slog.Warn("NAS map not built", "err", err)
 		}
+		s.agentPruneSnapshots(now)
 	}()
 }

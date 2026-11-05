@@ -235,7 +235,7 @@ func attachmentText(ctx context.Context, name string, data []byte) (string, erro
 		return office.Text(name, data)
 	}
 	if !utf8.Valid(data) {
-		return "", toolcatalog.Errorf("this file is no text, PDF, Word or Excel document (images cannot be read by this model)")
+		return "", toolcatalog.Errorf("this file is no text, PDF, Word or Excel document (for pictures use image_view)")
 	}
 	return string(data), nil
 }

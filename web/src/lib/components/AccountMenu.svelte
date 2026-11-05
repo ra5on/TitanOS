@@ -54,7 +54,15 @@
 			onclick={() => (open = !open)}
 		>
 			<span class="avatar" aria-hidden="true">{initial}</span>
-			{#if !folded}<span class="name">{user.name}</span>
+			{#if !folded}
+				{#if side}
+					<!-- In the sidebar and the phone's drawer: as wide as the tools
+					     above, with the role below the name (PLAN 46). -->
+					<span class="lines"
+						><span class="name">{user.name}</span><span class="role">{t(`role.${user.role}`)}</span
+						></span
+					>
+				{:else}<span class="name">{user.name}</span>{/if}
 				<Icon name={side ? 'chevronRight' : 'chevronDown'} size={14} />{/if}
 		</button>
 
@@ -160,7 +168,22 @@
 		overflow-y: auto;
 	}
 	.side .trigger {
-		max-width: 100%;
+		width: 100%;
+		height: auto;
+		min-height: 52px;
+		padding: 7px 10px 7px 8px;
+		text-align: left;
+	}
+	.side .trigger .lines {
+		flex: 1;
+	}
+	.side .trigger :global(svg) {
+		color: var(--muted);
+		flex: none;
+	}
+	.role {
+		font-size: var(--text-xs);
+		color: var(--muted);
 	}
 	.side .name {
 		min-width: 0;
@@ -170,6 +193,7 @@
 	}
 	.folded .trigger {
 		width: 46px;
+		min-height: 44px;
 		justify-content: center;
 		padding: 0;
 	}

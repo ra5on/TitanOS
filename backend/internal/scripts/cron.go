@@ -193,3 +193,17 @@ func (s Schedule) Expression() (string, error) {
 	}
 	return "", errors.New("invalid schedule")
 }
+
+// NextCron returns the first due minute of a five-field cron expression
+// after t, in the location of t (used by the KI-Agent's planned tasks).
+func NextCron(expr string, t time.Time) (time.Time, error) {
+	c, err := parseCron(expr)
+	if err != nil {
+		return time.Time{}, err
+	}
+	next := c.next(t)
+	if next == nil {
+		return time.Time{}, fmt.Errorf("%w: never due", errCron)
+	}
+	return *next, nil
+}

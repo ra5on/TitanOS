@@ -334,6 +334,7 @@
 						onclick={() => (selected = '')}>×</button
 					>
 				</div>
+				{#if detail.perUser}<p class="notice-ok" role="note">{t('shares.perUser')}</p>{/if}
 				{#if detail.guardLocked}<div class="notice-error locked" role="alert">
 						<p>
 							{t('shares.guardLocked', {

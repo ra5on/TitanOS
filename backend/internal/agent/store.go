@@ -60,6 +60,11 @@ type Project struct {
 	Instructions string    `json:"instructions,omitempty"`
 	Location     string    `json:"location,omitempty"`
 	Created      time.Time `json:"created"`
+	// Members are other accounts that share the project (PLAN 51): they
+	// see it and its chats and start chats in it. Owner is set only in
+	// answers, for a project another account shares.
+	Members []string `json:"members,omitempty"`
+	Owner   string   `json:"owner,omitempty"`
 }
 
 // Source is a web page an answer used.
@@ -163,6 +168,9 @@ type ChatInfo struct {
 	// Unread: changed since the person last looked (only in the list
 	// answer, never stored).
 	Unread bool `json:"unread,omitempty"`
+	// Author: the account a chat of a shared project belongs to, when it
+	// is not the reader's (only in answers; such chats are read-only).
+	Author string `json:"author,omitempty"`
 }
 
 // Info returns the list entry of a chat.
@@ -211,18 +219,30 @@ type Skill struct {
 	Description string    `json:"description,omitempty"`
 }
 
-// Schedule is a task the agent runs again and again.
+// Schedule is a planned task of the agent: once, again and again, or on a
+// state in Home Assistant. A reminder only sends a message (PLAN 49).
 type Schedule struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
 	Task    string `json:"task"`
 	Project string `json:"project,omitempty"`
-	// Every: "daily", "weekly", "monthly", "hourly"; At "HH:MM";
+	// Kind: "" a task the agent works on, "reminder" only a message,
+	// "morning" the morning report (Report says what goes in).
+	Kind string `json:"kind,omitempty"`
+	// Every: "once" (Date and At), "minutes"/"hours"/"days" (every
+	// Interval, days at At), "hourly", "daily", "weekdays" (Weekdays at
+	// At), "weekly", "monthly", "cron" (Cron, five fields), "trigger".
 	// Weekday 0–6 (Sunday 0) for weekly, Day 1–28 for monthly.
-	Every   string    `json:"every"`
-	At      string    `json:"at,omitempty"`
-	Weekday int       `json:"weekday,omitempty"`
-	Day     int       `json:"day,omitempty"`
+	Every    string `json:"every"`
+	At       string `json:"at,omitempty"`
+	Date     string `json:"date,omitempty"`
+	Interval int    `json:"interval,omitempty"`
+	Weekdays []int  `json:"weekdays,omitempty"`
+	Cron     string `json:"cron,omitempty"`
+	Weekday  int    `json:"weekday,omitempty"`
+	Day      int    `json:"day,omitempty"`
+	// Report: what the morning report contains.
+	Report  *Report   `json:"report,omitempty"`
 	Enabled bool      `json:"enabled"`
 	LastRun time.Time `json:"lastRun,omitempty"`
 	LastOK  bool      `json:"lastOk,omitempty"`
@@ -232,6 +252,16 @@ type Schedule struct {
 	// Button offers the task as a button in Home Assistant (MQTT).
 	Button  bool      `json:"button,omitempty"`
 	Created time.Time `json:"created"`
+}
+
+// Report is what the morning report of an account contains (PLAN 49);
+// each person sets it for themselves.
+type Report struct {
+	NAS     bool   `json:"nas,omitempty"`
+	Backups bool   `json:"backups,omitempty"`
+	Today   bool   `json:"today,omitempty"`
+	Home    bool   `json:"home,omitempty"`
+	Extra   string `json:"extra,omitempty"`
 }
 
 // Trigger starts a schedule from Home Assistant.

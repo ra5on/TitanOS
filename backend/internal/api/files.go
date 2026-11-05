@@ -81,7 +81,13 @@ func (s *Server) fileRoots(user auth.User) []files.Root {
 			continue
 		}
 		dir := s.opts.Shares.Path(share)
-		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		stat := os.Stat
+		if share.PerUser {
+			// Only the account's own folder (share of the KI-Agent, PLAN 49),
+			// never through a link.
+			dir, stat = s.opts.Shares.UserFolder(share, user.Name), os.Lstat
+		}
+		if info, err := stat(dir); err != nil || !info.IsDir() {
 			continue
 		}
 		roots = append(roots, files.Root{

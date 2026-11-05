@@ -253,6 +253,23 @@
 	const models = $derived((status?.models ?? []).filter((m) => m.capabilities.includes('tools')));
 	const others = $derived((status?.models ?? []).filter((m) => !m.capabilities.includes('tools')));
 	const chosen = $derived(models.find((m) => m.name === settings?.model));
+	// Speech and pictures (PLAN 49).
+	const visionModels = $derived(
+		(status?.models ?? []).filter((m) => m.capabilities.includes('vision')),
+	);
+	const vram = $derived((status?.running ?? []).reduce((sum, r) => sum + (r.vram ?? 0), 0));
+	let voiceCheck = $state<{ reachable: boolean; models?: string[]; error?: string } | null>(null);
+	async function checkVoice() {
+		voiceCheck = null;
+		try {
+			voiceCheck = await api.post<{ reachable: boolean; models?: string[]; error?: string }>(
+				'/agent/voice/check',
+				{ url: settings?.voice?.url ?? '' },
+			);
+		} catch (e) {
+			voiceCheck = { reachable: false, error: apiErrorText(e) };
+		}
+	}
 	const runningContext = $derived(
 		status?.running?.find((r) => r.name === settings?.model)?.contextLength ?? 0,
 	);
@@ -503,6 +520,96 @@
 				{/if}
 				<span class="muted">{t('agent.pullHint')}</span>
 			</div>{/if}
+	</section>
+
+	<section class="tile panel" aria-labelledby="ag-media">
+		<h2 class="tile-title" id="ag-media">{t('agent.sectionMedia')}</h2>
+		<div class="stack">
+			<span>{t('agent.pictures')}</span>
+			{#if chosen?.capabilities.includes('vision')}
+				<span class="muted">✓ {t('agent.picturesMain', { model: chosen.name })}</span>
+			{:else}
+				<span class="muted">{t('agent.picturesNone')}</span>
+			{/if}
+			<label class="check"
+				><input
+					type="checkbox"
+					checked={!!settings.vision?.enabled}
+					onchange={(e) =>
+						(settings!.vision = {
+							...(settings!.vision ?? {}),
+							enabled: e.currentTarget.checked,
+						})}
+				/><span>{t('agent.visionOwn')}</span></label
+			>
+			{#if settings.vision?.enabled}
+				<select
+					class="field"
+					value={settings.vision?.model ?? ''}
+					aria-label={t('agent.visionModel')}
+					onchange={(e) =>
+						(settings!.vision = { ...(settings!.vision ?? {}), model: e.currentTarget.value })}
+				>
+					<option value="">{t('agent.modelChoose')}</option>
+					{#each visionModels as m (m.name)}<option value={m.name}>{m.name} ({gb(m.size)})</option
+						>{/each}
+				</select>
+				<span class="muted">{t('agent.visionHint')}</span>
+			{/if}
+			{#if vram}<span class="muted"
+					>{t('agent.vramNow', {
+						gb: (vram / 1e9).toFixed(1).replace('.', i18n.locale === 'de' ? ',' : '.'),
+					})}</span
+				>{/if}
+		</div>
+		<div class="stack">
+			<span>{t('agent.voice')}</span>
+			<label class="check"
+				><input
+					type="checkbox"
+					checked={!!settings.voice?.enabled}
+					onchange={(e) =>
+						(settings!.voice = { ...(settings!.voice ?? {}), enabled: e.currentTarget.checked })}
+				/><span>{t('agent.voiceOn')}</span></label
+			>
+			{#if settings.voice?.enabled}
+				<span class="line">
+					<input
+						class="field"
+						value={settings.voice?.url ?? ''}
+						placeholder="http://192.168.1.5:8000"
+						aria-label={t('agent.voiceUrl')}
+						oninput={(e) =>
+							(settings!.voice = { ...(settings!.voice ?? {}), url: e.currentTarget.value })}
+					/>
+					<button type="button" class="btn" onclick={checkVoice}>{t('agent.voiceCheck')}</button>
+				</span>
+				<input
+					class="field"
+					value={settings.voice?.model ?? ''}
+					placeholder="Systran/faster-whisper-large-v3"
+					aria-label={t('agent.voiceModel')}
+					oninput={(e) =>
+						(settings!.voice = { ...(settings!.voice ?? {}), model: e.currentTarget.value })}
+				/>
+				{#if voiceCheck}
+					<span class={voiceCheck.reachable ? 'notice-ok' : 'notice-error'} role="status"
+						>{voiceCheck.reachable
+							? t('agent.voiceOk', { models: (voiceCheck.models ?? []).join(', ') || '–' })
+							: t('agent.voiceDown', { error: voiceCheck.error ?? '' })}</span
+					>
+				{/if}
+			{/if}
+			<span class="muted">{t('agent.voiceHint')}</span>
+		</div>
+		<label class="check"
+			><input
+				type="checkbox"
+				checked={!settings.noSnapshots}
+				onchange={(e) => (settings!.noSnapshots = !e.currentTarget.checked)}
+			/><span>{t('agent.snapshots')}</span></label
+		>
+		<span class="muted">{t('agent.snapshotsHint')}</span>
 	</section>
 
 	<section class="tile panel" aria-labelledby="ag-instruction">

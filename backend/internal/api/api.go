@@ -221,6 +221,8 @@ type Server struct {
 	agentClient     atomic.Pointer[agent.Ollama]
 	agentRT         agentRuntime
 	agentWatch      agentWatchers
+	agentMirror     agentMirror
+	agentSnaps      agentSnapState
 	agentOpen       func() (*os.Root, error)
 	agentWebFactory func() *agent.Web
 	agentReact      agentReactState
