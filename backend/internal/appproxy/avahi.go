@@ -149,3 +149,6 @@ func hasAnyPrefix(name string, prefixes []string) bool {
 	}
 	return false
 }
+
+// PrimaryIPv4 is the address of the NAS in the home network (see primaryIPv4).
+func PrimaryIPv4() string { return primaryIPv4() }

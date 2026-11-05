@@ -14,6 +14,28 @@ Ab Werk ist der Agent aus. Eingeschaltet wird er unter **Einstellungen › KI-Ag
 
 **Kontextlänge:** „Wie in Ollama eingestellt“ schickt keinen eigenen Wert. Die Seite zeigt, womit Ollama das Modell gerade geladen hat (`/api/ps`), und warnt unter 16k. Ollama nimmt ohne Einstellung je nach Grafikspeicher nur 4k. Rund 80 Werkzeuge belegen etwa 6 700 Token (gemessen mit gpt-oss:20b).
 
+**Einstellungen › KI-Agent (seit 0.54.0, PLAN 53)**
+
+Die Seite hat Reiter statt einer langen Spalte:
+- **Übersicht:** Ein/Aus mit Zustand, Handy-App, Grundanweisung.
+- **Verbindung und Modelle:** Ollama, Knoten, Modell, Sprache, Bilder, Snapshot.
+- **Rechte.**
+- **Konten und Orte.**
+- **Home Assistant.**
+- **Eigeninitiative.**
+
+Links wie `?tab=connection` öffnen einen Reiter direkt.
+
+**Handy-App**
+- Zuerst wählt man den Weg zum NAS, dann erscheint der QR-Code dazu. Der QR-Code wird im Browser erzeugt, kein fremder Dienst.
+- Wege: Heimnetz-IP, Tailscale (HTTPS, wenn das Zertifikat läuft), NetBird, dynamisches DNS, eigene Domain mit Zertifikat oder eine eigene Adresse.
+- `GET /api/v1/agent/addresses` liefert die Wege, nur für Besitzer und Administratoren. Er liest dafür nur Einstellungen und Zustände im RAM.
+- Ein Hinweis erklärt, dass Mitteilungen und das Symbol auf dem Home-Bildschirm HTTPS brauchen.
+
+**Whisper als App**
+- „Whisper einrichten“ öffnet die Katalog-App `whisper`: Speaches mit NVIDIA-Grafikkarte, Host-Port 8010, Modell `Systran/faster-whisper-large-v3` wird beim ersten Start geladen.
+- Läuft die App, übernimmt „Whisper-App … übernehmen“ ihre Adresse (`http://127.0.0.1:<port>`) und schaltet die Spracheingabe ein.
+
 ## Bedienung
 
 - **Aussehen (PLAN 48):** Handy und Desktop sehen gleich aus, angelehnt an die großen Chat-Apps.

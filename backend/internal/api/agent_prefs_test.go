@@ -47,6 +47,12 @@ func TestAgentPrefsPerAccount(t *testing.T) {
 	if _, body := ts.do(guest, "GET", "/api/v1/agent/prefs", nil); strings.TrimSpace(string(body)) != "{}" {
 		t.Fatalf("guest sees prefs of the owner: %s", body)
 	}
+	if res, body := ts.request("GET", "/api/v1/agent/addresses", nil); res.StatusCode != 200 || !strings.Contains(string(body), `"addresses":[`) {
+		t.Fatalf("addresses: %d %s", res.StatusCode, body)
+	}
+	if res, _ := ts.do(guest, "GET", "/api/v1/agent/addresses", nil); res.StatusCode != 403 {
+		t.Fatal("user sees the addresses")
+	}
 	if _, body := ts.do(guest, "GET", "/api/v1/agent/suggestions", nil); !strings.Contains(string(body), `"suggestions":[]`) {
 		t.Fatalf("guest suggestions: %s", body)
 	}
