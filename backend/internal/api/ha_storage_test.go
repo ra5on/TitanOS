@@ -201,20 +201,20 @@ func TestStorageForHomeAssistant(t *testing.T) {
 
 	// Backups: none yet is fine at first, overdue after the days set.
 	now := time.Now()
-	setup, _ := ts.server.haStorage()
-	ts.server.checkHABackups(t.Context(), setup, now, false)
+	setup, _ := ts.server.haStorage("")
+	ts.server.checkHABackups(t.Context(), ts.server.opts.HomeAssistant, setup, now, false)
 	backup := func() haBackupState { return *ts.server.haStore.backups["titanos_homeassistant"] }
 	if backup().Overdue || ts.server.haStore.backups["titanos_docs_musik"] != nil {
 		t.Fatalf("right after the setup: %+v", ts.server.haStore.backups)
 	}
-	ts.server.checkHABackups(t.Context(), setup, now.Add(4*24*time.Hour), false)
+	ts.server.checkHABackups(t.Context(), ts.server.opts.HomeAssistant, setup, now.Add(4*24*time.Hour), false)
 	if !backup().Overdue || !hasNotice(ts, "backup_ha_overdue") {
 		t.Fatalf("not overdue: %+v", backup())
 	}
 	fake.mu.Lock()
 	fake.backups = []map[string]any{{"backup_id": "a", "name": "Täglich", "date": now.Add(4*24*time.Hour - time.Hour), "agents": map[string]any{"hassio.titanos_homeassistant": map[string]any{}}}}
 	fake.mu.Unlock()
-	ts.server.checkHABackups(t.Context(), setup, now.Add(4*24*time.Hour), false)
+	ts.server.checkHABackups(t.Context(), ts.server.opts.HomeAssistant, setup, now.Add(4*24*time.Hour), false)
 	if b := backup(); b.Overdue || b.Name != "Täglich" {
 		t.Fatalf("after a backup: %+v", b)
 	}

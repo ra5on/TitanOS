@@ -50,7 +50,10 @@ var (
 
 // Settings is /config/homeassistant/settings.json.
 type Settings struct {
-	Enabled bool `json:"enabled"`
+	// Name tells connections apart, e.g. "Haus" or "Ferienwohnung"; empty
+	// for the first one in files of older versions.
+	Name    string `json:"name,omitempty"`
+	Enabled bool   `json:"enabled"`
 	// URL is the address of Home Assistant, e.g. http://homeassistant.local:8123.
 	URL   string `json:"url"`
 	Token string `json:"token,omitempty"`
@@ -152,6 +155,11 @@ func ValidService(s string) bool { return serviceName.MatchString(s) }
 // Manager holds the settings and talks to the server.
 type Manager struct {
 	store *config.Store
+	// id names the connection (PrimaryID for the first one), file is where
+	// its settings are kept.
+	id, file string
+	// hub holds all connections; nil for a manager on its own.
+	hub *Hub
 
 	mu       sync.Mutex
 	loaded   bool
@@ -165,13 +173,23 @@ type Manager struct {
 
 // NewManager returns a manager without a server.
 func NewManager(store *config.Store) *Manager {
-	return &Manager{store: store, changed: make(chan struct{})}
+	return &Manager{store: store, id: PrimaryID, file: settingsFile, changed: make(chan struct{})}
+}
+
+// ID names the connection: PrimaryID for the first one.
+func (m *Manager) ID() string { return m.id }
+
+// Name is the name the owner gave the connection.
+func (m *Manager) Name() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.settings.Name
 }
 
 // Load reads the settings from /config.
 func (m *Manager) Load() error {
 	var settings Settings
-	if err := m.store.ReadJSON(settingsFile, &settings); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	if err := m.store.ReadJSON(m.file, &settings); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
 	mqttDefaults(&settings.MQTT)
@@ -255,6 +273,10 @@ func (m *Manager) SetSettings(s Settings, clear ...string) error {
 	if s.Account != "" && !accountName.MatchString(s.Account) {
 		return invalid("account")
 	}
+	s.Name = strings.TrimSpace(s.Name)
+	if len(s.Name) > 40 || strings.ContainsAny(s.Name, "\r\n\t\x00") {
+		return invalid("name: at most 40 characters")
+	}
 	s.Token = strings.TrimSpace(s.Token)
 	s.URL = strings.TrimRight(strings.TrimSpace(s.URL), "/")
 	if s.URL != "" {
@@ -310,7 +332,7 @@ func (m *Manager) SetSettings(s Settings, clear ...string) error {
 			persisted.MQTT.ExtraGroups = append(persisted.MQTT.ExtraGroups, group)
 		}
 	}
-	if err := m.store.WriteJSON(settingsFile, persisted); err != nil {
+	if err := m.store.WriteJSON(m.file, persisted); err != nil {
 		return err
 	}
 	m.settings = s
@@ -554,7 +576,7 @@ func (m *Manager) States(ctx context.Context, allowedOnly bool) ([]State, error)
 	settings := m.settings
 	m.mu.Unlock()
 	if allowedOnly {
-		if r, own := releaseOf(ctx); own {
+		if r, own := releaseOf(ctx, m.id); own {
 			states = slices.DeleteFunc(states, func(s State) bool { return !r.allows(s.EntityID) })
 		} else {
 			states = slices.DeleteFunc(states, func(s State) bool { return !allowed(settings, s.EntityID) })
@@ -634,7 +656,7 @@ func (m *Manager) Call(ctx context.Context, domain, service string, entities []s
 	m.mu.Unlock()
 	for _, e := range entities {
 		ok := callAllowed(settings, e, service)
-		if r, own := releaseOf(ctx); own {
+		if r, own := releaseOf(ctx, m.id); own {
 			ok = r.allows(e)
 		}
 		if domainOf(e) != domain || !ok {

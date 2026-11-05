@@ -8,6 +8,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/diagnose"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
+	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 	"github.com/ra5on/TitanOS/backend/internal/version"
 	"github.com/ra5on/TitanOS/backend/internal/webui"
 )
@@ -69,6 +70,7 @@ func (w *titand) wireAPI() error {
 		HealthReport:       w.report,
 		Fans:               w.coolers,
 		HomeAssistant:      w.home,
+		HomeAssistants:     w.homes,
 		ConfigBackup:       w.stickBackup,
 		USB:                w.drives,
 		BackupTarget:       w.backupTarget,
@@ -117,7 +119,11 @@ func (w *titand) wireAPI() error {
 	if !w.opts.dev {
 		w.background(func() { w.stick.Follow(ctx) })
 	}
-	w.background(func() { w.home.RunMQTT(ctx, w.handler.HASnapshot, w.handler.HACommand) })
+	w.background(func() {
+		w.homes.Run(ctx, func(ctx context.Context, m *homeassistant.Manager) {
+			m.RunMQTT(ctx, w.handler.HASnapshot, w.handler.HACommand)
+		})
+	})
 	w.schedule.Busy = w.handler.PowerBusy
 	w.background(func() { w.schedule.Run(ctx) })
 	return nil

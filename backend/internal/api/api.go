@@ -123,6 +123,9 @@ type Options struct {
 	IPv64Reserved []int
 	// HomeAssistant is optional; nil leaves the connection out.
 	HomeAssistant *homeassistant.Manager
+	// HomeAssistants are all connections, HomeAssistant the first of them;
+	// nil makes a hub of HomeAssistant alone.
+	HomeAssistants *homeassistant.Hub
 	// ConfigBackup saves /config to a volume and restores it on a new stick.
 	ConfigBackup *configbackup.Manager
 	// Diagnose reads the logs and packs bundles for bug reports.
@@ -192,7 +195,11 @@ type Server struct {
 	dav       davState
 	mcp       mcpState
 	haStore   haStorageState
-	handler   http.Handler
+	// haStores is the storage of further Home Assistant connections.
+	haStores   map[string]*haStorageState
+	haStoresMu sync.Mutex
+	haHubOnce  sync.Once
+	handler    http.Handler
 	// patterns are all routes of the mux, for tests that compare them
 	// with the route list of the public API.
 	patterns []string

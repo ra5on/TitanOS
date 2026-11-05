@@ -48,14 +48,38 @@
 	);
 	let haQuery = $state('');
 	let haError = $state('');
+	// Several Home Assistant connections (PLAN §45): one release list each.
+	let haConn = $state('main');
+	let haConns = $state<{ id: string; name: string }[]>([]);
+	$effect(() => {
+		api
+			.get<{ connections: { id: string; name: string; active: boolean }[] }>(
+				'/homeassistant/connections',
+			)
+			.then(
+				(res) => (haConns = (res.connections ?? []).filter((c) => c.active || c.id === 'main')),
+				() => (haConns = []),
+			);
+	});
+	const haRelease = $derived(
+		haConn === 'main'
+			? settings?.homeassistant.release
+			: settings?.homeassistant.releases?.[haConn],
+	);
+	function chooseHA(id: string) {
+		haConn = id;
+		haEntities = null;
+		haError = '';
+	}
 	async function loadHA() {
 		haError = '';
+		const query = haConn === 'main' ? '' : `?connection=${encodeURIComponent(haConn)}`;
 		try {
-			const s = await api.get<{ domains: string[] }>('/homeassistant/settings');
+			const s = await api.get<{ domains: string[] }>(`/homeassistant/settings${query}`);
 			haDomains = s.domains ?? [];
 			haEntities = (
 				await api.get<{ entities: { id: string; name: string; area?: string; domain: string }[] }>(
-					'/homeassistant/entities',
+					`/homeassistant/entities${query}`,
 				)
 			).entities;
 		} catch (e) {
@@ -64,7 +88,8 @@
 	}
 	function toggleRelease(kind: 'domains' | 'entities', value: string) {
 		if (!settings) return;
-		const r = (settings.homeassistant.release ??= {});
+		const ha = settings.homeassistant;
+		const r = haConn === 'main' ? (ha.release ??= {}) : ((ha.releases ??= {})[haConn] ??= {});
 		const list = new Set(r[kind] ?? []);
 		if (list.has(value)) list.delete(value);
 		else list.add(value);
@@ -592,13 +617,24 @@
 		<div class="stack">
 			<span>{t('agent.haRelease')}</span>
 			<span class="muted">{t('agent.haReleaseHint')}</span>
+			{#if haConns.length > 1}<label class="narrow"
+					><span>{t('notify.haConnection')}</span>
+					<select
+						class="field"
+						value={haConn}
+						onchange={(e) => chooseHA((e.currentTarget as HTMLSelectElement).value)}
+					>
+						{#each haConns as c (c.id)}<option value={c.id}>{c.name || t('ha.conn.first')}</option
+							>{/each}
+					</select></label
+				>{/if}
 			{#if haEntities === null}
 				<span class="line"
 					><button type="button" class="btn" onclick={loadHA}>{t('agent.haLoad')}</button>
 					<span class="muted"
 						>{t('agent.haReleased', {
-							domains: settings.homeassistant.release?.domains?.length ?? 0,
-							entities: settings.homeassistant.release?.entities?.length ?? 0,
+							domains: haRelease?.domains?.length ?? 0,
+							entities: haRelease?.entities?.length ?? 0,
 						})}</span
 					></span
 				>
@@ -610,7 +646,7 @@
 						<label class="check"
 							><input
 								type="checkbox"
-								checked={settings.homeassistant.release?.domains?.includes(d)}
+								checked={haRelease?.domains?.includes(d)}
 								onchange={() => toggleRelease('domains', d)}
 							/><span>{d}</span></label
 						>
@@ -625,11 +661,11 @@
 				/>
 				<div class="entities">
 					{#each haShown as e (e.id)}
-						{@const viaDomain = settings.homeassistant.release?.domains?.includes(e.domain)}
+						{@const viaDomain = haRelease?.domains?.includes(e.domain)}
 						<label class="check"
 							><input
 								type="checkbox"
-								checked={viaDomain || settings.homeassistant.release?.entities?.includes(e.id)}
+								checked={viaDomain || haRelease?.entities?.includes(e.id)}
 								disabled={viaDomain}
 								onchange={() => toggleRelease('entities', e.id)}
 							/><span

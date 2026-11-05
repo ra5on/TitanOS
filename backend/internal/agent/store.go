@@ -233,8 +233,11 @@ type Schedule struct {
 
 // Trigger starts a schedule from Home Assistant.
 type Trigger struct {
-	Entity string `json:"entity"`
-	State  string `json:"state"`
+	// Connection is the Home Assistant connection by its ID; empty is the
+	// first one (files of older versions).
+	Connection string `json:"connection,omitempty"`
+	Entity     string `json:"entity"`
+	State      string `json:"state"`
 	// For keeps the state that long (minutes) before it counts.
 	For int `json:"for,omitempty"`
 }

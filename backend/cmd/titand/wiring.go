@@ -98,6 +98,7 @@ type titand struct {
 	stick           *stickwatch.Watcher
 	pushes          *webpush.Manager
 	home            *homeassistant.Manager
+	homes           *homeassistant.Hub
 	stickBackup     *configbackup.Manager
 	backupFailed    bool
 	access          *sshd.Manager

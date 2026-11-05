@@ -83,14 +83,28 @@ type Release struct {
 
 type releaseKey struct{}
 
-// WithRelease returns a context whose calls use r as the release.
+// WithRelease returns a context whose calls to the first connection use r
+// as the release; other connections release nothing.
 func WithRelease(ctx context.Context, r Release) context.Context {
-	return context.WithValue(ctx, releaseKey{}, r)
+	return WithReleases(ctx, map[string]Release{PrimaryID: r})
 }
 
-func releaseOf(ctx context.Context) (Release, bool) {
-	r, ok := ctx.Value(releaseKey{}).(Release)
-	return r, ok
+// WithReleases returns a context whose calls use the release of their
+// connection by its ID; a connection without one releases nothing.
+func WithReleases(ctx context.Context, releases map[string]Release) context.Context {
+	return context.WithValue(ctx, releaseKey{}, releases)
+}
+
+// releaseOf is the release of the context for connection id.
+func releaseOf(ctx context.Context, id string) (Release, bool) {
+	releases, ok := ctx.Value(releaseKey{}).(map[string]Release)
+	if !ok {
+		return Release{}, false
+	}
+	if id == "" {
+		id = PrimaryID
+	}
+	return releases[id], true
 }
 
 func (r Release) allows(entity string) bool {
@@ -105,7 +119,7 @@ func (r Release) allows(entity string) bool {
 
 // AllowedCtx is Allowed with the release of the context, if it has one.
 func (m *Manager) AllowedCtx(ctx context.Context, entity string) bool {
-	if r, ok := releaseOf(ctx); ok {
+	if r, ok := releaseOf(ctx, m.id); ok {
 		return r.allows(entity)
 	}
 	return m.Allowed(entity)
@@ -113,7 +127,7 @@ func (m *Manager) AllowedCtx(ctx context.Context, entity string) bool {
 
 // CanCallCtx is CanCall with the release of the context, if it has one.
 func (m *Manager) CanCallCtx(ctx context.Context, entity, service string) bool {
-	if r, ok := releaseOf(ctx); ok {
+	if r, ok := releaseOf(ctx, m.id); ok {
 		return r.allows(entity)
 	}
 	return m.CanCall(entity, service)

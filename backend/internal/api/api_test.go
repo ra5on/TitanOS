@@ -98,10 +98,12 @@ func newTestServerWith(t *testing.T, change func(*Options)) *testServer {
 	home := homeassistant.NewManager(store)
 	home.Load()
 	notifier := loadedNotify(store)
-	notifier.SetHomeAssistant(home)
+	homes := homeassistant.NewHub(store, home)
+	homes.Load()
+	notifier.SetHomeAssistant(homes)
 	opts := Options{
 		UI: testUI, Store: store, Users: users, Monitor: system.NewMonitor(context.Background()), Energy: disabledEnergy(store), MemoryPolicy: disabledMemory(store), PowerButton: disabledPowerButton(store), Tailscale: disabledTailscale(store), Netbird: disabledNetbird(store),
-		Storage: disks, Shares: shareManager, Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(t, store), BackupTarget: loadedTarget(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: notifier, HomeAssistant: home, ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: updater, Backup: disabledBackups(store), UPS: disabledUPS(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3", LetsEncrypt: disabledLetsEncrypt(store), DDNS: disabledDDNS(store),
+		Storage: disks, Shares: shareManager, Files: files.NewManager(0), Docker: disabledDocker(store), Catalog: loadedCatalog(t, store), BackupTarget: loadedTarget(store), Terminal: noShell(store), VMs: disabledVMs(store), Hardware: hardware.NewManager(), Plugins: disabledPlugins(store), Network: disabledNetwork(store), Notify: notifier, HomeAssistant: home, HomeAssistants: homes, ConfigBackup: disabledBackup(store), Diagnose: diagnose.NewManager(store, "1.2.3"), SSH: disabledSSH(store), Update: updater, Backup: disabledBackups(store), UPS: disabledUPS(store), Settings: disabledSettings(store), Power: power, Version: "1.2.3", LetsEncrypt: disabledLetsEncrypt(store), DDNS: disabledDDNS(store),
 	}
 	if change != nil {
 		change(&opts)

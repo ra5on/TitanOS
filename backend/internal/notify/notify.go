@@ -111,12 +111,15 @@ type Discord struct {
 type HomeAssistant struct {
 	Enabled bool   `json:"enabled"`
 	Service string `json:"service"`
+	// Connection is the Home Assistant connection by its ID; missing (files
+	// of older versions) is the first one.
+	Connection string `json:"connection,omitempty"`
 }
 
-// HASender is the Home Assistant connection, see package homeassistant.
+// HASender is the Home Assistant connections, see package homeassistant.
 type HASender interface {
-	Active() bool
-	Notify(ctx context.Context, service, title, message string, data map[string]any) error
+	ActiveOn(connection string) bool
+	NotifyOn(ctx context.Context, connection, service, title, message string, data map[string]any) error
 }
 
 // Settings is /config/notify/settings.json.
@@ -205,15 +208,18 @@ func (m *Manager) haSend(cfg HomeAssistant, title, text string, data map[string]
 	m.mu.Lock()
 	ha := m.ha
 	m.mu.Unlock()
-	if ha == nil || !ha.Active() {
+	if ha == nil || !ha.ActiveOn(cfg.Connection) {
 		return invalid("Home Assistant is not set up under Settings › Home Assistant")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	return ha.Notify(ctx, cfg.Service, title, text, data)
+	return ha.NotifyOn(ctx, cfg.Connection, cfg.Service, title, text, data)
 }
 
-var haService = regexp.MustCompile(`^notify\.[a-z0-9_]{1,64}$`)
+var (
+	haService    = regexp.MustCompile(`^notify\.[a-z0-9_]{1,64}$`)
+	haConnection = regexp.MustCompile(`^(|main|[a-z0-9]{8})$`)
+)
 
 // Load reads the settings from /config.
 func (m *Manager) Load() error {
@@ -316,6 +322,9 @@ func (m *Manager) SetSettings(settings Settings, clear ...string) error {
 	}
 	if settings.HomeAssistant.Enabled && !haService.MatchString(settings.HomeAssistant.Service) {
 		return invalid("Home Assistant service, e.g. notify.mobile_app_phone")
+	}
+	if !haConnection.MatchString(settings.HomeAssistant.Connection) {
+		return invalid("Home Assistant connection")
 	}
 	if d := settings.Digest; d.Enabled && !digestTime.MatchString(d.Time) {
 		return invalid("time of the daily summary")

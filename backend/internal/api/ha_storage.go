@@ -90,13 +90,55 @@ type haResult struct {
 	Error string `json:"error,omitempty"`
 }
 
-func (s *Server) haStorage() (*haStorage, error) {
-	st := &s.haStore
+// haStorageFileOf is where the storage of a connection is kept: the first
+// one's in storage.json as before, every other one's in a file of its own
+// that older versions do not know (they would take it for the first one's).
+func haStorageFileOf(id string) string {
+	if id == "" || id == homeassistant.PrimaryID {
+		return haStorageFile
+	}
+	return "homeassistant/connections/" + id + "-storage.json"
+}
+
+// haStoreOf is the storage state of a connection.
+func (s *Server) haStoreOf(id string) *haStorageState {
+	if id == "" || id == homeassistant.PrimaryID {
+		return &s.haStore
+	}
+	s.haStoresMu.Lock()
+	defer s.haStoresMu.Unlock()
+	if s.haStores == nil {
+		s.haStores = map[string]*haStorageState{}
+	}
+	st := s.haStores[id]
+	if st == nil {
+		st = &haStorageState{}
+		s.haStores[id] = st
+	}
+	return st
+}
+
+// forgetHAStorage drops the storage of a removed connection. Accounts and
+// shares stay as they are; the owner removes them like any other.
+func (s *Server) forgetHAStorage(id string) {
+	if id == "" || id == homeassistant.PrimaryID {
+		return
+	}
+	if err := s.opts.Store.Remove(haStorageFileOf(id)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		slog.Warn("storage of a removed Home Assistant connection left on the stick", "connection", id, "err", err)
+	}
+	s.haStoresMu.Lock()
+	delete(s.haStores, id)
+	s.haStoresMu.Unlock()
+}
+
+func (s *Server) haStorage(id string) (*haStorage, error) {
+	st := s.haStoreOf(id)
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	if !st.loaded {
 		var setup haStorage
-		err := s.opts.Store.ReadJSON(haStorageFile, &setup)
+		err := s.opts.Store.ReadJSON(haStorageFileOf(id), &setup)
 		switch {
 		case err == nil:
 			st.setup = &setup
@@ -114,11 +156,11 @@ func (s *Server) haStorage() (*haStorage, error) {
 	return &copy, nil
 }
 
-func (s *Server) saveHAStorage(setup *haStorage) error {
-	st := &s.haStore
+func (s *Server) saveHAStorage(id string, setup *haStorage) error {
+	st := s.haStoreOf(id)
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	if err := s.opts.Store.WriteJSON(haStorageFile, setup); err != nil {
+	if err := s.opts.Store.WriteJSON(haStorageFileOf(id), setup); err != nil {
 		return err
 	}
 	st.setup, st.loaded = setup, true
@@ -129,14 +171,20 @@ func (s *Server) saveHAStorage(setup *haStorage) error {
 		}
 	}
 	select {
-	case st.check <- struct{}{}:
+	case s.haStore.check <- struct{}{}:
 	default:
 	}
 	return nil
 }
 
 func (s *Server) handleHAStorage(w http.ResponseWriter, r *http.Request) {
-	setup, err := s.haStorage()
+	ha := s.haOf(r)
+	if ha == nil {
+		writeError(w, http.StatusNotFound, "ha_connection_missing", homeassistant.ErrNoConnection.Error())
+		return
+	}
+	st := s.haStoreOf(ha.ID())
+	setup, err := s.haStorage(ha.ID())
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", "the settings are not readable from /config")
 		return
@@ -152,18 +200,18 @@ func (s *Server) handleHAStorage(w http.ResponseWriter, r *http.Request) {
 		if setup.Server != "" {
 			server = setup.Server
 		}
-		s.haStore.mu.Lock()
+		st.mu.Lock()
 		for _, e := range setup.Entries {
 			view := entryView{haEntry: e}
-			if b := s.haStore.backups[e.Mount]; b != nil && e.Usage == "backup" {
+			if b := st.backups[e.Mount]; b != nil && e.Usage == "backup" {
 				copy := *b
 				view.Backup = &copy
 			}
 			entries = append(entries, view)
 		}
-		s.haStore.mu.Unlock()
+		st.mu.Unlock()
 	}
-	active := s.opts.HomeAssistant != nil && s.opts.HomeAssistant.Active()
+	active := ha.Active()
 	// The shares to choose from: those on a mounted volume, by name.
 	mounted := s.opts.Storage.Mounted()
 	if mounted == nil {
@@ -186,6 +234,11 @@ func (s *Server) handleHAStorage(w http.ResponseWriter, r *http.Request) {
 // person at a web session.
 func (s *Server) handleHAStorageAdd(w http.ResponseWriter, r *http.Request) {
 	if !s.requireWebSession(w, r) {
+		return
+	}
+	ha := s.haOf(r)
+	if ha == nil {
+		writeError(w, http.StatusNotFound, "ha_connection_missing", homeassistant.ErrNoConnection.Error())
 		return
 	}
 	var req struct {
@@ -218,12 +271,12 @@ func (s *Server) handleHAStorageAdd(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "ha_storage_read_only", "backups need to write")
 		return
 	}
-	setup, err := s.haStorage()
+	setup, err := s.haStorage(ha.ID())
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", "the settings are not readable from /config")
 		return
 	}
-	if req.Register && (s.opts.HomeAssistant == nil || !s.opts.HomeAssistant.Active()) {
+	if req.Register && !ha.Active() {
 		writeError(w, http.StatusConflict, "ha_not_connected", "Home Assistant is not connected")
 		return
 	}
@@ -312,7 +365,7 @@ func (s *Server) handleHAStorageAdd(w http.ResponseWriter, r *http.Request) {
 	s.opts.Shares.Kick()
 	s.opts.SSH.Kick()
 	setup.Entries = append(setup.Entries, entry)
-	if err := s.saveHAStorage(setup); err != nil {
+	if err := s.saveHAStorage(ha.ID(), setup); err != nil {
 		writeError(w, http.StatusInternalServerError, "config_write_failed", err.Error())
 		return
 	}
@@ -323,7 +376,7 @@ func (s *Server) handleHAStorageAdd(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Register {
 		// The new password goes to every entry, or the others stop working.
-		res["results"] = s.haRegisterAll(r.Context(), setup, password)
+		res["results"] = s.haRegisterAll(r.Context(), ha, setup, password)
 	}
 	writeJSON(w, http.StatusCreated, res)
 }
@@ -349,12 +402,17 @@ func (s *Server) handleHAStorageRegister(w http.ResponseWriter, r *http.Request)
 	if !s.requireWebSession(w, r) {
 		return
 	}
-	setup, err := s.haStorage()
+	ha := s.haOf(r)
+	if ha == nil {
+		writeError(w, http.StatusNotFound, "ha_connection_missing", homeassistant.ErrNoConnection.Error())
+		return
+	}
+	setup, err := s.haStorage(ha.ID())
 	if err != nil || setup == nil || len(setup.Entries) == 0 {
 		writeError(w, http.StatusNotFound, "ha_storage_missing", "no storage for Home Assistant is set up")
 		return
 	}
-	if s.opts.HomeAssistant == nil || !s.opts.HomeAssistant.Active() {
+	if !ha.Active() {
 		writeError(w, http.StatusConflict, "ha_not_connected", "Home Assistant is not connected")
 		return
 	}
@@ -366,12 +424,12 @@ func (s *Server) handleHAStorageRegister(w http.ResponseWriter, r *http.Request)
 	s.opts.Shares.Kick()
 	if server := s.haServerAddress(r); server != "" && server != setup.Server {
 		setup.Server = server
-		if err := s.saveHAStorage(setup); err != nil {
+		if err := s.saveHAStorage(ha.ID(), setup); err != nil {
 			writeError(w, http.StatusInternalServerError, "config_write_failed", err.Error())
 			return
 		}
 	}
-	results := s.haRegisterAll(r.Context(), setup, password)
+	results := s.haRegisterAll(r.Context(), ha, setup, password)
 	slog.Info("storage entered in Home Assistant again", "entries", len(setup.Entries), "by", currentUser(r).Name, "ip", remoteIP(r))
 	writeJSON(w, http.StatusOK, map[string]any{"setup": setup, "password": password, "results": results})
 }
@@ -379,7 +437,7 @@ func (s *Server) handleHAStorageRegister(w http.ResponseWriter, r *http.Request)
 // haRegisterAll enters every entry in Home Assistant with this password:
 // new ones are added, those there already get the new password. A failure
 // is part of the answer, not an error: the values work by hand as well.
-func (s *Server) haRegisterAll(ctx context.Context, setup *haStorage, password string) []haResult {
+func (s *Server) haRegisterAll(ctx context.Context, ha *homeassistant.Manager, setup *haStorage, password string) []haResult {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Minute)
 	defer cancel()
 	results := make([]haResult, 0, len(setup.Entries))
@@ -392,7 +450,7 @@ func (s *Server) haRegisterAll(ctx context.Context, setup *haStorage, password s
 	if setup.Server == "" {
 		return fail("no address of the NAS that Home Assistant can reach")
 	}
-	mounts, err := s.opts.HomeAssistant.Mounts(ctx)
+	mounts, err := ha.Mounts(ctx)
 	if err != nil {
 		return fail(haReason(err))
 	}
@@ -402,9 +460,9 @@ func (s *Server) haRegisterAll(ctx context.Context, setup *haStorage, password s
 			Username: setup.Account, Password: password, ReadOnly: e.ReadOnly,
 		}
 		if slices.ContainsFunc(mounts, func(m homeassistant.Mount) bool { return m.Name == e.Mount }) {
-			err = s.opts.HomeAssistant.UpdateMount(ctx, req)
+			err = ha.UpdateMount(ctx, req)
 		} else {
-			err = s.opts.HomeAssistant.AddMount(ctx, req)
+			err = ha.AddMount(ctx, req)
 		}
 		result := haResult{Mount: e.Mount, OK: err == nil}
 		if err != nil {
@@ -426,16 +484,21 @@ func haReason(err error) string {
 	return err.Error()
 }
 
-func (s *Server) haEntry(w http.ResponseWriter, r *http.Request) (*haStorage, int, bool) {
-	setup, err := s.haStorage()
+func (s *Server) haEntry(w http.ResponseWriter, r *http.Request) (*homeassistant.Manager, *haStorage, int, bool) {
+	ha := s.haOf(r)
+	if ha == nil {
+		writeError(w, http.StatusNotFound, "ha_connection_missing", homeassistant.ErrNoConnection.Error())
+		return nil, nil, 0, false
+	}
+	setup, err := s.haStorage(ha.ID())
 	if err == nil && setup != nil {
 		mount := r.PathValue("mount")
 		if i := slices.IndexFunc(setup.Entries, func(e haEntry) bool { return e.Mount == mount }); i >= 0 {
-			return setup, i, true
+			return ha, setup, i, true
 		}
 	}
 	writeError(w, http.StatusNotFound, "ha_storage_missing", "no such storage for Home Assistant")
-	return nil, 0, false
+	return nil, nil, 0, false
 }
 
 func (s *Server) handleHAStorageChange(w http.ResponseWriter, r *http.Request) {
@@ -445,7 +508,7 @@ func (s *Server) handleHAStorageChange(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	setup, i, ok := s.haEntry(w, r)
+	ha, setup, i, ok := s.haEntry(w, r)
 	if !ok {
 		return
 	}
@@ -454,7 +517,7 @@ func (s *Server) handleHAStorageChange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	setup.Entries[i].MaxAgeDays = req.MaxAgeDays
-	if err := s.saveHAStorage(setup); err != nil {
+	if err := s.saveHAStorage(ha.ID(), setup); err != nil {
 		writeError(w, http.StatusInternalServerError, "config_write_failed", err.Error())
 		return
 	}
@@ -465,7 +528,7 @@ func (s *Server) handleHAStorageChange(w http.ResponseWriter, r *http.Request) {
 // account's access to its share unless another entry needs it. Share and
 // data stay. Nobody left with access, the person removing it gets it.
 func (s *Server) handleHAStorageRemove(w http.ResponseWriter, r *http.Request) {
-	setup, i, ok := s.haEntry(w, r)
+	ha, setup, i, ok := s.haEntry(w, r)
 	if !ok {
 		return
 	}
@@ -487,14 +550,14 @@ func (s *Server) handleHAStorageRemove(w http.ResponseWriter, r *http.Request) {
 			s.opts.Shares.Kick()
 		}
 	}
-	if err := s.saveHAStorage(setup); err != nil {
+	if err := s.saveHAStorage(ha.ID(), setup); err != nil {
 		writeError(w, http.StatusInternalServerError, "config_write_failed", err.Error())
 		return
 	}
 	removed := ""
-	if s.opts.HomeAssistant != nil && s.opts.HomeAssistant.Active() {
+	if ha.Active() {
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), time.Minute)
-		if err := s.opts.HomeAssistant.RemoveMount(ctx, entry.Mount); err != nil {
+		if err := ha.RemoveMount(ctx, entry.Mount); err != nil {
 			removed = haReason(err)
 		}
 		cancel()
@@ -505,12 +568,17 @@ func (s *Server) handleHAStorageRemove(w http.ResponseWriter, r *http.Request) {
 
 // handleHAStorageCheck looks at the backups of Home Assistant right away.
 func (s *Server) handleHAStorageCheck(w http.ResponseWriter, r *http.Request) {
-	setup, err := s.haStorage()
+	ha := s.haOf(r)
+	if ha == nil {
+		writeError(w, http.StatusNotFound, "ha_connection_missing", homeassistant.ErrNoConnection.Error())
+		return
+	}
+	setup, err := s.haStorage(ha.ID())
 	if err != nil || setup == nil {
 		writeError(w, http.StatusNotFound, "ha_storage_missing", "no storage for Home Assistant is set up")
 		return
 	}
-	s.checkHABackups(r.Context(), setup, time.Now(), true)
+	s.checkHABackups(r.Context(), ha, setup, time.Now(), true)
 	s.handleHAStorage(w, r)
 }
 
@@ -529,8 +597,12 @@ func (s *Server) RunHAStorage(ctx context.Context) {
 			timer.Reset(time.Minute)
 			continue
 		}
-		if setup, err := s.haStorage(); err == nil && setup != nil {
-			s.checkHABackups(ctx, setup, time.Now(), false)
+		if hub := s.haHub(); hub != nil {
+			for _, ha := range hub.All() {
+				if setup, err := s.haStorage(ha.ID()); err == nil && setup != nil {
+					s.checkHABackups(ctx, ha, setup, time.Now(), false)
+				}
+			}
 		}
 		timer.Reset(24 * time.Hour)
 	}
@@ -538,20 +610,20 @@ func (s *Server) RunHAStorage(ctx context.Context) {
 
 // checkHABackups asks once for all backup entries; all says to look also
 // at those whose watching is off (a person asked).
-func (s *Server) checkHABackups(ctx context.Context, setup *haStorage, now time.Time, all bool) {
+func (s *Server) checkHABackups(ctx context.Context, ha *homeassistant.Manager, setup *haStorage, now time.Time, all bool) {
 	var watched []haEntry
 	for _, e := range setup.Entries {
 		if e.Usage == "backup" && (all || e.MaxAgeDays > 0) {
 			watched = append(watched, e)
 		}
 	}
-	if len(watched) == 0 || s.opts.HomeAssistant == nil || !s.opts.HomeAssistant.Active() {
+	if len(watched) == 0 || ha == nil || !ha.Active() {
 		return
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
-	backups, err := s.opts.HomeAssistant.Backups(ctx)
-	st := &s.haStore
+	backups, err := ha.Backups(ctx)
+	st := s.haStoreOf(ha.ID())
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	if st.backups == nil {
@@ -580,7 +652,11 @@ func (s *Server) checkHABackups(ctx context.Context, setup *haStorage, now time.
 		case b.Overdue && !b.notified:
 			b.notified = true
 			if s.opts.Notify != nil {
-				s.opts.Notify.Notify("warning", "backup_ha_overdue", e.place())
+				subject := e.place()
+				if label := haLabel(ha); label != "" {
+					subject += " (" + label + ")"
+				}
+				s.opts.Notify.Notify("warning", "backup_ha_overdue", subject)
 			}
 		case !b.Overdue:
 			b.notified = false
@@ -591,8 +667,8 @@ func (s *Server) checkHABackups(ctx context.Context, setup *haStorage, now time.
 // haServerAddress is the address of the NAS that Home Assistant reaches:
 // the one this NAS uses towards it, else the one the browser used.
 func (s *Server) haServerAddress(r *http.Request) string {
-	if s.opts.HomeAssistant != nil {
-		if settings, _ := s.opts.HomeAssistant.Settings(); settings.URL != "" {
+	if ha := s.haOf(r); ha != nil {
+		if settings, _ := ha.Settings(); settings.URL != "" {
 			if u, err := url.Parse(settings.URL); err == nil && u.Hostname() != "" {
 				port := u.Port()
 				if port == "" {

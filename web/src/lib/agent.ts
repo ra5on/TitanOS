@@ -165,6 +165,8 @@ export type Settings = {
 	homeassistant: {
 		/** The agent's own list of released devices (apart from MCP). */
 		release?: { domains?: string[]; entities?: string[] };
+		// Releases of further Home Assistant connections by their ID.
+		releases?: Record<string, { domains?: string[]; entities?: string[] }>;
 		entities?: Record<string, Mode>;
 		notify?: string[];
 		assist?: boolean;

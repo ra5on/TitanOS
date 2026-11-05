@@ -564,20 +564,33 @@ func (b *agentToolbox) haContext(ctx context.Context, t *agentTool) context.Cont
 	if t.area != toolcatalog.AreaHome {
 		return ctx
 	}
-	return homeassistant.WithRelease(ctx, b.settings.HA.Release)
+	releases := map[string]homeassistant.Release{homeassistant.PrimaryID: b.settings.HA.Release}
+	for id, r := range b.settings.HA.Releases {
+		if id != homeassistant.PrimaryID {
+			releases[id] = r
+		}
+	}
+	return homeassistant.WithReleases(ctx, releases)
 }
 
 // loadAreas reads the rooms of the entities once per run, only when a rule
 // names an area.
 func (b *agentToolbox) loadAreas(ctx context.Context) {
-	if b.areas != nil || b.s.opts.HomeAssistant == nil {
+	if b.areas != nil || b.s.haHub() == nil {
 		return
 	}
 	b.areas = map[string]string{}
 	for key := range b.settings.HA.Entities {
 		if strings.HasPrefix(key, "area:") {
-			if areas, err := b.s.opts.HomeAssistant.Areas(ctx); err == nil {
-				b.areas = areas
+			// Entity IDs of the connections, with their rooms.
+			for _, ha := range b.s.haHub().Active() {
+				if areas, err := ha.Areas(ctx); err == nil {
+					for entity, area := range areas {
+						if _, known := b.areas[entity]; !known {
+							b.areas[entity] = area
+						}
+					}
+				}
 			}
 			return
 		}

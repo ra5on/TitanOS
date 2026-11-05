@@ -22,7 +22,7 @@
 		ntfy: { enabled: boolean; url: string; token?: string };
 		telegram: { enabled: boolean; token?: string; chatID: string };
 		discord: { enabled: boolean; webhook?: string };
-		homeAssistant: { enabled: boolean; service: string };
+		homeAssistant: { enabled: boolean; service: string; connection?: string };
 		digest: { enabled: boolean; time: string; errorsNow: boolean };
 	};
 	type Answer = { settings: Settings; secretSet: Record<Channel, boolean> };
@@ -30,6 +30,25 @@
 	let draft = $state<Settings | null>(null);
 	let secretSet = $state<Partial<Record<Channel, boolean>>>({});
 	let haServices = $state<string[] | null>(null);
+	// Home Assistant connections to choose from (PLAN §45), by name.
+	let haConns = $state<{ id: string; name: string }[]>([]);
+	function loadHAServices(connection: string) {
+		const query = connection ? `?connection=${encodeURIComponent(connection)}` : '';
+		api
+			.get<{
+				services: string[];
+				connections?: { id: string; name: string }[];
+			}>(`/homeassistant/notify-services${query}`)
+			.then(
+				(res) => {
+					// A list of another connection may have come first.
+					if (connection === (draft?.homeAssistant.connection ?? '') || !draft)
+						haServices = res.services;
+					if (!connection) haConns = res.connections ?? [];
+				},
+				() => (haServices = []),
+			);
+	}
 	// Stored secrets that go away with the next save.
 	let clear = $state<Channel[]>([]);
 	let error = $state<{ text: string; detail: string } | null>(null);
@@ -65,6 +84,7 @@
 		};
 		secretSet = res.secretSet;
 		clear = [];
+		if (draft.homeAssistant.connection) loadHAServices(draft.homeAssistant.connection);
 	}
 
 	function load() {
@@ -73,10 +93,7 @@
 	}
 	$effect(() => {
 		load();
-		api.get<{ services: string[] }>('/homeassistant/notify-services').then(
-			(res) => (haServices = res.services),
-			() => (haServices = []),
-		);
+		loadHAServices('');
 	});
 
 	async function store(): Promise<boolean> {
@@ -428,6 +445,18 @@
 					{t('notify.haNotSetUp')} <a href="/settings/homeassistant">{t('ha.title')}</a>
 				</p>{/if}
 			<div class="row">
+				{#if haConns.length > 1}<label class="narrow"
+						><span>{t('notify.haConnection')}</span>
+						<select
+							class="field"
+							bind:value={draft.homeAssistant.connection}
+							onchange={() => loadHAServices(draft?.homeAssistant.connection ?? '')}
+						>
+							{#each haConns as c (c.id)}<option value={c.id === 'main' ? '' : c.id}
+									>{c.name || t('ha.conn.first')}</option
+								>{/each}
+						</select>
+					</label>{/if}
 				<label class="narrow"
 					><span>{t('notify.haService')}</span>
 					<select

@@ -2,6 +2,10 @@ package api
 
 // registerHomeAssistant registers the routes of Home Assistant and the storage for it.
 func (s *Server) registerHomeAssistant(mux *routeMux) {
+	// Several connections (PLAN §45); the other routes take ?connection=.
+	mux.HandleFunc("GET /api/v1/homeassistant/connections", s.requireAdmin(s.handleHAConnections))
+	mux.HandleFunc("POST /api/v1/homeassistant/connections", s.requireAdmin(s.handleHAConnectionAdd))
+	mux.HandleFunc("DELETE /api/v1/homeassistant/connections/{id}", s.requireAdmin(s.handleHAConnectionRemove))
 	mux.HandleFunc("GET /api/v1/homeassistant/settings", s.requireAdmin(s.handleHASettings))
 	mux.HandleFunc("PUT /api/v1/homeassistant/settings", s.requireAdmin(s.handleHASettingsChange))
 	mux.HandleFunc("POST /api/v1/homeassistant/check", s.requireAdmin(s.handleHACheck))
