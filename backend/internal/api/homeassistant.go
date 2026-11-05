@@ -155,6 +155,11 @@ func (s *Server) handleHANotifyServices(w http.ResponseWriter, r *http.Request) 
 		choices = append(choices, choice{m.ID(), m.Name()})
 	}
 	services, err := ha.NotifyServices(r.Context())
+	if err != nil && len(choices) > 0 && r.URL.Query().Get("connection") == "" {
+		// The first one is empty or away; the others can still be chosen.
+		writeJSON(w, http.StatusOK, map[string]any{"services": []string{}, "connections": choices})
+		return
+	}
 	if err != nil {
 		writeHAError(w, err)
 		return
@@ -219,7 +224,7 @@ func (s *Server) haTools(user auth.User) []toolcatalog.Tool {
 	}
 	// With several connections every tool takes "connection"; without it,
 	// it is the first one, as before.
-	several := len(hub.Active()) > 1
+	several := len(hub.All()) > 1
 	props := func(p map[string]any) map[string]any {
 		if several {
 			if p == nil {

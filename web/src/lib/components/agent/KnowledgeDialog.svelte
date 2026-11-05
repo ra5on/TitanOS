@@ -32,6 +32,16 @@
 	let error = $state('');
 	let editing = $state<{ kind: 'memory' | 'skill' | 'schedule'; id: string } | null>(null);
 	let draft = $state<Record<string, string>>({});
+	// Home Assistant connections for triggers (PLAN §45), by name.
+	let haConns = $state<{ id: string; name: string }[]>([]);
+	$effect(() => {
+		api
+			.get<{ connections?: { id: string; name: string }[] }>('/homeassistant/connection-names')
+			.then(
+				(res) => (haConns = res.connections ?? []),
+				() => (haConns = []),
+			);
+	});
 
 	let profile = $state('');
 	let log = $state<{ at: string; user: string; action: string; target?: string; ok: boolean }[]>(
@@ -103,13 +113,17 @@
 			weekday: String(s?.weekday ?? 1),
 			day: String(s?.day ?? 1),
 			entity: s?.trigger?.entity ?? '',
+			conn: s?.trigger?.connection ?? '',
 			state: s?.trigger?.state ?? '',
 			enabled: s ? String(s.enabled) : 'true',
 			button: String(!!s?.button),
 		};
 	}
 	function scheduleBody() {
-		const trigger = draft.every === 'trigger' ? { entity: draft.entity, state: draft.state } : null;
+		const trigger =
+			draft.every === 'trigger'
+				? { entity: draft.entity, state: draft.state, connection: draft.conn || undefined }
+				: null;
 		return {
 			name: draft.name,
 			task: draft.task,
@@ -445,6 +459,15 @@
 						/>
 					{/if}
 					{#if draft.every === 'trigger'}
+						{#if haConns.length > 1}<select
+								class="field"
+								bind:value={draft.conn}
+								aria-label={t('notify.haConnection')}
+							>
+								{#each haConns as c (c.id)}<option value={c.id === 'main' ? '' : c.id}
+										>{c.name || t('ha.conn.first')}</option
+									>{/each}
+							</select>{/if}
 						<input
 							class="field"
 							bind:value={draft.entity}

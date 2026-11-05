@@ -127,3 +127,35 @@ func TestHomeAssistantSeveralConnections(t *testing.T) {
 		t.Fatalf("settings.json: %+v %v", old, err)
 	}
 }
+
+// With the first connection empty, the only one in use is the default and
+// the others can still be chosen for messages.
+func TestHomeAssistantFirstEmpty(t *testing.T) {
+	second := &fakeHAServer{}
+	ha2 := second.start(t)
+	ts := newTestServer(t)
+	ts.setup()
+	res, body := ts.request("POST", "/api/v1/homeassistant/connections", map[string]string{"name": "Haus"})
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("add: %d %s", res.StatusCode, body)
+	}
+	var added struct {
+		ID string `json:"id"`
+	}
+	json.Unmarshal(body, &added)
+	if res, body := ts.request("PUT", "/api/v1/homeassistant/settings?connection="+added.ID, map[string]any{"name": "Haus", "enabled": true, "url": ha2.URL, "token": "ha-token", "domains": []string{"light"}}); res.StatusCode != 200 {
+		t.Fatalf("second: %d %s", res.StatusCode, body)
+	}
+	ts.mcpOn()
+	token := ts.mcpToken("alex", "mcp", "system:read", "system:write")
+	if text, isErr, _ := ts.mcpCall(token, "ha_entities", map[string]any{}); isErr || !strings.Contains(text, "light.kitchen") {
+		t.Fatalf("default with the first empty: %v %s", isErr, text)
+	}
+	res, body = ts.request("GET", "/api/v1/homeassistant/notify-services", nil)
+	if res.StatusCode != 200 || !strings.Contains(string(body), added.ID) {
+		t.Fatalf("choices with the first empty: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("GET", "/api/v1/homeassistant/connection-names", nil); res.StatusCode != 200 || !strings.Contains(string(body), `"name":"Haus"`) || strings.Contains(string(body), ha2.URL) {
+		t.Fatalf("names: %d %s", res.StatusCode, body)
+	}
+}

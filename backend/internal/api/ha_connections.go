@@ -34,6 +34,22 @@ func (s *Server) haConnection(id string) *homeassistant.Manager {
 	return nil
 }
 
+// haDefault is the connection used when none is named: the first one, or
+// the only one in use while the first is empty.
+func (s *Server) haDefault() *homeassistant.Manager {
+	hub := s.haHub()
+	if hub == nil {
+		return nil
+	}
+	if primary := hub.Primary(); primary.Active() {
+		return primary
+	}
+	if active := hub.Active(); len(active) == 1 {
+		return active[0]
+	}
+	return hub.Primary()
+}
+
 // haOf is the connection a request is about.
 func (s *Server) haOf(r *http.Request) *homeassistant.Manager {
 	return s.haConnection(r.URL.Query().Get("connection"))
@@ -134,15 +150,15 @@ func (s *Server) handleHAConnectionRemove(w http.ResponseWriter, r *http.Request
 // arguments of a Home Assistant tool; the rest is decoded as before.
 func (s *Server) haConnectionArg(args json.RawMessage) (*homeassistant.Manager, json.RawMessage, error) {
 	if len(args) == 0 {
-		return s.haConnection(""), args, nil
+		return s.haDefault(), args, nil
 	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(args, &fields); err != nil || fields == nil {
-		return s.haConnection(""), args, nil // the tool's own decoding says what is wrong
+		return s.haDefault(), args, nil // the tool's own decoding says what is wrong
 	}
 	raw, ok := fields["connection"]
 	if !ok {
-		return s.haConnection(""), args, nil
+		return s.haDefault(), args, nil
 	}
 	var id string
 	if err := json.Unmarshal(raw, &id); err != nil {
@@ -161,7 +177,7 @@ func (s *Server) haConnectionArg(args json.RawMessage) (*homeassistant.Manager, 
 // the connections there are.
 func (s *Server) haConnectionProperty() map[string]any {
 	ids := []string{}
-	desc := "Home Assistant connection by ID; leave out for the first one."
+	desc := "Home Assistant connection by ID; leave out for the first one in use."
 	for _, m := range s.haHub().Active() {
 		ids = append(ids, m.ID())
 		if name := haLabel(m); name != "" {
@@ -178,4 +194,20 @@ func (s *Server) haFromContext(ctx context.Context) *homeassistant.Manager {
 		return m
 	}
 	return s.opts.HomeAssistant
+}
+
+// handleHAConnectionNames lists the connections in use by name, for every
+// account: choosing one for a phone or a trigger. Nothing else of them.
+func (s *Server) handleHAConnectionNames(w http.ResponseWriter, r *http.Request) {
+	type choice struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	choices := []choice{}
+	if hub := s.haHub(); hub != nil {
+		for _, m := range hub.Active() {
+			choices = append(choices, choice{m.ID(), m.Name()})
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"connections": choices})
 }

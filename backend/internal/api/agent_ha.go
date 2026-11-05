@@ -26,7 +26,7 @@ func (b *agentToolbox) haTools() []*agentTool {
 	}
 	// With several connections the tools take "connection".
 	props := func(p map[string]any) map[string]any {
-		if len(hub.Active()) > 1 {
+		if len(hub.All()) > 1 {
 			p["connection"] = b.s.haConnectionProperty()
 		}
 		return p

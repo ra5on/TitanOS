@@ -106,7 +106,7 @@ export type Schedule = {
 	lastRun?: string;
 	lastOk?: boolean;
 	chat?: string;
-	trigger?: { entity: string; state: string; for?: number } | null;
+	trigger?: { entity: string; state: string; for?: number; connection?: string } | null;
 	button?: boolean;
 	created: string;
 };
