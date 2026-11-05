@@ -8,4 +8,6 @@ export const shell = $state<{
 	closeMenu: (() => void) | null;
 	/** The page shows its own menu button, so the round one is hidden. */
 	ownMenu: boolean;
-}>({ statusNote: '', openMenu: null, closeMenu: null, ownMenu: false });
+	/** The running tasks as a sheet from the bottom (phone, PLAN 46). */
+	tasksSheet: boolean;
+}>({ statusNote: '', openMenu: null, closeMenu: null, ownMenu: false, tasksSheet: false });

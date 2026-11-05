@@ -13,7 +13,7 @@ Diese Anleitung erklärt, wie du virtuelle Maschinen und LXC-Systemcontainer sta
 
 - Lesen: `vm_list` (Zustand, vCPUs, RAM, Last, Adressen laufender VMs), `lxc_list` (Zustand, Distribution, CPU, RAM), `hardware_status` (welche VM ein Gerät nutzt).
 - Ändern mit deiner Freigabe: `vm_action` (start, shutdown, reboot, poweroff, remove, remove_with_disks) und `lxc_action` (start, stop, restart, kill).
-- **Nicht:** Snapshots anlegen oder zurücksetzen, Konsolen öffnen, VMs anlegen. Das machst du in der Oberfläche; der Agent sagt dir, wo.
+- **Nicht:** VM- oder LXC-Snapshots anlegen oder zurücksetzen, Konsolen öffnen, VMs anlegen. Das machst du in der Oberfläche; der Agent sagt dir, wo. (Automatische Snapshots vor Änderungen gibt es nur für Btrfs-Volumes, bei App-Updates und Dateiänderungen, siehe „Backups“.)
 - `remove_with_disks` schlägt der Agent nur vor, wenn du ausdrücklich das Löschen der Platten willst.
 
 ## Starten und stoppen

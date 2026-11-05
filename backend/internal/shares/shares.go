@@ -388,14 +388,16 @@ func (m *Manager) UserFolder(share Share, user string) string {
 }
 
 // userFolders makes the folder of every account with access in a share
-// with PerUser, owned by the account, group users, setgid.
+// with PerUser, owned by the account and closed to everyone else (0700):
+// even where a share is offered without %U (an older version after a
+// way back), other accounts cannot open it over SMB.
 func (m *Manager) userFolders(share Share, path string, users []auth.User) error {
 	for _, u := range users {
 		if _, ok := share.Access[u.Name]; !ok || strings.ContainsAny(u.Name, "/\\") || u.Name == "" {
 			continue
 		}
 		dir := filepath.Join(path, u.Name)
-		if err := os.Mkdir(dir, 0o770); err != nil && !os.IsExist(err) {
+		if err := os.Mkdir(dir, 0o700); err != nil && !os.IsExist(err) {
 			return err
 		}
 		if st, err := os.Lstat(dir); err != nil || !st.IsDir() {
@@ -404,7 +406,7 @@ func (m *Manager) userFolders(share Share, path string, users []auth.User) error
 		if err := os.Chown(dir, u.UID, m.gid); err != nil {
 			return err
 		}
-		if err := os.Chmod(dir, 0o770|os.ModeSetgid); err != nil {
+		if err := os.Chmod(dir, 0o700); err != nil {
 			return err
 		}
 	}

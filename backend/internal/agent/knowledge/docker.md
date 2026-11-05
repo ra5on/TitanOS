@@ -45,7 +45,7 @@ TitanOS erkennt Updates über den Digest des Image-Tags (alle 12 Stunden und per
 2. Sicherung klären mit `backup_status`: Gibt es einen Auftrag mit dem Bereich `appdata` (Daten aller Apps), und ist er kürzlich gelungen?
 3. Wenn nicht: dir vorschlagen, das Backup jetzt zu starten (`backup_action` mit `run`). Ein Backup-Auftrag kann ausgewählte Container während der Sicherung sauber anhalten und danach wieder starten.
 4. Bei Datenbank-Apps auf Versionssprünge hinweisen (z. B. große Versionen von PostgreSQL brauchen oft eine eigene Umstellung).
-5. Erst dann `app_action` mit `update` vorschlagen. Die Daten in den Pfaden bleiben erhalten; der Container wird neu erstellt.
+5. Erst dann `app_action` mit `update` vorschlagen. Die Daten in den Pfaden bleiben erhalten; der Container wird neu erstellt. Liegt Docker auf einem Btrfs-Volume, legt TitanOS vor Update oder Entfernen selbst einen Snapshot des Volumes an (Einstellung „Snapshot vor Änderungen“, 7 Tage aufbewahrt); bei ext4/XFS nicht.
 6. Danach `docker_list` und `container_logs` prüfen: läuft die App, keine neuen Fehler?
 7. Läuft sie nicht: Logs zeigen und gemeinsam entscheiden. Die Daten aus dem Backup holst du über eine Wiederherstellung in einen neuen Ordner (siehe Anleitung „Backups“).
 

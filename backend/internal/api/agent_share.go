@@ -155,11 +155,11 @@ func (s *Server) agentUserRoot(sh shares.Share, user auth.User) (*os.Root, error
 		if err := os.MkdirAll(s.opts.Shares.Path(sh), 0o770); err != nil {
 			return nil, err
 		}
-		if err := os.Mkdir(dir, 0o770); err != nil && !errors.Is(err, fs.ErrExist) {
+		if err := os.Mkdir(dir, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
 			return nil, err
 		}
 		_ = os.Lchown(dir, user.UID, s.usersGID())
-		_ = os.Chmod(dir, 0o770|os.ModeSetgid)
+		_ = os.Chmod(dir, 0o700)
 		st, err = os.Lstat(dir)
 	}
 	if err != nil {

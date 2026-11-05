@@ -16,7 +16,15 @@
 	 * `badge`: only a small badge with the number while something runs (head
 	 * line, sidebar status), nothing otherwise.
 	 */
-	let { compact = false, badge = false }: { compact?: boolean; badge?: boolean } = $props();
+	/**
+	 * `sheetOnly`: only the sheet of the phone, shown by the shell outside
+	 * the menu (the menu closes, and with it the badge inside it).
+	 */
+	let {
+		compact = false,
+		badge = false,
+		sheetOnly = false,
+	}: { compact?: boolean; badge?: boolean; sheetOnly?: boolean } = $props();
 
 	type Task = {
 		id: string;
@@ -33,7 +41,7 @@
 		}[];
 	};
 	type UpdateStatus = { progress: { phase: string; percent: number; file: string } };
-	let open = $state(false);
+	let open = $state((() => sheetOnly)());
 	// On the phone the tasks are a sheet from the bottom; the menu closes
 	// first, so the sheet does not sit on top of it (PLAN 46).
 	let phone = $state(matchMedia('(max-width: 760px)').matches);
@@ -45,7 +53,11 @@
 	});
 	let sheet = $state<HTMLDialogElement>();
 	function show() {
-		if (phone) shell.closeMenu?.();
+		if (phone) {
+			shell.tasksSheet = true;
+			shell.closeMenu?.();
+			return;
+		}
 		open = true;
 	}
 	$effect(() => {
@@ -183,7 +195,9 @@
 	] as Task[]);
 </script>
 
-{#if badge}
+{#if sheetOnly}
+	<!-- nothing but the sheet below -->
+{:else if badge}
 	{#if all.length > 0}<button
 			class="tasks-badge"
 			type="button"
@@ -206,7 +220,10 @@
 		class="sheet"
 		bind:this={sheet}
 		aria-labelledby="tasks-sheet-title"
-		onclose={() => (open = false)}
+		onclose={() => {
+			open = false;
+			shell.tasksSheet = false;
+		}}
 		onclick={(e) => {
 			if (e.target === sheet) sheet?.close();
 		}}

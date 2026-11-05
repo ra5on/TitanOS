@@ -174,13 +174,15 @@
 						{/if}
 						<span class="n">{count(p.id)}</span>
 					</button>
-					<button
-						type="button"
-						class="edit"
-						aria-label={t('agent.editProject', { name: p.name })}
-						title={t('agent.editProject', { name: p.name })}
-						onclick={() => oneditproject(p)}><Icon name="edit" size={13} /></button
-					>
+					{#if !p.owner}
+						<button
+							type="button"
+							class="edit"
+							aria-label={t('agent.editProject', { name: p.name })}
+							title={t('agent.editProject', { name: p.name })}
+							onclick={() => oneditproject(p)}><Icon name="edit" size={13} /></button
+						>
+					{/if}
 				</div>
 				{#if p.id === project}
 					{#each chats.filter((c) => c.project === p.id) as chat (chat.id)}{@render row(

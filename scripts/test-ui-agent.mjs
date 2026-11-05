@@ -324,7 +324,7 @@ try {
 		await page.locator('.composer .file', { hasText: 'Post/Telekom 2026-09.pdf' }).waitFor();
 		await page.screenshot({ path: `${out}/18-phone-nas-chips.png` });
 		// Too large to upload: a message instead of nothing.
-		await page.locator('.composer input[type=file]').setInputFiles({ name: 'gross.tar', mimeType: 'application/x-tar', buffer: Buffer.alloc(21 * 1024 * 1024) });
+		await page.locator('.composer input[type=file]').first().setInputFiles({ name: 'gross.tar', mimeType: 'application/x-tar', buffer: Buffer.alloc(21 * 1024 * 1024) });
 		await page.getByRole('alert').filter({ hasText: 'gross.tar' }).waitFor();
 		// A chat: everything of the desktop buttons in the ⋯ menu.
 		await page.goto(base + '/agent?chat=' + docChat.id);
@@ -355,6 +355,136 @@ try {
 		assert.equal(await page.locator('.side-nav').count(), 0, 'full screen is remembered');
 		await page.locator('header.top').getByRole('button', { name: 'Mit Menü' }).click();
 		await page.locator('.side-nav').waitFor();
+		await ctx.close();
+	}
+	// PLAN 49: planned tasks, reminders and the morning report.
+	{
+		const { ctx, page } = await open(1440, 1000);
+		const puts = [];
+		const planned = [
+			{ id: 'sm1', kind: 'morning', name: 'Morgenbericht', task: 'Morgenbericht', every: 'weekdays', weekdays: [1, 2, 3, 4, 5], at: '07:00', enabled: true, report: { nas: true, backups: true, today: true }, when: 'Mo, Di, Mi, Do, Fr um 07:00', next: '2026-11-06T06:00:00Z' },
+			{ id: 'sr1', kind: 'reminder', name: 'Müll', task: 'Mülltonne rausstellen', every: 'once', date: '2026-11-06', at: '19:00', enabled: true, when: 'am 06.11.2026 um 19:00', next: '2026-11-06T18:00:00Z' },
+			{ id: 'sc1', name: 'Gesundheitscheck', task: 'Gesundheitscheck und Bericht', every: 'weekly', at: '08:00', weekday: 1, enabled: true, lastRun: '2026-11-03T08:00:00Z', lastOk: true, when: 'jeden Mo um 08:00', next: '2026-11-09T07:00:00Z' },
+		];
+		await page.route('**/api/v1/agent/schedules**', (route) => {
+			const method = route.request().method();
+			if (method === 'PUT') {
+				puts.push({ url: route.request().url(), body: route.request().postDataJSON() });
+				return route.fulfill({ json: { schedules: planned } });
+			}
+			if (method === 'GET') return route.fulfill({ json: { schedules: planned } });
+			return route.fallback();
+		});
+		await page.goto(base + '/agent');
+		await page.getByRole('heading', { name: /Guten|Hallo/ }).waitFor();
+		await page.getByRole('navigation', { name: 'Menü des KI-Agenten' }).getByRole('button', { name: 'Geplant' }).click();
+		const dlg = page.locator('dialog[open]');
+		await dlg.getByRole('heading', { name: 'Morgenbericht' }).waitFor();
+		await dlg.getByText('Mülltonne').first().waitFor().catch(() => {});
+		assert.ok(await dlg.getByText('Müll', { exact: true }).isVisible(), 'reminder listed');
+		assert.ok(await dlg.getByText(/nächstes Mal/).first().isVisible(), 'next run shown');
+		await page.waitForTimeout(300);
+		await page.screenshot({ path: `${out}/24-planned.png` });
+		await dlg.getByLabel('Home Assistant').check();
+		await dlg.getByRole('button', { name: 'Speichern' }).first().click();
+		await page.waitForTimeout(300);
+		const morning = puts.at(-1)?.body;
+		assert.equal(morning?.kind, 'morning');
+		assert.equal(morning?.report?.home, true, 'morning report contents saved');
+		assert.deepEqual(morning?.weekdays, [1, 2, 3, 4, 5]);
+		// A reminder by hand.
+		await dlg.getByRole('button', { name: '+ Auftrag oder Erinnerung' }).click();
+		await dlg.getByRole('radio', { name: /Erinnerung/ }).click();
+		await dlg.getByLabel('Name').fill('Arzt');
+		await dlg.getByLabel('Text der Erinnerung').fill('Termin beim Zahnarzt');
+		await dlg.getByLabel('Wie oft').selectOption('once');
+		await dlg.getByLabel('Datum').fill('2026-11-10');
+		await dlg.getByLabel('Uhrzeit').last().fill('09:00');
+		await page.screenshot({ path: `${out}/25-planned-new.png` });
+		await dlg.getByRole('button', { name: 'Speichern' }).last().click();
+		await page.waitForTimeout(300);
+		const added = puts.at(-1);
+		assert.ok(added.url.endsWith('/agent/schedules/new'), added.url);
+		assert.equal(added.body.kind, 'reminder');
+		assert.equal(added.body.every, 'once');
+		assert.equal(added.body.date, '2026-11-10');
+		assert.equal(added.body.at, '09:00');
+		await ctx.close();
+	}
+	// PLAN 49/51: microphone, a project shared by another account, read-only chat.
+	{
+		const { ctx, page } = await open(390, 844);
+		await page.route('**/api/v1/agent/status', (route) => route.fulfill({ json: { ...status, voice: true, vision: 'gemma4:12b' } }));
+		await page.route('**/api/v1/agent/projects', (route) => route.fulfill({ json: { projects: [...projects, { id: 'maria:p1aaaaaaaaaa0009', name: 'Urlaub 2027', icon: '🏔️', owner: 'maria', created: at(1), members: ['alex'] }] } }));
+		const sharedChat = { id: 'c1aaaaaaaaaa0099', title: 'Fähre buchen', project: 'maria:p1aaaaaaaaaa0009', created: at(9), updated: at(9, 3), state: 'idle', author: 'maria', preview: 'Fähre ab Kiel.' };
+		await page.route('**/api/v1/agent/chats', (route) => (route.request().method() === 'GET' ? route.fulfill({ json: { chats: [...chats, sharedChat] } }) : route.fallback()));
+		await page.route('**/api/v1/agent/chats/c1aaaaaaaaaa0099**', (route) =>
+			route.fulfill({ json: { ...sharedChat, entries: [{ id: 'x1', at: at(9), role: 'user', content: 'Wie kommen wir nach Norwegen?' }, { id: 'x2', at: at(9, 3), role: 'assistant', content: 'Fähre ab Kiel.' }], author: 'maria', readOnly: true } }),
+		);
+		await page.goto(base + '/agent');
+		await page.getByRole('heading', { name: /Guten|Hallo/ }).waitFor();
+		assert.ok(await page.getByRole('button', { name: 'Sprechen' }).isVisible(), 'microphone with speech input on');
+		await page.getByRole('button', { name: 'Datei anhängen' }).click();
+		assert.ok(await page.getByRole('menuitem', { name: 'Foto oder Kamera' }).isVisible(), 'photo button');
+		await page.keyboard.press('Escape');
+		await page.getByRole('button', { name: 'Menü öffnen' }).click();
+		const drawer = page.locator('aside.drawer');
+		await drawer.getByRole('button', { name: /^🏔️ Urlaub 2027|^Urlaub 2027/ }).first().click();
+		await drawer.getByRole('button', { name: /Fähre buchen/ }).click();
+		await page.getByText('Fähre ab Kiel.').first().waitFor();
+		const input = page.locator('.composer textarea');
+		assert.ok(await input.isDisabled(), 'read-only chat');
+		assert.equal(await input.getAttribute('placeholder'), 'Chat von maria – nur lesen');
+		assert.equal(await page.getByRole('button', { name: 'Weitere Aktionen' }).count(), 0, 'no rename/delete for a foreign chat');
+		await page.screenshot({ path: `${out}/26-phone-shared-chat.png` });
+		await ctx.close();
+	}
+	// PLAN 46: tasks as a sheet from the bottom on the phone, account button as wide as the tools.
+	{
+		const { ctx, page } = await open(390, 844);
+		await page.route('**/api/v1/files/jobs', (route) => route.fulfill({ json: [{ id: 'j1', state: 'running', operation: 'copy', names: ['Fotos 2026'], copied: 50, bytes: 100 }] }));
+		await page.goto(base + '/settings');
+		await page.locator('.fab').click();
+		const drawerNav = page.locator('dialog.drawer');
+		await drawerNav.waitFor();
+		const tools = await drawerNav.locator('.quick-access').boundingBox();
+		const account = await drawerNav.locator('.account .trigger').boundingBox();
+		assert.ok(Math.abs(tools.width - account.width) < 2, `account button as wide as the tools (${account.width} vs ${tools.width})`);
+		assert.ok(await drawerNav.locator('.account .role').isVisible(), 'role below the name');
+		await page.screenshot({ path: `${out}/27-phone-account.png` });
+		await drawerNav.locator('.tasks-badge').click();
+		const sheet = page.locator('dialog.sheet[open]');
+		await sheet.waitFor();
+		assert.equal(await drawerNav.evaluate((d) => d.open), false, 'menu closes before the sheet');
+		await sheet.evaluate((d) => Promise.all(d.getAnimations({ subtree: true }).map((a) => a.finished)));
+		await page.waitForTimeout(300);
+		const box = await sheet.boundingBox();
+		assert.ok(box.y + box.height >= 843 && box.width >= 389, `sheet at the bottom (${JSON.stringify(box)})`);
+		assert.ok(await sheet.getByRole('link', { name: /Fotos 2026/ }).isVisible(), 'row opens the details');
+		await page.waitForTimeout(250);
+		await page.screenshot({ path: `${out}/28-phone-tasks-sheet.png` });
+		await sheet.getByRole('button', { name: 'Schließen' }).click();
+		await sheet.waitFor({ state: 'detached' });
+		await ctx.close();
+	}
+	// PLAN 49: speech, pictures and snapshots in the settings.
+	{
+		const { ctx, page, seen } = await open(1440, 1600);
+		await page.route('**/api/v1/agent/voice/check', (route) => route.fulfill({ json: { reachable: true, models: ['Systran/faster-whisper-large-v3'] } }));
+		await page.goto(base + '/settings/agent');
+		await page.getByRole('heading', { name: 'Sprache, Bilder und Sicherheit' }).waitFor();
+		await page.getByLabel('Mikrofon-Knopf im Eingabefeld').check();
+		await page.getByLabel('Adresse des Whisper-Dienstes').fill('http://192.168.10.5:8000');
+		await page.getByRole('button', { name: 'Verbindung prüfen' }).click();
+		await page.getByText(/Erreichbar. Modelle/).waitFor();
+		await page.getByRole('heading', { name: 'Sprache, Bilder und Sicherheit' }).scrollIntoViewIfNeeded();
+		await page.screenshot({ path: `${out}/29-settings-media.png` });
+		await page.getByRole('button', { name: 'Speichern' }).click();
+		await page.getByRole('status').first().waitFor();
+		const put = seen.puts.at(-1);
+		assert.equal(put.voice.enabled, true);
+		assert.equal(put.voice.url, 'http://192.168.10.5:8000');
+		assert.notEqual(put.noSnapshots, true, 'snapshots on by default');
 		await ctx.close();
 	}
 	// Settings › KI-Agent.

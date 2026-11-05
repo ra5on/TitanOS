@@ -7,7 +7,7 @@ Diese Anleitung erklärt, wie der Agent Aufgaben und Erinnerungen zeitlich plant
 
 - Du sagst es im Chat in normaler Sprache („erinnere mich morgen um 9 an den Müll“). Der Agent legt den Plan mit `schedule_create` an und nennt dir danach genau, wann er läuft („am 06.11.2026 um 09:00“).
 - Alle Zeiten gelten in der **Zeitzone des NAS**.
-- Die geplanten Aufträge deines Kontos zeigt `schedule_list` mit dem nächsten Lauf. In der Oberfläche findest du sie im Agenten unter „Gedächtnis, Skills, Geplant“.
+- Die geplanten Aufträge deines Kontos zeigt `schedule_list` mit dem nächsten Lauf. In der Oberfläche findest du sie im Agent-Menü unter **Geplant** (mit Pausieren, Ändern, Jetzt ausführen, Löschen).
 - Jeder Lauf bekommt einen eigenen Chat mit Name und Uhrzeit im Titel. Das Ergebnis kommt als Mitteilung aufs Handy.
 - Ein geplanter Lauf hat dieselben Rechte wie der Agent sonst. Was eine Freigabe braucht, wartet im Chat auf dich.
 
@@ -55,7 +55,7 @@ Ein Auftrag kann auch starten, wenn eine Entität in Home Assistant einen Zustan
 
 ## Morgenbericht
 
-- Ein besonderer geplanter Auftrag, **ab Werk aus**. Uhrzeit und Wochentage stellst du selbst ein.
+- Ein besonderer geplanter Auftrag, **ab Werk aus**. Einrichten im Agent-Menü unter **Geplant › Morgenbericht**: Uhrzeit, Wochentage und Inhalt stellt jedes Konto selbst ein. Der Agent legt ihn nicht im Chat an, er verweist auf diese Stelle.
 - Inhalt je Konto wählbar:
   - NAS-Zustand und Speicher (Volumes, SMART, Temperatur, freier Platz, Auffälliges der Nacht);
   - Sicherungen und Updates;
@@ -91,4 +91,4 @@ Das gilt für Aufträge des Agenten. Andere Zeitpläne von TitanOS haben eigene 
 - „Erinnere mich in 30 Minuten an den Kuchen“ → Erinnerung, einmalig, `in_minutes: 30`.
 - „Sortier jeden Montag um 8 die neuen Rechnungen“ → Auftrag, `weekly`, `weekday: 1`, `at: 08:00`.
 - „Prüf alle 6 Stunden, ob die Platten zu warm sind, und melde dich nur dann“ → Auftrag, `hours`, `interval: 6`; die Aufgabe sagt „nur bei Auffälligem melden“.
-- „Schick mir werktags um 7 einen Morgenbericht“ → Morgenbericht, Mo–Fr, 07:00.
+- „Schick mir werktags um 7 einen Morgenbericht“ → auf **Geplant › Morgenbericht** verweisen (Mo–Fr, 07:00 dort einstellen).
