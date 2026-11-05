@@ -400,7 +400,9 @@ func (m *Manager) Notify(severity, kind, subject string) {
 	if m.Urgent != nil && rank[severity] >= rank[Warning] {
 		m.Urgent()
 	}
-	if m.Observer != nil && rank[severity] >= rank[Warning] {
+	// The agent sees every message: warnings for its watch, info messages
+	// such as updates or USB disks for its events (PLAN 53).
+	if m.Observer != nil {
 		go m.Observer(message)
 	}
 	if rank[severity] >= rank[settings.MinSeverity] {

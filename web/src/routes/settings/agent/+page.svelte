@@ -385,6 +385,8 @@
 			...(settings.voice ?? {}),
 			enabled: true,
 			url: `http://127.0.0.1:${whisperApp.port}`,
+			// The model the Whisper app loads at its first start.
+			model: settings.voice?.model || 'Systran/faster-whisper-large-v3',
 		};
 	}
 </script>

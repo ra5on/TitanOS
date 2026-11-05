@@ -225,6 +225,7 @@ type Server struct {
 	agentSnaps      agentSnapState
 	agentOpen       func() (*os.Root, error)
 	agentWebFactory func() *agent.Web
+	agentInit       agentInitState
 	agentReact      agentReactState
 	agentStoreOnce  sync.Once
 	agentStoreOne   *agent.Store

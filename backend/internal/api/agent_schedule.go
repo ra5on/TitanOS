@@ -56,6 +56,8 @@ func (s *Server) agentTick(now time.Time) {
 	s.nightlyNASMap(now)
 	s.agentSyncShare()
 	s.agentWeeklyReport(now.In(s.agentLocation()))
+	s.agentForecastTick(now.In(s.agentLocation()))
+	s.agentReflectTick(now.In(s.agentLocation()))
 	store := s.agentStore()
 	// The entities of triggers, per connection.
 	watched := map[string][]string{}
@@ -163,7 +165,7 @@ func (s *Server) agentRunSchedule(user auth.User, id string, now time.Time, late
 	}
 	task := sc.Task
 	if sc.Kind == "morning" {
-		task = agentMorningTask(sc.Report)
+		task = agentMorningTask(sc.Report) + nightNote(user.Name)
 	}
 	chat := &agent.Chat{ID: agent.NewID(), Title: title, Project: sc.Project, Created: now, Updated: now, Origin: origin, State: agent.StateIdle,
 		Entries: []agent.Entry{{ID: agent.NewID(), At: now, Role: "user", Content: task}}}
@@ -258,7 +260,11 @@ func (s *Server) agentScheduleResult(user, id string, chat *agent.Chat) {
 // agent's initiative switched on, it looks into them as the chosen account,
 // at most once an hour per kind of notification.
 func (s *Server) agentObserve(m notify.Message) {
+	s.agentInitiativeObserve(m)
 	settings := s.agentSettings()
+	if m.Severity != notify.Warning && m.Severity != notify.Error {
+		return
+	}
 	if !settings.Enabled || !settings.React || s.opts.Users == nil {
 		return
 	}
@@ -270,6 +276,12 @@ func (s *Server) agentObserve(m notify.Message) {
 	if !ok || user.Disabled || !s.agentAllowed(user) {
 		return
 	}
+	s.agentObserveAs(user, m)
+}
+
+// agentObserveAs looks into a message as the account, at most once an hour
+// for each kind of message.
+func (s *Server) agentObserveAs(user auth.User, m notify.Message) {
 	r := &s.agentReact
 	r.mu.Lock()
 	if r.last == nil {

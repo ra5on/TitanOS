@@ -205,6 +205,75 @@ Seit 0.54.0 hat der Agent auf dem Handy und im Browser einen eigenen Auftritt. E
 - Nur Vibration, Bildschirm wach halten und Schriftgröße gehören dem Gerät (`localStorage`).
 - Ältere Versionen ignorieren die Datei.
 
+## Eigeninitiative, Vorschläge, Gedächtnis und Persönlichkeit (PLAN 53)
+
+Jedes Konto stellt in der Agent-App unter Einstellungen › Eigeninitiative und › Gedächtnis, Skills, Persönlichkeit selbst ein, wie viel der Agent von sich aus tut. Gespeichert wird in `.titanos/agent/<konto>/initiative.json` (`GET`/`PUT /api/v1/agent/initiative`).
+
+**Wie selbstständig**
+- Still: nichts von selbst.
+- Hinweise oder Vorschläge (Standard): Funde landen unter „Vorschläge“ (`inbox.json`, `GET /api/v1/agent/inbox`, `POST /api/v1/agent/inbox/{id}` mit `accept`).
+- Handelt selbst: Bei Meldungen sieht der Agent selbst nach, wie bei der bisherigen Eigeninitiative des Besitzers.
+
+**Nachts nachdenken**
+- Zur gewählten Zeit (Standard 03:30) liest der Agent die Chats des Tages noch einmal: nur Gesagtes, keine Werkzeugergebnisse, höchstens 10 Chats.
+- Er zieht bis zu 5 Fakten, Vorlieben und offene Punkte heraus.
+- Gefiltert wird:
+  - Geheimnisse;
+  - Systemtexte und Werkzeug-JSON (der Fehler, den OpenClaw-Nutzer beim „Dreaming“ sahen);
+  - Doppeltes.
+- „Erst bestätigen“ (Standard) legt die Funde unter „Vorschläge“ ab, „Einfach machen“ übernimmt sie direkt. Funde aus Chats mit fremden Inhalten sind markiert.
+- Auf Wunsch erwähnt der Morgenbericht in einem Satz, was neu gemerkt wurde.
+- Wann der Lauf startet:
+  - Er wartet, solange irgendein Chat läuft.
+  - Er startet nicht, wenn eine Platte des Agent-Volumes schläft; dann holt er den Lauf im Laufe des Tages nach.
+  - Er endet nach den eingestellten Minuten der Grafikkarte.
+
+**Wache und Ereignisse**
+- Warnungen des NAS werden für Besitzer und Administratoren mit eingeschalteter Wache zu Vorschlägen. Mit „Handelt selbst“ starten sie einen eigenen Chat.
+- Ereignisse (USB-Platte eingesteckt `usb_plugged`, Update verfügbar `update_available`/`docker_auto_updated`) kommen auch als Info-Meldung an. Der Beobachter von `notify` erhält dafür jetzt alle Stufen; die bisherige Eigeninitiative reagiert weiter nur auf Warnungen. Abstürze von Apps meldet TitanOS bisher nicht als eigene Meldung, deshalb gibt es dafür keinen Schalter.
+- Zustände in Home Assistant bleiben Auslöser geplanter Aufträge.
+
+**Vorausschau**
+- Einmal am Tag ab 04:00 nimmt der Agent die Belegung der Volumes. Die Werte kommen per statfs aus dem Kernel; keine Platte wird geweckt. Sie bleiben im RAM, höchstens 60 Tage.
+- Ab 7 Tagen und einer Füllung in höchstens 60 Tagen erscheint „<Volume> ist in etwa N Tagen voll“.
+
+**Skills lernen**
+- Läuft derselbe Ablauf aus mindestens drei Werkzeugen zweimal, schlägt der Agent ihn als Skill vor.
+- Es gibt 28 fertige Skills für alle Bereiche. Ein Test prüft, dass sie nur vorhandene Werkzeuge nennen; dabei fiel das nicht vorhandene `my_shares` auf.
+
+**Gedächtnis**
+- „Selbst merken“: Mit an merkt sich der Agent Wichtiges von selbst und immer bei „merk dir“; mit aus nur bei „merk dir“.
+- Sagt eine neue Erinnerung etwas anderes über dasselbe als eine alte, fragt der Agent unter „Vorschläge“ nach.
+- Erinnerungen, die älter als die gewählten Monate sind, kommen zur Frage „Noch aktuell?“.
+- „Gedächtnis leeren“ (`DELETE /api/v1/agent/memory`) mit einfacher Rückfrage.
+
+**Persönlichkeit**
+- Antwortlänge, Ton, Name und Symbol. Der Agent bekommt sie als Anweisung des Kontos.
+
+**Schlafende Platten**
+- Hintergrundarbeit weckt nie eine Platte: Wache, Nacht, Vorausschau und Chats aus Meldungen.
+- Bei eigenen Aufträgen gilt „Wecken“, „Erst fragen“ (Freigabe im Chat) oder „Nie“.
+- Geprüft wird aus dem, was titand ohnehin weiß (lsblk und die eigene Ruheliste); die Platte wird dafür nicht gelesen.
+
+**Suchorte**
+- Sind welche gewählt, sucht `files_search` nur dort. Andere Freigaben durchsucht er nur, wenn die letzte Nachricht sie nennt („such auch im Backup“).
+- Rechte und Ordner-Regeln gehen vor.
+
+**Kennenlernen**
+- Startet einen Chat, in dem der Agent die NAS-Landkarte ansieht, nach dem Wichtigsten fragt und drei Aufträge vorschlägt, die er erst nach Zustimmung anlegt.
+- Ohne Chats steht es als erster Vorschlag auf der Startseite.
+
+**Wochenrückblick:** ein normaler geplanter Auftrag (sonntags 18:00), den man verschieben kann. Er erscheint, sobald man die Eigeninitiative zum ersten Mal ansieht.
+
+**Ruhezeit:** In der Ruhezeit startet der Agent bei Meldungen keinen eigenen Chat, auch nicht mit „Handelt selbst“; die Meldung wird nur zum Vorschlag.
+
+**Ohne Plattenzugriff im Hintergrund:**
+- Die Einstellungen jedes Kontos liegen nach dem ersten Lesen im RAM.
+- Der Minutentakt und Meldungen lesen sie nur, solange das Agent-Volume ohnehin wach ist.
+- Vorschläge, die entstehen, während es schläft, warten im RAM und werden beim nächsten Öffnen von „Vorschläge“ oder beim nächtlichen Lauf geschrieben.
+- Die Werte der Vorausschau liegen im Ordner des Besitzers (`forecast.json`) und werden nur bei wachem Volume gelesen und geschrieben.
+- Ein unlesbares `initiative.json` oder `inbox.json` wird nie überschrieben: Die Seite meldet 503, Hintergrundarbeit lässt das Konto aus.
+
 ## Snapshot vor Änderungen (PLAN 51)
 
 Bevor der Agent eine App aktualisiert oder entfernt (`app_action`) oder Dateien verschiebt, umbenennt oder ersetzt (Gelöschtes landet im Papierkorb der Freigabe), legt TitanOS einen schreibgeschützten Btrfs-Snapshot `agent-JJJJMMTT-hhmmss` des betroffenen Volumes an (höchstens einer je Volume in 10 Minuten, 7 Tage aufbewahrt, nächtlich aufgeräumt). Der Chat zeigt ihn als Eintrag 📸. Einzelne Dateien holt man auf der Speicher-Seite unter Snapshots zurück (Wiederherstellen legt eine beschreibbare Kopie an; das Volume selbst wird nie zurückgesetzt). Volumes ohne Btrfs bekommen keinen, der Chat sagt das. Abschaltbar (`noSnapshots`). VM- und LXC-Snapshots legt der Agent nicht selbst an.
