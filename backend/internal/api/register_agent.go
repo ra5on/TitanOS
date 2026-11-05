@@ -57,6 +57,7 @@ func (s *Server) registerAgent(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/agent/prefs", s.requireAgent(s.handleAgentPrefs))
 	mux.HandleFunc("PUT /api/v1/agent/prefs", s.requireAgent(s.handleAgentPrefsSet))
 	mux.HandleFunc("GET /api/v1/agent/suggestions", s.requireAgent(s.handleAgentSuggestions))
+	mux.HandleFunc("GET /api/v1/agent/addresses", s.requireAdmin(s.handleAgentAddresses))
 	mux.HandleFunc("GET /api/v1/agent/profile", s.requireAgent(s.handleAgentProfile))
 	mux.HandleFunc("PUT /api/v1/agent/profile", s.requireAgent(s.handleAgentProfileSet))
 	mux.HandleFunc("GET /api/v1/agent/schedules", s.requireAgent(s.handleAgentSchedules))
