@@ -170,6 +170,9 @@ export function fixtureFactory(browser, errors) {
     await ctx.addInitScript(
       ({ theme, locale }) => {
         localStorage.setItem("titanos.locale", locale);
+        // The page scripts check pages in the classic frame; the desktop
+        // mode (PLAN 61) has scripts/test-ui-desktop.mjs.
+        localStorage.setItem("titanos.layout", "classic");
         localStorage.setItem("titanos.appearance", JSON.stringify({ theme }));
       },
       { theme, locale },

@@ -46,4 +46,10 @@ func (s *Server) registerAppStore(mux *routeMux) {
 	mux.HandleFunc("DELETE /api/v1/apps/sources/{id}", s.requireAdmin(s.handleSourceRemove))
 	mux.HandleFunc("GET /api/v1/apps/sources/{source}/apps/{app}", s.requireAdmin(s.handleAppTemplate))
 	mux.HandleFunc("GET /api/v1/apps/blank", s.requireAdmin(s.handleBlankTemplate))
+	// Programme (PLAN 61): who may use which Docker app, and its window.
+	mux.HandleFunc("GET /api/v1/apps/access", s.requireAdmin(s.handleAppAccess))
+	mux.HandleFunc("PUT /api/v1/apps/access", s.requireAdmin(s.handleAppAccessSet))
+	mux.HandleFunc("GET /api/v1/apps/mine", s.requireUser(s.handleAppsMine))
+	mux.HandleFunc("POST /api/v1/apps/{app}/window", s.requireUser(s.handleAppWindow))
+	mux.HandleFunc("GET /api/v1/apps/{app}/open", s.handleAppOpen)
 }

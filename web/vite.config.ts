@@ -47,7 +47,8 @@ export default defineConfig(({ mode }) => ({
 					'font-src': ['self', 'data:'],
 					'connect-src': ['self'],
 					'worker-src': ['self', 'blob:'],
-					'frame-src': ['self'],
+					// PLAN 61: windows of the desktop show Docker apps through their HTTPS names.
+					'frame-src': ['self', 'https:'],
 					'object-src': ['none'],
 					'base-uri': ['self'],
 				},

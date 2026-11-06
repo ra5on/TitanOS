@@ -76,7 +76,7 @@ try {
    await page.screenshot({path:out+'/'+name+'.png',fullPage:true});
   }
   for(const [path,selector,name] of [
-   ['/settings','.areas','einstellungen'],
+   ['/settings','.tiles','einstellungen'],
    ['/settings/backups','.summary strong','sicherungen'],
    ['/settings/backups/restore','#stick-replace','wiederherstellung'],
    ['/vms','#vm-title','vms'],
@@ -89,7 +89,7 @@ try {
    await capture(name);
   }
   backup.state.running=true;
-  await page.goto(base+'/settings');await page.getByRole('searchbox').waitFor();
+  await page.goto(base+'/settings');await page.getByRole('searchbox').first().waitFor();
   await page.getByRole('button',{name:/Laufende Aufgaben/}).click();await page.locator('dialog progress').nth(3).waitFor();await capture('aufgaben');
   await ctx.close();
   const mobile=await context('owner','hell',390);
@@ -101,7 +101,7 @@ try {
  } else {
  const {ctx,page}=await context();
  await page.goto(base+'/settings');
- const search=page.getByRole('searchbox');await search.waitFor();
+ const search=page.getByRole('navigation',{name:'Einstellungsbereiche',exact:true}).getByRole('searchbox');await search.waitFor();
  assert.equal(await page.locator('main select, main input[type=checkbox]').count(),0);
  // Desktop searches and lists the areas in the sidebar (the overview's list is for phones).
  assert.equal(await page.getByRole('navigation',{name:'Einstellungsbereiche',exact:true}).locator('ul[aria-labelledby] a').count(),allAreas);
@@ -148,7 +148,7 @@ try {
   }
   await ctx.close();
  }
- const user=await context('user');await user.page.goto(base+'/settings');await user.page.getByRole('searchbox').waitFor();assert.equal(await user.page.getByRole('navigation',{name:'Einstellungsbereiche',exact:true}).locator('ul[aria-labelledby] a').count(),userAreas);
+ const user=await context('user');await user.page.goto(base+'/settings');await user.page.getByRole('searchbox').first().waitFor();assert.equal(await user.page.getByRole('navigation',{name:'Einstellungsbereiche',exact:true}).locator('ul[aria-labelledby] a').count(),userAreas);
  for(const path of ['backups','backups/data','backups/configuration','backups/restore','timezone','access']) { await user.page.goto(base+'/settings/'+path);await user.page.getByText('Dafür fehlen diesem Konto die Rechte.',{exact:true}).waitFor(); }
  assert.ok(!requests.some(([role,,path])=>role==='user'&&['/backups','/config-backup','/network','/system/ssh','/system/certificate'].includes(path)));
  await user.ctx.close();assert.deepEqual(errors,[]);console.log('UI 0.6.1 checks passed: grouping, deep links, legacy links, restore dialog, errors/retry, local feedback, no archive polling, roles and responsive themes.');

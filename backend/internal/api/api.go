@@ -13,12 +13,14 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/activity"
 	"github.com/ra5on/TitanOS/backend/internal/agent"
+	"github.com/ra5on/TitanOS/backend/internal/appaccess"
 	"github.com/ra5on/TitanOS/backend/internal/appbackup"
 	"github.com/ra5on/TitanOS/backend/internal/appproxy"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
@@ -50,6 +52,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
+	"github.com/ra5on/TitanOS/backend/internal/procs"
 	"github.com/ra5on/TitanOS/backend/internal/replication"
 	"github.com/ra5on/TitanOS/backend/internal/scripts"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
@@ -74,13 +77,15 @@ import (
 // Options are the parts the API works with.
 type Options struct {
 	// UI holds the files of the web UI with index.html at its root.
-	UI                 fs.FS
-	Store              *config.Store
-	Users              *auth.Users
-	Monitoring         *monitoring.Manager
-	Media              *media.Manager
-	Maintenance        *maintenance.Manager
-	Scripts            *scripts.Manager
+	UI          fs.FS
+	Store       *config.Store
+	Users       *auth.Users
+	Monitoring  *monitoring.Manager
+	Media       *media.Manager
+	Maintenance *maintenance.Manager
+	Scripts     *scripts.Manager
+	// Processes lists and ends processes for the task manager (PLAN 61).
+	Processes          *procs.Sampler
 	ApplicationBackups *appbackup.Manager
 	Monitor            *system.Monitor
 	Storage            *storage.Manager
@@ -91,7 +96,10 @@ type Options struct {
 	SmartHistory *smarthistory.Recorder
 	// AppProxy gives apps HTTPS names of their own; nil leaves them out.
 	AppProxy *appproxy.Manager
-	Catalog  *catalog.Manager
+	// AppAccess holds which accounts may use which Docker app (PLAN 61);
+	// nil gives every app to owners and administrators only.
+	AppAccess *appaccess.Manager
+	Catalog   *catalog.Manager
 	// Terminal hands out the shell on the NAS and knows whether consoles are allowed.
 	Terminal *terminal.Manager
 	VMs      *vm.Manager
@@ -199,7 +207,9 @@ type Server struct {
 	haStores   map[string]*haStorageState
 	haStoresMu sync.Mutex
 	haHubOnce  sync.Once
-	handler    http.Handler
+	// containerNames caches Docker names for the process list.
+	containerNames containerNameCache
+	handler        http.Handler
 	// patterns are all routes of the mux, for tests that compare them
 	// with the route list of the public API.
 	patterns []string
@@ -267,6 +277,11 @@ func New(opts Options) *Server {
 	}
 	if c := s.opts.Cluster; c != nil {
 		c.Applied, c.Status, c.Notify = s.clusterApplied, s.ClusterStatus, s.clusterNotify
+	}
+	if s.opts.Processes == nil {
+		// Not given (tests): the list reads /proc, signals are refused.
+		s.opts.Processes = procs.New()
+		s.opts.Processes.Disabled = true
 	}
 	if s.opts.LXC == nil {
 		s.opts.LXC = lxc.NewManager(opts.Store, shares.UsersGID)
@@ -410,7 +425,9 @@ func (s *Server) securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
-		h.Set("X-Frame-Options", "DENY")
+		// PLAN 61: the desktop shows the pages of TitanOS in windows (frames of
+		// its own origin); other sites still may not frame it.
+		h.Set("X-Frame-Options", "SAMEORIGIN")
 		h.Set("Referrer-Policy", "same-origin")
 		if s.trustedTLS(r) {
 			h.Set("Strict-Transport-Security", hstsValue)
@@ -542,16 +559,32 @@ func (s *Server) authenticate(r *http.Request) (auth.User, bool) {
 	if id, ok := cluster.FromContext(r.Context()); ok {
 		return s.activeUser(id.User)
 	}
-	cookie, err := r.Cookie(s.cookieName())
-	if err != nil {
-		return auth.User{}, false
+	// A locked session (session_lock.go) counts as not logged in here;
+	// requireUser tells it apart.
+	user, state := s.cookieState(r)
+	return user, state == authOK
+}
+
+// authenticateState is authenticate that also tells a locked session
+// apart; tokens, in-process and cluster identities are never locked.
+func (s *Server) authenticateState(r *http.Request) (auth.User, authState) {
+	if _, ok := r.Context().Value(apiTokenIdentity{}).(string); ok {
+		return stateOf(s.authenticate(r))
 	}
-	session, ok := s.sessions.Get(cookie.Value)
+	if _, ok := r.Context().Value(inProcessIdentity{}).(string); ok {
+		return stateOf(s.authenticate(r))
+	}
+	if _, ok := cluster.FromContext(r.Context()); ok {
+		return stateOf(s.authenticate(r))
+	}
+	return s.cookieState(r)
+}
+
+func stateOf(user auth.User, ok bool) (auth.User, authState) {
 	if !ok {
-		return auth.User{}, false
+		return auth.User{}, authNone
 	}
-	// The account may have been removed or locked since the login.
-	return s.activeUser(session.User)
+	return user, authOK
 }
 
 // activeUser returns an account that exists and is not locked. Everything
@@ -568,9 +601,13 @@ func (s *Server) activeUser(name string) (auth.User, bool) {
 
 func (s *Server) requireUser(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user, ok := s.authenticate(r)
-		if !ok {
+		user, state := s.authenticateState(r)
+		switch {
+		case state == authNone:
 			writeError(w, http.StatusUnauthorized, "unauthorized", "not logged in")
+			return
+		case state == authLocked && !slices.Contains(lockExempt, r.Pattern):
+			writeLocked(w)
 			return
 		}
 		noteActivity(r, user)

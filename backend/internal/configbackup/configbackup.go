@@ -4,7 +4,8 @@
 // The stick is the only place where the configuration lives, and sticks
 // wear out. A backup is one tar.gz file in /mnt/<volume>/.titanos/backups;
 // it holds everything in /config, including password hashes and secrets,
-// so the folder is for root only.
+// so the folder is for root only. The keys of the TitanOS certificate
+// authority and of app windows are left out (see leftOut).
 package configbackup
 
 import (
@@ -86,6 +87,12 @@ var (
 	// reported as failed or installed on the new stick.
 	skipped = []string{"system/update-pending.json", ".accounts.lock"}
 )
+
+// leftOut tells whether a file of /config stays out of every backup and
+// is never restored: the TitanOS certificate authority and the key of app
+// windows (config.NotBackedUp). After a restore a new authority is made on
+// first need (devices install it again) and app windows ask for a new pass.
+func leftOut(name string) bool { return config.LeftOutOfBackups(name) }
 
 const timeLayout = "20060102T150405Z"
 
@@ -376,7 +383,11 @@ func (m *Manager) configFiles() ([]file, error) {
 		if err != nil {
 			return err
 		}
-		files = append(files, file{name: filepath.ToSlash(rel), path: p, info: info})
+		name := filepath.ToSlash(rel)
+		if leftOut(name) {
+			return nil
+		}
+		files = append(files, file{name: name, path: p, info: info})
 		return nil
 	})
 	sort.Slice(files, func(i, j int) bool { return files[i].name < files[j].name })
@@ -767,7 +778,7 @@ func (m *Manager) restore(r io.ReadSeeker, password string) (Manifest, error) {
 			if err != nil {
 				return Manifest{}, ErrNotABackup
 			}
-			if header.Typeflag != tar.TypeReg || header.Name == manifestName || slices.Contains(skipped, header.Name) || strings.HasPrefix(header.Name, "users/") != accounts {
+			if header.Typeflag != tar.TypeReg || header.Name == manifestName || slices.Contains(skipped, header.Name) || leftOut(header.Name) || strings.HasPrefix(header.Name, "users/") != accounts {
 				continue
 			}
 			data, err := io.ReadAll(io.LimitReader(archive, maxContent))

@@ -46,6 +46,9 @@ if (!login) {
   process.exit(2);
 }
 const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 } });
+// The crawl opens every page in the classic frame; the desktop mode
+// (PLAN 61) has scripts/test-ui-desktop.mjs.
+await ctx.addInitScript(() => localStorage.setItem("titanos.layout", "classic"));
 const page = await ctx.newPage();
 page.setDefaultTimeout(12000);
 page.on("pageerror", (e) => errors.push(String(e)));

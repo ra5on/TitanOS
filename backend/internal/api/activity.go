@@ -45,6 +45,9 @@ var activityQuiet = []string{
 	"POST /api/v1/files/usage",
 	"POST /api/v1/files/url-download/probe",
 	"PUT /api/v1/preferences/{kind}",
+	// Locking and unlocking are recorded by their handlers, with their own names.
+	"POST /api/v1/session/lock",
+	"POST /api/v1/session/unlock",
 	"PUT /api/v1/background",
 	"DELETE /api/v1/background",
 	"POST /api/v1/notifications/dismiss",

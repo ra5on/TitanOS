@@ -708,10 +708,18 @@ func (s *Server) handleAgentEvents(w http.ResponseWriter, r *http.Request) {
 	flusher.Flush()
 	keepAlive := time.NewTicker(20 * time.Second)
 	defer keepAlive.Stop()
+	// Like an open console, the stream ends when its login does: logout,
+	// the lock screen, a locked or removed account.
+	recheck := time.NewTicker(time.Duration(consoleRecheck.Load()))
+	defer recheck.Stop()
 	for {
 		select {
 		case <-r.Context().Done():
 			return
+		case <-recheck.C:
+			if _, ok := s.loginHolds(r, user); !ok {
+				return
+			}
 		case <-keepAlive.C:
 			fmt.Fprint(w, ": keep-alive\n\n")
 			flusher.Flush()

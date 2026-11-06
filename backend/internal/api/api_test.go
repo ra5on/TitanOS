@@ -498,7 +498,7 @@ func TestPreferences(t *testing.T) {
 	ts.setup()
 
 	_, body := ts.request("GET", "/api/v1/preferences", nil)
-	if strings.TrimSpace(string(body)) != `{"appearance":null,"bell":null,"dashboard":null,"docker":null,"files":null,"hints":null,"shares":null,"sound":null,"vnc":null}` {
+	if strings.TrimSpace(string(body)) != `{"appearance":null,"bell":null,"dashboard":null,"desktop":null,"docker":null,"files":null,"hints":null,"shares":null,"sound":null,"vnc":null}` {
 		t.Errorf("fresh preferences = %s", body)
 	}
 
@@ -691,7 +691,7 @@ func TestUI(t *testing.T) {
 			if cc := res.Header.Get("Cache-Control"); cc != tt.wantCache {
 				t.Errorf("Cache-Control = %q, want %q", cc, tt.wantCache)
 			}
-			if res.Header.Get("X-Frame-Options") != "DENY" {
+			if res.Header.Get("X-Frame-Options") != "SAMEORIGIN" {
 				t.Error("X-Frame-Options missing")
 			}
 		})

@@ -18,7 +18,7 @@ var cspContent = regexp.MustCompile(`(?is)\scontent=(?:"([^"]*)"|'([^']*)')`)
 
 // cspExtra are directives a meta tag cannot set: who may frame the UI and
 // where forms may go.
-const cspExtra = "frame-ancestors 'none'; form-action 'self'"
+const cspExtra = "frame-ancestors 'self'; form-action 'self'"
 
 // contentSecurityPolicy is the policy of index.html as a header, so that it
 // also holds for what the meta tag cannot cover. It is the same policy as

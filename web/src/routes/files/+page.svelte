@@ -63,6 +63,7 @@
 	import { FileClipboard } from './clipboard.svelte.ts';
 	import type { FileCommand } from './commands.ts';
 	import { droppedFiles, pickedFiles, type PickedFile } from './drop-files.ts';
+	import { frameMessage } from '#lib/desktop/frame.ts';
 	import { FileHistory, type Location } from './history.svelte.ts';
 	import { fileKeys, type KeyboardHost } from './keyboard.ts';
 	import { FilePreferenceStore } from './preferences.svelte.ts';
@@ -775,6 +776,27 @@
 	function upload(files: PickedFile[]) {
 		if (root && writable && files.length) uploadReview = { root, dir, files };
 	}
+	// PLAN 61: files dropped on the desktop arrive here (Dateien in a window);
+	// they wait until a writable folder is open, then the upload review asks.
+	let fromDesktop = $state<PickedFile[]>([]);
+	onMount(() => {
+		const take = (event: MessageEvent) => {
+			const msg = frameMessage(event);
+			if (msg?.type !== 'titanos-upload' || event.source !== window.parent) return;
+			const files = (msg as unknown as { files: unknown[] }).files.filter(
+				(f): f is File => f instanceof File,
+			);
+			window.parent.postMessage({ type: 'titanos-upload-ok' }, location.origin);
+			if (!fromDesktop.length) fromDesktop = files.map((file) => ({ file, path: file.name }));
+		};
+		window.addEventListener('message', take);
+		return () => window.removeEventListener('message', take);
+	});
+	$effect(() => {
+		if (!fromDesktop.length || !root || !writable) return;
+		upload(fromDesktop);
+		fromDesktop = [];
+	});
 	/** Creates the folders of an uploaded tree, parents first, then queues the files. */
 	async function startUpload(
 		files: { file: File; path: string; conflict: '' | 'rename' | 'replace' }[],

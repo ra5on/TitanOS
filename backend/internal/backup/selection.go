@@ -8,6 +8,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/ra5on/TitanOS/backend/internal/config"
 )
 
 // What a job saves. Sources are shares, whole unless Folders names the
@@ -203,6 +205,11 @@ func (m *Manager) selection(job Job) selection {
 			// /config is a link into the mounted stick; restic wants the folder.
 			if real, err := filepath.EvalSymlinks(m.configDir); err == nil {
 				add(real)
+				// The keys of the TitanOS authority and of app windows
+				// never leave the NAS (config.NotBackedUp).
+				for _, secret := range config.NotBackedUp {
+					sel.excludes = append(sel.excludes, filepath.Join(real, filepath.FromSlash(secret)))
+				}
 			} else {
 				sel.missing = append(sel.missing, "config")
 			}

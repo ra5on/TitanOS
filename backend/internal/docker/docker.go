@@ -427,6 +427,31 @@ func (m *Manager) RunningContainers(ctx context.Context) []string {
 	return names
 }
 
+// ContainerNames maps the ids of all containers to their names, for the
+// task manager (which container a process belongs to). Nil while Docker
+// is off or not ready.
+func (m *Manager) ContainerNames(ctx context.Context) map[string]string {
+	m.mu.Lock()
+	ready := m.applied != ""
+	m.mu.Unlock()
+	if m.Disabled || !ready {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	containers, err := m.api.containers(ctx)
+	if err != nil {
+		return nil
+	}
+	names := make(map[string]string, len(containers))
+	for _, c := range containers {
+		if len(c.Names) > 0 {
+			names[c.ID] = strings.TrimPrefix(c.Names[0], "/")
+		}
+	}
+	return names
+}
+
 // StopEngine ends the engine and so all containers, each with its stop
 // timeout. Unlike stopping them one by one this keeps their restart
 // policies: apps with "unless-stopped" come back after the restart.

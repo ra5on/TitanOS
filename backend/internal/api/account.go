@@ -129,17 +129,31 @@ func (s *Server) reconfirmProof(w http.ResponseWriter, user auth.User, p proof) 
 		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
 		return false
 	}
-	a := p.Passkey
+	switch s.checkPasskeyProof(user, p.Passkey) {
+	case "":
+		return true
+	case "passkey_expired":
+		writeError(w, http.StatusBadRequest, "passkey_expired", "the request expired, start again")
+	default:
+		s.limiter.Fail(key)
+		writeError(w, http.StatusForbidden, "passkey_failed", "the passkey was not accepted")
+	}
+	return false
+}
+
+// checkPasskeyProof checks a passkey's answer to a challenge of
+// handlePasskeyConfirmBegin for the account. It returns "" when it holds,
+// "passkey_expired" when the challenge is unknown (no guess, nothing to
+// count) and "passkey_failed" when the answer is wrong; the caller counts
+// that as a failed attempt with the keys of its own limiter.
+func (s *Server) checkPasskeyProof(user auth.User, a *passkeyAssertion) string {
 	c, ok := s.passkeys.take(a.ChallengeID)
 	if !ok || !c.confirm || c.user != user.Name {
-		writeError(w, http.StatusBadRequest, "passkey_expired", "the request expired, start again")
-		return false
+		return "passkey_expired"
 	}
-	fail := func(why string) bool {
-		s.limiter.Fail(key)
+	fail := func(why string) string {
 		slog.Warn("passkey confirmation failed", "user", user.Name, "why", why)
-		writeError(w, http.StatusForbidden, "passkey_failed", "the passkey was not accepted")
-		return false
+		return "passkey_failed"
 	}
 	clientData, err1 := webauthn.Encoding.DecodeString(a.ClientDataJSON)
 	authData, err2 := webauthn.Encoding.DecodeString(a.AuthenticatorData)
@@ -159,7 +173,7 @@ func (s *Server) reconfirmProof(w http.ResponseWriter, user auth.User, p proof) 
 	if err := s.opts.Users.UsePasskey(user.Name, passkey.ID, count); err != nil {
 		slog.Warn("passkey counter not saved", "user", user.Name, "err", err)
 	}
-	return true
+	return ""
 }
 
 // handleTwoFactorDisable switches the second factor off, with the password

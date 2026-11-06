@@ -1,0 +1,280 @@
+// PLAN 61: what the desktop keeps per account (preference "desktop" on the
+// NAS, written only when something changes). Open windows stay in this
+// browser (wm.svelte.ts): they change all the time and must not wear the stick.
+
+export type WidgetKind =
+	| 'status'
+	| 'cpuram'
+	| 'network'
+	| 'volumes'
+	| 'docker'
+	| 'vms'
+	| 'backups'
+	| 'temperatures'
+	| 'clock'
+	| 'homeassistant'
+	| 'tasks';
+
+export const WIDGET_KINDS: WidgetKind[] = [
+	'status',
+	'cpuram',
+	'network',
+	'volumes',
+	'docker',
+	'vms',
+	'backups',
+	'temperatures',
+	'clock',
+	'homeassistant',
+	'tasks',
+];
+
+/** A widget on the desktop: position and size in grid cells of 20 px. */
+export type Widget = { id: string; kind: WidgetKind; x: number; y: number; w: number; h: number };
+
+export type Folder = { id: string; name: string; apps: string[] };
+
+export type SortMode = 'free' | 'name' | 'kind' | 'recent';
+export type IconSize = 's' | 'm' | 'l';
+
+export type Wallpaper =
+	| { source: 'builtin'; id: string; live: boolean }
+	| { source: 'custom'; version: number; live: boolean };
+
+export type DesktopPrefs = {
+	version: 1;
+	/** Programs and folders on the desktop in their order ("app:docker", "docker:immich", "folder:x"). */
+	icons: string[];
+	/** Whether `icons` was set by the account (false: the standard set). */
+	customIcons: boolean;
+	folders: Folder[];
+	widgets: Widget[];
+	/** Whether `widgets` was set by the account. */
+	customWidgets: boolean;
+	sort: SortMode;
+	iconSize: IconSize;
+	wallpaper: Wallpaper;
+	/** Minutes without use until the desktop locks itself; 0 = never. */
+	lockMinutes: number;
+	/** Programs whose side bar is folded. */
+	folded: string[];
+	/** Saved window arrangements. */
+	layouts: Layout[];
+	/** Recently opened programs, newest first (for "Zuletzt"). */
+	recent: string[];
+};
+
+export type LayoutWindow = {
+	app: string;
+	href: string;
+	x: number;
+	y: number;
+	w: number;
+	h: number;
+};
+export type Layout = { id: string; name: string; windows: LayoutWindow[] };
+
+export const WALLPAPERS = ['wave', 'aurora', 'dunes', 'peaks', 'grid', 'calm'] as const;
+
+const ID = /^[a-z0-9][a-z0-9:._-]{0,95}$/i;
+
+export const defaultWidgets = (): Widget[] => [
+	{ id: 'w-status', kind: 'status', x: -17, y: 0, w: 17, h: 9 },
+	{ id: 'w-cpuram', kind: 'cpuram', x: -17, y: 9, w: 17, h: 6 },
+	{ id: 'w-volumes', kind: 'volumes', x: -17, y: 15, w: 17, h: 9 },
+	{ id: 'w-docker', kind: 'docker', x: -17, y: 24, w: 17, h: 12 },
+];
+
+export const defaultDesktop = (): DesktopPrefs => ({
+	version: 1,
+	icons: [],
+	customIcons: false,
+	folders: [],
+	widgets: defaultWidgets(),
+	customWidgets: false,
+	sort: 'kind',
+	iconSize: 'm',
+	wallpaper: { source: 'builtin', id: 'wave', live: true },
+	lockMinutes: 15,
+	folded: [],
+	layouts: [],
+	recent: [],
+});
+
+function strings(value: unknown, max = 200): string[] {
+	if (!Array.isArray(value)) return [];
+	return [...new Set(value.filter((v): v is string => typeof v === 'string' && ID.test(v)))].slice(
+		0,
+		max,
+	);
+}
+
+function int(value: unknown, min: number, max: number, fallback: number): number {
+	return typeof value === 'number' && Number.isFinite(value)
+		? Math.min(max, Math.max(min, Math.round(value)))
+		: fallback;
+}
+
+function text(value: unknown, max = 60): string {
+	return typeof value === 'string'
+		? value
+				.replace(/[\x00-\x1f\x7f]/g, '')
+				.trim()
+				.slice(0, max)
+		: '';
+}
+
+/** Reads what the NAS sent; anything unknown or broken falls back to the standard. */
+export function sanitizeDesktop(input: unknown): DesktopPrefs {
+	const base = defaultDesktop();
+	if (typeof input !== 'object' || input === null) return base;
+	const v = input as Record<string, unknown>;
+	const widgets = Array.isArray(v.widgets)
+		? v.widgets
+				.filter((w): w is Record<string, unknown> => typeof w === 'object' && w !== null)
+				.filter(
+					(w) =>
+						WIDGET_KINDS.includes(w.kind as WidgetKind) &&
+						typeof w.id === 'string' &&
+						ID.test(w.id),
+				)
+				.map((w) => ({
+					id: w.id as string,
+					kind: w.kind as WidgetKind,
+					x: int(w.x, -200, 200, 0),
+					y: int(w.y, 0, 200, 0),
+					w: int(w.w, 6, 60, 12),
+					h: int(w.h, 3, 60, 6),
+				}))
+				.slice(0, 40)
+		: base.widgets;
+	const folders = Array.isArray(v.folders)
+		? v.folders
+				.filter(
+					(f): f is Record<string, unknown> =>
+						typeof f === 'object' && f !== null && typeof f.id === 'string' && ID.test(f.id),
+				)
+				.map((f) => ({
+					id: f.id as string,
+					name: text(f.name) || 'Ordner',
+					apps: strings(f.apps, 40),
+				}))
+				.slice(0, 40)
+		: [];
+	const wp = (typeof v.wallpaper === 'object' && v.wallpaper ? v.wallpaper : {}) as Record<
+		string,
+		unknown
+	>;
+	const live = wp.live !== false;
+	const wallpaper: Wallpaper =
+		wp.source === 'custom'
+			? { source: 'custom', version: int(wp.version, 0, 1e12, 0), live }
+			: {
+					source: 'builtin',
+					id: WALLPAPERS.includes(wp.id as (typeof WALLPAPERS)[number])
+						? (wp.id as string)
+						: 'wave',
+					live,
+				};
+	const layouts = Array.isArray(v.layouts)
+		? v.layouts
+				.filter(
+					(l): l is Record<string, unknown> =>
+						typeof l === 'object' && l !== null && typeof l.id === 'string' && ID.test(l.id),
+				)
+				.map((l) => ({
+					id: l.id as string,
+					name: text(l.name) || 'Anordnung',
+					windows: (Array.isArray(l.windows) ? l.windows : [])
+						.filter((w): w is Record<string, unknown> => typeof w === 'object' && w !== null)
+						.filter(
+							(w) =>
+								typeof w.app === 'string' &&
+								ID.test(w.app) &&
+								typeof w.href === 'string' &&
+								(w.href as string).startsWith('/') &&
+								!(w.href as string).startsWith('//'),
+						)
+						.map((w) => ({
+							app: w.app as string,
+							href: (w.href as string).slice(0, 500),
+							x: int(w.x, -5000, 10000, 40),
+							y: int(w.y, 0, 10000, 40),
+							w: int(w.w, 320, 10000, 900),
+							h: int(w.h, 220, 10000, 640),
+						}))
+						.slice(0, 20),
+				}))
+				.slice(0, 10)
+		: [];
+	return {
+		version: 1,
+		icons: strings(v.icons),
+		customIcons: v.customIcons === true,
+		folders,
+		widgets,
+		customWidgets: v.customWidgets === true,
+		sort: (['free', 'name', 'kind', 'recent'] as SortMode[]).includes(v.sort as SortMode)
+			? (v.sort as SortMode)
+			: base.sort,
+		iconSize: (['s', 'm', 'l'] as IconSize[]).includes(v.iconSize as IconSize)
+			? (v.iconSize as IconSize)
+			: base.iconSize,
+		wallpaper,
+		lockMinutes: int(v.lockMinutes, 0, 1440, base.lockMinutes),
+		folded: strings(v.folded, 60),
+		layouts,
+		recent: strings(v.recent, 12),
+	};
+}
+
+/** The icons shown, in order: the account's own list, or every program. */
+export function arrangeIcons(
+	prefs: DesktopPrefs,
+	available: { key: string; label: string; kind: string }[],
+): string[] {
+	const known = new Set(available.map((a) => a.key));
+	const folders = new Set(prefs.folders.map((f) => 'folder:' + f.id));
+	const inFolders = new Set(prefs.folders.flatMap((f) => f.apps));
+	let keys = prefs.customIcons
+		? prefs.icons.filter((k) => known.has(k) || folders.has(k))
+		: available.map((a) => a.key).filter((k) => !inFolders.has(k));
+	if (!prefs.customIcons) keys = [...keys, ...[...folders].filter((f) => !keys.includes(f))];
+	const label = new Map(available.map((a) => [a.key, a.label]));
+	const kind = new Map(available.map((a) => [a.key, a.kind]));
+	const name = (k: string) =>
+		k.startsWith('folder:')
+			? (prefs.folders.find((f) => 'folder:' + f.id === k)?.name ?? '')
+			: (label.get(k) ?? k);
+	if (prefs.sort === 'name') keys = [...keys].sort((a, b) => name(a).localeCompare(name(b)));
+	else if (prefs.sort === 'kind') {
+		const rank = (k: string) => (k.startsWith('folder:') ? 2 : kind.get(k) === 'system' ? 0 : 1);
+		keys = [...keys].sort((a, b) => rank(a) - rank(b) || keys.indexOf(a) - keys.indexOf(b));
+	} else if (prefs.sort === 'recent') {
+		const at = (k: string) => {
+			const i = prefs.recent.indexOf(k);
+			return i < 0 ? 999 : i;
+		};
+		keys = [...keys].sort((a, b) => at(a) - at(b));
+	}
+	return keys;
+}
+
+/** Puts a widget where it does not cover another one (first free row). */
+export function placeWidget(
+	widgets: Widget[],
+	w: number,
+	h: number,
+	columns: number,
+	minX = 0,
+): { x: number; y: number } {
+	const overlaps = (x: number, y: number) =>
+		widgets.some((o) => {
+			const ox = o.x < 0 ? columns + o.x : o.x;
+			return x < ox + o.w && ox < x + w && y < o.y + o.h && o.y < y + h;
+		});
+	for (let y = 0; y < 200; y++)
+		for (let x = Math.min(minX, Math.max(0, columns - w)); x + w <= columns; x++)
+			if (!overlaps(x, y)) return { x, y };
+	return { x: Math.min(minX, Math.max(0, columns - w)), y: 0 };
+}

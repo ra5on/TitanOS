@@ -77,3 +77,16 @@ func TestListMissing(t *testing.T) {
 		t.Error("List succeeded although the store does not exist")
 	}
 }
+
+func TestLeftOutOfBackups(t *testing.T) {
+	for _, name := range []string{"tls/ca-key.pem", "tls/ca-cert.pem", "tls/ca-leaf-ui.pem", "tls/ca-leaf-apps.pem", "tls/app-gate.key"} {
+		if !LeftOutOfBackups(name) {
+			t.Errorf("%s backed up", name)
+		}
+	}
+	for _, name := range []string{"tls/custom-cert.pem", "tls/cert.pem", "users/alex/account.json", "tls/ca-leaf-ui.pem/x"} {
+		if LeftOutOfBackups(name) {
+			t.Errorf("%s left out", name)
+		}
+	}
+}

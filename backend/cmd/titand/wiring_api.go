@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"github.com/ra5on/TitanOS/backend/internal/procs"
 	"log/slog"
 
 	"github.com/ra5on/TitanOS/backend/internal/api"
@@ -39,6 +40,7 @@ func (w *titand) wireAPI() error {
 		Monitoring:         w.history,
 		Maintenance:        w.upkeep,
 		Scripts:            w.userScripts,
+		Processes:          processSampler(w.opts.dev),
 		ApplicationBackups: w.appBackups,
 		Storage:            w.volumes,
 		SmartHistory:       w.smartHistory,
@@ -48,6 +50,7 @@ func (w *titand) wireAPI() error {
 		FileIndex:          w.fullText,
 		Docker:             w.containers,
 		AppProxy:           w.routes,
+		AppAccess:          w.appRights,
 		Catalog:            w.appCatalog,
 		Terminal:           w.shells,
 		VMs:                w.machines,
@@ -127,4 +130,12 @@ func (w *titand) wireAPI() error {
 	w.schedule.Busy = w.handler.PowerBusy
 	w.background(func() { w.schedule.Run(ctx) })
 	return nil
+}
+
+// processSampler reads /proc for the task manager; in development mode
+// it runs on someone's own computer, so it sends no signals there.
+func processSampler(dev bool) *procs.Sampler {
+	p := procs.New()
+	p.Disabled = dev
+	return p
 }

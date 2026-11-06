@@ -449,6 +449,18 @@
 		background: var(--accent);
 		color: var(--on-accent);
 	}
+	/* On phones the choices stand one below the other instead of 2 + 1. */
+	@media (max-width: 520px) {
+		.segments {
+			display: flex;
+			flex-direction: column;
+			align-self: stretch;
+		}
+		.segments button {
+			height: 44px;
+			text-align: left;
+		}
+	}
 	pre {
 		margin: 0;
 		font-family: var(--font-mono);

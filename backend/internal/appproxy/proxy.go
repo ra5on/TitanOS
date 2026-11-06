@@ -81,6 +81,9 @@ func (m *Manager) Handler(next http.Handler) http.Handler {
 				r.Header.Del(name)
 			}
 		}
+		if !m.gate(w, r, gateApp(key)) {
+			return
+		}
 		m.handlerFor(key, route).proxy.ServeHTTP(w, r)
 	})
 }
@@ -217,6 +220,8 @@ func (m *Manager) newProxy(app string, route Route) *httputil.ReverseProxy {
 		},
 		ModifyResponse: func(res *http.Response) error {
 			dropSessionSetCookies(res.Header)
+			// Only the web UI of TitanOS may frame the app (desktop windows).
+			rewriteFrameHeaders(res.Header, m.frameOrigins())
 			return nil
 		},
 		Transport: m.transportFor(route),

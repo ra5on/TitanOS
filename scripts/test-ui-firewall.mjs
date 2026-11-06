@@ -166,17 +166,17 @@ try {
     const acme = { value: acmeData("http-01") };
     await routes(ctx, fw, acme);
 
-    // The sidebar lists the firewall under "Sicherheit und Fernzugriff",
-    // in order and with the "neu" badge.
+    // The sidebar lists the firewall under "Netzwerk" (PLAN 61), A–Z and
+    // with the "neu" badge.
     await page.goto(base + "/settings/network");
     await nav(page).waitFor();
-    const group = nav(page).locator(".group-title", { hasText: "Sicherheit und Fernzugriff" });
+    const group = nav(page).locator(".group-title", { hasText: "Netzwerk" });
     await group.waitFor();
     await page.screenshot({ path: `${out}/settings-overview-desktop.png`, fullPage: true });
     const hrefs = await nav(page).locator("a").evaluateAll((links) => links.map((a) => a.getAttribute("href")));
-    const security = hrefs.slice(hrefs.indexOf("/settings/access"), hrefs.indexOf("/settings/wireguard") + 1);
-    assert.deepEqual(security, [
-      "/settings/access", "/settings/firewall", "/settings/letsencrypt", "/settings/wireguard",
+    const network = hrefs.slice(hrefs.indexOf("/settings/ddns"), hrefs.indexOf("/settings/wireguard") + 1);
+    assert.deepEqual(network, [
+      "/settings/ddns", "/settings/firewall", "/settings/proxy", "/settings/letsencrypt", "/settings/network", "/settings/wireguard",
     ]);
     for (const area of ["firewall", "letsencrypt", "ddns"])
       assert.equal(await nav(page).locator(`a[href="/settings/${area}"]`).getByText("neu", { exact: true }).count(), 1, area);
@@ -324,7 +324,7 @@ try {
         }
     }
     await page.goto(base + "/settings");
-    await page.locator(".settings-group").first().waitFor();
+    await page.locator(".home-tile").first().waitFor();
     await page.screenshot({ path: `${out}/settings-overview-mobile.png`, fullPage: true });
     await ctx.close();
   }

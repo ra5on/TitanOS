@@ -16,6 +16,8 @@ export const session = $state<{
 	vnc: Record<string, unknown> | null;
 	/** Dismissed one-time hints of the account (storage/checks-hint.ts). */
 	hints: Record<string, unknown> | null;
+	/** The desktop of the account (PLAN 61, lib/desktop/prefs.ts). */
+	desktop: Record<string, unknown> | null;
 	/** Settings › Services: docker, vms and lxc, false when switched off. */
 	services: Record<string, boolean>;
 }>({
@@ -26,6 +28,7 @@ export const session = $state<{
 	docker: null,
 	vnc: null,
 	hints: null,
+	desktop: null,
 	services: {},
 });
 
@@ -37,6 +40,7 @@ async function loadPreferences() {
 		session.docker = prefs.docker;
 		session.vnc = prefs.vnc;
 		session.hints = prefs.hints ?? null;
+		session.desktop = prefs.desktop ?? null;
 		sound.settings = sanitizeSound(prefs.sound);
 		bell.settings = sanitizeBell(prefs.bell);
 		if (prefs.appearance)
@@ -48,6 +52,7 @@ async function loadPreferences() {
 		session.docker = null;
 		session.vnc = null;
 		session.hints = null;
+		session.desktop = null;
 	}
 }
 
@@ -72,7 +77,9 @@ export async function refreshSession() {
 		if (data.user?.name !== session.data?.user?.name) {
 			resetSound();
 		}
-		if (data.user) await Promise.all([loadPreferences(), loadServices()]);
+		// A locked session answers nothing else (lock.svelte.ts); the
+		// preferences follow once it is unlocked.
+		if (data.user && !data.locked) await Promise.all([loadPreferences(), loadServices()]);
 		session.data = data;
 		session.status = 'ready';
 	} catch {

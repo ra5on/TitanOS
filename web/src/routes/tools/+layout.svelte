@@ -5,9 +5,14 @@
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import ToolsSidebar from '#lib/components/ToolsSidebar.svelte';
 	import { terminal } from '#lib/terminal.svelte.ts';
+	// PLAN 61: in a window of the desktop the window's side bar lists the tools.
+	import { inWindow } from '#lib/desktop/frame.ts';
 	let { children }: { children: Snippet } = $props();
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 	const overview = $derived(page.url.pathname.replace(/\/$/, '') === '/tools');
+	// The task manager (PLAN 61) is the one tools page users see: its
+	// overview, read only, without the sidebar of the tools.
+	const forUsers = $derived(page.url.pathname.replace(/\/$/, '') === '/tools/taskmanager');
 	// As in the settings: the sidebar starts below banners and an open
 	// terminal covers the bottom, so its height follows the space really visible.
 	let aside = $state<HTMLElement>();
@@ -45,7 +50,7 @@
 <!-- Tools look like the settings (decision of the owner of 4 Nov 2026,
      variant B): a sidebar beside every tools page on the desktop; on phones
      the overview is the list and the pages behind it get a way back. -->
-{#if admin}<div class="tools-shell">
+{#if admin}<div class="tools-shell" class:in-window={inWindow}>
 		<div
 			class="tools-aside tile"
 			bind:this={aside}
@@ -54,14 +59,22 @@
 			<ToolsSidebar />
 		</div>
 		<div class="tools-main">
-			{#if !overview}<a class="tools-back" href="/tools">‹ {t('nav.tools')}</a>{/if}
+			{#if !overview && !inWindow}<a class="tools-back" href="/tools">‹ {t('nav.tools')}</a>{/if}
 			<div class="settings-page column">{@render children()}</div>
 		</div>
+	</div>{:else if forUsers && session.data?.user}<div class="settings-page column">
+		{@render children()}
 	</div>{:else}<p class="notice-error" role="alert">
 		{t('error.forbidden')}
 	</p>{/if}
 
 <style>
+	.tools-shell.in-window {
+		display: block;
+	}
+	.tools-shell.in-window > .tools-aside {
+		display: none;
+	}
 	.tools-shell {
 		display: grid;
 		grid-template-columns: 15.5rem minmax(0, 1fr);

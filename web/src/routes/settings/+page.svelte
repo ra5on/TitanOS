@@ -1,20 +1,24 @@
 <script lang="ts">
+	// "Alle Einstellungen" (owner's wish of 6 Nov 2026, PLAN 61-8, drafts 34/35):
+	// a search on top, then every area as an equal tile with a colored icon,
+	// its name and what is inside, grouped like the sidebar; below, the last
+	// settings changes from the activity log. The same page on phones (one
+	// column) and inside a desktop window (no sidebar there).
+	import { onMount } from 'svelte';
 	import { showsNew } from '#lib/settings-seen.svelte.ts';
-	// On phones the overview is the navigation: every area as a compact row
-	// with its state, with the search above it. On wider screens the sidebar
-	// holds the list, so the page shows only what the sidebar does not: what
-	// needs attention and this NAS (owner's decision of 30 Oct 2026).
-	import { settingsAreas, settingsEntries } from '#lib/settings-search.ts';
+	import { settingsEntries, settingsGroupLabel, settingsAreas } from '#lib/settings-search.ts';
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import SettingsSearch from '#lib/components/SettingsSearch.svelte';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { settingsSearch, settingsStates } from '#lib/settings-states.svelte.ts';
-	import { system } from '#lib/system.svelte.ts';
-	import { formatDuration } from '#lib/format.ts';
+	import { api } from '#lib/api.ts';
+	import { activityLabel, type ActivityEntry, type ActivityPage } from '#lib/activity.ts';
+	import { recentSettingsChanges } from '#lib/settings-recent.ts';
+	import { formatDateTime } from '#lib/format.ts';
 
-	const prefix = 'settings-list';
+	const prefix = 'settings-home';
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 	const groups = $derived(settingsEntries(settingsSearch.query, admin, t));
 	const flat = $derived(groups.flatMap((group) => group.entries));
@@ -24,13 +28,57 @@
 		searching && flat.length ? Math.min(settingsSearch.active, flat.length - 1) : -1,
 	);
 
-	// The areas with a state, in the order of the navigation.
-	const attention = $derived(
-		settingsAreas
-			.filter((area) => states[area.id] && (admin || !area.admin))
-			.map((area) => ({ area, state: states[area.id] })),
-	);
-	const info = $derived(system.info);
+	// One color per area; the values are theme-independent tokens in app.css.
+	const colors: Record<string, string> = {
+		about: 'slate',
+		updates: 'blue',
+		timezone: 'teal',
+		appearance: 'violet',
+		hardware: 'slate',
+		temperatures: 'orange',
+		energy: 'amber',
+		ups: 'green',
+		'power-button': 'red',
+		network: 'blue',
+		firewall: 'red',
+		wireguard: 'green',
+		ddns: 'orange',
+		letsencrypt: 'green',
+		proxy: 'cyan',
+		access: 'violet',
+		services: 'slate',
+		notifications: 'red',
+		homeassistant: 'blue',
+		agent: 'violet',
+		mcp: 'cyan',
+		api: 'slate',
+		cluster: 'teal',
+		programs: 'pink',
+		backups: 'teal',
+		files: 'amber',
+		memory: 'cyan',
+	};
+	const areaLabel = (id: string) => {
+		const area = settingsAreas.find((a) => a.id === id);
+		return area ? t(area.label) : id;
+	};
+
+	// The last settings changes; only owners and administrators may read the
+	// log, and without it (off, error) the section is left out.
+	let recent = $state<(ActivityEntry & { area: string })[]>([]);
+	onMount(() => {
+		if (!admin) return;
+		api
+			.get<ActivityPage>('/activity?days=30&limit=500')
+			.then((page) => (recent = recentSettingsChanges(page.entries ?? [])))
+			.catch(() => (recent = []));
+	});
+	function describe(entry: ActivityEntry): string {
+		const label = activityLabel(entry.action);
+		if (label.kind === 'named') return t(`activity.do.${label.key}` as 'activity.do.login');
+		const verb = t(`activity.verb.${label.verb}` as 'activity.verb.run');
+		return entry.target ? `${verb}: ${entry.target}` : verb;
+	}
 
 	function clear() {
 		settingsSearch.query = '';
@@ -38,217 +86,259 @@
 	}
 </script>
 
-<PageHead title={t('settings.title')} />
+<PageHead title={t('settingshome.all')} />
 
-<div class="desk-overview">
-	{#if admin}
-		<section class="tile panel" aria-labelledby="h-attention">
-			<h2 class="tile-title" id="h-attention">{t('settings.attention')}</h2>
-			{#if attention.length === 0}
-				<p class="all-good"><Icon name="check" size={16} />{t('settings.allGood')}</p>
-			{:else}
-				<ul class="attention">
-					{#each attention as { area, state } (area.id)}
+<div class="home">
+	<div class="home-search">
+		<SettingsSearch results={flat} idPrefix={prefix} placeholder={t('settingshome.searchHint')} />
+	</div>
+	{#if searching}<div class="search-result">
+			<span role="status"
+				>{flat.length ? t('ui.results', { count: flat.length }) : t('ui.noSettings')}</span
+			><button class="btn" type="button" onclick={clear}>{t('ui.clear')}</button>
+		</div>{/if}
+
+	<div class="groups" id="{prefix}-results">
+		{#each groups as group (group.group)}
+			{@const offset = flat.indexOf(group.entries[0])}
+			<section class="group" aria-labelledby="{prefix}-group-{group.group}">
+				<h2 class="group-title" id="{prefix}-group-{group.group}">
+					{t(settingsGroupLabel(group.group))}
+				</h2>
+				<ul class="tiles">
+					{#each group.entries as entry, i (entry.href)}
+						{@const state = entry.section ? undefined : states[entry.id]}
 						<li>
-							<span class="dot {state.tone}" aria-hidden="true"></span>
-							<span class="what">{t(state.text)}</span>
-							<a class="btn small" href="/settings/{area.id}">{t(area.label)}</a>
+							<a
+								id="{prefix}-{offset + i}"
+								class="tile home-tile"
+								class:highlight={offset + i === active}
+								href={entry.href}
+								onclick={clear}
+							>
+								<span
+									class="square"
+									style:--square="var(--icon-square-{colors[entry.id] ?? 'slate'})"
+									aria-hidden="true"><Icon name={entry.icon} size={20} /></span
+								>
+								<span class="text">
+									<span class="name"
+										>{entry.label}{#if showsNew(entry)}<span class="new">{t('settings.new')}</span
+											>{/if}</span
+									>
+									<span class="desc"
+										>{entry.section
+											? areaLabel(entry.id)
+											: t(`settingshome.desc.${entry.id}` as MessageKey)}</span
+									>
+									{#if state}<span class="chip {state.tone}">{t(state.text)}</span>{/if}
+								</span>
+							</a>
 						</li>
 					{/each}
 				</ul>
-			{/if}
-		</section>
-	{/if}
-	<section class="tile panel" aria-labelledby="h-this-nas">
-		<h2 class="tile-title" id="h-this-nas">{t('settings.thisNas')}</h2>
-		<dl class="facts">
-			<dt>{t('settings.nasName')}</dt>
-			<dd>{info?.hostname ?? '–'}</dd>
-			<dt>{t('about.version')}</dt>
-			<dd class="mono">{info ? `TitanOS ${info.version}` : '–'}</dd>
-			<dt>{t('settings.address')}</dt>
-			<dd class="mono">{location.host}</dd>
-			<dt>{t('system.uptime')}</dt>
-			<dd>{info ? formatDuration(info.uptimeSeconds) : '–'}</dd>
-		</dl>
-	</section>
-</div>
+			</section>
+		{/each}
+	</div>
 
-<div class="phone-search">
-	<SettingsSearch results={flat} idPrefix={prefix} visibleLabel />
-</div>
-{#if searching}<div class="search-result">
-		<span role="status">{t('ui.results', { count: flat.length })}</span><button
-			class="btn"
-			type="button"
-			onclick={clear}>{t('ui.clear')}</button
-		>
-	</div>{/if}
-{#if searching && flat.length === 0}<p class="phone-list">{t('ui.noSettings')}</p>{/if}
-<div class="groups phone-list" id="{prefix}-results">
-	{#each groups as group (group.group)}
-		{@const offset = flat.indexOf(group.entries[0])}
-		<section class="tile settings-group" aria-labelledby="group-{group.group}">
-			<h2 class="tile-title" id="group-{group.group}">
-				{t(`settings.group.${group.group}` as MessageKey)}
-			</h2>
-			<ul class="areas">
-				{#each group.entries as entry, i (entry.href)}
-					{@const state = entry.section ? undefined : states[entry.id]}
+	{#if admin && recent.length && !searching}
+		<section class="tile panel recent-panel" aria-labelledby="{prefix}-recent">
+			<div class="recent-head">
+				<h2 class="tile-title" id="{prefix}-recent">{t('settingshome.recent')}</h2>
+				<a href="/tools/activity">{t('settingshome.recentAll')}</a>
+			</div>
+			<ul class="recent">
+				{#each recent as entry, index (index)}
 					<li>
-						<a
-							id="{prefix}-{offset + i}"
-							href={entry.href}
-							class:highlight={offset + i === active}
-							onclick={clear}
-							><span class="setting-icon"><Icon name={entry.icon} size={16} /></span><span
-								class="name">{entry.label}</span
-							>{#if showsNew(entry)}<span class="new">{t('settings.new')}</span
-								>{/if}{#if state}<span class="chip {state.tone}">{t(state.text)}</span>{/if}<span
-								class="chevron"><Icon name="arrowRight" size={14} /></span
-							></a
+						<a class="area" href="/settings/{entry.area}">{areaLabel(entry.area)}</a>
+						<span class="what">{describe(entry)}</span>
+						<span class="who"
+							>{entry.user ? t('settingshome.recentBy', { user: entry.user }) : ''}</span
 						>
+						<time datetime={entry.at}>{formatDateTime(new Date(entry.at))}</time>
 					</li>
 				{/each}
 			</ul>
 		</section>
-	{/each}
+	{/if}
 </div>
 
 <style>
-	.groups {
+	.home {
 		display: flex;
 		flex-direction: column;
 		gap: var(--gap);
+		min-width: 0;
+		container-type: inline-size;
 	}
-	.settings-group {
+	.home-search {
+		width: 100%;
+		max-width: 36rem;
+		align-self: center;
+	}
+	.search-result {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-3);
+	}
+	.groups {
 		display: flex;
 		flex-direction: column;
-		min-width: 0;
-		overflow: hidden;
+		gap: var(--space-4);
 	}
-	.settings-group h2 {
-		padding: 10px var(--tile-pad);
-		border-bottom: 1px solid var(--panel-border);
+	.group {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		min-width: 0;
+	}
+	.group-title {
+		margin: 0;
+		font-size: var(--text-xs);
+		font-weight: 600;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--muted);
 	}
 	ul {
 		list-style: none;
 		margin: 0;
 		padding: 0;
 	}
-	li + li {
-		border-top: 1px solid var(--panel-border);
+	.tiles {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		grid-auto-rows: 1fr;
+		gap: var(--gap);
 	}
-	a {
+	.tiles li {
+		display: flex;
+		min-width: 0;
+	}
+	@container (min-width: 26rem) {
+		.tiles {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+	}
+	@container (min-width: 40rem) {
+		.tiles {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
+	}
+	@container (min-width: 54rem) {
+		.tiles {
+			grid-template-columns: repeat(4, minmax(0, 1fr));
+		}
+	}
+	.home-tile {
 		display: flex;
 		align-items: center;
 		gap: var(--space-3);
-		min-height: 44px;
-		padding: 6px var(--tile-pad);
+		width: 100%;
+		/* Room for two lines of description: equal tiles across the groups. */
+		min-height: 5.25rem;
+		padding: var(--space-3) var(--tile-pad);
 		color: var(--text);
 		text-decoration: none;
 	}
-	a:hover,
-	a.highlight {
+	.home-tile:hover,
+	.home-tile.highlight {
 		background: var(--chip);
 	}
-	a:focus-visible {
+	.home-tile:focus-visible {
 		outline-offset: -2px;
 	}
-	.setting-icon {
+	.square {
 		display: grid;
 		place-items: center;
 		flex: none;
-		width: 28px;
-		height: 28px;
-		border-radius: var(--radius-small);
-		background: color-mix(in srgb, var(--accent) 12%, transparent);
-		color: var(--accent);
+		width: 2.5rem;
+		height: 2.5rem;
+		border-radius: var(--radius-ctl, 10px);
+		background: linear-gradient(
+			160deg,
+			color-mix(in srgb, var(--square) 78%, #fff),
+			var(--square) 70%
+		);
+		color: var(--on-icon-square);
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, #fff 18%, transparent);
+	}
+	.text {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
 	}
 	.name {
-		flex: 1;
-		min-width: 0;
-		font-weight: 500;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-1) 6px;
+		font-weight: 600;
+		font-size: var(--text-md);
+		overflow-wrap: anywhere;
+	}
+	.desc {
+		color: var(--muted);
+		font-size: var(--text-sm);
+		line-height: 1.35;
 		overflow-wrap: anywhere;
 	}
 	.new {
-		flex: none;
 		padding: 0 5px;
 		border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
 		border-radius: var(--radius-small);
 		color: color-mix(in srgb, var(--accent) 60%, var(--text));
 		font-size: var(--text-xs);
+		font-weight: 500;
 	}
 	.chip {
-		flex: none;
+		align-self: flex-start;
+		margin-top: 2px;
 	}
-	.chevron {
+	.recent-head {
 		display: flex;
-		flex: none;
-		color: var(--muted);
+		flex-wrap: wrap;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: var(--space-2);
 	}
-	.search-result {
-		display: flex;
-		align-items: center;
-		gap: var(--space-3);
-	}
-	.desk-overview {
-		display: flex;
-		flex-direction: column;
-		gap: var(--gap);
-		max-width: 44rem;
-	}
-	.attention {
-		display: flex;
-		flex-direction: column;
-	}
-	.attention li {
-		display: flex;
-		align-items: center;
-		gap: 10px;
+	.recent li {
+		display: grid;
+		grid-template-columns: minmax(7rem, 12rem) minmax(0, 1fr) auto auto;
+		align-items: baseline;
+		gap: var(--space-1) var(--space-3);
 		padding: var(--space-2) 0;
+		font-size: var(--text-base);
 	}
-	.attention li + li {
+	.recent li + li {
 		border-top: 1px solid var(--panel-border);
 	}
+	.recent .area {
+		font-weight: 500;
+		overflow-wrap: anywhere;
+	}
 	.what {
-		flex: 1;
 		min-width: 0;
+		overflow-wrap: anywhere;
 	}
-	.all-good {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
-		margin: 0;
+	.who,
+	time {
 		color: var(--muted);
+		white-space: nowrap;
 	}
-	.all-good :global(svg) {
-		color: var(--accent);
-	}
-	.facts {
-		display: grid;
-		grid-template-columns: auto 1fr;
-		gap: 6px 18px;
-		margin: 0;
-		font-size: var(--text-md);
-	}
-	.facts dt {
-		color: var(--muted);
-	}
-	.facts dd {
-		margin: 0;
-	}
-	/* Wider screens search and navigate in the sidebar. */
-	@media (min-width: 761px) {
-		.phone-search,
-		.phone-list,
-		.search-result {
-			display: none;
+	@container (max-width: 34rem) {
+		.recent li {
+			grid-template-columns: minmax(0, 1fr) auto;
 		}
-	}
-	@media (max-width: 760px) {
-		.desk-overview {
-			display: none;
+		.recent .what {
+			grid-column: 1;
+			grid-row: 2;
+		}
+		.recent .who {
+			grid-column: 2;
+			grid-row: 2;
 		}
 	}
 </style>

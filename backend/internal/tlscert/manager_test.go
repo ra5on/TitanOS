@@ -49,6 +49,7 @@ func TestCustomCertificate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	m.ca.failed = true // the fallback without the TitanOS authority
 	own := m.Info()
 	if own.Kind != KindSelfSigned || len(own.Fingerprint) != 64 || own.Names[0] != "nas" {
 		t.Fatalf("at first: %+v", own)

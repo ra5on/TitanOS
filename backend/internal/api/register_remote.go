@@ -8,6 +8,9 @@ func (s *Server) registerRemoteAccess(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/system/certificate", s.requireAdmin(s.handleCertificate))
 	mux.HandleFunc("PUT /api/v1/system/certificate", s.requireAdmin(s.handleCertificateSet))
 	mux.HandleFunc("DELETE /api/v1/system/certificate", s.requireAdmin(s.handleCertificateRemove))
+	// The certificate (never the key) of the TitanOS authority, for devices.
+	mux.HandleFunc("GET /api/v1/certs/ca", s.requireUser(s.handleCAInfo))
+	mux.HandleFunc("GET /api/v1/certs/{file}", s.requireUser(s.handleCADownload))
 	mux.HandleFunc("GET /api/v1/system/letsencrypt", s.requireAdmin(s.handleLetsEncrypt))
 	mux.HandleFunc("PUT /api/v1/system/letsencrypt", s.requireAdmin(s.handleLetsEncryptChange))
 	mux.HandleFunc("POST /api/v1/system/letsencrypt/renew", s.requireAdmin(s.handleLetsEncryptRenew))

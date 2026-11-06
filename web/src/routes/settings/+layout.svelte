@@ -9,6 +9,7 @@
 	import { markAreaSeen } from '#lib/settings-seen.svelte.ts';
 	import SettingsSidebar from '#lib/components/SettingsSidebar.svelte';
 	import { terminal } from '#lib/terminal.svelte.ts';
+	import { embedded } from '#lib/embedded.ts';
 	let { children }: { children: Snippet } = $props();
 	// The sidebar starts below banners and the tasks row, not right under the
 	// header, and an open terminal covers the bottom: its height follows the
@@ -56,16 +57,19 @@
 
 <!-- A sidebar beside every settings page (desktop); on phones the overview is
      the list and the pages behind it get a way back instead. -->
-<div class="settings-shell" class:overview>
-	<div
-		class="settings-aside tile"
-		bind:this={aside}
-		style:max-height={room ? `${room}px` : undefined}
-	>
-		<SettingsSidebar />
-	</div>
+<!-- Inside a desktop window (PLAN 61) the window has the navigation: no
+     second sidebar, no way back, the page takes the whole width. -->
+<div class="settings-shell" class:overview class:embedded>
+	{#if !embedded}<div
+			class="settings-aside tile"
+			bind:this={aside}
+			style:max-height={room ? `${room}px` : undefined}
+		>
+			<SettingsSidebar />
+		</div>{/if}
 	<div class="settings-main">
-		{#if !overview}<a class="settings-back" href="/settings">‹ {t('nav.settings')}</a>{/if}
+		{#if !overview && !embedded}<a class="settings-back" href="/settings">‹ {t('nav.settings')}</a
+			>{/if}
 		{#if allowed}<div class="settings-page column">{@render children()}</div>{:else}<p
 				class="notice-error"
 				role="alert"
@@ -91,6 +95,12 @@
 		/* At its end the wheel moves the page on (no overscroll-behavior: contain). */
 		/* A surface of its own keeps the list readable over a background image. */
 		padding: 10px var(--space-2) var(--space-3);
+	}
+	.settings-shell.embedded {
+		display: block;
+	}
+	.settings-shell.embedded :global(.settings-page.column) {
+		max-width: none;
 	}
 	.settings-main {
 		display: flex;

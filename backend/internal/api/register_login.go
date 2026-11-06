@@ -16,6 +16,9 @@ func (s *Server) registerLogin(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/login/passkey/begin", s.handlePasskeyLoginBegin)
 	mux.HandleFunc("POST /api/v1/login/passkey", s.handlePasskeyLogin)
 	mux.HandleFunc("POST /api/v1/logout", s.handleLogout)
+	// The lock screen (session_lock.go): requireUser lets a locked session through to these two.
+	mux.HandleFunc("POST /api/v1/session/lock", s.requireUser(s.handleSessionLock))
+	mux.HandleFunc("POST /api/v1/session/unlock", s.requireUser(s.handleSessionUnlock))
 	// The look of the login page is public; changing it is not.
 	mux.HandleFunc("GET /api/v1/login-appearance", s.handleLoginAppearance)
 	mux.HandleFunc("GET /icons/{file}", s.handleAppIconFile)

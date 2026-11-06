@@ -14,6 +14,12 @@ export const toolsGroups: { group: ToolsGroup; entries: ToolsEntry[] }[] = [
 		entries: [
 			{ href: '/tools/tasks', label: 'ops.tasks', text: 'tools.text.tasks', icon: 'list' },
 			{
+				href: '/tools/taskmanager',
+				label: 'taskmanager.title',
+				text: 'taskmanager.navText',
+				icon: 'monitor',
+			},
+			{
 				href: '/tools/monitoring',
 				label: 'ops.monitoring',
 				text: 'tools.text.monitoring',
