@@ -16,6 +16,7 @@
 	import EncryptionPanel from './EncryptionPanel.svelte';
 	import { isLocked, lockedBlocks } from './crypt.ts';
 	import { refreshStorage } from '#lib/storage.svelte.ts';
+	import ForesightPlay from '#lib/components/agent/features/ForesightPlay.svelte';
 
 	type Props = {
 		volume: Volume;
@@ -262,6 +263,7 @@
 					onclick={onprofile}
 					disabled={busy}>{t('btrfs.profileChange')}</button
 				>{/if}
+			<ForesightPlay {volume} />
 		</div>
 	{/if}
 	{#if canAdminister && volume.encryption}<EncryptionPanel {volume} {busy} />{/if}

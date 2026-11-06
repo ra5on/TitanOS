@@ -40,6 +40,7 @@
 	} from './sleep-view.ts';
 	import { diskStatus, diskType, smartText } from './labels.ts';
 	import VolumeCard from './VolumeCard.svelte';
+	import ForesightPlay from '#lib/components/agent/features/ForesightPlay.svelte';
 	import type { MaintenanceStatus } from '#lib/operations.ts';
 	import { checksHintVolumes, sanitizeHints, uncheckedVolumes } from './checks-hint.ts';
 
@@ -756,6 +757,7 @@
 								selected = disk.volume ?? '';
 							}}>{t('storage.openVolume', { volume: disk.volume })}</button
 						>
+						<ForesightPlay volume={volumes.find((v) => v.name === disk.volume)} disk={disk.name} />
 					{:else if disk.role === 'free'}
 						<a class="btn" href="/tools/disks">{t('storage.testDisk')}</a>
 						{#each addTargets as volume (volume.name)}
