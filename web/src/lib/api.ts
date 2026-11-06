@@ -275,6 +275,8 @@ export type Preferences = {
 	bell: Record<string, unknown> | null;
 	/** Dismissed one-time hints; missing on NAS versions before it. */
 	hints?: Record<string, unknown> | null;
+	/** The desktop of the account (PLAN 61); missing on NAS versions before it. */
+	desktop?: Record<string, unknown> | null;
 };
 
 export type Temperature = {

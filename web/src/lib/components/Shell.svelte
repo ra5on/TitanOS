@@ -27,6 +27,15 @@
 	import { navForRole } from '#lib/navigation.ts';
 	import { agentAppMode } from '#lib/agent-app.ts';
 	import { agentFull } from '#lib/agent-full.svelte.ts';
+	// PLAN 61: the desktop mode replaces head line and side bar.
+	import Desktop from '#lib/desktop/Desktop.svelte';
+	import PhoneHome from '#lib/desktop/PhoneHome.svelte';
+	import PhoneBar from '#lib/desktop/PhoneBar.svelte';
+	import { appForPath } from '#lib/desktop/apps.ts';
+	import { announcePage, frameMessage, inWindow, ownPath } from '#lib/desktop/frame.ts';
+	import { mode } from '#lib/desktop/mode.svelte.ts';
+	import { goto } from '$app/navigation';
+	import { pageTitle } from '#lib/page-title.svelte.ts';
 
 	let { children }: { children: Snippet } = $props();
 
@@ -53,6 +62,51 @@
 		agentAppMode(page.url) ||
 			(page.url.pathname.startsWith('/agent') && (agentFull.on || !desktop)),
 	);
+	// PLAN 61: a page in a window of the desktop, the desktop itself, or the phone's home grid.
+	// Pages that belong to no program (Ersteinrichtung) keep the classic frame.
+	const known = $derived(page.url.pathname === '/' || !!appForPath(page.url.pathname));
+	const desktopMode = $derived(!inWindow && mode.wide && !agentAppMode(page.url) && known);
+	const phoneMode = $derived(!inWindow && !mode.wide && !agentApp && known);
+	afterNavigate(() => {
+		if (inWindow) announcePage(page.url.pathname + page.url.search, pageTitle.value);
+	});
+	$effect(() => {
+		if (inWindow) announcePage(page.url.pathname + page.url.search, pageTitle.value);
+	});
+	$effect(() => {
+		if (!inWindow) return;
+		// The side bar of the window moves the frame to another page of its program.
+		const message = (event: MessageEvent) => {
+			const msg = frameMessage(event);
+			if (msg?.type === 'titanos-goto' && event.source === window.parent && ownPath(msg.href))
+				void goto(msg.href);
+		};
+		// Keys of the desktop (Alt+Q, Alt+W, Alt+arrows, Ctrl+Space) also work inside a window.
+		const key = (event: KeyboardEvent) => {
+			const desk =
+				(event.altKey && !event.ctrlKey && !event.metaKey && /^(q|w|m|arrow)/i.test(event.key)) ||
+				((event.ctrlKey || event.metaKey) && event.code === 'Space');
+			if (!desk) return;
+			event.preventDefault();
+			window.parent.postMessage(
+				{
+					type: 'titanos-key',
+					key: event.key,
+					alt: event.altKey,
+					ctrl: event.ctrlKey,
+					shift: event.shiftKey,
+					meta: event.metaKey,
+				},
+				location.origin,
+			);
+		};
+		window.addEventListener('message', message);
+		window.addEventListener('keydown', key);
+		return () => {
+			window.removeEventListener('message', message);
+			window.removeEventListener('keydown', key);
+		};
+	});
 	const side = $derived(appearance.current.nav.layout === 'side' && desktop && !agentApp);
 	// The area the page belongs to, for the button's name.
 	const pageLabel = $derived(
@@ -115,8 +169,12 @@
 	// Without head line and status bar nothing sticks below or above them.
 	$effect(() => {
 		const root = document.documentElement.style;
-		root.setProperty('--header-height', side || sidePhone || agentApp ? '0px' : '60px');
-		root.setProperty('--status-height', side || sidePhone || agentApp ? '0px' : '34px');
+		const bare = side || sidePhone || agentApp || inWindow || desktopMode;
+		root.setProperty(
+			'--header-height',
+			phoneMode ? 'calc(52px + env(safe-area-inset-top))' : bare ? '0px' : '60px',
+		);
+		root.setProperty('--status-height', bare || phoneMode ? '0px' : '34px');
 		return () => {
 			root.removeProperty('--header-height');
 			root.removeProperty('--status-height');
@@ -214,63 +272,92 @@
 		>
 	</div>
 {/if}
-<div class="frame" class:side>
-	{#if side}<SideNav tasks={!ownTasks} note={shell.statusNote} />{/if}
-	<div
-		class="shell"
-		class:agent-app={agentApp}
-		style:padding-bottom={admin && terminal.open && !terminal.full
-			? `${terminal.height}px`
-			: undefined}
-	>
-		{#if !side && !sidePhone && !agentApp}<Header tasks={!ownTasks} />{/if}
-		<main
-			class:readable={!dockerPage}
-			class:dashboard={page.url.pathname === '/'}
-			class:agent-app={agentApp}
-		>
+{#if inWindow}
+	<main class="in-window" class:readable={!dockerPage} class:dashboard={page.url.pathname === '/'}>
+		{#if !dockerPage}<ConnectionBanner />{/if}
+		{@render children()}
+	</main>
+{:else if desktopMode}
+	<Desktop />
+{:else if phoneMode}
+	{#if page.url.pathname === '/'}
+		<PhoneHome />
+	{:else}
+		<PhoneBar />
+		<main class="phone-page" class:readable={!dockerPage}>
 			<ClusterBanner />
 			{#if !dockerPage}<ConnectionBanner />{/if}
 			{@render children()}
 		</main>
-		{#if !side && !sidePhone && !agentApp}<StatusBar note={shell.statusNote} />{/if}
+	{/if}
+{:else}
+	<div class="frame" class:side>
+		{#if side}<SideNav tasks={!ownTasks} note={shell.statusNote} />{/if}
+		<div
+			class="shell"
+			class:agent-app={agentApp}
+			style:padding-bottom={admin && terminal.open && !terminal.full
+				? `${terminal.height}px`
+				: undefined}
+		>
+			{#if !side && !sidePhone && !agentApp}<Header tasks={!ownTasks} />{/if}
+			<main
+				class:readable={!dockerPage}
+				class:dashboard={page.url.pathname === '/'}
+				class:agent-app={agentApp}
+			>
+				<ClusterBanner />
+				{#if !dockerPage}<ConnectionBanner />{/if}
+				{@render children()}
+			</main>
+			{#if !side && !sidePhone && !agentApp}<StatusBar note={shell.statusNote} />{/if}
+		</div>
 	</div>
-</div>
-{#if sidePhone}
-	{#if fab}<button
-			type="button"
-			class="fab {appearance.current.nav.button}"
-			aria-label={t('nav.openMenu', { page: t(pageLabel) })}
-			aria-haspopup="dialog"
-			aria-expanded={drawerOpen}
-			onclick={openDrawer}><Icon name="menu" size={24} /></button
-		>{/if}
-	<!-- Modal: Escape closes it, focus stays inside; a tap beside it closes it too. -->
-	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-	<dialog
-		class="drawer"
-		aria-label={t('nav.label')}
-		bind:this={drawer}
-		onclose={() => (drawerOpen = false)}
-		ontoggle={() => (drawerOpen = drawer?.open ?? false)}
-		onclick={(event) => {
-			if (event.target === drawer) closeDrawer();
-		}}
-	>
-		{#if drawerOpen}<SideNav
-				drawer
-				tasks={!ownTasks}
-				note={shell.statusNote}
-				onclose={closeDrawer}
-			/>{/if}
-	</dialog>
+	{#if sidePhone}
+		{#if fab}<button
+				type="button"
+				class="fab {appearance.current.nav.button}"
+				aria-label={t('nav.openMenu', { page: t(pageLabel) })}
+				aria-haspopup="dialog"
+				aria-expanded={drawerOpen}
+				onclick={openDrawer}><Icon name="menu" size={24} /></button
+			>{/if}
+		<!-- Modal: Escape closes it, focus stays inside; a tap beside it closes it too. -->
+		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+		<dialog
+			class="drawer"
+			aria-label={t('nav.label')}
+			bind:this={drawer}
+			onclose={() => (drawerOpen = false)}
+			ontoggle={() => (drawerOpen = drawer?.open ?? false)}
+			onclick={(event) => {
+				if (event.target === drawer) closeDrawer();
+			}}
+		>
+			{#if drawerOpen}<SideNav
+					drawer
+					tasks={!ownTasks}
+					note={shell.statusNote}
+					onclose={closeDrawer}
+				/>{/if}
+		</dialog>
+	{/if}
 {/if}
-{#if admin}<TerminalPanel />{/if}
+{#if admin && !inWindow && !desktopMode && !phoneMode}<TerminalPanel />{/if}
 {#if palette.open}<CommandPalette onclose={() => (palette.open = false)} />{/if}
 {#if shortcutsOpen}<ShortcutsDialog {admin} onclose={() => (shortcutsOpen = false)} />{/if}
 {#if shell.tasksSheet}<TasksPanel sheetOnly />{/if}
 
 <style>
+	/* PLAN 61: a page alone in a window of the desktop, or full screen on the phone. */
+	.in-window,
+	.phone-page {
+		padding: var(--page-pad);
+		min-height: 100dvh;
+	}
+	.in-window.dashboard {
+		padding-top: 12px;
+	}
 	/* As an app on the home screen the phone's home indicator lies over
 	   the bottom edge. */
 	@media (display-mode: standalone) {
