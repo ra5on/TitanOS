@@ -1,6 +1,9 @@
 package api
 
 import (
+	"net"
+	"net/netip"
+
 	"bytes"
 	"context"
 	"encoding/json"
@@ -21,6 +24,8 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
+	"github.com/ra5on/TitanOS/backend/internal/httpfetch"
+	"github.com/ra5on/TitanOS/backend/internal/netguard"
 	"github.com/ra5on/TitanOS/backend/internal/thumbs"
 	"github.com/ra5on/TitanOS/backend/internal/toolcatalog"
 )
@@ -42,8 +47,46 @@ const (
 	maxDiaryAnswer   = 4 << 20
 )
 
-// diaryHTTP talks to Immich and Frigate (tests replace it).
-var diaryHTTP = &http.Client{Timeout: 20 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+// diaryHTTP talks to Immich and Frigate (tests replace it). titand runs as
+// root: the home network (RFC 1918) is allowed, but never loopback,
+// link-local, the NAS's own addresses or its Docker networks, checked at
+// every connection (after name resolution); no redirects.
+var diaryHTTP = func() *http.Client {
+	c := httpfetch.NewClient(httpfetch.Policy{Allow: diaryAddressAllowed})
+	c.Timeout = 20 * time.Second
+	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return c
+}()
+
+// diaryAddressAllowed decides about one address the diary connects to.
+func diaryAddressAllowed(ap netip.AddrPort) bool {
+	addr := ap.Addr().Unmap()
+	if !netguard.LAN(addr) || addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() {
+		return false
+	}
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return false
+	}
+	for _, iface := range ifaces {
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		docker := strings.HasPrefix(iface.Name, "docker") || strings.HasPrefix(iface.Name, "br-") || strings.HasPrefix(iface.Name, "veth")
+		for _, a := range addrs {
+			prefix, err := netip.ParsePrefix(a.String())
+			if err != nil {
+				continue
+			}
+			// The NAS itself, and every address of a Docker network.
+			if prefix.Addr().Unmap() == addr || docker && prefix.Masked().Contains(addr) {
+				return false
+			}
+		}
+	}
+	return true
+}
 
 type diaryItem struct {
 	Day    string `json:"-"`

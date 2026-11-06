@@ -31,7 +31,6 @@ const features = {
   buddy: {
     enabled: true,
     address: "nas-eva.tail1234.ts.net:8752",
-    port: 8752,
     volume: "Data",
     protectDays: 30,
     every: "weekly",
@@ -352,7 +351,10 @@ for (const [width, height, tag] of [
     await cat.getByText(/Jede Rechnung nach Steuer/).isVisible(),
     "steps shown",
   );
-  assert.ok(await cat.getByText("aus TitanOS-Apps").isVisible(), "source shown");
+  assert.ok(
+    await cat.getByText("aus TitanOS-Apps").isVisible(),
+    "source shown",
+  );
   assert.ok(
     await cat.getByText(/Home Assistant Statistik · Meine Skills/).isVisible(),
     "own source shown",

@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -69,7 +70,6 @@ func TestFamily54Defaults(t *testing.T) {
 	// Settings are checked.
 	for _, bad := range []map[string]any{
 		{"buddy": map[string]any{"enabled": true, "volume": "nowhere"}},
-		{"buddy": map[string]any{"port": 80}},
 		{"buddy": map[string]any{"address": "http://x/y"}},
 	} {
 		if res, _ := ts.request("PUT", "/api/v1/agent/features", bad); res.StatusCode != http.StatusBadRequest {
@@ -127,9 +127,9 @@ func TestFamily54BuddyPairing(t *testing.T) {
 	if pa[0].Remote != pb[0].ID || pb[0].Remote != pa[0].ID {
 		t.Fatalf("ids: %+v %+v", pa[0], pb[0])
 	}
-	// The code works only once.
-	if res, _ := b.request("POST", "/api/v1/agent/buddy/pair", map[string]any{"address": addrA, "code": code.Code, "quota": 3 << 30}); res.StatusCode != http.StatusBadGateway {
-		t.Fatalf("code twice: %d", res.StatusCode)
+	// The code works only once (and this NAS is paired already).
+	if _, err := a.server.buddyAnswerPair(buddy.PairRequest{Code: code.Code, Name: "nas-c", Address: "nas-c.tail.ts.net", ID: "nas-x", Token: strings.Repeat("k", 64)}); err == nil {
+		t.Fatal("code twice")
 	}
 	// No secret in the view, nor in the settings.
 	for _, path := range []string{"/api/v1/agent/buddy", "/api/v1/agent/features", "/api/v1/agent/settings"} {
@@ -157,13 +157,13 @@ func TestFamily54BuddyPairing(t *testing.T) {
 	if len(a.server.buddyPartners()) != 1 {
 		t.Fatal("settings dropped the partner")
 	}
-	// An expired code: the other NAS refuses.
+	// An expired code: refused.
 	a.server.family54().codes.Now = func() time.Time { return time.Now().Add(-11 * time.Minute) }
 	_, body = a.request("POST", "/api/v1/agent/buddy/code", map[string]any{"quota": 2 << 30})
 	json.Unmarshal(body, &code)
 	a.server.family54().codes.Now = nil
-	if res, _ := b.request("POST", "/api/v1/agent/buddy/pair", map[string]any{"address": addrA, "code": code.Code, "quota": 3 << 30}); res.StatusCode != http.StatusBadGateway {
-		t.Fatalf("expired code: %d", res.StatusCode)
+	if _, err := a.server.buddyAnswerPair(buddy.PairRequest{Code: code.Code, Name: "nas-c", Address: "nas-c.tail.ts.net", ID: "nas-x", Token: strings.Repeat("k", 64)}); !errors.Is(err, buddy.ErrNoCode) {
+		t.Fatalf("expired code: %v", err)
 	}
 	// Ending the partnership.
 	if res, _ := a.request("DELETE", "/api/v1/agent/buddy/partners/"+pa[0].ID, nil); res.StatusCode != http.StatusNoContent {
@@ -361,6 +361,10 @@ func TestFamily54DiarySettings(t *testing.T) {
 
 func TestFamily54DiaryTool(t *testing.T) {
 	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard})
+	// The fakes listen on loopback, which the real client refuses.
+	old := diaryHTTP
+	diaryHTTP = &http.Client{}
+	t.Cleanup(func() { diaryHTTP = old })
 	loc := ts.server.agentLocation()
 	day := time.Date(2026, 10, 31, 0, 0, 0, 0, loc)
 	// Immich: two photos at the lake, with Bello.

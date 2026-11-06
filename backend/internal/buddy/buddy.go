@@ -9,16 +9,21 @@
 //
 //   - a file that exists is never replaced;
 //   - config and keys are never deleted;
-//   - locks may always be deleted (restic removes its own lock after every
-//     run);
-//   - data, index and snapshots may only be deleted once they are older
-//     than the protection period of this side (ProtectDays, 30 days by
-//     default). The owner of the data prunes with restic forget --prune as
-//     usual; whatever is younger stays, so a sender that was taken over
-//     cannot wipe the recent backups.
+//   - locks are deleted (restic removes its own lock after every run);
+//   - a deleted data, index or snapshot file is not removed but moved to
+//     the quarantine .trash/<deleted at>/<type>/… of the partner's folder.
+//     This side empties a quarantine only ProtectDays (30 by default) after
+//     the delete. restic forget --prune works as usual; a sender that was
+//     taken over and deletes everything (restic deduplicates, so today's
+//     snapshot uses packs of months ago) leaves all of it in quarantine,
+//     from where the person on this NAS can put it back (docs/agent54/family.md).
+//     The quarantine is never listed to the partner and counts to its quota.
 //
 // Each partner has its own quota; an upload that would go beyond it is
-// refused with 507 Insufficient Storage before anything is kept.
+// refused with 507 Insufficient Storage before anything is kept. Space is
+// reserved before the copy, so parallel uploads cannot pass it together;
+// a partner has at most maxLocks lock files and maxConcurrent requests at
+// once.
 package buddy
 
 import (
@@ -36,6 +41,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -53,6 +59,12 @@ const (
 	maxBlob            = 1 << 30
 	maxPairBody        = 16 << 10
 	maxLock            = 64 << 10
+	maxLocks           = 64
+	maxConcurrent      = 8
+	// Trash is the quarantine folder inside a partner's folder.
+	Trash = ".trash"
+	// purgeEvery is how often a partner's quarantine is looked at.
+	purgeEvery = time.Hour
 )
 
 var (
@@ -104,13 +116,16 @@ type Server struct {
 	Now       func() time.Time
 	MountRoot string
 
-	mu    sync.Mutex
-	usage map[string]int64
+	mu       sync.Mutex
+	usage    map[string]int64
+	reserved map[string]int64
+	active   map[string]int
+	purged   map[string]time.Time
 }
 
 // NewServer returns a server for the volumes under /mnt.
 func NewServer() *Server {
-	return &Server{MountRoot: "/mnt", Now: time.Now, usage: map[string]int64{}}
+	return &Server{MountRoot: "/mnt", Now: time.Now, usage: map[string]int64{}, reserved: map[string]int64{}, active: map[string]int{}, purged: map[string]time.Time{}}
 }
 
 // Usage returns what a partner keeps here, as far as it is known: it is
@@ -128,6 +143,19 @@ func (s *Server) Forget(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.usage, id)
+}
+
+// HasData tells whether a folder for id exists on the volume (an id whose
+// folder is there is never given to another partner). Without the volume
+// it cannot tell and says no; the random part of ids keeps them apart then.
+func (s *Server) HasData(id string) bool {
+	root, err := volumedata.OpenVolume(s.MountRoot, s.Volume(), s.Mounted())
+	if err != nil {
+		return false
+	}
+	defer root.Close()
+	_, err = root.Lstat(filepath.Join(Dir, id))
+	return !errors.Is(err, fs.ErrNotExist)
 }
 
 // RemoveData deletes the folder of a partner. Only the person on this NAS
@@ -194,6 +222,12 @@ func (s *Server) Handler() http.Handler {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		if !s.enter(p.ID) {
+			w.Header().Set("Retry-After", "2")
+			http.Error(w, "too many requests at once", http.StatusTooManyRequests)
+			return
+		}
+		defer s.leave(p.ID)
 		volume := ""
 		if s.Volume != nil {
 			volume = s.Volume()
@@ -222,6 +256,7 @@ func (s *Server) Handler() http.Handler {
 		}
 		defer repo.Close()
 		s.count(p.ID, repo)
+		s.purge(p.ID, repo)
 		s.serveRepo(w, r, p, repo, strings.TrimSuffix(inside, "/"), strings.HasSuffix(inside, "/"))
 	})
 }
@@ -249,6 +284,88 @@ func (s *Server) count(id string, repo *os.Root) {
 		s.usage[id] = total
 	}
 	s.mu.Unlock()
+}
+
+// enter counts a request of a partner; false when it has too many at once.
+func (s *Server) enter(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.active[id] >= maxConcurrent {
+		return false
+	}
+	s.active[id]++
+	return true
+}
+
+func (s *Server) leave(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.active[id]--
+}
+
+// reserve takes n bytes of a partner's room before an upload; false if
+// they are not there. Release gives back what was not used.
+func (s *Server) reserve(id string, quota, n int64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.usage[id]+s.reserved[id]+n > quota {
+		return false
+	}
+	s.reserved[id] += n
+	return true
+}
+
+func (s *Server) release(id string, n int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.reserved[id] = max(s.reserved[id]-n, 0)
+}
+
+func (s *Server) room(id string, quota int64) int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return quota - s.usage[id] - s.reserved[id]
+}
+
+// purge empties the quarantines of a partner that are older than the
+// protection period, at most once an hour (only on a request: the disk
+// is awake then).
+func (s *Server) purge(id string, repo *os.Root) {
+	now := s.Now()
+	s.mu.Lock()
+	due := now.Sub(s.purged[id]) >= purgeEvery
+	if due {
+		s.purged[id] = now
+	}
+	s.mu.Unlock()
+	if !due {
+		return
+	}
+	entries, err := fs.ReadDir(repo.FS(), Trash)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		at, err := strconv.ParseInt(e.Name(), 10, 64)
+		if err != nil || !e.IsDir() || now.Sub(time.Unix(0, at)) < s.protect() {
+			continue
+		}
+		dir := filepath.Join(Trash, e.Name())
+		var size int64
+		_ = fs.WalkDir(repo.FS(), dir, func(_ string, d fs.DirEntry, err error) error { // unreadable entries are skipped
+			if err == nil && d.Type().IsRegular() {
+				if info, err := d.Info(); err == nil {
+					size += info.Size()
+				}
+			}
+			return nil
+		})
+		if err := repo.RemoveAll(dir); err != nil {
+			slog.Warn("buddy quarantine not emptied", "partner", id, "err", err)
+			continue
+		}
+		s.add(id, -size)
+	}
 }
 
 func (s *Server) add(id string, n int64) {
@@ -384,16 +501,28 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request, p Partner, repo 
 		http.Error(w, "already exists; this repository is append-only", http.StatusForbidden)
 		return
 	}
-	used, _ := s.Usage(p.ID)
-	room := p.Quota - used
-	// A lock is tiny and lets restic remove old data when the quota is full.
+	quota := p.Quota
+	limit := int64(maxBlob)
+	// A lock is tiny and lets restic remove old data when the quota is
+	// full: up to maxLocks of them may go beyond it.
 	if strings.HasPrefix(path, "locks"+string(filepath.Separator)) {
-		room = max(room, maxLock)
+		if locks, _ := fs.ReadDir(repo.FS(), "locks"); len(locks) >= maxLocks {
+			http.Error(w, "too many locks", http.StatusInsufficientStorage)
+			return
+		}
+		quota, limit = max(quota, 0)+maxLock*maxLocks, maxLock
 	}
-	if r.ContentLength > maxBlob || r.ContentLength > 0 && r.ContentLength > room || room <= 0 {
+	// Reserve before copying: the length if known, else the room left.
+	want := r.ContentLength
+	if want < 0 {
+		want = min(s.room(p.ID, quota), limit)
+	}
+	if want > limit || want <= 0 && r.ContentLength != 0 || !s.reserve(p.ID, quota, want) {
 		http.Error(w, "quota of this partner reached (insufficient storage)", http.StatusInsufficientStorage)
 		return
 	}
+	defer s.release(p.ID, want)
+	limit = want
 	if err := repo.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		fail(w, err)
 		return
@@ -407,7 +536,6 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request, p Partner, repo 
 		return
 	}
 	defer repo.Remove(temp)
-	limit := min(room, maxBlob)
 	n, err := io.Copy(out, io.LimitReader(r.Body, limit+1))
 	if err == nil {
 		err = out.Sync()
@@ -432,29 +560,39 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request, p Partner, repo 
 	s.add(p.ID, n)
 }
 
-// remove deletes a file as far as the append-only rule allows.
+// remove deletes a lock; data, index and snapshots go to the quarantine.
 func (s *Server) remove(w http.ResponseWriter, r *http.Request, p Partner, repo *os.Root, path, kind string) {
 	info, err := repo.Lstat(path)
-	if err != nil {
+	if err != nil || !info.Mode().IsRegular() {
 		http.NotFound(w, r)
 		return
 	}
 	switch kind {
 	case "locks":
+		if err := repo.Remove(path); err != nil {
+			fail(w, err)
+			return
+		}
+		s.add(p.ID, -info.Size())
 	case "data", "index", "snapshots":
-		if s.Now().Sub(info.ModTime()) < s.protect() {
-			http.Error(w, "append-only: younger than the protection period of the partner", http.StatusForbidden)
+		// One quarantine folder per second keeps related deletes together.
+		stamp := s.Now().Truncate(time.Second).UnixNano()
+		target := filepath.Join(Trash, strconv.FormatInt(stamp, 10), path)
+		if err := repo.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+			fail(w, err)
+			return
+		}
+		if _, err := repo.Lstat(target); err == nil {
+			target += "." + strconv.FormatInt(s.Now().UnixNano(), 10)
+		}
+		if err := repo.Rename(path, target); err != nil {
+			fail(w, err)
 			return
 		}
 	default: // config, keys
 		http.Error(w, "append-only: the repository stays", http.StatusForbidden)
 		return
 	}
-	if err := repo.Remove(path); err != nil {
-		fail(w, err)
-		return
-	}
-	s.add(p.ID, -info.Size())
 }
 
 func fail(w http.ResponseWriter, err error) {

@@ -23,9 +23,9 @@ import (
 type agentBuddy struct {
 	Enabled bool `json:"enabled,omitempty"`
 	// Address is how partners reach this NAS (Tailscale name or address,
-	// optionally :port); Port where the server of this NAS listens.
+	// optionally :port). The server listens on buddy.DefaultPort (8752),
+	// a fixed port the firewall knows as the service "buddy".
 	Address string `json:"address,omitempty"`
-	Port    int    `json:"port,omitempty"`
 	// Volume keeps the backups of the partners (.titanos/buddy/<partner>).
 	Volume string `json:"volume,omitempty"`
 	// ProtectDays: data of partners younger than this cannot be deleted.
@@ -42,9 +42,6 @@ type agentBuddy struct {
 func (b agentBuddy) view() agentBuddy { return b.withDefaults() }
 
 func (b agentBuddy) withDefaults() agentBuddy {
-	if b.Port == 0 {
-		b.Port = buddy.DefaultPort
-	}
 	if b.ProtectDays == 0 {
 		b.ProtectDays = buddy.DefaultProtectDays
 	}
@@ -107,9 +104,6 @@ var clockForm = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
 
 func (s *Server) checkFamilyNAS(f *agentFeatures, old agentFeatures) error {
 	b := &f.Buddy
-	if b.Port != 0 && (b.Port < 1024 || b.Port > 65535) {
-		return errors.New("buddy: port 1024 to 65535")
-	}
 	if b.Address != "" {
 		address, err := buddy.CheckAddress(b.Address)
 		if err != nil {
@@ -153,12 +147,16 @@ func (s *Server) checkDiaryMine(user string, d *agentDiaryMine, old agentDiaryMi
 			continue
 		}
 		u, err := url.Parse(*raw)
-		if err != nil || u.Scheme != "http" && u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || len(*raw) > 512 {
+		// No user info, query or fragment: the paths of the APIs are added
+		// to the end and must stay a path.
+		if err != nil || u.Scheme != "http" && u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery ||
+			u.Fragment != "" || strings.ContainsAny(*raw, "#?@") || len(*raw) > 512 {
 			return errors.New("diary: Immich and Frigate as http(s) address")
 		}
 	}
 	d.ImmichKey = strings.TrimSpace(d.ImmichKey)
-	if d.ImmichKey == "" && !d.ClearImmichKey {
+	// The stored key only goes with the address it was given for.
+	if d.ImmichKey == "" && !d.ClearImmichKey && d.ImmichURL == old.ImmichURL {
 		d.ImmichKey = old.ImmichKey
 	}
 	if d.ImmichURL == "" {

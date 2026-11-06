@@ -5,12 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -178,45 +180,113 @@ func TestQuota(t *testing.T) {
 	}
 }
 
-// Append-only: nothing is replaced, config and keys stay, locks go, data
-// goes only when older than the protection period.
+// Append-only: nothing is replaced, config and keys stay, locks go, data,
+// index and snapshots go to the quarantine, which is emptied only after
+// the protection period and never listed.
 func TestAppendOnly(t *testing.T) {
 	f := newFixture(t, 1<<20)
-	tom := func(method, path string, body []byte) int {
-		code, _ := f.do(t, method, "/v1/tom"+path, "tom", f.token, body)
-		return code
+	tom := func(method, path string, body []byte) (int, string) {
+		code, out := f.do(t, method, "/v1/tom"+path, "tom", f.token, body)
+		return code, string(out)
 	}
 	tom("POST", "/?create=true", nil)
 	for _, p := range []string{"/config", "/keys/" + blobA, "/locks/" + blobA, "/data/" + blobA, "/snapshots/" + blobA, "/index/" + blobA} {
-		if code := tom("POST", p, []byte("v1")); code != 200 {
+		if code, _ := tom("POST", p, []byte("v1")); code != 200 {
 			t.Fatalf("upload %s: %d", p, code)
 		}
 	}
-	if code := tom("POST", "/data/"+blobA, []byte("v2")); code != http.StatusForbidden {
+	if code, _ := tom("POST", "/data/"+blobA, []byte("v2")); code != http.StatusForbidden {
 		t.Fatalf("overwrite: %d", code)
 	}
-	for _, p := range []string{"/config", "/keys/" + blobA, "/data/" + blobA, "/snapshots/" + blobA, "/index/" + blobA} {
-		if code := tom("DELETE", p, nil); code != http.StatusForbidden {
-			t.Errorf("young delete %s: %d", p, code)
-		}
-	}
-	if code := tom("DELETE", "/locks/"+blobA, nil); code != 200 {
-		t.Fatalf("lock delete: %d", code)
-	}
-	// 31 days later the owner may prune old data, still not keys or config.
-	f.now = f.now.Add(31 * 24 * time.Hour)
-	for _, p := range []string{"/data/" + blobA, "/snapshots/" + blobA, "/index/" + blobA} {
-		if code := tom("DELETE", p, nil); code != 200 {
-			t.Errorf("old delete %s: %d", p, code)
-		}
-	}
 	for _, p := range []string{"/config", "/keys/" + blobA} {
-		if code := tom("DELETE", p, nil); code != http.StatusForbidden {
+		if code, _ := tom("DELETE", p, nil); code != http.StatusForbidden {
 			t.Errorf("delete %s: %d", p, code)
 		}
 	}
+	for _, p := range []string{"/locks/" + blobA, "/data/" + blobA, "/snapshots/" + blobA, "/index/" + blobA} {
+		if code, _ := tom("DELETE", p, nil); code != 200 {
+			t.Errorf("delete %s: %d", p, code)
+		}
+	}
+	// Gone for the partner, but kept in quarantine and counted.
+	for _, p := range []string{"/data/", "/snapshots/", "/index/"} {
+		if _, body := tom("GET", p, nil); strings.Contains(body, blobA) {
+			t.Errorf("%s still lists the file: %s", p, body)
+		}
+	}
+	trash := filepath.Join(f.mount, "tank", Dir, "tom", Trash)
+	var kept []string
+	filepath.Walk(trash, func(p string, info os.FileInfo, err error) error {
+		if err == nil && info.Mode().IsRegular() {
+			kept = append(kept, filepath.Base(p))
+		}
+		return nil
+	})
+	if len(kept) != 3 {
+		t.Fatalf("quarantine: %v", kept)
+	}
+	if n, _ := f.s.Usage("tom"); n != 10 {
+		t.Fatalf("usage counts the quarantine: %d", n)
+	}
+	// A day later it stays; after the protection period it goes.
+	f.now = f.now.Add(25 * time.Hour)
+	tom("GET", "/config", nil)
+	if _, err := os.Stat(trash); err != nil {
+		t.Fatal("quarantine emptied too early")
+	}
+	f.now = f.now.Add(30 * 24 * time.Hour)
+	tom("GET", "/config", nil)
+	if entries, _ := os.ReadDir(trash); len(entries) != 0 {
+		t.Fatalf("quarantine not emptied: %v", entries)
+	}
 	if n, _ := f.s.Usage("tom"); n != 4 {
-		t.Fatalf("usage after prune: %d", n)
+		t.Fatalf("usage after emptying: %d", n)
+	}
+}
+
+// Parallel uploads cannot pass the quota together; lock files are capped;
+// a partner has a bounded number of requests at once.
+func TestQuotaReservedAndLimits(t *testing.T) {
+	f := newFixture(t, 100)
+	f.do(t, "POST", "/v1/tom/?create=true", "tom", f.token, nil)
+	var wg sync.WaitGroup
+	codes := make(chan int, 10)
+	for i := range 10 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			name := strings.Repeat(string("0123456789"[i]), 64)
+			code, _ := f.do(t, "POST", "/v1/tom/data/"+name, "tom", f.token, bytes.Repeat([]byte("x"), 30))
+			codes <- code
+		}()
+	}
+	wg.Wait()
+	close(codes)
+	ok := 0
+	for c := range codes {
+		if c == 200 {
+			ok++
+		}
+	}
+	if n, _ := f.s.Usage("tom"); ok > 3 || n > 100 {
+		t.Fatalf("quota passed: %d uploads, %d bytes", ok, n)
+	}
+	// Locks: at most maxLocks.
+	for i := range maxLocks + 1 {
+		name := strings.Repeat("0", 60) + string("0123456789abcdef"[i/16]) + string("0123456789abcdef"[i%16]) + "00"
+		code, _ := f.do(t, "POST", "/v1/tom/locks/"+name, "tom", f.token, []byte("lock"))
+		if i < maxLocks && code != 200 || i == maxLocks && code != http.StatusInsufficientStorage {
+			t.Fatalf("lock %d: %d", i, code)
+		}
+	}
+	// Requests at once.
+	for range maxConcurrent {
+		if !f.s.enter("tom") {
+			t.Fatal("enter")
+		}
+	}
+	if code, _ := f.do(t, "GET", "/v1/tom/config", "tom", f.token, nil); code != http.StatusTooManyRequests {
+		t.Fatalf("too many at once: %d", code)
 	}
 }
 
@@ -294,12 +364,13 @@ func TestPairRoundTrip(t *testing.T) {
 }
 
 func TestCheckAddress(t *testing.T) {
-	for in, want := range map[string]string{"nas-tom": "nas-tom:8752", "nas-tom.tail1234.ts.net:9000": "nas-tom.tail1234.ts.net:9000", "100.64.1.2": "100.64.1.2:8752", "[fd7a:115c:a1e0::1]:8752": "[fd7a:115c:a1e0::1]:8752"} {
+	for in, want := range map[string]string{"nas-tom.tail1234.ts.net": "nas-tom.tail1234.ts.net:8752", "nas-tom.tail1234.ts.net:9000": "nas-tom.tail1234.ts.net:9000", "100.64.1.2": "100.64.1.2:8752", "[fd7a:115c:a1e0::1]:8752": "[fd7a:115c:a1e0::1]:8752"} {
 		if got, err := CheckAddress(in); err != nil || got != want {
 			t.Errorf("%s: %s %v", in, got, err)
 		}
 	}
-	for _, bad := range []string{"", "http://x", "a b", "x:0", "x:70000", "x/../y"} {
+	// Not over Tailscale: the token would go in the clear.
+	for _, bad := range []string{"", "nas-tom", "192.168.1.20", "example.org", "8.8.8.8:8752", "http://x", "a b", "x.ts.net:0", "x.ts.net:70000", "x/../y"} {
 		if _, err := CheckAddress(bad); err == nil {
 			t.Errorf("accepted %q", bad)
 		}
@@ -309,8 +380,41 @@ func TestCheckAddress(t *testing.T) {
 	}
 }
 
-// With restic installed, a real backup, check and restore go through the
-// server; the repository stays readable only with its password.
+func TestServerLimits(t *testing.T) {
+	srv := NewHTTPServer(http.NotFoundHandler())
+	if srv.ReadHeaderTimeout == 0 || srv.ReadTimeout == 0 || srv.WriteTimeout == 0 || srv.IdleTimeout == 0 {
+		t.Fatalf("timeouts: %+v", srv)
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	limited := LimitListener(ln, 1)
+	defer limited.Close()
+	go func() {
+		for {
+			c, err := limited.Accept()
+			if err != nil {
+				return
+			}
+			_ = c // held open: the slot stays taken
+		}
+	}()
+	first, _ := net.Dial("tcp", ln.Addr().String())
+	defer first.Close()
+	time.Sleep(50 * time.Millisecond)
+	second, _ := net.Dial("tcp", ln.Addr().String())
+	defer second.Close()
+	// The second connection is not accepted while the first is open.
+	second.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+	if l := limited.(*limitListener); len(l.slots) != 1 {
+		t.Fatalf("slots: %d", len(l.slots))
+	}
+}
+
+// With restic installed: init, two backups, forget --prune go through;
+// what prune deleted is in quarantine, and putting it back (plus restic
+// repair index) brings the forgotten snapshot back, restorable.
 func TestRealRestic(t *testing.T) {
 	binary, err := exec.LookPath("restic")
 	if err != nil {
@@ -340,11 +444,10 @@ func TestRealRestic(t *testing.T) {
 	}
 	must("init")
 	must("backup", "doc.txt")
+	first := strings.TrimSpace(must("snapshots", "--json", "--latest", "1"))
+	os.WriteFile(filepath.Join(source, "doc.txt"), []byte("second version, another text entirely\n"), 0o600)
+	must("backup", "doc.txt")
 	must("check", "--read-data")
-	must("restore", "latest", "--target", filepath.Join(work, "restored"))
-	if data, _ := os.ReadFile(filepath.Join(work, "restored", "doc.txt")); string(data) != "Backup-Buddy round trip\n" {
-		t.Fatalf("restored %q", data)
-	}
 	// The receiving side holds no plain text.
 	filepath.Walk(filepath.Join(f.mount, "tank", Dir), func(p string, info os.FileInfo, err error) error {
 		if err == nil && info.Mode().IsRegular() {
@@ -354,11 +457,49 @@ func TestRealRestic(t *testing.T) {
 		}
 		return nil
 	})
-	// A young snapshot cannot be forgotten; restic reports the refusal.
-	if out, _ := run("forget", "latest"); !strings.Contains(out, "403") {
-		t.Fatalf("forget of a young snapshot was not refused: %s", out)
+	// forget --prune as the sender runs it: works, nothing refused.
+	out := must("forget", "--keep-last", "1", "--prune")
+	if strings.Contains(out, "403") || strings.Contains(out, "unable to remove") {
+		t.Fatalf("prune refused: %s", out)
 	}
-	if out := must("snapshots", "--json"); !strings.Contains(out, "doc.txt") && !strings.Contains(out, "source") {
-		t.Fatalf("snapshot gone: %s", out)
+	must("check")
+	if snaps := must("snapshots", "--json"); strings.Count(snaps, `"short_id"`) != 1 {
+		t.Fatalf("snapshots after forget: %s", snaps)
+	}
+	// Putting the quarantine back brings the first snapshot back.
+	repo := filepath.Join(f.mount, "tank", Dir, "tom")
+	trash := filepath.Join(repo, Trash)
+	stamps, _ := os.ReadDir(trash)
+	if len(stamps) == 0 {
+		t.Fatal("nothing in quarantine")
+	}
+	for _, st := range stamps {
+		base := filepath.Join(trash, st.Name())
+		filepath.Walk(base, func(p string, info os.FileInfo, err error) error {
+			if err != nil || !info.Mode().IsRegular() {
+				return nil
+			}
+			rel, _ := filepath.Rel(base, p)
+			if _, err := os.Stat(filepath.Join(repo, rel)); err == nil {
+				return nil
+			}
+			os.MkdirAll(filepath.Dir(filepath.Join(repo, rel)), 0o700)
+			return os.Rename(p, filepath.Join(repo, rel))
+		})
+	}
+	must("repair", "index")
+	if snaps := must("snapshots", "--json"); strings.Count(snaps, `"short_id"`) != 2 {
+		t.Fatalf("snapshots after putting back: %s", snaps)
+	}
+	var list []struct {
+		ID string `json:"id"`
+	}
+	json.Unmarshal([]byte(first), &list)
+	if len(list) != 1 {
+		t.Fatalf("first snapshot: %s", first)
+	}
+	must("restore", list[0].ID, "--target", filepath.Join(work, "restored"))
+	if data, _ := os.ReadFile(filepath.Join(work, "restored", "doc.txt")); string(data) != "Backup-Buddy round trip\n" {
+		t.Fatalf("restored %q", data)
 	}
 }
