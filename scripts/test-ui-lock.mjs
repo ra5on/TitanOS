@@ -257,7 +257,8 @@ try {
       document.body.append(frame);
     }, `${base}/`);
     const frame = page.frameLocator("#win");
-    await frame.locator("header .account .trigger").waitFor();
+    // A page in a frame of its own origin is a window of the desktop (PLAN 61): no head line.
+    await frame.locator("main.in-window").waitFor();
     await frame.locator("body").click({ position: { x: 10, y: 300 } });
     await frame.locator("body").press("Control+Alt+KeyL");
     await screen(page).waitFor();
