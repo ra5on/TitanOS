@@ -74,7 +74,7 @@
 	"power.preparingTextRestart": "VMs, containers and Docker apps are being ended. Then the NAS restarts.",
 	"power.preparingTextShutdown": "VMs, containers and Docker apps are being ended. Then the NAS shuts down.",
 	"power.preparingNothing": "Nothing runs that has to be ended.",
-	"power.stuck": "After 5 minutes this still runs: {names}. You can wait longer, go on anyway or cancel.",
+	"power.stuck": "After 5 minutes this still runs: {names}. You can wait longer, go on anyway (VMs still running are then switched off) or cancel.",
 	"power.anywayRestart": "Restart now anyway",
 	"power.anywayShutdown": "Shut down now anyway",
 	"power.callOff": "Cancel",

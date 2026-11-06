@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -98,5 +99,161 @@ func TestPruneKeepsTheCurrentStart(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "now.log")); err != nil {
 		t.Fatal("current start removed")
+	}
+}
+
+func reports(m *Manager) func() []Unclean {
+	var mu sync.Mutex
+	var got []Unclean
+	m.OnUnclean = func(u Unclean) { mu.Lock(); got = append(got, u); mu.Unlock() }
+	return func() []Unclean {
+		time.Sleep(20 * time.Millisecond)
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(got)
+	}
+}
+
+// A restart asked for in TitanOS seals the start: the next start reports
+// nothing, even if titand is killed afterwards before its own last write.
+func TestRequestedRestartIsClean(t *testing.T) {
+	base := t.TempDir()
+	first := manager(t, base, "aaa", &journal{out: "line\n-- cursor: c1\n"})
+	first.flush(context.Background())
+	if err := first.Seal(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// Lines that come later still go to the log, but no marker comes back.
+	first.flush(context.Background())
+	if _, err := os.Stat(filepath.Join(base, Dir, marker)); err == nil {
+		t.Fatal("marker after Seal")
+	}
+	second := manager(t, base, "bbb", &journal{})
+	got := reports(second)
+	second.flush(context.Background())
+	if u := got(); len(u) != 0 {
+		t.Fatalf("clean restart reported: %+v", u)
+	}
+}
+
+// A power cut is still a power cut, also after a restart that failed.
+func TestPowerCutAfterAFailedRestartIsReported(t *testing.T) {
+	base := t.TempDir()
+	first := manager(t, base, "aaa", &journal{})
+	first.flush(context.Background())
+	first.Seal(context.Background())
+	first.Rearm() // systemctl refused: the NAS runs on
+	second := manager(t, base, "bbb", &journal{})
+	got := reports(second)
+	second.flush(context.Background())
+	if u := got(); len(u) != 1 || u[0].Boot != "aaa" {
+		t.Fatalf("power cut not reported: %+v", u)
+	}
+}
+
+// Before 0.59.2 the marker was removed in whatever folder was current at
+// the end, silently. A volume that is no longer mounted (the folder is
+// gone) must not count as cleanly ended: the next start reports it.
+func TestSealFailsWhenTheVolumeIsGone(t *testing.T) {
+	disk, empty := t.TempDir(), t.TempDir()
+	first := manager(t, disk, "aaa", &journal{})
+	first.flush(context.Background())
+	// Unmounted: the folder below the mount point is gone.
+	hidden := filepath.Join(empty, "hidden")
+	if err := os.Rename(filepath.Join(disk, ".titanos"), hidden); err != nil {
+		t.Fatal(err)
+	}
+	first.Target = func() (string, bool) { return "", false }
+	if err := first.Seal(context.Background()); err == nil {
+		t.Fatal("Seal claims a clean end without a volume")
+	}
+	first.finish()
+	os.Rename(hidden, filepath.Join(disk, ".titanos"))
+	second := manager(t, disk, "bbb", &journal{})
+	got := reports(second)
+	second.flush(context.Background())
+	if u := got(); len(u) != 1 {
+		t.Fatalf("not reported: %+v", u)
+	}
+}
+
+// The volume for the logs can change while the NAS runs: "archive" is
+// mounted first, "media" (encrypted, sorts first) only once it is opened.
+// Before 0.59.2 the marker on "archive" stayed, and every restart was
+// reported as unclean when "archive" came up first the next time.
+func TestMarkerFollowsTheVolume(t *testing.T) {
+	archive, media := t.TempDir(), t.TempDir()
+	first := manager(t, archive, "aaa", &journal{})
+	first.flush(context.Background())
+	first.Target = func() (string, bool) { return media, true }
+	first.flush(context.Background())
+	if _, err := os.Stat(filepath.Join(archive, Dir, marker)); err == nil {
+		t.Fatal("marker left on the volume used before")
+	}
+	if err := first.Seal(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for _, base := range []string{archive, media} {
+		next := manager(t, base, "bbb", &journal{})
+		got := reports(next)
+		next.flush(context.Background())
+		if u := got(); len(u) != 0 {
+			t.Fatalf("%s: clean restart reported: %+v", base, u)
+		}
+	}
+}
+
+// Without a request (power button, UPS, systemctl in a console) the end is
+// recorded when titand stops: Run writes, removes the marker and says so.
+func TestStopOfTitandEndsTheStartCleanly(t *testing.T) {
+	base := t.TempDir()
+	j := &journal{out: "last line\n-- cursor: c9\n"}
+	m := manager(t, base, "aaa", j)
+	ctx, cancel := context.WithCancel(context.Background())
+	go m.Run(ctx)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if _, err := os.Stat(filepath.Join(base, Dir, marker)); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("no marker")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	cancel()
+	select {
+	case <-m.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run did not finish")
+	}
+	if _, err := os.Stat(filepath.Join(base, Dir, marker)); err == nil {
+		t.Fatal("marker after a clean stop")
+	}
+}
+
+// Locking the encrypted volume that holds the logs takes this start's
+// marker away first; the logs go on on another volume.
+func TestLockingTheLogVolumeTakesTheMarkerAlong(t *testing.T) {
+	media, archive := t.TempDir(), t.TempDir()
+	m := manager(t, media, "aaa", &journal{})
+	m.flush(context.Background())
+	m.LetGo(media)
+	if _, err := os.Stat(filepath.Join(media, Dir, marker)); err == nil {
+		t.Fatal("marker left on the locked volume")
+	}
+	m.Target = func() (string, bool) { return archive, true }
+	m.flush(context.Background())
+	if _, err := os.Stat(filepath.Join(archive, Dir, marker)); err != nil {
+		t.Fatal("no marker on the volume used now")
+	}
+	if err := m.Seal(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	next := manager(t, media, "bbb", &journal{})
+	got := reports(next)
+	next.flush(context.Background())
+	if u := got(); len(u) != 0 {
+		t.Fatalf("reported: %+v", u)
 	}
 }

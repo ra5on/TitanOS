@@ -74,7 +74,7 @@
 	"power.preparingTextRestart": "VMs, Container und Docker-Apps werden beendet. Danach startet das NAS neu.",
 	"power.preparingTextShutdown": "VMs, Container und Docker-Apps werden beendet. Danach fährt das NAS herunter.",
 	"power.preparingNothing": "Es läuft nichts, das beendet werden muss.",
-	"power.stuck": "Nach 5 Minuten läuft noch: {names}. Du kannst weiter warten, trotzdem weitermachen oder abbrechen.",
+	"power.stuck": "Nach 5 Minuten läuft noch: {names}. Du kannst weiter warten, trotzdem weitermachen (noch laufende VMs werden dann ausgeschaltet) oder abbrechen.",
 	"power.anywayRestart": "Trotzdem jetzt neu starten",
 	"power.anywayShutdown": "Trotzdem jetzt herunterfahren",
 	"power.callOff": "Abbrechen",
