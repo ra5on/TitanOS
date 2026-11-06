@@ -14,6 +14,8 @@
 		suggestedProxyPort,
 		type ProxyForm,
 	} from '#lib/app-proxy.ts';
+	import { gatedAppURL } from '#lib/app-links.ts';
+	import { apiPath } from '#lib/cluster-node.ts';
 	import ProxyRouteFields from '#lib/components/ProxyRouteFields.svelte';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 
@@ -146,7 +148,12 @@
 	{:else if embedded && !open}
 		<div class="summary">
 			{#if saved?.enabled && !status.off && saved.urls.length}
-				<a class="mono" href={saved.urls[0]} target="_blank" rel="noreferrer">{saved.urls[0]}</a>
+				<a
+					class="mono"
+					href={gatedAppURL(app, saved.urls[0], apiPath)}
+					target="_blank"
+					rel="noreferrer">{saved.urls[0]}</a
+				>
 				{#if saved.urls.length > 1}<span class="muted"
 						>{t('appform.moreAddresses', { count: saved.urls.length - 1 })}</span
 					>{/if}
@@ -172,7 +179,7 @@
 				<span class="muted">{t('proxy.addresses')}</span>
 				{#each saved.urls as address (address)}<a
 						class="mono"
-						href={address}
+						href={gatedAppURL(app, address, apiPath)}
 						target="_blank"
 						rel="noreferrer">{address}</a
 					>{/each}

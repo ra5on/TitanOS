@@ -14,6 +14,7 @@ func TestLetsEncryptCertificateByName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	m.ca.failed = true // the fallback without the TitanOS authority
 	selfSigned, _ := m.GetCertificate(&tls.ClientHelloInfo{ServerName: "nas.example.org"})
 	certPEM, keyPEM := issue(t, func(c *x509.Certificate) { c.DNSNames = []string{"nas.example.org", "*.example.org"} })
 	acme, err := tls.X509KeyPair(certPEM, keyPEM)

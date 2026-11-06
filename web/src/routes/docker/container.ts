@@ -1,5 +1,6 @@
 import type { DockerContainer } from '#lib/api.ts';
-import { appURL, publicURL } from '#lib/app-links.ts';
+import { appURL, gatedAppURL, publicURL } from '#lib/app-links.ts';
+import { apiPath } from '#lib/cluster-node.ts';
 import { formatDuration } from '#lib/format.ts';
 import { t } from '#lib/i18n/index.svelte.ts';
 
@@ -58,13 +59,13 @@ export function webLinks(
 			icon: 'lock',
 			text: t('docker.proxyWebui'),
 			label: t('docker.proxyWebuiLabel'),
-			href: publicURL(container.proxyUrl ?? ''),
+			href: gatedAppURL(container.app, container.proxyUrl ?? '', apiPath),
 		},
 		{
 			icon: 'tailnet',
 			text: t('docker.tailnetWebui'),
 			label: t('docker.tailnetWebuiLabel'),
-			href: publicURL(container.tailnetUrl ?? ''),
+			href: gatedAppURL(container.app, container.tailnetUrl ?? '', apiPath),
 		},
 		{
 			icon: 'tailnet',

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -66,6 +67,11 @@ type Manager struct {
 	tailnet atomic.Pointer[tls.Certificate]
 	// apps serves the HTTPS names of Docker apps; see apps.go.
 	apps appsCert
+	// ca is the authority of TitanOS that issues the certificates where
+	// no real one is; see ca.go.
+	ca authority
+	// localAddresses replaces the NAS's addresses in tests.
+	localAddresses func() []net.IP
 }
 
 // NewManager loads the certificate to use: the administrator's own if
@@ -74,6 +80,7 @@ type Manager struct {
 // a new certificate could not be stored.
 func NewManager(store *config.Store, hostname string) (*Manager, error) {
 	m := &Manager{store: store, hostname: hostname, now: time.Now}
+	m.ca.ui.file, m.ca.apps.file = caLeafUIFile, caLeafAppsFile
 	if cert, err := m.loadCustom(); err == nil {
 		m.current.Store(&cert)
 		m.kind.Store(KindCustom)
@@ -98,6 +105,12 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 		}
 		if tailnet := m.tailnet.Load(); tailnet != nil && covers(tailnet, hello.ServerName) {
 			return tailnet, nil
+		}
+	}
+	if m.kind.Load() == KindSelfSigned {
+		// Instead of the self-signed one, one from the TitanOS authority.
+		if leaf, err := m.uiLeaf(localIP(hello)); err == nil {
+			return leaf, nil
 		}
 	}
 	return m.current.Load(), nil
@@ -221,6 +234,12 @@ func (m *Manager) RemoveCustom() error {
 func (m *Manager) Info() Info {
 	info := Describe(m.current.Load())
 	info.Kind = m.kind.Load().(string)
+	if info.Kind == KindSelfSigned {
+		if leaf, err := m.uiLeaf(nil); err == nil {
+			info = Describe(leaf)
+			info.Kind = KindCA
+		}
+	}
 	if acme := m.acme.Load(); acme != nil {
 		described := Describe(acme)
 		described.Kind = KindLetsEncrypt

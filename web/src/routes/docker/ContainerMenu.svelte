@@ -39,7 +39,9 @@
 	// "nas.local:8096" beside an address, so one sees where it leads.
 	function where(href: string): string {
 		try {
-			return new URL(href).host;
+			// Links through TitanOS (app gate) name the app's host in ?host=.
+			const url = new URL(href, location.href);
+			return url.origin === location.origin ? (url.searchParams.get('host') ?? '') : url.host;
 		} catch {
 			return '';
 		}

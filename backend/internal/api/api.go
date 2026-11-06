@@ -20,6 +20,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/activity"
 	"github.com/ra5on/TitanOS/backend/internal/agent"
+	"github.com/ra5on/TitanOS/backend/internal/appaccess"
 	"github.com/ra5on/TitanOS/backend/internal/appbackup"
 	"github.com/ra5on/TitanOS/backend/internal/appproxy"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
@@ -95,7 +96,10 @@ type Options struct {
 	SmartHistory *smarthistory.Recorder
 	// AppProxy gives apps HTTPS names of their own; nil leaves them out.
 	AppProxy *appproxy.Manager
-	Catalog  *catalog.Manager
+	// AppAccess holds which accounts may use which Docker app (PLAN 61);
+	// nil gives every app to owners and administrators only.
+	AppAccess *appaccess.Manager
+	Catalog   *catalog.Manager
 	// Terminal hands out the shell on the NAS and knows whether consoles are allowed.
 	Terminal *terminal.Manager
 	VMs      *vm.Manager

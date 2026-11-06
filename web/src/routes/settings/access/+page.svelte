@@ -27,7 +27,7 @@
 		clientAddress: string;
 	};
 	type Certificate = {
-		kind: 'self-signed' | 'custom';
+		kind: 'self-signed' | 'custom' | 'titanos-ca';
 		names: string[];
 		issuer: string;
 		notBefore: string;
@@ -359,6 +359,11 @@
 	{:else if certificate}
 		{#if certificate.kind === 'self-signed'}
 			<p class="muted">{t('access.certSelf')}</p>
+		{:else if certificate.kind === 'titanos-ca'}
+			<p class="muted">
+				{t('appaccess.certCa')}
+				<a href="/settings/proxy#proxy-ca">{t('appaccess.certCaLink')}</a>
+			</p>
 		{:else if daysLeft < 14}
 			<p class="notice-warn">{t('access.certExpiring', { days: Math.max(daysLeft, 0) })}</p>
 		{/if}
@@ -375,7 +380,11 @@
 		<dl>
 			<div>
 				<dt>{t('access.certKind')}</dt>
-				<dd>{t(`access.certKind.${certificate.kind}`)}</dd>
+				<dd>
+					{certificate.kind === 'titanos-ca'
+						? t('appaccess.certKindCa')
+						: t(`access.certKind.${certificate.kind}`)}
+				</dd>
 			</div>
 			<div>
 				<dt>{t('access.certIssuer')}</dt>

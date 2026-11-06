@@ -55,3 +55,10 @@ Konto erlaubten Bereiche. Der aktuelle Bereich bleibt am Knopf sichtbar.
 Links haben mindestens 44 px Höhe; das Menü schließt bei Auswahl, Escape,
 Außenklick und Wechsel zur Desktopbreite. Die Desktop-Reiterleiste bleibt
 seitlich scrollbar. Diese Anpassung gehört zum Entwicklungsstand nach Beta 7.
+
+## Über TitanOS geöffnete HTTPS-Namen (PLAN 61)
+
+Links der Oberfläche auf den HTTPS-Namen einer App (`proxyUrl`, `tailnetUrl`) zeigen auf
+`/api/v1/apps/<app>/open?host=<name>` (`gatedAppURL` in `web/src/lib/app-links.ts`). titand
+leitet mit einem einmaligen Token für die Browser-Sperre der App weiter; ohne Recht auf die
+App antwortet es 403. Einzelheiten: `docs/APP-WINDOWS.md`.

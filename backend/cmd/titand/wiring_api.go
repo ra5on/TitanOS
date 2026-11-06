@@ -50,6 +50,7 @@ func (w *titand) wireAPI() error {
 		FileIndex:          w.fullText,
 		Docker:             w.containers,
 		AppProxy:           w.routes,
+		AppAccess:          w.appRights,
 		Catalog:            w.appCatalog,
 		Terminal:           w.shells,
 		VMs:                w.machines,
