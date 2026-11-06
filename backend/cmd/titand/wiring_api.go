@@ -53,6 +53,7 @@ func (w *titand) wireAPI() error {
 		AppAccess:          w.appRights,
 		Catalog:            w.appCatalog,
 		Terminal:           w.shells,
+		Viewer:             w.remoteView,
 		VMs:                w.machines,
 		LXC:                w.systemContainers,
 		Hardware:           w.devices,

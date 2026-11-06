@@ -1,0 +1,898 @@
+package viewer
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strconv"
+	"sync"
+	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/docker"
+	"github.com/ra5on/TitanOS/backend/internal/hardware"
+)
+
+// Engine is the part of Docker the viewer uses (docker/viewer.go).
+type Engine interface {
+	Viewers(ctx context.Context) ([]docker.ViewerContainer, error)
+	ViewerCreate(ctx context.Context, spec docker.ViewerSpec) (string, error)
+	ViewerStart(ctx context.Context, id string) error
+	ViewerRemove(ctx context.Context, id string) error
+	ViewerAddress(ctx context.Context, id, network string) (string, error)
+	ViewerMemory(ctx context.Context, id string) (uint64, error)
+	ViewerImageID(ctx context.Context, ref string) (string, error)
+	ViewerLoadImage(ctx context.Context, archive io.Reader) error
+	ViewerNetwork(ctx context.Context, name string) error
+	AppEndpoints(ctx context.Context, app string) ([]docker.AppEndpoint, error)
+	ViewerAttach(ctx context.Context, network, id, alias string) (string, bool, error)
+	ViewerDetach(ctx context.Context, network, id, alias string) error
+	ViewerAttached(ctx context.Context, network, alias string) ([]string, error)
+}
+
+// Release gives the signed manifest and assets of a release (package
+// plugins, release_assets.go).
+type Release interface {
+	ReleaseManifest(ctx context.Context, version string) ([]byte, error)
+	DownloadReleaseAsset(ctx context.Context, version, asset, dest, sha256 string, size int64) error
+}
+
+// Errors of Open; the API turns each into a code for the window.
+var (
+	// ErrImageNotReady: the image is being fetched (or failed); see ImageStatus.
+	ErrImageNotReady = errors.New("viewer: the image is not ready")
+	// ErrMemory: a new view would leave less than Reserve of RAM.
+	ErrMemory = errors.New("viewer: not enough free memory")
+	// ErrHostNetwork: the app uses the network of the NAS (or of another
+	// container) and cannot join the internal network.
+	ErrHostNetwork = errors.New("viewer: the app uses the host network")
+	// ErrNoWebUI: no container of the app publishes the port of its WebUI.
+	ErrNoWebUI = errors.New("viewer: the app has no web interface")
+	// ErrNotRunning: the app's web container does not run.
+	ErrNotRunning = errors.New("viewer: the app does not run")
+	// ErrNoVolume: no mounted volume for the profiles.
+	ErrNoVolume = errors.New("viewer: no volume for the remote view")
+	// ErrName: an account or app name that cannot be a folder or label.
+	ErrName = errors.New("viewer: invalid name")
+)
+
+const (
+	// Reserve is the RAM that must stay free after a new view.
+	Reserve = 700 << 20
+	// PerView is what a view is expected to take (target ≤ 400 MB).
+	PerView = 400 << 20
+	// containerMemory is the hard limit of one viewer container.
+	containerMemory = 1536 << 20
+	// agentPort is where the agent in the container listens.
+	agentPort = 7300
+	// attachAlias marks the endpoint of an app TitanOS connected to the
+	// viewer network; only endpoints with it are ever disconnected.
+	attachAlias = "titanos-viewer-attached"
+)
+
+// profileUID is the user (and group) of the browser in the container;
+// tests set their own.
+var profileUID = 1000
+
+// Manager runs the remote views.
+type Manager struct {
+	Engine  Engine
+	Release Release
+	// Version is the version of this titand (without "v").
+	Version string
+	// Dev: development mode, local image, profiles in a temporary folder.
+	Dev       bool
+	MountRoot string
+	// Mounted lists the mounted volumes; DockerVolume is Docker's.
+	Mounted      func() []string
+	DockerVolume func() string
+	// Devices are the GPUs etc. for containers; Leased those with a VM.
+	Devices func(ctx context.Context) []hardware.ContainerDevice
+	Leased  func() map[string]bool
+	// Route is the app's HTTPS name target (host port and scheme), if any.
+	Route func(app string) (port int, scheme string, ok bool)
+	// MemAvailable is MemAvailable of /proc/meminfo in bytes.
+	MemAvailable func() (uint64, error)
+	// Network and Prefix name the internal network and the containers.
+	Network string
+	Prefix  string
+	// Linger keeps a container after the last window closed.
+	Linger time.Duration
+
+	store *config.Store
+
+	mu       sync.Mutex
+	settings Settings
+	image    imageState
+	sessions map[sessionKey]*session
+	gpus     []GPU
+	gpusAt   time.Time
+	cleaned  bool
+	cleanMu  sync.Mutex
+	devDir   string
+	base     context.Context
+}
+
+// New makes a manager with the defaults of a NAS.
+func New(store *config.Store) *Manager {
+	return &Manager{
+		store: store, MountRoot: "/mnt", Network: "titanos-viewer", Prefix: "titanos-viewer-",
+		Linger: 2 * time.Minute, MemAvailable: memAvailable, settings: Defaults(),
+		sessions: map[sessionKey]*session{}, base: context.Background(),
+	}
+}
+
+func (m *Manager) ctx() context.Context {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.base
+}
+
+// Load reads the settings; a missing file keeps the defaults.
+func (m *Manager) Load() error {
+	s := Defaults()
+	if err := m.store.ReadJSON(settingsFile, &s); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	m.mu.Lock()
+	m.settings = normalize(s)
+	m.mu.Unlock()
+	return nil
+}
+
+// Settings returns the current settings.
+func (m *Manager) Settings() Settings {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.settings
+}
+
+// SetSettings validates and stores the settings. Open views keep theirs.
+func (m *Manager) SetSettings(ctx context.Context, s Settings) error {
+	if err := Validate(s, m.GPUs(ctx), m.mounted()); err != nil {
+		return err
+	}
+	if err := m.store.WriteJSON(settingsFile, s); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	m.settings = s
+	m.mu.Unlock()
+	return nil
+}
+
+func (m *Manager) mounted() []string {
+	if m.Mounted == nil {
+		return nil
+	}
+	return m.Mounted()
+}
+
+// GPUs lists the devices for the remote view (cached for a minute: NVIDIA
+// asks nvidia-smi).
+func (m *Manager) GPUs(ctx context.Context) []GPU {
+	m.mu.Lock()
+	if m.gpus != nil && time.Since(m.gpusAt) < time.Minute {
+		out := slices.Clone(m.gpus)
+		m.mu.Unlock()
+		return out
+	}
+	m.mu.Unlock()
+	var devices []hardware.ContainerDevice
+	if m.Devices != nil {
+		devices = m.Devices(ctx)
+	}
+	var leased map[string]bool
+	if m.Leased != nil {
+		leased = m.Leased()
+	}
+	gpus := gpusFrom(devices, leased)
+	m.mu.Lock()
+	m.gpus, m.gpusAt = gpus, time.Now()
+	m.mu.Unlock()
+	return slices.Clone(gpus)
+}
+
+// NewViewGPU is the encoder a view started now would use: vaapi, nvenc or cpu.
+func (m *Manager) NewViewGPU(ctx context.Context) string {
+	if g := chooseGPU(m.Settings().GPU, m.GPUs(ctx)); g != nil {
+		return g.Kind
+	}
+	return "cpu"
+}
+
+// dataVolume is the volume of the image and profiles: the setting, else
+// Docker's volume; it must be mounted.
+func (m *Manager) dataVolume() (string, error) {
+	volume := m.Settings().Volume
+	if volume == "" && m.DockerVolume != nil {
+		volume = m.DockerVolume()
+	}
+	if volume == "" || !volumeName.MatchString(volume) || !slices.Contains(m.mounted(), volume) {
+		return "", ErrNoVolume
+	}
+	return volume, nil
+}
+
+// Run removes what an earlier titand left (containers with the viewer
+// label, app endpoints with the marker alias) once Docker answers.
+func (m *Manager) Run(ctx context.Context) {
+	m.mu.Lock()
+	m.base = ctx
+	m.mu.Unlock()
+	for {
+		if m.cleanup(ctx) == nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(30 * time.Second):
+		}
+	}
+}
+
+// cleanup runs once; it removes only labelled containers and only marked
+// endpoints. Views opened later are never touched by it.
+func (m *Manager) cleanup(ctx context.Context) error {
+	m.cleanMu.Lock()
+	defer m.cleanMu.Unlock()
+	if m.cleaned {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	list, err := m.Engine.Viewers(ctx)
+	if err != nil {
+		return err
+	}
+	for _, c := range list {
+		if err := m.Engine.ViewerRemove(ctx, c.ID); err != nil {
+			slog.Warn("left-over viewer not removed", "container", c.Name, "err", err)
+		} else {
+			slog.Info("left-over viewer removed", "container", c.Name)
+		}
+	}
+	attached, err := m.Engine.ViewerAttached(ctx, m.Network, attachAlias)
+	if err != nil {
+		return err
+	}
+	for _, id := range attached {
+		if err := m.Engine.ViewerDetach(ctx, m.Network, id, attachAlias); err != nil {
+			slog.Warn("app not taken off the viewer network", "container", id, "err", err)
+		}
+	}
+	m.cleaned = true
+	return nil
+}
+
+type sessionKey struct{ user, app string }
+
+type session struct {
+	key       sessionKey
+	ready     chan struct{}
+	err       error
+	container string
+	name      string
+	secret    string
+	address   string
+	appID     string
+	gpu       string
+	started   time.Time
+	viewers   int
+	gen       int
+	replace   chan struct{}
+	linger    *time.Timer
+}
+
+// Lease is one window's hold on a running view.
+type Lease struct {
+	m   *Manager
+	s   *session
+	gen int
+	// Ended closes when the same account opened the app in another window
+	// (that window takes the view over, see Replaced) or the view was
+	// stopped (Stop).
+	Ended <-chan struct{}
+	once  sync.Once
+}
+
+var (
+	appNameRE  = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
+	userNameRE = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9._-]{0,63}$`)
+)
+
+// ContainerName is the name of the viewer of an account and app. A hash
+// keeps "a-b"+"c" and "a"+"b-c" apart; the labels name both.
+func (m *Manager) ContainerName(user, app string) string {
+	sum := sha256.Sum256([]byte(user + "\x00" + app))
+	return m.Prefix + hex.EncodeToString(sum[:8])
+}
+
+// Open starts or reuses the view of user on app and returns a lease on
+// it. A second window of the same account takes the view over.
+func (m *Manager) Open(ctx context.Context, user, app string) (*Lease, error) {
+	if !appNameRE.MatchString(app) || !userNameRE.MatchString(user) {
+		return nil, ErrName
+	}
+	if err := m.cleanup(ctx); err != nil {
+		return nil, fmt.Errorf("viewer: docker: %w", err)
+	}
+	key := sessionKey{user, app}
+	for {
+		m.mu.Lock()
+		s := m.sessions[key]
+		if s == nil {
+			s = &session{key: key, ready: make(chan struct{})}
+			m.sessions[key] = s
+			m.mu.Unlock()
+			err := m.start(ctx, s)
+			m.mu.Lock()
+			s.err = err
+			if err != nil {
+				delete(m.sessions, key)
+			}
+			close(s.ready)
+			m.mu.Unlock()
+			if err != nil {
+				return nil, err
+			}
+			continue
+		}
+		select {
+		case <-s.ready:
+		default:
+			m.mu.Unlock()
+			select {
+			case <-s.ready:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+			continue
+		}
+		if s.err != nil || m.sessions[key] != s {
+			m.mu.Unlock()
+			continue
+		}
+		if s.linger != nil {
+			s.linger.Stop()
+			s.linger = nil
+		}
+		if s.replace != nil {
+			close(s.replace)
+		}
+		s.gen++
+		s.replace = make(chan struct{})
+		s.viewers++
+		lease := &Lease{m: m, s: s, gen: s.gen, Ended: s.replace}
+		m.mu.Unlock()
+		return lease, nil
+	}
+}
+
+// start makes the container of a new view. On failure nothing is left.
+func (m *Manager) start(ctx context.Context, s *session) (err error) {
+	image := m.readyImage()
+	if image == "" {
+		return ErrImageNotReady
+	}
+	// Docker may have lost it (another data root, removed by hand): fetch
+	// it again instead of failing every view until titand restarts.
+	if id, err := m.Engine.ViewerImageID(ctx, image); err == nil && id == "" {
+		m.mu.Lock()
+		if m.image.id == image {
+			m.image = imageState{}
+		}
+		m.mu.Unlock()
+		m.readyImage()
+		return ErrImageNotReady
+	}
+	if m.MemAvailable != nil {
+		avail, err := m.MemAvailable()
+		if err == nil && avail < Reserve+PerView {
+			return ErrMemory
+		}
+	}
+	endpoints, err := m.Engine.AppEndpoints(ctx, s.key.app)
+	if err != nil {
+		return err
+	}
+	routePort, scheme := 0, "http"
+	if m.Route != nil {
+		if port, sch, ok := m.Route(s.key.app); ok {
+			routePort = port
+			if sch != "" {
+				scheme = sch
+			}
+		}
+	}
+	target, err := pickTarget(endpoints, routePort)
+	if err != nil {
+		return err
+	}
+	profile, err := m.profileDir(s.key.user, s.key.app)
+	if err != nil {
+		return err
+	}
+	if err := m.Engine.ViewerNetwork(ctx, m.Network); err != nil {
+		return err
+	}
+	name := m.ContainerName(s.key.user, s.key.app)
+	// A container of the same view an earlier run left behind.
+	if list, err := m.Engine.Viewers(ctx); err == nil {
+		for _, c := range list {
+			if c.Name == name {
+				if err := m.Engine.ViewerRemove(ctx, c.ID); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	appAddress, _, err := m.Engine.ViewerAttach(ctx, m.Network, target.id, attachAlias)
+	if err != nil {
+		return fmt.Errorf("viewer: connect the app: %w", err)
+	}
+	s.appID = target.id
+	defer func() {
+		if err != nil {
+			m.detachUnused(context.WithoutCancel(ctx), s)
+		}
+	}()
+	if appAddress == "" {
+		return errors.New("viewer: the app has no address on the viewer network")
+	}
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		return err
+	}
+	settings := m.Settings()
+	gpu := chooseGPU(settings.GPU, m.GPUs(ctx))
+	spec := docker.ViewerSpec{
+		Name: name, Image: image, User: s.key.user, App: s.key.app, Profile: profile, Network: m.Network,
+		MemoryBytes: containerMemory, PidsLimit: 512, ShmBytes: 512 << 20,
+	}
+	kind := "cpu"
+	if gpu != nil {
+		kind = gpu.Kind
+		switch gpu.Kind {
+		case "vaapi":
+			spec.Devices = []string{gpu.node}
+			spec.GroupAdd = gpu.groups
+		case "nvenc":
+			spec.CDIDevices = []string{gpu.cdi}
+		}
+	}
+	spec.Env = viewerEnv(fmt.Sprintf("%s://%s%s", scheme, hostPort(appAddress, target.port), target.path), hex.EncodeToString(secret), kind, gpu, settings)
+	id, err := m.Engine.ViewerCreate(ctx, spec)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = m.Engine.ViewerRemove(context.WithoutCancel(ctx), id)
+		}
+	}()
+	if err := m.Engine.ViewerStart(ctx, id); err != nil {
+		return err
+	}
+	var address string
+	for range 20 {
+		if address, err = m.Engine.ViewerAddress(ctx, id, m.Network); err == nil {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
+	if err != nil {
+		return err
+	}
+	m.mu.Lock()
+	s.container, s.name, s.secret, s.address, s.gpu, s.started = id, name, hex.EncodeToString(secret), address, kind, time.Now()
+	m.mu.Unlock()
+	slog.Info("remote view started", "user", s.key.user, "app", s.key.app, "gpu", kind)
+	return nil
+}
+
+func viewerEnv(target, key, kind string, gpu *GPU, s Settings) []string {
+	audio := "0"
+	if s.Audio {
+		audio = "1"
+	}
+	env := []string{
+		"VIEWER_URL=" + target,
+		"VIEWER_KEY=" + key,
+		"VIEWER_GPU=" + kind,
+		"VIEWER_AUDIO=" + audio,
+		"VIEWER_QUALITY=" + s.Quality,
+		"VIEWER_FPS=" + strconv.Itoa(s.FPS),
+		"HOME=/profile",
+	}
+	if gpu != nil && gpu.node != "" {
+		env = append(env, "VIEWER_GPU_DEVICE="+gpu.node)
+	}
+	return env
+}
+
+func hostPort(address string, port int) string {
+	return address + ":" + strconv.Itoa(port)
+}
+
+// target is where the viewer's browser goes: the app container, the port
+// inside it and the path of the WebUI label.
+type target struct {
+	id   string
+	port int
+	path string
+}
+
+// pickTarget finds the container that publishes the app's web port (the
+// port of its HTTPS name if it has one, else of its WebUI label) and the
+// container port behind it: the viewer reaches the container over the
+// internal network, not the port on the NAS.
+func pickTarget(endpoints []docker.AppEndpoint, routePort int) (target, error) {
+	hostNet := false
+	for _, e := range endpoints {
+		if e.NetworkMode == "host" || len(e.NetworkMode) > 10 && e.NetworkMode[:10] == "container:" || len(e.NetworkMode) > 8 && e.NetworkMode[:8] == "service:" {
+			if webUIPort(e.WebUI) > 0 || routePort > 0 {
+				hostNet = true
+			}
+			continue
+		}
+		want := routePort
+		path := webUIPath(e.WebUI)
+		if want == 0 {
+			want = webUIPort(e.WebUI)
+		}
+		if want == 0 {
+			continue
+		}
+		for _, p := range e.Ports {
+			if p.Host == want && (p.Protocol == "tcp" || p.Protocol == "") {
+				if e.State != "running" {
+					return target{}, ErrNotRunning
+				}
+				return target{id: e.ID, port: p.Container, path: path}, nil
+			}
+		}
+	}
+	if hostNet {
+		return target{}, ErrHostNetwork
+	}
+	return target{}, ErrNoWebUI
+}
+
+var webUIRE = regexp.MustCompile(`^(?:(\d{1,5})([/?#].*)?|(?i:https?)://\[host\]:(\d{1,5})([/?#].*)?)$`)
+
+// webUIPort reads the port of a WebUI label ("8096", "8096/admin",
+// "http://[host]:8096/…"), like appproxy.WebUIPort.
+func webUIPort(label string) int {
+	m := webUIRE.FindStringSubmatch(label)
+	if m == nil {
+		return 0
+	}
+	port, err := strconv.Atoi(m[1] + m[3])
+	if err != nil || port < 1 || port > 65535 {
+		return 0
+	}
+	return port
+}
+
+// webUIPath is the path of a WebUI label, "/" without one.
+func webUIPath(label string) string {
+	m := webUIRE.FindStringSubmatch(label)
+	if m == nil {
+		return "/"
+	}
+	path := m[2] + m[4]
+	if path == "" || path[0] != '/' {
+		return "/" + path
+	}
+	return path
+}
+
+// profileDir makes <volume>/.titanos/viewer/profiles/<user>/<app>, the
+// folder only the container's user (1000) may use; its parents belong to
+// root. In development mode it is a temporary folder.
+func (m *Manager) profileDir(user, app string) (string, error) {
+	if m.Dev {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		if m.devDir == "" {
+			dir, err := os.MkdirTemp("", "titanos-viewer-dev-")
+			if err != nil {
+				return "", err
+			}
+			m.devDir = dir
+		}
+		dir := filepath.Join(m.devDir, user, app)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return "", err
+		}
+		if os.Chown(dir, 1000, 1000) != nil {
+			// Not root (a development machine): the container's user must
+			// still be able to write there.
+			_ = os.Chmod(dir, 0o777) //nolint:gosec // temporary development folder only
+		}
+		return dir, nil
+	}
+	parent, err := m.privateDir("profiles", user)
+	if err != nil {
+		return "", err
+	}
+	if err := checkSpace(parent, 256<<20); err != nil {
+		return "", err
+	}
+	root, err := os.OpenRoot(parent)
+	if err != nil {
+		return "", err
+	}
+	defer root.Close()
+	if err := root.Mkdir(app, 0o700); err == nil {
+		if err := root.Lchown(app, profileUID, profileUID); err != nil {
+			return "", err
+		}
+	} else if !errors.Is(err, fs.ErrExist) {
+		return "", err
+	}
+	if err := ownedDir(root, app, profileUID, 0o700); err != nil {
+		return "", err
+	}
+	return filepath.Join(parent, app), nil
+}
+
+// detachUnused takes the app container of s off the viewer network unless
+// another view uses it. Caller does not hold mu.
+func (m *Manager) detachUnused(ctx context.Context, s *session) {
+	if s.appID == "" {
+		return
+	}
+	m.mu.Lock()
+	for _, other := range m.sessions {
+		if other != s && other.appID == s.appID {
+			m.mu.Unlock()
+			return
+		}
+	}
+	m.mu.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if err := m.Engine.ViewerDetach(ctx, m.Network, s.appID, attachAlias); err != nil {
+		slog.Warn("app not taken off the viewer network", "app", s.key.app, "err", err)
+	}
+}
+
+// Close ends the lease. linger keeps the container for Manager.Linger when
+// this was the last window (the window was closed or lost its connection);
+// otherwise (logout, lock, right taken away, idle) the view stops at once.
+func (l *Lease) Close(linger bool) {
+	l.once.Do(func() { l.m.release(l.s, linger) })
+}
+
+func (m *Manager) release(s *session, linger bool) {
+	m.mu.Lock()
+	s.viewers--
+	if s.viewers > 0 || m.sessions[s.key] != s {
+		m.mu.Unlock()
+		return
+	}
+	if linger && m.Linger > 0 {
+		s.linger = time.AfterFunc(m.Linger, func() { m.stopIfIdle(s) })
+		m.mu.Unlock()
+		return
+	}
+	delete(m.sessions, s.key)
+	m.mu.Unlock()
+	m.stop(s)
+}
+
+func (m *Manager) stopIfIdle(s *session) {
+	m.mu.Lock()
+	if s.viewers > 0 || m.sessions[s.key] != s {
+		m.mu.Unlock()
+		return
+	}
+	delete(m.sessions, s.key)
+	m.mu.Unlock()
+	m.stop(s)
+}
+
+// stop removes the container (the profile stays) and detaches the app.
+func (m *Manager) stop(s *session) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err := m.Engine.ViewerRemove(ctx, s.container); err != nil {
+		slog.Warn("viewer not removed", "user", s.key.user, "app", s.key.app, "err", err)
+	}
+	m.detachUnused(ctx, s)
+	slog.Info("remote view ended", "user", s.key.user, "app", s.key.app)
+}
+
+// Stop ends every view of an app or of an account ("" matches all), e.g.
+// when an account is removed. Their windows see the connection end.
+func (m *Manager) Stop(user, app string) {
+	m.mu.Lock()
+	var stopping []*session
+	for key, s := range m.sessions {
+		select {
+		case <-s.ready:
+		default:
+			continue
+		}
+		if s.err == nil && (user == "" || key.user == user) && (app == "" || key.app == app) {
+			if s.linger != nil {
+				s.linger.Stop()
+			}
+			if s.replace != nil {
+				close(s.replace)
+				s.replace = nil
+			}
+			delete(m.sessions, key)
+			stopping = append(stopping, s)
+		}
+	}
+	m.mu.Unlock()
+	for _, s := range stopping {
+		m.stop(s)
+	}
+}
+
+// AgentURL is the address of the agent's stream, with the session key.
+// It contains the secret: never log it.
+func (l *Lease) AgentURL() string {
+	return "ws://" + hostPort(l.s.address, agentPort) + "/stream?key=" + l.s.secret
+}
+
+// DownloadURL is the address of a file the browser in the view downloaded.
+// It contains the secret: never log it.
+func (l *Lease) DownloadURL(id string) string {
+	return "http://" + hostPort(l.s.address, agentPort) + "/downloads/" + id + "?key=" + l.s.secret
+}
+
+// Replaced tells, once Ended closed, whether another window took the view
+// over (rather than the view being stopped).
+func (l *Lease) Replaced() bool {
+	l.m.mu.Lock()
+	defer l.m.mu.Unlock()
+	return l.m.sessions[l.s.key] == l.s && l.s.gen != l.gen
+}
+
+// GPU is the encoder of the view: "vaapi", "nvenc" or "cpu".
+func (l *Lease) GPU() string { return l.s.gpu }
+
+// Peek returns a lease-less handle on a running view of user and app, for
+// downloads; ok is false without one.
+func (m *Manager) Peek(user, app string) (*Lease, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s := m.sessions[sessionKey{user, app}]
+	if s == nil || s.address == "" {
+		return nil, false
+	}
+	return &Lease{m: m, s: s}, true
+}
+
+// SessionInfo describes a view for the status.
+type SessionInfo struct {
+	User string `json:"user"`
+	App  string `json:"app"`
+	// State is "starting", "open" (a window is connected) or "idle" (the
+	// container waits Linger for the window to come back).
+	State       string    `json:"state"`
+	Since       time.Time `json:"since"`
+	Windows     int       `json:"windows"`
+	GPU         string    `json:"gpu"`
+	MemoryBytes uint64    `json:"memoryBytes"`
+}
+
+// Sessions lists the views; user "" lists all.
+func (m *Manager) Sessions(ctx context.Context, user string) []SessionInfo {
+	m.mu.Lock()
+	out := []SessionInfo{}
+	ids := []string{}
+	for key, s := range m.sessions {
+		if user != "" && key.user != user {
+			continue
+		}
+		info := SessionInfo{User: key.user, App: key.app, State: "open", Since: s.started, Windows: s.viewers, GPU: s.gpu}
+		if s.container == "" {
+			info.State = "starting"
+		} else if s.viewers == 0 {
+			info.State = "idle"
+		}
+		out = append(out, info)
+		ids = append(ids, s.container)
+	}
+	m.mu.Unlock()
+	for i := range out {
+		if ids[i] != "" {
+			mctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+			out[i].MemoryBytes, _ = m.Engine.ViewerMemory(mctx, ids[i])
+			cancel()
+		}
+	}
+	slices.SortFunc(out, func(a, b SessionInfo) int {
+		if a.User != b.User {
+			return compare(a.User, b.User)
+		}
+		return compare(a.App, b.App)
+	})
+	return out
+}
+
+func compare(a, b string) int {
+	switch {
+	case a < b:
+		return -1
+	case a > b:
+		return 1
+	}
+	return 0
+}
+
+// Memory is the RAM estimate of the status.
+type Memory struct {
+	AvailableBytes uint64 `json:"availableBytes"`
+	ReserveBytes   uint64 `json:"reserveBytes"`
+	PerViewBytes   uint64 `json:"perViewBytes"`
+	// More is how many further views fit (estimate).
+	More int `json:"more"`
+}
+
+// MemoryEstimate is free RAM and how many more views fit.
+func (m *Manager) MemoryEstimate() Memory {
+	out := Memory{ReserveBytes: Reserve, PerViewBytes: PerView}
+	if m.MemAvailable == nil {
+		return out
+	}
+	avail, err := m.MemAvailable()
+	if err != nil {
+		return out
+	}
+	out.AvailableBytes = avail
+	if avail > Reserve {
+		out.More = int((avail - Reserve) / PerView)
+	}
+	return out
+}
+
+// memAvailable reads MemAvailable of /proc/meminfo.
+func memAvailable() (uint64, error) {
+	data, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return 0, err
+	}
+	return parseMemAvailable(data)
+}
+
+func parseMemAvailable(data []byte) (uint64, error) {
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	for scanner.Scan() {
+		fields := bytes.Fields(scanner.Bytes())
+		if len(fields) >= 2 && string(fields[0]) == "MemAvailable:" {
+			kb, err := strconv.ParseUint(string(fields[1]), 10, 64)
+			if err != nil {
+				return 0, err
+			}
+			return kb << 10, nil
+		}
+	}
+	return 0, errors.New("viewer: MemAvailable missing")
+}

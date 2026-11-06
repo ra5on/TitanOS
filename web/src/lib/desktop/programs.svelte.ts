@@ -5,7 +5,7 @@ import { t } from '../i18n/index.svelte.ts';
 import { session } from '../session.svelte.ts';
 import { appAllowed, SYSTEM_APPS, type SideItem } from './apps.ts';
 import { dockerPrograms, dockerUpdates, sources } from './sources.svelte.ts';
-import { openWindow, wm } from './wm.svelte.ts';
+import { openWindow } from './wm.svelte.ts';
 import { storage } from '../storage.svelte.ts';
 
 export type Program = {
@@ -120,7 +120,7 @@ export async function openTab(key: string, href: string) {
 	} else window.open(url, '_blank', 'noopener');
 }
 
-/** Opens a program; Docker apps first ask the NAS for an entry that lets the window in (PLAN 61-1). */
+/** Opens a program; a Docker app's window shows its remote view (PLAN 63). */
 export async function openProgram(
 	key: string,
 	opts: { href?: string; from?: { x: number; y: number }; fresh?: boolean } = {},
@@ -128,10 +128,8 @@ export async function openProgram(
 	const p = findProgram(key);
 	if (!p) return;
 	if (p.kind === 'docker') {
-		// The window keeps the app's address; the one-time entry only loads it.
-		const open = !opts.fresh && wm.windows.find((w) => w.app === key);
-		const entry = open || !p.href.startsWith('https://') ? undefined : await appEntry(key, p.href);
-		openWindow(key, p.href, p.label, { from: opts.from, fresh: opts.fresh, entry });
+		// The window keeps the app's address for its title bar and "open in a tab".
+		openWindow(key, p.href, p.label, { from: opts.from, fresh: opts.fresh });
 		return;
 	}
 	openWindow(key, opts.href ?? p.href, p.label, {

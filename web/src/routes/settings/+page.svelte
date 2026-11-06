@@ -54,6 +54,7 @@
 		api: 'slate',
 		cluster: 'teal',
 		programs: 'pink',
+		viewer: 'blue',
 		backups: 'teal',
 		files: 'amber',
 		memory: 'cyan',

@@ -110,6 +110,7 @@ test('the settings navigation keeps its four groups in order, sorts entries A–
 		'timezone',
 		'updates',
 		'ups',
+		'viewer',
 		'wireguard',
 	]);
 	const fresh = admin
@@ -125,6 +126,7 @@ test('the settings navigation keeps its four groups in order, sorts entries A–
 		'mcp',
 		'programs',
 		'services',
+		'viewer',
 		'wireguard',
 	]);
 	const user = settingsEntries('', false, label).flatMap((g) => g.entries.map((e) => e.id));

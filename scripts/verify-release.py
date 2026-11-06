@@ -115,6 +115,13 @@ def verify(release, keys, without_plugins=False):
             required.add("nvidia-kernel-sources.tar.gz")
         if not required <= checksums.keys():
             raise ValueError("plugin source/license archive missing: " + name)
+    # The image of the remote view (docs/FERNANSICHT.md), optional for older releases.
+    if (viewer := manifest.get("viewer")) is not None:
+        asset = f"titanos-viewer-{version}.tar.zst"
+        if not isinstance(viewer, dict) or viewer.get("asset") != asset or checksums.get(asset) != viewer.get("sha256") \
+                or (release / asset).stat().st_size != viewer.get("size") \
+                or not re.fullmatch(r"sha256:[0-9a-f]{64}", str(viewer.get("imageId", ""))):
+            raise ValueError("viewer image mismatch: " + asset)
     if sdk := manifest.get("nvidiaBuildSDK"):
         if sdk.get("kernel") != manifest["kernel"] or sdk.get("version") != base or sdk.get("asset") != "nvidia-build-sdk.tar.zst":
             raise ValueError("SDK target mismatch")

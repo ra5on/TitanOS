@@ -52,6 +52,7 @@ const prefixes: [string, string][] = (
 		['app-icon', 'appearance'],
 		['files/index', 'files'],
 		['cluster', 'cluster'],
+		['viewer/settings', 'viewer'],
 	] as [string, string][]
 ).sort((a, b) => b[0].length - a[0].length);
 

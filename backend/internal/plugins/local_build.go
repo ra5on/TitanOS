@@ -12,7 +12,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/ra5on/TitanOS/backend/internal/minisign"
 	"io"
 	"io/fs"
 	"os"
@@ -147,20 +146,9 @@ func (m *Manager) secureBuildDir(volume string) error {
 }
 func (m *Manager) fetchBuildSDK(ctx context.Context) (buildSDK, error) {
 	var sdk buildSDK
-	base, err := m.releaseBase()
+	data, err := m.ReleaseManifest(ctx, m.Release)
 	if err != nil {
 		return sdk, err
-	}
-	data, err := m.fetchMetadata(ctx, base+"manifest.json", 1<<20)
-	if err != nil {
-		return sdk, err
-	}
-	sig, err := m.fetchMetadata(ctx, base+"manifest.json.minisig", 4096)
-	if err != nil {
-		return sdk, err
-	}
-	if minisign.Verify(minisign.LoadKeys(m.keyDir), data, string(sig)) != nil {
-		return sdk, ErrInvalid
 	}
 	var release struct {
 		Version, Tag, Kernel string

@@ -6,6 +6,7 @@
 	"settingshome.group.accounts": "Accounts and services",
 	"settingshome.group.data": "Data",
 	"settingshome.area.programs": "Programs",
+	"settingshome.area.viewer": "Remote view",
 	"settingshome.recent": "Recently changed",
 	"settingshome.recentBy": "by {user}",
 	"settingshome.recentAll": "Full log",
@@ -33,6 +34,7 @@
 	"settingshome.desc.api": "Tokens, CLI, OpenAPI",
 	"settingshome.desc.cluster": "Several NAS working together",
 	"settingshome.desc.programs": "Who gets which programs",
+	"settingshome.desc.viewer": "Docker apps in windows, GPU and sound",
 	"settingshome.desc.backups": "Data, apps, stick, restore",
 	"settingshome.desc.files": "File search, index, thumbnails",
 	"settingshome.desc.memory": "Memory, write cache"

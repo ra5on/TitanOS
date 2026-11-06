@@ -3,6 +3,7 @@
 	// each opens full screen with a way back (PhoneBar).
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import Icon from '../components/Icon.svelte';
 	import AccountMenu from '../components/AccountMenu.svelte';
 	import { t } from '../i18n/index.svelte.ts';
@@ -11,7 +12,8 @@
 	import { formatPercent } from '../format.ts';
 	import DesktopIcon from './DesktopIcon.svelte';
 	import { arrangeIcons } from './prefs.ts';
-	import { programs } from './programs.svelte.ts';
+	import { openTab, programs, type Program } from './programs.svelte.ts';
+	import RemoteView from './RemoteView.svelte';
 	import { watchSources } from './sources.svelte.ts';
 	import { desktop, loadDesktop } from './wm.svelte.ts';
 	import { wallpaperCss } from './wallpapers.ts';
@@ -57,12 +59,26 @@
 	);
 	const bad = $derived((storage.status?.volumes ?? []).filter((v) => v.state !== 'ok').length);
 
-	function open(href: string, external: boolean) {
-		if (external) window.open(href, '_blank', 'noopener');
-		else void goto(href);
+	// PLAN 63: a Docker app opens full screen in its remote view (a history
+	// entry of its own, so the phone's Back returns to the grid).
+	const remote = $derived(page.state.remote ? (byKey.get(page.state.remote) ?? null) : null);
+	function open(p: Program) {
+		if (p.kind !== 'docker') return void goto(p.href);
+		void goto(page.url.pathname, { state: { remote: p.key }, shallow: true });
 	}
 </script>
 
+{#if remote}
+	<div class="remote-full">
+		<RemoteView
+			app={remote.key.replace(/^docker:/, '')}
+			title={remote.label}
+			phone
+			onback={() => history.back()}
+			onopentab={() => remote && openTab(remote.key, remote.href)}
+		/>
+	</div>
+{/if}
 <div
 	class="home"
 	class:light
@@ -97,7 +113,7 @@
 	</div>
 	<div class="grid">
 		{#each [...shown, ...missing] as p (p.key)}
-			<button type="button" class="app" onclick={() => open(p.href, p.external)}>
+			<button type="button" class="app" onclick={() => open(p)}>
 				<span class="wrap">
 					<DesktopIcon
 						glyph={p.glyph}
@@ -116,6 +132,13 @@
 </div>
 
 <style>
+	.remote-full {
+		position: fixed;
+		inset: 0;
+		z-index: 50;
+		display: flex;
+		background: var(--bg);
+	}
 	.home {
 		min-height: 100dvh;
 		overflow-x: clip;

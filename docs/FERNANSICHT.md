@@ -1,0 +1,127 @@
+# Fernansicht für Docker-Apps (PLAN 63)
+
+Seit 0.60.0 öffnet das Fenster einer Docker-App die App **nicht mehr im Browser des Nutzers**, sondern TitanOS öffnet sie auf dem NAS in einem eigenen Browser (Chromium in einem Container) und überträgt Bild und Ton über die TitanOS-Adresse ins Fenster. Das geht überall, wo TitanOS selbst erreichbar ist (Heimnetz, VPN, Cloudflare-Tunnel, Handy), weil nur HTTPS und WebSocket zur TitanOS-Adresse nötig sind. Entscheidung des Projektinhabers vom 6.11.2026: „Immer Fernansicht“ (PLAN 62-4, 63, 63-1).
+
+## Aufbau
+
+```
+Browser (Fenster)  ──WebSocket (TitanOS-Adresse, Anmeldung)──▶  titand  ──WebSocket (internes Netz, Sitzungsschlüssel)──▶  Agent im Viewer-Container
+   WebCodecs: H.264 → Canvas, Opus → Lautstärke                     Rechte, Ende bei Abmelden/Sperre/Trennzeit          Xvfb + Chromium (Kiosk, nur die App) + GStreamer + PulseAudio
+```
+
+- **Abbild** `titanos-viewer`: Debian trixie, Chromium, Xvfb, GStreamer (x264, VA-API), PulseAudio, xclip, Schriften, der Agent `titanos-viewer` (Go, `backend/cmd/titanos-viewer`). Gebaut im Release, als signierte Release-Datei (`manifest.json` → `viewer`), auf dem NAS bei der ersten Fernansicht geladen, geprüft (Signatur des Manifests, SHA-256, Größe) und mit `docker load` eingespielt. Kein Zug aus einer Registry.
+- **Container** je Benutzer und App (`titanos-viewer-<user>-<app>`): nicht root (UID 1000), `--cap-drop ALL`, `no-new-privileges`, Wurzel nur lesbar, beschreibbar nur `/profile` (Browserprofil auf einem Daten-Volume unter `.titanos/viewer/profiles/<user>/<app>`) und tmpfs (`/tmp`, `/run`). GPU nur mit Einstellung (`/dev/dri`).
+- **Netz:** eigenes internes Docker-Netz `titanos-viewer` (ohne Weg nach draußen); der App-Container wird für die Dauer der Ansicht angehängt. Chromium-Richtlinien erlauben nur die Adresse der App (`URLBlocklist: *`, `URLAllowlist: <App>`), keine Entwicklerwerkzeuge, kein `file://`.
+
+## Protokoll Browser ↔ titand ↔ Agent
+
+Ein WebSocket, `GET /api/v1/viewer/{app}/stream` (Anmeldung, Recht auf die App wie beim App-Fenster). titand reicht Nachrichten unverändert zwischen Browser und Agent durch (der Agent ist unter `ws://<container>:7300/stream?key=<Sitzungsschlüssel>` erreichbar), prüft aber Richtung Agent die Länge und den Typ.
+
+**Binäre Nachrichten** – erstes Byte ist der Typ:
+
+| Typ | Richtung | Inhalt |
+|---|---|---|
+| `0x01` Video | Agent → Browser | Byte 1: Flags (Bit 0 = Schlüsselbild); Byte 2–9: Zeitstempel in µs (uint64, big endian); Rest: eine H.264-Zugriffseinheit (Annex B, mit Startcodes) |
+| `0x02` Ton | Agent → Browser | Byte 1–8: Zeitstempel in µs; Rest: ein Opus-Paket (48 kHz, Stereo, 20 ms) |
+| `0x03` Datei-Teil | Browser → Agent | Hochladen: Byte 1–4 Upload-Nummer (uint32), Rest Daten (höchstens 256 KiB je Nachricht) |
+
+**Text-Nachrichten** – JSON mit `"t"`:
+
+Agent → Browser:
+- `{"t":"hello","codec":"avc1.42E01F","width":1280,"height":800,"gpu":"vaapi"|"nvenc"|"cpu","audio":true}` – nach dem Verbinden und nach jeder Größenänderung (neuer Decoder, danach kommt ein Schlüsselbild).
+- `{"t":"stats","fps":59,"kbps":4200,"latencyMs":18}` – jede Sekunde.
+- `{"t":"clipboard","text":"…"}` – die Zwischenablage im NAS-Browser hat sich geändert (höchstens 1 MiB).
+- `{"t":"download","name":"bild.jpg","size":12345,"id":"d1"}` – eine Datei wurde heruntergeladen; abholen über `GET /api/v1/viewer/{app}/downloads/{id}`.
+- `{"t":"cursor","shape":"pointer"|"text"|"default"|…}` – Mauszeigerform (der Zeiger wird nicht ins Bild gezeichnet).
+- `{"t":"bye","reason":"idle"|"logout"|"stopped"|"error","text":"…"}`.
+
+Browser → Agent:
+- `{"t":"size","width":1280,"height":800,"scale":2}` – sichtbare Fläche in CSS-Pixeln und Gerätefaktor; der Agent stellt den Bildschirm darauf ein (gerundet auf gerade Zahlen, 320–3840 × 240–2160).
+- `{"t":"mouse","x":100,"y":50,"buttons":1}` – absolute Lage in Bildpunkten des Bildschirms und gedrückte Tasten (Bitmaske wie `MouseEvent.buttons`).
+- `{"t":"wheel","dx":0,"dy":-120}`.
+- `{"t":"key","code":"KeyA","key":"a","down":true,"mods":{"shift":false,"ctrl":false,"alt":false,"meta":false}}` – druckbare Zeichen ohne Strg/Alt/Meta werden über `key` getippt (unabhängig vom Tastaturlayout), alles andere über `code`.
+- `{"t":"text","text":"Hallo"}` – Text tippen (Handy-Tastatur, Einfügen).
+- `{"t":"clipboard","text":"…"}` – Zwischenablage des Nutzers in den NAS-Browser legen.
+- `{"t":"keyframe"}` – Schlüsselbild anfordern (nach Fehler im Decoder).
+- `{"t":"quality","mode":"auto"|"high"|"balanced"|"low","fps":30|60}`.
+- `{"t":"upload","id":1,"name":"a.pdf","size":123}` → danach Teile `0x03`, Agent antwortet `{"t":"uploaded","id":1}`; die Datei liegt im NAS-Browser unter „Hochgeladen“ zur Auswahl im Dateidialog.
+- `{"t":"touch", …}` gibt es nicht: das Handy schickt `mouse`/`wheel` (Tippen = Klick, Wischen = Rad, langes Tippen = Rechtsklick).
+
+## Einstellungen
+
+`GET/PUT /api/v1/viewer/settings` (Administratoren), `/config/viewer/settings.json`:
+`{"gpu":"auto"|"off"|"/dev/dri/renderD128","quality":"auto","fps":60,"audio":true,"volume":"<Volume für Profile>"}`.
+`GET /api/v1/viewer/status`: Abbild geladen/lädt/fehlt, GPU-Geräte, offene Ansichten mit RAM, geschätzter Platz für weitere.
+
+## Lebenslauf einer Ansicht
+
+1. Fenster öffnet `…/stream`. titand prüft Recht und freien Speicher (Abbruch mit `viewer_memory`, wenn weniger als 700 MB frei bleiben), lädt bei Bedarf das Abbild, legt Profilordner an, startet den Container und hängt die App ans interne Netz.
+2. Der Agent startet Xvfb, PulseAudio und Chromium mit der App-Adresse, dann Bild- und Tonstrom.
+3. Ende: Fenster zu → Container läuft 2 Minuten weiter (schnelles Wiederöffnen), dann wird er gestoppt und entfernt; das Profil bleibt. Abmelden, Sperren, Passwortwechsel, Entzug des Rechts und die Trennzeit der Konsolen beenden den Strom wie bei Konsolen (Prüfung alle 3 s).
+
+## titand-Seite im Einzelnen (Teil B)
+
+Code: `backend/internal/viewer/` (Einstellungen, Abbild, Container, Prüfung der Nachrichten, Weiterleitung), `backend/internal/docker/viewer.go` (die einzigen Docker-Aufrufe der Fernansicht), `backend/internal/api/viewer.go` (Routen), `backend/internal/plugins/release_assets.go` (signiertes Manifest und Release-Dateien, gemeinsam mit der NVIDIA-Bauumgebung).
+
+### Routen (nur Weboberfläche, nicht in `publicRoutes`, kein MCP/Agent)
+
+| Route | Wer | Antwort |
+|---|---|---|
+| `GET /api/v1/viewer/settings` | Besitzer/Admin | `{"gpu":"auto","quality":"auto","fps":60,"audio":true,"volume":""}` |
+| `PUT /api/v1/viewer/settings` | Besitzer/Admin | gleiche Form (fehlende Felder behalten den bisherigen Wert); 400 `viewer_settings_invalid` bei unbekannter GPU (nur `id` aus `status.gpus`), `quality` außer `auto|high|balanced|low`, `fps` außer 30/60, nicht eingebundenem Volume. `volume: ""` = Volume von Docker |
+| `GET /api/v1/viewer/status` | jedes Konto | siehe unten; Benutzer sehen nur ihre eigenen Ansichten und keine GPU-Liste |
+| `POST /api/v1/viewer/image` | Besitzer/Admin | Abbild jetzt laden (sonst mit der ersten Ansicht; nach einem Fehler sofort neu); Antwort wie `status.image` |
+| `GET /api/v1/viewer/{app}/stream` | Recht auf die App | WebSocket (siehe Protokoll) |
+| `GET /api/v1/viewer/{app}/downloads/{id}` | Recht auf die App, eigene offene Ansicht | Datei als `attachment` (`application/octet-stream`, `nosniff`, Name nach RFC 5987); 404 `viewer_no_session` ohne offene Ansicht, 403 `app_forbidden` |
+
+`GET /api/v1/viewer/status`:
+
+```json
+{
+  "image": {"state": "missing|downloading|loading|ready|error", "version": "0.60.0",
+            "bytes": 123, "size": 456, "progress": 0.27, "error": "…", "dev": false},
+  "gpu": "vaapi|nvenc|cpu",
+  "gpus": [{"id": "/dev/dri/renderD128", "kind": "vaapi", "vendor": "8086", "title": "Intel … · 0000:00:02.0",
+            "available": true, "reason": ""}],
+  "sessions": [{"user": "anna", "app": "immich", "state": "starting|open|idle", "since": "2026-11-06T21:00:00Z",
+                "windows": 1, "gpu": "vaapi", "memoryBytes": 314572800}],
+  "memory": {"availableBytes": 6000000000, "reserveBytes": 734003200, "perViewBytes": 419430400, "more": 12},
+  "idleMinutes": 15
+}
+```
+
+`gpu` ist der Kodierer einer jetzt geöffneten Ansicht. `idleMinutes` ist die Trennzeit der Konsolen, die auch Ansichten beendet (0 = nie). Nach einem Fehler beim Laden des Abbilds versucht titand es frühestens nach einer Minute erneut (außer per `POST …/image`). `gpus[].id` ist bei Intel/AMD der Render-Knoten, bei NVIDIA die PCI-Adresse; `reason` ist `vm` (an eine VM gegeben) oder `driver`. NVIDIA braucht das Treiber-Plugin (CDI `nvidia.com/gpu=<UUID>`). `state: idle` heißt: kein Fenster verbunden, der Container wartet noch bis zu 2 Minuten.
+
+### Ergänzungen am Protokoll
+
+Ein Browser kann die Antwort eines abgelehnten WebSocket-Handshakes nicht lesen. Deshalb nimmt titand die Verbindung jeder angemeldeten Sitzung an und meldet Probleme als Nachricht, danach schließt es mit Code 1008 und dem Fehlercode als Grund:
+
+- `{"t":"starting"}` – titand → Browser, sofort nach dem Verbinden (Recht geprüft), bevor der Container startet.
+- `{"t":"error","code":"…","text":"…"}` – titand → Browser, danach Ende. Codes: `app_forbidden`, `viewer_image` (mit `"image": {…}` wie im Status; das Abbild wird geladen: Status abfragen und neu verbinden), `viewer_memory` (mit `"memory": {…}`), `viewer_hostnet` (App im Host-Netz: „In eigenem Tab“ anbieten), `viewer_no_webui`, `viewer_not_running`, `viewer_volume` (kein eingebundenes Volume für Profile), `viewer_agent` (Agent antwortet nicht binnen 15 s), `viewer_name`, `viewer_unavailable`, `viewer_error`.
+- `{"t":"bye","reason":"…"}` von titand: `idle` (Trennzeit der Konsolen ohne Eingabe), `logout` (Abmeldung, Sperre, Passwortwechsel, Konto gesperrt/gelöscht), `forbidden` (Recht entzogen, Rolle geändert), `replaced` (dasselbe Konto hat die App in einem anderen Fenster geöffnet; das neue Fenster übernimmt denselben Container), `stopped` (Container beendet), `error` (unzulässige Nachricht vom Browser).
+
+Richtung Agent lässt titand nur durch: Text-JSON ≤ 1 MiB + 4 KiB mit `t` aus `size, mouse, wheel, key, text, clipboard, keyframe, quality, upload`; binär nur Typ `0x03` mit 4 Byte Upload-Nummer und ≤ 256 KiB Daten. Alles andere beendet die Ansicht (`bye` `error`). Als Eingabe (gegen die Trennzeit) zählen `mouse, wheel, key, text, clipboard, upload` und `0x03`. Richtung Browser geht alles unverändert durch (Lesegrenze 16 MiB je Nachricht).
+
+### Container und Umgebung
+
+- Name `titanos-viewer-<16 Hex>` (SHA-256 von Konto und App, damit sich `a-b`/`c` und `a`/`b-c` nicht treffen); Labels `titanos.viewer=1`, `titanos.viewer.user`, `titanos.viewer.app`. Erstellt immer aus der Image-ID (`sha256:…`), nie aus einem Tag.
+- Umgebung für den Agenten: `VIEWER_URL` (z. B. `http://172.30.0.2:3001/photos`: Adresse des App-Containers im Netz `titanos-viewer`, **Container-Port** hinter dem veröffentlichten Port des HTTPS-Namens bzw. des Labels `titanos.webui`, Pfad aus dem Label, Schema des HTTPS-Namens), `VIEWER_KEY` (32 Zufallsbytes hex, nur im RAM), `VIEWER_GPU` (`vaapi|nvenc|cpu`), `VIEWER_AUDIO` (`1|0`), `VIEWER_QUALITY`, `VIEWER_FPS`, `VIEWER_GPU_DEVICE` (Render-Knoten, nur bei VA-API), `HOME=/profile`.
+- titand verbindet sich mit `ws://<viewer-ip>:7300/stream?key=…` (Wiederholung bis 15 s) und holt Downloads von `http://<viewer-ip>:7300/downloads/<id>?key=…` (der Agent nennt den Dateinamen in `Content-Disposition`). Adressen mit Schlüssel werden nie protokolliert.
+- Ende: Fenster zu → 2 Minuten Nachlauf, dann Container entfernen, App vom Netz nehmen, wenn keine andere Ansicht sie braucht. Trennzeit, Abmelden, Sperre, Rechtsentzug → sofort. Beim Start von titand (sobald Docker antwortet) werden übrig gebliebene Viewer-Container entfernt und App-Container mit dem Alias `titanos-viewer-attached` vom Netz genommen.
+- Aktivitätsprotokoll: `viewer_start` (App, bei Fehler mit Code) und `viewer_end` (App, Grund); keine Schlüssel.
+
+### Abbild
+
+1. `GET …/releases/download/v<titand-Version>/manifest.json` + `.minisig`, geprüft mit den Schlüsseln wie die NVIDIA-Bauumgebung; Version und Tag müssen passen. Die eigene titand-Version, nicht die Basis: ein App-Release bringt sein eigenes Abbild.
+2. Eintrag `viewer`: `asset` = `titanos-viewer-<version>.tar.zst`, `sha256`, `size` ≤ 2 GiB, `imageId` = `sha256:<64 hex>` (Config-Digest).
+3. Gibt es die Image-ID schon in Docker: fertig. Sonst Download nach `<volume>/.titanos/viewer/image/<asset>.part` (fortsetzbar, Größe und SHA-256 geprüft), umbenennen, `docker load` (zstd erkennt Docker 26 selbst, geprüft mit Debian-trixie-Docker 26.1.5), danach muss `docker image inspect <imageId>` genau diese ID liefern. Das Archiv wird danach gelöscht; Archive anderer Versionen ebenso.
+4. Entwicklungsmodus (`titand -dev`): nur das lokale Abbild `titanos-viewer:dev` (aus `scripts/build-viewer-image.sh`), kein Download; Profile in einem temporären Ordner, nie auf einem Daten-Volume.
+
+### Grenzen (Stand Teil B)
+
+- Apps im Host-Netz bzw. mit `network_mode: container:/service:` gehen nicht (`viewer_hostnet`).
+- Wird der App-Container während einer Ansicht neu erstellt (Update, Bearbeiten), hängt der neue nicht am Netz; die Ansicht muss neu geöffnet werden.
+- HTTPS-Apps mit eigenem Zertifikat: Chromium sieht ein fremdes Zertifikat für die interne Adresse (Sache des Agenten/Abbilds).
+- `imageId` setzt den klassischen Image-Speicher von Docker voraus (Debian trixie); mit dem containerd-Speicher wäre die ID eine andere.
+- Ältere Abbilder anderer Versionen bleiben in Docker liegen, bis jemand sie entfernt.
+
