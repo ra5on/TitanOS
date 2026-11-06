@@ -164,6 +164,9 @@ type Manager struct {
 	api    *client
 	// Disabled leaves the system alone. Set in development mode.
 	Disabled bool
+	// ViewerNamePrefix replaces ViewerPrefix for the viewer's own objects
+	// (tests next to real viewers); empty keeps it.
+	ViewerNamePrefix string
 	// Timezone names the time zone of the NAS for the update window.
 	Timezone func() string
 	// ExternalBusy holds automatic updates back while other NAS work runs.
@@ -627,6 +630,10 @@ func (m *Manager) Action(ctx context.Context, id, action string) error {
 	if !containerIDRE.MatchString(id) || !slices.Contains([]string{"start", "stop", "restart"}, action) {
 		return ErrNotFound
 	}
+	// Viewers of the remote view are no apps (docs/FERNANSICHT.md).
+	if m.isViewerContainer(ctx, id) {
+		return ErrNotFound
+	}
 	m.hardwareMu.Lock()
 	defer m.hardwareMu.Unlock()
 	if m.backupActive() {
@@ -654,6 +661,10 @@ func (m *Manager) Remove(ctx context.Context, id string) error {
 	if !containerIDRE.MatchString(id) {
 		return ErrNotFound
 	}
+	// Viewers of the remote view are no apps (docs/FERNANSICHT.md).
+	if m.isViewerContainer(ctx, id) {
+		return ErrNotFound
+	}
 	res, err := m.api.do(ctx, "DELETE", "/containers/"+id, map[string][]string{"force": {"true"}})
 	if err == nil {
 		res.Body.Close()
@@ -667,6 +678,10 @@ func (m *Manager) Logs(ctx context.Context, id string, tail int) (string, error)
 		return "", ErrDisabled
 	}
 	if !containerIDRE.MatchString(id) {
+		return "", ErrNotFound
+	}
+	// Viewers of the remote view are no apps (docs/FERNANSICHT.md).
+	if m.isViewerContainer(ctx, id) {
 		return "", ErrNotFound
 	}
 	text, err := m.api.logs(ctx, id, min(max(tail, 1), 2000))
@@ -741,6 +756,10 @@ func (m *Manager) Console(ctx context.Context, id, shell, user string) (io.ReadW
 		return nil, nil, ErrDisabled
 	}
 	if !containerIDRE.MatchString(id) {
+		return nil, nil, ErrNotFound
+	}
+	// Viewers of the remote view are no apps (docs/FERNANSICHT.md).
+	if m.isViewerContainer(ctx, id) {
 		return nil, nil, ErrNotFound
 	}
 	command := []string{"/bin/sh", "-c", "command -v bash >/dev/null 2>&1 && exec bash || exec sh"}

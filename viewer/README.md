@@ -8,7 +8,7 @@ captures the screen with GStreamer (H.264), the sound with PulseAudio
 
 | File | Purpose |
 |---|---|
-| `Dockerfile` | Debian trixie-slim (pinned by digest), Debian packages only, agent binary, `USER 1000`, `tini` as PID 1 |
+| `Dockerfile` | Debian trixie-slim (pinned by digest), Debian packages only, agent binary, `USER 1000`, `tini` as PID 1; labels `titanos.viewer.image=1` and `titanos.viewer.release=<version>` (build arg `VIEWER_RELEASE`) |
 | `dpkg-excludes` | dpkg path filters: no docs (except copyright), man pages, translations, Chromium locales other than de/en, and libraries only used by plugins the viewer never loads |
 | `pulse.pa` | PulseAudio: null sink `titan`, local socket only, no network modules |
 | `test-integration.sh` | end-to-end test with Docker (see below) |
@@ -48,9 +48,19 @@ docker run -d --name titanos-viewer-<user>-<app> \
   used, `HOME` is ignored. The profile directory must be writable by
   UID 1000. Chromium uses `/dev/shm`: give the container `--shm-size`
   (titand: 512m; 256m is enough for one 4K view).
-- Chromium managed policies are generated at start into
-  `/tmp/titanos-viewer/policies`; `/etc/chromium/policies/managed` is a
-  symlink there (made at build time).
+- Chromium managed policy: titand writes `proto.ChromiumPolicy(origin)`
+  on the host (root, 0444) and bind-mounts it read-only at
+  `/etc/chromium/policies/managed/titanos.json` (a root-owned 0755
+  directory in the image, otherwise empty). The agent refuses to start
+  (exit 1, "refusing to start the browser") unless that file is a regular
+  root-owned file, not writable by group/others or by the agent, in a
+  directory with the same properties, and locks the browser to the
+  `VIEWER_URL` origin (`proto.CheckPolicy`).
+- Uploads: refused with `no_space` unless 1 GiB stays free on the profile
+  volume and uploads + downloads stay ≤ 4 GiB per profile; `Hochgeladen`
+  is emptied at start and on SIGTERM, downloads older than 24 h are
+  removed at start, and over the limits running and then the oldest
+  downloads are deleted.
 - `GET /healthz` (no key) answers `ok` once the agent listens.
 - `SIGTERM` (docker stop): the client gets `bye` (`stopped`), Chromium gets
   SIGTERM and its child processes up to 5 s to finish, so the cookie
@@ -62,7 +72,7 @@ Environment:
 | Variable | Meaning |
 |---|---|
 | `VIEWER_URL` | app address, `http(s)://host[:port][/path]`; its origin is the only allowed origin |
-| `VIEWER_KEY` | session key (≥ 16 characters), required as `?key=` or header `X-Viewer-Key` on `/stream` and `/downloads/{id}` |
+| `VIEWER_KEY` | session key (≥ 16 characters), required in the header `X-Viewer-Key` on `/stream` and `/downloads/{id}` (a key in the URL is not accepted) |
 | `VIEWER_GPU` | `cpu` (default), `vaapi`, `nvenc`; a GPU encoder that does not deliver a frame within 4 s falls back to `cpu` for the life of the container |
 | `VIEWER_GPU_DEVICE` | render node for VA-API (default `renderD128`) |
 | `VIEWER_AUDIO` | `1` starts PulseAudio and streams Opus |
@@ -70,7 +80,7 @@ Environment:
 | `VIEWER_QUALITY` | `auto` (default), `high`, `balanced`, `low` |
 | `VIEWER_SIZE` | initial size, e.g. `1280x800@2` (default 1280x800, scale 1) |
 | `VIEWER_LANG` | Chromium UI language, default `de` |
-| `VIEWER_SANDBOX` | `1` drops `--no-sandbox` (only works if the container may create user namespaces) |
+| `VIEWER_SANDBOX` | `1` drops `--no-sandbox` (only works if the container may create user namespaces; titand does not set it) |
 | `VIEWER_DEBUG` | `1` logs all child stderr |
 
 ## Implementation notes and limits
@@ -100,10 +110,20 @@ Environment:
   `text` is typed on its own goroutine (US characters as physical keys,
   the rest via the remapped keycodes, ≤ 10000 characters); long pastes
   should go via `clipboard` + Ctrl+V.
-- **Chromium sandbox:** off (`--no-sandbox`). With `--cap-drop ALL`, the
-  default seccomp/AppArmor profiles deny user namespaces, and the setuid
-  helper does not work with `no-new-privileges`. The container is the
-  isolation boundary.
+- **Chromium sandbox: off (`--no-sandbox`).** Chromium's sandbox needs
+  user namespaces or its setuid helper as first layer; with
+  `--cap-drop ALL` the default seccomp/AppArmor profiles deny user
+  namespaces and the setuid helper cannot work with `no-new-privileges`.
+  Tested with titand's flags: `--disable-namespace-sandbox` and/or
+  `--disable-setuid-sandbox` instead of `--no-sandbox` make Chromium exit
+  with "No usable sandbox"; seccomp-bpf alone cannot be kept. So renderers
+  are not isolated from each other or the browser process; a Chromium
+  exploit runs as UID 1000 in the container. The container is the
+  boundary (read-only root, no capabilities, no-new-privileges, Docker
+  seccomp, internal network without a way out, read-only policy, only
+  `/tmp` and this profile writable), and the image is rebuilt for every
+  Chromium/x264/GStreamer/Mesa security update and at least every 7 days
+  (`scripts/viewer-image-reuse.py`).
 - **Cursor:** XFixes cursor changes are watched, but Chromium's cursors
   carry no names, so only `default` is reported today.
 - **Untested here:** VA-API and NVENC encoding (the test machine has only

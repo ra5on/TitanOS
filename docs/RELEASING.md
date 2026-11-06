@@ -183,7 +183,7 @@ Einzelheiten, Einrichtung und Grenzen: [AUTOPILOT.md](AUTOPILOT.md).
   (`smoke-release.py --kernel-new`) und das ZIP mit SeaBIOS und 32-Bit-OVMF
   (`--firmware bios|ia32`), sofern das Release beides enthält.
 
-## Ab 0.60.0: Abbild der Fernansicht
+## Ab 0.61.0: Abbild der Fernansicht
 
 `release.yml` baut in jedem Release-Lauf vor „Pack the release“ das Abbild
 der Fernansicht mit `scripts/build-viewer-image.sh <version> out/viewer`.
@@ -304,7 +304,7 @@ Kanal Stable veröffentlicht. Die Release-Seite nennt das Apache-2.0-Datum
 | `tailscale.raw`, `tailscale.plugin.json`, `.minisig`, `tailscale-licenses.tar.gz` | Tailscale, Subnet-/Exit-Node-Einstellungen und Original-Lizenztexte |
 | `netbird.raw`, `netbird.plugin.json`, `.minisig`, `netbird-licenses.tar.gz` | NetBird-Client (BSD-3-Clause, ohne AGPL-Server), Original-Lizenz und Hinweise der Go-Module |
 | `<treiber>.raw`, `<treiber>.plugin.json`, `.minisig`, `<treiber>-licenses.tar.gz`, `<treiber>-sources.tar.gz` für `wangxun-nic`, `intel-qat`, `it87-extended` | Treiber-Plugins aus dem Kernel-Satz des Plugin-Repositorys für genau den Kernel des Releases; die Quellarchive enthalten die kompilierten GPL-Quellen und das Baurezept, `titanos-<version>-sources.txt` nennt Debian-Quellpaket bzw. Upstream-Commit. `make-release.sh` verweigert ein Treiber-Plugin ohne Kernel, Quellenangabe oder Quellarchiv |
-| `titanos-viewer-<version>.tar.zst` | Abbild der Fernansicht (`docker save`, zstd; Chromium, Xvfb, GStreamer mit x264/VA-API, PulseAudio, Agent `titanos-viewer`), seit 0.60.0 in **jedem** Release (App und System). Im signierten Manifest unter `viewer` mit `asset`, `sha256`, `size` und `imageId` (Config-Digest, `sha256:…`); titand lädt es bei der ersten Fernansicht, prüft Signatur, Größe, SHA-256 und nach `docker load` die Image-ID (`docs/FERNANSICHT.md`). Die Debian-Pakete des Abbilds stehen mit Quellpaketlinks in `titanos-<version>-sources.txt` („Viewer image“), die Liste zusätzlich unter `viewer/packages.txt` im Lizenzarchiv; die Copyright-Dateien liegen im Abbild unter `/usr/share/doc` |
+| `titanos-viewer-<version>.tar.zst` | Abbild der Fernansicht (`docker save`, zstd; Chromium, Xvfb, GStreamer mit x264/VA-API, PulseAudio, Agent `titanos-viewer`), seit 0.61.0 in **jedem** Release (App und System). Im signierten Manifest unter `viewer` mit `asset`, `sha256`, `size` und `imageId` (Config-Digest, `sha256:…`); titand lädt es bei der ersten Fernansicht, prüft Signatur, Größe, SHA-256 und nach `docker load` die Image-ID (`docs/FERNANSICHT.md`). Die Debian-Pakete des Abbilds stehen mit Quellpaketlinks in `titanos-<version>-sources.txt` („Viewer image“), die Liste zusätzlich unter `viewer/packages.txt` im Lizenzarchiv; die Copyright-Dateien liegen im Abbild unter `/usr/share/doc` |
 | `SHA256SUMS`, `SHA256SUMS.minisig` | signierte Prüfsummen aller unveränderlichen Release-Dateien |
 | `titanos-<version>-cli-linux-amd64` | statische öffentliche CLI, durch signierte SHA256SUMS abgedeckt |
 | `titanos-<version>-sources.txt` | genaue Debian-/Go-/npm-Quellpakete und Versionen |

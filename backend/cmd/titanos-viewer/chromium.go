@@ -2,81 +2,62 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
+
+	"github.com/ra5on/TitanOS/backend/internal/viewer/proto"
 )
 
-// policies returns the managed Chromium policies for the app origin.
-// /etc/chromium/policies/managed is a symlink (made at image build time)
-// to policyDir on the tmpfs, because the root file system is read-only
-// and the allowed origin is only known at start.
-func policies(origin string) map[string]any {
-	return map[string]any{
-		"URLBlocklist":                        []string{"*", "file://*", "chrome://*", "chrome-extension://*", "view-source:*", "devtools://*"},
-		"URLAllowlist":                        []string{origin, "about:blank"},
-		"DeveloperToolsAvailability":          2,
-		"DownloadDirectory":                   downloadDir,
-		"PromptForDownloadLocation":           false,
-		"DownloadRestrictions":                0,
-		"AllowFileSelectionDialogs":           true,
-		"PasswordManagerEnabled":              true,
-		"SyncDisabled":                        true,
-		"BrowserSignin":                       0,
-		"BrowserAddPersonEnabled":             false,
-		"BrowserGuestModeEnabled":             false,
-		"DefaultBrowserSettingEnabled":        false,
-		"TranslateEnabled":                    false,
-		"ExtensionInstallBlocklist":           []string{"*"},
-		"BlockExternalExtensions":             true,
-		"MetricsReportingEnabled":             false,
-		"SearchSuggestEnabled":                false,
-		"SafeBrowsingProtectionLevel":         0,
-		"NetworkPredictionOptions":            2,
-		"DnsOverHttpsMode":                    "off",
-		"BackgroundModeEnabled":               false,
-		"PrintingEnabled":                     false,
-		"DefaultNotificationsSetting":         2,
-		"DefaultGeolocationSetting":           2,
-		"AudioCaptureAllowed":                 false,
-		"VideoCaptureAllowed":                 false,
-		"ScreenCaptureAllowed":                false,
-		"AutofillCreditCardEnabled":           false,
-		"ShowFullUrlsInAddressBar":            false,
-		"PromotionalTabsEnabled":              false,
-		"PrivacySandboxPromptEnabled":         false,
-		"PrivacySandboxAdTopicsEnabled":       false,
-		"PrivacySandboxSiteEnabledAdsEnabled": false,
-		"PrivacySandboxAdMeasurementEnabled":  false,
-		"CloudReportingEnabled":               false,
-		"MediaRouterCastAllowAllIPs":          false,
-		"EnableMediaRouter":                   false,
-		"HardwareAccelerationModeEnabled":     true,
-		"BrowserLabsEnabled":                  false,
-		"FeedbackSurveysEnabled":              false,
-		"UserFeedbackAllowed":                 false,
-		"GenAiDefaultSettings":                2,
+// checkPolicyFile verifies the managed policy titand bind-mounts
+// read-only (proto.PolicyPath): a regular file owned by rootUID in a
+// directory owned by rootUID, neither writable by group/others nor by
+// this process, that locks the browser to the app origin. Chromium is
+// not started otherwise: a policy the browser (or the file dialog) could
+// change would undo the URL lock.
+func checkPolicyFile(path, origin string, rootUID uint32) error {
+	dir := filepath.Dir(path)
+	for _, p := range []string{dir, path} {
+		info, err := os.Lstat(p)
+		if err != nil {
+			return err
+		}
+		st, ok := info.Sys().(*syscall.Stat_t)
+		if !ok {
+			return fmt.Errorf("%s: no owner information", p)
+		}
+		switch {
+		case p == dir && !info.IsDir():
+			return fmt.Errorf("%s is not a directory", p)
+		case p == path && !info.Mode().IsRegular():
+			return fmt.Errorf("%s is not a regular file", p)
+		case st.Uid != rootUID:
+			return fmt.Errorf("%s is owned by uid %d, want %d", p, st.Uid, rootUID)
+		case info.Mode().Perm()&0o022 != 0:
+			return fmt.Errorf("%s is writable by group or others (%v)", p, info.Mode().Perm())
+		}
+		if unix.Access(p, unix.W_OK) == nil {
+			return fmt.Errorf("%s is writable by the viewer", p)
+		}
 	}
-}
-
-func writePolicies(origin string) error {
-	if err := os.MkdirAll(policyDir, 0o755); err != nil {
-		return err
-	}
-	b, err := json.MarshalIndent(policies(origin), "", "  ")
+	f, err := os.Open(path)
 	if err != nil {
 		return err
 	}
-	tmp := filepath.Join(policyDir, ".titanos.json.tmp")
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, 1<<20))
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, filepath.Join(policyDir, "titanos.json"))
+	return proto.CheckPolicy(data, origin)
 }
 
 // chromeArgs builds the Chromium command line.
@@ -145,7 +126,9 @@ type chromium struct {
 	stopped bool
 	kick    chan struct{}
 	ready   chan struct{} // closed by the first size or after firstWait
-	once    sync.Once
+	// closeWindows asks all browser windows to close (WM_DELETE_WINDOW).
+	closeWindows func()
+	once         sync.Once
 }
 
 // firstWait is how long the first start waits for the client's size, so
@@ -188,7 +171,7 @@ func (c *chromium) run(ctx context.Context) {
 				}
 				log.Printf("chromium exited (%v), restarting", p.err)
 			case <-ctx.Done():
-				p.stop(5 * time.Second)
+				c.end(p)
 				return
 			}
 		}
@@ -228,6 +211,21 @@ func (c *chromium) configure(w, h int, scale float64) (restarted bool) {
 	return true
 }
 
+// end closes the browser windows (a normal browser shutdown that writes
+// cookies and the profile; a SIGTERM makes Chromium skip writing the
+// cookie database), waits up to 5 s, then stops the process group.
+func (c *chromium) end(p *proc) {
+	if c.closeWindows != nil && !p.exited() {
+		c.closeWindows()
+		select {
+		case <-p.done:
+		case <-time.After(5 * time.Second):
+			log.Printf("chromium did not close its windows, terminating it")
+		}
+	}
+	p.stop(5 * time.Second)
+}
+
 // restart restarts the browser with a new size and scale.
 func (c *chromium) restart(w, h int, scale float64) {
 	c.mu.Lock()
@@ -239,7 +237,7 @@ func (c *chromium) restart(w, h int, scale float64) {
 	default:
 	}
 	if p != nil {
-		p.stop(5 * time.Second)
+		c.end(p)
 	}
 }
 
@@ -249,6 +247,6 @@ func (c *chromium) stop() {
 	p := c.p
 	c.mu.Unlock()
 	if p != nil {
-		p.stop(5 * time.Second)
+		c.end(p)
 	}
 }

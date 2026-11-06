@@ -11,6 +11,15 @@ newest earlier release that has one, this takes that release's archive:
   * the package list comes from that release's licenses archive, whose
     checksum is in its signed SHA256SUMS.
 
+It is never reused (Chromium security updates):
+
+  * when the previous image is older than 7 days (the date of the oldest
+    release that carries the same image ID), or
+  * when Debian's candidate version (trixie + trixie-security, asked in
+    the pinned base image) of a security-relevant package (chromium*,
+    libx264*, gstreamer*, mesa* …) differs from that release's
+    packages.txt, or the candidates cannot be determined.
+
 It writes <out-dir>/titanos-viewer-<version>.tar.zst, .packages.txt and
 .image-id (the same image ID) and exits 0. Exit code 3 means: build it
 (changes, or no earlier release with an image). Anything else is an error.
@@ -27,6 +36,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -43,6 +53,10 @@ INPUTS = (
     "backend/go.sum",
 )
 BUILD = 3
+# An image is rebuilt after this long even without changes (security updates).
+MAX_AGE = 7 * 24 * 3600
+# Packages whose updates force a new image.
+SECURITY = re.compile(r"^(chromium.*|libx264.*|gstreamer.*|libgstreamer.*|mesa.*|libgl1-mesa.*|libegl-mesa.*|libglx-mesa.*|libgbm.*|libdrm.*|libva.*|intel-media-va-driver.*)$")
 
 spec = importlib.util.spec_from_file_location("release_kind", REPO / "scripts/release-kind.py")
 release_kind = importlib.util.module_from_spec(spec)
@@ -98,12 +112,85 @@ def decide(version, tags, manifest_of, changed_since):
     return tag, manifest
 
 
-def reuse(version, out, tag, manifest, source, keys):
+def pinned_base():
+    """The base image of viewer/Dockerfile (name@sha256:…)."""
+    for line in (REPO / "viewer/Dockerfile").read_text().splitlines():
+        m = re.fullmatch(r"FROM\s+(\S+@sha256:[0-9a-f]{64})\s*", line)
+        if m:
+            return m.group(1)
+    raise ValueError("viewer/Dockerfile has no pinned FROM")
+
+
+def parse_packages(text):
+    """name → version of a packages.txt (name version source [source-version])."""
+    out = {}
+    for line in text.splitlines():
+        fields = line.split()
+        if len(fields) >= 2:
+            out[fields[0]] = fields[1]
+    return out
+
+
+def parse_policy(text):
+    """name → candidate version from `apt-cache policy` output."""
+    out, name = {}, None
+    for line in text.splitlines():
+        if line and not line[0].isspace() and line.endswith(":"):
+            name = line[:-1]
+        elif name and line.strip().startswith("Candidate:"):
+            out[name] = line.split(":", 1)[1].strip()
+    return out
+
+
+def candidate_versions(names, run=subprocess.run):
+    """Candidate versions in Debian (with trixie-security, as the image build
+    sees it) via the pinned base image."""
+    if not names:
+        return {}
+    for name in names:
+        if not re.fullmatch(r"[a-z0-9][a-z0-9.+-]*", name):
+            raise ValueError(f"odd package name {name!r}")
+    result = run(["docker", "run", "--rm", pinned_base(), "sh", "-c",
+                  "apt-get update -qq >/dev/null && apt-cache policy " + " ".join(sorted(names))],
+                 capture_output=True, text=True, timeout=600)
+    if result.returncode != 0:
+        raise RuntimeError(f"apt-cache policy failed: {result.stderr.strip()[-300:]}")
+    return parse_policy(result.stdout)
+
+
+def image_built_at(tag, tags, manifest_of, tag_time):
+    """Unix time of the oldest release that carries the image of tag (a
+    reused image keeps its ID, so the chain goes back to its build)."""
+    image = manifest_of(tag)["viewer"]["imageId"]
+    oldest = tag
+    earlier = sorted((t for t in tags if release_kind.key(t[1:]) and release_kind.key(t[1:]) < release_kind.key(tag[1:])),
+                     key=lambda t: release_kind.key(t[1:]), reverse=True)
+    for t in earlier:
+        m = manifest_of(t)
+        if not m or not isinstance(m.get("viewer"), dict) or m["viewer"].get("imageId") != image:
+            break
+        oldest = t
+    return tag_time(oldest)
+
+
+def security_reason(packages_text, candidates, built_at, now, max_age=MAX_AGE):
+    """Why the previous image must not be reused (None: it may)."""
+    if now - built_at > max_age:
+        return f"the image is {int((now - built_at) / 86400)} days old (more than {max_age // 86400})"
+    old = {n: v for n, v in parse_packages(packages_text).items() if SECURITY.match(n)}
+    if not old or "chromium" not in old:
+        return "no chromium in the previous package list"
+    changed = [f"{n} {v} → {candidates.get(n, 'unknown')}" for n, v in sorted(old.items()) if candidates.get(n) != v]
+    if changed:
+        return "security-relevant updates: " + ", ".join(changed[:10])
+    return None
+
+
+def previous_packages(tag, source, keys):
+    """packages.txt of tag from its licenses archive (checked against the
+    signed SHA256SUMS)."""
     base = f"{source}/releases/download/{tag}/"
-    viewer = manifest["viewer"]
     old_version = tag[1:]
-    if viewer.get("asset") != f"titanos-viewer-{old_version}.tar.zst" or not re.fullmatch(r"sha256:[0-9a-f]{64}", str(viewer.get("imageId", ""))):
-        raise ValueError(f"odd viewer entry in {tag}")
     # The licenses archive is covered by the signed SHA256SUMS.
     sums, sums_sig = fetch(base + "SHA256SUMS", 1 << 20), fetch(base + "SHA256SUMS.minisig", 4096)
     if not sums or not sums_sig or not signed(sums, sums_sig, keys):
@@ -114,7 +201,17 @@ def reuse(version, out, tag, manifest, source, keys):
     if not licenses or hashlib.sha256(licenses).hexdigest() != checksums.get(licenses_name):
         raise ValueError(f"{licenses_name} does not match SHA256SUMS")
     with tarfile.open(fileobj=io.BytesIO(licenses)) as archive:
-        packages = archive.extractfile("viewer/packages.txt").read()
+        return archive.extractfile("viewer/packages.txt").read()
+
+
+def reuse(version, out, tag, manifest, source, keys, packages=None):
+    base = f"{source}/releases/download/{tag}/"
+    viewer = manifest["viewer"]
+    old_version = tag[1:]
+    if viewer.get("asset") != f"titanos-viewer-{old_version}.tar.zst" or not re.fullmatch(r"sha256:[0-9a-f]{64}", str(viewer.get("imageId", ""))):
+        raise ValueError(f"odd viewer entry in {tag}")
+    if packages is None:
+        packages = previous_packages(tag, source, keys)
     out.mkdir(parents=True, exist_ok=True)
     target = out / f"titanos-viewer-{version}.tar.zst"
     digest, size = hashlib.sha256(), 0
@@ -155,7 +252,18 @@ def main():
     if not tag:
         print(f"building the viewer image: {manifest}", file=sys.stderr)
         sys.exit(BUILD)
-    reuse(args.version, args.out, tag, manifest, source, args.keys)
+    packages = previous_packages(tag, source, args.keys)
+    built = image_built_at(tag, tags, manifest_of,
+                           lambda t: int(release_kind.git("for-each-ref", "--format=%(creatordate:unix)", f"refs/tags/{t}").strip()))
+    try:
+        names = [n for n in parse_packages(packages.decode()) if SECURITY.match(n)]
+        reason = security_reason(packages.decode(), candidate_versions(names), built, time.time())
+    except (RuntimeError, ValueError, OSError, subprocess.TimeoutExpired) as error:
+        reason = f"cannot check Debian updates ({error})"
+    if reason:
+        print(f"building the viewer image: {reason}", file=sys.stderr)
+        sys.exit(BUILD)
+    reuse(args.version, args.out, tag, manifest, source, args.keys, packages)
     print(f"viewer image of {tag} reused ({manifest['viewer']['imageId']})", file=sys.stderr)
 
 

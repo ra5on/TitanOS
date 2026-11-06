@@ -167,6 +167,7 @@ func (s *Server) handleAppAccessSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	noteTarget(r, "apps")
+	go s.viewerRecheckRights()
 	slog.Info("app rights changed", "by", currentUser(r).Name, "ip", remoteIP(r))
 	s.handleAppAccess(w, r)
 }

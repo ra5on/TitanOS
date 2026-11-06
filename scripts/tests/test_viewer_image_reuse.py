@@ -47,6 +47,104 @@ class DecideTest(unittest.TestCase):
         self.assertIsNone(self.decide("0.60.0", [])[0])
 
 
+PACKAGES = """chromium 156.0.8078.79-1~deb13u1 chromium 156.0.8078.79-1~deb13u1
+chromium-common 156.0.8078.79-1~deb13u1 chromium 156.0.8078.79-1~deb13u1
+libx264-164 2:0.164.3108+git31e19f9-2+b1 x264 2:0.164.3108+git31e19f9-2
+gstreamer1.0-plugins-bad 1.26.2-2 gst-plugins-bad1.0 1.26.2-2
+mesa-libgallium 25.0.7-2+deb13u1 mesa 25.0.7-2+deb13u1
+coreutils 9.7-3 coreutils 9.7-3
+"""
+POLICY = """chromium:
+  Installed: (none)
+  Candidate: 156.0.8078.79-1~deb13u1
+  Version table:
+     156.0.8078.79-1~deb13u1 500
+chromium-common:
+  Installed: (none)
+  Candidate: 156.0.8078.79-1~deb13u1
+libx264-164:
+  Installed: (none)
+  Candidate: 2:0.164.3108+git31e19f9-2+b1
+gstreamer1.0-plugins-bad:
+  Installed: (none)
+  Candidate: 1.26.2-2
+mesa-libgallium:
+  Installed: (none)
+  Candidate: 25.0.7-2+deb13u1
+"""
+DAY = 86400
+
+
+class SecurityTest(unittest.TestCase):
+    def candidates(self, **change):
+        c = reuse.parse_policy(POLICY)
+        c.update(change)
+        return c
+
+    def test_parse(self):
+        self.assertEqual(reuse.parse_policy(POLICY)["libx264-164"], "2:0.164.3108+git31e19f9-2+b1")
+        self.assertEqual(reuse.parse_packages(PACKAGES)["coreutils"], "9.7-3")
+        names = [n for n in reuse.parse_packages(PACKAGES) if reuse.SECURITY.match(n)]
+        self.assertEqual(sorted(names), ["chromium", "chromium-common", "gstreamer1.0-plugins-bad", "libx264-164", "mesa-libgallium"])
+
+    def test_fresh_and_unchanged_is_reused(self):
+        self.assertIsNone(reuse.security_reason(PACKAGES, self.candidates(), 1000 * DAY, 1003 * DAY))
+
+    def test_old_image_is_rebuilt(self):
+        reason = reuse.security_reason(PACKAGES, self.candidates(), 1000 * DAY, 1007 * DAY + 1)
+        self.assertIn("days old", reason)
+
+    def test_security_update_is_rebuilt(self):
+        for name in ["chromium", "libx264-164", "gstreamer1.0-plugins-bad", "mesa-libgallium"]:
+            with self.subTest(name=name):
+                reason = reuse.security_reason(PACKAGES, self.candidates(**{name: "99.0-1~deb13u1"}), 1000 * DAY, 1001 * DAY)
+                self.assertIn(name, reason)
+
+    def test_unknown_candidate_is_rebuilt(self):
+        c = self.candidates()
+        del c["chromium"]
+        self.assertIn("unknown", reuse.security_reason(PACKAGES, c, 1000 * DAY, 1001 * DAY))
+
+    def test_other_package_updates_do_not_matter(self):
+        self.assertIsNone(reuse.security_reason(PACKAGES.replace("9.7-3", "9.8-1"), self.candidates(), 1000 * DAY, 1001 * DAY))
+
+    def test_without_chromium_it_is_rebuilt(self):
+        self.assertIsNotNone(reuse.security_reason("coreutils 9.7-3 coreutils 9.7-3\n", {}, 1000 * DAY, 1001 * DAY))
+
+    def test_candidate_versions_asks_the_pinned_base(self):
+        calls = []
+
+        class Result:
+            returncode, stdout, stderr = 0, POLICY, ""
+
+        def run(cmd, **kw):
+            calls.append(cmd)
+            return Result()
+
+        got = reuse.candidate_versions(["chromium", "libx264-164"], run=run)
+        self.assertEqual(got["chromium"], "156.0.8078.79-1~deb13u1")
+        self.assertIn("debian:trixie-slim@sha256:", calls[0][3])
+        self.assertIn("apt-cache policy chromium libx264-164", calls[0][-1])
+        with self.assertRaises(ValueError):
+            reuse.candidate_versions(["x; rm -rf /"], run=run)
+
+        class Failed:
+            returncode, stdout, stderr = 100, "", "no network"
+        with self.assertRaises(RuntimeError):
+            reuse.candidate_versions(["chromium"], run=lambda *a, **k: Failed())
+
+    def test_image_age_follows_reuse_chain(self):
+        manifests = {
+            "v0.60.0": {"viewer": {"imageId": "sha256:" + "a" * 64}},
+            "v0.61.0": {"viewer": {"imageId": "sha256:" + "b" * 64}},
+            "v0.62.0": {"viewer": {"imageId": "sha256:" + "b" * 64}},
+            "v0.63.0": {"viewer": {"imageId": "sha256:" + "b" * 64}},
+        }
+        times = {"v0.60.0": 1, "v0.61.0": 2, "v0.62.0": 3, "v0.63.0": 4}
+        built = reuse.image_built_at("v0.63.0", list(manifests), manifests.get, times.get)
+        self.assertEqual(built, 2)  # built for 0.61.0, reused by 0.62.0 and 0.63.0
+
+
 @unittest.skipUnless(shutil.which("minisign"), "minisign not installed")
 class ReuseTest(unittest.TestCase):
     def setUp(self):

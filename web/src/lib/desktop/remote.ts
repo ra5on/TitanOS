@@ -87,6 +87,7 @@ export type ViewerError =
 	| 'app_forbidden'
 	| 'viewer_image'
 	| 'viewer_memory'
+	| 'viewer_limit'
 	| 'viewer_hostnet'
 	| 'viewer_no_webui'
 	| 'viewer_not_running'
@@ -101,7 +102,7 @@ export type ServerMessage =
 	| { t: 'clipboard'; text: string }
 	| { t: 'download'; name: string; size: number; id: string }
 	| { t: 'cursor'; shape: string }
-	| { t: 'uploaded'; id: number }
+	| { t: 'uploaded'; id: number; error?: 'too_large' | 'bad_name' | 'no_space' | 'failed' }
 	| { t: 'bye'; reason: ByeReason; text: string }
 	| { t: 'starting' }
 	| { t: 'error'; code: string; text: string; image?: ImageStatus };
@@ -110,6 +111,7 @@ const VIEWER_ERRORS: ViewerError[] = [
 	'app_forbidden',
 	'viewer_image',
 	'viewer_memory',
+	'viewer_limit',
 	'viewer_hostnet',
 	'viewer_no_webui',
 	'viewer_not_running',
@@ -157,7 +159,13 @@ export function parseMessage(text: string): ServerMessage | null {
 		case 'cursor':
 			return { t: 'cursor', shape: str(m.shape) };
 		case 'uploaded':
-			return { t: 'uploaded', id: num(m.id) };
+			return {
+				t: 'uploaded',
+				id: num(m.id),
+				error: (['too_large', 'bad_name', 'no_space', 'failed'] as const).find(
+					(e) => e === m.error,
+				),
+			};
 		case 'bye': {
 			const reason = BYE_REASONS.find((r) => r === m.reason) ?? 'error';
 			return { t: 'bye', reason, text: str(m.text) };

@@ -351,6 +351,7 @@ func (c *client) control() {
 				c.lastClip = text
 				c.sendJSON(proto.Clipboard{T: "clipboard", Text: text}, false)
 			}
+			enforceDownloadLimits()
 			for _, dl := range a.dl.poll() {
 				c.sendJSON(proto.Download{T: "download", Name: dl.Name, Size: dl.Size, ID: dl.ID}, true)
 			}

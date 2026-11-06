@@ -2,12 +2,12 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/viewer/proto"
 )
@@ -212,10 +212,7 @@ func TestSanitizeName(t *testing.T) {
 }
 
 func TestUploads(t *testing.T) {
-	dir := t.TempDir()
-	old := uploadDir
-	uploadDir = filepath.Join(dir, "Hochgeladen")
-	defer func() { uploadDir = old }()
+	withProfile(t, 100<<30)
 	u := newUploads()
 	if _, code := u.begin(1, "a.txt", proto.MaxUploadSize+1); code != proto.UploadTooLarge {
 		t.Fatal(code)
@@ -317,28 +314,56 @@ func TestAppOrigin(t *testing.T) {
 	}
 }
 
-func TestPolicies(t *testing.T) {
-	p := policies("http://10.0.0.5:8080")
-	b, _ := json.Marshal(p)
-	var m map[string]any
-	_ = json.Unmarshal(b, &m)
-	if !slices.Contains(toStrings(m["URLBlocklist"]), "*") || !slices.Contains(toStrings(m["URLBlocklist"]), "file://*") {
-		t.Fatal("blocklist")
+func TestCheckPolicyFile(t *testing.T) {
+	origin := "http://10.0.0.5:8080"
+	uid := uint32(os.Getuid())
+	if uid == 0 {
+		t.Skip("root can write anything")
 	}
-	if allow := toStrings(m["URLAllowlist"]); !slices.Equal(allow, []string{"http://10.0.0.5:8080", "about:blank"}) {
-		t.Fatal(allow)
+	mk := func(fileMode, dirMode os.FileMode, data []byte) string {
+		dir := filepath.Join(t.TempDir(), "managed")
+		os.Mkdir(dir, 0o755)
+		p := filepath.Join(dir, "titanos.json")
+		os.WriteFile(p, data, 0o644)
+		os.Chmod(p, fileMode)
+		os.Chmod(dir, dirMode)
+		t.Cleanup(func() { os.Chmod(dir, 0o755) })
+		return p
 	}
-	if m["DeveloperToolsAvailability"] != 2.0 || m["DownloadDirectory"] != "/profile/Downloads" || m["PromptForDownloadLocation"] != false {
-		t.Fatal("policy values")
+	good, _ := proto.ChromiumPolicy(origin)
+	if err := checkPolicyFile(mk(0o444, 0o555, good), origin, uid); err != nil {
+		t.Fatalf("read-only policy rejected: %v", err)
 	}
-}
-
-func toStrings(v any) []string {
-	var out []string
-	for _, x := range v.([]any) {
-		out = append(out, x.(string))
+	for name, c := range map[string]struct {
+		file, dir os.FileMode
+		data      []byte
+		origin    string
+		uid       uint32
+	}{
+		"writable file":  {0o644, 0o555, good, origin, uid},
+		"writable dir":   {0o444, 0o755, good, origin, uid},
+		"group writable": {0o464, 0o555, good, origin, uid},
+		"other origin":   {0o444, 0o555, good, "http://10.0.0.6:8080", uid},
+		"wrong owner":    {0o444, 0o555, good, origin, uid + 1},
+		"no blocklist":   {0o444, 0o555, []byte(`{"URLAllowlist":["http://10.0.0.5:8080","about:blank"]}`), origin, uid},
+	} {
+		if err := checkPolicyFile(mk(c.file, c.dir, c.data), c.origin, c.uid); err == nil {
+			t.Errorf("%s accepted", name)
+		}
 	}
-	return out
+	if checkPolicyFile(filepath.Join(t.TempDir(), "missing.json"), origin, uid) == nil {
+		t.Error("missing file accepted")
+	}
+	target := mk(0o444, 0o555, good)
+	dir := filepath.Join(t.TempDir(), "m2")
+	os.Mkdir(dir, 0o755)
+	link := filepath.Join(dir, "titanos.json")
+	os.Symlink(target, link)
+	os.Chmod(dir, 0o555)
+	t.Cleanup(func() { os.Chmod(dir, 0o755) })
+	if checkPolicyFile(link, origin, uid) == nil {
+		t.Error("symlink accepted")
+	}
 }
 
 func TestPipelineArgs(t *testing.T) {
@@ -388,5 +413,100 @@ func TestUSKey(t *testing.T) {
 		if _, _, ok := usKey(r); ok {
 			t.Errorf("%q has no US key", r)
 		}
+	}
+}
+
+func withProfile(t *testing.T, free int64) string {
+	t.Helper()
+	dir := t.TempDir()
+	oldU, oldD, oldF := uploadDir, downloadDir, freeSpace
+	uploadDir, downloadDir = filepath.Join(dir, "Hochgeladen"), filepath.Join(dir, "Downloads")
+	os.MkdirAll(downloadDir, 0o755)
+	freeSpace = func(string) (int64, error) { return free, nil }
+	t.Cleanup(func() { uploadDir, downloadDir, freeSpace = oldU, oldD, oldF })
+	return dir
+}
+
+func TestUploadSpace(t *testing.T) {
+	withProfile(t, proto.ProfileReserve+100)
+	u := newUploads()
+	if _, code := u.begin(1, "a", 101); code != proto.UploadNoSpace {
+		t.Fatalf("reserve: %q", code)
+	}
+	if _, code := u.begin(1, "a", 60); code != "" {
+		t.Fatal(code)
+	}
+	// the second upload would eat into the reserve together with the first
+	if _, code := u.begin(2, "b", 50); code != proto.UploadNoSpace {
+		t.Fatalf("pending: %q", code)
+	}
+	// space shrinks while writing: the chunk is refused, the upload dropped
+	freeSpace = func(string) (int64, error) { return proto.ProfileReserve + 10, nil }
+	if _, _, code := u.chunk(1, make([]byte, 20)); code != proto.UploadNoSpace {
+		t.Fatalf("chunk: %q", code)
+	}
+	if ents, _ := os.ReadDir(uploadDir); len(ents) != 0 {
+		t.Fatal("temp file left")
+	}
+}
+
+func TestUploadCap(t *testing.T) {
+	withProfile(t, 100<<30)
+	f, _ := os.Create(filepath.Join(downloadDir, "big"))
+	f.Truncate(proto.ProfileCap - 10) // sparse
+	f.Close()
+	u := newUploads()
+	if _, code := u.begin(1, "a", 11); code != proto.UploadNoSpace {
+		t.Fatalf("cap: %q", code)
+	}
+	if _, code := u.begin(1, "a", 10); code != "" {
+		t.Fatalf("within cap: %q", code)
+	}
+}
+
+func TestProfileCleanup(t *testing.T) {
+	withProfile(t, 100<<30)
+	os.MkdirAll(uploadDir, 0o755)
+	os.WriteFile(filepath.Join(uploadDir, "x"), []byte("x"), 0o644)
+	clearUploads()
+	if _, err := os.Stat(uploadDir); !os.IsNotExist(err) {
+		t.Fatal("uploads kept")
+	}
+	old, young := filepath.Join(downloadDir, "old"), filepath.Join(downloadDir, "young")
+	os.WriteFile(old, []byte("o"), 0o644)
+	os.WriteFile(young, []byte("y"), 0o644)
+	os.Chtimes(old, time.Now().Add(-25*time.Hour), time.Now().Add(-25*time.Hour))
+	pruneDownloads(24 * time.Hour)
+	if _, err := os.Stat(old); !os.IsNotExist(err) {
+		t.Fatal("old download kept")
+	}
+	if _, err := os.Stat(young); err != nil {
+		t.Fatal("young download removed")
+	}
+}
+
+func TestEnforceDownloadLimits(t *testing.T) {
+	withProfile(t, 100<<30)
+	mk := func(name string, size int64, age time.Duration) string {
+		p := filepath.Join(downloadDir, name)
+		f, _ := os.Create(p)
+		f.Truncate(size)
+		f.Close()
+		os.Chtimes(p, time.Now().Add(-age), time.Now().Add(-age))
+		return p
+	}
+	a := mk("a.bin", 2<<30, 3*time.Hour)
+	b := mk("b.bin", 1<<30, time.Hour)
+	part := mk("c.bin.crdownload", 1<<30+1, 0)
+	enforceDownloadLimits() // 4 GiB + 1: the running download goes first
+	for p, want := range map[string]bool{a: true, b: true, part: false} {
+		if _, err := os.Stat(p); (err == nil) != want {
+			t.Errorf("%s exists=%v, want %v", filepath.Base(p), err == nil, want)
+		}
+	}
+	freeSpace = func(string) (int64, error) { return proto.ProfileReserve - 1, nil }
+	enforceDownloadLimits() // low space: remove oldest until ok (here: all)
+	if _, err := os.Stat(a); !os.IsNotExist(err) {
+		t.Error("oldest download kept with low space")
 	}
 }

@@ -64,7 +64,7 @@ qrcode-generator          MIT                     https://github.com/kazuhikoara
 IBM Plex fonts            OFL-1.1                 https://github.com/IBM/plex
 
 Remote view image (titanos-viewer-<version>.tar.zst, a separate release
-asset since 0.60.0, loaded into Docker on the NAS on first use): Debian 13
+asset since 0.61.0, loaded into Docker on the NAS on first use): Debian 13
 packages including Chromium (BSD-3-Clause and others), Xvfb/X.Org (MIT),
 GStreamer (LGPL-2.1-or-later) with gst-plugins-ugly/x264 (GPL-2.0-or-later),
 VA-API drivers (MIT), PulseAudio (LGPL-2.1-or-later), Opus (BSD-3-Clause)

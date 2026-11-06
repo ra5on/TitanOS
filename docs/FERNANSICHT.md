@@ -1,6 +1,6 @@
 # Fernansicht für Docker-Apps (PLAN 63)
 
-Seit 0.60.0 öffnet das Fenster einer Docker-App die App **nicht mehr im Browser des Nutzers**, sondern TitanOS öffnet sie auf dem NAS in einem eigenen Browser (Chromium in einem Container) und überträgt Bild und Ton über die TitanOS-Adresse ins Fenster. Das geht überall, wo TitanOS selbst erreichbar ist (Heimnetz, VPN, Cloudflare-Tunnel, Handy), weil nur HTTPS und WebSocket zur TitanOS-Adresse nötig sind. Entscheidung des Projektinhabers vom 6.11.2026: „Immer Fernansicht“ (PLAN 62-4, 63, 63-1).
+Seit 0.61.0 öffnet das Fenster einer Docker-App die App **nicht mehr im Browser des Nutzers**, sondern TitanOS öffnet sie auf dem NAS in einem eigenen Browser (Chromium in einem Container) und überträgt Bild und Ton über die TitanOS-Adresse ins Fenster. Das geht überall, wo TitanOS selbst erreichbar ist (Heimnetz, VPN, Cloudflare-Tunnel, Handy), weil nur HTTPS und WebSocket zur TitanOS-Adresse nötig sind. Entscheidung des Projektinhabers vom 6.11.2026: „Immer Fernansicht“ (PLAN 62-4, 63, 63-1).
 
 ## Aufbau
 
@@ -11,11 +11,13 @@ Browser (Fenster)  ──WebSocket (TitanOS-Adresse, Anmeldung)──▶  titand
 
 - **Abbild** `titanos-viewer`: Debian trixie, Chromium, Xvfb, GStreamer (x264, VA-API), PulseAudio, xclip, Schriften, der Agent `titanos-viewer` (Go, `backend/cmd/titanos-viewer`). Gebaut im Release, als signierte Release-Datei (`manifest.json` → `viewer`), auf dem NAS bei der ersten Fernansicht geladen, geprüft (Signatur des Manifests, SHA-256, Größe) und mit `docker load` eingespielt. Kein Zug aus einer Registry.
 - **Container** je Benutzer und App (`titanos-viewer-<hash>`, Labels nennen Konto und App): nicht root (UID 1000), `--cap-drop ALL`, `no-new-privileges`, Wurzel nur lesbar, beschreibbar nur `/profile` (Browserprofil auf einem Daten-Volume unter `.titanos/viewer/profiles/<user>/<app>`) und tmpfs `/tmp`. GPU nur mit Einstellung (`/dev/dri`).
-- **Netz:** eigenes internes Docker-Netz `titanos-viewer` (ohne Weg nach draußen); der App-Container wird für die Dauer der Ansicht angehängt. Chromium-Richtlinien erlauben nur die Adresse der App (`URLBlocklist: *`, `URLAllowlist: <App>`), keine Entwicklerwerkzeuge, kein `file://`.
+- **Chromium-Sandbox: aus (`--no-sandbox`).** Chromiums eigene Sandbox braucht Benutzer-Namensräume (oder das setuid-Hilfsprogramm). Mit `--cap-drop ALL` und Dockers Standard-Seccomp/AppArmor sind Namensräume verboten, und das setuid-Hilfsprogramm geht mit `no-new-privileges` nicht. `--disable-namespace-sandbox` bzw. `--disable-setuid-sandbox` statt `--no-sandbox` wurden mit den Container-Einstellungen von titand geprüft (7.11.2026): Chromium startet dann nicht („No usable sandbox“); die Seccomp-BPF-Schicht lässt sich ohne die erste Schicht nicht allein einschalten. Ohne Sandbox laufen die Renderer daher ohne eigene Trennung voneinander und vom Browserprozess; eine Lücke in Chromium gibt die Rechte von UID 1000 **im Container**. Die Grenze ist der Container: Wurzel nur lesbar, keine Capabilities, `no-new-privileges`, Docker-Seccomp, eigenes internes Netz ohne Weg nach draußen und zum NAS, Richtlinie nur lesbar eingebunden, beschreibbar nur `/tmp` und das Profil dieses Benutzers für diese App. Deshalb wird das Abbild bei Sicherheitsupdates von Chromium (und x264, GStreamer, Mesa) und spätestens nach 7 Tagen neu gebaut, nicht wiederverwendet (`scripts/viewer-image-reuse.py`).
+- **Platz:** Hochladen nur, wenn auf dem Profil-Volume danach mindestens 1 GiB frei bleibt und Hochgeladenes plus Downloads je Profil höchstens 4 GiB sind (geprüft vor dem Hochladen und vor jedem Teil; sonst `uploaded` mit `error: "no_space"`). Laufende und dann die ältesten Downloads werden gelöscht, wenn die Grenzen überschritten sind. „Hochgeladen“ wird beim Start und Ende des Containers geleert, Downloads älter als 24 Stunden beim Start gelöscht.
+- **Netz:** je Ansicht ein eigenes internes Docker-Netz `titanos-viewer-<hash>` (ohne Weg nach draußen, Bridge `tvw<12 hex>` auf dem Host); darin nur dieser Viewer und der Web-Container dieser App, solange die Ansicht besteht. Der Host verwirft neue Verbindungen aus diesen Netzen (nft, siehe unten). Chromium-Richtlinien (`proto.ChromiumPolicy`) erlauben nur die Adresse der App (`URLBlocklist: *`, `URLAllowlist: <App>`), keine Entwicklerwerkzeuge, kein `file://`; titand schreibt sie auf dem Host und bindet die Datei nur lesbar ein.
 
 ## Protokoll Browser ↔ titand ↔ Agent
 
-Ein WebSocket, `GET /api/v1/viewer/{app}/stream` (Anmeldung, Recht auf die App wie beim App-Fenster). titand reicht Nachrichten unverändert zwischen Browser und Agent durch (der Agent ist unter `ws://<container>:7300/stream?key=<Sitzungsschlüssel>` erreichbar), prüft aber Richtung Agent die Länge und den Typ.
+Ein WebSocket, `GET /api/v1/viewer/{app}/stream` (Anmeldung, Recht auf die App wie beim App-Fenster). titand reicht Nachrichten unverändert zwischen Browser und Agent durch (der Agent ist unter `ws://<container>:7300/stream` mit dem Sitzungsschlüssel im Kopf `X-Viewer-Key` erreichbar; ein Schlüssel in der Adresse gilt nicht), prüft aber Richtung Agent die Länge und den Typ.
 
 **Binäre Nachrichten** – erstes Byte ist der Typ:
 
@@ -55,7 +57,7 @@ Browser → Agent:
 
 ## Lebenslauf einer Ansicht
 
-1. Fenster öffnet `…/stream`. titand prüft Recht und freien Speicher (Abbruch mit `viewer_memory`, wenn weniger als 700 MB frei bleiben), lädt bei Bedarf das Abbild, legt Profilordner an, startet den Container und hängt die App ans interne Netz.
+1. Fenster öffnet `…/stream`. titand prüft Recht, Anzahl und Speicher (siehe „Grenzen je Ansicht“), lädt bei Bedarf das Abbild, legt Profilordner an, startet den Container und hängt die App ans interne Netz.
 2. Der Agent startet Xvfb, PulseAudio und Chromium mit der App-Adresse, dann Bild- und Tonstrom.
 3. Ende: Fenster zu → Container läuft 2 Minuten weiter (schnelles Wiederöffnen), dann wird er gestoppt und entfernt; das Profil bleibt. Abmelden, Sperren, Passwortwechsel, Entzug des Rechts und die Trennzeit der Konsolen beenden den Strom wie bei Konsolen (Prüfung alle 3 s).
 
@@ -78,14 +80,14 @@ Code: `backend/internal/viewer/` (Einstellungen, Abbild, Container, Prüfung der
 
 ```json
 {
-  "image": {"state": "missing|downloading|loading|ready|error", "version": "0.60.0",
+  "image": {"state": "missing|downloading|loading|ready|error", "version": "0.61.0",
             "bytes": 123, "size": 456, "progress": 0.27, "error": "…", "dev": false},
   "gpu": "vaapi|nvenc|cpu",
   "gpus": [{"id": "/dev/dri/renderD128", "kind": "vaapi", "vendor": "8086", "title": "Intel … · 0000:00:02.0",
             "available": true, "reason": ""}],
   "sessions": [{"user": "anna", "app": "immich", "state": "starting|open|idle", "since": "2026-11-06T21:00:00Z",
                 "windows": 1, "gpu": "vaapi", "memoryBytes": 314572800}],
-  "memory": {"availableBytes": 6000000000, "reserveBytes": 734003200, "perViewBytes": 419430400, "more": 12},
+  "memory": {"availableBytes": 6000000000, "reserveBytes": 734003200, "perViewBytes": 1073741824, "more": 12},
   "idleMinutes": 15
 }
 ```
@@ -97,7 +99,7 @@ Code: `backend/internal/viewer/` (Einstellungen, Abbild, Container, Prüfung der
 Ein Browser kann die Antwort eines abgelehnten WebSocket-Handshakes nicht lesen. Deshalb nimmt titand die Verbindung jeder angemeldeten Sitzung an und meldet Probleme als Nachricht, danach schließt es mit Code 1008 und dem Fehlercode als Grund:
 
 - `{"t":"starting"}` – titand → Browser, sofort nach dem Verbinden (Recht geprüft), bevor der Container startet.
-- `{"t":"error","code":"…","text":"…"}` – titand → Browser, danach Ende. Codes: `app_forbidden`, `viewer_image` (mit `"image": {…}` wie im Status; das Abbild wird geladen: Status abfragen und neu verbinden), `viewer_memory` (mit `"memory": {…}`), `viewer_hostnet` (App im Host-Netz: „In eigenem Tab“ anbieten), `viewer_no_webui`, `viewer_not_running`, `viewer_volume` (kein eingebundenes Volume für Profile), `viewer_agent` (Agent antwortet nicht binnen 15 s), `viewer_name`, `viewer_unavailable`, `viewer_error`.
+- `{"t":"error","code":"…","text":"…"}` – titand → Browser, danach Ende. Codes: `app_forbidden`, `viewer_image` (mit `"image": {…}` wie im Status; das Abbild wird geladen: Status abfragen und neu verbinden), `viewer_memory` (mit `"memory": {…}`; auch wenn die Höchstzahl aus dem RAM erreicht ist), `viewer_limit` (das Konto hat schon 4 Ansichten offen), `viewer_hostnet` (App im Host-Netz: „In eigenem Tab“ anbieten), `viewer_no_webui`, `viewer_not_running`, `viewer_volume` (kein eingebundenes Volume für Profile), `viewer_agent` (Agent antwortet nicht binnen 15 s), `viewer_name`, `viewer_unavailable`, `viewer_error`.
 - `{"t":"bye","reason":"…"}` von titand: `idle` (Trennzeit der Konsolen ohne Eingabe), `logout` (Abmeldung, Sperre, Passwortwechsel, Konto gesperrt/gelöscht), `forbidden` (Recht entzogen, Rolle geändert), `replaced` (dasselbe Konto hat die App in einem anderen Fenster geöffnet; das neue Fenster übernimmt denselben Container), `stopped` (Container beendet), `error` (unzulässige Nachricht vom Browser).
 
 Richtung Agent lässt titand nur durch: Text-JSON ≤ 6 MiB (`proto.MaxTextMessage`; 1 MiB Zwischenablage kann maskiert bis zum Sechsfachen wachsen) mit `t` aus `size, mouse, wheel, key, text, clipboard, keyframe, quality, upload`; binär nur Typ `0x03` mit 4 Byte Upload-Nummer und 1 Byte bis 256 KiB Daten. Kein JSON, unbekanntes `t`, zu groß oder anderer Binärtyp beendet die Ansicht (`bye` `error`). Bekannte Nachrichten mit Werten außerhalb der Grenzen (`proto.ParseClient`) verwirft titand still, wie es der Agent täte. Als Eingabe (gegen die Trennzeit) zählen `mouse, wheel, key, text, clipboard, upload` und `0x03`. Richtung Browser geht alles unverändert durch (Lesegrenze 16 MiB je Nachricht).
@@ -106,9 +108,22 @@ Richtung Agent lässt titand nur durch: Text-JSON ≤ 6 MiB (`proto.MaxTextMessa
 
 - Ordner: `<volume>/.titanos/viewer/`, `…/image/`, `…/profiles/` und `…/profiles/<konto>/` gehören root mit 0700 (Docker bindet als root ein, der Container sieht nur `/profile`). Ausnahme von der Regel „private Betriebsdaten gehören root“ (`docs/rules/STORAGE.md`): der Profilordner `…/profiles/<konto>/<app>` gehört UID 1000 mit 0700, weil Chromium im Container dort schreibt. titand legt jeden Ordner ohne Verfolgen von Links an (`os.Root`) und lehnt fremde Besitzer oder für andere beschreibbare Ordner ab.
 - Name `titanos-viewer-<16 Hex>` (SHA-256 von Konto und App, damit sich `a-b`/`c` und `a`/`b-c` nicht treffen); Labels `titanos.viewer=1`, `titanos.viewer.user`, `titanos.viewer.app`. Erstellt immer aus der Image-ID (`sha256:…`), nie aus einem Tag.
-- Umgebung für den Agenten: `VIEWER_URL` (z. B. `http://172.30.0.2:3001/photos`: Adresse des App-Containers im Netz `titanos-viewer`, **Container-Port** hinter dem veröffentlichten Port des HTTPS-Namens bzw. des Labels `titanos.webui`, Pfad aus dem Label, Schema des HTTPS-Namens), `VIEWER_KEY` (32 Zufallsbytes hex, nur im RAM), `VIEWER_GPU` (`vaapi|nvenc|cpu`), `VIEWER_AUDIO` (`1|0`), `VIEWER_QUALITY`, `VIEWER_FPS`, `VIEWER_GPU_DEVICE` (Render-Knoten, nur bei VA-API), `HOME=/profile`.
+- Umgebung für den Agenten: `VIEWER_URL` (z. B. `http://172.30.0.2:3001/photos`: Adresse des App-Containers im Netz der Ansicht, **Container-Port** hinter dem veröffentlichten Port des HTTPS-Namens bzw. des Labels `titanos.webui`, Pfad aus dem Label, Schema des HTTPS-Namens), `VIEWER_KEY` (32 Zufallsbytes hex, nur im RAM), `VIEWER_GPU` (`vaapi|nvenc|cpu`), `VIEWER_AUDIO` (`1|0`), `VIEWER_QUALITY`, `VIEWER_FPS`, `VIEWER_GPU_DEVICE` (Render-Knoten, nur bei VA-API), `HOME=/profile`.
+- Netz: `titanos-viewer-<16 hex>` (gleicher Name wie der Container), `Internal`, Labels wie der Container, Bridge-Name `tvw<12 hex>` (`com.docker.network.bridge.name`). Der Web-Container der App wird mit dem Alias `titanos-viewer-attached` angehängt; titand nimmt nur Endpunkte mit diesem Alias wieder ab. Vor dem Verbinden prüft titand den Container per ID: läuft er nicht mehr oder hat er im Netz der Ansicht eine andere Adresse, wird die Ansicht beendet und einmal neu gestartet.
+- Host-Regeln: eigene nft-Tabelle `inet titanos_viewer` (unabhängig davon, ob die Firewall von TitanOS an ist; vor jedem Start neu geladen, nicht im Entwicklungsmodus): im Eingang des Hosts von `iifname "tvw*"` nur Antworten (`ct state established,related`), alles Neue wird verworfen. Ein Browser in einer Ansicht erreicht so über das Gateway seines Netzes keinen Dienst des NAS; titand selbst verbindet sich von außen zum Agenten, dessen Antworten kommen als „established“ zurück.
+- Richtlinie: `/run/titanos/viewer/<container>/titanos.json` (Ordner root 0755, Datei 0444, im RAM), nur lesbar eingebunden als `/etc/chromium/policies/managed/titanos.json` (`proto.PolicyPath`; der Ordner im Abbild gehört root und enthält sonst nichts). Wird mit der Ansicht gelöscht; beim Start von titand der ganze Ordner `/run/titanos/viewer`.
 - titand wartet, bis `http://<viewer-ip>:7300/healthz` (ohne Schlüssel) antwortet, und verbindet sich dann mit `ws://<viewer-ip>:7300/stream`; Downloads holt es von `http://<viewer-ip>:7300/downloads/<id>` (der Agent nennt den Dateinamen in `Content-Disposition`). Der Sitzungsschlüssel geht immer im Kopf `X-Viewer-Key`, nie in der Adresse (insgesamt höchstens 15 s bis zur Verbindung). `hello` (mit `codec` aus dem Strom, z. B. `avc1.42C020`, und `scale`) und alle anderen Nachrichten des Agenten reicht titand unverändert durch.
-- Ende: Fenster zu → 2 Minuten Nachlauf, dann Container stoppen (10 s Zeit, damit Chromium Cookies und Profil schreibt; ebenso bei Abmelden, Sperre, Rechtsentzug und beim Aufräumen nach einem Neustart von titand) und entfernen, App vom Netz nehmen, wenn keine andere Ansicht sie braucht. Trennzeit, Abmelden, Sperre, Rechtsentzug → sofort. Beim Start von titand (sobald Docker antwortet) werden übrig gebliebene Viewer-Container entfernt und App-Container mit dem Alias `titanos-viewer-attached` vom Netz genommen.
+- Ende: Fenster zu → 2 Minuten Nachlauf, dann Container stoppen (10 s Zeit, damit Chromium Cookies und Profil schreibt; ebenso bei Abmelden, Sperre, Rechtsentzug und beim Aufräumen nach einem Neustart von titand) und entfernen, App vom Netz der Ansicht nehmen, Netz und Richtlinie löschen. Trennzeit, Abmelden, Sperre, Rechtsentzug → sofort. Ebenso sofort: Löschen des Kontos (dazu werden seine Profile unter `.titanos/viewer/profiles/<konto>` ohne Verfolgen von Links gelöscht), Entfernen der App, Entzug des App-Rechts unter Programme (auch für Ansichten, die gerade auf ihr Fenster warten). Beim Start von titand (sobald Docker antwortet) werden übrig gebliebene Viewer-Container und Viewer-Netze entfernt (nur mit Label `titanos.viewer=1` **und** Namensanfang `titanos-viewer-`), angehängte Apps vorher abgenommen.
+- Eigene Objekte: Container und Netze nur mit Label `titanos.viewer=1` und Namensanfang `titanos-viewer-`; Abbilder nur mit `titanos.viewer.image=1` und `titanos.viewer.release`. Alle Docker-Routen für Apps (Start/Stopp, Entfernen, Logs, Konsole) und damit auch MCP und Agent lehnen Viewer-Container ab (Label oder Name). Compose-Dateien mit Netzen namens `titanos-viewer…` (auch extern oder als `network_mode`) lehnt titand ab.
+
+### Grenzen je Ansicht
+
+- Speicher: jede Ansicht hat 1 GiB Limit (gemessen 230–400 MB in Gebrauch). Für jede offene, wartende oder startende Ansicht ist dieses Limit reserviert (was sie noch nicht nutzt, zählt zusätzlich zu MemAvailable). Eine neue Ansicht startet nur, wenn danach noch 700 MB frei bleiben, sonst `viewer_memory`.
+- Höchstzahl gesamt aus dem RAM: (MemTotal − 2 GiB) / 1 GiB, mindestens 1 (`viewer_memory`); je Konto 4 (`viewer_limit`; dasselbe Programm in einem zweiten Fenster zählt nicht).
+- CPU: höchstens 2 CPUs je Ansicht (`NanoCpus`), Gewicht 512 statt 1024 (`CpuShares`), damit Apps und VMs vorgehen. Starts laufen nacheinander.
+
+### Aktivitätsprotokoll
+
 - Aktivitätsprotokoll: `viewer_start` (App, bei Fehler mit Code) und `viewer_end` (App, Grund); keine Schlüssel.
 
 ### Abbild

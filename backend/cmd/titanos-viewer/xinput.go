@@ -364,6 +364,48 @@ func (x *xctl) releaseAll() {
 	x.sync()
 }
 
+// closeWindows sends WM_DELETE_WINDOW to every top-level window that
+// supports it, like a window manager's close button.
+func (x *xctl) closeWindows() {
+	atom := func(name string) xproto.Atom {
+		r, err := xproto.InternAtom(x.conn, false, uint16(len(name)), name).Reply()
+		if err != nil {
+			return 0
+		}
+		return r.Atom
+	}
+	protocols, del := atom("WM_PROTOCOLS"), atom("WM_DELETE_WINDOW")
+	if protocols == 0 || del == 0 {
+		return
+	}
+	tree, err := xproto.QueryTree(x.conn, x.root).Reply()
+	if err != nil {
+		return
+	}
+	n := 0
+	for _, win := range tree.Children {
+		prop, err := xproto.GetProperty(x.conn, false, win, protocols, xproto.AtomAtom, 0, 32).Reply()
+		if err != nil || prop.Format != 32 {
+			continue
+		}
+		supported := false
+		for i := 0; i+4 <= len(prop.Value); i += 4 {
+			if xproto.Atom(xgb.Get32(prop.Value[i:])) == del {
+				supported = true
+			}
+		}
+		if !supported {
+			continue
+		}
+		ev := xproto.ClientMessageEvent{Format: 32, Window: win, Type: protocols,
+			Data: xproto.ClientMessageDataUnionData32New([]uint32{uint32(del), 0, 0, 0, 0})}
+		xproto.SendEvent(x.conn, false, win, xproto.EventMaskNoEvent, string(ev.Bytes()))
+		n++
+	}
+	x.sync()
+	log.Printf("asked %d browser windows to close", n)
+}
+
 // fitWindows keeps every normal top-level window at 0,0 with the screen
 // size (no window manager runs; a page going fullscreen would otherwise
 // grow to the whole 3840x2160 X screen). Override-redirect windows

@@ -220,6 +220,7 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.sessions.DeleteUser(target.Name, "")
+	go s.viewerForgetUser(target.Name)
 	s.prefs.forget(target.Name)
 	s.opts.Notify.ForgetPersonal(target.Name)
 	if err := s.opts.Shares.ForgetUser(target.Name); err != nil {

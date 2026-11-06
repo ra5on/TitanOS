@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -34,7 +33,6 @@ const (
 	profileDir    = "/profile"
 	chromeProfile = "/profile/chromium"
 	runDir        = "/tmp/titanos-viewer"
-	policyDir     = "/tmp/titanos-viewer/policies" // /etc/chromium/policies/managed links here
 	homeDir       = "/tmp/home"
 	pulseDir      = "/tmp/pulse"
 	pulseSocket   = "/tmp/pulse/native"
@@ -127,22 +125,7 @@ func loadConfig() (config, error) {
 }
 
 // appOrigin validates VIEWER_URL and returns its origin (scheme://host[:port]).
-func appOrigin(raw string) (string, error) {
-	if raw == "" {
-		return "", errors.New("VIEWER_URL missing")
-	}
-	u, err := url.Parse(raw)
-	if err != nil {
-		return "", fmt.Errorf("VIEWER_URL: %v", err)
-	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return "", errors.New("VIEWER_URL must be http or https")
-	}
-	if u.Host == "" || u.User != nil || strings.ContainsAny(u.Host, " *\"\\") {
-		return "", errors.New("VIEWER_URL host invalid")
-	}
-	return u.Scheme + "://" + u.Host, nil
-}
+func appOrigin(raw string) (string, error) { return proto.AppOrigin(raw) }
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
