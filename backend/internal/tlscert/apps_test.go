@@ -14,6 +14,7 @@ func TestAppCertificate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	m.ca.failed = true // the fallback without the TitanOS authority
 	names := []string{"*.nas.local"}
 	cert, err := m.ForNames("immich.nas.local", names)
 	if err != nil {
@@ -37,6 +38,7 @@ func TestAppCertificate(t *testing.T) {
 		t.Error("new certificate for the same names")
 	}
 	restarted, _ := NewManager(store, "nas")
+	restarted.ca.failed = true
 	after, _ := restarted.ForNames("immich.nas.local", names)
 	if string(after.Certificate[0]) != string(cert.Certificate[0]) {
 		t.Error("new certificate after a restart")
@@ -57,6 +59,7 @@ func TestAppCertificateFromImportedWildcard(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	m.ca.failed = true // the fallback without the TitanOS authority
 	certPEM, keyPEM := issue(t, func(c *x509.Certificate) { c.DNSNames = []string{"nas.home.example.org", "*.home.example.org"} })
 	if err := m.SetCustom(certPEM, keyPEM); err != nil {
 		t.Fatal(err)
