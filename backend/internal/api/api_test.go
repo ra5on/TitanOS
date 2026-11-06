@@ -644,6 +644,9 @@ func TestSameSiteRequestsAreRejected(t *testing.T) {
 	for _, h := range []map[string]string{
 		{"Origin": "https://" + u.Hostname() + ":20001", "Sec-Fetch-Site": "same-site"},
 		{"Origin": "https://" + u.Hostname() + ":20001"},
+		// A plain HTML form on the app's page: no preflight, text/plain.
+		{"Origin": "https://" + u.Hostname() + ":20001", "Sec-Fetch-Site": "same-site", "Content-Type": "text/plain"},
+		{"Origin": "https://" + u.Hostname() + ":20001", "Content-Type": "text/plain"},
 	} {
 		req, _ := http.NewRequest("POST", ts.url+"/api/v1/system/power", strings.NewReader(`{"action":"poweroff"}`))
 		for k, v := range h {
@@ -672,8 +675,18 @@ func TestSameSiteRequestsAreRejected(t *testing.T) {
 		t.Fatal(err)
 	}
 	res.Body.Close()
-	if res.StatusCode == http.StatusForbidden {
-		t.Errorf("request from the web UI itself: %d", res.StatusCode)
+	if res.StatusCode/100 != 2 {
+		t.Fatalf("request from the web UI itself: %d", res.StatusCode)
+	}
+	// It was carried out with the session cookie the refused requests
+	// carried as well: they failed for their origin, not for the login.
+	select {
+	case action := <-ts.power.actions:
+		if action != "poweroff" {
+			t.Errorf("web UI request carried out %q", action)
+		}
+	case <-time.After(5 * time.Second):
+		t.Error("request from the web UI itself was not carried out")
 	}
 }
 

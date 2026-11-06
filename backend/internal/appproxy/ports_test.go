@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
@@ -216,7 +217,9 @@ func TestPortRoutingAndCookies(t *testing.T) {
 		r.AddCookie(&http.Cookie{Name: "__Host-titanos_session", Value: "secret"})
 		r.AddCookie(&http.Cookie{Name: "__Host-titanos_device", Value: "secret"})
 		r.AddCookie(&http.Cookie{Name: "__Host-titanos_app_20001", Value: "secret"})
-		r.AddCookie(&http.Cookie{Name: "own", Value: "1"})
+		r.AddCookie(&http.Cookie{Name: "tp20000_own", Value: "1"})
+		r.AddCookie(&http.Cookie{Name: "tp20001_other", Value: "secret"})
+		r.AddCookie(&http.Cookie{Name: "plain", Value: "secret"})
 		h.ServeHTTP(w, r)
 		body := w.Body.String()
 		if w.Code != http.StatusOK || !strings.HasPrefix(body, "app page") {
@@ -317,5 +320,114 @@ func TestWindowURLsUseRequestHost(t *testing.T) {
 		if u, _ := m.EnterURL("immich", host, "tok"); u != "https://immich.nas.local/.titanos/enter?t=tok" {
 			t.Errorf("%s: enter url %q", host, u)
 		}
+	}
+}
+
+// TestPortCookiesAreKeptApart: browsers share cookies between the ports
+// of one host, so an app's cookies on its port carry the port in their
+// name; only those of the request's port reach the app, unprefixed.
+func TestPortCookiesAreKeptApart(t *testing.T) {
+	m := portManager(t)
+	port := upstreamPort(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Set-Cookie", "sid=abc; Path=/; HttpOnly; Secure; SameSite=Lax")
+		w.Header().Add("Set-Cookie", "__Host-csrf=x=y; Path=/; Secure; Partitioned")
+		w.Header().Add("Set-Cookie", "__secure-lang=de; Max-Age=60; Secure")
+		w.Header().Add("Set-Cookie", "nameless")
+		w.Header().Add("Set-Cookie", "=empty")
+		w.Header().Add("Set-Cookie", "titanos_session=evil; Path=/")
+		io.WriteString(w, "cookie="+r.Header.Get("Cookie"))
+	})
+	if err := m.SetRoute("one", Route{Enabled: true, Name: "one", Port: port}); err != nil {
+		t.Fatal(err)
+	}
+	m.SetPublishedPorts(nil)
+	m.SetAutoApps(nil)
+	if p := m.Settings().Ports["one"]; p != 20000 {
+		t.Fatalf("port = %d", p)
+	}
+	h := m.PortHandler()
+	w := httptest.NewRecorder()
+	r := portRequest("GET", "https://192.168.1.20:20000/", 20000)
+	// HTTP/2 may split the Cookie header into several lines.
+	r.Header.Add("Cookie", "tp20000_sid=abc; tp20001_sid=other-app; sid=by-script")
+	r.Header.Add("Cookie", "__Host-tp20000_csrf=x=y; __Host-tp20001_csrf=no; __Secure-tp20000_lang=de")
+	r.Header.Add("Cookie", "tp20000_=empty; __Host-titanos_session=secret; tp20000_titanos_session=secret; __Host-titanos_app_20000=pass")
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("%d %s", w.Code, w.Body.String())
+	}
+	if got, want := w.Body.String(), "cookie=sid=abc; __Host-csrf=x=y; __Secure-lang=de"; got != want {
+		t.Errorf("cookies to the app: %q, want %q", got, want)
+	}
+	want := []string{
+		"tp20000_sid=abc; Path=/; HttpOnly; Secure; SameSite=Lax",
+		"__Host-tp20000_csrf=x=y; Path=/; Secure; Partitioned",
+		"__secure-tp20000_lang=de; Max-Age=60; Secure",
+	}
+	if got := w.Header().Values("Set-Cookie"); !slices.Equal(got, want) {
+		t.Errorf("Set-Cookie on the port:\n got %q\nwant %q", got, want)
+	}
+
+	// On the app's name, cookies keep their names both ways.
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest("GET", "https://one.nas.local/", nil)
+	r.Header.Add("Cookie", "sid=abc; tp20000_sid=x")
+	m.Handler(http.NotFoundHandler()).ServeHTTP(w, r)
+	if got := w.Body.String(); got != "cookie=sid=abc; tp20000_sid=x" {
+		t.Errorf("cookies on the name: %q", got)
+	}
+	if got := w.Header().Values("Set-Cookie"); len(got) != 5 || got[0] != "sid=abc; Path=/; HttpOnly; Secure; SameSite=Lax" {
+		t.Errorf("Set-Cookie on the name: %q", got)
+	}
+}
+
+// TestPortAssignmentSkipsRoutePorts: no app port is one a route or a
+// target leads to on the NAS, even before Docker publishes it.
+func TestPortAssignmentSkipsRoutePorts(t *testing.T) {
+	m := portManager(t)
+	if err := m.SetRoute("one", Route{Enabled: true, Name: "one", Port: 20000}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetTarget("vm", Route{Enabled: true, Name: "vm", Host: "192.168.1.9", Port: 20001}); err != nil {
+		t.Fatal(err)
+	}
+	m.SetPublishedPorts(nil)
+	m.SetAutoApps(map[string]int{"two": 20002})
+	ports := m.Settings().Ports
+	if ports["one"] != 20003 || ports["two"] != 20004 {
+		t.Errorf("ports = %v", ports)
+	}
+}
+
+// TestProxyNeverDialsOwnPorts: a route that leads to one of titand's app
+// ports would loop back into titand; the check runs at every dial, so a
+// port given after the route's proxy was built counts as well.
+func TestProxyNeverDialsOwnPorts(t *testing.T) {
+	m := portManager(t)
+	var hits atomic.Int32
+	port := upstreamPort(t, func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		// No kept connection: the next request dials again.
+		w.Header().Set("Connection", "close")
+		io.WriteString(w, "app")
+	})
+	if err := m.SetRoute("one", Route{Enabled: true, Name: "one", Port: port}); err != nil {
+		t.Fatal(err)
+	}
+	h := m.Handler(http.NotFoundHandler())
+	get := func() int {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest("GET", "https://one.nas.local/", nil))
+		return w.Code
+	}
+	if code := get(); code != http.StatusOK || hits.Load() != 1 {
+		t.Fatalf("before: %d, %d hits", code, hits.Load())
+	}
+	// The route's port is now the app port of another app.
+	m.mu.Lock()
+	m.settings.Ports = map[string]int{"other": port}
+	m.mu.Unlock()
+	if code := get(); code != http.StatusBadGateway || hits.Load() != 1 {
+		t.Errorf("route to an app port of titand: %d, %d hits", code, hits.Load())
 	}
 }

@@ -168,7 +168,8 @@ festen HTTPS-Port auf den Adressen des NAS, z. B. `https://192.168.10.5:20001`. 
 - **Bereich 20000–20999** (fünfstellig, unter den Ausgangsports von Linux ab 32768). Jede App mit
   Route (eigene oder automatische, nicht Ziele außerhalb von Docker) bekommt beim ersten Erkennen
   den kleinsten freien Port. Frei heißt: kein Container veröffentlicht ihn (Docker-Portfreigaben
-  aller laufenden Container), er gehört nicht titand (Weboberfläche), er ist nicht der feste
+  aller Container, auch gestoppter: deren `PortBindings` per Inspect, `docker.Manager.HostPorts`),
+  keine Route und kein Ziel führt auf ihn (Port der Route), er gehört nicht titand (Weboberfläche), er ist nicht der feste
   NFS-mountd-Port 20048, und eine kurze Probe (`listen` auf allen Adressen, sofort wieder
   geschlossen) findet ihn frei. Vergeben wird erst, wenn Docker einmal geantwortet hat.
 - **Gespeichert** in `/config/docker/proxy.json` im optionalen Feld `ports` (`{"app": port}`),
@@ -184,7 +185,25 @@ festen HTTPS-Port auf den Adressen des NAS, z. B. `https://192.168.10.5:20001`. 
   Route antwortet auf ihrem Port nicht (Listener geschlossen, sonst 404). Ein Port, der sich nicht
   öffnen lässt, wird protokolliert und bei der nächsten Änderung bzw. nach 30 s erneut versucht; er
   hält titand nie an. Keine Route darf auf einen App-Port zeigen (der Proxy würde sich selbst
-  aufrufen).
+  aufrufen): Jede Verbindung des Proxys prüft beim Aufbau, ob sie auf einen Port von titand
+  (Weboberfläche, alle gespeicherten App-Ports, jeweils aktuell gelesen) auf Loopback, `0.0.0.0`/`::`
+  oder einer Adresse des NAS geht, und lehnt sie ab (502; Test
+  `appproxy.TestProxyNeverDialsOwnPorts`).
+- **Cookies der Apps je Port**: Damit sich Apps auf verschiedenen Ports mit gleichen
+  Cookie-Namen (z. B. `session`) nicht versehentlich gegenseitig abmelden, benennt der Proxy auf
+  dem Port jedes `Set-Cookie` der App um:
+  `sid` wird `tp20001_sid`, `__Host-sid` wird `__Host-tp20001_sid` (Attribute unverändert, Cookies
+  ohne Namen entfallen). Zur App gehen nur die Cookies mit dem Präfix des eigenen Ports, ohne
+  Präfix; alle anderen (andere Ports, Namen, TitanOS) entfallen. Auf den Namen der App bleibt alles
+  wie bisher (`appproxy/portcookies.go`, Test `appproxy.TestPortCookiesAreKeptApart`).
+  **Grenze:** Cookies, die das JavaScript der App selbst über `document.cookie` setzt oder liest,
+  lassen sich nicht umbenennen: Ein so gesetztes Cookie erreicht die App auf dem Port nie, und ein
+  vom Server gesetztes sieht das Skript nur mit Präfix. Apps, die darauf bauen (z. B. ein
+  CSRF-Token, das die Seite aus einem Cookie liest, etwa `XSRF-TOKEN` oder `csrftoken`),
+  scheitern auf dem Port beim Anmelden oder Speichern mit einem Sicherheits-/CSRF-Fehler und
+  funktionieren nur über ihren Namen. Schutz gegen eine bösartige App ist das nicht: Ihr Skript
+  kann Cookies anderer Ports ohne HttpOnly lesen und Cookies mit fremdem Präfix setzen, die der
+  Proxy dann an die andere App weitergibt (siehe Restrisiko unten).
 - **Entwicklungsmodus** (`titand -dev`, `Disabled`): keine Ports vergeben, keine Listener, wie avahi.
 - **Sperr-Cookie je Port**: Cookies trennen nicht nach Port; alle Ports von `192.168.10.5` teilen
   sich die Cookies dieser Adresse. Der Pass heißt deshalb auf einem Port
@@ -198,8 +217,20 @@ festen HTTPS-Port auf den Adressen des NAS, z. B. `https://192.168.10.5:20001`. 
   erreichen die App nie, und Apps können sie nicht setzen (Test
   `appproxy.TestPortRoutingAndCookies`). Umgekehrt weist die Weboberfläche Anfragen von
   App-Seiten ab: `http.CrossOriginProtection` lehnt `Sec-Fetch-Site: same-site` bzw. ein
-  fremdes `Origin` (anderer Port) ab (Test `api.TestSameSiteRequestsAreRejected`), die
-  WebSockets der Konsolen vergleichen `Origin` samt Port mit dem Host.
+  fremdes `Origin` (anderer Port) ab, auch als einfaches Formular mit `text/plain`
+  (Test `api.TestSameSiteRequestsAreRejected`), die WebSockets der Konsolen vergleichen
+  `Origin` samt Port mit dem Host.
+- **Restrisiko Sitzungscookie**: Ein Skript auf einer App-Seite unter `https://192.168.10.5:20001`
+  darf Cookies für den Host `192.168.10.5` setzen, also auch für die Weboberfläche. Das
+  bestehende Sitzungscookie (HttpOnly) kann es nicht direkt überschreiben, aber den Cookie-Speicher
+  fluten (der Browser verdrängt dann alte Cookies, die Sitzung ist weg) oder, solange man
+  abgemeldet ist, ein eigenes `__Host-titanos_session` setzen: Man ist dann mit dessen Konto
+  angemeldet. Sitzungen sind an kein Gerät gebunden (das Geräte-Cookie in `login_device.go`
+  dient nur der Sperre nach Fehlversuchen), und solange Weboberfläche und App-Ports denselben
+  Host teilen, lässt sich das nicht vollständig verhindern. Eine Größenbegrenzung des
+  Cookie-Kopfs auf den App-Ports hilft nicht: Die Flut trifft die Anfragen an die Weboberfläche.
+  Deshalb über Ports nur vertrauenswürdige Apps öffnen; über die Namen der Apps (eigener Host)
+  besteht das Risiko nicht.
 - **Zertifikat**: Der Browser fragt dort nach der Adresse oder dem Namen des NAS, nicht nach
   einem App-Namen. Reihenfolge (`tlscert.AddressCertificate`): Let's Encrypt bzw. Tailscale für
   ihre Namen, ein eigenes Zertifikat, wenn es Namen bzw. Adresse abdeckt, sonst das Zertifikat der
@@ -219,12 +250,11 @@ festen HTTPS-Port auf den Adressen des NAS, z. B. `https://192.168.10.5:20001`. 
 
 Grenzen:
 
-- Apps auf verschiedenen Ports derselben Adresse teilen sich ihre eigenen Cookies. Setzen zwei
-  Apps ein Cookie gleichen Namens (z. B. `session`) ohne eigenen Pfad, überschreiben sie sich
-  gegenseitig; über den Namen der App passiert das nicht.
+- Cookies, die das JavaScript einer App selbst setzt, trennt der Proxy nicht nach Port (siehe
+  oben); solche Apps über ihren Namen öffnen.
 - Veröffentlicht ein Container später einen schon vergebenen Port, gewinnt Docker (DNAT) und die
-  App ist über diesen Port nicht mehr erreichbar. Portfreigaben gestoppter Container sieht die
-  Prüfung nicht.
+  App ist über diesen Port nicht mehr erreichbar. Portfreigaben gestoppter Container werden
+  berücksichtigt, aber nur die, die Docker beim Vergeben schon kennt.
 - Die Fenster-Adresse nimmt den Host, unter dem die Weboberfläche aufgerufen wurde. Ist sie über
   eine Domain mit Portweiterleitung nur für 443, über einen Reverse Proxy oder über einen Namen im
   Tailnet erreichbar, muss der App-Port unter demselben Host erreichbar sein; sonst bleibt das

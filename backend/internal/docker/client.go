@@ -134,8 +134,11 @@ type apiInspect struct {
 		Labels map[string]string
 	}
 	HostConfig struct {
-		Privileged     bool
-		Runtime        string
+		Privileged bool
+		Runtime    string
+		// PortBindings are the ports the container publishes on the
+		// host, also while it is stopped ("8080/tcp" → [{HostPort "8080"}]).
+		PortBindings   map[string][]struct{ HostIP, HostPort string }
 		Devices        []struct{ PathOnHost string }
 		DeviceRequests []struct {
 			Driver       string

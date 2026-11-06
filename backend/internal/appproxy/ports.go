@@ -121,6 +121,13 @@ func (m *Manager) assignPorts(s *Settings, auto map[string]Route) bool {
 	for _, p := range slices.Concat(m.dockerPorts, m.Reserved, fixedPorts) {
 		taken[p] = true
 	}
+	// The ports routes lead to: an app port on one of them would send the
+	// app's own port (or a target on the NAS) back into titand.
+	for _, routes := range []map[string]Route{s.Apps, s.Targets, auto} {
+		for _, route := range routes {
+			taken[route.Port] = true
+		}
+	}
 	if m.HTTPSPort > 0 {
 		taken[m.HTTPSPort] = true
 	}
@@ -383,7 +390,9 @@ func (m *Manager) PortHandler() http.Handler {
 		if !m.gateWith(w, r, gateApp(key), PortCookie(port), r.Host) {
 			return
 		}
-		m.handlerFor(key, route).proxy.ServeHTTP(w, r)
+		// The app's cookies are renamed per port (portcookies.go); only
+		// the proxy does that, titand's own pass above keeps its name.
+		m.handlerFor(key, route).proxy.ServeHTTP(w, r.WithContext(withPort(r.Context(), port)))
 	})
 }
 

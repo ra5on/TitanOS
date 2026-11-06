@@ -139,30 +139,31 @@ func sameRoute(a, b Route) bool {
 	return a.Host == b.Host && a.Port == b.Port && a.Scheme == b.Scheme && a.VerifyTLS == b.VerifyTLS
 }
 
-// transportFor is the connection for a route: apps without a certificate
-// check share upstream; targets and checked certificates get their own,
-// and a target may only be dialled in the home network, Tailscale or
-// NetBird, never back to titand itself.
+// transportFor is the connection for a route. Every route gets its own
+// with a check at dial time: never to one of titand's own ports on the
+// NAS (its web UI, its app ports: a loop back into titand), and a target
+// only in the home network, Tailscale or NetBird. The ports are read at
+// each dial, so that an app port given later counts as well.
 func (m *Manager) transportFor(route Route) http.RoundTripper {
-	if route.Host == "" && !route.VerifyTLS {
-		return upstream
-	}
 	transport := upstream.Clone()
 	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: !route.VerifyTLS}
-	if route.Host != "" {
-		// The app ports of titand are its own as well.
-		reserved := append(slices.Clone(m.Reserved), m.assignedPorts()...)
-		dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second, Control: func(_, address string, _ syscall.RawConn) error {
-			return checkTarget(address, reserved)
-		}}
-		transport.DialContext = dialer.DialContext
-	}
+	target := route.Host != ""
+	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second, Control: func(_, address string, _ syscall.RawConn) error {
+		return checkTarget(address, m.ownPorts(), target)
+	}}
+	transport.DialContext = dialer.DialContext
 	return transport
 }
 
-// checkTarget refuses addresses outside the home network and titand's own
-// ports on the NAS.
-func checkTarget(address string, reserved []int) error {
+// ownPorts are the ports titand listens on itself: its web UI and the
+// app ports (stored now, whether open or not).
+func (m *Manager) ownPorts() []int {
+	return append(slices.Clone(m.Reserved), m.assignedPorts()...)
+}
+
+// checkTarget refuses titand's own ports on the NAS and, for a target
+// (remote), addresses outside the home network.
+func checkTarget(address string, reserved []int, remote bool) error {
 	host, portText, err := net.SplitHostPort(address)
 	if err != nil {
 		return err
@@ -172,11 +173,11 @@ func checkTarget(address string, reserved []int) error {
 		return err
 	}
 	addr = addr.Unmap().WithZone("")
-	if !netguard.Local(addr) {
+	if remote && !netguard.Local(addr) {
 		return fmt.Errorf("%w: %s is not in the home network, Tailscale or NetBird", errTarget, addr)
 	}
 	port, _ := strconv.Atoi(portText)
-	if slices.Contains(reserved, port) && (addr.IsLoopback() || ownAddress(addr)) {
+	if slices.Contains(reserved, port) && (addr.IsLoopback() || addr.IsUnspecified() || ownAddress(addr)) {
 		return fmt.Errorf("%w: port %d of the NAS belongs to TitanOS", errTarget, port)
 	}
 	return nil
@@ -217,10 +218,18 @@ func (m *Manager) newProxy(app string, route Route) *httputil.ReverseProxy {
 			// Apps build their links from the name they were asked by.
 			pr.Out.Host = pr.In.Host
 			pr.SetXForwarded()
+			if port := portOf(pr.In.Context()); port != 0 {
+				unprefixPortCookies(pr.Out.Header, port)
+			}
 			stripSessionCookies(pr.Out.Header)
 		},
 		ModifyResponse: func(res *http.Response) error {
 			dropSessionSetCookies(res.Header)
+			if res.Request != nil {
+				if port := portOf(res.Request.Context()); port != 0 {
+					prefixPortSetCookies(res.Header, port)
+				}
+			}
 			// Only the web UI of TitanOS may frame the app (desktop windows).
 			rewriteFrameHeaders(res.Header, m.frameOrigins())
 			return nil

@@ -98,6 +98,8 @@ Heimnetz/VPN/Internet → NAS):
 | Backup-Buddy (KI-Agent, PLAN 54) | TCP 8752 | nein | nein | nein |
 | VPN-Tunnel | UDP 41641 (Tailscale), 51820 (NetBird, WireGuard-Server), 51821 (Tunnel des Clusters) | ja | ja | **ja** |
 
+Seit 0.59.0 (PLAN 62) umfasst der Dienst „HTTPS-Namen für Apps“ (Kennung `apps`) neben 443 auch die HTTPS-Ports der Apps im Bereich 20000–20999 – nur die, auf denen titand gerade lauscht, nicht der ganze Bereich. Wer den Dienst für eine Zone sperrt, sperrt dort also auch die App-Ports; wer ihn erlaubt, öffnet sie mit.
+
 Let's Encrypt über HTTP-01 braucht Port 80 aus dem Internet. Bei
 eingeschalteter Firewall gehört Port 80 zum Dienst „Weboberfläche“, der im
 Internet gesperrt ist: dann DNS-01 verwenden oder in der Zelle „Internet → NAS“

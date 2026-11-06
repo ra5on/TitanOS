@@ -78,7 +78,13 @@ func (w *titand) feedAutoApps(ctx context.Context) {
 	defer ticker.Stop()
 	for {
 		if status := w.containers.Status(ctx); status.Running {
-			w.routes.SetPublishedPorts(publishedPorts(status.Containers))
+			// Stopped containers keep their ports (HostPorts reads their
+			// bindings); no app port may take one of them.
+			published := publishedPorts(status.Containers)
+			if bound, ok := w.containers.HostPorts(ctx); ok {
+				published = append(published, bound...)
+			}
+			w.routes.SetPublishedPorts(published)
 			w.routes.SetAutoApps(autoApps(status.Containers))
 		}
 		select {
