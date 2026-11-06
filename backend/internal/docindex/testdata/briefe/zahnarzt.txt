@@ -1,0 +1,13 @@
+Zahnarzt Dr. Weber
+Praxis für Zahnheilkunde
+Marktplatz 3, 12345 Musterstadt
+
+Patient: Alex Beispiel
+Rechnung Nr. 2026-311 vom 28.10.2026
+
+Behandlung nach GOZ
+01  Eingehende Untersuchung        25,30 €
+Professionelle Zahnreinigung      187,20 €
+Rechnungsbetrag                   212,50 €
+
+Bitte überweisen Sie den Betrag bis zum 28.11.2026 auf unser Konto.
