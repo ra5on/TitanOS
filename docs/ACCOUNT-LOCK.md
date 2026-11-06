@@ -11,7 +11,11 @@ Seite **Nutzer**: Spalte „Status“ mit „Aktiv“ bzw. „Gesperrt“ (mit Z
 und sperrendem Konto), Knopf „Sperren“/„Entsperren“ je Zeile und ein
 Statusfilter (Alle/Aktiv/Gesperrt) über der Tabelle. Sperren und Entsperren
 laufen über einen einfachen Bestätigungsdialog, der die Folgen nennt; nichts
-muss eingetippt werden. Der Filter gilt nur für den aktuellen Seitenbesuch und
+muss eingetippt werden.
+
+Nicht zu verwechseln mit dem Sperrbildschirm einer einzelnen Anmeldung
+(„Sperren“ im Konto-Menü, Strg/⌘+Alt+L): der sperrt nur den Bildschirm des
+eigenen Browsers, siehe `docs/SESSION-LOCK.md`. Der Filter gilt nur für den aktuellen Seitenbesuch und
 schreibt nichts auf den Stick.
 
 API (nur Besitzer/Administratoren, normale Sitzung oder interne Wege mit

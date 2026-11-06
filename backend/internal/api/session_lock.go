@@ -1,0 +1,222 @@
+package api
+
+import (
+	"encoding/json"
+	"log/slog"
+	"math"
+	"net/http"
+	"slices"
+	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/firewall"
+)
+
+// The lock of a session (PLAN 61, lock screen of the desktop): the cookie
+// stays, the windows stay open in the browser, but the NAS answers every
+// request of the session with 423 "locked" until the account's password
+// (and code) or one of its passkeys is given again. Not to be confused
+// with locking an account (users/{name}/lock, auth/disabled.go).
+
+// defaultLockMinutes is the automatic lock while an account chose nothing;
+// maxLockMinutes bounds what it may choose.
+const (
+	defaultLockMinutes = 15
+	maxLockMinutes     = 24 * 60
+)
+
+// lockExempt are the routes a locked session may still call through
+// requireUser: unlocking (with a passkey, its challenge first) and locking
+// again. GET /session and logout do not go through requireUser.
+var lockExempt = []string{
+	"POST /api/v1/session/lock",
+	"POST /api/v1/session/unlock",
+	"POST /api/v1/account/passkeys/confirm",
+}
+
+// authState is what the cookie of a request stands for.
+type authState int
+
+const (
+	authNone authState = iota
+	authOK
+	authLocked
+)
+
+// lockMinutes is the automatic lock the account chose in its desktop
+// preferences ("lockMinutes", 0 = off), read from the cached preferences.
+// Never called with the lock of the session store held: the first read
+// of an account may wake the stick.
+func (s *Server) lockMinutes(user string) int {
+	return s.prefs.lockMinutes(user)
+}
+
+// lockMinutes reads the field "lockMinutes" of the desktop preferences;
+// the desktop stores other fields there as well, which stay untouched.
+func (p *preferences) lockMinutes(user string) int {
+	p.mu.Lock()
+	if minutes, ok := p.locks[user]; ok {
+		p.mu.Unlock()
+		return minutes
+	}
+	p.mu.Unlock()
+	minutes := defaultLockMinutes
+	if value, err := p.get(user, "desktop"); err == nil && value != nil {
+		var desktop struct {
+			LockMinutes *float64 `json:"lockMinutes"`
+		}
+		if json.Unmarshal(value, &desktop) == nil && desktop.LockMinutes != nil {
+			minutes = clampLockMinutes(*desktop.LockMinutes)
+		}
+	} else if err != nil {
+		// Not readable now: the default, and try again next time.
+		return minutes
+	}
+	p.mu.Lock()
+	if p.locks == nil {
+		p.locks = map[string]int{}
+	}
+	p.locks[user] = minutes
+	p.mu.Unlock()
+	return minutes
+}
+
+func clampLockMinutes(value float64) int {
+	if math.IsNaN(value) || value <= 0 {
+		return 0
+	}
+	return int(math.Min(math.Round(value), maxLockMinutes))
+}
+
+// cookieState looks at the session cookie of a request: it locks the
+// session first if it was not used for the account's lockMinutes (the
+// automatic lock also holds when no browser is left to lock it), then
+// counts the request as use.
+func (s *Server) cookieState(r *http.Request) (auth.User, authState) {
+	cookie, err := r.Cookie(s.cookieName())
+	if err != nil {
+		return auth.User{}, authNone
+	}
+	if peek, ok := s.sessions.Peek(cookie.Value); ok && !peek.Locked {
+		if minutes := s.lockMinutes(peek.User); minutes > 0 && s.sessions.LockIfIdle(cookie.Value, time.Duration(minutes)*time.Minute) {
+			slog.Info("session locked after inactivity", "user", peek.User, "ip", remoteIP(r))
+			s.recordEvent(r, peek.User, "session_autolock", "", true)
+		}
+	}
+	session, ok := s.sessions.Get(cookie.Value)
+	if !ok {
+		return auth.User{}, authNone
+	}
+	// The account may have been removed or locked since the login.
+	user, ok := s.activeUser(session.User)
+	if !ok {
+		return auth.User{}, authNone
+	}
+	if session.Locked {
+		return user, authLocked
+	}
+	return user, authOK
+}
+
+// writeLocked answers a request of a locked session.
+func writeLocked(w http.ResponseWriter) {
+	writeError(w, http.StatusLocked, "locked", "this session is locked; unlock it with the password or a passkey")
+}
+
+// handleSessionLock locks the session the request came with.
+func (s *Server) handleSessionLock(w http.ResponseWriter, r *http.Request) {
+	token := s.sessionToken(r)
+	if token == "" {
+		writeError(w, http.StatusBadRequest, "session_required", "only a logged-in browser can lock its session")
+		return
+	}
+	user := currentUser(r)
+	if peek, ok := s.sessions.Peek(token); ok && !peek.Locked && s.sessions.Lock(token) {
+		slog.Info("session locked", "user", user.Name, "ip", remoteIP(r))
+		s.recordEvent(r, user.Name, "session_lock", "", true)
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleSessionUnlock lifts the lock with the account's password (and
+// code with two-factor login) or a passkey answer to a challenge of
+// POST /account/passkeys/confirm. Failures count like failed logins:
+// the same limiter keys (known device or account name, and the address)
+// and the firewall's count of failures.
+func (s *Server) handleSessionUnlock(w http.ResponseWriter, r *http.Request) {
+	token := s.sessionToken(r)
+	if token == "" {
+		writeError(w, http.StatusBadRequest, "session_required", "only a logged-in browser can unlock its session")
+		return
+	}
+	var req proof
+	if !readJSON(w, r, &req) {
+		return
+	}
+	user := currentUser(r)
+	ip := remoteIP(r)
+	userKey, ipKey := "user:"+user.Name, "ip:"+ip
+	guessKey := userKey
+	if device := s.knownDevice(r, user.Name); device != "" {
+		guessKey = device
+	}
+	if wait := s.limiter.RetryAfter(guessKey, ipKey); wait > 0 {
+		s.recordEvent(r, user.Name, "session_unlock_blocked", "", false)
+		writeJSON(w, http.StatusTooManyRequests, map[string]apiError{"error": {
+			Code: "rate_limited", Message: "too many failed attempts, try again later", RetryAfter: int(math.Ceil(wait.Seconds())),
+		}})
+		return
+	}
+	fail := func(code, message, how string) {
+		s.limiter.Fail(guessKey, ipKey)
+		s.opts.Firewall.Failed(ip, firewall.SourceWeb)
+		slog.Warn("unlock failed", "user", user.Name, "ip", ip, "how", how)
+		s.recordEvent(r, user.Name, "session_unlock_failed", how, false)
+		writeError(w, http.StatusForbidden, code, message)
+	}
+	how := "password"
+	if req.Passkey != nil {
+		how = "passkey"
+		switch s.checkPasskeyProof(user, req.Passkey) {
+		case "":
+		case "passkey_expired":
+			writeError(w, http.StatusBadRequest, "passkey_expired", "the request expired, start again")
+			return
+		default:
+			fail("passkey_failed", "the passkey was not accepted", how)
+			return
+		}
+	} else {
+		if _, ok := s.opts.Users.Authenticate(user.Name, req.Password); !ok {
+			fail("wrong_password", "the password is wrong", how)
+			return
+		}
+		if user.TwoFactor() {
+			// The password was right; only now is the code asked for.
+			if req.Code == "" {
+				writeError(w, http.StatusForbidden, "second_factor_required", "enter the code from your authenticator app")
+				return
+			}
+			if !s.opts.Users.CheckSecondFactor(user.Name, req.Code) {
+				fail("invalid_code", "the code is wrong or was used already", "2fa")
+				return
+			}
+		}
+	}
+	s.limiter.Reset(userKey)
+	s.limiter.Reset(guessKey)
+	if !s.sessions.Unlock(token) {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "not logged in")
+		return
+	}
+	slog.Info("session unlocked", "user", user.Name, "ip", ip, "how", how)
+	s.recordEvent(r, user.Name, "session_unlock", how, true)
+	writeJSON(w, http.StatusOK, userOf(user))
+}
+
+// hasPasskeyHere reports whether the account holds a passkey for the
+// address of the request, for the button of the lock screen.
+func hasPasskeyHere(r *http.Request, user auth.User) bool {
+	rpID, _, ok := passkeyOrigin(r)
+	return ok && slices.ContainsFunc(user.Passkeys, func(key auth.Passkey) bool { return key.RPID == rpID })
+}

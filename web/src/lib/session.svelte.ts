@@ -72,7 +72,9 @@ export async function refreshSession() {
 		if (data.user?.name !== session.data?.user?.name) {
 			resetSound();
 		}
-		if (data.user) await Promise.all([loadPreferences(), loadServices()]);
+		// A locked session answers nothing else (lock.svelte.ts); the
+		// preferences follow once it is unlocked.
+		if (data.user && !data.locked) await Promise.all([loadPreferences(), loadServices()]);
 		session.data = data;
 		session.status = 'ready';
 	} catch {

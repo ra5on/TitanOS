@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -544,16 +545,32 @@ func (s *Server) authenticate(r *http.Request) (auth.User, bool) {
 	if id, ok := cluster.FromContext(r.Context()); ok {
 		return s.activeUser(id.User)
 	}
-	cookie, err := r.Cookie(s.cookieName())
-	if err != nil {
-		return auth.User{}, false
+	// A locked session (session_lock.go) counts as not logged in here;
+	// requireUser tells it apart.
+	user, state := s.cookieState(r)
+	return user, state == authOK
+}
+
+// authenticateState is authenticate that also tells a locked session
+// apart; tokens, in-process and cluster identities are never locked.
+func (s *Server) authenticateState(r *http.Request) (auth.User, authState) {
+	if _, ok := r.Context().Value(apiTokenIdentity{}).(string); ok {
+		return stateOf(s.authenticate(r))
 	}
-	session, ok := s.sessions.Get(cookie.Value)
+	if _, ok := r.Context().Value(inProcessIdentity{}).(string); ok {
+		return stateOf(s.authenticate(r))
+	}
+	if _, ok := cluster.FromContext(r.Context()); ok {
+		return stateOf(s.authenticate(r))
+	}
+	return s.cookieState(r)
+}
+
+func stateOf(user auth.User, ok bool) (auth.User, authState) {
 	if !ok {
-		return auth.User{}, false
+		return auth.User{}, authNone
 	}
-	// The account may have been removed or locked since the login.
-	return s.activeUser(session.User)
+	return user, authOK
 }
 
 // activeUser returns an account that exists and is not locked. Everything
@@ -570,9 +587,13 @@ func (s *Server) activeUser(name string) (auth.User, bool) {
 
 func (s *Server) requireUser(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user, ok := s.authenticate(r)
-		if !ok {
+		user, state := s.authenticateState(r)
+		switch {
+		case state == authNone:
 			writeError(w, http.StatusUnauthorized, "unauthorized", "not logged in")
+			return
+		case state == authLocked && !slices.Contains(lockExempt, r.Pattern):
+			writeLocked(w)
 			return
 		}
 		noteActivity(r, user)

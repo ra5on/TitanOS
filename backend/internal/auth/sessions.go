@@ -38,6 +38,12 @@ type Session struct {
 	// number of days after the login (or never), not after
 	// SessionIdleTimeout. Every session has it while the setting is on.
 	Remember bool `json:",omitempty"`
+	// Locked is a session whose screen is locked (PLAN 61): the cookie
+	// stays valid, but nothing but unlocking and logging out works until
+	// the account's password, code or passkey is given again. Kept in RAM
+	// and in the file in /run, never on the stick.
+	Locked   bool      `json:",omitempty"`
+	LockedAt time.Time `json:",omitzero"`
 }
 
 // ConfirmFor is how long entering the password again opens the door to
@@ -175,6 +181,65 @@ func (s *Sessions) Peek(token string) (Session, bool) {
 		return Session{}, false
 	}
 	return *session, true
+}
+
+// Lock locks the session of a token; false if there is none. Locking a
+// locked session again changes nothing.
+func (s *Sessions) Lock(token string) bool {
+	if token == "" {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session, ok := s.sessions[sha256.Sum256([]byte(token))]
+	if !ok || s.expired(session, s.now()) {
+		return false
+	}
+	if !session.Locked {
+		session.Locked, session.LockedAt = true, s.now()
+		s.save()
+	}
+	return true
+}
+
+// Unlock lifts the lock of a session after the account proved itself
+// again; the unlock counts as use.
+func (s *Sessions) Unlock(token string) bool {
+	if token == "" {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session, ok := s.sessions[sha256.Sum256([]byte(token))]
+	if !ok || s.expired(session, s.now()) {
+		return false
+	}
+	session.Locked, session.LockedAt = false, time.Time{}
+	session.LastSeen = s.now()
+	s.save()
+	return true
+}
+
+// LockIfIdle locks the session of a token when it was not used for idle
+// (the automatic lock); 0 or less never locks. It reports whether this
+// call locked it. Call it before Get, which counts the request as use.
+func (s *Sessions) LockIfIdle(token string, idle time.Duration) bool {
+	if token == "" || idle <= 0 {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session, ok := s.sessions[sha256.Sum256([]byte(token))]
+	if !ok || session.Locked {
+		return false
+	}
+	now := s.now()
+	if s.expired(session, now) || now.Sub(session.LastSeen) < idle {
+		return false
+	}
+	session.Locked, session.LockedAt = true, now
+	s.save()
+	return true
 }
 
 // Delete ends the session for a token.
@@ -548,4 +613,12 @@ func writePrivate(path string, data []byte) error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+// SetClockForTest replaces the clock of the store, for tests of other
+// packages that need time to pass (the automatic lock).
+func (s *Sessions) SetClockForTest(now func() time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.now = now
 }

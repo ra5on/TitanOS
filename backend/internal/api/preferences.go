@@ -34,6 +34,9 @@ type preferences struct {
 
 	mu    sync.Mutex
 	cache map[string]json.RawMessage // key: user + "/" + kind
+	// locks caches the field lockMinutes of the desktop preferences per
+	// account, read on every request of a session (session_lock.go).
+	locks map[string]int
 }
 
 func newPreferences(store *config.Store) *preferences {
@@ -73,6 +76,9 @@ func (p *preferences) set(user, kind string, value json.RawMessage) error {
 		return err
 	}
 	p.cache[user+"/"+kind] = value
+	if kind == "desktop" {
+		delete(p.locks, user)
+	}
 	return nil
 }
 
@@ -83,6 +89,7 @@ func (p *preferences) forget(user string) {
 	for _, kind := range preferenceKinds {
 		delete(p.cache, user+"/"+kind)
 	}
+	delete(p.locks, user)
 }
 
 func isJSONObject(data []byte) bool {

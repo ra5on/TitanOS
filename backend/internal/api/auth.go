@@ -100,6 +100,12 @@ type sessionResponse struct {
 	Hostname      string        `json:"hostname"`
 	// Version is only told to logged-in users.
 	Version string `json:"version,omitempty"`
+	// Locked: the session is locked (session_lock.go); User names who may
+	// unlock it, Passkey whether a passkey of the account works on this
+	// address. LockMinutes is the account's automatic lock, 0 = off.
+	Locked      bool `json:"locked,omitempty"`
+	Passkey     bool `json:"passkey,omitempty"`
+	LockMinutes *int `json:"lockMinutes,omitempty"`
 }
 
 func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
@@ -107,10 +113,18 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 	res := sessionResponse{Hostname: hostname}
 	res.ConfigAvailable = s.ensureUsersLoaded()
 	res.SetupRequired = res.ConfigAvailable && s.opts.Users.Count() == 0
-	if user, ok := s.authenticate(r); ok {
+	if user, state := s.authenticateState(r); state != authNone {
 		answer := userOf(user)
 		res.User = &answer
-		res.Version = s.opts.Version
+		minutes := s.lockMinutes(user.Name)
+		res.LockMinutes = &minutes
+		if state == authLocked {
+			// What the lock screen needs, nothing more.
+			res.Locked = true
+			res.Passkey = hasPasskeyHere(r, user)
+		} else {
+			res.Version = s.opts.Version
+		}
 		// A login that stays keeps its cookie as long as the browser allows,
 		// also after the setting was switched on for it.
 		if cookie, err := r.Cookie(s.cookieName()); err == nil {

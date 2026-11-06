@@ -15,6 +15,7 @@
 	import { dashboardScene } from '#lib/dashboard/scene.svelte.ts';
 	import Backdrop from '#lib/components/Backdrop.svelte';
 	import Shell from '#lib/components/Shell.svelte';
+	import LockScreen from '#lib/components/LockScreen.svelte';
 	import { i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import Login from '#lib/pages/Login.svelte';
 	import Problem from '#lib/pages/Problem.svelte';
@@ -169,6 +170,8 @@
 		<LoginPreview />
 	{:else}
 		<Shell>{@render children()}</Shell>
+		<!-- PLAN 61: the lock screen of the session, above everything. -->
+		<LockScreen />
 	{/if}
 {:else if session.status === 'loading'}
 	<p class="starting muted" role="status" aria-live="polite">

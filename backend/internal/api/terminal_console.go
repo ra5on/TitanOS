@@ -168,7 +168,8 @@ func (s *Server) consoleAllowed(r *http.Request, user auth.User) bool {
 			return false
 		}
 		session, ok := s.sessions.Peek(cookie.Value)
-		if !ok || session.User != name {
+		// A locked session (session_lock.go) closes its consoles too.
+		if !ok || session.User != name || session.Locked {
 			return false
 		}
 	}
