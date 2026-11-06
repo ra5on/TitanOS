@@ -190,3 +190,23 @@ func TestFamily54DiaryNoSSRF(t *testing.T) {
 		t.Fatal("reached a loopback server")
 	}
 }
+
+// Immich or Frigate as an app on this NAS: loopback and the NAS's own
+// address only on a port a running app publishes, never on titand's ports.
+func TestFamily54DiaryAppOnThisNAS(t *testing.T) {
+	old := diaryAppPort
+	t.Cleanup(func() { diaryAppPort = old })
+	diaryAppPort = func(port uint16) bool { return port == 2283 }
+	if !diaryAddressAllowed(netip.MustParseAddrPort("127.0.0.1:2283")) {
+		t.Fatal("app on this NAS refused")
+	}
+	for _, addr := range []string{"127.0.0.1:2284", "127.0.0.1:22", "169.254.169.254:2283"} {
+		if diaryAddressAllowed(netip.MustParseAddrPort(addr)) {
+			t.Errorf("allowed %s", addr)
+		}
+	}
+	diaryAppPort = nil
+	if diaryAddressAllowed(netip.MustParseAddrPort("127.0.0.1:2283")) {
+		t.Fatal("without Docker no own address")
+	}
+}

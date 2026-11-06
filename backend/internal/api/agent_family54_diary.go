@@ -61,7 +61,16 @@ var diaryHTTP = func() *http.Client {
 // diaryAddressAllowed decides about one address the diary connects to.
 func diaryAddressAllowed(ap netip.AddrPort) bool {
 	addr := ap.Addr().Unmap()
-	if !netguard.LAN(addr) || addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() {
+	if addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() {
+		return false
+	}
+	// Immich or Frigate as an app on this NAS: its own address (or
+	// loopback) only on a port a running app publishes, never a port of
+	// titand or the system (PLAN 54-G, after the security audit).
+	if addr.IsLoopback() || diaryOwnAddress(addr) {
+		return diaryAppPort != nil && diaryAppPort(ap.Port())
+	}
+	if !netguard.LAN(addr) {
 		return false
 	}
 	ifaces, err := net.Interfaces()
@@ -86,6 +95,57 @@ func diaryAddressAllowed(ap netip.AddrPort) bool {
 		}
 	}
 	return true
+}
+
+// diaryAppPort tells whether a running Docker app publishes this TCP port
+// on the NAS (set when the routes are registered; nil in tests).
+var diaryAppPort func(port uint16) bool
+
+// diaryOwnAddress: an address of the NAS itself (not of a Docker network).
+func diaryOwnAddress(addr netip.Addr) bool {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return false
+	}
+	for _, iface := range ifaces {
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, a := range addrs {
+			if prefix, err := netip.ParsePrefix(a.String()); err == nil && prefix.Addr().Unmap() == addr {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// installDiaryAppPorts lets the diary reach apps on this NAS by their
+// published ports.
+func (s *Server) installDiaryAppPorts() {
+	if s.opts.Docker == nil {
+		return
+	}
+	reserved := []uint16{22, 80, 443, 8750, 8752}
+	diaryAppPort = func(port uint16) bool {
+		if slices.Contains(reserved, port) {
+			return false
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		for _, c := range s.opts.Docker.Status(ctx).Containers {
+			if c.State != "running" {
+				continue
+			}
+			for _, p := range c.Ports {
+				if p.Host == int(port) && (p.Protocol == "" || p.Protocol == "tcp") {
+					return true
+				}
+			}
+		}
+		return false
+	}
 }
 
 type diaryItem struct {

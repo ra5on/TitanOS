@@ -150,7 +150,7 @@
 							>
 						{/if}
 					{:else}
-						{#if (item.kind as string) === 'deadline' && item.data?.root && item.data?.path}
+						{#if item.kind === 'deadline' && item.data?.root && item.data?.path}
 							<a class="btn" href={fileHref(item.data)}>{t('agent.f.docs.openFile')}</a>
 						{/if}
 						<button type="button" class="btn btn-primary" onclick={() => yes(item)}

@@ -206,6 +206,7 @@ func (s *Server) family54() *family54 {
 }
 
 func (s *Server) registerAgentFamily54(mux *routeMux) {
+	s.installDiaryAppPorts()
 	mux.HandleFunc("GET /api/v1/agent/buddy", s.requireAdmin(s.handleBuddy))
 	mux.HandleFunc("POST /api/v1/agent/buddy/code", s.requireAdmin(s.handleBuddyCode))
 	mux.HandleFunc("DELETE /api/v1/agent/buddy/code", s.requireAdmin(s.handleBuddyCodeCancel))
