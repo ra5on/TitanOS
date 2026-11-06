@@ -68,6 +68,11 @@ func Services(web *WebPorts) []Service {
 		// "Another TitanOS" (listens on Tailscale addresses only).
 		{ID: "ups", Ports: []PortSet{{"tcp", []string{"3493"}}}, Default: local},
 		{ID: "backuptarget", Ports: []PortSet{{"tcp", []string{"8750"}}}, Default: local},
+		// Backup-Buddy of the KI-Agent (PLAN 54-G): the partner's restic REST
+		// endpoint, on Tailscale addresses only.
+		// Closed by default: with the firewall on, the owner opens it for the
+		// VPN zone when the buddy is used.
+		{ID: "buddy", Ports: []PortSet{{"tcp", []string{"8752"}}}},
 		// The encrypted tunnels of Tailscale and NetBird, the WireGuard
 		// server and the tunnel of the cluster. Their peers come from the
 		// internet; the VPN authenticates them itself.

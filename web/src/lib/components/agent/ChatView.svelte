@@ -4,6 +4,7 @@
 	// (safe Markdown), questions with buttons, the card of a step that waits
 	// for approval and, while it runs, what streams in.
 	import Icon from '#lib/components/Icon.svelte';
+	import FamilyDiarySources from './features/FamilyDiarySources.svelte';
 	import { chatMarkdown } from '#lib/chat-markdown.ts';
 	import { formatDateTime } from '#lib/format.ts';
 	import { canSpeak, speak, speech } from '#lib/agent-speech.svelte.ts';
@@ -172,6 +173,7 @@
 					</details>
 				{/if}
 			{:else if block.kind === 'answer'}
+				{@const prev = list[i - 1]}
 				<div class="answer">
 					{#if block.entry.content}
 						<!-- eslint-disable-next-line svelte/no-at-html-tags -- chatMarkdown escapes everything first -->
@@ -190,6 +192,7 @@
 							>
 						{/if}
 					{/if}
+					{#if prev?.kind === 'steps'}<FamilyDiarySources steps={prev.steps} />{/if}
 					{#if block.entry.choices?.length && block.entry.id === lastAnswer && !busy && !readonly}
 						<div class="choices">
 							{#each block.entry.choices as choice, n (choice)}

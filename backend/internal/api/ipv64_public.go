@@ -209,7 +209,7 @@ func (s *Server) handleIPv64AccessRemove(w http.ResponseWriter, r *http.Request)
 // reservedPort tells whether a port belongs to titand (web UI, HTTPS names
 // of apps) or another service of the NAS that must never be published.
 func (s *Server) reservedPort(port int) bool {
-	reserved := []int{22, 80, 443, 8750}
+	reserved := []int{22, 80, 443, 8750, 8752}
 	reserved = append(reserved, s.opts.IPv64Reserved...)
 	if s.opts.AppProxy != nil {
 		reserved = append(reserved, s.opts.AppProxy.Reserved...)

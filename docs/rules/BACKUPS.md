@@ -82,3 +82,4 @@ Bereich: Datensicherung, Stick-/Konfigurationssicherung, USB-Kopie, SMB-Kopie, M
 
 - Ziel auf einem zweiten NAS mit SMB-Zugangsdaten, Freigabenauswahl, Quellordnern und Zeitplan. Neue/geänderte Dateien kopieren; gelöschte Quelldateien im Ziel behalten. Keine Versionierung. Weiterhin als Beta gekennzeichnet; `docs/SMB-COPY-BACKUPS.md`.
 - Docker-Apps zeigen ihren eingetragenen App-Namen; technische Container-Namen bleiben Identität und Suchmerkmal. Aktuelles Layout siehe nächster Abschnitt.
+- Backup-Buddy des KI-Agenten (PLAN 54-G, `docs/agent54/family.md`): gegenseitiges Sichern zweier TitanOS über einen eigenen Backup-Job `buddy-<partner>` (restic REST), Kopplung per Einmalcode, Kontingent je Partner, Schutzfrist vor dem Löschen; ab Werk aus.

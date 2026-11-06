@@ -6267,6 +6267,8 @@
 	"firewall.svcText.webui": "These pages of TitanOS",
 	"firewall.svc.apps": "HTTPS names for apps",
 	"firewall.svcText.apps": "Same port as the web UI; TitanOS tells them apart by name",
+	"firewall.svc.buddy": "Backup buddy (AI agent)",
+	"firewall.svcText.buddy": "Listens on Tailscale addresses only",
 	"firewall.svc.smb": "SMB shares",
 	"firewall.svcText.smb": "Windows, macOS, Linux",
 	"firewall.svc.nfs": "NFS shares",
