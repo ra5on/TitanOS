@@ -18,7 +18,6 @@
 	"agent.f.family.buddy.probe.off": "Aus",
 	"agent.f.family.buddy.probeFiles": "Stichproben",
 	"agent.f.family.buddy.protect": "Schutzfrist (Tage)",
-	"agent.f.family.buddy.port": "Port",
 	"agent.f.family.buddy.protectHint": "Was Partner hier ablegen, ist nur anhängbar: Daten jünger als die Schutzfrist lassen sich nicht löschen, auch nicht vom Partner.",
 	"agent.f.family.buddy.open": "Backup-Buddy öffnen",
 	"agent.f.family.buddy.problem.off": "Der Backup-Buddy ist ausgeschaltet.",

@@ -93,7 +93,7 @@
 	}
 
 	const saveBuddy = () =>
-		run(() => savenas({ ...nas!, buddy: { ...buddy, port: Number(buddy.port) || 0 } }));
+		run(() => savenas({ ...nas!, buddy: { ...buddy } }));
 	const saveDiary = () =>
 		run(async () => {
 			const next: DiaryMine = { ...diary };
@@ -229,16 +229,6 @@
 						min="7"
 						max="365"
 						bind:value={buddy.protectDays}
-					/></label
-				>
-				<label class="field-row"
-					><span>{t('agent.f.family.buddy.port')}</span>
-					<input
-						class="field"
-						type="number"
-						min="1024"
-						max="65535"
-						bind:value={buddy.port}
 					/></label
 				>
 			</div>

@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -50,10 +52,13 @@ type buddyPartner struct {
 	Token string `json:"token"`
 	// Quota is what this NAS grants the partner; TheirQuota what the
 	// partner grants this NAS (as it said at pairing).
-	Quota      int64     `json:"quota"`
-	TheirQuota int64     `json:"theirQuota"`
-	Shares     []string  `json:"shares"`
-	Paired     time.Time `json:"paired"`
+	Quota      int64 `json:"quota"`
+	TheirQuota int64 `json:"theirQuota"`
+	// TheirProtect is the protection period of the partner (days): the
+	// job keeps at least that long, so its prune asks nothing younger.
+	TheirProtect int       `json:"theirProtect,omitempty"`
+	Shares       []string  `json:"shares"`
+	Paired       time.Time `json:"paired"`
 }
 
 type buddyCodeMeta struct {
@@ -148,8 +153,11 @@ func (s *Server) buddyHandler() http.Handler {
 
 var nonID = regexp.MustCompile(`[^a-z0-9-]+`)
 
-// buddyNewID makes a folder name from a host name, unused so far.
-func buddyNewID(name string, taken []buddyPartner) string {
+// buddyNewID makes a folder name from a host name with a random suffix.
+// An id is never used again while its folder exists here (a partner
+// removed without its data keeps it), so a new partner of the same name
+// never inherits old data.
+func buddyNewID(name string, taken []buddyPartner, hasData func(string) bool) string {
 	base := strings.ToLower(name)
 	if host, _, err := net.SplitHostPort(base); err == nil {
 		base = host
@@ -159,14 +167,39 @@ func buddyNewID(name string, taken []buddyPartner) string {
 	if base == "" || base[0] < 'a' || base[0] > 'z' {
 		base = "nas-" + base
 	}
-	if len(base) > 20 {
-		base = strings.TrimRight(base[:20], "-")
+	if len(base) > 17 {
+		base = strings.TrimRight(base[:17], "-")
 	}
-	id := base
-	for i := 2; slices.ContainsFunc(taken, func(p buddyPartner) bool { return p.ID == id }); i++ {
-		id = base + "-" + strconv.Itoa(i)
+	for {
+		raw := make([]byte, 3)
+		_, _ = rand.Read(raw)
+		id := base + "-" + hex.EncodeToString(raw)
+		if !slices.ContainsFunc(taken, func(p buddyPartner) bool { return p.ID == id }) && (hasData == nil || !hasData(id)) {
+			return id
+		}
 	}
-	return id
+}
+
+// buddyJobRunning tells whether the job to a partner runs (tests replace it).
+var buddyJobRunning = func(s *Server, id string) bool {
+	job, ok := s.buddyJobs()[id]
+	return ok && job.State.Running
+}
+
+// buddyPaired finds a partner already paired at this address or name.
+func buddyPaired(list []buddyPartner, address, name string) bool {
+	return slices.ContainsFunc(list, func(p buddyPartner) bool {
+		return strings.EqualFold(p.Address, address) || name != "" && strings.EqualFold(p.Name, name)
+	})
+}
+
+// buddyKeepDays is how many daily versions the job keeps: at least the
+// protection period of the partner.
+func buddyKeepDays(theirProtect int) int {
+	if theirProtect <= 0 {
+		theirProtect = buddy.DefaultProtectDays
+	}
+	return max(31, theirProtect+1)
 }
 
 func hostName() string {
@@ -195,6 +228,12 @@ func (s *Server) buddyAnswerPair(req buddy.PairRequest) (buddy.PairResponse, err
 		return buddy.PairResponse{}, err
 	}
 	f := s.family54()
+	// Checked before the code is used, so a refusal leaves it valid.
+	if list := s.buddyPartners(); len(list) >= maxBuddyPartners {
+		return buddy.PairResponse{}, errors.New("buddy: too many partners")
+	} else if buddyPaired(list, address, req.Name) {
+		return buddy.PairResponse{}, errors.New("buddy: this NAS is paired already")
+	}
 	meta, err := f.codes.Redeem(req.Code)
 	if err != nil {
 		return buddy.PairResponse{}, err
@@ -204,17 +243,18 @@ func (s *Server) buddyAnswerPair(req buddy.PairRequest) (buddy.PairResponse, err
 	if err != nil {
 		return buddy.PairResponse{}, err
 	}
+	srv := s.buddyServer() // locks f.mu itself
 	f.mu.Lock()
-	if len(f.partners) >= maxBuddyPartners {
+	if len(f.partners) >= maxBuddyPartners || buddyPaired(f.partners, address, req.Name) {
 		f.mu.Unlock()
-		return buddy.PairResponse{}, errors.New("buddy: too many partners")
+		return buddy.PairResponse{}, errors.New("buddy: this NAS is paired already or there are too many partners")
 	}
 	name := req.Name
 	if name == "" {
 		name = address
 	}
-	p := buddyPartner{ID: buddyNewID(name, f.partners), Name: name, Address: address, Remote: req.ID, Hash: buddy.HashToken(token), Token: req.Token,
-		Quota: m.Quota, TheirQuota: req.Quota, Shares: m.Shares, Paired: time.Now().UTC().Truncate(time.Second)}
+	p := buddyPartner{ID: buddyNewID(name, f.partners, srv.HasData), Name: name, Address: address, Remote: req.ID, Hash: buddy.HashToken(token), Token: req.Token,
+		Quota: m.Quota, TheirQuota: req.Quota, TheirProtect: req.ProtectDays, Shares: m.Shares, Paired: time.Now().UTC().Truncate(time.Second)}
 	err = s.buddySaveLocked(f, append(slices.Clone(f.partners), p))
 	f.mu.Unlock()
 	if err != nil {
@@ -222,7 +262,7 @@ func (s *Server) buddyAnswerPair(req buddy.PairRequest) (buddy.PairResponse, err
 	}
 	_ = s.buddySyncJob(p) // logged and shown in the view
 	slog.Info("buddy paired", "partner", p.ID, "address", address)
-	return buddy.PairResponse{Name: hostName(), ID: p.ID, Token: token, Quota: m.Quota}, nil
+	return buddy.PairResponse{Name: hostName(), ID: p.ID, Token: token, Quota: m.Quota, ProtectDays: settings.ProtectDays}, nil
 }
 
 // buddyPairClient is the client for pairing requests (tests replace it).
@@ -418,8 +458,11 @@ func (s *Server) handleBuddyPair(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f := s.family54()
-	if len(s.buddyPartners()) >= maxBuddyPartners {
+	if list := s.buddyPartners(); len(list) >= maxBuddyPartners {
 		writeError(w, http.StatusConflict, "buddy_full", "too many partners")
+		return
+	} else if buddyPaired(list, address, "") {
+		writeError(w, http.StatusConflict, "buddy_paired", "this NAS is paired already")
 		return
 	}
 	token, err := buddy.NewToken()
@@ -427,20 +470,25 @@ func (s *Server) handleBuddyPair(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "buddy_token", err.Error())
 		return
 	}
-	id := buddyNewID(address, s.buddyPartners())
+	id := buddyNewID(address, s.buddyPartners(), s.buddyServer().HasData)
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	res, err := buddyPairClient.Pair(ctx, address, buddy.PairRequest{Code: req.Code, Name: hostName(), Address: settings.Address, ID: id, Token: token, Quota: req.Quota})
+	res, err := buddyPairClient.Pair(ctx, address, buddy.PairRequest{Code: req.Code, Name: hostName(), Address: settings.Address, ID: id, Token: token, Quota: req.Quota, ProtectDays: settings.ProtectDays})
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "buddy_pair_failed", err.Error())
 		return
 	}
 	p := buddyPartner{ID: id, Name: res.Name, Address: address, Remote: res.ID, Hash: buddy.HashToken(token), Token: res.Token,
-		Quota: req.Quota, TheirQuota: res.Quota, Shares: shares, Paired: time.Now().UTC().Truncate(time.Second)}
+		Quota: req.Quota, TheirQuota: res.Quota, TheirProtect: res.ProtectDays, Shares: shares, Paired: time.Now().UTC().Truncate(time.Second)}
 	if p.Name == "" {
 		p.Name = address
 	}
 	f.mu.Lock()
+	if buddyPaired(f.partners, address, "") {
+		f.mu.Unlock()
+		writeError(w, http.StatusConflict, "buddy_paired", "this NAS is paired already")
+		return
+	}
 	err = s.buddySaveLocked(f, append(slices.Clone(f.partners), p))
 	f.mu.Unlock()
 	if err != nil {
@@ -504,6 +552,24 @@ func (s *Server) handleBuddyPartnerDelete(w http.ResponseWriter, r *http.Request
 		return
 	}
 	id := r.PathValue("id")
+	if !slices.ContainsFunc(s.buddyPartners(), func(p buddyPartner) bool { return p.ID == id }) {
+		writeError(w, http.StatusNotFound, "not_found", "no such partner")
+		return
+	}
+	// The job goes first: while it runs, nothing is removed.
+	if s.opts.Backup != nil {
+		if buddyJobRunning(s, buddyJobPrefix+id) {
+			writeError(w, http.StatusConflict, "buddy_running", "the backup to this partner is running; try again when it is done")
+			return
+		}
+		if err := s.opts.Backup.Delete(buddyJobPrefix + id); errors.Is(err, backup.ErrRunning) {
+			writeError(w, http.StatusConflict, "buddy_running", "the backup to this partner is running; try again when it is done")
+			return
+		} else if err != nil && !errors.Is(err, backup.ErrNotFound) {
+			writeError(w, http.StatusServiceUnavailable, "buddy_job", err.Error())
+			return
+		}
+	}
 	f := s.family54()
 	f.mu.Lock()
 	at := slices.IndexFunc(f.partners, func(p buddyPartner) bool { return p.ID == id })
@@ -517,11 +583,6 @@ func (s *Server) handleBuddyPartnerDelete(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 		return
-	}
-	if s.opts.Backup != nil {
-		if err := s.opts.Backup.Delete(buddyJobPrefix + id); err != nil && !errors.Is(err, backup.ErrNotFound) {
-			slog.Warn("buddy job not removed", "partner", id, "err", err)
-		}
 	}
 	if r.URL.Query().Get("data") == "1" {
 		if err := s.buddyServer().RemoveData(id); err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -544,7 +605,7 @@ func (s *Server) buddyJob(p buddyPartner, settings agentBuddy) backup.Job {
 		Enabled: true,
 		Every:   settings.Every, Weekday: settings.Weekday, MonthDay: 1, Time: settings.Time,
 		// Never younger than the protection period of the partner.
-		Keep: backup.Keep{Daily: 31, Weekly: 8, Monthly: 12},
+		Keep: backup.Keep{Daily: buddyKeepDays(p.TheirProtect), Weekly: 8, Monthly: 12},
 	}
 }
 
@@ -618,7 +679,7 @@ func (s *Server) buddyTick(now time.Time) {
 		devMode := s.opts.BackupTarget == nil || s.opts.BackupTarget.Disabled
 		if s.opts.Tailscale != nil && !devMode && slices.Contains(s.mountedVolumes(), settings.Volume) {
 			for _, ip := range buddy.TailscaleOnly(s.opts.Tailscale.Status().IPs) {
-				want = append(want, net.JoinHostPort(ip, strconv.Itoa(settings.Port)))
+				want = append(want, net.JoinHostPort(ip, strconv.Itoa(buddy.DefaultPort)))
 			}
 		}
 		f.listener.Reconcile(want, s.buddyHandler())

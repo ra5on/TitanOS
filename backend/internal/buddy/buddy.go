@@ -11,10 +11,14 @@
 //   - config and keys are never deleted;
 //   - locks may always be deleted (restic removes its own lock after every
 //     run);
-//   - data, index and snapshots may only be deleted once they are older
-//     than the protection period of this side (ProtectDays, 30 days by
-//     default). The owner of the data prunes with restic forget --prune as
-//     usual; whatever is younger stays, so a sender that was taken over
+//   - index files may always be deleted: restic prune replaces them, and
+//     they hold no backup data (restic repair index rebuilds them from the
+//     packs);
+//   - data and snapshots may only be deleted once they are older than the
+//     protection period of this side (ProtectDays, 30 days by default). The
+//     owner of the data prunes with restic forget --prune as usual; it is
+//     told the period at pairing and keeps at least that many days, so its
+//     prune never asks for something younger. A sender that was taken over
 //     cannot wipe the recent backups.
 //
 // Each partner has its own quota; an upload that would go beyond it is
@@ -128,6 +132,19 @@ func (s *Server) Forget(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.usage, id)
+}
+
+// HasData tells whether a folder for id exists on the volume (an id whose
+// folder is there is never given to another partner). Without the volume
+// it cannot tell and says no; the random part of ids keeps them apart then.
+func (s *Server) HasData(id string) bool {
+	root, err := volumedata.OpenVolume(s.MountRoot, s.Volume(), s.Mounted())
+	if err != nil {
+		return false
+	}
+	defer root.Close()
+	_, err = root.Lstat(filepath.Join(Dir, id))
+	return !errors.Is(err, fs.ErrNotExist)
 }
 
 // RemoveData deletes the folder of a partner. Only the person on this NAS
@@ -440,8 +457,8 @@ func (s *Server) remove(w http.ResponseWriter, r *http.Request, p Partner, repo 
 		return
 	}
 	switch kind {
-	case "locks":
-	case "data", "index", "snapshots":
+	case "locks", "index":
+	case "data", "snapshots":
 		if s.Now().Sub(info.ModTime()) < s.protect() {
 			http.Error(w, "append-only: younger than the protection period of the partner", http.StatusForbidden)
 			return

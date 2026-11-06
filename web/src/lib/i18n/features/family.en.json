@@ -18,7 +18,6 @@
 	"agent.f.family.buddy.probe.off": "Off",
 	"agent.f.family.buddy.probeFiles": "Samples",
 	"agent.f.family.buddy.protect": "Protection (days)",
-	"agent.f.family.buddy.port": "Port",
 	"agent.f.family.buddy.protectHint": "What partners keep here is append-only: data younger than the protection period cannot be deleted, not even by the partner.",
 	"agent.f.family.buddy.open": "Open backup buddy",
 	"agent.f.family.buddy.problem.off": "The backup buddy is off.",

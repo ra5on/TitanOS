@@ -151,11 +151,12 @@ func (s *Server) handleCatalogInstall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	args, _ := json.Marshal(map[string]string{"name": e.Name, "when": e.When, "steps": e.Steps})
-	if _, err := box.skillSave(r.Context(), nil, args); err != nil {
+	// Saved as foreign content in the first write (a chat that read foreign content).
+	if _, err := box.skillSave(r.Context(), &agent.Chat{Tainted: true}, args); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_skill", err.Error())
 		return
 	}
-	// From the community: foreign content, marked as such.
+	// Where it came from, for "installed" and an update.
 	own, err = store.Skills(user.Name)
 	if err != nil {
 		agentStoreError(w, err)

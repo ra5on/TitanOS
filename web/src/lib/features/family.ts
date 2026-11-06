@@ -6,7 +6,6 @@ import { api } from '../api.ts';
 export type Buddy = {
 	enabled?: boolean;
 	address?: string;
-	port?: number;
 	volume?: string;
 	protectDays?: number;
 	every?: 'daily' | 'weekly' | 'monthly';

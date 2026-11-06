@@ -31,7 +31,6 @@ const features = {
   buddy: {
     enabled: true,
     address: "nas-eva.tail1234.ts.net:8752",
-    port: 8752,
     volume: "Data",
     protectDays: 30,
     every: "weekly",

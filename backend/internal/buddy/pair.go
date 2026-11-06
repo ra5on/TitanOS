@@ -54,14 +54,18 @@ type PairRequest struct {
 	ID    string `json:"id"`
 	Token string `json:"token"`
 	Quota int64  `json:"quota"`
+	// ProtectDays is the protection period of the sender: data this NAS
+	// keeps there cannot be deleted before (older versions send 0).
+	ProtectDays int `json:"protectDays,omitempty"`
 }
 
 // PairResponse is the answer, the same the other way.
 type PairResponse struct {
-	Name  string `json:"name"`
-	ID    string `json:"id"`
-	Token string `json:"token"`
-	Quota int64  `json:"quota"`
+	Name        string `json:"name"`
+	ID          string `json:"id"`
+	Token       string `json:"token"`
+	Quota       int64  `json:"quota"`
+	ProtectDays int    `json:"protectDays,omitempty"`
 }
 
 // Codes keeps at most one pairing code, in the RAM only.
