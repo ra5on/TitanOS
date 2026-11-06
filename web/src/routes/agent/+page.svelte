@@ -101,6 +101,27 @@
 	const settingsShown = $derived(
 		dialog?.kind === 'settings' ? dialog : under?.kind === 'settings' ? under : null,
 	);
+	/** The chat's action sheet takes the focus and gives it back (PLAN 59). */
+	function sheetFocus(node: HTMLElement) {
+		const back = document.activeElement as HTMLElement | null;
+		node.querySelector<HTMLElement>('button')?.focus();
+		const trap = (e: KeyboardEvent) => {
+			if (e.key !== 'Tab') return;
+			const items = [...node.querySelectorAll<HTMLElement>('button:not(:disabled)')];
+			if (!items.length) return;
+			const first = items[0];
+			const last = items[items.length - 1];
+			if (e.shiftKey && document.activeElement === first) {
+				e.preventDefault();
+				last.focus();
+			} else if (!e.shiftKey && document.activeElement === last) {
+				e.preventDefault();
+				first.focus();
+			}
+		};
+		node.addEventListener('keydown', trap);
+		return { destroy: () => (node.removeEventListener('keydown', trap), back?.focus?.()) };
+	}
 	function openOver(next: NonNullable<typeof dialog>) {
 		if (dialog?.kind === 'settings') under = dialog;
 		dialog = next;
@@ -1119,7 +1140,17 @@
 	{@const chat = dialog.chat}
 	<!-- PLAN 53: everything you can do with a chat, as a sheet from below. -->
 	<div class="sheet-scrim" role="presentation" onclick={() => (dialog = null)}></div>
-	<div class="action-sheet" role="dialog" aria-modal="true" aria-label={chat.title}>
+	<div
+		class="action-sheet"
+		role="dialog"
+		aria-modal="true"
+		aria-label={chat.title}
+		tabindex="-1"
+		use:sheetFocus
+		onkeydown={(e) => {
+			if (e.key === 'Escape') dialog = null;
+		}}
+	>
 		<span class="grab" aria-hidden="true"></span>
 		<strong class="sheet-title">{chat.title || t('agent.newChat')}</strong>
 		<div class="sheet-list">
