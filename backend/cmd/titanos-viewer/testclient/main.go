@@ -323,7 +323,9 @@ func main() {
 		}
 		if *clickAt != "" {
 			var x, y int
-			fmt.Sscanf(*clickAt, "%d,%d", &x, &y)
+			if _, err := fmt.Sscanf(*clickAt, "%d,%d", &x, &y); err != nil {
+				fail("click", "-click wants x,y: %v", err)
+			}
 			s.click(x, y)
 			time.Sleep(1500 * time.Millisecond)
 		}
@@ -467,7 +469,7 @@ func main() {
 
 	// upload with a hostile name
 	payload := []byte(strings.Repeat("x", 300<<10))
-	s.send(map[string]any{"t": "upload", "id": 7, "name": "../../etc/ä‮.txt", "size": len(payload)})
+	s.send(map[string]any{"t": "upload", "id": 7, "name": "../../etc/ä\u202e.txt", "size": len(payload)})
 	for off := 0; off < len(payload); off += proto.MaxUploadChunk {
 		end := min(off+proto.MaxUploadChunk, len(payload))
 		msg := append([]byte{proto.TypeUpload, 0, 0, 0, 7}, payload[off:end]...)

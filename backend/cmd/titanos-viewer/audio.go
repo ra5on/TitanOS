@@ -72,7 +72,7 @@ func startAudio(onPacket func([]byte)) (*audioStream, error) {
 	port := conn.LocalAddr().(*net.UDPAddr).Port
 	p, err := startProc("gst-audio", audioPipelineArgs(port), baseEnv(), nil, true)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, err
 	}
 	a := &audioStream{p: p, conn: conn, done: make(chan struct{})}
@@ -103,7 +103,7 @@ func (a *audioStream) stop() {
 	}
 	a.once.Do(func() {
 		a.p.stop(2 * time.Second)
-		a.conn.Close()
+		_ = a.conn.Close()
 		<-a.done
 	})
 }
