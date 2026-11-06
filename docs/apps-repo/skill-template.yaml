@@ -1,0 +1,31 @@
+# Vorlage für einen Skill des KI-Agenten im App-Store-Repository
+# (ra5on/TitanOS-Apps oder eine eigene Quelle), PLAN 54-G.
+#
+# Ablage: skills/<name>/skill.yaml
+#   <name>: Kleinbuchstaben, Ziffern und Bindestriche, höchstens 64 Zeichen,
+#           z. B. skills/rechnungen-steuerjahr/skill.yaml
+#
+# TitanOS lädt die Skills wie die Apps: nach dem Start und einmal am Tag.
+# Ein Skill, der nicht zu diesem Format passt, wird übersprungen.
+# Keine Passwörter, Schlüssel oder Tokens hineinschreiben: solche Skills
+# lassen sich nicht installieren.
+
+# Pflicht: kurzer Name (höchstens 80 Zeichen).
+name: Rechnungen nach Steuerjahr
+# Optional: eine Zeile für die Liste (höchstens 300 Zeichen).
+description: Sortiert Belege in Steuer/<Jahr>
+# Optional: wer den Skill geschrieben hat.
+author: ra5on
+# Pflicht: wann der Agent den Skill nimmt.
+when: Wenn Rechnungen eines Jahres zusammengesucht und abgelegt werden sollen
+# Die Werkzeuge des Agenten, die der Skill braucht (Namen wie in
+# Einstellungen › KI-Agent › Rechte). Auch Werkzeugnamen in den Schritten
+# zählen. Hat ein Konto eines davon nicht, lässt sich der Skill dort nicht
+# installieren.
+tools: [files_search, files_copy, note_write]
+# Pflicht: die Schritte, nummeriert (zusammen mit "when" höchstens 4000 Zeichen).
+steps: |
+  1. Mit files_search in Documents › Post nach Rechnungen des Jahres suchen.
+  2. Die Liste zeigen und fragen, welche nach Steuer/<Jahr> sollen.
+  3. Die gewählten mit files_copy verschieben (fragt vorher).
+  4. Mit note_write eine Notiz mit der Liste schreiben.
