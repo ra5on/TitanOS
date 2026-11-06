@@ -68,7 +68,7 @@ func TestAuthority(t *testing.T) {
 			t.Errorf("web UI leaf for %s: %v", name, err)
 		}
 	}
-	if left := ui.Leaf.NotAfter.Sub(time.Now()); left > 31*24*time.Hour {
+	if left := time.Until(ui.Leaf.NotAfter); left > 31*24*time.Hour {
 		t.Errorf("leaf lasts too long: %v", left)
 	}
 	if info := m.Info(); info.Kind != KindCA || info.Issuer != "TitanOS nas CA" {
