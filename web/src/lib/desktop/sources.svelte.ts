@@ -25,7 +25,17 @@ export type MineApp = {
 	url: string;
 	webui?: string;
 	running?: boolean;
+	/** PLAN 62: the app's own HTTPS port on the NAS address. */
+	port?: number;
 };
+
+/**
+ * PLAN 62: the app on its own port at the address the UI is open under –
+ * works where names like immich.nas.local are not found (many PCs and phones).
+ */
+function portURL(port: number | undefined, host: string): string {
+	return port && port >= 20000 && port <= 20999 ? `https://${host}:${port}` : '';
+}
 
 export const sources = $state<{
 	containers: DockerContainer[];
@@ -94,7 +104,7 @@ export function dockerPrograms(host: string): DockerProgram[] {
 				label: m.title || m.app,
 				icon: m.icon || group.find((c) => c.icon)?.icon || '',
 				// Without an HTTPS name the app's port (the window explains why it cannot show it).
-				url: m.url || (m.webui ? appURL(m.webui, host) : ''),
+				url: portURL(m.port, host) || m.url || (m.webui ? appURL(m.webui, host) : ''),
 				running: m.running ?? (group.length ? group.some((c) => c.state === 'running') : true),
 				updates: group.filter((c) => c.updateAvailable).length,
 			});
@@ -103,9 +113,13 @@ export function dockerPrograms(host: string): DockerProgram[] {
 	}
 	for (const [app, group] of byApp) {
 		const web =
-			group.find((c) => c.proxyUrl) ?? group.find((c) => c.webui) ?? group.find((c) => c.publicUrl);
+			group.find((c) => c.proxyPort) ??
+			group.find((c) => c.proxyUrl) ??
+			group.find((c) => c.webui) ??
+			group.find((c) => c.publicUrl);
 		if (!web) continue;
-		const url = web.proxyUrl || appURL(web.webui, host) || web.publicUrl;
+		const url =
+			portURL(web.proxyPort, host) || web.proxyUrl || appURL(web.webui, host) || web.publicUrl;
 		if (!url) continue;
 		out.push({
 			key: 'docker:' + app,

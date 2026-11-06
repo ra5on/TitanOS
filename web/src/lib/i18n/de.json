@@ -8978,5 +8978,9 @@
 	"agent.notes.deleteText": "„{name}“ wird gelöscht.",
 	"agent.notes.deleteFolderTitle": "Ordner löschen?",
 	"agent.notes.deleteFolderText": "Der Ordner „{name}“ wird mit {count} Notizen und allen Unterordnern gelöscht.",
-	"agent.noteNote": "Notiz gespeichert"
+	"agent.noteNote": "Notiz gespeichert",
+	"settings.consoleIdle": "Konsolen und VM-Bildschirm trennen nach",
+	"settings.consoleIdleMinutes": "{minutes} Minuten ohne Eingabe",
+	"settings.consoleIdleNever": "Nie",
+	"settings.consoleIdleDesc": "Gilt für NAS-Shell, Container-, LXC- und VM-Konsolen sowie den VM-Bildschirm. Gezählt werden nur Tastatur- und Mauseingaben. „Nie“ lässt offene Konsolen dauerhaft laufen; Abmelden, Sperren und Abschalten der Terminals beenden sie weiterhin."
 }

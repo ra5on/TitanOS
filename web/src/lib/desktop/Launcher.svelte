@@ -34,7 +34,7 @@
 		const out: { key: string; href: string; label: string; program: Program }[] = [];
 		for (const p of all)
 			for (const item of p.side)
-				if ('href' in item) {
+				if ('label' in item) {
 					const label = t(item.label);
 					if (label.toLowerCase().includes(q) && !p.label.toLowerCase().includes(q))
 						out.push({ key: p.key, href: item.href, label: `${p.label} › ${label}`, program: p });
@@ -209,6 +209,10 @@
 {#if power}<PowerDialog action={power} onclose={() => (power = null)} />{/if}
 
 <style>
+	/* PLAN 62: nearly solid, so icons and widgets behind never shine through the text. */
+	.launcher.glass-panel {
+		background: color-mix(in srgb, var(--surface) 97%, transparent);
+	}
 	.launcher {
 		position: absolute;
 		left: 10px;

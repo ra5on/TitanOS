@@ -584,6 +584,9 @@ export type DockerContainer = {
 	publicUrl: string;
 	/** The app's own HTTPS name through TitanOS, e.g. https://immich.nas.local; missing without one. */
 	proxyUrl?: string;
+	/** PLAN 62: the app's own HTTPS port on the NAS address (0/absent: none). */
+	proxyPort?: number;
+	proxyPortUrl?: string;
 	/** The app's own device in the tailnet, e.g. https://immich.tail1234.ts.net, while it runs. */
 	tailnetUrl?: string;
 	icon: string;

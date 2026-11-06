@@ -21,6 +21,7 @@
 	import { VNC_HEIGHT } from '#lib/vnc-size.ts';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import { inWindow } from '#lib/desktop/frame.ts';
 	import { SvelteSet } from 'svelte/reactivity';
 	import Overview from './Overview.svelte';
 	import Snapshots from './Snapshots.svelte';
@@ -78,6 +79,10 @@
 	>(null);
 	// "VM übernehmen": copies of VM settings on the volumes; read only on request.
 	let adopting = $state(false);
+	// In a desktop window the window's side bar lists the VMs (PLAN 62-3); "?adopt=1" opens the take-over.
+	$effect(() => {
+		if (page.url.searchParams.get('adopt') === '1') adopting = true;
+	});
 	let screen = $state<VncScreen>();
 	let connectionPhase = $state<ConnectionPhase>('connecting');
 	const size = new ConsoleSize();
@@ -532,14 +537,14 @@
 							{/snippet}
 						</Dropdown>
 						<span class="grow"></span>
-						<button
-							type="button"
-							class="tool icon-tool"
-							aria-pressed={sidebar}
-							aria-label={t('vms.sidebar')}
-							title={t('vms.sidebar')}
-							onclick={() => (sidebar = !sidebar)}><Icon name="sidebar" size={16} /></button
-						>
+						{#if !inWindow}<button
+								type="button"
+								class="tool icon-tool"
+								aria-pressed={sidebar}
+								aria-label={t('vms.sidebar')}
+								title={t('vms.sidebar')}
+								onclick={() => (sidebar = !sidebar)}><Icon name="sidebar" size={16} /></button
+							>{/if}
 						<button
 							type="button"
 							class="tool icon-tool"
@@ -573,20 +578,20 @@
 							><Icon name="maximize" size={16} /></button
 						>
 					{:else}<span class="grow"></span>
-						<button
-							type="button"
-							class="tool icon-tool"
-							aria-pressed={sidebar}
-							aria-label={t('vms.sidebar')}
-							title={t('vms.sidebar')}
-							onclick={() => (sidebar = !sidebar)}><Icon name="sidebar" size={16} /></button
-						>
+						{#if !inWindow}<button
+								type="button"
+								class="tool icon-tool"
+								aria-pressed={sidebar}
+								aria-label={t('vms.sidebar')}
+								title={t('vms.sidebar')}
+								onclick={() => (sidebar = !sidebar)}><Icon name="sidebar" size={16} /></button
+							>{/if}
 					{/if}
 				</div>
 			{/if}
 		</div>
 		<div class="layout">
-			{#if sidebar || tab !== 'screen'}
+			{#if !inWindow && (sidebar || tab !== 'screen')}
 				<aside class="tile" class:open={listOpen} aria-labelledby="vms-title">
 					<div class="aside-head">
 						<h2 class="tile-title" id="vms-title">{t('vms.title')}</h2>

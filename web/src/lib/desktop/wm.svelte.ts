@@ -35,6 +35,10 @@ export const wm = $state<{
 	preview: Snap;
 	switcher: boolean;
 	switcherIndex: number;
+	/** A window is being moved or resized (the desktop holds still meanwhile). */
+	dragging: boolean;
+	/** Room the dock takes at the edges of the desktop (snapped windows stay clear of it). */
+	inset: { l: number; r: number; b: number };
 }>({
 	windows: [],
 	focused: null,
@@ -42,6 +46,8 @@ export const wm = $state<{
 	preview: null,
 	switcher: false,
 	switcherIndex: 0,
+	dragging: false,
+	inset: { l: 0, r: 0, b: 0 },
 });
 
 export const desktop = $state<{ prefs: DesktopPrefs }>({ prefs: defaultDesktop() });
@@ -123,13 +129,14 @@ export function focus(id: string) {
 
 /** The size a new window gets: most of the desktop, smaller screens get all of it. */
 function newGeometry(index: number) {
-	const { w: aw, h: ah } = wm.area;
-	if (aw < 1280) return { x: 0, y: 0, w: aw, h: ah, snap: 'max' as Snap };
+	const aw = wm.area.w - wm.inset.l - wm.inset.r;
+	const ah = wm.area.h - wm.inset.b;
+	if (wm.area.w < 1280) return { x: wm.inset.l, y: 0, w: aw, h: ah, snap: 'max' as Snap };
 	const w = Math.min(1300, Math.round(aw * 0.78));
 	const h = Math.min(900, Math.round(ah * 0.9));
 	const offset = (index % 6) * 28;
 	return {
-		x: Math.round((aw - w) / 2) + offset - 60,
+		x: wm.inset.l + Math.max(0, Math.round((aw - w) / 2) + offset - 60),
 		y: Math.max(8, Math.round((ah - h) / 2) + offset - 20),
 		w,
 		h,
@@ -208,24 +215,27 @@ export function toggleMax(id: string) {
 
 /** The rectangle a snapped window takes. */
 export function snapRect(snap: Snap): { x: number; y: number; w: number; h: number } | null {
-	const { w, h } = wm.area;
+	const { l, r, b } = wm.inset;
+	const w = Math.max(200, wm.area.w - l - r);
+	const h = Math.max(200, wm.area.h - b);
 	const hw = Math.round(w / 2);
 	const hh = Math.round(h / 2);
+	const at = (x: number, y: number, ww: number, wh: number) => ({ x: x + l, y, w: ww, h: wh });
 	switch (snap) {
 		case 'max':
-			return { x: 0, y: 0, w, h };
+			return at(0, 0, w, h);
 		case 'left':
-			return { x: 0, y: 0, w: hw, h };
+			return at(0, 0, hw, h);
 		case 'right':
-			return { x: hw, y: 0, w: w - hw, h };
+			return at(hw, 0, w - hw, h);
 		case 'tl':
-			return { x: 0, y: 0, w: hw, h: hh };
+			return at(0, 0, hw, hh);
 		case 'tr':
-			return { x: hw, y: 0, w: w - hw, h: hh };
+			return at(hw, 0, w - hw, hh);
 		case 'bl':
-			return { x: 0, y: hh, w: hw, h: h - hh };
+			return at(0, hh, hw, h - hh);
 		case 'br':
-			return { x: hw, y: hh, w: w - hw, h: h - hh };
+			return at(hw, hh, w - hw, h - hh);
 		default:
 			return null;
 	}

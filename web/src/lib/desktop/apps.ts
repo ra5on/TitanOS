@@ -6,7 +6,10 @@ import type { IconName } from '../components/Icon.svelte';
 import type { MessageKey } from '../i18n/index.svelte.ts';
 
 export type SideItem =
-	{ group: MessageKey } | { href: string; label: MessageKey; icon: IconName; match?: string[] };
+	| { group: MessageKey }
+	| { href: string; label: MessageKey; icon: IconName; match?: string[] }
+	/** One thing of the program by name (a VM), with its state as a dot. */
+	| { href: string; text: string; state: 'on' | 'off' };
 
 export type Gradient =
 	'blue' | 'teal' | 'green' | 'orange' | 'violet' | 'grey' | 'dark' | 'red' | 'yellow' | 'pink';
@@ -123,6 +126,7 @@ export const SYSTEM_APPS: SystemApp[] = [
 			},
 			{ href: '/vms/new', label: 'desktop.side.newVm', icon: 'plus' },
 			{ href: '/vms/media', label: 'desktop.side.media', icon: 'disc' },
+			{ href: '/vms?adopt=1', label: 'desktop.side.adoptVm', icon: 'download', match: [] },
 		],
 		roles: ADMIN,
 		service: 'vms',
@@ -347,16 +351,6 @@ export const SYSTEM_APPS: SystemApp[] = [
 		],
 		kind: 'system',
 	},
-	{
-		id: 'overview',
-		label: 'desktop.app.overview',
-		glyph: 'overview',
-		gradient: 'teal',
-		href: '/',
-		paths: [],
-		side: [],
-		kind: 'system',
-	},
 ];
 
 /** Whether an account and the NAS's services allow a program. */
@@ -378,13 +372,12 @@ export function appForPath(path: string, apps: SystemApp[] = SYSTEM_APPS): Syste
 				length = prefix.length;
 			}
 		}
-	if (best) return best;
-	return path === '/' ? apps.find((a) => a.id === 'overview') : undefined;
+	return best;
 }
 
 /** Whether a side bar entry stands for the page shown. */
 export function sideActive(item: SideItem, path: string, items: SideItem[]): boolean {
-	if (!('href' in item)) return false;
+	if (!('href' in item) || 'text' in item) return false;
 	const prefixes = item.match ?? [item.href];
 	if (prefixes.some((p) => path === p)) return true;
 	// The most specific entry wins when several prefixes match.
@@ -395,6 +388,7 @@ export function sideActive(item: SideItem, path: string, items: SideItem[]): boo
 	return !items.some(
 		(other) =>
 			'href' in other &&
+			!('text' in other) &&
 			other !== item &&
 			(other.match ?? [other.href]).some(
 				(p) => (path === p || path.startsWith(p + '/')) && p.length > own.length,

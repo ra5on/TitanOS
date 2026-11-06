@@ -228,11 +228,14 @@ Nur Besitzer/Administratoren, jede Änderung im Aktivitätsprotokoll:
 - `PUT /api/v1/docker/proxy/apps/{app}` und `PUT /api/v1/docker/proxy/targets/{id}` mit der Route (ohne `domains` bleiben die gespeicherten, `[]` leert sie)
 - `DELETE /api/v1/docker/proxy/apps/{app}`, `DELETE /api/v1/docker/proxy/targets/{id}`
 - seit PLAN 61: `PUT /api/v1/docker/proxy` nimmt zusätzlich `auto` („Automatisch für alle Apps mit WebUI“); `GET` liefert `auto` und je automatischer Route `auto: true`
+- seit PLAN 62: jede App bekommt zusätzlich einen festen HTTPS-Port 20000–20999 auf den Adressen des NAS (`https://192.168.10.5:20001`), gespeichert im optionalen Feld `ports` (`{"immich": 20001}`) dieser Datei; Einzelheiten, Zertifikat, Cookies und Firewall in `docs/APP-WINDOWS.md`
 
 Rechte je App, App-Fenster und die Zertifizierungsstelle: `docs/APP-WINDOWS.md`.
 
 Fehler: `proxy_invalid` (400), `proxy_name_taken` (409). `GET /api/v1/docker`
-liefert je Container `proxyUrl`.
+liefert je Container `proxyUrl` und seit PLAN 62 `proxyPort` und `proxyPortUrl` (Port der App
+und ihre Adresse auf dem Host der Anfrage, z. B. `https://192.168.10.5:20001`; fehlen, solange
+titand auf keinem Port der App lauscht).
 
 ## Zertifikate bei Kurznamen
 

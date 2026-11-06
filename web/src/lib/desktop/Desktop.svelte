@@ -11,6 +11,8 @@
 	import Notifications from '../components/Notifications.svelte';
 	import TasksPanel from '../components/TasksPanel.svelte';
 	import AccountMenu from '../components/AccountMenu.svelte';
+	import NodeMenu from '../components/NodeMenu.svelte';
+	import { clusterNodes } from '../cluster.svelte.ts';
 	import { t } from '../i18n/index.svelte.ts';
 	import { session } from '../session.svelte.ts';
 	import { system } from '../system.svelte.ts';
@@ -23,10 +25,13 @@
 	import NotifyCenter from './NotifyCenter.svelte';
 	import DesktopDialogs from './DesktopDialogs.svelte';
 	import Window from './Window.svelte';
+	import Dock, { dockPin, dockUnpin } from './Dock.svelte';
 	import WidgetView from './WidgetView.svelte';
 	import {
 		arrangeIcons,
 		defaultWidgets,
+		dockPinned,
+		placeIcons,
 		placeWidget,
 		WIDGET_KINDS,
 		type Widget,
@@ -55,13 +60,16 @@
 	let launcher = $state(false);
 	let center = $state(false);
 	let editWidgets = $state(false);
+	let editDock = $state(false);
 	let dialog = $state<'wallpaper' | 'settings' | 'gallery' | 'layout' | null>(null);
 	let openFolder = $state<string | null>(null);
 	let menu = $state<{
 		x: number;
 		y: number;
-		kind: 'desk' | 'icon' | 'sort' | 'size';
+		kind: 'desk' | 'icon' | 'sort' | 'size' | 'bar' | 'widget' | 'widgetSize' | 'dock' | 'dockPos';
 		key?: string;
+		/** Opened from the dock (its own items in the program menu). */
+		dock?: boolean;
 	} | null>(null);
 	let renaming = $state<string | null>(null);
 	let dragKey = $state<string | null>(null);
@@ -82,6 +90,56 @@
 	const agentAllowed = $derived(all.some((p) => p.key === 'app:agent'));
 	const sizes = { s: 48, m: 60, l: 72 } as const;
 	const iconPx = $derived(sizes[desktop.prefs.iconSize]);
+	const barIcon = $derived({ s: 15, m: 18, l: 22 }[desktop.prefs.barSize]);
+	const known = $derived(new Set(all.map((p) => p.key)));
+	const inDock = $derived(new Set(dockPinned(desktop.prefs, known)));
+
+	// The dock keeps its edge free: snapped windows and icons stay clear of it.
+	const dockRoom = $derived(desktop.prefs.dock.size + 34);
+	$effect(() => {
+		const d = desktop.prefs.dock;
+		const room = d.show ? dockRoom : 0;
+		wm.inset = {
+			l: d.position === 'left' ? room : 0,
+			r: d.position === 'right' ? room : 0,
+			b: d.position === 'bottom' ? room : 0,
+		};
+	});
+
+	// Icons sit on a grid; "free" keeps each icon where it was put (PLAN 62-1).
+	const colW = $derived(iconPx + 60);
+	const rowH = $derived(iconPx + 56);
+	const ICON_LEFT = 18;
+	const ICON_TOP = 8;
+	const gridRows = $derived(
+		Math.max(1, Math.floor((wm.area.h - ICON_TOP - 8 - wm.inset.b) / rowH)),
+	);
+	const gridCols = $derived(
+		Math.max(1, Math.floor((wm.area.w - ICON_LEFT - wm.inset.l - wm.inset.r) / colW)),
+	);
+	const places = $derived(placeIcons(icons, desktop.prefs, gridRows, gridCols));
+	function cellAt(clientX: number, clientY: number): { c: number; r: number } {
+		const box = area?.getBoundingClientRect();
+		const x = clientX - (box?.left ?? 0) - ICON_LEFT - wm.inset.l;
+		const y = clientY - (box?.top ?? 0) - ICON_TOP;
+		return {
+			c: Math.max(0, Math.min(gridCols - 1, Math.floor(x / colW))),
+			r: Math.max(0, Math.min(gridRows - 1, Math.floor(y / rowH))),
+		};
+	}
+	/** Writes every icon's present place, so switching to "free" moves nothing. */
+	function freeze(p: typeof desktop.prefs) {
+		const next: Record<string, { c: number; r: number }> = {};
+		for (const [k, at] of places) next[k] = { ...at };
+		p.iconPos = next;
+		p.sort = 'free';
+	}
+	function autoArrange() {
+		savePrefs((p) => {
+			p.iconPos = {};
+			p.sort = 'kind';
+		});
+	}
 
 	// The wallpaper: built in (light/dark by the theme) or the account's own picture.
 	let tint = $state(dayTint());
@@ -172,14 +230,23 @@
 			});
 			return;
 		}
+		const cell = cellAt(event.clientX, event.clientY);
+		const from = places.get(key);
 		savePrefs((p) => {
-			const list = iconsNow().filter((k) => k !== key);
-			const at = target ? list.indexOf(target) : -1;
-			list.splice(at < 0 ? list.length : at, 0, key);
-			p.icons = list;
+			freeze(p);
+			if (!iconsNow().includes(key)) p.icons = [...iconsNow(), key];
+			else p.icons = iconsNow();
 			p.customIcons = true;
-			p.sort = 'free';
 			p.folders = p.folders.map((f) => ({ ...f, apps: f.apps.filter((a) => a !== key) }));
+			// Onto another icon: the two change places; onto free space: it stays there.
+			const other = target ?? [...places].find(([, at]) => at.c === cell.c && at.r === cell.r)?.[0];
+			const to = target ? places.get(target) : cell;
+			if (!to) return;
+			if (other && other !== key) {
+				if (from) p.iconPos[other] = { ...from };
+				else delete p.iconPos[other];
+			}
+			p.iconPos[key] = { ...to };
 		});
 	}
 	function removeIcon(key: string) {
@@ -300,8 +367,7 @@
 		const dims = { s: [12, 5], m: [17, 8], l: [24, 12] }[size];
 		// New widgets go beside the icons, never on top of them.
 		const iconsRight =
-			(area?.querySelector('.icons')?.getBoundingClientRect().right ?? 0) -
-			(area?.getBoundingClientRect().left ?? 0);
+			ICON_LEFT + wm.inset.l + (Math.max(0, ...[...places.values()].map((at) => at.c)) + 1) * colW;
 		const at = placeWidget(
 			desktop.prefs.widgets,
 			dims[0],
@@ -314,6 +380,17 @@
 				...p.widgets,
 				{ id: 'w' + Date.now().toString(36), kind, x: at.x, y: at.y, w: dims[0], h: dims[1] },
 			];
+			p.customWidgets = true;
+		});
+	}
+	function resizeWidget(id: string, size: 's' | 'm' | 'l') {
+		const dims = { s: [12, 5], m: [17, 8], l: [24, 12] }[size];
+		savePrefs((p) => {
+			p.widgets = p.widgets.map((w) =>
+				w.id === id
+					? { ...w, x: w.x < 0 ? -dims[0] : w.x, w: dims[0], h: Math.max(w.h, dims[1]) }
+					: w,
+			);
 			p.customWidgets = true;
 		});
 	}
@@ -373,7 +450,25 @@
 			center = false;
 			openFolder = null;
 			editWidgets = false;
+			editDock = false;
 		}
+	}
+
+	// Menu and message centre close on a click beside them (also into a window's frame).
+	function outside(event: PointerEvent) {
+		const el = event.target as HTMLElement | null;
+		if (launcher && !el?.closest('.launcher, [data-opens="launcher"], .dropdown-panel, dialog'))
+			launcher = false;
+		if (center && !el?.closest('.center, [data-opens="center"], dialog')) center = false;
+	}
+	function blurred() {
+		// Focus went into a window's frame: that was a click beside the menu.
+		setTimeout(() => {
+			if (document.activeElement instanceof HTMLIFrameElement) {
+				launcher = false;
+				center = false;
+			}
+		}, 0);
 	}
 	function keyUp(event: KeyboardEvent) {
 		if (wm.switcher && (event.key === 'Alt' || !event.altKey)) {
@@ -393,6 +488,19 @@
 		if (!w) return;
 		if (wm.focused === id && !w.minimized) minimize(id);
 		else focus(id);
+	}
+	// PLAN 62-3: the VMs window lists every machine below its pages (saves the page's own list).
+	function sideOf(app: string, side: Program['side']): Program['side'] {
+		if (app !== 'app:vms' || !sources.vms.length) return side;
+		return [
+			...side,
+			{ group: 'desktop.side.vmList' },
+			...sources.vms.map((vm) => ({
+				href: '/vms?vm=' + encodeURIComponent(vm.name),
+				text: vm.displayName || vm.name,
+				state: vm.state === 'running' ? ('on' as const) : ('off' as const),
+			})),
+		];
 	}
 	function programOf(app: string): Program | undefined {
 		return byKey.get(app) ?? findProgram(app);
@@ -447,18 +555,28 @@
 	});
 </script>
 
-<svelte:window onkeydown={keys} onkeyup={keyUp} />
+<svelte:window onkeydown={keys} onkeyup={keyUp} onpointerdowncapture={outside} onblur={blurred} />
 
 <div
 	class="desktop"
 	class:light
 	class:live={desktop.prefs.wallpaper.live && !reduced}
+	class:moving={wm.dragging}
 	style:--wallpaper={wallpaper}
 	style:--tint="{tint}deg"
 	style:--icon={iconPx + 'px'}
+	style:--pb={{ s: 28, m: 34, l: 42 }[desktop.prefs.barSize] + 'px'}
 >
 	<div class="paper" aria-hidden="true"></div>
-	<header class="topbar">
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<header
+		class="topbar"
+		oncontextmenu={(e) => {
+			if ((e.target as HTMLElement).closest('.menu, .floating-menu, [role="menu"]')) return;
+			e.preventDefault();
+			menu = { x: e.clientX, y: e.clientY, kind: 'bar' };
+		}}
+	>
 		<div class="pill glass-panel">
 			<button
 				type="button"
@@ -466,16 +584,17 @@
 				class:on={!wm.windows.some((w) => !w.minimized)}
 				onclick={showDesktop}
 				title={t('desktop.bar.showDesktop')}
-				aria-label={t('desktop.bar.showDesktop')}><Icon name="monitor" size={18} /></button
+				aria-label={t('desktop.bar.showDesktop')}><Icon name="monitor" size={barIcon} /></button
 			>
 			<button
 				type="button"
 				class="pb"
 				class:on={launcher}
+				data-opens="launcher"
 				onclick={() => (launcher = !launcher)}
 				title={t('desktop.menu.title')}
 				aria-label={t('desktop.menu.title')}
-				aria-expanded={launcher}><Icon name="grid" size={18} /></button
+				aria-expanded={launcher}><Icon name="grid" size={barIcon} /></button
 			>
 			{#if wm.windows.length}<span class="sep" aria-hidden="true"></span>{/if}
 			{#each wm.windows as w (w.id)}
@@ -494,11 +613,14 @@
 						gradient={p?.gradient ?? 'grey'}
 						image={p?.image ?? ''}
 						name={w.title}
-						size={24}
+						size={barIcon + 6}
 					/>
 				</button>
 			{/each}
 		</div>
+		{#if clusterNodes.nodes.length > 1}
+			<div class="pill glass-panel right"><NodeMenu variant="desk" /></div>
+		{/if}
 		<span class="space"></span>
 		<div class="pill glass-panel right">
 			{#if info}
@@ -557,17 +679,19 @@
 				type="button"
 				class="pb"
 				class:on={center}
+				data-opens="center"
 				onclick={() => (center = !center)}
 				title={t('desktop.center.title')}
 				aria-label={t('desktop.center.title')}
-				aria-expanded={center}><Icon name="list" size={18} /></button
+				aria-expanded={center}><Icon name="list" size={barIcon} /></button
 			>
 			<button
 				type="button"
 				class="pb"
+				data-opens="launcher"
 				onclick={() => (launcher = true)}
 				title={t('desktop.menu.search')}
-				aria-label={t('desktop.menu.search')}><Icon name="search" size={18} /></button
+				aria-label={t('desktop.menu.search')}><Icon name="search" size={barIcon} /></button
 			>
 			<AccountMenu />
 		</div>
@@ -577,6 +701,7 @@
 	<div
 		class="desk-area"
 		bind:this={area}
+		style:--dock-room="{dockRoom}px"
 		ondragover={(e) => {
 			e.preventDefault();
 			if (e.dataTransfer?.types.includes('Files')) fileDrop = true;
@@ -589,11 +714,12 @@
 		}}
 		oncontextmenu={(e) => {
 			if (e.target !== area && !(e.target as HTMLElement).classList.contains('icons')) return;
+			editDock = false;
 			e.preventDefault();
 			menu = { x: e.clientX, y: e.clientY, kind: 'desk' };
 		}}
 	>
-		<div class="icons" style:grid-template-rows="repeat(auto-fill, calc(var(--icon) + 52px))">
+		<div class="icons" style:left="{ICON_LEFT + wm.inset.l}px">
 			{#each icons as key (key)}
 				{@const p = byKey.get(key)}
 				{@const folder = key.startsWith('folder:') ? folderOf(key) : undefined}
@@ -602,6 +728,9 @@
 						type="button"
 						class="ico"
 						class:drop={dropBefore === key}
+						style:left="{(places.get(key)?.c ?? 0) * colW}px"
+						style:top="{(places.get(key)?.r ?? 0) * rowH}px"
+						style:width="{colW - 4}px"
 						draggable="true"
 						ondragstart={(e) => {
 							dragKey = key;
@@ -679,7 +808,7 @@
 			{/each}
 		</div>
 
-		{#each desktop.prefs.widgets as w (w.id)}
+		{#each desktop.prefs.widgetsHidden ? [] : desktop.prefs.widgets as w (w.id)}
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="widget glass-panel"
@@ -692,7 +821,7 @@
 				oncontextmenu={(e) => {
 					e.preventDefault();
 					e.stopPropagation();
-					editWidgets = true;
+					menu = { x: e.clientX, y: e.clientY, kind: 'widget', key: w.id };
 				}}
 			>
 				<WidgetView kind={w.kind} onopen={(key, href) => open(key, undefined, href)} />
@@ -733,12 +862,25 @@
 				glyph={p?.glyph ?? ''}
 				gradient={p?.gradient ?? 'grey'}
 				image={p?.image ?? ''}
-				side={p?.side ?? []}
+				side={sideOf(w.app, p?.side ?? [])}
 				external={p?.external ?? w.app.startsWith('docker:')}
 				foldKey={w.app}
 				onaddress={address}
 			/>
 		{/each}
+
+		{#if desktop.prefs.dock.show}
+			<Dock
+				{all}
+				edit={editDock}
+				onopen={(key, e) => open(key, e)}
+				onmenu={(e, key) =>
+					(menu = key
+						? { x: e.clientX, y: e.clientY, kind: 'icon', key, dock: true }
+						: { x: e.clientX, y: e.clientY, kind: 'dock' })}
+				ondone={() => (editDock = false)}
+			/>
+		{/if}
 
 		{#if wm.preview}
 			{@const r = snapRect(wm.preview)}
@@ -977,16 +1119,176 @@
 						}}><span>{t('desktop.ctx.whoMay')}</span></button
 					>
 				{/if}
+				<span class="menu-rule" role="separator"></span>
+				{#if inDock.has(key)}
+					<button
+						type="button"
+						role="menuitem"
+						onclick={() => {
+							dockUnpin(key, known);
+							menu = null;
+						}}><span>{t('desktop.dock.unpin')}</span></button
+					>
+				{:else}
+					<button
+						type="button"
+						role="menuitem"
+						onclick={() => {
+							dockPin(key, known);
+							if (!desktop.prefs.dock.show) savePrefs((d) => (d.dock.show = true));
+							menu = null;
+						}}><span>{t('desktop.dock.pin')}</span></button
+					>
+				{/if}
+				{#if icons.includes(key)}
+					{#if !menu.dock}
+						<button
+							type="button"
+							role="menuitem"
+							class="danger"
+							onclick={() => {
+								removeIcon(key);
+								menu = null;
+							}}><span>{t('desktop.ctx.removeFromDesktop')}</span></button
+						>
+					{/if}
+				{:else}
+					<button
+						type="button"
+						role="menuitem"
+						onclick={() => {
+							savePrefs((d) => {
+								d.icons = [...iconsNow(), key];
+								d.customIcons = true;
+							});
+							menu = null;
+						}}><span>{t('desktop.ctx.toDesktop')}</span></button
+					>
+				{/if}
+				{#if wm.windows.some((w) => w.app === key)}
+					<button
+						type="button"
+						role="menuitem"
+						onclick={() => {
+							wm.windows.filter((w) => w.app === key).forEach((w) => closeWindow(w.id));
+							menu = null;
+						}}><span>{t('desktop.dock.closeAll')}</span></button
+					>
+				{/if}
+			{/if}
+		{:else if menu.kind === 'bar'}
+			{#each [['s', 'desktop.size.s'], ['m', 'desktop.size.m'], ['l', 'desktop.size.l']] as const as [size, label] (size)}
+				<button
+					type="button"
+					role="menuitemradio"
+					aria-checked={desktop.prefs.barSize === size}
+					onclick={() => {
+						savePrefs((p) => (p.barSize = size));
+						menu = null;
+					}}><span>{t('desktop.bar.size')}: {t(label)}</span></button
+				>
+			{/each}
+		{:else if menu.kind === 'widget' && menu.key}
+			{@const id = menu.key}
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => (menu = menu && { ...menu, kind: 'widgetSize' })}
+				><span>{t('desktop.widgets.size')}</span><span aria-hidden="true">›</span></button
+			>
+			<button
+				type="button"
+				role="menuitem"
+				class="danger"
+				onclick={() => {
+					removeWidget(id);
+					menu = null;
+				}}><span>{t('desktop.widgets.removeOne')}</span></button
+			>
+			<span class="menu-rule" role="separator"></span>
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => {
+					editWidgets = true;
+					menu = null;
+				}}><span>{t('desktop.ctx.widgets')}</span></button
+			>
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => {
+					dialog = 'gallery';
+					menu = null;
+				}}><span>{t('desktop.widgets.add')}</span></button
+			>
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => {
+					savePrefs((p) => (p.widgetsHidden = true));
+					editWidgets = false;
+					menu = null;
+				}}><span>{t('desktop.widgets.hideAll')}</span></button
+			>
+		{:else if menu.kind === 'widgetSize' && menu.key}
+			{@const id = menu.key}
+			{#each [['s', 'desktop.size.s'], ['m', 'desktop.size.m'], ['l', 'desktop.size.l']] as const as [size, label] (size)}
 				<button
 					type="button"
 					role="menuitem"
-					class="danger"
 					onclick={() => {
-						removeIcon(key);
+						resizeWidget(id, size);
 						menu = null;
-					}}><span>{t('desktop.ctx.removeFromDesktop')}</span></button
+					}}><span>{t(label)}</span></button
 				>
-			{/if}
+			{/each}
+		{:else if menu.kind === 'dock'}
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => {
+					editDock = true;
+					menu = null;
+				}}><span>{t('desktop.dock.edit')}</span></button
+			>
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => (menu = menu && { ...menu, kind: 'dockPos' })}
+				><span>{t('desktop.dock.position')}</span><span aria-hidden="true">›</span></button
+			>
+			<button
+				type="button"
+				role="menuitemcheckbox"
+				aria-checked={desktop.prefs.dock.magnify > 0}
+				onclick={() => {
+					savePrefs((p) => (p.dock.magnify = p.dock.magnify ? 0 : 1));
+					menu = null;
+				}}><span>{t('desktop.dock.magnify')}</span></button
+			>
+			<span class="menu-rule" role="separator"></span>
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => {
+					savePrefs((p) => (p.dock.show = false));
+					editDock = false;
+					menu = null;
+				}}><span>{t('desktop.dock.hide')}</span></button
+			>
+		{:else if menu.kind === 'dockPos'}
+			{#each [['bottom', 'desktop.dock.bottom'], ['left', 'desktop.dock.left'], ['right', 'desktop.dock.right']] as const as [pos, label] (pos)}
+				<button
+					type="button"
+					role="menuitemradio"
+					aria-checked={desktop.prefs.dock.position === pos}
+					onclick={() => {
+						savePrefs((p) => (p.dock.position = pos));
+						menu = null;
+					}}><span>{t(label)}</span></button
+				>
+			{/each}
 		{:else if menu.kind === 'desk'}
 			<button
 				type="button"
@@ -1004,10 +1306,38 @@
 				type="button"
 				role="menuitem"
 				onclick={() => {
+					autoArrange();
+					menu = null;
+				}}><span>{t('desktop.ctx.autoArrange')}</span></button
+			>
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => {
 					newFolder();
 					menu = null;
 				}}><span>{t('desktop.ctx.newFolder')}</span></button
 			>
+			<span class="menu-rule" role="separator"></span>
+			<button
+				type="button"
+				role="menuitemcheckbox"
+				aria-checked={!desktop.prefs.widgetsHidden}
+				onclick={() => {
+					savePrefs((p) => (p.widgetsHidden = !p.widgetsHidden));
+					menu = null;
+				}}><span>{t('desktop.widgets.show')}</span></button
+			>
+			<button
+				type="button"
+				role="menuitemcheckbox"
+				aria-checked={desktop.prefs.dock.show}
+				onclick={() => {
+					savePrefs((p) => (p.dock.show = !p.dock.show));
+					menu = null;
+				}}><span>{t('desktop.dock.show')}</span></button
+			>
+			<span class="menu-rule" role="separator"></span>
 			<button
 				type="button"
 				role="menuitem"
@@ -1021,6 +1351,7 @@
 				role="menuitem"
 				onclick={() => {
 					editWidgets = true;
+					if (desktop.prefs.widgetsHidden) savePrefs((p) => (p.widgetsHidden = false));
 					menu = null;
 				}}><span>{t('desktop.ctx.widgets')}</span></button
 			>
@@ -1104,6 +1435,10 @@
 	.live .paper {
 		animation: drift 90s ease-in-out infinite alternate;
 	}
+	/* Holding still while a window moves keeps the glass from being drawn anew each frame. */
+	.moving .paper {
+		animation-play-state: paused;
+	}
 	@keyframes drift {
 		to {
 			transform: translate(-2%, 1.5%) scale(1.04);
@@ -1117,7 +1452,7 @@
 		box-shadow: 0 10px 30px rgb(0 0 0 / 0.3);
 	}
 	.topbar {
-		height: 52px;
+		height: calc(var(--pb) + 18px);
 		flex: none;
 		display: flex;
 		align-items: center;
@@ -1140,8 +1475,8 @@
 		flex: none;
 	}
 	.pb {
-		width: 34px;
-		height: 34px;
+		width: var(--pb);
+		height: var(--pb);
 		flex: none;
 		display: grid;
 		place-items: center;
@@ -1184,7 +1519,7 @@
 		align-items: center;
 		gap: 6px;
 		padding: 0 6px;
-		font-size: 11px;
+		font-size: max(10px, calc(var(--pb) * 0.32));
 		line-height: 1.15;
 		white-space: nowrap;
 		font-variant-numeric: tabular-nums;
@@ -1197,14 +1532,17 @@
 	}
 	.icons {
 		position: absolute;
-		left: 18px;
 		top: 8px;
-		bottom: 8px;
-		display: grid;
-		grid-auto-flow: column;
-		grid-auto-columns: calc(var(--icon) + 56px);
-		gap: 0 4px;
-		align-content: start;
+		right: 0;
+		bottom: 0;
+		pointer-events: none;
+	}
+	.icons > .ico {
+		position: absolute;
+		pointer-events: auto;
+		transition:
+			left 0.18s ease,
+			top 0.18s ease;
 	}
 	.ico {
 		position: relative;
@@ -1237,7 +1575,13 @@
 			0 1px 2px rgb(255 255 255 / 0.8);
 	}
 	.ico.drop {
-		box-shadow: inset 3px 0 0 var(--accent);
+		box-shadow: inset 0 0 0 2px var(--accent);
+	}
+	:global(.menu-rule) {
+		display: block;
+		height: 1px;
+		margin: 4px 6px;
+		background: var(--border);
 	}
 	.ico .label {
 		max-width: 100%;
@@ -1558,7 +1902,8 @@
 		.bubble-pop {
 			animation: none;
 		}
-		.snap-preview {
+		.snap-preview,
+		.icons > .ico {
 			transition: none;
 		}
 	}

@@ -8978,5 +8978,9 @@
 	"agent.notes.deleteText": "“{name}” is deleted.",
 	"agent.notes.deleteFolderTitle": "Delete folder?",
 	"agent.notes.deleteFolderText": "The folder “{name}” is deleted with {count} notes and all subfolders.",
-	"agent.noteNote": "Note saved"
+	"agent.noteNote": "Note saved",
+	"settings.consoleIdle": "End consoles and VM screens after",
+	"settings.consoleIdleMinutes": "{minutes} minutes without input",
+	"settings.consoleIdleNever": "Never",
+	"settings.consoleIdleDesc": "Applies to the NAS shell, container, LXC and VM consoles and the VM screen. Only keyboard and mouse input counts. “Never” keeps open consoles running; logging out, locking and switching terminals off still end them."
 }

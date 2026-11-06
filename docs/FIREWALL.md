@@ -87,7 +87,7 @@ Heimnetz/VPN/Internet → NAS):
 | Dienst | Ports | Heimnetz | VPN | Internet |
 |---|---|---|---|---|
 | Weboberfläche | TCP 80, 443 (bzw. die Ports von `titand -http/-https`) | ja | ja | nein |
-| HTTPS-Namen für Apps | TCP 443 | ja | ja | nein |
+| HTTPS-Namen für Apps | TCP 443 und die HTTPS-Ports der Apps (20000–20999, nur die, auf denen titand lauscht; PLAN 62) | ja | ja | nein |
 | SMB | TCP 139, 445; UDP 137–138 | ja | ja | nein |
 | NFS | TCP/UDP 111, 2049, 20048 (mountd), 32765–32766 (statd), 32768 (lockd) | ja | ja | nein |
 | SSH | TCP 22 | ja | ja | nein |

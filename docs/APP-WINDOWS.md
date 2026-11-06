@@ -158,15 +158,95 @@ TitanOS deshalb die Zertifikate seiner Namen selbst aus (`tlscert/ca.go`):
   dem Update einmal eine neue Warnung, bis die Zertifizierungsstelle installiert ist (danach
   bleibt das neue Zertifikat über Neustarts gleich).
 
+## HTTPS-Port je App (PLAN 62)
+
+Entscheidung des Projektinhabers vom 6.11.2026 (PLAN 62-1): Viele Geräte lösen dreiteilige
+`.local`-Namen wie `wordcraft.titan.local` nicht auf (Linux mit nss-mdns `mdns4_minimal`, manche
+Windows- und Android-Geräte). Deshalb bekommt jede Docker-App **zusätzlich** zu ihren Namen einen
+festen HTTPS-Port auf den Adressen des NAS, z. B. `https://192.168.10.5:20001`. Die Namen bleiben.
+
+- **Bereich 20000–20999** (fünfstellig, unter den Ausgangsports von Linux ab 32768). Jede App mit
+  Route (eigene oder automatische, nicht Ziele außerhalb von Docker) bekommt beim ersten Erkennen
+  den kleinsten freien Port. Frei heißt: kein Container veröffentlicht ihn (Docker-Portfreigaben
+  aller laufenden Container), er gehört nicht titand (Weboberfläche), er ist nicht der feste
+  NFS-mountd-Port 20048, und eine kurze Probe (`listen` auf allen Adressen, sofort wieder
+  geschlossen) findet ihn frei. Vergeben wird erst, wenn Docker einmal geantwortet hat.
+- **Gespeichert** in `/config/docker/proxy.json` im optionalen Feld `ports` (`{"app": port}`),
+  geschrieben nur, wenn eine App neu einen Port bekommt (nie zyklisch). Ein gespeicherter Port wird
+  nie neu geprüft oder neu vergeben: gleiche Adresse nach Neustart und Update, auch wenn die App
+  gerade gestoppt ist. Frei wird er nur, wenn die App entfernt wird (Docker › App entfernen);
+  Entfernen nur des HTTPS-Namens behält den Port.
+- **Proxy**: titand lauscht auf jedem Port einer App, deren Route gerade antwortet (Hauptschalter,
+  Route an), auf allen Adressen (IPv4 und IPv6 wie :443), mit TLS. Der Port entscheidet die App,
+  gleich welcher Name oder welche Adresse im Host-Kopf steht. Alles andere ist wie beim Namen:
+  Firewall-Dienst „HTTPS-Namen für Apps“, erlaubte Netze der Route, Browser-Sperre, Rechte je Konto,
+  `frame-ancestors`, WebSockets, `X-Forwarded-*`. Eine App ohne Route oder mit ausgeschalteter
+  Route antwortet auf ihrem Port nicht (Listener geschlossen, sonst 404). Ein Port, der sich nicht
+  öffnen lässt, wird protokolliert und bei der nächsten Änderung bzw. nach 30 s erneut versucht; er
+  hält titand nie an. Keine Route darf auf einen App-Port zeigen (der Proxy würde sich selbst
+  aufrufen).
+- **Entwicklungsmodus** (`titand -dev`, `Disabled`): keine Ports vergeben, keine Listener, wie avahi.
+- **Sperr-Cookie je Port**: Cookies trennen nicht nach Port; alle Ports von `192.168.10.5` teilen
+  sich die Cookies dieser Adresse. Der Pass heißt deshalb auf einem Port
+  `__Host-titanos_app_<port>` (z. B. `__Host-titanos_app_20001`), auf den Namen weiter
+  `__Host-titanos_app`. Er gilt ohnehin nur für seine App (HMAC über die App).
+- **TitanOS-Cookies**: Die Weboberfläche auf `https://192.168.10.5` und eine App auf
+  `https://192.168.10.5:20001` sind dieselbe Site, aber verschiedene Origins. Der Browser schickt
+  das Sitzungscookie `__Host-titanos_session` (HttpOnly, SameSite=Strict) auch an die App-Ports.
+  Der Proxy entfernt vor der Weiterleitung jedes Cookie `titanos_*`, `__Host-titanos*` und
+  `__Secure-titanos*`: Sitzung, „Angemeldet bleiben“, die eigenen Pässe und die anderer Apps
+  erreichen die App nie, und Apps können sie nicht setzen (Test
+  `appproxy.TestPortRoutingAndCookies`). Umgekehrt weist die Weboberfläche Anfragen von
+  App-Seiten ab: `http.CrossOriginProtection` lehnt `Sec-Fetch-Site: same-site` bzw. ein
+  fremdes `Origin` (anderer Port) ab (Test `api.TestSameSiteRequestsAreRejected`), die
+  WebSockets der Konsolen vergleichen `Origin` samt Port mit dem Host.
+- **Zertifikat**: Der Browser fragt dort nach der Adresse oder dem Namen des NAS, nicht nach
+  einem App-Namen. Reihenfolge (`tlscert.AddressCertificate`): Let's Encrypt bzw. Tailscale für
+  ihre Namen, ein eigenes Zertifikat, wenn es Namen bzw. Adresse abdeckt, sonst das Zertifikat der
+  TitanOS-Zertifizierungsstelle für die Weboberfläche (Hostname, `.local`, `localhost` und die
+  Adressen des NAS als IP-SAN) – **auch wenn für die Weboberfläche Let's Encrypt oder ein eigenes
+  Zertifikat eingerichtet ist**. Ein App-Name auf seinem Port bekommt das Zertifikat der Namen.
+  Entscheidung zu den Adressen: Die Namensbeschränkung der Zertifizierungsstelle erlaubt bereits
+  seit PLAN 61 die privaten Bereiche 10/8, 172.16/12, 192.168/16, 100.64/10, fc00::/7, Link-local
+  und Loopback (eine ältere ohne Beschränkung wird einmal ersetzt). Sie bleibt unverändert: Für
+  diese Adressen kann sie bürgen, für öffentliche Adressen nicht (dort bleibt das verwendete
+  Zertifikat, selbst signiert bzw. das eigene, mit Warnung). Neue Adressen (DHCP, IPv6-Präfix)
+  bekommen ein Zertifikat nur im RAM, ohne Schreibzugriff.
+- **Firewall**: Ist sie an, gehören die Ports, auf denen titand gerade lauscht, zum Dienst
+  „HTTPS-Namen für Apps“ (neben 443) und sind in denselben Zonen offen
+  (`firewall.Manager.SetAppPorts`, neu geladen nur bei Änderung). titand prüft die Zone
+  zusätzlich selbst (`AllowHTTP`).
+
+Grenzen:
+
+- Apps auf verschiedenen Ports derselben Adresse teilen sich ihre eigenen Cookies. Setzen zwei
+  Apps ein Cookie gleichen Namens (z. B. `session`) ohne eigenen Pfad, überschreiben sie sich
+  gegenseitig; über den Namen der App passiert das nicht.
+- Veröffentlicht ein Container später einen schon vergebenen Port, gewinnt Docker (DNAT) und die
+  App ist über diesen Port nicht mehr erreichbar. Portfreigaben gestoppter Container sieht die
+  Prüfung nicht.
+- Die Fenster-Adresse nimmt den Host, unter dem die Weboberfläche aufgerufen wurde. Ist sie über
+  eine Domain mit Portweiterleitung nur für 443, über einen Reverse Proxy oder über einen Namen im
+  Tailnet erreichbar, muss der App-Port unter demselben Host erreichbar sein; sonst bleibt das
+  Fenster leer, und `nameUrl` ist der Rückweg (Entscheidung des Projektinhabers offen).
+- Ports von Apps, die außerhalb von TitanOS entfernt werden (`docker compose down` von Hand),
+  bleiben vergeben.
+- Ein älterer titand liest die Datei weiter, kennt `ports` aber nicht und verliert das Feld, wenn er
+  die Datei speichert; danach werden die Ports neu (ggf. anders) vergeben.
+- Geprüft mit Go-Tests (Vergabe, Bereich, belegte Ports, Neustart, Freigabe nur beim Entfernen,
+  Weiterleitung unabhängig vom Host, Cookies, Fenster-Adresse auf dem Host der Anfrage, Zertifikat
+  für Adressen auch mit eigenem Zertifikat, Firewall-Regel). Nicht geprüft: echte Browser und
+  Geräte, echte Apps auf den Ports.
+
 ## API
 
 Nur Web-Oberfläche, nicht in `publicRoutes` (kein Token, kein MCP):
 
 - `GET /api/v1/apps/access` (Besitzer/Admin) → `{newApps: "admins"|"everyone", apps: [{app, icon, url, webui, running, gate, users}], accounts: [{name, role, disabled}]}`
 - `PUT /api/v1/apps/access` (Besitzer/Admin) mit `{newApps, apps: [{app, gate, users}]}`; Apps, die fehlen, folgen danach `newApps`. Fehler `app_access_invalid` (400).
-- `GET /api/v1/apps/mine` (jedes Konto) → `{apps: [{app, icon, url, webui, running}]}`: Apps mit HTTPS-Namen oder WebUI-Label, die das Konto nutzen darf; `url` ist der HTTPS-Name (`""` ohne).
-- `POST /api/v1/apps/{app}/window` (jedes Konto) → `{url, expires}`; `url` = `https://<name>/.titanos/enter?t=<token>`, `expires` RFC 3339 (60 s). Fehler `app_forbidden` (403), `session_required` (403, ohne Sitzungscookie), `proxy_no_route` (409).
-- `GET /api/v1/apps/{app}/open?host=<name>` → 303 zur Eintrittsadresse (auf `host`, wenn das ein Name der App ist); ohne Anmeldung 303 auf `/`, ohne Recht 403.
+- `GET /api/v1/apps/mine` (jedes Konto) → `{apps: [{app, icon, url, webui, running, port, portUrl}]}`: Apps mit HTTPS-Namen, Port oder WebUI-Label, die das Konto nutzen darf; `url` ist der HTTPS-Name (`""` ohne), `port` der HTTPS-Port der App (z. B. `20001`) und `portUrl` ihre Adresse auf dem Host, unter dem die Weboberfläche gerade aufgerufen wurde (`https://192.168.10.5:20001`); beide fehlen, solange titand auf keinem Port der App lauscht. `GET /api/v1/apps/access` liefert je App dieselben Felder.
+- `POST /api/v1/apps/{app}/window` (jedes Konto) → `{url, nameUrl, port, expires}`. `url` ist die Eintrittsadresse auf dem Port der App **am Host der Anfrage**: der Host-Kopf der Anfrage an die Weboberfläche ohne deren Port (`192.168.10.5`, `titan.local`, `[fd00::5]`), also `https://192.168.10.5:20001/.titanos/enter?t=<token>`. Nur Hosts, unter denen die Weboberfläche erreichbar ist (dieselbe Liste wie `frame-ancestors`), sonst und ohne Port der App ist `url` die Adresse auf dem Namen. `nameUrl` = `https://<name>/.titanos/enter?t=<token>` (`""` ohne Namen), `port` der Port (`0` ohne). Beide Adressen tragen dasselbe Token (60 s, einmal). `expires` RFC 3339. Fehler `app_forbidden` (403), `session_required` (403, ohne Sitzungscookie), `proxy_no_route` (409).
+- `GET /api/v1/apps/{app}/open?host=<name>` → 303 zur Eintrittsadresse (auf `host`, wenn das ein Name der App ist oder Host der Weboberfläche mit dem Port der App, z. B. `host=192.168.10.5:20001` von der Sperrseite eines Ports; ohne `host` der Port der App am Host der Anfrage, sonst der Name); ohne Anmeldung 303 auf `/`, ohne Recht 403.
 - `GET /api/v1/certs/ca` → `{available, name, fingerprint, notAfter}`; `GET /api/v1/certs/ca.crt`, `GET /api/v1/certs/ca.cer`.
 
 ## Prüfstand und Grenzen

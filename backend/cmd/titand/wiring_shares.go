@@ -25,6 +25,8 @@ func (w *titand) wireShares() error {
 	w.routes.HTTPSPort, w.routes.Reserved = proxyPorts(w.opts)
 	w.routes.OnChange = w.folders.Kick
 	w.routes.Gate = w.packetFilter.AllowHTTP
+	// The firewall opens the HTTPS ports of apps like the port of the names.
+	w.routes.OnPorts = w.packetFilter.SetAppPorts
 	if err := w.routes.Load(); err != nil {
 		slog.Warn("app HTTPS names not readable from /config", "err", err)
 	}

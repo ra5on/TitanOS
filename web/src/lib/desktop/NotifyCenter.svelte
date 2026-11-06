@@ -104,6 +104,10 @@
 </aside>
 
 <style>
+	/* PLAN 62: nearly solid, so icons and widgets behind never shine through the text. */
+	.center.glass-panel {
+		background: color-mix(in srgb, var(--surface) 97%, transparent);
+	}
 	.center {
 		position: absolute;
 		right: 10px;

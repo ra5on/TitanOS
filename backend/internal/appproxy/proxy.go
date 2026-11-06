@@ -150,7 +150,8 @@ func (m *Manager) transportFor(route Route) http.RoundTripper {
 	transport := upstream.Clone()
 	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: !route.VerifyTLS}
 	if route.Host != "" {
-		reserved := m.Reserved
+		// The app ports of titand are its own as well.
+		reserved := append(slices.Clone(m.Reserved), m.assignedPorts()...)
 		dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second, Control: func(_, address string, _ syscall.RawConn) error {
 			return checkTarget(address, reserved)
 		}}

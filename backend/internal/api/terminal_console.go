@@ -78,9 +78,13 @@ func (s *Server) serveStream(w http.ResponseWriter, r *http.Request, opts consol
 	slog.Info("console opened", "target", opts.target, "user", user.Name, "ip", remoteIP(r))
 	defer slog.Info("console closed", "target", opts.target, "user", user.Name, "ip", remoteIP(r))
 
-	idleAfter := time.Duration(consoleIdle.Load())
-	idle := time.AfterFunc(idleAfter, cancel)
-	defer idle.Stop()
+	// 0: the owner chose "never"; then there is no timer.
+	idleAfter := s.consoleIdleAfter()
+	var idle *time.Timer
+	if idleAfter > 0 {
+		idle = time.AfterFunc(idleAfter, cancel)
+		defer idle.Stop()
+	}
 	go func() {
 		recheck := time.NewTicker(time.Duration(consoleRecheck.Load()))
 		defer recheck.Stop()
@@ -128,7 +132,9 @@ func (s *Server) serveStream(w http.ResponseWriter, r *http.Request, opts consol
 			return
 		}
 		if opts.input == nil || opts.input(data) {
-			idle.Reset(idleAfter)
+			if idle != nil {
+				idle.Reset(idleAfter)
+			}
 		}
 		if kind == websocket.MessageText && !opts.raw {
 			var size struct{ Cols, Rows int }
@@ -206,4 +212,15 @@ func vncInput(data []byte) bool {
 		}
 	}
 	return false
+}
+
+// consoleIdleAfter is how long a console may go without input: the owner's
+// choice (0: never) or the standard.
+func (s *Server) consoleIdleAfter() time.Duration {
+	if s.opts.Terminal != nil {
+		if minutes, chosen := s.opts.Terminal.IdleMinutes(); chosen {
+			return time.Duration(minutes) * time.Minute
+		}
+	}
+	return time.Duration(consoleIdle.Load())
 }

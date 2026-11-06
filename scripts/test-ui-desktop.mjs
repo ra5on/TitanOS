@@ -224,9 +224,14 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   await shot(page, "07-rechtsklick-symbol");
   await page.keyboard.press("Escape");
   const area = await page.locator(".desk-area").boundingBox();
-  await page.mouse.click(area.x + area.width / 2, area.y + area.height - 60, {
-    button: "right",
-  });
+  // The middle of the desktop: the dock takes the bottom edge (PLAN 62).
+  await page.mouse.click(
+    area.x + area.width * 0.5,
+    area.y + area.height * 0.45,
+    {
+      button: "right",
+    },
+  );
   await page.getByRole("menuitem", { name: "Widgets bearbeiten" }).waitFor();
   await shot(page, "08-rechtsklick-arbeitsplatz");
   await page.getByRole("menuitem", { name: "Widgets bearbeiten" }).click();
@@ -270,6 +275,13 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   await page.locator("section.win").first().waitFor();
   await page.waitForTimeout(1500);
   await shot(page, "11-hell-vms-link");
+  // PLAN 62-3: the window's side bar lists the VMs; the page's own list is gone.
+  const side = page.locator("section.win nav.side");
+  await side.getByText("Deine VMs").waitFor();
+  await side.getByRole("button", { name: "Source VM" }).click();
+  const vmFrame = page.frameLocator("section.win iframe").first();
+  await vmFrame.locator("main").first().waitFor();
+  assert.equal(await vmFrame.locator("aside.tile").count(), 0, "no VM list inside the window");
   await ctx.close();
 }
 
@@ -284,6 +296,87 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   await shot(page, "13-handy-docker");
   await page.getByRole("button", { name: "Zum Startbildschirm" }).click();
   await page.locator(".home").waitFor();
+  await ctx.close();
+}
+
+// 5. PLAN 62: dock, icons placed freely, widget menu, menu closes beside it, bar size.
+{
+  const { ctx, page } = await open();
+  const dock = page.locator("nav.dock");
+  await dock.waitFor();
+  assert.ok((await dock.locator(".slot").count()) >= 3, "dock with programs");
+  await shot(page, "10-dock");
+  // Opening from the dock: the window gets a dot under its icon.
+  await dock.getByRole("button", { name: "Dateien" }).click();
+  await page.locator("section.win").first().waitFor();
+  assert.equal(
+    await dock.locator('[data-key="app:files"] .dot.on').count(),
+    1,
+    "open program marked in the dock",
+  );
+  await dock.getByRole("button", { name: "Dateien" }).click();
+  await page.waitForTimeout(300);
+  // Right click on the dock itself: its own menu and the edit mode.
+  const d = await dock.boundingBox();
+  await page.mouse.click(d.x + 4, d.y + d.height / 2, { button: "right" });
+  await page.getByRole("menuitem", { name: "Dock bearbeiten" }).click();
+  await page.getByRole("group", { name: "Dock bearbeiten" }).waitFor();
+  await page.getByRole("radio", { name: "Stark" }).click();
+  await page.locator(".dock-edit input[type=range]").first().fill("64");
+  await shot(page, "11-dock-bearbeiten");
+  await page
+    .getByRole("group", { name: "Dock bearbeiten" })
+    .getByRole("button", { name: "Fertig" })
+    .click();
+  // Right click on an icon in the dock: the program's menu.
+  await dock.getByRole("button", { name: "Docker" }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Aus dem Dock entfernen" }).click();
+  await page.waitForTimeout(200);
+  assert.equal(
+    await dock.getByRole("button", { name: "Docker", exact: true }).count(),
+    0,
+    "unpinned",
+  );
+  // An icon dragged to a free spot stays there.
+  const icon = page.locator(".icons > .ico", { hasText: "Speicher" });
+  const before = await icon.boundingBox();
+  const area = await page.locator(".desk-area").boundingBox();
+  await icon.dragTo(page.locator(".desk-area"), {
+    targetPosition: { x: area.width * 0.45, y: area.height * 0.35 },
+    force: true,
+  });
+  await page.waitForTimeout(400);
+  const after = await icon.boundingBox();
+  assert.ok(after.x - before.x > 200, "icon moved freely to the right");
+  // Widgets: right click, hide all; back from the desktop menu.
+  await page.locator(".widget").first().click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Widget entfernen" }).waitFor();
+  await shot(page, "12-widget-rechtsklick");
+  await page.getByRole("menuitem", { name: "Alle Widgets ausblenden" }).click();
+  assert.equal(await page.locator(".widget").count(), 0, "widgets hidden");
+  await page.mouse.click(
+    area.x + area.width * 0.6,
+    area.y + area.height * 0.6,
+    { button: "right" },
+  );
+  await page
+    .getByRole("menuitemcheckbox", { name: "Widgets anzeigen" })
+    .click();
+  assert.ok((await page.locator(".widget").count()) > 0, "widgets back");
+  // The menu closes on a click beside it.
+  await page.getByRole("button", { name: "Alle Programme" }).first().click();
+  await page.locator(".launcher").waitFor();
+  await page.mouse.click(area.x + area.width - 300, area.y + area.height * 0.5);
+  await page.locator(".launcher").waitFor({ state: "detached", timeout: 3000 });
+  // The bars at the top: size by right click.
+  await page
+    .locator("header.topbar .pill")
+    .first()
+    .click({ button: "right", position: { x: 4, y: 4 } });
+  await page.getByRole("menuitemradio", { name: /Groß/ }).click();
+  const pb = await page.locator("header.topbar .pb").first().boundingBox();
+  assert.ok(pb.height >= 40, "large bar");
+  await shot(page, "13-leisten-gross");
   await ctx.close();
 }
 
