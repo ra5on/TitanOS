@@ -265,6 +265,8 @@ type Compare struct {
 	From      LevelFacts `json:"from"`
 	To        LevelFacts `json:"to"`
 	NeedDisks int        `json:"needDisks"`
+	// UsedBytes is what the volume holds now.
+	UsedBytes uint64 `json:"usedBytes"`
 	// Fits: the used data fits the new level.
 	Fits bool `json:"fits"`
 	// Way is profile (Btrfs, in place) or newVolume (new volume, copy).
@@ -829,6 +831,7 @@ func otherLevel(m Model, sc Scenario) (Result, error) {
 		To:   LevelFacts{Level: target, Disks: max(n, MinDisks(target))},
 	}
 	c.NeedDisks = max(0, MinDisks(target)-n)
+	c.UsedBytes = v.UsedBytes
 	toSizes := slices.Clone(sizes)
 	for i := 0; i < c.NeedDisks && len(sizes) > 0; i++ {
 		toSizes = append(toSizes, slices.Min(sizes))
