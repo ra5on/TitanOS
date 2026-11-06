@@ -25,6 +25,7 @@
 		onknowledge,
 		onplanned,
 		onnotes,
+		onpaper,
 		gestures = false,
 		pull = false,
 		compact = false,
@@ -56,6 +57,8 @@
 		onplanned: () => void;
 		/** Opens the notes (PLAN 57). */
 		onnotes?: () => void;
+		/** Opens "Papierkram" when the function is on (PLAN 54). */
+		onpaper?: () => void;
 		/** PLAN 53: swiping a chat aside and its menu. */
 		gestures?: boolean;
 		pull?: boolean;
@@ -215,6 +218,11 @@
 		{#if onnotes}<button type="button" class="item" onclick={onnotes}
 				><span class="em"><Icon name="fileText" size={17} /></span><span class="name"
 					>{t('agent.notes.title')}</span
+				></button
+			>{/if}
+		{#if onpaper}<button type="button" class="item" onclick={onpaper}
+				><span class="em"><Icon name="list" size={17} /></span><span class="name"
+					>{t('agent.f.paper')}</span
 				></button
 			>{/if}
 		{#if found}

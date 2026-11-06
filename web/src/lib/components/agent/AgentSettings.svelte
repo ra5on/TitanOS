@@ -11,6 +11,7 @@
 	import { cubicOut } from 'svelte/easing';
 	import InitiativeSettings from './InitiativeSettings.svelte';
 	import PushDevices from '#lib/components/PushDevices.svelte';
+	import FeaturesPanel from './features/FeaturesPanel.svelte';
 
 	type Part = 'memory' | 'skills' | 'schedules' | 'map' | 'me' | 'log';
 	let {
@@ -32,18 +33,18 @@
 		status: Status;
 		user: string;
 		calm?: boolean;
-		start?: 'list' | 'speech' | 'look' | 'models' | 'initiative' | 'mind' | 'push';
+		start?: 'list' | 'speech' | 'look' | 'models' | 'initiative' | 'mind' | 'push' | 'features';
 		onopen: (part: Part) => void;
 		onclose: () => void;
 		/** Starts getting to know the person again (PLAN 53). */
 		onknow?: () => void;
 	} = $props();
 
-	let section = $state<'list' | 'speech' | 'look' | 'models' | 'initiative' | 'mind' | 'push'>(
-		(() => start)(),
-	);
+	let section = $state<
+		'list' | 'speech' | 'look' | 'models' | 'initiative' | 'mind' | 'push' | 'features'
+	>((() => start)());
 	const rows: {
-		id: Part | 'speech' | 'look' | 'models' | 'initiative' | 'mind' | 'push';
+		id: Part | 'speech' | 'look' | 'models' | 'initiative' | 'mind' | 'push' | 'features';
 		icon: IconName;
 		color: string;
 		label: MessageKey;
@@ -71,6 +72,14 @@
 			color: '#ef4444',
 			label: 'agent.set.push' as MessageKey,
 			sub: t('agent.set.pushSub'),
+		},
+		// PLAN 54: the nine functions, each off by default.
+		{
+			id: 'features',
+			icon: 'sparkle',
+			color: '#6366f1',
+			label: 'agent.f.title',
+			sub: t('agent.f.sub'),
 		},
 		{ id: 'initiative', icon: 'bulb', color: '#f97316', label: 'agent.set.initiative' },
 		{ id: 'schedules', icon: 'clock', color: '#0ea5e9', label: 'agent.schedules' },
@@ -104,7 +113,8 @@
 			id === 'models' ||
 			id === 'initiative' ||
 			id === 'mind' ||
-			id === 'push'
+			id === 'push' ||
+			id === 'features'
 		)
 			((back = false), (section = id));
 		else onopen(id);
@@ -129,7 +139,9 @@
 							? t('agent.set.models')
 							: section === 'push'
 								? t('agent.set.push')
-								: t('agent.set.title'),
+								: section === 'features'
+									? t('agent.f.title')
+									: t('agent.set.title'),
 	);
 </script>
 
@@ -247,6 +259,8 @@
 					</div>
 				{:else if section === 'initiative' || section === 'mind'}
 					<InitiativeSettings part={section} onrestart={onknow} />
+				{:else if section === 'features'}
+					<FeaturesPanel admin={status.admin} {calm} />
 				{:else if section === 'push'}
 					<p class="pushhint">{t('agent.set.pushHint')}</p>
 					<PushDevices personal={!status.admin} />

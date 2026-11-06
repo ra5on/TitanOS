@@ -61,6 +61,7 @@ func (s *Server) agentTick(now time.Time) {
 	s.agentWeeklyReport(now.In(s.agentLocation()))
 	s.agentForecastTick(now.In(s.agentLocation()))
 	s.agentReflectTick(now.In(s.agentLocation()))
+	s.agentFeaturesTick(now.In(s.agentLocation()))
 	store := s.agentStore()
 	// The entities of triggers, per connection.
 	watched := map[string][]string{}

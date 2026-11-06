@@ -84,4 +84,6 @@ func (s *Server) registerAgent(mux *routeMux) {
 	mux.HandleFunc("PUT /api/v1/agent/schedules/{id}", s.requireAgent(s.handleAgentScheduleSet))
 	mux.HandleFunc("DELETE /api/v1/agent/schedules/{id}", s.requireAgent(s.handleAgentScheduleDelete))
 	mux.HandleFunc("POST /api/v1/agent/schedules/{id}/run", s.requireAgent(s.handleAgentScheduleRun))
+	// The nine functions of PLAN 54 (agent_features.go).
+	s.registerAgentFeatures(mux)
 }

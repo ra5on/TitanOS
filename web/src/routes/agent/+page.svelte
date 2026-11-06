@@ -32,6 +32,8 @@
 	import { canSpeak, speak, speechPrefs, stopSpeaking } from '#lib/agent-speech.svelte.ts';
 	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { pageTitle } from '#lib/page-title.svelte.ts';
+	import { loadMine, type FeatureViewId, type FeaturesPublic } from '#lib/agent-features.ts';
+	import FeatureView from '#lib/components/agent/features/FeatureView.svelte';
 	import { session } from '#lib/session.svelte.ts';
 	import {
 		accountLook,
@@ -94,8 +96,17 @@
 		| { kind: 'notes' }
 		| { kind: 'sheet'; project: Project }
 		| { kind: 'nas' }
+		| { kind: 'feature'; id: FeatureViewId }
 		| null
 	>(null);
+	// PLAN 54: which functions are there for this account.
+	let features = $state<FeaturesPublic | null>(null);
+	$effect(() => {
+		if (!status?.enabled || !status.allowed) return;
+		loadMine()
+			.then((m) => (features = m.nas))
+			.catch(() => (features = null));
+	});
 	/** The settings beneath a window opened from them. */
 	let under = $state<Extract<NonNullable<typeof dialog>, { kind: 'settings' }> | null>(null);
 	const settingsShown = $derived(
@@ -802,6 +813,7 @@
 		oneditproject: (p: Project) => (dialog = { kind: 'project', project: p }),
 		onknowledge: () => (dialog = { kind: 'knowledge', tab: 'memory' }),
 		onplanned: () => (dialog = { kind: 'knowledge', tab: 'schedules', only: true }),
+		onpaper: features?.paper ? () => (dialog = { kind: 'feature', id: 'paper' }) : undefined,
 		onnotes: () => {
 			menuOpen = false;
 			dialog = { kind: 'notes' };
@@ -1109,7 +1121,9 @@
 		}}
 	/>
 {/if}
-{#if dialog?.kind === 'project'}
+{#if dialog?.kind === 'feature'}
+	<FeatureView id={dialog.id} {calm} onclose={() => (dialog = null)} />
+{:else if dialog?.kind === 'project'}
 	<ProjectDialog
 		project={dialog.project}
 		{locations}

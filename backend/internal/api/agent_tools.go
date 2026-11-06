@@ -126,6 +126,9 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 	for _, t := range b.noteTools() {
 		add(t)
 	}
+	for _, t := range b.featureTools() {
+		add(t)
+	}
 	return b
 }
 

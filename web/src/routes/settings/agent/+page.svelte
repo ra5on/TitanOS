@@ -10,6 +10,7 @@
 	import Tabs from '#lib/components/Tabs.svelte';
 	import QrCode from '#lib/components/QrCode.svelte';
 	import AgentVolume from '#lib/components/agent/AgentVolume.svelte';
+	import FeaturesPanel from '#lib/components/agent/features/FeaturesPanel.svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { api, type DockerStatus, type FileRoot } from '#lib/api.ts';
@@ -339,7 +340,7 @@
 	);
 
 	// PLAN 53: the page in tabs instead of one long column.
-	const TABS = ['overview', 'connection', 'rights', 'accounts', 'ha', 'initiative'] as const;
+	const TABS = ['overview', 'connection', 'rights', 'accounts', 'ha', 'initiative', 'features'] as const;
 	type Tab = (typeof TABS)[number];
 	const tabOf = (v: string | null): Tab => (TABS.includes(v as Tab) ? (v as Tab) : 'overview');
 	let tab = $state<Tab>(tabOf(page.url.searchParams.get('tab')));
@@ -425,7 +426,12 @@
 		label={t('agent.settingsTitle')}
 		onchange={choose}
 	/>
-	{#if tab === 'overview'}
+	{#if tab === 'features'}
+		<section class="tile panel" aria-labelledby="ag-features">
+			<h2 class="tile-title" id="ag-features">{t('agent.f.title')}</h2>
+			<FeaturesPanel admin={true} />
+		</section>
+	{:else if tab === 'overview'}
 		<section class="tile panel hero" aria-labelledby="ag-hero">
 			<div class="hero-row">
 				<span class="hero-orb" aria-hidden="true"><Icon name="sparkle" size={26} /></span>

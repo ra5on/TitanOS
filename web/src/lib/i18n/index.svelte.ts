@@ -1,6 +1,18 @@
 import { ApiError } from '../api.ts';
-import de from './de.json';
-import en from './en.json';
+import deBase from './de.json';
+import enBase from './en.json';
+// PLAN 54: each group of the agent's functions has texts of its own.
+import docsDe from './features/docs.de.json';
+import docsEn from './features/docs.en.json';
+import protectDe from './features/protect.de.json';
+import protectEn from './features/protect.en.json';
+import foresightDe from './features/foresight.de.json';
+import foresightEn from './features/foresight.en.json';
+import familyDe from './features/family.de.json';
+import familyEn from './features/family.en.json';
+
+const de = { ...deBase, ...docsDe, ...protectDe, ...foresightDe, ...familyDe };
+const en = { ...enBase, ...docsEn, ...protectEn, ...foresightEn, ...familyEn };
 
 export const LOCALES = ['de', 'en'] as const;
 export type Locale = (typeof LOCALES)[number];
