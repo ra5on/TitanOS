@@ -12,9 +12,9 @@ Drei Funktionen des KI-Agenten: Backup-Buddy, Skill-Katalog und Familien-Tagebuc
 
 **Koppeln.** NAS A legt fest, wie viel Platz es dem Partner gibt und welche eigenen Freigaben es beim Partner sichert. Dann zeigt es einen Code wie `K7Q-4MZ-92X`. Der Code gilt 10 Minuten und nur einmal; nach 5 falschen Versuchen verfällt er. Auf NAS B gibt man die Adresse von A und den Code ein und legt ebenfalls Platz und Freigaben fest. B schickt A in einer Anfrage seinen Namen, seine Adresse, den Namen, den es A gibt, und das Token, mit dem A sich bei B anmeldet. A antwortet mit dem Gleichen in der anderen Richtung. Jede Seite speichert nur den SHA-256 des Tokens, das sie selbst ausgegeben hat. Das Token für den Partner liegt nur in `/config` und im Sicherungsauftrag.
 
-**Senden.** Für jeden Partner mit gewählten Freigaben gibt es einen gewöhnlichen Sicherungsauftrag `buddy-<partner>` der Art `rest`. Er steht auch auf der Seite Sicherungen, mit Wiederherstellen und Prüfen. restic verschlüsselt mit dem Passwort des Auftrags; das Passwort verlässt dieses NAS nie. Das Token geht als `RESTIC_REST_PASSWORD` in die Umgebung von restic, nie in die Adresse oder die Kommandozeile. Behalten werden 8 wöchentliche und 12 monatliche Stände, damit nie etwas jünger als die Schutzfrist gelöscht werden soll. Die monatliche Probe startet der Agent direkt nach einer gelungenen Sicherung (höchstens eine Stunde danach), weil die Platten dann wach sind. Danach wartet sie 30 Tage.
+**Senden.** Für jeden Partner mit gewählten Freigaben gibt es einen gewöhnlichen Sicherungsauftrag `buddy-<partner>` der Art `rest`. Er steht auch auf der Seite Sicherungen, mit Wiederherstellen und Prüfen. Lässt er sich nicht speichern, zeigt die Ansicht den Grund beim Partner. Geschrieben wird der Auftrag nur, wenn sich Freigaben, Zeitplan oder Ziel wirklich ändern; ein Start von titand schreibt nichts auf den Stick. restic verschlüsselt mit dem Passwort des Auftrags; das Passwort verlässt dieses NAS nie. Das Token geht als `RESTIC_REST_PASSWORD` in die Umgebung von restic, nie in die Adresse oder die Kommandozeile. Behalten werden die Stände der letzten 31 Tage, dazu 8 wöchentliche und 12 monatliche. So soll nie etwas jünger als die Schutzfrist gelöscht werden. Stellt ein Partner eine Schutzfrist über 31 Tage ein, meldet `forget` beim Absender Warnungen (403), die Sicherung selbst klappt. Die monatliche Probe startet der Agent direkt nach einer gelungenen Sicherung (höchstens eine Stunde danach), weil die Platten dann wach sind. Danach wartet sie 30 Tage.
 
-**Empfangen (Paket `backend/internal/buddy`).** Ein kleiner Server spricht das REST-Protokoll von restic (v1 und v2): `POST /?create=true`, `config`, Listen, `HEAD/GET` mit Range, `POST`, `DELETE`. Er lauscht nur auf den Tailscale-Adressen dieses NAS (100.64.0.0/10, fd7a:115c:a1e0::/48), auf dem eigenen Port, ohne TLS; die Verbindung verschlüsselt WireGuard. Im Entwicklungsmodus lauscht er nicht. Pfade:
+**Empfangen (Paket `backend/internal/buddy`).** Ein kleiner Server spricht das REST-Protokoll von restic (v1 und v2): `POST /?create=true`, `config`, Listen, `HEAD/GET` mit Range, `POST`, `DELETE`. Er lauscht nur auf den Tailscale-Adressen dieses NAS (100.64.0.0/10, fd7a:115c:a1e0::/48), auf dem eigenen Port, ohne TLS; die Verbindung verschlüsselt WireGuard. Im Entwicklungsmodus lauscht er nicht. Ist der Agent oder der Backup-Buddy aus, beantwortet er nichts (404); der Zeitplan der Aufträge läuft als gewöhnliche Sicherung weiter, die monatliche Probe startet nur bei eingeschaltetem Agenten. Pfade:
 
 - `/v1/pair`: die Kopplungsanfrage, nur mit gültigem Code;
 - `/v1/<partner>/…`: Anmeldung per Basic mit Partnername und Token. Ein falsches Token, ein fehlendes und der Ordner eines anderen Partners bekommen dieselbe 401.
@@ -62,7 +62,7 @@ Im Chat beantwortet der Agent Fragen wie „Was haben wir letztes Wochenende gem
 
 - Chats und Erinnerungen: nur die eigenen des Kontos.
 - Home Assistant: nur für Besitzer und Administratoren, wie bei den anderen `ha_*`-Werkzeugen. Nur Geräte, die für den Agenten freigegeben sind, und nur aus den Bereichen Personen, Alarmanlage, Schlösser, Türsensoren, Abdeckungen und Geräteortung. Gelesen wird der Verlauf (`/api/history`) von höchstens 12 Geräten über höchstens 7 Tage. Eine eigene Logbuch-Abfrage gibt es nicht, weil das Paket `homeassistant` keine anbietet.
-- Fotos-Ordner: Beim Speichern wird geprüft, ob das Konto die Freigabe öffnen darf; ein fremder Ordner wird abgelehnt. Beim Lesen wird erneut mit den Rechten von jetzt geprüft. Gezählt werden Aufnahmedaten aus EXIF (JPEG) oder sonst die Änderungszeit, höchstens 20 000 Dateien, nur Dateien, die seit Beginn des Zeitraums geschrieben wurden. Schläft die Platte, liest ein Hintergrund-Chat (oder ein Konto mit „nie wecken“) den Ordner nicht.
+- Fotos-Ordner: Beim Speichern wird geprüft, ob das Konto die Freigabe öffnen darf; ein fremder Ordner wird abgelehnt. Beim Lesen wird erneut mit den Rechten von jetzt geprüft. Gezählt werden Aufnahmedaten aus EXIF (JPEG) oder sonst die Änderungszeit, höchstens 20 000 Dateien, nur Dateien, die seit Beginn des Zeitraums geschrieben wurden. Schläft die Platte, wird der Ordner nur gelesen, wenn das Konto unter Eigeninitiative „Platten wecken“ erlaubt und der Chat kein Hintergrund-Chat ist. Ein lesendes Werkzeug kann nicht nachfragen; „fragen“ gilt deshalb als „nicht wecken“. Ordner, die für den Agenten gesperrt sind (Rechte › Ordner), bleiben zu, auch unterhalb des gewählten Ordners.
 - Immich: `POST /api/search/metadata` mit dem eigenen Schlüssel (`x-api-key`), höchstens 1 000 Aufnahmen. Je Tag werden Anzahl, Orte und Personen gezählt.
 - Frigate: `GET /api/events` im Zeitraum, höchstens 200. Personen erscheinen mit Uhrzeit, andere Ereignisse gezählt je Kamera.
 
@@ -78,9 +78,10 @@ Der Immich-Schlüssel ist ein Geheimnis. Er kommt nie zur Seite zurück, nur `im
   - Prüfung der Einstellungen;
   - Benutzer sehen den Buddy nicht;
   - Kopplung zweier Test-Server mit Code (falsch, einmalig, abgelaufen);
+  - Sicherungsauftrag auf beiden Seiten (Art `rest`, Adresse ohne Token, Benutzername, Aufbewahrung), folgt täglich/wöchentlich/monatlich, verschwindet ohne Freigaben;
   - Hashes passen zu den Tokens, kein Token in den Ansichten, Partner bleibt bei `PUT /agent/features`, Lösen sperrt;
   - Katalog: gültig, Signatur fehlt, falsche Signatur, anderer Schlüssel, veränderter Eintrag, unbekanntes Werkzeug, geänderter Eintrag (Digest), Installation als fremder Inhalt, Export;
-  - Tagebuch: Schlüssel nicht in der Ansicht und behalten, fremder Ordner abgelehnt, Werkzeug mit Fakes für Immich, Frigate und Home Assistant (nur freigegebene Geräte), Tür nur mit Frigate, Benutzer ohne Home Assistant und ohne fremde Quellen, Zeitraum geprüft.
+  - Tagebuch: Schlüssel nicht in der Ansicht und behalten, Ordner in einer Freigabe, die das Konto nicht öffnen darf, abgelehnt, Werkzeug mit Fakes für Immich, Frigate und Home Assistant (nur freigegebene Geräte), Tür nur mit Frigate, Benutzer ohne Home Assistant und ohne fremde Quellen, Zeitraum geprüft.
 - Web: `tests/agent54-family.test.mjs`; `scripts/test-ui-agent54-family.mjs` mit gemockter API bei 390×844 und 1440×900. Bilder liegen in `out/validation/v057-family/`.
 
 ## Grenzen, nicht geprüft
@@ -93,3 +94,21 @@ Der Immich-Schlüssel ist ein Geheimnis. Er kommt nie zur Seite zurück, nur `im
 - Die Werkzeugerkennung in den Schritten zählt Wörter wie `files_search`; ein Wort dieser Form, das kein Werkzeug ist, verhindert die Installation.
 - Das Tagebuch fragt keinen Kalender ab (es gibt keinen Kalender in TitanOS). Die Fotos-Seite gibt es nicht mehr; deshalb Immich oder ein Ordner. EXIF von HEIC wird nicht gelesen, dort zählt die Änderungszeit.
 - Echte Immich-, Frigate- und Home-Assistant-Server sind nicht getestet, nur ihre API-Formen als Fakes.
+- Der Fotos-Ordner selbst (EXIF lesen, gesperrte Unterordner, schlafende Platte) hat keinen Go-Test: Der Testserver hat keine Freigabe mit Dateien. Die EXIF-Auswertung ist die vorhandene aus `thumbs`.
+- Die Quellen unter der Antwort und die Menüeinträge brauchen Änderungen an gemeinsamen Dateien (`family-shared-files.patch`). Mit dem Patch geprüft: `svelte-check` ohne Fehler und ein Bild des Chats (`phone-09-…`); danach wurde der Patch wieder entfernt.
+
+## Nötige Änderungen an gemeinsamen Dateien
+
+Genau als Patch in `docs/agent54/family-shared-files.patch`:
+
+- `web/src/lib/components/agent/ChatView.svelte`: `FamilyDiarySources` unter der Antwort.
+- `AgentMenu.svelte` und `routes/agent/+page.svelte`: Menüeinträge „Backup-Buddy“ (nur Besitzer/Admin) und „Skill-Katalog“, wenn die Funktion an ist.
+
+Dazu, ohne Patch:
+
+- `backend/internal/firewall/services.go`: Dienst `{ID: "buddy", Ports: []PortSet{{"tcp", []string{"8752"}}}, Default: local}` neben `backuptarget`, mit Text dazu in `docs/FIREWALL.md`.
+- `backend/internal/api/ipv64_public.go` (`reservedPort`): 8752 zu `22, 80, 443, 8750`.
+- `docs/rules/API.md`, Abschnitt KI-Agent: die neuen Routen und dass der Buddy-Server ein eigener Zugang außerhalb von Sitzung und `publicRoutes` ist (eigener Port nur auf Tailscale, Basic mit Partner-Token, nur der eigene Ordner, `/v1/pair` nur mit gültigem Code).
+- `docs/rules/BACKUPS.md`: Verweis auf den Backup-Buddy neben „Anderes TitanOS“.
+
+Nicht genommen wurde der Weg über den Port der Weboberfläche: `bearerAccess` in `tokens.go` lehnt jede Basic-Anmeldung außerhalb von `/dav` und `/mcp` ab. Dafür hätte man dort eine Ausnahme für `/buddy/` gebraucht.

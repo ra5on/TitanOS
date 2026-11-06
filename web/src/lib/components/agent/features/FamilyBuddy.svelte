@@ -96,6 +96,13 @@
 			</div>
 			<h4 class="h">{tk('agent.f.family.buddy.iAtThem', { name: p.name })}</h4>
 			<div class="grp">
+				{#if p.jobError}
+					<div class="row">
+						<p class="notice-error" role="alert">
+							{tk('agent.f.family.buddy.jobError', { error: p.jobError })}
+						</p>
+					</div>
+				{/if}
 				<div class="row">
 					<span class="t"
 						><strong
@@ -255,7 +262,12 @@
 						class="btn btn-primary"
 						disabled={busy || !address || code.length !== 11 || data.problem === 'off'}
 						onclick={async () => {
-							if (await run(() => buddyPair(address, code, quotaGB * GiB, shares))) {
+							let jobError = '';
+							const ok = await run(async () => {
+								jobError = (await buddyPair(address, code, quotaGB * GiB, shares)).jobError ?? '';
+							});
+							if (jobError) error = tk('agent.f.family.buddy.jobError', { error: jobError });
+							if (ok) {
 								address = '';
 								code = '';
 							}

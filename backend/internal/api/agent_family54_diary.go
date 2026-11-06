@@ -356,8 +356,9 @@ func (b *agentToolbox) diaryPhotos(ctx context.Context, c *diaryCollect, f agent
 		return
 	}
 	if b.s.agentAsleep(ctx, b.user, f.Root) {
-		in, _ := b.s.agentInitiativeOf(b.user.Name)
-		if background || in.Wake == "never" {
+		// A reading tool cannot ask; only "wake" lets it wake the disk.
+		in, err := b.s.agentInitiativeOf(b.user.Name)
+		if background || err != nil || in.Wake != "wake" {
 			c.note("Fotos: die Platte schläft und wird jetzt nicht geweckt.")
 			return
 		}
@@ -380,6 +381,17 @@ func (b *agentToolbox) diaryPhotos(ctx context.Context, c *diaryCollect, f agent
 		}
 		if entry.IsDir() {
 			if p != base && strings.HasPrefix(entry.Name(), ".") {
+				return fs.SkipDir
+			}
+			// Folders locked for the agent stay closed, also below the base.
+			rel := p
+			if rel == "." {
+				rel = ""
+			}
+			if b.realFolderMode(f.Root, rel) == agent.ModeDeny {
+				if p == base {
+					c.note("Fotos: der Ordner ist für den Agenten gesperrt.")
+				}
 				return fs.SkipDir
 			}
 			return nil

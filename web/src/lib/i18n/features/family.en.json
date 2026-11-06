@@ -127,5 +127,6 @@
 	"agent.f.family.wd3": "Wednesday",
 	"agent.f.family.wd4": "Thursday",
 	"agent.f.family.wd5": "Friday",
-	"agent.f.family.wd6": "Saturday"
+	"agent.f.family.wd6": "Saturday",
+	"agent.f.family.buddy.jobError": "Paired, but the backup job could not be saved: {error}"
 }

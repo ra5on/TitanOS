@@ -136,7 +136,9 @@ func (s *Server) buddyServer() *buddy.Server {
 func (s *Server) buddyHandler() http.Handler {
 	inner := s.buddyServer().Handler()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !s.buddySettings().Enabled {
+		// Off with the function and with the agent: the tick, which closes
+		// the listener, only runs while the agent is on.
+		if settings := s.agentSettings(); !settings.Enabled || !settings.Features.Buddy.Enabled {
 			http.NotFound(w, r)
 			return
 		}
@@ -218,7 +220,7 @@ func (s *Server) buddyAnswerPair(req buddy.PairRequest) (buddy.PairResponse, err
 	if err != nil {
 		return buddy.PairResponse{}, err
 	}
-	s.buddySyncJob(p)
+	_ = s.buddySyncJob(p) // logged and shown in the view
 	slog.Info("buddy paired", "partner", p.ID, "address", address)
 	return buddy.PairResponse{Name: hostName(), ID: p.ID, Token: token, Quota: m.Quota}, nil
 }
@@ -249,6 +251,8 @@ type buddyPartnerView struct {
 	Shares     []string      `json:"shares"`
 	Paired     time.Time     `json:"paired"`
 	Job        *buddyJobView `json:"job"`
+	// JobError says why the job to the partner could not be saved.
+	JobError string `json:"jobError,omitempty"`
 }
 
 func (s *Server) buddyJobs() map[string]backup.View {
@@ -282,6 +286,9 @@ func (s *Server) handleBuddy(w http.ResponseWriter, r *http.Request) {
 		if job, ok := jobs[buddyJobPrefix+p.ID]; ok {
 			v.Job = &buddyJobView{LastRun: job.State.LastRun, LastOK: job.State.LastOK, LastError: job.State.LastError, Bytes: job.State.Bytes, Running: job.State.Running, Next: job.Next, Probe: job.State.Probe}
 		}
+		f.mu.Lock()
+		v.JobError = f.jobErr[p.ID]
+		f.mu.Unlock()
 		partners = append(partners, v)
 	}
 	shares := []string{}
@@ -440,8 +447,11 @@ func (s *Server) handleBuddyPair(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 		return
 	}
-	s.buddySyncJob(p)
-	writeJSON(w, http.StatusOK, map[string]any{"id": p.ID, "name": p.Name})
+	out := map[string]any{"id": p.ID, "name": p.Name}
+	if err := s.buddySyncJob(p); err != nil {
+		out["jobError"] = err.Error()
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) handleBuddyPartnerSet(w http.ResponseWriter, r *http.Request) {
@@ -478,7 +488,10 @@ func (s *Server) handleBuddyPartnerSet(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 		return
 	}
-	s.buddySyncJob(p)
+	if err := s.buddySyncJob(p); err != nil {
+		writeError(w, http.StatusBadRequest, "buddy_job", err.Error())
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -531,31 +544,50 @@ func (s *Server) buddyJob(p buddyPartner, settings agentBuddy) backup.Job {
 		Enabled: true,
 		Every:   settings.Every, Weekday: settings.Weekday, MonthDay: 1, Time: settings.Time,
 		// Never younger than the protection period of the partner.
-		Keep: backup.Keep{Weekly: 8, Monthly: 12},
+		Keep: backup.Keep{Daily: 31, Weekly: 8, Monthly: 12},
 	}
 }
 
 // buddySyncJob makes the job of a partner match: there while shares are
-// chosen, gone without.
-func (s *Server) buddySyncJob(p buddyPartner) {
+// chosen, gone without. It writes /config only when something differs.
+func (s *Server) buddySyncJob(p buddyPartner) error {
 	if s.opts.Backup == nil || s.opts.Storage == nil {
-		return
+		return nil
 	}
 	id := buddyJobPrefix + p.ID
-	_, exists := s.buddyJobs()[id]
+	have, exists := s.buddyJobs()[id]
+	want := s.buddyJob(p, s.buddySettings())
 	var err error
 	switch {
 	case len(p.Shares) == 0 && exists:
 		err = s.opts.Backup.Delete(id)
 	case len(p.Shares) == 0:
+	case exists && !buddyJobDiffers(have.Job, want):
 	case exists:
-		err = s.opts.Backup.Update(id, s.buddyJob(p, s.buddySettings()), s.opts.Storage.Names())
+		err = s.opts.Backup.Update(id, want, s.opts.Storage.Names())
 	default:
-		err = s.opts.Backup.Create(s.buddyJob(p, s.buddySettings()), s.opts.Storage.Names())
+		err = s.opts.Backup.Create(want, s.opts.Storage.Names())
 	}
+	f := s.family54()
+	f.mu.Lock()
+	if err != nil {
+		f.jobErr[p.ID] = err.Error()
+	} else {
+		delete(f.jobErr, p.ID)
+	}
+	f.mu.Unlock()
 	if err != nil {
 		slog.Warn("buddy job not saved", "partner", p.ID, "err", err)
 	}
+	return err
+}
+
+// buddyJobDiffers compares what the buddy sets of a job (the stored one
+// comes without its secrets).
+func buddyJobDiffers(have, want backup.Job) bool {
+	return !slices.Equal(have.Sources, want.Sources) || have.Every != want.Every || have.Weekday != want.Weekday || have.Time != want.Time ||
+		have.Destination.Type != want.Destination.Type || have.Destination.URL != want.Destination.URL || have.Destination.Username != want.Destination.Username ||
+		have.Keep.Daily != want.Keep.Daily || have.Keep.Weekly != want.Keep.Weekly || have.Keep.Monthly != want.Keep.Monthly || !have.Enabled
 }
 
 // buddyTick keeps the server listening, the jobs on the schedule of the
@@ -597,13 +629,15 @@ func (s *Server) buddyTick(now time.Time) {
 	// A changed schedule goes to the jobs.
 	key := fmt.Sprint(settings.Every, settings.Weekday, settings.Time)
 	f.mu.Lock()
+	// The first tick after a start compares too, but buddySyncJob writes
+	// only what differs, so a start does not write to the stick.
 	changed := f.synced != key
 	f.synced = key
 	f.mu.Unlock()
 	if changed {
 		for _, p := range s.buddyPartners() {
 			if len(p.Shares) > 0 {
-				s.buddySyncJob(p)
+				_ = s.buddySyncJob(p) // logged and shown in the view
 			}
 		}
 	}

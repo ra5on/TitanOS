@@ -65,6 +65,8 @@ export type BuddyPartner = {
 	shares: string[];
 	paired: string;
 	job: BuddyJob | null;
+	/** Why the job to the partner could not be saved. */
+	jobError?: string;
 };
 export type BuddyView = {
 	settings: Buddy;
@@ -100,7 +102,12 @@ export const buddyCode = (quota: number, shares: string[]) =>
 	api.post<{ code: string; expires: string }>('/agent/buddy/code', { quota, shares });
 export const buddyCodeCancel = () => api.delete('/agent/buddy/code');
 export const buddyPair = (address: string, code: string, quota: number, shares: string[]) =>
-	api.post<{ id: string; name: string }>('/agent/buddy/pair', { address, code, quota, shares });
+	api.post<{ id: string; name: string; jobError?: string }>('/agent/buddy/pair', {
+		address,
+		code,
+		quota,
+		shares,
+	});
 export const buddyPartnerSet = (id: string, quota: number, shares: string[]) =>
 	api.put(`/agent/buddy/partners/${encodeURIComponent(id)}`, { quota, shares });
 export const buddyPartnerDelete = (id: string, data: boolean) =>

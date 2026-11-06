@@ -210,6 +210,7 @@ type family54 struct {
 	lastNet   int64
 	synced    string
 	probeTry  map[string]int64
+	jobErr    map[string]string
 	addresses []string
 }
 
@@ -219,7 +220,7 @@ func (s *Server) family54() *family54 {
 	if v, ok := family54States.Load(s); ok {
 		return v.(*family54)
 	}
-	v, _ := family54States.LoadOrStore(s, &family54{probeTry: map[string]int64{}})
+	v, _ := family54States.LoadOrStore(s, &family54{probeTry: map[string]int64{}, jobErr: map[string]string{}})
 	return v.(*family54)
 }
 

@@ -178,10 +178,67 @@ func TestFamily54BuddyPairing(t *testing.T) {
 	}
 }
 
+// Pairing with shares makes the sending job; it follows the schedule of
+// the settings and keeps the token out of its address.
+func TestFamily54BuddySendingJob(t *testing.T) {
+	a := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard})
+	b := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard})
+	listenA := httptest.NewServer(a.server.buddyHandler())
+	defer listenA.Close()
+	addrA := strings.TrimPrefix(listenA.URL, "http://")
+	for _, ts := range []*testServer{a, b} {
+		setAgent(ts, func(s *agentSettings) {
+			s.Features.Buddy = agentBuddy{Enabled: true, Volume: "tank", Address: "nas-b.tail.ts.net:8752"}
+		})
+	}
+	_, body := a.request("POST", "/api/v1/agent/buddy/code", map[string]any{"quota": 2 << 30, "shares": []string{"media"}})
+	var code struct{ Code string }
+	json.Unmarshal(body, &code)
+	res, body := b.request("POST", "/api/v1/agent/buddy/pair", map[string]any{"address": addrA, "code": code.Code, "quota": 3 << 30, "shares": []string{"media"}})
+	if res.StatusCode != 200 || strings.Contains(string(body), "jobError") {
+		t.Fatalf("pair: %d %s", res.StatusCode, body)
+	}
+	pb := b.server.buddyPartners()[0]
+	for _, side := range []struct {
+		ts *testServer
+		p  buddyPartner
+	}{{b, pb}, {a, a.server.buddyPartners()[0]}} {
+		job, ok := side.ts.server.buddyJobs()[buddyJobPrefix+side.p.ID]
+		if !ok {
+			t.Fatalf("no job for %s", side.p.ID)
+		}
+		d := job.Job.Destination
+		if d.Type != "rest" || d.URL != buddy.BaseURL(side.p.Address)+"/"+side.p.Remote || d.Username != side.p.Remote || strings.Contains(d.URL, side.p.Token) {
+			t.Fatalf("destination: %+v", d)
+		}
+		if job.Job.Every != "weekly" || job.Job.Keep.Daily != 31 || !job.SecretSet["password"] {
+			t.Fatalf("job: %+v", job)
+		}
+	}
+	for _, every := range []string{"daily", "monthly", "weekly"} {
+		setAgent(b, func(s *agentSettings) { s.Features.Buddy.Every, s.Features.Buddy.Time = every, "03:30" })
+		b.server.buddyTick(time.Now())
+		job := b.server.buddyJobs()[buddyJobPrefix+pb.ID]
+		if job.Job.Every != every || job.Job.Time != "03:30" {
+			t.Fatalf("%s: %+v", every, job.Job)
+		}
+	}
+	// Changing the shares changes the job; none removes it.
+	if res, body := b.request("PUT", "/api/v1/agent/buddy/partners/"+pb.ID, map[string]any{"quota": 4 << 30, "shares": []string{}}); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("partner: %d %s", res.StatusCode, body)
+	}
+	if _, ok := b.server.buddyJobs()[buddyJobPrefix+pb.ID]; ok {
+		t.Fatal("job without shares")
+	}
+	if res, _ := b.request("PUT", "/api/v1/agent/buddy/partners/"+pb.ID, map[string]any{"quota": 4 << 30, "shares": []string{"nosuch"}}); res.StatusCode != http.StatusBadRequest {
+		t.Fatal("unknown share")
+	}
+}
+
 func TestFamily54BuddyJob(t *testing.T) {
 	p := buddyPartner{ID: "nas-tom", Address: "nas-tom:8752", Remote: "nas-eva", Token: "secret", Shares: []string{"Documents"}}
 	job := (&Server{}).buddyJob(p, agentBuddy{}.withDefaults())
-	if job.ID != "buddy-nas-tom" || job.Destination.Type != "rest" || job.Destination.URL != "http://nas-tom:8752/v1/nas-eva" || job.Destination.Username != "nas-eva" || job.Every != "weekly" || job.Keep.Weekly != 8 || job.Keep.Monthly != 12 {
+	if job.ID != "buddy-nas-tom" || job.Destination.Type != "rest" || job.Destination.URL != "http://nas-tom:8752/v1/nas-eva" || job.Destination.Username != "nas-eva" || job.Every != "weekly" || job.Keep.Daily != 31 || job.Keep.Weekly != 8 || job.Keep.Monthly != 12 {
 		t.Fatalf("job: %+v", job)
 	}
 	// The token goes to restic in the environment, never in the URL.
@@ -323,7 +380,7 @@ func TestFamily54DiarySettings(t *testing.T) {
 	if mine.Diary.ImmichKey != "immich-secret-key" {
 		t.Fatal("key lost")
 	}
-	// A folder outside this account's roots (another account's) is refused.
+	// A folder in a root this account cannot open is refused.
 	if res, _ := put(map[string]any{"photos": map[string]any{"root": "share/gast-privat", "path": "Fotos"}}); res.StatusCode != http.StatusBadRequest {
 		t.Fatalf("foreign folder: %d", res.StatusCode)
 	}

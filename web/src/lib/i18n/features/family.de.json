@@ -127,5 +127,6 @@
 	"agent.f.family.wd3": "Mittwoch",
 	"agent.f.family.wd4": "Donnerstag",
 	"agent.f.family.wd5": "Freitag",
-	"agent.f.family.wd6": "Samstag"
+	"agent.f.family.wd6": "Samstag",
+	"agent.f.family.buddy.jobError": "Die Kopplung steht, aber der Sicherungsauftrag ließ sich nicht speichern: {error}"
 }
