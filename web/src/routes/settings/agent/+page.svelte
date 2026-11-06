@@ -340,7 +340,15 @@
 	);
 
 	// PLAN 53: the page in tabs instead of one long column.
-	const TABS = ['overview', 'connection', 'rights', 'accounts', 'ha', 'initiative', 'features'] as const;
+	const TABS = [
+		'overview',
+		'connection',
+		'rights',
+		'accounts',
+		'ha',
+		'initiative',
+		'features',
+	] as const;
 	type Tab = (typeof TABS)[number];
 	const tabOf = (v: string | null): Tab => (TABS.includes(v as Tab) ? (v as Tab) : 'overview');
 	let tab = $state<Tab>(tabOf(page.url.searchParams.get('tab')));
