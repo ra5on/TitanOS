@@ -98,12 +98,15 @@ type Entry struct {
 	Level    string          `json:"level,omitempty"`
 	Summary  string          `json:"summary,omitempty"`
 	Duration int64           `json:"durationMs,omitempty"`
+	// Kind of a tool step: read, create, change or agent.
+	Kind string `json:"kind,omitempty"`
 	// Choices the agent offers as buttons with its question.
 	Choices []string  `json:"choices,omitempty"`
 	Sources []Source  `json:"sources,omitempty"`
 	Files   []FileRef `json:"files,omitempty"`
 	// Note entries: "memory" (something it remembered), "approved",
-	// "declined", "stopped", "interrupted", "error", "limit".
+	// "declined", "stopped", "interrupted", "error", "limit", "timelimit",
+	// "summary" (older lines summarised), "verify", "badcall", "loop".
 	Note string `json:"note,omitempty"`
 	// Stats of the round that wrote an assistant entry.
 	Stats *Stats `json:"stats,omitempty"`
@@ -119,6 +122,7 @@ type Pending struct {
 	Level   string          `json:"level"`
 	Summary string          `json:"summary"`
 	Area    string          `json:"area,omitempty"`
+	Kind    string          `json:"kind,omitempty"`
 	At      time.Time       `json:"at"`
 }
 
@@ -149,8 +153,12 @@ type Chat struct {
 	Pending *Pending `json:"pending,omitempty"`
 	// Tainted: the chat has read content from outside TitanOS (files,
 	// logs, web pages). Web tools then need the person's approval.
-	Tainted bool    `json:"tainted,omitempty"`
-	Entries []Entry `json:"entries"`
+	Tainted bool `json:"tainted,omitempty"`
+	// Plan is the plan the agent keeps for the current task (plan_update).
+	Plan []PlanStep `json:"plan,omitempty"`
+	// Areas of tools loaded in this chat (tools_load, PLAN 55).
+	Areas   []string `json:"areas,omitempty"`
+	Entries []Entry  `json:"entries"`
 }
 
 // ChatInfo is a chat in the list, without its entries.

@@ -176,7 +176,14 @@ func (c *client) version(ctx context.Context) (string, error) {
 func (c *client) containers(ctx context.Context) ([]apiContainer, error) {
 	var list []apiContainer
 	err := c.getJSON(ctx, "/containers/json", url.Values{"all": {"true"}}, &list)
-	return list, err
+	// The agent's sandboxes are no apps: never listed, updated or stopped.
+	kept := list[:0]
+	for _, item := range list {
+		if item.Labels[sandboxLabel] == "" {
+			kept = append(kept, item)
+		}
+	}
+	return kept, err
 }
 
 // stats returns one sample without waiting for a second one; the caller

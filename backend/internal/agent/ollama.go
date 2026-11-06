@@ -375,6 +375,9 @@ type ToolSpec struct {
 		Description string         `json:"description"`
 		Parameters  map[string]any `json:"parameters"`
 	} `json:"function"`
+	// Area and Kind are for the runner, never sent to Ollama.
+	Area string `json:"-"`
+	Kind string `json:"-"`
 }
 
 // ChatRequest is one round with the model.
