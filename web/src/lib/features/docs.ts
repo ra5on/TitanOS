@@ -32,7 +32,7 @@ export type PaperMine = {
 	mail?: PaperMail;
 };
 
-export type DocsFolderState = 'new' | 'done' | 'running' | 'asleep' | 'noAccess' | 'error';
+export type DocsFolderState = 'new' | 'done' | 'running' | 'asleep' | 'noAccess' | 'full' | 'error';
 export type DocsFolder = FolderRef & {
 	files: number;
 	pending?: number;

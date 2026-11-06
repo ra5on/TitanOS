@@ -54,6 +54,8 @@ type paperEntry struct {
 	Paid     bool          `json:"paid,omitempty"`
 	Subject  string        `json:"subject,omitempty"`
 	Error    string        `json:"error,omitempty"`
+	// Offered: the due date went to the deadline watcher once.
+	Offered bool `json:"offered,omitempty"`
 }
 
 type paperHint struct {
@@ -212,10 +214,10 @@ func (s *Server) paperRun(ctx context.Context, u auth.User, m agentFeaturesMine,
 				entry.Error = err.Error()
 			}
 		}
-		lg.Entries = paperPut(lg.Entries, entry)
 		if entry.State == "filed" {
-			s.paperDue(u, m, nas, entry)
+			entry.Offered = s.paperDue(u, m, nas, entry) || entry.Offered
 		}
+		lg.Entries = paperPut(lg.Entries, entry)
 	}
 	return s.paperSave(u.Name, &lg)
 }
@@ -236,9 +238,9 @@ func paperPut(list []paperEntry, e paperEntry) []paperEntry {
 }
 
 // paperDue offers the due date of a filed bill to the deadline watcher.
-func (s *Server) paperDue(u auth.User, m agentFeaturesMine, nas agentDocsNAS, e paperEntry) {
-	if !nas.Deadlines || !m.Docs.Deadlines || e.Info.Due.IsZero() || e.Info.Due.Before(dayStart(time.Now().In(s.agentLocation()))) {
-		return
+func (s *Server) paperDue(u auth.User, m agentFeaturesMine, nas agentDocsNAS, e paperEntry) bool {
+	if e.Offered || !nas.Deadlines || !m.Docs.Deadlines || e.Info.Due.IsZero() || e.Info.Due.Before(dayStart(time.Now().In(s.agentLocation()))) {
+		return false
 	}
 	d := docindex.Deadline{Kind: docindex.KindPayment, Date: e.Info.Due, Cents: e.Info.Cents, Debit: e.Info.Debit}
 	item := deadlineItem(e.Root, e.Path, 0, d, e.Info.Sender, e.ID)
@@ -247,6 +249,7 @@ func (s *Server) paperDue(u auth.User, m agentFeaturesMine, nas agentDocsNAS, e 
 	}
 	var st docsState
 	s.docsOffer(u, m.Docs, &st, item)
+	return true
 }
 
 func dayStart(t time.Time) time.Time {
@@ -769,7 +772,7 @@ func (s *Server) handlePaperAssign(w http.ResponseWriter, r *http.Request) {
 		if err := s.paperFile(u, inbox, e, nil, m.Paper); err != nil {
 			return err
 		}
-		s.paperDue(u, m, s.agentSettings().Features.Docs, *e)
+		e.Offered = s.paperDue(u, m, s.agentSettings().Features.Docs, *e) || e.Offered
 		return nil
 	})
 }

@@ -24,7 +24,9 @@ Drei Funktionen des KI-Agenten: **Dokumenten-Gedächtnis**, **Fristenwächter** 
 
 ## Daten
 
-- Index, Zustand und Papierkram-Protokoll liegen in `.titanos/docs/<konto>/` auf dem Volume des Agenten (`index.json`, `state.json`, `paper.json`, root, 0700, über `volumedata.Open`). Sie liegen nie auf dem Stick. Je Dokument bleiben höchstens 24 KiB Text für Ausschnitte.
+- Index, Zustand und Papierkram-Protokoll liegen in `.titanos/docs/<konto>/` auf dem Volume des Agenten (`index.json`, `state.json`, `paper.json`, root, 0700, über `volumedata.Open`). Sie liegen nie auf dem Stick. Je Dokument bleiben höchstens 24 KiB Text für Ausschnitte, je Konto höchstens 64 MiB Text. Ist das Gedächtnis voll, warten neue Dokumente, und der Ordner zeigt „Speicher voll“. Einen unlesbaren Index baut der nächste Lauf neu auf.
+- Es liest immer nur ein Konto gleichzeitig ein (RAM, eine Grafikkarte). Die anderen Konten folgen in den nächsten Zehn-Minuten-Fenstern der Nacht.
+- Ein Ordner, der früher gespeichert wurde und inzwischen nicht mehr erreichbar ist, bleibt in den Einstellungen und zeigt „kein Zugriff“. Er blockiert das Speichern anderer Einstellungen nicht. Neue Ordner prüft titand immer.
 - Einstellungen je Konto liegen in `features.json` im privaten Agent-Ordner (Gerüst). Das IMAP-Passwort steht nur dort. `view()` gibt `passwordSet` statt des Werts zurück, ein PUT ohne Passwort behält das alte.
 - API (nur Web-Sitzung, `requireAgent`): `GET /agent/docs`, `POST /agent/docs/run`, `GET /agent/docs/search?q=`, `GET /agent/paper?month=`, `POST /agent/paper/run`, `POST /agent/paper/mail/test`, `POST /agent/paper/{id}/undo|assign|paid`. Für Fristen dient das vorhandene `/agent/inbox`.
 
@@ -44,7 +46,8 @@ Drei Funktionen des KI-Agenten: **Dokumenten-Gedächtnis**, **Fristenwächter** 
 
 - **Texterkennung von Scans** hängt am Bild-Modell. Für Beträge und Daten aus echten Scans gibt es noch keine Messung, gemessen sind nur Textbriefe. Der Inhaber wollte Testbriefe auf der RTX 5060 Ti mit gemma4: dieser Lauf steht aus. Tesseract wird bewusst nicht benutzt.
 - **Fristen** kommen nur aus Regeln; das Modell wird für Fristen nicht gefragt. Ungewöhnliche Formulierungen fallen durch, Datumsangaben wie `11/03/2026` (Schrägstrich) erkennt der Wächter nicht.
-- **Suche** ist eine Wortsuche mit BM25 und leichter Stammbildung, keine Bedeutungssuche (keine Embeddings).
+- **Suche** ist eine Wortsuche mit BM25 und leichter Stammbildung, keine Bedeutungssuche (keine Embeddings). Jede Suche liest den Index des Kontos neu ein und zerlegt ihn (bei großen Archiven einige hundert Millisekunden; nicht gemessen).
+- **Öffnen** führt zum Ordner der Datei im Dateimanager. Die Route `/files` kennt keinen Parameter, der eine einzelne Datei auswählt.
 - **Postfach**: Nur ungelesene Mails im INBOX-Ordner. Eine Mail, die schon in einem anderen Programm gelesen wurde, holt der Agent nicht. Höchstens 20 Mails je Abruf, 30 MiB je Mail. Kein OAuth (Gmail/Outlook verlangen App-Passwörter).
 - Abgelegtes wird erst im nächsten Nachtlauf durchsuchbar, wenn der Ablage-Ordner zu den Ordnern des Gedächtnisses gehört (ab Werk ja).
 - Zieht der Agent auf ein anderes Volume um, nimmt er `.titanos/docs` nicht mit. Der Index baut sich in der nächsten Nacht neu auf, das Papierkram-Protokoll (Rückgängig) bleibt auf dem alten Volume.

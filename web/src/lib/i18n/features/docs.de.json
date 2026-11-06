@@ -104,6 +104,7 @@
 	"agent.f.docs.state.asleep": "Platte schläft",
 	"agent.f.docs.state.done": "eingelesen",
 	"agent.f.docs.state.error": "Fehler",
+	"agent.f.docs.state.full": "Speicher voll",
 	"agent.f.docs.state.new": "noch nicht",
 	"agent.f.docs.state.noAccess": "kein Zugriff",
 	"agent.f.docs.state.running": "läuft",

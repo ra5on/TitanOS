@@ -602,3 +602,60 @@ func TestDocsNightTick(t *testing.T) {
 		t.Fatal("bad time accepted")
 	}
 }
+
+// A folder or target saved before stays when its share goes away: the
+// page sends all settings back, also when another group saves its part.
+func TestDocsStaleFolderKeepsSaving(t *testing.T) {
+	ts, home := docsServer(t)
+	mnt := filepath.Dir(filepath.Dir(filepath.Dir(home)))
+	docsNAS(t, ts, map[string]any{"enabled": true, "paper": true})
+	mine := map[string]any{
+		"docs":  map[string]any{"on": true, "custom": true, "folders": []map[string]string{{"root": "share/Docs", "path": ""}}},
+		"paper": map[string]any{"on": true, "target": map[string]string{"root": "share/Docs", "path": "Post"}},
+	}
+	docsMine(t, ts, ts.client, mine)
+	ts.disks.UseMounts(mnt, func() map[string]bool { return map[string]bool{} })
+	mine["diary"] = map[string]any{}
+	docsMine(t, ts, ts.client, mine)
+	// A new folder without access is still refused.
+	mine["docs"] = map[string]any{"custom": true, "folders": []map[string]string{{"root": "share/Docs", "path": ""}, {"root": "share/Docs", "path": "Neu"}}}
+	if res, _ := ts.request("PUT", "/api/v1/agent/features/me", mine); res.StatusCode != http.StatusBadRequest {
+		t.Fatal("new folder without access accepted")
+	}
+}
+
+// The memory has a budget; when it is full new documents wait, and a
+// broken index is read anew instead of stopping the memory for good.
+func TestDocsBudgetAndBrokenIndex(t *testing.T) {
+	ts, home := docsServer(t)
+	docsNAS(t, ts, map[string]any{"enabled": true})
+	docsMine(t, ts, ts.client, map[string]any{"docs": map[string]any{"on": true}})
+	budget := docsBudget
+	t.Cleanup(func() { docsBudget = budget })
+	docsBudget = 2500
+	for i := range 3 {
+		os.WriteFile(filepath.Join(home, "Dokumente", fmt.Sprintf("brief%d.txt", i)), []byte("Versicherung "+strings.Repeat("x", 1500)), 0o644)
+	}
+	alex, _ := ts.users.Get("alex")
+	m, _ := ts.server.agentFeaturesOf("alex")
+	if err := ts.server.docsRun(context.Background(), alex, m.Docs, true, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	_, body := ts.request("GET", "/api/v1/agent/docs", nil)
+	if !strings.Contains(string(body), `"state":"full"`) {
+		t.Fatalf("status: %s", body)
+	}
+	if hits, err := ts.server.docsSearch(alex, "Versicherung", 10, nil); err != nil || len(hits) != 1 {
+		t.Fatalf("search: %v %v", hits, err)
+	}
+	root, _ := ts.server.docsRoot("alex")
+	root.WriteFile(docsIndexFile, []byte("{kaputt"), 0o600)
+	root.Close()
+	docsBudget = budget
+	if err := ts.server.docsRun(context.Background(), alex, m.Docs, true, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if hits, _ := ts.server.docsSearch(alex, "Versicherung", 10, nil); len(hits) != 3 {
+		t.Fatalf("rebuilt: %v", hits)
+	}
+}

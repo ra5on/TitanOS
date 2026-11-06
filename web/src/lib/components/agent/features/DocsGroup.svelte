@@ -23,6 +23,7 @@
 	} from '#lib/features/docs.ts';
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { formatDateTime } from '#lib/format.ts';
+	import { untrack } from 'svelte';
 
 	type Props = {
 		admin: boolean;
@@ -144,9 +145,14 @@
 	// Mailbox form: saved with its own button; the password only when typed.
 	let mail = $state<PaperMail>({});
 	let password = $state('');
+	// Filled once when the page opens, so that saving another setting
+	// does not wipe what is typed here.
 	$effect(() => {
-		mail = { ...(paper.mail ?? {}) };
-		password = '';
+		if (page !== 'paper') return;
+		untrack(() => {
+			mail = { ...(paper.mail ?? {}) };
+			password = '';
+		});
 	});
 	async function saveMail() {
 		note = '';
@@ -155,6 +161,8 @@
 		if (password) next.password = password;
 		try {
 			await savePaper({ ...paper, mail: next });
+			mail = { ...(paper.mail ?? {}) };
+			password = '';
 			note = t('agent.f.saved');
 		} catch {
 			// shown
@@ -185,6 +193,7 @@
 		running: { cls: 'warn', key: 'agent.f.docs.state.running' },
 		asleep: { cls: 'warn', key: 'agent.f.docs.state.asleep' },
 		noAccess: { cls: 'bad', key: 'agent.f.docs.state.noAccess' },
+		full: { cls: 'bad', key: 'agent.f.docs.state.full' },
 		error: { cls: 'bad', key: 'agent.f.docs.state.error' },
 	};
 	const stateTag = (s: string) =>

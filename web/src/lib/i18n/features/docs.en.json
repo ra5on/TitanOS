@@ -104,6 +104,7 @@
 	"agent.f.docs.state.asleep": "disk asleep",
 	"agent.f.docs.state.done": "read",
 	"agent.f.docs.state.error": "error",
+	"agent.f.docs.state.full": "memory full",
 	"agent.f.docs.state.new": "not yet",
 	"agent.f.docs.state.noAccess": "no access",
 	"agent.f.docs.state.running": "running",

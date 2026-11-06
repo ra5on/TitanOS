@@ -35,13 +35,16 @@ import (
 const (
 	docsIndexFile = "index.json"
 	docsStateFile = "state.json"
-	maxDocsIndex  = 96 << 20
+	maxDocsIndex  = 128 << 20
 	maxDocsState  = 8 << 20
 	docsMaxFiles  = 5000 // per folder and run
 	docsMaxDepth  = 8
 	docsMaxFile   = 50 << 20
 	docsMaxScans  = 40 // pages for the picture model per run
 )
+
+// docsBudget is the text kept per account, well below the read limit.
+var docsBudget = 64 << 20
 
 var docsUserName = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 
@@ -145,6 +148,9 @@ type docsKey struct {
 }
 
 var docsRuntimes sync.Map // docsKey → *docsRuntime
+
+// docsIndexing holds the account whose index run goes, per server.
+var docsIndexing sync.Map // *Server → account
 
 func (s *Server) docsRT(user string) *docsRuntime {
 	v, _ := docsRuntimes.LoadOrStore(docsKey{s, user}, &docsRuntime{})
@@ -327,9 +333,16 @@ func (s *Server) docsStartRun(u auth.User, mine agentDocsMine, now bool, at time
 		rt.mu.Unlock()
 		return false
 	}
+	// One account at a time on the NAS (RAM, one GPU); the others follow
+	// in the next slots of the night.
+	if _, busy := docsIndexing.LoadOrStore(s, u.Name); busy {
+		rt.mu.Unlock()
+		return false
+	}
 	rt.running, rt.lastTry, rt.done, rt.total = true, at, 0, 0
 	rt.mu.Unlock()
 	go func() {
+		defer docsIndexing.Delete(s)
 		defer func() {
 			rt.mu.Lock()
 			rt.running, rt.folder = false, ""
@@ -359,7 +372,12 @@ func (s *Server) docsRun(ctx context.Context, u auth.User, mine agentDocsMine, a
 	defer rt.mutex.Unlock()
 	var idx docindex.Index
 	if err := s.docsRead(u.Name, docsIndexFile, &idx, maxDocsIndex); err != nil {
-		return err
+		if errors.Is(err, volumedata.ErrUnavailable) {
+			return err
+		}
+		// A broken or too large index is built anew, never a dead end.
+		slog.Warn("document index unreadable, read anew", "account", u.Name, "err", err)
+		idx = docindex.Index{}
 	}
 	var st docsState
 	if err := s.docsRead(u.Name, docsStateFile, &st, maxDocsState); err != nil {
@@ -415,7 +433,8 @@ func (s *Server) docsRun(ctx context.Context, u auth.User, mine agentDocsMine, a
 		rt.folder, rt.done, rt.total = key, 0, len(list)
 		rt.mu.Unlock()
 		present := map[string]bool{}
-		pending := 0
+		pending, full := 0, false
+		size := idx.TextSize()
 		for i, file := range list {
 			if ctx.Err() != nil {
 				break
@@ -444,13 +463,26 @@ func (s *Server) docsRun(ctx context.Context, u auth.User, mine agentDocsMine, a
 				pages, source = nil, "none"
 			}
 			doc := docindex.Doc{Root: root.ID, Path: file.path, Size: file.size, MTime: file.mtime, Source: source, Pages: pages}
+			prev, known := idx.Get(root.ID, file.path)
+			if !known && size+docTextSize(doc) > docsBudget {
+				full = true
+				continue // the memory is full: new documents wait
+			}
 			idx.Put(doc)
+			if known {
+				size -= docTextSize(prev)
+			}
+			stored, _ := idx.Get(root.ID, file.path)
+			size += docTextSize(stored)
 			changed = append(changed, doc)
 		}
 		idx.Remove(func(d docindex.Doc) bool {
 			return inFolders(d.Root, d.Path, []agentFolderRef{f}) && !present[d.Path] && d.Root == root.ID
 		})
 		fst.Files, fst.Pending, fst.LastRun, fst.Error = len(list), pending, at, ""
+		if full {
+			fst.Error = "full"
+		}
 	}
 	rt.mu.Lock()
 	rt.asleep = asleep
@@ -478,6 +510,14 @@ func docsNightDone(st docsState, folders []agentFolderRef, at string, now time.T
 		}
 	}
 	return true
+}
+
+func docTextSize(d docindex.Doc) int {
+	n := len(d.Path) + 64
+	for _, p := range d.Pages {
+		n += min(len(p.Text), docindex.MaxDocText)
+	}
+	return min(n, docindex.MaxDocText+len(d.Path)+64)
 }
 
 // agentBusy: a chat of any account runs right now.
@@ -558,7 +598,7 @@ type docsFolderView struct {
 	Files   int       `json:"files"`
 	Pending int       `json:"pending,omitempty"`
 	LastRun time.Time `json:"lastRun,omitzero"`
-	// State: new, done, running, asleep, noAccess, error.
+	// State: new, done, running, asleep, noAccess, full, error.
 	State   string `json:"state"`
 	Percent int    `json:"percent,omitempty"`
 }
@@ -594,6 +634,8 @@ func (s *Server) handleDocsStatus(w http.ResponseWriter, r *http.Request) {
 			}
 			if fst.Error == "no_access" {
 				v.State = "noAccess"
+			} else if fst.Error == "full" {
+				v.State = "full"
 			} else if fst.Error != "" {
 				v.State = "error"
 			}
@@ -636,7 +678,10 @@ func (s *Server) docsSearch(user auth.User, query string, limit int, keep func(d
 	// old), so reading needs no lock.
 	var idx docindex.Index
 	if err := s.docsRead(user.Name, docsIndexFile, &idx, maxDocsIndex); err != nil {
-		return nil, err
+		if errors.Is(err, volumedata.ErrUnavailable) {
+			return nil, err
+		}
+		idx = docindex.Index{} // unreadable: empty until the next run builds it anew
 	}
 	roots := map[string]bool{}
 	for _, r := range s.fileRoots(user) {

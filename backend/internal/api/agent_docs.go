@@ -185,8 +185,11 @@ func (s *Server) checkDocsMine(user string, d *agentDocsMine, old agentDocsMine)
 			return err
 		}
 		// Rights now, not as the page claims (another account's folder,
-		// a share without access, a volume as a whole: refused).
-		if _, ok := s.docsShareRoot(u, f.Root); !ok {
+		// a share without access, a volume as a whole: refused). A folder
+		// that was saved before stays as it is (the page sends all of the
+		// account's settings back): the run marks it "kein Zugriff".
+		kept := old.Custom && slices.ContainsFunc(old.Folders, func(o agentFolderRef) bool { return o.Root == f.Root && o.Path == p })
+		if _, ok := s.docsShareRoot(u, f.Root); !ok && !kept {
 			return errors.New("no read access to " + f.Root)
 		}
 		key := f.Root + "/" + p
@@ -220,7 +223,7 @@ func (s *Server) checkPaperMine(user string, p *agentPaperMine, old agentPaperMi
 	default:
 		return errors.New("folder scheme is sender, type or year")
 	}
-	if p.Target.Root != "" || p.Target.Path != "" {
+	if (p.Target.Root != "" || p.Target.Path != "") && p.Target != old.Target {
 		dir, err := cleanFolderPath(p.Target.Path)
 		if err != nil {
 			return err

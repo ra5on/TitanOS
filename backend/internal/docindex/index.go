@@ -81,6 +81,18 @@ func (x *Index) Put(d Doc) {
 	x.built = false
 }
 
+// TextSize is the text kept of all documents, in bytes.
+func (x *Index) TextSize() int {
+	n := 0
+	for _, d := range x.Docs {
+		n += len(d.Path) + 64
+		for _, p := range d.Pages {
+			n += len(p.Text)
+		}
+	}
+	return n
+}
+
 // Get returns the document of a root and path.
 func (x *Index) Get(root, p string) (Doc, bool) {
 	for _, d := range x.Docs {
