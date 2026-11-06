@@ -97,7 +97,8 @@
 	--on-monogram: #fff;
 
 	/* Colored icon squares (settings overview, PLAN 61): the same in every
-	   theme, each with white (--on-icon-square) at 4.5:1 or more. */
+	   theme; white (--on-icon-square) on each color reaches 4.5:1, on the
+	   lighter top of the square's gradient still 3:1 (enough for icons). */
 	--icon-square-blue: #2563eb;
 	--icon-square-violet: #7c3aed;
 	--icon-square-teal: #0f766e;
