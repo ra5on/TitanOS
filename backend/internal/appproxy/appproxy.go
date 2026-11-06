@@ -144,6 +144,16 @@ type Manager struct {
 	Disabled bool
 	// OnChange is called after the routes changed, e.g. to start avahi.
 	OnChange func()
+	// Access is the browser gate of Docker apps (package appaccess); nil
+	// lets every request through.
+	Access Gatekeeper
+	// UIHosts are further names the web UI is reached under (Let's
+	// Encrypt, dynamic DNS, the tailnet); with the NAS's name and addresses
+	// they may frame apps. Called at most once a minute, from RAM only.
+	UIHosts func() []string
+	// addresses replaces the NAS's addresses in tests.
+	addresses func() []netip.Addr
+	origins   uiOrigins
 
 	mu       sync.RWMutex
 	settings Settings
