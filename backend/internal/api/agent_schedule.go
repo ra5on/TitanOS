@@ -53,6 +53,11 @@ func (s *Server) AgentScheduler(ctx context.Context) {
 
 func (s *Server) agentTick(now time.Time) {
 	settings := s.agentSettings()
+	// Protection (ransomware guard, ends of emergency access) works also
+	// while the agent itself is off (PLAN 54-S); each part checks its switch.
+	if s.opts.Users != nil {
+		s.agentProtectTick(now.In(s.agentLocation()))
+	}
 	if !settings.Enabled || s.opts.Users == nil {
 		return
 	}

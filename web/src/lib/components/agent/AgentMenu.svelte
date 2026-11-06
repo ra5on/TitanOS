@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { FeatureViewId } from '#lib/agent-features.ts';
 	import { swipe } from '#lib/agent-swipe.ts';
 	// The menu of the KI-Agent (PLAN 48), the same on the desktop (left of
 	// the chat, beside the TitanOS menu) and on the phone (slides in from the
@@ -6,7 +7,7 @@
 	// by day. Running chats glow, waiting ones say so, unread ones carry a
 	// dot. At the bottom knowledge, look and settings, and on the phone or in
 	// the installed app the way back to TitanOS.
-	import Icon from '#lib/components/Icon.svelte';
+	import Icon, { type IconName } from '#lib/components/Icon.svelte';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { groupChats, type ChatInfo, type Project, type Swipe } from '#lib/agent.ts';
 
@@ -25,7 +26,8 @@
 		onknowledge,
 		onplanned,
 		onnotes,
-		onpaper,
+		features = [],
+		onfeature,
 		gestures = false,
 		pull = false,
 		compact = false,
@@ -57,8 +59,9 @@
 		onplanned: () => void;
 		/** Opens the notes (PLAN 57). */
 		onnotes?: () => void;
-		/** Opens "Papierkram" when the function is on (PLAN 54). */
-		onpaper?: () => void;
+		/** Views of the functions that are on for this account (PLAN 54). */
+		features?: { id: FeatureViewId; label: string; icon: IconName; count?: number }[];
+		onfeature?: (id: FeatureViewId) => void;
 		/** PLAN 53: swiping a chat aside and its menu. */
 		gestures?: boolean;
 		pull?: boolean;
@@ -220,11 +223,10 @@
 					>{t('agent.notes.title')}</span
 				></button
 			>{/if}
-		{#if onpaper}<button type="button" class="item" onclick={onpaper}
-				><span class="em"><Icon name="list" size={17} /></span><span class="name"
-					>{t('agent.f.paper')}</span
-				></button
-			>{/if}
+		{#each features as f (f.id)}<button type="button" class="item" onclick={() => onfeature?.(f.id)}
+				><span class="em"><Icon name={f.icon} size={17} /></span><span class="name">{f.label}</span
+				>{#if f.count}<span class="count">{f.count}</span>{/if}</button
+			>{/each}
 		{#if found}
 			<div class="group">{t('agent.found', { count: found.length })}</div>
 			{#each found as chat (chat.id)}{@render row(chat)}{:else}

@@ -177,11 +177,11 @@ func (s *Server) registerAgentFeatures(mux *routeMux) {
 }
 
 // agentFeaturesTick runs the background work of the functions once a minute
-// (from agentTick). Each group decides itself what is due; none may wake a
+// (from agentTick; the protection runs from there also while the agent is
+// off). Each group decides itself what is due; none may wake a
 // sleeping disk (PLAN 53) or write to the stick.
 func (s *Server) agentFeaturesTick(now agentNow) {
 	s.agentDocsTick(now)
-	s.agentProtectTick(now)
 	s.agentForesightTick(now)
 	s.agentFamily54Tick(now)
 }

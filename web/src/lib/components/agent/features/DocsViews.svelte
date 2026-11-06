@@ -176,7 +176,7 @@
 </script>
 
 {#if id === 'paper'}
-	<DocsSheet title={t('agent.f.paper')} {calm} {onclose}>
+	<DocsSheet title={t('agent.f.menu.paper')} {calm} {onclose}>
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 		{#if sum}
 			<div class="seg" role="group" aria-label={t('agent.f.docs.month')}>
