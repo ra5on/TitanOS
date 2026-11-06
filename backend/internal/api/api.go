@@ -217,15 +217,15 @@ type Server struct {
 	// The KI-Agent (agent*.go): settings, the Ollama client, running
 	// chats and open pages. agentOpen and agentWebFactory replace the data
 	// volume and the web in tests.
-	agentConf       agentSettingsState
-	agentClient     atomic.Pointer[agent.Ollama]
-	agentRT         agentRuntime
-	agentWatch      agentWatchers
-	agentMirror     agentMirror
-	agentSnaps      agentSnapState
-	agentOpen       func() (*os.Root, error)
+	agentConf   agentSettingsState
+	agentClient atomic.Pointer[agent.Ollama]
+	agentRT     agentRuntime
+	agentWatch  agentWatchers
+	agentMirror agentMirror
+	agentSnaps  agentSnapState
+	agentOpen   func() (*os.Root, error)
 	// agentSandbox replaces the Docker sandbox of code_run in tests.
-	agentSandbox func(context.Context, docker.SandboxRequest) (docker.SandboxResult, error)
+	agentSandbox    func(context.Context, docker.SandboxRequest) (docker.SandboxResult, error)
 	agentWebFactory func() *agent.Web
 	agentInit       agentInitState
 	agentReact      agentReactState

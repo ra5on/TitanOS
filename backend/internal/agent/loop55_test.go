@@ -226,7 +226,8 @@ func TestBrokenToolCallGoesBackToTheModel(t *testing.T) {
 	if !isBadCall(errors.New("Ollama: error parsing tool call: raw='{\"a\":'")) || isBadCall(errors.New("model not found")) {
 		t.Fatal("broken calls not told apart")
 	}
-	if !transient(&StatusError{Status: 503}) || transient(&StatusError{Status: 500, Message: "error parsing tool call"}) || transient(&StatusError{Status: 404}) {
+	if !transient(&StatusError{Status: 503}) || transient(&StatusError{Status: 500, Message: "error parsing tool call"}) || transient(&StatusError{Status: 404}) ||
+		!transient(errors.New("Ollama: an error was encountered while running the model: unexpected EOF")) {
 		t.Fatal("transient errors not told apart")
 	}
 	s := &scripted{next: func(n int, body map[string]any) (int, []string) {

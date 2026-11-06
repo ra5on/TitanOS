@@ -54,7 +54,7 @@ const sandboxOutput = 64 << 10
 // Sandbox runs code in a throw-away container.
 func (m *Manager) Sandbox(ctx context.Context, req SandboxRequest) (SandboxResult, error) {
 	if !m.current().Enabled {
-		return SandboxResult{}, errors.New("Docker is switched off")
+		return SandboxResult{}, errors.New("docker is switched off")
 	}
 	var cmd []string
 	switch req.Language {
@@ -103,7 +103,9 @@ func (m *Manager) Sandbox(ctx context.Context, req SandboxRequest) (SandboxResul
 			"LogConfig":      map[string]any{"Type": "json-file", "Config": map[string]string{"max-size": "1m"}},
 		},
 	}
-	var created struct{ ID string `json:"Id"` }
+	var created struct {
+		ID string `json:"Id"`
+	}
 	if err := m.api.sendJSON(ctx, http.MethodPost, "/containers/create", body, &created); err != nil {
 		return SandboxResult{}, err
 	}
@@ -161,7 +163,9 @@ func (m *Manager) cleanSandboxes(ctx context.Context) {
 
 // ensureImage pulls an image that is not there yet.
 func (c *client) ensureImage(ctx context.Context, ref string) error {
-	var img struct{ ID string `json:"Id"` }
+	var img struct {
+		ID string `json:"Id"`
+	}
 	if err := c.getJSON(ctx, "/images/"+url.PathEscape(ref)+"/json", nil, &img); err == nil {
 		return nil
 	}

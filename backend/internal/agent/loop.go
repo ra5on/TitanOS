@@ -371,7 +371,12 @@ func transient(err error) bool {
 		return true
 	}
 	var se *StatusError
-	return errors.As(err, &se) && se.Status >= 500 && !isBadCall(err)
+	if errors.As(err, &se) && se.Status >= 500 && !isBadCall(err) {
+		return true
+	}
+	// The model runner of Ollama died in the middle of the answer.
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "error was encountered while running the model") || strings.Contains(s, "runner has unexpectedly stopped")
 }
 
 // isBadCall is Ollama failing to read the tool call the model wrote.

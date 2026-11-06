@@ -126,7 +126,9 @@ func agentEvalTasks() []agentEvalTask {
 				return ""
 			}},
 		{name: "create", ask: "Leg in Docs eine Datei einkauf.md an mit einer Liste: Milch, Brot, Eier.",
-			check: func(d, _ string, _ *agent.Chat) string { return fileHas(filepath.Join(d, "einkauf.md"), `(?is)milch.*brot.*eier`) }},
+			check: func(d, _ string, _ *agent.Chat) string {
+				return fileHas(filepath.Join(d, "einkauf.md"), `(?is)milch.*brot.*eier`)
+			}},
 		{name: "count", ask: "Wie viele .txt-Dateien liegen in Docs/Notizen? Schreib nur die Zahl in eine neue Datei Docs/anzahl.txt.",
 			setup: func(d string) {
 				for _, n := range []string{"a.txt", "b.txt", "c.txt", "bild.jpg", "liste.md"} {
