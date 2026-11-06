@@ -109,6 +109,23 @@ func TestAgentVolumeChooseAndMove(t *testing.T) {
 			t.Fatalf("%s left on the old volume", gone)
 		}
 	}
+	// The old data is kept aside until removed ("Alte Kopie löschen").
+	old, _ := filepath.Glob(filepath.Join(mnt, "tank", ".titanos", "agent-old", "*", agentShareName, "alex", "Notizen", "Einkauf.md"))
+	if len(old) != 1 {
+		t.Fatal("old copy not kept")
+	}
+	_, body = ts.request("GET", "/api/v1/agent/volumes", nil)
+	vols.Volumes = nil
+	json.Unmarshal(body, &vols)
+	if vols.Current != "fast" || !vols.Volumes[1].OldCopy || vols.Volumes[0].OldCopy {
+		t.Fatalf("after the move: %s", body)
+	}
+	if res, _ := ts.request("POST", "/api/v1/agent/volume/cleanup", map[string]any{"volume": "tank"}); res.StatusCode != http.StatusNoContent {
+		t.Fatal("cleanup")
+	}
+	if _, err := os.Stat(filepath.Join(mnt, "tank", ".titanos", "agent-old")); !os.IsNotExist(err) {
+		t.Fatal("old copy still there")
+	}
 	if _, err := os.Lstat(filepath.Join(mnt, "fast", agentShareName, "alex", "raus")); !os.IsNotExist(err) {
 		t.Fatal("link copied")
 	}
@@ -141,4 +158,52 @@ func TestAgentVolumeChooseAndMove(t *testing.T) {
 		t.Fatal("store open while moving")
 	}
 	ts.server.agentMove.active.Store(false)
+}
+
+// A move a restart broke off leaves a marked copy on the target, which the
+// next move clears; a share KI-Agent on another volume stops the move.
+func TestAgentMoveAfterBrokenMove(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	mnt := t.TempDir()
+	ts.store.WriteJSON("storage/volumes.json", []storage.VolumeConfig{
+		{Name: "tank", Level: "raid1", Filesystem: "ext4", ArrayUUID: "a", FilesystemUUID: "b"},
+		{Name: "fast", Level: "raid1", Filesystem: "btrfs", ArrayUUID: "c", FilesystemUUID: "d"},
+	})
+	ts.disks.Load()
+	for _, v := range []string{"tank", "fast"} {
+		os.MkdirAll(filepath.Join(mnt, v), 0o755)
+	}
+	ts.disks.UseMounts(mnt, func() map[string]bool { return map[string]bool{mnt + "/tank": true, mnt + "/fast": true} })
+	ts.shares.UseMountRoot(mnt)
+	fake := &agentOllama{}
+	if res, body := ts.request("PUT", "/api/v1/agent/settings", map[string]any{"enabled": true, "ollama": fake.start(t), "model": "gpt-oss:20b", "volume": "tank", "policy": agent.Policy{Preset: agent.PresetStandard}}); res.StatusCode != http.StatusOK {
+		t.Fatalf("settings: %d %s", res.StatusCode, body)
+	}
+	if err := ts.server.agentStore().SaveChat("alex", &agent.Chat{ID: agent.NewID(), Title: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	// Half a copy from before a restart.
+	os.MkdirAll(filepath.Join(mnt, "fast", ".titanos", "agent", "alex"), 0o700)
+	os.WriteFile(filepath.Join(mnt, "fast", ".titanos", "agent", "alex", "halb.json"), []byte("{}"), 0o600)
+	if res, _ := ts.request("POST", "/api/v1/agent/volume/move", map[string]any{"to": "fast"}); res.StatusCode != http.StatusConflict {
+		t.Fatal("moved onto foreign data")
+	}
+	os.WriteFile(filepath.Join(mnt, "fast", moveMarker), []byte("tank\n"), 0o600)
+	if res, body := ts.request("POST", "/api/v1/agent/volume/move", map[string]any{"to": "fast"}); res.StatusCode != http.StatusAccepted {
+		t.Fatalf("move after a broken one: %d %s", res.StatusCode, body)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for ts.server.agentMoving() && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if j := ts.server.agentMoveView(); j == nil || j.State != moveDone {
+		t.Fatalf("job %+v", j)
+	}
+	if _, err := os.Stat(filepath.Join(mnt, "fast", ".titanos", "agent", "alex", "halb.json")); !os.IsNotExist(err) {
+		t.Fatal("half copy kept")
+	}
+	if _, err := os.Stat(filepath.Join(mnt, "fast", moveMarker)); !os.IsNotExist(err) {
+		t.Fatal("marker kept")
+	}
 }

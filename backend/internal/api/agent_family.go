@@ -168,7 +168,9 @@ func foreignChat(c *agent.Chat) *agent.Chat {
 			// Only that there was a step, for the "n Schritte" box.
 			e = agent.Entry{ID: e.ID, At: e.At, Role: "tool", Tool: e.Tool, OK: e.OK}
 		case "note":
-			if e.Note == "edited" || e.Note == "snapshot" || e.Note == "error" {
+			// Summaries and memory notes are made from the steps' results
+			// (PLAN 59): they stay the author's like the results.
+			if e.Note == "edited" || e.Note == "snapshot" || e.Note == "error" || e.Note == "summary" || e.Note == "memory" {
 				continue
 			}
 			e.Args, e.Result, e.Summary = nil, "", ""

@@ -40,14 +40,14 @@ func TestAgentProbeLoadsModel(t *testing.T) {
 	}))
 	defer srv.Close()
 	other, _ := agent.NewOllama(srv.URL)
-	if n := agentProbe(other, "gemma4:12b", "")(context.Background()); n != 262144 {
+	if n := agentProbe(other, "gemma4:12b", "")(context.Background()); n != agentGuessContext {
 		t.Fatalf("fallback %d", n)
 	}
 }
 
 func TestSameModelContext(t *testing.T) {
 	s := agentSettings{Model: "gemma4:12b", Context: 32768}
-	if sameModelContext(s, "gemma4:12b") != 32768 || sameModelContext(s, "llava:latest") != 0 {
+	if sameModelContext(s, "", "gemma4:12b") != 32768 || sameModelContext(s, "", "llava:latest") != 0 || sameModelContext(s, "llava", "llava:latest") != 32768 {
 		t.Fatal("context for picture model")
 	}
 }

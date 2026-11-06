@@ -22,6 +22,7 @@ func (s *Server) registerAgent(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/agent/volumes", s.requireAdmin(s.handleAgentVolumes))
 	mux.HandleFunc("GET /api/v1/agent/volume/move", s.requireAdmin(s.handleAgentMoveStatus))
 	mux.HandleFunc("POST /api/v1/agent/volume/move", s.requireAdmin(s.handleAgentMove))
+	mux.HandleFunc("POST /api/v1/agent/volume/cleanup", s.requireAdmin(s.handleAgentMoveCleanup))
 
 	mux.HandleFunc("GET /api/v1/agent/chats", s.requireAgent(s.handleAgentChats))
 	mux.HandleFunc("POST /api/v1/agent/chats", s.requireAgent(s.handleAgentChatNew))

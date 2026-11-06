@@ -15,6 +15,7 @@
 		freeBytes: number;
 		kind?: 'ssd' | 'hdd' | 'usb' | 'mixed';
 		current: boolean;
+		oldCopy?: boolean;
 	};
 	type Move = {
 		from: string;
@@ -97,6 +98,18 @@
 		pick = '';
 	}
 
+	let removing = $state('');
+	async function removeOld(volume: string) {
+		error = '';
+		try {
+			await api.post('/agent/volume/cleanup', { volume });
+			removing = '';
+			void load();
+		} catch (e) {
+			error = apiErrorText(e);
+		}
+	}
+
 	async function start() {
 		if (!pick) return;
 		error = '';
@@ -162,6 +175,18 @@
 			>
 		</div>
 	{:else}
+		{#each volumes.filter((v) => v.oldCopy) as v (v.name)}
+			<div class="row old">
+				<span class="t"
+					><strong>{t('agent.vol.oldTitle', { volume: v.name })}</strong><small
+						>{t('agent.vol.oldText')}</small
+					></span
+				>
+				<button type="button" class="btn" onclick={() => (removing = v.name)}
+					>{t('agent.vol.oldRemove')}</button
+				>
+			</div>
+		{/each}
 		{#if move?.state === 'done'}
 			<p class="notice-ok" role="status">
 				{t('agent.vol.done', { to: move.to })}{#if move.skipped}
@@ -217,6 +242,19 @@
 			>
 			<button type="button" class="btn" onclick={() => ((choosing = false), (pick = ''))}
 				>{t('common.cancel')}</button
+			>
+		</div>
+	</Dialog>
+{/if}
+
+{#if removing}
+	<Dialog title={t('agent.vol.oldRemove')} onclose={() => (removing = '')}>
+		<p>{t('agent.vol.oldConfirm', { volume: removing })}</p>
+		<div class="dialog-actions">
+			<button type="button" class="btn btn-danger" onclick={() => removeOld(removing)}
+				>{t('agent.vol.oldRemove')}</button
+			>
+			<button type="button" class="btn" onclick={() => (removing = '')}>{t('common.cancel')}</button
 			>
 		</div>
 	</Dialog>

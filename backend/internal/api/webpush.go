@@ -27,6 +27,7 @@ type pushArea struct {
 func (a pushArea) register(mux *routeMux, user func(http.HandlerFunc) http.HandlerFunc) {
 	mux.HandleFunc("GET /api/v1/notifications/push", user(a.handlePushDevices))
 	mux.HandleFunc("POST /api/v1/notifications/push", user(a.handlePushSubscribe))
+	mux.HandleFunc("PUT /api/v1/notifications/push/{id}", user(a.handlePushKinds))
 	mux.HandleFunc("DELETE /api/v1/notifications/push/{id}", user(a.handlePushRemove))
 	mux.HandleFunc("POST /api/v1/notifications/push/{id}/test", user(a.handlePushTest))
 }
@@ -55,6 +56,27 @@ func (a pushArea) handlePushSubscribe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_push_subscription", err.Error())
 	case errors.Is(err, webpush.ErrTooMany):
 		writeError(w, http.StatusConflict, "too_many_push_devices", err.Error())
+	case err != nil:
+		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
+	default:
+		writeJSON(w, http.StatusOK, device)
+	}
+}
+
+// handlePushKinds switches what a device gets: messages of TitanOS (the
+// bell, owners and administrators) and of the KI-Agent (PLAN 59).
+func (a pushArea) handlePushKinds(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		NAS   bool `json:"nas"`
+		Agent bool `json:"agent"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	device, err := a.push.SetKinds(currentUser(r).Name, r.PathValue("id"), req.NAS, req.Agent)
+	switch {
+	case errors.Is(err, webpush.ErrNotFound):
+		writeError(w, http.StatusNotFound, "push_device_not_found", err.Error())
 	case err != nil:
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 	default:

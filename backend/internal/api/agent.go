@@ -217,11 +217,14 @@ func (s *Server) handleAgentChatNew(w http.ResponseWriter, r *http.Request) {
 		agentStoreError(w, err)
 		return
 	}
+	// The answer is the chat as it starts: the run changes it right away
+	// in its own goroutine (PLAN 59, a data race before).
+	snapshot := json.RawMessage(mustJSON(chat))
 	if err := s.agentStart(user, chat, func(rn *agent.Runner, ctx context.Context) error { return rn.Run(ctx, chat) }); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "agent_unavailable", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusCreated, chat)
+	writeJSON(w, http.StatusCreated, snapshot)
 }
 
 // handleAgentMessage adds a message to a chat and runs it.
@@ -265,11 +268,14 @@ func (s *Server) handleAgentMessage(w http.ResponseWriter, r *http.Request) {
 		agentStoreError(w, err)
 		return
 	}
+	// The answer is the chat as it starts: the run changes it right away
+	// in its own goroutine (PLAN 59, a data race before).
+	snapshot := json.RawMessage(mustJSON(chat))
 	if err := s.agentStart(user, chat, func(rn *agent.Runner, ctx context.Context) error { return rn.Run(ctx, chat) }); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "agent_unavailable", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusAccepted, chat)
+	writeJSON(w, http.StatusAccepted, snapshot)
 }
 
 // handleAgentDecide approves or declines the waiting step. Only the owner
@@ -764,7 +770,9 @@ func (f flushFunc) Flush() { f() }
 // for when "as set in Ollama" is chosen (PLAN 55: summarise in time). A
 // model that is not loaded is loaded first (the request would load it
 // anyway), so the first round of a task knows the window too (PLAN 59a).
-// If Ollama still reports nothing, the model's own length is the guess.
+// If Ollama still reports nothing, a careful guess (agentGuessContext).
+const agentGuessContext = 8192
+
 func agentProbe(client *agent.Ollama, model, keepAlive string) func(context.Context) int {
 	same := func(name string) bool {
 		return name == model || strings.TrimSuffix(name, ":latest") == strings.TrimSuffix(model, ":latest")
@@ -795,9 +803,19 @@ func agentProbe(client *agent.Ollama, model, keepAlive string) func(context.Cont
 				return n
 			}
 		}
-		if info, err := client.Show(lctx, model); err == nil {
-			return info.ContextLength
+		// Not loadable now: the model's trained length is only an upper
+		// bound; a careful guess summarises too early rather than too late.
+		if info, err := client.Show(lctx, model); err == nil && info.ContextLength > 0 {
+			return min(info.ContextLength, agentGuessContext)
 		}
 		return 0
 	}
+}
+
+func mustJSON(v any) []byte {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return []byte("null")
+	}
+	return data
 }

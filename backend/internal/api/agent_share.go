@@ -326,6 +326,9 @@ func (s *Server) agentSyncUser(sh shares.Share, user auth.User) error {
 	m := &s.agentMirror
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if s.agentMoving() {
+		return nil // the data is being moved (PLAN 58)
+	}
 	st := m.load(s, user.Name)
 	version := s.opts.Version
 	changed := version != st.Version

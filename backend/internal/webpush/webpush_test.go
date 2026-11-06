@@ -241,6 +241,39 @@ func TestPersonalMessagesForEveryAccount(t *testing.T) {
 	}
 }
 
+// PLAN 59: each device chooses messages of TitanOS and of the agent.
+func TestDeviceKinds(t *testing.T) {
+	b := newBrowser(t)
+	m, server, _ := fixture(t, b)
+	d, _ := m.Subscribe("alex", "a", b.subscription(server.URL+"/a"))
+	if _, err := m.SetKinds("bob", d.ID, false, true); !errors.Is(err, ErrNotFound) {
+		t.Fatal("changed another account's device")
+	}
+	if got, err := m.SetKinds("alex", d.ID, false, true); err != nil || len(got.Off) != 1 {
+		t.Fatalf("kinds %+v %v", got, err)
+	}
+	m.Broadcast(Message{Title: "NAS"})
+	time.Sleep(200 * time.Millisecond)
+	b.mu.Lock()
+	n := len(b.got)
+	b.mu.Unlock()
+	if n != 0 {
+		t.Fatal("NAS message to a device that switched it off")
+	}
+	m.SetKinds("alex", d.ID, true, false)
+	m.SendTo("alex", Message{Title: "Agent"})
+	time.Sleep(200 * time.Millisecond)
+	b.mu.Lock()
+	n = len(b.got)
+	b.mu.Unlock()
+	if n != 0 {
+		t.Fatal("agent message to a device that switched it off")
+	}
+	if devs := m.Devices("alex"); len(devs) != 1 || devs[0].Off[0] != KindAgent {
+		t.Fatalf("devices %+v", devs)
+	}
+}
+
 func TestEndpointsOnlyAtPushServices(t *testing.T) {
 	m := New(config.Open(t.TempDir()))
 	if err := m.Load(); err != nil {

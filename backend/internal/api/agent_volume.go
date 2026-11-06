@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -89,6 +90,8 @@ type agentVolumeView struct {
 	// Kind is ssd, hdd, usb or mixed, from the member disks.
 	Kind    string `json:"kind,omitempty"`
 	Current bool   `json:"current"`
+	// OldCopy: the old data of a move is still kept here.
+	OldCopy bool `json:"oldCopy,omitempty"`
 }
 
 // handleAgentVolumes lists the mounted volumes to choose from, with free
@@ -127,7 +130,7 @@ func (s *Server) handleAgentVolumes(w http.ResponseWriter, r *http.Request) {
 	current := s.agentSettings().Volume
 	list := []agentVolumeView{}
 	for _, name := range slices.Sorted(slices.Values(s.opts.Storage.Mounted())) {
-		v := agentVolumeView{Name: name, Filesystem: fsys[name], Kind: kinds[name], Current: name == current}
+		v := agentVolumeView{Name: name, Filesystem: fsys[name], Kind: kinds[name], Current: name == current, OldCopy: s.hasOldCopy(name, s.opts.Storage.Mounted())}
 		var st syscall.Statfs_t
 		if syscall.Statfs(s.opts.Storage.MountPoint(name), &st) == nil {
 			v.SizeBytes = st.Blocks * uint64(st.Bsize)
@@ -189,6 +192,8 @@ func (s *Server) handleAgentMove(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, "agent_volume_full", err.Error())
 		case errors.Is(err, errMoveNotEmpty):
 			writeError(w, http.StatusConflict, "agent_volume_not_empty", err.Error())
+		case errors.Is(err, errShareElsewhere):
+			writeError(w, http.StatusConflict, "agent_share_elsewhere", err.Error())
 		default:
 			writeError(w, http.StatusInternalServerError, "agent_move", err.Error())
 		}
@@ -213,6 +218,8 @@ type agentMovePlan struct {
 	from, to string
 	mounted  []string
 	total    int64
+	// parts are the places that exist on the old volume.
+	parts []string
 }
 
 type errMoveSpace struct{ need, free uint64 }
@@ -227,8 +234,26 @@ func (s *Server) mountRoot(volume string) string {
 	return filepath.Dir(s.opts.Storage.MountPoint(volume))
 }
 
+// moveMarker on the target marks a copy that has not been switched to yet;
+// a move that a restart broke off is cleaned up by the next one.
+const moveMarker = ".titanos/agent-move-incomplete"
+
+// moveOld on the old volume keeps the old data after a switch, until the
+// person removes it ("Alte Kopie löschen"): whatever an SMB client wrote
+// there between the check and the switch is not lost.
+const moveOld = ".titanos/agent-old"
+
+var errShareElsewhere = errors.New("the share KI-Agent lies on another volume than the agent's data")
+
 func (s *Server) agentMovePlan(from, to string, mounted []string) (agentMovePlan, error) {
 	plan := agentMovePlan{from: from, to: to, mounted: mounted}
+	if s.opts.Shares != nil {
+		for _, sh := range s.opts.Shares.List() {
+			if strings.EqualFold(sh.Name, agentShareName) && sh.Volume != from {
+				return plan, fmt.Errorf("%w (%s)", errShareElsewhere, sh.Volume)
+			}
+		}
+	}
 	src, err := volumedata.OpenVolume(s.mountRoot(from), from, mounted)
 	if err != nil {
 		return plan, err
@@ -239,12 +264,24 @@ func (s *Server) agentMovePlan(from, to string, mounted []string) (agentMovePlan
 		return plan, err
 	}
 	defer dst.Close()
+	if _, err := dst.Lstat(moveMarker); err == nil {
+		for _, part := range s.agentMoveParts() {
+			if err := dst.RemoveAll(part); err != nil {
+				return plan, err
+			}
+		}
+		_ = dst.Remove(moveMarker)
+	}
 	for _, part := range s.agentMoveParts() {
+		if _, err := src.Lstat(part); errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
 		size, _, err := treeSize(src, part)
-		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		if err != nil {
 			return plan, err
 		}
 		plan.total += size
+		plan.parts = append(plan.parts, part)
 		if _, files, err := treeSize(dst, part); err == nil && files > 0 {
 			return plan, fmt.Errorf("%w: %s", errMoveNotEmpty, part)
 		}
@@ -281,32 +318,47 @@ func treeSize(root *os.Root, dir string) (int64, int, error) {
 
 func (s *Server) agentMoveRun(plan agentMovePlan) {
 	defer s.agentMove.active.Store(false)
-	fail := func(err error, dst *os.Root) {
+	var dst *os.Root
+	// clean says whether the copy on the target may go: never once the
+	// settings could point at it.
+	clean := true
+	fail := func(err error) {
 		slog.Warn("agent data not moved; the old volume stays", "from", plan.from, "to", plan.to, "err", err)
-		if dst != nil {
+		if dst != nil && clean {
 			for _, part := range s.agentMoveParts() {
 				_ = dst.RemoveAll(part)
 			}
+			_ = dst.Remove(moveMarker)
 		}
 		s.agentMoveUpdate(func(j *agentMoveJob) { j.State, j.Error, j.Finished = moveFailed, err.Error(), time.Now() })
 	}
 	src, err := volumedata.OpenVolume(s.mountRoot(plan.from), plan.from, plan.mounted)
 	if err != nil {
-		fail(err, nil)
+		fail(err)
 		return
 	}
 	defer src.Close()
-	dst, err := volumedata.OpenVolume(s.mountRoot(plan.to), plan.to, plan.mounted)
-	if err != nil {
-		fail(err, nil)
+	if dst, err = volumedata.OpenVolume(s.mountRoot(plan.to), plan.to, plan.mounted); err != nil {
+		dst = nil
+		fail(err)
 		return
 	}
 	defer dst.Close()
 	if err := dst.MkdirAll(".titanos", 0o700); err != nil {
-		fail(err, dst)
+		fail(err)
 		return
 	}
-	for _, part := range s.agentMoveParts() {
+	// A copy of the chats into the share that runs right now ends first;
+	// new ones see the move and wait.
+	s.agentMirror.mu.Lock()
+	s.agentMirror.mu.Unlock() //nolint:staticcheck // only waiting
+	if err := dst.WriteFile(moveMarker, []byte(plan.from+"\n"), 0o600); err != nil {
+		fail(err)
+		return
+	}
+	// Every error inside a part fails the move: a file that vanished
+	// during the copy (an SMB client) must not count as copied.
+	for _, part := range plan.parts {
 		if err := copyTree(src, dst, part, func(files int, n int64, skipped bool) {
 			s.agentMoveUpdate(func(j *agentMoveJob) {
 				j.Files += files
@@ -315,37 +367,49 @@ func (s *Server) agentMoveRun(plan agentMovePlan) {
 					j.Skipped++
 				}
 			})
-		}); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			fail(err, dst)
+		}); err != nil {
+			fail(err)
 			return
 		}
 	}
 	s.agentMoveUpdate(func(j *agentMoveJob) { j.State = moveChecking })
-	for _, part := range s.agentMoveParts() {
-		if err := compareTree(src, dst, part); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			fail(fmt.Errorf("the copy differs: %w", err), dst)
+	for _, part := range plan.parts {
+		if err := compareTree(src, dst, part); err != nil {
+			fail(fmt.Errorf("the copy differs: %w", err))
 			return
 		}
 	}
 	s.agentMoveUpdate(func(j *agentMoveJob) { j.State = moveSwitching })
-	if err := s.agentSetVolume(plan.to); err != nil {
-		fail(err, dst)
-		return
-	}
+	// The share first, then the agent's own data: a restart in between
+	// leaves the data where agent.json says (the marker stays, the next
+	// move cleans up), and the share is moved back below.
 	if err := s.opts.Shares.Relocate(agentShareName, plan.to, s.opts.Storage.Names()); err != nil && !errors.Is(err, shares.ErrNotFound) {
-		// The settings point at the new volume already; put them back.
-		if back := s.agentSetVolume(plan.from); back != nil {
-			slog.Error("agent volume could not be set back", "err", back)
-		}
-		fail(err, dst)
+		fail(err)
 		return
 	}
+	if err := s.agentSetVolume(plan.to); err != nil {
+		if back := s.opts.Shares.Relocate(agentShareName, plan.from, s.opts.Storage.Names()); back != nil && !errors.Is(back, shares.ErrNotFound) {
+			slog.Error("share KI-Agent could not be set back", "err", back)
+			clean = false
+		}
+		s.opts.Shares.Kick()
+		fail(err)
+		return
+	}
+	clean = false
+	_ = dst.Remove(moveMarker)
 	s.opts.Shares.Kick()
 	s.agentMoveUpdate(func(j *agentMoveJob) { j.State = moveCleaning })
+	// The old data is kept aside, not deleted (see moveOld).
 	var problems []string
-	for _, part := range s.agentMoveParts() {
-		if err := src.RemoveAll(part); err != nil {
-			problems = append(problems, err.Error())
+	stamp := time.Now().UTC().Format("20060102-150405")
+	if err := src.MkdirAll(moveOld+"/"+stamp, 0o700); err != nil {
+		problems = append(problems, err.Error())
+	} else {
+		for _, part := range plan.parts {
+			if err := src.Rename(part, moveOld+"/"+stamp+"/"+filepath.Base(part)); err != nil {
+				problems = append(problems, err.Error())
+			}
 		}
 	}
 	slog.Info("agent data moved", "from", plan.from, "to", plan.to)
@@ -356,6 +420,44 @@ func (s *Server) agentMoveRun(plan agentMovePlan) {
 		}
 	})
 	go s.agentSyncShare()
+}
+
+// handleAgentMoveCleanup removes the old copy of a moved agent on a volume.
+func (s *Server) handleAgentMoveCleanup(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Volume string `json:"volume"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if s.opts.Storage == nil || s.agentMoving() {
+		writeError(w, http.StatusConflict, "agent_moving", errAgentMoving.Error())
+		return
+	}
+	mounted := s.opts.Storage.Mounted()
+	root, err := volumedata.OpenVolume(s.mountRoot(req.Volume), req.Volume, mounted)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "agent_volume_unknown", "no such mounted volume")
+		return
+	}
+	defer root.Close()
+	if err := root.RemoveAll(moveOld); err != nil {
+		writeError(w, http.StatusInternalServerError, "agent_move", err.Error())
+		return
+	}
+	slog.Info("old copy of the agent removed", "volume", req.Volume)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// hasOldCopy tells whether a volume keeps the old data of a move.
+func (s *Server) hasOldCopy(volume string, mounted []string) bool {
+	root, err := volumedata.OpenVolume(s.mountRoot(volume), volume, mounted)
+	if err != nil {
+		return false
+	}
+	defer root.Close()
+	_, err = root.Lstat(moveOld)
+	return err == nil
 }
 
 // agentSetVolume writes the agent's volume to agent.json.

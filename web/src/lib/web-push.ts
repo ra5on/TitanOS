@@ -3,7 +3,14 @@
 // and subscribes the browser with the key of the NAS.
 import { api } from './api.ts';
 
-export type PushDevice = { id: string; name: string; service: string; created: string };
+export type PushDevice = {
+	id: string;
+	name: string;
+	service: string;
+	created: string;
+	/** Kinds switched off: 'nas' (TitanOS), 'agent' (KI-Agent), PLAN 59. */
+	off?: string[];
+};
 
 /** Registers the service worker where browsers allow one (HTTPS or localhost). */
 export function registerServiceWorker(): void {
