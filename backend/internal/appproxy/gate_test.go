@@ -345,3 +345,26 @@ func TestWebUIPort(t *testing.T) {
 		}
 	}
 }
+
+func TestEnterURL(t *testing.T) {
+	m, _ := newTestManager(t)
+	if err := m.SetRoute("immich", Route{Enabled: true, Name: "immich", Aliases: []string{"photos"}, Port: 2283}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetRoute("other", Route{Enabled: true, Name: "other", Port: 2284}); err != nil {
+		t.Fatal(err)
+	}
+	for host, want := range map[string]string{
+		"":                 "https://immich.nas.local/.titanos/enter?t=a%2Bb",
+		"photos.nas.local": "https://photos.nas.local/.titanos/enter?t=a%2Bb",
+		"other.nas.local":  "https://immich.nas.local/.titanos/enter?t=a%2Bb",
+		"evil.example.org": "https://immich.nas.local/.titanos/enter?t=a%2Bb",
+	} {
+		if got, ok := m.EnterURL("immich", host, "a+b"); !ok || got != want {
+			t.Errorf("host %q: %s", host, got)
+		}
+	}
+	if _, ok := m.EnterURL("none", "", "x"); ok {
+		t.Error("enter address for an app without a name")
+	}
+}

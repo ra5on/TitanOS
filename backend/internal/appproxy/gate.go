@@ -153,3 +153,27 @@ func (m *Manager) uiOrigin(host string) string {
 	}
 	return best
 }
+
+// EnterURL is the address that lets a browser in to an app with a window
+// token: on host if it is one of the app's names (its device in the
+// tailnet included), else on the app's main address. ok is false if the
+// app has no name that answers.
+func (m *Manager) EnterURL(app, host, token string) (string, bool) {
+	base := ""
+	if host = hostOnly(host); host != "" {
+		if key, _, ok := m.match(host); ok && key == "app:"+app {
+			base = m.hostURL(host)
+		} else if key, ok := m.tailnetMatch(host); ok && key == "app:"+app {
+			if _, enabled := m.routeByKey(key); enabled {
+				base = "https://" + host
+			}
+		}
+	}
+	if base == "" {
+		base = m.URL(app)
+	}
+	if base == "" {
+		return "", false
+	}
+	return base + EnterPath + "?t=" + url.QueryEscape(token), true
+}

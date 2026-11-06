@@ -13,6 +13,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/activity"
 	"github.com/ra5on/TitanOS/backend/internal/api"
 	"github.com/ra5on/TitanOS/backend/internal/app"
+	"github.com/ra5on/TitanOS/backend/internal/appaccess"
 	"github.com/ra5on/TitanOS/backend/internal/appbackup"
 	"github.com/ra5on/TitanOS/backend/internal/appproxy"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
@@ -82,6 +83,7 @@ type titand struct {
 	smartHistory     *smarthistory.Recorder
 	folders          *shares.Manager
 	routes           *appproxy.Manager
+	appRights        *appaccess.Manager
 	devices          *hardware.Manager
 	containers       *docker.Manager
 	appCatalog       *catalog.Manager
@@ -215,7 +217,7 @@ func (w *titand) wireBase() error {
 func (w *titand) wire() error {
 	for _, step := range []func() error{
 		w.wireBase, w.wireShares, w.wireApplications, w.wireNotifications, w.wireAccess, w.wireUpdates,
-		w.wireBackups, w.wireHardware, w.wireFiles, w.wireRemoteAccess, w.wireMaintenance, w.wireAPI,
+		w.wireBackups, w.wireHardware, w.wireFiles, w.wireRemoteAccess, w.wireAppAccess, w.wireMaintenance, w.wireAPI,
 	} {
 		if err := step(); err != nil {
 			return err
