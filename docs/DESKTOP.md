@@ -12,7 +12,7 @@ Jede Seite von TitanOS gehört zu genau einem Programm (`web/src/lib/desktop/app
 | Freigaben | Freigaben, Dienste |
 | Speicher | Speicher (Verwalten, Platten prüfen, Importieren, Platte ersetzen), Plattenwerkzeuge, Arbeitsspeicher |
 | Docker | Container, Netzwerke, HTTPS-Namen für Apps |
-| Virtuelle Maschinen | Maschinen, neue Maschine, ISO und Medien; jeder VM-Bildschirm als eigenes Fenster |
+| Virtuelle Maschinen | Maschinen, neue Maschine, ISO und Medien, VM übernehmen; darunter jede VM einzeln (seit 0.59.0 statt der Liste auf der Seite); jeder VM-Bildschirm als eigenes Fenster |
 | Systemcontainer | LXC |
 | App-Center | App-Katalog, eigene App, Plugins, Aufräumen |
 | Sicherung | Datensicherung (alle Teile), Stick-Sicherung |
@@ -25,14 +25,14 @@ Jede Seite von TitanOS gehört zu genau einem Programm (`web/src/lib/desktop/app
 | Sicherheit | Firewall |
 | Mein Konto | Passwort, 2FA, Passkeys, SSH-Schlüssel, WebDAV |
 | Systemsteuerung | alle übrigen Einstellungen, Startseite „Alle Einstellungen“ |
-| Übersicht | das bisherige Dashboard |
 
-Docker-Apps mit Weboberfläche (z. B. Immich) sind eigene Programme; ihr Fenster zeigt die App über ihren HTTPS-Namen (`docs/APP-LINKS.md`). Normale Benutzer sehen nur die Programme ihrer Rolle und die Docker-Apps, die ihnen freigegeben sind (Benutzer › Programme).
+Docker-Apps mit Weboberfläche (z. B. Immich) sind eigene Programme; ihr Fenster zeigt die App über ihren HTTPS-Namen (`docs/APP-LINKS.md`). Viele Geräte lösen dreiteilige `.local`-Namen nicht auf; dafür ist die „Fernansicht“ geplant (PLAN 63): TitanOS öffnet die App auf dem NAS und überträgt das Bild über die eigene Adresse. Normale Benutzer sehen nur die Programme ihrer Rolle und die Docker-Apps, die ihnen freigegeben sind (Benutzer › Programme).
 
 ## Fenster
 
 - Eine Seite im Fenster läuft in einem Rahmen gleicher Herkunft (`X-Frame-Options: SAMEORIGIN`, `frame-ancestors 'self'`); fremde Seiten dürfen TitanOS weiter nicht einbetten. Im Rahmen zeigt die Seite keine Kopfzeile und keine eigene zweite Seitenleiste (`web/src/lib/desktop/frame.ts`, `inWindow`).
 - Die Seitenleiste des Fensters listet die Seiten und Einstellungen des Programms; einklappbar (nur Symbole), je Programm gemerkt.
+- Beim Verschieben folgt das Fenster dem Zeiger per Transformation (eine Aktualisierung je Bild), der bewegte Hintergrund hält an; Lage und Größe werden erst beim Loslassen geschrieben.
 - Größe an allen vier Ecken und Seiten, Doppelklick auf die Titelleiste = maximieren, an den Rand ziehen = halbe Seite, oben = Vollbild, Ecke = Viertel (mit Vorschau). Knöpfe rechts: in eigenem Tab öffnen, minimieren, maximieren, schließen.
 - Unter 1280 px Breite öffnen Fenster maximiert.
 - Die Adresse des Browsers zeigt die Seite des Fensters vorn; ein Lesezeichen oder Link öffnet das passende Programm. Der Verlauf wächst dabei nicht (Zurück bleibt auf dem Arbeitsplatz).
@@ -41,15 +41,17 @@ Docker-Apps mit Weboberfläche (z. B. Immich) sind eigene Programme; ihr Fenster
 ## Arbeitsplatz
 
 - **Hauptmenü:** alle Programme, Suche über Programme und ihre Seiten, Filter (Alle, TitanOS, Docker-Apps, VMs, Zuletzt), unten Konto, Systemsteuerung, Sperren, Ein/Aus. Ein Programm aus dem Menü auf den Arbeitsplatz ziehen legt es dort ab.
-- **Symbole:** ordnen nach Art, Name, zuletzt benutzt oder frei; drei Größen; Ordner; Abzeichen (Zahl = Updates, ! = Warnung, Punkt = läuft/gestoppt, Text beim Überfahren). Rechtsklick auf ein Symbol bzw. den Arbeitsplatz für alle Aktionen.
-- **Widgets** frei auf einem Raster von 20 px, an der Ecke vergrößern, Galerie mit Zustand, CPU/RAM, Netzwerk, Volumes, Docker-Apps, VMs, Sicherungen, Temperaturen, Uhr, Home Assistant, Aufgaben. Sie lesen nur, was die Oberfläche ohnehin abfragt, und wecken keine Platten.
+- **Leisten oben:** links Arbeitsplatz zeigen, Hauptmenü, offene Fenster, im Cluster daneben der Umschalter zwischen den Nodes; rechts Auslastung, Aufgaben, Mitteilungen, Konto. Rechtsklick auf eine Leiste stellt ihre Größe ein (Klein, Mittel, Groß). Hauptmenü und Mitteilungs-Center schließen bei einem Klick daneben (auch in ein Fenster).
+- **Dock** (seit 0.59.0, ab Werk an): angeheftete Programme und offene Fenster (nach einem Strich), Punkt = offen, Vergrößern beim Überfahren. Ziehen aus dem Menü oder vom Arbeitsplatz heftet an, Ziehen im Dock sortiert um. Rechtsklick auf das Dock: Dock bearbeiten (Größe, Deckkraft, Vergrößern Aus/Leicht/Stark, Position unten/links/rechts, × entfernt), Position, Dock ausblenden. Rechtsklick auf ein Symbol im Dock: das Programm-Menü mit „Im Dock behalten“/„Aus dem Dock entfernen“. Angedockte Fenster und Symbole halten den Platz des Docks frei.
+- **Symbole:** frei auf einem unsichtbaren Raster (ziehen an eine freie Stelle; auf ein anderes Symbol = tauschen, auf einen Ordner = hinein), „Automatisch anordnen“ im Rechtsklick; sonst ordnen nach Art, Name oder zuletzt benutzt; drei Größen; Ordner; Abzeichen (Zahl = Updates, ! = Warnung, Punkt = läuft/gestoppt, Text beim Überfahren). Rechtsklick auf ein Symbol bzw. den Arbeitsplatz für alle Aktionen.
+- **Widgets** frei auf einem Raster von 20 px; Rechtsklick auf ein Widget: Größe, Entfernen, Bearbeiten, Hinzufügen, alle ausblenden (wieder einblenden im Rechtsklick auf den Arbeitsplatz); an der Ecke vergrößern, Galerie mit Zustand, CPU/RAM, Netzwerk, Volumes, Docker-Apps, VMs, Sicherungen, Temperaturen, Uhr, Home Assistant, Aufgaben. Sie lesen nur, was die Oberfläche ohnehin abfragt, und wecken keine Platten.
 - **Hintergrund:** sechs eigene Bilder (SVG, hell und dunkel nach Theme) oder ein eigenes Bild (wie der bisherige Hintergrund je Konto auf dem Stick, höchstens 10 MB). „Bewegter Hintergrund“ verschiebt es langsam und färbt es nach Tageszeit; bei „Bewegung reduzieren“ steht es still.
 - **Mitteilungs-Center**, **Agent-Blase** (der Agent im kleinen Fenster; die Frage beginnt mit dem Fenster vorn) und **Sperrbildschirm** (Sperren im Menü, automatisch nach einstellbarer Zeit).
 - Dateien vom PC auf den Arbeitsplatz ziehen öffnet „Dateien“ und lädt sie in den gerade offenen Ordner hoch (mit der üblichen Rückfrage).
 
 ## Gespeichert
 
-- Je Konto in der Einstellung `desktop` auf dem Stick (`/config/users/<name>/desktop.json`): Symbole, Ordner, Widgets, Hintergrund, Sortierung, Sperrzeit, eingeklappte Seitenleisten, gespeicherte Fenster-Anordnungen. Geschrieben wird nur nach einer Änderung, 1,5 s nach der letzten.
+- Je Konto in der Einstellung `desktop` auf dem Stick (`/config/users/<name>/desktop.json`): Symbole mit ihren Plätzen, Ordner, Widgets (und ob ausgeblendet), Dock, Größe der Leisten, Hintergrund, Sortierung, Sperrzeit, eingeklappte Seitenleisten, gespeicherte Fenster-Anordnungen. Geschrieben wird nur nach einer Änderung, 1,5 s nach der letzten.
 - Offene Fenster mit Lage und Größe nur im Browser (`localStorage`): sie ändern sich ständig und sollen den Stick nicht abnutzen.
 
 ## Grenzen

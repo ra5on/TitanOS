@@ -3,12 +3,27 @@
 	import { api } from '#lib/api.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { revealTarget } from '#lib/reveal-target.ts';
-	type Settings = { enabled: boolean; confirm: boolean };
+	type Settings = { enabled: boolean; confirm: boolean; idleMinutes?: number };
+	const IDLE = [5, 15, 30, 60, 120, 0];
+	let idleState = $state<'' | 'saving' | 'saved'>('');
+	let idleError = $state('');
+	async function saveIdle(minutes: number) {
+		idleState = 'saving';
+		idleError = '';
+		try {
+			value = await api.put<Settings>('/terminal', { idleMinutes: minutes });
+			idleState = 'saved';
+			setTimeout(() => (idleState = ''), 5000);
+		} catch (err) {
+			idleState = '';
+			idleError = apiErrorText(err);
+		}
+	}
 	let value = $state<Settings | null>(null);
 	let loading = $state(false);
 	let loadError = $state('');
-	let pending = $state<keyof Settings | null>(null);
-	let saved = $state<keyof Settings | null>(null);
+	let pending = $state<'enabled' | 'confirm' | null>(null);
+	let saved = $state<'enabled' | 'confirm' | null>(null);
 	let errors = $state({ enabled: '', confirm: '' });
 	async function load() {
 		loading = true;
@@ -28,7 +43,7 @@
 			return () => clearTimeout(timer);
 		}
 	});
-	async function save(key: keyof Settings, checked: boolean) {
+	async function save(key: 'enabled' | 'confirm', checked: boolean) {
 		if (pending) return;
 		pending = key;
 		saved = null;
@@ -75,6 +90,30 @@
 				{#if errors[key]}<p class="notice-error" role="alert">{errors[key]}</p>{/if}
 			</div>
 		{/each}
+		<!-- PLAN 62-3: how long a console or VM screen may go without input. -->
+		<div class="option">
+			<label class="idle" for="terminal-idle">{t('settings.consoleIdle')}</label>
+			<select
+				id="terminal-idle"
+				class="field"
+				disabled={idleState === 'saving'}
+				value={value.idleMinutes ?? 15}
+				onchange={(e) => saveIdle(Number(e.currentTarget.value))}
+			>
+				{#each IDLE as minutes (minutes)}
+					<option value={minutes}
+						>{minutes
+							? t('settings.consoleIdleMinutes', { minutes })
+							: t('settings.consoleIdleNever')}</option
+					>
+				{/each}
+			</select>
+			<p class="muted plain">{t('settings.consoleIdleDesc')}</p>
+			{#if idleState}<p role="status">
+					{t(idleState === 'saving' ? 'ui.saving' : 'ui.saved')}
+				</p>{/if}
+			{#if idleError}<p class="notice-error" role="alert">{idleError}</p>{/if}
+		</div>
 	{/if}
 </section>
 
@@ -86,5 +125,15 @@
 	.option > p {
 		padding-left: 28px;
 		font-size: var(--text-base);
+	}
+	.option > p.plain {
+		padding-left: 0;
+	}
+	.idle {
+		font-weight: 600;
+		margin-top: var(--space-3);
+	}
+	select {
+		max-width: 260px;
 	}
 </style>

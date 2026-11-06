@@ -11,7 +11,7 @@
 	import Icon from './Icon.svelte';
 	import Logo from './Logo.svelte';
 
-	let { variant }: { variant: 'logo' | 'card' | 'badge' } = $props();
+	let { variant }: { variant: 'logo' | 'card' | 'badge' | 'desk' } = $props();
 
 	const id = $props.id();
 	let open = $state(false);
@@ -155,6 +155,32 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 		font-size: var(--text-base);
+	}
+	/* PLAN 62: in the top bar of the desktop, beside the menu. */
+	.desk .trigger {
+		position: relative;
+		justify-content: center;
+		width: var(--pb, 34px);
+		height: var(--pb, 34px);
+		border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+		background: color-mix(in srgb, var(--accent) 14%, transparent);
+	}
+	.desk .initials {
+		font-size: var(--text-sm);
+		font-weight: 700;
+	}
+	.desk .trigger > .dot {
+		position: absolute;
+		right: -3px;
+		bottom: -3px;
+		width: 10px;
+		height: 10px;
+		border: 2px solid var(--surface);
+	}
+	.desk .menu {
+		background: var(--surface);
+		top: calc(100% + 10px);
+		z-index: 9600;
 	}
 	.badge .trigger {
 		position: relative;

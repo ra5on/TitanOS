@@ -62,7 +62,47 @@ export type DesktopPrefs = {
 	layouts: Layout[];
 	/** Recently opened programs, newest first (for "Zuletzt"). */
 	recent: string[];
+	/** Places of icons on the desktop's grid (sort "free"): column and row. */
+	iconPos: Record<string, { c: number; r: number }>;
+	/** All widgets hidden (they stay as they are and come back as they were). */
+	widgetsHidden: boolean;
+	dock: Dock;
+	/** Size of the two bars at the top. */
+	barSize: IconSize;
 };
+
+export type DockPosition = 'bottom' | 'left' | 'right';
+export type Dock = {
+	show: boolean;
+	/** Programs kept in the dock, in their order. */
+	pinned: string[];
+	/** Whether `pinned` was set by the account (false: the standard set). */
+	customPinned: boolean;
+	/** Size of the icons in px. */
+	size: number;
+	/** Opacity of the dock's plate in percent. */
+	opacity: number;
+	/** Growing under the pointer: 0 off, 1 light, 2 strong. */
+	magnify: 0 | 1 | 2;
+	position: DockPosition;
+};
+export const DOCK_DEFAULT_PINNED = [
+	'app:files',
+	'app:docker',
+	'app:vms',
+	'app:agent',
+	'app:monitor',
+	'app:settings',
+];
+export const defaultDock = (): Dock => ({
+	show: true,
+	pinned: [],
+	customPinned: false,
+	size: 52,
+	opacity: 90,
+	magnify: 1,
+	position: 'bottom',
+});
 
 export type LayoutWindow = {
 	app: string;
@@ -99,6 +139,10 @@ export const defaultDesktop = (): DesktopPrefs => ({
 	folded: [],
 	layouts: [],
 	recent: [],
+	iconPos: {},
+	widgetsHidden: false,
+	dock: defaultDock(),
+	barSize: 'm',
 });
 
 function strings(value: unknown, max = 200): string[] {
@@ -225,7 +269,84 @@ export function sanitizeDesktop(input: unknown): DesktopPrefs {
 		folded: strings(v.folded, 60),
 		layouts,
 		recent: strings(v.recent, 12),
+		iconPos: positions(v.iconPos),
+		widgetsHidden: v.widgetsHidden === true,
+		dock: sanitizeDock(v.dock),
+		barSize: (['s', 'm', 'l'] as IconSize[]).includes(v.barSize as IconSize)
+			? (v.barSize as IconSize)
+			: 'm',
 	};
+}
+
+function positions(value: unknown): Record<string, { c: number; r: number }> {
+	const out: Record<string, { c: number; r: number }> = {};
+	if (typeof value !== 'object' || value === null || Array.isArray(value)) return out;
+	for (const [key, at] of Object.entries(value).slice(0, 300)) {
+		if (!ID.test(key) || typeof at !== 'object' || at === null) continue;
+		const p = at as Record<string, unknown>;
+		out[key] = { c: int(p.c, 0, 200, 0), r: int(p.r, 0, 200, 0) };
+	}
+	return out;
+}
+
+function sanitizeDock(value: unknown): Dock {
+	const base = defaultDock();
+	if (typeof value !== 'object' || value === null) return base;
+	const d = value as Record<string, unknown>;
+	return {
+		show: d.show !== false,
+		pinned: strings(d.pinned, 40),
+		customPinned: d.customPinned === true,
+		size: int(d.size, 36, 80, base.size),
+		opacity: int(d.opacity, 30, 100, base.opacity),
+		magnify: int(d.magnify, 0, 2, base.magnify) as 0 | 1 | 2,
+		position: (['bottom', 'left', 'right'] as DockPosition[]).includes(d.position as DockPosition)
+			? (d.position as DockPosition)
+			: base.position,
+	};
+}
+
+/**
+ * Where each icon sits on the grid. Sorted modes fill the columns from the
+ * top left; "free" keeps the account's places and puts new icons in the
+ * first free cell.
+ */
+export function placeIcons(
+	keys: string[],
+	prefs: Pick<DesktopPrefs, 'sort' | 'iconPos'>,
+	rows: number,
+	columns: number,
+): Map<string, { c: number; r: number }> {
+	const out = new Map<string, { c: number; r: number }>();
+	const rowsN = Math.max(1, rows);
+	const taken = new Set<string>();
+	const cell = (c: number, r: number) => c + ':' + r;
+	if (prefs.sort === 'free')
+		for (const key of keys) {
+			const at = prefs.iconPos[key];
+			if (!at) continue;
+			// A smaller screen pulls icons back inside; a taken cell leaves the icon for the next pass.
+			const c = Math.min(at.c, Math.max(0, columns - 1));
+			const r = Math.min(at.r, rowsN - 1);
+			if (taken.has(cell(c, r))) continue;
+			taken.add(cell(c, r));
+			out.set(key, { c, r });
+		}
+	let next = 0;
+	for (const key of keys) {
+		if (out.has(key)) continue;
+		while (taken.has(cell(Math.floor(next / rowsN), next % rowsN))) next++;
+		const at = { c: Math.floor(next / rowsN), r: next % rowsN };
+		taken.add(cell(at.c, at.r));
+		out.set(key, at);
+	}
+	return out;
+}
+
+/** The programs in the dock: the account's own, or the standard set of those it may use. */
+export function dockPinned(prefs: DesktopPrefs, known: Set<string>): string[] {
+	const list = prefs.dock.customPinned ? prefs.dock.pinned : DOCK_DEFAULT_PINNED;
+	return list.filter((k) => known.has(k));
 }
 
 /** The icons shown, in order: the account's own list, or every program. */

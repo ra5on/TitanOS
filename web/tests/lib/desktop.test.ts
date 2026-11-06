@@ -3,7 +3,14 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from 'vitest';
 import { appAllowed, appForPath, sideActive, SYSTEM_APPS } from '#lib/desktop/apps.ts';
-import { arrangeIcons, defaultDesktop, placeWidget, sanitizeDesktop } from '#lib/desktop/prefs.ts';
+import {
+	arrangeIcons,
+	defaultDesktop,
+	dockPinned,
+	placeIcons,
+	placeWidget,
+	sanitizeDesktop,
+} from '#lib/desktop/prefs.ts';
 import de from '#lib/i18n/features/desktop.de.json';
 import en from '#lib/i18n/features/desktop.en.json';
 
@@ -90,4 +97,63 @@ test('roles and services decide which programs an account sees', () => {
 test('German and English texts have the same keys', () => {
 	expect(Object.keys(en).sort()).toEqual(Object.keys(de).sort());
 	void readFileSync;
+});
+
+test('PLAN 62: icons keep their places in free mode and fill gaps otherwise', () => {
+	const keys = ['a', 'b', 'c', 'd'];
+	const sorted = placeIcons(keys, { sort: 'kind', iconPos: { a: { c: 5, r: 5 } } }, 3, 10);
+	expect([...sorted.values()]).toEqual([
+		{ c: 0, r: 0 },
+		{ c: 0, r: 1 },
+		{ c: 0, r: 2 },
+		{ c: 1, r: 0 },
+	]);
+	const free = placeIcons(
+		keys,
+		{ sort: 'free', iconPos: { a: { c: 4, r: 1 }, b: { c: 4, r: 1 }, c: { c: 99, r: 99 } } },
+		3,
+		6,
+	);
+	expect(free.get('a')).toEqual({ c: 4, r: 1 });
+	// The same cell twice: the second icon moves to the first free one.
+	expect(free.get('b')).toEqual({ c: 0, r: 0 });
+	// Off a smaller screen: pulled back inside.
+	expect(free.get('c')).toEqual({ c: 5, r: 2 });
+	expect(free.get('d')).toEqual({ c: 0, r: 1 });
+});
+
+test('PLAN 62: dock and bar settings are checked', () => {
+	const v = sanitizeDesktop({
+		dock: {
+			show: false,
+			pinned: ['app:files', '../x'],
+			size: 500,
+			opacity: 1,
+			magnify: 9,
+			position: 'top',
+		},
+		iconPos: { 'app:files': { c: 2, r: 3 }, '../x': { c: 1, r: 1 }, bad: 5 },
+		widgetsHidden: true,
+		barSize: 'xl',
+	});
+	expect(v.dock).toEqual({
+		show: false,
+		pinned: ['app:files'],
+		customPinned: false,
+		size: 80,
+		opacity: 30,
+		magnify: 2,
+		position: 'bottom',
+	});
+	expect(v.iconPos).toEqual({ 'app:files': { c: 2, r: 3 } });
+	expect(v.widgetsHidden).toBe(true);
+	expect(v.barSize).toBe('m');
+	const prefs = defaultDesktop();
+	expect(dockPinned(prefs, new Set(['app:files', 'app:docker']))).toEqual([
+		'app:files',
+		'app:docker',
+	]);
+	prefs.dock.customPinned = true;
+	prefs.dock.pinned = ['docker:immich', 'app:gone'];
+	expect(dockPinned(prefs, new Set(['docker:immich']))).toEqual(['docker:immich']);
 });

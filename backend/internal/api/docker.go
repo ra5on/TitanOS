@@ -11,6 +11,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/appproxy"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
+	"github.com/ra5on/TitanOS/backend/internal/terminal"
 )
 
 var dockerErrors = []struct {
@@ -334,18 +335,35 @@ func (s *Server) serveConsole(w http.ResponseWriter, r *http.Request, target str
 
 // handleTerminal tells the web UI whether terminals are allowed.
 func (s *Server) handleTerminal(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]bool{
+	idle, _ := s.opts.Terminal.IdleMinutes()
+	writeJSON(w, http.StatusOK, map[string]any{
 		"enabled": s.opts.Terminal.Enabled(),
 		"confirm": s.opts.Terminal.ConfirmRequired(),
 		// Without a shell on the NAS there are container consoles only.
 		"nasShell": !s.opts.Terminal.Disabled,
+		// Minutes without input until consoles and VM screens end; 0: never.
+		"idleMinutes": idle,
 	})
 }
 
 func (s *Server) handleTerminalSettings(w http.ResponseWriter, r *http.Request) {
-	var req struct{ Enabled, Confirm *bool }
+	var req struct {
+		Enabled, Confirm *bool
+		IdleMinutes      *int `json:"idleMinutes"`
+	}
 	if !readJSON(w, r, &req) {
 		return
+	}
+	if req.IdleMinutes != nil {
+		if !slices.Contains(terminal.IdleChoices, *req.IdleMinutes) {
+			writeError(w, http.StatusBadRequest, "invalid_idle", "idle time must be one of 0, 5, 15, 30, 60, 120 minutes")
+			return
+		}
+		if err := s.opts.Terminal.SetIdleMinutes(*req.IdleMinutes); err != nil {
+			writeError(w, http.StatusInternalServerError, "config_write_failed", err.Error())
+			return
+		}
+		slog.Info("console idle time changed", "minutes", *req.IdleMinutes, "by", currentUser(r).Name, "ip", remoteIP(r))
 	}
 	if req.Enabled != nil {
 		if err := s.opts.Terminal.SetEnabled(*req.Enabled); err != nil {

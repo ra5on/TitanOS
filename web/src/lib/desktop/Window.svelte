@@ -61,6 +61,7 @@
 	let loaded = $state(false);
 	let slow = $state(false);
 	let dragging = $state(false);
+	let shift = $state({ x: 0, y: 0 });
 	const insecure = $derived(
 		external && win.href.startsWith('http:') && location.protocol === 'https:',
 	);
@@ -126,21 +127,51 @@
 			.closest('.desk-area')
 			?.getBoundingClientRect();
 		let moved = false;
+		let frameReq = 0;
+		let last: PointerEvent | null = null;
+		// The window follows the pointer by a transform (no new layout per frame);
+		// its place is written once, when the pointer lets go.
+		const apply = () => {
+			frameReq = 0;
+			const e = last;
+			if (!e) return;
+			const dx = e.clientX - start.px;
+			const dy = e.clientY - start.py;
+			const x = Math.round(start.x + dx);
+			const y = Math.max(0, Math.round(start.y + dy));
+			shift = { x: x - start.x, y: y - start.y };
+			const snap = bounds ? snapAt(e.clientX - bounds.left, e.clientY - bounds.top) : null;
+			if (snap !== wm.preview) wm.preview = snap;
+		};
 		const move = (e: PointerEvent) => {
 			const dx = e.clientX - start.px;
 			const dy = e.clientY - start.py;
 			if (!moved && Math.abs(dx) + Math.abs(dy) < 4) return;
-			moved = true;
-			dragging = true;
-			win.snap = null;
-			win.x = Math.round(start.x + dx);
-			win.y = Math.max(0, Math.round(start.y + dy));
-			wm.preview = bounds ? snapAt(e.clientX - bounds.left, e.clientY - bounds.top) : null;
+			if (!moved) {
+				moved = true;
+				dragging = true;
+				wm.dragging = true;
+				if (win.snap) {
+					// Comes loose under the pointer at its own size.
+					Object.assign(win, { x: Math.round(start.x), y: start.y, snap: null });
+					start.x = win.x;
+				}
+			}
+			last = e;
+			if (!frameReq) frameReq = requestAnimationFrame(apply);
 		};
 		const up = () => {
 			window.removeEventListener('pointermove', move);
 			window.removeEventListener('pointerup', up);
+			if (frameReq) cancelAnimationFrame(frameReq);
+			if (moved) {
+				apply();
+				win.x = start.x + shift.x;
+				win.y = start.y + shift.y;
+				shift = { x: 0, y: 0 };
+			}
 			dragging = false;
+			wm.dragging = false;
 			if (wm.preview) setSnap(win.id, wm.preview);
 			wm.preview = null;
 			saveWindows();
@@ -159,6 +190,7 @@
 		win.snap = null;
 		Object.assign(win, { x: start.x, y: start.y, w: start.w, h: start.h });
 		dragging = true;
+		wm.dragging = true;
 		const move = (e: PointerEvent) => {
 			const dx = e.clientX - start.px;
 			const dy = e.clientY - start.py;
@@ -180,6 +212,7 @@
 			window.removeEventListener('pointermove', move);
 			window.removeEventListener('pointerup', up);
 			dragging = false;
+			wm.dragging = false;
 			saveWindows();
 		};
 		window.addEventListener('pointermove', move);
@@ -221,6 +254,7 @@
 	style:width="{rect.w}px"
 	style:height="{rect.h}px"
 	style:z-index={win.z}
+	style:transform={shift.x || shift.y ? `translate3d(${shift.x}px, ${shift.y}px, 0)` : undefined}
 	style:--from-x="{(win.from?.x ?? rect.x) - rect.x}px"
 	style:--from-y="{(win.from?.y ?? rect.y) - rect.y}px"
 	aria-label={win.title}
@@ -240,6 +274,21 @@
 						{#if !folded}<div class="group">{t(item.group)}</div>{:else}<div
 								class="rule"
 							></div>{/if}
+					{:else if 'text' in item}
+						{@const on =
+							new URLSearchParams(win.href.split('?')[1] ?? '').get('vm') ===
+							new URLSearchParams(item.href.split('?')[1]).get('vm')}
+						<button
+							type="button"
+							class="item thing"
+							class:on
+							title={folded ? item.text : undefined}
+							aria-current={on ? 'page' : undefined}
+							onclick={() => navigateWindow(win.id, item.href)}
+						>
+							<span class="state {item.state}" aria-hidden="true"></span>
+							{#if !folded}<span>{item.text}</span>{/if}
+						</button>
 					{:else}
 						<button
 							type="button"
@@ -377,12 +426,14 @@
 		background: var(--bg);
 		border: 1px solid var(--border);
 		box-shadow: 0 10px 28px rgb(0 0 0 / 0.35);
-		transition: filter 0.2s;
-		filter: brightness(0.93) saturate(0.95);
 	}
 	.win.focused {
 		box-shadow: 0 24px 60px rgb(0 0 0 / 0.45);
-		filter: none;
+	}
+	/* While moving: one layer for the GPU and a lighter shadow (smooth in every browser). */
+	.win.dragging {
+		will-change: transform;
+		box-shadow: 0 14px 34px rgb(0 0 0 / 0.4);
 	}
 	.win.snapped {
 		border-radius: 0;
@@ -441,6 +492,21 @@
 		color: var(--muted);
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
+	}
+	.item.thing {
+		padding-left: 16px;
+	}
+	.state {
+		flex: none;
+		width: 9px;
+		height: 9px;
+		margin: 0 4px;
+		border-radius: 50%;
+		border: 1.5px solid var(--muted);
+	}
+	.state.on {
+		border-color: var(--ok-text);
+		background: var(--ok-text);
 	}
 	.rule {
 		height: 1px;
@@ -561,6 +627,9 @@
 	.shield {
 		position: absolute;
 		inset: 0;
+	}
+	.win:not(.focused) .shield {
+		background: rgb(0 0 0 / 0.06);
 	}
 	.dragging .shield {
 		cursor: grabbing;

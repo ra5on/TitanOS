@@ -565,6 +565,17 @@ textarea {
 	textarea.field {
 		font-size: max(16px, 1rem);
 	}
+	/* iOS Safari zooms into every field under 16 px and stays zoomed after
+	   leaving it (login, search on the phone home): no field may be smaller. */
+	input:not([type='checkbox'], [type='radio'], [type='range'], [type='color']),
+	select,
+	textarea {
+		font-size: max(16px, 1em) !important;
+	}
+}
+html {
+	-webkit-text-size-adjust: 100%;
+	text-size-adjust: 100%;
 }
 @media (max-width: 760px) {
 	:root {

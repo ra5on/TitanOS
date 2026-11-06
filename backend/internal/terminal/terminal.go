@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"slices"
 	"sync"
 	"syscall"
 
@@ -37,7 +38,17 @@ type Settings struct {
 	// stick backups. Off unless the owner chose it: a console is a root
 	// shell, and without the prompt a stolen login cookie is enough.
 	NoConfirm bool `json:"noConfirm,omitempty"`
+	// IdleMinutes ends consoles and VM screens after so many minutes
+	// without keyboard or mouse input; 0 never ends them (PLAN 62-3,
+	// owner's choice). Missing: the standard of 15 minutes.
+	IdleMinutes *int `json:"idleMinutes,omitempty"`
 }
+
+// IdleChoices are the minutes the web UI offers; 0 is "never".
+var IdleChoices = []int{0, 5, 15, 30, 60, 120}
+
+// DefaultIdleMinutes is the idle time when nobody chose one.
+const DefaultIdleMinutes = 15
 
 // Manager knows whether terminals are allowed and starts shells.
 type Manager struct {
@@ -51,6 +62,7 @@ type Manager struct {
 	mu        sync.Mutex
 	enabled   bool
 	noConfirm bool
+	idle      *int
 	// off is closed when terminals are switched off, to end running sessions.
 	off chan struct{}
 }
@@ -70,6 +82,43 @@ func (m *Manager) Load() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.enabled, m.noConfirm = settings.Enabled, settings.NoConfirm
+	m.idle = nil
+	if settings.IdleMinutes != nil && slices.Contains(IdleChoices, *settings.IdleMinutes) {
+		v := *settings.IdleMinutes
+		m.idle = &v
+	}
+	return nil
+}
+
+// settings is what is written; the caller holds mu.
+func (m *Manager) settings() Settings {
+	return Settings{Enabled: m.enabled, NoConfirm: m.noConfirm, IdleMinutes: m.idle}
+}
+
+// IdleMinutes is the idle time of consoles in minutes (0: never) and
+// whether someone chose it.
+func (m *Manager) IdleMinutes() (minutes int, chosen bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.idle == nil {
+		return DefaultIdleMinutes, false
+	}
+	return *m.idle, true
+}
+
+// SetIdleMinutes chooses the idle time; only IdleChoices are taken.
+func (m *Manager) SetIdleMinutes(minutes int) error {
+	if !slices.Contains(IdleChoices, minutes) {
+		return fmt.Errorf("terminal: idle time %d minutes is not offered", minutes)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	next := m.settings()
+	next.IdleMinutes = &minutes
+	if err := m.store.WriteJSON(settingsFile, next); err != nil {
+		return err
+	}
+	m.idle = &minutes
 	return nil
 }
 
@@ -84,7 +133,9 @@ func (m *Manager) ConfirmRequired() bool {
 func (m *Manager) SetConfirmRequired(required bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if err := m.store.WriteJSON(settingsFile, Settings{Enabled: m.enabled, NoConfirm: !required}); err != nil {
+	next := m.settings()
+	next.NoConfirm = !required
+	if err := m.store.WriteJSON(settingsFile, next); err != nil {
 		return err
 	}
 	m.noConfirm = !required
@@ -102,7 +153,9 @@ func (m *Manager) Enabled() bool {
 func (m *Manager) SetEnabled(enabled bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if err := m.store.WriteJSON(settingsFile, Settings{Enabled: enabled, NoConfirm: m.noConfirm}); err != nil {
+	next := m.settings()
+	next.Enabled = enabled
+	if err := m.store.WriteJSON(settingsFile, next); err != nil {
 		return err
 	}
 	if m.enabled && !enabled {

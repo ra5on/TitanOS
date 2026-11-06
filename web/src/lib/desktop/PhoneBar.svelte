@@ -37,7 +37,7 @@
 		{#if open}
 			<div class="pages dropdown-panel" role="menu">
 				{#each items as item, i (i)}
-					{#if 'href' in item}
+					{#if 'label' in item}
 						<button
 							type="button"
 							role="menuitemradio"
