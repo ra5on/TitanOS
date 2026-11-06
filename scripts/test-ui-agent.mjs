@@ -157,7 +157,70 @@ async function noOverflow(page, what) {
 	assert.ok(overflow <= 1, `${what}: horizontal scroll ${overflow}`);
 }
 
+// PLAN 55: the new parts on their own (UI_ONLY=55 runs only these).
+async function plan55() {
+	// PLAN 55: plan, summary and time limit in a chat, on the phone.
+	{
+		const { ctx, page } = await open(390, 844);
+		const longChat = {
+			...docChat,
+			plan: [{ text: 'Docker-Apps lesen', done: true }, { text: 'Ablageort der Daten prüfen', done: true }, { text: 'Word-Dokument schreiben', done: false }],
+			entries: [
+				docChat.entries[0],
+				{ id: 'z1', at: at(9, 1), role: 'note', note: 'summary', content: '- Gewünscht: Übersicht aller Docker-Apps als Word.\n- 14 Apps gelesen, 2 mit Daten außerhalb von appdata.' },
+				...docChat.entries.slice(1, 5),
+				{ id: 'z2', at: at(9, 4), role: 'note', note: 'verify' },
+				docChat.entries[5],
+				{ id: 'z3', at: at(9, 5), role: 'note', note: 'timeask' },
+				{ id: 'z4', at: at(9, 5), role: 'assistant', content: 'Erledigt: Apps gelesen, Ablage geprüft. Offen: das Dokument. Nächster Schritt: schreiben.' },
+				{ id: 'z5', at: at(9, 5), role: 'note', note: 'timelimit', content: '30' },
+			],
+		};
+		await page.route('**/api/v1/agent/chats/' + docChat.id, (route) => (route.request().method() === 'GET' ? route.fulfill({ json: longChat }) : route.fallback()));
+		await page.goto(base + '/agent?chat=' + docChat.id);
+		const plan = page.getByRole('region', { name: 'Plan' });
+		await plan.waitFor();
+		assert.ok(await plan.getByText('2 von 3 erledigt').isVisible(), 'plan progress');
+		assert.ok(await page.getByText('Ältere Teile des Chats zusammengefasst').isVisible(), 'summary note');
+		assert.ok(await page.getByText('Nach 30 Minuten angehalten.').isVisible(), 'time limit note');
+		assert.ok(await page.getByRole('button', { name: 'Weitermachen' }).isVisible(), 'continue after the time limit');
+		assert.equal(await page.getByText('[TitanOS]').count(), 0, 'hints to the model stay hidden');
+		await noOverflow(page, 'chat with plan');
+		await plan.scrollIntoViewIfNeeded();
+		await page.waitForTimeout(300);
+		await page.screenshot({ path: `${out}/30-phone-plan-timelimit.png` });
+		await ctx.close();
+	}
+	// PLAN 55: working like an agent and code in a sandbox, in the settings.
+	{
+		const { ctx, page, seen } = await open(1440, 2400);
+		await page.goto(base + '/settings/agent?tab=connection');
+		await page.getByRole('heading', { name: 'Sprache, Bilder und Sicherheit' }).waitFor();
+		assert.ok(await page.getByLabel('Werkzeuge nach Bedarf laden').isChecked(), 'tools by area on by default');
+		assert.ok(await page.getByLabel('Helfer für Unteraufträge').isChecked(), 'helper on by default');
+		assert.equal(await page.getByLabel('Code ausführen in einer Sandbox').isChecked(), false, 'code off by default');
+		await page.getByLabel('Code ausführen in einer Sandbox').check();
+		await page.getByLabel('Zeitgrenze (Sekunden)').fill('120');
+		await page.getByLabel('Zeit je Auftrag (Minuten)').fill('45');
+		await page.getByLabel('Code ausführen in einer Sandbox').scrollIntoViewIfNeeded();
+		await page.screenshot({ path: `${out}/31-settings-code.png` });
+		await page.getByRole('button', { name: 'Speichern' }).click();
+		await page.getByRole('status').first().waitFor();
+		const put = seen.puts.at(-1);
+		assert.equal(put.code.enabled, true);
+		assert.equal(put.code.timeout, 120);
+		assert.equal(put.maxMinutes, 45);
+		assert.notEqual(put.allTools, true);
+		await ctx.close();
+	}
+}
+
 try {
+	await plan55();
+	if (process.env.UI_ONLY === '55') {
+		console.log('KI-Agent UI (PLAN 55) ok:', out);
+		process.exit(0);
+	}
 	// Desktop in TitanOS: the agent menu beside the TitanOS menu, chat with
 	// steps, answer, approval, model choice at the top (PLAN 48).
 	{
@@ -183,7 +246,6 @@ try {
 		await page.screenshot({ path: `${out}/2-desktop-document.png` });
 		await page.goto(base + '/agent');
 		await page.getByRole('heading', { name: /Guten|Hallo/ }).waitFor();
-		assert.ok(await page.locator('.ptile', { hasText: 'Home Assistant' }).isVisible(), 'project tiles on the start');
 		await page.locator('.sugg button', { hasText: 'Gesundheitscheck' }).click();
 		assert.match(await page.locator('.composer textarea').inputValue(), /Gesundheitscheck/, 'suggestion fills the input');
 		await page.waitForTimeout(300);

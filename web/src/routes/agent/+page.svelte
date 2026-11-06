@@ -340,6 +340,13 @@
 				if (e.entry.role === 'assistant') live = { thinking: '', content: '', step: live.step };
 				if (e.entry.role === 'tool') live.step = null;
 				break;
+			case 'reset':
+				// The round is asked again; what streamed in does not count.
+				live = { thinking: '', content: '', step: live.step };
+				break;
+			case 'plan':
+				current.plan = e.plan;
+				break;
 			case 'approval':
 				current.pending = e.pending;
 				current.state = 'waiting';

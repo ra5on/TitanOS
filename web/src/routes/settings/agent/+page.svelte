@@ -640,6 +640,33 @@
 				<span class="muted">{t('agent.maxStepsHint')}</span>
 			</label>
 			<label class="stack">
+				<span>{t('agent.maxMinutes')}</span>
+				<input
+					class="field narrow"
+					type="number"
+					min="1"
+					max="600"
+					bind:value={settings.maxMinutes}
+				/>
+				<span class="muted">{t('agent.maxMinutesHint')}</span>
+			</label>
+			<label class="check"
+				><input
+					type="checkbox"
+					checked={!settings.allTools}
+					onchange={(e) => (settings!.allTools = !e.currentTarget.checked)}
+				/><span>{t('agent.lazyTools')}</span></label
+			>
+			<span class="muted">{t('agent.lazyToolsHint')}</span>
+			<label class="check"
+				><input
+					type="checkbox"
+					checked={!settings.noDelegate}
+					onchange={(e) => (settings!.noDelegate = !e.currentTarget.checked)}
+				/><span>{t('agent.delegate')}</span></label
+			>
+			<span class="muted">{t('agent.delegateHint')}</span>
+			<label class="stack">
 				<span>{t('agent.keepAlive')}</span>
 				<select class="field" bind:value={settings.keepAlive}>
 					<option value="">{t('agent.keepAliveOllama')}</option>
@@ -778,6 +805,44 @@
 				/><span>{t('agent.snapshots')}</span></label
 			>
 			<span class="muted">{t('agent.snapshotsHint')}</span>
+			<label class="check"
+				><input
+					type="checkbox"
+					checked={!!settings.code?.enabled}
+					onchange={(e) =>
+						(settings!.code = { ...(settings!.code ?? {}), enabled: e.currentTarget.checked })}
+				/><span>{t('agent.code')}</span></label
+			>
+			{#if settings.code?.enabled}
+				<div class="code-limits">
+					<label class="stack">
+						<span>{t('agent.codeTimeout')}</span>
+						<input
+							class="field narrow"
+							type="number"
+							min="1"
+							max="600"
+							value={settings.code.timeout ?? 60}
+							oninput={(e) =>
+								(settings!.code = { ...settings!.code, timeout: Number(e.currentTarget.value) })}
+						/>
+					</label>
+					<label class="stack">
+						<span>{t('agent.codeMemory')}</span>
+						<input
+							class="field narrow"
+							type="number"
+							min="64"
+							max="8192"
+							step="64"
+							value={settings.code.memory ?? 512}
+							oninput={(e) =>
+								(settings!.code = { ...settings!.code, memory: Number(e.currentTarget.value) })}
+						/>
+					</label>
+				</div>
+			{/if}
+			<span class="muted">{t('agent.codeHint')}</span>
 		</section>
 	{/if}
 
@@ -1144,6 +1209,11 @@
 {/if}
 
 <style>
+	.code-limits {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-3);
+	}
 	.hero {
 		background: linear-gradient(
 			120deg,

@@ -29,7 +29,12 @@ export type Entry = {
 	files?: { root: string; path: string; size?: number }[];
 	note?: string;
 	stats?: { promptTokens: number; outputTokens: number };
+	/** Kind of a tool step: read, create, change or agent (PLAN 55). */
+	kind?: string;
 };
+
+/** A point of the plan the agent keeps for a task (plan_update, PLAN 55). */
+export type PlanStep = { text: string; done?: boolean };
 
 export type Pending = {
 	id: string;
@@ -57,10 +62,17 @@ export type Chat = {
 	error?: string;
 	pending?: Pending | null;
 	tainted?: boolean;
+	/** The plan of the current task (PLAN 55). */
+	plan?: PlanStep[];
+	/** Tool areas loaded in this chat (tools_load). */
+	areas?: string[];
 	entries: Entry[];
 };
 
-export type ChatInfo = Omit<Chat, 'entries' | 'model' | 'think' | 'pending' | 'tainted'> & {
+export type ChatInfo = Omit<
+	Chat,
+	'entries' | 'model' | 'think' | 'pending' | 'tainted' | 'plan' | 'areas'
+> & {
 	preview?: string;
 	/** Changed since the person last looked, on any device (PLAN 48). */
 	unread?: boolean;
@@ -238,6 +250,14 @@ export type Settings = {
 	vision?: { enabled?: boolean; model?: string };
 	/** Switches off the Btrfs snapshot before changes (PLAN 51). */
 	noSnapshots?: boolean;
+	/** Time limit of a task in minutes (PLAN 55; 0 is 30). */
+	maxMinutes?: number;
+	/** Offer every tool at once instead of the core and tools_load. */
+	allTools?: boolean;
+	/** Switch off the helper for subtasks (task_delegate). */
+	noDelegate?: boolean;
+	/** code_run in a sandbox container (PLAN 55, off by default). */
+	code?: { enabled?: boolean; timeout?: number; memory?: number };
 };
 
 export type ToolView = {
@@ -264,6 +284,7 @@ export const AREAS = [
 	'plugins',
 	'home',
 	'web',
+	'code',
 ] as const;
 
 /** Events of a running chat (server-sent events). */
@@ -274,6 +295,8 @@ export type AgentEvent =
 	| { type: 'step'; step: Entry }
 	| { type: 'state'; state: ChatState; error?: string }
 	| { type: 'approval'; pending: Pending }
+	| { type: 'reset' }
+	| { type: 'plan'; plan: PlanStep[] }
 	| { type: 'end' };
 
 /**
@@ -390,7 +413,9 @@ export function blocks(entries: Entry[]): Block[] {
 				out.push({ kind: 'answer', entry: e });
 			}
 		} else if (e.role === 'note') {
-			if (e.note === 'approved' || e.note === 'declined') {
+			// Hints of the runner to the model are no lines for the person.
+			if (e.note === 'limitask' || e.note === 'timeask' || e.note === 'badcall') continue;
+			if (e.note === 'approved' || e.note === 'declined' || e.note === 'verify') {
 				steps.push(e);
 				continue;
 			}
@@ -436,6 +461,10 @@ const STEP_WORDS: Record<string, string> = {
 	ha_call: 'homeCall',
 	ha_history: 'home',
 	ha_diagnostics: 'home',
+	plan_update: 'plan',
+	tools_load: 'toolsLoad',
+	task_delegate: 'delegate',
+	code_run: 'code',
 };
 
 /** The word key of a tool for agent.step.<word>, or '' to show the name. */
