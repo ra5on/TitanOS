@@ -15,8 +15,10 @@
 		idPrefix: string;
 		/** Shows the label above the field instead of only to screen readers. */
 		visibleLabel?: boolean;
+		/** A placeholder of its own (the overview names examples). */
+		placeholder?: string;
 	};
-	let { results, idPrefix, visibleLabel = false }: Props = $props();
+	let { results, idPrefix, visibleLabel = false, placeholder }: Props = $props();
 
 	const searching = $derived(settingsSearch.query.trim() !== '');
 	const active = $derived(
@@ -55,7 +57,7 @@
 			class="field"
 			type="search"
 			autocomplete="off"
-			placeholder={visibleLabel ? t('ui.searchHint') : t('ui.searchSettings')}
+			placeholder={placeholder ?? (visibleLabel ? t('ui.searchHint') : t('ui.searchSettings'))}
 			aria-controls="{idPrefix}-results"
 			aria-activedescendant={active >= 0 ? `${idPrefix}-${active}` : undefined}
 			bind:value={settingsSearch.query}

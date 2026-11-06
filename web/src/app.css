@@ -96,6 +96,20 @@
 	/* Text on an app's monogram, whose color is derived from the app's name. */
 	--on-monogram: #fff;
 
+	/* Colored icon squares (settings overview, PLAN 61): the same in every
+	   theme, each with white (--on-icon-square) at 4.5:1 or more. */
+	--icon-square-blue: #2563eb;
+	--icon-square-violet: #7c3aed;
+	--icon-square-teal: #0f766e;
+	--icon-square-cyan: #0e7490;
+	--icon-square-green: #15803d;
+	--icon-square-orange: #c2410c;
+	--icon-square-amber: #b45309;
+	--icon-square-red: #dc2626;
+	--icon-square-pink: #be185d;
+	--icon-square-slate: #475569;
+	--on-icon-square: #fff;
+
 	/* The two fixed colors of the "shapes" background; the third is the accent. */
 	--shape-2: #7048e8;
 	--shape-3: #0c8599;

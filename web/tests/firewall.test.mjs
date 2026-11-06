@@ -245,7 +245,7 @@ test('tabs follow ?tab= and the anchors of the settings search', () => {
 
 test('the firewall page is found and named in both languages', () => {
 	assert.ok(
-		settingsAreas.some((area) => area.id === 'firewall' && area.admin && area.group === 'security'),
+		settingsAreas.some((area) => area.id === 'firewall' && area.admin && area.group === 'network'),
 	);
 	assert.ok(matchesSetting('nftables', 'Firewall', 'firewall'));
 	for (const tab of ['zones', 'networks', 'policies', 'autoblock', 'recent'])

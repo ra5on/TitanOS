@@ -67,15 +67,18 @@ test('the HTTPS names of apps have their own admin-only settings page', async ()
 		assert.ok(matchesSetting(q, 'HTTPS-Namen für Apps', 'proxy'), q);
 });
 
-test('the settings navigation sorts groups and entries A–Z and filters by role', async () => {
+test('the settings navigation keeps its four groups in order, sorts entries A–Z and filters by role', async () => {
 	const { settingsEntries } = await import('../src/lib/settings-search.ts');
 	const { readFileSync } = await import('node:fs');
 	const de = JSON.parse(readFileSync(new URL('../src/lib/i18n/de.json', import.meta.url), 'utf8'));
 	const label = (key) => de[key] ?? key;
 	const admin = settingsEntries('', true, label);
-	const titles = admin.map((g) => label(`settings.group.${g.group}`));
+	// PLAN 61: System, Network, Accounts and services, Data – in this order.
+	assert.deepEqual(
+		admin.map((g) => g.group),
+		['system', 'network', 'accounts', 'data'],
+	);
 	const order = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
-	assert.deepEqual(titles, [...titles].sort(order.compare));
 	for (const g of admin) {
 		const names = g.entries.map((e) => e.label);
 		assert.deepEqual(names, [...names].sort(order.compare), g.group);
@@ -100,6 +103,7 @@ test('the settings navigation sorts groups and entries A–Z and filters by role
 		'network',
 		'notifications',
 		'power-button',
+		'programs',
 		'proxy',
 		'services',
 		'temperatures',
@@ -119,6 +123,7 @@ test('the settings navigation sorts groups and entries A–Z and filters by role
 		'firewall',
 		'letsencrypt',
 		'mcp',
+		'programs',
 		'services',
 		'wireguard',
 	]);

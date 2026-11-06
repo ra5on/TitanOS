@@ -6,9 +6,9 @@
 	import { page } from '$app/state';
 	import Icon from './Icon.svelte';
 	import SettingsSearch from './SettingsSearch.svelte';
-	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
-	import { settingsEntries } from '#lib/settings-search.ts';
+	import { settingsEntries, settingsGroupLabel } from '#lib/settings-search.ts';
 	import { settingsSearch, settingsStates } from '#lib/settings-states.svelte.ts';
 
 	const prefix = 'settings-side';
@@ -34,11 +34,11 @@
 <nav class="settings-sidebar" aria-label={t('settings.navigation')}>
 	<SettingsSearch results={flat} idPrefix={prefix} />
 	<div class="groups" id="{prefix}-results">
-		<!-- The overview (what needs attention, this NAS) above the groups. -->
+		<!-- "All settings" (the tiles) above the groups. -->
 		{#if !searching}<ul class="overview">
 				<li>
 					<a href="/settings" aria-current={path === '/settings' ? 'page' : undefined}
-						><Icon name="gridSmall" size={16} /><span class="label">{t('settings.overview')}</span
+						><Icon name="gridSmall" size={16} /><span class="label">{t('settingshome.all')}</span
 						></a
 					>
 				</li>
@@ -50,7 +50,7 @@
 		{#each groups as group (group.group)}
 			{@const offset = flat.indexOf(group.entries[0])}
 			<p class="group-title" id="{prefix}-group-{group.group}">
-				{t(`settings.group.${group.group}` as MessageKey)}
+				{t(settingsGroupLabel(group.group))}
 			</p>
 			<ul aria-labelledby="{prefix}-group-{group.group}">
 				{#each group.entries as entry, i (entry.href)}
