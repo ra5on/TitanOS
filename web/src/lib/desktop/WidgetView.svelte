@@ -28,8 +28,14 @@
 	);
 	const volumes = $derived(storage.status?.volumes ?? []);
 	const problems = $derived(volumes.filter((v) => v.state !== 'ok').length);
+	// The main connection first (the one with the default route), then the others for the totals.
 	const net = $derived(
-		info?.networks?.length ? info.networks : info?.network ? [info.network] : [],
+		info?.network
+			? [
+					info.network,
+					...(info.networks ?? []).filter((n) => n.interface !== info.network?.interface),
+				]
+			: (info?.networks ?? []),
 	);
 	const rx = $derived(net.reduce((s, n) => s + (n.rxBytesPerSecond || 0), 0));
 	const tx = $derived(net.reduce((s, n) => s + (n.txBytesPerSecond || 0), 0));
