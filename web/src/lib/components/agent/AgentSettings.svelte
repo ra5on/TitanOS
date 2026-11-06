@@ -65,17 +65,13 @@
 		},
 		// Mitteilungen auf diesem Gerät: on an iPhone the agent app from the
 		// home screen is an app of its own and needs its own subscription.
-		...(status.admin
-			? [
-					{
-						id: 'push' as const,
-						icon: 'bell' as IconName,
-						color: '#ef4444',
-						label: 'agent.set.push' as MessageKey,
-						sub: t('agent.set.pushSub'),
-					},
-				]
-			: []),
+		{
+			id: 'push' as const,
+			icon: 'bell' as IconName,
+			color: '#ef4444',
+			label: 'agent.set.push' as MessageKey,
+			sub: t('agent.set.pushSub'),
+		},
 		{ id: 'initiative', icon: 'bulb', color: '#f97316', label: 'agent.set.initiative' },
 		{ id: 'schedules', icon: 'clock', color: '#0ea5e9', label: 'agent.schedules' },
 		{ id: 'mind', icon: 'users', color: '#ec4899', label: 'agent.set.mind' },
@@ -137,7 +133,10 @@
 	);
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && onclose()} />
+<svelte:window
+	onkeydown={(e) =>
+		e.key === 'Escape' && !document.querySelector('dialog[open], .over-settings') && onclose()}
+/>
 
 <div class="scrim" role="presentation" onclick={onclose} transition:fly={{ duration: 0 }}></div>
 <div
@@ -250,7 +249,7 @@
 					<InitiativeSettings part={section} onrestart={onknow} />
 				{:else if section === 'push'}
 					<p class="pushhint">{t('agent.set.pushHint')}</p>
-					<PushDevices />
+					<PushDevices personal={!status.admin} />
 				{:else if section === 'models'}
 					<div class="grp">
 						<div class="row">
@@ -462,6 +461,7 @@
 		inset: 0;
 		z-index: 70;
 		background: rgb(3 6 14 / 0.45);
+		-webkit-backdrop-filter: blur(6px);
 		backdrop-filter: blur(6px);
 	}
 	.panel {
@@ -475,6 +475,7 @@
 		flex-direction: column;
 		color: var(--text);
 		background: color-mix(in srgb, var(--surface) 78%, transparent);
+		-webkit-backdrop-filter: blur(30px) saturate(170%);
 		backdrop-filter: blur(30px) saturate(170%);
 		border-left: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
 		box-shadow: -24px 0 60px -24px rgb(0 0 0 / 0.7);

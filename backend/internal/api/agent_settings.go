@@ -180,8 +180,25 @@ func (s *Server) handleAgentSettingsSet(w http.ResponseWriter, r *http.Request) 
 	a := &s.agentConf
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	// PLAN 58: the volume is chosen when the agent is switched on and
+	// changes afterwards only by moving the data.
 	if req.Volume == "" {
 		req.Volume = a.settings.Volume
+	}
+	var mounted []string
+	if s.opts.Storage != nil {
+		mounted = s.opts.Storage.Mounted()
+	}
+	switch {
+	case a.settings.Volume != "" && req.Volume != a.settings.Volume:
+		writeError(w, http.StatusConflict, "agent_volume_move", "the agent's volume changes only by moving its data")
+		return
+	case a.settings.Volume == "" && req.Volume != "" && !slices.Contains(mounted, req.Volume):
+		writeError(w, http.StatusBadRequest, "agent_volume_unknown", "no such mounted volume")
+		return
+	case a.settings.Volume == "" && req.Volume == "" && req.Enabled && !a.settings.Enabled && len(mounted) > 0:
+		writeError(w, http.StatusBadRequest, "agent_volume_required", "choose the volume for the agent's data")
+		return
 	}
 	req.Shared = a.settings.Shared
 	if err := s.opts.Store.WriteJSON(agentSettingsFile, req); err != nil {

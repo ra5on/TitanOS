@@ -1,8 +1,10 @@
 package api
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -26,6 +28,11 @@ type agentOllama struct {
 	got     []map[string]any
 	// failChat: /api/chat answers with this HTTP status (0: normally).
 	failChat int
+	// loaded: a chat without messages loaded the model (as Ollama does);
+	// /api/ps then lists it with loadedContext (default 32768).
+	loaded        bool
+	loadedContext int
+	preloads      int
 }
 
 func (f *agentOllama) start(t *testing.T) string {
@@ -38,13 +45,27 @@ func (f *agentOllama) start(t *testing.T) string {
 		case "/api/show":
 			w.Write([]byte(`{"capabilities":["completion","tools","thinking"],"thinking":{"values":["low","medium","high"],"default":"medium"}}`))
 		case "/api/ps":
-			w.Write([]byte(`{"models":[]}`))
+			f.mu.Lock()
+			loaded, n := f.loaded, cmp.Or(f.loadedContext, 32768)
+			f.mu.Unlock()
+			if !loaded {
+				w.Write([]byte(`{"models":[]}`))
+				return
+			}
+			fmt.Fprintf(w, `{"models":[{"name":"gpt-oss:20b","context_length":%d,"size_vram":1}]}`, n)
 		case "/api/pull":
 			w.Write([]byte(`{"status":"pulling manifest"}` + "\n" + `{"status":"downloading","completed":5,"total":10}` + "\n" + `{"status":"success"}` + "\n"))
 		case "/api/chat":
 			var body map[string]any
 			json.NewDecoder(r.Body).Decode(&body)
 			f.mu.Lock()
+			if msgs, ok := body["messages"].([]any); ok && len(msgs) == 0 {
+				f.loaded = true
+				f.preloads++
+				f.mu.Unlock()
+				w.Write([]byte(`{"model":"gpt-oss:20b","message":{"role":"assistant","content":""},"done":true,"done_reason":"load"}`))
+				return
+			}
 			f.got = append(f.got, body)
 			if f.failChat != 0 {
 				f.mu.Unlock()
@@ -410,6 +431,12 @@ func TestAgentEventStream(t *testing.T) {
 		case "/api/show":
 			w.Write([]byte(`{"capabilities":["tools"]}`))
 		case "/api/chat":
+			var body struct{ Messages []any }
+			json.NewDecoder(r.Body).Decode(&body)
+			if len(body.Messages) == 0 { // preload (PLAN 59a)
+				w.Write([]byte(`{"done":true,"done_reason":"load"}`))
+				return
+			}
 			w.Write([]byte(`{"message":{"role":"assistant","content":"Hal"},"done":false}` + "\n"))
 			w.(http.Flusher).Flush()
 			<-release

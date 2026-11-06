@@ -17,6 +17,12 @@ func (s *Server) registerAgent(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/agent/check", s.requireAdmin(s.handleAgentCheck))
 	mux.HandleFunc("POST /api/v1/agent/voice/check", s.requireAdmin(s.handleAgentVoiceCheck))
 	mux.HandleFunc("GET /api/v1/agent/tools", s.requireAdmin(s.handleAgentTools))
+	// The volume of the agent's data, chosen when it is switched on, and
+	// moving it (PLAN 58).
+	mux.HandleFunc("GET /api/v1/agent/volumes", s.requireAdmin(s.handleAgentVolumes))
+	mux.HandleFunc("GET /api/v1/agent/volume/move", s.requireAdmin(s.handleAgentMoveStatus))
+	mux.HandleFunc("POST /api/v1/agent/volume/move", s.requireAdmin(s.handleAgentMove))
+	mux.HandleFunc("POST /api/v1/agent/volume/cleanup", s.requireAdmin(s.handleAgentMoveCleanup))
 
 	mux.HandleFunc("GET /api/v1/agent/chats", s.requireAgent(s.handleAgentChats))
 	mux.HandleFunc("POST /api/v1/agent/chats", s.requireAgent(s.handleAgentChatNew))

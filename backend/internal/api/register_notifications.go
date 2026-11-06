@@ -20,5 +20,5 @@ func (s *Server) registerHealthReport(mux *routeMux) {
 
 // registerPush registers the routes of push notifications to browsers.
 func (s *Server) registerPush(mux *routeMux) {
-	pushArea{push: s.opts.WebPush, notify: s.opts.Notify}.register(mux, s.requireAdmin)
+	pushArea{push: s.opts.WebPush, notify: s.opts.Notify}.register(mux, s.requireUser)
 }

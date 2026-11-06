@@ -74,11 +74,17 @@ func (w *titand) wireNotifications() error {
 		})
 	})
 	// Notifications on phones and browsers (Web Push): what the bell shows,
-	// to owners and administrators who subscribed a device.
+	// to owners and administrators who subscribed a device; the agent's
+	// own messages to every account.
 	w.pushes = webpush.New(w.store)
 	w.pushes.Allowed = func(name string) bool {
 		user, ok := w.users.Get(name)
 		return ok && user.Role.CanAdminister() && !user.Disabled
+	}
+	// Every account gets its own messages (the KI-Agent's), PLAN 58.
+	w.pushes.Personal = func(name string) bool {
+		user, ok := w.users.Get(name)
+		return ok && !user.Disabled
 	}
 	if err := w.pushes.Load(); err != nil {
 		slog.Warn("web push settings not readable from /config", "err", err)

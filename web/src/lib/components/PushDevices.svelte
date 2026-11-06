@@ -17,7 +17,24 @@
 		type PushDevice,
 	} from '#lib/web-push.ts';
 
+	/** For an account with the role "Benutzer": only its agent's messages (PLAN 58). */
+	let { personal = false }: { personal?: boolean } = $props();
 	let devices = $state<PushDevice[] | null>(null);
+	async function setKinds(device: PushDevice, kind: 'nas' | 'agent', on: boolean) {
+		const off = new Set(device.off ?? []);
+		if (on) off.delete(kind);
+		else off.add(kind);
+		error = '';
+		try {
+			const next = await api.put<PushDevice>(`/notifications/push/${device.id}`, {
+				nas: !off.has('nas'),
+				agent: !off.has('agent'),
+			});
+			devices = (devices ?? []).map((d) => (d.id === next.id ? next : d));
+		} catch (err) {
+			error = apiErrorText(err);
+		}
+	}
 	let publicKey = $state('');
 	let thisDevice = $state('');
 	let busy = $state(false);
@@ -120,7 +137,7 @@
 
 <section class="tile panel" id="push" aria-labelledby="push-title">
 	<h2 class="tile-title" id="push-title">{t('push.title')}</h2>
-	<p class="muted">{t('push.intro')}</p>
+	<p class="muted">{personal ? t('push.introPersonal') : t('push.intro')}</p>
 	{#if !supported && !needsHomeScreen}
 		<p class="notice-warn">{t(window.isSecureContext ? 'push.unsupported' : 'push.needsHttps')}</p>
 	{:else if needsHomeScreen}
@@ -148,6 +165,24 @@
 					<span class="muted small"
 						>{t('push.since', { date: formatTime(new Date(device.created)) })}</span
 					>
+					<span class="kinds">
+						{#if !personal}<label class="check"
+								><input
+									type="checkbox"
+									checked={!device.off?.includes('nas')}
+									disabled={busy}
+									onchange={(e) => setKinds(device, 'nas', e.currentTarget.checked)}
+								/><span>{t('push.kindNas')}</span></label
+							>{/if}
+						<label class="check"
+							><input
+								type="checkbox"
+								checked={!device.off?.includes('agent')}
+								disabled={busy}
+								onchange={(e) => setKinds(device, 'agent', e.currentTarget.checked)}
+							/><span>{t('push.kindAgent')}</span></label
+						>
+					</span>
 					<span class="row-actions">
 						<button type="button" class="btn small" disabled={busy} onclick={() => test(device)}
 							>{t('push.test')}</button
@@ -205,5 +240,10 @@
 	}
 	.devices .row-actions {
 		margin-left: auto;
+	}
+	.kinds {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px 16px;
 	}
 </style>

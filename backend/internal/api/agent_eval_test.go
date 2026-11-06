@@ -1,6 +1,7 @@
 package api
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -238,7 +239,7 @@ func runAgentEval(t *testing.T, client *agent.Ollama, model string, task agentEv
 	chat.Entries = append(chat.Entries, agent.Entry{ID: agent.NewID(), Role: "user", Content: task.ask})
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 	defer cancel()
-	r := &agent.Runner{Ollama: client, Model: model, Tools: box, MaxSteps: 15, Context: task.context,
+	r := &agent.Runner{Ollama: client, Model: model, Tools: box, MaxSteps: 15, Context: cmp.Or(task.context, evalContext()), KeepAlive: os.Getenv("TITANOS_EVAL_KEEPALIVE"),
 		System: ts.server.agentPrompt(ctx, user, settings, chat, box)}
 	agentEvalTune(r)
 	start := time.Now()
@@ -273,4 +274,12 @@ func runAgentEval(t *testing.T, client *agent.Ollama, model string, task agentEv
 		}
 	}
 	return res
+}
+
+// evalContext is TITANOS_EVAL_CTX: the context of the tasks without one of
+// their own, so that the eval uses what the NAS uses and Ollama does not
+// load the model anew for it.
+func evalContext() int {
+	n, _ := strconv.Atoi(os.Getenv("TITANOS_EVAL_CTX"))
+	return n
 }

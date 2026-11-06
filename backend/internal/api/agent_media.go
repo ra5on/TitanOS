@@ -150,7 +150,7 @@ func (b *agentToolbox) imageView(ctx context.Context, chat *agent.Chat, args jso
 	}
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
-	text, err := client.Look(ctx, model, question+"\nAntworte auf Deutsch, sachlich. Gib Text im Bild wörtlich wieder.", data, b.settings.KeepAlive)
+	text, err := client.Look(ctx, model, question+"\nAntworte auf Deutsch, sachlich. Gib Text im Bild wörtlich wieder.", data, b.settings.KeepAlive, sameModelContext(b.settings, chatModel(chat), model))
 	if err != nil {
 		return agent.Outcome{}, err
 	}
@@ -311,4 +311,18 @@ func (s *Server) handleAgentVoiceCheck(w http.ResponseWriter, r *http.Request) {
 		models = append(models, m.ID)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"reachable": true, "models": models})
+}
+
+// sameModelContext is the context to send with a request to model: the
+// configured one when it is the model the chat runs on (one load in
+// Ollama), else
+// what Ollama has set for that model.
+func sameModelContext(settings agentSettings, running, model string) int {
+	if running == "" {
+		running = settings.Model
+	}
+	if strings.TrimSuffix(model, ":latest") == strings.TrimSuffix(running, ":latest") {
+		return settings.Context
+	}
+	return 0
 }

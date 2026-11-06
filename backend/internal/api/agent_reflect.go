@@ -169,7 +169,7 @@ func (s *Server) agentReflect(user auth.User, in agentInitiative, now time.Time)
 	}
 	ctx, cancel := context.WithTimeout(s.agentBase(), time.Duration(in.GPUMinutes)*time.Minute)
 	defer cancel()
-	msg, _, err := client.Chat(ctx, agent.ChatRequest{Model: settings.Model, KeepAlive: "1m", Messages: []agent.Message{
+	msg, _, err := client.Chat(ctx, agent.ChatRequest{Model: settings.Model, KeepAlive: settings.KeepAlive, Context: settings.Context, Messages: []agent.Message{
 		{Role: "system", Content: reflectPrompt}, {Role: "user", Content: text}}}, nil)
 	if err != nil {
 		slog.Warn("agent could not think about the day", "user", user.Name, "err", err)

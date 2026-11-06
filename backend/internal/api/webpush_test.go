@@ -22,10 +22,13 @@ func TestPushDevices(t *testing.T) {
 	ts.request("POST", "/api/v1/users", map[string]any{"name": "reader", "password": testPassword, "role": "user"})
 	user := ts.newClient()
 	ts.do(user, "POST", "/api/v1/login", credentials{Name: "reader", Password: testPassword})
-	for _, route := range routes {
-		if res, _ := ts.do(user, route.method, "/api/v1"+route.path, map[string]any{}); res.StatusCode != http.StatusForbidden {
-			t.Fatalf("user %s %s: %d", route.method, route.path, res.StatusCode)
-		}
+	// PLAN 58: an account with the role "Benutzer" subscribes its own
+	// devices (for its agent's messages) and sees only those.
+	if res, _ := ts.do(user, "GET", "/api/v1/notifications/push", nil); res.StatusCode != http.StatusOK {
+		t.Fatalf("user list: %d", res.StatusCode)
+	}
+	if res, _ := ts.do(user, "DELETE", "/api/v1/notifications/push/x", nil); res.StatusCode != http.StatusNotFound {
+		t.Fatalf("user remove: %d", res.StatusCode)
 	}
 
 	res, body := ts.request("GET", "/api/v1/notifications/push", nil)

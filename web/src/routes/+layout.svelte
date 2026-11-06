@@ -8,7 +8,7 @@
 
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { afterNavigate, beforeNavigate, onNavigate } from '$app/navigation';
+	import { afterNavigate, beforeNavigate, goto, onNavigate } from '$app/navigation';
 	import { isAgentPath } from '#lib/agent-app.ts';
 	import DashboardBackground from '#lib/dashboard/DashboardBackground.svelte';
 	import { dashboardVisual } from '#lib/dashboard/visual.ts';
@@ -46,6 +46,17 @@
 
 	let { children } = $props();
 
+	// A tapped notification moves the open window (sw.js, PLAN 59): no
+	// reload, nothing unsaved gets lost; crossing to the agent loads anew.
+	onMount(() => {
+		if (!('serviceWorker' in navigator)) return;
+		const open = (e: MessageEvent) => {
+			const url = e.data?.type === 'open' && typeof e.data.url === 'string' ? e.data.url : '';
+			if (url.startsWith('/') && !url.startsWith('//')) void goto(url);
+		};
+		navigator.serviceWorker.addEventListener('message', open);
+		return () => navigator.serviceWorker.removeEventListener('message', open);
+	});
 	onMount(() => {
 		initAppearance();
 		refreshSession();

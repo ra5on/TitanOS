@@ -57,7 +57,7 @@ func (s *Server) newAgentStore() *agent.Store {
 		return &agent.Store{Open: func() (*os.Root, error) { return s.agentOpen() }}
 	}
 	return &agent.Store{Open: func() (*os.Root, error) {
-		if s.opts.Storage == nil {
+		if s.agentMoving() || s.opts.Storage == nil {
 			return nil, volumedata.ErrUnavailable
 		}
 		mounted := s.opts.Storage.Mounted()
@@ -217,11 +217,14 @@ func (s *Server) handleAgentChatNew(w http.ResponseWriter, r *http.Request) {
 		agentStoreError(w, err)
 		return
 	}
+	// The answer is the chat as it starts: the run changes it right away
+	// in its own goroutine (PLAN 59, a data race before).
+	snapshot := json.RawMessage(mustJSON(chat))
 	if err := s.agentStart(user, chat, func(rn *agent.Runner, ctx context.Context) error { return rn.Run(ctx, chat) }); err != nil {
-		writeError(w, http.StatusServiceUnavailable, "agent_unavailable", err.Error())
+		agentStartError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, chat)
+	writeJSON(w, http.StatusCreated, snapshot)
 }
 
 // handleAgentMessage adds a message to a chat and runs it.
@@ -265,11 +268,14 @@ func (s *Server) handleAgentMessage(w http.ResponseWriter, r *http.Request) {
 		agentStoreError(w, err)
 		return
 	}
+	// The answer is the chat as it starts: the run changes it right away
+	// in its own goroutine (PLAN 59, a data race before).
+	snapshot := json.RawMessage(mustJSON(chat))
 	if err := s.agentStart(user, chat, func(rn *agent.Runner, ctx context.Context) error { return rn.Run(ctx, chat) }); err != nil {
-		writeError(w, http.StatusServiceUnavailable, "agent_unavailable", err.Error())
+		agentStartError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusAccepted, chat)
+	writeJSON(w, http.StatusAccepted, snapshot)
 }
 
 // handleAgentDecide approves or declines the waiting step. Only the owner
@@ -437,6 +443,9 @@ func (s *Server) agentStart(user auth.User, chat *agent.Chat, work func(*agent.R
 	if !settings.Enabled {
 		return errors.New("the agent is switched off")
 	}
+	if s.agentMoving() {
+		return errAgentMoving
+	}
 	client, err := s.agentOllama()
 	if err != nil {
 		return err
@@ -512,7 +521,7 @@ func (s *Server) agentRunner(ctx context.Context, user auth.User, settings agent
 	}
 	return &agent.Runner{
 		Ollama: client, Model: model, Think: thinkValue, Context: settings.Context, KeepAlive: settings.KeepAlive, MaxSteps: settings.MaxSteps,
-		MaxTime: time.Duration(settings.MaxMinutes) * time.Minute, Window: settings.Context, Probe: agentProbe(client, model),
+		MaxTime: time.Duration(settings.MaxMinutes) * time.Minute, Window: settings.Context, Probe: agentProbe(client, model, settings.KeepAlive),
 		LazyTools: !settings.AllTools, Delegate: !settings.NoDelegate,
 		System: s.agentPrompt(ctx, user, settings, chat, box),
 		Tools:  box,
@@ -721,15 +730,20 @@ func (s *Server) handleAgentEvents(w http.ResponseWriter, r *http.Request) {
 
 // AgentInterrupted marks runs that titand did not finish (restart, app
 // update) as interrupted; it never claims they go on.
-func (s *Server) AgentInterrupted(ctx context.Context) {
+// It reports whether the agent's volume was there to look; the scheduler
+// tries again until it was (PLAN 59: an encrypted volume unlocked later).
+func (s *Server) AgentInterrupted(ctx context.Context) bool {
 	store := s.agentStore()
+	if store.Available() != nil {
+		return false
+	}
 	for _, user := range store.Accounts() {
 		list, err := store.Chats(user)
 		if err != nil {
 			continue
 		}
 		for _, info := range list {
-			if info.State != agent.StateRunning {
+			if info.State != agent.StateRunning || s.agentRunning(user, info.ID) {
 				continue
 			}
 			chat, err := store.Chat(user, info.ID)
@@ -743,6 +757,7 @@ func (s *Server) AgentInterrupted(ctx context.Context) {
 			}
 		}
 	}
+	return true
 }
 
 // AgentRunning reports whether the agent works on something right now, so
@@ -758,20 +773,64 @@ type flushFunc func()
 func (f flushFunc) Flush() { f() }
 
 // agentProbe finds the context the model runs with right now (/api/ps),
-// for when "as set in Ollama" is chosen (PLAN 55: summarise in time).
-func agentProbe(client *agent.Ollama, model string) func(context.Context) int {
-	return func(ctx context.Context) int {
-		pctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-		list, err := client.Running(pctx)
+// for when "as set in Ollama" is chosen (PLAN 55: summarise in time). A
+// model that is not loaded is loaded first (the request would load it
+// anyway), so the first round of a task knows the window too (PLAN 59a).
+// If Ollama still reports nothing, a careful guess (agentGuessContext).
+const agentGuessContext = 8192
+
+func agentProbe(client *agent.Ollama, model, keepAlive string) func(context.Context) int {
+	same := func(name string) bool {
+		return name == model || strings.TrimSuffix(name, ":latest") == strings.TrimSuffix(model, ":latest")
+	}
+	running := func(ctx context.Context) int {
+		list, err := client.Running(ctx)
 		if err != nil {
 			return 0
 		}
 		for _, m := range list {
-			if m.Name == model || strings.TrimSuffix(m.Name, ":latest") == strings.TrimSuffix(model, ":latest") {
+			if same(m.Name) {
 				return m.ContextLength
 			}
 		}
 		return 0
 	}
+	return func(ctx context.Context) int {
+		pctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		n := running(pctx)
+		cancel()
+		if n > 0 {
+			return n
+		}
+		lctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+		defer cancel()
+		if err := client.Preload(lctx, model, keepAlive, 0); err == nil {
+			if n = running(lctx); n > 0 {
+				return n
+			}
+		}
+		// Not loadable now: the model's trained length is only an upper
+		// bound; a careful guess summarises too early rather than too late.
+		if info, err := client.Show(lctx, model); err == nil && info.ContextLength > 0 {
+			return min(info.ContextLength, agentGuessContext)
+		}
+		return 0
+	}
+}
+
+func mustJSON(v any) []byte {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return []byte("null")
+	}
+	return data
+}
+
+// agentStartError: a chat that already runs is a conflict, not a failure.
+func agentStartError(w http.ResponseWriter, err error) {
+	if errors.Is(err, agent.ErrBusy) {
+		writeError(w, http.StatusConflict, "agent_busy", "the agent is still working on this chat; stop it first")
+		return
+	}
+	writeError(w, http.StatusServiceUnavailable, "agent_unavailable", err.Error())
 }

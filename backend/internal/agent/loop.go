@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // A run takes the chat as it is, asks the model, makes the calls it wants
@@ -134,7 +135,9 @@ func (r *Runner) add(chat *Chat, e Entry) error {
 	}
 	chat.Entries = append(chat.Entries, e)
 	chat.Updated = e.At
-	r.emit(Event{Type: "entry", Entry: &chat.Entries[len(chat.Entries)-1]})
+	// A copy: the event is written out later, while the chat goes on.
+	sent := chat.Entries[len(chat.Entries)-1]
+	r.emit(Event{Type: "entry", Entry: &sent})
 	return r.save(chat)
 }
 
@@ -152,6 +155,22 @@ func (r *Runner) setState(chat *Chat, state, msg string) {
 
 // MaxResultText is how much of a tool result goes back to the model.
 const MaxResultText = 12000
+
+// MaxStoredResult is how much of a tool result the chat keeps (PLAN 59): the
+// model sees at most MaxResultText of it anyway, and a chat with several
+// listings of megabytes grew past what the store reads back.
+const MaxStoredResult = 64 << 10
+
+func keepResult(text string) string {
+	if len(text) <= MaxStoredResult {
+		return text
+	}
+	cut := MaxStoredResult
+	for cut > 0 && !utf8.RuneStart(text[cut]) {
+		cut--
+	}
+	return text[:cut] + fmt.Sprintf("\n[… %d more bytes not kept]", len(text)-cut)
+}
 
 // olderResultText is how much of a result of an earlier turn it sees.
 const olderResultText = 1500
@@ -250,17 +269,28 @@ func (r *Runner) Run(ctx context.Context, chat *Chat) error {
 		r.start = r.now()
 	}
 	// A new question starts without the plan of the last task.
-	if i := lastUserIndex(chat); i >= 0 && i == len(chat.Entries)-1 && len(chat.Plan) > 0 {
+	if i := lastUserIndex(chat); i >= 0 && len(chat.Plan) > 0 && !answered(chat, i) {
 		chat.Plan = nil
 	}
 	maxSteps := r.MaxSteps
 	if maxSteps <= 0 {
 		maxSteps = 30
 	}
-	steps := 0
+	// Keeping the plan and loading tools are bookkeeping, not steps of the
+	// task (PLAN 59: small tasks were twice as long because of them).
+	// Beyond freeBookkeeping per task they count again, so that a model
+	// that only rewrites its plan still ends.
+	steps, kept := 0, 0
+	count := func(tool string) {
+		if bookkeeping(tool) && kept < freeBookkeeping {
+			kept++
+			return
+		}
+		steps++
+	}
 	for _, e := range chat.Entries[lastUserIndex(chat)+1:] {
 		if e.Role == "tool" {
-			steps++
+			count(e.Tool)
 		}
 	}
 	badCalls := 0
@@ -310,7 +340,7 @@ func (r *Runner) Run(ctx context.Context, chat *Chat) error {
 			return r.save(chat)
 		}
 		for i, call := range msg.ToolCalls {
-			steps++
+			count(call.Function.Name)
 			done, err := r.call(ctx, chat, call.Function.Name, call.Function.Arguments)
 			if err != nil {
 				return err
@@ -414,6 +444,21 @@ func (r *Runner) report(ctx context.Context, chat *Chat, ask, note, value string
 	return r.save(chat)
 }
 
+const freeBookkeeping = 8
+
+// answered: something of the agent came after the question at i (notes of
+// the page, such as "edited", do not count).
+func answered(chat *Chat, i int) bool {
+	for _, e := range chat.Entries[i+1:] {
+		if e.Role == "assistant" || e.Role == "tool" {
+			return true
+		}
+	}
+	return false
+}
+
+func bookkeeping(tool string) bool { return tool == toolPlan || tool == toolLoad }
+
 // needsCheck: in this turn something was changed and nothing was read
 // after it, and the runner has not asked for a check yet.
 func needsCheck(chat *Chat) bool {
@@ -510,7 +555,7 @@ func (r *Runner) call(ctx context.Context, chat *Chat, name string, args json.Ra
 	}
 	r.loadArea(chat, p.Area)
 	if p.Mode == ModeAsk {
-		chat.Pending = &Pending{ID: NewID(), Tool: p.Tool, Args: p.Args, Plan: p.Plan, Level: p.Level, Summary: p.Summary, Area: p.Area, Kind: p.Kind, At: r.now()}
+		chat.Pending = &Pending{ID: NewID(), Tool: p.Tool, Args: p.Args, Plan: p.Plan, Level: p.Level, Summary: p.Summary, Area: p.Area, Kind: p.Kind, Untrusted: p.Untrusted, At: r.now()}
 		r.setState(chat, StateWaiting, "")
 		r.emit(Event{Type: "approval", Wait: chat.Pending})
 		return true, r.save(chat)
@@ -533,7 +578,7 @@ func (r *Runner) execute(ctx context.Context, chat *Chat, p Prepared, step Entry
 		step.Result = "Error: " + err.Error()
 		return false, r.add(chat, step)
 	}
-	step.OK, step.Result, step.Sources, step.Files = true, out.Text, out.Sources, out.Files
+	step.OK, step.Result, step.Sources, step.Files = true, keepResult(out.Text), out.Sources, out.Files
 	if err := r.add(chat, step); err != nil {
 		return false, err
 	}
@@ -572,7 +617,7 @@ func (r *Runner) Decide(ctx context.Context, chat *Chat, id string, approve bool
 	r.setState(chat, StateRunning, "")
 	step := Entry{ID: NewID(), At: r.now(), Role: "tool", Tool: p.Tool, Args: p.Args}
 	r.emit(Event{Type: "step", Step: &step})
-	done, err := r.execute(ctx, chat, Prepared{Tool: p.Tool, Args: p.Args, Plan: p.Plan, Level: p.Level, Summary: p.Summary, Area: p.Area, Kind: p.Kind, Mode: ModeAllow}, step)
+	done, err := r.execute(ctx, chat, Prepared{Tool: p.Tool, Args: p.Args, Plan: p.Plan, Level: p.Level, Summary: p.Summary, Area: p.Area, Kind: p.Kind, Untrusted: p.Untrusted, Mode: ModeAllow}, step)
 	if err != nil || done {
 		return err
 	}

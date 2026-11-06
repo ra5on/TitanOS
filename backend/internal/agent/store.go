@@ -30,7 +30,7 @@ var ErrNoVolume = errors.New("agent: no data volume mounted")
 var ErrNotFound = errors.New("agent: not found")
 
 const (
-	maxChatFile  = 16 << 20
+	maxChatFile  = 64 << 20 // PLAN 59: older chats grew past 16 MB
 	maxIndexFile = 4 << 20
 	// MaxChats an account keeps; the oldest unpinned chats go first.
 	MaxChats = 2000
@@ -123,7 +123,10 @@ type Pending struct {
 	Summary string          `json:"summary"`
 	Area    string          `json:"area,omitempty"`
 	Kind    string          `json:"kind,omitempty"`
-	At      time.Time       `json:"at"`
+	// Untrusted: the step reads outside content; approved, it still marks
+	// the chat (PLAN 59, it was lost on the way through the approval).
+	Untrusted bool      `json:"untrusted,omitempty"`
+	At        time.Time `json:"at"`
 }
 
 // States of a chat.

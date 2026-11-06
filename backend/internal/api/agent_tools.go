@@ -574,8 +574,13 @@ func (b *agentToolbox) haMode(name string, args json.RawMessage, mode string) st
 		domain, _, _ := strings.Cut(id, ".")
 		stricter(ruleFor(id, domain))
 	}
+	// The call's own domain counts where it names no device of that domain
+	// (e.g. "all lights"); with named devices their rules decide, so an
+	// exception for one device works inside a denied domain (PLAN 59).
 	for _, d := range domains {
-		stricter(ruleFor("", d))
+		if !slices.ContainsFunc(ids, func(id string) bool { return strings.HasPrefix(id, d+".") }) {
+			stricter(ruleFor("", d))
+		}
 	}
 	if (name == "ha_automation_save" || name == "ha_script_save") && len(ids) == 0 {
 		stricter(agent.ModeAsk)

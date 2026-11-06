@@ -7,12 +7,20 @@ Ab Werk ist der Agent aus. Eingeschaltet wird er unter **Einstellungen › KI-Ag
 ## Einrichten
 
 1. Ollama auf einem Rechner im Heimnetz betreiben und ein Modell mit Werkzeugen laden, z. B. `ollama pull gpt-oss:20b`.
-2. Einstellungen › KI-Agent: Adresse eintragen (z. B. `http://192.168.10.5:11434`), **Prüfen**, Modell wählen, einschalten, speichern.
+2. Einstellungen › KI-Agent: Adresse eintragen (z. B. `http://192.168.10.5:11434`), **Prüfen**, Modell wählen, einschalten, speichern. Beim ersten Einschalten fragt ein Fenster nach dem **Speicherort** (siehe unten).
 3. Den Reiter **KI-Agent** öffnen.
 
 **Denkstufen:** Die Auswahl kommt vom Modell selbst (`thinking.values` aus Ollamas `/api/show`). gpt-oss meldet Niedrig/Mittel/Hoch, andere Modelle nur an/aus oder mehr Stufen. Eine Stufe, die das Modell nicht kennt, wird nicht gesendet; Ollama würde sie sonst still durch seinen Standard ersetzen.
 
-**Kontextlänge:** „Wie in Ollama eingestellt“ schickt keinen eigenen Wert. Die Seite zeigt, womit Ollama das Modell gerade geladen hat (`/api/ps`), und warnt unter 16k. Ollama nimmt ohne Einstellung je nach Grafikspeicher nur 4k. Rund 80 Werkzeuge belegen etwa 6 700 Token (gemessen mit gpt-oss:20b).
+**Kontextlänge:** „Wie in Ollama eingestellt“ schickt keinen eigenen Wert. Die Auswahl geht bis 256k, aber nie über die Länge des Modells (`context_length` aus `/api/show`). Die Seite zeigt immer, wie viel das Modell kann, und, wenn es geladen ist, womit Ollama es gerade nutzt (`/api/ps`); sie warnt unter 16k und weist über 64k auf den Grafikspeicher hin. Ist das Modell zu Beginn eines Auftrags nicht geladen, lädt der Agent es zuerst und liest dann den echten Wert (PLAN 59a), damit er schon in der ersten Runde rechtzeitig zusammenfasst. Jede Anfrage von TitanOS an das Modell des Agenten (Chat, Zusammenfassen, Nachdenken in der Nacht, Bilder ansehen) schickt dieselbe Haltezeit und denselben Kontext aus den Einstellungen, damit Ollama das Modell nicht neu lädt oder früher entlädt. Rund 80 Werkzeuge belegen etwa 6 700 Token (gemessen mit gpt-oss:20b).
+
+**Speicherort (PLAN 58):** Alles des Agenten liegt auf einem Volume: privat `.titanos/agent/` (Chats mit Gedanken und Schritten, Gedächtnis, Freigaben, Zeitpläne, Anhänge) und die Freigabe `KI-Agent` (Chats als Markdown, Projekte, Dokumente, Skills, Notizen, Arbeitsordner der Sandbox). Die Sprachmodelle bleiben bei Ollama.
+- Beim ersten Einschalten fragt ein Fenster nach dem Volume; angeboten werden alle eingebundenen mit freiem Platz und Art (SSD/Festplatte), SSD ist vorgewählt und empfohlen. Wer den Agenten schon nutzt, behält sein Volume ohne Frage.
+- Das Volume ändert sich danach nur über **Umziehen** (Übersicht › Speicherort). titand kopiert Ordner und Dateien mit Rechten und Zeiten, lässt Verknüpfungen weg, vergleicht jede Datei per SHA-256, schaltet erst dann `volume` in `agent.json` und die Freigabe um und räumt zuletzt das alte Volume auf. Scheitert ein Schritt vor dem Umschalten, bleibt das alte Volume gültig und die halbe Kopie wird entfernt.
+- Während des Umzugs pausiert der Agent (keine neuen Aufträge, kein Lesen und Schreiben seiner Daten). Läuft ein Auftrag, lehnt titand den Umzug ab. Das Ziel braucht etwa 10 % mehr freien Platz als die Daten und darf noch keine Daten des Agenten haben.
+- API (Besitzer und Administratoren): `GET /api/v1/agent/volumes`, `POST /api/v1/agent/volume/move` `{to}`, `GET /api/v1/agent/volume/move`. Der Fortschritt liegt nur im RAM; ein Neustart während des Umzugs lässt das alte Volume gültig (die Einstellung wird erst nach der Prüfung geschrieben).
+
+**Mitteilungen (PLAN 58):** Jedes Konto kann seine Geräte für Mitteilungen eintragen (Agent-App: Zahnrad › Mitteilungen; Konto-Seite). Konten mit der Rolle „Benutzer“ bekommen nur die Mitteilungen ihres eigenen Agenten (Auftrag fertig, Freigabe nötig, Erinnerungen); was die Glocke zeigt, geht weiter nur an Besitzer und Administratoren.
 
 **Einstellungen › KI-Agent (seit 0.54.0, PLAN 53)**
 
@@ -352,7 +360,7 @@ Ergebnisse stehen in den Release-Notizen.
 |---|---|
 | Einstellungen | `/config/system/agent.json` (Stick, nur beim Speichern); auf dem Admin-Knoten auch die Anfragen anderer Knoten (`shared`) |
 | Vollbild ja/nein | `localStorage` des Browsers (`titanos.agent.full`) |
-| Chats, Projekte, Gedächtnis, Skills, geplante Aufträge | `.titanos/agent/<konto>/` auf einem Daten-Volume: beim ersten Gebrauch das erste eingebundene, danach fest (`volume` in `agent.json`) |
+| Chats, Projekte, Gedächtnis, Skills, geplante Aufträge | `.titanos/agent/<konto>/` auf dem Volume des Agenten: beim Einschalten gewählt (`volume` in `agent.json`), danach nur per Umziehen geändert; ältere Installationen ohne Wahl nehmen beim ersten Gebrauch das erste eingebundene |
 | Darstellung | `localStorage` des Browsers |
 | Gelesen-Stand je Chat | `.titanos/agent/<konto>/seen.json` (nur bei Änderung geschrieben) |
 | Stand der Abbilder in der Freigabe | `.titanos/agent/<konto>/mirror.json` |

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import PushDevices from '#lib/components/PushDevices.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import SoundSettings from '#lib/components/SoundSettings.svelte';
 	import PersonalNotifications from '#lib/components/PersonalNotifications.svelte';
@@ -358,7 +359,8 @@
 	</section>
 {/if}
 
-{#if user?.role === 'owner' || user?.role === 'admin'}<PersonalNotifications />{/if}
+{#if user?.role === 'owner' || user?.role === 'admin'}<PersonalNotifications
+	/>{:else if user}<PushDevices personal />{/if}
 {#if user?.role === 'owner' || user?.role === 'admin'}<BellSettings />{/if}
 <SoundSettings />
 

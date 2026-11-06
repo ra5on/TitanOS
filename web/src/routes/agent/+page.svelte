@@ -96,6 +96,43 @@
 		| { kind: 'nas' }
 		| null
 	>(null);
+	/** The settings beneath a window opened from them. */
+	let under = $state<Extract<NonNullable<typeof dialog>, { kind: 'settings' }> | null>(null);
+	const settingsShown = $derived(
+		dialog?.kind === 'settings' ? dialog : under?.kind === 'settings' ? under : null,
+	);
+	/** The chat's action sheet takes the focus and gives it back (PLAN 59). */
+	function sheetFocus(node: HTMLElement) {
+		const back = document.activeElement as HTMLElement | null;
+		node.querySelector<HTMLElement>('button')?.focus();
+		const trap = (e: KeyboardEvent) => {
+			if (e.key !== 'Tab') return;
+			const items = [...node.querySelectorAll<HTMLElement>('button:not(:disabled)')];
+			if (!items.length) return;
+			const first = items[0];
+			const last = items[items.length - 1];
+			if (e.shiftKey && document.activeElement === first) {
+				e.preventDefault();
+				last.focus();
+			} else if (!e.shiftKey && document.activeElement === last) {
+				e.preventDefault();
+				first.focus();
+			}
+		};
+		node.addEventListener('keydown', trap);
+		return { destroy: () => (node.removeEventListener('keydown', trap), back?.focus?.()) };
+	}
+	function openOver(next: NonNullable<typeof dialog>) {
+		if (dialog?.kind === 'settings') under = dialog;
+		dialog = next;
+	}
+	// Closing the window on top brings the settings back.
+	$effect(() => {
+		if (dialog === null && under) {
+			dialog = under;
+			under = null;
+		}
+	});
 	let composer = $state<{ fill: (text: string) => void }>();
 	let attachments = $state<{ name: string; file?: File; ref?: string }[]>([]);
 	let phone = $state(matchMedia('(max-width: 760px)').matches);
@@ -114,6 +151,36 @@
 	const contextNow = $derived(
 		status?.context || status?.running?.find((r) => r.name === model)?.contextLength || 0,
 	);
+
+	// PLAN 59: on the phone the app follows the visible part of the screen.
+	// With the keyboard open iOS keeps the page height and pans instead; the
+	// app then sits in what is visible and the composer right on the
+	// keyboard, without the gap of the home indicator.
+	let keyboard = $state(false);
+	$effect(() => {
+		const vv = window.visualViewport;
+		if (!vv || !(app && phone)) return;
+		const root = document.documentElement;
+		const update = () => {
+			// Pinch zoom also shrinks the visible part: then nothing moves.
+			if (Math.abs(vv.scale - 1) > 0.01) return;
+			root.style.setProperty('--ag-vvh', `${vv.height}px`);
+			root.style.setProperty('--ag-vvtop', `${vv.offsetTop}px`);
+			keyboard = root.clientHeight - vv.height > 120;
+			// The page behind the app cannot scroll; what iOS panned goes back.
+			if (vv.offsetTop > 0 && root.scrollHeight <= root.clientHeight + 1) window.scrollTo(0, 0);
+		};
+		update();
+		vv.addEventListener('resize', update);
+		vv.addEventListener('scroll', update);
+		return () => {
+			vv.removeEventListener('resize', update);
+			vv.removeEventListener('scroll', update);
+			root.style.removeProperty('--ag-vvh');
+			root.style.removeProperty('--ag-vvtop');
+			keyboard = false;
+		};
+	});
 
 	$effect(() => {
 		const query = matchMedia('(max-width: 760px)');
@@ -824,11 +891,13 @@
 	class="agent"
 	class:app
 	class:phone
+	class:keyboard
 	class:glass={look.glass}
 	class:glow={look.glow && !calm}
 	class:calm
 	data-style={look.style}
 	data-bg={look.background}
+	data-size={look.fontSize}
 	style={lookStyle(look)}
 >
 	{#if error}<div class="notice-error" role="alert">{error}</div>{/if}
@@ -1021,6 +1090,25 @@
 	{/if}
 </div>
 
+{#if settingsShown && status}
+	<!-- The settings stay open beneath a window they open (PLAN 59), and
+	     are there again when it closes. -->
+	<AgentSettings
+		bind:look
+		{status}
+		{user}
+		{calm}
+		start={settingsShown.section ?? 'list'}
+		onknow={getToKnow}
+		onclose={() => ((dialog = null), (under = null))}
+		onopen={(part) => openOver({ kind: 'knowledge', tab: part, only: true })}
+		chats={chats.filter((c) => !c.author).length}
+		ondeleteall={() => {
+			keepPinned = true;
+			openOver({ kind: 'deleteAll' });
+		}}
+	/>
+{/if}
 {#if dialog?.kind === 'project'}
 	<ProjectDialog
 		project={dialog.project}
@@ -1041,6 +1129,7 @@
 		{projects}
 		onclose={() => (dialog = null)}
 		onopenchat={(id) => {
+			under = null;
 			dialog = null;
 			void open(id);
 		}}
@@ -1051,7 +1140,17 @@
 	{@const chat = dialog.chat}
 	<!-- PLAN 53: everything you can do with a chat, as a sheet from below. -->
 	<div class="sheet-scrim" role="presentation" onclick={() => (dialog = null)}></div>
-	<div class="action-sheet" role="dialog" aria-modal="true" aria-label={chat.title}>
+	<div
+		class="action-sheet"
+		role="dialog"
+		aria-modal="true"
+		aria-label={chat.title}
+		tabindex="-1"
+		use:sheetFocus
+		onkeydown={(e) => {
+			if (e.key === 'Escape') dialog = null;
+		}}
+	>
 		<span class="grab" aria-hidden="true"></span>
 		<strong class="sheet-title">{chat.title || t('agent.newChat')}</strong>
 		<div class="sheet-list">
@@ -1104,22 +1203,6 @@
 			dialog = null;
 			newChat('');
 			void send(text);
-		}}
-	/>
-{:else if dialog?.kind === 'settings' && status}
-	<AgentSettings
-		bind:look
-		{status}
-		{user}
-		{calm}
-		start={dialog.section ?? 'list'}
-		onknow={getToKnow}
-		onclose={() => (dialog = null)}
-		onopen={(part) => (dialog = { kind: 'knowledge', tab: part, only: true })}
-		chats={chats.filter((c) => !c.author).length}
-		ondeleteall={() => {
-			keepPinned = true;
-			dialog = { kind: 'deleteAll' };
 		}}
 	/>
 {:else if dialog?.kind === 'move'}
@@ -1242,6 +1325,7 @@
 		inset: 0;
 		z-index: 70;
 		background: rgb(3 6 14 / 0.5);
+		-webkit-backdrop-filter: blur(8px);
 		backdrop-filter: blur(8px);
 	}
 	.action-sheet {
@@ -1256,6 +1340,7 @@
 		border-radius: 26px 26px 0 0;
 		color: var(--text);
 		background: color-mix(in srgb, var(--surface) 82%, transparent);
+		-webkit-backdrop-filter: blur(30px) saturate(170%);
 		backdrop-filter: blur(30px) saturate(170%);
 		border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
 		animation: sheet-up 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -1414,6 +1499,20 @@
 		height: 100dvh;
 		gap: 0;
 	}
+	:global(html:has(.agent.app.phone)),
+	:global(body:has(.agent.app.phone)) {
+		height: 100%;
+		overflow: hidden;
+		overscroll-behavior: none;
+	}
+	.agent.app.phone {
+		position: fixed;
+		top: var(--ag-vvtop, 0px);
+		left: 0;
+		right: 0;
+		height: var(--ag-vvh, 100dvh);
+		min-height: 0;
+	}
 	.layout {
 		flex: 1;
 		min-height: 0;
@@ -1436,14 +1535,21 @@
 	.agent.glass .side,
 	.agent.glass .main {
 		background: color-mix(in srgb, var(--surface) calc(var(--ag-alpha, 0.55) * 100%), transparent);
+		-webkit-backdrop-filter: blur(26px) saturate(170%);
 		backdrop-filter: blur(26px) saturate(170%);
 		border-color: color-mix(in srgb, var(--text) 10%, transparent);
 		box-shadow:
 			inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent),
 			0 20px 50px -25px rgb(0 0 0 / 0.7);
 	}
-	.layout {
-		zoom: var(--ag-scale, 1);
+	/* Text size of the app (PLAN 53) through the root font size, not CSS
+	   zoom: WebKit drew zoomed text over the glass layers blurred
+	   (PLAN 59, title on the iPhone). */
+	:global(html:has(.agent[data-size='s'])) {
+		font-size: calc(16px * var(--font-scale) * 0.93);
+	}
+	:global(html:has(.agent[data-size='l'])) {
+		font-size: calc(16px * var(--font-scale) * 1.1);
 	}
 	.main {
 		display: flex;
@@ -1456,6 +1562,7 @@
 		border: 0;
 		border-radius: 0;
 		background: transparent;
+		-webkit-backdrop-filter: none;
 		backdrop-filter: none;
 		box-shadow: none;
 	}
@@ -1563,6 +1670,9 @@
 	.agent.phone .dock {
 		padding: 4px 12px calc(env(safe-area-inset-bottom, 0px) + 8px);
 	}
+	.agent.phone.keyboard .dock {
+		padding-bottom: 6px;
+	}
 	.scrim {
 		position: fixed;
 		inset: 0;
@@ -1570,6 +1680,7 @@
 		border: 0;
 		padding: 0;
 		background: rgb(0 0 0 / 0.5);
+		-webkit-backdrop-filter: blur(3px);
 		backdrop-filter: blur(3px);
 		cursor: default;
 	}
@@ -1582,6 +1693,7 @@
 		width: min(84%, 340px);
 		padding-top: env(safe-area-inset-top, 0px);
 		background: color-mix(in srgb, var(--surface) 78%, transparent);
+		-webkit-backdrop-filter: blur(28px) saturate(170%);
 		backdrop-filter: blur(28px) saturate(170%);
 		border-right: 1px solid var(--glass-border, var(--border));
 		box-shadow: 20px 0 50px -20px rgb(0 0 0 / 0.7);

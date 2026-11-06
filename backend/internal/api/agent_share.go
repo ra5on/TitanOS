@@ -85,7 +85,7 @@ func (s *Server) agentShareUsers(settings agentSettings) []auth.User {
 // is not the agent's).
 func (s *Server) agentShare() (shares.Share, bool) {
 	settings := s.agentSettings()
-	if !settings.Enabled || s.opts.Shares == nil || s.opts.Storage == nil || s.opts.Users == nil {
+	if !settings.Enabled || s.agentMoving() || s.opts.Shares == nil || s.opts.Storage == nil || s.opts.Users == nil {
 		return shares.Share{}, false
 	}
 	// The same volume as the agent's own data (chosen once, then kept).
@@ -326,6 +326,9 @@ func (s *Server) agentSyncUser(sh shares.Share, user auth.User) error {
 	m := &s.agentMirror
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if s.agentMoving() {
+		return nil // the data is being moved (PLAN 58)
+	}
 	st := m.load(s, user.Name)
 	version := s.opts.Version
 	changed := version != st.Version

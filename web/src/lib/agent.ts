@@ -211,6 +211,8 @@ export type FolderRule = { root: string; path: string; mode: Mode };
 
 export type Settings = {
 	enabled: boolean;
+	/** The volume of the agent's data (PLAN 58). */
+	volume?: string;
 	ollama?: string;
 	/** '' this node's own Ollama, 'cluster' the model of the admin node (PLAN 47). */
 	source?: '' | 'cluster';

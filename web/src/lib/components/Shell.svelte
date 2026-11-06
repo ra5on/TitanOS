@@ -218,6 +218,7 @@
 	{#if side}<SideNav tasks={!ownTasks} note={shell.statusNote} />{/if}
 	<div
 		class="shell"
+		class:agent-app={agentApp}
 		style:padding-bottom={admin && terminal.open && !terminal.full
 			? `${terminal.height}px`
 			: undefined}
@@ -273,7 +274,9 @@
 	/* As an app on the home screen the phone's home indicator lies over
 	   the bottom edge. */
 	@media (display-mode: standalone) {
-		.shell {
+		/* The agent app keeps that space itself (PLAN 59: counted twice it
+		   left a gap above the keyboard and a page that scrolls). */
+		.shell:not(.agent-app) {
 			padding-bottom: env(safe-area-inset-bottom);
 		}
 	}

@@ -81,6 +81,43 @@ type Device struct {
 	Name    string    `json:"name"`
 	Service string    `json:"service"`
 	Created time.Time `json:"created"`
+	// Off are the kinds of messages this device does not want (PLAN 59):
+	// KindNAS (what the bell shows) and KindAgent (the KI-Agent's). Empty,
+	// as in older files, means both.
+	Off []string `json:"off,omitempty"`
+}
+
+// Kinds of messages a device can switch off.
+const (
+	KindNAS   = "nas"
+	KindAgent = "agent"
+)
+
+func (d Device) wants(kind string) bool { return !slices.Contains(d.Off, kind) }
+
+// SetKinds switches the kinds of messages of a device of user.
+func (m *Manager) SetKinds(user, id string, nas, agent bool) (Device, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	i := slices.IndexFunc(m.st.Devices, func(d stored) bool { return d.ID == id && d.User == user })
+	if i < 0 {
+		return Device{}, ErrNotFound
+	}
+	var off []string
+	if !nas {
+		off = append(off, KindNAS)
+	}
+	if !agent {
+		off = append(off, KindAgent)
+	}
+	next := m.st
+	next.Devices = slices.Clone(m.st.Devices)
+	next.Devices[i].Off = off
+	if err := m.store.WriteJSON(file, next); err != nil {
+		return Device{}, err
+	}
+	m.st = next
+	return next.Devices[i].Device, nil
 }
 
 type stored struct {
@@ -113,8 +150,12 @@ type Manager struct {
 	// Allowed tells whether an account may still get notifications (owner
 	// or administrator, not locked); nil allows all.
 	Allowed func(user string) bool
-	client  *http.Client
-	now     func() time.Time
+	// Personal tells whether an account may get its own messages (SendTo,
+	// e.g. the KI-Agent's, PLAN 58); nil falls back to Allowed. Accounts
+	// with the role "Benutzer" get these but no notifications of the NAS.
+	Personal func(user string) bool
+	client   *http.Client
+	now      func() time.Time
 	// checkHost decides which endpoint hosts are taken; tests replace it.
 	checkHost func(hostport string) bool
 
@@ -322,6 +363,13 @@ func (m *Manager) Test(ctx context.Context, user, id string, msg Message) error 
 	return m.sendTo(ctx, *target, msg)
 }
 
+func (m *Manager) personal(user string) bool {
+	if m.Personal != nil {
+		return m.Personal(user)
+	}
+	return m.Allowed == nil || m.Allowed(user)
+}
+
 // Broadcast sends a message to every device whose account may still get
 // notifications, in the background, one attempt each with one retry.
 func (m *Manager) Broadcast(msg Message) {
@@ -329,7 +377,7 @@ func (m *Manager) Broadcast(msg Message) {
 	devices := slices.Clone(m.st.Devices)
 	m.mu.Unlock()
 	for _, d := range devices {
-		if m.Allowed != nil && !m.Allowed(d.User) {
+		if (m.Allowed != nil && !m.Allowed(d.User)) || !d.wants(KindNAS) {
 			continue
 		}
 		go func() {
@@ -355,7 +403,7 @@ func (m *Manager) SendTo(user string, msg Message) {
 	devices := slices.Clone(m.st.Devices)
 	m.mu.Unlock()
 	for _, d := range devices {
-		if d.User != user || (m.Allowed != nil && !m.Allowed(d.User)) {
+		if d.User != user || !m.personal(d.User) || !d.wants(KindAgent) {
 			continue
 		}
 		go func() {

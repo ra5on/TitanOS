@@ -544,11 +544,16 @@ func (o *Ollama) Pull(ctx context.Context, model string, progress func(PullProgr
 
 // Look asks a model that sees pictures about one image and returns its
 // answer (PLAN 49). It does not stream: the agent waits for the whole text.
-func (o *Ollama) Look(ctx context.Context, model, prompt string, image []byte, keepAlive string) (string, error) {
+// numCtx is sent when the picture model is the main model, so that Ollama
+// does not load it anew with another context.
+func (o *Ollama) Look(ctx context.Context, model, prompt string, image []byte, keepAlive string, numCtx int) (string, error) {
 	body := map[string]any{"model": model, "stream": false,
 		"messages": []Message{{Role: "user", Content: prompt, Images: []string{base64.StdEncoding.EncodeToString(image)}}}}
 	if keepAlive != "" {
 		body["keep_alive"] = keepAlive
+	}
+	if numCtx > 0 {
+		body["options"] = map[string]any{"num_ctx": numCtx}
 	}
 	var out struct {
 		Message Message `json:"message"`
