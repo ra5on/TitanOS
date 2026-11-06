@@ -137,7 +137,9 @@ eingeschalteter Apps:
    der Apps abdecken“, Platzhalter `*.<domain>`), wird es verwendet.
 2. Sonst das importierte eigene Zertifikat, wenn es den Namen abdeckt (z. B. ein
    Platzhalterzertifikat `*.home.example.org`).
-3. Sonst ein eigenes selbst signiertes Zertifikat für Apps, das nur Platzhalter
+3. Sonst (seit PLAN 61) ein kurzlebiges Zertifikat der **TitanOS-Zertifizierungsstelle**
+   für dieselben Namen, nur im RAM (siehe `docs/APP-WINDOWS.md`).
+4. Nur wenn die Zertifizierungsstelle nicht verfügbar ist: ein eigenes selbst signiertes Zertifikat für Apps, das nur Platzhalter
    nennt: `*.<hostname>.local` und ggf. `*.<domain>`
    (`/config/tls/apps-cert.pem`, `apps-key.pem`). Es bleibt gleich, wenn Apps
    dazukommen oder gehen; neu erzeugt wird es nur, wenn sich Hostname oder Domain
@@ -155,7 +157,9 @@ IPv64 als Anbieter oder für Namen unter der App-Domain bzw. einem Namen des
 Zertifikats. Ändern sich die Routen, sieht Let's Encrypt gleich nach
 (`NamesChanged`).
 
-Browser verlangen die Ausnahme für selbst signierte Zertifikate je Name. Wer das
+Ist die TitanOS-Zertifizierungsstelle auf dem Gerät installiert (Download unter
+Einstellungen › HTTPS-Namen für Apps), warnt der Browser bei keinem dieser Namen.
+Ohne sie verlangen Browser die Ausnahme je Name. Wer das
 vermeiden will, lässt unter Einstellungen › Let's Encrypt ein Zertifikat für
 `*.<domain>` holen, importiert unter Einstellungen › Zugang ein eigenes
 Platzhalterzertifikat oder vertraut dem App-Zertifikat im Betriebssystem.
@@ -223,6 +227,9 @@ Nur Besitzer/Administratoren, jede Änderung im Aktivitätsprotokoll:
 - `PUT /api/v1/docker/proxy` mit `{domain?, localName?, mdns?, off?}`; nicht gesendete Felder bleiben unverändert (ältere Seiten schicken nur `domain`)
 - `PUT /api/v1/docker/proxy/apps/{app}` und `PUT /api/v1/docker/proxy/targets/{id}` mit der Route (ohne `domains` bleiben die gespeicherten, `[]` leert sie)
 - `DELETE /api/v1/docker/proxy/apps/{app}`, `DELETE /api/v1/docker/proxy/targets/{id}`
+- seit PLAN 61: `PUT /api/v1/docker/proxy` nimmt zusätzlich `auto` („Automatisch für alle Apps mit WebUI“); `GET` liefert `auto` und je automatischer Route `auto: true`
+
+Rechte je App, App-Fenster und die Zertifizierungsstelle: `docs/APP-WINDOWS.md`.
 
 Fehler: `proxy_invalid` (400), `proxy_name_taken` (409). `GET /api/v1/docker`
 liefert je Container `proxyUrl`.
