@@ -20,6 +20,7 @@ export type FrameMessage =
 	| { type: 'titanos-prefs'; dock: Dock }
 	/** A window asks the desktop to open one of its dialogs (the wallpaper). */
 	| { type: 'titanos-desk-dialog'; dialog: 'wallpaper' }
+	| { type: 'titanos-console'; session: unknown }
 	| {
 			type: 'titanos-key';
 			key: string;

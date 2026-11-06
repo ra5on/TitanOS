@@ -345,7 +345,7 @@
 		</dialog>
 	{/if}
 {/if}
-{#if admin && !inWindow && !desktopMode && !phoneMode}<TerminalPanel />{/if}
+{#if admin && (inWindow ? page.url.pathname === '/terminal' : !desktopMode)}<TerminalPanel />{/if}
 {#if palette.open}<CommandPalette onclose={() => (palette.open = false)} />{/if}
 {#if shortcutsOpen}<ShortcutsDialog {admin} onclose={() => (shortcutsOpen = false)} />{/if}
 {#if shell.tasksSheet}<TasksPanel sheetOnly />{/if}

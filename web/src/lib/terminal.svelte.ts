@@ -1,5 +1,6 @@
 // The terminal panel: which sessions are open and how the panel looks.
 // It lives outside the pages, so sessions go on when the page changes.
+import { embedded } from './embedded.ts';
 
 export type TerminalSession = {
 	id: number;
@@ -52,7 +53,15 @@ export function remember() {
 	}
 }
 
-function add(session: Omit<TerminalSession, 'id' | 'started'>) {
+export type NewSession = Omit<TerminalSession, 'id' | 'started'>;
+
+function add(session: NewSession) {
+	// In a window of the desktop (PLAN 62-5) a console opens in the Terminal
+	// window; the page asking for it has no panel of its own.
+	if (embedded && location.pathname !== '/terminal') {
+		window.parent.postMessage({ type: 'titanos-console', session }, location.origin);
+		return;
+	}
 	const id = nextId++;
 	terminal.sessions.push({ ...session, id, started: Date.now() });
 	terminal.active = id;
@@ -107,6 +116,24 @@ export function addLXCConsole(name: string, label = name, mode: 'shell' | 'conso
 		container: name,
 		shell,
 	});
+}
+
+/** Opens a session asked for by another window (validated: only the known kinds). */
+export function openRequested(value: unknown) {
+	if (typeof value !== 'object' || value === null) return;
+	const s = value as Record<string, unknown>;
+	const text = (v: unknown, max = 200) => (typeof v === 'string' ? v.slice(0, max) : '');
+	const container = text(s.container);
+	const title = text(s.title, 80) || container;
+	if (s.kind === 'nas') addNasShell();
+	else if (s.kind === 'ct' && container) addContainerConsole(container, title);
+	else if (s.kind === 'vm' && container) addVmConsole(container, title);
+	else if (s.kind === 'lxc' && container)
+		addLXCConsole(
+			container,
+			title.replace(/ \(tty\)$/, ''),
+			s.shell === 'sh' ? 'console' : 'shell',
+		);
 }
 
 export function closeSession(id: number) {

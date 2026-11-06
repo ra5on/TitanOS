@@ -17,6 +17,7 @@
 		focus,
 		minimize,
 		navigateWindow,
+		openWindow,
 		registerFrame,
 		saveWindows,
 		savePrefs,
@@ -109,6 +110,14 @@
 			win.href = msg.path;
 			if (focused) onaddress?.(msg.path);
 			saveWindows();
+		} else if (msg?.type === 'titanos-console') {
+			// A console asked for by this page opens in the Terminal window (PLAN 62-5).
+			const href = '/terminal?open=' + encodeURIComponent(JSON.stringify(msg.session));
+			const term = wm.windows.find((w) => w.app === 'app:terminal');
+			if (term) {
+				navigateWindow(term.id, href);
+				focus(term.id);
+			} else openWindow('app:terminal', href, t('desktop.app.terminal'), { multi: true });
 		} else if (msg?.type === 'titanos-key') {
 			window.dispatchEvent(
 				new KeyboardEvent('keydown', {
