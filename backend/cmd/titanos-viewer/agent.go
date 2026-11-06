@@ -69,7 +69,7 @@ func waitFor(path string, d time.Duration) error {
 
 // prepareDirs creates the writable layout on /tmp and /profile.
 func prepareDirs() error {
-	for _, d := range []string{runDir, policyDir, homeDir + "/.config/gtk-3.0", homeDir + "/.cache", pulseDir} {
+	for _, d := range []string{runDir, homeDir + "/.config/gtk-3.0", homeDir + "/.cache", pulseDir} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
 			return err
 		}
@@ -96,8 +96,8 @@ func (a *agent) start(parent context.Context) error {
 	if err := prepareDirs(); err != nil {
 		return err
 	}
-	if err := writePolicies(a.cfg.Origin); err != nil {
-		return fmt.Errorf("policies: %w", err)
+	if err := checkPolicyFile(proto.PolicyPath, a.cfg.Origin, 0); err != nil {
+		return fmt.Errorf("refusing to start the browser: Chromium policy: %w", err)
 	}
 	var err error
 	a.xvfb, err = startProc("xvfb", []string{"/usr/bin/Xvfb", display,
@@ -132,8 +132,11 @@ func (a *agent) start(parent context.Context) error {
 		}
 	}
 	go warmGstRegistry()
+	clearUploads()
+	pruneDownloads(24 * time.Hour)
 	a.dl = newDownloads()
 	a.chrome = newChromium(a.cfg, a.w, a.h, a.scale)
+	a.chrome.closeWindows = a.x.closeWindows
 	go a.chrome.run(a.ctx)
 	go func() {
 		t := time.NewTicker(500 * time.Millisecond)
@@ -164,6 +167,7 @@ func (a *agent) shutdown() {
 	}
 	a.pulse.stop(2 * time.Second)
 	a.xvfb.stop(2 * time.Second)
+	clearUploads()
 }
 
 func (a *agent) current() *client {
@@ -180,11 +184,10 @@ func (a *agent) closeClient(reason, text string) {
 	}
 }
 
+// requestKey is the session key of a request. Only the header counts: a
+// key in the URL would end up in logs.
 func requestKey(r *http.Request) string {
-	if k := r.Header.Get("X-Viewer-Key"); k != "" {
-		return k
-	}
-	return r.URL.Query().Get("key")
+	return r.Header.Get("X-Viewer-Key")
 }
 
 func (a *agent) routes() http.Handler {

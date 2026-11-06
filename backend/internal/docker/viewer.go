@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -29,6 +30,34 @@ const ViewerLabel = "titanos.viewer"
 
 // ErrNotViewer refuses a container that does not carry ViewerLabel.
 var ErrNotViewer = errors.New("docker: not a container of the remote view")
+
+// ViewerPrefix starts the names of viewer containers and networks. Only
+// objects with ViewerLabel AND this prefix are the viewer's own.
+const ViewerPrefix = "titanos-viewer-"
+
+// viewerPrefix is ViewerPrefix; Manager.ViewerPrefix replaces it (tests
+// that run next to real viewers).
+func (m *Manager) viewerPrefix() string {
+	if m.ViewerNamePrefix != "" {
+		return m.ViewerNamePrefix
+	}
+	return ViewerPrefix
+}
+
+// ownViewer tells whether labels and name mark a viewer object of TitanOS.
+func (m *Manager) ownViewer(labels map[string]string, name string) bool {
+	return labels[ViewerLabel] == "1" && strings.HasPrefix(strings.TrimPrefix(name, "/"), m.viewerPrefix())
+}
+
+// isViewerContainer tells whether a container is part of the remote view
+// (label OR name): the routes for apps refuse those.
+func (m *Manager) isViewerContainer(ctx context.Context, id string) bool {
+	info, err := m.inspectAny(ctx, id)
+	if err != nil {
+		return false
+	}
+	return info.Config.Labels[ViewerLabel] != "" || strings.HasPrefix(strings.TrimPrefix(info.Name, "/"), ViewerPrefix)
+}
 
 // ViewerSpec is one viewer container.
 type ViewerSpec struct {
@@ -51,7 +80,18 @@ type ViewerSpec struct {
 	MemoryBytes int64
 	PidsLimit   int64
 	ShmBytes    int64
+	// NanoCPUs caps the CPU (1e9 = one CPU); CPUShares weighs it against
+	// other containers (Docker's default is 1024).
+	NanoCPUs  int64
+	CPUShares int64
+	// Policy is a host file (root-owned, 0444) mounted read-only as
+	// Chromium's managed policy (PolicyPath, proto.PolicyPath).
+	Policy string
 }
+
+// PolicyPath is the managed policy file of Chromium in the image; its
+// folder is root's and holds nothing else (viewer/Dockerfile).
+const PolicyPath = "/etc/chromium/policies/managed/titanos.json"
 
 // viewerCreateBody is the request of POST /containers/create for a spec.
 func viewerCreateBody(spec ViewerSpec) map[string]any {
@@ -59,14 +99,22 @@ func viewerCreateBody(spec ViewerSpec) map[string]any {
 	for _, d := range spec.Devices {
 		devices = append(devices, map[string]string{"PathOnHost": d, "PathInContainer": d, "CgroupPermissions": "rw"})
 	}
+	binds := []string{spec.Profile + ":/profile:rw"}
+	if spec.Policy != "" {
+		// Read-only and owned by root on the host: nothing in the
+		// container can change or add a policy.
+		binds = append(binds, spec.Policy+":"+PolicyPath+":ro")
+	}
 	host := map[string]any{
 		"NetworkMode":    spec.Network,
 		"ReadonlyRootfs": true,
+		// The only writable places besides /profile; the agent needs no /run.
 		"Tmpfs": map[string]string{
 			"/tmp": "rw,nosuid,nodev,size=256m,mode=1777",
-			"/run": "rw,nosuid,nodev,noexec,size=16m,mode=0755",
 		},
-		"Binds":       []string{spec.Profile + ":/profile:rw"},
+		"Binds":       binds,
+		"NanoCpus":    spec.NanoCPUs,
+		"CpuShares":   spec.CPUShares,
 		"Memory":      spec.MemoryBytes,
 		"MemorySwap":  spec.MemoryBytes,
 		"PidsLimit":   spec.PidsLimit,
@@ -109,7 +157,7 @@ func (m *Manager) Viewers(ctx context.Context) ([]ViewerContainer, error) {
 	}
 	out := []ViewerContainer{}
 	for _, c := range list {
-		if c.Labels[ViewerLabel] != "1" {
+		if len(c.Names) == 0 || !m.ownViewer(c.Labels, c.Names[0]) {
 			continue
 		}
 		v := ViewerContainer{ID: c.ID, State: c.State, User: c.Labels[ViewerLabel+".user"], App: c.Labels[ViewerLabel+".app"]}
@@ -123,7 +171,7 @@ func (m *Manager) Viewers(ctx context.Context) ([]ViewerContainer, error) {
 
 // ViewerCreate creates (not starts) a viewer container.
 func (m *Manager) ViewerCreate(ctx context.Context, spec ViewerSpec) (string, error) {
-	if spec.Name == "" || !strings.HasPrefix(spec.Image, "sha256:") || spec.Profile == "" || spec.Network == "" {
+	if !strings.HasPrefix(spec.Name, m.viewerPrefix()) || !strings.HasPrefix(spec.Network, m.viewerPrefix()) || !strings.HasPrefix(spec.Image, "sha256:") || spec.Profile == "" {
 		return "", errors.New("docker: incomplete viewer")
 	}
 	var created struct {
@@ -138,6 +186,8 @@ func (m *Manager) ViewerCreate(ctx context.Context, spec ViewerSpec) (string, er
 // viewerInspect is the part of GET /containers/{id}/json the viewer uses.
 type viewerInspect struct {
 	ID     string `json:"Id"`
+	Name   string
+	State  struct{ Running bool }
 	Config struct {
 		Labels map[string]string
 	}
@@ -164,7 +214,7 @@ func (m *Manager) inspectViewer(ctx context.Context, id string) (viewerInspect, 
 	if err != nil {
 		return info, err
 	}
-	if info.Config.Labels[ViewerLabel] != "1" {
+	if !m.ownViewer(info.Config.Labels, info.Name) {
 		return info, ErrNotViewer
 	}
 	return info, nil
@@ -178,13 +228,22 @@ func (m *Manager) ViewerStart(ctx context.Context, id string) error {
 	return m.api.post(ctx, "/containers/"+url.PathEscape(id)+"/start", nil)
 }
 
-// ViewerRemove stops and removes a viewer container. A container that is
-// gone already counts as removed.
+// ViewerStopSeconds is how long a viewer gets to end on its own before it
+// is killed: Chromium writes cookies and the profile on exit.
+const ViewerStopSeconds = 10
+
+// ViewerRemove stops a viewer container (giving it ViewerStopSeconds) and
+// removes it. A container that is gone already counts as removed. ctx must
+// allow for the stop time.
 func (m *Manager) ViewerRemove(ctx context.Context, id string) error {
 	if _, err := m.inspectViewer(ctx, id); err != nil {
 		if notFound(err) {
 			return nil
 		}
+		return err
+	}
+	// A container that is not running answers 304, which is no error.
+	if err := m.api.post(ctx, "/containers/"+url.PathEscape(id)+"/stop", url.Values{"t": {strconv.Itoa(ViewerStopSeconds)}}); err != nil && !notFound(err) {
 		return err
 	}
 	_, err := m.api.do(ctx, http.MethodDelete, "/containers/"+url.PathEscape(id), url.Values{"force": {"true"}})
@@ -194,16 +253,14 @@ func (m *Manager) ViewerRemove(ctx context.Context, id string) error {
 	return err
 }
 
-// ViewerAddress is the IPv4 address of a viewer container on network.
-func (m *Manager) ViewerAddress(ctx context.Context, id, network string) (string, error) {
+// ViewerState is the IPv4 address of a viewer container on network and
+// whether it runs.
+func (m *Manager) ViewerState(ctx context.Context, id, network string) (address string, running bool, err error) {
 	info, err := m.inspectViewer(ctx, id)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
-	if n, ok := info.NetworkSettings.Networks[network]; ok && n.IPAddress != "" {
-		return n.IPAddress, nil
-	}
-	return "", errors.New("docker: viewer has no address yet")
+	return info.NetworkSettings.Networks[network].IPAddress, info.State.Running, nil
 }
 
 // ViewerMemory is the memory a viewer container uses now, without the
@@ -266,18 +323,24 @@ func (m *Manager) ViewerLoadImage(ctx context.Context, archive io.Reader) error 
 	return scanner.Err()
 }
 
-// ViewerNetwork makes sure the internal network of the viewers exists. A
-// network of that name that is not internal or not labelled is refused,
-// never changed.
-func (m *Manager) ViewerNetwork(ctx context.Context, name string) error {
+// ViewerNetwork makes sure the internal network of one view exists, with
+// a fixed bridge name (bridge, at most 15 characters) for the host rules.
+// A network of that name that is not internal or not the viewer's own is
+// refused, never changed.
+func (m *Manager) ViewerNetwork(ctx context.Context, name, bridge, user, app string) error {
+	if !strings.HasPrefix(name, m.viewerPrefix()) || bridge == "" || len(bridge) > 15 {
+		return errors.New("docker: invalid viewer network")
+	}
 	var net struct {
+		Name     string
 		Internal bool
 		Labels   map[string]string
+		Options  map[string]string
 	}
 	err := m.api.getJSON(ctx, "/networks/"+url.PathEscape(name), nil, &net)
 	if err == nil {
-		if !net.Internal || net.Labels[ViewerLabel] != "1" {
-			return fmt.Errorf("docker: network %s exists and is not the internal network of the remote view", name)
+		if !net.Internal || !m.ownViewer(net.Labels, net.Name) || net.Options["com.docker.network.bridge.name"] != bridge {
+			return fmt.Errorf("docker: network %s exists and is not an internal network of the remote view", name)
 		}
 		return nil
 	}
@@ -285,8 +348,52 @@ func (m *Manager) ViewerNetwork(ctx context.Context, name string) error {
 		return err
 	}
 	body := map[string]any{"Name": name, "Driver": "bridge", "Internal": true, "CheckDuplicate": true,
-		"Labels": map[string]string{ViewerLabel: "1"}}
+		"Options": map[string]string{"com.docker.network.bridge.name": bridge, "com.docker.network.bridge.enable_icc": "true"},
+		"Labels":  map[string]string{ViewerLabel: "1", ViewerLabel + ".user": user, ViewerLabel + ".app": app}}
 	return m.api.sendJSON(ctx, http.MethodPost, "/networks/create", body, nil)
+}
+
+// ViewerNetworks lists the networks of the remote view (label and prefix).
+func (m *Manager) ViewerNetworks(ctx context.Context) ([]string, error) {
+	var list []struct {
+		Name   string
+		Labels map[string]string
+	}
+	filters := `{"label":["` + ViewerLabel + `=1"]}`
+	if err := m.api.getJSON(ctx, "/networks", url.Values{"filters": {filters}}, &list); err != nil {
+		return nil, err
+	}
+	out := []string{}
+	for _, n := range list {
+		if m.ownViewer(n.Labels, n.Name) {
+			out = append(out, n.Name)
+		}
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
+// ViewerRemoveNetwork removes a network of the remote view. Docker refuses
+// while containers are still on it.
+func (m *Manager) ViewerRemoveNetwork(ctx context.Context, name string) error {
+	var net struct {
+		Name   string
+		Labels map[string]string
+	}
+	if err := m.api.getJSON(ctx, "/networks/"+url.PathEscape(name), nil, &net); err != nil {
+		if notFound(err) {
+			return nil
+		}
+		return err
+	}
+	if !m.ownViewer(net.Labels, net.Name) {
+		return errors.New("docker: not a network of the remote view")
+	}
+	_, err := m.api.do(ctx, http.MethodDelete, "/networks/"+url.PathEscape(name), nil)
+	if notFound(err) {
+		return nil
+	}
+	return err
 }
 
 // AppEndpoint is a container of an app as the viewer needs it.
@@ -339,7 +446,7 @@ func (m *Manager) ViewerAttach(ctx context.Context, network, id, alias string) (
 	if err != nil {
 		return "", false, err
 	}
-	if info.Config.Labels[ViewerLabel] != "" {
+	if info.Config.Labels[ViewerLabel] != "" || strings.HasPrefix(strings.TrimPrefix(info.Name, "/"), ViewerPrefix) {
 		return "", false, errors.New("docker: a viewer is no app")
 	}
 	if n, ok := info.NetworkSettings.Networks[network]; ok {
@@ -356,9 +463,12 @@ func (m *Manager) ViewerAttach(ctx context.Context, network, id, alias string) (
 	return info.NetworkSettings.Networks[network].IPAddress, true, nil
 }
 
-// ViewerDetach takes an app container off the viewer network, but only if
+// ViewerDetach takes an app container off a viewer network, but only if
 // it carries alias there, i.e. ViewerAttach put it there.
 func (m *Manager) ViewerDetach(ctx context.Context, network, id, alias string) error {
+	if !strings.HasPrefix(network, m.viewerPrefix()) {
+		return errors.New("docker: not a network of the remote view")
+	}
 	info, err := m.inspectAny(ctx, id)
 	if notFound(err) {
 		return nil
@@ -389,7 +499,7 @@ func (m *Manager) ViewerAttached(ctx context.Context, network, alias string) ([]
 	out := []string{}
 	for id := range net.Containers {
 		info, err := m.inspectAny(ctx, id)
-		if err != nil || info.Config.Labels[ViewerLabel] != "" {
+		if err != nil || info.Config.Labels[ViewerLabel] != "" || strings.HasPrefix(strings.TrimPrefix(info.Name, "/"), ViewerPrefix) {
 			continue
 		}
 		if n, ok := info.NetworkSettings.Networks[network]; ok && slices.Contains(n.Aliases, alias) {
@@ -411,4 +521,65 @@ func (m *Manager) LeasedHardware() map[string]bool {
 	m.hardwareMu.Lock()
 	defer m.hardwareMu.Unlock()
 	return m.blockedHardware()
+}
+
+// ViewerImageLabel marks images of the remote view (viewer/Dockerfile);
+// ViewerReleaseLabel names the release they were built for. Only images
+// with both are the viewer's own.
+const (
+	ViewerImageLabel   = "titanos.viewer.image"
+	ViewerReleaseLabel = "titanos.viewer.release"
+)
+
+func ownImage(labels map[string]string) bool {
+	return labels[ViewerImageLabel] == "1" && labels[ViewerReleaseLabel] != ""
+}
+
+// ViewerImage is an image of the remote view.
+type ViewerImage struct {
+	ID   string
+	Tags []string
+}
+
+// ViewerImages lists the images that carry ViewerImageLabel.
+func (m *Manager) ViewerImages(ctx context.Context) ([]ViewerImage, error) {
+	var list []struct {
+		ID       string `json:"Id"`
+		RepoTags []string
+		Labels   map[string]string
+	}
+	filters := `{"label":["` + ViewerImageLabel + `=1"]}`
+	if err := m.api.getJSON(ctx, "/images/json", url.Values{"filters": {filters}}, &list); err != nil {
+		return nil, err
+	}
+	out := []ViewerImage{}
+	for _, img := range list {
+		if ownImage(img.Labels) {
+			out = append(out, ViewerImage{ID: img.ID, Tags: slices.DeleteFunc(img.RepoTags, func(t string) bool { return t == "<none>:<none>" })})
+		}
+	}
+	return out, nil
+}
+
+// ViewerRemoveImage removes an image of the remote view, never by force:
+// Docker refuses while a container uses it. Other images are refused.
+func (m *Manager) ViewerRemoveImage(ctx context.Context, id string) error {
+	var img struct {
+		ID     string `json:"Id"`
+		Config struct{ Labels map[string]string }
+	}
+	if err := m.api.getJSON(ctx, "/images/"+url.PathEscape(id)+"/json", nil, &img); err != nil {
+		if notFound(err) {
+			return nil
+		}
+		return err
+	}
+	if !ownImage(img.Config.Labels) {
+		return errors.New("docker: not an image of the remote view")
+	}
+	_, err := m.api.do(ctx, http.MethodDelete, "/images/"+url.PathEscape(img.ID), nil)
+	if notFound(err) {
+		return nil
+	}
+	return err
 }

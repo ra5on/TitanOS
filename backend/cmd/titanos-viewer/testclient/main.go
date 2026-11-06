@@ -55,7 +55,7 @@ type stream struct {
 }
 
 func dial(ctx context.Context, addr, key string) (*stream, error) {
-	c, _, err := websocket.Dial(ctx, "ws://"+addr+"/stream?key="+key, nil)
+	c, _, err := websocket.Dial(ctx, "ws://"+addr+"/stream", &websocket.DialOptions{HTTPHeader: http.Header{"X-Viewer-Key": {key}}})
 	if err != nil {
 		return nil, err
 	}
@@ -183,6 +183,40 @@ func (s *stream) combo(mod, modKey, code, key string) {
 	time.Sleep(50 * time.Millisecond)
 }
 
+// shortcut presses e.g. "ctrl+shift+KeyI" or "F12".
+func (s *stream) shortcut(c string) {
+	parts := strings.Split(c, "+")
+	code := parts[len(parts)-1]
+	var m proto.Mods
+	var mods []string
+	for _, p := range parts[:len(parts)-1] {
+		switch p {
+		case "ctrl":
+			m.Ctrl, mods = true, append(mods, "ControlLeft")
+		case "shift":
+			m.Shift, mods = true, append(mods, "ShiftLeft")
+		case "alt":
+			m.Alt, mods = true, append(mods, "AltLeft")
+		}
+	}
+	key := code
+	if strings.HasPrefix(code, "Key") {
+		key = strings.ToLower(code[3:])
+		if m.Shift {
+			key = code[3:]
+		}
+	}
+	for _, mc := range mods {
+		s.key(mc, mc, true, m)
+		time.Sleep(20 * time.Millisecond)
+	}
+	s.tap(code, key, m)
+	for _, mc := range mods {
+		s.key(mc, mc, false, proto.Mods{})
+	}
+	time.Sleep(50 * time.Millisecond)
+}
+
 func (s *stream) click(x, y int) {
 	s.send(map[string]any{"t": "mouse", "x": x, "y": y, "buttons": 0})
 	time.Sleep(50 * time.Millisecond)
@@ -214,21 +248,43 @@ func main() {
 		pngPixel(os.Args[2:])
 		return
 	}
+	if len(os.Args) == 4 && os.Args[1] == "policy" { // policy <origin> <file>
+		b, err := proto.ChromiumPolicy(os.Args[2])
+		if err == nil {
+			err = os.WriteFile(os.Args[3], b, 0o444)
+		}
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		return
+	}
 	addr := flag.String("addr", "", "viewer host:port")
 	key := flag.String("key", "", "session key")
 	wantAudio := flag.Bool("audio", false, "expect audio packets")
 	phase := flag.String("phase", "all", "all | stream (video, size, scale) | big (3840x2160 for 10 s) | hold (wait for bye)")
 	wantGPU := flag.String("wantgpu", "cpu", "expected hello.gpu")
+	combo := flag.String("combo", "", "phase keys: shortcuts like ctrl+KeyU,F12 (comma separated), each followed by 1.5 s")
+	typeText := flag.String("text", "", "phase keys: text typed after the shortcuts")
+	clickAt := flag.String("click", "", "phase keys: x,y clicked after the text")
 	flag.Parse()
 	ctx := context.Background()
 	httpc := &http.Client{Timeout: 10 * time.Second}
 
 	// wrong key is rejected
-	if resp, err := httpc.Get("http://" + *addr + "/stream?key=wrong-key-0123456789"); err != nil || resp.StatusCode != 403 {
-		fail("auth", "wrong key not rejected (%v)", err)
+	for _, k := range []string{"wrong-key-0123456789", ""} {
+		if resp, err := get(httpc, "http://"+*addr+"/stream", k); err != nil || resp.StatusCode != 403 {
+			fail("auth", "key %q not rejected (%v)", k, err)
+		} else {
+			resp.Body.Close()
+		}
+	}
+	// the key in the URL is not accepted (only the header)
+	if resp, err := httpc.Get("http://" + *addr + "/stream?key=" + *key); err != nil || resp.StatusCode != 403 {
+		fail("auth", "key in the URL accepted (%v)", err)
 	} else {
 		resp.Body.Close()
-		pass("auth", "wrong key → 403")
+		pass("auth", "wrong, missing and URL key → 403")
 	}
 
 	t0 := time.Now()
@@ -252,6 +308,24 @@ func main() {
 			pass("bye", "%v", m)
 		} else {
 			fail("bye", "got %v", m)
+		}
+		exit()
+	case "keys":
+		for _, c := range strings.Split(*combo, ",") {
+			if c != "" {
+				s.shortcut(c)
+				time.Sleep(1500 * time.Millisecond)
+			}
+		}
+		if *typeText != "" {
+			s.send(map[string]any{"t": "text", "text": *typeText})
+			time.Sleep(time.Second)
+		}
+		if *clickAt != "" {
+			var x, y int
+			fmt.Sscanf(*clickAt, "%d,%d", &x, &y)
+			s.click(x, y)
+			time.Sleep(1500 * time.Millisecond)
 		}
 		exit()
 	case "big":
@@ -370,7 +444,7 @@ func main() {
 	s.tap("Enter", "Enter", proto.Mods{})
 	if m := s.waitText("download", 8*time.Second, nil); m != nil {
 		id, _ := m["id"].(string)
-		resp, err := httpc.Get("http://" + *addr + "/downloads/" + id + "?key=" + *key)
+		resp, err := get(httpc, "http://"+*addr+"/downloads/"+id, *key)
 		if err != nil {
 			fail("download", "%v", err)
 		} else {
@@ -382,7 +456,7 @@ func main() {
 				fail("download", "status %d body %q", resp.StatusCode, b)
 			}
 		}
-		if resp, err := httpc.Get("http://" + *addr + "/downloads/" + id + "?key=bad-key-0123456789"); err == nil && resp.StatusCode == 403 {
+		if resp, err := get(httpc, "http://"+*addr+"/downloads/"+id, "bad-key-0123456789"); err == nil && resp.StatusCode == 403 {
 			pass("download-auth", "bad key → 403")
 		} else {
 			fail("download-auth", "bad key not rejected")
@@ -467,6 +541,18 @@ func exit() {
 		os.Exit(1)
 	}
 	os.Exit(0)
+}
+
+// get fetches url with the session key in the X-Viewer-Key header.
+func get(c *http.Client, url, key string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	if key != "" {
+		req.Header.Set("X-Viewer-Key", key)
+	}
+	return c.Do(req)
 }
 
 func finish(s *stream) {

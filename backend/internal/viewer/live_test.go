@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
+	"github.com/ra5on/TitanOS/backend/internal/viewer/proto"
 )
 
 // TestLiveDevView runs one real view against the local Docker in
@@ -27,8 +30,10 @@ func TestLiveDevView(t *testing.T) {
 	dir := t.TempDir()
 	engine := docker.NewManager(config.Open(dir), dir)
 	m := New(config.Open(t.TempDir()))
-	m.Engine, m.Dev, m.Version = engine, true, "dev"
-	m.Prefix, m.Network = "fern63-test-b-", "fern63-test-bnet"
+	m.Engine, m.Dev, m.Version = logEngine{engine, t}, true, "dev"
+	// Own names: the containers and networks of other tests are never touched.
+	engine.ViewerNamePrefix, m.Prefix = "fern63-test-b-", "fern63-test-b-"
+	m.Policy = proto.ChromiumPolicy
 	m.cleaned = true
 	t.Cleanup(func() {
 		if m.devDir != "" {
@@ -58,7 +63,7 @@ func TestLiveDevView(t *testing.T) {
 	var hello map[string]any
 	frames, keyframes := 0, 0
 	deadline := time.Now().Add(40 * time.Second)
-	for time.Now().Before(deadline) && (hello == nil || keyframes == 0 || frames < 5) {
+	for time.Now().Before(deadline) && (hello == nil || keyframes == 0 || frames < 90) {
 		kind, data, err := conn.Read(ctx)
 		if err != nil {
 			t.Fatalf("read: %v (hello %v, frames %d)", err, hello, frames)
@@ -82,4 +87,28 @@ func TestLiveDevView(t *testing.T) {
 	if hello == nil || keyframes == 0 {
 		t.Fatal("no picture")
 	}
+}
+
+// logEngine shows the output of a viewer before it is removed.
+type logEngine struct {
+	*docker.Manager
+	t *testing.T
+}
+
+func (e logEngine) ViewerRemove(ctx context.Context, id string) error {
+	out, _ := exec.Command("docker", "logs", "--tail", "30", id).CombinedOutput()
+	e.t.Logf("viewer %.12s output:\n%s", id, out)
+	return e.Manager.ViewerRemove(ctx, id)
+}
+
+// ViewerCreate hands the policy file to root first, as titand (root) on a
+// NAS writes it; the agent refuses a policy it could own.
+func (e logEngine) ViewerCreate(ctx context.Context, spec docker.ViewerSpec) (string, error) {
+	if spec.Policy != "" {
+		dir := filepath.Dir(spec.Policy)
+		if out, err := exec.Command("docker", "run", "--rm", "--network", "none", "-v", dir+":/p", "debian:trixie-slim", "chown", "0:0", "/p/titanos.json").CombinedOutput(); err != nil {
+			e.t.Fatalf("chown policy: %v %s", err, out)
+		}
+	}
+	return e.Manager.ViewerCreate(ctx, spec)
 }

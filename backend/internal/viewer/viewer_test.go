@@ -20,17 +20,24 @@ import (
 
 // fakeEngine records what the viewer asks of Docker.
 type fakeEngine struct {
-	mu        sync.Mutex
-	viewers   []docker.ViewerContainer
-	removed   []string
-	created   []docker.ViewerSpec
-	started   []string
-	attached  map[string]bool // app container → carries the marker
-	detached  []string
-	images    map[string]string
-	loaded    int
-	endpoints []docker.AppEndpoint
-	listErr   error
+	mu         sync.Mutex
+	viewers    []docker.ViewerContainer
+	removed    []string
+	created    []docker.ViewerSpec
+	started    []string
+	attached   map[string]bool // network|app container → carries the marker
+	detached   []string
+	images     map[string]string
+	loaded     int
+	endpoints  []docker.AppEndpoint
+	listErr    error
+	imageList  []docker.ViewerImage
+	networks   []string
+	netRemoved []string
+	stale      map[string]bool
+	memory     uint64
+	inUse      map[string]bool
+	removedIm  []string
 }
 
 func newFakeEngine() *fakeEngine {
@@ -66,10 +73,22 @@ func (f *fakeEngine) ViewerRemove(_ context.Context, id string) error {
 	f.viewers = slices.DeleteFunc(f.viewers, func(v docker.ViewerContainer) bool { return v.ID == id })
 	return nil
 }
-func (f *fakeEngine) ViewerAddress(context.Context, string, string) (string, error) {
-	return "172.30.0.5", nil
+func (f *fakeEngine) ViewerState(_ context.Context, id, network string) (string, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.stale[id] {
+		return "172.30.0.9", true, nil
+	}
+	return "172.30.0.5", true, nil
 }
-func (f *fakeEngine) ViewerMemory(context.Context, string) (uint64, error) { return 300 << 20, nil }
+func (f *fakeEngine) ViewerMemory(context.Context, string) (uint64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.memory != 0 {
+		return f.memory, nil
+	}
+	return 300 << 20, nil
+}
 func (f *fakeEngine) ViewerImageID(_ context.Context, ref string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -85,33 +104,70 @@ func (f *fakeEngine) ViewerLoadImage(_ context.Context, r io.Reader) error {
 	}
 	return nil
 }
-func (f *fakeEngine) ViewerNetwork(context.Context, string) error { return nil }
+func (f *fakeEngine) ViewerNetwork(_ context.Context, name, bridge, user, app string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(bridge) > 15 {
+		return errors.New("bridge name too long")
+	}
+	f.networks = append(f.networks, name)
+	return nil
+}
+func (f *fakeEngine) ViewerNetworks(context.Context) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.networks), nil
+}
+func (f *fakeEngine) ViewerRemoveNetwork(_ context.Context, name string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.networks = slices.DeleteFunc(f.networks, func(n string) bool { return n == name })
+	f.netRemoved = append(f.netRemoved, name)
+	return nil
+}
 func (f *fakeEngine) AppEndpoints(context.Context, string) ([]docker.AppEndpoint, error) {
 	return f.endpoints, nil
 }
-func (f *fakeEngine) ViewerAttach(_ context.Context, _, id, _ string) (string, bool, error) {
+func (f *fakeEngine) ViewerAttach(_ context.Context, network, id, _ string) (string, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.attached[id] = true
+	f.attached[network+"|"+id] = true
 	return "172.30.0.2", true, nil
 }
-func (f *fakeEngine) ViewerDetach(_ context.Context, _, id, _ string) error {
+func (f *fakeEngine) ViewerDetach(_ context.Context, network, id, _ string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.attached[id] {
-		delete(f.attached, id)
+	if f.attached[network+"|"+id] {
+		delete(f.attached, network+"|"+id)
 		f.detached = append(f.detached, id)
 	}
 	return nil
 }
-func (f *fakeEngine) ViewerAttached(context.Context, string, string) ([]string, error) {
+func (f *fakeEngine) ViewerAttached(_ context.Context, network, _ string) ([]string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	out := []string{}
-	for id := range f.attached {
-		out = append(out, id)
+	for key := range f.attached {
+		if n, id, _ := strings.Cut(key, "|"); n == network {
+			out = append(out, id)
+		}
 	}
 	return out, nil
+}
+
+func (f *fakeEngine) ViewerImages(context.Context) ([]docker.ViewerImage, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.imageList), nil
+}
+func (f *fakeEngine) ViewerRemoveImage(_ context.Context, id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.inUse[id] {
+		return errors.New("conflict: image is being used")
+	}
+	f.removedIm = append(f.removedIm, id)
+	return nil
 }
 
 const testImageID = "sha256:" + "ab0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd"
@@ -127,6 +183,7 @@ func testManager(t *testing.T, engine *fakeEngine) *Manager {
 	m.DockerVolume = func() string { return "data" }
 	m.MemAvailable = func() (uint64, error) { return 8 << 30, nil }
 	m.Linger = time.Hour
+	m.PolicyRoot = t.TempDir()
 	checkSpace = func(string, int64) error { return nil }
 	profileUID = os.Getuid()
 	t.Cleanup(func() { checkSpace, profileUID = spaceFor, 1000 })
@@ -282,6 +339,35 @@ func TestImageIsVerifiedAndLoaded(t *testing.T) {
 	}
 }
 
+func TestOlderImagesAreRemoved(t *testing.T) {
+	engine := newFakeEngine()
+	old, used := "sha256:"+strings.Repeat("1", 64), "sha256:"+strings.Repeat("2", 64)
+	engine.imageList = []docker.ViewerImage{{ID: old, Tags: []string{"titanos-viewer:0.59.9"}}, {ID: used}, {ID: testImageID}}
+	engine.inUse = map[string]bool{used: true}
+	m := testManager(t, engine)
+	m.image = imageState{}
+	m.Release = fakeRelease{manifest: manifest(goodEntry), body: "image"}
+	m.readyImage()
+	if st := waitImage(t, m); st.State != "ready" {
+		t.Fatalf("state %+v", st)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		engine.mu.Lock()
+		removed := slices.Clone(engine.removedIm)
+		engine.mu.Unlock()
+		if len(removed) > 0 {
+			// Only the old one; the new image and one in use stay.
+			if !slices.Equal(removed, []string{old}) {
+				t.Fatalf("removed %v", removed)
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("older image not removed")
+}
+
 func TestImageAlreadyLoadedIsNotDownloaded(t *testing.T) {
 	engine := newFakeEngine()
 	engine.images[testImageID] = testImageID
@@ -328,6 +414,8 @@ func (c countingRelease) ReleaseManifest(ctx context.Context, v string) ([]byte,
 func TestContainerSpec(t *testing.T) {
 	engine := newFakeEngine()
 	m := testManager(t, engine)
+	m.CPUs = 8
+	m.Policy = func(origin string) ([]byte, error) { return []byte("origin=" + origin), nil }
 	m.store.WriteJSON(settingsFile, Settings{GPU: "off", Quality: "auto", FPS: 60})
 	m.Load()
 	lease, err := m.Open(t.Context(), "anna", "immich")
@@ -339,8 +427,22 @@ func TestContainerSpec(t *testing.T) {
 		t.Fatalf("created %d", len(engine.created))
 	}
 	spec := engine.created[0]
-	if spec.Image != testImageID || spec.Network != "titanos-viewer" || spec.User != "anna" || spec.App != "immich" {
+	// Its own network, named like the container; the policy file from titand.
+	if spec.Image != testImageID || spec.Network != spec.Name || spec.User != "anna" || spec.App != "immich" {
 		t.Fatalf("spec: %+v", spec)
+	}
+	if spec.NanoCPUs != 2e9 || spec.CPUShares != 512 || spec.MemoryBytes != PerView {
+		t.Fatalf("CPU/memory: %+v", spec)
+	}
+	if !slices.Equal(engine.networks, []string{spec.Name}) || !engine.attached[spec.Name+"|app1"] {
+		t.Fatalf("network %v attached %v", engine.networks, engine.attached)
+	}
+	policy, err := os.ReadFile(spec.Policy)
+	if err != nil || string(policy) != "origin=http://172.30.0.2:3001" {
+		t.Fatalf("policy %q %v", policy, err)
+	}
+	if st, _ := os.Stat(spec.Policy); st.Mode().Perm() != 0o444 {
+		t.Fatalf("policy mode %v", st.Mode())
 	}
 	if len(spec.Devices) != 0 || len(spec.CDIDevices) != 0 {
 		t.Fatalf("GPU off but devices: %+v", spec)
@@ -369,7 +471,7 @@ func TestContainerSpec(t *testing.T) {
 			t.Errorf("%s: %v %v", dir, st.Mode(), err)
 		}
 	}
-	if !strings.HasPrefix(lease.AgentURL(), "ws://172.30.0.5:7300/stream?key=") {
+	if lease.AgentURL() != "ws://172.30.0.5:7300/stream" || lease.Key() != lease.s.secret {
 		t.Fatal("agent address")
 	}
 }
@@ -499,13 +601,14 @@ func TestLingerReplaceAndStop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Each view has its own network: ben's keeps the app.
 	again.Close(false)
-	if len(engine.detached) != 1 {
-		t.Fatal("app detached while ben still views it")
+	if len(engine.detached) != 2 || !engine.attached[m.ContainerName("ben", "immich")+"|app1"] {
+		t.Fatalf("detached %v, attached %v", engine.detached, engine.attached)
 	}
 	other.Close(false)
-	if len(engine.detached) != 2 {
-		t.Fatalf("app not detached: %v", engine.detached)
+	if len(engine.detached) != 3 || len(engine.attached) != 0 || len(engine.networks) != 0 {
+		t.Fatalf("left: detached %v attached %v networks %v", engine.detached, engine.attached, engine.networks)
 	}
 }
 
@@ -513,7 +616,8 @@ func TestCleanupTouchesOnlyLabelledViewers(t *testing.T) {
 	engine := newFakeEngine()
 	// Viewers lists only containers with the label (docker/viewer.go).
 	engine.viewers = []docker.ViewerContainer{{ID: "old1", Name: "titanos-viewer-aaaa"}}
-	engine.attached["app9"] = true
+	engine.networks = []string{"titanos-viewer-bbbb"}
+	engine.attached["titanos-viewer-bbbb|app9"] = true
 	m := testManager(t, engine)
 	engine.listErr = errors.New("docker not running")
 	if err := m.cleanup(t.Context()); err == nil {
@@ -523,8 +627,8 @@ func TestCleanupTouchesOnlyLabelledViewers(t *testing.T) {
 	if err := m.cleanup(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(engine.removed, []string{"old1"}) || !slices.Equal(engine.detached, []string{"app9"}) {
-		t.Fatalf("removed %v detached %v", engine.removed, engine.detached)
+	if !slices.Equal(engine.removed, []string{"old1"}) || !slices.Equal(engine.detached, []string{"app9"}) || !slices.Equal(engine.netRemoved, []string{"titanos-viewer-bbbb"}) {
+		t.Fatalf("removed %v detached %v networks %v", engine.removed, engine.detached, engine.netRemoved)
 	}
 	// Once only: views opened later are never cleaned away.
 	lease, _ := m.Open(t.Context(), "anna", "immich")

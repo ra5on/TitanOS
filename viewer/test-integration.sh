@@ -40,8 +40,10 @@ ip_of() { docker inspect -f "{{(index .NetworkSettings.Networks \"$NET\").IPAddr
 echo "== building test client"
 (cd "$ROOT/backend" && CGO_ENABLED=0 go build -o "$WORK/testclient" ./cmd/titanos-viewer/testclient)
 
-mkdir -p "$WORK/www/cgi-bin" "$WORK/www2" "$WORK/log" "$WORK/profile"
-chmod 777 "$WORK/log" "$WORK/profile"
+mkdir -p "$WORK/www/cgi-bin" "$WORK/www2" "$WORK/log" "$WORK/profile/Downloads" "$WORK/policy" "$WORK/badpolicy"
+chmod 777 "$WORK/log" "$WORK/profile" "$WORK/profile/Downloads"
+# a local page for the file:// test (Ctrl+O)
+echo '<html><body style="margin:0;background:#00d000">GREEN</body></html>' >"$WORK/profile/Downloads/green.html"
 touch "$WORK/log/probe.txt"
 chmod 666 "$WORK/log/probe.txt"
 cat >"$WORK/www/index.html" <<'EOF'
@@ -75,8 +77,16 @@ docker run -d --name fern63-test-web --network "$NET" -v "$WORK/www:/www:ro" -v 
 docker run -d --name fern63-test-other --network "$NET" -v "$WORK/www2:/www:ro" busybox:1.37 httpd -f -vv -p 80 -h /www >/dev/null
 WEBIP=$(ip_of fern63-test-web)
 
-# viewer <name> [extra docker args...]: start with titand's settings
-viewer() {
+# The Chromium policy as titand writes it: proto.ChromiumPolicy, root-owned,
+# 0444, bind-mounted read-only (the copy in badpolicy belongs to UID 1000).
+"$WORK/testclient" policy "http://$WEBIP:80" "$WORK/policy/titanos.json"
+cp "$WORK/policy/titanos.json" "$WORK/badpolicy/titanos.json"
+chmod 644 "$WORK/badpolicy/titanos.json"
+docker run --rm -v "$WORK/policy:/p" busybox:1.37 chown 0:0 /p/titanos.json
+POLICY=(-v "$WORK/policy/titanos.json:/etc/chromium/policies/managed/titanos.json:ro")
+
+# run_viewer <name> [extra docker args...]: start with titand's settings
+run_viewer() {
 	local name=$1
 	shift
 	docker run -d --name "$name" --network "$NET" \
@@ -86,6 +96,13 @@ viewer() {
 		-v "$WORK/profile:/profile" -e HOME=/profile \
 		-e VIEWER_URL="http://$WEBIP:80" -e VIEWER_KEY="$KEY" -e VIEWER_AUDIO=1 "$@" \
 		"$IMAGE" >/dev/null
+}
+
+# viewer <name> [extra docker args...]: start with the policy, wait until ready
+viewer() {
+	local name=$1
+	shift
+	run_viewer "$name" "${POLICY[@]}" "$@"
 	for _ in $(seq 50); do
 		docker logs "$name" 2>&1 | grep -q 'ready on' && return 0
 		sleep 0.2
@@ -97,8 +114,75 @@ viewer() {
 client() { docker run --rm --network "$NET" -v "$WORK/testclient:/testclient:ro" busybox:1.37 /testclient "$@"; }
 client_wget() { docker run --rm --network "$NET" busybox:1.37 wget -q -T 3 -O /dev/null "$1"; }
 
+shot() { # shot <w> <h>: screenshot of the top-left region
+	docker exec -e GST_REGISTRY=/tmp/titanos-viewer/gst-registry.bin fern63-test-viewer gst-launch-1.0 -q ximagesrc display-name=:99 num-buffers=1 \
+		startx=0 starty=0 endx=$(($1 - 1)) endy=$(($2 - 1)) ! videoconvert ! pngenc ! filesink location=/tmp/shot.png >/dev/null
+	docker exec fern63-test-viewer cat /tmp/shot.png >"$WORK/shot.png" # docker cp cannot read tmpfs
+}
+px() { "$WORK/testclient" pngpixel "$WORK/shot.png" "$1" "$2"; }
+green() { read -r r g b _ <<<"$(px "$1" "$2")"; [ "$g" -gt 150 ] && [ "$r" -lt 80 ] && ok "screenshot: green corner at $1,$2" || bad "screenshot: $1,$2 = $r $g $b, want green"; }
+red() { read -r r g b _ <<<"$(px "$1" "$2")"; [ "$r" -gt 150 ] && [ "$g" -lt 80 ] && ok "screenshot: page at $1,$2" || bad "screenshot: $1,$2 = $r $g $b, want red"; }
+black() { read -r r g b _ <<<"$(px "$1" "$2")"; [ "$r" -lt 30 ] && [ "$g" -lt 30 ] && [ "$b" -lt 30 ] && ok "screenshot: outside window at $1,$2" || bad "screenshot: $1,$2 = $r $g $b, want black"; }
+
+echo "== the agent refuses a missing or writable policy"
+for variant in none writable; do
+	extra=()
+	[ "$variant" = writable ] && extra=(-v "$WORK/badpolicy/titanos.json:/etc/chromium/policies/managed/titanos.json")
+	run_viewer fern63-test-viewer "${extra[@]}"
+	sleep 3
+	if [ "$(docker inspect -f '{{.State.Running}}' fern63-test-viewer)" = false ] &&
+		docker logs fern63-test-viewer 2>&1 | grep -q 'refusing to start the browser'; then
+		ok "policy $variant: agent refused to start ($(docker logs fern63-test-viewer 2>&1 | grep -o 'Chromium policy: .*' | head -1))"
+	else
+		bad "policy $variant: agent started"
+	fi
+	docker rm -f fern63-test-viewer >/dev/null
+done
+
 viewer fern63-test-viewer
 VIP=$(ip_of fern63-test-viewer)
+
+echo "== policy cannot be changed from inside (UID 1000)"
+SUM=$(sha256sum <"$WORK/policy/titanos.json")
+for cmd in 'echo x >>/etc/chromium/policies/managed/titanos.json' 'rm -f /etc/chromium/policies/managed/titanos.json' \
+	'chmod 666 /etc/chromium/policies/managed/titanos.json' 'touch /etc/chromium/policies/managed/evil.json' \
+	'mv /etc/chromium/policies/managed /tmp/m' 'ln -s /tmp/x /etc/chromium/policies/managed/evil.json'; do
+	if docker exec fern63-test-viewer sh -c "$cmd" 2>/dev/null; then bad "policy: '$cmd' worked"; else ok "policy: '$cmd' refused"; fi
+done
+[ "$(sha256sum <"$WORK/policy/titanos.json")" = "$SUM" ] && ok "policy: file unchanged" || bad "policy: file changed"
+[ "$(docker exec fern63-test-viewer stat -c '%u %a' /etc/chromium/policies/managed)" = "0 755" ] && ok "policy: directory root 0755" || bad "policy: directory not root 0755"
+
+echo "== blocked schemes and shortcuts (1280x800)"
+keys() { client -addr "$VIP:7300" -key "$KEY" -phase keys "$@" >/dev/null; }
+blocked_page() { # Chromium's "This page is blocked" (grey icon on white)
+	read -r r g b _ <<<"$(px 376 148)"
+	read -r r2 g2 _ <<<"$(px 900 600)"
+	[ "$r" -lt 140 ] && [ "$r" = "$g" ] && [ "$g" = "$b" ] && [ "$r2" -gt 240 ] && [ "$g2" -gt 240 ]
+}
+devtools_refused() { # the page, dimmed, under "DevTools not allowed on this page" with its blue OK
+	read -r r g _ <<<"$(px 640 600)"
+	read -r br bg bb _ <<<"$(px 790 135)"
+	[ "$r" -gt 40 ] && [ "$g" -lt 30 ] && [ "$bb" -gt 150 ] && [ "$br" -lt 80 ] && [ "$bg" -lt 120 ]
+}
+sleep 5                # Chromium starts at most 3 s after the agent, then loads the page
+keys -click 640,700 # focus the page first
+for c in ctrl+shift+KeyI F12 ctrl+shift+KeyJ ctrl+KeyU; do
+	keys -combo "$c"
+	shot 1280 800
+	devtools_refused && ok "$c (DevTools/view-source): refused" || bad "$c: DevTools/view-source not refused"
+	keys -click 811,124 # OK
+done
+keys -combo ctrl+KeyH
+shot 1280 800
+blocked_page && ok "chrome://history: blocked" || bad "chrome://history: not blocked"
+keys -combo ctrl+KeyW
+keys -combo ctrl+KeyO,ctrl+KeyL -text /profile/Downloads/green.html -click 1220,776
+shot 1280 800
+read -r fr fg _ <<<"$(px 640 400)" # white, not the green local page
+if blocked_page && [ "$fg" -gt 200 ] && [ "$fr" -gt 200 ]; then ok "file://: blocked (Ctrl+O)"; else bad "file://: not blocked ($fr $fg)"; fi
+keys -combo alt+ArrowLeft
+shot 1280 800
+red 500 400
 
 # positive control: the second server is reachable and logs requests
 client_wget http://fern63-test-other/ || bad "control: other server not reachable"
@@ -119,16 +203,6 @@ fi
 grep -qxF 'file=%C3%A4.txt' "$WORK/log/file.txt" 2>/dev/null && ok "file dialog: ä.txt picked from Hochgeladen" ||
 	bad "file dialog: no file picked ($(cat "$WORK/log/file.txt" 2>/dev/null))"
 
-shot() { # shot <w> <h>: screenshot of the top-left region
-	docker exec -e GST_REGISTRY=/tmp/titanos-viewer/gst-registry.bin fern63-test-viewer gst-launch-1.0 -q ximagesrc display-name=:99 num-buffers=1 \
-		startx=0 starty=0 endx=$(($1 - 1)) endy=$(($2 - 1)) ! videoconvert ! pngenc ! filesink location=/tmp/shot.png >/dev/null
-	docker exec fern63-test-viewer cat /tmp/shot.png >"$WORK/shot.png" # docker cp cannot read tmpfs
-}
-px() { "$WORK/testclient" pngpixel "$WORK/shot.png" "$1" "$2"; }
-green() { read -r r g b _ <<<"$(px "$1" "$2")"; [ "$g" -gt 150 ] && [ "$r" -lt 80 ] && ok "screenshot: green corner at $1,$2" || bad "screenshot: $1,$2 = $r $g $b, want green"; }
-red() { read -r r g b _ <<<"$(px "$1" "$2")"; [ "$r" -gt 150 ] && [ "$g" -lt 80 ] && ok "screenshot: page at $1,$2" || bad "screenshot: $1,$2 = $r $g $b, want red"; }
-black() { read -r r g b _ <<<"$(px "$1" "$2")"; [ "$r" -lt 30 ] && [ "$g" -lt 30 ] && [ "$b" -lt 30 ] && ok "screenshot: outside window at $1,$2" || bad "screenshot: $1,$2 = $r $g $b, want black"; }
-
 echo "== screenshot (window resized to 1000x600)"
 shot 1200 800
 green 990 590
@@ -141,13 +215,19 @@ for target in 1.1.1.1 "$(ip -4 route get 1.1.1.1 | sed -n 's/.* via \([0-9.]*\).
 	if client_wget "http://$target/" 2>/dev/null; then bad "egress: $target reachable"; else ok "egress: $target unreachable"; fi
 done
 
+mem() { # docker stats plus the cgroup's anon/shmem/file split
+	docker stats --no-stream --format "RAM viewer container, $1: {{.MemUsage}} CPU {{.CPUPerc}}" fern63-test-viewer
+	docker exec fern63-test-viewer sh -c 'cat /sys/fs/cgroup/memory.stat' |
+		awk '$1=="anon"||$1=="shmem"||$1=="file"||$1=="active_file"{printf "  %s %d MiB", $1, $2/1048576} END{print ""}'
+}
+
 echo "== scale 2 and RAM"
 client -addr "$VIP:7300" -key "$KEY" -phase stream >"$WORK/stream.log" &
 sleep 5
-docker stats --no-stream --format 'RAM viewer container, 1000x600 scale 1 streaming: {{.MemUsage}} CPU {{.CPUPerc}}' fern63-test-viewer
+mem "1000x600 scale 1 streaming"
 wait $! || FAIL=1
 cat "$WORK/stream.log"
-docker stats --no-stream --format 'RAM viewer container, 1280x800 (640x400 scale 2) idle: {{.MemUsage}}' fern63-test-viewer
+mem "1280x800 (640x400 scale 2) idle"
 shot 1400 900
 green 1270 790
 black 1290 300
@@ -155,7 +235,7 @@ black 1290 300
 echo "== 3840x2160 (1920x1080 scale 2)"
 client -addr "$VIP:7300" -key "$KEY" -phase big >"$WORK/big.log" &
 sleep 9
-docker stats --no-stream --format 'RAM viewer container, 3840x2160 streaming: {{.MemUsage}} CPU {{.CPUPerc}}' fern63-test-viewer
+mem "3840x2160 streaming"
 docker exec fern63-test-viewer df -h /tmp | tail -1 | awk '{print "tmpfs /tmp used: " $3 " of " $2}'
 wait $! || FAIL=1
 cat "$WORK/big.log"

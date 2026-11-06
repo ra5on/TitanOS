@@ -229,6 +229,9 @@ func (s *Server) handleAppRemove(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	// Deleting the data is asked for by naming the app once more.
 	purge := r.URL.Query().Get("deleteData") == name
+	if s.opts.Viewer != nil {
+		s.opts.Viewer.Stop("", name)
+	}
 	if err := s.opts.Docker.RemoveApp(r.Context(), name, purge); err != nil {
 		writeDockerError(w, err)
 		return

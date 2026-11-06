@@ -3,14 +3,19 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/ra5on/TitanOS/backend/internal/viewer/proto"
 )
@@ -112,6 +117,18 @@ func (u *uploads) begin(id uint32, name string, size int64) (*upload, string) {
 	if len(u.m) >= 16 {
 		return nil, proto.UploadFailed
 	}
+	// Room: the volume keeps ProfileReserve free, and uploads plus
+	// downloads (on disk and still announced) stay within ProfileCap.
+	pending := size
+	for _, up := range u.m {
+		pending += up.size - up.written
+	}
+	if free, err := freeSpace(filepath.Dir(uploadDir)); err != nil || free-pending < proto.ProfileReserve {
+		return nil, proto.UploadNoSpace
+	}
+	if dirSize(uploadDir)+dirSize(downloadDir)+pending > proto.ProfileCap {
+		return nil, proto.UploadNoSpace
+	}
 	f, err := os.CreateTemp(uploadDir, ".upload-*.part")
 	if err != nil {
 		return nil, proto.UploadFailed
@@ -133,6 +150,10 @@ func (u *uploads) chunk(id uint32, data []byte) (done bool, final string, errCod
 	if up.written+int64(len(data)) > up.size {
 		u.drop(id)
 		return false, "", proto.UploadTooLarge
+	}
+	if free, err := freeSpace(filepath.Dir(uploadDir)); err != nil || free-int64(len(data)) < proto.ProfileReserve {
+		u.drop(id)
+		return false, "", proto.UploadNoSpace
 	}
 	if _, err := up.f.Write(data); err != nil {
 		u.drop(id)
@@ -185,6 +206,97 @@ func (u *uploads) abortAll() {
 	for id, up := range u.m {
 		up.abort()
 		delete(u.m, id)
+	}
+}
+
+// freeSpace returns the bytes available to this process on the file
+// system of path (a variable for tests).
+var freeSpace = func(path string) (int64, error) {
+	var st unix.Statfs_t
+	if err := unix.Statfs(path, &st); err != nil {
+		return 0, err
+	}
+	return int64(st.Bavail) * int64(st.Bsize), nil
+}
+
+// dirSize sums the sizes of the regular files below dir.
+func dirSize(dir string) int64 {
+	var n int64
+	_ = filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
+		if err == nil && d.Type().IsRegular() {
+			if info, err := d.Info(); err == nil {
+				n += info.Size()
+			}
+		}
+		return nil
+	})
+	return n
+}
+
+// clearUploads removes /profile/Hochgeladen: uploads only live for the
+// session (agent start and SIGTERM).
+func clearUploads() {
+	if err := os.RemoveAll(uploadDir); err != nil {
+		log.Printf("uploads: %v", err)
+	}
+}
+
+// pruneDownloads removes downloads older than maxAge (agent start).
+func pruneDownloads(maxAge time.Duration) {
+	ents, err := os.ReadDir(downloadDir)
+	if err != nil {
+		return
+	}
+	for _, e := range ents {
+		info, err := e.Info()
+		if err != nil || info.IsDir() || time.Since(info.ModTime()) < maxAge {
+			continue
+		}
+		if os.Remove(filepath.Join(downloadDir, e.Name())) == nil {
+			log.Printf("downloads: removed one older than %v", maxAge)
+		}
+	}
+}
+
+// enforceDownloadLimits deletes running downloads (*.crdownload) and then
+// the oldest finished ones while the profile exceeds ProfileCap or the
+// volume has less than ProfileReserve free.
+func enforceDownloadLimits() {
+	over := func() bool {
+		free, err := freeSpace(filepath.Dir(downloadDir))
+		return err == nil && free < proto.ProfileReserve || dirSize(uploadDir)+dirSize(downloadDir) > proto.ProfileCap
+	}
+	if !over() {
+		return
+	}
+	ents, err := os.ReadDir(downloadDir)
+	if err != nil {
+		return
+	}
+	type file struct {
+		name string
+		mod  time.Time
+		part bool
+	}
+	var files []file
+	for _, e := range ents {
+		if info, err := e.Info(); err == nil && info.Mode().IsRegular() {
+			files = append(files, file{e.Name(), info.ModTime(), strings.HasSuffix(e.Name(), ".crdownload")})
+		}
+	}
+	sort.Slice(files, func(i, j int) bool {
+		if files[i].part != files[j].part {
+			return files[i].part
+		}
+		return files[i].mod.Before(files[j].mod)
+	})
+	for _, f := range files {
+		if !over() {
+			return
+		}
+		if os.Remove(filepath.Join(downloadDir, f.name)) == nil {
+			log.Printf("downloads: removed a file, the profile is over its limit")
+		}
 	}
 }
 

@@ -13,32 +13,37 @@ import (
 )
 
 func TestCheckClient(t *testing.T) {
-	big := `{"t":"clipboard","text":"` + strings.Repeat("a", MaxText) + `"}`
+	// A clipboard of 1 MiB of quotes is twice that as JSON: still relayed.
+	quotes := `{"t":"clipboard","text":"` + strings.Repeat(`\"`, 1<<20-10) + `"}`
+	huge := `{"t":"clipboard","text":"` + strings.Repeat("a", MaxText) + `"}`
 	for _, tc := range []struct {
-		binary bool
-		data   string
-		input  bool
-		ok     bool
+		binary         bool
+		data           string
+		forward, input bool
+		ok             bool
 	}{
-		{false, `{"t":"mouse","x":1,"y":2,"buttons":1}`, true, true},
-		{false, `{"t":"key","code":"KeyA","key":"a","down":true}`, true, true},
-		{false, `{"t":"size","width":1280,"height":800,"scale":2}`, false, true},
-		{false, `{"t":"keyframe"}`, false, true},
-		{false, `{"t":"quality","mode":"auto","fps":60}`, false, true},
-		{false, `{"t":"upload","id":1,"name":"a.pdf","size":3}`, true, true},
-		{false, `{"t":"exec","cmd":"rm -rf /"}`, false, false},
-		{false, `{"t":"hello"}`, false, false}, // agent → browser only
-		{false, `["t","mouse"]`, false, false},
-		{false, `not json`, false, false},
-		{false, big, false, false},
-		{true, "\x03\x00\x00\x00\x01data", true, true},
-		{true, "\x01\x00video", false, false},
-		{true, "\x03\x00\x00", false, false},
-		{true, "\x03\x00\x00\x00\x01" + strings.Repeat("x", MaxChunk+1), false, false},
+		{false, `{"t":"mouse","x":1,"y":2,"buttons":1}`, true, true, true},
+		{false, `{"t":"key","code":"KeyA","key":"a","down":true}`, true, true, true},
+		{false, `{"t":"size","width":1280,"height":800,"scale":2}`, true, false, true},
+		{false, `{"t":"keyframe"}`, true, false, true},
+		{false, `{"t":"quality","mode":"auto","fps":60}`, true, false, true},
+		{false, `{"t":"upload","id":1,"name":"a.pdf","size":3}`, true, true, true},
+		{false, quotes, true, true, true},
+		// Known but out of range: dropped like the agent would, the view goes on.
+		{false, `{"t":"mouse","x":-50,"y":2,"buttons":1}`, false, false, true},
+		{false, `{"t":"exec","cmd":"rm -rf /"}`, false, false, false},
+		{false, `{"t":"hello"}`, false, false, false}, // agent → browser only
+		{false, `["t","mouse"]`, false, false, false},
+		{false, `not json`, false, false, false},
+		{false, huge, false, false, false},
+		{true, "\x03\x00\x00\x00\x01data", true, true, true},
+		{true, "\x01\x00video", false, false, false},
+		{true, "\x03\x00\x00", false, false, false},
+		{true, "\x03\x00\x00\x00\x01" + strings.Repeat("x", 256<<10+1), false, false, false},
 	} {
-		input, err := CheckClient(tc.binary, []byte(tc.data))
-		if (err == nil) != tc.ok || input != tc.input {
-			t.Errorf("%.40q: input %v err %v", tc.data, input, err)
+		forward, input, err := CheckClient(tc.binary, []byte(tc.data))
+		if (err == nil) != tc.ok || input != tc.input || forward != tc.forward {
+			t.Errorf("%.40q: forward %v input %v err %v", tc.data, forward, input, err)
 		}
 	}
 }

@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -83,7 +85,7 @@ func TestViewerStreamChecksRightAndMemory(t *testing.T) {
 	if len(msgs) != 2 || msgs[0]["t"] != "starting" || msgs[1]["t"] != "error" || lastCode(msgs) != "viewer_memory" {
 		t.Fatalf("owner without memory: %v", msgs)
 	}
-	for err, want := range map[error]string{viewer.ErrHostNetwork: "viewer_hostnet", viewer.ErrImageNotReady: "viewer_image", viewer.ErrNoWebUI: "viewer_no_webui"} {
+	for err, want := range map[error]string{viewer.ErrLimit: "viewer_limit", viewer.ErrHostNetwork: "viewer_hostnet", viewer.ErrImageNotReady: "viewer_image", viewer.ErrNoWebUI: "viewer_no_webui"} {
 		fake.err = err
 		if code := lastCode(viewerMessages(t, ts, ts.client, "immich")); code != want {
 			t.Errorf("%v: %q", err, code)
@@ -217,4 +219,33 @@ func TestAttachmentName(t *testing.T) {
 	if strings.ContainsAny(got, "\r\n/") || !strings.HasPrefix(got, "attachment;") || !strings.Contains(got, "filename*=UTF-8''") {
 		t.Fatalf("%s", got)
 	}
+}
+
+func TestDeletedAccountLosesItsViewerProfiles(t *testing.T) {
+	ts := newTestServer(t)
+	m := viewer.New(ts.store)
+	m.MountRoot = t.TempDir()
+	m.Mounted = func() []string { return []string{"data"} }
+	m.DockerVolume = func() string { return "data" }
+	ts.server.opts.Viewer = m
+	ts.setup()
+	ts.users.Create("gast", testPassword, auth.RoleUser)
+	profile := filepath.Join(m.MountRoot, "data/.titanos/viewer/profiles/gast/immich")
+	os.MkdirAll(profile, 0o700)
+	other := filepath.Join(m.MountRoot, "data/.titanos/viewer/profiles/anna")
+	os.MkdirAll(other, 0o700)
+	if res, body := ts.request("DELETE", "/api/v1/users/gast", nil); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("delete: %d %s", res.StatusCode, body)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(filepath.Dir(profile)); os.IsNotExist(err) {
+			if _, err := os.Stat(other); err != nil {
+				t.Fatal("another account's profiles removed")
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("profiles of the deleted account kept")
 }

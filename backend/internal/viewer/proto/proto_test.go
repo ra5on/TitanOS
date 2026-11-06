@@ -2,6 +2,7 @@ package proto
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -104,4 +105,74 @@ func TestHeaders(t *testing.T) {
 	if len(a) != 9 || a[0] != TypeAudio || binary.BigEndian.Uint64(a[1:]) != 42 {
 		t.Fatal(a)
 	}
+}
+
+func TestChromiumPolicy(t *testing.T) {
+	b, err := ChromiumPolicy("http://172.18.0.2:8080")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckPolicy(b, "http://172.18.0.2:8080"); err != nil {
+		t.Fatal(err)
+	}
+	var p map[string]any
+	if err := json.Unmarshal(b, &p); err != nil {
+		t.Fatal(err)
+	}
+	for k, want := range map[string]any{
+		"PasswordManagerEnabled": false, "SavingBrowserHistoryDisabled": true, "DownloadRestrictions": 1.0,
+		"AllowFileSelectionDialogs": true, "DeveloperToolsAvailability": 2.0, "DownloadDirectory": "/profile/Downloads",
+		"PromptForDownloadLocation": false, "BrowserSignin": 0.0, "SyncDisabled": true,
+	} {
+		if p[k] != want {
+			t.Errorf("%s = %v, want %v", k, p[k], want)
+		}
+	}
+	block := strings.Join(toStrings(p["URLBlocklist"]), " ")
+	for _, s := range []string{"*", "file://*", "chrome://*", "devtools://*", "view-source:*", "javascript://*"} {
+		if !strings.Contains(" "+block+" ", " "+s+" ") {
+			t.Errorf("URLBlocklist lacks %q", s)
+		}
+	}
+	if CheckPolicy(b, "http://172.18.0.3:8080") == nil {
+		t.Fatal("policy accepted for another origin")
+	}
+	for _, bad := range []string{"", "http://x/path", "file:///etc", "javascript:alert(1)", "http://a,b", "http://u:p@h", "http://*"} {
+		if _, err := ChromiumPolicy(bad); err == nil {
+			t.Errorf("accepted origin %q", bad)
+		}
+	}
+}
+
+func TestCheckPolicyRejects(t *testing.T) {
+	good, _ := ChromiumPolicy("https://app:8443")
+	for _, bad := range []string{
+		`{}`, `not json`,
+		`{"URLBlocklist":["*"],"URLAllowlist":["https://app:8443","about:blank"],"DeveloperToolsAvailability":2}`,
+		strings.Replace(string(good), `"about:blank"`, `"about:blank","*"`, 1),
+		strings.Replace(string(good), `"DeveloperToolsAvailability": 2`, `"DeveloperToolsAvailability": 0`, 1),
+	} {
+		if CheckPolicy([]byte(bad), "https://app:8443") == nil {
+			t.Errorf("accepted %.60s", bad)
+		}
+	}
+}
+
+func TestAppOrigin(t *testing.T) {
+	for in, want := range map[string]string{
+		"http://172.18.0.2:8080": "http://172.18.0.2:8080", "https://app:8443/path?x=1": "https://app:8443",
+		"http://[fd00::1]:80/": "http://[fd00::1]:80",
+	} {
+		if got, err := AppOrigin(in); err != nil || got != want {
+			t.Errorf("%q → %q %v", in, got, err)
+		}
+	}
+}
+
+func toStrings(v any) []string {
+	var out []string
+	for _, x := range v.([]any) {
+		out = append(out, x.(string))
+	}
+	return out
 }

@@ -89,7 +89,14 @@
 	let copied = $state(false);
 	let downloads = $state<{ id: string; name: string; size: number }[]>([]);
 	let uploads = $state<
-		{ id: number; name: string; size: number; sent: number; state: 'run' | 'done' | 'failed' }[]
+		{
+			id: number;
+			name: string;
+			size: number;
+			sent: number;
+			state: 'run' | 'done' | 'failed';
+			error?: string;
+		}[]
 	>([]);
 	let cursor = $state('default');
 	let box = $state({ w: 0, h: 0 });
@@ -303,7 +310,11 @@
 				break;
 			case 'uploaded': {
 				const u = uploads.find((x) => x.id === msg.id);
-				if (u) {
+				if (u && msg.error) {
+					// The NAS refused it: too big, no room left or a bad name.
+					u.state = 'failed';
+					u.error = msg.error;
+				} else if (u) {
 					u.state = 'done';
 					u.sent = u.size;
 				}
@@ -938,7 +949,9 @@
 						>{u.state === 'done'
 							? t('viewer.uploadDone')
 							: u.state === 'failed'
-								? t('viewer.uploadFailed')
+								? u.error
+									? t(`viewer.uploadError.${u.error}` as 'viewer.uploadError.failed')
+									: t('viewer.uploadFailed')
 								: formatPercent(u.size ? (100 * u.sent) / u.size : 100)}</span
 					>
 					{#if u.state === 'run'}<progress max={u.size || 1} value={u.sent}></progress>{/if}

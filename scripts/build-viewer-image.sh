@@ -38,7 +38,7 @@ echo "== image" >&2
 TAG=titanos-viewer:$VERSION
 SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-$(git -C "$ROOT" log -1 --format=%ct 2>/dev/null || echo 0)}
 export SOURCE_DATE_EPOCH
-docker build --network=default --label org.opencontainers.image.version="$VERSION" \
+docker build --network=default --build-arg VIEWER_RELEASE="$VERSION" --label org.opencontainers.image.version="$VERSION" \
 	--label org.opencontainers.image.title=titanos-viewer -t "$TAG" "$CTX" >&2
 if [ "${VIEWER_TAG_DEV:-0}" = 1 ]; then
 	docker tag "$TAG" titanos-viewer:dev

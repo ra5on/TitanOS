@@ -121,6 +121,8 @@ func viewerError(err error) (code, text string) {
 		return "viewer_image", "the remote view is being prepared"
 	case errors.Is(err, viewer.ErrMemory):
 		return "viewer_memory", "not enough free memory for another remote view"
+	case errors.Is(err, viewer.ErrLimit):
+		return "viewer_limit", fmt.Sprintf("an account may have at most %d remote views open", viewer.PerAccount)
 	case errors.Is(err, viewer.ErrHostNetwork):
 		return "viewer_hostnet", "the app uses the network of the NAS; open it in its own tab"
 	case errors.Is(err, viewer.ErrNoWebUI):
@@ -196,6 +198,16 @@ func (s *Server) handleViewerStream(w http.ResponseWriter, r *http.Request) {
 	// a few seconds).
 	_ = conn.Write(ctx, websocket.MessageText, []byte(`{"t":"starting"}`))
 	lease, err := opener.Open(ctx, user.Name, app)
+	// Right before dialling: the container still runs with its address on
+	// the view's own network; otherwise the view starts afresh once.
+	if err == nil {
+		if err = lease.Check(ctx); errors.Is(err, viewer.ErrStale) {
+			lease, err = opener.Open(ctx, user.Name, app)
+			if err == nil {
+				err = lease.Check(ctx)
+			}
+		}
+	}
 	if err != nil {
 		code, text := viewerError(err)
 		var extra map[string]any
@@ -347,14 +359,8 @@ func (s *Server) handleViewerDownload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "viewer_no_session", "the remote view of this app is not open")
 		return
 	}
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, lease.DownloadURL(id), nil)
+	res, err := lease.Download(r.Context(), id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal", "download failed")
-		return
-	}
-	res, err := viewerClient.Do(req)
-	if err != nil {
-		// The error would name the address with the key.
 		writeError(w, http.StatusBadGateway, "viewer_agent", "the remote view did not answer")
 		return
 	}
@@ -378,11 +384,6 @@ func (s *Server) handleViewerDownload(w http.ResponseWriter, r *http.Request) {
 	noteTarget(r, app)
 	_, _ = io.Copy(w, res.Body)
 }
-
-// viewerClient talks to agents on the internal network only.
-var viewerClient = &http.Client{Transport: &http.Transport{Proxy: nil}, CheckRedirect: func(*http.Request, []*http.Request) error {
-	return http.ErrUseLastResponse
-}}
 
 // attachmentName is a Content-Disposition with a safe ASCII fallback and
 // the full name per RFC 5987.
@@ -419,4 +420,28 @@ func rfc5987(s string) string {
 		}
 	}
 	return b.String()
+}
+
+// viewerForgetUser ends the views of a deleted account and removes its
+// browser profiles.
+func (s *Server) viewerForgetUser(name string) {
+	if s.opts.Viewer == nil {
+		return
+	}
+	s.opts.Viewer.Stop(name, "")
+	if err := s.opts.Viewer.DeleteProfiles(name); err != nil {
+		slog.Warn("remote view profiles not removed", "user", name, "err", err)
+	}
+}
+
+// viewerRecheckRights ends views (also those waiting for their window) of
+// accounts that lost the right on their app.
+func (s *Server) viewerRecheckRights() {
+	if s.opts.Viewer == nil {
+		return
+	}
+	s.opts.Viewer.StopWhere(func(user, app string) bool {
+		account, ok := s.activeUser(user)
+		return !ok || !s.allowsAppNow(account, app)
+	})
 }

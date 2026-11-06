@@ -29,9 +29,11 @@ const (
 	MaxUploadSize    = 2 << 30   // bytes per uploaded file
 	MaxClipboard     = 1 << 20   // bytes of clipboard text
 	MaxText          = 10000     // runes per "text" message
-	MaxTextMessage   = 2 << 20   // bytes of one JSON text message towards the agent
+	MaxTextMessage   = 6 << 20   // bytes of one JSON text message towards the agent (1 MiB clipboard, escaped)
 	MaxBinaryMessage = 5 + MaxUploadChunk
-	MaxNameLen       = 255 // bytes of an upload name as sent by the browser
+	MaxNameLen       = 255     // bytes of an upload name as sent by the browser
+	ProfileReserve   = 1 << 30 // bytes that must stay free on the profile volume
+	ProfileCap       = 4 << 30 // bytes of uploads + downloads per profile
 	MinWidth         = 320
 	MaxWidth         = 3840
 	MinHeight        = 240
@@ -305,6 +307,9 @@ const (
 	UploadTooLarge = "too_large"
 	UploadFailed   = "failed"
 	UploadBadName  = "bad_name"
+	// UploadNoSpace: the profile volume would keep less than
+	// ProfileReserve free, or the profile would exceed ProfileCap.
+	UploadNoSpace = "no_space"
 )
 
 // VideoHeader builds the 10-byte header of a 0x01 message.

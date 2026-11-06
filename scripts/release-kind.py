@@ -43,6 +43,8 @@ ALLOWED = (
     # squashfs. make-release.sh and third-party-licenses.py only pack it.
     "viewer/",
     "scripts/build-viewer-image.sh",
+    "scripts/viewer-image-reuse.py",
+    "scripts/tests/test_viewer_image_reuse.py",
     # The example agent is published as its own image, not in the system.
     "examples/",
     ".github/workflows/agent.yml",
