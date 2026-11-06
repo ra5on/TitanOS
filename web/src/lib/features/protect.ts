@@ -62,6 +62,8 @@ export type GuardAlert = {
 	snapshotAt?: string;
 	held?: string;
 	restored?: RestoreResult;
+	/** How many files a restore puts back (the stored ones). */
+	restorable?: number;
 	error?: string;
 	by?: string;
 };

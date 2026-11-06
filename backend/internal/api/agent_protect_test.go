@@ -51,6 +51,9 @@ func (r *protectRunner) Run(_ context.Context, _ string, name string, args ...st
 		return `{"sessions":{"1":{"server_id":{"pid":"4242"},"username":"lena","remote_machine":"PC-Wohnzimmer","hostname":"ipv4:192.168.1.57:50000"}}}`, nil
 	case name == "btrfs" && len(args) == 5 && args[1] == "snapshot" && strings.Contains(args[3], "/snapshots/"):
 		return "", os.CopyFS(args[4], os.DirFS(args[3]))
+	case name == "btrfs" && len(args) == 5 && args[1] == "snapshot":
+		// A snapshot of the volume: the share as it is now.
+		return "", os.CopyFS(filepath.Join(args[4], "Documents"), os.DirFS(filepath.Join(args[3], "Documents")))
 	case name == "lsblk":
 		return "", errors.New("no lsblk in tests")
 	}
@@ -193,6 +196,12 @@ func TestProtectOffByDefault(t *testing.T) {
 // snapshot from 10:30 has the originals.
 func (e *protectEnv) attack(t *testing.T, n int, snapshot bool) {
 	t.Helper()
+	e.attackFiles(t, n, snapshot)
+	e.attackEvents(n)
+}
+
+func (e *protectEnv) attackFiles(t *testing.T, n int, snapshot bool) {
+	t.Helper()
 	share := filepath.Join(e.mnt, "fast", "Documents")
 	snap := filepath.Join(e.mnt, "fast", ".titanos", "snapshots", "agent-20261106-103000", "Documents")
 	for i := range n {
@@ -206,6 +215,10 @@ func (e *protectEnv) attack(t *testing.T, n int, snapshot bool) {
 	}
 	os.Chmod(filepath.Join(e.mnt, "fast", ".titanos"), 0o700)
 	os.Chmod(filepath.Join(e.mnt, "fast", ".titanos", "snapshots"), 0o700)
+}
+
+func (e *protectEnv) attackEvents(n int) {
+	share := filepath.Join(e.mnt, "fast", "Documents")
 	for i := range n {
 		rel := fmt.Sprintf("Post/Brief%02d.pdf", i)
 		e.src.ch <- protect.Event{At: e.clock().Add(time.Duration(i) * 100 * time.Millisecond), Op: protect.OpRename, From: filepath.Join(share, rel), Path: filepath.Join(share, rel+".locked"), PID: 4242}
@@ -244,7 +257,24 @@ func TestGuardLockRestoreReopen(t *testing.T) {
 	ts := env.ts
 	env.features(t, map[string]any{"guard": map[string]any{"enabled": true}})
 	ts.server.agentProtectTick(env.clock())
-	env.attack(t, 40, true)
+	// A harmless write 10 s before the attack takes the hourly snapshot;
+	// the files are already encrypted on disk when it is copied.
+	share0 := filepath.Join(env.mnt, "fast", "Documents")
+	os.MkdirAll(share0, 0o755)
+	env.attackFiles(t, 40, true)
+	env.src.ch <- protect.Event{At: env.clock().Add(-10 * time.Second), Op: protect.OpWrite, Path: filepath.Join(share0, "notiz.bin"), PID: 1}
+	pre := filepath.Join(env.mnt, "fast", ".titanos", "snapshots", "guard-pre-"+env.clock().Add(-10*time.Second).UTC().Format("20060102-150405"))
+	deadline0 := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline0) {
+		if _, err := os.Stat(pre); err == nil {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if _, err := os.Stat(pre); err != nil {
+		t.Fatalf("no pre-snapshot: %v %v", err, env.runner.calls)
+	}
+	env.attackEvents(40)
 	a := env.waitAlert(t)
 	if a.Share != "Documents" || a.Reason != "known-extension" || !a.Locked || a.Client.User != "lena" || a.Client.IP != "192.168.1.57" || !a.Btrfs {
 		t.Fatalf("alert: %+v", a)
@@ -262,13 +292,9 @@ func TestGuardLockRestoreReopen(t *testing.T) {
 	if env.access("Fotos")["max"] != shares.ReadWrite {
 		t.Fatal("another share locked")
 	}
-	// The hourly point to go back to, taken while the volume is written to.
-	deadline := time.Now().Add(2 * time.Second)
-	for !env.runner.has("btrfs subvolume snapshot -r "+env.mnt+"/fast "+env.mnt+"/fast/.titanos/snapshots/guard-pre-") && time.Now().Before(deadline) {
-		time.Sleep(20 * time.Millisecond)
-	}
-	if !env.runner.has("btrfs subvolume snapshot -r " + env.mnt + "/fast " + env.mnt + "/fast/.titanos/snapshots/guard-pre-") {
-		t.Fatalf("no pre-snapshot: %v", env.runner.calls)
+	// The attack's own events took no snapshot.
+	if n := strings.Count(strings.Join(env.runner.calls, "\n"), "guard-pre-"); n != 1 {
+		t.Fatalf("pre-snapshots: %d %v", n, env.runner.calls)
 	}
 	// While it goes on, the alert collects the files; restoring waits.
 	time.Sleep(100 * time.Millisecond)
@@ -349,6 +375,8 @@ func TestGuardReportAndFalseAlarm(t *testing.T) {
 		t.Fatalf("report mode locked: %+v", a)
 	}
 	ts.request("POST", "/api/v1/agent/protect/guard/"+a.ID+"/dismiss", nil)
+	// The share is quiet for an hour after a false alarm.
+	env.set(env.clock().Add(61 * time.Minute))
 
 	env.features(t, map[string]any{"guard": map[string]any{"enabled": true}})
 	ts.server.agentProtectTick(env.clock())
@@ -383,11 +411,11 @@ func TestGuardReportAndFalseAlarm(t *testing.T) {
 	if b.State != "dismissed" {
 		t.Fatalf("state: %s", b.State)
 	}
-	// The same device again within the hour: no alarm.
+	// The device again within the hour (reconnected: a new process): no alarm.
 	before := len(ts.server.guardStatusFor(20)["alerts"].([]guardAlert))
 	for i := range 10 {
 		rel := fmt.Sprintf("y%02d.docx", i)
-		env.src.ch <- protect.Event{At: env.clock().Add(12*time.Minute + time.Duration(i)*time.Second), Op: protect.OpRename, From: filepath.Join(share, rel), Path: filepath.Join(share, rel+".locked"), PID: 77}
+		env.src.ch <- protect.Event{At: env.clock().Add(12*time.Minute + time.Duration(i)*time.Second), Op: protect.OpRename, From: filepath.Join(share, rel), Path: filepath.Join(share, rel+".locked"), PID: 78}
 	}
 	time.Sleep(300 * time.Millisecond)
 	if after := len(ts.server.guardStatusFor(20)["alerts"].([]guardAlert)); after != before {

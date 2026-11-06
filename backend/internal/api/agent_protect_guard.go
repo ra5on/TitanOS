@@ -65,14 +65,17 @@ type guardAlert struct {
 	Restored   *protect.RestoreResult `json:"restored,omitempty"`
 	Error      string                 `json:"error,omitempty"`
 	Closed     time.Time              `json:"closed,omitzero"`
-	By         string                 `json:"by,omitempty"`
+	// Restorable is how many files a restore would put back (page only).
+	Restorable int    `json:"restorable,omitempty"`
+	By         string `json:"by,omitempty"`
 }
 
 func (a guardAlert) open() bool { return a.State == "active" || a.State == "stopped" }
 
 const (
 	maxGuardAlerts   = 20
-	maxStoredFiles   = 3000
+	maxStoredFiles   = 2000
+	closedFiles      = 20
 	guardPrePrefix   = "guard-pre-"
 	guardHoldPrefix  = "guard-hold-"
 	guardPreEvery    = time.Hour
@@ -97,8 +100,22 @@ func (s *Server) guardLoadLocked(ps *protectState) {
 }
 
 func (s *Server) guardSaveLocked(ps *protectState) {
+	if !ps.loaded {
+		// What is on the volume could not be read: writing now would drop
+		// the saved access of open alerts.
+		slog.Error("ransomware guard state not saved: the stored state was not readable")
+		return
+	}
 	if len(ps.alerts) > maxGuardAlerts {
 		ps.alerts = ps.alerts[len(ps.alerts)-maxGuardAlerts:]
+	}
+	// Closed alerts keep a sample of their files, so the file stays far
+	// below what the store reads back (4 MiB).
+	for i := range ps.alerts {
+		if a := &ps.alerts[i]; !a.open() && len(a.Files) > closedFiles {
+			a.More += len(a.Files) - closedFiles
+			a.Files = slices.Clone(a.Files[:closedFiles])
+		}
 	}
 	if err := s.agentStore().WriteShared(guardFile, ps.alerts); err != nil {
 		slog.Error("ransomware guard state not saved", "err", err)
@@ -144,7 +161,7 @@ func (s *Server) guardTick(g agentGuard, now time.Time) {
 	if ps.detector == nil {
 		ps.detector = protect.NewDetector(g.thresholds())
 	} else {
-		ps.detector.T = g.thresholds()
+		ps.detector.SetThresholds(g.thresholds())
 	}
 	mounts := s.guardMounts()
 	k := strings.Join(mounts, "\n")
@@ -241,7 +258,6 @@ func (s *Server) guardEvent(ev protect.Event) {
 	if !ok {
 		return
 	}
-	s.guardPreSnapshot(sh.Volume, g, ev.At)
 	file := protect.Affected{Was: rel, Now: rel}
 	kind := protect.KindNone
 	switch ev.Op {
@@ -263,16 +279,27 @@ func (s *Server) guardEvent(ev protect.Event) {
 			}
 		}
 	}
-	if kind == protect.KindNone {
-		return
-	}
 	ps.mu.Lock()
 	det := ps.detector
 	ps.mu.Unlock()
 	if det == nil {
 		return
 	}
-	if inc := det.Observe(sh.Name, "pid:"+strconv.Itoa(ev.PID), kind, file, ev.At); inc != nil {
+	if kind == protect.KindNone {
+		// The point to go back to is taken only on harmless writes and
+		// never while an attack runs on the share: a snapshot started by
+		// the attack's own first renames would hold encrypted files.
+		if !det.Active(sh.Name) {
+			s.guardPreSnapshot(sh.Volume, g, ev.At)
+		}
+		return
+	}
+	client := "pid:" + strconv.Itoa(ev.PID)
+	if protect.ProcessName(ev.PID) == "nfsd" {
+		// nfsd spreads one client's writes over its threads.
+		client = "nfsd"
+	}
+	if inc := det.Observe(sh.Name, client, kind, file, ev.At); inc != nil {
 		s.guardStart(*inc, ev.PID, g)
 	}
 }
@@ -444,7 +471,16 @@ func (s *Server) guardStart(inc protect.Incident, pid int, g agentGuard) {
 	a := guardAlert{ID: newAlertID(inc.First), Share: sh.Name, Volume: sh.Volume, Reason: inc.Reason, Mode: g.mode(), First: inc.First.UTC(), Last: inc.Last.UTC(), Count: inc.Count, Files: inc.Files, State: "active", Btrfs: s.isBtrfs(sh.Volume)}
 	a.Client = s.guardClient(ctx, pid)
 	if a.Btrfs {
-		a.Snapshot, a.SnapshotAt = s.guardFindSnapshot(sh.Volume, inc.First)
+		// Only a snapshot clearly before the first suspicious event (one
+		// window earlier) is free of the attack's changes.
+		window := protect.DefaultThresholds().Window
+		ps.mu.Lock()
+		det := ps.detector
+		ps.mu.Unlock()
+		if det != nil {
+			window = det.Window()
+		}
+		a.Snapshot, a.SnapshotAt = s.guardFindSnapshot(sh.Volume, inc.First.Add(-window))
 	}
 	if a.Mode != guardReport {
 		if err := s.guardLockShare(ctx, &a); err != nil {
@@ -734,6 +770,7 @@ func (s *Server) guardStatusFor(limit int) map[string]any {
 		list = list[:limit]
 	}
 	for i := range list {
+		list[i].Restorable = len(list[i].Files)
 		if len(list[i].Files) > 500 {
 			list[i].More += len(list[i].Files) - 500
 			list[i].Files = list[i].Files[:500]
@@ -794,7 +831,7 @@ func (s *Server) handleGuardReopen(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGuardDismiss: it was wanted (e.g. an own encryption): reopen,
-// restore nothing, and do not alarm on that device and share for an hour.
+// restore nothing, and do not alarm on that share for an hour.
 func (s *Server) handleGuardDismiss(w http.ResponseWriter, r *http.Request) {
 	s.guardAction(w, r, func(a *guardAlert) error {
 		if err := s.guardUnlockShare(a); err != nil {
@@ -806,7 +843,9 @@ func (s *Server) handleGuardDismiss(w http.ResponseWriter, r *http.Request) {
 		ps.mu.Unlock()
 		if det != nil {
 			det.Forget(a.Share)
-			det.Mute(a.Share, "pid:"+strconv.Itoa(a.Client.PID), ps.now().Add(guardFalseMute))
+			// The whole share: the device reconnects with a new process
+			// after it was cut off.
+			det.Mute(a.Share, "", ps.now().Add(guardFalseMute))
 		}
 		a.State = "dismissed"
 		return nil

@@ -24,7 +24,7 @@ const alert = {
 	id: '20261106-094200-abc123', share: 'Documents', volume: 'Fast', reason: 'known-extension', mode: 'lock',
 	client: { user: 'lena', ip: '192.168.1.57', machine: 'PC-Wohnzimmer', process: 'smbd', pid: 4242 },
 	first: ago(14), last: ago(12), count: 1318, more: 1278, files, state: 'stopped', locked: true, btrfs: true,
-	snapshot: 'agent-20261106-093000', snapshotAt: ago(26), held: 'guard-hold-20261106-094200',
+	snapshot: 'agent-20261106-093000', snapshotAt: ago(26), held: 'guard-hold-20261106-094200', restorable: 1318,
 };
 const features = {
 	docs: {}, whatIf: {}, advisor: {}, buddy: {}, catalog: {}, diary: {},
@@ -165,6 +165,47 @@ for (const [width, height, tag] of [[390, 844, 'phone'], [1440, 900, 'desktop']]
 	await page.getByRole('button', { name: 'Ablehnen' }).click();
 	await page.waitForTimeout(200);
 	assert.ok(seen.posts.some((p) => p.endsWith('/r1/decline')), 'decline was sent');
+	await ctx.close();
+}
+
+// The person's side (lena, a user): ask for the emergency access in the
+// agent app (Einstellungen › Funktionen), then waiting.
+{
+	const made = await create('user', 'graphit', 390);
+	const { page, ctx } = made;
+	await page.setViewportSize({ width: 390, height: 844 });
+	let request = null;
+	await ctx.route('**/api/v1/**', async (route) => {
+		const url = new URL(route.request().url());
+		const p = url.pathname.slice(7);
+		const method = route.request().method();
+		const json = (value, status = 200) => route.fulfill({ status, json: value });
+		if (!p.startsWith('/agent')) return route.fallback();
+		if (p === '/agent/status') return json({ enabled: true, allowed: true, admin: false, model: 'gpt-oss:20b', volume: true, reachable: true, models: [], running: [] });
+		if (p === '/agent/chats') return json({ chats: [] });
+		if (p === '/agent/projects') return json({ projects: [] });
+		if (p === '/agent/features/me') return json({ mine: { docs: {}, paper: {}, diary: {} }, nas: pub });
+		if (p === '/agent/protect/me') return json({ guard: false, handbook: false, emergency: true, person: { account: 'lena', waitDays: 3, shares: ['Documents'] }, codes: false, ...(request ? { request } : {}) });
+		if (p === '/agent/protect/emergency/request' && method === 'POST') {
+			const body = route.request().postDataJSON();
+			request = { id: 'r9', account: 'lena', reason: body.reason, created: now.toISOString(), due: inDays(3), state: 'waiting', shares: ['Documents'] };
+			return json(request, 201);
+		}
+		if (p.endsWith('/events')) return route.fulfill({ status: 200, contentType: 'text/event-stream', body: 'event: end\ndata: {}\n\n' });
+		return json({});
+	});
+	await page.goto(base + '/agent');
+	await page.getByRole('button', { name: /Einstellungen/ }).first().click();
+	await page.getByRole('button', { name: /Funktionen/ }).first().click();
+	await page.getByRole('button', { name: /Notfallzugang/ }).first().click();
+	await page.getByText('Im Notfall kannst du hier').waitFor();
+	await noOverflow(page, 'person form');
+	await page.screenshot({ path: `${out}/08c-notfallzugang-person-phone.png` });
+	await page.locator('#em-reason').fill('Papa ist im Krankenhaus.');
+	await page.getByRole('button', { name: 'Beantragen', exact: true }).click();
+	await page.getByText('Dein Antrag läuft').waitFor();
+	await noOverflow(page, 'person waiting');
+	await page.screenshot({ path: `${out}/08d-notfallzugang-person-wartet-phone.png` });
 	await ctx.close();
 }
 

@@ -180,7 +180,9 @@
 							><small
 								>{alert.state === 'active'
 									? t('agent.f.protect.g.restoreWait')
-									: t('agent.f.protect.g.restoreSub', { count: formatNumber(total(alert)) })}</small
+									: t('agent.f.protect.g.restoreSub', {
+											count: formatNumber(alert.restorable ?? total(alert)),
+										})}</small
 							></span
 						>
 						<button
@@ -265,7 +267,7 @@
 		<p>
 			{t(`agent.f.protect.g.confirmText.${confirm}` as MessageKey, {
 				share: alert.share,
-				count: formatNumber(total(alert)),
+				count: formatNumber(alert.restorable ?? total(alert)),
 			})}
 		</p>
 		<div class="dialog-actions">

@@ -119,6 +119,20 @@ func NewDetector(t Thresholds) *Detector {
 	return &Detector{T: t, marks: map[string][]mark{}, active: map[string]*Incident{}, muted: map[string]time.Time{}}
 }
 
+// SetThresholds changes the thresholds (the settings changed).
+func (d *Detector) SetThresholds(t Thresholds) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.T = t
+}
+
+// Window is the time window of the thresholds.
+func (d *Detector) Window() time.Duration {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.T.Window
+}
+
 func key(share, client string) string { return share + "|" + client }
 
 // Mute ignores a client on a share (client "" for every client) until a
