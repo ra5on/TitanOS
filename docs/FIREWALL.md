@@ -87,7 +87,7 @@ Heimnetz/VPN/Internet → NAS):
 | Dienst | Ports | Heimnetz | VPN | Internet |
 |---|---|---|---|---|
 | Weboberfläche | TCP 80, 443 (bzw. die Ports von `titand -http/-https`) | ja | ja | nein |
-| HTTPS-Namen für Apps | TCP 443 und die HTTPS-Ports der Apps (20000–20999, nur die, auf denen titand lauscht; PLAN 62) | ja | ja | nein |
+| HTTPS-Namen für Apps | TCP 443 | ja | ja | nein |
 | SMB | TCP 139, 445; UDP 137–138 | ja | ja | nein |
 | NFS | TCP/UDP 111, 2049, 20048 (mountd), 32765–32766 (statd), 32768 (lockd) | ja | ja | nein |
 | SSH | TCP 22 | ja | ja | nein |
@@ -97,8 +97,6 @@ Heimnetz/VPN/Internet → NAS):
 | Backups anderer TitanOS | TCP 8750 | ja | ja | nein |
 | Backup-Buddy (KI-Agent, PLAN 54) | TCP 8752 | nein | nein | nein |
 | VPN-Tunnel | UDP 41641 (Tailscale), 51820 (NetBird, WireGuard-Server), 51821 (Tunnel des Clusters) | ja | ja | **ja** |
-
-Seit 0.59.0 (PLAN 62) umfasst der Dienst „HTTPS-Namen für Apps“ (Kennung `apps`) neben 443 auch die HTTPS-Ports der Apps im Bereich 20000–20999 – nur die, auf denen titand gerade lauscht, nicht der ganze Bereich. Wer den Dienst für eine Zone sperrt, sperrt dort also auch die App-Ports; wer ihn erlaubt, öffnet sie mit.
 
 Let's Encrypt über HTTP-01 braucht Port 80 aus dem Internet. Bei
 eingeschalteter Firewall gehört Port 80 zum Dienst „Weboberfläche“, der im

@@ -101,12 +101,7 @@ type Container struct {
 	// TailnetURL is the app's own device in the tailnet
 	// (https://<name>.<tailnet>.ts.net) while it runs; the API fills it in.
 	TailnetURL string `json:"tailnetUrl,omitempty"`
-	// ProxyPort is the app's HTTPS port on the NAS through titand (PLAN
-	// 62) and ProxyPortURL its address on the host the web UI was reached
-	// under (https://192.168.10.5:20001); set by the API, empty without.
-	ProxyPort    int    `json:"proxyPort,omitempty"`
-	ProxyPortURL string `json:"proxyPortUrl,omitempty"`
-	Icon         string `json:"icon"`
+	Icon       string `json:"icon"`
 	// UpdateAvailable is true when the registry has a newer image for the
 	// container's tag than the one it runs.
 	UpdateAvailable bool   `json:"updateAvailable"`

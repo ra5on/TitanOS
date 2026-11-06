@@ -69,34 +69,28 @@ func gateApp(key string) string {
 }
 
 // gate answers the requests the gate takes itself and tells whether the
-// request may go on to the app (on an app's names).
+// request may go on to the app.
 func (m *Manager) gate(w http.ResponseWriter, r *http.Request, app string) bool {
-	return m.gateWith(w, r, app, gateCookie, hostOnly(r.Host))
-}
-
-// gateWith is gate with the name of the pass's cookie and the host the
-// page without a pass sends back to (/open?host=…).
-func (m *Manager) gateWith(w http.ResponseWriter, r *http.Request, app, cookieName, back string) bool {
 	if m.Access == nil || app == "" {
 		return true
 	}
 	if r.URL.Path == EnterPath {
-		m.enter(w, r, app, cookieName, back)
+		m.enter(w, r, app)
 		return false
 	}
 	if !m.Access.Gated(app) || !pageLoad(r) {
 		return true
 	}
-	if cookie, err := r.Cookie(cookieName); err == nil && m.Access.Admit(cookie.Value, app) {
+	if cookie, err := r.Cookie(gateCookie); err == nil && m.Access.Admit(cookie.Value, app) {
 		return true
 	}
-	m.refuse(w, r, app, back)
+	m.refuse(w, r, app)
 	return false
 }
 
 // enter takes the window token, sets the cookie and sends the browser on
 // to the app's start page.
-func (m *Manager) enter(w http.ResponseWriter, r *http.Request, app, cookieName, back string) {
+func (m *Manager) enter(w http.ResponseWriter, r *http.Request, app string) {
 	h := w.Header()
 	h.Set("Cache-Control", "no-store")
 	h.Set("Referrer-Policy", "no-referrer")
@@ -105,15 +99,15 @@ func (m *Manager) enter(w http.ResponseWriter, r *http.Request, app, cookieName,
 		// A window restored after a reload brings its old, used token
 		// again; a browser that still holds a valid pass for this app
 		// and login simply goes on.
-		if held, err := r.Cookie(cookieName); err == nil && m.Access.Admit(held.Value, app) {
+		if held, err := r.Cookie(gateCookie); err == nil && m.Access.Admit(held.Value, app) {
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
 		}
-		m.refuse(w, r, app, back)
+		m.refuse(w, r, app)
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
-		Name: cookieName, Value: cookie, Path: "/", MaxAge: int(ttl / time.Second),
+		Name: gateCookie, Value: cookie, Path: "/", MaxAge: int(ttl / time.Second),
 		HttpOnly: true, Secure: true, SameSite: http.SameSiteNoneMode, Partitioned: true,
 	})
 	http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -121,8 +115,8 @@ func (m *Manager) enter(w http.ResponseWriter, r *http.Request, app, cookieName,
 
 // refuse answers a page load without a valid pass: a short page in German
 // and English that leads to TitanOS, which opens the app again.
-func (m *Manager) refuse(w http.ResponseWriter, r *http.Request, app, back string) {
-	link := m.uiOrigin(hostOnly(r.Host)) + "/api/v1/apps/" + url.PathEscape(app) + "/open?host=" + url.QueryEscape(back)
+func (m *Manager) refuse(w http.ResponseWriter, r *http.Request, app string) {
+	link := m.uiOrigin(hostOnly(r.Host)) + "/api/v1/apps/" + url.PathEscape(app) + "/open?host=" + url.QueryEscape(hostOnly(r.Host))
 	h := w.Header()
 	h.Set("Content-Type", "text/html; charset=utf-8")
 	h.Set("Cache-Control", "no-store")
@@ -170,14 +164,10 @@ func (m *Manager) uiOrigin(host string) string {
 
 // EnterURL is the address that lets a browser in to an app with a window
 // token: on host if it is one of the app's names (its device in the
-// tailnet included) or a host of the web UI with the app's port
-// ("192.168.10.5:20001"), else on the app's main address. ok is false if
-// the app has no name that answers.
+// tailnet included), else on the app's main address. ok is false if the
+// app has no name that answers.
 func (m *Manager) EnterURL(app, host, token string) (string, bool) {
-	base := m.portEnterBase(app, host)
-	if base != "" {
-		return base + EnterPath + "?t=" + url.QueryEscape(token), true
-	}
+	base := ""
 	if host = hostOnly(host); host != "" {
 		if key, _, ok := m.match(host); ok && key == "app:"+app {
 			base = m.hostURL(host)

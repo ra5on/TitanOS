@@ -199,27 +199,6 @@ func (m *Manager) applyLocked(ctx context.Context) error {
 	return nil
 }
 
-// SetAppPorts takes the HTTPS ports of apps titand listens on now (PLAN
-// 62); they are opened like the port of the HTTPS names. The rules are
-// loaded anew only when the ports changed and the firewall is on.
-func (m *Manager) SetAppPorts(ports []int) {
-	ports = slices.Clone(ports)
-	slices.Sort(ports)
-	ports = slices.Compact(ports)
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if slices.Equal(ports, m.Web.Apps) {
-		return
-	}
-	m.Web.Apps = ports
-	if !m.loaded || m.Disabled || !m.current().Enabled {
-		return
-	}
-	if err := m.applyLocked(context.Background()); err != nil {
-		slog.Error("firewall rules not loaded", "err", err)
-	}
-}
-
 // tableNeeded tells whether there should be a table at all.
 func (m *Manager) tableNeeded() bool {
 	return m.current().Enabled || len(m.blockedPrefixes()) > 0

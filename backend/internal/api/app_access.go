@@ -29,11 +29,6 @@ type dockerApp struct {
 	URL     string `json:"url"`
 	WebUI   string `json:"webui"`
 	Running bool   `json:"running"`
-	// Port is the app's HTTPS port on the NAS (PLAN 62) while titand
-	// listens on it; PortURL its address on the host the web UI was
-	// reached under, e.g. https://192.168.10.5:20001.
-	Port    int    `json:"port,omitempty"`
-	PortURL string `json:"portUrl,omitempty"`
 }
 
 // dockerApps lists the apps with their icon, HTTPS name and state, sorted.
@@ -50,9 +45,6 @@ func (s *Server) dockerApps(r *http.Request) []dockerApp {
 		a := &dockerApp{App: name}
 		if s.opts.AppProxy != nil {
 			a.URL = s.opts.AppProxy.URL(name)
-			if a.PortURL = s.opts.AppProxy.PortURL(name, r.Host); a.PortURL != "" {
-				a.Port = s.opts.AppProxy.Port(name)
-			}
 		}
 		byName[name] = a
 		return a
@@ -189,22 +181,21 @@ func (s *Server) allowsApp(r *http.Request, app string) bool {
 }
 
 // handleAppsMine lists the Docker apps the account may use, for the
-// desktop: {apps: [{app, icon, url, webui, running, port, portUrl}]}; url
-// is the HTTPS name ("" without one), portUrl the app's port on the host
-// of this request (left out without one).
+// desktop: {apps: [{app, icon, url, webui, running}]}; url is the HTTPS
+// name ("" without one).
 func (s *Server) handleAppsMine(w http.ResponseWriter, r *http.Request) {
 	out := []dockerApp{}
 	for _, a := range s.dockerApps(r) {
-		if (a.URL != "" || a.PortURL != "" || a.WebUI != "") && s.allowsApp(r, a.App) {
+		if (a.URL != "" || a.WebUI != "") && s.allowsApp(r, a.App) {
 			out = append(out, a)
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"apps": out})
 }
 
-// enterToken checks the account's right and makes a window token for
-// the login of the request.
-func (s *Server) enterToken(r *http.Request, app string) (string, time.Time, int, string) {
+// enterURL makes the address that lets the account's browser in to an
+// app once; host picks one of the app's names.
+func (s *Server) enterURL(r *http.Request, app, host string) (string, time.Time, int, string) {
 	if !s.allowsApp(r, app) {
 		return "", time.Time{}, http.StatusForbidden, "app_forbidden"
 	}
@@ -218,17 +209,6 @@ func (s *Server) enterToken(r *http.Request, app string) (string, time.Time, int
 		return "", time.Time{}, http.StatusForbidden, "session_required"
 	}
 	token, expires := s.opts.AppAccess.EnterToken(currentUser(r).Name, app, session)
-	return token, expires, 0, ""
-}
-
-// enterURL makes the address that lets the account's browser in to an
-// app once; host picks one of the app's names, or the app's port on a
-// host of the web UI ("192.168.10.5:20001").
-func (s *Server) enterURL(r *http.Request, app, host string) (string, time.Time, int, string) {
-	token, expires, status, code := s.enterToken(r, app)
-	if status != 0 {
-		return "", time.Time{}, status, code
-	}
 	link, ok := s.opts.AppProxy.EnterURL(app, host, token)
 	if !ok {
 		return "", time.Time{}, http.StatusConflict, "proxy_no_route"
@@ -237,30 +217,16 @@ func (s *Server) enterURL(r *http.Request, app, host string) (string, time.Time,
 }
 
 // handleAppWindow returns the address that opens an app in a window (or
-// a tab): {url, nameUrl, port, expires}. url is the app's port on the
-// host this request came in on (https://192.168.10.5:20001/.titanos/
-// enter?t=…), or its name where it has no port; nameUrl the same on the
-// app's name ("" without one); port the app's port (0 without one). One
-// token serves both, 60 seconds, once.
+// a tab): {url, expires}. The token in it holds 60 seconds, once.
 func (s *Server) handleAppWindow(w http.ResponseWriter, r *http.Request) {
 	app := r.PathValue("app")
-	token, expires, status, code := s.enterToken(r, app)
-	if status == 0 {
-		portURL, nameURL := s.opts.AppProxy.WindowURLs(app, r.Host, token)
-		port := 0
-		link := nameURL
-		if portURL != "" {
-			link, port = portURL, s.opts.AppProxy.Port(app)
-		}
-		if link == "" {
-			status, code = http.StatusConflict, "proxy_no_route"
-		} else {
-			noteTarget(r, app)
-			writeJSON(w, http.StatusOK, map[string]any{"url": link, "nameUrl": nameURL, "port": port, "expires": expires.UTC().Format(time.RFC3339)})
-			return
-		}
+	link, expires, status, code := s.enterURL(r, app, "")
+	if status != 0 {
+		writeError(w, status, code, appWindowMessage(code))
+		return
 	}
-	writeError(w, status, code, appWindowMessage(code))
+	noteTarget(r, app)
+	writeJSON(w, http.StatusOK, map[string]any{"url": link, "expires": expires.UTC().Format(time.RFC3339)})
 }
 
 func appWindowMessage(code string) string {
@@ -283,12 +249,7 @@ func (s *Server) handleAppOpen(w http.ResponseWriter, r *http.Request) {
 	}
 	r = r.WithContext(context.WithValue(r.Context(), contextKey{}, user))
 	app := r.PathValue("app")
-	host := r.URL.Query().Get("host")
-	if host == "" && s.opts.AppProxy != nil {
-		// Without a name asked for, the app's port on this host (PLAN 62).
-		host = strings.TrimPrefix(s.opts.AppProxy.PortURL(app, r.Host), "https://")
-	}
-	link, _, status, code := s.enterURL(r, app, host)
+	link, _, status, code := s.enterURL(r, app, r.URL.Query().Get("host"))
 	if status != 0 {
 		http.Error(w, appWindowMessage(code), status)
 		return

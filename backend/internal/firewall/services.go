@@ -20,18 +20,12 @@ type Service struct {
 }
 
 // WebPorts are the ports titand serves the web UI on; 0 means the usual
-// port (80, 443), HTTP -1 that plain HTTP is off. Apps are the HTTPS
-// ports of apps titand listens on (PLAN 62, 20000–20999), part of the
-// service "apps" next to the port of the web UI.
-type WebPorts struct {
-	HTTP, HTTPS int
-	Apps        []int
-}
+// port (80, 443), HTTP -1 that plain HTTP is off.
+type WebPorts struct{ HTTP, HTTPS int }
 
 func (w *WebPorts) or() WebPorts {
 	out := WebPorts{HTTP: 80, HTTPS: 443}
 	if w != nil {
-		out.Apps = w.Apps
 		if w.HTTPS > 0 {
 			out.HTTPS = w.HTTPS
 		}
@@ -58,16 +52,11 @@ func Services(web *WebPorts) []Service {
 		webui = append([]string{strconv.Itoa(w.HTTP)}, webui...)
 	}
 	nfs := []string{"111", "2049", nfsMountd, nfsStatd, nfsLockd}
-	apps := []string{strconv.Itoa(w.HTTPS)}
-	for _, port := range w.Apps {
-		apps = append(apps, strconv.Itoa(port))
-	}
 	return []Service{
 		{ID: "webui", Ports: []PortSet{{"tcp", webui}}, Default: local},
 		// App HTTPS names share the port of the web UI; titand itself tells
-		// both apart by name (see AllowHTTP). The HTTPS ports of apps
-		// belong to this service as well.
-		{ID: "apps", Ports: []PortSet{{"tcp", apps}}, Default: local},
+		// both apart by name (see AllowHTTP).
+		{ID: "apps", Ports: []PortSet{{"tcp", []string{strconv.Itoa(w.HTTPS)}}}, Default: local},
 		{ID: "smb", Ports: []PortSet{{"tcp", []string{"139", "445"}}, {"udp", []string{"137-138"}}}, Default: local},
 		{ID: "nfs", Ports: []PortSet{{"tcp", nfs}, {"udp", nfs}}, Default: local},
 		{ID: "ssh", Ports: []PortSet{{"tcp", []string{"22"}}}, Default: local},

@@ -84,3 +84,35 @@ func TestShellRunsInATerminal(t *testing.T) {
 		}
 	}
 }
+
+// PLAN 62-3: the idle time of consoles is chosen from a fixed list (0 is
+// "never"), kept on the stick and read again; nothing chosen is 15.
+func TestIdleMinutes(t *testing.T) {
+	store := config.Open(t.TempDir())
+	m := NewManager(store)
+	if err := m.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if got, chosen := m.IdleMinutes(); got != DefaultIdleMinutes || chosen {
+		t.Fatalf("standard = %d, %v", got, chosen)
+	}
+	if err := m.SetIdleMinutes(7); err == nil {
+		t.Fatal("7 minutes taken")
+	}
+	if err := m.SetIdleMinutes(0); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetEnabled(false); err != nil {
+		t.Fatal(err)
+	}
+	again := NewManager(store)
+	if err := again.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if got, chosen := again.IdleMinutes(); got != 0 || !chosen {
+		t.Fatalf("after reload = %d, %v", got, chosen)
+	}
+	if again.Enabled() {
+		t.Fatal("other settings lost")
+	}
+}

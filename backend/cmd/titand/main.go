@@ -267,20 +267,6 @@ func run(opts options) error {
 			return w.nodes.ServerConfig(hello), nil
 		}, MinVersion: tls.VersionTLS12}
 		serve(https, true)
-		// Every app also answers on a port of its own on the NAS's
-		// addresses (PLAN 62). These listeners come and go with the apps;
-		// one that cannot be opened is logged and tried again, it never
-		// stops titand, so they are not part of serve.
-		appPorts := newServer("", w.routes.PortHandler())
-		appPorts.TLSConfig = &tls.Config{GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-			// An app's own name on its port gets the certificate of the names.
-			if names := w.routes.CertificateNames(hello.ServerName); names != nil {
-				return w.certs.ForNames(hello.ServerName, names)
-			}
-			return w.certs.AddressCertificate(hello)
-		}, MinVersion: tls.VersionTLS12}
-		servers = append(servers, appPorts)
-		go w.routes.ServePorts(ctx, appPorts)
 		if opts.httpAddr != "" {
 			// Port 80 also answers the HTTP challenge of Let's Encrypt.
 			serve(newServer(opts.httpAddr, w.acmeCerts.HTTPHandler(redirectToHTTPS(opts.httpsAddr))), false)

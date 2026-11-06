@@ -9,7 +9,6 @@ package appproxy
 // (Settings.NoAuto, stored only when changed).
 
 import (
-	"log/slog"
 	"maps"
 	"regexp"
 	"slices"
@@ -82,21 +81,7 @@ func (m *Manager) SetAutoApps(ports map[string]int) {
 	m.mu.Lock()
 	m.autoInput = maps.Clone(ports)
 	changed := m.recomputeAuto()
-	// Only a port actually given is written: with the range full, nothing
-	// is written on every look at Docker.
-	need := false
-	if m.needsPorts(m.settings, m.auto) {
-		trial := m.copySettings()
-		need = m.assignPorts(&trial, m.auto)
-	}
 	m.mu.Unlock()
-	if need {
-		// A new app gets its HTTPS port; this writes the stick once.
-		if err := m.change(func(*Settings) error { return nil }); err != nil {
-			slog.Warn("HTTPS ports of apps not saved", "err", err)
-		}
-		return
-	}
 	if changed {
 		m.changed()
 	}
@@ -126,7 +111,7 @@ func (m *Manager) computeAuto(s Settings, input map[string]int) map[string]Route
 	sort.Strings(apps)
 	for _, app := range apps {
 		port := input[app]
-		if _, own := s.Apps[app]; own || !appRE.MatchString(app) || port < 1 || port > 65535 || slices.Contains(m.Reserved, port) || slices.Contains(slices.Collect(maps.Values(s.Ports)), port) {
+		if _, own := s.Apps[app]; own || !appRE.MatchString(app) || port < 1 || port > 65535 || slices.Contains(m.Reserved, port) {
 			continue
 		}
 		name := freeLabel(DNSLabel(app), func(n string) bool { return slices.Contains(taken, n) })
@@ -151,10 +136,6 @@ func (m *Manager) changed() {
 	default:
 	}
 	m.kickTailnet()
-	select {
-	case m.portKick <- struct{}{}:
-	default:
-	}
 	if m.OnChange != nil {
 		m.OnChange()
 	}

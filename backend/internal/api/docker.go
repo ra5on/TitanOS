@@ -54,16 +54,15 @@ func writeDockerError(w http.ResponseWriter, err error) {
 func (s *Server) handleDocker(w http.ResponseWriter, r *http.Request) {
 	status := s.opts.Docker.Status(r.Context())
 	if s.opts.AppProxy != nil {
-		addProxyURLs(status.Containers, s.opts.AppProxy, r.Host)
+		addProxyURLs(status.Containers, s.opts.AppProxy)
 	}
 	writeJSON(w, http.StatusOK, status)
 }
 
-// addProxyURLs gives the HTTPS name of an app, and its HTTPS port on the
-// host the web UI was reached under (uiHost), to the container that
+// addProxyURLs gives the HTTPS name of an app to the container that
 // publishes the port of its route; to all of the app's containers if none
 // does (host network).
-func addProxyURLs(containers []docker.Container, routes *appproxy.Manager, uiHost string) {
+func addProxyURLs(containers []docker.Container, routes *appproxy.Manager) {
 	publishes := map[string]bool{}
 	for _, c := range containers {
 		if route, ok := routes.Route(c.App); ok && c.App != "" && slices.ContainsFunc(c.Ports, func(p docker.Port) bool { return p.Host == route.Port }) {
@@ -78,9 +77,6 @@ func addProxyURLs(containers []docker.Container, routes *appproxy.Manager, uiHos
 		if !publishes[c.App] || slices.ContainsFunc(c.Ports, func(p docker.Port) bool { return p.Host == route.Port }) {
 			containers[i].ProxyURL = routes.URL(c.App)
 			containers[i].TailnetURL = routes.TailnetURL(c.App)
-			if portURL := routes.PortURL(c.App, uiHost); portURL != "" {
-				containers[i].ProxyPortURL, containers[i].ProxyPort = portURL, routes.Port(c.App)
-			}
 		}
 	}
 }
@@ -237,10 +233,9 @@ func (s *Server) handleAppRemove(w http.ResponseWriter, r *http.Request) {
 		writeDockerError(w, err)
 		return
 	}
-	// The HTTPS name and port go with the app; a new app of that name
-	// starts without.
+	// The HTTPS name goes with the app; a new app of that name starts without.
 	if s.opts.AppProxy != nil {
-		if err := s.opts.AppProxy.ForgetApp(name); err != nil {
+		if err := s.opts.AppProxy.RemoveRoute(name); err != nil {
 			slog.Warn("HTTPS name of a removed app not forgotten", "app", name, "err", err)
 		}
 	}

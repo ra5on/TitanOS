@@ -94,7 +94,7 @@ func TestProxyURLsOnContainers(t *testing.T) {
 		{Name: "off-1", App: "off", Ports: []docker.Port{{Host: 9000}}},
 		{Name: "loose"},
 	}
-	addProxyURLs(containers, routes, "")
+	addProxyURLs(containers, routes)
 	want := []string{"https://photos.nas.local", "", "https://hostnet.nas.local", "", ""}
 	for i, c := range containers {
 		if c.ProxyURL != want[i] {

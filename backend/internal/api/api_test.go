@@ -633,63 +633,6 @@ func TestCrossSiteRequestsAreRejected(t *testing.T) {
 	}
 }
 
-// TestSameSiteRequestsAreRejected: an app on a port of the NAS's own
-// address (PLAN 62, https://192.168.1.20:20001) is the same site as the
-// web UI, so the browser sends the session cookie along; the request is
-// still refused, because it does not come from the same origin.
-func TestSameSiteRequestsAreRejected(t *testing.T) {
-	ts := newTestServer(t)
-	ts.setup()
-	u, _ := url.Parse(ts.url)
-	for _, h := range []map[string]string{
-		{"Origin": "https://" + u.Hostname() + ":20001", "Sec-Fetch-Site": "same-site"},
-		{"Origin": "https://" + u.Hostname() + ":20001"},
-		// A plain HTML form on the app's page: no preflight, text/plain.
-		{"Origin": "https://" + u.Hostname() + ":20001", "Sec-Fetch-Site": "same-site", "Content-Type": "text/plain"},
-		{"Origin": "https://" + u.Hostname() + ":20001", "Content-Type": "text/plain"},
-	} {
-		req, _ := http.NewRequest("POST", ts.url+"/api/v1/system/power", strings.NewReader(`{"action":"poweroff"}`))
-		for k, v := range h {
-			req.Header.Set(k, v)
-		}
-		res, err := ts.client.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		res.Body.Close()
-		if res.StatusCode != http.StatusForbidden {
-			t.Errorf("request from an app port %v: %d, want 403", h, res.StatusCode)
-		}
-	}
-	select {
-	case action := <-ts.power.actions:
-		t.Errorf("request from an app port carried out %q", action)
-	default:
-	}
-	// Control: the same request from the web UI's own origin goes through.
-	req, _ := http.NewRequest("POST", ts.url+"/api/v1/system/power", strings.NewReader(`{"action":"poweroff"}`))
-	req.Header.Set("Origin", ts.url)
-	req.Header.Set("Sec-Fetch-Site", "same-origin")
-	res, err := ts.client.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	res.Body.Close()
-	if res.StatusCode/100 != 2 {
-		t.Fatalf("request from the web UI itself: %d", res.StatusCode)
-	}
-	// It was carried out with the session cookie the refused requests
-	// carried as well: they failed for their origin, not for the login.
-	select {
-	case action := <-ts.power.actions:
-		if action != "poweroff" {
-			t.Errorf("web UI request carried out %q", action)
-		}
-	case <-time.After(5 * time.Second):
-		t.Error("request from the web UI itself was not carried out")
-	}
-}
-
 func TestConfigUnavailable(t *testing.T) {
 	store := config.Open("/proc/titanos-no-such-dir")
 	users := auth.NewUsers(store)

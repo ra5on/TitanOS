@@ -78,13 +78,6 @@ func (w *titand) feedAutoApps(ctx context.Context) {
 	defer ticker.Stop()
 	for {
 		if status := w.containers.Status(ctx); status.Running {
-			// Stopped containers keep their ports (HostPorts reads their
-			// bindings); no app port may take one of them.
-			published := publishedPorts(status.Containers)
-			if bound, ok := w.containers.HostPorts(ctx); ok {
-				published = append(published, bound...)
-			}
-			w.routes.SetPublishedPorts(published)
 			w.routes.SetAutoApps(autoApps(status.Containers))
 		}
 		select {
@@ -111,18 +104,4 @@ func autoApps(containers []docker.Container) map[string]int {
 		in = append(in, ac)
 	}
 	return appproxy.AutoPorts(in)
-}
-
-// publishedPorts are all TCP ports the containers publish on the NAS; no
-// app gets one of them as its HTTPS port.
-func publishedPorts(containers []docker.Container) []int {
-	var out []int
-	for _, c := range containers {
-		for _, p := range c.Ports {
-			if p.Host > 0 && (p.Protocol == "tcp" || p.Protocol == "") {
-				out = append(out, p.Host)
-			}
-		}
-	}
-	return out
 }

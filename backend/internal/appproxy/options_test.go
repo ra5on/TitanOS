@@ -280,14 +280,8 @@ func TestTargets(t *testing.T) {
 	// Every connection to a target is checked where it goes.
 	reserved := []int{443, 80}
 	for address, ok := range map[string]bool{"192.168.1.9:8123": true, "127.0.0.1:8080": true, "[fd7a:115c:a1e0::9]:80": true, "8.8.8.8:80": false, "127.0.0.1:443": false, "[::1]:80": false} {
-		if err := checkTarget(address, reserved, true); (err == nil) != ok {
+		if err := checkTarget(address, reserved); (err == nil) != ok {
 			t.Errorf("%s: %v", address, err)
-		}
-	}
-	// A Docker app (no host) may reach any port but titand's own.
-	for address, ok := range map[string]bool{"127.0.0.1:8080": true, "8.8.8.8:80": true, "127.0.0.1:443": false, "0.0.0.0:80": false, "[::]:443": false} {
-		if err := checkTarget(address, reserved, false); (err == nil) != ok {
-			t.Errorf("app %s: %v", address, err)
 		}
 	}
 }

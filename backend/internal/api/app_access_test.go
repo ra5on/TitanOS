@@ -89,15 +89,11 @@ func TestAppAccessRoutes(t *testing.T) {
 
 	var window struct {
 		URL     string `json:"url"`
-		NameURL string `json:"nameUrl"`
-		Port    *int   `json:"port"`
 		Expires string `json:"expires"`
 	}
 	res, body = ts.do(anna, "POST", "/api/v1/apps/immich/window", nil)
 	json.Unmarshal(body, &window)
-	// Without a port titand listens on (development mode here), url is
-	// the name; port 0. The port form is tested in package appproxy.
-	if res.StatusCode != http.StatusOK || !strings.HasPrefix(window.URL, "https://immich.nas.local/.titanos/enter?t=") || window.NameURL != window.URL || window.Port == nil || *window.Port != 0 || window.Expires == "" {
+	if res.StatusCode != http.StatusOK || !strings.HasPrefix(window.URL, "https://immich.nas.local/.titanos/enter?t=") || window.Expires == "" {
 		t.Fatalf("window: %d %s", res.StatusCode, body)
 	}
 	u, _ := url.Parse(window.URL)

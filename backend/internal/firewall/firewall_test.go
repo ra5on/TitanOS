@@ -826,23 +826,3 @@ func TestInternetHTTP(t *testing.T) {
 		t.Error("without plain HTTP there is nothing to reach")
 	}
 }
-
-// TestAppPorts: the HTTPS ports of apps (PLAN 62) belong to the service
-// "apps"; without any the rules stay those of before.
-func TestAppPorts(t *testing.T) {
-	rs := sampleRuleset()
-	before := render(rs)
-	rs.web.Apps = []int{20000, 20001}
-	got := render(rs)
-	if got == before || !strings.Contains(got, `tcp dport { 443, 20000, 20001 } accept comment "apps"`) {
-		t.Errorf("app ports not opened:\n%s", got)
-	}
-	m, nft, _ := newTestManager(t)
-	m.SetAppPorts([]int{20001, 20000, 20001})
-	if !slices.Equal(m.Web.Apps, []int{20000, 20001}) {
-		t.Errorf("ports = %v", m.Web.Apps)
-	}
-	if len(nft.scripts) != 0 {
-		t.Error("rules loaded while the firewall is off")
-	}
-}

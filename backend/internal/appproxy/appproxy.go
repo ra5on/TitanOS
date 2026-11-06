@@ -104,10 +104,6 @@ type Settings struct {
 	// NoAuto switches the automatic names of apps with a WebUI off (see
 	// auto.go); they are on unless switched off.
 	NoAuto bool `json:"noAuto,omitempty"`
-	// Ports are the HTTPS ports of apps on the NAS's addresses (PLAN 62,
-	// see ports.go): app → port in 20000–20999, given once and kept.
-	// Older versions ignore them (and lose them when they save the file).
-	Ports map[string]int `json:"ports,omitempty"`
 }
 
 // General are the settings for all names; nil leaves a field as it is.
@@ -186,25 +182,11 @@ type Manager struct {
 	// routes made from them (RAM only, see auto.go).
 	autoInput map[string]int
 	auto      map[string]Route
-
-	// The HTTPS ports of apps (ports.go). dockerPorts are the ports the
-	// containers publish on the NAS, dockerKnown whether Docker told them.
-	dockerPorts []int
-	dockerKnown bool
-	// portRange replaces PortFirst–PortLast and portFree the listen check
-	// in tests.
-	portRange [2]int
-	portFree  func(port int) bool
-	// OnPorts is told the app ports titand listens on whenever they
-	// change (the firewall opens them).
-	OnPorts  func([]int)
-	portKick chan struct{}
-	ports    portListeners
 }
 
 // NewManager returns a manager with no routes; Load reads them.
 func NewManager(store *config.Store) *Manager {
-	return &Manager{store: store, settings: Settings{Apps: map[string]Route{}}, proxies: map[string]*appHandler{}, hostsFile: "/etc/avahi/hosts", kick: make(chan struct{}, 1), Tailnet: newTailnet(), tailnetKick: make(chan struct{}, 1), portKick: make(chan struct{}, 1)}
+	return &Manager{store: store, settings: Settings{Apps: map[string]Route{}}, proxies: map[string]*appHandler{}, hostsFile: "/etc/avahi/hosts", kick: make(chan struct{}, 1), Tailnet: newTailnet(), tailnetKick: make(chan struct{}, 1)}
 }
 
 // Load reads the routes from /config. A missing file means none.
@@ -234,7 +216,6 @@ func (m *Manager) copySettings() Settings {
 	out := m.settings
 	out.Apps = copyRoutes(m.settings.Apps)
 	out.Targets = copyRoutes(m.settings.Targets)
-	out.Ports = maps.Clone(m.settings.Ports)
 	return out
 }
 
@@ -272,9 +253,6 @@ func toDisk(s Settings) Settings {
 	s.Targets = conv(s.Targets)
 	if len(s.Targets) == 0 {
 		s.Targets = nil
-	}
-	if len(s.Ports) == 0 {
-		s.Ports = nil
 	}
 	return s
 }
@@ -443,10 +421,6 @@ func (m *Manager) setRoute(target bool, key string, route Route) error {
 		if route.Short && slices.Contains(mine, m.localLabelOf(*s)) {
 			return fmt.Errorf("%w: the short name %s.local would be the name of the NAS", ErrInvalid, m.localLabelOf(*s))
 		}
-		// An app port of titand would send the requests back to the proxy.
-		if loopbackHost(route.Host) && slices.Contains(slices.Collect(maps.Values(s.Ports)), route.Port) {
-			return fmt.Errorf("%w: port %d is the HTTPS port of an app in TitanOS", ErrInvalid, route.Port)
-		}
 		if target {
 			if s.Targets == nil {
 				s.Targets = map[string]Route{}
@@ -530,7 +504,6 @@ func (m *Manager) change(fn func(*Settings) error) error {
 		m.mu.Unlock()
 		return err
 	}
-	m.assignPorts(&next, m.computeAuto(next, m.autoInput))
 	if err := m.store.WriteJSON(configFile, toDisk(next)); err != nil {
 		m.mu.Unlock()
 		return err
