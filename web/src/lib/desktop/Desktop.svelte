@@ -16,6 +16,7 @@
 	import { system } from '../system.svelte.ts';
 	import { appearance } from '../theme/appearance.svelte.ts';
 	import { THEMES } from '../theme/themes.ts';
+	import { lock } from '../lock.svelte.ts';
 	import { appForPath, appAllowed } from './apps.ts';
 	import DesktopIcon from './DesktopIcon.svelte';
 	import Launcher from './Launcher.svelte';
@@ -48,7 +49,7 @@
 	} from './wm.svelte.ts';
 	import { formatPercent, formatMegabytesPerSecond } from '../format.ts';
 
-	let { onlock }: { onlock?: () => void } = $props();
+	const onlock = () => void lock();
 
 	let area = $state<HTMLElement>();
 	let launcher = $state(false);

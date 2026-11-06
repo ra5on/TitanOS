@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { t } from '#lib/i18n/index.svelte.ts';
+	import { lock } from '#lib/lock.svelte.ts';
 	import { logout, session } from '#lib/session.svelte.ts';
 	import Icon from './Icon.svelte';
 	import LanguageSwitch from './LanguageSwitch.svelte';
@@ -31,6 +32,13 @@
 	function openAppearance() {
 		open = false;
 		goto('/settings/appearance');
+	}
+
+	const mac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+
+	function lockNow() {
+		open = false;
+		void lock();
 	}
 
 	function ask(action: 'restart' | 'shutdown') {
@@ -95,6 +103,11 @@
 					>
 				{/if}
 				<hr />
+				<button type="button" role="menuitem" onclick={lockNow}
+					><Icon name="lock" />{t('lock.menu')}<kbd class="keys"
+						>{mac ? t('lock.shortcutMac') : t('lock.shortcut')}</kbd
+					></button
+				>
 				<button type="button" role="menuitem" onclick={logout}
 					><Icon name="logout" />{t('menu.logout')}</button
 				>
@@ -258,6 +271,12 @@
 	}
 	.language span {
 		flex: 1 1 auto;
+	}
+	.keys {
+		margin-left: auto;
+		font: inherit;
+		font-size: var(--text-xs);
+		color: var(--muted);
 	}
 	@media (max-width: 760px) {
 		.account:not(.side) .name {

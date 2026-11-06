@@ -16,6 +16,10 @@ was am NAS geändert hat. Konten mit der Rolle Benutzer sehen das Protokoll nich
   Ersteinrichtung. Sperren und Entsperren eines Kontos stehen als
   `POST /api/v1/users/{name}/lock` bzw. `…/unlock` mit dem Konto als Ziel im
   Protokoll (siehe `docs/ACCOUNT-LOCK.md`).
+- **Sperrbildschirm** (Sitzung sperren, `docs/SESSION-LOCK.md`): `session_lock`
+  (von Hand), `session_autolock` (nach der Leerlaufzeit), `session_unlock` mit
+  `password` oder `passkey` als Ziel, `session_unlock_failed` (Ziel `password`,
+  `2fa` oder `passkey`) und `session_unlock_blocked` (Bremse greift).
 - **Konsolen und sensible Downloads:** NAS-Konsole, Container-Konsole,
   serielle VM-Konsole, VM-Bildschirm, Download der Konfigurationssicherung und
   das Diagnosepaket.

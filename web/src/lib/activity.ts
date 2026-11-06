@@ -125,6 +125,12 @@ const named: Record<string, string> = {
 	letsencrypt_failed: 'letsencryptFailed',
 	ddns_updated: 'ddnsUpdated',
 	ddns_failed: 'ddnsFailed',
+	// The lock screen (PLAN 61) names its entries with keys of its own text file.
+	session_lock: 'lock.activity.locked',
+	session_autolock: 'lock.activity.autolocked',
+	session_unlock: 'lock.activity.unlocked',
+	session_unlock_failed: 'lock.activity.unlockFailed',
+	session_unlock_blocked: 'lock.activity.unlockBlocked',
 };
 
 const areas: Record<string, string> = {

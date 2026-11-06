@@ -15,6 +15,7 @@
 	import { dashboardScene } from '#lib/dashboard/scene.svelte.ts';
 	import Backdrop from '#lib/components/Backdrop.svelte';
 	import Shell from '#lib/components/Shell.svelte';
+	import LockScreen from '#lib/components/LockScreen.svelte';
 	import { i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import Login from '#lib/pages/Login.svelte';
 	import Problem from '#lib/pages/Problem.svelte';
@@ -26,9 +27,19 @@
 	import { effectOn } from '#lib/theme/themes.ts';
 	import { pageTitle } from '#lib/page-title.svelte.ts';
 	import { inWindow, mode } from '#lib/desktop/mode.svelte.ts';
+	import { desktop } from '#lib/desktop/wm.svelte.ts';
+	import { wallpaperCss } from '#lib/desktop/wallpapers.ts';
+	import { THEMES } from '#lib/theme/themes.ts';
 	import { clearAgentNotifications, registerServiceWorker } from '#lib/web-push.ts';
 
 	const agentRoute = $derived(isAgentPath(page.url.pathname));
+	// The lock screen shows the desktop's wallpaper (PLAN 61).
+	const lockBackground = $derived.by(() => {
+		const wp = desktop.prefs.wallpaper;
+		if (wp.source === 'custom') return `url("/api/v1/background?v=${wp.version}") center / cover`;
+		const light = THEMES[appearance.current.theme as keyof typeof THEMES]?.dark === false;
+		return `${wallpaperCss(wp.id, light)} center / cover`;
+	});
 	// Safari reads the manifest only when a page loads: the step between
 	// TitanOS and the KI-Agent loads the page anew, so "Add to Home Screen"
 	// makes the right app on either side (PLAN 48). Links are turned into a
@@ -172,6 +183,8 @@
 		<LoginPreview />
 	{:else}
 		<Shell>{@render children()}</Shell>
+		<!-- PLAN 61: the lock screen of the session, above everything. -->
+		<LockScreen background={lockBackground} />
 	{/if}
 {:else if session.status === 'loading'}
 	<p class="starting muted" role="status" aria-live="polite">

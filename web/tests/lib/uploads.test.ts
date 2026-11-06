@@ -122,3 +122,20 @@ test('recovering a reselected file checks its size first', async () => {
 		queue.recover(file(), root, '', { id: 'u9', name: 'a.txt', size: 99, offset: 0 } as never),
 	).rejects.toMatchObject({ code: 'upload_mismatch' });
 });
+
+test('a locked session holds the upload until it is unlocked', async () => {
+	vi.useFakeTimers({ toFake: ['setTimeout'] });
+	try {
+		nas.fail = 'locked';
+		queue.enqueue([{ file: file(), dir: '' }], root);
+		await vi.waitFor(() => expect(queue.uploads.items[0].state).toBe('retrying'));
+		await vi.advanceTimersByTimeAsync(5000);
+		expect(queue.uploads.items[0].state).toBe('retrying');
+		nas.fail = '';
+		await vi.advanceTimersByTimeAsync(5000);
+		await vi.waitFor(() => expect(queue.uploads.items[0].state).toBe('done'));
+		expect(queue.uploads.items[0].error).toBeFalsy();
+	} finally {
+		vi.useRealTimers();
+	}
+});

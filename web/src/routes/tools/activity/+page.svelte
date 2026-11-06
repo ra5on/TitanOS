@@ -109,7 +109,10 @@
 	}
 	function describe(entry: ActivityEntry): string {
 		const label = activityLabel(entry.action);
-		if (label.kind === 'named') return t(`activity.do.${label.key}` as 'activity.do.login');
+		if (label.kind === 'named')
+			return label.key.startsWith('lock.')
+				? t(label.key as 'lock.activity.locked')
+				: t(`activity.do.${label.key}` as 'activity.do.login');
 		return t('activity.generic', {
 			area: t(`activity.area.${label.area}` as 'activity.area.other'),
 			verb: t(`activity.verb.${label.verb}` as 'activity.verb.run'),

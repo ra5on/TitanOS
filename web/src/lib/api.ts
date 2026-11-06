@@ -34,6 +34,14 @@ export function apiFetch(path: string, init: RequestInit = {}): Promise<Response
 	return fetch(apiPath(path), { credentials: 'same-origin', ...init });
 }
 
+// A 423 "locked" answer means the session is locked (lock.svelte.ts, which
+// registers here: importing it would make a cycle).
+let onLocked: (() => void) | null = null;
+/** Sets what happens when the NAS answers that the session is locked. */
+export function setLockedHandler(handler: (() => void) | null) {
+	onLocked = handler;
+}
+
 /** The ApiError of an answer that is not ok, from titand's JSON error body when there is one. */
 export async function responseError(res: Response): Promise<ApiError> {
 	let code = 'internal';
@@ -56,6 +64,7 @@ export async function responseError(res: Response): Promise<ApiError> {
 		activeNode()
 	)
 		code = 'cluster_feature_missing';
+	if (res.status === 423 && code === 'locked') onLocked?.();
 	return new ApiError(res.status, code, message, retryAfter);
 }
 
@@ -186,6 +195,12 @@ export type Session = {
 	user: User | null;
 	hostname: string;
 	version?: string;
+	/** The session is locked (lock screen); user names who may unlock it. */
+	locked?: boolean;
+	/** While locked: the account has a passkey for this address. */
+	passkey?: boolean;
+	/** The account's automatic lock in minutes, 0 = off. */
+	lockMinutes?: number;
 };
 
 export type Accelerator = {
@@ -275,7 +290,7 @@ export type Preferences = {
 	bell: Record<string, unknown> | null;
 	/** Dismissed one-time hints; missing on NAS versions before it. */
 	hints?: Record<string, unknown> | null;
-	/** The desktop of the account (PLAN 61); missing on NAS versions before it. */
+	/** The desktop of the account (PLAN 61); lockMinutes is the automatic lock. */
 	desktop?: Record<string, unknown> | null;
 };
 

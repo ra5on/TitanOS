@@ -137,6 +137,14 @@ async function transfer(item: Upload) {
 					);
 					continue;
 				}
+				if (problem === 'locked') {
+					// The session is locked (lock screen, PLAN 61): wait for the
+					// unlock and go on where the NAS stopped; nothing is lost.
+					if (stateOf(item) === 'uploading') item.state = 'retrying';
+					item.speed = 0;
+					await sleep(5000);
+					continue;
+				}
 				if (problem === 'upload_mismatch') {
 					// The NAS has more or less than we think: ask and continue there.
 					const current = await api.get<UploadStatus>(`/files/uploads/${item.id}`);
