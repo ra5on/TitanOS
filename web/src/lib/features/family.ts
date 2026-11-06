@@ -15,7 +15,8 @@ export type Buddy = {
 	probe?: 'monthly' | 'off';
 	probeFiles?: number;
 };
-export type Catalog = { enabled?: boolean; url?: string; key?: string };
+/** The skills come from the App-Store sources (folder skills/); only a switch. */
+export type Catalog = { enabled?: boolean };
 export type DiaryNAS = { enabled?: boolean };
 export type DiarySource = 'chats' | 'reminders' | 'home' | 'photos' | 'immich' | 'frigate';
 export type DiaryMine = {
@@ -80,15 +81,18 @@ export type BuddyView = {
 };
 
 export type CatalogSkill = {
+	/** "<source>/<id>", what install names. */
+	key: string;
 	id: string;
+	source: string;
+	/** "TitanOS-Apps" or the name of an own source. */
+	sourceName: string;
 	name: string;
 	description?: string;
 	when: string;
 	steps: string;
 	tools: string[];
 	author?: string;
-	version?: string;
-	installs?: number;
 	digest: string;
 	unknown: string[];
 	installed: boolean;
@@ -115,7 +119,7 @@ export const buddyPartnerDelete = (id: string, data: boolean) =>
 
 export const loadCatalog = () => api.get<{ skills: CatalogSkill[] }>('/agent/catalog');
 export const installSkill = (s: CatalogSkill) =>
-	api.post('/agent/catalog/install', { id: s.id, digest: s.digest });
+	api.post('/agent/catalog/install', { key: s.key, digest: s.digest });
 
 /** Share of a quota in percent, 0–100. */
 export function quotaPercent(used: number, quota: number): number {

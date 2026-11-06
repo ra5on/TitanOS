@@ -1,8 +1,8 @@
 <script lang="ts">
-	// Skill-Katalog (PLAN 54-G, mockup 12): the signed skills of the
-	// community. Before installing, the whole skill is shown (name, when,
-	// steps, tools) and the person decides; the server checks the signature
-	// again and installs exactly what was shown. Own skills can be exported
+	// Skill-Katalog (PLAN 54-G, mockup 12): the skills of the App-Store
+	// sources (folder skills/ in TitanOS-Apps and own sources). Before installing, the whole skill is shown (name, when,
+	// steps, tools) and the person decides; the server installs exactly
+	// what was shown. Own skills can be exported
 	// as a submission package.
 	import { api } from '#lib/api.ts';
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
@@ -60,8 +60,6 @@
 			error = apiErrorText(e);
 		}
 	}
-	const count = (n?: number) =>
-		n ? tk('agent.f.family.catalog.installs', { n: n.toLocaleString() }) : '';
 </script>
 
 <div class="cat">
@@ -72,21 +70,21 @@
 		<p class="muted">{t('agent.f.family.loading')}</p>
 	{:else if skills.length}
 		<div class="grp">
-			{#each skills as s (s.id)}
+			{#each skills as s (s.key)}
 				<button
 					type="button"
 					class="row"
 					onclick={() => (asking = s)}
-					aria-expanded={asking?.id === s.id}
+					aria-expanded={asking?.key === s.key}
 				>
 					<span class="ic" aria-hidden="true">🧩</span>
 					<span class="t"
 						><strong>{s.name}</strong><small
-							>{[s.description, count(s.installs)].filter(Boolean).join(' · ')}</small
+							>{[s.description, s.sourceName].filter(Boolean).join(' · ')}</small
 						></span
 					>
 					{#if s.installed}<span class="tag">{t('agent.f.family.catalog.isInstalled')}</span
-						>{:else}<span class="tag ok">{t('agent.f.family.catalog.signed')}</span>{/if}
+						>{:else}<span class="tag">{t('agent.f.family.catalog.notInstalled')}</span>{/if}
 				</button>
 			{/each}
 		</div>
@@ -106,9 +104,11 @@
 					? asking.tools.join(', ')
 					: t('agent.f.family.catalog.noTools')}</small
 			>
-			{#if asking.author}<small class="muted"
-					>{tk('agent.f.family.catalog.by', { who: asking.author })}</small
-				>{/if}
+			<small class="muted"
+				>{tk('agent.f.family.catalog.from', { source: asking.sourceName })}{asking.author
+					? ' · ' + tk('agent.f.family.catalog.by', { who: asking.author })
+					: ''}</small
+			>
 			<small class="muted">{t('agent.f.family.catalog.when')}: {asking.when}</small>
 			<pre class="steps">{asking.steps}</pre>
 			{#if asking.unknown.length}
@@ -227,9 +227,6 @@
 		border-radius: 999px;
 		border: 1px solid currentColor;
 		color: var(--muted);
-	}
-	.tag.ok {
-		color: var(--success, #22c55e);
 	}
 	.ask {
 		display: flex;

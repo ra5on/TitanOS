@@ -34,18 +34,29 @@ Abgelegt wird unter `.titanos/buddy/<partner>/` auf dem gewählten Volume (root,
 
 ## Skill-Katalog
 
-**Bedienung.** Der Besitzer trägt die https-Adresse des Katalogs und den öffentlichen ed25519-Schlüssel ein (32 Byte, base64). Ab Werk ist beides leer; einen Katalog oder Schlüssel liefert TitanOS nicht mit. „Katalog öffnen“ zeigt die Ansicht `catalog` wie im Entwurf 12. Jedes Konto des Agenten kann sie öffnen, wenn die Funktion an ist. Tippt man auf einen Skill, zeigt der Agent Name, Beschreibung, wann der Skill gilt, alle Schritte und die Werkzeuge, die er nutzt. Erst danach kommt „Installieren“. Unter „Eigene Skills teilen“ lädt man einen eigenen Skill als Einreichungspaket herunter (`titanos-skill-submission`, JSON mit Name, Wann, Schritten und erkannten Werkzeugen, ohne Kontonamen). Eingereicht wird beim Betreiber des Katalogs.
+**Herkunft (Entscheidung des Inhabers 6.11.2026).** Die Skills kommen aus dem App-Store: aus dem Ordner `skills/` in ra5on/TitanOS-Apps und in jeder eigenen Quelle, die der Besitzer unter Apps eingetragen hat. Geladen werden sie vom Paket `backend/internal/catalog` zusammen mit den Apps (gleicher Download des Archivs, nur im RAM, nach dem Start und einmal am Tag). Es gibt keinen eigenen Schlüssel und keine eigene Adresse. Vertraut wird ihnen wie den Apps derselben Quelle. Eine Quelle, die nur Skills enthält, gilt als gültige Quelle. Die eingebauten Skills bleiben wie bisher in TitanOS.
 
-**Format.** Die Indexdatei (`{"version":1,"skills":[{id,name,description,when,steps,tools,author,version,installs}]}`) liegt an der Adresse. Die abgetrennte Signatur liegt unter derselben Adresse mit `.sig`: base64 der 64 Signaturbytes über die genauen Bytes des Index. Geprüft wird die Signatur vor jedem Lesen. Ohne Schlüssel, ohne Signatur oder mit falscher Signatur zeigt der Agent nichts und installiert nichts. Ein verändertes Eintragsbyte bricht die Signatur.
+**Format.** Je Skill ein Ordner mit einer Datei `skills/<name>/skill.yaml`; eine Vorlage liegt in `docs/apps-repo/skill-template.yaml`.
 
-**Installieren.** Der Server lädt und prüft den Katalog erneut. Er nimmt den Eintrag nur, wenn er genau dem gezeigten entspricht (SHA-256 des Eintrags); sonst kommt 409. Abgelehnt wird auch:
+- `<name>`: Kleinbuchstaben, Ziffern, Bindestriche, höchstens 64 Zeichen.
+- `name` (Pflicht, höchstens 80 Zeichen), `when` (Pflicht), `steps` (Pflicht, mit `when` höchstens 4000 Zeichen).
+- `tools`: Liste von Werkzeugnamen, höchstens 40.
+- `description` und `author`: freiwillig.
+
+YAML passt zum Paket `catalog`, das aus den Archiven ohnehin nur YAML-Dateien behält. Ein Skill, der nicht passt, wird übersprungen; die anderen bleiben. Das sind: kaputtes YAML, fehlende Pflichtfelder, zu lang, ein Werkzeugname, der kein Name ist, ein doppelter Ordner.
+
+**Bedienung.** Unter Funktionen gibt es nur den Schalter, ab Werk aus. „Katalog öffnen“ zeigt die Ansicht `catalog` wie im Entwurf 12. Jedes Konto des Agenten kann sie öffnen, wenn die Funktion an ist. Jeder Skill zeigt seine Quelle („TitanOS-Apps“ oder den Namen der eigenen Quelle). Tippt man auf einen Skill, zeigt der Agent Name, Quelle, Autor, wann er gilt, alle Schritte und die Werkzeuge. Erst danach kommt „Installieren“.
+
+Unter „Eigene Skills teilen“ lädt man einen eigenen Skill als Paket herunter: JSON mit `format: titanos-skill-submission`, Name, Wann, Schritten, erkannten Werkzeugen und dem Zielpfad `skills/<name>/skill.yaml`, ohne Kontonamen. Eingereicht wird im Repository.
+
+**Installieren.** Der Server nimmt den Skill aus dem, was der Katalog gerade im RAM hat, unter `<quelle>/<name>`. Er nimmt ihn nur, wenn der Eintrag genau dem gezeigten entspricht (SHA-256 des Eintrags samt Quelle); sonst kommt 409. Abgelehnt wird auch:
 
 - ein Werkzeug, das das Konto nicht hat; gezählt werden die genannten und die in den Schritten vorkommenden Namen wie `files_search`;
 - ein gleichnamiger eigener Skill.
 
-Gespeichert wird über `skill_save` mit dessen Regeln (keine Geheimnisse, Länge). Der Skill gilt danach als fremder Inhalt (`untrusted`) und trägt in der Beschreibung `Skill-Katalog: <id>`. Ein Skill ändert selbst nichts. Werkzeuge, die etwas ändern, fragen wie immer.
+Gespeichert wird über `skill_save` mit dessen Regeln (keine Geheimnisse, Länge). Der Skill gilt danach als fremder Inhalt (`untrusted`) und trägt in der Beschreibung `Skill-Katalog: <quelle>/<name>`. Ein Skill ändert selbst nichts. Werkzeuge, die etwas ändern, fragen wie immer.
 
-Routen (jedes Konto des Agenten, nur Web-Sitzung): `GET /agent/catalog`, `POST /agent/catalog/install`, `GET /agent/catalog/export/{id}`.
+Routen (jedes Konto des Agenten, nur Web-Sitzung): `GET /agent/catalog`, `POST /agent/catalog/install` (`key`, `digest`), `GET /agent/catalog/export/{id}`.
 
 ## Familien-Tagebuch
 
@@ -80,7 +91,8 @@ Der Immich-Schlüssel ist ein Geheimnis. Er kommt nie zur Seite zurück, nur `im
   - Kopplung zweier Test-Server mit Code (falsch, einmalig, abgelaufen);
   - Sicherungsauftrag auf beiden Seiten (Art `rest`, Adresse ohne Token, Benutzername, Aufbewahrung), folgt täglich/wöchentlich/monatlich, verschwindet ohne Freigaben;
   - Hashes passen zu den Tokens, kein Token in den Ansichten, Partner bleibt bei `PUT /agent/features`, Lösen sperrt;
-  - Katalog: gültig, Signatur fehlt, falsche Signatur, anderer Schlüssel, veränderter Eintrag, unbekanntes Werkzeug, geänderter Eintrag (Digest), Installation als fremder Inhalt, Export;
+  - Katalog aus einer gefälschten App-Store-Quelle (Archiv mit `skills/`): kaputter Skill übersprungen, Quelle angezeigt, unbekanntes Werkzeug abgelehnt, geänderter Eintrag (Digest), unbekannter Skill, Installation als fremder Inhalt, Export;
+- `go test ./internal/catalog -run Skills`: Skills aus dem offiziellen Archiv und aus einer eigenen Quelle nur mit Skills, mit Quellennamen; kaputtes YAML, fehlende Schritte, falscher Werkzeugname und falscher Ordnername übersprungen; die Apps bleiben unverändert;
   - Tagebuch: Schlüssel nicht in der Ansicht und behalten, Ordner in einer Freigabe, die das Konto nicht öffnen darf, abgelehnt, Werkzeug mit Fakes für Immich, Frigate und Home Assistant (nur freigegebene Geräte), Tür nur mit Frigate, Benutzer ohne Home Assistant und ohne fremde Quellen, Zeitraum geprüft.
 - Web: `tests/agent54-family.test.mjs`; `scripts/test-ui-agent54-family.mjs` mit gemockter API bei 390×844 und 1440×900. Bilder liegen in `out/validation/v057-family/`.
 
@@ -90,7 +102,7 @@ Der Immich-Schlüssel ist ein Geheimnis. Er kommt nie zur Seite zurück, nur `im
 - Der Buddy-Server lauscht nur über Tailscale. Andere Wege (WireGuard, NetBird, Heimnetz) gibt es nicht, weil ohne TLS sonst das Token im Klartext liefe.
 - „Ich sichere bei …“ zeigt die Datenmenge des letzten Laufs, nicht den belegten Platz beim Partner (dedupliziert und komprimiert meist weniger).
 - `prune` kann junge, nicht mehr gebrauchte Pakete (abgebrochene Läufe) nicht löschen; sie bleiben bis zur Schutzfrist und zählen zum Kontingent.
-- Ein Katalog, ein Hosting und ein Schlüssel sind nicht festgelegt; das entscheidet der Inhaber. Getestet wurde nur mit einem Testschlüssel.
+- In ra5on/TitanOS-Apps gibt es noch keinen Ordner `skills/`. Geprüft wurde nur mit gefälschten Quellen.
 - Die Werkzeugerkennung in den Schritten zählt Wörter wie `files_search`; ein Wort dieser Form, das kein Werkzeug ist, verhindert die Installation.
 - Das Tagebuch fragt keinen Kalender ab (es gibt keinen Kalender in TitanOS). Die Fotos-Seite gibt es nicht mehr; deshalb Immich oder ein Ordner. EXIF von HEIC wird nicht gelesen, dort zählt die Änderungszeit.
 - Echte Immich-, Frigate- und Home-Assistant-Server sind nicht getestet, nur ihre API-Formen als Fakes.

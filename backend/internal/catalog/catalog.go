@@ -93,6 +93,7 @@ type App struct {
 
 type state struct {
 	apps    []App
+	skills  []Skill
 	format  string
 	updated time.Time
 	tried   time.Time
@@ -208,7 +209,7 @@ func (m *Manager) refresh(ctx context.Context, all bool) {
 			etag = st.etag
 		}
 		m.mu.Unlock()
-		apps, format, etag, err := m.fetch(ctx, source, etag)
+		got, etag, err := m.fetch(ctx, source, etag)
 		if ctx.Err() != nil {
 			return
 		}
@@ -227,7 +228,7 @@ func (m *Manager) refresh(ctx context.Context, all bool) {
 			st.err = errorCode(err)
 			slog.Warn("app source not fetched", "source", source.URL, "err", err)
 		default:
-			st.apps, st.format, st.etag, st.updated, st.err = apps, format, etag, st.tried, ""
+			st.apps, st.skills, st.format, st.etag, st.updated, st.err = got.apps, got.skills, got.format, etag, st.tried, ""
 		}
 		m.mu.Unlock()
 	}
@@ -247,13 +248,25 @@ func errorCode(err error) string {
 	}
 }
 
-func (m *Manager) fetch(ctx context.Context, source Source, etag string) ([]App, string, string, error) {
+// fetched is what one fetch of a source found.
+type fetched struct {
+	apps   []App
+	skills []Skill
+	format string
+}
+
+func (m *Manager) fetch(ctx context.Context, source Source, etag string) (fetched, string, error) {
 	files, etag, err := download(ctx, m.client, source.URL, etag)
 	if err != nil {
-		return nil, "", etag, err
+		return fetched{}, etag, err
 	}
 	apps, format, err := parse(source.ID, files)
-	return apps, format, etag, err
+	skills := parseSkills(source.ID, files)
+	// A source with skills only is not empty.
+	if errors.Is(err, ErrEmpty) && len(skills) > 0 {
+		apps, format, err = []App{}, "skills", nil
+	}
+	return fetched{apps: apps, skills: skills, format: format}, etag, err
 }
 
 // Status returns the sources and all their apps.
@@ -312,7 +325,7 @@ func (m *Manager) Add(ctx context.Context, name, address string) error {
 	id := make([]byte, 6)
 	rand.Read(id)
 	source := Source{ID: hex.EncodeToString(id), Name: name, URL: address}
-	apps, format, etag, err := m.fetch(ctx, source, "")
+	got, etag, err := m.fetch(ctx, source, "")
 	if err != nil {
 		return err
 	}
@@ -333,7 +346,7 @@ func (m *Manager) Add(ctx context.Context, name, address string) error {
 	}
 	now := time.Now()
 	m.sources = sources
-	m.states[source.ID] = &state{apps: apps, format: format, etag: etag, updated: now, tried: now}
+	m.states[source.ID] = &state{apps: got.apps, skills: got.skills, format: got.format, etag: etag, updated: now, tried: now}
 	debug.FreeOSMemory()
 	return nil
 }

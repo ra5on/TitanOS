@@ -40,11 +40,7 @@ const features = {
     probe: "monthly",
     probeFiles: 50,
   },
-  catalog: {
-    enabled: true,
-    url: "https://katalog.example/index.json",
-    key: "MCowBQYDK2VwAyEAtestkeytestkeytestkeytestkey=",
-  },
+  catalog: { enabled: true },
   diary: { enabled: false },
 };
 const pub = {
@@ -109,14 +105,16 @@ const buddy = {
   listening: ["100.64.1.2:8752"],
   problem: "",
 };
-const skill = (id, name, description, installs, tools, steps) => ({
+const skill = (id, name, description, sourceName, tools, steps) => ({
+  key: (sourceName === "TitanOS-Apps" ? "titanos/" : "a1b2c3/") + id,
+  source: sourceName === "TitanOS-Apps" ? "titanos" : "a1b2c3",
+  sourceName,
   id,
   name,
   description,
   when: "Wenn die Person danach fragt",
   steps,
   tools,
-  installs,
   digest: id.padEnd(64, "0"),
   unknown: [],
   installed: false,
@@ -127,7 +125,7 @@ const catalog = {
       "steuer",
       "Rechnungen nach Steuerjahr",
       "Sortiert Belege in Steuer/<Jahr>",
-      1200,
+      "TitanOS-Apps",
       ["files_search", "file_move", "note_write"],
       "1. In Documents › Post nach Rechnungen des Jahres suchen (files_search).\n2. Jede Rechnung nach Steuer/<Jahr> verschieben (file_move), vorher fragen.\n3. Eine Notiz mit der Liste schreiben (note_write).",
     ),
@@ -135,7 +133,7 @@ const catalog = {
       "immich-dupes",
       "Immich-Duplikate finden",
       "Liest Immich über die API",
-      640,
+      "TitanOS-Apps",
       ["web_read"],
       "1. Duplikate über die Immich-API lesen.",
     ),
@@ -144,7 +142,7 @@ const catalog = {
         "strom",
         "Wöchentlicher Strombericht",
         "Home Assistant Statistik",
-        410,
+        "Meine Skills",
         ["ha_statistics"],
         "1. ha_statistics für den Stromzähler lesen.",
       ),
@@ -353,6 +351,11 @@ for (const [width, height, tag] of [
   assert.ok(
     await cat.getByText(/Jede Rechnung nach Steuer/).isVisible(),
     "steps shown",
+  );
+  assert.ok(await cat.getByText("aus TitanOS-Apps").isVisible(), "source shown");
+  assert.ok(
+    await cat.getByText(/Home Assistant Statistik · Meine Skills/).isVisible(),
+    "own source shown",
   );
   await noOverflow(page, `${tag} catalog`);
   await page.screenshot({ path: `${out}/${tag}-06-skill-katalog.png` });

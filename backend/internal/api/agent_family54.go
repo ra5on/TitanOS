@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/base64"
 	"errors"
 	"net/url"
 	"regexp"
@@ -64,13 +63,10 @@ func (b agentBuddy) withDefaults() agentBuddy {
 	return b
 }
 
-// agentCatalog are the settings of the Skill-Katalog: where the signed
-// index lies and the ed25519 key it is signed with. Both empty ab Werk;
-// the owner decides hosting and key.
+// agentCatalog switches the Skill-Katalog on. Its skills come from the
+// sources of the App-Store (folder skills/), there is nothing else to set.
 type agentCatalog struct {
-	Enabled bool   `json:"enabled,omitempty"`
-	URL     string `json:"url,omitempty"`
-	Key     string `json:"key,omitempty"`
+	Enabled bool `json:"enabled,omitempty"`
 }
 
 func (c agentCatalog) view() agentCatalog { return c }
@@ -141,19 +137,6 @@ func (s *Server) checkFamilyNAS(f *agentFeatures, old agentFeatures) error {
 			if b.Volume != old.Buddy.Volume || b.Enabled && !old.Buddy.Enabled {
 				return errors.New("buddy: choose a mounted volume for the backups of the partners")
 			}
-		}
-	}
-	c := &f.Catalog
-	c.URL, c.Key = strings.TrimSpace(c.URL), strings.TrimSpace(c.Key)
-	if c.URL != "" {
-		u, err := url.Parse(c.URL)
-		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || len(c.URL) > 2048 {
-			return errors.New("catalog: an https address")
-		}
-	}
-	if c.Key != "" {
-		if raw, err := base64.StdEncoding.DecodeString(c.Key); err != nil || len(raw) != 32 {
-			return errors.New("catalog: the public key is 32 bytes ed25519, base64")
 		}
 	}
 	return nil

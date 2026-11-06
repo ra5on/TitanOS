@@ -1,10 +1,10 @@
 package api
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -71,8 +71,6 @@ func TestFamily54Defaults(t *testing.T) {
 		{"buddy": map[string]any{"enabled": true, "volume": "nowhere"}},
 		{"buddy": map[string]any{"port": 80}},
 		{"buddy": map[string]any{"address": "http://x/y"}},
-		{"catalog": map[string]any{"url": "http://catalog.example/index.json"}},
-		{"catalog": map[string]any{"key": "abc"}},
 	} {
 		if res, _ := ts.request("PUT", "/api/v1/agent/features", bad); res.StatusCode != http.StatusBadRequest {
 			t.Errorf("accepted %v: %d", bad, res.StatusCode)
@@ -249,114 +247,80 @@ func TestFamily54BuddyJob(t *testing.T) {
 
 // ---------- catalog ----------
 
-type testCatalog struct {
-	pub   ed25519.PublicKey
-	index []byte
-	sig   []byte
-	noSig bool
-}
-
-func signedCatalog(t *testing.T, skills []catalogEntry) *testCatalog {
+// skillSource serves an App-Store source with a skills/ folder; the
+// official source of the test server is pointed at it.
+func skillSource(t *testing.T, ts *testServer, files map[string]string) *map[string]string {
 	t.Helper()
-	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
-	index, _ := json.Marshal(catalogIndex{Version: 1, Skills: skills})
-	return &testCatalog{pub: pub, index: index, sig: []byte(base64.StdEncoding.EncodeToString(ed25519.Sign(priv, index)))}
-}
-
-func (c *testCatalog) serve(t *testing.T) *httptest.Server {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/index.json":
-			w.Write(c.index)
-		case "/index.json.sig":
-			if c.noSig {
-				http.NotFound(w, r)
-				return
-			}
-			w.Write(c.sig)
-		default:
-			http.NotFound(w, r)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var buf bytes.Buffer
+		zipped := gzip.NewWriter(&buf)
+		archive := tar.NewWriter(zipped)
+		for name, content := range files {
+			archive.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(content)), Typeflag: tar.TypeReg})
+			archive.Write([]byte(content))
 		}
+		archive.Close()
+		zipped.Close()
+		w.Write(buf.Bytes())
 	}))
 	t.Cleanup(srv.Close)
-	old := catalogHTTP
-	catalogHTTP = srv.Client()
-	t.Cleanup(func() { catalogHTTP = old })
-	return srv
+	ts.server.opts.Catalog.SetClient(srv.Client())
+	ts.server.opts.Catalog.SetOfficialURL(srv.URL + "/ra5on/TitanOS-Apps")
+	ts.server.opts.Catalog.Refresh(context.Background())
+	return &files
 }
 
 func TestFamily54Catalog(t *testing.T) {
 	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard})
-	good := catalogEntry{ID: "steuer", Name: "Rechnungen nach Steuerjahr", When: "Wenn Belege sortiert werden sollen", Steps: "1. files_search nach Rechnungen\n2. Ergebnis zeigen", Tools: []string{"files_search"}, Installs: 1200}
-	strange := catalogEntry{ID: "strange", Name: "Fremd", When: "nie", Steps: "1. evil_tool aufrufen", Tools: []string{"evil_tool"}}
-	cat := signedCatalog(t, []catalogEntry{good, strange})
-	srv := cat.serve(t)
-	features := map[string]any{"catalog": map[string]any{"enabled": true, "url": srv.URL + "/index.json", "key": base64.StdEncoding.EncodeToString(cat.pub)}}
-	if res, body := ts.request("PUT", "/api/v1/agent/features", features); res.StatusCode != 200 {
+	steps := "1. files_search nach Rechnungen\n2. Ergebnis zeigen"
+	skillSource(t, ts, map[string]string{
+		"apps-HEAD/whoami/compose.yaml":       "services:\n  web:\n    image: traefik/whoami\n",
+		"apps-HEAD/skills/steuer/skill.yaml":  "name: Rechnungen nach Steuerjahr\nwhen: Wenn Belege sortiert werden sollen\ntools: [files_search]\nsteps: |\n  1. files_search nach Rechnungen\n  2. Ergebnis zeigen\n",
+		"apps-HEAD/skills/strange/skill.yaml": "name: Fremd\nwhen: nie\nsteps: 1. evil_tool aufrufen\ntools: [evil_tool]\n",
+		"apps-HEAD/skills/kaputt/skill.yaml":  "name: Kaputt\nsteps: [kein text\n",
+	})
+	// Off: nothing.
+	if res, _ := ts.request("GET", "/api/v1/agent/catalog", nil); res.StatusCode != http.StatusConflict {
+		t.Fatalf("off: %d", res.StatusCode)
+	}
+	if res, body := ts.request("PUT", "/api/v1/agent/features", map[string]any{"catalog": map[string]any{"enabled": true}}); res.StatusCode != 200 {
 		t.Fatalf("features: %d %s", res.StatusCode, body)
 	}
 	res, body := ts.request("GET", "/api/v1/agent/catalog", nil)
 	var list struct{ Skills []catalogView }
 	json.Unmarshal(body, &list)
-	if res.StatusCode != 200 || len(list.Skills) != 2 || len(list.Skills[0].Unknown) != 0 || len(list.Skills[1].Unknown) != 1 {
+	// The malformed skill is skipped; each shows its source.
+	if res.StatusCode != 200 || len(list.Skills) != 2 || list.Skills[0].ID != "steuer" || list.Skills[0].SourceName != "TitanOS-Apps" || len(list.Skills[0].Unknown) != 0 || len(list.Skills[1].Unknown) != 1 {
 		t.Fatalf("list: %d %s", res.StatusCode, body)
 	}
+	good, strange := list.Skills[0], list.Skills[1]
 	// Unknown tool: refused.
-	if res, body := ts.request("POST", "/api/v1/agent/catalog/install", map[string]any{"id": "strange", "digest": list.Skills[1].Digest}); res.StatusCode != http.StatusBadRequest || !strings.Contains(string(body), "evil_tool") {
+	if res, body := ts.request("POST", "/api/v1/agent/catalog/install", map[string]any{"key": strange.Key, "digest": strange.Digest}); res.StatusCode != http.StatusBadRequest || !strings.Contains(string(body), "evil_tool") {
 		t.Fatalf("unknown tool: %d %s", res.StatusCode, body)
 	}
 	// Not what was shown: refused.
-	if res, _ := ts.request("POST", "/api/v1/agent/catalog/install", map[string]any{"id": "steuer", "digest": "0000"}); res.StatusCode != http.StatusConflict {
+	if res, _ := ts.request("POST", "/api/v1/agent/catalog/install", map[string]any{"key": good.Key, "digest": "0000"}); res.StatusCode != http.StatusConflict {
 		t.Fatalf("digest: %d", res.StatusCode)
 	}
-	if res, body := ts.request("POST", "/api/v1/agent/catalog/install", map[string]any{"id": "steuer", "digest": list.Skills[0].Digest}); res.StatusCode != 200 {
+	if res, _ := ts.request("POST", "/api/v1/agent/catalog/install", map[string]any{"key": "titanos/nosuch", "digest": good.Digest}); res.StatusCode != http.StatusNotFound {
+		t.Fatalf("unknown skill: %d", res.StatusCode)
+	}
+	if res, body := ts.request("POST", "/api/v1/agent/catalog/install", map[string]any{"key": good.Key, "digest": good.Digest}); res.StatusCode != 200 {
 		t.Fatalf("install: %d %s", res.StatusCode, body)
 	}
 	skills, _ := ts.server.agentStore().Skills("alex")
-	if len(skills) != 1 || !skills[0].Untrusted || skills[0].Description != catalogMarker+"steuer" || skills[0].Steps != good.Steps {
+	if len(skills) != 1 || !skills[0].Untrusted || skills[0].Description != catalogMarker+good.Key || skills[0].Steps != steps {
 		t.Fatalf("installed: %+v", skills)
 	}
-	// Export of an own skill as a submission package.
+	_, body = ts.request("GET", "/api/v1/agent/catalog", nil)
+	json.Unmarshal(body, &list)
+	if !list.Skills[0].Installed {
+		t.Fatal("not shown as installed")
+	}
+	// Export of an own skill as a submission package for the repository.
 	res, body = ts.request("GET", "/api/v1/agent/catalog/export/"+skills[0].ID, nil)
-	if res.StatusCode != 200 || !strings.Contains(res.Header.Get("Content-Disposition"), "attachment") || !strings.Contains(string(body), catalogSubmitFmt) || !strings.Contains(string(body), "files_search") {
+	if res.StatusCode != 200 || !strings.Contains(res.Header.Get("Content-Disposition"), "attachment") || !strings.Contains(string(body), catalogSubmitFmt) || !strings.Contains(string(body), "files_search") || !strings.Contains(string(body), "skill.yaml") {
 		t.Fatalf("export: %d %s", res.StatusCode, body)
-	}
-	// A tampered entry breaks the signature: nothing shown, nothing installed.
-	signed := cat.index
-	cat.index = []byte(strings.Replace(string(signed), "Ergebnis zeigen", "Alles löschen", 1))
-	for _, call := range []struct{ method, path string }{{"GET", "/api/v1/agent/catalog"}, {"POST", "/api/v1/agent/catalog/install"}} {
-		res, body := ts.request(call.method, call.path, map[string]any{"id": "steuer", "digest": list.Skills[0].Digest})
-		if res.StatusCode != http.StatusBadGateway || errorCode(t, body) != "catalog_signature" {
-			t.Fatalf("tampered %s: %d %s", call.method, res.StatusCode, body)
-		}
-	}
-	// Missing signature.
-	cat.index, cat.noSig = signed, true
-	if res, body := ts.request("GET", "/api/v1/agent/catalog", nil); res.StatusCode != http.StatusBadGateway || errorCode(t, body) != "catalog_signature" {
-		t.Fatalf("no signature: %d %s", res.StatusCode, body)
-	}
-	// Signed with another key.
-	cat.noSig = false
-	other, _, _ := ed25519.GenerateKey(rand.Reader)
-	features["catalog"].(map[string]any)["key"] = base64.StdEncoding.EncodeToString(other)
-	ts.request("PUT", "/api/v1/agent/features", features)
-	if res, body := ts.request("GET", "/api/v1/agent/catalog", nil); res.StatusCode != http.StatusBadGateway || errorCode(t, body) != "catalog_signature" {
-		t.Fatalf("other key: %d %s", res.StatusCode, body)
-	}
-}
-
-func TestFamily54CatalogVerify(t *testing.T) {
-	cat := signedCatalog(t, []catalogEntry{{ID: "a", Name: "A", When: "x", Steps: "y"}, {ID: "../bad", Name: "B"}})
-	key := base64.StdEncoding.EncodeToString(cat.pub)
-	got, err := verifyCatalog(cat.index, cat.sig, key)
-	if err != nil || len(got.Skills) != 1 {
-		t.Fatalf("verify: %+v %v", got, err)
-	}
-	if _, err := verifyCatalog(cat.index, nil, key); err != errCatalogSignature {
-		t.Fatal("empty signature")
-	}
-	if _, err := verifyCatalog(cat.index, cat.sig, ""); err != errCatalogOff {
-		t.Fatal("no key")
 	}
 }
 

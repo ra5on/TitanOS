@@ -1,8 +1,7 @@
 <script lang="ts">
 	// Gruppe „Gemeinschaft und Familie“ (PLAN 54-G): the rows of the three
 	// functions and their settings. Owners and administrators switch them on
-	// for the NAS (Backup-Buddy and the catalog's address and key only
-	// they); every account of the agent sets its own diary sources.
+	// for the NAS (Backup-Buddy only they); every account of the agent sets its own diary sources.
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { api } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
@@ -11,7 +10,6 @@
 		DIARY_SOURCES,
 		loadBuddy,
 		type Buddy,
-		type Catalog,
 		type DiaryMine,
 		type DiarySource,
 	} from '#lib/features/family.ts';
@@ -39,7 +37,6 @@
 
 	// Drafts of the settings while a dialog is open.
 	let buddy = $state<Buddy>({});
-	let catalog = $state<Catalog>({});
 	let diary = $state<DiaryMine>({});
 	let immichKey = $state('');
 	let volumes = $state<string[]>([]);
@@ -57,7 +54,6 @@
 				.then((v) => (volumes = v.volumes ?? []))
 				.catch(() => (volumes = []));
 		}
-		if (p === 'catalog' && nas) catalog = { ...nas.catalog };
 		if (p === 'diary') {
 			diary = { ...(mine?.diary ?? {}), off: [...(mine?.diary?.off ?? [])] };
 			immichKey = '';
@@ -98,7 +94,6 @@
 
 	const saveBuddy = () =>
 		run(() => savenas({ ...nas!, buddy: { ...buddy, port: Number(buddy.port) || 0 } }));
-	const saveCatalog = () => run(() => savenas({ ...nas!, catalog: { ...catalog } }));
 	const saveDiary = () =>
 		run(async () => {
 			const next: DiaryMine = { ...diary };
@@ -262,41 +257,16 @@
 
 {#if open === 'catalog'}
 	<Dialog title={t('agent.f.family.catalog.title')} onclose={() => (open = null)}>
-		<form
-			class="fam"
-			onsubmit={(e) => {
-				e.preventDefault();
-				void saveCatalog();
-			}}
-		>
+		<div class="fam">
 			<p class="muted">{t('agent.f.family.catalog.intro')}</p>
-			{#if admin && nas}
-				<label class="field-row"
-					><span>{t('agent.f.family.catalog.url')}</span>
-					<input
-						class="field"
-						type="url"
-						bind:value={catalog.url}
-						placeholder="https://…/index.json"
-					/></label
-				>
-				<label class="field-row"
-					><span>{t('agent.f.family.catalog.key')}</span>
-					<input class="field mono" bind:value={catalog.key} spellcheck="false" />
-					<small class="muted">{t('agent.f.family.catalog.keyHint')}</small></label
-				>
-				{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-				{#if saved}<p class="muted" role="status">{t('agent.f.saved')}</p>{/if}
-			{/if}
 			<div class="actions">
-				{#if isOn('catalog')}<button type="button" class="btn" onclick={() => (view = 'catalog')}
-						>{t('agent.f.family.catalog.open')}</button
-					>{/if}
-				{#if admin && nas}<button class="btn btn-primary" disabled={busy}
-						>{t('agent.f.family.save')}</button
-					>{/if}
+				{#if isOn('catalog')}<button
+						type="button"
+						class="btn btn-primary"
+						onclick={() => (view = 'catalog')}>{t('agent.f.family.catalog.open')}</button
+					>{:else}<p class="muted">{t('agent.f.family.catalog.offHint')}</p>{/if}
 			</div>
-		</form>
+		</div>
 	</Dialog>
 {/if}
 
@@ -462,9 +432,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-	}
-	.mono {
-		font-family: var(--font-mono, monospace);
 	}
 	.actions {
 		display: flex;
