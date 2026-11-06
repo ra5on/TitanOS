@@ -46,6 +46,11 @@ Nur für **Seitenaufrufe im Browser** (`appproxy/gate.go`): `Sec-Fetch-Mode: nav
 `Sec-Fetch-*`-Kopfzeilen ein GET/HEAD mit `Accept` mit `text/html`. WebSockets, `fetch`,
 Bilder, Skripte und alle Aufrufe der Handy- und TV-Apps (eigene Anmeldung der App) gehen
 unverändert durch. Die Sperre schützt die Seiten der App, nicht ihre Schnittstelle.
+Achtung: Apps auf Handy oder Fernseher, die die **Webseite** der App in einer WebView zeigen
+(z. B. Jellyfin für Android, die Home-Assistant-App), senden ebenfalls Seitenaufrufe und werden
+über den HTTPS-Namen gesperrt. Für sie die Prüfung je App ausschalten oder den Port der App
+verwenden. Ein Service Worker (PWA) kann eine zwischengespeicherte Seite ohne Prüfung zeigen;
+die Aufrufe der Seite an die App gehen ohnehin durch.
 
 1. Die Weboberfläche holt `POST /api/v1/apps/{app}/window` und lädt die Adresse
    `https://<app>/.titanos/enter?t=<token>` ins Fenster. Das Token ist ein HMAC (Schlüssel
@@ -99,9 +104,13 @@ TitanOS deshalb die Zertifikate seiner Namen selbst aus (`tlscert/ca.go`):
   Zertifikat.
 - Reihenfolge: eigenes Zertifikat (deckt es den Namen) > Let's Encrypt > Tailscale >
   TitanOS-Zertifizierungsstelle > selbst signiert (nur, wenn die Zertifizierungsstelle fehlt).
-- Die ausgestellten Zertifikate (Weboberfläche: Hostname, `.local`, `localhost`, Adressen des
-  NAS; Apps: die Platzhalter und Namen wie bisher) gelten 30 Tage, liegen nur im RAM und werden
-  10 Tage vor Ablauf neu erzeugt – keine Schreibzugriffe auf den Stick.
+- Zwei ausgestellte Zertifikate: Weboberfläche (Hostname, `.local`, `localhost`, Adressen des
+  NAS) und Apps (die Platzhalter, Kurz- und vollen Namen wie bisher). Sie gelten 397 Tage
+  (unter der Grenze der Browser), liegen im RAM und in `/config/tls/ca-leaf-ui.pem` bzw.
+  `ca-leaf-apps.pem` und bleiben über Neustarts gleich, damit eine Browser-Ausnahme von vor der
+  Installation hält. Geschrieben wird nur beim Ausstellen: wenn sich die Namen ändern, 30 Tage
+  vor Ablauf, oder für die Weboberfläche, wenn ein Gerät eine Adresse des NAS anspricht, die
+  noch nicht darin steht. Keine Schreibzugriffe je Anfrage oder nach Zeitplan.
 - Der private Schlüssel verlässt `/config` nie: nicht über API oder MCP, nicht im
   Diagnosepaket (Positivliste `configFiles`, Test `TestBundleLeavesOutKeys`), `tls` ist im
   Stick-Dateimanager ausgeblendet. Bewusste Ausnahme: die Sicherungen des Sticks enthalten
@@ -111,7 +120,8 @@ TitanOS deshalb die Zertifikate seiner Namen selbst aus (`tlscert/ca.go`):
   Installation für Windows, macOS, iPhone/iPad (einschließlich
   „Zertifikatsvertrauenseinstellungen“), Android und Linux.
 - Wer zuvor dem selbst signierten Zertifikat im Browser eine Ausnahme gegeben hat, sieht nach
-  dem Update einmal eine neue Warnung, bis die Zertifizierungsstelle installiert ist.
+  dem Update einmal eine neue Warnung, bis die Zertifizierungsstelle installiert ist (danach
+  bleibt das neue Zertifikat über Neustarts gleich).
 
 ## API
 

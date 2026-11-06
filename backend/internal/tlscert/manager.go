@@ -80,6 +80,7 @@ type Manager struct {
 // a new certificate could not be stored.
 func NewManager(store *config.Store, hostname string) (*Manager, error) {
 	m := &Manager{store: store, hostname: hostname, now: time.Now}
+	m.ca.ui.file, m.ca.apps.file = caLeafUIFile, caLeafAppsFile
 	if cert, err := m.loadCustom(); err == nil {
 		m.current.Store(&cert)
 		m.kind.Store(KindCustom)
@@ -108,7 +109,7 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 	}
 	if m.kind.Load() == KindSelfSigned {
 		// Instead of the self-signed one, one from the TitanOS authority.
-		if leaf, err := m.uiLeaf(); err == nil {
+		if leaf, err := m.uiLeaf(localIP(hello)); err == nil {
 			return leaf, nil
 		}
 	}
@@ -234,7 +235,7 @@ func (m *Manager) Info() Info {
 	info := Describe(m.current.Load())
 	info.Kind = m.kind.Load().(string)
 	if info.Kind == KindSelfSigned {
-		if leaf, err := m.uiLeaf(); err == nil {
+		if leaf, err := m.uiLeaf(nil); err == nil {
 			info = Describe(leaf)
 			info.Kind = KindCA
 		}

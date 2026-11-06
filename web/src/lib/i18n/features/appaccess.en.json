@@ -11,7 +11,7 @@
 	"appaccess.adminAlways": "Owners and administrators may always use every app; their ticks cannot be cleared.",
 	"appaccess.gate": "Check the login in the browser",
 	"appaccess.gateFor": "Check the login in the browser for {app}",
-	"appaccess.gateHint": "Page loads in a browser then need the TitanOS login and the right to the app. Apps on phones and TVs (e.g. Immich, Jellyfin, Bitwarden) keep signing in on their own and are not affected.",
+	"appaccess.gateHint": "Page loads in a browser then need the TitanOS login and the right to the app. Apps on phones and TVs that only use the app's API (e.g. the Immich or Bitwarden app) keep signing in on their own and are not affected. Apps that show the app's web page (e.g. the Jellyfin app for Android or the Home Assistant app) are locked out at the HTTPS name: switch the check off for that app or connect them through the app's port.",
 	"appaccess.gateLimit": "The lock guards the app's pages in the browser. Its API stays guarded by the app's own login.",
 	"appaccess.newApps": "New Docker apps",
 	"appaccess.newAppsAdmins": "Owners and administrators only",

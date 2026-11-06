@@ -10,9 +10,10 @@ package tlscert
 // The authority is made on first need: ECDSA P-256, about ten years. Its
 // private key stays in /config/tls (hidden in the stick file manager,
 // not in the diagnostic bundle, never sent by the API or MCP). Only its
-// certificate can be downloaded. The leaf certificates are short-lived
-// and kept in RAM only: a new start makes new ones without writing to the
-// stick.
+// certificate can be downloaded. Two leaf certificates (web UI, apps) are
+// kept in RAM and stored only when issued, so that they stay the same
+// across restarts; a new one comes only when names change or it nears its
+// end.
 
 import (
 	"crypto/ecdsa"
@@ -30,7 +31,6 @@ import (
 	"math/big"
 	"net"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -40,14 +40,14 @@ const (
 	caCertFile = "tls/ca-cert.pem"
 	caKeyFile  = "tls/ca-key.pem"
 
-	caValidity = 10 * 365 * 24 * time.Hour
-	// leafValidity is short: leaves live in RAM and are made anew.
-	leafValidity = 30 * 24 * time.Hour
+	caValidity     = 10 * 365 * 24 * time.Hour
+	caLeafUIFile   = "tls/ca-leaf-ui.pem"
+	caLeafAppsFile = "tls/ca-leaf-apps.pem"
+
+	// leafValidity stays under the 398 days browsers accept.
+	leafValidity = 397 * 24 * time.Hour
 	// leafRenew makes a new leaf when the old one has less left.
-	leafRenew = 10 * 24 * time.Hour
-	// addressCheck is how often the NAS's addresses are looked at again
-	// for the certificate of the web UI.
-	addressCheck = time.Minute
+	leafRenew = 30 * 24 * time.Hour
 )
 
 // KindCA is a certificate issued by the TitanOS authority. Browsers trust
@@ -62,12 +62,8 @@ type authority struct {
 	cert   *x509.Certificate
 	key    *ecdsa.PrivateKey
 	failed bool
-	leaves map[string]*tls.Certificate
-
-	// The web UI's own names and addresses, looked at every minute.
-	uiAt    time.Time
-	uiIPs   []net.IP
-	uiNames []string
+	ui     leafSlot
+	apps   leafSlot
 }
 
 // caLoaded returns the authority, making it on first need. A stick that
@@ -212,50 +208,74 @@ func (m *Manager) CAInfo() (Info, bool) {
 	return Describe(&tls.Certificate{Certificate: [][]byte{cert.Raw}, Leaf: cert}), true
 }
 
-// caLeaf returns a certificate from the authority for these names and
-// addresses, kept in RAM and made anew before it runs out.
-func (m *Manager) caLeaf(names []string, ips []net.IP) (*tls.Certificate, error) {
-	a := &m.ca
-	a.mu.Lock()
-	defer a.mu.Unlock()
+// leafSlot is one certificate issued by the authority: kept in RAM and
+// on the stick, so that it stays the same across restarts (a browser
+// exception for it, made before the authority was installed, then holds).
+// It is written only when it is issued: when its names change or it is
+// about to run out.
+type leafSlot struct {
+	file   string
+	loaded bool
+	cert   *tls.Certificate
+}
+
+// leaf returns the slot's certificate if fits accepts it and it is fresh,
+// else issues one for names and ips and stores it.
+func (m *Manager) leaf(slot *leafSlot, fits func(*x509.Certificate) bool, issue func() ([]string, []net.IP)) (*tls.Certificate, error) {
 	caCert, caKey, err := m.caLoaded()
 	if err != nil {
 		return nil, err
 	}
-	key := leafKey(names, ips)
 	now := m.now()
-	if leaf := a.leaves[key]; leaf != nil && leaf.Leaf.NotAfter.Sub(now) > leafRenew {
-		return leaf, nil
+	if !slot.loaded {
+		slot.loaded = true
+		if data, err := m.store.Read(slot.file); err == nil {
+			if cert, err := tls.X509KeyPair(data, data); err == nil && cert.Leaf != nil && cert.Leaf.CheckSignatureFrom(caCert) == nil {
+				cert.Certificate = append(cert.Certificate[:1:1], caCert.Raw)
+				slot.cert = &cert
+			}
+		}
 	}
-	leaf, err := issueLeaf(caCert, caKey, names, ips, now)
+	if c := slot.cert; c != nil && fits(c.Leaf) && c.Leaf.NotAfter.Sub(now) > leafRenew && !now.Before(c.Leaf.NotBefore) {
+		return c, nil
+	}
+	names, ips := issue()
+	cert, certPEM, keyPEM, err := issueLeaf(caCert, caKey, names, ips, now)
 	if err != nil {
 		return nil, err
 	}
-	if a.leaves == nil || len(a.leaves) > 32 {
-		// Names come and go; old sets are not kept for ever.
-		a.leaves = map[string]*tls.Certificate{}
+	slot.cert = cert
+	if err := m.store.Write(slot.file, append(certPEM, keyPEM...)); err != nil {
+		// It serves from RAM until the next start.
+		slog.Warn("certificate from the TitanOS authority not saved", "file", slot.file, "err", err)
 	}
-	a.leaves[key] = leaf
-	return leaf, nil
+	return cert, nil
 }
 
-func leafKey(names []string, ips []net.IP) string {
-	parts := slices.Clone(names)
-	for _, ip := range ips {
-		parts = append(parts, ip.String())
-	}
-	sort.Strings(parts)
-	return strings.Join(parts, ",")
+// caLeaf is the authority's certificate for the HTTPS names of apps; it
+// must name every one of names (wildcards, short names, domains).
+func (m *Manager) caLeaf(names []string) (*tls.Certificate, error) {
+	a := &m.ca
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return m.leaf(&a.apps, func(leaf *x509.Certificate) bool {
+		for _, name := range names {
+			if !slices.Contains(leaf.DNSNames, name) {
+				return false
+			}
+		}
+		return true
+	}, func() ([]string, []net.IP) { return slices.Clone(names), nil })
 }
 
-func issueLeaf(caCert *x509.Certificate, caKey *ecdsa.PrivateKey, names []string, ips []net.IP, now time.Time) (*tls.Certificate, error) {
+func issueLeaf(caCert *x509.Certificate, caKey *ecdsa.PrivateKey, names []string, ips []net.IP, now time.Time) (*tls.Certificate, []byte, []byte, error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 127))
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 	cn := "TitanOS"
 	if len(names) > 0 {
@@ -275,32 +295,58 @@ func issueLeaf(caCert *x509.Certificate, caKey *ecdsa.PrivateKey, names []string
 	}
 	der, err := x509.CreateCertificate(rand.Reader, template, caCert, &key.PublicKey, caKey)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 	leaf, err := x509.ParseCertificate(der)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
-	return &tls.Certificate{Certificate: [][]byte{der, caCert.Raw}, PrivateKey: key, Leaf: leaf}, nil
+	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
+	return &tls.Certificate{Certificate: [][]byte{der, caCert.Raw}, PrivateKey: key, Leaf: leaf}, certPEM, keyPEM, nil
 }
 
 // uiLeaf is the authority's certificate for the web UI: the NAS's name,
-// its .local name, localhost and its addresses.
-func (m *Manager) uiLeaf() (*tls.Certificate, error) {
+// its .local name, localhost and its addresses. It is made anew only when
+// a client reaches the NAS on an address it does not name (local).
+func (m *Manager) uiLeaf(local net.IP) (*tls.Certificate, error) {
 	a := &m.ca
 	a.mu.Lock()
-	if a.uiNames == nil || m.now().Sub(a.uiAt) > addressCheck {
-		name := strings.ToLower(m.hostname)
-		names := []string{"localhost"}
-		if name != "" {
-			names = []string{name, name + ".local", "localhost"}
-		}
-		ips := append([]net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback}, m.addresses()...)
-		a.uiNames, a.uiIPs, a.uiAt = names, ips, m.now()
+	defer a.mu.Unlock()
+	name := strings.ToLower(m.hostname)
+	names := []string{"localhost"}
+	if name != "" {
+		names = []string{name, name + ".local", "localhost"}
 	}
-	names, ips := a.uiNames, a.uiIPs
-	a.mu.Unlock()
-	return m.caLeaf(names, ips)
+	return m.leaf(&a.ui, func(leaf *x509.Certificate) bool {
+		for _, n := range names {
+			if !slices.Contains(leaf.DNSNames, n) {
+				return false
+			}
+		}
+		return local == nil || slices.ContainsFunc(leaf.IPAddresses, local.Equal)
+	}, func() ([]string, []net.IP) {
+		ips := append([]net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback}, m.addresses()...)
+		if local != nil && !slices.ContainsFunc(ips, local.Equal) {
+			ips = append(ips, local)
+		}
+		return names, ips
+	})
+}
+
+// localIP is the NAS's address a TLS client connected to, or nil.
+func localIP(hello *tls.ClientHelloInfo) net.IP {
+	if hello == nil || hello.Conn == nil {
+		return nil
+	}
+	if addr, ok := hello.Conn.LocalAddr().(*net.TCPAddr); ok {
+		return addr.IP
+	}
+	return nil
 }
 
 func (m *Manager) addresses() []net.IP {

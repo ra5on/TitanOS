@@ -20,6 +20,7 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import ProxyRouteFields from '#lib/components/ProxyRouteFields.svelte';
+	import { gatedAppURL } from '#lib/app-links.ts';
 	import { apiPath } from '#lib/cluster-node.ts';
 	import { formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
@@ -292,7 +293,7 @@
 					>{/if}
 			</div>
 			<div class="urls">
-				{#if route.urls[0]}{@render link(route.urls[0], live)}{/if}
+				{#if route.urls[0]}{@render link(route.urls[0], live, kind === 'app' ? route.app : '')}{/if}
 				{#if more > 0}<button
 						type="button"
 						class="more"
@@ -304,8 +305,12 @@
 			</div>
 			{#if expanded[key]}
 				<div class="details">
-					{#each route.urls.slice(1) as url (url)}{@render link(url, live)}{/each}
-					{#if tailnetUrl}{@render link(tailnetUrl, live)}{/if}
+					{#each route.urls.slice(1) as url (url)}{@render link(
+							url,
+							live,
+							kind === 'app' ? route.app : '',
+						)}{/each}
+					{#if tailnetUrl}{@render link(tailnetUrl, live, kind === 'app' ? route.app : '')}{/if}
 					{#if route.tailnet?.error && route.tailnet.error !== 'plugin'}<span class="muted small"
 							>{route.tailnet.error}</span
 						>{/if}
@@ -356,10 +361,13 @@
 	</div>
 {/snippet}
 
-{#snippet link(url: string, live: boolean)}
-	{#if live}<a class="mono" href={url} target="_blank" rel="noreferrer">{url}</a>{:else}<span
-			class="mono muted">{url}</span
-		>{/if}
+{#snippet link(url: string, live: boolean, app = '')}
+	{#if live}<a
+			class="mono"
+			href={app ? gatedAppURL(app, url, apiPath) : url}
+			target="_blank"
+			rel="noreferrer">{url}</a
+		>{:else}<span class="mono muted">{url}</span>{/if}
 {/snippet}
 
 <PageHead title={t('proxy.settingsTitle')} parent={{ href: '/settings', label: t('nav.settings') }}>

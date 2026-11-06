@@ -37,7 +37,7 @@ func (m *Manager) ForNames(serverName string, names []string) (*tls.Certificate,
 		return current, nil
 	}
 	// Without a real one, the TitanOS authority issues it.
-	if leaf, err := m.caLeaf(names, nil); err == nil {
+	if leaf, err := m.caLeaf(names); err == nil {
 		return leaf, nil
 	}
 	a := &m.apps

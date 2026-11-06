@@ -11,7 +11,7 @@
 	"appaccess.adminAlways": "Besitzer und Administratoren dürfen immer alle Apps nutzen; ihre Haken lassen sich nicht abwählen.",
 	"appaccess.gate": "Anmeldung im Browser prüfen",
 	"appaccess.gateFor": "Anmeldung im Browser prüfen für {app}",
-	"appaccess.gateHint": "Seitenaufrufe im Browser brauchen dann die TitanOS-Anmeldung und das Recht auf die App. Apps auf Handy und Fernseher (z. B. Immich, Jellyfin, Bitwarden) melden sich weiter selbst an und sind davon nicht betroffen.",
+	"appaccess.gateHint": "Seitenaufrufe im Browser brauchen dann die TitanOS-Anmeldung und das Recht auf die App. Apps auf Handy und Fernseher, die nur die Schnittstelle der App nutzen (z. B. die Immich- oder Bitwarden-App), melden sich weiter selbst an und sind nicht betroffen. Apps, die die Webseite der App anzeigen (z. B. die Jellyfin-App für Android oder die Home-Assistant-App), werden über den HTTPS-Namen gesperrt: Schalte die Prüfung für diese App aus oder verbinde sie über den Port der App.",
 	"appaccess.gateLimit": "Die Sperre schützt die Seiten der App im Browser. Ihre Schnittstelle schützt weiter die eigene Anmeldung der App.",
 	"appaccess.newApps": "Neue Docker-Apps",
 	"appaccess.newAppsAdmins": "Nur für Besitzer und Administratoren",

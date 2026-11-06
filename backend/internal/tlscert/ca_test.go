@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -68,8 +69,8 @@ func TestAuthority(t *testing.T) {
 			t.Errorf("web UI leaf for %s: %v", name, err)
 		}
 	}
-	if left := time.Until(ui.Leaf.NotAfter); left > 31*24*time.Hour {
-		t.Errorf("leaf lasts too long: %v", left)
+	if left := time.Until(ui.Leaf.NotAfter); left > 398*24*time.Hour {
+		t.Errorf("leaf lasts longer than browsers accept: %v", left)
 	}
 	if info := m.Info(); info.Kind != KindCA || info.Issuer != "TitanOS nas CA" {
 		t.Errorf("info: %+v", info)
@@ -90,16 +91,39 @@ func TestAuthority(t *testing.T) {
 	if again != app {
 		t.Error("a new leaf for the same names")
 	}
-	// Leaves stay in RAM: no apps certificate on the stick.
+	// No self-signed apps certificate any more.
 	if _, err := store.Read(appsCertFile); err == nil {
-		t.Error("leaf written to the stick")
+		t.Error("self-signed apps certificate made")
 	}
 
-	// The same authority after a restart.
+	// The same authority and the same leaves after a restart, so that a
+	// browser exception made before installing the authority holds.
+	changes := store.Changes()
 	restarted, _ := NewManager(store, "nas")
+	restarted.localAddresses = m.localAddresses
 	der2, err := restarted.CACertificate()
 	if err != nil || string(der2) != string(caDER) {
 		t.Error("authority not kept across restarts")
+	}
+	appAgain, _ := restarted.ForNames("immich.nas.local", []string{"*.nas.local", "immich.local"})
+	if string(appAgain.Certificate[0]) != string(app.Certificate[0]) {
+		t.Error("new apps leaf after a restart")
+	}
+	uiAgain, _ := restarted.GetCertificate(&tls.ClientHelloInfo{})
+	if string(uiAgain.Certificate[0]) != string(ui.Certificate[0]) || len(uiAgain.Certificate) != 2 {
+		t.Error("new web UI leaf after a restart")
+	}
+	if store.Changes() != changes {
+		t.Error("a restart wrote to the stick")
+	}
+	// A new address of the NAS: only then a new leaf for the web UI.
+	restarted.localAddresses = func() []net.IP { return []net.IP{net.ParseIP("192.168.1.20"), net.ParseIP("10.0.0.5")} }
+	if leaf, _ := restarted.uiLeaf(net.ParseIP("192.168.1.20")); string(leaf.Certificate[0]) != string(ui.Certificate[0]) {
+		t.Error("new leaf for a known address")
+	}
+	leaf, _ := restarted.uiLeaf(net.ParseIP("10.0.0.5"))
+	if err := verifyWith(t, caDER, leaf, "nas.local"); err != nil || !slices.ContainsFunc(leaf.Leaf.IPAddresses, net.ParseIP("10.0.0.5").Equal) {
+		t.Error("no leaf for a new address")
 	}
 }
 

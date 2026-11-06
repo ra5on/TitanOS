@@ -122,8 +122,8 @@ func (m *Manager) refuse(w http.ResponseWriter, r *http.Request, app string) {
 	href := html.EscapeString(link)
 	_, _ = w.Write([]byte(`<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TitanOS</title>` +
 		`<style>body{font-family:system-ui,sans-serif;margin:0;min-height:100vh;display:grid;place-items:center;background:#0f1419;color:#e6e8eb}main{max-width:28rem;padding:24px}h1{font-size:1.25rem;margin:0 0 8px}p{margin:0 0 16px;line-height:1.5;color:#b8bec6}a{display:inline-block;padding:8px 14px;border-radius:8px;background:#3b82f6;color:#fff;text-decoration:none}hr{border:0;border-top:1px solid #2a3139;margin:24px 0}@media (prefers-color-scheme:light){body{background:#f5f6f8;color:#14181d}p{color:#4a525c}hr{border-top-color:#d6dae0}a{background:#1d4ed8}}</style></head><body><main>` +
-		`<h1>Diese App über TitanOS öffnen</h1><p>Diese App ist durch die TitanOS-Anmeldung geschützt. Melde dich bei TitanOS an und öffne sie dort.</p><p><a href="` + href + `" target="_top" rel="noreferrer">TitanOS öffnen</a></p><hr>` +
-		`<h1 lang="en">Open this app through TitanOS</h1><p lang="en">This app is protected by the TitanOS login. Sign in to TitanOS and open it there.</p><p><a lang="en" href="` + href + `" target="_top" rel="noreferrer">Open TitanOS</a></p>` +
+		`<h1>Diese App über TitanOS öffnen</h1><p>Diese App ist durch die TitanOS-Anmeldung geschützt. Melde dich bei TitanOS an und öffne sie dort.</p><p><a href="` + href + `" rel="noreferrer">TitanOS öffnen</a></p><hr>` +
+		`<h1 lang="en">Open this app through TitanOS</h1><p lang="en">This app is protected by the TitanOS login. Sign in to TitanOS and open it there.</p><p><a lang="en" href="` + href + `" rel="noreferrer">Open TitanOS</a></p>` +
 		`</main></body></html>`))
 }
 

@@ -138,7 +138,7 @@ eingeschalteter Apps:
 2. Sonst das importierte eigene Zertifikat, wenn es den Namen abdeckt (z. B. ein
    Platzhalterzertifikat `*.home.example.org`).
 3. Sonst (seit PLAN 61) ein kurzlebiges Zertifikat der **TitanOS-Zertifizierungsstelle**
-   für dieselben Namen, nur im RAM (siehe `docs/APP-WINDOWS.md`).
+   für dieselben Namen (siehe `docs/APP-WINDOWS.md`).
 4. Nur wenn die Zertifizierungsstelle nicht verfügbar ist: ein eigenes selbst signiertes Zertifikat für Apps, das nur Platzhalter
    nennt: `*.<hostname>.local` und ggf. `*.<domain>`
    (`/config/tls/apps-cert.pem`, `apps-key.pem`). Es bleibt gleich, wenn Apps

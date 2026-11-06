@@ -109,6 +109,14 @@ func (m *Manager) buildOrigins() []string {
 	}
 	if m.UIHosts != nil {
 		for _, host := range m.UIHosts() {
+			// A certificate or DNS name may also name apps (Let's Encrypt
+			// with the apps' domains): an app never frames another app.
+			if _, _, app := m.match(host); app {
+				continue
+			}
+			if _, app := m.tailnetMatch(hostOnly(host)); app {
+				continue
+			}
 			add(host)
 		}
 	}

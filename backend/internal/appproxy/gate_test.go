@@ -71,6 +71,14 @@ func TestFrameOrigins(t *testing.T) {
 	m.addresses = func() []netip.Addr {
 		return []netip.Addr{netip.MustParseAddr("192.168.1.20"), netip.MustParseAddr("fd00::20")}
 	}
+	if err := m.SetRoute("immich", Route{Enabled: true, Name: "immich", Port: 2283, Domains: []string{"photos.example.org"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetDomain("example.org"); err != nil {
+		t.Fatal(err)
+	}
+	ui := m.UIHosts
+	m.UIHosts = func() []string { return append(ui(), "photos.example.org", "immich.example.org", "immich.nas.local") }
 	got := m.frameOrigins()
 	want := []string{"https://nas:8443", "https://nas.local:8443", "https://nas.example.org:8443", "https://nas.tail1.ts.net:8443", "https://192.168.1.20:8443", "https://[fd00::20]:8443"}
 	if !slices.Equal(got, want) {
