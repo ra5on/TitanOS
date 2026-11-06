@@ -42,14 +42,20 @@
 			error = apiErrorText(e);
 		}
 	}
-	const look: Record<InboxItem['kind'], { icon: IconName; color: string }> = {
+	// 'deadline': Fristenwächter (PLAN 54-D, features/DocsViews.svelte).
+	const look: Record<InboxItem['kind'] | 'deadline', { icon: IconName; color: string }> = {
 		memory: { icon: 'star', color: '#10b981' },
 		conflict: { icon: 'activity', color: '#f59e0b' },
 		fade: { icon: 'clock', color: '#64748b' },
 		skill: { icon: 'zap', color: '#eab308' },
 		forecast: { icon: 'disk', color: '#f97316' },
 		alert: { icon: 'bell', color: '#fb7185' },
+		deadline: { icon: 'clock', color: '#f59e0b' },
 	};
+	const kindText = (k: string) =>
+		k === 'deadline' ? t('agent.f.docs.inboxKind') : t(`agent.inbox.kind.${k}` as MessageKey);
+	const fileHref = (d: Record<string, string>) =>
+		`/files?root=${encodeURIComponent(d.root)}&path=${encodeURIComponent(d.path.split('/').slice(0, -1).join('/'))}`;
 	const kinds = $derived([...new Set(items.map((i) => i.kind))]);
 	const shown = $derived(filter === 'all' ? items : items.filter((i) => i.kind === filter));
 	// Yes means remove for old or contradicting memories, keep for the rest.
@@ -101,18 +107,18 @@
 				>
 				{#each kinds as k (k)}
 					<label class:on={filter === k}
-						><input type="radio" bind:group={filter} value={k} />{t(
-							`agent.inbox.kind.${k}` as MessageKey,
-						)}</label
+						><input type="radio" bind:group={filter} value={k} />{kindText(k)}</label
 					>
 				{/each}
 			</div>
 		{/if}
 		{#each shown as item (item.id)}
-			<article class="card" style:--c={look[item.kind].color}>
+			<article class="card" style:--c={(look[item.kind] ?? look.alert).color}>
 				<div class="head">
-					<span class="sq" aria-hidden="true"><Icon name={look[item.kind].icon} size={15} /></span>
-					<span class="kind">{t(`agent.inbox.kind.${item.kind}` as MessageKey)}</span>
+					<span class="sq" aria-hidden="true"
+						><Icon name={(look[item.kind] ?? look.alert).icon} size={15} /></span
+					>
+					<span class="kind">{kindText(item.kind)}</span>
 					<time>{formatDateTime(new Date(item.created))}</time>
 				</div>
 				{#if editing?.id === item.id}
@@ -144,6 +150,9 @@
 							>
 						{/if}
 					{:else}
+						{#if (item.kind as string) === 'deadline' && item.data?.root && item.data?.path}
+							<a class="btn" href={fileHref(item.data)}>{t('agent.f.docs.openFile')}</a>
+						{/if}
 						<button type="button" class="btn btn-primary" onclick={() => yes(item)}
 							>{yesLabel(item.kind)}</button
 						>
