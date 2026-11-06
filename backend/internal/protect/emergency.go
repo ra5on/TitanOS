@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"errors"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -67,6 +68,27 @@ type EmergencyState struct {
 	Requests []Request `json:"requests"`
 	// Codes are the SHA-256 of printed one-time codes per account.
 	Codes map[string]string `json:"codes,omitempty"`
+	// CodeFails counts wrong codes per account; from MaxCodeTries on, codes
+	// are refused until Until (doubling, at most a day).
+	CodeFails map[string]CodeFail `json:"codeFails,omitempty"`
+}
+
+// CodeFail is the count of wrong codes of an account.
+type CodeFail struct {
+	N     int       `json:"n"`
+	Until time.Time `json:"until,omitzero"`
+}
+
+// MaxCodeTries wrong codes are allowed before codes are refused for a while.
+const MaxCodeTries = 5
+
+// codeLock is how long codes are refused after n wrong ones.
+func codeLock(n int) time.Duration {
+	if n < MaxCodeTries {
+		return 0
+	}
+	d := 15 * time.Minute << min(n-MaxCodeTries, 7)
+	return min(d, 24*time.Hour)
 }
 
 // Store keeps a value on the data volume.
@@ -82,6 +104,7 @@ var (
 	ErrNoRequest     = errors.New("no such request")
 	ErrDecided       = errors.New("the request was already decided")
 	ErrBadCode       = errors.New("the code is not valid")
+	ErrCodeLocked    = errors.New("too many wrong codes; try again later")
 )
 
 // Emergency is the emergency access with its state.
@@ -120,11 +143,14 @@ func (e *Emergency) saveLocked(next EmergencyState) error {
 
 func (e *Emergency) clone() EmergencyState {
 	st := EmergencyState{Requests: slices.Clone(e.state.Requests)}
+	for i := range st.Requests {
+		st.Requests[i].Added = slices.Clone(st.Requests[i].Added)
+	}
 	if e.state.Codes != nil {
-		st.Codes = map[string]string{}
-		for k, v := range e.state.Codes {
-			st.Codes[k] = v
-		}
+		st.Codes = maps.Clone(e.state.Codes)
+	}
+	if e.state.CodeFails != nil {
+		st.CodeFails = maps.Clone(e.state.CodeFails)
 	}
 	return st
 }
@@ -171,18 +197,31 @@ func (e *Emergency) Ask(p *Person, account, reason, code string, now time.Time) 
 	req := Request{ID: newID(), Account: account, Reason: reason, Created: now, Due: now.Add(time.Duration(wait) * 24 * time.Hour), State: StateWaiting, Shares: slices.Clone(p.Shares)}
 	next := e.clone()
 	if code != "" {
+		fail := next.CodeFails[account]
+		if now.Before(fail.Until) {
+			return Request{}, ErrCodeLocked
+		}
 		want, ok := next.Codes[account]
 		if !ok || subtle.ConstantTimeCompare([]byte(want), []byte(hashCode(code))) != 1 {
+			fail.N++
+			if d := codeLock(fail.N); d > 0 {
+				fail.Until = now.Add(d)
+			}
+			if next.CodeFails == nil {
+				next.CodeFails = map[string]CodeFail{}
+			}
+			next.CodeFails[account] = fail
+			if err := e.saveLocked(next); err != nil {
+				return Request{}, err
+			}
 			return Request{}, ErrBadCode
 		}
 		delete(next.Codes, account)
+		delete(next.CodeFails, account)
 		req.Code, req.Due = true, now
 	}
 	next.Requests = append(next.Requests, req)
-	// Old decided requests beyond 100 go.
-	if len(next.Requests) > 100 {
-		next.Requests = next.Requests[len(next.Requests)-100:]
-	}
+	next.Requests = pruneRequests(next.Requests, 100)
 	if err := e.saveLocked(next); err != nil {
 		return Request{}, err
 	}
@@ -364,4 +403,31 @@ func hashCode(code string) string {
 	code = strings.ReplaceAll(code, "-", "")
 	sum := sha256.Sum256([]byte("titanos-emergency:" + code))
 	return hex.EncodeToString(sum[:])
+}
+
+// pruneRequests drops the oldest decided requests beyond keep. Waiting and
+// granted ones always stay: their deadline or their read access must end.
+func pruneRequests(list []Request, keep int) []Request {
+	over := len(list) - keep
+	if over <= 0 {
+		return list
+	}
+	out := make([]Request, 0, len(list))
+	for _, r := range list {
+		if over > 0 && !r.Open() {
+			over--
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+// Detach takes shares out of what a grant added, because their access was
+// changed by someone else since: the end of the grant leaves them alone.
+func (e *Emergency) Detach(id string, shares []string) (Request, error) {
+	return e.change(id, func(r *Request) error {
+		r.Added = slices.DeleteFunc(r.Added, func(s string) bool { return slices.Contains(shares, s) })
+		return nil
+	})
 }

@@ -395,3 +395,56 @@ func TestHandbook(t *testing.T) {
 		t.Fatalf("sections: %+v", s)
 	}
 }
+
+// Waiting and granted requests are never pruned, however many decided
+// ones come after them.
+func TestPruneKeepsOpen(t *testing.T) {
+	store := &memStore{}
+	e := NewEmergency(store, func(err error) bool { return errors.Is(err, errNone) })
+	p := &Person{Account: "lena", Shares: []string{"Fotos"}}
+	first, _ := e.Ask(p, "lena", "first", "", t0)
+	e.Grant(first.ID, "alex", []string{"Fotos"}, t0)
+	other := &Person{Account: "max", Shares: []string{"Fotos"}}
+	for i := range 150 {
+		r, err := e.Ask(other, "max", "x", "", t0.Add(time.Duration(i)*time.Minute))
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.Decline(r.ID, "alex", t0.Add(time.Duration(i)*time.Minute))
+	}
+	st, _ := e.State()
+	if len(st.Requests) > 101 {
+		t.Fatalf("not pruned: %d", len(st.Requests))
+	}
+	if r, ok := e.Active("lena", t0.Add(time.Hour)); !ok || r.ID != first.ID {
+		t.Fatal("granted request pruned")
+	}
+	if _, end, _ := e.Due(t0.Add(GrantFor)); len(end) != 1 {
+		t.Fatal("grant does not end")
+	}
+}
+
+// Wrong one-time codes: from the fifth on, codes are refused for a while,
+// also with the right one; the lock survives a restart.
+func TestCodeAttemptLimit(t *testing.T) {
+	store := &memStore{}
+	nf := func(err error) bool { return errors.Is(err, errNone) }
+	e := NewEmergency(store, nf)
+	p := &Person{Account: "lena", Shares: []string{"Fotos"}}
+	code, _ := e.NewCode("lena")
+	for i := range MaxCodeTries {
+		if _, err := e.Ask(p, "lena", "x", "WRONG-WRONG", t0.Add(time.Duration(i)*time.Second)); !errors.Is(err, ErrBadCode) {
+			t.Fatalf("try %d: %v", i, err)
+		}
+	}
+	e = NewEmergency(store, nf)
+	if _, err := e.Ask(p, "lena", "x", code, t0.Add(time.Minute)); !errors.Is(err, ErrCodeLocked) {
+		t.Fatalf("right code during the lock: %v", err)
+	}
+	if r, err := e.Ask(p, "lena", "x", code, t0.Add(20*time.Minute)); err != nil || !r.Code {
+		t.Fatalf("after the lock: %v", err)
+	}
+	if codeLock(MaxCodeTries+20) != 24*time.Hour || codeLock(MaxCodeTries-1) != 0 {
+		t.Fatal("lock times")
+	}
+}

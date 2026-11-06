@@ -25,7 +25,7 @@ Temporäre Namen von Office, Editoren und Synchronisierern (`~$x.docx`, `x.docx.
 **Snapshot zum Zurückgehen.** Auf Btrfs-Volumes nimmt der Wächter höchstens einmal je Stunde einen schreibgeschützten Snapshot `guard-pre-<UTC>`, und nur bei einem unverdächtigen Schreibvorgang in eine Freigabe (die Platten sind wach), nie während auf der Freigabe ein Vorfall läuft. Er wird zwei Tage aufbewahrt, außer eine offene Meldung braucht ihn. Abschaltbar („Stündlicher Snapshot“). Für das Zurückstellen gilt der jüngste Snapshot des Volumes, der mindestens ein Zeitfenster (60 s) vor dem ersten verdächtigen Ereignis liegt (Zeit aus dem Namen: `guard-` in UTC, `agent-` und Zeitplan-Snapshots in Ortszeit).
 
 **Meldung** (Ansicht `guard`, Entwurf 06): was, wann, Gerät, Konto, betroffene Dateien, dazu
-- *Zurückstellen* (fragt einmal nach): jede betroffene Datei kommt aus dem Snapshot an ihren alten Platz; was jetzt dort liegt (die `.locked`-Datei oder die neu geschriebene), wandert in `.recycle/titanos-guard/<Zeit>/` der Freigabe, nichts wird gelöscht. Dateien, die der Snapshot nicht hat, bleiben unberührt. Während des Zurückstellens zählen titands eigene Schreibvorgänge nicht.
+- *Zurückstellen* (fragt einmal nach): jede betroffene Datei kommt aus dem Snapshot an ihren alten Platz; was jetzt dort liegt (die `.locked`-Datei oder die neu geschriebene), wandert in `.recycle/titanos-guard/<Zeit>/` der Freigabe, nichts wird gelöscht. Dateien, die der Snapshot nicht hat, bleiben unberührt. Während des Zurückstellens zählen titands eigene Schreibvorgänge nicht. Zurückgestellt wird nur eine Meldung im Zustand „aufgehört“ und nur einmal (Zustand „wird zurückgestellt“); „Alles automatisch“ stellt im Hintergrund zurück, der Takt des Agenten wartet nicht darauf.
 - *Freigabe wieder öffnen:* gibt genau die Rechte zurück, die der Wächter genommen hat; was ein Administrator während der Sperre geändert hat, bleibt.
 - *Fehlalarm:* öffnet die Freigabe, stellt nichts zurück, und die Freigabe löst eine Stunde lang keinen Alarm aus (die ganze Freigabe, weil ein getrenntes Gerät mit einem neuen Prozess wiederkommt).
 - Ohne Btrfs (ext4/XFS) oder ohne Snapshot von vorher: Sperren und Melden wie oben; die Meldung verweist auf Einstellungen › Datensicherung › Zurückstellen und darauf, dass Btrfs-Snapshots besser schützen.
@@ -42,7 +42,7 @@ Ein Dokument über den Aufbau des NAS und „Was tun, wenn …“ (Platte fällt
 - Neu erstellt nachts 03:20–03:59 (nach der NAS-Karte), nur wenn sich die Fakten geändert haben (Hash), nicht während das Volume des Agenten schläft; „Jetzt neu erstellen“ auf Knopfdruck. Die Speicherdaten kommen aus `Storage.Status` (lsblk/mdadm, weckt keine Platte).
 - Einstellungen: Ergebnisse der Wiederherstellungsproben aufnehmen (ab Werk aus), Ansprechpartner aufnehmen mit eigenen Einträgen (ab Werk aus, höchstens 10).
 - Lesen dürfen Besitzer, Administratoren und eine Person mit freigeschaltetem Notfallzugang (jedes Lesen dieser Person steht im Aktivitätsprotokoll).
-- Daten: `.titanos/agent/protect-handbook.json` (Fakten, Hash, Zeit). Werkzeug `emergency_handbook` (lesen).
+- Daten: `.titanos/agent/protect-handbook.json` (Fakten, Hash, Zeit). Werkzeug `emergency_handbook` (lesen); auch dieses Lesen durch die Person steht im Aktivitätsprotokoll.
 
 ## Notfallzugang
 
@@ -50,9 +50,9 @@ Ein Dokument über den Aufbau des NAS und „Was tun, wenn …“ (Platte fällt
 - Die Person beantragt in ihrer Agent-App (Einstellungen › Funktionen › Notfallzugang) mit einem Grund, oder über das Werkzeug `emergency_access_request`. Ein nicht eingetragenes Konto kann nicht beantragen.
 - Besitzer und Administratoren bekommen sofort eine Push-Mitteilung und sehen den Antrag (Ansicht `emergency`, Entwurf 08) mit **Ablehnen** und **Jetzt freigeben** (fragt einmal nach). Niemand entscheidet über den eigenen Antrag.
 - Ohne Antwort wird nach der Wartezeit freigeschaltet (Tick jede Minute). Freischalten heißt: auf jeder gewählten Freigabe, auf der die Person noch **keinen** Zugang hat, bekommt sie „nur lesen“; vorhandene Rechte bleiben, es gibt nie Schreibrechte und nie mehr, als die Person schon hat. Dazu das Handbuch.
-- Nach 30 Tagen endet der Zugang von selbst; ein Besitzer kann ihn vorher beenden; er endet auch, wenn die Person ausgetragen, ihr Konto gesperrt oder die Funktion ausgeschaltet wird. Zurückgenommen wird genau, was die Freischaltung hinzugefügt hat (und nur, wenn es noch „nur lesen“ ist).
+- Nach 30 Tagen endet der Zugang von selbst; ein Besitzer kann ihn vorher beenden; er endet auch, wenn die Person ausgetragen, ihr Konto gesperrt oder die Funktion ausgeschaltet wird. Zurückgenommen wird genau, was die Freischaltung hinzugefügt hat. Ändert ein Administrator währenddessen den Eintrag der Person auf einer dieser Freigaben (entfernt, Schreibrecht), merkt titand das im Minutentakt und lässt den Eintrag beim Ende stehen. Gibt ein Administrator „nur lesen“ auf einer Freigabe, die schon über den Notfallzugang „nur lesen“ hat, ist das nicht zu unterscheiden und wird beim Ende entfernt. Anträge mit offener Frist oder laufendem Zugang werden nie aus dem Verlauf gekürzt.
 - Antrag, Ablehnen, Freischalten, Ende, Zurückziehen und jedes Lesen des Handbuchs durch die Person stehen im Aktivitätsprotokoll.
-- Optional (ab Werk aus): gedruckter Einmalcode je Person. Der Code wird einmal gezeigt (zum Ausdrucken), gespeichert ist nur sein SHA-256; mit ihm wird ohne Wartezeit freigeschaltet, danach ist er verbraucht.
+- Optional (ab Werk aus): gedruckter Einmalcode je Person. Der Code wird einmal gezeigt (zum Ausdrucken), gespeichert ist nur sein SHA-256; mit ihm wird ohne Wartezeit freigeschaltet, danach ist er verbraucht. Nach 5 falschen Codes werden Codes dieser Person 15 Minuten lang abgelehnt, danach jeweils doppelt so lange (höchstens einen Tag).
 - Daten: `.titanos/agent/protect-emergency.json` (Anträge, Fristen, Freischaltungen, Code-Hashes) auf dem Volume des Agenten; übersteht Neustarts. Die Freigaberechte selbst stehen in `/config` (nur beim Freischalten und Beenden geschrieben).
 
 ## Routen
@@ -77,7 +77,7 @@ Ein Dokument über den Aufbau des NAS und „Was tun, wenn …“ (Platte fällt
 
 ## Grenzen, nicht geprüft
 
-- fanotify selbst ist nicht automatisch getestet (braucht root und `CAP_SYS_ADMIN`); nicht geprüft auf echter Hardware, insbesondere `FAN_MARK_FILESYSTEM` auf Btrfs-Subvolumes (ab Kernel 6.8 möglich) und mit LUKS. Scheitert das Einrichten, zeigt die Ansicht „Der Wächter beobachtet gerade nicht: …“.
+- fanotify selbst ist nicht automatisch getestet (braucht root und `CAP_SYS_ADMIN`); nicht geprüft auf echter Hardware, insbesondere `FAN_MARK_FILESYSTEM` auf Btrfs-Subvolumes (ab Kernel 6.8 möglich) und mit LUKS. Scheitert das Einrichten oder bricht der Wächter ab (auch ein Absturz wird abgefangen), zeigt die Ansicht „Der Wächter beobachtet gerade nicht: …“; titand versucht es nach 1, 2, 4 … höchstens 30 Minuten erneut.
 - Läuft die Ereignis-Warteschlange über (sehr viele Schreibvorgänge), gehen Ereignisse verloren; titand zählt das (`overflows`), erkennt dann aber ggf. später.
 - `smbstatus --json` braucht Samba 4.16+; das Feld `server_id.pid` ist die Zuordnung. Sitzt das Gerät hinter NAT, wird die NAT-Adresse getrennt.
 - Liegt der jüngste Snapshot kurz vor dem Angriff, kann er schon einzelne veränderte Dateien enthalten, die vor dem ersten erkannten Ereignis verändert wurden (z. B. unauffällig wirkende); das Zurückstellen holt dann diese Fassung. Ab Werk wird deshalb nur ein Snapshot genommen, der mindestens ein Zeitfenster vor dem ersten verdächtigen Ereignis liegt.

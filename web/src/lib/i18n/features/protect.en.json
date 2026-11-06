@@ -154,5 +154,6 @@
 	"agent.f.protect.s.codeHint": "Grants without waiting; one printable code per person",
 	"agent.f.protect.s.readOnly": "The emergency access never gives write access and never more than the person has; when it ends it takes back exactly what it gave.",
 	"agent.f.protect.g.openAlert": "1 open alert",
-	"agent.f.protect.e.openRequest": "1 open request"
+	"agent.f.protect.e.openRequest": "1 open request",
+	"agent.f.protect.g.state.restoring": "being restored …"
 }

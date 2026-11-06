@@ -87,7 +87,12 @@ func (e *protectEnv) set(t time.Time)  { e.mu.Lock(); e.now = t; e.mu.Unlock() }
 // volume "tank" below a temporary folder, a share Documents on fast.
 func protectServer(t *testing.T) *protectEnv {
 	t.Helper()
-	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard})
+	// Like agentServer, but the volumes are in place before the agent is
+	// switched on (its background work reads them).
+	ts := newTestServer(t)
+	ts.setup()
+	agentDir := t.TempDir()
+	ts.server.agentOpen = func() (*os.Root, error) { return os.OpenRoot(agentDir) }
 	mnt := t.TempDir()
 	if err := ts.store.WriteJSON("storage/volumes.json", []storage.VolumeConfig{
 		{Name: "tank", Level: "raid1", Filesystem: "ext4", ArrayUUID: "a", FilesystemUUID: "b"},
@@ -105,6 +110,11 @@ func protectServer(t *testing.T) *protectEnv {
 	ts.shares.UseMountRoot(mnt)
 	runner := &protectRunner{}
 	ts.disks.UseRunner(runner)
+	fake := &agentOllama{}
+	settings := map[string]any{"enabled": true, "ollama": fake.start(t), "model": "gpt-oss:20b", "think": "high", "policy": agent.Policy{Preset: agent.PresetStandard}, "volume": "tank"}
+	if res, body := ts.request("PUT", "/api/v1/agent/settings", settings); res.StatusCode != http.StatusOK {
+		t.Fatalf("settings: %d %s", res.StatusCode, body)
+	}
 	for _, u := range []string{"lena", "max"} {
 		ts.users.Create(u, testPassword, auth.RoleUser)
 	}

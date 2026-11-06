@@ -55,7 +55,7 @@ export type GuardAlert = {
 	count: number;
 	more?: number;
 	files: Affected[];
-	state: 'active' | 'stopped' | 'restored' | 'reopened' | 'dismissed';
+	state: 'active' | 'stopped' | 'restoring' | 'restored' | 'reopened' | 'dismissed';
 	locked: boolean;
 	btrfs: boolean;
 	snapshot?: string;

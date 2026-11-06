@@ -36,10 +36,13 @@
 	});
 
 	const alert = $derived(
-		status?.alerts.find((a) => a.state === 'active' || a.state === 'stopped') ?? status?.alerts[0],
+		status?.alerts.find(
+			(a) => a.state === 'active' || a.state === 'stopped' || a.state === 'restoring',
+		) ?? status?.alerts[0],
 	);
 	const earlier = $derived(status?.alerts.filter((a) => a !== alert) ?? []);
-	const open = (a: GuardAlert) => a.state === 'active' || a.state === 'stopped';
+	const open = (a: GuardAlert) =>
+		a.state === 'active' || a.state === 'stopped' || a.state === 'restoring';
 
 	function sameDay(a: Date, b: Date) {
 		return a.toDateString() === b.toDateString();

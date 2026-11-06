@@ -154,5 +154,6 @@
 	"agent.f.protect.s.codeHint": "Schaltet ohne Wartezeit frei; je Person ein Code zum Ausdrucken",
 	"agent.f.protect.s.readOnly": "Der Notfallzugang gibt nie Schreibrechte und nie mehr, als die Person schon hat; er nimmt beim Ende genau das zurück, was er gegeben hat.",
 	"agent.f.protect.g.openAlert": "1 offene Meldung",
-	"agent.f.protect.e.openRequest": "1 offener Antrag"
+	"agent.f.protect.e.openRequest": "1 offener Antrag",
+	"agent.f.protect.g.state.restoring": "wird zurückgestellt …"
 }

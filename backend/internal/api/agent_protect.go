@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
@@ -234,10 +236,10 @@ func (s *Server) checkProtect(f *agentFeatures, old agentFeatures) error {
 	// Switched off, a person removed or their shares changed: open
 	// requests and grants follow once the settings are saved.
 	if !slices.EqualFunc(old.Emergency.Persons, e.Persons, samePerson) || old.Emergency.Enabled != e.Enabled || old.Guard.Enabled != g.Enabled {
-		go func() {
+		protectGo("reconcile", func() {
 			time.Sleep(50 * time.Millisecond)
 			s.protectReconcile(time.Now())
-		}()
+		})
 	}
 	return nil
 }
@@ -277,13 +279,17 @@ type protectState struct {
 	watchCancel context.CancelFunc
 	watchKey    string
 	watchErr    string
-	watchSince  time.Time
-	overflows   int
-	alerts      []guardAlert
-	loaded      bool
-	lastPre     map[string]time.Time // volume → last pre-snapshot
-	sessions    map[int]protect.Client
-	sessionsAt  time.Time
+	// watchFailed and watchBackoff retry a watcher that stopped with an
+	// error (1 min, doubling up to 30 min).
+	watchFailed  time.Time
+	watchBackoff time.Duration
+	watchSince   time.Time
+	overflows    int
+	alerts       []guardAlert
+	loaded       bool
+	lastPre      map[string]time.Time // volume → last pre-snapshot
+	sessions     map[int]protect.Client
+	sessionsAt   time.Time
 
 	// emergency
 	emergency *protect.Emergency
@@ -293,6 +299,19 @@ type protectState struct {
 }
 
 var protectStates sync.Map // *Server → *protectState
+
+// protectGo runs background work of the group; a panic is logged and
+// ends only that work, never titand.
+func protectGo(what string, f func()) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("protection work crashed", "work", what, "panic", r, "stack", string(debug.Stack()))
+			}
+		}()
+		f()
+	}()
+}
 
 func (s *Server) protect() *protectState {
 	if v, ok := protectStates.Load(s); ok {
@@ -410,6 +429,9 @@ func (b *agentToolbox) protectTools() []*agentTool {
 				hb, err := b.s.handbookCurrent(ctx)
 				if err != nil {
 					return agent.Outcome{}, err
+				}
+				if !b.user.Role.CanAdminister() {
+					b.s.emergencyRecord(b.user.Name, "emergency handbook read", b.user.Name+" (agent)")
 				}
 				return agent.Outcome{Text: protect.Markdown(hb.Facts, hb.Made.In(b.s.agentLocation()), true)}, nil
 			},
