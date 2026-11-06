@@ -106,6 +106,22 @@
 		const name = session.data?.user ? pageTitle.value || (route ? t(route) : '') : '';
 		return [name, host, 'TitanOS'].filter(Boolean).join(' – ');
 	});
+
+	// The agent app reaches under the status bar of the iPhone (PLAN 56):
+	// translucent status bar and the whole screen there, TitanOS keeps the
+	// black bar. iOS reads both at load; crossing to and from the agent
+	// reloads the page.
+	$effect.pre(() => {
+		const status = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+		const viewport = document.querySelector('meta[name="viewport"]');
+		status?.setAttribute('content', agentRoute ? 'black-translucent' : 'black');
+		viewport?.setAttribute(
+			'content',
+			agentRoute
+				? 'width=device-width, initial-scale=1, viewport-fit=cover'
+				: 'width=device-width, initial-scale=1',
+		);
+	});
 </script>
 
 <svelte:head>

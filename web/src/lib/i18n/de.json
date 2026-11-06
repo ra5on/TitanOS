@@ -8872,5 +8872,11 @@
 	"agent.planDone": "erledigt",
 	"agent.set.push": "Mitteilungen",
 	"agent.set.pushSub": "Auf diesem Gerät",
-	"agent.set.pushHint": "Schalte hier Mitteilungen für dieses Gerät ein. Auf dem iPhone ist der Agent vom Home-Bildschirm eine eigene App: Er braucht ein eigenes Einschalten, auch wenn TitanOS schon Mitteilungen bekommt. Ist ein Chat gerade auf einem Gerät offen, kommt für ihn keine Mitteilung."
+	"agent.set.pushHint": "Schalte hier Mitteilungen für dieses Gerät ein. Auf dem iPhone ist der Agent vom Home-Bildschirm eine eigene App: Er braucht ein eigenes Einschalten, auch wenn TitanOS schon Mitteilungen bekommt. Ist ein Chat gerade auf einem Gerät offen, kommt für ihn keine Mitteilung.",
+	"agent.deleteAll": "Alle Chats löschen",
+	"agent.deleteAllSub": "{count} Chats · Angeheftete kannst du behalten",
+	"agent.deleteAllTitle": "Alle Chats löschen?",
+	"agent.deleteAllText": "{count} Chats werden gelöscht, auch die in Projekten, mit ihren Anhängen. Projekte, Gedächtnis und Skills bleiben. Laufende Aufträge bleiben stehen.",
+	"agent.deleteAllKeepPinned": "Angeheftete Chats behalten ({count})",
+	"agent.deleteAllButton": "Alle löschen"
 }

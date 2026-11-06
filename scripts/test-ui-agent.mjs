@@ -203,6 +203,42 @@ async function plan55() {
 		assert.ok(heights.length > 40 && Math.min(...heights) >= 30, `rows keep their height (${Math.min(...heights)})`);
 		await ctx.close();
 	}
+	// PLAN 56: under the status bar, slide-in, delete all chats.
+	{
+		const { ctx, page } = await open(390, 844);
+		let removed = '';
+		await page.route('**/api/v1/agent/chats?keepPinned=true', (route) => {
+			removed = route.request().method() + ' ' + new URL(route.request().url()).search;
+			return route.fulfill({ json: { deleted: 5, kept: 1 } });
+		});
+		await page.goto(base + '/agent?app=1&chat=' + docChat.id);
+		await page.getByRole('button', { name: 'Einstellungen' }).first().click();
+		const metas = await page.evaluate(() => [document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]').content, document.querySelector('meta[name="viewport"]').content]);
+		assert.equal(metas[0], 'black-translucent', 'agent reaches under the status bar');
+		assert.match(metas[1], /viewport-fit=cover/);
+		await page.locator('.panel .row', { hasText: 'Darstellung' }).first().click();
+		const moving = await page.locator('.panel .pane').evaluate((el) => el.getAnimations().length + getComputedStyle(el).transform);
+		assert.ok(/1|matrix/.test(moving), 'the sub-item slides in');
+		await page.waitForTimeout(400);
+		await page.getByRole('button', { name: 'Zurück' }).click();
+		await page.getByRole('button', { name: /Alle Chats löschen/ }).click();
+		const dlg = page.getByRole('dialog', { name: 'Alle Chats löschen?' });
+		await dlg.waitFor();
+		assert.ok(await dlg.getByLabel(/Angeheftete Chats behalten/).isChecked(), 'pinned ones kept by default');
+		await dlg.evaluate((d) => Promise.all(d.getAnimations().map((a) => a.finished)));
+		await noOverflow(page, 'delete all');
+		await page.screenshot({ path: `${out}/33-phone-delete-all.png` });
+		await dlg.getByRole('button', { name: 'Alle löschen' }).click();
+		await dlg.waitFor({ state: 'detached' });
+		assert.equal(removed, 'DELETE ?keepPinned=true');
+		await page.screenshot({ path: `${out}/34-phone-after-delete.png` });
+		await ctx.close();
+		const os = await open(390, 844);
+		await os.page.goto(base + '/');
+		await os.page.waitForTimeout(600);
+		assert.equal(await os.page.evaluate(() => document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]').content), 'black', 'TitanOS keeps its bar');
+		await os.ctx.close();
+	}
 	// Notifications on this device inside the agent app (own subscription on iOS).
 	{
 		const { ctx, page } = await open(390, 844);

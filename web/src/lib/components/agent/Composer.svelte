@@ -252,7 +252,7 @@
 		padding: 6px;
 		border-radius: 26px;
 		border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
-		background: color-mix(in srgb, var(--surface) 70%, transparent);
+		background: color-mix(in srgb, var(--surface) calc(var(--ag-alpha, 0.55) * 100%), transparent);
 		backdrop-filter: blur(22px) saturate(160%);
 		box-shadow:
 			0 0 0 1px color-mix(in srgb, var(--accent) 8%, transparent),
@@ -379,6 +379,23 @@
 	@media (max-width: 760px), (pointer: coarse) {
 		textarea {
 			font-size: max(16px, 1rem);
+		}
+	}
+	/* The phone: a flatter bar (PLAN 56); the text stays 16 px for iOS. */
+	@media (max-width: 760px) {
+		.composer {
+			padding: 4px;
+			border-radius: 22px;
+		}
+		.composer :global(.round),
+		.composer .attach,
+		.composer .attach-menu :global(.btn) {
+			width: 34px;
+			height: 34px;
+			min-height: 34px;
+		}
+		.composer textarea {
+			padding: 5px 4px;
 		}
 	}
 </style>

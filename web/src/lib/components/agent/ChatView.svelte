@@ -335,7 +335,6 @@
 		border-radius: var(--radius-ctl, 14px);
 		padding: var(--space-2, 10px) var(--space-3, 14px);
 		margin: var(--space-1, 6px) 0 var(--space-2, 10px);
-		background: color-mix(in srgb, var(--surface) 70%, transparent);
 	}
 	.plan header {
 		display: flex;
@@ -518,6 +517,14 @@
 		font-size: var(--text-base);
 		overflow: hidden;
 	}
+	/* Every surface follows "Glasstärke" (PLAN 56), on the phone too. */
+	.thinking,
+	.steps,
+	.file,
+	.plan {
+		background: color-mix(in srgb, var(--surface) calc(var(--ag-alpha, 0.55) * 100%), transparent);
+		backdrop-filter: blur(18px) saturate(160%);
+	}
 	.thinking {
 		border-style: dashed;
 	}
@@ -536,7 +543,6 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		background: color-mix(in srgb, var(--text) 3%, transparent);
 	}
 	.step {
 		display: flex;

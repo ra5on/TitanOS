@@ -89,6 +89,7 @@
 		| { kind: 'move'; chat: ChatInfo }
 		| { kind: 'rename'; chat: ChatInfo; title: string }
 		| { kind: 'delete'; chat: ChatInfo }
+		| { kind: 'deleteAll' }
 		| { kind: 'sheet'; project: Project }
 		| { kind: 'nas' }
 		| null
@@ -542,6 +543,19 @@
 		try {
 			await api.delete(`/agent/chats/${chat.id}`);
 			if (current?.id === chat.id) newChat();
+			await loadLists();
+		} catch (e) {
+			error = apiErrorText(e);
+		}
+		dialog = null;
+	}
+
+	// "Alle Chats löschen" (PLAN 56): the own chats, pinned ones stay if wished.
+	let keepPinned = $state(true);
+	async function removeAll() {
+		try {
+			await api.delete(`/agent/chats${keepPinned ? '?keepPinned=true' : ''}`);
+			if (current && !(keepPinned && current.pinned)) newChat();
 			await loadLists();
 		} catch (e) {
 			error = apiErrorText(e);
@@ -1096,6 +1110,11 @@
 		onknow={getToKnow}
 		onclose={() => (dialog = null)}
 		onopen={(part) => (dialog = { kind: 'knowledge', tab: part, only: true })}
+		chats={chats.filter((c) => !c.author).length}
+		ondeleteall={() => {
+			keepPinned = true;
+			dialog = { kind: 'deleteAll' };
+		}}
 	/>
 {:else if dialog?.kind === 'move'}
 	{@const chat = dialog.chat}
@@ -1155,6 +1174,25 @@
 		<div class="dialog-actions">
 			<button type="button" class="btn btn-danger" onclick={() => remove(chat)}
 				>{t('common.delete')}</button
+			>
+			<button type="button" class="btn" onclick={() => (dialog = null)}>{t('common.cancel')}</button
+			>
+		</div>
+	</Dialog>
+{:else if dialog?.kind === 'deleteAll'}
+	{@const own = chats.filter((c) => !c.author)}
+	{@const pinned = own.filter((c) => c.pinned).length}
+	<Dialog title={t('agent.deleteAllTitle')} onclose={() => (dialog = null)}>
+		<p>{t('agent.deleteAllText', { count: own.length })}</p>
+		{#if pinned}
+			<label class="check"
+				><input type="checkbox" bind:checked={keepPinned} />
+				<span>{t('agent.deleteAllKeepPinned', { count: pinned })}</span></label
+			>
+		{/if}
+		<div class="dialog-actions">
+			<button type="button" class="btn btn-danger" onclick={removeAll}
+				>{t('agent.deleteAllButton')}</button
 			>
 			<button type="button" class="btn" onclick={() => (dialog = null)}>{t('common.cancel')}</button
 			>
@@ -1515,7 +1553,7 @@
 		margin: 0 auto;
 	}
 	.agent.phone .dock {
-		padding: 6px 10px calc(env(safe-area-inset-bottom, 0px) + 10px);
+		padding: 4px 12px calc(env(safe-area-inset-bottom, 0px) + 8px);
 	}
 	.scrim {
 		position: fixed;
@@ -1575,5 +1613,30 @@
 		gap: var(--space-2);
 		flex-wrap: wrap;
 		margin-top: var(--space-3);
+	}
+	/* Windows of the agent (Geplant, Gedächtnis, Projekt …) slide in from
+	   the right like the settings (PLAN 56); "Animationen: Aus" and "Weniger
+	   Bewegung" leave them still. Only on /agent: TitanOS keeps its look. */
+	:global(body:has(.agent:not(.calm)) dialog.tile[open]) {
+		animation: ag-slide-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+	}
+	:global(body:has(.agent.phone:not(.calm)) dialog.tile[open]) {
+		animation-name: ag-slide-in-far;
+	}
+	@keyframes -global-ag-slide-in {
+		from {
+			transform: translateX(48px);
+			opacity: 0;
+		}
+	}
+	@keyframes -global-ag-slide-in-far {
+		from {
+			transform: translateX(100vw);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		:global(dialog.tile[open]) {
+			animation: none;
+		}
 	}
 </style>

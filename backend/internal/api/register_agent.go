@@ -20,6 +20,7 @@ func (s *Server) registerAgent(mux *routeMux) {
 
 	mux.HandleFunc("GET /api/v1/agent/chats", s.requireAgent(s.handleAgentChats))
 	mux.HandleFunc("POST /api/v1/agent/chats", s.requireAgent(s.handleAgentChatNew))
+	mux.HandleFunc("DELETE /api/v1/agent/chats", s.requireAgent(s.handleAgentChatsDelete))
 	mux.HandleFunc("GET /api/v1/agent/chats/{id}", s.requireAgent(s.handleAgentChat))
 	mux.HandleFunc("PATCH /api/v1/agent/chats/{id}", s.requireAgent(s.handleAgentChatPatch))
 	mux.HandleFunc("DELETE /api/v1/agent/chats/{id}", s.requireAgent(s.handleAgentChatDelete))

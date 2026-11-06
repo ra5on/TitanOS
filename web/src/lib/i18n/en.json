@@ -8872,5 +8872,11 @@
 	"agent.planDone": "done",
 	"agent.set.push": "Notifications",
 	"agent.set.pushSub": "On this device",
-	"agent.set.pushHint": "Switch on notifications for this device here. On an iPhone the agent from the home screen is an app of its own: it needs its own switch, even when TitanOS already gets notifications. While a chat is open on a device, no notification comes for it."
+	"agent.set.pushHint": "Switch on notifications for this device here. On an iPhone the agent from the home screen is an app of its own: it needs its own switch, even when TitanOS already gets notifications. While a chat is open on a device, no notification comes for it.",
+	"agent.deleteAll": "Delete all chats",
+	"agent.deleteAllSub": "{count} chats · you can keep pinned ones",
+	"agent.deleteAllTitle": "Delete all chats?",
+	"agent.deleteAllText": "{count} chats are deleted, also those in projects, with their attachments. Projects, memory and skills stay. Running tasks stay.",
+	"agent.deleteAllKeepPinned": "Keep pinned chats ({count})",
+	"agent.deleteAllButton": "Delete all"
 }

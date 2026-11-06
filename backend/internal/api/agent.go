@@ -395,6 +395,35 @@ func (s *Server) handleAgentChatDelete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleAgentChatsDelete deletes all chats of the account at once (PLAN
+// 56), with their attachments; pinned ones stay with keepPinned, running
+// ones always (they are counted as skipped). Projects, memory and skills
+// stay. Chats of other accounts in a shared project are never touched.
+func (s *Server) handleAgentChatsDelete(w http.ResponseWriter, r *http.Request) {
+	user := currentUser(r)
+	keepPinned := r.URL.Query().Get("keepPinned") == "true"
+	store := s.agentStore()
+	list, err := store.Chats(user.Name)
+	if err != nil {
+		agentStoreError(w, err)
+		return
+	}
+	deleted, skipped := 0, 0
+	for _, c := range list {
+		if (keepPinned && c.Pinned) || s.agentRunning(user.Name, c.ID) {
+			skipped++
+			continue
+		}
+		if err := store.DeleteChat(user.Name, c.ID); err != nil {
+			agentStoreError(w, err)
+			return
+		}
+		deleted++
+	}
+	slog.Info("agent chats deleted", "user", user.Name, "deleted", deleted, "kept", skipped)
+	writeJSON(w, http.StatusOK, map[string]int{"deleted": deleted, "kept": skipped})
+}
+
 func (s *Server) agentRunning(user, chat string) bool {
 	s.agentRT.mu.Lock()
 	defer s.agentRT.mu.Unlock()
