@@ -5,8 +5,19 @@ import { inWindow } from './frame.ts';
 
 const QUERY = '(min-width: 900px)';
 
-export const mode = $state<{ wide: boolean }>({
+/** The classic frame (head line or side bar) for the UI test scripts of the
+ * pages: they set localStorage "titanos.layout" = "classic". Not offered in the UI. */
+function classicLayout(): boolean {
+	try {
+		return localStorage.getItem('titanos.layout') === 'classic';
+	} catch {
+		return false;
+	}
+}
+
+export const mode = $state<{ wide: boolean; classic: boolean }>({
 	wide: typeof matchMedia === 'function' ? matchMedia(QUERY).matches : true,
+	classic: typeof localStorage !== 'undefined' && classicLayout(),
 });
 
 if (typeof matchMedia === 'function') {

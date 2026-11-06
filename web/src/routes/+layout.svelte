@@ -151,7 +151,7 @@
 	{/if}
 </svelte:head>
 
-{#if inWindow || (session.data?.user && mode.wide && !agentRoute)}
+{#if inWindow || (session.data?.user && mode.wide && !mode.classic && !agentRoute)}
 	<!-- The desktop (PLAN 61) draws its own wallpaper; windows show the page on the theme's colour. -->
 {:else if session.data?.user && (page.url.pathname === '/' || backgroundEverywhere)}<DashboardBackground
 		visual={shownVisual}

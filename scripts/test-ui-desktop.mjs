@@ -61,6 +61,7 @@ async function open(
 ) {
   const made = await create("owner", theme, width);
   await made.page.setViewportSize({ width, height });
+  await made.ctx.addInitScript(() => localStorage.removeItem("titanos.layout"));
   made.data.dockerContainers = containers;
   made.data.dockerApps = containers.map((c) => c.name);
   made.data.prefs.docker = {
