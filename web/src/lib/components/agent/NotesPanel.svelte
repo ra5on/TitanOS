@@ -584,6 +584,7 @@
 		inset: 0;
 		z-index: 70;
 		background: rgb(3 6 14 / 0.45);
+		-webkit-backdrop-filter: blur(6px);
 		backdrop-filter: blur(6px);
 	}
 	.notes {
@@ -597,6 +598,7 @@
 		grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
 		color: var(--text);
 		background: color-mix(in srgb, var(--surface) 82%, transparent);
+		-webkit-backdrop-filter: blur(30px) saturate(170%);
 		backdrop-filter: blur(30px) saturate(170%);
 		border-left: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
 		box-shadow: -24px 0 60px -24px rgb(0 0 0 / 0.7);

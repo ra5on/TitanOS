@@ -232,6 +232,7 @@
 		border-radius: 18px;
 		border: 1px solid var(--glass-border, var(--border));
 		background: color-mix(in srgb, var(--surface) 90%, transparent);
+		-webkit-backdrop-filter: blur(28px) saturate(170%);
 		backdrop-filter: blur(28px) saturate(170%);
 		box-shadow: 0 24px 60px -20px rgb(0 0 0 / 0.6);
 		text-align: left;
@@ -287,6 +288,7 @@
 	@media (max-width: 760px) {
 		.scrim {
 			background: rgb(0 0 0 / 0.45);
+			-webkit-backdrop-filter: blur(3px);
 			backdrop-filter: blur(3px);
 		}
 		.panel {

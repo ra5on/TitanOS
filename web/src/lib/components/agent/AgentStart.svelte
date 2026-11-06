@@ -250,6 +250,7 @@
 		border-radius: 999px;
 		border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
 		background: color-mix(in srgb, var(--surface) 45%, transparent);
+		-webkit-backdrop-filter: blur(16px);
 		backdrop-filter: blur(16px);
 		color: var(--text);
 		font: inherit;
@@ -288,6 +289,7 @@
 		border-radius: 16px;
 		border: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
 		background: color-mix(in srgb, var(--surface) 50%, transparent);
+		-webkit-backdrop-filter: blur(18px);
 		backdrop-filter: blur(18px);
 	}
 	.run.waiting {
@@ -375,6 +377,7 @@
 		border-radius: 18px;
 		border: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
 		background: color-mix(in srgb, var(--surface) calc(var(--ag-alpha, 0.55) * 100%), transparent);
+		-webkit-backdrop-filter: blur(22px) saturate(160%);
 		backdrop-filter: blur(22px) saturate(160%);
 		box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
 		color: var(--text);

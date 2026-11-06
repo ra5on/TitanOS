@@ -25,10 +25,27 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
 	event.notification.close();
-	const url = new URL(event.notification.data?.url || '/', self.location.origin).href;
+	const url = new URL(event.notification.data?.url || '/', self.location.origin);
+	const agent = (path) => path === '/agent' || path.startsWith('/agent/');
 	event.waitUntil(
 		(async () => {
 			const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+			const same = windows.filter((c) => new URL(c.url).origin === self.location.origin);
+			// The agent's message goes to an open agent window; others to any
+			// TitanOS window. The page moves itself (no reload, so nothing
+			// unsaved in an editor or a console is lost), PLAN 59.
+			const target = agent(url.pathname)
+				? same.find((c) => agent(new URL(c.url).pathname))
+				: same[0];
+			if (target) {
+				await target.focus();
+				target.postMessage({ type: 'open', url: url.pathname + url.search });
+				return;
+			}
+			await self.clients.openWindow(url.href);
+		})(),
+	);
+});
 			for (const client of windows) {
 				if (new URL(client.url).origin === self.location.origin) {
 					await client.focus();

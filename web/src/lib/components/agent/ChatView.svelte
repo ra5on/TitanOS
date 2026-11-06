@@ -524,6 +524,7 @@
 	.file,
 	.plan {
 		background: color-mix(in srgb, var(--surface) calc(var(--ag-alpha, 0.55) * 100%), transparent);
+		-webkit-backdrop-filter: blur(18px) saturate(160%);
 		backdrop-filter: blur(18px) saturate(160%);
 	}
 	.thinking {

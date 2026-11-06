@@ -133,7 +133,9 @@
 	);
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && onclose()} />
+<svelte:window
+	onkeydown={(e) => e.key === 'Escape' && !document.querySelector('dialog[open], .over-settings') && onclose()}
+/>
 
 <div class="scrim" role="presentation" onclick={onclose} transition:fly={{ duration: 0 }}></div>
 <div
@@ -458,6 +460,7 @@
 		inset: 0;
 		z-index: 70;
 		background: rgb(3 6 14 / 0.45);
+		-webkit-backdrop-filter: blur(6px);
 		backdrop-filter: blur(6px);
 	}
 	.panel {
@@ -471,6 +474,7 @@
 		flex-direction: column;
 		color: var(--text);
 		background: color-mix(in srgb, var(--surface) 78%, transparent);
+		-webkit-backdrop-filter: blur(30px) saturate(170%);
 		backdrop-filter: blur(30px) saturate(170%);
 		border-left: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
 		box-shadow: -24px 0 60px -24px rgb(0 0 0 / 0.7);

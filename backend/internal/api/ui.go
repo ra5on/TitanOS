@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"html"
 	"io/fs"
 	"net/http"
@@ -45,6 +46,7 @@ func contentSecurityPolicy(ui fs.FS) string {
 func uiHandler(ui fs.FS) http.Handler {
 	files := http.FileServerFS(ui)
 	csp := sync.OnceValue(func() string { return contentSecurityPolicy(ui) })
+	agentIndex := sync.OnceValues(func() ([]byte, error) { return agentIndexHTML(ui) })
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			w.Header().Set("Allow", "GET, HEAD")
@@ -58,6 +60,15 @@ func uiHandler(ui fs.FS) http.Handler {
 			// otherwise the browser keeps an old UI after an update.
 			w.Header().Set("Cache-Control", "no-cache")
 			w.Header().Set("Content-Security-Policy", csp())
+			if name == "agent" || strings.HasPrefix(name, "agent/") {
+				if data, err := agentIndex(); err == nil {
+					w.Header().Set("Content-Type", "text/html; charset=utf-8")
+					if r.Method == http.MethodGet {
+						_, _ = w.Write(data)
+					}
+					return
+				}
+			}
 			http.ServeFileFS(w, r, ui, "index.html")
 			return
 		}
@@ -77,4 +88,19 @@ func uiHandler(ui fs.FS) http.Handler {
 func isFile(fsys fs.FS, name string) bool {
 	info, err := fs.Stat(fsys, name)
 	return err == nil && !info.IsDir()
+}
+
+// agentIndexHTML is index.html for the KI-Agent's pages (PLAN 59): iOS
+// takes the status bar of a home-screen app from the page as it loads, so
+// the agent's picture behind the status bar has to be in the HTML, not only
+// set by the page afterwards. Opened from a notification, the agent app
+// otherwise starts with an opaque bar and its view slides down.
+func agentIndexHTML(ui fs.FS) ([]byte, error) {
+	data, err := fs.ReadFile(ui, "index.html")
+	if err != nil {
+		return nil, err
+	}
+	data = bytes.Replace(data, []byte(`name="apple-mobile-web-app-status-bar-style" content="black"`), []byte(`name="apple-mobile-web-app-status-bar-style" content="black-translucent"`), 1)
+	data = bytes.Replace(data, []byte(`content="width=device-width, initial-scale=1"`), []byte(`content="width=device-width, initial-scale=1, viewport-fit=cover"`), 1)
+	return data, nil
 }

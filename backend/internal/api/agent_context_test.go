@@ -4,7 +4,9 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 )
@@ -47,5 +49,26 @@ func TestSameModelContext(t *testing.T) {
 	s := agentSettings{Model: "gemma4:12b", Context: 32768}
 	if sameModelContext(s, "gemma4:12b") != 32768 || sameModelContext(s, "llava:latest") != 0 {
 		t.Fatal("context for picture model")
+	}
+}
+
+// PLAN 59: the agent's pages come with the translucent status bar in the
+// HTML itself (iOS reads it at load); other pages keep the black bar.
+func TestAgentIndexStatusBar(t *testing.T) {
+	ui := fstest.MapFS{"index.html": {Data: []byte(`<meta name="viewport" content="width=device-width, initial-scale=1" /><meta name="apple-mobile-web-app-status-bar-style" content="black" />`)}}
+	h := uiHandler(ui)
+	get := func(p string) string {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest("GET", p, nil))
+		return rec.Body.String()
+	}
+	if b := get("/agent?chat=x"); !strings.Contains(b, `content="black-translucent"`) || !strings.Contains(b, "viewport-fit=cover") {
+		t.Fatalf("agent page: %s", b)
+	}
+	if b := get("/settings"); strings.Contains(b, "translucent") || strings.Contains(b, "viewport-fit") {
+		t.Fatalf("TitanOS page: %s", b)
+	}
+	if b := get("/agentx"); strings.Contains(b, "translucent") {
+		t.Fatal("not an agent path")
 	}
 }

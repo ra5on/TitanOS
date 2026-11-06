@@ -257,10 +257,21 @@ func (r *Runner) Run(ctx context.Context, chat *Chat) error {
 	if maxSteps <= 0 {
 		maxSteps = 30
 	}
-	steps := 0
+	// Keeping the plan and loading tools are bookkeeping, not steps of the
+	// task (PLAN 59: small tasks were twice as long because of them).
+	// Beyond freeBookkeeping per task they count again, so that a model
+	// that only rewrites its plan still ends.
+	steps, kept := 0, 0
+	count := func(tool string) {
+		if bookkeeping(tool) && kept < freeBookkeeping {
+			kept++
+			return
+		}
+		steps++
+	}
 	for _, e := range chat.Entries[lastUserIndex(chat)+1:] {
 		if e.Role == "tool" {
-			steps++
+			count(e.Tool)
 		}
 	}
 	badCalls := 0
@@ -310,7 +321,7 @@ func (r *Runner) Run(ctx context.Context, chat *Chat) error {
 			return r.save(chat)
 		}
 		for i, call := range msg.ToolCalls {
-			steps++
+			count(call.Function.Name)
 			done, err := r.call(ctx, chat, call.Function.Name, call.Function.Arguments)
 			if err != nil {
 				return err
@@ -413,6 +424,10 @@ func (r *Runner) report(ctx context.Context, chat *Chat, ask, note, value string
 	r.setState(chat, StateIdle, "")
 	return r.save(chat)
 }
+
+const freeBookkeeping = 8
+
+func bookkeeping(tool string) bool { return tool == toolPlan || tool == toolLoad }
 
 // needsCheck: in this turn something was changed and nothing was read
 // after it, and the runner has not asked for a check yet.

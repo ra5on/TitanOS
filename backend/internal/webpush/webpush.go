@@ -117,8 +117,8 @@ type Manager struct {
 	// e.g. the KI-Agent's, PLAN 58); nil falls back to Allowed. Accounts
 	// with the role "Benutzer" get these but no notifications of the NAS.
 	Personal func(user string) bool
-	client  *http.Client
-	now     func() time.Time
+	client   *http.Client
+	now      func() time.Time
 	// checkHost decides which endpoint hosts are taken; tests replace it.
 	checkHost func(hostport string) bool
 
