@@ -132,9 +132,11 @@ func TestCovAgentMemoryAndSkillAfterUntrustedRead(t *testing.T) {
 		`{"role":"assistant","content":"Gemerkt."}`,
 	}
 	fake.mu.Unlock()
+	// The skill saved in the first chat is outside content: web tools ask
+	// in later chats, but what the person says is not marked for it.
 	clean := start("Merk dir: der Drucker steht im Flur")
-	if clean.Tainted {
-		t.Fatal("clean chat tainted")
+	if clean.Tainted || !clean.OutsideSkill {
+		t.Fatalf("clean chat: tainted %v, outside skill %v", clean.Tainted, clean.OutsideSkill)
 	}
 
 	_, body := ts.request("GET", "/api/v1/agent/memory", nil)
