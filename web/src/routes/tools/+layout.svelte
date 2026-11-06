@@ -8,6 +8,9 @@
 	let { children }: { children: Snippet } = $props();
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 	const overview = $derived(page.url.pathname.replace(/\/$/, '') === '/tools');
+	// The task manager (PLAN 61) is the one tools page users see: its
+	// overview, read only, without the sidebar of the tools.
+	const forUsers = $derived(page.url.pathname.replace(/\/$/, '') === '/tools/taskmanager');
 	// As in the settings: the sidebar starts below banners and an open
 	// terminal covers the bottom, so its height follows the space really visible.
 	let aside = $state<HTMLElement>();
@@ -57,6 +60,8 @@
 			{#if !overview}<a class="tools-back" href="/tools">‹ {t('nav.tools')}</a>{/if}
 			<div class="settings-page column">{@render children()}</div>
 		</div>
+	</div>{:else if forUsers && session.data?.user}<div class="settings-page column">
+		{@render children()}
 	</div>{:else}<p class="notice-error" role="alert">
 		{t('error.forbidden')}
 	</p>{/if}

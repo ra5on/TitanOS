@@ -29,7 +29,9 @@ type Info struct {
 	Network       *Network      `json:"network"`
 	Networks      []Network     `json:"networks"`
 	Temperatures  []Temperature `json:"temperatures"`
-	Inventory     Inventory     `json:"inventory"`
+	// Disks is the throughput per block device (diskio.go).
+	Disks     []DiskIO  `json:"disks"`
+	Inventory Inventory `json:"inventory"`
 }
 
 type CPU struct {
@@ -108,6 +110,7 @@ type Monitor struct {
 	threadUsage  []ThreadUsage
 	memory       Memory
 	cpuWatts     *float64
+	disks        []DiskIO
 }
 
 // NewMonitor starts sampling until ctx is done.
@@ -131,6 +134,7 @@ func (m *Monitor) run(ctx context.Context) {
 	prevIface := defaultRoute().iface
 	prevRx, prevTx := readNetBytes(prevIface)
 	previous := networkCounters()
+	prevDisks := readDiskCounters("/sys/block")
 	prevTime := time.Now()
 	var memoryWarning memoryWarning
 	memoryWarning.observe(m.Memory(), prevTime)
@@ -170,6 +174,9 @@ func (m *Monitor) run(ctx context.Context) {
 				}
 			}
 			previous = current
+			currentDisks := readDiskCounters("/sys/block")
+			disks := diskRates(prevDisks, currentDisks, seconds)
+			prevDisks = currentDisks
 			memory := readMemorySample()
 			memory.LowAvailable = memoryWarning.observe(memory, now)
 
@@ -185,6 +192,7 @@ func (m *Monitor) run(ctx context.Context) {
 				}
 			}
 			m.temperatures = temperatures
+			m.disks = disks
 			m.mu.Unlock()
 		}
 	}
@@ -199,7 +207,11 @@ func (m *Monitor) Info() Info {
 	threads := slices.Clone(m.threadUsage)
 	rates := m.rates
 	sampledInterface := m.network
+	disks := slices.Clone(m.disks)
 	m.mu.RUnlock()
+	if disks == nil {
+		disks = []DiskIO{}
+	}
 
 	hostname, _ := os.Hostname()
 	info := Info{
@@ -211,6 +223,7 @@ func (m *Monitor) Info() Info {
 		Image:         readImage(),
 		Stick:         Stick{Label: stickLabel, Present: exists(stickDevice)},
 		Temperatures:  append([]Temperature{}, temperatures...),
+		Disks:         disks,
 		Inventory:     systemInventory(),
 	}
 

@@ -7,6 +7,9 @@ func (s *Server) registerPower(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/system/power", s.requireAdmin(s.handlePowerStatus))
 	mux.HandleFunc("DELETE /api/v1/system/power", s.requireAdmin(s.handlePowerCancel))
 	mux.HandleFunc("POST /api/v1/system/power/now", s.requireAdmin(s.handlePowerNow))
+	// Task manager (PLAN 61): owners and administrators, never tokens/MCP.
+	mux.HandleFunc("GET /api/v1/system/processes", s.requireAdmin(s.handleProcesses))
+	mux.HandleFunc("POST /api/v1/system/processes/{pid}/signal", s.requireAdmin(s.browserOnly(s.handleProcessSignal)))
 }
 
 // registerMaintenance registers the routes of the backup of the stick, logs, the activity log, diagnostics and the about page.
