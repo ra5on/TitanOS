@@ -24,8 +24,16 @@ const (
 	StartTLS = "starttls" // plain connect, then STARTTLS (143)
 )
 
-// MaxMessage bounds one fetched mail (literals larger are refused).
-const MaxMessage = 30 << 20
+// MaxMessage bounds one fetched mail (literals larger are refused); a var
+// for tests.
+var MaxMessage = 30 << 20
+
+// ErrTooLarge: the mail is larger than MaxMessage.
+var ErrTooLarge = errors.New("IMAP: mail too large")
+
+// ErrBroken: the connection is out of step (a literal was not read) and
+// must be opened anew.
+var ErrBroken = errors.New("IMAP: connection out of step, connect anew")
 
 // Config is how to reach a mailbox.
 type Config struct {
@@ -43,9 +51,13 @@ type Config struct {
 
 // Client is one connection.
 type Client struct {
-	conn net.Conn
-	r    *bufio.Reader
-	tag  int
+	conn   net.Conn
+	r      *bufio.Reader
+	tag    int
+	broken bool
+	// UIDValidity of the selected INBOX: UIDs are only the same mail
+	// while it stays the same.
+	UIDValidity string
 }
 
 var ErrAuth = errors.New("IMAP: login refused (user or password wrong)")
@@ -132,15 +144,28 @@ func quote(s string) string {
 	return b.String()
 }
 
+// maxLine bounds one line of the server; longer ones break the connection
+// without being read into RAM first.
+const maxLine = 1 << 20
+
 func (c *Client) line() (string, error) {
-	s, err := c.r.ReadString('\n')
-	if err != nil {
-		return "", err
+	var b []byte
+	for {
+		part, err := c.r.ReadSlice('\n')
+		if len(b)+len(part) > maxLine {
+			c.broken = true
+			return "", errors.New("IMAP: line too long")
+		}
+		b = append(b, part...)
+		if err == nil {
+			break
+		}
+		if err != bufio.ErrBufferFull {
+			c.broken = true
+			return "", err
+		}
 	}
-	if len(s) > 1<<20 {
-		return "", errors.New("IMAP: line too long")
-	}
-	return strings.TrimRight(s, "\r\n"), nil
+	return strings.TrimRight(string(b), "\r\n"), nil
 }
 
 // response is the untagged lines and the literals that came with them.
@@ -155,6 +180,9 @@ func (c *Client) cmd(command string) (response, error) { return c.send(command, 
 func (c *Client) cmdSecret(command string) (response, error) { return c.send(command, true) }
 
 func (c *Client) send(command string, secret bool) (response, error) {
+	if c.broken {
+		return response{}, ErrBroken
+	}
 	c.tag++
 	tag := "T" + strconv.Itoa(c.tag)
 	verb := strings.SplitN(command, " ", 2)[0]
@@ -162,6 +190,7 @@ func (c *Client) send(command string, secret bool) (response, error) {
 		return response{}, fmt.Errorf("IMAP %s: %w", verb, err)
 	}
 	var res response
+	litTotal, lineTotal := 0, 0
 	for {
 		l, err := c.line()
 		if err != nil {
@@ -180,10 +209,18 @@ func (c *Client) send(command string, secret bool) (response, error) {
 		// A literal {n} follows the line.
 		if n, ok := literalSize(l); ok {
 			if n > MaxMessage {
-				return res, fmt.Errorf("IMAP: message larger than %d MiB", MaxMessage>>20)
+				// The literal stays unread: the stream is out of step.
+				c.broken = true
+				return res, fmt.Errorf("%w (%d MiB at most)", ErrTooLarge, MaxMessage>>20)
+			}
+			// All literals of one answer together: one mail at most.
+			if litTotal += n; litTotal > MaxMessage {
+				c.broken = true
+				return res, fmt.Errorf("%w (answer over %d MiB)", ErrTooLarge, MaxMessage>>20)
 			}
 			buf := make([]byte, n)
 			if _, err := io.ReadFull(c.r, buf); err != nil {
+				c.broken = true
 				return res, fmt.Errorf("IMAP %s: %w", verb, err)
 			}
 			res.literals = append(res.literals, buf)
@@ -192,6 +229,10 @@ func (c *Client) send(command string, secret bool) (response, error) {
 				return res, err
 			}
 			l += " " + rest
+		}
+		if lineTotal += len(l); lineTotal > 4*maxLine {
+			c.broken = true
+			return res, fmt.Errorf("%w (answer over %d MiB)", ErrTooLarge, MaxMessage>>20)
 		}
 		res.lines = append(res.lines, l)
 	}
@@ -221,8 +262,35 @@ func literalSize(l string) (int, bool) {
 
 // SelectInbox opens INBOX (read-write, so that \Seen can be set).
 func (c *Client) SelectInbox() error {
-	_, err := c.cmd("SELECT INBOX")
+	res, err := c.cmd("SELECT INBOX")
+	for _, l := range res.lines {
+		if i := strings.Index(l, "[UIDVALIDITY "); i >= 0 {
+			v := l[i+len("[UIDVALIDITY "):]
+			if j := strings.IndexByte(v, ']'); j > 0 {
+				c.UIDValidity = v[:j]
+			}
+		}
+	}
 	return err
+}
+
+// Size asks the size of a mail before it is fetched.
+func (c *Client) Size(uid uint32) (int, error) {
+	res, err := c.cmd(fmt.Sprintf("UID FETCH %d (RFC822.SIZE)", uid))
+	if err != nil {
+		return 0, err
+	}
+	for _, l := range res.lines {
+		if i := strings.Index(l, "RFC822.SIZE "); i >= 0 {
+			f := strings.FieldsFunc(l[i+len("RFC822.SIZE "):], func(r rune) bool { return r == ' ' || r == ')' })
+			if len(f) > 0 {
+				if n, err := strconv.Atoi(f[0]); err == nil && n >= 0 {
+					return n, nil
+				}
+			}
+		}
+	}
+	return 0, fmt.Errorf("IMAP: no size of mail %d", uid)
 }
 
 // Unseen returns the UIDs of the unread mails.
@@ -265,6 +333,8 @@ func (c *Client) MarkSeen(uid uint32) error {
 
 // Close logs out and closes the connection.
 func (c *Client) Close() error {
-	_, _ = c.cmd("LOGOUT")
+	if !c.broken {
+		_, _ = c.cmd("LOGOUT")
+	}
 	return c.conn.Close()
 }

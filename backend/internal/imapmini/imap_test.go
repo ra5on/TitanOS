@@ -250,3 +250,48 @@ func TestParseMail(t *testing.T) {
 		}
 	}
 }
+
+// A name with a very long "extension" must not panic (it once cut below
+// zero and took titand down with it).
+func TestSafeFileNameLongExtension(t *testing.T) {
+	name := "a." + strings.Repeat("x", 300)
+	got := SafeFileName(name, "application/pdf")
+	if len([]rune(got)) > 120 || got == "" {
+		t.Fatalf("%d %q", len(got), got)
+	}
+	if got := SafeFileName(strings.Repeat("b", 200)+".pdf", ""); !strings.HasSuffix(got, ".pdf") || len([]rune(got)) != 120 {
+		t.Fatalf("short extension: %q", got)
+	}
+}
+
+// A hostile server cannot push unbounded data into RAM: an endless line
+// and an answer with literals over the limit break the connection.
+func TestServerCannotFloodMemory(t *testing.T) {
+	for _, flood := range []string{
+		"* " + strings.Repeat("A", 2<<20) + "\r\n",
+		"* 1 FETCH (BODY[] {900}\r\n" + strings.Repeat("x", 900) + ")\r\n* 2 FETCH (BODY[] {900}\r\n" + strings.Repeat("x", 900) + ")\r\n",
+	} {
+		limit := MaxMessage
+		MaxMessage = 1000
+		server, client := net.Pipe()
+		go func() {
+			r := bufio.NewReader(server)
+			r.ReadString('\n')
+			server.Write([]byte(flood + "T1 OK\r\n"))
+			server.Close()
+		}()
+		c := &Client{conn: client, r: bufio.NewReader(client)}
+		orig := maxLineTest()
+		_, err := c.cmd("NOOP")
+		MaxMessage = limit
+		if err == nil || !c.broken {
+			t.Fatalf("accepted a flood (%d bytes): %v %d", len(flood), err, orig)
+		}
+		if _, err := c.cmd("NOOP"); err != ErrBroken {
+			t.Fatalf("used a broken connection: %v", err)
+		}
+		client.Close()
+	}
+}
+
+func maxLineTest() int { return maxLine }
