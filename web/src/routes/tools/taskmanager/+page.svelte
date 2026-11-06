@@ -13,7 +13,7 @@
 		type StorageStatus,
 		type VM,
 	} from '#lib/api.ts';
-	import { formatBytes, formatBytesOf, formatPercent } from '#lib/format.ts';
+	import { formatBytes, formatBytesOf, formatDecimal, formatPercent } from '#lib/format.ts';
 	import { apiErrorText, t, tOr } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { poll } from '#lib/poll.ts';
@@ -414,7 +414,7 @@
 							</div>
 							<div>
 								<dt>{t('taskmanager.cpu')}</dt>
-								<dd class="mono">{p.cpuPercent.toFixed(1)} %</dd>
+								<dd class="mono">{formatDecimal(p.cpuPercent, 1)} %</dd>
 							</div>
 							<div>
 								<dt>{t('taskmanager.ram')}</dt>
@@ -462,7 +462,7 @@
 								running(c) ? 'taskmanager.state.running' : 'taskmanager.state.stopped',
 							)}</span
 						>
-						<span class="mono num">{running(c) ? `${c.cpuPercent.toFixed(1)} %` : '–'}</span>
+						<span class="mono num">{running(c) ? `${formatDecimal(c.cpuPercent, 1)} %` : '–'}</span>
 						<span class="mono num">{running(c) ? formatBytes(c.memoryBytes) : '–'}</span>
 						<div class="actions">
 							{#if running(c)}
@@ -503,7 +503,7 @@
 								on ? 'taskmanager.state.running' : 'taskmanager.state.stopped',
 							)}</span
 						>
-						<span class="mono num">{on ? `${v.cpuPercent.toFixed(1)} %` : '–'}</span>
+						<span class="mono num">{on ? `${formatDecimal(v.cpuPercent, 1)} %` : '–'}</span>
 						<span class="mono num">{on ? formatBytes(v.memoryBytes) : '–'}</span>
 						<div class="actions">
 							{#if on}
@@ -536,7 +536,7 @@
 								on ? 'taskmanager.state.running' : 'taskmanager.state.stopped',
 							)}</span
 						>
-						<span class="mono num">{on ? `${c.cpuPercent.toFixed(1)} %` : '–'}</span>
+						<span class="mono num">{on ? `${formatDecimal(c.cpuPercent, 1)} %` : '–'}</span>
 						<span class="mono num">{on ? formatBytes(c.memoryBytes) : '–'}</span>
 						<div class="actions">
 							{#if on}
