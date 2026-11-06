@@ -65,17 +65,13 @@
 		},
 		// Mitteilungen auf diesem Gerät: on an iPhone the agent app from the
 		// home screen is an app of its own and needs its own subscription.
-		...(status.admin
-			? [
-					{
-						id: 'push' as const,
-						icon: 'bell' as IconName,
-						color: '#ef4444',
-						label: 'agent.set.push' as MessageKey,
-						sub: t('agent.set.pushSub'),
-					},
-				]
-			: []),
+		{
+			id: 'push' as const,
+			icon: 'bell' as IconName,
+			color: '#ef4444',
+			label: 'agent.set.push' as MessageKey,
+			sub: t('agent.set.pushSub'),
+		},
 		{ id: 'initiative', icon: 'bulb', color: '#f97316', label: 'agent.set.initiative' },
 		{ id: 'schedules', icon: 'clock', color: '#0ea5e9', label: 'agent.schedules' },
 		{ id: 'mind', icon: 'users', color: '#ec4899', label: 'agent.set.mind' },
@@ -250,7 +246,7 @@
 					<InitiativeSettings part={section} onrestart={onknow} />
 				{:else if section === 'push'}
 					<p class="pushhint">{t('agent.set.pushHint')}</p>
-					<PushDevices />
+					<PushDevices personal={!status.admin} />
 				{:else if section === 'models'}
 					<div class="grp">
 						<div class="row">

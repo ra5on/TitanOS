@@ -115,6 +115,32 @@
 		status?.context || status?.running?.find((r) => r.name === model)?.contextLength || 0,
 	);
 
+	// PLAN 59: on the phone the app follows the visible part of the screen.
+	// With the keyboard open iOS keeps the page height and pans instead; the
+	// app then sits in what is visible and the composer right on the
+	// keyboard, without the gap of the home indicator.
+	let keyboard = $state(false);
+	$effect(() => {
+		const vv = window.visualViewport;
+		if (!vv || !(app && phone)) return;
+		const root = document.documentElement;
+		const update = () => {
+			root.style.setProperty('--ag-vvh', `${vv.height}px`);
+			root.style.setProperty('--ag-vvtop', `${vv.offsetTop}px`);
+			keyboard = window.innerHeight - vv.height > 120;
+		};
+		update();
+		vv.addEventListener('resize', update);
+		vv.addEventListener('scroll', update);
+		return () => {
+			vv.removeEventListener('resize', update);
+			vv.removeEventListener('scroll', update);
+			root.style.removeProperty('--ag-vvh');
+			root.style.removeProperty('--ag-vvtop');
+			keyboard = false;
+		};
+	});
+
 	$effect(() => {
 		const query = matchMedia('(max-width: 760px)');
 		const change = () => {
@@ -824,6 +850,7 @@
 	class="agent"
 	class:app
 	class:phone
+	class:keyboard
 	class:glass={look.glass}
 	class:glow={look.glow && !calm}
 	class:calm
@@ -1414,6 +1441,14 @@
 		height: 100dvh;
 		gap: 0;
 	}
+	.agent.app.phone {
+		position: fixed;
+		top: var(--ag-vvtop, 0px);
+		left: 0;
+		right: 0;
+		height: var(--ag-vvh, 100dvh);
+		min-height: 0;
+	}
 	.layout {
 		flex: 1;
 		min-height: 0;
@@ -1562,6 +1597,9 @@
 	}
 	.agent.phone .dock {
 		padding: 4px 12px calc(env(safe-area-inset-bottom, 0px) + 8px);
+	}
+	.agent.phone.keyboard .dock {
+		padding-bottom: 6px;
 	}
 	.scrim {
 		position: fixed;

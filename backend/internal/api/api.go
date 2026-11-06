@@ -232,6 +232,7 @@ type Server struct {
 	agentStoreOnce  sync.Once
 	agentStoreOne   *agent.Store
 	agentPull       agentPull
+	agentMove       agentMoveState
 
 	loadMu      sync.Mutex
 	lastLoadTry time.Time

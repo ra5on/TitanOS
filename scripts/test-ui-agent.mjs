@@ -154,7 +154,8 @@ async function open(width, height, { theme = 'graphit', path = '/agent', look = 
 
 async function noOverflow(page, what) {
 	const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
-	assert.ok(overflow <= 1, `${what}: horizontal scroll ${overflow}`);
+	const wide = overflow > 1 ? await page.evaluate(() => [...document.querySelectorAll('body *')].filter((e) => e.getBoundingClientRect().right > innerWidth + 1 && !e.closest('.backdrop')).slice(-6).map((e) => `${e.tagName}.${e.className}`)) : [];
+	assert.ok(overflow <= 1, `${what}: horizontal scroll ${overflow} ${wide.join(' | ')}`);
 }
 
 // PLAN 55: the new parts on their own (UI_ONLY=55 runs only these).
@@ -339,7 +340,98 @@ async function plan55() {
 	}
 }
 
+
+// PLAN 58/59: where the agent keeps its data, and the phone app.
+async function plan58() {
+	const vols = [
+		{ name: 'Data', filesystem: 'ext4', sizeBytes: 8e12, freeBytes: 5.1e12, kind: 'hdd', current: false },
+		{ name: 'Fast', filesystem: 'btrfs', sizeBytes: 1e12, freeBytes: 7.2e11, kind: 'ssd', current: false },
+	];
+	// Switching on asks for the volume; SSD is preselected and recommended.
+	{
+		const { ctx, page, seen } = await open(390, 844);
+		await page.route('**/api/v1/agent/volumes', (route) => route.fulfill({ json: { volumes: vols, current: '', move: null } }));
+		await page.route('**/api/v1/agent/settings', (route) =>
+			route.request().method() === 'PUT'
+				? (seen.puts.push(route.request().postDataJSON()), route.fulfill({ json: route.request().postDataJSON() }))
+				: route.fulfill({ json: { ...settings, enabled: false, volume: '' } }),
+		);
+		await page.goto(base + '/settings/agent');
+		await page.getByRole('heading', { name: 'Speicherort' }).waitFor();
+		await page.getByText('Wird beim Einschalten gewählt.').waitFor();
+		await page.getByLabel('KI-Agent eingeschaltet').click();
+		const dialog = page.getByRole('dialog', { name: 'Wo speichert der Agent seine Daten?' });
+		await dialog.waitFor();
+		assert.ok(await dialog.getByRole('radio', { name: /Fast/ }).isChecked(), 'SSD preselected');
+		await dialog.getByText('Empfohlen').waitFor();
+		await page.waitForTimeout(300);
+		await page.screenshot({ path: `${out}/40-phone-volume-choose.png` });
+		await noOverflow(page, 'volume choice');
+		await dialog.getByRole('button', { name: 'Übernehmen' }).click();
+		assert.ok(await page.getByLabel('KI-Agent eingeschaltet').isChecked(), 'switched on after choosing');
+		await page.getByRole('button', { name: 'Speichern' }).first().click();
+		await page.waitForTimeout(300);
+		const put = seen.puts.at(-1);
+		assert.equal(put.volume, 'Fast');
+		assert.equal(put.enabled, true);
+		await ctx.close();
+	}
+	// Moving: the dialog, then the progress.
+	{
+		const { ctx, page, seen } = await open(390, 844);
+		let state = null;
+		const here = vols.map((v) => ({ ...v, current: v.name === 'Data' }));
+		await page.route('**/api/v1/agent/volumes', (route) => route.fulfill({ json: { volumes: here, current: 'Data', move: state } }));
+		await page.route('**/api/v1/agent/volume/move', (route) => {
+			if (route.request().method() === 'POST') {
+				seen.posts.push(route.request().postDataJSON());
+				state = { from: 'Data', to: 'Fast', state: 'copying', files: 812, bytes: 1.4e9, total: 3.9e9, started: at(10) };
+				return route.fulfill({ status: 202, json: { move: state } });
+			}
+			return route.fulfill({ json: { move: state } });
+		});
+		await page.route('**/api/v1/agent/settings', (route) => route.fulfill({ json: { ...settings, volume: 'Data' } }));
+		await page.goto(base + '/settings/agent');
+		await page.getByRole('heading', { name: 'Speicherort' }).waitFor();
+		await page.getByText('5,1 TB frei').first().waitFor().catch(() => {});
+		await page.getByRole('button', { name: 'Umziehen' }).click();
+		const dialog = page.getByRole('dialog', { name: 'Daten des Agenten umziehen' });
+		await dialog.waitFor();
+		await page.waitForTimeout(300);
+		await page.screenshot({ path: `${out}/41-phone-volume-move.png` });
+		await dialog.getByRole('button', { name: 'Umziehen' }).click();
+		await page.getByRole('progressbar', { name: 'Fortschritt des Umzugs' }).waitFor();
+		assert.deepEqual(seen.posts.at(-1), { to: 'Fast' });
+		await noOverflow(page, 'volume move');
+		await page.screenshot({ path: `${out}/42-phone-volume-moving.png` });
+		await ctx.close();
+	}
+	// Opened from a notification without ?app=1, the installed app stays the
+	// app: no TitanOS frame, the composer at the bottom of the screen.
+	{
+		const { ctx, page } = await open(390, 844);
+		await page.addInitScript(() => {
+			localStorage.setItem('titanos.agent.app', '1');
+			const mm = window.matchMedia.bind(window);
+			window.matchMedia = (q) => (q.includes('display-mode: standalone') ? { matches: true, media: q, addEventListener() {}, removeEventListener() {} } : mm(q));
+		});
+		await page.goto(base + '/agent?chat=' + docChat.id);
+		await page.getByRole('heading', { name: docChat.title }).waitFor();
+		const box = await page.locator('.dock').boundingBox();
+		assert.ok(box && Math.abs(box.y + box.height - 844) <= 2, `composer at the bottom: ${JSON.stringify(box)}`);
+		const top = await page.locator('header.top').boundingBox();
+		assert.ok(top && top.y <= 1, `header at the top: ${JSON.stringify(top)}`);
+		await page.screenshot({ path: `${out}/43-phone-from-notification.png` });
+		await ctx.close();
+	}
+}
+
 try {
+	await plan58();
+	if (process.env.UI_ONLY === '58') {
+		console.log('KI-Agent UI (PLAN 58) ok:', out);
+		process.exit(0);
+	}
 	await plan55();
 	if (process.env.UI_ONLY === '55') {
 		console.log('KI-Agent UI (PLAN 55) ok:', out);

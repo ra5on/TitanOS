@@ -213,6 +213,34 @@ func TestBroadcastOnlyToAllowedAccounts(t *testing.T) {
 	}
 }
 
+// PLAN 58: an account with the role "Benutzer" gets its own messages
+// (SendTo, the agent's) but none of the NAS (Broadcast).
+func TestPersonalMessagesForEveryAccount(t *testing.T) {
+	b := newBrowser(t)
+	m, server, _ := fixture(t, b)
+	m.Subscribe("bob", "b", b.subscription(server.URL+"/b"))
+	m.Allowed = func(user string) bool { return user == "alex" }
+	m.Personal = func(user string) bool { return user != "gesperrt" }
+	m.Broadcast(Message{Title: "Volume", Body: "degradiert"})
+	m.SendTo("bob", Message{Title: "KI-Agent", Body: "fertig"})
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		b.mu.Lock()
+		n := len(b.got)
+		b.mu.Unlock()
+		if n >= 1 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	time.Sleep(100 * time.Millisecond)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.got) != 1 {
+		t.Fatalf("sent %d, want only the agent's message to bob", len(b.got))
+	}
+}
+
 func TestEndpointsOnlyAtPushServices(t *testing.T) {
 	m := New(config.Open(t.TempDir()))
 	if err := m.Load(); err != nil {

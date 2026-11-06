@@ -9,6 +9,7 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import Tabs from '#lib/components/Tabs.svelte';
 	import QrCode from '#lib/components/QrCode.svelte';
+	import AgentVolume from '#lib/components/agent/AgentVolume.svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { api, type DockerStatus, type FileRoot } from '#lib/api.ts';
@@ -209,6 +210,18 @@
 		} finally {
 			saving = false;
 		}
+	}
+
+	// PLAN 58: switching the agent on asks where its data goes, once.
+	let choosingVolume = $state(false);
+	function switchOn(box: HTMLInputElement) {
+		if (!settings) return;
+		if (box.checked && !settings.volume) {
+			box.checked = false;
+			choosingVolume = true;
+			return;
+		}
+		settings.enabled = box.checked;
 	}
 
 	let pullName = $state('');
@@ -427,11 +440,23 @@
 					>
 				</div>
 				<label class="check"
-					><input type="checkbox" bind:checked={settings.enabled} /><span>{t('agent.enabled')}</span
-					></label
+					><input
+						type="checkbox"
+						checked={settings.enabled}
+						onchange={(e) => switchOn(e.currentTarget)}
+					/><span>{t('agent.enabled')}</span></label
 				>
 			</div>
 		</section>
+		<AgentVolume
+			current={settings.volume ?? ''}
+			bind:choosing={choosingVolume}
+			onchosen={(v) => {
+				settings!.volume = v;
+				settings!.enabled = true;
+			}}
+			onmoved={(v) => (settings!.volume = v)}
+		/>
 		<section class="tile panel" aria-labelledby="ag-phone">
 			<h2 class="tile-title" id="ag-phone">{t('agent.phoneApp')}</h2>
 			<p class="muted">{t('agent.phoneAppIntro')}</p>
@@ -1272,6 +1297,7 @@
 		margin: 0;
 		padding: 0;
 		min-width: 0;
+		position: relative;
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-2);

@@ -57,7 +57,7 @@ func (s *Server) newAgentStore() *agent.Store {
 		return &agent.Store{Open: func() (*os.Root, error) { return s.agentOpen() }}
 	}
 	return &agent.Store{Open: func() (*os.Root, error) {
-		if s.opts.Storage == nil {
+		if s.agentMoving() || s.opts.Storage == nil {
 			return nil, volumedata.ErrUnavailable
 		}
 		mounted := s.opts.Storage.Mounted()
@@ -436,6 +436,9 @@ func (s *Server) agentStart(user auth.User, chat *agent.Chat, work func(*agent.R
 	settings := s.agentSettings()
 	if !settings.Enabled {
 		return errors.New("the agent is switched off")
+	}
+	if s.agentMoving() {
+		return errAgentMoving
 	}
 	client, err := s.agentOllama()
 	if err != nil {

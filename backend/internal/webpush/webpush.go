@@ -113,6 +113,10 @@ type Manager struct {
 	// Allowed tells whether an account may still get notifications (owner
 	// or administrator, not locked); nil allows all.
 	Allowed func(user string) bool
+	// Personal tells whether an account may get its own messages (SendTo,
+	// e.g. the KI-Agent's, PLAN 58); nil falls back to Allowed. Accounts
+	// with the role "Benutzer" get these but no notifications of the NAS.
+	Personal func(user string) bool
 	client  *http.Client
 	now     func() time.Time
 	// checkHost decides which endpoint hosts are taken; tests replace it.
@@ -322,6 +326,13 @@ func (m *Manager) Test(ctx context.Context, user, id string, msg Message) error 
 	return m.sendTo(ctx, *target, msg)
 }
 
+func (m *Manager) personal(user string) bool {
+	if m.Personal != nil {
+		return m.Personal(user)
+	}
+	return m.Allowed == nil || m.Allowed(user)
+}
+
 // Broadcast sends a message to every device whose account may still get
 // notifications, in the background, one attempt each with one retry.
 func (m *Manager) Broadcast(msg Message) {
@@ -355,7 +366,7 @@ func (m *Manager) SendTo(user string, msg Message) {
 	devices := slices.Clone(m.st.Devices)
 	m.mu.Unlock()
 	for _, d := range devices {
-		if d.User != user || (m.Allowed != nil && !m.Allowed(d.User)) {
+		if d.User != user || !m.personal(d.User) {
 			continue
 		}
 		go func() {

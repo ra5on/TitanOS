@@ -379,6 +379,29 @@ func (m *Manager) Update(name string, share Share, volumes, users []string) erro
 	return m.save(shares)
 }
 
+// Relocate points a share at another volume, after its files were copied
+// there (the KI-Agent's move, PLAN 58). The files on the old volume stay
+// for the caller to remove; the quota id is global and stays.
+func (m *Manager) Relocate(name, volume string, volumes []string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	i := slices.IndexFunc(m.shares, func(s Share) bool { return s.Name == name })
+	if i < 0 {
+		return ErrNotFound
+	}
+	if !slices.Contains(volumes, volume) {
+		return fmt.Errorf("%w: %s", ErrUnknownVolume, volume)
+	}
+	share := m.shares[i]
+	if share.Volume == volume {
+		return nil
+	}
+	share.Volume = volume
+	shares := slices.Clone(m.shares)
+	shares[i] = share
+	return m.save(shares)
+}
+
 // GID is the group that owns the files of the shares ("users").
 func (m *Manager) GID() int { return m.gid }
 

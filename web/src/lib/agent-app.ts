@@ -4,17 +4,39 @@
 
 const KEY = 'titanos.agent.app';
 
-export function agentAppMode(url: {
-	pathname: string;
-	searchParams: { get(name: string): string | null };
-}): boolean {
+/**
+ * Whether the agent runs as its own app. Started from the home screen it
+ * has ?app=1; opened later from a notification (/agent?chat=…) or after
+ * iOS ended it, the URL lacks it. Then the app counts as the agent's when
+ * it runs standalone and was the agent's app before (PLAN 59: on iOS each
+ * home-screen app has storage of its own, so the TitanOS app is not taken
+ * for the agent's).
+ */
+export function agentAppMode(
+	url: {
+		pathname: string;
+		searchParams: { get(name: string): string | null };
+	},
+	standalone: () => boolean = isStandalone,
+): boolean {
 	if (!url.pathname.startsWith('/agent')) return false;
+	const flag = url.searchParams.get('app') === '1';
 	try {
-		if (url.searchParams.get('app') === '1') sessionStorage.setItem(KEY, '1');
-		return sessionStorage.getItem(KEY) === '1';
+		if (flag) {
+			sessionStorage.setItem(KEY, '1');
+			if (standalone()) localStorage.setItem(KEY, '1');
+		}
+		if (sessionStorage.getItem(KEY) === '1') return true;
+		return standalone() && localStorage.getItem(KEY) === '1';
 	} catch {
-		return url.searchParams.get('app') === '1';
+		return flag;
 	}
+}
+
+function isStandalone(): boolean {
+	if (typeof window === 'undefined') return false;
+	const nav = navigator as Navigator & { standalone?: boolean };
+	return nav.standalone === true || matchMedia('(display-mode: standalone)').matches;
 }
 
 /** Whether a path belongs to the KI-Agent. */

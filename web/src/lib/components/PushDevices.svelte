@@ -17,6 +17,8 @@
 		type PushDevice,
 	} from '#lib/web-push.ts';
 
+	/** For an account with the role "Benutzer": only its agent's messages (PLAN 58). */
+	let { personal = false }: { personal?: boolean } = $props();
 	let devices = $state<PushDevice[] | null>(null);
 	let publicKey = $state('');
 	let thisDevice = $state('');
@@ -120,7 +122,7 @@
 
 <section class="tile panel" id="push" aria-labelledby="push-title">
 	<h2 class="tile-title" id="push-title">{t('push.title')}</h2>
-	<p class="muted">{t('push.intro')}</p>
+	<p class="muted">{personal ? t('push.introPersonal') : t('push.intro')}</p>
 	{#if !supported && !needsHomeScreen}
 		<p class="notice-warn">{t(window.isSecureContext ? 'push.unsupported' : 'push.needsHttps')}</p>
 	{:else if needsHomeScreen}

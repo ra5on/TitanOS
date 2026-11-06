@@ -12,8 +12,10 @@ import (
 
 // Notifications on this device (Web Push, docs/WEB-PUSH.md): a browser or a
 // web app on the home screen subscribes and then gets what the bell shows,
-// from the level set under "send from". Owners and administrators only,
-// like the bell.
+// from the level set under "send from". Every account can subscribe its
+// devices (PLAN 58); what the bell shows goes only to owners and
+// administrators (webpush.Manager.Allowed), an account with the role
+// "Benutzer" gets only its own messages, those of its KI-Agent.
 
 // pushArea needs the push subscriptions and, for the test message, the
 // wording of notifications (narrow dependencies, see fansArea).
@@ -22,11 +24,11 @@ type pushArea struct {
 	notify *notify.Manager
 }
 
-func (a pushArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
-	mux.HandleFunc("GET /api/v1/notifications/push", admin(a.handlePushDevices))
-	mux.HandleFunc("POST /api/v1/notifications/push", admin(a.handlePushSubscribe))
-	mux.HandleFunc("DELETE /api/v1/notifications/push/{id}", admin(a.handlePushRemove))
-	mux.HandleFunc("POST /api/v1/notifications/push/{id}/test", admin(a.handlePushTest))
+func (a pushArea) register(mux *routeMux, user func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/notifications/push", user(a.handlePushDevices))
+	mux.HandleFunc("POST /api/v1/notifications/push", user(a.handlePushSubscribe))
+	mux.HandleFunc("DELETE /api/v1/notifications/push/{id}", user(a.handlePushRemove))
+	mux.HandleFunc("POST /api/v1/notifications/push/{id}/test", user(a.handlePushTest))
 }
 
 func (a pushArea) handlePushDevices(w http.ResponseWriter, r *http.Request) {
