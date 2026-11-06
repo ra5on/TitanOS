@@ -86,6 +86,19 @@ Aufträge laufen auf dem NAS weiter, auch wenn die Seite zu ist. Ist er fertig, 
 - **Knopf in Home Assistant:** Ein geplanter Auftrag mit Häkchen „Als Knopf in Home Assistant anbieten“ erscheint dort als Knopf (MQTT-Gruppe „KI-Agent“ unter Einstellungen › Home Assistant).
 - **Wochenbericht** (Einstellungen › KI-Agent): montags um 8 Uhr über die Benachrichtigungen, was der Agent geändert hat. Das Protokoll steht auch im Agenten.
 
+## Notizen (PLAN 57)
+
+Im Agent-Menü unter „Geplant“ öffnet **Notizen** eigene Notizen mit Ordnern (Entscheidungen des Inhabers vom 6.11.2026):
+
+- Jede Notiz ist eine Markdown-Datei, jeder Ordner ein echter Ordner unter `KI-Agent/<konto>/Notizen/`, bis vier Ebenen tief. Sie sind im Dateimanager und per SMB zu sehen, nur für das eigene Konto.
+- Bedienung:
+  - Ordner anlegen, umbenennen und löschen (samt Inhalt, mit Rückfrage).
+  - Notizen anlegen, umbenennen, in Ordner verschieben, anheften und löschen; dazu eine Suche über Titel und Anfang.
+  - Am Desktop stehen Liste und Notiz nebeneinander. Am Handy wischt die Notiz über die Liste.
+- **Formatleiste:** Überschrift, Fett, Kursiv, Liste, Checkliste (`- [ ] `), Trennlinie. Gespeichert als Markdown, von selbst nach kurzer Pause und beim Verlassen. Wurde die Datei inzwischen woanders geändert (anderes Gerät, Dateimanager), speichert TitanOS nicht darüber und bietet „Neu laden“.
+- **Der Agent** liest sie (`notes_list`, `note_read`) und schreibt mit seinen Rechten (`note_write`): Eine neue Notiz legt er ohne Nachfrage an. Ergänzen (`append`), Neuschreiben (`replace`) und Löschen (`note_delete`) sind Änderungen und fragen in der Schnellwahl „Standard“ nach. Die Namen der Notizen bekommt er wie bisher in jedem Auftrag.
+- Angeheftete merkt sich TitanOS privat in `.titanos/agent/<konto>/notes.json`. Alles geht über `os.Root`: Ein Link im Ordner führt nicht hinaus.
+
 ## Wie der Agent arbeitet (PLAN 55)
 
 Der Agent arbeitet nicht nur Frage für Frage ab. Er hält einen Auftrag selbst zusammen:

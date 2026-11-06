@@ -239,6 +239,69 @@ async function plan55() {
 		assert.equal(await os.page.evaluate(() => document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]').content), 'black', 'TitanOS keeps its bar');
 		await os.ctx.close();
 	}
+	// PLAN 57: notes with folders (in-memory API).
+	for (const [w, h, name] of [[390, 844, 'phone'], [1440, 900, 'desktop']]) {
+		const { ctx, page } = await open(w, h);
+		const files = new Map([
+			['Haushalt/Einkauf.md', '- [ ] Milch\n- [ ] Brot'],
+			['Ideen.md', '# Garten\nHochbeet bauen'],
+		]);
+		const folders = new Set(['Haushalt', 'Arbeit']);
+		const pinned = new Set(['Ideen.md']);
+		const calls = [];
+		await page.route('**/api/v1/agent/notes**', async (route) => {
+			const req = route.request();
+			const u = new URL(req.url());
+			const sub = u.pathname.replace(/.*\/agent\/notes/, '');
+			const body = req.postData() ? JSON.parse(req.postData()) : {};
+			calls.push(req.method() + ' ' + sub);
+			if (sub === '' && req.method() === 'GET') {
+				const notes = [...files].map(([p, c]) => ({ path: p, title: p.split('/').pop().replace(/\.md$/, ''), folder: p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '', modified: at(9), size: c.length, pinned: pinned.has(p), preview: c.replace(/[#\-\[\]]/g, '').trim() }));
+				return route.fulfill({ json: { folders: [...folders].sort(), notes } });
+			}
+			if (sub === '/file' && req.method() === 'GET') return route.fulfill({ json: { path: u.searchParams.get('path'), content: files.get(u.searchParams.get('path')), modified: at(9) } });
+			if (sub === '/file' && req.method() === 'PUT') { files.set(body.path, body.content); return route.fulfill({ json: { path: body.path, modified: at(10) } }); }
+			if (sub === '/folders') { folders.add(body.path); return route.fulfill({ status: 204 }); }
+			if (sub === '/move') { files.set(body.to, files.get(body.from)); files.delete(body.from); return route.fulfill({ status: 204 }); }
+			return route.fulfill({ status: 204 });
+		});
+		await page.goto(base + '/agent?app=1');
+		if (name === 'phone') await page.getByRole('button', { name: /Menü|Chats/ }).first().click();
+		await page.getByRole('button', { name: 'Notizen', exact: true }).click();
+		const panel = page.getByRole('dialog', { name: 'Notizen' });
+		await panel.getByText('Einkauf').waitFor();
+		await panel.evaluate((d) => Promise.all(d.getAnimations({ subtree: true }).map((a) => a.finished)));
+		await noOverflow(page, 'notes ' + name);
+		await page.screenshot({ path: `${out}/35-${name}-notes.png` });
+		await panel.locator('button.note', { hasText: 'Einkauf' }).click();
+		const text = panel.getByLabel('Text der Notiz');
+		await text.waitFor();
+		assert.equal(await text.inputValue(), '- [ ] Milch\n- [ ] Brot');
+		await text.press('End');
+		await text.press('ControlOrMeta+End');
+		await text.type('\nEier');
+		await panel.getByRole('button', { name: 'Checkliste' }).click();
+		for (let i = 0; i < 40 && !files.get('Haushalt/Einkauf.md').endsWith('- [ ] Eier'); i++) await page.waitForTimeout(100);
+		await panel.getByText('Gespeichert').waitFor();
+		assert.equal(files.get('Haushalt/Einkauf.md'), '- [ ] Milch\n- [ ] Brot\n- [ ] Eier', 'saved with the checklist');
+		await panel.evaluate((d) => Promise.all(d.getAnimations({ subtree: true }).map((a) => a.finished)));
+		await page.screenshot({ path: `${out}/36-${name}-note-edit.png` });
+		if (name === 'phone') {
+			await panel.getByRole('button', { name: 'Zurück' }).click();
+			await panel.getByRole('button', { name: 'Menü der Notiz Ideen' }).click();
+			await panel.getByRole('menuitem', { name: 'In Ordner verschieben' }).click();
+			await page.getByRole('dialog', { name: 'Verschieben nach' }).getByRole('button', { name: 'Arbeit' }).click();
+			await panel.locator('button.note', { hasText: 'Arbeit' }).waitFor();
+			assert.ok(files.has('Arbeit/Ideen.md') && !files.has('Ideen.md'), 'moved into the folder');
+			await panel.getByRole('button', { name: 'Neuer Ordner' }).click();
+			const dlg = page.getByRole('dialog', { name: 'Neuer Ordner' });
+			await dlg.getByLabel('Name des Ordners').fill('Urlaub');
+			await dlg.getByRole('button', { name: 'Anlegen' }).click();
+			await panel.locator('button.folder', { hasText: 'Urlaub' }).waitFor();
+			assert.ok(calls.includes('POST /folders'));
+		}
+		await ctx.close();
+	}
 	// Notifications on this device inside the agent app (own subscription on iOS).
 	{
 		const { ctx, page } = await open(390, 844);

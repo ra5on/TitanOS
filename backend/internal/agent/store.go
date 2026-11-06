@@ -774,3 +774,23 @@ func (s *Store) Attachment(user, chat, name string) ([]byte, error) {
 	}
 	return io.ReadAll(f)
 }
+
+// NotesMeta is what the notes of an account need beside their files
+// (PLAN 57): the pinned ones, by their path below Notizen/.
+type NotesMeta struct {
+	Pinned []string `json:"pinned,omitempty"`
+}
+
+// NotesMeta reads notes.json; none is an empty one.
+func (s *Store) NotesMeta(user string) (NotesMeta, error) {
+	var m NotesMeta
+	if err := s.read(user, "notes.json", &m, 1<<20); err != nil && !errors.Is(err, ErrNotFound) {
+		return m, err
+	}
+	return m, nil
+}
+
+// SaveNotesMeta writes notes.json.
+func (s *Store) SaveNotesMeta(user string, m NotesMeta) error {
+	return s.write(user, "notes.json", m)
+}

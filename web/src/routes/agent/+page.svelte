@@ -18,6 +18,7 @@
 	import ModelPicker from '#lib/components/agent/ModelPicker.svelte';
 	import ChatView from '#lib/components/agent/ChatView.svelte';
 	import Composer from '#lib/components/agent/Composer.svelte';
+	import NotesPanel from '#lib/components/agent/NotesPanel.svelte';
 	import KnowledgeDialog from '#lib/components/agent/KnowledgeDialog.svelte';
 	import LookDialog from '#lib/components/agent/LookDialog.svelte';
 	import AgentSettings from '#lib/components/agent/AgentSettings.svelte';
@@ -90,6 +91,7 @@
 		| { kind: 'rename'; chat: ChatInfo; title: string }
 		| { kind: 'delete'; chat: ChatInfo }
 		| { kind: 'deleteAll' }
+		| { kind: 'notes' }
 		| { kind: 'sheet'; project: Project }
 		| { kind: 'nas' }
 		| null
@@ -733,6 +735,10 @@
 		oneditproject: (p: Project) => (dialog = { kind: 'project', project: p }),
 		onknowledge: () => (dialog = { kind: 'knowledge', tab: 'memory' }),
 		onplanned: () => (dialog = { kind: 'knowledge', tab: 'schedules', only: true }),
+		onnotes: () => {
+			menuOpen = false;
+			dialog = { kind: 'notes' };
+		},
 		onlook: () => (dialog = { kind: 'settings', section: 'look' }),
 		onsettings: () => (dialog = { kind: 'settings' }),
 		inboxCount,
@@ -1179,6 +1185,8 @@
 			>
 		</div>
 	</Dialog>
+{:else if dialog?.kind === 'notes'}
+	<NotesPanel {calm} onclose={() => (dialog = null)} />
 {:else if dialog?.kind === 'deleteAll'}
 	{@const own = chats.filter((c) => !c.author)}
 	{@const pinned = own.filter((c) => c.pinned).length}

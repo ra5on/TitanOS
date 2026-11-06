@@ -101,6 +101,7 @@
 	}
 	const noteText: Record<string, MessageKey> = {
 		memory: 'agent.noteMemory',
+		note: 'agent.noteNote',
 		skill: 'agent.noteSkill',
 		schedule: 'agent.noteSchedule',
 		homeassistant: 'agent.noteHA',
@@ -225,7 +226,7 @@
 						<summary>{t('agent.noteEdited')}</summary>
 						<pre>{block.entry.content}</pre>
 					</details>
-				{:else if block.entry.note === 'memory' || block.entry.note === 'skill' || block.entry.note === 'schedule' || block.entry.note === 'homeassistant' || block.entry.note === 'album'}
+				{:else if block.entry.note === 'memory' || block.entry.note === 'note' || block.entry.note === 'skill' || block.entry.note === 'schedule' || block.entry.note === 'homeassistant' || block.entry.note === 'album'}
 					<span class="learn">✦ {t(noteText[block.entry.note])}: {block.entry.content}</span>
 				{:else}
 					<div class="note" class:bad={block.entry.note === 'error'}>

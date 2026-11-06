@@ -40,6 +40,8 @@ type agentTool struct {
 	plan             func(context.Context, json.RawMessage) (*toolcatalog.Action, error)
 	route            *publicRoute
 	own              func(context.Context, *agent.Chat, json.RawMessage) (agent.Outcome, error)
+	// kindOf decides the kind from the arguments (note_write: new or not).
+	kindOf func(json.RawMessage) string
 }
 
 type agentToolbox struct {
@@ -121,6 +123,9 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 	if t := b.codeTool(); t != nil {
 		add(t)
 	}
+	for _, t := range b.noteTools() {
+		add(t)
+	}
 	return b
 }
 
@@ -191,6 +196,9 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 	p := agent.Prepared{Tool: name, Args: args, Area: t.area, Untrusted: t.untrusted}
 	ctx = b.haContext(ctx, t)
 	kind := t.kind
+	if t.kindOf != nil {
+		kind = t.kindOf(args)
+	}
 	if t.plan != nil {
 		planned := args
 		var fields map[string]json.RawMessage

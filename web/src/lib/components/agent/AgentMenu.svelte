@@ -24,6 +24,7 @@
 		oneditproject,
 		onknowledge,
 		onplanned,
+		onnotes,
 		gestures = false,
 		pull = false,
 		compact = false,
@@ -53,6 +54,8 @@
 		onknowledge: () => void;
 		/** Opens the planned tasks, reminders and the morning report. */
 		onplanned: () => void;
+		/** Opens the notes (PLAN 57). */
+		onnotes?: () => void;
 		/** PLAN 53: swiping a chat aside and its menu. */
 		gestures?: boolean;
 		pull?: boolean;
@@ -209,6 +212,11 @@
 				>{t('agent.planned')}</span
 			></button
 		>
+		{#if onnotes}<button type="button" class="item" onclick={onnotes}
+				><span class="em"><Icon name="fileText" size={17} /></span><span class="name"
+					>{t('agent.notes.title')}</span
+				></button
+			>{/if}
 		{#if found}
 			<div class="group">{t('agent.found', { count: found.length })}</div>
 			{#each found as chat (chat.id)}{@render row(chat)}{:else}
