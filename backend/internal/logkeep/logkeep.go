@@ -11,6 +11,13 @@
 // A marker says that a start is running. If a later start finds the marker
 // of an earlier one, that start did not end cleanly: power cut, crash or
 // reset. Kernel crash records (pstore) are kept with it.
+//
+// A restart or shutdown asked for in TitanOS seals the start (Seal) right
+// before systemd is asked to go down, once the guests have ended: last
+// lines written, marker removed while the volume is certainly mounted.
+// Any other end (power button, UPS, systemctl in a console) is sealed when
+// titand stops; titand waits for that with a budget of its own (FinalWait),
+// not cut short by the web server's shutdown.
 package logkeep
 
 import (
@@ -42,6 +49,9 @@ const (
 	// maxStarts is how many starts are kept at most.
 	maxStarts = 50
 	marker    = "running"
+	// FinalWait bounds the last write when titand stops. titand waits at
+	// least this long for Run to return before it exits.
+	FinalWait = 20 * time.Second
 )
 
 // Unclean describes a start that did not end cleanly.
@@ -74,12 +84,68 @@ type Manager struct {
 	last    time.Time
 	urgent  chan struct{}
 	checked bool
+	// marked are the folders this start put its marker in. The volume for
+	// the logs can change while the NAS runs (an encrypted volume that is
+	// opened later sorts first); every marker of this start goes at the end.
+	marked map[string]bool
+	// sealed: the end of this start is recorded; no new marker is written
+	// until Rearm.
+	sealed bool
+	done   chan struct{}
 }
 
 // New returns a manager for the running start.
 func New(runner run.Runner) *Manager {
 	boot, _ := os.ReadFile("/proc/sys/kernel/random/boot_id")
-	return &Manager{runner: runner, pstore: "/var/lib/systemd/pstore", boot: strings.TrimSpace(string(boot)), now: time.Now, urgent: make(chan struct{}, 1)}
+	return &Manager{runner: runner, pstore: "/var/lib/systemd/pstore", boot: strings.TrimSpace(string(boot)), now: time.Now, urgent: make(chan struct{}, 1), marked: map[string]bool{}, done: make(chan struct{})}
+}
+
+// Done is closed once Run has returned, after its last write.
+func (m *Manager) Done() <-chan struct{} { return m.done }
+
+// Seal writes the last lines and removes the marker of this start, for a
+// restart or shutdown that was asked for. It is called once the guests
+// have ended and right before systemd is asked to go down. It fails when
+// the marker could not be removed (no volume mounted any more, a write
+// error): the start then still counts as not ended cleanly, which is the
+// honest answer. Lines written later are still appended.
+func (m *Manager) Seal(ctx context.Context) error {
+	m.flush(ctx)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sealed = true
+	return m.removeMarkersLocked()
+}
+
+// LetGo removes this start's marker from the volume mounted at base, for a
+// volume that is about to be locked (unmounted) while the NAS runs. The
+// next write picks the volume for the logs again and marks it.
+func (m *Manager) LetGo(base string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	dir := filepath.Join(base, Dir)
+	if !m.marked[dir] {
+		return
+	}
+	if err := removeMarker(dir); err != nil {
+		slog.Warn("start marker not removed before locking", "dir", dir, "err", err)
+		return
+	}
+	delete(m.marked, dir)
+	if m.dir == dir {
+		m.dir, m.checked = "", false
+	}
+}
+
+// Rearm undoes Seal when going down failed: the start runs on and a later
+// crash must be noticed again.
+func (m *Manager) Rearm() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sealed = false
+	if m.dir != "" {
+		m.writeMarkerLocked()
+	}
 }
 
 // Urgent asks for a write soon, for a warning or an error.
@@ -105,7 +171,8 @@ func (m *Manager) Run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			final, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer close(m.done)
+			final, cancel := context.WithTimeout(context.Background(), FinalWait)
 			m.flush(final)
 			m.finish()
 			cancel()
@@ -177,10 +244,52 @@ func (m *Manager) checkMarkerLocked() {
 			}
 		}
 	}
-	content := fmt.Sprintf("%s %s\n", m.boot, m.started.UTC().Format(time.RFC3339))
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-		slog.Warn("start marker not written", "err", err)
+	if !m.sealed {
+		m.writeMarkerLocked()
 	}
+}
+
+// writeMarkerLocked marks this start as running in the current folder.
+// A marker this start left in another folder goes: only one volume says
+// that this start runs.
+func (m *Manager) writeMarkerLocked() {
+	content := fmt.Sprintf("%s %s\n", m.boot, m.started.UTC().Format(time.RFC3339))
+	if err := os.WriteFile(filepath.Join(m.dir, marker), []byte(content), 0o600); err != nil {
+		slog.Warn("start marker not written", "err", err)
+		return
+	}
+	for dir := range m.marked {
+		if dir != m.dir && removeMarker(dir) == nil {
+			delete(m.marked, dir)
+		}
+	}
+	m.marked[m.dir] = true
+}
+
+// removeMarkersLocked removes every marker of this start. A folder that is
+// gone means its volume is no longer mounted: the marker on the disk could
+// not be removed.
+func (m *Manager) removeMarkersLocked() error {
+	var errs []error
+	for dir := range m.marked {
+		if err := removeMarker(dir); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		delete(m.marked, dir)
+	}
+	return errors.Join(errs...)
+}
+
+// removeMarker removes the marker in dir; the folder must still be there.
+func removeMarker(dir string) error {
+	if _, err := os.Stat(dir); err != nil {
+		return fmt.Errorf("logkeep: volume of %s not reachable: %w", dir, err)
+	}
+	if err := os.Remove(filepath.Join(dir, marker)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 // keepCrashLocked copies kernel crash records next to the log of the
@@ -256,11 +365,9 @@ func (m *Manager) flush(ctx context.Context) {
 func (m *Manager) finish() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.dir == "" {
-		return
-	}
-	if err := os.Remove(filepath.Join(m.dir, marker)); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		slog.Warn("start marker not removed", "err", err)
+	m.sealed = true
+	if err := m.removeMarkersLocked(); err != nil {
+		slog.Warn("start marker not removed; the next start reports an unclean end", "err", err)
 	}
 }
 
