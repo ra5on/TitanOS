@@ -315,7 +315,15 @@
 		else set.delete(name);
 		settings.users = [...set];
 	}
-	const contexts = [0, 8192, 16384, 32768, 65536, 131072];
+	// PLAN 59a: up to 256k, but never more than the model can.
+	const modelContext = $derived(
+		status?.models?.find((m) => m.name === settings?.model)?.contextLength ?? 0,
+	);
+	const contexts = $derived(
+		[0, 8192, 16384, 32768, 65536, 131072, 196608, 262144].filter(
+			(c) => c === 0 || !modelContext || c <= modelContext || c === settings?.context,
+		),
+	);
 
 	// PLAN 53: the page in tabs instead of one long column.
 	const TABS = ['overview', 'connection', 'rights', 'accounts', 'ha', 'initiative'] as const;
@@ -622,10 +630,12 @@
 						>{/each}
 				</select>
 				<span class="muted">
+					{#if modelContext}{t('agent.contextModel', { tokens: tokens(modelContext) })}{/if}
 					{#if runningContext}{t('agent.contextNow', { tokens: tokens(runningContext) })}{:else}{t(
 							'agent.contextUnknown',
 						)}{/if}
 					{t('agent.contextHint')}
+					{#if (settings.context ?? 0) > 65536}{t('agent.contextVram')}{/if}
 				</span>
 			</label>
 			<label class="stack">

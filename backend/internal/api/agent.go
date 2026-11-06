@@ -512,7 +512,7 @@ func (s *Server) agentRunner(ctx context.Context, user auth.User, settings agent
 	}
 	return &agent.Runner{
 		Ollama: client, Model: model, Think: thinkValue, Context: settings.Context, KeepAlive: settings.KeepAlive, MaxSteps: settings.MaxSteps,
-		MaxTime: time.Duration(settings.MaxMinutes) * time.Minute, Window: settings.Context, Probe: agentProbe(client, model),
+		MaxTime: time.Duration(settings.MaxMinutes) * time.Minute, Window: settings.Context, Probe: agentProbe(client, model, settings.KeepAlive),
 		LazyTools: !settings.AllTools, Delegate: !settings.NoDelegate,
 		System: s.agentPrompt(ctx, user, settings, chat, box),
 		Tools:  box,
@@ -758,19 +758,42 @@ type flushFunc func()
 func (f flushFunc) Flush() { f() }
 
 // agentProbe finds the context the model runs with right now (/api/ps),
-// for when "as set in Ollama" is chosen (PLAN 55: summarise in time).
-func agentProbe(client *agent.Ollama, model string) func(context.Context) int {
-	return func(ctx context.Context) int {
-		pctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-		list, err := client.Running(pctx)
+// for when "as set in Ollama" is chosen (PLAN 55: summarise in time). A
+// model that is not loaded is loaded first (the request would load it
+// anyway), so the first round of a task knows the window too (PLAN 59a).
+// If Ollama still reports nothing, the model's own length is the guess.
+func agentProbe(client *agent.Ollama, model, keepAlive string) func(context.Context) int {
+	same := func(name string) bool {
+		return name == model || strings.TrimSuffix(name, ":latest") == strings.TrimSuffix(model, ":latest")
+	}
+	running := func(ctx context.Context) int {
+		list, err := client.Running(ctx)
 		if err != nil {
 			return 0
 		}
 		for _, m := range list {
-			if m.Name == model || strings.TrimSuffix(m.Name, ":latest") == strings.TrimSuffix(model, ":latest") {
+			if same(m.Name) {
 				return m.ContextLength
 			}
+		}
+		return 0
+	}
+	return func(ctx context.Context) int {
+		pctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		n := running(pctx)
+		cancel()
+		if n > 0 {
+			return n
+		}
+		lctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+		defer cancel()
+		if err := client.Preload(lctx, model, keepAlive, 0); err == nil {
+			if n = running(lctx); n > 0 {
+				return n
+			}
+		}
+		if info, err := client.Show(lctx, model); err == nil {
+			return info.ContextLength
 		}
 		return 0
 	}
