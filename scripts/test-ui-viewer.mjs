@@ -333,7 +333,7 @@ const until = async (fn, what, ms = 5000) => {
     if (fn()) return;
     await sleep(50);
   }
-  assert.fail("timed out: " + what);
+  assert.fail("timed out: " + (typeof what === "function" ? what() : what));
 };
 
 // 1. A window with the remote view: picture, bar, input, quality, files, clipboard.
@@ -708,7 +708,7 @@ const until = async (fn, what, ms = 5000) => {
         .filter((m) => m.t === "mouse")
         .map((m) => m.buttons)
         .join() === "0,1,0",
-    "touch tap = click",
+    () => "touch tap = click: " + JSON.stringify(v.sent),
   );
   v.sent.length = 0;
   await touch("touchStart", [[cx - 30, cy]]);

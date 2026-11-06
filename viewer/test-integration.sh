@@ -171,6 +171,10 @@ echo "stopped after $(($(date +%s) - start)) s"
 wait $HOLD || FAIL=1
 cat "$WORK/hold.log"
 docker logs fern63-test-viewer 2>&1 | tail -n 4
+if command -v python3 >/dev/null; then # when did Chromium last write the cookie?
+	python3 -I -c 'import sqlite3,sys,datetime;[print("cookie DB: %s written %d ms before SIGTERM" % (r[0], int(sys.argv[2]) - (r[1] / 1000 - 11644473600000))) for r in sqlite3.connect(sys.argv[1]).execute("select name,last_update_utc from cookies")]' \
+		"$WORK/profile/chromium/Default/Cookies" "$STOP_MS" || true
+fi
 PROBES=$(wc -l <"$WORK/log/probe.txt")
 viewer fern63-test-viewer2
 for _ in $(seq 30); do

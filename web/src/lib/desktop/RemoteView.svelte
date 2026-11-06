@@ -560,8 +560,8 @@
 		);
 	}
 
-	function mouse(x: number, y: number, buttons: number) {
-		if (x === lastMouse.x && y === lastMouse.y && buttons === lastMouse.buttons) return;
+	function mouse(x: number, y: number, buttons: number, force = false) {
+		if (!force && x === lastMouse.x && y === lastMouse.y && buttons === lastMouse.buttons) return;
 		lastMouse = { x, y, buttons };
 		send({ t: 'mouse', x, y, buttons });
 	}
@@ -592,7 +592,7 @@
 				longPress = window.setTimeout(() => {
 					if (gesture !== 'tap' || !p) return;
 					gesture = 'done';
-					mouse(p.x, p.y, 0);
+					mouse(p.x, p.y, 0, true);
 					mouse(p.x, p.y, 2);
 					mouse(p.x, p.y, 0);
 				}, 550);
@@ -641,7 +641,7 @@
 				const p = point(event);
 				// Tap = click.
 				if (p) {
-					mouse(p.x, p.y, 0);
+					mouse(p.x, p.y, 0, true);
 					mouse(p.x, p.y, 1);
 					mouse(p.x, p.y, 0);
 				}

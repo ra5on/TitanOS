@@ -260,14 +260,9 @@
 	"desktop.widgets.size": "Change size",
 	"desktop.window.close": "Close",
 	"desktop.window.fold": "Fold side bar",
-	"desktop.window.insecureText": "The app is only reachable at {address}. A secure TitanOS page (HTTPS) may not show an unencrypted page in a window. With an HTTPS name through TitanOS it runs in the window.",
-	"desktop.window.insecureTitle": "This app cannot run in a window here",
 	"desktop.window.maximize": "Maximise",
 	"desktop.window.minimize": "Minimise",
 	"desktop.window.openTab": "Open in own tab",
 	"desktop.window.restore": "Restore",
-	"desktop.window.setupNames": "Set up HTTPS names",
-	"desktop.window.slowText": "The app does not load. Often this device does not trust the certificate (Control panel › HTTPS names: TitanOS certificate authority) or the app forbids windows.",
-	"desktop.window.unfold": "Unfold side bar",
-	"desktop.window.wait": "Keep waiting"
+	"desktop.window.unfold": "Unfold side bar"
 }

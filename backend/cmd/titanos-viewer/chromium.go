@@ -172,7 +172,7 @@ func (c *chromium) run(ctx context.Context) {
 			return
 		}
 		clearProfileLocks()
-		env := append(baseEnv(), "GTK_THEME=Adwaita")
+		env := append(baseEnv(), "GTK_THEME=Adwaita", "GSETTINGS_BACKEND=memory")
 		p, err := startProc("chromium", chromeArgs(c.cfg, c.w, c.h, c.scale), env, nil, false)
 		if err != nil {
 			c.mu.Unlock()

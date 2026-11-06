@@ -90,19 +90,25 @@ func (p *proc) exited() bool {
 }
 
 // stop sends SIGTERM to the process itself, so it can end its children
-// in order (Chromium flushes the profile), and SIGKILL to the whole
-// process group once it exited or after timeout.
+// in order, waits for it, then gives the rest of the process group the
+// remaining time to exit on its own (Chromium's network service writes
+// the cookie database after the browser process is gone) and finally
+// sends SIGKILL to the group.
 func (p *proc) stop(timeout time.Duration) {
 	if p == nil {
 		return
 	}
 	pgid := p.cmd.Process.Pid
+	deadline := time.Now().Add(timeout)
 	if !p.exited() {
 		_ = syscall.Kill(pgid, syscall.SIGTERM)
 		select {
 		case <-p.done:
 		case <-time.After(timeout):
 		}
+	}
+	for time.Now().Before(deadline) && syscall.Kill(-pgid, 0) == nil {
+		time.Sleep(50 * time.Millisecond)
 	}
 	_ = syscall.Kill(-pgid, syscall.SIGKILL)
 	<-p.done

@@ -260,14 +260,9 @@
 	"desktop.widgets.size": "Größe ändern",
 	"desktop.window.close": "Schließen",
 	"desktop.window.fold": "Seitenleiste einklappen",
-	"desktop.window.insecureText": "Die App ist nur über {address} erreichbar. Eine sichere TitanOS-Seite (HTTPS) darf keine unverschlüsselte Seite in ein Fenster holen. Mit einem HTTPS-Namen über TitanOS läuft sie im Fenster.",
-	"desktop.window.insecureTitle": "Diese App kann hier nicht im Fenster laufen",
 	"desktop.window.maximize": "Maximieren",
 	"desktop.window.minimize": "Minimieren",
 	"desktop.window.openTab": "In eigenem Tab öffnen",
 	"desktop.window.restore": "Verkleinern",
-	"desktop.window.setupNames": "HTTPS-Namen einrichten",
-	"desktop.window.slowText": "Die App lädt nicht. Oft fehlt dem Gerät das Vertrauen ins Zertifikat (Systemsteuerung › HTTPS-Namen: TitanOS-Zertifizierungsstelle) oder die App verbietet Fenster.",
-	"desktop.window.unfold": "Seitenleiste ausklappen",
-	"desktop.window.wait": "Weiter warten"
+	"desktop.window.unfold": "Seitenleiste ausklappen"
 }

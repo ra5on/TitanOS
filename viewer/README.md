@@ -13,7 +13,7 @@ captures the screen with GStreamer (H.264), the sound with PulseAudio
 | `pulse.pa` | PulseAudio: null sink `titan`, local socket only, no network modules |
 | `test-integration.sh` | end-to-end test with Docker (see below) |
 
-The package list (`name version source`) is in the image at
+The package list (`name version source source-version`) is in the image at
 `/usr/share/titanos-viewer/packages.txt` and next to the release file.
 
 ## Build
@@ -52,8 +52,10 @@ docker run -d --name titanos-viewer-<user>-<app> \
   `/tmp/titanos-viewer/policies`; `/etc/chromium/policies/managed` is a
   symlink there (made at build time).
 - `GET /healthz` (no key) answers `ok` once the agent listens.
-- `SIGTERM` (docker stop): the client gets `bye` (`stopped`), Chromium is
-  ended gracefully so the profile is flushed.
+- `SIGTERM` (docker stop): the client gets `bye` (`stopped`), Chromium gets
+  SIGTERM and its child processes up to 5 s to finish, so the cookie
+  database is written (tested: a cookie set 0.1 s before the stop is there
+  in the next container). Use `docker stop -t 10` or more.
 
 Environment:
 
@@ -102,9 +104,13 @@ Environment:
   default seccomp/AppArmor profiles deny user namespaces, and the setuid
   helper does not work with `no-new-privileges`. The container is the
   isolation boundary.
-- **Untested here:** VA-API and NVENC (no GPU on the test machine); the
-  pipelines are built per the GStreamer 1.26 element docs and fall back to
-  the CPU encoder if they fail.
+- **Cursor:** XFixes cursor changes are watched, but Chromium's cursors
+  carry no names, so only `default` is reported today.
+- **Untested here:** VA-API and NVENC encoding (the test machine has only
+  a virtio GPU without video encode); the pipelines are built per the
+  GStreamer 1.26 element docs. Tested: with `VIEWER_GPU=vaapi` (render
+  node passed in) and `nvenc` the agent falls back to the CPU encoder and
+  says `gpu: "cpu"` in `hello`.
 
 ## Test
 

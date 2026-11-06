@@ -6,7 +6,7 @@
 #
 # Writes <out-dir>/titanos-viewer-<version>.tar.zst (docker save | zstd)
 # and <out-dir>/titanos-viewer-<version>.packages.txt ("name version
-# source" of every Debian package in the image, for the license
+# source source-version" of every Debian package in the image, for the license
 # inventory). Prints the image ID as the last line. The image is tagged
 # titanos-viewer:<version>.
 #

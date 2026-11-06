@@ -17,7 +17,7 @@ RUN set -eux; \
       intel-media-va-driver mesa-va-drivers \
       fonts-noto-core fonts-noto-color-emoji; \
     mkdir -p /usr/share/titanos-viewer; \
-    dpkg-query -W -f='${Package} ${Version} ${source:Package}\n' | sort > /usr/share/titanos-viewer/packages.txt; \
+    dpkg-query -W -f='${Package} ${Version} ${source:Package} ${source:Version}\n' | sort > /usr/share/titanos-viewer/packages.txt; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/* /var/log/apt /var/log/dpkg.log; \
     fc-cache -f; \

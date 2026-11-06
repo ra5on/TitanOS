@@ -26,7 +26,7 @@ Jede Seite von TitanOS gehört zu genau einem Programm (`web/src/lib/desktop/app
 | Mein Konto | Passwort, 2FA, Passkeys, SSH-Schlüssel, WebDAV |
 | Systemsteuerung | alle übrigen Einstellungen, Startseite „Alle Einstellungen“ |
 
-Docker-Apps mit Weboberfläche (z. B. Immich) sind eigene Programme; ihr Fenster zeigt die App über ihren HTTPS-Namen (`docs/APP-LINKS.md`). Viele Geräte lösen dreiteilige `.local`-Namen nicht auf; dafür ist die „Fernansicht“ geplant (PLAN 63): TitanOS öffnet die App auf dem NAS und überträgt das Bild über die eigene Adresse. Normale Benutzer sehen nur die Programme ihrer Rolle und die Docker-Apps, die ihnen freigegeben sind (Benutzer › Programme).
+Docker-Apps mit Weboberfläche (z. B. Immich) sind eigene Programme; ihr Fenster zeigt die App seit 0.60.0 immer in der **Fernansicht** (`docs/FERNANSICHT.md`): TitanOS öffnet sie auf dem NAS in einem eigenen Browser und überträgt Bild und Ton über die TitanOS-Adresse, also auch per Cloudflare, VPN und am Handy. „In eigenem Tab öffnen“ zeigt die App weiter direkt über ihren Namen bzw. Port. Normale Benutzer sehen nur die Programme ihrer Rolle und die Docker-Apps, die ihnen freigegeben sind (Benutzer › Programme).
 
 ## Fenster
 
@@ -57,5 +57,4 @@ Docker-Apps mit Weboberfläche (z. B. Immich) sind eigene Programme; ihr Fenster
 ## Grenzen
 
 - Seiten im Fenster sind eigene Rahmen; jedes offene Fenster lädt die Oberfläche einmal (mehr Arbeitsspeicher im Browser).
-- Docker-Apps, die sich trotz Proxy nicht einbetten lassen (eigene Anmeldung über fremde Anbieter, Prüfung per JavaScript), öffnet „In eigenem Tab“. Eine reine `http://IP:Port`-Adresse kann eine HTTPS-Seite nicht im Fenster zeigen; das Fenster erklärt es.
-- Ohne vertrautes Zertifikat lädt ein App-Fenster nicht (Browser zeigen in Rahmen keine Warnung). Abhilfe: Let's Encrypt, Tailscale-Name oder die TitanOS-Zertifizierungsstelle auf dem Gerät (`docs/APP-LINKS.md`).
+- Die Fernansicht braucht einen Browser mit WebCodecs (aktuelle Chrome/Edge, Firefox ab 130, Safari ab 16.4) und HTTPS oder `localhost`; sonst erklärt das Fenster es und bietet „In eigenem Tab öffnen“. Grenzen der Fernansicht (Apps im Host-Netz, Speicher je Ansicht) in `docs/FERNANSICHT.md`.
