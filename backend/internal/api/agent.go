@@ -221,7 +221,7 @@ func (s *Server) handleAgentChatNew(w http.ResponseWriter, r *http.Request) {
 	// in its own goroutine (PLAN 59, a data race before).
 	snapshot := json.RawMessage(mustJSON(chat))
 	if err := s.agentStart(user, chat, func(rn *agent.Runner, ctx context.Context) error { return rn.Run(ctx, chat) }); err != nil {
-		writeError(w, http.StatusServiceUnavailable, "agent_unavailable", err.Error())
+		agentStartError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, snapshot)
@@ -272,7 +272,7 @@ func (s *Server) handleAgentMessage(w http.ResponseWriter, r *http.Request) {
 	// in its own goroutine (PLAN 59, a data race before).
 	snapshot := json.RawMessage(mustJSON(chat))
 	if err := s.agentStart(user, chat, func(rn *agent.Runner, ctx context.Context) error { return rn.Run(ctx, chat) }); err != nil {
-		writeError(w, http.StatusServiceUnavailable, "agent_unavailable", err.Error())
+		agentStartError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusAccepted, snapshot)
@@ -730,15 +730,20 @@ func (s *Server) handleAgentEvents(w http.ResponseWriter, r *http.Request) {
 
 // AgentInterrupted marks runs that titand did not finish (restart, app
 // update) as interrupted; it never claims they go on.
-func (s *Server) AgentInterrupted(ctx context.Context) {
+// It reports whether the agent's volume was there to look; the scheduler
+// tries again until it was (PLAN 59: an encrypted volume unlocked later).
+func (s *Server) AgentInterrupted(ctx context.Context) bool {
 	store := s.agentStore()
+	if store.Available() != nil {
+		return false
+	}
 	for _, user := range store.Accounts() {
 		list, err := store.Chats(user)
 		if err != nil {
 			continue
 		}
 		for _, info := range list {
-			if info.State != agent.StateRunning {
+			if info.State != agent.StateRunning || s.agentRunning(user, info.ID) {
 				continue
 			}
 			chat, err := store.Chat(user, info.ID)
@@ -752,6 +757,7 @@ func (s *Server) AgentInterrupted(ctx context.Context) {
 			}
 		}
 	}
+	return true
 }
 
 // AgentRunning reports whether the agent works on something right now, so
@@ -818,4 +824,13 @@ func mustJSON(v any) []byte {
 		return []byte("null")
 	}
 	return data
+}
+
+// agentStartError: a chat that already runs is a conflict, not a failure.
+func agentStartError(w http.ResponseWriter, err error) {
+	if errors.Is(err, agent.ErrBusy) {
+		writeError(w, http.StatusConflict, "agent_busy", "the agent is still working on this chat; stop it first")
+		return
+	}
+	writeError(w, http.StatusServiceUnavailable, "agent_unavailable", err.Error())
 }

@@ -35,7 +35,7 @@ type agentReactState struct {
 
 // AgentScheduler runs recurring tasks and triggers until ctx ends.
 func (s *Server) AgentScheduler(ctx context.Context) {
-	s.AgentInterrupted(ctx)
+	marked := s.AgentInterrupted(ctx)
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	for {
@@ -43,6 +43,9 @@ func (s *Server) AgentScheduler(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case now := <-ticker.C:
+			if !marked {
+				marked = s.AgentInterrupted(ctx)
+			}
 			s.agentTick(now)
 		}
 	}
