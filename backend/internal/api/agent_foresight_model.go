@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -96,13 +97,29 @@ func ring[T any](list []T, v T, max int) []T {
 	return list
 }
 
+// mergeSamples puts the kept hourly samples before the ones taken since
+// the start, oldest first, at most volsRing.
+func mergeSamples(saved, ram []monitoring.Sample) []monitoring.Sample {
+	var out []monitoring.Sample
+	for _, x := range saved {
+		if len(ram) == 0 || x.At.Before(ram[0].At) {
+			out = append(out, x)
+		}
+	}
+	out = append(out, ram...)
+	sort.SliceStable(out, func(i, j int) bool { return out[i].At.Before(out[j].At) })
+	if len(out) > volsRing {
+		out = slices.Clone(out[len(out)-volsRing:])
+	}
+	return out
+}
+
 // foresightSample takes the samples of this minute, from RAM only: the
 // monitor's values, /proc and the storage status (lsblk, mdstat, statfs of
 // mounted volumes), none of which wakes a disk.
 func (s *Server) foresightSample(now time.Time, f agentFeatures) {
 	st := s.foresight()
 	st.mu.Lock()
-	defer st.mu.Unlock()
 	if s.opts.Monitor != nil && f.Advisor.Enabled {
 		info := s.opts.Monitor.Info()
 		st.cpu = ring(st.cpu, advisor.CPUSample{At: now, Percent: info.CPU.UsagePercent}, cpuRing)
@@ -118,15 +135,20 @@ func (s *Server) foresightSample(now time.Time, f agentFeatures) {
 		}
 	}
 	if s.opts.Storage == nil || now.Sub(st.statAt) < statEvery {
+		st.mu.Unlock()
 		return
 	}
 	st.statAt = now
+	st.mu.Unlock()
+	// The status is read without the lock: it may take a while.
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	status, err := s.opts.Storage.Status(ctx)
 	if err != nil {
 		return
 	}
+	st.mu.Lock()
+	defer st.mu.Unlock()
 	for _, v := range status.Volumes {
 		if v.Sync != nil && v.Sync.SpeedBytesPerSecond > 0 && (v.State == storage.VolumeRebuilding || v.State == storage.VolumeSyncing || v.State == storage.VolumeChecking) {
 			st.measured[v.Name] = v.Sync.SpeedBytesPerSecond

@@ -49,6 +49,9 @@ func TestDiskPrediction(t *testing.T) {
 		{"old disk", hdd("sdh", nil, Sample{PowerOnHours: ph(50000), Reallocated: p64(0)}), LevelWatch, CodeOld, ""},
 		{"smart failed", Disk{Name: "sdi", Kind: "hdd", Known: true, SmartFailed: true}, LevelFail, CodeSmartFailed, ""},
 		{"never read", Disk{Name: "sdj", Kind: "hdd"}, LevelWatch, CodeNoSmart, ""},
+		{"asleep since start, judged from the history", Disk{Name: "sdl", Kind: "hdd", History: history(30, func(i int, s *Sample) {
+			s.Reallocated, s.Pending = p64(uint64(i/3)), p64(2)
+		})}, LevelFail, CodeSectorsRising, ""},
 		{"uncorrectable rising", hdd("sdk", history(10, func(i int, s *Sample) { s.Uncorrectable = p64(uint64(i / 3)) }), Sample{Uncorrectable: p64(5)}), LevelFail, CodeUncorrectable, ""},
 	}
 	for _, c := range cases {
@@ -127,7 +130,7 @@ func TestBottlenecks(t *testing.T) {
 	if v := byArea[AreaVolume]; v.Level != LevelTight || v.Code != CodeVolumeFilling || *v.Days != 35 {
 		t.Fatalf("volume %+v %v", v, *v.Days)
 	}
-	if g := byArea[AreaGPU]; g.Level != LevelOK || *g.Bytes != 12.6e9 {
+	if g := byArea[AreaGPU]; g.Level != LevelOK || *g.Bytes != 12.6e9 || !g.Ollama {
 		t.Fatalf("gpu %+v", g)
 	}
 	if c := byArea[AreaCPU]; c.Level != LevelOK {
@@ -180,7 +183,7 @@ func TestCPUAndHeat(t *testing.T) {
 	}
 	// GPU full, reported without Ollama.
 	total, used := 8e9, 7.9e9
-	if g, _ := judgeGPU(GPU{Name: "x", Total: &total, UsedBytes: &used}); g.Code != CodeGPUFull {
+	if g, _ := judgeGPU(GPU{Name: "x", Total: &total, UsedBytes: &used}); g.Code != CodeGPUFull || g.Ollama {
 		t.Fatalf("gpu %+v", g)
 	}
 	// A GPU without memory figures says nothing (never zero).

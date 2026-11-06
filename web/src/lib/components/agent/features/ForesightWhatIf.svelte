@@ -48,11 +48,17 @@
 
 	$effect(() => {
 		const sc = scenario;
+		const key = scenarioKey(sc);
 		result = null;
 		error = '';
+		// A late answer for a scenario no longer chosen is dropped.
 		playWhatIf(sc)
-			.then((r) => (result = r))
-			.catch((e) => (error = apiErrorText(e)));
+			.then((r) => {
+				if (key === current) result = r;
+			})
+			.catch((e) => {
+				if (key === current) error = apiErrorText(e);
+			});
 	});
 
 	function optionLabel(s: Scenario) {

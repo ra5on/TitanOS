@@ -98,7 +98,10 @@
 				text =
 					f.bytes == null
 						? tk('c.gpuUnknown', { total })
-						: tk(f.code === 'gpuFull' ? 'c.gpuFull' : 'c.gpuOllama', { used, total });
+						: tk(f.code === 'gpuFull' ? 'c.gpuFull' : f.ollama ? 'c.gpuOllama' : 'c.gpuOK', {
+								used,
+								total,
+							});
 				break;
 			}
 			default:
@@ -147,7 +150,7 @@
 			{#if view?.saved?.offers?.[f.subject]?.length}
 				<small>{tk('offers')}</small>
 				<ul class="offers">
-					{#each view.saved.offers[f.subject] as o (o.url)}
+					{#each view.saved.offers[f.subject] as o, i (i)}
 						<li>
 							<a href={o.url} target="_blank" rel="noopener noreferrer nofollow">{o.title}</a
 							>{#if o.price}<span class="price"> · {o.price} €</span>{/if}

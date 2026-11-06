@@ -99,7 +99,8 @@ Daten:
 - Arbeitsspeicher alle 10 Minuten (verfügbar, PSI-Druck, Swap aus
   `/proc/meminfo`), CPU jede Minute, beides aus dem RAM des Monitors, Ringe im
   RAM (1 Tag CPU, 7 Tage Speicher).
-- Volume-Belegung stündlich (30 Tage, mit dem Bericht gespeichert); Wachstum
+- Volume-Belegung stündlich (30 Tage, mit dem Bericht gespeichert und nach
+  einem Neustart mit den neuen Proben zusammengeführt); Wachstum
   mit der Regression von `monitoring.CapacityTrends`, bei eingeschaltetem
   längerem Monitoring dessen Trend.
 - Grafikkarte: `Accelerators.Snapshot()` (fehlende Werte bleiben „unbekannt“,
@@ -140,6 +141,11 @@ ein Lauf jetzt. API: `GET /api/v1/agent/advisor`, `POST /api/v1/agent/advisor/ru
   und Platten ab. Gemessen heißt: auf diesem Volume zuletzt gesehen.
 - RAID 10: welches Spiegelpaar betroffen ist, wird nicht ausgelesen.
 - Freigabe-Größen ohne Sicherung sind nicht bekannt (kein Scan im Hintergrund).
+- In den ersten Minuten nach dem Start kennt titand die Zustände der
+  Sicherungen noch nicht (die Sicherung liest sie ab der dritten Minute);
+  bis dahin zeigt Durchspielen „Stand gerade nicht bekannt“ statt „gesichert“.
+- Eine Platte, die seit dem Start schläft, wird mit dem neuesten Tag ihres
+  SMART-Verlaufs beurteilt; ohne Verlauf heißt es „keine SMART-Werte“.
 - Die Vorhersage ist eine Faustregel aus Trends, keine Garantie; ohne Verlauf
   ist sie schwächer.
 - Nicht getestet: echte Platten, echtes mdadm/Btrfs, echte Grafikkarte, echtes

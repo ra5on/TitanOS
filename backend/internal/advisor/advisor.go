@@ -8,7 +8,9 @@ package advisor
 
 import (
 	"math"
+	"slices"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -178,6 +180,8 @@ type Finding struct {
 	Volume    string `json:"volume,omitempty"`
 	// Label is the sensor of a temperature.
 	Label string `json:"label,omitempty"`
+	// Ollama: Bytes of a graphics card is what Ollama's models take.
+	Ollama bool `json:"ollama,omitempty"`
 }
 
 // Report is the result of one run, worst first.
@@ -323,8 +327,13 @@ const hoursOld = 5 * 24 * 365
 func JudgeDisk(d Disk, now time.Time) Finding {
 	f := Finding{Area: AreaDisk, Subject: d.Name, Level: LevelOK, Code: CodeDiskOK, Model: d.Model, Kind: d.Kind, SizeBytes: d.SizeBytes, Volume: d.Volume}
 	if !d.Known {
-		f.Level, f.Code = LevelWatch, CodeNoSmart
-		return f
+		if len(d.History) == 0 {
+			f.Level, f.Code = LevelWatch, CodeNoSmart
+			return f
+		}
+		// Asleep since the start: the newest kept day stands for today.
+		newest := slices.MaxFunc(d.History, func(a, b Sample) int { return strings.Compare(a.Day, b.Day) })
+		d.Current = newest
 	}
 	s := series(d, now)
 	weeks := weeksOf(s)
@@ -548,7 +557,7 @@ func judgeGPU(g GPU) (Finding, bool) {
 		used = f64(float64(*g.OllamaBytes))
 	}
 	if g.OllamaBytes != nil {
-		f.Bytes = f64(float64(*g.OllamaBytes))
+		f.Bytes, f.Ollama = f64(float64(*g.OllamaBytes)), true
 	} else if used != nil {
 		f.Bytes = f64(*used)
 	}

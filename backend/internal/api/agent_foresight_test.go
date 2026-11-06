@@ -16,6 +16,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/backup"
+	"github.com/ra5on/TitanOS/backend/internal/monitoring"
 	"github.com/ra5on/TitanOS/backend/internal/whatif"
 )
 
@@ -93,6 +94,19 @@ func TestForesightOffByDefaultAndRights(t *testing.T) {
 		if res, _ := ts.do(guest, r.method, "/api/v1"+r.path, map[string]any{"kind": "disk", "disk": "sda"}); res.StatusCode != http.StatusForbidden {
 			t.Fatalf("user %s: %d", r.path, res.StatusCode)
 		}
+	}
+	// An administrator who is not the owner may.
+	ts.users.Create("admin2", testPassword, auth.RoleAdmin)
+	admin := ts.newClient()
+	ts.do(admin, "POST", "/api/v1/login", credentials{Name: "admin2", Password: testPassword})
+	for _, r := range []struct{ method, path string }{{"GET", "/agent/whatif"}, {"GET", "/agent/advisor"}} {
+		if res, body := ts.do(admin, r.method, "/api/v1"+r.path, nil); res.StatusCode != http.StatusOK {
+			t.Fatalf("admin %s: %d %s", r.path, res.StatusCode, body)
+		}
+	}
+	admin2, _ := ts.users.Get("admin2")
+	if tools := toolNames(ts, admin2); tools["whatif"] == nil || tools["hardware_advice"] == nil {
+		t.Fatal("administrator lacks the tools")
 	}
 	gast, _ := ts.users.Get("gast")
 	if tools := toolNames(ts, gast); tools["whatif"] != nil || tools["hardware_advice"] != nil {
@@ -307,5 +321,35 @@ func TestAdvisorNightly(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	if saved, _ := ts.server.advisorReport(); !saved.LastRun.Equal(night) {
 		t.Fatal("ran twice")
+	}
+}
+
+func TestAdvisorKeepsGrowthAndWords(t *testing.T) {
+	now := time.Now()
+	var saved []monitoring.Sample
+	for i := range 30 {
+		saved = append(saved, monitoring.Sample{At: now.Add(time.Duration(i-40) * time.Hour)})
+	}
+	ram := []monitoring.Sample{{At: now.Add(-time.Hour)}, {At: now}}
+	// A kept sample from after the start is not taken twice.
+	merged := mergeSamples(append(saved, monitoring.Sample{At: now}), ram)
+	if len(merged) != 32 || !merged[0].At.Equal(saved[0].At) || !merged[31].At.Equal(now) {
+		t.Fatalf("merged %d", len(merged))
+	}
+	for i := 1; i < len(merged); i++ {
+		if merged[i].At.Before(merged[i-1].At) {
+			t.Fatal("not in order")
+		}
+	}
+	text := advisorText(advisor.Report{Findings: []advisor.Finding{
+		{Area: advisor.AreaDisk, Subject: "sda", Level: advisor.LevelFail, Code: advisor.CodeSectorsRising},
+		{Area: advisor.AreaMemory, Subject: "memory", Level: advisor.LevelTight, Code: advisor.CodeMemoryTight},
+		{Area: advisor.AreaGPU, Subject: "RTX", Level: advisor.LevelOK, Code: advisor.CodeGPUOK},
+	}})
+	if !strings.Contains(text, "Platte sda: umgelagerte Sektoren steigen (fällt wahrscheinlich aus)") || !strings.Contains(text, "Arbeitsspeicher: zeitweise knapp (eng)") || strings.Contains(text, "RTX") || strings.Contains(text, "sectorsRising") {
+		t.Fatalf("monthly text:\n%s", text)
+	}
+	if advisorText(advisor.Report{}) == "" {
+		t.Fatal("empty report text")
 	}
 }

@@ -55,7 +55,7 @@ const advisorView = (prices = false) => ({
 			{ area: 'disk', subject: 'sda', level: 'fail', code: 'sectorsRising', also: ['pendingRising'], from: 0, to: 4, weeks: 6, hours: 36800, model: 'WDC WD80EFZZ', kind: 'hdd', sizeBytes: 8e12, volume: 'Data' },
 			{ area: 'memory', subject: 'memory', level: 'tight', code: 'memoryTight', percent: 92, totalBytes: 17179869184, suggestBytes: 17179869184 },
 			{ area: 'volume', subject: 'Fast', level: 'tight', code: 'volumeFilling', percent: 87, days: 35, bytes: 3.7e9, volume: 'Fast' },
-			{ area: 'gpu', subject: 'RTX 5060 Ti', level: 'ok', code: 'gpuOK', percent: 79, bytes: 12.6e9, totalBytes: 16e9 },
+			{ area: 'gpu', subject: 'RTX 5060 Ti', level: 'ok', code: 'gpuOK', percent: 79, bytes: 12.6e9, totalBytes: 16e9, ollama: true },
 			{ area: 'temperature', subject: 'temperatures', level: 'ok', code: 'tempsOK' },
 			{ area: 'disk', subject: 'sdb', level: 'ok', code: 'diskOK', hours: 9000 },
 		] },

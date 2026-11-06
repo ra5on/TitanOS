@@ -65,9 +65,7 @@ func (s *Server) advisorLoad() {
 	defer st.mu.Unlock()
 	st.loaded = true
 	st.saved = saved
-	if len(st.vols) == 0 {
-		st.vols = saved.Volumes
-	}
+	st.vols = mergeSamples(saved.Volumes, st.vols)
 	for k, v := range saved.Measured {
 		if _, ok := st.measured[k]; !ok {
 			st.measured[k] = v
@@ -193,6 +191,9 @@ func (s *Server) advisorOffers(ctx context.Context, report advisor.Report) map[s
 			continue
 		}
 		for _, r := range results {
+			if r.URL == "" {
+				continue
+			}
 			offer := advisorOffer{Title: r.Title, URL: r.URL}
 			if m := priceRe.FindStringSubmatch(r.Title + " " + r.Snippet); m != nil {
 				offer.Price = strings.TrimSpace(m[1] + m[2] + m[3])
@@ -224,6 +225,37 @@ func replacementQuery(f advisor.Finding) string {
 	return fmt.Sprintf("%s%s %s Preis", f.Model, size, kind)
 }
 
+// advisorWords are the findings in the words of the monthly report.
+var advisorWords = map[string]string{
+	advisor.CodeSmartFailed:   "meldet selbst einen Fehler (SMART)",
+	advisor.CodeSectorsRising: "umgelagerte Sektoren steigen",
+	advisor.CodePendingRising: "schwebende Sektoren steigen",
+	advisor.CodeMediaRising:   "Medienfehler steigen",
+	advisor.CodeWornOut:       "ist bald abgenutzt",
+	advisor.CodeSectorsStable: "hat umgelagerte Sektoren (gleichbleibend)",
+	advisor.CodePending:       "hat schwebende Sektoren",
+	advisor.CodeUncorrectable: "hat nicht korrigierbare Lesefehler",
+	advisor.CodeWear:          "ist stark abgenutzt",
+	advisor.CodeOld:           "ist lange in Betrieb",
+	advisor.CodeCable:         "CRC-Fehler steigen, Kabel prüfen",
+	advisor.CodeSpareLow:      "Reserve-Speicher unter der Schwelle",
+	advisor.CodeNoSmart:       "keine SMART-Werte",
+	advisor.CodeMemoryTight:   "zeitweise knapp",
+	advisor.CodeMemorySwap:    "das NAS lagert aus",
+	advisor.CodeVolumeFilling: "wird bei jetzigem Wachstum bald voll",
+	advisor.CodeVolumeFull:    "ist fast voll",
+	advisor.CodeVolumeHigh:    "ist zu über 85 % voll",
+	advisor.CodeCPUBusy:       "stundenlang stark ausgelastet",
+	advisor.CodeGPUFull:       "Grafikspeicher voll",
+	advisor.CodeTempHot:       "zu heiß",
+	advisor.CodeTempWarm:      "warm",
+}
+
+var advisorAreas = map[string]string{
+	advisor.AreaDisk: "Platte", advisor.AreaMemory: "Arbeitsspeicher", advisor.AreaVolume: "Volume",
+	advisor.AreaCPU: "Prozessor", advisor.AreaGPU: "Grafikkarte", advisor.AreaTemperature: "Temperaturen",
+}
+
 // advisorText is the monthly report (German, like the weekly report).
 func advisorText(r advisor.Report) string {
 	var lines []string
@@ -231,7 +263,25 @@ func advisorText(r advisor.Report) string {
 		if f.Level == advisor.LevelOK {
 			continue
 		}
-		lines = append(lines, fmt.Sprintf("- %s %s: %s (%s)", f.Area, f.Subject, f.Code, f.Level))
+		what := advisorWords[f.Code]
+		if what == "" {
+			what = f.Code
+		}
+		subject := advisorAreas[f.Area]
+		if f.Area == advisor.AreaDisk || f.Area == advisor.AreaVolume || f.Area == advisor.AreaGPU {
+			subject += " " + f.Subject
+		}
+		if f.Area == advisor.AreaTemperature && f.Label != "" {
+			subject += " (" + f.Label + ")"
+		}
+		mark := "ansehen"
+		switch f.Level {
+		case advisor.LevelFail:
+			mark = "fällt wahrscheinlich aus"
+		case advisor.LevelTight:
+			mark = "eng"
+		}
+		lines = append(lines, fmt.Sprintf("- %s: %s (%s)", subject, what, mark))
 	}
 	if len(lines) == 0 {
 		return "Der Hardware-Berater hat diesen Monat nichts Auffälliges gefunden."

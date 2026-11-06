@@ -93,6 +93,7 @@ export type Finding = {
 	sizeBytes?: number;
 	volume?: string;
 	label?: string;
+	ollama?: boolean;
 };
 export type Offer = { title: string; url: string; price?: string };
 export type AdvisorView = {
