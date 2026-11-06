@@ -595,6 +595,8 @@ export type AppProxyRoute = {
 	/** Full domains of their own, e.g. photos.example.org. */
 	domains?: string[];
 	urls: string[];
+	/** Made automatically for an app with a WebUI (PLAN 61); kept in RAM only. */
+	auto?: boolean;
 	/** The route's own device in the tailnet (0.30.0 and later). */
 	tailnet?: {
 		state: 'starting' | 'login' | 'running' | 'https-off' | 'stopped' | 'error';
@@ -614,6 +616,8 @@ export type AppProxyStatus = {
 	off?: boolean;
 	targets?: AppProxyRoute[];
 	tailnet?: { available: boolean; keySet: boolean };
+	/** "Automatisch für alle Apps mit WebUI" (PLAN 61). */
+	auto?: boolean;
 };
 
 export type DockerStatus = {

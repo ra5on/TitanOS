@@ -30,3 +30,15 @@ export function tailnetHost(status: TailnetStatus | null): string {
 		''
 	);
 }
+
+/**
+ * A link to an app's HTTPS name through TitanOS (PLAN 61): the NAS first
+ * hands the browser a short pass for the app's browser gate, then sends it
+ * on to url. open turns an API path into an address (apiPath).
+ */
+export function gatedAppURL(app: string, url: string, open: (path: string) => string): string {
+	const href = publicURL(url);
+	if (!href || !/^[a-z0-9][a-z0-9_-]{0,31}$/.test(app)) return href;
+	const host = new URL(href).hostname;
+	return `${open(`/apps/${encodeURIComponent(app)}/open`)}?host=${encodeURIComponent(host)}`;
+}

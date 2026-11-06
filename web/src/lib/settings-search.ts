@@ -73,7 +73,11 @@ const keywords: Record<string, string> = {
 	agent:
 		'ki agent assistent ai ollama chat projekte modell denken kontext rechte ablageorte gedächtnis skills zeitplan home assistant assist',
 	proxy:
-		'proxy reverse https name namen domain mdns avahi app apps adresse address docker zertifikat certificate',
+		'proxy reverse https name namen domain mdns avahi app apps adresse address docker zertifikat certificate automatisch automatic webui zertifizierungsstelle certificate authority ca installieren install',
+	'proxy-ca':
+		'zertifizierungsstelle certificate authority ca root stammzertifikat installieren install iphone ipad android windows macos linux',
+	programs:
+		'programme programs apps app docker rechte rights benutzer user users konto account erlauben allow sperre lock arbeitsplatz desktop fenster window browser anmeldung login',
 };
 
 function normalize(text: string): string {
@@ -101,6 +105,7 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 		{ id: 'hostname', label: 'netcfg.hostname', href: '/settings/network#net-system' },
 		{ id: 'dns', label: 'netcfg.dns', href: '/settings/network#network-dns' },
 	],
+	proxy: [{ id: 'proxy-ca', label: 'appaccess.caTitle', href: '/settings/proxy#proxy-ca' }],
 	letsencrypt: [
 		{
 			id: 'letsencrypt-status',
@@ -316,6 +321,7 @@ export const settingsAreas: SettingsArea[] = [
 		newSince: { version: '0.38.0', date: '2026-10-30' },
 	},
 	{ id: 'access', label: 'access.title', group: 'security', icon: 'lock', admin: true },
+	{ id: 'programs', label: 'appaccess.title', group: 'security', icon: 'grid', admin: true },
 	{
 		id: 'firewall',
 		label: 'firewall.title',

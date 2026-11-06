@@ -100,6 +100,7 @@ test('the settings navigation sorts groups and entries A–Z and filters by role
 		'network',
 		'notifications',
 		'power-button',
+		'programs',
 		'proxy',
 		'services',
 		'temperatures',

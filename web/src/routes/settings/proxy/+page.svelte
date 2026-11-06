@@ -20,6 +20,8 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import ProxyRouteFields from '#lib/components/ProxyRouteFields.svelte';
+	import { apiPath } from '#lib/cluster-node.ts';
+	import { formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 
 	type Kind = 'app' | 'target';
@@ -45,6 +47,10 @@
 	let tailnetBusy = $state(false);
 	let tailnetError = $state('');
 	let tailnetNotice = $state('');
+	let autoBusy = $state(false);
+	let autoError = $state('');
+	type CAInfo = { available: boolean; name?: string; fingerprint?: string; notAfter?: string };
+	let ca = $state<CAInfo | null>(null);
 
 	const apps = $derived(status?.apps ?? []);
 	const targets = $derived(status?.targets ?? []);
@@ -91,6 +97,12 @@
 		}
 	}
 	onMount(load);
+	onMount(() => {
+		api.get<CAInfo>('/certs/ca').then(
+			(info) => (ca = info),
+			() => (ca = { available: false }),
+		);
+	});
 
 	function path(kind: Kind, key: string) {
 		return `/docker/proxy/${kind === 'app' ? 'apps' : 'targets'}/${encodeURIComponent(key)}`;
@@ -127,6 +139,19 @@
 			offError = failure(err);
 		} finally {
 			offBusy = false;
+		}
+	}
+
+	async function setAuto(auto: boolean) {
+		if (autoBusy) return;
+		autoBusy = true;
+		autoError = '';
+		try {
+			take(await api.put<AppProxyStatus>('/docker/proxy', { auto }));
+		} catch (err) {
+			autoError = failure(err);
+		} finally {
+			autoBusy = false;
 		}
 	}
 
@@ -249,6 +274,7 @@
 			<div class="route-name">
 				<strong>{name}</strong>
 				{#if !route.enabled}<span class="chip">{t('proxy.off')}</span>{/if}
+				{#if route.auto}<span class="chip">{t('appaccess.autoChip')}</span>{/if}
 				{#if !route.localOnly || route.networks?.length}<span
 						class="chip"
 						class:warn={!route.localOnly && !route.networks?.length}>{access(route)}</span
@@ -312,17 +338,19 @@
 						href="/docker/apps/{encodeURIComponent(route.app)}#h-proxy"
 						onclick={close}><Icon name="external" size={16} /><span>{t('proxy.edit')}</span></a
 					>{/if}
-				<hr />
-				<button
-					type="button"
-					role="menuitem"
-					class="danger"
-					onclick={() => {
-						close();
-						error = '';
-						removing = { kind, route };
-					}}><Icon name="trash" size={16} /><span>{t('proxy.remove')}</span></button
-				>
+				{#if !route.auto}
+					<hr />
+					<button
+						type="button"
+						role="menuitem"
+						class="danger"
+						onclick={() => {
+							close();
+							error = '';
+							removing = { kind, route };
+						}}><Icon name="trash" size={16} /><span>{t('proxy.remove')}</span></button
+					>
+				{/if}
 			{/snippet}
 		</Dropdown>
 	</div>
@@ -362,6 +390,20 @@
 
 	<section class="tile panel" aria-labelledby="proxy-apps">
 		<h2 class="tile-title" id="proxy-apps">{t('proxy.appsTitle')}</h2>
+		{#if status.auto !== undefined}
+			<div class="option">
+				<label class="check"
+					><input
+						type="checkbox"
+						checked={status.auto}
+						disabled={autoBusy || status.off}
+						onchange={(event) => setAuto(event.currentTarget.checked)}
+					/><span>{t('appaccess.autoNames')}</span></label
+				>
+				<p class="muted hint">{t('appaccess.autoNamesHint')}</p>
+				{#if autoError}<p class="notice-error" role="alert">{autoError}</p>{/if}
+			</div>
+		{/if}
 		{#each apps as route (route.app)}
 			{@render routeRow('app', route)}
 		{:else}
@@ -488,6 +530,50 @@
 				{#if tailnetNotice}<span class="muted" role="status">{tailnetNotice}</span>{/if}
 			</div>
 		</form>
+	{/if}
+
+	{#if ca}
+		<section class="tile panel" aria-labelledby="proxy-ca">
+			<h2 class="tile-title" id="proxy-ca">{t('appaccess.caTitle')}</h2>
+			<p class="hint">{t('appaccess.caIntro')}</p>
+			<p class="muted hint">{t('appaccess.caNotNeeded')}</p>
+			{#if ca.available}
+				<dl class="facts">
+					<div>
+						<dt>{t('appaccess.caName')}</dt>
+						<dd>{ca.name}</dd>
+					</div>
+					{#if ca.notAfter}<div>
+							<dt>{t('appaccess.caUntil')}</dt>
+							<dd>{formatDateTime(new Date(ca.notAfter))}</dd>
+						</div>{/if}
+					<div>
+						<dt>{t('appaccess.caFingerprint')}</dt>
+						<dd class="mono fingerprint">{ca.fingerprint}</dd>
+					</div>
+				</dl>
+				<div class="row-actions">
+					<a class="btn btn-primary" href={apiPath('/certs/ca.crt')} download
+						>{t('appaccess.caDownloadCrt')}</a
+					>
+					<a class="btn" href={apiPath('/certs/ca.cer')} download>{t('appaccess.caDownloadCer')}</a>
+				</div>
+				<details class="explain">
+					<summary>{t('appaccess.caHowTitle')}</summary>
+					<dl class="howto">
+						{#each ['Windows', 'Mac', 'Ios', 'Android', 'Linux'] as const as os (os)}
+							<div>
+								<dt>{t(`appaccess.ca${os}Title`)}</dt>
+								<dd class="hint">{t(`appaccess.ca${os}`)}</dd>
+							</div>
+						{/each}
+					</dl>
+				</details>
+				<p class="muted hint">{t('appaccess.caKey')}</p>
+			{:else}
+				<p class="notice-warn">{t('appaccess.caUnavailable')}</p>
+			{/if}
+		</section>
 	{/if}
 
 	<details class="tile panel explain" aria-labelledby="proxy-how">
@@ -655,6 +741,41 @@
 	details.explain:not(.tile) summary {
 		color: var(--accent);
 		font-size: var(--text-md);
+	}
+	.facts,
+	.howto {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		margin: 0;
+		font-size: var(--text-md);
+	}
+	.facts > div {
+		display: grid;
+		grid-template-columns: minmax(8rem, 12rem) minmax(0, 1fr);
+		gap: var(--space-3);
+	}
+	.facts dt,
+	.howto dt {
+		color: var(--muted);
+	}
+	.howto dt {
+		font-weight: 600;
+		color: var(--text);
+	}
+	.facts dd,
+	.howto dd {
+		margin: 0;
+		min-width: 0;
+	}
+	.fingerprint {
+		overflow-wrap: anywhere;
+	}
+	@media (max-width: 640px) {
+		.facts > div {
+			grid-template-columns: minmax(0, 1fr);
+			gap: 2px;
+		}
 	}
 	.edit {
 		display: flex;
