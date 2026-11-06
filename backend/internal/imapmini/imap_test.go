@@ -70,7 +70,7 @@ func (f *FakeServer) serve() {
 func (f *FakeServer) handle(raw net.Conn) {
 	defer raw.Close()
 	tc := &tls.Config{Certificates: []tls.Certificate{f.cert}}
-	var conn net.Conn = raw
+	conn := net.Conn(raw)
 	if !f.StartTLS {
 		conn = tls.Server(raw, tc)
 	}

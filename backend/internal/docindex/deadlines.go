@@ -35,9 +35,9 @@ var (
 	dueWords      = regexp.MustCompile(`(?i)\bfrist\b|fristende|einzureichen|einreichen bis|spätestens|spaetestens|deadline|\bdue\b|bis zum`)
 	debitWords    = regexp.MustCompile(`(?i)lastschrift|abgebucht|abbuchung|eingezogen|direct debit|sepa`)
 
-	beforeEnd = regexp.MustCompile(`(?i)(\d+|eine[nm]?|zwei|drei|vier|sechs|zwölf)\s+(monate?n?|wochen?|tage?n?|months?|weeks?|days?)\s+(?:zum|vor|before)\s+(?:dem\s+|the\s+)?(?:ablauf|vertragsende|ende|end|expiry|laufzeitende)`)
-	withinDays = regexp.MustCompile(`(?i)(?:innerhalb|binnen|within)\s+(?:von\s+)?(\d+)\s+(tage?n?|days?|wochen|weeks)`)
-	spanYears  = regexp.MustCompile(`(?i)(\d+|ein|eine|zwei|drei|fünf|one|two|three|five)[\s-]+(jahre?n?|years?|monate?n?|months?)\s+(?:\w+\s+)?(?:garantie|gewährleistung|gewaehrleistung|herstellergarantie|warranty|guarantee)|(?:garantie|gewährleistung|warranty|guarantee)\s*(?:von|:|of)?\s*(\d+|ein|eine|zwei|drei|fünf|one|two|three|five)\s+(jahre?n?|years?|monate?n?|months?)`)
+	beforeEnd    = regexp.MustCompile(`(?i)(\d+|eine[nm]?|zwei|drei|vier|sechs|zwölf)\s+(monate?n?|wochen?|tage?n?|months?|weeks?|days?)\s+(?:zum|vor|before)\s+(?:dem\s+|the\s+)?(?:ablauf|vertragsende|ende|end|expiry|laufzeitende)`)
+	withinDays   = regexp.MustCompile(`(?i)(?:innerhalb|binnen|within)\s+(?:von\s+)?(\d+)\s+(tage?n?|days?|wochen|weeks)`)
+	spanYears    = regexp.MustCompile(`(?i)(\d+|ein|eine|zwei|drei|fünf|one|two|three|five)[\s-]+(jahre?n?|years?|monate?n?|months?)\s+(?:\w+\s+)?(?:garantie|gewährleistung|gewaehrleistung|herstellergarantie|warranty|guarantee)|(?:garantie|gewährleistung|warranty|guarantee)\s*(?:von|:|of)?\s*(\d+|ein|eine|zwei|drei|fünf|one|two|three|five)\s+(jahre?n?|years?|monate?n?|months?)`)
 	docDateWords = regexp.MustCompile(`(?i)rechnungsdatum|kaufdatum|lieferdatum|belegdatum|\bdatum\b|invoice date|\bdate\b|\bvom\b`)
 )
 

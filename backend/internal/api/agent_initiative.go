@@ -428,6 +428,9 @@ func (s *Server) applyAgentInbox(user string, item agentInboxItem) error {
 		}
 		list = append(list, agent.Skill{ID: agent.NewID(), Name: item.Title, When: item.Data["when"], Steps: item.Data["steps"], Chat: item.Data["chat"], Updated: time.Now().UTC()})
 		return store.SaveSkills(user, list)
+	case "deadline":
+		// PLAN 54-D: a deadline becomes reminders (agent_docs_deadline.go).
+		return s.docsAcceptDeadline(user, item)
 	}
 	// Hints, forecasts and events: noted, nothing to change.
 	return nil
