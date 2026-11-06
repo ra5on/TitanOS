@@ -65,6 +65,15 @@ func (w *titand) wireAccess() error {
 		if err != nil {
 			slog.Warn("using a temporary TLS certificate", "err", err)
 		}
+		// The domains of the app proxy known when the TitanOS authority is
+		// made go into its name constraints.
+		w.certs.CADomains = func() []string {
+			domains := w.routes.Domains()
+			if domain := w.routes.Settings().Domain; domain != "" {
+				domains = append(domains, domain)
+			}
+			return domains
+		}
 		w.background(func() { watchCertificate(ctx, w.certs, w.notifier) })
 	}
 	return nil

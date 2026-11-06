@@ -141,7 +141,8 @@ func (s *Sessions) Create(user, remoteIP, userAgent string) (string, error) {
 	return token, nil
 }
 
-// Get returns the session for a token and marks it as used.
+// Get returns the session for a token and marks it as used, unless it is
+// locked.
 func (s *Sessions) Get(token string) (Session, bool) {
 	if token == "" {
 		return Session{}, false
@@ -161,7 +162,11 @@ func (s *Sessions) Get(token string) (Session, bool) {
 		s.keepRemembered()
 		return Session{}, false
 	}
-	session.LastSeen = now
+	// A locked session is not in use: its polling of GET /session must
+	// not keep it alive, so that it still runs out.
+	if !session.Locked {
+		session.LastSeen = now
+	}
 	if now.Sub(s.saved) >= saveEvery {
 		s.save()
 	}
@@ -375,6 +380,34 @@ func sessionID(key [sha256.Size]byte) string {
 	// help anyone who sees it.
 	sum := sha256.Sum256(key[:])
 	return base64.RawURLEncoding.EncodeToString(sum[:12])
+}
+
+// SessionID names the session of a token without giving the token away
+// (the same ID as in the list of devices). Passes that must end with the
+// session, such as the cookies of app windows, carry it.
+func SessionID(token string) string {
+	if token == "" {
+		return ""
+	}
+	return sessionID(sha256.Sum256([]byte(token)))
+}
+
+// Usable tells whether the session with an ID (SessionID) still exists
+// for the account, has not run out and is not locked. Like Peek it does
+// not count as use: an app window must not keep a TitanOS login alive.
+func (s *Sessions) Usable(id, user string) bool {
+	if id == "" || user == "" {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.now()
+	for key, session := range s.sessions {
+		if session.User == user && sessionID(key) == id {
+			return !session.Locked && !s.expired(session, now)
+		}
+	}
+	return false
 }
 
 // List returns the sessions of an account, the newest first.

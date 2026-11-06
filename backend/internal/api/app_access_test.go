@@ -31,6 +31,7 @@ func TestAppAccessRoutes(t *testing.T) {
 		u, ok := ts.server.opts.Users.Get(name)
 		return appaccess.Account{Name: u.Name, Admin: u.Role.CanAdminister(), Disabled: u.Disabled}, ok
 	}
+	rights.SessionUsable = ts.server.sessions.Usable
 	ts.server.opts.AppAccess = rights
 	routes.Access = rights
 

@@ -3,6 +3,7 @@ package procs
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -18,7 +19,11 @@ func fixture(t *testing.T) (*Sampler, string) {
 		t.Fatal(err)
 	}
 	s := &Sampler{Root: filepath.Join(dir, "proc"), Passwd: filepath.Join(dir, "etc", "passwd"), Self: 100, Parent: 1, PageSize: 4096,
-		Kill: func(int, syscall.Signal) error { t.Fatal("unexpected signal"); return nil }}
+		// Fixture pids may be real processes on the host: never open or
+		// signal them.
+		OpenPID:  func(int) (int, error) { t.Fatal("unexpected pidfd"); return -1, nil },
+		SendPID:  func(int, syscall.Signal) error { t.Fatal("unexpected signal"); return nil },
+		ClosePID: func(int) error { return nil }}
 	return s, dir
 }
 
@@ -130,16 +135,103 @@ func TestSignalRefusals(t *testing.T) {
 	}
 	s.Disabled = false
 	var got []any
-	s.Kill = func(pid int, sig syscall.Signal) error { got = append(got, pid, sig); return nil }
+	closed := 0
+	s.OpenPID = func(pid int) (int, error) { got = append(got, pid); return 42, nil }
+	s.SendPID = func(fd int, sig syscall.Signal) error { got = append(got, fd, sig); return nil }
+	s.ClosePID = func(fd int) error { closed++; return nil }
 	if name, err := s.Signal(600, 1300, "kill"); err != nil || name != "bash" {
 		t.Fatalf("kill: %q %v", name, err)
 	}
-	if len(got) != 2 || got[0] != 600 || got[1] != syscall.SIGKILL {
-		t.Fatalf("sent %v", got)
+	if len(got) != 3 || got[0] != 600 || got[1] != 42 || got[2] != syscall.SIGKILL || closed != 1 {
+		t.Fatalf("sent %v, closed %d", got, closed)
 	}
-	s.Kill = func(int, syscall.Signal) error { return syscall.ESRCH }
+	s.SendPID = func(int, syscall.Signal) error { return syscall.ESRCH }
 	if _, err := s.Signal(600, 1300, "term"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("gone: %v", err)
+	}
+	s.OpenPID = func(int) (int, error) { return -1, syscall.ESRCH }
+	if _, err := s.Signal(600, 1300, "term"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("gone before open: %v", err)
+	}
+}
+
+func TestSignalPIDReusedWhileOpening(t *testing.T) {
+	s, dir := fixture(t)
+	stat := filepath.Join(dir, "proc", "600", "stat")
+	// Between the first look and the pidfd, bash ended and its pid went to
+	// another process: the pidfd holds the new one, which gets nothing.
+	s.OpenPID = func(int) (int, error) {
+		write(t, stat, strings.Replace(readFile(stat), " 1300 ", " 1400 ", 1))
+		return 42, nil
+	}
+	s.SendPID = func(int, syscall.Signal) error { t.Fatal("signal to a reused pid"); return nil }
+	if _, err := s.Signal(600, 1300, "kill"); !errors.Is(err, ErrChanged) {
+		t.Fatalf("reused pid: %v", err)
+	}
+}
+
+func TestProtectedServicesAndChildrenOfTitand(t *testing.T) {
+	s, dir := fixture(t)
+	stat := filepath.Join(dir, "proc", "600", "stat")
+	orig := readFile(stat)
+	for _, name := range []string{"dockerd", "containerd", "containerd-shim", "sshd", "sshd-session", "systemd-journal", "systemd-udevd", "smbd", "nmbd", "mdadm", "libvirtd", "virtqemud"} {
+		write(t, stat, strings.Replace(orig, "(bash)", "("+name+")", 1))
+		if _, err := s.Signal(600, 1300, "kill"); !errors.Is(err, ErrProtected) {
+			t.Errorf("%s: %v", name, err)
+		}
+		l, err := s.List()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p, _ := find(l, 600); !p.Protected {
+			t.Errorf("%s not marked protected", name)
+		}
+	}
+	for _, name := range []string{"dockerd-helper", "bash", "containerd2", "sshdx"} {
+		if protectedName(name) {
+			t.Errorf("%s protected", name)
+		}
+	}
+	// A shell titand started, and what that shell started, stay too.
+	write(t, stat, strings.Replace(orig, " S 500 ", " S 100 ", 1))
+	if _, err := s.Signal(600, 1300, "kill"); !errors.Is(err, ErrProtected) {
+		t.Errorf("child of titand: %v", err)
+	}
+	write(t, filepath.Join(dir, "proc", "400", "stat"), strings.Replace(readFile(filepath.Join(dir, "proc", "400", "stat")), " S 1 ", " S 600 ", 1))
+	l, err := s.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := find(l, 400); !p.Protected {
+		t.Error("grandchild of titand not marked protected")
+	}
+}
+
+// TestSignalThroughPidfd ends a real child process of the test through a
+// pidfd; nothing else on the host is touched.
+func TestSignalThroughPidfd(t *testing.T) {
+	cmd := exec.Command("sleep", "60")
+	if err := cmd.Start(); err != nil {
+		t.Skip("no sleep:", err)
+	}
+	defer cmd.Process.Kill()
+	s := &Sampler{Root: "/proc", Passwd: "/etc/passwd", Self: -1, Parent: -1}
+	p, err := s.readOne(cmd.Process.Pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Signal(cmd.Process.Pid, p.start+1, "term"); !errors.Is(err, ErrChanged) {
+		t.Fatalf("wrong start time: %v", err)
+	}
+	if _, err := s.Signal(cmd.Process.Pid, p.start, "term"); err != nil {
+		if errors.Is(err, syscall.ENOSYS) || errors.Is(err, syscall.EPERM) {
+			t.Skip("pidfd not available:", err)
+		}
+		t.Fatal(err)
+	}
+	err = cmd.Wait()
+	if status, ok := cmd.ProcessState.Sys().(syscall.WaitStatus); !ok || !status.Signaled() || status.Signal() != syscall.SIGTERM {
+		t.Fatalf("child not ended by SIGTERM: %v", err)
 	}
 }
 

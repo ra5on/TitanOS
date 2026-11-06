@@ -106,3 +106,27 @@ func TestRememberedSessionLocksAfterRestart(t *testing.T) {
 		t.Error("a remembered login came back unlocked after an hour")
 	}
 }
+
+func TestLockedSessionStillRunsOut(t *testing.T) {
+	sessions := NewSessions()
+	now := time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)
+	sessions.now = func() time.Time { return now }
+	token, _ := sessions.Create("alex", "192.0.2.1", "test")
+	sessions.Lock(token)
+	// The lock screen polls GET /session; that is no use of the session.
+	for range 8 {
+		now = now.Add(24 * time.Hour)
+		sessions.Get(token)
+	}
+	if _, ok := sessions.Get(token); ok {
+		t.Fatal("a locked session kept alive by polling")
+	}
+	// An unlocked session is kept alive by use.
+	token, _ = sessions.Create("alex", "192.0.2.1", "test")
+	for range 8 {
+		now = now.Add(24 * time.Hour)
+		if _, ok := sessions.Get(token); !ok {
+			t.Fatal("a used session ran out")
+		}
+	}
+}

@@ -64,6 +64,10 @@ type authority struct {
 	failed bool
 	ui     leafSlot
 	apps   leafSlot
+	// uiRAM is the web UI's leaf for an address of the NAS the stored one
+	// does not name (a new IPv6 prefix, DHCP): kept in RAM only, so that
+	// a changing address never writes to the stick.
+	uiRAM *tls.Certificate
 }
 
 // caLoaded returns the authority, making it on first need. A stick that
@@ -85,15 +89,20 @@ func (m *Manager) caLoaded() (*x509.Certificate, *ecdsa.PrivateKey, error) {
 			slog.Error("certificate authority of TitanOS not usable", "err", err)
 			return nil, nil, fmt.Errorf("%w: %v", ErrNoCA, err)
 		}
-		a.cert, a.key = cert, key
-		return cert, key, nil
+		if constrained(cert) {
+			a.cert, a.key = cert, key
+			return cert, key, nil
+		}
+		// An authority from a development build before name constraints:
+		// it could vouch for any name (a bank's), so it is replaced once.
+		return m.replaceCA(keyPEM)
 	}
 	if !errors.Is(certErr, fs.ErrNotExist) || !errors.Is(keyErr, fs.ErrNotExist) {
 		// One of both is there, or the stick cannot be read: keep it.
 		a.failed = true
 		return nil, nil, fmt.Errorf("%w: %v", ErrNoCA, errors.Join(certErr, keyErr))
 	}
-	cert, key, certPEM, keyPEM, err := newCA(m.hostname, m.now())
+	cert, key, certPEM, keyPEM, err := newCA(m.hostname, m.permittedNames(), m.now())
 	if err != nil {
 		a.failed = true
 		return nil, nil, fmt.Errorf("%w: %v", ErrNoCA, err)
@@ -112,6 +121,145 @@ func (m *Manager) caLoaded() (*x509.Certificate, *ecdsa.PrivateKey, error) {
 	a.cert, a.key = cert, key
 	return cert, key, nil
 }
+
+// replaceCA makes a new authority in place of one without name
+// constraints. The old key goes back if the new certificate cannot be
+// written, so that the stick never holds a key without its certificate.
+// The lock is held.
+func (m *Manager) replaceCA(oldKey []byte) (*x509.Certificate, *ecdsa.PrivateKey, error) {
+	a := &m.ca
+	cert, key, certPEM, keyPEM, err := newCA(m.hostname, m.permittedNames(), m.now())
+	if err != nil {
+		a.failed = true
+		return nil, nil, fmt.Errorf("%w: %v", ErrNoCA, err)
+	}
+	if err := m.store.Write(caKeyFile, keyPEM); err != nil {
+		a.failed = true
+		return nil, nil, fmt.Errorf("%w: not replaced: %v", ErrNoCA, err)
+	}
+	if err := m.store.Write(caCertFile, certPEM); err != nil {
+		_ = m.store.Write(caKeyFile, oldKey) // back to the old pair; the first error is returned
+		a.failed = true
+		return nil, nil, fmt.Errorf("%w: not replaced: %v", ErrNoCA, err)
+	}
+	slog.Warn("certificate authority of TitanOS replaced by one with name constraints; devices must install it again", "name", cert.Subject.CommonName)
+	a.cert, a.key = cert, key
+	return cert, key, nil
+}
+
+// constrained tells whether an authority limits the names it may vouch
+// for (critical name constraints with permitted names and addresses).
+func constrained(cert *x509.Certificate) bool {
+	return cert.PermittedDNSDomainsCritical && len(cert.PermittedDNSDomains) > 0 && len(cert.PermittedIPRanges) > 0
+}
+
+// permittedRanges are the addresses the authority may vouch for: private,
+// shared (CGNAT, Tailscale), loopback and link-local networks. A public
+// address of the NAS keeps the self-signed certificate.
+var permittedRanges = []string{
+	"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16",
+	"fc00::/7", "fe80::/10", "::1/128",
+}
+
+// permittedNames are the DNS names the authority may vouch for, fixed
+// when it is made: the NAS's name, everything under .local (the apps'
+// names such as immich.nas.local), localhost and the domains of the app
+// proxy configured at that time. A permitted name covers itself and all
+// names below it. Names added later get no certificate from it.
+func (m *Manager) permittedNames() []string {
+	out := []string{"local", "localhost"}
+	add := func(name string) {
+		name = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(name)), ".")
+		name = strings.TrimPrefix(name, "*.")
+		if name == "" || strings.ContainsAny(name, "*/: ") || net.ParseIP(name) != nil || slices.Contains(out, name) {
+			return
+		}
+		// Covered by "local" already.
+		if strings.HasSuffix(name, ".local") {
+			return
+		}
+		out = append(out, name)
+	}
+	add(m.hostname)
+	if m.CADomains != nil {
+		for _, domain := range m.CADomains() {
+			add(domain)
+		}
+	}
+	return out
+}
+
+// permitsName tells whether the authority's constraints allow a DNS name
+// (Go's and the browsers' rule: a permitted "local" covers "local" and
+// every name ending in ".local").
+func permitsName(ca *x509.Certificate, name string) bool {
+	if len(ca.PermittedDNSDomains) == 0 {
+		return len(ca.ExcludedDNSDomains) == 0
+	}
+	name = strings.TrimSuffix(strings.ToLower(name), ".")
+	if name == "" {
+		return false
+	}
+	for _, c := range ca.PermittedDNSDomains {
+		c = strings.ToLower(c)
+		if dot, ok := strings.CutPrefix(c, "."); ok {
+			if strings.HasSuffix(name, c) && name != dot {
+				return true
+			}
+			continue
+		}
+		if name == c || strings.HasSuffix(name, "."+c) {
+			return true
+		}
+	}
+	return false
+}
+
+// permitsIP tells whether the authority's constraints allow an address.
+func permitsIP(ca *x509.Certificate, ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	if len(ca.PermittedIPRanges) == 0 {
+		return len(ca.ExcludedIPRanges) == 0
+	}
+	if v4 := ip.To4(); v4 != nil {
+		ip = v4
+	}
+	for _, r := range ca.PermittedIPRanges {
+		if len(r.IP) == len(ip) && r.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+func permittedOnly(ca *x509.Certificate, names []string) []string {
+	out := []string{}
+	for _, name := range names {
+		if permitsName(ca, name) && !slices.Contains(out, name) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+func permittedIPs(ca *x509.Certificate, ips []net.IP) []net.IP {
+	var out []net.IP
+	for _, ip := range ips {
+		if v4 := ip.To4(); v4 != nil {
+			ip = v4
+		}
+		if permitsIP(ca, ip) && !slices.ContainsFunc(out, ip.Equal) {
+			out = append(out, ip)
+		}
+	}
+	return out
+}
+
+// errNotPermitted means a name or address lies outside the authority's
+// constraints; the caller falls back to the self-signed certificate.
+var errNotPermitted = errors.New("tlscert: outside the constraints of the TitanOS authority")
 
 func parseCA(certPEM, keyPEM []byte) (*x509.Certificate, *ecdsa.PrivateKey, error) {
 	block, _ := pem.Decode(certPEM)
@@ -140,7 +288,15 @@ func parseCA(certPEM, keyPEM []byte) (*x509.Certificate, *ecdsa.PrivateKey, erro
 	return cert, key, nil
 }
 
-func newCA(hostname string, now time.Time) (*x509.Certificate, *ecdsa.PrivateKey, []byte, []byte, error) {
+func newCA(hostname string, permitted []string, now time.Time) (*x509.Certificate, *ecdsa.PrivateKey, []byte, []byte, error) {
+	var ranges []*net.IPNet
+	for _, cidr := range permittedRanges {
+		_, r, err := net.ParseCIDR(cidr)
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+		ranges = append(ranges, r)
+	}
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -169,6 +325,12 @@ func newCA(hostname string, now time.Time) (*x509.Certificate, *ecdsa.PrivateKey
 		IsCA:                  true,
 		MaxPathLenZero:        true,
 		SubjectKeyId:          ski[:],
+		// Installed on a device, an authority without limits could vouch
+		// for any site; this one only for the NAS's own names and private
+		// addresses.
+		PermittedDNSDomainsCritical: true,
+		PermittedDNSDomains:         permitted,
+		PermittedIPRanges:           ranges,
 	}
 	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
 	if err != nil {
@@ -253,12 +415,25 @@ func (m *Manager) leaf(slot *leafSlot, fits func(*x509.Certificate) bool, issue 
 }
 
 // caLeaf is the authority's certificate for the HTTPS names of apps; it
-// must name every one of names (wildcards, short names, domains).
-func (m *Manager) caLeaf(names []string) (*tls.Certificate, error) {
+// names every one of names the authority may vouch for (wildcards, short
+// names, domains). A server name outside its constraints (a domain added
+// after the authority was made) gets errNotPermitted.
+func (m *Manager) caLeaf(serverName string, names []string) (*tls.Certificate, error) {
 	a := &m.ca
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return m.leaf(&a.apps, func(leaf *x509.Certificate) bool {
+	caCert, _, err := m.caLoaded()
+	if err != nil {
+		return nil, err
+	}
+	if serverName != "" && !permitsName(caCert, serverName) {
+		return nil, errNotPermitted
+	}
+	names = permittedOnly(caCert, names)
+	if len(names) == 0 {
+		return nil, errNotPermitted
+	}
+	cert, err := m.leaf(&a.apps, func(leaf *x509.Certificate) bool {
 		for _, name := range names {
 			if !slices.Contains(leaf.DNSNames, name) {
 				return false
@@ -266,6 +441,13 @@ func (m *Manager) caLeaf(names []string) (*tls.Certificate, error) {
 		}
 		return true
 	}, func() ([]string, []net.IP) { return slices.Clone(names), nil })
+	if err != nil {
+		return nil, err
+	}
+	if serverName != "" && cert.Leaf.VerifyHostname(serverName) != nil {
+		return nil, errNotPermitted
+	}
+	return cert, nil
 }
 
 func issueLeaf(caCert *x509.Certificate, caKey *ecdsa.PrivateKey, names []string, ips []net.IP, now time.Time) (*tls.Certificate, []byte, []byte, error) {
@@ -311,31 +493,72 @@ func issueLeaf(caCert *x509.Certificate, caKey *ecdsa.PrivateKey, names []string
 }
 
 // uiLeaf is the authority's certificate for the web UI: the NAS's name,
-// its .local name, localhost and its addresses. It is made anew only when
-// a client reaches the NAS on an address it does not name (local).
-func (m *Manager) uiLeaf(local net.IP) (*tls.Certificate, error) {
+// its .local name, localhost and its addresses, as far as the authority
+// may vouch for them. serverName is the name the client asked for (SNI),
+// local the NAS's address it connected to when it asked for none (an
+// address typed into the browser).
+//
+// The stored leaf is written to the stick only when it is first issued,
+// when the NAS's names change and before it runs out. An address it does
+// not name gets a leaf kept in RAM only, so that changing addresses (IPv6
+// prefixes, DHCP) never write to the stick. A name or address outside the
+// authority's constraints (a public address) gets errNotPermitted: the
+// self-signed certificate serves it.
+func (m *Manager) uiLeaf(serverName string, local net.IP) (*tls.Certificate, error) {
 	a := &m.ca
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	caCert, caKey, err := m.caLoaded()
+	if err != nil {
+		return nil, err
+	}
+	if serverName != "" {
+		if !permitsName(caCert, serverName) {
+			return nil, errNotPermitted
+		}
+		local = nil // browsers send no name for an address
+	}
+	if local != nil && !permitsIP(caCert, local) {
+		return nil, errNotPermitted
+	}
 	name := strings.ToLower(m.hostname)
 	names := []string{"localhost"}
 	if name != "" {
 		names = []string{name, name + ".local", "localhost"}
 	}
-	return m.leaf(&a.ui, func(leaf *x509.Certificate) bool {
+	names = permittedOnly(caCert, names)
+	addresses := func() []net.IP {
+		return permittedIPs(caCert, append([]net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback}, m.addresses()...))
+	}
+	namesAll := func(leaf *x509.Certificate) bool {
 		for _, n := range names {
 			if !slices.Contains(leaf.DNSNames, n) {
 				return false
 			}
 		}
-		return local == nil || slices.ContainsFunc(leaf.IPAddresses, local.Equal)
-	}, func() ([]string, []net.IP) {
-		ips := append([]net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback}, m.addresses()...)
-		if local != nil && !slices.ContainsFunc(ips, local.Equal) {
-			ips = append(ips, local)
-		}
-		return names, ips
-	})
+		return true
+	}
+	stored, err := m.leaf(&a.ui, namesAll, func() ([]string, []net.IP) { return names, addresses() })
+	if err != nil {
+		return nil, err
+	}
+	if local == nil || slices.ContainsFunc(stored.Leaf.IPAddresses, local.Equal) {
+		return stored, nil
+	}
+	now := m.now()
+	if c := a.uiRAM; c != nil && namesAll(c.Leaf) && slices.ContainsFunc(c.Leaf.IPAddresses, local.Equal) && c.Leaf.NotAfter.Sub(now) > leafRenew && !now.Before(c.Leaf.NotBefore) && c.Leaf.CheckSignatureFrom(caCert) == nil {
+		return c, nil
+	}
+	ips := addresses()
+	if !slices.ContainsFunc(ips, local.Equal) {
+		ips = append(ips, local)
+	}
+	cert, _, _, err := issueLeaf(caCert, caKey, names, ips, now)
+	if err != nil {
+		return nil, err
+	}
+	a.uiRAM = cert
+	return cert, nil
 }
 
 // localIP is the NAS's address a TLS client connected to, or nil.

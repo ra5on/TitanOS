@@ -36,6 +36,9 @@ func TestFoldersAndExcludes(t *testing.T) {
 	for _, want := range []string{
 		"--exclude " + filepath.Join(root, "tank/media/Fotos/2024"), "--exclude *.tmp",
 		filepath.Join(root, "tank/media/Fotos"), filepath.Join(root, "tank/appdata"), filepath.Join(root, "cold/appdata"), filepath.Join(root, "cold/vms"), e.m.configDir,
+		// The keys of the TitanOS authority and of app windows stay home.
+		"--exclude " + filepath.Join(e.m.configDir, "tls/ca-key.pem"), "--exclude " + filepath.Join(e.m.configDir, "tls/ca-cert.pem"),
+		"--exclude " + filepath.Join(e.m.configDir, "tls/ca-leaf-*.pem"), "--exclude " + filepath.Join(e.m.configDir, "tls/app-gate.key"),
 	} {
 		if !strings.Contains(calls, want) {
 			t.Errorf("%q missing in:\n%s", want, calls)

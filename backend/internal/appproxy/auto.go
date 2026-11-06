@@ -35,6 +35,45 @@ func WebUIPort(label string) int {
 	return port
 }
 
+// AppContainer is what the automatic names need of a container.
+type AppContainer struct {
+	// App is the Compose project; containers without one get no name.
+	App string
+	// WebUI is the "titanos.webui" label.
+	WebUI string
+	// Ports are the TCP ports of the NAS the container publishes
+	// (Docker's port bindings).
+	Ports []int
+}
+
+// AutoPorts are the apps that get an automatic name, with the port of
+// their WebUI label: only a port that one of the app's own containers
+// actually publishes on the NAS. A label is set by whoever wrote the
+// compose file; pointing it at a port the app does not publish (the web
+// UI, SSH, another app) must not give that port a name under the app.
+// Containers in the host's network publish no ports and get no name.
+func AutoPorts(containers []AppContainer) map[string]int {
+	published := map[string][]int{}
+	for _, c := range containers {
+		if c.App != "" {
+			published[c.App] = append(published[c.App], c.Ports...)
+		}
+	}
+	out := map[string]int{}
+	for _, c := range containers {
+		if c.App == "" {
+			continue
+		}
+		if _, seen := out[c.App]; seen {
+			continue
+		}
+		if port := WebUIPort(c.WebUI); port > 0 && slices.Contains(published[c.App], port) {
+			out[c.App] = port
+		}
+	}
+	return out
+}
+
 // SetAutoApps tells the manager which apps have a WebUI now and on which
 // port of the NAS (app → port); see the wiring, which asks Docker. Only a
 // change of the resulting names publishes anew.

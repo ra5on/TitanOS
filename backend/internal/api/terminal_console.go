@@ -157,6 +157,16 @@ func (s *Server) serveStream(w http.ResponseWriter, r *http.Request, opts consol
 // looking at the current state is the one way that cannot miss a path.
 // Peek does not count the check as use of the session.
 func (s *Server) consoleAllowed(r *http.Request, user auth.User) bool {
+	current, ok := s.loginHolds(r, user)
+	return ok && current.Role.CanAdminister()
+}
+
+// loginHolds repeats, for an answer that stays open (consoles, event
+// streams), the login check requireUser made when it began: the session
+// of the cookie still exists for the account and is not locked, and the
+// account still exists and is not locked. It returns the account as it
+// is now. Peek does not count the check as use of the session.
+func (s *Server) loginHolds(r *http.Request, user auth.User) (auth.User, bool) {
 	name := user.Name
 	_, token := r.Context().Value(apiTokenIdentity{}).(string)
 	_, agent := r.Context().Value(inProcessIdentity{}).(string)
@@ -165,17 +175,20 @@ func (s *Server) consoleAllowed(r *http.Request, user auth.User) bool {
 	if !token && !agent && !viaCluster(r) {
 		cookie, err := r.Cookie(s.cookieName())
 		if err != nil {
-			return false
+			return auth.User{}, false
 		}
 		session, ok := s.sessions.Peek(cookie.Value)
 		// A locked session (session_lock.go) closes its consoles too.
 		if !ok || session.User != name || session.Locked {
-			return false
+			return auth.User{}, false
 		}
 	}
 	current, ok := s.activeUser(name)
 	// The same name may have been given to a new account.
-	return ok && current.Created.Equal(user.Created) && current.Role.CanAdminister()
+	if !ok || !current.Created.Equal(user.Created) {
+		return auth.User{}, false
+	}
+	return current, true
 }
 
 // vncInput tells someone at the keyboard or mouse of a VM screen from the

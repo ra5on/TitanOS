@@ -72,6 +72,10 @@ type Manager struct {
 	ca authority
 	// localAddresses replaces the NAS's addresses in tests.
 	localAddresses func() []net.IP
+	// CADomains are the domains of the app proxy (the domain of one's
+	// own and the full names of routes). Only those known when the
+	// TitanOS authority is made are in its name constraints.
+	CADomains func() []string
 }
 
 // NewManager loads the certificate to use: the administrator's own if
@@ -108,8 +112,13 @@ func (m *Manager) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 		}
 	}
 	if m.kind.Load() == KindSelfSigned {
-		// Instead of the self-signed one, one from the TitanOS authority.
-		if leaf, err := m.uiLeaf(localIP(hello)); err == nil {
+		// Instead of the self-signed one, one from the TitanOS authority,
+		// for the names and addresses it may vouch for.
+		serverName := ""
+		if hello != nil {
+			serverName = hello.ServerName
+		}
+		if leaf, err := m.uiLeaf(serverName, localIP(hello)); err == nil {
 			return leaf, nil
 		}
 	}
@@ -235,7 +244,7 @@ func (m *Manager) Info() Info {
 	info := Describe(m.current.Load())
 	info.Kind = m.kind.Load().(string)
 	if info.Kind == KindSelfSigned {
-		if leaf, err := m.uiLeaf(nil); err == nil {
+		if leaf, err := m.uiLeaf("", nil); err == nil {
 			info = Describe(leaf)
 			info.Kind = KindCA
 		}

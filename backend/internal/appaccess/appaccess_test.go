@@ -12,6 +12,10 @@ type fixture struct {
 	store    *config.Store
 	accounts map[string]Account
 	now      time.Time
+	// sessions are the TitanOS logins (ID → account); locked ones are
+	// marked in locked.
+	sessions map[string]string
+	locked   map[string]bool
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -25,6 +29,9 @@ func newFixture(t *testing.T) *fixture {
 	f.m = New(f.store)
 	f.m.Lookup = func(name string) (Account, bool) { a, ok := f.accounts[name]; return a, ok }
 	f.m.Now = func() time.Time { return f.now }
+	f.sessions = map[string]string{"s-alex": "alex", "s-anna": "anna", "s-anna2": "anna"}
+	f.locked = map[string]bool{}
+	f.m.SessionUsable = func(id, user string) bool { return f.sessions[id] == user && !f.locked[id] }
 	if err := f.m.Load(); err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +102,7 @@ func TestEnterAndCookie(t *testing.T) {
 	if err := f.m.Set(Settings{Apps: map[string]App{"immich": {Users: []string{"anna"}}}}); err != nil {
 		t.Fatal(err)
 	}
-	token, expiry := f.m.EnterToken("anna", "immich")
+	token, expiry := f.m.EnterToken("anna", "immich", "s-anna")
 	if expiry.Sub(f.now) != EnterTTL {
 		t.Errorf("expiry %v", expiry)
 	}
@@ -141,7 +148,7 @@ func TestEnterAndCookie(t *testing.T) {
 
 func TestEnterTokenExpires(t *testing.T) {
 	f := newFixture(t)
-	token, _ := f.m.EnterToken("alex", "immich")
+	token, _ := f.m.EnterToken("alex", "immich", "s-alex")
 	f.now = f.now.Add(EnterTTL)
 	if _, _, ok := f.m.Enter(token, "immich"); ok {
 		t.Error("expired token taken")
@@ -150,10 +157,63 @@ func TestEnterTokenExpires(t *testing.T) {
 
 func TestKeyKept(t *testing.T) {
 	f := newFixture(t)
-	token, _ := f.m.EnterToken("alex", "immich")
+	token, _ := f.m.EnterToken("alex", "immich", "s-alex")
 	again := New(f.store)
-	again.Lookup, again.Now = f.m.Lookup, f.m.Now
+	again.Lookup, again.Now, again.SessionUsable = f.m.Lookup, f.m.Now, f.m.SessionUsable
 	if _, _, ok := again.Enter(token, "immich"); !ok {
 		t.Error("key not kept across restarts")
+	}
+}
+
+func TestPassEndsWithTheLogin(t *testing.T) {
+	f := newFixture(t)
+	if err := f.m.Set(Settings{Apps: map[string]App{"immich": {Users: []string{"anna"}}}}); err != nil {
+		t.Fatal(err)
+	}
+	enter := func(session string) string {
+		t.Helper()
+		token, _ := f.m.EnterToken("anna", "immich", session)
+		cookie, _, ok := f.m.Enter(token, "immich")
+		if !ok {
+			t.Fatal("valid token refused")
+		}
+		return cookie
+	}
+	cookie := enter("s-anna")
+	other := enter("s-anna2")
+	// The lock screen shuts the app, unlocking opens it again.
+	f.locked["s-anna"] = true
+	if f.m.Admit(cookie, "immich") {
+		t.Error("cookie of a locked login admitted")
+	}
+	if !f.m.Admit(other, "immich") {
+		t.Error("the lock of one login shut another")
+	}
+	delete(f.locked, "s-anna")
+	if !f.m.Admit(cookie, "immich") {
+		t.Error("cookie refused after unlocking")
+	}
+	// Logging out (or a password change ending the session, or expiry).
+	delete(f.sessions, "s-anna")
+	if f.m.Admit(cookie, "immich") {
+		t.Error("cookie of an ended login admitted")
+	}
+	// A token of a locked or ended login is not taken; nor one of another
+	// account's login, nor one without a login.
+	f.locked["s-anna2"] = true
+	token, _ := f.m.EnterToken("anna", "immich", "s-anna2")
+	if _, _, ok := f.m.Enter(token, "immich"); ok {
+		t.Error("token of a locked login taken")
+	}
+	for _, session := range []string{"s-anna", "s-alex", ""} {
+		token, _ := f.m.EnterToken("anna", "immich", session)
+		if _, _, ok := f.m.Enter(token, "immich"); ok {
+			t.Errorf("token for login %q taken", session)
+		}
+	}
+	// Without a session store nothing is let in.
+	f.m.SessionUsable = nil
+	if f.m.Admit(other, "immich") {
+		t.Error("admitted without a session store")
 	}
 }

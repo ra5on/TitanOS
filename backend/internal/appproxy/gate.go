@@ -31,7 +31,8 @@ type Gatekeeper interface {
 	Gated(app string) bool
 	// Enter takes a window token and returns the cookie value and its life.
 	Enter(token, app string) (cookie string, ttl time.Duration, ok bool)
-	// Admit checks a cookie against the account's current right.
+	// Admit checks a cookie against the account's current right and the
+	// TitanOS login it was made for (gone or locked: no entry).
 	Admit(cookie, app string) bool
 }
 
@@ -95,6 +96,13 @@ func (m *Manager) enter(w http.ResponseWriter, r *http.Request, app string) {
 	h.Set("Referrer-Policy", "no-referrer")
 	cookie, ttl, ok := m.Access.Enter(r.URL.Query().Get("t"), app)
 	if !ok {
+		// A window restored after a reload brings its old, used token
+		// again; a browser that still holds a valid pass for this app
+		// and login simply goes on.
+		if held, err := r.Cookie(gateCookie); err == nil && m.Access.Admit(held.Value, app) {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
 		m.refuse(w, r, app)
 		return
 	}

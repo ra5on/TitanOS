@@ -23,8 +23,13 @@ aber bis zum Entsperren ist nichts zu sehen und nichts zu bedienen.
 Die Sperre liegt im NAS, nicht nur im Browser. Solange gesperrt, beantwortet
 titand jede Anfrage dieser Anmeldung mit „gesperrt“ (HTTP 423), außer dem
 Abfragen der Anmeldung, dem Entsperren und dem Abmelden. Neue Konsolen werden
-abgewiesen, offene Konsolen und VM-Bildschirme enden nach wenigen Sekunden.
-Andere Geräte und API-Tokens desselben Kontos bleiben angemeldet. Hat die
+abgewiesen, offene Konsolen, VM-Bildschirme und der Ereignisstrom des
+KI-Agenten (SSE) enden nach wenigen Sekunden (Prüfung alle 3 Sekunden). Docker-Apps
+im Fenster lassen keine Seitenaufrufe mehr zu, bis entsperrt ist (das Cookie der
+App ist an diese Anmeldung gebunden, `docs/APP-WINDOWS.md`). Das Abfragen der
+Anmeldung durch den Sperrbildschirm zählt nicht als Benutzung: Eine gesperrte
+Anmeldung läuft nach den üblichen Fristen (7 Tage ohne Benutzung bzw. die Frist
+von „Angemeldet bleiben“) trotzdem ab. Andere Geräte und API-Tokens desselben Kontos bleiben angemeldet. Hat die
 Anmeldung so lange keine Anfrage gestellt, wie die automatische Sperre
 eingestellt ist (Browser geschlossen, Gerät im Ruhezustand), sperrt das NAS sie
 beim nächsten Zugriff selbst.
@@ -44,8 +49,7 @@ Im Aktivitätsprotokoll stehen Sperren, automatisches Sperren, Entsperren
   zu berühren oder die Zeit länger zu stellen.
 - Uploads, die der Browser selbst schickt, warten während der Sperre und laufen
   nach dem Entsperren an derselben Stelle weiter; Aufträge des NAS laufen ohnehin
-  weiter. Der Ereignisstrom des KI-Agenten (SSE) wird nicht beendet, nur neue
-  Anfragen werden abgewiesen.
+  weiter.
 - Die Seite hinter dem Sperrbildschirm ist nur unbedienbar gemacht; wer
   Zugriff auf den entsperrten Rechner und die Entwicklerwerkzeuge des Browsers
   hat, kann zuvor geladene Inhalte dort noch lesen. Neue Daten liefert das NAS

@@ -85,6 +85,10 @@ type Manager struct {
 	Lookup func(name string) (Account, bool)
 	// Now is the clock; time.Now if nil.
 	Now func() time.Time
+	// SessionUsable tells whether the TitanOS login a pass was made for
+	// (auth.SessionID) still exists for the account and is not locked
+	// (auth.Sessions.Usable). Without it no pass is taken.
+	SessionUsable func(id, user string) bool
 
 	mu       sync.RWMutex
 	settings Settings
@@ -246,68 +250,81 @@ func (m *Manager) signingKey() []byte {
 	return m.key
 }
 
-// token is kind|user|app|expiry|nonce, base64url, a dot and its HMAC.
-func (m *Manager) sign(kind, user, app string, expiry time.Time) string {
+// token is kind|user|app|expiry|nonce|session, base64url, a dot and its
+// HMAC. session is the ID of the TitanOS login (auth.SessionID) the pass
+// was made for: the pass ends with that login.
+func (m *Manager) sign(kind, user, app, session string, expiry time.Time) string {
 	nonce := make([]byte, 12)
 	_, _ = rand.Read(nonce) // crypto/rand does not fail on Linux
-	payload := strings.Join([]string{kind, user, app, strconv.FormatInt(expiry.Unix(), 10), base64.RawURLEncoding.EncodeToString(nonce)}, "|")
+	payload := strings.Join([]string{kind, user, app, strconv.FormatInt(expiry.Unix(), 10), base64.RawURLEncoding.EncodeToString(nonce), session}, "|")
 	body := base64.RawURLEncoding.EncodeToString([]byte(payload))
 	mac := hmac.New(sha256.New, m.signingKey())
 	mac.Write([]byte(body))
 	return body + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
-// verify checks a token of a kind for an app and returns its account,
-// expiry and nonce.
-func (m *Manager) verify(kind, token, app string) (string, time.Time, string, bool) {
+// pass is what a verified token says.
+type pass struct {
+	user, nonce, session string
+	expiry               time.Time
+}
+
+// verify checks a token of a kind for an app: signed, not expired, made
+// for a login that still exists and is not locked.
+func (m *Manager) verify(kind, token, app string) (pass, bool) {
 	body, sig, ok := strings.Cut(token, ".")
 	if !ok || len(token) > 1024 {
-		return "", time.Time{}, "", false
+		return pass{}, false
 	}
 	got, err := base64.RawURLEncoding.DecodeString(sig)
 	if err != nil {
-		return "", time.Time{}, "", false
+		return pass{}, false
 	}
 	mac := hmac.New(sha256.New, m.signingKey())
 	mac.Write([]byte(body))
 	if !hmac.Equal(got, mac.Sum(nil)) {
-		return "", time.Time{}, "", false
+		return pass{}, false
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(body)
 	if err != nil {
-		return "", time.Time{}, "", false
+		return pass{}, false
 	}
 	parts := strings.Split(string(raw), "|")
-	if len(parts) != 5 || parts[0] != kind || parts[2] != app || parts[1] == "" {
-		return "", time.Time{}, "", false
+	if len(parts) != 6 || parts[0] != kind || parts[2] != app || parts[1] == "" || parts[5] == "" {
+		return pass{}, false
 	}
 	unix, err := strconv.ParseInt(parts[3], 10, 64)
 	if err != nil {
-		return "", time.Time{}, "", false
+		return pass{}, false
 	}
-	expiry := time.Unix(unix, 0)
-	if !m.now().Before(expiry) {
-		return "", time.Time{}, "", false
+	p := pass{user: parts[1], expiry: time.Unix(unix, 0), nonce: parts[4], session: parts[5]}
+	if !m.now().Before(p.expiry) {
+		return pass{}, false
 	}
-	return parts[1], expiry, parts[4], true
+	if m.SessionUsable == nil || !m.SessionUsable(p.session, p.user) {
+		return pass{}, false
+	}
+	return p, true
 }
 
 // EnterToken returns a token that lets the account's browser in to the
-// app once, within EnterTTL. The caller checks the right first.
-func (m *Manager) EnterToken(user, app string) (string, time.Time) {
+// app once, within EnterTTL; session is the ID of the TitanOS login that
+// asked (auth.SessionID). The caller checks the right first.
+func (m *Manager) EnterToken(user, app, session string) (string, time.Time) {
 	expiry := m.now().Add(EnterTTL)
-	return m.sign("enter", user, app, expiry), expiry
+	return m.sign("enter", user, app, session, expiry), expiry
 }
 
-// Enter takes a window token for an app: valid, not used before and the
-// account still allowed. It returns the value of the browser's cookie
-// and how long it holds.
+// Enter takes a window token for an app: valid, not used before, its
+// login still there and not locked, and the account still allowed. It
+// returns the value of the browser's cookie, bound to the same login, and
+// how long it holds.
 func (m *Manager) Enter(token, app string) (cookie string, ttl time.Duration, ok bool) {
-	user, expiry, nonce, ok := m.verify("enter", token, app)
-	if !ok || !m.use(nonce, expiry) || !m.Allows(user, app) {
+	p, ok := m.verify("enter", token, app)
+	if !ok || !m.use(p.nonce, p.expiry) || !m.Allows(p.user, app) {
 		return "", 0, false
 	}
-	return m.sign("gate", user, app, m.now().Add(CookieTTL)), CookieTTL, true
+	return m.sign("gate", p.user, app, p.session, m.now().Add(CookieTTL)), CookieTTL, true
 }
 
 // use marks a nonce as used; false if it was before.
@@ -328,8 +345,11 @@ func (m *Manager) use(nonce string, expiry time.Time) bool {
 }
 
 // Admit tells whether the cookie of a browser lets it in to an app now:
-// signed for the app, not expired, and its account still allowed.
+// signed for the app, not expired, the TitanOS login it was made for
+// still there and not locked (logging out, a password change that ends
+// the sessions, expiry and the lock screen shut the app as well), and its
+// account still allowed.
 func (m *Manager) Admit(cookie, app string) bool {
-	user, _, _, ok := m.verify("gate", cookie, app)
-	return ok && m.Allows(user, app)
+	p, ok := m.verify("gate", cookie, app)
+	return ok && m.Allows(p.user, app)
 }

@@ -14,6 +14,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // pfKthread marks a kernel thread in the flags of /proc/<pid>/stat.
@@ -98,8 +100,12 @@ type Sampler struct {
 	Self, Parent int
 	// Disabled refuses signals (development mode on someone's computer).
 	Disabled bool
-	// Kill sends the signal; tests replace it.
-	Kill func(pid int, sig syscall.Signal) error
+	// OpenPID opens a pidfd for a process and SendPID signals through it;
+	// ClosePID closes it. nil uses pidfd_open(2), pidfd_send_signal(2)
+	// and close(2); tests replace them.
+	OpenPID  func(pid int) (int, error)
+	SendPID  func(fd int, sig syscall.Signal) error
+	ClosePID func(fd int) error
 	// Wait is the pause between two reads when there is no recent one.
 	Wait     time.Duration
 	PageSize uint64
@@ -110,7 +116,7 @@ type Sampler struct {
 
 // New returns a sampler of the real /proc.
 func New() *Sampler {
-	return &Sampler{Root: "/proc", Passwd: "/etc/passwd", Self: os.Getpid(), Parent: os.Getppid(), Kill: syscall.Kill, Wait: 300 * time.Millisecond, PageSize: uint64(os.Getpagesize())}
+	return &Sampler{Root: "/proc", Passwd: "/etc/passwd", Self: os.Getpid(), Parent: os.Getppid(), Wait: 300 * time.Millisecond, PageSize: uint64(os.Getpagesize())}
 }
 
 // List reads all user space processes. CPU usage is measured against the
@@ -134,6 +140,11 @@ func (s *Sampler) List() (List, error) {
 	}
 	prev := s.prev
 	s.prev = cur
+	parents := make(map[int]int, len(procs))
+	for _, p := range procs {
+		parents[p.pid] = p.ppid
+	}
+	parentOf := func(pid int) (int, bool) { ppid, ok := parents[pid]; return ppid, ok }
 	cpus := countCPUs(readFile(filepath.Join(s.Root, "stat")))
 	users := readPasswd(s.Passwd)
 	out := List{Processes: make([]Process, 0, len(procs)), CPUs: cpus, MemoryTotalBytes: memTotal(readFile(filepath.Join(s.Root, "meminfo"))), SampledSeconds: now.Sub(prev.at).Seconds()}
@@ -159,7 +170,7 @@ func (s *Sampler) List() (List, error) {
 		out.Processes = append(out.Processes, Process{
 			PID: p.pid, PPID: p.ppid, Name: p.name, Command: command, User: user, State: p.state,
 			CPUPercent: round1(cpu), MemoryBytes: p.rssPages * s.pageSize(), Start: p.start,
-			Owner: OwnerOf(p.cgroup), Protected: s.protected(p),
+			Owner: OwnerOf(p.cgroup), Protected: s.protected(p, parentOf),
 		})
 	}
 	sort.Slice(out.Processes, func(i, j int) bool { return out.Processes[i].PID < out.Processes[j].PID })
@@ -175,14 +186,85 @@ func (s *Sampler) pageSize() uint64 {
 
 func round1(v float64) float64 { return float64(int64(v*10+0.5)) / 10 }
 
-// protected says whether a process must not be ended from the web UI.
-func (s *Sampler) protected(p raw) bool {
-	return p.pid <= 2 || p.kernel() || p.pid == s.Self || p.pid == s.Parent || p.tgid == s.Self || p.tgid == s.Parent
+// protectedNames are services the NAS needs to run, keep its data or be
+// reached; they are never ended from the web UI. Names are compared as
+// /proc/<pid>/stat shows them (at most 15 bytes: "systemd-journald"
+// reads "systemd-journal").
+var protectedNames = []string{
+	"dockerd", "containerd", "sshd", "systemd-journald", "systemd-udevd",
+	"smbd", "nmbd", "mdadm", "libvirtd", "virtqemud",
+}
+
+// protectedPrefixes cover helpers with changing names: the shims of
+// Docker's containers (containerd-shim-runc-v2) and the per-connection
+// processes of OpenSSH 9.8+ (sshd-session, sshd-auth).
+var protectedPrefixes = []string{"containerd-shim", "sshd-"}
+
+// commLen is the most a process name in /proc/<pid>/stat holds.
+const commLen = 15
+
+// protectedName tells whether a process name is one of the NAS's
+// essential services.
+func protectedName(name string) bool {
+	for _, n := range protectedNames {
+		if name == n[:min(len(n), commLen)] {
+			return true
+		}
+	}
+	for _, prefix := range protectedPrefixes {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// maxDepth bounds the walk up the process tree.
+const maxDepth = 64
+
+// protected says whether a process must not be ended from the web UI:
+// init and kernel threads, titand, its parent and everything titand
+// started (its shells and helpers), and the essential services.
+// parentOf returns the parent of a pid.
+func (s *Sampler) protected(p raw, parentOf func(pid int) (int, bool)) bool {
+	if p.pid <= 2 || p.kernel() || p.pid == s.Self || p.pid == s.Parent || p.tgid == s.Self || p.tgid == s.Parent || protectedName(p.name) {
+		return true
+	}
+	pid := p.ppid
+	for range maxDepth {
+		if pid <= 1 {
+			return false
+		}
+		if pid == s.Self {
+			return true
+		}
+		next, ok := parentOf(pid)
+		if !ok {
+			return false
+		}
+		pid = next
+	}
+	// A chain this long is no normal process tree: better left alone.
+	return true
+}
+
+// parentFromProc reads the parent of a pid from /proc.
+func (s *Sampler) parentFromProc(pid int) (int, bool) {
+	p, err := s.readOne(pid)
+	if err != nil {
+		return 0, false
+	}
+	return p.ppid, true
 }
 
 // Signal sends SIGTERM ("term") or SIGKILL ("kill") to a process. start
 // must be the start time the list showed; a different one means the pid
 // now names another process. It returns the name of the process.
+//
+// The signal goes through a pidfd: the process is opened first, then its
+// start time is read again, then the signal goes to exactly the process
+// that was opened. A pid freed and reused in between gets nothing (the
+// check sees the new start time, or the pidfd names the ended process).
 func (s *Sampler) Signal(pid int, start uint64, signal string) (string, error) {
 	sig, ok := map[string]syscall.Signal{"term": syscall.SIGTERM, "kill": syscall.SIGKILL}[signal]
 	if !ok {
@@ -200,7 +282,7 @@ func (s *Sampler) Signal(pid int, start uint64, signal string) (string, error) {
 	if p.tgid != pid {
 		return p.name, ErrNotFound
 	}
-	if s.protected(p) {
+	if s.protected(p, s.parentFromProc) {
 		return p.name, ErrProtected
 	}
 	if p.start != start {
@@ -209,11 +291,36 @@ func (s *Sampler) Signal(pid int, start uint64, signal string) (string, error) {
 	if s.Disabled {
 		return p.name, ErrDisabled
 	}
-	kill := s.Kill
-	if kill == nil {
-		kill = syscall.Kill
+	open, send, closeFD := s.OpenPID, s.SendPID, s.ClosePID
+	if open == nil {
+		open = func(pid int) (int, error) { return unix.PidfdOpen(pid, 0) }
 	}
-	if err := kill(pid, sig); err != nil {
+	if send == nil {
+		send = func(fd int, sig syscall.Signal) error { return unix.PidfdSendSignal(fd, sig, nil, 0) }
+	}
+	if closeFD == nil {
+		closeFD = unix.Close
+	}
+	fd, err := open(pid)
+	if err != nil {
+		if errors.Is(err, syscall.ESRCH) || errors.Is(err, syscall.EINVAL) {
+			return p.name, ErrNotFound
+		}
+		return p.name, err
+	}
+	defer func() { _ = closeFD(fd) }() // read-only handle; nothing to lose
+	// The pidfd holds one process now: is it still the one in the list?
+	again, err := s.readOne(pid)
+	if err != nil {
+		return p.name, ErrNotFound
+	}
+	if again.tgid != pid || again.start != start {
+		return p.name, ErrChanged
+	}
+	if s.protected(again, s.parentFromProc) {
+		return again.name, ErrProtected
+	}
+	if err := send(fd, sig); err != nil {
 		if errors.Is(err, syscall.ESRCH) {
 			return p.name, ErrNotFound
 		}

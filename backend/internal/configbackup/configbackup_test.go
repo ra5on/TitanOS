@@ -9,6 +9,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/retention"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -452,5 +453,64 @@ func TestKeepsByDayWeekMonth(t *testing.T) {
 	}
 	if err := e.m.SetSettings(Settings{Enabled: true, Keep: 3, Versions: &retention.Keep{Mode: "rolling"}}, nil); !errors.Is(err, ErrInvalid) {
 		t.Errorf("rolling accepted: %v", err)
+	}
+}
+
+func TestAuthorityKeysStayOut(t *testing.T) {
+	e := newEnv(t)
+	secrets := []string{"tls/ca-key.pem", "tls/ca-cert.pem", "tls/ca-leaf-ui.pem", "tls/ca-leaf-apps.pem", "tls/app-gate.key"}
+	for _, name := range secrets {
+		e.write(t, name, "secret "+name)
+	}
+	e.write(t, "tls/custom-cert.pem", "own certificate")
+	name := e.create(t)
+
+	// Not in the file on the volume (which can be downloaded) …
+	file, err := e.m.Open([]string{"tank", "fast"}, "fast", name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	unzip, err := gzip.NewReader(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	reader := tar.NewReader(unzip)
+	for {
+		header, err := reader.Next()
+		if err != nil {
+			break
+		}
+		names = append(names, header.Name)
+	}
+	for _, secret := range secrets {
+		if slices.Contains(names, secret) {
+			t.Errorf("%s is in the backup", secret)
+		}
+	}
+	if !slices.Contains(names, "tls/custom-cert.pem") {
+		t.Error("the rest of tls is missing")
+	}
+
+	// … and never restored from an older backup that holds them.
+	manifest := [3]string{manifestName, "", `{"format":1,"time":"2026-10-13T12:00:00Z","hostname":"nas","version":"1.0.0"}`}
+	entries := [][3]string{manifest, {"users/alex/account.json", "", `{}`}, {"tls/custom-cert.pem", "", "own"}}
+	for _, secret := range secrets {
+		entries = append(entries, [3]string{secret, "", "old " + secret})
+	}
+	stick := newEnv(t)
+	os.RemoveAll(filepath.Join(stick.root, "config"))
+	os.MkdirAll(filepath.Join(stick.root, "config"), 0o755)
+	if _, err := stick.m.RestoreUpload(archive(t, entries...), ""); err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range secrets {
+		if _, err := stick.store.Read(secret); err == nil {
+			t.Errorf("%s restored", secret)
+		}
+	}
+	if data, _ := stick.store.Read("tls/custom-cert.pem"); string(data) != "own" {
+		t.Error("other files of tls not restored")
 	}
 }

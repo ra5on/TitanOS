@@ -28,6 +28,11 @@ func (w *titand) wireAppAccess() error {
 		}
 		return appaccess.Account{Name: user.Name, Admin: user.Role.CanAdminister(), Disabled: user.Disabled}, true
 	}
+	// Passes of app windows end with the TitanOS login they were made
+	// for (logout, lock, expiry); the session store is wired later.
+	w.appRights.SessionUsable = func(id, user string) bool {
+		return w.sessions != nil && w.sessions.Usable(id, user)
+	}
 	if err := w.appRights.Load(); err != nil {
 		slog.Warn("app rights not readable from /config", "err", err)
 	}
@@ -83,20 +88,20 @@ func (w *titand) feedAutoApps(ctx context.Context) {
 	}
 }
 
-// autoApps are the apps (Compose projects) with a WebUI label that names a
-// port of the NAS, with that port. Containers without a project and
-// WebUIs elsewhere get no automatic name.
+// autoApps are the apps (Compose projects) with a WebUI label that names
+// a TCP port one of the app's containers publishes on the NAS, with that
+// port. Containers without a project, in the host's network and WebUIs
+// elsewhere get no automatic name.
 func autoApps(containers []docker.Container) map[string]int {
-	out := map[string]int{}
+	in := make([]appproxy.AppContainer, 0, len(containers))
 	for _, c := range containers {
-		if c.App == "" {
-			continue
-		}
-		if port := appproxy.WebUIPort(c.WebUI); port > 0 {
-			if _, seen := out[c.App]; !seen {
-				out[c.App] = port
+		ac := appproxy.AppContainer{App: c.App, WebUI: c.WebUI}
+		for _, p := range c.Ports {
+			if p.Host > 0 && (p.Protocol == "tcp" || p.Protocol == "") {
+				ac.Ports = append(ac.Ports, p.Host)
 			}
 		}
+		in = append(in, ac)
 	}
-	return out
+	return appproxy.AutoPorts(in)
 }

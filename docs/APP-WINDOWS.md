@@ -54,14 +54,24 @@ die Aufrufe der Seite an die App gehen ohnehin durch.
 
 1. Die Weboberfläche holt `POST /api/v1/apps/{app}/window` und lädt die Adresse
    `https://<app>/.titanos/enter?t=<token>` ins Fenster. Das Token ist ein HMAC (Schlüssel
-   `/config/tls/app-gate.key`, einmal erzeugt) über Konto, App und Ablauf, gilt **60 s** und
-   **nur einmal** (verbrauchte Tokens im RAM).
-2. `/.titanos/enter` auf dem App-Namen prüft Token und aktuelles Recht, setzt das Cookie
-   `__Host-titanos_app` (HttpOnly, Secure, SameSite=None, Partitioned, Path=/, 12 h, HMAC über
-   Konto, App, Ablauf) und leitet auf `/` weiter. Antwort mit `Cache-Control: no-store` und
-   `Referrer-Policy: no-referrer`; der Pfad erreicht die App nie.
-3. Jeder weitere Seitenaufruf braucht ein gültiges Cookie **und** das aktuelle Recht. Ohne
-   kommt Status 403 mit einer kleinen Seite „Diese App über TitanOS öffnen“ (Deutsch und
+   `/config/tls/app-gate.key`, einmal erzeugt) über Konto, App, Ablauf und die Kennung der
+   TitanOS-Anmeldung, die es geholt hat (`auth.SessionID`: Hash des Hashes des
+   Sitzungs-Tokens, wie in „Angemeldete Geräte“, nie das Token selbst), gilt **60 s** und
+   **nur einmal** (verbrauchte Tokens im RAM). Nur eine Browser-Anmeldung bekommt eins; ohne
+   Sitzungscookie (API-Token, Cluster) antwortet die Route 403 `session_required`.
+2. `/.titanos/enter` auf dem App-Namen prüft Token, Anmeldung und aktuelles Recht, setzt das
+   Cookie `__Host-titanos_app` (HttpOnly, Secure, SameSite=None, Partitioned, Path=/, 12 h,
+   HMAC über Konto, App, Ablauf und dieselbe Anmeldungskennung) und leitet auf `/` weiter.
+   Antwort mit `Cache-Control: no-store` und `Referrer-Policy: no-referrer`; der Pfad erreicht
+   die App nie. Ist das Token ungültig oder verbraucht, der Browser hat aber schon ein gültiges
+   Cookie dieser App und Anmeldung (ein nach dem Neuladen wiederhergestelltes Fenster lädt die
+   alte Eintrittsadresse), geht es ebenfalls mit 303 auf `/` weiter, ohne neues Cookie.
+3. Jeder weitere Seitenaufruf braucht ein gültiges Cookie, das aktuelle Recht **und** die
+   TitanOS-Anmeldung, für die es ausgestellt wurde: Sie muss noch bestehen und darf nicht
+   gesperrt sein (`auth.Sessions.Usable`, zählt nicht als Benutzung der Anmeldung). Abmelden,
+   das Beenden der Anmeldung unter „Angemeldete Geräte“, ein Passwortwechsel, der die
+   Sitzungen beendet, ihr Ablauf und der Sperrbildschirm schließen die App damit ebenfalls aus;
+   nach dem Entsperren gilt das Cookie wieder. Ohne kommt Status 403 mit einer kleinen Seite „Diese App über TitanOS öffnen“ (Deutsch und
    Englisch, im Fenster darstellbar) mit Link auf `GET /api/v1/apps/{app}/open?host=<name>`
    der passenden Weboberfläche.
 
@@ -79,7 +89,13 @@ Sperrseite, ein Klick genügt. Grenze: Safari und andere Browser trennen Cookies
 ## Automatische HTTPS-Namen
 
 Mit eingeschaltetem Proxy bekommt jede Docker-App (Compose-Projekt), deren Container ein
-`titanos.webui`-Label mit Port auf dem NAS trägt, einen Namen `<app>.<lokaler Name>.local`
+`titanos.webui`-Label mit Port auf dem NAS trägt, einen Namen – aber nur, wenn ein Container
+**dieser App** genau diesen Port per Docker-Portfreigabe (TCP) auf dem NAS veröffentlicht
+(`appproxy.AutoPorts`). Ein Label, das auf einen fremden Port zeigt (Weboberfläche, SSH, eine
+andere App), bekommt keinen Namen. Container im Host-Netz veröffentlichen keine Ports und
+bekommen daher keinen automatischen Namen; Docker nennt Portfreigaben nur laufender
+Container, eine gestoppte App verliert ihren automatischen Namen bis zum nächsten Start (eine
+eigene Route bleibt). Sonst einen Namen `<app>.<lokaler Name>.local`
 bzw. `<app>.<domain>` (nur Heimnetz, Tailscale, NetBird). Schalter „Automatisch für alle Apps
 mit WebUI“ unter Einstellungen › HTTPS-Namen für Apps, ab Werk an (`noAuto` in
 `/config/docker/proxy.json` nur, wenn ausgeschaltet).
@@ -102,19 +118,38 @@ TitanOS deshalb die Zertifikate seiner Namen selbst aus (`tlscert/ca.go`):
   in `/config/tls/ca-key.pem` und `ca-cert.pem`. Ist nur eine der Dateien da oder der Stick
   nicht lesbar, wird nie eine neue darübergeschrieben; dann bleibt es beim selbst signierten
   Zertifikat.
+- **Namensbeschränkung** (X.509 Name Constraints, kritisch): Die Zertifizierungsstelle darf
+  nur für den Hostnamen, alles unter `.local` (Eintrag `local`, deckt `nas.local` und
+  `immich.nas.local`), `localhost` und die beim Anlegen eingestellten Domains des App-Proxys
+  (eigene Domain, volle Namen von Routen) bürgen, dazu nur für die Adressbereiche 10/8,
+  172.16/12, 192.168/16, 100.64/10 (Tailscale), 127/8, 169.254/16, fc00::/7, fe80::/10 und
+  ::1. Ein Gerät, das sie installiert hat, lehnt jedes Zertifikat für fremde Namen (z. B.
+  einer Bank) ab, selbst wenn jemand ihren Schlüssel erbeutet. Namen und Adressen außerhalb
+  (öffentliche IP-Adressen, später hinzugefügte Domains, ein später geänderter Hostname ohne
+  `.local`) bekommen kein Zertifikat von ihr; dort bleibt das selbst signierte. Eine
+  Zertifizierungsstelle ohne Beschränkung (Entwicklungsstände vor dieser Regel) wird einmal
+  ersetzt; Geräte installieren dann die neue.
 - Reihenfolge: eigenes Zertifikat (deckt es den Namen) > Let's Encrypt > Tailscale >
   TitanOS-Zertifizierungsstelle > selbst signiert (nur, wenn die Zertifizierungsstelle fehlt).
 - Zwei ausgestellte Zertifikate: Weboberfläche (Hostname, `.local`, `localhost`, Adressen des
   NAS) und Apps (die Platzhalter, Kurz- und vollen Namen wie bisher). Sie gelten 397 Tage
   (unter der Grenze der Browser), liegen im RAM und in `/config/tls/ca-leaf-ui.pem` bzw.
   `ca-leaf-apps.pem` und bleiben über Neustarts gleich, damit eine Browser-Ausnahme von vor der
-  Installation hält. Geschrieben wird nur beim Ausstellen: wenn sich die Namen ändern, 30 Tage
-  vor Ablauf, oder für die Weboberfläche, wenn ein Gerät eine Adresse des NAS anspricht, die
-  noch nicht darin steht. Keine Schreibzugriffe je Anfrage oder nach Zeitplan.
+  Installation hält. Geschrieben wird nur beim Ausstellen: beim ersten Mal, wenn sich die Namen
+  (Hostname, Domains) ändern und 30 Tage vor Ablauf. Spricht ein Gerät die Weboberfläche über
+  eine Adresse des NAS an, die nicht im gespeicherten Zertifikat steht (wechselnde
+  IPv6-Präfixe, DHCP), bekommt es ein Zertifikat, das **nur im RAM** liegt. Keine
+  Schreibzugriffe je Anfrage, je Adresse oder nach Zeitplan.
 - Der private Schlüssel verlässt `/config` nie: nicht über API oder MCP, nicht im
   Diagnosepaket (Positivliste `configFiles`, Test `TestBundleLeavesOutKeys`), `tls` ist im
-  Stick-Dateimanager ausgeblendet. Bewusste Ausnahme: die Sicherungen des Sticks enthalten
-  `/config` vollständig, damit eine Wiederherstellung die Zertifizierungsstelle behält.
+  Stick-Dateimanager ausgeblendet. Auch die Sicherungen des Sticks (`configbackup`, Funktion
+  `leftOut`, Test `TestAuthorityKeysStayOut`) enthalten weder `tls/ca-key.pem` noch
+  `tls/ca-cert.pem`, `tls/ca-leaf-*.pem` und `tls/app-gate.key`, und eine Wiederherstellung
+  spielt sie aus älteren Sicherungen nie zurück. Der Bereich „config“ der Datensicherung
+  (restic) schließt dieselben Dateien aus (`config.NotBackedUp`). **Nach dem Wiederherstellen einer
+  Stick-Sicherung entsteht deshalb eine neue Zertifizierungsstelle; alle Geräte müssen ihr
+  Zertifikat neu installieren** (die alte aus den Geräten entfernen). Offene App-Fenster
+  brauchen einmal ein neues Token.
 - Download (jedes angemeldete Konto): `GET /api/v1/certs/ca.crt` (PEM) und `ca.cer` (DER),
   `application/x-x509-ca-cert`, als Anhang. Die Seite HTTPS-Namen für Apps erklärt die
   Installation für Windows, macOS, iPhone/iPad (einschließlich
@@ -130,17 +165,20 @@ Nur Web-Oberfläche, nicht in `publicRoutes` (kein Token, kein MCP):
 - `GET /api/v1/apps/access` (Besitzer/Admin) → `{newApps: "admins"|"everyone", apps: [{app, icon, url, webui, running, gate, users}], accounts: [{name, role, disabled}]}`
 - `PUT /api/v1/apps/access` (Besitzer/Admin) mit `{newApps, apps: [{app, gate, users}]}`; Apps, die fehlen, folgen danach `newApps`. Fehler `app_access_invalid` (400).
 - `GET /api/v1/apps/mine` (jedes Konto) → `{apps: [{app, icon, url, webui, running}]}`: Apps mit HTTPS-Namen oder WebUI-Label, die das Konto nutzen darf; `url` ist der HTTPS-Name (`""` ohne).
-- `POST /api/v1/apps/{app}/window` (jedes Konto) → `{url, expires}`; `url` = `https://<name>/.titanos/enter?t=<token>`, `expires` RFC 3339 (60 s). Fehler `app_forbidden` (403), `proxy_no_route` (409).
+- `POST /api/v1/apps/{app}/window` (jedes Konto) → `{url, expires}`; `url` = `https://<name>/.titanos/enter?t=<token>`, `expires` RFC 3339 (60 s). Fehler `app_forbidden` (403), `session_required` (403, ohne Sitzungscookie), `proxy_no_route` (409).
 - `GET /api/v1/apps/{app}/open?host=<name>` → 303 zur Eintrittsadresse (auf `host`, wenn das ein Name der App ist); ohne Anmeldung 303 auf `/`, ohne Recht 403.
 - `GET /api/v1/certs/ca` → `{available, name, fingerprint, notAfter}`; `GET /api/v1/certs/ca.crt`, `GET /api/v1/certs/ca.cer`.
 
 ## Prüfstand und Grenzen
 
 Geprüft mit Go-Tests (`appaccess`, `appproxy/gate_test.go`, `tlscert/ca_test.go`,
-`api/app_access_test.go`, `diagnose/secrets_test.go`) und Node-Tests
+`api/app_access_test.go`, `diagnose/secrets_test.go`, `configbackup`) und Node-Tests
 (`web/tests/appaccess.test.mjs`): Kopfzeilen, Sperre mit Token-Ablauf, einmaligem Token,
-entzogenem Recht, gesperrtem/gelöschtem Konto und Nicht-Browser-Aufrufen, automatische
-Namen, Zertifikatskette bis zur Zertifizierungsstelle. Nicht geprüft: echte Browser
+entzogenem Recht, gesperrtem/gelöschtem Konto, Abmelden, Sperrbildschirm und Entsperren,
+verbrauchtem Token mit gültigem Cookie und Nicht-Browser-Aufrufen, automatische Namen nur für
+veröffentlichte Ports, Zertifikatskette bis zur Zertifizierungsstelle, Namensbeschränkung
+(Zertifikat für `bank.de` wird abgelehnt, App- und Weboberflächen-Namen gelten), neue
+IPv6-Adressen ohne Schreibzugriff, Sicherungen ohne Schlüssel. Nicht geprüft: echte Browser
 (Partitioned-Cookies in Safari/Firefox/Chrome im iframe), echte Apps (Immich, Jellyfin,
 Vaultwarden, Paperless, Home Assistant, Nextcloud) und die Installation der
 Zertifizierungsstelle auf echten Geräten. Apps, die per JavaScript `window.top` prüfen,

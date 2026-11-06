@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/activity"
+	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/webauthn/webauthntest"
 )
@@ -300,4 +302,59 @@ func mustURL(t *testing.T, raw string) *url.URL {
 		t.Fatal(err)
 	}
 	return u
+}
+
+func TestAgentEventsEndWithTheSessionLock(t *testing.T) {
+	recheck := consoleRecheck.Swap(int64(20 * time.Millisecond))
+	t.Cleanup(func() { consoleRecheck.Store(recheck) })
+	ts := newTestServer(t)
+	ts.setup()
+	alex, _ := ts.users.Get("alex")
+	var token string
+	for _, c := range ts.client.Jar.Cookies(mustURL(t, ts.url)) {
+		if c.Name == ts.server.cookieName() {
+			token = c.Value
+		}
+	}
+	id := agent.NewID()
+	ts.server.agentRT.mu.Lock()
+	if ts.server.agentRT.runs == nil {
+		ts.server.agentRT.runs = map[string]*agentRun{}
+	}
+	ts.server.agentRT.runs[runKey("alex", id)] = &agentRun{user: "alex", chat: id, subs: map[chan agent.Event]struct{}{}}
+	ts.server.agentRT.mu.Unlock()
+
+	stream := func() chan struct{} {
+		r := httptest.NewRequest("GET", "/api/v1/agent/chats/"+id+"/events", nil)
+		r.SetPathValue("id", id)
+		r.AddCookie(&http.Cookie{Name: ts.server.cookieName(), Value: token})
+		r = r.WithContext(context.WithValue(r.Context(), contextKey{}, alex))
+		done := make(chan struct{})
+		go func() {
+			ts.server.handleAgentEvents(httptest.NewRecorder(), r)
+			close(done)
+		}()
+		return done
+	}
+	done := stream()
+	select {
+	case <-done:
+		t.Fatal("stream of a running chat ended at once")
+	case <-time.After(100 * time.Millisecond):
+	}
+	ts.request("POST", "/api/v1/session/lock", nil)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("event stream of a locked session still open")
+	}
+	// Logging out ends it as well.
+	ts.server.sessions.Unlock(token)
+	done = stream()
+	ts.server.sessions.Delete(token)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("event stream of an ended session still open")
+	}
 }

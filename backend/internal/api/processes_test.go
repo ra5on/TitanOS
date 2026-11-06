@@ -19,7 +19,10 @@ func processServer(t *testing.T) (*testServer, *[]int) {
 	sent := &[]int{}
 	ts := newTestServerWith(t, func(o *Options) {
 		o.Processes = &procs.Sampler{Root: "../procs/testdata/proc", Passwd: "../procs/testdata/etc/passwd", Self: 100, Parent: 1, PageSize: 4096,
-			Kill: func(pid int, sig syscall.Signal) error { *sent = append(*sent, pid, int(sig)); return nil }}
+			// The fd stands for the pid; nothing is opened or sent.
+			OpenPID:  func(pid int) (int, error) { return pid, nil },
+			SendPID:  func(fd int, sig syscall.Signal) error { *sent = append(*sent, fd, int(sig)); return nil },
+			ClosePID: func(int) error { return nil }}
 	})
 	ts.server.opts.Activity = activity.New(ts.store)
 	ts.setup()

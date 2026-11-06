@@ -203,9 +203,17 @@ sichtbar ist, und nur, was der offene Reiter braucht.
   Web-Sitzung (`browserOnly`), nicht in `publicRoutes`, nicht im MCP-/Agent-
   Werkzeugkatalog. `start` ist die Startzeit aus der Liste; passt sie nicht
   mehr, ist die Nummer neu vergeben (409 `process_changed`). Abgelehnt werden
-  PID ≤ 2, Kernel-Threads, Thread-IDs, titand und sein Elternprozess (403
-  `process_protected`) sowie alles im Entwicklungsmodus (409 `dev_mode`). Jede
-  Anfrage steht im Aktivitätsprotokoll mit Prozessname und Signal.
+  PID ≤ 2, Kernel-Threads, Thread-IDs, titand, sein Elternprozess und alle von
+  titand gestarteten Prozesse samt Nachkommen (also auch Shells der NAS-Konsole
+  und was darin läuft), dazu die für den Betrieb nötigen Dienste `dockerd`,
+  `containerd`, `containerd-shim*`, `sshd` (auch `sshd-session`/`sshd-auth`),
+  `systemd-journald`, `systemd-udevd`, `smbd`, `nmbd`, `mdadm`, `libvirtd` und
+  `virtqemud` (Name aus `/proc/<pid>/stat`, 403 `process_protected`; die Liste
+  zeigt sie als geschützt) sowie alles im Entwicklungsmodus (409 `dev_mode`).
+  Das Signal geht über einen pidfd (`pidfd_open`, danach wird die Startzeit
+  erneut gelesen, dann `pidfd_send_signal`), sodass eine inzwischen neu vergebene
+  Prozessnummer nie getroffen wird. Jede Anfrage steht im Aktivitätsprotokoll mit
+  Prozessname und Signal.
 - **Container, VMs und Systemcontainer:** die vorhandenen Listen und Aktionen
   (`/docker`, `/vms`, `/lxc`); Stoppen und Neustarten mit einfachem
   Bestätigungsdialog.

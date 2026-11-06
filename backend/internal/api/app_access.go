@@ -202,7 +202,13 @@ func (s *Server) enterURL(r *http.Request, app, host string) (string, time.Time,
 	if s.opts.AppProxy == nil || s.opts.AppAccess == nil {
 		return "", time.Time{}, http.StatusConflict, "proxy_no_route"
 	}
-	token, expires := s.opts.AppAccess.EnterToken(currentUser(r).Name, app)
+	// The pass is bound to this login: it ends with logout and lock. Only
+	// a browser session has one (no API tokens, no cluster calls).
+	session := auth.SessionID(s.sessionToken(r))
+	if session == "" {
+		return "", time.Time{}, http.StatusForbidden, "session_required"
+	}
+	token, expires := s.opts.AppAccess.EnterToken(currentUser(r).Name, app, session)
 	link, ok := s.opts.AppProxy.EnterURL(app, host, token)
 	if !ok {
 		return "", time.Time{}, http.StatusConflict, "proxy_no_route"
@@ -224,8 +230,11 @@ func (s *Server) handleAppWindow(w http.ResponseWriter, r *http.Request) {
 }
 
 func appWindowMessage(code string) string {
-	if code == "app_forbidden" {
+	switch code {
+	case "app_forbidden":
 		return "this account may not use this app"
+	case "session_required":
+		return "only a browser logged in to TitanOS can open an app window"
 	}
 	return "the app has no HTTPS name"
 }

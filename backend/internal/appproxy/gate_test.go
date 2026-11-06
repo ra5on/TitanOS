@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/appaccess"
+	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/config"
 )
 
@@ -125,6 +126,9 @@ type gateFixture struct {
 	accounts map[string]appaccess.Account
 	now      time.Time
 	h        http.Handler
+	sessions *auth.Sessions
+	// logins are the TitanOS session tokens of the accounts.
+	logins map[string]string
 }
 
 func newGateFixture(t *testing.T) *gateFixture {
@@ -136,6 +140,16 @@ func newGateFixture(t *testing.T) *gateFixture {
 	f.access = appaccess.New(config.Open(t.TempDir()))
 	f.access.Lookup = func(name string) (appaccess.Account, bool) { a, ok := f.accounts[name]; return a, ok }
 	f.access.Now = func() time.Time { return f.now }
+	f.sessions = auth.NewSessions()
+	f.logins = map[string]string{}
+	for user := range f.accounts {
+		token, err := f.sessions.Create(user, "192.168.1.5", "test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		f.logins[user] = token
+	}
+	f.access.SessionUsable = f.sessions.Usable
 	f.m.Access = f.access
 	port := upstreamPort(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Frame-Options", "DENY")
@@ -165,7 +179,7 @@ func (f *gateFixture) do(path string, browser bool, cookie *http.Cookie) *httpte
 
 func (f *gateFixture) enter(t *testing.T, user string) *http.Cookie {
 	t.Helper()
-	token, _ := f.access.EnterToken(user, "immich")
+	token, _ := f.access.EnterToken(user, "immich", auth.SessionID(f.logins[user]))
 	w := f.do(EnterPath+"?t="+url.QueryEscape(token), true, nil)
 	if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/" {
 		t.Fatalf("enter: %d %s", w.Code, w.Header().Get("Location"))
@@ -245,15 +259,83 @@ func TestGateRevokedAndExpired(t *testing.T) {
 		t.Errorf("expired pass still lets in: %d", w.Code)
 	}
 	// Old or used window tokens are refused at the door.
-	token, _ := f.access.EnterToken("anna", "immich")
+	token, _ := f.access.EnterToken("anna", "immich", auth.SessionID(f.logins["anna"]))
 	f.now = f.now.Add(appaccess.EnterTTL)
 	if w := f.do(EnterPath+"?t="+url.QueryEscape(token), true, nil); w.Code != http.StatusForbidden || len(w.Result().Cookies()) != 0 {
 		t.Errorf("expired token: %d", w.Code)
 	}
-	token, _ = f.access.EnterToken("anna", "immich")
+	token, _ = f.access.EnterToken("anna", "immich", auth.SessionID(f.logins["anna"]))
 	f.do(EnterPath+"?t="+url.QueryEscape(token), true, nil)
 	if w := f.do(EnterPath+"?t="+url.QueryEscape(token), true, nil); w.Code != http.StatusForbidden {
 		t.Errorf("token used twice: %d", w.Code)
+	}
+}
+
+func TestGateEndsWithTheLogin(t *testing.T) {
+	f := newGateFixture(t)
+	cookie := f.enter(t, "alex")
+	if w := f.do("/", true, cookie); w.Code != http.StatusOK {
+		t.Fatalf("with pass: %d", w.Code)
+	}
+	// The lock screen of TitanOS shuts the app; unlocking opens it again.
+	f.sessions.Lock(f.logins["alex"])
+	if w := f.do("/", true, cookie); w.Code != http.StatusForbidden {
+		t.Errorf("locked login still lets in: %d", w.Code)
+	}
+	f.sessions.Unlock(f.logins["alex"])
+	if w := f.do("/", true, cookie); w.Code != http.StatusOK {
+		t.Errorf("unlocked login refused: %d", w.Code)
+	}
+	// A window token of a locked login is not taken either.
+	f.sessions.Lock(f.logins["alex"])
+	token, _ := f.access.EnterToken("alex", "immich", auth.SessionID(f.logins["alex"]))
+	if w := f.do(EnterPath+"?t="+url.QueryEscape(token), true, nil); w.Code != http.StatusForbidden {
+		t.Errorf("token of a locked login: %d", w.Code)
+	}
+	f.sessions.Unlock(f.logins["alex"])
+	// Logging out ends the pass.
+	f.sessions.Delete(f.logins["alex"])
+	if w := f.do("/", true, cookie); w.Code != http.StatusForbidden {
+		t.Errorf("pass of an ended login still lets in: %d", w.Code)
+	}
+	// So does a password change that ends the account's sessions.
+	again, err := f.sessions.Create("alex", "192.168.1.5", "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.logins["alex"] = again
+	cookie = f.enter(t, "alex")
+	f.sessions.DeleteUser("alex", "")
+	if w := f.do("/", true, cookie); w.Code != http.StatusForbidden {
+		t.Errorf("pass after the sessions ended still lets in: %d", w.Code)
+	}
+}
+
+func TestGateUsedTokenWithPass(t *testing.T) {
+	f := newGateFixture(t)
+	token, _ := f.access.EnterToken("alex", "immich", auth.SessionID(f.logins["alex"]))
+	first := f.do(EnterPath+"?t="+url.QueryEscape(token), true, nil)
+	cookies := first.Result().Cookies()
+	if first.Code != http.StatusSeeOther || len(cookies) != 1 {
+		t.Fatalf("enter: %d", first.Code)
+	}
+	// A window restored after a reload loads the old address again: with a
+	// valid pass it goes on to the app instead of the refusal.
+	w := f.do(EnterPath+"?t="+url.QueryEscape(token), true, cookies[0])
+	if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/" || w.Header().Get("Cache-Control") != "no-store" {
+		t.Errorf("used token with pass: %d %s", w.Code, w.Header().Get("Location"))
+	}
+	if len(w.Result().Cookies()) != 0 {
+		t.Error("a used token handed out a new pass")
+	}
+	// Not with the pass of a locked login, nor without a pass.
+	f.sessions.Lock(f.logins["alex"])
+	if w := f.do(EnterPath+"?t="+url.QueryEscape(token), true, cookies[0]); w.Code != http.StatusForbidden {
+		t.Errorf("used token with pass of a locked login: %d", w.Code)
+	}
+	f.sessions.Unlock(f.logins["alex"])
+	if w := f.do(EnterPath+"?t="+url.QueryEscape(token), true, nil); w.Code != http.StatusForbidden {
+		t.Errorf("used token without pass: %d", w.Code)
 	}
 }
 
@@ -264,6 +346,33 @@ func TestGateSwitchedOff(t *testing.T) {
 	}
 	if w := f.do("/", true, nil); w.Code != http.StatusOK {
 		t.Errorf("gate off still refuses: %d", w.Code)
+	}
+}
+
+func TestAutoPortsOnlyPublished(t *testing.T) {
+	got := AutoPorts([]AppContainer{
+		// The label names a port the app publishes.
+		{App: "immich", WebUI: "2283", Ports: []int{2283}},
+		// The label points at the web UI of TitanOS or SSH: nothing published.
+		{App: "evil", WebUI: "443"},
+		{App: "evil2", WebUI: "http://[host]:22/", Ports: []int{8080}},
+		// Another container of the same app publishes it.
+		{App: "paperless", WebUI: "8000"},
+		{App: "paperless", Ports: []int{8000}},
+		// A port published by another app does not count.
+		{App: "thief", WebUI: "8096"},
+		{App: "jellyfin", WebUI: "8096/web", Ports: []int{8096}},
+		// No project, no name.
+		{WebUI: "9000", Ports: []int{9000}},
+	})
+	want := map[string]int{"immich": 2283, "paperless": 8000, "jellyfin": 8096}
+	if len(got) != len(want) {
+		t.Fatalf("auto ports %v, want %v", got, want)
+	}
+	for app, port := range want {
+		if got[app] != port {
+			t.Errorf("%s: %d, want %d", app, got[app], port)
+		}
 	}
 }
 
