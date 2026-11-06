@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	// PLAN 61: one window of the desktop. TitanOS programs show their pages
 	// in a frame of the same origin with the program's own side bar; Docker
 	// apps show their own interface through their HTTPS name.
@@ -7,7 +8,7 @@
 	import DesktopIcon from './DesktopIcon.svelte';
 	import { sideActive, type SideItem } from './apps.ts';
 	import { frameMessage } from './frame.ts';
-	import { openTab as openProgramTab } from './programs.svelte.ts';
+	import { appEntry, openTab as openProgramTab } from './programs.svelte.ts';
 	import {
 		closeWindow,
 		desktop,
@@ -49,7 +50,14 @@
 	const MIN_H = 240;
 	let frame = $state<HTMLIFrameElement>();
 	// The frame loads its first page once; later pages are reached inside it.
-	const src = win.href;
+	// A Docker app's window opens through a fresh entry of the gate, also after a reload.
+	let src = $state(
+		untrack(() => win.entry ?? (external && win.href.startsWith('https://') ? '' : win.href)),
+	);
+	$effect(() => {
+		if (src) return;
+		void appEntry(win.app, win.href).then((url) => (src = url));
+	});
 	let loaded = $state(false);
 	let slow = $state(false);
 	let dragging = $state(false);
@@ -194,7 +202,7 @@
 	}
 
 	function openTab() {
-		void openProgramTab(win.app, external ? win.href.split('/.titanos/enter')[0] : win.href);
+		void openProgramTab(win.app, win.href);
 	}
 	const EDGES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
 </script>
@@ -321,14 +329,16 @@
 						>
 					</div>
 				</div>
-			{:else}
+			{:else if src}
 				<iframe
 					bind:this={frame}
 					data-window={win.id}
 					{src}
 					title={win.title}
 					onload={() => (loaded = true)}
-					allow="clipboard-read; clipboard-write; fullscreen; publickey-credentials-get; publickey-credentials-create; camera; microphone"
+					allow={external
+						? 'fullscreen; clipboard-write'
+						: 'clipboard-read; clipboard-write; fullscreen; publickey-credentials-get; publickey-credentials-create; camera; microphone'}
 					sandbox={external
 						? 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals'
 						: undefined}

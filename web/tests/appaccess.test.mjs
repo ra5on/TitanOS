@@ -24,7 +24,7 @@ test('Programme is an admin-only settings page that the search finds', async () 
 		await import('../src/lib/settings-search.ts');
 	const area = settingsAreas.find((a) => a.id === 'programs');
 	assert.ok(area?.admin);
-	assert.equal(area.label, 'appaccess.title');
+	assert.equal(area.label, 'settingshome.area.programs');
 	assert.ok(!userSettingsPaths.includes('/settings/programs'));
 	for (const q of ['Programme', 'rechte', 'benutzer', 'desktop'])
 		assert.ok(matchesSetting(q, 'Programme', 'programs'), q);

@@ -21,6 +21,8 @@ export type Win = {
 	snap: Snap;
 	/** Where the window grew from (the icon), for the opening effect. */
 	from?: { x: number; y: number };
+	/** A one-time entry of a Docker app's gate (PLAN 61-1); never stored. */
+	entry?: string;
 };
 
 const KEY = 'titanos.desktop.windows';
@@ -55,6 +57,12 @@ function storageKey() {
 export function loadDesktop() {
 	desktop.prefs = sanitizeDesktop(session.desktop);
 	try {
+		const recent = JSON.parse(localStorage.getItem(recentKey()) ?? 'null');
+		if (Array.isArray(recent)) desktop.prefs.recent = sanitizeDesktop({ recent }).recent;
+	} catch {
+		// Keep what the NAS has.
+	}
+	try {
 		const raw = JSON.parse(localStorage.getItem(storageKey()) ?? '[]');
 		if (Array.isArray(raw))
 			wm.windows = raw
@@ -82,7 +90,7 @@ export function saveWindows() {
 	clearTimeout(saveWindowsTimer);
 	saveWindowsTimer = setTimeout(() => {
 		try {
-			const plain = wm.windows.map(({ from: _from, ...w }) => w);
+			const plain = wm.windows.map(({ from: _from, entry: _entry, ...w }) => w);
 			localStorage.setItem(storageKey(), JSON.stringify(plain));
 		} catch {
 			// Not remembered in this browser.
@@ -134,11 +142,12 @@ export function openWindow(
 	app: string,
 	href: string,
 	title: string,
-	opts: { multi?: boolean; from?: { x: number; y: number }; fresh?: boolean } = {},
+	opts: { multi?: boolean; from?: { x: number; y: number }; fresh?: boolean; entry?: string } = {},
 ) {
 	const existing = !opts.multi && !opts.fresh ? wm.windows.find((w) => w.app === app) : undefined;
 	if (existing) {
-		if (href && existing.href !== href) navigateWindow(existing.id, href);
+		if (href && existing.href !== href && !app.startsWith('docker:'))
+			navigateWindow(existing.id, href);
 		focus(existing.id);
 		return existing.id;
 	}
@@ -152,6 +161,7 @@ export function openWindow(
 		z: ++topZ,
 		minimized: false,
 		from: opts.from,
+		entry: opts.entry,
 	};
 	wm.windows.push(win);
 	wm.focused = win.id;
@@ -160,9 +170,17 @@ export function openWindow(
 	return win.id;
 }
 
+// Recently used programs stay in this browser: opening a program must not write the stick.
+function recentKey() {
+	return 'titanos.desktop.recent.' + (session.data?.user?.name ?? '');
+}
 function rememberRecent(app: string) {
-	const recent = [app, ...desktop.prefs.recent.filter((r) => r !== app)].slice(0, 12);
-	if (recent.join() !== desktop.prefs.recent.join()) savePrefs((p) => (p.recent = recent));
+	desktop.prefs.recent = [app, ...desktop.prefs.recent.filter((r) => r !== app)].slice(0, 12);
+	try {
+		localStorage.setItem(recentKey(), JSON.stringify(desktop.prefs.recent));
+	} catch {
+		// Not remembered in this browser.
+	}
 }
 
 export function closeWindow(id: string) {

@@ -65,7 +65,9 @@
 	// PLAN 61: a page in a window of the desktop, the desktop itself, or the phone's home grid.
 	// Pages that belong to no program (Ersteinrichtung) keep the classic frame.
 	const known = $derived(page.url.pathname === '/' || !!appForPath(page.url.pathname));
-	const desktopMode = $derived(!inWindow && !mode.classic && mode.wide && !agentAppMode(page.url) && known);
+	const desktopMode = $derived(
+		!inWindow && !mode.classic && mode.wide && !agentAppMode(page.url) && known,
+	);
 	const phoneMode = $derived(!inWindow && !mode.classic && !mode.wide && !agentApp && known);
 	afterNavigate(() => {
 		if (inWindow) announcePage(page.url.pathname + page.url.search, pageTitle.value);

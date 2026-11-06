@@ -5,7 +5,7 @@ import { t } from '../i18n/index.svelte.ts';
 import { session } from '../session.svelte.ts';
 import { appAllowed, SYSTEM_APPS, type SideItem } from './apps.ts';
 import { dockerPrograms, dockerUpdates, sources } from './sources.svelte.ts';
-import { openWindow } from './wm.svelte.ts';
+import { openWindow, wm } from './wm.svelte.ts';
 import { storage } from '../storage.svelte.ts';
 
 export type Program = {
@@ -128,8 +128,10 @@ export async function openProgram(
 	const p = findProgram(key);
 	if (!p) return;
 	if (p.kind === 'docker') {
-		const href = p.href.startsWith('https://') ? await appEntry(key, p.href) : p.href;
-		openWindow(key, href, p.label, { from: opts.from, fresh: opts.fresh });
+		// The window keeps the app's address; the one-time entry only loads it.
+		const open = !opts.fresh && wm.windows.find((w) => w.app === key);
+		const entry = open || !p.href.startsWith('https://') ? undefined : await appEntry(key, p.href);
+		openWindow(key, p.href, p.label, { from: opts.from, fresh: opts.fresh, entry });
 		return;
 	}
 	openWindow(key, opts.href ?? p.href, p.label, {
