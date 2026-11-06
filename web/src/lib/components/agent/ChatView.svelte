@@ -85,7 +85,13 @@
 
 	function stepLabel(e: Entry): string {
 		if (e.role === 'note')
-			return t(e.note === 'approved' ? 'agent.noteApproved' : 'agent.noteDeclined');
+			return t(
+				e.note === 'verify'
+					? 'agent.noteVerify'
+					: e.note === 'approved'
+						? 'agent.noteApproved'
+						: 'agent.noteDeclined',
+			);
 		const word = stepWord(e.tool);
 		return word ? t(`agent.step.${word}` as MessageKey) : (e.tool ?? '').replaceAll('_', ' ');
 	}
@@ -95,6 +101,7 @@
 	}
 	const noteText: Record<string, MessageKey> = {
 		memory: 'agent.noteMemory',
+		note: 'agent.noteNote',
 		skill: 'agent.noteSkill',
 		schedule: 'agent.noteSchedule',
 		homeassistant: 'agent.noteHA',
@@ -103,6 +110,8 @@
 		interrupted: 'agent.noteInterrupted',
 		error: 'agent.noteError',
 		limit: 'agent.noteLimit',
+		timelimit: 'agent.noteTimeLimit',
+		loop: 'agent.noteLoop',
 		undone: 'agent.noteUndone',
 	};
 	const levelText: Record<string, MessageKey> = {
@@ -205,6 +214,11 @@
 								>{t('agent.planned')}</button
 							>{/if}
 					</div>
+				{:else if block.entry.note === 'summary'}
+					<details class="note edited">
+						<summary>{t('agent.noteSummary')}</summary>
+						<pre>{block.entry.content}</pre>
+					</details>
 				{:else if block.entry.note === 'snapshot'}
 					<span class="learn snap">{block.entry.content}</span>
 				{:else if block.entry.note === 'edited'}
@@ -212,7 +226,7 @@
 						<summary>{t('agent.noteEdited')}</summary>
 						<pre>{block.entry.content}</pre>
 					</details>
-				{:else if block.entry.note === 'memory' || block.entry.note === 'skill' || block.entry.note === 'schedule' || block.entry.note === 'homeassistant' || block.entry.note === 'album'}
+				{:else if block.entry.note === 'memory' || block.entry.note === 'note' || block.entry.note === 'skill' || block.entry.note === 'schedule' || block.entry.note === 'homeassistant' || block.entry.note === 'album'}
 					<span class="learn">✦ {t(noteText[block.entry.note])}: {block.entry.content}</span>
 				{:else}
 					<div class="note" class:bad={block.entry.note === 'error'}>
@@ -222,7 +236,7 @@
 						{#if block.entry.note === 'error' && block.entry.content}<span class="muted">
 								· {block.entry.content}</span
 							>{/if}
-						{#if (block.entry.note === 'error' || block.entry.note === 'interrupted' || block.entry.note === 'limit') && i === list.length - 1 && onretry}
+						{#if ['error', 'interrupted', 'limit', 'timelimit', 'loop'].includes(block.entry.note ?? '') && i === list.length - 1 && onretry}
 							<button type="button" class="btn" onclick={onretry}>{t('agent.continue')}</button>
 						{/if}
 					</div>
@@ -245,6 +259,25 @@
 				</a>
 			{/each}
 		{/each}
+
+		{#if chat.plan?.length}
+			{@const done = chat.plan.filter((s) => s.done).length}
+			<section class="plan" aria-label={t('agent.plan')}>
+				<header>
+					<strong>{t('agent.plan')}</strong>
+					<span class="muted">{t('agent.planProgress', { done, total: chat.plan.length })}</span>
+				</header>
+				<ol>
+					{#each chat.plan as step, n (n)}
+						<li class:done={step.done}>
+							<span class="box" aria-hidden="true">{step.done ? '✓' : ''}</span>
+							<span>{step.text}</span>
+							{#if step.done}<span class="sr-only">{t('agent.planDone')}</span>{/if}
+						</li>
+					{/each}
+				</ol>
+			</section>
+		{/if}
 
 		{#if busy}
 			{#if live.thinking && !live.content}
@@ -298,6 +331,54 @@
 </div>
 
 <style>
+	.plan {
+		border: 1px solid var(--border);
+		border-radius: var(--radius-ctl, 14px);
+		padding: var(--space-2, 10px) var(--space-3, 14px);
+		margin: var(--space-1, 6px) 0 var(--space-2, 10px);
+	}
+	.plan header {
+		display: flex;
+		justify-content: space-between;
+		gap: 8px;
+		flex-wrap: wrap;
+		font-size: 0.9rem;
+	}
+	.plan ol {
+		list-style: none;
+		margin: 6px 0 0;
+		padding: 0;
+		display: grid;
+		gap: 4px;
+	}
+	.plan li {
+		display: flex;
+		gap: 8px;
+		align-items: flex-start;
+		font-size: 0.92rem;
+		overflow-wrap: anywhere;
+	}
+	.plan li.done > span:nth-child(2) {
+		color: var(--muted);
+		text-decoration: line-through;
+	}
+	.plan .box {
+		flex: none;
+		width: 1.1em;
+		height: 1.1em;
+		margin-top: 0.15em;
+		border: 1.5px solid var(--muted);
+		border-radius: 4px;
+		display: inline-grid;
+		place-items: center;
+		font-size: 0.75em;
+		line-height: 1;
+	}
+	.plan li.done .box {
+		background: var(--accent-fill, var(--accent));
+		border-color: var(--accent);
+		color: var(--on-accent);
+	}
 	.plan-card {
 		display: flex;
 		align-items: center;
@@ -437,6 +518,14 @@
 		font-size: var(--text-base);
 		overflow: hidden;
 	}
+	/* Every surface follows "Glasstärke" (PLAN 56), on the phone too. */
+	.thinking,
+	.steps,
+	.file,
+	.plan {
+		background: color-mix(in srgb, var(--surface) calc(var(--ag-alpha, 0.55) * 100%), transparent);
+		backdrop-filter: blur(18px) saturate(160%);
+	}
 	.thinking {
 		border-style: dashed;
 	}
@@ -455,7 +544,6 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		background: color-mix(in srgb, var(--text) 3%, transparent);
 	}
 	.step {
 		display: flex;

@@ -43,7 +43,12 @@ Links wie `?tab=connection` öffnen einen Reiter direkt.
   - **Kopfzeile:** in der Mitte Modell und Denkstufe; Antippen öffnet die Auswahl (Desktop als Fenster unter dem Knopf, Handy als Blatt von unten). Im Chat stehen dort Titel, Projekt und Modell. Rechts Anheften (Desktop), Vollbild (Desktop), **⋯** (Umbenennen, In Projekt verschieben, Export Markdown/PDF, Löschen; am Handy auch Anheften) und ✎ Neuer Chat.
   - **Start = neuer Chat:** Begrüßung mit leuchtendem Agent-Symbol (atmet, solange ein Auftrag läuft), Projekte als Kacheln (Antippen öffnet das Projekt), laufende und wartende Aufträge mit Stopp-Knopf, vier Vorschläge, die das Eingabefeld füllen.
   - **Eingabefeld:** eine Pille mit Büroklammer, Text und Senden-Knopf, Glas mit Leuchtrand. Auf dem Handy 16 px Schrift, damit iOS nicht heranzoomt.
-  - **Effekte:** Glas, Leuchten, Verlaufsschrift, weiche Übergänge; „Leuchten“ und „Weniger Bewegung“ unter Darstellung schalten sie ab (auch die Systemeinstellung „Bewegung reduzieren“).
+  - **Bis unter die Statusleiste (PLAN 56):** Auf `/agent` meldet die Seite dem iPhone eine durchsichtige Statusleiste (`black-translucent`, `viewport-fit=cover`); das Bild reicht bis ganz oben. TitanOS selbst behält die schwarze Leiste. iOS liest das beim Laden, deshalb lädt der Wechsel zwischen TitanOS und dem Agenten neu (wie beim Manifest).
+- **Glasstärke** gilt für alle Flächen des Agenten: Eingabeleiste, Schritte, Gedanken, Plan, Dateikarten, Seitenleiste. Am Handy ist die Eingabeleiste flacher (Knöpfe 34 px).
+- **Wischen:** Unterpunkte der Einstellungen wischen von rechts herein, „Zurück“ von links. Die Fenster des Agenten (Geplant, Gedächtnis, Skills, Landkarte, Projekt …) wischen ebenfalls herein. „Animationen: Reduziert/Aus“ und „Bewegung reduzieren“ des Geräts schalten das ab.
+- **Alle Chats löschen** unten in den Einstellungen des Agenten (`DELETE /api/v1/agent/chats`, `?keepPinned=true`): löscht die eigenen Chats mit Anhängen. Angeheftete bleiben ab Werk, laufende immer. Projekte, Gedächtnis und Skills bleiben, Chats anderer Konten in geteilten Projekten nie.
+- **Mitteilungen** (Einstellungen › Mitteilungen, nur Besitzer und Administratoren): Auf dem iPhone ist der Agent vom Home-Bildschirm eine eigene App mit eigenem Abo. Dort einmal einschalten, auch wenn TitanOS schon Mitteilungen bekommt.
+- **Effekte:** Glas, Leuchten, Verlaufsschrift, weiche Übergänge; „Leuchten“ und „Weniger Bewegung“ unter Darstellung schalten sie ab (auch die Systemeinstellung „Bewegung reduzieren“).
 - **Desktop:** Links bleibt das TitanOS-Menü, daneben das Agent-Menü, rechts der Chat (höchstens etwa 800 px breit, mittig). **Vollbild** in der Kopfzeile blendet das TitanOS-Menü aus, **Mit Menü** wieder ein; die Wahl gilt je Gerät (`localStorage`, PLAN 47).
 - **Handy:** Der Agent ist immer eine eigene Ansicht ohne TitanOS-Rahmen (PLAN 48). ☰ oben links (oder Wischen vom linken Rand) öffnet das Agent-Menü, Wischen nach links schließt es. Ganz unten im Menü führt **„Zurück zu TitanOS“** zum Dashboard.
 - **Home-Bildschirm:** Zwischen TitanOS und dem Agenten lädt die Seite neu. Safari liest das Manifest nur beim Laden. So legt „Zum Home-Bildschirm“ auf `/agent` das Agent-Symbol an und überall sonst das von TitanOS, auch wenn man über das Menü hingekommen ist.
@@ -80,6 +85,41 @@ Aufträge laufen auf dem NAS weiter, auch wenn die Seite zu ist. Ist er fertig, 
 - **Agent eines anderen Knotens** (PLAN 47, Entscheidung 5.11.2026): Jeder Knoten eines Clusters wählt unter Einstellungen › KI-Agent „Eigener Agent“ oder „Agent von <Admin-Knoten>“. Mit dem Agenten des Admin-Knotens kommt nur das Modell von dort; Chats, Gedächtnis, Skills, Rechte und Ordner bleiben auf dem Knoten, er braucht keine eigene Ollama-Adresse. Der Knoten fragt mit „Freigabe anfragen“ an; der Admin-Knoten meldet das (`agent_cluster_request`) und gibt unter „Andere Knoten im Cluster“ frei, entzieht oder entfernt die Anfrage. Die Anfragen laufen signiert über den Cluster (`/agent/…` der Cluster-Routen, nur Admin-Knoten); weitergereicht werden nur `/api/version`, `/api/tags`, `/api/show`, `/api/ps` und `/api/chat` von Ollama, kein Herunterladen. Modelle lädt man auf dem Admin-Knoten.
 - **Knopf in Home Assistant:** Ein geplanter Auftrag mit Häkchen „Als Knopf in Home Assistant anbieten“ erscheint dort als Knopf (MQTT-Gruppe „KI-Agent“ unter Einstellungen › Home Assistant).
 - **Wochenbericht** (Einstellungen › KI-Agent): montags um 8 Uhr über die Benachrichtigungen, was der Agent geändert hat. Das Protokoll steht auch im Agenten.
+
+## Notizen (PLAN 57)
+
+Im Agent-Menü unter „Geplant“ öffnet **Notizen** eigene Notizen mit Ordnern (Entscheidungen des Inhabers vom 6.11.2026):
+
+- Jede Notiz ist eine Markdown-Datei, jeder Ordner ein echter Ordner unter `KI-Agent/<konto>/Notizen/`, bis vier Ebenen tief. Sie sind im Dateimanager und per SMB zu sehen, nur für das eigene Konto.
+- Bedienung:
+  - Ordner anlegen, umbenennen und löschen (samt Inhalt, mit Rückfrage).
+  - Notizen anlegen, umbenennen, in Ordner verschieben, anheften und löschen; dazu eine Suche über Titel und Anfang.
+  - Am Desktop stehen Liste und Notiz nebeneinander. Am Handy wischt die Notiz über die Liste.
+- **Formatleiste:** Überschrift, Fett, Kursiv, Liste, Checkliste (`- [ ] `), Trennlinie. Gespeichert als Markdown, von selbst nach kurzer Pause und beim Verlassen. Wurde die Datei inzwischen woanders geändert (anderes Gerät, Dateimanager), speichert TitanOS nicht darüber und bietet „Neu laden“.
+- **Der Agent** liest sie (`notes_list`, `note_read`) und schreibt mit seinen Rechten (`note_write`): Eine neue Notiz legt er ohne Nachfrage an. Ergänzen (`append`), Neuschreiben (`replace`) und Löschen (`note_delete`) sind Änderungen und fragen in der Schnellwahl „Standard“ nach. Die Namen der Notizen bekommt er wie bisher in jedem Auftrag.
+- Angeheftete merkt sich TitanOS privat in `.titanos/agent/<konto>/notes.json`. Alles geht über `os.Root`: Ein Link im Ordner führt nicht hinaus.
+
+## Wie der Agent arbeitet (PLAN 55)
+
+Der Agent arbeitet nicht nur Frage für Frage ab. Er hält einen Auftrag selbst zusammen:
+
+- **Plan:** Bei mehr als zwei Schritten schreibt er zuerst einen kurzen Plan (`plan_update`) und hakt ihn ab. Der Plan steht unten im Chat („2 von 3 erledigt“) und geht in jede Runde mit. Eine neue Frage beginnt ohne den alten Plan.
+- **Kontext:** Würde die nächste Anfrage mehr als 70 % des Kontexts füllen, fasst er die älteren Teile kurz zusammen. Im Chat steht dann „Ältere Teile des Chats zusammengefasst“, zum Aufklappen. Die Grundregeln und die Frage des laufenden Auftrags bleiben immer erhalten. Ohne eigene Kontextlänge fragt TitanOS Ollama, womit das Modell geladen ist. Ein einzelnes Ergebnis darf höchstens ein Viertel des Kontexts belegen.
+- **Werkzeuge nach Bedarf** (ab Werk an): Zuerst bekommt das Modell nur die wichtigsten Bereiche (Dateien, System, eigene Werkzeuge, Internet), weitere lädt es mit `tools_load`. Das spart viel Kontext: Alle Werkzeuge und die Grundanweisung zusammen belegen mit gemma4:12b rund 12 600 Token. Abschaltbar unter „Werkzeuge nach Bedarf laden“.
+- **Helfer für Unteraufträge** (`task_delegate`, ab Werk an): Für breites Nachsehen startet der Agent einen Helfer mit leerem Kontext. Der Helfer darf nur ohne Nachfrage lesen und gibt einen Bericht zurück. Seine Schritte zählen zur Grenze des Auftrags.
+- **Fehler:** Antwortet Ollama nicht oder mit einem Fehler 5xx, versucht er es bis zu drei Mal; was schon gestreamt war, verschwindet dabei wieder. Einen kaputten Werkzeugaufruf bekommt das Modell als Hinweis zurück. Ruft es denselben Schritt mit denselben Angaben ein drittes Mal, wird der Aufruf nicht ausgeführt; beim fünften hält der Auftrag an („derselbe Schritt kam immer wieder“).
+- **Prüfen:** Hat er etwas geändert und danach nichts gelesen, fordert ihn TitanOS einmal auf, das Ergebnis nachzuprüfen („Prüft das Ergebnis nach“).
+- **Grenzen:** Schritte je Auftrag (Standard 30) und Zeit je Auftrag (Standard 30 Minuten). An der Grenze schreibt er ohne Werkzeuge, was erledigt ist, was offen ist und was als Nächstes käme. Mit „Weitermachen“ geht es weiter.
+
+### Code ausführen (Sandbox)
+
+Unter Einstellungen › KI-Agent › Verbindung und Modelle › „Code ausführen in einer Sandbox“, **ab Werk aus**, nur mit eingeschaltetem Docker (Entscheidung des Inhabers vom 5.11.2026: der Mittelweg zwischen gar keinem Code und einer Konsole).
+
+- Werkzeug `code_run`: Python 3 (nur Standardbibliothek) oder sh (busybox), z. B. zum Rechnen, Umwandeln, Sortieren oder Prüfen von Daten.
+- Jeder Lauf ist ein eigener Wegwerf-Container (`python:3.13-alpine`, fest per Digest): kein Netz, schreibgeschütztes System, `/tmp` im RAM (64 MiB), läuft als das Konto. Er sieht nur den eigenen Ordner der Freigabe „KI-Agent“ als `/work` (lesen und schreiben), sonst nichts vom NAS. Ohne Rechte (`CapDrop ALL`, `no-new-privileges`), mit höchstens 128 Prozessen und 1 CPU. Zeit (Standard 60 s, bis 600 s) und Arbeitsspeicher (Standard 512 MiB) sind einstellbar. Danach wird der Container gelöscht, auch bei Abbruch oder Zeitüberschreitung.
+- **Fragt vor jedem Lauf** und zeigt dabei das ganze Programm. Ohne Nachfrage läuft es nur, wenn `code_run` oder der Bereich „Code ausführen“ ausdrücklich auf „Ohne Nachfrage“ steht; „Alles ohne Nachfrage“ reicht dafür nicht.
+- Die Ausgabe (höchstens 64 KiB) gilt als fremder Inhalt: Danach fragt die Websuche nach.
+- Die Container erscheinen nirgends als App und werden nie aktualisiert oder gesichert. Das Image lädt der erste Lauf.
 
 ## Was der Agent darf
 
@@ -294,6 +334,17 @@ Der Agent nutzt die Verbindung unter Einstellungen › Home Assistant:
 - **Geräte-Regeln** (`domain:`, `entity:`, `area:` für Räume, z. B. `area:kueche`): können den Bereich nur strenger machen. Sie gelten für jedes Gerät, das ein Aufruf irgendwo nennt (auch in den Aktionen einer Automation). Schlösser und Alarmanlagen fragen ab Werk nach; eine Automation oder ein Skript ohne erkennbare Geräte fragt immer nach.
 - **Mitteilungen** über Notify-Dienste der Home-Assistant-App, zusätzlich zu Web Push.
 - **Assist:** In Home Assistant die eingebaute Integration **Ollama** hinzufügen, Adresse `https://<NAS>/agent-ollama`, Modell `titanos-agent`, dann unter Sprachassistenten als Gesprächsagent wählen. TitanOS beantwortet diese Schnittstelle nur, wenn Assist eingeschaltet ist und die Anfrage von einer der Adressen kommt, die unter Einstellungen › Home Assistant als Verbindung eingetragen sind. Bei mehreren Verbindungen hat der Agent je Verbindung eine eigene Geräte-Freigabe (Auswahl über dem Abschnitt), seine Home-Assistant-Werkzeuge nehmen `connection`, Mitteilungen an einen Dienst einer weiteren Verbindung stehen als `<id>/notify.x`. Fragen laufen als das gewählte Konto mit den Rechten des Agenten; dauert etwas länger als 45 Sekunden, antwortet er „Ich kümmere mich darum“ und meldet das Ergebnis.
+
+## Messen (PLAN 55)
+
+`TestAgentEval` ist ein fester Satz typischer Aufträge mit Testdaten gegen ein echtes Ollama: Freigaben nennen, Rechnung finden, Datei anlegen, zählen und schreiben, Wort suchen, umbenennen, Ordner sortieren, Beträge zusammenzählen, größte Datei unter 400 Dateien, langer Chat bei 8k Kontext. Geprüft wird nur, was am Ende dasteht (Antwort oder Datei).
+
+```bash
+TITANOS_OLLAMA=http://192.168.10.5:11434 TITANOS_OLLAMA_MODEL=gemma4:12b TITANOS_EVAL_RUNS=2 \
+  go test ./internal/api -run TestAgentEval -v -timeout 90m
+```
+
+Ergebnisse stehen in den Release-Notizen.
 
 ## Daten
 

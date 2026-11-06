@@ -209,7 +209,8 @@ func TestStepLimitAndUnknownTool(t *testing.T) {
 			errs++
 		}
 	}
-	if notes != 1 || errs != 1 || len(fake.got) != 2 {
+	// Two rounds with tools, then one without for the report (PLAN 55).
+	if notes != 1 || errs != 1 || len(fake.got) != 3 || fake.got[2]["tools"] != nil {
 		t.Fatalf("notes %d errs %d rounds %d", notes, errs, len(fake.got))
 	}
 }

@@ -8,7 +8,9 @@
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { ACCENTS, SWIPES, type Look, type Status, type Swipe } from '#lib/agent.ts';
 	import { fly } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
 	import InitiativeSettings from './InitiativeSettings.svelte';
+	import PushDevices from '#lib/components/PushDevices.svelte';
 
 	type Part = 'memory' | 'skills' | 'schedules' | 'map' | 'me' | 'log';
 	let {
@@ -20,23 +22,28 @@
 		onopen,
 		onclose,
 		onknow,
+		chats = 0,
+		ondeleteall,
 	}: {
+		/** Own chats of the account, for "Alle Chats löschen" (PLAN 56). */
+		chats?: number;
+		ondeleteall?: () => void;
 		look: Look;
 		status: Status;
 		user: string;
 		calm?: boolean;
-		start?: 'list' | 'speech' | 'look' | 'models' | 'initiative' | 'mind';
+		start?: 'list' | 'speech' | 'look' | 'models' | 'initiative' | 'mind' | 'push';
 		onopen: (part: Part) => void;
 		onclose: () => void;
 		/** Starts getting to know the person again (PLAN 53). */
 		onknow?: () => void;
 	} = $props();
 
-	let section = $state<'list' | 'speech' | 'look' | 'models' | 'initiative' | 'mind'>(
+	let section = $state<'list' | 'speech' | 'look' | 'models' | 'initiative' | 'mind' | 'push'>(
 		(() => start)(),
 	);
 	const rows: {
-		id: Part | 'speech' | 'look' | 'models' | 'initiative' | 'mind';
+		id: Part | 'speech' | 'look' | 'models' | 'initiative' | 'mind' | 'push';
 		icon: IconName;
 		color: string;
 		label: MessageKey;
@@ -56,6 +63,19 @@
 			label: 'agent.set.models',
 			sub: status.vision ? `${status.model} · ${status.vision}` : status.model,
 		},
+		// Mitteilungen auf diesem Gerät: on an iPhone the agent app from the
+		// home screen is an app of its own and needs its own subscription.
+		...(status.admin
+			? [
+					{
+						id: 'push' as const,
+						icon: 'bell' as IconName,
+						color: '#ef4444',
+						label: 'agent.set.push' as MessageKey,
+						sub: t('agent.set.pushSub'),
+					},
+				]
+			: []),
 		{ id: 'initiative', icon: 'bulb', color: '#f97316', label: 'agent.set.initiative' },
 		{ id: 'schedules', icon: 'clock', color: '#0ea5e9', label: 'agent.schedules' },
 		{ id: 'mind', icon: 'users', color: '#ec4899', label: 'agent.set.mind' },
@@ -82,9 +102,22 @@
 		},
 	]);
 	function go(id: (typeof rows)[number]['id']) {
-		if (id === 'speech' || id === 'look' || id === 'models' || id === 'initiative' || id === 'mind')
-			section = id;
+		if (
+			id === 'speech' ||
+			id === 'look' ||
+			id === 'models' ||
+			id === 'initiative' ||
+			id === 'mind' ||
+			id === 'push'
+		)
+			((back = false), (section = id));
 		else onopen(id);
+	}
+	// Which way the next sub-item slides in.
+	let back = $state(false);
+	function goBack() {
+		back = true;
+		section = 'list';
 	}
 	const swipeLabel = (s: Swipe) => t(`agent.set.swipe.${s}`);
 	const title = $derived(
@@ -98,7 +131,9 @@
 						? t('agent.set.mind')
 						: section === 'models'
 							? t('agent.set.models')
-							: t('agent.set.title'),
+							: section === 'push'
+								? t('agent.set.push')
+								: t('agent.set.title'),
 	);
 </script>
 
@@ -117,7 +152,7 @@
 			type="button"
 			class="ib"
 			aria-label={section === 'list' ? t('common.close') : t('agent.set.back')}
-			onclick={() => (section === 'list' ? onclose() : (section = 'list'))}
+			onclick={() => (section === 'list' ? onclose() : goBack())}
 			><Icon name={section === 'list' ? 'close' : 'chevronLeft'} size={20} /></button
 		>
 		<h2>{title}</h2>
@@ -125,269 +160,299 @@
 	</header>
 
 	<div class="body">
-		{#if section === 'list'}
-			<div class="who">
-				<span class="av" aria-hidden="true">{user.slice(0, 1).toUpperCase()}</span>
-				<span><strong>{user}</strong><small>{status.model}</small></span>
-			</div>
-			<div class="grp">
-				{#each rows as r (r.id)}
-					<button type="button" class="row" onclick={() => go(r.id)}>
-						<span class="sq" style:--c={r.color} aria-hidden="true"
-							><Icon name={r.icon} size={17} /></span
+		<!-- A sub-item slides in from the right, "back" from the left (PLAN 56). -->
+		{#key section}
+			<div
+				class="pane"
+				in:fly={{ x: back ? -90 : 140, duration: calm ? 0 : 300, opacity: 0, easing: cubicOut }}
+			>
+				{#if section === 'list'}
+					<div class="who">
+						<span class="av" aria-hidden="true">{user.slice(0, 1).toUpperCase()}</span>
+						<span><strong>{user}</strong><small>{status.model}</small></span>
+					</div>
+					<div class="grp">
+						{#each rows as r (r.id)}
+							<button type="button" class="row" onclick={() => go(r.id)}>
+								<span class="sq" style:--c={r.color} aria-hidden="true"
+									><Icon name={r.icon} size={17} /></span
+								>
+								<span class="t"
+									><strong>{t(r.label)}</strong>{#if r.sub}<small>{r.sub}</small>{/if}</span
+								>
+								<Icon name="chevronRight" size={16} />
+							</button>
+						{/each}
+					</div>
+					{#if ondeleteall && chats > 0}
+						<div class="grp">
+							<button type="button" class="row danger" onclick={ondeleteall}>
+								<span class="sq" style:--c="#ef4444" aria-hidden="true"
+									><Icon name="trash" size={17} /></span
+								>
+								<span class="t"
+									><strong>{t('agent.deleteAll')}</strong><small
+										>{t('agent.deleteAllSub', { count: chats })}</small
+									></span
+								>
+							</button>
+						</div>
+					{/if}
+					{#if status.admin}
+						<a class="titanos" href="/settings/agent"
+							><Icon name="gear" size={16} />{t('agent.set.titanos')}</a
 						>
-						<span class="t"
-							><strong>{t(r.label)}</strong>{#if r.sub}<small>{r.sub}</small>{/if}</span
-						>
-						<Icon name="chevronRight" size={16} />
-					</button>
-				{/each}
-			</div>
-			{#if status.admin}
-				<a class="titanos" href="/settings/agent"
-					><Icon name="gear" size={16} />{t('agent.set.titanos')}</a
-				>
-			{/if}
-		{:else if section === 'speech'}
-			<div class="grp">
-				<label class="row">
-					<span class="t"
-						><strong>{t('agent.set.readAutoLabel')}</strong><small
-							>{t('agent.set.readAutoHint')}</small
-						></span
-					>
-					<input type="checkbox" class="switch" bind:checked={look.read} />
-				</label>
-				<label class="row col">
-					<span class="t"
-						><strong>{t('agent.set.rate')}</strong><small>{look.rate.toFixed(1)}×</small></span
-					>
-					<input type="range" min="0.5" max="2" step="0.1" bind:value={look.rate} />
-				</label>
-			</div>
-			<p class="cap">{t('agent.set.voiceIn')}</p>
-			<div class="grp">
-				<div class="row">
-					<span class="t"
-						><strong>{t('agent.set.whisper')}</strong><small
-							>{status.voice ? t('agent.set.whisperOn') : t('agent.set.whisperOff')}</small
-						></span
-					>
-					{#if !status.voice && status.admin}<a
-							class="btn btn-primary small"
-							href="/settings/agent?tab=connection#voice">{t('agent.set.setup')}</a
+					{/if}
+				{:else if section === 'speech'}
+					<div class="grp">
+						<label class="row">
+							<span class="t"
+								><strong>{t('agent.set.readAutoLabel')}</strong><small
+									>{t('agent.set.readAutoHint')}</small
+								></span
+							>
+							<input type="checkbox" class="switch" bind:checked={look.read} />
+						</label>
+						<label class="row col">
+							<span class="t"
+								><strong>{t('agent.set.rate')}</strong><small>{look.rate.toFixed(1)}×</small></span
+							>
+							<input type="range" min="0.5" max="2" step="0.1" bind:value={look.rate} />
+						</label>
+					</div>
+					<p class="cap">{t('agent.set.voiceIn')}</p>
+					<div class="grp">
+						<div class="row">
+							<span class="t"
+								><strong>{t('agent.set.whisper')}</strong><small
+									>{status.voice ? t('agent.set.whisperOn') : t('agent.set.whisperOff')}</small
+								></span
+							>
+							{#if !status.voice && status.admin}<a
+									class="btn btn-primary small"
+									href="/settings/agent?tab=connection#voice">{t('agent.set.setup')}</a
+								>{/if}
+						</div>
+						<div class="row col">
+							<span class="t"><strong>{t('agent.set.mic')}</strong></span>
+							<span class="seg" role="radiogroup" aria-label={t('agent.set.mic')}>
+								{#each ['tap', 'hold'] as const as m (m)}
+									<label class:on={look.mic === m}
+										><input type="radio" bind:group={look.mic} value={m} />{t(
+											`agent.set.mic.${m}`,
+										)}</label
+									>
+								{/each}
+							</span>
+						</div>
+					</div>
+				{:else if section === 'initiative' || section === 'mind'}
+					<InitiativeSettings part={section} onrestart={onknow} />
+				{:else if section === 'push'}
+					<p class="pushhint">{t('agent.set.pushHint')}</p>
+					<PushDevices />
+				{:else if section === 'models'}
+					<div class="grp">
+						<div class="row">
+							<span class="t"
+								><strong>{t('agent.set.chatModel')}</strong><small>{status.model}</small></span
+							>
+						</div>
+						<div class="row">
+							<span class="t"
+								><strong>{t('agent.set.visionModel')}</strong><small
+									>{status.vision || t('agent.set.visionSame')}</small
+								></span
+							>
+						</div>
+					</div>
+					<p class="hint">{t('agent.set.modelsHint')}</p>
+					{#if status.admin}<a class="titanos" href="/settings/agent?tab=connection"
+							><Icon name="gear" size={16} />{t('agent.set.modelsAdmin')}</a
 						>{/if}
-				</div>
-				<div class="row col">
-					<span class="t"><strong>{t('agent.set.mic')}</strong></span>
-					<span class="seg" role="radiogroup" aria-label={t('agent.set.mic')}>
-						{#each ['tap', 'hold'] as const as m (m)}
-							<label class:on={look.mic === m}
-								><input type="radio" bind:group={look.mic} value={m} />{t(
-									`agent.set.mic.${m}`,
-								)}</label
+				{:else}
+					<p class="cap">{t('agent.set.gestures')}</p>
+					<div class="grp">
+						<label class="row">
+							<span class="t"
+								><strong>{t('agent.set.gesturesLabel')}</strong><small
+									>{t('agent.set.gesturesHint')}</small
+								></span
 							>
+							<input type="checkbox" class="switch" bind:checked={look.gestures} />
+						</label>
+						{#each [['swipeRight', 'agent.set.swipeRight'], ['swipeLeft', 'agent.set.swipeLeft']] as const as [key, label] (key)}
+							<label class="row" class:off={!look.gestures}>
+								<span class="t"><strong>{t(label)}</strong></span>
+								<select class="field" bind:value={look[key]} disabled={!look.gestures}>
+									{#each SWIPES as s (s)}<option value={s}>{swipeLabel(s)}</option>{/each}
+								</select>
+							</label>
 						{/each}
-					</span>
-				</div>
-			</div>
-		{:else if section === 'initiative' || section === 'mind'}
-			<InitiativeSettings part={section} onrestart={onknow} />
-		{:else if section === 'models'}
-			<div class="grp">
-				<div class="row">
-					<span class="t"
-						><strong>{t('agent.set.chatModel')}</strong><small>{status.model}</small></span
-					>
-				</div>
-				<div class="row">
-					<span class="t"
-						><strong>{t('agent.set.visionModel')}</strong><small
-							>{status.vision || t('agent.set.visionSame')}</small
-						></span
-					>
-				</div>
-			</div>
-			<p class="hint">{t('agent.set.modelsHint')}</p>
-			{#if status.admin}<a class="titanos" href="/settings/agent?tab=connection"
-					><Icon name="gear" size={16} />{t('agent.set.modelsAdmin')}</a
-				>{/if}
-		{:else}
-			<p class="cap">{t('agent.set.gestures')}</p>
-			<div class="grp">
-				<label class="row">
-					<span class="t"
-						><strong>{t('agent.set.gesturesLabel')}</strong><small
-							>{t('agent.set.gesturesHint')}</small
-						></span
-					>
-					<input type="checkbox" class="switch" bind:checked={look.gestures} />
-				</label>
-				{#each [['swipeRight', 'agent.set.swipeRight'], ['swipeLeft', 'agent.set.swipeLeft']] as const as [key, label] (key)}
-					<label class="row" class:off={!look.gestures}>
-						<span class="t"><strong>{t(label)}</strong></span>
-						<select class="field" bind:value={look[key]} disabled={!look.gestures}>
-							{#each SWIPES as s (s)}<option value={s}>{swipeLabel(s)}</option>{/each}
-						</select>
-					</label>
-				{/each}
-				<label class="row" class:off={!look.gestures}>
-					<span class="t"
-						><strong>{t('agent.set.edge')}</strong><small>{t('agent.set.edgeHint')}</small></span
-					>
-					<input
-						type="checkbox"
-						class="switch"
-						bind:checked={look.edge}
-						disabled={!look.gestures}
-					/>
-				</label>
-				<label class="row">
-					<span class="t"><strong>{t('agent.set.pull')}</strong></span>
-					<input type="checkbox" class="switch" bind:checked={look.pull} />
-				</label>
-				<label class="row">
-					<span class="t"
-						><strong>{t('agent.lookVibrate')}</strong><small>{t('agent.set.device')}</small></span
-					>
-					<input type="checkbox" class="switch" bind:checked={look.vibrate} />
-				</label>
-			</div>
+						<label class="row" class:off={!look.gestures}>
+							<span class="t"
+								><strong>{t('agent.set.edge')}</strong><small>{t('agent.set.edgeHint')}</small
+								></span
+							>
+							<input
+								type="checkbox"
+								class="switch"
+								bind:checked={look.edge}
+								disabled={!look.gestures}
+							/>
+						</label>
+						<label class="row">
+							<span class="t"><strong>{t('agent.set.pull')}</strong></span>
+							<input type="checkbox" class="switch" bind:checked={look.pull} />
+						</label>
+						<label class="row">
+							<span class="t"
+								><strong>{t('agent.lookVibrate')}</strong><small>{t('agent.set.device')}</small
+								></span
+							>
+							<input type="checkbox" class="switch" bind:checked={look.vibrate} />
+						</label>
+					</div>
 
-			<p class="cap">{t('agent.set.lookMotion')}</p>
-			<div class="grp">
-				<div class="row col">
-					<span class="t"><strong>{t('agent.set.motionLabel')}</strong></span>
-					<span class="seg" role="radiogroup" aria-label={t('agent.set.motionLabel')}>
-						{#each ['full', 'reduced', 'off'] as const as m (m)}
-							<label class:on={look.motion === m}
-								><input type="radio" bind:group={look.motion} value={m} />{t(
-									`agent.set.motion.${m}`,
-								)}</label
+					<p class="cap">{t('agent.set.lookMotion')}</p>
+					<div class="grp">
+						<div class="row col">
+							<span class="t"><strong>{t('agent.set.motionLabel')}</strong></span>
+							<span class="seg" role="radiogroup" aria-label={t('agent.set.motionLabel')}>
+								{#each ['full', 'reduced', 'off'] as const as m (m)}
+									<label class:on={look.motion === m}
+										><input type="radio" bind:group={look.motion} value={m} />{t(
+											`agent.set.motion.${m}`,
+										)}</label
+									>
+								{/each}
+							</span>
+						</div>
+						<div class="row col">
+							<span class="t"><strong>{t('agent.lookAccent')}</strong></span>
+							<span class="swatches" role="radiogroup" aria-label={t('agent.lookAccent')}>
+								{#each Object.entries(ACCENTS) as [id, pair] (id)}
+									<label
+										class:on={look.accent === id}
+										title={t(`agent.accent.${id}` as MessageKey)}
+										style:background={pair
+											? `linear-gradient(135deg, ${pair[0]}, ${pair[1]})`
+											: 'var(--accent)'}
+										><input
+											type="radio"
+											bind:group={look.accent}
+											value={id}
+											aria-label={t(`agent.accent.${id}` as MessageKey)}
+										/></label
+									>
+								{/each}
+							</span>
+						</div>
+						<div class="row col">
+							<span class="t"><strong>{t('agent.lookBackground')}</strong></span>
+							<span class="seg" role="radiogroup" aria-label={t('agent.lookBackground')}>
+								{#each ['aurora', 'ocean', 'forest', 'none'] as const as b (b)}
+									<label class:on={look.background === b}
+										><input type="radio" bind:group={look.background} value={b} />{t(
+											`agent.bg${b[0].toUpperCase()}${b.slice(1)}` as MessageKey,
+										)}</label
+									>
+								{/each}
+							</span>
+						</div>
+						<label class="row">
+							<span class="t"><strong>{t('agent.lookGlass')}</strong></span>
+							<input type="checkbox" class="switch" bind:checked={look.glass} />
+						</label>
+						<label class="row col" class:off={!look.glass}>
+							<span class="t"
+								><strong>{t('agent.set.glassLevel')}</strong><small
+									>{t('agent.set.glassHint')}</small
+								></span
 							>
-						{/each}
-					</span>
-				</div>
-				<div class="row col">
-					<span class="t"><strong>{t('agent.lookAccent')}</strong></span>
-					<span class="swatches" role="radiogroup" aria-label={t('agent.lookAccent')}>
-						{#each Object.entries(ACCENTS) as [id, pair] (id)}
-							<label
-								class:on={look.accent === id}
-								title={t(`agent.accent.${id}` as MessageKey)}
-								style:background={pair
-									? `linear-gradient(135deg, ${pair[0]}, ${pair[1]})`
-									: 'var(--accent)'}
-								><input
-									type="radio"
-									bind:group={look.accent}
-									value={id}
-									aria-label={t(`agent.accent.${id}` as MessageKey)}
-								/></label
+							<input
+								type="range"
+								min="0"
+								max="100"
+								step="5"
+								bind:value={look.glassLevel}
+								disabled={!look.glass}
+							/>
+						</label>
+						<label class="row">
+							<span class="t"><strong>{t('agent.lookGlow')}</strong></span>
+							<input type="checkbox" class="switch" bind:checked={look.glow} />
+						</label>
+						<div class="row col">
+							<span class="t"
+								><strong>{t('agent.set.fontSize')}</strong><small>{t('agent.set.device')}</small
+								></span
 							>
-						{/each}
-					</span>
-				</div>
-				<div class="row col">
-					<span class="t"><strong>{t('agent.lookBackground')}</strong></span>
-					<span class="seg" role="radiogroup" aria-label={t('agent.lookBackground')}>
-						{#each ['aurora', 'ocean', 'forest', 'none'] as const as b (b)}
-							<label class:on={look.background === b}
-								><input type="radio" bind:group={look.background} value={b} />{t(
-									`agent.bg${b[0].toUpperCase()}${b.slice(1)}` as MessageKey,
-								)}</label
-							>
-						{/each}
-					</span>
-				</div>
-				<label class="row">
-					<span class="t"><strong>{t('agent.lookGlass')}</strong></span>
-					<input type="checkbox" class="switch" bind:checked={look.glass} />
-				</label>
-				<label class="row col" class:off={!look.glass}>
-					<span class="t"
-						><strong>{t('agent.set.glassLevel')}</strong><small>{t('agent.set.glassHint')}</small
-						></span
-					>
-					<input
-						type="range"
-						min="0"
-						max="100"
-						step="5"
-						bind:value={look.glassLevel}
-						disabled={!look.glass}
-					/>
-				</label>
-				<label class="row">
-					<span class="t"><strong>{t('agent.lookGlow')}</strong></span>
-					<input type="checkbox" class="switch" bind:checked={look.glow} />
-				</label>
-				<div class="row col">
-					<span class="t"
-						><strong>{t('agent.set.fontSize')}</strong><small>{t('agent.set.device')}</small></span
-					>
-					<span class="seg" role="radiogroup" aria-label={t('agent.set.fontSize')}>
-						{#each ['s', 'm', 'l'] as const as f (f)}
-							<label class:on={look.fontSize === f}
-								><input type="radio" bind:group={look.fontSize} value={f} />{t(
-									`agent.set.font.${f}`,
-								)}</label
-							>
-						{/each}
-					</span>
-				</div>
-				<div class="row col">
-					<span class="t"><strong>{t('agent.lookStyle')}</strong></span>
-					<span class="seg" role="radiogroup" aria-label={t('agent.lookStyle')}>
-						{#each ['bubbles', 'clean', 'compact'] as const as st (st)}
-							<label class:on={look.style === st}
-								><input type="radio" bind:group={look.style} value={st} />{t(
-									`agent.style${st[0].toUpperCase()}${st.slice(1)}` as MessageKey,
-								)}</label
-							>
-						{/each}
-					</span>
-				</div>
-				<label class="row">
-					<span class="t"><strong>{t('agent.set.compact')}</strong></span>
-					<input type="checkbox" class="switch" bind:checked={look.compact} />
-				</label>
-			</div>
+							<span class="seg" role="radiogroup" aria-label={t('agent.set.fontSize')}>
+								{#each ['s', 'm', 'l'] as const as f (f)}
+									<label class:on={look.fontSize === f}
+										><input type="radio" bind:group={look.fontSize} value={f} />{t(
+											`agent.set.font.${f}`,
+										)}</label
+									>
+								{/each}
+							</span>
+						</div>
+						<div class="row col">
+							<span class="t"><strong>{t('agent.lookStyle')}</strong></span>
+							<span class="seg" role="radiogroup" aria-label={t('agent.lookStyle')}>
+								{#each ['bubbles', 'clean', 'compact'] as const as st (st)}
+									<label class:on={look.style === st}
+										><input type="radio" bind:group={look.style} value={st} />{t(
+											`agent.style${st[0].toUpperCase()}${st.slice(1)}` as MessageKey,
+										)}</label
+									>
+								{/each}
+							</span>
+						</div>
+						<label class="row">
+							<span class="t"><strong>{t('agent.set.compact')}</strong></span>
+							<input type="checkbox" class="switch" bind:checked={look.compact} />
+						</label>
+					</div>
 
-			<p class="cap">{t('agent.set.startChat')}</p>
-			<div class="grp">
-				<div class="row col">
-					<span class="t"><strong>{t('agent.set.startLabel')}</strong></span>
-					<span class="seg" role="radiogroup" aria-label={t('agent.set.startLabel')}>
-						{#each ['new', 'last', 'overview'] as const as v (v)}
-							<label class:on={look.start === v}
-								><input type="radio" bind:group={look.start} value={v} />{t(
-									`agent.set.start.${v}`,
-								)}</label
+					<p class="cap">{t('agent.set.startChat')}</p>
+					<div class="grp">
+						<div class="row col">
+							<span class="t"><strong>{t('agent.set.startLabel')}</strong></span>
+							<span class="seg" role="radiogroup" aria-label={t('agent.set.startLabel')}>
+								{#each ['new', 'last', 'overview'] as const as v (v)}
+									<label class:on={look.start === v}
+										><input type="radio" bind:group={look.start} value={v} />{t(
+											`agent.set.start.${v}`,
+										)}</label
+									>
+								{/each}
+							</span>
+						</div>
+						<label class="row">
+							<span class="t"><strong>{t('agent.set.suggestions')}</strong></span>
+							<input type="checkbox" class="switch" bind:checked={look.suggestions} />
+						</label>
+						<label class="row">
+							<span class="t"><strong>{t('agent.set.steps')}</strong></span>
+							<input type="checkbox" class="switch" bind:checked={look.steps} />
+						</label>
+						<label class="row">
+							<span class="t"><strong>{t('agent.lookTyping')}</strong></span>
+							<input type="checkbox" class="switch" bind:checked={look.typing} />
+						</label>
+						<label class="row">
+							<span class="t"
+								><strong>{t('agent.set.keepAwake')}</strong><small>{t('agent.set.device')}</small
+								></span
 							>
-						{/each}
-					</span>
-				</div>
-				<label class="row">
-					<span class="t"><strong>{t('agent.set.suggestions')}</strong></span>
-					<input type="checkbox" class="switch" bind:checked={look.suggestions} />
-				</label>
-				<label class="row">
-					<span class="t"><strong>{t('agent.set.steps')}</strong></span>
-					<input type="checkbox" class="switch" bind:checked={look.steps} />
-				</label>
-				<label class="row">
-					<span class="t"><strong>{t('agent.lookTyping')}</strong></span>
-					<input type="checkbox" class="switch" bind:checked={look.typing} />
-				</label>
-				<label class="row">
-					<span class="t"
-						><strong>{t('agent.set.keepAwake')}</strong><small>{t('agent.set.device')}</small></span
-					>
-					<input type="checkbox" class="switch" bind:checked={look.keepAwake} />
-				</label>
+							<input type="checkbox" class="switch" bind:checked={look.keepAwake} />
+						</label>
+					</div>
+				{/if}
 			</div>
-		{/if}
+		{/key}
 	</div>
 </div>
 
@@ -449,8 +514,14 @@
 		flex-direction: column;
 		gap: 6px;
 	}
-	.body > * {
+	.body > *,
+	.pane > * {
 		flex-shrink: 0;
+	}
+	.pane {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
 	}
 	.who {
 		display: flex;
@@ -488,6 +559,12 @@
 		font-weight: 600;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
+		color: var(--muted);
+	}
+	.pushhint {
+		margin: 0 4px 12px;
+		font-size: 0.9rem;
+		line-height: 1.45;
 		color: var(--muted);
 	}
 	.grp {
@@ -624,5 +701,8 @@
 	}
 	.field {
 		max-width: 46%;
+	}
+	.row.danger strong {
+		color: var(--status-error, #e5484d);
 	}
 </style>

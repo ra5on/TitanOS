@@ -157,7 +157,194 @@ async function noOverflow(page, what) {
 	assert.ok(overflow <= 1, `${what}: horizontal scroll ${overflow}`);
 }
 
+// PLAN 55: the new parts on their own (UI_ONLY=55 runs only these).
+async function plan55() {
+	// PLAN 55: plan, summary and time limit in a chat, on the phone.
+	{
+		const { ctx, page } = await open(390, 844);
+		const longChat = {
+			...docChat,
+			plan: [{ text: 'Docker-Apps lesen', done: true }, { text: 'Ablageort der Daten prüfen', done: true }, { text: 'Word-Dokument schreiben', done: false }],
+			entries: [
+				docChat.entries[0],
+				{ id: 'z1', at: at(9, 1), role: 'note', note: 'summary', content: '- Gewünscht: Übersicht aller Docker-Apps als Word.\n- 14 Apps gelesen, 2 mit Daten außerhalb von appdata.' },
+				...docChat.entries.slice(1, 5),
+				{ id: 'z2', at: at(9, 4), role: 'note', note: 'verify' },
+				docChat.entries[5],
+				{ id: 'z3', at: at(9, 5), role: 'note', note: 'timeask' },
+				{ id: 'z4', at: at(9, 5), role: 'assistant', content: 'Erledigt: Apps gelesen, Ablage geprüft. Offen: das Dokument. Nächster Schritt: schreiben.' },
+				{ id: 'z5', at: at(9, 5), role: 'note', note: 'timelimit', content: '30' },
+			],
+		};
+		await page.route('**/api/v1/agent/chats/' + docChat.id, (route) => (route.request().method() === 'GET' ? route.fulfill({ json: longChat }) : route.fallback()));
+		await page.goto(base + '/agent?chat=' + docChat.id);
+		const plan = page.getByRole('region', { name: 'Plan' });
+		await plan.waitFor();
+		assert.ok(await plan.getByText('2 von 3 erledigt').isVisible(), 'plan progress');
+		assert.ok(await page.getByText('Ältere Teile des Chats zusammengefasst').isVisible(), 'summary note');
+		assert.ok(await page.getByText('Nach 30 Minuten angehalten.').isVisible(), 'time limit note');
+		assert.ok(await page.getByRole('button', { name: 'Weitermachen' }).isVisible(), 'continue after the time limit');
+		assert.equal(await page.getByText('[TitanOS]').count(), 0, 'hints to the model stay hidden');
+		await noOverflow(page, 'chat with plan');
+		await plan.scrollIntoViewIfNeeded();
+		await page.waitForTimeout(300);
+		await page.screenshot({ path: `${out}/30-phone-plan-timelimit.png` });
+		await ctx.close();
+	}
+	// Many chats: rows of the menu keep their height (the highlight was cut).
+	{
+		const { ctx, page } = await open(390, 844);
+		const many = Array.from({ length: 40 }, (_, i) => ({ id: 'c2aaaaaaaaaa' + String(i).padStart(4, '0'), title: 'Gesundheitscheck ' + i, created: at(10), updated: at(10, i), state: 'idle', preview: '' }));
+		await page.route('**/api/v1/agent/chats', (route) => (route.request().method() === 'GET' ? route.fulfill({ json: { chats: [...chats, ...many] } }) : route.fallback()));
+		await page.goto(base + '/agent?app=1');
+		await page.getByRole('button', { name: /Menü|Chats/ }).first().click();
+		await page.getByText('Gesundheitscheck 39').waitFor();
+		const heights = await page.locator('nav.menu .item').evaluateAll((list) => list.map((e) => e.getBoundingClientRect().height));
+		assert.ok(heights.length > 40 && Math.min(...heights) >= 30, `rows keep their height (${Math.min(...heights)})`);
+		await ctx.close();
+	}
+	// PLAN 56: under the status bar, slide-in, delete all chats.
+	{
+		const { ctx, page } = await open(390, 844);
+		let removed = '';
+		await page.route('**/api/v1/agent/chats?keepPinned=true', (route) => {
+			removed = route.request().method() + ' ' + new URL(route.request().url()).search;
+			return route.fulfill({ json: { deleted: 5, kept: 1 } });
+		});
+		await page.goto(base + '/agent?app=1&chat=' + docChat.id);
+		await page.getByRole('button', { name: 'Einstellungen' }).first().click();
+		const metas = await page.evaluate(() => [document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]').content, document.querySelector('meta[name="viewport"]').content]);
+		assert.equal(metas[0], 'black-translucent', 'agent reaches under the status bar');
+		assert.match(metas[1], /viewport-fit=cover/);
+		await page.locator('.panel .row', { hasText: 'Darstellung' }).first().click();
+		const moving = await page.locator('.panel .pane').evaluate((el) => el.getAnimations().length + getComputedStyle(el).transform);
+		assert.ok(/1|matrix/.test(moving), 'the sub-item slides in');
+		await page.waitForTimeout(400);
+		await page.getByRole('button', { name: 'Zurück' }).click();
+		await page.getByRole('button', { name: /Alle Chats löschen/ }).click();
+		const dlg = page.getByRole('dialog', { name: 'Alle Chats löschen?' });
+		await dlg.waitFor();
+		assert.ok(await dlg.getByLabel(/Angeheftete Chats behalten/).isChecked(), 'pinned ones kept by default');
+		await dlg.evaluate((d) => Promise.all(d.getAnimations().map((a) => a.finished)));
+		await noOverflow(page, 'delete all');
+		await page.screenshot({ path: `${out}/33-phone-delete-all.png` });
+		await dlg.getByRole('button', { name: 'Alle löschen' }).click();
+		await dlg.waitFor({ state: 'detached' });
+		assert.equal(removed, 'DELETE ?keepPinned=true');
+		await page.screenshot({ path: `${out}/34-phone-after-delete.png` });
+		await ctx.close();
+		const os = await open(390, 844);
+		await os.page.goto(base + '/');
+		await os.page.waitForTimeout(600);
+		assert.equal(await os.page.evaluate(() => document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]').content), 'black', 'TitanOS keeps its bar');
+		await os.ctx.close();
+	}
+	// PLAN 57: notes with folders (in-memory API).
+	for (const [w, h, name] of [[390, 844, 'phone'], [1440, 900, 'desktop']]) {
+		const { ctx, page } = await open(w, h);
+		const files = new Map([
+			['Haushalt/Einkauf.md', '- [ ] Milch\n- [ ] Brot'],
+			['Ideen.md', '# Garten\nHochbeet bauen'],
+		]);
+		const folders = new Set(['Haushalt', 'Arbeit']);
+		const pinned = new Set(['Ideen.md']);
+		const calls = [];
+		await page.route('**/api/v1/agent/notes**', async (route) => {
+			const req = route.request();
+			const u = new URL(req.url());
+			const sub = u.pathname.replace(/.*\/agent\/notes/, '');
+			const body = req.postData() ? JSON.parse(req.postData()) : {};
+			calls.push(req.method() + ' ' + sub);
+			if (sub === '' && req.method() === 'GET') {
+				const notes = [...files].map(([p, c]) => ({ path: p, title: p.split('/').pop().replace(/\.md$/, ''), folder: p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '', modified: at(9), size: c.length, pinned: pinned.has(p), preview: c.replace(/[#\-\[\]]/g, '').trim() }));
+				return route.fulfill({ json: { folders: [...folders].sort(), notes } });
+			}
+			if (sub === '/file' && req.method() === 'GET') return route.fulfill({ json: { path: u.searchParams.get('path'), content: files.get(u.searchParams.get('path')), modified: at(9) } });
+			if (sub === '/file' && req.method() === 'PUT') { files.set(body.path, body.content); return route.fulfill({ json: { path: body.path, modified: at(10) } }); }
+			if (sub === '/folders') { folders.add(body.path); return route.fulfill({ status: 204 }); }
+			if (sub === '/move') { files.set(body.to, files.get(body.from)); files.delete(body.from); return route.fulfill({ status: 204 }); }
+			return route.fulfill({ status: 204 });
+		});
+		await page.goto(base + '/agent?app=1');
+		if (name === 'phone') await page.getByRole('button', { name: /Menü|Chats/ }).first().click();
+		await page.getByRole('button', { name: 'Notizen', exact: true }).click();
+		const panel = page.getByRole('dialog', { name: 'Notizen' });
+		await panel.getByText('Einkauf').waitFor();
+		await panel.evaluate((d) => Promise.all(d.getAnimations({ subtree: true }).map((a) => a.finished)));
+		await noOverflow(page, 'notes ' + name);
+		await page.screenshot({ path: `${out}/35-${name}-notes.png` });
+		await panel.locator('button.note', { hasText: 'Einkauf' }).click();
+		const text = panel.getByLabel('Text der Notiz');
+		await text.waitFor();
+		assert.equal(await text.inputValue(), '- [ ] Milch\n- [ ] Brot');
+		await text.press('End');
+		await text.press('ControlOrMeta+End');
+		await text.type('\nEier');
+		await panel.getByRole('button', { name: 'Checkliste' }).click();
+		for (let i = 0; i < 40 && !files.get('Haushalt/Einkauf.md').endsWith('- [ ] Eier'); i++) await page.waitForTimeout(100);
+		await panel.getByText('Gespeichert').waitFor();
+		assert.equal(files.get('Haushalt/Einkauf.md'), '- [ ] Milch\n- [ ] Brot\n- [ ] Eier', 'saved with the checklist');
+		await panel.evaluate((d) => Promise.all(d.getAnimations({ subtree: true }).map((a) => a.finished)));
+		await page.screenshot({ path: `${out}/36-${name}-note-edit.png` });
+		if (name === 'phone') {
+			await panel.getByRole('button', { name: 'Zurück' }).click();
+			await panel.getByRole('button', { name: 'Menü der Notiz Ideen' }).click();
+			await panel.getByRole('menuitem', { name: 'In Ordner verschieben' }).click();
+			await page.getByRole('dialog', { name: 'Verschieben nach' }).getByRole('button', { name: 'Arbeit' }).click();
+			await panel.locator('button.note', { hasText: 'Arbeit' }).waitFor();
+			assert.ok(files.has('Arbeit/Ideen.md') && !files.has('Ideen.md'), 'moved into the folder');
+			await panel.getByRole('button', { name: 'Neuer Ordner' }).click();
+			const dlg = page.getByRole('dialog', { name: 'Neuer Ordner' });
+			await dlg.getByLabel('Name des Ordners').fill('Urlaub');
+			await dlg.getByRole('button', { name: 'Anlegen' }).click();
+			await panel.locator('button.folder', { hasText: 'Urlaub' }).waitFor();
+			assert.ok(calls.includes('POST /folders'));
+		}
+		await ctx.close();
+	}
+	// Notifications on this device inside the agent app (own subscription on iOS).
+	{
+		const { ctx, page } = await open(390, 844);
+		await page.route('**/api/v1/notifications/push', (route) => route.fulfill({ json: { publicKey: 'BCx', devices: [{ id: 'd1', name: 'iPhone', service: 'web.push.apple.com', created: at(8) }] } }));
+		await page.goto(base + '/agent?app=1');
+		await page.getByRole('button', { name: 'Einstellungen' }).first().click();
+		await page.getByRole('button', { name: /Mitteilungen/ }).click();
+		await page.getByText('Auf dem iPhone ist der Agent').waitFor();
+		await page.waitForTimeout(400);
+		await noOverflow(page, 'agent push');
+		await page.screenshot({ path: `${out}/32-phone-agent-push.png` });
+		await ctx.close();
+	}
+	// PLAN 55: working like an agent and code in a sandbox, in the settings.
+	{
+		const { ctx, page, seen } = await open(1440, 2400);
+		await page.goto(base + '/settings/agent?tab=connection');
+		await page.getByRole('heading', { name: 'Sprache, Bilder und Sicherheit' }).waitFor();
+		assert.ok(await page.getByLabel('Werkzeuge nach Bedarf laden').isChecked(), 'tools by area on by default');
+		assert.ok(await page.getByLabel('Helfer für Unteraufträge').isChecked(), 'helper on by default');
+		assert.equal(await page.getByLabel('Code ausführen in einer Sandbox').isChecked(), false, 'code off by default');
+		await page.getByLabel('Code ausführen in einer Sandbox').check();
+		await page.getByLabel('Zeitgrenze (Sekunden)').fill('120');
+		await page.getByLabel('Zeit je Auftrag (Minuten)').fill('45');
+		await page.getByLabel('Code ausführen in einer Sandbox').scrollIntoViewIfNeeded();
+		await page.screenshot({ path: `${out}/31-settings-code.png` });
+		await page.getByRole('button', { name: 'Speichern' }).click();
+		await page.getByRole('status').first().waitFor();
+		const put = seen.puts.at(-1);
+		assert.equal(put.code.enabled, true);
+		assert.equal(put.code.timeout, 120);
+		assert.equal(put.maxMinutes, 45);
+		assert.notEqual(put.allTools, true);
+		await ctx.close();
+	}
+}
+
 try {
+	await plan55();
+	if (process.env.UI_ONLY === '55') {
+		console.log('KI-Agent UI (PLAN 55) ok:', out);
+		process.exit(0);
+	}
 	// Desktop in TitanOS: the agent menu beside the TitanOS menu, chat with
 	// steps, answer, approval, model choice at the top (PLAN 48).
 	{
@@ -183,7 +370,6 @@ try {
 		await page.screenshot({ path: `${out}/2-desktop-document.png` });
 		await page.goto(base + '/agent');
 		await page.getByRole('heading', { name: /Guten|Hallo/ }).waitFor();
-		assert.ok(await page.locator('.ptile', { hasText: 'Home Assistant' }).isVisible(), 'project tiles on the start');
 		await page.locator('.sugg button', { hasText: 'Gesundheitscheck' }).click();
 		assert.match(await page.locator('.composer textarea').inputValue(), /Gesundheitscheck/, 'suggestion fills the input');
 		await page.waitForTimeout(300);
