@@ -169,3 +169,55 @@ das ganze NAS: Platten, Lüfter, Mainboard und Netzteil fehlen. Auf Intel und
 AMD ab Zen; ohne Zähler (auch in VMs) bleibt der Wert unbekannt. Anzeige als
 Feld „CPU-Leistung“ der Systeminfo-Kachel und im Bericht über das NAS; API
 `cpu.powerWatts` in der Systeminfo.
+
+## Taskmanager (PLAN 61, Monitor-App)
+
+Seite `/tools/taskmanager` (Werkzeuge › Beobachten › Taskmanager, im Desktop-Modus
+die App „Monitor“). Sie fragt alle zwei Sekunden nach, nur solange die Seite
+sichtbar ist, und nur, was der offene Reiter braucht.
+
+- **Übersicht** (auch für Benutzer, nur lesen): CPU gesamt und je Kern, RAM,
+  Netzwerk der Standardschnittstelle, Durchsatz je Volume, Grafik/Beschleuniger
+  mit gemeldeter Auslastung; kleine Verläufe der letzten 80 Sekunden im Browser.
+  Quelle ist `GET /api/v1/system`; das Feld `disks` (`name`,
+  `readBytesPerSecond`, `writeBytesPerSecond`, `busyPercent`) kommt aus den
+  Zählern in `/sys/block/<name>/stat`, die `system.Monitor` alle zwei Sekunden
+  liest. Das Lesen dieser Kernelzähler schickt nichts an die Platte und weckt
+  keine. Der Durchsatz eines Volumes ist die Summe seiner Platten; bei Spiegeln
+  zählt jedes Schreiben je Platte (was die Platten tun, nicht was Programme
+  schrieben).
+- **Prozesse** (Besitzer/Administratoren): `GET /api/v1/system/processes` liefert
+  `{processes: [{pid, ppid, name, command, user, state, cpuPercent, memoryBytes,
+  start, owner: {kind, id, name}, protected}], cpus, memoryTotalBytes,
+  sampledSeconds}`. Gelesen wird nur `/proc` (`stat`, `status`, `cmdline`,
+  `cgroup`) und `/etc/passwd`; Kernel-Threads und Threads fehlen. CPU ist in
+  Prozent des ganzen NAS (100 = alle CPUs voll) und wird gegen die vorige
+  Abfrage gerechnet; ist die älter als zehn Sekunden, nimmt titand zwei Proben
+  im Abstand von 300 ms. Speicher ist RSS. Die Zugehörigkeit kommt aus der
+  cgroup: `docker-<id>.scope` (Name über die Docker-API, fünf Sekunden
+  zwischengespeichert), `machine-qemu\x2d<n>\x2d<name>.scope` (VM),
+  `lxc.payload.<name>`/`titanos-lxc@<name>.service` (Systemcontainer), sonst der
+  systemd-Dienst. Lange Namen kürzt systemd selbst; dann steht der gekürzte Name da.
+- **Beenden/Erzwingen:** `POST /api/v1/system/processes/{pid}/signal` mit
+  `{signal: "term"|"kill", start}` (SIGTERM bzw. SIGKILL), nur aus einer
+  Web-Sitzung (`browserOnly`), nicht in `publicRoutes`, nicht im MCP-/Agent-
+  Werkzeugkatalog. `start` ist die Startzeit aus der Liste; passt sie nicht
+  mehr, ist die Nummer neu vergeben (409 `process_changed`). Abgelehnt werden
+  PID ≤ 2, Kernel-Threads, Thread-IDs, titand und sein Elternprozess (403
+  `process_protected`) sowie alles im Entwicklungsmodus (409 `dev_mode`). Jede
+  Anfrage steht im Aktivitätsprotokoll mit Prozessname und Signal.
+- **Container, VMs und Systemcontainer:** die vorhandenen Listen und Aktionen
+  (`/docker`, `/vms`, `/lxc`); Stoppen und Neustarten mit einfachem
+  Bestätigungsdialog.
+- **Netzwerk:** jede Schnittstelle mit Zustand, Linktempo und Durchsatz.
+- **Platten:** Zustand aus dem Ruhemodus (`schläft`/`aktiv`), Temperatur aus dem
+  zuletzt gelesenen SMART-Wert, Durchsatz und Belegung aus `disks`. Schlafende
+  Platten zeigen keinen Durchsatz und werden nie geweckt. `/storage` wird nur
+  alle 30 Sekunden gelesen.
+
+Prüfung: Go-Tests `internal/procs` (Fixture-`/proc` in `testdata`, nie der
+Host), `internal/system/diskio_test.go`, `internal/api/processes_test.go`
+(Rollen, Tokens, MCP, geschützte PIDs, Aktivitätsprotokoll), Vitest
+`tests/lib/taskmanager.test.ts`, UI `scripts/test-ui-taskmanager.mjs` (1440, 800,
+390 px). Nicht auf echter Hardware geprüft: echte cgroup-Pfade von libvirt und
+LXC sind aus der Dokumentation bzw. dem Code von `internal/lxc` nachgebildet.

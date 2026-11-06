@@ -50,6 +50,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
+	"github.com/ra5on/TitanOS/backend/internal/procs"
 	"github.com/ra5on/TitanOS/backend/internal/replication"
 	"github.com/ra5on/TitanOS/backend/internal/scripts"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
@@ -74,13 +75,15 @@ import (
 // Options are the parts the API works with.
 type Options struct {
 	// UI holds the files of the web UI with index.html at its root.
-	UI                 fs.FS
-	Store              *config.Store
-	Users              *auth.Users
-	Monitoring         *monitoring.Manager
-	Media              *media.Manager
-	Maintenance        *maintenance.Manager
-	Scripts            *scripts.Manager
+	UI          fs.FS
+	Store       *config.Store
+	Users       *auth.Users
+	Monitoring  *monitoring.Manager
+	Media       *media.Manager
+	Maintenance *maintenance.Manager
+	Scripts     *scripts.Manager
+	// Processes lists and ends processes for the task manager (PLAN 61).
+	Processes          *procs.Sampler
 	ApplicationBackups *appbackup.Manager
 	Monitor            *system.Monitor
 	Storage            *storage.Manager
@@ -199,7 +202,9 @@ type Server struct {
 	haStores   map[string]*haStorageState
 	haStoresMu sync.Mutex
 	haHubOnce  sync.Once
-	handler    http.Handler
+	// containerNames caches Docker names for the process list.
+	containerNames containerNameCache
+	handler        http.Handler
 	// patterns are all routes of the mux, for tests that compare them
 	// with the route list of the public API.
 	patterns []string
@@ -267,6 +272,11 @@ func New(opts Options) *Server {
 	}
 	if c := s.opts.Cluster; c != nil {
 		c.Applied, c.Status, c.Notify = s.clusterApplied, s.ClusterStatus, s.clusterNotify
+	}
+	if s.opts.Processes == nil {
+		// Not given (tests): the list reads /proc, signals are refused.
+		s.opts.Processes = procs.New()
+		s.opts.Processes.Disabled = true
 	}
 	if s.opts.LXC == nil {
 		s.opts.LXC = lxc.NewManager(opts.Store, shares.UsersGID)

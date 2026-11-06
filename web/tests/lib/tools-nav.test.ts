@@ -1,10 +1,15 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test } from 'vitest';
-import de from '#lib/i18n/de.json';
-import en from '#lib/i18n/en.json';
+import deBase from '#lib/i18n/de.json';
+import enBase from '#lib/i18n/en.json';
+import deTaskmanager from '#lib/i18n/features/taskmanager.de.json';
+import enTaskmanager from '#lib/i18n/features/taskmanager.en.json';
 import { toolsAnchors, toolsCurrent, toolsGroups } from '#lib/tools-nav.ts';
 
+// Texts of a part of PLAN 61 live in its own file (i18n/features).
+const de = { ...deBase, ...deTaskmanager };
+const en = { ...enBase, ...enTaskmanager };
 const entries = toolsGroups.flatMap((group) => group.entries);
 const page = (href: string) => resolve(process.cwd(), `src/routes${href}/+page.svelte`);
 

@@ -19,6 +19,7 @@ const context = fixtureFactory(browser, errors);
 // The sidebar in its order: group, entry, address and page title.
 const entries = [
 	['Beobachten', 'Aufträge', '/tools/tasks', 'Aufträge'],
+	['Beobachten', 'Taskmanager', '/tools/taskmanager', 'Taskmanager'],
 	['Beobachten', 'Monitoring', '/tools/monitoring', 'Monitoring'],
 	['Beobachten', 'Aktivität', '/tools/activity', 'Aktivität'],
 	['Beobachten', 'Protokoll', '/tools/logs', 'Protokoll'],
