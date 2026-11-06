@@ -32,7 +32,7 @@
 		type Widget,
 		type WidgetKind,
 	} from './prefs.ts';
-	import { findProgram, openProgram, programs, type Program } from './programs.svelte.ts';
+	import { findProgram, openProgram, openTab, programs, type Program } from './programs.svelte.ts';
 	import { sources, watchSources } from './sources.svelte.ts';
 	import { dayTint, wallpaperCss } from './wallpapers.ts';
 	import {
@@ -945,7 +945,7 @@
 					type="button"
 					role="menuitem"
 					onclick={() => {
-						window.open(p.href, '_blank', 'noopener');
+						void openTab(key, p.href);
 						menu = null;
 					}}><span>{t('desktop.window.openTab')}</span></button
 				>

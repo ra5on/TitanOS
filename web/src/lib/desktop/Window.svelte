@@ -7,6 +7,7 @@
 	import DesktopIcon from './DesktopIcon.svelte';
 	import { sideActive, type SideItem } from './apps.ts';
 	import { frameMessage } from './frame.ts';
+	import { openTab as openProgramTab } from './programs.svelte.ts';
 	import {
 		closeWindow,
 		desktop,
@@ -193,7 +194,7 @@
 	}
 
 	function openTab() {
-		window.open(external ? win.href : win.href, '_blank', 'noopener');
+		void openProgramTab(win.app, external ? win.href.split('/.titanos/enter')[0] : win.href);
 	}
 	const EDGES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
 </script>

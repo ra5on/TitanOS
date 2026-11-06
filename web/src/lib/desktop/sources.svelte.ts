@@ -17,7 +17,15 @@ export type DockerProgram = {
 	updates: number;
 };
 
-export type MineApp = { app: string; title?: string; icon?: string; url: string };
+/** GET /apps/mine (PLAN 61-1): the apps this account may use. */
+export type MineApp = {
+	app: string;
+	title?: string;
+	icon?: string;
+	url: string;
+	webui?: string;
+	running?: boolean;
+};
 
 export const sources = $state<{
 	containers: DockerContainer[];
@@ -85,12 +93,13 @@ export function dockerPrograms(host: string): DockerProgram[] {
 				app: m.app,
 				label: m.title || m.app,
 				icon: m.icon || group.find((c) => c.icon)?.icon || '',
-				url: m.url,
-				running: group.length ? group.some((c) => c.state === 'running') : true,
+				// Without an HTTPS name the app's port (the window explains why it cannot show it).
+				url: m.url || (m.webui ? appURL(m.webui, host) : ''),
+				running: m.running ?? (group.length ? group.some((c) => c.state === 'running') : true),
 				updates: group.filter((c) => c.updateAvailable).length,
 			});
 		}
-		return out;
+		return out.filter((p) => p.url).sort((a, b) => a.label.localeCompare(b.label));
 	}
 	for (const [app, group] of byApp) {
 		const web =

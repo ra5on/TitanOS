@@ -97,6 +97,29 @@ export function findProgram(key: string): Program | undefined {
 	return [...programs(), ...vmScreens()].find((p) => p.key === key);
 }
 
+/** A fresh entry for a Docker app (the gate's cookie of a window does not carry over to a tab). */
+export async function appEntry(key: string, fallback: string): Promise<string> {
+	if (!key.startsWith('docker:')) return fallback;
+	try {
+		const r = await api.post<{ url: string }>(`/apps/${encodeURIComponent(key.slice(7))}/window`);
+		if (r?.url?.startsWith('https://')) return r.url;
+	} catch {
+		// Older NAS or no HTTPS name: the app's own address.
+	}
+	return fallback;
+}
+
+/** Opens a program in a tab of its own. */
+export async function openTab(key: string, href: string) {
+	// Opened at once (pop-up blockers), then pointed at the entry.
+	const tab = window.open('about:blank', '_blank');
+	const url = await appEntry(key, href);
+	if (tab) {
+		tab.opener = null;
+		tab.location.href = url;
+	} else window.open(url, '_blank', 'noopener');
+}
+
 /** Opens a program; Docker apps first ask the NAS for an entry that lets the window in (PLAN 61-1). */
 export async function openProgram(
 	key: string,
@@ -105,14 +128,7 @@ export async function openProgram(
 	const p = findProgram(key);
 	if (!p) return;
 	if (p.kind === 'docker') {
-		const app = key.slice('docker:'.length);
-		let href = p.href;
-		try {
-			const r = await api.post<{ url: string }>(`/apps/${encodeURIComponent(app)}/window`);
-			if (r?.url?.startsWith('https://')) href = r.url;
-		} catch {
-			// Without the gate (older NAS, gate off) the app's own address.
-		}
+		const href = p.href.startsWith('https://') ? await appEntry(key, p.href) : p.href;
 		openWindow(key, href, p.label, { from: opts.from, fresh: opts.fresh });
 		return;
 	}
