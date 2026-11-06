@@ -361,6 +361,10 @@ func TestFamily54DiarySettings(t *testing.T) {
 
 func TestFamily54DiaryTool(t *testing.T) {
 	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard})
+	// The fakes listen on loopback, which the real client refuses.
+	old := diaryHTTP
+	diaryHTTP = &http.Client{}
+	t.Cleanup(func() { diaryHTTP = old })
 	loc := ts.server.agentLocation()
 	day := time.Date(2026, 10, 31, 0, 0, 0, 0, loc)
 	// Immich: two photos at the lake, with Bello.

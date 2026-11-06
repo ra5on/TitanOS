@@ -351,7 +351,10 @@ for (const [width, height, tag] of [
     await cat.getByText(/Jede Rechnung nach Steuer/).isVisible(),
     "steps shown",
   );
-  assert.ok(await cat.getByText("aus TitanOS-Apps").isVisible(), "source shown");
+  assert.ok(
+    await cat.getByText("aus TitanOS-Apps").isVisible(),
+    "source shown",
+  );
   assert.ok(
     await cat.getByText(/Home Assistant Statistik · Meine Skills/).isVisible(),
     "own source shown",

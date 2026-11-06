@@ -92,8 +92,7 @@
 		}
 	}
 
-	const saveBuddy = () =>
-		run(() => savenas({ ...nas!, buddy: { ...buddy } }));
+	const saveBuddy = () => run(() => savenas({ ...nas!, buddy: { ...buddy } }));
 	const saveDiary = () =>
 		run(async () => {
 			const next: DiaryMine = { ...diary };

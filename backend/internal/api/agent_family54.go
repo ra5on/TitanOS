@@ -147,7 +147,10 @@ func (s *Server) checkDiaryMine(user string, d *agentDiaryMine, old agentDiaryMi
 			continue
 		}
 		u, err := url.Parse(*raw)
-		if err != nil || u.Scheme != "http" && u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || len(*raw) > 512 {
+		// No user info, query or fragment: the paths of the APIs are added
+		// to the end and must stay a path.
+		if err != nil || u.Scheme != "http" && u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery ||
+			u.Fragment != "" || strings.ContainsAny(*raw, "#?@") || len(*raw) > 512 {
 			return errors.New("diary: Immich and Frigate as http(s) address")
 		}
 	}

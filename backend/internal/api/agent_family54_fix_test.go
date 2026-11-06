@@ -1,15 +1,22 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"testing"
 
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/buddy"
 )
+
+func init() {
+	// The test servers of the partners listen on loopback.
+	buddy.AllowHost = func(host string) bool { return host == "127.0.0.1" }
+}
 
 // Fix 1: an id is never given again while its folder exists, and ids of
 // the same host name differ.
@@ -31,7 +38,7 @@ func TestFamily54BuddyIDNotReused(t *testing.T) {
 	if !buddy.ValidID(long) || len("buddy-"+long) > 31 {
 		t.Fatalf("long id %q", long)
 	}
-	if buddyNewID("nas-tom", nil, nil) == buddyNewID("nas-tom", nil, nil) {
+	if one, two := buddyNewID("nas-tom", nil, nil), buddyNewID("nas-tom", nil, nil); one == two {
 		t.Fatal("same id twice")
 	}
 }
@@ -130,7 +137,7 @@ func TestFamily54BuddyNoDoublePairing(t *testing.T) {
 	}
 	f.partners = full
 	f.mu.Unlock()
-	req.Name, req.Address = "nas-neu", "nas-neu:8752"
+	req.Name, req.Address = "nas-neu", "nas-neu.tail.ts.net:8752"
 	if _, err := a.server.buddyAnswerPair(req); err == nil {
 		t.Fatal("paired beyond the limit")
 	}
@@ -155,5 +162,31 @@ func TestFamily54DiaryKeyFollowsAddress(t *testing.T) {
 	put(map[string]any{"immichUrl": "http://elsewhere.example:2283"})
 	if mine, _ := ts.server.agentFeaturesOf("alex"); mine.Diary.ImmichKey != "" {
 		t.Fatal("key went to another address")
+	}
+}
+
+// Audit C: Immich and Frigate addresses take no fragment, user info or
+// query, and the diary never connects to loopback, link-local or the NAS.
+func TestFamily54DiaryNoSSRF(t *testing.T) {
+	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard})
+	for _, bad := range []string{"http://immich.local:2283#", "http://immich.local:2283/#x", "http://user:pw@immich.local", "http://immich.local/?a=1", "http://evil.example@immich.local"} {
+		if res, _ := ts.request("PUT", "/api/v1/agent/features/me", map[string]any{"diary": map[string]any{"immichUrl": bad}}); res.StatusCode != http.StatusBadRequest {
+			t.Errorf("accepted %q", bad)
+		}
+	}
+	for _, addr := range []string{"127.0.0.1:2283", "[::1]:2283", "169.254.169.254:80", "0.0.0.0:80"} {
+		if diaryAddressAllowed(netip.MustParseAddrPort(addr)) {
+			t.Errorf("allowed %s", addr)
+		}
+	}
+	if !diaryAddressAllowed(netip.MustParseAddrPort("10.255.254.253:2283")) {
+		t.Error("home network refused")
+	}
+	// At connection time, after name resolution.
+	frigate := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("[]")) }))
+	defer frigate.Close()
+	var out []any
+	if err := diaryRequest(context.Background(), http.MethodGet, frigate.URL+"/api/events", nil, nil, &out); err == nil {
+		t.Fatal("reached a loopback server")
 	}
 }

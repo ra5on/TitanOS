@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"regexp"
 	"slices"
 	"strconv"
@@ -39,7 +40,7 @@ const (
 var (
 	ErrNoCode   = errors.New("buddy: no valid pairing code")
 	hostForm    = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$`)
-	errAddress  = errors.New("buddy: address: a host name or IP address, optionally with :port")
+	errAddress  = errors.New("buddy: address: a Tailscale address or name (100.x.y.z, *.ts.net), optionally with :port")
 	errAnswered = errors.New("buddy: the other NAS refused the pairing")
 )
 
@@ -155,7 +156,22 @@ func Display(code string) string {
 	return code[:3] + "-" + code[3:6] + "-" + code[6:]
 }
 
-// CheckAddress checks an address a person entered: host or host:port.
+// AllowHost lets tests use their own loopback servers; nil in titand.
+var AllowHost func(host string) bool
+
+// tailscaleHost: an address of the tailnet (100.64.0.0/10,
+// fd7a:115c:a1e0::/48) or a MagicDNS name (*.ts.net). Tokens go over
+// plain http; WireGuard of Tailscale encrypts them, nothing else would.
+func tailscaleHost(host string) bool {
+	if ip, err := netip.ParseAddr(host); err == nil {
+		ip = ip.Unmap()
+		return netip.MustParsePrefix("100.64.0.0/10").Contains(ip) || netip.MustParsePrefix("fd7a:115c:a1e0::/48").Contains(ip)
+	}
+	return strings.HasSuffix(strings.ToLower(strings.TrimSuffix(host, ".")), ".ts.net")
+}
+
+// CheckAddress checks an address a person entered: host or host:port, a
+// Tailscale address or name.
 func CheckAddress(address string) (string, error) {
 	address = strings.TrimSpace(address)
 	host, port := address, ""
@@ -163,6 +179,9 @@ func CheckAddress(address string) (string, error) {
 		host, port = h, p
 	}
 	if ip := net.ParseIP(host); ip == nil && !hostForm.MatchString(host) {
+		return "", errAddress
+	}
+	if !tailscaleHost(host) && (AllowHost == nil || !AllowHost(host)) {
 		return "", errAddress
 	}
 	if port == "" {
@@ -261,11 +280,54 @@ func (l *Listener) Reconcile(want []string, handler http.Handler) {
 			slog.Warn("buddy cannot listen", "address", address, "err", err)
 			continue
 		}
-		server := &http.Server{Handler: handler, ReadHeaderTimeout: 15 * time.Second, IdleTimeout: 2 * time.Minute}
+		ln = LimitListener(ln, maxConnections)
+		server := NewHTTPServer(handler)
 		l.servers[address] = server
 		go func() { _ = server.Serve(ln) }() // ends with Close
 		slog.Info("buddy listening", "address", address)
 	}
+}
+
+// maxConnections bounds the open connections of one listener.
+const maxConnections = 32
+
+// NewHTTPServer is the HTTP server of the buddy: bounded in time. A blob is
+// at most 1 GiB, so a request may take minutes, not hours.
+func NewHTTPServer(handler http.Handler) *http.Server {
+	return &http.Server{Handler: handler, ReadHeaderTimeout: 15 * time.Second, ReadTimeout: 30 * time.Minute,
+		WriteTimeout: 30 * time.Minute, IdleTimeout: 2 * time.Minute, MaxHeaderBytes: 16 << 10}
+}
+
+// LimitListener accepts at most n connections at once; more wait.
+func LimitListener(l net.Listener, n int) net.Listener {
+	return &limitListener{Listener: l, slots: make(chan struct{}, n)}
+}
+
+type limitListener struct {
+	net.Listener
+	slots chan struct{}
+}
+
+func (l *limitListener) Accept() (net.Conn, error) {
+	l.slots <- struct{}{}
+	c, err := l.Listener.Accept()
+	if err != nil {
+		<-l.slots
+		return nil, err
+	}
+	return &limitConn{Conn: c, done: func() { <-l.slots }}, nil
+}
+
+type limitConn struct {
+	net.Conn
+	once sync.Once
+	done func()
+}
+
+func (c *limitConn) Close() error {
+	err := c.Conn.Close()
+	c.once.Do(c.done)
+	return err
 }
 
 // Addresses are where the listener answers now.
