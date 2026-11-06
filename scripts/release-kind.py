@@ -43,6 +43,18 @@ ALLOWED = (
     # squashfs. make-release.sh and third-party-licenses.py only pack it.
     "viewer/",
     "scripts/build-viewer-image.sh",
+    # Release tooling that runs only in CI (manifest, license inventory of the
+    # release archive, release checks, the build workflow); an app release
+    # uses it to repack the base image anyway (decision of 7.11.2026, PLAN 63).
+    # THIRD_PARTY_LICENSES is the overview in the repository; the copy in the
+    # image follows with the next full release, the release archive carries
+    # the complete inventory of every release.
+    "scripts/make-release.sh",
+    "scripts/third-party-licenses.py",
+    "scripts/verify-release.py",
+    "scripts/tests/test_release.py",
+    ".github/workflows/build.yml",
+    "THIRD_PARTY_LICENSES",
     "scripts/viewer-image-reuse.py",
     "scripts/tests/test_viewer_image_reuse.py",
     # The example agent is published as its own image, not in the system.

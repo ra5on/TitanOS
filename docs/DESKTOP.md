@@ -26,7 +26,7 @@ Jede Seite von TitanOS gehört zu genau einem Programm (`web/src/lib/desktop/app
 | Mein Konto | Passwort, 2FA, Passkeys, SSH-Schlüssel, WebDAV |
 | Systemsteuerung | alle übrigen Einstellungen, Startseite „Alle Einstellungen“ |
 
-Docker-Apps mit Weboberfläche (z. B. Immich) sind eigene Programme; ihr Fenster zeigt die App seit 0.60.0 immer in der **Fernansicht** (`docs/FERNANSICHT.md`): TitanOS öffnet sie auf dem NAS in einem eigenen Browser und überträgt Bild und Ton über die TitanOS-Adresse, also auch per Cloudflare, VPN und am Handy. „In eigenem Tab öffnen“ zeigt die App weiter direkt über ihren Namen bzw. Port. Normale Benutzer sehen nur die Programme ihrer Rolle und die Docker-Apps, die ihnen freigegeben sind (Benutzer › Programme).
+Docker-Apps mit Weboberfläche (z. B. Immich) sind eigene Programme; ihr Fenster zeigt die App seit 0.61.0 immer in der **Fernansicht** (`docs/FERNANSICHT.md`): TitanOS öffnet sie auf dem NAS in einem eigenen Browser und überträgt Bild und Ton über die TitanOS-Adresse, also auch per Cloudflare, VPN und am Handy. „In eigenem Tab öffnen“ zeigt die App weiter direkt über ihren Namen bzw. Port. Normale Benutzer sehen nur die Programme ihrer Rolle und die Docker-Apps, die ihnen freigegeben sind (Benutzer › Programme).
 
 ## Fenster
 

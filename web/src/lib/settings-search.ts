@@ -387,7 +387,7 @@ export const settingsAreas: SettingsArea[] = [
 		group: 'system',
 		icon: 'monitor',
 		admin: true,
-		newSince: { version: '0.60.0', date: '2026-11-06' },
+		newSince: { version: '0.61.0', date: '2026-11-07' },
 	},
 ];
 
