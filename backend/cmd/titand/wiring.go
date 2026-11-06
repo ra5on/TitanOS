@@ -60,6 +60,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/update"
 	"github.com/ra5on/TitanOS/backend/internal/ups"
 	"github.com/ra5on/TitanOS/backend/internal/usb"
+	"github.com/ra5on/TitanOS/backend/internal/viewer"
 	"github.com/ra5on/TitanOS/backend/internal/vm"
 	"github.com/ra5on/TitanOS/backend/internal/webpush"
 	"github.com/ra5on/TitanOS/backend/internal/wgserver"
@@ -84,6 +85,7 @@ type titand struct {
 	folders          *shares.Manager
 	routes           *appproxy.Manager
 	appRights        *appaccess.Manager
+	remoteView       *viewer.Manager
 	devices          *hardware.Manager
 	containers       *docker.Manager
 	appCatalog       *catalog.Manager
@@ -217,7 +219,7 @@ func (w *titand) wireBase() error {
 func (w *titand) wire() error {
 	for _, step := range []func() error{
 		w.wireBase, w.wireShares, w.wireApplications, w.wireNotifications, w.wireAccess, w.wireUpdates,
-		w.wireBackups, w.wireHardware, w.wireFiles, w.wireRemoteAccess, w.wireAppAccess, w.wireMaintenance, w.wireAPI,
+		w.wireBackups, w.wireHardware, w.wireFiles, w.wireRemoteAccess, w.wireAppAccess, w.wireViewer, w.wireMaintenance, w.wireAPI,
 	} {
 		if err := step(); err != nil {
 			return err

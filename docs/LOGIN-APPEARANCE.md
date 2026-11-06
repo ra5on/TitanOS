@@ -2,15 +2,21 @@
 
 Einstellungen › Darstellung › Abschnitt „Anmeldeseite“. Die übrige Darstellung gilt je Konto; die Anmeldeseite ist **eine Einstellung für das ganze NAS**. Nur Besitzer und Administratoren sehen und ändern den Abschnitt.
 
+## Aussehen seit PLAN 64 (0.61.0)
+
+Die Anmeldeseite hat den Stil des Arbeitsplatzes (wie der Sperrbildschirm): Hintergrundbild, große Uhr mit Datum, darunter eine Glas-Karte mit Logo, Überschrift, Name des NAS, Formular (Passwort, Zwei-Faktor-Schritt, Passkey unverändert) und unten die Sprachwahl; am Handy mit Rändern für Notch und Home-Leiste. Ohne eigenes Bild der Anmeldeseite zeigt sie den eingebauten Arbeitsplatz-Hintergrund des Kontos, das zuletzt in diesem Browser angemeldet war (`localStorage` `titanos.login.wallpaper`, nur der Name des Motivs; ein eigenes Bild eines Kontos bleibt privat, dann und ohne Eintrag das Standardmotiv „Welle“). Nach dem Abmelden erscheint dieselbe Seite. Gilt nur für die Anmeldung; Ersteinrichtung und Fehlerseiten bleiben bei `AuthCard`.
+
+Geändert gegenüber vorher: „Standard“ heißt jetzt diese neue Seite, nicht mehr die alte. Die Karte ist immer Glas (gespeichertes `style` Flach/Kontur wird als Glas gezeigt, Transparenz und Unschärfe gelten weiter); Uhrzeit und Datum stehen immer da (`clock` wird gelesen und gespeichert, aber nicht mehr ausgewertet). Beide Schalter sind aus dem Editor entfernt. Alle anderen Optionen unten gelten unverändert; das Dateiformat bleibt gleich.
+
 ## Optionen
 
-Alle Optionen sind freiwillig. Ohne gespeicherte Einstellungen (oder mit „Standard“) sieht die Seite genau so aus wie bisher.
+Alle Optionen sind freiwillig. Ohne gespeicherte Einstellungen (oder mit „Standard“) zeigt die Seite das Aussehen oben (Arbeitsplatz-Hintergrund, Glas-Karte).
 
-- **Theme:** „Wie Standard“ (bisheriges Verhalten: die zuletzt in diesem Browser benutzte Darstellung, sonst Graphit) oder fest Graphit, Schwarz, Mitternacht, Hell, Automatisch. Mit festem Theme zusätzlich Akzentfarbe (Vorgaben oder eigene) und Stil der Karte (Flach, Glas, Kontur); Glas-Transparenz und -Unschärfe werden wie überall begrenzt.
-- **Hintergrund:** keiner (Hintergrund des Themes), eines der zehn Galerie-Motive oder ein eigenes Bild; Füllen/Einpassen, Zoom, Position und Abdunkeln wie beim Dashboard.
+- **Theme:** „Wie Standard“ (bisheriges Verhalten: die zuletzt in diesem Browser benutzte Darstellung, sonst Graphit) oder fest Graphit, Schwarz, Mitternacht, Hell, Automatisch. Mit festem Theme zusätzlich Akzentfarbe (Vorgaben oder eigene) und Glas-Transparenz und -Unschärfe der Karte (wie überall begrenzt); die Karte ist seit PLAN 64 immer Glas.
+- **Hintergrund:** der Hintergrund des Arbeitsplatzes (Standard, siehe oben), eines der zehn Galerie-Motive oder ein eigenes Bild; Füllen/Einpassen, Zoom, Position und Abdunkeln wie beim Dashboard.
 - **Karte:** Position Mitte, links oder rechts (auf Smartphones bis 760 px immer mittig), Breite normal oder breit.
 - **Texte:** Überschrift (Standard „Anmelden“, höchstens 60 Zeichen) und eine Zeile Begrüßung/Hinweis (höchstens 300 Zeichen), je Deutsch und Englisch; fehlt eine Sprache, gilt die andere. Nur Text: kein HTML, kein Markdown, keine Zeilenumbrüche; angezeigt wird immer als Text.
-- **Anzeigen:** Namen des NAS (an), Logo (an), Uhrzeit und Datum (aus). Ist der Name ausgeschaltet, nennt auch die öffentliche Antwort von `/api/v1/session` ihn vor der Anmeldung nicht mehr.
+- **Anzeigen:** Namen des NAS (an), Logo (an); Uhrzeit und Datum stehen seit PLAN 64 immer da. Ist der Name ausgeschaltet, nennt auch die öffentliche Antwort von `/api/v1/session` ihn vor der Anmeldung nicht mehr.
 
 Der Abschnitt zeigt eine verkleinerte Vorschau der echten Anmeldeseite. „Vorschau in neuem Tab“ öffnet `/login-preview`: dieselbe Seite mit den ungespeicherten Werten, ohne Abmeldung (nur Besitzer/Administratoren, das Formular schickt nichts). Liegt der Text der Karte auf dem gewählten Hintergrund unter 4,5:1 Kontrast (geschätzt aus der mittleren Bildfarbe nach dem Abdunkeln und der Deckkraft der Karte), warnt der Editor. Wer im System weniger Transparenz eingestellt hat (`prefers-reduced-transparency`), sieht eine deckende Karte.
 

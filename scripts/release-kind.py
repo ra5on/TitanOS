@@ -4,8 +4,9 @@
 An app release replaces titand alone (see docs/APP-UPDATES.md). It is made
 on the system image of the newest full release before it (the base), and
 only if nothing but titand and its web UI changed since that release: the
-code under backend/ and web/, documentation, browser tests and the example
-agent, which is an image of its own. Everything else, and a tag message
+code under backend/ and web/, documentation, browser tests, the example
+agent and the image of the remote view (viewer/), which are images of
+their own. Everything else, and a tag message
 with "[system]", makes a full release.
 
 Prints kind=app|system and base=<version> as lines for $GITHUB_OUTPUT.
@@ -37,6 +38,25 @@ ALLOWED = (
     # release repacks the base image anyway (decision of 4.11.2026). Changes
     # meant for the image itself need "[system]" in the tag message.
     ".github/workflows/release.yml",
+    # The image of the remote view (PLAN 63) is a release asset of its own,
+    # built for every release and loaded by titand; it is not in the system
+    # squashfs. make-release.sh and third-party-licenses.py only pack it.
+    "viewer/",
+    "scripts/build-viewer-image.sh",
+    # Release tooling that runs only in CI (manifest, license inventory of the
+    # release archive, release checks, the build workflow); an app release
+    # uses it to repack the base image anyway (decision of 7.11.2026, PLAN 63).
+    # THIRD_PARTY_LICENSES is the overview in the repository; the copy in the
+    # image follows with the next full release, the release archive carries
+    # the complete inventory of every release.
+    "scripts/make-release.sh",
+    "scripts/third-party-licenses.py",
+    "scripts/verify-release.py",
+    "scripts/tests/test_release.py",
+    ".github/workflows/build.yml",
+    "THIRD_PARTY_LICENSES",
+    "scripts/viewer-image-reuse.py",
+    "scripts/tests/test_viewer_image_reuse.py",
     # The example agent is published as its own image, not in the system.
     "examples/",
     ".github/workflows/agent.yml",

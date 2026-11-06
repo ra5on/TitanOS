@@ -12,13 +12,7 @@
 	import { session } from '#lib/session.svelte.ts';
 	import { appearance } from '#lib/theme/appearance.svelte.ts';
 	import { isHex, type Hex } from '#lib/theme/color.ts';
-	import {
-		ACCENT_IDS,
-		ACCENTS,
-		LIMITS,
-		resolvePalette,
-		SURFACE_STYLES,
-	} from '#lib/theme/themes.ts';
+	import { ACCENT_IDS, ACCENTS, LIMITS, resolvePalette } from '#lib/theme/themes.ts';
 	import {
 		cardContrast,
 		defaultLoginLook,
@@ -289,28 +283,22 @@
 					oninput={() => (draft.accent = 'custom')}
 				/>
 			</div>
-			<label class="stack"
-				>{t('appearance.style')}<select class="field" bind:value={draft.style}>
-					{#each SURFACE_STYLES as id (id)}<option value={id}>{t(`style.${id}`)}</option>{/each}
-				</select></label
-			>
-			{#if draft.style === 'glass'}
-				<Slider
-					id="login-glass"
-					label={t('appearance.transparency')}
-					bind:value={draft.glass}
-					limit={LIMITS.glass}
-					unit="%"
-				/>
-				<Slider
-					id="login-blur"
-					label={t('appearance.blur')}
-					bind:value={draft.blur}
-					limit={LIMITS.blur}
-					unit="px"
-				/>
-				<p class="hint muted">{t('loginLook.glassHint')}</p>
-			{/if}
+			<!-- PLAN 64: the card is always glass like the lock screen; transparency and blur stay. -->
+			<Slider
+				id="login-glass"
+				label={t('appearance.transparency')}
+				bind:value={draft.glass}
+				limit={LIMITS.glass}
+				unit="%"
+			/>
+			<Slider
+				id="login-blur"
+				label={t('appearance.blur')}
+				bind:value={draft.blur}
+				limit={LIMITS.blur}
+				unit="px"
+			/>
+			<p class="hint muted">{t('loginLook.glassHint')}</p>
 		{/if}
 	</div>
 
@@ -438,9 +426,6 @@
 			checked={!draft.hideLogo}
 			onchange={(e) => (draft.hideLogo = !e.currentTarget.checked)}
 		/>{t('loginLook.showLogo')}</label
-	>
-	<label class="check"
-		><input type="checkbox" bind:checked={draft.clock} />{t('loginLook.clock')}</label
 	>
 
 	<fieldset class="divided texts">

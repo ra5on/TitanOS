@@ -6,6 +6,7 @@
 	"settingshome.group.accounts": "Konten und Dienste",
 	"settingshome.group.data": "Daten",
 	"settingshome.area.programs": "Programme",
+	"settingshome.area.viewer": "Fernansicht",
 	"settingshome.recent": "Zuletzt geändert",
 	"settingshome.recentBy": "von {user}",
 	"settingshome.recentAll": "Ganzes Protokoll",
@@ -33,6 +34,7 @@
 	"settingshome.desc.api": "Tokens, CLI, OpenAPI",
 	"settingshome.desc.cluster": "Mehrere NAS im Verbund",
 	"settingshome.desc.programs": "Wer welche Programme bekommt",
+	"settingshome.desc.viewer": "Docker-Apps im Fenster, GPU und Ton",
 	"settingshome.desc.backups": "Daten, Apps, Stick, Wiederherstellung",
 	"settingshome.desc.files": "Dateisuche, Index, Vorschaubilder",
 	"settingshome.desc.memory": "Arbeitsspeicher, Schreibcache"

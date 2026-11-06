@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/logkeep"
 	"github.com/ra5on/TitanOS/backend/internal/lxc"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
@@ -27,13 +28,16 @@ const vmStopWait = 2 * time.Minute
 // stop on their own, so locking stops them first, and unlocking starts
 // again the ones locking stopped. Autostart after a start of the NAS
 // happens as usual once the volume is unlocked.
-func wireEncryption(volumes *storage.Manager, folders *shares.Manager, machines *vm.Manager, containers *lxc.Manager, notifier *notify.Manager) {
+func wireEncryption(volumes *storage.Manager, folders *shares.Manager, machines *vm.Manager, containers *lxc.Manager, notifier *notify.Manager, logs *logkeep.Manager) {
 	var mu sync.Mutex
 	stopped := map[string][]string{} // volume → "vm:<name>" / "lxc:<name>"
 
 	volumes.OnLocked = func(volume string) { notifier.Notify(notify.Warning, "volume_locked", volume) }
 	volumes.BeforeLock = func(ctx context.Context, volume string) (func(), error) {
 		folders.LetGo(ctx, volume)
+		// The marker of this start must not stay behind on a locked volume:
+		// the next start would report an unclean end.
+		logs.LetGo(volumes.MountPoint(volume))
 		mounted := volumes.Mounted() // without volume already
 		with := append(slices.Clone(mounted), volume)
 		var names []string

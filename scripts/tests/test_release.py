@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import subprocess
+import tarfile
 import tempfile
 import threading
 import unittest
@@ -68,7 +69,7 @@ Version: 1.0
                 licenses.image(root)
 
 
-@unittest.skipUnless(all(shutil.which(c) for c in ["mksquashfs", "unsquashfs", "minisign", "zip"]),
+@unittest.skipUnless(all(shutil.which(c) for c in ["mksquashfs", "unsquashfs", "minisign", "zip", "zstd"]),
                      "release tools not installed (make test-release requires them)")
 class ReleaseTest(unittest.TestCase):
     def setUp(self):
@@ -76,8 +77,21 @@ class ReleaseTest(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.repo = Path(self.tmp.name)
         (self.repo / "scripts").mkdir()
-        for name in ["make-release.sh", "sign-release.sh"]:
+        for name in ["make-release.sh", "sign-release.sh", "third-party-licenses.py"]:
             shutil.copy2(REPO / "scripts" / name, self.repo / "scripts" / name)
+        # Stands for scripts/build-viewer-image.sh (needs Docker): the archive,
+        # its package list and the image ID as the last line of its output.
+        viewer = self.repo / "scripts/build-viewer-image.sh"
+        viewer.write_text('#!/bin/sh\nset -e\nmkdir -p "$2"\n'
+                          'image=$(mktemp -d)\n'
+                          'printf \'[{"Config":"blobs/sha256/%s","RepoTags":["titanos-viewer:%s"]}]\' "${VIEWER_TEST_CONFIG:-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}" "$1" > "$image/manifest.json"\n'
+                          'tar -C "$image" -cf - manifest.json | zstd -q > "$2/titanos-viewer-$1.tar.zst"\n'
+                          'rm -r "$image"\n'
+                          'printf "chromium\\t142.0.7444.59-1\\tchromium\\t142.0.7444.59-1\\n'
+                          'libx264-164\\t2:0.164.3108+git31e19f9-2+b1\\tx264\\t2:0.164.3108+git31e19f9-2\\n'
+                          'libc6 2.41-12+deb13u4 glibc\\n" > "$2/titanos-viewer-$1.packages.txt"\n'
+                          'echo "Loaded image"\necho "${VIEWER_TEST_ID:-sha256:' + "a" * 64 + '}"\n')
+        viewer.chmod(0o755)
         shutil.copytree(REPO / "boot", self.repo / "boot")
         shutil.copytree(REPO / "plugins/catalog", self.repo / "plugins/catalog")
         self.root = self.repo / "build/mkosi.output/rootfs"
@@ -154,6 +168,7 @@ class ReleaseTest(unittest.TestCase):
         self.assertEqual((self.release / "titanos-0.1.0-beta.1-titand").read_bytes(), b"titand 0.1.0-beta.1")
         for name in ["manifest.json", "titanos-0.1.0-beta.1.zip", "titanos-0.1.0-beta.1-vmlinuz", "titanos-0.1.0-beta.1-titand",
                      "titanos-0.1.0-beta.1-licenses.tar.gz", "titanos-0.1.0-beta.1-sources.txt", "titanos-0.1.0-beta.1-cli-linux-amd64",
+                     "titanos-viewer-0.1.0-beta.1.tar.zst",
                      "nvidia-build-sdk.tar.zst", "nvidia-build-sdk-sources.txt", "nvidia.raw", "nvidia.plugin.json", "nvidia.plugin.json.minisig", "nvidia-kernel-sources.tar.gz", "nvidia-licenses.tar.gz"]:
             with self.subTest(name=name):
                 path = self.release / name
@@ -168,6 +183,40 @@ class ReleaseTest(unittest.TestCase):
         (self.release / "unexpected.txt").write_text("unexpected")
         with self.assertRaisesRegex(ValueError, "inventory"):
             verify.verify(self.release, self.keys)
+
+    def test_release_carries_the_viewer_image(self):
+        self.pack()
+        self.sign()
+        self.assertEqual(verify.verify(self.release, self.keys), "0.1.0-beta.1")
+        manifest = json.loads((self.release / "manifest.json").read_text())
+        asset = self.release / "titanos-viewer-0.1.0-beta.1.tar.zst"
+        self.assertEqual(manifest["viewer"], {"asset": asset.name, "sha256": hashlib.sha256(asset.read_bytes()).hexdigest(),
+                                              "size": asset.stat().st_size, "imageId": "sha256:" + "a" * 64})
+        sources = (self.release / "titanos-0.1.0-beta.1-sources.txt").read_text()
+        self.assertIn("Viewer image (titanos-viewer-0.1.0-beta.1.tar.zst)", sources)
+        self.assertIn("libx264-164 2:0.164.3108+git31e19f9-2+b1\n  https://snapshot.debian.org/package/x264/2%3A0.164.3108%2Bgit31e19f9-2/", sources)
+        # Without a source version: the binary version without +bN.
+        self.assertIn("libc6 2.41-12+deb13u4\n  https://snapshot.debian.org/package/glibc/2.41-12%2Bdeb13u4/", sources)
+        with tarfile.open(self.release / "titanos-0.1.0-beta.1-licenses.tar.gz") as archive:
+            self.assertIn("viewer/packages.txt", archive.getnames())
+        # A changed image ID breaks the inventory as well.
+        manifest["viewer"]["imageId"] = "titanos-viewer:latest"
+        (self.release / "manifest.json").write_text(json.dumps(manifest))
+        with self.assertRaises(ValueError):
+            verify.verify(self.release, self.keys)
+
+    def test_viewer_image_without_id_is_refused(self):
+        self.command("mksquashfs", str(self.root), str(self.slot / "filesystem.squashfs"), "-noappend", "-quiet", "-processors", "1")
+        output = self.command("env", "VIEWER_TEST_ID=done", "scripts/make-release.sh", "0.1.0-beta.1", "beta", success=False)
+        self.assertIn("image ID", output)
+        self.assertFalse((self.release / "manifest.json").exists())
+
+    def test_viewer_image_id_must_be_the_config_digest(self):
+        # The builder's Docker may name the image by another digest than the
+        # NAS will; the archive decides.
+        self.command("mksquashfs", str(self.root), str(self.slot / "filesystem.squashfs"), "-noappend", "-quiet", "-processors", "1")
+        output = self.command("env", "VIEWER_TEST_CONFIG=" + "b" * 64, "scripts/make-release.sh", "0.1.0-beta.1", "beta", success=False)
+        self.assertIn("config digest", output)
 
     def kernel_new(self, marker="new"):
         """The same image with a backports kernel, as make-zip.sh --kernel-new leaves it."""

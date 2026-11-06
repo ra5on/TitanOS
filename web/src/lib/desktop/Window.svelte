@@ -2,13 +2,15 @@
 	import { untrack } from 'svelte';
 	// PLAN 61: one window of the desktop. TitanOS programs show their pages
 	// in a frame of the same origin with the program's own side bar; Docker
-	// apps show their own interface through their HTTPS name.
+	// apps always show their remote view (PLAN 63: the app runs in a browser
+	// on the NAS, its picture comes over the TitanOS address).
 	import Icon from '../components/Icon.svelte';
 	import { t } from '../i18n/index.svelte.ts';
 	import DesktopIcon from './DesktopIcon.svelte';
 	import { sideActive, type SideItem } from './apps.ts';
 	import { frameMessage } from './frame.ts';
-	import { appEntry, openTab as openProgramTab } from './programs.svelte.ts';
+	import { openTab as openProgramTab } from './programs.svelte.ts';
+	import RemoteView from './RemoteView.svelte';
 	import {
 		closeWindow,
 		desktop,
@@ -51,30 +53,13 @@
 	const MIN_H = 240;
 	let frame = $state<HTMLIFrameElement>();
 	// The frame loads its first page once; later pages are reached inside it.
-	// A Docker app's window opens through a fresh entry of the gate, also after a reload.
-	let src = $state(
-		untrack(() => win.entry ?? (external && win.href.startsWith('https://') ? '' : win.href)),
-	);
-	$effect(() => {
-		if (src) return;
-		void appEntry(win.app, win.href).then((url) => (src = url));
-	});
-	let loaded = $state(false);
-	let slow = $state(false);
+	const src = untrack(() => win.href);
 	let dragging = $state(false);
 	let shift = $state({ x: 0, y: 0 });
-	const insecure = $derived(
-		external && win.href.startsWith('http:') && location.protocol === 'https:',
-	);
 
 	$effect(() => {
 		registerFrame(win.id, frame ?? null);
 		return () => registerFrame(win.id, null);
-	});
-	$effect(() => {
-		if (!external) return;
-		const timer = setTimeout(() => (slow = !loaded), 9000);
-		return () => clearTimeout(timer);
 	});
 
 	const folded = $derived(desktop.prefs.folded.includes(foldKey));
@@ -88,11 +73,40 @@
 	const focused = $derived(wm.focused === win.id);
 	const path = $derived(win.href.split('?')[0]);
 
+	// PLAN 64: the title bar names the program and the page ("Docker › Container"):
+	// the page's own title, or the entry of the side bar when the page is
+	// called like its program.
+	let pageName = $state('');
+	const crumb = $derived.by(() => {
+		if (external) return '';
+		const vm = new URLSearchParams(win.href.split('?')[1] ?? '').get('vm');
+		const thing = side.find(
+			(item) =>
+				'text' in item && !!vm && new URLSearchParams(item.href.split('?')[1]).get('vm') === vm,
+		);
+		if (thing && 'text' in thing) return thing.text;
+		const label = (exact: boolean) => {
+			const item = side.find(
+				(i) =>
+					'label' in i &&
+					!('text' in i) &&
+					(exact ? (i.match ?? [i.href.split('?')[0]]).includes(path) : sideActive(i, path, side)),
+			);
+			const text = item && 'label' in item ? t(item.label) : '';
+			return text === win.title ? '' : text;
+		};
+		// The entry of the side bar for exactly this page, else the page's own
+		// title (a page below an entry, e.g. one app), else the entry above it.
+		const own = pageName.trim();
+		return label(true) || (own && own !== win.title ? own : '') || label(false);
+	});
+
 	// The frame says which page it shows; the address of the browser follows the window in front.
 	function message(event: MessageEvent) {
 		if (!frame || event.source !== frame.contentWindow) return;
 		const msg = frameMessage(event);
 		if (msg?.type === 'titanos-page') {
+			pageName = msg.title;
 			win.href = msg.path;
 			if (focused) onaddress?.(msg.path);
 			saveWindows();
@@ -334,7 +348,8 @@
 					size={22}
 					name={win.title}
 				/>{/if}
-			<b class="title">{win.title}</b>
+			<b class="title">{win.title}</b>{#if crumb}<span class="crumb" aria-hidden="true">›</span
+				><span class="title page">{crumb}</span>{/if}
 			{#if external}<span class="addr"
 					>{win.href.replace(/^https?:\/\//, '').replace(/\/$/, '')}</span
 				>{/if}
@@ -373,47 +388,16 @@
 			>
 		</header>
 		<div class="body">
-			{#if insecure}
-				<div class="note">
-					<DesktopIcon {glyph} {gradient} {image} size={60} name={win.title} />
-					<h3>{t('desktop.window.insecureTitle')}</h3>
-					<p>{t('desktop.window.insecureText', { address: win.href })}</p>
-					<div class="actions">
-						<a class="btn btn-primary" href="/settings/proxy" target="_top"
-							>{t('desktop.window.setupNames')}</a
-						>
-						<button type="button" class="btn" onclick={openTab}
-							>{t('desktop.window.openTab')}</button
-						>
-					</div>
-				</div>
-			{:else if src}
+			{#if external}
+				<RemoteView app={win.app.replace(/^docker:/, '')} title={win.title} onopentab={openTab} />
+			{:else}
 				<iframe
 					bind:this={frame}
 					data-window={win.id}
 					{src}
 					title={win.title}
-					onload={() => (loaded = true)}
-					allow={external
-						? 'fullscreen; clipboard-write'
-						: 'clipboard-read; clipboard-write; fullscreen; publickey-credentials-get; publickey-credentials-create; camera; microphone'}
-					sandbox={external
-						? 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals'
-						: undefined}
+					allow="clipboard-read; clipboard-write; fullscreen; publickey-credentials-get; publickey-credentials-create; camera; microphone"
 				></iframe>
-				{#if external && slow}
-					<div class="note slow">
-						<p>{t('desktop.window.slowText')}</p>
-						<div class="actions">
-							<button type="button" class="btn" onclick={() => (slow = false)}
-								>{t('desktop.window.wait')}</button
-							>
-							<button type="button" class="btn btn-primary" onclick={openTab}
-								>{t('desktop.window.openTab')}</button
-							>
-						</div>
-					</div>
-				{/if}
 			{/if}
 			{#if dragging || !focused}<div class="shield" aria-hidden="true"></div>{/if}
 		</div>
@@ -427,12 +411,16 @@
 </section>
 
 <style>
+	/* PLAN 64: corners, transparency and glass follow Settings › Appearance
+	   (--radius-scale, --desk-surface, --desk-blur); the page itself stays opaque. */
 	.win {
 		position: absolute;
 		display: flex;
-		border-radius: 14px;
+		border-radius: calc(14px * var(--radius-scale, 1));
 		overflow: hidden;
-		background: var(--bg);
+		background: var(--desk-surface, var(--bg));
+		backdrop-filter: blur(var(--desk-blur, 0px)) saturate(1.3);
+		-webkit-backdrop-filter: blur(var(--desk-blur, 0px)) saturate(1.3);
 		border: 1px solid var(--border);
 		box-shadow: 0 10px 28px rgb(0 0 0 / 0.35);
 	}
@@ -442,6 +430,8 @@
 	/* While moving: one layer for the GPU and a lighter shadow (smooth in every browser). */
 	.win.dragging {
 		will-change: transform;
+		backdrop-filter: none;
+		-webkit-backdrop-filter: none;
 		box-shadow: 0 14px 34px rgb(0 0 0 / 0.4);
 	}
 	.win.snapped {
@@ -465,7 +455,7 @@
 		display: flex;
 		flex-direction: column;
 		padding: 12px 10px;
-		background: color-mix(in srgb, var(--surface) 88%, transparent);
+		background: color-mix(in srgb, var(--surface) 40%, transparent);
 		border-right: 1px solid var(--border);
 		overflow: hidden;
 	}
@@ -529,7 +519,7 @@
 		min-height: 36px;
 		padding: 6px 10px;
 		border: 0;
-		border-radius: 9px;
+		border-radius: calc(9px * var(--radius-scale, 1));
 		background: none;
 		color: var(--text);
 		font: inherit;
@@ -579,7 +569,7 @@
 		align-items: center;
 		gap: 9px;
 		padding: 0 6px 0 14px;
-		background: var(--header);
+		background: color-mix(in srgb, var(--header) 55%, transparent);
 		border-bottom: 1px solid var(--border);
 		user-select: none;
 		touch-action: none;
@@ -589,6 +579,21 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+	.title {
+		flex: none;
+		max-width: 45%;
+	}
+	.title.page {
+		flex: 0 1 auto;
+		max-width: none;
+		min-width: 0;
+		font-weight: 400;
+		color: var(--muted);
+	}
+	.crumb {
+		margin: 0 -4px;
+		color: var(--muted);
 	}
 	.addr {
 		color: var(--muted);
@@ -607,7 +612,7 @@
 		display: grid;
 		place-items: center;
 		border: 0;
-		border-radius: 7px;
+		border-radius: calc(7px * var(--radius-scale, 1));
 		background: none;
 		color: var(--muted);
 		cursor: pointer;
@@ -642,47 +647,6 @@
 	}
 	.dragging .shield {
 		cursor: grabbing;
-	}
-	.note {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 12px;
-		padding: 30px;
-		text-align: center;
-	}
-	.note h3 {
-		margin: 0;
-	}
-	.note p {
-		margin: 0;
-		max-width: 480px;
-		color: var(--muted);
-		line-height: 1.5;
-		overflow-wrap: anywhere;
-	}
-	.note.slow {
-		position: absolute;
-		left: 50%;
-		bottom: 20px;
-		transform: translateX(-50%);
-		flex: none;
-		padding: 14px 18px;
-		border: 1px solid var(--border);
-		border-radius: 14px;
-		background: var(--surface);
-		box-shadow: var(--shadow-menu);
-		flex-direction: row;
-		flex-wrap: wrap;
-		max-width: calc(100% - 40px);
-	}
-	.actions {
-		display: flex;
-		gap: 10px;
-		flex-wrap: wrap;
-		justify-content: center;
 	}
 	.edge {
 		position: absolute;

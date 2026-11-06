@@ -1,0 +1,6 @@
+# PulseAudio for the TitanOS viewer: one null sink, local socket only,
+# no network modules. The agent reads titan.monitor.
+load-module module-null-sink sink_name=titan sink_properties=device.description=TitanOS rate=48000 channels=2
+set-default-sink titan
+set-default-source titan.monitor
+load-module module-native-protocol-unix auth-anonymous=1 socket=/tmp/pulse/native

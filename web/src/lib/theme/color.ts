@@ -81,3 +81,22 @@ export function rotateHue(hex: Hex, degrees: number): Hex {
 							: [c, 0, x];
 	return toHex([r1, g1, b1].map((v) => (v + m) * 255));
 }
+
+/**
+ * The same color with its saturation (HSL) multiplied by `factor`: below 1
+ * calmer, above 1 stronger. Hue and lightness stay.
+ */
+export function saturate(hex: Hex, factor: number): Hex {
+	if (factor === 1) return hex;
+	const [r, g, b] = toRgb(hex).map((v) => v / 255);
+	const max = Math.max(r, g, b);
+	const min = Math.min(r, g, b);
+	const l = (max + min) / 2;
+	const d = max - min;
+	if (d === 0) return hex;
+	const s = d / (1 - Math.abs(2 * l - 1));
+	const next = Math.min(1, Math.max(0, s * factor));
+	// Every channel moves away from (or towards) the lightness by the same ratio.
+	const ratio = next / s;
+	return toHex([r, g, b].map((v) => Math.min(1, Math.max(0, l + (v - l) * ratio)) * 255));
+}

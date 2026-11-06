@@ -206,7 +206,8 @@ export function loginAppearance(
 					theme: look.theme,
 					accent: look.accent,
 					customAccent: look.customAccent,
-					style: look.style,
+					// PLAN 64: the card is glass like the lock screen (older looks: flat or outline).
+					style: 'glass',
 					glass: look.glass,
 					blur: look.blur,
 				};

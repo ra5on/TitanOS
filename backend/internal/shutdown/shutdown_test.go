@@ -261,3 +261,66 @@ func TestAFailedRestartCanBeTriedAgain(t *testing.T) {
 		t.Fatalf("powered %q", got)
 	}
 }
+
+// A VM that ignores ACPI is switched off once the waiting time is up (or
+// the person goes on), before the NAS is asked to go down; the order is
+// guests first, then power.
+func TestAStubbornVMIsSwitchedOffBeforeGoingDown(t *testing.T) {
+	for _, unattended := range []bool{true, false} {
+		f := newFake()
+		f.stubborn["win"] = true
+		var order []string
+		w := f.workloads()
+		w.ForceVM = func(_ context.Context, name string) error {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			f.vms[name] = false
+			order = append(order, "force:"+name)
+			return nil
+		}
+		m := New(w)
+		m.Wait, m.Poll = 40*time.Millisecond, 5*time.Millisecond
+		m.Begin("reboot", "update", unattended, func() error {
+			f.mu.Lock()
+			order = append(order, "power")
+			f.mu.Unlock()
+			f.powered <- "reboot"
+			return nil
+		})
+		if !unattended {
+			time.Sleep(100 * time.Millisecond)
+			if err := m.Now(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if got := powered(t, f, time.Second); got != "reboot" {
+			t.Fatalf("unattended=%v: powered %q", unattended, got)
+		}
+		f.mu.Lock()
+		if !slices.Equal(order, []string{"force:win", "power"}) {
+			t.Errorf("unattended=%v: order %v", unattended, order)
+		}
+		f.mu.Unlock()
+		for _, it := range m.Status().Items {
+			if it.State != "stopped" {
+				t.Errorf("unattended=%v: %+v", unattended, it)
+			}
+		}
+	}
+}
+
+// VMs that shut down by themselves are never switched off.
+func TestObedientVMsAreNotSwitchedOff(t *testing.T) {
+	f := newFake()
+	w := f.workloads()
+	w.ForceVM = func(_ context.Context, name string) error {
+		t.Errorf("switched off %s", name)
+		return nil
+	}
+	m := New(w)
+	m.Wait, m.Poll = time.Minute, 5*time.Millisecond
+	m.Begin("poweroff", "alex", false, f.power("poweroff"))
+	if got := powered(t, f, time.Second); got != "poweroff" {
+		t.Fatalf("powered %q", got)
+	}
+}

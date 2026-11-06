@@ -8,6 +8,7 @@ import {
 	isHex,
 	luminance,
 	rotateHue,
+	saturate,
 	shade,
 	withAlpha,
 	type Hex,
@@ -218,6 +219,12 @@ export type Appearance = {
 	sidebar: BarSurface;
 	/** Order and hidden tabs of the header navigation. */
 	nav: NavPrefs;
+	/**
+	 * Colour strength in percent, 50–150 (PLAN 64, Settings › Appearance):
+	 * saturation of the accent and of the desktop's wallpaper. Optional in
+	 * stored settings (100 when missing); older versions ignore it.
+	 */
+	saturation: number;
 };
 
 export const LIMITS = {
@@ -231,6 +238,7 @@ export const LIMITS = {
 	glow: { min: 0, max: 100, step: 5 },
 	duration: { min: 150, max: 1000, step: 50 },
 	dialogDim: { min: 0, max: 90, step: 5 },
+	saturation: { min: 50, max: 150, step: 5 },
 } as const;
 
 /**
@@ -272,6 +280,7 @@ export function defaultAppearance(): Appearance {
 		bars: defaultBar('opaque'),
 		sidebar: defaultBar('tiles'),
 		nav: defaultNav(),
+		saturation: 100,
 	};
 }
 
@@ -414,7 +423,39 @@ export function sanitizeAppearance(input: unknown, legacy?: unknown): Appearance
 		sidebar: sanitizeBar(v.sidebar, 'tiles'),
 		dialogs: sanitizeDialogs(v.dialogs),
 		nav: sanitizeNav(v.nav),
+		saturation: inRange(v.saturation, LIMITS.saturation, d.saturation),
 	};
+}
+
+/** The corner radius of tiles and windows ("Ecken"); buttons and fields follow it. */
+export function withCorners(a: Appearance, radius: number): Appearance {
+	const rTile = inRange(radius, LIMITS.rTile, a.rTile);
+	return { ...a, rTile, rCtl: Math.min(LIMITS.rCtl.max, Math.round(rTile * 0.7)) };
+}
+
+/**
+ * The settings as the simple appearance page (PLAN 64) means them: its
+ * sliders count everywhere. Transparency or blur make the surfaces glass
+ * (both at 0: flat), and menus and dialogs follow those values instead of
+ * own ones kept from older versions. The stored fields stay for the way back.
+ */
+export function globalLook(a: Appearance): Appearance {
+	return {
+		...a,
+		style: a.glass === 0 && a.blur === 0 ? 'flat' : 'glass',
+		menus: { ...a.menus, own: false },
+		dialogs: { ...a.dialogs, own: false },
+	};
+}
+
+/**
+ * Opacity of the desktop's own glass (menus, panels, dock plate, phone
+ * search): follows "Transparenz", gentler than the tiles, so text on it stays
+ * readable (the 70 % of 0.58 at the default).
+ */
+export function deskAlpha(a: Appearance, palette: Palette): number {
+	if (a.style !== 'glass') return 1;
+	return Math.max(1 - a.glass / 150, palette.dark ? 0.45 : 0.55);
 }
 
 /** The colors of a theme. `systemLight` decides what "auto" means right now. */
@@ -444,11 +485,15 @@ export function pickedAccent(a: Appearance): Hex {
 	return a.accent === 'custom' ? a.customAccent : ACCENTS[a.accent].hex;
 }
 
-/** The accent as used: darkened on light themes until it is visible (3:1). */
+/**
+ * The accent as used: with the colour strength, and darkened on light themes
+ * until it is visible (3:1).
+ */
 export function resolveAccent(a: Appearance, palette: Palette): Hex {
-	if (palette.dark) return pickedAccent(a);
-	if (a.accent !== 'custom') return ACCENTS[a.accent].dark;
-	return darkenFor(a.customAccent, palette.bg, 3);
+	const factor = (a.saturation ?? 100) / 100;
+	if (palette.dark) return saturate(pickedAccent(a), factor);
+	const base = a.accent !== 'custom' ? ACCENTS[a.accent].dark : a.customAccent;
+	return darkenFor(saturate(base, factor), palette.bg, 3);
 }
 
 /** Opacity of glass surfaces. Limited so that text stays readable. */
@@ -550,6 +595,11 @@ export function cssVariables(a: Appearance, systemLight: boolean): Record<string
 		'--radius-tile': `${a.rTile}px`,
 		'--radius-ctl': `${a.rCtl}px`,
 		'--font-scale': (a.font / 100).toFixed(2),
+		// PLAN 64: the desktop's own surfaces follow the global sliders too.
+		'--radius-scale': (a.rTile / 14).toFixed(2),
+		'--desk-surface': withAlpha(p.surface, deskAlpha(a, p)),
+		'--desk-blur': a.style === 'glass' ? `${Math.round(a.blur * 1.2)}px` : '0px',
+		'--wallpaper-filter': `saturate(${((a.saturation ?? 100) / 100).toFixed(2)})`,
 		// Derived values the surface styles in app.css are built from.
 		'--glass-surface': withAlpha(p.surface, alpha),
 		'--glass-border': p.dark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.7)',

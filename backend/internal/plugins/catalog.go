@@ -59,10 +59,7 @@ func catalogClient() *http.Client {
 
 func (m *Manager) releaseBase() (string, error) {
 	// A development commit must never borrow a driver from the latest release.
-	if !releaseVersion.MatchString(m.Release) || strings.HasPrefix(m.Release, "v") {
-		return "", ErrRelease
-	}
-	return m.releaseSource + "/releases/download/v" + m.Release + "/", nil
+	return m.releaseBaseFor(m.Release)
 }
 
 func (m *Manager) catalogSnapshot() (CatalogStatus, []Plugin) {

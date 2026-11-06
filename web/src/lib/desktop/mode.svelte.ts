@@ -25,3 +25,13 @@ if (typeof matchMedia === 'function') {
 }
 
 export { inWindow };
+
+/** PLAN 64: the page is shown full screen on the phone (the bar above names the program). */
+export function phoneView(): boolean {
+	return !inWindow && !mode.classic && !mode.wide;
+}
+
+/** PLAN 64: the page looks like a window app – in a window of the desktop or on the phone. */
+export function windowView(): boolean {
+	return inWindow || phoneView();
+}

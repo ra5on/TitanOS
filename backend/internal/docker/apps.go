@@ -1,6 +1,8 @@
 package docker
 
 import (
+	"go.yaml.in/yaml/v3"
+
 	"context"
 	"errors"
 	"io/fs"
@@ -102,6 +104,9 @@ func exists(path string) bool {
 // Validate with the same project directory and env values as the later start.
 // New secrets stay in a private RAM temporary file until validation succeeds.
 func (m *Manager) validateCompose(ctx context.Context, volume, name, compose, env string) error {
+	if err := refuseViewerNetworks(compose); err != nil {
+		return err
+	}
 	file, err := os.CreateTemp("", "titanos-compose-env-*")
 	if err != nil {
 		return err
@@ -507,5 +512,54 @@ func (m *Manager) RemoveApp(ctx context.Context, name string, purge bool) error 
 	m.appList = nil
 	delete(m.jobs, name)
 	m.mu.Unlock()
+	return nil
+}
+
+// refuseViewerNetworks keeps apps off the networks of the remote view
+// (titanos-viewer…): a network key, its name, a service's network list or
+// network_mode naming one is refused, external or not.
+func refuseViewerNetworks(compose string) error {
+	var doc map[string]any
+	if yaml.Unmarshal([]byte(compose), &doc) != nil {
+		return nil // docker compose config reports the syntax error
+	}
+	viewer := func(name string) bool {
+		name = strings.ToLower(strings.TrimSpace(name))
+		name = strings.TrimPrefix(strings.TrimPrefix(name, "container:"), "service:")
+		return strings.HasPrefix(name, "titanos-viewer")
+	}
+	refuse := &InvalidComposeError{Detail: "networks named titanos-viewer… belong to the remote view of TitanOS"}
+	networks, _ := doc["networks"].(map[string]any)
+	for key, value := range networks {
+		if viewer(key) {
+			return refuse
+		}
+		if def, ok := value.(map[string]any); ok {
+			if n, _ := def["name"].(string); viewer(n) {
+				return refuse
+			}
+		}
+	}
+	services, _ := doc["services"].(map[string]any)
+	for _, value := range services {
+		service, _ := value.(map[string]any)
+		if mode, _ := service["network_mode"].(string); viewer(mode) {
+			return refuse
+		}
+		switch list := service["networks"].(type) {
+		case []any:
+			for _, n := range list {
+				if s, _ := n.(string); viewer(s) {
+					return refuse
+				}
+			}
+		case map[string]any:
+			for n := range list {
+				if viewer(n) {
+					return refuse
+				}
+			}
+		}
+	}
 	return nil
 }

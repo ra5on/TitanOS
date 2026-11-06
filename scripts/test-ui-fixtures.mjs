@@ -162,10 +162,13 @@ export function fixtureFactory(browser, errors) {
     theme = "graphit",
     width = 1440,
     locale = "de",
+    // Extra context options, e.g. phone emulation (isMobile, hasTouch, deviceScaleFactor).
+    options = {},
   ) {
     const ctx = await browser.newContext({
       locale: "de-DE",
       viewport: { width, height: 1000 },
+      ...options,
     });
     await ctx.addInitScript(
       ({ theme, locale }) => {
@@ -304,6 +307,49 @@ export function fixtureFactory(browser, errors) {
       setupDone: role !== "setup",
       setupBackups: [],
       setupCalls: [],
+      // PLAN 63: the remote view's settings and state (GET/PUT
+      // /viewer/settings, GET /viewer/status); viewerPuts records saves.
+      viewer: {
+        settings: {
+          gpu: "auto",
+          quality: "auto",
+          fps: 60,
+          audio: true,
+          volume: "",
+        },
+        status: {
+          image: { state: "ready", version: "0.60.0", bytes: 0, size: 0, progress: 0 },
+          gpu: "vaapi",
+          gpus: [
+            {
+              id: "/dev/dri/renderD128",
+              kind: "vaapi",
+              vendor: "8086",
+              title: "Intel UHD 770",
+              available: true,
+            },
+          ],
+          sessions: [
+            {
+              user: "alex",
+              app: "photos",
+              state: "open",
+              since: "2026-11-06T08:00:00Z",
+              windows: 1,
+              gpu: "vaapi",
+              memoryBytes: 380e6,
+            },
+          ],
+          memory: {
+            availableBytes: 8e9,
+            reserveBytes: 734003200,
+            perViewBytes: 380e6,
+            more: 9,
+          },
+          idleMinutes: 15,
+        },
+      },
+      viewerPuts: [],
       // GET /network for the bridge step of /welcome (setup variant only).
       network: {
         config: { bridge: false },
@@ -328,6 +374,18 @@ export function fixtureFactory(browser, errors) {
           },
         });
 
+      if (path === "/viewer/settings") {
+        if (method === "PUT") {
+          data.viewer.settings = route.request().postDataJSON();
+          data.viewerPuts.push(data.viewer.settings);
+        }
+        return json(data.viewer.settings);
+      }
+      if (path === "/viewer/status") return json(data.viewer.status);
+      if (path === "/viewer/image" && method === "POST") {
+        data.viewer.status.image = { ...data.viewer.status.image, state: "downloading", size: 400e6, bytes: 0, progress: 0 };
+        return json(data.viewer.status.image);
+      }
       if (path === "/maintenance") {
         if (method === "PUT") {
           const settings = route.request().postDataJSON();
@@ -1110,6 +1168,9 @@ export function fixtureFactory(browser, errors) {
       }
       return json({});
     });
+    // PLAN 63: a remote view that never starts (scripts that test it
+    // route the stream themselves); nothing reaches a NAS.
+    await ctx.routeWebSocket(/\/api\/v1\/viewer\/[^/]+\/stream/, () => {});
     const page = await ctx.newPage();
     page.setDefaultTimeout(12000);
     page.on("pageerror", (e) => errors.push(String(e)));

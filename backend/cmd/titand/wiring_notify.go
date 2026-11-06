@@ -162,7 +162,7 @@ func (w *titand) wireNotifications() error {
 	})
 	// Encrypted volumes: notice after a start, stopping and restarting
 	// what runs on them around locking (encryption.go).
-	wireEncryption(w.volumes, w.folders, w.machines, w.systemContainers, w.notifier)
+	wireEncryption(w.volumes, w.folders, w.machines, w.systemContainers, w.notifier, w.logs)
 	w.volumes.OnCacheMissing = func(volume string) { w.notifier.Notify(notify.Error, "volume_cache_missing", volume) }
 	w.volumes.OnCacheRemoved = func(volume string) { w.notifier.Notify(notify.Info, "volume_cache_removed", volume) }
 	w.background(func() { w.volumes.RunCacheCleaner(ctx) })

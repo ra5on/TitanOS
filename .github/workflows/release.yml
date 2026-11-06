@@ -10,6 +10,12 @@ name: Release
 # tag asks it for the set of a new kernel, waits for it and carries the sets
 # in the release for NAS that do not know the plugin repository yet.
 #
+# Every release, app or system, carries the image of the remote view
+# (docs/FERNANSICHT.md): scripts/viewer-image-reuse.py takes the previous
+# release's verified archive when nothing in the image changed, otherwise
+# scripts/build-viewer-image.sh builds it; make-release.sh lists it in the
+# signed manifest ("viewer").
+#
 # A tag on which only titand changed since the last full release becomes an
 # app release (scripts/release-kind.py, docs/APP-UPDATES.md): the published
 # image of that release gets the new titand, without mkosi and new plugins.
@@ -37,6 +43,11 @@ on:
       - 'scripts/plugin-set.py'
       - 'scripts/normalize-image-tmpfiles.py'
       - 'scripts/make-release.sh'
+      - 'scripts/build-viewer-image.sh'
+      - 'scripts/viewer-image-reuse.py'
+      - 'viewer/**'
+      - 'backend/cmd/titanos-viewer/**'
+      - 'backend/internal/viewer/proto/**'
       - 'scripts/sign-release.sh'
       - 'scripts/verify-release.py'
       - 'scripts/check-release-keys.py'
@@ -262,8 +273,27 @@ jobs:
           cd backend
           sudo env PATH="$PATH" TITANOS_TEST_NVIDIA_SDK="$sdk" go test ./internal/plugins -run '^TestRealNASBuildEnvironment$' -count=1 -timeout 25m -v
 
+      - name: Image of the remote view (titanos-viewer, docs/FERNANSICHT.md)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -o pipefail
+          mkdir -p out/viewer
+          # Unchanged since the previous release: take its signed archive
+          # (same image ID), so NAS boxes do not download it again.
+          status=0
+          python3 scripts/viewer-image-reuse.py "$VERSION" out/viewer || status=$?
+          if [ "$status" = 3 ]; then
+            # The last line of the output is the image ID (config digest).
+            scripts/build-viewer-image.sh "$VERSION" out/viewer | tee out/viewer/build.log | tail -n 1 > "out/viewer/titanos-viewer-$VERSION.image-id"
+          elif [ "$status" != 0 ]; then
+            exit "$status"
+          fi
+
       - name: Pack the release
         env:
+          # Built in the step before; make-release.sh lists it in the manifest.
+          VIEWER_DIR: out/viewer
           # Only a pull request packs the system alone; it is never published.
           WITHOUT_PLUGINS: ${{ (github.event_name == 'pull_request' || steps.plugins.outputs.ready == 'false') && '1' || '' }}
           BASE_VERSION: ${{ steps.kind.outputs.base }}

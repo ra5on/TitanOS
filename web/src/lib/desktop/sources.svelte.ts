@@ -99,7 +99,11 @@ export function dockerPrograms(host: string): DockerProgram[] {
 				updates: group.filter((c) => c.updateAvailable).length,
 			});
 		}
-		return out.filter((p) => p.url).sort((a, b) => a.label.localeCompare(b.label));
+		// The NAS lists only apps with a web interface. Their window shows the
+		// remote view (PLAN 63), which needs only the app's name: an address the
+		// browser cannot use itself (a template like "http://[IP]:8080") must not
+		// hide the app (PLAN 64, phone without Docker apps).
+		return out.sort((a, b) => a.label.localeCompare(b.label));
 	}
 	for (const [app, group] of byApp) {
 		const web =

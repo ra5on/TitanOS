@@ -12,6 +12,8 @@
 #                                                   if STICK_IMAGE=1
 #   out/release/titanos-<version>-titand            titand alone, for an app update without restart
 #   out/release/titanos-<version>-sources.txt       where the sources of the Debian packages are
+#   out/release/titanos-viewer-<version>.tar.zst    the image of the remote view (PLAN 63), loaded by
+#                                                   titand with docker load on first use
 #   out/release/manifest.json                       what an update consists of
 #
 # sign-release.sh signs the manifest, installation ZIP and complete checksums.
@@ -25,6 +27,9 @@
 #                       release (repack-release.py), else the version itself
 #   TITAND=path         titand of the release (default backend/bin/titand)
 #   STICK_IMAGE=1       also pack the stick as a disk image (legacy BIOS)
+#   VIEWER_DIR=dir      take the viewer image from dir (titanos-viewer-<version>.tar.zst,
+#                       .packages.txt and .image-id) instead of building it with
+#                       scripts/build-viewer-image.sh
 #
 # Expects out/stick and build/mkosi.output from "make zip" with the same VERSION.
 set -euo pipefail
@@ -104,9 +109,30 @@ if [ -d "$variant" ]; then
     fi
 fi
 
+# The image of the remote view (docs/FERNANSICHT.md) belongs to every release,
+# app or system: titand loads the one of its own version. It is a release
+# asset, never part of the system image.
+viewer_dir=${VIEWER_DIR:-out/viewer}
+viewer_asset=titanos-viewer-$version.tar.zst
+if [ -z "${VIEWER_DIR:-}" ]; then
+    rm -rf "$viewer_dir"
+    mkdir -p "$viewer_dir"
+    # The script prints the image ID (the config digest) as its last line.
+    scripts/build-viewer-image.sh "$version" "$viewer_dir" | tail -n 1 > "$viewer_dir/titanos-viewer-$version.image-id"
+fi
+for file in "$viewer_asset" "titanos-viewer-$version.packages.txt" "titanos-viewer-$version.image-id"; do
+    if [ ! -s "$viewer_dir/$file" ]; then
+        echo "viewer image incomplete: $viewer_dir/$file missing" >&2; exit 1
+    fi
+done
+if ! grep -Eqx 'sha256:[0-9a-f]{64}' "$viewer_dir/titanos-viewer-$version.image-id"; then
+    echo "build-viewer-image.sh did not print an image ID (sha256:…)" >&2; exit 1
+fi
+
 release=out/release
 rm -rf "$release"
 mkdir -p "$release"
+cp "$viewer_dir/$viewer_asset" "$release/$viewer_asset"
 
 (cd "$stick" && zip -q -r -0 "../release/titanos-$version.zip" .)
 (cd "$release" && sha256sum "titanos-$version.zip" > "titanos-$version.zip.sha256")
@@ -125,10 +151,11 @@ if [ -x backend/bin/titanosctl ]; then
     cp backend/bin/titanosctl "$release/titanos-$version-cli-linux-amd64"
 fi
 
+VIEWER_DIR=$viewer_dir \
 VARIANT=$([ -d "$variant" ] && echo "$variant") VARIANT_IMAGE=$variant_image \
 VERSION=$version BASE=$base CHANNEL=$channel CHANGELOG=$changelog RELEASE=$release IMAGE=$image \
     MIN_VERSION=${MIN_VERSION:-} WITHOUT_PLUGINS=${WITHOUT_PLUGINS:-} python3 - <<'PY'
-import datetime, hashlib, json, os, re, tarfile, shutil, zipfile
+import datetime, hashlib, importlib.util, json, os, re, subprocess, tarfile, shutil, zipfile
 from pathlib import Path
 
 version, base, release, image = os.environ["VERSION"], os.environ["BASE"], os.environ["RELEASE"], os.environ["IMAGE"]
@@ -241,6 +268,43 @@ if not without_plugins:
     manifest["nvidiaBuildSDK"] = sdk
     for asset in [sdk["asset"], "nvidia-build-sdk-sources.txt"]:
         shutil.copy2(Path("out/plugins") / asset, Path(release) / asset)
+# The image of the remote view. Optional for older TitanOS, which ignore it;
+# titand checks the manifest signature, size, SHA-256 and the loaded image ID.
+viewer_dir = Path(os.environ["VIEWER_DIR"])
+viewer_asset = f"titanos-viewer-{version}.tar.zst"
+viewer_id = (viewer_dir / f"titanos-viewer-{version}.image-id").read_text().strip()
+if not re.fullmatch(r"sha256:[0-9a-f]{64}", viewer_id):
+    raise SystemExit("invalid viewer image ID")
+def archive_config(path):
+    """The config digest the archive's manifest.json names: the ID the image
+    gets with Docker's classic image store on the NAS, whatever store the
+    builder used (its own ID could be a manifest digest)."""
+    unpack = subprocess.Popen(["zstd", "-dc", str(path)], stdout=subprocess.PIPE)
+    try:
+        with tarfile.open(fileobj=unpack.stdout, mode="r|") as archive:
+            for member in archive:
+                if member.name == "manifest.json":
+                    entries = json.load(archive.extractfile(member))
+                    break
+            else:
+                raise SystemExit("the viewer archive has no manifest.json")
+    finally:
+        unpack.kill()
+        unpack.wait()
+    if len(entries) != 1:
+        raise SystemExit("the viewer archive must hold exactly one image")
+    match = re.fullmatch(r"(?:blobs/sha256/)?([0-9a-f]{64})(?:\.json)?", entries[0].get("Config", ""))
+    if not match:
+        raise SystemExit("unexpected Config in the viewer archive")
+    return "sha256:" + match[1]
+if archive_config(Path(release) / viewer_asset) != viewer_id:
+    raise SystemExit("the viewer image ID does not match the config digest in its archive")
+manifest["viewer"] = {"asset": viewer_asset, "sha256": sha256(os.path.join(release, viewer_asset)),
+                      "size": os.path.getsize(os.path.join(release, viewer_asset)), "imageId": viewer_id}
+licenses_spec = importlib.util.spec_from_file_location("third_party_licenses", "scripts/third-party-licenses.py")
+third_party = importlib.util.module_from_spec(licenses_spec)
+licenses_spec.loader.exec_module(third_party)
+viewer_components = third_party.viewer_packages(viewer_dir / f"titanos-viewer-{version}.packages.txt")
 with open(os.path.join(release, "manifest.json"), "w", encoding="utf-8") as f:
     json.dump(manifest, f, indent=2, ensure_ascii=False)
     f.write("\n")
@@ -259,6 +323,10 @@ with open(os.path.join(release, f"titanos-{version}-sources.txt"), "w", encoding
         f.write(f"{c['ecosystem']}: {c['name']} {c['version']}\n  {c['source']}\n")
     for name, plugin_version, links in plugin_sources:
         f.write(f"Plugin: {name} {plugin_version}\n" + "".join(f"  {link}\n" for link in links))
+    # The viewer image is a container of its own (Chromium, GStreamer, x264 …).
+    f.write(f"\nViewer image ({viewer_asset}):\n")
+    for c in viewer_components:
+        f.write(f"Debian: {c['name']} {c['version']}\n  {c['source']}\n")
     if variant:
         # Kernel and firmware of the image with the new kernel differ.
         known = {(c["ecosystem"], c["name"], c["version"]) for c in components}
@@ -272,6 +340,9 @@ with tarfile.open(os.path.join(release, f"titanos-{version}-licenses.tar.gz"), "
     if variant:
         for name in ["components.json", "licenses"]:
             archive.add(variant_notices / name, arcname="kernel-new/" + name)
+    # The copyright files of the viewer's packages are inside its image
+    # (/usr/share/doc); the list names them with their versions.
+    archive.add(viewer_dir / f"titanos-viewer-{version}.packages.txt", arcname="viewer/packages.txt")
 with open(os.path.join(release, "SHA256SUMS"), "w", encoding="utf-8") as f:
     for path in sorted(Path(release).iterdir()):
         if path.name != "SHA256SUMS":

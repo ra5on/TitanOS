@@ -3,7 +3,7 @@ import type { IconName } from '#lib/components/Icon.svelte';
 
 const keywords: Record<string, string> = {
 	appearance:
-		'navigation reiter tabs leiste kopfzeile header reihenfolge order theme design farbe color font schrift hintergrund background app symbol icon home bildschirm screen menü menu fenster window dialog transparenz transparency glas glass',
+		'navigation reiter tabs leiste kopfzeile header reihenfolge order theme design farbe color font schrift hintergrund background app symbol icon home bildschirm screen menü menu fenster window dialog transparenz transparency glas glass glaseffekt ecken corners farbstärke saturation dock anmeldeseite login',
 	network:
 		'ip dns gateway bridge vlan bonding netzwerk network hostname name nas-name rechnername umbenennen rename',
 	firewall:
@@ -76,6 +76,8 @@ const keywords: Record<string, string> = {
 		'proxy reverse https name namen domain mdns avahi app apps adresse address docker zertifikat certificate automatisch automatic webui zertifizierungsstelle certificate authority ca installieren install',
 	'proxy-ca':
 		'zertifizierungsstelle certificate authority ca root stammzertifikat installieren install iphone ipad android windows macos linux',
+	viewer:
+		'fernansicht remote view docker app apps fenster window browser chromium gpu grafikkarte graphics vaapi nvenc qualität quality bildrate frame rate fps ton sound audio lautstärke volume profil profile',
 	programs:
 		'programme programs apps app docker rechte rights benutzer user users konto account erlauben allow sperre lock arbeitsplatz desktop fenster window browser anmeldung login',
 };
@@ -378,6 +380,14 @@ export const settingsAreas: SettingsArea[] = [
 		icon: 'grid',
 		admin: true,
 		newSince: { version: '0.58.0', date: '2026-11-06' },
+	},
+	{
+		id: 'viewer',
+		label: 'settingshome.area.viewer',
+		group: 'system',
+		icon: 'monitor',
+		admin: true,
+		newSince: { version: '0.61.0', date: '2026-11-07' },
 	},
 ];
 

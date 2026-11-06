@@ -3,23 +3,30 @@
 	// each opens full screen with a way back (PhoneBar).
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import Icon from '../components/Icon.svelte';
 	import AccountMenu from '../components/AccountMenu.svelte';
+	import NodeMenu from '../components/NodeMenu.svelte';
+	import { clusterNodes } from '../cluster.svelte.ts';
 	import { t } from '../i18n/index.svelte.ts';
 	import { system } from '../system.svelte.ts';
 	import { storage } from '../storage.svelte.ts';
 	import { formatPercent } from '../format.ts';
 	import DesktopIcon from './DesktopIcon.svelte';
 	import { arrangeIcons } from './prefs.ts';
-	import { programs } from './programs.svelte.ts';
+	import { openTab, programs, type Program } from './programs.svelte.ts';
+	import RemoteView from './RemoteView.svelte';
 	import { watchSources } from './sources.svelte.ts';
 	import { desktop, loadDesktop } from './wm.svelte.ts';
 	import { wallpaperCss } from './wallpapers.ts';
 	import { appearance } from '../theme/appearance.svelte.ts';
-	import { THEMES } from '../theme/themes.ts';
+	import { resolvePalette } from '../theme/themes.ts';
 
 	onMount(() => {
 		loadDesktop();
+		// Coming from the login (keyboard open) or a long page, Safari keeps the
+		// old scroll position: the home screen always starts at its top.
+		window.scrollTo(0, 0);
 		return watchSources();
 	});
 	let query = $state('');
@@ -48,7 +55,7 @@
 				!keys.includes(p.key) && (!query || p.label.toLowerCase().includes(query.toLowerCase())),
 		),
 	);
-	const light = $derived(THEMES[appearance.current.theme as keyof typeof THEMES]?.dark === false);
+	const light = $derived(!resolvePalette(appearance.current, appearance.systemLight).dark);
 	const info = $derived(system.info);
 	const memPct = $derived(
 		info
@@ -57,12 +64,26 @@
 	);
 	const bad = $derived((storage.status?.volumes ?? []).filter((v) => v.state !== 'ok').length);
 
-	function open(href: string, external: boolean) {
-		if (external) window.open(href, '_blank', 'noopener');
-		else void goto(href);
+	// PLAN 63: a Docker app opens full screen in its remote view (a history
+	// entry of its own, so the phone's Back returns to the grid).
+	const remote = $derived(page.state.remote ? (byKey.get(page.state.remote) ?? null) : null);
+	function open(p: Program) {
+		if (p.kind !== 'docker') return void goto(p.href);
+		void goto(page.url.pathname, { state: { remote: p.key }, shallow: true });
 	}
 </script>
 
+{#if remote}
+	<div class="remote-full">
+		<RemoteView
+			app={remote.key.replace(/^docker:/, '')}
+			title={remote.label}
+			phone
+			onback={() => history.back()}
+			onopentab={() => remote && openTab(remote.key, remote.href)}
+		/>
+	</div>
+{/if}
 <div
 	class="home"
 	class:light
@@ -73,7 +94,7 @@
 				light,
 			)} center / cover"
 >
-	<header class="bar">
+	<header class="top">
 		<label class="search glass-panel">
 			<Icon name="search" size={17} />
 			<input
@@ -82,6 +103,7 @@
 				aria-label={t('desktop.menu.search')}
 			/>
 		</label>
+		{#if clusterNodes.nodes.length > 1}<span class="node"><NodeMenu variant="phone" /></span>{/if}
 		<span class="account glass-panel"><AccountMenu /></span>
 	</header>
 	<div class="status glass-panel">
@@ -97,7 +119,7 @@
 	</div>
 	<div class="grid">
 		{#each [...shown, ...missing] as p (p.key)}
-			<button type="button" class="app" onclick={() => open(p.href, p.external)}>
+			<button type="button" class="app" onclick={() => open(p)}>
 				<span class="wrap">
 					<DesktopIcon
 						glyph={p.glyph}
@@ -116,12 +138,23 @@
 </div>
 
 <style>
+	.remote-full {
+		position: fixed;
+		inset: 0;
+		z-index: 50;
+		display: flex;
+		background: var(--bg);
+	}
 	.home {
 		min-height: 100dvh;
 		overflow-x: clip;
-		padding: calc(10px + env(safe-area-inset-top)) 12px calc(20px + env(safe-area-inset-bottom));
+		/* PLAN 64: safe areas on every side (iPhone across: the notch is at a side). */
+		padding: 0 calc(12px + env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom))
+			calc(12px + env(safe-area-inset-left));
 		position: relative;
 		isolation: isolate;
+		width: 100%;
+		max-width: 100vw;
 	}
 	.home::before {
 		content: '';
@@ -129,12 +162,26 @@
 		inset: 0;
 		z-index: -1;
 		background: var(--wallpaper);
+		filter: var(--wallpaper-filter, none);
 	}
-	.bar {
+	/* The search stays in sight while the grid scrolls, below the status bar. */
+	.top {
+		position: sticky;
+		top: 0;
+		z-index: 5;
 		display: flex;
 		gap: 8px;
 		align-items: center;
-		margin-bottom: 12px;
+		margin: 0 -12px 12px;
+		padding: calc(10px + env(safe-area-inset-top)) 12px 10px;
+		background: linear-gradient(to bottom, rgb(0 0 0 / 0.28), transparent);
+	}
+	.light .top {
+		background: linear-gradient(to bottom, rgb(255 255 255 / 0.4), transparent);
+	}
+	.node {
+		flex: none;
+		display: flex;
 	}
 	.search {
 		flex: 1;
@@ -143,7 +190,7 @@
 		gap: 8px;
 		height: 44px;
 		padding: 0 14px;
-		border-radius: 14px;
+		border-radius: calc(14px * min(var(--radius-scale, 1), 1.6));
 		color: var(--muted);
 		min-width: 0;
 	}
@@ -186,7 +233,7 @@
 	}
 	.grid {
 		display: grid;
-		grid-template-columns: repeat(4, 1fr);
+		grid-template-columns: repeat(4, minmax(0, 1fr));
 		gap: 16px 4px;
 	}
 	.app {

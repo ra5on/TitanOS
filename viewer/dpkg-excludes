@@ -1,0 +1,29 @@
+# dpkg path filters for the titanos-viewer image (installed before any
+# package). Documentation except the copyright files, man pages and
+# translations are dropped, and so are libraries only needed by plugins
+# the viewer never loads (GStreamer onnx/flite, ALSA a52/lavrate via
+# libavcodec). The packages stay installed and listed in packages.txt.
+path-exclude=/usr/share/doc/*
+path-include=/usr/share/doc/*/copyright
+path-exclude=/usr/share/man/*
+path-exclude=/usr/share/info/*
+path-exclude=/usr/share/locale/*
+path-exclude=/usr/share/lintian/*
+path-exclude=/usr/share/gtk-doc/*
+path-exclude=/usr/lib/chromium/locales/*
+path-include=/usr/lib/chromium/locales/de.pak
+path-include=/usr/lib/chromium/locales/en-US.pak
+path-include=/usr/lib/chromium/locales/en-GB.pak
+path-exclude=/usr/lib/x86_64-linux-gnu/libonnxruntime*
+path-exclude=/usr/lib/x86_64-linux-gnu/libdnnl*
+path-exclude=/usr/lib/x86_64-linux-gnu/libflite*
+path-exclude=/usr/lib/x86_64-linux-gnu/libavcodec.so*
+path-exclude=/usr/lib/x86_64-linux-gnu/libx265*
+path-exclude=/usr/lib/x86_64-linux-gnu/libcodec2*
+path-exclude=/usr/lib/x86_64-linux-gnu/libSvtAv1Enc*
+path-exclude=/usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstonnx.so
+path-exclude=/usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstflite.so
+path-exclude=/usr/lib/x86_64-linux-gnu/alsa-lib/libasound_module_rate_lavrate*
+path-exclude=/usr/lib/x86_64-linux-gnu/alsa-lib/libasound_module_pcm_a52*
+path-exclude=/usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstsvtav1.so
+path-exclude=/usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstx265.so

@@ -11,7 +11,7 @@
 	import Icon from './Icon.svelte';
 	import Logo from './Logo.svelte';
 
-	let { variant }: { variant: 'logo' | 'card' | 'badge' | 'desk' } = $props();
+	let { variant }: { variant: 'logo' | 'card' | 'badge' | 'desk' | 'phone' } = $props();
 
 	const id = $props.id();
 	let open = $state(false);
@@ -75,6 +75,10 @@
 					>{t('cluster.nodeCount', { count: clusterNodes.nodes.length })}</span
 				></span
 			>
+			<Icon name="chevronDown" size={14} />
+		{:else if variant === 'desk'}
+			<span class="dot" class:away={!current?.self && !current?.online} aria-hidden="true"></span>
+			<span class="mono name">{current?.name}</span>
 			<Icon name="chevronDown" size={14} />
 		{:else}
 			<span class="mono initials">{initials}</span><span class="dot" aria-hidden="true"></span>
@@ -156,26 +160,25 @@
 		white-space: nowrap;
 		font-size: var(--text-base);
 	}
-	/* PLAN 62: in the top bar of the desktop, beside the menu. */
+	/* PLAN 62/64: in the top bar of the desktop, right after the menu, with
+	   the node's name (the state as a dot and in the menu, not by colour alone). */
+	.desk {
+		flex: none;
+	}
 	.desk .trigger {
-		position: relative;
-		justify-content: center;
-		width: var(--pb, 34px);
 		height: var(--pb, 34px);
+		padding: 0 8px 0 10px;
+		gap: 7px;
 		border-color: color-mix(in srgb, var(--accent) 60%, transparent);
 		background: color-mix(in srgb, var(--accent) 14%, transparent);
 	}
-	.desk .initials {
-		font-size: var(--text-sm);
-		font-weight: 700;
-	}
-	.desk .trigger > .dot {
-		position: absolute;
-		right: -3px;
-		bottom: -3px;
-		width: 10px;
-		height: 10px;
-		border: 2px solid var(--surface);
+	.desk .name {
+		max-width: 140px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: var(--text-base);
+		font-weight: 600;
 	}
 	.desk .menu {
 		background: var(--surface);
@@ -295,6 +298,42 @@
 		margin: var(--space-1) 0;
 		border: 0;
 		border-top: 1px solid var(--border);
+	}
+	/* PLAN 64: on the phone's home beside the search; the menu spans the screen. */
+	.phone .trigger {
+		position: relative;
+		justify-content: center;
+		width: 44px;
+		height: 44px;
+		border-radius: 14px;
+		border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+		background: color-mix(in srgb, var(--accent) 16%, transparent);
+	}
+	.phone .initials {
+		font-size: var(--text-base);
+		font-weight: 700;
+	}
+	.phone .trigger > .dot {
+		position: absolute;
+		right: -3px;
+		bottom: -3px;
+		width: 11px;
+		height: 11px;
+		border: 2px solid var(--surface);
+	}
+	.phone .menu {
+		position: fixed;
+		top: calc(64px + env(safe-area-inset-top));
+		left: 8px;
+		right: 8px;
+		width: auto;
+		max-width: none;
+		z-index: 60;
+		background: var(--surface);
+	}
+	.phone .menu button,
+	.phone .menu a {
+		min-height: 44px;
 	}
 	@media (max-width: 760px) {
 		.logo .menu {

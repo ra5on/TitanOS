@@ -69,6 +69,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/update"
 	"github.com/ra5on/TitanOS/backend/internal/ups"
 	"github.com/ra5on/TitanOS/backend/internal/usb"
+	"github.com/ra5on/TitanOS/backend/internal/viewer"
 	"github.com/ra5on/TitanOS/backend/internal/vm"
 	"github.com/ra5on/TitanOS/backend/internal/webpush"
 	"github.com/ra5on/TitanOS/backend/internal/wgserver"
@@ -102,7 +103,9 @@ type Options struct {
 	Catalog   *catalog.Manager
 	// Terminal hands out the shell on the NAS and knows whether consoles are allowed.
 	Terminal *terminal.Manager
-	VMs      *vm.Manager
+	// Viewer runs the remote view of Docker apps (PLAN 63); nil leaves it out.
+	Viewer *viewer.Manager
+	VMs    *vm.Manager
 	// LXC runs system containers; nil makes one that does nothing.
 	LXC          *lxc.Manager
 	Hardware     *hardware.Manager
@@ -234,6 +237,8 @@ type Server struct {
 	agentMirror agentMirror
 	agentSnaps  agentSnapState
 	agentOpen   func() (*os.Root, error)
+	// viewerOpen replaces viewer.Manager.Open in tests.
+	viewerOpen viewerOpener
 	// agentSandbox replaces the Docker sandbox of code_run in tests.
 	agentSandbox    func(context.Context, docker.SandboxRequest) (docker.SandboxResult, error)
 	agentWebFactory func() *agent.Web
@@ -367,6 +372,7 @@ func New(opts Options) *Server {
 	s.registerUploads(mux)
 	s.registerDocker(mux)
 	s.registerAppStore(mux)
+	s.registerViewer(mux)
 	s.registerVMs(mux)
 	s.registerHardware(mux)
 	s.registerVMDetails(mux)

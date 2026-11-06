@@ -71,7 +71,7 @@ function svg(id: string, p: Palette): string {
 <path d='M-100 820C250 620 420 300 760 260s620 160 960 20' fill='none' stroke='${line}' stroke-opacity='.35' stroke-width='2'/>
 <path d='M-100 900C300 760 560 520 900 520s520 240 800 120' fill='none' stroke='${line}' stroke-opacity='.25' stroke-width='2'/>`;
 	}
-	const s = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 1000' preserveAspectRatio='xMidYMid slice'><defs><radialGradient id='r' cx='.72' cy='.3' r='.75'><stop offset='0' stop-color='${glow}' stop-opacity='.5'/><stop offset='1' stop-color='${base}' stop-opacity='0'/></radialGradient><filter id='b'><feGaussianBlur stdDeviation='40'/></filter></defs>${body}</svg>`;
+	const s = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 1000' preserveAspectRatio='xMidYMid slice'><defs><radialGradient id='r' cx='.72' cy='.3' r='.75'><stop offset='0' stop-color='${glow}' stop-opacity='.5'/><stop offset='1' stop-color='${base}' stop-opacity='0'/></radialGradient><filter id='b' x='-50%' y='-50%' width='200%' height='200%'><feGaussianBlur stdDeviation='40'/></filter></defs>${body}</svg>`;
 	return `url("data:image/svg+xml,${encodeURIComponent(s)}")`;
 }
 

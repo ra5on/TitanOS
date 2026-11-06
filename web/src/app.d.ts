@@ -1,6 +1,11 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
 declare global {
-	namespace App {}
+	namespace App {
+		interface PageState {
+			/** PLAN 63: the Docker app shown full screen in its remote view on the phone. */
+			remote?: string;
+		}
+	}
 }
 
 // The attributes gridstack reads a tile's place in the grid from.

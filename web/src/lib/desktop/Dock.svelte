@@ -28,7 +28,7 @@
 	import { t } from '../i18n/index.svelte.ts';
 	import Icon from '../components/Icon.svelte';
 	import DesktopIcon from './DesktopIcon.svelte';
-	import type { DockPosition } from './prefs.ts';
+	import type { Dock as DockPrefs, DockPosition } from './prefs.ts';
 	import type { Program } from './programs.svelte.ts';
 	import { desktop, focus, minimize, savePrefs, wm } from './wm.svelte.ts';
 
@@ -36,24 +36,30 @@
 		all,
 		edit = false,
 		onopen,
-		onmenu,
-		ondone,
+		onmenu = () => {},
+		ondone = () => {},
+		preview = null,
 	}: {
 		all: Program[];
 		edit?: boolean;
-		onopen: (key: string, event: Event) => void;
+		onopen?: (key: string, event: Event) => void;
 		/** Right click: on an icon (key) or on the dock itself (null). */
-		onmenu: (event: MouseEvent, key: string | null) => void;
-		ondone: () => void;
+		onmenu?: (event: MouseEvent, key: string | null) => void;
+		ondone?: () => void;
+		/**
+		 * Shows these settings instead of the desktop's, as a still picture
+		 * (Settings › Appearance › Dock, PLAN 64): no clicks, drags or menus.
+		 */
+		preview?: DockPrefs | null;
 	} = $props();
 
 	const byKey = $derived(new Map(all.map((p) => [p.key, p])));
-	const dock = $derived(desktop.prefs.dock);
+	const dock = $derived(preview ?? desktop.prefs.dock);
 	const known = $derived(new Set(all.map((p) => p.key)));
-	const pinned = $derived(dockPinned(desktop.prefs, known));
+	const pinned = $derived(dockPinned({ ...desktop.prefs, dock }, known));
 	// Open programs that are not kept come after a line, like on other desktops.
 	const running = $derived(
-		[...new Set(wm.windows.map((w) => w.app))].filter((a) => !pinned.includes(a)),
+		preview ? [] : [...new Set(wm.windows.map((w) => w.app))].filter((a) => !pinned.includes(a)),
 	);
 	const vertical = $derived(dock.position !== 'bottom');
 	const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -82,9 +88,9 @@
 		return wm.windows.filter((w) => w.app === key);
 	}
 	function click(event: MouseEvent, key: string) {
-		if (edit) return;
+		if (edit || preview) return;
 		const list = windowsOf(key);
-		if (!list.length) return onopen(key, event);
+		if (!list.length) return onopen?.(key, event);
 		const front = list.find((w) => w.id === wm.focused && !w.minimized);
 		if (front) list.forEach((w) => minimize(w.id));
 		else [...list].sort((a, b) => a.z - b.z).forEach((w) => focus(w.id));
@@ -103,6 +109,7 @@
 		return at < 0 ? items.length : at;
 	}
 	function dragOver(event: DragEvent) {
+		if (preview) return;
 		if (!event.dataTransfer?.types.includes('text/x-titanos-program')) return;
 		event.preventDefault();
 		event.stopPropagation();
@@ -157,13 +164,14 @@
 				type="button"
 				class="it"
 				class:wiggle={edit && !reduced}
-				draggable="true"
+				draggable={!preview}
+				tabindex={preview ? -1 : undefined}
 				ondragstart={(e) => e.dataTransfer?.setData('text/x-titanos-program', key)}
 				onclick={(e) => click(e, key)}
 				oncontextmenu={(e) => {
 					e.preventDefault();
 					e.stopPropagation();
-					onmenu(e, key);
+					if (!preview) onmenu(e, key);
 				}}
 				aria-label={p.label}
 			>
@@ -195,6 +203,8 @@
 <nav
 	class="dock {dock.position}"
 	class:edit
+	class:preview={!!preview}
+	aria-hidden={preview ? 'true' : undefined}
 	bind:this={bar}
 	style:--size="{dock.size}px"
 	style:--plate="{dock.opacity}%"
@@ -208,7 +218,7 @@
 	ondrop={drop}
 	oncontextmenu={(e) => {
 		e.preventDefault();
-		onmenu(e, null);
+		if (!preview) onmenu(e, null);
 	}}
 >
 	{#each pinned as key, i (key)}{@render item(key, true, i)}{/each}
@@ -293,10 +303,11 @@
 		align-items: flex-end;
 		gap: 6px;
 		padding: 8px 10px;
-		border-radius: calc(var(--size) * 0.36 + 8px);
+		border-radius: calc((var(--size) * 0.36 + 8px) * min(var(--radius-scale, 1), 1.4));
 		background: color-mix(in srgb, var(--surface) var(--plate), transparent);
-		backdrop-filter: blur(20px) saturate(1.3);
-		-webkit-backdrop-filter: blur(20px) saturate(1.3);
+		/* The global "Glaseffekt" (Settings › Appearance, PLAN 64). */
+		backdrop-filter: blur(var(--desk-blur, 20px)) saturate(1.3);
+		-webkit-backdrop-filter: blur(var(--desk-blur, 20px)) saturate(1.3);
 		border: 1px solid color-mix(in srgb, #fff 14%, transparent);
 		box-shadow: 0 16px 40px rgb(0 0 0 / 0.4);
 		max-width: calc(100% - 24px);
@@ -320,6 +331,10 @@
 	.dock.right {
 		right: 10px;
 		align-items: flex-end;
+	}
+	/* In the settings' preview the dock sits in its frame and only shows itself. */
+	.dock.preview {
+		pointer-events: none;
 	}
 	.dock.edit {
 		outline: 2px dashed color-mix(in srgb, var(--accent) 70%, transparent);

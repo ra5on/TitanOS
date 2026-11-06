@@ -22,6 +22,8 @@
 	import Setup from '#lib/pages/Setup.svelte';
 	import LoginPreview from '#lib/login/LoginPreview.svelte';
 	import { loadLoginLook } from '#lib/login/state.svelte.ts';
+	import { rememberLoginWallpaper } from '#lib/login/wallpaper.ts';
+	import { sanitizeDesktop } from '#lib/desktop/prefs.ts';
 	import { refreshSession, session } from '#lib/session.svelte.ts';
 	import { appearance, initAppearance } from '#lib/theme/appearance.svelte.ts';
 	import { effectOn } from '#lib/theme/themes.ts';
@@ -33,6 +35,11 @@
 	import { clearAgentNotifications, registerServiceWorker } from '#lib/web-push.ts';
 
 	const agentRoute = $derived(isAgentPath(page.url.pathname));
+	// PLAN 64: the login page shows the wallpaper of the account last logged in here.
+	$effect(() => {
+		if (session.data?.user && !inWindow)
+			rememberLoginWallpaper(sanitizeDesktop(session.desktop).wallpaper);
+	});
 	// The lock screen shows the desktop's wallpaper (PLAN 61).
 	const lockBackground = $derived.by(() => {
 		const wp = desktop.prefs.wallpaper;
@@ -164,7 +171,7 @@
 
 {#if inWindow || (session.data?.user && mode.wide && !mode.classic && !agentRoute)}
 	<!-- The desktop (PLAN 61) draws its own wallpaper; windows show the page on the theme's colour. -->
-{:else if session.data?.user && (page.url.pathname === '/' || backgroundEverywhere)}<DashboardBackground
+{:else if session.data?.user && mode.classic && (page.url.pathname === '/' || backgroundEverywhere)}<!-- PLAN 64: the dashboard's background has no setting any more; only the classic frame of the test scripts keeps it. --><DashboardBackground
 		visual={shownVisual}
 		inherited={appearance.current}
 		urls={dashboardScene.urls}

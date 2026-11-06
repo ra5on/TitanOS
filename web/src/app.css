@@ -886,3 +886,74 @@ main.readable :target {
 		animation: none;
 	}
 }
+
+/* PLAN 64: a page in a window of the desktop (main.in-window) or full screen
+   on the phone (main.phone-page) looks like a window app – the tool bar of
+   PageHead right under the title bar, sections as cards with a header row,
+   settings as rows "label left, control right", compact tables. Only these
+   two frames; the classic layout keeps its look. */
+:is(main.in-window, main.phone-page) {
+	--gap: 16px;
+}
+:is(main.in-window, main.phone-page):has(.win-toolbar) {
+	padding-top: 0;
+}
+/* The window is the column: settings use its whole width. */
+:is(main.in-window, main.phone-page) .settings-page.column {
+	max-width: none;
+}
+/* Cards. */
+:is(main.in-window, main.phone-page) .tile {
+	border-radius: calc(12px * var(--radius-scale, 1));
+	border-color: var(--panel-border, var(--border));
+}
+/* Card headings read as titles, not as small capitals. */
+:is(main.in-window, main.phone-page) .tile :is(h2, h3).tile-title {
+	color: var(--text);
+	font-size: var(--text-md);
+	font-weight: 600;
+	letter-spacing: 0;
+	text-transform: none;
+}
+/* In a section card the heading (alone or with its badges) is the header row. */
+:is(main.in-window, main.phone-page) .tile.panel {
+	gap: 12px;
+	padding: 16px;
+}
+:is(main.in-window, main.phone-page) .tile.panel > :is(h2, h3).tile-title:first-child,
+:is(main.in-window, main.phone-page) .tile.panel > div:first-child:has(> :is(h2, h3).tile-title) {
+	margin: -16px -16px 0;
+	padding: 12px 16px;
+	border-bottom: 1px solid var(--panel-border, var(--border));
+}
+/* Settings as rows: label (with its hint) left, control right. */
+:is(main.in-window, main.phone-page) .tile.panel .stack {
+	max-width: none;
+}
+/* A window is a frame of its own: its width is the viewport here. */
+@media (min-width: 640px) {
+	main.in-window .tile.panel label.stack:not(dialog *) {
+		display: grid;
+		grid-template-columns: minmax(10rem, 240px) minmax(0, 1fr);
+		align-items: center;
+		column-gap: 16px;
+	}
+	main.in-window .tile.panel label.stack:not(dialog *) > span:first-child {
+		color: var(--text);
+	}
+	main.in-window .tile.panel label.stack:not(dialog *) > :is(.field, select, input, textarea) {
+		max-width: 32rem;
+	}
+	main.in-window .tile.panel label.stack:not(dialog *) > :nth-child(n + 3) {
+		grid-column: 2;
+	}
+}
+/* Compact tables: muted 12 px header, 9 px rows. */
+:is(main.in-window, main.phone-page) :is(.data-table, .tile table) :is(th, td) {
+	padding: 9px 12px;
+}
+:is(main.in-window, main.phone-page) :is(.data-table, .tile table) th {
+	font-size: var(--text-sm);
+	font-weight: 500;
+	color: var(--muted);
+}

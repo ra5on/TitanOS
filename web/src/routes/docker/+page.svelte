@@ -4,6 +4,7 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import { inWindow, phoneView } from '#lib/desktop/mode.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import {
 		defaultDockerLayout,
@@ -660,35 +661,68 @@
 		run('global', () =>
 			api.put('/docker/settings', { enabled: true, volume: draft.volume || volumes[0] }),
 		);
+	// PLAN 64: the phone's full-screen view (in a window: inWindow).
+	const phone = $derived(phoneView());
 </script>
+
+{#snippet viewTools()}
+	<span class="search-box"
+		><Icon name="search" size={15} /><input
+			class="field search"
+			type="search"
+			disabled={editing}
+			bind:value={search}
+			oninput={() => (expanded = {})}
+			placeholder={t('docker.search')}
+			aria-label={t('docker.search')}
+		/></span
+	>
+	<div class="segmented icons" role="group" aria-label={t('docker.layout.view')}>
+		{#each [['list', t('docker.layout.list'), 'list'], ['cards', t('docker.layout.cards'), 'grid']] as const as [id, label, icon] (id)}
+			<button
+				type="button"
+				aria-pressed={layout.view === id}
+				aria-label={label}
+				title={label}
+				disabled={savingLayout}
+				onclick={() => setView(id)}><Icon name={icon} size={16} /></button
+			>
+		{/each}
+	</div>
+{/snippet}
+
+{#snippet bulk()}
+	<button
+		type="button"
+		class="btn"
+		disabled={globalBusy || editing || runCount === containers.length}
+		onclick={startAll}><Icon name="play" size={15} />{t('docker.startAll')}</button
+	>
+	<button
+		type="button"
+		class="btn"
+		disabled={globalBusy || editing || runCount === 0}
+		onclick={() => (confirmStopAll = true)}
+		><Icon name="stop" size={15} />{t('docker.stopAll')}</button
+	>
+	<button type="button" class="btn" disabled={globalBusy} onclick={checkUpdates}
+		><Icon name="refresh" size={15} />{t('docker.checkUpdates')}</button
+	>
+	{#if updatable}
+		<button type="button" class="btn" onclick={askUpdates} disabled={globalBusy}
+			><Icon name="download" size={15} />{t('docker.updateAllCount', {
+				count: updateApps.length,
+			})}</button
+		>
+	{/if}
+{/snippet}
 
 <PageHead title={t('docker.title')}>
 	{#snippet actions()}
-		{#if status?.running && containers.length > 0}
-			<span class="search-box"
-				><Icon name="search" size={15} /><input
-					class="field search"
-					type="search"
-					disabled={editing}
-					bind:value={search}
-					oninput={() => (expanded = {})}
-					placeholder={t('docker.search')}
-					aria-label={t('docker.search')}
-				/></span
-			>
-			<div class="segmented icons" role="group" aria-label={t('docker.layout.view')}>
-				{#each [['list', t('docker.layout.list'), 'list'], ['cards', t('docker.layout.cards'), 'grid']] as const as [id, label, icon] (id)}
-					<button
-						type="button"
-						aria-pressed={layout.view === id}
-						aria-label={label}
-						title={label}
-						disabled={savingLayout}
-						onclick={() => setView(id)}><Icon name={icon} size={16} /></button
-					>
-				{/each}
-			</div>
-		{/if}
+		{#if status?.running && containers.length > 0 && !phone}{@render viewTools()}{/if}
+		<!-- PLAN 64: in a window the actions for all apps join the tool bar;
+		     what does not fit moves into its "⋯" menu. -->
+		{#if inWindow && containers.length > 0}{@render bulk()}{/if}
 		<button
 			type="button"
 			class="btn icon-btn"
@@ -720,6 +754,10 @@
 	{/snippet}
 </PageHead>
 
+{#if phone && status?.running && containers.length > 0}
+	<!-- PLAN 64: on the phone the search gets a row of its own under the tool bar. -->
+	<div class="phone-tools">{@render viewTools()}</div>
+{/if}
 {#if status?.running && containers.length > 0}
 	<div class="status-line">
 		<div class="filters" role="group" aria-label={t('docker.filter')}>
@@ -1124,29 +1162,7 @@
 	{/if}
 	{#if containers.length > 0}
 		<div class="bulk">
-			<button
-				type="button"
-				class="btn"
-				disabled={globalBusy || editing || runCount === containers.length}
-				onclick={startAll}><Icon name="play" size={15} />{t('docker.startAll')}</button
-			>
-			<button
-				type="button"
-				class="btn"
-				disabled={globalBusy || editing || runCount === 0}
-				onclick={() => (confirmStopAll = true)}
-				><Icon name="stop" size={15} />{t('docker.stopAll')}</button
-			>
-			<button type="button" class="btn" disabled={globalBusy} onclick={checkUpdates}
-				><Icon name="refresh" size={15} />{t('docker.checkUpdates')}</button
-			>
-			{#if updatable}
-				<button type="button" class="btn" onclick={askUpdates} disabled={globalBusy}
-					><Icon name="download" size={15} />{t('docker.updateAllCount', {
-						count: updateApps.length,
-					})}</button
-				>
-			{/if}
+			{#if !inWindow}{@render bulk()}{/if}
 			<span class="spacer"></span>
 			<span class="muted engine"
 				>{t('docker.version', { version: status.version })} · {t('docker.onVolume', {
@@ -1995,5 +2011,21 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--space-2);
+	}
+	/* PLAN 64: in the window's tool bar the search sits left and gives way first. */
+	:global(.win-toolbar) .search-box {
+		flex: 0 1 15rem;
+		min-width: 7rem;
+		width: auto;
+		margin-right: auto;
+	}
+	.phone-tools {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+	}
+	.phone-tools .search-box {
+		flex: 1;
+		width: auto;
 	}
 </style>

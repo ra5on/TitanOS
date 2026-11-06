@@ -28,6 +28,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/firewall"
+	"github.com/ra5on/TitanOS/backend/internal/logkeep"
 	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	command "github.com/ra5on/TitanOS/backend/internal/run"
@@ -282,6 +283,12 @@ func run(opts options) error {
 	}
 
 	stop()
+	// The kept journal gets its own time for the last lines and for
+	// removing the start marker, whatever the web server does: before
+	// 0.59.2 both shared ten seconds, and a slow last write (sleeping
+	// disks, a busy shutdown) was cut off with the marker still there, so
+	// the next start reported an unclean end (owner report of 6.11.2026).
+	logsDeadline := time.Now().Add(logkeep.FinalWait + 5*time.Second)
 	w.sessions.Flush()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -293,6 +300,7 @@ func run(opts options) error {
 	// The background services end with the context; a service that hangs
 	// must not keep the daemon from stopping.
 	w.waitServices(shutdownCtx)
+	waitLogs(w.logs.Done(), logsDeadline)
 	if errors.Is(err, http.ErrServerClosed) {
 		err = nil
 	}
@@ -522,20 +530,43 @@ func redirectToHTTPS(httpsAddr string) http.Handler {
 	})
 }
 
+// waitLogs waits until the kept journal has written its last lines and
+// marked the start as ended, at most until deadline.
+func waitLogs(done <-chan struct{}, deadline time.Time) {
+	timer := time.NewTimer(time.Until(deadline))
+	defer timer.Stop()
+	select {
+	case <-done:
+	case <-timer.C:
+		slog.Warn("kept journal did not finish in time; the next start reports an unclean end")
+	}
+}
+
 // announcedPower runs before first, for planned shutdowns and restarts.
+// Right before systemd is asked, seal records the requested end (the
+// guests have ended by then); if systemd refuses, rearm undoes that.
 type announcedPower struct {
 	system.Power
 	before func()
+	seal   func()
+	rearm  func()
 }
 
-func (p announcedPower) Reboot() error {
-	p.before()
-	return p.Power.Reboot()
-}
+func (p announcedPower) Reboot() error   { return p.do(p.Power.Reboot) }
+func (p announcedPower) Poweroff() error { return p.do(p.Power.Poweroff) }
 
-func (p announcedPower) Poweroff() error {
-	p.before()
-	return p.Power.Poweroff()
+func (p announcedPower) do(power func() error) error {
+	if p.before != nil {
+		p.before()
+	}
+	if p.seal != nil {
+		p.seal()
+	}
+	err := power()
+	if err != nil && p.rearm != nil {
+		p.rearm()
+	}
+	return err
 }
 
 // portOf returns the port of a listen address, fallback without one.

@@ -108,6 +108,9 @@ let savePrefsTimer: ReturnType<typeof setTimeout> | undefined;
 /** Saves the desktop's settings on the NAS, a moment after the last change. */
 export function savePrefs(change?: (p: DesktopPrefs) => void) {
 	if (change) change(desktop.prefs);
+	// Known at once (PLAN 64): a page that loads the desktop before the
+	// timer runs (the phone's home after Settings) must not read old values.
+	session.desktop = $state.snapshot(desktop.prefs) as unknown as Record<string, unknown>;
 	clearTimeout(savePrefsTimer);
 	savePrefsTimer = setTimeout(() => {
 		const value = $state.snapshot(desktop.prefs);

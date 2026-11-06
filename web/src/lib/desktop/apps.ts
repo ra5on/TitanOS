@@ -327,6 +327,7 @@ export const SYSTEM_APPS: SystemApp[] = [
 			{ href: '/settings/energy', label: 'desktop.side.energy', icon: 'zap' },
 			{ href: '/settings/ups', label: 'desktop.side.ups', icon: 'battery' },
 			{ href: '/settings/power-button', label: 'desktop.side.powerButton', icon: 'power' },
+			{ href: '/settings/viewer', label: 'desktop.side.viewer', icon: 'monitor' },
 			{ group: 'desktop.side.network' },
 			{ href: '/settings/network', label: 'desktop.side.network', icon: 'globe' },
 			{ href: '/settings/firewall', label: 'desktop.side.firewall', icon: 'shield' },

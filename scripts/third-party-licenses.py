@@ -132,6 +132,34 @@ def debian_packages(status):
         yield fields["Package"], fields["Version"], source, version
 
 
+def viewer_packages(listing):
+    """Components of the viewer image (PLAN 63) from its package list.
+
+    scripts/build-viewer-image.sh writes one line per installed Debian package,
+    fields separated by blanks or tabs:
+      dpkg-query -W -f='${Package} ${Version} ${source:Package} ${source:Version}\n'
+    The source version may be left out; then it is the binary version without a
+    binNMU suffix (+bN), as for the system image. The image is a release asset
+    of its own, not part of the system image; its packages are listed with their
+    source packages like the system's.
+    """
+    components = []
+    for number, line in enumerate(Path(listing).read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        fields = line.split()
+        if len(fields) not in (3, 4) or not all(re.fullmatch(r"[A-Za-z0-9.+:~_-]+", f) for f in fields):
+            raise ValueError(f"viewer package list, line {number}: expected package, version, source [, source version]")
+        name, version, source = fields[:3]
+        source_version = fields[3] if len(fields) == 4 else re.sub(r"\+b\d+$", "", version)
+        components.append(dict(ecosystem="Debian (viewer image)", name=name, version=version,
+                               source=f"https://snapshot.debian.org/package/{quote(source, safe='')}/{quote(source_version, safe='')}/",
+                               notices=[]))
+    if not components:
+        raise ValueError("viewer package list is empty")
+    return sorted(components, key=lambda c: c["name"])
+
+
 def image(root):
     root = root.resolve()
     destination = root / "usr/share/titanos"
@@ -153,10 +181,12 @@ def image(root):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=["application", "image"])
+    parser.add_argument("mode", choices=["application", "image", "viewer"])
     parser.add_argument("path", type=Path)
     args = parser.parse_args()
     if args.mode == "application":
         application(args.path)
+    elif args.mode == "viewer":
+        print(json.dumps(viewer_packages(args.path), indent=2, ensure_ascii=False))
     else:
         image(args.path)

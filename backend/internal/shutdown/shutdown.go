@@ -22,9 +22,13 @@ import (
 // Workloads are the hooks into the managers of VMs, LXC and Docker.
 type Workloads struct {
 	// VMs lists the VMs that run.
-	VMs      func() []string
-	StopVM   func(ctx context.Context, name string) error
-	StartVM  func(ctx context.Context, name string) error
+	VMs     func() []string
+	StopVM  func(ctx context.Context, name string) error
+	StartVM func(ctx context.Context, name string) error
+	// ForceVM switches off a VM that did not shut down within the waiting
+	// time (or when the person goes on without waiting), so that no VM
+	// still writes to a volume while the NAS goes down. Optional.
+	ForceVM  func(ctx context.Context, name string) error
 	LXC      func() []string
 	StopLXC  func(ctx context.Context, name string) error
 	StartLXC func(ctx context.Context, name string) error
@@ -301,6 +305,8 @@ func (m *Manager) run(ctx context.Context, now <-chan struct{}, power func() err
 		break
 	}
 
+	m.forceVMs(ctx, vms, set)
+
 	m.mu.Lock()
 	if m.status == nil || ctx.Err() != nil {
 		m.mu.Unlock()
@@ -317,6 +323,29 @@ func (m *Manager) run(ctx context.Context, now <-chan struct{}, power func() err
 			m.status.Phase, m.status.Error = "failed", err.Error()
 		}
 		m.mu.Unlock()
+	}
+}
+
+// forceVMs switches off the VMs that still run after the wait.
+func (m *Manager) forceVMs(ctx context.Context, vms []string, set func(kind, name, state string, err error)) {
+	w := m.Workloads
+	if w.ForceVM == nil || w.VMs == nil || len(vms) == 0 {
+		return
+	}
+	running := map[string]bool{}
+	for _, name := range w.VMs() {
+		running[name] = true
+	}
+	for _, name := range vms {
+		if !running[name] || ctx.Err() != nil {
+			continue
+		}
+		slog.Warn("VM did not shut down in time, switching it off", "vm", name)
+		if err := w.ForceVM(ctx, name); err != nil {
+			set("vm", name, "failed", err)
+			continue
+		}
+		set("vm", name, "stopped", nil)
 	}
 }
 

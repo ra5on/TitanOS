@@ -2,17 +2,20 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"maps"
 	"slices"
 
 	"github.com/ra5on/TitanOS/backend/internal/app"
+	"github.com/ra5on/TitanOS/backend/internal/logkeep"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
 	command "github.com/ra5on/TitanOS/backend/internal/run"
 	"github.com/ra5on/TitanOS/backend/internal/shutdown"
 	"github.com/ra5on/TitanOS/backend/internal/system"
 	"github.com/ra5on/TitanOS/backend/internal/update"
 	"github.com/ra5on/TitanOS/backend/internal/version"
+	"github.com/ra5on/TitanOS/backend/internal/vm"
 )
 
 // wireUpdates wires power, the orderly shutdown and updates.
@@ -31,7 +34,15 @@ func (w *titand) wireUpdates() error {
 		if w.beforePowerOff != nil {
 			w.beforePowerOff()
 		}
-	}}
+	}, seal: func() {
+		// The guests have ended (package shutdown): last lines and the end
+		// of this start go to the volume now, while it is surely mounted.
+		ctx, cancel := context.WithTimeout(context.Background(), logkeep.FinalWait)
+		defer cancel()
+		if err := w.logs.Seal(ctx); err != nil {
+			slog.Warn("end of this start not recorded; the next start reports an unclean end", "err", err)
+		}
+	}, rearm: w.logs.Rearm}
 	// Planned restarts and shutdowns first end the VMs, LXC containers and
 	// Docker apps, with time for each and visible in the web UI. The UPS
 	// keeps the fast way of systemd (upsPower).
@@ -42,6 +53,14 @@ func (w *titand) wireUpdates() error {
 		},
 		StartVM: func(ctx context.Context, name string) error {
 			return w.machines.Start(ctx, name, w.volumes.Mounted())
+		},
+		// Pulls the plug of a VM that did not shut down in time, as switching
+		// the VM service off and locking a volume do.
+		ForceVM: func(ctx context.Context, name string) error {
+			if err := w.machines.Action(ctx, name, "poweroff"); err != nil && !errors.Is(err, vm.ErrNotRunning) {
+				return err
+			}
+			return nil
 		},
 		LXC: func() []string { return slices.Collect(maps.Keys(w.systemContainers.RunningNames())) },
 		StopLXC: func(ctx context.Context, name string) error {

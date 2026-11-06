@@ -58,6 +58,7 @@ async function open(
   height = 1000,
   theme = "graphit",
   path = "/",
+  setup = null,
 ) {
   const made = await create("owner", theme, width);
   await made.page.setViewportSize({ width, height });
@@ -100,6 +101,7 @@ async function open(
       body: '<!doctype html><title>App</title><body style="background:#223;color:#fff;font:16px sans-serif;padding:20px">Oberfläche der App (Testdaten)</body>',
     }),
   );
+  if (setup) await setup(made);
   await made.page.goto(base + path);
   await made.page.waitForSelector(".desktop, .home", { timeout: 15000 });
   await made.page.waitForTimeout(800);
@@ -304,6 +306,46 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   const termFrame = page.frameLocator("section.win iframe").last();
   await termFrame.locator("section.panel").waitFor({ timeout: 10000 });
   await shot(page, "14-konsole-im-terminal-fenster");
+  await ctx.close();
+}
+
+// 3b. Cluster (PLAN 64): the node switcher sits right after the menu button,
+// names the node and its menu is not cut off by the bar.
+{
+  const { ctx, page } = await open(1600, 1000, "graphit", "/", (made) =>
+    made.ctx.route("**/api/v1/cluster/nodes", (r) =>
+      r.fulfill({
+        json: {
+          manages: true,
+          version: "0.44.0",
+          nodes: [
+            { id: "n1", name: "titan", self: true, online: true, version: "0.44.0", compatible: true },
+            { id: "n2", name: "thor", self: false, online: true, version: "0.44.0", compatible: true },
+          ],
+        },
+      }),
+    ),
+  );
+  const bar = page.locator("header.topbar");
+  const trigger = bar.getByRole("button", { name: /titan/ });
+  await trigger.waitFor();
+  assert.ok((await trigger.innerText()).includes("titan"), "node name shown");
+  const menuBtn = await bar.getByRole("button", { name: "Alle Programme" }).boundingBox();
+  const node = await trigger.boundingBox();
+  assert.ok(
+    node.x > menuBtn.x && node.x - (menuBtn.x + menuBtn.width) < 30,
+    "switcher right after the menu button",
+  );
+  await trigger.click();
+  const item = page.getByRole("menuitemradio", { name: /thor/ });
+  await item.waitFor();
+  const box = await item.boundingBox();
+  const hit = await page.evaluate(
+    ({ x, y }) => document.elementFromPoint(x, y)?.closest("[role=menuitemradio]")?.textContent ?? "",
+    { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+  );
+  assert.ok(hit.includes("thor"), "node menu visible, not clipped by the bar");
+  await shot(page, "14-cluster-umschalter");
   await ctx.close();
 }
 

@@ -183,6 +183,39 @@ Einzelheiten, Einrichtung und Grenzen: [AUTOPILOT.md](AUTOPILOT.md).
   (`smoke-release.py --kernel-new`) und das ZIP mit SeaBIOS und 32-Bit-OVMF
   (`--firmware bios|ia32`), sofern das Release beides enthält.
 
+## Ab 0.61.0: Abbild der Fernansicht
+
+`release.yml` baut in jedem Release-Lauf vor „Pack the release“ das Abbild
+der Fernansicht mit `scripts/build-viewer-image.sh <version> out/viewer`.
+Das Skript legt `titanos-viewer-<version>.tar.zst` und
+`titanos-viewer-<version>.packages.txt` ab und gibt als **letzte Zeile** die
+Image-ID (Config-Digest `sha256:…`, wie sie `docker image inspect` mit dem
+klassischen Image-Speicher und `manifest.json` im Archiv nennen) aus; der
+Workflow schreibt sie nach `titanos-viewer-<version>.image-id`.
+Hat sich seit dem letzten Release mit Abbild nichts an `viewer/`,
+`backend/cmd/titanos-viewer/`, `backend/internal/viewer/proto/`,
+`scripts/build-viewer-image.sh` oder `backend/go.mod`/`go.sum` geändert,
+übernimmt `scripts/viewer-image-reuse.py` stattdessen dessen Archiv: Manifest
+mit gültiger Signatur, Archiv nach Größe und SHA-256 daraus, Paketliste aus dem
+Lizenzarchiv (Prüfsumme in der signierten `SHA256SUMS`). Es erscheint unter dem
+neuen Dateinamen mit derselben Image-ID, und die NAS laden es nicht erneut.
+Exit-Code 3 heißt „neu bauen“, andere Fehler brechen den Lauf ab.
+`make-release.sh` nimmt mit `VIEWER_DIR=out/viewer` diese Dateien, ohne
+`VIEWER_DIR` ruft es das Skript selbst auf. Fehlt eine der drei Dateien oder
+ist die ID keine `sha256:`-Kennung, bricht es ab. Das Abbild ist eine eigene
+Release-Datei, nicht Teil des System-squashfs: Änderungen unter `viewer/`
+und an `scripts/build-viewer-image.sh` erzwingen kein volles Release
+(`scripts/release-kind.py`). `verify-release.py` prüft den Eintrag `viewer`,
+wenn er da ist.
+
+Format von `.packages.txt` (eine Zeile je installiertem Paket, durch Leerzeichen
+oder Tabulatoren getrennt): `dpkg-query -W -f='${Package} ${Version} ${source:Package} ${source:Version}\n'`;
+fehlt die Quellversion, gilt die Paketversion ohne binNMU-Endung (`+bN`).
+`scripts/third-party-licenses.py viewer <datei>` liest es (auch zum Prüfen von Hand).
+
+Nicht abgedeckt: Die QEMU-Smoke-Tests des Releases laden das Abbild nicht und
+öffnen keine Fernansicht.
+
 ## Probelauf ohne Veröffentlichung
 
 Änderungen an Build, Boot oder Release-Skripten lösen in Pull Requests den
@@ -271,6 +304,7 @@ Kanal Stable veröffentlicht. Die Release-Seite nennt das Apache-2.0-Datum
 | `tailscale.raw`, `tailscale.plugin.json`, `.minisig`, `tailscale-licenses.tar.gz` | Tailscale, Subnet-/Exit-Node-Einstellungen und Original-Lizenztexte |
 | `netbird.raw`, `netbird.plugin.json`, `.minisig`, `netbird-licenses.tar.gz` | NetBird-Client (BSD-3-Clause, ohne AGPL-Server), Original-Lizenz und Hinweise der Go-Module |
 | `<treiber>.raw`, `<treiber>.plugin.json`, `.minisig`, `<treiber>-licenses.tar.gz`, `<treiber>-sources.tar.gz` für `wangxun-nic`, `intel-qat`, `it87-extended` | Treiber-Plugins aus dem Kernel-Satz des Plugin-Repositorys für genau den Kernel des Releases; die Quellarchive enthalten die kompilierten GPL-Quellen und das Baurezept, `titanos-<version>-sources.txt` nennt Debian-Quellpaket bzw. Upstream-Commit. `make-release.sh` verweigert ein Treiber-Plugin ohne Kernel, Quellenangabe oder Quellarchiv |
+| `titanos-viewer-<version>.tar.zst` | Abbild der Fernansicht (`docker save`, zstd; Chromium, Xvfb, GStreamer mit x264/VA-API, PulseAudio, Agent `titanos-viewer`), seit 0.61.0 in **jedem** Release (App und System). Im signierten Manifest unter `viewer` mit `asset`, `sha256`, `size` und `imageId` (Config-Digest, `sha256:…`); titand lädt es bei der ersten Fernansicht, prüft Signatur, Größe, SHA-256 und nach `docker load` die Image-ID (`docs/FERNANSICHT.md`). Die Debian-Pakete des Abbilds stehen mit Quellpaketlinks in `titanos-<version>-sources.txt` („Viewer image“), die Liste zusätzlich unter `viewer/packages.txt` im Lizenzarchiv; die Copyright-Dateien liegen im Abbild unter `/usr/share/doc` |
 | `SHA256SUMS`, `SHA256SUMS.minisig` | signierte Prüfsummen aller unveränderlichen Release-Dateien |
 | `titanos-<version>-cli-linux-amd64` | statische öffentliche CLI, durch signierte SHA256SUMS abgedeckt |
 | `titanos-<version>-sources.txt` | genaue Debian-/Go-/npm-Quellpakete und Versionen |
