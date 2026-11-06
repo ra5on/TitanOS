@@ -853,6 +853,12 @@
 		grid-template-columns: repeat(3, minmax(0, 1fr));
 		gap: var(--space-2);
 	}
+	/* On phones each choice gets its own row, so no description is cut. */
+	@media (max-width: 520px) {
+		.three {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
 	.option {
 		display: flex;
 		flex-direction: column;

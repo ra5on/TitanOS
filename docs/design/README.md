@@ -106,6 +106,41 @@ lokalen Vite-Server. Benötigt eine vorhandene Playwright-Installation (über
 erzeugt Vergleichsbilder für Graphit/Hell bei 1440 und 390 Pixeln.
 Die Testdaten gehören ausschließlich zum Testskript, nicht zum Produkt.
 
+### „Alle Einstellungen“ und vier Gruppen (PLAN 61, 6. November 2026)
+
+Wunsch des Projektinhabers „Einstellungsmenü überarbeiten“ (PLAN 61-8,
+Entwürfe `out/proposal/desktop-61/runde3/34-systemsteuerung.png` und
+`35-systemsteuerung-start.png`). Ersetzt bei `/settings` die Übersicht aus
+„Braucht Aufmerksamkeit“/„Dieses NAS“ (Desktop) und die Zeilenliste (Handy).
+`/settings` heißt „Alle Einstellungen“: oben ein zentriertes Suchfeld
+(höchstens 36rem, dieselbe Suche wie in der Seitenleiste, Treffer springen zu
+Bereichen und Abschnitten, Pfeiltasten/Enter/Escape), darunter **gleich große
+Kacheln** (`.tile`, folgt Flach/Glas/Kontur) je Bereich: Symbol (`Icon`) weiß
+in einem farbigen, abgerundeten Quadrat (Farben `--icon-square-*` in `app.css`,
+für alle Themes gleich, weiß darauf ≥ 4,5:1), Name, eine kurze Zeile, was drin
+ist (`settingshome.desc.*`), optional „neu“ und der Zustand als Chip mit Text.
+Gruppen mit kleiner Großbuchstaben-Überschrift, in fester Reihenfolge
+**System, Netzwerk, Konten und Dienste, Daten**; innerhalb alphabetisch.
+Spalten nach der Breite der Seitenspalte (Container-Abfrage, nicht nach
+Fensterbreite): ab 54rem vier, ab 40rem drei, ab 26rem zwei, sonst eine (Handy).
+Darunter für Besitzer/Administratoren „Zuletzt geändert“: die letzten fünf
+erfolgreichen Einstellungsänderungen der letzten 30 Tage aus dem
+Aktivitätsprotokoll (Bereich als Link, was, von wem, wann; Link „Ganzes
+Protokoll“). Nur ausdrücklich zugeordnete Einstellungsrouten zählen
+(`web/src/lib/settings-recent.ts`); Dateien, Container, Chats, Läufe und
+Prüfungen nicht. Ohne Protokoll oder bei Fehler entfällt der Abschnitt.
+Eine Kachel je Bereich (1:1 wie die Seitenleiste); die im Entwurf 35
+zusammengefassten Kacheln (z. B. „DNS und Zertifikate“, „API und MCP“)
+würden zusammengelegte Seiten verlangen und sind nicht umgesetzt.
+**Im Fenster des Desktop-Modus** (Seite in einem iframe derselben Herkunft,
+`web/src/lib/embedded.ts`, `embedded`) zeigen die Einstellungen weder die
+eigene Seitenleiste noch „‹ Einstellungen“; die Seite nutzt die ganze
+Fensterbreite (ohne 64rem-Grenze). Browserprüfung:
+`scripts/test-ui-settings-home.mjs` (Übersicht 1440/800/390 px, Hell,
+Benutzerrolle, eingebettet, alle Einstellungsseiten in drei Breiten mit
+Prüfung auf seitliches Scrollen, Überlappung und abgeschnittenen Text;
+Bilder unter `out/validation/settings-home/`).
+
 ### Einstellungen mit Seitenleiste (28. Oktober 2026)
 
 Vom Projektinhaber am 28. Oktober 2026 bestätigter Entwurf „A – Seitenleiste“.
@@ -118,18 +153,16 @@ darunter die Gruppen mit kleiner Großbuchstaben-Überschrift und Zeilen von
 etwa 32 px mit 16-px-Symbol und Titel. Die aktuelle Seite trägt eine
 Akzenttönung (Text aus Akzent und Textfarbe gemischt, damit auch Hell 4,5:1
 erreicht) und `aria-current="page"`; die Leiste ist ein `nav` mit
-`aria-label`. Gruppen in fester Reihenfolge (`settingsAreas`, Stand 30.10.2026):
-System, Netzwerk, Sicherheit und Fernzugriff, Hardware und Energie, Daten und
-Speicher, Integrationen, Persönlich; oben „Übersicht“ (Aufmerksamkeit, dieses NAS);
-innerhalb der Gruppen nicht alphabetisch. Bereiche mit Zustand bekommen einen
+`aria-label`. Gruppen seit PLAN 61 (6.11.2026): System, Netzwerk, Konten und
+Dienste, Daten (siehe oben); oben „Alle Einstellungen“ (`/settings`);
+innerhalb der Gruppen alphabetisch (seit 0.54.0). Bereiche mit Zustand bekommen einen
 Punkt mit Tooltip und Screenreader-Text, optional ein „neu“-Abzeichen
 (`isNew`). Rechts die bisherigen Seiten unverändert (`.settings-page.column`,
 höchstens 64rem); der Brotkrumen zu „Einstellungen“ entfällt.
 
-`/settings` zeigt rechts alle Bereiche als kompakte Zeilen je Gruppe
-(Symbol in Akzenttönung, Titel, Zustand als Chip mit Text, Pfeil), eine
-Spalte. Mobil bis 760 px: keine Seitenleiste; `/settings` ist dieselbe Liste
-in voller Breite mit Suchfeld darüber, Unterseiten haben oben den Rückweg
+`/settings` zeigt seit PLAN 61 die Kacheln (siehe oben). Mobil bis 760 px:
+keine Seitenleiste; `/settings` zeigt die Kacheln in einer Spalte mit dem
+Suchfeld darüber, Unterseiten haben oben den Rückweg
 „‹ Einstellungen“ (44 px hoch). Kein seitliches Scrollen. Knöpfe und Felder
 sind innerhalb der Einstellungen auf dem Desktop kompakter (etwa 30 px,
 13 px Text, über `--control-height` und die Dichte); Touch bleibt bei 44 px.

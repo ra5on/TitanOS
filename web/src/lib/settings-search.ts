@@ -223,16 +223,16 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 };
 
 /** The groups of the settings navigation, in the order they are shown. */
-export const settingsGroups = [
-	'system',
-	'network',
-	'security',
-	'hardware',
-	'data',
-	'integrations',
-	'personal',
-] as const;
+// Since PLAN 61 (owner's wish of 6 Nov 2026, "Einstellungsmenü überarbeiten")
+// four groups in this fixed order, the same for the sidebar and the tiles of
+// the overview; within a group the areas are sorted A–Z.
+export const settingsGroups = ['system', 'network', 'accounts', 'data'] as const;
 export type SettingsGroup = (typeof settingsGroups)[number];
+
+/** The title of a settings group in the page language. */
+export function settingsGroupLabel(group: SettingsGroup): MessageKey {
+	return `settingshome.group.${group}` as MessageKey;
+}
 export type SettingsArea = {
 	id: string;
 	label: MessageKey;
@@ -290,7 +290,7 @@ export const settingsAreas: SettingsArea[] = [
 	{
 		id: 'services',
 		label: 'services.title',
-		group: 'system',
+		group: 'accounts',
 		icon: 'box',
 		admin: true,
 		newSince: { version: '0.41.0', date: '2026-10-31' },
@@ -298,7 +298,7 @@ export const settingsAreas: SettingsArea[] = [
 	{
 		id: 'notifications',
 		label: 'notify.settingsTitle',
-		group: 'system',
+		group: 'accounts',
 		icon: 'bell',
 		admin: true,
 	},
@@ -315,17 +315,16 @@ export const settingsAreas: SettingsArea[] = [
 	{
 		id: 'cluster',
 		label: 'cluster.title',
-		group: 'network',
+		group: 'accounts',
 		icon: 'tailnet',
 		admin: true,
 		newSince: { version: '0.38.0', date: '2026-10-30' },
 	},
-	{ id: 'access', label: 'access.title', group: 'security', icon: 'lock', admin: true },
-	{ id: 'programs', label: 'appaccess.title', group: 'security', icon: 'grid', admin: true },
+	{ id: 'access', label: 'access.title', group: 'accounts', icon: 'lock', admin: true },
 	{
 		id: 'firewall',
 		label: 'firewall.title',
-		group: 'security',
+		group: 'network',
 		icon: 'shield',
 		admin: true,
 		newSince: { version: '0.31.0', date: '2026-10-28' },
@@ -333,7 +332,7 @@ export const settingsAreas: SettingsArea[] = [
 	{
 		id: 'letsencrypt',
 		label: 'letsencrypt.title',
-		group: 'security',
+		group: 'network',
 		icon: 'check',
 		admin: true,
 		newSince: { version: '0.31.0', date: '2026-10-28' },
@@ -341,24 +340,24 @@ export const settingsAreas: SettingsArea[] = [
 	{
 		id: 'wireguard',
 		label: 'wg.title',
-		group: 'security',
+		group: 'network',
 		icon: 'key',
 		admin: true,
 		newSince: { version: '0.34.0', date: '2026-10-28' },
 	},
-	{ id: 'hardware', label: 'hardware.title', group: 'hardware', icon: 'monitor', admin: true },
-	{ id: 'temperatures', label: 'temperatures.title', group: 'hardware', icon: 'activity' },
-	{ id: 'energy', label: 'energy.title', group: 'hardware', icon: 'zap', admin: true },
-	{ id: 'ups', label: 'ups.title', group: 'hardware', icon: 'battery', admin: true },
-	{ id: 'power-button', label: 'powerButton.title', group: 'hardware', icon: 'power', admin: true },
-	{ id: 'memory', label: 'memoryPolicy.title', group: 'data', icon: 'grid', admin: true },
+	{ id: 'hardware', label: 'hardware.title', group: 'system', icon: 'monitor', admin: true },
+	{ id: 'temperatures', label: 'temperatures.title', group: 'system', icon: 'activity' },
+	{ id: 'energy', label: 'energy.title', group: 'system', icon: 'zap', admin: true },
+	{ id: 'ups', label: 'ups.title', group: 'system', icon: 'battery', admin: true },
+	{ id: 'power-button', label: 'powerButton.title', group: 'system', icon: 'power', admin: true },
+	{ id: 'memory', label: 'memoryPolicy.title', group: 'data', icon: 'memory', admin: true },
 	{ id: 'backups', label: 'safeguard.title', group: 'data', icon: 'archive', admin: true },
 	{ id: 'files', label: 'fileIndex.title', group: 'data', icon: 'search', admin: true },
-	{ id: 'homeassistant', label: 'ha.title', group: 'integrations', icon: 'home', admin: true },
+	{ id: 'homeassistant', label: 'ha.title', group: 'accounts', icon: 'home', admin: true },
 	{
 		id: 'agent',
 		label: 'agent.settingsTitle',
-		group: 'integrations',
+		group: 'accounts',
 		icon: 'sparkle',
 		admin: true,
 		newSince: { version: '0.48.0', date: '2026-11-05' },
@@ -366,12 +365,20 @@ export const settingsAreas: SettingsArea[] = [
 	{
 		id: 'mcp',
 		label: 'mcp.pageTitle',
-		group: 'integrations',
+		group: 'accounts',
 		icon: 'chat',
 		newSince: { version: '0.41.0', date: '2026-10-31' },
 	},
-	{ id: 'api', label: 'api.title', group: 'integrations', icon: 'key' },
-	{ id: 'appearance', label: 'menu.appearance', group: 'personal', icon: 'palette' },
+	{ id: 'api', label: 'api.title', group: 'accounts', icon: 'key' },
+	{ id: 'appearance', label: 'menu.appearance', group: 'system', icon: 'palette' },
+	{
+		id: 'programs',
+		label: 'settingshome.area.programs',
+		group: 'accounts',
+		icon: 'grid',
+		admin: true,
+		newSince: { version: '0.58.0', date: '2026-11-06' },
+	},
 ];
 
 /** The area a settings path belongs to ("/settings/ddns/x" → "ddns"), or "" for the overview. */
@@ -431,9 +438,9 @@ export function settingsEntries(
 				? [{ ...base, href: `/settings/${area.id}`, label: translate(area.label) }]
 				: [];
 		});
-	// Groups and entries in alphabetical order of the page language (PLAN 53).
+	// Entries in alphabetical order of the page language (PLAN 53), groups in
+	// their fixed order (PLAN 61).
 	const order = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
-	const title = (group: SettingsGroup) => translate(`settings.group.${group}` as MessageKey);
 	return settingsGroups
 		.map((group) => ({
 			group,
@@ -441,6 +448,5 @@ export function settingsEntries(
 				.filter((entry) => entry.group === group)
 				.sort((a, b) => order.compare(a.label, b.label)),
 		}))
-		.filter((group) => group.entries.length)
-		.sort((a, b) => order.compare(title(a.group), title(b.group)));
+		.filter((group) => group.entries.length);
 }

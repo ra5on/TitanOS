@@ -1,17 +1,10 @@
 // PLAN 61: a page of TitanOS shown in a window of the desktop runs in a
 // frame of its own origin. It then shows no head line, side bar or status
 // bar of its own and tells the window which page it shows.
+import { embedded } from '../embedded.ts';
 
-/** True inside a window of the desktop (a frame of the same origin). */
-export const inWindow: boolean = (() => {
-	if (typeof window === 'undefined') return false;
-	try {
-		return window.self !== window.top && window.top?.location.origin === location.origin;
-	} catch {
-		// A frame of another origin: not ours.
-		return false;
-	}
-})();
+/** True inside a window of the desktop (a frame of the same origin, lib/embedded.ts). */
+export const inWindow: boolean = embedded;
 
 export type FrameMessage =
 	| { type: 'titanos-page'; path: string; title: string }

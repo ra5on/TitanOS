@@ -293,5 +293,15 @@
 		.two {
 			grid-template-columns: 1fr;
 		}
+		/* The sample header keeps to the phone width: the current tab only. */
+		.bar-top .nav:not(.current) {
+			display: none;
+		}
+		.bar-top .account {
+			min-width: 0;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
 	}
 </style>

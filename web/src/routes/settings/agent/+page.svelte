@@ -1295,16 +1295,20 @@
 	.hero-text .tile-title {
 		margin: 0;
 	}
+	/* Ways and QR code side by side while the column has room (not the
+	   window: inside a desktop window or beside the sidebar it is narrower). */
 	.phone-app {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr) auto;
+		display: flex;
+		flex-wrap: wrap;
 		gap: var(--space-4);
-		align-items: start;
+		align-items: flex-start;
 	}
-	@media (max-width: 760px) {
-		.phone-app {
-			grid-template-columns: minmax(0, 1fr);
-		}
+	.phone-app > :first-child {
+		flex: 999 1 22rem;
+	}
+	.phone-app > :last-child {
+		flex: 1 0 13rem;
+		max-width: 100%;
 	}
 	.ways {
 		border: 0;
@@ -1329,8 +1333,13 @@
 		border-color: var(--accent);
 		background: color-mix(in srgb, var(--accent) 10%, transparent);
 	}
+	/* A narrow column puts the chip under the address instead of
+	   squeezing the address into broken pieces. */
+	.way {
+		flex-wrap: wrap;
+	}
 	.way > span:first-of-type {
-		flex: 1;
+		flex: 1 1 14rem;
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
