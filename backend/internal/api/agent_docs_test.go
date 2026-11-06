@@ -574,3 +574,31 @@ func TestPaperMailbox(t *testing.T) {
 		t.Fatalf("wrong password: %d %s", res.StatusCode, body)
 	}
 }
+
+func TestDocsNightTick(t *testing.T) {
+	ts, home := docsServer(t)
+	docsNAS(t, ts, map[string]any{"enabled": true, "at": "03:00"})
+	docsMine(t, ts, ts.client, map[string]any{"docs": map[string]any{"on": true}})
+	os.WriteFile(filepath.Join(home, "Dokumente", "a.txt"), []byte("Versicherungsschein"), 0o644)
+	loc := ts.server.agentLocation()
+	night := time.Date(2026, 11, 7, 3, 0, 0, 0, loc)
+	for _, at := range []time.Time{night.Add(-time.Minute), night.Add(5 * time.Minute), night.Add(4 * time.Hour)} {
+		if docsNightDue("03:00", at) {
+			t.Fatalf("due at %v", at)
+		}
+	}
+	ts.server.agentDocsTick(night)
+	waitDocs(t, ts, "alex")
+	var st docsState
+	ts.server.docsRead("alex", docsStateFile, &st, maxDocsState)
+	f := st.Folders["share/KI-Agent/Dokumente"]
+	if f == nil || f.Files != 1 || !f.LastRun.Equal(night) {
+		t.Fatalf("state: %+v", f)
+	}
+	if !docsNightDone(st, []agentFolderRef{{Root: "share/KI-Agent", Path: "Dokumente"}}, "03:00", night.Add(10*time.Minute)) {
+		t.Fatal("night not done")
+	}
+	if res, _ := ts.request("PUT", "/api/v1/agent/features", map[string]any{"docs": map[string]any{"enabled": true, "at": "3 Uhr"}}); res.StatusCode != http.StatusBadRequest {
+		t.Fatal("bad time accepted")
+	}
+}

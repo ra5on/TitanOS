@@ -346,7 +346,7 @@ func (s *Server) agentDocsTick(now agentNow) {
 		return
 	}
 	indexDue := docsNightDue(nas.at(), now)
-	paperDue := nas.Paper && now.Minute()%5 == 0
+	paperDue := nas.Paper && now.Minute()%10 == 0
 	if !indexDue && !paperDue {
 		return
 	}
@@ -362,7 +362,7 @@ func (s *Server) agentDocsTick(now agentNow) {
 			s.docsStartRun(u, m.Docs, false, now)
 		}
 		if paperDue && m.Paper.On {
-			s.paperStartRun(u, m, now.Minute()%15 == 0, now)
+			s.paperStartRun(u, m, now.Minute()%20 == 0, now)
 		}
 	}
 }

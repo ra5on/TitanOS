@@ -369,6 +369,10 @@ func (s *Server) docsRun(ctx context.Context, u auth.User, mine agentDocsMine, a
 		st.Folders = map[string]*docsFolderState{}
 	}
 	folders := mine.folders()
+	nas := s.agentSettings().Features.Docs
+	if !asked && docsNightDone(st, folders, nas.at(), at) {
+		return nil // this night's run is complete
+	}
 	wanted := map[string]bool{}
 	for _, f := range folders {
 		wanted[folderKey(f)] = true
@@ -380,7 +384,6 @@ func (s *Server) docsRun(ctx context.Context, u auth.User, mine agentDocsMine, a
 			delete(st.Folders, k)
 		}
 	}
-	nas := s.agentSettings().Features.Docs
 	vision := !mine.NoScans
 	scans := docsMaxScans
 	asleep := map[string]bool{}
@@ -459,6 +462,22 @@ func (s *Server) docsRun(ctx context.Context, u auth.User, mine agentDocsMine, a
 		s.docsDeadlinesFound(u, mine, &st, changed, at)
 	}
 	return s.docsWrite(u.Name, docsStateFile, &st)
+}
+
+// docsNightDone: every folder was read since tonight's time.
+func docsNightDone(st docsState, folders []agentFolderRef, at string, now time.Time) bool {
+	t, err := time.ParseInLocation("15:04", at, now.Location())
+	if err != nil {
+		return false
+	}
+	due := time.Date(now.Year(), now.Month(), now.Day(), t.Hour(), t.Minute(), 0, 0, now.Location())
+	for _, f := range folders {
+		fst := st.Folders[folderKey(f)]
+		if fst == nil || fst.LastRun.Before(due) {
+			return false
+		}
+	}
+	return true
 }
 
 // agentBusy: a chat of any account runs right now.
