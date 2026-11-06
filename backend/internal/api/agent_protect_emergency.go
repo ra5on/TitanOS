@@ -179,6 +179,7 @@ func (s *Server) emergencyTick(e agentEmergency, now time.Time) {
 		return
 	}
 	s.emergencyReconcile(e, now)
+	s.emergencyDetach()
 	grant, end, err := s.protect().emergency.Due(now)
 	if err != nil {
 		return
@@ -190,6 +191,35 @@ func (s *Server) emergencyTick(e agentEmergency, now time.Time) {
 	}
 	for _, r := range end {
 		_ = s.emergencyEnd(r, "", "30 days over", now)
+	}
+}
+
+// emergencyDetach notices shares whose entry for a granted person is no
+// longer the "ro" the grant set (an administrator changed or removed it):
+// from then on that entry is the administrator's, and the end of the grant
+// does not touch it. Runs every minute from RAM (share list, state).
+func (s *Server) emergencyDetach() {
+	ps := s.protect()
+	st, err := ps.emergency.State()
+	if err != nil {
+		return
+	}
+	for _, r := range st.Requests {
+		if r.State != protect.StateGranted || len(r.Added) == 0 {
+			continue
+		}
+		var changed []string
+		for _, name := range r.Added {
+			sh, ok := s.shareByName(name)
+			if !ok || sh.Access[r.Account] != shares.ReadOnly {
+				changed = append(changed, name)
+			}
+		}
+		if len(changed) > 0 {
+			if _, err := ps.emergency.Detach(r.ID, changed); err == nil {
+				s.emergencyRecord(r.Account, "emergency access: share changed by an administrator, kept at the end", fmt.Sprintf("%s: %v", r.Account, changed))
+			}
+		}
 	}
 }
 
@@ -273,6 +303,8 @@ func (s *Server) handleEmergencyRequest(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusConflict, "emergency_open", err.Error())
 	case errors.Is(err, protect.ErrBadCode):
 		writeError(w, http.StatusForbidden, "emergency_bad_code", err.Error())
+	case errors.Is(err, protect.ErrCodeLocked):
+		writeError(w, http.StatusTooManyRequests, "emergency_code_locked", err.Error())
 	case err != nil:
 		writeError(w, http.StatusBadRequest, "emergency", err.Error())
 	default:

@@ -70,7 +70,9 @@ type guardAlert struct {
 	By         string `json:"by,omitempty"`
 }
 
-func (a guardAlert) open() bool { return a.State == "active" || a.State == "stopped" }
+func (a guardAlert) open() bool {
+	return a.State == "active" || a.State == "stopped" || a.State == "restoring"
+}
 
 const (
 	maxGuardAlerts   = 20
@@ -165,13 +167,17 @@ func (s *Server) guardTick(g agentGuard, now time.Time) {
 	}
 	mounts := s.guardMounts()
 	k := strings.Join(mounts, "\n")
-	if ps.watchCancel == nil || ps.watchKey != k {
+	retry := ps.watchErr != "" && now.Sub(ps.watchFailed) >= ps.watchBackoff
+	if ps.watchCancel == nil || ps.watchKey != k || retry {
 		if ps.watchCancel != nil {
 			ps.watchCancel()
 		}
+		if ps.watchKey != k {
+			ps.watchBackoff = 0
+		}
 		ctx, cancel := context.WithCancel(s.agentBase())
 		ps.watchCancel, ps.watchKey, ps.watchErr, ps.watchSince = cancel, k, "", now
-		go s.guardWatch(ctx, mounts)
+		protectGo("guard watcher", func() { s.guardWatch(ctx, mounts) })
 	}
 	det := ps.detector
 	ps.mu.Unlock()
@@ -206,7 +212,15 @@ func (s *Server) guardWatch(ctx context.Context, mounts []string) {
 		}
 		src = f
 	}
-	go func() { done <- src.Watch(ctx, mounts, events) }()
+	protectGo("fanotify", func() {
+		defer func() {
+			if r := recover(); r != nil {
+				done <- fmt.Errorf("watcher crashed: %v", r)
+				panic(r)
+			}
+		}()
+		done <- src.Watch(ctx, mounts, events)
+	})
 	for {
 		select {
 		case ev := <-events:
@@ -216,6 +230,8 @@ func (s *Server) guardWatch(ctx context.Context, mounts []string) {
 				slog.Error("ransomware guard is not watching", "err", err)
 				ps.mu.Lock()
 				ps.watchErr = err.Error()
+				ps.watchFailed = ps.now()
+				ps.watchBackoff = min(max(2*ps.watchBackoff, time.Minute), 30*time.Minute)
 				ps.mu.Unlock()
 			}
 			// Drain what is left, then stop.
@@ -342,7 +358,7 @@ func (s *Server) guardPreSnapshot(volume string, g agentGuard, at time.Time) {
 	}
 	ps.lastPre[volume] = at
 	ps.mu.Unlock()
-	go func() {
+	protectGo("pre-snapshot", func() {
 		ctx, cancel := context.WithTimeout(s.agentBase(), time.Minute)
 		defer cancel()
 		name := guardPrePrefix + at.UTC().Format("20060102-150405")
@@ -351,7 +367,7 @@ func (s *Server) guardPreSnapshot(volume string, g agentGuard, at time.Time) {
 			return
 		}
 		s.guardPrune(ctx, volume, at)
-	}()
+	})
 }
 
 // guardPrune removes the guard's snapshots of a volume that are old and
@@ -667,10 +683,14 @@ func (s *Server) guardStopped(inc protect.Incident, g agentGuard) {
 	}
 	s.guardSaveLocked(ps)
 	ps.mu.Unlock()
+	// In the background: a restore may take minutes and the tick must go
+	// on (reminders, schedules). guardRestore runs only once per alert.
 	for _, id := range auto {
-		if _, err := s.guardRestore(id, "auto"); err != nil {
-			slog.Error("automatic restore after a ransomware alarm failed", "alert", id, "err", err)
-		}
+		protectGo("auto restore", func() {
+			if _, err := s.guardRestore(id, "auto"); err != nil {
+				slog.Error("automatic restore after a ransomware alarm failed", "alert", id, "err", err)
+			}
+		})
 	}
 }
 
@@ -689,50 +709,97 @@ func (s *Server) guardAlert(id string) (guardAlert, bool) {
 	return guardAlert{}, false
 }
 
-func (s *Server) guardPut(a guardAlert) {
+var (
+	errGuardActive     = errors.New("the attack is still going on; wait until it stopped")
+	errGuardNotStopped = errors.New("only an alert whose attack stopped can be restored, once")
+)
+
+// guardRestoreHook is called by tests while a restore holds its alert.
+var guardRestoreHook func(id string)
+
+// guardSetState changes the state of an alert if it is from; it is the
+// one place where a restore claims an alert, so it runs once.
+func (s *Server) guardSetState(id, from, to string) (guardAlert, error) {
+	ps := s.protect()
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	s.guardLoadLocked(ps)
+	for i := range ps.alerts {
+		a := &ps.alerts[i]
+		if a.ID != id {
+			continue
+		}
+		if a.State != from {
+			if a.State == "active" {
+				return *a, errGuardActive
+			}
+			return *a, errGuardNotStopped
+		}
+		a.State = to
+		s.guardSaveLocked(ps)
+		return *a, nil
+	}
+	return guardAlert{}, agent.ErrNotFound
+}
+
+// guardRestore puts the files back from the snapshot. Only a stopped
+// alert is restored, and only once (state restoring while it runs). The
+// share stays read-only (the device may still be infected); reopening is
+// a separate step.
+func (s *Server) guardRestore(id, by string) (guardAlert, error) {
+	a, err := s.guardSetState(id, "stopped", "restoring")
+	if err != nil {
+		return a, err
+	}
+	res, err := s.guardRestoreFiles(a)
 	ps := s.protect()
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 	for i := range ps.alerts {
-		if ps.alerts[i].ID == a.ID {
-			ps.alerts[i] = a
+		cur := &ps.alerts[i]
+		if cur.ID != id {
+			continue
 		}
+		// Only the fields of the restore: a reopen meanwhile stays.
+		if err != nil {
+			if cur.State == "restoring" {
+				cur.State = "stopped"
+			}
+		} else {
+			cur.Restored, cur.By, cur.Closed = &res, by, time.Now().UTC()
+			if cur.State == "restoring" {
+				cur.State = "restored"
+			}
+		}
+		s.guardSaveLocked(ps)
+		a = *cur
 	}
-	s.guardSaveLocked(ps)
+	return a, err
 }
 
-var errGuardActive = errors.New("the attack is still going on; wait until it stopped")
-
-// guardRestore puts the files back from the snapshot. The share stays
-// read-only (the device may still be infected); reopening is a separate
-// step.
-func (s *Server) guardRestore(id, by string) (guardAlert, error) {
-	a, ok := s.guardAlert(id)
-	if !ok {
-		return a, agent.ErrNotFound
-	}
-	if a.State == "active" {
-		return a, errGuardActive
-	}
+func (s *Server) guardRestoreFiles(a guardAlert) (protect.RestoreResult, error) {
 	snap := a.Held
 	if snap == "" {
 		snap = a.Snapshot
 	}
 	if snap == "" {
-		return a, protect.ErrNoSnapshot
+		return protect.RestoreResult{}, protect.ErrNoSnapshot
 	}
 	sh, ok := s.shareByName(a.Share)
 	if !ok {
-		return a, shares.ErrNotFound
+		return protect.RestoreResult{}, shares.ErrNotFound
 	}
 	shareDir := s.opts.Shares.Path(sh)
 	rel, err := filepath.Rel(s.opts.Storage.MountPoint(sh.Volume), shareDir)
 	if err != nil || strings.HasPrefix(rel, "..") {
-		return a, fmt.Errorf("share outside its volume")
+		return protect.RestoreResult{}, fmt.Errorf("share outside its volume")
 	}
 	snapDir := filepath.Join(s.snapshotPath(sh.Volume, snap), rel)
 	if _, err := os.Stat(snapDir); err != nil {
-		return a, fmt.Errorf("the snapshot has no folder of the share: %w", err)
+		return protect.RestoreResult{}, fmt.Errorf("the snapshot has no folder of the share: %w", err)
+	}
+	if guardRestoreHook != nil {
+		guardRestoreHook(a.ID)
 	}
 	ps := s.protect()
 	ps.mu.Lock()
@@ -746,11 +813,8 @@ func (s *Server) guardRestore(id, by string) (guardAlert, error) {
 	if det != nil {
 		det.Mute(a.Share, "", ps.now().Add(10*time.Second))
 	}
-	a.Restored, a.State, a.By = &res, "restored", by
-	a.Closed = time.Now().UTC()
-	s.guardPut(a)
-	slog.Info("files restored after a ransomware alarm", "share", a.Share, "snapshot", snap, "restored", res.Restored, "recycled", res.Recycled, "failed", len(res.Failed), "by", by)
-	return a, nil
+	slog.Info("files restored after a ransomware alarm", "share", a.Share, "snapshot", snap, "restored", res.Restored, "recycled", res.Recycled, "failed", len(res.Failed))
+	return res, nil
 }
 
 func (s *Server) handleGuard(w http.ResponseWriter, r *http.Request) {
@@ -790,15 +854,31 @@ func (s *Server) guardAction(w http.ResponseWriter, r *http.Request, f func(*gua
 		writeError(w, http.StatusNotFound, "not_found", "no such alert")
 		return
 	}
+	before := a.State
 	if err := f(&a); err != nil {
 		writeError(w, http.StatusConflict, "guard_action", err.Error())
 		return
 	}
-	a.By = currentUser(r).Name
-	if a.Closed.IsZero() {
-		a.Closed = time.Now().UTC()
+	// Write back only what the action changed: a restore may have finished
+	// meanwhile.
+	ps := s.protect()
+	ps.mu.Lock()
+	for i := range ps.alerts {
+		cur := &ps.alerts[i]
+		if cur.ID != id {
+			continue
+		}
+		cur.Locked, cur.By = a.Locked, currentUser(r).Name
+		if a.State != before {
+			cur.State = a.State
+		}
+		if cur.Closed.IsZero() {
+			cur.Closed = time.Now().UTC()
+		}
+		a = *cur
 	}
-	s.guardPut(a)
+	s.guardSaveLocked(ps)
+	ps.mu.Unlock()
 	writeJSON(w, http.StatusOK, a)
 }
 
@@ -834,6 +914,9 @@ func (s *Server) handleGuardReopen(w http.ResponseWriter, r *http.Request) {
 // restore nothing, and do not alarm on that share for an hour.
 func (s *Server) handleGuardDismiss(w http.ResponseWriter, r *http.Request) {
 	s.guardAction(w, r, func(a *guardAlert) error {
+		if a.State == "restoring" {
+			return errors.New("the files are being restored; wait until it is done")
+		}
 		if err := s.guardUnlockShare(a); err != nil {
 			return err
 		}

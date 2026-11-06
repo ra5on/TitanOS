@@ -214,13 +214,13 @@ func (s *Server) handbookTick(h agentHandbook, now time.Time) {
 	if s.agentVolumeAsleep() {
 		return
 	}
-	go func() {
+	protectGo("handbook", func() {
 		ctx, cancel := context.WithTimeout(s.agentBase(), 2*time.Minute)
 		defer cancel()
 		if _, err := s.handbookRefresh(ctx, false); err != nil {
 			slog.Warn("emergency handbook not made", "err", err)
 		}
-	}()
+	})
 }
 
 func handbookLang(r *http.Request) bool { return r.URL.Query().Get("lang") != "en" }
