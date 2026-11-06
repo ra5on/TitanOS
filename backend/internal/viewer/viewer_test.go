@@ -31,6 +31,9 @@ type fakeEngine struct {
 	loaded    int
 	endpoints []docker.AppEndpoint
 	listErr   error
+	imageList []docker.ViewerImage
+	inUse     map[string]bool
+	removedIm []string
 }
 
 func newFakeEngine() *fakeEngine {
@@ -112,6 +115,21 @@ func (f *fakeEngine) ViewerAttached(context.Context, string, string) ([]string, 
 		out = append(out, id)
 	}
 	return out, nil
+}
+
+func (f *fakeEngine) ViewerImages(context.Context) ([]docker.ViewerImage, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.imageList), nil
+}
+func (f *fakeEngine) ViewerRemoveImage(_ context.Context, id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.inUse[id] {
+		return errors.New("conflict: image is being used")
+	}
+	f.removedIm = append(f.removedIm, id)
+	return nil
 }
 
 const testImageID = "sha256:" + "ab0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd"
@@ -282,6 +300,35 @@ func TestImageIsVerifiedAndLoaded(t *testing.T) {
 	}
 }
 
+func TestOlderImagesAreRemoved(t *testing.T) {
+	engine := newFakeEngine()
+	old, used := "sha256:"+strings.Repeat("1", 64), "sha256:"+strings.Repeat("2", 64)
+	engine.imageList = []docker.ViewerImage{{ID: old, Tags: []string{"titanos-viewer:0.59.9"}}, {ID: used}, {ID: testImageID}}
+	engine.inUse = map[string]bool{used: true}
+	m := testManager(t, engine)
+	m.image = imageState{}
+	m.Release = fakeRelease{manifest: manifest(goodEntry), body: "image"}
+	m.readyImage()
+	if st := waitImage(t, m); st.State != "ready" {
+		t.Fatalf("state %+v", st)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		engine.mu.Lock()
+		removed := slices.Clone(engine.removedIm)
+		engine.mu.Unlock()
+		if len(removed) > 0 {
+			// Only the old one; the new image and one in use stay.
+			if !slices.Equal(removed, []string{old}) {
+				t.Fatalf("removed %v", removed)
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("older image not removed")
+}
+
 func TestImageAlreadyLoadedIsNotDownloaded(t *testing.T) {
 	engine := newFakeEngine()
 	engine.images[testImageID] = testImageID
@@ -369,7 +416,7 @@ func TestContainerSpec(t *testing.T) {
 			t.Errorf("%s: %v %v", dir, st.Mode(), err)
 		}
 	}
-	if !strings.HasPrefix(lease.AgentURL(), "ws://172.30.0.5:7300/stream?key=") {
+	if lease.AgentURL() != "ws://172.30.0.5:7300/stream" || lease.Key() != lease.s.secret {
 		t.Fatal("agent address")
 	}
 }

@@ -347,14 +347,8 @@ func (s *Server) handleViewerDownload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "viewer_no_session", "the remote view of this app is not open")
 		return
 	}
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, lease.DownloadURL(id), nil)
+	res, err := lease.Download(r.Context(), id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal", "download failed")
-		return
-	}
-	res, err := viewerClient.Do(req)
-	if err != nil {
-		// The error would name the address with the key.
 		writeError(w, http.StatusBadGateway, "viewer_agent", "the remote view did not answer")
 		return
 	}
@@ -378,11 +372,6 @@ func (s *Server) handleViewerDownload(w http.ResponseWriter, r *http.Request) {
 	noteTarget(r, app)
 	_, _ = io.Copy(w, res.Body)
 }
-
-// viewerClient talks to agents on the internal network only.
-var viewerClient = &http.Client{Transport: &http.Transport{Proxy: nil}, CheckRedirect: func(*http.Request, []*http.Request) error {
-	return http.ErrUseLastResponse
-}}
 
 // attachmentName is a Content-Disposition with a safe ASCII fallback and
 // the full name per RFC 5987.

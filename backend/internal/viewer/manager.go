@@ -23,6 +23,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
+	"github.com/ra5on/TitanOS/backend/internal/viewer/proto"
 )
 
 // Engine is the part of Docker the viewer uses (docker/viewer.go).
@@ -40,6 +41,8 @@ type Engine interface {
 	ViewerAttach(ctx context.Context, network, id, alias string) (string, bool, error)
 	ViewerDetach(ctx context.Context, network, id, alias string) error
 	ViewerAttached(ctx context.Context, network, alias string) ([]string, error)
+	ViewerImages(ctx context.Context) ([]docker.ViewerImage, error)
+	ViewerRemoveImage(ctx context.Context, id string) error
 }
 
 // Release gives the signed manifest and assets of a release (package
@@ -76,7 +79,7 @@ const (
 	// containerMemory is the hard limit of one viewer container.
 	containerMemory = 1536 << 20
 	// agentPort is where the agent in the container listens.
-	agentPort = 7300
+	agentPort = proto.Port
 	// attachAlias marks the endpoint of an app TitanOS connected to the
 	// viewer network; only endpoints with it are ever disconnected.
 	attachAlias = "titanos-viewer-attached"
@@ -255,7 +258,8 @@ func (m *Manager) cleanup(ctx context.Context) error {
 	if m.cleaned {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	// Each left-over viewer gets its stop time (docker.ViewerStopSeconds).
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 	list, err := m.Engine.Viewers(ctx)
 	if err != nil {
@@ -754,17 +758,28 @@ func (m *Manager) Stop(user, app string) {
 	}
 }
 
-// AgentURL is the address of the agent's stream, with the session key.
-// It contains the secret: never log it.
+// AgentURL is the address of the agent's stream. The session key goes in
+// the header KeyHeader, never in the address.
 func (l *Lease) AgentURL() string {
-	return "ws://" + hostPort(l.s.address, agentPort) + "/stream?key=" + l.s.secret
+	return "ws://" + hostPort(l.s.address, agentPort) + "/stream"
 }
 
-// DownloadURL is the address of a file the browser in the view downloaded.
-// It contains the secret: never log it.
-func (l *Lease) DownloadURL(id string) string {
-	return "http://" + hostPort(l.s.address, agentPort) + "/downloads/" + id + "?key=" + l.s.secret
+// HealthURL answers 200 once the agent listens (no key needed).
+func (l *Lease) HealthURL() string {
+	return "http://" + hostPort(l.s.address, agentPort) + "/healthz"
 }
+
+// DownloadURL is the address of a file the browser in the view downloaded;
+// send Key in KeyHeader with it.
+func (l *Lease) DownloadURL(id string) string {
+	return "http://" + hostPort(l.s.address, agentPort) + "/downloads/" + id
+}
+
+// KeyHeader carries the session key to the agent.
+const KeyHeader = "X-Viewer-Key"
+
+// Key is the session key of the view. Never log it.
+func (l *Lease) Key() string { return l.s.secret }
 
 // Replaced tells, once Ended closed, whether another window took the view
 // over (rather than the view being stopped).

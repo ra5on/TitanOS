@@ -29,7 +29,7 @@ const (
 	MaxUploadSize    = 2 << 30   // bytes per uploaded file
 	MaxClipboard     = 1 << 20   // bytes of clipboard text
 	MaxText          = 10000     // runes per "text" message
-	MaxTextMessage   = 2 << 20   // bytes of one JSON text message towards the agent
+	MaxTextMessage   = 6 << 20   // bytes of one JSON text message towards the agent (1 MiB clipboard, escaped)
 	MaxBinaryMessage = 5 + MaxUploadChunk
 	MaxNameLen       = 255 // bytes of an upload name as sent by the browser
 	MinWidth         = 320

@@ -161,6 +161,31 @@ func (m *Manager) fetchImage() {
 	}
 	m.image.id = id
 	m.image.status = ImageStatus{State: "ready"}
+	if !m.Dev {
+		go m.pruneImages(id)
+	}
+}
+
+// pruneImages removes the images of earlier versions (label
+// titanos.viewer.image=1) once this one is loaded and verified. Docker
+// refuses to remove an image a container still uses; that one stays.
+func (m *Manager) pruneImages(keep string) {
+	ctx, cancel := context.WithTimeout(m.ctx(), 5*time.Minute)
+	defer cancel()
+	images, err := m.Engine.ViewerImages(ctx)
+	if err != nil {
+		return
+	}
+	for _, img := range images {
+		if img.ID == keep {
+			continue
+		}
+		if err := m.Engine.ViewerRemoveImage(ctx, img.ID); err != nil {
+			slog.Info("older remote view image kept", "image", img.ID, "tags", img.Tags, "err", err)
+		} else {
+			slog.Info("older remote view image removed", "image", img.ID, "tags", img.Tags)
+		}
+	}
 }
 
 func (m *Manager) obtainImage(ctx context.Context) (string, error) {

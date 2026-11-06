@@ -3,6 +3,10 @@
 # which places the statically built agent binary next to this file.
 FROM debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
 
+# titand removes older images with this label once a newer one is loaded
+# and verified (backend/internal/viewer/image.go); never other images.
+LABEL titanos.viewer.image="1"
+
 ARG DEBIAN_FRONTEND=noninteractive
 COPY dpkg-excludes /etc/dpkg/dpkg.cfg.d/titanos-viewer
 RUN set -eux; \

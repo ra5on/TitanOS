@@ -192,6 +192,14 @@ Das Skript legt `titanos-viewer-<version>.tar.zst` und
 Image-ID (Config-Digest `sha256:…`, wie sie `docker image inspect` mit dem
 klassischen Image-Speicher und `manifest.json` im Archiv nennen) aus; der
 Workflow schreibt sie nach `titanos-viewer-<version>.image-id`.
+Hat sich seit dem letzten Release mit Abbild nichts an `viewer/`,
+`backend/cmd/titanos-viewer/`, `backend/internal/viewer/proto/`,
+`scripts/build-viewer-image.sh` oder `backend/go.mod`/`go.sum` geändert,
+übernimmt `scripts/viewer-image-reuse.py` stattdessen dessen Archiv: Manifest
+mit gültiger Signatur, Archiv nach Größe und SHA-256 daraus, Paketliste aus dem
+Lizenzarchiv (Prüfsumme in der signierten `SHA256SUMS`). Es erscheint unter dem
+neuen Dateinamen mit derselben Image-ID, und die NAS laden es nicht erneut.
+Exit-Code 3 heißt „neu bauen“, andere Fehler brechen den Lauf ab.
 `make-release.sh` nimmt mit `VIEWER_DIR=out/viewer` diese Dateien, ohne
 `VIEWER_DIR` ruft es das Skript selbst auf. Fehlt eine der drei Dateien oder
 ist die ID keine `sha256:`-Kennung, bricht es ab. Das Abbild ist eine eigene

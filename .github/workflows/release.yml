@@ -11,8 +11,10 @@ name: Release
 # in the release for NAS that do not know the plugin repository yet.
 #
 # Every release, app or system, carries the image of the remote view
-# (docs/FERNANSICHT.md): scripts/build-viewer-image.sh builds it here, and
-# make-release.sh lists it in the signed manifest ("viewer").
+# (docs/FERNANSICHT.md): scripts/viewer-image-reuse.py takes the previous
+# release's verified archive when nothing in the image changed, otherwise
+# scripts/build-viewer-image.sh builds it; make-release.sh lists it in the
+# signed manifest ("viewer").
 #
 # A tag on which only titand changed since the last full release becomes an
 # app release (scripts/release-kind.py, docs/APP-UPDATES.md): the published
@@ -42,6 +44,7 @@ on:
       - 'scripts/normalize-image-tmpfiles.py'
       - 'scripts/make-release.sh'
       - 'scripts/build-viewer-image.sh'
+      - 'scripts/viewer-image-reuse.py'
       - 'viewer/**'
       - 'backend/cmd/titanos-viewer/**'
       - 'backend/internal/viewer/proto/**'
@@ -276,8 +279,16 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p out/viewer
-          # The last line of the output is the image ID (config digest).
-          scripts/build-viewer-image.sh "$VERSION" out/viewer | tee out/viewer/build.log | tail -n 1 > "out/viewer/titanos-viewer-$VERSION.image-id"
+          # Unchanged since the previous release: take its signed archive
+          # (same image ID), so NAS boxes do not download it again.
+          status=0
+          python3 scripts/viewer-image-reuse.py "$VERSION" out/viewer || status=$?
+          if [ "$status" = 3 ]; then
+            # The last line of the output is the image ID (config digest).
+            scripts/build-viewer-image.sh "$VERSION" out/viewer | tee out/viewer/build.log | tail -n 1 > "out/viewer/titanos-viewer-$VERSION.image-id"
+          elif [ "$status" != 0 ]; then
+            exit "$status"
+          fi
 
       - name: Pack the release
         env:

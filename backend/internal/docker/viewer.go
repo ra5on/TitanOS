@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -62,9 +63,9 @@ func viewerCreateBody(spec ViewerSpec) map[string]any {
 	host := map[string]any{
 		"NetworkMode":    spec.Network,
 		"ReadonlyRootfs": true,
+		// The only writable places besides /profile; the agent needs no /run.
 		"Tmpfs": map[string]string{
 			"/tmp": "rw,nosuid,nodev,size=256m,mode=1777",
-			"/run": "rw,nosuid,nodev,noexec,size=16m,mode=0755",
 		},
 		"Binds":       []string{spec.Profile + ":/profile:rw"},
 		"Memory":      spec.MemoryBytes,
@@ -178,13 +179,22 @@ func (m *Manager) ViewerStart(ctx context.Context, id string) error {
 	return m.api.post(ctx, "/containers/"+url.PathEscape(id)+"/start", nil)
 }
 
-// ViewerRemove stops and removes a viewer container. A container that is
-// gone already counts as removed.
+// ViewerStopSeconds is how long a viewer gets to end on its own before it
+// is killed: Chromium writes cookies and the profile on exit.
+const ViewerStopSeconds = 10
+
+// ViewerRemove stops a viewer container (giving it ViewerStopSeconds) and
+// removes it. A container that is gone already counts as removed. ctx must
+// allow for the stop time.
 func (m *Manager) ViewerRemove(ctx context.Context, id string) error {
 	if _, err := m.inspectViewer(ctx, id); err != nil {
 		if notFound(err) {
 			return nil
 		}
+		return err
+	}
+	// A container that is not running answers 304, which is no error.
+	if err := m.api.post(ctx, "/containers/"+url.PathEscape(id)+"/stop", url.Values{"t": {strconv.Itoa(ViewerStopSeconds)}}); err != nil && !notFound(err) {
 		return err
 	}
 	_, err := m.api.do(ctx, http.MethodDelete, "/containers/"+url.PathEscape(id), url.Values{"force": {"true"}})
@@ -411,4 +421,56 @@ func (m *Manager) LeasedHardware() map[string]bool {
 	m.hardwareMu.Lock()
 	defer m.hardwareMu.Unlock()
 	return m.blockedHardware()
+}
+
+// ViewerImageLabel marks images of the remote view (viewer/Dockerfile).
+const ViewerImageLabel = "titanos.viewer.image"
+
+// ViewerImage is an image of the remote view.
+type ViewerImage struct {
+	ID   string
+	Tags []string
+}
+
+// ViewerImages lists the images that carry ViewerImageLabel.
+func (m *Manager) ViewerImages(ctx context.Context) ([]ViewerImage, error) {
+	var list []struct {
+		ID       string `json:"Id"`
+		RepoTags []string
+		Labels   map[string]string
+	}
+	filters := `{"label":["` + ViewerImageLabel + `=1"]}`
+	if err := m.api.getJSON(ctx, "/images/json", url.Values{"filters": {filters}}, &list); err != nil {
+		return nil, err
+	}
+	out := []ViewerImage{}
+	for _, img := range list {
+		if img.Labels[ViewerImageLabel] == "1" {
+			out = append(out, ViewerImage{ID: img.ID, Tags: slices.DeleteFunc(img.RepoTags, func(t string) bool { return t == "<none>:<none>" })})
+		}
+	}
+	return out, nil
+}
+
+// ViewerRemoveImage removes an image of the remote view, never by force:
+// Docker refuses while a container uses it. Other images are refused.
+func (m *Manager) ViewerRemoveImage(ctx context.Context, id string) error {
+	var img struct {
+		ID     string `json:"Id"`
+		Config struct{ Labels map[string]string }
+	}
+	if err := m.api.getJSON(ctx, "/images/"+url.PathEscape(id)+"/json", nil, &img); err != nil {
+		if notFound(err) {
+			return nil
+		}
+		return err
+	}
+	if img.Config.Labels[ViewerImageLabel] != "1" {
+		return errors.New("docker: not an image of the remote view")
+	}
+	_, err := m.api.do(ctx, http.MethodDelete, "/images/"+url.PathEscape(img.ID), nil)
+	if notFound(err) {
+		return nil
+	}
+	return err
 }
