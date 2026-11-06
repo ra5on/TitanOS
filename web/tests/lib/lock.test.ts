@@ -93,6 +93,10 @@ test('Strg/⌘+Alt+L is the shortcut, by key position', () => {
 	expect(isLockShortcut(key({}))).toBe(false);
 	expect(isLockShortcut(key({ ctrlKey: true, shiftKey: true }))).toBe(false);
 	expect(isLockShortcut(key({ ctrlKey: true, code: 'KeyK' }))).toBe(false);
+	// AltGr on Windows arrives as Ctrl+Alt and types a letter (Polish ł).
+	expect(
+		isLockShortcut({ ...key({ ctrlKey: true }), getModifierState: (k) => k === 'AltGraph' }),
+	).toBe(false);
 });
 
 test('a 423 "locked" answer anywhere shows the lock screen', () => {

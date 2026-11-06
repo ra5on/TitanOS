@@ -59,27 +59,42 @@ func (p *preferences) lockMinutes(user string) int {
 		p.mu.Unlock()
 		return minutes
 	}
+	// Unreadable a moment ago (stick missing): the default, without asking
+	// the stick again on every request.
+	if failed, ok := p.lockFailed[user]; ok && time.Since(failed) < lockRetry {
+		p.mu.Unlock()
+		return defaultLockMinutes
+	}
 	p.mu.Unlock()
 	minutes := defaultLockMinutes
-	if value, err := p.get(user, "desktop"); err == nil && value != nil {
+	value, err := p.get(user, "desktop")
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if err != nil {
+		if p.lockFailed == nil {
+			p.lockFailed = map[string]time.Time{}
+		}
+		p.lockFailed[user] = time.Now()
+		return minutes
+	}
+	if value != nil {
 		var desktop struct {
 			LockMinutes *float64 `json:"lockMinutes"`
 		}
 		if json.Unmarshal(value, &desktop) == nil && desktop.LockMinutes != nil {
 			minutes = clampLockMinutes(*desktop.LockMinutes)
 		}
-	} else if err != nil {
-		// Not readable now: the default, and try again next time.
-		return minutes
 	}
-	p.mu.Lock()
 	if p.locks == nil {
 		p.locks = map[string]int{}
 	}
+	delete(p.lockFailed, user)
 	p.locks[user] = minutes
-	p.mu.Unlock()
 	return minutes
 }
+
+// lockRetry is how long an unreadable desktop preference is not asked for again.
+const lockRetry = 30 * time.Second
 
 func clampLockMinutes(value float64) int {
 	if math.IsNaN(value) || value <= 0 {

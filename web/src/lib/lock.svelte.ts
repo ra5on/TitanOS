@@ -79,8 +79,13 @@ export function idleExpired(lastActivity: number, now: number, minutes: number):
 
 /** Strg+Alt+L, on the Mac ⌘+Alt+L (by key position: Alt+L types "¬" there). */
 export function isLockShortcut(
-	e: Pick<KeyboardEvent, 'code' | 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey'>,
+	e: Pick<KeyboardEvent, 'code' | 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey'> & {
+		getModifierState?: (key: string) => boolean;
+	},
 ): boolean {
+	// On Windows AltGr comes as Ctrl+Alt: AltGr+L types a letter on some
+	// layouts (Polish ł) and must not lock.
+	if (e.getModifierState?.('AltGraph')) return false;
 	return e.code === 'KeyL' && e.altKey && (e.ctrlKey || e.metaKey) && !e.shiftKey;
 }
 

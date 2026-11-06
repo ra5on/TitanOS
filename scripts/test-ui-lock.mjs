@@ -230,6 +230,20 @@ try {
     await ctx.close();
   }
 
+  // 4b. A phone held across (844 × 390): nothing cut off at the top, the
+  //     form reachable by scrolling.
+  {
+    const { ctx, page } = await open(844, { locked: true });
+    await page.setViewportSize({ width: 844, height: 390 });
+    await screen(page).waitFor();
+    const clock = await page.locator(".lockscreen .clock").boundingBox();
+    assert.ok(clock.y >= 0, "clock not cut off at the top");
+    await page.getByLabel("Passwort", { exact: true }).scrollIntoViewIfNeeded();
+    assert.ok(await page.getByLabel("Passwort", { exact: true }).isVisible());
+    await page.screenshot({ path: `${out}/landscape-844x390.png`, animations: "disabled" });
+    await ctx.close();
+  }
+
   // 5. A same-origin frame (a window of the desktop): locking inside it
   //    locks the top window; the frame shows nothing; unlocking frees both.
   {

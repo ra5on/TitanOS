@@ -266,7 +266,8 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		justify-content: center;
+		/* Taller than a short screen (phone across): scrolls from the top. */
+		justify-content: safe center;
 		padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
 		overflow-y: auto;
 		color: #fff;
@@ -466,6 +467,24 @@
 	@keyframes lock-in {
 		from {
 			opacity: 0;
+		}
+	}
+	/* Short screens (phone across): a smaller clock, the form in view. */
+	@media (max-height: 520px) {
+		.clock {
+			font-size: 56px;
+		}
+		.date {
+			margin-top: 4px;
+		}
+		.who {
+			flex-direction: row;
+			margin-top: 16px;
+		}
+		.avatar {
+			width: 44px;
+			height: 44px;
+			font-size: 20px;
 		}
 	}
 	@media (prefers-reduced-motion: reduce) {

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
 )
@@ -37,6 +38,8 @@ type preferences struct {
 	// locks caches the field lockMinutes of the desktop preferences per
 	// account, read on every request of a session (session_lock.go).
 	locks map[string]int
+	// lockFailed is when reading them last failed, per account.
+	lockFailed map[string]time.Time
 }
 
 func newPreferences(store *config.Store) *preferences {
@@ -78,6 +81,7 @@ func (p *preferences) set(user, kind string, value json.RawMessage) error {
 	p.cache[user+"/"+kind] = value
 	if kind == "desktop" {
 		delete(p.locks, user)
+		delete(p.lockFailed, user)
 	}
 	return nil
 }

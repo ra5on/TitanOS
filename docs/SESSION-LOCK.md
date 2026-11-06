@@ -42,8 +42,10 @@ Im Aktivitätsprotokoll stehen Sperren, automatisches Sperren, Entsperren
 - Benutzung innerhalb eingebetteter Docker-Apps (fremde Adresse im Fenster)
   zählt nicht als Benutzung; dort hilft nur, zwischendurch das TitanOS-Fenster
   zu berühren oder die Zeit länger zu stellen.
-- Uploads, die der Browser selbst schickt, stocken während der Sperre; Aufträge
-  des NAS laufen weiter.
+- Uploads, die der Browser selbst schickt, warten während der Sperre und laufen
+  nach dem Entsperren an derselben Stelle weiter; Aufträge des NAS laufen ohnehin
+  weiter. Der Ereignisstrom des KI-Agenten (SSE) wird nicht beendet, nur neue
+  Anfragen werden abgewiesen.
 - Die Seite hinter dem Sperrbildschirm ist nur unbedienbar gemacht; wer
   Zugriff auf den entsperrten Rechner und die Entwicklerwerkzeuge des Browsers
   hat, kann zuvor geladene Inhalte dort noch lesen. Neue Daten liefert das NAS
