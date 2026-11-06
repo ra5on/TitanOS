@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -424,6 +425,8 @@ type fakeIMAP struct {
 	mail map[uint32]string
 	seen map[uint32]bool
 	cmds []string
+	// lie: the size the server reports for a mail (a broken server).
+	lie map[uint32]int
 }
 
 func startFakeIMAP(t *testing.T) *fakeIMAP {
@@ -433,7 +436,7 @@ func startFakeIMAP(t *testing.T) *fakeIMAP {
 		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, KeyUsage: x509.KeyUsageDigitalSignature}
 	der, _ := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 	leaf, _ := x509.ParseCertificate(der)
-	f := &fakeIMAP{pool: x509.NewCertPool(), cert: tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}, mail: map[uint32]string{}, seen: map[uint32]bool{}}
+	f := &fakeIMAP{pool: x509.NewCertPool(), cert: tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}, mail: map[uint32]string{}, seen: map[uint32]bool{}, lie: map[uint32]int{}}
 	f.pool.AddCert(leaf)
 	ln, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{Certificates: []tls.Certificate{f.cert}})
 	if err != nil {
@@ -474,7 +477,7 @@ func (f *fakeIMAP) serve(c net.Conn) {
 				fmt.Fprintf(c, "%s NO wrong\r\n", tag)
 			}
 		case cmd == "SELECT INBOX":
-			fmt.Fprintf(c, "%s OK\r\n", tag)
+			fmt.Fprintf(c, "* OK [UIDVALIDITY 42] ok\r\n%s OK\r\n", tag)
 		case cmd == "UID SEARCH UNSEEN":
 			f.mu.Lock()
 			ids := []string{}
@@ -485,6 +488,16 @@ func (f *fakeIMAP) serve(c net.Conn) {
 			}
 			f.mu.Unlock()
 			fmt.Fprintf(c, "* SEARCH %s\r\n%s OK\r\n", strings.Join(ids, " "), tag)
+		case strings.HasSuffix(cmd, "(RFC822.SIZE)"):
+			var uid uint32
+			fmt.Sscanf(cmd, "UID FETCH %d", &uid)
+			f.mu.Lock()
+			size, lied := f.lie[uid]
+			if !lied {
+				size = len(f.mail[uid])
+			}
+			f.mu.Unlock()
+			fmt.Fprintf(c, "* 1 FETCH (UID %d RFC822.SIZE %d)\r\n%s OK\r\n", uid, size, tag)
 		case strings.HasPrefix(cmd, "UID FETCH "):
 			var uid uint32
 			fmt.Sscanf(cmd, "UID FETCH %d", &uid)
@@ -658,4 +671,111 @@ func TestDocsBudgetAndBrokenIndex(t *testing.T) {
 	if hits, _ := ts.server.docsSearch(alex, "Versicherung", 10, nil); len(hits) != 3 {
 		t.Fatalf("rebuilt: %v", hits)
 	}
+}
+
+func fakeMailbox(t *testing.T, ts *testServer) *fakeIMAP {
+	t.Helper()
+	f := startFakeIMAP(t)
+	hook := paperIMAP
+	t.Cleanup(func() { paperIMAP = hook })
+	paperIMAP = func(c *imapmini.Config) {
+		c.TLS = &tls.Config{RootCAs: f.pool}
+		c.Dial = func(ctx context.Context, network, _ string) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(ctx, network, f.addr)
+		}
+	}
+	docsNAS(t, ts, map[string]any{"enabled": true, "paper": true})
+	docsMine(t, ts, ts.client, map[string]any{"paper": map[string]any{"on": true, "mail": map[string]any{"enabled": true, "host": "imap.test", "user": "alex", "password": "pw-geheim"}}})
+	return f
+}
+
+// PLAN 53: a run that finds nothing new writes nothing, so the disk can
+// go to standby; the time of the last look stays in RAM.
+func TestPaperRunWritesOnlyChanges(t *testing.T) {
+	ts, _ := docsServer(t)
+	fakeMailbox(t, ts)
+	alex, _ := ts.users.Get("alex")
+	m, _ := ts.server.agentFeaturesOf("alex")
+	for range 2 {
+		if err := ts.server.paperRun(context.Background(), alex, m, true, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	root, _ := ts.server.docsRoot("alex")
+	_, err := root.Stat(paperFile)
+	root.Close()
+	if err == nil {
+		t.Fatal("paper.json written although nothing changed")
+	}
+	if _, body := ts.request("GET", "/api/v1/agent/docs", nil); !strings.Contains(string(body), `"mailAt":"`) {
+		t.Fatalf("mail time not shown: %s", body)
+	}
+}
+
+// A mail that is too large, one whose size the server got wrong and one
+// that cannot be read never block the mails after them, and are not
+// fetched again.
+func TestPaperMailSkipsBadMails(t *testing.T) {
+	ts, home := docsServer(t)
+	f := fakeMailbox(t, ts)
+	limit := imapmini.MaxMessage
+	t.Cleanup(func() { imapmini.MaxMessage = limit })
+	imapmini.MaxMessage = 3000
+	big := "From: a@b.test\r\nSubject: gross\r\n\r\n" + strings.Repeat("x", 5000) + "\r\n"
+	f.mail[5] = big
+	f.mail[6] = big
+	f.lie[6] = 100
+	f.mail[7] = "kein Kopf\r\n\r\nText\r\n"
+	f.mail[8] = "From: congstar <info@congstar.test>\r\nSubject: Deine Rechnung Oktober\r\nMessage-ID: <c8@congstar.test>\r\nDate: Thu, 05 Nov 2026 10:00:00 +0100\r\n\r\nRechnungsdatum: 05.11.2026\r\nRechnungsbetrag: 15,00 EUR\r\n"
+	alex, _ := ts.users.Get("alex")
+	m, _ := ts.server.agentFeaturesOf("alex")
+	if err := ts.server.paperRun(context.Background(), alex, m, true, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if !f.seen[8] || f.seen[5] || f.seen[6] || f.seen[7] {
+		t.Fatalf("seen: %v", f.seen)
+	}
+	if _, err := os.Stat(filepath.Join(home, "Dokumente", "Ablage", "congstar", "2026-11-05 congstar Rechnung.md")); err != nil {
+		t.Fatal("good mail not taken")
+	}
+	lg, _ := ts.server.paperLoad("alex")
+	skipped := slices.Sorted(slices.Values(lg.Skip))
+	if strings.Join(skipped, ",") != "42:5,42:6,42:7" || lg.MailError != "" {
+		t.Fatalf("skip: %v %q", lg.Skip, lg.MailError)
+	}
+	f.mu.Lock()
+	f.cmds = nil
+	f.mu.Unlock()
+	ts.server.paperRun(context.Background(), alex, m, true, time.Now())
+	for _, c := range f.cmds {
+		if strings.HasPrefix(c, "UID FETCH 5") || strings.HasPrefix(c, "UID FETCH 6") || strings.HasPrefix(c, "UID FETCH 7") {
+			t.Fatalf("fetched again: %s", c)
+		}
+	}
+}
+
+// A panic in a background run is logged, never the end of titand.
+func TestPaperRunSurvivesPanic(t *testing.T) {
+	ts, home := docsServer(t)
+	docsNAS(t, ts, map[string]any{"enabled": true, "paper": true})
+	docsMine(t, ts, ts.client, map[string]any{"paper": map[string]any{"on": true}})
+	inbox := filepath.Join(home, paperInbox)
+	os.MkdirAll(inbox, 0o755)
+	old := time.Now().Add(-5 * time.Minute)
+	os.WriteFile(filepath.Join(inbox, "a.jpg"), []byte("x"), 0o644)
+	os.Chtimes(filepath.Join(inbox, "a.jpg"), old, old)
+	look := docsLook
+	t.Cleanup(func() { docsLook = look })
+	docsLook = func(context.Context, *Server, []byte) (string, error) { panic("kaputt") }
+	alex, _ := ts.users.Get("alex")
+	m, _ := ts.server.agentFeaturesOf("alex")
+	if !ts.server.paperStartRun(alex, m, false, time.Now()) {
+		t.Fatal("not started")
+	}
+	waitDocs(t, ts, "alex")
+	if !ts.server.paperStartRun(alex, m, false, time.Now()) {
+		t.Fatal("flag not reset after the panic")
+	}
+	waitDocs(t, ts, "alex")
 }

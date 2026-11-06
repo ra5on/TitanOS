@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"html"
 	"io"
 	"mime"
@@ -72,7 +73,17 @@ func latin1(b []byte) string {
 }
 
 // Parse reads a mail: sender, subject, date, the text and the attachments.
-func Parse(raw []byte) (Mail, error) {
+// A mail that makes the parser panic is an error, never a crash.
+func Parse(raw []byte) (m Mail, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			m, err = Mail{}, fmt.Errorf("mail cannot be read: %v", r)
+		}
+	}()
+	return parse(raw)
+}
+
+func parse(raw []byte) (Mail, error) {
 	msg, err := mail.ReadMessage(bytes.NewReader(raw))
 	if err != nil {
 		return Mail{}, err
@@ -118,7 +129,7 @@ func Parse(raw []byte) (Mail, error) {
 				}
 			}
 		}
-		data, err := io.ReadAll(io.LimitReader(decode(header.Get("Content-Transfer-Encoding"), body), MaxMessage))
+		data, err := io.ReadAll(io.LimitReader(decode(header.Get("Content-Transfer-Encoding"), body), int64(MaxMessage)))
 		if err != nil {
 			return err
 		}
@@ -234,6 +245,9 @@ func SafeFileName(name, ctype string) string {
 	name = strings.TrimLeft(strings.TrimSpace(b.String()), ".")
 	if r := []rune(name); len(r) > 120 {
 		ext := path.Ext(name)
+		if len([]rune(ext)) > 16 {
+			ext = "" // no real extension; never cut below zero
+		}
 		name = string(r[:120-len([]rune(ext))]) + ext
 	}
 	if name == "" {

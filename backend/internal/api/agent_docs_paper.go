@@ -37,6 +37,7 @@ const (
 	maxPaperEntries = 3000
 	maxPaperSeen    = 3000
 	paperMailBatch  = 20
+	maxPaperSkip    = 500
 	paperSettle     = time.Minute // a scanner may still be writing
 )
 
@@ -67,8 +68,10 @@ type paperHint struct {
 }
 
 type paperLog struct {
-	Entries   []paperEntry         `json:"entries"`
-	Seen      []string             `json:"seen,omitempty"`
+	Entries []paperEntry `json:"entries"`
+	Seen    []string     `json:"seen,omitempty"`
+	// Skip: mails left alone (too large, unreadable), as uidvalidity:uid.
+	Skip      []string             `json:"skip,omitempty"`
 	Hints     map[string]paperHint `json:"hints,omitempty"`
 	MailAt    time.Time            `json:"mailAt,omitzero"`
 	MailError string               `json:"mailError,omitempty"`
@@ -118,6 +121,12 @@ func (s *Server) paperStartRun(u auth.User, m agentFeaturesMine, mail bool, at t
 	rt.paperRun = true
 	rt.mu.Unlock()
 	go func() {
+		// A bad document or mail must never take titand down.
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("paperwork run failed", "account", u.Name, "panic", r)
+			}
+		}()
 		defer func() {
 			rt.mu.Lock()
 			rt.paperRun = false
@@ -152,15 +161,23 @@ func (s *Server) paperRun(ctx context.Context, u auth.User, m agentFeaturesMine,
 	if err != nil {
 		return err
 	}
+	// Written only when something changed: a run every ten minutes must
+	// not keep the disk from its standby (PLAN 53).
+	before := paperPrint(lg)
 	if mail && m.Paper.Mail.Enabled {
 		if err := s.paperFetchMail(ctx, u, m.Paper, root, &lg, now); err != nil {
 			lg.MailError = err.Error()
 		} else {
 			lg.MailError = ""
 		}
-		lg.MailAt = now
-		if err := s.paperSave(u.Name, &lg); err != nil {
-			return err
+		rt.mu.Lock()
+		rt.mailAt = now // in RAM only
+		rt.mu.Unlock()
+		if p := paperPrint(lg); p != before {
+			if err := s.paperSave(u.Name, &lg); err != nil {
+				return err
+			}
+			before = p
 		}
 	}
 	entries, err := s.opts.Files.List(root, paperInbox)
@@ -219,7 +236,29 @@ func (s *Server) paperRun(ctx context.Context, u auth.User, m agentFeaturesMine,
 		}
 		lg.Entries = paperPut(lg.Entries, entry)
 	}
+	if paperPrint(lg) == before {
+		return nil
+	}
 	return s.paperSave(u.Name, &lg)
+}
+
+// paperPrint is the log as it would be written, to see whether it changed.
+func paperPrint(lg paperLog) string {
+	lg.MailAt = time.Time{}
+	data, _ := json.Marshal(lg)
+	return string(data)
+}
+
+// paperMailAt is when the mailbox was last looked at (RAM, else the
+// time an older version wrote).
+func (s *Server) paperMailAt(user string, lg paperLog) time.Time {
+	rt := s.docsRT(user)
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	if !rt.mailAt.IsZero() {
+		return rt.mailAt
+	}
+	return lg.MailAt
 }
 
 func firstTime(a, b time.Time) time.Time {
@@ -373,35 +412,74 @@ func (s *Server) paperFetchMail(ctx context.Context, u auth.User, p agentPaperMi
 	paperIMAP(&cfg)
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
-	c, err := imapmini.Dial(ctx, cfg)
-	if err != nil {
+	var c *imapmini.Client
+	connect := func() error {
+		if c != nil {
+			c.Close()
+		}
+		var err error
+		if c, err = imapmini.Dial(ctx, cfg); err != nil {
+			c = nil
+			return err
+		}
+		return c.SelectInbox()
+	}
+	if err := connect(); err != nil {
 		return err
 	}
-	defer c.Close()
-	if err := c.SelectInbox(); err != nil {
-		return err
-	}
+	defer func() {
+		if c != nil {
+			c.Close()
+		}
+	}()
 	uids, err := c.Unseen()
 	if err != nil {
 		return err
 	}
+	// Mails that are too large or cannot be read are left alone (unread,
+	// for the person) and never block the ones after them.
+	key := func(uid uint32) string { return c.UIDValidity + ":" + strconv.FormatUint(uint64(uid), 10) }
+	uids = slices.DeleteFunc(uids, func(uid uint32) bool { return slices.Contains(lg.Skip, key(uid)) })
 	if len(uids) > paperMailBatch {
 		uids = uids[:paperMailBatch]
 	}
-	for _, uid := range uids {
-		raw, err := c.Fetch(uid)
-		if err != nil {
-			return err
+	skip := func(uid uint32) {
+		lg.Skip = append(lg.Skip, key(uid))
+		if len(lg.Skip) > maxPaperSkip {
+			lg.Skip = lg.Skip[len(lg.Skip)-maxPaperSkip:]
 		}
-		id := ""
+	}
+	reconnects := 0
+	for _, uid := range uids {
+		raw, err := s.paperFetchOne(c, uid)
+		if err != nil {
+			if !errors.Is(err, imapmini.ErrBroken) && !errors.Is(err, imapmini.ErrTooLarge) && !errors.Is(err, errPaperTooLarge) {
+				return err // network or server: tried again next time
+			}
+			skip(uid)
+			if errors.Is(err, errPaperTooLarge) {
+				continue // asked by size: the stream is fine
+			}
+			// The stream is out of step: connect anew, go on with the next.
+			if reconnects++; reconnects > 3 {
+				return err
+			}
+			if err := connect(); err != nil {
+				return err
+			}
+			continue
+		}
 		mail, perr := imapmini.Parse(raw)
-		if perr == nil && mail.MessageID != "" {
-			id = mail.MessageID
-		} else {
+		if perr != nil {
+			skip(uid)
+			continue
+		}
+		id := mail.MessageID
+		if id == "" {
 			sum := sha256.Sum256(raw)
 			id = "sha256:" + hex.EncodeToString(sum[:12])
 		}
-		if !slices.Contains(lg.Seen, id) && perr == nil {
+		if !slices.Contains(lg.Seen, id) {
 			if err := s.paperTakeMail(u, p, root, lg, mail, now); err != nil {
 				return err
 			}
@@ -411,14 +489,26 @@ func (s *Server) paperFetchMail(ctx context.Context, u auth.User, p agentPaperMi
 				return err
 			}
 		}
-		if perr != nil {
-			continue // left unread, tried again
-		}
 		if err := c.MarkSeen(uid); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+var errPaperTooLarge = errors.New("mail too large")
+
+// paperFetchOne asks the size first, so a mail over the limit is never
+// fetched at all.
+func (s *Server) paperFetchOne(c *imapmini.Client, uid uint32) ([]byte, error) {
+	size, err := c.Size(uid)
+	if err != nil {
+		return nil, err
+	}
+	if size > imapmini.MaxMessage {
+		return nil, errPaperTooLarge
+	}
+	return c.Fetch(uid)
 }
 
 func (s *Server) paperTakeMail(u auth.User, p agentPaperMine, root files.Root, lg *paperLog, mail imapmini.Mail, now time.Time) error {
@@ -481,7 +571,7 @@ func (s *Server) paperInboxView(u auth.User, p agentPaperMine) *paperInboxInfo {
 	if err != nil {
 		return nil
 	}
-	out := &paperInboxInfo{Folder: agentShareName + " › " + paperInbox, MailAt: lg.MailAt, MailError: lg.MailError}
+	out := &paperInboxInfo{Folder: agentShareName + " › " + paperInbox, MailAt: s.paperMailAt(u.Name, lg), MailError: lg.MailError}
 	for _, e := range lg.Entries {
 		switch e.State {
 		case "waiting":
@@ -624,6 +714,7 @@ func (s *Server) handlePaper(w http.ResponseWriter, r *http.Request) {
 		agentStoreError(w, err)
 		return
 	}
+	lg.MailAt = s.paperMailAt(user.Name, lg)
 	writeJSON(w, http.StatusOK, paperSummary(lg, r.URL.Query().Get("month"), time.Now().In(s.agentLocation())))
 }
 

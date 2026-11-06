@@ -140,6 +140,7 @@ type docsRuntime struct {
 	mutex    sync.Mutex // one index run at a time
 	paperMu  sync.Mutex // the paperwork log
 	paperRun bool
+	mailAt   time.Time // last look into the mailbox (RAM only)
 }
 
 type docsKey struct {
@@ -342,6 +343,12 @@ func (s *Server) docsStartRun(u auth.User, mine agentDocsMine, now bool, at time
 	rt.running, rt.lastTry, rt.done, rt.total = true, at, 0, 0
 	rt.mu.Unlock()
 	go func() {
+		// A bad document or mail must never take titand down.
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("document memory run failed", "account", u.Name, "panic", r)
+			}
+		}()
 		defer docsIndexing.Delete(s)
 		defer func() {
 			rt.mu.Lock()
