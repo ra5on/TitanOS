@@ -49,9 +49,9 @@ func (s *Server) foresight() *foresightState {
 }
 
 const (
-	cpuRing  = 24 * 60     // one day of minutes
-	memRing  = 7 * 24 * 6  // a week of ten minutes
-	volsRing = 30 * 24     // a month of hours
+	cpuRing  = 24 * 60    // one day of minutes
+	memRing  = 7 * 24 * 6 // a week of ten minutes
+	volsRing = 30 * 24    // a month of hours
 	memEvery = 10 * time.Minute
 	volEvery = time.Hour
 	// statEvery: how often the storage status is read for rebuild speeds.
