@@ -139,7 +139,7 @@
 		api.get<{ compose: string }>(`/docker/apps/${app}`).then(
 			(res) => {
 				if (app !== name) return;
-				original = text = res.compose;
+				original = text = res.compose ?? '';
 				loaded = true;
 				if (!parse()) view = 'compose';
 			},

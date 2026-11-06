@@ -11,6 +11,7 @@ export type FrameMessage =
 	| { type: 'titanos-goto'; href: string }
 	| { type: 'titanos-open'; href: string }
 	| { type: 'titanos-upload'; files: File[] }
+	| { type: 'titanos-console'; session: unknown }
 	| {
 			type: 'titanos-key';
 			key: string;

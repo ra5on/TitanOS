@@ -281,7 +281,29 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   await side.getByRole("button", { name: "Source VM" }).click();
   const vmFrame = page.frameLocator("section.win iframe").first();
   await vmFrame.locator("main").first().waitFor();
-  assert.equal(await vmFrame.locator("aside.tile").count(), 0, "no VM list inside the window");
+  assert.equal(
+    await vmFrame.locator("aside.tile").count(),
+    0,
+    "no VM list inside the window",
+  );
+  await ctx.close();
+}
+
+// PLAN 62-5: a console asked for in a window opens in the Terminal window.
+{
+  const { ctx, page } = await open(
+    1600,
+    1000,
+    "graphit",
+    "/docker/apps/immich",
+  );
+  const frame = page.frameLocator("section.win iframe").first();
+  await frame.getByRole("button", { name: "Konsole" }).click();
+  const term = page.locator("section.win", { hasText: "Terminal" });
+  await term.waitFor({ timeout: 10000 });
+  const termFrame = page.frameLocator("section.win iframe").last();
+  await termFrame.locator("section.panel").waitFor({ timeout: 10000 });
+  await shot(page, "14-konsole-im-terminal-fenster");
   await ctx.close();
 }
 
