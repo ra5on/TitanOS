@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"net"
 	"net/netip"
 	"os"
@@ -100,6 +101,9 @@ type Settings struct {
 	// devices); a map of its own so that older versions, which would send
 	// them to 127.0.0.1, never see them as apps.
 	Targets map[string]Route `json:"targets,omitempty"`
+	// NoAuto switches the automatic names of apps with a WebUI off (see
+	// auto.go); they are on unless switched off.
+	NoAuto bool `json:"noAuto,omitempty"`
 }
 
 // General are the settings for all names; nil leaves a field as it is.
@@ -108,6 +112,8 @@ type General struct {
 	LocalName *string `json:"localName"`
 	MDNS      *bool   `json:"mdns"`
 	Off       *bool   `json:"off"`
+	// Auto gives every app with a WebUI a name of its own.
+	Auto *bool `json:"auto"`
 	// TailscaleKey is the auth key for names in the tailnet; "" removes
 	// it. It is never sent back.
 	TailscaleKey *string `json:"tailscaleKey"`
@@ -171,6 +177,11 @@ type Manager struct {
 	Tailnet     *Tailnet
 	tailnetKey  string
 	tailnetKick chan struct{}
+
+	// autoInput are the apps with a WebUI and their ports, auto the
+	// routes made from them (RAM only, see auto.go).
+	autoInput map[string]int
+	auto      map[string]Route
 }
 
 // NewManager returns a manager with no routes; Load reads them.
@@ -188,6 +199,7 @@ func (m *Manager) Load() error {
 	m.mu.Lock()
 	m.settings = fromDisk(settings)
 	m.proxies = map[string]*appHandler{}
+	m.recomputeAuto()
 	m.mu.Unlock()
 	m.loadTailnetKey()
 	return nil
@@ -295,6 +307,9 @@ func (m *Manager) SetGeneral(g General) error {
 		}
 		if g.Off != nil {
 			s.Off = *g.Off
+		}
+		if g.Auto != nil {
+			s.NoAuto = !*g.Auto
 		}
 		// A short name must not be the head of the local suffix.
 		head := m.localLabelOf(*s)
@@ -470,6 +485,9 @@ func (m *Manager) routeByKey(key string) (Route, bool) {
 		routes = m.settings.Targets
 	}
 	route, ok := routes[name]
+	if !ok && kind == "app" && m.autoActive() {
+		route, ok = m.auto[name]
+	}
 	return route, ok && route.Enabled
 }
 
@@ -493,15 +511,9 @@ func (m *Manager) change(fn func(*Settings) error) error {
 	m.settings = next
 	// Handlers are made again for the new targets on the next request.
 	m.proxies = map[string]*appHandler{}
+	m.recomputeAuto()
 	m.mu.Unlock()
-	select {
-	case m.kick <- struct{}{}:
-	default:
-	}
-	m.kickTailnet()
-	if m.OnChange != nil {
-		m.OnChange()
-	}
+	m.changed()
 	return nil
 }
 
@@ -843,6 +855,11 @@ func (m *Manager) enabled() []entry {
 			out = append(out, entry{"target:" + id, route})
 		}
 	}
+	if m.autoActive() {
+		for app, route := range m.auto {
+			out = append(out, entry{"app:" + app, route})
+		}
+	}
 	sort.Slice(out, func(i, j int) bool { return out[i].key < out[j].key })
 	return out
 }
@@ -921,6 +938,9 @@ func (m *Manager) Route(app string) (Route, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	route, ok := m.settings.Apps[app]
+	if !ok && m.autoActive() {
+		route, ok = m.auto[app]
+	}
 	return route, ok && route.Enabled && !m.settings.Off
 }
 
@@ -977,6 +997,9 @@ type AppInfo struct {
 	Route
 	App  string   `json:"app"`
 	URLs []string `json:"urls"`
+	// Auto marks a name made automatically for an app with a WebUI; it
+	// lives in RAM only. Saving it makes it a route of its own.
+	Auto bool `json:"auto,omitempty"`
 	// Tailnet is the state of its device in the tailnet, if it has one.
 	Tailnet *TailnetNode `json:"tailnet,omitempty"`
 }
@@ -986,14 +1009,16 @@ type Status struct {
 	Domain string `json:"domain"`
 	// LocalName is the chosen local name ("" = the NAS's name, which
 	// DefaultLocalName tells).
-	LocalName        string        `json:"localName"`
-	DefaultLocalName string        `json:"defaultLocalName"`
-	MDNS             bool          `json:"mdns"`
-	Off              bool          `json:"off"`
-	Suffixes         []string      `json:"suffixes"`
-	Apps             []AppInfo     `json:"apps"`
-	Targets          []AppInfo     `json:"targets"`
-	Tailnet          TailnetStatus `json:"tailnet"`
+	LocalName        string `json:"localName"`
+	DefaultLocalName string `json:"defaultLocalName"`
+	MDNS             bool   `json:"mdns"`
+	Off              bool   `json:"off"`
+	// Auto is the switch "Automatisch für alle Apps mit WebUI".
+	Auto     bool          `json:"auto"`
+	Suffixes []string      `json:"suffixes"`
+	Apps     []AppInfo     `json:"apps"`
+	Targets  []AppInfo     `json:"targets"`
+	Tailnet  TailnetStatus `json:"tailnet"`
 }
 
 // Info lists every route with its addresses, sorted by app and target.
@@ -1001,7 +1026,7 @@ func (m *Manager) Info() Status {
 	settings := m.Settings()
 	status := Status{
 		Domain: settings.Domain, LocalName: settings.LocalName, DefaultLocalName: m.host(),
-		MDNS: !settings.NoMDNS, Off: settings.Off, Suffixes: m.Suffixes(),
+		MDNS: !settings.NoMDNS, Off: settings.Off, Auto: !settings.NoAuto, Suffixes: m.Suffixes(),
 	}
 	list := func(prefix string, routes map[string]Route) []AppInfo {
 		out := []AppInfo{}
@@ -1026,6 +1051,16 @@ func (m *Manager) Info() Status {
 		return out
 	}
 	status.Apps = list("app:", settings.Apps)
+	m.mu.RLock()
+	auto := maps.Clone(m.auto)
+	m.mu.RUnlock()
+	if !settings.NoAuto {
+		for app, route := range auto {
+			route.Scheme = "http"
+			status.Apps = append(status.Apps, AppInfo{Route: route, App: app, URLs: m.urls(route), Auto: true})
+		}
+	}
+	sort.Slice(status.Apps, func(i, j int) bool { return status.Apps[i].App < status.Apps[j].App })
 	status.Targets = list("target:", settings.Targets)
 	status.Tailnet = m.TailnetInfo()
 	if status.Suffixes == nil {

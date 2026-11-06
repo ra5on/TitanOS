@@ -4,8 +4,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"regexp"
-	"strconv"
 
 	"github.com/ra5on/TitanOS/backend/internal/appproxy"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
@@ -192,18 +190,12 @@ func (s *Server) handleAppTailnetCheck(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, check)
 }
 
-// webUIPort reads the port of a WebUI label: "8096", "8096/admin" or
-// "http://[host]:8096/…".
-var webUIPort = regexp.MustCompile(`^(?:(\d{1,5})(?:[/?#].*)?|(?i:https?)://\[host\]:(\d{1,5})(?:[/?#].*)?)$`)
-
 // webPort is the port to publish an app on, like the page suggests it:
 // the one of a WebUI label, else the first published TCP port; 0 if none.
 func webPort(containers []docker.Container, app string) int {
 	for _, c := range containers {
-		if m := webUIPort.FindStringSubmatch(c.WebUI); c.App == app && m != nil {
-			if port, err := strconv.Atoi(m[1] + m[2]); err == nil && port > 0 && port < 65536 {
-				return port
-			}
+		if port := appproxy.WebUIPort(c.WebUI); c.App == app && port > 0 {
+			return port
 		}
 	}
 	for _, c := range containers {

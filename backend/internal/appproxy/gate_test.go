@@ -258,3 +258,90 @@ func TestGateSwitchedOff(t *testing.T) {
 		t.Errorf("gate off still refuses: %d", w.Code)
 	}
 }
+
+func TestAutoRoutes(t *testing.T) {
+	m, store := newTestManager(t)
+	port := upstreamPort(t, echo)
+	if err := m.SetRoute("immich", Route{Enabled: false, Name: "photos", Port: port}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetRoute("own", Route{Enabled: true, Name: "jellyfin", Port: port}); err != nil {
+		t.Fatal(err)
+	}
+	changes := store.Changes()
+	m.SetAutoApps(map[string]int{"immich": port, "jellyfin": port, "My_App": port, "web": 443, "paperless": port})
+	if store.Changes() != changes {
+		t.Error("automatic names written to the stick")
+	}
+	if _, ok := m.Route("immich"); ok {
+		t.Error("an app's own route (switched off) must win over the automatic one")
+	}
+	r, ok := m.Route("jellyfin")
+	if !ok || r.Name != "jellyfin-2" || !r.LocalOnly {
+		t.Errorf("taken name not avoided: %+v %v", r, ok)
+	}
+	if _, ok := m.Route("My_App"); ok {
+		t.Error("an invalid app name got a route")
+	}
+	if _, ok := m.Route("web"); ok {
+		t.Error("a port of titand got a route")
+	}
+	if u := m.URL("paperless"); u != "https://paperless.nas.local" {
+		t.Errorf("url %q", u)
+	}
+	h := m.Handler(http.NotFoundHandler())
+	req := httptest.NewRequest("GET", "https://paperless.nas.local/", nil)
+	req.RemoteAddr = "192.168.1.30:5000"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("automatic name does not answer: %d", rec.Code)
+	}
+	info := m.Info()
+	auto := 0
+	for _, a := range info.Apps {
+		if a.Auto {
+			auto++
+		}
+	}
+	if auto != 2 || !info.Auto {
+		t.Errorf("info: %d automatic, switch %v", auto, info.Auto)
+	}
+	// Switched off: gone, and the switch is stored.
+	off := false
+	if err := m.SetGeneral(General{Auto: &off}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := m.Route("paperless"); ok {
+		t.Error("automatic names still answer when switched off")
+	}
+	var stored Settings
+	if err := store.ReadJSON(configFile, &stored); err != nil || !stored.NoAuto || len(stored.Apps) != 2 {
+		t.Errorf("stored: %+v %v", stored, err)
+	}
+	on := true
+	if err := m.SetGeneral(General{Auto: &on}); err != nil {
+		t.Fatal(err)
+	}
+	// A removed app loses its name.
+	m.SetAutoApps(map[string]int{"jellyfin": port})
+	if _, ok := m.Route("paperless"); ok {
+		t.Error("removed app keeps its automatic name")
+	}
+	// The whole proxy off: nothing.
+	yes := true
+	if err := m.SetGeneral(General{Off: &yes}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := m.Route("jellyfin"); ok {
+		t.Error("automatic name with the proxy off")
+	}
+}
+
+func TestWebUIPort(t *testing.T) {
+	for label, want := range map[string]int{"8096": 8096, "8096/admin": 8096, "http://[host]:2283/": 2283, "https://example.org": 0, "": 0, "99999": 0} {
+		if got := WebUIPort(label); got != want {
+			t.Errorf("%q: %d, want %d", label, got, want)
+		}
+	}
+}
