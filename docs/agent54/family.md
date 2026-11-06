@@ -107,7 +107,7 @@ Der Immich-Schlüssel ist ein Geheimnis. Er kommt nie zur Seite zurück, nur `im
 - Das Tagebuch fragt keinen Kalender ab (es gibt keinen Kalender in TitanOS). Die Fotos-Seite gibt es nicht mehr; deshalb Immich oder ein Ordner. EXIF von HEIC wird nicht gelesen, dort zählt die Änderungszeit.
 - Echte Immich-, Frigate- und Home-Assistant-Server sind nicht getestet, nur ihre API-Formen als Fakes.
 - Der Fotos-Ordner selbst (EXIF lesen, gesperrte Unterordner, schlafende Platte) hat keinen Go-Test: Der Testserver hat keine Freigabe mit Dateien. Die EXIF-Auswertung ist die vorhandene aus `thumbs`.
-- Die Quellen unter der Antwort und die Menüeinträge brauchen Änderungen an gemeinsamen Dateien (`family-shared-files.patch`). Mit dem Patch geprüft: `svelte-check` ohne Fehler und ein Bild des Chats (`phone-09-…`); danach wurde der Patch wieder entfernt.
+- Quellen unter der Antwort und Menüeinträge sind beim Zusammenführen eingebaut.
 
 ## Nötige Änderungen an gemeinsamen Dateien
 

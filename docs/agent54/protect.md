@@ -84,5 +84,5 @@ Ein Dokument über den Aufbau des NAS und „Was tun, wenn …“ (Platte fällt
 - NFS-Schreibvorgänge zählen gemeinsam als ein Gerät „nfsd“ (nfsd verteilt einen Client auf mehrere Threads); NFS kennt keine Konten, getrennt wird nur über die Sperre (Export nur lesend).
 - Gespeichert werden je offener Meldung höchstens 2000 Dateien (zurückgestellt werden nur diese), je abgeschlossener Meldung 20 als Beispiel.
 - Dateilesen über SMB/NFS durch die Person mit Notfallzugang steht nicht einzeln im Aktivitätsprotokoll (nur Antrag, Freischalten, Ende und das Lesen des Handbuchs über titand).
-- Der Tick läuft nur, solange der Agent eingeschaltet ist: ist der Agent aus, startet der Wächter nicht und Fristen laufen erst weiter, wenn er wieder an ist (siehe Bericht, Änderung an gemeinsamen Dateien).
-- Die Push-Links (`/agent?feature=guard|emergency`) öffnen die Ansicht erst, wenn die Agent-Seite den Parameter auswertet (gemeinsame Datei).
+- Der Schutz läuft seit dem Zusammenführen auch, wenn der Agent selbst aus ist (eigener Aufruf vor der Abfrage in `agentTick`).
+- Die Push-Links `/agent?feature=guard|emergency` öffnen die Ansicht direkt. Eine eingetragene Person ohne KI-Agent stellt den Antrag auf ihrer Konto-Seite.
