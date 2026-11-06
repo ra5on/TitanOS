@@ -118,6 +118,9 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 	}
 	add(b.attachmentTool())
 	add(b.imageTool())
+	if t := b.codeTool(); t != nil {
+		add(t)
+	}
 	return b
 }
 
@@ -165,6 +168,7 @@ func (b *agentToolbox) Specs(chat *agent.Chat) []agent.ToolSpec {
 		spec.Function.Name = t.name
 		spec.Function.Description = strings.TrimSpace(strings.Split(t.description, "\n")[0])
 		spec.Function.Parameters = t.params
+		spec.Area, spec.Kind = t.area, t.kind
 		specs = append(specs, spec)
 	}
 	return specs
@@ -242,10 +246,17 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 			return agent.Prepared{}, errors.New("this device is not allowed for the agent")
 		}
 	}
+	if t.name == "code_run" {
+		if _, err := parseCode(args); err != nil {
+			return agent.Prepared{}, err
+		}
+		mode = b.codeMode(mode)
+		p.Summary = codeSummary(args)
+	}
 	if p.Summary == "" && t.kind != agent.KindRead && t.kind != agent.KindAgent {
 		p.Summary = t.name + " " + compactArgs(args)
 	}
-	p.Mode = mode
+	p.Mode, p.Kind = mode, kind
 	return p, nil
 }
 

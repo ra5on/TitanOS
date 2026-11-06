@@ -285,7 +285,14 @@ func TestAgentRunsToolsAsksAndLogs(t *testing.T) {
 	if data, _ := os.ReadFile(filepath.Join(dir, "liste.md")); string(data) != "neu" {
 		t.Fatalf("not replaced after approval: %q", data)
 	}
-	if chat.State != agent.StateIdle || chat.Entries[len(chat.Entries)-1].Content != "Ersetzt." {
+	// After the change the runner asked once for a check (PLAN 55), then
+	// the model answered again.
+	answered, checked := false, false
+	for _, e := range chat.Entries {
+		answered = answered || e.Content == "Ersetzt."
+		checked = checked || e.Note == "verify"
+	}
+	if chat.State != agent.StateIdle || !answered || !checked {
 		t.Fatalf("end: %s %+v", chat.State, chat.Entries[len(chat.Entries)-1])
 	}
 	// The writes show up as "KI-Agent" in the activity log.

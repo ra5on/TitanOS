@@ -224,6 +224,8 @@ type Server struct {
 	agentMirror     agentMirror
 	agentSnaps      agentSnapState
 	agentOpen       func() (*os.Root, error)
+	// agentSandbox replaces the Docker sandbox of code_run in tests.
+	agentSandbox func(context.Context, docker.SandboxRequest) (docker.SandboxResult, error)
 	agentWebFactory func() *agent.Web
 	agentInit       agentInitState
 	agentReact      agentReactState

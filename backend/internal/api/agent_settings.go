@@ -75,6 +75,23 @@ type agentSettings struct {
 	// NoSnapshots switches off the Btrfs snapshot before changes that
 	// can lose data (PLAN 51, agent_snapshot.go); on by default.
 	NoSnapshots bool `json:"noSnapshots,omitempty"`
+	// Working like an agent (PLAN 55): MaxMinutes ends a run with a report
+	// (0: agentDefaultMinutes); AllTools offers every tool at once instead
+	// of the core and tools_load; NoDelegate switches off task_delegate.
+	MaxMinutes int  `json:"maxMinutes,omitempty"`
+	AllTools   bool `json:"allTools,omitempty"`
+	NoDelegate bool `json:"noDelegate,omitempty"`
+	// Code runs Python or sh in a sandbox container (agent_code.go), off by
+	// default (decision of the owner 5.11.2026: the middle way).
+	Code agentCode `json:"code"`
+}
+
+// agentCode are the settings of code_run.
+type agentCode struct {
+	Enabled bool `json:"enabled,omitempty"`
+	// Timeout in seconds (0: 60), Memory in MiB (0: 512).
+	Timeout int `json:"timeout,omitempty"`
+	Memory  int `json:"memory,omitempty"`
 }
 
 type agentHASettings struct {
@@ -92,8 +109,10 @@ type agentHASettings struct {
 }
 
 const (
-	agentDefaultSteps = 30
-	agentMaxSteps     = 100
+	agentDefaultSteps   = 30
+	agentMaxSteps       = 100
+	agentDefaultMinutes = 30
+	agentMaxMinutes     = 600
 )
 
 type agentSettingsState struct {
@@ -121,6 +140,15 @@ func (s *Server) agentSettings() agentSettings {
 	}
 	if out.MaxSteps <= 0 {
 		out.MaxSteps = agentDefaultSteps
+	}
+	if out.MaxMinutes <= 0 {
+		out.MaxMinutes = agentDefaultMinutes
+	}
+	if out.Code.Timeout <= 0 {
+		out.Code.Timeout = 60
+	}
+	if out.Code.Memory <= 0 {
+		out.Code.Memory = 512
 	}
 	return out
 }
@@ -202,6 +230,12 @@ func (s *Server) checkAgentSettings(req *agentSettings) error {
 	}
 	if req.MaxSteps < 0 || req.MaxSteps > agentMaxSteps {
 		return errors.New("steps per task: 1 to 100")
+	}
+	if req.MaxMinutes < 0 || req.MaxMinutes > agentMaxMinutes {
+		return errors.New("minutes per task: 1 to 600")
+	}
+	if req.Code.Timeout < 0 || req.Code.Timeout > 600 || req.Code.Memory < 0 || (req.Code.Memory != 0 && (req.Code.Memory < 64 || req.Code.Memory > 8192)) {
+		return errors.New("code: 1 to 600 seconds, 64 to 8192 MiB")
 	}
 	if err := checkAgentMedia(req); err != nil {
 		return err

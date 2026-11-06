@@ -483,6 +483,8 @@ func (s *Server) agentRunner(ctx context.Context, user auth.User, settings agent
 	}
 	return &agent.Runner{
 		Ollama: client, Model: model, Think: thinkValue, Context: settings.Context, KeepAlive: settings.KeepAlive, MaxSteps: settings.MaxSteps,
+		MaxTime: time.Duration(settings.MaxMinutes) * time.Minute, Window: settings.Context, Probe: agentProbe(client, model),
+		LazyTools: !settings.AllTools, Delegate: !settings.NoDelegate,
 		System: s.agentPrompt(ctx, user, settings, chat, box),
 		Tools:  box,
 		Save:   func(c *agent.Chat) error { return store.SaveChat(user.Name, c) },
@@ -725,3 +727,22 @@ func (s *Server) AgentRunning() bool {
 type flushFunc func()
 
 func (f flushFunc) Flush() { f() }
+
+// agentProbe finds the context the model runs with right now (/api/ps),
+// for when "as set in Ollama" is chosen (PLAN 55: summarise in time).
+func agentProbe(client *agent.Ollama, model string) func(context.Context) int {
+	return func(ctx context.Context) int {
+		pctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		list, err := client.Running(pctx)
+		if err != nil {
+			return 0
+		}
+		for _, m := range list {
+			if m.Name == model || strings.TrimSuffix(m.Name, ":latest") == strings.TrimSuffix(model, ":latest") {
+				return m.ContextLength
+			}
+		}
+		return 0
+	}
+}
