@@ -355,8 +355,8 @@ func TestRealRestic(t *testing.T) {
 		return nil
 	})
 	// A young snapshot cannot be forgotten; restic reports the refusal.
-	if out, err := run("forget", "latest"); err == nil {
-		t.Fatalf("forget of a young snapshot went through: %s", out)
+	if out, _ := run("forget", "latest"); !strings.Contains(out, "403") {
+		t.Fatalf("forget of a young snapshot was not refused: %s", out)
 	}
 	if out := must("snapshots", "--json"); !strings.Contains(out, "doc.txt") && !strings.Contains(out, "source") {
 		t.Fatalf("snapshot gone: %s", out)
