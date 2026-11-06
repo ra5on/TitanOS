@@ -3,7 +3,7 @@ import type { IconName } from '#lib/components/Icon.svelte';
 
 const keywords: Record<string, string> = {
 	appearance:
-		'navigation reiter tabs leiste kopfzeile header reihenfolge order theme design farbe color font schrift hintergrund background app symbol icon home bildschirm screen menü menu fenster window dialog transparenz transparency glas glass',
+		'navigation reiter tabs leiste kopfzeile header reihenfolge order theme design farbe color font schrift hintergrund background app symbol icon home bildschirm screen menü menu fenster window dialog transparenz transparency glas glass glaseffekt ecken corners farbstärke saturation dock anmeldeseite login',
 	network:
 		'ip dns gateway bridge vlan bonding netzwerk network hostname name nas-name rechnername umbenennen rename',
 	firewall:

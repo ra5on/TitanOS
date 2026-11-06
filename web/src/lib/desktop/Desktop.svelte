@@ -32,6 +32,7 @@
 		defaultWidgets,
 		dockPinned,
 		placeIcons,
+		sanitizeDock,
 		placeWidget,
 		WIDGET_KINDS,
 		type Widget,
@@ -39,6 +40,7 @@
 	} from './prefs.ts';
 	import { findProgram, openProgram, openTab, programs, type Program } from './programs.svelte.ts';
 	import { sources, watchSources } from './sources.svelte.ts';
+	import { frameMessage } from './frame.ts';
 	import { dayTint, wallpaperCss } from './wallpapers.ts';
 	import {
 		byRecency,
@@ -170,10 +172,42 @@
 		measure();
 		const observer = new ResizeObserver(measure);
 		if (area) observer.observe(area);
+		window.addEventListener('message', fromWindow);
 		return () => {
 			stop();
 			observer.disconnect();
+			window.removeEventListener('message', fromWindow);
 		};
+	});
+
+	// PLAN 64: Settings › Appearance › Dock runs in a window. The desktop stays
+	// the only writer of its settings: a window asks for the dock and sends
+	// changes; only frames of our own windows count, and what they send is
+	// checked like stored settings.
+	function windowFrames(): HTMLIFrameElement[] {
+		return [...document.querySelectorAll<HTMLIFrameElement>('iframe[data-window]')];
+	}
+	function sendDock(target: WindowProxy) {
+		target.postMessage(
+			{ type: 'titanos-dock', dock: $state.snapshot(desktop.prefs.dock) },
+			location.origin,
+		);
+	}
+	function fromWindow(event: MessageEvent) {
+		const msg = frameMessage(event);
+		if (!msg) return;
+		const source = windowFrames().find((f) => f.contentWindow === event.source)?.contentWindow;
+		if (!source) return;
+		if (msg.type === 'titanos-dock-get') sendDock(source);
+		else if (msg.type === 'titanos-prefs') savePrefs((p) => (p.dock = sanitizeDock(msg.dock)));
+		else if (msg.type === 'titanos-desk-dialog' && msg.dialog === 'wallpaper') dialog = 'wallpaper';
+	}
+	// Open settings windows follow changes made on the dock itself (right click).
+	$effect(() => {
+		JSON.stringify(desktop.prefs.dock);
+		untrack(() => {
+			for (const f of windowFrames()) if (f.contentWindow) sendDock(f.contentWindow);
+		});
 	});
 
 	// The address of the browser follows the window in front.
@@ -596,31 +630,35 @@
 				aria-label={t('desktop.menu.title')}
 				aria-expanded={launcher}><Icon name="grid" size={barIcon} /></button
 			>
+			<!-- PLAN 64: the node switcher right after the menu, with the node's name;
+			     its menu leaves the bar, so only the open windows are clipped. -->
+			{#if clusterNodes.nodes.length > 1}<span class="sep" aria-hidden="true"></span><NodeMenu
+					variant="desk"
+				/>{/if}
 			{#if wm.windows.length}<span class="sep" aria-hidden="true"></span>{/if}
-			{#each wm.windows as w (w.id)}
-				{@const p = programOf(w.app)}
-				<button
-					type="button"
-					class="pb task"
-					class:on={wm.focused === w.id && !w.minimized}
-					class:min={w.minimized}
-					onclick={() => taskClick(w.id)}
-					title={w.title}
-					aria-label={w.title}
-				>
-					<DesktopIcon
-						glyph={p?.glyph ?? ''}
-						gradient={p?.gradient ?? 'grey'}
-						image={p?.image ?? ''}
-						name={w.title}
-						size={barIcon + 6}
-					/>
-				</button>
-			{/each}
+			<div class="tasks">
+				{#each wm.windows as w (w.id)}
+					{@const p = programOf(w.app)}
+					<button
+						type="button"
+						class="pb task"
+						class:on={wm.focused === w.id && !w.minimized}
+						class:min={w.minimized}
+						onclick={() => taskClick(w.id)}
+						title={w.title}
+						aria-label={w.title}
+					>
+						<DesktopIcon
+							glyph={p?.glyph ?? ''}
+							gradient={p?.gradient ?? 'grey'}
+							image={p?.image ?? ''}
+							name={w.title}
+							size={barIcon + 6}
+						/>
+					</button>
+				{/each}
+			</div>
 		</div>
-		{#if clusterNodes.nodes.length > 1}
-			<div class="pill glass-panel right"><NodeMenu variant="desk" /></div>
-		{/if}
 		<span class="space"></span>
 		<div class="pill glass-panel right">
 			{#if info}
@@ -1430,7 +1468,8 @@
 		inset: -4%;
 		z-index: -1;
 		background: var(--wallpaper);
-		filter: hue-rotate(var(--tint));
+		/* "Farbstärke" (Settings › Appearance, PLAN 64) reaches the wallpaper too. */
+		filter: hue-rotate(var(--tint)) var(--wallpaper-filter, saturate(1));
 	}
 	.live .paper {
 		animation: drift 90s ease-in-out infinite alternate;
@@ -1444,10 +1483,11 @@
 			transform: translate(-2%, 1.5%) scale(1.04);
 		}
 	}
+	/* Follows "Transparenz" and "Glaseffekt" (Settings › Appearance, PLAN 64). */
 	:global(.glass-panel) {
-		background: color-mix(in srgb, var(--surface) 70%, transparent);
-		backdrop-filter: blur(22px) saturate(1.4);
-		-webkit-backdrop-filter: blur(22px) saturate(1.4);
+		background: var(--desk-surface, color-mix(in srgb, var(--surface) 70%, transparent));
+		backdrop-filter: blur(var(--desk-blur, 22px)) saturate(1.4);
+		-webkit-backdrop-filter: blur(var(--desk-blur, 22px)) saturate(1.4);
 		border: 1px solid color-mix(in srgb, #fff 12%, transparent);
 		box-shadow: 0 10px 30px rgb(0 0 0 / 0.3);
 	}
@@ -1473,6 +1513,18 @@
 	.pill.right {
 		overflow: visible;
 		flex: none;
+	}
+	/* The first pill lets the node switcher's menu out; only the open
+	   windows are cut off when there are too many. */
+	.pill:not(.right) {
+		overflow: visible;
+	}
+	.tasks {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		min-width: 0;
+		overflow: hidden;
 	}
 	.pb {
 		width: var(--pb);

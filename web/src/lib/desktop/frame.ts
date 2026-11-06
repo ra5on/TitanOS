@@ -2,6 +2,7 @@
 // frame of its own origin. It then shows no head line, side bar or status
 // bar of its own and tells the window which page it shows.
 import { embedded } from '../embedded.ts';
+import type { Dock } from './prefs.ts';
 
 /** True inside a window of the desktop (a frame of the same origin, lib/embedded.ts). */
 export const inWindow: boolean = embedded;
@@ -11,6 +12,14 @@ export type FrameMessage =
 	| { type: 'titanos-goto'; href: string }
 	| { type: 'titanos-open'; href: string }
 	| { type: 'titanos-upload'; files: File[] }
+	/** PLAN 64, Settings › Appearance › Dock: a window asks for the dock (answer: titanos-dock). */
+	| { type: 'titanos-dock-get' }
+	/** The desktop's dock, sent to the windows (answer, and after every change). */
+	| { type: 'titanos-dock'; dock: Dock }
+	/** A window changes the dock; the desktop checks it and saves it (one writer). */
+	| { type: 'titanos-prefs'; dock: Dock }
+	/** A window asks the desktop to open one of its dialogs (the wallpaper). */
+	| { type: 'titanos-desk-dialog'; dialog: 'wallpaper' }
 	| {
 			type: 'titanos-key';
 			key: string;

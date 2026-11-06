@@ -24,6 +24,8 @@ import settingshomeEn from './features/settingshome.en.json';
 // PLAN 63: the remote view of Docker apps.
 import viewerDe from './features/viewer.de.json';
 import viewerEn from './features/viewer.en.json';
+import lookDe from './features/look.de.json';
+import lookEn from './features/look.en.json';
 
 const de = {
 	...deBase,
@@ -37,6 +39,7 @@ const de = {
 	...lockDe,
 	...settingshomeDe,
 	...viewerDe,
+	...lookDe,
 };
 const en = {
 	...enBase,
@@ -50,6 +53,7 @@ const en = {
 	...lockEn,
 	...settingshomeEn,
 	...viewerEn,
+	...lookEn,
 };
 
 export const LOCALES = ['de', 'en'] as const;

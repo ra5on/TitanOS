@@ -116,15 +116,16 @@ try {
   // 1. Without settings: the login page as it always was.
   {
     const { ctx, page } = await loggedOut(defaults());
-    const main = page.locator("main.auth");
+    const main = page.locator("main.login");
     assert.equal(await main.getAttribute("style"), null);
     assert.equal(await main.getAttribute("data-theme"), null);
-    assert.equal(await page.locator(".login-background").count(), 0);
+    // PLAN 64: the desktop's wallpaper behind the card.
+    assert.equal(await page.locator(".paper .picture.wallpaper").count(), 1);
     assert.equal(await page.locator("h1").textContent(), "Anmelden");
     await page.getByText("titan-test").waitFor();
-    assert.equal(await page.locator(".auth .logo").count(), 1);
+    assert.equal(await page.locator("main.login .logo").count(), 1);
     const card = await page.locator("section.card").boundingBox();
-    assert.equal(Math.round(card.width), 440);
+    assert.equal(Math.round(card.width), 380);
     assert.ok(Math.abs(card.x + card.width / 2 - 720) <= 1, "card centered");
     await page.screenshot({ path: `${out}/login-default.png` });
     await ctx.close();
@@ -135,7 +136,7 @@ try {
     const { ctx, page } = await create("user");
     await loginRoutes(ctx, { value: defaults(), saves: [], uploads: 0, imageRequests: 0 });
     await page.goto(base + "/settings/appearance");
-    await page.getByRole("heading", { name: "Theme", exact: true }).first().waitFor();
+    await page.getByRole("heading", { name: "Farben", exact: true }).first().waitFor();
     assert.equal(await page.getByRole("heading", { name: "Anmeldeseite" }).count(), 0);
     await ctx.close();
   }
@@ -156,27 +157,25 @@ try {
     await section.getByRole("radio", { name: "Hintergrund Wüste" }).click();
     await section.getByRole("radio", { name: "Hintergrund Nordlicht" }).click();
     await section.getByLabel(/^Theme/).selectOption("mitternacht");
-    await section.getByLabel("Stil der Flächen").selectOption("glass");
     await section.getByRole("radio", { name: "Türkis" }).click();
     const de = section.locator(".language").first();
     await de.getByLabel("Überschrift").fill("Willkommen zu Hause");
     await de.getByLabel("Begrüßung oder Hinweis").fill("Nur für die Familie. <b>Kein HTML</b>");
-    await section.getByLabel("Uhrzeit und Datum zeigen").check();
-    await section.locator(".frame .welcome", { hasText: "<b>Kein HTML</b>" }).waitFor();
-    assert.equal(await section.locator(".frame .welcome b").count(), 0);
+    // PLAN 64: clock and date are always on the page; no switch any more.
+    await section.locator(".frame .card .notice", { hasText: "<b>Kein HTML</b>" }).waitFor();
+    assert.equal(await section.locator(".frame .card .notice b").count(), 0);
     await section.locator(".frame .clock").waitFor();
 
     // Contrast warning: dark text on a see-through card over a dark motif.
     const warning = section.getByText(/nur etwa .* Kontrast/);
     assert.equal(await warning.count(), 0);
     await section.getByLabel(/^Theme/).selectOption("hell");
-    await section.getByLabel("Stil der Flächen").selectOption("outline");
+    await section.locator("#login-glass").fill("90");
     await section.getByRole("radio", { name: "Hintergrund Weltraum" }).click();
     await warning.waitFor();
-    await section.getByLabel("Stil der Flächen").selectOption("flat");
+    await section.locator("#login-glass").fill("0");
     await warning.waitFor({ state: "detached" });
     await section.getByLabel(/^Theme/).selectOption("mitternacht");
-    await section.getByLabel("Stil der Flächen").selectOption("glass");
     await section.getByRole("radio", { name: "Hintergrund Nordlicht" }).click();
 
     // Preview in a new tab without logging out.
@@ -187,7 +186,7 @@ try {
     await popup.getByText("Vorschau – Anmelden ist hier ohne Wirkung").waitFor();
     await popup.locator("h1", { hasText: "Willkommen zu Hause" }).waitFor();
     assert.match(
-      await popup.locator(".login-background .picture").getAttribute("style"),
+      await popup.locator(".paper .picture").getAttribute("style"),
       /nordlicht\.webp/,
     );
     await popup.close();
@@ -199,7 +198,8 @@ try {
     assert.equal(saved.accent, "tuerkis");
     assert.deepEqual(saved.background, { source: "builtin", id: "nordlicht", fit: "cover", x: 50, y: 50, zoom: 100, dim: 30 });
     assert.equal(saved.texts.de.title, "Willkommen zu Hause");
-    assert.equal(saved.clock, true);
+    // PLAN 64: the clock is always shown; the stored switch keeps its value.
+    assert.equal(saved.clock, false);
     assert.equal("configured" in saved, false);
     await section.screenshot({
       path: `${out}/settings-section.png`,
@@ -217,13 +217,13 @@ try {
   // 3. Logged out: the saved look (glass on a gallery motif, welcome text, 2FA step).
   {
     const { ctx, page } = await loggedOut({ ...saved, configured: true });
-    const main = page.locator("main.auth");
+    const main = page.locator("main.login");
     assert.equal(await main.getAttribute("data-theme"), "mitternacht");
     assert.equal(await main.getAttribute("data-surface"), "glass");
     await page.locator("h1", { hasText: "Willkommen zu Hause" }).waitFor();
-    await page.locator(".welcome", { hasText: "<b>Kein HTML</b>" }).waitFor();
-    await page.locator(".clock time").waitFor();
-    assert.match(await page.locator(".login-background .picture").getAttribute("style"), /nordlicht\.webp/);
+    await page.locator(".card .notice", { hasText: "<b>Kein HTML</b>" }).waitFor();
+    await page.locator(".clock").waitFor();
+    assert.match(await page.locator(".paper .picture").getAttribute("style"), /nordlicht\.webp/);
     await page.screenshot({ path: `${out}/login-glass-motif.png` });
     // The two-factor step keeps the look.
     await page.getByLabel("Name").fill("alex");
@@ -251,20 +251,20 @@ try {
       texts: { de: { title: "Familien-NAS", notice: "Bei Problemen: Alex fragen." } },
     };
     const { ctx, page } = await loggedOut(look, { theme: "graphit" });
-    const main = page.locator("main.auth");
+    const main = page.locator("main.login");
     assert.equal(await main.getAttribute("data-theme"), "hell");
     assert.equal(await main.getAttribute("data-mode"), "light");
-    assert.equal(await page.locator(".auth .logo").count(), 0);
+    assert.equal(await page.locator("main.login .logo").count(), 0);
     const card = await page.locator("section.card").boundingBox();
     assert.ok(card.x < 200, `card left: ${card.x}`);
-    assert.equal(Math.round(card.width), 560);
+    assert.equal(Math.round(card.width), 480);
     // Text on the light card is dark enough.
     const colors = await page.evaluate(() => {
       const card = getComputedStyle(document.querySelector("section.card"));
       return { text: card.color, bg: card.backgroundColor };
     });
     assert.equal(colors.text, "rgb(20, 24, 29)");
-    assert.equal(colors.bg, "rgb(255, 255, 255)");
+    // PLAN 64: the card is glass on the picture (an older "flat" look included).
     await page.screenshot({ path: `${out}/login-hell-left.png` });
     await page.setViewportSize({ width: 375, height: 812 });
     const mobile = await page.locator("section.card").boundingBox();
@@ -293,11 +293,11 @@ try {
     await page.locator("h1", { hasText: "Welcome back" }).waitFor();
     assert.equal(await page.getByText("titan-test").count(), 0);
     assert.match(
-      await page.locator(".login-background .picture").getAttribute("style"),
+      await page.locator(".paper .picture").getAttribute("style"),
       new RegExp(`/api/v1/login-appearance/background/${imageID}`),
     );
-    assert.equal(await page.locator(".login-background .dim").evaluate((e) => e.style.opacity), "0.55");
-    await page.waitForFunction(() => document.querySelector(".clock time"));
+    assert.equal(await page.locator(".paper .dim").evaluate((e) => e.style.opacity), "0.55");
+    await page.waitForFunction(() => document.querySelector("main.login .clock"));
     await page.waitForTimeout(300);
     assert.ok(state.imageRequests >= 1);
     await page.screenshot({ path: `${out}/login-own-image-dark.png` });
@@ -333,7 +333,7 @@ try {
   // 7. The light theme as the browser's own look, without login settings, is unchanged too.
   {
     const { ctx, page } = await loggedOut(defaults(), { theme: "hell", width: 375, height: 812 });
-    assert.equal(await page.locator("main.auth").getAttribute("style"), null);
+    assert.equal(await page.locator("main.login").getAttribute("style"), null);
     assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), "hell");
     await noHorizontalScroll(page);
     await page.screenshot({ path: `${out}/login-default-hell-mobile.png` });

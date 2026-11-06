@@ -5,6 +5,7 @@
 	import { api, ApiError } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import { windowView } from '#lib/desktop/mode.svelte.ts';
 	import ClusterUpdates from '#lib/components/cluster/ClusterUpdates.svelte';
 	import { activeNode } from '#lib/cluster-node.ts';
 	import PowerDialog from '#lib/components/PowerDialog.svelte';
@@ -364,9 +365,37 @@
 		if (slot.triesLeft === 0) return t('update.slot.bad');
 		return t(slot.next ? 'update.slot.next' : 'update.slot.fallback');
 	}
+	// PLAN 64: a window of the desktop or the phone's full-screen view.
+	const windowed = $derived(windowView());
 </script>
 
-<PageHead title={t('update.title')} parent={{ href: '/settings', label: t('nav.settings') }} />
+{#snippet checkState()}
+	{#if status?.checkError}{t('update.checkFailed')}
+	{:else if checked}{t('update.upToDate')}
+	{:else if status?.lastCheck}{t('update.lastCheck', {
+			time: formatDateTime(new Date(status.lastCheck)),
+		})}{/if}
+{/snippet}
+{#snippet checkButton(primary: boolean)}
+	<button
+		type="button"
+		class="btn"
+		class:btn-primary={primary}
+		disabled={busy !== ''}
+		onclick={() => act('check')}>{t(busy === 'check' ? 'update.checking' : 'update.check')}</button
+	>
+{/snippet}
+{#if windowed && status?.canVerify && !status.pending && !working}
+	<!-- PLAN 64: in a window the search for updates is the tool bar's action. -->
+	<PageHead title={t('update.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
+		{#snippet actions()}
+			<span class="muted toolbar-state" role="status">{@render checkState()}</span>
+			{@render checkButton(true)}
+		{/snippet}
+	</PageHead>
+{:else}
+	<PageHead title={t('update.title')} parent={{ href: '/settings', label: t('nav.settings') }} />
+{/if}
 
 {#if error}<div class="notice-error" role="alert">
 		{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
@@ -496,18 +525,10 @@
 			{#if status.kernelMissing}<p class="notice-warn" role="status">
 					{t('update.kernel.missing', { version: status.kernelMissing })}
 				</p>{/if}
-			<div class="row">
-				<button type="button" class="btn" disabled={busy !== ''} onclick={() => act('check')}
-					>{t(busy === 'check' ? 'update.checking' : 'update.check')}</button
-				>
-				<span class="muted" role="status">
-					{#if status.checkError}{t('update.checkFailed')}
-					{:else if checked}{t('update.upToDate')}
-					{:else if status.lastCheck}{t('update.lastCheck', {
-							time: formatDateTime(new Date(status.lastCheck)),
-						})}{/if}
-				</span>
-			</div>
+			{#if !windowed}<div class="row">
+					{@render checkButton(false)}
+					<span class="muted" role="status">{@render checkState()}</span>
+				</div>{/if}
 			{#if status.checkError}<pre class="muted">{status.checkError}</pre>{/if}
 		{/if}
 	</section>
@@ -971,5 +992,13 @@
 	}
 	.slots .kernel {
 		font-size: var(--text-sm);
+	}
+	:global(.win-actions) > .toolbar-state {
+		flex-shrink: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: var(--text-base);
 	}
 </style>

@@ -108,6 +108,6 @@ Suche behält Abschnittsziele, Rollen und bestehende Weiterleitungen.
 
 ## Prüfungen
 
-`scripts/test-ui-dashboard-visual.mjs`, `scripts/test-ui-dashboard-grid.mjs`, `scripts/test-ui-dashboard-flow.mjs` und `scripts/test-ui-personal-dashboard.mjs` prüfen echte Browserbedienung gegen
+`scripts/test-ui-dashboard-grid.mjs`, `scripts/test-ui-dashboard-flow.mjs` und `scripts/test-ui-personal-dashboard.mjs` prüfen echte Browserbedienung gegen
 isolierte API-Daten; Ergebnisse und Hardwaregrenzen stehen in den Release-Notizen.
 Beispieldaten der Entwürfe und Tests gehören niemals ins Produkt.

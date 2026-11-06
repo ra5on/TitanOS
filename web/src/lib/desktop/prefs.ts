@@ -289,7 +289,7 @@ function positions(value: unknown): Record<string, { c: number; r: number }> {
 	return out;
 }
 
-function sanitizeDock(value: unknown): Dock {
+export function sanitizeDock(value: unknown): Dock {
 	const base = defaultDock();
 	if (typeof value !== 'object' || value === null) return base;
 	const d = value as Record<string, unknown>;
@@ -398,4 +398,13 @@ export function placeWidget(
 		for (let x = Math.min(minX, Math.max(0, columns - w)); x + w <= columns; x++)
 			if (!overlaps(x, y)) return { x, y };
 	return { x: Math.min(minX, Math.max(0, columns - w)), y: 0 };
+}
+
+/** Moves the entry at `from` to the place `to` (the dock's list in the settings). */
+export function moveItem<T>(list: T[], from: number, to: number): T[] {
+	if (from < 0 || from >= list.length) return list;
+	const out = [...list];
+	const [item] = out.splice(from, 1);
+	out.splice(Math.max(0, Math.min(out.length, to)), 0, item);
+	return out;
 }

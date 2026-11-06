@@ -162,10 +162,13 @@ export function fixtureFactory(browser, errors) {
     theme = "graphit",
     width = 1440,
     locale = "de",
+    // Extra context options, e.g. phone emulation (isMobile, hasTouch, deviceScaleFactor).
+    options = {},
   ) {
     const ctx = await browser.newContext({
       locale: "de-DE",
       viewport: { width, height: 1000 },
+      ...options,
     });
     await ctx.addInitScript(
       ({ theme, locale }) => {

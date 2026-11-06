@@ -522,7 +522,9 @@
 		gap: var(--space-2);
 	}
 	.search {
+		flex: 0 1 16rem;
 		width: 16rem;
+		min-width: min(10rem, 100%);
 		max-width: 100%;
 	}
 	.density {

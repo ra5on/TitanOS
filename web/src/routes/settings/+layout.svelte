@@ -10,6 +10,8 @@
 	import SettingsSidebar from '#lib/components/SettingsSidebar.svelte';
 	import { terminal } from '#lib/terminal.svelte.ts';
 	import { embedded } from '#lib/embedded.ts';
+	// PLAN 64: on the phone the bar above the program leads back.
+	import { phoneView } from '#lib/desktop/mode.svelte.ts';
 	let { children }: { children: Snippet } = $props();
 	// The sidebar starts below banners and the tasks row, not right under the
 	// header, and an open terminal covers the bottom: its height follows the
@@ -68,7 +70,8 @@
 			<SettingsSidebar />
 		</div>{/if}
 	<div class="settings-main">
-		{#if !overview && !embedded}<a class="settings-back" href="/settings">‹ {t('nav.settings')}</a
+		{#if !overview && !embedded && !phoneView()}<a class="settings-back" href="/settings"
+				>‹ {t('nav.settings')}</a
 			>{/if}
 		{#if allowed}<div class="settings-page column">{@render children()}</div>{:else}<p
 				class="notice-error"

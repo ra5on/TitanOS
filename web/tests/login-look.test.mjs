@@ -34,7 +34,8 @@ test('a fixed theme starts from the defaults, inherit keeps the browser look', (
 	assert.equal(fixed.scoped, true);
 	assert.equal(fixed.appearance.theme, 'hell');
 	assert.equal(fixed.appearance.accent, 'rose');
-	assert.equal(fixed.appearance.style, 'flat');
+	// PLAN 64: the card is glass like the lock screen, whatever an older look stored.
+	assert.equal(fixed.appearance.style, 'glass');
 	assert.equal(fixed.appearance.font, 100);
 	const motif = loginAppearance(
 		{

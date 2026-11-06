@@ -72,11 +72,40 @@
 	const focused = $derived(wm.focused === win.id);
 	const path = $derived(win.href.split('?')[0]);
 
+	// PLAN 64: the title bar names the program and the page ("Docker › Container"):
+	// the page's own title, or the entry of the side bar when the page is
+	// called like its program.
+	let pageName = $state('');
+	const crumb = $derived.by(() => {
+		if (external) return '';
+		const vm = new URLSearchParams(win.href.split('?')[1] ?? '').get('vm');
+		const thing = side.find(
+			(item) =>
+				'text' in item && !!vm && new URLSearchParams(item.href.split('?')[1]).get('vm') === vm,
+		);
+		if (thing && 'text' in thing) return thing.text;
+		const label = (exact: boolean) => {
+			const item = side.find(
+				(i) =>
+					'label' in i &&
+					!('text' in i) &&
+					(exact ? (i.match ?? [i.href.split('?')[0]]).includes(path) : sideActive(i, path, side)),
+			);
+			const text = item && 'label' in item ? t(item.label) : '';
+			return text === win.title ? '' : text;
+		};
+		// The entry of the side bar for exactly this page, else the page's own
+		// title (a page below an entry, e.g. one app), else the entry above it.
+		const own = pageName.trim();
+		return label(true) || (own && own !== win.title ? own : '') || label(false);
+	});
+
 	// The frame says which page it shows; the address of the browser follows the window in front.
 	function message(event: MessageEvent) {
 		if (!frame || event.source !== frame.contentWindow) return;
 		const msg = frameMessage(event);
 		if (msg?.type === 'titanos-page') {
+			pageName = msg.title;
 			win.href = msg.path;
 			if (focused) onaddress?.(msg.path);
 			saveWindows();
@@ -310,7 +339,8 @@
 					size={22}
 					name={win.title}
 				/>{/if}
-			<b class="title">{win.title}</b>
+			<b class="title">{win.title}</b>{#if crumb}<span class="crumb" aria-hidden="true">›</span
+				><span class="title page">{crumb}</span>{/if}
 			{#if external}<span class="addr"
 					>{win.href.replace(/^https?:\/\//, '').replace(/\/$/, '')}</span
 				>{/if}
@@ -372,12 +402,16 @@
 </section>
 
 <style>
+	/* PLAN 64: corners, transparency and glass follow Settings › Appearance
+	   (--radius-scale, --desk-surface, --desk-blur); the page itself stays opaque. */
 	.win {
 		position: absolute;
 		display: flex;
-		border-radius: 14px;
+		border-radius: calc(14px * var(--radius-scale, 1));
 		overflow: hidden;
-		background: var(--bg);
+		background: var(--desk-surface, var(--bg));
+		backdrop-filter: blur(var(--desk-blur, 0px)) saturate(1.3);
+		-webkit-backdrop-filter: blur(var(--desk-blur, 0px)) saturate(1.3);
 		border: 1px solid var(--border);
 		box-shadow: 0 10px 28px rgb(0 0 0 / 0.35);
 	}
@@ -387,6 +421,8 @@
 	/* While moving: one layer for the GPU and a lighter shadow (smooth in every browser). */
 	.win.dragging {
 		will-change: transform;
+		backdrop-filter: none;
+		-webkit-backdrop-filter: none;
 		box-shadow: 0 14px 34px rgb(0 0 0 / 0.4);
 	}
 	.win.snapped {
@@ -410,7 +446,7 @@
 		display: flex;
 		flex-direction: column;
 		padding: 12px 10px;
-		background: color-mix(in srgb, var(--surface) 88%, transparent);
+		background: color-mix(in srgb, var(--surface) 40%, transparent);
 		border-right: 1px solid var(--border);
 		overflow: hidden;
 	}
@@ -474,7 +510,7 @@
 		min-height: 36px;
 		padding: 6px 10px;
 		border: 0;
-		border-radius: 9px;
+		border-radius: calc(9px * var(--radius-scale, 1));
 		background: none;
 		color: var(--text);
 		font: inherit;
@@ -524,7 +560,7 @@
 		align-items: center;
 		gap: 9px;
 		padding: 0 6px 0 14px;
-		background: var(--header);
+		background: color-mix(in srgb, var(--header) 55%, transparent);
 		border-bottom: 1px solid var(--border);
 		user-select: none;
 		touch-action: none;
@@ -534,6 +570,21 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+	.title {
+		flex: none;
+		max-width: 45%;
+	}
+	.title.page {
+		flex: 0 1 auto;
+		max-width: none;
+		min-width: 0;
+		font-weight: 400;
+		color: var(--muted);
+	}
+	.crumb {
+		margin: 0 -4px;
+		color: var(--muted);
 	}
 	.addr {
 		color: var(--muted);
@@ -552,7 +603,7 @@
 		display: grid;
 		place-items: center;
 		border: 0;
-		border-radius: 7px;
+		border-radius: calc(7px * var(--radius-scale, 1));
 		background: none;
 		color: var(--muted);
 		cursor: pointer;

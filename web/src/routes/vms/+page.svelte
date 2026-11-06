@@ -9,6 +9,7 @@
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import { phoneView, windowView } from '#lib/desktop/mode.svelte.ts';
 	import TasksPanel from '#lib/components/TasksPanel.svelte';
 	import { api, type VM, type VMStatus } from '#lib/api.ts';
 	import { poll, type Poller } from '#lib/poll.ts';
@@ -292,6 +293,9 @@
 		const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
 		rowMenu = { vm, x: rect.left, y: rect.bottom + 4 };
 	}
+	// PLAN 64: a window of the desktop or the phone's full-screen view.
+	const windowed = $derived(windowView());
+	const phone = $derived(phoneView());
 </script>
 
 <svelte:document
@@ -332,6 +336,88 @@
 	</div>
 {/if}
 
+{#snippet vmState(current: VM)}
+	<span class="chip" class:ok={current.state === 'running'}>{t(`vms.state.${current.state}`)}</span>
+	{#if current.autostart}<span class="chip">{t('vms.autostart')}</span>{/if}
+{/snippet}
+
+{#snippet vmButtons(current: VM, tasks = true)}
+	{#if tasks}<TasksPanel compact />{/if}
+	{#if current.state === 'running'}
+		<button
+			type="button"
+			class="btn btn-primary"
+			onclick={() => act(current, 'shutdown')}
+			disabled={isBusy(current)}>{t('vms.shutdown')}</button
+		>
+	{:else}
+		<button
+			type="button"
+			class="btn btn-primary"
+			onclick={() => act(current, 'start')}
+			disabled={isBusy(current) || !canStart(current)}>{t('vms.start')}</button
+		>
+	{/if}
+	<a
+		class="btn icon-btn"
+		href="/vms/edit?vm={encodeURIComponent(current.name)}"
+		aria-label={t('vms.edit')}
+		title={t('vms.edit')}><Icon name="edit" size={16} /></a
+	>
+	<Dropdown label={t('ui.more')} icon="more" align="right">
+		{#snippet children(close)}
+			{#if current.state === 'running'}
+				<button
+					type="button"
+					role="menuitem"
+					disabled={isBusy(current)}
+					onclick={() => {
+						close();
+						act(current, 'reboot');
+					}}><Icon name="restart" size={16} /><span>{t('vms.reboot')}</span></button
+				>
+				<button
+					type="button"
+					role="menuitem"
+					disabled={isBusy(current)}
+					onclick={() => {
+						close();
+						open('poweroff');
+					}}><Icon name="power" size={16} /><span>{t('vms.poweroff')}</span></button
+				>
+				<button
+					type="button"
+					role="menuitem"
+					onclick={() => {
+						close();
+						addVmConsole(current.name, vmLabel(current));
+					}}><Icon name="terminal" size={16} /><span>{t('vms.serial')}</span></button
+				>
+				<hr />
+			{/if}
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => {
+					close();
+					showXML();
+				}}><Icon name="fileText" size={16} /><span>{t('vms.showXml')}</span></button
+			>
+			{#if current.state !== 'running'}
+				<button
+					type="button"
+					role="menuitem"
+					disabled={isBusy(current) || !!current.job}
+					onclick={() => {
+						close();
+						cloning = current;
+					}}><Icon name="copy" size={16} /><span>{t('ops.clone')}</span></button
+				>
+			{/if}
+		{/snippet}
+	</Dropdown>
+{/snippet}
+
 {#if status && vms.length === 0}
 	{#if !status.kvm}<p class="notice-warn" role="status">{t('vms.noKvm')}</p>{/if}
 	<PageHead title={t('vms.title')}>
@@ -347,100 +433,48 @@
 	<EmptyState title={t('vms.empty')} />
 {:else if status && current}
 	<div class="vm-page">
-		<div class="head">
-			<div class="title">
-				<div class="name-row">
-					<h1 id="vm-title">{vmLabel(current)}</h1>
-					<span class="chip" class:ok={current.state === 'running'}
-						>{t(`vms.state.${current.state}`)}</span
-					>
-					{#if current.autostart}<span class="chip">{t('vms.autostart')}</span>{/if}
+		{#if windowed}
+			<!-- PLAN 64: in a window the title bar names the VM; state and buttons form the tool bar. -->
+			<PageHead title={vmLabel(current)}>
+				{#snippet actions()}
+					{#if !phone}{@render vmState(current)}<span class="spacer"></span>{/if}
+					{@render vmButtons(current, !phone)}
+				{/snippet}
+			</PageHead>
+			<!-- On the phone the bar keeps only the buttons; the state gets a row of its own. -->
+			{#if phone}<div class="phone-state">
+					{@render vmState(current)}<TasksPanel compact />
+				</div>{/if}
+			{#if current.description || current.ioError}<div class="title">
+					{#if current.description}<span class="description muted">{current.description}</span>{/if}
+					{#if current.ioError}<p class="notice-error io-error" role="alert">
+							{t('vms.ioError')}
+							<button type="button" class="btn small" onclick={() => act(current, 'resume')}
+								>{t('vms.resume')}</button
+							>
+						</p>{/if}
+				</div>{/if}
+		{:else}
+			<div class="head">
+				<div class="title">
+					<div class="name-row">
+						<h1 id="vm-title">{vmLabel(current)}</h1>
+						<span class="chip" class:ok={current.state === 'running'}
+							>{t(`vms.state.${current.state}`)}</span
+						>
+						{#if current.autostart}<span class="chip">{t('vms.autostart')}</span>{/if}
+					</div>
+					{#if current.description}<span class="description muted">{current.description}</span>{/if}
+					{#if current.ioError}<p class="notice-error io-error" role="alert">
+							{t('vms.ioError')}
+							<button type="button" class="btn small" onclick={() => act(current, 'resume')}
+								>{t('vms.resume')}</button
+							>
+						</p>{/if}
 				</div>
-				{#if current.description}<span class="description muted">{current.description}</span>{/if}
-				{#if current.ioError}<p class="notice-error io-error" role="alert">
-						{t('vms.ioError')}
-						<button type="button" class="btn small" onclick={() => act(current, 'resume')}
-							>{t('vms.resume')}</button
-						>
-					</p>{/if}
+				<div class="buttons">{@render vmButtons(current)}</div>
 			</div>
-			<div class="buttons">
-				<TasksPanel compact />
-				{#if current.state === 'running'}
-					<button
-						type="button"
-						class="btn btn-primary"
-						onclick={() => act(current, 'shutdown')}
-						disabled={isBusy(current)}>{t('vms.shutdown')}</button
-					>
-				{:else}
-					<button
-						type="button"
-						class="btn btn-primary"
-						onclick={() => act(current, 'start')}
-						disabled={isBusy(current) || !canStart(current)}>{t('vms.start')}</button
-					>
-				{/if}
-				<a
-					class="btn icon-btn"
-					href="/vms/edit?vm={encodeURIComponent(current.name)}"
-					aria-label={t('vms.edit')}
-					title={t('vms.edit')}><Icon name="edit" size={16} /></a
-				>
-				<Dropdown label={t('ui.more')} icon="more" align="right">
-					{#snippet children(close)}
-						{#if current.state === 'running'}
-							<button
-								type="button"
-								role="menuitem"
-								disabled={isBusy(current)}
-								onclick={() => {
-									close();
-									act(current, 'reboot');
-								}}><Icon name="restart" size={16} /><span>{t('vms.reboot')}</span></button
-							>
-							<button
-								type="button"
-								role="menuitem"
-								disabled={isBusy(current)}
-								onclick={() => {
-									close();
-									open('poweroff');
-								}}><Icon name="power" size={16} /><span>{t('vms.poweroff')}</span></button
-							>
-							<button
-								type="button"
-								role="menuitem"
-								onclick={() => {
-									close();
-									addVmConsole(current.name, vmLabel(current));
-								}}><Icon name="terminal" size={16} /><span>{t('vms.serial')}</span></button
-							>
-							<hr />
-						{/if}
-						<button
-							type="button"
-							role="menuitem"
-							onclick={() => {
-								close();
-								showXML();
-							}}><Icon name="fileText" size={16} /><span>{t('vms.showXml')}</span></button
-						>
-						{#if current.state !== 'running'}
-							<button
-								type="button"
-								role="menuitem"
-								disabled={isBusy(current) || !!current.job}
-								onclick={() => {
-									close();
-									cloning = current;
-								}}><Icon name="copy" size={16} /><span>{t('ops.clone')}</span></button
-							>
-						{/if}
-					{/snippet}
-				</Dropdown>
-			</div>
-		</div>
+		{/if}
 
 		{#if notices.length}
 			<div class="notices">
@@ -1188,5 +1222,15 @@
 			width: 2.75rem;
 			height: 2.75rem;
 		}
+	}
+	/* PLAN 64: the state at the left of the window's tool bar, buttons right. */
+	.spacer {
+		flex: 1;
+	}
+	.phone-state {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-2);
 	}
 </style>

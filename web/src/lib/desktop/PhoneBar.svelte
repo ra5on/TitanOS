@@ -7,10 +7,15 @@
 	import { t } from '../i18n/index.svelte.ts';
 	import DesktopIcon from './DesktopIcon.svelte';
 	import { appForPath, sideActive } from './apps.ts';
+	import { activeNode } from '../cluster-node.ts';
+	import { clusterNodes } from '../cluster.svelte.ts';
 
 	const app = $derived(appForPath(page.url.pathname));
 	const items = $derived((app?.side ?? []).filter((i) => 'href' in i));
 	let open = $state(false);
+	// PLAN 64: while this tab manages another node of the cluster, its name stays in sight.
+	const nodeId = activeNode();
+	const node = $derived(nodeId ? clusterNodes.nodes.find((n) => n.id === nodeId) : undefined);
 </script>
 
 <header class="phone-bar">
@@ -25,6 +30,11 @@
 		/>{/if}
 	<b>{app ? t(app.label) : ''}</b>
 	<span class="space"></span>
+	{#if node}<span
+			class="node mono"
+			title={t('cluster.managing', { name: node.name })}
+			aria-label={t('cluster.managing', { name: node.name })}>{node.name}</span
+		>{/if}
 	{#if items.length > 1}
 		<button
 			type="button"
@@ -60,13 +70,26 @@
 		align-items: center;
 		gap: 8px;
 		height: calc(52px + env(safe-area-inset-top));
-		padding: env(safe-area-inset-top) 8px 0;
+		padding: env(safe-area-inset-top) calc(8px + env(safe-area-inset-right)) 0
+			calc(8px + env(safe-area-inset-left));
 		background: var(--header);
 		border-bottom: 1px solid var(--border);
 	}
+	.node {
+		max-width: 38%;
+		padding: 4px 10px;
+		border-radius: 999px;
+		border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+		background: color-mix(in srgb, var(--accent) 14%, transparent);
+		font-size: var(--text-sm);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		flex: none;
+	}
 	.back {
-		width: 40px;
-		height: 40px;
+		width: 44px;
+		height: 44px;
 		display: grid;
 		place-items: center;
 		border: 0;
@@ -76,6 +99,7 @@
 		cursor: pointer;
 	}
 	b {
+		min-width: 0;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -88,5 +112,6 @@
 		right: 8px;
 		top: calc(100% + 4px);
 		min-width: 14rem;
+		max-width: calc(100vw - 16px);
 	}
 </style>
