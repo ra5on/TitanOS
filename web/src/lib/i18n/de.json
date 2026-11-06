@@ -8869,5 +8869,8 @@
 	"agent.codeHint": "Der Agent darf kurze Python- oder sh-Programme ausführen, z. B. zum Rechnen, Umwandeln oder Sortieren. Sie laufen in einem Wegwerf-Container ohne Netz, mit schreibgeschütztem System, als dein Konto, und sehen nur deinen Ordner im KI-Agent als /work. Vor jedem Lauf fragt er nach, außer du stellst „Code ausführen“ unter Bereiche auf „Ohne Nachfrage“. Braucht Docker.",
 	"agent.codeTimeout": "Zeitgrenze (Sekunden)",
 	"agent.codeMemory": "Arbeitsspeicher (MiB)",
-	"agent.planDone": "erledigt"
+	"agent.planDone": "erledigt",
+	"agent.set.push": "Mitteilungen",
+	"agent.set.pushSub": "Auf diesem Gerät",
+	"agent.set.pushHint": "Schalte hier Mitteilungen für dieses Gerät ein. Auf dem iPhone ist der Agent vom Home-Bildschirm eine eigene App: Er braucht ein eigenes Einschalten, auch wenn TitanOS schon Mitteilungen bekommt. Ist ein Chat gerade auf einem Gerät offen, kommt für ihn keine Mitteilung."
 }

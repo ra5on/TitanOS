@@ -8869,5 +8869,8 @@
 	"agent.codeHint": "The agent may run short Python or sh programs, e.g. to calculate, convert or sort. They run in a throw-away container without network, with a read-only system, as your account, and only see your folder in KI-Agent as /work. It asks before every run unless you set “Run code” under areas to “Without asking”. Needs Docker.",
 	"agent.codeTimeout": "Time limit (seconds)",
 	"agent.codeMemory": "Memory (MiB)",
-	"agent.planDone": "done"
+	"agent.planDone": "done",
+	"agent.set.push": "Notifications",
+	"agent.set.pushSub": "On this device",
+	"agent.set.pushHint": "Switch on notifications for this device here. On an iPhone the agent from the home screen is an app of its own: it needs its own switch, even when TitanOS already gets notifications. While a chat is open on a device, no notification comes for it."
 }

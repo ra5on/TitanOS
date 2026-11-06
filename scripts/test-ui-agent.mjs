@@ -191,6 +191,19 @@ async function plan55() {
 		await page.screenshot({ path: `${out}/30-phone-plan-timelimit.png` });
 		await ctx.close();
 	}
+	// Notifications on this device inside the agent app (own subscription on iOS).
+	{
+		const { ctx, page } = await open(390, 844);
+		await page.route('**/api/v1/notifications/push', (route) => route.fulfill({ json: { publicKey: 'BCx', devices: [{ id: 'd1', name: 'iPhone', service: 'web.push.apple.com', created: at(8) }] } }));
+		await page.goto(base + '/agent?app=1');
+		await page.getByRole('button', { name: 'Einstellungen' }).first().click();
+		await page.getByRole('button', { name: /Mitteilungen/ }).click();
+		await page.getByText('Auf dem iPhone ist der Agent').waitFor();
+		await page.waitForTimeout(400);
+		await noOverflow(page, 'agent push');
+		await page.screenshot({ path: `${out}/32-phone-agent-push.png` });
+		await ctx.close();
+	}
 	// PLAN 55: working like an agent and code in a sandbox, in the settings.
 	{
 		const { ctx, page, seen } = await open(1440, 2400);

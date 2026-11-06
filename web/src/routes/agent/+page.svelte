@@ -494,9 +494,13 @@
 		ping();
 		const timer = setInterval(() => visible() && seen(id, true), 15000);
 		document.addEventListener('visibilitychange', ping);
+		// iOS may close the app without a visibility change (swiped away).
+		const gone = () => seen(id, false);
+		window.addEventListener('pagehide', gone);
 		return () => {
 			clearInterval(timer);
 			document.removeEventListener('visibilitychange', ping);
+			window.removeEventListener('pagehide', gone);
 			seen(id, false);
 		};
 	});

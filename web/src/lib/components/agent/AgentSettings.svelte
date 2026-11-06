@@ -9,6 +9,7 @@
 	import { ACCENTS, SWIPES, type Look, type Status, type Swipe } from '#lib/agent.ts';
 	import { fly } from 'svelte/transition';
 	import InitiativeSettings from './InitiativeSettings.svelte';
+	import PushDevices from '#lib/components/PushDevices.svelte';
 
 	type Part = 'memory' | 'skills' | 'schedules' | 'map' | 'me' | 'log';
 	let {
@@ -25,18 +26,18 @@
 		status: Status;
 		user: string;
 		calm?: boolean;
-		start?: 'list' | 'speech' | 'look' | 'models' | 'initiative' | 'mind';
+		start?: 'list' | 'speech' | 'look' | 'models' | 'initiative' | 'mind' | 'push';
 		onopen: (part: Part) => void;
 		onclose: () => void;
 		/** Starts getting to know the person again (PLAN 53). */
 		onknow?: () => void;
 	} = $props();
 
-	let section = $state<'list' | 'speech' | 'look' | 'models' | 'initiative' | 'mind'>(
+	let section = $state<'list' | 'speech' | 'look' | 'models' | 'initiative' | 'mind' | 'push'>(
 		(() => start)(),
 	);
 	const rows: {
-		id: Part | 'speech' | 'look' | 'models' | 'initiative' | 'mind';
+		id: Part | 'speech' | 'look' | 'models' | 'initiative' | 'mind' | 'push';
 		icon: IconName;
 		color: string;
 		label: MessageKey;
@@ -56,6 +57,19 @@
 			label: 'agent.set.models',
 			sub: status.vision ? `${status.model} · ${status.vision}` : status.model,
 		},
+		// Mitteilungen auf diesem Gerät: on an iPhone the agent app from the
+		// home screen is an app of its own and needs its own subscription.
+		...(status.admin
+			? [
+					{
+						id: 'push' as const,
+						icon: 'bell' as IconName,
+						color: '#ef4444',
+						label: 'agent.set.push' as MessageKey,
+						sub: t('agent.set.pushSub'),
+					},
+				]
+			: []),
 		{ id: 'initiative', icon: 'bulb', color: '#f97316', label: 'agent.set.initiative' },
 		{ id: 'schedules', icon: 'clock', color: '#0ea5e9', label: 'agent.schedules' },
 		{ id: 'mind', icon: 'users', color: '#ec4899', label: 'agent.set.mind' },
@@ -82,7 +96,14 @@
 		},
 	]);
 	function go(id: (typeof rows)[number]['id']) {
-		if (id === 'speech' || id === 'look' || id === 'models' || id === 'initiative' || id === 'mind')
+		if (
+			id === 'speech' ||
+			id === 'look' ||
+			id === 'models' ||
+			id === 'initiative' ||
+			id === 'mind' ||
+			id === 'push'
+		)
 			section = id;
 		else onopen(id);
 	}
@@ -98,7 +119,9 @@
 						? t('agent.set.mind')
 						: section === 'models'
 							? t('agent.set.models')
-							: t('agent.set.title'),
+							: section === 'push'
+								? t('agent.set.push')
+								: t('agent.set.title'),
 	);
 </script>
 
@@ -193,6 +216,9 @@
 			</div>
 		{:else if section === 'initiative' || section === 'mind'}
 			<InitiativeSettings part={section} onrestart={onknow} />
+		{:else if section === 'push'}
+			<p class="pushhint">{t('agent.set.pushHint')}</p>
+			<PushDevices />
 		{:else if section === 'models'}
 			<div class="grp">
 				<div class="row">
@@ -488,6 +514,12 @@
 		font-weight: 600;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
+		color: var(--muted);
+	}
+	.pushhint {
+		margin: 0 4px 12px;
+		font-size: 0.9rem;
+		line-height: 1.45;
 		color: var(--muted);
 	}
 	.grp {
