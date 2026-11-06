@@ -359,6 +359,11 @@
 		gap: 1px;
 		scrollbar-width: thin;
 	}
+	/* Rows keep their height: a row that hides its overflow (.swipe) may
+	   otherwise shrink to nothing when there are many chats. */
+	.scroll > :global(*) {
+		flex-shrink: 0;
+	}
 	.group {
 		padding: 14px 10px 4px;
 		font-size: var(--text-xs);

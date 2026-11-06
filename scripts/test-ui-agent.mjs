@@ -191,6 +191,18 @@ async function plan55() {
 		await page.screenshot({ path: `${out}/30-phone-plan-timelimit.png` });
 		await ctx.close();
 	}
+	// Many chats: rows of the menu keep their height (the highlight was cut).
+	{
+		const { ctx, page } = await open(390, 844);
+		const many = Array.from({ length: 40 }, (_, i) => ({ id: 'c2aaaaaaaaaa' + String(i).padStart(4, '0'), title: 'Gesundheitscheck ' + i, created: at(10), updated: at(10, i), state: 'idle', preview: '' }));
+		await page.route('**/api/v1/agent/chats', (route) => (route.request().method() === 'GET' ? route.fulfill({ json: { chats: [...chats, ...many] } }) : route.fallback()));
+		await page.goto(base + '/agent?app=1');
+		await page.getByRole('button', { name: /Menü|Chats/ }).first().click();
+		await page.getByText('Gesundheitscheck 39').waitFor();
+		const heights = await page.locator('nav.menu .item').evaluateAll((list) => list.map((e) => e.getBoundingClientRect().height));
+		assert.ok(heights.length > 40 && Math.min(...heights) >= 30, `rows keep their height (${Math.min(...heights)})`);
+		await ctx.close();
+	}
 	// Notifications on this device inside the agent app (own subscription on iOS).
 	{
 		const { ctx, page } = await open(390, 844);
