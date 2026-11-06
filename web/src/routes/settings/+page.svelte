@@ -76,7 +76,8 @@
 	function describe(entry: ActivityEntry): string {
 		const label = activityLabel(entry.action);
 		if (label.kind === 'named') return t(`activity.do.${label.key}` as 'activity.do.login');
-		return entry.target ?? '';
+		const verb = t(`activity.verb.${label.verb}` as 'activity.verb.run');
+		return entry.target ? `${verb}: ${entry.target}` : verb;
 	}
 
 	function clear() {
@@ -235,7 +236,8 @@
 		align-items: center;
 		gap: var(--space-3);
 		width: 100%;
-		min-height: 4.75rem;
+		/* Room for two lines of description: equal tiles across the groups. */
+		min-height: 5.25rem;
 		padding: var(--space-3) var(--tile-pad);
 		color: var(--text);
 		text-decoration: none;

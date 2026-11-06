@@ -1,6 +1,7 @@
 // Settings sidebar (decision of 28 Oct 2026, "Entwurf A – Seitenleiste"):
 // sidebar beside every settings page, active item, search with keyboard,
-// overview with what needs attention (desktop), phone list with a way back, no horizontal scroll, contrast
+// overview "Alle Einstellungen" with tiles (PLAN 61, details in
+// test-ui-settings-home.mjs), phone tiles with a way back, no horizontal scroll, contrast
 // in the light theme, states read once. Isolated API data only.
 // PLAYWRIGHT_MODULE=/abs/playwright/index.mjs UI_URL=http://127.0.0.1:5190 node scripts/test-ui-settings-sidebar.mjs
 import assert from "node:assert/strict";
@@ -97,18 +98,10 @@ try {
       (await current.getAttribute("title")) ?? (await current.locator(".marker").getAttribute("title")),
       /Update verfügbar/,
     );
-    assert.equal(await nav(page).locator(".group-title").count(), 7);
+    // PLAN 61: four groups in a fixed order.
     assert.deepEqual(
       (await nav(page).locator(".group-title").allTextContents()).map((s) => s.trim()),
-      [
-        "System",
-        "Netzwerk",
-        "Sicherheit und Fernzugriff",
-        "Hardware und Energie",
-        "Daten und Speicher",
-        "Integrationen",
-        "Persönlich",
-      ],
+      ["System", "Netzwerk", "Konten und Dienste", "Daten"],
     );
     // Every area plus the overview on top.
     assert.equal(await nav(page).locator("a").count(), allAreas + 1);
@@ -132,16 +125,16 @@ try {
 
     // Search: Enter opens the section anchor, the search clears afterwards.
     const search = nav(page).getByRole("searchbox", { name: "Einstellungen suchen" });
-    await search.fill("DNS");
+    await search.fill("SSH");
     assert.equal(
       await nav(page).locator("a").first().getAttribute("href"),
-      "/settings/network#network-dns",
+      "/settings/access#access-ssh",
     );
     await search.press("Enter");
-    await page.waitForURL("**/settings/network#network-dns");
+    await page.waitForURL("**/settings/access#access-ssh");
     assert.equal(await search.inputValue(), "");
     // The sidebar follows the navigation a moment later.
-    await nav(page).locator('a[aria-current="page"][href="/settings/network"]').waitFor();
+    await nav(page).locator('a[aria-current="page"][href="/settings/access"]').waitFor();
     // Arrow keys move through the results, Enter opens the highlighted one.
     await search.fill("power");
     const hrefs = await nav(page)
@@ -164,7 +157,7 @@ try {
     await page.goto(base + "/settings");
     const upsReads = () =>
       data.requests.filter(([m, p]) => m === "GET" && p === "/ups").length;
-    await page.locator(".desk-overview").waitFor();
+    await page.locator(".home-tile").first().waitFor();
     const before = upsReads();
     await nav(page).getByRole("link", { name: "Hardware", exact: true }).click();
     await page.waitForURL("**/settings/hardware");
@@ -172,19 +165,12 @@ try {
     await page.waitForURL("**/settings/power-button");
     assert.equal(upsReads(), before, "states are not read again per page");
 
-    // Overview (desktop): no second list, only what needs attention and this NAS.
+    // Overview (desktop): tiles; a state shows as text on its tile.
     await nav(page).getByRole("link", { name: "Über TitanOS", exact: true }).click();
     await page.goto(base + "/settings");
-    await page.locator(".desk-overview").waitFor();
-    assert.equal(await page.locator(".settings-page .areas a").first().isVisible(), false);
-    const attention = page.locator(".desk-overview .attention li");
-    await attention.getByText("Update verfügbar").waitFor();
-    assert.equal(
-      await attention.filter({ hasText: "Update verfügbar" }).locator("a").getAttribute("href"),
-      "/settings/updates",
-    );
-    await page.locator(".desk-overview .facts").getByText("titan-test").waitFor();
-    assert.equal(await page.getByRole("searchbox").count(), 1, "one visible search on desktop");
+    const updates = page.locator('.settings-page .home-tile[href="/settings/updates"]');
+    await updates.getByText("Update verfügbar").waitFor();
+    assert.equal(await page.getByRole("searchbox").count(), 2, "sidebar search and page search");
     assert.equal(
       await nav(page).locator('a[aria-current="page"]').getAttribute("href"),
       "/settings",
@@ -201,22 +187,21 @@ try {
     await ctx.close();
   }
 
-  // Phone: the overview is the list, subpages get a way back, no sidebar.
+  // Phone: the overview tiles in one column, subpages get a way back, no sidebar.
   {
     const { ctx, page } = await create("owner", "graphit", 375);
     await page.goto(base + "/settings");
-    await page.locator(".settings-group").first().waitFor();
+    await page.locator(".settings-page .group").first().waitFor();
     assert.equal(await nav(page).isVisible(), false);
-    assert.equal(await page.locator(".settings-group").count(), 7);
-    assert.equal(await page.locator(".desk-overview").isVisible(), false);
+    assert.equal(await page.locator(".settings-page .group").count(), 4);
     assert.ok((await overflow(page)) <= 0, "no horizontal scroll on the overview");
     const search = page.getByRole("searchbox", { name: "Einstellungen suchen" });
     await search.fill("SSH");
-    assert.equal(await page.locator(".settings-page .areas a").count(), 1);
+    assert.equal(await page.locator(".settings-page .home-tile").count(), 1);
     await search.fill("");
     await fonts(page);
     await page.screenshot({ path: `${out}/mobile-overview.png`, fullPage: true });
-    await page.locator('.settings-page .areas a[href="/settings/updates"]').click();
+    await page.locator('.settings-page .home-tile[href="/settings/updates"]').click();
     await page.waitForURL("**/settings/updates");
     const back = page.getByRole("link", { name: "‹ Einstellungen", exact: true });
     await back.waitFor();
@@ -250,8 +235,8 @@ try {
     }
     await page.screenshot({ path: `${out}/desktop-updates-hell.png` });
     await page.goto(base + "/settings");
-    await page.locator(".desk-overview").waitFor();
-    for (const selector of [".desk-overview .tile-title", ".desk-overview dt", ".desk-overview dd"]) {
+    await page.locator(".home-tile").first().waitFor();
+    for (const selector of [".settings-page .group-title", ".home-tile .name", ".home-tile .desc"]) {
       const ratio = await contrast(page, selector);
       assert.ok(ratio >= 4.5, `${selector}: contrast ${ratio.toFixed(2)}`);
     }

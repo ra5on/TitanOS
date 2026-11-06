@@ -355,8 +355,8 @@ try {
     .waitFor();
   await page.screenshot({ path: out + "/storage.png", fullPage: true });
   await page.goto(base + "/settings");
-  // On the desktop the sidebar lists the areas: seven groups in the fixed
-  // order of settings-search.ts (owner's decision of 30 Oct 2026).
+  // On the desktop the sidebar lists the areas: four groups in the fixed
+  // order of settings-search.ts (PLAN 61), entries A–Z.
   const side = page.getByRole("navigation", {
     name: "Einstellungsbereiche",
     exact: true,
@@ -365,11 +365,8 @@ try {
   assert.deepEqual(await side.locator(".group-title").allTextContents(), [
     "System",
     "Netzwerk",
-    "Sicherheit und Fernzugriff",
-    "Hardware und Energie",
-    "Daten und Speicher",
-    "Integrationen",
-    "Persönlich",
+    "Konten und Dienste",
+    "Daten",
   ]);
   assert.deepEqual(
     (
@@ -378,11 +375,15 @@ try {
         .allTextContents()
     ).map((name) => name.trim()),
     [
+      "Darstellung",
+      "Datum und Uhrzeit",
+      "Ein-/Ausschalter",
+      "Energie",
+      "Hardware",
+      "Temperaturen",
       "Über TitanOS",
       "Updates",
-      "Datum und Uhrzeit",
-      "Dienste",
-      "Benachrichtigungen",
+      "USV",
     ],
   );
   await side.getByRole("searchbox").fill("SSH");
