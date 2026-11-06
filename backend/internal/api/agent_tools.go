@@ -126,6 +126,9 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 	for _, t := range b.noteTools() {
 		add(t)
 	}
+	for _, t := range b.featureTools() {
+		add(t)
+	}
 	return b
 }
 
@@ -244,7 +247,7 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 	}
 	// After outside content was read, nothing goes out to the web without
 	// the person: a page or file could have told the model to send data.
-	if t.area == agent.AreaWeb && chat != nil && chat.Tainted {
+	if t.area == agent.AreaWeb && chat != nil && (chat.Tainted || chat.OutsideSkill) {
 		mode = agent.Stricter(mode, agent.ModeAsk)
 	}
 	if t.area == toolcatalog.AreaHome {

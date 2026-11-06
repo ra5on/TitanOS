@@ -1,0 +1,12 @@
+Finanzamt Musterstadt
+Steuernummer 123/456/78901
+
+Bescheid für 2025 über Einkommensteuer
+Datum: 20.10.2026
+
+Festgesetzte Einkommensteuer    1.284,37 €
+Abzüglich Vorauszahlungen       1.000,00 €
+Verbleibende Belastung            284,37 €
+
+Bitte zahlen Sie den Betrag von 284,37 € bis zum 23.11.2026.
+Einspruch kann innerhalb eines Monats nach Bekanntgabe eingelegt werden.

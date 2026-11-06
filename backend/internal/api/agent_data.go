@@ -466,6 +466,12 @@ func (s *Server) agentPrompt(ctx context.Context, user auth.User, settings agent
 		for _, sk := range skills {
 			if !sk.Disabled && !slices.Contains(settings.SkillsOff, sk.ID) {
 				in.Skills = append(in.Skills, sk)
+				// A skill from outside (catalog, or saved after reading outside
+				// content) steers the agent like outside content: web tools
+				// ask first in this chat (PLAN 54-G, security audit).
+				if sk.Untrusted && chat != nil {
+					chat.OutsideSkill = true
+				}
 			}
 		}
 	}

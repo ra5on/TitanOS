@@ -95,6 +95,7 @@ Heimnetz/VPN/Internet → NAS):
 | Ping | ICMP/ICMPv6 Echo | ja | ja | nein |
 | USV im Netzwerk (NUT) | TCP 3493 | ja | ja | nein |
 | Backups anderer TitanOS | TCP 8750 | ja | ja | nein |
+| Backup-Buddy (KI-Agent, PLAN 54) | TCP 8752 | nein | nein | nein |
 | VPN-Tunnel | UDP 41641 (Tailscale), 51820 (NetBird, WireGuard-Server), 51821 (Tunnel des Clusters) | ja | ja | **ja** |
 
 Let's Encrypt über HTTP-01 braucht Port 80 aus dem Internet. Bei
@@ -193,7 +194,7 @@ Ports gibt man mit Port-Richtlinien in der Zelle zum NAS frei.
   gemerkt und beim Zurücknehmen wiederhergestellt. Ist die Firewall aus, ändert
   sich nichts. IPv64 dokumentiert keine Quelladressbereiche des CDN; die
   Freigabe gilt deshalb für die ganze Zone Internet, nur für die Ports der App.
-  Die Ports der Weboberfläche (und 22, 8750) werden nie veröffentlicht.
+  Die Ports der Weboberfläche (und 22, 8750, 8752) werden nie veröffentlicht.
 - **v64 Blocklist** (ab Werk aus, Einstellungen › Dynamisches DNS › IPv64 › Blocklist): titand
   holt die Liste höchstens einmal am Tag (nur im RAM, höchstens 200.000
   Einträge, ohne private/VPN-Bereiche und Netze größer als /16 bzw. /32) und legt

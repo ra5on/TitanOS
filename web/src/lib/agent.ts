@@ -811,7 +811,7 @@ export function sanitizeInitiative(v: unknown): Initiative {
 /** A suggestion of the agent waiting for a yes or no (GET /agent/inbox). */
 export type InboxItem = {
 	id: string;
-	kind: 'memory' | 'conflict' | 'fade' | 'skill' | 'forecast' | 'alert';
+	kind: 'memory' | 'conflict' | 'fade' | 'skill' | 'forecast' | 'alert' | 'deadline';
 	title: string;
 	body?: string;
 	data?: Record<string, string>;

@@ -1,5 +1,14 @@
 <script lang="ts">
 	import PushDevices from '#lib/components/PushDevices.svelte';
+	import ProtectEmergency from '#lib/components/agent/features/ProtectEmergency.svelte';
+	import { api as protectApi } from '#lib/api.ts';
+	// PLAN 54: a person registered for the emergency access asks here, also
+	// without the KI-Agent.
+	let emergencyMe = $state(false);
+	void protectApi
+		.get<{ emergency?: boolean }>('/agent/protect/me')
+		.then((m) => (emergencyMe = !!m.emergency))
+		.catch(() => (emergencyMe = false));
 	import PageHead from '#lib/components/PageHead.svelte';
 	import SoundSettings from '#lib/components/SoundSettings.svelte';
 	import PersonalNotifications from '#lib/components/PersonalNotifications.svelte';
@@ -362,6 +371,12 @@
 {#if user?.role === 'owner' || user?.role === 'admin'}<PersonalNotifications
 	/>{:else if user}<PushDevices personal />{/if}
 {#if user?.role === 'owner' || user?.role === 'admin'}<BellSettings />{/if}
+{#if emergencyMe}
+	<section class="tile" aria-labelledby="emergency-title">
+		<h2 class="tile-title" id="emergency-title">{t('agent.f.menu.emergency')}</h2>
+		<ProtectEmergency />
+	</section>
+{/if}
 <SoundSettings />
 
 {#if changingPassword && user}

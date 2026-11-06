@@ -157,6 +157,10 @@ type Chat struct {
 	// Tainted: the chat has read content from outside TitanOS (files,
 	// logs, web pages). Web tools then need the person's approval.
 	Tainted bool `json:"tainted,omitempty"`
+	// OutsideSkill: a skill from outside (catalog, or saved after outside
+	// content) is in the prompt (PLAN 54-G); web tools ask first, like after
+	// outside content, but what the person says is not marked for it.
+	OutsideSkill bool `json:"outsideSkill,omitempty"`
 	// Plan is the plan the agent keeps for the current task (plan_update).
 	Plan []PlanStep `json:"plan,omitempty"`
 	// Areas of tools loaded in this chat (tools_load, PLAN 55).

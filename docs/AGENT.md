@@ -354,6 +354,19 @@ TITANOS_OLLAMA=http://192.168.10.5:11434 TITANOS_OLLAMA_MODEL=gemma4:12b TITANOS
 
 Ergebnisse stehen in den Release-Notizen.
 
+## Funktionen (PLAN 54)
+
+Neun Funktionen in vier Gruppen, jede **ab Werk aus** und einzeln einstellbar: Einstellungen des Agenten › Funktionen bzw. Einstellungen › KI-Agent › Funktionen. Was das ganze NAS betrifft, schalten Besitzer und Administratoren ein (`features` in `agent.json`, `GET`/`PUT /api/v1/agent/features`); was ein Konto für sich einstellt (Ordner, Postfach, Quellen), liegt in `features.json` im privaten Agent-Ordner (`GET`/`PUT /api/v1/agent/features/me`). Eingeschaltete Funktionen erscheinen im Agent-Menü; Mitteilungen öffnen sie mit `/agent?feature=<id>`.
+
+| Gruppe | Funktionen | Einzelheiten |
+|---|---|---|
+| Dokumente und Fristen | Dokumenten-Gedächtnis (Werkzeug `documents_search`), Fristenwächter (Vorschläge in „Vorschläge“), Papierkram-Autopilot (Eingang, eigenes IMAP-Postfach, Ablage mit Rückgängig, Ansicht „Papierkram“) | `docs/agent54/docs.md` |
+| Schutz | Ransomware-Wächter (fanotify, sperren und melden, Zurückstellen aus Btrfs-Snapshots), Notfallhandbuch (Markdown/PDF), Notfallzugang (Antrag mit Wartezeit, nur lesen, 30 Tage) | `docs/agent54/protect.md` |
+| Vorausschau | Was-wäre-wenn („Durchspielen“ auf der Speicher-Seite, Werkzeug `whatif`), Hardware-Berater (SMART-Verlauf, Engpässe, Werkzeug `hardware_advice`) | `docs/agent54/foresight.md` |
+| Gemeinschaft und Familie | Backup-Buddy (restic REST auf TCP 8752, nur Tailscale), Skill-Katalog (Ordner `skills/` der App-Store-Quellen), Familien-Tagebuch (Werkzeug `diary`) | `docs/agent54/family.md` |
+
+Der Ransomware-Wächter läuft auch, wenn der Chat des Agenten aus ist; er ergänzt den älteren Wächter je Freigabe (Samba `full_audit`, Freigaben › Ransomware-Wächter), „Wieder öffnen“ hebt beide Sperren auf. Der Backup-Buddy ergänzt „Backups anderer TitanOS“ (TCP 8750) um Kopplung per Code, Kontingent und gegenseitiges Sichern. Hintergrundarbeit weckt keine schlafende Platte und schreibt nicht auf den Stick.
+
 ## Daten
 
 | Was | Wo |

@@ -84,6 +84,9 @@ type agentSettings struct {
 	// Code runs Python or sh in a sandbox container (agent_code.go), off by
 	// default (decision of the owner 5.11.2026: the middle way).
 	Code agentCode `json:"code"`
+	// Features are the nine functions of PLAN 54 (agent_features.go), each
+	// off by default; changed only through /agent/features.
+	Features agentFeatures `json:"features"`
 }
 
 // agentCode are the settings of code_run.
@@ -165,7 +168,9 @@ func (s *Server) agentAllowed(user auth.User) bool {
 }
 
 func (s *Server) handleAgentSettings(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.agentSettings())
+	out := s.agentSettings()
+	out.Features = out.Features.view() // no secrets to the page
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) handleAgentSettingsSet(w http.ResponseWriter, r *http.Request) {
@@ -201,6 +206,7 @@ func (s *Server) handleAgentSettingsSet(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	req.Shared = a.settings.Shared
+	req.Features = a.settings.Features
 	if err := s.opts.Store.WriteJSON(agentSettingsFile, req); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 		return

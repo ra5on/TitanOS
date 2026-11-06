@@ -1,0 +1,21 @@
+Stadtwerke Musterstadt GmbH · Postfach 12 34 · 12345 Musterstadt
+
+Herrn Alex Beispiel
+Lindenweg 5
+12345 Musterstadt
+
+Rechnungsdatum: 03.11.2026
+Kundennummer: 4711-0815
+
+Ihre Abschlagsrechnung November 2026
+
+Sehr geehrter Herr Beispiel,
+für den Monat November berechnen wir Ihnen folgenden Abschlag für Strom und Erdgas:
+
+Strom Abschlag           54,00 €
+Erdgas Abschlag          32,00 €
+Abschlagsbetrag gesamt   86,00 €
+
+Der Betrag wird am 15.11.2026 per SEPA-Lastschrift von Ihrem Konto abgebucht.
+Mit freundlichen Grüßen
+Ihre Stadtwerke Musterstadt

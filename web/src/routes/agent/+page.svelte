@@ -26,12 +26,15 @@
 	import ProjectDialog from '#lib/components/agent/ProjectDialog.svelte';
 	import ProjectSheet from '#lib/components/agent/ProjectSheet.svelte';
 	import { api, apiFetch, responseError } from '#lib/api.ts';
+	import type { IconName } from '#lib/components/Icon.svelte';
 	import { agentAppMode } from '#lib/agent-app.ts';
 	import { agentFull, setAgentFull } from '#lib/agent-full.svelte.ts';
 	import { clearAgentNotifications } from '#lib/web-push.ts';
 	import { canSpeak, speak, speechPrefs, stopSpeaking } from '#lib/agent-speech.svelte.ts';
 	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { pageTitle } from '#lib/page-title.svelte.ts';
+	import { loadMine, type FeatureViewId, type FeaturesPublic } from '#lib/agent-features.ts';
+	import FeatureView from '#lib/components/agent/features/FeatureView.svelte';
 	import { session } from '#lib/session.svelte.ts';
 	import {
 		accountLook,
@@ -94,8 +97,74 @@
 		| { kind: 'notes' }
 		| { kind: 'sheet'; project: Project }
 		| { kind: 'nas' }
+		| { kind: 'feature'; id: FeatureViewId }
 		| null
 	>(null);
+	// PLAN 54: which functions are there for this account, and their views
+	// in the menu (only what is on; the others stay under Funktionen).
+	let features = $state<FeaturesPublic | null>(null);
+	let protectMe = $state<{
+		guard?: boolean;
+		handbook?: boolean;
+		emergency?: boolean;
+		alerts?: number;
+		requests?: number;
+	} | null>(null);
+	$effect(() => {
+		if (!status?.enabled || !status.allowed) return;
+		loadMine()
+			.then((m) => (features = m.nas))
+			.catch(() => (features = null));
+		api
+			.get<typeof protectMe>('/agent/protect/me')
+			.then((p) => (protectMe = p))
+			.catch(() => (protectMe = null));
+	});
+	const featureItems = $derived.by(() => {
+		const f = features;
+		const admin = !!status?.admin;
+		const out: { id: FeatureViewId; label: string; icon: IconName; count?: number }[] = [];
+		if (!f) return out;
+		if (f.paper) out.push({ id: 'paper', label: t('agent.f.menu.paper'), icon: 'list' });
+		if (f.deadlines)
+			out.push({ id: 'deadlines', label: t('agent.f.menu.deadlines'), icon: 'clock' });
+		if (protectMe?.guard)
+			out.push({
+				id: 'guard',
+				label: t('agent.f.menu.guard'),
+				icon: 'shield',
+				count: protectMe.alerts,
+			});
+		if (protectMe?.handbook)
+			out.push({ id: 'handbook', label: t('agent.f.menu.handbook'), icon: 'fileText' });
+		if (f.emergency && (admin || protectMe?.emergency))
+			out.push({
+				id: 'emergency',
+				label: t('agent.f.menu.emergency'),
+				icon: 'key',
+				count: protectMe?.requests,
+			});
+		if (f.advisor && admin)
+			out.push({ id: 'advisor', label: t('agent.f.menu.advisor'), icon: 'chip' });
+		if (f.buddy && admin) out.push({ id: 'buddy', label: t('agent.f.menu.buddy'), icon: 'users' });
+		if (f.catalog) out.push({ id: 'catalog', label: t('agent.f.menu.catalog'), icon: 'zap' });
+		return out;
+	});
+	// Links of notifications open a view: /agent?feature=guard (PLAN 54).
+	$effect(() => {
+		const id = page.url.searchParams.get('feature') as FeatureViewId | null;
+		const known: FeatureViewId[] = [
+			'paper',
+			'deadlines',
+			'guard',
+			'handbook',
+			'emergency',
+			'advisor',
+			'buddy',
+			'catalog',
+		];
+		if (id && known.includes(id) && status?.enabled) dialog = { kind: 'feature', id };
+	});
 	/** The settings beneath a window opened from them. */
 	let under = $state<Extract<NonNullable<typeof dialog>, { kind: 'settings' }> | null>(null);
 	const settingsShown = $derived(
@@ -802,6 +871,11 @@
 		oneditproject: (p: Project) => (dialog = { kind: 'project', project: p }),
 		onknowledge: () => (dialog = { kind: 'knowledge', tab: 'memory' }),
 		onplanned: () => (dialog = { kind: 'knowledge', tab: 'schedules', only: true }),
+		features: featureItems,
+		onfeature: (id: FeatureViewId) => {
+			menuOpen = false;
+			dialog = { kind: 'feature', id };
+		},
 		onnotes: () => {
 			menuOpen = false;
 			dialog = { kind: 'notes' };
@@ -1109,7 +1183,9 @@
 		}}
 	/>
 {/if}
-{#if dialog?.kind === 'project'}
+{#if dialog?.kind === 'feature'}
+	<FeatureView id={dialog.id} {calm} onclose={() => (dialog = null)} />
+{:else if dialog?.kind === 'project'}
 	<ProjectDialog
 		project={dialog.project}
 		{locations}
