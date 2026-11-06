@@ -10,9 +10,42 @@ import foresightDe from './features/foresight.de.json';
 import foresightEn from './features/foresight.en.json';
 import familyDe from './features/family.de.json';
 import familyEn from './features/family.en.json';
+// PLAN 61: the desktop mode and its parts have texts of their own.
+import desktopDe from './features/desktop.de.json';
+import desktopEn from './features/desktop.en.json';
+import appaccessDe from './features/appaccess.de.json';
+import appaccessEn from './features/appaccess.en.json';
+import taskmanagerDe from './features/taskmanager.de.json';
+import taskmanagerEn from './features/taskmanager.en.json';
+import lockDe from './features/lock.de.json';
+import lockEn from './features/lock.en.json';
+import settingshomeDe from './features/settingshome.de.json';
+import settingshomeEn from './features/settingshome.en.json';
 
-const de = { ...deBase, ...docsDe, ...protectDe, ...foresightDe, ...familyDe };
-const en = { ...enBase, ...docsEn, ...protectEn, ...foresightEn, ...familyEn };
+const de = {
+	...deBase,
+	...docsDe,
+	...protectDe,
+	...foresightDe,
+	...familyDe,
+	...desktopDe,
+	...appaccessDe,
+	...taskmanagerDe,
+	...lockDe,
+	...settingshomeDe,
+};
+const en = {
+	...enBase,
+	...docsEn,
+	...protectEn,
+	...foresightEn,
+	...familyEn,
+	...desktopEn,
+	...appaccessEn,
+	...taskmanagerEn,
+	...lockEn,
+	...settingshomeEn,
+};
 
 export const LOCALES = ['de', 'en'] as const;
 export type Locale = (typeof LOCALES)[number];

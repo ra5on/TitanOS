@@ -410,7 +410,9 @@ func (s *Server) securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
-		h.Set("X-Frame-Options", "DENY")
+		// PLAN 61: the desktop shows the pages of TitanOS in windows (frames of
+		// its own origin); other sites still may not frame it.
+		h.Set("X-Frame-Options", "SAMEORIGIN")
 		h.Set("Referrer-Policy", "same-origin")
 		if s.trustedTLS(r) {
 			h.Set("Strict-Transport-Security", hstsValue)

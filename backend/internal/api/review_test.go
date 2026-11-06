@@ -248,7 +248,7 @@ func TestContentSecurityPolicyHeader(t *testing.T) {
 	ts := newTestServer(t)
 	res, _ := ts.request("GET", "/", nil)
 	csp := res.Header.Get("Content-Security-Policy")
-	if !strings.Contains(csp, "frame-ancestors 'none'") || !strings.Contains(csp, "object-src 'none'") || strings.Contains(csp, "script-src") {
+	if !strings.Contains(csp, "frame-ancestors 'self'") || !strings.Contains(csp, "object-src 'none'") || strings.Contains(csp, "script-src") {
 		t.Errorf("policy without a meta tag: %q", csp)
 	}
 	if res.Header.Get("Strict-Transport-Security") != "" {
@@ -258,7 +258,7 @@ func TestContentSecurityPolicyHeader(t *testing.T) {
 		t.Error("policy on API answers")
 	}
 	ui := fstest.MapFS{"index.html": {Data: []byte(`<!doctype html><head><meta http-equiv="content-security-policy" content="script-src 'self' 'sha256-abc='; object-src 'none'; base-uri 'self'"></head>`)}}
-	if got, want := contentSecurityPolicy(ui), "script-src 'self' 'sha256-abc='; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"; got != want {
+	if got, want := contentSecurityPolicy(ui), "script-src 'self' 'sha256-abc='; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'"; got != want {
 		t.Errorf("policy %q, want %q", got, want)
 	}
 }

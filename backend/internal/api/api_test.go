@@ -691,7 +691,7 @@ func TestUI(t *testing.T) {
 			if cc := res.Header.Get("Cache-Control"); cc != tt.wantCache {
 				t.Errorf("Cache-Control = %q, want %q", cc, tt.wantCache)
 			}
-			if res.Header.Get("X-Frame-Options") != "DENY" {
+			if res.Header.Get("X-Frame-Options") != "SAMEORIGIN" {
 				t.Error("X-Frame-Options missing")
 			}
 		})
