@@ -415,7 +415,7 @@ func (s *Server) paperFetchMail(ctx context.Context, u auth.User, p agentPaperMi
 	var c *imapmini.Client
 	connect := func() error {
 		if c != nil {
-			c.Close()
+			_ = c.Close() // best effort, the run goes on with a new connection
 		}
 		var err error
 		if c, err = imapmini.Dial(ctx, cfg); err != nil {
@@ -429,7 +429,7 @@ func (s *Server) paperFetchMail(ctx context.Context, u auth.User, p agentPaperMi
 	}
 	defer func() {
 		if c != nil {
-			c.Close()
+			_ = c.Close() // best effort
 		}
 	}()
 	uids, err := c.Unseen()
@@ -751,7 +751,7 @@ func (s *Server) handlePaperMailTest(w http.ResponseWriter, r *http.Request) {
 	c, err := imapmini.Dial(ctx, cfg)
 	if err == nil {
 		err = c.SelectInbox()
-		c.Close()
+		_ = c.Close() // best effort
 	}
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "mail_failed", err.Error())
