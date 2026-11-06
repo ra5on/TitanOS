@@ -152,6 +152,11 @@ async function open(width, height, { theme = 'graphit', path = '/agent', look = 
 	return { ...made, seen };
 }
 
+// A row of the agent's settings panel by its exact title.
+function settingsRow(panel, title) {
+	return panel.locator('.row').filter({ has: panel.page().locator('strong', { hasText: new RegExp(`^${title}$`) }) }).first();
+}
+
 async function noOverflow(page, what) {
 	const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
 	const wide = overflow > 1 ? await page.evaluate(() => [...document.querySelectorAll('body *')].filter((e) => e.getBoundingClientRect().right > innerWidth + 1 && !e.closest('.backdrop')).slice(-6).map((e) => `${e.tagName}.${e.className}`)) : [];
@@ -426,14 +431,22 @@ async function plan58() {
 	}
 }
 
+// Console errors of the pages so far (asserted before every exit).
+function noConsoleErrors() {
+	const real = errors.filter((e) => !/favicon|ERR_ABORTED/.test(e));
+	assert.deepEqual(real, [], 'console errors');
+}
+
 try {
 	await plan58();
 	if (process.env.UI_ONLY === '58') {
+		noConsoleErrors();
 		console.log('KI-Agent UI (PLAN 58) ok:', out);
 		process.exit(0);
 	}
 	await plan55();
 	if (process.env.UI_ONLY === '55') {
+		noConsoleErrors();
 		console.log('KI-Agent UI (PLAN 55) ok:', out);
 		process.exit(0);
 	}
@@ -462,23 +475,93 @@ try {
 		await page.screenshot({ path: `${out}/2-desktop-document.png` });
 		await page.goto(base + '/agent');
 		await page.getByRole('heading', { name: /Guten|Hallo/ }).waitFor();
-		await page.locator('.sugg button', { hasText: 'Gesundheitscheck' }).click();
-		assert.match(await page.locator('.composer textarea').inputValue(), /Gesundheitscheck/, 'suggestion fills the input');
+		// The suggestions are chosen at random: take the first one shown.
+		const sugg = page.locator('.sugg button').first();
+		await sugg.waitFor();
+		const suggTitle = (await sugg.locator('strong').innerText()).trim();
+		await sugg.click();
+		assert.ok((await page.locator('.composer textarea').inputValue()).trim().length > 0, `suggestion "${suggTitle}" fills the input`);
 		await page.waitForTimeout(300);
 		await page.screenshot({ path: `${out}/3-desktop-new.png` });
-		await menu.getByRole('button', { name: 'Darstellung' }).click();
-		await page.locator('dialog[open]').waitFor();
-		await page.waitForTimeout(300);
+		// Look, memory and map: rows of the settings panel (PLAN 59).
+		await menu.getByRole('button', { name: 'Einstellungen' }).click();
+		const settingsPanel = page.locator('.panel[role=dialog]');
+		await settingsPanel.waitFor();
+		await settingsPanel.locator('.row', { hasText: 'Darstellung' }).first().click();
+		await page.waitForTimeout(400);
 		await page.screenshot({ path: `${out}/4-desktop-look.png` });
-		await page.keyboard.press('Escape');
-		await menu.getByRole('button', { name: 'Wissen' }).click();
+		await settingsPanel.getByRole('button', { name: 'Zurück' }).click();
+		await settingsRow(settingsPanel, 'Gedächtnis').click();
 		await page.locator('dialog[open]').getByText('Telekom-Rechnungen liegen').waitFor();
 		await page.waitForTimeout(300);
 		await page.screenshot({ path: `${out}/5-desktop-memory.png` });
-		await page.locator('dialog[open]').getByRole('tab', { name: 'NAS-Landkarte' }).click();
+		await page.keyboard.press('Escape');
+		await page.locator('dialog[open]').waitFor({ state: 'detached' });
+		await settingsRow(settingsPanel, 'NAS-Landkarte').click();
 		await page.locator('dialog[open]').getByText('Eingescannte Briefe').waitFor();
 		await page.waitForTimeout(300);
 		await page.screenshot({ path: `${out}/14-desktop-map.png` });
+		await ctx.close();
+	}
+	// PLAN 59: a window opened from the settings lies over them; closing it
+	// brings back the settings, Escape once more closes them.
+	{
+		const { ctx, page } = await open(1440, 1000);
+		await page.goto(base + '/agent?app=1');
+		await page.getByRole('heading', { name: /Guten|Hallo/ }).waitFor();
+		await page.getByRole('button', { name: 'Einstellungen' }).first().click();
+		const panel = page.locator('.panel[role=dialog]');
+		await panel.waitFor();
+		await settingsRow(panel, 'Gedächtnis').click();
+		const knowledge = page.locator('dialog[open]');
+		await knowledge.getByText('Telekom-Rechnungen liegen').waitFor();
+		assert.ok(await panel.isVisible(), 'settings stay beneath the memory window');
+		await page.keyboard.press('Escape');
+		await knowledge.waitFor({ state: 'detached' });
+		await page.waitForTimeout(200);
+		assert.ok(await panel.isVisible(), 'settings still open after closing the window');
+		await panel.focus().catch(() => {});
+		await page.keyboard.press('Escape');
+		await panel.waitFor({ state: 'detached' });
+		await ctx.close();
+	}
+	// PLAN 59: Mitteilungen in the agent's settings, per device which
+	// messages come; a "Benutzer" only chooses the agent's.
+	for (const admin of [true, false]) {
+		const { ctx, page } = await open(390, 844);
+		const puts = [];
+		if (!admin) await page.route('**/api/v1/agent/status', (route) => route.fulfill({ json: { ...status, admin: false } }));
+		await page.route('**/api/v1/notifications/push**', (route) => {
+			const req = route.request();
+			const id = new URL(req.url()).pathname.split('/').pop();
+			if (req.method() === 'PUT') {
+				const body = req.postDataJSON();
+				puts.push({ id, body });
+				const off = [...(body.nas ? [] : ['nas']), ...(body.agent ? [] : ['agent'])];
+				return route.fulfill({ json: { id, name: 'iPhone', service: 'apple', created: at(9), off } });
+			}
+			return route.fulfill({ json: { publicKey: 'BOrX', devices: [{ id: 'dev00000000000001', name: 'iPhone', service: 'apple', created: at(9) }] } });
+		});
+		await page.goto(base + '/agent?app=1');
+		await page.getByRole('heading', { name: /Guten|Hallo/ }).waitFor();
+		await page.getByRole('button', { name: 'Einstellungen' }).first().click();
+		const panel = page.locator('.panel[role=dialog]');
+		await settingsRow(panel, 'Mitteilungen').click();
+		const agentBox = panel.getByRole('checkbox', { name: 'KI-Agent' });
+		await agentBox.waitFor();
+		assert.ok(await agentBox.isChecked(), 'agent messages on');
+		const nasBox = panel.getByRole('checkbox', { name: 'Meldungen von TitanOS' });
+		if (admin) {
+			assert.ok(await nasBox.isChecked(), 'NAS messages on');
+			await nasBox.uncheck();
+			await page.waitForTimeout(300);
+			assert.deepEqual(puts, [{ id: 'dev00000000000001', body: { nas: false, agent: true } }]);
+			assert.equal(await nasBox.isChecked(), false);
+			await noOverflow(page, 'push devices');
+			await page.screenshot({ path: `${out}/40-phone-push-devices.png` });
+		} else {
+			assert.equal(await nasBox.count(), 0, 'a user only chooses the agent');
+		}
 		await ctx.close();
 	}
 	// Between TitanOS and the agent the page loads anew, so Safari takes the
@@ -530,7 +613,7 @@ try {
 		await page.screenshot({ path: `${out}/7-phone-home${suffix}.png` });
 		await noOverflow(page, 'phone home');
 		if (!suffix) {
-			await page.locator('.ptile', { hasText: 'Home Assistant' }).click();
+			await page.locator('.chips .chip-p', { hasText: 'Home Assistant' }).click();
 			await page.locator('dialog[open]').waitFor();
 			await page.waitForTimeout(300);
 			await page.screenshot({ path: `${out}/8-phone-project.png` });
@@ -749,7 +832,7 @@ try {
 	{
 		const { ctx, page, seen } = await open(1440, 1600);
 		await page.route('**/api/v1/agent/voice/check', (route) => route.fulfill({ json: { reachable: true, models: ['Systran/faster-whisper-large-v3'] } }));
-		await page.goto(base + '/settings/agent');
+		await page.goto(base + '/settings/agent?tab=connection');
 		await page.getByRole('heading', { name: 'Sprache, Bilder und Sicherheit' }).waitFor();
 		await page.getByLabel('Mikrofon-Knopf im Eingabefeld').check();
 		await page.getByLabel('Adresse des Whisper-Dienstes').fill('http://192.168.10.5:8000');
@@ -768,17 +851,18 @@ try {
 	// Settings › KI-Agent.
 	{
 		const { ctx, page, seen } = await open(1440, 2400);
-		await page.goto(base + '/settings/agent');
+		await page.goto(base + '/settings/agent?tab=rights');
 		await page.getByRole('heading', { name: 'Was der Agent darf' }).waitFor();
 		await page.waitForTimeout(500);
 		await page.screenshot({ path: `${out}/11-settings.png`, fullPage: true });
+		await page.getByRole('button', { name: /Dateien/ }).first().click();
+		await page.getByText('files_delete').waitFor();
+		await page.goto(base + '/settings/agent?tab=ha');
 		await page.getByRole('button', { name: 'Geräte aus Home Assistant laden' }).click();
 		await page.getByText('Haustür').waitFor();
 		await page.getByText('Geräte für den Agenten').scrollIntoViewIfNeeded();
 		await page.waitForTimeout(300);
 		await page.screenshot({ path: `${out}/13-settings-ha-release.png` });
-		await page.getByRole('button', { name: /Dateien/ }).first().click();
-		await page.getByText('files_delete').waitFor();
 		await page.getByRole('button', { name: 'Speichern' }).click();
 		await page.getByRole('status').waitFor();
 		assert.equal(seen.puts.length, 1);
@@ -786,7 +870,7 @@ try {
 		assert.deepEqual(seen.puts[0].homeassistant.release.entities, ['light.flur', 'lock.haustuer']);
 		await ctx.close();
 		const phone = await open(390, 844);
-		await phone.page.goto(base + '/settings/agent');
+		await phone.page.goto(base + '/settings/agent?tab=rights');
 		await phone.page.getByRole('heading', { name: 'Was der Agent darf' }).waitFor();
 		await noOverflow(phone.page, 'settings phone');
 		await phone.page.screenshot({ path: `${out}/12-settings-phone.png`, fullPage: true });
@@ -796,7 +880,7 @@ try {
 	// node releases.
 	{
 		const member = await open(1440, 1100, { cluster: { member: true, admin: false, adminNode: 'nas-haupt', state: 'off' } });
-		await member.page.goto(base + '/settings/agent');
+		await member.page.goto(base + '/settings/agent?tab=connection');
 		await member.page.getByRole('radio', { name: 'Agent von nas-haupt' }).click();
 		await member.page.getByRole('button', { name: 'Freigabe bei nas-haupt anfragen' }).click();
 		await member.page.getByText('Die Anfrage liegt bei nas-haupt').waitFor();
@@ -809,7 +893,7 @@ try {
 				? route.fulfill({ json: { ...settings, shared: [{ node: 'n2', name: 'nas-keller', allowed: false, asked: at(9) }] } })
 				: route.fallback(),
 		);
-		await admin.page.goto(base + '/settings/agent');
+		await admin.page.goto(base + '/settings/agent?tab=connection');
 		await admin.page.getByRole('heading', { name: 'Andere Knoten im Cluster' }).waitFor();
 		await admin.page.getByRole('button', { name: 'Freigeben' }).click();
 		await admin.page.getByRole('button', { name: 'Entziehen' }).waitFor();
@@ -817,8 +901,7 @@ try {
 		await admin.page.screenshot({ path: `${out}/22-settings-cluster-admin.png` });
 		await admin.ctx.close();
 	}
-	const real = errors.filter((e) => !/favicon|ERR_ABORTED/.test(e));
-	assert.deepEqual(real, [], 'console errors');
+	noConsoleErrors();
 	console.log('KI-Agent UI ok:', out);
 } finally {
 	await browser.close();

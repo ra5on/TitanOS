@@ -158,7 +158,7 @@ func (b *agentToolbox) skillSave(_ context.Context, chat *agent.Chat, args json.
 	if req.Name == "" || len(req.Name) > 80 || strings.TrimSpace(req.Steps) == "" || len(req.Steps)+len(req.When) > maxSkillText {
 		return agent.Outcome{}, toolcatalog.Errorf("give a short name, when to use it and the steps (at most %d characters)", maxSkillText)
 	}
-	if secretish.MatchString(req.Steps) {
+	if secretish.MatchString(req.Name + "\n" + req.When + "\n" + req.Steps) {
 		return agent.Outcome{}, toolcatalog.Errorf("skills never hold passwords, keys or secrets")
 	}
 	store := b.s.agentStore()

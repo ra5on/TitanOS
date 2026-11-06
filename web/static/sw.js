@@ -46,14 +46,3 @@ self.addEventListener('notificationclick', (event) => {
 		})(),
 	);
 });
-			for (const client of windows) {
-				if (new URL(client.url).origin === self.location.origin) {
-					await client.focus();
-					if ('navigate' in client) await client.navigate(url);
-					return;
-				}
-			}
-			await self.clients.openWindow(url);
-		})(),
-	);
-});

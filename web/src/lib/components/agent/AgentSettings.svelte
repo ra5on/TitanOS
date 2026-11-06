@@ -134,7 +134,8 @@
 </script>
 
 <svelte:window
-	onkeydown={(e) => e.key === 'Escape' && !document.querySelector('dialog[open], .over-settings') && onclose()}
+	onkeydown={(e) =>
+		e.key === 'Escape' && !document.querySelector('dialog[open], .over-settings') && onclose()}
 />
 
 <div class="scrim" role="presentation" onclick={onclose} transition:fly={{ duration: 0 }}></div>

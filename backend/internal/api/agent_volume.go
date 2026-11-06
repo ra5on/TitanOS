@@ -351,7 +351,8 @@ func (s *Server) agentMoveRun(plan agentMovePlan) {
 	// A copy of the chats into the share that runs right now ends first;
 	// new ones see the move and wait.
 	s.agentMirror.mu.Lock()
-	s.agentMirror.mu.Unlock() //nolint:staticcheck // only waiting
+	//lint:ignore SA2001 the lock only waits for a running copy to end
+	s.agentMirror.mu.Unlock()
 	if err := dst.WriteFile(moveMarker, []byte(plan.from+"\n"), 0o600); err != nil {
 		fail(err)
 		return
