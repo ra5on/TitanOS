@@ -22,7 +22,7 @@
 	const slot = $derived(system.info?.image?.slot.toUpperCase() ?? '');
 </script>
 
-<PageHead title={t('about.title')} parent={{ href: '/settings', label: t('nav.settings') }} />
+<PageHead title={t('about.title')} />
 
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 

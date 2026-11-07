@@ -123,6 +123,8 @@ Ein einstellbarer NVIDIA-Persistenzmodus ist nicht enthalten.
 
 ## Dashboard
 
+*Seit 0.59.0 gibt es das Dashboard nicht mehr (Desktop-Modus, `docs/DESKTOP.md`); der folgende Abschnitt beschreibt den Stand bis 0.59.0.*
+
 Unter **Dashboard bearbeiten → Kachel hinzufügen** gibt es getrennte Kacheln
 für **iGPU/GPU · Intel & AMD**, **NPU** und **NVIDIA**. Jede Kachel zeigt die
 erkannten Geräte dieser Gruppe; sie kann unabhängig angeordnet, vergrößert

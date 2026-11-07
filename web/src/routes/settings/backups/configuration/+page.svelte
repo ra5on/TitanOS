@@ -202,10 +202,7 @@
 	}
 </script>
 
-<PageHead
-	title={t('safeguard.config')}
-	parent={{ href: '/settings/backups', label: t('safeguard.title') }}
->
+<PageHead title={t('safeguard.config')}>
 	<p class="muted">{t('stick.intro')}</p>
 </PageHead>
 

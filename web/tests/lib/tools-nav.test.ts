@@ -5,7 +5,7 @@ import deBase from '#lib/i18n/de.json';
 import enBase from '#lib/i18n/en.json';
 import deTaskmanager from '#lib/i18n/features/taskmanager.de.json';
 import enTaskmanager from '#lib/i18n/features/taskmanager.en.json';
-import { toolsAnchors, toolsCurrent, toolsGroups } from '#lib/tools-nav.ts';
+import { toolsAnchors, toolsGroups } from '#lib/tools-nav.ts';
 
 // Texts of a part of PLAN 61 live in its own file (i18n/features).
 const de = { ...deBase, ...deTaskmanager };
@@ -28,12 +28,4 @@ test('every tools row leads to a page and has texts in both languages', () => {
 test('old anchors point to existing tools pages', () => {
 	for (const target of Object.values(toolsAnchors))
 		expect(existsSync(page(target)), target).toBe(true);
-});
-
-test('a row is current on its page and sub-pages, not on a sibling with the same prefix', () => {
-	expect(toolsCurrent('/tools/logs', '/tools/logs')).toBe(true);
-	expect(toolsCurrent('/tools/logs', '/tools/logs/')).toBe(true);
-	expect(toolsCurrent('/tools/logs', '/tools/logs/kernel')).toBe(true);
-	expect(toolsCurrent('/tools/disks', '/tools/disksx')).toBe(false);
-	expect(toolsCurrent('/tools/disks', '/tools')).toBe(false);
 });

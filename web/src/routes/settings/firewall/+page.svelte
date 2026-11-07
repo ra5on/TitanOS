@@ -227,7 +227,7 @@
 	);
 </script>
 
-<PageHead title={t('firewall.title')} parent={{ href: '/settings', label: t('nav.settings') }} />
+<PageHead title={t('firewall.title')} />
 
 {#if loadError}<div class="notice-error" role="alert">
 		{loadError}<button class="btn" onclick={load}>{t('ui.retry')}</button>
@@ -447,7 +447,5 @@
 		position: sticky;
 		bottom: 12px;
 		z-index: 2;
-		/* Beside the round menu button of "Side" navigation on a phone. */
-		margin-left: var(--fab-clear, 0px);
 	}
 </style>

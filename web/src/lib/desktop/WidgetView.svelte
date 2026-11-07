@@ -395,7 +395,7 @@
 		color: var(--muted);
 	}
 	.state.on {
-		color: var(--ok-text, #9be3be);
+		color: color-mix(in srgb, var(--ok-text, #9be3be) 75%, var(--text));
 	}
 	.state::before {
 		content: '';

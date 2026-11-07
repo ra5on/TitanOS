@@ -7,6 +7,7 @@ import {
 	arrangeIcons,
 	defaultDesktop,
 	dockPinned,
+	dropIcon,
 	placeIcons,
 	placeWidget,
 	sanitizeDesktop,
@@ -156,4 +157,58 @@ test('PLAN 62: dock and bar settings are checked', () => {
 	prefs.dock.customPinned = true;
 	prefs.dock.pinned = ['docker:immich', 'app:gone'];
 	expect(dockPinned(prefs, new Set(['docker:immich']))).toEqual(['docker:immich']);
+});
+
+test('PLAN 65-10: icons keep their stored places when the window shrinks and grows', () => {
+	const keys = ['a', 'b', 'c', 'd'];
+	const prefs = {
+		sort: 'free' as const,
+		iconPos: { a: { c: 0, r: 0 }, b: { c: 9, r: 0 }, c: { c: 9, r: 4 }, d: { c: 3, r: 1 } },
+	};
+	const big = placeIcons(keys, prefs, 6, 12);
+	expect(Object.fromEntries(big)).toEqual(prefs.iconPos);
+	// Smaller: b and c are shown inside, near their place; a and d stay put.
+	const small = placeIcons(keys, prefs, 3, 5);
+	expect(small.get('a')).toEqual({ c: 0, r: 0 });
+	expect(small.get('d')).toEqual({ c: 3, r: 1 });
+	expect(small.get('b')).toEqual({ c: 4, r: 0 });
+	expect(small.get('c')).toEqual({ c: 4, r: 2 });
+	// A stand-in never takes the cell of an icon whose own place fits.
+	const crowded = placeIcons(
+		['x', 'y'],
+		{ sort: 'free', iconPos: { x: { c: 20, r: 0 }, y: { c: 4, r: 0 } } },
+		3,
+		5,
+	);
+	expect(crowded.get('y')).toEqual({ c: 4, r: 0 });
+	expect(crowded.get('x')).toEqual({ c: 4, r: 1 });
+
+	// Dragging d in the small window writes only d; b and c keep their places.
+	const stored = dropIcon(prefs, small, 'd', { c: 1, r: 2 });
+	expect(stored).toEqual({ ...prefs.iconPos, d: { c: 1, r: 2 } });
+	// Grown again: everything else is back where it was.
+	const back = placeIcons(keys, { sort: 'free', iconPos: stored }, 6, 12);
+	expect(back.get('b')).toEqual({ c: 9, r: 0 });
+	expect(back.get('c')).toEqual({ c: 9, r: 4 });
+	expect(back.get('d')).toEqual({ c: 1, r: 2 });
+
+	// Onto another icon: the two swap, nothing else changes.
+	const swapped = dropIcon(prefs, small, 'a', { c: 3, r: 1 }, 'd');
+	expect(swapped).toEqual({ ...prefs.iconPos, a: { c: 3, r: 1 }, d: { c: 0, r: 0 } });
+
+	// From a sorted desktop: the shown places become the stored ones, then the move.
+	const sorted = placeIcons(keys, { sort: 'kind', iconPos: {} }, 3, 5);
+	const first = dropIcon({ sort: 'kind', iconPos: {} }, sorted, 'a', { c: 4, r: 2 });
+	expect(first).toEqual({
+		a: { c: 4, r: 2 },
+		b: { c: 0, r: 1 },
+		c: { c: 0, r: 2 },
+		d: { c: 1, r: 0 },
+	});
+
+	// A new icon fills a free cell and moves nobody.
+	const added = placeIcons([...keys, 'e'], prefs, 6, 12);
+	for (const k of keys)
+		expect(added.get(k)).toEqual(prefs.iconPos[k as keyof typeof prefs.iconPos]);
+	expect(added.get('e')).toEqual({ c: 0, r: 1 });
 });

@@ -195,7 +195,10 @@ func (m *Manager) FollowJournal(ctx context.Context) {
 	}
 	for ctx.Err() == nil {
 		// Fields of different names are ANDed by journalctl; "+" ORs.
-		cmd := exec.CommandContext(ctx, "journalctl", "--follow", "--lines=0", "--output=json",
+		// Its own context: when reading stops early (a line too long),
+		// journalctl is ended, or Wait would wait for it for good.
+		follow, stop := context.WithCancel(ctx)
+		cmd := exec.CommandContext(follow, "journalctl", "--follow", "--lines=0", "--output=json",
 			"SYSLOG_IDENTIFIER=sshd-session", "SYSLOG_IDENTIFIER=sshd", "+", "_SYSTEMD_UNIT=smbd.service", "+", "_TRANSPORT=kernel")
 		out, err := cmd.StdoutPipe()
 		if err == nil {
@@ -203,8 +206,10 @@ func (m *Manager) FollowJournal(ctx context.Context) {
 		}
 		if err == nil {
 			err = m.readJournal(out)
+			stop()
 			cmd.Wait()
 		}
+		stop()
 		if ctx.Err() != nil {
 			return
 		}

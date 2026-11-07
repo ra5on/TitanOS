@@ -305,7 +305,7 @@
 		READ_ONLY.includes(domain) ? 'read' : DANGER.includes(domain) ? 'danger' : 'normal';
 </script>
 
-<PageHead title={t('ha.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
+<PageHead title={t('ha.title')}>
 	<p class="muted">{t('ha.intro')}</p>
 </PageHead>
 

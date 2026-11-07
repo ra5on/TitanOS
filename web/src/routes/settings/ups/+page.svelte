@@ -122,7 +122,7 @@
 	const status = $derived(answer?.status);
 </script>
 
-<PageHead title={t('ups.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
+<PageHead title={t('ups.title')}>
 	<p class="muted">{t('ups.intro')}</p>
 </PageHead>
 

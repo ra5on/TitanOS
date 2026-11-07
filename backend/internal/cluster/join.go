@@ -248,12 +248,15 @@ func (m *Manager) Join(ctx context.Context, text string) error {
 		return fmt.Errorf("%w: answer of the cluster", ErrInvalid)
 	}
 	// The accounts of the cluster first, then this node is a member.
-	for _, user := range res.Accounts {
-		m.importAccount(user)
-	}
 	state := res.State
 	if state.Accounts == nil {
 		state.Accounts = map[string]AccountVersion{}
+	}
+	for _, user := range res.Accounts {
+		if m.importAccount(user) != nil {
+			// Without its version the admin node sends it again.
+			delete(state.Accounts, user.Name)
+		}
 	}
 	m.mu.Lock()
 	err = m.saveLocked(&state, secrets{Secret: res.Secret, JoinKey: res.JoinKey})
@@ -266,19 +269,21 @@ func (m *Manager) Join(ctx context.Context, text string) error {
 }
 
 // importAccount takes over an account of the cluster and lets Applied
-// follow up.
-func (m *Manager) importAccount(user auth.User) {
+// follow up. An error means the account here is unchanged: its version
+// must not be noted, or the admin node would never send it again.
+func (m *Manager) importAccount(user auth.User) error {
 	if current, ok := m.Users.Get(user.Name); ok && accountHash(current) == accountHash(user) {
-		return
+		return nil
 	}
 	before, existed, err := m.Users.Import(user)
 	if err != nil {
 		slog.Error("cluster: account not taken over", "user", user.Name, "err", err)
-		return
+		return err
 	}
 	if m.Applied != nil {
 		m.Applied(before, existed, user, false)
 	}
+	return nil
 }
 
 // handlePreview answers a node that wants to join, if its key is right.

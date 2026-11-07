@@ -310,6 +310,11 @@ export function sanitizeDock(value: unknown): Dock {
  * Where each icon sits on the grid. Sorted modes fill the columns from the
  * top left; "free" keeps the account's places and puts new icons in the
  * first free cell.
+ *
+ * The stored places never change here (PLAN 65-10): an icon whose place lies
+ * outside a smaller window is shown at the nearest free cell inside, and
+ * comes back to its own place once the window is large enough again. Icons
+ * whose place fits always win over such stand-ins.
  */
 export function placeIcons(
 	keys: string[],
@@ -319,28 +324,75 @@ export function placeIcons(
 ): Map<string, { c: number; r: number }> {
 	const out = new Map<string, { c: number; r: number }>();
 	const rowsN = Math.max(1, rows);
+	const colsN = Math.max(1, columns);
 	const taken = new Set<string>();
 	const cell = (c: number, r: number) => c + ':' + r;
-	if (prefs.sort === 'free')
+	const take = (key: string, c: number, r: number) => {
+		taken.add(cell(c, r));
+		out.set(key, { c, r });
+	};
+	if (prefs.sort === 'free') {
+		const outside: string[] = [];
 		for (const key of keys) {
 			const at = prefs.iconPos[key];
 			if (!at) continue;
-			// A smaller screen pulls icons back inside; a taken cell leaves the icon for the next pass.
-			const c = Math.min(at.c, Math.max(0, columns - 1));
-			const r = Math.min(at.r, rowsN - 1);
-			if (taken.has(cell(c, r))) continue;
-			taken.add(cell(c, r));
-			out.set(key, { c, r });
+			if (at.c >= colsN || at.r >= rowsN) outside.push(key);
+			// The same cell twice: the later icon goes to the first free cell.
+			else if (!taken.has(cell(at.c, at.r))) take(key, at.c, at.r);
 		}
+		for (const key of outside) {
+			const at = prefs.iconPos[key];
+			const c0 = Math.min(at.c, colsN - 1);
+			const r0 = Math.min(at.r, rowsN - 1);
+			let best: { c: number; r: number } | null = null;
+			let bestD = Infinity;
+			for (let c = 0; c < colsN; c++)
+				for (let r = 0; r < rowsN; r++) {
+					if (taken.has(cell(c, r))) continue;
+					// Ties stay in the same column (the icons stack like before).
+					const d = (c - c0) ** 2 + (r - r0) ** 2 + Math.abs(c - c0) / 100;
+					if (d < bestD) {
+						bestD = d;
+						best = { c, r };
+					}
+				}
+			if (best) take(key, best.c, best.r);
+		}
+	}
 	let next = 0;
 	for (const key of keys) {
 		if (out.has(key)) continue;
 		while (taken.has(cell(Math.floor(next / rowsN), next % rowsN))) next++;
-		const at = { c: Math.floor(next / rowsN), r: next % rowsN };
-		taken.add(cell(at.c, at.r));
-		out.set(key, at);
+		take(key, Math.floor(next / rowsN), next % rowsN);
 	}
 	return out;
+}
+
+/**
+ * The places to store after `key` was dropped on `to` (PLAN 65-10). Only the
+ * moved icon and, when it lands on another icon, that one change; every other
+ * stored place stays as it is, even when a smaller window shows it elsewhere.
+ * `shown` are the places on screen now; when the desktop was sorted until now,
+ * all shown places become the stored ones first, so nothing jumps.
+ */
+export function dropIcon(
+	prefs: Pick<DesktopPrefs, 'sort' | 'iconPos'>,
+	shown: Map<string, { c: number; r: number }>,
+	key: string,
+	to: { c: number; r: number },
+	other?: string,
+): Record<string, { c: number; r: number }> {
+	const next: Record<string, { c: number; r: number }> = {};
+	if (prefs.sort === 'free')
+		for (const [k, at] of Object.entries(prefs.iconPos)) next[k] = { ...at };
+	else for (const [k, at] of shown) next[k] = { ...at };
+	const from = shown.get(key);
+	if (other && other !== key) {
+		if (from) next[other] = { ...from };
+		else delete next[other];
+	}
+	next[key] = { ...to };
+	return next;
 }
 
 /** The programs in the dock: the account's own, or the standard set of those it may use. */

@@ -58,9 +58,7 @@
 	}
 </script>
 
-<PageHead title={t('cleanup.title')} parent={{ href: '/plugins', label: t('nav.plugins') }}
-	><p class="muted">{t('cleanup.intro')}</p></PageHead
->
+<PageHead title={t('cleanup.title')}><p class="muted">{t('cleanup.intro')}</p></PageHead>
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 {#if loading}<p class="loading" role="status">
 		{t('common.loading')}

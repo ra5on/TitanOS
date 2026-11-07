@@ -405,6 +405,13 @@ type Chunk struct {
 	Content  string
 }
 
+// MaxAnswerBytes and MaxToolCalls bound one streamed answer of Ollama, so a
+// server that never ends cannot fill the memory of titand.
+const (
+	MaxAnswerBytes = 8 << 20
+	MaxToolCalls   = 64
+)
+
 // Chat sends one round and streams thinking and text to onChunk. It
 // returns the whole message, including the tool calls.
 func (o *Ollama) Chat(ctx context.Context, r ChatRequest, onChunk func(Chunk)) (Message, Stats, error) {
@@ -464,6 +471,9 @@ func (o *Ollama) Chat(ctx context.Context, r ChatRequest, onChunk func(Chunk)) (
 		}
 		if part.Error != "" {
 			return Message{}, stats, fmt.Errorf("Ollama: %s", part.Error)
+		}
+		if thinking.Len()+content.Len()+len(part.Message.Thinking)+len(part.Message.Content) > MaxAnswerBytes || len(msg.ToolCalls)+len(part.Message.ToolCalls) > MaxToolCalls {
+			return Message{}, stats, errors.New("Ollama: the answer is too long")
 		}
 		if part.Message.Thinking != "" || part.Message.Content != "" {
 			thinking.WriteString(part.Message.Thinking)

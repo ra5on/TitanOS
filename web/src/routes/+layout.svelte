@@ -10,13 +10,10 @@
 	import { page } from '$app/state';
 	import { afterNavigate, beforeNavigate, goto, onNavigate } from '$app/navigation';
 	import { isAgentPath } from '#lib/agent-app.ts';
-	import DashboardBackground from '#lib/dashboard/DashboardBackground.svelte';
-	import { dashboardVisual } from '#lib/dashboard/visual.ts';
-	import { dashboardScene } from '#lib/dashboard/scene.svelte.ts';
 	import Backdrop from '#lib/components/Backdrop.svelte';
 	import Shell from '#lib/components/Shell.svelte';
 	import LockScreen from '#lib/components/LockScreen.svelte';
-	import { i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { i18n, t } from '#lib/i18n/index.svelte.ts';
 	import Login from '#lib/pages/Login.svelte';
 	import Problem from '#lib/pages/Problem.svelte';
 	import Setup from '#lib/pages/Setup.svelte';
@@ -28,7 +25,8 @@
 	import { appearance, initAppearance } from '#lib/theme/appearance.svelte.ts';
 	import { effectOn } from '#lib/theme/themes.ts';
 	import { pageTitle } from '#lib/page-title.svelte.ts';
-	import { inWindow, mode } from '#lib/desktop/mode.svelte.ts';
+	import { frameFor, inWindow } from '#lib/desktop/mode.svelte.ts';
+	import { appForPath } from '#lib/desktop/apps.ts';
 	import { desktop } from '#lib/desktop/wm.svelte.ts';
 	import { wallpaperCss } from '#lib/desktop/wallpapers.ts';
 	import { THEMES } from '#lib/theme/themes.ts';
@@ -101,9 +99,9 @@
 		if (!document.startViewTransition || !effectOn(appearance.current, 'transitions')) return;
 		if (navigation.from?.url.pathname === navigation.to?.url.pathname) return;
 		if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-		// The header is named only while a transition runs: a named element is
-		// a backdrop root, and the glass of the account menu and the
-		// notifications in it would no longer blur the page behind them.
+		// The phone's bar is named only while a transition runs: a named
+		// element is a backdrop root, and the glass of the menu in it would
+		// no longer blur the page behind it (app.css).
 		const root = document.documentElement;
 		root.dataset.viewTransition = 'running';
 		return new Promise((resolve) => {
@@ -115,25 +113,22 @@
 		});
 	});
 
-	// The dashboard background; a picture of its own also behind every other
-	// page unless switched off. "Like the general background" and "none" stay
-	// on the dashboard: the other pages have the general background anyway.
-	const shownVisual = $derived(
-		dashboardScene.preview ?? dashboardVisual(session.dashboard?.visual),
+	// The desktop (PLAN 61) draws its own wallpaper; windows show the page on the theme's colour.
+	const ownBackground = $derived(
+		inWindow ||
+			(!!session.data?.user &&
+				!agentRoute &&
+				frameFor({
+					known: page.url.pathname === '/' || !!appForPath(page.url.pathname),
+					agentApp: false,
+					agentAppMode: false,
+				}) === 'desktop'),
 	);
-	const backgroundEverywhere = $derived(
-		shownVisual.background.everywhere &&
-			(shownVisual.background.source === 'builtin' || shownVisual.background.source === 'custom'),
-	);
-	// Pages without a PageHead (the dashboard) are named by their place in the navigation.
-	const ROUTE_TITLES: Record<string, MessageKey> = {
-		'/': 'nav.dashboard',
-		'/terminal': 'terminal.title',
-	};
 	const documentTitle = $derived.by(() => {
 		const host = session.data?.hostname;
-		const route = ROUTE_TITLES[page.url.pathname];
-		const name = session.data?.user ? pageTitle.value || (route ? t(route) : '') : '';
+		// The terminal has no PageHead to name it.
+		const route = page.url.pathname === '/terminal' ? t('terminal.title') : '';
+		const name = session.data?.user ? pageTitle.value || route : '';
 		return [name, host, 'TitanOS'].filter(Boolean).join(' – ');
 	});
 
@@ -169,15 +164,12 @@
 	{/if}
 </svelte:head>
 
-{#if inWindow || (session.data?.user && mode.wide && !mode.classic && !agentRoute)}
-	<!-- The desktop (PLAN 61) draws its own wallpaper; windows show the page on the theme's colour. -->
-{:else if session.data?.user && mode.classic && (page.url.pathname === '/' || backgroundEverywhere)}<!-- PLAN 64: the dashboard's background has no setting any more; only the classic frame of the test scripts keeps it. --><DashboardBackground
-		visual={shownVisual}
-		inherited={appearance.current}
-		urls={dashboardScene.urls}
-	/>{:else}<Backdrop appearance={appearance.current} />{/if}
+{#if !ownBackground}<Backdrop appearance={appearance.current} />{/if}
 
-{#if session.status === 'unreachable'}
+<!-- PLAN 65-6: the texts of the language load first (lib/i18n). -->
+{#if !i18n.ready}
+	<!-- Nothing yet: usually a moment only. -->
+{:else if session.status === 'unreachable'}
 	<Problem title={t('unreachable.title')} text={t('unreachable.text')} />
 {:else if session.status === 'ready' && session.data}
 	{#if !session.data.configAvailable}

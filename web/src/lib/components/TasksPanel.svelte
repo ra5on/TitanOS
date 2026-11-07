@@ -13,12 +13,11 @@
 	import Dialog from './Dialog.svelte';
 	import Icon from './Icon.svelte';
 	/**
-	 * `badge`: only a small badge with the number while something runs (head
-	 * line, sidebar status), nothing otherwise.
+	 * `badge`: only a small badge with the number while something runs (top
+	 * bar of the desktop), nothing otherwise.
 	 */
 	/**
-	 * `sheetOnly`: only the sheet of the phone, shown by the shell outside
-	 * the menu (the menu closes, and with it the badge inside it).
+	 * `sheetOnly`: only the sheet of the phone, shown by the shell above the page.
 	 */
 	let {
 		compact = false,
@@ -42,8 +41,7 @@
 	};
 	type UpdateStatus = { progress: { phase: string; percent: number; file: string } };
 	let open = $state((() => sheetOnly)());
-	// On the phone the tasks are a sheet from the bottom; the menu closes
-	// first, so the sheet does not sit on top of it (PLAN 46).
+	// On the phone the tasks are a sheet from the bottom (PLAN 46).
 	let phone = $state(matchMedia('(max-width: 760px)').matches);
 	$effect(() => {
 		const query = matchMedia('(max-width: 760px)');
@@ -55,7 +53,6 @@
 	function show() {
 		if (phone) {
 			shell.tasksSheet = true;
-			shell.closeMenu?.();
 			return;
 		}
 		open = true;

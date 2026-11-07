@@ -97,10 +97,7 @@
 	}
 </script>
 
-<PageHead
-	title={t('look.dock.title')}
-	parent={{ href: '/settings/appearance', label: t('appearance.title') }}
->
+<PageHead title={t('look.dock.title')}>
 	<p class="muted">{t('look.dock.intro')}</p>
 	{#snippet actions()}
 		<button type="button" class="btn" onclick={reset} disabled={!dock}

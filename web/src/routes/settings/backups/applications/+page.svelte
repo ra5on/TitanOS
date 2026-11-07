@@ -150,9 +150,7 @@
 </script>
 
 <NavigationGuard dirty={!!plan} />
-<PageHead
-	title={t('applications.title')}
-	parent={{ href: '/settings/backups', label: t('safeguard.title') }}
+<PageHead title={t('applications.title')}
 	>{#snippet actions()}<a class="btn" href="/settings/backups/coverage">{t('coverage.title')}</a
 		><button class="btn" disabled={busy} onclick={load}>{t('ops.refresh')}</button
 		>{/snippet}</PageHead

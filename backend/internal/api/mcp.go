@@ -247,7 +247,7 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.mcpSettings().Enabled {
-		writeError(w, http.StatusForbidden, "mcp_disabled", "the MCP server is switched off under Settings › API and CLI")
+		writeError(w, http.StatusForbidden, "mcp_disabled", "the MCP server is switched off under Settings › MCP server")
 		return
 	}
 	token, user, failed := s.tokenAccount(r.Header.Get("Authorization"))

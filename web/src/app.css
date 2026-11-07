@@ -12,11 +12,6 @@
 	--bg: #0e1114;
 	--surface: #161a1f;
 	--header: #12161a;
-	--bar-bg: var(--header);
-	--bar-backdrop: none;
-	--sidebar-bg: var(--header);
-	--sidebar-backdrop: none;
-	--sidebar-edge: none;
 	--border: #232a31;
 	--text: #e6e9ed;
 	--muted: #9aa3ad;
@@ -250,53 +245,6 @@
 	-webkit-backdrop-filter: var(--menu-backdrop);
 	backdrop-filter: var(--menu-backdrop);
 	box-shadow: var(--menu-shadow);
-}
-
-/* Header, sidebar and status bar (Settings › Appearance › Bars, and
-   Navigation › Sidebar for .sidebar-surface). The glass
-   lies on a layer behind the content: a backdrop-filter on the bar itself
-   would make it a backdrop root, and its menus would no longer blur the
-   page. The bar must be positioned and form a stacking context. */
-.bar-surface {
-	background: transparent;
-	isolation: isolate;
-}
-.bar-surface::before {
-	content: '';
-	position: absolute;
-	inset: 0;
-	z-index: -1;
-	background: var(--bar-bg);
-	-webkit-backdrop-filter: var(--bar-backdrop);
-	backdrop-filter: var(--bar-backdrop);
-	pointer-events: none;
-}
-.sidebar-surface::before {
-	background: var(--sidebar-bg);
-	-webkit-backdrop-filter: var(--sidebar-backdrop);
-	backdrop-filter: var(--sidebar-backdrop);
-	box-shadow: var(--sidebar-edge);
-}
-/* Without backdrop-filter or with reduced transparency the bars and the
-   sidebar are opaque like menus and dialogs. The values come inline on
-   <html>, so the layer itself is overridden. */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-	.bar-surface::before,
-	.sidebar-surface::before {
-		background: var(--header);
-		-webkit-backdrop-filter: none;
-		backdrop-filter: none;
-		box-shadow: none;
-	}
-}
-@media (prefers-reduced-transparency: reduce) {
-	.bar-surface::before,
-	.sidebar-surface::before {
-		background: var(--header);
-		-webkit-backdrop-filter: none;
-		backdrop-filter: none;
-		box-shadow: none;
-	}
 }
 
 *,
@@ -744,15 +692,14 @@ main.readable :target {
    movement always stops for prefers-reduced-motion. */
 
 /* Gradient accent: filled controls and bars use --accent-fill. */
-:root[data-fx-gradient='on']
-	:is(.btn-primary, .btn-primary:hover:not(:disabled), .bar > span, .fab) {
+:root[data-fx-gradient='on'] :is(.btn-primary, .btn-primary:hover:not(:disabled), .bar > span) {
 	background: var(--accent-fill);
 }
 
-/* Page transitions: the header keeps its place, the content fades over. */
+/* Page transitions: the phone's bar keeps its place, the content fades over. */
 /* Named only while a transition runs (+layout.svelte): a named element is a
-   backdrop root, and menus in the header would not blur the page. */
-:root[data-fx-transitions='on'][data-view-transition] header {
+   backdrop root, and menus in the bar would not blur the page. */
+:root[data-fx-transitions='on'][data-view-transition] header.phone-bar {
 	view-transition-name: titanos-header;
 }
 ::view-transition-old(root),

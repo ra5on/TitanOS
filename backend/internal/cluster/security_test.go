@@ -11,6 +11,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/ra5on/TitanOS/backend/internal/auth"
 )
 
 // joinedPair makes a cluster of two test nodes: a created it, b joined.
@@ -230,5 +232,171 @@ func TestParseJoinInfoRefusesBadInput(t *testing.T) {
 		if _, err := parseJoinInfo(text); !errors.Is(err, ErrJoinInfo) {
 			t.Errorf("%q: %v", text, err)
 		}
+	}
+}
+
+// The protocol between the nodes is not reachable for an account: neither
+// through the proxy of the web interface (any account on a managing node
+// could send accounts or members to the others) nor as a signed request
+// that names an account.
+func TestPeerProtocolNotForAccounts(t *testing.T) {
+	a, b := joinedPair(t)
+	for _, path := range []string{"cluster/peer/accounts", "/cluster/peer/members", "cluster/./peer/node", "cluster//peer/leave", "x/../cluster/peer/backup/pair", "cluster/peer"} {
+		rec := httptest.NewRecorder()
+		a.m.Proxy(rec, httptest.NewRequest("POST", "/api/v1/cluster/nodes/"+b.m.ID()+"/api/"+path, strings.NewReader("[]")), b.m.ID(), "alex", path)
+		if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "cluster_not_permitted") {
+			t.Errorf("proxy to %s: %d %s", path, rec.Code, rec.Body)
+		}
+	}
+	for _, target := range []string{PeerPrefix + "accounts", PeerPrefix + "status"} {
+		req := withCertificate(signedBy(t, a.m, "GET", target, "alex"), a.m.cert.tls.Leaf)
+		rec := httptest.NewRecorder()
+		b.m.PeerHandler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("%s signed for an account: %d %s", target, rec.Code, rec.Body)
+		}
+		req = withCertificate(signedBy(t, a.m, "GET", target, ""), a.m.cert.tls.Leaf)
+		rec = httptest.NewRecorder()
+		b.m.PeerHandler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("%s signed by the node: %d %s", target, rec.Code, rec.Body)
+		}
+	}
+	if peerPath("storage") || peerPath("cluster/nodes") || peerPath("cluster/peers") {
+		t.Error("other paths taken for the protocol")
+	}
+}
+
+// failingImport is Accounts whose Import fails while fail is set.
+type failingImport struct {
+	Accounts
+	fail *bool
+}
+
+func (f failingImport) Import(user auth.User) (auth.User, bool, error) {
+	if *f.fail {
+		return auth.User{}, false, errors.New("stick not writable")
+	}
+	return f.Accounts.Import(user)
+}
+
+// An account that could not be taken over keeps its old version here, so
+// that the admin node sends it again instead of thinking it arrived.
+func TestFailedImportIsSentAgain(t *testing.T) {
+	a, b := joinedPair(t)
+	fail := true
+	b.m.Users = failingImport{Accounts: b.users, fail: &fail}
+	old := a.m.versions()["alex"]
+	if _, err := a.users.SetPassword("alex", "a-new-password"); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "new version on A", func() bool { return a.m.versions()["alex"] != old })
+	a.m.pushAccount(context.Background(), "alex")
+	if sameAccount(a, b, "alex") {
+		t.Fatal("account changed although Import failed")
+	}
+	if b.m.versions()["alex"] == a.m.versions()["alex"] {
+		t.Fatal("version noted for an account that was not taken over")
+	}
+	fail = false
+	a.m.syncAccounts(context.Background())
+	if !sameAccount(a, b, "alex") {
+		t.Fatal("account not sent again")
+	}
+}
+
+// Background work that started in the cluster must not panic when the node
+// left meanwhile.
+func TestBackgroundAfterLeaving(t *testing.T) {
+	a := newTestNode(t, "nas-a", map[string]string{"alex": "password-of-a"})
+	if err := a.m.Create("Home"); err != nil {
+		t.Fatal(err)
+	}
+	a.m.mu.Lock()
+	a.m.state = nil
+	a.m.mu.Unlock()
+	if _, ok := a.m.record("alex"); ok {
+		t.Error("record outside a cluster")
+	}
+	a.m.watchNodes(context.Background())
+}
+
+// An account a node keeps for itself does not act on another node that
+// has its own account of that name: neither the sending node nor the
+// receiving one lets it through.
+func TestLocalAccountDoesNotActElsewhere(t *testing.T) {
+	a, b := joinedPair(t)
+	c := newTestNode(t, "nas-c", map[string]string{"cora": "password-of-c"})
+	if err := c.m.Join(context.Background(), a.m.JoinInfo()); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "C known on B", func() bool { _, err := b.m.node(c.m.ID()); return err == nil })
+	if err := a.m.SetManage(context.Background(), b.m.ID(), true); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "B may manage", func() bool { return b.m.Manages() && c.m.MayManage(b.m.ID()) })
+	// carol is plain on B and owner on C, neither from the admin node.
+	if _, err := b.users.Create("carol", "password-of-b", auth.RoleUser); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.users.Create("carol", "password-of-c", auth.RoleAdmin); err != nil {
+		t.Fatal(err)
+	}
+	if b.m.ClusterAccount("carol") || c.m.ClusterAccount("carol") {
+		t.Fatal("local account taken for one of the cluster")
+	}
+	if !b.m.ClusterAccount("alex") || !c.m.ClusterAccount("alex") || !a.m.ClusterAccount("alex") {
+		t.Fatal("account of the admin node not one of the cluster")
+	}
+	rec := httptest.NewRecorder()
+	b.m.Proxy(rec, httptest.NewRequest("GET", "/api/v1/storage", nil), c.m.ID(), "carol", "storage")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("proxy for a local account: %d %s", rec.Code, rec.Body)
+	}
+	rec = httptest.NewRecorder()
+	b.m.Proxy(rec, httptest.NewRequest("GET", "/api/v1/storage", nil), c.m.ID(), "alex", "storage")
+	if rec.Code != http.StatusOK || !strings.HasPrefix(rec.Body.String(), "alex ") {
+		t.Fatalf("proxy for an account of the cluster: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// The relay passes restic's requests on, not the pairing: that is for the
+// backup page of an administrator, and every program here reaches the relay.
+func TestRelayRefusesPairing(t *testing.T) {
+	a, b := joinedPair(t)
+	for _, p := range []string{"/pair", "/./pair", "//pair", "/x/../pair/"} {
+		rec := httptest.NewRecorder()
+		a.m.Relay().ServeHTTP(rec, httptest.NewRequest("POST", "/"+b.m.ID()+p, strings.NewReader(`{"name":"x"}`)))
+		if rec.Code != http.StatusForbidden || strings.Contains(rec.Body.String(), "token") {
+			t.Errorf("pairing through the relay %s: %d %s", p, rec.Code, rec.Body)
+		}
+	}
+	rec := httptest.NewRecorder()
+	a.m.Relay().ServeHTTP(rec, httptest.NewRequest("GET", "/"+b.m.ID()+"/Node-a/config", nil))
+	if rec.Code != http.StatusOK || rec.Body.String() != "backup ok" {
+		t.Errorf("restic through the relay: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// Preview and join come from anyone who reaches the port: they read only a
+// small body before the join key is checked, and a real join still fits.
+func TestJoinBodyIsSmallBeforeTheKey(t *testing.T) {
+	a := newTestNode(t, "nas-a", map[string]string{"alex": "password-of-a"})
+	if err := a.m.Create("Home"); err != nil {
+		t.Fatal(err)
+	}
+	big := `{"key":"` + strings.Repeat("0", joinBodyLimit) + `"}`
+	for _, path := range []string{"preview", "join"} {
+		req := httptest.NewRequest("POST", PeerPrefix+path, strings.NewReader(big))
+		req.RemoteAddr = "127.0.0.1:40000"
+		rec := httptest.NewRecorder()
+		a.m.PeerHandler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_json") {
+			t.Errorf("%s with %d bytes: %d %s", path, len(big), rec.Code, rec.Body)
+		}
+	}
+	b := newTestNode(t, "nas-b", map[string]string{"bob": "password-of-b"})
+	if err := b.m.Join(context.Background(), a.m.JoinInfo()); err != nil {
+		t.Fatalf("a real join: %v", err)
 	}
 }

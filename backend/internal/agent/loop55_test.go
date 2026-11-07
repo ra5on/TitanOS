@@ -368,3 +368,66 @@ func TestTimeLimitReports(t *testing.T) {
 		t.Fatalf("end %+v / %+v", chat.Entries[n-2], chat.Entries[n-1])
 	}
 }
+
+// One answer with more calls than the step limit runs only up to the
+// limit; the rest is recorded as not run and the next round reports.
+func TestManyCallsInOneRoundKeepTheStepLimit(t *testing.T) {
+	calls := []string{}
+	for i := 0; i < 10; i++ {
+		calls = append(calls, fmt.Sprintf(`{"function":{"name":"look","arguments":{"n":%d}}}`, i))
+	}
+	fake := &fakeOllama{replies: [][]string{{`{"role":"assistant","content":"","tool_calls":[` + strings.Join(calls, ",") + `]}`}}}
+	tools := &fakeTools{}
+	r := &Runner{Ollama: fake.serve(t), Model: "m", Tools: tools, MaxSteps: 3}
+	chat := newChat("x")
+	r.Run(context.Background(), chat)
+	if len(tools.ran) != 3 {
+		t.Fatalf("ran %d calls with a limit of 3", len(tools.ran))
+	}
+	notRun, limit := 0, 0
+	for _, e := range chat.Entries {
+		if e.Role == "tool" && strings.Contains(e.Result, "step limit") {
+			notRun++
+		}
+		if e.Note == "limit" {
+			limit++
+		}
+	}
+	if notRun != 7 || limit != 1 {
+		t.Fatalf("not run %d, limit notes %d", notRun, limit)
+	}
+}
+
+// An Ollama that streams without end is cut off instead of filling the
+// memory of titand.
+func TestChatAnswerIsBounded(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		line := []byte(`{"message":{"role":"assistant","content":"` + strings.Repeat("x", 64<<10) + `"},"done":false}` + "\n")
+		for i := 0; i < (MaxAnswerBytes>>16)+4; i++ {
+			if _, err := w.Write(line); err != nil {
+				return
+			}
+		}
+		w.Write([]byte(`{"message":{"role":"assistant","content":""},"done":true}` + "\n"))
+	}))
+	defer srv.Close()
+	o, err := NewOllama(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := o.Chat(context.Background(), ChatRequest{Model: "m"}, nil); err == nil || !strings.Contains(err.Error(), "too long") {
+		t.Fatalf("err = %v", err)
+	}
+	calls := []string{}
+	for i := 0; i < MaxToolCalls+1; i++ {
+		calls = append(calls, `{"function":{"name":"look","arguments":{}}}`)
+	}
+	srv2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"message":{"role":"assistant","content":"","tool_calls":[` + strings.Join(calls, ",") + `]},"done":true}` + "\n"))
+	}))
+	defer srv2.Close()
+	o2, _ := NewOllama(srv2.URL)
+	if _, _, err := o2.Chat(context.Background(), ChatRequest{Model: "m"}, nil); err == nil {
+		t.Fatal("too many tool calls accepted")
+	}
+}

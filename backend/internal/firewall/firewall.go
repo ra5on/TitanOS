@@ -642,12 +642,16 @@ func (m *Manager) SetAppZones(ctx context.Context, key string, zones Zones) (boo
 	if err := validate(cfg); err != nil {
 		return false, err
 	}
-	if err := m.store.WriteJSON(settingsFile, toFile(cfg)); err != nil {
-		return false, err
-	}
+	// Rules first, the stick after: settings whose rules could not be
+	// loaded must not be stored, or the next start would bring them.
 	before := m.active
 	m.active = cfg
 	if err := m.applyLocked(ctx); err != nil {
+		m.active = before
+		_ = m.applyLocked(ctx) // going back to the rules before; the first error is returned
+		return false, err
+	}
+	if err := m.store.WriteJSON(settingsFile, toFile(cfg)); err != nil {
 		m.active = before
 		_ = m.applyLocked(ctx) // going back to the rules before; the first error is returned
 		return false, err

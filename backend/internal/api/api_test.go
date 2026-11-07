@@ -988,7 +988,7 @@ func TestVMsAreForAdministrators(t *testing.T) {
 func TestTwoFactorLogin(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
-	res, body := ts.request("POST", "/api/v1/account/2fa/begin", nil)
+	res, body := ts.request("POST", "/api/v1/account/2fa/begin", map[string]string{"password": testPassword})
 	var begun struct{ Secret, URI string }
 	if json.Unmarshal(body, &begun) != nil || res.StatusCode != http.StatusOK || begun.Secret == "" {
 		t.Fatalf("begin: %d %s", res.StatusCode, body)
@@ -1910,6 +1910,8 @@ func (ts *testServer) withShare() string {
 	if err := ts.disks.Load(); err != nil {
 		ts.t.Fatal(err)
 	}
+	// A share sync started by an earlier settings change reads the mounts.
+	ts.server.shareSyncs.Wait()
 	ts.disks.UseMounts(mnt, func() map[string]bool { return map[string]bool{mnt + "/tank": true} })
 	ts.shares.UseMountRoot(mnt)
 	dir := filepath.Join(mnt, "tank", "Docs")

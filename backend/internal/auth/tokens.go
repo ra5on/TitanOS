@@ -77,13 +77,21 @@ func (t *Tokens) loadLocked() {
 	}
 }
 
-func (t *Tokens) List(user string) []APIToken {
+// ofAccount reports whether token belongs to user as the account is now:
+// a token of a deleted account of the same name, or from before a password
+// change, no longer counts (it cannot sign in either, tokenAccount).
+func (token APIToken) ofAccount(user User) bool {
+	return token.User == user.Name && token.AccountCreated.Equal(user.Created) && token.AccountKey == TokenAccountKey(user)
+}
+
+// List returns the tokens of user that are still valid.
+func (t *Tokens) List(user User) []APIToken {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.loadLocked()
 	list := []APIToken{}
 	for _, token := range t.tokens {
-		if token.User == user {
+		if token.ofAccount(user) {
 			token.Hash = ""
 			token.AccountKey = ""
 			token.Scopes = slices.Clone(token.Scopes)
@@ -115,7 +123,7 @@ func (t *Tokens) Create(user User, name string, scopes []string) (APIToken, stri
 	}
 	count := 0
 	for _, token := range t.tokens {
-		if token.User == user.Name {
+		if token.ofAccount(user) {
 			count++
 		}
 	}
@@ -134,7 +142,9 @@ func (t *Tokens) Create(user User, name string, scopes []string) (APIToken, stri
 	plain := "titanos_" + id + "_" + base64.RawURLEncoding.EncodeToString(secret)
 	hash := sha256.Sum256([]byte(plain))
 	token := APIToken{ID: id, Name: name, User: user.Name, AccountCreated: user.Created, AccountKey: TokenAccountKey(user), Scopes: scopes, Created: time.Now().UTC(), Hash: hex.EncodeToString(hash[:])}
-	next := append(slices.Clone(t.tokens), token)
+	// Left-overs of an earlier account of this name go with this write.
+	next := slices.DeleteFunc(slices.Clone(t.tokens), func(old APIToken) bool { return old.User == user.Name && !old.ofAccount(user) })
+	next = append(next, token)
 	if err := t.store.WriteJSON(tokenFile, next); err != nil {
 		return APIToken{}, "", err
 	}
@@ -194,6 +204,27 @@ func (t *Tokens) Revoke(user, id string) error {
 	next := slices.DeleteFunc(slices.Clone(t.tokens), func(token APIToken) bool { return token.User == user && token.ID == id })
 	if len(next) == len(t.tokens) {
 		return ErrNotFound
+	}
+	if err := t.store.WriteJSON(tokenFile, next); err != nil {
+		return err
+	}
+	t.tokens = next
+	return nil
+}
+
+// RemoveUser deletes the tokens of a deleted account, so that a new account
+// of the same name does not see them. The stick is written only if there
+// were any.
+func (t *Tokens) RemoveUser(name string) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.loadLocked()
+	if !t.loaded {
+		return ErrNotLoaded
+	}
+	next := slices.DeleteFunc(slices.Clone(t.tokens), func(token APIToken) bool { return token.User == name })
+	if len(next) == len(t.tokens) {
+		return nil
 	}
 	if err := t.store.WriteJSON(tokenFile, next); err != nil {
 		return err

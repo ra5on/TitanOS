@@ -7,10 +7,7 @@
 	const version = $derived(system.info?.version ?? '');
 </script>
 
-<PageHead
-	title={t('safeguard.restore')}
-	parent={{ href: '/settings/backups', label: t('safeguard.title') }}
-/>
+<PageHead title={t('safeguard.restore')} />
 <DataBackups restoreOnly />
 <section
 	class="tile panel"

@@ -21,6 +21,8 @@ export type FrameMessage =
 	/** A window asks the desktop to open one of its dialogs (the wallpaper). */
 	| { type: 'titanos-desk-dialog'; dialog: 'wallpaper' }
 	| { type: 'titanos-console'; session: unknown }
+	/** PLAN 65-6: the desktop tells a window's page whether it can be seen (minimized: no). */
+	| { type: 'titanos-visible'; visible: boolean }
 	| {
 			type: 'titanos-key';
 			key: string;

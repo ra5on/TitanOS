@@ -109,8 +109,9 @@ export function dockerPrograms(host: string): DockerProgram[] {
 		const web =
 			group.find((c) => c.proxyUrl) ?? group.find((c) => c.webui) ?? group.find((c) => c.publicUrl);
 		if (!web) continue;
+		// The window shows the remote view, which needs only the name (PLAN 63):
+		// an address this browser cannot use itself does not hide the app.
 		const url = web.proxyUrl || appURL(web.webui, host) || web.publicUrl;
-		if (!url) continue;
 		out.push({
 			key: 'docker:' + app,
 			app,

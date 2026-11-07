@@ -5,7 +5,7 @@
   </picture>
 </p>
 
-<p align="center"><strong>Deine Daten. Deine Anwendungen. Deine Startseite.</strong><br>Ein NAS-Betriebssystem für den eigenen Server – vom USB-Stick gestartet, im RAM betrieben, im Browser verwaltet.</p>
+<p align="center"><strong>Deine Daten. Deine Anwendungen. Dein Arbeitsplatz.</strong><br>Ein NAS-Betriebssystem für den eigenen Server – vom USB-Stick gestartet, im RAM betrieben, im Browser verwaltet.</p>
 
 <p align="center">
   <a href="https://github.com/ra5on/TitanOS/releases/latest"><img src="docs/brand/download-stable.svg" alt="Aktuelle TitanOS-Version herunterladen" width="350" height="54"></a><br>
@@ -19,43 +19,40 @@
   <a href="LICENSE.md">Fair Source</a>
 </p>
 
-[![TitanOS: persönlich gestaltbares Dashboard mit Systeminformationen, Docker-Apps, VMs, Speicher und Messwerten](docs/screenshots/current/dashboard.png)](docs/screenshots/current/dashboard.png)
+[![TitanOS im Desktop-Modus: Arbeitsplatz mit Programmsymbolen, Docker-Apps, Widgets, Leisten oben und Dock](docs/screenshots/current/arbeitsplatz.png)](docs/screenshots/current/arbeitsplatz.png)
 
 ## Ein Server für Dateien, Apps und virtuelle Maschinen
 
-TitanOS macht aus einem x86-64-PC einen zentralen Speicher und Anwendungsserver. Du verwaltest RAID-Volumes, Freigaben, Docker-Apps, LXC-Systemcontainer, virtuelle Maschinen und Sicherungen in einer gemeinsamen Weboberfläche. Dazu kommen ein Dateimanager, Hardware-Monitoring, Home Assistant, ein KI-Agent mit deinem eigenen Ollama und ein optionaler MCP-Server für KI-Clients wie Claude.
+TitanOS macht aus einem x86-64-PC einen zentralen Speicher und Anwendungsserver. Du verwaltest RAID-Volumes, Freigaben, Docker-Apps, LXC-Systemcontainer, virtuelle Maschinen und Sicherungen in einer Weboberfläche, die wie ein Desktop arbeitet: jeder Bereich ist ein Programm im eigenen Fenster. Dazu kommen ein Dateimanager, Hardware-Monitoring, Home Assistant, ein KI-Agent mit deinem eigenen Ollama und ein optionaler MCP-Server für KI-Clients wie Claude.
 
-Die Startseite passt du an deinen Alltag an: Welche Informationen du siehst, wie viel Platz sie bekommen und wie sie aussehen, bestimmst du selbst. Jede Person hat ihr eigenes Dashboard und ihre eigenen Darstellungseinstellungen.
+Den Arbeitsplatz richtest du dir selbst ein: welche Programme auf dem Desktop und im Dock liegen, welche Widgets du siehst, welcher Hintergrund und wie durchscheinend Fenster und Leisten sind. Docker-Apps wie Immich oder Jellyfin öffnen in der Fernansicht direkt im Fenster, auch von unterwegs über Cloudflare oder VPN. Jede Person hat ihren eigenen Arbeitsplatz; am Handy wird daraus ein App-Raster.
 
 Das System basiert auf **Debian 13**, startet per UEFI (auch 32-Bit-UEFI) oder Legacy-BIOS von einem USB-Stick und läuft aus dem Arbeitsspeicher. Nutzdaten, Container und VM-Abbilder liegen auf separaten Daten-Volumes. Die Konfiguration bleibt auf dem Stick; automatische Konfigurationssicherungen helfen beim Austausch eines ausgefallenen Sticks.
 
 Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-Software-RAID und ist ein eigenständiges Projekt ohne Verbindung zu Lime Technology.
 
-**Die Bilder zeigen die echte Weboberfläche mit isolierten Beispieldaten.** Es sind keine Messungen eines produktiven NAS und keine Design-Mockups. Ein Klick öffnet die volle Auflösung. [Aufnahmestand und Erstellung](docs/screenshots/README.md).
+**Die Bilder zeigen die echte Weboberfläche mit isolierten Beispieldaten.** Es sind keine Messungen eines produktiven NAS und keine Design-Mockups; das Bild innerhalb der Fernansicht ist ein nachgebildeter Teststrom, keine echte App. Ein Klick öffnet die volle Auflösung. [Aufnahmestand und Erstellung](docs/screenshots/README.md).
 
 ## Funktionen
 
-### Deine persönliche Startseite
+### Arbeitsplatz, Fenster und Dock
 
-- **Ein frei anpassbares Dashboard pro Konto:** Kacheln verschieben, vergrößern, verkleinern, duplizieren, ausblenden, einklappen und an ihrer Position sperren. Ein Positionsraster mit Ziehvorschau und unabhängigen Spalten vermeidet gemeinsame Leerzeilen.
-- **Anpassbare Aufteilung:** ein bis vier Spalten und eine Mindestbreite festlegen. Bei schmaleren Fenstern wandern die Inhalte in ihrer Lesereihenfolge nach unten; Kacheln können automatisch wachsen oder eine feste Höhe mit scrollbarem Inhalt bekommen.
-- **Inhalt je Kachel:** Messwerte als Zahl, Balken, Ring oder Verlauf; Felder und Einträge auswählen und sortieren; bei Apps und VMs Symbolgröße, Eintragsbreite und Namenszeilen; eigener Titel und Symbol.
-- **Aussehen an einem Ort:** Theme, Akzent, Flach, Glas oder Kontur mit Transparenz, Unschärfe und Glanz, Leuchten mit eigener Farbe, Ecken, Schriftgröße, Dichte und Bewegung stellst du unter Einstellungen › Darstellung ein; sie gelten für alle Kacheln und die ganze Oberfläche. Menüs und Dialogfenster bekommen auf Wunsch eigene Transparenz, Unschärfe und Abdunkelung, auch das Menü auf dem Handy. Der Editor führt mit „Darstellung“ direkt dorthin.
-- **Eigener Hintergrund:** zehn mitgelieferte Motive oder bis zu fünf eigene Bilder pro Konto, ganzes Bild oder Ausschnitt mit Position und Zoom, feststehend oder mitlaufend und abdunkelbar; gewählt unter Einstellungen › Darstellung › Hintergrund des Dashboards; ab Werk liegt ein gewähltes Bild auch hinter allen anderen Seiten.
-- **Flüssige Messwerte:** einstellbare, abschaltbare Übergänge für Balken, Ringe und Verläufe (Einstellungen › Darstellung); die Bewegungsreduktion des Browsers wird berücksichtigt.
-- **Kompakter Schnellzugriff:** Suche, Terminal, Benachrichtigungen und Dashboard-Bearbeiten liegen in einer gemeinsamen Fläche oben rechts; das Konto-Menü bleibt separat.
-- **Inhalte selbst auswählen:** Systeminformationen einblenden und sortieren; CPU-Threads, Sensoren, Netzwerkschnittstellen und einzelne Geräte oder Anwendungen gezielt anzeigen.
-- **Tailnet im Blick:** Die Kachel „Tailscale“ (Besitzer/Administratoren) zeigt die Geräte des Tailnets. Pro Kachel wählst du Geräte und sortierbare Angaben: Online/Offline, Tailscale-IPv4/IPv6, Hostname, MagicDNS-Name, zuletzt gesehen, Betriebssystem, Exit Node, Subnet-Routen und eine Markierung für dieses NAS.
-- **NetBird-Netz im Blick:** Die Kachel „NetBird“ (Besitzer/Administratoren) zeigt die Geräte des NetBird-Netzes mit wählbaren, sortierbaren Angaben: verbunden, dieses NAS, NetBird-IP/IPv6, Name (FQDN), letzter Handshake, Verbindungsart (direkt oder über Relay) und Netze; optional nur verbundene Geräte.
-- **Direkt am Eintrag handeln:** passende Klickmenüs für Docker, VMs, Shares und Volumes. Docker zeigt die konfigurierten App-Icons; Stacks sind zunächst geschlossen. Details einer VM öffnen sich unmittelbar unter dieser VM.
-- **Klare Rückfragen statt Eintippen:** Löschen, Überschreiben, Plattentests, Zwei-Faktor-Zurücksetzen, SSH-Schlüssel und Zertifikate entfernen bestätigt man in einem Dialog, der genau nennt, was passiert. Namen müssen nirgends eingetippt werden; „Abbrechen“ hat den Fokus, Enter löst nie die gefährliche Aktion aus. Zerstörende Knöpfe stehen auf Detailseiten gesammelt in einer abgesetzten „Gefahrenzone“ am Ende. Fachbegriffe wie Write-Intent-Bitmap, Bridge, VLAN oder Token-Bereiche erklärt ein „?“ direkt daneben.
-- **Visueller Editor mit Vorschau:** eine haftende Leiste bündelt Kachel hinzufügen, Spalten, Mindestbreite, Rückgängig, Wiederholen, Standard, Abbrechen und Speichern (auch per Strg/⌘+Z/Y/S); Änderungen siehst du sofort.
+- **Jeder Bereich ein Programm:** Dateien, Freigaben, Speicher, Docker, Virtuelle Maschinen, Systemcontainer, App-Center, Sicherung, KI-Agent, Monitor, Protokolle, Aufgabenplaner, Terminal, Benutzer, Sicherheit, Mein Konto und Systemsteuerung öffnen als eigene Fenster. Jedes Fenster hat seine eigene, einklappbare Seitenleiste mit den Seiten und Einstellungen des Programms, die Titelleiste nennt Programm und Seite, die Aktionen stehen in einer Werkzeugleiste darunter.
+- **Fenster wie am PC:** frei verschieben, an allen Kanten und Ecken vergrößern, an den Rand ziehen für die halbe Seite, nach oben für Vollbild, in die Ecke für ein Viertel – mit Vorschau. Knöpfe rechts: in eigenem Tab öffnen, minimieren, maximieren, schließen. Fensterwechsler und Tastenkürzel (Alt + Q, Alt + Pfeile, Alt + W, Strg + Leertaste). Die Browser-Adresse zeigt das Fenster vorn, Lesezeichen öffnen das passende Programm. Fenster-Anordnungen lassen sich speichern.
+- **Arbeitsplatz:** Programmsymbole frei auf einem unsichtbaren Raster, „Automatisch anordnen“, drei Größen, Ordner, Abzeichen für Updates, Warnungen und „läuft/gestoppt“. Die Symbole behalten ihre Plätze, auch wenn das Browserfenster kleiner und wieder größer wird. Rechtsklick-Menüs auf Symbole, Arbeitsplatz, Widgets, Leisten und Dock.
+- **Widgets** frei platzierbar und in der Größe änderbar: Zustand, CPU/RAM, Netzwerk, Volumes, Docker-Apps, VMs, Sicherungen, Temperaturen, Uhr, Home Assistant, Aufgaben; einzeln entfernen oder alle ausblenden. Sie lesen nur, was die Oberfläche ohnehin abfragt, und wecken keine Platten.
+- **Hauptmenü** oben links mit Suche über Programme und ihre Seiten, Filtern (TitanOS, Docker-Apps, VMs, Zuletzt) und Konto, Systemsteuerung, Sperren, Ein/Aus. Programme aus dem Menü auf den Arbeitsplatz oder ins Dock ziehen.
+- **Dock** (ab Werk an): angeheftete Programme und offene Fenster, Vergrößern beim Überfahren, umsortieren per Ziehen; Größe, Deckkraft, Vergrößern und Position (unten, links, rechts) im Rechtsklick oder unter Systemsteuerung › Darstellung › Dock mit Vorschau.
+- **Leisten oben:** offene Fenster, im Cluster der Umschalter zwischen den Nodes, Auslastung, Aufgaben, Mitteilungs-Center und Konto; Größe Klein/Mittel/Groß.
+- **Sperrbildschirm und Anmeldung:** Sperren im Menü oder automatisch nach einstellbarer Zeit; Entsperren mit Passwort (und 2FA) oder Passkey. Die Anmeldeseite zeigt Uhr und Glaskarte über dem Hintergrund des Arbeitsplatzes.
+- **KI-Agent** als eigenes Programm mit Chatfenster und eigenen Einstellungen, dazu eine Helfer-Blase, deren Frage mit dem Fenster vorn beginnt.
+- **Dateien hineinziehen:** Dateien vom PC auf den Arbeitsplatz ziehen öffnet „Dateien“ und lädt sie in den offenen Ordner hoch.
+- **Am Handy:** Startbildschirm mit Suche und App-Raster; jedes Programm und jede Docker-App öffnet im Vollbild mit „Zurück“. Ränder für Notch und Home-Leiste, keine vergrößernden Eingabefelder in Safari.
+- **Klare Rückfragen statt Eintippen:** Löschen, Überschreiben, Plattentests, Zwei-Faktor-Zurücksetzen, SSH-Schlüssel und Zertifikate entfernen bestätigt man in einem Dialog, der genau nennt, was passiert. Namen müssen nirgends eingetippt werden; „Abbrechen“ hat den Fokus, Enter löst nie die gefährliche Aktion aus. Zerstörende Knöpfe stehen gesammelt in einer abgesetzten „Gefahrenzone“ am Ende. Fachbegriffe erklärt ein „?“ direkt daneben.
 
-[![Dashboard-Editor mit haftender Editorleiste und den Inhaltsoptionen der ausgewählten Docker-Kachel](docs/screenshots/current/dashboard-editor.png)](docs/screenshots/current/dashboard-editor.png)
+[![Hauptmenü mit Suche, Filtern, Programmen und Docker-Apps](docs/screenshots/current/hauptmenue.png)](docs/screenshots/current/hauptmenue.png)
 
-[![Einstellungen › Darstellung mit geöffneter Hintergrundgalerie: zehn lokale Motive und Vorschau](docs/screenshots/current/dashboard-hintergruende.png)](docs/screenshots/current/dashboard-hintergruende.png)
-
-[Eigenes Bild als Hintergrund hinzufügen](docs/screenshots/current/dashboard-bild-upload.png) · [VM-Details direkt im Dashboard ansehen](docs/screenshots/current/dashboard-vm-details.png).
+[Dock bearbeiten](docs/screenshots/current/dock-bearbeiten.png) · [Beschreibung des Desktop-Modus](docs/DESKTOP.md) · [Sperrbildschirm](docs/SESSION-LOCK.md)
 
 ### Speicher und Laufwerke
 
@@ -68,8 +65,6 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 - **Plattenzustand und Vorbereitung:** SMART, Temperatur, Betriebsstunden, Fehler und Verschleiß; neue Laufwerke vollständig lesen oder überschreiben und zurücklesen, anschließend einen langen Selbsttest ausführen. Ruhezustand der Festplatten als Standard und abweichend je Volume oder je Platte, mit „schläft seit“ bzw. „zuletzt geweckt“ je Platte; erreichbar auch unter Einstellungen › Energie. [Einzelheiten](docs/DISK-SLEEP.md).
 - **Verbrauch verstehen:** kompakte Volume- und Laufwerkslisten mit Details auf Auswahl, Speicheranalyse auf Anforderung und optionale Kapazitätsprognosen aus gültigen Monitoring-Verläufen.
 
-[![Speicherübersicht mit drei Volumes und den Details eines RAID5-Volumes](docs/screenshots/current/speicher.png)](docs/screenshots/current/speicher.png)
-
 [Btrfs](docs/BTRFS.md) · [Übernahme, Erweiterung und Speicheranalyse](docs/WORKFLOWS.md)
 
 ### Freigaben und Konten
@@ -80,8 +75,6 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 - **Vorgängerversionen und Ransomware-Schutz:** Btrfs-Snapshots erscheinen in Windows unter „Vorgängerversionen“. Benennt ein Konto plötzlich viele Dateien wie Ransomware um, wird die Freigabe sofort schreibgeschützt und ein Snapshot angelegt. Geplante Snapshots lassen sich für eine Frist gegen Löschen sperren. [Einzelheiten](docs/SHARE-PROTECTION.md).
 - **Besitzer, Administratoren und Benutzer:** das erste Besitzerkonto hat einen frei gewählten Namen. Benutzer sehen ihre freigegebenen Dateien; Systemverwaltung, Docker und VMs bleiben den Verwaltungsrollen vorbehalten.
 - **Anmeldung und Sicherheit:** Passwortschutz gegen Durchprobieren, TOTP mit Wiederherstellungscodes, Übersicht angemeldeter Geräte und Abmelden einzelner oder aller anderen Sitzungen. Konten lassen sich sperren, ohne sie zu löschen; das wirkt auch für SMB, SSH und API-Tokens. [Konten sperren](docs/ACCOUNT-LOCK.md).
-
-[![Shares mit kompakter Freigabenliste, Diensten und Zugriffsrechten](docs/screenshots/current/shares.png)](docs/screenshots/current/shares.png)
 
 ### Dateien direkt im Browser verwalten
 
@@ -98,14 +91,13 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 - **Weitere Datenträger:** nicht verwaltete USB-, SATA-, SAS- und NVMe-Dateisysteme ausdrücklich einbinden; FAT32, exFAT, NTFS, ext2/3/4, XFS und Btrfs. Bei NTFS steht zusätzlich ein lesender Ausweichweg bereit. Jede Aktion berücksichtigt Kontorechte und Schreibschutz.
 - **Laufwerke formatieren und partitionieren:** ganze Platten außerhalb der Volumes neu formatieren oder im Partitionseditor Tabellen anlegen, Partitionen anlegen, löschen, formatieren, umbenennen und in direkt folgenden freien Platz vergrößern – mit erneuter Prüfung der Platte direkt vor dem Schreiben. [Partitionseditor](docs/PARTITIONS.md).
 
-[![Dateimanager mit Ortsauswahl, Ordnern, Dokumenten und Werkzeugleiste](docs/screenshots/current/dateien.png)](docs/screenshots/current/dateien.png)
-
 [Texteditor und USB-Dateisysteme](docs/FILE-EDITOR.md) · [Vorschaubilder und Volltextsuche](docs/FILE-SEARCH.md) · [Partitionseditor](docs/PARTITIONS.md) · [Von Link herunterladen](docs/FILE-DOWNLOADS.md) · [Kopieren und Verschieben](docs/FILE-COPY.md) · [RAM und Uploads](docs/MEMORY.md) · [Lange Windows-SMB-Pfade](docs/WINDOWS-SMB.md)
 
 ### Docker und App-Store
 
 - **Container und Compose-Stacks:** Images und Tags einzeln je Dienst bearbeiten, Store-Vorgaben und Digests erhalten; Start, Stopp, Neustart, Logs und Browserkonsole; CPU, RAM, Ports und geprüfte Updatezustände im Blick. Suche, Filter sowie anpassbare Reihenfolge und Ansicht.
-- **Kompakte Kacheln:** jeder Container als gleich breite Kachel mit App-Symbol, CPU und RAM, so viele nebeneinander wie Platz ist; der farbige Streifen zeigt, ob er läuft. Ein Klick aufs Symbol öffnet dasselbe Menü wie auf dem Dashboard.
+- **Kompakte Kacheln:** jeder Container als gleich breite Kachel mit App-Symbol, CPU und RAM, so viele nebeneinander wie Platz ist; der farbige Streifen zeigt, ob er läuft. Ein Klick aufs Symbol öffnet das Menü des Containers.
+- **Docker-Apps im Fenster (Fernansicht):** Jede App mit Weboberfläche ist ein eigenes Programm. Ihr Fenster zeigt die App in der Fernansicht: TitanOS öffnet sie auf dem NAS in einem abgeschotteten Browser-Container und überträgt Bild und Ton über die TitanOS-Adresse (WebSocket, H.264/Opus) – im Heimnetz, per VPN, über einen Cloudflare-Tunnel und am Handy. Anmeldungen in den Apps bleiben je Konto und App erhalten; Lautstärke, Qualität (30/60 Bilder je Sekunde), Zwischenablage, Hoch- und Herunterladen im Fenster; GPU-Kodierung per VA-API (Intel/AMD) oder NVENC (NVIDIA-Plugin), sonst Prozessor. Das Abbild der Fernansicht ist eine eigene signierte Release-Datei (Download etwa 320 MB bei der ersten Ansicht). Wer welche App nutzen darf, steht unter Benutzer › Programme. „In eigenem Tab öffnen“ bleibt als Ausweg. [Einzelheiten und Grenzen](docs/FERNANSICHT.md).
 - **Anwendungen schnell öffnen:** eigene App-Icons und Links zur WebUI, zur Tailscale-Adresse und zur öffentlichen Adresse, direkt im Menü mit Zieladresse. Bei Stacks bestimmt ein Hauptdienst die gemeinsamen Links.
 - **Automatische App-Updates (optional):** gewählte Apps holen neue Images in einem Zeitfenster; läuft eine App danach nicht richtig, kehrt TitanOS zu den vorigen Images zurück. [Einzelheiten](docs/APP-AUTO-UPDATE.md).
 - **Eigener HTTPS-Name je App:** auf Wunsch erreichst du eine App unter `https://immich.<nas>.local`, unter einer eigenen Domain oder mit einem Klick als eigenes Gerät im Tailnet unter `https://<app>.<tailnet>.ts.net` mit gültigem Zertifikat. TitanOS leitet selbst weiter (auch WebSockets), gibt die Namen per mDNS im Heimnetz bekannt und hält die TitanOS-Anmeldung von den Apps fern; wahlweise nur aus Heimnetz, Tailscale und NetBird erreichbar. Alle Namen und die gemeinsame Domain stehen zusätzlich unter Einstellungen › HTTPS-Namen für Apps.
@@ -114,21 +106,23 @@ Die Bedienidee ist von Unraid inspiriert; TitanOS setzt auf klassisches Linux-So
 - **App-Store mit eigenen Quellen:** offizieller [TitanOS-App-Katalog](https://github.com/ra5on/TitanOS-Apps), zusätzliche Repositories, Archive und Compose-Dateien; Unterstützung für CasaOS-kompatible Stores.
 - **Installationshilfe:** freie Ports, Zeitzone, Pfade und Geheimnisse vorbereiten und die Herkunft der Feldwerte anzeigen. Eigene Vorlagen für Immich sowie Ollama mit Open WebUI; Container-Abbilder und Modelle werden erst bei Nutzung heruntergeladen.
 
-[![Docker-Übersicht mit geschlossenen Stacks und einzelnen Anwendungen](docs/screenshots/current/docker.png)](docs/screenshots/current/docker.png)
+[![Programm Docker im Fenster: Seitenleiste, Werkzeugleiste und Container-Karten mit App-Symbolen](docs/screenshots/current/docker.png)](docs/screenshots/current/docker.png)
 
-[App-Links](docs/APP-LINKS.md) · [HTTPS-Namen für Apps](docs/APP-PROXY.md) · [Immich und Ollama-Vorlagen](docs/NATIVE-APPS.md)
+[![Docker-App „immich“ in der Fernansicht im Fenster, mit Lautstärke, Qualität, Zwischenablage und Dateien (Bild nachgebildet)](docs/screenshots/current/fernansicht.png)](docs/screenshots/current/fernansicht.png)
+
+[Fernansicht](docs/FERNANSICHT.md) · [App-Fenster, Rechte und Zertifizierungsstelle](docs/APP-WINDOWS.md) · [App-Links](docs/APP-LINKS.md) · [HTTPS-Namen für Apps](docs/APP-PROXY.md) · [Immich und Ollama-Vorlagen](docs/NATIVE-APPS.md)
 
 ### Virtuelle Maschinen
 
 - **KVM/QEMU und libvirt:** VMs anlegen, starten, sauber herunterfahren und automatisch starten. UEFI als Standard, optional Legacy-BIOS für passende Gäste; Windows 11 mit TPM 2.0 und Secure Boot im Gast.
 - **Ressourcen und Datenträger:** CPU-Kerne zuweisen oder reservieren, qcow2/raw und vorhandene Abbilder nutzen, physische Platten einbinden und ausgeschaltete VMs mit neuen Kennungen klonen.
-- **Browserkonsolen:** Übersicht, Bildschirm und Snapshots mit gemeinsamer Bedienleiste und bündiger VM-Liste. VNC zeigt ausschließlich das Gastbild; Tastenkombinationen, Text senden, Vollbild und Bildschirmfoto bleiben außerhalb der Bildfläche erreichbar. Der Bildschirm gilt als Konsole: öffnet mit der bestehenden Anmeldung, endet nach 15 Minuten ohne Eingabe und beim Abmelden. Serielle Konsole und ISO-Wechsel im laufenden Betrieb.
+- **Browserkonsolen:** Übersicht, Bildschirm und Snapshots mit gemeinsamer Bedienleiste und bündiger VM-Liste. VNC zeigt ausschließlich das Gastbild; Tastenkombinationen, Text senden, Vollbild und Bildschirmfoto bleiben außerhalb der Bildfläche erreichbar. Der Bildschirm gilt als Konsole: öffnet mit der bestehenden Anmeldung in einem eigenen Fenster, endet nach der gewählten Zeit ohne Eingabe (5–120 Minuten oder „Nie“, ab Werk 15) und beim Abmelden. Serielle Konsole und ISO-Wechsel im laufenden Betrieb.
 - **Netzwerk und Geräte:** bestätigte benannte NAS-Bridges mit eigener Gast-IP oder QEMU-User-Networking; erkannte IP-Adressen, PCI/GPU-/USB-Passthrough und Ordnerfreigaben per virtiofs. Eine Grafik wird nur übergeben, wenn kein Programm des NAS sie noch nutzt; bei der Start-iGPU wird die Textkonsole vorher gelöst und danach zurückgegeben, damit das NAS dabei nicht hängen bleibt.
 - **Installationsmedien und Abbilder:** Browser-Upload oder HTTP(S)-Import, gzip/xz/ZIP auf dem Daten-Volume entpacken, Prüfsummen und kontrollierte Wiederaufnahme. Offizielle stabile Windows-VirtIO-ISO automatisch als zweites CD-Laufwerk einlegen. [Medienimport und Grenzen](docs/VM-MEDIA.md).
 - **Snapshots:** VM-Datenträger, Konfiguration und bei unterstützten Gästen RAM-Zustand, UEFI und TPM sichern und zurücksetzen. Zeitpläne, Aufbewahrung und Wiederherstellungsstatus; Voraussetzungen und Ausschlüsse werden angezeigt.
 - **VM übernehmen:** Eine Kopie der Einstellungen liegt im Ordner jeder VM auf dem Volume. Nach Verlust des Sticks, für entfernte VMs mit erhaltenen Platten oder für ein Volume von einem anderen TitanOS lassen sich VMs damit wieder registrieren (ohne durchgereichte Geräte, ohne Autostart).
 
-[![VM-Verwaltung mit Maschinenliste und Übersicht der ausgewählten Home-Assistant-VM](docs/screenshots/current/vms.png)](docs/screenshots/current/vms.png)
+[![Programm Virtuelle Maschinen: VMs in der Seitenleiste, Übersicht einer VM mit Hardware, Platten, Netzwerk und Gefahrenzone](docs/screenshots/current/vms.png)](docs/screenshots/current/vms.png)
 
 [VM-Snapshots und Grenzen](docs/VM-SNAPSHOTS.md) · [VM übernehmen](docs/VM-IMPORT.md) · [Bridge-Netzwerk](docs/NETWORKING.md)
 
@@ -138,7 +132,7 @@ Die VM-Einrichtung zeigt kompakte Kacheln mit einer gemeinsamen Zusammenfassung.
 
 - **Ganze Linux-Systeme ohne VM:** Container aus den Abbildern von images.linuxcontainers.org (Debian, Ubuntu, Alpine und weitere) anlegen, starten, herunterfahren und automatisch starten. Das Root-Dateisystem liegt auf einem Daten-Volume.
 - **Sicher voreingestellt:** unprivilegiert mit eigenen IDs; privilegierte Container nur ausdrücklich und mit Warnung. CPU- und RAM-Grenzen, Netzwerk an den Bridges des NAS mit fester MAC-Adresse, NAS-Ordner wahlweise nur lesend.
-- **Konsole und Snapshots:** Shell und Textkonsole im Terminal-Panel; auf Btrfs-Volumes Snapshots anlegen und zurücksetzen. [Einzelheiten und Grenzen](docs/LXC.md).
+- **Konsole und Snapshots:** Shell und Textkonsole im Terminal-Fenster; auf Btrfs-Volumes Snapshots anlegen und zurücksetzen. [Einzelheiten und Grenzen](docs/LXC.md).
 
 ### Sicherungen und Wiederherstellung
 
@@ -154,7 +148,7 @@ Die VM-Einrichtung zeigt kompakte Kacheln mit einer gemeinsamen Zusammenfassung.
 
 ### Wartung, Monitoring und Diagnose
 
-- **Eigene Skripte:** Werkzeuge › Skripte führt eigene Skripte als root aus – per Knopf mit Live-Ausgabe, nach Zeitplan (auch Cron), einmal beim Start nach dem Einbinden der Volumes oder beim Herunterfahren vor dem Beenden der Apps. Sie liegen auf einem Daten-Volume, die letzten zehn Läufe bleiben mit Ausgabe erhalten, fehlgeschlagene automatische Läufe melden sich. Nur für Besitzer/Administratoren, nicht über API-Tokens oder MCP. [Einzelheiten](docs/SCRIPTS.md)
+- **Eigene Skripte:** Aufgabenplaner › Skripte führt eigene Skripte als root aus – per Knopf mit Live-Ausgabe, nach Zeitplan (auch Cron), einmal beim Start nach dem Einbinden der Volumes oder beim Herunterfahren vor dem Beenden der Apps. Sie liegen auf einem Daten-Volume, die letzten zehn Läufe bleiben mit Ausgabe erhalten, fehlgeschlagene automatische Läufe melden sich. Nur für Besitzer/Administratoren, nicht über API-Tokens oder MCP. [Einzelheiten](docs/SCRIPTS.md)
 - **Wartungspläne:** gemeinsame Zeitfenster mit Zeitzone, auf Wunsch alle N Stunden; RAID-Prüfungen, Btrfs-Scrub, SMART-Kurz- und Langtests (beim Anlegen eines Volumes vorausgewählt), Backup-Prüfungen, Wiederherstellungsproben und Snapshot-Aufbewahrung. Abhängigkeiten, optionaler Backup-Vorrang und sichtbare Wartegründe.
 - **Auftragsübersicht:** laufende und bekannte abgeschlossene Vorgänge filtern, Fehler prüfen und unterstützte Aufträge pausieren, abbrechen oder fortsetzen. Eigene Uploads einsehen.
 - **Live-Monitoring:** CPU und Threads, RAM, Netzverkehr, Volumes, Laufwerke, Temperaturen und Beschleuniger. Kurze Verläufe im RAM; optional sieben oder 30 Tage auf einem Daten-Volume, mit CSV-/JSON-Export. Fehlende Werte bleiben unbekannt.
@@ -169,7 +163,7 @@ Die VM-Einrichtung zeigt kompakte Kacheln mit einer gemeinsamen Zusammenfassung.
 
 ### GPU, iGPU, NPU und Plugins
 
-- **Hardware prüfen:** Werkzeuge › Hardware prüfen fasst CPU, RAM, Controller, Netzwerk, Grafik, Sensoren und Treiberstand zusammen, nennt Geräte ohne Treiber mit Grund (etwa „behoben ab Linux 7.3“ und ob der Kernel „Neu“ es schon hat) und speichert auf Wunsch einen anonymisierten Schnappschuss für einen Fehlerbericht.
+- **Hardware prüfen:** Monitor › Hardware prüfen fasst CPU, RAM, Controller, Netzwerk, Grafik, Sensoren und Treiberstand zusammen, nennt Geräte ohne Treiber mit Grund (etwa „behoben ab Linux 7.3“ und ob der Kernel „Neu“ es schon hat) und speichert auf Wunsch einen anonymisierten Schnappschuss für einen Fehlerbericht.
 - **Stabile Hardwarebasis:** Intel-/AMD-CPU-Microcode für frühes Laden, gezielte Netzwerk-/HBA-Firmware und geprüfte Intel-i915/xe-/NPU- sowie AMD-Grafikmodule und Firmware. Für Intel-Grafik von Skylake bis Tiger/Rocket Lake lässt sich unter Einstellungen › Hardware HuC (Low-Power-Encodierung) bzw. GuC-Submission mit HuC laden; ab Werk gilt der Kernelstandard, wirksam nach einem Neustart, nicht auf echter Gen9–11-Hardware geprüft. [Umfang und Hardware-Prüfgrenzen](docs/HARDWARE-COMPATIBILITY.md).
 
 - **Hardware für Apps auswählen:** stabile Gerätekennungen für Intel-/AMD-Grafik, NVIDIA, NPU und Coral USB; Zuordnung je Container-Dienst.
@@ -196,56 +190,48 @@ Die VM-Einrichtung zeigt kompakte Kacheln mit einer gemeinsamen Zusammenfassung.
 
 - **Persönliche API-Zugänge:** benannte, widerrufbare Tokens mit bewusst gewählten Bereichen und aktuellen Konto-/Share-Rechten. Standard nur lesend, Geheimnis einmalig sichtbar, ausschließlich sein Hash wird gespeichert.
 - **OpenAPI und CLI:** dokumentierter API-Vertrag und statisches `titanosctl` für Status, Dateien sowie erlaubte Docker-/VM-Aktionen. [Verwendung](docs/PUBLIC-API.md).
-- **KI-Agent (optional, ab Werk aus):** Aufträge in normaler Sprache, die er mit den Werkzeugen von TitanOS in mehreren Schritten erledigt – mit deinem Ollama (z. B. gpt-oss), Denkstufen des Modells, Projekten und Chats, Gedächtnis und Skills, Websuche, Word-Dokumenten, geplanten Aufträgen, Eigeninitiative bei Meldungen und Home Assistant samt Assist. Je Werkzeug, Bereich und Ordner einstellbar: ohne Nachfrage, mit Knopf im Chat oder verboten. Dateien aus deinen Freigaben direkt in den Chat; Oberfläche wie die großen Chat-Apps mit eigenem Menü, auf dem Handy als eigene App (auch auf dem Home-Bildschirm); Mitteilungen nur, solange du den Chat nicht schon offen hast; eigener Ordner je Konto in der Freigabe „KI-Agent“ mit Chats, Projekten, mitgeliefertem Wissen und Notizen; Erinnerungen und frei planbare Aufträge (einmalig, Intervalle, Wochentage, Cron) samt Morgenbericht; Spracheingabe über Whisper, Bilder verstehen und Vorlesen; Snapshot vor riskanten Änderungen; Projekte mit anderen Konten teilen; im Cluster nutzt ein Knoten auf Freigabe das Modell des Admin-Knotens. Eigener Auftritt mit Glas und Polarlicht, Wischgesten, Vorschläge je nach Lage, alle Einstellungen je Konto; Eigeninitiative mit nächtlichem Nachdenken über die Chats, Vorschlägen zum Annehmen, Wache, Vorausschau, gelernten Skills, Persönlichkeit und Suchorten – Hintergrundarbeit weckt keine schlafende Platte. [Einzelheiten](docs/AGENT.md)
+- **KI-Agent (optional, ab Werk aus):** Aufträge in normaler Sprache, die er mit den Werkzeugen von TitanOS in mehreren Schritten erledigt – mit deinem Ollama (z. B. gpt-oss), Denkstufen des Modells, Projekten und Chats, Gedächtnis und Skills, Websuche, Word-Dokumenten, geplanten Aufträgen, Eigeninitiative bei Meldungen und Home Assistant samt Assist. Je Werkzeug, Bereich und Ordner einstellbar: ohne Nachfrage, mit Knopf im Chat oder verboten. Dateien aus deinen Freigaben direkt in den Chat; Oberfläche wie die großen Chat-Apps mit eigenem Menü, im Desktop-Modus als eigenes Programm im Fenster, auf dem Handy als eigene App (auch auf dem Home-Bildschirm); Mitteilungen nur, solange du den Chat nicht schon offen hast; eigener Ordner je Konto in der Freigabe „KI-Agent“ mit Chats, Projekten, mitgeliefertem Wissen und Notizen; Erinnerungen und frei planbare Aufträge (einmalig, Intervalle, Wochentage, Cron) samt Morgenbericht; Spracheingabe über Whisper, Bilder verstehen und Vorlesen; Snapshot vor riskanten Änderungen; Projekte mit anderen Konten teilen; im Cluster nutzt ein Knoten auf Freigabe das Modell des Admin-Knotens. Eigener Auftritt mit Glas und Polarlicht, Wischgesten, Vorschläge je nach Lage, alle Einstellungen je Konto; Eigeninitiative mit nächtlichem Nachdenken über die Chats, Vorschlägen zum Annehmen, Wache, Vorausschau, gelernten Skills, Persönlichkeit und Suchorten – Hintergrundarbeit weckt keine schlafende Platte. [Einzelheiten](docs/AGENT.md)
 - **MCP-Server (optional, ab Werk aus):** Claude Desktop, Claude Code und andere MCP-Clients arbeiten mit den Rechten eines persönlichen Tokens am NAS: Zustand, Speicher, Freigaben, Dateien und Dokumente (Word, Excel, PDF), Docker, VMs, Sicherungen, Firewall-Regeln, Konten, Plugins, Updates, Neustart/Ausschalten, freigegebene Home-Assistant-Geräte und das Handbuch. Verwaltungsaktionen brauchen den Token-Bereich `system:write` (nur Besitzer/Administratoren). Jedes Werkzeug lässt sich einzeln ausschalten; gefährliche und zerstörende Aufrufe sind ab Werk gesperrt und laufen erst nach ausdrücklicher Freischaltung und mit Bestätigung des Clients. Geheimnisse, Passwörter, Konsolen und Netzwerkbestätigung bleiben außen vor; jeder Aufruf steht im Aktivitätsprotokoll. Die eigene MCP-Seite unter Einstellungen zeigt allen Konten Zustand, Endpunkt und Verbindungsanleitung samt Token-Knopf; Schalter, Werkzeuge und letzte Aufrufe sehen nur Besitzer und Administratoren. [Einrichtung](docs/MCP.md).
-
-[![KI-Agent: eigenes Menü mit Projekten und Chats neben dem TitanOS-Menü, Start mit Begrüßung, Projekt-Kacheln, laufenden Aufträgen und Vorschlägen](docs/screenshots/current/ki-agent.png)](docs/screenshots/current/ki-agent.png)
 
 <p>
   <a href="docs/screenshots/current/ki-agent-mobil.png"><img src="docs/screenshots/current/ki-agent-mobil.png" alt="KI-Agent auf dem Smartphone als eigene App: Polarlicht hinter Glas, Begrüßung, Projekt-Chips, Vorschläge mit Grund und Eingabefeld" width="260"></a>
   <a href="docs/screenshots/current/ki-agent-menue-mobil.png"><img src="docs/screenshots/current/ki-agent-menue-mobil.png" alt="Menü des KI-Agenten auf dem Smartphone mit Projekten, angehefteten Chats und „Zurück zu TitanOS“" width="260"></a>
 </p>
 
-[Chat mit Schritten, Tabelle und Freigabe-Karte](docs/screenshots/current/ki-agent-chat.png)
-
 ### Netzwerk, Energie und Systemzugang
 
 - **Netzwerk:** mehrere benannte Netze über Anschlüsse, Bonds und VLANs; IPv4-DHCP/feste Adressen, IPv6-SLAAC/DHCPv6/feste Adressen, DNS und Routen. Bevorzugter Verwaltungszugang, zweiminütiger Probelauf und authentifizierte lokale Wiederherstellung. Router und DHCP bleiben extern.
-- **Tailscale als Plugin:** Fernzugriff, Subnet-Routing und Exit-Node-Betrieb in beiden Rollen; Routen- und DNS-Einstellungen mit Rückfall. Unter dem Tailnet-Namen (`https://<name>.<tailnet>.ts.net`) liefert TitanOS ein gültiges Zertifikat aus, sobald HTTPS im Tailnet an ist (Ein-Klick-Freischaltung aus den Einstellungen). Eine Dashboard-Kachel listet die Geräte des Tailnets.
+- **Tailscale als Plugin:** Fernzugriff, Subnet-Routing und Exit-Node-Betrieb in beiden Rollen; Routen- und DNS-Einstellungen mit Rückfall. Unter dem Tailnet-Namen (`https://<name>.<tailnet>.ts.net`) liefert TitanOS ein gültiges Zertifikat aus, sobald HTTPS im Tailnet an ist (Ein-Klick-Freischaltung aus den Einstellungen). 
 - **WireGuard-Server:** eigener VPN-Zugang ohne Zusatzdienst: einschalten, Gerät per Namen hinzufügen, QR-Code mit der WireGuard-App scannen; Zugriff auf Heimnetz oder alles.
 - **Cluster wie bei Proxmox:** mehrere TitanOS per Beitrittsinformation verbinden; der Admin-Knoten verwaltet alle anderen, weitere Knoten nur mit seiner Freigabe, seine Konten gelten überall, Backups von Knoten zu Knoten. Den Weg wählst du selbst (Heimnetz, Tailscale, NetBird, WireGuard, eigene Adresse; für Verwaltung und Sicherungen getrennt, je Knoten abweichend, mit Rückkehr auf den bevorzugten Weg), auf Wunsch über einen eigenen WireGuard-Tunnel zwischen den Knoten. Knoten mit unterschiedlicher Version bleiben verwaltbar; „Alle aktualisieren“ nacheinander oder gleichzeitig. Meldungen jedes Knotens direkt in der Knotenliste. Abgesichert durch festgenagelte Zertifikate in beide Richtungen und signierte Anfragen. Kein Ausfallschutz. [Einzelheiten](docs/CLUSTER.md).
-- **NetBird als Plugin:** Fernzugriff über NetBird Cloud oder einen eigenen Management-Server, Anmeldung per Setup-Key (wird nie wieder angezeigt), Routen, Routing-Peer/Exit Node und DNS mit zweiminütigem Rückfall; Dashboard-Kachel mit den Geräten. Ausgeliefert wird nur der BSD-lizenzierte Client.
+- **NetBird als Plugin:** Fernzugriff über NetBird Cloud oder einen eigenen Management-Server, Anmeldung per Setup-Key (wird nie wieder angezeigt), Routen, Routing-Peer/Exit Node und DNS mit zweiminütigem Rückfall. Ausgeliefert wird nur der BSD-lizenzierte Client.
 - **Energie und USV:** CPU-Profile, Herunterfahren und Einschalten per RTC-Zeitplan, Wake-on-LAN und Verhalten des physischen Ein-/Ausschalters. USB- oder Netzwerk-USV über NUT, Abschalten bei Stromausfall und Weitergabe des USV-Status.
 - **Firewall:** ab Werk aus; eingeschaltet Zonen Heimnetz, VPN und Internet (auch öffentliches IPv6) mit Freigaben je Dienst und je Docker-App, eigenen Regeln, zweiminütiger Probe mit Rückfall und Liste zuletzt verworfener Pakete. Optional automatisches Sperren von Absendern nach fehlgeschlagenen Anmeldungen an Weboberfläche, SSH und SMB.
 - **HTTPS:** dauerhaftes selbst signiertes Zertifikat ab dem ersten Start, eigene PEM-Zertifikate samt Schlüssel und Kette importieren oder automatische Zertifikate von Let's Encrypt per DNS-Challenge (Cloudflare, deSEC, Hetzner, IONOS, Netcup, INWX, DuckDNS, IPv64, RFC 2136; auch als Platzhalter für die HTTPS-Namen der Apps) oder über Port 80, mit selbständiger Erneuerung.
 - **Dynamisches DNS:** Namen auf die öffentliche IPv4-Adresse des Anschlusses und die IPv6-Adresse des NAS halten, bei denselben Anbietern oder per dyndns2 (Strato, No-IP …); optional eine Überwachung der Erreichbarkeit bei IPv64.net.
 - **IPv64.net-Konto** (Reiter IPv64 unter Dynamisches DNS): Paket, Verbrauch, Log und API-Keys, Domains und DNS-Einträge, Zuweisungen von Domains an NAS, Apps und Geräte (über die „Eigenen Domains“ der HTTPS-Namen), Healthchecks aller Arten mit Statistik, Integrationen und Statusseiten, Offline-Seiten und DNS-Failover, CDN/Reverse Proxy und Portmapper, Docker-Apps „Öffentlich über IPv64“, Cloud Router mit optionalem WireGuard-Tunnel des NAS und die v64 Blocklist für die Firewall – alles ab Werk aus.
-- **Terminal und SSH:** NAS-Shell und Docker-Konsolen als Browser-Tabs für Besitzer/Administratoren. SSH ist zunächst ausgeschaltet; nach Aktivierung Anmeldung mit eigenem Konto und Schlüssel, bei Bedarf `sudo`. Linux-root ist für direkte Anmeldung gesperrt. Offene Konsolen enden innerhalb weniger Sekunden nach Abmelden, Kontolöschung, Herabstufung oder Passwort-Zurücksetzen; ein entfernter SSH-Schlüssel beendet auch die SSH-Sitzungen des Kontos.
+- **Terminal und SSH:** NAS-Shell als Programm „Terminal“ (mehrere Fenster möglich) für Besitzer/Administratoren; Konsolen von Docker-Containern, VMs (seriell) und Systemcontainern öffnen im Terminal-Fenster. Trennen ohne Eingabe nach wählbarer Zeit (5–120 Minuten oder „Nie“, ab Werk 15). SSH ist zunächst ausgeschaltet; nach Aktivierung Anmeldung mit eigenem Konto und Schlüssel, bei Bedarf `sudo`. Linux-root ist für direkte Anmeldung gesperrt. Offene Konsolen enden innerhalb weniger Sekunden nach Abmelden, Kontolöschung, Herabstufung oder Passwort-Zurücksetzen; ein entfernter SSH-Schlüssel beendet auch die SSH-Sitzungen des Kontos.
 - **Benachrichtigungen:** Meldungszentrale mit persönlichen Filtern sowie E-Mail, ntfy, Telegram, Discord, Home-Assistant-App und Mitteilungen direkt aufs Handy oder in den Browser (Web Push, auf dem iPhone über TitanOS auf dem Home-Bildschirm) für Systemereignisse; Besitzer und Administratoren bekommen Speicher-, Sicherungs-, Update- und Systemmeldungen zusätzlich auf eigene Wege mit Ruhezeiten; auf Wunsch ein wöchentlicher oder monatlicher Bericht über das NAS.
-
-[Firewall-Seite mit Zonen, Docker-Apps, eigenen Regeln und automatischem Sperren](docs/screenshots/current/firewall.png)
 
 [Netzwerk](docs/NETWORKING.md) · [Firewall](docs/FIREWALL.md) · [Let's Encrypt](docs/LETSENCRYPT.md) · [Dynamisches DNS](docs/DDNS.md) · [WireGuard](docs/WIREGUARD.md) · [Web Push](docs/WEB-PUSH.md) · [Tailscale](docs/TAILSCALE.md) · [NetBird](docs/NETBIRD.md) · [Ein-/Ausschalter](docs/POWER-BUTTON.md)
 
-### Einstellungen, Darstellung und mobile Bedienung
+### Systemsteuerung, Darstellung und Handy
 
-- **Geordnete Einstellungen:** eine Seitenleiste neben jeder Einstellungsseite mit sieben festen Gruppen (System; Netzwerk; Sicherheit und Fernzugriff; Hardware und Energie; Daten und Speicher; Integrationen; Persönlich), Zuständen wie „Update verfügbar“ und einer Suche, die direkt zum passenden Abschnitt springt; auf dem Smartphone eine Liste mit Rückweg. Sicherungen bündeln Datenbackups, Konfigurationssicherung und Wiederherstellung.
-- **Darstellung an einem Ort:** Themes Graphit, Schwarz, Mitternacht, Hell, Automatisch und Eigenes; Akzentfarbe, Flach/Glas/Kontur mit Transparenz, Unschärfe und Glanz, Leuchten, Ecken, Schriftgröße, Dichte, Bewegung, allgemeiner Hintergrund und der Hintergrund des Dashboards. Gilt pro Konto für die ganze Oberfläche; exportieren und importieren. Dazu ein eigenes App-Symbol für den Home-Bildschirm.
-- **Anmeldeseite gestalten:** Besitzer und Administratoren legen für das ganze NAS Theme, Akzent, Glas/Flach/Kontur, ein Galerie-Motiv oder eigenes Bild, Position und Breite der Karte, Überschrift und Begrüßung (Deutsch/Englisch), Logo, NAS-Namen und Uhr fest – mit Vorschau und Kontrastwarnung (siehe `docs/LOGIN-APPEARANCE.md`).
-- **Deutsch und Englisch**, lokale Schriftdateien, Tastatur- und Touch-Bedienung und rollenabhängige Befehlspalette per Strg/⌘+K.
-- **Desktop-Modus:** am großen Bildschirm ein Arbeitsplatz mit Hintergrundbild, Programmsymbolen und frei platzierbaren Widgets; jeder Bereich (Dateien, Docker, VMs, Speicher, Sicherung, KI-Agent, Systemsteuerung …) ist ein eigenes Programm im Fenster mit eigener, einklappbarer Seitenleiste. Fenster lassen sich frei verschieben, an allen Kanten vergrößern und andocken; Hauptmenü mit Suche, Rechtsklick-Menüs, Ordner, Abzeichen, Mitteilungs-Center, Fensterwechsler und Sperrbildschirm. Docker-Apps wie Immich öffnen als Programm im Fenster, mit Rechten je Benutzer. Am Handy ein App-Raster mit Programmen im Vollbild. Beschreibung: [docs/DESKTOP.md](docs/DESKTOP.md).
-- **Dienste nach Bedarf:** Docker, VMs und LXC lassen sich unter Einstellungen › Dienste ausschalten; ihr Reiter verschwindet, die Daten bleiben.
+- **Systemsteuerung:** Startseite „Alle Einstellungen“ mit Suche und gleich großen Bereichen, Seitenleiste nach System, Netzwerk sowie Konten und Diensten; unten „Zuletzt geändert“. Einstellungen als Zeilen „Bezeichnung links, Wert rechts“.
+- **Darstellung einfach und global:** Hell, Dunkel oder Automatisch, dunkle Varianten Graphit, Schwarz, Mitternacht oder Eigenes, Akzentfarbe und fünf Schieberegler – Transparenz, Glaseffekt, Ecken, Schriftgröße, Farbstärke. Sie wirken sofort überall (Arbeitsplatz, Fenster, Handy) und speichern sich selbst; exportieren und importieren. Sechs eigene Hintergründe (hell und dunkel) oder ein eigenes Bild, auf Wunsch langsam bewegt und nach Tageszeit gefärbt; „Bewegung reduzieren“ des Systems wird beachtet. Dazu ein eigenes App-Symbol für den Home-Bildschirm.
+- **Anmeldeseite gestalten:** Besitzer und Administratoren legen für das ganze NAS Akzent, Hintergrund (der des Arbeitsplatzes, ein Galerie-Motiv oder ein eigenes Bild), Überschrift und Begrüßung (Deutsch/Englisch), Logo, NAS-Namen und Uhr fest – mit Vorschau und Kontrastwarnung (siehe `docs/LOGIN-APPEARANCE.md`).
+- **Deutsch und Englisch**, lokale Schriftdateien, Tastatur- und Touch-Bedienung.
+- **Dienste nach Bedarf:** Docker, VMs und LXC lassen sich unter Systemsteuerung › Dienste ausschalten; ihr Programm verschwindet, die Daten bleiben.
 
-[![Einstellungen mit Seitenleiste in sieben Gruppen, „Braucht Aufmerksamkeit“ und „Dieses NAS“](docs/screenshots/current/einstellungen.png)](docs/screenshots/current/einstellungen.png)
+[![Systemsteuerung › Alle Einstellungen mit Suche und Bereichen nach System, Netzwerk sowie Konten und Diensten](docs/screenshots/current/systemsteuerung.png)](docs/screenshots/current/systemsteuerung.png)
 
-[![Gestaltete Anmeldeseite: Glaskarte mit Uhr und Begrüßung „Willkommen zu Hause“ über dem Motiv Nordlicht](docs/screenshots/current/anmeldeseite.png)](docs/screenshots/current/anmeldeseite.png)
+[![Anmeldeseite mit Uhr und Glaskarte](docs/screenshots/current/anmeldeseite.png)](docs/screenshots/current/anmeldeseite.png)
 
-[Einstellungen › Darstellung mit Seitenleiste, Theme, Akzent und Vorschau](docs/screenshots/current/darstellung.png) · [Anmeldeseite gestalten](docs/LOGIN-APPEARANCE.md)
+[Systemsteuerung › Darstellung mit fünf Schiebereglern](docs/screenshots/current/darstellung.png) · [Anmeldeseite gestalten](docs/LOGIN-APPEARANCE.md)
 
 <p align="center">
-  <a href="docs/screenshots/current/dashboard-mobil.png"><img src="docs/screenshots/current/dashboard-mobil.png" alt="Dashboard auf einem Smartphone" width="260"></a>
-  <a href="docs/screenshots/current/dateien-mobil.png"><img src="docs/screenshots/current/dateien-mobil.png" alt="Dateimanager auf einem Smartphone" width="260"></a>
-  <a href="docs/screenshots/current/navigation-mobil.png"><img src="docs/screenshots/current/navigation-mobil.png" alt="Navigation „Seitlich“ auf dem Smartphone: Seitenleiste als Schublade von links" width="260"></a>
+  <a href="docs/screenshots/current/handy-start.png"><img src="docs/screenshots/current/handy-start.png" alt="Startbildschirm am Smartphone: Suche, Zustand und App-Raster mit Programmen und Docker-Apps" width="260"></a>
+  <a href="docs/screenshots/current/fernansicht-mobil.png"><img src="docs/screenshots/current/fernansicht-mobil.png" alt="Docker-App in der Fernansicht am Smartphone im Vollbild mit Lautstärke und Tastatur (Bild nachgebildet)" width="260"></a>
 </p>
 
 ### Updates mit geprüftem Rückfall

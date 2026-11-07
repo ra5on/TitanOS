@@ -85,7 +85,7 @@ const tools = [
 async function open(width, height, { theme = 'graphit', path = '/agent', look = null, cluster = null } = {}) {
 	const made = await create('owner', theme, width);
 	await made.page.setViewportSize({ width, height });
-	const appearance = { theme, nav: { layout: 'side' } };
+	const appearance = { theme };
 	made.data.prefs.appearance = appearance;
 	await made.ctx.addInitScript(([v, l]) => {
 		localStorage.setItem('titanos.appearance', JSON.stringify(v));
@@ -431,6 +431,17 @@ async function plan58() {
 	}
 }
 
+// A link of TitanOS clicked (the desktop's programs and the phone's home
+// lead there; PLAN 65: no classic navigation any more).
+async function followLink(page, href) {
+	await page.evaluate((to) => {
+		const a = document.createElement('a');
+		a.href = to;
+		document.body.append(a);
+		a.click();
+	}, href);
+}
+
 // Console errors of the pages so far (asserted before every exit).
 function noConsoleErrors() {
 	const real = errors.filter((e) => !/favicon|ERR_ABORTED/.test(e));
@@ -458,7 +469,6 @@ try {
 		await page.getByRole('heading', { name: 'Status Home Assistant' }).waitFor();
 		await page.getByRole('button', { name: 'Ausführen' }).waitFor();
 		assert.ok(await page.getByText('Freigabe nötig').isVisible());
-		assert.ok(await page.locator('.side-nav').getByText('KI-Agent').isVisible(), 'nav entry');
 		const menu = page.getByRole('navigation', { name: 'Menü des KI-Agenten' });
 		assert.ok(await menu.getByText('Freigabe').first().isVisible(), 'waiting chat marked in the menu');
 		await page.waitForTimeout(400);
@@ -571,7 +581,7 @@ try {
 		await page.goto(base + '/');
 		assert.equal(await page.locator('link[rel=manifest]').getAttribute('href'), '/manifest.webmanifest');
 		await page.evaluate(() => ((window).__same = true));
-		await page.locator('.side-nav').getByText('KI-Agent').click();
+		await followLink(page, '/agent');
 		await page.getByRole('heading', { name: /Guten|Hallo/ }).waitFor();
 		assert.equal(await page.evaluate(() => (window).__same ?? false), false, 'agent loaded anew');
 		assert.equal(await page.locator('link[rel=manifest]').getAttribute('href'), '/agent.webmanifest');
@@ -586,7 +596,7 @@ try {
 		await page.getByRole('heading', { name: /Guten|Hallo/ }).waitFor();
 		await page.waitForFunction(() => document.querySelector('link[rel=manifest]')?.getAttribute('href') === '/agent.webmanifest');
 		await page.evaluate(() => ((window).__same = true));
-		await page.locator('.side-nav').getByText('Dashboard').click();
+		await followLink(page, '/');
 		await page.waitForURL(base + '/');
 		await page.waitForFunction(() => document.querySelector('link[rel=manifest]')?.getAttribute('href') === '/manifest.webmanifest');
 		assert.equal(await page.evaluate(() => (window).__same ?? false), false, 'TitanOS loaded anew');
@@ -597,7 +607,7 @@ try {
 		const { ctx, page } = await open(1440, 900);
 		await page.goto(base + '/agent?app=1&chat=' + haChat.id);
 		await page.getByRole('heading', { name: 'Status Home Assistant' }).waitFor();
-		assert.equal(await page.locator('.side-nav').count(), 0, 'app without TitanOS frame');
+		assert.equal(await page.locator('.desktop, .phone-bar').count(), 0, 'app without TitanOS frame');
 		assert.equal(await page.locator('link[rel=manifest]').getAttribute('href'), '/agent.webmanifest');
 		await page.getByRole('button', { name: 'Zurück zu TitanOS' }).waitFor();
 		await page.waitForTimeout(300);
@@ -641,8 +651,7 @@ try {
 		await page.goto(base + '/agent');
 		await page.getByRole('heading', { name: /Guten|Hallo/ }).waitFor();
 		await page.waitForTimeout(300);
-		assert.equal(await page.locator('.fab').count(), 0, 'no round TitanOS menu button in the agent');
-		assert.equal(await page.locator('header.bar-surface, .side-nav').count(), 0, 'no TitanOS frame on the phone');
+		assert.equal(await page.locator('.desktop, .phone-bar, .home').count(), 0, 'no TitanOS frame on the phone');
 		const size = await page.locator('.composer textarea').evaluate((e) => parseFloat(getComputedStyle(e).fontSize));
 		assert.ok(size >= 16, `input font ${size}px zooms on iOS`);
 		await page.screenshot({ path: `${out}/10-phone-in-titanos.png` });
@@ -709,13 +718,13 @@ try {
 		await page.getByRole('heading', { name: 'Docker-Übersicht als Word' }).waitFor();
 		await page.locator('header.top').getByRole('button', { name: 'Vollbild' }).click();
 		await page.waitForTimeout(250);
-		assert.equal(await page.locator('.side-nav').count(), 0, 'full screen hides the menu');
+		await page.locator('main.agent-app').waitFor();
 		await page.screenshot({ path: `${out}/20-desktop-full.png` });
 		await page.reload();
 		await page.getByRole('heading', { name: 'Docker-Übersicht als Word' }).waitFor();
-		assert.equal(await page.locator('.side-nav').count(), 0, 'full screen is remembered');
+		assert.equal(await page.locator('main.agent-app').count(), 1, 'full screen is remembered');
 		await page.locator('header.top').getByRole('button', { name: 'Mit Menü' }).click();
-		await page.locator('.side-nav').waitFor();
+		await page.locator('main.agent-app').waitFor({ state: 'detached' });
 		await ctx.close();
 	}
 	// PLAN 49: planned tasks, reminders and the morning report.
@@ -798,34 +807,6 @@ try {
 		assert.equal(await input.getAttribute('placeholder'), 'Chat von maria – nur lesen');
 		assert.equal(await page.getByRole('button', { name: 'Weitere Aktionen' }).count(), 0, 'no rename/delete for a foreign chat');
 		await page.screenshot({ path: `${out}/26-phone-shared-chat.png` });
-		await ctx.close();
-	}
-	// PLAN 46: tasks as a sheet from the bottom on the phone, account button as wide as the tools.
-	{
-		const { ctx, page } = await open(390, 844);
-		await page.route('**/api/v1/files/jobs', (route) => route.fulfill({ json: [{ id: 'j1', state: 'running', operation: 'copy', names: ['Fotos 2026'], copied: 50, bytes: 100 }] }));
-		await page.goto(base + '/settings');
-		await page.locator('.fab').click();
-		const drawerNav = page.locator('dialog.drawer');
-		await drawerNav.waitFor();
-		const tools = await drawerNav.locator('.quick-access').boundingBox();
-		const account = await drawerNav.locator('.account .trigger').boundingBox();
-		assert.ok(Math.abs(tools.width - account.width) < 2, `account button as wide as the tools (${account.width} vs ${tools.width})`);
-		assert.ok(await drawerNav.locator('.account .role').isVisible(), 'role below the name');
-		await page.screenshot({ path: `${out}/27-phone-account.png` });
-		await drawerNav.locator('.tasks-badge').click();
-		const sheet = page.locator('dialog.sheet[open]');
-		await sheet.waitFor();
-		assert.equal(await drawerNav.evaluate((d) => d.open), false, 'menu closes before the sheet');
-		await sheet.evaluate((d) => Promise.all(d.getAnimations({ subtree: true }).map((a) => a.finished)));
-		await page.waitForTimeout(300);
-		const box = await sheet.boundingBox();
-		assert.ok(box.y + box.height >= 843 && box.width >= 389, `sheet at the bottom (${JSON.stringify(box)})`);
-		assert.ok(await sheet.getByRole('link', { name: /Fotos 2026/ }).isVisible(), 'row opens the details');
-		await page.waitForTimeout(250);
-		await page.screenshot({ path: `${out}/28-phone-tasks-sheet.png` });
-		await sheet.getByRole('button', { name: 'Schließen' }).click();
-		await sheet.waitFor({ state: 'detached' });
 		await ctx.close();
 	}
 	// PLAN 49: speech, pictures and snapshots in the settings.

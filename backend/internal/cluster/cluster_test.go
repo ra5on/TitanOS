@@ -97,6 +97,10 @@ func newTestNode(t *testing.T, name string, accounts map[string]string) *testNod
 			http.Error(w, "not permitted", http.StatusForbidden)
 			return
 		}
+		if !m.ClusterAccount(id.User) {
+			http.Error(w, "not a cluster account", http.StatusForbidden)
+			return
+		}
 		if n.api != nil && n.api(w, r, id) {
 			return
 		}

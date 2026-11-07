@@ -57,3 +57,42 @@ func TestPersonalTokensHashRestartAndRevoke(t *testing.T) {
 		t.Fatal("corrupt token inventory overwritten")
 	}
 }
+
+// Tokens of a deleted account do not belong to a new account of the same
+// name: not listed, not counted toward the limit, cleared with the next
+// token of the new account, and removed with the account (RemoveUser).
+func TestTokensOfAnEarlierAccountDoNotCount(t *testing.T) {
+	dir := t.TempDir()
+	os.Mkdir(filepath.Join(dir, "users"), 0o700)
+	store := config.Open(dir)
+	tokens := NewTokens(store)
+	old := User{Name: "alex", Role: RoleOwner, Created: time.Now().UTC().Add(-time.Hour), PasswordHash: "old"}
+	for range 32 {
+		if _, _, err := tokens.Create(old, "old", nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, err := tokens.Create(old, "one too many", nil); err == nil {
+		t.Fatal("limit of 32 not kept")
+	}
+	again := User{Name: "alex", Role: RoleOwner, Created: time.Now().UTC(), PasswordHash: "new"}
+	if list := tokens.List(again); len(list) != 0 {
+		t.Fatalf("tokens of the earlier account listed: %d", len(list))
+	}
+	if _, _, err := tokens.Create(again, "new", nil); err != nil {
+		t.Fatalf("earlier tokens counted: %v", err)
+	}
+	restarted := NewTokens(store)
+	if n := len(restarted.tokens); n != 1 {
+		t.Fatalf("%d tokens kept on the stick, want only the new one", n)
+	}
+	if err := restarted.RemoveUser("alex"); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(NewTokens(store).tokens); n != 0 {
+		t.Fatalf("%d tokens left after removing the account", n)
+	}
+	if err := restarted.RemoveUser("nobody"); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -13,7 +13,7 @@
 	"settingshome.desc.about": "Version, Lizenz, Ersteinrichtung",
 	"settingshome.desc.updates": "System, Apps, Kernel",
 	"settingshome.desc.timezone": "Zeitzone, Uhrzeit",
-	"settingshome.desc.appearance": "Theme, Hintergrund, Navigation",
+	"settingshome.desc.appearance": "Theme, Akzent, Regler, Dock, Anmeldeseite",
 	"settingshome.desc.hardware": "Grafik, Treiber, USB-Platten",
 	"settingshome.desc.temperatures": "Sensoren, Lüfter, Warnungen",
 	"settingshome.desc.energy": "Zeitplan, Wake-on-LAN, Platten-Ruhe",

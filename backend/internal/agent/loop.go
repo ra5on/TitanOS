@@ -341,6 +341,14 @@ func (r *Runner) Run(ctx context.Context, chat *Chat) error {
 		}
 		for i, call := range msg.ToolCalls {
 			count(call.Function.Name)
+			if steps+r.extra > maxSteps {
+				// One answer with many calls must not run past the step
+				// limit; the next round reports instead.
+				for _, rest := range msg.ToolCalls[i:] {
+					chat.Entries = append(chat.Entries, Entry{ID: NewID(), At: r.now(), Role: "tool", Tool: rest.Function.Name, Args: rest.Function.Arguments, Result: "Not run: the step limit of this task is reached."})
+				}
+				break
+			}
 			done, err := r.call(ctx, chat, call.Function.Name, call.Function.Arguments)
 			if err != nil {
 				return err

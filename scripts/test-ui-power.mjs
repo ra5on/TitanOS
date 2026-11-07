@@ -42,12 +42,14 @@ async function open(width) {
   });
   // The restart itself: the health check answers once the NAS is "back".
   await made.ctx.route("**/api/v1/health", (r) => r.fulfill({ status: 503, body: "" }));
+  // The account menu: desktop's top bar, phone's home screen (PLAN 65: no classic frame).
+  await made.ctx.addInitScript(() => localStorage.removeItem("titanos.layout"));
   await made.page.goto(`${base}/`);
   return { ...made, state };
 }
 
 async function startRestart(page) {
-  await page.locator("header .account .trigger").click();
+  await page.locator(".account .trigger").first().click();
   await page.getByRole("menuitem", { name: /NAS neu starten/ }).click();
   const dialog = page.locator("dialog[open]");
   await dialog.getByRole("button", { name: "Neu starten", exact: true }).click();
@@ -92,7 +94,7 @@ try {
     // Opened again while a preparation runs (another tab, an update): the
     // dialog shows it right away.
     state.preparing = { action: "poweroff", by: "update", phase: "stopping", unattended: true, items: items("stopping") };
-    await page.locator("header .account .trigger").click();
+    await page.locator(".account .trigger").first().click();
     await page.getByRole("menuitem", { name: /NAS neu starten/ }).click();
     await page.locator("dialog[open]").getByRole("heading", { name: "Herunterfahren wird vorbereitet" }).waitFor();
     await ctx.close();

@@ -84,6 +84,10 @@ func (s *Server) handleAgentFeaturesSet(w http.ResponseWriter, r *http.Request) 
 	s.agentSettings() // loaded
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if !a.loaded {
+		writeError(w, http.StatusServiceUnavailable, "config_unavailable", "agent.json is not readable; nothing was changed")
+		return
+	}
 	if err := s.checkAgentFeatures(&req, a.settings.Features); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_agent_features", err.Error())
 		return

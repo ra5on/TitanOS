@@ -5,8 +5,7 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { api } from '#lib/api.ts';
 	import Slider from '#lib/components/Slider.svelte';
-	import EffectSlider from '#lib/dashboard/EffectSlider.svelte';
-	import { BACKGROUND_IDS } from '#lib/dashboard/visual.ts';
+	import EffectSlider from '#lib/components/EffectSlider.svelte';
 	import { apiErrorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import Login from '#lib/pages/Login.svelte';
 	import { session } from '#lib/session.svelte.ts';
@@ -33,6 +32,7 @@
 		sanitizeLoginLook,
 		type LoginLocale,
 		type LoginLook,
+		BACKGROUND_IDS,
 	} from './look.ts';
 	import { loadLoginLook, loginLook, PREVIEW_KEY, useLoginLook } from './state.svelte.ts';
 
@@ -446,7 +446,7 @@
 					/></label
 				>
 				<label class="stack"
-					>{t('loginLook.textNotice')}<input
+					><span>{t('loginLook.textNotice')}</span><input
 						class="field"
 						type="text"
 						lang={locale}
@@ -589,6 +589,11 @@
 	}
 	.language small {
 		font-size: var(--text-xs);
+	}
+	/* The texts of a language already sit in two columns: no label-left rows
+	   of a window inside them (app.css), they would not fit. */
+	:global(main.in-window .tile.panel) .language label.stack {
+		display: flex;
 	}
 	.state {
 		font-size: var(--text-base);

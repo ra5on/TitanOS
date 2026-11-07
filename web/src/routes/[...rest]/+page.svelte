@@ -6,7 +6,7 @@
 <section class="tile">
 	<h1>{t('placeholder.title')}</h1>
 	<p class="muted">{t('placeholder.text')}</p>
-	<a href="/">{t('nav.dashboard')}</a>
+	<a href="/">{t('desktop.phone.home')}</a>
 </section>
 
 <style>

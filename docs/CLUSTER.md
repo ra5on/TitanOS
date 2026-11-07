@@ -85,7 +85,7 @@ Wer einen Knoten verwaltet, kann alle verwalten. Wer einen Knoten übernimmt, al
 - **Konto und Rechte:** Der andere Knoten prüft Konto und Rechte selbst, mit seinem synchronisierten Konto.
 - **Protokoll:** Im Aktivitätsprotokoll des Knotens steht die Herkunft „per Cluster“.
 - **Lokal bleiben:** Anmeldung, das eigene Konto, die Darstellung und die Cluster-Einstellungen bleiben auf dem eigenen NAS.
-- **Anzeige:** Ein Balken unter der Kopfzeile zeigt, welcher Knoten gerade verwaltet wird, und führt zurück. Die Wahl gilt je Browser-Tab.
+- **Anzeige:** Im Desktop-Modus steht der Node-Umschalter oben links neben dem Hauptmenü bzw. am Handy neben der Suche (`docs/DESKTOP.md`). Bis 0.61.0 zeigte in der alten Oberfläche ein Balken unter der Kopfzeile, welcher Knoten gerade verwaltet wird, und führt zurück. Die Wahl gilt je Browser-Tab.
 - **Knoten startet neu** (seit 0.41.0): Lehnt der Knoten die Verbindung ab (`connection refused`, typisch für die Sekunden eines App-Updates oder Neustarts von titand), antwortet die Weiterleitung mit `503 cluster_restarting` und `Retry-After: 3` statt `502 cluster_unreachable`. Die Oberfläche (`web/src/lib/api.ts`, `node-restart.ts`) wartet dann und fragt bis zu zwei Minuten von selbst erneut; die Anfrage hat den Knoten nie erreicht, deshalb gilt das für alle Methoden. Solange gewartet wird, sagt der Balken „Knoten startet neu, gleich wieder da“. Beim Laden der Oberfläche wartet nur die Dienste-Abfrage (`/services/state`) höchstens fünf Sekunden, damit ein neu startender Knoten den Start nicht aufhält. Dauert es länger, erscheint derselbe Satz als Fehlermeldung. Die Übersicht unter Einstellungen › Cluster nennt den Knoten genauso. Im Protokoll steht dazu eine Info-Zeile („node is restarting“), kein Fehler. Andere Verbindungsfehler (Zeitüberschreitung, keine Route) bleiben „nicht erreichbar“.
 
 **Nur auf dem Knoten selbst** gehen das Ändern und Bestätigen von Netzwerk und Firewall (`cluster_local_only`). Die Bestätigung soll zeigen, dass der Browser das NAS noch erreicht. Über einen anderen Knoten zeigt sie das nicht.
@@ -96,7 +96,7 @@ Wer einen Knoten verwaltet, kann alle verwalten. Wer einen Knoten übernimmt, al
 
 - **Knoten nicht erreichbar:** Antwortet ein Knoten auf keinem Weg, meldet jeder verwaltende Knoten das nach 10 Minuten (einstellbar 5, 30, 60 oder nie, `cluster_node_unreachable`, Warnung) und „wieder erreichbar“, wenn er zurück ist (`cluster_node_back`). Kurze Neustarts bei App-Updates bleiben unter der Schwelle.
 - **Uhrzeit vergleichen** (ab Werk an): Jeder Knoten sendet seine Uhrzeit mit dem Status. Weicht sie mehr als eine Minute ab, steht „Uhr geht n min vor/nach (NTP prüfen)“ am Knoten; ab zwei Minuten scheitern die signierten Anfragen.
-- **Dashboard-Kachel „Cluster“** (nur Besitzer/Administratoren): je Knoten erreichbar, Version, Weg, CPU und freier Speicher.
+- *(Bis 0.59.0; das Dashboard ist entfernt.)* **Dashboard-Kachel „Cluster“** (nur Besitzer/Administratoren): je Knoten erreichbar, Version, Weg, CPU und freier Speicher.
 
 ## Rollen und Rechte
 

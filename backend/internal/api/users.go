@@ -107,6 +107,10 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		// ResetTwoFactor switches the second factor of the account off,
 		// for someone who lost the phone and the recovery codes.
 		ResetTwoFactor bool `json:"resetTwoFactor"`
+		// For one's own account the reset needs the same proof as
+		// switching the second factor off (password and code, or a
+		// passkey); administrators resetting another account do not.
+		proof
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -119,6 +123,15 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if !mayManage(actor, target.Role) || !mayManage(actor, req.Role) {
 		writeError(w, http.StatusForbidden, "forbidden", "owners are only managed by owners")
+		return
+	}
+	// Checked before anything changes: a reset must not happen for a
+	// request that then fails.
+	if req.Role != auth.RoleOwner && req.Role != auth.RoleAdmin && req.Role != auth.RoleUser {
+		writeAccountError(w, auth.ErrInvalidRole)
+		return
+	}
+	if req.ResetTwoFactor && target.Name == actor.Name && !s.reconfirmProof(w, actor, req.proof) {
 		return
 	}
 	if req.ResetTwoFactor {
@@ -167,7 +180,16 @@ func (s *Server) handleSetPassword(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
 			return
 		}
-		if _, valid := s.opts.Users.Authenticate(actor.Name, req.Current); !valid {
+		_, valid := s.opts.Users.Authenticate(actor.Name, req.Current)
+		// Guesses sent at the same time all passed the check above.
+		if s.limiter.RetryAfter(key) > 0 {
+			if !valid {
+				s.limiter.Fail(key)
+			}
+			writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
+			return
+		}
+		if !valid {
 			s.limiter.Fail(key)
 			writeError(w, http.StatusForbidden, "wrong_password", "the current password is wrong")
 			return
@@ -220,6 +242,9 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.sessions.DeleteUser(target.Name, "")
+	if err := s.tokens.RemoveUser(target.Name); err != nil {
+		slog.Error("remove API tokens of the deleted account", "user", target.Name, "err", err)
+	}
 	go s.viewerForgetUser(target.Name)
 	s.prefs.forget(target.Name)
 	s.opts.Notify.ForgetPersonal(target.Name)

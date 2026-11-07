@@ -80,7 +80,7 @@
 		name ? t('hwcheck.driver', { driver: name }) : t('hwcheck.noDriver');
 </script>
 
-<PageHead title={t('hwcheck.title')} parent={{ href: '/tools', label: t('nav.tools') }}>
+<PageHead title={t('hwcheck.title')}>
 	<p class="muted">{t('hwcheck.intro')}</p>
 </PageHead>
 

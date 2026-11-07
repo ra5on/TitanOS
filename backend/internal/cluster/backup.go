@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	pathpkg "path"
 	"regexp"
 	"slices"
 	"strings"
@@ -171,6 +172,12 @@ func (m *Manager) Relay() http.Handler {
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id, rest, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, "/"), "/")
+		// Pairing goes from the backup page (PairBackup), never through
+		// the relay, which any program on this NAS may reach.
+		if pathpkg.Clean("/"+rest) == "/pair" {
+			http.Error(w, "not possible through the relay", http.StatusForbidden)
+			return
+		}
 		n, err := m.node(id)
 		if err != nil {
 			http.Error(w, "unknown node", http.StatusNotFound)

@@ -4,7 +4,7 @@ import { settingSections, settingsAreas } from './settings-search.ts';
 
 export type PaletteEntry = { href: string; label: string; section: string; terms?: string };
 export const pages: { href: string; label: MessageKey; admin?: boolean }[] = [
-	{ href: '/', label: 'nav.dashboard' },
+	{ href: '/', label: 'desktop.phone.home' },
 	{ href: '/storage', label: 'nav.storage', admin: true },
 	{ href: '/shares', label: 'nav.shares', admin: true },
 	{ href: '/files', label: 'nav.files' },

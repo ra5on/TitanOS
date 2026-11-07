@@ -1416,8 +1416,8 @@
 		gap: 2px;
 		padding: var(--space-2);
 		position: sticky;
-		top: calc(var(--header-height, 60px) + var(--gap));
-		max-height: calc(100vh - var(--header-height, 60px) - 2 * var(--gap) - 40px);
+		top: calc(var(--header-height, 0px) + var(--gap));
+		max-height: calc(100vh - var(--header-height, 0px) - 2 * var(--gap) - 40px);
 		overflow: auto;
 	}
 	.workspace {
@@ -1451,7 +1451,7 @@
 	}
 	.saving {
 		position: fixed;
-		left: calc(16px + var(--fab-clear, 0px));
+		left: 16px;
 		bottom: 44px;
 		z-index: 50;
 		margin: 0;

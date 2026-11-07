@@ -215,7 +215,7 @@
 	</div>
 {/snippet}
 
-<PageHead title={t('appearance.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
+<PageHead title={t('appearance.title')}>
 	<p class="muted">{t('look.intro')}</p>
 	{#snippet actions()}
 		<button type="button" class="btn" onclick={reset}>{t('appearance.reset')}</button>

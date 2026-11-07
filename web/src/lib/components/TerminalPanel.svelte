@@ -16,7 +16,8 @@
 		remember,
 		terminal,
 	} from '#lib/terminal.svelte.ts';
-	import TerminalScreen from './TerminalScreen.svelte';
+	// xterm is large: it loads with the first terminal, not with every page (PLAN 65-6).
+	import type TerminalScreen from './TerminalScreen.svelte';
 	import Dialog from './Dialog.svelte';
 	import { focusFirstItem, moveFocus } from './menu.ts';
 	import { tick } from 'svelte';
@@ -31,6 +32,13 @@
 	let query = $state('');
 	let now = $state(Date.now());
 	let screens = $state<Record<number, TerminalScreen | undefined>>({});
+	let Screen = $state<typeof TerminalScreen | null>(null);
+	$effect(() => {
+		if (terminal.sessions.length && !Screen)
+			void import('./TerminalScreen.svelte')
+				.then((m) => (Screen = m.default))
+				.catch(() => (error = t('desktop.window.loadFailed')));
+	});
 	let menuRoot = $state<HTMLElement>();
 	let menuPanel = $state<HTMLElement>();
 	let plus = $state<HTMLButtonElement>();
@@ -381,18 +389,20 @@
 				{error || t(info?.nasShell === false ? 'terminal.emptyNoShell' : 'terminal.empty')}
 			</p>
 		{/if}
-		{#each terminal.sessions as session (session.id)}
-			{#key `${session.shell}|${session.user ?? ''}`}
-				<TerminalScreen
-					bind:this={screens[session.id]}
-					{session}
-					active={terminal.open && session.id === terminal.active}
-					fontSize={terminal.fontSize}
-					confirmed={info?.enabled === true}
-					onrefused={() => check()}
-				/>
-			{/key}
-		{/each}
+		{#if Screen}
+			{#each terminal.sessions as session (session.id)}
+				{#key `${session.shell}|${session.user ?? ''}`}
+					<Screen
+						bind:this={screens[session.id]}
+						{session}
+						active={terminal.open && session.id === terminal.active}
+						fontSize={terminal.fontSize}
+						confirmed={info?.enabled === true}
+						onrefused={() => check()}
+					/>
+				{/key}
+			{/each}
+		{/if}
 	</div>
 
 	<div class="foot mono">

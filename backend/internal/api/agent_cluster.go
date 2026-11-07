@@ -130,6 +130,12 @@ func (s *Server) agentShareRequest(id string) string {
 	a := &s.agentConf
 	s.agentSettings() // loaded
 	a.mu.Lock()
+	if !a.loaded {
+		// agent.json unreadable: never write over it from a request of
+		// another node.
+		a.mu.Unlock()
+		return sharePending
+	}
 	settings := a.settings
 	i := slices.IndexFunc(settings.Shared, func(sh agentShare) bool { return sh.Node == id })
 	if i >= 0 {
@@ -174,6 +180,10 @@ func (s *Server) handleAgentShareSet(w http.ResponseWriter, r *http.Request) {
 	s.agentSettings()
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if !a.loaded {
+		writeError(w, http.StatusServiceUnavailable, "config_unavailable", "agent.json is not readable; nothing was changed")
+		return
+	}
 	settings := a.settings
 	i := slices.IndexFunc(settings.Shared, func(sh agentShare) bool { return sh.Node == id })
 	if i < 0 {

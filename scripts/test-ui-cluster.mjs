@@ -1,8 +1,8 @@
 // The cluster (PLAN 23, decided 1.11.2026): ways chosen freely for managing
 // and backups, an exception per node, "Check ways", the tunnel of TitanOS,
 // notices; nodes of another version managed with a strip that names both
-// versions; "Update all nodes" one after the other or all at once; the
-// cluster tile on the dashboard. Isolated API data only.
+// versions; "Update all nodes" one after the other or all at once.
+// Isolated API data only.
 // PLAYWRIGHT_MODULE=/abs/playwright/index.mjs UI_URL=http://127.0.0.1:5173 node scripts/test-ui-cluster.mjs
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
@@ -114,7 +114,7 @@ async function shot(page, file) {
 
 async function open(width, path, node = "") {
   const made = await create("owner", "graphit", width);
-  made.data.prefs.appearance = { theme: "graphit", nav: { order: [], hidden: [], layout: "side", magnify: true } };
+  made.data.prefs.appearance = { theme: "graphit" };
   const state = { put: [], routes: [], runs: [], run: null, page: clusterPage() };
   const { ctx, page } = made;
   await ctx.route("**/api/v1/cluster", (r) => {
@@ -269,16 +269,6 @@ try {
     await dialog.getByRole("button", { name: "1 Knoten aktualisieren" }).click();
     await section.getByText("Aktualisiert die Knoten gleichzeitig").waitFor();
     assert.deepEqual(state.runs.at(-1), { nodes: ["n2"], parallel: true });
-    await ctx.close();
-  }
-  {
-    // The dashboard tile.
-    const { ctx, page, data } = await open(1440, "/settings/cluster");
-    data.prefs.dashboard = { tiles: [{ id: "cluster", x: 0, y: 0, w: 6, h: 4 }] };
-    await page.goto(base + "/");
-    await page.getByText("3 von 3 Knoten erreichbar").first().waitFor();
-    await page.getByText("0.43.0 · Heimnetz · CPU 8 %", { exact: false }).waitFor();
-    await shot(page, out + "/7-dashboard.png");
     await ctx.close();
   }
   {

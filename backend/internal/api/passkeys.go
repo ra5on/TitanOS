@@ -209,19 +209,7 @@ func (s *Server) handlePasskeyBegin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "passkey_address", "passkeys need a host name with a trusted HTTPS certificate, not an IP address")
 		return
 	}
-	key := "user:" + user.Name
-	if wait := s.limiter.RetryAfter(key); wait > 0 {
-		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
-		return
-	}
-	if _, ok := s.opts.Users.Authenticate(user.Name, req.Password); !ok {
-		s.limiter.Fail(key)
-		writeError(w, http.StatusForbidden, "wrong_password", "the password is wrong")
-		return
-	}
-	if !s.opts.Users.CheckSecondFactor(user.Name, req.Code) {
-		s.limiter.Fail(key)
-		writeError(w, http.StatusForbidden, "invalid_code", "the code is wrong or was used already")
+	if !s.reconfirm(w, user, req.Password, req.Code) {
 		return
 	}
 	handle, err := s.opts.Users.WebAuthnUserID(user.Name)

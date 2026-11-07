@@ -1,67 +1,85 @@
 import { ApiError } from '../api.ts';
-import deBase from './de.json';
-import enBase from './en.json';
+// PLAN 65-6: only the language in use is loaded (the texts of both were
+// most of the main chunk). German is the reference for the keys.
+import type deBase from './de.json';
 // PLAN 54: each group of the agent's functions has texts of its own.
-import docsDe from './features/docs.de.json';
-import docsEn from './features/docs.en.json';
-import protectDe from './features/protect.de.json';
-import protectEn from './features/protect.en.json';
-import foresightDe from './features/foresight.de.json';
-import foresightEn from './features/foresight.en.json';
-import familyDe from './features/family.de.json';
-import familyEn from './features/family.en.json';
+import type docsDe from './features/docs.de.json';
+import type protectDe from './features/protect.de.json';
+import type foresightDe from './features/foresight.de.json';
+import type familyDe from './features/family.de.json';
 // PLAN 61: the desktop mode and its parts have texts of their own.
-import desktopDe from './features/desktop.de.json';
-import desktopEn from './features/desktop.en.json';
-import appaccessDe from './features/appaccess.de.json';
-import appaccessEn from './features/appaccess.en.json';
-import taskmanagerDe from './features/taskmanager.de.json';
-import taskmanagerEn from './features/taskmanager.en.json';
-import lockDe from './features/lock.de.json';
-import lockEn from './features/lock.en.json';
-import settingshomeDe from './features/settingshome.de.json';
-import settingshomeEn from './features/settingshome.en.json';
+import type desktopDe from './features/desktop.de.json';
+import type appaccessDe from './features/appaccess.de.json';
+import type taskmanagerDe from './features/taskmanager.de.json';
+import type lockDe from './features/lock.de.json';
+import type settingshomeDe from './features/settingshome.de.json';
 // PLAN 63: the remote view of Docker apps.
-import viewerDe from './features/viewer.de.json';
-import viewerEn from './features/viewer.en.json';
-import lookDe from './features/look.de.json';
-import lookEn from './features/look.en.json';
+import type viewerDe from './features/viewer.de.json';
+import type lookDe from './features/look.de.json';
 
-const de = {
-	...deBase,
-	...docsDe,
-	...protectDe,
-	...foresightDe,
-	...familyDe,
-	...desktopDe,
-	...appaccessDe,
-	...taskmanagerDe,
-	...lockDe,
-	...settingshomeDe,
-	...viewerDe,
-	...lookDe,
-};
-const en = {
-	...enBase,
-	...docsEn,
-	...protectEn,
-	...foresightEn,
-	...familyEn,
-	...desktopEn,
-	...appaccessEn,
-	...taskmanagerEn,
-	...lockEn,
-	...settingshomeEn,
-	...viewerEn,
-	...lookEn,
+type Messages = typeof deBase &
+	typeof docsDe &
+	typeof protectDe &
+	typeof foresightDe &
+	typeof familyDe &
+	typeof desktopDe &
+	typeof appaccessDe &
+	typeof taskmanagerDe &
+	typeof lockDe &
+	typeof settingshomeDe &
+	typeof viewerDe &
+	typeof lookDe;
+
+/** The files of a language, in the order they are merged. */
+const FILES = {
+	de: () =>
+		Promise.all([
+			import('./de.json'),
+			import('./features/docs.de.json'),
+			import('./features/protect.de.json'),
+			import('./features/foresight.de.json'),
+			import('./features/family.de.json'),
+			import('./features/desktop.de.json'),
+			import('./features/appaccess.de.json'),
+			import('./features/taskmanager.de.json'),
+			import('./features/lock.de.json'),
+			import('./features/settingshome.de.json'),
+			import('./features/viewer.de.json'),
+			import('./features/look.de.json'),
+		]),
+	en: () =>
+		Promise.all([
+			import('./en.json'),
+			import('./features/docs.en.json'),
+			import('./features/protect.en.json'),
+			import('./features/foresight.en.json'),
+			import('./features/family.en.json'),
+			import('./features/desktop.en.json'),
+			import('./features/appaccess.en.json'),
+			import('./features/taskmanager.en.json'),
+			import('./features/lock.en.json'),
+			import('./features/settingshome.en.json'),
+			import('./features/viewer.en.json'),
+			import('./features/look.en.json'),
+		]),
 };
 
 export const LOCALES = ['de', 'en'] as const;
 export type Locale = (typeof LOCALES)[number];
-export type MessageKey = keyof typeof de;
+export type MessageKey = keyof Messages;
 
-// German is the reference: a key missing in another language is a type error.
-const messages: Record<Locale, Record<MessageKey, string>> = { de, en };
+// The loaded languages; a missing key shows the key (tests/i18n checks both files).
+const messages: Partial<Record<Locale, Record<string, string>>> = {};
+const loading: Partial<Record<Locale, Promise<void>>> = {};
+
+/** Loads the texts of a language once; the UI waits for `i18n.ready`. */
+export function loadLocale(locale: Locale): Promise<void> {
+	if (messages[locale]) return Promise.resolve();
+	loading[locale] ??= FILES[locale]().then((parts) => {
+		messages[locale] = Object.assign({}, ...parts.map((part) => part.default));
+	});
+	return loading[locale];
+}
 
 const STORAGE_KEY = 'titanos.locale';
 
@@ -76,20 +94,32 @@ function detectLocale(): Locale {
 	return navigator.language.toLowerCase().startsWith('de') ? 'de' : 'en';
 }
 
-export const i18n = $state<{ locale: Locale }>({ locale: detectLocale() });
+export const i18n = $state<{ locale: Locale; ready: boolean }>({
+	locale: detectLocale(),
+	ready: false,
+});
+void loadLocale(i18n.locale).then(() => (i18n.ready = true));
 
+/** Switches the language; the texts of a language not used yet load first. */
 export function setLocale(locale: Locale) {
-	i18n.locale = locale;
 	try {
 		localStorage.setItem(STORAGE_KEY, locale);
 	} catch {
 		// It just will not be remembered in this browser.
 	}
+	if (messages[locale]) i18n.locale = locale;
+	else void loadLocale(locale).then(() => (i18n.locale = locale));
+}
+
+function table(): Record<string, string> {
+	// Read so that texts follow once the language has loaded.
+	void i18n.ready;
+	return messages[i18n.locale] ?? {};
 }
 
 /** Returns the text for key in the current language; `{name}` is replaced from params. */
 export function t(key: MessageKey, params?: Record<string, string | number>): string {
-	const text = messages[i18n.locale][key];
+	const text = table()[key] ?? key;
 	if (!params) return text;
 	return text.replace(/\{(\w+)\}/g, (match, name: string) =>
 		name in params ? String(params[name]) : match,
@@ -98,13 +128,13 @@ export function t(key: MessageKey, params?: Record<string, string | number>): st
 
 /** The text for a key that is put together at run time, or `fallback` if there is none. */
 export function tOr(key: string, fallback: string): string {
-	return key in de ? t(key as MessageKey) : fallback;
+	return key in table() ? t(key as MessageKey) : fallback;
 }
 
 /** The text for an error code from the API, or a general one if the code is unknown. */
 export function errorText(code: string): string {
 	const key = `error.${code}`;
-	return key in de ? t(key as MessageKey) : t('error.internal');
+	return key in table() ? t(key as MessageKey) : t('error.internal');
 }
 
 /**

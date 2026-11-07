@@ -1,6 +1,6 @@
 <script lang="ts">
-	// The head of a page: where it sits (optional), the title, a line or two
-	// below it and the page's buttons on the right.
+	// The head of a page: the title, a line or two below it and the page's
+	// buttons.
 	//
 	// PLAN 64: inside a window of the desktop the title bar of the window
 	// names the page, so the page shows no big heading of its own (it stays
@@ -12,21 +12,18 @@
 	import type { Snippet } from 'svelte';
 	import { pageTitle } from '#lib/page-title.svelte.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
-	import { phoneView, windowView } from '#lib/desktop/mode.svelte.ts';
+	import { phoneView } from '#lib/desktop/mode.svelte.ts';
 	import { page } from '$app/state';
 	import { appForPath } from '#lib/desktop/apps.ts';
 	import Dropdown from './Dropdown.svelte';
 
 	type Props = {
 		title: string;
-		parent?: { href: string; label: string };
-		// What the way back calls this page, if not its title.
-		crumb?: string;
 		id?: string;
 		children?: Snippet;
 		actions?: Snippet;
 	};
-	let { title, parent, crumb, id, children, actions }: Props = $props();
+	let { title, id, children, actions }: Props = $props();
 
 	// The browser tab shows the title of the page; the last head that leaves clears it.
 	$effect(() => {
@@ -44,7 +41,6 @@
 	// A bar only with something in it: actions, the page's name on the phone or
 	// (in a window) the page's intro. Never an empty strip.
 	const hasBar = $derived(!!actions || (phone ? ownName : !!children));
-	const windowed = $derived(windowView());
 
 	// Buttons that can move into the "⋯" menu: plain buttons and links of the
 	// bar, never the main action, a field, a group or a button with a menu of
@@ -87,7 +83,7 @@
 	}
 	// Measured in one go (reading sizes lays the page out): no waiting between steps.
 	function fit() {
-		if (!windowed || !box) return;
+		if (!box) return;
 		const candidates = [...box.children].filter(movable).reverse();
 		for (const el of candidates) el.removeAttribute('data-win-overflow');
 		if (more) more.style.display = 'none';
@@ -121,7 +117,8 @@
 		return nodes.length > 0 && nodes.every(inMore);
 	}
 	$effect(() => {
-		if (!windowed || !box || !bar) return;
+		// Without ResizeObserver (tests in jsdom) the bar simply does not fold.
+		if (!box || !bar || typeof ResizeObserver === 'undefined') return;
 		let frame = 0;
 		const later = () => {
 			cancelAnimationFrame(frame);
@@ -149,10 +146,10 @@
 	});
 </script>
 
-{#if windowed && !hasBar}
+{#if !hasBar}
 	<h1 class="sr-only" {id}>{title}</h1>
 	{#if children}<div class="win-intro alone">{@render children()}</div>{/if}
-{:else if windowed}
+{:else}
 	<div class="win-toolbar" class:phone class:sticky={!!actions || phone} bind:this={bar}>
 		{#if phone && ownName}
 			<h1 class="win-title" {id}>{title}</h1>
@@ -186,52 +183,9 @@
 		{/if}
 	</div>
 	{#if (actions || phone) && children}<div class="win-intro">{@render children()}</div>{/if}
-{:else}
-	<div class="page-head">
-		<div class="title">
-			{#if parent}<p class="muted crumbs">
-					<a href={parent.href}>{parent.label}</a> › {crumb ?? title}
-				</p>{/if}
-			<h1 {id}>{title}</h1>
-			{@render children?.()}
-		</div>
-		{#if actions}<div class="actions">{@render actions()}</div>{/if}
-	</div>
 {/if}
 
 <style>
-	.page-head {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-end;
-		justify-content: space-between;
-		gap: var(--space-3);
-	}
-	.title {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
-		min-width: 0;
-		font-size: var(--text-md);
-	}
-	.title :global(p) {
-		margin: 0;
-		max-width: 60rem;
-	}
-	.crumbs {
-		font-size: var(--text-base);
-	}
-	h1 {
-		font-size: var(--text-page);
-		font-weight: 600;
-	}
-	.actions {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2);
-	}
-
 	/* PLAN 64: the tool bar of a window (see app.css for the page around it). */
 	.win-toolbar {
 		display: flex;
@@ -318,6 +272,12 @@
 	}
 	.win-intro.alone {
 		margin-top: 0;
+	}
+	/* Straight in the page's <main> (a block, no gap to pull back): it sits
+	   below the bar, not half under it (PLAN 65: Speicher, Freigaben). */
+	:global(main) > .win-intro:not(.alone) {
+		margin-top: 8px;
+		margin-bottom: var(--gap, 16px);
 	}
 	.win-intro :global(p) {
 		margin: 0;

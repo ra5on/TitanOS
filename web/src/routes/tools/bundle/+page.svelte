@@ -18,7 +18,7 @@
 	}
 </script>
 
-<PageHead title={t('tools.bundle')} parent={{ href: '/tools', label: t('nav.tools') }} />
+<PageHead title={t('tools.bundle')} />
 
 <section class="tile panel" id="tools-bundle" aria-label={t('tools.bundle')}>
 	<p class="muted">{t('tools.bundleText')}</p>

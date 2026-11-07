@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -37,15 +38,57 @@ func parseBtrfsProgress(scrub, replace string) btrfsProgress {
 	return result
 }
 
+// How often refreshBtrfs asks btrfs: often while something is going on
+// (scrub, replace, balance, a missing device), else rarely. Four commands
+// per volume every five seconds cost more than an idle NAS should spend
+// (owner decision 7.11.2026).
+const (
+	btrfsBusyInterval = 5 * time.Second
+	btrfsIdleInterval = 30 * time.Second
+)
+
+// btrfsDue reports whether refreshBtrfs should ask btrfs now: something
+// runs or is missing on a volume, a Btrfs volume was mounted since the
+// last look, or the idle interval has passed. Called with actions held.
+func (m *Manager) btrfsDue(mounted []string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.btrfsProbed.IsZero() || m.now().Sub(m.btrfsProbed) >= btrfsIdleInterval {
+		return true
+	}
+	if len(mounted) != len(m.btrfsProgress) {
+		return true
+	}
+	for _, name := range mounted {
+		state, ok := m.btrfsProgress[name]
+		if !ok || state.State != "" || state.Missing > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // These commands read kernel progress/status records, never file contents.
+// The caller (Run) comes every btrfsBusyInterval; btrfsDue decides.
 func (m *Manager) refreshBtrfs(ctx context.Context) {
 	if m.ReadOnly || !m.actions.TryLock() {
 		return
 	}
 	defer m.actions.Unlock()
+	mounts := m.readMounts() // once per round, not once per volume
+	var mounted []string
+	volumes := m.configured()
+	for _, volume := range volumes {
+		if volume.Filesystem == "btrfs" && mounts[m.MountPoint(volume.Name)] {
+			mounted = append(mounted, volume.Name)
+		}
+	}
+	if !m.btrfsDue(mounted) {
+		return
+	}
 	states := map[string]btrfsProgress{}
-	for _, volume := range m.configured() {
-		if volume.Filesystem != "btrfs" || !m.readMounts()[m.MountPoint(volume.Name)] {
+	for _, volume := range volumes {
+		if !slices.Contains(mounted, volume.Name) {
 			continue
 		}
 		probe, cancel := context.WithTimeout(ctx, 3*time.Second)
@@ -74,5 +117,6 @@ func (m *Manager) refreshBtrfs(ctx context.Context) {
 	}
 	m.mu.Lock()
 	m.btrfsProgress = states
+	m.btrfsProbed = m.now()
 	m.mu.Unlock()
 }

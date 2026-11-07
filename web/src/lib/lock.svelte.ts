@@ -20,8 +20,6 @@ import { refreshSession, session } from './session.svelte.ts';
 export const LOCK_DEFAULT_MINUTES = 15;
 /** The longest automatic lock the NAS accepts. */
 export const LOCK_MAX_MINUTES = 24 * 60;
-/** Choices offered for the automatic lock; 0 = off. */
-export const LOCK_CHOICES = [0, 5, 10, 15, 30, 60] as const;
 
 const CHANNEL = 'titanos-lock';
 const ACTIVITY_KEY = 'titanos.lastActivity';

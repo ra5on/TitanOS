@@ -153,7 +153,7 @@
 	}
 </script>
 
-<PageHead title={t('swap.title')} parent={{ href: '/storage', label: t('nav.storage') }}>
+<PageHead title={t('swap.title')}>
 	<p class="muted">{t('swap.intro')}</p>
 </PageHead>
 

@@ -63,7 +63,7 @@
 	}
 </script>
 
-<PageHead title={t('memoryPolicy.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
+<PageHead title={t('memoryPolicy.title')}>
 	<p class="muted">{t('memoryPolicy.intro')}</p>
 </PageHead>
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}

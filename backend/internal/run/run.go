@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 )
@@ -59,7 +60,16 @@ func CombinedLines(ctx context.Context, r Runner, onLine func(string), name stri
 	return out, err
 }
 
-// lineWriter keeps everything written and calls onLine for every line.
+// The output a lineWriter keeps, and the longest line it collects: a
+// command printing for hours (a pull, a build) must not fill the memory
+// of titand. The callers only need the end (for the error message).
+const (
+	keptOutput = 1 << 20
+	maxLine    = 64 << 10
+)
+
+// lineWriter keeps the last keptOutput bytes written and calls onLine for
+// every line; a longer line than maxLine is handed over in parts.
 type lineWriter struct {
 	all    bytes.Buffer
 	part   []byte
@@ -68,14 +78,31 @@ type lineWriter struct {
 
 func (w *lineWriter) Write(p []byte) (int, error) {
 	w.all.Write(p)
+	if w.all.Len() > 2*keptOutput {
+		tail := slices.Clone(w.all.Bytes()[w.all.Len()-keptOutput:])
+		w.all.Reset()
+		w.all.Write(tail)
+	}
 	for _, b := range p {
 		if b == '\n' || b == '\r' {
 			w.flush()
 			continue
 		}
 		w.part = append(w.part, b)
+		if len(w.part) >= maxLine {
+			w.flush()
+		}
 	}
 	return len(p), nil
+}
+
+// output is the end of what was written, at most keptOutput bytes.
+func (w *lineWriter) output() string {
+	data := w.all.Bytes()
+	if len(data) > keptOutput {
+		data = data[len(data)-keptOutput:]
+	}
+	return string(data)
 }
 
 func (w *lineWriter) flush() {
@@ -116,7 +143,8 @@ func (Exec) RunCombined(ctx context.Context, stdin string, name string, args ...
 
 // RunCombinedLines is RunCombined that also calls onLine for every line as
 // the command prints it. stdout and stderr share one writer, so onLine is
-// never called twice at the same time.
+// never called twice at the same time. Of a long output only the last MiB
+// is returned (keptOutput).
 func (Exec) RunCombinedLines(ctx context.Context, onLine func(string), name string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	output := &lineWriter{onLine: onLine}
@@ -126,10 +154,11 @@ func (Exec) RunCombinedLines(ctx context.Context, onLine func(string), name stri
 			return "", &CommandError{Command: commandLine(name, args), Err: err}
 		}
 		output.flush()
-		return output.all.String(), &CommandError{Command: commandLine(name, args), Output: strings.TrimSpace(output.all.String()), Err: err}
+		out := output.output()
+		return out, &CommandError{Command: commandLine(name, args), Output: strings.TrimSpace(out), Err: err}
 	}
 	output.flush()
-	return output.all.String(), nil
+	return output.output(), nil
 }
 
 // RunSecret runs a command that needs secrets, such as the passphrase of an

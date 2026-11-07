@@ -120,6 +120,8 @@ type Manager struct {
 	now             func() time.Time
 	forward         func() error
 
+	// applying keeps Apply calls from overlapping.
+	applying sync.Mutex
 	mu       sync.Mutex
 	loaded   bool
 	settings Settings
@@ -453,13 +455,19 @@ func serverConfig(s Settings, private string) string {
 // Apply brings the interface in line with the settings: up with all
 // devices while switched on, gone while off.
 func (m *Manager) Apply(ctx context.Context) error {
+	// One apply at a time, each with the settings of when it starts: an
+	// older one finishing last would bring back a removed device.
+	m.applying.Lock()
+	defer m.applying.Unlock()
 	m.mu.Lock()
 	s, private := m.settings, m.private
 	m.mu.Unlock()
 	if m.Disabled {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	// The settings are stored already: the interface follows them even
+	// when the request that changed them goes away meanwhile.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cancel()
 	var err error
 	if s.Enabled && s.Network != "" && validKey(private) {

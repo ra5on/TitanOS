@@ -25,7 +25,7 @@
 	const users = (id: string) => data?.usedBy[id] ?? [];
 </script>
 
-<PageHead title={t('hardware.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
+<PageHead title={t('hardware.title')}>
 	<p class="muted">{t('hardware.intro')}</p>
 </PageHead>
 

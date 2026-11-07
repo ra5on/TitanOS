@@ -816,3 +816,32 @@ func TestDeleteEncryptedCachedArrayRunsAgainAfterABusyCacheDevice(t *testing.T) 
 		t.Fatal("volume still configured")
 	}
 }
+
+type failingMkfsBtrfs struct{ *cryptRunner }
+
+func (r failingMkfsBtrfs) Run(ctx context.Context, stdin, name string, args ...string) (string, error) {
+	if name == "mkfs.btrfs" {
+		return "", errors.New("mkfs.btrfs failed")
+	}
+	return r.cryptRunner.Run(ctx, stdin, name, args...)
+}
+
+// A failed encrypted Btrfs create closes the LUKS containers it opened:
+// left open they hold the disks, and every later attempt to use them is
+// refused until a restart.
+func TestFailedEncryptedBtrfsCreateClosesItsContainers(t *testing.T) {
+	m, tree := treeManager(t, []blockDevice{tdisk("sdc", "C"), tdisk("sdd", "D")})
+	runner := newCryptRunner(tree, t.TempDir())
+	m.runner, m.mapperDir = failingMkfsBtrfs{runner}, runner.mapperDir
+	m.loaded = true
+	disks := []string{"sdc", "sdd"}
+	if err := createVolume(m, context.Background(), CreateRequest{Name: "pool", Level: "raid1", Filesystem: "btrfs", Disks: disks, Erase: disks, Encrypt: true, Password: goodPassword}); err == nil {
+		t.Fatal("create succeeded although mkfs failed")
+	}
+	if left, _ := os.ReadDir(runner.mapperDir); len(left) != 0 {
+		t.Fatalf("LUKS containers left open: %v", left)
+	}
+	if _, ok := m.find("pool"); ok {
+		t.Fatal("failed volume recorded")
+	}
+}

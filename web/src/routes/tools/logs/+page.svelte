@@ -184,7 +184,7 @@
 	}
 </script>
 
-<PageHead title={t('tools.logs')} parent={{ href: '/tools', label: t('nav.tools') }} />
+<PageHead title={t('tools.logs')} />
 
 <section class="tile logs" aria-labelledby="tools-logs">
 	<h2 class="sr-only" id="tools-logs">{t('tools.logs')}</h2>

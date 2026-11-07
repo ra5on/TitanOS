@@ -1,97 +1,34 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import {
-	arrangeNav,
-	moveNav,
-	NAV,
-	navForRole,
-	sanitizeNav,
-	visibleNav,
-} from '../src/lib/navigation.ts';
+import { sanitizeNav } from '../src/lib/navigation.ts';
 import { defaultAppearance, sanitizeAppearance } from '../src/lib/theme/themes.ts';
 
-const ids = (items) => items.map((item) => item.id);
-
-test('standard order without preferences', () => {
-	assert.deepEqual(ids(visibleNav(NAV, { order: [], hidden: [] })), ids(NAV));
-	assert.deepEqual(ids(navForRole('user')), ['dashboard', 'files', 'settings']);
-});
-
-test('saved order wins and missing tabs keep their standard neighbour', () => {
-	const order = ['tools', 'dashboard', 'storage', 'settings'];
-	const out = ids(arrangeNav(NAV, { order, hidden: [] }));
-	assert.equal(out[0], 'tools');
-	assert.equal(out.indexOf('shares'), out.indexOf('storage') + 1);
-	assert.equal(out.length, NAV.length);
-	assert.deepEqual([...out].sort(), ids(NAV).sort());
-});
-
-test('hidden tabs disappear, settings never', () => {
-	const out = ids(visibleNav(NAV, { order: [], hidden: ['docker', 'settings', 'vms'] }));
-	assert.ok(!out.includes('docker') && !out.includes('vms'));
-	assert.ok(out.includes('settings'));
-	assert.deepEqual(sanitizeNav({ hidden: ['settings', 'docker'] }).hidden, ['docker']);
-});
-
-test('moving swaps neighbours and keeps ids of other roles', () => {
-	const users = navForRole('user');
-	const order = moveNav(users, { order: ['tools'], hidden: [] }, 'files', -1);
-	assert.deepEqual(order, ['files', 'dashboard', 'settings', 'tools']);
-	assert.deepEqual(moveNav(users, { order: ['tools'], hidden: [] }, 'dashboard', -1), [
-		'dashboard',
-		'files',
-		'settings',
-		'tools',
-	]);
-});
+// PLAN 65: the classic navigation is gone; its stored settings stay readable.
+const standard = { order: [], hidden: [], layout: 'top', magnify: true, button: 'tl' };
 
 test('sanitizing keeps unknown but valid ids and drops junk', () => {
 	assert.deepEqual(sanitizeNav({ order: ['fleet', 'fleet', 'Bad Id', 7, 'docker'], hidden: 'x' }), {
+		...standard,
 		order: ['fleet', 'docker'],
-		hidden: [],
-		layout: 'top',
-		magnify: true,
-		button: 'tl',
 	});
-	assert.deepEqual(sanitizeNav(null), {
-		order: [],
-		hidden: [],
-		layout: 'top',
-		magnify: true,
-		button: 'tl',
-	});
-	assert.deepEqual(defaultAppearance().nav, {
-		order: [],
-		hidden: [],
-		layout: 'top',
-		magnify: true,
-		button: 'tl',
-	});
+	assert.deepEqual(sanitizeNav(null), standard);
+	assert.deepEqual(defaultAppearance().nav, standard);
 	assert.deepEqual(sanitizeAppearance({ nav: { order: ['tools'] } }).nav, {
+		...standard,
 		order: ['tools'],
-		hidden: [],
-		layout: 'top',
-		magnify: true,
-		button: 'tl',
 	});
+	assert.deepEqual(sanitizeNav({ hidden: ['settings', 'docker'] }).hidden, ['docker']);
 	assert.equal(sanitizeNav({ button: 'br' }).button, 'br');
 	assert.equal(sanitizeNav({ button: 'middle' }).button, 'tl');
 });
 
-test('the sidebar is kept, anything else means the header', () => {
+test('stored layout and magnify survive for older versions', () => {
 	assert.equal(sanitizeNav({ layout: 'side' }).layout, 'side');
 	assert.equal(sanitizeNav({ layout: 'left' }).layout, 'top');
 	assert.equal(
 		sanitizeAppearance({ nav: { layout: 'side', hidden: ['apps'] } }).nav.layout,
 		'side',
 	);
-});
-
-test('every tab has an icon for the sidebar', () => {
-	for (const item of NAV) assert.ok(item.icon, item.id);
-});
-
-test('magnifying the folded sidebar is on unless switched off', () => {
 	assert.equal(sanitizeNav({}).magnify, true);
 	assert.equal(sanitizeNav({ magnify: false }).magnify, false);
 	assert.equal(sanitizeNav({ magnify: 'no' }).magnify, true);

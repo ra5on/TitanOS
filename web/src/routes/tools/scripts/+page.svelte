@@ -110,7 +110,7 @@
 	const volumeChanged = $derived(!!status && volume !== '' && volume !== status.volume);
 </script>
 
-<PageHead title={t('scripts.title')} parent={{ href: '/tools', label: t('nav.tools') }}
+<PageHead title={t('scripts.title')}
 	>{#snippet actions()}<button class="btn" disabled={busy} onclick={load}>{t('ops.refresh')}</button
 		><button class="btn btn-primary" disabled={!status?.available} onclick={() => (editing = '')}
 			>{t('scripts.add')}</button

@@ -13,6 +13,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
 	"github.com/ra5on/TitanOS/backend/internal/run"
@@ -294,7 +295,21 @@ type jobLog struct {
 	at    map[string]int
 }
 
+// jobLogLines and jobLineMax bound what a job keeps of its output: a
+// build or a long pull may print without end, the page shows only the
+// last jobOutputMax bytes.
+const (
+	jobLogLines = 2000
+	jobLineMax  = 4096
+)
+
 func (l *jobLog) add(line string) {
+	if len(line) > jobLineMax {
+		line = line[:jobLineMax] + "…"
+	}
+	if len(l.lines) >= jobLogLines {
+		l.trim()
+	}
 	if match := progressLine.FindStringSubmatch(line); match != nil {
 		if i, ok := l.at[match[1]]; ok {
 			l.lines[i] = line
@@ -306,6 +321,20 @@ func (l *jobLog) add(line string) {
 		l.at[match[1]] = len(l.lines)
 	}
 	l.lines = append(l.lines, line)
+}
+
+// trim drops the older half of the lines and finds the rest again.
+func (l *jobLog) trim() {
+	l.lines = slices.Clone(l.lines[len(l.lines)/2:])
+	l.at = nil
+	for i, line := range l.lines {
+		if match := progressLine.FindStringSubmatch(line); match != nil {
+			if l.at == nil {
+				l.at = map[string]int{}
+			}
+			l.at[match[1]] = i
+		}
+	}
 }
 
 func (l *jobLog) String() string {
@@ -459,6 +488,9 @@ func (m *Manager) Compose(name string) (string, error) {
 	return string(data), nil
 }
 
+// removeTimeout bounds the "docker compose down" calls of RemoveApp.
+const removeTimeout = 10 * time.Minute
+
 // RemoveApp stops and removes the containers of an app and forgets its
 // compose file. The app's data folder on the volume stays, unless purge is
 // set: then its folder, its named volumes and, where no other container
@@ -484,6 +516,10 @@ func (m *Manager) RemoveApp(ctx context.Context, name string, purge bool) error 
 		return errBackupRunning
 	}
 	if running {
+		// Removing goes on when the page that asked is closed: a "down"
+		// killed halfway leaves the app half removed.
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), removeTimeout)
+		defer cancel()
 		down := []string{"down", "--remove-orphans"}
 		if purge {
 			down = append(down, "--volumes")

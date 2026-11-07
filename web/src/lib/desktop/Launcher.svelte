@@ -64,15 +64,51 @@
 		// The menu steps aside so the desktop can take the icon.
 		setTimeout(onclose, 0);
 	}
+	let root = $state<HTMLElement>();
 	function keys(event: KeyboardEvent) {
 		if (event.key === 'Escape') {
 			event.preventDefault();
 			onclose();
-		} else if (event.key === 'Enter' && (shown[0] || pages[0])) {
+			return;
+		}
+		// Enter in the search field opens the first hit; on a button it is that button's.
+		if (event.key === 'Enter' && event.target === field && (shown[0] || pages[0])) {
 			event.preventDefault();
 			if (shown[0]) onopen(shown[0].key);
 			else onopen(pages[0].key, pages[0].href);
+			return;
 		}
+		// PLAN 65-5: the arrow keys move through the programs and pages like a grid.
+		if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key))
+			return;
+		const items = [...(root?.querySelectorAll<HTMLElement>('.prog, .page') ?? [])];
+		if (!items.length) return;
+		const at = items.indexOf(document.activeElement as HTMLElement);
+		if (at < 0) {
+			if (event.key !== 'ArrowDown') return;
+			event.preventDefault();
+			items[0].focus();
+			return;
+		}
+		event.preventDefault();
+		const top = items[0].offsetTop;
+		const columns = Math.max(1, items.filter((el) => el.offsetTop === top).length);
+		const isPage = (i: number) => items[i].classList.contains('page');
+		const step = isPage(at) ? 1 : columns;
+		let next = at;
+		if (event.key === 'Home') next = 0;
+		else if (event.key === 'End') next = items.length - 1;
+		else if (event.key === 'ArrowRight') next = Math.min(items.length - 1, at + 1);
+		else if (event.key === 'ArrowLeft') next = Math.max(0, at - 1);
+		else if (event.key === 'ArrowDown') next = Math.min(items.length - 1, at + step);
+		else if (event.key === 'ArrowUp') {
+			if (at - step < 0) {
+				field?.focus();
+				return;
+			}
+			next = at - step;
+		}
+		items[next].focus();
 	}
 	const FILTERS: [Filter, Parameters<typeof t>[0]][] = [
 		['all', 'desktop.menu.all'],
@@ -86,6 +122,7 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
 	class="launcher glass-panel"
+	bind:this={root}
 	role="dialog"
 	aria-label={t('desktop.menu.title')}
 	tabindex="-1"
@@ -311,7 +348,12 @@
 	.page:hover,
 	.page:focus-visible {
 		background: color-mix(in srgb, var(--accent) 16%, transparent);
-		outline: none;
+	}
+	/* The keyboard's place is visible, not only a tint like the pointer's. */
+	.prog:focus-visible,
+	.page:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
 	}
 	.none {
 		grid-column: 1 / -1;

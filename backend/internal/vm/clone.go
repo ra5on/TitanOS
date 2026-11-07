@@ -105,6 +105,12 @@ func (m *Manager) Clone(ctx context.Context, name string, req CloneRequest, moun
 	if err := m.checkDirectory(clone); err != nil {
 		return err
 	}
+	// Publishing checks the clone with validClone; anything it refuses
+	// (e.g. a source with automatic GPU passthrough) is refused now, not
+	// after copying every disk.
+	if err := m.validClone(ctx, clone, req.Volume); err != nil {
+		return err
+	}
 	// checkDirectory accepts an existing legacy folder (Directory == ""), but
 	// a clone is published without overwriting: a leftover folder (e.g. of a
 	// VM deleted with its disks kept) would only fail after the whole copy.

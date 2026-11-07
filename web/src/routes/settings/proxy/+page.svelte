@@ -370,7 +370,7 @@
 		>{:else}<span class="mono muted">{url}</span>{/if}
 {/snippet}
 
-<PageHead title={t('proxy.settingsTitle')} parent={{ href: '/settings', label: t('nav.settings') }}>
+<PageHead title={t('proxy.settingsTitle')}>
 	<p class="muted">{t('proxy.settingsIntro')}</p>
 	{#snippet actions()}
 		{#if status && extended}<label class="check head-switch" title={t('proxy.allOnHint')}

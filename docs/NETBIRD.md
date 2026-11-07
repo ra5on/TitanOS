@@ -53,6 +53,8 @@ SSO-Anmeldung im Browser bietet TitanOS nicht an.
 
 ## Dashboard-Kachel
 
+*Seit 0.59.0 gibt es das Dashboard nicht mehr (Desktop-Modus, `docs/DESKTOP.md`); der folgende Abschnitt beschreibt den Stand bis 0.59.0.*
+
 Besitzer und Administratoren können im Dashboard-Editor die Kachel **NetBird**
 hinzufügen. Sie zeigt die Geräte des NetBird-Netzes einschließlich dieses NAS.
 Je Kachel lassen sich Geräte (über den öffentlichen WireGuard-Schlüssel des

@@ -261,7 +261,7 @@
 	}
 	.row.header {
 		position: sticky;
-		top: var(--header-height, 60px);
+		top: var(--header-height, 0px);
 		z-index: 2;
 		padding-top: var(--space-1);
 		padding-bottom: var(--space-1);

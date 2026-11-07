@@ -5,5 +5,5 @@
 	import { t } from '#lib/i18n/index.svelte.ts';
 </script>
 
-<PageHead title={t('ops.tasks')} parent={{ href: '/tools', label: t('nav.tools') }} />
+<PageHead title={t('ops.tasks')} />
 <ActionSummary /><RecoveryPanel />

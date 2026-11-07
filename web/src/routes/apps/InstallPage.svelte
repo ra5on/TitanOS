@@ -422,7 +422,7 @@
 	);
 </script>
 
-<PageHead {title} parent={{ href: '/apps', label: t('apps.title') }}>
+<PageHead {title}>
 	{#snippet actions()}
 		{#if phase === 'form' && form}<ViewSwitch bind:advanced />{/if}
 	{/snippet}

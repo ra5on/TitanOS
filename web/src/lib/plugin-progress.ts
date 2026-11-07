@@ -35,7 +35,6 @@ export type PluginProgress = {
 };
 
 export const pluginStepKey = (id: string) => `plugins.step.${id}` as MessageKey;
-export const pluginActionKey = (action: string) => `plugins.action.${action}` as MessageKey;
 
 /** The newest operation for a plugin, running ones first. */
 export function latestFor(

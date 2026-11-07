@@ -98,7 +98,7 @@
 		<div class="line">
 			<span
 				>{t('vms.form.cores')}{#if machine.cpuModel}
-					<span class="muted">· {machine.cpuModel}</span>{/if}</span
+					<span class="muted">&nbsp;· {machine.cpuModel}</span>{/if}</span
 			>
 			<div class="segments" role="radiogroup" aria-label={t('vms.form.cores')}>
 				<button type="button" role="radio" aria-checked={!pinning} onclick={() => (pinning = false)}

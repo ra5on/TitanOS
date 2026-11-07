@@ -97,7 +97,7 @@
 </script>
 
 {#if admin}
-	<PageHead title={t('smart.title')} parent={{ href: '/storage', label: t('nav.storage') }}>
+	<PageHead title={t('smart.title')}>
 		{#if reports}<p class="muted">
 				{t('smart.summary', {
 					ok: counts.ok,

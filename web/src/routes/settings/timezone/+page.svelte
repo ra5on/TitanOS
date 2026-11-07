@@ -49,7 +49,7 @@
 	}
 </script>
 
-<PageHead title={t('settings.datetime')} parent={{ href: '/settings', label: t('nav.settings') }} />
+<PageHead title={t('settings.datetime')} />
 <section class="tile panel">
 	{#if loading}<p class="loading" role="status">{t('common.loading')}</p>{/if}
 	{#if loadError}<div class="notice-error" role="alert">

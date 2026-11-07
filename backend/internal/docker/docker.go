@@ -785,7 +785,9 @@ func (m *Manager) Console(ctx context.Context, id, shell, user string) (io.ReadW
 	}
 	resize := func(cols, rows int) {
 		if cols > 0 && rows > 0 && cols <= 1000 && rows <= 1000 {
-			_ = m.api.execResize(context.WithoutCancel(ctx), exec, cols, rows) // a failed resize keeps the old terminal size
+			rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			_ = m.api.execResize(rctx, exec, cols, rows) // a failed resize keeps the old terminal size
+			cancel()
 		}
 	}
 	return stream, resize, nil

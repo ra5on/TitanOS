@@ -1,181 +1,51 @@
 {
-  "source": "52737da2f5f139370c28e5ca83da51999b3829f2",
-  "version": "0.47.1",
-  "captured": "2026-10-31",
+  "source": "Arbeitsbaum des Zweigs feat/0.62 (Basis 0.61.0, nicht eingecheckt; andere Teile von 0.62.0 wurden während der Aufnahme parallel geändert)",
+  "server": "vite dev auf 127.0.0.1:5272",
+  "version": "0.62.0 (in Arbeit; die Statusangaben der Testdaten nennen 0.61.0 aus releaseVersion())",
+  "captured": "2026-11-07",
   "demoData": true,
-  "theme": "Graphit / Blau / Glas",
-  "browserErrors": [],
-  "loadedAppLogos": 13,
+  "theme": "Graphit / Blau (Standard der Testdaten)",
+  "browser": "Playwright Chromium",
+  "note": "Bilder ohne uiVersion 0.62.0 stammen aus früheren Aufnahmen (alte Oberfläche) und werden in der README nicht mehr eingebunden.",
   "images": [
     {
-      "file": "dashboard.png",
-      "script": "docs/screenshots/capture.mjs",
-      "width": 1600,
-      "height": 1416,
-      "bytes": 727532,
-      "sha256": "b0f96eeec34e9f5231eadc71084faf35b04f3f5b5d0be266f155bbf0c477c7a8"
+      "file": "anmeldeseite.png",
+      "script": "scripts/test-ui-appearance.mjs (unverändert)",
+      "output": "09-abgemeldet-desktop.png",
+      "uiVersion": "0.62.0 (Arbeitsstand)",
+      "captured": "2026-11-07",
+      "width": 1440,
+      "height": 900,
+      "bytes": 359759,
+      "sha256": "2a5b77538158140003943def5682067722215bed7deb5820f669cd31b3235ca8"
     },
     {
-      "file": "dashboard-editor.png",
-      "script": "docs/screenshots/capture.mjs",
+      "file": "arbeitsplatz.png",
+      "script": "scripts/test-ui-desktop.mjs (Variante: Original-App-Symbole)",
+      "output": "01-arbeitsplatz.png",
+      "uiVersion": "0.62.0 (Arbeitsstand)",
+      "captured": "2026-11-07",
       "width": 1600,
-      "height": 1546,
-      "bytes": 833149,
-      "sha256": "3f5cd2829d4e66e239bb259e30283245f3ecd68024ec9b6fef65d6f471a31973"
+      "height": 1000,
+      "bytes": 346780,
+      "sha256": "878b008565988ecce504d2925d5373b350df4a6adfdbf09d6cafa6419796208f"
     },
     {
       "file": "darstellung.png",
-      "script": "docs/screenshots/capture.mjs",
+      "script": "Aufnahmeskript nach scripts/test-ui-desktop.mjs (Fenster /settings/appearance maximiert)",
+      "output": "sys-darstellung.png",
+      "uiVersion": "0.62.0 (Arbeitsstand)",
+      "captured": "2026-11-07",
       "width": 1600,
       "height": 1000,
-      "bytes": 776794,
-      "sha256": "8be535c84cf0b56788884796776fab9e9191c9c5495233ea159e713f3b9b6384"
-    },
-    {
-      "file": "dashboard-hintergruende.png",
-      "script": "docs/screenshots/capture.mjs",
-      "width": 1600,
-      "height": 1000,
-      "bytes": 608513,
-      "sha256": "db329507ed006220006c491c10c85b1f83bf18c8ab2af0eba00d9854c0175535"
-    },
-    {
-      "file": "dashboard-bild-upload.png",
-      "script": "docs/screenshots/capture.mjs",
-      "width": 1600,
-      "height": 1000,
-      "bytes": 401639,
-      "sha256": "3a50ee0e4fc6053cb3bd20240920e71be92528f858d906a07977b715bcbfa00c"
-    },
-    {
-      "file": "dashboard-vm-details.png",
-      "script": "docs/screenshots/capture.mjs",
-      "width": 1600,
-      "height": 1783,
-      "bytes": 743213,
-      "sha256": "36f300f180a8eb117b7d8bbf38c19a182e4953a00eda8b5e13782873ab35152a"
-    },
-    {
-      "file": "speicher.png",
-      "script": "docs/screenshots/capture.mjs",
-      "width": 1600,
-      "height": 1000,
-      "bytes": 685682,
-      "sha256": "ac16a4d68a0eb513a52211a5bafc21b13737d3fa28e116d07320198ac5e1588f"
-    },
-    {
-      "file": "shares.png",
-      "script": "docs/screenshots/capture.mjs",
-      "width": 1600,
-      "height": 780,
-      "bytes": 484622,
-      "sha256": "62474c011d4602ba0ecdb4b3accc3cf5d82edb6e8f7a9feb5a73eca651c776de"
-    },
-    {
-      "file": "dateien.png",
-      "script": "docs/screenshots/capture.mjs",
-      "width": 1600,
-      "height": 1000,
-      "bytes": 669708,
-      "sha256": "76bd3e8cf278342644feb75d2ef86e00c316d8b47e8dae4f76269e4ad984f75a"
-    },
-    {
-      "file": "docker.png",
-      "script": "docs/screenshots/capture.mjs",
-      "width": 1600,
-      "height": 1000,
-      "bytes": 957372,
-      "sha256": "d0c2d10454e9e656e026cd5dac77f0c788b697bd5ca077792e4f240b4c2fc0b2"
-    },
-    {
-      "file": "vms.png",
-      "script": "docs/screenshots/capture.mjs",
-      "width": 1600,
-      "height": 938,
-      "bytes": 583735,
-      "sha256": "b742b72155020cd204ebcdc1ec2ba25bffd1934e644711be4cef26a111f826ce"
-    },
-    {
-      "file": "dateien-mobil.png",
-      "script": "docs/screenshots/capture.mjs",
-      "width": 390,
-      "height": 844,
-      "bytes": 92808,
-      "sha256": "667b6269f965ff75d19d96aaf451e1ce297af62db68987eb12af3219ddbea5ce"
-    },
-    {
-      "file": "dashboard-mobil.png",
-      "script": "docs/screenshots/capture.mjs",
-      "width": 390,
-      "height": 844,
-      "bytes": 99220,
-      "sha256": "486438a3e2460d95cdd1d2abf34b8f71d2d229580e49b6012eb17fa124e8142c"
-    },
-    {
-      "file": "anmeldeseite.png",
-      "script": "docs/screenshots/capture.mjs",
-      "width": 1600,
-      "height": 900,
-      "bytes": 794716,
-      "sha256": "f642bc193e40221610a956c6808c548970330e9833449697f1d72baadcc9a4c0"
-    },
-    {
-      "file": "einstellungen.png",
-      "script": "docs/screenshots/capture.mjs",
-      "width": 1440,
-      "height": 1047,
-      "bytes": 768075,
-      "sha256": "47bfb7d6d8ced42158517a146396e8aec269421a8bfd8722a91b584f6cac4d14"
-    },
-    {
-      "file": "firewall.png",
-      "script": "scripts/test-ui-firewall.mjs",
-      "scriptOutput": "firewall-desktop-on.png",
-      "width": 1440,
-      "height": 1561,
-      "bytes": 474623,
-      "sha256": "372d1bbff980fc9b7a2803b6cceb5e2cc83be2bdf5ba90c34c9c8b7ca2efe9fc"
-    },
-    {
-      "file": "vm-erstellen.png",
-      "script": "scripts/test-ui-vm-create.mjs",
-      "scriptOutput": "graphit-1600-de.png",
-      "width": 1600,
-      "height": 1410,
-      "bytes": 424397,
-      "sha256": "521d039697d4bb6bebff5987dda1b87778b963770040e654930d12fc244e0463"
-    },
-    {
-      "file": "vm-erstellen-mobil.png",
-      "script": "scripts/test-ui-vm-create.mjs",
-      "scriptOutput": "graphit-390-de.png",
-      "width": 390,
-      "height": 3093,
-      "bytes": 273253,
-      "sha256": "3e66a06da799d98a22acebcd7a24c0830d13d0c6716f4a39ebaabc8787edf16b"
-    },
-    {
-      "file": "protokoll.png",
-      "script": "scripts/test-ui-vm-create.mjs",
-      "scriptOutput": "system-logs.png",
-      "width": 1600,
-      "height": 1050,
-      "bytes": 127964,
-      "sha256": "d67229e20e51e3a5959ce5882e65decbabcd82ac3b05e0fd7c50dfdac3a493ab"
-    },
-    {
-      "file": "dateien-ersetzen.png",
-      "script": "scripts/test-ui-copy-confirmation.mjs",
-      "scriptOutput": "replace-before-copy.png",
-      "width": 1440,
-      "height": 1000,
-      "bytes": 197005,
-      "sha256": "709075dbb4c331b78fe488c7a6f3a497456e9a65df45ceb2656afb811312b274"
+      "bytes": 229648,
+      "sha256": "eb6a8f5d1749541845830ad4acff9a999ca832708f0101ee1ca77b8c5e85aaf7"
     },
     {
       "file": "dateien-auftraege-1440.png",
       "script": "scripts/test-ui-drive-transfers.mjs",
-      "scriptOutput": "dateien-auftraege-1440.png",
+      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
+      "captured": "2026-10-31",
       "width": 1440,
       "height": 1251,
       "bytes": 353110,
@@ -184,37 +54,123 @@
     {
       "file": "dateien-auftraege-390.png",
       "script": "scripts/test-ui-drive-transfers.mjs",
-      "scriptOutput": "dateien-auftraege-390.png",
+      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
+      "captured": "2026-10-31",
       "width": 390,
       "height": 2045,
       "bytes": 228416,
       "sha256": "4a15f2bb429f4afab25acf9a43a8b45d2855ab5280afd4d159ca6d470d77acae"
     },
     {
-      "file": "navigation-mobil.png",
-      "script": "scripts/test-ui-mobile-side-nav.mjs",
-      "scriptOutput": "offen-graphit-390.png",
-      "width": 390,
-      "height": 844,
-      "bytes": 45180,
-      "sha256": "55129b74a550b0f1e6a5fd3baba07b1269d9e7c2299dc5bce5614c253049967e"
-    },
-    {
-      "file": "ki-agent.png",
-      "script": "scripts/test-ui-agent.mjs",
-      "scriptOutput": "3-desktop-new.png",
-      "version": "0.51.0",
-      "captured": "2026-11-05",
+      "file": "dateien-ersetzen.png",
+      "script": "scripts/test-ui-copy-confirmation.mjs",
+      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
+      "captured": "2026-10-31",
       "width": 1440,
       "height": 1000,
-      "bytes": 476462,
-      "sha256": "8ba826069141d3797b9936ff4c07878a2880698767f4e45511bfe06bd486f7be"
+      "bytes": 197005,
+      "sha256": "709075dbb4c331b78fe488c7a6f3a497456e9a65df45ceb2656afb811312b274"
+    },
+    {
+      "file": "dateien-mobil.png",
+      "script": "docs/screenshots/capture.mjs",
+      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
+      "captured": "2026-10-31",
+      "width": 390,
+      "height": 844,
+      "bytes": 92808,
+      "sha256": "667b6269f965ff75d19d96aaf451e1ce297af62db68987eb12af3219ddbea5ce"
+    },
+    {
+      "file": "dateien.png",
+      "script": "docs/screenshots/capture.mjs",
+      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
+      "captured": "2026-10-31",
+      "width": 1600,
+      "height": 1000,
+      "bytes": 669708,
+      "sha256": "76bd3e8cf278342644feb75d2ef86e00c316d8b47e8dae4f76269e4ad984f75a"
+    },
+    {
+      "file": "dock-bearbeiten.png",
+      "script": "scripts/test-ui-desktop.mjs (Variante: Original-App-Symbole, Widgets ausgeblendet)",
+      "output": "11-dock-bearbeiten.png",
+      "uiVersion": "0.62.0 (Arbeitsstand)",
+      "captured": "2026-11-07",
+      "width": 1600,
+      "height": 1000,
+      "bytes": 330793,
+      "sha256": "49a9fe2c4553366c61143091b6bea51dfb38d9579a039ccc48a80c132d57bc57"
+    },
+    {
+      "file": "docker.png",
+      "script": "Aufnahmeskript nach scripts/test-ui-desktop.mjs (Fenster /docker maximiert)",
+      "output": "docker.png",
+      "uiVersion": "0.62.0 (Arbeitsstand)",
+      "captured": "2026-11-07",
+      "width": 1600,
+      "height": 1000,
+      "bytes": 203430,
+      "sha256": "7df024efc0ac769478280a171012b2f7ae5a46e13d316a9ae8f4c5ae1aa18208"
+    },
+    {
+      "file": "fernansicht-mobil.png",
+      "script": "scripts/test-ui-viewer.mjs (Variante: Original-App-Symbole, Widgets ausgeblendet)",
+      "output": "07-handy-fernansicht.png",
+      "uiVersion": "0.62.0 (Arbeitsstand)",
+      "captured": "2026-11-07",
+      "width": 390,
+      "height": 844,
+      "bytes": 12621,
+      "sha256": "39f66ca4e94a264a870e9c382d8fbb3313f9b114b5923a0cc3271f39fd9b3ada"
+    },
+    {
+      "file": "fernansicht.png",
+      "script": "scripts/test-ui-viewer.mjs (Variante: Original-App-Symbole, Widgets ausgeblendet)",
+      "output": "01-fenster-fernansicht.png",
+      "uiVersion": "0.62.0 (Arbeitsstand)",
+      "captured": "2026-11-07",
+      "width": 1600,
+      "height": 1000,
+      "bytes": 169451,
+      "sha256": "313a3305c89af63bc979ad80a1b0fbf097fcc2800ddff619dd21161468c9ddd9"
+    },
+    {
+      "file": "firewall.png",
+      "script": "scripts/test-ui-firewall.mjs",
+      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
+      "captured": "2026-10-31",
+      "width": 1440,
+      "height": 1561,
+      "bytes": 474623,
+      "sha256": "372d1bbff980fc9b7a2803b6cceb5e2cc83be2bdf5ba90c34c9c8b7ca2efe9fc"
+    },
+    {
+      "file": "handy-start.png",
+      "script": "scripts/test-ui-desktop.mjs (Variante: Original-App-Symbole)",
+      "output": "12-handy-start.png",
+      "uiVersion": "0.62.0 (Arbeitsstand)",
+      "captured": "2026-11-07",
+      "width": 390,
+      "height": 844,
+      "bytes": 146200,
+      "sha256": "f8ac8c0975eaca47a84c135e9d5675b9ffad3f35d339d5d4d89af540081860a0"
+    },
+    {
+      "file": "hauptmenue.png",
+      "script": "scripts/test-ui-desktop.mjs (Variante: Original-App-Symbole, Widgets ausgeblendet)",
+      "output": "06-hauptmenue.png",
+      "uiVersion": "0.62.0 (Arbeitsstand)",
+      "captured": "2026-11-07",
+      "width": 1600,
+      "height": 1000,
+      "bytes": 227838,
+      "sha256": "c00293871cb009fb8c232b5d87df17c02210c73c711e98b005c535e7e8e1f740"
     },
     {
       "file": "ki-agent-chat.png",
       "script": "scripts/test-ui-agent.mjs",
-      "scriptOutput": "1-desktop-chat.png",
-      "version": "0.51.0",
+      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
       "captured": "2026-11-05",
       "width": 1440,
       "height": 1000,
@@ -222,26 +178,106 @@
       "sha256": "d21bc3867d1f9f0fd75290cf0e3cc8cecdc7f8ff31f2eedbe115c18fa33f80b5"
     },
     {
-      "file": "ki-agent-mobil.png",
-      "script": "scripts/test-ui-agent.mjs",
-      "scriptOutput": "10-phone-in-titanos.png",
-      "version": "0.51.0",
-      "captured": "2026-11-05",
-      "width": 390,
-      "height": 844,
-      "bytes": 239449,
-      "sha256": "4c330a465e76576664f8938cec8a4a8ffc302a54266f944573d9d859c9444e81"
-    },
-    {
       "file": "ki-agent-menue-mobil.png",
       "script": "scripts/test-ui-agent.mjs",
-      "scriptOutput": "16-phone-menu.png",
-      "version": "0.51.0",
+      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
       "captured": "2026-11-05",
       "width": 390,
       "height": 844,
-      "bytes": 113263,
-      "sha256": "5060692e9c1b9668da9fc2b84aafe85d354041e8c1af6c0b3f8be5cf752add9a"
+      "bytes": 106339,
+      "sha256": "4d6bf0bf077d8f78349a290c0bccdf32a88ffb1abed601305c42908bc3ab85b2"
+    },
+    {
+      "file": "ki-agent-mobil.png",
+      "script": "scripts/test-ui-agent.mjs",
+      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
+      "captured": "2026-11-05",
+      "width": 390,
+      "height": 844,
+      "bytes": 218436,
+      "sha256": "8cd5ccf9e2cfb99105d0d74a57302aa5a40af5057eeb0517d29d067a5701d4d5"
+    },
+    {
+      "file": "ki-agent.png",
+      "script": "scripts/test-ui-agent.mjs",
+      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
+      "captured": "2026-11-05",
+      "width": 1440,
+      "height": 900,
+      "bytes": 441651,
+      "sha256": "b3245c35d3e198826b03017bb3f28bd07910ea330f9f7e05acd31a94f23ece30"
+    },
+    {
+      "file": "protokoll.png",
+      "script": "scripts/test-ui-vm-create.mjs",
+      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
+      "captured": "2026-10-31",
+      "width": 1600,
+      "height": 1050,
+      "bytes": 127964,
+      "sha256": "d67229e20e51e3a5959ce5882e65decbabcd82ac3b05e0fd7c50dfdac3a493ab"
+    },
+    {
+      "file": "shares.png",
+      "script": "docs/screenshots/capture.mjs",
+      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
+      "captured": "2026-10-31",
+      "width": 1600,
+      "height": 780,
+      "bytes": 484622,
+      "sha256": "62474c011d4602ba0ecdb4b3accc3cf5d82edb6e8f7a9feb5a73eca651c776de"
+    },
+    {
+      "file": "speicher.png",
+      "script": "docs/screenshots/capture.mjs",
+      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
+      "captured": "2026-10-31",
+      "width": 1600,
+      "height": 1000,
+      "bytes": 685682,
+      "sha256": "ac16a4d68a0eb513a52211a5bafc21b13737d3fa28e116d07320198ac5e1588f"
+    },
+    {
+      "file": "systemsteuerung.png",
+      "script": "Aufnahmeskript nach scripts/test-ui-desktop.mjs (Fenster /settings maximiert)",
+      "output": "sys-alle.png",
+      "uiVersion": "0.62.0 (Arbeitsstand)",
+      "captured": "2026-11-07",
+      "width": 1600,
+      "height": 1000,
+      "bytes": 308294,
+      "sha256": "ac53c48b7483fa9e0fb017d19111d5e114ef2faa53fee2f1b686a90bfb930e3d"
+    },
+    {
+      "file": "vm-erstellen-mobil.png",
+      "script": "scripts/test-ui-vm-create.mjs",
+      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
+      "captured": "2026-10-31",
+      "width": 390,
+      "height": 3093,
+      "bytes": 273253,
+      "sha256": "3e66a06da799d98a22acebcd7a24c0830d13d0c6716f4a39ebaabc8787edf16b"
+    },
+    {
+      "file": "vm-erstellen.png",
+      "script": "scripts/test-ui-vm-create.mjs",
+      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
+      "captured": "2026-10-31",
+      "width": 1600,
+      "height": 1410,
+      "bytes": 424397,
+      "sha256": "521d039697d4bb6bebff5987dda1b87778b963770040e654930d12fc244e0463"
+    },
+    {
+      "file": "vms.png",
+      "script": "Aufnahmeskript nach scripts/test-ui-desktop.mjs (Fenster /vms maximiert)",
+      "output": "vms.png",
+      "uiVersion": "0.62.0 (Arbeitsstand)",
+      "captured": "2026-11-07",
+      "width": 1600,
+      "height": 1000,
+      "bytes": 210190,
+      "sha256": "8611a5bc5035b99047a48de7e1c4fbaf574b8c9b4277729e9e1f39c2b6e9596e"
     }
   ]
 }

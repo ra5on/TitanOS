@@ -141,6 +141,23 @@
 			};
 		});
 	}
+	// PLAN 65-5: the arrow keys move along the dock (Tab leaves it).
+	function arrows(event: KeyboardEvent) {
+		const keys =
+			dock.position === 'bottom' ? ['ArrowLeft', 'ArrowRight'] : ['ArrowUp', 'ArrowDown'];
+		if (![...keys, 'Home', 'End'].includes(event.key)) return;
+		const items = [...(bar?.querySelectorAll<HTMLElement>('button.it') ?? [])];
+		const at = items.indexOf(document.activeElement as HTMLElement);
+		if (at < 0) return;
+		event.preventDefault();
+		const next =
+			event.key === 'Home'
+				? 0
+				: event.key === 'End'
+					? items.length - 1
+					: (at + (event.key === keys[1] ? 1 : items.length - 1)) % items.length;
+		items[next]?.focus();
+	}
 	const positions = [
 		['bottom', 'desktop.dock.bottom'],
 		['left', 'desktop.dock.left'],
@@ -216,6 +233,7 @@
 		if (e.target === bar) dropAt = null;
 	}}
 	ondrop={drop}
+	onkeydown={arrows}
 	oncontextmenu={(e) => {
 		e.preventDefault();
 		if (!preview) onmenu(e, null);
@@ -455,6 +473,11 @@
 		font-size: 11px;
 		font-weight: 700;
 		line-height: 20px;
+	}
+	/* While editing the × sits at the top: the badge moves down out of its way. */
+	.edit .badge {
+		top: auto;
+		bottom: -4px;
 	}
 	.x {
 		position: absolute;

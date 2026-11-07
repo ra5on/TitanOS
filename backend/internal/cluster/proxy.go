@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httputil"
+	pathpkg "path"
 	"strings"
 	"sync"
 	"syscall"
@@ -214,6 +215,19 @@ func (m *Manager) Proxy(w http.ResponseWriter, r *http.Request, id, user, path s
 		writeError(w, http.StatusForbidden, "cluster_not_permitted", "this node may not manage the others")
 		return
 	}
+	// The protocol between the nodes is not for accounts: a request of the
+	// web interface signed by this node must not reach it, whatever the
+	// account may do here.
+	if peerPath(path) {
+		writeError(w, http.StatusForbidden, "cluster_not_permitted", "not possible through another node")
+		return
+	}
+	// The other node knows the account by its name only: one this node
+	// keeps for itself is not the account of that name there.
+	if !m.ClusterAccount(user) {
+		writeError(w, http.StatusForbidden, "cluster_not_permitted", "this account exists on this node only")
+		return
+	}
 	n, err := m.node(id)
 	if err != nil {
 		status, code := ErrorCode(err)
@@ -236,6 +250,14 @@ func (m *Manager) Proxy(w http.ResponseWriter, r *http.Request, id, user, path s
 	}
 	ctx := context.WithValue(r.Context(), proxyKey{}, proxyTarget{node: n, address: address, path: "/api/v1/" + strings.TrimPrefix(path, "/"), user: user})
 	m.proxy.ServeHTTP(w, r.WithContext(ctx))
+}
+
+// peerPath reports whether path (after /api/v1/) leads to the protocol
+// between the nodes (PeerPrefix), also when written with dots or slashes
+// the other node would clean away.
+func peerPath(path string) bool {
+	clean := pathpkg.Clean("/api/v1/" + strings.TrimPrefix(path, "/"))
+	return strings.HasPrefix(clean+"/", PeerPrefix)
 }
 
 // browserHeaders are headers of the browser that mean nothing to the other

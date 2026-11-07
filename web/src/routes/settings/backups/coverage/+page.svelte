@@ -46,9 +46,7 @@
 	onMount(load);
 </script>
 
-<PageHead
-	title={t('coverage.title')}
-	parent={{ href: '/settings/backups', label: t('safeguard.title') }}
+<PageHead title={t('coverage.title')}
 	>{#snippet actions()}<button class="btn" disabled={busy} onclick={load}>{t('ops.refresh')}</button
 		><a class="btn" href="/settings/backups/applications">{t('coverage.restoreApps')}</a
 		>{/snippet}</PageHead

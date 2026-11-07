@@ -33,6 +33,6 @@ func (s *Server) registerVMDetails(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/vms/{name}/xml", s.requireAdmin(s.handleVMXML))
 	mux.HandleFunc("GET /api/v1/vms/{name}/addresses", s.requireAdmin(s.handleVMAddresses))
 	mux.HandleFunc("PUT /api/v1/vms/{name}/medium", s.requireAppAdmin(s.handleVMMedium))
-	mux.HandleFunc("GET /api/v1/vms/{name}/screen", s.requireAdmin(s.handleVMScreen))
+	mux.HandleFunc("GET /api/v1/vms/{name}/screen", s.requireAppConsole(s.handleVMScreen))
 	mux.HandleFunc("POST /api/v1/vms/{name}/{action}", s.requireAppAdmin(s.handleVMAction))
 }

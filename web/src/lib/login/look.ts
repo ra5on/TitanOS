@@ -3,7 +3,6 @@
 // titand checks every value again; this mirrors its rules so that the page
 // never renders anything it would not accept.
 
-import { BACKGROUND_IDS } from '../dashboard/visual.ts';
 import { contrast, isHex, type Hex } from '../theme/color.ts';
 import {
 	ACCENT_IDS,
@@ -15,6 +14,20 @@ import {
 	type Palette,
 	type SurfaceStyle,
 } from '../theme/themes.ts';
+
+/** The built-in background pictures (static/backgrounds/<id>.webp). */
+export const BACKGROUND_IDS = [
+	'nordlicht',
+	'nebelwald',
+	'bergsee',
+	'kueste',
+	'wueste',
+	'weltraum',
+	'graphit',
+	'mitternacht',
+	'wellen',
+	'geometrie',
+] as const;
 
 export const LOGIN_THEMES = [
 	'inherit',

@@ -47,6 +47,8 @@
 	let code = $state('');
 	let recovery = $state<string[] | null>(null);
 	let disabling = $state(false);
+	// Setting up 2FA asks for the password first (a session alone may not, owner 7.11.2026).
+	let beginning = $state(false);
 	let password = $state('');
 	let dialogError = $state('');
 	let busy = $state(false);
@@ -86,14 +88,19 @@
 	});
 
 	async function begin() {
+		if (busy) return;
+		busy = true;
 		error = '';
 		dialogError = '';
-		code = '';
 		try {
-			setup = await api.post<TotpSetup>('/account/2fa/begin');
+			setup = await api.post<TotpSetup>('/account/2fa/begin', { password });
+			beginning = false;
+			password = '';
+			code = '';
 		} catch (err) {
-			error = apiErrorText(err);
+			dialogError = apiErrorText(err);
 		}
+		busy = false;
 	}
 
 	async function enable(event: SubmitEvent) {
@@ -151,12 +158,18 @@
 		busy = false;
 	}
 
-	function openConfirm(kind: 'disable' | 'renew') {
+	function openConfirm(kind: 'disable' | 'renew' | 'begin') {
 		dialogError = '';
 		code = '';
 		password = '';
 		disabling = kind === 'disable';
 		renewing = kind === 'renew';
+		beginning = kind === 'begin';
+	}
+	function closeConfirm() {
+		disabling = false;
+		renewing = false;
+		beginning = false;
 	}
 
 	async function end(device: Device) {
@@ -263,7 +276,7 @@
 					>
 				</div>
 			{:else if !setup}
-				<button type="button" class="btn btn-primary" onclick={begin}
+				<button type="button" class="btn btn-primary" onclick={() => openConfirm('begin')}
 					>{t('account.twoFactorSetup')}</button
 				>
 			{/if}
@@ -415,14 +428,27 @@
 	</Dialog>
 {/if}
 
-{#if disabling || renewing}
+{#if disabling || renewing || beginning}
 	<Dialog
-		title={t(disabling ? 'account.disableTitle' : 'account.renewTitle')}
+		title={t(
+			beginning ? 'account.beginTitle' : disabling ? 'account.disableTitle' : 'account.renewTitle',
+		)}
 		locked={busy}
-		onclose={() => ((disabling = false), (renewing = false))}
+		onclose={closeConfirm}
 	>
-		<form class="confirm" onsubmit={(event) => event.preventDefault()}>
-			<p class="text">{t(disabling ? 'account.disableText' : 'account.renewText')}</p>
+		<form
+			class="confirm"
+			onsubmit={(event) => {
+				event.preventDefault();
+				// Enter starts the setup (nothing is lost); switching off stays a click.
+				if (beginning && password) void begin();
+			}}
+		>
+			<p class="text">
+				{t(
+					beginning ? 'account.beginText' : disabling ? 'account.disableText' : 'account.renewText',
+				)}
+			</p>
 			<label
 				><span>{t('auth.password')}</span><input
 					class="field"
@@ -432,31 +458,36 @@
 					required
 				/></label
 			>
-			<label
-				><span>{t('auth.code')}</span><input
-					class="field mono"
-					type="text"
-					bind:value={code}
-					inputmode="numeric"
-					autocomplete="one-time-code"
-					spellcheck="false"
-					required
-				/></label
-			>
+			{#if !beginning}
+				<label
+					><span>{t('auth.code')}</span><input
+						class="field mono"
+						type="text"
+						bind:value={code}
+						inputmode="numeric"
+						autocomplete="one-time-code"
+						spellcheck="false"
+						required
+					/></label
+				>
+			{/if}
 			{#if dialogError}<p class="notice-warn" role="alert">{dialogError}</p>{/if}
 			<div class="dialog-actions">
-				<button
-					type="button"
-					class="btn"
-					disabled={busy}
-					onclick={() => ((disabling = false), (renewing = false))}>{t('common.cancel')}</button
+				<button type="button" class="btn" disabled={busy} onclick={closeConfirm}
+					>{t('common.cancel')}</button
 				>
 				<button
 					type="button"
-					class="btn btn-warn"
-					disabled={busy || !password || !code}
-					onclick={disabling ? disable : renew}
-					>{t(disabling ? 'account.disableSubmit' : 'account.renewSubmit')}</button
+					class="btn {beginning ? 'btn-primary' : 'btn-warn'}"
+					disabled={busy || !password || (!beginning && !code)}
+					onclick={beginning ? begin : disabling ? disable : renew}
+					>{t(
+						beginning
+							? 'account.beginSubmit'
+							: disabling
+								? 'account.disableSubmit'
+								: 'account.renewSubmit',
+					)}</button
 				>
 			</div>
 		</form>

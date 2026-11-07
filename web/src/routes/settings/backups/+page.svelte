@@ -96,7 +96,7 @@
 		value ? formatDateTime(new Date(value)) : t('safeguard.none');
 </script>
 
-<PageHead title={t('safeguard.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
+<PageHead title={t('safeguard.title')}>
 	<p class="muted">{t('safeguard.intro')}</p>
 	{#snippet actions()}<button class="btn" disabled={loading} onclick={load}
 			>{t(loading ? 'common.loading' : 'safeguard.refresh')}</button

@@ -99,7 +99,7 @@
 	}
 </script>
 
-{#if admin}<PageHead title={t('ops.import')} parent={{ href: '/storage', label: t('nav.storage') }}
+{#if admin}<PageHead title={t('ops.import')}
 		>{#snippet actions()}<button class="btn" disabled={busy} onclick={load}
 				>{t('ops.refresh')}</button
 			>{/snippet}</PageHead

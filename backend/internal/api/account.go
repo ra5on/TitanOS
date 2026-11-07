@@ -50,9 +50,24 @@ func (s *Server) handleAccountSessionsEndOthers(w http.ResponseWriter, r *http.R
 
 // handleTwoFactorBegin hands out a secret for the authenticator app. It
 // only counts once handleTwoFactorEnable has seen a code made from it.
+// Like switching it off it needs the password (or a passkey) of the
+// account: a session alone must not set up a second factor that locks
+// the owner of the account out (owner decision 7.11.2026).
 func (s *Server) handleTwoFactorBegin(w http.ResponseWriter, r *http.Request) {
+	var req proof
+	if !readJSON(w, r, &req) {
+		return
+	}
+	user := currentUser(r)
+	if user.TOTPSecret != "" {
+		writeTwoFactorError(w, auth.ErrTwoFactorEnabled)
+		return
+	}
+	if !s.reconfirmProof(w, user, req) {
+		return
+	}
 	hostname, _ := os.Hostname()
-	secret, uri, err := s.opts.Users.BeginTwoFactor(currentUser(r).Name, "TitanOS "+hostname)
+	secret, uri, err := s.opts.Users.BeginTwoFactor(user.Name, "TitanOS "+hostname)
 	if err != nil {
 		writeTwoFactorError(w, err)
 		return
@@ -82,16 +97,40 @@ func (s *Server) handleTwoFactorEnable(w http.ResponseWriter, r *http.Request) {
 // failed login; it answers the request itself when the proof fails.
 func (s *Server) reconfirm(w http.ResponseWriter, user auth.User, password, code string) bool {
 	key := "user:" + user.Name
-	if wait := s.limiter.RetryAfter(key); wait > 0 {
+	// Proofs sent at the same time all pass this check before the first
+	// of them is counted (hashing is slow), so it is made again before
+	// every answer: once the limit was reached meanwhile, the answer is
+	// not told, right or wrong; a wrong proof still counts.
+	blocked := func() bool {
+		if s.limiter.RetryAfter(key) <= 0 {
+			return false
+		}
 		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
+		return true
+	}
+	if blocked() {
 		return false
 	}
-	if _, ok := s.opts.Users.Authenticate(user.Name, password); !ok {
+	_, ok := s.opts.Users.Authenticate(user.Name, password)
+	if blocked() {
+		if !ok {
+			s.limiter.Fail(key)
+		}
+		return false
+	}
+	if !ok {
 		s.limiter.Fail(key)
 		writeError(w, http.StatusForbidden, "wrong_password", "the password is wrong")
 		return false
 	}
-	if !s.opts.Users.CheckSecondFactor(user.Name, code) {
+	ok = s.opts.Users.CheckSecondFactor(user.Name, code)
+	if blocked() {
+		if !ok {
+			s.limiter.Fail(key)
+		}
+		return false
+	}
+	if !ok {
 		s.limiter.Fail(key)
 		writeError(w, http.StatusForbidden, "invalid_code", "the code is wrong or was used already")
 		return false
@@ -177,26 +216,15 @@ func (s *Server) checkPasskeyProof(user auth.User, a *passkeyAssertion) string {
 }
 
 // handleTwoFactorDisable switches the second factor off, with the password
-// and a code as proof that it is the owner of the account who asks.
+// and a code (or a passkey) as proof that it is the owner of the account
+// who asks.
 func (s *Server) handleTwoFactorDisable(w http.ResponseWriter, r *http.Request) {
-	var req struct{ Password, Code string }
+	var req proof
 	if !readJSON(w, r, &req) {
 		return
 	}
 	user := currentUser(r)
-	key := "user:" + user.Name
-	if wait := s.limiter.RetryAfter(key); wait > 0 {
-		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
-		return
-	}
-	if _, ok := s.opts.Users.Authenticate(user.Name, req.Password); !ok {
-		s.limiter.Fail(key)
-		writeError(w, http.StatusForbidden, "wrong_password", "the password is wrong")
-		return
-	}
-	if !s.opts.Users.CheckSecondFactor(user.Name, req.Code) {
-		s.limiter.Fail(key)
-		writeError(w, http.StatusForbidden, "invalid_code", "the code is wrong or was used already")
+	if !s.reconfirmProof(w, user, req) {
 		return
 	}
 	if err := s.opts.Users.DisableTwoFactor(user.Name); err != nil {
@@ -211,7 +239,7 @@ func (s *Server) handleTwoFactorDisable(w http.ResponseWriter, r *http.Request) 
 // and a code as proof like switching the second factor off. The new codes
 // are shown this once; only their hashes are kept.
 func (s *Server) handleTwoFactorRecovery(w http.ResponseWriter, r *http.Request) {
-	var req struct{ Password, Code string }
+	var req proof
 	if !readJSON(w, r, &req) {
 		return
 	}
@@ -220,19 +248,7 @@ func (s *Server) handleTwoFactorRecovery(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusConflict, "two_factor_not_begun", "two-factor login is off")
 		return
 	}
-	key := "user:" + user.Name
-	if wait := s.limiter.RetryAfter(key); wait > 0 {
-		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
-		return
-	}
-	if _, ok := s.opts.Users.Authenticate(user.Name, req.Password); !ok {
-		s.limiter.Fail(key)
-		writeError(w, http.StatusForbidden, "wrong_password", "the password is wrong")
-		return
-	}
-	if !s.opts.Users.CheckSecondFactor(user.Name, req.Code) {
-		s.limiter.Fail(key)
-		writeError(w, http.StatusForbidden, "invalid_code", "the code is wrong or was used already")
+	if !s.reconfirmProof(w, user, req) {
 		return
 	}
 	codes, err := s.opts.Users.NewRecoveryCodes(user.Name)

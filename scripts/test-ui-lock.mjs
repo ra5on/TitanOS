@@ -109,6 +109,8 @@ async function open(width, options = {}) {
         },
       });
     });
+  // The account menu sits in the desktop's top bar (PLAN 65: no classic frame).
+  await made.ctx.addInitScript(() => localStorage.removeItem("titanos.layout"));
   if (options.clock) await made.page.clock.install();
   await made.page.goto(`${options.base ?? base}/`);
   return { ...made, nas };

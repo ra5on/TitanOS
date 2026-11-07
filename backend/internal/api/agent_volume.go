@@ -420,7 +420,7 @@ func (s *Server) agentMoveRun(plan agentMovePlan) {
 			j.Cleanup = problems[0]
 		}
 	})
-	go s.agentSyncShare()
+	s.shareSyncs.Go(s.agentSyncShare)
 }
 
 // handleAgentMoveCleanup removes the old copy of a moved agent on a volume.
@@ -467,6 +467,9 @@ func (s *Server) agentSetVolume(volume string) error {
 	a := &s.agentConf
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if !a.loaded {
+		return errors.New("agent.json is not readable")
+	}
 	next := a.settings
 	next.Volume = volume
 	if err := s.opts.Store.WriteJSON(agentSettingsFile, next); err != nil {

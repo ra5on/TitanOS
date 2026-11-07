@@ -15,8 +15,6 @@
 				{ keys: [mod, 'K'], label: 'shortcuts.palette', show: true },
 				{ keys: ['Strg', '`'], label: 'shortcuts.terminal', show: admin },
 				{ keys: ['?'], label: 'shortcuts.help', show: true },
-				{ keys: [mod, 'Z'], label: 'shortcuts.dashboardUndo', show: true },
-				{ keys: [mod, 'S'], label: 'shortcuts.dashboardSave', show: true },
 				{ keys: ['F1'], label: 'shortcuts.files', show: true },
 				{ keys: ['Esc'], label: 'shortcuts.escape', show: true },
 			] satisfies { keys: string[]; label: MessageKey; show: boolean }[]

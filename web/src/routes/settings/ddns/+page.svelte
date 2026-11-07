@@ -146,7 +146,7 @@
 	}
 </script>
 
-<PageHead title={t('ddns.title')} parent={{ href: '/settings', label: t('nav.settings') }} />
+<PageHead title={t('ddns.title')} />
 
 <Tabs
 	tabs={DDNS_TABS.map((id) => ({ id, label: t(id === 'ipv64' ? 'ipv64x.title' : 'ddns.tabDdns') }))}

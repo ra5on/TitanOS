@@ -257,6 +257,9 @@ type Manager struct {
 	// sleepSamples is protected by actions, never persisted on the stick.
 	sleepSamples  map[string]sleepSample
 	btrfsProgress map[string]btrfsProgress
+	// btrfsProbed is when refreshBtrfs last asked btrfs (protected by
+	// actions).
+	btrfsProbed time.Time
 	// btrfsSeen is when mountAll first saw a member of an unmounted Btrfs
 	// mirror (protected by actions). clock replaces time.Now in tests.
 	btrfsSeen map[string]time.Time
@@ -314,10 +317,29 @@ func (m *Manager) Load() error {
 	return m.loadDiskSleep()
 }
 
+// configured returns a deep copy of the volumes: callers change their copy
+// and save it (updateVolume). Cache and Encryption are pointers; shared,
+// a change would reach RAM even when saving it to /config failed.
 func (m *Manager) configured() []VolumeConfig {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return append([]VolumeConfig(nil), m.volumes...)
+	volumes := make([]VolumeConfig, len(m.volumes))
+	for i, volume := range m.volumes {
+		volumes[i] = volume.clone()
+	}
+	return volumes
+}
+
+// clone copies a volume with its own Cache and Encryption.
+func (v VolumeConfig) clone() VolumeConfig {
+	if v.Cache != nil {
+		c := *v.Cache
+		v.Cache = &c
+	}
+	if v.Encryption != nil {
+		v.Encryption = &EncryptionConfig{UUIDs: slices.Clone(v.Encryption.UUIDs)}
+	}
+	return v
 }
 
 // FilesystemUUIDs returns the filesystem UUIDs of the volumes of the NAS.

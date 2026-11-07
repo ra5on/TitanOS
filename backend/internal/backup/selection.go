@@ -225,15 +225,27 @@ func (m *Manager) homeVolume(job Job) string {
 			return source.Volume
 		}
 	}
-	if len(job.Volumes) > 0 {
-		return job.Volumes[0]
+	// Only while it is mounted: below an empty mount point, the state file
+	// and restic's cache would land in the RAM. No other volume stands in,
+	// or what the job knows would be split across volumes; without its
+	// home the job is unavailable (stateFile is empty).
+	var mounted []string
+	if len(job.Volumes) > 0 || len(job.Places) > 0 || len(job.Extras) > 0 || len(job.Applications) > 0 {
+		mounted = m.mounted()
 	}
-	if len(job.Places) > 0 {
-		volume, _, _ := strings.Cut(job.Places[0], "/")
-		return volume
+	home := ""
+	if len(job.Volumes) > 0 {
+		home = job.Volumes[0]
+	} else if len(job.Places) > 0 {
+		home, _, _ = strings.Cut(job.Places[0], "/")
+	}
+	if home != "" {
+		if slices.Contains(mounted, home) {
+			return home
+		}
+		return ""
 	}
 	if len(job.Extras) > 0 || len(job.Applications) > 0 {
-		mounted := m.mounted()
 		sort.Strings(mounted)
 		for _, volume := range mounted {
 			if !(job.Destination.Type == "local" && volume == job.Destination.Volume) {

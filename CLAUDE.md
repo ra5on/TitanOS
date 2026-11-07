@@ -4,7 +4,7 @@ Ein schlankes NAS-Betriebssystem, das vom USB-Stick bootet und komplett im RAM l
 
 > **Diese Datei enthält nur Kernregeln; Fachregeln stehen in `docs/rules/` bzw. den verlinkten Dokumenten. Vor Arbeiten an einem Bereich dessen Regeldatei lesen. Neue Regeln in die passende Regeldatei, nicht hier anhängen.** Verzeichnis: Abschnitt „Fachregeln“ unten und `docs/rules/README.md`.
 
-Stand: **0.57.0** (Release-Prüfstand siehe docs/releases/v0.57.0.md). Diese Datei und die Regeldateien beschreiben die aktuell geltenden Entscheidungen, nicht die Reihenfolge ihrer Einführung. Historische Release- und Testberichte stehen in `docs/releases/` und den Fachdokumenten. Bei Änderungen die betroffene Regel dort aktualisieren, wo sie steht, statt widersprechende Nachträge anzuhängen.
+Stand: **0.62.0** (Release-Prüfstand siehe docs/releases/v0.62.0.md). Diese Datei und die Regeldateien beschreiben die aktuell geltenden Entscheidungen, nicht die Reihenfolge ihrer Einführung. Historische Release- und Testberichte stehen in `docs/releases/` und den Fachdokumenten. Bei Änderungen die betroffene Regel dort aktualisieren, wo sie steht, statt widersprechende Nachträge anzuhängen.
 
 Eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen aus anderen Projekten übernehmen.
 
@@ -30,7 +30,7 @@ Eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen aus ande
 - `LICENSE.md` enthält den unveränderten Text der FSL-1.1-ALv2 (offizielle Vorlage von fsl.software) mit `Copyright 2026 ra5on`. Lizenztext nie umformulieren.
 - Bezeichnung: „Fair Source“. Nicht „Open Source“ nennen, solange eine Version noch nicht zu Apache-2.0 gewechselt ist. Lizenzhinweis in README und unter „Einstellungen › Über“.
 - Jede Release-Seite nennt das Datum, ab dem diese Version unter Apache-2.0 steht (Erscheinungsdatum + 2 Jahre).
-- Fremdkomponenten behalten ihre Lizenz (Linux-Kernel, Debian-Pakete: GPL u. a.; noVNC: MPL-2.0; xterm.js, gridstack: MIT). Das Abbild ist eine Zusammenstellung; GPL-Teile bleiben GPL, ihre Quellen werden jedem Release beigelegt bzw. verlinkt (CI). Eigener Code, der GPL-Code ableitet (z. B. Kernelmodule), muss GPL sein.
+- Fremdkomponenten behalten ihre Lizenz (Linux-Kernel, Debian-Pakete: GPL u. a.; noVNC: MPL-2.0; xterm.js: MIT). Das Abbild ist eine Zusammenstellung; GPL-Teile bleiben GPL, ihre Quellen werden jedem Release beigelegt bzw. verlinkt (CI). Eigener Code, der GPL-Code ableitet (z. B. Kernelmodule), muss GPL sein.
 - `THIRD_PARTY_LICENSES` im Repo und im Abbild (unter „Einstellungen › Über“ anzeigen). Umgesetzt: „Einstellungen › Über TitanOS“ zeigt Version, Kernel, den Lizenzhinweis (Fair Source, FSL-1.1-ALv2, Apache-2.0 nach zwei Jahren), den Lizenztext und `THIRD_PARTY_LICENSES`; beide Dateien liegen im Abbild unter `/usr/share/titanos/`. Die Repo-Datei `THIRD_PARTY_LICENSES` ist eine Übersicht. Für jedes Abbild erzeugt `scripts/third-party-licenses.py` ein Versionsinventar aus Debian-Paketdaten, den Go-Modulen des gebauten Binarys und dem npm-Paketbaum einschließlich Fonts und Build-Werkzeugen. Originalhinweise liegen unter `/usr/share/titanos/licenses/`; das Release enthält ein Lizenzarchiv und genaue Quellpaketlinks.
 - Beiträge nur mit Contributor License Agreement (z. B. per CLA-Bot), damit kommerzielle Lizenzen später möglich bleiben. `CONTRIBUTING.md` erklärt das.
 - Name: „basiert auf Debian“ ist okay, „Debian“ nicht im Produktnamen.
@@ -188,7 +188,7 @@ Verbindliche Detailregeln je Bereich. Vor Arbeiten an einem Bereich die Datei le
 |---|---|
 | `docs/rules/STORAGE.md` | Stick/`/config`, Volumes, mdadm/Btrfs, SSD-Cache, Verschlüsselung, Firmware/Treiber, Ruhemodus, RAM-/Upload-Budget, Übernahme/Erweiterung, Wartung, Auftragsabläufe, Anwendungssicherungen, Restore-Proben, VM-Klon, Speicherverbrauch |
 | `docs/rules/UPDATES.md` | Update-Quelle, Signaturen, Update-Einstellungen, A/B-Systemupdates, App-Updates, Boot-/App-Check |
-| `docs/rules/WEB-UI.md` | Kopfzeile, Konto-Menü, Bestätigungsdialoge, Marke, Einstellungsseiten mit Seitenleiste, Dashboard, Themes/Farben/Glas, gemeinsame UI, mobile Navigation, Befehlspalette |
+| `docs/rules/WEB-UI.md` | Desktop-Modus (Arbeitsplatz, Fenster, Dock, Handy-Raster), Bestätigungsdialoge, Marke, Systemsteuerung, Darstellung/Themes/Farben/Glas, gemeinsame UI, Ersteinrichtung |
 | `docs/rules/ACCOUNTS-ACCESS.md` | Konten/Rollen, 2FA, Passkeys, Sitzungen/„Angemeldet bleiben“, Konten sperren, SSH/Zertifikate (Zugang), Terminal und Konsolen, Aktivitätsprotokoll |
 | `docs/rules/SYSTEM.md` | Energie, Zeitplan/Wake-on-LAN, USV, Werkzeuge-Reiter, Benachrichtigungen, Monitoring/CPU-Leistung, Ein-/Ausschalter, Tailscale, NetBird |
 | `docs/rules/NETWORK.md` | Netzwerkeinstellungen mit Rückfall, Firewall |

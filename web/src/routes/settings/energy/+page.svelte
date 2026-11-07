@@ -65,7 +65,7 @@
 	});
 </script>
 
-<PageHead title={t('energy.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
+<PageHead title={t('energy.title')}>
 	<p class="muted">{t('energy.intro')}</p>
 </PageHead>
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}

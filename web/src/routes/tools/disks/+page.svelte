@@ -4,5 +4,5 @@
 	import DiskTests from './DiskTests.svelte';
 </script>
 
-<PageHead title={t('disktest.title')} parent={{ href: '/tools', label: t('nav.tools') }} />
+<PageHead title={t('disktest.title')} />
 <DiskTests />
