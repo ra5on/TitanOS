@@ -45,6 +45,8 @@ type options struct {
 	httpAddr  string
 	dev       bool
 	devAddr   string
+	// webappsDir holds app archives for development mode (PLAN 66).
+	webappsDir string
 }
 
 func main() {
@@ -54,6 +56,7 @@ func main() {
 	flag.StringVar(&opts.httpAddr, "http", ":80", "address that redirects to HTTPS; empty to turn off")
 	flag.BoolVar(&opts.dev, "dev", false, "development mode: plain HTTP on -dev-listen, no reboot or poweroff")
 	flag.StringVar(&opts.devAddr, "dev-listen", "127.0.0.1:8080", "address in development mode")
+	flag.StringVar(&opts.webappsDir, "webapps-dir", "", "development mode: folder with web app archives (titanos-webapp-<id>-<version>.zip or the upstream <id>-web-<version>.zip)")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	checkBoot := flag.Bool("check-boot", false, "wait until the running titand is ready, for the boot check after an update")
 	checkApp := flag.Bool("check-app", false, "wait until a new app update is ready, and go back if it does not get there")

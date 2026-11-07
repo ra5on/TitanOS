@@ -57,6 +57,11 @@ ALLOWED = (
     "THIRD_PARTY_LICENSES",
     "scripts/viewer-image-reuse.py",
     "scripts/tests/test_viewer_image_reuse.py",
+    # The web apps (PLAN 66) are release assets fetched and checked in CI,
+    # installed by titand onto a data volume; nothing of them is in the image.
+    "webapps/",
+    "scripts/fetch-webapps.py",
+    "scripts/tests/test_fetch_webapps.py",
     # The example agent is published as its own image, not in the system.
     "examples/",
     ".github/workflows/agent.yml",

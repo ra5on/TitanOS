@@ -318,7 +318,13 @@ export function fixtureFactory(browser, errors) {
           volume: "",
         },
         status: {
-          image: { state: "ready", version: "0.60.0", bytes: 0, size: 0, progress: 0 },
+          image: {
+            state: "ready",
+            version: "0.60.0",
+            bytes: 0,
+            size: 0,
+            progress: 0,
+          },
           gpu: "vaapi",
           gpus: [
             {
@@ -383,7 +389,13 @@ export function fixtureFactory(browser, errors) {
       }
       if (path === "/viewer/status") return json(data.viewer.status);
       if (path === "/viewer/image" && method === "POST") {
-        data.viewer.status.image = { ...data.viewer.status.image, state: "downloading", size: 400e6, bytes: 0, progress: 0 };
+        data.viewer.status.image = {
+          ...data.viewer.status.image,
+          state: "downloading",
+          size: 400e6,
+          bytes: 0,
+          progress: 0,
+        };
         return json(data.viewer.status.image);
       }
       if (path === "/maintenance") {
@@ -424,13 +436,42 @@ export function fixtureFactory(browser, errors) {
         const log = (data.activity ??= {
           settings: { enabled: true, volume: "", days: 90, maxMiB: 64 },
           entries: [
-            { at: time, user: "alex", via: "web", ip: "192.168.1.20", action: "POST /api/v1/files/delete", target: "Media/alt.mkv", status: 200, ok: true },
-            { at: time, user: "sam", via: "web", ip: "192.168.1.31", action: "login_failed", ok: false },
-            { at: time, user: "alex", via: "token", action: "PUT /api/v1/system/timezone", status: 200, ok: true },
+            {
+              at: time,
+              user: "alex",
+              via: "web",
+              ip: "192.168.1.20",
+              action: "POST /api/v1/files/delete",
+              target: "Media/alt.mkv",
+              status: 200,
+              ok: true,
+            },
+            {
+              at: time,
+              user: "sam",
+              via: "web",
+              ip: "192.168.1.31",
+              action: "login_failed",
+              ok: false,
+            },
+            {
+              at: time,
+              user: "alex",
+              via: "token",
+              action: "PUT /api/v1/system/timezone",
+              status: 200,
+              ok: true,
+            },
           ],
           queries: [],
         });
-        const status = { settings: log.settings, volume: log.settings.enabled ? "Data" : "", pending: 0, dropped: 0, error: "" };
+        const status = {
+          settings: log.settings,
+          volume: log.settings.enabled ? "Data" : "",
+          pending: 0,
+          dropped: 0,
+          error: "",
+        };
         if (method === "PUT") {
           log.settings = route.request().postDataJSON();
           return json({ ...status, settings: log.settings });
@@ -438,11 +479,16 @@ export function fixtureFactory(browser, errors) {
         log.queries.push(Object.fromEntries(url.searchParams));
         if (url.searchParams.get("format")) {
           data.exports++;
-          return route.fulfill({ body: "time,user\n", contentType: "text/csv" });
+          return route.fulfill({
+            body: "time,user\n",
+            contentType: "text/csv",
+          });
         }
         const user = url.searchParams.get("user"),
           failed = url.searchParams.get("failed") === "1";
-        const entries = log.entries.filter((e) => (!user || e.user === user) && (!failed || !e.ok));
+        const entries = log.entries.filter(
+          (e) => (!user || e.user === user) && (!failed || !e.ok),
+        );
         return json({ entries, more: false, stored: true, status });
       }
       if (path === "/monitoring") {
@@ -719,7 +765,12 @@ export function fixtureFactory(browser, errors) {
           domains: ["light", "switch", "sensor"],
           sensorGroups: ["system", "storage"],
           commandGroups: [],
-          status: { watching: false, watchError: "", mqtt: false, mqttError: "" },
+          status: {
+            watching: false,
+            watchError: "",
+            mqtt: false,
+            mqttError: "",
+          },
         };
         if (method === "PUT") data.ha.settings = route.request().postDataJSON();
         return json(data.ha);
@@ -765,7 +816,11 @@ export function fixtureFactory(browser, errors) {
         return route.fulfill({ status: 204 });
       if (path === "/system") return json(data.system);
       // Share quotas per volume; PUT .../quotas switches them like titand.
-      const quotas = (data.volumeQuotas ??= { Data: "active", Fast: "unsupported", Safe: "off" });
+      const quotas = (data.volumeQuotas ??= {
+        Data: "active",
+        Fast: "unsupported",
+        Safe: "off",
+      });
       const switched = /^\/storage\/volumes\/([^/]+)\/quotas$/.exec(path);
       if (switched && method === "PUT") {
         const on = route.request().postDataJSON().enabled;
@@ -778,7 +833,12 @@ export function fixtureFactory(browser, errors) {
         return json({
           volumes: [
             { ...volume, level: "raid5", shareQuotas: quotas.Data },
-            { ...volume, name: "Fast", filesystem: "btrfs", shareQuotas: quotas.Fast },
+            {
+              ...volume,
+              name: "Fast",
+              filesystem: "btrfs",
+              shareQuotas: quotas.Fast,
+            },
             { ...volume, name: "Safe", shareQuotas: quotas.Safe },
           ],
           disks: [
@@ -863,13 +923,18 @@ export function fixtureFactory(browser, errors) {
           ];
           data.plugins = {
             ...data.plugins,
-            recommendations: data.plugins.recommendations.filter((r) => r.plugin !== name),
+            recommendations: data.plugins.recommendations.filter(
+              (r) => r.plugin !== name,
+            ),
             dismissed: (data.plugins.dismissed ?? 0) + 1,
           };
         } else if (method === "DELETE") {
           data.plugins = {
             ...data.plugins,
-            recommendations: [...data.plugins.recommendations, ...(data.hiddenRecommendations ?? [])],
+            recommendations: [
+              ...data.plugins.recommendations,
+              ...(data.hiddenRecommendations ?? []),
+            ],
             dismissed: 0,
           };
           data.hiddenRecommendations = [];
@@ -877,15 +942,26 @@ export function fixtureFactory(browser, errors) {
         return json(data.plugins);
       }
       // Community plugins: a link is inspected, then installed with its name.
-      if (path === "/plugins/external/inspect" && method === "POST" && data.linkPreview)
+      if (
+        path === "/plugins/external/inspect" &&
+        method === "POST" &&
+        data.linkPreview
+      )
         return json(data.linkPreview);
       if (path === "/plugins/external" && method === "POST" && data.plugins) {
         (data.externalInstalls ??= []).push(route.request().postDataJSON());
         data.plugins = data.pluginsAfterExternal ?? data.plugins;
         return json(data.plugins);
       }
-      if (path.endsWith("/update") && path.startsWith("/plugins/") && method === "POST") {
-        (data.pluginUpdates ??= []).push([path, route.request().postDataJSON()]);
+      if (
+        path.endsWith("/update") &&
+        path.startsWith("/plugins/") &&
+        method === "POST"
+      ) {
+        (data.pluginUpdates ??= []).push([
+          path,
+          route.request().postDataJSON(),
+        ]);
         if (data.failPluginUpdate)
           return route.fulfill({
             status: 409,
@@ -962,27 +1038,84 @@ export function fixtureFactory(browser, errors) {
         return json({ disks: data.usbDisks ?? [], job: data.usbJob ?? null });
       // Partition editor: tests set data.usbLayouts (disk ID -> layout) and
       // read data.partitionActions; each action starts a running job.
-      const partitionRoute = path.match(/^\/usb\/disks\/([^/]+)\/(partitions|table)(?:\/(\d+)(?:\/(\w+))?)?$/);
+      const partitionRoute = path.match(
+        /^\/usb\/disks\/([^/]+)\/(partitions|table)(?:\/(\d+)(?:\/(\w+))?)?$/,
+      );
       if (partitionRoute) {
         const [, rawId, kind, number, verb] = partitionRoute;
         const id = decodeURIComponent(rawId);
         const layout = data.usbLayouts?.[id];
         if (!layout)
-          return route.fulfill({ status: 404, json: { error: { code: "usb_not_found", message: "usb: no such drive" } } });
-        if (method === "GET") return json({ ...layout, job: data.usbJob ?? null });
+          return route.fulfill({
+            status: 404,
+            json: {
+              error: { code: "usb_not_found", message: "usb: no such drive" },
+            },
+          });
+        if (method === "GET")
+          return json({ ...layout, job: data.usbJob ?? null });
         const body = method === "DELETE" ? {} : route.request().postDataJSON();
-        const action = kind === "table" ? "table" : !number ? "create" : method === "DELETE" ? "delete" : verb;
-        (data.partitionActions ??= []).push({ id, action, ...(number ? { number: Number(number) } : {}), ...body });
-        data.usbJob = { disk: id, device: layout.disk.device, name: layout.disk.model, action, partition: number ? layout.disk.device + number : "", filesystem: body.filesystem ?? "", label: body.label ?? "", scheme: layout.table, phase: "partition", started: time };
+        const action =
+          kind === "table"
+            ? "table"
+            : !number
+              ? "create"
+              : method === "DELETE"
+                ? "delete"
+                : verb;
+        (data.partitionActions ??= []).push({
+          id,
+          action,
+          ...(number ? { number: Number(number) } : {}),
+          ...body,
+        });
+        data.usbJob = {
+          disk: id,
+          device: layout.disk.device,
+          name: layout.disk.model,
+          action,
+          partition: number ? layout.disk.device + number : "",
+          filesystem: body.filesystem ?? "",
+          label: body.label ?? "",
+          scheme: layout.table,
+          phase: "partition",
+          started: time,
+        };
         return json({ disks: data.usbDisks ?? [], job: data.usbJob });
       }
-      if (path.startsWith("/usb/disks/") && path.endsWith("/format") && method === "POST") {
+      if (
+        path.startsWith("/usb/disks/") &&
+        path.endsWith("/format") &&
+        method === "POST"
+      ) {
         const body = route.request().postDataJSON();
-        (data.formats ??= []).push({ id: decodeURIComponent(path.split("/")[3]), ...body });
+        (data.formats ??= []).push({
+          id: decodeURIComponent(path.split("/")[3]),
+          ...body,
+        });
         if (data.formatError)
-          return route.fulfill({ status: 409, json: { error: { code: data.formatError, message: "usb: this drive cannot be formatted now: inuse" } } });
-        const disk = data.usbDisks.find((d) => d.id === decodeURIComponent(path.split("/")[3]));
-        data.usbJob = { disk: disk.id, device: disk.device, name: disk.model, filesystem: body.filesystem, label: body.label, scheme: "mbr", phase: "format", started: time };
+          return route.fulfill({
+            status: 409,
+            json: {
+              error: {
+                code: data.formatError,
+                message: "usb: this drive cannot be formatted now: inuse",
+              },
+            },
+          });
+        const disk = data.usbDisks.find(
+          (d) => d.id === decodeURIComponent(path.split("/")[3]),
+        );
+        data.usbJob = {
+          disk: disk.id,
+          device: disk.device,
+          name: disk.model,
+          filesystem: body.filesystem,
+          label: body.label,
+          scheme: "mbr",
+          phase: "format",
+          started: time,
+        };
         disk.formattable = false;
         disk.reason = "formatting";
         return json({ disks: data.usbDisks, job: data.usbJob });
@@ -1243,7 +1376,15 @@ export function fixtureFactory(browser, errors) {
             ocr: false,
             time: "",
             indexes: [
-              { volume: "Data", state: "idle", files: 0, known: false, scanned: 0, updated: 0, bytes: 0 },
+              {
+                volume: "Data",
+                state: "idle",
+                files: 0,
+                known: false,
+                scanned: 0,
+                updated: 0,
+                bytes: 0,
+              },
             ],
             ocrAvailable: false,
           },
@@ -1259,7 +1400,13 @@ export function fixtureFactory(browser, errors) {
           budgetBytes: 3.2e9,
           reserveBytes: 1e9,
           inFlightBytes: 0,
-          memory: { ...data.system.memory, cacheBytes: 2e9, dirtyBytes: 0, writebackBytes: 0, lowAvailable: false },
+          memory: {
+            ...data.system.memory,
+            cacheBytes: 2e9,
+            dirtyBytes: 0,
+            writebackBytes: 0,
+            lowAvailable: false,
+          },
           paused: false,
         });
       // HTTPS names: no app route (app pages stay as before), one device
@@ -1299,7 +1446,12 @@ export function fixtureFactory(browser, errors) {
         return json({
           settings: { governor: "", preference: "", platform: "" },
           controls: [
-            { key: "governor", choices: ["powersave", "performance"], current: "powersave", mixed: false },
+            {
+              key: "governor",
+              choices: ["powersave", "performance"],
+              current: "powersave",
+              mixed: false,
+            },
           ],
           drivers: ["intel_pstate"],
           readOnly: false,
@@ -1312,10 +1464,36 @@ export function fixtureFactory(browser, errors) {
           available: true,
           errors: [],
           listed: true,
-          volumeStatus: [{ name: "Data", override: null, effective: 30, origin: "default" }],
+          volumeStatus: [
+            { name: "Data", override: null, effective: 30, origin: "default" },
+          ],
           diskStatus: [
-            { id: "serial:WD-A1", name: "sda", model: "WDC WD40EFPX", serial: "WD-A1", sizeBytes: 4e12, volume: "Data", override: null, effective: 30, origin: "default", state: "active", since: time },
-            { id: "serial:WD-B1", name: "sdb", model: "WDC WD40EFPX", serial: "WD-B1", sizeBytes: 4e12, volume: "Data", override: null, effective: 30, origin: "default", state: "asleep", since: time },
+            {
+              id: "serial:WD-A1",
+              name: "sda",
+              model: "WDC WD40EFPX",
+              serial: "WD-A1",
+              sizeBytes: 4e12,
+              volume: "Data",
+              override: null,
+              effective: 30,
+              origin: "default",
+              state: "active",
+              since: time,
+            },
+            {
+              id: "serial:WD-B1",
+              name: "sdb",
+              model: "WDC WD40EFPX",
+              serial: "WD-B1",
+              sizeBytes: 4e12,
+              volume: "Data",
+              override: null,
+              effective: 30,
+              origin: "default",
+              state: "asleep",
+              since: time,
+            },
           ],
           unavailable: [],
         });
@@ -1327,7 +1505,14 @@ export function fixtureFactory(browser, errors) {
             wakeOnLan: false,
           },
           rtc: true,
-          interfaces: [{ name: "enp1s0", mac: "52:54:00:00:00:01", supported: true, enabled: false }],
+          interfaces: [
+            {
+              name: "enp1s0",
+              mac: "52:54:00:00:00:01",
+              supported: true,
+              enabled: false,
+            },
+          ],
           readOnly: false,
         });
       // Settings › Programs: who sees which app.
@@ -1335,7 +1520,15 @@ export function fixtureFactory(browser, errors) {
         return json({
           newApps: "admins",
           apps: [
-            { app: "photos", icon: "", url: "https://photos.example.test", webui: "2283", running: true, gate: true, users: ["alex"] },
+            {
+              app: "photos",
+              icon: "",
+              url: "https://photos.example.test",
+              webui: "2283",
+              running: true,
+              gate: true,
+              users: ["alex"],
+            },
           ],
           accounts: [
             { name: "alex", role: "owner", disabled: false },
@@ -1354,11 +1547,19 @@ export function fixtureFactory(browser, errors) {
           dns: "",
           publicKey: "q2ZcE9n0d0b8pW3s1o4Vt7yXh6kLm5NfRa9Jc2Ue8Gs=",
           peers: [
-            { name: "Handy", publicKey: "x7Yv3Lq9dK2mP0sT8wR4nB6cF1hJ5aZgE3uNiO7tWpM=", address: "10.10.0.2/32", created: time, received: 0, sent: 0 },
+            {
+              name: "Handy",
+              publicKey: "x7Yv3Lq9dK2mP0sT8wR4nB6cF1hJ5aZgE3uNiO7tWpM=",
+              address: "10.10.0.2/32",
+              created: time,
+              received: 0,
+              sent: 0,
+            },
           ],
         });
       // Settings › KI-Agent: switched off, no Ollama answer yet.
-      if (path === "/agent/cluster") return json({ member: false, admin: false });
+      if (path === "/agent/cluster")
+        return json({ member: false, admin: false });
       if (path === "/agent/settings" && method === "GET")
         return json({
           enabled: false,
@@ -1397,7 +1598,14 @@ export function fixtureFactory(browser, errors) {
       if (path === "/agent/volumes" && method === "GET")
         return json({
           volumes: [
-            { name: "Data", filesystem: "ext4", sizeBytes: 1e12, freeBytes: 6e11, kind: "hdd", current: false },
+            {
+              name: "Data",
+              filesystem: "ext4",
+              sizeBytes: 1e12,
+              freeBytes: 6e11,
+              kind: "hdd",
+              current: false,
+            },
           ],
           move: null,
         });
@@ -1407,7 +1615,17 @@ export function fixtureFactory(browser, errors) {
       if (path === "/account/tokens" && method === "GET")
         return json({
           tokens: [],
-          scopes: ["system:read", "system:write", "files:read", "files:write", "docker:read", "docker:write", "vms:read", "vms:write", "mcp"],
+          scopes: [
+            "system:read",
+            "system:write",
+            "files:read",
+            "files:write",
+            "docker:read",
+            "docker:write",
+            "vms:read",
+            "vms:write",
+            "mcp",
+          ],
         });
       // Dynamic DNS and the IPv64 tab: nothing set up, no IPv64 key.
       if (path === "/network/ddns" && method === "GET")
@@ -1431,7 +1649,12 @@ export function fixtureFactory(browser, errors) {
         return json({
           status: {
             settings: {
-              notify: { enabled: false, failover: true, cdnTraffic: true, healthchecks: true },
+              notify: {
+                enabled: false,
+                failover: true,
+                cdnTraffic: true,
+                healthchecks: true,
+              },
               blocklist: { enabled: false },
               wireguard: { enabled: false },
               published: [],
@@ -1448,12 +1671,27 @@ export function fixtureFactory(browser, errors) {
           nasCheck: "",
           hostname: "titan-test",
           zones: ["ipv64.de", "ipv64.net", "home64.de"],
-          recordTypes: ["A", "AAAA", "CNAME", "MX", "TXT", "NS", "SRV", "TLSA", "CAA"],
+          recordTypes: [
+            "A",
+            "AAAA",
+            "CNAME",
+            "MX",
+            "TXT",
+            "NS",
+            "SRV",
+            "TLSA",
+            "CAA",
+          ],
         });
       // New VM: eight threads, no image or free disk yet.
       if (path === "/vms/host")
         return json({
-          cpus: Array.from({ length: 8 }, (_, id) => ({ id, kind: "", siblings: [id % 4, (id % 4) + 4], usedBy: [] })),
+          cpus: Array.from({ length: 8 }, (_, id) => ({
+            id,
+            kind: "",
+            siblings: [id % 4, (id % 4) + 4],
+            usedBy: [],
+          })),
           images: [],
           disks: [],
           virt: null,
@@ -1495,7 +1733,14 @@ export function fixtureFactory(browser, errors) {
             config,
             pending: null,
             pendingSeconds: 0,
-            interfaces: [{ name: "enp1s0", mac: "52:54:00:00:00:01", carrier: true, speedMbps: 1000 }],
+            interfaces: [
+              {
+                name: "enp1s0",
+                mac: "52:54:00:00:00:01",
+                carrier: true,
+                speedMbps: 1000,
+              },
+            ],
             device: "br0",
             addresses: ["192.168.1.20/24"],
             gateway: "192.168.1.1",
@@ -1504,7 +1749,13 @@ export function fixtureFactory(browser, errors) {
             bridgeReady: true,
             topology: config,
             pendingTopology: null,
-            live: { admin: { device: "br0", up: true, addresses: ["192.168.1.20/24"] } },
+            live: {
+              admin: {
+                device: "br0",
+                up: true,
+                addresses: ["192.168.1.20/24"],
+              },
+            },
             vlans: false,
             vlansInUse: false,
           },
@@ -1539,8 +1790,14 @@ export function fixtureFactory(browser, errors) {
           volume: "Data",
           kernel: "test",
           plugins: [
-            plugin("intel-gpu-tools", "Intel GPU Tools", "tools", true, { de: "Werkzeuge für Intel-Grafik", en: "Tools for Intel graphics" }),
-            plugin("tailscale", "Tailscale", "remote", false, { de: "Fernzugriff ohne offene Ports", en: "Remote access without open ports" }),
+            plugin("intel-gpu-tools", "Intel GPU Tools", "tools", true, {
+              de: "Werkzeuge für Intel-Grafik",
+              en: "Tools for Intel graphics",
+            }),
+            plugin("tailscale", "Tailscale", "remote", false, {
+              de: "Fernzugriff ohne offene Ports",
+              en: "Remote access without open ports",
+            }),
           ],
           catalog: { release: releaseVersion(), state: "ready" },
           recommendations: [],
@@ -1552,9 +1809,26 @@ export function fixtureFactory(browser, errors) {
       if (path === "/plugins/releases")
         return json({
           releases: [
-            { version: releaseVersion(), bytes: 600e6, protected: true, reason: "current", fingerprint: "current" },
-            { version: "0.58.0", bytes: 590e6, protected: true, reason: "fallback", fingerprint: "fallback" },
-            { version: "0.55.0", bytes: 580e6, protected: false, fingerprint: "old" },
+            {
+              version: releaseVersion(),
+              bytes: 600e6,
+              protected: true,
+              reason: "current",
+              fingerprint: "current",
+            },
+            {
+              version: "0.58.0",
+              bytes: 590e6,
+              protected: true,
+              reason: "fallback",
+              fingerprint: "fallback",
+            },
+            {
+              version: "0.55.0",
+              bytes: 580e6,
+              protected: false,
+              fingerprint: "old",
+            },
           ],
         });
       // Let's Encrypt: one name proven over DNS, certificate valid.
@@ -1594,10 +1868,33 @@ export function fixtureFactory(browser, errors) {
       if (path === "/docker/networks" && method === "GET")
         return json({
           networks: [
-            { name: "heimnetz", parent: "admin", driver: "ipvlan", subnet: "192.168.1.0/24", gateway: "192.168.1.1", range: "192.168.1.192/27", hostAccess: false },
+            {
+              name: "heimnetz",
+              parent: "admin",
+              driver: "ipvlan",
+              subnet: "192.168.1.0/24",
+              gateway: "192.168.1.1",
+              range: "192.168.1.192/27",
+              hostAccess: false,
+            },
           ],
           parents: [
-            { id: "admin", name: "Heimnetz", purpose: "management", parent: "enp1s0", vlan: 0, bridge: true, management: true, ipv4: "dhcp", address: "", gateway: "", ipv6: "auto", address6: "", gateway6: "", dns: [] },
+            {
+              id: "admin",
+              name: "Heimnetz",
+              purpose: "management",
+              parent: "enp1s0",
+              vlan: 0,
+              bridge: true,
+              management: true,
+              ipv4: "dhcp",
+              address: "",
+              gateway: "",
+              ipv6: "auto",
+              address6: "",
+              gateway6: "",
+              dns: [],
+            },
           ],
         });
       return json({});
@@ -1691,7 +1988,10 @@ function scriptFixtures(time) {
     },
     scriptRuns: {
       a1a1a1a1a1a1a1a1: [
-        run("ok", { exit: 0, output: "sending incremental file list\nfertig\n" }),
+        run("ok", {
+          exit: 0,
+          output: "sending incremental file list\nfertig\n",
+        }),
         run("timeout", { started: "2026-10-22T03:00:00Z", output: "" }),
       ],
       b2b2b2b2b2b2b2b2: [
@@ -1732,7 +2032,10 @@ function scriptRoute(data, path, method, route, time) {
   }
   const script = status.scripts.find((s) => s.id === parts[0]);
   if (!script)
-    return json({ error: { code: "script_not_found", message: "fixture" } }, 404);
+    return json(
+      { error: { code: "script_not_found", message: "fixture" } },
+      404,
+    );
   const finish = (outcome, exit) => {
     script.running = false;
     const run = {
@@ -1763,19 +2066,27 @@ function scriptRoute(data, path, method, route, time) {
       return route.fulfill({ status: 204 });
     case "POST run":
       if (script.running)
-        return json({ error: { code: "script_running", message: "fixture" } }, 409);
+        return json(
+          { error: { code: "script_running", message: "fixture" } },
+          409,
+        );
       script.running = true;
       data.scriptPolls[script.id] = 0;
       return route.fulfill({ status: 202 });
     case "POST cancel":
       if (!script.running)
-        return json({ error: { code: "script_not_running", message: "fixture" } }, 409);
+        return json(
+          { error: { code: "script_not_running", message: "fixture" } },
+          409,
+        );
       finish("canceled");
       return route.fulfill({ status: 202 });
     case "GET runs":
       return json({ runs: data.scriptRuns[script.id] ?? [] });
     case "GET output": {
-      const from = Number(new URL(route.request().url()).searchParams.get("from") ?? 0);
+      const from = Number(
+        new URL(route.request().url()).searchParams.get("from") ?? 0,
+      );
       const all = "Sicherung beginnt …\n12 Dateien kopiert\n";
       if (script.running) {
         const polls = ++data.scriptPolls[script.id];
@@ -1787,7 +2098,12 @@ function scriptRoute(data, path, method, route, time) {
           next: shown,
           skipped: false,
           run: script.running
-            ? { trigger: "manual", started: time, durationMs: 0, outcome: "running" }
+            ? {
+                trigger: "manual",
+                started: time,
+                durationMs: 0,
+                outcome: "running",
+              }
             : script.last,
         });
       }

@@ -72,6 +72,12 @@ const named: Record<string, string> = {
 	'POST /api/v1/files/mkdir': 'fileMkdir',
 	'POST /api/v1/files/create': 'fileCreate',
 	'PUT /api/v1/files/text': 'fileEdit',
+	// PLAN 66: web apps in the browser.
+	'PUT /api/v1/files/content': 'fileContent',
+	'POST /api/v1/webapps/{id}/install': 'webappInstall',
+	'DELETE /api/v1/webapps/{id}': 'webappRemove',
+	'POST /api/v1/webapps/defaults/install': 'webappDefaults',
+	'POST /api/v1/webapps/migrate': 'webappMigrate',
 	'POST /api/v1/files/uploads': 'fileUpload',
 	'POST /api/v1/files/url-download': 'fileDownloadLink',
 	'POST /api/v1/files/extract': 'fileExtract',

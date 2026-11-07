@@ -65,3 +65,5 @@ Docker-Apps mit Weboberfläche (z. B. Immich) sind eigene Programme; ihr Fenster
 
 - Seiten im Fenster sind eigene Rahmen; jedes offene Fenster lädt die Oberfläche einmal (mehr Arbeitsspeicher im Browser).
 - Die Fernansicht braucht einen Browser mit WebCodecs (aktuelle Chrome/Edge, Firefox ab 130, Safari ab 16.4) und HTTPS oder `localhost`; sonst erklärt das Fenster es und bietet „In eigenem Tab öffnen“. Grenzen der Fernansicht (Apps im Host-Netz, Speicher je Ansicht) in `docs/FERNANSICHT.md`.
+- Seit 0.63.0 gibt es drei Arten von App-Fenstern: **Web-App direkt** (Craft-Programme laufen im Browser, `docs/WEBAPPS.md`), Fernansicht für Docker-Apps, TitanOS-Seiten. Kein App-Fenster zeigt eine Adresse; Lautstärke, Dateien, Zwischenablage, Qualität und „In eigenem Tab öffnen“ stecken im ⋯-Menü der Titelleiste.
+- Beim Verschieben eines Symbols erscheint das Raster aller Plätze bis zum Dock; der Zielplatz (bzw. das Symbol, mit dem getauscht wird) ist hervorgehoben, das Symbol bleibt in voller Größe. Die Reihen sind gleichmäßig gestreckt, die gespeicherten Plätze ändern sich dadurch nicht.

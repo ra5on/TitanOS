@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { onDestroy, untrack } from 'svelte';
+	import { onDestroy, tick, untrack } from 'svelte';
+	import { focusFirstItem, moveFocus } from '../components/menu.ts';
 	// PLAN 61: one window of the desktop. TitanOS programs show their pages
 	// in a frame of the same origin with the program's own side bar; Docker
 	// apps always show their remote view (PLAN 63: the app runs in a browser
@@ -9,9 +10,15 @@
 	import DesktopIcon from './DesktopIcon.svelte';
 	import { sideActive, type SideItem } from './apps.ts';
 	import { frameMessage } from './frame.ts';
-	import { openTab as openProgramTab } from './programs.svelte.ts';
+	import { openProgram, openTab as openProgramTab } from './programs.svelte.ts';
+	import Dialog from '../components/Dialog.svelte';
+	import '../components/menu.css';
+	import WebAppView from '../webapps/WebAppView.svelte';
+	import { webAppById, webapps } from '../webapps/webapps.svelte.ts';
+	import { baseName } from '../webapps/protocol.ts';
 	import {
 		closeWindow,
+		requestClose,
 		desktop,
 		focus,
 		minimize,
@@ -47,6 +54,35 @@
 		foldKey: string;
 		onaddress?: (path: string) => void;
 	} = $props();
+
+	// PLAN 66: a web app running in the browser (its window has no address and no side bar).
+	const webappId = $derived(win.app.startsWith('webapp:') ? win.app.slice(7) : '');
+	const webapp = $derived(webappId ? webAppById(webappId) : undefined);
+	let view = $state<WebAppView>();
+	let moreOpen = $state(false);
+	let remoteHost = $state<HTMLElement | null>(null);
+	let moreButton = $state<HTMLButtonElement>();
+	let menuEl = $state<HTMLElement>();
+	// The ⋯ menu by keyboard like every menu of TitanOS: arrows, Escape back to ⋯.
+	async function toggleMore() {
+		moreOpen = !moreOpen;
+		if (!moreOpen) return;
+		await tick();
+		focusFirstItem(menuEl);
+	}
+	function menuKey(e: KeyboardEvent) {
+		if (e.key === 'Escape') {
+			e.preventDefault();
+			e.stopPropagation();
+			moreOpen = false;
+			moreButton?.focus();
+			return;
+		}
+		if ((e.target as HTMLElement).matches?.('[role^="menuitem"]')) moveFocus(menuEl, e);
+	}
+	let restartAsk = $state(false);
+	const docName = $derived(win.docName || (win.doc ? baseName(win.doc.path) : ''));
+	const closing = $derived(wm.closing.includes(win.id));
 
 	const MIN_W = 360;
 	const MIN_H = 240;
@@ -208,8 +244,14 @@
 		}
 	}
 	$effect(() => {
-		if (focused && !external) onaddress?.(win.href);
+		if (focused && !external && !webappId) onaddress?.(win.href);
 	});
+
+	function restartApp() {
+		moreOpen = false;
+		if (view?.isUnsaved()) restartAsk = true;
+		else view?.restart();
+	}
 
 	// Moving: from the title bar; a snapped window comes loose under the pointer.
 	function startMove(event: PointerEvent) {
@@ -335,12 +377,18 @@
 	}
 
 	function openTab() {
+		if (webappId) return view?.openTab();
 		void openProgramTab(win.app, win.href);
 	}
 	const EDGES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
 </script>
 
-<svelte:window onmessage={message} />
+<svelte:window
+	onmessage={message}
+	onblur={() => (moreOpen = false)}
+	onpointerdown={(e) =>
+		moreOpen && !(e.target as Element).closest?.('.more-wrap') && (moreOpen = false)}
+/>
 
 <!-- A window is a non-modal dialog: it takes the keyboard (resize keys) and the focus. -->
 <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
@@ -430,12 +478,92 @@
 					size={22}
 					name={win.title}
 				/>{/if}
-			<b class="title">{win.title}</b>{#if crumb}<span class="crumb" aria-hidden="true">›</span
+			<b class="title">{win.title}</b>{#if webappId}{#if docName}<span
+						class="crumb"
+						aria-hidden="true">·</span
+					><span class="title page">{docName}</span>{/if}{:else if crumb}<span
+					class="crumb"
+					aria-hidden="true">›</span
 				><span class="title page">{crumb}</span>{/if}
-			{#if external}<span class="addr"
-					>{win.href.replace(/^https?:\/\//, '').replace(/\/$/, '')}</span
-				>{/if}
 			<span class="fill"></span>
+			{#if webappId || external}
+				<span class="more-wrap">
+					<button
+						type="button"
+						class="ctl"
+						class:on={moreOpen}
+						aria-haspopup="menu"
+						aria-expanded={moreOpen}
+						bind:this={moreButton}
+						onclick={toggleMore}
+						title={t('webapps.menu.more')}
+						aria-label={t('webapps.menu.more')}><Icon name="more" size={16} /></button
+					>
+					{#if moreOpen}
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<div
+							class="win-menu dropdown-panel floating-menu"
+							role="menu"
+							tabindex="-1"
+							bind:this={menuEl}
+							onkeydown={menuKey}
+						>
+							{#if external}
+								<!-- PLAN 66: the remote view puts its controls here (RemoteView, inTitle). -->
+								<div class="remote-host" bind:this={remoteHost}></div>
+								<hr />
+								<button
+									type="button"
+									role="menuitem"
+									onclick={() => {
+										moreOpen = false;
+										openTab();
+									}}
+									><Icon name="external" size={16} /><span>{t('desktop.window.openTab')}</span
+									></button
+								>
+							{:else}
+								<button
+									type="button"
+									role="menuitem"
+									disabled={!webapp}
+									onclick={() => {
+										moreOpen = false;
+										view?.openPicker();
+									}}><Icon name="folder" size={16} /><span>{t('webapps.menu.open')}</span></button
+								>
+								<button
+									type="button"
+									role="menuitem"
+									disabled={!webapp || webapp.bridge !== 'host'}
+									onclick={() => {
+										moreOpen = false;
+										view?.saveAs();
+									}}
+									><Icon name="download" size={16} /><span>{t('webapps.menu.saveAs')}</span></button
+								>
+								<hr />
+								<button
+									type="button"
+									role="menuitem"
+									onclick={() => {
+										moreOpen = false;
+										openTab();
+									}}
+									><Icon name="external" size={16} /><span>{t('desktop.window.openTab')}</span
+									></button
+								>
+								<button type="button" role="menuitem" disabled={!webapp} onclick={restartApp}
+									><Icon name="restart" size={16} /><span>{t('webapps.restart')}</span></button
+								>
+								{#if webapp}<p class="menu-status muted">
+										{t('webapps.menu.status', { version: webapp.version })}
+									</p>{/if}
+							{/if}
+						</div>
+					{/if}
+				</span>
+			{/if}
 			<button
 				type="button"
 				class="ctl"
@@ -464,16 +592,43 @@
 			<button
 				type="button"
 				class="ctl close"
-				onclick={() => closeWindow(win.id)}
+				onclick={() => requestClose(win.id)}
 				title={t('desktop.window.close')}
 				aria-label={t('desktop.window.close')}><Icon name="close" size={15} /></button
 			>
 		</header>
 		<div class="body">
-			{#if external}
+			{#if webappId}
+				{#if webapp?.installed && webapp.url}
+					<WebAppView
+						bind:this={view}
+						app={webapp}
+						doc={win.doc}
+						winId={win.id}
+						ondoc={(doc) => {
+							win.doc = doc;
+							win.docName = undefined;
+							saveWindows();
+						}}
+						onname={(name) => {
+							win.docName = name;
+							saveWindows();
+						}}
+						onopen={(doc) => void openProgram(win.app, { doc })}
+					/>
+				{:else if webapps.loaded}
+					<p class="load-failed">{t('webapps.unknownApp')}</p>
+				{/if}
+			{:else if external}
 				<!-- The remote view's player loads with the first Docker app (PLAN 65-6). -->
 				{#await import('./RemoteView.svelte') then { default: RemoteView }}
-					<RemoteView app={win.app.replace(/^docker:/, '')} title={win.title} onopentab={openTab} />
+					<RemoteView
+						app={win.app.replace(/^docker:/, '')}
+						title={win.title}
+						onopentab={openTab}
+						inTitle
+						menuHost={moreOpen ? remoteHost : null}
+					/>
 				{:catch}
 					<p class="load-failed">{t('desktop.window.loadFailed')}</p>
 				{/await}
@@ -487,9 +642,49 @@
 					allow="clipboard-read; clipboard-write; fullscreen; publickey-credentials-get; publickey-credentials-create; camera; microphone"
 				></iframe>
 			{/if}
-			{#if dragging || !focused}<div class="shield" aria-hidden="true"></div>{/if}
+			{#if dragging || (!focused && !(webappId && wm.fileDrag))}<div
+					class="shield"
+					aria-hidden="true"
+				></div>{/if}
 		</div>
 	</div>
+	{#if closing}
+		<Dialog
+			title={t('webapps.unsavedTitle')}
+			onclose={() => (wm.closing = wm.closing.filter((c) => c !== win.id))}
+		>
+			<p>{t('webapps.unsavedText', { app: win.title })}</p>
+			<div class="dialog-actions">
+				<button type="button" class="btn btn-danger" onclick={() => closeWindow(win.id)}
+					>{t('webapps.closeAnyway')}</button
+				>
+				<button
+					type="button"
+					class="btn btn-primary"
+					onclick={() => (wm.closing = wm.closing.filter((c) => c !== win.id))}
+					>{t('common.cancel')}</button
+				>
+			</div>
+		</Dialog>
+	{/if}
+	{#if restartAsk}
+		<Dialog title={t('webapps.unsavedTitle')} onclose={() => (restartAsk = false)}>
+			<p>{t('webapps.unsavedRestart', { app: win.title })}</p>
+			<div class="dialog-actions">
+				<button
+					type="button"
+					class="btn btn-danger"
+					onclick={() => {
+						restartAsk = false;
+						view?.restart();
+					}}>{t('webapps.restartAnyway')}</button
+				>
+				<button type="button" class="btn btn-primary" onclick={() => (restartAsk = false)}
+					>{t('common.cancel')}</button
+				>
+			</div>
+		</Dialog>
+	{/if}
 	{#if !win.snap}
 		{#each EDGES as edge (edge)}
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -659,6 +854,9 @@
 	.titlebar {
 		height: 42px;
 		flex: none;
+		/* Above the body (the ⋯ menu of a web app opens over the app), below the resize edges. */
+		position: relative;
+		z-index: 1;
 		display: flex;
 		align-items: center;
 		gap: 9px;
@@ -689,16 +887,35 @@
 		margin: 0 -4px;
 		color: var(--muted);
 	}
-	.addr {
-		color: var(--muted);
-		font-size: var(--text-sm);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		min-width: 0;
-	}
 	.fill {
 		flex: 1;
+	}
+	.more-wrap {
+		position: relative;
+		flex: none;
+	}
+	.ctl.on {
+		background: color-mix(in srgb, var(--text) 12%, transparent);
+		color: var(--text);
+	}
+	.win-menu {
+		position: absolute;
+		right: 0;
+		top: calc(100% + 6px);
+		z-index: 20;
+		min-width: 260px;
+		max-width: min(340px, calc(100vw - 24px));
+		/* Over a busy app (a remote picture) the glass alone would not keep the text readable. */
+		background:
+			linear-gradient(var(--menu-bg), var(--menu-bg)),
+			color-mix(in srgb, var(--surface) 88%, transparent);
+		display: flex;
+		flex-direction: column;
+		padding: 6px;
+	}
+	.menu-status {
+		margin: 4px 10px 2px;
+		font-size: var(--text-xs);
 	}
 	.ctl {
 		width: 32px;
@@ -727,6 +944,8 @@
 	}
 	.body {
 		position: relative;
+		/* Its own layer: nothing of the content (the remote view's canvas) rises above the ⋯ menu. */
+		isolation: isolate;
 		flex: 1;
 		min-height: 0;
 		display: flex;

@@ -16,6 +16,8 @@ import type settingshomeDe from './features/settingshome.de.json';
 // PLAN 63: the remote view of Docker apps.
 import type viewerDe from './features/viewer.de.json';
 import type lookDe from './features/look.de.json';
+// PLAN 66: web apps directly in the browser.
+import type webappsDe from './features/webapps.de.json';
 
 type Messages = typeof deBase &
 	typeof docsDe &
@@ -28,7 +30,8 @@ type Messages = typeof deBase &
 	typeof lockDe &
 	typeof settingshomeDe &
 	typeof viewerDe &
-	typeof lookDe;
+	typeof lookDe &
+	typeof webappsDe;
 
 /** The files of a language, in the order they are merged. */
 const FILES = {
@@ -46,6 +49,7 @@ const FILES = {
 			import('./features/settingshome.de.json'),
 			import('./features/viewer.de.json'),
 			import('./features/look.de.json'),
+			import('./features/webapps.de.json'),
 		]),
 	en: () =>
 		Promise.all([
@@ -61,6 +65,7 @@ const FILES = {
 			import('./features/settingshome.en.json'),
 			import('./features/viewer.en.json'),
 			import('./features/look.en.json'),
+			import('./features/webapps.en.json'),
 		]),
 };
 

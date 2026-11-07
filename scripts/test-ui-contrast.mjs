@@ -22,7 +22,9 @@ await mkdir(out, { recursive: true });
 const errors = [];
 const create = fixtureFactory(browser, errors);
 
-const themes = (process.env.CONTRAST_THEMES || "graphit,schwarz,mitternacht,hell")
+const themes = (
+  process.env.CONTRAST_THEMES || "graphit,schwarz,mitternacht,hell"
+)
   .split(",")
   .filter(Boolean);
 const levels = [45, 90]; // standard and highest "Transparenz"
@@ -45,10 +47,18 @@ function collect({ offset, prefix }) {
     range.selectNodeContents(n);
     const r = range.getBoundingClientRect();
     if (r.width < 4 || r.height < 6) continue;
-    if (r.bottom < 0 || r.right < 0 || r.top > innerHeight || r.left > innerWidth)
+    if (
+      r.bottom < 0 ||
+      r.right < 0 ||
+      r.top > innerHeight ||
+      r.left > innerWidth
+    )
       continue;
     // Hidden behind something else (a window over the desktop): skip.
-    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    const hit = document.elementFromPoint(
+      r.left + r.width / 2,
+      r.top + r.height / 2,
+    );
     if (!hit || !(hit === el || el.contains(hit) || hit.contains(el))) continue;
     // Faded on purpose (disabled controls) do not count.
     if (el.closest(":disabled, [aria-disabled=true]")) continue;
@@ -58,9 +68,11 @@ function collect({ offset, prefix }) {
       id,
       text: n.textContent.trim().slice(0, 40),
       where:
-        el.closest(
-          "section.win, .launcher, .center, nav.dock, .widget, [role=menu], header.topbar, .icons",
-        )?.className.split(" ")[0] || el.tagName,
+        el
+          .closest(
+            "section.win, .launcher, .center, nav.dock, .widget, [role=menu], header.topbar, .icons",
+          )
+          ?.className.split(" ")[0] || el.tagName,
       wallpaper: !!el.closest(".icons .label, .icons > .ico"),
       color: s.color,
       size: parseFloat(s.fontSize),
@@ -97,7 +109,8 @@ async function measure({ png, items }) {
     v /= 255;
     return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
   };
-  const lum = ([r, gg, b]) => 0.2126 * lin(r) + 0.7152 * lin(gg) + 0.0722 * lin(b);
+  const lum = ([r, gg, b]) =>
+    0.2126 * lin(r) + 0.7152 * lin(gg) + 0.0722 * lin(b);
   const ratio = (a, b) => {
     const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
     return (x + 0.05) / (y + 0.05);
@@ -114,22 +127,27 @@ async function measure({ png, items }) {
     // rgb(…) in 0–255, or color(srgb …) in 0–1 (from color-mix).
     const m = it.color.match(/[\d.]+/g).map(Number);
     const srgb = it.color.startsWith("color(");
-    const fg = (srgb ? m.slice(0, 3).map((v) => v * 255) : m.slice(0, 3));
+    const fg = srgb ? m.slice(0, 3).map((v) => v * 255) : m.slice(0, 3);
     const alpha = m[3] ?? 1;
-    const sorted = px
-      .map((p) => [p, ratio(p, fg)])
-      .sort((a, b) => a[1] - b[1]);
+    const sorted = px.map((p) => [p, ratio(p, fg)]).sort((a, b) => a[1] - b[1]);
     const bg = sorted[Math.floor(sorted.length * 0.1)][0];
     // A see-through text color: blended over its background.
     const shown = fg.map((v, i) => v * alpha + bg[i] * (1 - alpha));
     const large = it.size >= 24 || (it.bold && it.size >= 18.66);
-    return { ...it, ratio: +ratio(shown, bg).toFixed(2), need: large ? 3 : 4.5 };
+    return {
+      ...it,
+      ratio: +ratio(shown, bg).toFixed(2),
+      need: large ? 3 : 4.5,
+    };
   });
 }
 
 async function check(page, name) {
   await page.waitForTimeout(500);
-  const items = await page.evaluate(collect, { offset: { x: 0, y: 0 }, prefix: "t" });
+  const items = await page.evaluate(collect, {
+    offset: { x: 0, y: 0 },
+    prefix: "t",
+  });
   // The page in the window (same origin): its texts with the frame's place.
   for (const [i, frame] of page.frames().slice(1).entries()) {
     const el = await frame.frameElement().catch(() => null);
@@ -140,12 +158,17 @@ async function check(page, name) {
       .catch(() => []);
     // Only what the window shows (inside it, not under a menu of the desktop).
     const shown = inner.filter(
-      (t) => t.y >= box.y && t.y + t.h <= box.y + box.height && t.x < box.x + box.width,
+      (t) =>
+        t.y >= box.y &&
+        t.y + t.h <= box.y + box.height &&
+        t.x < box.x + box.width,
     );
     const free = await page.evaluate(
       (list) =>
         list.map(
-          (t) => document.elementFromPoint(t.x + t.w / 2, t.y + t.h / 2)?.tagName === "IFRAME",
+          (t) =>
+            document.elementFromPoint(t.x + t.w / 2, t.y + t.h / 2)?.tagName ===
+            "IFRAME",
         ),
       shown,
     );
@@ -157,9 +180,9 @@ async function check(page, name) {
   const png = (await page.screenshot()).toString("base64");
   for (const f of frames) await f.evaluate(hide, false).catch(() => {});
   await page.screenshot({ path: `${out}/${name}.png` });
-  return page.evaluate(measure, { png, items }).then((r) =>
-    r.map((x) => ({ ...x, shot: name })),
-  );
+  return page
+    .evaluate(measure, { png, items })
+    .then((r) => r.map((x) => ({ ...x, shot: name })));
 }
 
 const results = [];
@@ -220,14 +243,16 @@ for (const theme of themes) {
 const low = results.filter((r) => r.ratio < r.need);
 const onWallpaper = low.filter((r) => r.wallpaper);
 const failing = low.filter((r) => !r.wallpaper);
-const key = (r) => `${r.shot} ${r.where} "${r.text}" ${r.ratio}:1 (needs ${r.need})`;
+const key = (r) =>
+  `${r.shot} ${r.where} "${r.text}" ${r.ratio}:1 (needs ${r.need})`;
 console.log(`${results.length} texts checked`);
 if (onWallpaper.length)
   console.log(
     "on the wallpaper (shadowed labels, not counted):\n" +
       [...new Set(onWallpaper.map(key))].join("\n"),
   );
-if (failing.length) console.log("too low:\n" + [...new Set(failing.map(key))].join("\n"));
+if (failing.length)
+  console.log("too low:\n" + [...new Set(failing.map(key))].join("\n"));
 await browser.close();
 if (!process.env.CONTRAST_REPORT) {
   assert.deepEqual(failing.map(key), [], "contrast of all texts");

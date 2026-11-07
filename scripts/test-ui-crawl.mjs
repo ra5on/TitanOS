@@ -15,21 +15,62 @@ const only = process.env.UI_ROUTES?.split(",");
 await mkdir(out, { recursive: true });
 
 const routes = [
-  "/account", "/apps", "/docker", "/docker/apps/web",
-  "/docker/networks", "/files", "/plugins", "/plugins/cleanup", "/settings",
-  "/settings/about", "/settings/access", "/settings/api",
-  "/settings/appearance", "/settings/backups", "/settings/cluster",
-  "/settings/backups/applications", "/settings/backups/configuration",
-  "/settings/backups/coverage", "/settings/backups/data",
-  "/settings/backups/restore", "/settings/energy", "/settings/hardware",
-  "/settings/homeassistant", "/settings/agent", "/agent", "/settings/memory", "/settings/network",
-  "/settings/notifications", "/settings/power-button", "/settings/stick",
-  "/settings/temperatures", "/settings/timezone", "/settings/updates",
-  "/settings/ups", "/shares", "/storage", "/storage/import",
-  "/storage/manage", "/terminal", "/tools", "/tools/maintenance", "/tools/disks",
-  "/tools/bundle", "/tools/hardware", "/tools/logs", "/tools/scripts",
-  "/tools/monitoring", "/tools/activity", "/tools/tasks", "/users", "/vms", "/vms/edit?vm=source",
-  "/vms/media", "/vms/new", "/vms/screen?vm=source", "/welcome",
+  "/account",
+  "/apps",
+  "/docker",
+  "/docker/apps/web",
+  "/docker/networks",
+  "/files",
+  "/plugins",
+  "/plugins/cleanup",
+  "/settings",
+  "/settings/about",
+  "/settings/access",
+  "/settings/api",
+  "/settings/appearance",
+  "/settings/backups",
+  "/settings/cluster",
+  "/settings/backups/applications",
+  "/settings/backups/configuration",
+  "/settings/backups/coverage",
+  "/settings/backups/data",
+  "/settings/backups/restore",
+  "/settings/energy",
+  "/settings/hardware",
+  "/settings/homeassistant",
+  "/settings/agent",
+  "/agent",
+  "/settings/memory",
+  "/settings/network",
+  "/settings/notifications",
+  "/settings/power-button",
+  "/settings/stick",
+  "/settings/temperatures",
+  "/settings/timezone",
+  "/settings/updates",
+  "/settings/ups",
+  "/shares",
+  "/storage",
+  "/storage/import",
+  "/storage/manage",
+  "/terminal",
+  "/tools",
+  "/tools/maintenance",
+  "/tools/disks",
+  "/tools/bundle",
+  "/tools/hardware",
+  "/tools/logs",
+  "/tools/scripts",
+  "/tools/monitoring",
+  "/tools/activity",
+  "/tools/tasks",
+  "/users",
+  "/vms",
+  "/vms/edit?vm=source",
+  "/vms/media",
+  "/vms/new",
+  "/vms/screen?vm=source",
+  "/welcome",
 ].filter((route) => !only || only.includes(route));
 
 // Buttons that would only leave the page or end the session.
@@ -42,10 +83,14 @@ const findings = [];
 // pages they were never meant for would look broken.
 const login = process.env.UI_LOGIN;
 if (!login) {
-  console.error("UI_LOGIN=name:password for a titand started with -dev is required");
+  console.error(
+    "UI_LOGIN=name:password for a titand started with -dev is required",
+  );
   process.exit(2);
 }
-const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 } });
+const ctx = await browser.newContext({
+  viewport: { width: 1360, height: 900 },
+});
 // The crawl opens every page alone, as a window of the desktop shows it
 // (PLAN 65, lib/desktop/mode.svelte.ts); the desktop itself has
 // scripts/test-ui-desktop.mjs.
@@ -57,7 +102,14 @@ page.on("pageerror", (e) => errors.push(String(e)));
   const [name, password] = login.split(":");
   await page.goto(base + "/login");
   const status = await page.evaluate(
-    async (body) => (await fetch("/api/v1/login", { method: "POST", headers: { "Content-Type": "application/json" }, body })).status,
+    async (body) =>
+      (
+        await fetch("/api/v1/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+        })
+      ).status,
     JSON.stringify({ name, password }),
   );
   if (status !== 200) throw new Error(`login failed: ${status}`);
@@ -114,13 +166,19 @@ for (const route of routes) {
 async function crawl(route) {
   await open(route);
   if ((await broken()) || errors.length || consoleErrors.length) {
-    note(route, "load", [...errors, ...consoleErrors].join(" | ") || "error page");
+    note(
+      route,
+      "load",
+      [...errors, ...consoleErrors].join(" | ") || "error page",
+    );
     return;
   }
   const labels = await page
     .locator("main button:visible")
     .evaluateAll((buttons) =>
-      buttons.map((b) => (b.innerText || b.getAttribute("aria-label") || "").trim()),
+      buttons.map((b) =>
+        (b.innerText || b.getAttribute("aria-label") || "").trim(),
+      ),
     );
   const seen = new Set();
   for (const [index, label] of labels.entries()) {
@@ -137,11 +195,18 @@ async function crawl(route) {
     }
     await page.waitForTimeout(400);
     if ((await broken()) || errors.length || consoleErrors.length) {
-      note(route, `click "${label}"`, [...errors, ...consoleErrors].join(" | ") || "error page");
+      note(
+        route,
+        `click "${label}"`,
+        [...errors, ...consoleErrors].join(" | ") || "error page",
+      );
       await page.screenshot({ path: `${out}/${findings.length}.png` });
     }
     await page.keyboard.press("Escape");
-    if (new URL(page.url()).pathname !== new URL(base + route).pathname || (await broken()))
+    if (
+      new URL(page.url()).pathname !== new URL(base + route).pathname ||
+      (await broken())
+    )
       await open(route);
   }
   console.log(`ok ${route} (${seen.size} buttons)`);

@@ -62,16 +62,22 @@ async function open(width, options = {}) {
       const body = req.postDataJSON();
       nas.calls.push(["unlock", body]);
       const deny = (code) =>
-        route.fulfill({ status: 403, json: { error: { code, message: code } } });
+        route.fulfill({
+          status: 403,
+          json: { error: { code, message: code } },
+        });
       if (body.passkey) {
         if (body.passkey.challengeId !== "c-1") return deny("passkey_failed");
       } else {
         if (body.password !== PASSWORD) return deny("wrong_password");
         if (nas.twoFactor && !body.code) return deny("second_factor_required");
-        if (nas.twoFactor && body.code !== "123456") return deny("invalid_code");
+        if (nas.twoFactor && body.code !== "123456")
+          return deny("invalid_code");
       }
       nas.locked = false;
-      return route.fulfill({ json: { name: "alex", role: "owner", twoFactor: nas.twoFactor } });
+      return route.fulfill({
+        json: { name: "alex", role: "owner", twoFactor: nas.twoFactor },
+      });
     }
     if (path === "/account/passkeys/confirm" && method === "POST")
       return route.fulfill({
@@ -121,14 +127,25 @@ const screen = (page) => page.locator(".lockscreen:not(.frame)");
 // Boxes of the visible parts must not overlap, nor leave the screen.
 async function noOverlap(page, width) {
   const boxes = {};
-  for (const part of [".clock", ".date", ".avatar", ".name", ".pill", ".actions", ".quiet"]) {
+  for (const part of [
+    ".clock",
+    ".date",
+    ".avatar",
+    ".name",
+    ".pill",
+    ".actions",
+    ".quiet",
+  ]) {
     const el = page.locator(`.lockscreen ${part}`);
     if (await el.count()) boxes[part] = await el.first().boundingBox();
   }
   const names = Object.keys(boxes);
   for (const [i, a] of names.entries()) {
     const box = boxes[a];
-    assert.ok(box.x >= 0 && box.x + box.width <= width + 0.5, `${a} inside at ${width}`);
+    assert.ok(
+      box.x >= 0 && box.x + box.width <= width + 0.5,
+      `${a} inside at ${width}`,
+    );
     for (const b of names.slice(i + 1)) {
       const o = boxes[b];
       const apart =
@@ -140,7 +157,9 @@ async function noOverlap(page, width) {
     }
   }
   assert.ok(
-    (await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0,
+    (await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    )) <= 0,
     "no sideways scroll",
   );
 }
@@ -157,27 +176,59 @@ try {
     await screen(page).waitFor();
     assert.deepEqual(nas.calls[0], ["lock"]);
     const field = page.getByLabel("Passwort", { exact: true });
-    await page.waitForFunction(() => document.activeElement?.getAttribute("type") === "password");
+    await page.waitForFunction(
+      () => document.activeElement?.getAttribute("type") === "password",
+    );
     assert.equal(await page.locator(".lockscreen .name").textContent(), "alex");
-    assert.match(await page.locator(".lockscreen .quiet").textContent(), /Gesperrt nach 15 Min ohne Bedienung/);
+    assert.match(
+      await page.locator(".lockscreen .quiet").textContent(),
+      /Gesperrt nach 15 Min ohne Bedienung/,
+    );
     // Escape does nothing, the command palette does not open behind.
     await page.keyboard.press("Escape");
     await page.keyboard.press("Control+k");
     assert.ok(await screen(page).isVisible());
-    assert.equal(await page.locator("dialog[open]").count(), 0, "nothing opened behind the lock");
+    assert.equal(
+      await page.locator("dialog[open]").count(),
+      0,
+      "nothing opened behind the lock",
+    );
     // The page behind cannot be reached.
-    assert.ok(await page.evaluate(() => [...document.body.children].filter((e) => !e.classList.contains("lockscreen")).every((e) => e.inert)));
-    await page.screenshot({ path: `${out}/locked-1440.png`, animations: "disabled" });
+    assert.ok(
+      await page.evaluate(() =>
+        [...document.body.children]
+          .filter((e) => !e.classList.contains("lockscreen"))
+          .every((e) => e.inert),
+      ),
+    );
+    await page.screenshot({
+      path: `${out}/locked-1440.png`,
+      animations: "disabled",
+    });
     await field.fill("falsch");
     await page.keyboard.press("Enter");
-    await page.getByRole("alert").filter({ hasText: "Das Passwort stimmt nicht." }).waitFor();
+    await page
+      .getByRole("alert")
+      .filter({ hasText: "Das Passwort stimmt nicht." })
+      .waitFor();
     assert.equal(await field.inputValue(), "", "wrong password cleared");
-    await page.screenshot({ path: `${out}/wrong-password-1440.png`, animations: "disabled" });
+    await page.screenshot({
+      path: `${out}/wrong-password-1440.png`,
+      animations: "disabled",
+    });
     await field.fill(PASSWORD);
     await page.getByRole("button", { name: "Entsperren" }).click();
     await screen(page).waitFor({ state: "detached" });
-    assert.deepEqual(nas.calls.at(-1), ["unlock", { password: PASSWORD, code: "" }]);
-    assert.ok(await page.evaluate(() => [...document.body.children].every((e) => !e.inert)), "page usable again");
+    assert.deepEqual(nas.calls.at(-1), [
+      "unlock",
+      { password: PASSWORD, code: "" },
+    ]);
+    assert.ok(
+      await page.evaluate(() =>
+        [...document.body.children].every((e) => !e.inert),
+      ),
+      "page usable again",
+    );
     // Strg+Alt+L locks too.
     await page.locator("body").click({ position: { x: 5, y: 500 } });
     await page.keyboard.press("Control+Alt+KeyL");
@@ -189,33 +240,60 @@ try {
   // 2. Loaded while locked, with two-factor login: the code is asked for; a
   //    request of the page meanwhile got 423 and changed nothing.
   {
-    const { ctx, page, nas } = await open(1440, { locked: true, twoFactor: true });
+    const { ctx, page, nas } = await open(1440, {
+      locked: true,
+      twoFactor: true,
+    });
     await screen(page).waitFor();
     const code = page.getByLabel("Code aus der Authentifizierungs-App");
     await code.waitFor();
     await page.getByLabel("Passwort", { exact: true }).fill(PASSWORD);
     await code.fill("000000");
     await page.keyboard.press("Enter");
-    await page.getByRole("alert").filter({ hasText: /Code stimmt nicht/ }).waitFor();
-    assert.equal(await page.getByLabel("Passwort", { exact: true }).inputValue(), PASSWORD, "password kept after a wrong code");
+    await page
+      .getByRole("alert")
+      .filter({ hasText: /Code stimmt nicht/ })
+      .waitFor();
+    assert.equal(
+      await page.getByLabel("Passwort", { exact: true }).inputValue(),
+      PASSWORD,
+      "password kept after a wrong code",
+    );
     assert.equal(await code.inputValue(), "", "wrong code cleared");
-    assert.ok((await code.boundingBox()).height >= 40, "code field full height");
-    await page.screenshot({ path: `${out}/two-factor-1440.png`, animations: "disabled" });
+    assert.ok(
+      (await code.boundingBox()).height >= 40,
+      "code field full height",
+    );
+    await page.screenshot({
+      path: `${out}/two-factor-1440.png`,
+      animations: "disabled",
+    });
     await code.fill("123456");
     await page.keyboard.press("Enter");
     await screen(page).waitFor({ state: "detached" });
-    assert.deepEqual(nas.calls.at(-1), ["unlock", { password: PASSWORD, code: "123456" }]);
+    assert.deepEqual(nas.calls.at(-1), [
+      "unlock",
+      { password: PASSWORD, code: "123456" },
+    ]);
     await ctx.close();
   }
 
   // 3. Passkey (host name, faked authenticator) on the phone width.
   {
-    const { ctx, page, nas } = await open(390, { locked: true, passkey: true, fakePasskey: true, base: named });
+    const { ctx, page, nas } = await open(390, {
+      locked: true,
+      passkey: true,
+      fakePasskey: true,
+      base: named,
+    });
     await screen(page).waitFor();
     const button = page.getByRole("button", { name: "Mit Passkey entsperren" });
     await button.waitFor();
     await noOverlap(page, 390);
-    await page.screenshot({ path: `${out}/passkey-390.png`, animations: "disabled" });
+    await page.screenshot({
+      path: `${out}/passkey-390.png`,
+      animations: "disabled",
+    });
     await button.click();
     await screen(page).waitFor({ state: "detached" });
     assert.equal(nas.calls.at(-1)[1].passkey.challengeId, "c-1");
@@ -228,7 +306,10 @@ try {
     await screen(page).waitFor();
     await noOverlap(page, width);
     if (width === 390)
-      await page.screenshot({ path: `${out}/locked-390.png`, animations: "disabled" });
+      await page.screenshot({
+        path: `${out}/locked-390.png`,
+        animations: "disabled",
+      });
     await ctx.close();
   }
 
@@ -242,7 +323,10 @@ try {
     assert.ok(clock.y >= 0, "clock not cut off at the top");
     await page.getByLabel("Passwort", { exact: true }).scrollIntoViewIfNeeded();
     assert.ok(await page.getByLabel("Passwort", { exact: true }).isVisible());
-    await page.screenshot({ path: `${out}/landscape-844x390.png`, animations: "disabled" });
+    await page.screenshot({
+      path: `${out}/landscape-844x390.png`,
+      animations: "disabled",
+    });
     await ctx.close();
   }
 
@@ -255,7 +339,8 @@ try {
       const frame = document.createElement("iframe");
       frame.src = src;
       frame.id = "win";
-      frame.style.cssText = "position:fixed;left:40px;top:120px;width:700px;height:500px;z-index:5;border:0";
+      frame.style.cssText =
+        "position:fixed;left:40px;top:120px;width:700px;height:500px;z-index:5;border:0";
       document.body.append(frame);
     }, `${base}/`);
     const frame = page.frameLocator("#win");
@@ -265,7 +350,11 @@ try {
     await frame.locator("body").press("Control+Alt+KeyL");
     await screen(page).waitFor();
     await frame.locator(".lockscreen.frame").waitFor();
-    assert.equal(await frame.locator(".lockscreen.frame input").count(), 0, "no form in the frame");
+    assert.equal(
+      await frame.locator(".lockscreen.frame input").count(),
+      0,
+      "no form in the frame",
+    );
     await page.getByLabel("Passwort", { exact: true }).fill(PASSWORD);
     await page.keyboard.press("Enter");
     await screen(page).waitFor({ state: "detached" });
@@ -275,14 +364,20 @@ try {
 
   // 6. The automatic lock after the account's minutes without use.
   {
-    const { ctx, page, nas } = await open(1440, { clock: true, lockMinutes: 5 });
+    const { ctx, page, nas } = await open(1440, {
+      clock: true,
+      lockMinutes: 5,
+    });
     await page.locator("header .account .trigger").waitFor();
     await page.clock.fastForward("04:00");
     assert.equal(await screen(page).count(), 0, "not yet");
     await page.clock.fastForward("01:30");
     await screen(page).waitFor();
     assert.ok(nas.calls.some(([c]) => c === "lock"));
-    assert.match(await page.locator(".lockscreen .quiet").textContent(), /5 Min/);
+    assert.match(
+      await page.locator(".lockscreen .quiet").textContent(),
+      /5 Min/,
+    );
     await ctx.close();
   }
 

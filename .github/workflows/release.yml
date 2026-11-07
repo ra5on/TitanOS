@@ -14,7 +14,10 @@ name: Release
 # (docs/FERNANSICHT.md): scripts/viewer-image-reuse.py takes the previous
 # release's verified archive when nothing in the image changed, otherwise
 # scripts/build-viewer-image.sh builds it; make-release.sh lists it in the
-# signed manifest ("viewer").
+# signed manifest ("viewer"). Likewise the web apps (docs/WEBAPPS.md):
+# scripts/fetch-webapps.py downloads the archives of webapps/catalog.json
+# from their GitHub releases, checks SHA-256 and contents, and
+# make-release.sh lists them in the signed manifest ("webapps").
 #
 # A tag on which only titand changed since the last full release becomes an
 # app release (scripts/release-kind.py, docs/APP-UPDATES.md): the published
@@ -45,6 +48,8 @@ on:
       - 'scripts/make-release.sh'
       - 'scripts/build-viewer-image.sh'
       - 'scripts/viewer-image-reuse.py'
+      - 'scripts/fetch-webapps.py'
+      - 'webapps/**'
       - 'viewer/**'
       - 'backend/cmd/titanos-viewer/**'
       - 'backend/internal/viewer/proto/**'
@@ -290,10 +295,16 @@ jobs:
             exit "$status"
           fi
 
+      - name: Web apps (Craft programs for the browser, docs/WEBAPPS.md)
+        # Upstream archives of webapps/catalog.json, unchanged; their SHA-256
+        # and contents are checked here and again by titand.
+        run: python3 scripts/fetch-webapps.py out/webapps
+
       - name: Pack the release
         env:
           # Built in the step before; make-release.sh lists it in the manifest.
           VIEWER_DIR: out/viewer
+          WEBAPPS_DIR: out/webapps
           # Only a pull request packs the system alone; it is never published.
           WITHOUT_PLUGINS: ${{ (github.event_name == 'pull_request' || steps.plugins.outputs.ready == 'false') && '1' || '' }}
           BASE_VERSION: ${{ steps.kind.outputs.base }}

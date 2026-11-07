@@ -55,6 +55,7 @@ var testUI = fstest.MapFS{
 	"favicon.svg":                 {Data: []byte("<svg/>")},
 	"manifest.webmanifest":        {Data: []byte(`{"name":"TitanOS"}`)},
 	"_app/immutable/entry/app.js": {Data: []byte("console.log(1)")},
+	"webapps/_host/host.js":       {Data: []byte("// host")},
 }
 
 const testPassword = "a long test password"
@@ -498,7 +499,7 @@ func TestPreferences(t *testing.T) {
 	ts.setup()
 
 	_, body := ts.request("GET", "/api/v1/preferences", nil)
-	if strings.TrimSpace(string(body)) != `{"appearance":null,"bell":null,"dashboard":null,"desktop":null,"docker":null,"files":null,"hints":null,"shares":null,"sound":null,"vnc":null}` {
+	if strings.TrimSpace(string(body)) != `{"appearance":null,"bell":null,"dashboard":null,"desktop":null,"docker":null,"fileapps":null,"files":null,"hints":null,"shares":null,"sound":null,"vnc":null}` {
 		t.Errorf("fresh preferences = %s", body)
 	}
 

@@ -54,6 +54,7 @@ func (w *titand) wireAPI() error {
 		Catalog:            w.appCatalog,
 		Terminal:           w.shells,
 		Viewer:             w.remoteView,
+		Webapps:            w.webApps,
 		VMs:                w.machines,
 		LXC:                w.systemContainers,
 		Hardware:           w.devices,

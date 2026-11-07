@@ -35,6 +35,7 @@ var fileErrors = []struct {
 	{files.ErrRebooted, http.StatusConflict, "copy_rebooted"},
 	{files.ErrAccess, http.StatusForbidden, "file_access_denied"},
 	{files.ErrTextConflict, http.StatusConflict, "text_conflict"},
+	{files.ErrChanged, http.StatusConflict, "file_changed"},
 	{files.ErrInvalidJSON, http.StatusBadRequest, "invalid_json"},
 	{files.ErrNotText, http.StatusBadRequest, "not_text"},
 	{files.ErrProtected, http.StatusConflict, "vm_file_protected"},
@@ -593,6 +594,40 @@ func (s *Server) handleFileText(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("text file saved", "root", root.ID, "path", req.Path, "by", currentUser(r).Name, "ip", remoteIP(r))
+	writeJSON(w, http.StatusOK, result)
+}
+
+// handleFileContent writes a whole file from the request body (PLAN 66:
+// a web app saves into the original). ?root=&path=&expect=<mtime-ns |
+// RFC 3339 "modified" | none>; Content-Length is required.
+func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	noteTarget(r, filePlace(q.Get("root"), q.Get("path")))
+	root, ok := s.fileRoot(w, r, q.Get("root"))
+	if !ok {
+		return
+	}
+	expect, err := files.ParseExpect(q.Get("expect"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "expect must be none, the modification time in nanoseconds or an RFC 3339 time")
+		return
+	}
+	if r.ContentLength < 0 {
+		writeError(w, http.StatusLengthRequired, "length_required", "Content-Length is required")
+		return
+	}
+	if r.ContentLength > files.MaxContent {
+		writeError(w, http.StatusRequestEntityTooLarge, "too_large", "the file is larger than 2 GiB")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, r.ContentLength)
+	user := currentUser(r)
+	result, err := s.opts.Files.WriteContent(root, q.Get("path"), r.Body, r.ContentLength, user.UID, expect)
+	if err != nil {
+		writeFileError(w, err)
+		return
+	}
+	slog.Info("file saved by web app", "root", root.ID, "path", q.Get("path"), "size", result.Size, "by", user.Name, "ip", remoteIP(r))
 	writeJSON(w, http.StatusOK, result)
 }
 

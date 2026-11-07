@@ -68,6 +68,10 @@
 	import { fileKeys, type KeyboardHost } from './keyboard.ts';
 	import { FilePreferenceStore } from './preferences.svelte.ts';
 	import { UsbDrives } from './usb.svelte.ts';
+	// PLAN 66: files open in their standard app (a web app running in the browser).
+	import { appForFile, loadWebApps, setFileApp } from '#lib/webapps/webapps.svelte.ts';
+	import { EDITOR, extOf } from '#lib/webapps/protocol.ts';
+	import { openInWebApp } from '#lib/webapps/open.ts';
 
 	const canAdminister = $derived(
 		session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin',
@@ -261,6 +265,7 @@
 
 	onMount(() => {
 		void prefs.load();
+		void loadWebApps();
 	});
 	const visibleFavorites = $derived(
 		prefs.favorites.filter((f) => roots?.some((r) => r.id === f.root)),
@@ -330,6 +335,8 @@
 	const currentUSBBackup = $derived(usb.backupAt(rootId, dir));
 	$effect(() => usb.watch());
 
+	/** The text editor may save here (for "Öffnen mit › Texteditor"). */
+	const writableText = $derived(!backupLocked && !!(root?.editable || writable));
 	const editable = $derived.by(() => {
 		if (backupLocked || !(root?.editable || writable) || selected.length !== 1) return false;
 		const entry = entries?.find((candidate) => candidate.name === selected[0]);
@@ -564,8 +571,36 @@
 			return;
 		selected = [entry.name];
 		anchor = entry.name;
+		if (openWithStandard(entry)) return;
 		if (previewKind(entry.name, entry.size)) preview = entry;
 		else if (editable) editing = join(dir, entry.name);
+	}
+	/** PLAN 66: the standard app of the file type (Dateien › Einstellungen › Standard-Apps). */
+	function openWithStandard(entry: FileEntry): boolean {
+		const choice = appForFile(entry.name);
+		if (
+			choice === EDITOR &&
+			isEditableText(entry.name, entry.size) &&
+			(root?.editable || writable)
+		) {
+			editing = join(dir, entry.name);
+			return true;
+		}
+		if (!choice?.startsWith('webapp:')) return false;
+		openInWebApp(choice, rootId, join(dir, entry.name));
+		return true;
+	}
+	/** "Öffnen mit": an app chosen for this file, and with "always" as its standard app. */
+	async function openWith(entry: FileEntry, app: string, always: boolean) {
+		if (always) {
+			try {
+				await setFileApp(extOf(entry.name), app);
+			} catch (e) {
+				error = apiErrorText(e);
+			}
+		}
+		if (app === EDITOR) editing = join(dir, entry.name);
+		else openInWebApp(app, rootId, join(dir, entry.name));
 	}
 	function entryMenu(entry: FileEntry, x: number, y: number) {
 		if (!selectedNames.has(entry.name)) selected = [entry.name];
@@ -1157,6 +1192,8 @@
 	{writable}
 	{canPaste}
 	view={prefs.view}
+	{writableText}
+	onopenwith={(entry, app, always) => choose(() => void openWith(entry, app, always))}
 	oncommand={(action, entry) => choose(() => command(action, entry))}
 	onclose={() => {
 		menu = null;

@@ -25,7 +25,10 @@ try {
     assert.match(await list.textContent(), /Anmeldung fehlgeschlagen/);
     assert.match(await list.textContent(), /System: geändert/);
     assert.match(await list.textContent(), /per API-Token/);
-    await page.screenshot({ path: `${out}/activity-desktop.png`, fullPage: true });
+    await page.screenshot({
+      path: `${out}/activity-desktop.png`,
+      fullPage: true,
+    });
 
     await page.getByLabel("Konto").selectOption("sam");
     await list.getByText("Anmeldung fehlgeschlagen").waitFor();
@@ -51,9 +54,14 @@ try {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.reload();
     await list.getByText("Dateien gelöscht").waitFor();
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - innerWidth,
+    );
     assert.ok(overflow <= 1, `horizontal scroll ${overflow}`);
-    await page.screenshot({ path: `${out}/activity-mobile.png`, fullPage: true });
+    await page.screenshot({
+      path: `${out}/activity-mobile.png`,
+      fullPage: true,
+    });
     await ctx.close();
   }
   {

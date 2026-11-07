@@ -119,8 +119,7 @@ function fileRoutes(ctx, state) {
       });
     if (path.endsWith("/inspect")) {
       const request = route.request().postDataJSON();
-      if (!request.toRoot)
-        return route.fulfill({ json: inspection() });
+      if (!request.toRoot) return route.fulfill({ json: inspection() });
       await new Promise((resolve) =>
         state.pending.push({
           request,
@@ -163,9 +162,7 @@ async function openCopy(page) {
     .getByRole("button", { name: "Kopieren nach …", exact: true })
     .click();
   const dialog = page.getByRole("dialog");
-  await dialog
-    .getByLabel("Gibt es den Namen schon", { exact: true })
-    .waitFor();
+  await dialog.getByLabel("Gibt es den Namen schon", { exact: true }).waitFor();
   // Into a subfolder: copying into the folder the file is in only works
   // with "keep both".
   await dialog.getByRole("button", { name: "Fotos", exact: true }).click();
@@ -225,15 +222,25 @@ try {
       await next(state)
     ).respond({ error: { code: "internal", message: "fixture" } }, 500);
     await dialog.getByRole("alert").first().waitFor();
-    assert.equal(await copy.isEnabled(), true, "keep both blocked by a failed check");
+    assert.equal(
+      await copy.isEnabled(),
+      true,
+      "keep both blocked by a failed check",
+    );
     await copy.click();
     await (
       await next(state)
-    ).respond(inspection({ conflicts: [conflict()], different: 1, differentBytes: 12 }));
+    ).respond(
+      inspection({ conflicts: [conflict()], different: 1, differentBytes: 12 }),
+    );
     await dialog
       .getByText("Am Ziel gibt es 1 gleiche Namen", { exact: false })
       .waitFor();
-    assert.equal(state.copies.length, 0, "started without showing the conflicts");
+    assert.equal(
+      state.copies.length,
+      0,
+      "started without showing the conflicts",
+    );
     await dialog.locator("td", { hasText: "report.txt" }).waitFor();
     await page.screenshot({ path: out + "/dialog-konflikte-hinweis.png" });
     await copy.click();
@@ -252,7 +259,10 @@ try {
     const dialog = await openCopy(page);
     await (
       await next(state)
-    ).respond({ error: { code: "file_scan_timeout", message: "timeout" } }, 408);
+    ).respond(
+      { error: { code: "file_scan_timeout", message: "timeout" } },
+      408,
+    );
     await dialog
       .getByText("Die Prüfung des Ziels hat zu lange gedauert. Eine Regel", {
         exact: false,
@@ -260,7 +270,9 @@ try {
       .waitFor();
     const rule = dialog.getByLabel("Gibt es den Namen schon", { exact: true });
     assert.equal(
-      await rule.locator('option[value="individual"]').evaluate((o) => o.disabled),
+      await rule
+        .locator('option[value="individual"]')
+        .evaluate((o) => o.disabled),
       true,
     );
     await dialog
@@ -324,7 +336,8 @@ try {
       state: "failed",
       to: "share/Projects",
       dir: "",
-      error: "Transfer interrupted; recheck current access and resume incomplete files.",
+      error:
+        "Transfer interrupted; recheck current access and resume incomplete files.",
       errorCode: "interrupted",
       failed: 0,
       kept: 0,
@@ -336,8 +349,13 @@ try {
     const state = { pending: [], copies: [], jobs: [job, rebooted] };
     await fileRoutes(ctx, state);
     await page.goto(base + "/files?root=share%2FDocuments");
-    const panel = page.getByRole("region", { name: "Dateiaufträge", exact: true });
-    await panel.getByText("Mit Fehlern abgeschlossen", { exact: true }).waitFor();
+    const panel = page.getByRole("region", {
+      name: "Dateiaufträge",
+      exact: true,
+    });
+    await panel
+      .getByText("Mit Fehlern abgeschlossen", { exact: true })
+      .waitFor();
     await panel
       .getByText("Zu groß für das Ziel (FAT32", { exact: false })
       .waitFor();
@@ -350,7 +368,10 @@ try {
       })
       .waitFor();
     await panel
-      .getByRole("button", { name: "Fehlgeschlagene erneut versuchen", exact: true })
+      .getByRole("button", {
+        name: "Fehlgeschlagene erneut versuchen",
+        exact: true,
+      })
       .waitFor();
     await panel
       .getByText("Der Auftrag wurde unterbrochen (Neustart des Dienstes).", {
@@ -358,7 +379,9 @@ try {
       })
       .waitFor();
     assert.equal(
-      await panel.getByRole("button", { name: "Offene Dateien erneut versuchen" }).count(),
+      await panel
+        .getByRole("button", { name: "Offene Dateien erneut versuchen" })
+        .count(),
       0,
       "retry offered after a restart",
     );
@@ -394,7 +417,9 @@ try {
     await page.goto(base + "/files?root=usb%2Fstick");
     await bar.waitFor();
     assert.equal(
-      await bar.getByRole("button", { name: "Papierkorb", exact: true }).count(),
+      await bar
+        .getByRole("button", { name: "Papierkorb", exact: true })
+        .count(),
       0,
       "USB drive shows a recycle bin",
     );
@@ -405,9 +430,14 @@ try {
     const state = { pending: [], copies: [], jobs: [] };
     await fileRoutes(ctx, state);
     await page.goto(base + "/files?root=volume%2FData");
-    await page.getByRole("button", { name: "Papierkorb", exact: true }).first().click();
     await page
-      .getByRole("heading", { name: "Papierkörbe der Freigaben auf diesem Volume" })
+      .getByRole("button", { name: "Papierkorb", exact: true })
+      .first()
+      .click();
+    await page
+      .getByRole("heading", {
+        name: "Papierkörbe der Freigaben auf diesem Volume",
+      })
       .waitFor();
     await page.screenshot({ path: out + "/volume-papierkoerbe.png" });
     await page.getByRole("button", { name: "Data/Media" }).click();
@@ -435,16 +465,22 @@ try {
       if (!own) await new Promise((r) => setTimeout(r, 25));
     }
     assert.equal(own.request.toDir, "");
-    await own.respond(
-      inspection({ identical: 1, identicalBytes: 12 }),
-    );
+    await own.respond(inspection({ identical: 1, identicalBytes: 12 }));
     const rule = dialog.getByLabel("Gibt es den Namen schon", { exact: true });
-    await dialog.getByText("Kopien benötigen", { exact: false }).or(
-      dialog.getByText("Eine Kopie geht hier nur", { exact: false }),
-    ).waitFor();
+    await dialog
+      .getByText("Kopien benötigen", { exact: false })
+      .or(dialog.getByText("Eine Kopie geht hier nur", { exact: false }))
+      .waitFor();
     assert.equal(await rule.inputValue(), "rename");
-    const copy = dialog.getByRole("button", { name: "Hierher kopieren", exact: true });
-    assert.equal(await copy.isEnabled(), true, "duplicate in the same folder blocked");
+    const copy = dialog.getByRole("button", {
+      name: "Hierher kopieren",
+      exact: true,
+    });
+    assert.equal(
+      await copy.isEnabled(),
+      true,
+      "duplicate in the same folder blocked",
+    );
     await rule.selectOption("replace");
     assert.equal(await copy.isDisabled(), true, "replace onto itself allowed");
     await ctx.close();
@@ -461,30 +497,47 @@ try {
       await page
         .getByRole("checkbox", { name: "report.txt auswählen", exact: true })
         .check();
-      await page.getByRole("button", { name: "Löschen", exact: true }).first().click();
+      await page
+        .getByRole("button", { name: "Löschen", exact: true })
+        .first()
+        .click();
       return page.getByRole("dialog");
     };
     let dialog = await openDelete("/files?root=usb%2Fstick");
-    await dialog.getByText("Hier gibt es keinen Papierkorb", { exact: false }).waitFor();
+    await dialog
+      .getByText("Hier gibt es keinen Papierkorb", { exact: false })
+      .waitFor();
     await page.waitForTimeout(400);
     await page.screenshot({ path: out + "/usb-loeschen-kein-papierkorb.png" });
-    await dialog.getByRole("button", { name: "Abbrechen", exact: true }).click();
+    await dialog
+      .getByRole("button", { name: "Abbrechen", exact: true })
+      .click();
     dialog = await openDelete("/files?root=volume%2FData");
-    await dialog.getByText("Hier gibt es keinen Papierkorb", { exact: false }).waitFor();
+    await dialog
+      .getByText("Hier gibt es keinen Papierkorb", { exact: false })
+      .waitFor();
     await dialog
       .getByText("In der Volume-Ansicht landen nur Einträge", { exact: false })
       .waitFor();
-    await dialog.getByRole("button", { name: "Abbrechen", exact: true }).click();
+    await dialog
+      .getByRole("button", { name: "Abbrechen", exact: true })
+      .click();
     dialog = await openDelete("/files?root=volume%2FData&path=Documents");
     await dialog
       .getByText("in den Papierkorb der Freigabe verschoben", { exact: false })
       .waitFor();
     await page.waitForTimeout(400);
     await page.screenshot({ path: out + "/volume-loeschen-papierkorb.png" });
-    await dialog.getByRole("button", { name: "In den Papierkorb", exact: true }).click();
+    await dialog
+      .getByRole("button", { name: "In den Papierkorb", exact: true })
+      .click();
     await dialog.waitFor({ state: "hidden" });
     assert.deepEqual(state.deletes, [
-      { root: "volume/Data", paths: ["Documents/report.txt"], permanent: false },
+      {
+        root: "volume/Data",
+        paths: ["Documents/report.txt"],
+        permanent: false,
+      },
     ]);
     await ctx.close();
   }

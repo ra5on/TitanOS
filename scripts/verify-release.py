@@ -26,6 +26,25 @@ def digest(path):
 # The official plugins are those the image has catalog entries for; they are
 # built in ra5on/TitanOS-Plugins (docs/PLUGIN-REPO.md).
 OFFICIAL = {p.stem for p in (Path(__file__).resolve().parent.parent / "plugins/catalog").glob("*.json")}
+# The web apps a release of this repository carries (PLAN 66, docs/WEBAPPS.md).
+CATALOG = Path(__file__).resolve().parent.parent / "webapps/catalog.json"
+
+
+def verify_webapps(manifest, release, checksums):
+    """Every app of the catalog, unchanged upstream archive (the catalog's
+    SHA-256 and size), listed in the checksums; optional for older releases."""
+    webapps = manifest.get("webapps")
+    if webapps is None:
+        return
+    catalog = json.loads(CATALOG.read_text())["apps"]
+    if not isinstance(webapps, list) or [e.get("id") for e in webapps if isinstance(e, dict)] != [a["id"] for a in catalog]:
+        raise ValueError("web apps do not match the catalog")
+    for entry, app in zip(webapps, catalog):
+        asset = f"titanos-webapp-{app['id']}-{app['version']}.zip"
+        if set(entry) != {"id", "version", "asset", "sha256", "size"} or entry["version"] != app["version"] \
+                or entry["asset"] != asset or entry["sha256"] != app["sha256"] or entry["size"] != app["size"] \
+                or checksums.get(asset) != entry["sha256"] or (release / asset).stat().st_size != entry["size"]:
+            raise ValueError("web app mismatch: " + asset)
 
 
 def verify(release, keys, without_plugins=False):
@@ -122,6 +141,7 @@ def verify(release, keys, without_plugins=False):
                 or (release / asset).stat().st_size != viewer.get("size") \
                 or not re.fullmatch(r"sha256:[0-9a-f]{64}", str(viewer.get("imageId", ""))):
             raise ValueError("viewer image mismatch: " + asset)
+    verify_webapps(manifest, release, checksums)
     if sdk := manifest.get("nvidiaBuildSDK"):
         if sdk.get("kernel") != manifest["kernel"] or sdk.get("version") != base or sdk.get("asset") != "nvidia-build-sdk.tar.zst":
             raise ValueError("SDK target mismatch")

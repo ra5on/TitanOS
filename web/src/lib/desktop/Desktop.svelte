@@ -1,4 +1,5 @@
 <script lang="ts">
+	import MigrationDialog from '../webapps/MigrationDialog.svelte';
 	// PLAN 61: the desktop mode – TitanOS as a desktop with programs in
 	// windows, widgets and a main menu. It replaces the head line and side
 	// bar on large screens; every page of TitanOS opens in a window.
@@ -42,10 +43,13 @@
 	import { findProgram, openProgram, openTab, programs, type Program } from './programs.svelte.ts';
 	import { sources, watchSources } from './sources.svelte.ts';
 	import { frameMessage } from './frame.ts';
+	import { setWindowDrag } from '../file-drag.ts';
+	import { loadWebApps } from '../webapps/webapps.svelte.ts';
 	import { dayTint, wallpaperCss } from './wallpapers.ts';
 	import {
+		anyUnsaved,
 		byRecency,
-		closeWindow,
+		requestClose,
 		desktop,
 		focus,
 		loadDesktop,
@@ -77,6 +81,15 @@
 	let renaming = $state<string | null>(null);
 	let dragKey = $state<string | null>(null);
 	let dropBefore = $state<string | null>(null);
+	// PLAN 66: while a program is dragged over the desktop the grid shows, with the cell it would land in.
+	let programDrag = $state(false);
+	let dragCell = $state<{ c: number; r: number } | null>(null);
+	function endIconDrag() {
+		dragKey = null;
+		dropBefore = null;
+		programDrag = false;
+		dragCell = null;
+	}
 	let fileDrop = $state(false);
 	let bubble = $state(false);
 
@@ -111,13 +124,15 @@
 	});
 
 	// Icons sit on a grid; "free" keeps each icon where it was put (PLAN 62-1).
+	// PLAN 66 (owner): the rows reach down to the dock – as many as fit at
+	// their nominal height, stretched evenly over the room; icons sit on the
+	// same stretched rows, so cells and icons stay aligned.
 	const colW = $derived(iconPx + 60);
-	const rowH = $derived(iconPx + 56);
 	const ICON_LEFT = 18;
 	const ICON_TOP = 8;
-	const gridRows = $derived(
-		Math.max(1, Math.floor((wm.area.h - ICON_TOP - 8 - wm.inset.b) / rowH)),
-	);
+	const rowRoom = $derived(Math.max(1, wm.area.h - ICON_TOP - 8 - wm.inset.b));
+	const gridRows = $derived(Math.max(1, Math.floor(rowRoom / (iconPx + 56))));
+	const rowH = $derived(Math.max(iconPx + 56, Math.floor(rowRoom / gridRows)));
 	const gridCols = $derived(
 		Math.max(1, Math.floor((wm.area.w - ICON_LEFT - wm.inset.l - wm.inset.r) / colW)),
 	);
@@ -168,7 +183,17 @@
 		const observer = new ResizeObserver(measure);
 		if (area) observer.observe(area);
 		window.addEventListener('message', fromWindow);
+		window.addEventListener('dragenter', dragEnter, true);
+		window.addEventListener('dragleave', dragLeave, true);
+		window.addEventListener('drop', dragDone, true);
+		window.addEventListener('dragend', dragDone, true);
+		window.addEventListener('beforeunload', beforeUnload);
 		return () => {
+			window.removeEventListener('dragenter', dragEnter, true);
+			window.removeEventListener('dragleave', dragLeave, true);
+			window.removeEventListener('drop', dragDone, true);
+			window.removeEventListener('dragend', dragDone, true);
+			window.removeEventListener('beforeunload', beforeUnload);
 			stop();
 			observer.disconnect();
 			window.removeEventListener('message', fromWindow);
@@ -196,6 +221,45 @@
 		if (msg.type === 'titanos-dock-get') sendDock(source);
 		else if (msg.type === 'titanos-prefs') savePrefs((p) => (p.dock = sanitizeDock(msg.dock)));
 		else if (msg.type === 'titanos-desk-dialog' && msg.dialog === 'wallpaper') dialog = 'wallpaper';
+		else if (msg.type === 'titanos-file-drag') {
+			// PLAN 66: the file manager in a window drags files; web app windows take them.
+			setWindowDrag(msg.drag);
+			wm.fileDrag = !!msg.drag;
+		} else if (msg.type === 'titanos-open-file') void openFile(msg);
+	}
+
+	/** PLAN 66: the file manager opens a file in a web app (one window per document). */
+	async function openFile(msg: { root: string; path: string; app?: string }) {
+		if (typeof msg.root !== 'string' || typeof msg.path !== 'string') return;
+		if (typeof msg.app !== 'string' || !msg.app.startsWith('webapp:')) return;
+		if (!findProgram(msg.app)) await loadWebApps();
+		void openProgram(msg.app, { doc: { root: msg.root, path: msg.path } });
+	}
+
+	// PLAN 66: files dragged from this PC over the desktop: web app windows
+	// show where to drop them (their frame would swallow the drag otherwise).
+	let dragDepth = 0;
+	function dragEnter(e: DragEvent) {
+		if (!e.dataTransfer?.types.includes('Files')) return;
+		dragDepth++;
+		wm.fileDrag = true;
+	}
+	function dragLeave(e: DragEvent) {
+		if (!e.dataTransfer?.types.includes('Files')) return;
+		dragDepth = Math.max(0, dragDepth - 1);
+		if (!dragDepth) wm.fileDrag = false;
+	}
+	function dragDone() {
+		dragDepth = 0;
+		// After the drop's own handlers (this runs first, in the capture phase).
+		setTimeout(() => {
+			wm.fileDrag = false;
+			setWindowDrag(null);
+		}, 0);
+	}
+	// Leaving the page with unsaved work in a web app asks first.
+	function beforeUnload(e: BeforeUnloadEvent) {
+		if (anyUnsaved()) e.preventDefault();
 	}
 	// Open settings windows follow changes made on the dock itself (right click).
 	$effect(() => {
@@ -216,7 +280,7 @@
 	}
 	$effect(() => {
 		const front = wm.windows.find((w) => w.id === wm.focused && !w.minimized);
-		if (!front || front.app.startsWith('docker:')) address('/');
+		if (!front || front.app.startsWith('docker:') || front.app.startsWith('webapp:')) address('/');
 	});
 
 	function iconCenter(event: Event): { x: number; y: number } | undefined {
@@ -243,8 +307,7 @@
 	function dropOn(event: DragEvent, target: string | null) {
 		event.preventDefault();
 		const key = event.dataTransfer?.getData('text/x-titanos-program') || dragKey;
-		dragKey = null;
-		dropBefore = null;
+		endIconDrag();
 		if (!key) return;
 		if (target?.startsWith('folder:') && !key.startsWith('folder:')) {
 			const id = target.slice(7);
@@ -349,6 +412,28 @@
 	function widgetLeft(w: Widget) {
 		return (w.x < 0 ? columns + w.x : w.x) * CELL;
 	}
+	// PLAN 66: the cells shown while dragging a program – not those under a widget.
+	const dragCells = $derived.by(() => {
+		if (!programDrag && !dragKey) return [];
+		const boxes = (desktop.prefs.widgetsHidden ? [] : desktop.prefs.widgets).map((w) => ({
+			l: widgetLeft(w),
+			t: w.y * CELL,
+			r: widgetLeft(w) + w.w * CELL - 10,
+			b: w.y * CELL + w.h * CELL - 10,
+		}));
+		const used = new Set([...places.values()].map((at) => at.c + ':' + at.r));
+		const out: { c: number; r: number }[] = [];
+		for (let r = 0; r < gridRows; r++)
+			for (let c = 0; c < gridCols; c++) {
+				const l = ICON_LEFT + wm.inset.l + c * colW;
+				const t = ICON_TOP + r * rowH;
+				const covered = boxes.some(
+					(b) => l < b.r && l + colW - 4 > b.l && t < b.b && t + rowH - 4 > b.t,
+				);
+				if (!covered || used.has(c + ':' + r)) out.push({ c, r });
+			}
+		return out;
+	});
 	function startWidget(event: PointerEvent, w: Widget, mode: 'move' | 'size') {
 		if (!editWidgets || event.button !== 0) return;
 		event.preventDefault();
@@ -444,7 +529,7 @@
 			if (!front) return;
 			if (k === 'w') {
 				event.preventDefault();
-				closeWindow(front);
+				requestClose(front);
 			} else if (k === 'm') {
 				event.preventDefault();
 				minimize(front);
@@ -757,9 +842,20 @@
 		ondragover={(e) => {
 			e.preventDefault();
 			if (e.dataTransfer?.types.includes('Files')) fileDrop = true;
+			if (dragKey || e.dataTransfer?.types.includes('text/x-titanos-program')) {
+				programDrag = true;
+				dropBefore = null;
+				const cell = cellAt(e.clientX, e.clientY);
+				if (dragCell?.c !== cell.c || dragCell?.r !== cell.r) dragCell = cell;
+			}
 		}}
 		ondragleave={(e) => {
 			if (e.target === area) fileDrop = false;
+			// Left the desktop (not only moved onto an icon on it).
+			if (!e.relatedTarget || !area?.contains(e.relatedTarget as Node)) {
+				programDrag = false;
+				dragCell = null;
+			}
 		}}
 		ondrop={(e) => {
 			if (!dropFiles(e)) dropOn(e, null);
@@ -772,6 +868,20 @@
 		}}
 	>
 		<div class="icons" style:left="{ICON_LEFT + wm.inset.l}px">
+			{#if programDrag || dragKey}
+				<div class="drag-grid" aria-hidden="true">
+					{#each dragCells as { c, r } (c + ':' + r)}
+						<span
+							class="cell"
+							class:target={!dropBefore && dragCell?.c === c && dragCell?.r === r}
+							style:left="{c * colW}px"
+							style:top="{r * rowH}px"
+							style:width="{colW - 4}px"
+							style:height="{rowH - 4}px"
+						></span>
+					{/each}
+				</div>
+			{/if}
 			{#each icons as key (key)}
 				{@const p = byKey.get(key)}
 				{@const folder = key.startsWith('folder:') ? folderOf(key) : undefined}
@@ -780,7 +890,8 @@
 						type="button"
 						class="ico"
 						data-key={key}
-						class:drop={dropBefore === key}
+						class:drop={dropBefore === key && dragKey !== key}
+						class:lifted={dragKey === key}
 						style:left="{(places.get(key)?.c ?? 0) * colW}px"
 						style:top="{(places.get(key)?.r ?? 0) * rowH}px"
 						style:width="{colW - 4}px"
@@ -788,11 +899,18 @@
 						ondragstart={(e) => {
 							dragKey = key;
 							e.dataTransfer?.setData('text/x-titanos-program', key);
+							// The icon at its full size under the pointer (the browser shows it see-through).
+							const el = e.currentTarget as HTMLElement;
+							const box = el.getBoundingClientRect();
+							e.dataTransfer?.setDragImage(el, e.clientX - box.left, e.clientY - box.top);
 						}}
+						ondragend={endIconDrag}
 						ondragover={(e) => {
 							e.preventDefault();
 							e.stopPropagation();
-							dropBefore = key;
+							programDrag = true;
+							dropBefore = dragKey === key ? null : key;
+							dragCell = places.get(key) ?? null;
 						}}
 						ondrop={(e) => {
 							e.stopPropagation();
@@ -1223,7 +1341,7 @@
 						type="button"
 						role="menuitem"
 						onclick={() => {
-							wm.windows.filter((w) => w.app === key).forEach((w) => closeWindow(w.id));
+							wm.windows.filter((w) => w.app === key).forEach((w) => requestClose(w.id));
 							menu = null;
 						}}><span>{t('desktop.dock.closeAll')}</span></button
 					>
@@ -1472,6 +1590,9 @@
 		kinds={WIDGET_KINDS}
 	/>{/if}
 
+<!-- PLAN 66: once after the update to 0.63, for owners and administrators. -->
+<MigrationDialog />
+
 <style>
 	.desktop {
 		position: fixed;
@@ -1647,7 +1768,39 @@
 			0 1px 2px rgb(255 255 255 / 0.8);
 	}
 	.ico.drop {
-		box-shadow: inset 0 0 0 2px var(--accent);
+		box-shadow:
+			inset 0 0 0 2px var(--accent),
+			0 0 18px color-mix(in srgb, var(--accent) 45%, transparent);
+		background: color-mix(in srgb, var(--accent) 16%, transparent);
+	}
+	/* PLAN 66: the dragged icon stays faint in its old place. */
+	.ico.lifted {
+		opacity: 0.35;
+	}
+	.drag-grid {
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+	}
+	.drag-grid .cell {
+		position: absolute;
+		border: 1px dashed color-mix(in srgb, #fff 26%, transparent);
+		border-radius: 12px;
+		background: color-mix(in srgb, #fff 4%, transparent);
+	}
+	.light .drag-grid .cell {
+		border-color: color-mix(in srgb, var(--text) 30%, transparent);
+		background: color-mix(in srgb, var(--text) 4%, transparent);
+	}
+	.drag-grid .cell.target {
+		border: 2px solid var(--accent);
+		background: color-mix(in srgb, var(--accent) 18%, transparent);
+		box-shadow: 0 0 22px color-mix(in srgb, var(--accent) 45%, transparent);
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.icons > .ico {
+			transition: none;
+		}
 	}
 	:global(.menu-rule) {
 		display: block;

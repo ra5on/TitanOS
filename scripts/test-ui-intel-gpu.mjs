@@ -89,33 +89,73 @@ try {
     await page.goto(`${base}/settings/hardware`);
     const de = lang === "de";
     await page
-      .getByRole("heading", { name: de ? "Intel-Grafik: GuC/HuC" : "Intel graphics: GuC/HuC" })
+      .getByRole("heading", {
+        name: de ? "Intel-Grafik: GuC/HuC" : "Intel graphics: GuC/HuC",
+      })
       .waitFor();
     await page.getByText("Kaby Lake (Gen9.5)").waitFor();
     await page.getByText(de ? "HuC nicht geladen" : "HuC not loaded").waitFor();
-    const save = page.getByRole("button", { name: de ? "Speichern" : "Save" }).last();
+    const save = page
+      .getByRole("button", { name: de ? "Speichern" : "Save" })
+      .last();
     assert.ok(await save.isDisabled());
 
-    await page.getByRole("radio", { name: de ? /HuC laden/ : /Load HuC/ }).check();
+    await page
+      .getByRole("radio", { name: de ? /HuC laden/ : /Load HuC/ })
+      .check();
     await save.click();
-    await page.getByText(de ? "Gespeichert, wirksam nach Neustart" : "Saved, effective after a restart").waitFor();
+    await page
+      .getByText(
+        de
+          ? "Gespeichert, wirksam nach Neustart"
+          : "Saved, effective after a restart",
+      )
+      .waitFor();
     assert.deepEqual(state.puts.at(-1), { mode: "huc" });
-    await page.getByRole("button", { name: de ? "Jetzt neu starten …" : "Restart now …" }).waitFor();
+    await page
+      .getByRole("button", {
+        name: de ? "Jetzt neu starten …" : "Restart now …",
+      })
+      .waitFor();
 
     // GuC submission: a warning and a plain confirmation, nothing typed.
-    await page.getByRole("radio", { name: de ? /GuC-Submission und HuC/ : /GuC submission and HuC/ }).check();
-    await page.getByText(de ? "Gen9/Gen9.5 kennt keine GuC-Submission" : "Gen9/Gen9.5 has no GuC submission", { exact: false }).waitFor();
+    await page
+      .getByRole("radio", {
+        name: de ? /GuC-Submission und HuC/ : /GuC submission and HuC/,
+      })
+      .check();
+    await page
+      .getByText(
+        de
+          ? "Gen9/Gen9.5 kennt keine GuC-Submission"
+          : "Gen9/Gen9.5 has no GuC submission",
+        { exact: false },
+      )
+      .waitFor();
     await save.click();
     const dialog = page.getByRole("dialog");
     await dialog.waitFor();
     assert.equal(await dialog.locator("input").count(), 0);
-    await page.screenshot({ path: `${out}/confirm-${lang}-${width}.png`, fullPage: true });
-    await dialog.getByRole("button", { name: de ? "Einschalten" : "Turn on" }).click();
-    await page.getByText(de ? "Gespeichert, wirksam nach Neustart" : "Saved, effective after a restart").waitFor();
+    await page.screenshot({
+      path: `${out}/confirm-${lang}-${width}.png`,
+      fullPage: true,
+    });
+    await dialog
+      .getByRole("button", { name: de ? "Einschalten" : "Turn on" })
+      .click();
+    await page
+      .getByText(
+        de
+          ? "Gespeichert, wirksam nach Neustart"
+          : "Saved, effective after a restart",
+      )
+      .waitFor();
     assert.deepEqual(state.puts.at(-1), { mode: "guc" });
 
     const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth,
     );
     assert.ok(overflow <= 0, `page scrolls sideways by ${overflow}px`);
     // Firmware file names wrap only after "/" or "_", never inside a word.
@@ -131,7 +171,9 @@ try {
             chars.push([node.data[i], range.getBoundingClientRect().top]);
           }
         return chars.flatMap(([, top], i) =>
-          i && top > chars[i - 1][1] + 2 && !"/_".includes(chars[i - 1][0]) ? [span.textContent] : [],
+          i && top > chars[i - 1][1] + 2 && !"/_".includes(chars[i - 1][0])
+            ? [span.textContent]
+            : [],
         );
       }),
     );
@@ -139,7 +181,10 @@ try {
     assert.deepEqual(badBreaks, [], "firmware names broken mid-word");
     // From the top, so the sticky header is not drawn in the middle.
     await page.evaluate(() => window.scrollTo(0, 0));
-    await page.screenshot({ path: `${out}/hardware-${lang}-${width}.png`, fullPage: true });
+    await page.screenshot({
+      path: `${out}/hardware-${lang}-${width}.png`,
+      fullPage: true,
+    });
     await ctx.close();
   }
   assert.deepEqual(errors, []);

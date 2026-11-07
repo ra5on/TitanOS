@@ -231,7 +231,11 @@ async function desktop(path = "/", width = 1600, height = 1000) {
   await page.getByRole("menuitem", { name: /Dock bearbeiten/ }).click();
   await page.locator(".dock-edit").waitFor();
   await page.locator('.dock-edit input[type="range"]').first().fill("50");
-  for (let i = 0; i < 30 && (await frame.locator("#dock-size").inputValue()) !== "50"; i++)
+  for (
+    let i = 0;
+    i < 30 && (await frame.locator("#dock-size").inputValue()) !== "50";
+    i++
+  )
     await page.waitForTimeout(100);
   assert.equal(
     await frame.locator("#dock-size").inputValue(),

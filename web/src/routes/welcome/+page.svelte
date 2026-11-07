@@ -11,9 +11,18 @@
 	import { replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import { untrack } from 'svelte';
+	// PLAN 66: the office programs that run in the browser, preselected.
+	import OfficeApps from '#lib/webapps/OfficeApps.svelte';
+	import { loadWebApps, webapps } from '#lib/webapps/webapps.svelte.ts';
+	import { sanitizeHints } from '../storage/checks-hint.ts';
 
-	const STEPS = 3;
-	const STEP_NAMES = ['welcome.basics', 'welcome.network', 'welcome.done'] as const;
+	const STEPS = 4;
+	const STEP_NAMES = [
+		'welcome.basics',
+		'welcome.network',
+		'welcome.office',
+		'welcome.done',
+	] as const;
 	// The browser tab names the page like every other one.
 	$effect(() => {
 		const shown = t('welcome.title');
@@ -156,6 +165,40 @@
 		if (step === STEPS) untrack(check);
 	});
 
+	const officeApps = $derived(webapps.apps.filter((a) => a.default));
+	let office = $state<string[] | null>(null);
+	let officeBusy = $state(false);
+	let officeError = $state('');
+	$effect(() => {
+		if (step !== 3) return;
+		untrack(() => {
+			void loadWebApps().then(() => {
+				// Preselected; a choice made before (pending) stays as it was.
+				const pending = officeApps.filter((a) => a.pending).map((a) => a.id);
+				office ??= pending.length ? pending : officeApps.map((a) => a.id);
+			});
+		});
+	});
+	/** POST /webapps/defaults/install with the chosen apps; [] records "no, thanks". */
+	async function saveOffice(chosen: string[]) {
+		officeBusy = true;
+		officeError = '';
+		try {
+			await api.post('/webapps/defaults/install', {
+				apps: chosen.filter((id) => !officeApps.find((a) => a.id === id)?.installed),
+			});
+			// Answered here: the offer after the update (MigrationDialog) does not ask again.
+			const hints = { ...sanitizeHints(session.hints), 'webapps-0.63': true };
+			await api.put('/preferences/hints', hints).catch(() => {});
+			session.hints = hints;
+			step = 4;
+		} catch (err) {
+			if (err instanceof ApiError && err.code === 'read_only') step = 4;
+			else officeError = apiErrorText(err);
+		}
+		officeBusy = false;
+	}
+
 	async function saveBasics(event: SubmitEvent) {
 		event.preventDefault();
 		error = '';
@@ -277,6 +320,43 @@
 					>
 				</div>
 			</div>
+		{:else if step === 3}
+			<div class="body">
+				<h2>{t('welcome.office')}</h2>
+				<p class="muted">{t('welcome.officeText')}</p>
+				{#if !webapps.loaded}
+					<p class="muted" role="status">{t('welcome.checking')}</p>
+				{:else if webapps.unavailable || !officeApps.length}
+					<p class="muted">{t('welcome.officeUnavailable')}</p>
+				{:else}
+					<OfficeApps
+						apps={officeApps}
+						bind:selected={() => office ?? [], (v) => (office = v)}
+						disabled={officeBusy}
+					/>
+					{#if !webapps.volume}<p class="muted small">{t('welcome.officeNoVolume')}</p>{/if}
+					<p class="muted small">{t('welcome.officeLater')}</p>
+				{/if}
+				{#if officeError}<p class="notice-error" role="alert">{officeError}</p>{/if}
+				<div class="actions">
+					<button type="button" class="btn" onclick={() => (step = 2)}>{t('welcome.back')}</button>
+					{#if webapps.loaded && !webapps.unavailable && officeApps.length}
+						<button type="button" class="btn" disabled={officeBusy} onclick={() => saveOffice([])}
+							>{t('welcome.skip')}</button
+						>
+						<button
+							type="button"
+							class="btn btn-primary"
+							disabled={officeBusy || !(office ?? []).length}
+							onclick={() => saveOffice(office ?? [])}>{t('welcome.officeInstall')}</button
+						>
+					{:else}
+						<button type="button" class="btn btn-primary" onclick={() => (step = 4)}
+							>{t('welcome.next')}</button
+						>
+					{/if}
+				</div>
+			</div>
 		{:else}
 			<div class="body">
 				<h2>{t('welcome.done')}</h2>
@@ -307,7 +387,7 @@
 					{/each}
 				</ul>
 				<div class="actions">
-					<button type="button" class="btn" onclick={() => (step = 2)}>{t('welcome.back')}</button>
+					<button type="button" class="btn" onclick={() => (step = 3)}>{t('welcome.back')}</button>
 					<a class="btn btn-primary" href="/">{t('welcome.finish')}</a>
 				</div>
 			</div>

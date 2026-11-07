@@ -134,8 +134,22 @@ async function context({
   await ctx.route("**/api/v1/vms**", (r) => {
     const path = new URL(r.request().url()).pathname;
     const method = r.request().method();
-    if (path === "/api/v1/vms/virtio") return r.fulfill({json:{id:"virtio-fixture",volume:"Data",name:"virtio-win.iso",phase:"done",bytes:100,total:100,written:100,outputBytes:100,output:"/mnt/Data/iso/virtio-win.iso"}});
-    if (path === "/api/v1/vms/imports") return r.fulfill({json:{jobs:[],chunkBytes:8<<20}});
+    if (path === "/api/v1/vms/virtio")
+      return r.fulfill({
+        json: {
+          id: "virtio-fixture",
+          volume: "Data",
+          name: "virtio-win.iso",
+          phase: "done",
+          bytes: 100,
+          total: 100,
+          written: 100,
+          outputBytes: 100,
+          output: "/mnt/Data/iso/virtio-win.iso",
+        },
+      });
+    if (path === "/api/v1/vms/imports")
+      return r.fulfill({ json: { jobs: [], chunkBytes: 8 << 20 } });
     if (path === "/api/v1/vms/host")
       return r.fulfill({
         json: {
@@ -340,7 +354,9 @@ try {
     const { ctx, page } = await context({ theme, width, locale });
     await page.goto(`${base}/vms/new`);
     const name = page.locator('input[maxlength="160"]');
-    await name.fill(locale === "de" ? "Debian Entwicklung" : "Debian development");
+    await name.fill(
+      locale === "de" ? "Debian Entwicklung" : "Debian development",
+    );
     await page.locator("#vm-vcpus").fill("4");
     await page.locator("#vm-memory").fill("8");
     await page.locator("#vm-iso").fill("/mnt/Data/isos/debian-13.iso");

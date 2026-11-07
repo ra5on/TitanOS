@@ -1,4 +1,5 @@
 <script lang="ts">
+	import MigrationDialog from '../webapps/MigrationDialog.svelte';
 	// PLAN 61: TitanOS on the phone – programs as a grid like a home screen;
 	// each opens full screen with a way back (PhoneBar).
 	import { onMount } from 'svelte';
@@ -67,6 +68,12 @@
 	// entry of its own, so the phone's Back returns to the grid).
 	const remote = $derived(page.state.remote ? (byKey.get(page.state.remote) ?? null) : null);
 	function open(p: Program) {
+		// PLAN 66: a web app opens full screen above the grid, like a Docker app.
+		if (p.kind === 'webapp')
+			return void goto(page.url.pathname, {
+				state: { webapp: { id: p.key.slice(7) } },
+				shallow: true,
+			});
 		if (p.kind !== 'docker') return void goto(p.href);
 		void goto(page.url.pathname, { state: { remote: p.key }, shallow: true });
 	}
@@ -139,6 +146,9 @@
 		{/each}
 	</div>
 </div>
+
+<!-- PLAN 66: once after the update to 0.63, for owners and administrators. -->
+<MigrationDialog />
 
 <style>
 	.load-failed {

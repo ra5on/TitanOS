@@ -261,11 +261,16 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
     !puts.at(-1).icons.includes("docker:immich") && puts.at(-1).customIcons,
     "icon removed in the saved desktop",
   );
-  // The Docker app window: external address, open-in-tab button.
+  // The Docker app window: like an app (PLAN 66) – name, no address, ⋯ menu, open-in-tab button.
   await page.locator(".ico", { hasText: "jellyfin" }).first().click();
   await page
-    .locator("section.win .addr", { hasText: "jellyfin.nas.local" })
+    .locator('section.win .titlebar button[aria-label="Mehr"]')
     .waitFor();
+  assert.equal(
+    await page.locator("section.win .addr").count(),
+    0,
+    "no address",
+  );
   await page.waitForTimeout(800);
   await shot(page, "10-app-fenster");
   await ctx.close();
@@ -319,8 +324,22 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
           manages: true,
           version: "0.44.0",
           nodes: [
-            { id: "n1", name: "titan", self: true, online: true, version: "0.44.0", compatible: true },
-            { id: "n2", name: "thor", self: false, online: true, version: "0.44.0", compatible: true },
+            {
+              id: "n1",
+              name: "titan",
+              self: true,
+              online: true,
+              version: "0.44.0",
+              compatible: true,
+            },
+            {
+              id: "n2",
+              name: "thor",
+              self: false,
+              online: true,
+              version: "0.44.0",
+              compatible: true,
+            },
           ],
         },
       }),
@@ -330,7 +349,9 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   const trigger = bar.getByRole("button", { name: /titan/ });
   await trigger.waitFor();
   assert.ok((await trigger.innerText()).includes("titan"), "node name shown");
-  const menuBtn = await bar.getByRole("button", { name: "Alle Programme" }).boundingBox();
+  const menuBtn = await bar
+    .getByRole("button", { name: "Alle Programme" })
+    .boundingBox();
   const node = await trigger.boundingBox();
   assert.ok(
     node.x > menuBtn.x && node.x - (menuBtn.x + menuBtn.width) < 30,
@@ -341,7 +362,9 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   await item.waitFor();
   const box = await item.boundingBox();
   const hit = await page.evaluate(
-    ({ x, y }) => document.elementFromPoint(x, y)?.closest("[role=menuitemradio]")?.textContent ?? "",
+    ({ x, y }) =>
+      document.elementFromPoint(x, y)?.closest("[role=menuitemradio]")
+        ?.textContent ?? "",
     { x: box.x + box.width / 2, y: box.y + box.height / 2 },
   );
   assert.ok(hit.includes("thor"), "node menu visible, not clipped by the bar");
@@ -412,6 +435,61 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   await page.waitForTimeout(400);
   const after = await icon.boundingBox();
   assert.ok(after.x - before.x > 200, "icon moved freely to the right");
+  // PLAN 66: while an icon is dragged the grid shows, the target cell is
+  // marked, the icon stays faint in its place; all gone after the drop.
+  {
+    const moving = page.locator(".icons > .ico", { hasText: "Freigaben" });
+    const box = await moving.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + 24);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 20, box.y + 44, { steps: 4 });
+    await page.mouse.move(
+      area.x + area.width * 0.4,
+      area.y + area.height * 0.55,
+      { steps: 12 },
+    );
+    await page.locator(".drag-grid .cell.target").waitFor({ timeout: 3000 });
+    assert.ok(
+      (await page.locator(".drag-grid .cell").count()) > 20,
+      "grid of all cells",
+    );
+    assert.equal(
+      await page.locator(".drag-grid .cell.target").count(),
+      1,
+      "one target cell",
+    );
+    assert.equal(
+      await page.locator(".ico.lifted").count(),
+      1,
+      "dragged icon faint in place",
+    );
+    // The grid reaches down to the dock: less than one row is left above it.
+    const cells = await page
+      .locator(".drag-grid .cell")
+      .evaluateAll((els) =>
+        Math.max(...els.map((e) => e.getBoundingClientRect().bottom)),
+      );
+    const dockTop =
+      (await page.locator(".dock").first().boundingBox())?.y ??
+      area.y + area.height;
+    assert.ok(
+      dockTop - cells < 40,
+      `grid ends at the dock (${dockTop - cells} px)`,
+    );
+    await shot(page, "11b-raster-beim-verschieben");
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+    assert.equal(
+      await page.locator(".drag-grid").count(),
+      0,
+      "grid gone after the drop",
+    );
+    assert.equal(
+      await page.locator(".ico.lifted").count(),
+      0,
+      "icon back to full strength",
+    );
+  }
   // Widgets: right click, hide all; back from the desktop menu.
   await page.locator(".widget").first().click({ button: "right" });
   await page.getByRole("menuitem", { name: "Widget entfernen" }).waitFor();
@@ -468,7 +546,11 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   await page.keyboard.press("ArrowLeft");
   assert.notEqual((await active()).label, second, "arrow left goes back");
   await page.keyboard.press("ArrowUp");
-  assert.equal((await active()).tag, "INPUT", "arrow up from the first row: search");
+  assert.equal(
+    (await active()).tag,
+    "INPUT",
+    "arrow up from the first row: search",
+  );
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("Enter");
   await page.locator("section.win").first().waitFor();
@@ -478,16 +560,30 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
     { timeout: 10000 },
   );
   // Inside the window Alt+W closes it; the focus comes back to the desktop.
+  // The page in the frame must have loaded (it forwards the desktop keys).
+  await page
+    .frameLocator("section.win iframe")
+    .first()
+    .locator("main.in-window")
+    .waitFor({ timeout: 15000 });
   await page.keyboard.press("Alt+w");
   await page.locator("section.win").first().waitFor({ state: "detached" });
   await page.waitForTimeout(100);
-  assert.equal((await active()).opens, "launcher", "focus back on the menu button");
+  assert.equal(
+    (await active()).opens,
+    "launcher",
+    "focus back on the menu button",
+  );
   // The dock: arrow keys move along it.
   const dockButtons = page.locator("nav.dock button.it");
   await dockButtons.first().focus();
   await page.keyboard.press("ArrowRight");
   assert.equal(
-    await page.evaluate(() => [...document.querySelectorAll("nav.dock button.it")].indexOf(document.activeElement)),
+    await page.evaluate(() =>
+      [...document.querySelectorAll("nav.dock button.it")].indexOf(
+        document.activeElement,
+      ),
+    ),
     1,
     "dock: arrow right",
   );
@@ -503,7 +599,9 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   await page.locator(".icons > .ico", { hasText: "Docker" }).first().click();
   const unnamed = await page
     .locator("section.win header.titlebar button")
-    .evaluateAll((els) => els.filter((b) => !b.getAttribute("aria-label")).length);
+    .evaluateAll(
+      (els) => els.filter((b) => !b.getAttribute("aria-label")).length,
+    );
   assert.equal(unnamed, 0, "title bar buttons are labelled");
   await shot(page, "15-tastatur");
   await ctx.close();
@@ -542,8 +640,9 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
     await page.setViewportSize({ width, height: 1000 });
     await page.waitForFunction(
       (before) =>
-        document.querySelector('.ico[data-key="app:docker"]')?.getAttribute("style") !==
-        before,
+        document
+          .querySelector('.ico[data-key="app:docker"]')
+          ?.getAttribute("style") !== before,
       docker,
       { timeout: 5000 },
     );
@@ -556,7 +655,11 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   assert.ok(colW > 0 && rowH > 0, "stored places shown at 1600");
   await resize(900);
   const narrow = await places();
-  assert.notEqual(narrow["app:docker"], wide["app:docker"], "pulled inside at 900");
+  assert.notEqual(
+    narrow["app:docker"],
+    wide["app:docker"],
+    "pulled inside at 900",
+  );
   assert.equal(narrow["app:files"], wide["app:files"], "files stays at 900");
   await resize(1600);
   assert.deepEqual(await places(), wide, "1600 → 900 → 1600 keeps every place");
@@ -565,13 +668,15 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   const area = await page.locator(".desk-area").boundingBox();
   const icons = await page.locator(".icons").boundingBox();
   const putsBefore = puts.length;
-  await page.locator('.ico[data-key="app:shares"]').dragTo(page.locator(".desk-area"), {
-    targetPosition: {
-      x: icons.x - area.x + 2 * colW + colW / 2,
-      y: icons.y - area.y + 4 * rowH + rowH / 2,
-    },
-    force: true,
-  });
+  await page
+    .locator('.ico[data-key="app:shares"]')
+    .dragTo(page.locator(".desk-area"), {
+      targetPosition: {
+        x: icons.x - area.x + 2 * colW + colW / 2,
+        y: icons.y - area.y + 4 * rowH + rowH / 2,
+      },
+      force: true,
+    });
   // Saved a moment after the last change (lib/desktop/wm: 1.5 s).
   await page.waitForTimeout(2200);
   assert.ok(puts.length > putsBefore, "the move is saved");
@@ -583,7 +688,11 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   const back = await places();
   for (const key of ["app:files", "app:docker", "app:storage"])
     assert.equal(back[key], wide[key], key + " back at its place at 1600");
-  assert.equal(back["app:shares"], `${2 * colW}px,${4 * rowH}px`, "moved icon at 1600");
+  assert.equal(
+    back["app:shares"],
+    `${2 * colW}px,${4 * rowH}px`,
+    "moved icon at 1600",
+  );
   await shot(page, "14-symbole-plaetze");
   await ctx.close();
 }

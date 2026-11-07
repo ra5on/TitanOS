@@ -1,4 +1,6 @@
 <script lang="ts">
+	// PLAN 66: programs that run directly in the browser, above the Docker catalog.
+	import BrowserApps from '#lib/webapps/BrowserApps.svelte';
 	import AppIcon from '#lib/components/AppIcon.svelte';
 	import {
 		api,
@@ -192,6 +194,8 @@
 		{t('apps.dockerOff')} <a href="/docker">{t('apps.dockerOpen')}</a>
 	</p>
 {/if}
+
+<BrowserApps />
 
 {#if sourcesOpen && store}
 	<section class="tile sources" aria-labelledby="sources-title">

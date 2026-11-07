@@ -1,29 +1,92 @@
 # Web-Apps direkt (PLAN 66)
 
-Seit 0.63.0 laufen Programme, die es als reine Browser-Seite gibt (die Craft-Programme von storytold: WordCraft, GridCraft, PdfCraft u. a.), **direkt im Browser** im TitanOS-Fenster: kein Stream, keine Last auf dem NAS, auch über Cloudflare und am Handy. TitanOS liefert ihre Dateien selbst aus und reicht Dateien hinein und wieder heraus („Öffnen mit“, Standard-Apps, Speichern ins Original). Entscheidungen des Projektinhabers vom 7.11.2026 (PLAN 66, 66-1, 66-2).
+Seit 0.63.0 laufen Programme, die es als reine Browser-Seite gibt (die Craft-Programme von storytold: WordCraft, GridCraft, PdfCraft u. a.), **direkt im Browser** im TitanOS-Fenster: kein Stream, keine Last auf dem NAS, auch über Cloudflare und am Handy. TitanOS liefert ihre Dateien selbst aus und reicht Dateien hinein und wieder heraus („Öffnen mit“, Standard-Apps, Speichern ins Original). Entscheidungen des Projektinhabers vom 7.11.2026 (PLAN 66, 66-1, 66-2), dazu „Docker-Versionen ersetzen“ (7.11.2026).
 
 ## Katalog und Herkunft
 
-- `webapps/catalog.json` im Repository: je App `id` (z. B. `wordcraft`), `name`, `repo` (`storytold/wordcraft`), `version`, `upstreamAsset` (`wordcraft-web-0.16.0.zip`), `sha256` des Upstream-Archivs, `bridge` (`host` = Craft-Host-Brücke `craft-web-host`, `adapter` = ohne Brücke), `types` (Dateiendungen) und `default` (gehört zur Grundausstattung). Grundausstattung: WordCraft (`docx doc odt rtf`), GridCraft (`xlsx xls ods csv`), PdfCraft (`pdf`).
-- Die Release-CI lädt jedes Archiv von GitHub, prüft den SHA-256 aus dem Katalog, prüft den Inhalt (nur reguläre Dateien, keine Pfade mit `..`/absolut, Größe ≤ 64 MiB entpackt, enthält `index.html`) und legt es als `titanos-webapp-<id>-<version>.zip` ins Release; das signierte `manifest.json` bekommt `"webapps": [{"id","version","asset","sha256","size"}]` (optional, ältere titand ignorieren es).
-- titand lädt eine App nur aus dem Manifest **seines eigenen Releases** (Signatur wie beim Abbild der Fernansicht), prüft Größe und SHA-256, entpackt sicher nach `<volume>/.titanos/webapps/<id>/<version>/` (root, 0755/0644) und merkt sich installierte Apps in `/config/webapps.json` (`{"installed":[{"id","version","volume"}]}`). Nie auf dem Stick. Im Entwicklungsmodus: Archive aus einem lokalen Ordner (`-webapps-dir`), Ablage in einem Temp-Ordner.
+- `webapps/catalog.json` im Repository (Kopie in `backend/internal/webapps/catalog.json`, per `go:embed` in titand; ein Test hält beide gleich): je App `id` (z. B. `wordcraft`; Kleinbuchstaben, beginnt nie mit `_`), `name`, `repo` (`storytold/wordcraft`), `version`, `upstreamAsset` (`wordcraft-web-0.16.0.zip`), `sha256` und `size` des Upstream-Archivs, `license`, `bridge` (`host` = Craft-Host-Brücke `craft-web-host`, `adapter` = ohne Brücke), `types` (Dateiendungen ohne Punkt, klein) und `default` (gehört zur Grundausstattung). Grundausstattung: WordCraft (`docx doc odt rtf`), GridCraft (`xlsx xls ods csv`), PdfCraft (`pdf`).
+- Stand 0.63.0 (jeweils neuestes Release, SHA-256 mit den `SHA256SUMS.txt` von storytold abgeglichen):
+
+| id | Version | Brücke | Typen | Canvas im `index.html` |
+|---|---|---|---|---|
+| wordcraft | 0.16.0 | host | docx doc odt rtf | `wordcraft_canvas` |
+| gridcraft | 0.17.0 | host | xlsx xls ods csv | `gridcraft_canvas` |
+| pdfcraft | 0.19.0 | host | pdf | **`pdfcraft`** |
+| deckcraft | 0.16.0 | host | pptx potx ppsx | `deckcraft_canvas` |
+| cadcraft | 0.18.0 | host | dxf | `cadcraft_canvas` |
+| figcraft | 0.16.0 | host | figcraft | `figcraft_canvas` |
+| filmcraft | 0.18.0 | host | fcproj | `filmcraft_canvas` |
+| lightcraft | 0.19.0 | host | – | `lightcraft_canvas` |
+| vectorcraft | 0.22.0 | adapter | svg ai | `vectorcraft_canvas` |
+| designcraft | 0.18.0 | adapter | – | `designcraft_canvas` |
+| effectcraft | 0.22.0 | adapter | ecproj | `effectcraft_canvas` |
+| soundcraft | 0.18.0 | adapter | – | `soundcraft_canvas` |
+| texturecraft | 0.4.0 | adapter | – | `texturecraft_canvas` |
+| materialcraft | 0.2.0 | adapter | – | `materialcraft_canvas` |
+
+- Die Release-CI (`scripts/fetch-webapps.py`, Schritt „Web apps“ in `release.yml`) lädt jedes Archiv von `https://github.com/<repo>/releases/download/v<version>/<upstreamAsset>` (ohne GitHub-API), prüft Größe und SHA-256 aus dem Katalog und den Inhalt (Regeln wie in titand, siehe unten) und legt es **unverändert** als `titanos-webapp-<id>-<version>.zip` ins Release – der SHA-256 bleibt der des Katalogs. Das signierte `manifest.json` bekommt `"webapps": [{"id","version","asset","sha256","size"}]` (optional, ältere titand ignorieren es); `verify-release.py` verlangt genau die Apps des Katalogs mit dessen Version, SHA-256 und Größe. Lizenz-, NOTICE-, ATTRIBUTION-/ASSETS- und Schrift-Lizenzdateien (OFL-1.1) jeder App kommen ins Lizenzarchiv des Releases unter `webapps/<id>-<version>/` (fehlen `LICENSE-MIT`/`LICENSE-APACHE` im Archiv, aus dem Repository am Tag), `sources.txt` verlinkt den Quellstand am Tag. Mit `WEBAPPS_DIR` nimmt `make-release.sh` die geprüften Archive aus einem Ordner, mit `WEBAPPS_SOURCE` holt es sie aus einem lokalen Ordner (Tests).
+- titand lädt eine App nur aus dem Manifest **seines eigenen Releases** (Signatur wie beim Abbild der Fernansicht, `plugins.Manager.ReleaseManifest`/`DownloadReleaseAsset`), prüft Größe und SHA-256, verlangt dieselbe Version wie sein Katalog (`release_mismatch` sonst) und entpackt sicher:
+  - jeder Eintrag liegt unter genau `<id>-web-<version>/` (dieser Ordner entfällt), nur reguläre Dateien und Ordner (keine Links, Geräte), keine absoluten Namen, keine Teile `.`/`..`/leer, kein `\` oder NUL, keine doppelten Namen (ohne Groß-/Kleinschreibung), höchstens **2000 Dateien** und **256 MiB entpackt** (gezählt beim Lesen, nicht nach den Angaben im Archiv), `index.html` oben. Die ursprüngliche Grenze von 64 MiB war zu klein: EffectCraft 74 MB, VectorCraft 93 MB, LightCraft 100 MB (mit vorkomprimierten Kopien).
+  - Ablage: `<volume>/.titanos/webapps/<id>/<version>/` (über `volumedata.Open`: Ordner root 0700, Dateien 0644; titand liefert sie selbst aus), erst in `.staging-…`, dann umbenannt; danach werden andere Versionen dieser App und das heruntergeladene Archiv (`downloads/`) entfernt. Zu jeder komprimierbaren Datei ab 1 KiB (`.js .mjs .wasm .css .json .svg .txt .md .webmanifest .ttf .otf .map`) legt titand beim Installieren eine `.gz`-Kopie an (außer `index.html`), damit Ausliefern keine CPU kostet.
+  - Volume: das der bereits installierten Apps, sonst Dockers Volume, sonst das erste eingebundene; **nie der Stick**, nie RAM/Overlay (vor dem Laden mindestens 768 MiB frei auf dem Volume).
+- `/config/webapps.json` (optional, neu): `{"installed":[{"id","version","volume","icon"}],"pending":["wordcraft",…],"offered":true}`. `icon` ist die Symboldatei relativ zum App-Ordner (aus `<link rel="icon">` in `index.html`, sonst `favicon.svg`/`favicon.png`/`icon-256.png`), `pending` die Apps, die auf das erste Volume warten, `offered`, dass der Update-Hinweis gesendet oder beantwortet wurde. titand liest die Datei nur beim Start und schreibt sie nur bei Änderungen (Installieren, Entfernen, Wahl).
+- **Entwicklungsmodus** (`titand -dev -webapps-dir <ordner>`): Archive aus dem Ordner (`titanos-webapp-<id>-<version>.zip` oder der Upstream-Name), geprüft gegen SHA-256 und Größe des Katalogs; Ablage in einem Temp-Ordner (`titand-webapps-*`, beim Beenden gelöscht), nie auf einem Volume; installierte Apps gelten nach einem Neustart als nicht installiert.
 
 ## API
 
-- `GET /api/v1/webapps` (jedes Konto): `{"apps":[{"id","name","version","installed":bool,"state":"missing|downloading|ready|error","progress","error","bridge","types":[...],"default":bool,"url":"/webapps/<id>/<version>/"}],"volume":"<name>"}`.
-- `POST /api/v1/webapps/{id}/install`, `DELETE /api/v1/webapps/{id}` (Administratoren), `POST /api/v1/webapps/defaults/install` (Grundausstattung, für Ersteinrichtung und Hinweis nach Update).
-- `GET /webapps/{id}/{version}/{path...}`: die Dateien der App, **ohne Anmeldung** (öffentlicher Open-Source-Code; der abgeschottete Rahmen sendet keine Cookies), nur für installierte Apps, richtige MIME-Typen (`.wasm` = `application/wasm`), `Cache-Control: immutable` für Dateien mit Hash, `no-cache` für `index.html`, gzip, Kopfzeilen `Content-Security-Policy: sandbox allow-scripts allow-downloads allow-modals allow-popups; frame-ancestors 'self'`, `X-Content-Type-Options: nosniff`, `Cross-Origin-Resource-Policy: cross-origin` und `Access-Control-Allow-Origin: *` (der abgeschottete Rahmen hat den Ursprung `null`; ES-Module und `.wasm` brauchen dann CORS – die Dateien sind ohnehin öffentlich). `index.html` liefert titand ergänzt aus: `data-host="page"` am Canvas der App (Craft-Brücke im selben Dokument) und `<script src="/webapps/_host/host.js">` vor dem App-Skript.
-- `GET /webapps/_host/host.js`: der TitanOS-Vermittler im abgeschotteten Dokument (Teil der Weboberfläche, statisch).
-- Dateien: Lesen über `GET /api/v1/files/download?path=…` (wie bisher), Schreiben über **neu** `PUT /api/v1/files/content?path=…&expect=<mtime-ns|none>` (Rumpf = Datei, Rechte des Kontos wie beim Hochladen, atomar über temp + rename, `409 file_changed` wenn sich die Datei seit `expect` geändert hat, `expect=none` = neue Datei, darf nicht existieren), Antwort `{"mtime":…,"size":…}`.
+Alle Antworten von `GET /api/v1/webapps` und den Aktionen haben dieselbe Form:
+
+```json
+{
+  "apps": [{
+    "id": "wordcraft", "name": "WordCraft", "version": "0.16.0",
+    "installed": true, "state": "ready", "progress": 1,
+    "bridge": "host", "types": ["docx","doc","odt","rtf"], "default": true,
+    "pending": false, "url": "/webapps/wordcraft/0.16.0/",
+    "icon": "/webapps/wordcraft/0.16.0/wordcraft-fa59e09a3f921e03.ico",
+    "size": 22269466, "license": "MIT OR Apache-2.0", "repo": "storytold/wordcraft"
+  }],
+  "volume": "data",
+  "docker": [{"app": "wordcraft", "webapp": "wordcraft", "running": true, "image": "ghcr.io/storytold/wordcraft:0.15.0"}],
+  "migration": {"running": false, "started": "…", "finished": "…", "install": ["wordcraft"],
+                "items": [{"app": "wordcraft", "webapp": "wordcraft", "state": "removed"}]}
+}
+```
+
+- `state`: `missing` | `downloading` (Laden und Entpacken; `progress` 0–1, 1 = wird entpackt) | `ready` | `error`. `error` ist ein Code: `no_volume`, `volume_unavailable` (installiert, aber das Volume ist nicht eingebunden), `not_in_release` (das Release dieser titand bringt die App nicht, z. B. Entwicklungsstand), `download_failed`, `invalid_archive`, `install_failed`, `release_mismatch`. Schlägt ein Update fehl, bleibt die alte Version `ready` und `error` nennt den Code. `version` ist bei installierten Apps die installierte, sonst die des Katalogs. `url`/`icon` nur bei `ready`; `icon` fehlt, wenn die App keins hat (Oberfläche zeichnet einen Buchstaben). `pending`: wartet auf ein Volume. `GET` liest keine Platte.
+- `docker` und `migration` nur für Besitzer/Administratoren (Benutzer: `[]` und `null`).
+- `GET /api/v1/webapps` (jedes Konto).
+- `POST /api/v1/webapps/{id}/install` (Administratoren): startet im Hintergrund, Antwort 202. Fehler: `404 webapp_unknown`.
+- `DELETE /api/v1/webapps/{id}` (Administratoren): entfernt Eintrag und Dateien. `404 webapp_not_installed`, `409 webapp_busy` (wird gerade installiert).
+- `POST /api/v1/webapps/defaults/install` (Administratoren), Rumpf optional `{"apps":["wordcraft",…]}`: ohne Rumpf die Grundausstattung; ohne eingebundenes Volume merkt sich titand die Wahl als `pending` und installiert, sobald eines eingebunden ist (Prüfung alle 30 s im RAM). `{"apps":[]}` vermerkt nur die Antwort (`offered`, kein Hinweis mehr). Ersteinrichtung und der Knopf im Hinweis rufen diese Route.
+- `POST /api/v1/webapps/migrate` (Administratoren, wie „App entfernen“ gesperrt während einer Anwendungssicherung) `{"install":["wordcraft"],"removeDocker":["wordcraft"]}`: installiert die Web-Apps und entfernt danach die genannten Docker-Apps. Jede Docker-App muss in `docker` stehen (`400 webapp_not_craft_docker` sonst) und ihre Web-App in `install` oder schon installiert sein (`400 webapp_not_installed`); `400 webapp_unknown` bei unbekannter id, `409 webapp_busy` während eine andere Umstellung läuft. Eine Docker-App wird **erst entfernt, wenn ihre Web-App fertig installiert ist**; scheitert die Installation, bleibt sie (`kept`). Fortschritt in `migration.items[].state`: `waiting`, `removing`, `removed`, `kept`, `failed` (mit `error`). Nur im RAM; ein Neustart von titand bricht eine laufende Umstellung ab (Docker-Apps bleiben dann stehen).
+  - Entfernen ist das normale „App entfernen“ **ohne Daten löschen**: Fernansichten der App beenden, `docker compose down --remove-orphans` (Container und Netzwerke weg; benannte Volumes, gebundene Ordner, `.titanos`-/App-Datenordner auf dem Volume und Abbilder bleiben), Compose-Datei aus `/config/apps/<name>` löschen, HTTPS-Name der App vergessen. Daten muss man danach bei Bedarf selbst unter Docker löschen.
+- Erkennung der Docker-Versionen (`webapps.DetectDocker`): nur von TitanOS verwaltete Apps (Compose-Datei in `/config`), nur wenn Docker antwortet. Eine App zählt, wenn **jeder** ihrer Container dieselbe Craft-App ist – Abbild `storytold/<id>` (Docker Hub, `ghcr.io/storytold/…`) bzw. ein Abbild, dessen letzter Teil `<id>`, `<id>-web`, `<id>-app` oder `<id>_web` heißt, oder ein Containername dieser Form (nicht mit Abbildern wie postgres, mysql, mariadb, redis, mongo, valkey oder `…server…`) – oder sie keine Container hat und so heißt. `-server` zählt nie (FigCraft-Server ist nicht die App). Apps mit weiteren Diensten (Datenbank, Proxy) werden nie angeboten.
+- `GET /webapps/{id}/{version}/{path...}`: die Dateien der App, **ohne Anmeldung** (öffentlicher Open-Source-Code; der abgeschottete Rahmen sendet keine Cookies), nur für installierte Apps in genau dieser Version und nur bei eingebundenem Volume, sonst 404. Keine Ordnerlisten, keine Dateien oder Ordner, die mit `.` beginnen (`.htaccess`), keine Links; `index.html.gz`/`.br` direkt nie.
+  - MIME fest nach Endung (`.wasm` = `application/wasm`, `.js`/`.mjs` = `text/javascript; charset=utf-8`, Schriften `font/*`, `.webmanifest`, Bilder; Unbekanntes `application/octet-stream`).
+  - `Cache-Control: public, max-age=31536000, immutable` für **alle Dateien außer `index.html`** – die Version steht in der Adresse, keine Datei darunter ändert sich (LightCraft hat Dateinamen ohne Hash; die Regel „Dateien mit Hash“ wäre falsch). `index.html`: `no-cache`.
+  - Komprimiert: liegt `<datei>.br` bzw. `<datei>.gz` daneben und erlaubt der Browser es (`Accept-Encoding`, `q=0` gilt als nein), kommt diese mit `Content-Encoding` und `Vary: Accept-Encoding` (dann ohne `Content-Length`); nie für `index.html`. Nichts wird beim Ausliefern komprimiert.
+  - Kopfzeilen jeder Antwort: `Content-Security-Policy: sandbox allow-scripts allow-downloads allow-modals allow-popups; frame-ancestors 'self'`, `X-Content-Type-Options: nosniff`, `Cross-Origin-Resource-Policy: cross-origin`, `Access-Control-Allow-Origin: *` (der abgeschottete Rahmen hat den Ursprung `null`; ES-Module und `.wasm` brauchen dann CORS). Die CSP-Sandbox gilt auch, wenn eine Datei (z. B. ein SVG) außerhalb des Rahmens geöffnet wird: kein Zugriff auf den TitanOS-Ursprung. Die allgemeinen Kopfzeilen von titand (`X-Frame-Options: SAMEORIGIN`, `Referrer-Policy`) kommen dazu; die CSP der Oberfläche nicht.
+  - `index.html` liefert titand ergänzt aus: bei `bridge: host` `data-host="page"` am **ersten `<canvas>`** (falls es noch keins hat; PdfCraft heißt `id="pdfcraft"`), und bei allen Apps `<script src="/webapps/_host/host.js" data-app="<id>" data-bridge="host|adapter"></script>` **im `<head>`** direkt vor dem ersten `<script>` (bei Trunk-Builds das Modul-Skript im Kopf) bzw. vor `</head>`, wenn das erste Skript erst im `<body>` steht (LightCraft, EffectCraft, FilmCraft, SoundCraft). Sonst bleibt die Datei unverändert (auch die SRI-`integrity`-Angaben).
+- `GET /webapps/_host/{file}`: der TitanOS-Vermittler im abgeschotteten Dokument (`web/static/webapps/_host/host.js`, Teil der Weboberfläche, ohne Anmeldung). Eigener Handler: nur `.js`-Dateien, die in der eingebetteten Oberfläche unter `webapps/_host/` liegen, als `text/javascript; charset=utf-8`, `no-cache`, mit `Access-Control-Allow-Origin: *` und `nosniff`; sonst 404 (nie die `index.html` der Oberfläche, die der Browser wegen `nosniff` still verwerfen würde). `_host` ist nie eine App-id; die Route ist spezifischer als die der Apps.
+- Dateien: Lesen über `GET /api/v1/files/download?root=<id>&path=…` (wie bisher), Schreiben über **neu** `PUT /api/v1/files/content?root=<id>&path=<pfad>&expect=<mtime-ns|modified|none>`:
+  - Rumpf = Datei (geht direkt auf das Volume, nichts im RAM), `Content-Length` nötig (`411 length_required`), höchstens 2 GiB (`413 too_large`). Rechte des Kontos wie beim Hochladen (beschreibbare Wurzel; Stick und nur lesbare Freigaben `403 read_only_share`), Pfadprüfung wie beim Schreiben über MCP (keine geheimen/geschützten Pfade, Links werden am Ziel gespeichert, wenn es in der Wurzel liegt), freier Platz geprüft (`507 no_space`; Kontingente der Freigaben sind Projekt-Quotas des Kernels, die Teil-Datei erbt sie, ein Überschreiten endet ebenfalls in `507 no_space`).
+  - `expect`: Nanosekunden seit 1970 als Ziffern (aus `mtime` einer früheren Antwort), **oder** die RFC-3339-Zeit `modified` aus der Dateiliste (die ist auf Sekunden gekürzt; dann wird auf Sekunden verglichen), **oder** `none` (neue Datei, darf nicht existieren: `409 file_exists`). Bei Links gilt auch die Zeit des Links selbst (die Liste zeigt sie). Passt die Zeit nicht oder ist die Datei inzwischen weg: `409 file_changed`. Ungültiges `expect`: `400 bad_request`.
+  - Schreiben: in eine versteckte Teil-Datei im selben Ordner, Besitzer und Rechte der alten Datei übernommen (neue Datei: Konto und Gruppe der Freigabe, 0660), `fsync`, unmittelbar davor noch einmal geprüft (`409 file_changed`), dann atomar umbenannt (neue Datei mit `RENAME_NOREPLACE`). **Der alte Inhalt bleibt als `<name>.prev`** wie beim Texteditor und beim Schreiben über MCP (harter Link, auf FAT/exFAT umbenannt). Kein Papierkorb, kein Rückgängig-Eintrag.
+  - Antwort `200 {"modified":"<RFC3339Nano, UTC>","mtime":"<ns als Text>","size":n}` (`mtime` als Text, weil Nanosekunden keine JSON-Zahl sind). Im Aktivitätsprotokoll als `PUT /api/v1/files/content` mit Wurzel/Pfad.
+  - Grenze: Dateizeiten kommen von einer groben Kernel-Uhr (einige Millisekunden). Zwei Speicherungen in derselben Millisekunde sind nicht unterscheidbar; mit dem Sekundenwert der Liste gilt das für dieselbe Sekunde.
+- Keine dieser Routen ist in `publicRoutes` oder im Werkzeugkatalog (kein Token, kein MCP, kein Agent).
 
 ## Ablauf im Fenster
 
 ```
 TitanOS-Fenster (WebAppView, Ursprung TitanOS)
    └─ <iframe sandbox="allow-scripts allow-downloads allow-modals allow-popups"   (eigener, undurchsichtiger Ursprung:
-        src="/webapps/<id>/<version>/?author=<Name>">                               keine Cookies, keine TitanOS-API)
+        src="/webapps/<id>/<version>/?author=<Name>&bridge=host|adapter&app=<id>">  keine Cookies, keine TitanOS-API)
          host.js  ⇄  App (gleiches Dokument, CustomEvents der Craft-Brücke oder Adapter)
 ```
+
+**Nie `host=parent`** an die Adresse hängen: es hat Vorrang vor `data-host` (und der Rahmen hat keinen gleichen Ursprung).
 
 Nachrichten zwischen Fenster und `host.js` per `postMessage` (Fenster prüft `event.source === iframe.contentWindow`, sendet mit `targetOrigin "*"`, weil der Rahmen keinen Ursprung hat; Inhalte sind nur Dateiname und Bytes):
 
@@ -35,18 +98,38 @@ Nachrichten zwischen Fenster und `host.js` per `postMessage` (Fenster prüft `ev
 | host → Fenster | `{"type":"webapp-dirty","dirty":bool}`, `{"type":"webapp-failed","text"}` |
 | Fenster → host | `{"type":"webapp-saved","ok":bool,"text"}` (nur zur Anzeige in der App, falls unterstützt) |
 
-- **Brücke** (`bridge: host`): `host.js` spricht die Craft-Host-Ereignisse `<id>:ready/open/save/dirty/failed` am Canvas (`data-host="page"`).
+- **Brücke** (`bridge: host`): `host.js` spricht die Craft-Host-Ereignisse `<id>:ready/open/save/dirty/failed` am Canvas mit `data-host="page"` (Präfix ist immer die Katalog-id, auch `pdfcraft:ready`). Die Ereignisse steigen nicht auf (`bubbles: false`), laufen aber durch die Capture-Phase: `window.addEventListener("<id>:ready", h, true)` fängt sie, auch wenn `host.js` im `<head>` vor dem Canvas läuft (geprüft mit WordCraft 0.16.0 in Chromium, abgeschotteter Ursprung: `detail` = `{"version":"1","appVersion":"0.16.0","file":false}`). Öffnen: `canvas.dispatchEvent(new CustomEvent("<id>:open",{detail:{name,bytes}}))` auf dem Canvas (`event.target` von `ready`). `save`: `detail` = `{name, saveAs, bytes}`; `dirty`: `{dirty}`; `failed`: `{error}`. Laut HOSTING.md der Apps höchstens 512 MiB je geöffneter Datei; FilmCraft importiert Nicht-Projektdateien wie abgelegte Dateien.
 - **Adapter** (`bridge: adapter`): Öffnen = synthetisches `drop` mit `DataTransfer`/`File` auf den Canvas; Speichern = Abfangen von Downloads (`HTMLAnchorElement.prototype.click` bei `download`-Attribut und `blob:`-Adressen, `URL.createObjectURL`), `saveAs` immer `true` (der Nutzer wählt Ziel).
-- **Speichern:** `saveAs:false` → `PUT /files/content` aufs Original mit `expect`=mtime beim Öffnen; `409` → Dialog „Datei wurde inzwischen geändert: Überschreiben / Als Kopie speichern / Abbrechen“. `saveAs:true` → Speicherdialog von TitanOS (Ordner und Name, vorausgefüllt), danach ist das die Datei des Fensters. Exporte (PDF usw.) ebenfalls über den Speicherdialog.
+- **Speichern:** `saveAs:false` → `PUT /files/content` aufs Original mit `expect` = `mtime` aus der letzten Antwort bzw. `modified` beim Öffnen; `409 file_changed` → Dialog „Datei wurde inzwischen geändert: Überschreiben / Als Kopie speichern / Abbrechen“ (Überschreiben: mit der aktuellen Zeit der Datei erneut). `saveAs:true` → Speicherdialog von TitanOS (Ordner und Name, vorausgefüllt; `expect=none` bzw. bei vorhandener Datei nach Rückfrage deren Zeit), danach ist das die Datei des Fensters. Exporte (PDF usw.) ebenfalls über den Speicherdialog.
 - **Ungespeicherte Änderungen:** Schließen des Fensters mit `dirty` fragt nach.
+
+### Grenzen im abgeschotteten Rahmen (geprüft 7.11.2026 mit Chromium headless (Playwright 1194), abgeschotteter Ursprung über die CSP-Sandbox)
+
+- WordCraft, GridCraft, PdfCraft, FilmCraft und LightCraft laden Modul und WebAssembly über CORS und starten (WebGL2; WebGPU nur über HTTPS bzw. wo der Browser es hat).
+- **Kein Browser-Speicher** (localStorage, IndexedDB, OPFS, Web Locks): Einstellungen der Apps bleiben nicht erhalten, eigene Schriften nicht gespeichert; LightCraft arbeitet ohne Bibliothek auf Dauer.
+- **Keine Web Worker** aus Dateien der App (LightCraft: Render-Worker starten nicht, die App läuft ohne sie weiter; auf einem gewöhnlichen Server starten sie, es liegt also am abgeschotteten Ursprung); Service Worker (EffectCraft) ebenso nicht.
+- **PhotoCraft 0.21.0** startet nicht: `app/photocraft-web.js` lädt `app/snippets/eframe-…/inline0.js`, das im Upstream-Archiv fehlt (auch mit einem einfachen statischen Server 404, also ein Fehler im Paket von storytold; 0.20.2 hat denselben Aufbau). Upstream melden; bis dahin ist PhotoCraft **nicht im Katalog** (Entscheidung 7.11.2026: was nicht startet, kommt vorerst nicht in den Katalog).
+- Nicht geprüft: die übrigen Adapter-Apps, Speichern über die Brücke im echten Fenster, Safari/Firefox.
 
 ## Dateimanager
 
 - Doppelklick öffnet die **Standard-App** des Dateityps; Rechtsklick „Öffnen mit ›“ listet passende Web-Apps, Docker-Apps nicht (vorerst), den Texteditor; Haken „Immer mit … öffnen“ setzt die Standard-App.
-- Standard-Apps je Konto in der Einstellung `fileapps` (`{"<ext>":"webapp:<id>"}`), Vorgabe aus dem Katalog; verwaltet unter Dateien › Einstellungen › Standard-Apps.
+- Standard-Apps je Konto in der Einstellung `fileapps` (`PUT /api/v1/preferences/fileapps`, `{"<ext>":"webapp:<id>"|"editor"}`; Endungen klein ohne Punkt, 1–10 Zeichen, höchstens 200 Einträge, `<id>` muss im Katalog stehen, sonst `400 bad_request`; fehlt die Einstellung, gilt die Vorgabe aus dem Katalog), verwaltet unter Dateien › Einstellungen › Standard-Apps.
 
 ## Ersteinrichtung und Update
 
-- Ersteinrichtung (`/welcome`): Schritt „Office-Programme“ mit den drei vorausgewählt (abwählbar). Installiert, sobald das erste Volume eingehängt ist (titand merkt sich die Wahl in `/config/webapps.json` als `"pending":["wordcraft",…]`).
-- Bestehende NAS: nach dem Update einmal eine Mitteilung für Besitzer/Administratoren „Office-Programme installieren?“ mit Knopf (`defaults/install`).
-- App-Center: Abschnitt „Programme für den Browser“ mit allen Katalog-Apps, Installieren/Entfernen.
+- Ersteinrichtung (`/welcome`): Schritt „Office-Programme“ mit den drei vorausgewählt (abwählbar) → `POST defaults/install` mit der Wahl (auch `{"apps":[]}`, damit später kein Hinweis kommt). Installiert, sobald das erste Volume eingehängt ist (`pending` in `/config/webapps.json`).
+- Bestehende NAS: zwei Minuten nach dem Start einmal eine Mitteilung (`kind` `webapps_offer`, Info) „Office-Programme installieren?“, nur wenn ein Konto existiert, keine Web-App installiert oder vorgemerkt ist und `offered` fehlt; danach wird `offered` gespeichert (auch nach Neustart kein zweites Mal). Findet titand Docker-Versionen der Craft-Apps, heißt die Mitteilung `webapps_offer_docker` mit deren Namen als `subject` und nennt sie. Die Oberfläche zeigt dazu den Knopf (`defaults/install` bzw. `migrate`).
+- App-Center: Abschnitt „Programme für den Browser“ mit allen Katalog-Apps, Installieren/Entfernen, Docker-Versionen ersetzen.
+- Neue Versionen der Apps kommen nur mit TitanOS-Updates (neuer Katalog): titand installiert nach dem Start jede installierte App, deren Version nicht die des Katalogs ist, neu (im Hintergrund, auf ihrem Volume; die alte Version bleibt bis dahin nutzbar und wird danach entfernt; ein Fehlschlag wird nicht wiederholt, bis man „Installieren“ drückt).
+
+## Ergänzungen aus dem Bau der Oberfläche (0.63.0)
+
+- **Rahmen-Adresse:** `?author=<Name>&bridge=host|adapter&app=<id>`; `host.js` nimmt bevorzugt `data-app`/`data-bridge` am eigenen Script-Tag, die Adresse ist der Rückfall. Nie `host=parent`.
+- **Ereignisse der Craft-Brücke** (`craft-libs`, `crates/web-host`): `<id>:ready/open/save/dirty/failed/handoff`, vom Host zur App zusätzlich `host`, `saved` und `handoff-done`. `save` trägt `name`, `bytes` (ArrayBuffer), optional `id` und `saveAs`; `failed` trägt `error`. Nicht blasend, am Canvas, Felder in `detail`.
+- **`webapp-command {"command":"save-as"}`** (Fenster → host.js): löst „Speichern unter“ in der App aus (synthetisches F12; bei WordCraft geprüft). Kommt binnen 2,5 s nichts, zeigt das Fenster einen Hinweis.
+- **Je `webapp-save` genau eine Antwort `webapp-saved`** (`ok:false` bei Abbruch, Konfliktabbruch, Fehler und für erzeugte Kopien), damit die Reihenfolge in host.js stimmt.
+- **Speicherregel:** Speichert die App in einem anderen Format, das sie selbst bearbeitet (z. B. WordCraft `.doc` → `.docx`, GridCraft `.csv` → `.xlsx`), geht es über den Speicherdialog und wird danach die Datei des Fensters; Exporte (PDF usw.) überschreiben nie das Original, sondern bieten „In Freigabe speichern“ oder „Auf diesen PC“.
+- **Fenster-Nachrichten** zwischen Seiten und Arbeitsplatz: `titanos-file-drag {drag}`, `titanos-open-file {root, path, app}`.
+- **`fileapps`:** Wert `"editor"` = TitanOS (Vorschau bzw. Texteditor). Vorgabe: App der Grundausstattung, sonst die erste installierte; Typen, die TitanOS selbst zeigt (Bilder, SVG, Text), bleiben bei TitanOS.
+- **Grenzen:** Im abgeschotteten Rahmen gibt es weder localStorage noch IndexedDB (Einstellungen und gespeicherte Schriften der Apps bleiben nicht erhalten); WebGPU nur über HTTPS, sonst WebGL2; Dateien werden ganz in den Arbeitsspeicher gelesen; Firefox und Safari ungeprüft; Konten mit eigener Symbolanordnung bekommen neue Web-Apps im Hauptmenü (Filter „Browser-Programme“) und im Dock, nicht automatisch auf den Arbeitsplatz; am Handy öffnet „⋯ › Öffnen“ eine Datei (Doppeltippen nicht).

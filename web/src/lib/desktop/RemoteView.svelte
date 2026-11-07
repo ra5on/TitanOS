@@ -54,6 +54,8 @@
 		phone = false,
 		onopentab,
 		onback,
+		inTitle = false,
+		menuHost = null,
 	}: {
 		/** The Docker app (compose project) as the NAS names it. */
 		app: string;
@@ -62,7 +64,18 @@
 		phone?: boolean;
 		onopentab: () => void;
 		onback?: () => void;
+		/** PLAN 66: in a window the controls live in the window's ⋯ menu, not in a bar. */
+		inTitle?: boolean;
+		/** The open ⋯ menu of the window the controls are put into. */
+		menuHost?: HTMLElement | null;
 	} = $props();
+
+	/** Moves the menu's part into the window's ⋯ menu (it stays this component's). */
+	function portal(node: HTMLElement, target: HTMLElement) {
+		target.appendChild(node);
+		return { destroy: () => node.remove() };
+	}
+	let section = $state<'' | 'files' | 'clip' | 'quality'>('');
 
 	type Phase =
 		| 'connecting'
@@ -1026,6 +1039,58 @@
 				{/snippet}
 			</Dropdown>
 		</header>
+	{:else if inTitle}
+		{#if menuHost}
+			<div class="title-menu" use:portal={menuHost}>
+				{#if hello?.audio && !noAudio}
+					<span class="vol">{@render volumeControl()}</span>
+				{:else if noAudio}<p class="muted small pad">{t('viewer.noAudio')}</p>{/if}
+				<hr />
+				<button type="button" role="menuitem" disabled={!live} onclick={() => fileInput?.click()}
+					><Icon name="upload" size={16} /><span>{t('viewer.menu.open')}</span></button
+				>
+				<button
+					type="button"
+					role="menuitem"
+					aria-expanded={section === 'files'}
+					onclick={() => (section = section === 'files' ? '' : 'files')}
+					><Icon name="download" size={16} /><span>{t('viewer.downloads')}</span><kbd
+						>{downloads.length}</kbd
+					></button
+				>
+				{#if section === 'files'}<div class="sub">{@render filesPanel()}</div>{/if}
+				<button
+					type="button"
+					role="menuitem"
+					aria-expanded={section === 'clip'}
+					onclick={() => (section = section === 'clip' ? '' : 'clip')}
+					><Icon name="paste" size={16} /><span>{t('viewer.clipboard')}</span></button
+				>
+				{#if section === 'clip'}<div class="sub">{@render clipboardPanel()}</div>{/if}
+				<button
+					type="button"
+					role="menuitem"
+					aria-expanded={section === 'quality'}
+					onclick={() => (section = section === 'quality' ? '' : 'quality')}
+					><Icon name="monitor" size={16} /><span>{t('viewer.quality')}</span><kbd
+						>{t(`viewer.q.${quality}` as MessageKey)} ›</kbd
+					></button
+				>
+				{#if section === 'quality'}<div class="sub" role="group">
+						{@render qualityItems(() => (section = ''))}
+					</div>{/if}
+				<hr />
+				<button type="button" role="menuitem" onclick={reconnect}
+					><Icon name="restart" size={16} /><span>{t('viewer.reconnect')}</span></button
+				>
+				<p class="menu-line muted">
+					<span class="pill" class:live class:ended={!live && phase !== 'connecting'}
+						><span class="dot" aria-hidden="true"></span>{t('viewer.pill')}{#if stateWord}
+							· {stateWord}{/if}</span
+					>{#if live && statsText}<span class="stats">{statsText}</span>{/if}
+				</p>
+			</div>
+		{/if}
 	{:else}
 		<div class="view-bar" role="toolbar" aria-label={t('viewer.toolbar', { app: title })}>
 			<span class="pill" class:live class:ended={!live && phase !== 'connecting'}
@@ -1197,6 +1262,39 @@
 		flex-direction: column;
 		background: #000;
 		container-type: inline-size;
+	}
+	/* PLAN 66: the part of the window's ⋯ menu. */
+	.title-menu {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		max-height: min(70vh, 560px);
+		overflow-y: auto;
+	}
+	.title-menu .vol {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 4px 10px;
+	}
+	.title-menu .sub {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		margin: 2px 0 6px 26px;
+		padding: 6px 0 6px 10px;
+		border-left: 2px solid var(--border);
+	}
+	.title-menu .menu-line {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 4px 10px;
+		margin: 6px 10px 2px;
+		font-size: var(--text-xs);
+	}
+	.title-menu .pad {
+		margin: 4px 10px;
 	}
 	.view-bar,
 	.phone-head {

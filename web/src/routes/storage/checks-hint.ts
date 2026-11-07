@@ -3,12 +3,17 @@
 import type { Disk, Volume } from '#lib/api.ts';
 import type { MaintenanceSettings } from '#lib/operations.ts';
 
-/** What the account stores under the preference kind "hints". */
-export type Hints = { checksDismissed?: string[] };
+/** What the account stores under the preference kind "hints" (other hints keep their own keys, e.g. PLAN 66 "webapps-0.63"). */
+export type Hints = { checksDismissed?: string[]; [other: string]: unknown };
 
 export function sanitizeHints(value: unknown): Hints {
 	const list = (value as Hints | null)?.checksDismissed;
+	const others =
+		value && typeof value === 'object' && !Array.isArray(value)
+			? (value as Record<string, unknown>)
+			: {};
 	return {
+		...others,
 		checksDismissed: Array.isArray(list)
 			? list.filter((name): name is string => typeof name === 'string')
 			: [],

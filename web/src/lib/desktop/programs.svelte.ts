@@ -7,11 +7,13 @@ import { appAllowed, SYSTEM_APPS, type SideItem } from './apps.ts';
 import { dockerPrograms, dockerUpdates, sources } from './sources.svelte.ts';
 import { openWindow } from './wm.svelte.ts';
 import { storage } from '../storage.svelte.ts';
+import { readyApps } from '../webapps/webapps.svelte.ts';
+import { letterGradient } from '../webapps/protocol.ts';
 
 export type Program = {
 	key: string;
 	label: string;
-	kind: 'system' | 'docker' | 'vm';
+	kind: 'system' | 'docker' | 'vm' | 'webapp';
 	glyph: string;
 	gradient: string;
 	image: string;
@@ -73,6 +75,21 @@ export function programs(): Program[] {
 						title: d.running ? t('desktop.widget.running') : t('desktop.widget.stopped'),
 					},
 		});
+	// PLAN 66: web apps installed on the NAS run in the browser in a window of their own.
+	for (const a of readyApps())
+		out.push({
+			key: 'webapp:' + a.id,
+			label: a.name,
+			kind: 'webapp',
+			glyph: '',
+			gradient: letterGradient(a.id),
+			image: a.icon ?? '',
+			href: a.url,
+			side: [],
+			multi: true,
+			external: false,
+			badge: null,
+		});
 	return out;
 }
 
@@ -123,13 +140,23 @@ export async function openTab(key: string, href: string) {
 /** Opens a program; a Docker app's window shows its remote view (PLAN 63). */
 export async function openProgram(
 	key: string,
-	opts: { href?: string; from?: { x: number; y: number }; fresh?: boolean } = {},
+	opts: {
+		href?: string;
+		from?: { x: number; y: number };
+		fresh?: boolean;
+		/** PLAN 66: the file a web app opens. */
+		doc?: { root: string; path: string };
+	} = {},
 ) {
 	const p = findProgram(key);
 	if (!p) return;
 	if (p.kind === 'docker') {
 		// The window keeps the app's address for its title bar and "open in a tab".
 		openWindow(key, p.href, p.label, { from: opts.from, fresh: opts.fresh });
+		return;
+	}
+	if (p.kind === 'webapp') {
+		openWindow(key, p.href, p.label, { from: opts.from, fresh: opts.fresh, doc: opts.doc });
 		return;
 	}
 	openWindow(key, opts.href ?? p.href, p.label, {

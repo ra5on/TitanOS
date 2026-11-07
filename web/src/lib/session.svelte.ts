@@ -18,8 +18,11 @@ export const session = $state<{
 	hints: Record<string, unknown> | null;
 	/** The desktop of the account (PLAN 61, lib/desktop/prefs.ts). */
 	desktop: Record<string, unknown> | null;
+	/** PLAN 66: the standard app per file type ({"docx": "webapp:wordcraft"}). */
+	fileapps: Record<string, unknown> | null;
 	/** Settings › Services: docker, vms and lxc, false when switched off. */
 	services: Record<string, boolean>;
+	prefsLoaded: number;
 }>({
 	status: 'loading',
 	data: null,
@@ -29,7 +32,10 @@ export const session = $state<{
 	vnc: null,
 	hints: null,
 	desktop: null,
+	fileapps: null,
 	services: {},
+	/** Counts loads of the account's preferences (the desktop applies them once they are there). */
+	prefsLoaded: 0,
 });
 
 async function loadPreferences() {
@@ -41,6 +47,8 @@ async function loadPreferences() {
 		session.vnc = prefs.vnc;
 		session.hints = prefs.hints ?? null;
 		session.desktop = prefs.desktop ?? null;
+		session.fileapps = prefs.fileapps ?? null;
+		session.prefsLoaded++;
 		sound.settings = sanitizeSound(prefs.sound);
 		bell.settings = sanitizeBell(prefs.bell);
 		if (prefs.appearance)
@@ -53,6 +61,7 @@ async function loadPreferences() {
 		session.vnc = null;
 		session.hints = null;
 		session.desktop = null;
+		session.fileapps = null;
 	}
 }
 

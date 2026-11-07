@@ -35,6 +35,11 @@
 	import { pageTitle } from '#lib/page-title.svelte.ts';
 
 	let { children }: { children: Snippet } = $props();
+	// PLAN 66: once a web app was full screen on the phone it stays mounted (it guards unsaved work on Back).
+	let phoneApp = $state(false);
+	$effect(() => {
+		if (page.state.webapp) phoneApp = true;
+	});
 
 	// A shell is a way into the system: administrators only.
 	const dockerPage = $derived(
@@ -219,6 +224,12 @@
 			{#if !dockerPage}<ConnectionBanner />{/if}
 			{@render children()}
 		</main>
+	{/if}
+	<!-- PLAN 66: a web app full screen (opened from the home grid or the file manager). -->
+	{#if page.state.webapp || phoneApp}
+		{#await import('#lib/webapps/WebAppPhone.svelte') then { default: WebAppPhone }}
+			<WebAppPhone />
+		{/await}
 	{/if}
 {:else}
 	<!-- The page alone; the page ends above the open terminal, so that all of it can be scrolled into view. -->

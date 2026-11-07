@@ -129,24 +129,27 @@ try {
     await page.goto(base + "/settings/mcp");
     await page.getByRole("heading", { name: "Status" }).waitFor();
     assert.match(
-      await page.locator("section", { hasText: "Status" }).first().textContent(),
+      await page
+        .locator("section", { hasText: "Status" })
+        .first()
+        .textContent(),
       /Bereit/,
     );
     assert.equal(
       await page.getByLabel("MCP-Server für dieses NAS einschalten").count(),
       0,
     );
-    assert.equal(await page.getByRole("heading", { name: "Werkzeuge" }).count(), 0);
+    assert.equal(
+      await page.getByRole("heading", { name: "Werkzeuge" }).count(),
+      0,
+    );
     assert.equal(
       await page.getByRole("heading", { name: "Letzte Aufrufe" }).count(),
       0,
     );
     assert.equal(await page.getByText("Aufrufe heute").count(), 0);
     assert.equal(seen.activity, 0, "a user does not ask the activity log");
-    assert.equal(
-      await page.locator("input.mono").inputValue(),
-      base + "/mcp",
-    );
+    assert.equal(await page.locator("input.mono").inputValue(), base + "/mcp");
     for (const tab of ["Claude Code", "mcp-remote", "titanosctl"]) {
       await page.getByRole("tab", { name: new RegExp(tab) }).click();
       await page.locator("pre.snippet").waitFor();
@@ -163,11 +166,16 @@ try {
     await page.getByRole("link", { name: "Token für MCP erstellen" }).click();
     const dialog = page.getByRole("dialog");
     await dialog.waitFor();
-    assert.equal(await dialog.getByLabel("KI-Clients per MCP").isChecked(), true);
+    assert.equal(
+      await dialog.getByLabel("KI-Clients per MCP").isChecked(),
+      true,
+    );
     // Users only get scopes their role may have.
     assert.equal(await dialog.getByLabel(/Container/).count(), 0);
     const close = await help(page, "Token-Bereiche", /Token/);
-    await page.screenshot({ path: `${out}/api-scopes-help-${width}-${theme}.png` });
+    await page.screenshot({
+      path: `${out}/api-scopes-help-${width}-${theme}.png`,
+    });
     await close();
     await dialog.getByRole("button", { name: "Abbrechen" }).click();
 
@@ -179,7 +187,10 @@ try {
       0,
     );
     assert.equal(await block.locator("pre, code, button").count(), 0);
-    assert.equal(await block.getByRole("link", { name: "MCP-Server" }).count(), 1);
+    assert.equal(
+      await block.getByRole("link", { name: "MCP-Server" }).count(),
+      1,
+    );
     await noOverflow(page);
     await page.screenshot({
       path: `${out}/api-user-${width}-${theme}.png`,
@@ -191,7 +202,9 @@ try {
       await page.goto(base + "/settings/about");
       const search = page.getByRole("searchbox").first();
       await search.fill("mcp");
-      const links = page.locator('a[href^="/settings/mcp"], a[href*="api-mcp"]');
+      const links = page.locator(
+        'a[href^="/settings/mcp"], a[href*="api-mcp"]',
+      );
       await page.locator('a[href="/settings/mcp"]').first().waitFor();
       assert.equal(await page.locator('a[href*="api-mcp"]').count(), 0);
       assert.ok((await links.count()) >= 1);
@@ -233,14 +246,22 @@ try {
     await page.getByRole("button", { name: "Neues Volume" }).first().click();
     const dialog = page.getByRole("dialog");
     await dialog.waitFor();
-    await dialog.getByRole("radio", { name: /RAID 1/ }).first().click();
+    await dialog
+      .getByRole("radio", { name: /RAID 1/ })
+      .first()
+      .click();
     await dialog.getByText("Write-Intent-Bitmap").first().waitFor();
     const close = await help(page, "Write-Intent-Bitmap", /Platte/);
     await page.screenshot({ path: `${out}/help-bitmap-1440-graphit.png` });
     await close();
-    await dialog.getByRole("radio", { name: /RAID 0/ }).first().click();
+    await dialog
+      .getByRole("radio", { name: /RAID 0/ })
+      .first()
+      .click();
     assert.equal(
-      await dialog.getByRole("button", { name: "Was bedeutet „Write-Intent-Bitmap“?" }).count(),
+      await dialog
+        .getByRole("button", { name: "Was bedeutet „Write-Intent-Bitmap“?" })
+        .count(),
       0,
       "RAID 0 has no bitmap",
     );
@@ -252,36 +273,75 @@ try {
   ]) {
     const { ctx, page } = await fixture("owner", theme, width);
     const net = (id, name, parent, address, management = false, vlan = 0) => ({
-      id, name, parent, address, management, vlan,
+      id,
+      name,
+      parent,
+      address,
+      management,
+      vlan,
       purpose: management ? "management" : "apps",
-      bridge: true, ipv4: "static", gateway: management ? "192.168.1.1" : "",
-      ipv6: "auto", address6: "", gateway6: "", dns: [], routes: [],
+      bridge: true,
+      ipv4: "static",
+      gateway: management ? "192.168.1.1" : "",
+      ipv6: "auto",
+      address6: "",
+      gateway6: "",
+      dns: [],
+      routes: [],
     });
     const config = {
-      hostname: "titan-test", ports: ["enp1s0"], bondMode: "", vlan: 0,
-      bridge: true, dhcp: true, address: "", gateway: "", dns: [], bonds: [],
+      hostname: "titan-test",
+      ports: ["enp1s0"],
+      bondMode: "",
+      vlan: 0,
+      bridge: true,
+      dhcp: true,
+      address: "",
+      gateway: "",
+      dns: [],
+      bonds: [],
       vlans: true,
       networks: [net("admin", "Verwaltung", "enp1s0", "192.168.1.20/24", true)],
     };
     const network = {
-      config, pending: null, topology: config, pendingTopology: null,
+      config,
+      pending: null,
+      topology: config,
+      pendingTopology: null,
       pendingSeconds: 0,
-      interfaces: [{ name: "enp1s0", mac: "52:54:00:00:00:01", carrier: true, speedMbps: 2500 }],
-      device: "br0", addresses: ["192.168.1.20/24"], gateway: "192.168.1.1",
-      dns: ["192.168.1.1"], configured: true, bridgeReady: true,
+      interfaces: [
+        {
+          name: "enp1s0",
+          mac: "52:54:00:00:00:01",
+          carrier: true,
+          speedMbps: 2500,
+        },
+      ],
+      device: "br0",
+      addresses: ["192.168.1.20/24"],
+      gateway: "192.168.1.1",
+      dns: ["192.168.1.1"],
+      configured: true,
+      bridgeReady: true,
     };
     await ctx.route("**/api/v1/network", (route) =>
-      route.fulfill({ json: { network, bondModes: ["active-backup", "802.3ad"] } }),
+      route.fulfill({
+        json: { network, bondModes: ["active-backup", "802.3ad"] },
+      }),
     );
     await page.goto(base + "/settings/network");
     await page.getByRole("button", { name: "Netz hinzufügen" }).first().click();
     const editor = page.getByRole("dialog");
-    await editor.getByText("Bridge für VMs und Container bereitstellen").waitFor();
+    await editor
+      .getByText("Bridge für VMs und Container bereitstellen")
+      .waitFor();
     let close = await help(page, "Bridge", /br0/);
     await page.screenshot({ path: `${out}/help-bridge-${width}-${theme}.png` });
     await close();
     // The VLAN-ID field of the editor has its "?" as well.
-    await editor.getByRole("button", { name: "Was bedeutet „VLAN“?" }).waitFor();
+    await editor
+      .getByRole("button", { name: "Was bedeutet „VLAN“?" })
+      .waitFor();
     await editor.getByRole("button", { name: "Abbrechen" }).click();
     await editor.waitFor({ state: "detached" });
     await page.getByRole("tab", { name: "Schnittstellen" }).click();
