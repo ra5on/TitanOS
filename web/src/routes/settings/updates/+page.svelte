@@ -5,7 +5,6 @@
 	import { api, ApiError } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
-	import { windowView } from '#lib/desktop/mode.svelte.ts';
 	import ClusterUpdates from '#lib/components/cluster/ClusterUpdates.svelte';
 	import { activeNode } from '#lib/cluster-node.ts';
 	import PowerDialog from '#lib/components/PowerDialog.svelte';
@@ -365,8 +364,6 @@
 		if (slot.triesLeft === 0) return t('update.slot.bad');
 		return t(slot.next ? 'update.slot.next' : 'update.slot.fallback');
 	}
-	// PLAN 64: a window of the desktop or the phone's full-screen view.
-	const windowed = $derived(windowView());
 </script>
 
 {#snippet checkState()}
@@ -376,25 +373,21 @@
 			time: formatDateTime(new Date(status.lastCheck)),
 		})}{/if}
 {/snippet}
-{#snippet checkButton(primary: boolean)}
-	<button
-		type="button"
-		class="btn"
-		class:btn-primary={primary}
-		disabled={busy !== ''}
-		onclick={() => act('check')}>{t(busy === 'check' ? 'update.checking' : 'update.check')}</button
+{#snippet checkButton()}
+	<button type="button" class="btn btn-primary" disabled={busy !== ''} onclick={() => act('check')}
+		>{t(busy === 'check' ? 'update.checking' : 'update.check')}</button
 	>
 {/snippet}
-{#if windowed && status?.canVerify && !status.pending && !working}
+{#if status?.canVerify && !status.pending && !working}
 	<!-- PLAN 64: in a window the search for updates is the tool bar's action. -->
-	<PageHead title={t('update.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
+	<PageHead title={t('update.title')}>
 		{#snippet actions()}
 			<span class="muted toolbar-state" role="status">{@render checkState()}</span>
-			{@render checkButton(true)}
+			{@render checkButton()}
 		{/snippet}
 	</PageHead>
 {:else}
-	<PageHead title={t('update.title')} parent={{ href: '/settings', label: t('nav.settings') }} />
+	<PageHead title={t('update.title')} />
 {/if}
 
 {#if error}<div class="notice-error" role="alert">
@@ -525,10 +518,6 @@
 			{#if status.kernelMissing}<p class="notice-warn" role="status">
 					{t('update.kernel.missing', { version: status.kernelMissing })}
 				</p>{/if}
-			{#if !windowed}<div class="row">
-					{@render checkButton(false)}
-					<span class="muted" role="status">{@render checkState()}</span>
-				</div>{/if}
 			{#if status.checkError}<pre class="muted">{status.checkError}</pre>{/if}
 		{/if}
 	</section>

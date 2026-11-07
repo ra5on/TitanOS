@@ -301,3 +301,39 @@ func TestStatusReadsTheDump(t *testing.T) {
 		t.Fatal("device not removed", err)
 	}
 }
+
+// cancelAware fails every command whose context is done, like exec does.
+type cancelAware struct{ fakeRunner }
+
+func (c *cancelAware) Run(ctx context.Context, stdin, name string, args ...string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	return c.fakeRunner.Run(ctx, stdin, name, args...)
+}
+
+// A removed device loses access even when the request that removed it is
+// gone before the interface was updated.
+func TestRemoveOutlivesTheRequest(t *testing.T) {
+	m, _, _ := fixture(t)
+	runner := &cancelAware{}
+	m.runner = runner
+	if err := m.Set(context.Background(), Settings{Enabled: true, Endpoint: "nas.example.org"}); err != nil {
+		t.Fatal(err)
+	}
+	peer, _, err := m.AddPeer(context.Background(), "phone")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(runner.conf, peer.PublicKey) {
+		t.Fatal("device not in the interface")
+	}
+	gone, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := m.RemovePeer(gone, peer.PublicKey); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(runner.conf, peer.PublicKey) {
+		t.Fatal("removed device still in the interface")
+	}
+}

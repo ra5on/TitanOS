@@ -28,7 +28,7 @@ const requests = [];
 
 async function context(theme = 'graphit', width = 1440, locale = 'de') {
 	const ctx = await browser.newContext({ locale: locale === 'de' ? 'de-DE' : 'en-US', viewport: { width, height: 1000 } });
-	await ctx.addInitScript(({ theme, locale }) => { localStorage.setItem('titanos.locale', locale); localStorage.setItem('titanos.layout', 'classic'); localStorage.setItem('titanos.appearance', JSON.stringify({ theme })); }, { theme, locale });
+	await ctx.addInitScript(({ theme, locale }) => { localStorage.setItem('titanos.locale', locale); localStorage.setItem('titanos.layout', 'bare'); localStorage.setItem('titanos.appearance', JSON.stringify({ theme })); }, { theme, locale });
 	await ctx.route('**/api/v1/**', async (route) => {
 		const url = new URL(route.request().url());
 		const path = url.pathname.slice('/api/v1'.length);
@@ -140,8 +140,8 @@ try {
 		assert.ok(await page.getByRole('menuitem', { name: 'Starten' }).isVisible());
 		await page.keyboard.press('Escape');
 
-		// Header menu: removing is only offered while the VM is off.
-		await page.locator('.head .dropdown button').click();
+		// Menu of the tool bar: removing is only offered while the VM is off.
+		await page.locator('.win-toolbar .dropdown button').click();
 		assert.equal(await page.getByRole('menuitem', { name: /Entfernen/ }).count(), 0);
 		await page.keyboard.press('Escape');
 

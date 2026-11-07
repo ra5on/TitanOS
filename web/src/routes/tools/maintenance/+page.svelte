@@ -191,7 +191,7 @@
 </script>
 
 <NavigationGuard dirty={settingsDirty || jobDirty} />
-<PageHead title={t('ops.maintenance')} parent={{ href: '/tools', label: t('nav.tools') }}
+<PageHead title={t('ops.maintenance')}
 	>{#snippet actions()}<button class="btn" disabled={busy} onclick={load}>{t('ops.refresh')}</button
 		><button class="btn btn-primary" disabled={!settings || busy} onclick={() => edit()}
 			>{t('ops.add')}</button

@@ -240,10 +240,7 @@
 	const memoryUsed = $derived(system ? system.memory.totalBytes - system.memory.availableBytes : 0);
 </script>
 
-<PageHead
-	title={t('taskmanager.title')}
-	parent={admin ? { href: '/tools', label: t('nav.tools') } : undefined}
-/>
+<PageHead title={t('taskmanager.title')} />
 
 {#if admin}
 	<Tabs

@@ -3,7 +3,6 @@ package cluster
 import (
 	"encoding/json"
 	"errors"
-	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -83,7 +82,16 @@ func ErrorCode(err error) (int, string) {
 }
 
 func readBody(w http.ResponseWriter, r *http.Request, v any) bool {
-	if err := json.NewDecoder(io.LimitReader(r.Body, 16<<20)).Decode(v); err != nil {
+	return readBodyLimit(w, r, v, 16<<20)
+}
+
+// joinBodyLimit bounds what preview and join read before the join key is
+// checked: they come from anyone who may reach the port, and a join
+// request is a key and one node (a few KiB).
+const joinBodyLimit = 64 << 10
+
+func readBodyLimit(w http.ResponseWriter, r *http.Request, v any, limit int64) bool {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, limit)).Decode(v); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", "invalid request body")
 		return false
 	}
@@ -106,6 +114,12 @@ func (m *Manager) PeerHandler() http.Handler {
 		id, err := m.Verify(r)
 		if err != nil {
 			writeError(w, http.StatusUnauthorized, "cluster_unauthorized", "request not signed by the cluster")
+			return
+		}
+		// The nodes talk among themselves on behalf of no account. One that
+		// is named came through the proxy of the web interface (Proxy).
+		if id.User != "" {
+			writePeerError(w, ErrNotPermitted)
 			return
 		}
 		r = r.WithContext(WithIdentity(r.Context(), id))
@@ -198,7 +212,7 @@ func (m *Manager) peerPreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req previewRequest
-	if !readBody(w, r, &req) {
+	if !readBodyLimit(w, r, &req, joinBodyLimit) {
 		return
 	}
 	if err := m.checkJoinKey(r.RemoteAddr, req.Key); err != nil {
@@ -226,7 +240,7 @@ func (m *Manager) peerJoin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req joinRequest
-	if !readBody(w, r, &req) {
+	if !readBodyLimit(w, r, &req, joinBodyLimit) {
 		return
 	}
 	res, err := m.admit(r.Context(), r.RemoteAddr, req)

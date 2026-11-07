@@ -694,9 +694,68 @@ export function fixtureFactory(browser, errors) {
         return route.fulfill({ status: 204 });
       }
       if (path === "/homeassistant/settings") {
+        // A fresh NAS: Home Assistant not connected (scripts may set data.ha).
+        data.ha ??= {
+          settings: {
+            enabled: false,
+            url: "",
+            fingerprint: "",
+            domains: [],
+            entities: [],
+            mqtt: {
+              enabled: false,
+              host: "",
+              port: 1883,
+              username: "",
+              tls: false,
+              prefix: "homeassistant",
+              groups: [],
+              commands: [],
+              interval: 30,
+            },
+          },
+          tokenSet: false,
+          mqttPasswordSet: false,
+          domains: ["light", "switch", "sensor"],
+          sensorGroups: ["system", "storage"],
+          commandGroups: [],
+          status: { watching: false, watchError: "", mqtt: false, mqttError: "" },
+        };
         if (method === "PUT") data.ha.settings = route.request().postDataJSON();
-        return json(data.ha ?? {});
+        return json(data.ha);
       }
+      if (path === "/system/power-button")
+        return json({
+          settings: {
+            action:
+              method === "PUT"
+                ? route.request().postDataJSON().action
+                : "poweroff",
+          },
+          readOnly: false,
+        });
+      if (path === "/notifications/settings")
+        return json({
+          settings: {
+            language: "de",
+            minSeverity: "warning",
+            email: {
+              enabled: false,
+              host: "",
+              port: 587,
+              security: "starttls",
+              username: "",
+              from: "",
+              to: "",
+            },
+            ntfy: { enabled: false, url: "" },
+            telegram: { enabled: false, chatID: "" },
+            discord: { enabled: false },
+            homeAssistant: { enabled: false, service: "" },
+            digest: { enabled: false, time: "08:00", errorsNow: true },
+          },
+          secretSet: {},
+        });
       // Appearance is kept like titand does, so a reload shows what was applied.
       if (path === "/preferences/appearance" && method === "PUT") {
         data.prefs.appearance = route.request().postDataJSON();
@@ -1129,6 +1188,14 @@ export function fixtureFactory(browser, errors) {
             },
           ],
           kvm: true,
+          bridge: false,
+          host: {
+            cpus: 8,
+            memoryBytes: 16e9,
+            usedMemoryBytes: 3e9,
+            availableMemoryBytes: 13e9,
+            cpuModel: "Test CPU",
+          },
         });
       if (path === "/update/progress")
         return json({ progress: { phase: "idle" } });
@@ -1166,6 +1233,373 @@ export function fixtureFactory(browser, errors) {
         data.updateChecks++;
         return json(data.update);
       }
+      // Settings › Files: the full-text index, off, nothing indexed yet.
+      if (path === "/files/index" && method === "GET")
+        return json({
+          status: {
+            enabled: false,
+            volumes: [],
+            shares: [],
+            ocr: false,
+            time: "",
+            indexes: [
+              { volume: "Data", state: "idle", files: 0, known: false, scanned: 0, updated: 0, bytes: 0 },
+            ],
+            ocrAvailable: false,
+          },
+          volumes: ["Data"],
+          shares: data.shares.map((s) => ({ name: s.name, volume: s.volume })),
+          mounted: ["Data"],
+        });
+      // Settings › Memory: the page cache share of the RAM.
+      if (path === "/system/memory" && method === "GET")
+        return json({
+          settings: { cachePercent: 20 },
+          readOnly: false,
+          budgetBytes: 3.2e9,
+          reserveBytes: 1e9,
+          inFlightBytes: 0,
+          memory: { ...data.system.memory, cacheBytes: 2e9, dirtyBytes: 0, writebackBytes: 0, lowAvailable: false },
+          paused: false,
+        });
+      // HTTPS names: no app route (app pages stay as before), one device
+      // of the home network.
+      if (path === "/docker/proxy" && method === "GET")
+        return json({
+          domain: "",
+          suffixes: ["titan-test.local"],
+          apps: [],
+          targets: [
+            {
+              app: "homeassistant",
+              enabled: true,
+              name: "homeassistant",
+              host: "192.168.1.30",
+              port: 8123,
+              scheme: "http",
+              urls: ["https://homeassistant.titan-test.local"],
+            },
+          ],
+          localName: "",
+          defaultLocalName: "titan-test",
+          mdns: true,
+          off: false,
+          tailnet: { available: false, keySet: false },
+          auto: false,
+        });
+      if (path === "/certs/ca")
+        return json({
+          available: true,
+          name: "TitanOS titan-test CA",
+          fingerprint: "3F:A1:7C:22:9B:04:E8:51:6D:C0:12:7A:9E:44:B3:08",
+          notAfter: "2036-10-01T00:00:00Z",
+        });
+      // Settings › Energy: profiles, disk sleep and the power schedule.
+      if (path === "/system/energy" && method === "GET")
+        return json({
+          settings: { governor: "", preference: "", platform: "" },
+          controls: [
+            { key: "governor", choices: ["powersave", "performance"], current: "powersave", mixed: false },
+          ],
+          drivers: ["intel_pstate"],
+          readOnly: false,
+        });
+      if (path === "/storage/disk-sleep" && method === "GET")
+        return json({
+          idleMinutes: 30,
+          volumes: {},
+          disks: {},
+          available: true,
+          errors: [],
+          listed: true,
+          volumeStatus: [{ name: "Data", override: null, effective: 30, origin: "default" }],
+          diskStatus: [
+            { id: "serial:WD-A1", name: "sda", model: "WDC WD40EFPX", serial: "WD-A1", sizeBytes: 4e12, volume: "Data", override: null, effective: 30, origin: "default", state: "active", since: time },
+            { id: "serial:WD-B1", name: "sdb", model: "WDC WD40EFPX", serial: "WD-B1", sizeBytes: 4e12, volume: "Data", override: null, effective: 30, origin: "default", state: "asleep", since: time },
+          ],
+          unavailable: [],
+        });
+      if (path === "/system/power-schedule" && method === "GET")
+        return json({
+          settings: {
+            off: { enabled: false, days: [], time: "23:30" },
+            on: { enabled: false, days: [], time: "07:00" },
+            wakeOnLan: false,
+          },
+          rtc: true,
+          interfaces: [{ name: "enp1s0", mac: "52:54:00:00:00:01", supported: true, enabled: false }],
+          readOnly: false,
+        });
+      // Settings › Programs: who sees which app.
+      if (path === "/apps/access" && method === "GET")
+        return json({
+          newApps: "admins",
+          apps: [
+            { app: "photos", icon: "", url: "https://photos.example.test", webui: "2283", running: true, gate: true, users: ["alex"] },
+          ],
+          accounts: [
+            { name: "alex", role: "owner", disabled: false },
+            { name: "mia", role: "user", disabled: false },
+          ],
+        });
+      // Settings › WireGuard: off, one device prepared.
+      if (path === "/network/wireguard" && method === "GET")
+        return json({
+          enabled: false,
+          running: false,
+          endpoint: "",
+          port: 51820,
+          network: "10.10.0.0/24",
+          fullTunnel: false,
+          dns: "",
+          publicKey: "q2ZcE9n0d0b8pW3s1o4Vt7yXh6kLm5NfRa9Jc2Ue8Gs=",
+          peers: [
+            { name: "Handy", publicKey: "x7Yv3Lq9dK2mP0sT8wR4nB6cF1hJ5aZgE3uNiO7tWpM=", address: "10.10.0.2/32", created: time, received: 0, sent: 0 },
+          ],
+        });
+      // Settings › KI-Agent: switched off, no Ollama answer yet.
+      if (path === "/agent/cluster") return json({ member: false, admin: false });
+      if (path === "/agent/settings" && method === "GET")
+        return json({
+          enabled: false,
+          volume: "",
+          ollama: "",
+          model: "",
+          think: "",
+          context: 0,
+          users: [],
+          policy: { preset: "standard" },
+          locations: [],
+          homeassistant: {},
+        });
+      if (path === "/agent/addresses")
+        return json({
+          addresses: [
+            { kind: "lan", url: "http://192.168.1.20", https: false },
+            { kind: "local", url: "https://titan-test.local", https: true },
+          ],
+        });
+      if (path === "/agent/status" && method === "GET")
+        return json({
+          enabled: false,
+          allowed: true,
+          admin: true,
+          model: "",
+          think: "",
+          context: 0,
+          volume: false,
+          web: false,
+          reachable: false,
+          models: [],
+          running: [],
+        });
+      if (path === "/agent/tools") return json({ tools: [], areas: [] });
+      if (path === "/agent/volumes" && method === "GET")
+        return json({
+          volumes: [
+            { name: "Data", filesystem: "ext4", sizeBytes: 1e12, freeBytes: 6e11, kind: "hdd", current: false },
+          ],
+          move: null,
+        });
+      if (path === "/homeassistant/connections" && method === "GET")
+        return json({ connections: [], max: 8 });
+      // Settings › API und CLI: no token yet.
+      if (path === "/account/tokens" && method === "GET")
+        return json({
+          tokens: [],
+          scopes: ["system:read", "system:write", "files:read", "files:write", "docker:read", "docker:write", "vms:read", "vms:write", "mcp"],
+        });
+      // Dynamic DNS and the IPv64 tab: nothing set up, no IPv64 key.
+      if (path === "/network/ddns" && method === "GET")
+        return json({
+          settings: {
+            enabled: false,
+            hostnames: [],
+            provider: { type: "" },
+            ipv4: true,
+            ipv6: true,
+            interval: 0,
+            lookupURL: "",
+            interface: "",
+            heartbeat: { enabled: false },
+          },
+          secrets: {},
+          running: false,
+          heartbeat: {},
+        });
+      if (path === "/ipv64" && method === "GET")
+        return json({
+          status: {
+            settings: {
+              notify: { enabled: false, failover: true, cdnTraffic: true, healthchecks: true },
+              blocklist: { enabled: false },
+              wireguard: { enabled: false },
+              published: [],
+              maintenance: [],
+            },
+            keySet: false,
+            keySource: "",
+            poll: {},
+            blocklistStatus: { entries: 0, live: false },
+            tunnel: { up: false, routes: [] },
+            readOnly: false,
+          },
+          firewall: false,
+          nasCheck: "",
+          hostname: "titan-test",
+          zones: ["ipv64.de", "ipv64.net", "home64.de"],
+          recordTypes: ["A", "AAAA", "CNAME", "MX", "TXT", "NS", "SRV", "TLSA", "CAA"],
+        });
+      // New VM: eight threads, no image or free disk yet.
+      if (path === "/vms/host")
+        return json({
+          cpus: Array.from({ length: 8 }, (_, id) => ({ id, kind: "", siblings: [id % 4, (id % 4) + 4], usedBy: [] })),
+          images: [],
+          disks: [],
+          virt: null,
+        });
+      // Settings › Network (the welcome flow has its own answer above).
+      if (path === "/network" && method === "GET") {
+        const lan = {
+          id: "admin",
+          name: "Heimnetz",
+          purpose: "management",
+          parent: "enp1s0",
+          vlan: 0,
+          bridge: true,
+          management: true,
+          ipv4: "dhcp",
+          address: "",
+          gateway: "",
+          ipv6: "auto",
+          address6: "",
+          gateway6: "",
+          dns: [],
+          routes: [],
+        };
+        const config = {
+          hostname: "titan-test",
+          ports: ["enp1s0"],
+          bondMode: "",
+          vlan: 0,
+          bridge: true,
+          dhcp: true,
+          address: "",
+          gateway: "",
+          dns: [],
+          networks: [lan],
+          bonds: [],
+        };
+        return json({
+          network: {
+            config,
+            pending: null,
+            pendingSeconds: 0,
+            interfaces: [{ name: "enp1s0", mac: "52:54:00:00:00:01", carrier: true, speedMbps: 1000 }],
+            device: "br0",
+            addresses: ["192.168.1.20/24"],
+            gateway: "192.168.1.1",
+            dns: ["192.168.1.1"],
+            configured: true,
+            bridgeReady: true,
+            topology: config,
+            pendingTopology: null,
+            live: { admin: { device: "br0", up: true, addresses: ["192.168.1.20/24"] } },
+            vlans: false,
+            vlansInUse: false,
+          },
+          bondModes: ["active-backup", "802.3ad", "balance-alb"],
+        });
+      }
+      // Plugins without data.plugins (scripts that set it are answered above).
+      if (path === "/plugins" || path === "/plugins/catalog") {
+        const plugin = (name, title, category, installed, description) => ({
+          name,
+          title,
+          description,
+          version: "1.0.0",
+          size: 24e6,
+          kernel: "",
+          contains: null,
+          modules: [],
+          services: installed ? ["titanos-" + name + ".service"] : [],
+          installed,
+          enabled: installed,
+          active: installed,
+          path: "",
+          official: true,
+          local: false,
+          download: !installed,
+          problem: "",
+          update: null,
+          category,
+        });
+        return json({
+          driverUpdate: null,
+          volume: "Data",
+          kernel: "test",
+          plugins: [
+            plugin("intel-gpu-tools", "Intel GPU Tools", "tools", true, { de: "Werkzeuge für Intel-Grafik", en: "Tools for Intel graphics" }),
+            plugin("tailscale", "Tailscale", "remote", false, { de: "Fernzugriff ohne offene Ports", en: "Remote access without open ports" }),
+          ],
+          catalog: { release: releaseVersion(), state: "ready" },
+          recommendations: [],
+          dismissed: 0,
+          sources: [],
+        });
+      }
+      if (path === "/plugins/progress") return json({ operations: [] });
+      if (path === "/plugins/releases")
+        return json({
+          releases: [
+            { version: releaseVersion(), bytes: 600e6, protected: true, reason: "current", fingerprint: "current" },
+            { version: "0.58.0", bytes: 590e6, protected: true, reason: "fallback", fingerprint: "fallback" },
+            { version: "0.55.0", bytes: 580e6, protected: false, fingerprint: "old" },
+          ],
+        });
+      // Let's Encrypt: one name proven over DNS, certificate valid.
+      if (path === "/system/letsencrypt" && method === "GET")
+        return json({
+          settings: {
+            enabled: true,
+            email: "",
+            staging: false,
+            domains: ["nas.example.de"],
+            apps: false,
+            challenge: "dns-01",
+            provider: { type: "cloudflare" },
+            propagation: 0,
+            directory: "",
+          },
+          secrets: { token: true },
+          names: ["nas.example.de"],
+          appDomain: "",
+          certificate: {
+            names: ["nas.example.de"],
+            issuer: "R11",
+            notBefore: "2026-10-01T00:00:00Z",
+            notAfter: "2026-12-30T00:00:00Z",
+            fingerprint: "ab",
+          },
+          running: false,
+          lastAttempt: time,
+          lastSuccess: time,
+          failures: 0,
+          renewAt: "2026-11-30T00:00:00Z",
+          httpPort: true,
+          firewall: false,
+          internetHttp: false,
+        });
+      // Docker › LAN networks: one container LAN on the home network.
+      if (path === "/docker/networks" && method === "GET")
+        return json({
+          networks: [
+            { name: "heimnetz", parent: "admin", driver: "ipvlan", subnet: "192.168.1.0/24", gateway: "192.168.1.1", range: "192.168.1.192/27", hostAccess: false },
+          ],
+          parents: [
+            { id: "admin", name: "Heimnetz", purpose: "management", parent: "enp1s0", vlan: 0, bridge: true, management: true, ipv4: "dhcp", address: "", gateway: "", ipv6: "auto", address6: "", gateway6: "", dns: [] },
+          ],
+        });
       return json({});
     });
     // PLAN 63: a remote view that never starts (scripts that test it

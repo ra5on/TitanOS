@@ -303,6 +303,12 @@ func (c *client) execStart(ctx context.Context, execID string) (io.ReadWriteClos
 	if err != nil {
 		return nil, err
 	}
+	// The handshake ends with ctx (or after 30 s): an engine that accepts
+	// but never answers must not hold the request and the socket forever.
+	// The terminal itself has no deadline.
+	stop := context.AfterFunc(ctx, func() { conn.SetDeadline(time.Unix(1, 0)) })
+	defer stop()
+	_ = conn.SetDeadline(time.Now().Add(30 * time.Second))
 	const body = `{"Detach":false,"Tty":true}`
 	_, err = fmt.Fprintf(conn, "POST /v1.43/exec/%s/start HTTP/1.1\r\nHost: docker\r\nContent-Type: application/json\r\nConnection: Upgrade\r\nUpgrade: tcp\r\nContent-Length: %d\r\n\r\n%s", execID, len(body), body)
 	if err != nil {
@@ -318,6 +324,14 @@ func (c *client) execStart(ctx context.Context, execID string) (io.ReadWriteClos
 	if res.StatusCode != http.StatusSwitchingProtocols && res.StatusCode != http.StatusOK {
 		conn.Close()
 		return nil, &apiError{Status: res.StatusCode, Message: "exec could not be started"}
+	}
+	if !stop() {
+		conn.Close()
+		return nil, context.Cause(ctx)
+	}
+	if err := conn.SetDeadline(time.Time{}); err != nil {
+		conn.Close()
+		return nil, err
 	}
 	// The reader may already hold the first bytes of output.
 	return &hijacked{Conn: conn, reader: reader}, nil

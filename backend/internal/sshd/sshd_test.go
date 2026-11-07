@@ -220,6 +220,8 @@ func TestHostKeyKeptWhenOnlyPublicHalfIsMissing(t *testing.T) {
 	if err := m.store.Remove(hostKeyFile + ".pub"); err != nil {
 		t.Fatal(err)
 	}
+	// As after a restart of titand: the key is read from /config again.
+	m.hostPrivate, m.hostPublic = nil, nil
 	second, err := m.hostKey(context.Background())
 	if err != nil || second != first {
 		t.Fatalf("fingerprint %q -> %q (%v)", first, second, err)
@@ -266,5 +268,34 @@ func TestLockedAccountLosesSSH(t *testing.T) {
 	m.Apply(context.Background(), users)
 	if keys, _ := os.ReadFile(filepath.Join(m.etcDir, "authorized_keys/bo")); string(keys) != key+"\n" || len(m.Status().Accounts) != 1 {
 		t.Errorf("after unlock: %q %v", keys, m.Status().Accounts)
+	}
+}
+
+// Apply runs again every few seconds while an account waits for its Linux
+// user; the key of the NAS is read from /config only the first time.
+func TestHostKeyReadOnce(t *testing.T) {
+	m, system, _ := newManager(t)
+	if err := m.SetEnabled(true); err != nil {
+		t.Fatal(err)
+	}
+	users := []auth.User{{Name: "alex", Role: auth.RoleOwner, UID: 2000, SSHKeys: []string{userKey(t)}}, {Name: "neu", Role: auth.RoleAdmin, UID: 2001, SSHKeys: []string{userKey(t)}}}
+	if complete, err := m.Apply(context.Background(), users); err != nil || complete {
+		t.Fatal(complete, err)
+	}
+	first := m.Status().Fingerprint
+	// Gone from /config: a read would make a new key.
+	for _, name := range []string{hostKeyFile, hostKeyFile + ".pub"} {
+		if err := m.store.Remove(name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := m.Apply(context.Background(), users); err != nil {
+		t.Fatal(err)
+	}
+	if m.Status().Fingerprint != first || system.ran("ssh-keygen") != 1 {
+		t.Fatalf("key read or made again: %s -> %s, calls %v", first, m.Status().Fingerprint, system.calls)
+	}
+	if _, err := m.store.Read(hostKeyFile); err == nil {
+		t.Fatal("key written to /config again")
 	}
 }

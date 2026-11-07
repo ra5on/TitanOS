@@ -84,7 +84,7 @@
 	}
 </script>
 
-<PageHead title={t('appaccess.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
+<PageHead title={t('appaccess.title')}>
 	<p class="muted">{t('appaccess.intro')}</p>
 </PageHead>
 

@@ -137,12 +137,14 @@ func (u *Users) FindPasskey(id string, userHandle []byte) (User, Passkey, bool) 
 }
 
 // UsePasskey remembers the new signature counter. Most synced passkeys
-// always send 0; then nothing is written to the stick.
+// always send 0; then nothing is written to the stick. The counter only
+// goes up: of two logins checked at the same time, the one with the lower
+// count may finish last.
 func (u *Users) UsePasskey(name, id string, count uint32) error {
 	_, err := u.update(name, func(user *User) error {
 		for i := range user.Passkeys {
 			if user.Passkeys[i].ID == id {
-				if user.Passkeys[i].SignCount == count {
+				if count <= user.Passkeys[i].SignCount {
 					return errUnchanged
 				}
 				user.Passkeys[i].SignCount = count

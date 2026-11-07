@@ -262,6 +262,10 @@ type Server struct {
 	// pending are the stand-ins New made for missing managers; Start
 	// loads their settings.
 	pending []func(context.Context) error
+	// shareSyncs counts the agentSyncShare runs started in the background
+	// after a settings change; tests wait for them before they change the
+	// storage manager.
+	shareSyncs sync.WaitGroup
 }
 
 // New returns the handler for all requests.

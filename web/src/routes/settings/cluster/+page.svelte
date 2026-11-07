@@ -316,7 +316,7 @@
 	}
 </script>
 
-<PageHead title={t('cluster.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
+<PageHead title={t('cluster.title')}>
 	<p class="muted">{t('cluster.intro')}</p>
 </PageHead>
 

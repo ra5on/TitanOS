@@ -101,6 +101,8 @@ Schnittstellen:
 
 ## Dashboard nach Beta 5
 
+*Seit 0.59.0 gibt es das Dashboard nicht mehr (Desktop-Modus, `docs/DESKTOP.md`); der folgende Abschnitt beschreibt den Stand bis 0.59.0.*
+
 CPU, Arbeitsspeicher und Systeminfos sind getrennte Kacheln. Vorhandene Layouts
 werden einmal ergänzt; die bisherige Systemkachel wird nicht verschoben oder
 verkleinert. Ab Layoutversion 3 bleiben auch bewusst entfernte CPU-/RAM-Kacheln
@@ -138,6 +140,8 @@ bleiben unbekannt. Hinweise sind auf der geladenen Seite sichtbar; es gibt dafü
 keine zusätzlichen Push-Meldungen. Genaue Grenzen in [WORKFLOWS.md](WORKFLOWS.md).
 
 ## Dashboard-Editor und MQTT seit 0.18.0
+
+*Seit 0.59.0 gibt es das Dashboard nicht mehr (Desktop-Modus, `docs/DESKTOP.md`); der folgende Abschnitt beschreibt den Stand bis 0.59.0.*
 
 Der [persönliche Editor](design/PersonalDashboard.md) ergänzt Typografie, Flächen,
 Messwertdarstellungen und mehrere unabhängige Kachelinstanzen auf einer Startseite.

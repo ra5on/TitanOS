@@ -44,8 +44,9 @@ func (m *Manager) refreshBtrfs(ctx context.Context) {
 	}
 	defer m.actions.Unlock()
 	states := map[string]btrfsProgress{}
+	mounts := m.readMounts() // once per round, not once per volume
 	for _, volume := range m.configured() {
-		if volume.Filesystem != "btrfs" || !m.readMounts()[m.MountPoint(volume.Name)] {
+		if volume.Filesystem != "btrfs" || !mounts[m.MountPoint(volume.Name)] {
 			continue
 		}
 		probe, cancel := context.WithTimeout(ctx, 3*time.Second)

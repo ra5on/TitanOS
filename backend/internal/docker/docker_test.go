@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -630,5 +631,140 @@ func TestJobLogKeepsOneLinePerImageAndLayer(t *testing.T) {
 	want := "web Pulled\n034d6572bf28 Pull complete\nContainer web-1 Created"
 	if got := log.String(); got != want {
 		t.Errorf("log = %q, want %q", got, want)
+	}
+}
+
+// An engine that accepts the exec connection but never answers must not
+// hold the console request forever.
+func TestExecStartGivesUpWithContext(t *testing.T) {
+	socket := filepath.Join(t.TempDir(), "docker.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { listener.Close() })
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			t.Cleanup(func() { conn.Close() })
+		}
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		stream, err := newClient(socket).execStart(ctx, "abc")
+		if stream != nil {
+			stream.Close()
+		}
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("execStart succeeded without an answer")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("execStart still waits for an engine that does not answer")
+	}
+}
+
+// After the handshake the terminal has no deadline, even once the context
+// of the request that opened it is over.
+func TestExecStartTerminalOutlivesHandshake(t *testing.T) {
+	socket := filepath.Join(t.TempDir(), "docker.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { listener.Close() })
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		reader := bufio.NewReader(conn)
+		req, err := http.ReadRequest(reader)
+		if err != nil {
+			return
+		}
+		req.Body.Close()
+		conn.Write([]byte("HTTP/1.1 101 UPGRADED\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n"))
+		time.Sleep(300 * time.Millisecond)
+		conn.Write([]byte("hello"))
+	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	stream, err := newClient(socket).execStart(ctx, "abc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Close()
+	cancel()
+	buf := make([]byte, 5)
+	if _, err := io.ReadFull(stream, buf); err != nil || string(buf) != "hello" {
+		t.Fatalf("terminal read %q, %v", buf, err)
+	}
+}
+
+// A build that prints without end must not grow titand's memory.
+func TestJobLogIsBounded(t *testing.T) {
+	var log jobLog
+	log.add("034d6572bf28 Pulling fs layer")
+	for i := range 100000 {
+		log.add("step " + itoa(uint64(i)) + strings.Repeat("x", 10))
+	}
+	log.add(strings.Repeat("y", 1<<20))
+	log.add("034d6572bf28 Pull complete")
+	log.add("last line")
+	if len(log.lines) > jobLogLines {
+		t.Errorf("job log keeps %d lines", len(log.lines))
+	}
+	for _, line := range log.lines {
+		if len(line) > jobLineMax+len("…") {
+			t.Fatalf("job log keeps a line of %d bytes", len(line))
+		}
+	}
+	if !strings.HasSuffix(log.String(), "\n034d6572bf28 Pull complete\nlast line") {
+		t.Errorf("tail of the log: %q", log.String()[len(log.String())-80:])
+	}
+	// The index still points at the right lines after trimming.
+	log.add("034d6572bf28 Already exists")
+	if !strings.HasSuffix(log.String(), "\n034d6572bf28 Already exists\nlast line") {
+		t.Errorf("progress line not updated in place: %q", log.String()[len(log.String())-80:])
+	}
+}
+
+// ctxRunner fails commands whose context is already over, like exec does.
+type ctxRunner struct{ fakeRunner }
+
+func (r *ctxRunner) Run(ctx context.Context, stdin string, name string, args ...string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	return r.fakeRunner.Run(ctx, stdin, name, args...)
+}
+
+// Closing the page that removes an app must not stop "down" halfway.
+func TestRemoveAppOutlivesRequest(t *testing.T) {
+	m, _, _ := newTestManager(t)
+	runner := &ctxRunner{}
+	m.runner = runner
+	m.applied = "/somewhere"
+	m.SetSettings(Settings{Enabled: true, Volume: "data"}, []string{"data"})
+	m.store.Write("apps/whoami/compose.yaml", []byte("services: {}"))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := m.RemoveApp(ctx, "whoami", false); err != nil {
+		t.Fatalf("remove with a closed request: %v", err)
+	}
+	if !slices.ContainsFunc(runner.commands, func(c string) bool { return strings.HasSuffix(c, "down --remove-orphans") }) {
+		t.Errorf("no compose down in %v", runner.commands)
+	}
+	if _, err := m.Compose("whoami"); !errors.Is(err, ErrNotFound) {
+		t.Error("compose file still stored")
 	}
 }

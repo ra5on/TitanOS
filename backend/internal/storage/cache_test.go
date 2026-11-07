@@ -549,3 +549,72 @@ func TestForgottenCacheClearsTheSSD(t *testing.T) {
 		}
 	})
 }
+
+// breakVolumesFile makes every later write of volumes.json fail.
+func breakVolumesFile(t *testing.T, m *Manager) {
+	t.Helper()
+	path := filepath.Join(m.store.Dir(), configFile)
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(path, "keep"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A failed save must not change the volumes in RAM: the cache settings
+// are pointers, and changing them in place made RAM believe what the
+// stick never got. A read cache then counted as stale in RAM only and was
+// mounted without its SSD, while the stick still trusted the cache.
+func TestFailedCacheSaveLeavesTheVolumesUnchanged(t *testing.T) {
+	ctx := context.Background()
+	m, runner := cacheManager(t)
+	m.volumes[0].Cache = &CacheConfig{Mode: "writethrough", MetaUUID: testMetaUUID, DataUUID: testDataUUID}
+	m.saveVolumes(m.volumes)
+	cachedArray(t, m)
+	m.clock = func() time.Time { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }
+	m.cacheSeen = map[string]time.Time{"tank": m.clock().Add(-cacheGrace)}
+	breakVolumesFile(t, m)
+
+	for round := 0; round < 2; round++ {
+		cfg, _ := m.find("tank")
+		if source, err := m.mountSource(ctx, cfg); err == nil {
+			t.Fatalf("round %d: mounted from %s although the stale mark was not saved", round, source)
+		}
+		if cfg, _ := m.find("tank"); cfg.Cache.Stale {
+			t.Fatalf("round %d: stale in RAM only", round)
+		}
+	}
+
+	ssdPresent(t, m)
+	cfg, _ := m.find("tank")
+	if _, err := m.mountSource(ctx, cfg); err != nil {
+		t.Fatal(err)
+	}
+	runner.fakeDM.log = nil
+	if err := m.SetCacheMode(ctx, "tank", "writeback"); err == nil {
+		t.Fatal("mode change reported although not saved")
+	}
+	if cfg, _ := m.find("tank"); cfg.Cache.Mode != "writethrough" {
+		t.Fatalf("mode %q in RAM only", cfg.Cache.Mode)
+	}
+	if table := runner.fakeDM.live["titanos-cache-tank"]; !strings.Contains(table, "writethrough") {
+		t.Fatalf("live cache became %q while the stick still says read cache", table)
+	}
+}
+
+// In development mode the cleaner leaves caches alone: detaching and
+// clearing the SSD change disks.
+func TestCacheCleanerChangesNothingInDevelopmentMode(t *testing.T) {
+	m, runner := cacheManager(t)
+	activeCache(t, m, runner, "writeback", 0)
+	m.updateVolume("tank", func(v *VolumeConfig) { v.Cache.Removing = true })
+	zeroed := zeroWatch(m, runner)
+	m.ReadOnly = true
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	m.RunCacheCleaner(ctx)
+	if cfg, _ := m.find("tank"); cfg.Cache == nil || len(*zeroed) != 0 || strings.Contains(runner.dm(), "reload") {
+		t.Fatalf("cache touched in development mode: %+v %v\n%s", cfg.Cache, *zeroed, runner.dm())
+	}
+}

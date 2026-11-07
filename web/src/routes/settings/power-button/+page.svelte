@@ -35,7 +35,7 @@
 	}
 </script>
 
-<PageHead title={t('powerButton.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
+<PageHead title={t('powerButton.title')}>
 	<p class="muted">{t('powerButton.intro')}</p>
 </PageHead>
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}

@@ -108,3 +108,35 @@ func TestRunGivesUpOnAProcessThatDoesNotEnd(t *testing.T) {
 		t.Fatalf("%v after %v", err, time.Since(start))
 	}
 }
+
+// A command printing for long keeps only the end of its output in memory,
+// and a line without end reaches onLine in parts.
+func TestLineWriterIsBounded(t *testing.T) {
+	longest := 0
+	w := &lineWriter{onLine: func(line string) { longest = max(longest, len(line)) }}
+	chunk := []byte(strings.Repeat("x", 4096))
+	for range 2048 { // 8 MiB without a line end
+		_, _ = w.Write(chunk)
+	}
+	_, _ = w.Write([]byte("end\n"))
+	if w.all.Len() > 2*keptOutput || len(w.part) != 0 {
+		t.Fatalf("kept %d bytes, part %d", w.all.Len(), len(w.part))
+	}
+	if longest == 0 || longest > maxLine {
+		t.Fatalf("longest line handed over: %d", longest)
+	}
+	if out := w.output(); len(out) != keptOutput || !strings.HasSuffix(out, "xend\n") {
+		t.Fatalf("output: %d bytes, ends %q", len(out), out[max(0, len(out)-8):])
+	}
+}
+
+func TestRunCombinedLinesReturnsTheEnd(t *testing.T) {
+	lines := 0
+	out, err := Exec{}.RunCombinedLines(context.Background(), func(string) { lines++ }, "sh", "-c", "yes line | head -n 300000; echo last")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) > keptOutput || !strings.HasSuffix(out, "last\n") || lines != 300001 {
+		t.Fatalf("%d bytes, %d lines, ends %q", len(out), lines, out[max(0, len(out)-8):])
+	}
+}

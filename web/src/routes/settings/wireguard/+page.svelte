@@ -136,7 +136,7 @@
 	}
 </script>
 
-<PageHead title={t('wg.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
+<PageHead title={t('wg.title')}>
 	<p class="muted">{t('wg.intro')}</p>
 </PageHead>
 

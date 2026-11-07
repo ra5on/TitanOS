@@ -24,6 +24,8 @@ Anmeldung und Freigabe des Geräts erfolgen dort durch den Besitzer.
 
 ## Dashboard-Kachel
 
+*Seit 0.59.0 gibt es das Dashboard nicht mehr (Desktop-Modus, `docs/DESKTOP.md`); der folgende Abschnitt beschreibt den Stand bis 0.59.0.*
+
 Besitzer und Administratoren können im Dashboard-Editor die Kachel
 **Tailscale** hinzufügen. Sie zeigt die Geräte des Tailnets einschließlich
 dieses NAS. Je Kachel lassen sich Geräte (über die stabile Tailscale-Node-ID,

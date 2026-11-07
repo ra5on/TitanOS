@@ -341,6 +341,21 @@ func (m *Manager) SetCacheMode(ctx context.Context, name, mode string) error {
 			return err
 		}
 	}
+	if mode == "writeback" && volume.Cache.Mode != "writeback" {
+		// Saved before the live switch: a write cache the stick still
+		// called a read cache would be mounted without its SSD, and its
+		// unwritten blocks lost.
+		if err := m.updateVolume(name, func(v *VolumeConfig) { v.Cache.Mode = mode }); err != nil {
+			return err
+		}
+		if err := m.reloadCache(ctx, volume, mode, cachePolicy); err != nil {
+			// Still a read cache. Should going back fail, the stick says
+			// write cache, which only waits for the SSD at mount.
+			_ = m.updateVolume(name, func(v *VolumeConfig) { v.Cache.Mode = volume.Cache.Mode }) // best effort, see above
+			return err
+		}
+		return nil
+	}
 	if err := m.reloadCache(ctx, volume, mode, cachePolicy); err != nil {
 		return err
 	}
@@ -617,6 +632,9 @@ func (m *Manager) finishCacheRemoval(ctx context.Context, name string) bool {
 // RunCacheCleaner forgets caches that were being written back once they
 // hold no dirty block, every 10 seconds until ctx is done.
 func (m *Manager) RunCacheCleaner(ctx context.Context) {
+	if m.ReadOnly {
+		return // detaching and clearing the SSD change disks
+	}
 	for {
 		for _, volume := range m.configured() {
 			if volume.Cache == nil || !volume.Cache.Removing {

@@ -17,11 +17,28 @@ import (
 // Native Btrfs volumes use one of btrfsLayouts for data and metadata. No md
 // device is involved. The filesystem UUID, not a Linux device name,
 // identifies the pool.
-func (m *Manager) createBtrfs(ctx context.Context, req CreateRequest, devices []blockDevice, sizeMiB uint64, password []byte) error {
+func (m *Manager) createBtrfs(ctx context.Context, req CreateRequest, devices []blockDevice, sizeMiB uint64, password []byte) (result error) {
 	var parts []string
 	var encryption *EncryptionConfig
 	if req.Encrypt {
 		encryption = &EncryptionConfig{UUIDs: []string{}}
+		// A failed create closes the containers it opened: left open they
+		// hold the disks, and using them again is refused until a restart.
+		defer func() {
+			// Once recorded (only mounting failed) the volume stays as is.
+			if result == nil {
+				return
+			}
+			if _, ok := m.find(req.Name); ok {
+				return
+			}
+			cleanup := context.WithoutCancel(ctx)
+			for _, uuid := range encryption.UUIDs {
+				if err := m.luksClose(cleanup, cryptName(VolumeConfig{Name: req.Name, Filesystem: "btrfs"}, uuid)); err != nil {
+					slog.Warn("clean up after failed create: close LUKS", "volume", req.Name, "err", err)
+				}
+			}
+		}()
 	}
 	for _, name := range req.Disks {
 		device, _ := findDevice(devices, name)

@@ -1481,7 +1481,7 @@
 	}
 	.sticky {
 		position: sticky;
-		bottom: var(--fab-clear, 0px);
+		bottom: 0;
 		padding: var(--space-3) 0;
 		background: linear-gradient(transparent, var(--bg) 30%);
 		display: flex;

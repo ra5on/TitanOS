@@ -364,3 +364,22 @@ func TestPublishAvahiHosts(t *testing.T) {
 		t.Errorf("hosts file written in development mode: %v", err)
 	}
 }
+
+func TestClientCannotClaimRealIP(t *testing.T) {
+	m, _ := newTestManager(t)
+	port := upstreamPort(t, func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, strings.Join(r.Header.Values("X-Real-Ip"), ","))
+	})
+	if err := m.SetRoute("vault", Route{Enabled: true, Name: "vault", Port: port}); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Host = "vault.nas.local"
+	req.RemoteAddr = "192.168.1.5:5000"
+	req.Header.Set("X-Real-IP", "6.6.6.6")
+	rec := httptest.NewRecorder()
+	m.Handler(http.NotFoundHandler()).ServeHTTP(rec, req)
+	if got := rec.Body.String(); got != "192.168.1.5" {
+		t.Errorf("app saw X-Real-IP %q, want the connection's address", got)
+	}
+}

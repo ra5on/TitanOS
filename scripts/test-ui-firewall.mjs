@@ -154,7 +154,8 @@ async function routes(ctx, fw, acme) {
 }
 
 const overflow = (page) => page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
-const nav = (page) => page.getByRole("navigation", { name: "Einstellungsbereiche", exact: true });
+// PLAN 65: the settings overview lists the areas (the window lists them too; no sidebar in the page).
+const nav = (page) => page.locator(".settings-shell");
 
 try {
   // Desktop.
@@ -166,14 +167,14 @@ try {
     const acme = { value: acmeData("http-01") };
     await routes(ctx, fw, acme);
 
-    // The sidebar lists the firewall under "Netzwerk" (PLAN 61), A–Z and
+    // The overview lists the firewall under "Netzwerk" (PLAN 61), A–Z and
     // with the "neu" badge.
-    await page.goto(base + "/settings/network");
-    await nav(page).waitFor();
+    await page.goto(base + "/settings");
+    await nav(page).locator(".home-tile").first().waitFor();
     const group = nav(page).locator(".group-title", { hasText: "Netzwerk" });
     await group.waitFor();
     await page.screenshot({ path: `${out}/settings-overview-desktop.png`, fullPage: true });
-    const hrefs = await nav(page).locator("a").evaluateAll((links) => links.map((a) => a.getAttribute("href")));
+    const hrefs = await nav(page).locator("a.home-tile").evaluateAll((links) => links.map((a) => a.getAttribute("href")));
     const network = hrefs.slice(hrefs.indexOf("/settings/ddns"), hrefs.indexOf("/settings/wireguard") + 1);
     assert.deepEqual(network, [
       "/settings/ddns", "/settings/firewall", "/settings/proxy", "/settings/letsencrypt", "/settings/network", "/settings/wireguard",
@@ -181,21 +182,19 @@ try {
     for (const area of ["firewall", "letsencrypt", "ddns"])
       assert.equal(await nav(page).locator(`a[href="/settings/${area}"]`).getByText("neu", { exact: true }).count(), 1, area);
 
-    // Firewall: inside the sidebar, compact controls, switch on with trial.
+    // Firewall: compact controls, switch on with trial.
     await page.goto(base + "/settings/firewall");
     await page.getByRole("heading", { level: 1, name: "Firewall" }).waitFor();
-    assert.equal(await nav(page).locator('a[aria-current="page"]').getAttribute("href"), "/settings/firewall");
     // Opening an area once takes its "new" badge away; the others keep theirs.
+    await page.goto(base + "/settings");
+    await nav(page).locator(".home-tile").first().waitFor();
     assert.equal(await nav(page).locator('a[href="/settings/firewall"]').getByText("neu", { exact: true }).count(), 0, "seen");
     assert.equal(await nav(page).locator('a[href="/settings/ddns"]').getByText("neu", { exact: true }).count(), 1, "not seen yet");
-    assert.equal(await page.locator(".crumbs").first().isVisible(), false, "no breadcrumb beside the sidebar");
+    await page.goto(base + "/settings/firewall");
+    await page.getByRole("heading", { level: 1, name: "Firewall" }).waitFor();
     const button = page.locator(".settings-page .tile .btn").first();
     await button.waitFor();
     assert.ok((await button.boundingBox()).height <= 32, "compact settings buttons");
-    const aside = await page.locator(".settings-aside").boundingBox();
-    const main = await page.locator(".settings-page").first().boundingBox();
-    assert.ok(main.x >= aside.x + aside.width, "the page sits right of the sidebar");
-    assert.ok(main.width <= 64 * 16 + 1, `page at most 64rem wide (${main.width})`);
     await page.screenshot({ path: `${out}/firewall-desktop-off.png`, fullPage: true });
     const master = page.getByRole("checkbox", { name: "Firewall einschalten", exact: true });
     await master.check();
@@ -289,12 +288,11 @@ try {
     await page.goto(base + "/settings/ddns");
     await page.getByRole("heading", { level: 1, name: "Dynamisches DNS" }).waitFor();
     await page.getByText("198.51.100.20").first().waitFor();
-    assert.equal(await nav(page).locator('a[aria-current="page"]').getAttribute("href"), "/settings/ddns");
     await page.screenshot({ path: `${out}/ddns-desktop.png`, fullPage: true });
     await ctx.close();
   }
 
-  // Phone width: no sidebar, way back, no horizontal scroll.
+  // Phone width: no horizontal scroll.
   {
     const { ctx, page, data } = await create("owner", "graphit", 390);
     data.system.version = "0.31.0";
@@ -310,8 +308,6 @@ try {
     ]) {
       await page.goto(base + path);
       await page.getByRole("heading", { level: 1, name: heading }).waitFor();
-      await page.getByRole("link", { name: "‹ Einstellungen", exact: true }).waitFor();
-      assert.equal(await nav(page).isVisible(), false);
       if (name === "letsencrypt") await page.getByTestId("le-firewall-http").waitFor();
       assert.ok((await overflow(page)) <= 1, `${name}: horizontal scroll`);
       await page.screenshot({ path: `${out}/${name}-mobile.png`, fullPage: true });

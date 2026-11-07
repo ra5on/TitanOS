@@ -1,7 +1,17 @@
 # Docker-Apps im Fenster: Programme, Browser-Sperre, automatische Namen, Zertifizierungsstelle
 
 PLAN 61 (Desktop-Modus, Entscheidungen des Projektinhabers vom 6.11.2026, 61-1 bis 61-9).
-Der Arbeitsplatz zeigt jede Docker-App mit WebUI in einem Fenster: ein iframe ihres
+> **Stand seit 0.61.0:** Das Fenster einer Docker-App zeigt die App nicht mehr als iframe,
+> sondern immer in der **Fernansicht** (`docs/FERNANSICHT.md`, Entscheidung des
+> Projektinhabers „Immer Fernansicht“, PLAN 62-4/63). Was unten über das iframe im Fenster
+> steht, beschreibt den Stand 0.58.0–0.59.1. Weiter gültig sind die Rechte je Konto
+> (Programme, auch für die Fernansicht), die Browser-Schranke für Aufrufe über den
+> HTTPS-Namen (z. B. „In eigenem Tab öffnen“), die automatischen Namen und die
+> Zertifizierungsstelle. Die Umschreibung von `X-Frame-Options`/`frame-ancestors` im Proxy
+> (`appproxy/frame.go`) läuft noch, hat in TitanOS aber keinen Verwender mehr: die Oberfläche
+> erlaubt als `frame-src` nur `'self'`, und ein eigener Tab wird nie eingebettet.
+
+Bis 0.59.1 zeigte der Arbeitsplatz jede Docker-App mit WebUI in einem Fenster als iframe ihres
 HTTPS-Namens (`https://immich.nas.local`, siehe `docs/APP-PROXY.md`). Dieses Dokument
 beschreibt den Teil im App-Proxy und in titand; Fenster und Arbeitsplatz selbst
 stehen in der Dokumentation des Desktop-Modus.

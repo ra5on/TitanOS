@@ -15,7 +15,7 @@ const only = process.env.UI_ROUTES?.split(",");
 await mkdir(out, { recursive: true });
 
 const routes = [
-  "/", "/account", "/apps", "/docker", "/docker/apps/web",
+  "/account", "/apps", "/docker", "/docker/apps/web",
   "/docker/networks", "/files", "/plugins", "/plugins/cleanup", "/settings",
   "/settings/about", "/settings/access", "/settings/api",
   "/settings/appearance", "/settings/backups", "/settings/cluster",
@@ -46,9 +46,10 @@ if (!login) {
   process.exit(2);
 }
 const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 } });
-// The crawl opens every page in the classic frame; the desktop mode
-// (PLAN 61) has scripts/test-ui-desktop.mjs.
-await ctx.addInitScript(() => localStorage.setItem("titanos.layout", "classic"));
+// The crawl opens every page alone, as a window of the desktop shows it
+// (PLAN 65, lib/desktop/mode.svelte.ts); the desktop itself has
+// scripts/test-ui-desktop.mjs.
+await ctx.addInitScript(() => localStorage.setItem("titanos.layout", "bare"));
 const page = await ctx.newPage();
 page.setDefaultTimeout(12000);
 page.on("pageerror", (e) => errors.push(String(e)));
@@ -110,58 +111,6 @@ for (const route of routes) {
     note(route, "crawler", String(e).split("\n")[0]);
   }
 }
-if (!only || only.includes("/")) {
-  try {
-    await addEveryTile();
-  } catch (e) {
-    note("/", "editor", String(e).split("\n")[0]);
-  }
-}
-
-// The editor button sits in the header, outside <main>: add every tile the
-// editor offers against the real -dev answers, then cancel. Without an active
-// plugin the Tailscale and NetBird tiles must say so calmly.
-async function addEveryTile() {
-  await open("/");
-  await page
-    .getByRole("button", { name: /^(Dashboard bearbeiten|Edit dashboard)$/ })
-    .click();
-  const addButton = page
-    .locator(".editbar")
-    .getByRole("button", { name: /^(Kachel hinzufügen|Add a tile)$/ });
-  await addButton.click();
-  const choices = page.locator(".add-tiles .tile-choices button:enabled");
-  await choices.first().waitFor();
-  let added = 0;
-  // Adding a tile opens its inspector; the toolbar button reopens the list.
-  while (added < 40) {
-    if (!(await page.locator(".add-tiles").count())) await addButton.click();
-    await page.locator(".add-tiles").waitFor();
-    if (!(await choices.count())) break;
-    const label = (await choices.first().innerText()).trim();
-    errors.length = 0;
-    consoleErrors.length = 0;
-    await choices.first().click();
-    added++;
-    await page.waitForTimeout(400);
-    if ((await broken()) || errors.length || consoleErrors.length)
-      note("/", `add tile "${label}"`, [...errors, ...consoleErrors].join(" | ") || "error page");
-  }
-  await page
-    .locator('.grid-stack-item[gs-id="tailscale"]')
-    .getByText(/^(Das Tailscale-Plugin ist nicht aktiv\.|The Tailscale plugin is not active\.)$/)
-    .waitFor();
-  await page
-    .locator('.grid-stack-item[gs-id="netbird"]')
-    .getByText(/^(Das NetBird-Plugin ist nicht aktiv\.|The NetBird plugin is not active\.)$/)
-    .waitFor();
-  await page.getByRole("button", { name: /^(Abbrechen|Cancel)$/ }).click();
-  // Unsaved changes: the editor asks before discarding them.
-  await page.getByRole("button", { name: /^(Verwerfen|Discard)$/ }).click();
-  await page.locator(".editbar").waitFor({ state: "detached" });
-  console.log(`ok / editor (${added} tiles added)`);
-}
-
 async function crawl(route) {
   await open(route);
   if ((await broken()) || errors.length || consoleErrors.length) {

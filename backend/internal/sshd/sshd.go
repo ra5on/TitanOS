@@ -91,6 +91,8 @@ type Manager struct {
 	running     bool
 	accounts    []string
 	netErr      string
+	// hostPrivate/hostPublic are the key of the NAS once read from /config.
+	hostPrivate, hostPublic []byte
 }
 
 // NewManager returns a manager working on the real system. usersGID is
@@ -342,52 +344,16 @@ func (m *Manager) Apply(ctx context.Context, users []auth.User) (bool, error) {
 // hostKey puts the key of the NAS in place, making and storing one first
 // if /config has none, and returns its fingerprint.
 func (m *Manager) hostKey(ctx context.Context) (string, error) {
-	private, err := m.store.Read(hostKeyFile)
-	public, pubErr := m.store.Read(hostKeyFile + ".pub")
-	// Only a key that is not there is made anew. A stick that cannot be
-	// read right now must not change the fingerprint clients know.
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return "", err
-	}
-	if err == nil && pubErr != nil {
-		if !errors.Is(pubErr, fs.ErrNotExist) {
-			return "", pubErr
-		}
-		signer, parseErr := ssh.ParsePrivateKey(private)
-		if parseErr != nil {
-			return "", parseErr
-		}
-		public = append(bytes.TrimSpace(ssh.MarshalAuthorizedKey(signer.PublicKey())), " titanos\n"...)
-		if err := m.store.Write(hostKeyFile+".pub", public); err != nil {
+	// Read from /config once: Run applies again every few seconds while
+	// an account waits for its Linux user or sshd refuses the networks.
+	m.mu.Lock()
+	private, public := m.hostPrivate, m.hostPublic
+	m.mu.Unlock()
+	if private == nil {
+		var err error
+		if private, public, err = m.storedHostKey(ctx); err != nil {
 			return "", err
 		}
-		pubErr = nil
-	}
-	if err != nil || pubErr != nil {
-		if err := os.MkdirAll(m.workDir, 0o700); err != nil {
-			return "", err
-		}
-		file := filepath.Join(m.workDir, "host_ed25519")
-		os.Remove(file)
-		os.Remove(file + ".pub")
-		defer os.Remove(file)
-		defer os.Remove(file + ".pub")
-		if _, err := m.runner.Run(ctx, "", "ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "titanos", "-f", file); err != nil {
-			return "", err
-		}
-		if private, err = os.ReadFile(file); err != nil {
-			return "", err
-		}
-		if public, err = os.ReadFile(file + ".pub"); err != nil {
-			return "", err
-		}
-		if err := m.store.Write(hostKeyFile, private); err != nil {
-			return "", err
-		}
-		if err := m.store.Write(hostKeyFile+".pub", public); err != nil {
-			return "", err
-		}
-		slog.Info("made a key for SSH and stored it in /config")
 	}
 	key, _, _, _, err := ssh.ParseAuthorizedKey(public)
 	if err != nil {
@@ -399,5 +365,61 @@ func (m *Manager) hostKey(ctx context.Context) (string, error) {
 	if err := os.WriteFile(filepath.Join(m.etcDir, "ssh_host_ed25519_key.pub"), public, 0o644); err != nil {
 		return "", err
 	}
+	m.mu.Lock()
+	m.hostPrivate, m.hostPublic = private, public
+	m.mu.Unlock()
 	return ssh.FingerprintSHA256(key), nil
+}
+
+// storedHostKey reads the key of the NAS from /config, making and storing
+// one first if there is none.
+func (m *Manager) storedHostKey(ctx context.Context) (private, public []byte, err error) {
+	private, err = m.store.Read(hostKeyFile)
+	public, pubErr := m.store.Read(hostKeyFile + ".pub")
+	// Only a key that is not there is made anew. A stick that cannot be
+	// read right now must not change the fingerprint clients know.
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, nil, err
+	}
+	if err == nil && pubErr != nil {
+		if !errors.Is(pubErr, fs.ErrNotExist) {
+			return nil, nil, pubErr
+		}
+		signer, parseErr := ssh.ParsePrivateKey(private)
+		if parseErr != nil {
+			return nil, nil, parseErr
+		}
+		public = append(bytes.TrimSpace(ssh.MarshalAuthorizedKey(signer.PublicKey())), " titanos\n"...)
+		if err := m.store.Write(hostKeyFile+".pub", public); err != nil {
+			return nil, nil, err
+		}
+		pubErr = nil
+	}
+	if err != nil || pubErr != nil {
+		if err := os.MkdirAll(m.workDir, 0o700); err != nil {
+			return nil, nil, err
+		}
+		file := filepath.Join(m.workDir, "host_ed25519")
+		os.Remove(file)
+		os.Remove(file + ".pub")
+		defer os.Remove(file)
+		defer os.Remove(file + ".pub")
+		if _, err := m.runner.Run(ctx, "", "ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "titanos", "-f", file); err != nil {
+			return nil, nil, err
+		}
+		if private, err = os.ReadFile(file); err != nil {
+			return nil, nil, err
+		}
+		if public, err = os.ReadFile(file + ".pub"); err != nil {
+			return nil, nil, err
+		}
+		if err := m.store.Write(hostKeyFile, private); err != nil {
+			return nil, nil, err
+		}
+		if err := m.store.Write(hostKeyFile+".pub", public); err != nil {
+			return nil, nil, err
+		}
+		slog.Info("made a key for SSH and stored it in /config")
+	}
+	return private, public, nil
 }

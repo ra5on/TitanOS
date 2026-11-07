@@ -11,6 +11,7 @@
 // is what made an effect start itself again after every answer.
 
 import { untrack } from 'svelte';
+import { PAGE_VISIBILITY, pageHidden } from './embedded.ts';
 
 export type PollOptions = {
 	/** Milliseconds between the end of one run and the next; a function is asked again each time. */
@@ -30,8 +31,9 @@ export type Poller = (() => void) & {
 	now: () => Promise<void>;
 };
 
+// A hidden tab or a minimized desktop window (lib/embedded.ts).
 function hidden() {
-	return typeof document !== 'undefined' && document.hidden;
+	return pageHidden();
 }
 
 /** Starts calling `run` regularly; the result stops it. Runs never overlap. */
@@ -95,6 +97,7 @@ export function poll(run: (signal: AbortSignal) => unknown, options: PollOptions
 
 	if (pauseHidden && typeof document !== 'undefined') {
 		document.addEventListener('visibilitychange', visible);
+		document.addEventListener(PAGE_VISIBILITY, visible);
 	}
 	if (immediate) void start();
 	schedule();
@@ -104,7 +107,10 @@ export function poll(run: (signal: AbortSignal) => unknown, options: PollOptions
 		stopped = true;
 		clearTimeout(timer);
 		controller.abort();
-		if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', visible);
+		if (typeof document !== 'undefined') {
+			document.removeEventListener('visibilitychange', visible);
+			document.removeEventListener(PAGE_VISIBILITY, visible);
+		}
 	};
 	return Object.assign(stop, { now: start });
 }

@@ -1,6 +1,6 @@
 // Settings overview "Alle Einstellungen" (PLAN 61, drafts 34/35): search,
 // equal tiles in four groups, "Zuletzt geändert", role filter, embedded mode
-// (inside a same-origin frame: no second sidebar, no way back, full width),
+// (inside a same-origin frame: no sidebar, no way back, full width),
 // and every settings page at 1440, 800 and 390 px without horizontal scroll,
 // overlapping text/controls or cut text. Isolated API data only.
 // PLAYWRIGHT_MODULE=/abs/playwright/index.mjs UI_URL=http://127.0.0.1:5233 node scripts/test-ui-settings-home.mjs
@@ -41,7 +41,7 @@ async function fonts(page) {
 // text cut by a clipping box, and text or controls lying on each other.
 function problems(page, frame) {
   return (frame ?? page).evaluate(() => {
-    const root = document.querySelector(".settings-main") ?? document.body;
+    const root = document.querySelector(".settings-shell") ?? document.body;
     const found = [];
     if (document.documentElement.scrollWidth > innerWidth + 1)
       found.push(`horizontal scroll ${document.documentElement.scrollWidth} > ${innerWidth}`);
@@ -134,7 +134,7 @@ try {
       queries: [],
     };
     await page.goto(base + "/settings");
-    const main = page.locator(".settings-main");
+    const main = page.locator(".settings-shell");
     await main.locator(".home-tile").first().waitFor();
     assert.deepEqual(
       (await main.locator(".group-title").allTextContents()).map((s) => s.trim()),
@@ -143,12 +143,8 @@ try {
     assert.equal(await main.locator(".home-tile").count(), ids.length, "one tile per area");
     const hrefs = await main.locator(".home-tile").evaluateAll((a) => a.map((x) => x.getAttribute("href")));
     for (const id of ids) assert.ok(hrefs.includes(`/settings/${id}`), id);
-    // Sidebar has the same groups.
-    const nav = page.getByRole("navigation", { name: "Einstellungsbereiche", exact: true });
-    assert.deepEqual(
-      (await nav.locator(".group-title").allTextContents()).map((s) => s.trim()),
-      ["System", "Netzwerk", "Konten und Dienste", "Daten"],
-    );
+    // PLAN 65: the window lists the settings pages; the page has no sidebar of its own.
+    assert.equal(await page.locator(".settings-aside, .settings-sidebar").count(), 0, "no sidebar");
     // Four equal columns on a wide screen.
     const sizes = await main.locator(".home-tile").evaluateAll((a) =>
       a.map((x) => {
@@ -183,7 +179,7 @@ try {
 
   // Overview at 800 and 390 px, light theme too.
   for (const [width, theme, columns] of [
-    [800, "graphit", 2],
+    [800, "graphit", 3],
     [390, "graphit", 1],
     [1440, "hell", 4],
   ]) {
@@ -191,7 +187,7 @@ try {
     await page.goto(base + "/settings");
     await page.locator(".home-tile").first().waitFor();
     const lefts = await page
-      .locator(".settings-main .home-tile")
+      .locator(".settings-shell .home-tile")
       .evaluateAll((a) => new Set(a.map((x) => Math.round(x.getBoundingClientRect().left))).size);
     assert.equal(lefts, columns, `${columns} columns at ${width} px`);
     assert.deepEqual(await problems(page), [], `overview at ${width}`);
@@ -205,18 +201,18 @@ try {
     const { ctx, page, data } = await create("user");
     await page.goto(base + "/settings");
     await page.locator(".home-tile").first().waitFor();
-    assert.equal(await page.locator(".settings-main .home-tile").count(), userIds.length);
+    assert.equal(await page.locator(".settings-shell .home-tile").count(), userIds.length);
     assert.equal(await page.locator(".recent").count(), 0);
     assert.equal(data.activity, undefined, "the log is not read for users");
     await ctx.close();
   }
 
-  // Embedded: the page inside a same-origin frame has no second sidebar,
-  // no way back and uses the full width.
+  // Embedded: the page inside a same-origin frame (a window of the desktop)
+  // has no sidebar, no way back and uses the full width.
   {
     const { ctx, page } = await create("owner", "graphit", 1440);
     await page.goto(base + "/settings/about");
-    await page.locator(".settings-aside").waitFor();
+    await page.locator(".settings-shell").waitFor();
     for (const [path, name] of [
       ["/settings", "overview"],
       ["/settings/updates", "updates"],
@@ -230,11 +226,11 @@ try {
         document.body.append(f);
       }, path);
       const frame = page.frameLocator("#embed-test");
-      await frame.locator(".settings-main h1").first().waitFor();
-      assert.equal(await frame.locator(".settings-aside").count(), 0, "no second sidebar");
+      await frame.locator("main.in-window .settings-page").first().waitFor();
+      assert.equal(await frame.locator(".settings-aside").count(), 0, "no sidebar");
       assert.equal(await frame.locator(".settings-back").count(), 0, "no way back");
       const width = await frame
-        .locator(".settings-main")
+        .locator(".settings-shell")
         .evaluate((el) => el.getBoundingClientRect().width / innerWidth);
       assert.ok(width > 0.85, `content uses the window width (${width})`);
       if (name === "overview") {
@@ -269,7 +265,7 @@ try {
       }
       for (const path of pages) {
         await page.goto(base + path);
-        await page.locator(".settings-main h1, .settings-main .notice-error").first().waitFor().catch(() => {});
+        await page.locator(".settings-shell .settings-page, .settings-shell .notice-error").first().waitFor().catch(() => {});
         await page.waitForTimeout(600);
         await fonts(page);
         const found = await problems(page);

@@ -365,8 +365,6 @@
 
 <PageHead
 	title={existing ? t('vms.dialog.edit', { name: vmLabel(existing) }) : t('vms.new.title')}
-	parent={{ href: '/vms', label: t('vms.title') }}
-	crumb={existing ? vmLabel(existing) : t('vms.new.crumb')}
 />
 
 {#if host?.virt}<VirtCheck virt={host.virt} problemsOnly />{:else if status && !status.kvm}<p

@@ -61,7 +61,7 @@ func (s *Server) bearerAccess(next http.Handler) http.Handler {
 }
 
 func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, map[string]any{"tokens": s.tokens.List(currentUser(r).Name), "scopes": auth.TokenScopes})
+	writeJSON(w, 200, map[string]any{"tokens": s.tokens.List(currentUser(r)), "scopes": auth.TokenScopes})
 }
 func (s *Server) handleTokenCreate(w http.ResponseWriter, r *http.Request) {
 	var req struct {

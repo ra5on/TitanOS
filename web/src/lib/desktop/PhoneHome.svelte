@@ -15,7 +15,6 @@
 	import DesktopIcon from './DesktopIcon.svelte';
 	import { arrangeIcons } from './prefs.ts';
 	import { openTab, programs, type Program } from './programs.svelte.ts';
-	import RemoteView from './RemoteView.svelte';
 	import { watchSources } from './sources.svelte.ts';
 	import { desktop, loadDesktop } from './wm.svelte.ts';
 	import { wallpaperCss } from './wallpapers.ts';
@@ -75,13 +74,17 @@
 
 {#if remote}
 	<div class="remote-full">
-		<RemoteView
-			app={remote.key.replace(/^docker:/, '')}
-			title={remote.label}
-			phone
-			onback={() => history.back()}
-			onopentab={() => remote && openTab(remote.key, remote.href)}
-		/>
+		{#await import('./RemoteView.svelte') then { default: RemoteView }}
+			<RemoteView
+				app={remote.key.replace(/^docker:/, '')}
+				title={remote.label}
+				phone
+				onback={() => history.back()}
+				onopentab={() => remote && openTab(remote.key, remote.href)}
+			/>
+		{:catch}
+			<p class="load-failed">{t('desktop.window.loadFailed')}</p>
+		{/await}
 	</div>
 {/if}
 <div
@@ -138,6 +141,11 @@
 </div>
 
 <style>
+	.load-failed {
+		margin: 0;
+		padding: 24px;
+		color: var(--text);
+	}
 	.remote-full {
 		position: fixed;
 		inset: 0;

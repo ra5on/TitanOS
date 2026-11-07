@@ -195,7 +195,7 @@
 	const applied = (n: NASNetwork) => !!current?.networks?.some((c) => c.id === n.id);
 </script>
 
-<PageHead title={t('netcfg.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
+<PageHead title={t('netcfg.title')}>
 	<p class="muted">{t('netx.intro')}</p>
 	{#snippet actions()}
 		<button class="btn btn-primary" disabled={locked || !draft} onclick={() => editNetwork()}

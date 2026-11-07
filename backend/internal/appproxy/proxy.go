@@ -216,6 +216,12 @@ func (m *Manager) newProxy(app string, route Route) *httputil.ReverseProxy {
 			// Apps build their links from the name they were asked by.
 			pr.Out.Host = pr.In.Host
 			pr.SetXForwarded()
+			// Some apps (Vaultwarden, for its login bans) trust X-Real-IP;
+			// Rewrite keeps the one a client sent, so it is set here too.
+			pr.Out.Header.Del("X-Real-Ip")
+			if addr, ok := remoteIP(pr.In.RemoteAddr); ok {
+				pr.Out.Header.Set("X-Real-Ip", addr.String())
+			}
 			stripSessionCookies(pr.Out.Header)
 		},
 		ModifyResponse: func(res *http.Response) error {

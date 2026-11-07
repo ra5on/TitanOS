@@ -1910,6 +1910,8 @@ func (ts *testServer) withShare() string {
 	if err := ts.disks.Load(); err != nil {
 		ts.t.Fatal(err)
 	}
+	// A share sync started by an earlier settings change reads the mounts.
+	ts.server.shareSyncs.Wait()
 	ts.disks.UseMounts(mnt, func() map[string]bool { return map[string]bool{mnt + "/tank": true} })
 	ts.shares.UseMountRoot(mnt)
 	dir := filepath.Join(mnt, "tank", "Docs")

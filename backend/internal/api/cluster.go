@@ -49,6 +49,12 @@ func (s *Server) clusterAccess(next http.Handler) http.Handler {
 			writeError(w, http.StatusForbidden, "cluster_not_permitted", "the node may not manage this one")
 			return
 		}
+		// Only for an account of the cluster: one this node keeps for
+		// itself is not the account of the same name on the other node.
+		if !c.ClusterAccount(id.User) {
+			writeError(w, http.StatusForbidden, "cluster_not_permitted", "the account is not one of the cluster")
+			return
+		}
 		r.Header.Del("Cookie")
 		r.Header.Del("Authorization")
 		next.ServeHTTP(w, r.WithContext(cluster.WithIdentity(r.Context(), id)))
@@ -98,7 +104,7 @@ func (s *Server) requireOwner(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func (s *Server) routeCluster(mux *routeMux) {
-	mux.HandleFunc("GET /api/v1/cluster", s.requireAdmin(s.handleCluster))
+	mux.HandleFunc("GET /api/v1/cluster", s.requireAdmin(s.requireOwnSession(s.handleCluster)))
 	mux.HandleFunc("GET /api/v1/cluster/nodes", s.requireUser(s.handleClusterNodes))
 	mux.HandleFunc("POST /api/v1/cluster", s.requireOwner(s.requireOwnSession(s.handleClusterCreate)))
 	mux.HandleFunc("PUT /api/v1/cluster", s.requireAdmin(s.requireOwnSession(s.handleClusterSettings)))
@@ -113,7 +119,7 @@ func (s *Server) routeCluster(mux *routeMux) {
 	mux.HandleFunc("PUT /api/v1/cluster/nodes/{id}/route", s.requireAdmin(s.requireOwnSession(s.handleClusterRoute)))
 	mux.HandleFunc("POST /api/v1/cluster/nodes/{id}/admin", s.requireOwner(s.requireOwnSession(s.handleClusterHandOver)))
 	mux.HandleFunc("POST /api/v1/cluster/probe", s.requireAdmin(s.requireOwnSession(s.handleClusterProbe)))
-	mux.HandleFunc("GET /api/v1/cluster/update", s.requireAdmin(s.handleClusterUpdateRun))
+	mux.HandleFunc("GET /api/v1/cluster/update", s.requireAdmin(s.requireOwnSession(s.handleClusterUpdateRun)))
 	mux.HandleFunc("POST /api/v1/cluster/update", s.requireAdmin(s.requireOwnSession(s.handleClusterUpdateAll)))
 	mux.HandleFunc("/api/v1/cluster/nodes/{id}/api/{path...}", s.requireUser(s.requireOwnSession(s.handleClusterProxy)))
 }
@@ -149,7 +155,16 @@ func (s *Server) handleCluster(w http.ResponseWriter, r *http.Request) {
 // handleClusterNodes lists the nodes for switching between them; every
 // account may see them, the other node decides what it may do there. A
 // member manages nobody: manages is false and the switcher stays away.
+//
+// Like the other cluster routes it is for the web interface of this node
+// only (docs/rules/CLUSTER.md): a token, MCP or another node gets the
+// answer of a NAS outside a cluster, which the switcher takes as "nothing
+// to switch to", not an error.
 func (s *Server) handleClusterNodes(w http.ResponseWriter, r *http.Request) {
+	if viaCluster(r) || !webSession(r) || s.sessionToken(r) == "" {
+		writeJSON(w, http.StatusOK, map[string]any{"nodes": []any{}, "version": s.opts.Version, "manages": false})
+		return
+	}
 	type node struct {
 		ID      string `json:"id"`
 		Name    string `json:"name"`
@@ -462,6 +477,9 @@ func (s *Server) clusterApplied(before auth.User, existed bool, after auth.User,
 	switch {
 	case deleted:
 		s.sessions.DeleteUser(name, "")
+		if err := s.tokens.RemoveUser(name); err != nil {
+			slog.Error("remove API tokens of the deleted account", "user", name, "err", err)
+		}
 		s.prefs.forget(name)
 		s.opts.Notify.ForgetPersonal(name)
 		if err := s.opts.Shares.ForgetUser(name); err != nil {

@@ -2,66 +2,57 @@
 
 `current/` enthält die aktuellen Aufnahmen für die Projekt-README und die Fachdokumente.
 
-**Aufnahmestand:** die Bilder aus `capture.mjs` (einschließlich Einstellungen) sowie Firewall, VM erstellen, Protokoll, Dateien ersetzen, Dateiaufträge und Navigation auf dem Handy zeigen die gebaute Svelte-WebUI von **TitanOS 0.47.1** (Stand nach 0.47.1, Zweig `feat/kleine-punkte-c`), aufgenommen am **3. November 2026** mit Chromium (Playwright), Theme Graphit, blauer Akzent, Glasflächen, Deutsch. Die Statuszeile von Firewall, VM erstellen und Protokoll nennt die Version der jeweiligen Prüfskripte. Die Bilder des KI-Agenten (`ki-agent*.png`) zeigen **0.51.0** (Zweig `feat/agent-48`), aufgenommen am **5. November 2026** mit der Seitenleisten-Navigation; ihre Testdaten setzt `scripts/test-ui-agent.mjs` (kein Ollama, kein NAS). `ki-agent.png`, `ki-agent-mobil.png` und `ki-agent-menue-mobil.png` zeigen seit **0.54.0** (Zweig `feat/ui-53b`, 5. November 2026) den neuen Auftritt des Agenten mit denselben Testdaten.
+**Aufnahmestand:** Die Bilder der README zeigen den **Desktop-Modus** im Arbeitsstand von **TitanOS 0.62.0** (Zweig `feat/0.62`, Basis 0.61.0, noch nicht eingecheckt), aufgenommen am **7. November 2026** mit Chromium (Playwright) gegen `vite dev` (Port 5272), Theme Graphit, blauer Akzent, Deutsch. Während der Aufnahme änderten andere Teilarbeiten von 0.62.0 die Oberfläche parallel; vor dem Release neu aufnehmen, wenn sich Arbeitsplatz, Fenster oder Anmeldeseite noch sichtbar ändern. Wo die Testdaten eine Version anzeigen, steht dort 0.61.0 (`releaseVersion()` in `scripts/test-ui-fixtures.mjs` nimmt den letzten Tag).
 
-Alle NAS-Antworten werden durch isolierte Demonstrationsdaten ersetzt. Hostname, Konten, Dateien, Laufwerke, Adressen und Messwerte sind Beispiele. Es werden weder echte NAS-Geräte angesprochen noch Container oder VMs gestartet. Die sichtbaren App-Icons sind die konfigurierten Originalbilder der jeweiligen Projekte. Ihre Quellen und SHA-256-Werte stehen in [icon-sources.json](icon-sources.json); Namen und Logos gehören den jeweiligen Projekten. Keine nachträgliche Bildbearbeitung oder eingebauten Design-Mockups. Die Bilder ersetzen keine Funktions- oder Hardwareprüfung.
+Ältere Bilder in `current/` (Speicher, Freigaben, Dateien, Firewall, VM erstellen, Protokoll, Dateiaufträge, KI-Agent) zeigen die **alte Oberfläche** mit Kopfzeile (0.47.1 bzw. KI-Agent 0.51.0/0.54.0). Kopfzeile und Seitennavigation sind seit 0.62.0 entfernt; diese Bilder sind nur noch in Fachdokumenten verlinkt (VM erstellen, Protokoll) bzw. als Nachweis ihrer damaligen Prüfungen und werden in der README nicht mehr eingebunden. Die Aufnahmen des alten Dashboards und der alten Navigation sind entfernt.
 
-[capture.json](current/capture.json) nennt Quellstand, Version, Aufnahmedatum und für jedes Bild Aufnahmeskript, Originaldatei der Skriptausgabe, Größe und SHA-256.
+Alle NAS-Antworten werden durch isolierte Demonstrationsdaten ersetzt (`scripts/test-ui-fixtures.mjs`). Hostname, Konten, Dateien, Laufwerke, Adressen und Messwerte sind Beispiele. Es werden weder echte NAS-Geräte angesprochen noch Container oder VMs gestartet. Das Bild in der **Fernansicht** ist ein nachgebildeter Strom (rote Fläche mit grünem Quadrat, im Browser selbst kodiert), keine echte App. Die sichtbaren App-Symbole (immich, jellyfin, paperless, vaultwarden) sind die Originalbilder der Projekte aus dem Zwischenspeicher `out/readme-icons/` (SHA-256 bei der Aufnahme mit `icon-sources.json` verglichen, gleich); Quellen und SHA-256 stehen in [icon-sources.json](icon-sources.json), Namen und Logos gehören den jeweiligen Projekten. Keine nachträgliche Bildbearbeitung und keine Design-Mockups. Die Bilder ersetzen keine Funktions- oder Hardwareprüfung.
+
+[capture.json](current/capture.json) nennt Quellstand, Aufnahmedatum und für jedes Bild Aufnahmeskript, Originaldatei der Skriptausgabe, Größe und SHA-256.
 
 ## In der README
 
 | Datei | Inhalt | Darstellung |
 |---|---|---|
-| [dashboard.png](current/dashboard.png) | Persönliche Startseite mit zehn Kacheln auf dem Motiv Nordlicht | Desktop 1600, vollständige Seite |
-| [dashboard-editor.png](current/dashboard-editor.png) | Editor mit haftender Editorleiste (Kachel hinzufügen, Darstellung, Spalten, Mindestbreite, Rückgängig/Wiederholen, Standard, Abbrechen, Speichern) und den Inhaltsoptionen der ausgewählten Docker-Kachel | Desktop 1600, vollständige Seite |
-| [dashboard-hintergruende.png](current/dashboard-hintergruende.png) | Einstellungen › Darstellung › Hintergrund des Dashboards: Galerie mit zehn lokalen Motiven und Vorschau | Desktop 1600 × 1000 |
-| [dashboard-bild-upload.png](current/dashboard-bild-upload.png) | Dieselbe Galerie, Reiter „Eigene Bilder“ mit einem hinzugefügten Bild | Desktop 1600 × 1000 |
-| [darstellung.png](current/darstellung.png) | Einstellungen › Darstellung in der Seitenleiste: Theme, Akzent, Stil der Flächen, Vorschau | Desktop 1600 × 1000 |
-| [dashboard-vm-details.png](current/dashboard-vm-details.png) | Details unmittelbar unter der ausgewählten VM | Desktop 1600, vollständige Seite |
-| [speicher.png](current/speicher.png) | Volume-Liste und ausgewähltes RAID5-Volume | Desktop 1600 × 1000 |
-| [shares.png](current/shares.png) | Kompakte Freigabenliste | Desktop 1600, vollständige Seite |
-| [dateien.png](current/dateien.png) | Dateimanager mit Ordnern und Dokumenten | Desktop 1600, vollständige Seite |
-| [docker.png](current/docker.png) | Geschlossene Stacks und einzelne Container | Desktop 1600, vollständige Seite |
-| [vms.png](current/vms.png) | Liste und Übersicht einer ausgewählten VM | Desktop 1600, vollständige Seite |
-| [einstellungen.png](current/einstellungen.png) | Einstellungsübersicht mit Seitenleiste in sieben Gruppen, „Braucht Aufmerksamkeit“ und „Dieses NAS“ | Desktop 1440, vollständige Seite |
-| [firewall.png](current/firewall.png) | Firewall eingeschaltet: Zonen und Dienste, Docker-Apps, eigene Regeln, automatisches Sperren, zuletzt verworfene Pakete | Desktop 1440, vollständige Seite |
-| [anmeldeseite.png](current/anmeldeseite.png) | Gestaltete Anmeldeseite (abgemeldet): Theme Mitternacht, Akzent Türkis, Glaskarte über dem Motiv Nordlicht, Uhr, Überschrift „Willkommen zu Hause“, Hinweis „Nur für die Familie.“ | Desktop 1600 × 900 |
-| [dashboard-mobil.png](current/dashboard-mobil.png) | Oberer Ausschnitt der gestapelten Startseite | Smartphone 390 × 844 |
-| [dateien-mobil.png](current/dateien-mobil.png) | Ortsauswahl und Dateiliste | Smartphone 390 × 844 |
-| [navigation-mobil.png](current/navigation-mobil.png) | Navigation „Seitlich“ auf dem Handy: geöffnete Schublade mit Bereichen, Status, Werkzeugen und Konto | Smartphone 390 × 844 |
-| [ki-agent.png](current/ki-agent.png) | KI-Agent (0.54.0): Agent-Menü neben dem TitanOS-Menü, Start mit Begrüßung, Projekt-Chips, laufenden Aufträgen, Vorschlägen nach Lage; Modell und Denkstufe oben | Desktop 1440 × 900 |
-| [ki-agent-chat.png](current/ki-agent-chat.png) | KI-Agent: Chat mit Schritten, Tabelle und Freigabe-Karte, „Freigabe“ im Menü | Desktop 1440 × 1000 |
-| [ki-agent-mobil.png](current/ki-agent-mobil.png) | KI-Agent auf dem Handy als eigene App: Start | Smartphone 390 × 844 |
-| [ki-agent-menue-mobil.png](current/ki-agent-menue-mobil.png) | Menü des KI-Agenten auf dem Handy mit „Zurück zu TitanOS“ | Smartphone 390 × 844 |
+| [arbeitsplatz.png](current/arbeitsplatz.png) | Arbeitsplatz: Programmsymbole mit Abzeichen (Update, läuft/gestoppt), Widgets rechts (Zustand, CPU/RAM, Volumes, Docker-Apps), Leisten oben, Dock | Desktop 1600 × 1000 |
+| [fernansicht.png](current/fernansicht.png) | Fenster der Docker-App „immich“ in der Fernansicht: Zustand, Bildrate, GPU, Lautstärke, Qualität, Zwischenablage, Dateien; Bild nachgebildet | Desktop 1600 × 1000 |
+| [hauptmenue.png](current/hauptmenue.png) | Hauptmenü mit Suche, Filtern, Programmen, Docker-Apps und VM-Bildschirm, unten Konto, Sperren, Ein/Aus | Desktop 1600 × 1000 |
+| [docker.png](current/docker.png) | Programm Docker (Fenster maximiert): Seitenleiste, Werkzeugleiste, Container-Karten | Desktop 1600 × 1000 |
+| [vms.png](current/vms.png) | Programm Virtuelle Maschinen: „Deine VMs“ in der Seitenleiste, Übersicht einer VM mit Gefahrenzone | Desktop 1600 × 1000 |
+| [systemsteuerung.png](current/systemsteuerung.png) | Systemsteuerung › Alle Einstellungen mit Suche und Bereichen | Desktop 1600 × 1000 |
+| [darstellung.png](current/darstellung.png) | Systemsteuerung › Darstellung: Theme, Variante, Akzent, fünf Schieberegler | Desktop 1600 × 1000 |
+| [dock-bearbeiten.png](current/dock-bearbeiten.png) | Dock bearbeiten: Größe, Deckkraft, Vergrößern, Position | Desktop 1600 × 1000 |
+| [anmeldeseite.png](current/anmeldeseite.png) | Anmeldeseite nach dem Abmelden: Uhr, Glaskarte, Sprache | Desktop 1440 × 900 |
+| [handy-start.png](current/handy-start.png) | Startbildschirm am Handy: Suche, Zustand, App-Raster mit Docker-Apps | Smartphone 390 × 844 |
+| [fernansicht-mobil.png](current/fernansicht-mobil.png) | Fernansicht am Handy im Vollbild mit Lautstärke und Tastatur | Smartphone 390 × 844 |
+| [ki-agent-mobil.png](current/ki-agent-mobil.png) | KI-Agent als eigene App am Handy (0.54.0) | Smartphone 390 × 844 |
+| [ki-agent-menue-mobil.png](current/ki-agent-menue-mobil.png) | Menü des KI-Agenten am Handy (0.54.0) | Smartphone 390 × 844 |
 
-## Weitere Aufnahmen
-
-Nicht in der README eingebunden; die VM- und Protokollbilder verlinkt [VM-CREATE-VALIDATION.md](../VM-CREATE-VALIDATION.md).
+## Weitere Aufnahmen (alte Oberfläche)
 
 | Datei | Inhalt | Darstellung |
 |---|---|---|
-| [vm-erstellen.png](current/vm-erstellen.png) | VM-Formular mit sechs Kacheln (einschließlich Zeitplan) und Zusammenfassung | Desktop 1600, vollständige Seite |
-| [vm-erstellen-mobil.png](current/vm-erstellen-mobil.png) | Dasselbe Formular in Lesereihenfolge gestapelt | Smartphone 390, vollständige Seite |
-| [protokoll.png](current/protokoll.png) | Systemprotokoll mit Filter und originaler historischer Versionsmeldung „TitanOS 0.19.0 started“ als Journalbeispiel | Desktop 1600, vollständige Seite |
-| [dateien-ersetzen.png](current/dateien-ersetzen.png) | Ersetzen-Bestätigung vor dem ersten Kopierklick | Desktop 1440 × 1000 |
-| [dateien-auftraege-1440.png](current/dateien-auftraege-1440.png) | Interne Laufwerke, Restzeit und Entfernen einzelner/aller beendeten Aufträge | Desktop 1440, vollständige Seite |
-| [dateien-auftraege-390.png](current/dateien-auftraege-390.png) | Dieselben Funktionen mit geöffneter Ortsauswahl | Smartphone 390, vollständige Seite |
-| [netzwerk-mobil.png](current/netzwerk-mobil.png) / [Hell](current/netzwerk-mobil-hell.png) | Netzwerk, Graphit/Hell | Smartphone 390 |
+| [vm-erstellen.png](current/vm-erstellen.png) | VM-Formular mit sechs Kacheln und Zusammenfassung (0.47.1) | Desktop 1600, vollständige Seite |
+| [vm-erstellen-mobil.png](current/vm-erstellen-mobil.png) | Dasselbe Formular gestapelt | Smartphone 390, vollständige Seite |
+| [protokoll.png](current/protokoll.png) | Systemprotokoll mit Filter | Desktop 1600, vollständige Seite |
+| [speicher.png](current/speicher.png), [shares.png](current/shares.png), [dateien.png](current/dateien.png), [dateien-mobil.png](current/dateien-mobil.png), [firewall.png](current/firewall.png) | Seiten der alten Oberfläche (0.47.1) | Desktop 1600 bzw. 390 |
+| [dateien-ersetzen.png](current/dateien-ersetzen.png), [dateien-auftraege-1440.png](current/dateien-auftraege-1440.png), [dateien-auftraege-390.png](current/dateien-auftraege-390.png) | Ersetzen-Bestätigung, Dateiaufträge (0.47.1) | 1440 bzw. 390 |
+| [ki-agent.png](current/ki-agent.png), [ki-agent-chat.png](current/ki-agent-chat.png) | KI-Agent am Desktop neben der alten Seitennavigation (0.51.0/0.54.0) | Desktop 1440 |
 
 ## Herkunft je Bild
 
-`docs/screenshots/capture.mjs` nimmt die README-Bilder außer Firewall und Navigation auf dem Handy auf. Die übrigen Bilder stammen unverändert aus der Ausgabe der Browserprüfungen, die dabei zugleich ihre Funktionsprüfungen bestehen müssen:
-
 | Skript | Ausgabe → Datei in `current/` |
 |---|---|
-| `scripts/test-ui-firewall.mjs` | `firewall-desktop-on.png` → `firewall.png` |
-| `scripts/test-ui-mobile-side-nav.mjs` | `offen-graphit-390.png` → `navigation-mobil.png` |
-| `scripts/test-ui-vm-create.mjs` | `graphit-1600-de.png` → `vm-erstellen.png`, `graphit-390-de.png` → `vm-erstellen-mobil.png`, `system-logs.png` → `protokoll.png` |
-| `scripts/test-ui-copy-confirmation.mjs` | `replace-before-copy.png` → `dateien-ersetzen.png` |
-| `scripts/test-ui-drive-transfers.mjs` | `dateien-auftraege-1440.png`, `dateien-auftraege-390.png` (gleiche Namen) |
-| `scripts/test-ui-agent.mjs` | `3-desktop-new.png` → `ki-agent.png`, `1-desktop-chat.png` → `ki-agent-chat.png`, `10-phone-in-titanos.png` → `ki-agent-mobil.png`, `16-phone-menu.png` → `ki-agent-menue-mobil.png` |
+| `scripts/test-ui-desktop.mjs`, Variante A | `01-arbeitsplatz.png` → `arbeitsplatz.png`, `12-handy-start.png` → `handy-start.png` |
+| `scripts/test-ui-desktop.mjs`, Variante B | `06-hauptmenue.png` → `hauptmenue.png`, `11-dock-bearbeiten.png` → `dock-bearbeiten.png` |
+| `scripts/test-ui-viewer.mjs`, Variante B | `01-fenster-fernansicht.png` → `fernansicht.png`, `07-handy-fernansicht.png` → `fernansicht-mobil.png` |
+| `scripts/test-ui-appearance.mjs` (unverändert) | `09-abgemeldet-desktop.png` → `anmeldeseite.png` |
+| Aufnahme nach Variante B, Fenster maximiert | `/settings` → `systemsteuerung.png`, `/settings/appearance` → `darstellung.png`, `/docker` → `docker.png`, `/vms` → `vms.png` |
+| `scripts/test-ui-agent.mjs` (0.54.0) | `10-phone-in-titanos.png` → `ki-agent-mobil.png`, `16-phone-menu.png` → `ki-agent-menue-mobil.png` |
 
-Die Anmeldeseite nimmt `capture.mjs` in einem eigenen, abgemeldeten Browserkontext mit isolierten Werten für `/api/v1/login-appearance` auf (wie `scripts/test-ui-login-appearance.mjs`); Texte werden nur als Text angezeigt. Bei der Aufnahme werden geladene Schriftdateien, alle 13 Docker-Logos, fehlender horizontaler Überlauf auf dem Smartphone und JavaScript-Laufzeitfehler geprüft.
+**Varianten** (Kopien der Skripte außerhalb des Repositorys, nur für die Aufnahme): **A** setzt in den Testcontainern `icon` auf `https://icons.example.test/<name>.svg` und beantwortet diese Adressen aus `out/readme-icons/` (sonst zeigen die Docker-Apps Buchstaben). **B** setzt zusätzlich `prefs.desktop = { widgetsHidden: true }`, damit keine Widgets unter halbtransparenten Fenstern durchscheinen. Die Aufnahmen „Fenster maximiert“ öffnen den Pfad wie `open()` in `test-ui-desktop.mjs` (Variante B), doppelklicken auf die Titelleiste des Fensters und nehmen nach 1,8 s auf. Die unveränderten Skripte `test-ui-desktop.mjs`, `test-ui-viewer.mjs`, `test-ui-appearance.mjs` und `test-ui-phone.mjs` liefen am selben Tag kurz vorher ohne Befund (der Arbeitsstand änderte sich dazwischen durch andere Teilarbeiten); die Variante A von `test-ui-desktop.mjs` brach erst nach den verwendeten Bildern beim Schritt „Dock bearbeiten › Fertig“ ab, Variante B beim Widget-Schritt (es gibt dort absichtlich keine Widgets).
+
+`docs/screenshots/capture.mjs` nimmt noch die alte Oberfläche (Dashboard, Kopfzeile) auf und ist **veraltet**; nicht mehr für `current/` verwenden, bis es auf den Desktop-Modus umgestellt ist.
 
 ## Neu aufnehmen
 
@@ -77,16 +68,15 @@ In einem zweiten Terminal:
 
 ```sh
 PLAYWRIGHT_MODULE=/absoluter/pfad/zu/playwright/index.mjs \
-BROWSER_EXECUTABLE=/absoluter/pfad/zu/chromium \
-UI_URL=http://127.0.0.1:5187 \
-node docs/screenshots/capture.mjs
+UI_URL=http://127.0.0.1:5187 UI_OUTPUT=out/validation/desktop \
+node scripts/test-ui-desktop.mjs
 ```
 
 Bei lokal auflösbarem Playwright und dessen installiertem Chromium können die ersten beiden Variablen entfallen. Fehlende Original-Icons lädt das Skript aus den dokumentierten öffentlichen Quellen in den ignorierten Cache `out/readme-icons/`; hierfür ist einmalig Internetzugang nötig. `UI_ICON_DIR` wählt einen bereits vorhandenen Cache. Geänderte Icon-Bytes brechen die Aufnahme ab, bis Quelle und Prüfsumme bewusst geprüft wurden. Die Browseraufnahme selbst verwendet nur den lokalen UI-Server und abgefangene API-/Icon-Antworten; sonstige externe Browseranfragen werden blockiert.
 
 `UI_OUTPUT` kann ein anderes Ausgabeziel setzen. `UI_SOURCE_REF` setzt den tatsächlich gebauten Git-Stand für den Nachweis, standardmäßig `HEAD`. Vor Aufnahmen nach einer Produktänderung Versionsangabe, Kernel und Beispieldaten im Skript anpassen, das Frontend aus diesem Stand neu bauen und alle Bilder visuell prüfen. Die feste Beispieluhr sorgt für zusammenpassende Datums- und Laufzeitangaben.
 
-Neue Bilder ersetzen die Dateien in `current/`, damit die README keine Versionspfade benötigt. Reihenfolge: zuerst die Skripte aus der Tabelle oben mit eigenem `UI_OUTPUT` ausführen und ihre Ausgaben wie angegeben nach `current/` kopieren, zuletzt `capture.mjs` (schreibt seine Bilder und `capture.json` mit den Prüfsummen aller Bilder in `current/`). Danach Aufnahmestand oben anpassen und jedes Bild ansehen. Ordner wie `v0.6.1/` bis `v0.7.2/` und die Bilder direkt in `docs/screenshots/` sind historische Aufnahmen und werden nirgends mehr verlinkt.
+Neue Bilder ersetzen die Dateien in `current/`, damit die README keine Versionspfade benötigt. Reihenfolge: zuerst die Skripte aus der Tabelle oben mit eigenem `UI_OUTPUT` ausführen und ihre Ausgaben wie angegeben nach `current/` kopieren, danach `capture.json` mit Größe und SHA-256 jedes Bildes in `current/` neu schreiben (bis zur Umstellung von `capture.mjs` von Hand bzw. per kleinem Skript; `capture.mjs` selbst nicht mehr ausführen). Danach Aufnahmestand oben anpassen und jedes Bild ansehen. Ordner wie `v0.6.1/` bis `v0.7.2/` und die Bilder direkt in `docs/screenshots/` sind historische Aufnahmen und werden nirgends mehr verlinkt.
 
 Die Skripte aus der Tabelle oben laufen gegen denselben Vorschau-Server, zum Beispiel:
 

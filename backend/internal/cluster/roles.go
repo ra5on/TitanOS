@@ -154,3 +154,20 @@ func (m *Manager) selfNode() Node {
 	defer m.mu.Unlock()
 	return m.selfNodeLocked()
 }
+
+// ClusterAccount reports whether account name is one of the cluster: on
+// the admin node every account, elsewhere those that came from it. Only
+// those act on other nodes; an account a member keeps for itself may have
+// the name of another one elsewhere (CLUSTER.md: own accounts stay local).
+func (m *Manager) ClusterAccount(name string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.state == nil || name == "" {
+		return false
+	}
+	if m.adminLocked() == m.self.ID {
+		return true
+	}
+	v, ok := m.state.Accounts[name]
+	return ok && !v.Deleted
+}

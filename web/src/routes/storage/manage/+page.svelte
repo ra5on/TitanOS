@@ -257,7 +257,6 @@
 
 {#if admin}<PageHead
 		title={t(mode === 'grow' ? 'ops.grow' : mode === 'snapshots' ? 'snapshot.title' : 'ops.usage')}
-		parent={{ href: '/storage', label: t('nav.storage') }}
 		>{#snippet actions()}<a class="btn" href="/tools/maintenance">{t('ops.maintenance')}</a><button
 				class="btn"
 				disabled={busy}

@@ -122,6 +122,11 @@ type agentSettingsState struct {
 	mu       sync.Mutex
 	loaded   bool
 	settings agentSettings
+	// volumeNotKept is set once keeping the volume chosen at first use
+	// failed: agentVolume runs from minute ticks, which must not try to
+	// write the stick again and again (the choice is made again at the
+	// next start).
+	volumeNotKept bool
 }
 
 func (s *Server) agentSettings() agentSettings {
@@ -183,8 +188,15 @@ func (s *Server) handleAgentSettingsSet(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	a := &s.agentConf
+	// Load agent.json first: what is not in the request (volume, shared
+	// nodes, features) is taken from it.
+	s.agentSettings()
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if !a.loaded {
+		writeError(w, http.StatusServiceUnavailable, "config_unavailable", "agent.json is not readable; nothing was changed")
+		return
+	}
 	// PLAN 58: the volume is chosen when the agent is switched on and
 	// changes afterwards only by moving the data.
 	if req.Volume == "" {
@@ -214,7 +226,7 @@ func (s *Server) handleAgentSettingsSet(w http.ResponseWriter, r *http.Request) 
 	a.settings, a.loaded = req, true
 	s.agentClient.Store(nil)
 	// The share of the agent follows (made, accounts updated).
-	go s.agentSyncShare()
+	s.shareSyncs.Go(s.agentSyncShare)
 	writeJSON(w, http.StatusOK, req)
 }
 
@@ -526,13 +538,14 @@ func (s *Server) agentVolume(mounted []string) (string, bool) {
 	chosen := sorted[0]
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.loaded && a.settings.Volume == "" {
+	if a.loaded && a.settings.Volume == "" && !a.volumeNotKept {
 		next := a.settings
 		next.Volume = chosen
 		if err := s.opts.Store.WriteJSON(agentSettingsFile, next); err == nil {
 			a.settings = next
 		} else {
-			slog.Warn("agent volume not kept", "err", err)
+			a.volumeNotKept = true
+			slog.Warn("agent volume not kept, not trying again before the next start", "err", err)
 		}
 	}
 	return chosen, true

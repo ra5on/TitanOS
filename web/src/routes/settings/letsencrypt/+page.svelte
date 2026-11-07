@@ -191,7 +191,7 @@
 	);
 </script>
 
-<PageHead title={t('letsencrypt.title')} parent={{ href: '/settings', label: t('nav.settings') }} />
+<PageHead title={t('letsencrypt.title')} />
 
 {#if loadError}
 	<div class="notice-error" role="alert">

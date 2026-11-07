@@ -27,8 +27,8 @@ Läuft TitanOS vom Home-Bildschirm (`display-mode: standalone`), lässt die
 Seite unten Platz für den Home-Indikator. Einen eigenen Zurück-Knopf in der
 Kopfzeile gibt es nicht (entfernt auf Wunsch des Projektinhabers vom
 30.10.2026); Unterseiten öffnen sich über Menüs statt über eigene Seiten,
-wo das reicht. Navigiert wird wie im Browser
-über das Menü der Kopfzeile; eine eigene untere Leiste gibt es nicht
+wo das reicht. Navigiert wird über das App-Raster des
+Startbildschirms und „Zurück“ (bis 0.61.0 über das Menü der Kopfzeile); eine eigene untere Leiste gibt es nicht
 (Entscheidung des Projektinhabers vom 29.10.2026). Im Browser ändert sich
 nichts.
 

@@ -269,3 +269,21 @@ func TestCloneDiscardWhilePublishingOnlyBeforeRename(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// A source the published clone would be refused for must be refused
+// before any disk is copied, not after the whole copy.
+func TestCloneRefusesAutoGPUBeforeCopying(t *testing.T) {
+	m, v := snapshotFixture(t)
+	v.Disks[0].SizeBytes = 3 * gib
+	v.AutoGPU = true
+	m.vms[v.Name] = v
+	if err := m.Clone(context.Background(), v.Name, CloneRequest{Name: "copy", Volume: "fast"}, []string{"data", "fast"}); !errors.Is(err, ErrInvalid) {
+		t.Fatal("clone of an automatic GPU VM accepted:", err)
+	}
+	if ops, err := m.CloneOperations("fast", []string{"fast"}); err != nil || len(ops) != 0 {
+		t.Fatal("a staged clone was left:", ops, err)
+	}
+	if _, err := m.get("copy"); err == nil {
+		t.Fatal("clone registered")
+	}
+}

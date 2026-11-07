@@ -1493,9 +1493,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--gap);
-		height: calc(
-			100dvh - var(--header-height, 60px) - var(--status-height, 34px) - 2 * var(--page-pad)
-		);
+		height: calc(100dvh - var(--header-height, 0px) - 2 * var(--page-pad));
 		min-height: 420px;
 	}
 	.agent[data-bg]:not([data-bg='none'])::before {

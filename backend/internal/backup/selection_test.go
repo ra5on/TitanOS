@@ -133,3 +133,36 @@ func (e *env) mount(t *testing.T, volume string) {
 	}
 	e.m.mountsFile = file
 }
+
+// A volume that is not mounted is no home for the state and restic's cache:
+// below its empty mount point they would land in the RAM.
+func TestHomeVolumeOnlyMounted(t *testing.T) {
+	e := newEnv(t)
+	root := e.m.mountRoot
+	e.mount(t, "tank")
+	for name, job := range map[string]Job{
+		"volumes": {ID: "v", Volumes: []string{"tank", "cold"}, Destination: Destination{Type: "s3"}},
+		"places":  {ID: "p", Places: []string{"tank/b", "cold/a"}, Destination: Destination{Type: "s3"}},
+	} {
+		if file := e.m.stateFile(job); !strings.HasPrefix(file, filepath.Join(root, "tank")+"/") {
+			t.Errorf("%s: state file %q, want it on the mounted volume tank", name, file)
+		}
+	}
+	// The home volume (the first one) is missing: no other volume stands
+	// in, so what the job knows is not split across volumes.
+	for name, job := range map[string]Job{
+		"volumes":      {ID: "v", Volumes: []string{"cold"}, Destination: Destination{Type: "s3"}},
+		"places":       {ID: "p", Places: []string{"cold/a"}, Destination: Destination{Type: "s3"}},
+		"volumes-next": {ID: "v", Volumes: []string{"cold", "tank"}, Destination: Destination{Type: "s3"}},
+		"places-next":  {ID: "p", Places: []string{"cold/a", "tank/b"}, Destination: Destination{Type: "s3"}},
+	} {
+		if file := e.m.stateFile(job); file != "" {
+			t.Errorf("%s: state file %q on a volume that is not mounted", name, file)
+		}
+	}
+	// With all of them mounted, the first one stays the home, as before.
+	e.mount(t, "cold")
+	if file := e.m.stateFile(Job{ID: "v", Volumes: []string{"cold", "tank"}}); !strings.HasPrefix(file, filepath.Join(root, "cold")+"/") {
+		t.Errorf("state file %q, want it on cold", file)
+	}
+}

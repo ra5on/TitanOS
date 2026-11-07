@@ -656,10 +656,7 @@
 	}
 </script>
 
-{#if !restoreOnly}<PageHead
-		title={t('safeguard.data')}
-		parent={{ href: '/settings/backups', label: t('safeguard.title') }}
-	>
+{#if !restoreOnly}<PageHead title={t('safeguard.data')}>
 		<p class="muted">{t('backup.intro')}</p>
 	</PageHead>{:else}<h2 class="tile-title" id="restore-files" use:revealTarget>
 		{t('safeguard.filesRestore')}

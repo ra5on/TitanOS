@@ -140,7 +140,7 @@
 	}
 </script>
 
-<PageHead title={t('api.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
+<PageHead title={t('api.title')}>
 	<p class="muted">{t('api.intro')}</p>
 	{#snippet actions()}<button class="btn btn-primary" onclick={() => startCreate(['system:read'])}
 			>{t('api.create')}</button

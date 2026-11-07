@@ -84,7 +84,11 @@ func (m *Manager) noteLocal(name string) bool {
 // record returns the account as it goes to another node.
 func (m *Manager) record(name string) (accountRecord, bool) {
 	m.mu.Lock()
-	v, ok := m.state.Accounts[name]
+	var v AccountVersion
+	ok := false
+	if m.state != nil { // nil after leaving meanwhile
+		v, ok = m.state.Accounts[name]
+	}
 	m.mu.Unlock()
 	if !ok {
 		return accountRecord{}, false
@@ -142,7 +146,9 @@ func (m *Manager) takeAccounts(records []accountRecord) error {
 			if rec.User == nil || rec.User.Name != rec.Name || accountHash(*rec.User) != rec.Version.Hash {
 				continue
 			}
-			m.importAccount(*rec.User)
+			if m.importAccount(*rec.User) != nil {
+				continue
+			}
 		}
 		m.mu.Lock()
 		if m.state != nil {

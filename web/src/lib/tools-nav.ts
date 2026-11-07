@@ -66,12 +66,6 @@ export const toolsGroups: { group: ToolsGroup; entries: ToolsEntry[] }[] = [
 	},
 ];
 
-/** Whether a tools row belongs to the page at `path` (sub-paths included). */
-export function toolsCurrent(href: string, path: string): boolean {
-	const clean = path.replace(/\/$/, '') || '/';
-	return clean === href || clean.startsWith(`${href}/`);
-}
-
 /** Old anchors on the tools overview and the pages that replaced them. */
 export const toolsAnchors: Record<string, string> = {
 	'#tools-logs': '/tools/logs',

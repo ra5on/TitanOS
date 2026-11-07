@@ -171,6 +171,17 @@ func (m *Manager) RestoreSnapshot(ctx context.Context, name, id string) error {
 	}
 	rootfs := m.rootfs(c)
 	restored, old := rootfs+".restore", rootfs+".old"
+	// A restore that broke off between its two renames left the current
+	// state only in rootfs.old: put it back before anything is deleted,
+	// or the leftover cleanup below would remove the last copy and every
+	// later restore would fail on the missing root file system.
+	if _, err := os.Lstat(rootfs); errors.Is(err, fs.ErrNotExist) {
+		if _, err := os.Lstat(old); err == nil {
+			if err := os.Rename(old, rootfs); err != nil {
+				return err
+			}
+		}
+	}
 	for _, leftover := range []string{restored, old} {
 		if _, err := os.Lstat(leftover); err == nil {
 			// Left behind by a restore that broke off: a subvolume or empty.
@@ -183,12 +194,22 @@ func (m *Manager) RestoreSnapshot(ctx context.Context, name, id string) error {
 	if _, err := m.runner.Run(ctx, "", "btrfs", "subvolume", "snapshot", path, restored); err != nil {
 		return err
 	}
-	if err := os.Rename(rootfs, old); err != nil {
+	hadRootfs := true
+	if err := os.Rename(rootfs, old); errors.Is(err, fs.ErrNotExist) {
+		// No root file system at all (removed by hand): the snapshot
+		// becomes it.
+		hadRootfs = false
+	} else if err != nil {
 		return err
 	}
 	if err := os.Rename(restored, rootfs); err != nil {
-		_ = os.Rename(old, rootfs) // going back to the old root file system; the first error is returned
+		if hadRootfs {
+			_ = os.Rename(old, rootfs) // going back to the old root file system; the first error is returned
+		}
 		return err
+	}
+	if !hadRootfs {
+		return nil
 	}
 	_, err = m.runner.Run(ctx, "", "btrfs", "subvolume", "delete", old)
 	return err

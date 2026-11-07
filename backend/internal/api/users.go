@@ -121,6 +121,12 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "forbidden", "owners are only managed by owners")
 		return
 	}
+	// Checked before anything changes: a reset must not happen for a
+	// request that then fails.
+	if req.Role != auth.RoleOwner && req.Role != auth.RoleAdmin && req.Role != auth.RoleUser {
+		writeAccountError(w, auth.ErrInvalidRole)
+		return
+	}
 	if req.ResetTwoFactor {
 		if err := s.opts.Users.DisableTwoFactor(target.Name); err != nil {
 			writeAccountError(w, err)
@@ -167,7 +173,16 @@ func (s *Server) handleSetPassword(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
 			return
 		}
-		if _, valid := s.opts.Users.Authenticate(actor.Name, req.Current); !valid {
+		_, valid := s.opts.Users.Authenticate(actor.Name, req.Current)
+		// Guesses sent at the same time all passed the check above.
+		if s.limiter.RetryAfter(key) > 0 {
+			if !valid {
+				s.limiter.Fail(key)
+			}
+			writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
+			return
+		}
+		if !valid {
 			s.limiter.Fail(key)
 			writeError(w, http.StatusForbidden, "wrong_password", "the current password is wrong")
 			return
@@ -220,6 +235,9 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.sessions.DeleteUser(target.Name, "")
+	if err := s.tokens.RemoveUser(target.Name); err != nil {
+		slog.Error("remove API tokens of the deleted account", "user", target.Name, "err", err)
+	}
 	go s.viewerForgetUser(target.Name)
 	s.prefs.forget(target.Name)
 	s.opts.Notify.ForgetPersonal(target.Name)

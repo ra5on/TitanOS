@@ -32,6 +32,7 @@
 		defaultWidgets,
 		dockPinned,
 		placeIcons,
+		dropIcon,
 		sanitizeDock,
 		placeWidget,
 		WIDGET_KINDS,
@@ -97,7 +98,8 @@
 	const inDock = $derived(new Set(dockPinned(desktop.prefs, known)));
 
 	// The dock keeps its edge free: snapped windows and icons stay clear of it.
-	const dockRoom = $derived(desktop.prefs.dock.size + 34);
+	// Plate (icon + 2 × 8 px padding + slot and border, ~size + 27) + 10 px to the edge + a gap.
+	const dockRoom = $derived(desktop.prefs.dock.size + 46);
 	$effect(() => {
 		const d = desktop.prefs.dock;
 		const room = d.show ? dockRoom : 0;
@@ -128,13 +130,6 @@
 			c: Math.max(0, Math.min(gridCols - 1, Math.floor(x / colW))),
 			r: Math.max(0, Math.min(gridRows - 1, Math.floor(y / rowH))),
 		};
-	}
-	/** Writes every icon's present place, so switching to "free" moves nothing. */
-	function freeze(p: typeof desktop.prefs) {
-		const next: Record<string, { c: number; r: number }> = {};
-		for (const [k, at] of places) next[k] = { ...at };
-		p.iconPos = next;
-		p.sort = 'free';
 	}
 	function autoArrange() {
 		savePrefs((p) => {
@@ -265,22 +260,19 @@
 			return;
 		}
 		const cell = cellAt(event.clientX, event.clientY);
-		const from = places.get(key);
+		const shown = new Map(places);
 		savePrefs((p) => {
-			freeze(p);
 			if (!iconsNow().includes(key)) p.icons = [...iconsNow(), key];
 			else p.icons = iconsNow();
 			p.customIcons = true;
 			p.folders = p.folders.map((f) => ({ ...f, apps: f.apps.filter((a) => a !== key) }));
 			// Onto another icon: the two change places; onto free space: it stays there.
-			const other = target ?? [...places].find(([, at]) => at.c === cell.c && at.r === cell.r)?.[0];
-			const to = target ? places.get(target) : cell;
+			const other = target ?? [...shown].find(([, at]) => at.c === cell.c && at.r === cell.r)?.[0];
+			const to = target ? shown.get(target) : cell;
 			if (!to) return;
-			if (other && other !== key) {
-				if (from) p.iconPos[other] = { ...from };
-				else delete p.iconPos[other];
-			}
-			p.iconPos[key] = { ...to };
+			// Only the moved icon (and the one it swaps with) change their stored place (PLAN 65-10).
+			p.iconPos = dropIcon(p, shown, key, to, other);
+			p.sort = 'free';
 		});
 	}
 	function removeIcon(key: string) {
@@ -488,6 +480,28 @@
 		}
 	}
 
+	/** Where a context menu opens: at the pointer, or under the element for the keyboard's menu key. */
+	function menuAt(e: MouseEvent): { x: number; y: number } {
+		if (e.clientX || e.clientY) return { x: e.clientX, y: e.clientY };
+		const r = ((e.currentTarget ?? e.target) as HTMLElement).getBoundingClientRect();
+		return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+	}
+
+	// PLAN 65-5: when the menu or the message centre closes and the focus went
+	// nowhere, it returns to the button that opened it.
+	let wasOpen = { launcher: false, center: false };
+	$effect(() => {
+		const now = { launcher, center };
+		for (const kind of ['launcher', 'center'] as const)
+			if (wasOpen[kind] && !now[kind])
+				setTimeout(() => {
+					const active = document.activeElement;
+					if (active && active !== document.body) return;
+					document.querySelector<HTMLElement>(`[data-opens="${kind}"]`)?.focus();
+				}, 0);
+		wasOpen = now;
+	});
+
 	// Menu and message centre close on a click beside them (also into a window's frame).
 	function outside(event: PointerEvent) {
 		const el = event.target as HTMLElement | null;
@@ -608,7 +622,7 @@
 		oncontextmenu={(e) => {
 			if ((e.target as HTMLElement).closest('.menu, .floating-menu, [role="menu"]')) return;
 			e.preventDefault();
-			menu = { x: e.clientX, y: e.clientY, kind: 'bar' };
+			menu = { ...menuAt(e), kind: 'bar' };
 		}}
 	>
 		<div class="pill glass-panel">
@@ -754,7 +768,7 @@
 			if (e.target !== area && !(e.target as HTMLElement).classList.contains('icons')) return;
 			editDock = false;
 			e.preventDefault();
-			menu = { x: e.clientX, y: e.clientY, kind: 'desk' };
+			menu = { ...menuAt(e), kind: 'desk' };
 		}}
 	>
 		<div class="icons" style:left="{ICON_LEFT + wm.inset.l}px">
@@ -765,6 +779,7 @@
 					<button
 						type="button"
 						class="ico"
+						data-key={key}
 						class:drop={dropBefore === key}
 						style:left="{(places.get(key)?.c ?? 0) * colW}px"
 						style:top="{(places.get(key)?.r ?? 0) * rowH}px"
@@ -791,7 +806,7 @@
 						oncontextmenu={(e) => {
 							e.preventDefault();
 							e.stopPropagation();
-							menu = { x: e.clientX, y: e.clientY, kind: 'icon', key };
+							menu = { ...menuAt(e), kind: 'icon', key };
 						}}
 						title={p?.badge?.title}
 					>
@@ -859,7 +874,7 @@
 				oncontextmenu={(e) => {
 					e.preventDefault();
 					e.stopPropagation();
-					menu = { x: e.clientX, y: e.clientY, kind: 'widget', key: w.id };
+					menu = { ...menuAt(e), kind: 'widget', key: w.id };
 				}}
 			>
 				<WidgetView kind={w.kind} onopen={(key, href) => open(key, undefined, href)} />
@@ -914,8 +929,8 @@
 				onopen={(key, e) => open(key, e)}
 				onmenu={(e, key) =>
 					(menu = key
-						? { x: e.clientX, y: e.clientY, kind: 'icon', key, dock: true }
-						: { x: e.clientX, y: e.clientY, kind: 'dock' })}
+						? { ...menuAt(e), kind: 'icon', key, dock: true }
+						: { ...menuAt(e), kind: 'dock' })}
 				ondone={() => (editDock = false)}
 			/>
 		{/if}
@@ -1424,7 +1439,12 @@
 					role="menuitemradio"
 					aria-checked={desktop.prefs.sort === mode}
 					onclick={() => {
-						savePrefs((p) => (p.sort = mode));
+						savePrefs((p) => {
+							// Into "free" without own places: the icons stay where they are now.
+							if (mode === 'free' && p.sort !== 'free' && !Object.keys(p.iconPos).length)
+								p.iconPos = Object.fromEntries([...places].map(([k, at]) => [k, { ...at }]));
+							p.sort = mode;
+						});
 						menu = null;
 					}}><span>{t(label)}</span></button
 				>

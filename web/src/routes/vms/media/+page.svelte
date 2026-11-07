@@ -221,7 +221,7 @@
 	}
 </script>
 
-<PageHead title={t('media.title')} parent={{ href: '/vms', label: t('nav.vms') }}
+<PageHead title={t('media.title')}
 	><p class="muted">{t('media.intro')}</p>
 	{#snippet actions()}<button class="btn btn-primary" disabled={!volumes.length} onclick={add}
 			><Icon name="plus" />{t('media.add')}</button

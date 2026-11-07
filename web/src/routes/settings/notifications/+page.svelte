@@ -171,10 +171,7 @@
 	</div>
 {/snippet}
 
-<PageHead
-	title={t('notify.settingsTitle')}
-	parent={{ href: '/settings', label: t('nav.settings') }}
->
+<PageHead title={t('notify.settingsTitle')}>
 	<p class="muted">{t('notify.intro')}</p>
 </PageHead>
 <p class="muted"><a href="/account#bell">{t('notify.personalHint')}</a></p>

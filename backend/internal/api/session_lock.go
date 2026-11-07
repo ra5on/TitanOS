@@ -182,9 +182,25 @@ func (s *Server) handleSessionUnlock(w http.ResponseWriter, r *http.Request) {
 		}})
 		return
 	}
+	// Guesses sent at the same time all pass the check above before the
+	// first of them is counted (hashing is slow); once the limit was
+	// reached meanwhile, the answer is not told, right or wrong.
+	blocked := func(how string) bool {
+		wait := s.limiter.RetryAfter(guessKey, ipKey)
+		if wait <= 0 {
+			return false
+		}
+		s.recordEvent(r, user.Name, "session_unlock_blocked", how, false)
+		writeRateLimited(w, wait, "too many failed attempts, try again later")
+		return true
+	}
 	fail := func(code, message, how string) {
+		wasBlocked := s.limiter.RetryAfter(guessKey, ipKey) > 0
 		s.limiter.Fail(guessKey, ipKey)
 		s.opts.Firewall.Failed(ip, firewall.SourceWeb)
+		if wasBlocked && blocked(how) {
+			return
+		}
 		slog.Warn("unlock failed", "user", user.Name, "ip", ip, "how", how)
 		s.recordEvent(r, user.Name, "session_unlock_failed", how, false)
 		writeError(w, http.StatusForbidden, code, message)
@@ -208,6 +224,9 @@ func (s *Server) handleSessionUnlock(w http.ResponseWriter, r *http.Request) {
 		}
 		if user.TwoFactor() {
 			// The password was right; only now is the code asked for.
+			if blocked(how) {
+				return
+			}
 			if req.Code == "" {
 				writeError(w, http.StatusForbidden, "second_factor_required", "enter the code from your authenticator app")
 				return
@@ -217,6 +236,9 @@ func (s *Server) handleSessionUnlock(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+	}
+	if blocked(how) {
+		return
 	}
 	s.limiter.Reset(userKey)
 	s.limiter.Reset(guessKey)

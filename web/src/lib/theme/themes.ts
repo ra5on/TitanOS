@@ -207,17 +207,13 @@ export type Appearance = {
 	/** Dialogs (Dialog.svelte) and the dimming behind them. */
 	dialogs: DialogSurface;
 	/**
-	 * Header and status bar (navigation "top"): opaque by default; like the
-	 * tiles or own values with the glass style only. Shine is not used there.
+	 * PLAN 65: header and status bar of the classic frame, gone since 0.62.
+	 * Kept as stored, so that older versions sharing /config read them.
 	 */
 	bars: BarSurface;
-	/**
-	 * Side navigation (desktop and the phone's drawer): like the tiles by
-	 * default (also for stored appearances without it), opaque or own values
-	 * including shine; glass style only.
-	 */
+	/** PLAN 65: the side navigation of the classic frame; kept as stored, like `bars`. */
 	sidebar: BarSurface;
-	/** Order and hidden tabs of the header navigation. */
+	/** PLAN 65: tabs of the classic navigation; kept as stored, like `bars`. */
 	nav: NavPrefs;
 	/**
 	 * Colour strength in percent, 50–150 (PLAN 64, Settings › Appearance):
@@ -528,29 +524,6 @@ export function floatingAlpha(a: Appearance, s: FloatingSurface, palette: Palett
 	return Math.max(alpha, palette.dark ? 0.35 : 0.5);
 }
 
-/**
- * Background, backdrop filter and shine edge of a bar. Like the tiles and
- * own values use the glass limits of own menu values (at least 35 % opaque
- * on dark themes, 50 % on light ones, also on a plain background); the tiles'
- * shine is not taken over, own shine is used where the bar shows it.
- */
-export function barLook(
-	a: Appearance,
-	s: BarSurface,
-	palette: Palette,
-): { bg: string; backdrop: string; shine: number } {
-	if (a.style !== 'glass' || s.mode === 'opaque')
-		return { bg: palette.header, backdrop: 'none', shine: 0 };
-	const glass = s.mode === 'own' ? s.glass : a.glass;
-	const blur = s.mode === 'own' ? s.blur : a.blur;
-	const alpha = Math.max(1 - glass / 100, palette.dark ? 0.35 : 0.5);
-	return {
-		bg: withAlpha(palette.header, alpha),
-		backdrop: `blur(${blur}px) saturate(160%)`,
-		shine: s.mode === 'own' ? s.shine / 100 : 0,
-	};
-}
-
 function shineColor(shine: number, dark: boolean): string {
 	return `rgba(255, 255, 255, ${(dark ? shine * 0.5 : 0.4 + shine * 0.5).toFixed(2)})`;
 }
@@ -576,8 +549,6 @@ export function cssVariables(a: Appearance, systemLight: boolean): Record<string
 	const menuAlpha = floatingAlpha(a, a.menus, p);
 	const dialog = floatingValues(a, a.dialogs);
 	const dialogAlpha = floatingAlpha(a, a.dialogs, p);
-	const bars = barLook(a, a.bars, p);
-	const sidebar = barLook(a, a.sidebar, p);
 	return {
 		'--bg': p.bg,
 		'--surface': p.surface,
@@ -615,15 +586,6 @@ export function cssVariables(a: Appearance, systemLight: boolean): Record<string
 		'--dialog-shine': (dialog.shine / 100).toFixed(2),
 		'--glass-dialog': withAlpha(p.surface, dialogAlpha),
 		'--dialog-shine-color': shineColor(dialog.shine / 100, p.dark),
-		// Header and status bar; the side navigation has its own.
-		'--bar-bg': bars.bg,
-		'--bar-backdrop': bars.backdrop,
-		'--sidebar-bg': sidebar.bg,
-		'--sidebar-backdrop': sidebar.backdrop,
-		// A bright inner edge on the side towards the page (right edge).
-		'--sidebar-edge': sidebar.shine
-			? `inset -1px 0 0 ${shineColor(sidebar.shine, p.dark)}`
-			: 'none',
 		'--glass-shadow': `rgba(0, 0, 0, ${p.dark ? 0.3 : 0.08})`,
 		'--outline-border': p.dark ? shade(p.border, 0.12) : shade(p.border, -0.15),
 		'--overlay': withAlpha(p.dark ? p.bg : p.text, a.dialogs.dim / 100),

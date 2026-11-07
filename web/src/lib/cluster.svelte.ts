@@ -2,7 +2,7 @@
 // settings page and the node switcher show.
 import { api } from './api.ts';
 import { t, type MessageKey } from './i18n/index.svelte.ts';
-import { activeNode, compareVersions } from './cluster-node.ts';
+import { compareVersions } from './cluster-node.ts';
 
 export { compareVersions };
 
@@ -183,12 +183,6 @@ export async function loadClusterNodes() {
 	} finally {
 		clusterNodes.loaded = true;
 	}
-}
-
-/** The node this tab manages, or undefined for this NAS. */
-export function currentNode(): SwitchNode | undefined {
-	const id = activeNode();
-	return id ? clusterNodes.nodes.find((n) => n.id === id) : undefined;
 }
 
 /** The node of this NAS. */

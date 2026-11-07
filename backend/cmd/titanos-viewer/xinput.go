@@ -31,14 +31,13 @@ type xctl struct {
 	conn *xgb.Conn
 	root xproto.Window
 
-	mu       sync.Mutex
-	spare    []spareSlot
-	pressed  map[string]xproto.Keycode // code → pressed keycode
-	buttons  int
-	accX     float64
-	accY     float64
-	w, h     int
-	cursorCB func(string)
+	mu      sync.Mutex
+	spare   []spareSlot
+	pressed map[string]xproto.Keycode // code → pressed keycode
+	buttons int
+	accX    float64
+	accY    float64
+	w, h    int
 }
 
 func connectX() (*xctl, error) {

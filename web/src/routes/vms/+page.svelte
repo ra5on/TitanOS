@@ -9,7 +9,7 @@
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
-	import { phoneView, windowView } from '#lib/desktop/mode.svelte.ts';
+	import { phoneView } from '#lib/desktop/mode.svelte.ts';
 	import TasksPanel from '#lib/components/TasksPanel.svelte';
 	import { api, type VM, type VMStatus } from '#lib/api.ts';
 	import { poll, type Poller } from '#lib/poll.ts';
@@ -293,8 +293,7 @@
 		const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
 		rowMenu = { vm, x: rect.left, y: rect.bottom + 4 };
 	}
-	// PLAN 64: a window of the desktop or the phone's full-screen view.
-	const windowed = $derived(windowView());
+	// PLAN 64: the phone's full-screen view keeps only the buttons in the bar.
 	const phone = $derived(phoneView());
 </script>
 
@@ -433,48 +432,26 @@
 	<EmptyState title={t('vms.empty')} />
 {:else if status && current}
 	<div class="vm-page">
-		{#if windowed}
-			<!-- PLAN 64: in a window the title bar names the VM; state and buttons form the tool bar. -->
-			<PageHead title={vmLabel(current)}>
-				{#snippet actions()}
-					{#if !phone}{@render vmState(current)}<span class="spacer"></span>{/if}
-					{@render vmButtons(current, !phone)}
-				{/snippet}
-			</PageHead>
-			<!-- On the phone the bar keeps only the buttons; the state gets a row of its own. -->
-			{#if phone}<div class="phone-state">
-					{@render vmState(current)}<TasksPanel compact />
-				</div>{/if}
-			{#if current.description || current.ioError}<div class="title">
-					{#if current.description}<span class="description muted">{current.description}</span>{/if}
-					{#if current.ioError}<p class="notice-error io-error" role="alert">
-							{t('vms.ioError')}
-							<button type="button" class="btn small" onclick={() => act(current, 'resume')}
-								>{t('vms.resume')}</button
-							>
-						</p>{/if}
-				</div>{/if}
-		{:else}
-			<div class="head">
-				<div class="title">
-					<div class="name-row">
-						<h1 id="vm-title">{vmLabel(current)}</h1>
-						<span class="chip" class:ok={current.state === 'running'}
-							>{t(`vms.state.${current.state}`)}</span
+		<!-- PLAN 64: in a window the title bar names the VM; state and buttons form the tool bar. -->
+		<PageHead title={vmLabel(current)} id="vm-title">
+			{#snippet actions()}
+				{#if !phone}{@render vmState(current)}<span class="spacer"></span>{/if}
+				{@render vmButtons(current, !phone)}
+			{/snippet}
+		</PageHead>
+		<!-- On the phone the bar keeps only the buttons; the state gets a row of its own. -->
+		{#if phone}<div class="phone-state">
+				{@render vmState(current)}<TasksPanel compact />
+			</div>{/if}
+		{#if current.description || current.ioError}<div class="title">
+				{#if current.description}<span class="description muted">{current.description}</span>{/if}
+				{#if current.ioError}<p class="notice-error io-error" role="alert">
+						{t('vms.ioError')}
+						<button type="button" class="btn small" onclick={() => act(current, 'resume')}
+							>{t('vms.resume')}</button
 						>
-						{#if current.autostart}<span class="chip">{t('vms.autostart')}</span>{/if}
-					</div>
-					{#if current.description}<span class="description muted">{current.description}</span>{/if}
-					{#if current.ioError}<p class="notice-error io-error" role="alert">
-							{t('vms.ioError')}
-							<button type="button" class="btn small" onclick={() => act(current, 'resume')}
-								>{t('vms.resume')}</button
-							>
-						</p>{/if}
-				</div>
-				<div class="buttons">{@render vmButtons(current)}</div>
-			</div>
-		{/if}
+					</p>{/if}
+			</div>{/if}
 
 		{#if notices.length}
 			<div class="notices">
@@ -1002,38 +979,14 @@
 		flex-direction: column;
 		gap: var(--space-3);
 	}
-	.head {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		min-height: 58px;
-		justify-content: space-between;
-		gap: var(--space-3);
-	}
-	h1 {
-		font-size: var(--text-page);
-		font-weight: 600;
-	}
 	.title {
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-1);
 		min-width: 0;
 	}
-	.name-row {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 10px;
-	}
 	.description {
 		font-size: var(--text-md);
-	}
-	.buttons {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2);
 	}
 	.icon-btn {
 		width: 2.375rem;

@@ -76,7 +76,7 @@
 	}
 </script>
 
-<PageHead title={t('lan.title')} parent={{ href: '/docker', label: t('nav.docker') }}
+<PageHead title={t('lan.title')}
 	><p class="muted">{t('lan.intro')}</p>
 	{#snippet actions()}<button
 			class="btn btn-primary"

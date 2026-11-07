@@ -95,7 +95,7 @@
 </script>
 
 <NavigationGuard {dirty} />
-<PageHead title={t('ops.monitoring')} parent={{ href: '/tools', label: t('nav.tools') }}
+<PageHead title={t('ops.monitoring')}
 	>{#snippet actions()}<button class="btn" disabled={busy} onclick={load}>{t('ops.refresh')}</button
 		>{/snippet}</PageHead
 >

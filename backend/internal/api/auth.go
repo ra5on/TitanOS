@@ -207,12 +207,16 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		guessKey = device
 	}
 
-	if wait := s.limiter.RetryAfter(guessKey, ipKey); wait > 0 {
-		seconds := int(math.Ceil(wait.Seconds()))
+	blocked := func() bool {
+		wait := s.limiter.RetryAfter(guessKey, ipKey)
+		if wait <= 0 {
+			return false
+		}
 		s.recordEvent(r, req.Name, "login_blocked", "", false)
-		writeJSON(w, http.StatusTooManyRequests, map[string]apiError{"error": {
-			Code: "rate_limited", Message: "too many failed logins, try again later", RetryAfter: seconds,
-		}})
+		writeRateLimited(w, wait, "too many failed logins, try again later")
+		return true
+	}
+	if blocked() {
 		return
 	}
 	if !s.ensureUsersLoaded() {
@@ -224,6 +228,18 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// only after the password (and the second factor) were right, so the
 	// answer reveals nothing to someone guessing.
 	user, ok := s.opts.Users.Verify(req.Name, req.Password)
+	// Guesses sent at the same time all pass the check above before the
+	// first of them is counted (hashing is slow and runs two at a time).
+	// Once the limit was reached meanwhile, the answer is not told, right
+	// or wrong; a wrong guess still counts.
+	if s.limiter.RetryAfter(guessKey, ipKey) > 0 {
+		if !ok {
+			s.limiter.Fail(guessKey, ipKey)
+			s.opts.Firewall.Failed(ip, firewall.SourceWeb)
+		}
+		blocked()
+		return
+	}
 	if !ok {
 		s.limiter.Fail(guessKey, ipKey)
 		s.opts.Firewall.Failed(ip, firewall.SourceWeb)
@@ -239,7 +255,18 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusUnauthorized, "second_factor_required", "enter the code from your authenticator app")
 			return
 		}
-		if !s.opts.Users.CheckSecondFactor(user.Name, req.Code) {
+		codeOK := s.opts.Users.CheckSecondFactor(user.Name, req.Code)
+		// As for the password: codes guessed at the same time are not
+		// answered once the limit was reached meanwhile.
+		if s.limiter.RetryAfter(guessKey, ipKey) > 0 {
+			if !codeOK {
+				s.limiter.Fail(guessKey, ipKey)
+				s.opts.Firewall.Failed(ip, firewall.SourceWeb)
+			}
+			blocked()
+			return
+		}
+		if !codeOK {
 			s.limiter.Fail(guessKey, ipKey)
 			s.opts.Firewall.Failed(ip, firewall.SourceWeb)
 			slog.Warn("login failed at the second factor", "user", req.Name, "ip", ip)
@@ -272,6 +299,13 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, userOf(user))
 	}
+}
+
+// writeRateLimited answers a request that has to wait for the limiter.
+func writeRateLimited(w http.ResponseWriter, wait time.Duration, message string) {
+	writeJSON(w, http.StatusTooManyRequests, map[string]apiError{"error": {
+		Code: "rate_limited", Message: message, RetryAfter: int(math.Ceil(wait.Seconds())),
+	}})
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {

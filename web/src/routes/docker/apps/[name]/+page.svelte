@@ -355,10 +355,7 @@
 	}
 </script>
 
-<PageHead
-	title={t('editor.title', { name })}
-	parent={{ href: '/docker', label: t('docker.title') }}
->
+<PageHead title={t('editor.title', { name })}>
 	{#snippet actions()}<ViewSwitch bind:advanced />{/snippet}
 </PageHead>
 
@@ -1165,10 +1162,6 @@
 	@media (max-width: 760px) {
 		.links {
 			padding-left: var(--space-3);
-		}
-		/* Beside the round menu button of "Side" navigation. */
-		.apply {
-			padding-left: calc(var(--space-3) + var(--fab-clear, 0px));
 		}
 		.apply .note {
 			text-align: left;

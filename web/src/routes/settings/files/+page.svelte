@@ -92,7 +92,7 @@
 	}
 </script>
 
-<PageHead title={t('fileIndex.title')} parent={{ href: '/settings', label: t('nav.settings') }}>
+<PageHead title={t('fileIndex.title')}>
 	<p class="muted">{t('fileIndex.intro')}</p>
 </PageHead>
 {#if loadError}<p class="notice-error" role="alert">

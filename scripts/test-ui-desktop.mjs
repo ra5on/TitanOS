@@ -444,6 +444,150 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   await ctx.close();
 }
 
+// PLAN 65-5: the desktop by keyboard – menu with arrow keys, focus into a
+// new window and back after closing it, dock with arrow keys, context menu
+// with the menu key.
+{
+  const { ctx, page } = await open();
+  const active = () =>
+    page.evaluate(() => {
+      const el = document.activeElement;
+      return {
+        tag: el?.tagName,
+        opens: el?.getAttribute("data-opens"),
+        cls: el?.className,
+        label: el?.getAttribute("aria-label") ?? el?.textContent?.trim(),
+      };
+    });
+  await page.keyboard.press("Control+Space");
+  await page.locator(".launcher").waitFor();
+  await page.keyboard.press("ArrowDown");
+  assert.match((await active()).cls, /prog/, "arrow down: first program");
+  await page.keyboard.press("ArrowRight");
+  const second = (await active()).label;
+  await page.keyboard.press("ArrowLeft");
+  assert.notEqual((await active()).label, second, "arrow left goes back");
+  await page.keyboard.press("ArrowUp");
+  assert.equal((await active()).tag, "INPUT", "arrow up from the first row: search");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await page.locator("section.win").first().waitFor();
+  await page.waitForFunction(
+    () => document.activeElement?.tagName === "IFRAME",
+    null,
+    { timeout: 10000 },
+  );
+  // Inside the window Alt+W closes it; the focus comes back to the desktop.
+  await page.keyboard.press("Alt+w");
+  await page.locator("section.win").first().waitFor({ state: "detached" });
+  await page.waitForTimeout(100);
+  assert.equal((await active()).opens, "launcher", "focus back on the menu button");
+  // The dock: arrow keys move along it.
+  const dockButtons = page.locator("nav.dock button.it");
+  await dockButtons.first().focus();
+  await page.keyboard.press("ArrowRight");
+  assert.equal(
+    await page.evaluate(() => [...document.querySelectorAll("nav.dock button.it")].indexOf(document.activeElement)),
+    1,
+    "dock: arrow right",
+  );
+  // The menu key on a desktop icon opens its menu; arrows and Escape work.
+  await page.locator(".icons > .ico").first().focus();
+  await page.keyboard.press("Shift+F10");
+  await page.locator("[role=menu]").first().waitFor();
+  await page.keyboard.press("ArrowDown");
+  assert.match((await active()).tag, /BUTTON|A/, "menu item focused");
+  await page.keyboard.press("Escape");
+  await page.locator("[role=menu]").waitFor({ state: "detached" });
+  // Every control of a window's title bar has a name.
+  await page.locator(".icons > .ico", { hasText: "Docker" }).first().click();
+  const unnamed = await page
+    .locator("section.win header.titlebar button")
+    .evaluateAll((els) => els.filter((b) => !b.getAttribute("aria-label")).length);
+  assert.equal(unnamed, 0, "title bar buttons are labelled");
+  await shot(page, "15-tastatur");
+  await ctx.close();
+}
+
+// PLAN 65-10: icons keep their places when the browser window shrinks and
+// grows; a move in the small window changes only the moved icon.
+{
+  const stored = {
+    "app:files": { c: 0, r: 0 },
+    "app:shares": { c: 5, r: 1 },
+    "app:docker": { c: 12, r: 0 },
+    "app:storage": { c: 12, r: 3 },
+  };
+  const { ctx, page, puts } = await open(1600, 1000, "graphit", "/", (made) => {
+    made.data.prefs.desktop = {
+      version: 1,
+      sort: "free",
+      iconPos: stored,
+      widgetsHidden: true,
+    };
+  });
+  const places = () =>
+    page.evaluate(() =>
+      Object.fromEntries(
+        [...document.querySelectorAll(".icons > .ico[data-key]")].map((el) => [
+          el.dataset.key,
+          el.style.left + "," + el.style.top,
+        ]),
+      ),
+    );
+  const resize = async (width) => {
+    const docker = await page
+      .locator('.ico[data-key="app:docker"]')
+      .getAttribute("style");
+    await page.setViewportSize({ width, height: 1000 });
+    await page.waitForFunction(
+      (before) =>
+        document.querySelector('.ico[data-key="app:docker"]')?.getAttribute("style") !==
+        before,
+      docker,
+      { timeout: 5000 },
+    );
+    await page.waitForTimeout(200);
+  };
+  await page.locator('.ico[data-key="app:docker"]').waitFor();
+  const wide = await places();
+  const colW = parseFloat(wide["app:docker"]) / 12;
+  const rowH = parseFloat(wide["app:storage"].split(",")[1]) / 3;
+  assert.ok(colW > 0 && rowH > 0, "stored places shown at 1600");
+  await resize(900);
+  const narrow = await places();
+  assert.notEqual(narrow["app:docker"], wide["app:docker"], "pulled inside at 900");
+  assert.equal(narrow["app:files"], wide["app:files"], "files stays at 900");
+  await resize(1600);
+  assert.deepEqual(await places(), wide, "1600 → 900 → 1600 keeps every place");
+  // Move "Freigaben" at 900 to a free cell; nothing else changes.
+  await resize(900);
+  const area = await page.locator(".desk-area").boundingBox();
+  const icons = await page.locator(".icons").boundingBox();
+  const putsBefore = puts.length;
+  await page.locator('.ico[data-key="app:shares"]').dragTo(page.locator(".desk-area"), {
+    targetPosition: {
+      x: icons.x - area.x + 2 * colW + colW / 2,
+      y: icons.y - area.y + 4 * rowH + rowH / 2,
+    },
+    force: true,
+  });
+  // Saved a moment after the last change (lib/desktop/wm: 1.5 s).
+  await page.waitForTimeout(2200);
+  assert.ok(puts.length > putsBefore, "the move is saved");
+  const saved = puts.at(-1).iconPos;
+  assert.deepEqual(saved["app:shares"], { c: 2, r: 4 }, "moved icon stored");
+  for (const key of ["app:files", "app:docker", "app:storage"])
+    assert.deepEqual(saved[key], stored[key], key + " keeps its stored place");
+  await resize(1600);
+  const back = await places();
+  for (const key of ["app:files", "app:docker", "app:storage"])
+    assert.equal(back[key], wide[key], key + " back at its place at 1600");
+  assert.equal(back["app:shares"], `${2 * colW}px,${4 * rowH}px`, "moved icon at 1600");
+  await shot(page, "14-symbole-plaetze");
+  await ctx.close();
+}
+
 await browser.close();
 assert.deepEqual(errors, [], "no script errors");
 console.log("desktop UI ok");

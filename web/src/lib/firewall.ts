@@ -13,7 +13,6 @@ import type {
 	FirewallZoneDef,
 } from './api.ts';
 
-export const builtinZones = ['home', 'vpn', 'internet', 'docker'] as const;
 /** Destinations besides the zones. */
 export const NAS = 'nas';
 export const APPS = 'apps';

@@ -59,3 +59,36 @@ func TestAppZonesAndBlocklistForIPv64(t *testing.T) {
 		t.Fatal("blocklist count")
 	}
 }
+
+// Zones whose rules nft refuses are neither kept nor stored on the stick.
+func TestAppZonesNotStoredWhenRulesFail(t *testing.T) {
+	m, nft, store := newTestManager(t)
+	ctx := context.Background()
+	if err := m.Load(ctx); err != nil {
+		t.Fatal(err)
+	}
+	cfg := Defaults()
+	cfg.Enabled = true
+	if err := m.Change(ctx, cfg, "192.168.1.20"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Confirm(ctx); err != nil {
+		t.Fatal(err)
+	}
+	nft.mu.Lock()
+	nft.fail = true
+	nft.mu.Unlock()
+	if _, err := m.SetAppZones(ctx, "immich", Zones{Internet: true}); err == nil {
+		t.Fatal("failing rules reported as applied")
+	}
+	if m.AppZones("immich").Internet {
+		t.Fatal("zones kept although their rules failed")
+	}
+	var stored fileConfig
+	if err := store.ReadJSON(settingsFile, &stored); err != nil {
+		t.Fatal(err)
+	}
+	if appAllowed(fromFile(stored).Cell(Internet, ToApps), "immich") {
+		t.Fatal("zones stored on the stick although their rules failed")
+	}
+}

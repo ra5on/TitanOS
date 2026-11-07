@@ -82,16 +82,40 @@ func (s *Server) handleTwoFactorEnable(w http.ResponseWriter, r *http.Request) {
 // failed login; it answers the request itself when the proof fails.
 func (s *Server) reconfirm(w http.ResponseWriter, user auth.User, password, code string) bool {
 	key := "user:" + user.Name
-	if wait := s.limiter.RetryAfter(key); wait > 0 {
+	// Proofs sent at the same time all pass this check before the first
+	// of them is counted (hashing is slow), so it is made again before
+	// every answer: once the limit was reached meanwhile, the answer is
+	// not told, right or wrong; a wrong proof still counts.
+	blocked := func() bool {
+		if s.limiter.RetryAfter(key) <= 0 {
+			return false
+		}
 		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
+		return true
+	}
+	if blocked() {
 		return false
 	}
-	if _, ok := s.opts.Users.Authenticate(user.Name, password); !ok {
+	_, ok := s.opts.Users.Authenticate(user.Name, password)
+	if blocked() {
+		if !ok {
+			s.limiter.Fail(key)
+		}
+		return false
+	}
+	if !ok {
 		s.limiter.Fail(key)
 		writeError(w, http.StatusForbidden, "wrong_password", "the password is wrong")
 		return false
 	}
-	if !s.opts.Users.CheckSecondFactor(user.Name, code) {
+	ok = s.opts.Users.CheckSecondFactor(user.Name, code)
+	if blocked() {
+		if !ok {
+			s.limiter.Fail(key)
+		}
+		return false
+	}
+	if !ok {
 		s.limiter.Fail(key)
 		writeError(w, http.StatusForbidden, "invalid_code", "the code is wrong or was used already")
 		return false
@@ -184,19 +208,7 @@ func (s *Server) handleTwoFactorDisable(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	user := currentUser(r)
-	key := "user:" + user.Name
-	if wait := s.limiter.RetryAfter(key); wait > 0 {
-		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
-		return
-	}
-	if _, ok := s.opts.Users.Authenticate(user.Name, req.Password); !ok {
-		s.limiter.Fail(key)
-		writeError(w, http.StatusForbidden, "wrong_password", "the password is wrong")
-		return
-	}
-	if !s.opts.Users.CheckSecondFactor(user.Name, req.Code) {
-		s.limiter.Fail(key)
-		writeError(w, http.StatusForbidden, "invalid_code", "the code is wrong or was used already")
+	if !s.reconfirm(w, user, req.Password, req.Code) {
 		return
 	}
 	if err := s.opts.Users.DisableTwoFactor(user.Name); err != nil {
@@ -220,19 +232,7 @@ func (s *Server) handleTwoFactorRecovery(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusConflict, "two_factor_not_begun", "two-factor login is off")
 		return
 	}
-	key := "user:" + user.Name
-	if wait := s.limiter.RetryAfter(key); wait > 0 {
-		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
-		return
-	}
-	if _, ok := s.opts.Users.Authenticate(user.Name, req.Password); !ok {
-		s.limiter.Fail(key)
-		writeError(w, http.StatusForbidden, "wrong_password", "the password is wrong")
-		return
-	}
-	if !s.opts.Users.CheckSecondFactor(user.Name, req.Code) {
-		s.limiter.Fail(key)
-		writeError(w, http.StatusForbidden, "invalid_code", "the code is wrong or was used already")
+	if !s.reconfirm(w, user, req.Password, req.Code) {
 		return
 	}
 	codes, err := s.opts.Users.NewRecoveryCodes(user.Name)

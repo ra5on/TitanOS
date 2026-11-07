@@ -79,15 +79,6 @@ export type Ipv64Healthcheck = {
 };
 export type Ipv64Integration = { id: number; type: string; name: string; status: string };
 
-/** The usage entries worth showing, in this order. */
-export const USAGE_KEYS = [
-	'dyndns_updates_24h',
-	'dyndns_domains',
-	'own_domains',
-	'healthchecks',
-	'healthcheck_pings_24h',
-];
-
 /** "3 of 48", "3" without a limit. */
 export function usageText(
 	usage: Ipv64Usage | undefined,

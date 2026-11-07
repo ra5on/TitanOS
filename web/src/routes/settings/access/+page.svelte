@@ -230,7 +230,7 @@
 	const fingerprint = $derived(certificate?.fingerprint.match(/.{1,2}/g)?.join(':') ?? '');
 </script>
 
-<PageHead title={t('access.title')} parent={{ href: '/settings', label: t('nav.settings') }} />
+<PageHead title={t('access.title')} />
 
 <section class="tile panel" aria-labelledby="access-ssh">
 	<h2 class="tile-title" id="access-ssh" use:revealTarget>{t('access.ssh')}</h2>

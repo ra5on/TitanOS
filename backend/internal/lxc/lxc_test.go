@@ -661,3 +661,47 @@ func TestDevelopmentModeChangesNothing(t *testing.T) {
 		t.Fatal(env.runner.lines())
 	}
 }
+
+// A restore that broke off between its two renames leaves the current
+// state only in rootfs.old. The next restore must not delete that last
+// copy as a leftover, and must still work.
+func TestRestoreAfterBrokenOffRestoreKeepsWorking(t *testing.T) {
+	env := newTestManager(t)
+	m, ctx := env.m, context.Background()
+	env.btrfs = true
+	env.create(t, Container{Name: "web", Volume: "data", Distribution: "debian", Release: "trixie"})
+	m.now = func() time.Time { return time.Date(2026, 10, 27, 14, 30, 0, 0, time.UTC) }
+	snapshot, err := m.CreateSnapshot(ctx, "web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(m.mountRoot, "data", "lxc", "web")
+	// The state of the broken-off restore: rootfs moved away, the copy
+	// of the snapshot not yet in place.
+	os.WriteFile(filepath.Join(dir, "rootfs", "marker"), nil, 0o644)
+	if err := os.Rename(filepath.Join(dir, "rootfs"), filepath.Join(dir, "rootfs.old")); err != nil {
+		t.Fatal(err)
+	}
+	os.MkdirAll(filepath.Join(dir, "rootfs.restore"), 0o755)
+
+	// With the snapshot step failing, nothing of the current state is lost.
+	env.runner.fail = "subvolume snapshot"
+	if err := m.RestoreSnapshot(ctx, "web", snapshot.ID); err == nil {
+		t.Fatal("restore without its copy succeeded")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "rootfs", "marker")); err != nil {
+		t.Fatal("the state before the restore was lost:", err)
+	}
+	env.runner.fail = ""
+	if err := m.RestoreSnapshot(ctx, "web", snapshot.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "rootfs")); err != nil {
+		t.Fatal("no root file system after the restore:", err)
+	}
+	for _, leftover := range []string{"rootfs.old", "rootfs.restore"} {
+		if _, err := os.Lstat(filepath.Join(dir, leftover)); !os.IsNotExist(err) {
+			t.Fatal(leftover, "is still there")
+		}
+	}
+}

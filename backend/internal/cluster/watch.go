@@ -14,6 +14,11 @@ func (m *Manager) watchNodes(ctx context.Context) {
 		return
 	}
 	m.mu.Lock()
+	if m.state == nil {
+		// Left the cluster since Manages.
+		m.mu.Unlock()
+		return
+	}
 	after := m.state.Ways.alertAfter()
 	m.mu.Unlock()
 	now := time.Now()

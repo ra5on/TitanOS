@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	// PLAN 61: one window of the desktop. TitanOS programs show their pages
 	// in a frame of the same origin with the program's own side bar; Docker
 	// apps always show their remote view (PLAN 63: the app runs in a browser
@@ -10,7 +10,6 @@
 	import { sideActive, type SideItem } from './apps.ts';
 	import { frameMessage } from './frame.ts';
 	import { openTab as openProgramTab } from './programs.svelte.ts';
-	import RemoteView from './RemoteView.svelte';
 	import {
 		closeWindow,
 		desktop,
@@ -60,6 +59,84 @@
 	$effect(() => {
 		registerFrame(win.id, frame ?? null);
 		return () => registerFrame(win.id, null);
+	});
+
+	// PLAN 65-6: a minimized window's page pauses its polling (lib/embedded.ts).
+	function tellVisible() {
+		frame?.contentWindow?.postMessage(
+			{ type: 'titanos-visible', visible: !win.minimized },
+			location.origin,
+		);
+	}
+	$effect(() => {
+		void win.minimized;
+		tellVisible();
+	});
+
+	// PLAN 65-5: keyboard focus goes into a window when it opens (or comes to
+	// the front) and returns to the desktop when it closes.
+	let section = $state<HTMLElement>();
+	function takeFocus() {
+		if (!focused || win.minimized) return;
+		const active = document.activeElement;
+		if (active instanceof HTMLIFrameElement && active !== frame) return;
+		if (section?.contains(active)) return;
+		if (frame) frame.focus();
+		else section?.focus();
+	}
+	// The desktop's keys (Alt+Q switcher, Alt+W/M, Alt+arrows, Ctrl+Space) reach
+	// the desktop at once while the focus is in the window's page (same origin),
+	// before the page sees them; releasing Alt ends the switcher there too.
+	function hookKeys() {
+		const inner = frame?.contentWindow;
+		if (!inner) return;
+		const pass = (type: 'keydown' | 'keyup', e: KeyboardEvent) =>
+			window.dispatchEvent(
+				new KeyboardEvent(type, {
+					key: e.key,
+					code: e.code,
+					altKey: e.altKey,
+					ctrlKey: e.ctrlKey,
+					shiftKey: e.shiftKey,
+					metaKey: e.metaKey,
+				}),
+			);
+		inner.addEventListener(
+			'keydown',
+			(e) => {
+				const desk =
+					(e.altKey && !e.ctrlKey && !e.metaKey && /^(q|w|m|arrow)/i.test(e.key)) ||
+					((e.ctrlKey || e.metaKey) && e.code === 'Space');
+				if (!desk) return;
+				e.preventDefault();
+				e.stopImmediatePropagation();
+				pass('keydown', e);
+			},
+			true,
+		);
+		inner.addEventListener('keyup', (e) => wm.switcher && pass('keyup', e), true);
+	}
+	function loaded() {
+		tellVisible();
+		try {
+			hookKeys();
+		} catch {
+			// A page of another origin (never ours): its keys stay its own.
+		}
+		takeFocus();
+	}
+	$effect(() => {
+		if (focused && !win.minimized) untrack(takeFocus);
+	});
+	onDestroy(() => {
+		setTimeout(() => {
+			if (document.activeElement && document.activeElement !== document.body) return;
+			const next =
+				document.querySelector<HTMLElement>('section.win.focused iframe') ??
+				document.querySelector<HTMLElement>('section.win.focused') ??
+				document.querySelector<HTMLElement>('[data-opens="launcher"]');
+			next?.focus();
+		}, 0);
 	});
 
 	const folded = $derived(desktop.prefs.folded.includes(foldKey));
@@ -265,7 +342,12 @@
 
 <svelte:window onmessage={message} />
 
+<!-- A window is a non-modal dialog: it takes the keyboard (resize keys) and the focus. -->
+<!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
 <section
+	bind:this={section}
+	role="dialog"
+	tabindex="-1"
 	class="win"
 	class:focused
 	class:dragging
@@ -389,10 +471,16 @@
 		</header>
 		<div class="body">
 			{#if external}
-				<RemoteView app={win.app.replace(/^docker:/, '')} title={win.title} onopentab={openTab} />
+				<!-- The remote view's player loads with the first Docker app (PLAN 65-6). -->
+				{#await import('./RemoteView.svelte') then { default: RemoteView }}
+					<RemoteView app={win.app.replace(/^docker:/, '')} title={win.title} onopentab={openTab} />
+				{:catch}
+					<p class="load-failed">{t('desktop.window.loadFailed')}</p>
+				{/await}
 			{:else}
 				<iframe
 					bind:this={frame}
+					onload={loaded}
 					data-window={win.id}
 					{src}
 					title={win.title}
@@ -418,9 +506,14 @@
 		display: flex;
 		border-radius: calc(14px * var(--radius-scale, 1));
 		overflow: hidden;
-		background: var(--desk-surface, var(--bg));
-		backdrop-filter: blur(var(--desk-blur, 0px)) saturate(1.3);
-		-webkit-backdrop-filter: blur(var(--desk-blur, 0px)) saturate(1.3);
+		/* PLAN 65: even at high transparency nothing behind a window stays
+		   readable (icon labels shone through the side bar): a second layer
+		   keeps at least ~75 % cover, and the glass always blurs. */
+		background:
+			linear-gradient(var(--desk-surface, var(--bg)), var(--desk-surface, var(--bg))),
+			color-mix(in srgb, var(--surface) 55%, transparent);
+		backdrop-filter: blur(max(var(--desk-blur, 0px), 14px)) saturate(1.3);
+		-webkit-backdrop-filter: blur(max(var(--desk-blur, 0px), 14px)) saturate(1.3);
 		border: 1px solid var(--border);
 		box-shadow: 0 10px 28px rgb(0 0 0 / 0.35);
 	}
@@ -541,7 +634,8 @@
 	}
 	.item.on {
 		background: color-mix(in srgb, var(--accent) 18%, transparent);
-		color: var(--accent);
+		/* Toward the text color: 4.5:1 on the tinted glass in every theme (PLAN 65-5). */
+		color: color-mix(in srgb, var(--accent) 65%, var(--text));
 		font-weight: 600;
 	}
 	.item.on :global(svg) {
@@ -625,6 +719,11 @@
 	.ctl.close:hover {
 		background: #c42b1c;
 		color: #fff;
+	}
+	.load-failed {
+		margin: 0;
+		padding: 24px;
+		color: var(--text);
 	}
 	.body {
 		position: relative;

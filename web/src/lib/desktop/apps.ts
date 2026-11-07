@@ -322,6 +322,8 @@ export const SYSTEM_APPS: SystemApp[] = [
 			{ href: '/settings/updates', label: 'desktop.side.updates', icon: 'download' },
 			{ href: '/settings/timezone', label: 'desktop.side.timezone', icon: 'clock' },
 			{ href: '/settings/appearance', label: 'desktop.side.appearance', icon: 'palette' },
+			// PLAN 65: the dock's page has its own entry (Darstellung is not lit while it is open).
+			{ href: '/settings/appearance/dock', label: 'desktop.dock.title', icon: 'columns' },
 			{ href: '/settings/hardware', label: 'desktop.side.hardware', icon: 'monitor' },
 			{ href: '/settings/temperatures', label: 'desktop.side.temperatures', icon: 'activity' },
 			{ href: '/settings/energy', label: 'desktop.side.energy', icon: 'zap' },

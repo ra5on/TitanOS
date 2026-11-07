@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/subtle"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -268,5 +267,3 @@ func (a *agent) serveClient(conn *websocket.Conn) {
 	}
 	a.mu.Unlock()
 }
-
-var errClosed = errors.New("client closed")

@@ -4,12 +4,11 @@ go 1.27.0
 
 require (
 	github.com/coder/websocket v1.8.15
+	github.com/jezek/xgb v1.3.1
 	go.etcd.io/bbolt v1.5.0
-	go.yaml.in/yaml/v3 v3.0.5
+	go.yaml.in/yaml/v3 v3.0.6
 	golang.org/x/crypto v0.58.0
 	golang.org/x/image v0.47.0
 	golang.org/x/net v0.62.0
 	golang.org/x/sys v0.49.0
 )
-
-require github.com/jezek/xgb v1.3.1 // indirect

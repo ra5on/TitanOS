@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/cluster"
 	"github.com/ra5on/TitanOS/backend/internal/webauthn/webauthntest"
 )
@@ -116,6 +117,18 @@ func TestClusterThroughTheAPI(t *testing.T) {
 	if res.StatusCode != http.StatusForbidden || errorCode(t, body) != "web_session_required" {
 		t.Fatalf("leave through A: %d %s", res.StatusCode, body)
 	}
+	// Reading the cluster pages through another node neither: the list of
+	// nodes answers like a NAS outside a cluster, the others refuse.
+	for _, path := range []string{"cluster", "cluster/update"} {
+		res, body = a.request("GET", "/api/v1/cluster/nodes/"+bID+"/api/"+path, nil)
+		if res.StatusCode != http.StatusForbidden || errorCode(t, body) != "web_session_required" {
+			t.Fatalf("GET %s through A: %d %s", path, res.StatusCode, body)
+		}
+	}
+	res, body = a.request("GET", "/api/v1/cluster/nodes/"+bID+"/api/cluster/nodes", nil)
+	if res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"nodes":[]`) || !strings.Contains(string(body), `"manages":false`) {
+		t.Fatalf("GET cluster/nodes through A: %d %s", res.StatusCode, body)
+	}
 	// Without a session of A nothing goes through.
 	req, _ := http.NewRequest("GET", a.url+"/api/v1/cluster/nodes/"+bID+"/api/users", nil)
 	if res, err := http.DefaultClient.Do(req); err != nil || res.StatusCode != http.StatusUnauthorized {
@@ -139,6 +152,19 @@ func TestClusterThroughTheAPI(t *testing.T) {
 	res, body = a.request("GET", "/api/v1/cluster/nodes", nil)
 	if res.StatusCode != http.StatusOK || strings.Count(string(body), `"online":true`) != 2 {
 		t.Fatalf("nodes: %d %s", res.StatusCode, body)
+	}
+
+	// An account B keeps for itself does not act on A, although B manages:
+	// A knows the account by its name only.
+	if _, err := b.users.Create("dora", testPassword, auth.RoleAdmin); err != nil {
+		t.Fatal(err)
+	}
+	if res, body := b.request("POST", "/api/v1/login", credentials{Name: "dora", Password: testPassword}); res.StatusCode != http.StatusOK {
+		t.Fatalf("login of dora on B: %d %s", res.StatusCode, body)
+	}
+	res, body = b.request("GET", "/api/v1/cluster/nodes/"+aID+"/api/users", nil)
+	if res.StatusCode != http.StatusForbidden || errorCode(t, body) != "cluster_not_permitted" {
+		t.Fatalf("local account of B acted on A: %d %s", res.StatusCode, body)
 	}
 }
 
