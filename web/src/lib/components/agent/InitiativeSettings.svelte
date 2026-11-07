@@ -81,7 +81,7 @@
 				><strong>{t('agent.init.reflect')}</strong><small>{t('agent.init.reflectHint')}</small
 				></span
 			>
-			<input type="checkbox" class="switch" bind:checked={value.reflect} />
+			<input type="checkbox" class="switch" role="switch" bind:checked={value.reflect} />
 		</label>
 		<label class="row" class:off={!value.reflect}>
 			<span class="t"><strong>{t('agent.init.at')}</strong></span>
@@ -114,6 +114,7 @@
 			<input
 				type="checkbox"
 				class="switch"
+				role="switch"
 				bind:checked={value.morningNote}
 				disabled={!value.reflect}
 			/>
@@ -127,14 +128,14 @@
 				><strong>{t('agent.init.watchLabel')}</strong><small>{t('agent.init.watchHint')}</small
 				></span
 			>
-			<input type="checkbox" class="switch" bind:checked={value.watch} />
+			<input type="checkbox" class="switch" role="switch" bind:checked={value.watch} />
 		</label>
 		<label class="row">
 			<span class="t"
 				><strong>{t('agent.init.forecast')}</strong><small>{t('agent.init.forecastHint')}</small
 				></span
 			>
-			<input type="checkbox" class="switch" bind:checked={value.forecast} />
+			<input type="checkbox" class="switch" role="switch" bind:checked={value.forecast} />
 		</label>
 		{#each ['usb', 'update'] as const as ev (ev)}
 			<label class="row">
@@ -142,6 +143,7 @@
 				<input
 					type="checkbox"
 					class="switch"
+					role="switch"
 					checked={value.events.includes(ev)}
 					onchange={(e) =>
 						(value.events = e.currentTarget.checked
@@ -185,6 +187,7 @@
 				<input
 					type="checkbox"
 					class="switch"
+					role="switch"
 					checked={searched(r.id)}
 					onchange={(e) => toggleRoot(r.id, e.currentTarget.checked)}
 				/>
@@ -223,7 +226,7 @@
 			<span class="t"
 				><strong>{t('agent.init.weekly')}</strong><small>{t('agent.init.weeklyHint')}</small></span
 			>
-			<input type="checkbox" class="switch" bind:checked={value.weekly} />
+			<input type="checkbox" class="switch" role="switch" bind:checked={value.weekly} />
 		</label>
 	</div>
 {:else}
@@ -234,14 +237,14 @@
 				><strong>{t('agent.init.memoryAuto')}</strong><small>{t('agent.init.memoryAutoHint')}</small
 				></span
 			>
-			<input type="checkbox" class="switch" bind:checked={value.memoryAuto} />
+			<input type="checkbox" class="switch" role="switch" bind:checked={value.memoryAuto} />
 		</label>
 		<label class="row">
 			<span class="t"
 				><strong>{t('agent.init.conflicts')}</strong><small>{t('agent.init.conflictsHint')}</small
 				></span
 			>
-			<input type="checkbox" class="switch" bind:checked={value.conflicts} />
+			<input type="checkbox" class="switch" role="switch" bind:checked={value.conflicts} />
 		</label>
 		<label class="row">
 			<span class="t"
@@ -281,7 +284,7 @@
 			<span class="t"
 				><strong>{t('agent.init.learn')}</strong><small>{t('agent.init.learnHint')}</small></span
 			>
-			<input type="checkbox" class="switch" bind:checked={value.learnSkills} />
+			<input type="checkbox" class="switch" role="switch" bind:checked={value.learnSkills} />
 		</label>
 		{#if onrestart}
 			<div class="row">
@@ -333,30 +336,31 @@
 {/if}
 
 <style>
+	/* PLAN 68: the same cards and rows as AgentSettings, theme colors only. */
 	.cap {
-		margin: 12px 6px 4px;
+		margin: 12px 4px 2px;
 		font-size: var(--text-xs);
 		font-weight: 600;
-		letter-spacing: 0.08em;
+		letter-spacing: 0.05em;
 		text-transform: uppercase;
 		color: var(--muted);
 	}
 	.grp {
 		flex-shrink: 0;
-		border-radius: 20px;
+		border-radius: var(--radius-tile);
 		overflow: hidden;
-		background: color-mix(in srgb, var(--text) 4%, transparent);
-		border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+		background: var(--surface);
+		border: 1px solid var(--border);
 	}
 	.row {
 		display: flex;
 		align-items: center;
 		gap: 12px;
 		width: 100%;
-		min-height: 52px;
-		padding: 9px 12px;
+		min-height: 48px;
+		padding: 10px 16px;
 		border: 0;
-		border-top: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+		border-top: 1px solid var(--border);
 		background: none;
 		color: var(--text);
 		font: inherit;
@@ -376,13 +380,14 @@
 		flex-basis: 100%;
 	}
 	.row.danger strong {
-		color: var(--danger, #fb7185);
+		color: var(--error-text);
 	}
 	.t {
 		flex: 1;
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
+		gap: 2px;
 	}
 	.t strong {
 		font-weight: 500;
@@ -390,29 +395,30 @@
 	.t small,
 	.level small {
 		color: var(--muted);
-		font-size: var(--text-xs);
+		font-size: var(--text-sm);
 	}
 	.seg {
 		display: grid;
 		grid-auto-flow: column;
 		grid-auto-columns: 1fr;
+		gap: 2px;
 		padding: 3px;
-		border-radius: 12px;
-		background: color-mix(in srgb, var(--text) 7%, transparent);
+		border-radius: var(--radius-ctl);
+		background: var(--chip);
 	}
 	.seg label {
 		text-align: center;
 		white-space: nowrap;
-		padding: 7px 8px;
-		border-radius: 9px;
+		padding: 6px 8px;
+		border-radius: calc(var(--radius-ctl) - 2px);
 		font-size: var(--text-sm);
-		font-weight: 600;
-		color: var(--muted);
+		color: var(--text);
 		cursor: pointer;
 	}
 	.seg label.on {
-		color: var(--on-accent, #fff);
-		background: var(--accent);
+		background: var(--surface);
+		font-weight: 600;
+		box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
 	}
 	.seg input,
 	.steps input {
@@ -463,12 +469,6 @@
 	}
 	.steps label.on i {
 		box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 30%, transparent);
-	}
-	.switch {
-		width: 22px;
-		height: 22px;
-		accent-color: var(--accent);
-		flex: none;
 	}
 	.time {
 		width: 6.5rem;

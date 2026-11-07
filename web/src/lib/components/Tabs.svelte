@@ -43,7 +43,9 @@
 		gap: 6px;
 	}
 	.tabs [aria-selected='true'] {
-		color: var(--accent);
+		/* Mixed toward the text colour: readable (4.5:1) on every theme and background. */
+		color: color-mix(in srgb, var(--accent) 70%, var(--text));
+		font-weight: 600;
 		border-bottom: 2px solid var(--accent);
 	}
 	.badge {

@@ -149,76 +149,72 @@
 
 <section class="tile ui-card" aria-labelledby="ag-volume">
 	<div class="card-head"><h2 id="ag-volume">{t('agent.vol.title')}</h2></div>
-	<div class="card-body">
-		<p class="muted">{t('agent.vol.intro')}</p>
-		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-		{#if running && move}
-			<div class="moving" role="status">
-				<span
-					>{t(`agent.vol.state.${move.state}` as MessageKey, {
-						from: move.from,
-						to: move.to,
-					})}</span
-				>
-				<div
-					class="bar"
-					role="progressbar"
-					aria-valuemin="0"
-					aria-valuemax="100"
-					aria-valuenow={Math.round(percent)}
-					aria-label={t('agent.vol.progress')}
-				>
-					<span style:width="{percent}%"></span>
-				</div>
-				<small class="muted"
-					>{t('agent.vol.copied', {
-						files: move.files,
-						bytes: formatBytes(move.bytes),
-						total: formatBytes(move.total),
-					})}</small
-				>
+	<div class="set-row one">
+		<span class="set-hint">{t('agent.vol.intro')}</span>
+	</div>
+	{#if error}<div class="set-row one">
+			<p class="notice-error" role="alert">{error}</p>
+		</div>{/if}
+	{#if running && move}
+		<div class="set-row one moving" role="status">
+			<span
+				>{t(`agent.vol.state.${move.state}` as MessageKey, {
+					from: move.from,
+					to: move.to,
+				})}</span
+			>
+			<div
+				class="bar"
+				role="progressbar"
+				aria-valuemin="0"
+				aria-valuemax="100"
+				aria-valuenow={Math.round(percent)}
+				aria-label={t('agent.vol.progress')}
+			>
+				<span style:width="{percent}%"></span>
 			</div>
-		{:else}
-			{#each volumes.filter((v) => v.oldCopy) as v (v.name)}
-				<div class="row old">
-					<span class="t"
-						><strong>{t('agent.vol.oldTitle', { volume: v.name })}</strong><small
-							>{t('agent.vol.oldText')}</small
-						></span
-					>
-					<button type="button" class="btn" onclick={() => (removing = v.name)}
-						>{t('agent.vol.oldRemove')}</button
-					>
-				</div>
-			{/each}
-			{#if move?.state === 'done'}
+			<small class="set-hint"
+				>{t('agent.vol.copied', {
+					files: move.files,
+					bytes: formatBytes(move.bytes),
+					total: formatBytes(move.total),
+				})}</small
+			>
+		</div>
+	{:else}
+		{#if move?.state === 'done'}
+			<div class="set-row one">
 				<p class="notice-ok" role="status">
 					{t('agent.vol.done', { to: move.to })}{#if move.skipped}
 						{t('agent.vol.skipped', { n: move.skipped })}{/if}{#if move.cleanup}
 						{t('agent.vol.cleanup', { from: move.from })}{/if}
 				</p>
-			{:else if move?.state === 'failed'}
+			</div>
+		{:else if move?.state === 'failed'}
+			<div class="set-row one">
 				<p class="notice-warn" role="alert">
 					{t('agent.vol.failed', { from: move.from, error: move.error ?? '' })}
 				</p>
-			{/if}
-			<div class="row">
-				<span class="t">
-					{#if here}
-						<strong>{here.name}</strong>
-						<small
-							>{t('agent.vol.free', {
-								free: formatBytes(here.freeBytes),
-								size: formatBytes(here.sizeBytes),
-							})}{kindLabel(here) ? ' · ' + kindLabel(here) : ''}</small
-						>
-					{:else if current}
-						<strong>{current}</strong><small>{t('agent.vol.missing')}</small>
-					{:else}
-						<small class="muted">{t('agent.vol.none')}</small>
-					{/if}
-				</span>
-				{#if current && others.length > 0}
+			</div>
+		{/if}
+		<div class="set-row" class:one={!(current && others.length > 0)}>
+			<span class="set-label">
+				{#if here}
+					<strong>{here.name}</strong>
+					<span class="set-hint"
+						>{t('agent.vol.free', {
+							free: formatBytes(here.freeBytes),
+							size: formatBytes(here.sizeBytes),
+						})}{kindLabel(here) ? ' · ' + kindLabel(here) : ''}</span
+					>
+				{:else if current}
+					<strong>{current}</strong><span class="set-hint">{t('agent.vol.missing')}</span>
+				{:else}
+					<span class="set-hint">{t('agent.vol.none')}</span>
+				{/if}
+			</span>
+			{#if current && others.length > 0}
+				<div class="set-control end">
 					<button
 						type="button"
 						class="btn"
@@ -227,10 +223,24 @@
 							moving = true;
 						}}>{t('agent.vol.move')}</button
 					>
-				{/if}
+				</div>
+			{/if}
+		</div>
+		{#each volumes.filter((v) => v.oldCopy) as v (v.name)}
+			<div class="set-row">
+				<span class="set-label"
+					><strong>{t('agent.vol.oldTitle', { volume: v.name })}</strong><span class="set-hint"
+						>{t('agent.vol.oldText')}</span
+					></span
+				>
+				<div class="set-control end">
+					<button type="button" class="btn" onclick={() => (removing = v.name)}
+						>{t('agent.vol.oldRemove')}</button
+					>
+				</div>
 			</div>
-		{/if}
-	</div>
+		{/each}
+	{/if}
 </section>
 
 {#if choosing}
@@ -321,18 +331,21 @@
 		color: var(--accent);
 		border: 1px solid var(--accent);
 	}
-	.row {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-		margin-top: 10px;
-		flex-wrap: wrap;
+	.set-row.one {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.set-row.one > p {
+		margin: 0;
+	}
+	.set-label strong {
+		font-weight: 600;
+	}
+	/* The hint on the card's surface: a little toward the text for 4.5:1. */
+	.set-hint {
+		color: color-mix(in srgb, var(--muted) 85%, var(--text));
 	}
 	.moving {
-		display: flex;
-		flex-direction: column;
 		gap: 6px;
-		margin-top: 10px;
 	}
 	.bar {
 		height: 8px;

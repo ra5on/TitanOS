@@ -125,9 +125,12 @@
 	const groupBusy = (group: DockerGroup) =>
 		busyKeys.has(appKey(group.name)) || group.members.some((c) => busyKeys.has(containerKey(c)));
 	function subLine(group: DockerGroup): string {
-		if (group.members.length > 1)
-			return t('docker.table.containers', { count: group.members.length });
-		return group.members[0]?.image ?? '';
+		const host = group.members.some((c) => c.hostNetwork) ? t('docker.table.hostNetwork') : '';
+		const base =
+			group.members.length > 1
+				? t('docker.table.containers', { count: group.members.length })
+				: (group.members[0]?.image ?? '');
+		return [base, host].filter(Boolean).join(' · ');
 	}
 	const stateOf = $derived(new Map(groups.map((g) => [g.id, rowState(g)])));
 	const isOn = (group: DockerGroup) => {

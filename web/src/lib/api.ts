@@ -590,6 +590,8 @@ export type DockerContainer = {
 	tailnetUrl?: string;
 	icon: string;
 	updateAvailable: boolean;
+	/** Uses the NAS network directly (no published ports). */
+	hostNetwork?: boolean;
 	updateState?: 'not_checked' | 'pinned' | 'failed' | 'current' | 'available';
 	updateError?: string;
 };

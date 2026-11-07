@@ -12,36 +12,38 @@
 		ontoggle?: (on: boolean) => void;
 		onopen?: () => void;
 	};
-	let { icon, color, title, sub, on = false, toggle = true, ontoggle, onopen }: Props = $props();
+	// PLAN 68: colors from the theme only; `color` is kept for the callers.
+	let { icon, title, sub, on = false, toggle = true, ontoggle, onopen }: Props = $props();
 </script>
 
 <div class="frow">
 	<button type="button" class="open" onclick={onopen} disabled={!onopen}>
-		<span class="ic" style:--c={color} aria-hidden="true">{icon}</span>
+		<span class="ic" aria-hidden="true">{icon}</span>
 		<span class="t"
 			><strong>{title}</strong>{#if sub}<small>{sub}</small>{/if}</span
 		>
 	</button>
 	{#if toggle}
-		<label class="sw"
-			><input
-				type="checkbox"
-				role="switch"
-				checked={on}
-				aria-label={title}
-				onchange={(e) => ontoggle?.(e.currentTarget.checked)}
-			/><span aria-hidden="true"></span></label
-		>
+		<input
+			type="checkbox"
+			class="switch"
+			role="switch"
+			checked={on}
+			aria-label={title}
+			onchange={(e) => ontoggle?.(e.currentTarget.checked)}
+		/>
 	{/if}
 </div>
 
 <style>
+	/* A row like every settings row: name and hint left, switch right. */
 	.frow {
 		display: flex;
 		align-items: center;
-		gap: 10px;
-		padding: 10px 12px;
-		border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+		gap: 12px;
+		min-height: 48px;
+		padding: 10px 16px;
+		border-top: 1px solid var(--panel-border, var(--border));
 	}
 	.frow:first-child {
 		border-top: 0;
@@ -63,15 +65,19 @@
 	.open:disabled {
 		cursor: default;
 	}
+	.open:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
 	.ic {
 		width: 30px;
 		height: 30px;
 		flex-shrink: 0;
 		display: grid;
 		place-items: center;
-		border-radius: 9px;
+		border-radius: var(--radius-ctl);
 		font-size: 16px;
-		background: color-mix(in srgb, var(--c) 18%, transparent);
+		background: var(--chip);
 	}
 	.t {
 		display: flex;
@@ -79,49 +85,15 @@
 		gap: 2px;
 		min-width: 0;
 	}
+	.t strong {
+		font-weight: 500;
+	}
 	.t small {
-		color: var(--muted);
+		color: color-mix(in srgb, var(--muted) 85%, var(--text));
+		font-size: var(--text-sm);
 		line-height: 1.35;
 	}
-	.sw {
-		position: relative;
-		flex-shrink: 0;
-		width: 44px;
-		height: 26px;
-	}
-	.sw input {
-		position: absolute;
-		inset: 0;
-		opacity: 0;
-		margin: 0;
-		cursor: pointer;
-	}
-	.sw span {
-		position: absolute;
-		inset: 0;
-		border-radius: 13px;
-		background: color-mix(in srgb, var(--text) 18%, transparent);
-		transition: background 0.15s;
-		pointer-events: none;
-	}
-	.sw span::after {
-		content: '';
-		position: absolute;
-		top: 3px;
-		left: 3px;
-		width: 20px;
-		height: 20px;
-		border-radius: 50%;
-		background: #fff;
-		transition: left 0.15s;
-	}
-	.sw input:checked + span {
-		background: var(--accent);
-	}
-	.sw input:checked + span::after {
-		left: 21px;
-	}
-	.sw input:focus-visible + span {
+	.switch:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: 2px;
 	}
