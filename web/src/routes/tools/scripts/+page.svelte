@@ -108,6 +108,31 @@
 		return parts.join(' · ');
 	}
 	const volumeChanged = $derived(!!status && volume !== '' && volume !== status.volume);
+
+	// PLAN 67-1: the menu bar of the desktop – new script, run one, its runs.
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	const byId = (id?: string) => status?.scripts.find((s) => s.id === id);
+	registerMenuCommands({
+		'planner.newScript': { run: () => (editing = ''), enabled: () => !!status?.available },
+		'planner.run': {
+			items: () =>
+				(status?.disabled ? [] : (status?.scripts ?? []))
+					.filter((s) => !s.running)
+					.map((s) => ({ id: s.id, text: s.name })),
+			run: (id) => {
+				const script = byId(id);
+				if (script) void start(script);
+			},
+		},
+		'planner.history': {
+			items: () => (status?.scripts ?? []).map((s) => ({ id: s.id, text: s.name })),
+			run: (id) => {
+				const script = byId(id);
+				if (script) history = script;
+			},
+		},
+		'planner.refresh': { run: () => void load(), enabled: () => !busy },
+	});
 </script>
 
 <PageHead title={t('scripts.title')}

@@ -163,6 +163,46 @@
 		if (from === source.id) from = 'all';
 		await change(() => api.delete<AppStore>(`/apps/sources/${source.id}`));
 	}
+
+	// PLAN 67-1: the menu bar of the desktop – catalogue, sources and filters.
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	registerMenuCommands({
+		'appcenter.refresh': {
+			run: () => void change(() => api.post<AppStore>('/apps/refresh')),
+			enabled: () => !busy && !!store,
+		},
+		'appcenter.sources': { run: () => (sourcesOpen = !sourcesOpen), checked: () => sourcesOpen },
+		'appcenter.filter.all': { run: () => (onlyInstalled = false), checked: () => !onlyInstalled },
+		'appcenter.filter.installed': {
+			run: () => (onlyInstalled = true),
+			checked: () => onlyInstalled,
+		},
+		'appcenter.webapps': () =>
+			document.querySelector('.browser-apps')?.scrollIntoView({ behavior: 'smooth' }),
+		'appcenter.categories': {
+			items: () =>
+				categories.map((key) => ({
+					id: key,
+					text: key === 'all' ? t('menubar.appcenter.all') : categoryLabel(key),
+					checked: category === key,
+				})),
+			run: (key) => {
+				if (key && categories.includes(key)) category = key;
+			},
+		},
+		'appcenter.source': {
+			items: () =>
+				sources.length > 1
+					? [
+							{ id: 'all', text: t('apps.allSources'), checked: from === 'all' },
+							...sources.map((s) => ({ id: s.id, text: s.name, checked: from === s.id })),
+						]
+					: [],
+			run: (id) => {
+				if (id === 'all' || sources.some((s) => s.id === id)) from = id ?? 'all';
+			},
+		},
+	});
 </script>
 
 <PageHead title={t('apps.title')}>

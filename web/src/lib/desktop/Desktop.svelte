@@ -59,7 +59,11 @@
 		snapRect,
 		wm,
 	} from './wm.svelte.ts';
-	import { formatPercent, formatMegabytesPerSecond } from '../format.ts';
+	import { formatPercent } from '../format.ts';
+	import { i18n } from '../i18n/index.svelte.ts';
+	import MenuBar from './menubar/MenuBar.svelte';
+	import { menuKeyDown, menuKeyReset, menuKeyUp, screenOwnsKeys } from './menubar/keys.ts';
+	import type { DeskOp } from './menubar/menus.ts';
 
 	const onlock = () => void lock();
 
@@ -106,7 +110,7 @@
 	const agentAllowed = $derived(all.some((p) => p.key === 'app:agent'));
 	const sizes = { s: 48, m: 60, l: 72 } as const;
 	const iconPx = $derived(sizes[desktop.prefs.iconSize]);
-	const barIcon = $derived({ s: 15, m: 18, l: 22 }[desktop.prefs.barSize]);
+	const barIcon = $derived({ s: 14, m: 17, l: 20 }[desktop.prefs.barSize]);
 	const known = $derived(new Set(all.map((p) => p.key)));
 	const inDock = $derived(new Set(dockPinned(desktop.prefs, known)));
 
@@ -226,6 +230,11 @@
 			setWindowDrag(msg.drag);
 			wm.fileDrag = !!msg.drag;
 		} else if (msg.type === 'titanos-open-file') void openFile(msg);
+		// PLAN 67: Docker › Container "In Fernansicht öffnen" opens the app's own window.
+		else if (msg.type === 'titanos-open-program') {
+			const key = typeof msg.key === 'string' ? msg.key : '';
+			if (key.startsWith('docker:') && findProgram(key)) void openProgram(key);
+		}
 	}
 
 	/** PLAN 66: the file manager opens a file in a web app (one window per document). */
@@ -514,8 +523,20 @@
 
 	// The switcher (Alt+Q, Alt+Tab belongs to the operating system) and window keys.
 	function keys(event: KeyboardEvent) {
+		if (menuKeyDown(event)) {
+			event.preventDefault();
+			menuBar?.focusBar();
+			return;
+		}
 		if (event.altKey && !event.ctrlKey && !event.metaKey) {
 			const k = event.key.toLowerCase();
+			// PLAN 67-1: Alt + K shows the desktop (Alt + D belongs to the browser's address bar).
+			if (event.code === 'KeyK' || k === 'k') {
+				if (screenOwnsKeys(event.target)) return;
+				event.preventDefault();
+				showDesktop();
+				return;
+			}
 			if (k === 'q' && wm.windows.length) {
 				event.preventDefault();
 				const list = byRecency();
@@ -589,6 +610,7 @@
 
 	// Menu and message centre close on a click beside them (also into a window's frame).
 	function outside(event: PointerEvent) {
+		menuKeyReset();
 		const el = event.target as HTMLElement | null;
 		if (launcher && !el?.closest('.launcher, [data-opens="launcher"], .dropdown-panel, dialog'))
 			launcher = false;
@@ -604,6 +626,10 @@
 		}, 0);
 	}
 	function keyUp(event: KeyboardEvent) {
+		if (menuKeyUp(event) && !wm.switcher) {
+			event.preventDefault();
+			menuBar?.focusBar();
+		}
 		if (wm.switcher && (event.key === 'Alt' || !event.altKey)) {
 			const target = byRecency()[wm.switcherIndex];
 			wm.switcher = false;
@@ -611,16 +637,49 @@
 		}
 	}
 
+	// PLAN 67-1: the menu bar of the top bar; Alt alone or F10 puts the keyboard there.
+	let menuBar = $state<MenuBar>();
+	function deskOp(op: DeskOp) {
+		if (op === 'newFolder') newFolder();
+		else if (op === 'wallpaper') dialog = 'wallpaper';
+		else if (op === 'autoArrange') autoArrange();
+		else if (op === 'widgets') savePrefs((p) => (p.widgetsHidden = !p.widgetsHidden));
+		else if (op === 'dock') savePrefs((p) => (p.dock.show = !p.dock.show));
+		else if (op.startsWith('size:')) {
+			const size = op.slice(5) as 's' | 'm' | 'l';
+			savePrefs((p) => (p.iconSize = size));
+		} else if (op.startsWith('sort:')) {
+			const mode = op.slice(5) as 'name' | 'kind' | 'recent' | 'free';
+			savePrefs((p) => {
+				// Into "free" without own places: the icons stay where they are now.
+				if (mode === 'free' && p.sort !== 'free' && !Object.keys(p.iconPos).length)
+					p.iconPos = Object.fromEntries([...places].map(([k, at]) => [k, { ...at }]));
+				p.sort = mode;
+			});
+		}
+	}
+
+	// Date and time on the right of the top bar.
+	let now = $state(new Date());
+	$effect(() => {
+		const timer = setInterval(() => (now = new Date()), 15_000);
+		return () => clearInterval(timer);
+	});
+	const dateText = $derived(
+		new Intl.DateTimeFormat(i18n.locale, {
+			weekday: 'short',
+			day: 'numeric',
+			month: 'short',
+		}).format(now),
+	);
+	const timeText = $derived(
+		new Intl.DateTimeFormat(i18n.locale, { hour: '2-digit', minute: '2-digit' }).format(now),
+	);
+
 	function showDesktop() {
 		const visible = wm.windows.filter((w) => !w.minimized);
 		if (visible.length) visible.forEach((w) => minimize(w.id));
 		else wm.windows.forEach((w) => focus(w.id));
-	}
-	function taskClick(id: string) {
-		const w = wm.windows.find((x) => x.id === id);
-		if (!w) return;
-		if (wm.focused === id && !w.minimized) minimize(id);
-		else focus(id);
 	}
 	// PLAN 62-3: the VMs window lists every machine below its pages (saves the page's own list).
 	function sideOf(app: string, side: Program['side']): Program['side'] {
@@ -654,22 +713,6 @@
 			? (100 * (info.memory.totalBytes - info.memory.availableBytes)) / info.memory.totalBytes
 			: 0,
 	);
-	const rx = $derived(
-		(info?.networks ?? (info?.network ? [info.network] : [])).reduce(
-			(s, n) => s + (n.rxBytesPerSecond || 0),
-			0,
-		),
-	);
-	const tx = $derived(
-		(info?.networks ?? (info?.network ? [info.network] : [])).reduce(
-			(s, n) => s + (n.txBytesPerSecond || 0),
-			0,
-		),
-	);
-	const gauge = (pct: number) => {
-		const c = 2 * Math.PI * 9;
-		return `${(c * Math.min(100, Math.max(0, pct))) / 100} ${c}`;
-	};
 	const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 	// The helper bubble knows the window in front: its question starts with it (the agent's "ask").
 	let bubbleSrc = $state('/agent');
@@ -698,117 +741,35 @@
 	style:--wallpaper={wallpaper}
 	style:--tint="{tint}deg"
 	style:--icon={iconPx + 'px'}
-	style:--pb={{ s: 28, m: 34, l: 42 }[desktop.prefs.barSize] + 'px'}
+	style:--bar-h={{ s: 34, m: 40, l: 48 }[desktop.prefs.barSize] + 'px'}
+	style:--pb={{ s: 26, m: 32, l: 40 }[desktop.prefs.barSize] + 'px'}
 >
 	<div class="paper" aria-hidden="true"></div>
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<!-- PLAN 67: one bar across the top (variant B): the logo menu, the
+	     program in front with its menus, the node switcher; on the right
+	     load, tasks, messages, quick settings, search, date and account.
+	     Open windows are in the dock. -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<header
-		class="topbar"
+		class="topbar glass-panel"
 		oncontextmenu={(e) => {
 			if ((e.target as HTMLElement).closest('.menu, .floating-menu, [role="menu"]')) return;
 			e.preventDefault();
 			menu = { ...menuAt(e), kind: 'bar' };
 		}}
 	>
-		<div class="pill glass-panel">
-			<button
-				type="button"
-				class="pb"
-				class:on={!wm.windows.some((w) => !w.minimized)}
-				onclick={showDesktop}
-				title={t('desktop.bar.showDesktop')}
-				aria-label={t('desktop.bar.showDesktop')}><Icon name="monitor" size={barIcon} /></button
-			>
-			<button
-				type="button"
-				class="pb"
-				class:on={launcher}
-				data-opens="launcher"
-				onclick={() => (launcher = !launcher)}
-				title={t('desktop.menu.title')}
-				aria-label={t('desktop.menu.title')}
-				aria-expanded={launcher}><Icon name="grid" size={barIcon} /></button
-			>
-			<!-- PLAN 64: the node switcher right after the menu, with the node's name;
-			     its menu leaves the bar, so only the open windows are clipped. -->
-			{#if clusterNodes.nodes.length > 1}<span class="sep" aria-hidden="true"></span><NodeMenu
-					variant="desk"
-				/>{/if}
-			{#if wm.windows.length}<span class="sep" aria-hidden="true"></span>{/if}
-			<div class="tasks">
-				{#each wm.windows as w (w.id)}
-					{@const p = programOf(w.app)}
-					<button
-						type="button"
-						class="pb task"
-						class:on={wm.focused === w.id && !w.minimized}
-						class:min={w.minimized}
-						onclick={() => taskClick(w.id)}
-						title={w.title}
-						aria-label={w.title}
-					>
-						<DesktopIcon
-							glyph={p?.glyph ?? ''}
-							gradient={p?.gradient ?? 'grey'}
-							image={p?.image ?? ''}
-							name={w.title}
-							size={barIcon + 6}
-						/>
-					</button>
-				{/each}
-			</div>
-		</div>
+		<MenuBar bind:this={menuBar} ondesk={deskOp} onshowdesktop={showDesktop} />
+		{#if clusterNodes.nodes.length > 1}<NodeMenu variant="desk" />{/if}
 		<span class="space"></span>
-		<div class="pill glass-panel right">
+		<div class="status">
 			{#if info}
-				<span class="gauge" title={t('desktop.widget.cpu')}>
-					<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"
-						><circle
-							cx="12"
-							cy="12"
-							r="9"
-							fill="none"
-							stroke="var(--track)"
-							stroke-width="3"
-						/><circle
-							cx="12"
-							cy="12"
-							r="9"
-							fill="none"
-							stroke="var(--accent)"
-							stroke-width="3"
-							stroke-dasharray={gauge(info.cpu.usagePercent)}
-							transform="rotate(-90 12 12)"
-						/></svg
-					>
-					<span>{t('desktop.widget.cpu')}<br /><b>{formatPercent(info.cpu.usagePercent)}</b></span>
-				</span>
-				<span class="gauge" title={t('desktop.widget.ram')}>
-					<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"
-						><circle
-							cx="12"
-							cy="12"
-							r="9"
-							fill="none"
-							stroke="var(--track)"
-							stroke-width="3"
-						/><circle
-							cx="12"
-							cy="12"
-							r="9"
-							fill="none"
-							stroke="var(--accent)"
-							stroke-width="3"
-							stroke-dasharray={gauge(memPct)}
-							transform="rotate(-90 12 12)"
-						/></svg
-					>
-					<span>{t('desktop.widget.ram')}<br /><b>{formatPercent(memPct)}</b></span>
-				</span>
-				<span class="gauge net"
-					>↑ {formatMegabytesPerSecond(tx)}<br />↓ {formatMegabytesPerSecond(rx)}</span
+				<span class="load" title={t('desktop.widget.cpu') + ' · ' + t('desktop.widget.ram')}
+					>{t('menubar.load', {
+						cpu: formatPercent(info.cpu.usagePercent),
+						ram: formatPercent(memPct),
+					})}</span
 				>
-				<span class="sep" aria-hidden="true"></span>
 			{/if}
 			<TasksPanel badge />
 			{#if role !== 'user'}<Notifications compact />{/if}
@@ -818,19 +779,24 @@
 				class:on={center}
 				data-opens="center"
 				onclick={() => (center = !center)}
-				title={t('desktop.center.title')}
-				aria-label={t('desktop.center.title')}
-				aria-expanded={center}><Icon name="list" size={barIcon} /></button
+				title={t('menubar.quick')}
+				aria-label={t('menubar.quick')}
+				aria-expanded={center}><Icon name="columns" size={barIcon} /></button
 			>
 			<button
 				type="button"
 				class="pb"
+				class:on={launcher}
 				data-opens="launcher"
-				onclick={() => (launcher = true)}
-				title={t('desktop.menu.search')}
-				aria-label={t('desktop.menu.search')}><Icon name="search" size={barIcon} /></button
+				onclick={() => (launcher = !launcher)}
+				title={t('desktop.menu.title') + ' (' + t('desktop.menu.shortcut') + ')'}
+				aria-label={t('desktop.menu.title')}
+				aria-expanded={launcher}><Icon name="search" size={barIcon} /></button
 			>
-			<AccountMenu />
+			<time class="clock" datetime={now.toISOString()}
+				><span class="date">{dateText}</span><span class="time">{timeText}</span></time
+			>
+			<AccountMenu compact />
 		</div>
 	</header>
 
@@ -1632,40 +1598,58 @@
 		border: 1px solid color-mix(in srgb, #fff 12%, transparent);
 		box-shadow: 0 10px 30px rgb(0 0 0 / 0.3);
 	}
-	.topbar {
-		height: calc(var(--pb) + 18px);
+	/* PLAN 67: one bar across the whole width, glass like the rest of the
+	   desktop (Settings › Appearance), a line below it. */
+	.topbar.glass-panel {
+		height: var(--bar-h);
 		flex: none;
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		padding: 0 10px;
+		gap: 6px;
+		padding: 0 8px 0 6px;
 		position: relative;
 		z-index: 9500;
+		border: 0;
+		border-bottom: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+		border-radius: 0;
+		box-shadow: 0 1px 10px rgb(0 0 0 / 0.18);
+		--mb-font: max(0.8125rem, calc(var(--bar-h) * 0.34));
+		font-size: var(--mb-font);
 	}
-	.pill {
-		display: flex;
-		align-items: center;
-		gap: 4px;
-		padding: 4px;
-		border-radius: 12px;
-		min-width: 0;
-		overflow: hidden;
-	}
-	.pill.right {
-		overflow: visible;
+	.status {
 		flex: none;
-	}
-	/* The first pill lets the node switcher's menu out; only the open
-	   windows are cut off when there are too many. */
-	.pill:not(.right) {
-		overflow: visible;
-	}
-	.tasks {
 		display: flex;
 		align-items: center;
-		gap: 4px;
-		min-width: 0;
-		overflow: hidden;
+		gap: 2px;
+		--quick-button-size: var(--pb);
+	}
+	.load {
+		padding: 0 8px;
+		color: var(--muted);
+		white-space: nowrap;
+		font-variant-numeric: tabular-nums;
+	}
+	.clock {
+		display: flex;
+		gap: 0.5em;
+		padding: 0 8px;
+		white-space: nowrap;
+		font-variant-numeric: tabular-nums;
+	}
+	.clock .date::after {
+		content: ' ·';
+		color: var(--muted);
+	}
+	/* Narrower screens keep the menus: the load goes first, then the date. */
+	@media (max-width: 1279px) {
+		.load {
+			display: none;
+		}
+	}
+	@media (max-width: 1099px) {
+		.clock .date {
+			display: none;
+		}
 	}
 	.pb {
 		width: var(--pb);
@@ -1674,7 +1658,7 @@
 		display: grid;
 		place-items: center;
 		border: 0;
-		border-radius: 9px;
+		border-radius: 8px;
 		background: none;
 		color: var(--text);
 		cursor: pointer;
@@ -1691,12 +1675,6 @@
 		outline: 2px solid var(--accent);
 		outline-offset: 2px;
 	}
-	.task.min {
-		opacity: 0.6;
-	}
-	.task.on {
-		box-shadow: inset 0 -2px 0 var(--accent);
-	}
 	.sep {
 		width: 1px;
 		height: 22px;
@@ -1707,21 +1685,13 @@
 	.space {
 		flex: 1;
 	}
-	.gauge {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		padding: 0 6px;
-		font-size: max(10px, calc(var(--pb) * 0.32));
-		line-height: 1.15;
-		white-space: nowrap;
-		font-variant-numeric: tabular-nums;
-	}
 	.desk-area {
 		position: relative;
 		flex: 1;
 		min-height: 0;
 		overflow: clip;
+		/* Windows stack inside the desktop; the top bar's menus stay above them all. */
+		isolation: isolate;
 	}
 	.icons {
 		position: absolute;

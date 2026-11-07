@@ -189,6 +189,15 @@
 	export function focus() {
 		term?.focus();
 	}
+
+	/** PLAN 67-1: Bearbeiten › Alles auswählen / Leeren in the menu bar. */
+	export function selectAll() {
+		term?.selectAll();
+	}
+	export function clear() {
+		term?.clear();
+		term?.focus();
+	}
 </script>
 
 <div class="session" class:hidden={!active}>

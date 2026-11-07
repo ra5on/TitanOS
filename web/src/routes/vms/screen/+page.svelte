@@ -37,6 +37,44 @@
 		};
 		return poll(check, { interval: 3000 });
 	});
+
+	// PLAN 67-1: Bildschirm in the menu bar of the VM screen's window.
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	import { KEYS, keyLabel } from '../vm-page.ts';
+	import { i18n } from '#lib/i18n/index.svelte.ts';
+	const live = () => !!running && !!screen;
+	registerMenuCommands({
+		'vms.cad': { run: () => screen?.ctrlAltDel(), enabled: live },
+		'vms.keys': {
+			items: () =>
+				live() ? KEYS.map((k, i) => ({ id: String(i), text: keyLabel(k.label, i18n.locale) })) : [],
+			run: (i) => {
+				const entry = KEYS[Number(i)];
+				if (entry) screen?.sendKeys(entry.keys);
+			},
+		},
+		'vms.screenshot': {
+			run: () => {
+				const data = screen?.screenshot();
+				if (!data) return;
+				const a = document.createElement('a');
+				a.href = data;
+				a.download = `${name}.png`;
+				a.click();
+			},
+			enabled: live,
+		},
+		...Object.fromEntries(
+			MODES.map((entry) => [
+				'vms.mode.' + entry,
+				{
+					run: () => (mode = entry),
+					enabled: () => entry !== 'remote' || resizable,
+					checked: () => mode === entry,
+				},
+			]),
+		),
+	});
 </script>
 
 <svelte:head><title>{displayName || name} · TitanOS</title></svelte:head>

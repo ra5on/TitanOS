@@ -558,22 +558,20 @@ export function tokens(n: number): string {
 	return n >= 1024 ? `${Math.round(n / 1024)}k` : String(n);
 }
 
-/** The look of the agent, kept in this browser only (no stick writes). */
+/**
+ * The app settings of the agent (PLAN 53), per account on the NAS; device
+ * things stay in this browser. Since 0.64 the agent has no look of its own
+ * (PLAN 68): colors come from the TitanOS theme. Stored values of the old
+ * look (accent, style, background, glass, glassLevel, glow) are ignored.
+ */
 export type Swipe = 'pin' | 'delete' | 'menu' | 'none';
 export type Look = {
-	accent: 'theme' | 'aurora' | 'ocean' | 'forest' | 'sunset' | 'rose';
-	style: 'bubbles' | 'clean' | 'compact';
-	background: 'none' | 'aurora' | 'ocean' | 'forest';
-	glass: boolean;
-	glow: boolean;
 	typing: boolean;
 	vibrate: boolean;
 	calm: boolean;
 	/** Read new answers aloud by themselves (PLAN 51); off: a button at each answer. */
 	read: boolean;
 	// PLAN 53: the agent app, kept per account on the NAS.
-	/** How much surfaces show through, 0–100. */
-	glassLevel: number;
 	fontSize: 's' | 'm' | 'l';
 	compact: boolean;
 	start: 'new' | 'last' | 'overview';
@@ -594,16 +592,10 @@ export type Look = {
 export const DEVICE_LOOK: readonly (keyof Look)[] = ['vibrate', 'keepAwake', 'fontSize'];
 
 export const defaultLook = (): Look => ({
-	accent: 'aurora',
-	style: 'bubbles',
-	background: 'aurora',
-	glass: true,
-	glow: true,
 	typing: true,
 	vibrate: true,
 	calm: false,
 	read: false,
-	glassLevel: 60,
 	fontSize: 'm',
 	compact: false,
 	start: 'new',
@@ -630,16 +622,10 @@ export function sanitizeLook(v: unknown): Look {
 	const num = (x: unknown, min: number, max: number, def: number) =>
 		typeof x === 'number' && Number.isFinite(x) ? Math.min(max, Math.max(min, x)) : def;
 	return {
-		accent: pick(o.accent, ['theme', 'aurora', 'ocean', 'forest', 'sunset', 'rose'], d.accent),
-		style: pick(o.style, ['bubbles', 'clean', 'compact'], d.style),
-		background: pick(o.background, ['none', 'aurora', 'ocean', 'forest'], d.background),
-		glass: bool(o.glass, d.glass),
-		glow: bool(o.glow, d.glow),
 		typing: bool(o.typing, d.typing),
 		vibrate: bool(o.vibrate, d.vibrate),
 		calm: bool(o.calm, d.calm),
 		read: bool(o.read, d.read),
-		glassLevel: num(o.glassLevel, 0, 100, d.glassLevel),
 		fontSize: pick(o.fontSize, ['s', 'm', 'l'], d.fontSize),
 		compact: bool(o.compact, d.compact),
 		start: pick(o.start, ['new', 'last', 'overview'], d.start),
@@ -666,17 +652,6 @@ export function accountLook(look: Look): Partial<Look> {
 	) as Partial<Look>;
 }
 
-/** The accents of the agent's look: theme accent or a two-color gradient. */
-export const ACCENTS: Record<Look['accent'], [string, string] | null> = {
-	theme: null,
-	aurora: ['#6cb6ff', '#a878ff'],
-	ocean: ['#3fb6ff', '#1f6fd6'],
-	forest: ['#47d4a0', '#0f9d74'],
-	sunset: ['#f2b14a', '#e2457a'],
-	rose: ['#ff8fb1', '#c06bff'],
-};
-
-/** CSS variables of a look for the root element of the agent. */
 /** A suggestion on the start page: a tile that fills the input. */
 export type Suggestion = {
 	title: string;
@@ -696,16 +671,6 @@ export type NasHint = {
 	severity: string;
 	time: string;
 };
-
-export function lookStyle(look: Look): string {
-	const pair = ACCENTS[look.accent];
-	// PLAN 53: how much the glass shows through and the text size of the app.
-	const alpha = (0.32 + (1 - look.glassLevel / 100) * 0.6).toFixed(2);
-	const scale = { s: 0.93, m: 1, l: 1.1 }[look.fontSize];
-	const base = `--ag-alpha: ${alpha}; --ag-scale: ${scale};`;
-	if (!pair) return `${base} --ag-gradient: var(--accent); --ag-accent-2: var(--accent);`;
-	return `${base} --accent: ${pair[0]}; --ag-accent-2: ${pair[1]}; --ag-gradient: linear-gradient(135deg, ${pair[0]}, ${pair[1]}); --on-accent: #0b1622;`;
-}
 
 // PLAN 53: initiative, memory care and personality of an account (GET/PUT /agent/initiative).
 export type Initiative = {
@@ -817,3 +782,151 @@ export type InboxItem = {
 	data?: Record<string, string>;
 	created: string;
 };
+
+/**
+ * The small line under the composer (PLAN 68): where the model runs and
+ * what leaves the network, only as far as this page knows it. `ollama` is
+ * the server address (only owners and administrators read it, '' else),
+ * `here` the host name the page was loaded from.
+ */
+export function whereLine(o: {
+	cluster: boolean;
+	web: boolean;
+	ollama: string;
+	here: string;
+}): { key: string; params?: Record<string, string> }[] {
+	let host = '';
+	try {
+		host = o.ollama ? new URL(o.ollama).hostname.replace(/^\[|\]$/g, '').toLowerCase() : '';
+	} catch {
+		host = '';
+	}
+	const local =
+		!!host &&
+		(host === 'localhost' ||
+			host === '::1' ||
+			host.startsWith('127.') ||
+			host === o.here.toLowerCase());
+	const lan =
+		local ||
+		/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|fe80:|f[cd][0-9a-f]{2}:)/.test(host) ||
+		host.endsWith('.local') ||
+		(!!host && !host.includes('.') && !host.includes(':'));
+	const out: { key: string; params?: Record<string, string> }[] = [];
+	if (o.cluster) out.push({ key: 'agent.whereCluster' });
+	else if (!host) out.push({ key: 'agent.whereOwn' });
+	else if (local) out.push({ key: 'agent.whereLocal' });
+	else out.push({ key: 'agent.whereHost', params: { host } });
+	if (o.web) out.push({ key: 'agent.whereWeb' });
+	else if (!o.cluster && lan) out.push({ key: 'agent.whereStays' });
+	else out.push({ key: 'agent.whereChats' });
+	return out;
+}
+
+/** Action cards with a plain-language title (agent.ask.<card>, PLAN 68). */
+export const ASK_CARDS = [
+	'vm.start',
+	'vm.shutdown',
+	'vm.reboot',
+	'vm.poweroff',
+	'vm.update',
+	'vm.remove',
+	'vm.purge',
+	'container.start',
+	'container.stop',
+	'container.restart',
+	'lxc.start',
+	'lxc.stop',
+	'lxc.restart',
+	'lxc.kill',
+	'app.update',
+	'app.remove',
+	'app.purge',
+	'apps.updateAll',
+	'file.write',
+	'file.replace',
+	'file.rename',
+	'file.delete',
+	'file.trash',
+	'files.delete',
+	'files.move',
+	'files.restore',
+	'folder.create',
+	'share.create',
+	'share.delete',
+	'volume.check',
+	'volume.stopCheck',
+	'volume.delete',
+	'backup.run',
+	'backup.stop',
+	'power.reboot',
+	'power.poweroff',
+	'update.install',
+	'update.rollback',
+	'account.delete',
+	'plugin.enable',
+	'plugin.disable',
+	'plugin.remove',
+	'plugin.update',
+] as const;
+
+/**
+ * The plain-language title of a step waiting for approval ("VM „HAOS“
+ * aktualisieren"): from the action card the backend names in the summary
+ * ("vm.update (name=HAOS)"), else from the tool and its action. null when
+ * there is no translation; the page then shows the summary as it is.
+ */
+export function approvalTitle(p: Pick<Pending, 'tool' | 'args' | 'summary'>): {
+	key: (typeof ASK_CARDS)[number];
+	name: string;
+} | null {
+	const m = /^([a-zA-Z]+\.[a-zA-Z]+)(?: \((.*)\))?$/.exec((p.summary ?? '').trim());
+	const params: Record<string, string> = {};
+	let card = '';
+	if (m) {
+		card = m[1];
+		for (const [, k, v] of (m[2] ?? '').matchAll(/(\w+)=(.*?)(?=, \w+=|$)/g)) params[k] = v;
+	}
+	const args =
+		p.args && typeof p.args === 'object'
+			? (p.args as Record<string, unknown>)
+			: ({} as Record<string, unknown>);
+	if (!(ASK_CARDS as readonly string[]).includes(card)) {
+		const action = typeof args.action === 'string' ? args.action : '';
+		const base = p.tool.replace(/_action$/, '');
+		card = action ? `${base}.${action}` : p.tool.replace('_', '.');
+		if (card === 'vm.remove_with_disks') card = 'vm.purge';
+		if (card === 'app.remove_with_data') card = 'app.purge';
+	}
+	if (!(ASK_CARDS as readonly string[]).includes(card)) return null;
+	// The thing the action is about, as the cards of the catalog name it
+	// (catalog_actions.go: mostly name; file.rename from; files path).
+	const pick = (o: Record<string, unknown>) => {
+		for (const k of [
+			'name',
+			'vm',
+			'container',
+			'app',
+			'account',
+			'volume',
+			'share',
+			'job',
+			'from',
+			'path',
+		])
+			if (typeof o[k] === 'string' && o[k])
+				return (o[k] as string).split('/').filter(Boolean).pop() ?? '';
+		return '';
+	};
+	const name = pick(params) || pick(args);
+	const nameless = [
+		'apps.updateAll',
+		'files.move',
+		'power.reboot',
+		'power.poweroff',
+		'update.install',
+		'update.rollback',
+	];
+	if (!name && !nameless.includes(card)) return null;
+	return { key: card as (typeof ASK_CARDS)[number], name };
+}

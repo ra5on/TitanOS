@@ -1,5 +1,4 @@
 import { api } from '../api.ts';
-import { isAgentPath } from '../agent-app.ts';
 import {
 	cssVariables,
 	dataAttributes,
@@ -18,11 +17,8 @@ export const appearance = $state<{ current: Appearance; systemLight: boolean }>(
 
 function apply() {
 	const root = document.documentElement;
-	// The KI-Agent keeps its own look (PLAN 64): the colour strength of the
-	// desktop does not reach it.
-	const value = isAgentPath(location.pathname)
-		? { ...appearance.current, saturation: 100 }
-		: appearance.current;
+	// Since PLAN 68 the KI-Agent follows the appearance like every program.
+	const value = appearance.current;
 	for (const [name, value_] of Object.entries(cssVariables(value, appearance.systemLight))) {
 		root.style.setProperty(name, value_);
 	}

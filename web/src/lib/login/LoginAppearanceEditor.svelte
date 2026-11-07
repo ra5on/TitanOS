@@ -35,6 +35,7 @@
 		BACKGROUND_IDS,
 	} from './look.ts';
 	import { loadLoginLook, loginLook, PREVIEW_KEY, useLoginLook } from './state.svelte.ts';
+	import LoginAccountsSettings from './LoginAccountsSettings.svelte';
 
 	let { dirty = $bindable(false) }: { dirty?: boolean } = $props();
 
@@ -231,6 +232,8 @@
 		new Intl.NumberFormat(i18n.locale, { maximumFractionDigits: 1 }).format(n);
 	const scale = $derived(frameWidth > 0 ? frameWidth / 1280 : 0.4);
 </script>
+
+<LoginAccountsSettings bind:look={draft} />
 
 <section class="tile panel login-look" aria-labelledby="h-login-look">
 	<h2 class="tile-title" id="h-login-look">{t('loginLook.title')}</h2>

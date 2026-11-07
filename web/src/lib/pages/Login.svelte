@@ -22,6 +22,17 @@
 	import Logo from '#lib/components/Logo.svelte';
 	import LanguageSwitch from '#lib/components/LanguageSwitch.svelte';
 	import Icon from '#lib/components/Icon.svelte';
+	import {
+		forgetAccount,
+		initials,
+		mergeAccounts,
+		rememberAccount,
+		rememberedAccounts,
+		serverAccounts,
+		type AccountsStyle,
+		type LoginAccount,
+	} from '#lib/login/accounts.ts';
+	import { onMount, tick } from 'svelte';
 
 	type Props = {
 		/** Only shows the page (preview of Settings › Appearance): nothing is sent. */
@@ -40,6 +51,65 @@
 	let needsCode = $state(false);
 	let code = $state('');
 	const passkeys = passkeysPossible();
+
+	// PLAN 67: the account picker. Accounts of this browser (remembered after
+	// a login) and, where the owner allows it, those the NAS lists. Picking
+	// one fills the name and asks for the password; "Anderes Konto" shows the
+	// plain form. Nothing about an account is told by timing or wording: the
+	// same error as ever for a wrong name or password.
+	let local = $state<LoginAccount[]>([]);
+	let server = $state<{ style: AccountsStyle; accounts: LoginAccount[] } | null>(null);
+	/** 'pick' while the picker shows, 'form' once an account (or "other") is chosen. */
+	let step = $state<'pick' | 'form'>('pick');
+	let chosen = $state<LoginAccount | null>(null);
+	let menuFor = $state<string | null>(null);
+	let nameField = $state<HTMLInputElement>();
+	let passwordField = $state<HTMLInputElement>();
+
+	onMount(() => {
+		if (preview) return;
+		local = rememberedAccounts();
+		void serverAccounts().then((answer) => (server = answer));
+	});
+	const accounts = $derived.by<LoginAccount[]>(() => {
+		// The editor's preview shows the signed-in account only, in the chosen style.
+		if (preview) {
+			const me = session.data?.user?.name;
+			return me ? [{ name: me }] : [];
+		}
+		return mergeAccounts(local, server?.accounts ?? []);
+	});
+	const picking = $derived(step === 'pick' && accounts.length > 0 && !needsCode);
+	const remembered = (name: string) => local.some((a) => a.name === name);
+
+	async function pick(account: LoginAccount | null) {
+		menuFor = null;
+		chosen = account;
+		name = account?.name ?? '';
+		password = '';
+		error = '';
+		step = 'form';
+		await tick();
+		(account ? passwordField : nameField)?.focus();
+	}
+	async function backToPicker() {
+		step = 'pick';
+		chosen = null;
+		name = '';
+		password = '';
+		error = '';
+		await tick();
+		document.querySelector<HTMLElement>('.accounts .account')?.focus();
+	}
+	function forget(account: LoginAccount) {
+		forgetAccount(account.name);
+		local = rememberedAccounts();
+		menuFor = null;
+	}
+	function remember() {
+		const user = session.data?.user;
+		if (user) rememberAccount(user.name);
+	}
 
 	const current = $derived(look === undefined ? loginLook.value : look);
 	const resolved = $derived(loginAppearance(current, appearance.current));
@@ -61,6 +131,9 @@
 	const words = $derived(loginTexts(current, i18n.locale, t('auth.loginTitle')));
 	const host = $derived(hostname ?? session.data?.hostname ?? '');
 	const position = $derived(current?.position ?? 'center');
+	const pickStyle = $derived<AccountsStyle>(
+		preview ? (current?.accountsStyle ?? 'circles') : (server?.style ?? 'circles'),
+	);
 
 	let now = $state(new Date());
 	$effect(() => {
@@ -83,6 +156,7 @@
 		try {
 			await loginWithPasskey();
 			await refreshSession();
+			remember();
 		} catch (err) {
 			if (err instanceof DOMException || (err instanceof Error && err.message === 'cancelled')) {
 				error = t(
@@ -107,6 +181,7 @@
 		error = '';
 		try {
 			await login(name, password, code);
+			remember();
 		} catch (err) {
 			if (err instanceof ApiError && err.code === 'second_factor_required') {
 				needsCode = true;
@@ -130,6 +205,12 @@
 		}
 	}
 </script>
+
+<svelte:window
+	onclick={(e) => {
+		if (menuFor && !(e.target as Element).closest?.('.account-menu, .account-more')) menuFor = null;
+	}}
+/>
 
 <main
 	class="login"
@@ -168,65 +249,161 @@
 			<div class="head">
 				{#if !current?.hideLogo}<Logo size={44} stacked />{/if}
 				<div class="titles">
-					<h1 id="login-title">{words.title}</h1>
+					<!-- The editor's preview is no page of its own: no second main heading there. -->
+					<svelte:element this={preview ? 'p' : 'h1'} class="h1" id="login-title"
+						>{words.title}</svelte:element
+					>
 					{#if host && !current?.hideHost}<span class="mono host">{host}</span>{/if}
 				</div>
 			</div>
 			{#if words.notice}<p class="notice">{words.notice}</p>{/if}
 
-			<form onsubmit={submit}>
-				{#if needsCode}
-					<p class="hint">{t('auth.codeHint')}</p>
-					<label>
-						<span>{t('auth.code')}</span>
-						<!-- svelte-ignore a11y_autofocus -->
-						<input
-							class="field mono"
-							type="text"
-							bind:value={code}
-							inputmode="numeric"
-							autocomplete="one-time-code"
-							spellcheck="false"
-							required
-							autofocus
-						/>
-					</label>
-				{:else}
-					<label>
-						<span>{t('auth.name')}</span>
-						<!-- svelte-ignore a11y_autofocus -->
-						<input
-							class="field"
-							type="text"
-							bind:value={name}
-							autocomplete="username"
-							autocapitalize="none"
-							spellcheck="false"
-							required
-							autofocus={!preview}
-						/>
-					</label>
-					<label>
-						<span>{t('auth.password')}</span>
-						<input
-							class="field"
-							type="password"
-							bind:value={password}
-							autocomplete="current-password"
-							required
-						/>
-					</label>
-				{/if}
-				{#if error}<p class="notice-warn" role="alert">{error}</p>{/if}
-				<button class="btn btn-primary" type="submit" disabled={busy}
-					>{t('auth.login')}<Icon name="arrowRight" size={16} /></button
-				>
-				{#if passkeys && !needsCode}
-					<button class="btn" type="button" disabled={busy} onclick={withPasskey}
-						><Icon name="key" size={16} />{t('passkeys.login')}</button
+			{#if picking}
+				<div class="picker" role="group" aria-label={t('login.pick')}>
+					<p class="pick-title">{t('login.pick')}</p>
+					<ul class="accounts {pickStyle}">
+						{#each accounts as account (account.name)}
+							{@const shown = account.displayName ?? account.name}
+							<li
+								oncontextmenu={(e) => {
+									if (!remembered(account.name) || preview) return;
+									e.preventDefault();
+									menuFor = account.name;
+								}}
+							>
+								<button
+									type="button"
+									class="account"
+									aria-label={t('login.as', { name: shown })}
+									onclick={() => pick(account)}
+								>
+									<span class="avatar" aria-hidden="true">{initials(account)}</span>
+									<span class="account-name">{shown}</span>
+									{#if account.displayName && account.displayName !== account.name}<span
+											class="account-login mono">{account.name}</span
+										>{/if}
+								</button>
+								{#if remembered(account.name) && !preview}
+									<button
+										type="button"
+										class="account-more"
+										aria-label={t('login.accountMenu', { name: shown })}
+										aria-haspopup="menu"
+										aria-expanded={menuFor === account.name}
+										onclick={() => (menuFor = menuFor === account.name ? null : account.name)}
+										><Icon name="more" size={14} /></button
+									>
+									{#if menuFor === account.name}
+										<div
+											class="account-menu"
+											role="menu"
+											tabindex="-1"
+											onkeydown={(e) => {
+												if (e.key === 'Escape') menuFor = null;
+											}}
+										>
+											<!-- svelte-ignore a11y_autofocus -->
+											<button
+												type="button"
+												role="menuitem"
+												autofocus
+												onclick={() => forget(account)}
+												>{t('login.forgetNamed', { name: shown })}</button
+											>
+										</div>
+									{/if}
+								{/if}
+							</li>
+						{/each}
+						<li>
+							<button type="button" class="account other" onclick={() => pick(null)}>
+								<span class="avatar" aria-hidden="true"><Icon name="plus" size={18} /></span>
+								<span class="account-name">{t('login.other')}</span>
+							</button>
+						</li>
+					</ul>
+				</div>
+			{:else}
+				<form onsubmit={submit}>
+					{#if needsCode}
+						<p class="hint">{t('auth.codeHint')}</p>
+						<label>
+							<span>{t('auth.code')}</span>
+							<!-- svelte-ignore a11y_autofocus -->
+							<input
+								class="field mono"
+								type="text"
+								bind:value={code}
+								inputmode="numeric"
+								autocomplete="one-time-code"
+								spellcheck="false"
+								required
+								autofocus
+							/>
+						</label>
+					{:else}
+						{#if chosen}
+							<!-- The picked account; the name goes along for password managers. -->
+							<div class="chosen">
+								<span class="avatar small" aria-hidden="true">{initials(chosen)}</span>
+								<span class="chosen-name">{chosen.displayName ?? chosen.name}</span>
+								<button type="button" class="link" onclick={backToPicker}
+									>{t('login.switch')}</button
+								>
+							</div>
+							<input
+								class="sr-only"
+								type="text"
+								tabindex="-1"
+								aria-hidden="true"
+								value={name}
+								autocomplete="username"
+								readonly
+							/>
+						{:else}
+							<label>
+								<span>{t('auth.name')}</span>
+								<!-- svelte-ignore a11y_autofocus -->
+								<input
+									class="field"
+									type="text"
+									bind:this={nameField}
+									bind:value={name}
+									autocomplete="username"
+									autocapitalize="none"
+									spellcheck="false"
+									required
+									autofocus={!preview && !accounts.length}
+								/>
+							</label>
+						{/if}
+						<label>
+							<span>{t('auth.password')}</span>
+							<input
+								class="field"
+								type="password"
+								bind:this={passwordField}
+								bind:value={password}
+								autocomplete="current-password"
+								required
+							/>
+						</label>
+					{/if}
+					{#if error}<p class="notice-warn" role="alert">{error}</p>{/if}
+					<button class="btn btn-primary" type="submit" disabled={busy}
+						>{t('auth.login')}<Icon name="arrowRight" size={16} /></button
 					>
-				{/if}
-			</form>
+					{#if passkeys && !needsCode}
+						<button class="btn" type="button" disabled={busy} onclick={withPasskey}
+							><Icon name="key" size={16} />{t('passkeys.login')}</button
+						>
+					{/if}
+					{#if accounts.length && !chosen && !needsCode}
+						<button type="button" class="link back" onclick={backToPicker}>{t('login.back')}</button
+						>
+					{/if}
+				</form>
+			{/if}
 		</section>
 	</div>
 
@@ -339,7 +516,7 @@
 		align-items: center;
 		min-width: 0;
 	}
-	h1 {
+	.h1 {
 		margin: 0;
 		font-size: var(--text-lg);
 		font-weight: 600;
@@ -376,6 +553,202 @@
 		align-items: center;
 		justify-content: center;
 		gap: var(--space-2);
+	}
+	/* PLAN 67: the account picker – circles (avatar and name) or a list. */
+	.picker {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+	}
+	.pick-title {
+		margin: 0;
+		text-align: center;
+		color: var(--muted);
+		font-size: var(--text-md);
+	}
+	.accounts {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+	.accounts li {
+		position: relative;
+		min-width: 0;
+	}
+	.account {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		width: 100%;
+		min-width: 0;
+		padding: 8px;
+		background: transparent;
+		border: 1px solid transparent;
+		border-radius: var(--radius-ctl);
+		color: var(--text);
+		font: inherit;
+		cursor: pointer;
+	}
+	.account:hover,
+	.account:focus-visible {
+		background: color-mix(in srgb, var(--text) 8%, transparent);
+	}
+	.avatar {
+		flex: none;
+		display: grid;
+		place-items: center;
+		width: 40px;
+		height: 40px;
+		border-radius: 50%;
+		background: var(--accent);
+		color: var(--on-accent);
+		font-weight: 600;
+		font-size: var(--text-md);
+	}
+	.other .avatar {
+		background: color-mix(in srgb, var(--text) 12%, transparent);
+		color: var(--text);
+	}
+	.account-name {
+		min-width: 0;
+		font-size: var(--text-md);
+		font-weight: 500;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.account-login {
+		color: var(--muted);
+		font-size: var(--text-sm);
+	}
+	/* Circles: a row of avatars with the name under each. */
+	.accounts.circles {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: var(--space-2);
+	}
+	.circles li {
+		width: 92px;
+	}
+	.circles .account {
+		flex-direction: column;
+		gap: 6px;
+		padding: 10px 4px;
+		text-align: center;
+	}
+	.circles .avatar {
+		width: 56px;
+		height: 56px;
+		font-size: var(--text-lg);
+	}
+	/* Names wrap (two lines) instead of being cut off. */
+	.circles .account-name {
+		max-width: 100%;
+		font-size: var(--text-base);
+		white-space: normal;
+		overflow-wrap: anywhere;
+		line-height: 1.25;
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+	}
+	.circles .account-login {
+		display: none;
+	}
+	/* List: one row per account. */
+	.accounts.list {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+	.list .account {
+		padding-right: 40px;
+	}
+	.account-more {
+		position: absolute;
+		top: 4px;
+		right: 4px;
+		display: grid;
+		place-items: center;
+		width: 28px;
+		height: 28px;
+		padding: 0;
+		background: transparent;
+		border: 0;
+		border-radius: 50%;
+		color: var(--muted);
+		cursor: pointer;
+	}
+	.list .account-more {
+		top: 50%;
+		transform: translateY(-50%);
+	}
+	.account-more:hover,
+	.account-more:focus-visible {
+		background: color-mix(in srgb, var(--text) 12%, transparent);
+		color: var(--text);
+	}
+	.account-menu {
+		position: absolute;
+		z-index: 5;
+		top: 34px;
+		right: 0;
+		min-width: 200px;
+		padding: 4px;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-ctl);
+		box-shadow: 0 10px 30px rgb(0 0 0 / 0.35);
+	}
+	.account-menu button {
+		width: 100%;
+		padding: 8px 10px;
+		background: transparent;
+		border: 0;
+		border-radius: var(--radius-small, 6px);
+		color: var(--text);
+		font: inherit;
+		font-size: var(--text-base);
+		text-align: left;
+		cursor: pointer;
+	}
+	.account-menu button:hover,
+	.account-menu button:focus-visible {
+		background: color-mix(in srgb, var(--text) 10%, transparent);
+	}
+	.chosen {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		min-width: 0;
+	}
+	.avatar.small {
+		width: 32px;
+		height: 32px;
+		font-size: var(--text-base);
+	}
+	.chosen-name {
+		flex: 1;
+		min-width: 0;
+		font-weight: 600;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.link {
+		padding: 4px 0;
+		background: none;
+		border: 0;
+		color: var(--accent);
+		font: inherit;
+		font-size: var(--text-base);
+		text-decoration: underline;
+		cursor: pointer;
+	}
+	.link.back {
+		align-self: center;
 	}
 	.lang {
 		display: flex;

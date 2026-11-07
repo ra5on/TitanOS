@@ -50,7 +50,29 @@ ziehen oder mit den Pfeiltasten verschieben. Folgeentscheidung am selben Tag:
 Kartengröße S/M/L in der Bearbeiten-Leiste, gemeinsam für alle Karten (nur
 mehr oder weniger Karten je Zeile, keine Einzelgrößen). Verworfen: Variante A
 (Stack-Karte mit Dienstliste und Einzelgrößen S/M/L je Karte). Regeln `docs/rules/DOCKER.md`
-(„Docker-Layout“), Prüfung `scripts/test-ui-docker-cards.mjs`.
+(„Docker-Layout“). Seit 0.64.0 ersetzt durch die Tabelle (`scripts/test-ui-docker-table.mjs`, „Docker-Seite: Tabelle“).
+
+### KI-Agent im neuen Design (0.64.0, PLAN 68)
+
+Vom Projektinhaber nach Screenshots freigegeben (7. November 2026). Entwurf und
+Aufnahme: `out/proposal/agent-68/entwurf-chat.png`, `entwurf-einstellungen.png`,
+`entwurf-handy.png` (HTML/CSS-Skizze in `entwurf.mjs`, Vergleich `ist/`). Der
+Agent verliert seinen eigenen Stil (Aurora-Hintergrund, Glas, Leuchten, eigene
+Akzente) und folgt der Designsprache aller Fenster (Vorbild Docker und
+Systemsteuerung › Netzwerk): links eine Seitenleiste wie die eines Fensters
+(KI-Agent, Neuer Chat, Suchen, Vorschläge, Geplant, Notizen, Projekte, Chats,
+unten Einstellungen und Einklappen), rechts der Chat mit Kopfzeile (Titel,
+Projekt-Chip, Modell-Chip, Anheften, ⋯), Nachrichten höchstens 760 px breit,
+eigene Nachricht als akzentgetönte Blase rechts, Schritte als eine aufklappbare
+Zeile, Tabellen in einer Karte, Freigabe als Banner-Karte mit Warnrahmen,
+Eingabe als Karte mit der Zeile darunter. Einstellungen › KI-Agent: Reiter
+bleiben, Inhalt in Karten; Rechte mit Schnellwahl-Karte und Bereichen als
+Zeilen mit kompakter Auswahl. Am Handy derselbe Aufbau, Seitenleiste hinter ☰.
+Abweichungen vom Entwurf: Die Seitenleiste liegt im Fenster unter der
+Titelleiste, nicht daneben (die Fensterleiste kennt nur feste Einträge). Den
+Schalter „Freigaben per Mitteilung“ der Skizze gibt es bei den Rechten nicht
+(Mitteilungen des Agenten schaltet man je Gerät); dort steht „Nie erlaubt“. Wartende Freigaben zeigen „▲ n“ (Form und Zahl, nicht nur Farbe). Prüfung
+`scripts/test-ui-agent.mjs`. Beschreibung `docs/AGENT.md` („Aussehen“).
 
 ### Cluster: Wege, Versionen, Alle aktualisieren (0.44.0)
 

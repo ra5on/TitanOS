@@ -94,6 +94,13 @@
 	const warnings = $derived(jobs?.jobs.filter((v) => v.state.warning) ?? []);
 	const date = (value: string | undefined) =>
 		value ? formatDateTime(new Date(value)) : t('safeguard.none');
+
+	// PLAN 67-1: the menu bar of the desktop; a new job is made on the jobs page.
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	registerMenuCommands({
+		'backup.new': () => void goto('/settings/backups/data?new=1'),
+		'backup.reload': { run: load, enabled: () => !loading },
+	});
 </script>
 
 <PageHead title={t('safeguard.title')}>

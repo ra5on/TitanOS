@@ -46,15 +46,17 @@ const (
 )
 
 var (
-	loginThemes      = []string{"inherit", "graphit", "schwarz", "mitternacht", "hell", "auto"}
-	loginAccents     = []string{"blau", "gruen", "tuerkis", "violett", "kupfer", "rose", "custom"}
-	loginStyles      = []string{"flat", "glass", "outline"}
-	loginSources     = []string{"theme", "builtin", "custom"}
-	loginPositions   = []string{"center", "left", "right"}
-	loginWidths      = []string{"normal", "wide"}
-	loginLocales     = []string{"de", "en"}
-	loginBackgrounds = []string{"nordlicht", "nebelwald", "bergsee", "kueste", "wueste", "weltraum", "graphit", "mitternacht", "wellen", "geometrie"}
-	loginHex         = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
+	loginThemes    = []string{"inherit", "graphit", "schwarz", "mitternacht", "hell", "auto"}
+	loginAccents   = []string{"blau", "gruen", "tuerkis", "violett", "kupfer", "rose", "custom"}
+	loginStyles    = []string{"flat", "glass", "outline"}
+	loginSources   = []string{"theme", "builtin", "custom"}
+	loginPositions = []string{"center", "left", "right"}
+	loginWidths    = []string{"normal", "wide"}
+	// loginAccountStyles are the looks of the account picker.
+	loginAccountStyles = []string{"circles", "list"}
+	loginLocales       = []string{"de", "en"}
+	loginBackgrounds   = []string{"nordlicht", "nebelwald", "bergsee", "kueste", "wueste", "weltraum", "graphit", "mitternacht", "wellen", "geometrie"}
+	loginHex           = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
 )
 
 type loginBackground struct {
@@ -96,6 +98,12 @@ type loginAppearance struct {
 	HideHost     bool                  `json:"hideHost"`
 	HideLogo     bool                  `json:"hideLogo"`
 	Clock        bool                  `json:"clock"`
+	// The account picker of the login page (PLAN 67, login_accounts.go):
+	// circles or a list; all accounts are shown only from the home
+	// network unless ShowAccountsExternal. Older titand ignore the fields.
+	AccountsStyle        string `json:"accountsStyle"`
+	ShowAccounts         bool   `json:"showAccounts"`
+	ShowAccountsExternal bool   `json:"showAccountsExternal"`
 }
 
 // loginAppearanceRequest is what the editor sends; the image is managed here.
@@ -110,6 +118,7 @@ func defaultLoginAppearance() loginAppearance {
 		Theme: "inherit", Accent: "blau", CustomAccent: "#E5B92E", Style: "glass", Glass: 45, Blur: 18,
 		Background: loginBackground{Source: "theme", Fit: "cover", X: 50, Y: 50, Zoom: 100, Dim: 30},
 		Position:   "center", Width: "normal", Texts: map[string]loginTexts{},
+		AccountsStyle: "circles", ShowAccounts: true,
 	}
 }
 
@@ -167,6 +176,11 @@ func (v *loginAppearance) validate() error {
 		return errors.New("unknown card position")
 	case !in(v.Width, loginWidths):
 		return errors.New("unknown card width")
+	case v.AccountsStyle != "" && !in(v.AccountsStyle, loginAccountStyles):
+		return errors.New("unknown account style")
+	}
+	if v.AccountsStyle == "" {
+		v.AccountsStyle = "circles"
 	}
 	v.CustomAccent = strings.ToUpper(v.CustomAccent)
 	texts := map[string]loginTexts{}
@@ -241,13 +255,30 @@ func digest(data []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// publicLoginLook is the answer of GET /login-appearance. The settings of
+// the account picker are shadowed: only owners and administrators (the
+// editor) see them; the login page gets its style from /login/accounts.
+type publicLoginLook struct {
+	Configured bool `json:"configured"`
+	loginAppearance
+	AccountsStyle        *string `json:"accountsStyle,omitempty"`
+	ShowAccounts         *bool   `json:"showAccounts,omitempty"`
+	ShowAccountsExternal *bool   `json:"showAccountsExternal,omitempty"`
+}
+
+func lookAnswer(configured bool, value loginAppearance, admin bool) publicLoginLook {
+	answer := publicLoginLook{Configured: configured, loginAppearance: value}
+	if admin {
+		answer.AccountsStyle, answer.ShowAccounts, answer.ShowAccountsExternal = &value.AccountsStyle, &value.ShowAccounts, &value.ShowAccountsExternal
+	}
+	return answer
+}
+
 // handleLoginAppearance answers without login: display values only.
 func (s *Server) handleLoginAppearance(w http.ResponseWriter, r *http.Request) {
 	value, exists := s.loginAppearance()
-	writeJSON(w, http.StatusOK, struct {
-		Configured bool `json:"configured"`
-		loginAppearance
-	}{exists, value})
+	user, ok := s.authenticate(r)
+	writeJSON(w, http.StatusOK, lookAnswer(exists, value, ok && user.Role.CanAdminister()))
 }
 
 // handleLoginBackground serves the configured image and nothing else.
@@ -390,10 +421,7 @@ func (s *Server) handlePutLoginAppearance(w http.ResponseWriter, r *http.Request
 	}
 	l.value, l.exists = next, true
 	noteTarget(r, "login-appearance")
-	writeJSON(w, http.StatusOK, struct {
-		Configured bool `json:"configured"`
-		loginAppearance
-	}{true, next})
+	writeJSON(w, http.StatusOK, lookAnswer(true, next, true))
 }
 
 // handleDeleteLoginAppearance goes back to the default look.

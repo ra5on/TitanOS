@@ -20,19 +20,19 @@ Ab Werk ist der Agent aus. Eingeschaltet wird er unter **Einstellungen › KI-Ag
 - Während des Umzugs pausiert der Agent (keine neuen Aufträge, kein Lesen und Schreiben seiner Daten). Läuft ein Auftrag, lehnt titand den Umzug ab. Das Ziel braucht etwa 10 % mehr freien Platz als die Daten und darf noch keine Daten des Agenten haben.
 - API (Besitzer und Administratoren): `GET /api/v1/agent/volumes`, `POST /api/v1/agent/volume/move` `{to}`, `GET /api/v1/agent/volume/move`. Der Fortschritt liegt nur im RAM; ein Neustart während des Umzugs lässt das alte Volume gültig (die Einstellung wird erst nach der Prüfung geschrieben).
 
-**Mitteilungen (PLAN 58):** Jedes Konto kann seine Geräte für Mitteilungen eintragen (Agent-App: Zahnrad › Mitteilungen; Konto-Seite). Konten mit der Rolle „Benutzer“ bekommen nur die Mitteilungen ihres eigenen Agenten (Auftrag fertig, Freigabe nötig, Erinnerungen); was die Glocke zeigt, geht weiter nur an Besitzer und Administratoren.
+**Mitteilungen (PLAN 58):** Jedes Konto kann seine Geräte für Mitteilungen eintragen (Agent-App: Einstellungen › Mitteilungen; Konto-Seite). Konten mit der Rolle „Benutzer“ bekommen nur die Mitteilungen ihres eigenen Agenten (Auftrag fertig, Freigabe nötig, Erinnerungen); was die Glocke zeigt, geht weiter nur an Besitzer und Administratoren.
 
 **Einstellungen › KI-Agent (seit 0.54.0, PLAN 53)**
 
 Die Seite hat Reiter statt einer langen Spalte:
 - **Übersicht:** Ein/Aus mit Zustand, Handy-App, Grundanweisung.
 - **Verbindung und Modelle:** Ollama, Knoten, Modell, Sprache, Bilder, Snapshot.
-- **Rechte.**
+- **Rechte** (seit 0.64.0 in Karten, PLAN 68): Karte „Schnellwahl“ mit der Auswahl Nur lesen / Standard / Alles ohne Nachfrage / Eigene in der Kopfzeile und der Zeile „Nie erlaubt“; Karte „Bereiche“, je Bereich eine Zeile mit kompakter Auswahl Ohne Nachfrage / Nachfragen / Verboten, aufklappbar zu den einzelnen Werkzeugen. Selten geänderte Bereiche (Sicherungen, Speicher, Freigaben, Konten, Plugins, Home Assistant, Code) stehen hinter „＋ n weitere Bereiche anzeigen“, aber nur, solange für sie nichts eigens eingestellt ist; ein geänderter Bereich bleibt immer sichtbar. Karte „Ordner-Regeln“ mit „＋ Regel“. Am Handy steht jede Auswahl in einer eigenen Zeile unter ihrer Bezeichnung.
 - **Konten und Orte.**
 - **Home Assistant.**
 - **Eigeninitiative.**
 
-Links wie `?tab=connection` öffnen einen Reiter direkt.
+Links wie `?tab=connection` öffnen einen Reiter direkt. Seit 0.64.0 stehen alle Reiter in Karten (`.tile.ui-card` mit Kopfzeile) wie die übrigen Einstellungen; im Fenster des Agenten ohne Einleitung, mit der Seitenleiste des Agenten links.
 
 **Handy-App**
 - Zuerst wählt man den Weg zum NAS, dann erscheint der QR-Code dazu. Der QR-Code wird im Browser erzeugt, kein fremder Dienst.
@@ -46,25 +46,27 @@ Links wie `?tab=connection` öffnen einen Reiter direkt.
 
 ## Bedienung
 
-- **Aussehen (PLAN 48):** Handy und Desktop sehen gleich aus, angelehnt an die großen Chat-Apps.
-  - **Agent-Menü:** Suche, „Neuer Chat“, Projekte (Klick klappt ihre Chats auf), dann Angeheftet und die Chats nach Tagen. Laufende Chats leuchten, wartende zeigen „Freigabe“, ungelesene einen Punkt (auch bei zugeklapptem Projekt). Unten Wissen, Darstellung und Einstellungen (nur Admins).
-  - **Kopfzeile:** in der Mitte Modell und Denkstufe; Antippen öffnet die Auswahl (Desktop als Fenster unter dem Knopf, Handy als Blatt von unten). Im Chat stehen dort Titel, Projekt und Modell. Rechts Anheften (Desktop), Vollbild (Desktop), **⋯** (Umbenennen, In Projekt verschieben, Export Markdown/PDF, Löschen; am Handy auch Anheften) und ✎ Neuer Chat.
-  - **Start = neuer Chat:** Begrüßung mit leuchtendem Agent-Symbol (atmet, solange ein Auftrag läuft), Projekte als Kacheln (Antippen öffnet das Projekt), laufende und wartende Aufträge mit Stopp-Knopf, vier Vorschläge, die das Eingabefeld füllen.
-  - **Eingabefeld:** eine Pille mit Büroklammer, Text und Senden-Knopf, Glas mit Leuchtrand. Auf dem Handy 16 px Schrift, damit iOS nicht heranzoomt.
+- **Aussehen (PLAN 68, seit 0.64.0; Entwurf `out/proposal/agent-68/`, vom Inhaber freigegeben):** Der Agent sieht aus wie jedes andere Programm von TitanOS (Vorbild Docker und Systemsteuerung › Netzwerk). Kein Aurora-Hintergrund, kein Glas, kein Leuchten, keine eigenen Farben mehr: alle Farben kommen aus dem Theme (`--bg`, `--surface`, `--border`, `--text`, `--muted`, `--accent`, `--chip`), auch die Farbstärke der Darstellung gilt jetzt im Agenten. Handy und Desktop haben denselben Aufbau.
+  - **Seitenleiste** (ca. 220 px, wie die Seitenleiste eines Fensters): oben das Agent-Symbol mit „KI-Agent“, „＋ Neuer Chat“, dann Suchen (öffnet das Suchfeld), Vorschläge, Geplant (mit Anzahl), Notizen und die eingeschalteten Funktionen, Abschnitt PROJEKTE (Anzahl der Chats; wartet ein Chat auf Freigabe, steht „▲ n“ in Warnfarbe, ungelesene haben einen Punkt, laufende pulsieren), „Projekt anlegen“, Angeheftet und die Chats nach Tagen. Unten Einstellungen und „Seitenleiste einklappen“ (je Gerät, `localStorage` `titanos.agent.side`; aufklappen über den Knopf links in der Kopfzeile). Schlichte Zeilen, die offene akzentgetönt, lange Namen mit „…“. Wartende Chats zeigen „Freigabe“ als Text.
+  - **Kopfzeile des Chats:** Titel, Projekt als Chip, Modell und Denkstufe als Chip („gpt-oss:20b · Mittel ▾“, öffnet die Auswahl), Anheften und **⋯** (Umbenennen, In Projekt verschieben, Export Markdown/PDF, Einstellungen, Löschen; ohne Chat nur Einstellungen). Außerhalb eines Fensters zusätzlich Vollbild.
+  - **Nachrichten:** höchstens 760 px breit, mittig. Die eigene Nachricht ist eine Blase rechts, mit dem Akzent getönt; die Antwort ist schlichter Text. Schritte und Gedanken eines Durchgangs sind eine aufklappbare Zeile („✓ 3 Schritte · 1,6 s · Docker-Apps gelesen, … Anzeigen ▾“, am Handy ohne die Aufzählung). Markdown-Tabellen stehen in einer Karte im Stil der Docker-Tabelle und scrollen am Handy seitlich. Unter jeder Antwort eine kleine Zeile: Vorlesen, Kopieren (mit Rückmeldung „Kopiert“; ohne HTTPS über ein unsichtbares Textfeld) und, was sich der Agent direkt davor gemerkt hat („✦ Gemerkt: …“).
+  - **Freigabe:** eine Banner-Karte mit Warnrahmen. Titel in Klartext aus Werkzeug und Argumenten („Freigabe nötig: VM „HAOS“ aktualisieren“, Übersetzungen `agent.ask.<karte>` für die Aktionskarten des Katalogs; ohne Übersetzung die Zusammenfassung des NAS), darunter die Stufe als Text („Stufe: Gefahr“, nicht nur über die Farbe) und wann gefragt wurde. Rechts „Abbrechen“ und „Ausführen“ (wie im Entwurf; bei „Zerstörend“ ist Ausführen rot), am Handy darunter. Nichts bekommt den Fokus, Enter löst nichts aus. „Details“ zeigt Werkzeug, Argumente und den Inhalt; bei Dateiinhalten ist es offen.
+  - **Eingabefeld:** eine Karte unten mit 📎, Text, 🎙 und dem Senden-Knopf im Akzent. Darunter eine kleine Zeile, die nur sagt, was die Seite weiß: „Läuft lokal auf diesem NAS über Ollama“ (Ollama auf diesem NAS), „Läuft über Ollama auf <Adresse>“ oder „Läuft über deinen eigenen Ollama-Server“ (Konten ohne Verwaltungsrechte sehen die Adresse nicht), „… eines anderen Cluster-Knotens“; dazu „nichts verlässt das Netzwerk“ nur bei einer Adresse im Heimnetz und ausgeschalteter Internetsuche, sonst „Internetsuche ist an“ bzw. „Chats bleiben auf diesem NAS“ (`whereLine` in `lib/agent.ts`). Auf dem Handy 16 px Schrift, damit iOS nicht heranzoomt.
+  - **Start = neuer Chat:** Agent-Symbol mit Begrüßung, Projekte als Chips, laufende und wartende Aufträge in einer Karte (mit Stopp-Knopf), Vorschläge als Zeilen einer Karte, die das Eingabefeld füllen.
+  - **Im Fenster** nutzt der Agent die Menüleiste des Arbeitsplatzes (Ablage › Neuer Chat …, Ansicht › Notizen …, Agent › Modell, Einstellungen). Die Seitenleiste liegt im Fenster unter der Titelleiste (die Fensterleiste kennt nur feste Einträge, Projekte und Chats ändern sich). Einstellungen › KI-Agent zeigt im Fenster des Agenten dieselbe Seitenleiste daneben (Einträge führen zurück in den Agenten).
   - **Bis unter die Statusleiste (PLAN 56):** Auf `/agent` meldet die Seite dem iPhone eine durchsichtige Statusleiste (`black-translucent`, `viewport-fit=cover`); das Bild reicht bis ganz oben. TitanOS selbst behält die schwarze Leiste. iOS liest das beim Laden, deshalb lädt der Wechsel zwischen TitanOS und dem Agenten neu (wie beim Manifest).
-- **Glasstärke** gilt für alle Flächen des Agenten: Eingabeleiste, Schritte, Gedanken, Plan, Dateikarten, Seitenleiste. Am Handy ist die Eingabeleiste flacher (Knöpfe 34 px).
 - **Wischen:** Unterpunkte der Einstellungen wischen von rechts herein, „Zurück“ von links. Die Fenster des Agenten (Geplant, Gedächtnis, Skills, Landkarte, Projekt …) wischen ebenfalls herein. „Animationen: Reduziert/Aus“ und „Bewegung reduzieren“ des Geräts schalten das ab.
 - **Alle Chats löschen** unten in den Einstellungen des Agenten (`DELETE /api/v1/agent/chats`, `?keepPinned=true`): löscht die eigenen Chats mit Anhängen. Angeheftete bleiben ab Werk, laufende immer. Projekte, Gedächtnis und Skills bleiben, Chats anderer Konten in geteilten Projekten nie.
 - **Mitteilungen** (Einstellungen › Mitteilungen, nur Besitzer und Administratoren): Auf dem iPhone ist der Agent vom Home-Bildschirm eine eigene App mit eigenem Abo. Dort einmal einschalten, auch wenn TitanOS schon Mitteilungen bekommt.
-- **Effekte:** Glas, Leuchten, Verlaufsschrift, weiche Übergänge; „Leuchten“ und „Weniger Bewegung“ unter Darstellung schalten sie ab (auch die Systemeinstellung „Bewegung reduzieren“).
+- **Bewegung:** weiche Übergänge und Hereinwischen; „Animationen: Reduziert/Aus“ unter Darstellung und Gesten schalten sie ab (auch die Systemeinstellung „Bewegung reduzieren“).
 - **Desktop:** Im Desktop-Modus ist der KI-Agent ein eigenes Programm im Fenster (`docs/DESKTOP.md`), dazu die Agent-Blase. Bis 0.61.0 in der alten Oberfläche: Links bleibt das TitanOS-Menü, daneben das Agent-Menü, rechts der Chat (höchstens etwa 800 px breit, mittig). **Vollbild** in der Kopfzeile blendet das TitanOS-Menü aus, **Mit Menü** wieder ein; die Wahl gilt je Gerät (`localStorage`, PLAN 47).
-- **Handy:** Der Agent ist immer eine eigene Ansicht ohne TitanOS-Rahmen (PLAN 48). ☰ oben links (oder Wischen vom linken Rand) öffnet das Agent-Menü, Wischen nach links schließt es. Ganz unten im Menü führt **„Zurück zu TitanOS“** zum Startbildschirm (App-Raster; bis 0.58.0 zum Dashboard).
+- **Handy:** Der Agent ist immer eine eigene Ansicht ohne TitanOS-Rahmen (PLAN 48). Oben ☰, „KI-Agent“, ＋ (neuer Chat) und ⋯ (mit den Einstellungen), darunter Titel, Projekt und Modell (lange Angaben brechen in eine eigene Zeile um). ☰ (oder Wischen vom linken Rand) öffnet die Seitenleiste, Wischen nach links schließt es. Ganz unten im Menü führt **„Zurück zu TitanOS“** zum Startbildschirm (App-Raster; bis 0.58.0 zum Dashboard).
 - **Home-Bildschirm:** Zwischen TitanOS und dem Agenten lädt die Seite neu. Safari liest das Manifest nur beim Laden. So legt „Zum Home-Bildschirm“ auf `/agent` das Agent-Symbol an und überall sonst das von TitanOS, auch wenn man über das Menü hingekommen ist.
 - **Eigene App:** Auf `/agent` „Zum Home-Bildschirm“ (iOS) bzw. „App installieren“ (Chrome/Edge). Die App hat ein eigenes Symbol und Manifest (`/agent.webmanifest`, Start `/agent?app=1`) und zeigt nie die TitanOS-Navigation.
 - **Projekte** haben eigene Anweisungen und einen Standard-Ablageort.
-- **Schritte:** Jeder Werkzeugaufruf steht im Chat, zusammengefasst als „n Schritte“. Die Gedanken des Modells lassen sich aufklappen. Der runde Knopf hält den Auftrag an.
+- **Schritte:** Jeder Werkzeugaufruf steht im Chat, zusammengefasst als „n Schritte“; die Gedanken des Modells stehen aufgeklappt in derselben Zeile. Der Knopf rechts im Eingabefeld hält den Auftrag an.
 - **Rückfragen:** Passt ein Name auf mehreres (Home Assistant als Docker-App und als VM), fragt der Agent mit Knöpfen.
-- **Darstellung:** Akzent, Chat-Stil (Blasen/Klar/Kompakt), Glas, Leuchten, Schreibanimation, Vibration (nur Android), weniger Bewegung. Gespeichert nur im Browser.
+- **Darstellung und Gesten** (Einstellungen des Agenten): Gesten, Vibration (nur Android), Animationen, Schriftgröße (je Gerät), kompakte Liste, Startansicht, Vorschläge, Schritte offen zeigen, Schreibanimation, Bildschirm wach halten. Für das Konto auf dem NAS gespeichert (`/agent/prefs`), Geräteeinstellungen nur im Browser. **Entfernt in 0.64.0:** Akzent, Chat-Stil (Blasen/Klar/Kompakt), Hintergrund (Aurora/Ozean/Wald), Glas mit Glasstärke und Leuchten (Felder `accent`, `style`, `background`, `glass`, `glassLevel`, `glow`). Gespeicherte Werte älterer Versionen (`titanos.agent.look` im Browser, `prefs.json` des Kontos) werden ohne Fehler gelesen und nicht mehr beachtet; beim nächsten Speichern fallen sie weg. Eine ältere App, die die Felder vermisst, nimmt ihre Standardwerte.
 
 Aufträge laufen auf dem NAS weiter, auch wenn die Seite zu ist. Ist er fertig, wartet er auf dich oder gab es einen Fehler, kommt eine Push-Mitteilung (Web Push); sie öffnet nur den Chat und gibt nie etwas frei.
 
@@ -202,23 +204,22 @@ Ist der Agent eingeschaltet, legt TitanOS auf seinem Volume die Freigabe **„KI
 
   Modell z. B. `Systran/faster-whisper-large-v3` oder eine turbo-Variante (ca. 1,5–2 GB Grafikspeicher). Image-Name und Variablen vor dem Einsatz in der Doku von Speaches nachsehen.
 - **Bilder verstehen:** Sieht das Hauptmodell Bilder (Fähigkeit `vision`, z. B. `gemma4:12b`), bekommt es sie direkt; sonst optional ein eigenes Bild-Modell. Werkzeug `image_view`: Bild aus dem Chat (Büroklammer › „Foto oder Kamera“) oder vom NAS, mit Frage; die Antwort des Modells gilt als fremder Inhalt.
-- **Vorlesen:** Lautsprecher-Knopf an jeder Antwort, wahlweise automatisch (Darstellung › „Antworten vorlesen“); Sprachausgabe des Geräts, ohne Server.
+- **Vorlesen:** Lautsprecher-Knopf an jeder Antwort, wahlweise automatisch (Einstellungen › Sprache › automatisch vorlesen); Sprachausgabe des Geräts, ohne Server.
 - Messung des Inhabers (5.11.2026): `gemma4:12b` mit 256K Kontext belegt 12,6 GB von 16 GB (RTX 5060 Ti); Whisper turbo passt daneben.
 
 ## Agent-App: Aussehen, Gesten, Einstellungen (PLAN 53)
 
-Seit 0.54.0 hat der Agent auf dem Handy und im Browser einen eigenen Auftritt. Er unterscheidet sich bewusst von TitanOS, das unverändert bleibt.
+Von 0.54.0 bis 0.63.0 hatte der Agent einen eigenen Auftritt (Polarlicht hinter Glas, leuchtende Kugel, eigene Akzente). Seit 0.64.0 folgt er der Designsprache von TitanOS (PLAN 68, siehe „Aussehen“ unter „Bedienung“).
 
 **Aussehen**
-- Langsam bewegtes Polarlicht hinter Glas; Stärke des Glases einstellbar.
-- Leuchtende Kugel, Begrüßung mit Namen im Verlauf.
+- Agent-Symbol und Begrüßung mit Namen.
 - Projekte als kleine Chips statt der großen Kachel.
 - „Passt gerade“: höchstens drei Vorschläge.
   - Zuerst Warnungen des NAS der letzten 48 Stunden (`GET /api/v1/agent/suggestions`, nur Besitzer und Administratoren, aus den Meldungen im RAM).
   - Dann nach Tageszeit: morgens „Was ist über Nacht passiert?“, abends „Ist zu Hause alles zu?“.
   - Dann wechselnd der Rest; „andere“ zeigt die nächsten.
 
-**Einstellungen im Agenten** (Zahnrad oben und im Menü, für jedes Konto)
+**Einstellungen im Agenten** (unten in der Seitenleiste und im ⋯-Menü der Kopfzeile, für jedes Konto)
 - Sprache:
   - automatisch vorlesen an oder aus; aus heißt Knopf „Vorlesen“ an jeder Antwort;
   - Tempo;
@@ -233,7 +234,7 @@ Seit 0.54.0 hat der Agent auf dem Handy und im Browser einen eigenen Auftritt. E
   - Ziehen zum Aktualisieren;
   - Vibration;
   - Animationen voll, reduziert oder aus; `prefers-reduced-motion` gilt immer;
-  - Akzent, Hintergrund, Glas mit Stärke, Leuchten, Schriftgröße, Stil der Antworten, kompakte Chatliste;
+  - Schriftgröße und kompakte Chatliste (Akzent, Hintergrund, Glas, Leuchten und Stil der Antworten sind seit 0.64.0 entfernt, siehe „Aussehen“);
   - beim Öffnen: neuer Chat, letzter Chat oder Übersicht;
   - Vorschläge;
   - Denkschritte und Werkzeuge zeigen;

@@ -188,6 +188,24 @@
 	// Times of the schedule are shown in the NAS's maintenance time zone.
 	const time = (value: string | null | undefined) =>
 		value ? formatDateTime(new Date(value), status?.settings.timezone || undefined) : '—';
+
+	// PLAN 67-1: Ablage › Neue Aufgabe / Jetzt ausführen in the menu bar of the desktop.
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	registerMenuCommands({
+		'planner.newTask': { run: () => edit(), enabled: () => !!settings && !busy },
+		'planner.run': {
+			items: () =>
+				busy
+					? []
+					: (status?.jobs ?? [])
+							.filter((v) => !v.state.running && !v.state.blocked)
+							.map((v) => ({ id: v.job.id, text: v.job.name })),
+			run: (id) => {
+				if (id) void action(id, 'run');
+			},
+		},
+		'planner.refresh': { run: () => void load(), enabled: () => !busy },
+	});
 </script>
 
 <NavigationGuard dirty={settingsDirty || jobDirty} />

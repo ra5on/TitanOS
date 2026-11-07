@@ -114,6 +114,12 @@ const named: Record<string, string> = {
 	'PUT /api/v1/hardware/intel-gpu': 'intelGuc',
 	'PUT /api/v1/login-appearance': 'loginAppearance',
 	'DELETE /api/v1/login-appearance': 'loginAppearanceReset',
+	// PLAN 67-1: Docker › Images, Volumes, Aufräumen.
+	'DELETE /api/v1/docker/images/{id}': 'dockerImageDelete',
+	'POST /api/v1/docker/images/prune': 'dockerImagesPrune',
+	'DELETE /api/v1/docker/volumes/{name}': 'dockerVolumeDelete',
+	'POST /api/v1/docker/volumes/prune': 'dockerVolumesPrune',
+	'POST /api/v1/docker/builder/prune': 'dockerBuilderPrune',
 	'POST /api/v1/update/{action}': 'update',
 	'POST /api/v1/vms/{name}/{action}': 'vmAction',
 	'POST /api/v1/docker/containers/{id}/{action}': 'containerAction',

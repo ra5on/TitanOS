@@ -93,6 +93,28 @@
 		document.documentElement.lang = i18n.locale;
 	});
 
+	// PLAN 67: a window's page never shows a login of its own. When its
+	// session is gone (logout elsewhere, expired, a 401), it tells the
+	// desktop, which loads anew at "/" and so shows the one login page.
+	const frameWithoutLogin = $derived(
+		inWindow && session.status === 'ready' && !!session.data && !session.data.user,
+	);
+	$effect(() => {
+		if (frameWithoutLogin)
+			window.parent.postMessage({ type: 'titanos-session-lost' }, location.origin);
+	});
+	onMount(() => {
+		if (inWindow) return;
+		const lost = (e: MessageEvent) => {
+			if (e.origin !== location.origin || e.data?.type !== 'titanos-session-lost') return;
+			// The whole page anew at "/": the one login page, no old state –
+			// only while this page still thinks someone is logged in (no loop).
+			if (session.data?.user) location.replace('/');
+		};
+		window.addEventListener('message', lost);
+		return () => window.removeEventListener('message', lost);
+	});
+
 	// Page transitions (Settings › Appearance › Effects): only between pages,
 	// not for a changed query on the same page, and never for reduced motion.
 	onNavigate((navigation) => {
@@ -177,7 +199,8 @@
 	{:else if session.data.setupRequired}
 		<Setup />
 	{:else if !session.data.user}
-		<Login />
+		<!-- In a window: nothing here; the desktop shows the login page (see above). -->
+		{#if !inWindow}<Login />{/if}
 	{:else if page.url.pathname === '/login-preview'}
 		<LoginPreview />
 	{:else}

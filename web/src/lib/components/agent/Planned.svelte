@@ -536,14 +536,10 @@
 		border-radius: 14px;
 		padding: var(--space-3);
 		margin-bottom: var(--space-3);
-		background: color-mix(in srgb, var(--surface) 70%, transparent);
+		background: var(--surface);
 	}
 	.morning {
-		background: linear-gradient(
-			135deg,
-			color-mix(in srgb, var(--accent) 14%, var(--surface)),
-			color-mix(in srgb, var(--surface) 80%, transparent)
-		);
+		background: color-mix(in srgb, var(--accent) 10%, var(--surface));
 		border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
 	}
 	header {

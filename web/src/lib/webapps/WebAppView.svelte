@@ -311,6 +311,11 @@
 	}
 	let saveAsAsked = false;
 	onDestroy(() => clearTimeout(saveAsWait));
+	/** PLAN 67-1: Speichern, Rückgängig … of the menu bar press the app's own keys (host bridge). */
+	export function command(name: 'save' | 'undo' | 'redo' | 'find' | 'select-all') {
+		frame?.focus();
+		post({ type: 'webapp-command', command: name });
+	}
 	export function restart() {
 		phase = 'starting';
 		appDirty = false;

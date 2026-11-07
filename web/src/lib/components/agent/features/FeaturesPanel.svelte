@@ -98,6 +98,6 @@
 		border: 1px solid var(--border);
 		border-radius: 14px;
 		overflow: hidden;
-		background: color-mix(in srgb, var(--surface) calc(var(--ag-alpha, 0.55) * 100%), transparent);
+		background: var(--surface);
 	}
 </style>

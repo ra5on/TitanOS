@@ -1,8 +1,9 @@
 <script lang="ts">
-	// One chat of the KI-Agent: the person's messages, the steps of each turn
-	// folded into one box ("5 Schritte · 6 s"), the thoughts, the answers
-	// (safe Markdown), questions with buttons, the card of a step that waits
-	// for approval and, while it runs, what streams in.
+	// One chat of the KI-Agent: the person's messages, the steps and thoughts
+	// of each turn folded into one line ("✓ 5 Schritte · 6,1 s … Anzeigen"),
+	// the answers (safe Markdown, tables in a card) with Vorlesen, Kopieren
+	// and what the agent remembered, questions with buttons, the banner of a
+	// step that waits for approval and, while it runs, what streams in.
 	import Icon from '#lib/components/Icon.svelte';
 	import FamilyDiarySources from './features/FamilyDiarySources.svelte';
 	import { chatMarkdown } from '#lib/chat-markdown.ts';
@@ -10,6 +11,7 @@
 	import { canSpeak, speak, speech } from '#lib/agent-speech.svelte.ts';
 	import { i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import {
+		approvalTitle,
 		blocks,
 		stepDetail,
 		stepFailed,
@@ -98,7 +100,70 @@
 	}
 	function seconds(steps: Entry[]): string {
 		const ms = steps.reduce((sum, s) => sum + (s.durationMs ?? 0), 0);
-		return ms < 1000 ? '' : ` · ${Math.round(ms / 1000)} s`;
+		if (!ms) return '';
+		const n = (ms / 1000).toLocaleString(i18n.locale, {
+			minimumFractionDigits: 1,
+			maximumFractionDigits: 1,
+		});
+		return ` · ${n} s`;
+	}
+	/** What the steps did, in short ("Docker-Apps gelesen, VMs gelesen"). */
+	function stepsGist(steps: Entry[]): string {
+		const words = [...new Set(steps.filter((s) => s.role === 'tool').map(stepLabel))];
+		return words.slice(0, 3).join(', ') + (words.length > 3 ? ' …' : '');
+	}
+	// What the agent remembered right before an answer goes into the small
+	// row under that answer (PLAN 68), not as a block of its own.
+	const LEARN = ['memory', 'note', 'skill', 'schedule', 'homeassistant', 'album'];
+	const isLearn = (b: (typeof list)[number]) =>
+		b.kind === 'note' &&
+		LEARN.includes(b.entry.note ?? '') &&
+		!(b.entry.note === 'schedule' && b.entry.content?.includes('„'));
+	const learnedBefore = $derived.by(() => {
+		const by = new Map<number, Entry[]>();
+		const taken = new Set<string>();
+		list.forEach((b, i) => {
+			if (b.kind !== 'answer') return;
+			const notes: Entry[] = [];
+			for (let j = i - 1; j >= 0; j--) {
+				const prev = list[j];
+				if (prev.kind === 'note' && isLearn(prev)) notes.unshift(prev.entry);
+				else break;
+			}
+			if (notes.length) {
+				by.set(i, notes);
+				for (const n of notes) taken.add(n.id);
+			}
+		});
+		return { by, taken };
+	});
+	// Kopieren: the clipboard API needs HTTPS; on plain http in the home
+	// network an invisible text field does it.
+	let copied = $state<{ id: string; ok: boolean } | null>(null);
+	let copyTimer: ReturnType<typeof setTimeout> | undefined;
+	async function copy(id: string, text: string) {
+		let ok = false;
+		try {
+			await navigator.clipboard.writeText(text);
+			ok = true;
+		} catch {
+			const area = document.createElement('textarea');
+			area.value = text;
+			area.setAttribute('readonly', '');
+			area.style.position = 'fixed';
+			area.style.opacity = '0';
+			document.body.appendChild(area);
+			area.select();
+			try {
+				ok = document.execCommand('copy');
+			} catch {
+				ok = false;
+			}
+			area.remove();
+		}
+		copied = { id, ok };
+		clearTimeout(copyTimer);
+		copyTimer = setTimeout(() => (copied = null), 1800);
 	}
 	const noteText: Record<string, MessageKey> = {
 		memory: 'agent.noteMemory',
@@ -115,6 +180,13 @@
 		loop: 'agent.noteLoop',
 		undone: 'agent.noteUndone',
 	};
+	function askTitle(p: Pending): string {
+		const plain = approvalTitle(p);
+		const what = plain
+			? t(`agent.ask.${plain.key}` as MessageKey, { name: plain.name })
+			: p.summary || p.tool.replaceAll('_', ' ');
+		return t('agent.ask.title', { what });
+	}
 	const levelText: Record<string, MessageKey> = {
 		normal: 'agent.levelChange',
 		danger: 'agent.levelDanger',
@@ -138,22 +210,34 @@
 	<div class="column">
 		{#each list as block, i (block.kind === 'steps' ? `s${i}` : block.entry.id)}
 			{#if block.kind === 'user'}
-				<div class="user">{block.entry.content}</div>
+				<div class="user"><span>{block.entry.content}</span></div>
 			{:else if block.kind === 'steps'}
-				{#if block.thinking}
-					<details class="thinking" open={showSteps}>
-						<summary><Icon name="bulb" size={14} /> {t('agent.thoughts')}</summary>
-						<p>{block.thinking}</p>
-					</details>
-				{/if}
-				{#if block.steps.length}
+				{@const tools = block.steps.filter((s) => s.role === 'tool').length}
+				{#if block.steps.length || block.thinking}
 					<details class="steps" open={showSteps || (i === list.length - 1 && busy)}>
 						<summary>
-							<span class="ok">✓</span>
-							{t('agent.steps', {
-								count: block.steps.filter((s) => s.role === 'tool').length,
-							})}{seconds(block.steps)}
+							{#if block.steps.length}
+								<span class="ok" aria-hidden="true">✓</span>
+								<span class="count">{t('agent.steps', { count: tools })}{seconds(block.steps)}</span
+								>
+								{#if stepsGist(block.steps)}<span class="gist">· {stepsGist(block.steps)}</span
+									>{/if}
+							{:else}
+								<Icon name="bulb" size={14} />
+								<span class="count">{t('agent.thoughts')}</span>
+							{/if}
+							<span class="toggle"
+								><span class="show">{t('agent.stepsShow')}</span><span class="hide"
+									>{t('agent.stepsHide')}</span
+								><Icon name="chevronDown" size={14} /></span
+							>
 						</summary>
+						{#if block.thinking}
+							<div class="thinking">
+								<strong>{t('agent.thoughts')}</strong>
+								<p>{block.thinking}</p>
+							</div>
+						{/if}
 						{#each block.steps as step (step.id)}
 							<div class="step" class:failed={stepFailed(step)}>
 								<span class="mark" aria-hidden="true">{stepFailed(step) ? '!' : '✓'}</span>
@@ -174,23 +258,11 @@
 				{/if}
 			{:else if block.kind === 'answer'}
 				{@const prev = list[i - 1]}
+				{@const learned = learnedBefore.by.get(i) ?? []}
 				<div class="answer">
 					{#if block.entry.content}
 						<!-- eslint-disable-next-line svelte/no-at-html-tags -- chatMarkdown escapes everything first -->
 						<div class="md">{@html chatMarkdown(block.entry.content)}</div>
-						{#if canSpeak()}
-							{@const reading = speech.id === block.entry.id}
-							<button
-								type="button"
-								class="say"
-								class:on={reading}
-								aria-pressed={reading}
-								aria-label={reading ? t('agent.readStop') : t('agent.readAloud')}
-								title={reading ? t('agent.readStop') : t('agent.readAloud')}
-								onclick={() => speak(block.entry.id, block.entry.content ?? '', i18n.locale)}
-								><Icon name={reading ? 'stop' : 'volume'} size={15} /></button
-							>
-						{/if}
 					{/if}
 					{#if prev?.kind === 'steps'}<FamilyDiarySources steps={prev.steps} />{/if}
 					{#if block.entry.choices?.length && block.entry.id === lastAnswer && !busy && !readonly}
@@ -205,9 +277,49 @@
 							{/each}
 						</div>
 					{/if}
+					{#if block.entry.content || learned.length}
+						<div class="acts">
+							{#if block.entry.content && canSpeak()}
+								{@const reading = speech.id === block.entry.id}
+								<button
+									type="button"
+									class="act"
+									class:on={reading}
+									aria-pressed={reading}
+									onclick={() => speak(block.entry.id, block.entry.content ?? '', i18n.locale)}
+									><Icon name={reading ? 'stop' : 'volume'} size={14} /><span
+										>{reading ? t('agent.readStop') : t('agent.readAloud')}</span
+									></button
+								>
+							{/if}
+							{#if block.entry.content}
+								{@const done = copied?.id === block.entry.id ? copied : null}
+								<button
+									type="button"
+									class="act"
+									onclick={() => copy(block.entry.id, block.entry.content ?? '')}
+									><Icon name={done?.ok ? 'check' : 'copy'} size={14} /><span
+										>{done
+											? done.ok
+												? t('agent.copiedShort')
+												: t('agent.copyFailed')
+											: t('agent.copy')}</span
+									></button
+								>
+								{#if done}<span class="sr-only" role="status"
+										>{done.ok ? t('agent.copiedShort') : t('agent.copyFailed')}</span
+									>{/if}
+							{/if}
+							{#each learned as n (n.id)}
+								<span class="learned">✦ {t(noteText[n.note ?? 'memory'])}: {n.content}</span>
+							{/each}
+						</div>
+					{/if}
 				</div>
 			{:else if block.kind === 'note'}
-				{#if block.entry.note === 'schedule' && block.entry.content?.includes('„')}
+				{#if learnedBefore.taken.has(block.entry.id)}
+					<!-- shown in the row under the next answer -->
+				{:else if block.entry.note === 'schedule' && block.entry.content?.includes('„')}
 					<div class="plan-card">
 						<span class="plan-ic" aria-hidden="true"
 							>{block.entry.content.startsWith('Erinnerung') ? '⏰' : '🗓️'}</span
@@ -229,8 +341,10 @@
 						<summary>{t('agent.noteEdited')}</summary>
 						<pre>{block.entry.content}</pre>
 					</details>
-				{:else if block.entry.note === 'memory' || block.entry.note === 'note' || block.entry.note === 'skill' || block.entry.note === 'schedule' || block.entry.note === 'homeassistant' || block.entry.note === 'album'}
-					<span class="learn">✦ {t(noteText[block.entry.note])}: {block.entry.content}</span>
+				{:else if isLearn(block)}
+					<span class="learn"
+						>✦ {t(noteText[block.entry.note ?? 'memory'])}: {block.entry.content}</span
+					>
 				{:else}
 					<div class="note" class:bad={block.entry.note === 'error'}>
 						{t(noteText[block.entry.note ?? ''] ?? 'agent.noteError', {
@@ -250,7 +364,7 @@
 		{#each chat.entries.filter((e) => e.role === 'tool' && e.files?.length) as step (step.id)}
 			{#each step.files ?? [] as file (file.root + file.path)}
 				<a
-					class="file tile"
+					class="file"
 					href={`/files?root=${encodeURIComponent(file.root)}&path=${encodeURIComponent(file.path.split('/').slice(0, -1).join('/'))}`}
 				>
 					<span class="doc" aria-hidden="true">{file.path.split('.').pop()?.toUpperCase()}</span>
@@ -303,196 +417,115 @@
 
 		{#if chat.pending && !busy && !readonly}
 			{@const p = chat.pending}
-			<div class="approval" role="group" aria-labelledby="pending-{p.id}">
-				<div class="row">
-					<strong id="pending-{p.id}">{t('agent.approvalTitle')}</strong>
-					<span class="chip {p.level === 'normal' ? '' : 'warn'}"
-						>{t(levelText[p.level] ?? 'agent.levelChange')}</span
-					>
+			{@const lines = argLines(p.args)}
+			<!-- PLAN 68: one banner card. The level is written out, not only a
+			     color; nothing here takes the focus or reacts to Enter. -->
+			<div
+				class="approval"
+				class:danger={p.level !== 'normal'}
+				role="group"
+				aria-labelledby="pending-{p.id}"
+			>
+				<div class="ask">
+					<span class="ask-ic" aria-hidden="true">{p.level === 'normal' ? '✎' : '▲'}</span>
+					<div class="ask-text">
+						<strong id="pending-{p.id}">{askTitle(p)}</strong>
+						<span
+							>{t('agent.ask.level', {
+								level: t(levelText[p.level] ?? 'agent.levelChange'),
+							})} · {t('agent.ask.at', { time: formatDateTime(new Date(p.at)) })}</span
+						>
+					</div>
+					<div class="ask-acts">
+						<button type="button" class="btn" disabled={deciding} onclick={() => ondecide(p, false)}
+							>{t('agent.decline')}</button
+						>
+						<button
+							type="button"
+							class="btn {p.level === 'destroy' ? 'btn-danger' : 'btn-primary'}"
+							disabled={deciding}
+							onclick={() => ondecide(p, true)}>{t('agent.approve')}</button
+						>
+					</div>
 				</div>
-				<p class="what">{p.tool.replaceAll('_', ' ')}{p.summary ? ' — ' + p.summary : ''}</p>
-				<dl>
-					{#each argLines(p.args) as [k, v] (k)}<dt>{k}</dt>
-						<dd>{v}</dd>{/each}
-				</dl>
-				{#if preview(p.args)}<pre>{preview(p.args)}</pre>{/if}
-				<div class="row">
-					<button
-						type="button"
-						class="btn btn-primary"
-						disabled={deciding}
-						onclick={() => ondecide(p, true)}>{t('agent.approve')}</button
-					>
-					<button type="button" class="btn" disabled={deciding} onclick={() => ondecide(p, false)}
-						>{t('agent.decline')}</button
-					>
-					<span class="muted small">{formatDateTime(new Date(p.at))}</span>
-				</div>
+				<details class="ask-details" open={!!preview(p.args)}>
+					<summary>{t('agent.ask.details')}</summary>
+					<dl>
+						<dt>{t('agent.ask.tool')}</dt>
+						<dd>{p.tool}{p.summary ? ' — ' + p.summary : ''}</dd>
+						{#each lines as [k, v] (k)}<dt>{k}</dt>
+							<dd>{v}</dd>{/each}
+					</dl>
+					{#if preview(p.args)}<pre>{preview(p.args)}</pre>{/if}
+				</details>
 			</div>
 		{/if}
 	</div>
 </div>
 
 <style>
-	.plan {
-		border: 1px solid var(--border);
-		border-radius: var(--radius-ctl, 14px);
-		padding: var(--space-2, 10px) var(--space-3, 14px);
-		margin: var(--space-1, 6px) 0 var(--space-2, 10px);
-	}
-	.plan header {
-		display: flex;
-		justify-content: space-between;
-		gap: 8px;
-		flex-wrap: wrap;
-		font-size: 0.9rem;
-	}
-	.plan ol {
-		list-style: none;
-		margin: 6px 0 0;
-		padding: 0;
-		display: grid;
-		gap: 4px;
-	}
-	.plan li {
-		display: flex;
-		gap: 8px;
-		align-items: flex-start;
-		font-size: 0.92rem;
-		overflow-wrap: anywhere;
-	}
-	.plan li.done > span:nth-child(2) {
-		color: var(--muted);
-		text-decoration: line-through;
-	}
-	.plan .box {
-		flex: none;
-		width: 1.1em;
-		height: 1.1em;
-		margin-top: 0.15em;
-		border: 1.5px solid var(--muted);
-		border-radius: 4px;
-		display: inline-grid;
-		place-items: center;
-		font-size: 0.75em;
-		line-height: 1;
-	}
-	.plan li.done .box {
-		background: var(--accent-fill, var(--accent));
-		border-color: var(--accent);
-		color: var(--on-accent);
-	}
-	.plan-card {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-		padding: 10px 12px;
-		border-radius: 14px;
-		border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
-		background: linear-gradient(
-			120deg,
-			color-mix(in srgb, var(--accent) 16%, var(--surface)),
-			color-mix(in srgb, var(--surface) 80%, transparent)
-		);
-	}
-	.plan-ic {
-		font-size: 20px;
-		flex: none;
-	}
-	.plan-text {
-		flex: 1;
-		min-width: 0;
-	}
-	.learn.snap {
-		border-color: color-mix(in srgb, var(--ok, var(--accent)) 40%, var(--border));
-	}
-	.edited pre {
-		white-space: pre-wrap;
-		font-size: var(--text-sm);
-		max-height: 240px;
-		overflow: auto;
-	}
-	.say {
-		margin-top: 4px;
-		width: 30px;
-		height: 30px;
-		border-radius: 50%;
-		border: 0;
-		display: grid;
-		place-items: center;
-		background: none;
-		color: var(--muted);
-		cursor: pointer;
-	}
-	.say:hover,
-	.say.on {
-		background: color-mix(in srgb, var(--text) 8%, transparent);
-		color: var(--accent);
-	}
+	/* PLAN 68: the chat in the design language of TitanOS – at most 760 px
+	   wide in the middle, the person's message a bubble on the right tinted
+	   with the accent, the answer plain text, steps one line, tables in a
+	   card, the approval one banner with a warning frame. */
 	.messages {
 		flex: 1;
 		overflow-y: auto;
-		padding: var(--space-4) var(--space-5);
+		padding: 20px 24px;
 		overscroll-behavior: contain;
 	}
 	.column {
-		max-width: 800px;
+		max-width: 760px;
 		margin: 0 auto;
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-3);
+		gap: 12px;
 	}
 	.user {
-		align-self: flex-end;
+		display: flex;
+		justify-content: flex-end;
+		margin: 4px 0;
+	}
+	.user span {
 		max-width: 78%;
 		padding: 9px 14px;
-		border-radius: 18px 18px 5px 18px;
-		background: var(--ag-gradient, var(--accent));
-		color: var(--on-accent);
+		border-radius: 14px 14px 4px 14px;
+		background: color-mix(in srgb, var(--accent) 24%, var(--surface));
+		color: var(--text);
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
-	}
-	:global(.agent[data-style='clean']) .user {
-		background: var(--chip);
-		color: var(--text);
-		border: 1px solid var(--border);
-	}
-	:global(.agent[data-style='compact']) .user {
-		background: transparent;
-		color: var(--text);
-		border-left: 3px solid var(--accent);
-		border-radius: 0;
-		align-self: stretch;
-		max-width: none;
-		padding: 2px 10px;
-	}
-	:global(.agent[data-style='compact']) .column {
-		gap: var(--space-2);
 	}
 	.answer {
 		line-height: 1.55;
 		overflow-wrap: anywhere;
 	}
 	.md :global(p) {
-		margin: 0 0 0.5em;
+		margin: 0 0 0.6em;
 	}
-	.md :global(table) {
-		border-collapse: collapse;
-		width: 100%;
-		font-size: var(--text-base);
-		margin: 4px 0;
-		display: block;
+	.md :global(.table) {
+		margin: 4px 0 12px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-tile);
+		background: var(--surface);
 		overflow-x: auto;
 	}
-	.md :global(th),
-	.md :global(td) {
-		text-align: left;
-		padding: 5px 8px;
-		border-bottom: 1px solid var(--border);
+	.md :global(.table table) {
+		width: 100%;
+		overflow-wrap: normal;
 	}
-	.md :global(th) {
+	.md :global(.table :is(th, td)) {
+		padding: 9px 14px;
+		font-size: var(--text-base);
+	}
+	.md :global(.table th) {
+		font-size: var(--text-sm);
+		font-weight: 600;
+	}
+	.md :global(.table tr:last-child td) {
+		border-bottom: 0;
+	}
+	.md :global(.table td:first-child) {
 		color: var(--muted);
-		font-weight: 500;
 	}
 	.md :global(code),
 	code {
@@ -505,7 +538,7 @@
 	}
 	.md :global(ul),
 	.md :global(ol) {
-		margin: 0 0 0.5em;
+		margin: 0 0 0.6em;
 		padding-left: 1.3em;
 	}
 	.md :global(h1),
@@ -514,40 +547,75 @@
 		font-size: var(--text-md);
 		margin: 0.6em 0 0.3em;
 	}
-	.thinking,
+	/* Steps and thoughts of a turn: one line, opened on demand. */
 	.steps {
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
-		font-size: var(--text-base);
+		background: var(--surface);
+		font-size: var(--text-sm);
 		overflow: hidden;
 	}
-	/* Every surface follows "Glasstärke" (PLAN 56), on the phone too. */
-	.thinking,
-	.steps,
-	.file,
-	.plan {
-		background: color-mix(in srgb, var(--surface) calc(var(--ag-alpha, 0.55) * 100%), transparent);
-		-webkit-backdrop-filter: blur(18px) saturate(160%);
-		backdrop-filter: blur(18px) saturate(160%);
+	.steps > summary {
+		list-style: none;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		min-height: 34px;
+		padding: 6px 12px;
+		color: var(--muted);
+		min-width: 0;
+	}
+	.steps > summary::-webkit-details-marker {
+		display: none;
+	}
+	.steps > summary:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+	}
+	.count {
+		flex: none;
+		color: var(--text);
+	}
+	.gist {
+		min-width: 0;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.toggle {
+		margin-left: auto;
+		flex: none;
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding-left: 8px;
+	}
+	.steps .hide,
+	.steps[open] .show {
+		display: none;
+	}
+	.steps[open] .hide {
+		display: inline;
+	}
+	.steps[open] .toggle :global(svg) {
+		transform: rotate(180deg);
 	}
 	.thinking {
-		border-style: dashed;
+		padding: 8px 12px;
+		border-top: 1px solid var(--border);
+	}
+	.thinking strong {
+		font-weight: 600;
+		font-size: var(--text-xs);
+		color: var(--muted);
 	}
 	.thinking p {
-		margin: 0;
-		padding: 8px 12px;
+		margin: 2px 0 0;
 		color: var(--muted);
 		white-space: pre-wrap;
 		max-height: 260px;
 		overflow-y: auto;
-	}
-	summary {
-		cursor: pointer;
-		padding: 6px 12px;
-		color: var(--muted);
-		display: flex;
-		align-items: center;
-		gap: 8px;
 	}
 	.step {
 		display: flex;
@@ -560,7 +628,7 @@
 	.undo {
 		border: 1px solid var(--border);
 		background: none;
-		color: var(--accent);
+		color: var(--text);
 		border-radius: 999px;
 		padding: 1px 8px;
 		font: inherit;
@@ -585,45 +653,93 @@
 	}
 	.choices {
 		display: flex;
-		gap: var(--space-2);
+		gap: 8px;
 		flex-wrap: wrap;
 		margin-top: 6px;
 	}
+	/* The small row under an answer: Vorlesen, Kopieren, Gemerkt. */
+	.acts {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 4px 14px;
+		margin-top: 2px;
+		font-size: var(--text-sm);
+		color: var(--muted);
+	}
+	.act {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		min-height: 28px;
+		padding: 0 4px;
+		border: 0;
+		border-radius: var(--radius-small, 6px);
+		background: none;
+		color: var(--muted);
+		font: inherit;
+		cursor: pointer;
+	}
+	.act:hover,
+	.act.on {
+		color: var(--text);
+		background: color-mix(in srgb, var(--text) 7%, transparent);
+	}
+	.act:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
+	}
+	.learned {
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
 	.learn {
 		align-self: flex-start;
-		font-size: var(--text-xs);
-		padding: 4px 10px;
+		font-size: var(--text-sm);
+		padding: 3px 10px;
 		border-radius: 999px;
-		border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-		background: color-mix(in srgb, var(--accent) 12%, transparent);
+		background: var(--chip);
+		color: var(--text);
 	}
 	.note {
 		font-size: var(--text-base);
 		color: var(--muted);
 		display: flex;
 		align-items: center;
-		gap: var(--space-2);
+		gap: 8px;
 		flex-wrap: wrap;
 	}
 	.note.bad {
 		color: var(--warn-text);
 	}
+	.note summary {
+		cursor: pointer;
+	}
+	.edited pre {
+		white-space: pre-wrap;
+		font-size: var(--text-sm);
+		max-height: 240px;
+		overflow: auto;
+	}
 	.file {
 		display: flex;
 		align-items: center;
-		gap: var(--space-3);
-		padding: var(--space-3);
+		gap: 12px;
+		padding: 12px 16px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-tile);
+		background: var(--surface);
 		text-decoration: none;
 		color: var(--text);
 	}
 	.file .doc {
-		width: 38px;
-		height: 44px;
+		width: 36px;
+		height: 42px;
 		border-radius: var(--radius-small);
 		display: grid;
 		place-items: center;
-		background: var(--accent);
-		color: var(--on-accent);
+		background: var(--chip);
+		color: var(--text);
 		font-weight: 700;
 		font-size: var(--text-xs);
 		flex: none;
@@ -639,6 +755,71 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+	.plan {
+		border: 1px solid var(--border);
+		border-radius: var(--radius-tile);
+		background: var(--surface);
+		padding: 10px 16px;
+	}
+	.plan header {
+		display: flex;
+		justify-content: space-between;
+		gap: 8px;
+		flex-wrap: wrap;
+		font-size: var(--text-base);
+	}
+	.plan ol {
+		list-style: none;
+		margin: 6px 0 0;
+		padding: 0;
+		display: grid;
+		gap: 4px;
+	}
+	.plan li {
+		display: flex;
+		gap: 8px;
+		align-items: flex-start;
+		font-size: var(--text-base);
+		overflow-wrap: anywhere;
+	}
+	.plan li.done > span:nth-child(2) {
+		color: var(--muted);
+		text-decoration: line-through;
+	}
+	.plan .box {
+		flex: none;
+		width: 1.1em;
+		height: 1.1em;
+		margin-top: 0.15em;
+		border: 1.5px solid var(--muted);
+		border-radius: 4px;
+		display: inline-grid;
+		place-items: center;
+		font-size: 0.75em;
+		line-height: 1;
+	}
+	.plan li.done .box {
+		background: var(--accent);
+		border-color: var(--accent);
+		color: var(--on-accent);
+	}
+	.plan-card {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		padding: 10px 16px;
+		border-radius: var(--radius-tile);
+		border: 1px solid var(--border);
+		background: var(--surface);
+	}
+	.plan-ic {
+		font-size: 20px;
+		flex: none;
+	}
+	.plan-text {
+		flex: 1;
+		min-width: 0;
 	}
 	.live-step {
 		display: flex;
@@ -663,27 +844,12 @@
 	}
 	.shimmer {
 		margin: 0;
-		font-weight: 500;
-		background: linear-gradient(
-			90deg,
-			var(--muted) 0%,
-			var(--text) 40%,
-			var(--accent) 50%,
-			var(--text) 60%,
-			var(--muted) 100%
-		);
-		background-size: 200% 100%;
-		-webkit-background-clip: text;
-		background-clip: text;
-		color: transparent;
-		animation: shimmer 2.2s linear infinite;
+		color: var(--muted);
+		animation: pulse 1.6s ease-in-out infinite;
 	}
-	@keyframes shimmer {
-		from {
-			background-position: 100% 0;
-		}
-		to {
-			background-position: -100% 0;
+	@keyframes pulse {
+		50% {
+			opacity: 0.55;
 		}
 	}
 	:global(.agent.calm) .shimmer,
@@ -696,57 +862,93 @@
 			animation: none;
 		}
 	}
+	/* The step that waits for approval: one banner card. */
 	.approval {
 		border: 1px solid var(--warn-border);
-		background: var(--warn-bg);
-		border-radius: var(--radius-ctl);
-		padding: var(--space-3);
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
+		border-radius: var(--radius-tile);
+		background: var(--surface);
+		overflow: hidden;
 	}
-	.approval .row {
+	.ask {
 		display: flex;
 		align-items: center;
-		gap: var(--space-2);
 		flex-wrap: wrap;
+		gap: 10px 12px;
+		padding: 12px 16px;
 	}
-	.approval .what {
-		margin: 0;
+	.ask-ic {
+		flex: none;
+		font-size: 16px;
+		color: var(--warn-text);
 	}
-	.approval dl {
+	.ask-text {
+		flex: 1 1 16rem;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+	.ask-text strong {
+		font-weight: 600;
+		overflow-wrap: anywhere;
+	}
+	.ask-text span {
+		color: var(--muted);
+		font-size: var(--text-sm);
+	}
+	.ask-acts {
+		display: flex;
+		gap: 8px;
+		margin-left: auto;
+	}
+	.ask-details {
+		border-top: 1px solid var(--border);
+		font-size: var(--text-sm);
+	}
+	.ask-details summary {
+		cursor: pointer;
+		padding: 6px 16px;
+		color: var(--muted);
+	}
+	.ask-details dl {
 		display: grid;
 		grid-template-columns: max-content 1fr;
 		gap: 2px 12px;
 		margin: 0;
-		font-size: var(--text-sm);
+		padding: 0 16px 10px;
 	}
-	.approval dt {
+	.ask-details dt {
 		color: var(--muted);
 	}
-	.approval dd {
+	.ask-details dd {
 		margin: 0;
 		overflow-wrap: anywhere;
 	}
-	.approval pre {
-		margin: 0;
+	.ask-details pre {
+		margin: 0 16px 12px;
 		max-height: 160px;
 		overflow: auto;
 		background: var(--bg);
 		padding: 8px;
 		border-radius: var(--radius-small);
-		font-size: var(--text-sm);
 		white-space: pre-wrap;
-	}
-	.small {
-		font-size: var(--text-xs);
 	}
 	@media (max-width: 760px) {
 		.messages {
-			padding: var(--space-3);
+			padding: 12px 14px;
 		}
-		.user {
+		.user span {
 			max-width: 86%;
+		}
+		.gist {
+			display: none;
+		}
+		.md :global(.table :is(th, td)) {
+			padding: 8px 8px;
+		}
+		.ask-acts {
+			width: 100%;
+			justify-content: flex-end;
 		}
 	}
 </style>

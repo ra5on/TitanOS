@@ -205,9 +205,11 @@ type Server struct {
 	limiter   *auth.Limiter
 	prefs     *preferences
 	loginLook loginLook
-	appIcon   appIcons
-	dav       davState
-	mcp       mcpState
+	// loginAccounts limits and checks the account list of the login page.
+	loginAccounts loginAccountsState
+	appIcon       appIcons
+	dav           davState
+	mcp           mcpState
 	// migration is the move from Docker versions to web apps (PLAN 66).
 	migration webappMigration
 	haStore   haStorageState

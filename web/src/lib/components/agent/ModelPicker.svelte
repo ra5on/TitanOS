@@ -21,7 +21,7 @@
 		models?: Model[];
 		model?: string;
 		think?: string;
-		/** The smaller form below a chat title. */
+		/** Kept for callers; the picker is one chip in every place (PLAN 68). */
 		small?: boolean;
 		calm?: boolean;
 	} = $props();
@@ -57,18 +57,16 @@
 	const ms = $derived(calm ? 0 : 220);
 	let trigger = $state<HTMLElement>();
 	let at = $state({ top: 0, left: 0 });
-	let accent = $state('');
 	function toggle() {
 		if (!open && trigger) {
 			const r = trigger.getBoundingClientRect();
-			// The agent's own accent (Darstellung) lives on .agent, not on <body>.
-			accent = getComputedStyle(trigger).getPropertyValue('--accent').trim();
-			at = { top: r.bottom + 8, left: r.left + r.width / 2 };
+			// Centered below the chip, but never past the edge of the window.
+			const mid = r.left + r.width / 2;
+			at = { top: r.bottom + 8, left: Math.max(172, Math.min(mid, innerWidth - 172)) };
 		}
 		open = !open;
 	}
-	// The panel lives at the end of the page: glass surfaces around the
-	// button would otherwise hold the fixed sheet inside them.
+	// The panel lives at the end of the page, above everything else.
 	function portal(node: HTMLElement) {
 		document.body.appendChild(node);
 		return { destroy: () => node.remove() };
@@ -92,19 +90,13 @@
 			bind:this={trigger}
 			onclick={toggle}
 			><strong>{model || '–'}</strong>{#if think}<span>· {levelLabel(think, i18n.locale)}</span
-				>{/if}<Icon name="chevronDown" size={small ? 12 : 16} /></button
+				>{/if}<Icon name="chevronDown" size={14} /></button
 		>
 	{:else}
 		<span class="trigger static"><strong>{model || '–'}</strong></span>
 	{/if}
 	{#if open}
-		<div
-			class="layer"
-			use:portal
-			style:--top="{at.top}px"
-			style:--left="{at.left}px"
-			style:--accent={accent || undefined}
-		>
+		<div class="layer" use:portal style:--top="{at.top}px" style:--left="{at.left}px">
 			<button
 				type="button"
 				class="scrim"
@@ -113,7 +105,7 @@
 				onclick={() => (open = false)}
 			></button>
 			<div
-				class="panel"
+				class="panel floating-menu"
 				role="dialog"
 				aria-label={t('agent.modelPick')}
 				transition:fly={phone ? { y: 320, duration: ms, opacity: 1 } : { y: -8, duration: ms }}
@@ -169,32 +161,37 @@
 		justify-content: center;
 		max-width: 100%;
 	}
+	/* PLAN 68: a chip "gpt-oss:20b · Mittel ▾" in the head of the chat. */
 	.trigger {
 		display: inline-flex;
 		align-items: center;
 		gap: 5px;
 		max-width: 100%;
-		padding: 6px 12px;
+		min-height: 30px;
+		padding: 4px 10px;
 		border-radius: 999px;
 		border: 0;
-		background: none;
+		background: var(--chip);
 		color: var(--text);
 		font: inherit;
-		font-size: 15px;
+		font-size: var(--text-sm);
 		cursor: pointer;
 		white-space: nowrap;
-		transition: background 0.15s ease;
 	}
 	.trigger:hover:not(.static) {
-		background: color-mix(in srgb, var(--text) 7%, transparent);
+		background: color-mix(in srgb, var(--text) 12%, var(--chip));
+	}
+	.trigger:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
 	}
 	.trigger strong {
-		font-weight: 600;
+		font-weight: 500;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
 	.trigger span {
-		color: var(--muted);
+		color: var(--text);
 	}
 	.trigger :global(svg) {
 		color: var(--muted);
@@ -202,13 +199,6 @@
 	}
 	.static {
 		cursor: default;
-	}
-	.small .trigger {
-		font-size: var(--text-xs);
-		padding: 1px 6px;
-	}
-	.small .trigger strong {
-		font-weight: 500;
 	}
 	.scrim {
 		position: fixed;
@@ -229,12 +219,6 @@
 		max-height: min(70dvh, calc(100dvh - var(--top) - 16px));
 		overflow-y: auto;
 		padding: 8px 12px 10px;
-		border-radius: 18px;
-		border: 1px solid var(--glass-border, var(--border));
-		background: color-mix(in srgb, var(--surface) 90%, transparent);
-		-webkit-backdrop-filter: blur(28px) saturate(170%);
-		backdrop-filter: blur(28px) saturate(170%);
-		box-shadow: 0 24px 60px -20px rgb(0 0 0 / 0.6);
 		text-align: left;
 	}
 	h3 {
@@ -288,8 +272,6 @@
 	@media (max-width: 760px) {
 		.scrim {
 			background: rgb(0 0 0 / 0.45);
-			-webkit-backdrop-filter: blur(3px);
-			backdrop-filter: blur(3px);
 		}
 		.panel {
 			position: fixed;

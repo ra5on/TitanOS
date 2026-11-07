@@ -424,6 +424,7 @@ input[type='checkbox'] {
 .chip {
 	display: inline-flex;
 	align-items: center;
+	gap: 4px;
 	padding: 2px var(--space-2);
 	background: var(--chip);
 	border: 1px solid var(--border);
@@ -903,4 +904,245 @@ main.readable :target {
 	font-size: var(--text-sm);
 	font-weight: 500;
 	color: var(--muted);
+}
+
+/* PLAN 67: one design language for every window and the phone's program
+   view. Left the program's areas (side bar of the window), on top tabs only
+   for parts of a page, below cards: a header row (title, its actions on the
+   right), rows "label (+ hint) left, control right", a footer row for the
+   card's own actions. 16 px between cards, 11–12 px row padding. */
+:is(main.in-window, main.phone-page) {
+	display: flex;
+	flex-direction: column;
+	gap: var(--gap);
+}
+:is(main.in-window, main.phone-page) > * {
+	min-width: 0;
+}
+/* Tabs sit under the tool bar (or the intro) and directly above the cards. */
+:is(main.in-window, main.phone-page) > .tabs {
+	margin-bottom: 0;
+}
+.tile.ui-card {
+	display: flex;
+	flex-direction: column;
+	padding: 0;
+	gap: 0;
+	min-width: 0;
+	overflow: hidden;
+}
+.card-head {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px 12px;
+	min-height: 48px;
+	padding: 10px 16px;
+	border-bottom: 1px solid var(--panel-border, var(--border));
+}
+.card-head > :is(h2, h3) {
+	margin: 0;
+	font-size: var(--text-md);
+	font-weight: 600;
+	color: var(--text);
+	letter-spacing: 0;
+	text-transform: none;
+}
+.card-head .card-meta {
+	color: var(--muted);
+	font-size: var(--text-base);
+}
+.card-head .card-tools {
+	margin-left: auto;
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.card-head .card-tools .btn,
+.card-foot .btn,
+.set-row .btn {
+	min-height: 32px;
+	font-size: var(--text-base);
+	padding: 0 12px;
+}
+.card-body {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 16px;
+	min-width: 0;
+}
+.set-row {
+	display: grid;
+	grid-template-columns: minmax(10rem, 36%) minmax(0, 1fr);
+	align-items: center;
+	gap: 6px 16px;
+	padding: 12px 16px;
+	min-height: 48px;
+	border-top: 1px solid var(--panel-border, var(--border));
+	min-width: 0;
+}
+.card-head + .set-row,
+.set-row:first-child {
+	border-top: 0;
+}
+.set-label {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+	font-size: var(--text-md);
+	color: var(--text);
+}
+.set-hint {
+	color: var(--muted);
+	font-size: var(--text-sm);
+	font-weight: 400;
+}
+.set-control {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+	min-width: 0;
+}
+.set-control.end {
+	justify-content: flex-end;
+}
+.card-foot {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+	padding: 12px 16px;
+	border-top: 1px solid var(--panel-border, var(--border));
+}
+.card-foot > .grow {
+	flex: 1 1 14rem;
+	min-width: 0;
+	color: var(--muted);
+	font-size: var(--text-base);
+}
+/* A banner card: a sentence with its action on the right. */
+.tile.ui-card.banner {
+	flex-direction: row;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 12px 16px;
+	padding: 14px 16px;
+}
+.banner .banner-text {
+	flex: 1 1 18rem;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.banner .banner-text strong {
+	font-size: var(--text-md);
+}
+.banner .banner-text span {
+	color: var(--muted);
+	font-size: var(--text-base);
+}
+.banner .banner-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+/* Tables inside a card run edge to edge. */
+.tile.ui-card > .table-wrap,
+.tile.ui-card > table {
+	width: 100%;
+}
+.tile.ui-card .data-table :is(th, td):first-child {
+	padding-left: 16px;
+}
+.tile.ui-card .data-table :is(th, td):last-child {
+	padding-right: 16px;
+}
+.tile.ui-card .data-table tr:last-child td {
+	border-bottom: 0;
+}
+.data-table td.num,
+.data-table th.num {
+	white-space: nowrap;
+}
+.data-table .sub {
+	display: block;
+	color: var(--muted);
+	font-size: var(--text-sm);
+}
+/* Two columns of rows (sliders) where the window is wide enough. */
+.set-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	column-gap: 32px;
+	padding: 4px 16px;
+}
+.set-grid > .set-row {
+	grid-template-columns: minmax(0, 1fr);
+	padding: 12px 0;
+	border-top: 0;
+}
+@media (max-width: 760px) {
+	.set-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+/* A narrow window or the phone: label above its control. */
+@media (max-width: 639px) {
+	.set-row {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	/* A row with only a button (or a switch) keeps it on the right. */
+	.set-row:has(> .set-control.end) {
+		grid-template-columns: minmax(0, 1fr) auto;
+	}
+}
+/* A switch for on/off settings in rows (a checkbox with role="switch"). The
+   state is told by the knob's place and the filled track, not only colour. */
+input.switch {
+	appearance: none;
+	-webkit-appearance: none;
+	position: relative;
+	flex: none;
+	width: 40px;
+	height: 22px;
+	margin: 0;
+	border-radius: 999px;
+	background: var(--track, var(--border));
+	border: 1px solid var(--border);
+	cursor: pointer;
+	transition: background 0.15s;
+}
+input.switch::after {
+	content: '';
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	background: var(--muted);
+	transition: transform 0.15s;
+}
+input.switch:checked {
+	background: var(--accent);
+	border-color: transparent;
+}
+input.switch:checked::after {
+	transform: translateX(18px);
+	background: var(--on-accent, #fff);
+}
+input.switch:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+@media (prefers-reduced-motion: reduce) {
+	input.switch,
+	input.switch::after {
+		transition: none;
+	}
 }

@@ -91,7 +91,7 @@
 		// Keys of the desktop (Alt+Q, Alt+W, Alt+arrows, Ctrl+Space) also work inside a window.
 		const key = (event: KeyboardEvent) => {
 			const desk =
-				(event.altKey && !event.ctrlKey && !event.metaKey && /^(q|w|m|arrow)/i.test(event.key)) ||
+				(event.altKey && !event.ctrlKey && !event.metaKey && /^(q|w|m|k|arrow)/i.test(event.key)) ||
 				((event.ctrlKey || event.metaKey) && event.code === 'Space');
 			if (!desk) return;
 			event.preventDefault();

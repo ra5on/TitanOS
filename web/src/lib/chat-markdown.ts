@@ -67,7 +67,7 @@ function table(lines: string[]): string {
 					.join('')}</tr>`,
 		)
 		.join('');
-	return `<div class="table"><table><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table></div>`;
+	return `<div class="table table-wrap"><table class="data-table"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function block(paragraph: string): string {

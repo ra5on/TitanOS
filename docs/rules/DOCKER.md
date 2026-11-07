@@ -11,6 +11,7 @@ Bereich: Container bearbeiten, Übersicht, App-Store/Katalog, Docker-Layout.
 - Umgesetzt: Übersicht mit Karten, Compose-Stacks, Suche, Filter, Start/Stopp/Neustart, Logs, Entfernen sowie „Compose importieren“. Entfernen behält ab Werk den Datenordner; wahlweise (Häkchen „Auch die Daten der App löschen“, dann nur noch die Rückfrage, kein Eintippen des Namens) löscht es auch `/mnt/<volume>/appdata/<name>`, die Docker-Volumes des Projekts und nicht anderweitig genutzte Images, damit eine Neuinstallation frisch beginnt (`DELETE /api/v1/docker/apps/<name>?deleteData=<name>`). Apps ohne Container (Einrichtung gescheitert) und fehlgeschlagene Einrichtungen zeigt die Docker-Seite mit Starten/Erneut versuchen, Bearbeiten und Entfernen. Eine importierte App liegt in `/config/apps/<name>/compose.yaml`; relative Pfade der Compose-Datei zeigen auf `/mnt/<volume>/appdata/<name>` (`--project-directory`), nie auf den Stick.
 - titand spricht die Docker-API direkt über den Unix-Socket (nur Standardbibliothek) und ruft für Apps `docker compose` auf.
 - Umgesetzt: Update-Hinweise (Digest des Tags in der Registry gegen das lokale Image, alle 12 Stunden und per Knopf), „Alle aktualisieren“, WebUI-Link über das Label `titanos.webui` (Port, Port/Pfad oder URL), Ports als Links auch in Stack-Zeilen.
+- **Images, Volumes, Aufräumen** (seit 0.64.0, PLAN 67-1, `docker/resources.go`, `api/docker_resources.go`, `docs/DOCKER-CLEANUP.md`): Listen mit Größe und „benutzt von“ (auch gestoppte Container), einzeln löschen und bereinigen, Build-Cache leeren, Platzübersicht `GET /api/v1/docker/df`. Netzwerke: alle Netze der Engine mit Art (`system`, `lan`, `titanos`, `app`, `user`), einfache Bridge-Netze anlegen (Subnetz freiwillig, ohne Überschneidung) und ungenutzte `user`-Netze löschen/bereinigen; LAN-Netze behalten ihre Routen. Nie die Prune-Endpunkte der Engine für Images/Volumes und nie force; geschützt sind Images der Fernansicht, das Sandbox-Image des KI-Agenten und Volumes von TitanOS (`titanos-…`, Label `titanos.…`). Volume-Bereinigung ab Werk nur anonyme Volumes und nie Volumes gespeicherter Apps; einzelnes Volume löschen nur nach Rückfrage in der Oberfläche (Datenverlust, nichts eintippen). Während App-Einrichtung/-Update oder Anwendungssicherung nichts löschen (`app_busy`). Nur Administratoren, nicht für Tokens/MCP/Agent.
 - Umgesetzt: Container-Konsole (xterm.js, WebSocket ↔ `docker exec`), nur für Besitzer/Administratoren mit bestehender Anmeldung, ohne zweite Passwortabfrage, Ende nach der unter Einstellungen › Zugang › Konsolen gewählten Zeit ohne Eingabe (5–120 Minuten oder „Nie“, ab Werk 15, PLAN 62-3), im Protokoll vermerkt. Im Desktop-Modus öffnet sie im Terminal-Fenster (seit 0.59.1).
 - Container mit dem Label `titanos.sandbox` sind die Wegwerf-Sandboxen des KI-Agenten (`code_run`, PLAN 55, `docker/sandbox.go`). `client.containers` lässt sie aus: Sie erscheinen nirgends als App und werden nie aktualisiert, gestoppt oder gesichert. Nach einem Absturz von titand räumt der nächste Lauf übrig gebliebene weg.
 - Umgesetzt: Container-Editor unter `/docker/apps/<name>` (Formular ↔ Compose auf demselben YAML-Text, Kommentare bleiben erhalten): Image, Autostart/Neustart-Richtlinie, Netzwerk, WebUI, Privilegiert, Pfade, Ports, Variablen, Labels mit Live-Prüfungen.
@@ -52,14 +53,16 @@ Bereich: Container bearbeiten, Übersicht, App-Store/Katalog, Docker-Layout.
 - „Übernehmen“ erstellt den Container neu; Daten in den Pfaden bleiben erhalten.
 - Kopfbereich mit Status, CPU/RAM und Schnellaktionen: WebUI öffnen, Logs, Konsole, Neustarten.
 
-**Docker-Seite: Kopfbereich** (Entscheidung des Projektinhabers vom 1.11.2026, PLAN 22; die Container-Liste bleibt unverändert)
-- Eine Kopfzeile: „Docker“, rechts Suche, Liste/Karten als zwei Symbole, Zahnrad, „App installieren“ mit Pfeil.
-- Statuszeile darunter = Filter: „Alle n · n laufen · n gestoppt · n Updates“ (Updates nur, wenn es welche gibt), rechts klein CPU/RAM, „Updates geprüft …“ und Symbol „Nach Updates suchen“.
-- Zahnrad-Menü: Einstellungen, LAN-Netze, Automatische Updates, Seite anpassen. Pfeil-Menü: aus dem App-Katalog, Compose-Datei importieren, eigener Container.
-- Unter der Liste: Alle starten, Alle stoppen (einfache Bestätigung), Nach Updates suchen, Alle aktualisieren (n); daneben Docker-Version und Volume. Start/Stopp laufen nacheinander über die vorhandenen Container-Aktionen.
+**Docker-Seite: Tabelle** (Entscheidung des Projektinhabers vom 7.11.2026, PLAN 67, Entwurf `out/proposal/container-64/container-tabelle.png`; ersetzt Kopfbereich, Liste und Karten von PLAN 22/Docker-Layout, deren Ansichten gelöscht sind: „den Rest, den wir als Ansicht hatten, kannst du alles löschen“)
+- Werkzeugleiste: Suche, Filter als Segmente „Alle n · Laufen n · Gestoppt n · Updates n“ (gezählt werden Zeilen = Apps; in schmalen Fenstern unter 760 px eine eigene Zeile darunter), „App installieren“ mit Pfeil-Menü (Katalog, Compose-Datei, eigener Container), ⋯ „Aktionen und Einstellungen“ (Alle starten, Alle stoppen … mit einfacher Bestätigung, Nach Updates suchen, Alle aktualisieren (n) …, Einstellungen, LAN-Netze, Automatische Updates …). Kein Ansichts-Umschalter mehr.
+- Vier Kennzahlen: Laufen „x von y“, CPU, Arbeitsspeicher, Updates („n verfügbar“/„keine“).
+- Eine Tabelle, eine Zeile je App (ein Compose-Stack ist eine Zeile): Name (App-Symbol bzw. Monogramm, Name als Link auf `/docker/apps/<name>`, darunter „n Container“ bzw. das Image), Zustand als Text mit eigener Form der Marke (Punkt = läuft, Ring = gestoppt, Dreieck = startet neu/Fehler; nie nur Farbe; Stack teilweise: „x von y laufen“), CPU mit kleinem Balken, RAM, Ports, Update-Abzeichen, Start/Stopp und ⋯. Ein Klick auf die Zeile öffnet die Seite der App; Rechtsklick öffnet das Menü.
+- Zeilen-Menü: Neu starten, Öffnen (Adressen des Hauptdienstes), In Fernansicht öffnen (nur im Fenster), Protokoll und Konsole je Container, Bearbeiten, Aktualisieren, Verknüpfungen (Stack), Im Tailnet veröffentlichen/herausnehmen, Entfernen ….
+- Darunter eine Zeile: Daten auf Volume …, Updates geprüft … mit „Nach Updates suchen“, Docker-Version.
+- Schmal (unter 900 px) wandert das Update-Abzeichen neben den Namen, unter 700 px CPU/RAM/Ports in die Unterzeile; am Handy (unter 640 px) jede App als gestapelte Zeile (Name mit Werten, Zustand, Knöpfe rechts). Prüfung `scripts/test-ui-docker-table.mjs`.
 
 **Docker-Übersicht und App-Store**
-- Container und Compose-Stacks als Liste oder Karten mit persönlicher Reihenfolge (eigene Anordnung oder A–Z): siehe „Docker-Layout“ unten. Das Layout bleibt auf dem bestätigten Stand (Karten: Entscheidung vom 4.11.2026); weitere Änderungen nur auf Auftrag. Beauftragt und umgesetzt (0.27.0): Belegt-Zustand und Aktionsfehler je Container/App statt seitenweit, Container-Menü in der Top-Layer (`ContextMenu.svelte`; öffnet sich per Klick aufs App-Symbol und per Rechtsklick auf Kachel/Karte wie bei den VMs, Wunsch des Projektinhabers vom 30.10.2026; Aufbau gleich auf Docker-Seite und Dashboard: Kopf mit Symbol und Name, Start/Stopp, Adressen mit Ziel, Logs, Konsole, Bearbeiten, Neustarten, Update, Entfernen; nur seitenspezifisch zusätzlich Tailnet bzw. Container anzeigen/Anheften), Logs mit Mitlaufen/Suche/Download, „Alle aktualisieren“ mit Auswahl je App (nacheinander `POST /docker/apps/{app}/update`), App-Editor mit Kopfbereich (Status, CPU/RAM, WebUI/Logs/Konsole/Neustarten) und haftender Leiste Übernehmen/Verwerfen.
+- Container und Compose-Stacks als Tabelle (siehe „Docker-Seite: Tabelle“ oben). Beauftragt und umgesetzt (0.27.0): Belegt-Zustand und Aktionsfehler je Container/App statt seitenweit, Container-Menü in der Top-Layer (`ContextMenu.svelte`; öffnet sich per Klick aufs App-Symbol und per Rechtsklick auf Kachel/Karte wie bei den VMs, Wunsch des Projektinhabers vom 30.10.2026; Aufbau gleich auf Docker-Seite und Dashboard: Kopf mit Symbol und Name, Start/Stopp, Adressen mit Ziel, Logs, Konsole, Bearbeiten, Neustarten, Update, Entfernen; nur seitenspezifisch zusätzlich Tailnet bzw. Container anzeigen/Anheften), Logs mit Mitlaufen/Suche/Download, „Alle aktualisieren“ mit Auswahl je App (nacheinander `POST /docker/apps/{app}/update`), App-Editor mit Kopfbereich (Status, CPU/RAM, WebUI/Logs/Konsole/Neustarten) und haftender Leiste Übernehmen/Verwerfen.
 - Suche/Filter, Status, CPU/RAM, Ports, WebUI, Start/Stopp und Schnellaktionen bleiben erhalten. Eigene Quellen werden täglich/per Knopf aktualisiert, externe Stores nur ausdrücklich hinzugefügt.
 - Installationspanel mit Herkunft je Feld, eigenen Variablen/Pfaden/Ports und erweiterten Rechtehinweisen. Daten auf dem ausgewählten Docker-Volume, niemals im RAM-Overlay; GPU-Nutzung ausdrücklich je Dienst.
 - Webadressen über `titanos.webui`, optional `titanos.public-url` und aktiven Tailscale-Host; `titanos.public-url` richtet keinen Tunnel ein. Siehe `docs/APP-LINKS.md` und `docs/NATIVE-APPS.md`.
@@ -68,93 +71,13 @@ Bereich: Container bearbeiten, Übersicht, App-Store/Katalog, Docker-Layout.
 - **Docker-Apps im Fenster** (PLAN 61, Entscheidungen des Projektinhabers vom 6.11.2026, `docs/APP-WINDOWS.md`; seit 0.61.0 zeigt das Fenster die App nicht mehr als iframe, sondern immer in der Fernansicht, siehe nächster Punkt; Rechte je Konto und die Browser-Schranke für Aufrufe über den HTTPS-Namen, z. B. „In eigenem Tab öffnen“, gelten weiter; die Rahmenfreigabe des Proxys läuft noch, hat aber keinen Verwender mehr, weil die Oberfläche als `frame-src` nur `'self'` erlaubt): Der App-Proxy entfernt `X-Frame-Options` und setzt `frame-ancestors` in jeder CSP-Richtlinie (Report-Only nur ersetzen, nie ergänzen) auf `'self'` und die https-Adressen der Weboberfläche (Hostname, `.local`, Namen von Let's Encrypt/eigenem Zertifikat/DDNS/Tailnet, Adressen des NAS), **nie `*`**, Liste nur aus dem RAM. Rechte je Konto im Paket `appaccess` (`/config/docker/app-access.json`, nur bei Änderung geschrieben; Besitzer/Admins immer, Benutzer nur mit Haken, ohne Eintrag „Neue Docker-Apps“, ab Werk nur Besitzer/Admins; jedes Mal gegen das aktuelle Konto geprüft). **Die Browser-Sperre gilt nur für Seitenaufrufe des Browsers** (`Sec-Fetch-Mode: navigate`, `Sec-Fetch-Dest` document/iframe/frame, ohne `Sec-Fetch-*` GET mit `Accept: text/html`); alles andere (Handy-/TV-Apps, fetch, WebSocket) geht unverändert durch, je App abschaltbar („Anmeldung im Browser prüfen“, ab Werk an). Eintritt nur über `/.titanos/enter` mit einmaligem 60-s-Token (HMAC, Schlüssel `/config/tls/app-gate.key`), danach Cookie `__Host-titanos_app` (12 h, Partitioned), das wie die TitanOS-Sitzung nie zur App gelangt. Ohne gültiges Cookie 403-Seite mit Link über `/api/v1/apps/{app}/open`; Links der Oberfläche auf HTTPS-Namen gehen über diese Route. Automatische HTTPS-Namen für alle Apps mit `titanos.webui`-Port („Automatisch für alle Apps mit WebUI“, ab Werk an, `noAuto` nur bei Änderung gespeichert): nur im RAM, aus Docker alle 30 s, eigene Routen gewinnen auch ausgeschaltet, nie auf den Stick. Routen `/api/v1/apps/access|mine|{app}/window|{app}/open` und `/api/v1/certs/…` nur für die Weboberfläche, nicht in `publicRoutes`/MCP.
 - **Fernansicht** (PLAN 62-4/63, Entscheidung des Projektinhabers vom 6.11.2026 „Immer Fernansicht“, seit 0.61.0, `docs/FERNANSICHT.md`, Pakete `viewer`, `docker/viewer.go`, `api/viewer.go`): Das App-Fenster zeigt die App aus einem Browser im Container `titanos-viewer-<hash>` (je Konto und App). Recht wie beim App-Fenster (`appaccess`, serverseitig, alle 3 s erneut zusammen mit Anmeldung/Sperre wie bei Konsolen; Trennzeit = Konsolen-Trennzeit); Löschen des Kontos (auch dessen Profile), Entfernen der App und Entzug des Rechts beenden auch wartende Ansichten. Eigene Objekte nur mit Label `titanos.viewer=1` **und** Namensanfang `titanos-viewer-` (Abbilder: `titanos.viewer.image=1` und `titanos.viewer.release`); titand fasst nie andere an, die Docker-Routen für Apps (und damit MCP/Agent) lehnen Viewer-Container ab, Compose-Dateien mit Netzen `titanos-viewer…` werden abgelehnt. Netz: je Ansicht ein internes Netz `titanos-viewer-<hash>` mit Bridge `tvw<hex>`, nur dieser Viewer und der Web-Container der App (Alias `titanos-viewer-attached`, nur damit wieder abgehängt); die nft-Tabelle `inet titanos_viewer` verwirft neue Verbindungen von `tvw*` zum Host, unabhängig von der Firewall. Apps im Host-Netz (oder `container:`/`service:`) gehen nicht (`viewer_hostnet`, Ausweg „In eigenem Tab“). Container: UID 1000, Wurzel nur lesbar, nur tmpfs `/tmp` (begrenzt), Chromium-Richtlinie von titand nur lesbar eingebunden, `CapDrop ALL`, `no-new-privileges`, 1 GiB RAM, 512 Prozesse, 512 MiB `/dev/shm`, höchstens 2 CPUs mit Gewicht 512, Stoppen mit 10 s Zeit (Chromium schreibt Cookies), GPU nur mit Einstellung (Render-Knoten mit seiner Gruppe bzw. NVIDIA per CDI), nie ein Gerät, das gerade einer VM gehört. Neue Ansicht nur, wenn mit dem reservierten Limit aller Ansichten 700 MB frei bleiben und die Höchstzahl aus dem RAM nicht erreicht ist (`viewer_memory`), höchstens 4 je Konto (`viewer_limit`), Starts nacheinander. Abbild nur aus dem signierten Release der eigenen titand-Version (`manifest.json` → `viewer`), nie aus einer Registry; Profile und Abbild-Download unter `<volume>/.titanos/viewer/` (Eltern root 0700, Profilordner UID 1000 0700), nie auf dem Stick oder im RAM. Einstellungen `/config/viewer/settings.json` (optional, ältere titand ignorieren sie). Routen nur für die Weboberfläche, nicht in `publicRoutes`/MCP/Agent.
 
-## Docker-Layout
+## Docker-Layout (gespeicherte Einstellung)
 
-- Zwei Ansichten für Container und Compose-Stacks: Liste und Karten (Wechsel
-  über die zwei Symbole im Seitenkopf, sofort gespeichert). „Minimal“ und
-  Kachelbreiten gibt es seit 553de39 nicht mehr; gespeicherte Breiten werden
-  ignoriert, ein gespeichertes „minimal“ wird zur Liste.
-- „Seite anpassen“ (Zahnrad-Menü) öffnet die Bearbeiten-Leiste über der
-  Übersicht: „Reihenfolge: Eigene Anordnung | A–Z“, in der Kartenansicht
-  „Kartengröße: S | M | L“, Image/CPU-Verlauf,
-  Standard wiederherstellen, Abbrechen, Layout speichern. Kein neues
-  Bedienelement im Seitenkopf. Suche und Filter sind beim Bearbeiten aus.
-  - **Eigene Anordnung:** In der Kartenansicht trägt jede Karte (Stack oder
-    Container) oben einen Griff „Verschieben“; Ziehen mit Maus oder Finger
-    ordnet live um (dieselbe Zeigerlogik wie der Dashboard-Editor,
-    `web/src/lib/pointer-drag.ts`; Escape, Fensterwechsel oder Abbruch legen die
-    Karte zurück). Tastatur: Griff fokussieren, Pfeiltasten verschieben um eine
-    Stelle, die neue Position wird angesagt. Der Karteninhalt ist beim
-    Bearbeiten nicht bedienbar (`inert`), geöffnete Stacks klappen zu. In der
-    Listenansicht bleibt die Reihenfolgeliste mit Griff und Pfeilknöpfen.
-    Beide ändern dieselbe gespeicherte Reihenfolge (`order`, `moveDockerGroup`).
-  - **A–Z:** sortiert nach Namen (Stacks unter den Containern einsortiert,
-    natürliche Zahlenfolge), in Liste und Karten; Ziehen und Griffe sind aus.
-    Die eigene Reihenfolge bleibt gespeichert und gilt nach dem Zurückschalten
-    wieder.
-- **Karten** (Entscheidung des Projektinhabers vom 4.11.2026, Variante B nach
-  Screenshot-Abstimmung): alle Karten gleich groß (die höchste Karte setzt die
-  Höhe für alle, auch für die Dienste eines geöffneten Stacks; Regel „keine
-  ungleichen Kacheln“), so viele nebeneinander wie passen, Handy eine Spalte
-  mit gleichem Verhalten. **Kartengröße** (Folgeentscheidung vom 4.11.2026):
-  ein Umschalter S/M/L für **alle Karten gemeinsam**, keine Einzelgrößen je
-  Karte. Er ändert nur die Mindestbreite (S 12,5rem, M 17rem wie bisher, L 23rem; S ergibt
-  auch neben der Seitenleisten-Navigation bei 1440 px eine Spalte mehr als M)
-  und damit, wie viele Karten nebeneinander stehen; alle bleiben gleich groß,
-  der Inhalt passt sich an (Container-Abfragen: schmale Karten verdichten die
-  Werte, die Laufzeit steht dann nur im Tooltip; der Update-Chip wird zum
-  Pfeil mit Tooltip und Screenreader-Text „Update“, damit der Name Platz hat;
-  Ports zeigen den ersten Port und „+n“ mit den übrigen im Tooltip, nie einen
-  angeschnittenen Chip; breitere Karten brechen Ports notfalls um). Stack- und Dienstkarten
-  folgen derselben Größe; am Handy immer eine Spalte. Ein
-  Compose-Stack ist **eine** Karte (`StackCard.svelte`), ab Werk zugeklappt:
-  Name mit Update-Chip, „Stack · n Dienste“, „x/y laufen“ (Punkt grün/gelb/grau
-  plus Text), Summe CPU/RAM der laufenden Dienste, gemeinsamer CPU-Verlauf
-  (Summe, am neuesten Wert ausgerichtet), die Dienste als Chips mit
-  Zustandspunkt und Update-Pfeil (Zustand auch als Screenreader-Text), Knopf
-  „Dienste“, Stack-Aktion „Alle starten“ (sobald ein Dienst steht) bzw. „Alle
-  stoppen“ (nacheinander über die Container-Aktionen, ohne Rückfrage wie beim
-  einzelnen Container), Links des Hauptdienstes (WebUI/Tailscale/öffentlich).
-  Symbol, ⋯ und Rechtsklick öffnen das Stack-Menü. **Geöffneter Stack**
-  (Entscheidung des Projektinhabers vom 4.11.2026, Variante C „Rahmen im
-  Raster“, nach Screenshots; vorher wirkten die Dienste in eigener Zeile mit
-  Überschrift abgetrennt): „Dienste“ öffnet einen getönten Rahmen über die
-  ganze Breite. Darin bleibt die Stack-Karte unverändert die erste Karte, die
-  Dienste folgen direkt daneben als normale Containerkarten auf denselben
-  Spalten wie alle anderen Karten (CSS-Subgrid, gleiche Breite und Höhe);
-  reichen die Spalten nicht, bricht die Zeile innerhalb des Rahmens um. Der
-  Rahmen beginnt eine eigene Zeile, die nächste Karte folgt darunter. „Dienste“
-  auf der Stack-Karte klappt wieder zu (`aria-controls` auf den Rahmen). Die
-  Dienstkarten heißen nach dem Dienst (`dockerName(…, 'service')`). Verworfen:
-  eigene Kopfzeile statt der Karte (A) und Dienste ohne Rahmen frei im Raster
-  (B, reißt am Zeilenende auseinander).
-  Prüfung `scripts/test-ui-docker-cards.mjs`, Screenshots unter
-  `out/validation/docker-karten/`.
-- **Liste als Kacheln** (Entscheidung des Projektinhabers vom 30.10.2026 nach
-  Screenshot-Abstimmung): jeder Container eine eigene abgerundete Kachel, alle
-  gleich breit (15rem) und 52 px hoch, so viele nebeneinander wie passen
-  (Handy: eine Spalte). App-Symbol mittig links, Name (mit Update-Chip) und
-  darunter nur CPU · RAM; der Zustand ist der Streifen links (Akzentfarbe =
-  läuft, grau = gestoppt; zusätzlich gedimmtes Symbol und „–“ statt Werten,
-  Screenreader-Text). Keine Knöpfe in der Kachel: Symbol oder Rechtsklick öffnet
-  das Menü (Start/Stopp oben, Adressen mit Ziel, Ports unten). Keine
-  Spaltenköpfe. Ein Stack ist eine Kachel derselben Form („laufend/gesamt · CPU ·
-  RAM“), sein Name klappt die Dienste als eigene Kacheln dahinter auf, sein
-  Symbol öffnet das Stack-Menü (Adressen, Probleme, Links festlegen, Tailnet,
-  Bearbeiten). Prüfung: `scripts/test-ui-dashboard-flow.mjs`,
-  Screenshots unter `out/validation/`.
-- **Karten einheitlich** (Plan 9d, 31.10.2026): Start/Stopp steht immer rechts
-  unten, Weblinks (WebUI, Tailscale, öffentlich) rechtsbündig darunter; die
-  Portzeile erscheint nur, wenn der Container Ports veröffentlicht, sonst bleibt
-  kein leerer Platz. Die Liste (Kacheln ohne Knöpfe und ohne Spaltenköpfe, siehe
-  oben) bleibt unverändert schlank; die frühere Tabelle mit Spalte „PORTS“ gibt
-  es nicht mehr (der Screenshot `docs/screenshots/current/docker.png` von 0.31.0
-  zeigt noch sie).
-- Pro Konto in `/config/users/<name>/docker.json`, über die vorhandene atomare
-  Preferences-API mit RAM-Cache (`view`, `sort` = `own`/`az`, `size` =
-  `s`/`m`/`l`, `order`, `details`, `primaryServices`; ältere Fassungen ohne
-  `sort` lesen als „Eigene Anordnung“, ohne `size` als M). Nur ausdrückliches Speichern schreibt, und nur bei einer
-  Änderung; unverändertes Speichern schließt die Leiste ohne Schreibzugriff.
-  Zuordnung über `app:<Compose-Projekt>` oder `container:<Name>`, nicht die
-  nach Updates wechselnde Container-ID. Temporär fehlende Einträge bleiben
-  gespeichert; neue Apps werden angehängt. Keine App wird durch Layouts versteckt.
+- Die Ansichten Liste/Karten, „Seite anpassen“, Kartengröße und das Verschieben
+  von Karten gibt es seit 0.64.0 nicht mehr (Tabelle, siehe oben). Die
+  Einstellung `docker` je Konto (`/config/users/<name>/docker.json`, Felder
+  `view`, `sort`, `size`, `order`, `details`, `primaryServices`) wird weiter
+  gelesen und beim Speichern unverändert mitgeschrieben, damit ältere
+  Versionen sie lesen können. Die Tabelle folgt der gespeicherten Reihenfolge
+  (`order` bzw. A–Z); geändert wird nur noch `primaryServices` („Verknüpfungen“
+  im Zeilen-Menü eines Stacks), nur bei einer Änderung.

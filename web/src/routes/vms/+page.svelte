@@ -43,7 +43,9 @@
 		type Problem,
 	} from './vm-page.ts';
 
-	type Tab = 'overview' | 'screen' | 'snapshots';
+	// PLAN 67: Übersicht · Bildschirm · Hardware · Snapshots · Zeitplan.
+	type Tab = 'overview' | 'screen' | 'hardware' | 'snapshots' | 'schedule';
+	const TABS: Tab[] = ['overview', 'screen', 'hardware', 'snapshots', 'schedule'];
 	type Filter = 'all' | 'running' | 'stopped';
 
 	let status = $state<VMStatus | null>(null);
@@ -117,7 +119,7 @@
 	const current = $derived(vms.find((vm) => vm.name === page.url.searchParams.get('vm')) ?? vms[0]);
 	const tab = $derived.by<Tab>(() => {
 		const asked = page.url.searchParams.get('tab');
-		if (asked === 'overview' || asked === 'screen' || asked === 'snapshots') return asked;
+		if (TABS.includes(asked as Tab)) return asked as Tab;
 		return current?.state === 'running' ? 'screen' : 'overview';
 	});
 	const link = (vm: VM, next?: Tab) =>
@@ -295,6 +297,88 @@
 	}
 	// PLAN 64: the phone's full-screen view keeps only the buttons in the bar.
 	const phone = $derived(phoneView());
+
+	// PLAN 67-1: the menu bar of the desktop acts on the VM shown.
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	const vmOn = () => current?.state === 'running';
+	const vmFree = () => !!current && !isBusy(current);
+	const screenOn = () => tab === 'screen' && vmOn() && !!screen;
+	let overview = $state<ReturnType<typeof Overview>>();
+	/** The CD drive lives in the hardware part: shown first if another tab is open. */
+	async function withOverview(act: (o: NonNullable<typeof overview>) => void) {
+		if (!current) return;
+		if (tab !== 'hardware' && tab !== 'overview') {
+			await goto(link(current, 'hardware'));
+			await tick();
+		}
+		if (overview) act(overview);
+	}
+	import { tick } from 'svelte';
+	registerMenuCommands({
+		'vms.start': {
+			run: () => current && act(current, 'start'),
+			enabled: () => vmFree() && !vmOn() && !!current && canStart(current),
+		},
+		'vms.shutdown': {
+			run: () => current && act(current, 'shutdown'),
+			enabled: () => vmFree() && vmOn(),
+		},
+		'vms.reboot': {
+			run: () => current && act(current, 'reboot'),
+			enabled: () => vmFree() && vmOn(),
+		},
+		'vms.poweroff': { run: () => open('poweroff'), enabled: () => vmFree() && vmOn() },
+		'vms.clone': { run: () => (cloning = current ?? null), enabled: () => vmFree() && !vmOn() },
+		'vms.remove': { run: () => open('remove'), enabled: vmFree },
+		'vms.edit': {
+			run: () => current && goto(`/vms/edit?vm=${encodeURIComponent(current.name)}`),
+			enabled: () => !!current,
+		},
+		...Object.fromEntries(
+			TABS.map((next) => [
+				'vms.tab.' + next,
+				{
+					run: () => current && goto(link(current, next)),
+					enabled: () => !!current,
+					checked: () => !!current && tab === next,
+				},
+			]),
+		),
+		'vms.cad': { run: () => screen?.ctrlAltDel(), enabled: screenOn },
+		// "Tasten senden ›": the key combinations of the screen's own key menu.
+		'vms.keys': {
+			items: () =>
+				screenOn()
+					? KEYS.map((k, i) => ({ id: String(i), text: keyLabel(k.label, i18n.locale) }))
+					: [],
+			run: (i) => {
+				const entry = KEYS[Number(i)];
+				if (entry) screen?.sendKeys(entry.keys);
+			},
+		},
+		'vms.isoInsert': { run: () => void withOverview((o) => o.insertMedium()), enabled: vmFree },
+		'vms.isoEject': {
+			run: () => void withOverview((o) => o.ejectMedium()),
+			enabled: () => vmFree() && !!current?.iso && !!current?.disks.length,
+		},
+		...Object.fromEntries(
+			MODES.map((entry) => [
+				'vms.mode.' + entry,
+				{
+					run: () => (mode = entry),
+					enabled: () => entry !== 'remote' || current?.template === 'linux',
+					checked: () => shownMode === entry,
+				},
+			]),
+		),
+		'vms.fullscreen': { run: () => void size.frame?.requestFullscreen(), enabled: screenOn },
+		'vms.screenshot': { run: saveScreenshot, enabled: screenOn },
+		'vms.paste': { run: () => open('paste'), enabled: screenOn },
+		'vms.serial': {
+			run: () => current && addVmConsole(current.name, vmLabel(current)),
+			enabled: vmOn,
+		},
+	});
 </script>
 
 <svelte:document
@@ -341,14 +425,28 @@
 {/snippet}
 
 {#snippet vmButtons(current: VM, tasks = true)}
+	<!-- PLAN 67: the main actions, the screen as the main one while the VM
+	     runs; the rest in "⋯" (what does not fit moves there too). -->
 	{#if tasks}<TasksPanel compact />{/if}
 	{#if current.state === 'running'}
 		<button
 			type="button"
-			class="btn btn-primary"
+			class="btn"
 			onclick={() => act(current, 'shutdown')}
-			disabled={isBusy(current)}>{t('vms.shutdown')}</button
+			disabled={isBusy(current)}><Icon name="power" size={15} />{t('vms.shutdown')}</button
 		>
+		<button
+			type="button"
+			class="btn"
+			onclick={() => act(current, 'reboot')}
+			disabled={isBusy(current)}><Icon name="restart" size={15} />{t('vms.reboot')}</button
+		>
+		{#if tab !== 'screen'}<a
+				class="btn btn-primary"
+				href={link(current, 'screen')}
+				data-sveltekit-replacestate
+				data-sveltekit-noscroll>{t('vms.openScreen')}</a
+			>{/if}
 	{:else}
 		<button
 			type="button"
@@ -357,24 +455,13 @@
 			disabled={isBusy(current) || !canStart(current)}>{t('vms.start')}</button
 		>
 	{/if}
-	<a
-		class="btn icon-btn"
-		href="/vms/edit?vm={encodeURIComponent(current.name)}"
-		aria-label={t('vms.edit')}
-		title={t('vms.edit')}><Icon name="edit" size={16} /></a
-	>
 	<Dropdown label={t('ui.more')} icon="more" align="right">
 		{#snippet children(close)}
+			<a role="menuitem" href="/vms/edit?vm={encodeURIComponent(current.name)}" onclick={close}
+				><Icon name="edit" size={16} /><span>{t('vms.edit')}</span></a
+			>
+			<hr />
 			{#if current.state === 'running'}
-				<button
-					type="button"
-					role="menuitem"
-					disabled={isBusy(current)}
-					onclick={() => {
-						close();
-						act(current, 'reboot');
-					}}><Icon name="restart" size={16} /><span>{t('vms.reboot')}</span></button
-				>
 				<button
 					type="button"
 					role="menuitem"
@@ -435,8 +522,9 @@
 		<!-- PLAN 64: in a window the title bar names the VM; state and buttons form the tool bar. -->
 		<PageHead title={vmLabel(current)} id="vm-title">
 			{#snippet actions()}
-				{#if !phone}{@render vmState(current)}<span class="spacer"></span>{/if}
-				{@render vmButtons(current, !phone)}
+				{#if !phone}<strong class="bar-name" aria-hidden="true">{vmLabel(current)}</strong
+					>{@render vmState(current)}<span class="spacer"></span>{/if}
+				{@render vmButtons(current, false)}
 			{/snippet}
 		</PageHead>
 		<!-- On the phone the bar keeps only the buttons; the state gets a row of its own. -->
@@ -489,7 +577,7 @@
 
 		<div class="command-bar">
 			<nav class="tabs" aria-label={t('vms.tabs')}>
-				{#each ['overview', 'screen', 'snapshots'] as const as entry (entry)}
+				{#each TABS as entry (entry)}
 					<a
 						href={link(current, entry)}
 						aria-current={tab === entry ? 'page' : undefined}
@@ -693,8 +781,10 @@
 			{/if}
 
 			<section class="main" aria-labelledby="vm-title">
-				{#if tab === 'overview'}
+				{#if tab === 'overview' || tab === 'hardware' || tab === 'schedule'}
 					<Overview
+						bind:this={overview}
+						part={tab}
 						vm={current}
 						history={history[current.name] ?? []}
 						volumes={storage.status?.volumes ?? []}
@@ -704,18 +794,18 @@
 						onchanged={load}
 						onsnapshots={() => goto(link(current, 'snapshots'), { replaceState: true })}
 					/>
-					<!-- Removing stands apart, at the end of the overview. -->
-					<DangerZone
-						tile
-						hint={t(current.state === 'running' ? 'vms.removeStopFirst' : 'vms.removeHint')}
-					>
-						<button
-							type="button"
-							class="btn btn-danger"
-							disabled={isBusy(current) || current.state === 'running'}
-							onclick={() => open('remove')}>{t('vms.remove')}</button
+					<!-- Removing stands apart, at the end of the hardware. -->
+					{#if tab === 'hardware'}<DangerZone
+							tile
+							hint={t(current.state === 'running' ? 'vms.removeStopFirst' : 'vms.removeHint')}
 						>
-					</DangerZone>
+							<button
+								type="button"
+								class="btn btn-danger"
+								disabled={isBusy(current) || current.state === 'running'}
+								onclick={() => open('remove')}>{t('vms.remove')}</button
+							>
+						</DangerZone>{/if}
 				{:else if tab === 'snapshots'}
 					<Snapshots vm={current} />
 				{:else}
@@ -817,6 +907,16 @@
 	/>{/if}
 
 <style>
+	/* PLAN 67: the VM's name leads the tool bar (the heading itself stays for screen readers). */
+	.bar-name {
+		min-width: 0;
+		max-width: 40%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: var(--text-lg);
+		font-weight: 600;
+	}
 	.vm-page {
 		width: 100%;
 		max-width: 1480px;
@@ -1136,6 +1236,12 @@
 		}
 		.tabs {
 			min-height: 44px;
+			/* Five tabs (PLAN 67): they scroll sideways in a narrow window, the page does not. */
+			flex: 1 1 100%;
+			min-width: 0;
+			gap: 20px;
+			overflow-x: auto;
+			scrollbar-width: none;
 		}
 		.toolbar {
 			flex: 1 1 100%;

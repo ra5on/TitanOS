@@ -475,10 +475,9 @@ for (const [width, height, tag] of [
     return json({});
   });
   await page.goto(base + "/agent");
-  await page
-    .getByRole("button", { name: /Einstellungen/ })
-    .first()
-    .click();
+  // PLAN 68: on the phone the settings are in the ⋯ menu of the top bar.
+  await page.getByRole("button", { name: "Weitere Aktionen" }).first().click();
+  await page.getByRole("menuitem", { name: "Einstellungen" }).click();
   await page
     .getByRole("button", { name: /Funktionen/ })
     .first()

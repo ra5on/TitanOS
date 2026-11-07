@@ -592,6 +592,12 @@ async function open(
   return { ...made, seen };
 }
 
+// PLAN 68: on the phone the agent's settings are in the ⋯ menu of the top bar.
+async function phoneSettings(page) {
+  await page.getByRole("button", { name: "Weitere Aktionen" }).first().click();
+  await page.getByRole("menuitem", { name: "Einstellungen" }).click();
+}
+
 // A row of the agent's settings panel by its exact title.
 function settingsRow(panel, title) {
   return panel
@@ -747,7 +753,7 @@ async function plan55() {
       return route.fulfill({ json: { deleted: 5, kept: 1 } });
     });
     await page.goto(base + "/agent?app=1&chat=" + docChat.id);
-    await page.getByRole("button", { name: "Einstellungen" }).first().click();
+    await phoneSettings(page);
     const metas = await page.evaluate(() => [
       document.querySelector(
         'meta[name="apple-mobile-web-app-status-bar-style"]',
@@ -939,7 +945,7 @@ async function plan55() {
       }),
     );
     await page.goto(base + "/agent?app=1");
-    await page.getByRole("button", { name: "Einstellungen" }).first().click();
+    await phoneSettings(page);
     await page.getByRole("button", { name: /Mitteilungen/ }).click();
     await page.getByText("Auf dem iPhone ist der Agent").waitFor();
     await page.waitForTimeout(400);
@@ -1218,6 +1224,20 @@ try {
       .first()
       .click();
     await page.waitForTimeout(400);
+    // PLAN 68: no colors, background or glass of the agent's own any more.
+    for (const gone of [
+      "Akzentfarbe",
+      "Hintergrund",
+      "Glas",
+      "Leuchten beim Arbeiten",
+      "Chat-Stil",
+    ])
+      assert.equal(
+        await settingsPanel.getByText(gone, { exact: true }).count(),
+        0,
+        "look option removed: " + gone,
+      );
+    await settingsPanel.getByText("Schriftgröße").first().waitFor();
     await page.screenshot({ path: `${out}/4-desktop-look.png` });
     await settingsPanel.getByRole("button", { name: "Zurück" }).click();
     await settingsRow(settingsPanel, "Gedächtnis").click();
@@ -1305,7 +1325,7 @@ try {
     });
     await page.goto(base + "/agent?app=1");
     await page.getByRole("heading", { name: /Guten|Hallo/ }).waitFor();
-    await page.getByRole("button", { name: "Einstellungen" }).first().click();
+    await phoneSettings(page);
     const panel = page.locator(".panel[role=dialog]");
     await settingsRow(panel, "Mitteilungen").click();
     const agentBox = panel.getByRole("checkbox", { name: "KI-Agent" });
@@ -1423,6 +1443,24 @@ try {
     });
     await page.goto(base + "/agent?app=1");
     await page.getByRole("heading", { name: /Guten|Hallo/ }).waitFor();
+    // A stored look of an older version (aurora, glass) is read without
+    // error and changes nothing: the agent has the theme's background.
+    assert.deepEqual(
+      await page.evaluate(() => {
+        const el = document.querySelector(".agent");
+        const probe = document.createElement("div");
+        probe.style.background = "var(--bg)";
+        document.body.append(probe);
+        const bg = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+        return [
+          getComputedStyle(el).backgroundColor === bg,
+          el.hasAttribute("data-bg"),
+        ];
+      }),
+      [true, false],
+      "old look ignored",
+    );
     await page.waitForTimeout(400);
     await page.screenshot({ path: `${out}/7-phone-home${suffix}.png` });
     await noOverflow(page, "phone home");
@@ -1513,6 +1551,8 @@ try {
     );
     await page.waitForTimeout(300);
     await page.screenshot({ path: `${out}/16-phone-menu.png` });
+    // PLAN 68: "Suchen" is a row of the side bar that opens the field.
+    await drawer.getByRole("button", { name: "Suchen" }).click();
     await drawer
       .getByRole("searchbox", { name: "Chats durchsuchen" })
       .fill("CPU");
@@ -1815,11 +1855,17 @@ try {
       await input.getAttribute("placeholder"),
       "Chat von maria – nur lesen",
     );
-    assert.equal(
-      await page.getByRole("button", { name: "Weitere Aktionen" }).count(),
-      0,
-      "no rename/delete for a foreign chat",
-    );
+    // PLAN 68: the ⋯ menu stays (it holds the settings), but without the
+    // chat's own actions.
+    await page.getByRole("button", { name: "Weitere Aktionen" }).click();
+    await page.getByRole("menuitem", { name: "Einstellungen" }).waitFor();
+    for (const name of ["Umbenennen", "Löschen", "In Projekt verschieben"])
+      assert.equal(
+        await page.getByRole("menuitem", { name }).count(),
+        0,
+        "no rename/delete for a foreign chat: " + name,
+      );
+    await page.keyboard.press("Escape");
     await page.screenshot({ path: `${out}/26-phone-shared-chat.png` });
     await ctx.close();
   }
@@ -1857,7 +1903,44 @@ try {
   {
     const { ctx, page, seen } = await open(1440, 2400);
     await page.goto(base + "/settings/agent?tab=rights");
-    await page.getByRole("heading", { name: "Was der Agent darf" }).waitFor();
+    // PLAN 68: Schnellwahl, Bereiche and Ordner-Regeln as cards.
+    await page.getByRole("heading", { name: "Schnellwahl" }).waitFor();
+    await page.getByRole("heading", { name: "Bereiche" }).waitFor();
+    await page.getByRole("heading", { name: "Ordner-Regeln" }).waitFor();
+    // Rarely changed areas wait behind "weitere Bereiche" while they follow
+    // the Schnellwahl; an area set on its own is always shown.
+    const areas = page.locator("section", {
+      has: page.getByRole("heading", { name: "Bereiche" }),
+    });
+    assert.equal(
+      await areas.getByRole("button", { name: /^Speicher/ }).count(),
+      0,
+      "a rare area at its preset is hidden",
+    );
+    await page
+      .getByRole("button", { name: /weitere Bereiche anzeigen/ })
+      .click();
+    await areas.getByRole("button", { name: /^Speicher/ }).waitFor();
+    await areas
+      .getByRole("radiogroup", { name: "Plugins" })
+      .getByRole("radio", { name: "Verboten" })
+      .click();
+    await page
+      .getByRole("button", { name: "Weniger Bereiche anzeigen" })
+      .click();
+    assert.equal(
+      await areas.getByRole("button", { name: /^Speicher/ }).count(),
+      0,
+      "folded again",
+    );
+    assert.equal(
+      await areas.getByRole("button", { name: /^Plugins/ }).count(),
+      1,
+      "a rare area set on its own stays in view",
+    );
+    await page
+      .getByRole("button", { name: /weitere Bereiche anzeigen/ })
+      .click();
     await page.waitForTimeout(500);
     await page.screenshot({ path: `${out}/11-settings.png`, fullPage: true });
     await page
@@ -1884,9 +1967,7 @@ try {
     await ctx.close();
     const phone = await open(390, 844);
     await phone.page.goto(base + "/settings/agent?tab=rights");
-    await phone.page
-      .getByRole("heading", { name: "Was der Agent darf" })
-      .waitFor();
+    await phone.page.getByRole("heading", { name: "Schnellwahl" }).waitFor();
     await noOverflow(phone.page, "settings phone");
     await phone.page.screenshot({
       path: `${out}/12-settings-phone.png`,

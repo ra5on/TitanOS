@@ -158,7 +158,7 @@ try {
       uploads: 0,
       imageRequests: 0,
     });
-    await page.goto(base + "/settings/appearance");
+    await page.goto(base + "/settings/appearance?tab=login");
     await page
       .getByRole("heading", { name: "Farben", exact: true })
       .first()
@@ -179,12 +179,12 @@ try {
       imageRequests: 0,
     };
     await loginRoutes(ctx, state);
-    await page.goto(base + "/settings/appearance");
+    await page.goto(base + "/settings/appearance?tab=login");
     const section = page.locator("section.login-look");
     await section.getByRole("heading", { name: "Anmeldeseite" }).waitFor();
     await section.getByText("Gilt für das ganze NAS").waitFor();
     // The preview is the login page itself, scaled down.
-    await section.locator(".frame h1", { hasText: "Anmelden" }).waitFor();
+    await section.locator(".frame .h1", { hasText: "Anmelden" }).waitFor();
 
     await section.getByLabel(/^Hintergrund/).selectOption("builtin");
     await section.getByRole("radio", { name: "Hintergrund Nordlicht" }).click();
@@ -224,7 +224,7 @@ try {
     await popup
       .getByText("Vorschau – Anmelden ist hier ohne Wirkung")
       .waitFor();
-    await popup.locator("h1", { hasText: "Willkommen zu Hause" }).waitFor();
+    await popup.locator(".h1", { hasText: "Willkommen zu Hause" }).waitFor();
     assert.match(
       await popup.locator(".paper .picture").getAttribute("style"),
       /nordlicht\.webp/,
@@ -395,7 +395,7 @@ try {
       imageRequests: 0,
     };
     await loginRoutes(ctx, state);
-    await page.goto(base + "/settings/appearance");
+    await page.goto(base + "/settings/appearance?tab=login");
     const section = page.locator("section.login-look");
     await section.getByRole("heading", { name: "Anmeldeseite" }).waitFor();
     const chooser = page.waitForEvent("filechooser");

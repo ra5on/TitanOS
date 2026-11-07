@@ -16,6 +16,10 @@
 		}
 		packing = false;
 	}
+
+	// PLAN 67-1: Ablage › Diagnosepaket erstellen in the menu bar of the desktop.
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	registerMenuCommands({ 'logs.pack': { run: () => void pack(), enabled: () => !packing } });
 </script>
 
 <PageHead title={t('tools.bundle')} />

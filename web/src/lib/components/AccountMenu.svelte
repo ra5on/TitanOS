@@ -7,6 +7,8 @@
 	import LanguageSwitch from './LanguageSwitch.svelte';
 	import PowerDialog from './PowerDialog.svelte';
 
+	/** compact: only the avatar (PLAN 67, the desktop's top bar); the name stays for screen readers. */
+	let { compact = false }: { compact?: boolean } = $props();
 	const user = $derived(session.data?.user);
 	const initial = $derived(user?.name.charAt(0).toUpperCase() ?? '');
 	const canAdminister = $derived(user?.role === 'owner' || user?.role === 'admin');
@@ -48,14 +50,16 @@
 		<button
 			type="button"
 			class="trigger"
+			class:compact
+			title={compact ? user.name : undefined}
 			class:open
 			aria-haspopup="menu"
 			aria-expanded={open}
 			onclick={() => (open = !open)}
 		>
 			<span class="avatar" aria-hidden="true">{initial}</span>
-			<span class="name">{user.name}</span>
-			<Icon name="chevronDown" size={14} />
+			<span class="name" class:sr-only={compact}>{user.name}</span>
+			{#if !compact}<Icon name="chevronDown" size={14} />{/if}
 		</button>
 
 		{#if open}
@@ -121,6 +125,20 @@
 		font: inherit;
 		font-size: var(--text-md);
 		cursor: pointer;
+	}
+	.trigger.compact {
+		height: var(--pb, 32px);
+		padding: 0 3px;
+		border: 0;
+	}
+	.trigger.compact .avatar {
+		width: calc(var(--pb, 32px) - 6px);
+		height: calc(var(--pb, 32px) - 6px);
+		border-radius: 50%;
+		font-size: var(--text-sm);
+	}
+	.trigger.compact ~ .menu {
+		top: calc(100% + 8px);
 	}
 	.trigger.open,
 	.trigger:hover {

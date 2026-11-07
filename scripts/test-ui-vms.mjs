@@ -372,11 +372,11 @@ try {
     assert.ok(
       await page.getByText("NVIDIA", { exact: false }).first().isVisible(),
     );
-    assert.ok(
-      await page
-        .getByText("Mit durchgereichter Grafikkarte", { exact: false })
-        .isVisible(),
-    );
+    // PLAN 67: the details of the hardware are a tab of their own.
+    await page.goto(`${base}/vms?vm=windows-11&tab=hardware`);
+    await page
+      .getByText("Mit durchgereichter Grafikkarte", { exact: false })
+      .waitFor();
     assert.ok(
       await page
         .getByText("Wenig Platz auf tank", { exact: false })

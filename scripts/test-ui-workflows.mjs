@@ -114,13 +114,12 @@ try {
   await page.getByRole("button", { name: "Projects", exact: true }).waitFor();
   assert.equal(await page.locator("tbody tr").count(), 1);
   await page.goto(base + "/docker");
-  const stack = page.locator(".stack").first();
+  // PLAN 67: one table row per app; a stack is one row, its menu holds the
+  // addresses, "Verknüpfungen", Tailnet and the editor.
+  const stack = page.locator('tr[data-app="photos"]');
   await stack.waitFor();
-  assert.equal(await stack.locator(".members").count(), 0);
-  // The stack tile has no buttons: its symbol opens the stack menu with the
-  // addresses, the problems, "Verknüpfungen", Tailnet and the editor.
   const openStackMenu = async () => {
-    await stack.locator(".stack-icon").click();
+    await stack.getByRole("button", { name: /Aktionen für photos/ }).click();
     const menu = page.getByRole("menu");
     await menu.waitFor();
     return menu;
@@ -148,25 +147,21 @@ try {
     .click();
   assert.equal(data.putDocker.at(-1).primaryServices["app:photos"], "web");
   await page.getByRole("dialog").waitFor({ state: "hidden" });
+  // The search finds an app by one of its containers.
   await page
     .getByRole("searchbox", { name: "Container suchen …", exact: true })
     .fill("db");
-  await stack.locator(".members").waitFor();
-  assert.equal(await stack.locator(".row").count(), 1);
+  assert.equal(await page.locator("table.app-table tbody tr").count(), 1);
   await page
     .getByRole("searchbox", { name: "Container suchen …", exact: true })
     .fill("");
-  await stack.locator(".members").waitFor({ state: "detached" });
-  menu = await openStackMenu();
-  await menu
-    .getByRole("menuitem", { name: "1 Dienste prüfen", exact: true })
-    .click();
-  assert.equal(await stack.locator(".row").count(), 2);
+  // A stopped service shows in the state of the row as text.
+  assert.match(await stack.locator("td.state").innerText(), /1 von 2 laufen/);
   data.failDocker = true;
   await page
     .getByText(/Angezeigte Werte können veraltet sein/)
     .waitFor({ timeout: 15000 });
-  assert.equal(await stack.locator(".row").count(), 2);
+  assert.equal(await page.locator("table.app-table tbody tr").count(), 1);
   data.failDocker = false;
   await page
     .getByText(/Angezeigte Werte können veraltet sein/)
@@ -180,7 +175,7 @@ try {
   for (let i = 0; ; i++) {
     menu = await openStackMenu();
     if (await missing.count()) break;
-    assert.ok(i < 30, "missing service shown in the stack menu");
+    assert.ok(i < 30, "missing service shown in the row menu");
     await page.keyboard.press("Escape");
     await menu.waitFor({ state: "hidden" });
     await page.waitForTimeout(500);
@@ -213,8 +208,7 @@ try {
         ),
       );
       await test.page.goto(base + "/docker");
-      await test.page.locator(".stack-toggle").waitFor();
-      assert.equal(await test.page.locator(".members").count(), 0);
+      await test.page.locator('tr[data-app="photos"]').waitFor();
       await test.page.screenshot({
         path: out + `/docker-${theme}-${width}.png`,
         fullPage: true,

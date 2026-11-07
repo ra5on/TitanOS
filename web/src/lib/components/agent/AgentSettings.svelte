@@ -1,12 +1,13 @@
 <script lang="ts">
 	// The settings of the KI-Agent inside the agent (PLAN 53): speech, models,
-	// what it plans and knows, and the look and gestures of the app. Everything
+	// what it plans and knows, and gestures, motion and text size of the app
+	// (since PLAN 68 no colors or glass of its own: the TitanOS theme). Everything
 	// here belongs to the account and is kept on the NAS (GET/PUT /agent/prefs,
 	// memory, skills …); vibration, screen and text size belong to the device.
 	// The connection to Ollama and the rights stay under TitanOS › Einstellungen.
 	import Icon, { type IconName } from '#lib/components/Icon.svelte';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
-	import { ACCENTS, SWIPES, type Look, type Status, type Swipe } from '#lib/agent.ts';
+	import { SWIPES, type Look, type Status, type Swipe } from '#lib/agent.ts';
 	import { fly } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 	import InitiativeSettings from './InitiativeSettings.svelte';
@@ -46,21 +47,18 @@
 	const rows: {
 		id: Part | 'speech' | 'look' | 'models' | 'initiative' | 'mind' | 'push' | 'features';
 		icon: IconName;
-		color: string;
 		label: MessageKey;
 		sub?: string;
 	}[] = $derived([
 		{
 			id: 'speech',
 			icon: 'volume',
-			color: '#8b5cf6',
 			label: 'agent.set.speech',
 			sub: look.read ? t('agent.set.readAuto') : t('agent.set.readButton'),
 		},
 		{
 			id: 'models',
 			icon: 'chip',
-			color: '#3b82f6',
 			label: 'agent.set.models',
 			sub: status.vision ? `${status.model} · ${status.vision}` : status.model,
 		},
@@ -69,7 +67,6 @@
 		{
 			id: 'push' as const,
 			icon: 'bell' as IconName,
-			color: '#ef4444',
 			label: 'agent.set.push' as MessageKey,
 			sub: t('agent.set.pushSub'),
 		},
@@ -77,23 +74,21 @@
 		{
 			id: 'features',
 			icon: 'sparkle',
-			color: '#6366f1',
 			label: 'agent.f.title',
 			sub: t('agent.f.sub'),
 		},
-		{ id: 'initiative', icon: 'bulb', color: '#f97316', label: 'agent.set.initiative' },
-		{ id: 'schedules', icon: 'clock', color: '#0ea5e9', label: 'agent.schedules' },
-		{ id: 'mind', icon: 'users', color: '#ec4899', label: 'agent.set.mind' },
-		{ id: 'memory', icon: 'star', color: '#10b981', label: 'agent.memory' },
-		{ id: 'skills', icon: 'zap', color: '#eab308', label: 'agent.skills' },
-		{ id: 'me', icon: 'chat', color: '#14b8a6', label: 'agent.me' },
-		{ id: 'map', icon: 'globe', color: '#64748b', label: 'agent.map' },
+		{ id: 'initiative', icon: 'bulb', label: 'agent.set.initiative' },
+		{ id: 'schedules', icon: 'clock', label: 'agent.schedules' },
+		{ id: 'mind', icon: 'users', label: 'agent.set.mind' },
+		{ id: 'memory', icon: 'star', label: 'agent.memory' },
+		{ id: 'skills', icon: 'zap', label: 'agent.skills' },
+		{ id: 'me', icon: 'chat', label: 'agent.me' },
+		{ id: 'map', icon: 'globe', label: 'agent.map' },
 		...(status.admin
 			? [
 					{
 						id: 'log' as const,
 						icon: 'list' as IconName,
-						color: '#94a3b8',
 						label: 'agent.log' as MessageKey,
 					},
 				]
@@ -101,7 +96,6 @@
 		{
 			id: 'look',
 			icon: 'palette',
-			color: '#a06bff',
 			label: 'agent.set.look',
 			sub: `${look.gestures ? t('agent.set.gesturesOn') : t('agent.set.gesturesOff')} · ${t(`agent.set.motion.${look.motion}`)}`,
 		},
@@ -185,9 +179,7 @@
 					<div class="grp">
 						{#each rows as r (r.id)}
 							<button type="button" class="row" onclick={() => go(r.id)}>
-								<span class="sq" style:--c={r.color} aria-hidden="true"
-									><Icon name={r.icon} size={17} /></span
-								>
+								<span class="sq" aria-hidden="true"><Icon name={r.icon} size={17} /></span>
 								<span class="t"
 									><strong>{t(r.label)}</strong>{#if r.sub}<small>{r.sub}</small>{/if}</span
 								>
@@ -198,9 +190,7 @@
 					{#if ondeleteall && chats > 0}
 						<div class="grp">
 							<button type="button" class="row danger" onclick={ondeleteall}>
-								<span class="sq" style:--c="#ef4444" aria-hidden="true"
-									><Icon name="trash" size={17} /></span
-								>
+								<span class="sq" aria-hidden="true"><Icon name="trash" size={17} /></span>
 								<span class="t"
 									><strong>{t('agent.deleteAll')}</strong><small
 										>{t('agent.deleteAllSub', { count: chats })}</small
@@ -342,61 +332,6 @@
 							</span>
 						</div>
 						<div class="row col">
-							<span class="t"><strong>{t('agent.lookAccent')}</strong></span>
-							<span class="swatches" role="radiogroup" aria-label={t('agent.lookAccent')}>
-								{#each Object.entries(ACCENTS) as [id, pair] (id)}
-									<label
-										class:on={look.accent === id}
-										title={t(`agent.accent.${id}` as MessageKey)}
-										style:background={pair
-											? `linear-gradient(135deg, ${pair[0]}, ${pair[1]})`
-											: 'var(--accent)'}
-										><input
-											type="radio"
-											bind:group={look.accent}
-											value={id}
-											aria-label={t(`agent.accent.${id}` as MessageKey)}
-										/></label
-									>
-								{/each}
-							</span>
-						</div>
-						<div class="row col">
-							<span class="t"><strong>{t('agent.lookBackground')}</strong></span>
-							<span class="seg" role="radiogroup" aria-label={t('agent.lookBackground')}>
-								{#each ['aurora', 'ocean', 'forest', 'none'] as const as b (b)}
-									<label class:on={look.background === b}
-										><input type="radio" bind:group={look.background} value={b} />{t(
-											`agent.bg${b[0].toUpperCase()}${b.slice(1)}` as MessageKey,
-										)}</label
-									>
-								{/each}
-							</span>
-						</div>
-						<label class="row">
-							<span class="t"><strong>{t('agent.lookGlass')}</strong></span>
-							<input type="checkbox" class="switch" bind:checked={look.glass} />
-						</label>
-						<label class="row col" class:off={!look.glass}>
-							<span class="t"
-								><strong>{t('agent.set.glassLevel')}</strong><small
-									>{t('agent.set.glassHint')}</small
-								></span
-							>
-							<input
-								type="range"
-								min="0"
-								max="100"
-								step="5"
-								bind:value={look.glassLevel}
-								disabled={!look.glass}
-							/>
-						</label>
-						<label class="row">
-							<span class="t"><strong>{t('agent.lookGlow')}</strong></span>
-							<input type="checkbox" class="switch" bind:checked={look.glow} />
-						</label>
-						<div class="row col">
 							<span class="t"
 								><strong>{t('agent.set.fontSize')}</strong><small>{t('agent.set.device')}</small
 								></span
@@ -406,18 +341,6 @@
 									<label class:on={look.fontSize === f}
 										><input type="radio" bind:group={look.fontSize} value={f} />{t(
 											`agent.set.font.${f}`,
-										)}</label
-									>
-								{/each}
-							</span>
-						</div>
-						<div class="row col">
-							<span class="t"><strong>{t('agent.lookStyle')}</strong></span>
-							<span class="seg" role="radiogroup" aria-label={t('agent.lookStyle')}>
-								{#each ['bubbles', 'clean', 'compact'] as const as st (st)}
-									<label class:on={look.style === st}
-										><input type="radio" bind:group={look.style} value={st} />{t(
-											`agent.style${st[0].toUpperCase()}${st.slice(1)}` as MessageKey,
 										)}</label
 									>
 								{/each}
@@ -470,13 +393,13 @@
 </div>
 
 <style>
+	/* PLAN 68: a sheet from the right with cards and rows like every
+	   settings page; colors from the theme only. */
 	.scrim {
 		position: fixed;
 		inset: 0;
 		z-index: 70;
-		background: rgb(3 6 14 / 0.45);
-		-webkit-backdrop-filter: blur(6px);
-		backdrop-filter: blur(6px);
+		background: rgb(0 0 0 / 0.45);
 	}
 	.panel {
 		position: fixed;
@@ -488,17 +411,16 @@
 		display: flex;
 		flex-direction: column;
 		color: var(--text);
-		background: color-mix(in srgb, var(--surface) 78%, transparent);
-		-webkit-backdrop-filter: blur(30px) saturate(170%);
-		backdrop-filter: blur(30px) saturate(170%);
-		border-left: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
-		box-shadow: -24px 0 60px -24px rgb(0 0 0 / 0.7);
+		background: var(--bg);
+		border-left: 1px solid var(--border);
+		box-shadow: var(--shadow-menu, -18px 0 44px rgb(0 0 0 / 0.5));
 	}
 	header {
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		padding: calc(env(safe-area-inset-top, 0px) + 12px) 14px 8px;
+		padding: calc(env(safe-area-inset-top, 0px) + 10px) 14px 10px;
+		border-bottom: 1px solid var(--border);
 	}
 	h2 {
 		flex: 1;
@@ -508,26 +430,29 @@
 	}
 	.ib,
 	.ib-space {
-		width: 40px;
-		height: 40px;
+		width: 36px;
+		height: 36px;
 		flex: none;
 	}
 	.ib {
-		border-radius: 13px;
+		border-radius: var(--radius-ctl);
 		display: grid;
 		place-items: center;
-		border: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
-		background: color-mix(in srgb, var(--text) 6%, transparent);
+		border: 1px solid var(--border);
+		background: none;
 		color: var(--text);
 		cursor: pointer;
+	}
+	.ib:hover {
+		background: color-mix(in srgb, var(--text) 7%, transparent);
 	}
 	.body {
 		flex: 1;
 		overflow-y: auto;
-		padding: 6px 14px calc(env(safe-area-inset-bottom, 0px) + 18px);
+		padding: 16px 16px calc(env(safe-area-inset-bottom, 0px) + 18px);
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: 8px;
 	}
 	.body > *,
 	.pane > * {
@@ -536,17 +461,17 @@
 	.pane {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: 8px;
 	}
 	.who {
 		display: flex;
 		align-items: center;
 		gap: 12px;
-		padding: 12px;
-		margin-bottom: 6px;
-		border-radius: 20px;
-		background: color-mix(in srgb, var(--text) 5%, transparent);
-		border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+		padding: 12px 16px;
+		margin-bottom: 8px;
+		border-radius: var(--radius-tile);
+		background: var(--surface);
+		border: 1px solid var(--border);
 	}
 	.who span:last-child {
 		display: flex;
@@ -556,52 +481,55 @@
 	.t small,
 	.hint {
 		color: var(--muted);
-		font-size: var(--text-xs);
+		font-size: var(--text-sm);
 	}
 	.av {
-		width: 44px;
-		height: 44px;
+		width: 40px;
+		height: 40px;
 		border-radius: 50%;
 		display: grid;
 		place-items: center;
-		font-weight: 800;
-		color: #fff;
-		background: var(--ag-gradient, var(--accent));
+		font-weight: 700;
+		color: var(--on-accent, #fff);
+		background: var(--accent);
 	}
 	.cap {
-		margin: 12px 6px 4px;
+		margin: 12px 4px 2px;
 		font-size: var(--text-xs);
 		font-weight: 600;
-		letter-spacing: 0.08em;
+		letter-spacing: 0.05em;
 		text-transform: uppercase;
 		color: var(--muted);
 	}
 	.pushhint {
 		margin: 0 4px 12px;
-		font-size: 0.9rem;
+		font-size: var(--text-base);
 		line-height: 1.45;
 		color: var(--muted);
 	}
 	.grp {
-		border-radius: 20px;
+		border-radius: var(--radius-tile);
 		overflow: hidden;
-		background: color-mix(in srgb, var(--text) 4%, transparent);
-		border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+		background: var(--surface);
+		border: 1px solid var(--border);
 	}
 	.row {
 		display: flex;
 		align-items: center;
 		gap: 12px;
 		width: 100%;
-		min-height: 52px;
-		padding: 9px 12px;
+		min-height: 48px;
+		padding: 10px 16px;
 		border: 0;
-		border-top: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+		border-top: 1px solid var(--border);
 		background: none;
 		color: var(--text);
 		font: inherit;
 		text-align: left;
 		cursor: pointer;
+	}
+	button.row:hover {
+		background: color-mix(in srgb, var(--text) 5%, transparent);
 	}
 	.row:first-child {
 		border-top: 0;
@@ -614,8 +542,7 @@
 		flex-wrap: wrap;
 	}
 	.row.col > .seg,
-	.row.col > input[type='range'],
-	.row.col > .swatches {
+	.row.col > input[type='range'] {
 		flex-basis: 100%;
 	}
 	.t {
@@ -623,77 +550,56 @@
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
+		gap: 2px;
 	}
 	.t strong {
 		font-weight: 500;
 	}
 	.sq {
-		width: 32px;
-		height: 32px;
-		border-radius: 10px;
+		width: 30px;
+		height: 30px;
+		border-radius: var(--radius-ctl);
 		flex: none;
 		display: grid;
 		place-items: center;
-		color: #fff;
-		background: linear-gradient(145deg, var(--c), color-mix(in srgb, var(--c) 45%, #0b1020));
-		box-shadow: 0 8px 18px -8px var(--c);
+		color: var(--muted);
+		background: var(--chip);
 	}
 	.row > :global(svg) {
 		color: var(--muted);
 	}
+	/* A compact segmented control like the rest of TitanOS. */
 	.seg {
 		display: grid;
 		grid-auto-flow: column;
 		grid-auto-columns: 1fr;
+		gap: 2px;
 		padding: 3px;
-		border-radius: 12px;
-		background: color-mix(in srgb, var(--text) 7%, transparent);
+		border-radius: var(--radius-ctl);
+		background: var(--chip);
 	}
 	.seg label {
 		text-align: center;
 		white-space: nowrap;
-		padding: 7px 8px;
-		border-radius: 9px;
+		padding: 6px 8px;
+		border-radius: calc(var(--radius-ctl) - 2px);
 		font-size: var(--text-sm);
-		font-weight: 600;
-		color: var(--muted);
+		color: var(--text);
 		cursor: pointer;
 	}
 	.seg label.on {
-		color: var(--on-accent, #fff);
-		background: var(--ag-gradient, var(--accent));
+		background: var(--surface);
+		font-weight: 600;
+		box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
 	}
-	.seg input,
-	.swatches input {
+	.seg input {
 		position: absolute;
 		opacity: 0;
 		pointer-events: none;
 	}
-	.seg label:has(input:focus-visible),
-	.swatches label:has(input:focus-visible) {
+	.seg label:has(input:focus-visible) {
 		outline: 2px solid var(--accent);
-		outline-offset: 2px;
-	}
-	.swatches {
-		display: flex;
-		gap: 10px;
-		flex-wrap: wrap;
-	}
-	.swatches label {
-		width: 34px;
-		height: 34px;
-		border-radius: 11px;
-		cursor: pointer;
-		border: 2px solid transparent;
-	}
-	.swatches label.on {
-		border-color: var(--text);
-	}
-	.switch {
-		width: 22px;
-		height: 22px;
-		accent-color: var(--accent);
-		flex: none;
+		outline-offset: 1px;
 	}
 	input[type='range'] {
 		accent-color: var(--accent);
@@ -704,11 +610,14 @@
 		justify-content: center;
 		gap: 8px;
 		margin-top: 12px;
-		min-height: 44px;
-		border-radius: 14px;
-		border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+		min-height: 40px;
+		border-radius: var(--radius-ctl);
+		border: 1px solid var(--border);
 		color: var(--text);
 		text-decoration: none;
+	}
+	.titanos:hover {
+		background: color-mix(in srgb, var(--text) 7%, transparent);
 	}
 	.small {
 		min-height: 32px;
@@ -718,6 +627,6 @@
 		max-width: 46%;
 	}
 	.row.danger strong {
-		color: var(--status-error, #e5484d);
+		color: var(--error-text);
 	}
 </style>

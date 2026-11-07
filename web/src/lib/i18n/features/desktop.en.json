@@ -267,5 +267,8 @@
 	"desktop.window.minimize": "Minimise",
 	"desktop.window.openTab": "Open in own tab",
 	"desktop.window.restore": "Restore",
-	"desktop.window.unfold": "Unfold side bar"
+	"desktop.window.unfold": "Unfold side bar",
+	"desktop.side.images": "Images",
+	"desktop.side.volumes": "Volumes",
+	"desktop.side.dockerCleanup": "Clean up"
 }

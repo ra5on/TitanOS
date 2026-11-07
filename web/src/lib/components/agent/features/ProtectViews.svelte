@@ -66,9 +66,7 @@
 		position: fixed;
 		inset: 0;
 		z-index: 70;
-		background: rgb(3 6 14 / 0.45);
-		-webkit-backdrop-filter: blur(6px);
-		backdrop-filter: blur(6px);
+		background: rgb(0 0 0 / 0.45);
 	}
 	.sheet {
 		position: fixed;
@@ -81,8 +79,8 @@
 		flex-direction: column;
 		color: var(--text);
 		background: var(--bg, var(--surface));
-		border-left: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
-		box-shadow: -24px 0 60px -24px rgb(0 0 0 / 0.7);
+		border-left: 1px solid var(--border);
+		box-shadow: var(--shadow-menu, -18px 0 44px rgb(0 0 0 / 0.5));
 	}
 	header {
 		display: flex;

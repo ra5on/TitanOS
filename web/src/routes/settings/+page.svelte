@@ -85,6 +85,13 @@
 		settingsSearch.query = '';
 		settingsSearch.active = 0;
 	}
+
+	// PLAN 67-1: Systemsteuerung › Ablage › Einstellungen suchen puts the cursor in the search.
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	registerMenuCommands({
+		'settings.search': () =>
+			document.querySelector<HTMLInputElement>('.home-search input[type="search"]')?.focus(),
+	});
 </script>
 
 <PageHead title={t('settingshome.all')} />

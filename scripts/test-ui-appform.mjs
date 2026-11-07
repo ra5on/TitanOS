@@ -419,20 +419,27 @@ try {
     await ctx.close();
   }
 
-  // Docker page: one head line, filters in the status line, gear menu, actions below.
+  // Docker page (PLAN 67, table): filters with counts in the tool bar, ⋯ menu
+  // with the actions for all apps and the settings, install menu.
   {
     const { ctx, page, state } = await open(1440, "/docker");
-    await page.getByRole("button", { name: /2 Updates/ }).waitFor();
+    const updates = page.getByRole("button", { name: /Updates\s*\d/ });
+    await updates.waitFor();
     await page.screenshot({ path: out + "/7-docker.png" });
-    await page.getByRole("button", { name: "Docker-Einstellungen" }).click();
+    const more = page.getByRole("button", {
+      name: "Aktionen und Einstellungen",
+    });
+    await more.click();
     for (const item of [
+      /Alle starten/,
+      /Alle stoppen/,
+      /Nach Updates suchen/,
       /Einstellungen/,
       /LAN-Netze/,
       /Automatische Updates/,
-      /Seite anpassen/,
     ])
-      await page.getByRole("menuitem", { name: item }).waitFor();
-    await page.screenshot({ path: out + "/8-docker-zahnrad.png" });
+      await page.getByRole("menuitem", { name: item }).first().waitFor();
+    await page.screenshot({ path: out + "/8-docker-menue.png" });
     await page.keyboard.press("Escape");
     await page
       .getByRole("button", { name: "Weitere Arten zu installieren" })
@@ -444,17 +451,14 @@ try {
       "/apps/new",
     );
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: /2 Updates/ }).click();
-    assert.equal(
-      await page
-        .getByRole("button", { name: /2 Updates/ })
-        .getAttribute("aria-pressed"),
-      "true",
-    );
-    await page.getByRole("button", { name: "Alle starten" }).click();
+    await updates.click();
+    assert.equal(await updates.getAttribute("aria-pressed"), "true");
+    await more.click();
+    await page.getByRole("menuitem", { name: "Alle starten" }).click();
     await page.waitForTimeout(300);
     assert.deepEqual(state.started, ["testservernginx"]);
-    await page.getByRole("button", { name: "Alle stoppen" }).click();
+    await more.click();
+    await page.getByRole("menuitem", { name: /Alle stoppen/ }).click();
     await page
       .getByRole("dialog")
       .getByRole("button", { name: "Alle stoppen" })
@@ -465,7 +469,7 @@ try {
   }
   {
     const { ctx, page } = await open(390, "/docker");
-    await page.getByRole("button", { name: /2 Updates/ }).waitFor();
+    await page.getByRole("button", { name: /Updates\s*\d/ }).waitFor();
     assert.ok(
       (await page.evaluate(
         () => document.documentElement.scrollWidth - innerWidth,

@@ -267,5 +267,8 @@
 	"desktop.window.minimize": "Minimieren",
 	"desktop.window.openTab": "In eigenem Tab öffnen",
 	"desktop.window.restore": "Verkleinern",
-	"desktop.window.unfold": "Seitenleiste ausklappen"
+	"desktop.window.unfold": "Seitenleiste ausklappen",
+	"desktop.side.images": "Images",
+	"desktop.side.volumes": "Volumes",
+	"desktop.side.dockerCleanup": "Aufräumen"
 }

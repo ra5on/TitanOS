@@ -654,6 +654,40 @@
 			? `${rate(parts.limit)} · ${t('backup.bandwidthWindowText', { from: parts.window.from, to: parts.window.to, limit: rate(parts.window.limit) })}`
 			: rate(parts.limit);
 	}
+
+	// PLAN 67-1: the menu bar of the desktop (Sicherung › Ablage). "?new=1"
+	// comes from the menu on the overview: a new job opens once the jobs are here.
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	import { page } from '$app/state';
+	import { replaceState } from '$app/navigation';
+	import { untrack } from 'svelte';
+	const canCreate = () => !restoreOnly && !!overview && !draft && overview.shares.length > 0;
+	$effect(() => {
+		if (page.url.searchParams.get('new') !== '1' || !canCreate()) return;
+		untrack(() => {
+			try {
+				replaceState(location.pathname + location.hash, page.state);
+			} catch {
+				// The address keeps the parameter; nothing opens twice (draft is set).
+			}
+			create();
+		});
+	});
+	registerMenuCommands({
+		'backup.new': { run: create, enabled: canCreate },
+		'backup.now': {
+			items: () =>
+				restoreOnly
+					? []
+					: (overview?.jobs ?? [])
+							.filter((v) => !v.state.running && !pending[v.job.id])
+							.map((v) => ({ id: v.job.id, text: v.job.id })),
+			run: (id) => {
+				const view = overview?.jobs.find((v) => v.job.id === id);
+				if (view) void act(view.job, 'run');
+			},
+		},
+	});
 </script>
 
 {#if !restoreOnly}<PageHead title={t('safeguard.data')}>

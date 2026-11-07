@@ -81,6 +81,12 @@ export type LoginLook = {
 	hideHost: boolean;
 	hideLogo: boolean;
 	clock: boolean;
+	/** PLAN 67: the account picker – circles or a list. */
+	accountsStyle: 'circles' | 'list';
+	/** All accounts of the NAS (home network), not only those of this browser. */
+	showAccounts: boolean;
+	/** All accounts also over the internet, a tunnel or a proxy. */
+	showAccountsExternal: boolean;
 };
 
 export function defaultLoginLook(): LoginLook {
@@ -99,6 +105,9 @@ export function defaultLoginLook(): LoginLook {
 		hideHost: false,
 		hideLogo: false,
 		clock: false,
+		accountsStyle: 'circles',
+		showAccounts: true,
+		showAccountsExternal: false,
 	};
 }
 
@@ -169,6 +178,11 @@ export function sanitizeLoginLook(input: unknown): LoginLook {
 		hideHost: v.hideHost === true,
 		hideLogo: v.hideLogo === true,
 		clock: v.clock === true,
+		// Only owners and administrators get these from titand; the defaults otherwise.
+		accountsStyle: v.accountsStyle === 'list' ? 'list' : d.accountsStyle,
+		showAccounts: typeof v.showAccounts === 'boolean' ? v.showAccounts : d.showAccounts,
+		showAccountsExternal:
+			typeof v.showAccountsExternal === 'boolean' ? v.showAccountsExternal : d.showAccountsExternal,
 	};
 }
 

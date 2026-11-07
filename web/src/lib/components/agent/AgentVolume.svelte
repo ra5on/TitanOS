@@ -147,85 +147,90 @@
 	<p class="muted small">{t('agent.vol.hint')}</p>
 {/snippet}
 
-<section class="tile panel" aria-labelledby="ag-volume">
-	<h2 class="tile-title" id="ag-volume">{t('agent.vol.title')}</h2>
-	<p class="muted">{t('agent.vol.intro')}</p>
-	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-	{#if running && move}
-		<div class="moving" role="status">
-			<span
-				>{t(`agent.vol.state.${move.state}` as MessageKey, { from: move.from, to: move.to })}</span
-			>
-			<div
-				class="bar"
-				role="progressbar"
-				aria-valuemin="0"
-				aria-valuemax="100"
-				aria-valuenow={Math.round(percent)}
-				aria-label={t('agent.vol.progress')}
-			>
-				<span style:width="{percent}%"></span>
-			</div>
-			<small class="muted"
-				>{t('agent.vol.copied', {
-					files: move.files,
-					bytes: formatBytes(move.bytes),
-					total: formatBytes(move.total),
-				})}</small
-			>
-		</div>
-	{:else}
-		{#each volumes.filter((v) => v.oldCopy) as v (v.name)}
-			<div class="row old">
-				<span class="t"
-					><strong>{t('agent.vol.oldTitle', { volume: v.name })}</strong><small
-						>{t('agent.vol.oldText')}</small
-					></span
+<section class="tile ui-card" aria-labelledby="ag-volume">
+	<div class="card-head"><h2 id="ag-volume">{t('agent.vol.title')}</h2></div>
+	<div class="card-body">
+		<p class="muted">{t('agent.vol.intro')}</p>
+		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+		{#if running && move}
+			<div class="moving" role="status">
+				<span
+					>{t(`agent.vol.state.${move.state}` as MessageKey, {
+						from: move.from,
+						to: move.to,
+					})}</span
 				>
-				<button type="button" class="btn" onclick={() => (removing = v.name)}
-					>{t('agent.vol.oldRemove')}</button
+				<div
+					class="bar"
+					role="progressbar"
+					aria-valuemin="0"
+					aria-valuemax="100"
+					aria-valuenow={Math.round(percent)}
+					aria-label={t('agent.vol.progress')}
+				>
+					<span style:width="{percent}%"></span>
+				</div>
+				<small class="muted"
+					>{t('agent.vol.copied', {
+						files: move.files,
+						bytes: formatBytes(move.bytes),
+						total: formatBytes(move.total),
+					})}</small
 				>
 			</div>
-		{/each}
-		{#if move?.state === 'done'}
-			<p class="notice-ok" role="status">
-				{t('agent.vol.done', { to: move.to })}{#if move.skipped}
-					{t('agent.vol.skipped', { n: move.skipped })}{/if}{#if move.cleanup}
-					{t('agent.vol.cleanup', { from: move.from })}{/if}
-			</p>
-		{:else if move?.state === 'failed'}
-			<p class="notice-warn" role="alert">
-				{t('agent.vol.failed', { from: move.from, error: move.error ?? '' })}
-			</p>
-		{/if}
-		<div class="row">
-			<span class="t">
-				{#if here}
-					<strong>{here.name}</strong>
-					<small
-						>{t('agent.vol.free', {
-							free: formatBytes(here.freeBytes),
-							size: formatBytes(here.sizeBytes),
-						})}{kindLabel(here) ? ' · ' + kindLabel(here) : ''}</small
+		{:else}
+			{#each volumes.filter((v) => v.oldCopy) as v (v.name)}
+				<div class="row old">
+					<span class="t"
+						><strong>{t('agent.vol.oldTitle', { volume: v.name })}</strong><small
+							>{t('agent.vol.oldText')}</small
+						></span
 					>
-				{:else if current}
-					<strong>{current}</strong><small>{t('agent.vol.missing')}</small>
-				{:else}
-					<small class="muted">{t('agent.vol.none')}</small>
-				{/if}
-			</span>
-			{#if current && others.length > 0}
-				<button
-					type="button"
-					class="btn"
-					onclick={() => {
-						pick = others[0].name;
-						moving = true;
-					}}>{t('agent.vol.move')}</button
-				>
+					<button type="button" class="btn" onclick={() => (removing = v.name)}
+						>{t('agent.vol.oldRemove')}</button
+					>
+				</div>
+			{/each}
+			{#if move?.state === 'done'}
+				<p class="notice-ok" role="status">
+					{t('agent.vol.done', { to: move.to })}{#if move.skipped}
+						{t('agent.vol.skipped', { n: move.skipped })}{/if}{#if move.cleanup}
+						{t('agent.vol.cleanup', { from: move.from })}{/if}
+				</p>
+			{:else if move?.state === 'failed'}
+				<p class="notice-warn" role="alert">
+					{t('agent.vol.failed', { from: move.from, error: move.error ?? '' })}
+				</p>
 			{/if}
-		</div>
-	{/if}
+			<div class="row">
+				<span class="t">
+					{#if here}
+						<strong>{here.name}</strong>
+						<small
+							>{t('agent.vol.free', {
+								free: formatBytes(here.freeBytes),
+								size: formatBytes(here.sizeBytes),
+							})}{kindLabel(here) ? ' · ' + kindLabel(here) : ''}</small
+						>
+					{:else if current}
+						<strong>{current}</strong><small>{t('agent.vol.missing')}</small>
+					{:else}
+						<small class="muted">{t('agent.vol.none')}</small>
+					{/if}
+				</span>
+				{#if current && others.length > 0}
+					<button
+						type="button"
+						class="btn"
+						onclick={() => {
+							pick = others[0].name;
+							moving = true;
+						}}>{t('agent.vol.move')}</button
+					>
+				{/if}
+			</div>
+		{/if}
+	</div>
 </section>
 
 {#if choosing}

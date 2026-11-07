@@ -40,9 +40,7 @@
 		display: flex;
 		flex-direction: column;
 		color: var(--text);
-		background: color-mix(in srgb, var(--bg) 97%, transparent);
-		-webkit-backdrop-filter: blur(30px) saturate(170%);
-		backdrop-filter: blur(30px) saturate(170%);
+		background: var(--bg);
 		font-size: 15px;
 	}
 	.fsheet:not([open]) {
