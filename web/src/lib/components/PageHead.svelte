@@ -117,7 +117,8 @@
 		return nodes.length > 0 && nodes.every(inMore);
 	}
 	$effect(() => {
-		if (!box || !bar) return;
+		// Without ResizeObserver (tests in jsdom) the bar simply does not fold.
+		if (!box || !bar || typeof ResizeObserver === 'undefined') return;
 		let frame = 0;
 		const later = () => {
 			cancelAnimationFrame(frame);

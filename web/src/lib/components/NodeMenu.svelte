@@ -1,17 +1,15 @@
 <script lang="ts">
 	// Chooses the node of the cluster this tab manages (lib/cluster-node.ts):
-	// at the symbol in the header ("logo"), as a card at the top of the
-	// sidebar ("card") or as a badge in the folded sidebar ("badge"). Shown
-	// only in a cluster; nodes that are away cannot be chosen, nodes of
+	// in the desktop's top bar ("desk") or on the phone's home ("phone").
+	// Shown only in a cluster; nodes that are away cannot be chosen, nodes of
 	// another version can.
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { activeNode, switchNode } from '#lib/cluster-node.ts';
 	import { clusterNodes, manageable, otherVersion } from '#lib/cluster.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import Icon from './Icon.svelte';
-	import Logo from './Logo.svelte';
 
-	let { variant }: { variant: 'logo' | 'card' | 'badge' | 'desk' | 'phone' } = $props();
+	let { variant }: { variant: 'desk' | 'phone' } = $props();
 
 	const id = $props.id();
 	let open = $state(false);
@@ -61,22 +59,10 @@
 		aria-expanded={open}
 		aria-controls="{id}-menu"
 		aria-label={t('cluster.switchCurrent', { name: current?.name ?? '' })}
-		title={variant === 'card'
-			? undefined
-			: t('cluster.switchCurrent', { name: current?.name ?? '' })}
+		title={t('cluster.switchCurrent', { name: current?.name ?? '' })}
 		onclick={() => (open = !open)}
 	>
-		{#if variant === 'logo'}
-			<Logo size={28} /><Icon name="chevronDown" size={14} />
-		{:else if variant === 'card'}
-			<span class="dot" aria-hidden="true"></span>
-			<span class="lines"
-				><span class="mono name">{current?.name}</span><span class="muted small"
-					>{t('cluster.nodeCount', { count: clusterNodes.nodes.length })}</span
-				></span
-			>
-			<Icon name="chevronDown" size={14} />
-		{:else if variant === 'desk'}
+		{#if variant === 'desk'}
 			<span class="dot" class:away={!current?.self && !current?.online} aria-hidden="true"></span>
 			<span class="mono name">{current?.name}</span>
 			<Icon name="chevronDown" size={14} />
@@ -134,32 +120,6 @@
 		outline: 2px solid var(--accent);
 		outline-offset: 2px;
 	}
-	.logo .trigger {
-		height: 44px;
-		padding: 0 6px 0 var(--space-1);
-		margin-left: -4px;
-		color: var(--muted);
-	}
-	.card .trigger {
-		width: 100%;
-		gap: 10px;
-		padding: var(--space-2) 10px;
-		border-color: var(--border);
-		background: var(--chip);
-		text-align: left;
-	}
-	.card .lines {
-		flex: 1;
-		min-width: 0;
-		display: flex;
-		flex-direction: column;
-	}
-	.card .name {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		font-size: var(--text-base);
-	}
 	/* PLAN 62/64: in the top bar of the desktop, right after the menu, with
 	   the node's name (the state as a dot and in the menu, not by colour alone). */
 	.desk {
@@ -185,26 +145,6 @@
 		top: calc(100% + 10px);
 		z-index: 9600;
 	}
-	.badge .trigger {
-		position: relative;
-		justify-content: center;
-		width: 44px;
-		height: 44px;
-		border-color: var(--accent);
-		background: color-mix(in srgb, var(--accent) 12%, transparent);
-	}
-	.badge .initials {
-		font-size: var(--text-base);
-		font-weight: 600;
-	}
-	.badge .trigger > .dot {
-		position: absolute;
-		right: -3px;
-		bottom: -3px;
-		width: 11px;
-		height: 11px;
-		border: 2px solid var(--header);
-	}
 	.dot {
 		flex: none;
 		width: 8px;
@@ -229,31 +169,6 @@
 		display: flex;
 		flex-direction: column;
 		padding: 6px;
-	}
-	/* Beside the page the glass would let the tiles shine through. */
-	.card .menu,
-	.badge .menu {
-		background: var(--surface);
-	}
-	.card .menu {
-		width: 100%;
-	}
-	/* Narrow: the state goes under the name. */
-	.card .menu button {
-		grid-template-columns: 10px 1fr;
-		row-gap: 0;
-	}
-	.card .menu button .small {
-		grid-column: 2;
-	}
-	.card .menu button .mono {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.badge .menu {
-		top: 0;
-		left: calc(100% + 10px);
 	}
 	.menu button,
 	.menu a {
@@ -334,14 +249,5 @@
 	.phone .menu button,
 	.phone .menu a {
 		min-height: 44px;
-	}
-	@media (max-width: 760px) {
-		.logo .menu {
-			position: fixed;
-			top: 68px;
-			left: 8px;
-			right: 8px;
-			width: auto;
-		}
 	}
 </style>

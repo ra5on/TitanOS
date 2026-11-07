@@ -50,9 +50,24 @@ func (s *Server) handleAccountSessionsEndOthers(w http.ResponseWriter, r *http.R
 
 // handleTwoFactorBegin hands out a secret for the authenticator app. It
 // only counts once handleTwoFactorEnable has seen a code made from it.
+// Like switching it off it needs the password (or a passkey) of the
+// account: a session alone must not set up a second factor that locks
+// the owner of the account out (owner decision 7.11.2026).
 func (s *Server) handleTwoFactorBegin(w http.ResponseWriter, r *http.Request) {
+	var req proof
+	if !readJSON(w, r, &req) {
+		return
+	}
+	user := currentUser(r)
+	if user.TOTPSecret != "" {
+		writeTwoFactorError(w, auth.ErrTwoFactorEnabled)
+		return
+	}
+	if !s.reconfirmProof(w, user, req) {
+		return
+	}
 	hostname, _ := os.Hostname()
-	secret, uri, err := s.opts.Users.BeginTwoFactor(currentUser(r).Name, "TitanOS "+hostname)
+	secret, uri, err := s.opts.Users.BeginTwoFactor(user.Name, "TitanOS "+hostname)
 	if err != nil {
 		writeTwoFactorError(w, err)
 		return
@@ -201,14 +216,15 @@ func (s *Server) checkPasskeyProof(user auth.User, a *passkeyAssertion) string {
 }
 
 // handleTwoFactorDisable switches the second factor off, with the password
-// and a code as proof that it is the owner of the account who asks.
+// and a code (or a passkey) as proof that it is the owner of the account
+// who asks.
 func (s *Server) handleTwoFactorDisable(w http.ResponseWriter, r *http.Request) {
-	var req struct{ Password, Code string }
+	var req proof
 	if !readJSON(w, r, &req) {
 		return
 	}
 	user := currentUser(r)
-	if !s.reconfirm(w, user, req.Password, req.Code) {
+	if !s.reconfirmProof(w, user, req) {
 		return
 	}
 	if err := s.opts.Users.DisableTwoFactor(user.Name); err != nil {
@@ -223,7 +239,7 @@ func (s *Server) handleTwoFactorDisable(w http.ResponseWriter, r *http.Request) 
 // and a code as proof like switching the second factor off. The new codes
 // are shown this once; only their hashes are kept.
 func (s *Server) handleTwoFactorRecovery(w http.ResponseWriter, r *http.Request) {
-	var req struct{ Password, Code string }
+	var req proof
 	if !readJSON(w, r, &req) {
 		return
 	}
@@ -232,7 +248,7 @@ func (s *Server) handleTwoFactorRecovery(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusConflict, "two_factor_not_begun", "two-factor login is off")
 		return
 	}
-	if !s.reconfirm(w, user, req.Password, req.Code) {
+	if !s.reconfirmProof(w, user, req) {
 		return
 	}
 	codes, err := s.opts.Users.NewRecoveryCodes(user.Name)

@@ -166,7 +166,10 @@
 
 {#if !ownBackground}<Backdrop appearance={appearance.current} />{/if}
 
-{#if session.status === 'unreachable'}
+<!-- PLAN 65-6: the texts of the language load first (lib/i18n). -->
+{#if !i18n.ready}
+	<!-- Nothing yet: usually a moment only. -->
+{:else if session.status === 'unreachable'}
 	<Problem title={t('unreachable.title')} text={t('unreachable.text')} />
 {:else if session.status === 'ready' && session.data}
 	{#if !session.data.configAvailable}

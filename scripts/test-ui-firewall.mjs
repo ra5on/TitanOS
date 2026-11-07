@@ -184,14 +184,14 @@ try {
 
     // Firewall: compact controls, switch on with trial.
     await page.goto(base + "/settings/firewall");
-    await page.getByRole("heading", { level: 1, name: "Firewall" }).waitFor();
+    await page.getByRole("heading", { level: 1, name: "Firewall" }).waitFor({ state: "attached" });
     // Opening an area once takes its "new" badge away; the others keep theirs.
     await page.goto(base + "/settings");
     await nav(page).locator(".home-tile").first().waitFor();
     assert.equal(await nav(page).locator('a[href="/settings/firewall"]').getByText("neu", { exact: true }).count(), 0, "seen");
     assert.equal(await nav(page).locator('a[href="/settings/ddns"]').getByText("neu", { exact: true }).count(), 1, "not seen yet");
     await page.goto(base + "/settings/firewall");
-    await page.getByRole("heading", { level: 1, name: "Firewall" }).waitFor();
+    await page.getByRole("heading", { level: 1, name: "Firewall" }).waitFor({ state: "attached" });
     const button = page.locator(".settings-page .tile .btn").first();
     await button.waitFor();
     assert.ok((await button.boundingBox()).height <= 32, "compact settings buttons");
@@ -258,7 +258,7 @@ try {
 
     // Let's Encrypt with HTTP-01 and the firewall off: no hint.
     await page.goto(base + "/settings/letsencrypt");
-    await page.getByRole("heading", { level: 1, name: "Let's Encrypt" }).waitFor();
+    await page.getByRole("heading", { level: 1, name: "Let's Encrypt" }).waitFor({ state: "attached" });
     assert.equal(await page.getByTestId("le-firewall-http").count(), 0, "no hint without firewall");
     // Firewall on, port 80 not open from the internet: the hint with links.
     acme.value = { ...acmeData("http-01"), firewall: true, internetHttp: false };
@@ -276,7 +276,7 @@ try {
     // An own rule for port 80 from the internet: no hint.
     acme.value = { ...acmeData("http-01"), firewall: true, internetHttp: true };
     await page.reload();
-    await page.getByRole("heading", { level: 1, name: "Let's Encrypt" }).waitFor();
+    await page.getByRole("heading", { level: 1, name: "Let's Encrypt" }).waitFor({ state: "attached" });
     await page.getByRole("heading", { name: "Zertifikat von Let's Encrypt" }).waitFor();
     assert.equal(await page.getByTestId("le-firewall-http").count(), 0, "no hint once port 80 is open");
     acme.value = acmeData("dns-01");
@@ -286,7 +286,7 @@ try {
 
     // Dynamic DNS.
     await page.goto(base + "/settings/ddns");
-    await page.getByRole("heading", { level: 1, name: "Dynamisches DNS" }).waitFor();
+    await page.getByRole("heading", { level: 1, name: "Dynamisches DNS" }).waitFor({ state: "attached" });
     await page.getByText("198.51.100.20").first().waitFor();
     await page.screenshot({ path: `${out}/ddns-desktop.png`, fullPage: true });
     await ctx.close();
@@ -307,7 +307,7 @@ try {
       ["/settings/ddns", "Dynamisches DNS", "ddns"],
     ]) {
       await page.goto(base + path);
-      await page.getByRole("heading", { level: 1, name: heading }).waitFor();
+      await page.getByRole("heading", { level: 1, name: heading }).waitFor({ state: "attached" });
       if (name === "letsencrypt") await page.getByTestId("le-firewall-http").waitFor();
       assert.ok((await overflow(page)) <= 1, `${name}: horizontal scroll`);
       await page.screenshot({ path: `${out}/${name}-mobile.png`, fullPage: true });

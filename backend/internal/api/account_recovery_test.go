@@ -14,7 +14,7 @@ func TestTwoFactorRecoveryCodes(t *testing.T) {
 	if res, body := ts.request("POST", "/api/v1/account/2fa/recovery", map[string]string{"password": testPassword}); res.StatusCode != http.StatusConflict || errorCode(t, body) != "two_factor_not_begun" {
 		t.Errorf("new codes without a second factor: %d %s", res.StatusCode, body)
 	}
-	_, body := ts.request("POST", "/api/v1/account/2fa/begin", nil)
+	_, body := ts.request("POST", "/api/v1/account/2fa/begin", map[string]string{"password": testPassword})
 	var begun struct{ Secret string }
 	json.Unmarshal(body, &begun)
 	_, body = ts.request("POST", "/api/v1/account/2fa/enable", map[string]string{"code": auth.CodeForTest(begun.Secret, 0)})

@@ -23,8 +23,10 @@
 	import { agentAppMode } from '#lib/agent-app.ts';
 	import { agentFull } from '#lib/agent-full.svelte.ts';
 	// PLAN 61: the desktop mode, the phone's home grid and pages in windows.
-	import Desktop from '#lib/desktop/Desktop.svelte';
-	import PhoneHome from '#lib/desktop/PhoneHome.svelte';
+	// The desktop and the phone's home load only where they are shown, not
+	// in every window's frame (PLAN 65-6).
+	import type Desktop from '#lib/desktop/Desktop.svelte';
+	import type PhoneHome from '#lib/desktop/PhoneHome.svelte';
 	import PhoneBar from '#lib/desktop/PhoneBar.svelte';
 	import { appForPath } from '#lib/desktop/apps.ts';
 	import { announcePage, frameMessage, inWindow, ownPath } from '#lib/desktop/frame.ts';
@@ -59,6 +61,14 @@
 	// alone (pages of no program such as /welcome, the agent app, test scripts).
 	const known = $derived(page.url.pathname === '/' || !!appForPath(page.url.pathname));
 	const frame = $derived(frameFor({ known, agentApp, agentAppMode: agentAppMode(page.url) }));
+	let DesktopView = $state<typeof Desktop | null>(null);
+	let PhoneHomeView = $state<typeof PhoneHome | null>(null);
+	$effect(() => {
+		if (frame === 'desktop' && !DesktopView)
+			void import('#lib/desktop/Desktop.svelte').then((m) => (DesktopView = m.default));
+		if (frame === 'phone' && page.url.pathname === '/' && !PhoneHomeView)
+			void import('#lib/desktop/PhoneHome.svelte').then((m) => (PhoneHomeView = m.default));
+	});
 	afterNavigate(() => {
 		if (inWindow) announcePage(page.url.pathname + page.url.search, pageTitle.value);
 	});
@@ -198,10 +208,10 @@
 		{@render children()}
 	</main>
 {:else if frame === 'desktop'}
-	<Desktop />
+	{#if DesktopView}<DesktopView />{/if}
 {:else if frame === 'phone'}
 	{#if page.url.pathname === '/'}
-		<PhoneHome />
+		{#if PhoneHomeView}<PhoneHomeView />{/if}
 	{:else}
 		<PhoneBar />
 		<main class="phone-page" class:readable={!dockerPage}>

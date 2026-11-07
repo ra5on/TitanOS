@@ -988,7 +988,7 @@ func TestVMsAreForAdministrators(t *testing.T) {
 func TestTwoFactorLogin(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
-	res, body := ts.request("POST", "/api/v1/account/2fa/begin", nil)
+	res, body := ts.request("POST", "/api/v1/account/2fa/begin", map[string]string{"password": testPassword})
 	var begun struct{ Secret, URI string }
 	if json.Unmarshal(body, &begun) != nil || res.StatusCode != http.StatusOK || begun.Secret == "" {
 		t.Fatalf("begin: %d %s", res.StatusCode, body)

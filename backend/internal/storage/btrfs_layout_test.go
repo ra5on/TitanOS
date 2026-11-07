@@ -254,3 +254,57 @@ func TestSingleBtrfsNeverMountsDegraded(t *testing.T) {
 		t.Fatal(runner.commands)
 	}
 }
+
+// The status of a Btrfs volume is asked every 30 seconds while all is
+// quiet, every 5 seconds while something runs or a device is missing.
+func TestBtrfsStatusPollingAdapts(t *testing.T) {
+	m, runner := layoutManager(t, btrfsMember("sda"), btrfsMember("sdb"))
+	now := time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC)
+	m.clock = func() time.Time { return now }
+	runner.balance = "No balance found on '/mnt/tank'\n"
+	runner.btrfsShow = "\tTotal devices 2\n\tdevid    1 size 100 used 1 path /dev/sda1\n\tdevid    2 size 100 used 1 path /dev/sdb1\n"
+	ctx := context.Background()
+	probes := func() int {
+		n := 0
+		for _, c := range runner.btrfs {
+			if strings.HasPrefix(c, "scrub status") {
+				n++
+			}
+		}
+		return n
+	}
+	tick := func(times int) {
+		for range times {
+			m.refreshBtrfs(ctx)
+			now = now.Add(btrfsBusyInterval)
+		}
+	}
+	tick(1)
+	if probes() != 1 {
+		t.Fatalf("first look: %d probes", probes())
+	}
+	// Quiet: one look per 30 seconds, not six.
+	tick(6)
+	if got := probes(); got != 2 {
+		t.Fatalf("quiet volume probed %d times in 35 s, want 2", got)
+	}
+	// A device goes missing: noticed at the next idle look at the latest,
+	// then followed every 5 seconds.
+	runner.btrfsShow = "\tTotal devices 2\n\tdevid    1 size 100 used 1 path /dev/sda1\n\t*** Some devices missing\n"
+	tick(6)
+	before := probes()
+	tick(3)
+	if got := probes() - before; got != 3 {
+		t.Fatalf("degraded volume probed %d times in 15 s, want 3", got)
+	}
+	// A scrub started here is followed at once.
+	runner.btrfsShow = "\tTotal devices 2\n\tdevid    1 size 100 used 1 path /dev/sda1\n\tdevid    2 size 100 used 1 path /dev/sdb1\n"
+	tick(1)
+	tick(2) // quiet again
+	before = probes()
+	m.setBtrfsProgress("tank", VolumeChecking)
+	tick(1)
+	if probes() != before+1 {
+		t.Fatal("a running scrub was not followed")
+	}
+}

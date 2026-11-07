@@ -163,7 +163,7 @@ func TestSessionUnlockIsRateLimitedLikeTheLogin(t *testing.T) {
 func TestSessionUnlockAsksForTheCode(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
-	_, body := ts.request("POST", "/api/v1/account/2fa/begin", nil)
+	_, body := ts.request("POST", "/api/v1/account/2fa/begin", map[string]string{"password": testPassword})
 	var begun struct{ Secret string }
 	json.Unmarshal(body, &begun)
 	if res, body := ts.request("POST", "/api/v1/account/2fa/enable", map[string]string{"code": auth.CodeForTest(begun.Secret, 0)}); res.StatusCode != http.StatusOK {

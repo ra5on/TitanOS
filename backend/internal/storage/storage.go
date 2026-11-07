@@ -257,6 +257,9 @@ type Manager struct {
 	// sleepSamples is protected by actions, never persisted on the stick.
 	sleepSamples  map[string]sleepSample
 	btrfsProgress map[string]btrfsProgress
+	// btrfsProbed is when refreshBtrfs last asked btrfs (protected by
+	// actions).
+	btrfsProbed time.Time
 	// btrfsSeen is when mountAll first saw a member of an unmounted Btrfs
 	// mirror (protected by actions). clock replaces time.Now in tests.
 	btrfsSeen map[string]time.Time

@@ -107,6 +107,10 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		// ResetTwoFactor switches the second factor of the account off,
 		// for someone who lost the phone and the recovery codes.
 		ResetTwoFactor bool `json:"resetTwoFactor"`
+		// For one's own account the reset needs the same proof as
+		// switching the second factor off (password and code, or a
+		// passkey); administrators resetting another account do not.
+		proof
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -125,6 +129,9 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	// request that then fails.
 	if req.Role != auth.RoleOwner && req.Role != auth.RoleAdmin && req.Role != auth.RoleUser {
 		writeAccountError(w, auth.ErrInvalidRole)
+		return
+	}
+	if req.ResetTwoFactor && target.Name == actor.Name && !s.reconfirmProof(w, actor, req.proof) {
 		return
 	}
 	if req.ResetTwoFactor {

@@ -7,12 +7,6 @@
 	import LanguageSwitch from './LanguageSwitch.svelte';
 	import PowerDialog from './PowerDialog.svelte';
 
-	/**
-	 * `side`: in the sidebar; the menu opens to the right of it, upwards.
-	 * `folded`: only the avatar.
-	 */
-	let { side = false, folded = false }: { side?: boolean; folded?: boolean } = $props();
-
 	const user = $derived(session.data?.user);
 	const initial = $derived(user?.name.charAt(0).toUpperCase() ?? '');
 	const canAdminister = $derived(user?.role === 'owner' || user?.role === 'admin');
@@ -50,28 +44,18 @@
 <svelte:window onclick={onWindowClick} onkeydown={onKeydown} />
 
 {#if user}
-	<div class="account" class:side class:folded bind:this={root}>
+	<div class="account" bind:this={root}>
 		<button
 			type="button"
 			class="trigger"
 			class:open
 			aria-haspopup="menu"
 			aria-expanded={open}
-			aria-label={folded ? user.name : undefined}
-			title={folded ? user.name : undefined}
 			onclick={() => (open = !open)}
 		>
 			<span class="avatar" aria-hidden="true">{initial}</span>
-			{#if !folded}
-				{#if side}
-					<!-- In the sidebar and the phone's drawer: as wide as the tools
-					     above, with the role below the name (PLAN 46). -->
-					<span class="lines"
-						><span class="name">{user.name}</span><span class="role">{t(`role.${user.role}`)}</span
-						></span
-					>
-				{:else}<span class="name">{user.name}</span>{/if}
-				<Icon name={side ? 'chevronRight' : 'chevronDown'} size={14} />{/if}
+			<span class="name">{user.name}</span>
+			<Icon name="chevronDown" size={14} />
 		</button>
 
 		{#if open}
@@ -171,49 +155,6 @@
 		flex-direction: column;
 		padding: 6px;
 	}
-	.side .menu {
-		position: fixed;
-		top: auto;
-		right: auto;
-		left: calc(var(--side-nav-width, 236px) + 8px);
-		bottom: 12px;
-		max-height: calc(100dvh - 24px);
-		overflow-y: auto;
-	}
-	.side .trigger {
-		width: 100%;
-		height: auto;
-		min-height: 52px;
-		padding: 7px 10px 7px 8px;
-		text-align: left;
-	}
-	.side .trigger .lines {
-		flex: 1;
-	}
-	.side .trigger :global(svg) {
-		color: var(--muted);
-		flex: none;
-	}
-	.role {
-		font-size: var(--text-xs);
-		color: var(--muted);
-	}
-	.side .name {
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.folded .trigger {
-		width: 46px;
-		min-height: 44px;
-		justify-content: center;
-		padding: 0;
-	}
-	.side .trigger:focus-visible {
-		outline: 2px solid var(--accent);
-		outline-offset: -2px;
-	}
 	.who {
 		display: flex;
 		align-items: center;
@@ -279,15 +220,8 @@
 		color: var(--muted);
 	}
 	@media (max-width: 760px) {
-		.account:not(.side) .name {
+		.account .name {
 			display: none;
-		}
-		/* In the phone's drawer: across its bottom, as wide as the drawer. */
-		.side .menu {
-			left: 12px;
-			right: auto;
-			bottom: calc(12px + env(safe-area-inset-bottom));
-			width: calc(var(--drawer-width, 300px) - 24px);
 		}
 	}
 </style>

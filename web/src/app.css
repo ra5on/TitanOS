@@ -692,8 +692,7 @@ main.readable :target {
    movement always stops for prefers-reduced-motion. */
 
 /* Gradient accent: filled controls and bars use --accent-fill. */
-:root[data-fx-gradient='on']
-	:is(.btn-primary, .btn-primary:hover:not(:disabled), .bar > span) {
+:root[data-fx-gradient='on'] :is(.btn-primary, .btn-primary:hover:not(:disabled), .bar > span) {
 	background: var(--accent-fill);
 }
 
