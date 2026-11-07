@@ -4,11 +4,31 @@
 	// NAS (on by default) or only those of this browser; and whether the NAS
 	// also shows them to someone outside the home network (off by default).
 	// The fields belong to the login look: the editor saves them with it.
+	import { api } from '#lib/api.ts';
 	import Segments from '#lib/components/Segments.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import type { LoginLook } from './look.ts';
 
 	let { look = $bindable() }: { look: LoginLook } = $props();
+
+	// PLAN 69: each account on its own – shown or not (locked ones never are).
+	type Account = { name: string; role: string; disabled?: boolean };
+	let accounts = $state<Account[] | null>(null);
+	$effect(() => {
+		api.get<Account[]>('/users').then(
+			(list) =>
+				(accounts = (Array.isArray(list) ? list : []).toSorted((a, b) =>
+					a.name.localeCompare(b.name),
+				)),
+			() => (accounts = []),
+		);
+	});
+	function setShown(name: string, shown: boolean) {
+		const rest = (look.hiddenAccounts ?? []).filter((n) => n !== name);
+		look.hiddenAccounts = shown ? rest : [...rest, name].sort();
+	}
+	const roleKey = (role: string) =>
+		role === 'owner' ? 'role.owner' : role === 'admin' ? 'role.admin' : 'role.user';
 
 	const styles = $derived<{ value: LoginLook['accountsStyle']; label: string }[]>([
 		{ value: 'circles', label: t('loginPick.circles') },
@@ -59,6 +79,40 @@
 			/>
 		</span>
 	</label>
+	{#if accounts?.length}
+		<div class="set-row sub-head" class:off={!look.showAccounts}>
+			<span class="set-label"
+				>{t('loginPick.each')}<span class="set-hint">{t('loginPick.eachHint')}</span></span
+			>
+		</div>
+		<ul class="accounts" class:off={!look.showAccounts} data-testid="login-accounts-each">
+			{#each accounts as a (a.name)}
+				<li>
+					<label class="set-row">
+						<span class="who">
+							<span class="initial" aria-hidden="true">{a.name.slice(0, 1).toUpperCase()}</span>
+							<span class="set-label"
+								>{a.name}<span class="set-hint"
+									>{t(roleKey(a.role))}{a.disabled ? ' · ' + t('loginPick.locked') : ''}</span
+								></span
+							>
+						</span>
+						<span class="set-control end">
+							<input
+								type="checkbox"
+								role="switch"
+								class="switch"
+								aria-label={t('loginPick.showNamed', { name: a.name })}
+								disabled={!look.showAccounts || a.disabled}
+								checked={!a.disabled && !(look.hiddenAccounts ?? []).includes(a.name)}
+								onchange={(e) => setShown(a.name, e.currentTarget.checked)}
+							/>
+						</span>
+					</label>
+				</li>
+			{/each}
+		</ul>
+	{/if}
 	<p class="card-note">{t('loginPick.note')}</p>
 </section>
 
@@ -102,6 +156,35 @@
 	}
 	.off {
 		opacity: 0.6;
+	}
+	.sub-head {
+		padding-bottom: 4px;
+	}
+	.accounts {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.accounts .set-row {
+		padding-left: 28px;
+	}
+	.who {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		min-width: 0;
+	}
+	.initial {
+		display: grid;
+		place-items: center;
+		flex: none;
+		width: 30px;
+		height: 30px;
+		border-radius: 50%;
+		background: color-mix(in srgb, var(--accent) 28%, var(--surface));
+		color: var(--text);
+		font-weight: 600;
+		font-size: var(--text-sm);
 	}
 	.card-note {
 		margin: 0;

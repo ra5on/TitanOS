@@ -358,3 +358,36 @@ func TestAgentEventsEndWithTheSessionLock(t *testing.T) {
 		t.Fatal("event stream of an ended session still open")
 	}
 }
+
+// PLAN 69: a login from a phone has its own automatic lock, never by default.
+func TestPhoneLockMinutes(t *testing.T) {
+	for ua, phone := range map[string]bool{
+		"Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148":      true,
+		"Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36":  true,
+		"Mozilla/5.0 (Linux; Android 15; SM-X910) AppleWebKit/537.36 Chrome/131.0 Safari/537.36":         false,
+		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/18.0 Safari/605.1": false,
+		"Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0":                         false,
+		"": false,
+	} {
+		if phoneAgent(ua) != phone {
+			t.Errorf("phoneAgent(%q) = %v", ua, !phone)
+		}
+	}
+	ts := newTestServer(t)
+	ts.setup()
+	const iphone = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Mobile/15E148"
+	if d, p := ts.server.lockMinutes("alex", "Firefox"), ts.server.lockMinutes("alex", iphone); d != 15 || p != 0 {
+		t.Fatalf("defaults: computer %d, phone %d", d, p)
+	}
+	if res, _ := ts.request("PUT", "/api/v1/preferences/desktop", map[string]any{"lockMinutes": 5, "lockMinutesPhone": 240}); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("preferences: %d", res.StatusCode)
+	}
+	if d, p := ts.server.lockMinutes("alex", "Firefox"), ts.server.lockMinutes("alex", iphone); d != 5 || p != 240 {
+		t.Fatalf("chosen: computer %d, phone %d", d, p)
+	}
+	// The phone keeps its own value when only the computer's changes.
+	ts.request("PUT", "/api/v1/preferences/desktop", map[string]any{"lockMinutes": 10})
+	if p := ts.server.lockMinutes("alex", iphone); p != 0 {
+		t.Errorf("phone without the field: %d", p)
+	}
+}

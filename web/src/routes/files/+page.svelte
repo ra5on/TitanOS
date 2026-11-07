@@ -63,7 +63,8 @@
 	import { FileClipboard } from './clipboard.svelte.ts';
 	import type { FileCommand } from './commands.ts';
 	import { droppedFiles, pickedFiles, type PickedFile } from './drop-files.ts';
-	import { frameMessage } from '#lib/desktop/frame.ts';
+	import { frameMessage, inWindow } from '#lib/desktop/frame.ts';
+	import Icon from '#lib/components/Icon.svelte';
 	import { FileHistory, type Location } from './history.svelte.ts';
 	import { fileKeys, type KeyboardHost } from './keyboard.ts';
 	import { FilePreferenceStore } from './preferences.svelte.ts';
@@ -827,6 +828,22 @@
 		window.addEventListener('message', take);
 		return () => window.removeEventListener('message', take);
 	});
+	// PLAN 69: in a window the places are the window's one side bar (the
+	// window draws none of its own here); folding it stays the desktop's setting.
+	let sideFolded = $state(false);
+	onMount(() => {
+		if (!inWindow) return;
+		const side = (event: MessageEvent) => {
+			const msg = frameMessage(event);
+			if (msg?.type === 'titanos-side' && event.source === window.parent) sideFolded = msg.folded;
+		};
+		window.addEventListener('message', side);
+		window.parent.postMessage({ type: 'titanos-side-get' }, location.origin);
+		return () => window.removeEventListener('message', side);
+	});
+	function foldSide() {
+		window.parent.postMessage({ type: 'titanos-side-fold' }, location.origin);
+	}
 	$effect(() => {
 		if (!fromDesktop.length || !root || !writable) return;
 		upload(fromDesktop);
@@ -1009,7 +1026,9 @@
 	</p>{/if}
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 <!-- Fixed, so that saving never moves the page. -->
-{#if prefs.saving}<p class="saving" role="status">{t('files.savingPreferences')}</p>{/if}
+{#if prefs.saving}<p class="saving" class:windowed={inWindow} role="status">
+		{t('files.savingPreferences')}
+	</p>{/if}
 
 {#if roots && roots.length === 0}
 	<EmptyState
@@ -1017,7 +1036,7 @@
 		text={canAdminister ? t('files.noRootsAdmin') : undefined}
 	/>
 {:else if roots}
-	<div class="layout">
+	<div class="layout" class:windowed={inWindow}>
 		<MobileLocation
 			{root}
 			{dir}
@@ -1027,36 +1046,63 @@
 		/>
 		<nav
 			id="file-places"
-			class="tile places"
+			class="places"
+			class:tile={!inWindow}
+			class:windowed={inWindow}
+			class:folded={inWindow && sideFolded}
 			class:open={placesOpen}
 			aria-label={t('files.places')}
 		>
-			<Places
-				{roots}
-				current={trash ? '' : rootId}
-				{dir}
-				showHidden={prefs.showHidden}
-				admin={canAdminister}
-				usbDevices={usb.devices}
-				usbBusy={usb.busy}
-				usbLoadError={usb.loadError}
-				backups={usb.backups}
-				backupLoadError={usb.backupLoadError}
-				backupProgressError={usb.progressError}
-				openingBackup={usb.opening}
-				favorites={visibleFavorites}
-				onopen={open}
-				onusb={(device, action) => usb.action(device, action)}
-				onbackup={(backup, restore) => usb.openBackup(backup, restore)}
-				onrefreshbackups={() => {
-					usb.loadBackups();
-					usb.load();
-				}}
-				onmanagefavorites={() => (favoriteManager = true)}
-				onremovefavorite={(favorite) =>
-					prefs.saveFavorites(prefs.favorites.filter((f) => f !== favorite))}
-				onformat={() => (formattingDrive = true)}
-			/>
+			<div class="side-tree">
+				<Places
+					windowed={inWindow}
+					{roots}
+					current={trash ? '' : rootId}
+					{dir}
+					showHidden={prefs.showHidden}
+					admin={canAdminister}
+					usbDevices={usb.devices}
+					usbBusy={usb.busy}
+					usbLoadError={usb.loadError}
+					backups={usb.backups}
+					backupLoadError={usb.backupLoadError}
+					backupProgressError={usb.progressError}
+					openingBackup={usb.opening}
+					favorites={visibleFavorites}
+					onopen={open}
+					onusb={(device, action) => usb.action(device, action)}
+					onbackup={(backup, restore) => usb.openBackup(backup, restore)}
+					onrefreshbackups={() => {
+						usb.loadBackups();
+						usb.load();
+					}}
+					onmanagefavorites={() => (favoriteManager = true)}
+					onremovefavorite={(favorite) =>
+						prefs.saveFavorites(prefs.favorites.filter((f) => f !== favorite))}
+					onformat={() => (formattingDrive = true)}
+				/>
+			</div>
+			{#if inWindow}
+				<!-- PLAN 69: the program's other entries and folding, as in every window's side bar. -->
+				<div class="side-foot">
+					<span class="side-group">{t('desktop.side.settings')}</span>
+					<a
+						class="side-item"
+						href="/settings/files"
+						title={sideFolded ? t('desktop.side.filesSettings') : undefined}
+						aria-label={sideFolded ? t('desktop.side.filesSettings') : undefined}
+						><Icon name="gear" size={17} /><span>{t('desktop.side.filesSettings')}</span></a
+					>
+					<button
+						type="button"
+						class="side-item side-fold"
+						onclick={foldSide}
+						title={sideFolded ? t('desktop.window.unfold') : undefined}
+						aria-label={sideFolded ? t('desktop.window.unfold') : undefined}
+						><Icon name="sidebar" size={17} /><span>{t('desktop.window.fold')}</span></button
+					>
+				</div>
+			{/if}
 		</nav>
 		{#if !trash}
 			<MobileActions
@@ -1621,6 +1667,153 @@
 		font-size: var(--text-md);
 	}
 
+	/* PLAN 69: in a window of the desktop the places are the window's one side
+	   bar (the window draws none on this page): same width, surface, group
+	   headings and highlighted entry as the side bar of every other window. */
+	.side-foot {
+		display: none;
+	}
+	.side-group {
+		margin: 12px 10px 4px;
+		font-size: var(--text-xs);
+		color: var(--muted);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+	.side-item {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		min-height: 36px;
+		padding: 6px 10px;
+		border: 0;
+		border-radius: calc(9px * var(--radius-scale, 1));
+		background: none;
+		color: var(--text);
+		font: inherit;
+		text-align: left;
+		text-decoration: none;
+		cursor: pointer;
+		width: 100%;
+	}
+	.side-item :global(svg) {
+		flex: none;
+		color: var(--muted);
+	}
+	.side-item:hover {
+		background: color-mix(in srgb, var(--text) 7%, transparent);
+	}
+	.side-item:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+	}
+	.side-fold {
+		color: var(--muted);
+		margin-top: 6px;
+	}
+	@media (min-width: 761px) {
+		.layout.windowed {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		:global(main.in-window):has(.places.windowed) {
+			padding-left: calc(220px + var(--page-pad));
+		}
+		:global(main.in-window):has(.places.windowed.folded) {
+			padding-left: calc(60px + var(--page-pad));
+		}
+		.places.windowed {
+			position: fixed;
+			z-index: 25;
+			top: 0;
+			bottom: 0;
+			left: 0;
+			width: 220px;
+			max-height: none;
+			gap: 0;
+			padding: 12px 10px;
+			overflow: hidden;
+			background: color-mix(in srgb, var(--surface) 40%, transparent);
+			border-right: 1px solid var(--border);
+		}
+		.places.windowed.folded {
+			width: 60px;
+			padding: 12px 8px;
+			align-items: center;
+		}
+		.side-tree {
+			flex: 1;
+			min-height: 0;
+			overflow-x: hidden;
+			overflow-y: auto;
+		}
+		.folded .side-tree,
+		.folded .side-group,
+		.folded .side-item span {
+			display: none;
+		}
+		.side-foot {
+			display: flex;
+			flex-direction: column;
+			gap: 2px;
+			flex: none;
+			width: 100%;
+		}
+		.folded .side-item {
+			justify-content: center;
+			padding: 0;
+			width: 44px;
+		}
+		.folded .side-foot {
+			align-items: center;
+		}
+		/* The places look like the entries of a window's side bar. */
+		.places.windowed :global(.group) {
+			margin: 12px 10px 4px;
+			padding: 0;
+			font-size: var(--text-xs);
+			text-transform: uppercase;
+			letter-spacing: 0.05em;
+		}
+		.places.windowed :global(:is(.name, .place)) {
+			min-height: 36px;
+			border-radius: calc(9px * var(--radius-scale, 1));
+			color: var(--text);
+		}
+		.places.windowed :global(:is(.name, .place):hover) {
+			background: color-mix(in srgb, var(--text) 7%, transparent) !important;
+		}
+		.places.windowed :global(:is(.name, .place).current) {
+			background: color-mix(in srgb, var(--accent) 18%, transparent) !important;
+			/* Toward the text color: 4.5:1 on the tinted glass in every theme (PLAN 65-5). */
+			color: color-mix(in srgb, var(--accent) 65%, var(--text));
+			font-weight: 600;
+		}
+		.places.windowed :global(.name.current svg) {
+			color: var(--accent);
+		}
+		.saving.windowed {
+			left: calc(220px + 16px);
+		}
+	}
+	@media (max-width: 760px) {
+		/* A narrow window: the places unfold under the location like on the phone. */
+		.places.windowed {
+			background: var(--panel-bg);
+			border: 1px solid var(--panel-border);
+			border-radius: var(--radius-tile);
+		}
+		.places.windowed.open {
+			flex-direction: column;
+		}
+		.places.windowed .side-foot {
+			display: flex;
+			flex-direction: column;
+			gap: 2px;
+		}
+		.places.windowed .side-fold {
+			display: none;
+		}
+	}
 	@media (max-width: 1100px) {
 		.workspace.split {
 			grid-template-columns: minmax(0, 1fr);

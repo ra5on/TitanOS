@@ -66,6 +66,7 @@
 	"webapps.migrate.removeApp": "Remove the Docker app “{app}”",
 	"webapps.migrate.removeHint": "Once the browser program is installed, the container and network of “{app}” are removed. Data folders and volumes stay, and so do your documents in the shares.",
 	"webapps.migrate.running": "Installing … You can keep working.",
+	"webapps.migrate.onNode": "For the node “{name}” of the cluster.",
 	"webapps.migrate.title": "Office programs right in the browser",
 	"webapps.migrate.whyText": "From TitanOS 0.63 these programs run right in your browser, in a TitanOS window. That is faster than before, needs no container and no memory on the NAS, and works wherever you reach TitanOS – on the go and on your phone, too. You open documents with a double click in the file manager, and saving writes straight into the original file. The programs are checked by TitanOS and come with TitanOS updates.",
 	"webapps.migrate.whyTitle": "Why WordCraft, GridCraft and PdfCraft are now installed this way",

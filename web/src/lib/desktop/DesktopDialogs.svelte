@@ -100,6 +100,7 @@
 		tasks: ['desktop.widget.tasks', 'desktop.gallery.tasks'],
 	};
 	const LOCK = [0, 5, 10, 15, 30, 60];
+	const LOCK_PHONE = [0, 5, 15, 30, 60, 240, 1440];
 </script>
 
 {#if kind === 'wallpaper'}
@@ -247,6 +248,24 @@
 						>{/each}
 				</select>
 				<span class="hint">{t('desktop.settings.lockHint')}</span>
+			</div>
+			<label for="d-lock-phone">{t('desktop.settings.lockPhone')}</label>
+			<div>
+				<select
+					id="d-lock-phone"
+					class="input"
+					value={desktop.prefs.lockMinutesPhone}
+					onchange={(e) => savePrefs((p) => (p.lockMinutesPhone = Number(e.currentTarget.value)))}
+				>
+					{#each LOCK_PHONE as m (m)}<option value={m}
+							>{m === 0
+								? t('desktop.settings.never')
+								: m >= 120
+									? t('desktop.settings.hours', { count: m / 60 })
+									: t('desktop.settings.minutes', { count: m })}</option
+						>{/each}
+				</select>
+				<span class="hint">{t('desktop.settings.lockPhoneHint')}</span>
 			</div>
 			<label for="d-size">{t('desktop.ctx.iconSize')}</label>
 			<div>

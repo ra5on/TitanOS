@@ -56,6 +56,8 @@ export type DesktopPrefs = {
 	wallpaper: Wallpaper;
 	/** Minutes without use until the desktop locks itself; 0 = never. */
 	lockMinutes: number;
+	/** The automatic lock of a login from a phone (PLAN 69), 0 = never (default). */
+	lockMinutesPhone: number;
 	/** Programs whose side bar is folded. */
 	folded: string[];
 	/** Saved window arrangements. */
@@ -136,6 +138,7 @@ export const defaultDesktop = (): DesktopPrefs => ({
 	iconSize: 'm',
 	wallpaper: { source: 'builtin', id: 'wave', live: true },
 	lockMinutes: 15,
+	lockMinutesPhone: 0,
 	folded: [],
 	layouts: [],
 	recent: [],
@@ -266,6 +269,7 @@ export function sanitizeDesktop(input: unknown): DesktopPrefs {
 			: base.iconSize,
 		wallpaper,
 		lockMinutes: int(v.lockMinutes, 0, 1440, base.lockMinutes),
+		lockMinutesPhone: int(v.lockMinutesPhone, 0, 1440, base.lockMinutesPhone),
 		folded: strings(v.folded, 60),
 		layouts,
 		recent: strings(v.recent, 12),

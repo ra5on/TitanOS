@@ -924,8 +924,17 @@ func renderSMBConf(shares []Share, path func(Share) string, shadow func(Share) s
 				[2]string{"full_audit:syslog", "true"},
 			)
 		}
+		// Mac support on every share (PLAN 69, owner decision 7.11.2026):
+		// Finder data goes into extended attributes instead of "._name"
+		// companion files, which macOS writes on shares without streams;
+		// existing ones are converted when a Mac opens them.
+		vfs = append(vfs, "catia", "fruit", "streams_xattr")
+		options = append(options,
+			[2]string{"fruit:metadata", "stream"},
+			[2]string{"fruit:delete_empty_adfiles", "yes"},
+			[2]string{"fruit:wipe_intentionally_left_blank_rfork", "yes"},
+		)
 		if share.TimeMachine.Enabled {
-			vfs = append(vfs, "catia", "fruit", "streams_xattr")
 			options = append(options, [2]string{"fruit:time machine", "yes"})
 			if share.TimeMachine.SizeGB > 0 {
 				options = append(options, [2]string{"fruit:time machine max size", fmt.Sprintf("%dG", share.TimeMachine.SizeGB)})

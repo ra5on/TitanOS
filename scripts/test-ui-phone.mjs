@@ -225,6 +225,35 @@ for (const [width, height] of [
   await ctx.close();
 }
 
+// PLAN 69: the control panel on a phone has one column of tiles, so long
+// names like "Benachrichtigungen" stay whole.
+{
+  const { ctx, page } = await phone(390, 844, { cluster: false });
+  await page.goto(base + "/settings");
+  const tile = page
+    .locator(".home-tile", { hasText: "Benachrichtigungen" })
+    .first();
+  await tile.waitFor({ timeout: 15000 });
+  const lefts = await page
+    .locator(".tiles li")
+    .evaluateAll((items) => [
+      ...new Set(
+        items.map((li) => Math.round(li.getBoundingClientRect().left)),
+      ),
+    ]);
+  assert.equal(lefts.length, 1, `one column: ${lefts}`);
+  const name = tile.locator(".name");
+  const lines = await name.evaluate((el) =>
+    Math.round(
+      el.getBoundingClientRect().height /
+        parseFloat(getComputedStyle(el).lineHeight || "20"),
+    ),
+  );
+  assert.ok(lines <= 1, `name on one line (${lines})`);
+  await page.screenshot({ path: `${out}/settings-one-column.png` });
+  await ctx.close();
+}
+
 await browser.close();
 const relevant = errors.filter(
   (e) => !/Failed to load resource|net::ERR/.test(e),

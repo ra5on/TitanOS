@@ -719,6 +719,54 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   await ctx.close();
 }
 
+// PLAN 69: the dock's menu button opens all programs above the dock; the
+// widget edit bar sits clear of the dock.
+{
+  const { ctx, page } = await open(1440, 900);
+  const button = page
+    .locator(".dock")
+    .getByRole("button", { name: "Alle Apps" });
+  await button.waitFor();
+  const first = await page.locator(".dock .slot").first().getAttribute("class");
+  assert.match(first, /menu-slot/, "menu button first in the dock");
+  await button.click();
+  const launcher = page.locator(".launcher");
+  await launcher.waitFor();
+  assert.equal(await button.getAttribute("aria-expanded"), "true");
+  const lb = await launcher.boundingBox();
+  const db = await page.locator(".dock").boundingBox();
+  assert.ok(
+    lb.y + lb.height <= db.y + 1,
+    `menu above the dock: ${lb.y + lb.height} > ${db.y}`,
+  );
+  await launcher
+    .getByRole("button", { name: "Docker", exact: true })
+    .first()
+    .waitFor();
+  await button.click();
+  await launcher.waitFor({ state: "detached" });
+  // The search button of the top bar still opens it under the bar.
+  await page.locator('[data-opens="launcher"]').first().click();
+  const top = await page.locator(".launcher").boundingBox();
+  assert.ok(top.y < 120, `menu from the top bar at the top: ${top.y}`);
+  await page.keyboard.press("Escape");
+  const area = await page.locator(".desk-area").boundingBox();
+  await page.mouse.click(
+    area.x + area.width * 0.5,
+    area.y + area.height * 0.45,
+    { button: "right" },
+  );
+  await page.getByRole("menuitem", { name: "Widgets bearbeiten" }).click();
+  const bar = await page.locator(".edit-bar").boundingBox();
+  const dock = await page.locator(".dock").boundingBox();
+  assert.ok(
+    bar.y + bar.height <= dock.y,
+    `edit bar above the dock: ${bar.y + bar.height} > ${dock.y}`,
+  );
+  await shot(page, "15-dock-menue-widgetleiste");
+  await ctx.close();
+}
+
 await browser.close();
 assert.deepEqual(errors, [], "no script errors");
 console.log("desktop UI ok");

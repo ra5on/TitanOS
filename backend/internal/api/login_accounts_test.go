@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"strings"
 	"testing"
 	"time"
 
@@ -113,6 +114,27 @@ func TestLoginAccounts(t *testing.T) {
 	ts.request("PUT", "/api/v1/login-appearance", loginSettings(nil))
 	if code, answer := askAccounts(t, ts, "192.168.1.20:4000", nil); code != 200 || answer.Style != "circles" || len(answer.Accounts) != 2 {
 		t.Errorf("older editor without the fields: %d %+v", code, answer)
+	}
+	// PLAN 69: single accounts hidden; the list is cleaned, only the editor sees it.
+	save = loginSettings(func(v map[string]any) { v["hiddenAccounts"] = []string{"bea", "bea", "gone"} })
+	if res, body := ts.request("PUT", "/api/v1/login-appearance", save); res.StatusCode != 200 {
+		t.Fatalf("hide: %d %s", res.StatusCode, body)
+	}
+	if code, answer := askAccounts(t, ts, "192.168.1.20:4000", nil); code != 200 || len(answer.Accounts) != 1 || names(answer)[0] != "alex" {
+		t.Errorf("hidden bea: %d %+v", code, answer)
+	}
+	_, body = ts.request("GET", "/api/v1/login-appearance", nil)
+	look = map[string]any{}
+	_ = json.Unmarshal(body, &look)
+	if h, _ := look["hiddenAccounts"].([]any); len(h) != 2 || h[0] != "bea" || h[1] != "gone" {
+		t.Errorf("admin view of hidden: %s", body)
+	}
+	res, body = ts.do(ts.newClient(), "GET", "/api/v1/login-appearance", nil)
+	if res.StatusCode != 200 || strings.Contains(string(body), "hiddenAccounts") || strings.Contains(string(body), "bea") {
+		t.Errorf("anonymous sees hidden accounts: %s", body)
+	}
+	if res, _ := ts.request("PUT", "/api/v1/login-appearance", loginSettings(func(v map[string]any) { v["hiddenAccounts"] = []string{"a\nb"} })); res.StatusCode != 400 {
+		t.Errorf("control character: %d", res.StatusCode)
 	}
 }
 

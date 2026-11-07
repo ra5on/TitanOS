@@ -38,9 +38,12 @@
 	);
 	const here = $derived(usable.find((r) => r.id === root));
 	const parts = $derived(dir ? dir.split('/') : []);
-	const folders = $derived((entries ?? []).filter((e) => e.dir));
+	// Hidden like in the file manager (PLAN 69): "._name" companion files a
+	// Mac leaves on shares looked like the document and failed to open.
+	const visible = $derived((entries ?? []).filter((e) => !e.name.startsWith('.')));
+	const folders = $derived(visible.filter((e) => e.dir));
 	const files = $derived(
-		(entries ?? []).filter(
+		visible.filter(
 			(e) => !e.dir && (mode === 'save' || !types.length || types.includes(extOf(e.name))),
 		),
 	);

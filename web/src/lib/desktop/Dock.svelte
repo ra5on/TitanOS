@@ -38,6 +38,8 @@
 		onopen,
 		onmenu = () => {},
 		ondone = () => {},
+		onlauncher,
+		launcher = false,
 		preview = null,
 	}: {
 		all: Program[];
@@ -46,6 +48,10 @@
 		/** Right click: on an icon (key) or on the dock itself (null). */
 		onmenu?: (event: MouseEvent, key: string | null) => void;
 		ondone?: () => void;
+		/** The menu button at the start: all programs (PLAN 69). */
+		onlauncher?: () => void;
+		/** The menu is open (the button shows it). */
+		launcher?: boolean;
 		/**
 		 * Shows these settings instead of the desktop's, as a still picture
 		 * (Settings › Appearance › Dock, PLAN 64): no clicks, drags or menus.
@@ -239,6 +245,28 @@
 		if (!preview) onmenu(e, null);
 	}}
 >
+	{#if onlauncher || preview}
+		<div class="slot menu-slot">
+			<button
+				type="button"
+				class="it menu-btn"
+				class:on={launcher}
+				data-opens="launcher"
+				tabindex={preview ? -1 : undefined}
+				onclick={() => onlauncher?.()}
+				oncontextmenu={(e) => {
+					e.preventDefault();
+					e.stopPropagation();
+				}}
+				aria-label={t('desktop.dock.menu')}
+				aria-expanded={preview ? undefined : launcher}
+				><Icon name="grid" size={Math.round(dock.size * 0.46)} /></button
+			>
+			{#if !edit && !launcher}<span class="tip" role="tooltip">{t('desktop.dock.menu')}</span>{/if}
+			<span class="dot" aria-hidden="true"></span>
+		</div>
+		<span class="line" aria-hidden="true"></span>
+	{/if}
 	{#each pinned as key, i (key)}{@render item(key, true, i)}{/each}
 	{#if dropAt === pinned.length}<span class="drop-end" aria-hidden="true"></span>{/if}
 	{#if running.length}<span class="line" aria-hidden="true"></span>{/if}
@@ -412,6 +440,18 @@
 		to {
 			transform: rotate(2.5deg);
 		}
+	}
+	.menu-btn {
+		width: var(--size);
+		height: var(--size);
+		border-radius: calc(var(--size) * 0.24 * min(var(--radius-scale, 1), 1.4));
+		background: color-mix(in srgb, var(--text) 12%, transparent);
+		color: var(--text);
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, #fff 16%, transparent);
+	}
+	.menu-btn:hover,
+	.menu-btn.on {
+		background: color-mix(in srgb, var(--accent) 30%, transparent);
 	}
 	.dot {
 		width: 5px;

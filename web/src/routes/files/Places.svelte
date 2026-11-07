@@ -29,6 +29,8 @@
 		onmanagefavorites: () => void;
 		onremovefavorite: (favorite: Favorite) => void;
 		onformat: () => void;
+		/** PLAN 69: the places are the side bar of the window (symbols, group headings like it). */
+		windowed?: boolean;
 	};
 	let {
 		roots,
@@ -51,6 +53,7 @@
 		onmanagefavorites,
 		onremovefavorite,
 		onformat,
+		windowed = false,
 	}: Props = $props();
 
 	const kinds = ['share', 'volume', 'usb', 'stick'] as const;
@@ -111,6 +114,7 @@
 			{#each list as place (place.id)}
 				<FolderTree
 					readOnly={!place.writable && kind !== 'stick'}
+					icon={windowed ? (kind === 'share' ? 'folder' : 'disk') : undefined}
 					root={place.id}
 					name={place.name}
 					currentRoot={current}

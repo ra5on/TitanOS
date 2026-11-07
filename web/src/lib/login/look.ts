@@ -87,6 +87,8 @@ export type LoginLook = {
 	showAccounts: boolean;
 	/** All accounts also over the internet, a tunnel or a proxy. */
 	showAccountsExternal: boolean;
+	/** PLAN 69: accounts left out of the picker, chosen one by one. */
+	hiddenAccounts: string[];
 };
 
 export function defaultLoginLook(): LoginLook {
@@ -108,6 +110,7 @@ export function defaultLoginLook(): LoginLook {
 		accountsStyle: 'circles',
 		showAccounts: true,
 		showAccountsExternal: false,
+		hiddenAccounts: [],
 	};
 }
 
@@ -183,6 +186,11 @@ export function sanitizeLoginLook(input: unknown): LoginLook {
 		showAccounts: typeof v.showAccounts === 'boolean' ? v.showAccounts : d.showAccounts,
 		showAccountsExternal:
 			typeof v.showAccountsExternal === 'boolean' ? v.showAccountsExternal : d.showAccountsExternal,
+		hiddenAccounts: Array.isArray(v.hiddenAccounts)
+			? [...new Set(v.hiddenAccounts.filter((n): n is string => typeof n === 'string' && !!n))]
+					.slice(0, 512)
+					.sort()
+			: d.hiddenAccounts,
 	};
 }
 

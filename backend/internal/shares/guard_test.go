@@ -27,7 +27,7 @@ func TestSMBConfPreviousVersionsGuardAndLock(t *testing.T) {
 		return before
 	}
 	fotos := section("Fotos")
-	for _, want := range []string{"vfs objects = shadow_copy2 full_audit recycle", "shadow:snapdir = /mnt/pool/.snapshots", "shadow:basedir = /mnt/pool", "shadow:format = @GMT-%Y.%m.%d-%H.%M.%S", "shadow:localtime = no", "full_audit:success = renameat unlinkat", "write list = alex"} {
+	for _, want := range []string{"vfs objects = shadow_copy2 full_audit catia fruit streams_xattr recycle", "shadow:snapdir = /mnt/pool/.snapshots", "shadow:basedir = /mnt/pool", "shadow:format = @GMT-%Y.%m.%d-%H.%M.%S", "shadow:localtime = no", "full_audit:success = renameat unlinkat", "write list = alex"} {
 		if !strings.Contains(fotos, want) {
 			t.Errorf("Fotos lacks %q:\n%s", want, fotos)
 		}

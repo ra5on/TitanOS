@@ -3,6 +3,7 @@
 	import { api, type FileEntry } from '#lib/api.ts';
 	import { apiErrorText, t, i18n } from '#lib/i18n/index.svelte.ts';
 	import { fileList } from '#lib/file-list.ts';
+	import Icon, { type IconName } from '#lib/components/Icon.svelte';
 	let {
 		root,
 		path = '',
@@ -13,6 +14,7 @@
 		onopen,
 		depth = 0,
 		readOnly = false,
+		icon,
 	}: {
 		root: string;
 		path?: string;
@@ -23,6 +25,8 @@
 		onopen: (root: string, path: string) => void;
 		depth?: number;
 		readOnly?: boolean;
+		/** PLAN 69: symbol of a place in the window's side bar (top level only). */
+		icon?: IconName;
 	} = $props();
 	let expanded = $state(false),
 		entries = $state<FileEntry[]>([]),
@@ -73,7 +77,10 @@
 			class:current={root === currentRoot && path === currentPath}
 			aria-current={root === currentRoot && path === currentPath ? 'location' : undefined}
 			title={name}
-			onclick={() => onopen(root, path)}>{name}</button
+			class:with-icon={!!icon}
+			onclick={() => onopen(root, path)}
+			>{#if icon}<Icon name={icon} size={17} /><span class="label">{name}</span
+				>{:else}{name}{/if}</button
 		>
 		{#if readOnly}<span class="chip">{t('files.readOnly')}</span>{/if}
 	</div>
@@ -136,6 +143,20 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 		padding: var(--space-1);
+	}
+	.name.with-icon {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+	}
+	.with-icon .label {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.with-icon :global(svg) {
+		flex: none;
+		color: var(--muted);
 	}
 	.current,
 	button:hover {
