@@ -16,7 +16,7 @@ const errors = [],
   create = fixtureFactory(browser, errors);
 try {
   const { ctx, page, data } = await create();
-	data.system.version = "0.31.0";
+  data.system.version = "0.31.0";
   const pending = [],
     copies = [];
   const file = {
@@ -150,8 +150,16 @@ try {
   // the confirmation; only choosing one by one needs the full list.
   await (await next()).respond({ ...review, truncated: true });
   await dialog.getByText("Mehr als 200 Konflikte", { exact: false }).waitFor();
-  assert.equal(await checkbox.isEnabled(), true, "truncated comparison blocked replacement");
-  assert.equal(await copy.isDisabled(), true, "replacement without confirmation");
+  assert.equal(
+    await checkbox.isEnabled(),
+    true,
+    "truncated comparison blocked replacement",
+  );
+  assert.equal(
+    await copy.isDisabled(),
+    true,
+    "replacement without confirmation",
+  );
   await checkbox.check();
   assert.equal(await copy.isEnabled(), true);
   await dialog.getByRole("combobox").first().selectOption("share/Projects");

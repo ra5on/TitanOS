@@ -67,7 +67,10 @@ try {
       .getByRole("button", { name: "Setup-Key speichern", exact: true })
       .click();
     await view.getByText("Ein Setup-Key ist gespeichert.").waitFor();
-    assert.equal(await view.getByLabel("Setup-Key", { exact: true }).inputValue(), "");
+    assert.equal(
+      await view.getByLabel("Setup-Key", { exact: true }).inputValue(),
+      "",
+    );
     assert.deepEqual(data.netbirdCalls.at(-1), [
       "PUT",
       "/plugins/netbird/setup-key",
@@ -78,7 +81,10 @@ try {
     await view.getByText("Verbunden", { exact: true }).waitFor();
     await view.getByText("titan.netbird.cloud").waitFor();
     await view.getByText("2 von 3 Geräten verbunden").waitFor();
-    assert.equal(data.netbirdCalls.at(-1)[1], "/plugins/netbird/control/connect");
+    assert.equal(
+      data.netbirdCalls.at(-1)[1],
+      "/plugins/netbird/control/connect",
+    );
 
     // A self-hosted server and routing run on trial until confirmed.
     await view
@@ -113,8 +119,13 @@ try {
     await view
       .getByRole("button", { name: "Zugriff funktioniert – speichern" })
       .click();
-    await view.getByText(/Bitte den Zugriff prüfen/).waitFor({ state: "detached" });
-    assert.equal(data.netbirdCalls.at(-1)[1], "/plugins/netbird/control/confirm");
+    await view
+      .getByText(/Bitte den Zugriff prüfen/)
+      .waitFor({ state: "detached" });
+    assert.equal(
+      data.netbirdCalls.at(-1)[1],
+      "/plugins/netbird/control/confirm",
+    );
 
     // Removing the NAS from the network asks first; cancel sends nothing.
     const calls = data.netbirdCalls.length;
@@ -122,8 +133,12 @@ try {
       .getByRole("button", { name: "NAS aus dem NetBird-Netz entfernen" })
       .click();
     const dialog = page.getByRole("dialog");
-    await dialog.getByText(/für eine neue Anmeldung ist wieder ein Setup-Key nötig/).waitFor();
-    await dialog.getByRole("button", { name: "Abbrechen", exact: true }).click();
+    await dialog
+      .getByText(/für eine neue Anmeldung ist wieder ein Setup-Key nötig/)
+      .waitFor();
+    await dialog
+      .getByRole("button", { name: "Abbrechen", exact: true })
+      .click();
     assert.equal(data.netbirdCalls.length, calls);
     await page.screenshot({ path: `${out}/settings.png`, fullPage: true });
     await ctx.close();

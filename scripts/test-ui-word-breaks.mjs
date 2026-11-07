@@ -12,8 +12,13 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { fixtureFactory } from "./test-ui-fixtures.mjs";
-const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || "playwright");
-const browser = await chromium.launch({ headless: true, executablePath: process.env.BROWSER_EXECUTABLE });
+const { chromium } = await import(
+  process.env.PLAYWRIGHT_MODULE || "playwright"
+);
+const browser = await chromium.launch({
+  headless: true,
+  executablePath: process.env.BROWSER_EXECUTABLE,
+});
 const base = process.env.UI_URL || "http://127.0.0.1:5182";
 const out = process.env.UI_OUTPUT || "out/validation/ui-word-breaks";
 await mkdir(out, { recursive: true });
@@ -52,7 +57,8 @@ function brokenWords() {
   while ((node = walker.nextNode())) {
     const el = node.parentElement;
     // Paths, addresses and code may break anywhere.
-    if (!el || el.closest("script,style,code,pre,.mono,input,textarea")) continue;
+    if (!el || el.closest("script,style,code,pre,.mono,input,textarea"))
+      continue;
     const style = getComputedStyle(el);
     if (style.visibility === "hidden" || style.display === "none") continue;
     for (const m of node.textContent.matchAll(/[\p{L}\p{N}]{4,}/gu)) {
@@ -60,20 +66,31 @@ function brokenWords() {
       range.setStart(node, m.index);
       range.setEnd(node, m.index + m[0].length);
       const tops = new Set(
-        [...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.top)),
+        [...range.getClientRects()]
+          .filter((r) => r.width > 0)
+          .map((r) => Math.round(r.top)),
       );
-      if (tops.size > 1) found.push(`${m[0]} <${el.tagName.toLowerCase()} class="${el.className}">`);
+      if (tops.size > 1)
+        found.push(
+          `${m[0]} <${el.tagName.toLowerCase()} class="${el.className}">`,
+        );
     }
   }
   return found;
 }
 
 function unnamedFields() {
-  return [...document.querySelectorAll("input:not([type=hidden]):not([type=checkbox]):not([type=radio]),select,textarea")]
+  return [
+    ...document.querySelectorAll(
+      "input:not([type=hidden]):not([type=checkbox]):not([type=radio]),select,textarea",
+    ),
+  ]
     .filter((e) => e.offsetParent !== null)
     .filter(
       (e) =>
-        !(e.labels?.length && [...e.labels].some((l) => l.textContent.trim())) &&
+        !(
+          e.labels?.length && [...e.labels].some((l) => l.textContent.trim())
+        ) &&
         !e.getAttribute("aria-label") &&
         !e.getAttribute("aria-labelledby") &&
         !e.title,
@@ -85,7 +102,11 @@ const problems = [];
 for (const locale of ["de", "en"]) {
   for (const font of [100, 120]) {
     const f = await create("owner", "graphit", 390, locale);
-    f.data.prefs.appearance = { ...(f.data.prefs.appearance ?? {}), theme: "graphit", font };
+    f.data.prefs.appearance = {
+      ...(f.data.prefs.appearance ?? {}),
+      theme: "graphit",
+      font,
+    };
     await f.page.setViewportSize({ width: 390, height: 844 });
     for (const path of pages) {
       await f.page.goto(`${base}${path}`);
@@ -95,11 +116,16 @@ for (const locale of ["de", "en"]) {
       for (const field of await f.page.evaluate(unnamedFields))
         problems.push(`${locale} ${path}: field without a name ${field}`);
       if (path === "/")
-        await f.page.screenshot({ path: `${out}/dashboard-${locale}-${font}.png`, fullPage: true });
+        await f.page.screenshot({
+          path: `${out}/dashboard-${locale}-${font}.png`,
+          fullPage: true,
+        });
     }
     await f.page.context().close();
   }
 }
 await browser.close();
 assert.deepEqual(problems, [], problems.join("\n"));
-console.log(`ui-word-breaks: ${pages.length} pages × de/en × 100/120 % without broken words or unnamed fields`);
+console.log(
+  `ui-word-breaks: ${pages.length} pages × de/en × 100/120 % without broken words or unnamed fields`,
+);

@@ -133,7 +133,9 @@ try {
     "http://192.168.1.20:2283/",
   );
   assert.equal(
-    await menu.getByRole("menuitem", { name: "Öffentlich", exact: true }).count(),
+    await menu
+      .getByRole("menuitem", { name: "Öffentlich", exact: true })
+      .count(),
     1,
   );
   await menu

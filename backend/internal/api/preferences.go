@@ -8,16 +8,19 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/webapps"
 )
 
 // preferenceKinds are the per-account settings the web UI stores. The
 // backend keeps them as opaque JSON objects; their shape belongs to the UI.
-var preferenceKinds = []string{"appearance", "dashboard", "sound", "docker", "vnc", "files", "bell", "shares", "hints", "desktop"}
+var preferenceKinds = []string{"appearance", "dashboard", "sound", "docker", "vnc", "files", "bell", "shares", "hints", "desktop", "fileapps"}
 
 // maxBackgroundBytes limits an uploaded background image. It is stored on the stick.
 const maxBackgroundBytes = 10 << 20
@@ -146,6 +149,10 @@ func (s *Server) handlePutPreferences(w http.ResponseWriter, r *http.Request) {
 		s.saveDashboard(w, r, value, nil)
 		return
 	}
+	if kind == "fileapps" && !validFileApps(value) {
+		writeError(w, http.StatusBadRequest, "bad_request", `fileapps maps file endings (lower case, without dot) to "webapp:<id>" or "editor"`)
+		return
+	}
 	user := currentUser(r).Name
 	if err := s.prefs.set(user, kind, value); err != nil {
 		slog.Error("write preferences", "user", user, "kind", kind, "err", err)
@@ -209,4 +216,29 @@ func (s *Server) handleDeleteBackground(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// fileAppsExt is a file ending as the default apps store it (PLAN 66).
+var fileAppsExt = regexp.MustCompile(`^[a-z0-9]{1,10}$`)
+
+// validFileApps checks the preference kind fileapps: the default app per
+// file ending, {"docx":"webapp:wordcraft","txt":"editor"}.
+func validFileApps(value json.RawMessage) bool {
+	var m map[string]string
+	if json.Unmarshal(value, &m) != nil || len(m) > 200 {
+		return false
+	}
+	for ext, app := range m {
+		if !fileAppsExt.MatchString(ext) {
+			return false
+		}
+		if app == "editor" {
+			continue
+		}
+		id, ok := strings.CutPrefix(app, "webapp:")
+		if _, known := webapps.Lookup(id); !ok || !known {
+			return false
+		}
+	}
+	return true
 }

@@ -21,6 +21,10 @@ export type FrameMessage =
 	/** A window asks the desktop to open one of its dialogs (the wallpaper). */
 	| { type: 'titanos-desk-dialog'; dialog: 'wallpaper' }
 	| { type: 'titanos-console'; session: unknown }
+	/** PLAN 66: the file manager in a window drags files (null: the drag ended). */
+	| { type: 'titanos-file-drag'; drag: { root: string; paths: string[] } | null }
+	/** PLAN 66: the file manager opens a file in a web app (app: "webapp:<id>", else its standard app). */
+	| { type: 'titanos-open-file'; root: string; path: string; app?: string }
 	/** PLAN 65-6: the desktop tells a window's page whether it can be seen (minimized: no). */
 	| { type: 'titanos-visible'; visible: boolean }
 	| {

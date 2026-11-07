@@ -71,6 +71,21 @@ and fonts. The release's sources.txt lists every package of that image with
 its exact Debian source package; its copyright files are inside the image
 under /usr/share/doc. The agent inside it is TitanOS code (FSL-1.1-ALv2).
 
+Web apps (titanos-webapp-<id>-<version>.zip, separate release assets since
+0.63.0, installed by titand onto a data volume on request): the unchanged
+browser builds (WebAssembly) of the Craft programs by storytold, each
+MIT OR Apache-2.0, versions as in webapps/catalog.json. Several bundle fonts
+under OFL-1.1 (Noto Sans, BIZ UD, Shippori Mincho, LXGW WenKai Lite, Nanum
+Gothic, Inter and others) and name further components in NOTICE,
+ATTRIBUTION.md or ASSETS.md (VectorCraft also bundles hayro under
+MIT OR Apache-2.0 with PDFium/Foxit font data and Adobe CMaps under
+BSD-3-Clause-style notices). These files
+are inside each archive and in the release's licenses.tar.gz under
+webapps/<id>-<version>/; sources.txt links the tagged source of each app.
+WordCraft, GridCraft, PdfCraft, DeckCraft, CADCraft, FigCraft, FilmCraft,
+LightCraft, VectorCraft, DesignCraft, EffectCraft, SoundCraft,
+TextureCraft, MaterialCraft: https://github.com/storytold/<name in lower case>
+
 Optional plugins (separate downloads) keep their own licenses, e.g. the
 NVIDIA driver plugin (NVIDIA license terms for the user-space libraries).
 From v0.1.0-beta.2 the separate NVIDIA plugin includes open kernel modules

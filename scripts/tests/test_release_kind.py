@@ -42,6 +42,11 @@ class ReleaseKindTest(unittest.TestCase):
         # A build file of the image still makes a full release.
         self.assertEqual(self.decide("0.8.2", ["viewer/Dockerfile", "build/mkosi.conf"])[:2], ("system", "0.8.2"))
 
+    def test_the_web_apps_are_not_part_of_the_system_image(self):
+        changed = ["backend/internal/webapps/manager.go", "webapps/catalog.json", "scripts/fetch-webapps.py",
+                   "scripts/tests/test_fetch_webapps.py", "scripts/make-release.sh", "THIRD_PARTY_LICENSES"]
+        self.assertEqual(self.decide("0.8.2", changed)[:2], ("app", "0.8.0"))
+
     def test_changes_to_the_image_make_a_full_release(self):
         for path in ["build/mkosi.conf", "boot/entry.conf.in", "scripts/make-zip.sh", ".github/actions/image-tools/action.yml", "Makefile"]:
             with self.subTest(path=path):

@@ -53,7 +53,7 @@
 			>
 		</p>
 		{#if session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin'}<p>
-				<a href="/welcome?step=3">{t('about.setupList')}</a>
+				<a href="/welcome?step=4">{t('about.setupList')}</a>
 			</p>{/if}
 	</section>
 

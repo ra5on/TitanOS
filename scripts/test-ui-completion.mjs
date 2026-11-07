@@ -26,7 +26,9 @@ try {
     .getByRole("combobox", { name: "Daten-Volume", exact: true })
     .selectOption("Safe");
   await dialog.getByRole("button", { name: "Abbrechen", exact: true }).click();
-  await page.getByRole("button", { name: "Änderungen verwerfen", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Änderungen verwerfen", exact: true })
+    .click();
   assert.equal(
     await page
       .getByRole("combobox", { name: "Daten-Volume", exact: true })
@@ -73,7 +75,8 @@ try {
   };
   await page.goto(base + "/tools/tasks");
   await page
-    .getByText("fixture image failure", { exact: true }).first()
+    .getByText("fixture image failure", { exact: true })
+    .first()
     .waitFor({ state: "attached" });
   assert.equal(
     await page
@@ -174,22 +177,42 @@ try {
     },
   ];
   Object.assign(data.backups[0].job, {
-    sources: [], enabled: false, every: "daily", time: "03:00",
-    keep: {daily: 1, weekly: 0, monthly: 0},
-    destination: {type: "local", volume: "Safe", folder: "repository"},
+    sources: [],
+    enabled: false,
+    every: "daily",
+    time: "03:00",
+    keep: { daily: 1, weekly: 0, monthly: 0 },
+    destination: { type: "local", volume: "Safe", folder: "repository" },
   });
   data.backups[0].stateKnown = false;
   data.backups[0].state.statusError = "fixture unreadable state";
   await page.goto(base + "/settings/backups");
-  await page.getByText(/Gespeicherter Auftragszustand konnte nicht verlässlich geladen werden/).waitFor();
+  await page
+    .getByText(
+      /Gespeicherter Auftragszustand konnte nicht verlässlich geladen werden/,
+    )
+    .waitFor();
   await page.goto(base + "/settings/backups/data");
-  await page.getByText("Zustand unbekannt", {exact: true}).waitFor();
-  await page.getByText("Gespeicherter Auftragszustand konnte nicht verlässlich geladen werden.", {exact: true}).waitFor();
+  await page.getByText("Zustand unbekannt", { exact: true }).waitFor();
+  await page
+    .getByText(
+      "Gespeicherter Auftragszustand konnte nicht verlässlich geladen werden.",
+      { exact: true },
+    )
+    .waitFor();
   data.backups[0].stateKnown = true;
-  data.backups[0].state = {running: true, phase: "application-restore", percent: 0, bytesDone: 0, bytesTotal: 0};
+  data.backups[0].state = {
+    running: true,
+    phase: "application-restore",
+    percent: 0,
+    bytesDone: 0,
+    bytesTotal: 0,
+  };
   await page.reload();
-  await page.getByText("Anwendungswiederherstellung", {exact: true}).waitFor();
-  data.backups[0].state = {running: false, phase: ""};
+  await page
+    .getByText("Anwendungswiederherstellung", { exact: true })
+    .waitFor();
+  data.backups[0].state = { running: false, phase: "" };
   await page.goto(base + "/settings/backups/applications");
   await page
     .getByRole("combobox", { name: "Anwendungssicherung", exact: true })

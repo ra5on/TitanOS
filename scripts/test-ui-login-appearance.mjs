@@ -30,7 +30,14 @@ function defaults() {
     style: "glass",
     glass: 45,
     blur: 18,
-    background: { source: "theme", fit: "cover", x: 50, y: 50, zoom: 100, dim: 30 },
+    background: {
+      source: "theme",
+      fit: "cover",
+      x: 50,
+      y: 50,
+      zoom: 100,
+      dim: 30,
+    },
     image: null,
     position: "center",
     width: "normal",
@@ -50,7 +57,10 @@ async function loginRoutes(ctx, state) {
       state.imageRequests++;
       return path.endsWith(imageID)
         ? route.fulfill({ body: picture, contentType: "image/webp" })
-        : route.fulfill({ status: 404, json: { error: { code: "not_found" } } });
+        : route.fulfill({
+            status: 404,
+            json: { error: { code: "not_found" } },
+          });
     }
     if (request.method() === "PUT") {
       let body;
@@ -60,7 +70,12 @@ async function loginRoutes(ctx, state) {
         const settings = /name="settings"\r\n\r\n([\s\S]*?)\r\n--/.exec(raw)[1];
         body = JSON.parse(Buffer.from(settings, "latin1").toString("utf8"));
         state.uploads++;
-        body.image = { id: imageID, width: 1280, height: 720, bytes: picture.length };
+        body.image = {
+          id: imageID,
+          width: 1280,
+          height: 720,
+          bytes: picture.length,
+        };
       } else {
         body = request.postDataJSON();
         body.image = body.removeImage ? null : state.value.image;
@@ -79,7 +94,10 @@ async function loginRoutes(ctx, state) {
 }
 
 // A browser that is not logged in, with a given look on the NAS.
-async function loggedOut(value, { width = 1440, theme = "graphit", height = 900 } = {}) {
+async function loggedOut(
+  value,
+  { width = 1440, theme = "graphit", height = 900 } = {},
+) {
   const { ctx, page } = await create("owner", theme, width);
   await page.setViewportSize({ width, height });
   const state = { value, saves: [], uploads: 0, imageRequests: 0 };
@@ -134,16 +152,32 @@ try {
   // 2. Editor: only for owners and administrators, saves one look for the NAS.
   {
     const { ctx, page } = await create("user");
-    await loginRoutes(ctx, { value: defaults(), saves: [], uploads: 0, imageRequests: 0 });
+    await loginRoutes(ctx, {
+      value: defaults(),
+      saves: [],
+      uploads: 0,
+      imageRequests: 0,
+    });
     await page.goto(base + "/settings/appearance");
-    await page.getByRole("heading", { name: "Farben", exact: true }).first().waitFor();
-    assert.equal(await page.getByRole("heading", { name: "Anmeldeseite" }).count(), 0);
+    await page
+      .getByRole("heading", { name: "Farben", exact: true })
+      .first()
+      .waitFor();
+    assert.equal(
+      await page.getByRole("heading", { name: "Anmeldeseite" }).count(),
+      0,
+    );
     await ctx.close();
   }
   let saved;
   {
     const { ctx, page } = await create("owner");
-    const state = { value: defaults(), saves: [], uploads: 0, imageRequests: 0 };
+    const state = {
+      value: defaults(),
+      saves: [],
+      uploads: 0,
+      imageRequests: 0,
+    };
     await loginRoutes(ctx, state);
     await page.goto(base + "/settings/appearance");
     const section = page.locator("section.login-look");
@@ -160,9 +194,13 @@ try {
     await section.getByRole("radio", { name: "Türkis" }).click();
     const de = section.locator(".language").first();
     await de.getByLabel("Überschrift").fill("Willkommen zu Hause");
-    await de.getByLabel("Begrüßung oder Hinweis").fill("Nur für die Familie. <b>Kein HTML</b>");
+    await de
+      .getByLabel("Begrüßung oder Hinweis")
+      .fill("Nur für die Familie. <b>Kein HTML</b>");
     // PLAN 64: clock and date are always on the page; no switch any more.
-    await section.locator(".frame .card .notice", { hasText: "<b>Kein HTML</b>" }).waitFor();
+    await section
+      .locator(".frame .card .notice", { hasText: "<b>Kein HTML</b>" })
+      .waitFor();
     assert.equal(await section.locator(".frame .card .notice b").count(), 0);
     await section.locator(".frame .clock").waitFor();
 
@@ -183,7 +221,9 @@ try {
       ctx.waitForEvent("page"),
       section.getByRole("button", { name: "Vorschau in neuem Tab" }).click(),
     ]);
-    await popup.getByText("Vorschau – Anmelden ist hier ohne Wirkung").waitFor();
+    await popup
+      .getByText("Vorschau – Anmelden ist hier ohne Wirkung")
+      .waitFor();
     await popup.locator("h1", { hasText: "Willkommen zu Hause" }).waitFor();
     assert.match(
       await popup.locator(".paper .picture").getAttribute("style"),
@@ -191,12 +231,26 @@ try {
     );
     await popup.close();
 
-    await page.locator(".save-bar").getByRole("button", { name: "Übernehmen" }).click();
-    await page.locator(".save-bar").getByText("Gespeichert", { exact: true }).waitFor();
+    await page
+      .locator(".save-bar")
+      .getByRole("button", { name: "Übernehmen" })
+      .click();
+    await page
+      .locator(".save-bar")
+      .getByText("Gespeichert", { exact: true })
+      .waitFor();
     saved = state.saves.at(-1);
     assert.equal(saved.theme, "mitternacht");
     assert.equal(saved.accent, "tuerkis");
-    assert.deepEqual(saved.background, { source: "builtin", id: "nordlicht", fit: "cover", x: 50, y: 50, zoom: 100, dim: 30 });
+    assert.deepEqual(saved.background, {
+      source: "builtin",
+      id: "nordlicht",
+      fit: "cover",
+      x: 50,
+      y: 50,
+      zoom: 100,
+      dim: 30,
+    });
     assert.equal(saved.texts.de.title, "Willkommen zu Hause");
     // PLAN 64: the clock is always shown; the stored switch keeps its value.
     assert.equal(saved.clock, false);
@@ -221,9 +275,14 @@ try {
     assert.equal(await main.getAttribute("data-theme"), "mitternacht");
     assert.equal(await main.getAttribute("data-surface"), "glass");
     await page.locator("h1", { hasText: "Willkommen zu Hause" }).waitFor();
-    await page.locator(".card .notice", { hasText: "<b>Kein HTML</b>" }).waitFor();
+    await page
+      .locator(".card .notice", { hasText: "<b>Kein HTML</b>" })
+      .waitFor();
     await page.locator(".clock").waitFor();
-    assert.match(await page.locator(".paper .picture").getAttribute("style"), /nordlicht\.webp/);
+    assert.match(
+      await page.locator(".paper .picture").getAttribute("style"),
+      /nordlicht\.webp/,
+    );
     await page.screenshot({ path: `${out}/login-glass-motif.png` });
     // The two-factor step keeps the look.
     await page.getByLabel("Name").fill("alex");
@@ -248,7 +307,9 @@ try {
       position: "left",
       width: "wide",
       hideLogo: true,
-      texts: { de: { title: "Familien-NAS", notice: "Bei Problemen: Alex fragen." } },
+      texts: {
+        de: { title: "Familien-NAS", notice: "Bei Problemen: Alex fragen." },
+      },
     };
     const { ctx, page } = await loggedOut(look, { theme: "graphit" });
     const main = page.locator("main.login");
@@ -268,9 +329,15 @@ try {
     await page.screenshot({ path: `${out}/login-hell-left.png` });
     await page.setViewportSize({ width: 375, height: 812 });
     const mobile = await page.locator("section.card").boundingBox();
-    assert.ok(Math.abs(mobile.x + mobile.width / 2 - 187.5) <= 1, "centered on phones");
+    assert.ok(
+      Math.abs(mobile.x + mobile.width / 2 - 187.5) <= 1,
+      "centered on phones",
+    );
     await noHorizontalScroll(page);
-    await page.screenshot({ path: `${out}/login-hell-left-mobile.png`, fullPage: true });
+    await page.screenshot({
+      path: `${out}/login-hell-left-mobile.png`,
+      fullPage: true,
+    });
     await ctx.close();
   }
 
@@ -283,7 +350,14 @@ try {
       accent: "kupfer",
       style: "glass",
       glass: 60,
-      background: { source: "custom", fit: "cover", x: 50, y: 40, zoom: 110, dim: 55 },
+      background: {
+        source: "custom",
+        fit: "cover",
+        x: 50,
+        y: 40,
+        zoom: 110,
+        dim: 55,
+      },
       image: { id: imageID, width: 1280, height: 720, bytes: picture.length },
       hideHost: true,
       clock: true,
@@ -296,8 +370,13 @@ try {
       await page.locator(".paper .picture").getAttribute("style"),
       new RegExp(`/api/v1/login-appearance/background/${imageID}`),
     );
-    assert.equal(await page.locator(".paper .dim").evaluate((e) => e.style.opacity), "0.55");
-    await page.waitForFunction(() => document.querySelector("main.login .clock"));
+    assert.equal(
+      await page.locator(".paper .dim").evaluate((e) => e.style.opacity),
+      "0.55",
+    );
+    await page.waitForFunction(() =>
+      document.querySelector("main.login .clock"),
+    );
     await page.waitForTimeout(300);
     assert.ok(state.imageRequests >= 1);
     await page.screenshot({ path: `${out}/login-own-image-dark.png` });
@@ -309,32 +388,66 @@ try {
   // 6. Upload of an own image in the editor goes out as multipart; default again removes the file.
   {
     const { ctx, page } = await create("owner");
-    const state = { value: defaults(), saves: [], uploads: 0, imageRequests: 0 };
+    const state = {
+      value: defaults(),
+      saves: [],
+      uploads: 0,
+      imageRequests: 0,
+    };
     await loginRoutes(ctx, state);
     await page.goto(base + "/settings/appearance");
     const section = page.locator("section.login-look");
     await section.getByRole("heading", { name: "Anmeldeseite" }).waitFor();
     const chooser = page.waitForEvent("filechooser");
     await section.getByLabel(/^Hintergrund/).selectOption("custom");
-    await (await chooser).setFiles({ name: "weltraum.webp", mimeType: "image/webp", buffer: picture });
+    await (
+      await chooser
+    ).setFiles({
+      name: "weltraum.webp",
+      mimeType: "image/webp",
+      buffer: picture,
+    });
     await section.getByText("Wird beim Speichern hochgeladen.").waitFor();
-    await page.locator(".save-bar").getByRole("button", { name: "Übernehmen" }).click();
-    await page.locator(".save-bar").getByText("Gespeichert", { exact: true }).waitFor();
+    await page
+      .locator(".save-bar")
+      .getByRole("button", { name: "Übernehmen" })
+      .click();
+    await page
+      .locator(".save-bar")
+      .getByText("Gespeichert", { exact: true })
+      .waitFor();
     assert.equal(state.uploads, 1);
     assert.equal(state.value.background.source, "custom");
-    await section.getByRole("button", { name: "Standard", exact: true }).click();
-    await section.getByText("Das gespeicherte eigene Bild wird beim Speichern entfernt.").waitFor();
-    await page.locator(".save-bar").getByRole("button", { name: "Übernehmen" }).click();
-    await page.locator(".save-bar").getByText("Gespeichert", { exact: true }).waitFor();
+    await section
+      .getByRole("button", { name: "Standard", exact: true })
+      .click();
+    await section
+      .getByText("Das gespeicherte eigene Bild wird beim Speichern entfernt.")
+      .waitFor();
+    await page
+      .locator(".save-bar")
+      .getByRole("button", { name: "Übernehmen" })
+      .click();
+    await page
+      .locator(".save-bar")
+      .getByText("Gespeichert", { exact: true })
+      .waitFor();
     assert.equal(state.value.configured, false);
     await ctx.close();
   }
 
   // 7. The light theme as the browser's own look, without login settings, is unchanged too.
   {
-    const { ctx, page } = await loggedOut(defaults(), { theme: "hell", width: 375, height: 812 });
+    const { ctx, page } = await loggedOut(defaults(), {
+      theme: "hell",
+      width: 375,
+      height: 812,
+    });
     assert.equal(await page.locator("main.login").getAttribute("style"), null);
-    assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), "hell");
+    assert.equal(
+      await page.evaluate(() => document.documentElement.dataset.theme),
+      "hell",
+    );
     await noHorizontalScroll(page);
     await page.screenshot({ path: `${out}/login-default-hell-mobile.png` });
     await ctx.close();

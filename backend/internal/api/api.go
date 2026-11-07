@@ -71,6 +71,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/usb"
 	"github.com/ra5on/TitanOS/backend/internal/viewer"
 	"github.com/ra5on/TitanOS/backend/internal/vm"
+	"github.com/ra5on/TitanOS/backend/internal/webapps"
 	"github.com/ra5on/TitanOS/backend/internal/webpush"
 	"github.com/ra5on/TitanOS/backend/internal/wgserver"
 )
@@ -105,7 +106,9 @@ type Options struct {
 	Terminal *terminal.Manager
 	// Viewer runs the remote view of Docker apps (PLAN 63); nil leaves it out.
 	Viewer *viewer.Manager
-	VMs    *vm.Manager
+	// Webapps installs and serves the web apps (PLAN 66); nil leaves them out.
+	Webapps *webapps.Manager
+	VMs     *vm.Manager
 	// LXC runs system containers; nil makes one that does nothing.
 	LXC          *lxc.Manager
 	Hardware     *hardware.Manager
@@ -205,6 +208,8 @@ type Server struct {
 	appIcon   appIcons
 	dav       davState
 	mcp       mcpState
+	// migration is the move from Docker versions to web apps (PLAN 66).
+	migration webappMigration
 	haStore   haStorageState
 	// haStores is the storage of further Home Assistant connections.
 	haStores   map[string]*haStorageState
@@ -377,6 +382,7 @@ func New(opts Options) *Server {
 	s.registerDocker(mux)
 	s.registerAppStore(mux)
 	s.registerViewer(mux)
+	s.registerWebapps(mux)
 	s.registerVMs(mux)
 	s.registerHardware(mux)
 	s.registerVMDetails(mux)

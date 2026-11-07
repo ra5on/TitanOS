@@ -292,6 +292,8 @@ export type Preferences = {
 	hints?: Record<string, unknown> | null;
 	/** The desktop of the account (PLAN 61); lockMinutes is the automatic lock. */
 	desktop?: Record<string, unknown> | null;
+	/** PLAN 66: standard apps per file type; missing on NAS versions before it. */
+	fileapps?: Record<string, unknown> | null;
 };
 
 export type Temperature = {

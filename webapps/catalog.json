@@ -1,0 +1,213 @@
+{
+  "apps": [
+    {
+      "id": "wordcraft",
+      "name": "WordCraft",
+      "repo": "storytold/wordcraft",
+      "version": "0.16.0",
+      "upstreamAsset": "wordcraft-web-0.16.0.zip",
+      "sha256": "612fcbe9c4fd8c8a2538e4b711dd78eb448859bbdb7f0f4517b26e99511d6f0e",
+      "size": 22269466,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "host",
+      "types": [
+        "docx",
+        "doc",
+        "odt",
+        "rtf"
+      ],
+      "default": true
+    },
+    {
+      "id": "gridcraft",
+      "name": "GridCraft",
+      "repo": "storytold/gridcraft",
+      "version": "0.17.0",
+      "upstreamAsset": "gridcraft-web-0.17.0.zip",
+      "sha256": "6fcd15c008b80945bc1a1d04757baed0800c69cc58525e62b9820c67b791176b",
+      "size": 9488811,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "host",
+      "types": [
+        "xlsx",
+        "xls",
+        "ods",
+        "csv"
+      ],
+      "default": true
+    },
+    {
+      "id": "pdfcraft",
+      "name": "PdfCraft",
+      "repo": "storytold/pdfcraft",
+      "version": "0.19.0",
+      "upstreamAsset": "pdfcraft-web-0.19.0.zip",
+      "sha256": "6cecea09db4d010f1ae18d4c3170db243c7adc653699ba2711f570d57fed6947",
+      "size": 19939263,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "host",
+      "types": [
+        "pdf"
+      ],
+      "default": true
+    },
+    {
+      "id": "deckcraft",
+      "name": "DeckCraft",
+      "repo": "storytold/deckcraft",
+      "version": "0.16.0",
+      "upstreamAsset": "deckcraft-web-0.16.0.zip",
+      "sha256": "8795d58ab02c30ad25f38525a79ee0e69c40b3d122e223dc04d2703827621f55",
+      "size": 11810397,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "host",
+      "types": [
+        "pptx",
+        "potx",
+        "ppsx"
+      ],
+      "default": false
+    },
+    {
+      "id": "cadcraft",
+      "name": "CADCraft",
+      "repo": "storytold/cadcraft",
+      "version": "0.18.0",
+      "upstreamAsset": "cadcraft-web-0.18.0.zip",
+      "sha256": "2440d15ebe28ce0a97f107a860f96d3bc21d98381b9f685676843b876a4d9086",
+      "size": 11252837,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "host",
+      "types": [
+        "dxf"
+      ],
+      "default": false
+    },
+    {
+      "id": "figcraft",
+      "name": "FigCraft",
+      "repo": "storytold/figcraft",
+      "version": "0.16.0",
+      "upstreamAsset": "figcraft-web-0.16.0.zip",
+      "sha256": "0335d9719415cc915a1a18c7ffdd64daeef4b817a4d703df2e167c04a0996852",
+      "size": 10364028,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "host",
+      "types": [
+        "figcraft"
+      ],
+      "default": false
+    },
+    {
+      "id": "filmcraft",
+      "name": "FilmCraft",
+      "repo": "storytold/filmcraft",
+      "version": "0.18.0",
+      "upstreamAsset": "filmcraft-web-0.18.0.zip",
+      "sha256": "bc894b13f7876e49d3a4406ac6c46f4312fca3a80c83d7f80307eaf6d5b1877a",
+      "size": 15414113,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "host",
+      "types": [
+        "fcproj"
+      ],
+      "default": false
+    },
+    {
+      "id": "lightcraft",
+      "name": "LightCraft",
+      "repo": "storytold/lightcraft",
+      "version": "0.19.0",
+      "upstreamAsset": "lightcraft-web-0.19.0.zip",
+      "sha256": "211e39578a0224513bef8b1f70ac89b0909d6838e5b6c89d0b9042aa88951bc0",
+      "size": 74296920,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "host",
+      "types": [],
+      "default": false
+    },
+    {
+      "id": "vectorcraft",
+      "name": "VectorCraft",
+      "repo": "storytold/vectorcraft",
+      "version": "0.22.0",
+      "upstreamAsset": "vectorcraft-web-0.22.0.zip",
+      "sha256": "da3759eb0689ffe4b1e267e47e0fe71dd79b1f99faf939d0e86813622d74b889",
+      "size": 34167167,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "adapter",
+      "types": [
+        "svg",
+        "ai"
+      ],
+      "default": false
+    },
+    {
+      "id": "designcraft",
+      "name": "DesignCraft",
+      "repo": "storytold/designcraft",
+      "version": "0.18.0",
+      "upstreamAsset": "designcraft-web-0.18.0.zip",
+      "sha256": "f684454589af6c412eec51da190b774d84d3f4f7b333e96a78c359fa4fb8aca4",
+      "size": 27161221,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "adapter",
+      "types": [],
+      "default": false
+    },
+    {
+      "id": "effectcraft",
+      "name": "EffectCraft",
+      "repo": "storytold/effectcraft",
+      "version": "0.22.0",
+      "upstreamAsset": "effectcraft-web-0.22.0.zip",
+      "sha256": "bdde079fd585adaca18cc456a3ce5577039894c99429b59a0375d64824ced554",
+      "size": 22229029,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "adapter",
+      "types": [
+        "ecproj"
+      ],
+      "default": false
+    },
+    {
+      "id": "soundcraft",
+      "name": "SoundCraft",
+      "repo": "storytold/soundcraft",
+      "version": "0.18.0",
+      "upstreamAsset": "soundcraft-web-0.18.0.zip",
+      "sha256": "c944fecc1aa332bfd0a6e3bd9719293489e8444cf46f575f8b3d38800d5d322b",
+      "size": 6865877,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "adapter",
+      "types": [],
+      "default": false
+    },
+    {
+      "id": "texturecraft",
+      "name": "TextureCraft",
+      "repo": "storytold/texturecraft",
+      "version": "0.4.0",
+      "upstreamAsset": "texturecraft-web-0.4.0.zip",
+      "sha256": "e423798c06ccfa455e51f12c5643fe0d8d752160ac8aaad9d20b1c001085e26c",
+      "size": 9180138,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "adapter",
+      "types": [],
+      "default": false
+    },
+    {
+      "id": "materialcraft",
+      "name": "MaterialCraft",
+      "repo": "storytold/materialcraft",
+      "version": "0.2.0",
+      "upstreamAsset": "materialcraft-web-0.2.0.zip",
+      "sha256": "0bdf84607dcbd637adff124608f0ac3b96796647d3c6892cbec7054d2f637b0d",
+      "size": 4618296,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "adapter",
+      "types": [],
+      "default": false
+    }
+  ]
+}

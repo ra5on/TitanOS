@@ -26,6 +26,12 @@ const out = process.env.UI_OUTPUT || "out/validation/viewer";
 await mkdir(out, { recursive: true });
 const errors = [];
 const create = fixtureFactory(browser, errors);
+/** Opens (or closes) the ⋯ menu of a window (PLAN 66: the view's controls are there). */
+async function more(win, open = true) {
+  const button = win.locator('.titlebar button[aria-label="Mehr"]');
+  if (((await button.getAttribute("aria-expanded")) === "true") !== open)
+    await button.click();
+}
 const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -348,11 +354,17 @@ const until = async (fn, what, ms = 5000) => {
     0,
     "no frame for a Docker app",
   );
-  assert.ok(
-    await win
-      .locator(".titlebar .addr", { hasText: "immich.nas.local" })
-      .count(),
-    "the app's address stays in the title bar",
+  // PLAN 66 (draft 02): like an app – no address in the title bar, the
+  // controls of the view in the window's ⋯ menu.
+  assert.equal(
+    await win.locator(".titlebar .addr").count(),
+    0,
+    "no address in the title bar",
+  );
+  assert.equal(
+    await win.locator(".view-bar").count(),
+    0,
+    "no bar of its own in a window",
   );
   assert.deepEqual(
     await canvas.evaluate((el) => [el.width, el.height]),
@@ -364,10 +376,13 @@ const until = async (fn, what, ms = 5000) => {
     size.width > 300 && size.height > 200 && size.scale >= 1,
     "size sent",
   );
-  await win.locator(".view-bar .pill", { hasText: "Fernansicht" }).waitFor();
+  await more(win);
+  await win.locator(".win-menu .pill", { hasText: "Fernansicht" }).waitFor();
   await win
-    .locator(".view-bar .stats", { hasText: "60 fps · 18 ms · GPU (VA-API)" })
+    .locator(".win-menu .stats", { hasText: "60 fps · 18 ms · GPU (VA-API)" })
     .waitFor();
+  await shot(page, "01b-menue");
+  await more(win, false);
   assert.equal(
     await canvas.evaluate((el) => el.style.cursor),
     "pointer",
@@ -469,14 +484,15 @@ const until = async (fn, what, ms = 5000) => {
   );
 
   // Quality.
-  await win.getByRole("button", { name: "Qualität" }).click();
+  await more(win);
+  await win.getByRole("menuitem", { name: /Qualität/ }).click();
   await page.getByRole("menuitemradio", { name: "Sparsam" }).click();
   await until(
     () =>
       v.sent.some((m) => m.t === "quality" && m.mode === "low" && m.fps === 60),
     "quality",
   );
-  await win.getByRole("button", { name: /Qualität/ }).click();
+  await win.getByRole("menuitem", { name: /Qualität/ }).click();
   await page.getByRole("menuitemradio", { name: "30 fps" }).click();
   await until(
     () =>
@@ -485,9 +501,9 @@ const until = async (fn, what, ms = 5000) => {
   );
 
   // Clipboard of the app, and sending text into it.
-  await win.getByRole("button", { name: "Zwischenablage" }).click();
+  await win.getByRole("menuitem", { name: "Zwischenablage" }).click();
   await page
-    .locator(".dropdown-panel .remote-clip", { hasText: "Text aus der App" })
+    .locator(".win-menu .remote-clip", { hasText: "Text aus der App" })
     .waitFor();
   await page.getByLabel("Text für die App").fill("Notiz");
   await page.getByRole("button", { name: "In die App legen" }).click();
@@ -496,11 +512,11 @@ const until = async (fn, what, ms = 5000) => {
     "clipboard send",
   );
   await shot(page, "02-zwischenablage");
-  await page.keyboard.press("Escape");
+  await win.getByRole("menuitem", { name: "Zwischenablage" }).click();
 
   // Files: upload in 256 KiB pieces with progress, downloads as links.
-  await win.getByRole("button", { name: "Dateien" }).click();
-  const link = page.locator(".dropdown-panel a", { hasText: "bild.jpg" });
+  await win.getByRole("menuitem", { name: /Heruntergeladen/ }).click();
+  const link = page.locator(".win-menu a", { hasText: "bild.jpg" });
   assert.equal(
     await link.getAttribute("href"),
     "/api/v1/viewer/immich/downloads/d1",
@@ -533,16 +549,16 @@ const until = async (fn, what, ms = 5000) => {
     "pieces carry the upload number",
   );
   await page
-    .locator(".dropdown-panel li", { hasText: "bericht.pdf" })
+    .locator(".win-menu li", { hasText: "bericht.pdf" })
     .getByText("hochgeladen")
     .waitFor();
   await shot(page, "03-dateien");
-  await page.keyboard.press("Escape");
+  await win.getByRole("menuitem", { name: /Heruntergeladen/ }).click();
 
   // Volume: remembered per app in this browser.
   const slider = win.getByRole("slider", { name: "Lautstärke" });
   await slider.fill("30");
-  await win.locator(".view-bar .pct", { hasText: "30 %" }).waitFor();
+  await win.locator(".win-menu .pct", { hasText: "30 %" }).waitFor();
   const stored = await page.evaluate(() =>
     JSON.parse(localStorage.getItem("titanos.viewer.immich")),
   );
@@ -558,12 +574,15 @@ const until = async (fn, what, ms = 5000) => {
     true,
   );
   await win.getByRole("button", { name: "Ton an" }).click();
+  await more(win, false);
 
   // Key frame after a decoder error is asked for by the view; the mock answers a request.
   // The end of the view: "Neu verbinden" starts it again.
   v.bye("idle");
   await win.getByText("Getrennt, weil eine Weile keine Eingabe kam.").waitFor();
-  await win.locator(".view-bar .pill", { hasText: "beendet" }).waitFor();
+  await more(win);
+  await win.locator(".win-menu .pill", { hasText: "beendet" }).waitFor();
+  await more(win, false);
   await shot(page, "04-beendet");
   await win.getByRole("button", { name: "Neu verbinden" }).click();
   await painted(canvas);
@@ -582,7 +601,8 @@ const until = async (fn, what, ms = 5000) => {
   const win2 = page.locator("section.win", { hasText: "immich" });
   if (!(await win2.count()))
     await page.locator(".ico", { hasText: "immich" }).first().click();
-  await win2.locator(".view-bar .pct", { hasText: "30 %" }).waitFor();
+  await more(win2);
+  await win2.locator(".win-menu .pct", { hasText: "30 %" }).waitFor();
   await ctx.close();
 }
 

@@ -7,8 +7,13 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { fixtureFactory } from "./test-ui-fixtures.mjs";
-const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || "playwright");
-const browser = await chromium.launch({ headless: true, executablePath: process.env.BROWSER_EXECUTABLE });
+const { chromium } = await import(
+  process.env.PLAYWRIGHT_MODULE || "playwright"
+);
+const browser = await chromium.launch({
+  headless: true,
+  executablePath: process.env.BROWSER_EXECUTABLE,
+});
 const base = process.env.UI_URL || "http://127.0.0.1:5173";
 const out = process.env.UI_OUTPUT || "out/validation/ui-cluster";
 await mkdir(out, { recursive: true });
@@ -24,15 +29,43 @@ const status = (name, version) => ({
   uptimeSeconds: 86400 * 3,
   cpuPercent: 8,
   memory: { totalBytes: 32e9, availableBytes: 20e9 },
-  volumes: [{ name: "Data", state: "ok", mounted: true, sizeBytes: 8e12, usedBytes: 3.1e12 }],
+  volumes: [
+    {
+      name: "Data",
+      state: "ok",
+      mounted: true,
+      sizeBytes: 8e12,
+      usedBytes: 3.1e12,
+    },
+  ],
   warnings: 0,
   errors: 0,
 });
-const node = (id, name, addresses, ways = {}) => ({ id, name, addresses, ways, extra: [], cert: "a".repeat(64), joined: time, updated: time });
+const node = (id, name, addresses, ways = {}) => ({
+  id,
+  name,
+  addresses,
+  ways,
+  extra: [],
+  cert: "a".repeat(64),
+  joined: time,
+  updated: time,
+});
 const nodes = [
-  node("n1", "titan", ["192.168.1.20:443", "100.101.7.12:443", "titan.tail1234.ts.net:443"]),
-  node("n2", "thor", ["192.168.1.30:443", "100.83.25.99:443", "10.77.0.2:443"], { "10.77.0.2:443": "tunnel" }),
-  node("n3", "loki", ["10.8.0.3:443", "100.70.4.18:443", "10.77.0.3:443"], { "10.77.0.3:443": "tunnel" }),
+  node("n1", "titan", [
+    "192.168.1.20:443",
+    "100.101.7.12:443",
+    "titan.tail1234.ts.net:443",
+  ]),
+  node(
+    "n2",
+    "thor",
+    ["192.168.1.30:443", "100.83.25.99:443", "10.77.0.2:443"],
+    { "10.77.0.2:443": "tunnel" },
+  ),
+  node("n3", "loki", ["10.8.0.3:443", "100.70.4.18:443", "10.77.0.3:443"], {
+    "10.77.0.3:443": "tunnel",
+  }),
 ];
 function clusterPage() {
   return {
@@ -44,8 +77,16 @@ function clusterPage() {
       admin: "n1",
       manages: true,
       extra: [],
-      found: ["192.168.1.20:443", "100.101.7.12:443", "titan.tail1234.ts.net:443"],
-      foundWays: { "192.168.1.20:443": "home", "100.101.7.12:443": "tailscale", "titan.tail1234.ts.net:443": "tailscale" },
+      found: [
+        "192.168.1.20:443",
+        "100.101.7.12:443",
+        "titan.tail1234.ts.net:443",
+      ],
+      foundWays: {
+        "192.168.1.20:443": "home",
+        "100.101.7.12:443": "tailscale",
+        "titan.tail1234.ts.net:443": "tailscale",
+      },
       ways: {},
       routes: { n3: { manage: "tunnel" } },
       tunnel: { running: false },
@@ -53,8 +94,23 @@ function clusterPage() {
       protocol: 1,
     },
     nodes: [
-      { ...nodes[0], self: true, online: true, compatible: true, status: status("titan", "0.44.0") },
-      { ...nodes[1], self: false, online: true, compatible: true, status: status("thor", "0.43.0"), address: "192.168.1.30:443", way: "home", millis: 2 },
+      {
+        ...nodes[0],
+        self: true,
+        online: true,
+        compatible: true,
+        status: status("titan", "0.44.0"),
+      },
+      {
+        ...nodes[1],
+        self: false,
+        online: true,
+        compatible: true,
+        status: status("thor", "0.43.0"),
+        address: "192.168.1.30:443",
+        way: "home",
+        millis: 2,
+      },
       {
         ...nodes[2],
         self: false,
@@ -75,9 +131,30 @@ const switchNodes = {
   manages: true,
   version: "0.44.0",
   nodes: [
-    { id: "n1", name: "titan", self: true, online: true, version: "0.44.0", compatible: true },
-    { id: "n2", name: "thor", self: false, online: true, version: "0.43.0", compatible: true },
-    { id: "n3", name: "loki", self: false, online: true, version: "0.44.0", compatible: true },
+    {
+      id: "n1",
+      name: "titan",
+      self: true,
+      online: true,
+      version: "0.44.0",
+      compatible: true,
+    },
+    {
+      id: "n2",
+      name: "thor",
+      self: false,
+      online: true,
+      version: "0.43.0",
+      compatible: true,
+    },
+    {
+      id: "n3",
+      name: "loki",
+      self: false,
+      online: true,
+      version: "0.44.0",
+      compatible: true,
+    },
   ],
 };
 const probes = {
@@ -87,26 +164,60 @@ const probes = {
       id: "n2",
       name: "thor",
       probes: [
-        { way: "home", address: "192.168.1.30:443", ok: true, millis: 2, used: true },
-        { way: "tunnel", address: "10.77.0.2:443", ok: true, millis: 3, used: false },
+        {
+          way: "home",
+          address: "192.168.1.30:443",
+          ok: true,
+          millis: 2,
+          used: true,
+        },
+        {
+          way: "tunnel",
+          address: "10.77.0.2:443",
+          ok: true,
+          millis: 3,
+          used: false,
+        },
       ],
     },
     {
       id: "n3",
       name: "loki",
       probes: [
-        { way: "tunnel", address: "10.77.0.3:443", ok: false, millis: 6000, problem: "timeout", used: false },
-        { way: "tailscale", address: "100.70.4.18:443", ok: true, millis: 38, used: true },
+        {
+          way: "tunnel",
+          address: "10.77.0.3:443",
+          ok: false,
+          millis: 6000,
+          problem: "timeout",
+          used: false,
+        },
+        {
+          way: "tailscale",
+          address: "100.70.4.18:443",
+          ok: true,
+          millis: 38,
+          used: true,
+        },
       ],
     },
   ],
 };
-const update = (version, available) => ({ version, available: available ? { version: available } : null, kind: "app" });
+const update = (version, available) => ({
+  version,
+  available: available ? { version: available } : null,
+  kind: "app",
+});
 
 async function shot(page, file) {
   const size = page.viewportSize();
-  const height = await page.evaluate(() => document.documentElement.scrollHeight);
-  await page.setViewportSize({ width: size.width, height: Math.max(size.height, height) });
+  const height = await page.evaluate(
+    () => document.documentElement.scrollHeight,
+  );
+  await page.setViewportSize({
+    width: size.width,
+    height: Math.max(size.height, height),
+  });
   await page.waitForTimeout(150);
   await page.screenshot({ path: file });
   await page.setViewportSize(size);
@@ -115,41 +226,108 @@ async function shot(page, file) {
 async function open(width, path, node = "") {
   const made = await create("owner", "graphit", width);
   made.data.prefs.appearance = { theme: "graphit" };
-  const state = { put: [], routes: [], runs: [], run: null, page: clusterPage() };
+  const state = {
+    put: [],
+    routes: [],
+    runs: [],
+    run: null,
+    page: clusterPage(),
+  };
   const { ctx, page } = made;
   await ctx.route("**/api/v1/cluster", (r) => {
     if (r.request().method() === "PUT") {
       const body = r.request().postDataJSON();
       state.put.push(body);
       state.page.cluster.ways = body.ways;
-      state.page.cluster.tunnel = { enabled: body.tunnel, address: body.tunnel ? "10.77.0.1" : "", port: 51821, running: body.tunnel };
+      state.page.cluster.tunnel = {
+        enabled: body.tunnel,
+        address: body.tunnel ? "10.77.0.1" : "",
+        port: 51821,
+        running: body.tunnel,
+      };
     }
     return r.fulfill({ json: state.page });
   });
-  await ctx.route("**/api/v1/cluster/nodes", (r) => r.fulfill({ json: switchNodes }));
-  await ctx.route("**/api/v1/cluster/probe", (r) => r.fulfill({ json: probes }));
+  await ctx.route("**/api/v1/cluster/nodes", (r) =>
+    r.fulfill({ json: switchNodes }),
+  );
+  await ctx.route("**/api/v1/cluster/probe", (r) =>
+    r.fulfill({ json: probes }),
+  );
   await ctx.route("**/api/v1/cluster/nodes/*/route", (r) => {
-    state.routes.push({ url: r.request().url(), body: r.request().postDataJSON() });
+    state.routes.push({
+      url: r.request().url(),
+      body: r.request().postDataJSON(),
+    });
     return r.fulfill({ json: state.page });
   });
   await ctx.route("**/api/v1/cluster/update", (r) => {
     if (r.request().method() === "POST") {
       const body = r.request().postDataJSON();
       state.runs.push(body);
-      state.run = { parallel: body.parallel, running: true, started: time, nodes: body.nodes.map((id) => ({ id, name: id, state: "waiting" })) };
+      state.run = {
+        parallel: body.parallel,
+        running: true,
+        started: time,
+        nodes: body.nodes.map((id) => ({ id, name: id, state: "waiting" })),
+      };
     }
     return r.fulfill({ json: { run: state.run } });
   });
-  await ctx.route("**/api/v1/cluster/nodes/n2/api/update", (r) => r.fulfill({ json: update("0.43.0", "0.44.0") }));
-  await ctx.route("**/api/v1/cluster/nodes/n3/api/update", (r) => r.fulfill({ json: update("0.44.0", null) }));
+  await ctx.route("**/api/v1/cluster/nodes/n2/api/update", (r) =>
+    r.fulfill({ json: update("0.43.0", "0.44.0") }),
+  );
+  await ctx.route("**/api/v1/cluster/nodes/n3/api/update", (r) =>
+    r.fulfill({ json: update("0.44.0", null) }),
+  );
   // thor's own messages, read and deleted through the proxy (PLAN 25a).
   const ago = (minutes) => new Date(Date.now() - minutes * 60000).toISOString();
   state.notices = [
-    { id: 11, time: ago(5), severity: "error", kind: "volume_degraded", subject: "Data", title: "Volume Data ist beeinträchtigt", text: "Eine Platte fehlt." },
-    { id: 12, time: ago(16), severity: "error", kind: "disk_failed", subject: "sdb", title: "Platte sdb meldet Fehler", text: "SMART: 8 nicht korrigierbare Sektoren." },
-    { id: 13, time: ago(30), severity: "warning", kind: "ups_battery", subject: "", title: "USV-Akku schwach", text: "" },
-    { id: 14, time: ago(40), severity: "info", kind: "update_done", subject: "", title: "Update installiert", text: "" },
-    { id: 15, time: ago(60 * 30), severity: "error", kind: "old", subject: "", title: "Älter als ein Tag", text: "" },
+    {
+      id: 11,
+      time: ago(5),
+      severity: "error",
+      kind: "volume_degraded",
+      subject: "Data",
+      title: "Volume Data ist beeinträchtigt",
+      text: "Eine Platte fehlt.",
+    },
+    {
+      id: 12,
+      time: ago(16),
+      severity: "error",
+      kind: "disk_failed",
+      subject: "sdb",
+      title: "Platte sdb meldet Fehler",
+      text: "SMART: 8 nicht korrigierbare Sektoren.",
+    },
+    {
+      id: 13,
+      time: ago(30),
+      severity: "warning",
+      kind: "ups_battery",
+      subject: "",
+      title: "USV-Akku schwach",
+      text: "",
+    },
+    {
+      id: 14,
+      time: ago(40),
+      severity: "info",
+      kind: "update_done",
+      subject: "",
+      title: "Update installiert",
+      text: "",
+    },
+    {
+      id: 15,
+      time: ago(60 * 30),
+      severity: "error",
+      kind: "old",
+      subject: "",
+      title: "Älter als ein Tag",
+      text: "",
+    },
   ];
   await ctx.route("**/api/v1/cluster/nodes/n2/api/notifications**", (r) => {
     if (r.request().method() === "POST") {
@@ -159,8 +337,23 @@ async function open(width, path, node = "") {
     }
     return r.fulfill({ json: { messages: state.notices } });
   });
-  await ctx.route("**/api/v1/cluster/nodes/n2/api/docker", (r) => r.fulfill({ json: { settings: { enabled: true, volume: "Data" }, running: true, version: "27.5.1", containers: [], apps: [], jobs: {} } }));
-  if (node) await ctx.addInitScript((id) => sessionStorage.setItem("titanos.cluster.node", id), node);
+  await ctx.route("**/api/v1/cluster/nodes/n2/api/docker", (r) =>
+    r.fulfill({
+      json: {
+        settings: { enabled: true, volume: "Data" },
+        running: true,
+        version: "27.5.1",
+        containers: [],
+        apps: [],
+        jobs: {},
+      },
+    }),
+  );
+  if (node)
+    await ctx.addInitScript(
+      (id) => sessionStorage.setItem("titanos.cluster.node", id),
+      node,
+    );
   await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
   await page.goto(base + path);
   return { ctx, page, state, data: made.data };
@@ -177,15 +370,27 @@ try {
     await list.getByText("eigener Weg: WireGuard (TitanOS)").waitFor();
     await list.getByText(/WireGuard \(TitanOS\) nicht erreichbar/).waitFor();
     await list.getByText("Uhr geht 3 min vor (NTP prüfen)").waitFor();
-    assert.equal(await page.locator("#cluster-alert").inputValue(), "0", "the notice defaults to 10 minutes");
+    assert.equal(
+      await page.locator("#cluster-alert").inputValue(),
+      "0",
+      "the notice defaults to 10 minutes",
+    );
     await shot(page, out + "/1-cluster.png");
     await page.locator("#cluster-way").selectOption("tailscale");
     await page.getByRole("switch", { name: "Nur diesen Weg benutzen" }).click();
     await page.locator("#cluster-backup").selectOption("home");
-    await page.getByRole("switch", { name: "WireGuard-Tunnel von TitanOS" }).click();
+    await page
+      .getByRole("switch", { name: "WireGuard-Tunnel von TitanOS" })
+      .click();
     await page.getByRole("button", { name: "Speichern" }).click();
     await page.getByText("An · 10.77.0.1").waitFor();
-    assert.deepEqual(state.put.at(-1).ways, { manage: "tailscale", only: true, backup: "home", return: 0, alert: 0 });
+    assert.deepEqual(state.put.at(-1).ways, {
+      manage: "tailscale",
+      only: true,
+      backup: "home",
+      return: 0,
+      alert: 0,
+    });
     assert.equal(state.put.at(-1).tunnel, true);
 
     // Check ways.
@@ -206,10 +411,17 @@ try {
     await route.getByRole("button", { name: "Übernehmen" }).click();
     await route.waitFor({ state: "detached" });
     assert.match(state.routes.at(-1).url, /\/cluster\/nodes\/n3\/route$/);
-    assert.deepEqual(state.routes.at(-1).body, { manage: "tunnel", only: false, backup: "home" });
+    assert.deepEqual(state.routes.at(-1).body, {
+      manage: "tunnel",
+      only: false,
+      backup: "home",
+    });
 
     // A node of another version is managed, not greyed out.
-    assert.equal(await list.getByRole("button", { name: "Verwalten" }).first().isEnabled(), true);
+    assert.equal(
+      await list.getByRole("button", { name: "Verwalten" }).first().isEnabled(),
+      true,
+    );
     await ctx.close();
   }
   {
@@ -222,13 +434,23 @@ try {
     await list.getByRole("button", { name: /2 Fehler/ }).click();
     const box = page.getByRole("region", { name: "Meldungen von thor" });
     await box.getByText("Platte sdb meldet Fehler").waitFor();
-    assert.equal(await box.getByRole("listitem").count(), 3, "warnings and errors of the last 24 hours only");
+    assert.equal(
+      await box.getByRole("listitem").count(),
+      3,
+      "warnings and errors of the last 24 hours only",
+    );
     await shot(page, out + "/9-meldungen.png");
     await box.getByRole("button", { name: /Platte sdb meldet Fehler/ }).click();
-    await box.getByText("Platte sdb meldet Fehler").waitFor({ state: "detached" });
+    await box
+      .getByText("Platte sdb meldet Fehler")
+      .waitFor({ state: "detached" });
     assert.deepEqual(state.dismissed, [12]);
-    await box.getByRole("button", { name: "Angezeigte Meldungen löschen" }).click();
-    const confirm = page.getByRole("dialog", { name: "Angezeigte Meldungen löschen?" });
+    await box
+      .getByRole("button", { name: "Angezeigte Meldungen löschen" })
+      .click();
+    const confirm = page.getByRole("dialog", {
+      name: "Angezeigte Meldungen löschen?",
+    });
     await confirm.getByText("2 Meldungen werden auf thor gelöscht").waitFor();
     await confirm.getByRole("button", { name: "Löschen" }).click();
     await box.getByText("Keine Warnungen oder Fehler mehr").waitFor();
@@ -239,9 +461,20 @@ try {
     const { ctx, page, state } = await open(390, "/settings/cluster");
     state.page.nodes[1].status.errors = 2;
     await page.reload();
-    await page.locator("#cluster-nodes").getByRole("button", { name: /2 Fehler/ }).click();
-    await page.getByRole("region", { name: "Meldungen von thor" }).getByText("Platte sdb meldet Fehler").waitFor();
-    assert.ok((await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)) <= 0, "no sideways scroll");
+    await page
+      .locator("#cluster-nodes")
+      .getByRole("button", { name: /2 Fehler/ })
+      .click();
+    await page
+      .getByRole("region", { name: "Meldungen von thor" })
+      .getByText("Platte sdb meldet Fehler")
+      .waitFor();
+    assert.ok(
+      (await page.evaluate(
+        () => document.documentElement.scrollWidth - innerWidth,
+      )) <= 0,
+      "no sideways scroll",
+    );
     await shot(page, out + "/10-meldungen-handy.png");
     await ctx.close();
   }
@@ -249,7 +482,11 @@ try {
     // Managing an older node: the strip names both versions; what it does
     // not have yet says so instead of "not found".
     const { ctx, page } = await open(1440, "/docker", "n2");
-    await page.getByText("thor läuft mit 0.43.0, dieses NAS mit 0.44.0", { exact: false }).waitFor();
+    await page
+      .getByText("thor läuft mit 0.43.0, dieses NAS mit 0.44.0", {
+        exact: false,
+      })
+      .waitFor();
     await page.getByRole("link", { name: "thor aktualisieren" }).waitFor();
     await shot(page, out + "/4-aeltere-version.png");
     await ctx.close();
@@ -261,20 +498,35 @@ try {
     await section.getByText("Update verfügbar").waitFor();
     await shot(page, out + "/5-updates.png");
     await section.getByRole("button", { name: "Alle aktualisieren" }).click();
-    const dialog = page.getByRole("dialog", { name: "Alle Knoten aktualisieren" });
+    const dialog = page.getByRole("dialog", {
+      name: "Alle Knoten aktualisieren",
+    });
     await dialog.getByText("App-Update, kein NAS-Neustart").waitFor();
-    assert.equal(await dialog.getByRole("radio", { name: /Nacheinander/ }).isChecked(), true);
+    assert.equal(
+      await dialog.getByRole("radio", { name: /Nacheinander/ }).isChecked(),
+      true,
+    );
     await page.screenshot({ path: out + "/6-alle-aktualisieren.png" });
     await dialog.getByRole("radio", { name: /Alle gleichzeitig/ }).check();
-    await dialog.getByRole("button", { name: "1 Knoten aktualisieren" }).click();
+    await dialog
+      .getByRole("button", { name: "1 Knoten aktualisieren" })
+      .click();
     await section.getByText("Aktualisiert die Knoten gleichzeitig").waitFor();
     assert.deepEqual(state.runs.at(-1), { nodes: ["n2"], parallel: true });
     await ctx.close();
   }
   {
     const { ctx, page } = await open(390, "/settings/cluster");
-    await page.locator("#cluster-nodes").getByText("über Heimnetz · 2 ms").waitFor();
-    assert.ok((await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)) <= 0, "no sideways scroll");
+    await page
+      .locator("#cluster-nodes")
+      .getByText("über Heimnetz · 2 ms")
+      .waitFor();
+    assert.ok(
+      (await page.evaluate(
+        () => document.documentElement.scrollWidth - innerWidth,
+      )) <= 0,
+      "no sideways scroll",
+    );
     await shot(page, out + "/8-cluster-handy.png");
     await ctx.close();
   }

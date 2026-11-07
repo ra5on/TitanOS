@@ -332,7 +332,9 @@ try {
     vms[2].available = false;
     await page.locator(".vm-page>.notices").waitFor();
     await page.waitForFunction(() => {
-      const frame = document.querySelector("main .frame").getBoundingClientRect();
+      const frame = document
+        .querySelector("main .frame")
+        .getBoundingClientRect();
       const footer = document
         .querySelector(".screen-footer")
         .getBoundingClientRect();

@@ -6,6 +6,7 @@
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { onMount } from 'svelte';
+	import StandardApps from '#lib/webapps/StandardApps.svelte';
 	import {
 		indexSettings,
 		indexStateLabel,
@@ -95,6 +96,8 @@
 <PageHead title={t('fileIndex.title')}>
 	<p class="muted">{t('fileIndex.intro')}</p>
 </PageHead>
+<!-- PLAN 66: per account, also for accounts that do not manage the index. -->
+<StandardApps />
 {#if loadError}<p class="notice-error" role="alert">
 		{loadError} <button class="btn" onclick={refresh}>{t('common.retry')}</button>
 	</p>{/if}

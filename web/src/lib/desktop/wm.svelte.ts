@@ -1,5 +1,7 @@
 // PLAN 61: the windows of the desktop and the desktop's own settings.
+import { untrack } from 'svelte';
 import { api } from '../api.ts';
+import { inWindow } from './frame.ts';
 import { session } from '../session.svelte.ts';
 import { defaultDesktop, sanitizeDesktop, type DesktopPrefs } from './prefs.ts';
 
@@ -23,6 +25,10 @@ export type Win = {
 	from?: { x: number; y: number };
 	/** A one-time entry of a Docker app's gate (PLAN 61-1); never stored. */
 	entry?: string;
+	/** PLAN 66: the file a web app's window shows (root of the file manager and path). */
+	doc?: { root: string; path: string };
+	/** PLAN 66: the name of the document the app has open (title bar). */
+	docName?: string;
 };
 
 const KEY = 'titanos.desktop.windows';
@@ -39,6 +45,10 @@ export const wm = $state<{
 	dragging: boolean;
 	/** Room the dock takes at the edges of the desktop (snapped windows stay clear of it). */
 	inset: { l: number; r: number; b: number };
+	/** PLAN 66: windows asking whether unsaved work may be dropped. */
+	closing: string[];
+	/** PLAN 66: files are dragged over the desktop (web app windows show where to drop them). */
+	fileDrag: boolean;
 }>({
 	windows: [],
 	focused: null,
@@ -48,9 +58,15 @@ export const wm = $state<{
 	switcherIndex: 0,
 	dragging: false,
 	inset: { l: 0, r: 0, b: 0 },
+	closing: [],
+	fileDrag: false,
 });
 
-export const desktop = $state<{ prefs: DesktopPrefs }>({ prefs: defaultDesktop() });
+export const desktop = $state<{
+	prefs: DesktopPrefs;
+	/** Load of the account's preferences the shown desktop came from; 0 = not loaded (defaults). */
+	from: number;
+}>({ prefs: defaultDesktop(), from: 0 });
 
 let topZ = 10;
 let counter = 0;
@@ -61,13 +77,39 @@ function storageKey() {
 
 /** Loads the account's desktop and the windows open in this browser. */
 export function loadDesktop() {
+	applyStoredPrefs();
+	loadWindows();
+}
+
+/**
+ * Takes the account's desktop from the session. Shown before the preferences
+ * arrived (a page that loads locked), the desktop shows the standard set and
+ * takes the account's own as soon as they are there (PLAN 66: icons were
+ * back in columns after unlocking).
+ */
+export function applyStoredPrefs() {
 	desktop.prefs = sanitizeDesktop(session.desktop);
+	desktop.from = session.prefsLoaded;
 	try {
 		const recent = JSON.parse(localStorage.getItem(recentKey()) ?? 'null');
 		if (Array.isArray(recent)) desktop.prefs.recent = sanitizeDesktop({ recent }).recent;
 	} catch {
 		// Keep what the NAS has.
 	}
+}
+
+// Preferences that arrive after the desktop was shown (unlocking, a later
+// reload of the session) replace the standard set; the open windows stay.
+if (!inWindow)
+	$effect.root(() => {
+		$effect(() => {
+			const loaded = session.prefsLoaded;
+			if (loaded && loaded !== untrack(() => desktop.from)) untrack(applyStoredPrefs);
+		});
+	});
+
+/** The windows open in this browser. */
+function loadWindows() {
 	try {
 		const raw = JSON.parse(localStorage.getItem(storageKey()) ?? '[]');
 		if (Array.isArray(raw))
@@ -83,6 +125,12 @@ export function loadDesktop() {
 					minimized: !!w.minimized,
 					snap: w.snap ?? null,
 					from: undefined,
+					doc:
+						typeof w.doc?.root === 'string' && typeof w.doc?.path === 'string'
+							? { root: w.doc.root, path: w.doc.path }
+							: undefined,
+					// A file of the PC is not opened again after a reload: no name without a file.
+					docName: typeof w.docName === 'string' && w.doc ? w.docName : undefined,
 				}));
 	} catch {
 		wm.windows = [];
@@ -108,6 +156,10 @@ let savePrefsTimer: ReturnType<typeof setTimeout> | undefined;
 /** Saves the desktop's settings on the NAS, a moment after the last change. */
 export function savePrefs(change?: (p: DesktopPrefs) => void) {
 	if (change) change(desktop.prefs);
+	// Never over the account's own desktop with the standard set: before the
+	// preferences arrived, and from a page in a window (the desktop of the top
+	// window is the only writer; lib/desktop/frame.ts, dock-link.svelte.ts).
+	if (!desktop.from || inWindow) return;
 	// Known at once (PLAN 64): a page that loads the desktop before the
 	// timer runs (the phone's home after Settings) must not read old values.
 	session.desktop = $state.snapshot(desktop.prefs) as unknown as Record<string, unknown>;
@@ -152,9 +204,39 @@ export function openWindow(
 	app: string,
 	href: string,
 	title: string,
-	opts: { multi?: boolean; from?: { x: number; y: number }; fresh?: boolean; entry?: string } = {},
+	opts: {
+		multi?: boolean;
+		from?: { x: number; y: number };
+		fresh?: boolean;
+		entry?: string;
+		doc?: { root: string; path: string };
+	} = {},
 ) {
-	const existing = !opts.multi && !opts.fresh ? wm.windows.find((w) => w.app === app) : undefined;
+	// PLAN 66: a web app has one window per document. The document's window
+	// comes forward; an empty window of the app (nothing opened, nothing
+	// changed) takes the file; otherwise a new window opens.
+	if (app.startsWith('webapp:') && !opts.fresh) {
+		const mine = wm.windows.filter((w) => w.app === app);
+		const doc = opts.doc;
+		const same = doc
+			? mine.find((w) => w.doc?.root === doc.root && w.doc?.path === doc.path)
+			: mine.sort((a, b) => b.z - a.z)[0];
+		const empty = doc ? mine.find((w) => !w.doc && !w.docName && !hasUnsaved(w.id)) : undefined;
+		const target = same ?? empty;
+		if (target) {
+			if (doc && !same) {
+				target.doc = doc;
+				target.docName = undefined;
+				saveWindows();
+			}
+			focus(target.id);
+			return target.id;
+		}
+	}
+	const existing =
+		!opts.multi && !opts.fresh && !app.startsWith('webapp:')
+			? wm.windows.find((w) => w.app === app)
+			: undefined;
 	if (existing) {
 		if (href && existing.href !== href && !app.startsWith('docker:'))
 			navigateWindow(existing.id, href);
@@ -172,6 +254,7 @@ export function openWindow(
 		minimized: false,
 		from: opts.from,
 		entry: opts.entry,
+		doc: opts.doc,
 	};
 	wm.windows.push(win);
 	wm.focused = win.id;
@@ -193,7 +276,35 @@ function rememberRecent(app: string) {
 	}
 }
 
+/**
+ * PLAN 66: a window may hold unsaved work (a web app with a changed document).
+ * Its guard says so; every way of closing goes through requestClose, which
+ * asks first (the window shows the question while its id is in wm.closing).
+ */
+const closeGuards = new Map<string, () => boolean>();
+export function registerCloseGuard(id: string, unsaved: (() => boolean) | null) {
+	if (unsaved) closeGuards.set(id, unsaved);
+	else closeGuards.delete(id);
+}
+export function hasUnsaved(id: string): boolean {
+	return closeGuards.get(id)?.() ?? false;
+}
+export function requestClose(id: string) {
+	if (hasUnsaved(id)) {
+		if (!wm.closing.includes(id)) wm.closing = [...wm.closing, id];
+		focus(id);
+		return;
+	}
+	closeWindow(id);
+}
+/** Any window with unsaved work (asked before the page is left). */
+export function anyUnsaved(): boolean {
+	return wm.windows.some((w) => hasUnsaved(w.id));
+}
+
 export function closeWindow(id: string) {
+	wm.closing = wm.closing.filter((c) => c !== id);
+	closeGuards.delete(id);
 	wm.windows = wm.windows.filter((w) => w.id !== id);
 	if (wm.focused === id)
 		wm.focused = [...wm.windows].sort((a, b) => b.z - a.z).find((w) => !w.minimized)?.id ?? null;

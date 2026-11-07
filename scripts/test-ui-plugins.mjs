@@ -44,7 +44,11 @@ const status = (version, update) => ({
   catalog: { release: "0.24.0", state: "ready" },
   driverUpdate: null,
 });
-const offered = { path: "/mnt/Data/media/werkzeug.plugin.json", version: "2.0", official: false };
+const offered = {
+  path: "/mnt/Data/media/werkzeug.plugin.json",
+  version: "2.0",
+  official: false,
+};
 
 try {
   const { ctx, page, data } = await context();
@@ -55,7 +59,9 @@ try {
   await page.screenshot({ path: `${out}/offered.png`, fullPage: true });
 
   // Cancel changes nothing.
-  await page.getByRole("button", { name: "Aktualisieren", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Aktualisieren", exact: true })
+    .click();
   let dialog = page.getByRole("dialog");
   await dialog.getByText("Werkzeug auf 2.0 aktualisieren?").waitFor();
   await dialog.getByText(offered.path).waitFor();
@@ -65,37 +71,62 @@ try {
 
   // A refused update keeps the dialog open with the reason.
   data.failPluginUpdate = true;
-  await page.getByRole("button", { name: "Aktualisieren", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Aktualisieren", exact: true })
+    .click();
   dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: "Aktualisieren", exact: true }).click();
+  await dialog
+    .getByRole("button", { name: "Aktualisieren", exact: true })
+    .click();
   await dialog.getByRole("alert").waitFor();
 
   // The click is the confirmation; the page sends the name the API wants.
   data.failPluginUpdate = false;
-  await dialog.getByRole("button", { name: "Aktualisieren", exact: true }).click();
+  await dialog
+    .getByRole("button", { name: "Aktualisieren", exact: true })
+    .click();
   await dialog.waitFor({ state: "detached" });
   assert.deepEqual(data.pluginUpdates.at(-1), [
     "/plugins/werkzeug/update",
     { path: offered.path, confirm: "werkzeug" },
   ]);
   await page.getByText("werkzeug · 2.0").waitFor();
-  assert.equal(await page.getByText("liegt in einer Freigabe bereit").count(), 0);
+  assert.equal(
+    await page.getByText("liegt in einer Freigabe bereit").count(),
+    0,
+  );
   await page.screenshot({ path: `${out}/updated.png`, fullPage: true });
   await ctx.close();
 
   // A newer version in the official catalog: no path, the NAS downloads it.
   {
     const { ctx, page, data } = await context();
-    const catalog = { path: "", version: "2.1", official: true, download: true };
+    const catalog = {
+      path: "",
+      version: "2.1",
+      official: true,
+      download: true,
+    };
     data.plugins = status("1.0", catalog);
     data.pluginsAfterUpdate = status("2.1", null);
     await page.goto(base + "/plugins");
-    await page.getByText("Version 2.1 ist im offiziellen Katalog verfügbar.").waitFor();
-    await page.getByRole("button", { name: "Aktualisieren", exact: true }).click();
+    await page
+      .getByText("Version 2.1 ist im offiziellen Katalog verfügbar.")
+      .waitFor();
+    await page
+      .getByRole("button", { name: "Aktualisieren", exact: true })
+      .click();
     const dialog = page.getByRole("dialog");
-    await dialog.getByText("lädt die signierte neue Version", { exact: false }).waitFor();
-    await page.screenshot({ path: `${out}/catalog-dialog.png`, fullPage: true });
-    await dialog.getByRole("button", { name: "Aktualisieren", exact: true }).click();
+    await dialog
+      .getByText("lädt die signierte neue Version", { exact: false })
+      .waitFor();
+    await page.screenshot({
+      path: `${out}/catalog-dialog.png`,
+      fullPage: true,
+    });
+    await dialog
+      .getByRole("button", { name: "Aktualisieren", exact: true })
+      .click();
     await dialog.waitFor({ state: "detached" });
     assert.deepEqual(data.pluginUpdates.at(-1), [
       "/plugins/werkzeug/update",
@@ -108,15 +139,28 @@ try {
   {
     const { ctx, page, data } = await context();
     data.plugins = status("1.0", null);
-    data.linkPreview = { ...plugin("0.3", null), name: "fremd", title: "Fremdes Plugin", installed: false, enabled: false, active: false, official: false, download: true };
+    data.linkPreview = {
+      ...plugin("0.3", null),
+      name: "fremd",
+      title: "Fremdes Plugin",
+      installed: false,
+      enabled: false,
+      active: false,
+      official: false,
+      download: true,
+    };
     await page.goto(base + "/plugins");
     await page.getByRole("button", { name: "Von Link hinzufügen …" }).click();
     const dialog = page.getByRole("dialog");
-    await dialog.getByLabel("Link zur .plugin.json").fill("https://example.org/fremd.plugin.json");
+    await dialog
+      .getByLabel("Link zur .plugin.json")
+      .fill("https://example.org/fremd.plugin.json");
     await dialog.getByRole("button", { name: "Prüfen", exact: true }).click();
     await dialog.getByText("wurde nicht geprüft", { exact: false }).waitFor();
     await page.screenshot({ path: `${out}/link-dialog.png`, fullPage: true });
-    await dialog.getByRole("button", { name: "Herunterladen und installieren" }).click();
+    await dialog
+      .getByRole("button", { name: "Herunterladen und installieren" })
+      .click();
     await dialog.waitFor({ state: "detached" });
     const sent = data.externalInstalls.at(-1);
     assert.equal(sent.url, "https://example.org/fremd.plugin.json");

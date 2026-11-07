@@ -229,12 +229,23 @@ func (s *Server) handleAppRemove(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	// Deleting the data is asked for by naming the app once more.
 	purge := r.URL.Query().Get("deleteData") == name
+	if err := s.removeDockerApp(r.Context(), name, purge); err != nil {
+		writeDockerError(w, err)
+		return
+	}
+	slog.Info("app removed", "app", name, "dataDeleted", purge, "by", currentUser(r).Name, "ip", remoteIP(r))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// removeDockerApp is "remove app": its remote views stop, Compose takes
+// the containers down (with purge also its volumes, images and data
+// folder), its compose file leaves /config and its HTTPS name is forgotten.
+func (s *Server) removeDockerApp(ctx context.Context, name string, purge bool) error {
 	if s.opts.Viewer != nil {
 		s.opts.Viewer.Stop("", name)
 	}
-	if err := s.opts.Docker.RemoveApp(r.Context(), name, purge); err != nil {
-		writeDockerError(w, err)
-		return
+	if err := s.opts.Docker.RemoveApp(ctx, name, purge); err != nil {
+		return err
 	}
 	// The HTTPS name goes with the app; a new app of that name starts without.
 	if s.opts.AppProxy != nil {
@@ -242,8 +253,7 @@ func (s *Server) handleAppRemove(w http.ResponseWriter, r *http.Request) {
 			slog.Warn("HTTPS name of a removed app not forgotten", "app", name, "err", err)
 		}
 	}
-	slog.Info("app removed", "app", name, "dataDeleted", purge, "by", currentUser(r).Name, "ip", remoteIP(r))
-	w.WriteHeader(http.StatusNoContent)
+	return nil
 }
 
 func (s *Server) handleAppSetCompose(w http.ResponseWriter, r *http.Request) {

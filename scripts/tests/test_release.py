@@ -77,8 +77,24 @@ class ReleaseTest(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.repo = Path(self.tmp.name)
         (self.repo / "scripts").mkdir()
-        for name in ["make-release.sh", "sign-release.sh", "third-party-licenses.py"]:
+        for name in ["make-release.sh", "sign-release.sh", "third-party-licenses.py", "fetch-webapps.py"]:
             shutil.copy2(REPO / "scripts" / name, self.repo / "scripts" / name)
+        # One web app (PLAN 66) from a local folder instead of GitHub.
+        self.webapp_source = self.repo / "webapp-source"
+        self.webapp_source.mkdir()
+        demo = self.webapp_source / "demo-web-1.0.0.zip"
+        with zipfile.ZipFile(demo, "w") as z:
+            z.writestr("demo-web-1.0.0/", "")
+            z.writestr("demo-web-1.0.0/index.html", "<canvas id=demo_canvas></canvas>")
+            z.writestr("demo-web-1.0.0/LICENSE-MIT", "MIT")
+            z.writestr("demo-web-1.0.0/LICENSE-APACHE", "Apache")
+        (self.repo / "webapps").mkdir()
+        (self.repo / "webapps/catalog.json").write_text(json.dumps({"apps": [{
+            "id": "demo", "name": "Demo", "repo": "example/demo", "version": "1.0.0", "upstreamAsset": demo.name,
+            "sha256": hashlib.sha256(demo.read_bytes()).hexdigest(), "size": demo.stat().st_size,
+            "license": "MIT OR Apache-2.0", "bridge": "host", "types": [], "default": False}]}))
+        self.addCleanup(setattr, verify, "CATALOG", verify.CATALOG)
+        verify.CATALOG = self.repo / "webapps/catalog.json"
         # Stands for scripts/build-viewer-image.sh (needs Docker): the archive,
         # its package list and the image ID as the last line of its output.
         viewer = self.repo / "scripts/build-viewer-image.sh"
@@ -143,6 +159,8 @@ class ReleaseTest(unittest.TestCase):
         env = dict(os.environ)
         env.pop("ALLOW_DEV", None)
         env.pop("MINISIGN_PASSWORD", None)
+        env.pop("WEBAPPS_DIR", None)
+        env["WEBAPPS_SOURCE"] = str(self.webapp_source)
         result = subprocess.run(args, cwd=self.repo, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         if success:
             self.assertEqual(result.returncode, 0, result.stdout)
@@ -168,7 +186,7 @@ class ReleaseTest(unittest.TestCase):
         self.assertEqual((self.release / "titanos-0.1.0-beta.1-titand").read_bytes(), b"titand 0.1.0-beta.1")
         for name in ["manifest.json", "titanos-0.1.0-beta.1.zip", "titanos-0.1.0-beta.1-vmlinuz", "titanos-0.1.0-beta.1-titand",
                      "titanos-0.1.0-beta.1-licenses.tar.gz", "titanos-0.1.0-beta.1-sources.txt", "titanos-0.1.0-beta.1-cli-linux-amd64",
-                     "titanos-viewer-0.1.0-beta.1.tar.zst",
+                     "titanos-viewer-0.1.0-beta.1.tar.zst", "titanos-webapp-demo-1.0.0.zip",
                      "nvidia-build-sdk.tar.zst", "nvidia-build-sdk-sources.txt", "nvidia.raw", "nvidia.plugin.json", "nvidia.plugin.json.minisig", "nvidia-kernel-sources.tar.gz", "nvidia-licenses.tar.gz"]:
             with self.subTest(name=name):
                 path = self.release / name
@@ -204,6 +222,34 @@ class ReleaseTest(unittest.TestCase):
         (self.release / "manifest.json").write_text(json.dumps(manifest))
         with self.assertRaises(ValueError):
             verify.verify(self.release, self.keys)
+
+    def test_release_carries_the_web_apps(self):
+        self.pack()
+        self.sign()
+        self.assertEqual(verify.verify(self.release, self.keys), "0.1.0-beta.1")
+        manifest = json.loads((self.release / "manifest.json").read_text())
+        asset = self.release / "titanos-webapp-demo-1.0.0.zip"
+        self.assertEqual(asset.read_bytes(), (self.webapp_source / "demo-web-1.0.0.zip").read_bytes())
+        self.assertEqual(manifest["webapps"], [{"id": "demo", "version": "1.0.0", "asset": asset.name,
+                                                "sha256": hashlib.sha256(asset.read_bytes()).hexdigest(), "size": asset.stat().st_size}])
+        self.assertIn("https://github.com/example/demo/archive/refs/tags/v1.0.0.tar.gz", (self.release / "titanos-0.1.0-beta.1-sources.txt").read_text())
+        with tarfile.open(self.release / "titanos-0.1.0-beta.1-licenses.tar.gz") as archive:
+            self.assertIn("webapps/demo-1.0.0/LICENSE-MIT", archive.getnames())
+        # A web app the catalog does not list (or lists otherwise) is refused.
+        catalog = json.loads(verify.CATALOG.read_text())
+        catalog["apps"][0]["version"] = "1.0.1"
+        verify.CATALOG.write_text(json.dumps(catalog))
+        with self.assertRaisesRegex(ValueError, "web app"):
+            verify.verify(self.release, self.keys)
+
+    def test_web_app_differing_from_the_catalog_is_not_packed(self):
+        self.command("mksquashfs", str(self.root), str(self.slot / "filesystem.squashfs"), "-noappend", "-quiet", "-processors", "1")
+        demo = self.webapp_source / "demo-web-1.0.0.zip"
+        with zipfile.ZipFile(demo, "a") as z:
+            z.writestr("demo-web-1.0.0/extra.js", "changed")
+        output = self.command("scripts/make-release.sh", "0.1.0-beta.1", "beta", success=False)
+        self.assertIn("SHA-256", output)
+        self.assertFalse((self.release / "manifest.json").exists())
 
     def test_viewer_image_without_id_is_refused(self):
         self.command("mksquashfs", str(self.root), str(self.slot / "filesystem.squashfs"), "-noappend", "-quiet", "-processors", "1")

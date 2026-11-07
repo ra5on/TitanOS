@@ -4,6 +4,7 @@
 import { api, type DockerContainer, type VM } from '../api.ts';
 import { appURL } from '../app-links.ts';
 import { session } from '../session.svelte.ts';
+import { loadWebApps } from '../webapps/webapps.svelte.ts';
 
 export type DockerProgram = {
 	key: string;
@@ -37,7 +38,8 @@ export const sources = $state<{
 const admin = () => ['owner', 'admin'].includes(session.data?.user?.role ?? '');
 
 async function load() {
-	const tasks: Promise<unknown>[] = [];
+	// PLAN 66: the web apps installed on the NAS are programs too.
+	const tasks: Promise<unknown>[] = [loadWebApps()];
 	// Apps the account may use (PLAN 61-1); NAS versions without it fall back to the Docker list.
 	tasks.push(
 		api

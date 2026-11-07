@@ -14,6 +14,9 @@
 #   out/release/titanos-<version>-sources.txt       where the sources of the Debian packages are
 #   out/release/titanos-viewer-<version>.tar.zst    the image of the remote view (PLAN 63), loaded by
 #                                                   titand with docker load on first use
+#   out/release/titanos-webapp-<id>-<version>.zip   the web apps (PLAN 66, docs/WEBAPPS.md): the
+#                                                   upstream archives of webapps/catalog.json, checked
+#                                                   by scripts/fetch-webapps.py; titand installs them
 #   out/release/manifest.json                       what an update consists of
 #
 # sign-release.sh signs the manifest, installation ZIP and complete checksums.
@@ -30,6 +33,10 @@
 #   VIEWER_DIR=dir      take the viewer image from dir (titanos-viewer-<version>.tar.zst,
 #                       .packages.txt and .image-id) instead of building it with
 #                       scripts/build-viewer-image.sh
+#   WEBAPPS_DIR=dir     take the web apps from dir (output of scripts/fetch-webapps.py)
+#                       instead of fetching them now
+#   WEBAPPS_SOURCE=dir  fetch the web apps from dir (upstream archive names) instead
+#                       of GitHub; for tests
 #
 # Expects out/stick and build/mkosi.output from "make zip" with the same VERSION.
 set -euo pipefail
@@ -129,6 +136,17 @@ if ! grep -Eqx 'sha256:[0-9a-f]{64}' "$viewer_dir/titanos-viewer-$version.image-
     echo "build-viewer-image.sh did not print an image ID (sha256:…)" >&2; exit 1
 fi
 
+# The web apps (docs/WEBAPPS.md) belong to every release as well: titand
+# installs those of its own release onto a data volume.
+webapps_dir=${WEBAPPS_DIR:-out/webapps}
+if [ -z "${WEBAPPS_DIR:-}" ]; then
+    rm -rf "$webapps_dir"
+    python3 scripts/fetch-webapps.py "$webapps_dir" ${WEBAPPS_SOURCE:+--source "$WEBAPPS_SOURCE"}
+fi
+if [ ! -s "$webapps_dir/webapps.json" ]; then
+    echo "web apps incomplete: $webapps_dir/webapps.json missing (scripts/fetch-webapps.py)" >&2; exit 1
+fi
+
 release=out/release
 rm -rf "$release"
 mkdir -p "$release"
@@ -151,7 +169,7 @@ if [ -x backend/bin/titanosctl ]; then
     cp backend/bin/titanosctl "$release/titanos-$version-cli-linux-amd64"
 fi
 
-VIEWER_DIR=$viewer_dir \
+VIEWER_DIR=$viewer_dir WEBAPPS_DIR=$webapps_dir \
 VARIANT=$([ -d "$variant" ] && echo "$variant") VARIANT_IMAGE=$variant_image \
 VERSION=$version BASE=$base CHANNEL=$channel CHANGELOG=$changelog RELEASE=$release IMAGE=$image \
     MIN_VERSION=${MIN_VERSION:-} WITHOUT_PLUGINS=${WITHOUT_PLUGINS:-} python3 - <<'PY'
@@ -305,6 +323,24 @@ licenses_spec = importlib.util.spec_from_file_location("third_party_licenses", "
 third_party = importlib.util.module_from_spec(licenses_spec)
 licenses_spec.loader.exec_module(third_party)
 viewer_components = third_party.viewer_packages(viewer_dir / f"titanos-viewer-{version}.packages.txt")
+# The web apps (PLAN 66). Optional for older TitanOS, which ignore them; titand
+# checks the manifest signature, size and SHA-256 and the archive's contents.
+# The archives are the upstream ones, unchanged: their SHA-256 is the catalog's.
+webapps_dir = Path(os.environ["WEBAPPS_DIR"])
+catalog = json.loads(Path("webapps/catalog.json").read_text())["apps"]
+fetched = json.loads((webapps_dir / "webapps.json").read_text())
+if [(e["id"], e["version"], e["sha256"], e["size"]) for e in fetched] != \
+        [(a["id"], a["version"], a["sha256"], a["size"]) for a in catalog]:
+    raise SystemExit("the fetched web apps do not match webapps/catalog.json")
+manifest["webapps"] = []
+for app in catalog:
+    asset = f"titanos-webapp-{app['id']}-{app['version']}.zip"
+    source = webapps_dir / asset
+    if sha256(source) != app["sha256"] or source.stat().st_size != app["size"]:
+        raise SystemExit("web app archive differs from the catalog: " + asset)
+    shutil.copy2(source, Path(release) / asset)
+    manifest["webapps"].append({"id": app["id"], "version": app["version"], "asset": asset,
+                                "sha256": app["sha256"], "size": app["size"]})
 with open(os.path.join(release, "manifest.json"), "w", encoding="utf-8") as f:
     json.dump(manifest, f, indent=2, ensure_ascii=False)
     f.write("\n")
@@ -327,6 +363,11 @@ with open(os.path.join(release, f"titanos-{version}-sources.txt"), "w", encoding
     f.write(f"\nViewer image ({viewer_asset}):\n")
     for c in viewer_components:
         f.write(f"Debian: {c['name']} {c['version']}\n  {c['source']}\n")
+    # The web apps are built from the source of their repositories at the tag.
+    f.write("\nWeb apps (titanos-webapp-*.zip, unchanged upstream archives):\n")
+    for app in catalog:
+        f.write(f"{app['name']} {app['version']} ({app['license']})\n"
+                f"  https://github.com/{app['repo']}/archive/refs/tags/v{app['version']}.tar.gz\n")
     if variant:
         # Kernel and firmware of the image with the new kernel differ.
         known = {(c["ecosystem"], c["name"], c["version"]) for c in components}
@@ -343,6 +384,9 @@ with tarfile.open(os.path.join(release, f"titanos-{version}-licenses.tar.gz"), "
     # The copyright files of the viewer's packages are inside its image
     # (/usr/share/doc); the list names them with their versions.
     archive.add(viewer_dir / f"titanos-viewer-{version}.packages.txt", arcname="viewer/packages.txt")
+    # License, notice and font license files of every web app.
+    for app in catalog:
+        archive.add(webapps_dir / "licenses" / app["id"], arcname=f"webapps/{app['id']}-{app['version']}")
 with open(os.path.join(release, "SHA256SUMS"), "w", encoding="utf-8") as f:
     for path in sorted(Path(release).iterdir()):
         if path.name != "SHA256SUMS":

@@ -17,7 +17,7 @@
 	}: { onopen: (key: string, href?: string) => void; onclose: () => void; onlock?: () => void } =
 		$props();
 
-	type Filter = 'all' | 'system' | 'docker' | 'vm' | 'recent';
+	type Filter = 'all' | 'system' | 'docker' | 'vm' | 'webapp' | 'recent';
 	let filter = $state<Filter>('all');
 	let query = $state('');
 	let power = $state<'restart' | 'shutdown' | null>(null);
@@ -49,6 +49,7 @@
 		if (filter === 'system') list = list.filter((p) => p.kind === 'system');
 		if (filter === 'docker') list = list.filter((p) => p.kind === 'docker');
 		if (filter === 'vm') list = list.filter((p) => p.kind === 'vm');
+		if (filter === 'webapp') list = list.filter((p) => p.kind === 'webapp');
 		if (filter === 'recent')
 			list = desktop.prefs.recent.flatMap((k) => list.filter((p) => p.key === k));
 		return list;
@@ -115,6 +116,7 @@
 		['system', 'desktop.menu.system'],
 		['docker', 'desktop.menu.docker'],
 		['vm', 'desktop.menu.vms'],
+		['webapp', 'webapps.menu.filter'],
 		['recent', 'desktop.menu.recent'],
 	];
 </script>
@@ -139,7 +141,7 @@
 		<kbd>{t('desktop.menu.shortcut')}</kbd>
 	</label>
 	<div class="filters" role="group" aria-label={t('desktop.menu.filter')}>
-		{#each FILTERS as [id, label] (id)}
+		{#each FILTERS.filter(([id]) => id !== 'webapp' || all.some((p) => p.kind === 'webapp')) as [id, label] (id)}
 			<button
 				type="button"
 				class="chip"

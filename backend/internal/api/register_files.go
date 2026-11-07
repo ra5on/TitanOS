@@ -33,6 +33,7 @@ func (s *Server) registerFiles(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/files/trash/{action}", s.requireUser(s.handleTrash))
 	mux.HandleFunc("GET /api/v1/files/text", s.requireUser(s.handleReadFileText))
 	mux.HandleFunc("PUT /api/v1/files/text", s.requireUser(s.handleFileText))
+	mux.HandleFunc("PUT /api/v1/files/content", s.requireUser(s.handleFileContent))
 	mux.HandleFunc("POST /api/v1/files/inspect", s.requireUser(s.handleFileInspect))
 	mux.HandleFunc("POST /api/v1/files/copy", s.requireUser(s.handleFileCopy))
 	mux.HandleFunc("POST /api/v1/files/write-document", s.requireUser(s.handleWriteDocument))

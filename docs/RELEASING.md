@@ -213,6 +213,23 @@ oder Tabulatoren getrennt): `dpkg-query -W -f='${Package} ${Version} ${source:Pa
 fehlt die Quellversion, gilt die Paketversion ohne binNMU-Endung (`+bN`).
 `scripts/third-party-licenses.py viewer <datei>` liest es (auch zum Prüfen von Hand).
 
+## Ab 0.63.0: Web-Apps
+
+`release.yml` lädt vor „Pack the release“ mit `scripts/fetch-webapps.py out/webapps`
+die Archive aus `webapps/catalog.json` von den GitHub-Releases der Apps, prüft
+Größe, SHA-256 und Inhalt (Regeln wie titand, `docs/WEBAPPS.md`) und legt sie
+unverändert als `titanos-webapp-<id>-<version>.zip` ab, dazu `webapps.json` und
+die Lizenzdateien je App. `make-release.sh` nimmt sie mit `WEBAPPS_DIR=out/webapps`
+(ohne `WEBAPPS_DIR` ruft es das Skript selbst auf; `WEBAPPS_SOURCE=<ordner>` nimmt
+die Archive aus einem Ordner statt von GitHub, für Tests), listet sie im
+Manifest unter `webapps`, schreibt ihre Quell-Links in `sources.txt` und ihre
+Lizenzdateien ins Lizenzarchiv (`webapps/<id>-<version>/`). `verify-release.py`
+verlangt genau die Apps des Katalogs mit dessen Version, SHA-256 und Größe.
+Neue App-Versionen: Eintrag in `webapps/catalog.json` ändern (Version,
+`upstreamAsset`, `sha256` und `size` des Upstream-Archivs, mit deren
+`SHA256SUMS.txt` abgleichen) und nach `backend/internal/webapps/catalog.json`
+kopieren; das ist kein volles Release (`scripts/release-kind.py`).
+
 Nicht abgedeckt: Die QEMU-Smoke-Tests des Releases laden das Abbild nicht und
 öffnen keine Fernansicht.
 
