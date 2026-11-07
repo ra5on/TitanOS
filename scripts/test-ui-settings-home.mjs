@@ -323,6 +323,13 @@ try {
     );
     assert.equal(await page.locator(".recent").count(), 0);
     assert.equal(data.activity, undefined, "the log is not read for users");
+    // PLAN 71: the overview below shows users only what they may read.
+    await page.locator(".overview .health").waitFor();
+    assert.equal(
+      await page.locator(".overview .services").count(),
+      0,
+      "no services for users",
+    );
     await ctx.close();
   }
 
@@ -362,8 +369,26 @@ try {
         .evaluate((el) => el.getBoundingClientRect().width / innerWidth);
       assert.ok(width > 0.85, `content uses the window width (${width})`);
       if (name === "overview") {
-        await frame.locator(".home-tile").first().waitFor();
-        await frame.getByRole("searchbox").first().waitFor();
+        // PLAN 71: in a window the side bar lists the areas; the page is the
+        // "Übersicht" with its cards (no tiles, no second search).
+        await frame
+          .locator(".overview .tile.ui-card .card-head")
+          .first()
+          .waitFor();
+        assert.equal(
+          await frame.locator(".home-tile").count(),
+          0,
+          "no tiles in a window",
+        );
+        assert.equal(
+          await frame.getByRole("searchbox").count(),
+          0,
+          "no second search",
+        );
+        for (const title of ["Zustand", "Zu erledigen", "Dienste"])
+          await frame
+            .locator(".overview .card-head h2", { hasText: title })
+            .waitFor();
       }
       await page.waitForTimeout(300);
       await page

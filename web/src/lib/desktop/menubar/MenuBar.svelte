@@ -266,7 +266,15 @@
 	function backToWindow() {
 		returnTo = null;
 		const win = front;
-		if (win) setTimeout(() => frameOf(win.id)?.focus(), 0);
+		// A command that put the focus into the window's own parts (PLAN 71: the
+		// search of the side bar) keeps it there.
+		if (win)
+			setTimeout(() => {
+				const frame = frameOf(win.id);
+				const own = document.activeElement;
+				if (frame && own !== frame && frame.closest('section')?.contains(own)) return;
+				frame?.focus();
+			}, 0);
 	}
 
 	// ---- Opening and closing ----

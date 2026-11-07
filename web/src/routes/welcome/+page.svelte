@@ -15,6 +15,7 @@
 	import OfficeApps from '#lib/webapps/OfficeApps.svelte';
 	import { loadWebApps, webapps } from '#lib/webapps/webapps.svelte.ts';
 	import { sanitizeHints } from '../storage/checks-hint.ts';
+	import { checkSetup, type SetupTodo } from '#lib/setup-checklist.ts';
 
 	const STEPS = 4;
 	const STEP_NAMES = [
@@ -55,23 +56,7 @@
 	const address = $derived(system.info?.network?.ipv4.split('/')[0] ?? location.hostname);
 
 	// What is already done; null while unknown (not loaded or not readable).
-	type Todo = {
-		href: string;
-		key:
-			| 'welcome.todoVolume'
-			| 'welcome.todoShare'
-			| 'welcome.todoTwoFactor'
-			| 'welcome.todoNotify'
-			| 'welcome.todoStick'
-			| 'welcome.todoApps'
-			| 'welcome.todoHardware'
-			| 'welcome.todoDrivers'
-			| 'welcome.todoBackup'
-			| 'welcome.todoRemote'
-			| 'welcome.todoPush';
-		done: boolean | null;
-	};
-	let todos = $state<Todo[]>([]);
+	let todos = $state<SetupTodo[]>([]);
 	let checking = $state(false);
 	let checkFailed = $state(false);
 	const doneCount = $derived(todos.filter((todo) => todo.done).length);
@@ -79,86 +64,9 @@
 	async function check() {
 		checkFailed = false;
 		checking = true;
-		const [storage, shares, notify, stick, plugins, backups, tailnet, wireguard, push] =
-			await Promise.allSettled([
-				api.get<{ volumes: unknown[] }>('/storage'),
-				api.get<unknown[]>('/shares'),
-				api.get<{ settings: Record<string, unknown> }>('/notifications/settings'),
-				api.get<{ backup: { lastError: string; backups: unknown[] } }>('/config-backup'),
-				api.get<{ recommendations?: unknown[] | null }>('/plugins'),
-				api.get<{ jobs: { job: { enabled: boolean } }[] }>('/backups'),
-				api.get<{ state: string }>('/plugins/tailscale'),
-				api.get<{ enabled: boolean }>('/network/wireguard'),
-				api.get<{ devices: unknown[] }>('/notifications/push'),
-			]);
-		// An answer of an unexpected shape counts as "unknown", not as an error of the page.
-		const value = <T,>(result: PromiseSettledResult<T>, test: (value: T) => boolean) => {
-			if (result.status !== 'fulfilled') return null;
-			try {
-				return test(result.value);
-			} catch {
-				return null;
-			}
-		};
-		const channel = (settings: Record<string, unknown>) =>
-			['email', 'ntfy', 'telegram', 'discord', 'homeAssistant'].some(
-				(name) => (settings[name] as { enabled?: boolean } | undefined)?.enabled,
-			);
-		todos = [
-			{
-				href: '/storage',
-				key: 'welcome.todoVolume',
-				done: value(storage, (s) => s.volumes.length > 0),
-			},
-			{
-				href: '/shares',
-				key: 'welcome.todoShare',
-				done: value(shares, (list) => Array.isArray(list) && list.length > 0),
-			},
-			{
-				href: '/account',
-				key: 'welcome.todoTwoFactor',
-				done: session.data?.user ? session.data.user.twoFactor : null,
-			},
-			{
-				href: '/settings/notifications',
-				key: 'welcome.todoNotify',
-				done: value(notify, (n) => channel(n.settings)),
-			},
-			{
-				href: '/settings/backups/configuration',
-				key: 'welcome.todoStick',
-				done: value(stick, (c) => c.backup.backups.length > 0 && !c.backup.lastError),
-			},
-			{
-				href: '/settings/backups/data',
-				key: 'welcome.todoBackup',
-				done: value(backups, (b) => b.jobs.some((j) => j.job.enabled)),
-			},
-			{
-				href: '/settings/network?tab=remote',
-				key: 'welcome.todoRemote',
-				done:
-					(tailnet.status === 'fulfilled' && tailnet.value.state === 'Running') ||
-					(wireguard.status === 'fulfilled' && wireguard.value.enabled)
-						? true
-						: tailnet.status === 'rejected' && wireguard.status === 'rejected'
-							? null
-							: false,
-			},
-			{
-				href: '/settings/notifications#push',
-				key: 'welcome.todoPush',
-				done: value(push, (p) => p.devices.length > 0),
-			},
-			{ href: '/docker', key: 'welcome.todoApps', done: null },
-			{ href: '/tools/hardware', key: 'welcome.todoHardware', done: null },
-		];
-		// Plugins for detected hardware (drivers, tools): only when there are any.
-		if (plugins.status === 'fulfilled' && (plugins.value.recommendations?.length ?? 0) > 0) {
-			todos.splice(1, 0, { href: '/plugins', key: 'welcome.todoDrivers', done: false });
-		}
-		checkFailed = [storage, shares, notify, stick].some((result) => result.status === 'rejected');
+		const result = await checkSetup(true);
+		todos = result.todos;
+		checkFailed = result.failed;
 		checking = false;
 	}
 	$effect(() => {

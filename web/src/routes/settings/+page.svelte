@@ -1,22 +1,21 @@
 <script lang="ts">
-	// "Alle Einstellungen" (owner's wish of 6 Nov 2026, PLAN 61-8, drafts 34/35):
-	// a search on top, then every area as an equal tile with a colored icon,
-	// its name and what is inside, grouped like the sidebar; below, the last
-	// settings changes from the activity log. The same page on phones (one
-	// column) and inside a desktop window (no sidebar there).
-	import { onMount } from 'svelte';
+	// The start page of the settings. In a window of the desktop (PLAN 71,
+	// owner's decision "Variante C" of 7 Nov 2026) it is the "Übersicht": the
+	// window's side bar with its search lists every area, so the page shows
+	// only the overview cards. On the phone and in a tab of its own there is no
+	// side bar: there it keeps "Alle Einstellungen" (PLAN 61-8, drafts 34/35) –
+	// a search, every area as a tile, grouped like the side bar – and the same
+	// overview cards below.
+	import { inWindow } from '#lib/desktop/frame.ts';
+	import SettingsOverview from './SettingsOverview.svelte';
 	import { showsNew } from '#lib/settings-seen.svelte.ts';
-	import { settingsEntries, settingsGroupLabel, settingsAreas } from '#lib/settings-search.ts';
+	import { settingsAreas, settingsEntries, settingsGroupLabel } from '#lib/settings-search.ts';
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import SettingsSearch from '#lib/components/SettingsSearch.svelte';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { settingsSearch, settingsStates } from '#lib/settings-states.svelte.ts';
-	import { api } from '#lib/api.ts';
-	import { activityLabel, type ActivityEntry, type ActivityPage } from '#lib/activity.ts';
-	import { recentSettingsChanges } from '#lib/settings-recent.ts';
-	import { formatDateTime } from '#lib/format.ts';
 
 	const prefix = 'settings-home';
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
@@ -59,34 +58,19 @@
 		files: 'amber',
 		memory: 'cyan',
 	};
-	const areaLabel = (id: string) => {
-		const area = settingsAreas.find((a) => a.id === id);
-		return area ? t(area.label) : id;
-	};
-
-	// The last settings changes; only owners and administrators may read the
-	// log, and without it (off, error) the section is left out.
-	let recent = $state<(ActivityEntry & { area: string })[]>([]);
-	onMount(() => {
-		if (!admin) return;
-		api
-			.get<ActivityPage>('/activity?days=30&limit=500')
-			.then((page) => (recent = recentSettingsChanges(page.entries ?? [])))
-			.catch(() => (recent = []));
-	});
-	function describe(entry: ActivityEntry): string {
-		const label = activityLabel(entry.action);
-		if (label.kind === 'named') return t(`activity.do.${label.key}` as 'activity.do.login');
-		const verb = t(`activity.verb.${label.verb}` as 'activity.verb.run');
-		return entry.target ? `${verb}: ${entry.target}` : verb;
-	}
-
 	function clear() {
 		settingsSearch.query = '';
 		settingsSearch.active = 0;
 	}
 
-	// PLAN 67-1: Systemsteuerung › Ablage › Einstellungen suchen puts the cursor in the search.
+	const areaLabel = (id: string) => {
+		const area = settingsAreas.find((a) => a.id === id);
+		return area ? t(area.label) : id;
+	};
+
+	// PLAN 67-1: Systemsteuerung › Ablage › Einstellungen suchen puts the cursor
+	// in the search. In a window the window itself answers (its side bar search,
+	// PLAN 71); this one serves the phone's ⋯ menu.
 	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
 	registerMenuCommands({
 		'settings.search': () =>
@@ -94,82 +78,68 @@
 	});
 </script>
 
-<PageHead title={t('settingshome.all')} />
+{#if inWindow}
+	<PageHead title={t('settingshome.overview')} />
+	<SettingsOverview {admin} />
+{:else}
+	<PageHead title={t('settingshome.all')} />
 
-<div class="home">
-	<div class="home-search">
-		<SettingsSearch results={flat} idPrefix={prefix} placeholder={t('settingshome.searchHint')} />
-	</div>
-	{#if searching}<div class="search-result">
-			<span role="status"
-				>{flat.length ? t('ui.results', { count: flat.length }) : t('ui.noSettings')}</span
-			><button class="btn" type="button" onclick={clear}>{t('ui.clear')}</button>
-		</div>{/if}
+	<div class="home">
+		<div class="home-search">
+			<SettingsSearch results={flat} idPrefix={prefix} placeholder={t('settingshome.searchHint')} />
+		</div>
+		{#if searching}<div class="search-result">
+				<span role="status"
+					>{flat.length ? t('ui.results', { count: flat.length }) : t('ui.noSettings')}</span
+				><button class="btn" type="button" onclick={clear}>{t('ui.clear')}</button>
+			</div>{/if}
 
-	<div class="groups" id="{prefix}-results">
-		{#each groups as group (group.group)}
-			{@const offset = flat.indexOf(group.entries[0])}
-			<section class="group" aria-labelledby="{prefix}-group-{group.group}">
-				<h2 class="group-title" id="{prefix}-group-{group.group}">
-					{t(settingsGroupLabel(group.group))}
-				</h2>
-				<ul class="tiles">
-					{#each group.entries as entry, i (entry.href)}
-						{@const state = entry.section ? undefined : states[entry.id]}
-						<li>
-							<a
-								id="{prefix}-{offset + i}"
-								class="tile home-tile"
-								class:highlight={offset + i === active}
-								href={entry.href}
-								onclick={clear}
-							>
-								<span
-									class="square"
-									style:--square="var(--icon-square-{colors[entry.id] ?? 'slate'})"
-									aria-hidden="true"><Icon name={entry.icon} size={20} /></span
+		<div class="groups" id="{prefix}-results">
+			{#each groups as group (group.group)}
+				{@const offset = flat.indexOf(group.entries[0])}
+				<section class="group" aria-labelledby="{prefix}-group-{group.group}">
+					<h2 class="group-title" id="{prefix}-group-{group.group}">
+						{t(settingsGroupLabel(group.group))}
+					</h2>
+					<ul class="tiles">
+						{#each group.entries as entry, i (entry.href)}
+							{@const state = entry.section ? undefined : states[entry.id]}
+							<li>
+								<a
+									id="{prefix}-{offset + i}"
+									class="tile home-tile"
+									class:highlight={offset + i === active}
+									href={entry.href}
+									onclick={clear}
 								>
-								<span class="text">
-									<span class="name"
-										>{entry.label}{#if showsNew(entry)}<span class="new">{t('settings.new')}</span
-											>{/if}</span
+									<span
+										class="square"
+										style:--square="var(--icon-square-{colors[entry.id] ?? 'slate'})"
+										aria-hidden="true"><Icon name={entry.icon} size={20} /></span
 									>
-									<span class="desc"
-										>{entry.section
-											? areaLabel(entry.id)
-											: t(`settingshome.desc.${entry.id}` as MessageKey)}</span
-									>
-									{#if state}<span class="chip {state.tone}">{t(state.text)}</span>{/if}
-								</span>
-							</a>
-						</li>
-					{/each}
-				</ul>
-			</section>
-		{/each}
-	</div>
+									<span class="text">
+										<span class="name"
+											>{entry.label}{#if showsNew(entry)}<span class="new">{t('settings.new')}</span
+												>{/if}</span
+										>
+										<span class="desc"
+											>{entry.section
+												? areaLabel(entry.id)
+												: t(`settingshome.desc.${entry.id}` as MessageKey)}</span
+										>
+										{#if state}<span class="chip {state.tone}">{t(state.text)}</span>{/if}
+									</span>
+								</a>
+							</li>
+						{/each}
+					</ul>
+				</section>
+			{/each}
+		</div>
 
-	{#if admin && recent.length && !searching}
-		<section class="tile panel recent-panel" aria-labelledby="{prefix}-recent">
-			<div class="recent-head">
-				<h2 class="tile-title" id="{prefix}-recent">{t('settingshome.recent')}</h2>
-				<a href="/tools/activity">{t('settingshome.recentAll')}</a>
-			</div>
-			<ul class="recent">
-				{#each recent as entry, index (index)}
-					<li>
-						<a class="area" href="/settings/{entry.area}">{areaLabel(entry.area)}</a>
-						<span class="what">{describe(entry)}</span>
-						<span class="who"
-							>{entry.user ? t('settingshome.recentBy', { user: entry.user }) : ''}</span
-						>
-						<time datetime={entry.at}>{formatDateTime(new Date(entry.at))}</time>
-					</li>
-				{/each}
-			</ul>
-		</section>
-	{/if}
-</div>
+		{#if !searching}<SettingsOverview {admin} prefix="{prefix}-overview" />{/if}
+	</div>
+{/if}
 
 <style>
 	.home {
@@ -307,49 +277,5 @@
 	.chip {
 		align-self: flex-start;
 		margin-top: 2px;
-	}
-	.recent-head {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: baseline;
-		justify-content: space-between;
-		gap: var(--space-2);
-	}
-	.recent li {
-		display: grid;
-		grid-template-columns: minmax(7rem, 12rem) minmax(0, 1fr) auto auto;
-		align-items: baseline;
-		gap: var(--space-1) var(--space-3);
-		padding: var(--space-2) 0;
-		font-size: var(--text-base);
-	}
-	.recent li + li {
-		border-top: 1px solid var(--panel-border);
-	}
-	.recent .area {
-		font-weight: 500;
-		overflow-wrap: anywhere;
-	}
-	.what {
-		min-width: 0;
-		overflow-wrap: anywhere;
-	}
-	.who,
-	time {
-		color: var(--muted);
-		white-space: nowrap;
-	}
-	@container (max-width: 34rem) {
-		.recent li {
-			grid-template-columns: minmax(0, 1fr) auto;
-		}
-		.recent .what {
-			grid-column: 1;
-			grid-row: 2;
-		}
-		.recent .who {
-			grid-column: 2;
-			grid-row: 2;
-		}
 	}
 </style>

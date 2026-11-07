@@ -197,7 +197,7 @@ function newGeometry(index: number, app = '') {
 	const offset = (index % 6) * 28;
 	return {
 		x: wm.inset.l + Math.max(0, Math.round((aw - w) / 2) + offset - 60),
-		y: Math.max(8, Math.round((ah - h) / 2) + offset - 20),
+		y: Math.max(8, Math.min(Math.round((ah - h) / 2) + offset - 20, ah - h - 8)),
 		w,
 		h,
 		snap: null as Snap,
@@ -330,6 +330,20 @@ export function toggleMax(id: string) {
 	if (!win) return;
 	win.snap = win.snap === 'max' ? null : 'max';
 	focus(id);
+}
+
+/**
+ * Where a free (not snapped) window is drawn: never below the top edge of the
+ * dock (PLAN 71, owner: "nicht unter das Dock rutschen"). Taller than the room
+ * left, it shrinks to it; lower, it moves up. Only the drawing is kept clear:
+ * the stored geometry stays as the account left it, so a smaller dock later
+ * gives the room back.
+ */
+export function clearOfDock(r: { x: number; y: number; w: number; h: number }) {
+	const room = wm.area.h - wm.inset.b;
+	if (room <= 0) return r;
+	const h = Math.min(r.h, room);
+	return { x: r.x, y: Math.max(0, Math.min(r.y, room - h)), w: r.w, h };
 }
 
 /** The rectangle a snapped window takes. */

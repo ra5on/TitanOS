@@ -9,6 +9,8 @@
 	import { t } from '../i18n/index.svelte.ts';
 	import DesktopIcon from './DesktopIcon.svelte';
 	import { pageDrawsSide, sideActive, type SideItem } from './apps.ts';
+	import { session } from '../session.svelte.ts';
+	import { settingsSideAllowed, settingsSideMatches } from '../settings-search.ts';
 	import { frameMessage, type FrameMessage } from './frame.ts';
 	import { openProgram, openTab as openProgramTab } from './programs.svelte.ts';
 	import Dialog from '../components/Dialog.svelte';
@@ -36,6 +38,7 @@
 		setSnap,
 		snapAt,
 		snapRect,
+		clearOfDock,
 		toggleMax,
 		wm,
 		type Win,
@@ -222,11 +225,71 @@
 		});
 	}
 
-	const rect = $derived(snapRect(win.snap) ?? { x: win.x, y: win.y, w: win.w, h: win.h });
+	const rect = $derived(
+		snapRect(win.snap) ?? clearOfDock({ x: win.x, y: win.y, w: win.w, h: win.h }),
+	);
 	const focused = $derived(wm.focused === win.id);
 	const path = $derived(win.href.split('?')[0]);
 	// PLAN 69: on these pages the page itself draws the one side bar.
 	const ownSide = $derived(pageDrawsSide(side, path));
+
+	// PLAN 71 (owner's decision "Variante C"): Systemsteuerung has one menu,
+	// its side bar. A search above it filters the entries by name and the
+	// keywords of the settings search ("ssh" → Zugang); a hit in a section
+	// shows its area and opens the section. Accounts with the role "user" see
+	// only the areas they may open. Other programs keep their side bar as is.
+	const searchable = $derived(win.app === 'app:settings');
+	let query = $state('');
+	let hit = $state(0);
+	let searchEl = $state<HTMLInputElement>();
+	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
+	type Link = Extract<SideItem, { label: unknown }>;
+	const isLink = (item: SideItem): item is Link => 'label' in item && 'href' in item;
+	const matches = $derived(
+		searchable && query.trim() ? settingsSideMatches(query, admin, t, side.filter(isLink)) : null,
+	);
+	const shownSide = $derived.by(() => {
+		if (!searchable) return side;
+		const kept = side.filter((item) =>
+			isLink(item)
+				? settingsSideAllowed(item.href, admin) && (!matches || matches.has(item.href))
+				: true,
+		);
+		// A group title only above entries of its own.
+		return kept.filter(
+			(item, i) => !('group' in item) || (kept[i + 1] && !('group' in kept[i + 1])),
+		);
+	});
+	const links = $derived(matches ? shownSide.filter(isLink) : []);
+	const current = $derived(links.length ? Math.min(hit, links.length - 1) : -1);
+	function openSide(item: Link) {
+		navigateWindow(win.id, matches?.get(item.href) ?? item.href);
+	}
+	function searchKey(e: KeyboardEvent) {
+		if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+			if (!links.length) return;
+			e.preventDefault();
+			hit = (Math.max(current, 0) + (e.key === 'ArrowDown' ? 1 : -1) + links.length) % links.length;
+			document.getElementById(`side-${win.id}-${hit}`)?.scrollIntoView({ block: 'nearest' });
+		} else if (e.key === 'Enter') {
+			const item = links[current];
+			if (!item) return;
+			e.preventDefault();
+			openSide(item);
+		} else if (e.key === 'Escape' && query) {
+			e.preventDefault();
+			e.stopPropagation();
+			query = '';
+			hit = 0;
+		}
+	}
+	/** Ablage › Einstellungen suchen, and the magnifier of the folded side bar. */
+	async function focusSearch() {
+		if (folded) toggleFold();
+		await tick();
+		searchEl?.focus();
+		searchEl?.select();
+	}
 
 	// PLAN 64: the title bar names the program and the page ("Docker › Container"):
 	// the page's own title, or the entry of the side bar when the page is
@@ -356,6 +419,8 @@
 				apply();
 				win.x = start.x + shift.x;
 				win.y = start.y + shift.y;
+				// Let go over the dock: the window stays above it (PLAN 71).
+				if (!wm.preview) Object.assign(win, clearOfDock(win));
 				shift = { x: 0, y: 0 };
 			}
 			dragging = false;
@@ -383,7 +448,8 @@
 			const dx = e.clientX - start.px;
 			const dy = e.clientY - start.py;
 			if (edge.includes('e')) win.w = Math.max(MIN_W, start.w + dx);
-			if (edge.includes('s')) win.h = Math.max(MIN_H, start.h + dy);
+			if (edge.includes('s'))
+				win.h = Math.max(MIN_H, Math.min(start.h + dy, wm.area.h - wm.inset.b - start.y));
 			if (edge.includes('w')) {
 				const w = Math.max(MIN_W, start.w - dx);
 				win.x = start.x + start.w - w;
@@ -471,6 +537,11 @@
 				'window.openTab': openTab,
 			},
 		);
+	else if (untrack(() => win.app === 'app:settings'))
+		registerWindowCommands(
+			untrack(() => win.id),
+			{ 'settings.search': () => void focusSearch() },
+		);
 	else if (untrack(() => external))
 		registerWindowCommands(
 			untrack(() => win.id),
@@ -556,8 +627,39 @@
 				<DesktopIcon {glyph} {gradient} size={folded ? 32 : 28} name={win.title} />
 				{#if !folded}<b>{win.title}</b>{/if}
 			</div>
-			<div class="items">
-				{#each side as item, i (i)}
+			{#if searchable}
+				{#if folded}
+					<button
+						type="button"
+						class="item"
+						title={t('settingshome.sideSearch')}
+						aria-label={t('settingshome.sideSearch')}
+						onclick={focusSearch}><Icon name="search" size={17} /></button
+					>
+				{:else}
+					<div class="side-search" role="search">
+						<span class="glass" aria-hidden="true"><Icon name="search" size={15} /></span>
+						<input
+							bind:this={searchEl}
+							type="search"
+							autocomplete="off"
+							spellcheck="false"
+							placeholder={t('settingshome.sideSearch')}
+							aria-label={t('settingshome.sideSearch')}
+							aria-controls="side-{win.id}"
+							aria-activedescendant={current >= 0 ? `side-${win.id}-${current}` : undefined}
+							bind:value={query}
+							oninput={() => (hit = 0)}
+							onkeydown={searchKey}
+						/>
+					</div>
+					{#if matches && !links.length}<p class="side-none" role="status">
+							{t('settingshome.sideNone')}
+						</p>{/if}
+				{/if}
+			{/if}
+			<div class="items" id="side-{win.id}">
+				{#each shownSide as item, i (i)}
 					{#if 'group' in item}
 						{#if !folded}<div class="group">{t(item.group)}</div>{:else}<div
 								class="rule"
@@ -578,13 +680,16 @@
 							{#if !folded}<span>{item.text}</span>{/if}
 						</button>
 					{:else}
+						{@const n = links.indexOf(item)}
 						<button
 							type="button"
 							class="item"
+							id={n >= 0 ? `side-${win.id}-${n}` : undefined}
 							class:on={sideActive(item, path, side)}
+							class:hit={n >= 0 && n === current}
 							title={folded ? t(item.label) : undefined}
 							aria-current={sideActive(item, path, side) ? 'page' : undefined}
-							onclick={() => navigateWindow(win.id, item.href)}
+							onclick={() => openSide(item)}
 						>
 							<Icon name={item.icon} size={17} />
 							{#if !folded}<span>{t(item.label)}</span>{/if}
@@ -873,15 +978,65 @@
 			opacity: 0;
 		}
 	}
+	/* PLAN 71: the side bar covers what lies behind the window completely
+	   (icon names of the desktop shone through it, owner's photo of 7 Nov
+	   2026): an opaque layer from the theme, tinted a little toward the page
+	   so it still reads as its own glass pane; also while the window moves. */
 	.side {
 		width: 220px;
 		flex: none;
 		display: flex;
 		flex-direction: column;
 		padding: 12px 10px;
-		background: color-mix(in srgb, var(--surface) 40%, transparent);
+		background:
+			linear-gradient(
+				180deg,
+				color-mix(in srgb, var(--text) 3%, transparent),
+				color-mix(in srgb, var(--accent) 3%, transparent)
+			),
+			color-mix(in srgb, var(--surface) 88%, var(--bg));
 		border-right: 1px solid var(--border);
 		overflow: hidden;
+	}
+	.side-search {
+		position: relative;
+		margin: 0 0 8px;
+	}
+	.side-search .glass {
+		position: absolute;
+		left: 9px;
+		top: 50%;
+		transform: translateY(-50%);
+		display: flex;
+		color: var(--muted);
+		pointer-events: none;
+	}
+	.side-search input {
+		width: 100%;
+		min-height: 32px;
+		padding: 4px 8px 4px 30px;
+		border: 1px solid var(--border);
+		border-radius: calc(8px * var(--radius-scale, 1));
+		background: var(--bg);
+		color: var(--text);
+		font: inherit;
+		font-size: var(--text-base);
+	}
+	.side-search input::placeholder {
+		color: var(--muted);
+		opacity: 1;
+	}
+	.side-search input:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -1px;
+	}
+	.side-none {
+		margin: 4px 10px 8px;
+		color: var(--muted);
+		font-size: var(--text-sm);
+	}
+	.item.hit {
+		box-shadow: inset 0 0 0 2px var(--accent);
 	}
 	.side.folded {
 		width: 60px;

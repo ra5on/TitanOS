@@ -281,7 +281,11 @@
 	});
 
 	// The address of the browser follows the window in front.
-	function address(path: string) {
+	function address(href: string) {
+		// Without a jump mark: "/settings/access#access-ssh" (a hit of the side
+		// bar search, PLAN 71) never equals the address and was written again
+		// and again – the page hung and its memory grew (found 7.11.2026).
+		const path = href.split('#')[0];
 		if (location.pathname + location.search === path) return;
 		try {
 			replaceState(path, page.state);

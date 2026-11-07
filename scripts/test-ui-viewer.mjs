@@ -489,14 +489,15 @@ const until = async (fn, what, ms = 5000) => {
   await page.getByRole("menuitemradio", { name: "Sparsam" }).click();
   await until(
     () =>
-      v.sent.some((m) => m.t === "quality" && m.mode === "low" && m.fps === 60),
+      // 30 fps unless chosen otherwise (0.66.0, owner 7.11.2026).
+      v.sent.some((m) => m.t === "quality" && m.mode === "low" && m.fps === 30),
     "quality",
   );
   await win.getByRole("menuitem", { name: /Qualität/ }).click();
-  await page.getByRole("menuitemradio", { name: "30 fps" }).click();
+  await page.getByRole("menuitemradio", { name: "60 fps" }).click();
   await until(
     () =>
-      v.sent.some((m) => m.t === "quality" && m.mode === "low" && m.fps === 30),
+      v.sent.some((m) => m.t === "quality" && m.mode === "low" && m.fps === 60),
     "fps",
   );
 

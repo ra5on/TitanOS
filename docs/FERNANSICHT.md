@@ -52,7 +52,7 @@ Browser → Agent:
 ## Einstellungen
 
 `GET/PUT /api/v1/viewer/settings` (Administratoren), `/config/viewer/settings.json`:
-`{"gpu":"auto"|"off"|"/dev/dri/renderD128","quality":"auto","fps":60,"audio":true,"volume":"<Volume für Profile>"}`.
+`{"gpu":"auto"|"off"|"/dev/dri/renderD128","quality":"auto","fps":30,"audio":true,"volume":"<Volume für Profile>"}`. Ab Werk 30 fps (seit 0.66.0, Inhaber 7.11.2026; vorher 60); ein gespeicherter Wert bleibt.
 `GET /api/v1/viewer/status`: Abbild geladen/lädt/fehlt, GPU-Geräte, offene Ansichten mit RAM, geschätzter Platz für weitere.
 
 ## Lebenslauf einer Ansicht
@@ -69,7 +69,7 @@ Code: `backend/internal/viewer/` (Einstellungen, Abbild, Container, Prüfung der
 
 | Route | Wer | Antwort |
 |---|---|---|
-| `GET /api/v1/viewer/settings` | Besitzer/Admin | `{"gpu":"auto","quality":"auto","fps":60,"audio":true,"volume":""}` |
+| `GET /api/v1/viewer/settings` | Besitzer/Admin | `{"gpu":"auto","quality":"auto","fps":30,"audio":true,"volume":""}` |
 | `PUT /api/v1/viewer/settings` | Besitzer/Admin | gleiche Form (fehlende Felder behalten den bisherigen Wert); 400 `viewer_settings_invalid` bei unbekannter GPU (nur `id` aus `status.gpus`), `quality` außer `auto|high|balanced|low`, `fps` außer 30/60, nicht eingebundenem Volume. `volume: ""` = Volume von Docker |
 | `GET /api/v1/viewer/status` | jedes Konto | siehe unten; Benutzer sehen nur ihre eigenen Ansichten und keine GPU-Liste |
 | `POST /api/v1/viewer/image` | Besitzer/Admin | Abbild jetzt laden (sonst mit der ersten Ansicht; nach einem Fehler sofort neu); Antwort wie `status.image` |

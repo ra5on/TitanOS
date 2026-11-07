@@ -37,7 +37,7 @@ var ErrInvalid = errors.New("viewer: invalid setting")
 
 // Defaults are the settings without a file.
 func Defaults() Settings {
-	return Settings{GPU: "auto", Quality: "auto", FPS: 60, Audio: true}
+	return Settings{GPU: "auto", Quality: "auto", FPS: 30, Audio: true}
 }
 
 var volumeName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)

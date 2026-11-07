@@ -48,6 +48,14 @@ func uiHandler(ui fs.FS) http.Handler {
 	csp := sync.OnceValue(func() string { return contentSecurityPolicy(ui) })
 	agentIndex := sync.OnceValues(func() ([]byte, error) { return agentIndexHTML(ui) })
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// PLAN 70: the share target of the installed web app. The service
+		// worker takes the shared files in the browser; a POST that reaches
+		// the NAS (worker not active yet) is never read and goes to the page,
+		// which then says that nothing arrived.
+		if r.Method == http.MethodPost && r.URL.Path == "/share-target" {
+			http.Redirect(w, r, "/share?missing=1", http.StatusSeeOther)
+			return
+		}
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			w.Header().Set("Allow", "GET, HEAD")
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

@@ -283,9 +283,8 @@
 			i18n.locale,
 		),
 	);
-	const gallery = $derived(
-		visibleEntries.filter((e) => !e.dir && previewKind(e.name, e.size) === 'image'),
-	);
+	// PLAN 70, quick look: the arrows go through every file of the folder in its order.
+	const gallery = $derived(visibleEntries.filter((e) => !e.dir));
 	const galleryIndex = $derived(preview ? gallery.findIndex((e) => e.name === preview?.name) : -1);
 	const selectedNames = $derived(new Set(selected));
 	const allSelected = $derived(
@@ -577,6 +576,12 @@
 		else if (editable) editing = join(dir, entry.name);
 	}
 	/** PLAN 66: the standard app of the file type (Dateien › Einstellungen › Standard-Apps). */
+	/** Quick look of the next file: it becomes the selection, like in the list. */
+	function quickLook(entry: FileEntry) {
+		preview = entry;
+		selected = [entry.name];
+		anchor = entry.name;
+	}
 	function openWithStandard(entry: FileEntry): boolean {
 		const choice = appForFile(entry.name);
 		if (
@@ -1595,9 +1600,18 @@
 		root={root.id}
 		path={join(dir, preview.name)}
 		size={preview.size}
-		onprevious={galleryIndex > 0 ? () => (preview = gallery[galleryIndex - 1]) : undefined}
+		modified={preview.modified}
+		onprevious={galleryIndex > 0 ? () => quickLook(gallery[galleryIndex - 1]) : undefined}
 		onnext={galleryIndex >= 0 && galleryIndex < gallery.length - 1
-			? () => (preview = gallery[galleryIndex + 1])
+			? () => quickLook(gallery[galleryIndex + 1])
+			: undefined}
+		onopen={appForFile(preview.name)?.startsWith('webapp:') ||
+		(appForFile(preview.name) === EDITOR && isEditableText(preview.name, preview.size))
+			? () => {
+					const entry = preview;
+					preview = null;
+					if (entry) openWithStandard(entry);
+				}
 			: undefined}
 		onclose={() => (preview = null)}
 	/>{/if}
@@ -1732,7 +1746,14 @@
 			gap: 0;
 			padding: 12px 10px;
 			overflow: hidden;
-			background: color-mix(in srgb, var(--surface) 40%, transparent);
+			/* The same opaque pane as the window's side bar (PLAN 71). */
+			background:
+				linear-gradient(
+					180deg,
+					color-mix(in srgb, var(--text) 3%, transparent),
+					color-mix(in srgb, var(--accent) 3%, transparent)
+				),
+				color-mix(in srgb, var(--surface) 88%, var(--bg));
 			border-right: 1px solid var(--border);
 		}
 		.places.windowed.folded {
