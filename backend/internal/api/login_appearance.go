@@ -104,7 +104,13 @@ type loginAppearance struct {
 	AccountsStyle        string `json:"accountsStyle"`
 	ShowAccounts         bool   `json:"showAccounts"`
 	ShowAccountsExternal bool   `json:"showAccountsExternal"`
+	// HiddenAccounts are left out of the picker (PLAN 69: chosen one by one
+	// under Appearance › Login page); new accounts show. Older titand ignore it.
+	HiddenAccounts []string `json:"hiddenAccounts,omitempty"`
 }
+
+// maxHiddenAccounts bounds the list; account names are at most 32 bytes.
+const maxHiddenAccounts = 512
 
 // loginAppearanceRequest is what the editor sends; the image is managed here.
 type loginAppearanceRequest struct {
@@ -181,6 +187,23 @@ func (v *loginAppearance) validate() error {
 	}
 	if v.AccountsStyle == "" {
 		v.AccountsStyle = "circles"
+	}
+	if len(v.HiddenAccounts) > maxHiddenAccounts {
+		return errors.New("too many hidden accounts")
+	}
+	hidden := make([]string, 0, len(v.HiddenAccounts))
+	for _, name := range v.HiddenAccounts {
+		if name == "" || len(name) > 64 || strings.ContainsFunc(name, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
+			return errors.New("invalid hidden account")
+		}
+		if !slices.Contains(hidden, name) {
+			hidden = append(hidden, name)
+		}
+	}
+	slices.Sort(hidden)
+	v.HiddenAccounts = hidden
+	if len(hidden) == 0 {
+		v.HiddenAccounts = nil
 	}
 	v.CustomAccent = strings.ToUpper(v.CustomAccent)
 	texts := map[string]loginTexts{}
@@ -261,15 +284,20 @@ func digest(data []byte) string {
 type publicLoginLook struct {
 	Configured bool `json:"configured"`
 	loginAppearance
-	AccountsStyle        *string `json:"accountsStyle,omitempty"`
-	ShowAccounts         *bool   `json:"showAccounts,omitempty"`
-	ShowAccountsExternal *bool   `json:"showAccountsExternal,omitempty"`
+	AccountsStyle        *string  `json:"accountsStyle,omitempty"`
+	ShowAccounts         *bool    `json:"showAccounts,omitempty"`
+	ShowAccountsExternal *bool    `json:"showAccountsExternal,omitempty"`
+	HiddenAccounts       []string `json:"hiddenAccounts,omitempty"`
 }
 
 func lookAnswer(configured bool, value loginAppearance, admin bool) publicLoginLook {
 	answer := publicLoginLook{Configured: configured, loginAppearance: value}
 	if admin {
 		answer.AccountsStyle, answer.ShowAccounts, answer.ShowAccountsExternal = &value.AccountsStyle, &value.ShowAccounts, &value.ShowAccountsExternal
+		answer.HiddenAccounts = slices.Clone(value.HiddenAccounts)
+		if answer.HiddenAccounts == nil {
+			answer.HiddenAccounts = []string{}
+		}
 	}
 	return answer
 }

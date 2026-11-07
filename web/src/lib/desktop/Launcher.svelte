@@ -14,8 +14,14 @@
 		onopen,
 		onclose,
 		onlock,
-	}: { onopen: (key: string, href?: string) => void; onclose: () => void; onlock?: () => void } =
-		$props();
+		at = 'top',
+	}: {
+		onopen: (key: string, href?: string) => void;
+		onclose: () => void;
+		onlock?: () => void;
+		/** Where it opens: under the top bar, or next to the dock's menu button (PLAN 69). */
+		at?: 'top' | 'bottom' | 'left' | 'right';
+	} = $props();
 
 	type Filter = 'all' | 'system' | 'docker' | 'vm' | 'webapp' | 'recent';
 	let filter = $state<Filter>('all');
@@ -123,7 +129,7 @@
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
-	class="launcher glass-panel"
+	class="launcher glass-panel at-{at}"
 	bind:this={root}
 	role="dialog"
 	aria-label={t('desktop.menu.title')}
@@ -264,6 +270,34 @@
 		border-radius: 20px;
 		z-index: 9000;
 		animation: drop 0.16s ease-out;
+	}
+	/* Opened from the dock: next to it, rising from its edge. */
+	.launcher.at-bottom {
+		top: auto;
+		bottom: calc(var(--dock-room, 90px) + 4px);
+		left: max(10px, calc(50% - 390px));
+		animation-name: rise;
+	}
+	.launcher.at-left,
+	.launcher.at-right {
+		top: auto;
+		bottom: 10px;
+		animation-name: rise;
+	}
+	.launcher.at-left {
+		left: calc(var(--dock-room, 90px) + 4px);
+		width: min(780px, calc(100% - var(--dock-room, 90px) - 20px));
+	}
+	.launcher.at-right {
+		left: auto;
+		right: calc(var(--dock-room, 90px) + 4px);
+		width: min(780px, calc(100% - var(--dock-room, 90px) - 20px));
+	}
+	@keyframes rise {
+		from {
+			opacity: 0;
+			transform: translateY(8px) scale(0.98);
+		}
 	}
 	@keyframes drop {
 		from {

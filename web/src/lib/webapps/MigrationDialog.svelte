@@ -3,6 +3,8 @@
 	// administrators – install the office programs as web apps and, as an
 	// option, remove the Docker versions of the Craft apps they replace.
 	import { api } from '#lib/api.ts';
+	import { activeNode } from '#lib/cluster-node.ts';
+	import { clusterNodes } from '#lib/cluster.svelte.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { formatPercent } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
@@ -11,7 +13,13 @@
 	import OfficeApps from './OfficeApps.svelte';
 	import { loadWebApps, webapps } from './webapps.svelte.ts';
 
-	const HINT = 'webapps-0.63';
+	// Per node (PLAN 69): the hints live on this NAS, the web apps on the
+	// node the tab manages – another node of the cluster asks once on its own.
+	const node = activeNode();
+	const HINT = node ? `webapps-0.63@${node}` : 'webapps-0.63';
+	const nodeName = $derived(
+		node ? (clusterNodes.nodes.find((n) => n.id === node)?.name ?? node) : '',
+	);
 	let later = $state(false);
 	let started = $state(false);
 	let busy = $state(false);
@@ -115,6 +123,7 @@
 		<div class="migrate">
 			{#if !started}
 				<h3>{t('webapps.migrate.whyTitle')}</h3>
+				{#if nodeName}<p class="node">{t('webapps.migrate.onNode', { name: nodeName })}</p>{/if}
 				<p>{t('webapps.migrate.whyText')}</p>
 				{#if office.length}
 					<OfficeApps
@@ -219,6 +228,9 @@
 {/if}
 
 <style>
+	.node {
+		font-weight: 600;
+	}
 	.migrate {
 		display: flex;
 		flex-direction: column;

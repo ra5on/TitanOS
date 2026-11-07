@@ -27,6 +27,12 @@ export type FrameMessage =
 	| { type: 'titanos-open-file'; root: string; path: string; app?: string }
 	/** PLAN 67: a page asks the desktop to open a Docker app's window ("docker:<app>"). */
 	| { type: 'titanos-open-program'; key: string }
+	/** PLAN 69: a page that draws the window's side bar itself asks whether it is folded. */
+	| { type: 'titanos-side-get' }
+	/** PLAN 69: such a page folds or unfolds the window's side bar (saved by the desktop). */
+	| { type: 'titanos-side-fold' }
+	/** PLAN 69: the window tells its page whether the side bar is folded (answer, and after every change). */
+	| { type: 'titanos-side'; folded: boolean }
 	/** PLAN 65-6: the desktop tells a window's page whether it can be seen (minimized: no). */
 	| { type: 'titanos-visible'; visible: boolean }
 	| {

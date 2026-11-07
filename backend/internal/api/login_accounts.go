@@ -156,7 +156,7 @@ func (s *Server) handleLoginAccounts(w http.ResponseWriter, r *http.Request) {
 	}
 	if look.ShowAccounts && s.opts.Users.Loaded() && (look.ShowAccountsExternal || s.fromHomeNetwork(r)) {
 		for _, user := range s.opts.Users.List() {
-			if !user.Disabled {
+			if !user.Disabled && !slices.Contains(look.HiddenAccounts, user.Name) {
 				answer.Accounts = append(answer.Accounts, loginAccount{Name: user.Name})
 			}
 		}

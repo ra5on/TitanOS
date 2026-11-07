@@ -40,7 +40,7 @@ type preferences struct {
 	cache map[string]json.RawMessage // key: user + "/" + kind
 	// locks caches the field lockMinutes of the desktop preferences per
 	// account, read on every request of a session (session_lock.go).
-	locks map[string]int
+	locks map[string]lockTimes
 	// lockFailed is when reading them last failed, per account.
 	lockFailed map[string]time.Time
 }

@@ -7,7 +7,15 @@ import type { MessageKey } from '../i18n/index.svelte.ts';
 
 export type SideItem =
 	| { group: MessageKey }
-	| { href: string; label: MessageKey; icon: IconName; match?: string[] }
+	| {
+			href: string;
+			label: MessageKey;
+			icon: IconName;
+			match?: string[];
+			/** PLAN 69: on this entry's pages the page draws the window's one side
+			 * bar itself (the file manager's folder tree); the window shows none. */
+			page?: true;
+	  }
 	/** One thing of the program by name (a VM), with its state as a dot. */
 	| { href: string; text: string; state: 'on' | 'off' };
 
@@ -47,7 +55,7 @@ export const SYSTEM_APPS: SystemApp[] = [
 		href: '/files',
 		paths: ['/files', '/settings/files'],
 		side: [
-			{ href: '/files', label: 'desktop.side.browse', icon: 'folder' },
+			{ href: '/files', label: 'desktop.side.browse', icon: 'folder', page: true },
 			{ group: 'desktop.side.settings' },
 			{ href: '/settings/files', label: 'desktop.side.filesSettings', icon: 'gear' },
 		],
@@ -399,4 +407,9 @@ export function sideActive(item: SideItem, path: string, items: SideItem[]): boo
 				(p) => (path === p || path.startsWith(p + '/')) && p.length > own.length,
 			),
 	);
+}
+
+/** PLAN 69: the page at this path draws the window's side bar itself. */
+export function pageDrawsSide(items: SideItem[], path: string): boolean {
+	return items.some((item) => 'page' in item && item.page && sideActive(item, path, items));
 }

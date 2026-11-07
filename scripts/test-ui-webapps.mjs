@@ -365,6 +365,8 @@ async function open(
   const nas = {
     files: {
       "Angebot.docx": { bytes: docx(), modified: MODIFIED },
+      // A Mac's companion file (PLAN 69): never offered to open.
+      "._Angebot.docx": { bytes: Buffer.alloc(4096), modified: MODIFIED },
       "bild.png": { bytes: png(), modified: MODIFIED },
       "logo.svg": {
         bytes: Buffer.from(
@@ -607,6 +609,18 @@ async function filesWindow(page) {
   );
   await page.keyboard.press("Escape");
   await win.locator(".win-menu").waitFor({ state: "detached" });
+  // PLAN 69: "Datei öffnen …" lists the document, not the Mac's "._" file.
+  await win.locator('.titlebar button[aria-label="Mehr"]').click();
+  await win.getByRole("menuitem", { name: "Datei öffnen …" }).click();
+  const fd = page.locator("form.fd");
+  await fd.locator(".row.file", { hasText: "Angebot.docx" }).first().waitFor();
+  assert.deepEqual(
+    await fd.locator(".row.file .name").allTextContents(),
+    ["Angebot.docx"],
+    "only the document, no companion file",
+  );
+  await page.keyboard.press("Escape");
+  await fd.waitFor({ state: "detached" });
 
   // Typing makes it dirty; Ctrl+S saves into the original.
   const box = await app.boundingBox();
@@ -981,6 +995,63 @@ for (const width of [1280, 390]) {
     "pdfcraft",
     "wordcraft",
   ]);
+  await made.ctx.close();
+}
+
+// PLAN 69: managing another node of the cluster, whose office programs are
+// missing, asks again (with its name) although this NAS answered already.
+{
+  const made = await create("owner", "graphit", 1440);
+  await made.page.setViewportSize({ width: 1440, height: 900 });
+  await made.ctx.addInitScript(() => {
+    localStorage.removeItem("titanos.layout");
+    sessionStorage.setItem("titanos.cluster.node", "n2");
+  });
+  made.data.prefs.hints = { "webapps-0.63": true };
+  const saved = [];
+  await made.ctx.route("**/api/v1/**", async (route) => {
+    const url = new URL(route.request().url());
+    const p = url.pathname.slice(7);
+    if (p === "/cluster/nodes")
+      return route.fulfill({
+        json: {
+          manages: true,
+          version: "0.65.0",
+          nodes: [
+            { id: "n1", name: "titan-test", self: true, online: true },
+            {
+              id: "n2",
+              name: "Keller",
+              self: false,
+              online: true,
+              compatible: true,
+            },
+          ],
+        },
+      });
+    if (p === "/preferences/hints" && route.request().method() === "PUT") {
+      saved.push(route.request().postDataJSON());
+      return route.fulfill({ status: 204 });
+    }
+    // The other node answers like this NAS would (test data).
+    if (p.startsWith("/cluster/nodes/n2/api/")) {
+      const rest = p.slice("/cluster/nodes/n2/api".length);
+      if (rest === "/webapps")
+        return route.fulfill({
+          json: webappsList({ data: made.data }),
+        });
+      url.pathname = "/api/v1" + rest;
+      return route.fallback({ url: url.toString() });
+    }
+    return route.fallback();
+  });
+  await made.page.goto(base + "/");
+  const dialog = made.page.getByRole("dialog", {
+    name: "Office-Programme direkt im Browser",
+  });
+  await dialog.waitFor({ timeout: 15000 });
+  await dialog.getByText("Für den Knoten „Keller“ im Cluster.").waitFor();
+  await shot(made.page, "14-offer-cluster");
   await made.ctx.close();
 }
 

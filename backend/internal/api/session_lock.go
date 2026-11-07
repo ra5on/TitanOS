@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
@@ -20,10 +21,27 @@ import (
 
 // defaultLockMinutes is the automatic lock while an account chose nothing;
 // maxLockMinutes bounds what it may choose.
+// defaultPhoneLockMinutes is the lock of a login from a phone while the
+// account chose nothing: never (owner decision 7.11.2026, PLAN 69 – the
+// phone has its own screen lock).
 const (
-	defaultLockMinutes = 15
-	maxLockMinutes     = 24 * 60
+	defaultLockMinutes      = 15
+	defaultPhoneLockMinutes = 0
+	maxLockMinutes          = 24 * 60
 )
+
+// lockTimes are the automatic locks of an account: on a computer and,
+// separately, on a phone (PLAN 69).
+type lockTimes struct{ desk, phone int }
+
+var defaultLockTimes = lockTimes{desk: defaultLockMinutes, phone: defaultPhoneLockMinutes}
+
+// phoneAgent tells whether a browser is a phone by its user agent: iPhone,
+// iPod, Android phones and others marked "Mobi". Tablets (iPad asks for the
+// desktop site, Android tablets lack "Mobile") count as computers.
+func phoneAgent(ua string) bool {
+	return strings.Contains(ua, "iPhone") || strings.Contains(ua, "iPod") || strings.Contains(ua, "Mobi")
+}
 
 // lockExempt are the routes a locked session may still call through
 // requireUser: unlocking (with a passkey, its challenge first) and locking
@@ -44,29 +62,35 @@ const (
 )
 
 // lockMinutes is the automatic lock the account chose in its desktop
-// preferences ("lockMinutes", 0 = off), read from the cached preferences.
-// Never called with the lock of the session store held: the first read
-// of an account may wake the stick.
-func (s *Server) lockMinutes(user string) int {
-	return s.prefs.lockMinutes(user)
+// preferences ("lockMinutes", 0 = off; "lockMinutesPhone" for a login from
+// a phone), read from the cached preferences. Never called with the lock
+// of the session store held: the first read of an account may wake the
+// stick.
+func (s *Server) lockMinutes(user, userAgent string) int {
+	times := s.prefs.lockTimes(user)
+	if phoneAgent(userAgent) {
+		return times.phone
+	}
+	return times.desk
 }
 
-// lockMinutes reads the field "lockMinutes" of the desktop preferences;
-// the desktop stores other fields there as well, which stay untouched.
-func (p *preferences) lockMinutes(user string) int {
+// lockTimes reads the fields "lockMinutes" and "lockMinutesPhone" of the
+// desktop preferences; the desktop stores other fields there as well,
+// which stay untouched.
+func (p *preferences) lockTimes(user string) lockTimes {
 	p.mu.Lock()
-	if minutes, ok := p.locks[user]; ok {
+	if times, ok := p.locks[user]; ok {
 		p.mu.Unlock()
-		return minutes
+		return times
 	}
 	// Unreadable a moment ago (stick missing): the default, without asking
 	// the stick again on every request.
 	if failed, ok := p.lockFailed[user]; ok && time.Since(failed) < lockRetry {
 		p.mu.Unlock()
-		return defaultLockMinutes
+		return defaultLockTimes
 	}
 	p.mu.Unlock()
-	minutes := defaultLockMinutes
+	times := defaultLockTimes
 	value, err := p.get(user, "desktop")
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -75,22 +99,28 @@ func (p *preferences) lockMinutes(user string) int {
 			p.lockFailed = map[string]time.Time{}
 		}
 		p.lockFailed[user] = time.Now()
-		return minutes
+		return times
 	}
 	if value != nil {
 		var desktop struct {
-			LockMinutes *float64 `json:"lockMinutes"`
+			LockMinutes      *float64 `json:"lockMinutes"`
+			LockMinutesPhone *float64 `json:"lockMinutesPhone"`
 		}
-		if json.Unmarshal(value, &desktop) == nil && desktop.LockMinutes != nil {
-			minutes = clampLockMinutes(*desktop.LockMinutes)
+		if json.Unmarshal(value, &desktop) == nil {
+			if desktop.LockMinutes != nil {
+				times.desk = clampLockMinutes(*desktop.LockMinutes)
+			}
+			if desktop.LockMinutesPhone != nil {
+				times.phone = clampLockMinutes(*desktop.LockMinutesPhone)
+			}
 		}
 	}
 	if p.locks == nil {
-		p.locks = map[string]int{}
+		p.locks = map[string]lockTimes{}
 	}
 	delete(p.lockFailed, user)
-	p.locks[user] = minutes
-	return minutes
+	p.locks[user] = times
+	return times
 }
 
 // lockRetry is how long an unreadable desktop preference is not asked for again.
@@ -113,7 +143,7 @@ func (s *Server) cookieState(r *http.Request) (auth.User, authState) {
 		return auth.User{}, authNone
 	}
 	if peek, ok := s.sessions.Peek(cookie.Value); ok && !peek.Locked {
-		if minutes := s.lockMinutes(peek.User); minutes > 0 && s.sessions.LockIfIdle(cookie.Value, time.Duration(minutes)*time.Minute) {
+		if minutes := s.lockMinutes(peek.User, peek.UserAgent); minutes > 0 && s.sessions.LockIfIdle(cookie.Value, time.Duration(minutes)*time.Minute) {
 			slog.Info("session locked after inactivity", "user", peek.User, "ip", remoteIP(r))
 			s.recordEvent(r, peek.User, "session_autolock", "", true)
 		}

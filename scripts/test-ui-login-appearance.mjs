@@ -231,6 +231,21 @@ try {
     );
     await popup.close();
 
+    // PLAN 69: accounts one by one – sam stays off the login page.
+    const each = page.locator('[data-testid="login-accounts-each"]');
+    await each
+      .getByRole("switch", { name: "alex auf der Anmeldeseite zeigen" })
+      .waitFor();
+    assert.equal(
+      await each
+        .getByRole("switch", { name: "sam auf der Anmeldeseite zeigen" })
+        .isChecked(),
+      true,
+    );
+    await each
+      .getByRole("switch", { name: "sam auf der Anmeldeseite zeigen" })
+      .click();
+
     await page
       .locator(".save-bar")
       .getByRole("button", { name: "Übernehmen" })
@@ -240,6 +255,7 @@ try {
       .getByText("Gespeichert", { exact: true })
       .waitFor();
     saved = state.saves.at(-1);
+    assert.deepEqual(saved.hiddenAccounts, ["sam"]);
     assert.equal(saved.theme, "mitternacht");
     assert.equal(saved.accent, "tuerkis");
     assert.deepEqual(saved.background, {

@@ -102,7 +102,8 @@ type sessionResponse struct {
 	Version string `json:"version,omitempty"`
 	// Locked: the session is locked (session_lock.go); User names who may
 	// unlock it, Passkey whether a passkey of the account works on this
-	// address. LockMinutes is the account's automatic lock, 0 = off.
+	// address. LockMinutes is the account's automatic lock for this
+	// browser (phones have their own, PLAN 69), 0 = off.
 	Locked      bool `json:"locked,omitempty"`
 	Passkey     bool `json:"passkey,omitempty"`
 	LockMinutes *int `json:"lockMinutes,omitempty"`
@@ -116,7 +117,8 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 	if user, state := s.authenticateState(r); state != authNone {
 		answer := userOf(user)
 		res.User = &answer
-		minutes := s.lockMinutes(user.Name)
+		// The lock of this login: a phone has its own (PLAN 69).
+		minutes := s.lockMinutes(user.Name, r.UserAgent())
 		res.LockMinutes = &minutes
 		if state == authLocked {
 			// What the lock screen needs, nothing more.

@@ -224,7 +224,8 @@
 		display: flex;
 		min-width: 0;
 	}
-	@container (min-width: 26rem) {
+	/* Two columns only where a long German word still fits (PLAN 69). */
+	@container (min-width: 34rem) {
 		.tiles {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
@@ -285,13 +286,15 @@
 		gap: var(--space-1) 6px;
 		font-weight: 600;
 		font-size: var(--text-md);
-		overflow-wrap: anywhere;
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	.desc {
 		color: var(--muted);
 		font-size: var(--text-sm);
 		line-height: 1.35;
-		overflow-wrap: anywhere;
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	.new {
 		padding: 0 5px;

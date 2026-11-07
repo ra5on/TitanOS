@@ -69,6 +69,8 @@
 
 	let area = $state<HTMLElement>();
 	let launcher = $state(false);
+	/** Where the main menu opens: under the top bar, or at the dock's menu button. */
+	let launcherAt = $state<'top' | 'bottom' | 'left' | 'right'>('top');
 	let center = $state(false);
 	let editWidgets = $state(false);
 	let editDock = $state(false);
@@ -575,6 +577,7 @@
 		}
 		if ((event.ctrlKey || event.metaKey) && event.code === 'Space') {
 			event.preventDefault();
+			launcherAt = 'top';
 			launcher = !launcher;
 		}
 		if (event.key === 'Escape') {
@@ -788,7 +791,10 @@
 				class="pb"
 				class:on={launcher}
 				data-opens="launcher"
-				onclick={() => (launcher = !launcher)}
+				onclick={() => {
+					launcherAt = 'top';
+					launcher = !launcher;
+				}}
 				title={t('desktop.menu.title') + ' (' + t('desktop.menu.shortcut') + ')'}
 				aria-label={t('desktop.menu.title')}
 				aria-expanded={launcher}><Icon name="search" size={barIcon} /></button
@@ -978,7 +984,13 @@
 			</div>
 		{/each}
 		{#if editWidgets}
-			<div class="edit-bar glass-panel">
+			<!-- Clear of the dock (PLAN 69: the dock covered the hint). -->
+			<div
+				class="edit-bar glass-panel"
+				style:bottom="{wm.inset.b + 18}px"
+				style:left="calc(50% + {(wm.inset.l - wm.inset.r) / 2}px)"
+				style:max-width="calc(100% - {wm.inset.l + wm.inset.r + 40}px)"
+			>
 				<span>{t('desktop.widgets.editHint')}</span>
 				<button type="button" class="btn" onclick={() => (dialog = 'gallery')}
 					><Icon name="plus" size={15} />{t('desktop.widgets.add')}</button
@@ -1016,6 +1028,11 @@
 						? { ...menuAt(e), kind: 'icon', key, dock: true }
 						: { ...menuAt(e), kind: 'dock' })}
 				ondone={() => (editDock = false)}
+				{launcher}
+				onlauncher={() => {
+					launcherAt = desktop.prefs.dock.position;
+					launcher = !launcher;
+				}}
 			/>
 		{/if}
 
@@ -1086,6 +1103,7 @@
 		{/if}
 
 		{#if launcher}<Launcher
+				at={launcherAt}
 				onopen={(key, href) => open(key, undefined, href)}
 				onclose={() => (launcher = false)}
 				{onlock}

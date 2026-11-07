@@ -8,8 +8,8 @@
 	import Icon from '../components/Icon.svelte';
 	import { t } from '../i18n/index.svelte.ts';
 	import DesktopIcon from './DesktopIcon.svelte';
-	import { sideActive, type SideItem } from './apps.ts';
-	import { frameMessage } from './frame.ts';
+	import { pageDrawsSide, sideActive, type SideItem } from './apps.ts';
+	import { frameMessage, type FrameMessage } from './frame.ts';
 	import { openProgram, openTab as openProgramTab } from './programs.svelte.ts';
 	import Dialog from '../components/Dialog.svelte';
 	import '../components/menu.css';
@@ -176,8 +176,21 @@
 		);
 		inner.addEventListener('pointerdown', menuKeyReset, true);
 	}
+	// PLAN 69: a page that draws the side bar itself (the file manager's tree)
+	// learns whether it is folded; folding stays one setting of the desktop.
+	function tellSide() {
+		frame?.contentWindow?.postMessage(
+			{ type: 'titanos-side', folded } satisfies FrameMessage,
+			location.origin,
+		);
+	}
+	$effect(() => {
+		void folded;
+		untrack(tellSide);
+	});
 	function loaded() {
 		tellVisible();
+		tellSide();
 		// PLAN 67-1: the new page announces its menu commands; ask in case it already did.
 		clearFrameCommands(win.id);
 		frame?.contentWindow?.postMessage({ type: 'titanos-menu-get' }, location.origin);
@@ -212,6 +225,8 @@
 	const rect = $derived(snapRect(win.snap) ?? { x: win.x, y: win.y, w: win.w, h: win.h });
 	const focused = $derived(wm.focused === win.id);
 	const path = $derived(win.href.split('?')[0]);
+	// PLAN 69: on these pages the page itself draws the one side bar.
+	const ownSide = $derived(pageDrawsSide(side, path));
 
 	// PLAN 64: the title bar names the program and the page ("Docker › Container"):
 	// the page's own title, or the entry of the side bar when the page is
@@ -250,6 +265,10 @@
 			win.href = msg.path;
 			if (focused) onaddress?.(msg.path);
 			saveWindows();
+		} else if (msg?.type === 'titanos-side-get') {
+			tellSide();
+		} else if (msg?.type === 'titanos-side-fold') {
+			toggleFold();
 		} else if (msg?.type === 'titanos-console') {
 			// A console asked for by this page opens in the Terminal window (PLAN 62-5).
 			const href = '/terminal?open=' + encodeURIComponent(JSON.stringify(msg.session));
@@ -531,7 +550,7 @@
 	onkeydown={keyResize}
 	onanimationend={() => (win.from = undefined)}
 >
-	{#if side.length && !external}
+	{#if side.length && !external && !ownSide}
 		<nav class="side" class:folded aria-label={win.title}>
 			<div class="side-title">
 				<DesktopIcon {glyph} {gradient} size={folded ? 32 : 28} name={win.title} />
@@ -587,7 +606,7 @@
 	<div class="main">
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<header class="titlebar" onpointerdown={startMove} ondblclick={() => toggleMax(win.id)}>
-			{#if !side.length || external}<DesktopIcon
+			{#if !side.length || external || ownSide}<DesktopIcon
 					{glyph}
 					{gradient}
 					{image}

@@ -123,6 +123,11 @@ Nachrichten zwischen Fenster und `host.js` per `postMessage` (Fenster prüft `ev
 - App-Center: Abschnitt „Programme für den Browser“ mit allen Katalog-Apps, Installieren/Entfernen, Docker-Versionen ersetzen.
 - Neue Versionen der Apps kommen nur mit TitanOS-Updates (neuer Katalog): titand installiert nach dem Start jede installierte App, deren Version nicht die des Katalogs ist, neu (im Hintergrund, auf ihrem Volume; die alte Version bleibt bis dahin nutzbar und wird danach entfernt; ein Fehlschlag wird nicht wiederholt, bis man „Installieren“ drückt).
 
+## Ergänzungen 0.65.0 (PLAN 69)
+
+- Der Öffnen-/Speichern-Dialog der Web-Apps (`FileDialog.svelte`) versteckt Punkt-Dateien wie der Dateimanager, auch `._name`-Begleitdateien eines Macs (sie sahen aus wie das Dokument und scheiterten in WordCraft, GridCraft und PdfCraft mit „not a readable …“).
+- Der Hinweis „Office-Programme direkt im Browser“ wird je Knoten gemerkt: `webapps-0.63` für dieses NAS, `webapps-0.63@<knoten>` für einen anderen Knoten, den der Tab im Cluster verwaltet (die Hinweise liegen auf dem eigenen NAS, die Web-Apps auf dem verwalteten Knoten). Der Dialog nennt dann den Knoten.
+
 ## Ergänzungen aus dem Bau der Oberfläche (0.63.0)
 
 - **Rahmen-Adresse:** `?author=<Name>&bridge=host|adapter&app=<id>`; `host.js` nimmt bevorzugt `data-app`/`data-bridge` am eigenen Script-Tag, die Adresse ist der Rückfall. Nie `host=parent`.
