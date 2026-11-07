@@ -173,7 +173,8 @@ test('"new" badges end by themselves after two minor versions or 30 days', async
 });
 
 test('PLAN 71: the side bar search of Systemsteuerung finds areas by name, keyword and section', async () => {
-	const { settingsSideMatches, settingsSideAllowed } = await import('../src/lib/settings-search.ts');
+	const { settingsSideMatches, settingsSideAllowed } =
+		await import('../src/lib/settings-search.ts');
 	const { SYSTEM_APPS } = await import('../src/lib/desktop/apps.ts');
 	const { readFileSync, readdirSync } = await import('node:fs');
 	const dir = new URL('../src/lib/i18n/', import.meta.url);
