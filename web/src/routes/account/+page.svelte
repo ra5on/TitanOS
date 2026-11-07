@@ -228,6 +228,40 @@
 			'–'
 		);
 	}
+
+	// PLAN 67-1: the menu bar of the desktop (Konto): the dialogs, or the section on the page.
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	const reveal = (id: string) => () =>
+		document
+			.getElementById(id)
+			?.closest('section')
+			?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	registerMenuCommands({
+		'account.password': () => (changingPassword = true),
+		'account.twoFactorOn': {
+			run: () => openConfirm('begin'),
+			enabled: () => !!user && !user.twoFactor && !setup,
+		},
+		'account.twoFactorOff': {
+			run: () => openConfirm('disable'),
+			enabled: () => !!user?.twoFactor,
+		},
+		'account.recoveryCodes': {
+			run: () => openConfirm('renew'),
+			enabled: () => !!user?.twoFactor,
+		},
+		'account.passkeys': reveal('acc-passkeys'),
+		'account.ssh': reveal('acc-ssh'),
+		'account.webdav': reveal('acc-webdav'),
+		'account.devices': reveal('acc-devices'),
+		'account.logoutAll': {
+			run: () => {
+				dialogError = '';
+				endingOthers = true;
+			},
+			enabled: () => !!devices?.some((device) => !device.current),
+		},
+	});
 </script>
 
 <PageHead title={t('account.title')} />

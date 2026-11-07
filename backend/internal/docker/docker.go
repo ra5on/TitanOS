@@ -174,6 +174,8 @@ type Manager struct {
 	// OnEvent reports automatic updates (notifications).
 	OnEvent func(severity, kind, subject string)
 	auto    autoUpdates
+	// df caches the slow disk usage answer of the engine (resources.go).
+	df dfCache
 	// configDir is where /config lives, for the paths given to docker compose.
 	configDir    string
 	mountRoot    string

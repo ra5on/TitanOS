@@ -33,6 +33,7 @@ Die Einstellungen gelten für die Anmeldung samt Zwei-Faktor-Schritt und für al
 | Route | Zugriff | Inhalt |
 |---|---|---|
 | `GET /api/v1/login-appearance` | ohne Anmeldung | nur die Anzeigewerte und `configured`; keine Version, keine Konten, keine Netzwerkdaten |
+| `GET /api/v1/login/accounts` | ohne Anmeldung | Kontenauswahl (seit 0.64.0): `{style, accounts:[{name}]}`, Regeln in `docs/rules/ACCOUNTS-ACCESS.md`. Die Felder `accountsStyle`, `showAccounts` (ab Werk an), `showAccountsExternal` (ab Werk aus) gehören zu dieser Einstellung, stehen in `GET /login-appearance` aber nur für angemeldete Besitzer/Administratoren; `PUT` beginnt bei den Werkseinstellungen, der Editor schickt sie also immer mit |
 | `GET /api/v1/login-appearance/background/{id}` | ohne Anmeldung | nur das konfigurierte Bild (`id` = SHA-256), `Cache-Control: public, immutable`, `nosniff`; alles andere 404 |
 | `PUT /api/v1/login-appearance` | Besitzer/Administrator | JSON oder multipart (`settings`, `image`); unbekannte Felder und ungültige Werte → 400, `removeImage` entfernt das Bild |
 | `DELETE /api/v1/login-appearance` | Besitzer/Administrator | zurück zum Standard, Bild wird entfernt |

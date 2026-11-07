@@ -16,6 +16,12 @@
 	import WebAppView from '../webapps/WebAppView.svelte';
 	import { webAppById, webapps } from '../webapps/webapps.svelte.ts';
 	import { baseName } from '../webapps/protocol.ts';
+	import { api } from '../api.ts';
+	import { registerWindowCommands } from '../menu-commands.svelte.ts';
+	import type RemoteViewType from './RemoteView.svelte';
+	import { menuKeyReset, screenOwnsKeys } from './menubar/keys.ts';
+	import { clearFrameCommands } from './menubar/state.svelte.ts';
+	import { sources } from './sources.svelte.ts';
 	import {
 		closeWindow,
 		requestClose,
@@ -140,8 +146,21 @@
 		inner.addEventListener(
 			'keydown',
 			(e) => {
+				// PLAN 67-1: Alt alone and F10 lead into the menu bar (not from a screen or terminal).
+				if (e.key === 'Alt' || e.key === 'F10') {
+					if (screenOwnsKeys(e.target) || (e.key === 'F10' && (e.shiftKey || e.ctrlKey))) {
+						menuKeyReset();
+						return;
+					}
+					if (e.key === 'F10') e.preventDefault();
+					pass('keydown', e);
+					return;
+				}
+				menuKeyReset();
+				// Alt + K (show the desktop) stays with a screen or terminal (readline, guests).
+				if (e.altKey && e.code === 'KeyK' && screenOwnsKeys(e.target)) return;
 				const desk =
-					(e.altKey && !e.ctrlKey && !e.metaKey && /^(q|w|m|arrow)/i.test(e.key)) ||
+					(e.altKey && !e.ctrlKey && !e.metaKey && /^(q|w|m|k|arrow)/i.test(e.key)) ||
 					((e.ctrlKey || e.metaKey) && e.code === 'Space');
 				if (!desk) return;
 				e.preventDefault();
@@ -150,10 +169,18 @@
 			},
 			true,
 		);
-		inner.addEventListener('keyup', (e) => wm.switcher && pass('keyup', e), true);
+		inner.addEventListener(
+			'keyup',
+			(e) => (wm.switcher || e.key === 'Alt') && pass('keyup', e),
+			true,
+		);
+		inner.addEventListener('pointerdown', menuKeyReset, true);
 	}
 	function loaded() {
 		tellVisible();
+		// PLAN 67-1: the new page announces its menu commands; ask in case it already did.
+		clearFrameCommands(win.id);
+		frame?.contentWindow?.postMessage({ type: 'titanos-menu-get' }, location.origin);
 		try {
 			hookKeys();
 		} catch {
@@ -381,6 +408,95 @@
 		void openProgramTab(win.app, win.href);
 	}
 	const EDGES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
+
+	// PLAN 67-1: web apps and the remote view live in the desktop itself, so
+	// their commands for the menu bar are registered here (not by a frame).
+	let remote = $state<RemoteViewType>();
+	async function restartDockerApp() {
+		const app = win.app.slice('docker:'.length);
+		for (const c of sources.containers.filter((x) => (x.app || x.name) === app))
+			await api.post(`/docker/containers/${encodeURIComponent(c.id)}/restart`).catch(() => {});
+	}
+	if (untrack(() => win.app.startsWith('webapp:')))
+		registerWindowCommands(
+			untrack(() => win.id),
+			{
+				'webapp.open': { run: () => view?.openPicker(), enabled: () => !!webapp },
+				'webapp.saveAs': {
+					run: () => view?.saveAs(),
+					enabled: () => !!webapp && webapp.bridge === 'host',
+				},
+				'webapp.reload': { run: restartApp, enabled: () => !!webapp },
+				// A new window of the app with no file (the app starts empty).
+				'webapp.new': {
+					run: () => void openProgram(win.app, { fresh: true }),
+					enabled: () => !!webapp,
+				},
+				...Object.fromEntries(
+					(
+						[
+							['webapp.save', 'save'],
+							['webapp.undo', 'undo'],
+							['webapp.redo', 'redo'],
+							['webapp.find', 'find'],
+							['webapp.selectAll', 'select-all'],
+						] as const
+					).map(([id, name]) => [
+						id,
+						{
+							run: () => view?.command(name),
+							enabled: () => !!webapp && webapp.bridge === 'host',
+						},
+					]),
+				),
+				'window.openTab': openTab,
+			},
+		);
+	else if (untrack(() => external))
+		registerWindowCommands(
+			untrack(() => win.id),
+			{
+				'remote.upload': { run: () => remote?.menu.upload(), enabled: () => !!remote?.menu.live() },
+				'remote.clipSend': {
+					run: () => void remote?.menu.clipSend(),
+					enabled: () => !!remote?.menu.live(),
+				},
+				'remote.clipGet': {
+					run: () => void remote?.menu.clipGet(),
+					enabled: () => !!remote?.menu.remoteClip(),
+				},
+				...Object.fromEntries(
+					(['auto', 'high', 'balanced', 'low'] as const).map((q) => [
+						'remote.quality.' + q,
+						{
+							run: () => remote?.menu.setQuality(q),
+							checked: () => remote?.menu.quality() === q,
+						},
+					]),
+				),
+				'remote.mute': {
+					run: () => remote?.menu.toggleMute(),
+					enabled: () => !!remote?.menu.audio(),
+					checked: () => !!remote?.menu.muted(),
+				},
+				'remote.fullscreen': {
+					run: () => remote?.menu.fullscreen(),
+					enabled: () => !!remote?.menu.live(),
+				},
+				'remote.reconnect': { run: () => remote?.menu.reconnect(), enabled: () => !!remote },
+				'remote.downloads': {
+					items: () => remote?.menu.downloads() ?? [],
+					run: (id) => id && remote?.menu.download(id),
+				},
+				'remote.stats': {
+					run: () => remote?.menu.toggleStats(),
+					enabled: () => !!remote?.menu.live(),
+					checked: () => !!remote?.menu.stats(),
+				},
+				'remote.restart': restartDockerApp,
+				'window.openTab': openTab,
+			},
+		);
 </script>
 
 <svelte:window
@@ -623,6 +739,7 @@
 				<!-- The remote view's player loads with the first Docker app (PLAN 65-6). -->
 				{#await import('./RemoteView.svelte') then { default: RemoteView }}
 					<RemoteView
+						bind:this={remote}
 						app={win.app.replace(/^docker:/, '')}
 						title={win.title}
 						onopentab={openTab}

@@ -18,6 +18,10 @@ import type viewerDe from './features/viewer.de.json';
 import type lookDe from './features/look.de.json';
 // PLAN 66: web apps directly in the browser.
 import type webappsDe from './features/webapps.de.json';
+// PLAN 67-1: the menu bar of the programs.
+import type menubarDe from './features/menubar.de.json';
+// PLAN 67: Docker images/volumes, the design of the windows, the login picker.
+import type designDe from './features/design.de.json';
 
 type Messages = typeof deBase &
 	typeof docsDe &
@@ -31,7 +35,9 @@ type Messages = typeof deBase &
 	typeof settingshomeDe &
 	typeof viewerDe &
 	typeof lookDe &
-	typeof webappsDe;
+	typeof webappsDe &
+	typeof designDe &
+	typeof menubarDe;
 
 /** The files of a language, in the order they are merged. */
 const FILES = {
@@ -50,6 +56,8 @@ const FILES = {
 			import('./features/viewer.de.json'),
 			import('./features/look.de.json'),
 			import('./features/webapps.de.json'),
+			import('./features/menubar.de.json'),
+			import('./features/design.de.json'),
 		]),
 	en: () =>
 		Promise.all([
@@ -66,6 +74,8 @@ const FILES = {
 			import('./features/viewer.en.json'),
 			import('./features/look.en.json'),
 			import('./features/webapps.en.json'),
+			import('./features/menubar.en.json'),
+			import('./features/design.en.json'),
 		]),
 };
 

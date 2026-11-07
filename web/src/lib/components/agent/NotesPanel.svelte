@@ -583,9 +583,7 @@
 		position: fixed;
 		inset: 0;
 		z-index: 70;
-		background: rgb(3 6 14 / 0.45);
-		-webkit-backdrop-filter: blur(6px);
-		backdrop-filter: blur(6px);
+		background: rgb(0 0 0 / 0.45);
 	}
 	.notes {
 		position: fixed;
@@ -597,11 +595,9 @@
 		display: grid;
 		grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
 		color: var(--text);
-		background: color-mix(in srgb, var(--surface) 82%, transparent);
-		-webkit-backdrop-filter: blur(30px) saturate(170%);
-		backdrop-filter: blur(30px) saturate(170%);
-		border-left: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
-		box-shadow: -24px 0 60px -24px rgb(0 0 0 / 0.7);
+		background: var(--bg);
+		border-left: 1px solid var(--border);
+		box-shadow: var(--shadow-menu, -18px 0 44px rgb(0 0 0 / 0.5));
 	}
 	section {
 		display: flex;
@@ -643,7 +639,7 @@
 		cursor: pointer;
 	}
 	.ib.accent {
-		background: var(--ag-gradient, var(--accent));
+		background: var(--accent);
 		color: var(--on-accent, #fff);
 		border-color: transparent;
 	}
@@ -769,12 +765,9 @@
 	}
 	.folder.on,
 	.note.on {
-		background: linear-gradient(
-			90deg,
-			color-mix(in srgb, var(--accent) 26%, transparent),
-			color-mix(in srgb, var(--accent) 4%, transparent)
-		);
-		box-shadow: inset 3px 0 0 var(--accent);
+		background: color-mix(in srgb, var(--accent) 18%, transparent);
+		color: color-mix(in srgb, var(--accent) 65%, var(--text));
+		font-weight: 600;
 	}
 	.more {
 		flex: none;

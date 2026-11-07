@@ -28,6 +28,16 @@ const rootVar = (target, name) =>
   );
 
 /** The desktop (no classic frame) with a few programs; PUTs are kept like titand does. */
+/** Clicks a tab of Darstellung and waits for its panel. */
+async function frame2Tab(page, name) {
+  const frame = page.frameLocator("section.win iframe").first();
+  await frame.getByRole("tab", { name, exact: true }).click();
+  await frame
+    .locator(".tab-panel:not([hidden])")
+    .first()
+    .waitFor({ timeout: 5000 });
+}
+
 async function desktop(path = "/", width = 1600, height = 1000) {
   const made = await create("owner", "graphit", width);
   await made.page.setViewportSize({ width, height });
@@ -123,6 +133,16 @@ async function desktop(path = "/", width = 1600, height = 1000) {
     await page.evaluate(() => document.documentElement.dataset.theme),
     "mitternacht",
   );
+  // PLAN 67: the tabs of the page, the mode as three small previews.
+  for (const name of [
+    "Glas & Schrift",
+    "Hintergrund",
+    "Dock",
+    "Anmeldeseite",
+    "Farben",
+  ]) {
+    await frame2Tab(page, name);
+  }
   // Removed options of the classic frame are gone.
   const frame2 = page.frameLocator("section.win iframe").first();
   await frame2.locator("#look-glass").waitFor({ timeout: 15000 });
@@ -362,6 +382,20 @@ for (const [width, height, label] of [
     "logout lands on the new login page",
   );
   await shot(page, `09-abgemeldet-${label}`);
+  // PLAN 67: the account that logged in here is offered on the next login.
+  const alex = login.locator(".accounts .account", { hasText: "alex" });
+  await alex.waitFor();
+  assert.ok(
+    await login.getByRole("button", { name: "Anderes Konto" }).isVisible(),
+    "another account can be chosen",
+  );
+  await alex.click();
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.getAttribute("type")),
+    "password",
+    "picking the account asks for the password",
+  );
+  await shot(page, `10-konto-gewaehlt-${label}`);
   await ctx.close();
 }
 

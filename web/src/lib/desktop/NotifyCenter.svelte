@@ -40,11 +40,11 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <aside
 	class="center glass-panel"
-	aria-label={t('desktop.center.title')}
+	aria-label={t('menubar.quick')}
 	onkeydown={(e) => e.key === 'Escape' && onclose()}
 >
 	<div class="head">
-		<b>{t('desktop.center.title')}</b>
+		<b>{t('menubar.quick')}</b>
 		<button type="button" class="x" onclick={onclose} aria-label={t('desktop.window.close')}
 			><Icon name="close" size={15} /></button
 		>

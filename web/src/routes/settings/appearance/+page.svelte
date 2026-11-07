@@ -33,8 +33,28 @@
 	import { sanitizeDesktop } from '#lib/desktop/prefs.ts';
 	import { loadDesktop } from '#lib/desktop/wm.svelte.ts';
 	import { wallpaperCss } from '#lib/desktop/wallpapers.ts';
+	import Tabs from '#lib/components/Tabs.svelte';
+	import { page } from '$app/state';
+	import { replaceState } from '$app/navigation';
+	import DockSettings from './DockSettings.svelte';
 
 	const CUSTOM_FIELDS: (keyof CustomColors)[] = ['bg', 'surface', 'header', 'text', 'border'];
+
+	// PLAN 67: tabs like Systemsteuerung › Netzwerk; the dock and the login
+	// page are tabs too. Every tab stays in the page (hidden), so the unsaved
+	// app symbol and login look keep their state while another tab shows.
+	type Tab = 'colors' | 'glass' | 'background' | 'dock' | 'login';
+	const TABS: Tab[] = ['colors', 'glass', 'background', 'dock', 'login'];
+	const tabFrom = (value: string | null): Tab =>
+		TABS.includes(value as Tab) ? (value as Tab) : 'colors';
+	let tab = $state<Tab>(tabFrom(page.url.searchParams.get('tab')));
+	function chooseTab(next: Tab) {
+		tab = next;
+		replaceState(
+			next === 'colors' ? '/settings/appearance' : `/settings/appearance?tab=${next}`,
+			{},
+		);
+	}
 	const DARK_THEMES = ['graphit', 'schwarz', 'mitternacht', 'eigen'] as const;
 
 	let draft = $state<Appearance>($state.snapshot(appearance.current));
@@ -52,6 +72,15 @@
 	const canAdminister = $derived(
 		session.data?.user?.role === 'owner' || session.data?.user?.role === 'admin',
 	);
+	const tabs = $derived(
+		TABS.filter((id) => id !== 'login' || canAdminister).map((id) => ({
+			id,
+			label: t(`look.tab.${id}`),
+		})),
+	);
+	$effect(() => {
+		if (tab === 'login' && session.data?.user && !canAdminister) tab = 'colors';
+	});
 
 	const palette = $derived(resolvePalette(draft, appearance.systemLight));
 	const ratio = $derived(textContrast(palette));
@@ -196,262 +225,343 @@
 	unit: string,
 	set: (v: number) => void,
 )}
-	<div class="row">
-		<span class="name">
-			<label for={id}>{label}</label>
-			<span class="muted small">{hint}</span>
+	<div class="set-row slider">
+		<span class="slider-top">
+			<span class="set-label">
+				<label for={id}>{label}</label>
+				<span class="set-hint">{hint}</span>
+			</span>
+			<output for={id} class="value">{value} {unit}</output>
 		</span>
-		<span class="range">
-			<input
-				{id}
-				type="range"
-				min={limit.min}
-				max={limit.max}
-				step={limit.step}
-				{value}
-				oninput={(e) => set(Number(e.currentTarget.value))}
-			/><output for={id} class="mono value">{value} {unit}</output>
-		</span>
+		<input
+			{id}
+			type="range"
+			min={limit.min}
+			max={limit.max}
+			step={limit.step}
+			{value}
+			oninput={(e) => set(Number(e.currentTarget.value))}
+		/>
 	</div>
 {/snippet}
 
+{#snippet thumb(kind: 'light' | 'dark' | 'auto')}
+	{@const light = look('hell')}
+	{@const dark = look(lastDark)}
+	<span class="thumb-mini {kind}" aria-hidden="true">
+		{#each kind === 'auto' ? [light, dark] : [kind === 'light' ? light : dark] as c, i (i)}
+			<span class="half" style:background={c.bg}>
+				<span class="bar" style:background={c.surface}></span>
+				<span class="pill"></span>
+				<span class="block" style:background={c.surface} style:border-color={c.border}></span>
+			</span>
+		{/each}
+	</span>
+{/snippet}
+
 <PageHead title={t('appearance.title')}>
-	<p class="muted">{t('look.intro')}</p>
-	{#snippet actions()}
-		<button type="button" class="btn" onclick={reset}>{t('appearance.reset')}</button>
-		<button type="button" class="btn" onclick={exportTheme}>{t('appearance.export')}</button>
-		<button type="button" class="btn" onclick={() => themeFile.click()}
-			>{t('appearance.import')}</button
-		>
-		<input
-			bind:this={themeFile}
-			type="file"
-			accept="application/json,.json"
-			hidden
-			onchange={importTheme}
-		/>
-	{/snippet}
+	<p>{t('look.intro')}</p>
 </PageHead>
 
-<p class="status muted small" role="status" aria-live="polite" data-state={state_}>
-	{#if state_ === 'saving'}{t('ui.saving')}{:else if state_ === 'saved'}{t(
-			'appearance.saved',
-		)}{:else if state_ === 'error'}<span class="warn">{error}</span>{:else}{t('look.autosave')}{/if}
-</p>
+<div class="tab-row">
+	<Tabs label={t('look.tabs')} {tabs} value={tab} onchange={chooseTab} />
+	<p class="status" role="status" aria-live="polite" data-state={state_}>
+		{#if state_ === 'saving'}{t('ui.saving')}{:else if state_ === 'saved'}{t(
+				'appearance.saved',
+			)}{:else if state_ === 'error'}<span class="warn">{error}</span>{/if}
+	</p>
+</div>
 
-<section class="tile panel rows" aria-labelledby="h-colors">
-	<h2 class="tile-title" id="h-colors">{t('look.colors')}</h2>
-	<div class="row">
-		<span class="name">{t('appearance.theme')}</span>
-		<Segments label={t('appearance.theme')} options={modes} value={mode} onchange={setMode} />
-	</div>
-	{#if mode === 'dark'}
-		<div class="row">
-			<span class="name">{t('look.variant')}</span>
-			<div class="variants" role="radiogroup" aria-label={t('look.variant')}>
-				{#each DARK_THEMES as id (id)}
-					{@const colors = look(id)}
+<!-- Farben: mode, variant, accent and the five sliders (approved draft 7.11.2026). -->
+<div class="tab-panel" hidden={tab !== 'colors'} data-tab-panel="colors">
+	<section class="tile ui-card" aria-labelledby="h-colors">
+		<div class="card-head"><h2 id="h-colors">{t('look.colors')}</h2></div>
+		<div class="set-row">
+			<span class="set-label">{t('look.mode')}</span>
+			<div class="modes" role="radiogroup" aria-label={t('look.mode')}>
+				{#each modes as m (m.value)}
 					<button
 						type="button"
 						role="radio"
-						class="variant"
-						aria-checked={draft.theme === id}
-						onclick={() => setDark(id)}
+						class="mode"
+						aria-checked={mode === m.value}
+						onclick={() => setMode(m.value)}
 					>
-						<span
-							class="swatch"
-							aria-hidden="true"
-							style:background={colors.bg}
-							style:border-color={colors.border}
-							><span style:background={colors.surface}></span></span
-						>{t(`theme.${id}`)}
+						{@render thumb(m.value)}
+						<span class="mode-name">{m.label}</span>
 					</button>
 				{/each}
 			</div>
 		</div>
-		{#if draft.theme === 'eigen'}
-			<div class="custom">
-				{#each CUSTOM_FIELDS as field (field)}
-					<label class="color">
-						<input type="color" bind:value={draft.custom[field]} />
-						<span>{t(`custom.${field}`)}</span>
-					</label>
-				{/each}
+		{#if mode === 'dark'}
+			<div class="set-row">
+				<span class="set-label">{t('look.variant')}</span>
+				<div class="variants" role="radiogroup" aria-label={t('look.variant')}>
+					{#each DARK_THEMES as id (id)}
+						{@const colors = look(id)}
+						<button
+							type="button"
+							role="radio"
+							class="variant"
+							aria-checked={draft.theme === id}
+							onclick={() => setDark(id)}
+						>
+							<span
+								class="swatch"
+								aria-hidden="true"
+								style:background={colors.bg}
+								style:border-color={colors.border}
+							></span>{t(`theme.${id}`)}{#if id === 'eigen'}&nbsp;…{/if}
+						</button>
+					{/each}
+				</div>
 			</div>
-			{#if ratio < 4.5}
-				<p class="notice-warn">
-					{t('appearance.contrastWarning', {
-						ratio:
-							new Intl.NumberFormat(i18n.locale, { maximumFractionDigits: 1 }).format(ratio) + ':1',
-					})}
-				</p>
+			{#if draft.theme === 'eigen'}
+				<div class="set-row">
+					<span class="set-label">{t('look.customColors')}</span>
+					<div class="set-control">
+						<div class="custom">
+							{#each CUSTOM_FIELDS as field (field)}
+								<label class="color">
+									<input type="color" bind:value={draft.custom[field]} />
+									<span>{t(`custom.${field}`)}</span>
+								</label>
+							{/each}
+						</div>
+						{#if ratio < 4.5}
+							<p class="notice-warn">
+								{t('appearance.contrastWarning', {
+									ratio:
+										new Intl.NumberFormat(i18n.locale, { maximumFractionDigits: 1 }).format(ratio) +
+										':1',
+								})}
+							</p>
+						{/if}
+					</div>
+				</div>
 			{/if}
 		{/if}
-	{/if}
-	<div class="row">
-		<span class="name">{t('appearance.accent')}</span>
-		<div class="accents" role="radiogroup" aria-label={t('appearance.accent')}>
-			{#each ACCENT_IDS as id (id)}
-				<button
-					type="button"
-					role="radio"
-					class="pickdot"
-					aria-label={t(`accent.${id}`)}
-					title={t(`accent.${id}`)}
-					aria-checked={draft.accent === id}
-					style:background={ACCENTS[id].hex}
-					onclick={() => (draft.accent = id)}
-				></button>
-			{/each}
-			<input
-				type="color"
-				class="pickdot"
-				aria-label={t('appearance.customAccent')}
-				title={t('appearance.customAccent')}
-				class:picked={draft.accent === 'custom'}
-				bind:value={draft.customAccent}
-				oninput={() => (draft.accent = 'custom')}
-			/>
-		</div>
-	</div>
-</section>
-
-<section class="tile panel rows" aria-labelledby="h-sliders">
-	<h2 class="tile-title" id="h-sliders">{t('look.sliders')}</h2>
-	{@render slider(
-		'look-glass',
-		t('appearance.transparency'),
-		t('look.glassHint'),
-		draft.glass,
-		LIMITS.glass,
-		'%',
-		(v) => (draft.glass = v),
-	)}
-	{@render slider(
-		'look-blur',
-		t('look.blur'),
-		t('look.blurHint'),
-		draft.blur,
-		LIMITS.blur,
-		'px',
-		(v) => (draft.blur = v),
-	)}
-	{@render slider(
-		'look-corners',
-		t('look.corners'),
-		t('look.cornersHint'),
-		draft.rTile,
-		LIMITS.rTile,
-		'px',
-		(v) => (draft = withCorners(draft, v)),
-	)}
-	{@render slider(
-		'look-font',
-		t('appearance.fontSize'),
-		t('look.fontHint'),
-		draft.font,
-		LIMITS.font,
-		'%',
-		(v) => (draft.font = v),
-	)}
-	{@render slider(
-		'look-saturation',
-		t('look.saturation'),
-		t('look.saturationHint'),
-		draft.saturation,
-		LIMITS.saturation,
-		'%',
-		(v) => (draft.saturation = v),
-	)}
-</section>
-
-<section class="tile panel rows" aria-labelledby="h-desk">
-	<h2 class="tile-title" id="h-desk">{t('look.desktop')}</h2>
-	<div class="row">
-		<span class="name">{t('desktop.wallpaper.title')}</span>
-		<span class="pick">
-			<span class="thumb" style:background={wallpaperPreview} aria-hidden="true"></span>
-			<button type="button" class="btn" onclick={chooseWallpaper}>{t('look.wallpaper')}</button>
-		</span>
-	</div>
-	<a class="row link" href="/settings/appearance/dock">
-		<span class="name"
-			><span>{t('look.dock.title')}</span><span class="muted small">{t('look.dock.link')}</span
-			></span
-		>
-		<Icon name="chevronRight" size={18} />
-	</a>
-</section>
-
-<details class="tile panel more">
-	<summary class="tile-title">{t('look.more')}</summary>
-	<div class="rows">
-		<div class="row">
-			<span class="name">{t('appearance.density')}</span>
-			<Segments
-				label={t('appearance.density')}
-				options={[
-					{ value: 'normal', label: t('density.normal') },
-					{ value: 'kompakt', label: t('density.kompakt') },
-				]}
-				value={draft.density}
-				onchange={(v) => (draft.density = v)}
-			/>
-		</div>
-		<label class="check"
-			><input type="checkbox" bind:checked={draft.fx.enabled} />{t('appearance.fx.enabled')}</label
-		>
-		{#if draft.fx.enabled}
-			<div class="fx-list">
-				{#each EFFECT_IDS as id (id)}
-					<label class="check fx">
-						<input type="checkbox" bind:checked={draft.fx[id]} />
-						<span
-							><span>{t(`appearance.fx.${id}`)}</span><span class="muted small"
-								>{t(`appearance.fx.${id}Desc`)}</span
-							></span
-						>
-					</label>
+		<div class="set-row">
+			<span class="set-label">{t('appearance.accent')}</span>
+			<div class="accents" role="radiogroup" aria-label={t('appearance.accent')}>
+				{#each ACCENT_IDS as id (id)}
+					<button
+						type="button"
+						role="radio"
+						class="pickdot"
+						aria-label={t(`accent.${id}`)}
+						title={t(`accent.${id}`)}
+						aria-checked={draft.accent === id}
+						style:background={ACCENTS[id].hex}
+						onclick={() => (draft.accent = id)}
+					></button>
 				{/each}
+				<label class="own-accent" class:picked={draft.accent === 'custom'}>
+					<input
+						type="color"
+						aria-label={t('appearance.customAccent')}
+						bind:value={draft.customAccent}
+						oninput={() => (draft.accent = 'custom')}
+					/>
+					<span>{t('look.accentCustom')}</span>
+				</label>
 			</div>
-		{/if}
-		<label class="check"
-			><input type="checkbox" bind:checked={draft.motion} />{t('dashboard.visual.smooth')}</label
-		>
-		{@render slider(
-			'look-shine',
-			t('appearance.shine'),
-			t('look.shineHint'),
-			draft.shine,
-			LIMITS.shine,
-			'%',
-			(v) => (draft.shine = v),
-		)}
-		{@render slider(
-			'look-glow',
-			t('dashboard.visual.glow'),
-			t('look.glowHint'),
-			draft.glow,
-			LIMITS.glow,
-			'%',
-			(v) => (draft.glow = v),
-		)}
-		{@render slider(
-			'look-dim',
-			t('appearance.floating.dim'),
-			t('look.dimHint'),
-			draft.dialogs.dim,
-			LIMITS.dialogDim,
-			'%',
-			(v) => (draft.dialogs.dim = v),
-		)}
-		<p class="muted small">{t('appearance.fx.hint')}</p>
-	</div>
-</details>
+		</div>
+	</section>
 
-{#if canAdminister}
-	<div class="extras">
+	<section class="tile ui-card" aria-labelledby="h-sliders">
+		<div class="card-head"><h2 id="h-sliders">{t('look.sliders')}</h2></div>
+		<div class="set-grid">
+			{@render slider(
+				'look-glass',
+				t('appearance.transparency'),
+				t('look.glassHint'),
+				draft.glass,
+				LIMITS.glass,
+				'%',
+				(v) => (draft.glass = v),
+			)}
+			{@render slider(
+				'look-blur',
+				t('look.blur'),
+				t('look.blurHint'),
+				draft.blur,
+				LIMITS.blur,
+				'px',
+				(v) => (draft.blur = v),
+			)}
+			{@render slider(
+				'look-corners',
+				t('look.corners'),
+				t('look.cornersHint'),
+				draft.rTile,
+				LIMITS.rTile,
+				'px',
+				(v) => (draft = withCorners(draft, v)),
+			)}
+			{@render slider(
+				'look-font',
+				t('appearance.fontSize'),
+				t('look.fontHint'),
+				draft.font,
+				LIMITS.font,
+				'%',
+				(v) => (draft.font = v),
+			)}
+			{@render slider(
+				'look-saturation',
+				t('look.saturation'),
+				t('look.saturationHint'),
+				draft.saturation,
+				LIMITS.saturation,
+				'%',
+				(v) => (draft.saturation = v),
+			)}
+		</div>
+		<div class="card-foot">
+			<span class="grow">{t('look.fileHint')}</span>
+			<button type="button" class="btn" onclick={exportTheme}>{t('appearance.export')}</button>
+			<button type="button" class="btn" onclick={() => themeFile.click()}
+				>{t('appearance.import')}</button
+			>
+			<button type="button" class="btn plain" onclick={reset}>{t('appearance.reset')}</button>
+			<input
+				bind:this={themeFile}
+				type="file"
+				accept="application/json,.json"
+				hidden
+				onchange={importTheme}
+			/>
+		</div>
+	</section>
+</div>
+
+<!-- Glas & Schrift: the finer settings (spacing, edges, glow, motion). -->
+<div class="tab-panel" hidden={tab !== 'glass'} data-tab-panel="glass">
+	<section class="tile ui-card" aria-labelledby="h-details">
+		<div class="card-head">
+			<h2 id="h-details">{t('look.details')}</h2>
+			<span class="card-meta">{t('look.detailsHint')}</span>
+		</div>
+		<div class="set-row">
+			<span class="set-label"
+				>{t('appearance.density')}<span class="set-hint">{t('look.densityHint')}</span></span
+			>
+			<span class="set-control">
+				<Segments
+					label={t('appearance.density')}
+					options={[
+						{ value: 'normal', label: t('density.normal') },
+						{ value: 'kompakt', label: t('density.kompakt') },
+					]}
+					value={draft.density}
+					onchange={(v) => (draft.density = v)}
+				/>
+			</span>
+		</div>
+		<label class="set-row">
+			<span class="set-label"
+				>{t('look.motion')}<span class="set-hint">{t('look.motionHint')}</span></span
+			>
+			<span class="set-control end"
+				><input type="checkbox" role="switch" class="switch" bind:checked={draft.motion} /></span
+			>
+		</label>
+		<div class="set-grid">
+			{@render slider(
+				'look-shine',
+				t('appearance.shine'),
+				t('look.shineHint'),
+				draft.shine,
+				LIMITS.shine,
+				'%',
+				(v) => (draft.shine = v),
+			)}
+			{@render slider(
+				'look-glow',
+				t('dashboard.visual.glow'),
+				t('look.glowHint'),
+				draft.glow,
+				LIMITS.glow,
+				'%',
+				(v) => (draft.glow = v),
+			)}
+			{@render slider(
+				'look-dim',
+				t('appearance.floating.dim'),
+				t('look.dimHint'),
+				draft.dialogs.dim,
+				LIMITS.dialogDim,
+				'%',
+				(v) => (draft.dialogs.dim = v),
+			)}
+		</div>
+	</section>
+
+	<section class="tile ui-card" aria-labelledby="h-fx">
+		<div class="card-head"><h2 id="h-fx">{t('look.effects')}</h2></div>
+		<label class="set-row">
+			<span class="set-label"
+				>{t('appearance.fx.enabled')}<span class="set-hint">{t('look.fxHint')}</span></span
+			>
+			<span class="set-control end"
+				><input
+					type="checkbox"
+					role="switch"
+					class="switch"
+					bind:checked={draft.fx.enabled}
+				/></span
+			>
+		</label>
+		{#if draft.fx.enabled}
+			{#each EFFECT_IDS as id (id)}
+				<label class="set-row">
+					<span class="set-label"
+						>{t(`appearance.fx.${id}`)}<span class="set-hint">{t(`appearance.fx.${id}Desc`)}</span
+						></span
+					>
+					<span class="set-control end"
+						><input
+							type="checkbox"
+							class="switch"
+							role="switch"
+							bind:checked={draft.fx[id]}
+						/></span
+					>
+				</label>
+			{/each}
+		{/if}
+		<p class="card-note">{t('appearance.fx.hint')}</p>
+	</section>
+</div>
+
+<!-- Hintergrund: the desktop's picture; the app symbol of the NAS (owners/admins). -->
+<div class="tab-panel" hidden={tab !== 'background'} data-tab-panel="background">
+	<section class="tile ui-card" aria-labelledby="h-desk">
+		<div class="card-head"><h2 id="h-desk">{t('desktop.wallpaper.title')}</h2></div>
+		<div class="set-row">
+			<span class="set-label"
+				>{t('look.desktop')}<span class="set-hint">{t('look.wallpaperHint')}</span></span
+			>
+			<span class="set-control">
+				<span class="wall" style:background={wallpaperPreview} aria-hidden="true"></span>
+				<button type="button" class="btn" onclick={chooseWallpaper}>{t('look.wallpaper')}</button>
+			</span>
+		</div>
+	</section>
+	{#if canAdminister}
 		<AppIconEditor bind:this={iconEditor} bind:dirty={iconDirty} />
+	{/if}
+</div>
+
+<!-- Dock: the former page /settings/appearance/dock. -->
+<div class="tab-panel" hidden={tab !== 'dock'} data-tab-panel="dock">
+	<DockSettings />
+</div>
+
+<!-- Anmeldeseite (owners/admins): the account picker and the login look. -->
+{#if canAdminister}
+	<div class="tab-panel" hidden={tab !== 'login'} data-tab-panel="login">
 		<LoginAppearanceEditor bind:this={loginEditor} bind:dirty={loginDirty} />
 	</div>
 	{#if iconDirty || loginDirty || extraMessage}
@@ -485,69 +595,136 @@
 {/if}
 
 <style>
-	.status {
-		margin: 0 0 var(--space-3);
-		min-height: 1.4em;
-	}
-	.warn {
-		color: var(--warn, var(--text));
-	}
-	section + section,
-	section + details,
-	details + .extras {
-		margin-top: var(--space-4);
-	}
-	.rows {
+	.tab-row {
+		position: relative;
 		display: flex;
-		flex-direction: column;
-		gap: var(--space-3);
-	}
-	.row {
-		display: grid;
-		grid-template-columns: minmax(140px, 240px) 1fr;
-		align-items: center;
-		gap: var(--space-3);
-		min-height: 40px;
-	}
-	.name {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		font-size: var(--text-md);
+		align-items: flex-end;
+		gap: 12px;
 		min-width: 0;
 	}
-	.range {
-		display: flex;
-		align-items: center;
-		gap: var(--space-3);
-		min-width: 0;
-	}
-	.range input {
+	.tab-row :global(.tabs) {
 		flex: 1;
 		min-width: 0;
 	}
-	.value {
-		min-width: 56px;
-		text-align: right;
-		font-size: var(--text-base);
-	}
-	.small {
+	.status {
+		position: absolute;
+		right: 0;
+		bottom: 12px;
+		margin: 0;
+		max-width: 50%;
 		font-size: var(--text-sm);
+		color: var(--muted);
+		text-align: right;
+		pointer-events: none;
 	}
-	.variants {
+	.status[data-state='error'] {
+		pointer-events: auto;
+	}
+	.warn {
+		color: var(--warn-text, var(--text));
+	}
+	.tab-panel {
+		display: flex;
+		flex-direction: column;
+		gap: var(--gap, 16px);
+		min-width: 0;
+	}
+	.tab-panel[hidden] {
+		display: none;
+	}
+	/* Modus: three small previews. */
+	.modes {
 		display: flex;
 		flex-wrap: wrap;
-		gap: var(--space-2);
+		gap: 12px;
+	}
+	.mode {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 6px;
+		padding: 0;
+		background: none;
+		border: 0;
+		color: var(--muted);
+		font: inherit;
+		font-size: var(--text-base);
+		cursor: pointer;
+	}
+	.mode[aria-checked='true'] {
+		color: var(--text);
+		font-weight: 600;
+	}
+	.thumb-mini {
+		display: flex;
+		width: 88px;
+		height: 54px;
+		padding: 3px;
+		border: 2px solid var(--border);
+		border-radius: 10px;
+		overflow: hidden;
+	}
+	.mode[aria-checked='true'] .thumb-mini {
+		border-color: var(--accent);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+	}
+	.half {
+		position: relative;
+		flex: 1;
+		border-radius: 6px;
+		overflow: hidden;
+	}
+	.auto .half:first-child {
+		border-radius: 6px 0 0 6px;
+	}
+	.auto .half:last-child {
+		border-radius: 0 6px 6px 0;
+	}
+	.half .bar {
+		position: absolute;
+		left: 8px;
+		top: 9px;
+		width: 34%;
+		height: 5px;
+		border-radius: 3px;
+	}
+	.half .pill {
+		position: absolute;
+		background: var(--accent);
+		left: 8px;
+		top: 20px;
+		width: 22%;
+		height: 5px;
+		border-radius: 3px;
+	}
+	.half .block {
+		position: absolute;
+		right: 6px;
+		top: 7px;
+		bottom: 7px;
+		width: 40%;
+		border: 1px solid;
+		border-radius: 5px;
+	}
+	.auto .half .block {
+		width: 30%;
+	}
+	.variants,
+	.accents {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
 	}
 	.variant {
 		display: inline-flex;
 		align-items: center;
-		gap: var(--space-2);
-		min-height: 40px;
-		padding: 4px 12px 4px 4px;
-		border: 2px solid var(--border);
+		gap: 8px;
+		min-height: 32px;
+		padding: 0 12px 0 8px;
+		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
-		background: var(--bg);
+		background: transparent;
 		color: var(--text);
 		font: inherit;
 		font-size: var(--text-base);
@@ -555,125 +732,150 @@
 	}
 	.variant[aria-checked='true'] {
 		border-color: var(--accent);
+		box-shadow: inset 0 0 0 1px var(--accent);
 	}
 	.swatch {
-		width: 30px;
-		height: 30px;
-		display: flex;
-		align-items: flex-end;
-		padding: 4px;
+		width: 16px;
+		height: 16px;
 		border: 1px solid;
-		border-radius: var(--radius-small);
-	}
-	.swatch span {
-		flex: 1;
-		height: 10px;
-		border-radius: var(--radius-bar);
+		border-radius: 4px;
 	}
 	.custom {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-		gap: var(--space-2);
+		grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+		gap: 8px;
+		width: 100%;
 	}
 	.color {
 		display: flex;
 		align-items: center;
-		gap: var(--space-2);
-		padding: var(--space-1) var(--space-2);
+		gap: 8px;
+		padding: 4px 8px;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 		font-size: var(--text-base);
 		cursor: pointer;
 	}
 	input[type='color'] {
-		width: 32px;
-		height: 32px;
+		width: 26px;
+		height: 26px;
 		padding: 0;
 		border: 0;
 		background: transparent;
 		cursor: pointer;
 	}
-	.accents {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-2);
-	}
-	.accents .pickdot {
-		width: 36px;
-		height: 36px;
+	.pickdot {
+		width: 26px;
+		height: 26px;
 		padding: 0;
-		border: 3px solid transparent;
+		border: 2px solid transparent;
 		border-radius: 50%;
 		cursor: pointer;
 		box-shadow: 0 0 0 1px var(--border);
 	}
-	.accents .pickdot[aria-checked='true'],
-	.accents .pickdot.picked {
-		border-color: var(--text);
+	.pickdot[aria-checked='true'] {
+		box-shadow:
+			0 0 0 2px var(--bg),
+			0 0 0 4px var(--text);
 	}
-	.pick {
-		display: flex;
+	.own-accent {
+		display: inline-flex;
 		align-items: center;
-		gap: var(--space-3);
-		flex-wrap: wrap;
+		gap: 6px;
+		margin-left: 6px;
+		color: var(--muted);
+		font-size: var(--text-base);
+		cursor: pointer;
 	}
-	.thumb {
-		width: 96px;
-		height: 56px;
-		border-radius: var(--radius-ctl);
+	.own-accent.picked {
+		color: var(--text);
+		font-weight: 600;
+	}
+	.own-accent input {
+		width: 22px;
+		height: 22px;
+	}
+	/* Sliders: name and value on one line, the hint below, the slider under it. */
+	.slider {
+		display: flex;
+		flex-direction: column;
+		align-items: stretch;
+		gap: 8px;
+	}
+	.slider-top {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 12px;
+	}
+	.value {
+		flex: none;
+		color: var(--muted);
+		font-size: var(--text-base);
+		font-variant-numeric: tabular-nums;
+	}
+	.slider input {
+		width: 100%;
+		margin: 0;
+	}
+	.plain {
+		border-color: transparent;
+	}
+	.card-note {
+		margin: 0;
+		padding: 10px 16px 14px;
+		border-top: 1px solid var(--panel-border, var(--border));
+		color: var(--muted);
+		font-size: var(--text-sm);
+	}
+	.wall {
+		width: 88px;
+		height: 52px;
+		border-radius: 8px;
 		border: 1px solid var(--border);
 		filter: var(--wallpaper-filter, none);
 	}
-	.link {
-		color: inherit;
-		text-decoration: none;
-		grid-template-columns: 1fr auto;
-		padding: var(--space-2);
-		margin: 0 calc(-1 * var(--space-2));
-		border-radius: var(--radius-ctl);
-	}
-	.link:hover,
-	.link:focus-visible {
-		background: var(--chip);
-	}
-	.more summary {
-		cursor: pointer;
-	}
-	.more[open] summary {
-		margin-bottom: var(--space-3);
-	}
-	.check {
+	/* The bar of the app symbol and the login look: unsaved changes. */
+	.save-bar {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
-		gap: var(--space-2);
-		font-size: var(--text-md);
+		gap: 8px 12px;
+		padding: 10px 16px;
+		border: 1px solid var(--panel-border, var(--border));
+		border-radius: calc(12px * var(--radius-scale, 1));
+		background: var(--panel-bg, var(--surface));
 	}
-	.fx-list {
+	.save-bar.pinned {
+		position: sticky;
+		bottom: 12px;
+		z-index: 15;
+		box-shadow: 0 8px 24px rgb(0 0 0 / 0.25);
+	}
+	.save-bar .state {
+		flex: 1 1 12rem;
+		font-size: var(--text-base);
+	}
+	.save-bar .state.warn {
+		color: var(--warn-text);
+	}
+	.save-bar .notice-error {
+		flex-basis: 100%;
+		margin: 0;
+	}
+	.save-bar .row-actions {
 		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-		padding-left: var(--space-1);
+		gap: 8px;
 	}
-	.check.fx {
-		align-items: flex-start;
-	}
-	.check.fx > span {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-	}
-	.extras {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-4);
-	}
-	@media (max-width: 600px) {
-		.row {
-			grid-template-columns: 1fr;
-			gap: var(--space-1);
+	@media (max-width: 639px) {
+		.status {
+			position: static;
+			max-width: none;
 		}
-		.link {
-			grid-template-columns: 1fr auto;
+		.tab-row {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 4px;
 		}
 	}
 </style>

@@ -1,9 +1,12 @@
 <script lang="ts">
-	// Frame of the pages shown before anyone is logged in. Its look comes
-	// from Settings › Appearance › Login page (one setting for the NAS); without
-	// one it is exactly the page as it always was.
+	// Frame of the pages shown before anyone is logged in or when the NAS
+	// cannot be used (first setup, "not reachable"). PLAN 67: in the style of
+	// the login page – the desktop's wallpaper (or the login page's picture)
+	// and a glass card – so no way to the login ever shows the old page.
 	import type { Snippet } from 'svelte';
-	import Backdrop from '#lib/components/Backdrop.svelte';
+	import { loginWallpaper } from '#lib/login/wallpaper.ts';
+	import { wallpaperCss } from '#lib/desktop/wallpapers.ts';
+	import { resolvePalette } from '#lib/theme/themes.ts';
 	import Logo from '#lib/components/Logo.svelte';
 	import LanguageSwitch from '#lib/components/LanguageSwitch.svelte';
 	import { i18n } from '#lib/i18n/index.svelte.ts';
@@ -55,6 +58,8 @@
 		effective.scoped ? dataAttributes(effective.appearance, appearance.systemLight) : {},
 	);
 	const picture = $derived(loginBackgroundURL(current, imageURL));
+	const dark = $derived(resolvePalette(effective.appearance, appearance.systemLight).dark);
+	const wallpaper = $derived(`${wallpaperCss(loginWallpaper(), !dark)} center / cover`);
 	const words = $derived(texts ? loginTexts(current, i18n.locale, title) : { title, notice: '' });
 	const position = $derived(current?.position ?? 'center');
 
@@ -84,25 +89,25 @@
 	{style}
 	{...attributes}
 >
-	{#if effective.scoped}
-		{#if picture}
-			<div class="login-background" aria-hidden="true">
-				<div
-					class="picture"
-					style:background-image={`url("${picture}")`}
-					style:background-size={current!.background.fit}
-					style:background-position={`${current!.background.x}% ${current!.background.y}%`}
-					style:transform={current!.background.fit === 'cover'
-						? `scale(${current!.background.zoom / 100})`
-						: undefined}
-				></div>
-				<div class="dim" style:opacity={current!.background.dim / 100}></div>
-			</div>
-		{:else if current?.background.source === 'theme'}
-			<Backdrop appearance={effective.appearance} contained />
-		{/if}
+	{#if effective.scoped && picture}
+		<div class="login-background" aria-hidden="true">
+			<div
+				class="picture"
+				style:background-image={`url("${picture}")`}
+				style:background-size={current!.background.fit}
+				style:background-position={`${current!.background.x}% ${current!.background.y}%`}
+				style:transform={current!.background.fit === 'cover'
+					? `scale(${current!.background.zoom / 100})`
+					: undefined}
+			></div>
+			<div class="dim" style:opacity={current!.background.dim / 100}></div>
+		</div>
+	{:else}
+		<div class="login-background" aria-hidden="true">
+			<div class="picture wallpaper" style:background={wallpaper}></div>
+		</div>
 	{/if}
-	<section class="tile card" class:wide={current?.width === 'wide'}>
+	<section class="card" class:wide={current?.width === 'wide'}>
 		{#if current?.clock}
 			<p class="clock"><time class="mono">{time}</time><span class="muted">{date}</span></p>
 		{/if}
@@ -129,11 +134,13 @@
 		gap: 20px;
 		padding: var(--space-5);
 	}
-	main.scoped {
-		background: var(--bg);
+	main {
 		color: var(--text);
 		isolation: isolate;
 		overflow: hidden;
+	}
+	.login-background {
+		background: #070d1c;
 	}
 	main.preview {
 		min-height: 100%;
@@ -184,7 +191,17 @@
 	.dim {
 		background: var(--dim);
 	}
+	.wallpaper {
+		filter: var(--wallpaper-filter, none);
+	}
 	.card {
+		color: var(--text);
+		border-radius: calc(var(--radius-tile) + 4px);
+		background: var(--desk-surface, color-mix(in srgb, var(--surface) 72%, transparent));
+		backdrop-filter: blur(var(--desk-blur, 22px)) saturate(1.4);
+		-webkit-backdrop-filter: blur(var(--desk-blur, 22px)) saturate(1.4);
+		border: 1px solid color-mix(in srgb, #fff 14%, transparent);
+		box-shadow: 0 20px 50px rgb(0 0 0 / 0.35);
 		width: 100%;
 		max-width: 440px;
 		display: flex;

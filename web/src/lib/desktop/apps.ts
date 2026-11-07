@@ -102,7 +102,11 @@ export const SYSTEM_APPS: SystemApp[] = [
 				icon: 'box',
 				match: ['/docker', '/docker/apps'],
 			},
+			// PLAN 67: the areas of Docker in the side bar.
+			{ href: '/docker/images', label: 'desktop.side.images', icon: 'archive' },
+			{ href: '/docker/volumes', label: 'desktop.side.volumes', icon: 'disk' },
 			{ href: '/docker/networks', label: 'desktop.side.networks', icon: 'globe' },
+			{ href: '/docker/cleanup', label: 'desktop.side.dockerCleanup', icon: 'trash' },
 			{ group: 'desktop.side.settings' },
 			{ href: '/settings/proxy', label: 'desktop.side.httpsNames', icon: 'lock' },
 		],
@@ -322,8 +326,6 @@ export const SYSTEM_APPS: SystemApp[] = [
 			{ href: '/settings/updates', label: 'desktop.side.updates', icon: 'download' },
 			{ href: '/settings/timezone', label: 'desktop.side.timezone', icon: 'clock' },
 			{ href: '/settings/appearance', label: 'desktop.side.appearance', icon: 'palette' },
-			// PLAN 65: the dock's page has its own entry (Darstellung is not lit while it is open).
-			{ href: '/settings/appearance/dock', label: 'desktop.dock.title', icon: 'columns' },
 			{ href: '/settings/hardware', label: 'desktop.side.hardware', icon: 'monitor' },
 			{ href: '/settings/temperatures', label: 'desktop.side.temperatures', icon: 'activity' },
 			{ href: '/settings/energy', label: 'desktop.side.energy', icon: 'zap' },

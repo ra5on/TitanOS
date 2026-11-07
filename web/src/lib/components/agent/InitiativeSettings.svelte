@@ -412,7 +412,7 @@
 	}
 	.seg label.on {
 		color: var(--on-accent, #fff);
-		background: var(--ag-gradient, var(--accent));
+		background: var(--accent);
 	}
 	.seg input,
 	.steps input {

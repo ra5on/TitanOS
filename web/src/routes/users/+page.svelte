@@ -3,6 +3,7 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import PasswordDialog from '#lib/components/PasswordDialog.svelte';
+	import Dropdown from '#lib/components/Dropdown.svelte';
 	import { apiErrorText, errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import {
@@ -193,6 +194,59 @@
 			working = false;
 		}
 	}
+
+	// PLAN 67-1: the menu bar of the desktop; actions on one account list the accounts.
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	const findAccount = (name?: string) => accounts?.find((a) => a.name === name);
+	const pick = (ok: (a: Account) => boolean) => () =>
+		(accounts ?? []).filter(ok).map((a) => ({ id: a.name, text: a.name }));
+	const canManage = (a: Account) => mayManage(a.role);
+	registerMenuCommands({
+		'users.new': openCreate,
+		'users.password': {
+			items: pick((a) => canManage(a) || a.name === me?.name),
+			run: (name) => name && (dialog = { kind: 'password', name }),
+		},
+		'users.lock': {
+			items: () =>
+				(accounts ?? [])
+					.filter((a) => accounts && mayLock(me, a, accounts))
+					.map((a) => ({
+						id: a.name,
+						text: a.disabled ? t('users.unlock') + ': ' + a.name : a.name,
+					})),
+			run: (name) => {
+				const account = findAccount(name);
+				if (!account) return;
+				dialogError = '';
+				dialog = { kind: 'lock', account, disabled: !account.disabled };
+			},
+		},
+		'users.reset2fa': {
+			items: pick((a) => a.twoFactor && canManage(a) && a.name !== me?.name),
+			run: (name) => {
+				const account = findAccount(name);
+				if (!account) return;
+				dialogError = '';
+				dialog = { kind: 'twoFactor', account };
+			},
+		},
+		'users.delete': {
+			items: pick((a) => canManage(a) && a.name !== me?.name),
+			run: (name) => {
+				if (!name) return;
+				dialogError = '';
+				dialog = { kind: 'delete', name };
+			},
+		},
+		...Object.fromEntries(
+			ACCOUNT_STATUS_FILTERS.map((f) => [
+				'users.filter.' + f,
+				{ run: () => (statusFilter = f), checked: () => statusFilter === f },
+			]),
+		),
+		'users.refresh': { run: load, enabled: () => !loading },
+	});
 </script>
 
 <PageHead title={t('users.title')}>
@@ -235,8 +289,8 @@
 					<th scope="col">{t('users.name')}</th>
 					<th scope="col">{t('users.role')}</th>
 					<th scope="col">{t('users.status')}</th>
-					<th scope="col">{t('users.shares')}</th>
-					<th scope="col">{t('users.created')}</th>
+					<th scope="col" class="reach">{t('users.shares')}</th>
+					<th scope="col" class="date">{t('users.created')}</th>
 					<th scope="col"></th>
 				</tr>
 			</thead>
@@ -302,43 +356,65 @@
 								{/each}
 							{/if}
 						</td>
-						<td class="muted">{date.format(new Date(account.created))}</td>
+						<td class="muted date">{date.format(new Date(account.created))}</td>
 						<td class="actions">
-							{#if manageable || account.name === me?.name}
-								<button
-									type="button"
-									class="btn"
-									onclick={() => (dialog = { kind: 'password', name: account.name })}
-									>{t('users.changePassword')}</button
+							<!-- PLAN 67: the account's actions in one "⋯" menu (the list keeps its width). -->
+							{#if manageable || account.name === me?.name || (accounts && mayLock(me, account, accounts))}
+								<Dropdown
+									label={t('users.actionsFor', { name: account.name })}
+									icon="more"
+									align="right"
 								>
-								{#if account.twoFactor && manageable && account.name !== me?.name}
-									<button
-										type="button"
-										class="btn"
-										onclick={() => ((dialogError = ''), (dialog = { kind: 'twoFactor', account }))}
-										>{t('users.resetTwoFactor')}</button
-									>
-								{/if}
-							{/if}
-							{#if accounts && mayLock(me, account, accounts)}
-								<button
-									type="button"
-									class="btn"
-									onclick={() => (
-										(dialogError = ''),
-										(dialog = { kind: 'lock', account, disabled: !account.disabled })
-									)}>{account.disabled ? t('users.unlock') : t('users.lock')}</button
-								>
-							{/if}
-							{#if manageable && account.name !== me?.name}
-								<button
-									type="button"
-									class="btn btn-danger-outline"
-									onclick={() => (
-										(dialogError = ''),
-										(dialog = { kind: 'delete', name: account.name })
-									)}>{t('users.delete')}</button
-								>
+									{#snippet children(close)}
+										{#if manageable || account.name === me?.name}
+											<button
+												type="button"
+												role="menuitem"
+												onclick={() => {
+													close();
+													dialog = { kind: 'password', name: account.name };
+												}}><span>{t('users.changePassword')}</span></button
+											>
+											{#if account.twoFactor && manageable && account.name !== me?.name}
+												<button
+													type="button"
+													role="menuitem"
+													onclick={() => {
+														close();
+														dialogError = '';
+														dialog = { kind: 'twoFactor', account };
+													}}><span>{t('users.resetTwoFactor')}</span></button
+												>
+											{/if}
+										{/if}
+										{#if accounts && mayLock(me, account, accounts)}
+											<button
+												type="button"
+												role="menuitem"
+												onclick={() => {
+													close();
+													dialogError = '';
+													dialog = { kind: 'lock', account, disabled: !account.disabled };
+												}}
+												><span>{account.disabled ? t('users.unlock') : t('users.lock')}</span
+												></button
+											>
+										{/if}
+										{#if manageable && account.name !== me?.name}
+											<hr />
+											<button
+												type="button"
+												role="menuitem"
+												class="danger"
+												onclick={() => {
+													close();
+													dialogError = '';
+													dialog = { kind: 'delete', name: account.name };
+												}}><span>{t('users.delete')}</span></button
+											>
+										{/if}
+									{/snippet}
+								</Dropdown>
 							{/if}
 						</td>
 					</tr>
@@ -508,8 +584,7 @@
 	}
 	.toolbar {
 		display: flex;
-		justify-content: flex-end;
-		margin-bottom: var(--space-3);
+		justify-content: flex-start;
 	}
 	.toolbar label {
 		flex-direction: row;
@@ -525,7 +600,7 @@
 	}
 	table {
 		width: 100%;
-		min-width: 840px;
+		min-width: 620px;
 		border-collapse: collapse;
 		font-size: var(--text-md);
 	}
@@ -600,8 +675,30 @@
 		text-decoration: underline;
 	}
 	.actions {
+		width: 1%;
 		text-align: right;
 		white-space: nowrap;
+	}
+	.date {
+		white-space: nowrap;
+	}
+	/* PLAN 67: narrow windows and phones keep name, role, state and the menu. */
+	@media (max-width: 639px) {
+		table {
+			min-width: 0;
+		}
+		.reach,
+		.date {
+			display: none;
+		}
+		.tile.table :is(th, td) {
+			padding-left: 8px;
+			padding-right: 8px;
+		}
+		.role {
+			width: 7.5rem;
+			min-width: 0;
+		}
 	}
 	.actions .btn {
 		height: 2.25rem;

@@ -7,6 +7,21 @@ func (s *Server) registerDocker(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/docker/networks", s.requireAdmin(s.handleLANNetworks))
 	mux.HandleFunc("POST /api/v1/docker/networks", s.requireHeavyAppAdmin(s.handleLANCreate))
 	mux.HandleFunc("DELETE /api/v1/docker/networks/{name}", s.requireAppAdmin(s.handleLANRemove))
+	// Images, volumes and the build cache (PLAN 67-1, docker_resources.go).
+	mux.HandleFunc("GET /api/v1/docker/images", s.requireAdmin(s.handleDockerImages))
+	mux.HandleFunc("DELETE /api/v1/docker/images/{id}", s.requireAppAdmin(s.handleDockerImageRemove))
+	mux.HandleFunc("POST /api/v1/docker/images/prune", s.requireAppAdmin(s.handleDockerImagesPrune))
+	mux.HandleFunc("GET /api/v1/docker/volumes", s.requireAdmin(s.handleDockerVolumes))
+	mux.HandleFunc("DELETE /api/v1/docker/volumes/{name}", s.requireAppAdmin(s.handleDockerVolumeRemove))
+	mux.HandleFunc("POST /api/v1/docker/volumes/prune", s.requireAppAdmin(s.handleDockerVolumesPrune))
+	mux.HandleFunc("POST /api/v1/docker/builder/prune", s.requireAppAdmin(s.handleDockerBuilderPrune))
+	mux.HandleFunc("GET /api/v1/docker/df", s.requireAdmin(s.handleDockerDiskUsage))
+	// All engine networks; plain bridge networks are created and deleted
+	// here, the LAN networks above keep their own routes.
+	mux.HandleFunc("GET /api/v1/docker/networks/all", s.requireAdmin(s.handleDockerAllNetworks))
+	mux.HandleFunc("POST /api/v1/docker/networks/bridge", s.requireAppAdmin(s.handleDockerBridgeCreate))
+	mux.HandleFunc("DELETE /api/v1/docker/networks/bridge/{name}", s.requireAppAdmin(s.handleDockerBridgeRemove))
+	mux.HandleFunc("POST /api/v1/docker/networks/prune", s.requireAppAdmin(s.handleDockerNetworksPrune))
 	mux.HandleFunc("PUT /api/v1/docker/settings", s.requireAppAdmin(s.handleDockerSettings))
 	mux.HandleFunc("GET /api/v1/services/state", s.requireUser(s.handleServicesState))
 	mux.HandleFunc("GET /api/v1/services", s.requireAdmin(s.handleServices))

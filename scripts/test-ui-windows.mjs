@@ -100,8 +100,28 @@ const everything = [
       "/settings/memory",
     ],
   ],
-  ["docker", ["/docker", "/docker/networks", "/settings/proxy"]],
-  ["vms", ["/vms", "/vms?vm=source", "/vms/new", "/vms/media"]],
+  [
+    "docker",
+    [
+      "/docker",
+      "/docker/images",
+      "/docker/volumes",
+      "/docker/networks",
+      "/docker/cleanup",
+      "/settings/proxy",
+    ],
+  ],
+  [
+    "vms",
+    [
+      "/vms",
+      "/vms?vm=source",
+      "/vms?vm=source&tab=hardware",
+      "/vms?vm=source&tab=schedule",
+      "/vms/new",
+      "/vms/media",
+    ],
+  ],
   ["lxc", ["/lxc"]],
   ["appcenter", ["/apps", "/apps/new", "/plugins", "/plugins/cleanup"]],
   [
@@ -140,6 +160,11 @@ const everything = [
       "/settings/about",
       "/settings/updates",
       "/settings/timezone",
+      "/settings/appearance",
+      "/settings/appearance?tab=glass",
+      "/settings/appearance?tab=background",
+      "/settings/appearance?tab=dock",
+      "/settings/appearance?tab=login",
       "/settings/ups",
       "/settings/power-button",
       "/settings/viewer",
@@ -386,7 +411,8 @@ async function inspect(frame) {
   });
 }
 
-const slug = (path) => path.replace(/^\//, "").replace(/[/?=]/g, "-") || "home";
+const slug = (path) =>
+  path.replace(/^\//, "").replace(/[/?=&]/g, "-") || "home";
 
 // WINDOWS_ALL=only skips the checks below; WINDOWS_PATHS=/a,/b narrows the pass.
 const allOnly = process.env.WINDOWS_ALL === "only";

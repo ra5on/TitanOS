@@ -55,9 +55,7 @@
 		display: flex;
 		flex-direction: column;
 		color: var(--text);
-		background: color-mix(in srgb, var(--surface) 97%, transparent);
-		-webkit-backdrop-filter: blur(30px) saturate(170%);
-		backdrop-filter: blur(30px) saturate(170%);
+		background: var(--bg);
 	}
 	@media (min-width: 900px) {
 		.sheet {

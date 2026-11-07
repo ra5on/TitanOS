@@ -1,13 +1,14 @@
 <script lang="ts">
 	import type { FeatureViewId } from '#lib/agent-features.ts';
 	import { swipe } from '#lib/agent-swipe.ts';
-	// The menu of the KI-Agent (PLAN 48), the same on the desktop (left of
-	// the chat, beside the TitanOS menu) and on the phone (slides in from the
-	// left): search, new chat, the projects with their chats, then the chats
-	// by day. Running chats glow, waiting ones say so, unread ones carry a
-	// dot. At the bottom knowledge, look and settings, and on the phone or in
-	// the installed app the way back to TitanOS.
+	// The side bar of the KI-Agent (PLAN 48, look of PLAN 68 like the side
+	// bar of every window): new chat, search, suggestions, planned, notes,
+	// the projects with their chats, then the chats by day. Running chats
+	// pulse, waiting ones say so, unread ones carry a dot. At the bottom the
+	// settings, folding the side bar and, on the phone or in the installed
+	// app, the way back to TitanOS. On the phone it slides in from the left.
 	import Icon, { type IconName } from '#lib/components/Icon.svelte';
+	import DesktopIcon from '#lib/desktop/DesktopIcon.svelte';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { groupChats, type ChatInfo, type Project, type Swipe } from '#lib/agent.ts';
 
@@ -16,7 +17,6 @@
 		projects,
 		current = '',
 		project = '',
-		host = '',
 		admin = false,
 		onopen,
 		onnew,
@@ -38,7 +38,9 @@
 		onsettings,
 		inboxCount = 0,
 		oninbox,
-		onlook,
+		plannedCount = 0,
+		settingsOn = false,
+		onfold,
 		ontitanos,
 	}: {
 		chats: ChatInfo[];
@@ -46,7 +48,6 @@
 		current?: string;
 		/** The open project (its chats show below it). */
 		project?: string;
-		host?: string;
 		admin?: boolean;
 		/** author: another account's chat in a shared project (read-only). */
 		onopen: (id: string, author?: string) => void;
@@ -75,12 +76,21 @@
 		/** PLAN 53: open suggestions of the agent. */
 		inboxCount?: number;
 		oninbox?: () => void;
-		onlook: () => void;
+		/** Planned tasks and reminders of the account. */
+		plannedCount?: number;
+		/** The settings are open (their row is marked). */
+		settingsOn?: boolean;
+		/** Folds the side bar away (desktop). */
+		onfold?: () => void;
 		/** Back to TitanOS (phone, installed app). */
 		ontitanos?: () => void;
 	} = $props();
 
 	let query = $state('');
+	let searching = $state(false);
+	function searchInput(node: HTMLInputElement) {
+		node.focus();
+	}
 	const found = $derived(
 		query.trim()
 			? chats.filter((c) =>
@@ -99,6 +109,8 @@
 		older: 'agent.groupOlder',
 	};
 	const count = (id: string) => chats.filter((c) => c.project === id).length;
+	const waiting = (id: string) =>
+		chats.filter((c) => c.project === id && c.state === 'waiting').length;
 	/** What a closed project shows of its chats: running, waiting, unread. */
 	function stateIn(id: string): 'running' | 'waiting' | 'unread' | '' {
 		const list = chats.filter((c) => c.project === id);
@@ -167,20 +179,12 @@
 
 <nav class="menu" class:compact aria-label={t('agent.menu')}>
 	<div class="top">
-		<span class="logo" aria-hidden="true"><Icon name="sparkle" size={18} /></span>
-		<span class="brand"
-			><strong>{t('agent.appName')}</strong>{#if host}<small>{host}</small>{/if}</span
-		>
+		<DesktopIcon glyph="agent" gradient="violet" size={28} name={t('nav.agent')} />
+		<strong class="brand">{t('nav.agent')}</strong>
 	</div>
-	<label class="search">
-		<Icon name="search" size={16} />
-		<input
-			type="search"
-			bind:value={query}
-			placeholder={t('agent.searchChats')}
-			aria-label={t('agent.searchChats')}
-		/>
-	</label>
+	<button type="button" class="btn new-chat" onclick={onnew}
+		><Icon name="plus" size={16} /><span>{t('agent.newChat')}</span></button
+	>
 	<!-- Pull to refresh is an extra; the list can also be reloaded by reopening. -->
 	<div
 		class="scroll"
@@ -203,29 +207,54 @@
 					? t('agent.pullRelease')
 					: t('agent.pullDown')}
 			</p>{/if}
-		<button type="button" class="item new" onclick={onnew}
-			><span class="em"><Icon name="newChat" size={17} /></span><span class="name"
-				>{t('agent.newChat')}</span
+		<button
+			type="button"
+			class="item"
+			class:on={searching}
+			aria-expanded={searching}
+			onclick={() => {
+				searching = !searching;
+				if (!searching) query = '';
+			}}
+			><span class="em"><Icon name="search" size={16} /></span><span class="name"
+				>{t('agent.sideSearch')}</span
 			></button
 		>
+		{#if searching}
+			<label class="search">
+				<input
+					type="search"
+					bind:value={query}
+					use:searchInput
+					placeholder={t('agent.searchChats')}
+					aria-label={t('agent.searchChats')}
+					onkeydown={(e) => {
+						if (e.key === 'Escape') {
+							query = '';
+							searching = false;
+						}
+					}}
+				/>
+			</label>
+		{/if}
 		{#if oninbox}<button type="button" class="item" onclick={oninbox}
-				><span class="em"><Icon name="bulb" size={17} /></span><span class="name"
+				><span class="em"><Icon name="bulb" size={16} /></span><span class="name"
 					>{t('agent.inbox.title')}</span
-				>{#if inboxCount}<span class="count">{inboxCount}</span>{/if}</button
+				>{#if inboxCount}<span class="n">{inboxCount}</span>{/if}</button
 			>{/if}
 		<button type="button" class="item" onclick={onplanned}
-			><span class="em"><Icon name="clock" size={17} /></span><span class="name"
+			><span class="em"><Icon name="clock" size={16} /></span><span class="name"
 				>{t('agent.planned')}</span
-			></button
+			>{#if plannedCount}<span class="n">{plannedCount}</span>{/if}</button
 		>
 		{#if onnotes}<button type="button" class="item" onclick={onnotes}
-				><span class="em"><Icon name="fileText" size={17} /></span><span class="name"
+				><span class="em"><Icon name="fileText" size={16} /></span><span class="name"
 					>{t('agent.notes.title')}</span
 				></button
 			>{/if}
 		{#each features as f (f.id)}<button type="button" class="item" onclick={() => onfeature?.(f.id)}
-				><span class="em"><Icon name={f.icon} size={17} /></span><span class="name">{f.label}</span
-				>{#if f.count}<span class="count">{f.count}</span>{/if}</button
+				><span class="em"><Icon name={f.icon} size={16} /></span><span class="name">{f.label}</span
+				>{#if f.count}<span class="n">{f.count}</span>{/if}</button
 			>{/each}
 		{#if found}
 			<div class="group">{t('agent.found', { count: found.length })}</div>
@@ -235,17 +264,16 @@
 		{:else}
 			<div class="group">{t('agent.projects')}</div>
 			{#each projects as p (p.id)}
+				{@const st = stateIn(p.id)}
 				<div class="project-row">
 					<button
 						type="button"
 						class="item"
-						class:on={p.id === project && !current}
+						class:on={p.id === project}
 						aria-expanded={p.id === project}
 						onclick={() => onproject(p.id === project ? '' : p.id)}
 					>
-						<span class="em" aria-hidden="true" style:--tile={p.color || 'var(--accent)'}
-							>{p.icon || '📁'}</span
-						>
+						<span class="em" aria-hidden="true">{p.icon || '📁'}</span>
 						<span class="name">{p.name}</span>
 						{#if p.owner}<span class="by" title={t('agent.sharedBy', { name: p.owner })}
 								>{p.owner}</span
@@ -254,16 +282,21 @@
 								title={t('agent.sharedWith', { names: p.members.join(', ') })}
 								>👥 {p.members.length}</span
 							>{/if}
-						{#if p.id !== project}
-							{@const st = stateIn(p.id)}
-							{#if st === 'waiting'}<span class="wait">{t('agent.approvalShort')}</span
-								>{:else if st === 'running'}<span class="live" title={t('agent.running')}
+						{#if st === 'waiting'}<span
+								class="wait-n"
+								title={t('agent.sideWaiting', { count: waiting(p.id) })}
+								><span aria-hidden="true">▲ {waiting(p.id)}</span><span class="sr-only"
+									>{t('agent.sideWaiting', { count: waiting(p.id) })}</span
+								></span
+							>{:else}
+							{#if st === 'running'}<span class="live" title={t('agent.running')}
 									><span class="sr-only">{t('agent.running')}</span></span
-								>{:else if st === 'unread'}<span class="dot" title={t('agent.unread')}
-									><span class="sr-only">{t('agent.unread')}</span></span
+								>{:else if st === 'unread' && p.id !== project}<span
+									class="dot"
+									title={t('agent.unread')}><span class="sr-only">{t('agent.unread')}</span></span
 								>{/if}
+							<span class="n">{count(p.id)}</span>
 						{/if}
-						<span class="n">{count(p.id)}</span>
 					</button>
 					{#if !p.owner}
 						<button
@@ -296,11 +329,23 @@
 		{/if}
 	</div>
 	<div class="foot">
-		<div class="tools">
-			<button type="button" class="wide" onclick={onsettings}
-				><Icon name="gear" size={19} /><span>{t('agent.set.title')}</span></button
+		<button
+			type="button"
+			class="item"
+			class:on={settingsOn}
+			aria-current={settingsOn ? 'page' : undefined}
+			onclick={onsettings}
+			><span class="em"><Icon name="gear" size={16} /></span><span class="name"
+				>{t('agent.set.title')}</span
+			></button
+		>
+		{#if onfold}
+			<button type="button" class="item add" onclick={onfold}
+				><span class="em"><Icon name="sidebar" size={16} /></span><span class="name"
+					>{t('agent.sideFold')}</span
+				></button
 			>
-		</div>
+		{/if}
 		{#if ontitanos}
 			<button type="button" class="titanos" onclick={ontitanos}
 				><Icon name="chevronLeft" size={17} />{t('agent.toTitanOS')}</button
@@ -310,71 +355,63 @@
 </nav>
 
 <style>
+	/* PLAN 68: like the side bar of every window (Window.svelte .side):
+	   plain rows, the open one tinted with the accent. */
 	.menu {
 		display: flex;
 		flex-direction: column;
 		min-height: 0;
 		height: 100%;
+		padding: 12px 10px;
 		color: var(--text);
 	}
 	.top {
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		padding: 16px 14px 8px;
-	}
-	.logo {
-		width: 34px;
-		height: 34px;
-		border-radius: 11px;
-		flex: none;
-		display: grid;
-		place-items: center;
-		color: #fff;
-		background: var(--ag-orb, var(--accent));
-		box-shadow: 0 0 20px -2px color-mix(in srgb, var(--accent) 70%, transparent);
-	}
-	.brand {
-		display: flex;
-		flex-direction: column;
+		padding: 4px 6px 14px;
 		min-width: 0;
 	}
-	.brand strong {
-		font-size: 16px;
+	.brand {
+		font-size: var(--text-lg);
+		font-weight: 600;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
-	.brand small {
-		color: var(--muted);
-		font-size: var(--text-xs);
+	.new-chat {
+		justify-content: center;
+		gap: 6px;
+		margin: 0 4px 10px;
+		min-height: 36px;
 	}
 	.search {
-		margin: 4px 12px 8px;
 		display: flex;
-		align-items: center;
-		gap: 8px;
-		padding: 0 12px;
-		min-height: 40px;
-		border-radius: 12px;
-		background: color-mix(in srgb, var(--text) 7%, transparent);
-		color: var(--muted);
+		margin: 2px 4px 4px;
 	}
 	.search input {
 		flex: 1;
 		min-width: 0;
-		border: 0;
-		outline: none;
-		background: transparent;
+		min-height: 34px;
+		padding: 0 10px;
+		border-radius: var(--radius-ctl);
+		border: 1px solid var(--border);
+		background: var(--surface);
 		color: var(--text);
 		font: inherit;
 		font-size: var(--text-base);
+	}
+	.search input:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -1px;
 	}
 	.scroll {
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
-		padding: 0 8px 10px;
 		display: flex;
 		flex-direction: column;
-		gap: 1px;
+		gap: 2px;
 		scrollbar-width: thin;
 	}
 	/* Rows keep their height: a row that hides its overflow (.swipe) may
@@ -383,9 +420,9 @@
 		flex-shrink: 0;
 	}
 	.group {
-		padding: 14px 10px 4px;
+		margin: 12px 10px 4px;
 		font-size: var(--text-xs);
-		letter-spacing: 0.07em;
+		letter-spacing: 0.05em;
 		text-transform: uppercase;
 		color: var(--muted);
 	}
@@ -394,9 +431,9 @@
 		align-items: center;
 		gap: 10px;
 		width: 100%;
-		min-height: 36px;
-		padding: 7px 10px;
-		border-radius: 10px;
+		min-height: 34px;
+		padding: 6px 10px;
+		border-radius: calc(9px * var(--radius-scale, 1));
 		border: 0;
 		background: none;
 		color: var(--text);
@@ -404,44 +441,44 @@
 		font-size: var(--text-base);
 		text-align: left;
 		cursor: pointer;
-		transition: background 0.15s ease;
 	}
 	.item :global(svg) {
 		color: var(--muted);
 		flex: none;
 	}
 	.item:hover {
-		background: color-mix(in srgb, var(--text) 6%, transparent);
+		background: color-mix(in srgb, var(--text) 7%, transparent);
 	}
 	.item.on {
-		background: linear-gradient(
-			90deg,
-			color-mix(in srgb, var(--accent) 28%, transparent),
-			color-mix(in srgb, var(--accent) 4%, transparent)
-		);
-		box-shadow: inset 3px 0 0 var(--accent);
+		background: color-mix(in srgb, var(--accent) 18%, transparent);
+		/* Toward the text color: 4.5:1 on the tint in every theme (as Window.svelte). */
+		color: color-mix(in srgb, var(--accent) 65%, var(--text));
+		font-weight: 600;
+	}
+	.item.on :global(svg) {
+		color: var(--accent);
+	}
+	.item:focus-visible,
+	.edit:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
 	}
 	.item.unread .name {
 		font-weight: 600;
 	}
-	.item.new {
-		font-weight: 600;
-	}
-	.item.new :global(svg) {
-		color: var(--text);
-	}
 	.item.sub {
-		padding-left: 44px;
+		padding-left: 38px;
 	}
 	.item.add {
 		color: var(--muted);
 	}
 	.em {
-		width: 22px;
+		width: 18px;
 		text-align: center;
 		flex: none;
 		display: grid;
 		place-items: center;
+		font-size: 14px;
 	}
 	.name {
 		flex: 1;
@@ -455,15 +492,24 @@
 		font-size: var(--text-xs);
 		padding: 0 7px;
 		border-radius: 999px;
-		background: color-mix(in srgb, var(--text) 8%, transparent);
+		background: var(--chip);
 		color: var(--muted);
 	}
 	.emoji {
 		font-size: 13px;
 	}
 	.n {
+		margin-left: auto;
 		color: var(--muted);
 		font-size: var(--text-xs);
+		font-weight: 400;
+		flex: none;
+	}
+	.wait-n {
+		flex: none;
+		font-size: var(--text-xs);
+		font-weight: 600;
+		color: var(--warn-text);
 	}
 	.live,
 	.dot {
@@ -474,16 +520,19 @@
 		background: var(--accent);
 	}
 	.live {
-		box-shadow: 0 0 10px var(--accent);
 		animation: breathe 1.8s ease-in-out infinite;
 	}
 	:global(.agent.calm) .live {
 		animation: none;
 	}
+	@media (prefers-reduced-motion: reduce) {
+		.live {
+			animation: none;
+		}
+	}
 	@keyframes breathe {
 		50% {
-			opacity: 0.45;
-			box-shadow: 0 0 2px var(--accent);
+			opacity: 0.4;
 		}
 	}
 	.wait {
@@ -499,6 +548,10 @@
 		display: flex;
 		align-items: center;
 	}
+	.project-row .item {
+		flex: 1;
+		min-width: 0;
+	}
 	.project-row .edit {
 		border: 0;
 		background: transparent;
@@ -513,43 +566,15 @@
 		opacity: 1;
 	}
 	.empty {
-		margin: 2px 0 4px 44px;
+		margin: 2px 0 4px 38px;
 		font-size: var(--text-sm);
 	}
 	.foot {
-		border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-		padding: 6px 8px calc(8px + env(safe-area-inset-bottom, 0px));
-	}
-	.tools {
-		display: flex;
-		gap: 4px;
-	}
-	.tools > * {
-		flex: 1;
 		display: flex;
 		flex-direction: column;
-		align-items: center;
-		gap: 4px;
-		padding: 8px 4px;
-		border-radius: 12px;
-		border: 0;
-		background: none;
-		color: var(--text);
-		font: inherit;
-		font-size: var(--text-xs);
-		text-decoration: none;
-		cursor: pointer;
-	}
-	.count {
-		margin-left: auto;
-		min-width: 22px;
-		padding: 1px 7px;
-		border-radius: 999px;
-		font-size: var(--text-xs);
-		font-weight: 700;
-		text-align: center;
-		color: var(--on-accent, #fff);
-		background: var(--ag-gradient, var(--accent));
+		gap: 2px;
+		padding-top: 8px;
+		padding-bottom: env(safe-area-inset-bottom, 0px);
 	}
 	.compact .item {
 		min-height: 30px;
@@ -568,11 +593,11 @@
 		font-size: var(--text-xs);
 		color: var(--muted);
 	}
-	/* Swiping a chat aside: the row follows the finger over a colored
-	   strip that names the action (PLAN 53). */
+	/* Swiping a chat aside: the row follows the finger over a strip that
+	   names the action (PLAN 53). */
 	.swipe {
 		position: relative;
-		border-radius: 12px;
+		border-radius: calc(9px * var(--radius-scale, 1));
 		overflow: hidden;
 		touch-action: pan-y;
 	}
@@ -585,13 +610,14 @@
 		padding: 0 16px;
 		font-size: var(--text-sm);
 		font-weight: 600;
-		color: #fff;
+		color: var(--on-accent);
 		opacity: 0;
-		background: linear-gradient(90deg, #3b82f6, #6366f1);
+		background: var(--accent);
 	}
 	.swipe:global([data-side='left'])::before {
 		justify-content: flex-end;
-		background: linear-gradient(90deg, #e11d48, #fb7185);
+		color: var(--error-text);
+		background: var(--error-bg);
 	}
 	.swipe:global([data-side='right'])::before,
 	.swipe:global([data-side='left'])::before {
@@ -612,17 +638,6 @@
 	.swipe:global(.dragging) > .item {
 		transition: none;
 	}
-	.tools > .wide {
-		flex-direction: row;
-		justify-content: center;
-		gap: 8px;
-		min-height: 44px;
-		font-size: var(--text-sm);
-		border: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
-	}
-	.tools > *:hover {
-		background: color-mix(in srgb, var(--text) 6%, transparent);
-	}
 	.titanos {
 		display: flex;
 		align-items: center;
@@ -631,9 +646,9 @@
 		width: 100%;
 		min-height: 44px;
 		margin-top: 6px;
-		border-radius: 12px;
+		border-radius: var(--radius-ctl);
 		border: 1px solid var(--border);
-		background: color-mix(in srgb, var(--text) 6%, transparent);
+		background: var(--chip);
 		color: var(--text);
 		font: inherit;
 		font-weight: 600;

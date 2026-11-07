@@ -106,17 +106,37 @@ export async function setupOwner(name: string, password: string) {
 	await refreshSession();
 }
 
+/**
+ * PLAN 67: after logging out or when the session is gone, the whole page
+ * loads anew at "/" (the top page, also from inside a window): only the one
+ * new login page shows, never an old one kept by a page still running an
+ * earlier version.
+ */
+function toLoginPage() {
+	if (typeof window === 'undefined') return;
+	try {
+		(window.top ?? window).location.replace('/');
+	} catch {
+		location.replace('/');
+	}
+}
+
 export async function logout() {
 	try {
 		await api.post('/logout');
 	} catch (err) {
 		if (!(err instanceof ApiError)) throw err;
 	}
-	await refreshSession();
+	resetSound();
+	if (session.data) session.data = { ...session.data, user: null };
+	toLoginPage();
 }
 
 /** Called when the NAS says the session is gone (restart, timeout). */
 export function sessionExpired() {
+	// Only once: a 401 while the login page already shows reloads nothing.
+	const wasIn = !!session.data?.user;
 	resetSound();
 	if (session.data) session.data = { ...session.data, user: null };
+	if (wasIn) toLoginPage();
 }

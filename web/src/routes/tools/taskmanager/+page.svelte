@@ -238,6 +238,35 @@
 	);
 	const gpus = $derived((system?.accelerators ?? []).filter((a) => a.usagePercent != null));
 	const memoryUsed = $derived(system ? system.memory.totalBytes - system.memory.availableBytes : 0);
+
+	// PLAN 67-1: the menu bar of the desktop – the tabs, sorting the processes, refresh now.
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	registerMenuCommands({
+		...Object.fromEntries(
+			tabs.map((id) => [
+				'monitor.tab.' + id,
+				{
+					run: () => choose(id),
+					enabled: () => admin || id === 'overview',
+					checked: () => tab === id,
+				},
+			]),
+		),
+		...Object.fromEntries(
+			(['cpu', 'memory', 'name'] as const).map((by) => [
+				'monitor.sort.' + by,
+				{
+					run: () => {
+						sort = by;
+						if (tab !== 'processes') choose('processes');
+					},
+					enabled: () => admin,
+					checked: () => sort === by,
+				},
+			]),
+		),
+		'monitor.refresh': () => void poller?.now(),
+	});
 </script>
 
 <PageHead title={t('taskmanager.title')} />

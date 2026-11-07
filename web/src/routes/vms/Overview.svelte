@@ -1,6 +1,9 @@
 <script lang="ts">
-	// The tab "Overview" of a VM: what it is made of and what it does, as
-	// tiles. The CD drive can be changed here, also while the VM runs.
+	// The tabs "Übersicht", "Hardware" and "Zeitplan" of a VM (PLAN 67): cards
+	// with rows, label left and value right. The overview shows the load, the
+	// network and a summary of the hardware with "Bearbeiten"; the hardware
+	// tab every part; the schedule tab the start and stop times. The CD drive
+	// can be changed on both, also while the VM runs.
 	import { poll } from '#lib/poll.ts';
 	import { api, ApiError, type Hardware, type Volume, type VM } from '#lib/api.ts';
 	import Icon from '#lib/components/Icon.svelte';
@@ -9,6 +12,7 @@
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import type { SnapshotStatus } from './snapshots.ts';
 	import IsoPicker from './IsoPicker.svelte';
+	import { WEEK } from '#lib/vm-schedule.ts';
 
 	type Props = {
 		vm: VM;
@@ -20,8 +24,20 @@
 		onstart: () => void;
 		onchanged: () => void;
 		onsnapshots: () => void;
+		part?: 'overview' | 'hardware' | 'schedule';
 	};
-	let { vm, history, volumes, canStart, busy, onstart, onchanged, onsnapshots }: Props = $props();
+	let {
+		vm,
+		history,
+		volumes,
+		canStart,
+		busy,
+		onstart,
+		onchanged,
+		onsnapshots,
+		part = 'overview',
+	}: Props = $props();
+	const editHref = $derived(`/vms/edit?vm=${encodeURIComponent(vm.name)}`);
 
 	const running = $derived(vm.state === 'running');
 	const base = $derived(`/vms/${encodeURIComponent(vm.name)}`);
@@ -137,6 +153,16 @@
 	function chooseMedium() {
 		medium = { error: '' };
 	}
+	/** PLAN 67-1: Medien › ISO einlegen / auswerfen in the menu bar. */
+	export function insertMedium() {
+		if (!mediumBusy) chooseMedium();
+	}
+	export function canEject(): boolean {
+		return !!vm.iso && vm.disks.length > 0 && !mediumBusy;
+	}
+	export function ejectMedium() {
+		if (canEject()) void setMedium('');
+	}
 	async function setMedium(path: string) {
 		mediumBusy = true;
 		ejectError = '';
@@ -156,216 +182,349 @@
 	}
 </script>
 
-<div class="tiles">
-	<section class="tile card" aria-labelledby="ov-load">
-		<h2 class="tile-title" id="ov-load">{t('vms.ov.load')}</h2>
-		{#if running}
-			<div class="meter">
-				<span class="key">{t('ui.cpu')}</span>
-				<Sparkline values={history} label={t('vms.ov.cpuHistory')} />
-				<span class="mono value">{formatPercent(vm.cpuPercent)}</span>
-			</div>
-			<div class="meter">
-				<span class="key">{t('ui.ram')}</span>
-				<div class="bar" aria-hidden="true">
-					<span class="metric-level" style:width="{memoryShare}%"></span>
-				</div>
-				<span class="mono value"
-					>{formatBytes(vm.memoryBytes)} / {formatBytes(vm.memoryMiB * 1024 * 1024)}</span
-				>
-			</div>
-			{#if uptime}<p class="muted small">{t('vms.since', { time: uptime })}</p>{/if}
-		{:else}
-			<p class="muted">{t('vms.ov.off')}</p>
-			<div>
-				<button type="button" class="btn btn-primary" onclick={onstart} disabled={busy || !canStart}
-					>{t('vms.startVm')}</button
-				>
-			</div>
-		{/if}
-	</section>
+{#snippet editButton()}
+	<a class="btn" href={editHref}>{t('vms.ov.edit')}</a>
+{/snippet}
 
-	<section class="tile card" aria-labelledby="ov-hardware">
-		<h2 class="tile-title" id="ov-hardware">{t('vms.ov.hardware')}</h2>
-		<dl>
-			<dt>{t('vms.ov.system')}</dt>
-			<dd>{t(`vms.template.${vm.template}`)}</dd>
-			<dt>{t('vms.ov.cpus')}</dt>
-			<dd class="mono">
-				{vm.vcpus} vCPU{#if vm.cpuPin?.length}{' · '}{t('vms.ov.pinned', {
-						cpus: vm.cpuPin.join(', '),
-					})}{/if}{#if vm.exclusive}{' · '}{t('vms.ov.exclusive')}{/if}
-			</dd>
-			<dt>{t('vms.ov.memory')}</dt>
-			<dd class="mono">{formatBytes(vm.memoryMiB * 1024 * 1024)}</dd>
-			<dt>{t('vms.ov.firmware')}</dt>
-			<dd>
-				{[
-					vm.firmware === 'bios' ? 'BIOS' : 'UEFI',
-					vm.secureBoot ? 'Secure Boot' : '',
-					vm.tpm ? 'TPM 2.0' : '',
-				]
-					.filter(Boolean)
-					.join(' · ')}
-			</dd>
-			<dt>{t('vms.autostart')}</dt>
-			<dd>{t(vm.autostart ? 'vms.ov.yes' : 'vms.ov.no')}</dd>
-			<dt>{t('vms.sched.title')}</dt>
-			<dd>
-				{#if vm.schedule}
-					{t('vms.sched.nextStart')}: {vm.schedule.nextStart
-						? formatDateTime(new Date(vm.schedule.nextStart))
-						: '–'}<br />
-					{t('vms.sched.nextStop')}: {vm.schedule.nextStop
-						? formatDateTime(new Date(vm.schedule.nextStop))
-						: '–'}
-					{#if vm.schedule.waiting}<br /><span class="muted"
-							>{t(
-								`vms.sched.wait.${vm.schedule.waiting}.${vm.schedule.waitReason ?? 'busy'}` as 'vms.sched.wait.start.busy',
-							)}</span
-						>{/if}
-				{:else}
-					{t('vms.sched.off')}
-				{/if}
-			</dd>
-		</dl>
-	</section>
+{#snippet scheduleSummary()}
+	{#if vm.schedule && vm.powerSchedule?.enabled}
+		<span
+			>{t('vms.sched.nextStart')}: {vm.schedule.nextStart
+				? formatDateTime(new Date(vm.schedule.nextStart))
+				: '–'}</span
+		>
+		<span class="muted"
+			>{t('vms.sched.nextStop')}: {vm.schedule.nextStop
+				? formatDateTime(new Date(vm.schedule.nextStop))
+				: '–'}</span
+		>
+		{#if vm.schedule.waiting}<span class="muted"
+				>{t(
+					`vms.sched.wait.${vm.schedule.waiting}.${vm.schedule.waitReason ?? 'busy'}` as 'vms.sched.wait.start.busy',
+				)}</span
+			>{/if}
+	{:else}
+		<span>{t('vms.sched.off')}</span>
+	{/if}
+{/snippet}
 
-	<section class="tile card" aria-labelledby="ov-disks">
-		<h2 class="tile-title" id="ov-disks">{t('vms.ov.disks')}</h2>
-		<ul class="rows">
-			{#each vm.disks as disk, index (index)}
-				{@const volume = diskVolume(disk)}
-				<li>
-					<Icon name="disk" size={16} />
-					<span class="mono name" title={disk.path || disk.file}
-						>{disk.path ? fileName(disk.path) : disk.file}</span
-					>
-					<span class="mono muted">{formatBytes(disk.sizeBytes)}</span>
-					{#if volume}<span
-							class="chip"
-							class:warn={usage(volume) >= 0.9}
-							title={t('vms.ov.volumeUse', {
-								volume: volume.name,
-								percent: Math.round(usage(volume) * 100),
-							})}>{volume.name} · {Math.round(usage(volume) * 100)} %</span
-						>{/if}
-				</li>
-			{/each}
-			<li>
-				<Icon name="disc" size={16} />
-				{#if vm.iso}
-					<span class="mono name" title={vm.iso}>{fileName(vm.iso)}</span>
-				{:else}
-					<span class="muted name">{t('vms.ov.cdEmpty')}</span>
-				{/if}
-				<span class="row-actions">
-					<button type="button" class="btn small" onclick={chooseMedium} disabled={mediumBusy}
-						>{t(vm.iso ? 'vms.ov.cdChange' : 'vms.ov.cdInsert')}</button
-					>
-					{#if vm.iso && vm.disks.length}<button
-							type="button"
-							class="btn small"
-							onclick={() => setMedium('')}
-							disabled={mediumBusy}>{t('vms.ov.cdEject')}</button
-						>{/if}
-				</span>
-			</li>
-		</ul>
-		{#if ejectError}<p class="notice-error" role="alert">{ejectError}</p>{/if}
-		{#if running}<p class="muted small">{t('vms.ov.cdLive')}</p>{/if}
-	</section>
-
-	<section class="tile card" aria-labelledby="ov-network">
-		<h2 class="tile-title" id="ov-network">{t('vms.ov.network')}</h2>
-		<dl>
-			<dt>{t('vms.ov.connection')}</dt>
-			<dd>{t(vm.network === 'bridge' ? 'vms.ov.bridge' : 'vms.ov.user')}</dd>
-			<dt>MAC</dt>
-			<dd class="mono">{vm.mac}</dd>
-			{#if running}
-				<dt>{t('vms.ov.address')}</dt>
-				<dd>
-					{#if addresses === null}
-						<span class="muted">…</span>
-					{:else if addresses.addresses.length}
-						{#each addresses.addresses as address (address)}
-							<span class="address">
-								<span class="mono">{address}</span>
-								<button
-									type="button"
-									class="icon"
-									aria-label={t('vms.ov.copyAddress', { address })}
-									title={t('vms.ov.copyAddress', { address })}
-									onclick={() => copy(address)}
-									><Icon name={copied === address ? 'check' : 'copy'} size={14} /></button
-								>
-							</span>
-						{/each}
-						<span class="muted small"
-							>{t(addresses.source === 'agent' ? 'vms.ov.fromAgent' : 'vms.ov.fromArp')}</span
-						>
-					{:else}
-						<span class="muted"
-							>{t(vm.network === 'bridge' ? 'vms.ov.noAddress' : 'vms.ov.noAddressUser')}</span
-						>
-					{/if}
-				</dd>
+{#snippet cdRow()}
+	<div class="kv">
+		<span class="k">{t('vms.ov.cd')}</span>
+		<span class="v">
+			{#if vm.iso}
+				<span class="mono name" title={vm.iso}>{fileName(vm.iso)}</span>
+			{:else}
+				<span class="muted name">{t('vms.ov.cdEmpty')}</span>
 			{/if}
-		</dl>
-	</section>
+			<span class="row-actions">
+				<button type="button" class="btn small" onclick={chooseMedium} disabled={mediumBusy}
+					>{t(vm.iso ? 'vms.ov.cdChange' : 'vms.ov.cdInsert')}</button
+				>
+				{#if vm.iso && vm.disks.length}<button
+						type="button"
+						class="btn small"
+						onclick={() => setMedium('')}
+						disabled={mediumBusy}>{t('vms.ov.cdEject')}</button
+					>{/if}
+			</span>
+		</span>
+	</div>
+{/snippet}
 
-	{#if devices.length || vm.folders?.length}
-		<section class="tile card" aria-labelledby="ov-devices">
-			<h2 class="tile-title" id="ov-devices">{t('vms.ov.devices')}</h2>
-			<ul class="rows">
-				{#each deviceRows as row (row.id)}
-					<li>
-						<Icon name="monitor" size={16} /><span class="name">{deviceName(row.id)}</span><span
-							class="mono muted">{row.ids.join(', ')}</span
+{#snippet diskRows()}
+	{#each vm.disks as disk, index (index)}
+		{@const volume = diskVolume(disk)}
+		<div class="kv">
+			<span class="k">{t('vms.ov.disk')}{vm.disks.length > 1 ? ` ${index + 1}` : ''}</span>
+			<span class="v">
+				<span class="mono name" title={disk.path || disk.file}
+					>{disk.path ? fileName(disk.path) : disk.file}</span
+				>
+				<span class="muted">{formatBytes(disk.sizeBytes)}</span>
+				{#if volume}<span
+						class="chip"
+						class:warn={usage(volume) >= 0.9}
+						title={t('vms.ov.volumeUse', {
+							volume: volume.name,
+							percent: Math.round(usage(volume) * 100),
+						})}>{volume.name} · {Math.round(usage(volume) * 100)} %</span
+					>{/if}
+			</span>
+		</div>
+	{/each}
+{/snippet}
+
+<div class="cards" class:two={part === 'overview'}>
+	{#if part === 'overview'}
+		<section class="tile ui-card" aria-labelledby="ov-load">
+			<div class="card-head">
+				<h2 id="ov-load">{t('vms.ov.load')}</h2>
+				{#if !running}<div class="card-tools">
+						<button
+							type="button"
+							class="btn btn-primary"
+							onclick={onstart}
+							disabled={busy || !canStart}>{t('vms.startVm')}</button
 						>
-					</li>
-				{/each}
-				{#each vm.folders ?? [] as folder (folder.tag)}
-					<li>
-						<Icon name="folder" size={16} /><span class="mono name" title={folder.path}
-							>{folder.tag} ← {folder.path}</span
-						>{#if folder.readOnly}<span class="chip">{t('vms.ov.readOnly')}</span>{/if}
-					</li>
-				{/each}
-			</ul>
-			{#if gpu}<p class="muted small">{t('vms.ov.gpuScreen')}</p>{/if}
+					</div>{/if}
+			</div>
+			{#if running}
+				<div class="kv">
+					<span class="k">{t('vms.ov.cpus')}</span>
+					<span class="v meter">
+						<span class="meter-top"
+							><span>{formatPercent(vm.cpuPercent)}</span><span class="muted">{vm.vcpus} vCPU</span
+							></span
+						>
+						<Sparkline values={history} label={t('vms.ov.cpuHistory')} />
+					</span>
+				</div>
+				<div class="kv">
+					<span class="k">{t('vms.ov.memory')}</span>
+					<span class="v meter">
+						<span class="meter-top"
+							><span>{formatBytes(vm.memoryBytes)}</span><span class="muted"
+								>{t('vms.ov.of', { total: formatBytes(vm.memoryMiB * 1024 * 1024) })}</span
+							></span
+						>
+						<span class="bar" aria-hidden="true"
+							><span class="metric-level" style:width="{memoryShare}%"></span></span
+						>
+					</span>
+				</div>
+				{#if uptime}<div class="kv">
+						<span class="k">{t('vms.ov.uptime')}</span><span class="v">{uptime}</span>
+					</div>{/if}
+			{:else}
+				<p class="card-text muted">{t('vms.ov.off')}</p>
+			{/if}
 		</section>
 	{/if}
 
-	<section class="tile card snapshot-card" aria-labelledby="ov-snapshots">
-		<h2 class="tile-title" id="ov-snapshots">{t('snapshots.title')}</h2>
-		{#if snapshots}
-			{@const latest = snapshots.snapshots
-				.filter((s) => !s.incomplete)
-				.sort((a, b) => b.created.localeCompare(a.created))[0]}
-			<dl>
-				<dt>{t('vms.ov.snapshotCount')}</dt>
-				<dd>{snapshots.snapshots.length}</dd>
-				<dt>{t('vms.ov.snapshotLatest')}</dt>
-				<dd>{latest ? new Date(latest.created).toLocaleString() : '–'}</dd>
-				<dt>{t('vms.ov.snapshotPlan')}</dt>
-				<dd>
-					{snapshots.schedule.enabled
-						? t('vms.ov.snapshotPlanOn', { time: snapshots.schedule.time })
-						: t('vms.ov.no')}
-				</dd>
-			</dl>
-			{#if snapshots.reason}<p class="muted small">
-					{t(`snapshots.reason.${snapshots.reason}`)}
-				</p>{/if}
-		{:else}
-			<p class="muted">…</p>
+	{#if part === 'overview' || part === 'hardware'}
+		<section class="tile ui-card" aria-labelledby="ov-network">
+			<div class="card-head"><h2 id="ov-network">{t('vms.ov.network')}</h2></div>
+			{#if running}
+				<div class="kv">
+					<span class="k">{t('vms.ov.address')}</span>
+					<span class="v">
+						{#if addresses === null}
+							<span class="muted">…</span>
+						{:else if addresses.addresses.length}
+							{#each addresses.addresses as address (address)}
+								<span class="address">
+									<span class="mono">{address}</span>
+									<button
+										type="button"
+										class="icon"
+										aria-label={t('vms.ov.copyAddress', { address })}
+										title={t('vms.ov.copyAddress', { address })}
+										onclick={() => copy(address)}
+										><Icon name={copied === address ? 'check' : 'copy'} size={14} /></button
+									>
+								</span>
+							{/each}
+							<span class="muted small"
+								>{t(addresses.source === 'agent' ? 'vms.ov.fromAgent' : 'vms.ov.fromArp')}</span
+							>
+						{:else}
+							<span class="muted"
+								>{t(vm.network === 'bridge' ? 'vms.ov.noAddress' : 'vms.ov.noAddressUser')}</span
+							>
+						{/if}
+					</span>
+				</div>
+			{/if}
+			<div class="kv">
+				<span class="k">{t('vms.ov.connection')}</span>
+				<span class="v">{t(vm.network === 'bridge' ? 'vms.ov.bridge' : 'vms.ov.user')}</span>
+			</div>
+			<div class="kv">
+				<span class="k">MAC</span><span class="v mono">{vm.mac}</span>
+			</div>
+		</section>
+	{/if}
+
+	{#if part === 'overview'}
+		<section class="tile ui-card wide" aria-labelledby="ov-hardware">
+			<div class="card-head">
+				<h2 id="ov-hardware">{t('vms.ov.hardware')}</h2>
+				<div class="card-tools">{@render editButton()}</div>
+			</div>
+			<div class="kv">
+				<span class="k">{t('vms.ov.system')}</span>
+				<span class="v"
+					>{t(`vms.template.${vm.template}`)} · {vm.firmware === 'bios' ? 'BIOS' : 'UEFI'} · {vm.vcpus}
+					vCPU · {formatBytes(vm.memoryMiB * 1024 * 1024)}</span
+				>
+			</div>
+			{@render diskRows()}
+			{@render cdRow()}
+			{#if devices.length || vm.folders?.length}
+				<div class="kv">
+					<span class="k">{t('vms.ov.devices')}</span>
+					<span class="v"
+						>{[
+							...deviceRows.map((row) => deviceName(row.id)),
+							...(vm.folders ?? []).map((f) => f.tag),
+						].join(', ')}</span
+					>
+				</div>
+			{/if}
+			<div class="kv">
+				<span class="k">{t('vms.sched.title')}</span>
+				<span class="v">{@render scheduleSummary()}</span>
+			</div>
+			{#if ejectError}<p class="notice-error inside" role="alert">{ejectError}</p>{/if}
+		</section>
+
+		<section class="tile ui-card wide" aria-labelledby="ov-snapshots">
+			<div class="card-head">
+				<h2 id="ov-snapshots">{t('snapshots.title')}</h2>
+				<div class="card-tools">
+					<button type="button" class="btn" onclick={onsnapshots}>{t('snapshots.manage')}</button>
+				</div>
+			</div>
+			{#if snapshots}
+				{@const latest = snapshots.snapshots
+					.filter((s) => !s.incomplete)
+					.sort((a, b) => b.created.localeCompare(a.created))[0]}
+				<div class="kv">
+					<span class="k">{t('vms.ov.snapshotCount')}</span>
+					<span class="v">{snapshots.snapshots.length}</span>
+				</div>
+				<div class="kv">
+					<span class="k">{t('vms.ov.snapshotLatest')}</span>
+					<span class="v">{latest ? new Date(latest.created).toLocaleString() : '–'}</span>
+				</div>
+				<div class="kv">
+					<span class="k">{t('vms.ov.snapshotPlan')}</span>
+					<span class="v"
+						>{snapshots.schedule.enabled
+							? t('vms.ov.snapshotPlanOn', { time: snapshots.schedule.time })
+							: t('vms.ov.no')}</span
+					>
+				</div>
+				{#if snapshots.reason}<p class="card-text muted small">
+						{t(`snapshots.reason.${snapshots.reason}`)}
+					</p>{/if}
+			{:else}
+				<p class="card-text muted">…</p>
+			{/if}
+		</section>
+	{/if}
+
+	{#if part === 'hardware'}
+		<section class="tile ui-card" aria-labelledby="hw-system">
+			<div class="card-head">
+				<h2 id="hw-system">{t('vms.ov.hardware')}</h2>
+				<div class="card-tools">{@render editButton()}</div>
+			</div>
+			<div class="kv">
+				<span class="k">{t('vms.ov.system')}</span><span class="v"
+					>{t(`vms.template.${vm.template}`)}</span
+				>
+			</div>
+			<div class="kv">
+				<span class="k">{t('vms.ov.cpus')}</span>
+				<span class="v"
+					>{vm.vcpus} vCPU{#if vm.cpuPin?.length}{' · '}{t('vms.ov.pinned', {
+							cpus: vm.cpuPin.join(', '),
+						})}{/if}{#if vm.exclusive}{' · '}{t('vms.ov.exclusive')}{/if}</span
+				>
+			</div>
+			<div class="kv">
+				<span class="k">{t('vms.ov.memory')}</span>
+				<span class="v">{formatBytes(vm.memoryMiB * 1024 * 1024)}</span>
+			</div>
+			<div class="kv">
+				<span class="k">{t('vms.ov.firmware')}</span>
+				<span class="v"
+					>{[
+						vm.firmware === 'bios' ? 'BIOS' : 'UEFI',
+						vm.secureBoot ? 'Secure Boot' : '',
+						vm.tpm ? 'TPM 2.0' : '',
+					]
+						.filter(Boolean)
+						.join(' · ')}</span
+				>
+			</div>
+			<div class="kv">
+				<span class="k">{t('vms.autostart')}</span>
+				<span class="v">{t(vm.autostart ? 'vms.ov.yes' : 'vms.ov.no')}</span>
+			</div>
+		</section>
+
+		<section class="tile ui-card" aria-labelledby="ov-disks">
+			<div class="card-head"><h2 id="ov-disks">{t('vms.ov.disks')}</h2></div>
+			{@render diskRows()}
+			{@render cdRow()}
+			{#if ejectError}<p class="notice-error inside" role="alert">{ejectError}</p>{/if}
+			{#if running}<p class="card-text muted small">{t('vms.ov.cdLive')}</p>{/if}
+		</section>
+
+		{#if devices.length || vm.folders?.length}
+			<section class="tile ui-card" aria-labelledby="ov-devices">
+				<div class="card-head"><h2 id="ov-devices">{t('vms.ov.devices')}</h2></div>
+				{#each deviceRows as row (row.id)}
+					<div class="kv">
+						<span class="k">{deviceName(row.id)}</span>
+						<span class="v mono muted">{row.ids.join(', ')}</span>
+					</div>
+				{/each}
+				{#each vm.folders ?? [] as folder (folder.tag)}
+					<div class="kv">
+						<span class="k mono">{folder.tag}</span>
+						<span class="v"
+							><span class="mono" title={folder.path}>{folder.path}</span>{#if folder.readOnly}<span
+									class="chip">{t('vms.ov.readOnly')}</span
+								>{/if}</span
+						>
+					</div>
+				{/each}
+				{#if gpu}<p class="card-text muted small">{t('vms.ov.gpuScreen')}</p>{/if}
+			</section>
 		{/if}
-		<div>
-			<button type="button" class="btn small" onclick={onsnapshots}>{t('snapshots.manage')}</button>
-		</div>
-	</section>
+	{/if}
+
+	{#if part === 'schedule'}
+		{@const plan = vm.powerSchedule}
+		<section class="tile ui-card" aria-labelledby="ov-schedule">
+			<div class="card-head">
+				<h2 id="ov-schedule">{t('vms.sched.title')}</h2>
+				<div class="card-tools">{@render editButton()}</div>
+			</div>
+			<div class="kv">
+				<span class="k">{t('vms.ov.state')}</span>
+				<span class="v">{plan?.enabled ? t('vms.ov.scheduleOn') : t('vms.sched.off')}</span>
+			</div>
+			{#if plan?.rules.length}
+				{#each plan.rules as rule, index (index)}
+					<div class="kv">
+						<span class="k"
+							>{t(rule.action === 'start' ? 'vms.sched.start' : 'vms.sched.stop')}</span
+						>
+						<span class="v"
+							><span class="mono">{rule.time}</span><span class="muted"
+								>{WEEK.filter((d) => rule.days.includes(d))
+									.map((d) => t(`backup.dayShort.${d}` as 'backup.dayShort.0'))
+									.join(', ')}</span
+							></span
+						>
+					</div>
+				{/each}
+			{:else}
+				<p class="card-text muted">{t('vms.sched.none')}</p>
+			{/if}
+			{#if plan?.enabled}
+				<div class="kv">
+					<span class="k">{t('vms.ov.next')}</span>
+					<span class="v column">{@render scheduleSummary()}</span>
+				</div>
+			{/if}
+		</section>
+	{/if}
 </div>
 
 {#if medium}
@@ -385,63 +544,63 @@
 {/if}
 
 <style>
-	.tiles {
+	.cards {
 		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: var(--gap, 16px);
+		align-items: start;
+	}
+	.cards.two {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: var(--space-4);
 	}
-	.card {
-		display: flex;
-		flex-direction: column;
-		gap: 14px;
-		min-width: 0;
-		padding: 18px 20px;
-		min-height: 180px;
-	}
-	.snapshot-card {
+	.cards.two .wide {
 		grid-column: 1 / -1;
-		min-height: 0;
+	}
+	@media (max-width: 760px) {
+		.cards.two {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+	/* A row of a card: label left, value right. */
+	.kv {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) auto;
+		grid-template-columns: minmax(7rem, 34%) minmax(0, 1fr);
 		align-items: center;
-		gap: var(--space-3) var(--space-5);
+		gap: 4px 16px;
+		padding: 11px 16px;
+		border-top: 1px solid var(--panel-border, var(--border));
+		font-size: var(--text-md);
+		min-width: 0;
 	}
-	.snapshot-card > h2,
-	.snapshot-card > p {
-		grid-column: 1 / -1;
+	.card-head + .kv {
+		border-top: 0;
 	}
-	.snapshot-card > dl {
+	.k {
+		color: var(--text);
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.v {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: var(--space-3);
+		gap: 4px 10px;
+		min-width: 0;
+		overflow-wrap: anywhere;
 	}
-	.snapshot-card > dl > dd {
-		margin-right: var(--space-5);
-	}
-	@media (max-width: 1100px) {
-		.tiles {
-			grid-template-columns: 1fr;
-		}
-		.snapshot-card {
-			display: flex;
-			align-items: stretch;
-		}
-		.snapshot-card > dl {
-			display: grid;
-		}
-		.snapshot-card > dl > dd {
-			margin-right: 0;
-		}
+	.v.column {
+		flex-direction: column;
+		align-items: flex-start;
 	}
 	.meter {
-		display: grid;
-		grid-template-columns: 2.5rem minmax(0, 1fr) auto;
-		align-items: center;
-		gap: 10px;
-		font-size: var(--text-md);
+		flex-direction: column;
+		align-items: stretch;
+		gap: 6px;
 	}
-	.value {
+	.meter-top {
+		display: flex;
+		justify-content: space-between;
+		gap: 10px;
 		font-size: var(--text-base);
 	}
 	.bar {
@@ -455,60 +614,40 @@
 		height: 100%;
 		background: var(--accent);
 	}
-	dl {
-		display: grid;
-		grid-template-columns: auto minmax(0, 1fr);
-		gap: 6px 14px;
+	.card-text {
 		margin: 0;
-		font-size: var(--text-md);
+		padding: 12px 16px;
 	}
-	dt {
-		color: var(--muted);
+	.card-head + .card-text {
+		padding-top: 14px;
 	}
-	dd {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-1) var(--space-2);
-		margin: 0;
-		min-width: 0;
-		overflow-wrap: anywhere;
+	.kv + .card-text {
+		border-top: 1px solid var(--panel-border, var(--border));
+	}
+	.inside {
+		margin: 0 16px 12px;
 	}
 	.mono {
 		font-size: var(--text-base);
 	}
-	.rows {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-		margin: 0;
-		padding: 0;
-		list-style: none;
-		font-size: var(--text-md);
-	}
-	.rows li {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 6px 10px;
-		min-width: 0;
-	}
-	.rows .name {
-		flex: 1 1 8rem;
+	.name {
 		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+		max-width: 100%;
 	}
 	.row-actions {
 		display: flex;
 		gap: 6px;
+		margin-left: auto;
 	}
 	.small {
 		font-size: var(--text-sm);
 	}
 	.btn.small {
-		height: 2rem;
+		min-height: 30px;
+		height: 30px;
 		padding: 0 10px;
 		font-size: var(--text-base);
 	}
@@ -536,5 +675,10 @@
 	.icon:hover {
 		background: var(--chip);
 		color: var(--text);
+	}
+	@media (max-width: 479px) {
+		.kv {
+			grid-template-columns: minmax(0, 1fr);
+		}
 	}
 </style>

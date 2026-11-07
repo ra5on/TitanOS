@@ -1,6 +1,6 @@
 <script lang="ts">
-	// The input of the KI-Agent (PLAN 48): one pill with the clip, the task
-	// and the round send button, glass with a glowing edge. Enter sends,
+	// The input of the KI-Agent (PLAN 48, card of PLAN 68): the clip, the
+	// task, the microphone and the send button in the accent. Enter sends,
 	// Shift+Enter a new line; while a run works the round button stops it.
 	// Model and thinking level sit at the top of the chat (ModelPicker).
 	import Dropdown from '#lib/components/Dropdown.svelte';
@@ -245,32 +245,19 @@
 </form>
 
 <style>
+	/* PLAN 68: a card at the bottom – 📎, text, 🎙 and the send button in
+	   the accent, like the rest of TitanOS (no glass, no glow). */
 	.composer {
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-		padding: 6px;
-		border-radius: 26px;
-		border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
-		background: color-mix(in srgb, var(--surface) calc(var(--ag-alpha, 0.55) * 100%), transparent);
-		-webkit-backdrop-filter: blur(22px) saturate(160%);
-		backdrop-filter: blur(22px) saturate(160%);
-		box-shadow:
-			0 0 0 1px color-mix(in srgb, var(--accent) 8%, transparent),
-			0 14px 40px -16px color-mix(in srgb, var(--accent) 45%, transparent);
-		transition:
-			border-color 0.2s ease,
-			box-shadow 0.2s ease;
+		padding: 8px 8px 8px 10px;
+		border-radius: var(--radius-tile);
+		border: 1px solid var(--border);
+		background: var(--surface);
 	}
 	.composer:focus-within {
 		border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
-		box-shadow:
-			0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent),
-			0 18px 48px -14px color-mix(in srgb, var(--accent) 60%, transparent);
-	}
-	:global(.agent:not(.glow)) .composer,
-	:global(.agent:not(.glow)) .composer:focus-within {
-		box-shadow: none;
 	}
 	textarea {
 		flex: 1;
@@ -286,7 +273,10 @@
 		line-height: 1.45;
 		min-height: 24px;
 		max-height: 220px;
-		padding: 7px 4px;
+		padding: 5px 4px;
+	}
+	textarea::placeholder {
+		color: var(--muted);
 	}
 	.tools {
 		display: flex;
@@ -294,9 +284,9 @@
 		gap: 6px;
 	}
 	.round {
-		width: 38px;
-		height: 38px;
-		border-radius: 50%;
+		width: 32px;
+		height: 32px;
+		border-radius: var(--radius-ctl);
 		display: grid;
 		place-items: center;
 		border: 0;
@@ -305,20 +295,31 @@
 	}
 	.attach,
 	.attach-menu :global(.btn) {
-		width: 38px;
-		height: 38px;
-		min-height: 38px;
+		width: 32px;
+		height: 32px;
+		min-height: 32px;
 		padding: 0;
-		border-radius: 50%;
+		border-radius: var(--radius-ctl);
 		border: 0;
+		background: none;
+		color: var(--muted);
+	}
+	.attach:hover,
+	.attach-menu :global(.btn:hover),
+	.mic:hover {
 		background: color-mix(in srgb, var(--text) 8%, transparent);
 		color: var(--text);
+	}
+	.round:focus-visible,
+	.attach-menu :global(.btn:focus-visible) {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
 	}
 	.files {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 6px;
-		padding: 4px 4px 0;
+		padding: 2px 2px 0;
 	}
 	.file {
 		display: inline-flex;
@@ -340,63 +341,44 @@
 		display: grid;
 	}
 	.send {
-		background: var(--ag-gradient, var(--accent));
+		background: var(--accent);
 		color: var(--on-accent);
-		box-shadow: 0 0 18px -2px color-mix(in srgb, var(--accent) 75%, transparent);
-		transition:
-			transform 0.15s ease,
-			opacity 0.15s ease;
-	}
-	.send:not(:disabled):hover {
-		transform: scale(1.06);
 	}
 	.send:disabled {
 		opacity: 0.45;
 		cursor: default;
-		box-shadow: none;
 	}
 	.stop {
 		background: var(--text);
 		color: var(--bg);
 	}
 	.mic {
-		background: color-mix(in srgb, var(--text) 8%, transparent);
-		color: var(--text);
+		background: none;
+		color: var(--muted);
 	}
 	.mic.on {
-		background: var(--status-error, #e5484d);
-		color: #fff;
+		background: var(--error-bg);
+		color: var(--error-text);
+		outline: 1px solid var(--error-border);
 		animation: rec 1.2s ease-in-out infinite;
 	}
 	@keyframes rec {
 		50% {
-			box-shadow: 0 0 0 6px color-mix(in srgb, var(--status-error, #e5484d) 25%, transparent);
+			opacity: 0.65;
 		}
 	}
 	:global(.agent.calm) .mic.on {
 		animation: none;
 	}
+	@media (prefers-reduced-motion: reduce) {
+		.mic.on {
+			animation: none;
+		}
+	}
 	/* Under 16px iOS zooms into the field on a tap and stays zoomed. */
 	@media (max-width: 760px), (pointer: coarse) {
 		textarea {
 			font-size: max(16px, 1rem);
-		}
-	}
-	/* The phone: a flatter bar (PLAN 56); the text stays 16 px for iOS. */
-	@media (max-width: 760px) {
-		.composer {
-			padding: 4px;
-			border-radius: 22px;
-		}
-		.composer :global(.round),
-		.composer .attach,
-		.composer .attach-menu :global(.btn) {
-			width: 34px;
-			height: 34px;
-			min-height: 34px;
-		}
-		.composer textarea {
-			padding: 5px 4px;
 		}
 	}
 </style>

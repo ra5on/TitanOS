@@ -1,11 +1,10 @@
 <script lang="ts">
-	// The KI-Agent (PLAN 44, look of PLAN 48): its own menu on the left, the
-	// chat on the right, with model and thinking level at the top and a
-	// start page like the big chat apps. On the desktop the TitanOS menu
-	// stays beside it (or full screen); on the phone the agent is an app of
-	// its own whose menu slides in from the left, with the way back to
-	// TitanOS. Installed from here it is an app of its own too
-	// (/agent.webmanifest, start /agent?app=1, no TitanOS frame).
+	// The KI-Agent (PLAN 44; look of PLAN 68, the design language of every
+	// window): its side bar on the left, the chat on the right with title,
+	// project and model at the top. Colors come from the TitanOS theme. On
+	// the phone the agent is an app of its own whose side bar slides in from
+	// the left, with the way back to TitanOS. Installed from here it is an
+	// app of its own too (/agent.webmanifest, start /agent?app=1).
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { fade, fly } from 'svelte/transition';
@@ -20,7 +19,6 @@
 	import Composer from '#lib/components/agent/Composer.svelte';
 	import NotesPanel from '#lib/components/agent/NotesPanel.svelte';
 	import KnowledgeDialog from '#lib/components/agent/KnowledgeDialog.svelte';
-	import LookDialog from '#lib/components/agent/LookDialog.svelte';
 	import AgentSettings from '#lib/components/agent/AgentSettings.svelte';
 	import InboxPanel from '#lib/components/agent/InboxPanel.svelte';
 	import ProjectDialog from '#lib/components/agent/ProjectDialog.svelte';
@@ -31,17 +29,18 @@
 	import { agentFull, setAgentFull } from '#lib/agent-full.svelte.ts';
 	import { clearAgentNotifications } from '#lib/web-push.ts';
 	import { canSpeak, speak, speechPrefs, stopSpeaking } from '#lib/agent-speech.svelte.ts';
-	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { pageTitle } from '#lib/page-title.svelte.ts';
 	import { loadMine, type FeatureViewId, type FeaturesPublic } from '#lib/agent-features.ts';
 	import FeatureView from '#lib/components/agent/features/FeatureView.svelte';
 	import { session } from '#lib/session.svelte.ts';
+	import { inWindow } from '#lib/desktop/frame.ts';
 	import {
 		accountLook,
 		defaultLook,
 		DEVICE_LOOK,
 		follow,
-		lookStyle,
+		whereLine,
 		sanitizeLook,
 		tokens,
 		type AgentEvent,
@@ -86,7 +85,6 @@
 				tab: 'memory' | 'skills' | 'schedules' | 'map' | 'me' | 'log';
 				only?: boolean;
 		  }
-		| { kind: 'look' }
 		| { kind: 'settings'; section?: 'list' | 'speech' | 'look' | 'models' | 'initiative' | 'mind' }
 		| { kind: 'actions'; chat: ChatInfo }
 		| { kind: 'inbox' }
@@ -261,7 +259,12 @@
 		return () => query.removeEventListener('change', change);
 	});
 	$effect(() => {
-		pageTitle.value = current?.title ? `${current.title} · ${t('nav.agent')}` : t('nav.agent');
+		// In a window the title bar names the program already.
+		pageTitle.value = current?.title
+			? inWindow
+				? current.title
+				: `${current.title} · ${t('nav.agent')}`
+			: t('nav.agent');
 		return () => (pageTitle.value = '');
 	});
 
@@ -353,12 +356,48 @@
 		} catch (e) {
 			error = apiErrorText(e);
 		}
+		api
+			.get<{ schedules?: unknown[] }>('/agent/schedules')
+			.then((r) => (plannedCount = r.schedules?.length ?? 0))
+			.catch(() => (plannedCount = 0));
+	}
+	let plannedCount = $state(0);
+	let ollamaUrl = $state('');
+	const whereText = $derived(
+		whereLine({
+			cluster: status?.source === 'cluster',
+			web: !!status?.web,
+			ollama: ollamaUrl,
+			here: location.hostname,
+		})
+			.map((p) => t(p.key as MessageKey, p.params))
+			.join(' · '),
+	);
+	// PLAN 68: the side bar can be folded away (per device).
+	const FOLD_KEY = 'titanos.agent.side';
+	let folded = $state(readFolded());
+	function readFolded() {
+		try {
+			return localStorage.getItem(FOLD_KEY) === 'folded';
+		} catch {
+			return false;
+		}
+	}
+	function setFolded(on: boolean) {
+		folded = on;
+		try {
+			if (on) localStorage.setItem(FOLD_KEY, 'folded');
+			else localStorage.removeItem(FOLD_KEY);
+		} catch {
+			// Only for this page view.
+		}
 	}
 	async function loadLocations() {
 		if (!status?.admin) return;
 		try {
-			const s = await api.get<{ locations?: Location[] }>('/agent/settings');
+			const s = await api.get<{ locations?: Location[]; ollama?: string }>('/agent/settings');
 			locations = s.locations ?? [];
+			ollamaUrl = s.ollama ?? '';
 		} catch {
 			locations = [];
 		}
@@ -858,7 +897,6 @@
 		projects,
 		current: current?.id,
 		project,
-		host: session.data?.hostname ?? '',
 		admin: status?.admin ?? false,
 		onopen: (id: string, author?: string) => open(id, true, author ?? ''),
 		onnew: () => newChat(''),
@@ -880,8 +918,10 @@
 			menuOpen = false;
 			dialog = { kind: 'notes' };
 		},
-		onlook: () => (dialog = { kind: 'settings', section: 'look' }),
 		onsettings: () => (dialog = { kind: 'settings' }),
+		settingsOn: !!settingsShown,
+		plannedCount,
+		onfold: phone ? undefined : () => setFolded(true),
 		inboxCount,
 		oninbox: () => (dialog = { kind: 'inbox' }),
 		gestures: look.gestures,
@@ -898,64 +938,112 @@
 		},
 		ontitanos: phone || installed ? toTitanOS : undefined,
 	});
+
+	// PLAN 67-1: the menu bar of the desktop – the same actions as the agent's own menu.
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	const agentOn = () => !!status?.enabled && !!status.allowed;
+	registerMenuCommands({
+		'agent.newChat': { run: () => newChat(''), enabled: agentOn },
+		'agent.project': {
+			run: () => (dialog = { kind: 'project', project: null }),
+			enabled: agentOn,
+		},
+		'agent.notes': { run: () => (dialog = { kind: 'notes' }), enabled: agentOn },
+		'agent.knowledge': {
+			run: () => (dialog = { kind: 'knowledge', tab: 'memory' }),
+			enabled: agentOn,
+		},
+		'agent.inbox': { run: () => (dialog = { kind: 'inbox' }), enabled: agentOn },
+		'agent.projects': {
+			items: () => projects.map((p) => ({ id: p.id, text: p.name, checked: project === p.id })),
+			run: (id) => {
+				if (id && projects.some((p) => p.id === id)) newChat(id);
+			},
+		},
+		'agent.model': {
+			items: () =>
+				(status?.models ?? []).map((m) => ({
+					id: m.name,
+					text: m.name,
+					checked: model === m.name,
+				})),
+			run: (id) => {
+				if (id && (status?.models ?? []).some((m) => m.name === id)) model = id;
+			},
+		},
+		'agent.settings': { run: () => (dialog = { kind: 'settings' }), enabled: agentOn },
+	});
 </script>
 
 <svelte:window ontouchstart={touchStart} ontouchmove={touchMove} />
 
-{#snippet chatMenu(info: ChatInfo)}
+{#snippet chatMenu(info: ChatInfo | null)}
 	<span class="more">
 		<Dropdown label={t('ui.more')} icon="more" align="right">
 			{#snippet children(close)}
-				{#if phone}
+				{#if info}
+					{#if phone}
+						<button
+							type="button"
+							role="menuitem"
+							onclick={() => {
+								close();
+								void patch(info, { pinned: !info.pinned });
+							}}
+							><Icon name="pin" size={16} /><span
+								>{info.pinned ? t('agent.unpin') : t('agent.pin')}</span
+							></button
+						>
+					{/if}
 					<button
 						type="button"
 						role="menuitem"
 						onclick={() => {
 							close();
-							void patch(info, { pinned: !info.pinned });
-						}}
-						><Icon name="pin" size={16} /><span
-							>{info.pinned ? t('agent.unpin') : t('agent.pin')}</span
-						></button
+							dialog = { kind: 'rename', chat: info, title: info.title };
+						}}><Icon name="edit" size={16} /><span>{t('agent.rename')}</span></button
 					>
+					<button
+						type="button"
+						role="menuitem"
+						onclick={() => {
+							close();
+							dialog = { kind: 'move', chat: info };
+						}}><Icon name="folder" size={16} /><span>{t('agent.moveToProject')}</span></button
+					>
+					<hr />
+					<a role="menuitem" href={`/api/v1/agent/chats/${info.id}/export`} download onclick={close}
+						><Icon name="download" size={16} /><span>{t('agent.exportMd')}</span></a
+					>
+					<a
+						role="menuitem"
+						href={`/api/v1/agent/chats/${info.id}/export?format=pdf`}
+						download
+						onclick={close}><Icon name="fileText" size={16} /><span>{t('agent.exportPdf')}</span></a
+					>
+					<hr />
 				{/if}
 				<button
 					type="button"
 					role="menuitem"
 					onclick={() => {
 						close();
-						dialog = { kind: 'rename', chat: info, title: info.title };
-					}}><Icon name="edit" size={16} /><span>{t('agent.rename')}</span></button
+						dialog = { kind: 'settings' };
+					}}><Icon name="gear" size={16} /><span>{t('agent.set.title')}</span></button
 				>
-				<button
-					type="button"
-					role="menuitem"
-					onclick={() => {
-						close();
-						dialog = { kind: 'move', chat: info };
-					}}><Icon name="folder" size={16} /><span>{t('agent.moveToProject')}</span></button
-				>
-				<hr />
-				<a role="menuitem" href={`/api/v1/agent/chats/${info.id}/export`} download onclick={close}
-					><Icon name="download" size={16} /><span>{t('agent.exportMd')}</span></a
-				>
-				<a
-					role="menuitem"
-					href={`/api/v1/agent/chats/${info.id}/export?format=pdf`}
-					download
-					onclick={close}><Icon name="fileText" size={16} /><span>{t('agent.exportPdf')}</span></a
-				>
-				<hr />
-				<button
-					type="button"
-					role="menuitem"
-					class="danger"
-					disabled={busy}
-					onclick={() => {
-						close();
-						dialog = { kind: 'delete', chat: info };
-					}}><Icon name="trash" size={16} /><span>{t('agent.delete')}</span></button
-				>
+				{#if info}
+					<hr />
+					<button
+						type="button"
+						role="menuitem"
+						class="danger"
+						disabled={busy}
+						onclick={() => {
+							close();
+							dialog = { kind: 'delete', chat: info };
+						}}><Icon name="trash" size={16} /><span>{t('agent.delete')}</span></button
+					>
+				{/if}
 			{/snippet}
 		</Dropdown>
 	</span>
@@ -966,20 +1054,16 @@
 	class:app
 	class:phone
 	class:keyboard
-	class:glass={look.glass}
-	class:glow={look.glow && !calm}
 	class:calm
-	data-style={look.style}
-	data-bg={look.background}
+	class:framed={inWindow}
 	data-size={look.fontSize}
-	style={lookStyle(look)}
 >
 	{#if error}<div class="notice-error" role="alert">{error}</div>{/if}
 
 	{#if !status}
 		<p class="muted pad">{t('agent.loading')}</p>
 	{:else if !status.enabled}
-		<div class="tile empty-state">
+		<div class="tile ui-card empty-state">
 			<Icon name="sparkle" size={32} />
 			<h1>{t('agent.offTitle')}</h1>
 			<p class="muted">{status.admin ? t('agent.offAdmin') : t('agent.offUser')}</p>
@@ -990,7 +1074,7 @@
 				>{/if}
 		</div>
 	{:else if !status.allowed}
-		<div class="tile empty-state">
+		<div class="tile ui-card empty-state">
 			<h1>{t('agent.notAllowedTitle')}</h1>
 			<p class="muted">{t('agent.notAllowed')}</p>
 			{#if phone || installed}<button type="button" class="btn" onclick={toTitanOS}
@@ -998,7 +1082,7 @@
 				>{/if}
 		</div>
 	{:else if !status.volume}
-		<div class="tile empty-state">
+		<div class="tile ui-card empty-state">
 			<h1>{t('agent.noVolumeTitle')}</h1>
 			<p class="muted">{t('agent.noVolume')}</p>
 			{#if phone || installed}<button type="button" class="btn" onclick={toTitanOS}
@@ -1006,87 +1090,88 @@
 				>{/if}
 		</div>
 	{:else}
-		<div class="layout">
-			{#if !phone}
-				<aside class="side tile"><AgentMenu {...menuProps} /></aside>
+		<div class="layout" class:folded={folded && !phone}>
+			{#if !phone && !folded}
+				<aside class="side"><AgentMenu {...menuProps} /></aside>
 			{/if}
-			<section class="main tile" aria-label={current?.title ?? t('agent.newChat')}>
-				<header class="top">
-					<div class="left">
-						{#if phone}
+			<section class="main" aria-label={current?.title ?? t('agent.newChat')}>
+				{#if phone}
+					<header class="top">
+						<button
+							type="button"
+							class="icon-btn"
+							aria-label={t('agent.menuOpen')}
+							aria-haspopup="dialog"
+							aria-expanded={menuOpen}
+							onclick={() => (menuOpen = true)}
+							><Icon
+								name="menu"
+								size={20}
+							/>{#if chats.some((c) => c.unread || c.state === 'waiting')}<span
+									class="badge"
+									aria-hidden="true"
+								></span>{/if}</button
+						>
+						<strong class="app-name">{t('nav.agent')}</strong>
+						<span class="fill"></span>
+						<button
+							type="button"
+							class="icon-btn"
+							aria-label={t('agent.newChat')}
+							title={t('agent.newChat')}
+							onclick={() => newChat('')}><Icon name="plus" size={20} /></button
+						>
+						{@render chatMenu(currentInfo ?? null)}
+					</header>
+					<div class="chat-head">
+						{#if current}<h1>{current.title}</h1>{/if}
+						{#if current && currentProject}<span class="chip proj"
+								>{currentProject.icon ?? ''} {currentProject.name}</span
+							>{/if}
+						<ModelPicker models={status.models} bind:model bind:think small {calm} />
+					</div>
+				{:else}
+					<header class="top">
+						{#if folded}
 							<button
 								type="button"
-								class="icon-btn"
-								aria-label={t('agent.menuOpen')}
-								aria-haspopup="dialog"
-								aria-expanded={menuOpen}
-								onclick={() => (menuOpen = true)}
-								><Icon
-									name="menu"
-									size={20}
-								/>{#if chats.some((c) => c.unread || c.state === 'waiting')}<span
-										class="badge"
-										aria-hidden="true"
-									></span>{/if}</button
+								class="tool-btn"
+								aria-label={t('agent.sideUnfold')}
+								title={t('agent.sideUnfold')}
+								onclick={() => setFolded(false)}><Icon name="sidebar" size={17} /></button
 							>
 						{/if}
-					</div>
-					<div class="mid">
-						{#if current}
-							<h1>{current.title}</h1>
-							<span class="sub">
-								{#if currentProject}<span class="proj"
-										>{currentProject.icon ?? ''} {currentProject.name} ·</span
-									>{/if}
-								<ModelPicker models={status.models} bind:model bind:think small {calm} />
-							</span>
-						{:else}
-							<ModelPicker models={status.models} bind:model bind:think {calm} />
-						{/if}
-					</div>
-					<div class="right">
-						{#if currentInfo && !phone}
+						<h1>{current?.title || t('agent.newChat')}</h1>
+						{#if current && currentProject}<span class="chip proj"
+								>{currentProject.icon ?? ''} {currentProject.name}</span
+							>{/if}
+						<span class="fill"></span>
+						<ModelPicker models={status.models} bind:model bind:think small {calm} />
+						{#if currentInfo}
 							<button
 								type="button"
-								class="icon-btn"
+								class="tool-btn"
 								class:on={currentInfo.pinned}
 								aria-label={currentInfo.pinned ? t('agent.unpin') : t('agent.pin')}
 								aria-pressed={currentInfo.pinned}
 								title={currentInfo.pinned ? t('agent.unpin') : t('agent.pin')}
 								onclick={() => patch(currentInfo, { pinned: !currentInfo.pinned })}
-								><Icon name="pin" size={17} /></button
+								><Icon name="pin" size={16} /></button
 							>
 						{/if}
-						{#if !phone && !installed}
+						{#if !installed && !inWindow}
 							<button
 								type="button"
-								class="icon-btn"
+								class="tool-btn"
 								aria-label={agentFull.on ? t('agent.withMenu') : t('agent.fullScreen')}
 								title={agentFull.on ? t('agent.withMenu') : t('agent.fullScreen')}
 								onclick={() => setAgentFull(!agentFull.on)}
-								><Icon name={agentFull.on ? 'sidebar' : 'maximize'} size={17} /></button
+								><Icon name={agentFull.on ? 'sidebar' : 'maximize'} size={16} /></button
 							>
 						{/if}
-						{#if currentInfo}{@render chatMenu(currentInfo)}{/if}
-						<button
-							type="button"
-							class="icon-btn"
-							aria-label={t('agent.set.title')}
-							title={t('agent.set.title')}
-							onclick={() => (dialog = { kind: 'settings' })}><Icon name="gear" size={18} /></button
-						>
-						{#if phone || current}
-							<button
-								type="button"
-								class="icon-btn"
-								aria-label={t('agent.newChat')}
-								title={t('agent.newChat')}
-								onclick={() => newChat(phone ? '' : project)}
-								><Icon name="newChat" size={18} /></button
-							>
-						{/if}
-					</div>
-				</header>
+						{@render chatMenu(currentInfo ?? null)}
+					</header>
+				{/if}
 				{#if status.reachable === false}
 					<p class="notice-warn">{t('agent.ollamaDownLong', { error: status.error ?? '' })}</p>
 				{:else if usable.length === 0}
@@ -1142,6 +1227,7 @@
 						onpicknas={() => (dialog = { kind: 'nas' })}
 						onerror={(m) => (error = m)}
 					/>
+					<p class="where">{whereText}</p>
 				</div>
 			</section>
 		</div>
@@ -1210,8 +1296,6 @@
 			void open(id);
 		}}
 	/>
-{:else if dialog?.kind === 'look'}
-	<LookDialog bind:look onclose={() => (dialog = null)} />
 {:else if dialog?.kind === 'actions'}
 	{@const chat = dialog.chat}
 	<!-- PLAN 53: everything you can do with a chat, as a sheet from below. -->
@@ -1236,37 +1320,27 @@
 					dialog = null;
 					void patch(chat, { pinned: !chat.pinned });
 				}}
-				><span class="sq" style:--c="#3b82f6"><Icon name="pin" size={17} /></span>{chat.pinned
+				><span class="sq"><Icon name="pin" size={17} /></span>{chat.pinned
 					? t('agent.unpin')
 					: t('agent.pin')}</button
 			>
 			<button type="button" onclick={() => (dialog = { kind: 'rename', chat, title: chat.title })}
-				><span class="sq" style:--c="#64748b"><Icon name="edit" size={17} /></span>{t(
-					'agent.rename',
-				)}</button
+				><span class="sq"><Icon name="edit" size={17} /></span>{t('agent.rename')}</button
 			>
 			<button type="button" onclick={() => (dialog = { kind: 'move', chat })}
-				><span class="sq" style:--c="#8b5cf6"><Icon name="folder" size={17} /></span>{t(
-					'agent.moveToProject',
-				)}</button
+				><span class="sq"><Icon name="folder" size={17} /></span>{t('agent.moveToProject')}</button
 			>
 			<a href={`/api/v1/agent/chats/${chat.id}/export`} download onclick={() => (dialog = null)}
-				><span class="sq" style:--c="#14b8a6"><Icon name="download" size={17} /></span>{t(
-					'agent.exportMd',
-				)}</a
+				><span class="sq"><Icon name="download" size={17} /></span>{t('agent.exportMd')}</a
 			>
 			<a
 				href={`/api/v1/agent/chats/${chat.id}/export?format=pdf`}
 				download
 				onclick={() => (dialog = null)}
-				><span class="sq" style:--c="#0ea5e9"><Icon name="fileText" size={17} /></span>{t(
-					'agent.exportPdf',
-				)}</a
+				><span class="sq"><Icon name="fileText" size={17} /></span>{t('agent.exportPdf')}</a
 			>
 			<button type="button" class="danger" onclick={() => (dialog = { kind: 'delete', chat })}
-				><span class="sq" style:--c="#e11d48"><Icon name="trash" size={17} /></span>{t(
-					'agent.delete',
-				)}</button
+				><span class="sq"><Icon name="trash" size={17} /></span>{t('agent.delete')}</button
 			>
 		</div>
 	</div>
@@ -1400,9 +1474,7 @@
 		position: fixed;
 		inset: 0;
 		z-index: 70;
-		background: rgb(3 6 14 / 0.5);
-		-webkit-backdrop-filter: blur(8px);
-		backdrop-filter: blur(8px);
+		background: rgb(0 0 0 / 0.5);
 	}
 	.action-sheet {
 		position: fixed;
@@ -1413,12 +1485,10 @@
 		max-width: 520px;
 		margin: 0 auto;
 		padding: 8px 14px calc(env(safe-area-inset-bottom, 0px) + 18px);
-		border-radius: 26px 26px 0 0;
+		border-radius: 18px 18px 0 0;
 		color: var(--text);
-		background: color-mix(in srgb, var(--surface) 82%, transparent);
-		-webkit-backdrop-filter: blur(30px) saturate(170%);
-		backdrop-filter: blur(30px) saturate(170%);
-		border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+		background: var(--bg);
+		border-top: 1px solid var(--border);
 		animation: sheet-up 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
 	}
 	@keyframes sheet-up {
@@ -1445,9 +1515,10 @@
 		font-size: var(--text-md);
 	}
 	.sheet-list {
-		border-radius: 20px;
+		border-radius: var(--radius-tile);
 		overflow: hidden;
-		border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+		background: var(--surface);
+		border: 1px solid var(--border);
 	}
 	.sheet-list > * {
 		display: flex;
@@ -1457,7 +1528,7 @@
 		min-height: 54px;
 		padding: 8px 12px;
 		border: 0;
-		border-top: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+		border-top: 1px solid var(--border);
 		background: none;
 		color: var(--text);
 		font: inherit;
@@ -1469,109 +1540,39 @@
 		border-top: 0;
 	}
 	.sheet-list .danger {
-		color: var(--danger, #fb7185);
+		color: var(--error-text);
 	}
 	.sheet-list .sq {
-		width: 34px;
-		height: 34px;
-		border-radius: 11px;
+		width: 32px;
+		height: 32px;
+		border-radius: var(--radius-ctl);
 		display: grid;
 		place-items: center;
-		color: #fff;
-		background: linear-gradient(145deg, var(--c), color-mix(in srgb, var(--c) 45%, #0b1020));
+		color: var(--muted);
+		background: var(--chip);
 	}
+	/* PLAN 68: the agent in the design language of every window: no
+	   background of its own, colors from the theme, the side bar like the
+	   side bar of a window, the chat at most 760 px wide in the middle. */
 	.agent {
-		--ag-orb: conic-gradient(
-			from 210deg,
-			var(--accent),
-			var(--ag-accent-2, var(--accent)),
-			color-mix(in srgb, var(--accent) 45%, #fff),
-			var(--accent)
-		);
+		/* Edge to edge in the window or the browser tab: the page around it
+		   gives up its padding (below); TitanOS's banners stay above it. */
 		position: relative;
-		isolation: isolate;
+		flex: 1;
+		min-height: 0;
 		display: flex;
 		flex-direction: column;
-		gap: var(--gap);
-		height: calc(100dvh - var(--header-height, 0px) - 2 * var(--page-pad));
-		min-height: 420px;
+		background: var(--bg);
+		color: var(--text);
 	}
-	.agent[data-bg]:not([data-bg='none'])::before {
-		content: '';
-		position: absolute;
-		inset: 0;
-		z-index: -1;
-		pointer-events: none;
-		border-radius: var(--radius-tile);
-	}
-	.agent {
-		overflow: hidden;
-		border-radius: var(--radius-tile);
-	}
-	.agent.app {
-		border-radius: 0;
-	}
-	/* PLAN 53: the agent has its own lively look – a slowly moving aurora
-	   behind glass. Motion off, calm or reduced motion keep it still. */
-	.agent[data-bg='aurora']::before {
-		inset: -12%;
-		filter: blur(48px) saturate(140%);
-		opacity: 0.9;
-		background:
-			radial-gradient(
-				40% 35% at 18% 20%,
-				color-mix(in srgb, var(--accent) 55%, transparent),
-				transparent 70%
-			),
-			radial-gradient(
-				35% 30% at 85% 12%,
-				color-mix(in srgb, var(--ag-accent-2, var(--accent)) 45%, transparent),
-				transparent 70%
-			),
-			radial-gradient(45% 40% at 70% 88%, rgb(34 211 238 / 0.22), transparent 70%),
-			radial-gradient(
-				40% 35% at 8% 92%,
-				color-mix(in srgb, var(--ag-accent-2, var(--accent)) 25%, transparent),
-				transparent 70%
-			);
-		animation: ag-aurora 28s ease-in-out infinite alternate;
-	}
-	.agent.calm[data-bg]::before {
-		animation: none;
-	}
-	@keyframes ag-aurora {
-		0% {
-			transform: translate3d(0, 0, 0) scale(1);
-		}
-		50% {
-			transform: translate3d(3%, -2%, 0) scale(1.06) rotate(2deg);
-		}
-		100% {
-			transform: translate3d(-3%, 2%, 0) scale(1.03) rotate(-2deg);
-		}
-	}
-	@media (prefers-reduced-motion: reduce) {
-		.agent[data-bg]::before {
-			animation: none;
-		}
-	}
-	.agent[data-bg='ocean']::before {
-		background: linear-gradient(
-			170deg,
-			color-mix(in srgb, var(--accent) 18%, transparent),
-			transparent 60%
-		);
-	}
-	.agent[data-bg='forest']::before {
-		background: radial-gradient(
-			70% 60% at 50% 100%,
-			color-mix(in srgb, var(--ag-accent-2, var(--accent)) 22%, transparent),
-			transparent 70%
-		);
-	}
-	.agent.app {
-		height: 100dvh;
+	:global(main:has(> .agent:not(.phone))) {
+		display: flex;
+		flex-direction: column;
+		padding: 0;
 		gap: 0;
+		height: 100dvh;
+		min-height: 0;
+		overflow: hidden;
 	}
 	:global(html:has(.agent.app.phone)),
 	:global(body:has(.agent.app.phone)) {
@@ -1591,34 +1592,19 @@
 		flex: 1;
 		min-height: 0;
 		display: grid;
-		grid-template-columns: 280px minmax(0, 1fr);
-		gap: var(--gap);
+		grid-template-columns: 220px minmax(0, 1fr);
 	}
-	.agent.app .layout {
-		padding: 12px;
-	}
+	.layout.folded,
 	.agent.phone .layout {
 		grid-template-columns: minmax(0, 1fr);
-		padding: 0;
 	}
 	.side {
-		padding: 0;
-		overflow: hidden;
 		min-height: 0;
+		overflow: hidden;
+		border-right: 1px solid var(--border);
+		background: color-mix(in srgb, var(--surface) 70%, transparent);
 	}
-	.agent.glass .side,
-	.agent.glass .main {
-		background: color-mix(in srgb, var(--surface) calc(var(--ag-alpha, 0.55) * 100%), transparent);
-		-webkit-backdrop-filter: blur(26px) saturate(170%);
-		backdrop-filter: blur(26px) saturate(170%);
-		border-color: color-mix(in srgb, var(--text) 10%, transparent);
-		box-shadow:
-			inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent),
-			0 20px 50px -25px rgb(0 0 0 / 0.7);
-	}
-	/* Text size of the app (PLAN 53) through the root font size, not CSS
-	   zoom: WebKit drew zoomed text over the glass layers blurred
-	   (PLAN 59, title on the iPhone). */
+	/* Text size of the app (PLAN 53) through the root font size. */
 	:global(html:has(.agent[data-size='s'])) {
 		font-size: calc(16px * var(--font-scale) * 0.93);
 	}
@@ -1629,82 +1615,78 @@
 		display: flex;
 		flex-direction: column;
 		min-height: 0;
-		padding: 0;
+		min-width: 0;
 		overflow: hidden;
 	}
-	.agent.phone .main {
-		border: 0;
-		border-radius: 0;
-		background: transparent;
-		-webkit-backdrop-filter: none;
-		backdrop-filter: none;
-		box-shadow: none;
-	}
+	/* The head of the chat: title, project, model, pin and more. */
 	.top {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+		display: flex;
 		align-items: center;
 		gap: 8px;
-		min-height: 58px;
-		padding: 8px 12px;
-		border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-	}
-	.agent.phone .top {
-		padding: calc(env(safe-area-inset-top, 0px) + 6px) 8px 6px;
-		border-bottom: 0;
-		grid-template-columns: 44px minmax(0, 1fr) auto;
-	}
-	.left,
-	.right {
-		display: flex;
-		align-items: center;
-		gap: 4px;
-	}
-	.right {
-		justify-content: flex-end;
-	}
-	.mid {
+		min-height: 56px;
+		padding: 10px 20px;
+		border-bottom: 1px solid var(--border);
 		min-width: 0;
-		max-width: min(560px, 60vw);
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		text-align: center;
 	}
-	.agent.phone .mid {
-		max-width: none;
-	}
-	.mid h1 {
+	.top h1 {
 		margin: 0;
-		max-width: 100%;
+		min-width: 0;
 		font-size: var(--text-md);
 		font-weight: 600;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
-	.sub {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 2px;
-		max-width: 100%;
-		font-size: var(--text-xs);
-		color: var(--muted);
-		white-space: nowrap;
+	.fill {
+		flex: 1;
 	}
 	.proj {
+		flex: none;
+		max-width: 40%;
 		overflow: hidden;
 		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
-	.icon-btn,
-	.more :global(.btn) {
+	.chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 4px 10px;
+		border-radius: 999px;
+		background: var(--chip);
+		color: var(--text);
+		font-size: var(--text-sm);
+	}
+	.tool-btn,
+	.top .more :global(.btn) {
+		position: relative;
+		width: 36px;
+		height: 36px;
+		min-height: 36px;
+		padding: 0;
+		border-radius: var(--radius-ctl);
+		display: grid;
+		place-items: center;
+		border: 1px solid var(--border);
+		background: none;
+		color: var(--text);
+		cursor: pointer;
+		flex: none;
+	}
+	.tool-btn:hover,
+	.top .more :global(.btn:hover) {
+		background: color-mix(in srgb, var(--text) 7%, transparent);
+	}
+	.tool-btn.on {
+		color: var(--accent);
+		border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+	}
+	.icon-btn {
 		position: relative;
 		width: 40px;
 		height: 40px;
-		min-height: 40px;
 		padding: 0;
-		border-radius: 50%;
+		border-radius: var(--radius-ctl);
 		display: grid;
 		place-items: center;
 		border: 0;
@@ -1712,14 +1694,44 @@
 		color: var(--text);
 		cursor: pointer;
 		flex: none;
-		transition: background 0.15s ease;
 	}
-	.icon-btn:hover,
-	.more :global(.btn:hover) {
+	.icon-btn:hover {
 		background: color-mix(in srgb, var(--text) 8%, transparent);
 	}
-	.icon-btn.on {
-		color: var(--accent);
+	.agent.phone .top {
+		min-height: 48px;
+		padding: calc(env(safe-area-inset-top, 0px) + 4px) 6px 4px;
+		gap: 2px;
+	}
+	.agent.phone .top .more :global(.btn) {
+		border: 0;
+		width: 40px;
+		height: 40px;
+	}
+	.app-name {
+		margin-left: 4px;
+		font-size: var(--text-md);
+		font-weight: 600;
+	}
+	.chat-head {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 8px;
+		padding: 10px 14px;
+		border-bottom: 1px solid var(--border);
+		min-width: 0;
+	}
+	.chat-head h1 {
+		margin: 0;
+		min-width: 0;
+		max-width: 100%;
+		font-size: var(--text-md);
+		font-weight: 600;
+		overflow-wrap: anywhere;
+	}
+	.chat-head .proj {
+		max-width: 100%;
 	}
 	.badge {
 		position: absolute;
@@ -1729,23 +1741,34 @@
 		height: 8px;
 		border-radius: 50%;
 		background: var(--accent);
-		box-shadow: 0 0 8px var(--accent);
 	}
 	.notice-warn {
 		margin: var(--space-2) var(--space-4) 0;
 	}
 	.dock {
-		padding: var(--space-3) var(--space-5) var(--space-4);
+		padding: 12px 24px 14px;
 	}
-	.dock :global(.composer) {
-		max-width: 800px;
-		margin: 0 auto;
+	.dock :global(.composer),
+	.where {
+		max-width: 760px;
+		margin-left: auto;
+		margin-right: auto;
+	}
+	.where {
+		margin-top: 6px;
+		margin-bottom: 0;
+		text-align: center;
+		font-size: var(--text-xs);
+		color: var(--muted);
 	}
 	.agent.phone .dock {
-		padding: 4px 12px calc(env(safe-area-inset-bottom, 0px) + 8px);
+		padding: 8px 12px calc(env(safe-area-inset-bottom, 0px) + 8px);
 	}
 	.agent.phone.keyboard .dock {
 		padding-bottom: 6px;
+	}
+	.agent.phone.keyboard .where {
+		display: none;
 	}
 	.scrim {
 		position: fixed;
@@ -1754,8 +1777,6 @@
 		border: 0;
 		padding: 0;
 		background: rgb(0 0 0 / 0.5);
-		-webkit-backdrop-filter: blur(3px);
-		backdrop-filter: blur(3px);
 		cursor: default;
 	}
 	.drawer {
@@ -1764,13 +1785,11 @@
 		top: 0;
 		bottom: 0;
 		left: 0;
-		width: min(84%, 340px);
+		width: min(84%, 320px);
 		padding-top: env(safe-area-inset-top, 0px);
-		background: color-mix(in srgb, var(--surface) 78%, transparent);
-		-webkit-backdrop-filter: blur(28px) saturate(170%);
-		backdrop-filter: blur(28px) saturate(170%);
-		border-right: 1px solid var(--glass-border, var(--border));
-		box-shadow: 20px 0 50px -20px rgb(0 0 0 / 0.7);
+		background: var(--bg);
+		border-right: 1px solid var(--border);
+		box-shadow: var(--shadow-menu, 0 18px 44px rgb(0 0 0 / 0.5));
 	}
 	.empty-state {
 		display: flex;

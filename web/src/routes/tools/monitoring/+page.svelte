@@ -92,6 +92,14 @@
 			busy = false;
 		}
 	}
+
+	// PLAN 67-1: the menu bar of the desktop – refresh and export of the history.
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	registerMenuCommands({
+		'monitor.refresh': { run: () => void load(), enabled: () => !busy },
+		'monitor.export': { run: () => void download('csv'), enabled: () => !busy },
+		'monitor.exportJson': { run: () => void download('json'), enabled: () => !busy },
+	});
 </script>
 
 <NavigationGuard {dirty} />

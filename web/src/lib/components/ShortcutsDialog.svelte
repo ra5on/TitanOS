@@ -3,8 +3,9 @@
 	import Dialog from './Dialog.svelte';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 
-	type Props = { admin: boolean; onclose: () => void };
-	let { admin, onclose }: Props = $props();
+	/** desktop: also the keys of the desktop and its menu bar (PLAN 67-1). */
+	type Props = { admin: boolean; desktop?: boolean; onclose: () => void };
+	let { admin, desktop = false, onclose }: Props = $props();
 
 	const mac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 	const mod = mac ? '⌘' : 'Strg';
@@ -17,6 +18,14 @@
 				{ keys: ['?'], label: 'shortcuts.help', show: true },
 				{ keys: ['F1'], label: 'shortcuts.files', show: true },
 				{ keys: ['Esc'], label: 'shortcuts.escape', show: true },
+				{ keys: ['Alt'], label: 'menubar.short.menubar', show: desktop },
+				{ keys: ['F10'], label: 'menubar.short.menubar', show: desktop },
+				{ keys: ['Strg', 'Leertaste'], label: 'menubar.short.launcher', show: desktop },
+				{ keys: ['Alt', 'Q'], label: 'menubar.short.switcher', show: desktop },
+				{ keys: ['Alt', 'W'], label: 'menubar.short.close', show: desktop },
+				{ keys: ['Alt', 'M'], label: 'menubar.short.minimize', show: desktop },
+				{ keys: ['Alt', '← → ↑'], label: 'menubar.short.snap', show: desktop },
+				{ keys: ['Alt', 'K'], label: 'menubar.short.showDesktop', show: desktop },
 			] satisfies { keys: string[]; label: MessageKey; show: boolean }[]
 		).filter((row) => row.show),
 	);
@@ -24,10 +33,14 @@
 
 <Dialog title={t('shortcuts.title')} {onclose}>
 	<dl class="keys">
-		{#each rows as row (row.label)}
+		{#each rows as row (row.label + row.keys.join())}
 			<dt>
 				{#each row.keys as key, index (index)}{#if index}<span class="plus">+</span>{/if}<kbd
-						>{key === 'Strg' ? t('shortcuts.ctrl') : key}</kbd
+						>{key === 'Strg'
+							? t('shortcuts.ctrl')
+							: key === 'Leertaste'
+								? t('shortcuts.space')
+								: key}</kbd
 					>{/each}
 			</dt>
 			<dd>{t(row.label)}</dd>

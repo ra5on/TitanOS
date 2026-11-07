@@ -183,12 +183,17 @@ export function focus(id: string) {
 }
 
 /** The size a new window gets: most of the desktop, smaller screens get all of it. */
-function newGeometry(index: number) {
+function newGeometry(index: number, app = '') {
 	const aw = wm.area.w - wm.inset.l - wm.inset.r;
 	const ah = wm.area.h - wm.inset.b;
 	if (wm.area.w < 1280) return { x: wm.inset.l, y: 0, w: aw, h: ah, snap: 'max' as Snap };
-	const w = Math.min(1300, Math.round(aw * 0.78));
-	const h = Math.min(900, Math.round(ah * 0.9));
+	let w = Math.min(1300, Math.round(aw * 0.78));
+	let h = Math.min(900, Math.round(ah * 0.9));
+	// PLAN 67: Systemsteuerung (side list, tabs and cards) opens larger when there is room.
+	if (app === 'app:settings') {
+		w = Math.min(Math.max(w, 1180), aw - 16);
+		h = Math.min(Math.max(h, 830), ah - 16);
+	}
 	const offset = (index % 6) * 28;
 	return {
 		x: wm.inset.l + Math.max(0, Math.round((aw - w) / 2) + offset - 60),
@@ -243,7 +248,7 @@ export function openWindow(
 		focus(existing.id);
 		return existing.id;
 	}
-	const g = newGeometry(wm.windows.length);
+	const g = newGeometry(wm.windows.length, app);
 	const win: Win = {
 		id: 'w' + Date.now().toString(36) + (counter++).toString(36),
 		app,
@@ -378,6 +383,11 @@ const frames = new Map<string, HTMLIFrameElement>();
 export function registerFrame(id: string, frame: HTMLIFrameElement | null) {
 	if (frame) frames.set(id, frame);
 	else frames.delete(id);
+}
+
+/** PLAN 67-1: the frame of a window (pages of TitanOS), for the menu bar. */
+export function frameOf(id: string): HTMLIFrameElement | undefined {
+	return frames.get(id);
 }
 
 /** Shows another page of the program in its window. */

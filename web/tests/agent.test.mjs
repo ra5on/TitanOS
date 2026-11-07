@@ -8,6 +8,8 @@ import {
 	parseEvent,
 	presetOf,
 	sanitizeLook,
+	approvalTitle,
+	whereLine,
 	accountLook,
 	stepDetail,
 	toolMode,
@@ -92,10 +94,23 @@ test('levels, step details and the look', () => {
 	assert.equal(levelLabel('xhigh', 'en'), 'Extra high');
 	assert.equal(levelLabel('turbo', 'de'), 'turbo');
 	assert.equal(stepDetail({ root: 'share/Docs', path: 'NAS' }), 'Docs › NAS');
-	assert.deepEqual(sanitizeLook({ accent: 'aurora', style: 'nope', glow: false }).style, 'bubbles');
-	assert.equal(sanitizeLook({ accent: 'aurora', glow: false }).glow, false);
-	// PLAN 53: the agent has its own look by default and the app settings.
-	assert.equal(sanitizeLook(null).accent, 'aurora');
+	// PLAN 68: the agent has no look of its own any more. A stored look of
+	// an older version reads without error; its visual fields are dropped.
+	const old = sanitizeLook({
+		accent: 'aurora',
+		style: 'clean',
+		background: 'ocean',
+		glass: true,
+		glow: false,
+		glassLevel: 400,
+		typing: false,
+		read: true,
+	});
+	for (const k of ['accent', 'style', 'background', 'glass', 'glow', 'glassLevel'])
+		assert.ok(!(k in old) && !(k in accountLook(old)), k);
+	assert.equal(old.typing, false);
+	assert.equal(old.read, true);
+	assert.equal(sanitizeLook(null).typing, true);
 	const app = sanitizeLook({
 		swipeLeft: 'menu',
 		swipeRight: 'wat',
@@ -105,9 +120,102 @@ test('levels, step details and the look', () => {
 	});
 	assert.equal(app.swipeLeft, 'menu');
 	assert.equal(app.swipeRight, 'pin');
-	assert.equal(app.glassLevel, 100);
 	assert.equal(app.motion, 'off');
 	assert.equal(app.rate, 2);
 	assert.ok(!('vibrate' in accountLook(app)) && !('fontSize' in accountLook(app)));
 	assert.equal(accountLook(app).swipeLeft, 'menu');
+});
+
+test('the line under the composer only says what it knows (PLAN 68)', () => {
+	const keys = (o) => whereLine(o).map((p) => p.key);
+	const base = { cluster: false, web: false, ollama: '', here: 'nas' };
+	assert.deepEqual(keys({ ...base, ollama: 'http://127.0.0.1:11434' }), [
+		'agent.whereLocal',
+		'agent.whereStays',
+	]);
+	assert.deepEqual(keys({ ...base, ollama: 'http://nas:11434' }), [
+		'agent.whereLocal',
+		'agent.whereStays',
+	]);
+	assert.deepEqual(whereLine({ ...base, ollama: 'http://192.168.1.5:11434' }), [
+		{ key: 'agent.whereHost', params: { host: '192.168.1.5' } },
+		{ key: 'agent.whereStays' },
+	]);
+	// Somewhere outside the home network: no promise about the network.
+	assert.deepEqual(keys({ ...base, ollama: 'https://ollama.example.org' }), [
+		'agent.whereHost',
+		'agent.whereChats',
+	]);
+	// Unknown address (accounts that are no administrators), web search, cluster.
+	assert.deepEqual(keys(base), ['agent.whereOwn', 'agent.whereChats']);
+	assert.deepEqual(keys({ ...base, ollama: 'http://127.0.0.1:11434', web: true }), [
+		'agent.whereLocal',
+		'agent.whereWeb',
+	]);
+	assert.deepEqual(keys({ ...base, cluster: true, ollama: 'http://127.0.0.1:1' }), [
+		'agent.whereCluster',
+		'agent.whereChats',
+	]);
+});
+
+test('a waiting step gets a plain title (PLAN 68)', () => {
+	assert.deepEqual(
+		approvalTitle({
+			tool: 'vm_action',
+			args: { name: 'HAOS', action: 'update' },
+			summary: 'vm.update (name=HAOS)',
+		}),
+		{ key: 'vm.update', name: 'HAOS' },
+	);
+	// From the tool and its action when the summary names no card.
+	assert.deepEqual(
+		approvalTitle({
+			tool: 'container_action',
+			args: { container: 'web', action: 'restart' },
+			summary: '',
+		}),
+		{ key: 'container.restart', name: 'web' },
+	);
+	assert.deepEqual(
+		approvalTitle({
+			tool: 'vm_action',
+			args: { vm: 'Win', action: 'remove_with_disks' },
+			summary: 'x',
+		}),
+		{ key: 'vm.purge', name: 'Win' },
+	);
+	assert.deepEqual(
+		approvalTitle({
+			tool: 'file_write',
+			args: {},
+			summary: 'file.write (path=NAS/Doku, x.docx, root=share/Documents)',
+		}),
+		{ key: 'file.write', name: 'Doku, x.docx' },
+	);
+	assert.deepEqual(
+		approvalTitle({ tool: 'power_action', args: { action: 'reboot' }, summary: 'power.reboot' }),
+		{
+			key: 'power.reboot',
+			name: '',
+		},
+	);
+	// A rename names what is renamed, not where it goes.
+	assert.deepEqual(
+		approvalTitle({
+			tool: 'file_rename',
+			args: {},
+			summary: 'file.rename (from=Scans/a.pdf, root=share/Documents, to=Archiv/Rechnung.pdf)',
+		}),
+		{ key: 'file.rename', name: 'a.pdf' },
+	);
+	assert.deepEqual(
+		approvalTitle({
+			tool: 'files_move',
+			args: {},
+			summary: 'files.move (count=3, root=share/Documents)',
+		}),
+		{ key: 'files.move', name: '' },
+	);
+	// Unknown: the page shows the summary.
+	assert.equal(approvalTitle({ tool: 'code_run', args: {}, summary: 'print(1)' }), null);
 });

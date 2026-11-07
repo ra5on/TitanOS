@@ -174,6 +174,35 @@
 					{ name: current.title, time },
 				);
 	}
+
+	// PLAN 67-1: the menu bar of the Terminal window (only the full terminal page offers it).
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	const live = () => terminal.full && !!screen;
+	registerMenuCommands({
+		'terminal.newTab': { run: addNasShell, enabled: () => terminal.full && !!info?.nasShell },
+		'terminal.consoleOf': { run: () => void openMenu(), enabled: () => terminal.full },
+		'terminal.closeTab': {
+			run: () => current && end(current.id, current.title, current.kind),
+			enabled: () => terminal.full && !!current,
+		},
+		'terminal.copy': { run: () => screen?.copy(), enabled: live },
+		'terminal.paste': { run: () => void screen?.paste(), enabled: live },
+		'terminal.selectAll': { run: () => screen?.selectAll(), enabled: live },
+		'terminal.find': { run: () => (searching = true), enabled: live },
+		'terminal.clear': { run: () => screen?.clear(), enabled: live },
+		'terminal.fullscreen': {
+			run: () => void document.documentElement.requestFullscreen?.().catch(() => {}),
+			enabled: () => terminal.full && !!document.fullscreenEnabled,
+		},
+		'terminal.fontUp': {
+			run: () => setFont(terminal.fontSize + 1),
+			enabled: () => terminal.full && terminal.fontSize < 18,
+		},
+		'terminal.fontDown': {
+			run: () => setFont(terminal.fontSize - 1),
+			enabled: () => terminal.full && terminal.fontSize > 11,
+		},
+	});
 </script>
 
 <svelte:window

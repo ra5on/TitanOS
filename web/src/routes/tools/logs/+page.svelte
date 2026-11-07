@@ -182,6 +182,65 @@
 	function level(priority: number): 'error' | 'warn' | '' {
 		return priority <= 3 ? 'error' : priority === 4 ? 'warn' : '';
 	}
+
+	// PLAN 67-1: the menu bar of the desktop – the same filters and actions as the page.
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	const LEVELS = [
+		[3, 'tools.level.error'],
+		[4, 'tools.level.warning'],
+		[6, 'tools.level.info'],
+		[7, 'tools.level.debug'],
+	] as const;
+	const RANGE_LABELS = [
+		['', 'tools.range.boot'],
+		['24h', 'tools.range.24h'],
+		['1h', 'tools.range.1h'],
+		['15m', 'tools.range.15m'],
+	] as const;
+	registerMenuCommands({
+		'logs.export': { run: exportLines, enabled: () => entries.length > 0 },
+		'logs.exportPrevious': () => void exportPrevious(),
+		'logs.copy': { run: () => void copyLines(), enabled: () => entries.length > 0 },
+		'logs.find': () =>
+			document.querySelector<HTMLInputElement>('.filters input[type=search]')?.focus(),
+		'logs.follow': { run: () => (follow = !follow), checked: () => follow },
+		'logs.source': {
+			items: () =>
+				SOURCES.map((name) => ({
+					id: name,
+					text: t(`tools.source.${name || 'all'}`),
+					checked: source === name,
+				})),
+			run: (id) => {
+				const next = SOURCES.find((name) => name === id);
+				if (next !== undefined) source = next;
+			},
+		},
+		'logs.level': {
+			items: () =>
+				LEVELS.map(([value, label]) => ({
+					id: String(value),
+					text: t(label),
+					checked: priority === value,
+				})),
+			run: (id) => {
+				const next = LEVELS.find(([value]) => String(value) === id);
+				if (next) priority = next[0];
+			},
+		},
+		'logs.range': {
+			items: () =>
+				RANGE_LABELS.map(([value, label]) => ({
+					id: value,
+					text: t(label),
+					checked: range === value,
+				})),
+			run: (id) => {
+				const next = RANGE_LABELS.find(([value]) => value === id);
+				if (next) range = next[0];
+			},
+		},
+	});
 </script>
 
 <PageHead title={t('tools.logs')} />

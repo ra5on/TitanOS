@@ -78,6 +78,14 @@
 	}
 	const driver = (name: string) =>
 		name ? t('hwcheck.driver', { driver: name }) : t('hwcheck.noDriver');
+
+	// PLAN 67-1: the menu bar of the desktop – run the check, export the result.
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	registerMenuCommands({
+		'monitor.check': { run: () => void check(), enabled: () => !running },
+		'monitor.export': { run: () => void save('text'), enabled: () => !!report },
+		'monitor.exportJson': { run: () => void save('json'), enabled: () => !!report },
+	});
 </script>
 
 <PageHead title={t('hwcheck.title')}>

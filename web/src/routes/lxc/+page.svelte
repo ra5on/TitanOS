@@ -139,6 +139,73 @@
 		if (!c.available) return t('lxc.unavailable');
 		return t(c.state === 'running' ? 'lxc.state.running' : 'lxc.state.stopped');
 	}
+
+	// PLAN 67-1: the menu bar of the desktop acts on the container shown.
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	const ct = () => selected;
+	const ctOn = () => selected?.state === 'running';
+	const ctFree = () => !!selected && !readOnly && busy !== selected.name;
+	registerMenuCommands({
+		'lxc.new': { run: () => (form = {}), enabled: () => !!list && !readOnly },
+		'lxc.start': {
+			run: () => ct() && action(ct()!, 'start'),
+			enabled: () => ctFree() && !ctOn() && !ct()?.job && !!ct()?.available,
+		},
+		'lxc.stop': { run: () => ct() && action(ct()!, 'stop'), enabled: () => ctFree() && ctOn() },
+		'lxc.restart': {
+			run: () => ct() && action(ct()!, 'restart'),
+			enabled: () => ctFree() && ctOn(),
+		},
+		'lxc.kill': {
+			run: () => {
+				const c = ct();
+				if (!c) return;
+				confirming = {
+					title: t('lxc.killTitle'),
+					text: t('lxc.killText', { name: containerLabel(c) }),
+					label: t('lxc.kill'),
+					run: () => action(c, 'kill'),
+				};
+			},
+			enabled: () => ctFree() && ctOn(),
+		},
+		'lxc.shell': {
+			run: () => ct() && addLXCConsole(ct()!.name, containerLabel(ct()!)),
+			enabled: () => ctFree() && ctOn(),
+		},
+		'lxc.console': {
+			run: () => ct() && addLXCConsole(ct()!.name, containerLabel(ct()!), 'console'),
+			enabled: () => ctFree() && ctOn(),
+		},
+		'lxc.edit': {
+			run: () => ct() && (form = { existing: ct()! }),
+			enabled: () => !!ct() && busy !== ct()!.name && ct()!.job?.state !== 'running',
+		},
+		'lxc.snapshot': {
+			run: () => {
+				const c = ct();
+				if (c) snapshotAction(c, () => api.post(`/lxc/${encodeURIComponent(c.name)}/snapshots`));
+			},
+			enabled: () => ctFree() && !!ct()?.btrfs && !!snapshots && !ct()?.job,
+		},
+		'lxc.remove': {
+			run: () => ct() && ((deleteData = false), (removing = ct())),
+			enabled: () => ctFree() && !ctOn() && ct()?.job?.state !== 'running',
+		},
+		'lxc.show': {
+			items: () =>
+				(list?.containers ?? []).map((c) => ({
+					id: c.name,
+					text: containerLabel(c),
+					checked: c.name === selected?.name,
+				})),
+			run: (name) => {
+				const c = list?.containers.find((x) => x.name === name);
+				if (c) choose(c);
+			},
+		},
+		'lxc.refresh': load,
+	});
 </script>
 
 <PageHead title={t('lxc.title')}>

@@ -882,6 +882,121 @@
 			});
 		upload(files);
 	}
+
+	// PLAN 67-1: the menu bar of the desktop runs the same commands as the bars.
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	import { hasTrash } from './commands.ts';
+	const canWrite = () => !!root && writable && !trash;
+	const some = () => selected.length > 0 && !trash;
+	registerMenuCommands({
+		'files.mkdir': { run: () => command('mkdir'), enabled: canWrite },
+		'files.newFile': { run: () => command('newFile'), enabled: canWrite },
+		'files.upload': { run: () => command('upload'), enabled: canWrite },
+		'files.uploadFolder': { run: () => command('uploadFolder'), enabled: canWrite },
+		'files.download': { run: () => command('download'), enabled: some },
+		'files.zip': {
+			run: () => (downloadPaths = selected.map((name) => join(dir, name))),
+			enabled: some,
+		},
+		'files.rename': {
+			run: () => command('rename'),
+			enabled: () => canWrite() && selected.length === 1,
+		},
+		'files.delete': { run: () => command('delete'), enabled: () => canWrite() && some() },
+		'files.trash': { run: () => command('trash'), enabled: () => hasTrash(root) },
+		'files.cut': { run: () => command('cut'), enabled: () => canWrite() && some() },
+		'files.copy': { run: () => command('clipboardCopy'), enabled: some },
+		'files.paste': {
+			run: () => command('paste'),
+			enabled: () => canWrite() && !!clipboard.content,
+		},
+		'files.selectAll': { run: () => command('selectAll'), enabled: () => !!root && !trash },
+		'files.search': { run: () => command('deepSearch'), enabled: () => !!root },
+		...Object.fromEntries(
+			(['list', 'small', 'large'] as const).map((v) => [
+				'files.view.' + v,
+				{ run: () => command(v), checked: () => prefs.view === v },
+			]),
+		),
+		...Object.fromEntries(
+			(['name', 'size', 'modified'] as const).map((s) => [
+				'files.sort.' + s,
+				{ run: () => prefs.sort !== s && prefs.sortBy(s), checked: () => prefs.sort === s },
+			]),
+		),
+		'files.hidden': { run: () => command('showHidden'), checked: () => prefs.showHidden },
+		'files.twoPanes': { run: () => command('twoPanes'), checked: () => prefs.split },
+		'files.back': { run: () => command('back'), enabled: () => !!steps.back.length },
+		'files.forward': { run: () => command('forward'), enabled: () => !!steps.forward.length },
+		'files.up': { run: () => command('up'), enabled: () => !!root && dir !== '' },
+		'files.goto': { run: () => command('editPath'), enabled: () => !!root },
+		'files.favorites': () => (favoriteManager = true),
+		'files.preview': { run: () => one() && command('preview', one()), enabled: () => !!one() },
+		'files.properties': {
+			run: () => one() && command('properties', one()),
+			enabled: () => !!one(),
+		},
+		'files.folderView': {
+			run: () => command('folderView'),
+			enabled: () => !!root,
+			checked: () => prefs.folderViewSaved,
+		},
+		'files.undo': { run: () => undoPanel?.undoLast(), enabled: () => !!undoPanel?.canUndo() },
+		// "Öffnen mit ›": the apps for the type of the one file chosen (as in its context menu).
+		'files.openWith': {
+			items: () => {
+				const entry = one();
+				if (!entry || entry.dir) return [];
+				const standard = appForFile(entry.name);
+				const list = appsFor(extOf(entry.name), webapps.apps).map((a) => ({
+					id: webAppKey(a.id),
+					text: a.name,
+					checked: webAppKey(a.id) === standard,
+				}));
+				if (writableText && isEditableText(entry.name, entry.size))
+					list.push({
+						id: EDITOR,
+						text: t('files.openWith.editor'),
+						checked: standard === EDITOR,
+					});
+				return list;
+			},
+			run: (app) => {
+				const entry = one();
+				if (entry && app) void openWith(entry, app, false);
+			},
+		},
+		// "Gehe zu › Freigaben": the places of the side bar.
+		'files.shares': {
+			items: () => (roots ?? []).map((r) => ({ id: r.id, text: r.name, checked: r.id === rootId })),
+			run: (id) => id && open(id, ''),
+		},
+		// "Gehe zu › Zuletzt": the folders visited before, newest first.
+		'files.recent': {
+			items: () => {
+				const seen = new Set<string>();
+				const out: { id: string; text: string }[] = [];
+				for (const step of [...steps.back].reverse()) {
+					const key = step.root + '\n' + step.path;
+					if (seen.has(key) || (step.root === rootId && step.path === dir)) continue;
+					seen.add(key);
+					const name = roots?.find((r) => r.id === step.root)?.name ?? step.root;
+					out.push({ id: key, text: step.path ? `${name} / ${step.path}` : name });
+				}
+				return out.slice(0, 15);
+			},
+			run: (key) => {
+				const [id, ...path] = (key ?? '').split('\n');
+				if (id) open(id, path.join('\n'));
+			},
+		},
+	});
+	import { appsFor, webAppKey } from '#lib/webapps/protocol.ts';
+	import { webapps } from '#lib/webapps/webapps.svelte.ts';
+	let undoPanel = $state<ReturnType<typeof UndoPanel>>();
+	/** The one entry chosen, if exactly one is. */
+	const one = () =>
+		selected.length === 1 && !trash ? entries?.find((e) => e.name === selected[0]) : undefined;
 </script>
 
 <svelte:window onkeydown={(event) => fileKeys(event, keys)} />
@@ -1235,6 +1350,7 @@
 />
 <UploadPanel />
 <UndoPanel
+	bind:this={undoPanel}
 	roots={safeRoots}
 	refresh={jobsTick}
 	onchanged={() => {

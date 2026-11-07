@@ -413,6 +413,15 @@
 		</p>
 		{#if restartedTo}<p class="notice-ok" role="status">
 				{t('update.app.restarted', { version: restartedTo })}
+				<!-- PLAN 67: the whole UI loads the new version (desktop and every
+				     window), so no part keeps running the old one. Never by itself:
+				     a window may hold unsaved work. -->
+				<button
+					type="button"
+					class="btn small"
+					onclick={() => (window.top ?? window).location.reload()}
+					>{t('update.app.reloadUi')}</button
+				>
 			</p>{/if}
 		{#if status.app.trial}<p class="notice-warn" role="status">{t('update.app.trial')}</p>{/if}
 

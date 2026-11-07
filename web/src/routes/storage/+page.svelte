@@ -336,6 +336,36 @@
 		dialog = null;
 		refreshStorage();
 	}
+
+	// PLAN 67-1: the menu bar of the desktop runs the same actions as the page.
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	import { lockedBlocks } from './crypt.ts';
+	registerMenuCommands({
+		'storage.newVolume': { run: () => (dialog = { kind: 'create' }), enabled: () => canAdminister },
+		'storage.addDisk': {
+			run: () => detail && (dialog = { kind: 'add', volume: detail.name }),
+			enabled: () => canAdminister && !!detail && takesDisk(detail) && !lockedBlocks(detail),
+		},
+		'storage.scrub': {
+			run: () => detail && check(detail, detail.state !== 'checking'),
+			enabled: () =>
+				canAdminister &&
+				!busy &&
+				!!detail &&
+				detail.level !== 'raid0' &&
+				(detail.state === 'ok' || detail.state === 'checking') &&
+				!lockedBlocks(detail),
+			checked: () => detail?.state === 'checking',
+		},
+		'storage.rescan': { run: rescan, enabled: () => canAdminister && !busy },
+		'storage.sleep': { run: () => (sleepOpen = true), enabled: () => canAdminister },
+		...Object.fromEntries(
+			(['volumes', 'disks'] as const).map((value) => [
+				'storage.tab.' + value,
+				{ run: () => switchTab(value), checked: () => tab === value },
+			]),
+		),
+	});
 </script>
 
 <PageHead title={t('storage.title')}>

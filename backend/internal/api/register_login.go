@@ -16,6 +16,8 @@ func (s *Server) registerLogin(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/login/passkey/begin", s.handlePasskeyLoginBegin)
 	mux.HandleFunc("POST /api/v1/login/passkey", s.handlePasskeyLogin)
 	mux.HandleFunc("POST /api/v1/logout", s.handleLogout)
+	// The account picker of the login page (login_accounts.go).
+	mux.HandleFunc("GET /api/v1/login/accounts", s.handleLoginAccounts)
 	// The lock screen (session_lock.go): requireUser lets a locked session through to these two.
 	mux.HandleFunc("POST /api/v1/session/lock", s.requireUser(s.handleSessionLock))
 	mux.HandleFunc("POST /api/v1/session/unlock", s.requireUser(s.handleSessionUnlock))

@@ -1,24 +1,25 @@
 <script lang="ts">
+	// Docker › Container (PLAN 67, owner's decision of 7 Nov 2026): one table
+	// of all apps – a Compose stack is one row – with state as text, CPU, RAM,
+	// ports and updates; Start/Stop and a ⋯ menu per row, the app's own page
+	// on a click. Above it the filters and four figures. The earlier card and
+	// tile views are gone; the stored docker preference is still read (order
+	// and main services of stacks).
 	import { poll, type Poller } from '#lib/poll.ts';
-	import { tick, onMount } from 'svelte';
+	import { onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
+	import { goto } from '$app/navigation';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { inWindow, phoneView } from '#lib/desktop/mode.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import {
-		defaultDockerLayout,
 		sanitizeDockerLayout,
 		dockerGroups,
 		arrangedDockerGroups,
-		moveDockerGroup,
 		stackPrimary,
 		type DockerGroup,
-		type DockerSort,
-		type DockerView,
 	} from '#lib/docker-layout.ts';
-	import { dragPointer } from '#lib/pointer-drag.ts';
-	import Segments from '#lib/components/Segments.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { dockerName } from '#lib/docker-name.ts';
 	import {
@@ -37,17 +38,14 @@
 	import UpdatesDialog from './UpdatesDialog.svelte';
 	import { inTailnet, tailnetPort } from '#lib/app-proxy.ts';
 	import { formatBytes, formatPercent } from '#lib/format.ts';
-	import { apiErrorText, errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
+	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { storage } from '#lib/storage.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
 	import { addContainerConsole } from '#lib/terminal.svelte.ts';
 	import { tailnetHost, type TailnetStatus } from '#lib/app-links.ts';
 	import AppIcon from '#lib/components/AppIcon.svelte';
 	import ContextMenu from '#lib/components/ContextMenu.svelte';
-	import ContainerCard from './ContainerCard.svelte';
-	import StackCard from './StackCard.svelte';
-	import ContainerRow from './ContainerRow.svelte';
-	import { isRunning, webLinks, type ContainerActions } from './container.ts';
+	import { isRunning, portLabels, webLinks } from './container.ts';
 
 	let tailnet = $state<TailnetStatus | null>(null);
 	const tailscaleHost = $derived(tailnetHost(tailnet));
@@ -70,173 +68,24 @@
 	let autoUpdates = $state(false);
 	let error = $state<{ text: string; detail: string } | null>(null);
 	// What has a request on its way: `container:<id>`, `app:<name>` or `global`
-	// for actions on everything. Other cards stay usable meanwhile.
+	// for actions on everything. Other rows stay usable meanwhile.
 	const busyKeys = new SvelteSet<string>();
 	const appKey = (app: string) => `app:${app}`;
 	const containerKey = (container: DockerContainer) => `container:${container.id}`;
-	const containerBusy = (container: DockerContainer) =>
-		busyKeys.has(containerKey(container)) ||
-		(!!container.app && busyKeys.has(appKey(container.app)));
 	const globalBusy = $derived(busyKeys.has('global'));
 	// Requests of the dialogs (remove, import, settings).
 	let dialogBusy = $state(false);
 	let search = $state('');
 	let filter = $state<'all' | 'running' | 'stopped' | 'updates'>('all');
-	// A stack is closed until the user opens it; filters reveal matching services.
-	let expanded = $state<Record<string, boolean>>({});
-	// The menu of a stack (addresses, problems, links, tailnet, editor), from its icon.
-	let stackMenu = $state<{ group: DockerGroup; x: number; y: number } | null>(null);
-	let stackMenuWasOpen = false;
-	function openStackMenu(group: DockerGroup, anchor: HTMLElement) {
-		if (stackMenuWasOpen) {
-			stackMenuWasOpen = false;
-			stackMenu = null;
-			return;
-		}
-		const rect = anchor.getBoundingClientRect();
-		stackMenu = { group, x: rect.left, y: rect.bottom + 4 };
-	}
-	const stackOpen = (id: string) => expanded[id] ?? (search.trim() !== '' || filter !== 'all');
 	let linkGroup = $state<DockerGroup | null>(null),
 		primaryService = $state('');
 	let refreshError = $state(''),
 		lastRefresh = $state(''),
 		refreshing = $state(false);
+	// The stored order and the main service of each stack (no view settings any more).
 	let layout = $state(sanitizeDockerLayout(session.docker));
-	let savedLayout = $state(sanitizeDockerLayout(session.docker));
-	let editing = $state(false);
 	let savingLayout = $state(false);
 	let layoutError = $state('');
-	let layoutSaved = $state(false);
-	let dragged = $state<string | null>(null);
-	function startEditing() {
-		editing = true;
-		layoutSaved = false;
-		layoutError = '';
-		search = '';
-		filter = 'all';
-	}
-	// The view is saved right away; only the order waits for "Save layout".
-	async function setView(view: DockerView) {
-		if (layout.view === view) return;
-		const previous = layout.view;
-		layout.view = view;
-		layoutError = '';
-		const value = sanitizeDockerLayout({ ...savedLayout, view });
-		savingLayout = true;
-		try {
-			await api.put('/preferences/docker', value);
-			session.docker = value;
-			savedLayout = value;
-		} catch (err) {
-			// Not saved: the page shows the view that is still stored.
-			layout.view = previous;
-			layoutError = t('docker.layout.viewFailed', { error: apiErrorText(err) });
-		} finally {
-			savingLayout = false;
-		}
-	}
-	function move(from: string, to: string) {
-		layout.order = moveDockerGroup(layout.order, groups, from, to);
-	}
-	function moveBy(id: string, offset: number) {
-		const target = groups[groups.findIndex((group) => group.id === id) + offset];
-		if (target) move(id, target.id);
-	}
-	// Screen readers hear where a moved card now stands.
-	let moveStatus = $state('');
-	function announce(id: string) {
-		const index = groups.findIndex((group) => group.id === id);
-		if (index >= 0)
-			moveStatus = t('docker.layout.position', {
-				name: groups[index].name,
-				position: index + 1,
-				count: groups.length,
-			});
-	}
-	// Cards are moved at their handle (pointer, also touch) like the
-	// dashboard tiles; the other cards make room while dragging.
-	let cancelDrag: (() => void) | null = null;
-	function dragCard(event: PointerEvent, id: string) {
-		if (!editing || savingLayout || layout.sort !== 'own' || event.button !== 0) return;
-		event.preventDefault();
-		const before = [...layout.order];
-		const stop = () => {
-			dragged = null;
-			cancelDrag = null;
-		};
-		dragged = id;
-		cancelDrag = dragPointer(event, {
-			move: (e) => {
-				// Near the top or bottom edge the page follows (phones show few cards).
-				const edge = 60;
-				if (e.clientY < edge) window.scrollBy(0, -Math.ceil((edge - e.clientY) / 3));
-				else if (e.clientY > innerHeight - edge)
-					window.scrollBy(0, Math.ceil((e.clientY - innerHeight + edge) / 3));
-				const over = document
-					.elementFromPoint(e.clientX, e.clientY)
-					?.closest<HTMLElement>('[data-group]')?.dataset.group;
-				if (over && over !== id) move(id, over);
-			},
-			end: () => {
-				stop();
-				announce(id);
-			},
-			abort: () => {
-				layout.order = before;
-				stop();
-			},
-			none: stop,
-		});
-	}
-	// Keyboard alternative: the arrow keys move the focused handle's card.
-	async function keyMove(event: KeyboardEvent, id: string) {
-		const offset = (
-			{ ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 } as Record<string, number>
-		)[event.key];
-		if (!offset || savingLayout || layout.sort !== 'own') return;
-		event.preventDefault();
-		moveBy(id, offset);
-		await tick();
-		document
-			.querySelector<HTMLElement>(`.cards [data-group="${CSS.escape(id)}"] .handle`)
-			?.focus({ preventScroll: false });
-		announce(id);
-	}
-	function setSort(sort: DockerSort) {
-		cancelDrag?.();
-		layout.sort = sort;
-		moveStatus = '';
-	}
-	function cancelLayout() {
-		cancelDrag?.();
-		layout = sanitizeDockerLayout(savedLayout);
-		editing = false;
-		layoutError = '';
-	}
-	async function saveLayout() {
-		cancelDrag?.();
-		layoutError = '';
-		const value = sanitizeDockerLayout(layout);
-		// Only a change is written to the stick.
-		if (JSON.stringify(value) === JSON.stringify(sanitizeDockerLayout(savedLayout))) {
-			layout = value;
-			editing = false;
-			return;
-		}
-		savingLayout = true;
-		try {
-			await api.put('/preferences/docker', value);
-			session.docker = value;
-			savedLayout = value;
-			editing = false;
-			layoutSaved = true;
-		} catch (err) {
-			layoutError = apiErrorText(err);
-		} finally {
-			savingLayout = false;
-		}
-	}
 	let dialog = $state<
 		| { kind: 'import' | 'settings' }
 		| { kind: 'logs'; container: DockerContainer }
@@ -252,81 +101,69 @@
 	const host = $derived(system.info?.network?.ipv4.split('/')[0] || location.hostname);
 	const containers = $derived(status?.containers ?? []);
 	const runCount = $derived(containers.filter(isRunning).length);
-	const totals = $derived(
-		t('docker.totals', {
-			cpu: formatPercent(containers.reduce((sum, container) => sum + container.cpuPercent, 0)),
-			ram: formatBytes(containers.reduce((sum, container) => sum + container.memoryBytes, 0)),
+	const groups = $derived(arrangedDockerGroups(dockerGroups(containers), layout, i18n.locale));
+
+	// ---- One row per app ----
+
+	type RowState = 'running' | 'partial' | 'stopped' | 'restarting' | 'error';
+	function rowState(group: DockerGroup): RowState {
+		const m = group.members;
+		if (m.some((c) => c.state === 'dead') || (jobFailed(group.name) && !m.some(isRunning)))
+			return 'error';
+		if (m.some((c) => c.state === 'restarting')) return 'restarting';
+		const running = m.filter((c) => c.state === 'running').length;
+		if (running === m.length) return 'running';
+		return running ? 'partial' : 'stopped';
+	}
+	const jobFailed = (app: string) => status?.jobs?.[app]?.state === 'failed';
+	const running = (group: DockerGroup) => group.members.filter(isRunning);
+	const groupCpu = (group: DockerGroup) => running(group).reduce((s, c) => s + c.cpuPercent, 0);
+	const groupRam = (group: DockerGroup) => running(group).reduce((s, c) => s + c.memoryBytes, 0);
+	const groupPorts = (group: DockerGroup) => [...new Set(group.members.flatMap(portLabels))];
+	const groupUpdate = (group: DockerGroup) => group.members.some((c) => c.updateAvailable);
+	const groupApp = (group: DockerGroup) => group.members.find((c) => c.managed && c.app)?.app ?? '';
+	const groupBusy = (group: DockerGroup) =>
+		busyKeys.has(appKey(group.name)) || group.members.some((c) => busyKeys.has(containerKey(c)));
+	function subLine(group: DockerGroup): string {
+		if (group.members.length > 1)
+			return t('docker.table.containers', { count: group.members.length });
+		return group.members[0]?.image ?? '';
+	}
+	const stateOf = $derived(new Map(groups.map((g) => [g.id, rowState(g)])));
+	const isOn = (group: DockerGroup) => {
+		const s = stateOf.get(group.id);
+		return s === 'running' || s === 'partial';
+	};
+	const counts = $derived({
+		all: groups.length,
+		running: groups.filter(isOn).length,
+		stopped: groups.filter((g) => stateOf.get(g.id) === 'stopped').length,
+		updates: groups.filter(groupUpdate).length,
+	});
+	const shownGroups = $derived(
+		groups.filter((group) => {
+			if (filter === 'running' && !isOn(group)) return false;
+			if (filter === 'stopped' && stateOf.get(group.id) !== 'stopped') return false;
+			if (filter === 'updates' && !groupUpdate(group)) return false;
+			const q = search.trim().toLowerCase();
+			return (
+				!q ||
+				[group.name, ...group.members.flatMap((c) => [c.name, c.image, c.service])]
+					.join(' ')
+					.toLowerCase()
+					.includes(q)
+			);
 		}),
 	);
+	const totalCpu = $derived(containers.reduce((s, c) => s + (isRunning(c) ? c.cpuPercent : 0), 0));
+	const totalRam = $derived(containers.reduce((s, c) => s + (isRunning(c) ? c.memoryBytes : 0), 0));
+	// A colour of its own for an app without an icon, from its name.
+	function hue(name: string) {
+		let h = 0;
+		for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360;
+		return h;
+	}
 
-	const visible = $derived(
-		containers.filter(
-			(container) =>
-				(filter === 'all' ||
-					(filter === 'updates'
-						? container.updateAvailable
-						: (filter === 'running') === isRunning(container))) &&
-				(search === '' ||
-					`${container.name} ${container.image} ${container.app}`
-						.toLowerCase()
-						.includes(search.toLowerCase())),
-		),
-	);
-	const groups = $derived(arrangedDockerGroups(dockerGroups(containers), layout, i18n.locale));
-	const visibleIDs = $derived(new Set(visible.map((container) => container.id)));
-	const shownGroups = $derived(
-		groups.filter((group) => group.members.some((container) => visibleIDs.has(container.id))),
-	);
-	const shownMembers = (group: DockerGroup) =>
-		group.members.filter((container) => visibleIDs.has(container.id));
-	const isStack = (group: DockerGroup) =>
-		group.members.length > 1 || !!layout.primaryServices[group.id];
-	const sum = (group: DockerGroup, value: (container: DockerContainer) => number) =>
-		group.members.filter(isRunning).reduce((total, container) => total + value(container), 0);
-	const stackBusy = (group: DockerGroup) =>
-		busyKeys.has(appKey(group.name)) ||
-		group.members.some((container) => busyKeys.has(containerKey(container)));
-	// "Start all"/"Stop all" of one stack: its services one after the other.
-	function stackAction(group: DockerGroup, action: 'start' | 'stop') {
-		const targets = group.members.filter((container) =>
-			action === 'start' ? !isRunning(container) : isRunning(container),
-		);
-		void run(
-			appKey(group.name),
-			async () => {
-				for (const container of targets)
-					await api.post(`/docker/containers/${encodeURIComponent(container.id)}/${action}`);
-			},
-			group.name,
-		);
-	}
-	const drawerId = (group: DockerGroup) => `docker-services-${encodeURIComponent(group.name)}`;
-	// All cards share one height (owner rule "no unequal tiles"): the tallest
-	// card sets it, also for the services of an opened stack.
-	function equalCards(node: HTMLElement) {
-		let frame = 0;
-		const measure = () => {
-			frame = 0;
-			node.style.removeProperty('--card-h');
-			const cards = node.querySelectorAll<HTMLElement>('.body > article');
-			const height = Math.max(0, ...[...cards].map((card) => card.offsetHeight));
-			if (height) node.style.setProperty('--card-h', `${height}px`);
-		};
-		const schedule = () => {
-			if (!frame) frame = requestAnimationFrame(measure);
-		};
-		const resized = new ResizeObserver(schedule);
-		resized.observe(node);
-		const changed = new MutationObserver(schedule);
-		changed.observe(node, { childList: true, subtree: true, characterData: true });
-		schedule();
-		return () => {
-			cancelAnimationFrame(frame);
-			resized.disconnect();
-			changed.disconnect();
-		};
-	}
-	const updateCount = $derived(containers.filter((container) => container.updateAvailable).length);
 	const updatable = $derived(
 		containers.some((container) => container.updateAvailable && container.managed),
 	);
@@ -343,7 +180,7 @@
 		Object.entries(status?.jobs ?? {}).filter(([, job]) => job.state !== 'done'),
 	);
 	// Apps whose setup never created a container (or whose containers are
-	// gone) have no card; without this they could not be removed.
+	// gone) have no row; without this they could not be removed.
 	const idleApps = $derived(
 		(status?.apps ?? []).filter(
 			(app) =>
@@ -379,21 +216,21 @@
 	}
 	function editLinks(group: DockerGroup) {
 		linkGroup = group;
-		primaryService = savedLayout.primaryServices[group.id] ?? '';
+		primaryService = layout.primaryServices[group.id] ?? '';
 		layoutError = '';
 	}
 	async function saveLinks() {
 		if (!linkGroup || savingLayout) return;
-		const primaryServices = { ...savedLayout.primaryServices };
+		const primaryServices = { ...layout.primaryServices };
 		if (primaryService) primaryServices[linkGroup.id] = primaryService;
 		else delete primaryServices[linkGroup.id];
-		const value = sanitizeDockerLayout({ ...savedLayout, primaryServices });
+		// The rest of the stored preference (older view fields too) stays as it is.
+		const value = sanitizeDockerLayout({ ...layout, primaryServices });
 		savingLayout = true;
 		layoutError = '';
 		try {
 			await api.put('/preferences/docker', value);
 			session.docker = value;
-			savedLayout = value;
 			layout = value;
 			linkGroup = null;
 		} catch (err) {
@@ -402,24 +239,12 @@
 			savingLayout = false;
 		}
 	}
-	async function showProblems(group: DockerGroup) {
-		search = '';
-		filter = 'all';
-		expanded[group.id] = true;
-		await tick();
-		const container = group.members.find((c) => !isRunning(c) || c.state === 'restarting');
-		if (container)
-			document
-				.getElementById(`docker-container-${encodeURIComponent(container.name)}`)
-				?.scrollIntoView({ block: 'nearest' });
-	}
 	onMount(() => {
 		const current = (poller = poll(fetchStatus, { interval: 3000 }));
 		void loadProxy();
 		return () => {
 			current();
 			if (poller === current) poller = undefined;
-			cancelDrag?.();
 		};
 	});
 
@@ -460,7 +285,7 @@
 			await action();
 		} catch (err) {
 			const failed = problem(err);
-			// Says which container or app it was, as other cards stay usable.
+			// Says which app it was, as other rows stay usable.
 			error = label ? { ...failed, text: `${label}: ${failed.text}` } : failed;
 			failedAction = { key, action, label };
 		}
@@ -468,8 +293,35 @@
 		busyKeys.delete(key);
 	}
 
-	function showLogs(container: DockerContainer) {
-		dialog = { kind: 'logs', container };
+	/** Start, stop or restart every container of a row, one after the other like by hand. */
+	function groupAction(group: DockerGroup, action: 'start' | 'stop' | 'restart') {
+		const targets = group.members.filter((c) =>
+			action === 'start' ? !isRunning(c) : action === 'stop' ? isRunning(c) : true,
+		);
+		void run(
+			appKey(group.name),
+			async () => {
+				for (const c of targets)
+					await api.post(`/docker/containers/${encodeURIComponent(c.id)}/${action}`);
+			},
+			group.name,
+		);
+	}
+	function updateApp(app: string) {
+		void run(appKey(app), () => api.post(`/docker/apps/${encodeURIComponent(app)}/update`), app);
+	}
+	function removeGroup(group: DockerGroup) {
+		dialogError = null;
+		const app = groupApp(group);
+		if (app) askRemoveApp(app);
+		else dialog = { kind: 'remove', container: group.members[0] };
+	}
+	/** PLAN 63: the app in its remote view window (the desktop opens it). */
+	function openRemote(app: string) {
+		window.parent.postMessage(
+			{ type: 'titanos-open-program', key: 'docker:' + app },
+			location.origin,
+		);
 	}
 
 	// "Update all" asks which apps first; all with an update are ticked.
@@ -529,31 +381,6 @@
 			dialogBusy = false;
 			busyKeys.delete(containerKey(container));
 		}
-	}
-
-	function actionsFor(container: DockerContainer): ContainerActions {
-		return {
-			onaction: (action) =>
-				run(
-					containerKey(container),
-					() => api.post(`/docker/containers/${container.id}/${action}`),
-					dockerName(container, 'distinct'),
-				),
-			onlogs: () => showLogs(container),
-			onremove: () => {
-				dialogError = null;
-				container.managed ? askRemoveApp(container.app) : (dialog = { kind: 'remove', container });
-			},
-			onconsole: () => addContainerConsole(container.id, dockerName(container, 'distinct')),
-			onupdate: () =>
-				run(
-					appKey(container.app),
-					() => api.post(`/docker/apps/${container.app}/update`),
-					container.app,
-				),
-			ontailnet: proxy ? () => openTailnet(container.app) : undefined,
-			tailnet: appInTailnet(container.app),
-		};
 	}
 
 	function askRemoveApp(app: string) {
@@ -621,12 +448,13 @@
 		}
 	});
 
-	// The menus of the head: the gear (settings, LAN, updates, layout) and the
-	// arrow next to "Install app" (catalog, compose file, own container).
-	let pageMenu = $state<'settings' | 'install' | null>(null);
+	// The menus of the tool bar: ⋯ (everything at once, settings, LAN,
+	// auto updates) and the arrow next to "Install app" (catalog, compose file,
+	// own container); the menu of a row.
+	let pageMenu = $state<'more' | 'install' | null>(null);
 	let pageMenuAt = $state<{ x: number; y: number } | null>(null);
 	let pageMenuWasOpen = false;
-	function openPageMenu(kind: 'settings' | 'install', anchor: HTMLElement) {
+	function openPageMenu(kind: 'more' | 'install', anchor: HTMLElement) {
 		if (pageMenuWasOpen) {
 			pageMenuWasOpen = false;
 			pageMenu = null;
@@ -636,10 +464,31 @@
 		pageMenuAt = { x: Math.max(8, rect.right - 280), y: rect.bottom + 4 };
 		pageMenu = kind;
 	}
+	// The action reads what the menu was opened for before the menu closes.
 	function pick(action: () => void) {
-		pageMenu = null;
 		action();
+		pageMenu = null;
+		rowMenu = null;
 	}
+	let rowMenu = $state<{ group: DockerGroup; x: number; y: number } | null>(null);
+	let rowMenuWasOpen = '';
+	function openRowMenu(group: DockerGroup, anchor: HTMLElement) {
+		if (rowMenuWasOpen === group.id) {
+			rowMenuWasOpen = '';
+			rowMenu = null;
+			return;
+		}
+		const rect = anchor.getBoundingClientRect();
+		rowMenu = { group, x: Math.max(8, rect.right - 260), y: rect.bottom + 4 };
+	}
+	/** A click on a row opens the app's own page (not on its buttons and links). */
+	function rowClick(event: MouseEvent, group: DockerGroup) {
+		if ((event.target as Element).closest('button, a, input')) return;
+		const app = groupApp(group);
+		if (app) void goto(`/docker/apps/${encodeURIComponent(app)}`);
+		else rowMenu = { group, x: event.clientX, y: event.clientY };
+	}
+
 	const checkUpdates = () =>
 		run('global', async () => (status = await api.post<DockerStatus>('/docker/updates/check')));
 	// Start and stop everything, one container after the other like by hand.
@@ -663,77 +512,73 @@
 		);
 	// PLAN 64: the phone's full-screen view (in a window: inWindow).
 	const phone = $derived(phoneView());
+	// A narrow window: the filters get a row of their own under the tool bar.
+	let roomy = $state(matchMedia('(min-width: 760px)').matches);
+	$effect(() => {
+		const query = matchMedia('(min-width: 760px)');
+		const change = () => (roomy = query.matches);
+		query.addEventListener('change', change);
+		return () => query.removeEventListener('change', change);
+	});
+	const FILTERS = [
+		['all', 'docker.table.filterAll'],
+		['running', 'docker.table.filterRunning'],
+		['stopped', 'docker.table.filterStopped'],
+		['updates', 'docker.table.filterUpdates'],
+	] as const;
+
+	// PLAN 67-1: the menu bar of the desktop runs the same actions as the toolbar.
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	const ready = () => !!status?.running && !globalBusy;
+	registerMenuCommands({
+		'docker.import': { run: () => open('import'), enabled: () => !!status?.running },
+		'docker.startAll': {
+			run: startAll,
+			enabled: () => ready() && runCount < containers.length,
+		},
+		'docker.stopAll': {
+			run: () => (confirmStopAll = true),
+			enabled: () => ready() && runCount > 0,
+		},
+		'docker.checkUpdates': { run: checkUpdates, enabled: () => !!status?.running && !globalBusy },
+		'docker.updateAll': { run: askUpdates, enabled: () => !!updatable && !globalBusy },
+		...Object.fromEntries(
+			(['all', 'running', 'stopped', 'updates'] as const).map((f) => [
+				'docker.filter.' + f,
+				{ run: () => (filter = f), checked: () => filter === f },
+			]),
+		),
+	});
 </script>
 
-{#snippet viewTools()}
+{#snippet searchBox()}
 	<span class="search-box"
 		><Icon name="search" size={15} /><input
 			class="field search"
 			type="search"
-			disabled={editing}
 			bind:value={search}
-			oninput={() => (expanded = {})}
 			placeholder={t('docker.search')}
 			aria-label={t('docker.search')}
 		/></span
 	>
-	<div class="segmented icons" role="group" aria-label={t('docker.layout.view')}>
-		{#each [['list', t('docker.layout.list'), 'list'], ['cards', t('docker.layout.cards'), 'grid']] as const as [id, label, icon] (id)}
-			<button
-				type="button"
-				aria-pressed={layout.view === id}
-				aria-label={label}
-				title={label}
-				disabled={savingLayout}
-				onclick={() => setView(id)}><Icon name={icon} size={16} /></button
+{/snippet}
+
+{#snippet filters()}
+	<div class="segmented" role="group" aria-label={t('docker.filter')}>
+		{#each FILTERS as [id, label] (id)}
+			<button type="button" aria-pressed={filter === id} onclick={() => (filter = id)}
+				>{t(label)} <b class="mono">{counts[id]}</b></button
 			>
 		{/each}
 	</div>
 {/snippet}
 
-{#snippet bulk()}
-	<button
-		type="button"
-		class="btn"
-		disabled={globalBusy || editing || runCount === containers.length}
-		onclick={startAll}><Icon name="play" size={15} />{t('docker.startAll')}</button
-	>
-	<button
-		type="button"
-		class="btn"
-		disabled={globalBusy || editing || runCount === 0}
-		onclick={() => (confirmStopAll = true)}
-		><Icon name="stop" size={15} />{t('docker.stopAll')}</button
-	>
-	<button type="button" class="btn" disabled={globalBusy} onclick={checkUpdates}
-		><Icon name="refresh" size={15} />{t('docker.checkUpdates')}</button
-	>
-	{#if updatable}
-		<button type="button" class="btn" onclick={askUpdates} disabled={globalBusy}
-			><Icon name="download" size={15} />{t('docker.updateAllCount', {
-				count: updateApps.length,
-			})}</button
-		>
-	{/if}
-{/snippet}
-
 <PageHead title={t('docker.title')}>
 	{#snippet actions()}
-		{#if status?.running && containers.length > 0 && !phone}{@render viewTools()}{/if}
-		<!-- PLAN 64: in a window the actions for all apps join the tool bar;
-		     what does not fit moves into its "⋯" menu. -->
-		{#if inWindow && containers.length > 0}{@render bulk()}{/if}
-		<button
-			type="button"
-			class="btn icon-btn"
-			aria-label={t('docker.pageMenu')}
-			title={t('docker.pageMenu')}
-			aria-haspopup="menu"
-			aria-expanded={!!pageMenu}
-			onpointerdown={() => (pageMenuWasOpen = pageMenu === 'settings')}
-			onclick={(event) => openPageMenu('settings', event.currentTarget)}
-			><Icon name="gear" size={17} /></button
-		>
+		{#if status?.running && containers.length > 0 && !phone}
+			{@render searchBox()}
+			{#if roomy}{@render filters()}{/if}
+		{/if}
 		{#if status?.settings.enabled}
 			<span class="split">
 				<a class="btn btn-primary" href="/apps"
@@ -751,63 +596,68 @@
 				>
 			</span>
 		{/if}
+		<button
+			type="button"
+			class="btn icon-btn"
+			aria-label={t('docker.table.more')}
+			title={t('docker.table.more')}
+			aria-haspopup="menu"
+			aria-expanded={pageMenu === 'more'}
+			onpointerdown={() => (pageMenuWasOpen = pageMenu === 'more')}
+			onclick={(event) => openPageMenu('more', event.currentTarget)}
+			><Icon name="more" size={17} /></button
+		>
 	{/snippet}
 </PageHead>
 
 {#if phone && status?.running && containers.length > 0}
-	<!-- PLAN 64: on the phone the search gets a row of its own under the tool bar. -->
-	<div class="phone-tools">{@render viewTools()}</div>
-{/if}
-{#if status?.running && containers.length > 0}
-	<div class="status-line">
-		<div class="filters" role="group" aria-label={t('docker.filter')}>
-			{#each [['all', containers.length, ''], ['running', runCount, 'ok'], ['stopped', containers.length - runCount, 'off'], ['updates', updateCount, 'warn']] as const as [id, count, tone] (id)}
-				{#if id !== 'updates' || count > 0 || filter === 'updates'}
-					<button
-						type="button"
-						class="filter {tone}"
-						aria-pressed={filter === id}
-						disabled={editing}
-						onclick={() => {
-							filter = id;
-							expanded = {};
-						}}
-						>{#if tone}<span class="dot {tone}" aria-hidden="true"></span>{/if}{#if id === 'all'}{t(
-								'docker.filterAll',
-							)} <b class="mono">{count}</b>{:else}<b class="mono">{count}</b>
-							{t(
-								id === 'running'
-									? 'docker.filterRunningCount'
-									: id === 'stopped'
-										? 'docker.filterStoppedCount'
-										: 'docker.filterUpdatesCount',
-							)}{/if}</button
-					>
-				{/if}
-			{/each}
-		</div>
-		<p class="meta">
-			<span class="mono">{totals}</span><span>{checked}</span><button
-				type="button"
-				class="icon-link"
-				aria-label={t('docker.checkUpdates')}
-				title={t('docker.checkUpdates')}
-				onclick={checkUpdates}
-				disabled={globalBusy}><Icon name="refresh" size={14} /></button
-			>
-		</p>
-	</div>
+	<!-- PLAN 64: on the phone search and filters get rows of their own under the tool bar. -->
+	<div class="phone-tools">{@render searchBox()}{@render filters()}</div>
+{:else if !roomy && status?.running && containers.length > 0}
+	<div class="phone-tools">{@render filters()}</div>
 {/if}
 
 {#if pageMenu && pageMenuAt}
 	<ContextMenu
-		label={t(pageMenu === 'settings' ? 'docker.pageMenu' : 'docker.installMenu')}
+		label={t(pageMenu === 'more' ? 'docker.table.more' : 'docker.installMenu')}
 		x={pageMenuAt.x}
 		y={pageMenuAt.y}
 		onclose={() => (pageMenu = null)}
 	>
-		{#if pageMenu === 'settings'}
-			<div class="menu-title">{t('docker.title')}</div>
+		{#if pageMenu === 'more'}
+			{#if status?.running && containers.length > 0}
+				<button
+					type="button"
+					role="menuitem"
+					disabled={globalBusy || runCount === containers.length}
+					onclick={() => pick(startAll)}
+					><Icon name="play" size={16} /><span>{t('docker.startAll')}</span></button
+				>
+				<button
+					type="button"
+					role="menuitem"
+					disabled={globalBusy || runCount === 0}
+					onclick={() => pick(() => (confirmStopAll = true))}
+					><Icon name="stop" size={16} /><span>{t('docker.stopAll')} …</span></button
+				>
+				<button
+					type="button"
+					role="menuitem"
+					disabled={globalBusy}
+					onclick={() => pick(checkUpdates)}
+					><Icon name="refresh" size={16} /><span>{t('docker.checkUpdates')}</span></button
+				>
+				<button
+					type="button"
+					role="menuitem"
+					disabled={globalBusy || !updatable}
+					onclick={() => pick(askUpdates)}
+					><Icon name="download" size={16} /><span
+						>{t('docker.updateAllCount', { count: updateApps.length })} …</span
+					></button
+				>
+				<hr />
+			{/if}
 			{#if status?.settings.enabled}
 				<button type="button" role="menuitem" onclick={() => pick(() => open('settings'))}
 					><Icon name="gear" size={16} /><span
@@ -828,14 +678,6 @@
 					onclick={() => pick(() => (autoUpdates = true))}
 					><Icon name="clock" size={16} /><span
 						>{t('autoUpdate.button')}<small>{t('docker.autoUpdateHint')}</small></span
-					></button
-				>
-			{/if}
-			{#if containers.length > 0}
-				<hr />
-				<button type="button" role="menuitem" disabled={editing} onclick={() => pick(startEditing)}
-					><Icon name="edit" size={16} /><span
-						>{t('docker.layout.edit')}<small>{t('docker.layoutHint')}</small></span
 					></button
 				>
 			{/if}
@@ -970,206 +812,167 @@
 	{/each}
 
 	{#if containers.length > 0}
-		{#if layoutError && !editing}<p class="notice-error" role="alert">{layoutError}</p>{/if}
-		{#if layoutSaved}<p class="muted saved" role="status">{t('docker.layout.saved')}</p>{/if}
-	{/if}
-
-	{#if editing}
-		<section class="tile layout-editor" aria-label={t('docker.layout.edit')}>
-			<div class="editor-row">
-				<span class="editor-label">{t('docker.layout.sort')}</span>
-				<Segments
-					label={t('docker.layout.sort')}
-					value={layout.sort}
-					disabled={savingLayout}
-					options={[
-						{ value: 'own', label: t('docker.layout.sortOwn') },
-						{ value: 'az', label: t('docker.layout.sortAz') },
-					]}
-					onchange={setSort}
-				/>
-				{#if layout.view === 'cards'}
-					<span class="editor-label">{t('docker.layout.size')}</span>
-					<Segments
-						label={t('docker.layout.size')}
-						bind:value={layout.size}
-						disabled={savingLayout}
-						options={[
-							{ value: 's', label: 'S', hint: t('docker.layout.sizeS') },
-							{ value: 'm', label: 'M', hint: t('docker.layout.sizeM') },
-							{ value: 'l', label: 'L', hint: t('docker.layout.sizeL') },
-						]}
-					/>
-				{/if}
-				<label class="check"
-					><input type="checkbox" bind:checked={layout.details} disabled={savingLayout} />{t(
-						'docker.layout.details',
-					)}</label
+		<div class="stats">
+			<section class="tile ui-card stat">
+				<span class="stat-label">{t('docker.table.statRunning')}</span>
+				<b class="stat-value"
+					>{t('docker.table.statRunningValue', { running: counts.running, total: counts.all })}</b
 				>
-				<span class="spacer"></span>
-				<div class="buttons">
-					<button
-						type="button"
-						class="btn"
-						disabled={savingLayout}
-						onclick={() => {
-							cancelDrag?.();
-							layout = { ...defaultDockerLayout(), view: layout.view };
-						}}>{t('dashboard.restore')}</button
-					>
-					<button type="button" class="btn" disabled={savingLayout} onclick={cancelLayout}
-						>{t('common.cancel')}</button
-					>
-					<button type="button" class="btn btn-primary" disabled={savingLayout} onclick={saveLayout}
-						>{t('docker.layout.save')}</button
-					>
-				</div>
-			</div>
-			<p class="muted editor-hint" id="docker-move-hint">
-				{t(
-					layout.sort === 'az'
-						? 'docker.layout.hintAz'
-						: layout.view === 'cards'
-							? 'docker.layout.hintCards'
-							: 'docker.layout.hint',
-				)}
-			</p>
-			<p class="sr-only" role="status">{moveStatus}</p>
-			{#if layout.view === 'list' && layout.sort === 'own'}
-				<ol class="order">
-					{#each groups as group, index (group.id)}
-						<li
-							class:dragging={dragged === group.id}
-							ondragover={(event) => {
-								if (dragged && !savingLayout) event.preventDefault();
-							}}
-							ondrop={(event) => {
-								event.preventDefault();
-								if (dragged && !savingLayout) move(dragged, group.id);
-								dragged = null;
-							}}
-						>
-							<button
-								type="button"
-								class="btn grip"
-								draggable={!savingLayout}
-								disabled={savingLayout}
-								aria-label={t('dashboard.move', { tile: group.name })}
-								ondragstart={(event) => {
-									dragged = group.id;
-									event.dataTransfer?.setData('text/plain', group.id);
-								}}
-								ondragend={() => (dragged = null)}><Icon name="grip" size={16} /></button
-							>
-							<span class="order-name">{group.name}</span>
-							{#if isStack(group)}<span class="chip">{t('docker.stack')}</span>{/if}
-							<button
-								type="button"
-								class="btn arrow"
-								disabled={savingLayout || index === 0}
-								aria-label={t('docker.layout.before', { name: group.name })}
-								onclick={() => moveBy(group.id, -1)}>↑</button
-							>
-							<button
-								type="button"
-								class="btn arrow"
-								disabled={savingLayout || index === groups.length - 1}
-								aria-label={t('docker.layout.after', { name: group.name })}
-								onclick={() => moveBy(group.id, 1)}>↓</button
-							>
-						</li>
-					{/each}
-				</ol>
-			{/if}
-			{#if layoutError}<p class="notice-error" role="alert">{layoutError}</p>{/if}
-		</section>
-	{/if}
-
-	{#if shownGroups.length > 0}
-		{#if layout.view === 'list'}
-			<div class="list" role="list" aria-label={t('docker.title')}>
-				{#each shownGroups as group (group.id)}
-					{#if isStack(group)}
-						<div class="stack" role="listitem" aria-label="{t('docker.stack')} {group.name}">
-							{@render stackHead(group)}
-							{#if stackOpen(group.id)}
-								<div class="members" role="list">
-									{#each shownMembers(group) as container (container.name)}
-										{@render row(container, true)}
-									{/each}
-								</div>
-							{/if}
-						</div>
-					{:else}
-						{@render row(group.members[0], false)}
-					{/if}
-				{/each}
-			</div>
-		{:else}
-			<div
-				class="cards size-{layout.size}"
-				class:editing
-				class:sorting={editing && layout.sort === 'own'}
-				role="list"
-				aria-label={t('docker.title')}
-				{@attach equalCards}
-			>
-				{#each shownGroups as group (group.id)}
-					{#if isStack(group) && stackOpen(group.id) && !editing}
-						<!-- An opened stack (owner's decision of 4 Nov 2026, variant C): one
-						     frame in the same grid, the stack card first, its services right
-						     beside it in the same columns; rows wrap inside the frame. -->
-						<section
-							class="stack-frame"
-							role="listitem"
-							id={drawerId(group)}
-							aria-label={t('docker.servicesOf', { name: group.name })}
-							title={search.trim() || filter !== 'all'
-								? t('docker.stackMatches', {
-										count: shownMembers(group).length,
-										total: group.members.length,
-									})
-								: undefined}
-						>
-							{@render groupCell(group, true)}
-							{#each shownMembers(group) as container (container.name)}
-								<div class="cell">
-									<div class="body">
-										<ContainerCard
-											{container}
-											{host}
-											{tailscaleHost}
-											busy={containerBusy(container)}
-											details={layout.details}
-											member
-											{...actionsFor(container)}
-										/>
-									</div>
-								</div>
-							{/each}
-						</section>
-					{:else}
-						{@render groupCell(group, false)}
-					{/if}
-				{/each}
-			</div>
-		{/if}
-	{/if}
-	{#if containers.length === 0 && jobs.length === 0 && idleApps.length === 0}
-		<EmptyState title={t('docker.empty')} />
-	{:else if visible.length === 0 && containers.length > 0}
-		<EmptyState title={t('docker.noMatch')} />
-	{/if}
-	{#if containers.length > 0}
-		<div class="bulk">
-			{#if !inWindow}{@render bulk()}{/if}
-			<span class="spacer"></span>
-			<span class="muted engine"
-				>{t('docker.version', { version: status.version })} · {t('docker.onVolume', {
-					volume: status.settings.volume,
-				})}</span
-			>
+			</section>
+			<section class="tile ui-card stat">
+				<span class="stat-label">{t('docker.cpu')}</span>
+				<b class="stat-value">{formatPercent(totalCpu)}</b>
+			</section>
+			<section class="tile ui-card stat">
+				<span class="stat-label">{t('docker.table.statRam')}</span>
+				<b class="stat-value">{formatBytes(totalRam)}</b>
+			</section>
+			<section class="tile ui-card stat">
+				<span class="stat-label">{t('docker.table.statUpdates')}</span>
+				<b class="stat-value" class:warn={counts.updates > 0}
+					>{counts.updates
+						? t('docker.table.statUpdatesValue', { count: counts.updates })
+						: t('docker.table.statUpdatesNone')}</b
+				>
+			</section>
 		</div>
+
+		{#if shownGroups.length > 0}
+			<section class="tile ui-card apps" aria-label={t('docker.table.title')}>
+				<div class="table-wrap">
+					<table class="data-table app-table">
+						<thead>
+							<tr>
+								<th scope="col">{t('docker.table.colName')}</th>
+								<th scope="col">{t('docker.table.colState')}</th>
+								<th scope="col" class="wide">{t('docker.cpu')}</th>
+								<th scope="col" class="wide num">{t('docker.ram')}</th>
+								<th scope="col" class="wide">{t('docker.column.ports')}</th>
+								<th scope="col" class="upd"><span class="sr-only">{t('docker.update')}</span></th>
+								<th scope="col"><span class="sr-only">{t('docker.table.colActions')}</span></th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each shownGroups as group (group.id)}
+								{@const state = stateOf.get(group.id) ?? 'stopped'}
+								{@const on = isOn(group) || state === 'restarting'}
+								{@const app = groupApp(group)}
+								{@const icon = group.members.find((c) => c.icon)?.icon ?? ''}
+								{@const cpu = groupCpu(group)}
+								{@const ports = groupPorts(group)}
+								{@const busy = groupBusy(group)}
+								<tr
+									class:clickable={!!app}
+									data-app={group.name}
+									onclick={(event) => rowClick(event, group)}
+									oncontextmenu={(event) => {
+										event.preventDefault();
+										rowMenu = { group, x: event.clientX, y: event.clientY };
+									}}
+								>
+									<td class="name">
+										<span class="who">
+											<span
+												class="app-icon"
+												style:--hue={hue(group.name)}
+												class:letter={!icon}
+												aria-hidden="true"><AppIcon src={icon} name={group.name} /></span
+											>
+											<span class="lines">
+												<span class="title-line"
+													>{#if app}<a
+															class="app-link"
+															href="/docker/apps/{encodeURIComponent(app)}">{group.name}</a
+														>{:else}<strong>{group.name}</strong>{/if}
+
+													{#if groupUpdate(group)}<span class="chip warn narrow-chip"
+															>{t('docker.update')}</span
+														>{/if}</span
+												>
+												<span class="sub">{subLine(group)}</span>
+												<!-- Narrow screens: the figures in the sub-line instead of columns. -->
+												<span class="sub narrow"
+													>{on
+														? `${t('docker.cpu')} ${formatPercent(cpu)} · ${t('docker.ram')} ${formatBytes(groupRam(group))}`
+														: ''}{on && ports.length ? ' · ' : ''}{ports.join(', ')}</span
+												>
+											</span>
+										</span>
+									</td>
+									<td class="state {state}">
+										<!-- The mark has a shape of its own per state (dot, ring, triangle). -->
+										<span class="mark" aria-hidden="true"></span>{state === 'partial'
+											? t('docker.stackSummary', {
+													running: running(group).length,
+													total: group.members.length,
+												})
+											: t(`docker.table.state.${state}`)}
+									</td>
+									<td class="wide cpu">
+										{#if on}<span class="bar" aria-hidden="true"
+												><span style:width="{Math.min(100, Math.max(2, cpu))}%"></span></span
+											>{formatPercent(cpu)}{:else}<span class="muted">–</span>{/if}
+									</td>
+									<td class="wide num"
+										>{#if on}{formatBytes(groupRam(group))}{:else}<span class="muted">–</span
+											>{/if}</td
+									>
+									<td class="wide ports mono">{ports.length ? ports.join(', ') : '–'}</td>
+									<td class="upd"
+										>{#if groupUpdate(group)}<span class="chip warn"
+												><Icon name="download" size={12} />{t('docker.update')}</span
+											>{/if}</td
+									>
+									<td class="actions">
+										<button
+											type="button"
+											class="btn icon-btn small"
+											disabled={busy || globalBusy}
+											aria-label={t(on ? 'docker.table.stopNamed' : 'docker.table.startNamed', {
+												name: group.name,
+											})}
+											title={t(on ? 'docker.stop' : 'docker.start')}
+											onclick={() => groupAction(group, on ? 'stop' : 'start')}
+											><Icon name={on ? 'stop' : 'play'} size={14} /></button
+										>
+										<button
+											type="button"
+											class="btn icon-btn small"
+											aria-label={t('docker.actionsFor', { name: group.name })}
+											title={t('docker.actionsFor', { name: group.name })}
+											aria-haspopup="menu"
+											aria-expanded={rowMenu?.group.id === group.id}
+											onpointerdown={() =>
+												(rowMenuWasOpen = rowMenu?.group.id === group.id ? group.id : '')}
+											onclick={(event) => openRowMenu(group, event.currentTarget)}
+											><Icon name="more" size={15} /></button
+										>
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			</section>
+		{:else}
+			<EmptyState title={t('docker.noMatch')} />
+		{/if}
+		<p class="foot muted">
+			<span>{t('docker.onVolume', { volume: status.settings.volume })}</span>
+			<span aria-hidden="true">·</span>
+			<span>{checked}</span><button
+				type="button"
+				class="icon-link"
+				aria-label={t('docker.checkUpdates')}
+				title={t('docker.checkUpdates')}
+				onclick={checkUpdates}
+				disabled={globalBusy}><Icon name="refresh" size={14} /></button
+			>
+			<span aria-hidden="true">·</span>
+			<span>{t('docker.version', { version: status.version })}</span>
+		</p>
+	{:else if jobs.length === 0 && idleApps.length === 0}
+		<EmptyState title={t('docker.empty')} />
 	{/if}
 {/if}
 
@@ -1185,198 +988,110 @@
 	</Dialog>
 {/if}
 
-{#snippet row(container: DockerContainer, member: boolean)}
-	<ContainerRow
-		{container}
-		{host}
-		{tailscaleHost}
-		busy={containerBusy(container)}
-		{member}
-		details={layout.details}
-		{...actionsFor(container)}
-	/>
-{/snippet}
-
-{#snippet stackHead(group: DockerGroup)}
-	{@const running = group.members.filter(isRunning).length}
-	{@const summary = t('docker.stackSummary', { running, total: group.members.length })}
-	<!-- A stack is a tile like a container: the icon opens its menu, the
-	     name unfolds the services as tiles behind it. -->
-	<div
-		class="stack-head"
-		class:stopped={running === 0}
-		title={search.trim() || filter !== 'all'
-			? t('docker.stackMatches', { count: shownMembers(group).length, total: group.members.length })
-			: undefined}
-		oncontextmenu={(event) => {
-			event.preventDefault();
-			stackMenu = { group, x: event.clientX, y: event.clientY };
-		}}
-		role="presentation"
-	>
-		<button
-			type="button"
-			class="stack-icon"
-			aria-label={t('docker.actionsFor', { name: group.name })}
-			aria-haspopup="menu"
-			onpointerdown={() => (stackMenuWasOpen = stackMenu?.group.id === group.id)}
-			onclick={(event) => openStackMenu(group, event.currentTarget)}
-			><AppIcon
-				src={group.members.find((container) => container.icon)?.icon ?? ''}
-				name={group.name}
-			/></button
-		>
-		<button
-			type="button"
-			class="stack-toggle"
-			aria-expanded={stackOpen(group.id)}
-			onclick={() => (expanded[group.id] = !stackOpen(group.id))}
-			><span class="stack-name">{group.name}</span><span class="sr-only">{t('docker.stack')}</span
-			>{#if group.members.some((container) => container.updateAvailable)}<span class="chip warn"
-					>{t('docker.update')}</span
-				>{/if}<span class="chevron" class:folded={!stackOpen(group.id)}
-				><Icon name="chevronDown" size={14} /></span
-			></button
-		>
-		<span class="stack-values"
-			><span class="sr-only">{summary}, {t('docker.cpu')}</span><span aria-hidden="true"
-				>{`${running}/${group.members.length} · `}</span
-			>{running ? formatPercent(sum(group, (container) => container.cpuPercent)) : '–'}<span
-				class="sr-only">, {t('docker.ram')}</span
-			><span aria-hidden="true">{' · '}</span>{running
-				? formatBytes(sum(group, (container) => container.memoryBytes))
-				: '–'}</span
-		>
-	</div>
-{/snippet}
-
-{#snippet groupCell(group: DockerGroup, framed: boolean)}
-	{@const stack = isStack(group)}
-	<div
-		class="cell"
-		class:dragging={dragged === group.id}
-		role={framed ? undefined : 'listitem'}
-		data-group={group.id}
-	>
-		{#if editing && layout.sort === 'own'}
-			<button
-				type="button"
-				class="handle"
-				aria-label={t('docker.layout.move', { name: group.name })}
-				aria-describedby="docker-move-hint"
-				disabled={savingLayout}
-				onpointerdown={(event) => dragCard(event, group.id)}
-				onkeydown={(event) => keyMove(event, group.id)}
-				><Icon name="grip" size={15} /><span>{t('docker.layout.handle')}</span></button
-			>
-		{/if}
-		<div class="body" inert={editing}>
-			{#if stack}
-				<StackCard
-					{group}
-					primary={stackPrimary(group, layout.primaryServices)}
-					{host}
-					{tailscaleHost}
-					busy={stackBusy(group)}
-					details={layout.details}
-					open={stackOpen(group.id) && !editing}
-					drawer={drawerId(group)}
-					ontoggle={() => (expanded[group.id] = !stackOpen(group.id))}
-					onmenu={(anchor) => openStackMenu(group, anchor)}
-					onmenuat={(event) => (stackMenu = { group, x: event.clientX, y: event.clientY })}
-					onmenupress={() => (stackMenuWasOpen = stackMenu?.group.id === group.id)}
-					onstartall={() => stackAction(group, 'start')}
-					onstopall={() => stackAction(group, 'stop')}
-				/>
-			{:else}
-				{@const container = group.members[0]}
-				<ContainerCard
-					{container}
-					{host}
-					{tailscaleHost}
-					busy={containerBusy(container)}
-					details={layout.details}
-					{...actionsFor(container)}
-				/>
-			{/if}
-		</div>
-	</div>
-{/snippet}
-
-{#if stackMenu}
-	{@const group = stackMenu.group}
-	{@const primary = stackPrimary(group, layout.primaryServices)}
+{#if rowMenu}
+	{@const group = rowMenu.group}
+	{@const app = groupApp(group)}
+	{@const primary = stackPrimary(group, layout.primaryServices) ?? group.members[0]}
 	{@const links = primary ? webLinks(primary, host, tailscaleHost) : []}
-	{@const app = group.members.find((c) => c.managed && c.app)?.app ?? ''}
-	{@const problemCount = group.members.filter(
-		(c) => !isRunning(c) || c.state === 'restarting',
-	).length}
+	{@const busy = groupBusy(group)}
+	{@const stack = group.members.length > 1}
 	<ContextMenu
 		label={t('docker.actionsFor', { name: group.name })}
-		x={stackMenu.x}
-		y={stackMenu.y}
-		onclose={() => (stackMenu = null)}
+		x={rowMenu.x}
+		y={rowMenu.y}
+		onclose={() => (rowMenu = null)}
 	>
-		{#if links.length > 0}
-			{#each links as link, index (`${index}:${link.href}`)}<a
-					role="menuitem"
-					href={link.href}
-					target="_blank"
-					rel="noreferrer"
-					title={link.label}
-					onclick={() => (stackMenu = null)}
-					><Icon name={link.icon} size={16} /><span>{link.text}</span></a
-				>{/each}
-			<hr />
-		{/if}
-		{#if layout.primaryServices[group.id] && !primary}<p class="menu-title">
+		<div class="menu-title">{group.name}</div>
+		{#if layout.primaryServices[group.id] && !stackPrimary(group, layout.primaryServices)}<p
+				class="menu-title"
+			>
 				{t('docker.primaryMissing', { service: layout.primaryServices[group.id] })}
 			</p>{/if}
-		{#if problemCount}
-			<button
-				type="button"
-				role="menuitem"
-				onclick={() => {
-					// group comes from stackMenu: read it before the menu closes.
-					const target = group;
-					stackMenu = null;
-					showProblems(target);
-				}}
-				><Icon name="activity" size={16} /><span
-					>{t('docker.stackProblems', { count: problemCount })}</span
-				></button
-			>
-		{/if}
 		<button
 			type="button"
 			role="menuitem"
-			disabled={editing || savingLayout}
-			onclick={() => {
-				const target = group;
-				stackMenu = null;
-				editLinks(target);
-			}}><Icon name="globe" size={16} /><span>{t('docker.stackLinks')}</span></button
+			disabled={busy}
+			onclick={() => pick(() => groupAction(group, 'restart'))}
+			><Icon name="restart" size={16} /><span>{t('docker.restart')}</span></button
 		>
-		{#if proxy && app}
+		{#if links.length}<p class="menu-title">{t('docker.table.open')}</p>{/if}
+		{#each links as link, index (`${index}:${link.href}`)}<a
+				role="menuitem"
+				href={link.href}
+				target="_blank"
+				rel="noreferrer"
+				title={link.label}
+				onclick={() => (rowMenu = null)}
+				><Icon name={link.icon} size={16} /><span>{link.text}</span></a
+			>{/each}
+		{#if inWindow && app}
+			<button type="button" role="menuitem" onclick={() => pick(() => openRemote(app))}
+				><Icon name="monitor" size={16} /><span>{t('docker.table.openRemote')}</span></button
+			>
+		{/if}
+		<hr />
+		{#each group.members as c (c.id)}
+			{@const label = c.service || dockerName(c, 'distinct')}
 			<button
 				type="button"
 				role="menuitem"
-				disabled={editing}
-				onclick={() => {
-					const target = app;
-					stackMenu = null;
-					openTailnet(target);
-				}}
+				onclick={() => pick(() => (dialog = { kind: 'logs', container: c }))}
+				><Icon name="fileText" size={16} /><span
+					>{stack ? t('docker.table.logsOf', { name: label }) : t('docker.logs')}</span
+				></button
+			>
+			<button
+				type="button"
+				role="menuitem"
+				disabled={!isRunning(c)}
+				onclick={() => pick(() => addContainerConsole(c.id, dockerName(c, 'distinct')))}
+				><Icon name="terminal" size={16} /><span
+					>{stack ? t('docker.table.consoleOf', { name: label }) : t('docker.console')}</span
+				></button
+			>
+		{/each}
+		<hr />
+		{#if app}
+			<a
+				role="menuitem"
+				href="/docker/apps/{encodeURIComponent(app)}"
+				onclick={() => (rowMenu = null)}
+				><Icon name="edit" size={16} /><span>{t('docker.edit')}</span></a
+			>
+		{/if}
+		{#if app && groupUpdate(group)}
+			<button
+				type="button"
+				role="menuitem"
+				disabled={busy}
+				onclick={() => pick(() => updateApp(app))}
+				><Icon name="download" size={16} /><span>{t('docker.updateNow')}</span></button
+			>
+		{/if}
+		{#if stack}
+			<button
+				type="button"
+				role="menuitem"
+				disabled={savingLayout}
+				onclick={() => pick(() => editLinks(group))}
+				><Icon name="globe" size={16} /><span>{t('docker.stackLinks')}</span></button
+			>
+		{/if}
+		{#if proxy && app}
+			<button type="button" role="menuitem" onclick={() => pick(() => openTailnet(app))}
 				><Icon name="tailnet" size={16} /><span
 					>{t(appInTailnet(app) ? 'docker.tailnetUnpublish' : 'docker.tailnetPublish')}</span
 				></button
 			>
 		{/if}
-		{#if app}
-			<a role="menuitem" href="/docker/apps/{app}" onclick={() => (stackMenu = null)}
-				><Icon name="edit" size={16} /><span>{t('docker.edit')}</span></a
-			>
-		{/if}
+		<hr />
+		<button
+			type="button"
+			role="menuitem"
+			class="danger"
+			onclick={() => pick(() => removeGroup(group))}
+			><Icon name="trash" size={16} /><span>{t('docker.remove')}</span></button
+		>
 	</ContextMenu>
 {/if}
 
@@ -1496,7 +1211,6 @@
 		align-items: center;
 		gap: var(--space-2);
 	}
-
 	.buttons {
 		display: flex;
 		flex-wrap: wrap;
@@ -1548,9 +1262,6 @@
 		width: 100%;
 		padding-left: 32px;
 	}
-	.segmented.icons button {
-		padding: 0 var(--space-2);
-	}
 	.icon-btn {
 		width: var(--control-height);
 		padding: 0;
@@ -1569,102 +1280,10 @@
 		border-bottom-left-radius: 0;
 		border-left: 1px solid color-mix(in srgb, var(--on-accent) 25%, transparent);
 	}
-	.status-line {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2) var(--space-3);
-	}
-	.filters {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-1);
-	}
-	.filter {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		min-height: 2rem;
-		padding: 0 10px;
-		background: transparent;
-		border: 1px solid transparent;
-		border-radius: 999px;
-		color: var(--muted);
-		font: inherit;
-		font-size: var(--text-md);
-		cursor: pointer;
-	}
-	.filter b {
-		color: var(--text);
-		font-weight: 600;
-	}
-	.filter.warn,
-	.filter.warn b {
-		color: var(--warn-text);
-	}
-	.filter:hover:not(:disabled) {
-		color: var(--text);
-	}
-	.filter[aria-pressed='true'] {
-		background: var(--chip);
-		border-color: var(--border);
-		color: var(--text);
-	}
-	.filter .dot.off {
-		background: var(--status-inactive);
-	}
-	.meta {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-1) var(--space-3);
-		margin: 0 0 0 auto;
-		color: var(--muted);
-		font-size: var(--text-sm);
-	}
-	.icon-link {
-		display: inline-flex;
-		padding: 2px;
-		background: none;
-		border: 0;
-		color: var(--accent);
-		cursor: pointer;
-	}
-	.icon-link:disabled {
-		opacity: 0.5;
-		cursor: default;
-	}
-	.bulk {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2);
-		padding-top: var(--space-3);
-		border-top: 1px solid var(--border);
-	}
-	.bulk .spacer {
-		flex: 1;
-	}
-	.engine {
-		font-size: var(--text-sm);
-	}
-	:global(.dropdown-panel) [role^='menuitem'] small {
-		display: block;
-		color: var(--muted);
-		font-size: var(--text-sm);
-		white-space: normal;
-	}
-	@media (max-width: 760px) {
-		.search-box {
-			flex: 1 1 10rem;
-			width: auto;
-		}
-		.meta {
-			margin-left: 0;
-		}
-	}
+	/* The filters: one segmented control with the number of apps in each. */
 	.segmented {
 		display: flex;
+		flex: none;
 		min-width: 0;
 		max-width: 100%;
 		overflow-x: auto;
@@ -1679,7 +1298,7 @@
 		flex: none;
 		display: inline-flex;
 		align-items: center;
-		gap: 7px;
+		gap: 6px;
 		height: 1.875rem;
 		padding: 0 10px;
 		background: transparent;
@@ -1690,310 +1309,224 @@
 		font-size: var(--text-base);
 		cursor: pointer;
 	}
-	.segmented button:hover:not(:disabled) {
+	.segmented button b {
+		font-weight: 500;
+	}
+	.segmented button:hover {
 		color: var(--text);
 	}
 	.segmented button[aria-pressed='true'] {
 		background: var(--chip);
 		color: var(--text);
-		font-weight: 500;
+		font-weight: 600;
 	}
-	.saved {
-		font-size: var(--text-base);
+	/* Four figures above the table. */
+	.stats {
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: var(--gap, 16px);
 	}
-
-	.layout-editor {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-3);
-		padding: var(--tile-pad);
-		font-size: var(--text-md);
+	.stat {
+		gap: 2px;
+		padding: 12px 16px;
 	}
-	.order {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
-		max-height: 22rem;
-		overflow-y: auto;
-		margin: 0;
-		padding: 0;
-		list-style: none;
+	.stat-label {
+		color: var(--muted);
+		font-size: var(--text-sm);
 	}
-	.order li {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
-		padding: var(--space-1) 6px;
-		border: 1px solid var(--border);
-		border-radius: var(--radius-ctl);
-	}
-	.order li.dragging {
-		border-style: dashed;
-		border-color: var(--accent);
-	}
-	.order-name {
-		flex: 1 1 auto;
-		min-width: 0;
+	.stat-value {
+		font-size: var(--text-lg);
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		white-space: nowrap;
-		font-weight: 500;
 	}
-	.grip {
-		padding: 0 var(--space-2);
-		cursor: grab;
+	.stat-value.warn {
+		color: var(--warn-text);
 	}
-	.arrow {
-		width: 2.25rem;
-		padding: 0;
+	/* The table of apps. */
+	.app-table tbody tr {
+		transition: background 0.12s ease;
 	}
-	.spacer {
-		flex: 1 1 auto;
+	.app-table tbody tr:hover {
+		background: color-mix(in srgb, var(--text) 4%, transparent);
 	}
-
-	/* The list: tiles of one fixed width, as many side by side as fit
-	   (owner's design of 30 Oct 2026). A stack is a tile too; its services
-	   follow as tiles of their own when it is unfolded. */
-	.list {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, 15rem);
-		gap: 10px;
+	.app-table tr.clickable {
+		cursor: pointer;
 	}
-	.stack,
-	.members {
-		display: contents;
+	.who {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		min-width: 0;
 	}
-	.stack-head {
-		display: grid;
-		grid-template-columns: 30px minmax(0, 1fr);
-		grid-template-rows: auto auto;
-		align-content: center;
-		column-gap: 10px;
-		row-gap: 1px;
-		height: 3.25rem;
-		padding: 0 var(--space-3) 0 14px;
-		box-sizing: border-box;
-		border: 1px solid var(--panel-border);
-		border-radius: 14px;
-		background: var(--panel-bg);
-		-webkit-backdrop-filter: var(--panel-backdrop);
-		backdrop-filter: var(--panel-backdrop);
-		box-shadow:
-			inset 4px 0 0 var(--accent),
-			var(--panel-shadow);
-		font-size: var(--text-md);
-	}
-	.stack-head.stopped {
-		box-shadow:
-			inset 4px 0 0 var(--muted),
-			var(--panel-shadow);
-	}
-	.stack-icon {
-		grid-row: 1 / span 2;
-		align-self: center;
+	.app-icon {
+		flex: none;
 		display: grid;
 		place-items: center;
 		width: 30px;
 		height: 30px;
-		padding: 0;
 		overflow: hidden;
-		border: 0;
-		border-radius: var(--radius-ctl);
-		background: none;
-		color: var(--text);
+		border-radius: 8px;
+		background: var(--chip);
 		font-size: var(--text-sm);
-		font-weight: 600;
-		cursor: pointer;
+		font-weight: 700;
+		text-transform: uppercase;
 	}
-	.stack-icon :global(img) {
-		padding: 0;
+	.app-icon.letter {
+		background: hsl(var(--hue) 50% 36%);
+		color: #fff;
 	}
-	.stack-icon:hover,
-	.stack-icon:focus-visible {
-		outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
-	}
-	.stack-toggle {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		min-width: 0;
-		padding: 0;
-		background: transparent;
-		border: 0;
-		color: var(--text);
-		font: inherit;
-		text-align: left;
-		cursor: pointer;
-	}
-	.stack-toggle .chip {
-		flex: none;
-		font-size: var(--text-xs);
-	}
-	.chevron {
-		display: inline-flex;
-		flex: none;
-		color: var(--muted);
-		transition: transform 0.15s ease;
-	}
-	.chevron.folded {
-		transform: rotate(-90deg);
-	}
-	.stack-name {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		font-weight: 600;
-	}
-	.stack-values {
-		overflow: hidden;
-		white-space: nowrap;
-		color: var(--muted);
-		font-family: var(--font-mono);
-		font-size: var(--text-sm);
-	}
-
-	/* Cards (owner's decision of 4 Nov 2026, variant B): all of one size,
-	   a stack is one card; opened, its services follow as cards. */
-	/* One size for all cards (owner's decision of 4 Nov 2026): S puts more,
-	   L fewer side by side; the services of an opened stack follow it. */
-	.cards {
-		--card-min: 17rem;
-	}
-	.cards.size-s {
-		/* Also one column more than M beside the side navigation at 1440 px. */
-		--card-min: 12.5rem;
-	}
-	.cards.size-l {
-		--card-min: 23rem;
-	}
-	.cards {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(min(var(--card-min), 100%), 1fr));
-		gap: var(--gap);
-	}
-	.cell {
+	.lines {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
 		min-width: 0;
 	}
-	.body {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		/* The cards fit their content to this width (container queries). */
-		container-type: inline-size;
-	}
-	.body > :global(article) {
-		flex: 1;
-		min-height: var(--card-h, auto);
-	}
-	.sorting .cell {
-		border-radius: var(--radius-tile);
-		outline: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent);
-		outline-offset: 3px;
-		user-select: none;
-	}
-	.sorting .cell.dragging {
-		outline: 2px solid var(--accent);
-	}
-	.cell.dragging .body {
-		opacity: 0.85;
-	}
-	.handle {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
-		min-height: 2rem;
-		padding: 0 10px;
-		border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-		border-radius: var(--radius-ctl);
-		background: color-mix(in srgb, var(--accent) 14%, var(--panel-bg));
+	.lines strong,
+	.app-link {
 		color: var(--text);
-		font: inherit;
-		font-size: var(--text-sm);
-		cursor: grab;
-		touch-action: none;
+		font-weight: 600;
+		text-decoration: none;
+		overflow-wrap: anywhere;
 	}
-	.handle :global(svg) {
-		color: var(--accent);
+	.app-link:hover,
+	.app-link:focus-visible {
+		text-decoration: underline;
 	}
-	.handle:focus-visible {
-		outline: 2px solid var(--accent);
-		outline-offset: 2px;
-	}
-	.dragging .handle {
-		cursor: grabbing;
-	}
-	/* The opened stack: a tinted frame around the stack card and its
-	   services, on the columns of the page grid (subgrid), so every card
-	   keeps the width of all others. The negative margin keeps the cards
-	   inside on the outer grid lines. */
-	.stack-frame {
-		grid-column: 1 / -1;
-		display: grid;
-		grid-template-columns: subgrid;
-		gap: var(--gap);
-		margin: calc(var(--space-2) * -1);
-		padding: var(--space-2);
-		border-radius: calc(var(--radius-tile) + var(--space-2));
-		background: color-mix(in srgb, var(--accent) 12%, transparent);
-		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
-	}
-	.layout-editor .editor-row {
+	.title-line {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: var(--space-3);
+		gap: 2px 8px;
+		min-width: 0;
 	}
-	.editor-label {
-		font-weight: 600;
+	.lines .sub {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		max-width: 22rem;
 	}
-	.editor-hint {
+	.narrow,
+	.narrow-chip {
+		display: none !important;
+	}
+	.state {
+		white-space: nowrap;
+	}
+	.state .mark {
+		display: inline-block;
+		width: 8px;
+		height: 8px;
+		margin-right: 7px;
+		border-radius: 50%;
+		background: currentColor;
+		vertical-align: 1px;
+	}
+	.state.stopped .mark {
+		background: none;
+		border: 1.5px solid currentColor;
+	}
+	.state.restarting .mark,
+	.state.error .mark {
+		width: 10px;
+		height: 9px;
+		border-radius: 0;
+		clip-path: polygon(50% 0, 100% 100%, 0 100%);
+	}
+	.state.running,
+	.state.partial {
+		color: var(--ok-text);
+	}
+	.state.partial .mark,
+	.state.restarting {
+		color: var(--warn-text);
+	}
+	.state.error {
+		color: var(--error-text);
+	}
+	.state.stopped {
+		color: var(--muted);
+	}
+	.cpu {
+		white-space: nowrap;
+		font-variant-numeric: tabular-nums;
+	}
+	.bar {
+		display: inline-block;
+		width: 56px;
+		height: 4px;
+		margin-right: 8px;
+		vertical-align: middle;
+		border-radius: 2px;
+		background: var(--track);
+		overflow: hidden;
+	}
+	.bar > span {
+		display: block;
+		height: 100%;
+		background: var(--accent);
+	}
+	.num {
+		font-variant-numeric: tabular-nums;
+	}
+	.ports {
+		max-width: 10rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--muted);
+	}
+	.upd {
+		width: 1%;
+		white-space: nowrap;
+	}
+	.chip :global(svg) {
+		vertical-align: -1px;
+		margin-right: 3px;
+	}
+	.actions {
+		width: 1%;
+		white-space: nowrap;
+		text-align: right;
+	}
+	.actions .btn + .btn {
+		margin-left: 6px;
+	}
+	.small {
+		min-height: 30px;
+		height: 30px;
+		width: 30px;
+	}
+	.foot {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 4px 8px;
 		margin: 0;
 		font-size: var(--text-sm);
 	}
-
-	@media (prefers-reduced-motion: reduce) {
-		.chevron {
-			transition: none;
-		}
+	.icon-link {
+		display: inline-flex;
+		padding: 2px;
+		background: none;
+		border: 0;
+		color: var(--accent);
+		cursor: pointer;
 	}
-	/* Phones: one tile per line. */
-	@media (max-width: 760px) {
-		.list,
-		.cards {
-			grid-template-columns: minmax(0, 1fr);
-		}
-		.handle {
-			min-height: 2.75rem;
-		}
+	.icon-link:disabled {
+		opacity: 0.5;
+		cursor: default;
 	}
-	@media (max-width: 760px) {
-		.search {
-			max-width: none;
-		}
-		.view-tools {
-			margin-left: 0;
-		}
-		.segmented button {
-			height: 2.5rem;
-		}
+	:global(.dropdown-panel) [role^='menuitem'] small {
+		display: block;
+		color: var(--muted);
+		font-size: var(--text-sm);
+		white-space: normal;
 	}
-
 	small {
 		font-size: var(--text-sm);
 		color: var(--muted);
-	}
-	.check {
-		flex-direction: row;
-		align-items: center;
-		gap: 10px;
-	}
-	.check input {
-		width: 18px;
-		height: 18px;
-		margin: 0;
 	}
 	.text {
 		font-size: var(--text-md);
@@ -2021,11 +1554,105 @@
 	}
 	.phone-tools {
 		display: flex;
-		align-items: center;
+		flex-direction: column;
 		gap: var(--space-2);
 	}
 	.phone-tools .search-box {
-		flex: 1;
-		width: auto;
+		width: 100%;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.app-table tbody tr {
+			transition: none;
+		}
+	}
+	/* Fewer columns as the window narrows; the figures move into the sub-line. */
+	@media (max-width: 899px) {
+		.app-table .ports {
+			max-width: 6rem;
+		}
+		.lines .sub {
+			max-width: 13rem;
+		}
+		.app-table td.upd,
+		.app-table th.upd {
+			display: none;
+		}
+		.lines .narrow-chip {
+			display: inline-flex !important;
+			font-size: var(--text-xs);
+		}
+		.bar {
+			width: 36px;
+		}
+	}
+	@media (max-width: 699px) {
+		.stats {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		.app-table .wide {
+			display: none;
+		}
+		.lines .narrow {
+			display: block !important;
+		}
+	}
+	/* Phones: each app a stacked row – name with its figures, state, actions. */
+	@media (max-width: 639px) {
+		.app-table thead {
+			display: none;
+		}
+		.app-table,
+		.app-table tbody {
+			display: block;
+		}
+		.app-table tr {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) auto;
+			grid-template-areas:
+				'name actions'
+				'state actions';
+			align-items: center;
+			column-gap: 8px;
+			padding: 10px 16px;
+			border-bottom: 1px solid var(--border);
+		}
+		.app-table tr:last-child {
+			border-bottom: 0;
+		}
+		.app-table td {
+			display: block;
+			padding: 0 !important;
+			border: 0 !important;
+		}
+		.app-table td.name {
+			grid-area: name;
+		}
+		.app-table td.state {
+			grid-area: state;
+			padding-left: 42px !important;
+			white-space: normal;
+		}
+		.app-table td.upd {
+			display: none;
+		}
+		.app-table td.actions {
+			grid-area: actions;
+			width: auto;
+		}
+		.lines .sub {
+			max-width: none;
+			white-space: normal;
+		}
+		.actions .small {
+			width: 2.75rem;
+			height: 2.75rem;
+		}
+		.search-box {
+			flex: 1 1 10rem;
+			width: auto;
+		}
+		.segmented button {
+			height: 2.5rem;
+		}
 	}
 </style>

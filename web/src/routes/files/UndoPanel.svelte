@@ -37,6 +37,14 @@
 			busy = '';
 		}
 	}
+	/** PLAN 67-1: Bearbeiten › Rückgängig in the menu bar takes back the newest change. */
+	export function canUndo(): boolean {
+		const last = records[0];
+		return !!last && !busy && !last.busy && allowed(last);
+	}
+	export function undoLast() {
+		if (records[0]) void undo(records[0]);
+	}
 	$effect(() => {
 		refresh;
 		return poll(load, { interval: 5000 });

@@ -171,6 +171,53 @@
 		if (selected === share.name) selected = '';
 		await load();
 	}
+
+	// PLAN 67-1: the menu bar of the desktop runs the same actions as the page.
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	const adminReady = () => canAdminister && accountReady;
+	registerMenuCommands({
+		'shares.new': {
+			run: () => (dialog = { kind: 'create' }),
+			enabled: () => adminReady() && volumes.length > 0,
+		},
+		'shares.edit': {
+			run: () => detail && (dialog = { kind: 'edit', share: detail }),
+			enabled: () => adminReady() && !!detail,
+		},
+		'shares.rights': {
+			run: () => (tab = 'access'),
+			enabled: () => !!detail,
+		},
+		'shares.connect': {
+			run: () => detail && (dialog = { kind: 'connect', share: detail }),
+			enabled: () => !!detail,
+		},
+		'shares.delete': {
+			run: () => detail && (dialog = { kind: 'delete', share: detail }),
+			enabled: () => canAdminister && !!detail,
+		},
+		...Object.fromEntries(
+			(['name', 'volume'] as const).map((column) => [
+				'shares.sort.' + column,
+				{
+					run: () => view.sort !== column && sortBy(column),
+					checked: () => view.sort === column,
+				},
+			]),
+		),
+		...Object.fromEntries(
+			(['all', 'smb', 'nfs'] as const).map((protocol) => [
+				'shares.proto.' + protocol,
+				{
+					run: () => {
+						view.protocol = protocol;
+						void saveView();
+					},
+					checked: () => view.protocol === protocol,
+				},
+			]),
+		),
+	});
 </script>
 
 <PageHead title={t('shares.title')}>

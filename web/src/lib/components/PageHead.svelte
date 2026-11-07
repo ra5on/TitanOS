@@ -279,6 +279,10 @@
 		margin-top: 8px;
 		margin-bottom: var(--gap, 16px);
 	}
+	/* PLAN 67: in a window and on the phone the page is a column with gaps. */
+	:global(:is(main.in-window, main.phone-page)) > .win-intro {
+		margin: 0;
+	}
 	.win-intro :global(p) {
 		margin: 0;
 		max-width: 60rem;

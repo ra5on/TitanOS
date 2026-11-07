@@ -320,6 +320,20 @@
 			details?.scrollIntoView({ block: 'start', behavior: 'smooth' });
 		}
 	}
+
+	// PLAN 67-1: the menu bar of the desktop – the head's actions of the plugins.
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	registerMenuCommands({
+		'appcenter.refresh': {
+			run: () => void refreshCatalog(true),
+			enabled: () => !busy && !refreshing,
+		},
+		'appcenter.sources': {
+			run: () => ((error = null), (sourcesOpen = true)),
+			enabled: () => !locked,
+		},
+		'appcenter.fromLink': { run: openLink, enabled: () => !locked && !!volumes.length },
+	});
 </script>
 
 <PageHead title={t('plugins.title')}>

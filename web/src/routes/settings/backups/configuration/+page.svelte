@@ -200,6 +200,12 @@
 		if (wanted) fetchBackup(wanted);
 		wanted = null;
 	}
+
+	// PLAN 67-1: Sicherung › Ablage › Stick jetzt sichern in the menu bar of the desktop.
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	registerMenuCommands({
+		'backup.stickNow': { run: run, enabled: () => busy === null && !!status?.target },
+	});
 </script>
 
 <PageHead title={t('safeguard.config')}>

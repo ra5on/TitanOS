@@ -867,6 +867,45 @@
 		retried = false;
 		connect();
 	}
+
+	/** PLAN 67-1: what the menu bar of the window does with the remote view. */
+	export const menu = {
+		live: () => phase === 'live',
+		upload: () => fileInput?.click(),
+		reconnect,
+		quality: () => quality,
+		setQuality: (q: Quality) => setQuality(q, prefs.fps ?? 60),
+		audio: () => !!hello?.audio && !noAudio,
+		muted: () => prefs.muted,
+		toggleMute,
+		fullscreen: () => void screen?.requestFullscreen?.().catch(() => {}),
+		remoteClip: () => remoteClip,
+		/** Sends the text on this computer's clipboard to the app. */
+		clipSend: async () => {
+			try {
+				const text = await navigator.clipboard.readText();
+				if (text) send(fitText('clipboard', text));
+			} catch {
+				// No permission: the ⋯ menu's clipboard field still works.
+			}
+		},
+		/** Puts the app's clipboard onto this computer's. */
+		clipGet: copyRemote,
+		/** Files the app offered for download (Ablage › Heruntergeladen ›). */
+		downloads: () => downloads.map((d) => ({ id: d.id, text: d.name })),
+		download: (id: string) => {
+			const d = downloads.find((x) => x.id === id);
+			if (!d) return;
+			const a = document.createElement('a');
+			a.href = apiPath(`/viewer/${encodeURIComponent(app)}/downloads/${encodeURIComponent(d.id)}`);
+			a.download = d.name;
+			a.click();
+		},
+		/** Ansicht › Statistik: frames, delay and GPU over the picture. */
+		stats: () => showStats,
+		toggleStats: () => (showStats = !showStats),
+	};
+	let showStats = $state(false);
 </script>
 
 {#snippet volumeControl()}
@@ -1141,6 +1180,7 @@
 		onchange={(e) => upload(e.currentTarget.files)}
 	/>
 	<div class="screen" bind:this={screen}>
+		{#if showStats && live && statsText}<p class="stats-line" role="status">{statsText}</p>{/if}
 		<canvas
 			bind:this={canvas}
 			class:hidden={!hello || phase !== 'live'}
@@ -1407,6 +1447,19 @@
 		height: 60%;
 		background: currentColor;
 		transform: rotate(45deg);
+	}
+	.stats-line {
+		position: absolute;
+		top: 8px;
+		right: 8px;
+		z-index: 2;
+		margin: 0;
+		padding: 3px 9px;
+		border-radius: 8px;
+		background: rgb(0 0 0 / 0.72);
+		color: #fff;
+		font-size: var(--text-sm);
+		pointer-events: none;
 	}
 	.screen {
 		position: relative;

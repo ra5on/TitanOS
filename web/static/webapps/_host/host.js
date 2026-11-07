@@ -116,6 +116,15 @@
 		});
 	}
 
+	// Menu commands of the TitanOS window and the Ctrl key they stand for.
+	var KEYS = {
+		save: ['s', 'KeyS', 83],
+		undo: ['z', 'KeyZ', 90],
+		redo: ['y', 'KeyY', 89],
+		find: ['f', 'KeyF', 70],
+		'select-all': ['a', 'KeyA', 65],
+	};
+
 	// Messages of the TitanOS window only (the frame's parent).
 	window.addEventListener('message', function (event) {
 		if (!framed || event.source !== parent) return;
@@ -135,6 +144,23 @@
 						key: 'F12',
 						code: 'F12',
 						keyCode: 123,
+						bubbles: true,
+						cancelable: true,
+					}),
+				);
+			});
+		} else if (msg.type === 'webapp-command' && bridge === 'host' && KEYS[msg.command]) {
+			// PLAN 67-1: the menu bar of the window (Speichern, Rückgängig …) presses the app's own keys.
+			var key = KEYS[msg.command];
+			var into = canvas();
+			if (!into) return;
+			['keydown', 'keyup'].forEach(function (type) {
+				into.dispatchEvent(
+					new KeyboardEvent(type, {
+						key: key[0],
+						code: key[1],
+						keyCode: key[2],
+						ctrlKey: true,
 						bubbles: true,
 						cancelable: true,
 					}),

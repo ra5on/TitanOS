@@ -170,9 +170,7 @@
 		position: fixed;
 		inset: 0;
 		z-index: 70;
-		background: rgb(3 6 14 / 0.45);
-		-webkit-backdrop-filter: blur(6px);
-		backdrop-filter: blur(6px);
+		background: rgb(0 0 0 / 0.45);
 	}
 	.panel {
 		position: fixed;
@@ -184,11 +182,9 @@
 		display: flex;
 		flex-direction: column;
 		color: var(--text);
-		background: color-mix(in srgb, var(--surface) 78%, transparent);
-		-webkit-backdrop-filter: blur(30px) saturate(170%);
-		backdrop-filter: blur(30px) saturate(170%);
-		border-left: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
-		box-shadow: -24px 0 60px -24px rgb(0 0 0 / 0.7);
+		background: var(--bg);
+		border-left: 1px solid var(--border);
+		box-shadow: var(--shadow-menu, -18px 0 44px rgb(0 0 0 / 0.5));
 	}
 	header {
 		display: flex;
@@ -253,7 +249,7 @@
 	}
 	.filter label.on {
 		color: var(--on-accent, #fff);
-		background: var(--ag-gradient, var(--accent));
+		background: var(--accent);
 		border-color: transparent;
 	}
 	.filter input {
@@ -293,8 +289,8 @@
 		border-radius: 9px;
 		display: grid;
 		place-items: center;
-		color: #fff;
-		background: linear-gradient(145deg, var(--c), color-mix(in srgb, var(--c) 45%, #0b1020));
+		color: var(--muted);
+		background: var(--chip);
 	}
 	.card strong {
 		font-size: var(--text-md);

@@ -35,7 +35,7 @@ test('headings, tables and italics', () => {
 	);
 	assert.equal(
 		chatMarkdown('| Platte | Temperatur |\n|---|---:|\n| sda | **41 °C** |'),
-		'<div class="table"><table><thead><tr><th>Platte</th><th>Temperatur</th></tr></thead><tbody><tr><td>sda</td><td><strong>41 °C</strong></td></tr></tbody></table></div>',
+		'<div class="table table-wrap"><table class="data-table"><thead><tr><th>Platte</th><th>Temperatur</th></tr></thead><tbody><tr><td>sda</td><td><strong>41 °C</strong></td></tr></tbody></table></div>',
 	);
 	assert.equal(chatMarkdown('Text\n- a\n- b'), '<p>Text</p><ul><li>a</li><li>b</li></ul>');
 	assert.equal(chatMarkdown('`*nicht kursiv*`'), '<p><code>*nicht kursiv*</code></p>');

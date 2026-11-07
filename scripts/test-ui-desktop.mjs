@@ -209,7 +209,12 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   await shot(page, "06-hauptmenue");
   await page.keyboard.press("Escape");
   // "Show desktop" minimizes every window; then the context menus.
-  await page.getByRole("button", { name: "Arbeitsplatz zeigen" }).click();
+  // PLAN 67: "Arbeitsplatz zeigen" sits in the logo menu of the top bar (and Alt + K).
+  await page.locator('header.topbar [data-menu="logo"]').click();
+  await page
+    .locator(".mb-menu")
+    .getByRole("menuitem", { name: "Arbeitsplatz zeigen" })
+    .click();
   await page.waitForTimeout(300);
   assert.equal(
     await page.locator("section.win:not(.min)").count(),
@@ -314,7 +319,7 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   await ctx.close();
 }
 
-// 3b. Cluster (PLAN 64): the node switcher sits right after the menu button,
+// 3b. Cluster (PLAN 64): the node switcher sits right after the menus (PLAN 67),
 // names the node and its menu is not cut off by the bar.
 {
   const { ctx, page } = await open(1600, 1000, "graphit", "/", (made) =>
@@ -349,13 +354,13 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   const trigger = bar.getByRole("button", { name: /titan/ });
   await trigger.waitFor();
   assert.ok((await trigger.innerText()).includes("titan"), "node name shown");
-  const menuBtn = await bar
-    .getByRole("button", { name: "Alle Programme" })
-    .boundingBox();
+  // PLAN 67: right after the menus of the program in front.
+  const menus = await bar.locator(".menubar").boundingBox();
   const node = await trigger.boundingBox();
   assert.ok(
-    node.x > menuBtn.x && node.x - (menuBtn.x + menuBtn.width) < 30,
-    "switcher right after the menu button",
+    node.x >= menus.x + menus.width - 1 &&
+      node.x - (menus.x + menus.width) < 30,
+    "switcher right after the menus",
   );
   await trigger.click();
   const item = page.getByRole("menuitemradio", { name: /thor/ });
@@ -424,6 +429,24 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
     0,
     "unpinned",
   );
+  // PLAN 67: dragging a program from the desktop or from the main menu into the dock pins it.
+  await page
+    .locator(".icons > .ico", { hasText: "Docker" })
+    .first()
+    .dragTo(dock, { force: true });
+  await dock
+    .getByRole("button", { name: "Docker", exact: true })
+    .waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Alle Programme" }).first().click();
+  await page.locator(".launcher").waitFor();
+  await page
+    .locator(".launcher .prog", { hasText: "Sicherung" })
+    .first()
+    .dragTo(dock, { force: true });
+  await dock
+    .getByRole("button", { name: "Sicherung", exact: true })
+    .waitFor({ timeout: 5000 });
+  await page.keyboard.press("Escape");
   // An icon dragged to a free spot stays there.
   const icon = page.locator(".icons > .ico", { hasText: "Speicher" });
   const before = await icon.boundingBox();
@@ -512,9 +535,8 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${name}.png` });
   await page.locator(".launcher").waitFor({ state: "detached", timeout: 3000 });
   // The bars at the top: size by right click.
   await page
-    .locator("header.topbar .pill")
-    .first()
-    .click({ button: "right", position: { x: 4, y: 4 } });
+    .locator("header.topbar")
+    .click({ button: "right", position: { x: 700, y: 6 } });
   await page.getByRole("menuitemradio", { name: /Groß/ }).click();
   const pb = await page.locator("header.topbar .pb").first().boundingBox();
   assert.ok(pb.height >= 40, "large bar");

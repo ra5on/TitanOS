@@ -118,6 +118,13 @@
 			verb: t(`activity.verb.${label.verb}` as 'activity.verb.run'),
 		});
 	}
+
+	// PLAN 67-1: Ablage › Exportieren in the menu bar of the desktop.
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	registerMenuCommands({
+		'logs.export': { run: () => void download('csv'), enabled: () => !busy },
+		'logs.exportJson': { run: () => void download('json'), enabled: () => !busy },
+	});
 </script>
 
 <NavigationGuard {dirty} />

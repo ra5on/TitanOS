@@ -225,6 +225,31 @@
 					: zoneLabel(selected.to)
 			: '',
 	);
+
+	// PLAN 67-1: the menu bar of the desktop (Sicherheit).
+	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
+	registerMenuCommands({
+		'security.addZone': {
+			run: () => {
+				choose('zones');
+				newZone();
+			},
+			enabled: () => !!draft && !locked,
+		},
+		'security.firewall': {
+			run: () => draft && (draft.enabled = !draft.enabled),
+			checked: () => !!draft?.enabled,
+			enabled: () => !!draft && !locked,
+		},
+		'security.apply': { run: apply, enabled: () => dirty && valid && !busy },
+		'security.discard': { run: discard, enabled: () => dirty && !busy },
+		...Object.fromEntries(
+			TABS.map((id) => [
+				'security.tab.' + id,
+				{ run: () => choose(id), checked: () => tab === id, enabled: () => !!status },
+			]),
+		),
+	});
 </script>
 
 <PageHead title={t('firewall.title')} />
