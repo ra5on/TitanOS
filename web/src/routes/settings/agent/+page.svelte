@@ -467,12 +467,8 @@
 		onchange={choose}
 	/>
 	{#if tab === 'features'}
-		<section class="tile ui-card" aria-labelledby="ag-features">
-			<div class="card-head"><h2 id="ag-features">{t('agent.f.title')}</h2></div>
-			<div class="card-body">
-				<FeaturesPanel admin={true} />
-			</div>
-		</section>
+		<!-- PLAN 68: one card per group of functions, each function a row. -->
+		<FeaturesPanel admin={true} heading={t('agent.f.title')} />
 	{:else if tab === 'overview'}
 		<section class="tile ui-card" aria-labelledby="ag-hero">
 			<div class="set-row">
@@ -513,57 +509,67 @@
 		/>
 		<section class="tile ui-card" aria-labelledby="ag-phone">
 			<div class="card-head"><h2 id="ag-phone">{t('agent.phoneApp')}</h2></div>
-			<div class="card-body">
-				<p class="muted">{t('agent.phoneAppIntro')}</p>
-				<div class="phone-app">
-					<fieldset class="ways">
-						<legend class="sr-only">{t('agent.phoneWay')}</legend>
-						{#each addresses as a (a.url)}
-							<label class="way" class:on={way === a.url}
-								><input type="radio" name="way" value={a.url} bind:group={way} /><span
-									><strong>{t(`agent.way.${a.kind}` as MessageKey)}</strong><small>{a.url}</small
-									></span
-								><span class="chip" class:ok={a.https}
-									>{a.https ? t('agent.wayHttps') : t('agent.wayHttp')}</span
-								></label
-							>
-						{/each}
-						<label class="way" class:on={way === 'own'}
-							><input type="radio" name="way" value="own" bind:group={way} /><span
-								><strong>{t('agent.way.own')}</strong>
-								{#if way === 'own'}<input
-										class="field"
-										bind:value={own}
-										placeholder="https://nas.example.org"
-										aria-label={t('agent.way.own')}
-									/>{:else}<small>{t('agent.wayOwnHint')}</small>{/if}</span
-							></label
-						>
-						<p class="muted small">{t('agent.phoneHttpsHint')}</p>
-					</fieldset>
-					<div class="qr">
-						{#if appUrl}
-							<QrCode text={appUrl} label={t('agent.phoneQr', { url: appUrl })} size={180} />
-							<small class="mono">{appUrl.replace(/^https?:\/\//, '')}</small>
-							<button type="button" class="btn" onclick={copyUrl}
-								>{copied ? '✓ ' + t('agent.copied') : t('agent.copyLink')}</button
-							>
-						{:else}
-							<p class="muted small">{t('agent.phoneNoUrl')}</p>
-						{/if}
-					</div>
+			<div class="set-row one">
+				<span class="set-hint">{t('agent.phoneAppIntro')}</span>
+			</div>
+			<fieldset class="ways">
+				<legend class="sr-only">{t('agent.phoneWay')}</legend>
+				{#each addresses as a (a.url)}
+					<label class="set-row way" class:on={way === a.url}
+						><input type="radio" name="way" value={a.url} bind:group={way} /><span class="set-label"
+							><strong>{t(`agent.way.${a.kind}` as MessageKey)}</strong><small class="set-hint mono"
+								>{a.url}</small
+							></span
+						><span class="chip" class:ok={a.https}
+							>{a.https ? '✓ ' + t('agent.wayHttps') : t('agent.wayHttp')}</span
+						></label
+					>
+				{/each}
+				<label class="set-row way" class:on={way === 'own'}
+					><input type="radio" name="way" value="own" bind:group={way} /><span class="set-label"
+						><strong>{t('agent.way.own')}</strong>
+						{#if way === 'own'}<input
+								class="field"
+								bind:value={own}
+								placeholder="https://nas.example.org"
+								aria-label={t('agent.way.own')}
+							/>{:else}<small class="set-hint">{t('agent.wayOwnHint')}</small>{/if}</span
+					></label
+				>
+			</fieldset>
+			<div class="set-row qr-row">
+				<span class="set-label"
+					>{t('agent.phoneQrTitle')}<span class="set-hint">{t('agent.phoneHttpsHint')}</span></span
+				>
+				<div class="set-control qr">
+					{#if appUrl}
+						<QrCode text={appUrl} label={t('agent.phoneQr', { url: appUrl })} size={180} />
+						<small class="mono">{appUrl.replace(/^https?:\/\//, '')}</small>
+					{:else}
+						<p class="set-hint">{t('agent.phoneNoUrl')}</p>
+					{/if}
 				</div>
 			</div>
+			{#if appUrl}
+				<div class="card-foot">
+					<button type="button" class="btn" onclick={copyUrl}
+						>{copied ? '✓ ' + t('agent.copied') : t('agent.copyLink')}</button
+					>
+				</div>
+			{/if}
 		</section>
 	{/if}
 	{#if tab === 'connection'}
 		<section class="tile ui-card" aria-labelledby="ag-conn">
 			<div class="card-head"><h2 id="ag-conn">{t('agent.sectionConnection')}</h2></div>
-			<div class="card-body">
-				{#if clusterInfo?.member || settings.source === 'cluster'}
-					<div class="stack">
-						<span>{t('agent.source')}</span>
+			{#if clusterInfo?.member || settings.source === 'cluster'}
+				<div class="set-row">
+					<span class="set-label"
+						>{t('agent.source')}<span class="set-hint">{t('agent.sourceHint')}</span></span
+					>
+					<div class="set-control">
 						<Segments
+							compact
 							label={t('agent.source')}
 							value={settings.source ?? ''}
 							options={[
@@ -575,46 +581,42 @@
 							]}
 							onchange={(v) => (settings!.source = v)}
 						/>
-						<span class="muted">{t('agent.sourceHint')}</span>
 					</div>
-				{/if}
-				{#if settings.source === 'cluster'}
-					<div class="stack">
-						<p class={shareState === 'allowed' ? 'notice-ok' : 'notice-warn'}>
-							{shareState
-								? t(shareText[shareState], { node: clusterInfo?.adminNode ?? '' })
-								: t('agent.shareNotAsked', { node: clusterInfo?.adminNode ?? '' })}
-						</p>
-						{#if shareState !== 'allowed'}
-							<span class="line"
-								><button type="button" class="btn" onclick={askAdmin}
-									>{t('agent.shareAsk', { node: clusterInfo?.adminNode ?? '' })}</button
-								></span
-							>
-						{/if}
-					</div>
-				{:else}
-					<label class="stack">
-						<span>{t('agent.ollamaServer')}</span>
-						<span class="line">
-							<input
-								class="field wide"
-								bind:value={settings.ollama}
-								placeholder="http://192.168.1.5:11434"
-							/>
-							<button type="button" class="btn" onclick={test}>{t('agent.check')}</button>
-						</span>
-						<span class="muted">{t('agent.ollamaHint')}</span>
-					</label>
-				{/if}
-				{#if check}
+				</div>
+			{/if}
+			{#if settings.source === 'cluster'}
+				<div class="set-row one">
+					<p class={shareState === 'allowed' ? 'notice-ok' : 'notice-warn'}>
+						{shareState
+							? t(shareText[shareState], { node: clusterInfo?.adminNode ?? '' })
+							: t('agent.shareNotAsked', { node: clusterInfo?.adminNode ?? '' })}
+					</p>
+				</div>
+			{:else}
+				<label class="set-row">
+					<span class="set-label"
+						>{t('agent.ollamaServer')}<span class="set-hint">{t('agent.ollamaHint')}</span></span
+					>
+					<span class="set-control">
+						<input
+							class="field"
+							bind:value={settings.ollama}
+							placeholder="http://192.168.1.5:11434"
+						/>
+					</span>
+				</label>
+			{/if}
+			{#if check}
+				<div class="set-row one">
 					<p class={check.reachable ? 'notice-ok' : 'notice-warn'}>
 						{check.reachable
 							? t('agent.checkOk', { version: check.version ?? '', models: check.models ?? 0 })
 							: t('agent.checkFail', { error: check.error ?? '' })}
 					</p>
-				{:else if status?.enabled}
-					<p class="muted">
+				</div>
+			{:else if status?.enabled}
+				<div class="set-row one">
+					<p class="set-hint state">
 						<span class="dot {status.reachable ? 'ok' : 'error'}"></span>
 						{status.reachable
 							? t('agent.connected', {
@@ -623,65 +625,65 @@
 								})
 							: t('agent.notConnected', { error: status.error ?? '' })}
 					</p>
+				</div>
+			{/if}
+			{#if status && !status.volume}<div class="set-row one">
+					<p class="notice-warn">{t('agent.noVolume')}</p>
+				</div>{/if}
+			{#if settings.source === 'cluster'}
+				{#if shareState !== 'allowed'}
+					<div class="card-foot">
+						<button type="button" class="btn" onclick={askAdmin}
+							>{t('agent.shareAsk', { node: clusterInfo?.adminNode ?? '' })}</button
+						>
+					</div>
 				{/if}
-				{#if status && !status.volume}<p class="notice-warn">{t('agent.noVolume')}</p>{/if}
-			</div>
+			{:else}
+				<div class="card-foot">
+					<button type="button" class="btn" onclick={test}>{t('agent.check')}</button>
+				</div>
+			{/if}
 		</section>
 
 		{#if clusterInfo?.admin}
 			<section class="tile ui-card" aria-labelledby="ag-nodes">
 				<div class="card-head"><h2 id="ag-nodes">{t('agent.sectionNodes')}</h2></div>
-				<div class="card-body">
-					<p class="muted">{t('agent.nodesIntro')}</p>
-					{#if settings.shared?.length}
-						<ul class="nodes">
-							{#each settings.shared as sh (sh.node)}
-								<li>
-									<span class="node-name"
-										><strong>{sh.name}</strong><small class="muted"
-											>{t('agent.nodeAsked', { date: new Date(sh.asked).toLocaleString() })}</small
-										></span
-									>
-									<span class="chip {sh.allowed ? 'ok' : 'warn'}"
-										>{sh.allowed ? t('agent.nodeAllowed') : t('agent.nodePending')}</span
-									>
-									<button
-										type="button"
-										class="btn {sh.allowed ? '' : 'btn-primary'}"
-										onclick={() => setShare(sh.node, { allowed: !sh.allowed })}
-										>{sh.allowed ? t('agent.nodeRevoke') : t('agent.nodeRelease')}</button
-									>
-									<button
-										type="button"
-										class="btn"
-										onclick={() => setShare(sh.node, { remove: true })}
-										>{t('agent.nodeRemove')}</button
-									>
-								</li>
-							{/each}
-						</ul>
-					{:else}
-						<p class="muted">{t('agent.nodesNone')}</p>
-					{/if}
-				</div>
+				<div class="set-row one"><span class="set-hint">{t('agent.nodesIntro')}</span></div>
+				{#each settings.shared ?? [] as sh (sh.node)}
+					<div class="set-row">
+						<span class="set-label"
+							><strong>{sh.name}</strong><span class="set-hint"
+								>{t('agent.nodeAsked', { date: new Date(sh.asked).toLocaleString() })}</span
+							></span
+						>
+						<div class="set-control node-tools">
+							<span class="chip {sh.allowed ? 'ok' : 'warn'}"
+								>{sh.allowed ? '✓ ' + t('agent.nodeAllowed') : t('agent.nodePending')}</span
+							>
+							<button
+								type="button"
+								class="btn {sh.allowed ? '' : 'btn-primary'}"
+								onclick={() => setShare(sh.node, { allowed: !sh.allowed })}
+								>{sh.allowed ? t('agent.nodeRevoke') : t('agent.nodeRelease')}</button
+							>
+							<button type="button" class="btn" onclick={() => setShare(sh.node, { remove: true })}
+								>{t('agent.nodeRemove')}</button
+							>
+						</div>
+					</div>
+				{:else}
+					<div class="set-row one"><span class="set-hint">{t('agent.nodesNone')}</span></div>
+				{/each}
 			</section>
 		{/if}
 
 		<section class="tile ui-card" aria-labelledby="ag-model">
 			<div class="card-head"><h2 id="ag-model">{t('agent.sectionModel')}</h2></div>
-			<div class="card-body">
-				<label class="stack">
-					<span>{t('agent.model')}</span>
-					<select class="field" bind:value={settings.model}>
-						<option value="">{t('agent.modelChoose')}</option>
-						{#each models as m (m.name)}<option value={m.name}>{m.name} ({gb(m.size)})</option
-							>{/each}
-						{#if settings.model && !models.some((m) => m.name === settings!.model)}<option
-								value={settings.model}>{settings.model}</option
-							>{/if}
-					</select>
+			<label class="set-row">
+				<span class="set-label"
+					>{t('agent.model')}
 					{#if chosen}
-						<span class="muted caps">
+						<span class="set-hint caps">
 							{t('agent.can')}
 							{#each ['tools', 'thinking', 'vision'] as cap (cap)}
 								<span class="chip {chosen.capabilities.includes(cap) ? 'ok' : ''}"
@@ -691,26 +693,51 @@
 							{/each}
 						</span>
 					{/if}
-					{#if others.length}<span class="muted"
+					{#if others.length}<span class="set-hint"
 							>{t('agent.modelsWithoutTools', {
 								names: others.map((m) => m.name).join(', '),
 							})}</span
-						>{/if}
-				</label>
-				{#if chosen && chosen.levels.length}
-					<div class="stack">
-						<span>{t('agent.thinkDefault')}</span>
+						>{/if}</span
+				>
+				<span class="set-control">
+					<select class="field" bind:value={settings.model}>
+						<option value="">{t('agent.modelChoose')}</option>
+						{#each models as m (m.name)}<option value={m.name}>{m.name} ({gb(m.size)})</option
+							>{/each}
+						{#if settings.model && !models.some((m) => m.name === settings!.model)}<option
+								value={settings.model}>{settings.model}</option
+							>{/if}
+					</select>
+				</span>
+			</label>
+			{#if chosen && chosen.levels.length}
+				<div class="set-row">
+					<span class="set-label"
+						>{t('agent.thinkDefault')}<span class="set-hint">{t('agent.thinkHint')}</span></span
+					>
+					<div class="set-control">
 						<Segments
+							compact
 							label={t('agent.thinkDefault')}
 							value={settings.think || chosen.defaultLevel || chosen.levels[0]}
 							options={chosen.levels.map((l) => ({ value: l, label: levelLabel(l, i18n.locale) }))}
 							onchange={(v) => (settings!.think = v)}
 						/>
-						<span class="muted">{t('agent.thinkHint')}</span>
 					</div>
-				{/if}
-				<label class="stack">
-					<span>{t('agent.context')}</span>
+				</div>
+			{/if}
+			<label class="set-row">
+				<span class="set-label"
+					>{t('agent.context')}<span class="set-hint">
+						{#if modelContext}{t('agent.contextModel', { tokens: tokens(modelContext) })}{/if}
+						{#if runningContext}{t('agent.contextNow', {
+								tokens: tokens(runningContext),
+							})}{:else}{t('agent.contextUnknown')}{/if}
+						{t('agent.contextHint')}
+						{#if (settings.context ?? 0) > 65536}{t('agent.contextVram')}{/if}
+					</span></span
+				>
+				<span class="set-control">
 					<select class="field" bind:value={settings.context}>
 						{#each contexts as c (c)}<option value={c}
 								>{c === 0
@@ -718,17 +745,13 @@
 									: tokens(c) + ' ' + t('agent.tokensWord')}</option
 							>{/each}
 					</select>
-					<span class="muted">
-						{#if modelContext}{t('agent.contextModel', { tokens: tokens(modelContext) })}{/if}
-						{#if runningContext}{t('agent.contextNow', {
-								tokens: tokens(runningContext),
-							})}{:else}{t('agent.contextUnknown')}{/if}
-						{t('agent.contextHint')}
-						{#if (settings.context ?? 0) > 65536}{t('agent.contextVram')}{/if}
-					</span>
-				</label>
-				<label class="stack">
-					<span>{t('agent.maxSteps')}</span>
+				</span>
+			</label>
+			<label class="set-row">
+				<span class="set-label"
+					>{t('agent.maxSteps')}<span class="set-hint">{t('agent.maxStepsHint')}</span></span
+				>
+				<span class="set-control">
 					<input
 						class="field narrow"
 						type="number"
@@ -736,10 +759,13 @@
 						max="100"
 						bind:value={settings.maxSteps}
 					/>
-					<span class="muted">{t('agent.maxStepsHint')}</span>
-				</label>
-				<label class="stack">
-					<span>{t('agent.maxMinutes')}</span>
+				</span>
+			</label>
+			<label class="set-row">
+				<span class="set-label"
+					>{t('agent.maxMinutes')}<span class="set-hint">{t('agent.maxMinutesHint')}</span></span
+				>
+				<span class="set-control">
 					<input
 						class="field narrow"
 						type="number"
@@ -747,85 +773,123 @@
 						max="600"
 						bind:value={settings.maxMinutes}
 					/>
-					<span class="muted">{t('agent.maxMinutesHint')}</span>
-				</label>
-				<label class="check"
+				</span>
+			</label>
+			<label class="set-row">
+				<span class="set-label"
+					>{t('agent.lazyTools')}<span class="set-hint">{t('agent.lazyToolsHint')}</span></span
+				>
+				<span class="set-control end"
 					><input
 						type="checkbox"
+						class="switch"
+						role="switch"
 						checked={!settings.allTools}
 						onchange={(e) => (settings!.allTools = !e.currentTarget.checked)}
-					/><span>{t('agent.lazyTools')}</span></label
+					/></span
 				>
-				<span class="muted">{t('agent.lazyToolsHint')}</span>
-				<label class="check"
+			</label>
+			<label class="set-row">
+				<span class="set-label"
+					>{t('agent.delegate')}<span class="set-hint">{t('agent.delegateHint')}</span></span
+				>
+				<span class="set-control end"
 					><input
 						type="checkbox"
+						class="switch"
+						role="switch"
 						checked={!settings.noDelegate}
 						onchange={(e) => (settings!.noDelegate = !e.currentTarget.checked)}
-					/><span>{t('agent.delegate')}</span></label
+					/></span
 				>
-				<span class="muted">{t('agent.delegateHint')}</span>
-				<label class="stack">
-					<span>{t('agent.keepAlive')}</span>
+			</label>
+			<label class="set-row">
+				<span class="set-label"
+					>{t('agent.keepAlive')}<span class="set-hint">{t('agent.keepAliveHint')}</span></span
+				>
+				<span class="set-control">
 					<select class="field" bind:value={settings.keepAlive}>
 						<option value="">{t('agent.keepAliveOllama')}</option>
 						{#each ['5m', '30m', '2h', '-1'] as k (k)}<option value={k}
 								>{t(`agent.keepAlive.${k}` as MessageKey)}</option
 							>{/each}
 					</select>
-					<span class="muted">{t('agent.keepAliveHint')}</span>
-				</label>
-				{#if settings.source !== 'cluster'}<div class="stack">
-						<span>{t('agent.pull')}</span>
-						<span class="line">
-							<input
-								class="field"
-								bind:value={pullName}
-								placeholder="qwen3:8b"
-								aria-label={t('agent.pull')}
-							/>
-							<button
-								type="button"
-								class="btn"
-								disabled={pull?.running || !pullName.trim()}
-								onclick={startPull}>{t('agent.pullStart')}</button
-							>
-						</span>
+				</span>
+			</label>
+			{#if settings.source !== 'cluster'}<div class="set-row">
+					<span class="set-label"
+						><label for="ag-pull">{t('agent.pull')}</label><span class="set-hint"
+							>{t('agent.pullHint')}</span
+						>
 						{#if pull?.model}
-							<span class="muted" role="status"
+							<span class="set-hint" role="status"
 								>{pull.model}: {pull.error ? pull.error : pull.status}{pull.total
 									? ` · ${Math.round(((pull.completed ?? 0) / pull.total) * 100)} %`
 									: ''}</span
 							>
-						{/if}
-						<span class="muted">{t('agent.pullHint')}</span>
-					</div>{/if}
-			</div>
+						{/if}</span
+					>
+					<div class="set-control">
+						<input
+							id="ag-pull"
+							class="field grow"
+							bind:value={pullName}
+							placeholder="qwen3:8b"
+							aria-label={t('agent.pull')}
+						/>
+						<button
+							type="button"
+							class="btn"
+							disabled={pull?.running || !pullName.trim()}
+							onclick={startPull}>{t('agent.pullStart')}</button
+						>
+					</div>
+				</div>{/if}
 		</section>
 
 		<section class="tile ui-card" aria-labelledby="ag-media">
 			<div class="card-head"><h2 id="ag-media">{t('agent.sectionMedia')}</h2></div>
-			<div class="card-body">
-				<div class="stack">
-					<span>{t('agent.pictures')}</span>
+			<div class="set-row one">
+				<span class="set-label"
+					>{t('agent.pictures')}
 					{#if chosen?.capabilities.includes('vision')}
-						<span class="muted">✓ {t('agent.picturesMain', { model: chosen.name })}</span>
+						<span class="set-hint">✓ {t('agent.picturesMain', { model: chosen.name })}</span>
 					{:else}
-						<span class="muted">{t('agent.picturesNone')}</span>
+						<span class="set-hint">{t('agent.picturesNone')}</span>
 					{/if}
-					<label class="check"
-						><input
-							type="checkbox"
-							checked={!!settings.vision?.enabled}
-							onchange={(e) =>
-								(settings!.vision = {
-									...(settings!.vision ?? {}),
-									enabled: e.currentTarget.checked,
-								})}
-						/><span>{t('agent.visionOwn')}</span></label
+					{#if vram}<span class="set-hint"
+							>{t('agent.vramNow', {
+								gb: (vram / 1e9).toFixed(1).replace('.', i18n.locale === 'de' ? ',' : '.'),
+							})}</span
+						>{/if}
+				</span>
+			</div>
+			<label class="set-row">
+				<span class="set-label">{t('agent.visionOwn')}</span>
+				<span class="set-control end"
+					><input
+						type="checkbox"
+						class="switch"
+						role="switch"
+						checked={!!settings.vision?.enabled}
+						onchange={(e) =>
+							(settings!.vision = {
+								...(settings!.vision ?? {}),
+								enabled: e.currentTarget.checked,
+							})}
+					/></span
+				>
+			</label>
+			{#if settings.vision?.enabled}
+				<div class="set-row">
+					<span class="set-label"
+						><label for="ag-vision">{t('agent.visionModel')}</label><span class="set-hint"
+							>{t('agent.visionHint')}</span
+						></span
 					>
-					{#if settings.vision?.enabled}
+					<div class="set-control">
 						<select
+							id="ag-vision"
 							class="field"
 							value={settings.vision?.model ?? ''}
 							aria-label={t('agent.visionModel')}
@@ -837,55 +901,68 @@
 									>{m.name} ({gb(m.size)})</option
 								>{/each}
 						</select>
-						<span class="muted">{t('agent.visionHint')}</span>
-					{/if}
-					{#if vram}<span class="muted"
-							>{t('agent.vramNow', {
-								gb: (vram / 1e9).toFixed(1).replace('.', i18n.locale === 'de' ? ',' : '.'),
-							})}</span
-						>{/if}
+					</div>
 				</div>
-				<div class="stack">
-					<span>{t('agent.voice')}</span>
-					<label class="check"
-						><input
-							type="checkbox"
-							checked={!!settings.voice?.enabled}
-							onchange={(e) =>
-								(settings!.voice = {
-									...(settings!.voice ?? {}),
-									enabled: e.currentTarget.checked,
-								})}
-						/><span>{t('agent.voiceOn')}</span></label
+			{/if}
+			<label class="set-row">
+				<span class="set-label"
+					>{t('agent.voiceOn')}<span class="set-hint">{t('agent.voiceHint')}</span></span
+				>
+				<span class="set-control end"
+					><input
+						type="checkbox"
+						class="switch"
+						role="switch"
+						checked={!!settings.voice?.enabled}
+						onchange={(e) =>
+							(settings!.voice = {
+								...(settings!.voice ?? {}),
+								enabled: e.currentTarget.checked,
+							})}
+					/></span
+				>
+			</label>
+			{#if !settings.voice?.url}
+				<div class="set-row" id="voice">
+					<span class="set-label"
+						>{t('agent.voice')}{#if !whisperApp}<span class="set-hint"
+								>{t('agent.whisperSetupHint')}</span
+							>{/if}</span
 					>
-					{#if !settings.voice?.url}
-						<span class="line" id="voice">
-							{#if whisperApp}
-								<button type="button" class="btn btn-primary" onclick={useWhisperApp}
-									>{t('agent.whisperUse', { name: whisperApp.name, port: whisperApp.port })}</button
-								>
-							{:else}
-								<a class="btn btn-primary" href="/apps/install/titanos/whisper"
-									>{t('agent.whisperSetup')}</a
-								>
-								<span class="muted small">{t('agent.whisperSetupHint')}</span>
-							{/if}
-						</span>
-					{/if}
-					{#if settings.voice?.enabled}
-						<span class="line">
-							<input
-								class="field"
-								value={settings.voice?.url ?? ''}
-								placeholder="http://192.168.1.5:8000"
-								aria-label={t('agent.voiceUrl')}
-								oninput={(e) =>
-									(settings!.voice = { ...(settings!.voice ?? {}), url: e.currentTarget.value })}
-							/>
-							<button type="button" class="btn" onclick={checkVoice}>{t('agent.voiceCheck')}</button
+					<div class="set-control">
+						{#if whisperApp}
+							<button type="button" class="btn btn-primary" onclick={useWhisperApp}
+								>{t('agent.whisperUse', { name: whisperApp.name, port: whisperApp.port })}</button
 							>
-						</span>
+						{:else}
+							<a class="btn btn-primary" href="/apps/install/titanos/whisper"
+								>{t('agent.whisperSetup')}</a
+							>
+						{/if}
+					</div>
+				</div>
+			{/if}
+			{#if settings.voice?.enabled}
+				<div class="set-row">
+					<span class="set-label"><label for="ag-voice-url">{t('agent.voiceUrl')}</label></span>
+					<div class="set-control">
 						<input
+							id="ag-voice-url"
+							class="field grow"
+							value={settings.voice?.url ?? ''}
+							placeholder="http://192.168.1.5:8000"
+							aria-label={t('agent.voiceUrl')}
+							oninput={(e) =>
+								(settings!.voice = { ...(settings!.voice ?? {}), url: e.currentTarget.value })}
+						/>
+						<button type="button" class="btn" onclick={checkVoice}>{t('agent.voiceCheck')}</button>
+					</div>
+				</div>
+				<div class="set-row">
+					<span class="set-label"><label for="ag-voice-model">{t('agent.voiceModel')}</label></span>
+					<div class="set-control">
+						<input
+							id="ag-voice-model"
 							class="field"
 							value={settings.voice?.model ?? ''}
 							placeholder="Systran/faster-whisper-large-v3"
@@ -893,86 +970,103 @@
 							oninput={(e) =>
 								(settings!.voice = { ...(settings!.voice ?? {}), model: e.currentTarget.value })}
 						/>
-						{#if voiceCheck}
-							<span class={voiceCheck.reachable ? 'notice-ok' : 'notice-error'} role="status"
-								>{voiceCheck.reachable
-									? t('agent.voiceOk', { models: (voiceCheck.models ?? []).join(', ') || '–' })
-									: t('agent.voiceDown', { error: voiceCheck.error ?? '' })}</span
-							>
-						{/if}
-					{/if}
-					<span class="muted">{t('agent.voiceHint')}</span>
+					</div>
 				</div>
-				<label class="check"
+				{#if voiceCheck}
+					<div class="set-row one">
+						<p class={voiceCheck.reachable ? 'notice-ok' : 'notice-error'} role="status">
+							{voiceCheck.reachable
+								? t('agent.voiceOk', { models: (voiceCheck.models ?? []).join(', ') || '–' })
+								: t('agent.voiceDown', { error: voiceCheck.error ?? '' })}
+						</p>
+					</div>
+				{/if}
+			{/if}
+			<label class="set-row">
+				<span class="set-label"
+					>{t('agent.snapshots')}<span class="set-hint">{t('agent.snapshotsHint')}</span></span
+				>
+				<span class="set-control end"
 					><input
 						type="checkbox"
+						class="switch"
+						role="switch"
 						checked={!settings.noSnapshots}
 						onchange={(e) => (settings!.noSnapshots = !e.currentTarget.checked)}
-					/><span>{t('agent.snapshots')}</span></label
+					/></span
 				>
-				<span class="muted">{t('agent.snapshotsHint')}</span>
-				<label class="check"
+			</label>
+			<label class="set-row">
+				<span class="set-label"
+					>{t('agent.code')}<span class="set-hint">{t('agent.codeHint')}</span></span
+				>
+				<span class="set-control end"
 					><input
 						type="checkbox"
+						class="switch"
+						role="switch"
 						checked={!!settings.code?.enabled}
 						onchange={(e) =>
 							(settings!.code = { ...(settings!.code ?? {}), enabled: e.currentTarget.checked })}
-					/><span>{t('agent.code')}</span></label
+					/></span
 				>
-				{#if settings.code?.enabled}
-					<div class="code-limits">
-						<label class="stack">
-							<span>{t('agent.codeTimeout')}</span>
-							<input
-								class="field narrow"
-								type="number"
-								min="1"
-								max="600"
-								value={settings.code.timeout ?? 60}
-								oninput={(e) =>
-									(settings!.code = { ...settings!.code, timeout: Number(e.currentTarget.value) })}
-							/>
-						</label>
-						<label class="stack">
-							<span>{t('agent.codeMemory')}</span>
-							<input
-								class="field narrow"
-								type="number"
-								min="64"
-								max="8192"
-								step="64"
-								value={settings.code.memory ?? 512}
-								oninput={(e) =>
-									(settings!.code = { ...settings!.code, memory: Number(e.currentTarget.value) })}
-							/>
-						</label>
-					</div>
-				{/if}
-				<span class="muted">{t('agent.codeHint')}</span>
-			</div>
+			</label>
+			{#if settings.code?.enabled}
+				<label class="set-row sub">
+					<span class="set-label">{t('agent.codeTimeout')}</span>
+					<span class="set-control">
+						<input
+							class="field narrow"
+							type="number"
+							min="1"
+							max="600"
+							value={settings.code.timeout ?? 60}
+							oninput={(e) =>
+								(settings!.code = { ...settings!.code, timeout: Number(e.currentTarget.value) })}
+						/>
+					</span>
+				</label>
+				<label class="set-row sub">
+					<span class="set-label">{t('agent.codeMemory')}</span>
+					<span class="set-control">
+						<input
+							class="field narrow"
+							type="number"
+							min="64"
+							max="8192"
+							step="64"
+							value={settings.code.memory ?? 512}
+							oninput={(e) =>
+								(settings!.code = { ...settings!.code, memory: Number(e.currentTarget.value) })}
+						/>
+					</span>
+				</label>
+			{/if}
 		</section>
 	{/if}
 
 	{#if tab === 'overview'}
 		<section class="tile ui-card" aria-labelledby="ag-instruction">
 			<div class="card-head"><h2 id="ag-instruction">{t('agent.sectionInstruction')}</h2></div>
+			<div class="set-row one">
+				<span class="set-hint">{t('agent.instructionIntro')}</span>
+			</div>
 			<div class="card-body">
-				<p class="muted">{t('agent.instructionIntro')}</p>
 				<textarea
 					class="field"
 					rows="8"
 					maxlength="8000"
 					bind:value={settings.instruction}
 					aria-labelledby="ag-instruction"></textarea>
-				<div class="row-actions">
-					{#if !settings.instruction?.trim()}<button
-							type="button"
-							class="btn"
-							onclick={() => (settings!.instruction = t('agent.instructionTemplate'))}
-							>{t('agent.instructionUseTemplate')}</button
-						>{/if}
-					<span class="muted">{t('agent.instructionHint')}</span>
-				</div>
+			</div>
+			<div class="card-foot">
+				<span class="grow">{t('agent.instructionHint')}</span>
+				{#if !settings.instruction?.trim()}<button
+						type="button"
+						class="btn"
+						onclick={() => (settings!.instruction = t('agent.instructionTemplate'))}
+						>{t('agent.instructionUseTemplate')}</button
+					>{/if}
 			</div>
 		</section>
 	{/if}
@@ -980,33 +1074,48 @@
 	{#if tab === 'accounts'}
 		<section class="tile ui-card" aria-labelledby="ag-users">
 			<div class="card-head"><h2 id="ag-users">{t('agent.sectionAccounts')}</h2></div>
-			<div class="card-body">
-				<p class="muted">{t('agent.accountsHint')}</p>
-				{#each userAccounts as a (a.name)}
-					<label class="check"
+			<div class="set-row one"><span class="set-hint">{t('agent.accountsHint')}</span></div>
+			{#each userAccounts as a (a.name)}
+				<label class="set-row">
+					<span class="set-label"
+						>{a.name}<span class="set-hint"
+							>{t(a.role === 'admin' ? 'agent.roleAdmin' : 'agent.roleUser')}</span
+						></span
+					>
+					<span class="set-control end"
 						><input
 							type="checkbox"
+							class="switch"
+							role="switch"
 							checked={settings.users?.includes(a.name)}
 							onchange={(e) => toggleUser(a.name, e.currentTarget.checked)}
-						/><span
-							>{a.name}
-							<span class="muted"
-								>({t(a.role === 'admin' ? 'agent.roleAdmin' : 'agent.roleUser')})</span
-							></span
-						></label
+						/></span
 					>
-				{:else}
-					<p class="muted">{t('agent.accountsNone')}</p>
-				{/each}
-			</div>
+				</label>
+			{:else}
+				<div class="set-row one"><span class="set-hint">{t('agent.accountsNone')}</span></div>
+			{/each}
 		</section>
 
 		<section class="tile ui-card" aria-labelledby="ag-loc">
-			<div class="card-head"><h2 id="ag-loc">{t('agent.sectionLocations')}</h2></div>
-			<div class="card-body">
-				<p class="muted">{t('agent.locationsHint')}</p>
-				{#each settings.locations ?? [] as l, i (i)}
-					<div class="loc">
+			<div class="card-head">
+				<h2 id="ag-loc">{t('agent.sectionLocations')}</h2>
+				<div class="card-tools">
+					<button
+						type="button"
+						class="btn"
+						onclick={() =>
+							(settings!.locations = [
+								...(settings!.locations ?? []),
+								{ name: '', root: roots[0]?.id ?? '', path: '', note: '' },
+							])}><Icon name="plus" size={15} />{t('agent.locationAdd')}</button
+					>
+				</div>
+			</div>
+			<div class="set-row one"><span class="set-hint">{t('agent.locationsHint')}</span></div>
+			{#each settings.locations ?? [] as l, i (i)}
+				<div class="set-row loc">
+					<span class="set-label loc-fields">
 						<input
 							class="field"
 							bind:value={l.name}
@@ -1031,27 +1140,19 @@
 							placeholder={t('agent.locationNote')}
 							aria-label={t('agent.locationNote')}
 						/>
+					</span>
+					<div class="set-control end">
 						<button
 							type="button"
 							class="btn"
 							aria-label={t('common.delete')}
+							title={t('common.delete')}
 							onclick={() => settings!.locations!.splice(i, 1)}
 							><Icon name="trash" size={15} /></button
 						>
 					</div>
-				{/each}
-				<div class="row-actions">
-					<button
-						type="button"
-						class="btn"
-						onclick={() =>
-							(settings!.locations = [
-								...(settings!.locations ?? []),
-								{ name: '', root: roots[0]?.id ?? '', path: '', note: '' },
-							])}>{t('agent.locationAdd')}</button
-					>
 				</div>
-			</div>
+			{/each}
 		</section>
 	{/if}
 
@@ -1203,37 +1304,92 @@
 	{#if tab === 'initiative'}
 		<section class="tile ui-card" aria-labelledby="ag-react">
 			<div class="card-head"><h2 id="ag-react">{t('agent.sectionInitiative')}</h2></div>
-			<div class="card-body">
-				<label class="check"
-					><input type="checkbox" bind:checked={settings.react} /><span>{t('agent.react')}</span
-					></label
+			<label class="set-row">
+				<span class="set-label"
+					>{t('agent.react')}<span class="set-hint">{t('agent.reactHint')}</span></span
 				>
-				<p class="muted">{t('agent.reactHint')}</p>
-				<label class="check"
-					><input type="checkbox" bind:checked={settings.weeklyReport} /><span
-						>{t('agent.weeklyReport')}</span
-					></label
+				<span class="set-control end"
+					><input
+						type="checkbox"
+						class="switch"
+						role="switch"
+						bind:checked={settings.react}
+					/></span
 				>
-				<label class="stack">
-					<span>{t('agent.reactAs')}</span>
+			</label>
+			<label class="set-row">
+				<span class="set-label">{t('agent.weeklyReport')}</span>
+				<span class="set-control end"
+					><input
+						type="checkbox"
+						class="switch"
+						role="switch"
+						bind:checked={settings.weeklyReport}
+					/></span
+				>
+			</label>
+			<label class="set-row">
+				<span class="set-label">{t('agent.reactAs')}</span>
+				<span class="set-control">
 					<select class="field" bind:value={settings.reactAs}>
 						<option value="">{t('agent.firstOwner')}</option>
 						{#each admins as a (a.name)}<option value={a.name}>{a.name}</option>{/each}
 					</select>
-				</label>
-			</div>
+				</span>
+			</label>
 		</section>
 	{/if}
 
 	{#if tab === 'ha'}
 		<section class="tile ui-card" aria-labelledby="ag-ha">
 			<div class="card-head"><h2 id="ag-ha">{t('agent.sectionHA')}</h2></div>
-			<div class="card-body">
-				<p class="muted">{t('agent.haIntro')}</p>
-				<div class="stack">
-					<span>{t('agent.haRelease')}</span>
-					<span class="muted">{t('agent.haReleaseHint')}</span>
-					{#if haConns.length > 1}<label class="narrow"
+			<div class="set-row one"><span class="set-hint">{t('agent.haIntro')}</span></div>
+			<label class="set-row">
+				<span class="set-label"
+					>{t('agent.haNotify')}<span class="set-hint">{t('agent.haNotifyHint')}</span></span
+				>
+				<span class="set-control">
+					<input class="field" bind:value={haNotify} placeholder="notify.mobile_app_iphone" />
+				</span>
+			</label>
+			<label class="set-row">
+				<span class="set-label"
+					>{t('agent.haAssist')}<span class="set-hint">{t('agent.haAssistHint')}</span></span
+				>
+				<span class="set-control end"
+					><input
+						type="checkbox"
+						class="switch"
+						role="switch"
+						bind:checked={settings.homeassistant.assist}
+					/></span
+				>
+			</label>
+			{#if settings.homeassistant.assist}
+				<label class="set-row">
+					<span class="set-label">{t('agent.haAssistAs')}</span>
+					<span class="set-control">
+						<select class="field" bind:value={settings.homeassistant.assistAs}>
+							<option value="">{t('agent.firstOwner')}</option>
+							{#each admins as a (a.name)}<option value={a.name}>{a.name}</option>{/each}
+						</select>
+					</span>
+				</label>
+				<div class="set-row one">
+					<p class="notice-ok">
+						{t('agent.haAssistSetup', {
+							url: typeof location === 'undefined' ? '' : location.origin + '/agent-ollama',
+						})}
+					</p>
+				</div>
+			{/if}
+		</section>
+
+		<section class="tile ui-card" aria-labelledby="ag-ha-release">
+			<div class="card-head">
+				<h2 id="ag-ha-release">{t('agent.haRelease')}</h2>
+				{#if haConns.length > 1}<div class="card-tools">
+						<label class="conn"
 							><span>{t('notify.haConnection')}</span>
 							<select
 								class="field"
@@ -1244,114 +1400,115 @@
 										>{c.name || t('ha.conn.first')}</option
 									>{/each}
 							</select></label
-						>{/if}
-					{#if haEntities === null}
-						<span class="line"
-							><button type="button" class="btn" onclick={loadHA}>{t('agent.haLoad')}</button>
-							<span class="muted"
-								>{t('agent.haReleased', {
-									domains: haRelease?.domains?.length ?? 0,
-									entities: haRelease?.entities?.length ?? 0,
-								})}</span
-							></span
 						>
-						{#if haError}<p class="notice-warn">{haError}</p>{/if}
+					</div>{/if}
+			</div>
+			<div class="set-row one"><span class="set-hint">{t('agent.haReleaseHint')}</span></div>
+			{#if haEntities === null}
+				<div class="set-row">
+					<span class="set-label"
+						>{t('agent.haReleased', {
+							domains: haRelease?.domains?.length ?? 0,
+							entities: haRelease?.entities?.length ?? 0,
+						})}</span
+					>
+					<div class="set-control end">
+						<button type="button" class="btn" onclick={loadHA}>{t('agent.haLoad')}</button>
+					</div>
+				</div>
+				{#if haError}<div class="set-row one"><p class="notice-warn">{haError}</p></div>{/if}
+			{:else}
+				<div class="set-row one sub-head"><strong>{t('agent.haDomains')}</strong></div>
+				<div class="set-grid domains">
+					{#each haDomains as d (d)}
+						<label class="set-row"
+							><span class="set-label"><code>{d}</code></span><span class="set-control end"
+								><input
+									type="checkbox"
+									class="switch"
+									role="switch"
+									checked={haRelease?.domains?.includes(d)}
+									onchange={() => toggleRelease('domains', d)}
+								/></span
+							></label
+						>
+					{/each}
+				</div>
+				<div class="set-row one">
+					<input
+						class="field"
+						type="search"
+						bind:value={haQuery}
+						placeholder={t('agent.haSearch')}
+						aria-label={t('agent.haSearch')}
+					/>
+				</div>
+				<div class="entities">
+					{#each haShown as e (e.id)}
+						{@const viaDomain = haRelease?.domains?.includes(e.domain)}
+						<label class="set-row"
+							><span class="set-label"
+								>{e.name}<span class="set-hint"
+									><code>{e.id}</code>{e.area ? ' · ' + e.area : ''}</span
+								></span
+							><span class="set-control end"
+								><input
+									type="checkbox"
+									class="switch"
+									role="switch"
+									checked={viaDomain || haRelease?.entities?.includes(e.id)}
+									disabled={viaDomain}
+									onchange={() => toggleRelease('entities', e.id)}
+								/></span
+							></label
+						>
 					{:else}
-						<fieldset class="domains">
-							<legend>{t('agent.haDomains')}</legend>
-							{#each haDomains as d (d)}
-								<label class="check"
-									><input
-										type="checkbox"
-										checked={haRelease?.domains?.includes(d)}
-										onchange={() => toggleRelease('domains', d)}
-									/><span>{d}</span></label
-								>
-							{/each}
-						</fieldset>
+						<div class="set-row one"><span class="set-hint">{t('agent.haNoEntities')}</span></div>
+					{/each}
+				</div>
+			{/if}
+		</section>
+
+		<section class="tile ui-card" aria-labelledby="ag-ha-rules">
+			<div class="card-head">
+				<h2 id="ag-ha-rules">{t('agent.haRules')}</h2>
+				<div class="card-tools">
+					<button
+						type="button"
+						class="btn"
+						onclick={() => haRules.push({ key: 'domain:', mode: 'ask' })}
+						><Icon name="plus" size={15} />{t('agent.haRuleAdd')}</button
+					>
+				</div>
+			</div>
+			{#each haRules as r, i (i)}
+				<div class="set-row frule">
+					<span class="set-label frule-where">
 						<input
 							class="field"
-							type="search"
-							bind:value={haQuery}
-							placeholder={t('agent.haSearch')}
-							aria-label={t('agent.haSearch')}
+							bind:value={r.key}
+							placeholder="domain:lock · entity:light.flur · area:kueche"
+							aria-label={t('agent.haRules')}
 						/>
-						<div class="entities">
-							{#each haShown as e (e.id)}
-								{@const viaDomain = haRelease?.domains?.includes(e.domain)}
-								<label class="check"
-									><input
-										type="checkbox"
-										checked={viaDomain || haRelease?.entities?.includes(e.id)}
-										disabled={viaDomain}
-										onchange={() => toggleRelease('entities', e.id)}
-									/><span
-										>{e.name} <code>{e.id}</code>{#if e.area}<span class="muted">
-												· {e.area}</span
-											>{/if}</span
-									></label
-								>
-							{:else}
-								<p class="muted">{t('agent.haNoEntities')}</p>
-							{/each}
-						</div>
-					{/if}
-				</div>
-				<div class="stack">
-					<span>{t('agent.haRules')}</span>
-					{#each haRules as r, i (i)}
-						<div class="rule ha">
-							<input
-								class="field"
-								bind:value={r.key}
-								placeholder="domain:lock · entity:light.flur · area:kueche"
-								aria-label={t('agent.haRules')}
-							/>
-							<Segments label={t('agent.haRules')} bind:value={r.mode} options={modeOptions} />
-							<button
-								type="button"
-								class="btn"
-								aria-label={t('common.delete')}
-								onclick={() => haRules.splice(i, 1)}><Icon name="trash" size={15} /></button
-							>
-						</div>
-					{/each}
-					<span class="line"
-						><button
+					</span>
+					<div class="set-control end">
+						<Segments
+							compact
+							label={t('agent.haRules')}
+							bind:value={r.mode}
+							options={modeOptions}
+						/>
+						<button
 							type="button"
 							class="btn"
-							onclick={() => haRules.push({ key: 'domain:', mode: 'ask' })}
-							>{t('agent.haRuleAdd')}</button
-						></span
-					>
-					<span class="muted">{t('agent.haRulesHint')}</span>
+							aria-label={t('common.delete')}
+							title={t('common.delete')}
+							onclick={() => haRules.splice(i, 1)}><Icon name="trash" size={15} /></button
+						>
+					</div>
 				</div>
-				<label class="stack">
-					<span>{t('agent.haNotify')}</span>
-					<input class="field" bind:value={haNotify} placeholder="notify.mobile_app_iphone" />
-					<span class="muted">{t('agent.haNotifyHint')}</span>
-				</label>
-				<label class="check"
-					><input type="checkbox" bind:checked={settings.homeassistant.assist} /><span
-						>{t('agent.haAssist')}</span
-					></label
-				>
-				<p class="muted">{t('agent.haAssistHint')}</p>
-				{#if settings.homeassistant.assist}
-					<label class="stack">
-						<span>{t('agent.haAssistAs')}</span>
-						<select class="field" bind:value={settings.homeassistant.assistAs}>
-							<option value="">{t('agent.firstOwner')}</option>
-							{#each admins as a (a.name)}<option value={a.name}>{a.name}</option>{/each}
-						</select>
-					</label>
-					<p class="notice-ok">
-						{t('agent.haAssistSetup', {
-							url: typeof location === 'undefined' ? '' : location.origin + '/agent-ollama',
-						})}
-					</p>
-				{/if}
-			</div>
+			{/each}
+			<div class="card-foot"><span class="grow">{t('agent.haRulesHint')}</span></div>
 		</section>
 	{/if}
 
@@ -1365,102 +1522,43 @@
 {/if}
 
 <style>
-	.code-limits {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-3);
+	/* PLAN 68: every tab in cards with rows "label (+ hint) left, control
+	   right"; lists as rows; the card's own actions in its foot. */
+	.set-row.one {
+		grid-template-columns: minmax(0, 1fr);
 	}
-	/* Ways and QR code side by side while the column has room (not the
-	   window: inside a desktop window or beside the sidebar it is narrower). */
-	.phone-app {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-4);
-		align-items: flex-start;
-	}
-	.phone-app > :first-child {
-		flex: 999 1 22rem;
-	}
-	.phone-app > :last-child {
-		flex: 1 0 13rem;
-		max-width: 100%;
-	}
-	.ways {
-		border: 0;
+	.set-row.one > p {
 		margin: 0;
-		padding: 0;
+	}
+	/* The hint on the card's surface: a little toward the text for 4.5:1. */
+	.set-hint {
+		color: color-mix(in srgb, var(--muted) 85%, var(--text));
+	}
+	.set-control > .field {
+		flex: 1 1 12rem;
 		min-width: 0;
-		position: relative;
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
 	}
-	.way {
-		display: flex;
-		align-items: center;
-		gap: var(--space-3);
-		padding: var(--space-2) var(--space-3);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-md, 10px);
-		cursor: pointer;
-	}
-	.way.on {
-		border-color: var(--accent);
-		background: color-mix(in srgb, var(--accent) 10%, transparent);
-	}
-	/* A narrow column puts the chip under the address instead of
-	   squeezing the address into broken pieces. */
-	.way {
-		flex-wrap: wrap;
-	}
-	.way > span:first-of-type {
+	.set-control > .field.grow {
 		flex: 1 1 14rem;
-		min-width: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
 	}
-	.way small {
-		color: var(--muted);
-		font-family: var(--font-mono, monospace);
-		overflow-wrap: anywhere;
+	.set-control > .field.narrow,
+	.narrow {
+		flex: none;
+		width: 100px;
 	}
-	.way .chip.ok {
-		color: var(--success, #34d399);
-	}
-	.qr {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: var(--space-2);
-		padding: var(--space-3);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-md, 10px);
-		min-width: 13rem;
-	}
-	.qr .mono {
-		font-family: var(--font-mono, monospace);
-		color: var(--muted);
-		overflow-wrap: anywhere;
-		text-align: center;
-	}
-	.line {
-		display: flex;
-		gap: var(--space-2);
-		align-items: center;
-		flex-wrap: wrap;
-	}
-	.line .btn {
+	.set-control .btn {
 		max-width: 100%;
 		white-space: normal;
 		height: auto;
 	}
-	.wide {
-		flex: 1;
-		min-width: 240px;
+	.set-row.sub {
+		padding-left: 40px;
 	}
-	.narrow {
-		width: 100px;
+	.node-tools {
+		justify-content: flex-end;
+	}
+	.state {
+		margin: 0;
 	}
 	.caps {
 		display: flex;
@@ -1468,45 +1566,105 @@
 		align-items: center;
 		flex-wrap: wrap;
 	}
-	.loc {
-		display: grid;
-		grid-template-columns:
-			minmax(120px, 1fr) minmax(120px, 1fr) minmax(120px, 1fr) minmax(120px, 1.2fr)
-			auto;
-		gap: var(--space-2);
+	.mono {
+		font-family: var(--font-mono, monospace);
+		overflow-wrap: anywhere;
+	}
+	/* The ways to the NAS: a radio list as rows. */
+	.ways {
+		border: 0;
+		margin: 0;
+		padding: 0;
+		min-width: 0;
+		position: relative;
+	}
+	.way {
+		display: flex;
 		align-items: center;
-		margin-bottom: var(--space-2);
+		gap: 12px;
+		cursor: pointer;
 	}
-	.rule {
-		display: grid;
-		grid-template-columns: minmax(140px, 1fr) minmax(140px, 1.4fr) auto auto;
-		gap: var(--space-2);
+	.way > .set-label {
+		flex: 1 1 auto;
+	}
+	.way > input[type='radio'] {
+		flex: none;
+		accent-color: var(--accent);
+	}
+	.way > .set-label > .field {
+		margin-top: 4px;
+	}
+	.way.on {
+		background: color-mix(in srgb, var(--accent) 8%, transparent);
+	}
+	.qr-row {
+		align-items: start;
+	}
+	.qr {
+		flex-direction: column;
 		align-items: center;
-		margin-bottom: var(--space-2);
 	}
-	.rule :global(.segments) {
-		flex-wrap: nowrap;
+	.qr .mono {
+		color: color-mix(in srgb, var(--muted) 85%, var(--text));
+		text-align: center;
 	}
-	.rule.ha {
-		grid-template-columns: minmax(200px, 1fr) auto auto;
+	.qr p {
+		margin: 0;
+	}
+	.card-foot > .grow {
+		color: color-mix(in srgb, var(--muted) 85%, var(--text));
+	}
+	textarea.field {
+		padding: 0.6rem 0.75rem;
+		resize: vertical;
+	}
+	/* Ablageorte: the fields of a place left, its delete button right. */
+	.loc-fields {
+		flex-direction: row;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+	.loc-fields .field {
+		flex: 1 1 9rem;
+		min-width: 0;
+	}
+	.set-row.loc {
+		grid-template-columns: minmax(0, 1fr) auto;
+	}
+	/* Home Assistant: domains in two columns, the devices in a scroll box. */
+	.sub-head {
+		padding-top: 10px;
+		padding-bottom: 4px;
+		min-height: 0;
 	}
 	.domains {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 4px 16px;
-		border: 1px solid var(--border);
-		border-radius: var(--radius-ctl);
-		padding: var(--space-2) var(--space-3);
+		padding-bottom: 8px;
+	}
+	.domains > .set-row {
+		grid-template-columns: minmax(0, 1fr) auto;
+		min-height: 40px;
+		padding: 6px 0;
 	}
 	.entities {
-		max-height: 320px;
+		max-height: 360px;
 		overflow-y: auto;
-		border: 1px solid var(--border);
-		border-radius: var(--radius-ctl);
-		padding: var(--space-2) var(--space-3);
+		border-top: 1px solid var(--panel-border, var(--border));
+	}
+	.entities > .set-row {
+		grid-template-columns: minmax(0, 1fr) auto;
+	}
+	.entities > .set-row:first-child {
+		border-top: 0;
+	}
+	.conn {
 		display: flex;
-		flex-direction: column;
-		gap: 2px;
+		align-items: center;
+		gap: 8px;
+		font-size: var(--text-base);
+	}
+	.conn .field {
+		width: auto;
+		min-width: 9rem;
 	}
 	/* PLAN 68: an area is a row; the label opens its tools. */
 	.area .expand {
@@ -1529,10 +1687,6 @@
 	.area .expand strong {
 		font-weight: 600;
 	}
-	/* The hint on the card's surface: a little toward the text for 4.5:1. */
-	.area .expand .set-hint {
-		color: color-mix(in srgb, var(--muted) 85%, var(--text));
-	}
 	.area .expand:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: 2px;
@@ -1540,9 +1694,6 @@
 	.area .set-control :global(.segments),
 	.frule .set-control :global(.segments) {
 		flex-wrap: nowrap;
-	}
-	.set-row.one {
-		grid-template-columns: minmax(0, 1fr);
 	}
 	.area {
 		padding-top: 9px;
@@ -1616,8 +1767,15 @@
 		.frule .set-control {
 			justify-content: flex-start;
 		}
-		.area.tool {
+		.area.tool,
+		.set-row.sub {
 			padding-left: 16px;
+		}
+		.set-row.loc {
+			align-items: start;
+		}
+		.node-tools {
+			justify-content: flex-start;
 		}
 	}
 	.tname {
@@ -1637,35 +1795,5 @@
 		display: flex;
 		gap: var(--space-2);
 		align-items: center;
-	}
-	@media (max-width: 760px) {
-		.loc,
-		.rule,
-		.rule.ha {
-			grid-template-columns: 1fr;
-			border-bottom: 1px solid var(--border);
-			padding-bottom: var(--space-2);
-		}
-	}
-	.nodes {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-	}
-	.nodes li {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
-		flex-wrap: wrap;
-		padding: var(--space-2) 0;
-		border-top: 1px solid var(--border);
-	}
-	.node-name {
-		flex: 1;
-		min-width: 10rem;
-		display: flex;
-		flex-direction: column;
 	}
 </style>

@@ -41,6 +41,7 @@ const container = (name, o = {}) => ({
   publicUrl: "",
   icon: "",
   updateAvailable: !!o.update,
+  ...(o.host ? { hostNetwork: true } : {}),
 });
 const containers = () => [
   container("immich-server", {
@@ -80,6 +81,7 @@ const containers = () => [
     image: "ghcr.io/blakeblackshear/frigate:stable",
     state: "restarting",
     ports: [port(5000)],
+    host: true,
   }),
 ];
 const apps = ["immich", "jellyfin", "vaultwarden", "frigate"];
@@ -122,6 +124,8 @@ try {
     // One row per app; the stack is one row.
     assert.equal(await table(frame).locator("tbody tr").count(), 4);
     assert.match(await row(frame, "immich").innerText(), /3 Container/);
+    assert.match(await row(frame, "frigate").innerText(), /Host-Netz/);
+    assert.doesNotMatch(await row(frame, "jellyfin").innerText(), /Host-Netz/);
     // State as text with a mark, never colour alone.
     const states = await table(frame)
       .locator("td.state")
