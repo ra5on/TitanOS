@@ -232,80 +232,99 @@
 	</Dialog>
 {:else}
 	<Dialog title={t('desktop.settings.title')} {onclose}>
-		<div class="form">
-			<label for="d-lock">{t('desktop.settings.lock')}</label>
-			<div>
-				<select
-					id="d-lock"
-					class="input"
-					value={desktop.prefs.lockMinutes}
-					onchange={(e) => savePrefs((p) => (p.lockMinutes = Number(e.currentTarget.value)))}
+		<!-- PLAN 70: rows like every settings card (label and hint left, control right). -->
+		<div class="rows ui-card">
+			<div class="set-row">
+				<label class="set-label" for="d-lock"
+					>{t('desktop.settings.lock')}<span class="set-hint">{t('desktop.settings.lockHint')}</span
+					></label
 				>
-					{#each LOCK as m (m)}<option value={m}
-							>{m === 0
-								? t('desktop.settings.never')
-								: t('desktop.settings.minutes', { count: m })}</option
-						>{/each}
-				</select>
-				<span class="hint">{t('desktop.settings.lockHint')}</span>
-			</div>
-			<label for="d-lock-phone">{t('desktop.settings.lockPhone')}</label>
-			<div>
-				<select
-					id="d-lock-phone"
-					class="input"
-					value={desktop.prefs.lockMinutesPhone}
-					onchange={(e) => savePrefs((p) => (p.lockMinutesPhone = Number(e.currentTarget.value)))}
-				>
-					{#each LOCK_PHONE as m (m)}<option value={m}
-							>{m === 0
-								? t('desktop.settings.never')
-								: m >= 120
-									? t('desktop.settings.hours', { count: m / 60 })
-									: t('desktop.settings.minutes', { count: m })}</option
-						>{/each}
-				</select>
-				<span class="hint">{t('desktop.settings.lockPhoneHint')}</span>
-			</div>
-			<label for="d-size">{t('desktop.ctx.iconSize')}</label>
-			<div>
-				<select
-					id="d-size"
-					class="input"
-					value={desktop.prefs.iconSize}
-					onchange={(e) =>
-						savePrefs((p) => (p.iconSize = e.currentTarget.value as 's' | 'm' | 'l'))}
-				>
-					<option value="s">{t('desktop.size.s')}</option><option value="m"
-						>{t('desktop.size.m')}</option
-					><option value="l">{t('desktop.size.l')}</option>
-				</select>
-			</div>
-			<label for="d-sort">{t('desktop.ctx.sort')}</label>
-			<div>
-				<select
-					id="d-sort"
-					class="input"
-					value={desktop.prefs.sort}
-					onchange={(e) => savePrefs((p) => (p.sort = e.currentTarget.value as typeof p.sort))}
-				>
-					<option value="kind">{t('desktop.sort.kind')}</option><option value="name"
-						>{t('desktop.sort.name')}</option
-					><option value="recent">{t('desktop.sort.recent')}</option><option value="free"
-						>{t('desktop.sort.free')}</option
+				<span class="set-control end">
+					<select
+						id="d-lock"
+						class="input"
+						value={desktop.prefs.lockMinutes}
+						onchange={(e) => savePrefs((p) => (p.lockMinutes = Number(e.currentTarget.value)))}
 					>
-				</select>
+						{#each LOCK as m (m)}<option value={m}
+								>{m === 0
+									? t('desktop.settings.never')
+									: t('desktop.settings.minutes', { count: m })}</option
+							>{/each}
+					</select>
+				</span>
 			</div>
-			<span></span>
-			<div>
-				<button
-					type="button"
-					class="btn"
-					onclick={() =>
-						savePrefs((p) => ((p.icons = []), (p.customIcons = false), (p.folders = [])))}
-					>{t('desktop.settings.resetIcons')}</button
+			<div class="set-row">
+				<label class="set-label" for="d-lock-phone"
+					>{t('desktop.settings.lockPhone')}<span class="set-hint"
+						>{t('desktop.settings.lockPhoneHint')}</span
+					></label
 				>
-				<span class="hint">{t('desktop.settings.resetIconsHint')}</span>
+				<span class="set-control end">
+					<select
+						id="d-lock-phone"
+						class="input"
+						value={desktop.prefs.lockMinutesPhone}
+						onchange={(e) => savePrefs((p) => (p.lockMinutesPhone = Number(e.currentTarget.value)))}
+					>
+						{#each LOCK_PHONE as m (m)}<option value={m}
+								>{m === 0
+									? t('desktop.settings.never')
+									: m >= 120
+										? t('desktop.settings.hours', { count: m / 60 })
+										: t('desktop.settings.minutes', { count: m })}</option
+							>{/each}
+					</select>
+				</span>
+			</div>
+			<div class="set-row">
+				<label class="set-label" for="d-size">{t('desktop.ctx.iconSize')}</label>
+				<span class="set-control end">
+					<select
+						id="d-size"
+						class="input"
+						value={desktop.prefs.iconSize}
+						onchange={(e) =>
+							savePrefs((p) => (p.iconSize = e.currentTarget.value as 's' | 'm' | 'l'))}
+					>
+						<option value="s">{t('desktop.size.s')}</option><option value="m"
+							>{t('desktop.size.m')}</option
+						><option value="l">{t('desktop.size.l')}</option>
+					</select>
+				</span>
+			</div>
+			<div class="set-row">
+				<label class="set-label" for="d-sort">{t('desktop.ctx.sort')}</label>
+				<span class="set-control end">
+					<select
+						id="d-sort"
+						class="input"
+						value={desktop.prefs.sort}
+						onchange={(e) => savePrefs((p) => (p.sort = e.currentTarget.value as typeof p.sort))}
+					>
+						<option value="kind">{t('desktop.sort.kind')}</option><option value="name"
+							>{t('desktop.sort.name')}</option
+						><option value="recent">{t('desktop.sort.recent')}</option><option value="free"
+							>{t('desktop.sort.free')}</option
+						>
+					</select>
+				</span>
+			</div>
+			<div class="set-row">
+				<span class="set-label"
+					>{t('desktop.settings.resetIcons')}<span class="set-hint"
+						>{t('desktop.settings.resetIconsHint')}</span
+					></span
+				>
+				<span class="set-control end">
+					<button
+						type="button"
+						class="btn"
+						onclick={() =>
+							savePrefs((p) => ((p.icons = []), (p.customIcons = false), (p.folders = [])))}
+						>{t('desktop.settings.reset')}</button
+					>
+				</span>
 			</div>
 		</div>
 		<div class="dialog-actions">
@@ -385,28 +404,20 @@
 		gap: 6px;
 		margin-top: 8px;
 	}
-	.form {
-		display: grid;
-		grid-template-columns: minmax(120px, 200px) 1fr;
-		gap: 8px 16px;
-		align-items: start;
+	.rows {
+		border: 1px solid var(--border);
+		border-radius: var(--radius-card, 12px);
+		overflow: hidden;
 	}
-	.form > label {
-		text-align: right;
-		padding-top: 8px;
-	}
-	.hint {
-		display: block;
-		color: var(--muted);
-		font-size: var(--text-sm);
-		margin: 4px 0 8px;
+	.rows .set-row + .set-row {
+		border-top: 1px solid var(--panel-border, var(--border));
 	}
 	@media (max-width: 560px) {
-		.form {
+		.rows .set-row {
 			grid-template-columns: 1fr;
 		}
-		.form > label {
-			text-align: left;
+		.rows .set-control.end {
+			justify-content: flex-start;
 		}
 	}
 </style>

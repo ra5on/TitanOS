@@ -1254,6 +1254,13 @@ export function fixtureFactory(browser, errors) {
           hardware: { pci: [], usb: [], iommu: false },
           usedBy: {},
         });
+      // Settings › Services (admin): Docker and VMs on, LXC off (PLAN 71 overview).
+      if (path === "/services" && method === "GET")
+        return json({
+          docker: { enabled: true, running: 3, total: 4, available: true },
+          vms: { enabled: true, running: 1, total: 2, available: true },
+          lxc: { enabled: false, running: 0, total: 0, available: true },
+        });
       // Settings › Access: SSH off, nobody with a key, the self-signed certificate.
       if (path === "/system/ssh")
         return json({

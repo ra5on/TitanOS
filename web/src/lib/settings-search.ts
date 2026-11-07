@@ -33,7 +33,7 @@ const keywords: Record<string, string> = {
 	files:
 		'dateisuche volltext index inhalt full text search content ocr vorschaubilder thumbnails miniaturen',
 	energy:
-		'energie energy governor cpu strom zeitplan schedule herunterfahren shutdown einschalten wake on lan wol rtc ruhemodus standby festplatten disk sleep',
+		'energie energy governor cpu strom zeitplan schedule herunterfahren shutdown einschalten wake on lan wol rtc ruhemodus standby festplatten platten-ruhe plattenruhe disk sleep spindown',
 	temperatures: 'temperatur temperature sensor wärme heat lüfter fan pwm drehzahl kurve curve',
 	about: 'lizenz license version titanos fair source',
 	timezone: 'zeitzone timezone time zone uhrzeit zeit clock',
@@ -459,4 +459,38 @@ export function settingsEntries(
 				.sort((a, b) => order.compare(a.label, b.label)),
 		}))
 		.filter((group) => group.entries.length);
+}
+
+/** Whether an account may open the settings page of a side bar entry (PLAN 71). */
+export function settingsSideAllowed(href: string, admin: boolean): boolean {
+	if (admin) return true;
+	const path = href.split(/[?#]/)[0].replace(/\/$/, '');
+	return !path.startsWith('/settings') || userSettingsPaths.includes(path);
+}
+
+/**
+ * PLAN 71: the search above the side bar of Systemsteuerung. Returns, for
+ * every side bar entry the search finds, where it leads: a matching section
+ * (e.g. "ssh" → Zugang › SSH) shows its area and opens its anchor; an entry
+ * also matches its own side bar name (which may differ from the area's).
+ */
+export function settingsSideMatches(
+	query: string,
+	admin: boolean,
+	translate: (key: MessageKey) => string,
+	items: { href: string; label: MessageKey }[],
+): Map<string, string> {
+	const hits = new Map<string, string>();
+	for (const group of settingsEntries(query, admin, translate))
+		for (const entry of group.entries) if (!hits.has(entry.id)) hits.set(entry.id, entry.href);
+	const out = new Map<string, string>();
+	for (const item of items) {
+		if (!settingsSideAllowed(item.href, admin)) continue;
+		const id = settingsAreaOf(item.href.split(/[?#]/)[0]);
+		const target =
+			(id ? hits.get(id) : undefined) ??
+			(matchesSetting(query, translate(item.label), id) ? item.href : undefined);
+		if (target) out.set(item.href, target);
+	}
+	return out;
 }

@@ -97,7 +97,9 @@ export function fileKeys(event: KeyboardEvent, host: KeyboardHost) {
 		if (!entry) return;
 		event.preventDefault();
 		if (entry.dir && key === 'enter') host.run('openFolder', entry);
-		else if (!entry.dir && previewKind(entry.name, entry.size)) host.run('preview', entry);
+		// PLAN 70: Space is the quick look of any file (info card when it has no preview).
+		else if (!entry.dir && (key === ' ' || previewKind(entry.name, entry.size)))
+			host.run('preview', entry);
 		// Like a double click: a file without a preview opens in the editor.
 		else if (!entry.dir && key === 'enter' && host.editable()) host.run('edit', entry);
 		return;

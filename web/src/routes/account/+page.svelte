@@ -23,6 +23,7 @@
 	import SshKeys from './SshKeys.svelte';
 	import Passkeys from './Passkeys.svelte';
 	import WebDav from './WebDav.svelte';
+	import AppInstallCard from '#lib/components/AppInstallCard.svelte';
 
 	type Device = {
 		id: string;
@@ -363,6 +364,7 @@
 
 	<Passkeys />
 	<WebDav />
+	<AppInstallCard />
 
 	<SshKeys />
 

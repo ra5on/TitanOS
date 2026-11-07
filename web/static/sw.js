@@ -1,6 +1,7 @@
-// Service worker of the TitanOS web app: only shows notifications that the
-// NAS sends over Web Push (docs/WEB-PUSH.md). It caches nothing; the web UI
-// always comes from the NAS.
+// Service worker of the TitanOS web app: shows notifications that the NAS
+// sends over Web Push (docs/WEB-PUSH.md) and takes files shared to the
+// installed app (PLAN 70, docs/PWA.md). It caches nothing of the web UI or
+// the API; the web UI always comes from the NAS.
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
 
@@ -43,6 +44,53 @@ self.addEventListener('notificationclick', (event) => {
 				return;
 			}
 			await self.clients.openWindow(url.href);
+		})(),
+	);
+});
+
+// PLAN 70: the share target. Android hands shared files over as a POST to
+// /share-target; they are kept in this browser only (Cache Storage
+// "titanos-share", nothing is sent anywhere) until /share uploads them to a
+// folder the user chooses, or drops them.
+const SHARE_CACHE = 'titanos-share';
+self.addEventListener('fetch', (event) => {
+	const url = new URL(event.request.url);
+	if (
+		event.request.method !== 'POST' ||
+		url.origin !== self.location.origin ||
+		url.pathname !== '/share-target'
+	)
+		return;
+	event.respondWith(
+		(async () => {
+			try {
+				const form = await event.request.formData();
+				await caches.delete(SHARE_CACHE);
+				const cache = await caches.open(SHARE_CACHE);
+				const files = form.getAll('files').filter((f) => f instanceof File && f.size >= 0);
+				const list = [];
+				for (const [i, file] of files.entries()) {
+					const key = `/share-target/file/${i}`;
+					await cache.put(
+						key,
+						new Response(file, { headers: { 'Content-Type': file.type || 'application/octet-stream' } }),
+					);
+					list.push({ key, name: file.name || `datei-${i + 1}`, size: file.size, type: file.type });
+				}
+				const text = ['title', 'text', 'url']
+					.map((k) => form.get(k))
+					.filter((v) => typeof v === 'string' && v.trim())
+					.join('\n');
+				await cache.put(
+					'/share-target/list',
+					new Response(JSON.stringify({ files: list, text }), {
+						headers: { 'Content-Type': 'application/json' },
+					}),
+				);
+				return Response.redirect('/share', 303);
+			} catch {
+				return Response.redirect('/share?missing=1', 303);
+			}
 		})(),
 	);
 });

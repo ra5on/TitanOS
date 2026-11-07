@@ -1,6 +1,7 @@
 package thumbs
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/binary"
@@ -256,5 +257,50 @@ func TestVolumeRel(t *testing.T) {
 	}
 	if VolumeRel("", "data", "/mnt/data", "x") != "" {
 		t.Fatal("no mount root")
+	}
+}
+
+// PLAN 70: Office documents show the picture they carry, nothing else.
+func TestOfficeThumbnail(t *testing.T) {
+	pic := image.NewNRGBA(image.Rect(0, 0, 120, 160))
+	var pngData bytes.Buffer
+	png.Encode(&pngData, pic)
+	archive := func(entries map[string][]byte) []byte {
+		var buf bytes.Buffer
+		z := zip.NewWriter(&buf)
+		for name, data := range entries {
+			w, _ := z.Create(name)
+			w.Write(data)
+		}
+		z.Close()
+		return buf.Bytes()
+	}
+	dir := t.TempDir()
+	m := New()
+	for _, tc := range []struct{ name, entry string }{
+		{"Angebot.docx", "docProps/thumbnail.png"},
+		{"Tabelle.ods", "Thumbnails/thumbnail.png"},
+	} {
+		data := archive(map[string][]byte{"[Content_Types].xml": []byte("<x/>"), tc.entry: pngData.Bytes()})
+		thumb, _, err := m.Get(context.Background(), source(t, dir, tc.name, data), 160)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if b := decode(t, thumb).Bounds(); b.Dy() != 160 {
+			t.Fatalf("%s: %v", tc.name, b)
+		}
+	}
+	// Without a picture, with a broken one, or no zip at all: the icon.
+	for name, data := range map[string][]byte{
+		"leer.xlsx":   archive(map[string][]byte{"xl/workbook.xml": []byte("<x/>")}),
+		"kaputt.pptx": archive(map[string][]byte{"docProps/thumbnail.jpeg": []byte("no jpeg")}),
+		"kein.docx":   []byte("not a zip"),
+	} {
+		if _, _, err := m.Get(context.Background(), source(t, dir, name, data), 160); !errors.Is(err, ErrUnsupported) {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+	if Kind("a.DOCX") != "office" || Kind("b.odp") != "office" || Kind("c.doc") != "" {
+		t.Fatal("office kinds")
 	}
 }

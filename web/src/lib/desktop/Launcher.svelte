@@ -9,6 +9,11 @@
 	import { desktop } from './wm.svelte.ts';
 	import { programs, vmScreens, type Program } from './programs.svelte.ts';
 	import { SYSTEM_APPS } from './apps.ts';
+	import { api } from '../api.ts';
+	import Dialog from '../components/Dialog.svelte';
+	import { apiErrorText } from '../i18n/index.svelte.ts';
+	import { sources } from './sources.svelte.ts';
+	import { matchActions, quickActions, type QuickAction } from './quick-actions.ts';
 
 	let {
 		onopen,
@@ -60,6 +65,62 @@
 			list = desktop.prefs.recent.flatMap((k) => list.filter((p) => p.key === k));
 		return list;
 	});
+	// PLAN 70: quick actions. The backup jobs are asked for only while the menu
+	// is open and something is typed; containers and VMs the desktop has anyway.
+	let backups = $state<string[] | null>(null);
+	$effect(() => {
+		if (!admin || backups !== null || !query.trim()) return;
+		backups = [];
+		api
+			.get<{ jobs?: { job: { id: string; enabled: boolean } }[] }>('/backups')
+			.then((r) => (backups = (r.jobs ?? []).filter((j) => j.job.enabled).map((j) => j.job.id)))
+			.catch(() => (backups = []));
+	});
+	const actions = $derived(
+		matchActions(
+			quickActions(t as never, admin, {
+				containers: sources.containers,
+				vms: sources.vms,
+				backups: backups ?? [],
+			}),
+			query,
+		),
+	);
+	let asking = $state<QuickAction | null>(null);
+	let acting = $state(false);
+	let actionNote = $state<{ ok: boolean; text: string } | null>(null);
+	function pick(action: QuickAction) {
+		if (action.local === 'restart' || action.local === 'shutdown') {
+			power = action.local;
+			return;
+		}
+		if (action.confirm) asking = action;
+		else void run(action);
+	}
+	async function run(action: QuickAction) {
+		asking = null;
+		if (action.local === 'lock') {
+			onclose();
+			onlock?.();
+			return;
+		}
+		if (action.local === 'logout') {
+			void logout();
+			return;
+		}
+		if (!action.post) return;
+		acting = true;
+		actionNote = null;
+		try {
+			await api.post(action.post);
+			actionNote = { ok: true, text: t('quick.done', { name: action.label }) };
+		} catch (e) {
+			actionNote = { ok: false, text: apiErrorText(e) };
+		} finally {
+			acting = false;
+		}
+	}
+
 	const onDesk = $derived(
 		new Set([...desktop.prefs.icons, ...desktop.prefs.folders.flatMap((f) => f.apps)]),
 	);
@@ -79,16 +140,17 @@
 			return;
 		}
 		// Enter in the search field opens the first hit; on a button it is that button's.
-		if (event.key === 'Enter' && event.target === field && (shown[0] || pages[0])) {
+		if (event.key === 'Enter' && event.target === field && (shown[0] || pages[0] || actions[0])) {
 			event.preventDefault();
 			if (shown[0]) onopen(shown[0].key);
-			else onopen(pages[0].key, pages[0].href);
+			else if (pages[0]) onopen(pages[0].key, pages[0].href);
+			else pick(actions[0]);
 			return;
 		}
 		// PLAN 65-5: the arrow keys move through the programs and pages like a grid.
 		if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key))
 			return;
-		const items = [...(root?.querySelectorAll<HTMLElement>('.prog, .page') ?? [])];
+		const items = [...(root?.querySelectorAll<HTMLElement>('.prog, .page, .action') ?? [])];
 		if (!items.length) return;
 		const at = items.indexOf(document.activeElement as HTMLElement);
 		if (at < 0) {
@@ -100,7 +162,7 @@
 		event.preventDefault();
 		const top = items[0].offsetTop;
 		const columns = Math.max(1, items.filter((el) => el.offsetTop === top).length);
-		const isPage = (i: number) => items[i].classList.contains('page');
+		const isPage = (i: number) => !items[i].classList.contains('prog');
 		const step = isPage(at) ? 1 : columns;
 		let next = at;
 		if (event.key === 'Home') next = 0;
@@ -157,7 +219,7 @@
 			>
 		{/each}
 	</div>
-	<div class="grid">
+	<div class="grid" class:gone={!shown.length && (pages.length > 0 || actions.length > 0)}>
 		{#each shown as p (p.key)}
 			<button
 				type="button"
@@ -177,7 +239,9 @@
 				<span>{p.label}</span>
 			</button>
 		{:else}
-			{#if !pages.length}<p class="muted none">{t('desktop.menu.nothing')}</p>{/if}
+			{#if !pages.length && !actions.length}<p class="muted none">
+					{t('desktop.menu.nothing')}
+				</p>{/if}
 		{/each}
 	</div>
 	{#if pages.length}
@@ -196,6 +260,26 @@
 			{/each}
 		</div>
 	{/if}
+	{#if actions.length}
+		<div class="pages actions" role="group" aria-label={t('quick.title')}>
+			<span class="group-title">{t('quick.title')}</span>
+			{#each actions as action (action.id)}
+				<button type="button" class="page action" disabled={acting} onclick={() => pick(action)}
+					><Icon name={action.icon as 'play'} size={17} /><span>{action.label}</span
+					>{#if action.confirm || action.local === 'restart' || action.local === 'shutdown'}<span
+							class="muted small">…</span
+						>{/if}</button
+				>
+			{/each}
+		</div>
+	{/if}
+	{#if actionNote}<p
+			class="action-note"
+			class:notice-error={!actionNote.ok}
+			role={actionNote.ok ? 'status' : 'alert'}
+		>
+			{actionNote.text}
+		</p>{/if}
 	<footer>
 		<span class="who">
 			<b class="avatar" aria-hidden="true"
@@ -252,8 +336,36 @@
 	</footer>
 </div>
 {#if power}<PowerDialog action={power} onclose={() => (power = null)} />{/if}
+{#if asking}
+	{@const a = asking}
+	<Dialog title={t('quick.confirmTitle')} onclose={() => (asking = null)}>
+		<p>{t('quick.confirm', { name: a.label })}</p>
+		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={() => (asking = null)}>{t('common.cancel')}</button
+			>
+			<button type="button" class="btn btn-danger" onclick={() => void run(a)}
+				>{t('quick.confirmDo')}</button
+			>
+		</div>
+	</Dialog>
+{/if}
 
 <style>
+	.actions .group-title {
+		display: block;
+		padding: 2px 4px 4px;
+		color: var(--muted);
+		font-size: var(--text-xs);
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+	}
+	.grid.gone {
+		display: none;
+	}
+	.action-note {
+		margin: 8px 0 0;
+		font-size: var(--text-sm);
+	}
 	/* PLAN 62: nearly solid, so icons and widgets behind never shine through the text. */
 	.launcher.glass-panel {
 		background: color-mix(in srgb, var(--surface) 97%, transparent);

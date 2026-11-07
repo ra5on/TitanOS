@@ -190,7 +190,7 @@
 			opened = true;
 			sendSize();
 			if (prefs.quality || prefs.fps)
-				send({ t: 'quality', mode: prefs.quality ?? 'auto', fps: prefs.fps ?? 60 });
+				send({ t: 'quality', mode: prefs.quality ?? 'auto', fps: prefs.fps ?? 30 });
 		};
 		socket.onmessage = (event) => {
 			if (typeof event.data === 'string') {
@@ -874,7 +874,7 @@
 		upload: () => fileInput?.click(),
 		reconnect,
 		quality: () => quality,
-		setQuality: (q: Quality) => setQuality(q, prefs.fps ?? 60),
+		setQuality: (q: Quality) => setQuality(q, prefs.fps ?? 30),
 		audio: () => !!hello?.audio && !noAudio,
 		muted: () => prefs.muted,
 		toggleMute,
@@ -944,7 +944,7 @@
 			role="menuitemradio"
 			aria-checked={quality === q}
 			onclick={() => {
-				setQuality(q, prefs.fps ?? 60);
+				setQuality(q, prefs.fps ?? 30);
 				close();
 			}}><span>{t(`viewer.q.${q}` as MessageKey)}</span></button
 		>
@@ -954,7 +954,7 @@
 		<button
 			type="button"
 			role="menuitemradio"
-			aria-checked={(prefs.fps ?? 60) === fps}
+			aria-checked={(prefs.fps ?? 30) === fps}
 			onclick={() => {
 				setQuality(quality, fps);
 				close();

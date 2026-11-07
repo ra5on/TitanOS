@@ -1,6 +1,7 @@
 package thumbs
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"errors"
@@ -49,6 +50,8 @@ func Kind(name string) string {
 		return "pdf"
 	case ".mp4", ".m4v", ".mov", ".mkv", ".webm", ".avi", ".ogv", ".mts", ".m2ts", ".wmv":
 		return "video"
+	case ".docx", ".xlsx", ".pptx", ".odt", ".ods", ".odp":
+		return "office"
 	}
 	return ""
 }
@@ -81,6 +84,8 @@ func (m *Manager) render(ctx context.Context, f *os.File, name string, size int6
 				img, err = m.runTool(ctx, f, "ffmpeg", args("0")...)
 			}
 		}
+	case "office":
+		img, err = officeThumbnail(f, size)
 	default:
 		return nil, ErrUnsupported
 	}
@@ -88,6 +93,54 @@ func (m *Manager) render(ctx context.Context, f *os.File, name string, size int6
 		return nil, err
 	}
 	return encode(orient(scale(img, box), orientation))
+}
+
+// Office documents (PLAN 70, quick look): OOXML and OpenDocument files are
+// zip archives that often carry a small picture of their first page, made
+// by the program that saved them. Only that picture is read: nothing is
+// converted, no helper program runs. Without one (or as EMF/WMF) the file
+// manager shows the icon.
+const (
+	maxOffice      = 512 << 20
+	maxOfficeThumb = 8 << 20
+)
+
+var officeThumbs = []string{"docProps/thumbnail.jpeg", "docProps/thumbnail.jpg", "docProps/thumbnail.png", "Thumbnails/thumbnail.png"}
+
+func officeThumbnail(f *os.File, size int64) (image.Image, error) {
+	if size <= 0 || size > maxOffice {
+		return nil, ErrUnsupported
+	}
+	z, err := zip.NewReader(f, size)
+	if err != nil {
+		return nil, ErrUnsupported
+	}
+	for _, want := range officeThumbs {
+		for _, entry := range z.File {
+			if !strings.EqualFold(entry.Name, want) || entry.UncompressedSize64 > maxOfficeThumb {
+				continue
+			}
+			r, err := entry.Open()
+			if err != nil {
+				return nil, ErrUnsupported
+			}
+			data, err := io.ReadAll(io.LimitReader(r, maxOfficeThumb+1))
+			_ = r.Close()
+			if err != nil || len(data) > maxOfficeThumb {
+				return nil, ErrUnsupported
+			}
+			config, _, err := image.DecodeConfig(bytes.NewReader(data))
+			if err != nil || config.Width <= 0 || config.Height <= 0 || int64(config.Width)*int64(config.Height) > maxPixels {
+				return nil, ErrUnsupported
+			}
+			img, _, err := image.Decode(bytes.NewReader(data))
+			if err != nil {
+				return nil, ErrUnsupported
+			}
+			return img, nil
+		}
+	}
+	return nil, ErrUnsupported
 }
 
 func decodeImage(f *os.File) (image.Image, int, error) {

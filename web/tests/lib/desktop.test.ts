@@ -72,7 +72,8 @@ test('every page of TitanOS belongs to a program', () => {
 	};
 	walk('src/routes', '');
 	const unowned = routes
-		.filter((r) => !r.includes('[') && !['/welcome', '/'].includes(r))
+		// /welcome and /share (PLAN 70, files shared to the phone app) stand alone.
+		.filter((r) => !r.includes('[') && !['/welcome', '/share', '/'].includes(r))
 		.filter((r) => !appForPath(r));
 	expect(unowned).toEqual([]);
 	expect(appForPath('/docker/networks')?.id).toBe('docker');

@@ -328,7 +328,7 @@ export const SYSTEM_APPS: SystemApp[] = [
 		href: '/settings',
 		paths: ['/settings'],
 		side: [
-			{ href: '/settings', label: 'desktop.side.allSettings', icon: 'grid', match: [] },
+			{ href: '/settings', label: 'desktop.side.allSettings', icon: 'home', match: ['/settings'] },
 			{ group: 'desktop.side.system' },
 			{ href: '/settings/about', label: 'desktop.side.about', icon: 'home' },
 			{ href: '/settings/updates', label: 'desktop.side.updates', icon: 'download' },

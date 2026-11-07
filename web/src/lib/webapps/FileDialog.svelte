@@ -9,7 +9,8 @@
 	import { extOf, validFileName } from './protocol.ts';
 
 	type Props = {
-		mode: 'open' | 'save';
+		/** folder (PLAN 70, sharing to the NAS): only a writable folder is chosen. */
+		mode: 'open' | 'save' | 'folder';
 		title: string;
 		/** Where the dialog starts (the folder of the open document). */
 		start?: { root: string; dir: string };
@@ -44,7 +45,10 @@
 	const folders = $derived(visible.filter((e) => e.dir));
 	const files = $derived(
 		visible.filter(
-			(e) => !e.dir && (mode === 'save' || !types.length || types.includes(extOf(e.name))),
+			(e) =>
+				!e.dir &&
+				mode !== 'folder' &&
+				(mode === 'save' || !types.length || types.includes(extOf(e.name))),
 		),
 	);
 	const taken = $derived(
@@ -91,7 +95,9 @@
 	});
 
 	const join = (a: string, b: string) => (a ? `${a}/${b}` : b);
-	const valid = $derived(mode === 'open' ? !!chosen : !!root && validFileName(fileName));
+	const valid = $derived(
+		mode === 'open' ? !!chosen : mode === 'folder' ? !!root : !!root && validFileName(fileName),
+	);
 
 	function submit(event: SubmitEvent) {
 		event.preventDefault();
@@ -99,7 +105,8 @@
 		if (mode === 'open') {
 			const entry = files.find((f) => f.name === chosen);
 			onpick({ root, path: join(dir, chosen), entry });
-		} else onpick({ root, path: join(dir, fileName.trim()) });
+		} else if (mode === 'folder') onpick({ root, path: dir });
+		else onpick({ root, path: join(dir, fileName.trim()) });
 	}
 </script>
 
@@ -176,7 +183,11 @@
 		<div class="dialog-actions">
 			<button type="button" class="btn" onclick={onclose}>{t('common.cancel')}</button>
 			<button class="btn btn-primary" disabled={!valid}
-				>{mode === 'open' ? t('webapps.dialog.open') : t('webapps.dialog.save')}</button
+				>{mode === 'open'
+					? t('webapps.dialog.open')
+					: mode === 'folder'
+						? t('share.here')
+						: t('webapps.dialog.save')}</button
 			>
 		</div>
 	</form>

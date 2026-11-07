@@ -242,6 +242,20 @@ for (const [width, height] of [
       ),
     ]);
   assert.equal(lefts.length, 1, `one column: ${lefts}`);
+  // PLAN 71: the phone has no side bar, so it keeps the search and a tile
+  // for every area; the overview cards follow below, inside the screen.
+  await page.getByRole("searchbox", { name: "Einstellungen suchen" }).waitFor();
+  assert.ok(
+    (await page.locator(".home-tile").count()) >= 20,
+    "every area as a tile",
+  );
+  const card = page.locator(".overview .health");
+  await card.waitFor();
+  const box = await card.boundingBox();
+  assert.ok(
+    box.x >= 0 && box.x + box.width <= 391,
+    `overview card fits (${box.x}, ${box.width})`,
+  );
   const name = tile.locator(".name");
   const lines = await name.evaluate((el) =>
     Math.round(

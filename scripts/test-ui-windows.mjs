@@ -484,6 +484,78 @@ for (const [, path] of allOnly ? [] : representative.slice(0, 9)) {
   await made.ctx.close();
 }
 
+// PLAN 71 ("Variante C"): Systemsteuerung has one menu – the side bar with
+// its search – and the start page is the overview with cards. The side bar
+// covers the desktop completely.
+if (!allOnly && (!onlyPaths || onlyPaths.includes("/settings"))) {
+  const made = await openWindow("settings", "/settings", 1100);
+  const { page, frame } = made;
+  await frame.waitForSelector(".overview .tile.ui-card .card-head");
+  check(
+    (await frame.$$(".home-tile")).length === 0,
+    "/settings in a window: the overview, no tiles",
+  );
+  const side = page.locator("section.win .side");
+  const bg = await side.evaluate((el) => getComputedStyle(el).backgroundColor);
+  const alpha = /rgba?\(([^)]+)\)/
+    .exec(bg)?.[1]
+    .split(/[\s,/]+/)
+    .filter(Boolean)[3];
+  check(
+    alpha === undefined || Number(alpha) >= 0.99,
+    `the window's side bar is opaque (${bg})`,
+  );
+  const items = () =>
+    side
+      .locator(".items .item")
+      .evaluateAll((a) => a.map((x) => x.textContent.trim()));
+  const all = (await items()).length;
+  const search = side.getByRole("searchbox", { name: "Einstellung suchen" });
+  await search.fill("ssh");
+  check(
+    JSON.stringify(await items()) === JSON.stringify(["Zugang und Sitzungen"]),
+    `side bar search "ssh" finds Zugang (${await items()})`,
+  );
+  // By keyboard: the window's page loads after Enter (no wait for it here).
+  await search.focus();
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(
+    () =>
+      document.querySelector("section.win iframe")?.contentWindow?.location
+        .hash === "#access-ssh",
+    null,
+    { timeout: 8000 },
+  );
+  await search.fill("zeitzone");
+  check((await items()).includes("Zeitzone"), "side bar search finds Zeitzone");
+  await search.fill("platten-ruhe");
+  check(
+    (await items()).includes("Energie"),
+    "side bar search finds Platten-Ruhe",
+  );
+  await search.press("Escape");
+  check((await items()).length === all, "Escape clears the side bar search");
+  // Ablage › Einstellungen suchen puts the cursor in the side bar's search.
+  await page.locator('[data-menu="file"]').first().click();
+  await page.getByRole("menuitem", { name: /Einstellungen suchen/ }).click();
+  await page.waitForTimeout(300);
+  check(
+    await search.evaluate((el) => el === document.activeElement),
+    "Ablage › Einstellungen suchen focuses the side bar search",
+  );
+  // Folded: only the magnifier; a click unfolds and focuses the field.
+  await side.locator(".fold").click();
+  await side.getByRole("button", { name: "Einstellung suchen" }).click();
+  await page.waitForTimeout(300);
+  check(
+    await side
+      .getByRole("searchbox")
+      .evaluate((el) => el === document.activeElement),
+    "the magnifier of the folded side bar opens the search",
+  );
+  await made.ctx.close();
+}
+
 // Script errors of the checked pages; the visual pass below also opens pages
 // whose data the shared fixtures do not have (they have scripts of their own).
 // A reload of the dev server while a page loads is no error of the page.

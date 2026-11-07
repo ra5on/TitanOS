@@ -171,3 +171,29 @@ test('"new" badges end by themselves after two minor versions or 30 days', async
 	// Areas from 0.31 are no longer new in 0.40.
 	assert.ok(!stillNew({ version: '0.31.0', date: '2026-10-28' }, '0.40.0', day('2026-10-31')));
 });
+
+test('PLAN 71: the side bar search of Systemsteuerung finds areas by name, keyword and section', async () => {
+	const { settingsSideMatches, settingsSideAllowed } =
+		await import('../src/lib/settings-search.ts');
+	const { SYSTEM_APPS } = await import('../src/lib/desktop/apps.ts');
+	const { readFileSync, readdirSync } = await import('node:fs');
+	const dir = new URL('../src/lib/i18n/', import.meta.url);
+	const de = JSON.parse(readFileSync(new URL('de.json', dir), 'utf8'));
+	for (const f of readdirSync(new URL('features/', dir)).filter((n) => n.endsWith('.de.json')))
+		Object.assign(de, JSON.parse(readFileSync(new URL('features/' + f, dir), 'utf8')));
+	const label = (key) => de[key] ?? key;
+	const items = SYSTEM_APPS.find((a) => a.id === 'settings').side.filter((i) => 'href' in i);
+	const find = (q, admin = true) => settingsSideMatches(q, admin, label, items);
+	// A section hit shows its area and leads to the section's anchor.
+	assert.deepEqual([...find('ssh')], [['/settings/access', '/settings/access#access-ssh']]);
+	assert.ok(find('Zeitzone').has('/settings/timezone'));
+	assert.ok(find('platten-ruhe').has('/settings/energy'));
+	// The side bar's own name counts too ("Übersicht", "Fernzugriff" …).
+	assert.ok(find('übersicht').has('/settings'));
+	assert.equal(find('xyzzy').size, 0);
+	// Accounts with the role "user" only find what they may open.
+	assert.equal(find('ssh', false).size, 0);
+	assert.ok(find('darstellung', false).has('/settings/appearance'));
+	assert.ok(settingsSideAllowed('/settings', false));
+	assert.ok(!settingsSideAllowed('/settings/network', false));
+});
