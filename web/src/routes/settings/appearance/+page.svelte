@@ -214,6 +214,9 @@
 		loginEditor?.discard();
 		extraMessage = null;
 	}
+	/** PLAN 73: where "Transparenz" lies on the slider from clear (0) to tinted (100). */
+	const liquidOf = (glass: number) =>
+		Math.max(0, Math.min(100, Math.round((80 - glass) / 0.75 / 5) * 5));
 </script>
 
 {#snippet slider(
@@ -372,24 +375,41 @@
 	<section class="tile ui-card" aria-labelledby="h-sliders">
 		<div class="card-head"><h2 id="h-sliders">{t('look.sliders')}</h2></div>
 		<div class="set-grid">
-			{@render slider(
-				'look-glass',
-				t('appearance.transparency'),
-				t('look.glassHint'),
-				draft.glass,
-				LIMITS.glass,
-				'%',
-				(v) => (draft.glass = v),
-			)}
-			{@render slider(
-				'look-blur',
-				t('look.blur'),
-				t('look.blurHint'),
-				draft.blur,
-				LIMITS.blur,
-				'px',
-				(v) => (draft.blur = v),
-			)}
+			<!-- PLAN 73 (owner 8.11.2026, like iOS "Liquid Glass"): one slider from
+			     clear to tinted instead of "Transparenz" and "Glaseffekt"; it sets
+			     both stored values (older apps read them as before). -->
+			<div class="set-row slider liquid">
+				<span class="slider-top">
+					<span class="set-label">
+						<label for="look-liquid">{t('look.liquid')}</label>
+						<span class="set-hint">{t('look.liquidHint')}</span>
+					</span>
+				</span>
+				<div class="liquid-preview" aria-hidden="true">
+					<span
+						class="pane"
+						style:background={`color-mix(in srgb, var(--surface) ${100 - draft.glass}%, transparent)`}
+						style:backdrop-filter={`blur(${draft.blur}px) saturate(1.4)`}
+						><b>15:11</b><span>{t('look.liquidSample')}</span></span
+					>
+				</div>
+				<span class="liquid-ends"
+					><span>{t('look.liquidClear')}</span><input
+						id="look-liquid"
+						type="range"
+						min="0"
+						max="100"
+						step="5"
+						value={liquidOf(draft.glass)}
+						aria-valuetext={t('look.liquidValue', { value: liquidOf(draft.glass) })}
+						oninput={(e) => {
+							const v = Number(e.currentTarget.value);
+							draft.glass = Math.round((80 - 0.75 * v) / 5) * 5;
+							draft.blur = Math.round((10 + 0.2 * v) / 2) * 2;
+						}}
+					/><span>{t('look.liquidTinted')}</span></span
+				>
+			</div>
 			{@render slider(
 				'look-corners',
 				t('look.corners'),
@@ -595,6 +615,40 @@
 {/if}
 
 <style>
+	.liquid-preview {
+		position: relative;
+		height: 110px;
+		border-radius: 14px;
+		overflow: hidden;
+		background: url('/backgrounds/nordlicht.webp') center 35% / cover;
+		display: grid;
+		place-items: center;
+	}
+	.liquid-preview .pane {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 2px;
+		padding: 12px 28px;
+		border-radius: 18px;
+		border: 1px solid color-mix(in srgb, #fff 18%, transparent);
+		color: var(--text);
+		font-size: var(--text-sm);
+	}
+	.liquid-preview .pane b {
+		font-size: var(--text-xl);
+		font-weight: 600;
+	}
+	.liquid-ends {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		font-size: var(--text-sm);
+		color: var(--muted);
+	}
+	.liquid-ends input {
+		flex: 1;
+	}
 	.tab-row {
 		position: relative;
 		display: flex;
