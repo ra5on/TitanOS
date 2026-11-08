@@ -351,6 +351,7 @@ export const SYSTEM_APPS: SystemApp[] = [
 			{ href: '/settings/letsencrypt', label: 'desktop.side.certificates', icon: 'lock' },
 			{ href: '/settings/proxy', label: 'desktop.side.httpsNames', icon: 'external' },
 			{ group: 'desktop.side.accountsServices' },
+			{ href: '/settings/users', label: 'desktop.app.users', icon: 'users' },
 			{ href: '/settings/access', label: 'desktop.side.access', icon: 'lock' },
 			{ href: '/settings/programs', label: 'desktop.side.programs', icon: 'grid' },
 			{ href: '/settings/services', label: 'desktop.side.services', icon: 'gear' },

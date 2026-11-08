@@ -516,7 +516,8 @@
 				</div>
 				<div class="set-control end">
 					<label class="switch-label"
-						><span>{t('agent.enabled')}</span><input
+						><input
+							aria-label={t('agent.enabled')}
 							type="checkbox"
 							class="switch"
 							role="switch"

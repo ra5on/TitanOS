@@ -98,7 +98,10 @@ async function open(width, height, phone = false) {
 }
 
 async function openAnalysis(ui) {
-  await ui.getByRole("button", { name: /Werkzeuge/ }).first().click();
+  // 0.70: the Explorer-like command bar keeps it in "Mehr" (…).
+  const tools = ui.getByRole("button", { name: /Werkzeuge/ });
+  if (await tools.count()) await tools.first().click();
+  else await ui.locator(".command-bar").getByRole("button", { name: "Weitere Aktionen", exact: true }).click();
   await ui.getByRole("menuitem", { name: "Speicher-Analyse" }).click();
   await ui.getByText("412,000 Dateien", { exact: false }).or(ui.getByText(/412\.000 Dateien|412000 Dateien|412,000 Dateien/)).first().waitFor({ timeout: 15000 });
 }

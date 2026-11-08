@@ -54,6 +54,8 @@
 	"settingshome.todo.none": "Nichts zu tun",
 	"settingshome.todo.checking": "Wird geprüft …",
 	"settingshome.todo.unknown": "Ein Teil ließ sich nicht prüfen.",
+	"settingshome.users.count": "{n} Konten",
+	"settingshome.users.locked": "{n} gesperrt",
 	"settingshome.open": "Öffnen",
 	"settingshome.services": "Dienste",
 	"settingshome.services.on": "an",

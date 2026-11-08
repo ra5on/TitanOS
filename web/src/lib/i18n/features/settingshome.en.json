@@ -54,6 +54,8 @@
 	"settingshome.todo.none": "Nothing to do",
 	"settingshome.todo.checking": "Checking …",
 	"settingshome.todo.unknown": "Some of it could not be checked.",
+	"settingshome.users.count": "{n} accounts",
+	"settingshome.users.locked": "{n} locked",
 	"settingshome.open": "Open",
 	"settingshome.services": "Services",
 	"settingshome.services.on": "on",

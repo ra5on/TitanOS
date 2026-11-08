@@ -44,6 +44,8 @@
 	let services = $state<Partial<Record<(typeof NAMES)[number], Service>> | null>(null);
 	let ssh = $state<{ enabled: boolean; running: boolean } | null>(null);
 	let firewall = $state<{ config: { enabled: boolean }; active: boolean } | null>(null);
+	// PLAN 75-4: the accounts, one row with a way into Systemsteuerung › Benutzer.
+	let accounts = $state<{ name: string; disabled?: boolean }[] | null>(null);
 
 	let recent = $state<(ActivityEntry & { area: string })[]>([]);
 
@@ -57,6 +59,10 @@
 			.get<typeof services>('/services')
 			.then((v) => (services = v && typeof v === 'object' ? v : {}))
 			.catch(() => (services = {}));
+		api
+			.get<{ name: string; disabled?: boolean }[]>('/users')
+			.then((v) => (accounts = Array.isArray(v) ? v : null))
+			.catch(() => {});
 		api
 			.get<{ enabled: boolean; running: boolean }>('/system/ssh')
 			.then((v) => (ssh = typeof v?.enabled === 'boolean' ? v : null))
@@ -184,6 +190,21 @@
 					</div>
 				{/if}
 			{/each}
+			{#if accounts}
+				{@const locked = accounts.filter((a) => a.disabled).length}
+				<div class="set-row">
+					<span class="set-label">{t('desktop.app.users')}</span>
+					<span class="set-control">
+						<span class="state"
+							>{t('settingshome.users.count', { n: accounts.length })}{#if locked}{' · '}{t(
+									'settingshome.users.locked',
+									{ n: locked },
+								)}{/if}</span
+						>
+						<a class="more" href="/settings/users">{t('settingshome.open')}</a>
+					</span>
+				</div>
+			{/if}
 			{#if ssh}
 				<div class="set-row">
 					<span class="set-label">{t('access.ssh')}</span>
