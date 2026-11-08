@@ -225,6 +225,7 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <nav
 	class="dock {dock.position}"
+	class:plain={!dock.border}
 	class:edit
 	class:preview={!!preview}
 	aria-hidden={preview ? 'true' : undefined}
@@ -348,8 +349,8 @@
 		display: flex;
 		align-items: flex-end;
 		gap: 6px;
-		padding: 8px 10px;
-		border-radius: calc((var(--size) * 0.36 + 8px) * min(var(--radius-scale, 1), 1.4));
+		padding: 9px;
+		border-radius: calc((var(--size) * 0.36 + 9px) * min(var(--radius-scale, 1), 1.4));
 		background: color-mix(in srgb, var(--surface) var(--plate), transparent);
 		/* The global "Glaseffekt" (Settings › Appearance, PLAN 64). */
 		backdrop-filter: blur(var(--desk-blur, 20px)) saturate(1.3);
@@ -453,16 +454,39 @@
 	.menu-btn.on {
 		background: color-mix(in srgb, var(--accent) 30%, transparent);
 	}
+	/* PLAN 73: the "open" dot lies in the plate's padding, so the frame is the
+	   same distance from the icons on every side (owner's photo of 8.11.2026). */
 	.dot {
-		width: 5px;
-		height: 5px;
-		margin-top: 4px;
+		position: absolute;
+		left: 50%;
+		bottom: -6px;
+		width: 4px;
+		height: 4px;
+		margin-left: -2px;
 		border-radius: 50%;
 		background: transparent;
+		pointer-events: none;
 	}
-	.left .dot,
+	.left .dot {
+		left: -6px;
+		top: 50%;
+		bottom: auto;
+		margin: -2px 0 0;
+	}
 	.right .dot {
-		margin: 0 4px;
+		left: auto;
+		right: -6px;
+		top: 50%;
+		bottom: auto;
+		margin: -2px 0 0;
+	}
+	/* "Umrandung: Ohne" – the icons alone on the desktop. */
+	.dock.plain {
+		background: none;
+		border-color: transparent;
+		box-shadow: none;
+		backdrop-filter: none;
+		-webkit-backdrop-filter: none;
 	}
 	.dot.on {
 		background: var(--text);

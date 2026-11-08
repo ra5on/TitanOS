@@ -87,6 +87,8 @@ export type Dock = {
 	/** Growing under the pointer: 0 off, 1 light, 2 strong. */
 	magnify: 0 | 1 | 2;
 	position: DockPosition;
+	/** PLAN 73: the plate with its frame (true) or the icons alone (false). */
+	border: boolean;
 };
 export const DOCK_DEFAULT_PINNED = [
 	'app:files',
@@ -104,6 +106,7 @@ export const defaultDock = (): Dock => ({
 	opacity: 90,
 	magnify: 1,
 	position: 'bottom',
+	border: true,
 });
 
 export type LayoutWindow = {
@@ -321,6 +324,7 @@ export function sanitizeDock(value: unknown): Dock {
 		position: (['bottom', 'left', 'right'] as DockPosition[]).includes(d.position as DockPosition)
 			? (d.position as DockPosition)
 			: base.position,
+		border: d.border !== false,
 	};
 }
 
