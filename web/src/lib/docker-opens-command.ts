@@ -24,7 +24,7 @@ export function joinCommand(args: string[]): string {
 export function mountedShares(opens: {
 	mounts: { source: string; target: string; readOnly: boolean }[];
 }): { share: string; readOnly: boolean }[] {
-	return opens.mounts
+	return (opens.mounts ?? [])
 		.filter((m) => m.target.startsWith(SHARES_TARGET) && !m.target.slice(8).includes('/'))
 		.map((m) => ({ share: m.target.slice(SHARES_TARGET.length), readOnly: m.readOnly }));
 }

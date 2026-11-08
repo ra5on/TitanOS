@@ -41,16 +41,27 @@ const noSideScroll = (page) =>
 
 try {
   {
-    // The tile on Tools leads here.
+    // PLAN 61/65: the side bar of the Tools window leads here.
     const { ctx, page } = await context("owner", "graphit", 1440);
+    await ctx.addInitScript(() => localStorage.removeItem("titanos.layout"));
     // The disk tests on that page are not part of the shared fixtures.
     await ctx.route("**/api/v1/storage/tests", (r) =>
       r.fulfill({ json: { tests: [] } }),
     );
     await page.goto(base + "/tools");
-    await page.getByRole("link", { name: "Skripte" }).click();
-    await page.waitForURL("**/tools/scripts");
-    await page.getByRole("heading", { name: "Skripte", level: 1 }).waitFor();
+    const side = page.locator("section.win nav.side");
+    await side.getByRole("button", { name: "Skripte", exact: true }).click();
+    const frame = page.frameLocator("section.win iframe").first();
+    await frame
+      .getByRole("heading", { name: "Skripte", level: 1 })
+      .waitFor({ timeout: 15000 });
+    assert.match(
+      await frame
+        .locator("main")
+        .first()
+        .evaluate(() => location.pathname),
+      /\/tools\/scripts$/,
+    );
     await ctx.close();
   }
   {

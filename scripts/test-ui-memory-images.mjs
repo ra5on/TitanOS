@@ -90,6 +90,19 @@ try {
       stored = installed.compose;
       return route.fulfill({ status: 201 });
     }
+    // PLAN 72: the edit page also reads the app's „Öffnen mit“ settings.
+    if (path === "/docker/apps/fixture-stack/opens")
+      return route.fulfill({
+        json: {
+          app: "fixture-stack",
+          name: "Fixture Stack",
+          types: [],
+          command: [],
+          service: "web",
+          running: true,
+          mounts: [],
+        },
+      });
     if (path === "/docker/apps/fixture-stack") {
       if (method === "PUT") {
         stored = route.request().postDataJSON().compose;
@@ -132,23 +145,24 @@ try {
     return route.fallback();
   });
 
-  // RAM tile: available memory, the occupancy bar (occupied, write cache,
-  // free; the read cache counts as free) and no warning while plenty is free.
-  await page.goto(base + "/");
-  const ram = page.locator('[gs-id="memory"]');
-  await ram.getByText(/Verfügbar:/).waitFor();
-  assert.equal(await ram.locator(".notice-warn").count(), 0);
-  const bar = ram.getByRole("img", { name: /^Belegt / });
-  await bar.waitFor();
+  // RAM: available memory counts the read cache as free.
+  // PLAN 64: the dashboard grid with its RAM tile (occupancy bar and warning)
+  // is gone; the Task manager shows used and available RAM, the low-memory
+  // warning stays on Settings › Schreibcache (checked below).
+  await page.goto(base + "/tools/taskmanager");
+  const ram = page.getByRole("region", { name: "RAM", exact: true });
+  await ram.getByText(/^12(,0)? GB verfügbar$/).waitFor();
   assert.match(
-    await bar.getAttribute("aria-label"),
-    /^Belegt 4(,0)? GB, Schreibcache 0 B, frei 12(,0)? GB$/,
+    await ram.locator(".value").innerText(),
+    /^4(,0)? \/ 16(,0)? GB$/,
   );
   await page.screenshot({ path: out + "/ram-cache.png", fullPage: true });
+  // No warning while plenty is free.
+  await page.goto(base + "/settings/memory");
+  await page.locator("#cache-budget").waitFor();
+  assert.equal(await page.getByText(/30 Sekunden/).count(), 0);
   data.system.memory.lowAvailable = true;
   data.system.memory.availableBytes = 1e9;
-  await ram.getByRole("status").waitFor();
-  assert.match(await ram.getByRole("status").innerText(), /30 Sekunden/);
 
   // Cache budget: without PSI the pressure reads "Nicht verfügbar"; the
   // chosen share is sent and applied.

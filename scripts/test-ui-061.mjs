@@ -136,17 +136,26 @@ let offline = false,
   failZone = false,
   failTasks = false;
 const requests = [];
-async function context(role = "owner", theme = "graphit", width = 1440) {
+// layout "bare": the page alone, the way its window shows it (PLAN 65);
+// "desktop": the desktop with windows (from 900 px) or the phone frame.
+async function context(
+  role = "owner",
+  theme = "graphit",
+  width = 1440,
+  layout = "bare",
+) {
   const ctx = await browser.newContext({
     locale: "de-DE",
     viewport: { width, height: 1000 },
   });
   await ctx.addInitScript(
-    ({ theme }) => {
+    ({ theme, layout }) => {
       localStorage.setItem("titanos.locale", "de");
+      if (layout === "bare") localStorage.setItem("titanos.layout", "bare");
+      else localStorage.removeItem("titanos.layout");
       localStorage.setItem("titanos.appearance", JSON.stringify({ theme }));
     },
-    { theme },
+    { theme, layout },
   );
   await ctx.route("**/api/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname.slice(
@@ -462,58 +471,70 @@ try {
       "README screenshots captured from 0.6.1 with isolated example data.",
     );
   } else {
-    const { ctx, page } = await context();
-    await page.goto(base + "/settings");
-    const search = page
-      .getByRole("navigation", { name: "Einstellungsbereiche", exact: true })
-      .getByRole("searchbox");
-    await search.waitFor();
-    assert.equal(
-      await page.locator("main select, main input[type=checkbox]").count(),
-      0,
-    );
-    // Desktop searches and lists the areas in the sidebar (the overview's list is for phones).
-    assert.equal(
-      await page
-        .getByRole("navigation", { name: "Einstellungsbereiche", exact: true })
-        .locator("ul[aria-labelledby] a")
-        .count(),
-      allAreas,
-    );
-    for (const [query, href] of [
-      ["SSH", "/settings/access#access-ssh"],
-      ["Zertifikat", "/settings/access#access-cert"],
-      ["Terminal", "/settings/access#access-terminal"],
-      ["DNS", "/settings/network#network-dns"],
-      ["Zeitzone", "/settings/timezone"],
-    ]) {
-      // The specific section is among the results; other areas may match too (HTTPS names know "Zertifikat" and mDNS).
-      await search.fill(query);
-      assert.ok(
-        (
-          await page
-            .getByRole("navigation", {
-              name: "Einstellungsbereiche",
-              exact: true,
-            })
-            .locator("ul[aria-labelledby] a")
-            .evaluateAll((a) => a.map((x) => x.getAttribute("href")))
-        ).includes(href),
-        query,
+    // PLAN 71: the Systemsteuerung window's side bar lists the areas and
+    // searches them; a hit opens the area at the section found.
+    {
+      const desk = await context("owner", "graphit", 1440, "desktop");
+      const { page } = desk;
+      await page.goto(base + "/settings");
+      const side = page.locator("section.win nav.side");
+      const frame = page.frameLocator("section.win iframe").first();
+      const items = () =>
+        side
+          .locator(".items .item")
+          .evaluateAll((a) => a.map((x) => x.textContent.trim()));
+      const search = side.getByRole("searchbox", {
+        name: "Einstellung suchen",
+      });
+      await search.waitFor({ timeout: 15000 });
+      await frame.locator(".overview .tile.ui-card").first().waitFor();
+      assert.equal(
+        await frame.locator("main select, main input[type=checkbox]").count(),
+        0,
       );
+      // All areas plus the overview.
+      assert.equal((await items()).length, allAreas + 1);
+      const at = (href) =>
+        page.waitForFunction(
+          (href) => {
+            const loc =
+              document.querySelector("section.win iframe")?.contentWindow
+                ?.location;
+            return loc && loc.pathname + loc.search + loc.hash === href;
+          },
+          href,
+          { timeout: 8000 },
+        );
+      for (const [query, area, href] of [
+        ["SSH", "Zugang und Sitzungen", "/settings/access#access-ssh"],
+        ["Zertifikat", "Zugang und Sitzungen", "/settings/access#access-cert"],
+        [
+          "Terminal",
+          "Zugang und Sitzungen",
+          "/settings/access#access-terminal",
+        ],
+        ["DNS", "Netzwerk", "/settings/network#network-dns"],
+        ["Zeitzone", "Zeitzone", "/settings/timezone"],
+        ["Backup", "Sicherungen", "/settings/backups/data"],
+      ]) {
+        // The area is among the results (others may match too: HTTPS names
+        // know "Zertifikat" and mDNS) and opens at the section found.
+        await search.fill(query);
+        assert.ok((await items()).includes(area), query);
+        await side.getByRole("button", { name: area, exact: true }).click();
+        await at(href);
+        // Let the window's page finish loading before the next search.
+        await frame.locator("main h1").first().waitFor({ state: "attached" });
+        await page.waitForTimeout(600);
+      }
+      await search.fill("");
+      await page.screenshot({
+        path: out + "/settings-desktop.png",
+        fullPage: true,
+      });
+      await desk.ctx.close();
     }
-    await search.fill("Backup");
-    assert.ok(
-      await page
-        .getByRole("navigation", { name: "Einstellungsbereiche", exact: true })
-        .locator('ul[aria-labelledby] a[href="/settings/backups/data"]')
-        .count(),
-    );
-    await search.fill("");
-    await page.screenshot({
-      path: out + "/settings-desktop.png",
-      fullPage: true,
-    });
+    const { ctx, page } = await context();
     failLoad = true;
     await page.goto(base + "/settings/timezone");
     await page
@@ -696,16 +717,17 @@ try {
         }
         await ctx.close();
       }
+    // The window's side bar lists only the areas a user may open (plus the overview).
+    const userDesk = await context("user", "graphit", 1440, "desktop");
+    await userDesk.page.goto(base + "/settings");
+    const userSide = userDesk.page.locator("section.win nav.side");
+    await userSide
+      .getByRole("searchbox", { name: "Einstellung suchen" })
+      .waitFor({ timeout: 15000 });
+    await userSide.locator(".items .item").first().waitFor();
+    assert.equal(await userSide.locator(".items .item").count(), userAreas + 1);
+    await userDesk.ctx.close();
     const user = await context("user");
-    await user.page.goto(base + "/settings");
-    await user.page.getByRole("searchbox").first().waitFor();
-    assert.equal(
-      await user.page
-        .getByRole("navigation", { name: "Einstellungsbereiche", exact: true })
-        .locator("ul[aria-labelledby] a")
-        .count(),
-      userAreas,
-    );
     for (const path of [
       "backups",
       "backups/data",

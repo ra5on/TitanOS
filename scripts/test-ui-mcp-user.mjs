@@ -198,16 +198,41 @@ try {
     });
 
     // The settings search finds MCP as the page, no longer a section.
+    // PLAN 71: the search sits in the side bar of the Systemsteuerung window;
+    // only "MCP-Server" is left (not "API und CLI" with its old section), and
+    // it opens the page.
     if (width === 1440) {
-      await page.goto(base + "/settings/about");
-      const search = page.getByRole("searchbox").first();
-      await search.fill("mcp");
-      const links = page.locator(
-        'a[href^="/settings/mcp"], a[href*="api-mcp"]',
+      const desk = await fixture("user", theme, width);
+      await desk.ctx.addInitScript(() =>
+        localStorage.removeItem("titanos.layout"),
       );
-      await page.locator('a[href="/settings/mcp"]').first().waitFor();
-      assert.equal(await page.locator('a[href*="api-mcp"]').count(), 0);
-      assert.ok((await links.count()) >= 1);
+      await desk.page.goto(base + "/settings/about");
+      const side = desk.page.locator("section.win nav.side");
+      const search = side.getByRole("searchbox", {
+        name: "Einstellung suchen",
+      });
+      await search.waitFor({ timeout: 15000 });
+      await search.fill("mcp");
+      assert.deepEqual(
+        await side
+          .locator(".items .item")
+          .evaluateAll((a) => a.map((x) => x.textContent.trim())),
+        ["MCP-Server"],
+      );
+      await side
+        .getByRole("button", { name: "MCP-Server", exact: true })
+        .click();
+      await desk.page.waitForFunction(
+        () => {
+          const loc =
+            document.querySelector("section.win iframe")?.contentWindow
+              ?.location;
+          return loc?.pathname === "/settings/mcp" && !loc.hash;
+        },
+        null,
+        { timeout: 8000 },
+      );
+      await desk.ctx.close();
     }
     await ctx.close();
   }

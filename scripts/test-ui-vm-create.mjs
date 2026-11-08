@@ -324,9 +324,10 @@ try {
     await page.getByRole("dialog").waitFor();
     await page.getByRole("button", { name: "Abbrechen", exact: true }).click();
     await page.goto(`${base}/vms?vm=running&tab=overview`);
-    await page.locator(".head .dropdown button").click();
+    // PLAN 67: restarting is a button of the page's tool bar now.
     await page
-      .getByRole("menuitem", { name: "Neu starten", exact: true })
+      .locator(".win-toolbar")
+      .getByRole("button", { name: "Neu starten", exact: true })
       .click();
     await page.waitForTimeout(150);
     assert.equal(

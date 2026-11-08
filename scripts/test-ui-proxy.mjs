@@ -210,10 +210,10 @@ try {
         .evaluate((d) => d.open),
       false,
     );
-    // The main switch sits in the head of the page.
+    // The main switch sits in the tool bar of the page (PLAN 64).
     assert.ok(
       await page
-        .locator(".page-head")
+        .locator(".win-toolbar")
         .getByRole("checkbox", { name: "HTTPS-Namen eingeschaltet" })
         .isChecked(),
     );

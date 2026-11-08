@@ -4,6 +4,7 @@
 	// windows, widgets and a main menu. It replaces the head line and side
 	// bar on large screens; every page of TitanOS opens in a window.
 	import { onMount, untrack } from 'svelte';
+	import { afterNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import { replaceState } from '$app/navigation';
 	import { api } from '../api.ts';
@@ -186,6 +187,18 @@
 			? `url("/api/v1/background?v=${desktop.prefs.wallpaper.version}") center / cover`
 			: `${wallpaperCss(desktop.prefs.wallpaper.id, light)} center / cover`,
 	);
+
+	// A link clicked on the desktop itself (the bell's "Details öffnen", the
+	// tasks dialog …) changes the address without a reload: open its window
+	// too. Only clicked links – the desktop's own address updates never come here.
+	afterNavigate((nav) => {
+		if (nav.type !== 'link' || !nav.to) return;
+		const url = nav.to.url;
+		if (url.pathname === '/') return;
+		const app = appForPath(url.pathname);
+		if (app && appAllowed(app, role, session.services))
+			void openProgram('app:' + app.id, { href: url.pathname + url.search + url.hash });
+	});
 
 	onMount(() => {
 		loadDesktop();
