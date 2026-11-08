@@ -99,6 +99,8 @@
 	let phase = $state<Phase>('connecting');
 	// The text of the end: a bye reason or a refusal code from titand.
 	let endKey = $state<MessageKey>('viewer.bye.error');
+	// For administrators: why titand could not start the view (PLAN 75-8).
+	let endDetail = $state('');
 	let hello = $state<{ width: number; height: number; gpu: Gpu; audio: boolean; codec: string }>();
 	let stats = $state<{ fps: number; latencyMs: number }>();
 	let painted = $state(false);
@@ -266,13 +268,15 @@
 
 	function end(reason: ByeReason | 'lost' | 'refused') {
 		endKey = `viewer.bye.${reason}` as MessageKey;
+		endDetail = '';
 		phase = 'ended';
 		stop();
 	}
 
 	// titand refused the view ({"t":"error"} and the close reason).
-	function refuse(code: ViewerError, loading?: ImageStatus) {
+	function refuse(code: ViewerError, loading?: ImageStatus, detail = '') {
 		stop();
+		endDetail = detail;
 		if (code === 'viewer_image') {
 			phase = 'image';
 			image = loading;
@@ -366,7 +370,11 @@
 				end(msg.reason);
 				break;
 			case 'error':
-				refuse(viewerError(msg.code) ?? 'viewer_error', msg.image);
+				refuse(
+					viewerError(msg.code) ?? 'viewer_error',
+					msg.image,
+					typeof msg.detail === 'string' ? msg.detail.slice(0, 400) : '',
+				);
 				break;
 		}
 	}
@@ -1381,6 +1389,7 @@
 				{:else}
 					<h3>{t('viewer.ended.title')}</h3>
 					<p>{t(endKey)}</p>
+					{#if endDetail}<p class="end-detail">{endDetail}</p>{/if}
 				{/if}
 				<div class="actions">
 					{#if phase === 'ended' || phase === 'memory'}
@@ -1513,6 +1522,14 @@
 	.pill.live {
 		background: color-mix(in srgb, var(--ok-text) 16%, transparent);
 		color: var(--ok-text);
+	}
+	.end-detail {
+		max-width: 36rem;
+		margin: 0;
+		color: var(--muted);
+		font-family: var(--font-mono, monospace);
+		font-size: var(--text-sm);
+		overflow-wrap: anywhere;
 	}
 	.pill.ended {
 		color: var(--muted);

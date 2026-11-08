@@ -222,6 +222,15 @@ func (s *Server) handleViewerStream(w http.ResponseWriter, r *http.Request) {
 			}
 		case "viewer_error":
 			slog.Warn("remote view not started", "user", user.Name, "app", app, "err", err)
+			// PLAN 75-8: administrators see the reason in the window, not
+			// only in the log (it names containers and Docker's answer).
+			if user.Role == auth.RoleOwner || user.Role == auth.RoleAdmin {
+				detail := err.Error()
+				if len(detail) > 400 {
+					detail = detail[:400] + " …"
+				}
+				extra = map[string]any{"detail": detail}
+			}
 		}
 		if code != "viewer_image" {
 			record("viewer_start", app+", "+code, false)
