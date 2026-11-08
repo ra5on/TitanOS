@@ -198,14 +198,16 @@ func (s *Server) shownAccounts(r *http.Request) []string {
 
 // handleLoginPicture serves the photo of an account the login page names.
 func (s *Server) handleLoginPicture(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Cache-Control", "no-store")
+	// The address names the content (sha256); private: a shared cache never keeps it.
+	w.Header().Set("Cache-Control", "private, max-age=3600")
 	notFound := func() { writeError(w, http.StatusNotFound, "not_found", "no such picture") }
 	id := r.PathValue("id")
 	if !accountPictureID.MatchString(id) {
 		notFound()
 		return
 	}
-	if ok, wait := s.allowLoginAccounts(passkeySource(r)); !ok {
+	// Own bucket: a page with several photos must not use up the one of the account list.
+	if ok, wait := s.allowLoginAccounts("picture:" + passkeySource(r)); !ok {
 		writeRateLimited(w, wait, "too many requests, try again later")
 		return
 	}
