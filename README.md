@@ -89,7 +89,7 @@ Alles im Einzelnen – zum Aufklappen.
 - **Am Handy:** Startbildschirm mit Suche und App-Raster; jedes Programm und jede Docker-App öffnet im Vollbild mit „Zurück“. Ränder für Notch und Home-Leiste, keine vergrößernden Eingabefelder in Safari.
 - **Klare Rückfragen statt Eintippen:** Löschen, Überschreiben, Plattentests, Zwei-Faktor-Zurücksetzen, SSH-Schlüssel und Zertifikate entfernen bestätigt man in einem Dialog, der genau nennt, was passiert. Namen müssen nirgends eingetippt werden; „Abbrechen“ hat den Fokus, Enter löst nie die gefährliche Aktion aus. Zerstörende Knöpfe stehen gesammelt in einer abgesetzten „Gefahrenzone“ am Ende. Fachbegriffe erklärt ein „?“ direkt daneben.
 
-[![Hauptmenü mit Suche, Filtern, Programmen und Docker-Apps](docs/screenshots/current/hauptmenue.png)](docs/screenshots/current/hauptmenue.png)
+[![Hauptmenü mit Suche, Filtern, Programmen, Docker-Apps und VM-Bildschirm](docs/screenshots/current/hauptmenue.png)](docs/screenshots/current/hauptmenue.png)
 
 [Dock bearbeiten](docs/screenshots/current/dock-bearbeiten.png) · [Beschreibung des Desktop-Modus](docs/DESKTOP.md) · [Sperrbildschirm](docs/SESSION-LOCK.md)
 
@@ -161,7 +161,7 @@ Alles im Einzelnen – zum Aufklappen.
 
 [![Programm Docker im Fenster: Seitenleiste, Werkzeugleiste und Container-Karten mit App-Symbolen](docs/screenshots/current/docker.png)](docs/screenshots/current/docker.png)
 
-[![Docker-App „immich“ in der Fernansicht im Fenster, mit Lautstärke, Qualität, Zwischenablage und Dateien (Bild nachgebildet)](docs/screenshots/current/fernansicht.png)](docs/screenshots/current/fernansicht.png)
+[![Docker-App „immich“ in der Fernansicht im Fenster, Menü mit Lautstärke, Dateien, Zwischenablage und Qualität (Bild nachgebildet)](docs/screenshots/current/fernansicht.png)](docs/screenshots/current/fernansicht.png)
 
 [Fernansicht](docs/FERNANSICHT.md) · [App-Fenster, Rechte und Zertifizierungsstelle](docs/APP-WINDOWS.md) · [App-Links](docs/APP-LINKS.md) · [HTTPS-Namen für Apps](docs/APP-PROXY.md) · [Immich und Ollama-Vorlagen](docs/NATIVE-APPS.md)
 
@@ -298,11 +298,11 @@ Die VM-Einrichtung zeigt kompakte Kacheln mit einer gemeinsamen Zusammenfassung.
 - **Deutsch und Englisch**, lokale Schriftdateien, Tastatur- und Touch-Bedienung.
 - **Dienste nach Bedarf:** Docker, VMs und LXC lassen sich unter Systemsteuerung › Dienste ausschalten; ihr Programm verschwindet, die Daten bleiben.
 
-[![Systemsteuerung › Alle Einstellungen mit Suche und Bereichen nach System, Netzwerk sowie Konten und Diensten](docs/screenshots/current/systemsteuerung.png)](docs/screenshots/current/systemsteuerung.png)
+[![Systemsteuerung › Übersicht mit Seitenleiste, Zustand, Diensten und offenen Aufgaben](docs/screenshots/current/systemsteuerung.png)](docs/screenshots/current/systemsteuerung.png)
 
 [![Anmeldeseite mit bewegtem Nordlicht und Kontobildern](docs/screenshots/current/anmeldeseite.png)](docs/screenshots/current/anmeldeseite.png)
 
-[Systemsteuerung › Darstellung mit fünf Schiebereglern](docs/screenshots/current/darstellung.png) · [Anmeldeseite gestalten](docs/LOGIN-APPEARANCE.md)
+[Systemsteuerung › Darstellung](docs/screenshots/current/darstellung.png) · [Anmeldeseite gestalten](docs/LOGIN-APPEARANCE.md)
 
 <p align="center">
   <a href="docs/screenshots/current/handy-start.png"><img src="docs/screenshots/current/handy-start.png" alt="Startbildschirm am Smartphone: Suche, Zustand und App-Raster mit Programmen und Docker-Apps" width="260"></a>

@@ -94,14 +94,14 @@
     },
     {
       "file": "dock-bearbeiten.png",
-      "script": "scripts/test-ui-desktop.mjs (Variante: Original-App-Symbole, Widgets ausgeblendet)",
-      "output": "11-dock-bearbeiten.png",
-      "uiVersion": "0.62.0 (Arbeitsstand)",
-      "captured": "2026-11-07",
+      "script": "scripts/capture-readme-screenshots.mjs",
+      "output": "dock-bearbeiten.png",
+      "uiVersion": "0.70.0",
+      "captured": "2026-11-08",
       "width": 1600,
       "height": 1000,
-      "bytes": 330793,
-      "sha256": "49a9fe2c4553366c61143091b6bea51dfb38d9579a039ccc48a80c132d57bc57"
+      "bytes": 430339,
+      "sha256": "a39469d70935c6f71c76ecc0ce62434e7fee43317d75aadcc9a4d9322d119b73"
     },
     {
       "file": "docker.png",
@@ -116,25 +116,25 @@
     },
     {
       "file": "fernansicht-mobil.png",
-      "script": "scripts/test-ui-viewer.mjs (Variante: Original-App-Symbole, Widgets ausgeblendet)",
+      "script": "scripts/test-ui-viewer.mjs mit VIEWER_PICTURE=/backgrounds/kueste.webp",
       "output": "07-handy-fernansicht.png",
-      "uiVersion": "0.62.0 (Arbeitsstand)",
-      "captured": "2026-11-07",
+      "uiVersion": "0.70.0",
+      "captured": "2026-11-08",
       "width": 390,
       "height": 844,
-      "bytes": 12621,
-      "sha256": "39f66ca4e94a264a870e9c382d8fbb3313f9b114b5923a0cc3271f39fd9b3ada"
+      "bytes": 137162,
+      "sha256": "58b0e8ef315b5310fd2e3be0e3ffe5f8c4629ae34458b678d3a77577474621b7"
     },
     {
       "file": "fernansicht.png",
-      "script": "scripts/test-ui-viewer.mjs (Variante: Original-App-Symbole, Widgets ausgeblendet)",
-      "output": "01-fenster-fernansicht.png",
-      "uiVersion": "0.62.0 (Arbeitsstand)",
-      "captured": "2026-11-07",
+      "script": "scripts/test-ui-viewer.mjs mit VIEWER_PICTURE=/backgrounds/kueste.webp",
+      "output": "01b-menue.png",
+      "uiVersion": "0.70.0",
+      "captured": "2026-11-08",
       "width": 1600,
       "height": 1000,
-      "bytes": 169451,
-      "sha256": "313a3305c89af63bc979ad80a1b0fbf097fcc2800ddff619dd21161468c9ddd9"
+      "bytes": 1032620,
+      "sha256": "0457dc20c86cd9c4afb04452a05cc4d9d5e914e8388a57f5577148ca95b0933b"
     },
     {
       "file": "firewall.png",
@@ -159,14 +159,14 @@
     },
     {
       "file": "hauptmenue.png",
-      "script": "scripts/test-ui-desktop.mjs (Variante: Original-App-Symbole, Widgets ausgeblendet)",
-      "output": "06-hauptmenue.png",
-      "uiVersion": "0.62.0 (Arbeitsstand)",
-      "captured": "2026-11-07",
+      "script": "scripts/capture-readme-screenshots.mjs",
+      "output": "hauptmenue.png",
+      "uiVersion": "0.70.0",
+      "captured": "2026-11-08",
       "width": 1600,
       "height": 1000,
-      "bytes": 227838,
-      "sha256": "c00293871cb009fb8c232b5d87df17c02210c73c711e98b005c535e7e8e1f740"
+      "bytes": 344412,
+      "sha256": "99641d1625451adb56bf06d4469cbd9fe11772336826b6ff57a573fbcbf243be"
     },
     {
       "file": "ki-agent-chat.png",
@@ -241,14 +241,14 @@
     },
     {
       "file": "systemsteuerung.png",
-      "script": "Aufnahmeskript nach scripts/test-ui-desktop.mjs (Fenster /settings maximiert)",
-      "output": "sys-alle.png",
-      "uiVersion": "0.62.0 (Arbeitsstand)",
-      "captured": "2026-11-07",
+      "script": "scripts/capture-readme-screenshots.mjs",
+      "output": "systemsteuerung.png",
+      "uiVersion": "0.70.0",
+      "captured": "2026-11-08",
       "width": 1600,
       "height": 1000,
-      "bytes": 308294,
-      "sha256": "ac53c48b7483fa9e0fb017d19111d5e114ef2faa53fee2f1b686a90bfb930e3d"
+      "bytes": 180798,
+      "sha256": "84821e9f644201db68878581f418938bfa0f838a1fa8c14d4a63b0a2b1c32d6b"
     },
     {
       "file": "vm-erstellen-mobil.png",
