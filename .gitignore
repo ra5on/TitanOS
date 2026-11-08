@@ -52,3 +52,6 @@ Thumbs.db
 
 # Fontconfig scratch output from isolated backend document tests.
 /backend/var/cache/fontconfig/
+
+# Python-Pakete, die beim Einrichten von Werkzeugen anfallen
+*.whl
