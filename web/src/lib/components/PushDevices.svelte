@@ -229,7 +229,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px var(--space-3);
+		gap: var(--space-1-5) var(--space-3);
 		padding: var(--space-2) 0;
 	}
 	.name {
@@ -244,6 +244,6 @@
 	.kinds {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px 16px;
+		gap: var(--space-1) var(--space-4);
 	}
 </style>

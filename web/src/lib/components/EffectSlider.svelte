@@ -60,7 +60,7 @@
 		display: flex;
 		justify-content: space-between;
 		font-size: var(--text-base);
-		margin-bottom: 10px;
+		margin-bottom: var(--space-2-5);
 		align-items: center;
 		gap: var(--space-2);
 	}

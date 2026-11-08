@@ -219,10 +219,10 @@
 		box-sizing: border-box;
 		width: 100%;
 		display: grid;
-		gap: var(--gap, 16px);
+		gap: var(--gap, var(--space-4));
 		max-width: 720px;
 		margin: 0 auto;
-		padding: var(--space-3, 12px);
+		padding: var(--space-3, var(--space-3));
 	}
 	.list {
 		margin: 0;
@@ -235,7 +235,7 @@
 	.name {
 		display: inline-flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		overflow-wrap: anywhere;
 	}
 	.text {
@@ -244,12 +244,12 @@
 	}
 	.pad {
 		margin: 0;
-		padding: 12px 16px;
+		padding: var(--space-3) var(--space-4);
 	}
 	.card-foot {
 		display: flex;
 		flex-wrap: wrap;
 		justify-content: flex-end;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 </style>

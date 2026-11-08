@@ -127,7 +127,7 @@
 	}
 	td.actions {
 		display: flex;
-		gap: 6px;
+		gap: var(--space-1-5);
 		justify-content: flex-end;
 	}
 </style>

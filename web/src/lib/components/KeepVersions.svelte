@@ -109,14 +109,14 @@
 	.modes,
 	.single {
 		display: grid;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.single {
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.mode {
 		display: grid;
-		gap: 6px;
+		gap: var(--space-1-5);
 		border: 1px solid var(--border);
 		border-radius: 10px;
 		padding: var(--space-3) 14px;

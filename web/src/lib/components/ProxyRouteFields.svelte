@@ -217,7 +217,7 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-md);
 		min-width: 0;
 	}
@@ -235,7 +235,7 @@
 	.check {
 		flex-direction: row;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.check span {
 		color: var(--text);
@@ -268,7 +268,7 @@
 	}
 	.problems {
 		margin: 0;
-		padding: 10px 14px 10px 28px;
+		padding: var(--space-2-5) 14px var(--space-2-5) 28px;
 		background: var(--warn-bg);
 		border: 1px solid var(--warn-border);
 		border-radius: var(--radius-ctl);

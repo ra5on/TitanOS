@@ -149,7 +149,7 @@
 
 <style>
 	.browser-apps {
-		margin-bottom: 16px;
+		margin-bottom: var(--space-4);
 	}
 	.list {
 		list-style: none;
@@ -157,13 +157,13 @@
 		padding: 0;
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.app {
 		display: flex;
 		align-items: flex-start;
-		gap: 12px;
-		padding: 12px;
+		gap: var(--space-3);
+		padding: var(--space-3);
 		border: 1px solid var(--border);
 		border-radius: calc(10px * var(--radius-scale, 1));
 		flex-wrap: wrap;
@@ -185,7 +185,7 @@
 	.status {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		flex-wrap: wrap;
 	}
 	.status.err {
@@ -212,7 +212,7 @@
 	}
 	.actions {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		margin-left: auto;
 	}
 </style>

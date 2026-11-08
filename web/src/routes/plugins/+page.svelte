@@ -962,7 +962,7 @@
 	.facts {
 		display: grid;
 		grid-template-columns: max-content 1fr;
-		gap: 6px var(--space-3);
+		gap: var(--space-1-5) var(--space-3);
 		margin: 0;
 	}
 	.facts dt {
@@ -1007,7 +1007,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: baseline;
-		gap: var(--space-1) 10px;
+		gap: var(--space-1) var(--space-2-5);
 	}
 	.name {
 		font-size: var(--text-md);
@@ -1068,7 +1068,7 @@
 	.chips {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	ul {
 		margin: 0;
@@ -1085,7 +1085,7 @@
 		gap: var(--space-3);
 	}
 	.update {
-		padding: 10px var(--space-3);
+		padding: var(--space-2-5) var(--space-3);
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-ctl);
 	}
@@ -1097,7 +1097,7 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-base);
 	}
 	label > span {
@@ -1106,7 +1106,7 @@
 	.check {
 		flex-direction: row;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		font-size: var(--text-md);
 	}
 	.check span {
@@ -1130,7 +1130,7 @@
 	.progress {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-base);
 	}
 	.progress progress {

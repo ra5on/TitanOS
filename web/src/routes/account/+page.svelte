@@ -592,7 +592,7 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-base);
 	}
 	label > span {
@@ -606,14 +606,14 @@
 	.actions {
 		display: flex;
 		justify-content: flex-end;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.device {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 10px;
+		gap: var(--space-2-5);
 		padding-top: var(--space-3);
 		border-top: 1px solid var(--panel-border);
 	}

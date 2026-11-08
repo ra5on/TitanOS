@@ -657,7 +657,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.hint {
 		font-size: var(--text-md);
@@ -680,7 +680,7 @@
 	.head-switch {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		font-size: var(--text-md);
 	}
 	.head-switch input {
@@ -713,7 +713,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px var(--space-2);
+		gap: var(--space-1-5) var(--space-2);
 	}
 	.urls,
 	.details {

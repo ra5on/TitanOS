@@ -56,7 +56,7 @@
 	.keys {
 		display: grid;
 		grid-template-columns: max-content 1fr;
-		gap: 10px 18px;
+		gap: var(--space-2-5) 18px;
 		margin: 0;
 		font-size: var(--text-md);
 	}

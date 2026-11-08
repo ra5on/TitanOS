@@ -151,6 +151,6 @@
 		display: flex;
 		gap: var(--space-2);
 		flex-wrap: wrap;
-		margin-top: 6px;
+		margin-top: var(--space-1-5);
 	}
 </style>

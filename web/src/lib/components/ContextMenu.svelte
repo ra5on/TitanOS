@@ -80,6 +80,6 @@
 		overflow: auto;
 		display: flex;
 		flex-direction: column;
-		padding: 6px;
+		padding: var(--space-1-5);
 	}
 </style>

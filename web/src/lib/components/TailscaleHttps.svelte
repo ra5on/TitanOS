@@ -96,7 +96,7 @@
 	.https-box {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 		padding: 14px var(--space-4);
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-tile);
@@ -112,7 +112,7 @@
 	.check {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		font-weight: 500;
 	}
 	.needs ul {
@@ -128,7 +128,7 @@
 	.https-off {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 		align-items: flex-start;
 	}
 </style>

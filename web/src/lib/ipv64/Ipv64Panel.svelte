@@ -234,7 +234,7 @@
 	.part {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	h3 {
 		margin: 0;
@@ -252,7 +252,7 @@
 	}
 	td {
 		text-align: left;
-		padding: 6px var(--space-2);
+		padding: var(--space-1-5) var(--space-2);
 		border-bottom: 1px solid var(--border);
 		vertical-align: middle;
 	}
@@ -261,12 +261,12 @@
 		white-space: nowrap;
 	}
 	.actions .btn + .btn {
-		margin-left: 6px;
+		margin-left: var(--space-1-5);
 	}
 	.create {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: flex-end;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 </style>

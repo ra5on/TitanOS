@@ -182,8 +182,8 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 10px var(--space-4);
-		padding: 10px var(--space-3);
+		gap: var(--space-2-5) var(--space-4);
+		padding: var(--space-2-5) var(--space-3);
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-ctl);
 	}
@@ -208,7 +208,7 @@
 	}
 	textarea {
 		height: auto;
-		padding: 10px var(--space-3);
+		padding: var(--space-2-5) var(--space-3);
 		font-size: var(--text-sm);
 		resize: vertical;
 	}
@@ -220,11 +220,11 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.actions {
 		display: flex;
 		justify-content: flex-end;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 </style>

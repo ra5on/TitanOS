@@ -435,7 +435,7 @@
 	}
 	.zones-list {
 		display: grid;
-		gap: 6px;
+		gap: var(--space-1-5);
 		margin: 0;
 	}
 	.zones-list div {

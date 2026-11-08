@@ -197,14 +197,14 @@
 	.fd {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 		min-width: 0;
 	}
 	.where {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px 12px;
+		gap: var(--space-2) var(--space-3);
 	}
 	.place select {
 		max-width: 100%;
@@ -213,7 +213,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 2px 4px;
+		gap: 2px var(--space-1);
 		min-width: 0;
 		color: var(--muted);
 	}
@@ -222,7 +222,7 @@
 		background: none;
 		color: var(--text);
 		font: inherit;
-		padding: 4px 6px;
+		padding: var(--space-1) var(--space-1-5);
 		border-radius: 6px;
 		cursor: pointer;
 		overflow-wrap: anywhere;
@@ -237,15 +237,15 @@
 		overflow-y: auto;
 		border: 1px solid var(--border);
 		border-radius: calc(10px * var(--radius-scale, 1));
-		padding: 4px;
+		padding: var(--space-1);
 		background: color-mix(in srgb, var(--surface) 60%, transparent);
 	}
 	.row {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		min-height: 36px;
-		padding: 6px 10px;
+		padding: var(--space-1-5) var(--space-2-5);
 		border: 0;
 		border-radius: 8px;
 		background: none;
@@ -275,12 +275,12 @@
 		outline-offset: -2px;
 	}
 	.pad {
-		padding: 10px;
+		padding: var(--space-2-5);
 		margin: 0;
 	}
 	.stack {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 </style>

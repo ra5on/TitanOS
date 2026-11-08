@@ -250,8 +250,8 @@
 	.composer {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
-		padding: 8px 8px 8px 10px;
+		gap: var(--space-1-5);
+		padding: var(--space-2) var(--space-2) var(--space-2) var(--space-2-5);
 		border-radius: var(--radius-tile);
 		border: 1px solid var(--border);
 		background: var(--surface);
@@ -273,7 +273,7 @@
 		line-height: 1.45;
 		min-height: 24px;
 		max-height: 220px;
-		padding: 5px 4px;
+		padding: 5px var(--space-1);
 	}
 	textarea::placeholder {
 		color: var(--muted);
@@ -281,7 +281,7 @@
 	.tools {
 		display: flex;
 		align-items: flex-end;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.round {
 		width: 32px;
@@ -318,14 +318,14 @@
 	.files {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px;
+		gap: var(--space-1-5);
 		padding: 2px 2px 0;
 	}
 	.file {
 		display: inline-flex;
 		align-items: center;
 		gap: 5px;
-		padding: 2px 4px 2px 8px;
+		padding: 2px var(--space-1) 2px var(--space-2);
 		border-radius: 999px;
 		background: var(--chip);
 		font-size: var(--text-sm);

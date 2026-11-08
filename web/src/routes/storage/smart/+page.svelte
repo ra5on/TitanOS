@@ -423,7 +423,7 @@
 	.badges {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px;
+		gap: var(--space-1-5);
 		margin: 0;
 	}
 	.bad,
@@ -440,13 +440,13 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.detail-heading h2 {
 		font-size: var(--text-lg);
 	}
 	.detail-heading .btn {
-		padding: 6px;
+		padding: var(--space-1-5);
 		min-height: 30px;
 	}
 	.detail h3 {
@@ -479,7 +479,7 @@
 		margin: 0;
 	}
 	.attr-table td {
-		padding: 6px var(--space-2);
+		padding: var(--space-1-5) var(--space-2);
 		font-size: var(--text-base);
 	}
 	.warn-row {
@@ -495,7 +495,7 @@
 		font-weight: 500;
 	}
 	.thresholds p {
-		margin: 10px 0 0;
+		margin: var(--space-2-5) 0 0;
 	}
 	@media (max-width: 1100px) {
 		.smart-layout.with-detail {

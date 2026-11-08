@@ -1619,7 +1619,7 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: 0.8125rem;
 	}
 	label > span {
@@ -1659,7 +1659,7 @@
 		display: flex;
 		gap: var(--space-2);
 		align-items: center;
-		margin-bottom: 6px;
+		margin-bottom: var(--space-1-5);
 	}
 	.pickfield {
 		display: flex;
@@ -1692,7 +1692,7 @@
 	.formats {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.format {
 		display: grid;
@@ -1717,7 +1717,7 @@
 	}
 	.format .dated {
 		align-items: flex-start;
-		margin: 6px 0 0 var(--space-5);
+		margin: var(--space-1-5) 0 0 var(--space-5);
 	}
 	.format > .muted {
 		margin-left: var(--space-5);
@@ -1763,12 +1763,12 @@
 	}
 	.key {
 		height: auto;
-		padding: 10px var(--space-3);
+		padding: var(--space-2-5) var(--space-3);
 		font-size: 0.75rem;
 		resize: none;
 	}
 	pre {
-		margin: 6px 0 0;
+		margin: var(--space-1-5) 0 0;
 		font-family: var(--font-mono);
 		font-size: 0.75rem;
 		white-space: pre-wrap;

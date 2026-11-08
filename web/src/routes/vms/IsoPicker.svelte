@@ -235,13 +235,13 @@
 		display: flex;
 		align-items: center;
 		flex-wrap: wrap;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-base);
 	}
 	.small-btn {
 		gap: var(--space-1);
 		height: 28px;
-		padding: 0 10px;
+		padding: 0 var(--space-2-5);
 		font-size: var(--text-sm);
 	}
 	.crumb {
@@ -275,7 +275,7 @@
 		border-bottom: 0;
 	}
 	.list > .muted {
-		padding: 10px var(--space-3);
+		padding: var(--space-2-5) var(--space-3);
 	}
 	.row {
 		display: flex;

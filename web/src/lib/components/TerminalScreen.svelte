@@ -226,7 +226,7 @@
 		overflow: hidden;
 	}
 	.ended {
-		padding: 6px var(--space-4);
+		padding: var(--space-1-5) var(--space-4);
 		background: var(--warn-bg);
 		color: var(--warn-text);
 		font-size: var(--text-base);

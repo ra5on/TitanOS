@@ -247,11 +247,11 @@
 	.divided {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	textarea {
 		height: auto;
-		padding: 10px var(--space-3);
+		padding: var(--space-2-5) var(--space-3);
 		max-width: 32rem;
 		resize: vertical;
 	}

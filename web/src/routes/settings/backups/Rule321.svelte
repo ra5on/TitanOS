@@ -67,7 +67,7 @@
 	.rule {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 		padding: calc(var(--tile-pad) + 2px);
 	}
 	.head {
@@ -93,7 +93,7 @@
 		grid-template-columns: 24px minmax(0, 1fr) auto;
 		align-items: center;
 		gap: var(--space-3);
-		padding: 10px 0;
+		padding: var(--space-2-5) 0;
 		border-top: 1px solid var(--panel-border);
 	}
 	.mark {

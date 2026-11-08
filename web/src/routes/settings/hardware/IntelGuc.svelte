@@ -253,7 +253,7 @@
 		display: grid;
 		grid-template-columns: max-content 1fr;
 		gap: var(--space-1) 14px;
-		margin: 6px 0 0;
+		margin: var(--space-1-5) 0 0;
 		font-size: var(--text-base);
 	}
 	dt {
@@ -263,7 +263,7 @@
 		margin: 0;
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px;
+		gap: var(--space-1-5);
 		align-items: center;
 	}
 	form {
@@ -277,7 +277,7 @@
 		margin: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	legend {
 		font-weight: 600;
@@ -288,7 +288,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		justify-content: space-between;
 	}
 </style>

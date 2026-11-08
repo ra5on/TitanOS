@@ -446,7 +446,7 @@
 	.divided {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	dl {
 		display: grid;
@@ -467,7 +467,7 @@
 	}
 	textarea {
 		height: auto;
-		padding: 10px var(--space-3);
+		padding: var(--space-2-5) var(--space-3);
 		max-width: 32rem;
 		resize: vertical;
 	}
@@ -479,10 +479,10 @@
 		max-width: 32rem;
 	}
 	.notice-warn p {
-		margin: 0 0 6px;
+		margin: 0 0 var(--space-1-5);
 	}
 	pre {
-		margin: 6px 0 0;
+		margin: var(--space-1-5) 0 0;
 		font-family: var(--font-mono);
 		font-size: var(--text-sm);
 		white-space: pre-wrap;

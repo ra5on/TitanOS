@@ -547,7 +547,7 @@
 	.cards {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
-		gap: var(--gap, 16px);
+		gap: var(--gap, var(--space-4));
 		align-items: start;
 	}
 	.cards.two {
@@ -566,8 +566,8 @@
 		display: grid;
 		grid-template-columns: minmax(7rem, 34%) minmax(0, 1fr);
 		align-items: center;
-		gap: 4px 16px;
-		padding: 11px 16px;
+		gap: var(--space-1) var(--space-4);
+		padding: 11px var(--space-4);
 		border-top: 1px solid var(--panel-border, var(--border));
 		font-size: var(--text-md);
 		min-width: 0;
@@ -584,7 +584,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 4px 10px;
+		gap: var(--space-1) var(--space-2-5);
 		min-width: 0;
 		overflow-wrap: anywhere;
 	}
@@ -595,12 +595,12 @@
 	.meter {
 		flex-direction: column;
 		align-items: stretch;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.meter-top {
 		display: flex;
 		justify-content: space-between;
-		gap: 10px;
+		gap: var(--space-2-5);
 		font-size: var(--text-base);
 	}
 	.bar {
@@ -616,7 +616,7 @@
 	}
 	.card-text {
 		margin: 0;
-		padding: 12px 16px;
+		padding: var(--space-3) var(--space-4);
 	}
 	.card-head + .card-text {
 		padding-top: 14px;
@@ -625,7 +625,7 @@
 		border-top: 1px solid var(--panel-border, var(--border));
 	}
 	.inside {
-		margin: 0 16px 12px;
+		margin: 0 var(--space-4) var(--space-3);
 	}
 	.mono {
 		font-size: var(--text-base);
@@ -639,7 +639,7 @@
 	}
 	.row-actions {
 		display: flex;
-		gap: 6px;
+		gap: var(--space-1-5);
 		margin-left: auto;
 	}
 	.small {
@@ -648,7 +648,7 @@
 	.btn.small {
 		min-height: 30px;
 		height: 30px;
-		padding: 0 10px;
+		padding: 0 var(--space-2-5);
 		font-size: var(--text-base);
 	}
 	p {

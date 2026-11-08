@@ -1131,7 +1131,7 @@
 	.field-row {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.notice-warn {
 		display: flex;
@@ -1142,10 +1142,10 @@
 	.buttons {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.job-actions {
-		margin-top: 10px;
+		margin-top: var(--space-2-5);
 	}
 	.setup {
 		display: flex;
@@ -1170,7 +1170,7 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-md);
 	}
 	.search-box {
@@ -1226,9 +1226,9 @@
 		flex: none;
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		height: 1.875rem;
-		padding: 0 10px;
+		padding: 0 var(--space-2-5);
 		background: transparent;
 		border: 0;
 		border-radius: var(--radius-small);
@@ -1252,11 +1252,11 @@
 	.stats {
 		display: grid;
 		grid-template-columns: repeat(4, minmax(0, 1fr));
-		gap: var(--gap, 16px);
+		gap: var(--gap, var(--space-4));
 	}
 	.stat {
 		gap: 2px;
-		padding: 12px 16px;
+		padding: var(--space-3) var(--space-4);
 	}
 	.stat-label {
 		color: var(--muted);
@@ -1286,7 +1286,7 @@
 	.who {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 		min-width: 0;
 	}
 	.app-icon {
@@ -1326,7 +1326,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 2px 8px;
+		gap: 2px var(--space-2);
 		min-width: 0;
 	}
 	.lines .sub {
@@ -1384,7 +1384,7 @@
 		display: inline-block;
 		width: 56px;
 		height: 4px;
-		margin-right: 8px;
+		margin-right: var(--space-2);
 		vertical-align: middle;
 		border-radius: 2px;
 		background: var(--track);
@@ -1419,7 +1419,7 @@
 		text-align: right;
 	}
 	.actions .btn + .btn {
-		margin-left: 6px;
+		margin-left: var(--space-1-5);
 	}
 	.small {
 		min-height: 30px;
@@ -1430,7 +1430,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 4px 8px;
+		gap: var(--space-1) var(--space-2);
 		margin: 0;
 		font-size: var(--text-sm);
 	}
@@ -1540,8 +1540,8 @@
 				'name actions'
 				'state actions';
 			align-items: center;
-			column-gap: 8px;
-			padding: 10px 16px;
+			column-gap: var(--space-2);
+			padding: var(--space-2-5) var(--space-4);
 			border-bottom: 1px solid var(--border);
 		}
 		.app-table tr:last-child {

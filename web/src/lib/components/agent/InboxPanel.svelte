@@ -189,8 +189,8 @@
 	header {
 		display: flex;
 		align-items: center;
-		gap: 10px;
-		padding: calc(env(safe-area-inset-top, 0px) + 12px) 14px 8px;
+		gap: var(--space-2-5);
+		padding: calc(env(safe-area-inset-top, 0px) + var(--space-3)) 14px var(--space-2);
 	}
 	h2 {
 		flex: 1;
@@ -223,23 +223,23 @@
 	.body {
 		flex: 1;
 		overflow-y: auto;
-		padding: 6px 14px calc(env(safe-area-inset-bottom, 0px) + 18px);
+		padding: var(--space-1-5) 14px calc(env(safe-area-inset-bottom, 0px) + 18px);
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.body > * {
 		flex-shrink: 0;
 	}
 	.filter {
 		display: flex;
-		gap: 6px;
+		gap: var(--space-1-5);
 		overflow-x: auto;
 		scrollbar-width: none;
 	}
 	.filter label {
 		white-space: nowrap;
-		padding: 7px 12px;
+		padding: 7px var(--space-3);
 		border-radius: 999px;
 		font-size: var(--text-sm);
 		font-weight: 600;
@@ -264,8 +264,8 @@
 	.card {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
-		padding: 12px 14px;
+		gap: var(--space-1-5);
+		padding: var(--space-3) 14px;
 		border-radius: 20px;
 		background: color-mix(in srgb, var(--text) 4%, transparent);
 		border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
@@ -273,7 +273,7 @@
 	.head {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		font-size: var(--text-xs);
 		color: var(--muted);
 	}
@@ -305,8 +305,8 @@
 	.acts {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
-		margin-top: 4px;
+		gap: var(--space-2);
+		margin-top: var(--space-1);
 	}
 	.acts .btn-primary {
 		margin-left: auto;

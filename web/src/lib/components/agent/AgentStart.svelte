@@ -158,18 +158,18 @@
 		width: 100%;
 		max-width: 808px;
 		margin: 0 auto;
-		padding: 0 24px 12px;
+		padding: 0 var(--space-5) var(--space-3);
 	}
 	.hello {
 		display: flex;
 		flex-direction: column;
 		align-items: flex-start;
-		gap: 4px;
-		padding: clamp(16px, 6vh, 48px) 0 16px;
+		gap: var(--space-1);
+		padding: clamp(var(--space-4), 6vh, 48px) 0 var(--space-4);
 	}
 	.orb {
 		display: block;
-		margin-bottom: 10px;
+		margin-bottom: var(--space-2-5);
 	}
 	h1 {
 		margin: 0;
@@ -184,19 +184,19 @@
 	}
 	.chips {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		overflow-x: auto;
 		scrollbar-width: none;
-		margin: 0 -24px 16px;
-		padding: 2px 24px;
+		margin: 0 -24px var(--space-4);
+		padding: 2px var(--space-5);
 	}
 	.chip-p {
 		flex: none;
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		min-height: 34px;
-		padding: 0 12px 0 10px;
+		padding: 0 var(--space-3) 0 var(--space-2-5);
 		border-radius: 999px;
 		border: 1px solid var(--border);
 		background: var(--surface);
@@ -224,7 +224,7 @@
 	.runs {
 		display: flex;
 		flex-direction: column;
-		margin-bottom: 16px;
+		margin-bottom: var(--space-4);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-tile);
 		background: var(--surface);
@@ -233,7 +233,7 @@
 	.run {
 		display: flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		border-top: 1px solid var(--border);
 	}
 	.run:first-child {
@@ -246,9 +246,9 @@
 		flex: 1;
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		min-height: 48px;
-		padding: 6px 16px;
+		padding: var(--space-1-5) var(--space-4);
 		border: 0;
 		background: none;
 		color: var(--text);
@@ -279,7 +279,7 @@
 	.stop {
 		width: 32px;
 		height: 32px;
-		margin-right: 10px;
+		margin-right: var(--space-2-5);
 		border-radius: var(--radius-ctl);
 		border: 1px solid var(--border);
 		background: none;
@@ -292,7 +292,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		margin: 2px 2px 8px;
+		margin: 2px 2px var(--space-2);
 		font-size: var(--text-xs);
 		font-weight: 600;
 		letter-spacing: 0.05em;
@@ -324,8 +324,8 @@
 	.sugg button {
 		display: flex;
 		align-items: center;
-		gap: 12px;
-		padding: 11px 16px;
+		gap: var(--space-3);
+		padding: 11px var(--space-4);
 		border: 0;
 		border-top: 1px solid var(--border);
 		background: none;
@@ -384,10 +384,10 @@
 	}
 	@media (max-width: 760px) {
 		.start {
-			padding: 0 14px 12px;
+			padding: 0 14px var(--space-3);
 		}
 		.chips {
-			margin: 0 -14px 16px;
+			margin: 0 -14px var(--space-4);
 			padding: 2px 14px;
 		}
 	}

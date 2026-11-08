@@ -32,7 +32,7 @@
 	.toggle {
 		display: inline-flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		min-height: var(--control-height);
 		padding: 0;
 		background: none;

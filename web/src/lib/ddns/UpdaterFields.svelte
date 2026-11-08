@@ -60,7 +60,7 @@
 	.divided {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.hint {
 		margin: 0;

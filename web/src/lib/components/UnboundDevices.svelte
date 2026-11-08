@@ -160,7 +160,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: baseline;
-		gap: 6px 10px;
+		gap: var(--space-1-5) var(--space-2-5);
 	}
 	.messages {
 		list-style: none;
@@ -169,13 +169,13 @@
 		flex-basis: 100%;
 	}
 	.sub {
-		margin: 6px 0 0;
+		margin: var(--space-1-5) 0 0;
 		font-size: var(--text-md);
 	}
 	summary {
 		cursor: pointer;
 		font-size: var(--text-md);
-		padding: 6px 0;
+		padding: var(--space-1-5) 0;
 	}
 	p {
 		margin: 0;

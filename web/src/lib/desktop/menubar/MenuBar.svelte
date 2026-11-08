@@ -625,7 +625,7 @@
 	}
 	.top.logo {
 		position: relative;
-		padding: 0 6px;
+		padding: 0 var(--space-1-5);
 	}
 	.top.logo img {
 		display: block;
@@ -645,7 +645,7 @@
 		flex: 0 1 auto;
 		min-width: 2.5em;
 		max-width: 220px;
-		padding: 0 8px 0 4px;
+		padding: 0 var(--space-2) 0 var(--space-1);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -667,9 +667,9 @@
 	.mb-menu [role^='menuitem'] {
 		display: flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		min-height: 1.9rem;
-		padding: 0 10px 0 4px;
+		padding: 0 var(--space-2-5) 0 var(--space-1);
 		border: 0;
 		border-radius: 6px;
 		background: transparent;
@@ -725,7 +725,7 @@
 	}
 	.mb-menu hr {
 		height: 1px;
-		margin: 4px 6px;
+		margin: var(--space-1) var(--space-1-5);
 		border: 0;
 		background: var(--border);
 	}

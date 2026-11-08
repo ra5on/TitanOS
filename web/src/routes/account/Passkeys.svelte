@@ -213,8 +213,8 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 10px var(--space-4);
-		padding: 10px var(--space-3);
+		gap: var(--space-2-5) var(--space-4);
+		padding: var(--space-2-5) var(--space-3);
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-ctl);
 	}
@@ -242,7 +242,7 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-md);
 	}
 </style>

@@ -151,7 +151,7 @@
 	.panel {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 		padding: calc(var(--row-pad) + 2px) var(--tile-pad);
 		font-size: var(--text-base);
 	}
@@ -160,7 +160,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px var(--space-3);
+		gap: var(--space-1-5) var(--space-3);
 	}
 	.title {
 		margin-right: auto;
@@ -169,8 +169,8 @@
 	.item {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
-		padding-top: 10px;
+		gap: var(--space-1-5);
+		padding-top: var(--space-2-5);
 		border-top: 1px solid var(--panel-border);
 	}
 	.name {

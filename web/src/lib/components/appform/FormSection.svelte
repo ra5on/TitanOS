@@ -11,7 +11,7 @@
 		grid-template-columns: minmax(10rem, 17rem) minmax(0, 1fr);
 		gap: 0 var(--space-4);
 		margin: 0;
-		padding: var(--space-4) var(--space-4) 6px;
+		padding: var(--space-4) var(--space-4) var(--space-1-5);
 		color: var(--muted);
 		font-size: var(--text-sm);
 		font-weight: 600;
@@ -20,7 +20,7 @@
 	}
 	span {
 		grid-column: 2;
-		padding-bottom: 6px;
+		padding-bottom: var(--space-1-5);
 		border-bottom: 1px solid var(--border);
 	}
 	@media (max-width: 760px) {

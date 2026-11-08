@@ -163,7 +163,7 @@
 	.bridge-setup {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 		font-size: var(--text-base);
 	}
 	p {
@@ -180,7 +180,7 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	button {
 		align-self: flex-start;

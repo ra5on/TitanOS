@@ -536,17 +536,17 @@
 
 <style>
 	.chip {
-		margin-left: 6px;
+		margin-left: var(--space-1-5);
 	}
 	td.prefix {
 		display: flex;
-		gap: 6px;
+		gap: var(--space-1-5);
 		align-items: center;
 		min-width: 16rem;
 	}
 	.url {
 		margin: 0;
-		padding: var(--space-2) 10px;
+		padding: var(--space-2) var(--space-2-5);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 		white-space: pre-wrap;

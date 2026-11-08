@@ -618,7 +618,7 @@
 		color: var(--muted);
 	}
 	td {
-		padding: 10px var(--space-4);
+		padding: var(--space-2-5) var(--space-4);
 		border-bottom: 1px solid var(--panel-border);
 		vertical-align: middle;
 	}
@@ -666,7 +666,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.reach {
 		max-width: 22rem;
@@ -699,8 +699,8 @@
 			display: none;
 		}
 		.tile.table :is(th, td) {
-			padding-left: 8px;
-			padding-right: 8px;
+			padding-left: var(--space-2);
+			padding-right: var(--space-2);
 		}
 		.role {
 			width: 7.5rem;
@@ -709,7 +709,7 @@
 	}
 	.actions .btn {
 		height: 2.25rem;
-		margin-left: 6px;
+		margin-left: var(--space-1-5);
 	}
 	form {
 		display: flex;
@@ -719,7 +719,7 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-md);
 	}
 	small {

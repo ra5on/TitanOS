@@ -175,9 +175,9 @@
 	.head {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		min-height: calc(52px + env(safe-area-inset-top));
-		padding: env(safe-area-inset-top) calc(6px + env(safe-area-inset-right)) 0
+		padding: env(safe-area-inset-top) calc(var(--space-1-5) + env(safe-area-inset-right)) 0
 			calc(6px + env(safe-area-inset-left));
 		border-bottom: 1px solid var(--border);
 		background: var(--header);
@@ -212,6 +212,6 @@
 		padding-bottom: env(safe-area-inset-bottom);
 	}
 	.pad {
-		padding: 24px;
+		padding: var(--space-5);
 	}
 </style>

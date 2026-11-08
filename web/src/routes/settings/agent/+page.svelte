@@ -1576,7 +1576,7 @@
 	.back-row {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		font-size: var(--text-md);
 	}
 	.areas .area {
@@ -1585,9 +1585,9 @@
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) auto;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 		width: 100%;
-		padding: 11px 16px;
+		padding: 11px var(--space-4);
 		border-top: 1px solid var(--panel-border, var(--border));
 		cursor: pointer;
 	}
@@ -1603,7 +1603,7 @@
 	.summary {
 		display: inline-flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		color: var(--muted);
 	}
 	.row-actions .grow {
@@ -1652,7 +1652,7 @@
 	}
 	.caps {
 		display: flex;
-		gap: 6px;
+		gap: var(--space-1-5);
 		align-items: center;
 		flex-wrap: wrap;
 	}
@@ -1671,7 +1671,7 @@
 	.way {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 		cursor: pointer;
 	}
 	.way > .set-label {
@@ -1682,7 +1682,7 @@
 		accent-color: var(--accent);
 	}
 	.way > .set-label > .field {
-		margin-top: 4px;
+		margin-top: var(--space-1);
 	}
 	.way.on {
 		background: color-mix(in srgb, var(--accent) 8%, transparent);
@@ -1712,7 +1712,7 @@
 	.loc-fields {
 		flex-direction: row;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.loc-fields .field {
 		flex: 1 1 9rem;
@@ -1723,17 +1723,17 @@
 	}
 	/* Home Assistant: domains in two columns, the devices in a scroll box. */
 	.sub-head {
-		padding-top: 10px;
-		padding-bottom: 4px;
+		padding-top: var(--space-2-5);
+		padding-bottom: var(--space-1);
 		min-height: 0;
 	}
 	.domains {
-		padding-bottom: 8px;
+		padding-bottom: var(--space-2);
 	}
 	.domains > .set-row {
 		grid-template-columns: minmax(0, 1fr) auto;
 		min-height: 40px;
-		padding: 6px 0;
+		padding: var(--space-1-5) 0;
 	}
 	.entities {
 		max-height: 360px;
@@ -1749,7 +1749,7 @@
 	.conn {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		font-size: var(--text-base);
 	}
 	.conn .field {
@@ -1760,7 +1760,7 @@
 	.area .expand {
 		flex-direction: row;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		border: 0;
 		background: none;
 		color: var(--text);
@@ -1796,7 +1796,7 @@
 	.frule-where {
 		flex-direction: row;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.frule-where .field {
 		flex: 1 1 9rem;
@@ -1805,7 +1805,7 @@
 	.hero-label {
 		flex-direction: row;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.hero-text {
 		display: flex;
@@ -1819,7 +1819,7 @@
 	.switch-label {
 		display: inline-flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		cursor: pointer;
 	}
 	.link-btn {
@@ -1859,7 +1859,7 @@
 		}
 		.area.tool,
 		.set-row.sub {
-			padding-left: 16px;
+			padding-left: var(--space-4);
 		}
 		.set-row.loc {
 			align-items: start;
@@ -1870,7 +1870,7 @@
 	}
 	.tname {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		align-items: center;
 		flex-wrap: wrap;
 	}

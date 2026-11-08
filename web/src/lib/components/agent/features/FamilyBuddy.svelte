@@ -357,14 +357,14 @@
 	.buddy {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 		min-width: 0;
 	}
 	.buddy p {
 		margin: 0;
 	}
 	.h {
-		margin: 8px 2px -2px;
+		margin: var(--space-2) 2px -2px;
 		font-size: var(--text-xs, 0.75rem);
 		font-weight: 600;
 		letter-spacing: 0.06em;
@@ -380,8 +380,8 @@
 	.row {
 		display: flex;
 		align-items: center;
-		gap: 10px;
-		padding: 10px 12px;
+		gap: var(--space-2-5);
+		padding: var(--space-2-5) var(--space-3);
 		border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
 		min-width: 0;
 	}
@@ -449,7 +449,7 @@
 		font-size: 1.6rem;
 		font-weight: 700;
 		letter-spacing: 0.12em;
-		padding: 10px 4px;
+		padding: var(--space-2-5) var(--space-1);
 		border: 1px dashed var(--border);
 		border-radius: 10px;
 		overflow-wrap: anywhere;
@@ -459,14 +459,14 @@
 		letter-spacing: 0.1em;
 	}
 	.note {
-		padding: 10px 12px;
+		padding: var(--space-2-5) var(--space-3);
 		border-radius: 12px;
 		border: 1px solid var(--warning, #eab308);
 	}
 	.field-row {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 		min-width: 0;
 	}
 	.field-row > span:first-child {
@@ -479,7 +479,7 @@
 	.unit {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.unit .field {
 		max-width: 10rem;
@@ -487,21 +487,21 @@
 	fieldset {
 		border: 1px solid var(--border);
 		border-radius: 12px;
-		padding: 8px 12px 12px;
+		padding: var(--space-2) var(--space-3) var(--space-3);
 		margin: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		min-width: 0;
 	}
 	legend {
 		font-weight: 600;
-		padding: 0 4px;
+		padding: 0 var(--space-1);
 	}
 	.check {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.small {
 		font-size: var(--text-sm, 0.85rem);

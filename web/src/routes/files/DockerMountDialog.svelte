@@ -49,7 +49,7 @@
 
 <style>
 	p {
-		margin: 0 0 10px;
+		margin: 0 0 var(--space-2-5);
 	}
 	ul {
 		margin: 0 0 14px;
@@ -59,8 +59,8 @@
 	.ro {
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		margin-bottom: 10px;
+		gap: var(--space-2);
+		margin-bottom: var(--space-2-5);
 	}
 	.small {
 		font-size: var(--text-sm);

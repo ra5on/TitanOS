@@ -94,7 +94,7 @@
 	.devices {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		max-width: 40rem;
 		min-width: 0;
 	}
@@ -102,7 +102,7 @@
 		display: grid;
 		grid-template-columns: auto minmax(0, 1fr) auto;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		padding: var(--space-2) var(--space-3);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);

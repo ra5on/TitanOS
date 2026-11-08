@@ -208,7 +208,7 @@
 		gap: var(--space-2);
 		flex-wrap: wrap;
 		align-items: center;
-		margin: 10px 0;
+		margin: var(--space-2-5) 0;
 	}
 	label .field {
 		flex: 1;
@@ -221,7 +221,7 @@
 	.entry {
 		display: grid;
 		grid-template-columns: 20px minmax(0, 1fr) auto;
-		gap: 10px;
+		gap: var(--space-2-5);
 		border-bottom: 1px solid var(--border);
 		padding: var(--space-2) 0;
 	}

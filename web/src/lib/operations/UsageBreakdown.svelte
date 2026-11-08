@@ -51,7 +51,7 @@
 	}
 	li {
 		display: flex;
-		gap: 10px;
+		gap: var(--space-2-5);
 		font-size: var(--text-base);
 	}
 	strong {

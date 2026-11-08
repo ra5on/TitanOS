@@ -364,7 +364,7 @@
 	}
 	.actions {
 		align-items: center;
-		gap: var(--space-2) 10px;
+		gap: var(--space-2) var(--space-2-5);
 	}
 	.count {
 		font-size: var(--text-base);
@@ -372,7 +372,7 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-base);
 	}
 	label > span {
@@ -412,7 +412,7 @@
 	.lines {
 		height: min(60vh, 640px);
 		overflow: auto;
-		padding: 10px var(--space-3);
+		padding: var(--space-2-5) var(--space-3);
 		background: var(--track);
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-ctl);

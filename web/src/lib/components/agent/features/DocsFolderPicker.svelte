@@ -99,8 +99,8 @@
 	.where {
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		margin: 0 0 8px;
+		gap: var(--space-2);
+		margin: 0 0 var(--space-2);
 		overflow-wrap: anywhere;
 	}
 	.list {
@@ -121,7 +121,7 @@
 	.list button {
 		width: 100%;
 		text-align: left;
-		padding: 10px 12px;
+		padding: var(--space-2-5) var(--space-3);
 		border: 0;
 		background: none;
 		color: var(--text);
@@ -130,6 +130,6 @@
 		overflow-wrap: anywhere;
 	}
 	.list .muted {
-		padding: 10px 12px;
+		padding: var(--space-2-5) var(--space-3);
 	}
 </style>

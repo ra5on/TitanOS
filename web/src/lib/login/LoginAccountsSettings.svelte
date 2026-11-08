@@ -119,7 +119,7 @@
 <style>
 	.previews {
 		display: inline-flex;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.mini {
 		width: 46px;
@@ -158,7 +158,7 @@
 		opacity: 0.6;
 	}
 	.sub-head {
-		padding-bottom: 4px;
+		padding-bottom: var(--space-1);
 	}
 	.accounts {
 		margin: 0;
@@ -171,7 +171,7 @@
 	.who {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		min-width: 0;
 	}
 	.initial {
@@ -188,7 +188,7 @@
 	}
 	.card-note {
 		margin: 0;
-		padding: 10px 16px 14px;
+		padding: var(--space-2-5) var(--space-4) 14px;
 		border-top: 1px solid var(--panel-border, var(--border));
 		color: var(--muted);
 		font-size: var(--text-sm);

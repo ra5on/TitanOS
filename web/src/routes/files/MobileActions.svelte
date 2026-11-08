@@ -238,7 +238,7 @@
 		.mobile-file-actions {
 			display: grid;
 			grid-template-columns: repeat(4, minmax(0, 1fr));
-			gap: 6px;
+			gap: var(--space-1-5);
 			min-width: 0;
 		}
 		/* The recycle bin as its own icon between search and "more". */
@@ -252,7 +252,7 @@
 		}
 		.mobile-file-actions > .btn {
 			min-width: 0;
-			padding: 0 6px;
+			padding: 0 var(--space-1-5);
 			font-size: var(--text-base);
 			gap: 5px;
 			height: 44px;
@@ -293,7 +293,7 @@
 		.mobile-selection {
 			display: flex;
 			align-items: center;
-			gap: 6px;
+			gap: var(--space-1-5);
 		}
 		.mobile-selection > span {
 			flex: 1;

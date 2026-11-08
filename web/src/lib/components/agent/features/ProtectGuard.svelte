@@ -300,7 +300,7 @@
 	}
 	@media (max-width: 420px) {
 		.prow :global(.btn) {
-			padding-inline: 12px;
+			padding-inline: var(--space-3);
 		}
 	}
 </style>

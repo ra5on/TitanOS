@@ -110,7 +110,7 @@
 	.head {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		flex-wrap: wrap;
 		margin-bottom: var(--space-2);
 	}
@@ -130,11 +130,11 @@
 		font-size: var(--text-sm);
 		font-weight: 600;
 		color: var(--muted);
-		padding: 6px 10px;
+		padding: var(--space-1-5) var(--space-2-5);
 		border-bottom: 1px solid var(--border);
 	}
 	td {
-		padding: var(--space-2) 10px;
+		padding: var(--space-2) var(--space-2-5);
 		border-bottom: 1px solid var(--border);
 	}
 	td .chip {

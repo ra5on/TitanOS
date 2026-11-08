@@ -159,14 +159,14 @@
 	.cat {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 		min-width: 0;
 	}
 	.cat p {
 		margin: 0;
 	}
 	.h {
-		margin: 8px 2px -2px;
+		margin: var(--space-2) 2px -2px;
 		font-size: var(--text-xs, 0.75rem);
 		font-weight: 600;
 		letter-spacing: 0.06em;
@@ -182,9 +182,9 @@
 	.row {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		width: 100%;
-		padding: 10px 12px;
+		padding: var(--space-2-5) var(--space-3);
 		border: 0;
 		border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
 		background: none;
@@ -231,8 +231,8 @@
 	.ask {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
-		padding: 12px 14px;
+		gap: var(--space-1-5);
+		padding: var(--space-3) 14px;
 		border-radius: 14px;
 		border: 1px solid var(--warning, #eab308);
 		background: color-mix(in srgb, var(--warning, #eab308) 10%, transparent);
@@ -246,15 +246,15 @@
 		overflow-wrap: anywhere;
 		font: inherit;
 		font-size: var(--text-sm, 0.85rem);
-		padding: 8px 10px;
+		padding: var(--space-2) var(--space-2-5);
 		border-radius: 8px;
 		background: color-mix(in srgb, var(--text) 6%, transparent);
 	}
 	.btns {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
-		margin-top: 4px;
+		gap: var(--space-2);
+		margin-top: var(--space-1);
 	}
 	.small {
 		font-size: var(--text-sm, 0.85rem);

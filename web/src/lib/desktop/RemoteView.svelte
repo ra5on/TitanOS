@@ -1447,36 +1447,36 @@
 	.title-menu .vol {
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		padding: 4px 10px;
+		gap: var(--space-2);
+		padding: var(--space-1) var(--space-2-5);
 	}
 	.title-menu .sub {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
-		margin: 2px 0 6px 26px;
-		padding: 6px 0 6px 10px;
+		gap: var(--space-2);
+		margin: 2px 0 var(--space-1-5) 26px;
+		padding: var(--space-1-5) 0 var(--space-1-5) var(--space-2-5);
 		border-left: 2px solid var(--border);
 	}
 	.title-menu .menu-line {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 4px 10px;
-		margin: 6px 10px 2px;
+		gap: var(--space-1) var(--space-2-5);
+		margin: var(--space-1-5) var(--space-2-5) 2px;
 		font-size: var(--text-xs);
 	}
 	.title-menu .pad {
-		margin: 4px 10px;
+		margin: var(--space-1) var(--space-2-5);
 	}
 	.view-bar,
 	.phone-head {
 		flex: none;
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		min-height: 40px;
-		padding: 4px 10px;
+		padding: var(--space-1) var(--space-2-5);
 		background: var(--header);
 		border-bottom: 1px solid var(--border);
 		color: var(--text);
@@ -1496,8 +1496,8 @@
 	}
 	.phone-head {
 		min-height: calc(52px + env(safe-area-inset-top));
-		padding: env(safe-area-inset-top) 6px 0;
-		gap: 4px;
+		padding: env(safe-area-inset-top) var(--space-1-5) 0;
+		gap: var(--space-1);
 	}
 	.title {
 		white-space: nowrap;
@@ -1511,8 +1511,8 @@
 	.pill {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
-		padding: 2px 10px;
+		gap: var(--space-1-5);
+		padding: 2px var(--space-2-5);
 		border-radius: 999px;
 		background: var(--chip);
 		color: var(--muted);
@@ -1549,7 +1549,7 @@
 	.vol {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.volume {
 		width: 110px;
@@ -1643,7 +1643,7 @@
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		gap: 12px;
+		gap: var(--space-3);
 		padding: 30px;
 		text-align: center;
 		background: var(--bg);
@@ -1669,7 +1669,7 @@
 	}
 	.actions {
 		display: flex;
-		gap: 10px;
+		gap: var(--space-2-5);
 		flex-wrap: wrap;
 		justify-content: center;
 	}
@@ -1689,7 +1689,7 @@
 	.clip {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 		align-items: flex-start;
 	}
 	.clip label {
@@ -1703,7 +1703,7 @@
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 		font-size: var(--text-sm);
-		padding: 8px;
+		padding: var(--space-2);
 		border-radius: var(--radius-small);
 		background: var(--chip);
 		align-self: stretch;
@@ -1714,13 +1714,13 @@
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.list li {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 4px 8px;
+		gap: var(--space-1) var(--space-2);
 	}
 	.list .name {
 		flex: 1;
@@ -1730,7 +1730,7 @@
 	.list a {
 		display: inline-flex;
 		align-items: center;
-		gap: 4px;
+		gap: var(--space-1);
 		flex: 1;
 		min-width: 0;
 	}
@@ -1755,7 +1755,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		justify-content: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		pointer-events: none;
 	}
 	.chip-btn,
@@ -1779,8 +1779,8 @@
 		max-width: 320px;
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		padding: 6px 12px;
+		gap: var(--space-2);
+		padding: var(--space-1-5) var(--space-3);
 	}
 	.volume-sheet .volume {
 		flex: 1;
@@ -1806,10 +1806,10 @@
 		font-size: var(--text-sm);
 	}
 	.note.start {
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.note.start h3 {
-		margin: 6px 0 0;
+		margin: var(--space-1-5) 0 0;
 		font-size: var(--text-lg);
 	}
 	.start-bar {
@@ -1864,7 +1864,7 @@
 		transform: translateX(-50%);
 		max-width: calc(100% - 32px);
 		margin: 0;
-		padding: 8px 14px;
+		padding: var(--space-2) 14px;
 		border-radius: 10px;
 		background: var(--surface);
 		border: 1px solid var(--border);

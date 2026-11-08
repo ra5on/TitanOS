@@ -115,10 +115,10 @@
 		bottom: 10px;
 		width: min(400px, calc(100% - 20px));
 		border-radius: 20px;
-		padding: 16px;
+		padding: var(--space-4);
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 		z-index: 9400;
 		animation: slide 0.18s ease-out;
 	}
@@ -148,14 +148,14 @@
 	.toggles {
 		display: grid;
 		grid-template-columns: repeat(4, 1fr);
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.tg {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 6px;
-		padding: 10px 4px;
+		gap: var(--space-1-5);
+		padding: var(--space-2-5) var(--space-1);
 		border: 0;
 		border-radius: 14px;
 		background: color-mix(in srgb, var(--bg) 50%, transparent);
@@ -174,13 +174,13 @@
 		overflow-y: auto;
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.msg {
 		display: flex;
-		gap: 10px;
+		gap: var(--space-2-5);
 		align-items: flex-start;
-		padding: 10px 12px;
+		padding: var(--space-2-5) var(--space-3);
 		border-radius: 12px;
 		background: color-mix(in srgb, var(--bg) 45%, transparent);
 	}

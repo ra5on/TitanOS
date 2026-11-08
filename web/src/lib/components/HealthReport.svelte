@@ -158,7 +158,7 @@
 	.preview {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 		padding: var(--space-3);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);

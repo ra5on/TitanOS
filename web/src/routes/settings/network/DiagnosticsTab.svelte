@@ -89,7 +89,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: flex-end;
-		gap: 10px var(--space-4);
+		gap: var(--space-2-5) var(--space-4);
 	}
 	.row .stack {
 		flex: 1 1 16rem;

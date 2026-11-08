@@ -179,7 +179,7 @@
 	}
 	.tools-group h2 {
 		margin: 0;
-		padding: 10px var(--tile-pad);
+		padding: var(--space-2-5) var(--tile-pad);
 		border-bottom: 1px solid var(--panel-border);
 	}
 	ul {

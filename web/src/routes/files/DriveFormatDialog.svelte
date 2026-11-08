@@ -323,14 +323,14 @@
 	}
 	.drives {
 		display: grid;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.drive {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		width: 100%;
-		padding: var(--space-2) 10px;
+		padding: var(--space-2) var(--space-2-5);
 		text-align: left;
 		background: var(--surface);
 		color: var(--text);
@@ -341,7 +341,7 @@
 	.drive-row {
 		display: flex;
 		align-items: stretch;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.partitions {
 		flex: none;
@@ -368,7 +368,7 @@
 		margin: 0 0 0.4rem;
 	}
 	.notice-info {
-		padding: 10px var(--space-3);
+		padding: var(--space-2-5) var(--space-3);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-sm, 8px);
 		background: var(--surface-2, var(--surface));

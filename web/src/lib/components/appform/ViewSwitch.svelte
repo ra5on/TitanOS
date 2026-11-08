@@ -42,7 +42,7 @@
 	.view-switch {
 		display: inline-flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		padding: var(--space-1) 2px;
 		background: none;
 		border: 0;

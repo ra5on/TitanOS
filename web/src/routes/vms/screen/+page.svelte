@@ -150,7 +150,7 @@
 	}
 	.bar button {
 		height: 2rem;
-		padding: 0 10px;
+		padding: 0 var(--space-2-5);
 		background: transparent;
 		border: 0;
 		border-radius: var(--radius-ctl);

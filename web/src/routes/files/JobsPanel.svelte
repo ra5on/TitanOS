@@ -414,7 +414,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		padding: var(--space-3);
 		margin-top: var(--gap);
 		background: var(--chip);

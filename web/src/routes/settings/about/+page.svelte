@@ -99,7 +99,7 @@
 		color: var(--muted);
 	}
 	pre {
-		margin: 10px 0 0;
+		margin: var(--space-2-5) 0 0;
 		padding: var(--space-3);
 		background: var(--track);
 		border-radius: var(--radius-ctl);

@@ -520,7 +520,7 @@
 	.accents {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.accents button,
 	.accents input {
@@ -564,14 +564,14 @@
 	}
 	.motifs span {
 		display: block;
-		padding: var(--space-1) 6px;
+		padding: var(--space-1) var(--space-1-5);
 	}
 	.upload {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 10px;
-		padding: 10px var(--space-3);
+		gap: var(--space-2-5);
+		padding: var(--space-2-5) var(--space-3);
 		background: var(--bg);
 		border: 1px dashed var(--border);
 		border-radius: var(--radius-ctl);
@@ -600,7 +600,7 @@
 	.language {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
-		gap: 6px var(--space-3);
+		gap: var(--space-1-5) var(--space-3);
 		margin-bottom: var(--space-3);
 	}
 	.lang {

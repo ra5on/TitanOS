@@ -111,7 +111,7 @@
 	@media (max-width: 760px) {
 		.form-row {
 			grid-template-columns: minmax(0, 1fr);
-			padding: 6px var(--space-3);
+			padding: var(--space-1-5) var(--space-3);
 		}
 		.name {
 			padding-top: var(--space-1);

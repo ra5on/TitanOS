@@ -169,7 +169,7 @@
 	.at {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	.at input {
 		max-width: 10rem;

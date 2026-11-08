@@ -176,7 +176,7 @@
 	:global(.ipv64-tab th),
 	:global(.ipv64-tab td) {
 		text-align: left;
-		padding: 6px var(--space-2);
+		padding: var(--space-1-5) var(--space-2);
 		border-bottom: 1px solid var(--border);
 		vertical-align: middle;
 	}
@@ -196,7 +196,7 @@
 		white-space: normal;
 	}
 	:global(.ipv64-tab td.actions .btn) {
-		margin: 2px 0 2px 6px;
+		margin: 2px 0 2px var(--space-1-5);
 	}
 	:global(.ipv64-tab .hint) {
 		margin: 0;
@@ -223,7 +223,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: flex-end;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	:global(.ipv64-tab .grow) {
 		flex: 1 1 14rem;
@@ -241,7 +241,7 @@
 		padding: var(--space-2) var(--space-3);
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	:global(.ipv64-tab .meter) {
 		height: 6px;

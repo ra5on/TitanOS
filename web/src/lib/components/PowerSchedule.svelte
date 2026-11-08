@@ -158,12 +158,12 @@
 
 <style>
 	.schedule {
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	form {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	p {
 		margin: 0;
@@ -180,7 +180,7 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-base);
 	}
 	label > span {
@@ -192,7 +192,7 @@
 	.check {
 		flex-direction: row;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		font-size: var(--text-md);
 		font-weight: 600;
 	}
@@ -224,7 +224,7 @@
 		list-style: none;
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.ifaces li {
 		display: flex;

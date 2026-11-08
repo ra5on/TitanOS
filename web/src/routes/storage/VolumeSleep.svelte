@@ -170,14 +170,14 @@
 <style>
 	.sleep {
 		display: grid;
-		gap: 10px;
+		gap: var(--space-2-5);
 		border-top: 1px solid var(--border);
 		padding-top: var(--space-3);
 	}
 	.head {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		flex-wrap: wrap;
 	}
 	.label {
@@ -192,12 +192,12 @@
 		margin: 0;
 		padding: 0;
 		display: grid;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.members-sleep li {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		flex-wrap: wrap;
 	}
 	.editor {

@@ -582,7 +582,7 @@
 	.acts {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 		justify-content: flex-end;
 	}
 	.x {

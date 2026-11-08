@@ -89,8 +89,8 @@
 	header {
 		display: flex;
 		align-items: center;
-		gap: 10px;
-		padding: calc(env(safe-area-inset-top, 0px) + 14px) 16px 10px;
+		gap: var(--space-2-5);
+		padding: calc(env(safe-area-inset-top, 0px) + 14px) var(--space-4) var(--space-2-5);
 	}
 	h2 {
 		flex: 1;
@@ -115,7 +115,7 @@
 	.body {
 		flex: 1;
 		overflow: auto;
-		padding: 4px 16px calc(env(safe-area-inset-bottom, 0px) + 24px);
+		padding: var(--space-1) var(--space-4) calc(env(safe-area-inset-bottom, 0px) + var(--space-5));
 		display: flex;
 		flex-direction: column;
 		gap: 14px;
@@ -129,7 +129,7 @@
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
 		color: var(--muted);
-		margin: 6px 2px -6px;
+		margin: var(--space-1-5) 2px -6px;
 	}
 	.body :global(.fgrp2) {
 		border: 1px solid var(--border);
@@ -140,8 +140,8 @@
 	.body :global(.frow2) {
 		display: flex;
 		align-items: center;
-		gap: 12px;
-		padding: 12px 14px;
+		gap: var(--space-3);
+		padding: var(--space-3) 14px;
 		border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
 	}
 	.body :global(.frow2:first-child) {
@@ -172,7 +172,7 @@
 	}
 	.body :global(.ftag) {
 		font-size: 12px;
-		padding: 2px 8px;
+		padding: 2px var(--space-2);
 		border-radius: 999px;
 		border: 1px solid currentColor;
 		white-space: nowrap;
@@ -190,10 +190,10 @@
 	.body :global(.fnote) {
 		border: 1px solid;
 		border-radius: 14px;
-		padding: 12px 14px;
+		padding: var(--space-3) 14px;
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 		overflow-wrap: anywhere;
 	}
 	.body :global(.fnote small) {
@@ -214,7 +214,7 @@
 	}
 	.body :global(.fbtns) {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		flex-wrap: wrap;
 	}
 	.body :global(.fmuted) {

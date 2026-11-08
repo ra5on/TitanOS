@@ -252,7 +252,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-2);
-		padding: 10px var(--space-3);
+		padding: var(--space-2-5) var(--space-3);
 		border-bottom: 1px solid var(--panel-border);
 	}
 	.toolbar .btn {
@@ -289,7 +289,7 @@
 		border-color: var(--border);
 	}
 	.crumbs button {
-		padding: var(--space-1) 6px;
+		padding: var(--space-1) var(--space-1-5);
 		background: transparent;
 		border: 0;
 		border-radius: var(--radius-small);
@@ -309,7 +309,7 @@
 		flex: 1 1 320px;
 		min-width: 0;
 		display: flex;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.path-form input {
 		flex: 1 1 160px;
@@ -317,7 +317,7 @@
 	}
 	.path-message {
 		margin: 0;
-		padding: 6px 14px;
+		padding: var(--space-1-5) 14px;
 		border-bottom: 1px solid var(--panel-border);
 		font-size: var(--text-base);
 	}
@@ -343,8 +343,8 @@
 	   path in one box with a folder symbol and › between the parts. */
 	.windowed {
 		flex-wrap: nowrap;
-		gap: 6px;
-		padding: 8px 12px;
+		gap: var(--space-1-5);
+		padding: var(--space-2) var(--space-3);
 	}
 	.windowed .btn {
 		height: 2rem;
@@ -371,7 +371,7 @@
 	.box-icon {
 		display: inline-flex;
 		color: var(--muted);
-		padding: 0 4px;
+		padding: 0 var(--space-1);
 	}
 	.windowed .search {
 		flex: 0 1 280px;

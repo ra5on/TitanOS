@@ -328,6 +328,6 @@
 		grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
 	}
 	.chip {
-		margin-left: 6px;
+		margin-left: var(--space-1-5);
 	}
 </style>

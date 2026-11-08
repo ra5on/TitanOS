@@ -579,7 +579,7 @@
 		padding-left: 22px;
 	}
 	.chip {
-		margin-right: 6px;
+		margin-right: var(--space-1-5);
 	}
 	ul {
 		margin: 0;

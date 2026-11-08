@@ -210,7 +210,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px var(--space-3);
+		gap: var(--space-1-5) var(--space-3);
 		font-size: var(--text-md);
 	}
 	.label {
@@ -223,7 +223,7 @@
 	.buttons {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px;
+		gap: var(--space-1-5);
 		margin-left: auto;
 	}
 	.crypt p {

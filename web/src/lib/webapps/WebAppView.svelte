@@ -585,8 +585,8 @@
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		gap: 12px;
-		padding: 16px;
+		gap: var(--space-3);
+		padding: var(--space-4);
 		text-align: center;
 		background: var(--bg);
 	}
@@ -619,7 +619,7 @@
 	.actions {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 		justify-content: center;
 	}
 	.drop {
@@ -633,7 +633,7 @@
 		z-index: 4;
 	}
 	.drop-card {
-		padding: 16px 22px;
+		padding: var(--space-4) 22px;
 		border-radius: calc(12px * var(--radius-scale, 1));
 		background: var(--surface);
 		color: var(--text);
@@ -643,14 +643,14 @@
 	.drop-card b {
 		display: inline-flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.busy {
 		position: absolute;
 		top: 8px;
 		left: 50%;
 		transform: translateX(-50%);
-		padding: 4px 12px;
+		padding: var(--space-1) var(--space-3);
 		border-radius: 999px;
 		background: var(--surface);
 		border: 1px solid var(--border);
@@ -662,12 +662,12 @@
 		right: 16px;
 		bottom: 16px;
 		width: min(380px, calc(100% - 32px));
-		padding: 14px 16px;
+		padding: 14px var(--space-4);
 		border-radius: calc(12px * var(--radius-scale, 1));
 		z-index: 6;
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.notice.error {
 		border-left: 4px solid var(--danger, #e0393e);
@@ -679,7 +679,7 @@
 	.notice-head {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.notice-head b {
 		flex: 1;
@@ -689,7 +689,7 @@
 	.notice-actions {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.notice-actions .btn {
 		flex: 1 1 140px;

@@ -519,17 +519,17 @@
 		flex-direction: column;
 		gap: 2px;
 		margin: 0;
-		padding: 6px;
+		padding: var(--space-1-5);
 		list-style: none;
 	}
 	.list button {
 		display: grid;
 		grid-template-columns: auto 1fr;
 		align-items: center;
-		column-gap: 10px;
+		column-gap: var(--space-2-5);
 		width: 100%;
 		min-height: 44px;
-		padding: 6px 10px;
+		padding: var(--space-1-5) var(--space-2-5);
 		background: none;
 		border: 0;
 		border-radius: var(--radius-ctl);
@@ -583,7 +583,7 @@
 	dl {
 		display: grid;
 		grid-template-columns: max-content 1fr;
-		gap: 6px var(--space-4);
+		gap: var(--space-1-5) var(--space-4);
 		margin: 0;
 		font-size: var(--text-md);
 	}
@@ -614,13 +614,13 @@
 		font-size: var(--text-md);
 	}
 	pre {
-		margin: 6px 0 0;
+		margin: var(--space-1-5) 0 0;
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 		font-size: var(--text-sm);
 	}
 	.config {
-		padding: 10px;
+		padding: var(--space-2-5);
 		background: var(--bg);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);

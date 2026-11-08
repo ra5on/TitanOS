@@ -614,8 +614,8 @@
 	header {
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		padding: calc(env(safe-area-inset-top, 0px) + 12px) 12px 8px;
+		gap: var(--space-2);
+		padding: calc(env(safe-area-inset-top, 0px) + var(--space-3)) var(--space-3) var(--space-2);
 	}
 	h2 {
 		flex: 1;
@@ -649,9 +649,9 @@
 	.search {
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		margin: 0 12px 8px;
-		padding: 0 12px;
+		gap: var(--space-2);
+		margin: 0 var(--space-3) var(--space-2);
+		padding: 0 var(--space-3);
 		min-height: 40px;
 		border-radius: 12px;
 		background: color-mix(in srgb, var(--text) 6%, transparent);
@@ -671,7 +671,7 @@
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
-		padding: 0 8px calc(env(safe-area-inset-bottom, 0px) + 16px);
+		padding: 0 var(--space-2) calc(env(safe-area-inset-bottom, 0px) + var(--space-4));
 	}
 	.folders,
 	.items {
@@ -680,8 +680,8 @@
 		gap: 2px;
 	}
 	.folders {
-		padding-bottom: 8px;
-		margin-bottom: 8px;
+		padding-bottom: var(--space-2);
+		margin-bottom: var(--space-2);
 		border-bottom: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
 	}
 	.folders > *,
@@ -695,7 +695,7 @@
 		align-items: stretch;
 	}
 	.frow {
-		padding-left: calc(var(--d, 0) * 16px);
+		padding-left: calc(var(--d, 0) * var(--space-4));
 	}
 	.folder,
 	.note {
@@ -712,9 +712,9 @@
 	.folder {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		min-height: 40px;
-		padding: 6px 10px;
+		padding: var(--space-1-5) var(--space-2-5);
 	}
 	.folder :global(svg) {
 		color: var(--muted);
@@ -733,12 +733,12 @@
 	.note {
 		display: grid;
 		gap: 2px;
-		padding: 9px 10px;
+		padding: 9px var(--space-2-5);
 	}
 	.nt {
 		display: flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		min-width: 0;
 	}
 	.nt strong {
@@ -787,7 +787,7 @@
 		top: calc(100% - 4px);
 		min-width: 170px;
 		display: grid;
-		padding: 4px;
+		padding: var(--space-1);
 		border-radius: 12px;
 		background: var(--menu-bg, var(--surface));
 		border: 1px solid var(--menu-border, var(--border));
@@ -795,7 +795,7 @@
 	}
 	.pop button {
 		text-align: left;
-		padding: 9px 12px;
+		padding: 9px var(--space-3);
 		border: 0;
 		border-radius: 8px;
 		background: none;
@@ -812,7 +812,7 @@
 	.empty {
 		color: var(--muted);
 		text-align: center;
-		padding: 24px 8px;
+		padding: var(--space-5) var(--space-2);
 	}
 	.editor .state {
 		color: var(--muted);
@@ -822,8 +822,8 @@
 	}
 	.fmt {
 		display: flex;
-		gap: 4px;
-		padding: 0 12px 8px;
+		gap: var(--space-1);
+		padding: 0 var(--space-3) var(--space-2);
 		flex-wrap: wrap;
 	}
 	.fmt button {
@@ -844,7 +844,7 @@
 		resize: none;
 		border: 0;
 		outline: none;
-		padding: 8px 18px calc(env(safe-area-inset-bottom, 0px) + 18px);
+		padding: var(--space-2) 18px calc(env(safe-area-inset-bottom, 0px) + 18px);
 		background: transparent;
 		color: var(--text);
 		font: inherit;
@@ -852,20 +852,20 @@
 		line-height: 1.6;
 	}
 	.conflict {
-		margin: 0 12px 8px;
-		padding: 8px 12px;
+		margin: 0 var(--space-3) var(--space-2);
+		padding: var(--space-2) var(--space-3);
 		border-radius: 10px;
 		background: var(--warn-bg);
 		color: var(--warn-text);
 		display: flex;
-		gap: 10px;
+		gap: var(--space-2-5);
 		align-items: center;
 		flex-wrap: wrap;
 	}
 	.blank {
 		align-items: center;
 		justify-content: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		color: var(--muted);
 	}
 	.choose {
@@ -874,11 +874,11 @@
 	}
 	.choose .btn {
 		justify-content: flex-start;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.stack {
 		display: grid;
-		gap: 6px;
+		gap: var(--space-1-5);
 		margin-bottom: var(--space-3);
 	}
 	/* The phone: the list, and the note slides in over it. */

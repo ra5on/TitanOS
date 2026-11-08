@@ -348,7 +348,7 @@
 		z-index: 8900;
 		display: flex;
 		align-items: flex-end;
-		gap: 6px;
+		gap: var(--space-1-5);
 		padding: 9px;
 		border-radius: calc((var(--size) * 0.36 + 9px) * min(var(--radius-scale, 1), 1.4));
 		background: color-mix(in srgb, var(--surface) var(--plate), transparent);
@@ -496,7 +496,7 @@
 		bottom: calc(100% + 10px);
 		left: 50%;
 		transform: translateX(-50%);
-		padding: 4px 10px;
+		padding: var(--space-1) var(--space-2-5);
 		border-radius: 8px;
 		background: var(--surface);
 		border: 1px solid var(--border);
@@ -564,14 +564,14 @@
 		flex: none;
 		align-self: stretch;
 		width: 1px;
-		margin: 6px 4px;
+		margin: var(--space-1-5) var(--space-1);
 		background: color-mix(in srgb, var(--text) 25%, transparent);
 	}
 	.left .line,
 	.right .line {
 		width: auto;
 		height: 1px;
-		margin: 4px 6px;
+		margin: var(--space-1) var(--space-1-5);
 	}
 	.drop-end {
 		flex: none;
@@ -579,7 +579,7 @@
 		height: var(--size);
 	}
 	.empty {
-		padding: 10px 14px;
+		padding: var(--space-2-5) 14px;
 		color: var(--muted);
 		font-size: var(--text-sm);
 	}
@@ -587,11 +587,11 @@
 		position: absolute;
 		z-index: 8950;
 		width: min(360px, calc(100% - 24px));
-		padding: 14px 16px;
+		padding: 14px var(--space-4);
 		border-radius: 16px;
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 		background: color-mix(in srgb, var(--surface) 96%, transparent);
 	}
 	.dock-edit.bottom {
@@ -618,7 +618,7 @@
 	.row {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-sm);
 	}
 	.dock-edit label span {
@@ -632,14 +632,14 @@
 	}
 	.seg {
 		display: flex;
-		gap: 4px;
+		gap: var(--space-1);
 		padding: 3px;
 		border-radius: 10px;
 		background: var(--chip);
 	}
 	.seg button {
 		flex: 1;
-		padding: 6px 8px;
+		padding: var(--space-1-5) var(--space-2);
 		border: 0;
 		border-radius: 8px;
 		background: none;
@@ -654,7 +654,7 @@
 	.actions {
 		display: flex;
 		justify-content: flex-end;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.slot,

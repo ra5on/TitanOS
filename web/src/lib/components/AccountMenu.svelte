@@ -116,8 +116,8 @@
 		height: 44px;
 		display: flex;
 		align-items: center;
-		gap: 10px;
-		padding: 0 10px 0 6px;
+		gap: var(--space-2-5);
+		padding: 0 var(--space-2-5) 0 var(--space-1-5);
 		background: transparent;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
@@ -171,13 +171,13 @@
 		max-width: calc(100vw - 24px);
 		display: flex;
 		flex-direction: column;
-		padding: 6px;
+		padding: var(--space-1-5);
 	}
 	.who {
 		display: flex;
 		align-items: center;
 		gap: var(--space-3);
-		padding: 10px 10px var(--space-3);
+		padding: var(--space-2-5) var(--space-2-5) var(--space-3);
 	}
 	.lines {
 		display: flex;
@@ -195,7 +195,7 @@
 	}
 	hr {
 		height: 1px;
-		margin: 6px var(--space-1);
+		margin: var(--space-1-5) var(--space-1);
 		border: 0;
 		background: var(--border);
 	}
@@ -206,7 +206,7 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-3);
-		padding: 0 10px;
+		padding: 0 var(--space-2-5);
 		font-size: var(--text-md);
 	}
 	.menu a {

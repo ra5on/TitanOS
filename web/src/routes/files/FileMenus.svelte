@@ -340,8 +340,8 @@
 		display: flex;
 		justify-content: space-between;
 		gap: 2px;
-		padding: 2px 4px 6px;
-		margin-bottom: 4px;
+		padding: 2px var(--space-1) var(--space-1-5);
+		margin-bottom: var(--space-1);
 		border-bottom: 1px solid var(--border);
 	}
 	.icon-row button {
@@ -371,12 +371,12 @@
 	.with {
 		display: flex;
 		flex-direction: column;
-		margin: 2px 0 4px 26px;
-		padding-left: 6px;
+		margin: 2px 0 var(--space-1) 26px;
+		padding-left: var(--space-1-5);
 		border-left: 2px solid var(--border);
 	}
 	.group {
-		padding: 6px 10px 2px;
+		padding: var(--space-1-5) var(--space-2-5) 2px;
 		font-size: var(--text-xs);
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
@@ -399,8 +399,8 @@
 	.always {
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		padding: 6px 10px;
+		gap: var(--space-2);
+		padding: var(--space-1-5) var(--space-2-5);
 		font-size: var(--text-sm);
 		color: var(--muted);
 		cursor: pointer;

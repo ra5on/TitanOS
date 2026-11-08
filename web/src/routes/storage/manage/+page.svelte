@@ -581,7 +581,7 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-base);
 		min-width: 0;
 	}
@@ -626,7 +626,7 @@
 	th,
 	td {
 		text-align: left;
-		padding: 10px;
+		padding: var(--space-2-5);
 		border-bottom: 1px solid var(--border);
 		vertical-align: top;
 	}

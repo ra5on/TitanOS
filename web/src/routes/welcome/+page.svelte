@@ -337,7 +337,7 @@
 	}
 	.steps {
 		display: flex;
-		gap: 6px;
+		gap: var(--space-1-5);
 		margin: 0;
 		padding: 0;
 		list-style: none;
@@ -351,7 +351,7 @@
 		align-items: center;
 		gap: var(--space-2);
 		width: 100%;
-		padding: 6px var(--space-2) var(--space-2) 0;
+		padding: var(--space-1-5) var(--space-2) var(--space-2) 0;
 		background: none;
 		border: 0;
 		border-bottom: 2px solid var(--border);
@@ -402,7 +402,7 @@
 		display: flex;
 		flex-direction: column;
 		align-items: stretch;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-md);
 	}
 	.group {
@@ -437,7 +437,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		justify-content: flex-end;
-		gap: 10px;
+		gap: var(--space-2-5);
 		margin-top: var(--space-1);
 	}
 	.row {
@@ -456,7 +456,7 @@
 		list-style: none;
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.todo {
 		display: flex;
@@ -485,7 +485,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 6px 10px;
+		gap: var(--space-1-5) var(--space-2-5);
 	}
 	.name {
 		font-weight: 600;

@@ -214,9 +214,9 @@
 	}
 	.row {
 		display: flex;
-		gap: 10px;
+		gap: var(--space-2-5);
 		align-items: flex-start;
-		padding: 10px var(--space-3);
+		padding: var(--space-2-5) var(--space-3);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 		cursor: pointer;
@@ -246,7 +246,7 @@
 	form {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 		margin-top: 14px;
 	}
 	.changes,

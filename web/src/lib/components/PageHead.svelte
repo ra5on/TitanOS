@@ -190,7 +190,7 @@
 	.win-toolbar {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		min-height: 49px;
 		margin: 0 calc(-1 * var(--page-pad));
 		padding: 8px var(--page-pad);
@@ -219,7 +219,7 @@
 		flex-wrap: nowrap;
 		align-items: center;
 		justify-content: flex-end;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	/* Compact controls: 32 px high (on the phone they keep their touch size). */
 	.win-toolbar:not(.phone) .win-actions :global(:is(.btn, .field, .segmented, select)) {
@@ -229,7 +229,7 @@
 		flex-shrink: 0;
 	}
 	.win-toolbar:not(.phone) .win-actions :global(.btn) {
-		padding: 0 12px;
+		padding: 0 var(--space-3);
 	}
 	.win-toolbar:not(.phone) .win-actions :global(.btn.icon-only),
 	.win-toolbar:not(.phone) .win-actions :global(.btn.icon-btn) {
@@ -257,7 +257,7 @@
 		display: inline-flex;
 	}
 	.win-intro {
-		margin-top: calc(-1 * var(--gap) + 4px);
+		margin-top: calc(-1 * var(--gap) + var(--space-1));
 		font-size: var(--text-base);
 		color: var(--muted);
 	}
@@ -267,8 +267,8 @@
 	/* Straight in the page's <main> (a block, no gap to pull back): it sits
 	   below the bar, not half under it (PLAN 65: Speicher, Freigaben). */
 	:global(main) > .win-intro:not(.alone) {
-		margin-top: 8px;
-		margin-bottom: var(--gap, 16px);
+		margin-top: var(--space-2);
+		margin-bottom: var(--gap, var(--space-4));
 	}
 	/* PLAN 67: in a window and on the phone the page is a column with gaps. */
 	:global(:is(main.in-window, main.phone-page)) > .win-intro {

@@ -521,7 +521,7 @@
 	.networks {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.networks h3 {
 		margin: 0;
@@ -551,7 +551,7 @@
 	}
 	textarea {
 		height: auto;
-		padding: 10px var(--space-3);
+		padding: var(--space-2-5) var(--space-3);
 		font-size: var(--text-sm);
 		resize: vertical;
 	}
@@ -561,7 +561,7 @@
 		color: var(--muted);
 	}
 	pre {
-		margin: 6px 0 0;
+		margin: var(--space-1-5) 0 0;
 		font-family: var(--font-mono);
 		font-size: var(--text-sm);
 		white-space: pre-wrap;

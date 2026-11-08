@@ -121,8 +121,8 @@
 	header {
 		display: flex;
 		align-items: center;
-		gap: 12px;
-		padding: 14px 16px 10px;
+		gap: var(--space-3);
+		padding: 14px var(--space-4) var(--space-2-5);
 	}
 	h2 {
 		margin: 0;
@@ -148,17 +148,17 @@
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
-		padding: 6px 16px 28px;
+		padding: var(--space-1-5) var(--space-4) 28px;
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.body > :global(*) {
 		flex-shrink: 0;
 	}
 	/* Shared look of the three views. */
 	.body :global(.pcap) {
-		margin: 10px 2px -2px;
+		margin: var(--space-2-5) 2px -2px;
 		font-size: var(--text-xs, 0.75rem);
 		font-weight: 600;
 		letter-spacing: 0.08em;
@@ -174,10 +174,10 @@
 	.body :global(.prow) {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 		width: 100%;
 		min-height: 48px;
-		padding: 10px 14px;
+		padding: var(--space-2-5) 14px;
 		border: 0;
 		border-top: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
 		background: none;
@@ -223,7 +223,7 @@
 		background: color-mix(in srgb, var(--c) 12%, transparent);
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 		overflow-wrap: anywhere;
 	}
 	.body :global(.pcard h3) {

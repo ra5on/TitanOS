@@ -101,11 +101,11 @@
 		font-size: var(--text-sm);
 		font-weight: 600;
 		color: var(--muted);
-		padding: 6px 10px;
+		padding: var(--space-1-5) var(--space-2-5);
 		border-bottom: 1px solid var(--border);
 	}
 	td {
-		padding: var(--space-2) 10px;
+		padding: var(--space-2) var(--space-2-5);
 		border-bottom: 1px solid var(--border);
 		white-space: nowrap;
 	}

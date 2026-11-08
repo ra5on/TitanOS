@@ -317,8 +317,8 @@
 	.acts {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
-		margin-top: 4px;
+		gap: var(--space-2);
+		margin-top: var(--space-1);
 	}
 	.bar {
 		height: 6px;
@@ -333,11 +333,11 @@
 	}
 	.small {
 		font-size: var(--text-sm, 0.875rem);
-		margin: 4px 2px;
+		margin: var(--space-1) 2px;
 	}
 	.lbl {
 		font-weight: 600;
-		margin: 4px 2px -4px;
+		margin: var(--space-1) 2px -4px;
 	}
 	textarea.field,
 	input.field {
@@ -348,7 +348,7 @@
 		font-size: 1.6rem;
 		letter-spacing: 0.12em;
 		text-align: center;
-		margin: 12px 0;
+		margin: var(--space-3) 0;
 		overflow-wrap: anywhere;
 	}
 </style>

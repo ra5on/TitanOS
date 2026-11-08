@@ -64,7 +64,7 @@
 	.play {
 		position: absolute;
 		inset: auto auto 6px 6px;
-		padding: 2px 6px;
+		padding: 2px var(--space-1-5);
 		border-radius: var(--radius-small);
 		background: var(--surface);
 		color: var(--text);

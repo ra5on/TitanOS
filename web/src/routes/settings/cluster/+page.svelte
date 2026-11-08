@@ -970,8 +970,8 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: var(--space-2) 10px;
-		padding: var(--space-3) var(--space-4) 6px;
+		gap: var(--space-2) var(--space-2-5);
+		padding: var(--space-3) var(--space-4) var(--space-1-5);
 	}
 	.nodes-head h2 {
 		margin: 0 auto 0 0;
@@ -997,7 +997,7 @@
 	.dot {
 		width: 10px;
 		height: 10px;
-		margin-top: 6px;
+		margin-top: var(--space-1-5);
 		border-radius: 50%;
 		background: var(--status-ok);
 	}
@@ -1017,7 +1017,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px var(--space-2);
+		gap: var(--space-1-5) var(--space-2);
 	}
 	.name {
 		font-weight: 600;
@@ -1026,7 +1026,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: baseline;
-		gap: 2px 6px;
+		gap: 2px var(--space-1-5);
 		font-size: var(--text-md);
 	}
 	.line.small,
@@ -1037,10 +1037,10 @@
 		display: flex;
 		flex-wrap: wrap;
 		justify-content: flex-end;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.trust {
-		padding: 10px var(--space-4) var(--space-3);
+		padding: var(--space-2-5) var(--space-4) var(--space-3);
 		border-top: 1px solid var(--border);
 	}
 	.settings-form {
@@ -1067,7 +1067,7 @@
 		grid-column: 2;
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.reveal {
 		display: flex;

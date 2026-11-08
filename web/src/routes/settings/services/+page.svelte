@@ -317,7 +317,7 @@
 	.title {
 		display: inline-flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		color: var(--text);
 	}
 	.set-label {
@@ -326,7 +326,7 @@
 		gap: 2px;
 	}
 	.ask {
-		margin: 0 16px 12px;
+		margin: 0 var(--space-4) var(--space-3);
 	}
 	.ask p {
 		margin: 0 0 var(--space-2);
@@ -338,7 +338,7 @@
 	.controls {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		flex-wrap: wrap;
 		justify-content: flex-end;
 	}
@@ -348,7 +348,7 @@
 	}
 	.card-foot {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		align-items: center;
 	}
 	.card-foot select {
@@ -358,7 +358,7 @@
 		white-space: nowrap;
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-sm);
 		color: var(--muted);
 	}
@@ -369,7 +369,7 @@
 		justify-content: center;
 	}
 	.card-head .set-hint {
-		margin-left: 8px;
+		margin-left: var(--space-2);
 	}
 	.row-actions .grow {
 		flex: 1;

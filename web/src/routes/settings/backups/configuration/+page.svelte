@@ -500,7 +500,7 @@
 		font-size: 0.8125rem;
 	}
 	pre {
-		margin: 6px 0 0;
+		margin: var(--space-1-5) 0 0;
 		font-family: var(--font-mono);
 		font-size: 0.75rem;
 		white-space: pre-wrap;

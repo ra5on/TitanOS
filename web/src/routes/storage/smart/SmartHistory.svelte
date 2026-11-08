@@ -165,7 +165,7 @@
 	.history {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 		min-width: 0;
 	}
 	h3,
@@ -233,7 +233,7 @@
 	}
 	th,
 	td {
-		padding: 6px var(--space-2);
+		padding: var(--space-1-5) var(--space-2);
 		border-bottom: 1px solid var(--panel-border);
 		text-align: left;
 		white-space: nowrap;
@@ -260,7 +260,7 @@
 	@media (max-width: 600px) {
 		th,
 		td {
-			padding: 6px var(--space-1);
+			padding: var(--space-1-5) var(--space-1);
 		}
 		.summary th {
 			white-space: normal;

@@ -276,7 +276,7 @@
 	.part {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	h3 {
 		margin: 0;
@@ -308,6 +308,6 @@
 		padding: var(--space-2) var(--space-3);
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 </style>
