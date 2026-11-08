@@ -86,6 +86,13 @@
 	function onWindowClick(event: MouseEvent) {
 		if (open && !confirmAll && !root?.contains(event.target as Node)) open = false;
 	}
+	// PLAN 74: a click into a window of the desktop (its own frame) never
+	// reaches this page as a click; the focus moving into the frame does.
+	function onWindowBlur() {
+		setTimeout(() => {
+			if (open && !confirmAll && document.activeElement instanceof HTMLIFrameElement) open = false;
+		}, 0);
+	}
 
 	// Escape closes the list and hands the focus back to the bell; an open
 	// confirmation handles its own Escape.
@@ -106,6 +113,7 @@
 
 <svelte:window
 	onclick={onWindowClick}
+	onblur={onWindowBlur}
 	onpointerdown={() => void armSound()}
 	onkeydown={(event) => {
 		void armSound();
