@@ -52,6 +52,10 @@ type stream struct {
 	closed           chan struct{}
 	lastVideoTS      uint64
 	cursors          []string
+	// tile mode (PLAN 72)
+	jpegTiles, pngTiles int
+	tileBytes           int64
+	tileArea            int64
 }
 
 func dial(ctx context.Context, addr, key string) (*stream, error) {
@@ -122,9 +126,26 @@ func (s *stream) read() {
 			if len(data) > 9 {
 				s.audio++
 			}
+		case proto.TypeTile:
+			if len(data) > proto.TileHeaderSize {
+				if data[1] == proto.TilePNG {
+					s.pngTiles++
+				} else {
+					s.jpegTiles++
+				}
+				s.tileBytes += int64(len(data))
+				s.tileArea += int64(binary.BigEndian.Uint16(data[6:])) * int64(binary.BigEndian.Uint16(data[8:]))
+			}
 		}
 		s.mu.Unlock()
 	}
+}
+
+// tiles returns the tile counters (PLAN 72).
+func (s *stream) tiles() (jpegs, pngs int, bytes, area int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.jpegTiles, s.pngTiles, s.tileBytes, s.tileArea
 }
 
 func (s *stream) counts() (aus, keys, audio int) {
@@ -262,7 +283,7 @@ func main() {
 	addr := flag.String("addr", "", "viewer host:port")
 	key := flag.String("key", "", "session key")
 	wantAudio := flag.Bool("audio", false, "expect audio packets")
-	phase := flag.String("phase", "all", "all | stream (video, size, scale) | big (3840x2160 for 10 s) | hold (wait for bye)")
+	phase := flag.String("phase", "all", "all | stream (video, size, scale) | big (3840x2160 for 10 s) | hold (wait for bye) | tiles | motion (PLAN 72)")
 	wantGPU := flag.String("wantgpu", "cpu", "expected hello.gpu")
 	combo := flag.String("combo", "", "phase keys: shortcuts like ctrl+KeyU,F12 (comma separated), each followed by 1.5 s")
 	typeText := flag.String("text", "", "phase keys: text typed after the shortcuts")
@@ -303,6 +324,12 @@ func main() {
 		fail("gpu", "hello.gpu %v, want %s", hello["gpu"], *wantGPU)
 	}
 	switch *phase {
+	case "tiles":
+		tilesPhase(s, hello)
+		exit()
+	case "motion":
+		motionPhase(s, hello)
+		exit()
 	case "hold":
 		if m := s.waitText("bye", 60*time.Second, nil); m != nil && m["reason"] == proto.ByeStopped {
 			pass("bye", "%v", m)
@@ -564,5 +591,87 @@ func finish(s *stream) {
 		pass("stats", "%v", lastStats)
 	} else {
 		fail("stats", "no stats")
+	}
+}
+
+// tilesPhase checks the tile mode on a calm page (PLAN 72): the first
+// frame comes as tiles covering the screen, a calm screen sends (almost)
+// nothing, lossy areas are sent again losslessly, typing sends small
+// areas only.
+func tilesPhase(s *stream, hello map[string]any) {
+	if hello["codec"] != proto.CodecTiles {
+		fail("tiles-hello", "codec %v, want tiles", hello["codec"])
+		return
+	}
+	w, h := hello["width"].(float64), hello["height"].(float64)
+	time.Sleep(3 * time.Second)
+	jpegs, pngs, bytes, area := s.tiles()
+	if area < int64(w*h) {
+		fail("tiles-first", "%d px of %v×%v covered", area, w, h)
+	} else {
+		pass("tiles-first", "%d JPEG and %d PNG tiles, %d KiB, screen covered", jpegs, pngs, bytes>>10)
+	}
+	if pngs == 0 {
+		fail("tiles-sharpen", "no lossless tile after a calm moment")
+	} else {
+		pass("tiles-sharpen", "%d lossless tiles", pngs)
+	}
+	_, _, before, _ := s.tiles()
+	time.Sleep(5 * time.Second)
+	_, _, after, _ := s.tiles()
+	idle := (after - before) / 5
+	if idle > 20<<10 {
+		fail("tiles-idle", "%d B/s on a calm screen", idle)
+	} else {
+		pass("tiles-idle", "%d B/s on a calm screen", idle)
+	}
+	_, _, _, a0 := s.tiles()
+	s.click(int(w)/2, 100)
+	time.Sleep(300 * time.Millisecond)
+	s.send(map[string]any{"t": "text", "text": "TitanOS Kacheln"})
+	time.Sleep(2 * time.Second)
+	_, _, _, a1 := s.tiles()
+	if a1 == a0 {
+		fail("tiles-typing", "no tile after typing")
+	} else if a1-a0 > int64(w*h) {
+		fail("tiles-typing", "typing sent %d px, more than the screen", a1-a0)
+	} else {
+		pass("tiles-typing", "typing sent %d px (%.1f %% of the screen)", a1-a0, float64(a1-a0)*100/(w*h))
+	}
+	if m := s.waitText("stats", 3*time.Second, nil); m != nil {
+		pass("tiles-stats", "%v", m)
+	}
+}
+
+// motionPhase checks the switch to video while the whole screen moves and
+// back to tiles when it stops (PLAN 72, KasmVNC thresholds 5 s / 3 s).
+func motionPhase(s *stream, hello map[string]any) {
+	if hello["codec"] != proto.CodecTiles {
+		fail("motion-hello", "codec %v, want tiles first", hello["codec"])
+		return
+	}
+	t0 := time.Now()
+	m := s.waitText("mode", 15*time.Second, func(m map[string]any) bool { return m["mode"] == "video" })
+	if m == nil {
+		fail("motion-video", "no switch to video within 15 s")
+		return
+	}
+	pass("motion-video", "video after %v", time.Since(t0).Round(100*time.Millisecond))
+	if h := s.waitText("hello", 5*time.Second, func(m map[string]any) bool { return m["codec"] != proto.CodecTiles }); h != nil {
+		pass("motion-hello-video", "%v", h)
+	}
+	time.Sleep(2 * time.Second)
+	if aus, _, _ := s.counts(); aus == 0 {
+		fail("motion-frames", "no H.264 frames in video mode")
+	} else {
+		pass("motion-frames", "%d H.264 frames", aus)
+	}
+	// The page stops its animation after a click.
+	s.click(20, 20)
+	t1 := time.Now()
+	if m := s.waitText("mode", 15*time.Second, func(m map[string]any) bool { return m["mode"] == "tiles" }); m != nil {
+		pass("motion-tiles", "back to tiles after %v", time.Since(t1).Round(100*time.Millisecond))
+	} else {
+		fail("motion-tiles", "no switch back to tiles within 15 s")
 	}
 }

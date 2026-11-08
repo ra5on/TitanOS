@@ -26,11 +26,14 @@ Ein WebSocket, `GET /api/v1/viewer/{app}/stream` (Anmeldung, Recht auf die App w
 | `0x01` Video | Agent → Browser | Byte 1: Flags (Bit 0 = Schlüsselbild); Byte 2–9: Zeitstempel in µs (uint64, big endian); Rest: eine H.264-Zugriffseinheit (Annex B, mit Startcodes) |
 | `0x02` Ton | Agent → Browser | Byte 1–8: Zeitstempel in µs; Rest: ein Opus-Paket (48 kHz, Stereo, 20 ms) |
 | `0x03` Datei-Teil | Browser → Agent | Hochladen: Byte 1–4 Upload-Nummer (uint32), Rest Daten (höchstens 256 KiB je Nachricht) |
+| `0x04` Kachel (seit 0.68) | Agent → Browser | Byte 1: 1 = JPEG, 2 = PNG (verlustfrei); Byte 2–9: x, y, Breite, Höhe (je uint16, big endian); Rest: das Bild dieses Bereichs. Nur während `hello.codec` `"tiles"` ist |
 
 **Text-Nachrichten** – JSON mit `"t"`:
 
 Agent → Browser:
 - `{"t":"hello","codec":"avc1.42E01F","width":1280,"height":800,"gpu":"vaapi"|"nvenc"|"cpu","audio":true}` – nach dem Verbinden und nach jeder Größenänderung (neuer Decoder, danach kommt ein Schlüsselbild).
+- `{"t":"hello","codec":"tiles",…}` (seit 0.68): Kachel-Betrieb, kein Decoder; danach kommen `0x04`-Kacheln, zuerst der ganze Bildschirm.
+- `{"t":"mode","mode":"tiles"|"video"}` (seit 0.68) – welche Übertragung gerade läuft (Anzeige im ⋯-Menü).
 - `{"t":"stats","fps":59,"kbps":4200,"latencyMs":18}` – jede Sekunde.
 - `{"t":"clipboard","text":"…"}` – die Zwischenablage im NAS-Browser hat sich geändert (höchstens 1 MiB).
 - `{"t":"download","name":"bild.jpg","size":12345,"id":"d1"}` – eine Datei wurde heruntergeladen; abholen über `GET /api/v1/viewer/{app}/downloads/{id}`.
@@ -45,14 +48,33 @@ Browser → Agent:
 - `{"t":"text","text":"Hallo"}` – Text tippen (Handy-Tastatur, Einfügen).
 - `{"t":"clipboard","text":"…"}` – Zwischenablage des Nutzers in den NAS-Browser legen.
 - `{"t":"keyframe"}` – Schlüsselbild anfordern (nach Fehler im Decoder).
-- `{"t":"quality","mode":"auto"|"high"|"balanced"|"low","fps":30|60}`.
+- `{"t":"quality","mode":"auto"|"high"|"balanced"|"low","fps":30|60,"transport":"auto"|"video"}` (`transport` seit 0.68, darf fehlen).
 - `{"t":"upload","id":1,"name":"a.pdf","size":123}` → danach Teile `0x03`, Agent antwortet `{"t":"uploaded","id":1}`; die Datei liegt im NAS-Browser unter „Hochgeladen“ zur Auswahl im Dateidialog.
 - `{"t":"touch", …}` gibt es nicht: das Handy schickt `mouse`/`wheel` (Tippen = Klick, Wischen = Rad, langes Tippen = Rechtsklick).
 
 ## Einstellungen
 
 `GET/PUT /api/v1/viewer/settings` (Administratoren), `/config/viewer/settings.json`:
-`{"gpu":"auto"|"off"|"/dev/dri/renderD128","quality":"auto","fps":30,"audio":true,"volume":"<Volume für Profile>"}`. Ab Werk 30 fps (seit 0.66.0, Inhaber 7.11.2026; vorher 60); ein gespeicherter Wert bleibt.
+`{"gpu":"auto"|"off"|"/dev/dri/renderD128","quality":"auto","fps":30,"transport":"auto"|"video","audio":true,"volume":"<Volume für Profile>"}`. Ab Werk 30 fps (seit 0.66.0, Inhaber 7.11.2026; vorher 60); ein gespeicherter Wert bleibt. `transport` seit 0.68 (fehlt: `auto`; ältere Versionen ignorieren das Feld).
+
+## App-Gefühl im Fenster (seit 0.68)
+
+- **Startbild:** Bis das erste Bild da ist, zeigt das Fenster das Symbol der App groß, ihren Namen und einen laufenden Balken (Entwurf 66-01) statt des Kreisels.
+- **Dateien ins Fenster ziehen:** Abgelegte Dateien gehen über den vorhandenen Upload (`upload` + `0x03`) in die App unter „Hochgeladen“; ein Hinweis nennt den Ort (Entwurf 66-04).
+- Im ⋯-Menü unter „Qualität“: „Kacheln, bei Bewegung Video“ oder „Immer Video“, je App im Browser gemerkt; die Statuszeile nennt die laufende Übertragung.
+
+## Kachel-Betrieb (PLAN 66/72, seit 0.68)
+
+Nach dem Vorbild von KasmVNC, selbst geschrieben (`backend/cmd/titanos-viewer/tiles.go`, `stream.go`):
+- **Erfassen:** eine zweite GStreamer-Leitung liefert rohe Bilder (`ximagesrc … ! videoconvert ! BGRx ! fdsink fd=3`) mit der eingestellten Bildrate.
+- **Vergleichen:** Kacheln von 64 × 64 Bildpunkten, Zeile für Zeile mit dem zuletzt **gesendeten** Stand verglichen. Nur geänderte Kacheln gehen raus, waagrecht benachbarte einer Zeile als ein Rechteck.
+- **Qualität je Bereich:** JPEG, wo sich etwas bewegt (in 3 der letzten 5 Bilder geändert) mit niedrigerer Qualität, sonst höher (`auto` 80/55, `high` 90/75, `balanced` 75/50, `low` 55/35).
+- **Nachschärfen:** Ein Bereich, der verlustbehaftet gesendet wurde und 300 ms ruhig ist, kommt verlustfrei als PNG (höchstens 48 Kacheln je Bild). Text ist nach dem Scrollen wieder gestochen scharf.
+- **Volle Leitung:** Passt eine Kachel nicht mehr in die Sendewarteschlange, wird sie nicht als gesendet gemerkt und beim nächsten Bild erneut geschickt; es gibt keinen Rückstau.
+- **Videomodus:** Ändern sich mindestens 45 % des Bildschirms 5 Sekunden lang, startet der bisherige H.264-Weg (`hello` mit avc-Codec, `mode: video`); eine langsame Erfassung (4 Bilder/s) misst weiter. Nach 3 Sekunden unter 45 % geht es zurück zu Kacheln (neues `hello` `tiles`, alle Kacheln neu).
+- **Browser:** Kacheln werden parallel dekodiert (`createImageBitmap`), aber in Ankunftsreihenfolge gezeichnet; die Leinwand wird beim Wechsel nicht geleert, wenn die Größe gleich bleibt.
+- **Umgebung:** `VIEWER_TRANSPORT=auto|video` (ab Werk `auto`). „Immer Video“ ist der Weg bis 0.67.
+- **Gemessen** (8.11.2026, `viewer/test-integration.sh`, 1280×800, CPU, Testseite mit blinkender Schreibmarke): erstes Bild 95 KiB (39 JPEG- und 17 PNG-Kacheln), danach ruhig etwa 7 KB/s (nur die Schreibmarke), Tippen schickt 8 % der Fläche; Vollbild-Animation schaltet nach 5–8 s auf Video und 3,3 s nach dem Ende zurück. Nicht gemessen: Verzögerung Eingabe → Bild, gedrosselte Leitungen, 4K, GPU, echte Apps.
 `GET /api/v1/viewer/status`: Abbild geladen/lädt/fehlt, GPU-Geräte, offene Ansichten mit RAM, geschätzter Platz für weitere.
 
 ## Lebenslauf einer Ansicht
@@ -108,7 +130,7 @@ Richtung Agent lässt titand nur durch: Text-JSON ≤ 6 MiB (`proto.MaxTextMessa
 
 - Ordner: `<volume>/.titanos/viewer/`, `…/image/`, `…/profiles/` und `…/profiles/<konto>/` gehören root mit 0700 (Docker bindet als root ein, der Container sieht nur `/profile`). Ausnahme von der Regel „private Betriebsdaten gehören root“ (`docs/rules/STORAGE.md`): der Profilordner `…/profiles/<konto>/<app>` gehört UID 1000 mit 0700, weil Chromium im Container dort schreibt. titand legt jeden Ordner ohne Verfolgen von Links an (`os.Root`) und lehnt fremde Besitzer oder für andere beschreibbare Ordner ab.
 - Name `titanos-viewer-<16 Hex>` (SHA-256 von Konto und App, damit sich `a-b`/`c` und `a`/`b-c` nicht treffen); Labels `titanos.viewer=1`, `titanos.viewer.user`, `titanos.viewer.app`. Erstellt immer aus der Image-ID (`sha256:…`), nie aus einem Tag.
-- Umgebung für den Agenten: `VIEWER_URL` (z. B. `http://172.30.0.2:3001/photos`: Adresse des App-Containers im Netz der Ansicht, **Container-Port** hinter dem veröffentlichten Port des HTTPS-Namens bzw. des Labels `titanos.webui`, Pfad aus dem Label, Schema des HTTPS-Namens), `VIEWER_KEY` (32 Zufallsbytes hex, nur im RAM), `VIEWER_GPU` (`vaapi|nvenc|cpu`), `VIEWER_AUDIO` (`1|0`), `VIEWER_QUALITY`, `VIEWER_FPS`, `VIEWER_GPU_DEVICE` (Render-Knoten, nur bei VA-API), `HOME=/profile`.
+- Umgebung für den Agenten: `VIEWER_URL` (z. B. `http://172.30.0.2:3001/photos`: Adresse des App-Containers im Netz der Ansicht, **Container-Port** hinter dem veröffentlichten Port des HTTPS-Namens bzw. des Labels `titanos.webui`, Pfad aus dem Label, Schema des HTTPS-Namens), `VIEWER_KEY` (32 Zufallsbytes hex, nur im RAM), `VIEWER_GPU` (`vaapi|nvenc|cpu`), `VIEWER_AUDIO` (`1|0`), `VIEWER_QUALITY`, `VIEWER_FPS`, `VIEWER_TRANSPORT` (seit 0.68), `VIEWER_GPU_DEVICE` (Render-Knoten, nur bei VA-API), `HOME=/profile`.
 - Netz: `titanos-viewer-<16 hex>` (gleicher Name wie der Container), `Internal`, Labels wie der Container, Bridge-Name `tvw<12 hex>` (`com.docker.network.bridge.name`). Der Web-Container der App wird mit dem Alias `titanos-viewer-attached` angehängt; titand nimmt nur Endpunkte mit diesem Alias wieder ab. Vor dem Verbinden prüft titand den Container per ID: läuft er nicht mehr oder hat er im Netz der Ansicht eine andere Adresse, wird die Ansicht beendet und einmal neu gestartet.
 - Host-Regeln: eigene nft-Tabelle `inet titanos_viewer` (unabhängig davon, ob die Firewall von TitanOS an ist; vor jedem Start neu geladen, nicht im Entwicklungsmodus): im Eingang des Hosts von `iifname "tvw*"` nur Antworten (`ct state established,related`), alles Neue wird verworfen. Ein Browser in einer Ansicht erreicht so über das Gateway seines Netzes keinen Dienst des NAS; titand selbst verbindet sich von außen zum Agenten, dessen Antworten kommen als „established“ zurück.
 - Richtlinie: `/run/titanos/viewer/<container>/titanos.json` (Ordner root 0755, Datei 0444, im RAM), nur lesbar eingebunden als `/etc/chromium/policies/managed/titanos.json` (`proto.PolicyPath`; der Ordner im Abbild gehört root und enthält sonst nichts). Wird mit der Ansicht gelöscht; beim Start von titand der ganze Ordner `/run/titanos/viewer`.

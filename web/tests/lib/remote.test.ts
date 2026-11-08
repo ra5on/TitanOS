@@ -18,7 +18,9 @@ import {
 	missingSupport,
 	parseAudio,
 	parseMessage,
+	parseTile,
 	parseVideo,
+	sanitizeView,
 	sanitizeImage,
 	sanitizeSettings,
 	sanitizeStatus,
@@ -242,9 +244,12 @@ test('settings and status from the NAS are read tolerantly', () => {
 		gpu: 'auto',
 		quality: 'auto',
 		fps: 60,
+		transport: 'auto',
 		audio: true,
 		volume: '',
 	});
+	expect(sanitizeSettings({ transport: 'video' }).transport).toBe('video');
+	expect(sanitizeSettings({ transport: 'rtsp' }).transport).toBe('auto');
 	expect(sanitizeSettings({ gpu: '/dev/dri/renderD128', fps: 30, audio: false })).toMatchObject({
 		gpu: '/dev/dri/renderD128',
 		fps: 30,
@@ -297,4 +302,23 @@ test('support: WebCodecs needs a secure page', () => {
 	expect(missingSupport({ VideoDecoder: function () {} })).toBeNull();
 	expect(missingSupport({ isSecureContext: false })).toBe('insecure');
 	expect(missingSupport({ isSecureContext: true })).toBe('webcodecs');
+});
+
+// PLAN 72: tiles (0x04) and the mode message.
+test('tiles are parsed with codec and area, broken ones refused', () => {
+	const buf = new Uint8Array([4, 2, 0, 64, 0, 128, 0, 32, 0, 16, 0x89, 0x50]).buffer;
+	const tile = parseTile(buf);
+	expect(tile).toMatchObject({ type: 'image/png', x: 64, y: 128, w: 32, h: 16 });
+	expect([...tile!.data]).toEqual([0x89, 0x50]);
+	expect(parseTile(new Uint8Array([4, 1, 0, 0, 0, 0, 0, 8, 0, 8, 0xff]).buffer)?.type).toBe(
+		'image/jpeg',
+	);
+	expect(parseTile(new Uint8Array([4, 3, 0, 0, 0, 0, 0, 8, 0, 8, 1]).buffer)).toBeNull();
+	expect(parseTile(new Uint8Array([4, 1, 0, 0, 0, 0, 0, 0, 0, 8, 1]).buffer)).toBeNull();
+	expect(parseTile(new Uint8Array([1, 1, 0, 0, 0, 0, 0, 8, 0, 8, 1]).buffer)).toBeNull();
+	expect(parseTile(new Uint8Array([4, 1, 0]).buffer)).toBeNull();
+	expect(parseMessage('{"t":"mode","mode":"tiles"}')).toEqual({ t: 'mode', mode: 'tiles' });
+	expect(parseMessage('{"t":"mode","mode":"x"}')).toBeNull();
+	expect(sanitizeView({ transport: 'video' }).transport).toBe('video');
+	expect(sanitizeView({ transport: 'other' }).transport).toBeUndefined();
 });

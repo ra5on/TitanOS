@@ -26,8 +26,12 @@ type Settings struct {
 	// Quality is "auto", "high", "balanced" or "low".
 	Quality string `json:"quality"`
 	// FPS is 30 or 60.
-	FPS   int  `json:"fps"`
-	Audio bool `json:"audio"`
+	FPS int `json:"fps"`
+	// Transport is "auto" (changed tiles, H.264 while much of the screen
+	// moves) or "video" (always H.264, the mode before 0.68). PLAN 72;
+	// older versions ignore the field.
+	Transport string `json:"transport,omitempty"`
+	Audio     bool   `json:"audio"`
 	// Volume holds the image and the browser profiles; "" is Docker's volume.
 	Volume string `json:"volume"`
 }
@@ -37,7 +41,7 @@ var ErrInvalid = errors.New("viewer: invalid setting")
 
 // Defaults are the settings without a file.
 func Defaults() Settings {
-	return Settings{GPU: "auto", Quality: "auto", FPS: 30, Audio: true}
+	return Settings{GPU: "auto", Quality: "auto", FPS: 30, Transport: "auto", Audio: true}
 }
 
 var volumeName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
@@ -59,6 +63,9 @@ func Validate(s Settings, gpus []GPU, volumes []string) error {
 	if s.FPS != 30 && s.FPS != 60 {
 		return fmt.Errorf("%w: fps must be 30 or 60", ErrInvalid)
 	}
+	if s.Transport != "" && s.Transport != "auto" && s.Transport != "video" {
+		return fmt.Errorf("%w: transport", ErrInvalid)
+	}
 	if s.Volume != "" && (!volumeName.MatchString(s.Volume) || !slices.Contains(volumes, s.Volume)) {
 		return fmt.Errorf("%w: volume %q is not mounted", ErrInvalid, s.Volume)
 	}
@@ -76,6 +83,9 @@ func normalize(s Settings) Settings {
 	}
 	if s.FPS == 0 {
 		s.FPS = d.FPS
+	}
+	if s.Transport == "" {
+		s.Transport = d.Transport
 	}
 	return s
 }

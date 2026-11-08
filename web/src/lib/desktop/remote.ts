@@ -6,6 +6,10 @@
 export const MSG_VIDEO = 0x01;
 export const MSG_AUDIO = 0x02;
 export const MSG_UPLOAD = 0x03;
+/** PLAN 72: a changed area of the screen as a picture (tile mode). */
+export const MSG_TILE = 0x04;
+/** Hello codec of the tile mode. */
+export const CODEC_TILES = 'tiles';
 /** Largest piece of an upload in one message. */
 export const UPLOAD_CHUNK = 256 * 1024;
 /** Waiting for the socket to drain above this many buffered bytes (uploads). */
@@ -34,6 +38,35 @@ export function parseVideo(buf: ArrayBuffer): VideoPacket | null {
 	return {
 		key: (view.getUint8(1) & 1) === 1,
 		timestamp: u64(view, 2),
+		data: new Uint8Array(buf, 10),
+	};
+}
+
+export type TilePacket = {
+	type: 'image/jpeg' | 'image/png';
+	x: number;
+	y: number;
+	w: number;
+	h: number;
+	data: Uint8Array;
+};
+
+/** 0x04 | codec (1 JPEG, 2 PNG) | u16 x, y, w, h | picture. Null when broken. */
+export function parseTile(buf: ArrayBuffer): TilePacket | null {
+	if (buf.byteLength < 11) return null;
+	const view = new DataView(buf);
+	if (view.getUint8(0) !== MSG_TILE) return null;
+	const codec = view.getUint8(1);
+	if (codec !== 1 && codec !== 2) return null;
+	const w = view.getUint16(6);
+	const h = view.getUint16(8);
+	if (!w || !h) return null;
+	return {
+		type: codec === 1 ? 'image/jpeg' : 'image/png',
+		x: view.getUint16(2),
+		y: view.getUint16(4),
+		w,
+		h,
 		data: new Uint8Array(buf, 10),
 	};
 }
@@ -99,6 +132,7 @@ export type ViewerError =
 export type ServerMessage =
 	| { t: 'hello'; codec: string; width: number; height: number; gpu: Gpu; audio: boolean }
 	| { t: 'stats'; fps: number; kbps: number; latencyMs: number }
+	| { t: 'mode'; mode: 'tiles' | 'video' }
 	| { t: 'clipboard'; text: string }
 	| { t: 'download'; name: string; size: number; id: string }
 	| { t: 'cursor'; shape: string }
@@ -151,6 +185,9 @@ export function parseMessage(text: string): ServerMessage | null {
 		}
 		case 'stats':
 			return { t: 'stats', fps: num(m.fps), kbps: num(m.kbps), latencyMs: num(m.latencyMs) };
+		case 'mode':
+			if (m.mode !== 'tiles' && m.mode !== 'video') return null;
+			return { t: 'mode', mode: m.mode };
 		case 'clipboard':
 			return { t: 'clipboard', text: str(m.text) };
 		case 'download':
@@ -368,7 +405,16 @@ export const QUALITIES: Quality[] = ['auto', 'high', 'balanced', 'low'];
  * Volume and mute per app; quality and frame rate only once chosen in the
  * window (until then the NAS's settings apply).
  */
-export type ViewPrefs = { volume: number; muted: boolean; quality?: Quality; fps?: 30 | 60 };
+export type ViewPrefs = {
+	volume: number;
+	muted: boolean;
+	quality?: Quality;
+	fps?: 30 | 60;
+	/** PLAN 72: "auto" tiles (video while much moves) or always "video". */
+	transport?: Transport;
+};
+export type Transport = 'auto' | 'video';
+export const TRANSPORTS: Transport[] = ['auto', 'video'];
 export const DEFAULT_VOLUME = 0.65;
 const prefsKey = (app: string) => 'titanos.viewer.' + app;
 
@@ -380,6 +426,8 @@ export function sanitizeView(v: unknown): ViewPrefs {
 	const quality = QUALITIES.find((q) => q === o.quality);
 	if (quality) out.quality = quality;
 	if (o.fps === 30 || o.fps === 60) out.fps = o.fps;
+	const transport = TRANSPORTS.find((x) => x === o.transport);
+	if (transport) out.transport = transport;
 	return out;
 }
 
@@ -405,6 +453,8 @@ export type ViewerSettings = {
 	gpu: string;
 	quality: Quality;
 	fps: 30 | 60;
+	/** PLAN 72: tiles with video while much moves, or always video. */
+	transport: Transport;
 	audio: boolean;
 	volume: string;
 };
@@ -456,6 +506,7 @@ export function sanitizeSettings(v: unknown): ViewerSettings {
 		gpu: str(o.gpu) || 'auto',
 		quality: QUALITIES.find((q) => q === o.quality) ?? 'auto',
 		fps: o.fps === 30 ? 30 : 60,
+		transport: TRANSPORTS.find((x) => x === o.transport) ?? 'auto',
 		audio: o.audio !== false,
 		volume: str(o.volume),
 	};

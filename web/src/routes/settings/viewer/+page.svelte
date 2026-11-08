@@ -230,6 +230,23 @@
 			</div>
 			<div class="row">
 				<div class="label">
+					<b>{t('viewer.settings.transport')}</b>
+					<p class="muted hint">{t('viewer.settings.transportHint')}</p>
+				</div>
+				<div class="control">
+					<Segments
+						options={[
+							{ value: 'auto', label: t('viewer.transport.auto') },
+							{ value: 'video', label: t('viewer.transport.video') },
+						]}
+						bind:value={draft.transport}
+						label={t('viewer.settings.transport')}
+						onchange={() => changed()}
+					/>
+				</div>
+			</div>
+			<div class="row">
+				<div class="label">
 					<b>{t('viewer.settings.audio')}</b>
 					<p class="muted hint">{t('viewer.settings.audioHint')}</p>
 				</div>
