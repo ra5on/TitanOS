@@ -65,20 +65,26 @@ try {
     const { ctx, page, data } = await context("owner", theme, width);
     data.system = { ...data.system, temperatures };
     let muted = [id(2)];
+    let heatShutdown = false;
     const puts = [];
     const answer = () => ({
       muted,
+      heatShutdown,
       sensors: temperatures.map((t) => ({
         id: t.id,
         limit: limits[t.id],
         own: own[t.id] ?? false,
         muted: muted.includes(t.id),
+        // PLAN 75-9: only a reliable chip with its own critical value.
+        shutdown: t.chip === "coretemp",
       })),
     });
     await page.route("**/api/v1/notifications/temperatures", (route) => {
       if (route.request().method() === "PUT") {
         puts.push(route.request().postDataJSON());
         muted = puts.at(-1).muted;
+        if (typeof puts.at(-1).heatShutdown === "boolean")
+          heatShutdown = puts.at(-1).heatShutdown;
       }
       return route.fulfill({ json: answer() });
     });
@@ -117,6 +123,35 @@ try {
       fullPage: true,
       animations: "disabled",
     });
+    // PLAN 75-9: the heat shutdown, off by default, names its sensors.
+    const heat = panel.getByRole("switch", {
+      name: "Bei Überhitzung herunterfahren",
+    });
+    assert.equal(await heat.isChecked(), false);
+    assert.ok(
+      await panel
+        .getByText("fährt das NAS geordnet herunter", { exact: false })
+        .isVisible(),
+    );
+    assert.ok(
+      await panel
+        .getByText(": coretemp Package id 0. Ab Werk aus.", { exact: false })
+        .isVisible(),
+    );
+    if (width === 1440) {
+      await heat.check();
+      await panel.getByText("Meldungen gespeichert.").waitFor();
+      assert.deepEqual(puts.at(-1), { muted: [id(2)], heatShutdown: true });
+      assert.ok(await heat.isChecked());
+      await panel.screenshot({
+        path: `${out}/heat-on.png`,
+        animations: "disabled",
+      });
+      await heat.uncheck();
+      await page.waitForTimeout(300);
+      assert.deepEqual(puts.at(-1), { muted: [id(2)], heatShutdown: false });
+      puts.length = 0;
+    }
     if (width === 1440) {
       await cpu.uncheck();
       await panel.getByText("Meldungen gespeichert.").waitFor();
