@@ -5,9 +5,12 @@ import (
 	"encoding/binary"
 	"image/jpeg"
 	"image/png"
+	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/image/webp"
 
 	"github.com/ra5on/TitanOS/backend/internal/viewer/proto"
 )
@@ -136,7 +139,7 @@ func TestEncodeTileKeepsColoursAndHeader(t *testing.T) {
 	f := frameOf(100, 80, 0, 0, 0)
 	paint(f, 100, 10, 20, 74, 84-20, 30, 60, 200) // BGR: red-ish
 	r := rect{10, 20, 64, 40}
-	msg, err := encodeTile(f, 100, r, true, 0)
+	msg, err := encodeTile(f, 100, tileJob{r: r, lossless: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +156,7 @@ func TestEncodeTileKeepsColoursAndHeader(t *testing.T) {
 	if cr>>8 != 200 || cg>>8 != 60 || cb>>8 != 30 || img.Bounds().Dx() != 64 || img.Bounds().Dy() != 40 {
 		t.Fatalf("pixel %d %d %d, %v", cr>>8, cg>>8, cb>>8, img.Bounds())
 	}
-	msg, err = encodeTile(f, 100, r, false, 80)
+	msg, err = encodeTile(f, 100, tileJob{r: r, quality: 80})
 	if err != nil || msg[1] != proto.TileJPEG {
 		t.Fatal(err)
 	}
@@ -201,5 +204,81 @@ func TestTileGridKnownPerTile(t *testing.T) {
 	g2.commit(f, changed[1:], true)
 	if changed, _ = g2.diff(f, now); len(changed) != 1 || changed[0] != 0 {
 		t.Fatalf("unsent tile: %v", changed)
+	}
+}
+
+// PLAN 72, Kasm-Reste: lossless tiles as WebP for a browser that reads it,
+// with the same pixels as the PNG.
+func TestEncodeTileWebP(t *testing.T) {
+	f := frameOf(100, 80, 0, 0, 0)
+	paint(f, 100, 10, 20, 74, 60, 30, 60, 200)
+	paint(f, 100, 40, 30, 50, 40, 255, 255, 255)
+	r := rect{10, 20, 64, 40}
+	msg, err := encodeTile(f, 100, tileJob{r: r, lossless: true, webp: true})
+	if err != nil || msg[1] != proto.TileWebP {
+		t.Fatalf("% x %v", msg[:2], err)
+	}
+	img, err := webp.Decode(bytes.NewReader(msg[proto.TileHeaderSize:]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref, _ := encodeTile(f, 100, tileJob{r: r, lossless: true})
+	want, _ := png.Decode(bytes.NewReader(ref[proto.TileHeaderSize:]))
+	for y := 0; y < r.H; y++ {
+		for x := 0; x < r.W; x++ {
+			a1, b1, c1, _ := img.At(x, y).RGBA()
+			a2, b2, c2, _ := want.At(x, y).RGBA()
+			if a1 != a2 || b1 != b2 || c1 != c2 {
+				t.Fatalf("pixel %d,%d differs", x, y)
+			}
+		}
+	}
+}
+
+// Encoding on all cores keeps the order of the areas.
+func TestEncodeAllKeepsOrder(t *testing.T) {
+	f := frameOf(640, 64, 9, 9, 9)
+	var jobs []tileJob
+	for i := 0; i < 10; i++ {
+		jobs = append(jobs, tileJob{r: rect{i * 64, 0, 64, 64}, tiles: []int{i}, quality: 70, lossless: i%3 == 0, webp: i%2 == 0})
+	}
+	old := encodeWorkers
+	defer func() { encodeWorkers = old }()
+	encodeWorkers = 4
+	msgs, errs := encodeAll(f, 640, jobs)
+	for i, m := range msgs {
+		if errs[i] != nil || binary.BigEndian.Uint16(m[2:]) != uint16(i*64) {
+			t.Fatalf("job %d: x=%d err=%v", i, binary.BigEndian.Uint16(m[2:]), errs[i])
+		}
+	}
+	if !slices.Contains([]byte{proto.TileWebP}, msgs[0][1]) || msgs[1][1] != proto.TileJPEG || msgs[3][1] != proto.TilePNG {
+		t.Fatalf("codecs %d %d %d", msgs[0][1], msgs[1][1], msgs[3][1])
+	}
+}
+
+// The video mode sends at most 1920×1080, aspect kept, even sizes.
+func TestFitVideoAndScaledPipeline(t *testing.T) {
+	for _, c := range []struct{ w, h, ow, oh int }{
+		{1280, 800, 1280, 800}, {1920, 1080, 1920, 1080}, {3840, 2160, 1920, 1080},
+		{2560, 1600, 1728, 1080}, {3440, 1440, 1920, 802}, {1080, 2400, 486, 1080},
+	} {
+		if ow, oh := fitVideo(c.w, c.h); ow != c.ow || oh != c.oh {
+			t.Errorf("%dx%d → %dx%d, want %dx%d", c.w, c.h, ow, oh, c.ow, c.oh)
+		}
+	}
+	args, err := pipelineArgs(encoderParams{GPU: "cpu", W: 3840, H: 2160, OutW: 1920, OutH: 1080, FPS: 30, Kbps: 4000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := strings.Join(args, " ")
+	for _, want := range []string{"endx=3839", "videoscale", "format=I420,width=1920,height=1080"} {
+		if !strings.Contains(line, want) {
+			t.Fatalf("%q missing in %s", want, line)
+		}
+	}
+	// Same size: no scaling in the pipeline.
+	args, _ = pipelineArgs(encoderParams{GPU: "cpu", W: 1280, H: 800, OutW: 1280, OutH: 800, FPS: 30, Kbps: 4000})
+	if strings.Contains(strings.Join(args, " "), "videoscale") {
+		t.Fatal("scaled without need")
 	}
 }

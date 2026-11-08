@@ -34,6 +34,7 @@
 		parseAudio,
 		parseMessage,
 		parseTile,
+		crispScale,
 		parseVideo,
 		QUALITIES,
 		sanitizeStatus,
@@ -161,6 +162,10 @@
 			? fitRect(box.w, box.h, hello.width, hello.height)
 			: { left: 0, top: 0, width: 0, height: 0 },
 	);
+	// PLAN 72: integer enlargement without smoothing (sharp text), as KasmVNC.
+	const crisp = $derived(
+		!!hello && crispScale(shown.width, hello.width, globalThis.devicePixelRatio ?? 1),
+	);
 	const live = $derived(phase === 'live');
 	const stateWord = $derived(
 		phase === 'live'
@@ -208,6 +213,7 @@
 					t: 'quality',
 					mode: prefs.quality ?? 'auto',
 					fps: prefs.fps ?? 30,
+					webp: true,
 					...(prefs.transport ? { transport: prefs.transport } : {}),
 				});
 		};
@@ -626,7 +632,7 @@
 		prefs.fps = fps;
 		prefs.transport = transport;
 		saveView(app, $state.snapshot(prefs));
-		send({ t: 'quality', mode, fps, transport });
+		send({ t: 'quality', mode, fps, transport, webp: true });
 	}
 
 	// ---- Size ----
@@ -1295,6 +1301,7 @@
 			style:top="{shown.top}px"
 			style:width="{shown.width}px"
 			style:height="{shown.height}px"
+			style:image-rendering={crisp ? 'pixelated' : undefined}
 			style:cursor
 			tabindex="0"
 			aria-label={t('viewer.screen', { app: title })}

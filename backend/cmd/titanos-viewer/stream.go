@@ -124,26 +124,31 @@ func (c *client) onFrame(t *tileStream, w int, frame []byte) {
 	c.a.mu.Lock()
 	quality := c.a.quality
 	c.a.mu.Unlock()
-	sent := false
+	webp := c.webp.Load()
+	// Changed areas (lossy) and calm ones (lossless), encoded on all cores.
+	var jobs []tileJob
 	for _, run := range t.grid.runs(changed) {
 		moving := false
 		for _, i := range run.tiles {
 			moving = moving || t.grid.moving(i)
 		}
-		msg, err := encodeTile(frame, w, run.r, false, jpegQuality(quality, moving))
-		if err != nil || !c.trySend(outMsg{typ: websocket.MessageBinary, data: msg, enq: now, vid: true}) {
-			// Not committed: the tiles count as changed again next frame.
-			continue
-		}
-		t.grid.commit(frame, run.tiles, true)
-		sent = true
+		jobs = append(jobs, tileJob{r: run.r, tiles: run.tiles, quality: jpegQuality(quality, moving)})
 	}
+	lossy := len(jobs)
 	for _, run := range t.grid.runs(t.grid.sharpen(now, sharpenBudget)) {
-		msg, err := encodeTile(frame, w, run.r, true, 0)
-		if err != nil || !c.trySend(outMsg{typ: websocket.MessageBinary, data: msg, enq: now, vid: true}) {
+		jobs = append(jobs, tileJob{r: run.r, tiles: run.tiles, lossless: true, webp: webp})
+	}
+	msgs, errs := encodeAll(frame, w, jobs)
+	sent := false
+	for i, j := range jobs {
+		if errs[i] != nil || !c.trySend(outMsg{typ: websocket.MessageBinary, data: msgs[i], enq: now, vid: true}) {
+			if i < lossy {
+				// Not committed: the tiles count as changed again next frame.
+				continue
+			}
 			break
 		}
-		t.grid.commit(frame, run.tiles, false)
+		t.grid.commit(frame, j.tiles, !j.lossless)
 		sent = true
 	}
 	if sent {

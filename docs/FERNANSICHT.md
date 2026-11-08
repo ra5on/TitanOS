@@ -26,7 +26,7 @@ Ein WebSocket, `GET /api/v1/viewer/{app}/stream` (Anmeldung, Recht auf die App w
 | `0x01` Video | Agent → Browser | Byte 1: Flags (Bit 0 = Schlüsselbild); Byte 2–9: Zeitstempel in µs (uint64, big endian); Rest: eine H.264-Zugriffseinheit (Annex B, mit Startcodes) |
 | `0x02` Ton | Agent → Browser | Byte 1–8: Zeitstempel in µs; Rest: ein Opus-Paket (48 kHz, Stereo, 20 ms) |
 | `0x03` Datei-Teil | Browser → Agent | Hochladen: Byte 1–4 Upload-Nummer (uint32), Rest Daten (höchstens 256 KiB je Nachricht) |
-| `0x04` Kachel (seit 0.68) | Agent → Browser | Byte 1: 1 = JPEG, 2 = PNG (verlustfrei); Byte 2–9: x, y, Breite, Höhe (je uint16, big endian); Rest: das Bild dieses Bereichs. Nur während `hello.codec` `"tiles"` ist |
+| `0x04` Kachel (seit 0.68) | Agent → Browser | Byte 1: 1 = JPEG, 2 = PNG (verlustfrei), 3 = WebP verlustfrei (seit 0.69, nur wenn der Browser `webp: true` in `size`/`quality` schickt); Byte 2–9: x, y, Breite, Höhe (je uint16, big endian); Rest: das Bild dieses Bereichs. Nur während `hello.codec` `"tiles"` ist |
 
 **Text-Nachrichten** – JSON mit `"t"`:
 
@@ -69,12 +69,21 @@ Nach dem Vorbild von KasmVNC, selbst geschrieben (`backend/cmd/titanos-viewer/ti
 - **Erfassen:** eine zweite GStreamer-Leitung liefert rohe Bilder (`ximagesrc … ! videoconvert ! BGRx ! fdsink fd=3`) mit der eingestellten Bildrate.
 - **Vergleichen:** Kacheln von 64 × 64 Bildpunkten, Zeile für Zeile mit dem zuletzt **gesendeten** Stand verglichen. Nur geänderte Kacheln gehen raus, waagrecht benachbarte einer Zeile als ein Rechteck.
 - **Qualität je Bereich:** JPEG, wo sich etwas bewegt (in 3 der letzten 5 Bilder geändert) mit niedrigerer Qualität, sonst höher (`auto` 80/55, `high` 90/75, `balanced` 75/50, `low` 55/35).
-- **Nachschärfen:** Ein Bereich, der verlustbehaftet gesendet wurde und 300 ms ruhig ist, kommt verlustfrei als PNG (höchstens 48 Kacheln je Bild). Text ist nach dem Scrollen wieder gestochen scharf.
+- **Nachschärfen:** Ein Bereich, der verlustbehaftet gesendet wurde und 300 ms ruhig ist, kommt verlustfrei (höchstens 48 Kacheln je Bild). Text ist nach dem Scrollen wieder gestochen scharf.
+  - Seit 0.69 kommt er als **WebP verlustfrei**, kodiert mit `nativewebp` (reines Go, MIT, ohne libwebp). Das ist kleiner und schneller als PNG.
+  - Ältere Seiten melden kein `webp` und bekommen weiter PNG.
+  - Verlustbehaftetes WebP gibt es in Go nicht ohne cgo; die bewegten Bereiche bleiben JPEG. So fällt auch KasmVNC ohne Zeitbudget auf JPEG zurück.
+- **Alle Kerne** (seit 0.69): Die Bereiche eines Bildes werden parallel kodiert, höchstens 8 gleichzeitig, und in ihrer Reihenfolge gesendet.
 - **Volle Leitung:** Passt eine Kachel nicht mehr in die Sendewarteschlange, wird sie nicht als gesendet gemerkt und beim nächsten Bild erneut geschickt; es gibt keinen Rückstau.
 - **Videomodus:** Ändern sich mindestens 45 % des Bildschirms 5 Sekunden lang, startet der bisherige H.264-Weg (`hello` mit avc-Codec, `mode: video`); eine langsame Erfassung (4 Bilder/s) misst weiter. Nach 3 Sekunden unter 45 % geht es zurück zu Kacheln (neues `hello` `tiles`, alle Kacheln neu).
+  - Seit 0.69 ist das Video im Videomodus **höchstens 1920 × 1080**, wie bei KasmVNC: Ein größerer Bildschirm wird mit gleichem Seitenverhältnis verkleinert (CPU: `videoscale`, VA-API: auf der GPU im Postprozessor). Die Bitrate richtet sich nach der kleineren Größe.
+  - `hello` nennt weiter die Bildschirmgröße; der Browser zieht das Bild beim Zeichnen auf die Leinwand, Mauskoordinaten bleiben die des Bildschirms.
+  - „Immer Video“ behält die volle Größe.
+- **Skalierung im Browser** (seit 0.69, wie KasmVNC): Bei ganzzahliger Vergrößerung (in Gerätepixeln 2×, 3× …) zeichnet die Leinwand ohne Weichzeichnen (`image-rendering: pixelated`), sonst geglättet.
 - **Browser:** Kacheln werden parallel dekodiert (`createImageBitmap`), aber in Ankunftsreihenfolge gezeichnet; die Leinwand wird beim Wechsel nicht geleert, wenn die Größe gleich bleibt.
 - **Umgebung:** `VIEWER_TRANSPORT=auto|video` (ab Werk `auto`). „Immer Video“ ist der Weg bis 0.67.
 - **Gemessen** (8.11.2026, `viewer/test-integration.sh`, 1280×800, CPU, Testseite mit blinkender Schreibmarke): erstes Bild 95 KiB (39 JPEG- und 17 PNG-Kacheln), danach ruhig etwa 7 KB/s (nur die Schreibmarke), Tippen schickt 8 % der Fläche; Vollbild-Animation schaltet nach 5–8 s auf Video und 3,3 s nach dem Ende zurück. Nicht gemessen: Verzögerung Eingabe → Bild, gedrosselte Leitungen, 4K, GPU, echte Apps.
+- **Gemessen 0.69** (8.11.2026, gleicher Test): Die 21 nachgeschärften Kacheln kamen alle als WebP, ein ruhiger Bildschirm braucht etwa 2,4 KB/s, Video nach 7,8 s und zurück nach 3,3 s. Die verkleinerte Pipeline (3840 × 2160 → 1920 × 1080, x264) lief im Abbild mit `videotestsrc`. Nicht gemessen: echter 4K-Bildschirm mit Videomodus, VA-API-Verkleinerung, Gewinn durch alle Kerne auf echter Hardware.
 `GET /api/v1/viewer/status`: Abbild geladen/lädt/fehlt, GPU-Geräte, offene Ansichten mit RAM, geschätzter Platz für weitere.
 
 ## Lebenslauf einer Ansicht

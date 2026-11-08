@@ -16,9 +16,12 @@ import (
 	"image/png"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/HugoSmits86/nativewebp"
 
 	"github.com/ra5on/TitanOS/backend/internal/viewer/proto"
 )
@@ -176,22 +179,72 @@ func cut(frame []byte, w int, r rect) *image.RGBA {
 
 var pngEncoder = png.Encoder{CompressionLevel: png.BestSpeed}
 
+// tileJob is one area to encode: lossy (JPEG at quality) or lossless (WebP
+// when the browser reads it, else PNG).
+type tileJob struct {
+	r        rect
+	tiles    []int
+	lossless bool
+	quality  int
+	webp     bool
+}
+
 // encodeTile builds one 0x04 message.
-func encodeTile(frame []byte, w int, r rect, lossless bool, quality int) ([]byte, error) {
+func encodeTile(frame []byte, w int, j tileJob) ([]byte, error) {
 	var buf bytes.Buffer
 	codec := proto.TileJPEG
-	if lossless {
+	switch {
+	case j.lossless && j.webp:
+		codec = proto.TileWebP
+	case j.lossless:
 		codec = proto.TilePNG
 	}
-	buf.Write(proto.TileHeader(codec, r.X, r.Y, r.W, r.H))
-	img := cut(frame, w, r)
+	buf.Write(proto.TileHeader(codec, j.r.X, j.r.Y, j.r.W, j.r.H))
+	img := cut(frame, w, j.r)
 	var err error
-	if lossless {
+	switch codec {
+	case proto.TileWebP:
+		err = nativewebp.Encode(&buf, img, &nativewebp.Options{CompressionLevel: nativewebp.BestSpeed})
+	case proto.TilePNG:
 		err = pngEncoder.Encode(&buf, img)
-	} else {
-		err = jpeg.Encode(&buf, img, &jpeg.Options{Quality: quality})
+	default:
+		err = jpeg.Encode(&buf, img, &jpeg.Options{Quality: j.quality})
 	}
 	return buf.Bytes(), err
+}
+
+// encodeWorkers is how many areas are encoded side by side: all cores, at
+// most eight (KasmVNC compresses on all cores too).
+var encodeWorkers = min(max(runtime.NumCPU(), 1), 8)
+
+// encodeAll encodes the jobs side by side and returns the messages in the
+// order of the jobs (an older area never covers a newer one in the browser).
+func encodeAll(frame []byte, w int, jobs []tileJob) ([][]byte, []error) {
+	msgs := make([][]byte, len(jobs))
+	errs := make([]error, len(jobs))
+	if len(jobs) <= 1 || encodeWorkers <= 1 {
+		for i, j := range jobs {
+			msgs[i], errs[i] = encodeTile(frame, w, j)
+		}
+		return msgs, errs
+	}
+	next := make(chan int)
+	var wg sync.WaitGroup
+	for range min(encodeWorkers, len(jobs)) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range next {
+				msgs[i], errs[i] = encodeTile(frame, w, jobs[i])
+			}
+		}()
+	}
+	for i := range jobs {
+		next <- i
+	}
+	close(next)
+	wg.Wait()
+	return msgs, errs
 }
 
 // jpegQuality maps the quality setting to JPEG qualities for calm and

@@ -31,6 +31,9 @@ const (
 const (
 	TileJPEG byte = 1 // lossy, while the area changes
 	TilePNG  byte = 2 // lossless, once the area is calm again ("sharpen")
+	// TileWebP is lossless WebP for the same (PLAN 72, Kasm-Reste): smaller
+	// and faster than PNG; only sent to a browser that says it reads it.
+	TileWebP byte = 3
 )
 
 // CodecTiles is the hello codec of the tile mode.
@@ -110,9 +113,12 @@ type ClientMsg struct {
 	FPS     int     `json:"fps,omitempty"`
 	// Transport of a quality message: "auto" or "video" (PLAN 72).
 	Transport string `json:"transport,omitempty"`
-	ID        uint32 `json:"id,omitempty"`
-	Name      string `json:"name,omitempty"`
-	Size      int64  `json:"size,omitempty"`
+	// WebP: the browser takes lossless tiles as WebP (size and quality
+	// messages, PLAN 72). Older pages leave it out and get PNG.
+	WebP bool   `json:"webp,omitempty"`
+	ID   uint32 `json:"id,omitempty"`
+	Name string `json:"name,omitempty"`
+	Size int64  `json:"size,omitempty"`
 }
 
 // Client message types.

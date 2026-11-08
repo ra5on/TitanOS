@@ -59,6 +59,8 @@ type client struct {
 
 	audio *audioStream
 	tiles *tileStream // tile mode or its measuring capture, guarded by vmu
+	// webp: the browser reads lossless tiles as WebP (size/quality messages).
+	webp atomic.Bool
 
 	frames   atomic.Int64
 	bytes    atomic.Int64
@@ -315,6 +317,9 @@ func (c *client) control() {
 			m := ev.msg
 			switch m.T {
 			case proto.MsgSize:
+				if m.WebP {
+					c.webp.Store(true)
+				}
 				pendingSize = m
 				sizeTimer = time.After(150 * time.Millisecond)
 			case proto.MsgKeyframe:
@@ -323,6 +328,9 @@ func (c *client) control() {
 					restart()
 				}
 			case proto.MsgQuality:
+				if m.WebP {
+					c.webp.Store(true)
+				}
 				a.mu.Lock()
 				if m.Mode != "" {
 					a.quality = m.Mode
@@ -437,7 +445,13 @@ func (c *client) startVideo(factor float64) {
 	if a.gpuFailed {
 		p.GPU = "cpu"
 	}
-	p.Kbps = bitrate(p.W, p.H, p.FPS, a.quality, factor)
+	// PLAN 72: the video mode of "auto" (much of the screen moves) sends at
+	// most 1920×1080, like KasmVNC; "Immer Video" keeps the full size.
+	if a.transport == proto.TransportAuto {
+		p.OutW, p.OutH = fitVideo(p.W, p.H)
+	}
+	ow, oh := p.out()
+	p.Kbps = bitrate(ow, oh, p.FPS, a.quality, factor)
 	a.mu.Unlock()
 	for {
 		ok := c.tryVideo(p)

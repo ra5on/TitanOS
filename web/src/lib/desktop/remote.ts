@@ -43,7 +43,7 @@ export function parseVideo(buf: ArrayBuffer): VideoPacket | null {
 }
 
 export type TilePacket = {
-	type: 'image/jpeg' | 'image/png';
+	type: 'image/jpeg' | 'image/png' | 'image/webp';
 	x: number;
 	y: number;
 	w: number;
@@ -57,12 +57,13 @@ export function parseTile(buf: ArrayBuffer): TilePacket | null {
 	const view = new DataView(buf);
 	if (view.getUint8(0) !== MSG_TILE) return null;
 	const codec = view.getUint8(1);
-	if (codec !== 1 && codec !== 2) return null;
+	// 1 JPEG (moving), 2 PNG and 3 WebP (lossless, PLAN 72).
+	if (codec !== 1 && codec !== 2 && codec !== 3) return null;
 	const w = view.getUint16(6);
 	const h = view.getUint16(8);
 	if (!w || !h) return null;
 	return {
-		type: codec === 1 ? 'image/jpeg' : 'image/png',
+		type: codec === 1 ? 'image/jpeg' : codec === 3 ? 'image/webp' : 'image/png',
 		x: view.getUint16(2),
 		y: view.getUint16(4),
 		w,
@@ -388,7 +389,20 @@ export function sizeMessage(width: number, height: number, scale: number) {
 		width: Math.max(1, Math.floor(width)),
 		height: Math.max(1, Math.floor(height)),
 		scale: Math.round(Math.max(1, Math.min(4, scale || 1)) * 100) / 100,
+		// PLAN 72: this page reads lossless tiles as WebP (smaller than PNG).
+		webp: true,
 	};
+}
+
+/**
+ * PLAN 72 (like KasmVNC): an integer enlargement is drawn without
+ * smoothing, so text stays sharp; any other factor is smoothed.
+ * `shownWidth` in CSS pixels, `ratio` the device pixel ratio.
+ */
+export function crispScale(shownWidth: number, screenWidth: number, ratio: number): boolean {
+	if (shownWidth <= 0 || screenWidth <= 0) return false;
+	const f = (shownWidth * (ratio || 1)) / screenWidth;
+	return f >= 1.98 && Math.abs(f - Math.round(f)) < 0.02;
 }
 
 /** A wheel event in pixels (lines and pages turned into pixels). */
