@@ -116,6 +116,8 @@ test('dock settings: order, sanitising and the standard set', () => {
 		opacity: 30,
 		magnify: 2,
 		position: 'bottom',
+		// PLAN 73: with the frame unless switched off.
+		border: true,
 	});
 	assert.deepEqual(sanitizeDock(null), defaultDock());
 	const prefs = sanitizeDesktop({});
