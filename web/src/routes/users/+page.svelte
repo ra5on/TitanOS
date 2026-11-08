@@ -653,6 +653,8 @@
 		display: block;
 		font-size: var(--text-sm);
 		color: var(--muted);
+		/* Cells may break anywhere (main.readable td); these hints are words. */
+		overflow-wrap: break-word;
 	}
 	.role {
 		width: auto;
