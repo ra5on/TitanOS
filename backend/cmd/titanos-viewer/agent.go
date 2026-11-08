@@ -36,11 +36,12 @@ type agent struct {
 	scale     float64
 	fps       int
 	quality   string
+	transport string
 	gpuFailed bool
 }
 
 func newAgent(cfg config) (*agent, error) {
-	return &agent{cfg: cfg, w: cfg.Width, h: cfg.Height, scale: cfg.Scale, fps: cfg.FPS, quality: cfg.Quality}, nil
+	return &agent{cfg: cfg, w: cfg.Width, h: cfg.Height, scale: cfg.Scale, fps: cfg.FPS, quality: cfg.Quality, transport: cfg.Transport}, nil
 }
 
 // keyOK compares the session key in constant time.

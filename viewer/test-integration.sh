@@ -71,6 +71,17 @@ printf '%s\n' '#!/bin/sh' \
 chmod 755 "$WORK/www/cgi-bin/submit"
 echo 'hello download' >"$WORK/www/file.txt"
 echo '<html><body style="background:blue">OTHER</body></html>' >"$WORK/www2/index.html"
+# PLAN 72: the whole screen changes colour until a click (tiles → video → tiles)
+cat >"$WORK/www/motion.html" <<'EOF'
+<!doctype html><html><head><meta charset="utf-8"><title>motion</title>
+<style>html,body{margin:0;height:100%}</style></head><body>
+<canvas id="c" style="display:block;width:100vw;height:100vh"></canvas>
+<script>
+const c=document.getElementById('c'),x=c.getContext('2d');let run=true,n=0;
+function f(){c.width=innerWidth;c.height=innerHeight;if(run){for(let i=0;i<400;i++){x.fillStyle='hsl('+((n*7+i*13)%360)+',80%,50%)';x.fillRect(Math.random()*c.width,Math.random()*c.height,120,120)}}else{x.fillStyle='#204060';x.fillRect(0,0,c.width,c.height)}n++;requestAnimationFrame(f)}
+addEventListener('mousedown',()=>{run=false});f();
+</script></body></html>
+EOF
 
 docker network create --internal "$NET" >/dev/null
 docker run -d --name fern63-test-web --network "$NET" -v "$WORK/www:/www:ro" -v "$WORK/log:/log" busybox:1.37 httpd -f -vv -p 80 -h /www >/dev/null
@@ -94,7 +105,8 @@ run_viewer() {
 		--cap-drop ALL --security-opt no-new-privileges --user 1000:1000 --ipc private \
 		--memory 1536m --memory-swap 1536m --pids-limit 512 --shm-size 512m \
 		-v "$WORK/profile:/profile" -e HOME=/profile \
-		-e VIEWER_URL="http://$WEBIP:80" -e VIEWER_KEY="$KEY" -e VIEWER_AUDIO=1 "$@" \
+		-e VIEWER_URL="http://$WEBIP:80" -e VIEWER_KEY="$KEY" -e VIEWER_AUDIO=1 \
+		-e VIEWER_TRANSPORT="${TRANSPORT:-video}" "$@" \
 		"$IMAGE" >/dev/null
 }
 
@@ -268,6 +280,20 @@ else
 	bad "cookies: new container sent '${COOKIE:-none}' (stop at $STOP_MS)"
 fi
 docker rm -f fern63-test-viewer fern63-test-viewer2 >/dev/null
+
+echo "== tiles: first frame, sharpening, idle, typing (PLAN 72)"
+TRANSPORT=auto viewer fern63-test-tiles
+client -addr "$(ip_of fern63-test-tiles):7300" -key "$KEY" -phase tiles >"$WORK/tiles.log" || FAIL=1
+grep -E '^(PASS|FAIL)' "$WORK/tiles.log" | grep -v 'auth' | sed 's/^/[tiles] /'
+docker logs fern63-test-tiles 2>&1 | grep -E 'tiles:' | head -3 | sed 's/^/[tiles] /'
+docker rm -f fern63-test-tiles >/dev/null
+
+echo "== tiles switch to video while the screen moves and back (PLAN 72)"
+TRANSPORT=auto viewer fern63-test-motion -e VIEWER_URL="http://$WEBIP:80/motion.html"
+client -addr "$(ip_of fern63-test-motion):7300" -key "$KEY" -phase motion >"$WORK/motion.log" || FAIL=1
+grep -E '^(PASS|FAIL)' "$WORK/motion.log" | grep -v 'auth' | sed 's/^/[motion] /'
+docker logs fern63-test-motion 2>&1 | grep -E 'tiles:|video:' | head -6 | sed 's/^/[motion] /'
+docker rm -f fern63-test-motion >/dev/null
 
 echo "== GPU encoders fall back to the CPU"
 for gpu in vaapi nvenc; do

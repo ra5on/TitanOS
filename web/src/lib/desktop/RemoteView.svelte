@@ -3,7 +3,7 @@
 	// the app in a browser on the NAS; this view shows its picture (WebCodecs
 	// video on a canvas), plays its sound and sends mouse, keys, text, the
 	// clipboard and uploads back (protocol: docs/FERNANSICHT.md, remote.ts).
-	import { onMount, untrack } from 'svelte';
+	import { onMount, untrack, type Snippet } from 'svelte';
 	import Icon from '../components/Icon.svelte';
 	import Dropdown from '../components/Dropdown.svelte';
 	import { api } from '../api.ts';
@@ -27,15 +27,19 @@
 		mapPoint,
 		MAX_DECODE_QUEUE,
 		MSG_AUDIO,
+		MSG_TILE,
 		MSG_VIDEO,
+		CODEC_TILES,
 		missingSupport,
 		parseAudio,
 		parseMessage,
+		parseTile,
 		parseVideo,
 		QUALITIES,
 		sanitizeStatus,
 		saveView,
 		sizeMessage,
+		TRANSPORTS,
 		UPLOAD_HIGH_WATER,
 		uploadChunk,
 		viewerError,
@@ -43,6 +47,7 @@
 		type ByeReason,
 		type Gpu,
 		type Quality,
+		type Transport,
 		type ServerMessage,
 		type ImageStatus,
 		type ViewerError,
@@ -56,6 +61,7 @@
 		onback,
 		inTitle = false,
 		menuHost = null,
+		splash,
 	}: {
 		/** The Docker app (compose project) as the NAS names it. */
 		app: string;
@@ -68,6 +74,8 @@
 		inTitle?: boolean;
 		/** The open ⋯ menu of the window the controls are put into. */
 		menuHost?: HTMLElement | null;
+		/** PLAN 66/72: the app's symbol for the start picture. */
+		splash?: Snippet;
 	} = $props();
 
 	/** Moves the menu's part into the window's ⋯ menu (it stays this component's). */
@@ -93,6 +101,10 @@
 	let hello = $state<{ width: number; height: number; gpu: Gpu; audio: boolean; codec: string }>();
 	let stats = $state<{ fps: number; latencyMs: number }>();
 	let painted = $state(false);
+	let dropping = $state(false);
+	let dropNote = $state(false);
+	// PLAN 72: which transport the viewer uses right now.
+	let streamMode = $state<'tiles' | 'video'>('video');
 	let image = $state<ImageStatus>();
 	const prefs = $state(untrack(() => loadView(app)));
 	let noAudio = $state(false);
@@ -158,14 +170,16 @@
 				: t('viewer.state.ended'),
 	);
 	const gpuText = $derived(hello ? t(`viewer.gpu.${hello.gpu}` as MessageKey) : '');
+	// PLAN 72: the transport in front (tiles or video).
 	const statsText = $derived(
-		stats && hello
-			? t('viewer.stats', {
-					fps: Math.round(stats.fps),
-					latency: Math.round(stats.latencyMs),
-					gpu: gpuText,
-				})
-			: gpuText,
+		(hello ? t(`viewer.mode.${streamMode}` as MessageKey) + ' · ' : '') +
+			(stats && hello
+				? t('viewer.stats', {
+						fps: Math.round(stats.fps),
+						latency: Math.round(stats.latencyMs),
+						gpu: gpuText,
+					})
+				: gpuText),
 	);
 	const volumeText = $derived(formatPercent(prefs.muted ? 0 : prefs.volume * 100));
 	const quality = $derived<Quality>(prefs.quality ?? 'auto');
@@ -189,8 +203,13 @@
 		socket.onopen = () => {
 			opened = true;
 			sendSize();
-			if (prefs.quality || prefs.fps)
-				send({ t: 'quality', mode: prefs.quality ?? 'auto', fps: prefs.fps ?? 30 });
+			if (prefs.quality || prefs.fps || prefs.transport)
+				send({
+					t: 'quality',
+					mode: prefs.quality ?? 'auto',
+					fps: prefs.fps ?? 30,
+					...(prefs.transport ? { transport: prefs.transport } : {}),
+				});
 		};
 		socket.onmessage = (event) => {
 			if (typeof event.data === 'string') {
@@ -203,6 +222,7 @@
 			if (!buf.byteLength) return;
 			const kind = new DataView(buf).getUint8(0);
 			if (kind === MSG_VIDEO) onVideo(buf);
+			else if (kind === MSG_TILE) onTile(buf);
 			else if (kind === MSG_AUDIO) onAudio(buf);
 		};
 		socket.onclose = (event) => {
@@ -311,6 +331,9 @@
 			case 'stats':
 				stats = { fps: msg.fps, latencyMs: msg.latencyMs };
 				break;
+			case 'mode':
+				streamMode = msg.mode;
+				break;
 			case 'clipboard':
 				remoteClip = msg.text;
 				copied = false;
@@ -351,6 +374,14 @@
 		closeVideo();
 		waitKey = true;
 		droppedKey = false;
+		if (codec === CODEC_TILES) {
+			// PLAN 72: pictures of changed areas, no decoder; the canvas keeps
+			// what it shows until the tiles arrive.
+			streamMode = 'tiles';
+			sizeCanvas(width, height);
+			return;
+		}
+		streamMode = 'video';
 		if (codec !== supportedCodec) {
 			const base: VideoDecoderConfig = { codec, optimizeForLatency: true };
 			let config: VideoDecoderConfig | null = { ...base, hardwareAcceleration: 'prefer-hardware' };
@@ -371,13 +402,43 @@
 			supportedCodec = codec;
 		}
 		if (closed || mine !== generation) return;
-		if (canvas) {
-			canvas.width = width;
-			canvas.height = height;
-		}
+		sizeCanvas(width, height);
 		openDecoder();
 		// A key frame went by while the decoder was being set up.
 		if (droppedKey) askKeyframe(true);
+	}
+
+	// Setting the size clears a canvas, even to the same size: only on a change.
+	function sizeCanvas(width: number, height: number) {
+		if (canvas && (canvas.width !== width || canvas.height !== height)) {
+			canvas.width = width;
+			canvas.height = height;
+		}
+	}
+
+	// ---- Tiles (PLAN 72) ----
+
+	// Pictures are decoded side by side but drawn in the order they came,
+	// so an older picture never covers a newer one.
+	let tileChain: Promise<void> = Promise.resolve();
+	function onTile(buf: ArrayBuffer) {
+		const tile = parseTile(buf);
+		if (!tile || !canvas) return;
+		const mine = generation;
+		const bitmap = createImageBitmap(new Blob([tile.data as BlobPart], { type: tile.type }));
+		tileChain = tileChain
+			.then(() => bitmap)
+			.then((picture) => {
+				const ctx = canvas?.getContext('2d');
+				if (ctx && mine === generation && !closed) {
+					ctx.drawImage(picture, tile.x, tile.y, tile.w, tile.h);
+					painted = true;
+				}
+				picture.close();
+			})
+			.catch(() => {
+				// A broken picture: the next change of that area replaces it.
+			});
 	}
 
 	function openDecoder() {
@@ -556,11 +617,16 @@
 		saveView(app, $state.snapshot(prefs));
 	}
 
-	function setQuality(mode: Quality, fps: 30 | 60) {
+	function setQuality(
+		mode: Quality,
+		fps: 30 | 60,
+		transport: Transport = prefs.transport ?? 'auto',
+	) {
 		prefs.quality = mode;
 		prefs.fps = fps;
+		prefs.transport = transport;
 		saveView(app, $state.snapshot(prefs));
-		send({ t: 'quality', mode, fps });
+		send({ t: 'quality', mode, fps, transport });
 	}
 
 	// ---- Size ----
@@ -961,6 +1027,23 @@
 			}}><span>{t('viewer.fpsValue', { fps })}</span></button
 		>
 	{/each}
+	<hr />
+	{#each TRANSPORTS as tr (tr)}
+		<button
+			type="button"
+			role="menuitemradio"
+			aria-checked={(prefs.transport ?? 'auto') === tr}
+			onclick={() => {
+				setQuality(quality, prefs.fps ?? 30, tr);
+				close();
+			}}
+			><span
+				>{t(`viewer.transport.${tr}` as MessageKey)}<small class="muted hint-line"
+					>{t(`viewer.transport.${tr}Hint` as MessageKey)}</small
+				></span
+			></button
+		>
+	{/each}
 {/snippet}
 
 {#snippet clipboardPanel()}
@@ -1031,7 +1114,31 @@
 	{:else}<p class="muted small">{t('viewer.noDownloads')}</p>{/if}
 {/snippet}
 
-<div class="remote" class:phone>
+<div
+	class="remote"
+	class:phone
+	role="presentation"
+	ondragover={(e) => {
+		// PLAN 66 draft 04: files dragged into the window are uploaded to the app.
+		if (live && e.dataTransfer?.types.includes('Files')) {
+			e.preventDefault();
+			dropping = true;
+		}
+	}}
+	ondragleave={(e) => {
+		if (!e.currentTarget.contains(e.relatedTarget as Node)) dropping = false;
+	}}
+	ondrop={(e) => {
+		if (!e.dataTransfer?.files.length) return;
+		e.preventDefault();
+		dropping = false;
+		void upload(e.dataTransfer.files);
+		dropNote = true;
+		setTimeout(() => (dropNote = false), 4000);
+	}}
+>
+	{#if dropping}<div class="drop-hint" aria-hidden="true">{t('viewer.dropHint')}</div>{/if}
+	{#if dropNote}<p class="drop-note" role="status">{t('viewer.uploadHint')}</p>{/if}
 	{#if phone}
 		<header class="phone-head">
 			<button
@@ -1217,10 +1324,20 @@
 			}}
 		/>
 		{#if phase === 'connecting' || (phase === 'live' && !painted)}
-			<div class="note" role="status">
-				<span class="spinner" aria-hidden="true"></span>
-				<p>{t('viewer.starting')}</p>
-			</div>
+			{#if splash}
+				<!-- PLAN 66 draft 01: the app's symbol, its name and a bar. -->
+				<div class="note start" role="status">
+					{@render splash()}
+					<h3>{title}</h3>
+					<span class="start-bar" aria-hidden="true"><span></span></span>
+					<p class="muted small">{t('viewer.starting')}</p>
+				</div>
+			{:else}
+				<div class="note" role="status">
+					<span class="spinner" aria-hidden="true"></span>
+					<p>{t('viewer.starting')}</p>
+				</div>
+			{/if}
 		{:else if phase === 'image'}
 			<div class="note" role="status">
 				<Icon name="download" size={36} />
@@ -1659,5 +1776,75 @@
 		.spinner {
 			animation: none;
 		}
+	}
+	.hint-line {
+		display: block;
+		font-size: var(--text-sm);
+	}
+	.note.start {
+		gap: 10px;
+	}
+	.note.start h3 {
+		margin: 6px 0 0;
+		font-size: var(--text-lg);
+	}
+	.start-bar {
+		position: relative;
+		display: block;
+		width: 160px;
+		height: 4px;
+		border-radius: 2px;
+		overflow: hidden;
+		background: color-mix(in srgb, var(--text) 14%, transparent);
+	}
+	.start-bar > span {
+		position: absolute;
+		inset: 0 auto 0 0;
+		width: 40%;
+		border-radius: 2px;
+		background: var(--accent);
+		animation: start-bar 1.3s ease-in-out infinite;
+	}
+	@keyframes start-bar {
+		from {
+			left: -40%;
+		}
+		to {
+			left: 100%;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.start-bar > span {
+			animation: none;
+			left: 30%;
+		}
+	}
+	.drop-hint {
+		position: absolute;
+		inset: 8px;
+		z-index: 6;
+		display: grid;
+		place-items: center;
+		border: 2px dashed var(--accent);
+		border-radius: var(--radius-tile, 12px);
+		background: color-mix(in srgb, var(--bg) 70%, transparent);
+		color: var(--text);
+		font-size: var(--text-md);
+		pointer-events: none;
+	}
+	.drop-note {
+		position: absolute;
+		left: 50%;
+		bottom: 16px;
+		z-index: 6;
+		transform: translateX(-50%);
+		max-width: calc(100% - 32px);
+		margin: 0;
+		padding: 8px 14px;
+		border-radius: 10px;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		color: var(--text);
+		font-size: var(--text-sm);
 	}
 </style>

@@ -21,7 +21,42 @@ const (
 	TypeVideo  byte = 0x01 // agent → browser: flags, ts µs, H.264 access unit
 	TypeAudio  byte = 0x02 // agent → browser: ts µs, Opus packet
 	TypeUpload byte = 0x03 // browser → agent: upload id (uint32 BE), data
+	// TypeTile (PLAN 66/72): agent → browser, one changed rectangle of the
+	// screen as a picture: codec (1 byte), x, y, w, h (uint16 BE each),
+	// then the JPEG or PNG data. Sent while the hello's codec is "tiles".
+	TypeTile byte = 0x04
 )
+
+// Tile codecs.
+const (
+	TileJPEG byte = 1 // lossy, while the area changes
+	TilePNG  byte = 2 // lossless, once the area is calm again ("sharpen")
+)
+
+// CodecTiles is the hello codec of the tile mode.
+const CodecTiles = "tiles"
+
+// Transports: "auto" sends changed tiles and switches to H.264 while much
+// of the screen moves; "video" always sends H.264 (the mode before 0.68).
+const (
+	TransportAuto  = "auto"
+	TransportVideo = "video"
+)
+
+// TileHeaderSize is the length of the header of a 0x04 message.
+const TileHeaderSize = 10
+
+// TileHeader builds the header of a 0x04 message.
+func TileHeader(codec byte, x, y, w, h int) []byte {
+	b := make([]byte, TileHeaderSize)
+	b[0] = TypeTile
+	b[1] = codec
+	binary.BigEndian.PutUint16(b[2:], uint16(x))
+	binary.BigEndian.PutUint16(b[4:], uint16(y))
+	binary.BigEndian.PutUint16(b[6:], uint16(w))
+	binary.BigEndian.PutUint16(b[8:], uint16(h))
+	return b
+}
 
 // Limits.
 const (
@@ -73,9 +108,11 @@ type ClientMsg struct {
 	Text    string  `json:"text,omitempty"`
 	Mode    string  `json:"mode,omitempty"`
 	FPS     int     `json:"fps,omitempty"`
-	ID      uint32  `json:"id,omitempty"`
-	Name    string  `json:"name,omitempty"`
-	Size    int64   `json:"size,omitempty"`
+	// Transport of a quality message: "auto" or "video" (PLAN 72).
+	Transport string `json:"transport,omitempty"`
+	ID        uint32 `json:"id,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Size      int64  `json:"size,omitempty"`
 }
 
 // Client message types.
@@ -163,6 +200,11 @@ func ParseClient(data []byte) (ClientMsg, error) {
 		if m.FPS != 0 && (m.FPS < 5 || m.FPS > 60) {
 			return m, invalid("fps out of range")
 		}
+		switch m.Transport {
+		case "", TransportAuto, TransportVideo:
+		default:
+			return m, invalid("unknown transport")
+		}
 	case MsgUpload:
 		if m.ID == 0 {
 			return m, invalid("upload id 0")
@@ -247,6 +289,13 @@ type Hello struct {
 	Scale  float64 `json:"scale"`
 	GPU    string  `json:"gpu"`
 	Audio  bool    `json:"audio"`
+}
+
+// Mode tells the browser which transport is active now (PLAN 72):
+// "tiles" or "video". A hello follows when the codec changes.
+type Mode struct {
+	T    string `json:"t"`
+	Mode string `json:"mode"`
 }
 
 // Stats is sent every second. LatencyMs is the agent-side latency from

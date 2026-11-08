@@ -26,6 +26,8 @@ type outMsg struct {
 type ctrlEvent struct {
 	msg     *proto.ClientMsg
 	dropped bool
+	// video: the mode switch of the tile mode decided (PLAN 72).
+	video *bool
 }
 
 type client struct {
@@ -56,6 +58,7 @@ type client struct {
 	firstAU  chan struct{}
 
 	audio *audioStream
+	tiles *tileStream // tile mode or its measuring capture, guarded by vmu
 
 	frames   atomic.Int64
 	bytes    atomic.Int64
@@ -263,17 +266,23 @@ func (c *client) control() {
 	lastDrop := time.Now()
 	lastFrames, lastBytes := int64(0), int64(0)
 
+	// restart starts the stream anew in its current mode (PLAN 72: tiles,
+	// or H.264 with the measuring capture while much moves).
 	restart := func() {
-		c.stopVideo()
-		c.startVideo(factor)
+		video := c.inVideo()
+		c.stopStream()
+		if video {
+			c.startVideo(factor)
+			a.mu.Lock()
+			w, h := a.w, a.h
+			a.mu.Unlock()
+			c.runCapture(w, h, detectFPS, true)
+			return
+		}
+		c.startStream(factor)
 	}
 	for {
-		var exited <-chan struct{}
-		c.vmu.Lock()
-		if c.video != nil {
-			exited = c.video.exited()
-		}
-		c.vmu.Unlock()
+		exited := c.streamExited()
 		select {
 		case <-c.ctx.Done():
 			return
@@ -285,6 +294,10 @@ func (c *client) control() {
 			time.Sleep(time.Second)
 			restart()
 		case ev := <-c.ctrl:
+			if ev.video != nil {
+				c.switchMode(*ev.video, factor)
+				continue
+			}
 			if ev.dropped {
 				lastDrop = time.Now()
 				a.mu.Lock()
@@ -317,9 +330,18 @@ func (c *client) control() {
 				if m.FPS != 0 {
 					a.fps = m.FPS
 				}
+				changed := m.Transport != "" && m.Transport != a.transport
+				if m.Transport != "" {
+					a.transport = m.Transport
+				}
 				a.mu.Unlock()
 				factor = 1
-				restart()
+				if changed {
+					c.stopStream()
+					c.startStream(factor)
+				} else {
+					restart()
+				}
 			case proto.MsgClipboard:
 				if err := writeClipboard(m.Text); err != nil {
 					log.Printf("clipboard: %v", err)
@@ -390,11 +412,11 @@ func (c *client) startMedia() {
 		}
 		c.audio = au
 	}
-	c.startVideo(1)
+	c.startStream(1)
 }
 
 func (c *client) stopMedia() {
-	c.stopVideo()
+	c.stopStream()
 	c.audio.stop()
 }
 

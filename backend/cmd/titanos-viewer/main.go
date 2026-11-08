@@ -52,27 +52,31 @@ type config struct {
 	Audio   bool
 	FPS     int
 	Quality string
-	Width   int
-	Height  int
-	Scale   float64
-	Sandbox bool
-	Listen  string
+	// Transport: proto.TransportAuto (tiles, H.264 while much moves) or
+	// proto.TransportVideo (always H.264), PLAN 72.
+	Transport string
+	Width     int
+	Height    int
+	Scale     float64
+	Sandbox   bool
+	Listen    string
 }
 
 func loadConfig() (config, error) {
 	c := config{
-		URL:     os.Getenv("VIEWER_URL"),
-		Key:     os.Getenv("VIEWER_KEY"),
-		GPU:     strings.ToLower(strings.TrimSpace(os.Getenv("VIEWER_GPU"))),
-		Device:  os.Getenv("VIEWER_GPU_DEVICE"),
-		Audio:   os.Getenv("VIEWER_AUDIO") == "1",
-		FPS:     30,
-		Quality: proto.QualityAuto,
-		Width:   1280,
-		Height:  800,
-		Scale:   1,
-		Sandbox: os.Getenv("VIEWER_SANDBOX") == "1",
-		Listen:  fmt.Sprintf(":%d", proto.Port),
+		URL:       os.Getenv("VIEWER_URL"),
+		Key:       os.Getenv("VIEWER_KEY"),
+		GPU:       strings.ToLower(strings.TrimSpace(os.Getenv("VIEWER_GPU"))),
+		Device:    os.Getenv("VIEWER_GPU_DEVICE"),
+		Audio:     os.Getenv("VIEWER_AUDIO") == "1",
+		FPS:       30,
+		Quality:   proto.QualityAuto,
+		Transport: proto.TransportAuto,
+		Width:     1280,
+		Height:    800,
+		Scale:     1,
+		Sandbox:   os.Getenv("VIEWER_SANDBOX") == "1",
+		Listen:    fmt.Sprintf(":%d", proto.Port),
 	}
 	origin, err := appOrigin(c.URL)
 	if err != nil {
@@ -105,6 +109,14 @@ func loadConfig() (config, error) {
 			c.Quality = v
 		default:
 			return c, errors.New("VIEWER_QUALITY must be auto, high, balanced or low")
+		}
+	}
+	if v := os.Getenv("VIEWER_TRANSPORT"); v != "" {
+		switch v {
+		case proto.TransportAuto, proto.TransportVideo:
+			c.Transport = v
+		default:
+			return c, errors.New("VIEWER_TRANSPORT must be auto or video")
 		}
 	}
 	if v := os.Getenv("VIEWER_SIZE"); v != "" { // e.g. 1280x800@2

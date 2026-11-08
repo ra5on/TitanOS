@@ -13,6 +13,7 @@
 // PLAYWRIGHT_MODULE=/abs/playwright/index.mjs UI_URL=http://127.0.0.1:5250 node scripts/test-ui-viewer.mjs
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
+import { deflateSync } from "node:zlib";
 import { fixtureFactory } from "./test-ui-fixtures.mjs";
 const { chromium } = await import(
   process.env.PLAYWRIGHT_MODULE || "playwright"
@@ -165,6 +166,52 @@ function audioMsg(a) {
   return out;
 }
 
+// A solid PNG (w×h, one colour) for the tile mode (PLAN 72).
+function png(w, h, [r, g, b]) {
+  const crc = (buf) => {
+    let c = ~0;
+    for (const x of buf) {
+      c ^= x;
+      for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
+    }
+    return ~c >>> 0;
+  };
+  const chunk = (type, data) => {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    const td = Buffer.concat([Buffer.from(type), data]);
+    const c = Buffer.alloc(4);
+    c.writeUInt32BE(crc(td));
+    return Buffer.concat([len, td, c]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0);
+  ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 2;
+  const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(w * 3)]);
+  for (let x = 0; x < w; x++) row.set([r, g, b], 1 + x * 3);
+  const raw = Buffer.concat(Array.from({ length: h }, () => row));
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", ihdr),
+    chunk("IDAT", deflateSync(raw)),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+// 0x04 | codec (2 = PNG) | x y w h | picture.
+function tileMsg(x, y, w, h, colour) {
+  const head = Buffer.alloc(10);
+  head[0] = 4;
+  head[1] = 2;
+  head.writeUInt16BE(x, 2);
+  head.writeUInt16BE(y, 4);
+  head.writeUInt16BE(w, 6);
+  head.writeUInt16BE(h, 8);
+  return Buffer.concat([head, png(w, h, colour)]);
+}
+
 // ---- A mocked viewer: what the window sent, and how the viewer behaves ----
 function viewer(page, behave) {
   const state = { sent: [], chunks: [], connections: 0, sockets: [] };
@@ -227,6 +274,27 @@ function viewer(page, behave) {
       }
       const msg = JSON.parse(m);
       state.sent.push(msg);
+      if (msg.t === "size" && !greeted && mode === "tiles") {
+        // PLAN 72: the tile mode – hello "tiles", then pictures of areas.
+        greeted = true;
+        ws.send(
+          JSON.stringify({
+            t: "hello",
+            codec: "tiles",
+            width: W,
+            height: H,
+            gpu: "cpu",
+            audio: false,
+          }),
+        );
+        ws.send(JSON.stringify({ t: "mode", mode: "tiles" }));
+        ws.send(tileMsg(0, 0, W, H, [210, 30, 30]));
+        // Two pictures of the same area: the later one must win.
+        ws.send(tileMsg(64, 64, 64, 64, [30, 30, 210]));
+        ws.send(tileMsg(64, 64, 64, 64, [30, 200, 60]));
+        ws.send(JSON.stringify({ t: "stats", fps: 4, kbps: 12, latencyMs: 3 }));
+        return;
+      }
       if (msg.t === "size" && !greeted) {
         greeted = true;
         ws.send(
@@ -812,6 +880,8 @@ const until = async (fn, what, ms = 5000) => {
   await gpu.selectOption("/dev/dri/renderD128");
   await page.getByRole("radio", { name: "Ausgewogen" }).click();
   await page.getByRole("radio", { name: "30 fps" }).click();
+  // PLAN 72: the transport, tiles by default.
+  await page.getByRole("radio", { name: "Immer Video" }).click();
   await page.getByLabel("Ton übertragen").uncheck();
   await page.getByLabel("Profile der Apps").selectOption("Data");
   await page.getByRole("button", { name: "Speichern" }).click();
@@ -820,6 +890,7 @@ const until = async (fn, what, ms = 5000) => {
     gpu: "/dev/dri/renderD128",
     quality: "balanced",
     fps: 30,
+    transport: "video",
     audio: false,
     volume: "Data",
   });
@@ -848,6 +919,50 @@ const until = async (fn, what, ms = 5000) => {
     "load now asks the NAS",
   );
   await page.getByText("Wird heruntergeladen").waitFor();
+  await ctx.close();
+}
+
+// PLAN 72: the tile mode – pictures of areas drawn where they belong, the
+// later picture of an area over the earlier one, "Kacheln" in the menu.
+{
+  const { ctx, page, v } = await open(1600, 1000, () => "tiles");
+  await page.locator(".ico", { hasText: "immich" }).first().click();
+  const win = page.locator("section.win", { hasText: "immich" });
+  const canvas = win.locator(".remote canvas");
+  await painted(canvas);
+  await page.waitForFunction(
+    (el) => {
+      const [r, g, b] = el.getContext("2d").getImageData(90, 90, 1, 1).data;
+      return g > 150 && r < 100 && b < 100;
+    },
+    await canvas.elementHandle(),
+    { timeout: 5000 },
+  );
+  const [r, g, b] = await canvas.evaluate((el) => [
+    ...el.getContext("2d").getImageData(10, 10, 1, 1).data,
+  ]);
+  assert.ok(
+    r > 150 && g < 100 && b < 100,
+    `red outside the tile: ${r} ${g} ${b}`,
+  );
+  await more(win);
+  await win.locator(".win-menu", { hasText: "Kacheln" }).first().waitFor();
+  await more(win, false);
+  // PLAN 66 draft 04: a file dragged into the window is uploaded to the app.
+  const drop = await page.evaluateHandle(() => {
+    const dt = new DataTransfer();
+    dt.items.add(new File(["Hallo"], "notiz.txt", { type: "text/plain" }));
+    return dt;
+  });
+  const remote = win.locator(".remote");
+  await remote.dispatchEvent("dragover", { dataTransfer: drop });
+  await win.locator(".drop-hint").waitFor();
+  await remote.dispatchEvent("drop", { dataTransfer: drop });
+  await win.getByText("unter „Hochgeladen“", { exact: false }).waitFor();
+  await until(
+    () => v.sent.some((m) => m.t === "upload" && m.name === "notiz.txt" && m.size === 5),
+    "upload of the dropped file",
+  );
   await ctx.close();
 }
 

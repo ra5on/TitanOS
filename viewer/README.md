@@ -78,6 +78,7 @@ Environment:
 | `VIEWER_AUDIO` | `1` starts PulseAudio and streams Opus |
 | `VIEWER_FPS` | 5–60, default 30 |
 | `VIEWER_QUALITY` | `auto` (default), `high`, `balanced`, `low` |
+| `VIEWER_TRANSPORT` | `auto` (default: changed tiles as JPEG/PNG, H.264 while ≥ 45 % of the screen moves for 5 s), `video` (always H.264) |
 | `VIEWER_SIZE` | initial size, e.g. `1280x800@2` (default 1280x800, scale 1) |
 | `VIEWER_LANG` | Chromium UI language, default `de` |
 | `VIEWER_SANDBOX` | `1` drops `--no-sandbox` (only works if the container may create user namespaces; titand does not set it) |

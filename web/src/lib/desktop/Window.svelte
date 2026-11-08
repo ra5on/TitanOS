@@ -869,7 +869,15 @@
 						onopentab={openTab}
 						inTitle
 						menuHost={moreOpen ? remoteHost : null}
-					/>
+					>
+						{#snippet splash()}<DesktopIcon
+								{glyph}
+								{gradient}
+								{image}
+								size={72}
+								name={win.title}
+							/>{/snippet}
+					</RemoteView>
 				{:catch}
 					<p class="load-failed">{t('desktop.window.loadFailed')}</p>
 				{/await}

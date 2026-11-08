@@ -728,6 +728,7 @@ func viewerEnv(target, key, kind string, gpu *GPU, s Settings) []string {
 		"VIEWER_AUDIO=" + audio,
 		"VIEWER_QUALITY=" + s.Quality,
 		"VIEWER_FPS=" + strconv.Itoa(s.FPS),
+		"VIEWER_TRANSPORT=" + s.Transport,
 		"HOME=/profile",
 	}
 	if gpu != nil && gpu.node != "" {
