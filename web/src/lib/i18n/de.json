@@ -5522,6 +5522,8 @@
 	"loginLook.width.wide": "Breit",
 	"loginLook.positionHint": "Auf Smartphones steht die Karte immer in der Mitte.",
 	"loginLook.showHost": "Namen des NAS zeigen",
+	"loginLook.moving": "Bewegter Hintergrund",
+	"loginLook.movingHint": "Nordlicht und Bergsee bewegen sich (Polarlicht, Wasser, Wolken). Bei „Bewegung reduzieren“ im System steht das Bild still.",
 	"loginLook.showLogo": "Logo zeigen",
 	"loginLook.clock": "Uhrzeit und Datum zeigen",
 	"loginLook.texts": "Texte",

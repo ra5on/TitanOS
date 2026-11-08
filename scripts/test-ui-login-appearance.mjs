@@ -137,14 +137,17 @@ try {
     const main = page.locator("main.login");
     assert.equal(await main.getAttribute("style"), null);
     assert.equal(await main.getAttribute("data-theme"), null);
-    // PLAN 64: the desktop's wallpaper behind the card.
-    assert.equal(await page.locator(".paper .picture.wallpaper").count(), 1);
-    assert.equal(await page.locator("h1").textContent(), "Anmelden");
-    await page.getByText("titan-test").waitFor();
+    // PLAN 74: the moving northern lights by default, no card, centred.
+    assert.equal(await page.locator(".paper .live canvas").count(), 1);
+    assert.equal(await page.locator("h1").textContent(), "Anmelden – titan-test");
     assert.equal(await page.locator("main.login .logo").count(), 1);
     const card = await page.locator("section.card").boundingBox();
-    assert.equal(Math.round(card.width), 380);
-    assert.ok(Math.abs(card.x + card.width / 2 - 720) <= 1, "card centered");
+    assert.ok(Math.abs(card.x + card.width / 2 - 720) <= 1, "form centred");
+    assert.equal(
+      await page.locator("section.card").evaluate((e) => getComputedStyle(e).backgroundColor),
+      "rgba(0, 0, 0, 0)",
+      "no card",
+    );
     await page.screenshot({ path: `${out}/login-default.png` });
     await ctx.close();
   }
@@ -295,8 +298,9 @@ try {
       .locator(".card .notice", { hasText: "<b>Kein HTML</b>" })
       .waitFor();
     await page.locator(".clock").waitFor();
+    // PLAN 74: the northern lights move; the still picture lies underneath.
     assert.match(
-      await page.locator(".paper .picture").getAttribute("style"),
+      await page.locator(".paper .live .still").getAttribute("style"),
       /nordlicht\.webp/,
     );
     await page.screenshot({ path: `${out}/login-glass-motif.png` });
@@ -335,12 +339,13 @@ try {
     const card = await page.locator("section.card").boundingBox();
     assert.ok(card.x < 200, `card left: ${card.x}`);
     assert.equal(Math.round(card.width), 480);
-    // Text on the light card is dark enough.
+    // PLAN 74: no card – white text on the darkened picture in every theme.
     const colors = await page.evaluate(() => {
       const card = getComputedStyle(document.querySelector("section.card"));
       return { text: card.color, bg: card.backgroundColor };
     });
-    assert.equal(colors.text, "rgb(20, 24, 29)");
+    assert.equal(colors.text, "rgb(255, 255, 255)");
+    assert.equal(colors.bg, "rgba(0, 0, 0, 0)");
     // PLAN 64: the card is glass on the picture (an older "flat" look included).
     await page.screenshot({ path: `${out}/login-hell-left.png` });
     await page.setViewportSize({ width: 375, height: 812 });

@@ -80,6 +80,8 @@ export type LoginLook = {
 	texts: Partial<Record<LoginLocale, LoginTexts>>;
 	hideHost: boolean;
 	hideLogo: boolean;
+	/** PLAN 74: the moving picture holds still (moving by default). */
+	still: boolean;
 	clock: boolean;
 	/** PLAN 67: the account picker – circles or a list. */
 	accountsStyle: 'circles' | 'list';
@@ -106,6 +108,7 @@ export function defaultLoginLook(): LoginLook {
 		texts: {},
 		hideHost: false,
 		hideLogo: false,
+		still: false,
 		clock: false,
 		accountsStyle: 'circles',
 		showAccounts: true,
@@ -180,6 +183,7 @@ export function sanitizeLoginLook(input: unknown): LoginLook {
 		texts,
 		hideHost: v.hideHost === true,
 		hideLogo: v.hideLogo === true,
+		still: v.still === true,
 		clock: v.clock === true,
 		// Only owners and administrators get these from titand; the defaults otherwise.
 		accountsStyle: v.accountsStyle === 'list' ? 'list' : d.accountsStyle,

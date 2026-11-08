@@ -116,7 +116,21 @@ export type LayoutWindow = {
 };
 export type Layout = { id: string; name: string; windows: LayoutWindow[] };
 
-export const WALLPAPERS = ['wave', 'aurora', 'dunes', 'peaks', 'grid', 'calm'] as const;
+export const WALLPAPERS = [
+	'wave',
+	'aurora',
+	'dunes',
+	'peaks',
+	'grid',
+	'calm',
+	// PLAN 74: the photos of the login page; nordlicht and bergsee move (lib/live).
+	'nordlicht',
+	'bergsee',
+	'kueste',
+	'nebelwald',
+	'wueste',
+	'weltraum',
+] as const;
 
 const ID = /^[a-z0-9][a-z0-9:._-]{0,95}$/i;
 

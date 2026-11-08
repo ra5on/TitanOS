@@ -76,6 +76,7 @@ async function loggedOut({ accounts, remembered = [], width = 1440 }) {
 const focusedLabel = (page) =>
   page.evaluate(() => {
     const el = document.activeElement;
+    if (el?.tagName === "INPUT") return el.getAttribute("type") || "";
     return el?.getAttribute("aria-label") || el?.getAttribute("type") || "";
   });
 
@@ -93,26 +94,39 @@ const focusedLabel = (page) =>
   const names = await picker.locator(".account-name").allInnerTexts();
   assert.deepEqual(
     names,
-    ["kim", "Alex Berger", "sam", "Anderes Konto"],
-    "this browser's account first, then the NAS's, then 'other'",
+    ["kim", "Alex Berger", "sam"],
+    "this browser's account first, then the NAS's",
   );
+  // PLAN 74: the first account is chosen at once, its name once below, the password focused.
+  assert.match(await page.locator(".chosen").innerText(), /kim/);
+  assert.equal(await focusedLabel(page), "password", "password focused");
+  assert.equal(
+    await page.locator(".accounts li.on .letter").innerText(),
+    "K",
+    "the first letter on the picture",
+  );
+  assert.ok(
+    (await page.locator(".accounts li.on .avatar").getAttribute("style")).includes("/backgrounds/"),
+    "a part of a built-in photo until the account has its own picture",
+  );
+  assert.equal(await page.locator("section.card").evaluate((e) => getComputedStyle(e).backgroundColor), "rgba(0, 0, 0, 0)", "no card");
   await page.screenshot({ path: `${out}/circles.png` });
-  // Keyboard: Tab reaches the first account; Enter picks it.
-  await page.keyboard.press("Tab");
+  // Keyboard: Tab reaches the accounts; Enter picks one.
+  await page.keyboard.press("Shift+Tab");
   let guard = 0;
-  while (!(await focusedLabel(page)).includes("Anmelden als") && guard++ < 8)
-    await page.keyboard.press("Tab");
-  assert.match(await focusedLabel(page), /Anmelden als kim/);
+  while (!(await focusedLabel(page)).includes("Anmelden als sam") && guard++ < 10)
+    await page.keyboard.press("Shift+Tab");
+  assert.match(await focusedLabel(page), /Anmelden als sam/);
   await page.keyboard.press("Enter");
   assert.equal(await focusedLabel(page), "password", "password focused");
-  assert.match(await page.locator(".chosen").innerText(), /kim/);
+  assert.match(await page.locator(".chosen").innerText(), /sam/);
+  await picker.getByRole("button", { name: "Anmelden als kim" }).click();
   // A wrong password: the usual message, the account stays chosen.
   await page.keyboard.type("wrong");
   await page.keyboard.press("Enter");
   await page.getByRole("alert").waitFor();
   assert.equal(state.logins.at(-1).name, "kim");
-  // "Konto wechseln" goes back; "Anderes Konto" shows the empty name field.
-  await page.getByRole("button", { name: "Konto wechseln" }).click();
+  // "Anderes Konto" shows the empty name field.
   await page.getByRole("button", { name: "Anderes Konto" }).click();
   assert.equal(await page.getByLabel("Name").inputValue(), "");
   assert.equal(
@@ -181,7 +195,8 @@ const focusedLabel = (page) =>
   });
   await page.locator(".accounts.circles").waitFor();
   const names = await page.locator(".accounts .account-name").allInnerTexts();
-  assert.deepEqual(names, ["kim", "Anderes Konto"]);
+  assert.deepEqual(names, ["kim"]);
+  await page.getByRole("button", { name: "Anderes Konto" }).waitFor();
   const over = await page.evaluate(
     () => document.documentElement.scrollWidth - innerWidth,
   );

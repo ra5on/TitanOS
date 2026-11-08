@@ -5,7 +5,8 @@
 import { WALLPAPERS } from '../desktop/prefs.ts';
 
 const KEY = 'titanos.login.wallpaper';
-export const DEFAULT_LOGIN_WALLPAPER = 'wave';
+// PLAN 74: the moving northern lights (owner's choice 8.11.2026).
+export const DEFAULT_LOGIN_WALLPAPER = 'nordlicht';
 
 /** Remembers the built-in wallpaper of the account now logged in. */
 export function rememberLoginWallpaper(wallpaper: { source: string; id?: string }) {

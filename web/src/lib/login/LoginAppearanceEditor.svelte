@@ -430,6 +430,14 @@
 			onchange={(e) => (draft.hideLogo = !e.currentTarget.checked)}
 		/>{t('loginLook.showLogo')}</label
 	>
+	<label class="check"
+		><input
+			type="checkbox"
+			checked={!draft.still}
+			onchange={(e) => (draft.still = !e.currentTarget.checked)}
+		/>{t('loginLook.moving')}</label
+	>
+	<p class="hint muted">{t('loginLook.movingHint')}</p>
 
 	<fieldset class="divided texts">
 		<legend class="tile-title">{t('loginLook.texts')}</legend>

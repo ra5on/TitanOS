@@ -24,6 +24,8 @@
 	import DesktopIcon from './DesktopIcon.svelte';
 	import Launcher from './Launcher.svelte';
 	import NotifyCenter from './NotifyCenter.svelte';
+	import LiveBackground from '../live/LiveBackground.svelte';
+	import { isLivePicture } from '../live/shaders.ts';
 	import DesktopDialogs from './DesktopDialogs.svelte';
 	import Window from './Window.svelte';
 	import Dock, { dockPin, dockUnpin } from './Dock.svelte';
@@ -165,6 +167,13 @@
 		const timer = setInterval(() => (tint = dayTint()), 10 * 60 * 1000);
 		return () => clearInterval(timer);
 	});
+	const livePicture = $derived(
+		desktop.prefs.wallpaper.source === 'builtin' && isLivePicture(desktop.prefs.wallpaper.id)
+			? desktop.prefs.wallpaper.id
+			: null,
+	);
+	// LiveBackground holds still by itself with "reduce motion".
+	const liveOn = $derived(desktop.prefs.wallpaper.live);
 	const wallpaper = $derived(
 		desktop.prefs.wallpaper.source === 'custom'
 			? `url("/api/v1/background?v=${desktop.prefs.wallpaper.version}") center / cover`
@@ -751,7 +760,14 @@
 	style:--bar-h={{ s: 34, m: 40, l: 48 }[desktop.prefs.barSize] + 'px'}
 	style:--pb={{ s: 26, m: 32, l: 40 }[desktop.prefs.barSize] + 'px'}
 >
-	<div class="paper" aria-hidden="true"></div>
+	{#if livePicture}
+		<!-- PLAN 74: a photo that moves (aurora, water); the drift of .paper is not needed then. -->
+		<div class="paper photo" aria-hidden="true">
+			<LiveBackground picture={livePicture} moving={liveOn} paused={wm.dragging} />
+		</div>
+	{:else}
+		<div class="paper" aria-hidden="true"></div>
+	{/if}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<!-- PLAN 67: one bar across the top (variant B): the logo menu, the
 	     program in front with its menus, the node switcher; on the right
@@ -1600,8 +1616,12 @@
 		/* "Farbstärke" (Settings › Appearance, PLAN 64) reaches the wallpaper too. */
 		filter: hue-rotate(var(--tint)) var(--wallpaper-filter, saturate(1));
 	}
-	.live .paper {
+	.live .paper:not(.photo) {
 		animation: drift 90s ease-in-out infinite alternate;
+	}
+	.paper.photo {
+		inset: 0;
+		background: none;
 	}
 	/* Holding still while a window moves keeps the glass from being drawn anew each frame. */
 	.moving .paper {

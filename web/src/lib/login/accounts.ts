@@ -92,3 +92,28 @@ export function initials(account: LoginAccount): string {
 		words.length > 1 ? words[0][0] + words[words.length - 1][0] : (words[0] ?? '?').slice(0, 1);
 	return letters.toUpperCase();
 }
+
+/** PLAN 74: the one letter on the account's picture. */
+export function firstLetter(account: LoginAccount): string {
+	return [...(account.displayName ?? account.name).trim()][0]?.toUpperCase() ?? '?';
+}
+
+// PLAN 74: until an account has a picture of its own, it shows a part of one
+// of the built-in photos – always the same one for the same name, never a
+// plain colour with a letter (owner's decision 8.11.2026).
+const FALLBACK = [
+	['nordlicht', '45% 30%'],
+	['kueste', '20% 70%'],
+	['wueste', '60% 60%'],
+	['nebelwald', '50% 40%'],
+	['bergsee', '50% 45%'],
+	['weltraum', '50% 50%'],
+] as const;
+
+/** The built-in photo and its part an account without a picture shows. */
+export function fallbackPicture(name: string): { url: string; position: string } {
+	let hash = 0;
+	for (const c of name) hash = (hash * 31 + c.codePointAt(0)!) >>> 0;
+	const [id, position] = FALLBACK[hash % FALLBACK.length];
+	return { url: `/backgrounds/${id}.webp`, position };
+}

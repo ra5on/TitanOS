@@ -5522,6 +5522,8 @@
 	"loginLook.width.wide": "Wide",
 	"loginLook.positionHint": "On phones the card is always in the center.",
 	"loginLook.showHost": "Show the name of the NAS",
+	"loginLook.moving": "Moving background",
+	"loginLook.movingHint": "Northern lights and Mountain lake move (aurora, water, clouds). With “reduce motion” in the system the picture stays still.",
 	"loginLook.showLogo": "Show the logo",
 	"loginLook.clock": "Show time and date",
 	"loginLook.texts": "Texts",

@@ -98,6 +98,9 @@ type loginAppearance struct {
 	HideHost     bool                  `json:"hideHost"`
 	HideLogo     bool                  `json:"hideLogo"`
 	Clock        bool                  `json:"clock"`
+	// Still stops the moving picture (northern lights, mountain lake) of the
+	// login page (PLAN 74: moving by default). Older titand ignore it.
+	Still bool `json:"still,omitempty"`
 	// The account picker of the login page (PLAN 67, login_accounts.go):
 	// circles or a list; all accounts are shown only from the home
 	// network unless ShowAccountsExternal. Older titand ignore the fields.
