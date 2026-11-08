@@ -1128,8 +1128,6 @@ func meminfo(field string) (uint64, error) {
 	return parseMeminfo(data, field)
 }
 
-func parseMemAvailable(data []byte) (uint64, error) { return parseMeminfo(data, "MemAvailable:") }
-
 func parseMeminfo(data []byte, field string) (uint64, error) {
 	scanner := bufio.NewScanner(bytes.NewReader(data))
 	for scanner.Scan() {

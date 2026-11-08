@@ -641,7 +641,9 @@
 	}
 	.share-name {
 		font-weight: 500;
-		overflow-wrap: anywhere;
+		/* Breaks only a name longer than the column, never a word like
+		   "Documents" that fits on a line of its own. */
+		overflow-wrap: break-word;
 	}
 	.share-name:hover {
 		color: var(--accent);

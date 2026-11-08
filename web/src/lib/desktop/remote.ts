@@ -140,7 +140,7 @@ export type ServerMessage =
 	| { t: 'uploaded'; id: number; error?: 'too_large' | 'bad_name' | 'no_space' | 'failed' }
 	| { t: 'bye'; reason: ByeReason; text: string }
 	| { t: 'starting' }
-	| { t: 'error'; code: string; text: string; image?: ImageStatus };
+	| { t: 'error'; code: string; text: string; image?: ImageStatus; detail?: string };
 
 const VIEWER_ERRORS: ViewerError[] = [
 	'app_forbidden',
@@ -213,6 +213,7 @@ export function parseMessage(text: string): ServerMessage | null {
 		case 'error': {
 			const out: ServerMessage = { t: 'error', code: str(m.code), text: str(m.text) };
 			if (m.image && typeof m.image === 'object') out.image = sanitizeImage(m.image);
+			if (typeof m.detail === 'string' && m.detail) out.detail = m.detail.slice(0, 400);
 			return out;
 		}
 	}

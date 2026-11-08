@@ -45,6 +45,7 @@
 	import { tailnetHost, type TailnetStatus } from '#lib/app-links.ts';
 	import AppIcon from '#lib/components/AppIcon.svelte';
 	import ContextMenu from '#lib/components/ContextMenu.svelte';
+	import RowMenu from './RowMenu.svelte';
 	import { isRunning, portLabels, webLinks } from './container.ts';
 
 	let tailnet = $state<TailnetStatus | null>(null);
@@ -994,108 +995,32 @@
 {#if rowMenu}
 	{@const group = rowMenu.group}
 	{@const app = groupApp(group)}
-	{@const primary = stackPrimary(group, layout.primaryServices) ?? group.members[0]}
-	{@const links = primary ? webLinks(primary, host, tailscaleHost) : []}
-	{@const busy = groupBusy(group)}
-	{@const stack = group.members.length > 1}
-	<ContextMenu
-		label={t('docker.actionsFor', { name: group.name })}
+	<RowMenu
+		{group}
 		x={rowMenu.x}
 		y={rowMenu.y}
+		{app}
+		busy={groupBusy(group)}
+		update={groupUpdate(group)}
+		inTailnet={!!app && appInTailnet(app)}
+		primaryServices={layout.primaryServices}
+		{host}
+		{tailscaleHost}
+		{inWindow}
+		proxy={!!proxy}
+		{savingLayout}
 		onclose={() => (rowMenu = null)}
-	>
-		<div class="menu-title">{group.name}</div>
-		{#if layout.primaryServices[group.id] && !stackPrimary(group, layout.primaryServices)}<p
-				class="menu-title"
-			>
-				{t('docker.primaryMissing', { service: layout.primaryServices[group.id] })}
-			</p>{/if}
-		<button
-			type="button"
-			role="menuitem"
-			disabled={busy}
-			onclick={() => pick(() => groupAction(group, 'restart'))}
-			><Icon name="restart" size={16} /><span>{t('docker.restart')}</span></button
-		>
-		{#if links.length}<p class="menu-title">{t('docker.table.open')}</p>{/if}
-		{#each links as link, index (`${index}:${link.href}`)}<a
-				role="menuitem"
-				href={link.href}
-				target="_blank"
-				rel="noreferrer"
-				title={link.label}
-				onclick={() => (rowMenu = null)}
-				><Icon name={link.icon} size={16} /><span>{link.text}</span></a
-			>{/each}
-		{#if inWindow && app}
-			<button type="button" role="menuitem" onclick={() => pick(() => openRemote(app))}
-				><Icon name="monitor" size={16} /><span>{t('docker.table.openRemote')}</span></button
-			>
-		{/if}
-		<hr />
-		{#each group.members as c (c.id)}
-			{@const label = c.service || dockerName(c, 'distinct')}
-			<button
-				type="button"
-				role="menuitem"
-				onclick={() => pick(() => (dialog = { kind: 'logs', container: c }))}
-				><Icon name="fileText" size={16} /><span
-					>{stack ? t('docker.table.logsOf', { name: label }) : t('docker.logs')}</span
-				></button
-			>
-			<button
-				type="button"
-				role="menuitem"
-				disabled={!isRunning(c)}
-				onclick={() => pick(() => addContainerConsole(c.id, dockerName(c, 'distinct')))}
-				><Icon name="terminal" size={16} /><span
-					>{stack ? t('docker.table.consoleOf', { name: label }) : t('docker.console')}</span
-				></button
-			>
-		{/each}
-		<hr />
-		{#if app}
-			<a
-				role="menuitem"
-				href="/docker/apps/{encodeURIComponent(app)}"
-				onclick={() => (rowMenu = null)}
-				><Icon name="edit" size={16} /><span>{t('docker.edit')}</span></a
-			>
-		{/if}
-		{#if app && groupUpdate(group)}
-			<button
-				type="button"
-				role="menuitem"
-				disabled={busy}
-				onclick={() => pick(() => updateApp(app))}
-				><Icon name="download" size={16} /><span>{t('docker.updateNow')}</span></button
-			>
-		{/if}
-		{#if stack}
-			<button
-				type="button"
-				role="menuitem"
-				disabled={savingLayout}
-				onclick={() => pick(() => editLinks(group))}
-				><Icon name="globe" size={16} /><span>{t('docker.stackLinks')}</span></button
-			>
-		{/if}
-		{#if proxy && app}
-			<button type="button" role="menuitem" onclick={() => pick(() => openTailnet(app))}
-				><Icon name="tailnet" size={16} /><span
-					>{t(appInTailnet(app) ? 'docker.tailnetUnpublish' : 'docker.tailnetPublish')}</span
-				></button
-			>
-		{/if}
-		<hr />
-		<button
-			type="button"
-			role="menuitem"
-			class="danger"
-			onclick={() => pick(() => removeGroup(group))}
-			><Icon name="trash" size={16} /><span>{t('docker.remove')}</span></button
-		>
-	</ContextMenu>
+		on={{
+			restart: () => pick(() => groupAction(group, 'restart')),
+			openRemote: (a) => pick(() => openRemote(a)),
+			logs: (c) => pick(() => (dialog = { kind: 'logs', container: c })),
+			console: (c) => pick(() => addContainerConsole(c.id, dockerName(c, 'distinct'))),
+			update: (a) => pick(() => updateApp(a)),
+			editLinks: () => pick(() => editLinks(group)),
+			tailnet: (a) => pick(() => openTailnet(a)),
+			remove: () => pick(() => removeGroup(group)),
+		}}
+	/>
 {/if}
 
 {#if linkGroup}

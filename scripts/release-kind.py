@@ -38,6 +38,9 @@ ALLOWED = (
     # release repacks the base image anyway (decision of 4.11.2026). Changes
     # meant for the image itself need "[system]" in the tag message.
     ".github/workflows/release.yml",
+    # Signs and publishes plugin sets in CI (PLAN 75: newest draft per tag);
+    # nothing of it is in the image.
+    ".github/workflows/plugin-sign.yml",
     # The image of the remote view (PLAN 63) is a release asset of its own,
     # built for every release and loaded by titand; it is not in the system
     # squashfs. make-release.sh and third-party-licenses.py only pack it.

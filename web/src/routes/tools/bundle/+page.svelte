@@ -1,25 +1,27 @@
 <script lang="ts">
-	import { api } from '#lib/api.ts';
+	import { apiPath } from '#lib/cluster-node.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
 
-	let packing = $state(false);
-	let packError = $state('');
-	// The bundle is made while it is being downloaded; the browser saves it.
-	async function pack() {
-		packing = true;
-		packError = '';
-		try {
-			await api.download('/diagnostics/bundle', 'titanos-diagnose.zip', { serverName: true });
-		} catch {
-			packError = t('tools.bundleFailed');
-		}
-		packing = false;
+	let started = $state(false);
+	// PLAN 75-10: the browser itself downloads the bundle while titand packs
+	// it, so the download bar shows it at once. Before, the page collected the
+	// whole file first (minutes on a NAS with many disks) and then handed it
+	// over - from a window of the desktop this ended with nothing to see.
+	function pack() {
+		const link = document.createElement('a');
+		link.href = apiPath('/diagnostics/bundle');
+		// titand's name (with the time) wins over this one when it sends it.
+		link.download = 'titanos-diagnose.zip';
+		document.body.append(link);
+		link.click();
+		link.remove();
+		started = true;
 	}
 
 	// PLAN 67-1: Ablage › Diagnosepaket erstellen in the menu bar of the desktop.
 	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
-	registerMenuCommands({ 'logs.pack': { run: () => void pack(), enabled: () => !packing } });
+	registerMenuCommands({ 'logs.pack': { run: pack, enabled: () => true } });
 </script>
 
 <PageHead title={t('tools.bundle')} />
@@ -33,11 +35,9 @@
 		<dd>{t('tools.bundleOutText')}</dd>
 	</dl>
 	<p class="notice-warn">{t('tools.bundleCheck')}</p>
-	{#if packError}<p class="notice-error" role="alert">{packError}</p>{/if}
+	{#if started}<p class="notice-ok" role="status">{t('tools.bundleStarted')}</p>{/if}
 	<div>
-		<button type="button" class="btn btn-primary" disabled={packing} onclick={pack}
-			>{t(packing ? 'tools.bundlePacking' : 'tools.bundleMake')}</button
-		>
+		<button type="button" class="btn btn-primary" onclick={pack}>{t('tools.bundleMake')}</button>
 	</div>
 </section>
 

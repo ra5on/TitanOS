@@ -2,6 +2,8 @@ import type { MessageKey } from '#lib/i18n/index.svelte.ts';
 import type { IconName } from '#lib/components/Icon.svelte';
 
 const keywords: Record<string, string> = {
+	users:
+		'nutzer benutzer konto konten account accounts passwort password rolle role administrator besitzer owner 2fa sperren lock anlegen',
 	appearance:
 		'navigation reiter tabs leiste kopfzeile header reihenfolge order theme design farbe color font schrift hintergrund background app symbol icon home bildschirm screen menü menu fenster window dialog transparenz transparency glas glass glaseffekt ecken corners farbstärke saturation dock anmeldeseite login',
 	network:
@@ -321,6 +323,14 @@ export const settingsAreas: SettingsArea[] = [
 		icon: 'tailnet',
 		admin: true,
 		newSince: { version: '0.38.0', date: '2026-10-30' },
+	},
+	{
+		id: 'users',
+		label: 'desktop.app.users',
+		group: 'accounts',
+		icon: 'users',
+		admin: true,
+		newSince: { version: '0.70.1', date: '2026-11-08' },
 	},
 	{ id: 'access', label: 'access.title', group: 'accounts', icon: 'lock', admin: true },
 	{

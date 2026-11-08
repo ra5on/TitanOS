@@ -110,6 +110,7 @@ test('the settings navigation keeps its four groups in order, sorts entries A–
 		'timezone',
 		'updates',
 		'ups',
+		'users',
 		'viewer',
 		'wireguard',
 	]);
@@ -126,6 +127,7 @@ test('the settings navigation keeps its four groups in order, sorts entries A–
 		'mcp',
 		'programs',
 		'services',
+		'users',
 		'viewer',
 		'wireguard',
 	]);

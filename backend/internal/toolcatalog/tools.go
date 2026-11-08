@@ -57,18 +57,6 @@ func CodedErrorf(code, format string, args ...any) error {
 	return &ToolError{Code: code, Message: fmt.Sprintf(format, args...)}
 }
 
-// ToolErrorCode is the category of an error for the activity log.
-func ToolErrorCode(err error) string {
-	var problem *ToolError
-	if errors.As(err, &problem) && problem.Code != "" {
-		return problem.Code
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return "tool_timeout"
-	}
-	return "tool_failed"
-}
-
 // DecodeArgs reads the arguments of a call strictly.
 func DecodeArgs(args json.RawMessage, v any) error {
 	if len(bytes.TrimSpace(args)) == 0 || bytes.TrimSpace(args)[0] != '{' {

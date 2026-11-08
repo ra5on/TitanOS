@@ -44,6 +44,11 @@
 	}
 	const offeredRoles = $derived(ROLES.filter(mayManage));
 	const date = $derived(new Intl.DateTimeFormat(i18n.locale, { dateStyle: 'medium' }));
+	// An account from before the field existed (or test data) has no date: a dash, never a crash.
+	const day = (value?: string) => {
+		const d = value ? new Date(value) : null;
+		return d && !Number.isNaN(d.getTime()) ? date.format(d) : '–';
+	};
 	const dateTime = $derived(
 		new Intl.DateTimeFormat(i18n.locale, { dateStyle: 'medium', timeStyle: 'short' }),
 	);
@@ -356,7 +361,7 @@
 								{/each}
 							{/if}
 						</td>
-						<td class="muted date">{date.format(new Date(account.created))}</td>
+						<td class="muted date">{day(account.created)}</td>
 						<td class="actions">
 							<!-- PLAN 67: the account's actions in one "⋯" menu (the list keeps its width). -->
 							{#if manageable || account.name === me?.name || (accounts && mayLock(me, account, accounts))}
@@ -648,6 +653,8 @@
 		display: block;
 		font-size: var(--text-sm);
 		color: var(--muted);
+		/* Cells may break anywhere (main.readable td); these hints are words. */
+		overflow-wrap: break-word;
 	}
 	.role {
 		width: auto;

@@ -412,7 +412,7 @@ try {
     );
     await page.getByRole("switch", { name: "Erweitert" }).click();
     await page.locator("#memory").selectOption("6g");
-    await page.getByRole("textbox", { name: "TZ" }).fill("Europe/Berlin");
+    await page.getByRole("textbox", { name: "TZ", exact: true }).fill("Europe/Berlin");
     assert.equal(await page.locator(".form-row.changed").count(), 2);
     assert.match(await page.locator(".apply").innerText(), /Übernehmen/);
     await shot(page, out + "/5-bearbeiten.png");
