@@ -1137,7 +1137,7 @@
 		text={canAdminister ? t('files.noRootsAdmin') : undefined}
 	/>
 {:else if roots}
-	<div class="layout" class:windowed={inWindow}>
+	<div class="layout" class:windowed={inWindow} class:folded={inWindow && sideFolded}>
 		<MobileLocation
 			{root}
 			{dir}
@@ -1868,23 +1868,40 @@
 		color: var(--muted);
 		margin-top: 6px;
 	}
+	/* The page head is a heading for screen readers only: it takes no room
+	   (in a window the flex gap above the content came from it, PLAN 73). */
+	.files-pagehead {
+		display: contents;
+	}
 	@media (min-width: 761px) {
+		/* PLAN 73: edge to edge in the window – the places are a column of the
+		   page's own grid (no fixed bar laid over the list), the list reaches
+		   the window's edges, the bars keep their inner spacing. */
 		.layout.windowed {
-			grid-template-columns: minmax(0, 1fr);
+			grid-template-columns: 220px minmax(0, 1fr);
+			gap: 0;
+			align-items: stretch;
+			margin: calc(-1 * var(--page-pad));
+			min-height: 100dvh;
 		}
-		:global(main.in-window):has(.places.windowed) {
-			padding-left: calc(220px + var(--page-pad));
+		.layout.windowed.folded {
+			grid-template-columns: 60px minmax(0, 1fr);
 		}
-		:global(main.in-window):has(.places.windowed.folded) {
-			padding-left: calc(60px + var(--page-pad));
+		.layout.windowed > .workspace {
+			align-content: start;
+		}
+		.layout.windowed .browser {
+			border: 0;
+			border-radius: 0;
+			background: none;
+			box-shadow: none;
 		}
 		.places.windowed {
-			position: fixed;
+			position: sticky;
 			z-index: 25;
 			top: 0;
-			bottom: 0;
-			left: 0;
-			width: 220px;
+			height: 100dvh;
+			width: auto;
 			max-height: none;
 			gap: 0;
 			padding: 12px 10px;
@@ -1900,7 +1917,6 @@
 			border-right: 1px solid var(--border);
 		}
 		.places.windowed.folded {
-			width: 60px;
 			padding: 12px 8px;
 			align-items: center;
 		}
@@ -1995,13 +2011,6 @@
 		}
 		.places.open {
 			display: flex;
-		}
-		.files-pagehead {
-			position: absolute;
-			width: 1px;
-			height: 1px;
-			overflow: hidden;
-			clip-path: inset(50%);
 		}
 	}
 </style>
