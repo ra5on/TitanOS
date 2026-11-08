@@ -67,7 +67,7 @@
 
 <p align="center"><sub>Alle Bilder zeigen die echte Oberfläche mit Beispieldaten. Keine Mockups. <a href="docs/screenshots/README.md">Aufnahmestand</a>.</sub></p>
 
-TitanOS basiert auf **Debian 13** und startet per UEFI, 32-Bit-UEFI oder Legacy-BIOS von einem USB-Stick. Daten, Apps und VMs liegen auf eigenen Volumes, die Konfiguration bleibt auf dem Stick. Die Bedienidee ist von Unraid inspiriert. TitanOS setzt auf klassisches Linux-Software-RAID und ist ein eigenständiges Projekt ohne Verbindung zu Lime Technology.
+TitanOS basiert auf **Debian 13** und läuft auf jedem 64-Bit-PC (x86-64) und startet von einem USB-Stick, normal per UEFI. Ältere Rechner mit 32-Bit-UEFI-Firmware oder Legacy-BIOS starten ebenfalls; das System bleibt auch dort 64-Bit. Daten, Apps und VMs liegen auf eigenen Volumes, die Konfiguration bleibt auf dem Stick. Die Bedienidee ist von Unraid inspiriert. TitanOS setzt auf klassisches Linux-Software-RAID und ist ein eigenständiges Projekt ohne Verbindung zu Lime Technology.
 
 ## Funktionen
 
@@ -330,7 +330,7 @@ TitanOS nutzt einen **Stable-Kanal**. Die Weboberfläche prüft und installiert 
 
 | Bereich | Voraussetzung |
 |---|---|
-| Rechner | x86-64/amd64 mit UEFI, 32-Bit-UEFI oder Legacy-BIOS (dafür das Stick-Abbild oder `boot/grub/stick-bios.py`, siehe `docs/BOOT.md`); Secure Boot für das NAS ausgeschaltet |
+| Rechner | 64-Bit-PC (x86-64/amd64), normal mit UEFI. Auch möglich: 32-Bit-UEFI-Firmware mit 64-Bit-CPU (z. B. Atom „Bay Trail“) oder Legacy-BIOS (dafür das Stick-Abbild oder `boot/grub/stick-bios.py`, siehe `docs/BOOT.md`). Secure Boot für das NAS ausgeschaltet |
 | Arbeitsspeicher | Für erste Tests 4 GB einplanen, zusätzlich RAM für Apps und VMs; keine pauschal abgenommene Hardware-Mindestgröße |
 | Bootmedium | USB-Stick mit 8–32 GB, FAT32, Label `TITANOS` |
 | Nutzdaten | Separate Laufwerke; ein neues Volume löscht die ausgewählten Platten |
