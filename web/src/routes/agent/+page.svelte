@@ -9,6 +9,7 @@
 	import { goto } from '$app/navigation';
 	import { fade, fly } from 'svelte/transition';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import { formatDateTime } from '#lib/format.ts';
 	import Dropdown from '#lib/components/Dropdown.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import NasPicker from '#lib/components/agent/NasPicker.svelte';
@@ -62,6 +63,8 @@
 
 	let status = $state<Status | null>(null);
 	let chats = $state<ChatInfo[]>([]);
+	// PLAN 72: archived chats are only in the Archiv.
+	const listedChats = $derived(chats.filter((c) => !c.archived));
 	let projects = $state<Project[]>([]);
 	let locations = $state<Location[]>([]);
 	let current = $state<Chat | null>(null);
@@ -97,6 +100,7 @@
 		| { kind: 'sheet'; project: Project }
 		| { kind: 'nas' }
 		| { kind: 'feature'; id: FeatureViewId }
+		| { kind: 'archive' }
 		| null
 	>(null);
 	// PLAN 54: which functions are there for this account, and their views
@@ -928,6 +932,10 @@
 		onsettings: () => (dialog = { kind: 'settings' }),
 		settingsOn: !!settingsShown,
 		plannedCount,
+		onarchive: () => {
+			menuOpen = false;
+			dialog = { kind: 'archive' };
+		},
 		onfold: phone ? undefined : () => setFolded(true),
 		inboxCount,
 		oninbox: () => (dialog = { kind: 'inbox' }),
@@ -940,6 +948,7 @@
 		onaction: (chat: ChatInfo, action: Swipe) => {
 			buzz(12);
 			if (action === 'pin') void patch(chat, { pinned: !chat.pinned });
+			else if (action === 'archive') void patch(chat, { archived: !chat.archived });
 			else if (action === 'delete') dialog = { kind: 'delete', chat };
 			else if (action === 'menu') dialog = { kind: 'actions', chat };
 		},
@@ -1017,6 +1026,17 @@
 							close();
 							dialog = { kind: 'move', chat: info };
 						}}><Icon name="folder" size={16} /><span>{t('agent.moveToProject')}</span></button
+					>
+					<button
+						type="button"
+						role="menuitem"
+						onclick={() => {
+							close();
+							void patch(info, { archived: !info.archived });
+						}}
+						><Icon name="archive" size={16} /><span
+							>{info.archived ? t('agent.archive.restore') : t('agent.archive.do')}</span
+						></button
 					>
 					<hr />
 					<a role="menuitem" href={`/api/v1/agent/chats/${info.id}/export`} download onclick={close}
@@ -1209,7 +1229,7 @@
 						onshuffle={() => (shuffle += 1)}
 						show={look.suggestions}
 						{user}
-						{chats}
+						chats={listedChats}
 						{projects}
 						{project}
 						{suggestions}
@@ -1341,6 +1361,16 @@
 			<button type="button" onclick={() => (dialog = { kind: 'move', chat })}
 				><span class="sq"><Icon name="folder" size={17} /></span>{t('agent.moveToProject')}</button
 			>
+			<button
+				type="button"
+				onclick={() => {
+					dialog = null;
+					void patch(chat, { archived: !chat.archived });
+				}}
+				><span class="sq"><Icon name="archive" size={17} /></span>{chat.archived
+					? t('agent.archive.restore')
+					: t('agent.archive.do')}</button
+			>
 			<a href={`/api/v1/agent/chats/${chat.id}/export`} download onclick={() => (dialog = null)}
 				><span class="sq"><Icon name="download" size={17} /></span>{t('agent.exportMd')}</a
 			>
@@ -1355,6 +1385,38 @@
 			>
 		</div>
 	</div>
+{:else if dialog?.kind === 'archive'}
+	{@const list = chats
+		.filter((c) => c.archived && !c.author)
+		.sort((a, b) => b.updated.localeCompare(a.updated))}
+	<Dialog title={t('agent.archive.title')} onclose={() => (dialog = null)}>
+		<section class="tile ui-card archive-list">
+			{#each list as c (c.id)}
+				<div class="set-row">
+					<span class="set-label"
+						>{c.title || t('agent.newChat')}<span class="set-hint"
+							>{formatDateTime(new Date(c.updated))}</span
+						></span
+					>
+					<span class="set-control">
+						<button
+							type="button"
+							class="btn"
+							onclick={() => {
+								dialog = null;
+								void open(c.id);
+							}}>{t('agent.archive.open')}</button
+						>
+						<button type="button" class="btn" onclick={() => void patch(c, { archived: false })}
+							>{t('agent.archive.restore')}</button
+						>
+					</span>
+				</div>
+			{:else}
+				<p class="set-row muted">{t('agent.archive.empty')}</p>
+			{/each}
+		</section>
+	</Dialog>
 {:else if dialog?.kind === 'inbox'}
 	<InboxPanel
 		{calm}
@@ -1465,7 +1527,7 @@
 	{@const p = dialog.project}
 	<ProjectSheet
 		project={p}
-		{chats}
+		chats={listedChats}
 		onclose={() => (dialog = null)}
 		onopen={(id) => {
 			dialog = null;

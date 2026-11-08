@@ -254,7 +254,6 @@ const features = {
   emergency: {},
   buddy: {},
   catalog: {},
-  diary: {},
   whatIf: { enabled: true },
   advisor: {
     enabled: true,
@@ -276,7 +275,6 @@ const pub = {
   advisor: true,
   buddy: false,
   catalog: false,
-  diary: false,
 };
 
 async function open(width, height, { whatIfOn = true, prices = false } = {}) {
@@ -311,7 +309,7 @@ async function open(width, height, { whatIfOn = true, prices = false } = {}) {
       return json(route.request().postDataJSON());
     }
     if (p === "/agent/features/me")
-      return json({ mine: { docs: {}, paper: {}, diary: {} }, nas: pub });
+      return json({ mine: { docs: {}, paper: {} }, nas: pub });
     if (/^\/backups\/[^/]+\/run$/.test(p)) {
       seen.backups.push(p);
       return json({});

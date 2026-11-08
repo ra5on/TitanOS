@@ -246,6 +246,9 @@ var clock = regexp.MustCompile(`^([01]\d|2[0-3]):[0-5]\d$`)
 
 // checkSchedule validates a schedule as the person or the agent sent it.
 func checkSchedule(sc *agent.Schedule) error {
+	if !slices.Contains([]string{"", "wake", "ask", "never"}, sc.Wake) {
+		return toolcatalog.Errorf("wake must be wake, ask or never (empty: as the account chose)")
+	}
 	sc.Name, sc.Task = strings.TrimSpace(sc.Name), strings.TrimSpace(sc.Task)
 	if sc.Name == "" || len(sc.Name) > 80 || sc.Task == "" || len(sc.Task) > 4000 {
 		return toolcatalog.Errorf("give a short name and the task")

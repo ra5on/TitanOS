@@ -183,6 +183,13 @@ Ist der Agent eingeschaltet, legt TitanOS auf seinem Volume die Freigabe **„KI
 - **Übersicht „Geplant“** im Agent-Menü (auch unter „Gedächtnis, Skills, Geplant“): nächster Lauf, Pausieren, Ändern, Jetzt ausführen, Löschen, letztes Ergebnis; Formular mit allen Arten.
 - **Morgenbericht** (ab Werk aus, je Konto): oben in „Geplant“ mit Uhrzeit, Wochentagen und Inhalt per Häkchen (NAS-Zustand und Speicher, Backups und Updates, Erinnerungen und Aufträge des Tages, Home Assistant) und eigenem Wunschtext. Er liest nur und ändert nichts. Der Agent legt ihn nicht im Chat an.
 - Ältere Versionen ignorieren die neuen Arten (Feld `every` mit unbekanntem Wert); beim Rückweg laufen sie nicht.
+- **Schlafende Platten je Auftrag** (seit 0.69, PLAN 53/72):
+  - Jeder Auftrag hat die Wahl „Wie unter Eigeninitiative“ (ab Werk), „Wecken“, „Vorher fragen“ oder „Nie wecken“ (Feld `wake` des Auftrags).
+  - Der Chat eines Laufs merkt sich seinen Auftrag (`schedule`). Die Dateiwerkzeuge nehmen dann die Wahl des Auftrags statt der des Kontos.
+  - „Vorher fragen“ hält den Lauf an, bis die Person zustimmt.
+  - Hintergrund (Wache, Nachdenken, Morgenbericht) weckt weiter nie.
+  - Erinnerungen haben die Wahl nicht.
+  - Ältere Versionen ignorieren das Feld; es gilt dann die Wahl des Kontos.
 
 ## Sprache, Bilder, Vorlesen (PLAN 49/51)
 
@@ -229,7 +236,7 @@ Von 0.54.0 bis 0.63.0 hatte der Agent einen eigenen Auftritt (Polarlicht hinter 
 - Geplant, Gedächtnis, Skills, Meine Anweisung, NAS-Landkarte, Protokoll: Jeder Teil öffnet sich einzeln, ohne Sammelfenster.
 - Darstellung und Gesten:
   - Wischgesten an oder aus;
-  - was Wischen nach rechts oder links an einem Chat tut: Anheften, Löschen, Menü, Nichts;
+  - was Wischen nach rechts oder links an einem Chat tut: Anheften, Archivieren, Löschen, Menü, Nichts;
   - vom Rand wischen: links Chats, rechts Einstellungen;
   - Ziehen zum Aktualisieren;
   - Vibration;
@@ -246,7 +253,15 @@ Von 0.54.0 bis 0.63.0 hatte der Agent einen eigenen Auftritt (Polarlicht hinter 
 
 **Menü eines Chats**
 - Erreichbar über Wischen mit „Menü“, langes Drücken oder Rechtsklick.
-- Anheften, Umbenennen, In Projekt verschieben, Markdown und PDF herunterladen, Löschen (mit einfacher Rückfrage).
+- Anheften, Umbenennen, In Projekt verschieben, Archivieren (bzw. „Aus dem Archiv holen“), Markdown und PDF herunterladen, Löschen (mit einfacher Rückfrage).
+
+**Archiv** (seit 0.69, PLAN 53/72)
+- Archivierte Chats verschwinden aus der Liste, aus der Suche des Menüs und aus der Startseite. Der Eintrag „Archiv“ in der Seitenleiste erscheint, sobald es archivierte Chats gibt, und zeigt ihre Zahl.
+- Das Archiv listet sie mit „Öffnen“ und „Aus dem Archiv holen“.
+- Technik:
+  - Feld `archived` des Chats (`PATCH /api/v1/agent/chats/{id}` mit `{"archived": true|false}`).
+  - Archivierte Chats werden beim Kürzen auf 2 000 Chats behalten wie angeheftete.
+  - Ältere Versionen zeigen sie wieder in der Liste.
 
 **Speicherort**
 - Die Einstellungen liegen je Konto auf dem NAS in `.titanos/agent/<konto>/prefs.json` (`GET`/`PUT /api/v1/agent/prefs`).
@@ -364,7 +379,7 @@ Neun Funktionen in vier Gruppen, jede **ab Werk aus** und einzeln einstellbar: E
 | Dokumente und Fristen | Dokumenten-Gedächtnis (Werkzeug `documents_search`), Fristenwächter (Vorschläge in „Vorschläge“), Papierkram-Autopilot (Eingang, eigenes IMAP-Postfach, Ablage mit Rückgängig, Ansicht „Papierkram“) | `docs/agent54/docs.md` |
 | Schutz | Ransomware-Wächter (fanotify, sperren und melden, Zurückstellen aus Btrfs-Snapshots), Notfallhandbuch (Markdown/PDF), Notfallzugang (Antrag mit Wartezeit, nur lesen, 30 Tage) | `docs/agent54/protect.md` |
 | Vorausschau | Was-wäre-wenn („Durchspielen“ auf der Speicher-Seite, Werkzeug `whatif`), Hardware-Berater (SMART-Verlauf, Engpässe, Werkzeug `hardware_advice`) | `docs/agent54/foresight.md` |
-| Gemeinschaft und Familie | Backup-Buddy (restic REST auf TCP 8752, nur Tailscale), Skill-Katalog (Ordner `skills/` der App-Store-Quellen), Familien-Tagebuch (Werkzeug `diary`) | `docs/agent54/family.md` |
+| Gemeinschaft und Familie | Backup-Buddy (restic REST auf TCP 8752, nur Tailscale), Skill-Katalog (Ordner `skills/` der App-Store-Quellen) (das Familien-Tagebuch wurde mit 0.69 entfernt) | `docs/agent54/family.md` |
 
 **Ansichten als Seite (PLAN 72, 0.67):** Im Agent-Fenster am Computer öffnen die Ansichten der Funktionen (Papierkram, Fristen, Ransomware-Wächter, Notfallhandbuch, Notfallzugang, Hardware-Berater, Backup-Buddy, Skill-Katalog) als Seite im Hauptbereich rechts der Seitenleiste (`FeatureHost.svelte`, Kontext aus `features/page-mode.ts`), nicht mehr als Blatt über der Leiste. Die Leiste bleibt bedienbar; „Neuer Chat“ und ein Chat schließen die Seite, Escape und „‹“ ebenso. Am Handy und beim Öffnen aus den Einstellungen bleibt es beim Blatt. Prüfung: `scripts/test-ui-agent54-docs.mjs` (Lage neben der Leiste, Schließen über „Neuer Chat“) und die übrigen `test-ui-agent54-*.mjs`.
 

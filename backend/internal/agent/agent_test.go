@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // fakeOllama answers /api/chat with the replies in order, each a list of
@@ -375,5 +377,21 @@ func TestSchedulesStayInRAM(t *testing.T) {
 	}
 	if opens != before {
 		t.Fatalf("the volume was read %d more times", opens-before)
+	}
+}
+
+// PLAN 72: trimming drops the oldest chats, never pinned or archived ones.
+func TestTrimKeepsPinnedAndArchived(t *testing.T) {
+	now := time.Now()
+	var index []ChatInfo
+	for i := 0; i < MaxChats+3; i++ {
+		index = append(index, ChatInfo{ID: fmt.Sprint(i), Updated: now.Add(-time.Duration(i) * time.Minute)})
+	}
+	index[MaxChats+1].Pinned = true
+	index[MaxChats+2].Archived = true
+	s := &Store{}
+	removed := s.trimLocked(&index)
+	if len(removed) != 1 || removed[0] != fmt.Sprint(MaxChats) {
+		t.Fatalf("removed %v", removed)
 	}
 }

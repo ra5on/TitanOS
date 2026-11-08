@@ -628,6 +628,7 @@ func TestDocsStaleFolderKeepsSaving(t *testing.T) {
 	}
 	docsMine(t, ts, ts.client, mine)
 	ts.disks.UseMounts(mnt, func() map[string]bool { return map[string]bool{} })
+	// An older page (0.68) still sends the removed diary part; it is ignored.
 	mine["diary"] = map[string]any{}
 	docsMine(t, ts, ts.client, mine)
 	// A new folder without access is still refused.

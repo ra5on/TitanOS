@@ -53,7 +53,6 @@ const features = {
   advisor: {},
   buddy: {},
   catalog: {},
-  diary: {},
 };
 const pub = {
   docs: true,
@@ -66,7 +65,6 @@ const pub = {
   advisor: false,
   buddy: false,
   catalog: false,
-  diary: false,
 };
 const mine = {
   docs: {
@@ -88,7 +86,6 @@ const mine = {
       passwordSet: true,
     },
   },
-  diary: {},
 };
 const docs = {
   at: "03:00",

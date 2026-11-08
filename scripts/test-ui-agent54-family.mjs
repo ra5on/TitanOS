@@ -1,8 +1,8 @@
 // PLAN 54-G „Gemeinschaft und Familie“: the rows in Einstellungen ›
-// KI-Agent › Funktionen, the settings of Backup-Buddy, Skill-Katalog and
-// Familien-Tagebuch, the views Backup-Buddy (mockup 11) and Skill-Katalog
-// (mockup 12) on the phone and the desktop. Isolated API data only: no
-// request reaches a NAS, a partner, a catalog, Immich or Frigate.
+// KI-Agent › Funktionen, the settings of Backup-Buddy and Skill-Katalog,
+// the views Backup-Buddy (mockup 11) and Skill-Katalog (mockup 12) on the
+// phone and the desktop. The Familien-Tagebuch was removed with 0.69.
+// Isolated API data only: no request reaches a NAS, a partner or a catalog.
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { fixtureFactory } from "./test-ui-fixtures.mjs";
@@ -40,7 +40,6 @@ const features = {
     probeFiles: 50,
   },
   catalog: { enabled: true },
-  diary: { enabled: false },
 };
 const pub = {
   docs: false,
@@ -53,18 +52,10 @@ const pub = {
   advisor: false,
   buddy: true,
   catalog: true,
-  diary: false,
 };
 const mine = {
   docs: {},
   paper: {},
-  diary: {
-    off: ["chats"],
-    immichUrl: "http://192.168.1.20:2283",
-    immichKeySet: true,
-    frigateUrl: "http://192.168.1.21:5000",
-    photos: { root: "share/Fotos", path: "2026" },
-  },
 };
 const buddy = {
   settings: features.buddy,
@@ -202,10 +193,7 @@ async function open(width, height) {
     if (p === "/agent/features/me" && method === "PUT") {
       const body = route.request().postDataJSON();
       seen.puts.push(body);
-      return json({
-        ...body,
-        diary: { ...body.diary, immichKey: undefined, immichKeySet: true },
-      });
+      return json(body);
     }
     if (p === "/agent/buddy") return json(buddy);
     if (p === "/agent/catalog") return json(catalog);
@@ -259,16 +247,16 @@ for (const [width, height, tag] of [
   await page.goto(base + "/settings/agent?tab=features");
   const group = page.locator(".fgrp").filter({ hasText: "Backup-Buddy" });
   await group.waitFor();
-  for (const title of ["Backup-Buddy", "Skill-Katalog", "Familien-Tagebuch"]) {
+  for (const title of ["Backup-Buddy", "Skill-Katalog"]) {
     assert.ok(
       await group.getByText(title, { exact: true }).isVisible(),
       `row ${title}`,
     );
   }
   assert.equal(
-    await group.getByRole("switch", { name: "Familien-Tagebuch" }).isChecked(),
-    false,
-    "diary off",
+    await group.getByText("Familien-Tagebuch").count(),
+    0,
+    "the removed diary has no row",
   );
   assert.equal(
     await group.getByRole("switch", { name: "Backup-Buddy" }).isChecked(),
@@ -373,32 +361,6 @@ for (const [width, height, tag] of [
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
 
-  // Familien-Tagebuch: the account's own sources; the key never comes back.
-  await group.getByRole("button", { name: /Familien-Tagebuch/ }).click();
-  dialog = page.getByRole("dialog", { name: "Familien-Tagebuch" });
-  await dialog.waitFor();
-  assert.equal(
-    await dialog.getByLabel("API-Schlüssel").inputValue(),
-    "",
-    "key not shown",
-  );
-  assert.equal(
-    await dialog
-      .getByRole("checkbox", { name: /Chats mit dem Agenten/ })
-      .isChecked(),
-    false,
-    "chats off",
-  );
-  await noOverflow(page, `${tag} diary settings`);
-  await page.screenshot({
-    path: `${out}/${tag}-07-tagebuch-einstellungen.png`,
-  });
-  await dialog.getByRole("checkbox", { name: /Chats mit dem Agenten/ }).check();
-  await dialog.getByRole("button", { name: "Speichern" }).click();
-  await dialog.getByText("Gespeichert.").waitFor();
-  const sent = seen.puts.at(-1);
-  assert.deepEqual(sent.diary.off, [], "chats back on");
-  assert.equal(sent.diary.immichKey, undefined, "no key sent without a change");
   await ctx.close();
 }
 

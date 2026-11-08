@@ -1,6 +1,6 @@
 # PLAN 54-G: Gemeinschaft und Familie
 
-Drei Funktionen des KI-Agenten: Backup-Buddy, Skill-Katalog und Familien-Tagebuch. Jede ist ab Werk aus. Eingeschaltet werden sie unter Einstellungen › KI-Agent › Funktionen (Besitzer und Administratoren). Die Werte nach dem Einschalten folgen §54-G und lassen sich alle ändern (§54-E).
+Zwei Funktionen des KI-Agenten: Backup-Buddy und Skill-Katalog. Das Familien-Tagebuch (Werkzeug `diary`) wurde mit 0.69 entfernt (Entscheidung des Projektinhabers vom 8.11.2026); seine Einstellungen `diary` in `features.json` fallen beim nächsten Speichern weg, ältere Versionen lesen sie als „aus“. Jede Funktion ist ab Werk aus. Eingeschaltet werden sie unter Einstellungen › KI-Agent › Funktionen (Besitzer und Administratoren). Die Werte nach dem Einschalten folgen §54-G und lassen sich alle ändern (§54-E).
 
 ## Backup-Buddy
 
@@ -66,30 +66,6 @@ Gespeichert wird über `skill_save` mit dessen Regeln (keine Geheimnisse, Länge
 
 Routen (jedes Konto des Agenten, nur Web-Sitzung): `GET /agent/catalog`, `POST /agent/catalog/install` (`key`, `digest`), `GET /agent/catalog/export/{id}`.
 
-## Familien-Tagebuch
-
-**Bedienung.** Besitzer oder Administratoren schalten die Funktion für den Agenten ein. Jedes Konto legt unter Funktionen › Familien-Tagebuch seine eigenen Quellen fest:
-
-- Chats mit dem Agenten, Erinnerungen und Home Assistant (alle drei ab Werk an);
-- einen Fotos-Ordner aus einer eigenen Freigabe;
-- Immich (Adresse und API-Schlüssel);
-- Frigate (Adresse).
-
-Im Chat beantwortet der Agent Fragen wie „Was haben wir letztes Wochenende gemacht?“ mit dem Werkzeug `diary` (lesend, fremder Inhalt). Es nimmt einen Zeitraum von höchstens 31 Tagen. „Wer war heute an der Tür?“ (`focus: door`) beantwortet nur Frigate. Ohne Frigate sagt der Agent das.
-
-**Quellen und Rechte.**
-
-- Chats und Erinnerungen: nur die eigenen des Kontos.
-- Home Assistant: nur für Besitzer und Administratoren, wie bei den anderen `ha_*`-Werkzeugen. Nur Geräte, die für den Agenten freigegeben sind, und nur aus den Bereichen Personen, Alarmanlage, Schlösser, Türsensoren, Abdeckungen und Geräteortung. Gelesen wird der Verlauf (`/api/history`) von höchstens 12 Geräten über höchstens 7 Tage. Eine eigene Logbuch-Abfrage gibt es nicht, weil das Paket `homeassistant` keine anbietet.
-- Fotos-Ordner: Beim Speichern wird geprüft, ob das Konto die Freigabe öffnen darf; ein fremder Ordner wird abgelehnt. Beim Lesen wird erneut mit den Rechten von jetzt geprüft. Gezählt werden Aufnahmedaten aus EXIF (JPEG) oder sonst die Änderungszeit, höchstens 20 000 Dateien, nur Dateien, die seit Beginn des Zeitraums geschrieben wurden. Schläft die Platte, wird der Ordner nur gelesen, wenn das Konto unter Eigeninitiative „Platten wecken“ erlaubt und der Chat kein Hintergrund-Chat ist. Ein lesendes Werkzeug kann nicht nachfragen; „fragen“ gilt deshalb als „nicht wecken“. Ordner, die für den Agenten gesperrt sind (Rechte › Ordner), bleiben zu, auch unterhalb des gewählten Ordners.
-- Verbindungen zu Immich und Frigate: Adressen ohne Benutzerangaben, Abfrage oder Fragment. Beim Verbinden (nach der Namensauflösung) wird geprüft. Das Heimnetz (RFC 1918) ist erlaubt. Nie erlaubt sind Loopback, Link-Local, die eigenen Adressen des NAS und die Netze von Docker (`docker*`, `br-*`). Läuft Immich als App auf demselben NAS, ist es deshalb über die eigene Adresse nicht erreichbar.
-- Immich: `POST /api/search/metadata` mit dem eigenen Schlüssel (`x-api-key`), höchstens 1 000 Aufnahmen. Je Tag werden Anzahl, Orte und Personen gezählt.
-- Frigate: `GET /api/events` im Zeitraum, höchstens 200. Personen erscheinen mit Uhrzeit, andere Ereignisse gezählt je Kamera.
-
-Der Immich-Schlüssel ist ein Geheimnis. Er kommt nie zur Seite zurück, nur `immichKeySet`; ein Speichern ohne Wert behält ihn, „Gespeicherten Schlüssel entfernen“ löscht ihn. Er steht in `features.json` im privaten Agent-Ordner des Kontos und nie in einem Werkzeugergebnis.
-
-**Quellen unter der Antwort.** Das Ergebnis von `diary` trägt die Quellen als `sources` des Schritts, z. B. `{"title":"Fotos (48)","url":"titanos:diary/photos"}`, und nennt sie auch im Text. Die Komponente `FamilyDiarySources.svelte` zeigt sie als Zeile unter der Antwort (Entwurf 13). Sie muss dafür in `ChatView.svelte` eingebunden werden (siehe unten); bis dahin stehen die Quellen nur im Schritt und in der Antwort des Modells.
-
 ## Geprüft
 
 - `go test ./internal/buddy`: Protokoll wie restic es schickt (anlegen, config, hochladen, Listen v1/v2, Range), Anmeldung (falsches/fehlendes Token, fremder Ordner), Kontingent (mit und ohne Länge, Sperre trotz vollem Kontingent), nur anhängen (kein Überschreiben, Quarantäne nicht gelistet, gezählt und erst nach der Schutzfrist geleert), reserviertes Kontingent bei gleichzeitigen Uploads, Grenze für Sperrdateien und gleichzeitige Anfragen, Zeitgrenzen und Verbindungsgrenze des Servers, nur Tailscale-Adressen, Volume weg, Ablauf und Raten des Codes, Kopplung hin und zurück, Adressen. **Mit dem echten restic dieses Rechners** (0.18): `init`, zwei `backup`, `check --read-data`, `forget --keep-last 1 --prune` ohne Ablehnung, `check`; danach die Quarantäne zurückgeschoben, `repair index`, beide Stände wieder da und der vergessene Stand identisch wiederhergestellt. Die Empfangsseite enthält keinen Klartext.
@@ -103,7 +79,6 @@ Der Immich-Schlüssel ist ein Geheimnis. Er kommt nie zur Seite zurück, nur `im
   - Katalog aus einer gefälschten App-Store-Quelle (Archiv mit `skills/`): kaputter Skill übersprungen, Quelle angezeigt, unbekanntes Werkzeug abgelehnt, geänderter Eintrag (Digest), unbekannter Skill, Installation als fremder Inhalt, Export;
 - `go test ./internal/catalog -run Skills`: Skills aus dem offiziellen Archiv und aus einer eigenen Quelle nur mit Skills, mit Quellennamen; kaputtes YAML, fehlende Schritte, falscher Werkzeugname und falscher Ordnername übersprungen; die Apps bleiben unverändert;
   - Kopplung: zufällige, nie wiederverwendete IDs; Schutzfrist ausgetauscht und Aufbewahrung danach; Lösen mit 409, solange der Auftrag läuft, sonst mit dem Auftrag; Doppelkopplung und volle Liste abgelehnt, ohne den Code zu verbrauchen;
-  - Tagebuch: Schlüssel nicht in der Ansicht, behalten nur zur gleichen Adresse, Adressen mit Fragment/Benutzer/Abfrage abgelehnt, Loopback/Link-Local beim Verbinden gesperrt, Ordner in einer Freigabe, die das Konto nicht öffnen darf, abgelehnt, Werkzeug mit Fakes für Immich, Frigate und Home Assistant (nur freigegebene Geräte), Tür nur mit Frigate, Benutzer ohne Home Assistant und ohne fremde Quellen, Zeitraum geprüft.
 - Web: `tests/agent54-family.test.mjs`; `scripts/test-ui-agent54-family.mjs` mit gemockter API bei 390×844 und 1440×900. Bilder liegen in `out/validation/v057-family/`.
 
 ## Grenzen, nicht geprüft
@@ -113,11 +88,8 @@ Der Immich-Schlüssel ist ein Geheimnis. Er kommt nie zur Seite zurück, nur `im
 - „Ich sichere bei …“ zeigt die Datenmenge des letzten Laufs, nicht den belegten Platz beim Partner (dedupliziert und komprimiert meist weniger).
 - Was `prune` löscht, belegt bis zum Ende der Schutzfrist weiter Platz im Kontingent. Ein Partner braucht deshalb etwas mehr Kontingent als seine Daten.
 - Das Zurückholen aus der Quarantäne hat keine Oberfläche; es ist ein Eingriff von Hand (siehe oben).
-- In ra5on/TitanOS-Apps gibt es noch keinen Ordner `skills/`. Geprüft wurde nur mit gefälschten Quellen.
+- Den Ordner `skills/` in ra5on/TitanOS-Apps schreibt TitanOS selbst (Entscheidung 8.11.2026, keine Skills aus fremden Quellen).
 - Die Werkzeugerkennung in den Schritten zählt Wörter wie `files_search`; ein Wort dieser Form, das kein Werkzeug ist, verhindert die Installation.
-- Das Tagebuch fragt keinen Kalender ab (es gibt keinen Kalender in TitanOS). Die Fotos-Seite gibt es nicht mehr; deshalb Immich oder ein Ordner. EXIF von HEIC wird nicht gelesen, dort zählt die Änderungszeit.
-- Echte Immich-, Frigate- und Home-Assistant-Server sind nicht getestet, nur ihre API-Formen als Fakes.
-- Der Fotos-Ordner selbst (EXIF lesen, gesperrte Unterordner, schlafende Platte) hat keinen Go-Test: Der Testserver hat keine Freigabe mit Dateien. Die EXIF-Auswertung ist die vorhandene aus `thumbs`.
 - Quellen unter der Antwort und Menüeinträge sind beim Zusammenführen eingebaut.
 
 ## Nötige Änderungen an gemeinsamen Dateien

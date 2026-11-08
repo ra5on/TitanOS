@@ -1,18 +1,11 @@
 <script lang="ts">
-	// Gruppe „Gemeinschaft und Familie“ (PLAN 54-G): the rows of the three
+	// Gruppe „Gemeinschaft und Familie“ (PLAN 54-G): the rows of the two
 	// functions and their settings. Owners and administrators switch them on
-	// for the NAS (Backup-Buddy only they); every account of the agent sets its own diary sources.
+	// for the NAS. The Familien-Tagebuch was removed with 0.69 (owner, 8.11.2026).
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
-	import { api } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import type { Features, FeaturesMine, FeaturesPublic } from '#lib/agent-features.ts';
-	import {
-		DIARY_SOURCES,
-		loadBuddy,
-		type Buddy,
-		type DiaryMine,
-		type DiarySource,
-	} from '#lib/features/family.ts';
+	import { loadBuddy, type Buddy } from '#lib/features/family.ts';
 	import FeatureRow from './FeatureRow.svelte';
 	import FamilyViews from './FamilyViews.svelte';
 
@@ -28,7 +21,7 @@
 	let { admin, nas, pub, mine, savenas, savemine, calm = false }: Props = $props();
 
 	const tk = (key: string) => t(key as MessageKey);
-	type Part = 'buddy' | 'catalog' | 'diary';
+	type Part = 'buddy' | 'catalog';
 	let open = $state<Part | null>(null);
 	let view = $state<'buddy' | 'catalog' | null>(null);
 	let error = $state('');
@@ -37,13 +30,9 @@
 
 	// Drafts of the settings while a dialog is open.
 	let buddy = $state<Buddy>({});
-	let diary = $state<DiaryMine>({});
-	let immichKey = $state('');
 	let volumes = $state<string[]>([]);
-	let roots = $state<{ id: string; name: string }[]>([]);
 
-	const isOn = (p: Part) =>
-		admin && nas ? !!nas[p === 'diary' ? 'diary' : p]?.enabled : !!pub?.[p];
+	const isOn = (p: Part) => (admin && nas ? !!nas[p]?.enabled : !!pub?.[p]);
 
 	function openPart(p: Part) {
 		error = '';
@@ -54,14 +43,6 @@
 				.then((v) => (volumes = v.volumes ?? []))
 				.catch(() => (volumes = []));
 		}
-		if (p === 'diary') {
-			diary = { ...(mine?.diary ?? {}), off: [...(mine?.diary?.off ?? [])] };
-			immichKey = '';
-			api
-				.get<{ id: string; name: string; kind: string }[]>('/files/roots')
-				.then((r) => (roots = (r ?? []).filter((x) => x.kind !== 'stick')))
-				.catch(() => (roots = []));
-		}
 		open = p;
 	}
 
@@ -71,7 +52,6 @@
 		try {
 			if (p === 'buddy') await savenas({ ...nas, buddy: { ...nas.buddy, enabled: on } });
 			if (p === 'catalog') await savenas({ ...nas, catalog: { ...nas.catalog, enabled: on } });
-			if (p === 'diary') await savenas({ ...nas, diary: { ...nas.diary, enabled: on } });
 		} catch {
 			// The panel shows the error; a buddy without a volume opens its settings.
 			if (p === 'buddy' && on) openPart('buddy');
@@ -93,24 +73,6 @@
 	}
 
 	const saveBuddy = () => run(() => savenas({ ...nas!, buddy: { ...buddy } }));
-	const saveDiary = () =>
-		run(async () => {
-			const next: DiaryMine = { ...diary };
-			delete next.immichKeySet;
-			if (immichKey) next.immichKey = immichKey;
-			if (next.photos && !next.photos.root) next.photos = null;
-			await savemine({ ...mine!, diary: next });
-			immichKey = '';
-			diary = { ...(mine?.diary ?? {}), off: [...(mine?.diary?.off ?? [])] };
-		});
-
-	function setSource(s: DiarySource, on: boolean) {
-		const off = new Set(diary.off ?? []);
-		if (on) off.delete(s);
-		else off.add(s);
-		diary.off = DIARY_SOURCES.filter((x) => off.has(x));
-	}
-
 	const weekdays = $derived([0, 1, 2, 3, 4, 5, 6].map((d) => tk(`agent.f.family.wd${d}`)));
 	const buddySub = $derived(
 		isOn('buddy') && nas?.buddy?.every
@@ -139,16 +101,6 @@
 		toggle={admin && !!nas}
 		ontoggle={(on) => toggle('catalog', on)}
 		onopen={admin || pub?.catalog ? () => openPart('catalog') : undefined}
-	/>
-	<FeatureRow
-		icon="📔"
-		color="#ec4899"
-		title={t('agent.f.family.diary.title')}
-		sub={t('agent.f.family.diary.sub')}
-		on={isOn('diary')}
-		toggle={admin && !!nas}
-		ontoggle={(on) => toggle('diary', on)}
-		onopen={admin || pub?.diary ? () => openPart('diary') : undefined}
 	/>
 </div>
 
@@ -259,104 +211,6 @@
 	</Dialog>
 {/if}
 
-{#if open === 'diary'}
-	<Dialog title={t('agent.f.family.diary.title')} onclose={() => (open = null)}>
-		<form
-			class="fam"
-			onsubmit={(e) => {
-				e.preventDefault();
-				void saveDiary();
-			}}
-		>
-			<p class="muted">{t('agent.f.family.diary.intro')}</p>
-			<fieldset>
-				<legend>{t('agent.f.family.diary.sources')}</legend>
-				{#each DIARY_SOURCES as s (s)}
-					<label class="check"
-						><input
-							type="checkbox"
-							checked={!(diary.off ?? []).includes(s)}
-							onchange={(e) => setSource(s, e.currentTarget.checked)}
-						/><span
-							>{tk(`agent.f.family.diary.src.${s}`)}<small class="muted"
-								>{tk(`agent.f.family.diary.srcHint.${s}`)}</small
-							></span
-						></label
-					>
-				{/each}
-			</fieldset>
-			<fieldset>
-				<legend>{t('agent.f.family.diary.photos')}</legend>
-				<label class="field-row"
-					><span>{t('agent.f.family.diary.root')}</span>
-					<select
-						class="field"
-						value={diary.photos?.root ?? ''}
-						onchange={(e) =>
-							(diary.photos = { root: e.currentTarget.value, path: diary.photos?.path ?? '' })}
-					>
-						<option value="">{t('agent.f.family.diary.noFolder')}</option>
-						{#each roots as r (r.id)}<option value={r.id}>{r.name}</option>{/each}
-					</select></label
-				>
-				{#if diary.photos?.root}
-					<label class="field-row"
-						><span>{t('agent.f.family.diary.path')}</span>
-						<input class="field" bind:value={diary.photos.path} placeholder="Fotos/2026" /></label
-					>
-				{/if}
-			</fieldset>
-			<fieldset>
-				<legend>Immich</legend>
-				<label class="field-row"
-					><span>{t('agent.f.family.diary.immichUrl')}</span>
-					<input
-						class="field"
-						type="url"
-						bind:value={diary.immichUrl}
-						placeholder="http://192.168.1.20:2283"
-					/></label
-				>
-				<label class="field-row"
-					><span>{t('agent.f.family.diary.immichKey')}</span>
-					<input
-						class="field"
-						type="password"
-						autocomplete="off"
-						bind:value={immichKey}
-						placeholder={mine?.diary?.immichKeySet ? t('agent.f.family.diary.keySet') : ''}
-					/></label
-				>
-				{#if mine?.diary?.immichKeySet}
-					<label class="check"
-						><input type="checkbox" bind:checked={diary.clearImmichKey} /><span
-							>{t('agent.f.family.diary.clearKey')}</span
-						></label
-					>
-				{/if}
-			</fieldset>
-			<fieldset>
-				<legend>Frigate</legend>
-				<label class="field-row"
-					><span>{t('agent.f.family.diary.frigateUrl')}</span>
-					<input
-						class="field"
-						type="url"
-						bind:value={diary.frigateUrl}
-						placeholder="http://192.168.1.21:5000"
-					/>
-					<small class="muted">{t('agent.f.family.diary.frigateHint')}</small></label
-				>
-			</fieldset>
-			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-			{#if saved}<p class="muted" role="status">{t('agent.f.saved')}</p>{/if}
-			<div class="actions">
-				<button class="btn btn-primary" disabled={busy || !mine}>{t('agent.f.family.save')}</button>
-			</div>
-		</form>
-	</Dialog>
-{/if}
-
 {#if view}
 	<FamilyViews id={view} {calm} onclose={() => (view = null)} />
 {/if}
@@ -393,34 +247,6 @@
 		.two {
 			grid-template-columns: 1fr;
 		}
-	}
-	fieldset {
-		border: 1px solid var(--border);
-		border-radius: 12px;
-		padding: 8px 12px 12px;
-		margin: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-		min-width: 0;
-	}
-	legend {
-		font-weight: 600;
-		padding: 0 4px;
-	}
-	.check {
-		display: flex;
-		align-items: flex-start;
-		gap: 8px;
-	}
-	.check input {
-		margin-top: 3px;
-		flex: none;
-	}
-	.check span {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
 	}
 	.actions {
 		display: flex;

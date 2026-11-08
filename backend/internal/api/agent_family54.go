@@ -2,19 +2,19 @@ package api
 
 import (
 	"errors"
-	"net/url"
 	"regexp"
 	"slices"
-	"strings"
 	"sync"
 
 	"github.com/ra5on/TitanOS/backend/internal/buddy"
 )
 
 // Gruppe „Gemeinschaft und Familie“ (PLAN 54-G): Backup-Buddy
-// (agent_family54_buddy.go), Skill-Katalog (agent_family54_catalog.go) and
-// Familien-Tagebuch (agent_family54_diary.go). Each is off by default;
-// switched on, the owner's answers of 54-G are the values ab Werk.
+// (agent_family54_buddy.go) and Skill-Katalog (agent_family54_catalog.go).
+// Each is off by default; switched on, the owner's answers of 54-G are the
+// values ab Werk. The Familien-Tagebuch was removed with 0.69 (owner,
+// 8.11.2026); its settings ("diary") in agent.json and the accounts'
+// features are dropped on the next save, older versions read them as off.
 
 // agentBuddy are the NAS-wide settings of the Backup-Buddy. The partners
 // themselves (with the hashes of their tokens and the token this NAS signs
@@ -68,38 +68,6 @@ type agentCatalog struct {
 
 func (c agentCatalog) view() agentCatalog { return c }
 
-// agentDiaryNAS switches the Familien-Tagebuch on for the agent's accounts.
-type agentDiaryNAS struct {
-	Enabled bool `json:"enabled,omitempty"`
-}
-
-func (d agentDiaryNAS) view() agentDiaryNAS { return d }
-
-// agentDiaryMine are an account's own sources of the diary.
-type agentDiaryMine struct {
-	// Off lists sources switched off: chats, reminders, home, photos,
-	// immich, frigate. Immich and Frigate count only when set up.
-	Off       []string `json:"off,omitempty"`
-	ImmichURL string   `json:"immichUrl,omitempty"`
-	// ImmichKey is a secret: never sent back, only ImmichKeySet.
-	ImmichKey    string `json:"immichKey,omitempty"`
-	ImmichKeySet bool   `json:"immichKeySet,omitempty"`
-	// ClearImmichKey removes the stored key (from the page).
-	ClearImmichKey bool   `json:"clearImmichKey,omitempty"`
-	FrigateURL     string `json:"frigateUrl,omitempty"`
-	// Photos is a folder of the account with photos (EXIF dates).
-	Photos *agentFolderRef `json:"photos,omitempty"`
-}
-
-func (d agentDiaryMine) view() agentDiaryMine {
-	d.ImmichKeySet, d.ImmichKey, d.ClearImmichKey = d.ImmichKey != "", "", false
-	return d
-}
-
-var diarySources = []string{"chats", "reminders", "home", "photos", "immich", "frigate"}
-
-func (d agentDiaryMine) on(source string) bool { return !slices.Contains(d.Off, source) }
-
 var clockForm = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
 
 func (s *Server) checkFamilyNAS(f *agentFeatures, old agentFeatures) error {
@@ -136,48 +104,6 @@ func (s *Server) checkFamilyNAS(f *agentFeatures, old agentFeatures) error {
 	return nil
 }
 
-func (s *Server) checkDiaryMine(user string, d *agentDiaryMine, old agentDiaryMine) error {
-	d.Off = slices.DeleteFunc(slices.Clone(d.Off), func(v string) bool { return !slices.Contains(diarySources, v) })
-	slices.Sort(d.Off)
-	d.Off = slices.Compact(d.Off)
-	d.ImmichKeySet = false
-	for _, raw := range []*string{&d.ImmichURL, &d.FrigateURL} {
-		*raw = strings.TrimRight(strings.TrimSpace(*raw), "/")
-		if *raw == "" {
-			continue
-		}
-		u, err := url.Parse(*raw)
-		// No user info, query or fragment: the paths of the APIs are added
-		// to the end and must stay a path.
-		if err != nil || u.Scheme != "http" && u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery ||
-			u.Fragment != "" || strings.ContainsAny(*raw, "#?@") || len(*raw) > 512 {
-			return errors.New("diary: Immich and Frigate as http(s) address")
-		}
-	}
-	d.ImmichKey = strings.TrimSpace(d.ImmichKey)
-	// The stored key only goes with the address it was given for.
-	if d.ImmichKey == "" && !d.ClearImmichKey && d.ImmichURL == old.ImmichURL {
-		d.ImmichKey = old.ImmichKey
-	}
-	if d.ImmichURL == "" {
-		d.ImmichKey = ""
-	}
-	if len(d.ImmichKey) > 256 || strings.ContainsAny(d.ImmichKey, "\r\n") {
-		return errors.New("diary: Immich key")
-	}
-	d.ClearImmichKey = false
-	if d.Photos != nil {
-		if d.Photos.Root == "" {
-			d.Photos = nil
-			return nil
-		}
-		if err := s.diaryFolderAllowed(user, *d.Photos); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // family54 is the RAM state of the group, one per server.
 type family54 struct {
 	codes    buddy.Codes
@@ -206,7 +132,6 @@ func (s *Server) family54() *family54 {
 }
 
 func (s *Server) registerAgentFamily54(mux *routeMux) {
-	s.installDiaryAppPorts()
 	mux.HandleFunc("GET /api/v1/agent/buddy", s.requireAdmin(s.handleBuddy))
 	mux.HandleFunc("POST /api/v1/agent/buddy/code", s.requireAdmin(s.handleBuddyCode))
 	mux.HandleFunc("DELETE /api/v1/agent/buddy/code", s.requireAdmin(s.handleBuddyCodeCancel))
@@ -220,11 +145,4 @@ func (s *Server) registerAgentFamily54(mux *routeMux) {
 
 func (s *Server) agentFamily54Tick(now agentNow) {
 	s.buddyTick(now)
-}
-
-func (b *agentToolbox) family54Tools() []*agentTool {
-	if !b.settings.Features.Diary.Enabled {
-		return nil
-	}
-	return []*agentTool{b.diaryTool()}
 }

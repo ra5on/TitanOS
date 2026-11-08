@@ -1,4 +1,4 @@
-// The nine functions of the agent (PLAN 54), each off by default: NAS-wide
+// The eight functions of the agent (PLAN 54), each off by default: NAS-wide
 // settings (owners and administrators, GET/PUT /agent/features) and an
 // account's own (GET/PUT /agent/features/me). The groups keep their types
 // in src/lib/features/.
@@ -6,7 +6,7 @@ import { api } from './api.ts';
 import type { DocsMine, DocsNAS, PaperMine } from './features/docs.ts';
 import type { Emergency, Guard, Handbook } from './features/protect.ts';
 import type { Advisor, WhatIf } from './features/foresight.ts';
-import type { Buddy, Catalog, DiaryMine, DiaryNAS } from './features/family.ts';
+import type { Buddy, Catalog } from './features/family.ts';
 
 export type Features = {
 	docs: DocsNAS;
@@ -17,9 +17,8 @@ export type Features = {
 	advisor: Advisor;
 	buddy: Buddy;
 	catalog: Catalog;
-	diary: DiaryNAS;
 };
-export type FeaturesMine = { docs: DocsMine; paper: PaperMine; diary: DiaryMine };
+export type FeaturesMine = { docs: DocsMine; paper: PaperMine };
 /** Which functions are there for every account of the agent. */
 export type FeaturesPublic = Record<
 	| 'docs'
@@ -31,8 +30,7 @@ export type FeaturesPublic = Record<
 	| 'whatIf'
 	| 'advisor'
 	| 'buddy'
-	| 'catalog'
-	| 'diary',
+	| 'catalog',
 	boolean
 >;
 

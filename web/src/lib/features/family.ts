@@ -1,5 +1,5 @@
-// Gruppe „Gemeinschaft und Familie“ (PLAN 54-G): Backup-Buddy, Skill-Katalog,
-// Familien-Tagebuch. Types of the API and small helpers (no runes, so they
+// Gruppe „Gemeinschaft und Familie“ (PLAN 54-G): Backup-Buddy and Skill-Katalog
+// (the Familien-Tagebuch was removed with 0.69). Types of the API and small helpers (no runes, so they
 // can be tested with node --test).
 import { api } from '../api.ts';
 
@@ -16,28 +16,6 @@ export type Buddy = {
 };
 /** The skills come from the App-Store sources (folder skills/); only a switch. */
 export type Catalog = { enabled?: boolean };
-export type DiaryNAS = { enabled?: boolean };
-export type DiarySource = 'chats' | 'reminders' | 'home' | 'photos' | 'immich' | 'frigate';
-export type DiaryMine = {
-	off?: DiarySource[];
-	immichUrl?: string;
-	/** Only sent when changed; the page never gets it back. */
-	immichKey?: string;
-	immichKeySet?: boolean;
-	clearImmichKey?: boolean;
-	frigateUrl?: string;
-	photos?: { root: string; path: string } | null;
-};
-
-export const DIARY_SOURCES: DiarySource[] = [
-	'chats',
-	'reminders',
-	'home',
-	'photos',
-	'immich',
-	'frigate',
-];
-
 export type BuddyProbe = {
 	at: string;
 	files: number;
@@ -142,13 +120,4 @@ export function formatCode(raw: string): string {
 		.replace(/[^0-9A-Z]/g, '')
 		.slice(0, 9);
 	return c.replace(/(.{3})(?=.)/g, '$1-');
-}
-
-/** The diary sources a tool step carries (titanos:diary/<id>). */
-export function diarySources(
-	sources: { title?: string; url: string }[] | undefined,
-): { title: string; id: string }[] {
-	return (sources ?? [])
-		.filter((s) => s.url.startsWith('titanos:diary/'))
-		.map((s) => ({ title: s.title ?? '', id: s.url.slice('titanos:diary/'.length) }));
 }
