@@ -64,6 +64,7 @@ Bereich: Shares, Freigabe-Löschen, Kontingente, Dateimanager, Datei-Editor, USB
 - `Share.Quota` (Bytes, ≥ 16 MiB) und `Share.QuotaID` (ab 10000, nie zweimal vergeben, Zähler `/config/shares/quota-ids.json`, vom Client nie übernommen). `shares.ApplyQuotas` läuft in jeder Runde von `Run`: Grenzen nur bei Änderung setzen, Projekt-ID vorhandener Dateien im Hintergrund vergeben, Belegung nur auf Anfrage (höchstens alle 30 s) lesen, damit ruhende Platten schlafen. ext4 ignoriert Grenzen für root (titand prüft vorher per statfs). CI-Prüfung im QEMU-Storage-Test (`scripts/quota_smoke.py`). Siehe `docs/SHARE-QUOTAS.md`.
 
 - macOS-Begleitdateien (`._Name`, Finder-Daten im AppleDouble-Format): bleiben sichtbar (versteckt wie alle Punktdateien); Öffnen, Doppelklick und „Öffnen mit“ zeigen statt eines Fehlers den Hinweis „macOS-Begleitdatei“ mit dem Namen der eigentlichen Datei und, falls sie im Ordner liegt, „„Name“ öffnen“ (PLAN 74, Inhaber 8.11.2026: nur Hinweis, kein Ausblenden, kein Aufräumen).
+
 ## Datei-Editor und USB-Uploads
 
 - `GET/PUT /files/text`: UTF-8 bis 512 KiB, gängige Textformate, JSON-Prüfung,
