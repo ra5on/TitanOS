@@ -189,7 +189,7 @@ type Manager struct {
 	gen, appliedGen uint64
 	// lastApplied: when Apply last ended without error (LastApplied).
 	lastApplied time.Time
-	purge           purgeState
+	purge       purgeState
 
 	guard guardState
 	// Shadow returns the folder of @GMT snapshots of a volume, "" if it has
