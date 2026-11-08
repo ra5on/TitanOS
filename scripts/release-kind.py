@@ -81,6 +81,9 @@ ALLOWED = (
     # a full image; they are not in the image, and an app release does not run
     # them (PR #289 fixed only the trusted certificate there).
     "scripts/workflows023_smoke.py",
+    # Takes the README pictures against vite dev with test data; nothing of it
+    # is in the image (v0.70.0 became a full release by mistake, 8.11.2026).
+    "scripts/capture-readme-screenshots.mjs",
 )
 
 

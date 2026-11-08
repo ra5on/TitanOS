@@ -53,6 +53,8 @@ class ReleaseKindTest(unittest.TestCase):
         self.assertEqual(self.decide("0.8.2", changed)[:2], ("app", "0.8.0"))
         # The checks of the QEMU storage test run in CI only.
         self.assertEqual(self.decide("0.8.2", ["scripts/workflows023_smoke.py"])[:2], ("app", "0.8.0"))
+        # The README pictures are taken against vite dev, not in the image.
+        self.assertEqual(self.decide("0.8.2", ["scripts/capture-readme-screenshots.mjs"])[:2], ("app", "0.8.0"))
         # Other files at the top stay a full release.
         self.assertEqual(self.decide("0.8.2", ["backend/x.go", "Makefile"])[:2], ("system", "0.8.2"))
 
