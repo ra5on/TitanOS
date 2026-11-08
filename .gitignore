@@ -55,3 +55,6 @@ Thumbs.db
 
 # Python-Pakete, die beim Einrichten von Werkzeugen anfallen
 *.whl
+
+# Built locally by go build in cmd/titanos-viewer (0.68 checked one in by mistake)
+/backend/cmd/titanos-viewer/titanos-viewer

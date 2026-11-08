@@ -3,6 +3,7 @@ module github.com/ra5on/TitanOS/backend
 go 1.27.0
 
 require (
+	github.com/HugoSmits86/nativewebp v1.3.0
 	github.com/coder/websocket v1.8.15
 	github.com/jezek/xgb v1.3.1
 	go.etcd.io/bbolt v1.5.0

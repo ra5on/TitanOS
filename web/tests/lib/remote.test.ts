@@ -26,6 +26,7 @@ import {
 	sanitizeStatus,
 	saveView,
 	sizeMessage,
+	crispScale,
 	UPLOAD_CHUNK,
 	uploadChunk,
 	videoMessage,
@@ -223,7 +224,13 @@ test('pointer: letterboxed picture, mapped to remote pixels and clamped', () => 
 	expect(mapPoint(5000, -10, shown, 1280, 800)).toEqual({ x: 1279, y: 0 });
 	expect(fitRect(0, 10, 10, 10).width).toBe(0);
 	// HiDPI: a 2× screen sends CSS pixels and the factor; the picture maps 1:1 back.
-	expect(sizeMessage(640.7, 400.2, 2)).toEqual({ t: 'size', width: 640, height: 400, scale: 2 });
+	expect(sizeMessage(640.7, 400.2, 2)).toEqual({
+		t: 'size',
+		width: 640,
+		height: 400,
+		scale: 2,
+		webp: true,
+	});
 	expect(sizeMessage(10, 10, 0)).toMatchObject({ scale: 1 });
 	expect(wheelDelta(0, 3, 1)).toEqual({ dx: 0, dy: 120 });
 	expect(wheelDelta(1.4, -100, 0)).toEqual({ dx: 1, dy: -100 });
@@ -313,7 +320,10 @@ test('tiles are parsed with codec and area, broken ones refused', () => {
 	expect(parseTile(new Uint8Array([4, 1, 0, 0, 0, 0, 0, 8, 0, 8, 0xff]).buffer)?.type).toBe(
 		'image/jpeg',
 	);
-	expect(parseTile(new Uint8Array([4, 3, 0, 0, 0, 0, 0, 8, 0, 8, 1]).buffer)).toBeNull();
+	expect(parseTile(new Uint8Array([4, 3, 0, 0, 0, 0, 0, 8, 0, 8, 1]).buffer)?.type).toBe(
+		'image/webp',
+	);
+	expect(parseTile(new Uint8Array([4, 4, 0, 0, 0, 0, 0, 8, 0, 8, 1]).buffer)).toBeNull();
 	expect(parseTile(new Uint8Array([4, 1, 0, 0, 0, 0, 0, 0, 0, 8, 1]).buffer)).toBeNull();
 	expect(parseTile(new Uint8Array([1, 1, 0, 0, 0, 0, 0, 8, 0, 8, 1]).buffer)).toBeNull();
 	expect(parseTile(new Uint8Array([4, 1, 0]).buffer)).toBeNull();
@@ -321,4 +331,14 @@ test('tiles are parsed with codec and area, broken ones refused', () => {
 	expect(parseMessage('{"t":"mode","mode":"x"}')).toBeNull();
 	expect(sanitizeView({ transport: 'video' }).transport).toBe('video');
 	expect(sanitizeView({ transport: 'other' }).transport).toBeUndefined();
+});
+
+// PLAN 72: integer enlargement without smoothing, as KasmVNC.
+test('crisp scaling only for integer enlargements', () => {
+	expect(crispScale(1280, 1280, 2)).toBe(true); // 2× on a HiDPI screen
+	expect(crispScale(2560, 1280, 1)).toBe(true);
+	expect(crispScale(1280, 1280, 1)).toBe(false); // 1:1 needs nothing
+	expect(crispScale(1500, 1280, 1)).toBe(false);
+	expect(crispScale(640, 1280, 2)).toBe(false); // 1:1 in device pixels
+	expect(crispScale(0, 1280, 1)).toBe(false);
 });

@@ -18,8 +18,35 @@ type encoderParams struct {
 	GPU    string // cpu | vaapi | nvenc
 	Device string // /dev/dri/renderD* for vaapi (optional)
 	W, H   int
-	FPS    int
-	Kbps   int
+	// OutW, OutH: the size of the video when it is smaller than the screen
+	// (the video mode of the transport "auto", PLAN 72); 0 = W, H. The
+	// browser draws it over the whole screen size.
+	OutW, OutH int
+	FPS        int
+	Kbps       int
+}
+
+// videoBox is the largest video of the video mode (KasmVNC: at most
+// 1920×1080, scaled up in the browser).
+const videoBoxW, videoBoxH = 1920, 1080
+
+// fitVideo is the size of the video for a screen: the screen itself when it
+// fits into 1920×1080, else scaled down with its aspect ratio, even sizes.
+func fitVideo(w, h int) (int, int) {
+	if w <= videoBoxW && h <= videoBoxH {
+		return w, h
+	}
+	scale := min(float64(videoBoxW)/float64(w), float64(videoBoxH)/float64(h))
+	ow, oh := int(float64(w)*scale)&^1, int(float64(h)*scale)&^1
+	return max(ow, 2), max(oh, 2)
+}
+
+// out is the encoded size.
+func (p encoderParams) out() (int, int) {
+	if p.OutW > 0 && p.OutH > 0 && (p.OutW != p.W || p.OutH != p.H) {
+		return p.OutW, p.OutH
+	}
+	return p.W, p.H
 }
 
 // gstExists reports whether a GStreamer element is available. GPU
@@ -61,11 +88,22 @@ func pipelineArgs(p encoderParams) ([]string, error) {
 	src := fmt.Sprintf("ximagesrc display-name=%s show-pointer=false use-damage=false startx=0 starty=0 endx=%d endy=%d"+
 		" ! video/x-raw,framerate=%d/1 ! queue max-size-buffers=1 leaky=downstream ! videoconvert n-threads=2",
 		display, p.W-1, p.H-1, p.FPS)
+	ow, oh := p.out()
+	scaled := ow != p.W || oh != p.H
+	if scaled && (ow%2 != 0 || oh%2 != 0 || ow <= 0 || oh <= 0) {
+		return nil, errors.New("video size must be even")
+	}
+	// size adds the smaller size to a caps filter; scaler scales on the CPU.
+	size, scaler := "", ""
+	if scaled {
+		size = fmt.Sprintf(",width=%d,height=%d", ow, oh)
+		scaler = "videoscale method=bilinear n-threads=2 ! "
+	}
 	var enc string
 	switch p.GPU {
 	case "cpu":
-		enc = fmt.Sprintf("video/x-raw,format=I420 ! x264enc tune=zerolatency speed-preset=ultrafast bitrate=%d vbv-buf-capacity=300"+
-			" key-int-max=%d aud=true byte-stream=true threads=2 ! video/x-h264,profile=constrained-baseline", p.Kbps, gop)
+		enc = fmt.Sprintf("%svideo/x-raw,format=I420%s ! x264enc tune=zerolatency speed-preset=ultrafast bitrate=%d vbv-buf-capacity=300"+
+			" key-int-max=%d aud=true byte-stream=true threads=2 ! video/x-h264,profile=constrained-baseline", scaler, size, p.Kbps, gop)
 	case "vaapi":
 		h264 := ""
 		for _, e := range []string{vaElement(p.Device, "h264enc"), vaElement(p.Device, "h264lpenc")} {
@@ -77,14 +115,15 @@ func pipelineArgs(p encoderParams) ([]string, error) {
 		if h264 == "" {
 			return nil, errors.New("no VA-API H.264 encoder (no /dev/dri access?)")
 		}
+		// The VA post-processor scales on the GPU.
 		post := vaElement(p.Device, "postproc")
-		enc = fmt.Sprintf("video/x-raw,format=NV12 ! %s ! video/x-raw(memory:VAMemory),format=NV12 ! %s rate-control=cbr bitrate=%d"+
-			" key-int-max=%d b-frames=0 aud=true target-usage=7", post, h264, p.Kbps, gop)
+		enc = fmt.Sprintf("video/x-raw,format=NV12 ! %s ! video/x-raw(memory:VAMemory),format=NV12%s ! %s rate-control=cbr bitrate=%d"+
+			" key-int-max=%d b-frames=0 aud=true target-usage=7", post, size, h264, p.Kbps, gop)
 	case "nvenc":
 		if !gstExists("nvh264enc") {
 			return nil, errors.New("nvh264enc not available")
 		}
-		enc = fmt.Sprintf("video/x-raw,format=NV12 ! nvh264enc rc-mode=cbr bitrate=%d gop-size=%d bframes=0 zerolatency=true aud=true preset=low-latency-hq", p.Kbps, gop)
+		enc = fmt.Sprintf("%svideo/x-raw,format=NV12%s ! nvh264enc rc-mode=cbr bitrate=%d gop-size=%d bframes=0 zerolatency=true aud=true preset=low-latency-hq", scaler, size, p.Kbps, gop)
 	default:
 		return nil, fmt.Errorf("unknown encoder %q", p.GPU)
 	}

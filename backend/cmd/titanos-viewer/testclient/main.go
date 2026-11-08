@@ -53,7 +53,8 @@ type stream struct {
 	lastVideoTS      uint64
 	cursors          []string
 	// tile mode (PLAN 72)
-	jpegTiles, pngTiles int
+	jpegTiles, pngTiles int // pngTiles: all lossless tiles (PNG and WebP)
+	webpTiles           int
 	tileBytes           int64
 	tileArea            int64
 }
@@ -128,9 +129,13 @@ func (s *stream) read() {
 			}
 		case proto.TypeTile:
 			if len(data) > proto.TileHeaderSize {
-				if data[1] == proto.TilePNG {
+				switch data[1] {
+				case proto.TilePNG:
 					s.pngTiles++
-				} else {
+				case proto.TileWebP:
+					s.pngTiles++
+					s.webpTiles++
+				default:
 					s.jpegTiles++
 				}
 				s.tileBytes += int64(len(data))
@@ -603,18 +608,31 @@ func tilesPhase(s *stream, hello map[string]any) {
 		fail("tiles-hello", "codec %v, want tiles", hello["codec"])
 		return
 	}
+	// Like the browser: the size of the view, saying that WebP is read.
+	scale, _ := hello["scale"].(float64)
+	scale = max(scale, 1)
+	s.send(map[string]any{"t": "size", "width": hello["width"].(float64) / scale, "height": hello["height"].(float64) / scale, "scale": scale, "webp": true})
+	if again := s.waitText("hello", 10*time.Second, nil); again != nil {
+		hello = again
+	}
 	w, h := hello["width"].(float64), hello["height"].(float64)
 	time.Sleep(3 * time.Second)
 	jpegs, pngs, bytes, area := s.tiles()
 	if area < int64(w*h) {
 		fail("tiles-first", "%d px of %v×%v covered", area, w, h)
 	} else {
-		pass("tiles-first", "%d JPEG and %d PNG tiles, %d KiB, screen covered", jpegs, pngs, bytes>>10)
+		pass("tiles-first", "%d JPEG and %d lossless tiles, %d KiB, screen covered", jpegs, pngs, bytes>>10)
 	}
-	if pngs == 0 {
+	s.mu.Lock()
+	webps := s.webpTiles
+	s.mu.Unlock()
+	switch {
+	case pngs == 0:
 		fail("tiles-sharpen", "no lossless tile after a calm moment")
-	} else {
-		pass("tiles-sharpen", "%d lossless tiles", pngs)
+	case webps == 0:
+		fail("tiles-webp", "%d lossless tiles, none as WebP although the client reads it", pngs)
+	default:
+		pass("tiles-sharpen", "%d lossless tiles, %d as WebP", pngs, webps)
 	}
 	_, _, before, _ := s.tiles()
 	time.Sleep(5 * time.Second)
