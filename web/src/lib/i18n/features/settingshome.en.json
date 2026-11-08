@@ -25,6 +25,7 @@
 	"settingshome.desc.ddns": "Dynamic DNS, IPv64",
 	"settingshome.desc.letsencrypt": "HTTPS certificates via ACME",
 	"settingshome.desc.proxy": "Addresses like app.nas.local",
+	"settingshome.desc.users": "Accounts, roles, passwords, 2FA",
 	"settingshome.desc.access": "SSH, certificate, sign-in, WebDAV",
 	"settingshome.desc.services": "Turn Docker, VMs, LXC on or off",
 	"settingshome.desc.notifications": "Email, push, messengers",

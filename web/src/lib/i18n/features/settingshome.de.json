@@ -25,6 +25,7 @@
 	"settingshome.desc.ddns": "DynDNS, IPv64",
 	"settingshome.desc.letsencrypt": "HTTPS-Zertifikate per ACME",
 	"settingshome.desc.proxy": "Adressen wie app.nas.local",
+	"settingshome.desc.users": "Konten, Rollen, Passwörter, 2FA",
 	"settingshome.desc.access": "SSH, Zertifikat, Anmeldung, WebDAV",
 	"settingshome.desc.services": "Docker, VMs, LXC ein- und ausschalten",
 	"settingshome.desc.notifications": "E-Mail, Push, Messenger",
