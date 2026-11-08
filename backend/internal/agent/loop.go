@@ -174,13 +174,6 @@ func keepResult(text string) string {
 
 // olderResultText is how much of a result of an earlier turn it sees.
 const olderResultText = 1500
-
-// Messages builds what the model gets from the chat, with the whole chat
-// and the default result sizes.
-func Messages(system string, chat *Chat) []Message {
-	return buildMessages(system, chat, MaxResultText)
-}
-
 // Hints the runner gives the model as notes; they are part of the
 // conversation for the model, short lines for the person.
 const (

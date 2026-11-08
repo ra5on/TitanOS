@@ -652,7 +652,7 @@ func TestNamesAreSafe(t *testing.T) {
 }
 
 func TestParseMemAvailable(t *testing.T) {
-	got, err := parseMemAvailable([]byte("MemTotal: 100 kB\nMemAvailable:    2048 kB\n"))
+	got, err := parseMeminfo([]byte("MemTotal: 100 kB\nMemAvailable:    2048 kB\n"), "MemAvailable:")
 	if err != nil || got != 2048<<10 {
 		t.Fatalf("%d %v", got, err)
 	}
