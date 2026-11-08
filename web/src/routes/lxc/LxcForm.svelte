@@ -149,33 +149,56 @@
 	locked={busy}
 	{onclose}
 >
+	<!-- PLAN 72: cards with rows like every settings card (label and hint left, control right). -->
 	<form class="form" onsubmit={submit}>
-		<label>
-			<span>{t('lxc.form.name')}</span>
-			<input class="field" bind:value={label} maxlength="80" required />
-			<small class="muted mono">{t('lxc.form.id', { id: identifier })}</small>
-		</label>
-		<label>
-			<span>{t('lxc.form.description')}</span>
-			<input class="field" bind:value={description} maxlength="2000" />
-		</label>
+		<section class="tile ui-card">
+			<div class="set-row">
+				<label class="set-label" for="lxc-name"
+					>{t('lxc.form.name')}<small class="set-hint mono"
+						>{t('lxc.form.id', { id: identifier })}</small
+					></label
+				>
+				<span class="set-control"
+					><input id="lxc-name" class="field" bind:value={label} maxlength="80" required /></span
+				>
+			</div>
+			<div class="set-row">
+				<label class="set-label" for="lxc-description">{t('lxc.form.description')}</label>
+				<span class="set-control"
+					><input
+						id="lxc-description"
+						class="field"
+						bind:value={description}
+						maxlength="2000"
+					/></span
+				>
+			</div>
+		</section>
 
-		<fieldset>
-			<legend>{t('lxc.form.image')}</legend>
+		<section class="tile ui-card">
+			<div class="card-head"><h3>{t('lxc.form.image')}</h3></div>
 			{#if initial}
-				<p class="mono">
+				<p class="set-row wide mono">
 					{initial.distribution}
 					{initial.release} · {initial.arch} · {initial.volume}
 				</p>
 			{:else}
-				{#if images === null}<p class="muted" role="status">{t('lxc.form.imagesLoading')}</p>{/if}
-				{#if imagesError}<p class="notice-warn" role="alert">
-						{t('lxc.form.imagesError')} <span class="mono">{imagesError}</span>
+				{#if images === null}<p class="set-row wide muted" role="status">
+						{t('lxc.form.imagesLoading')}
 					</p>{/if}
-				<div class="row">
-					<label>
-						<span>{t('lxc.form.distribution')}</span>
-						<select
+				{#if imagesError}<div class="set-row wide">
+						<p class="notice-warn" role="alert">
+							{t('lxc.form.imagesError')} <span class="mono">{imagesError}</span>
+						</p>
+					</div>{/if}
+				<div class="set-row">
+					<label class="set-label" for="lxc-distribution"
+						>{t('lxc.form.distribution')}<span class="set-hint">{t('lxc.form.imageSource')}</span
+						></label
+					>
+					<span class="set-control"
+						><select
+							id="lxc-distribution"
 							class="field"
 							bind:value={distribution}
 							onchange={pickRelease}
@@ -184,54 +207,72 @@
 							{#each groups as group (group.distribution)}<option value={group.distribution}
 									>{group.distribution}</option
 								>{/each}
-						</select>
-					</label>
-					<label>
-						<span>{t('lxc.form.release')}</span>
-						<select class="field" bind:value={release} disabled={!images?.length}>
-							{#each releases as name (name)}<option value={name}>{name}</option>{/each}
-						</select>
-					</label>
-					<label>
-						<span>{t('lxc.form.volume')}</span>
-						<select class="field" bind:value={volume} disabled={volumes.length === 0}>
-							{#each volumes as v (v.name)}<option value={v.name}>{v.name}</option>{/each}
-						</select>
-					</label>
+						</select></span
+					>
 				</div>
-				{#if storage.status && volumes.length === 0}<p class="notice-warn" role="status">
-						{t('lxc.form.noVolume')}
-					</p>{/if}
-				<p class="muted small">{t('lxc.form.imageSource')}</p>
+				<div class="set-row">
+					<label class="set-label" for="lxc-release">{t('lxc.form.release')}</label>
+					<span class="set-control"
+						><select id="lxc-release" class="field" bind:value={release} disabled={!images?.length}>
+							{#each releases as name (name)}<option value={name}>{name}</option>{/each}
+						</select></span
+					>
+				</div>
+				<div class="set-row">
+					<label class="set-label" for="lxc-volume">{t('lxc.form.volume')}</label>
+					<span class="set-control"
+						><select
+							id="lxc-volume"
+							class="field"
+							bind:value={volume}
+							disabled={volumes.length === 0}
+						>
+							{#each volumes as v (v.name)}<option value={v.name}>{v.name}</option>{/each}
+						</select></span
+					>
+				</div>
+				{#if storage.status && volumes.length === 0}<div class="set-row wide">
+						<p class="notice-warn" role="status">{t('lxc.form.noVolume')}</p>
+					</div>{/if}
 			{/if}
-		</fieldset>
+		</section>
 
-		<fieldset>
-			<legend>{t('lxc.form.resources')}</legend>
-			<div class="row">
-				<label>
-					<span>{t('lxc.form.cpus')}</span>
-					<input class="field" type="number" min="0" max={list.host.cpus} bind:value={cpus} />
-				</label>
-				<label>
-					<span>{t('lxc.form.memory')}</span>
-					<input
-						class="field"
+		<section class="tile ui-card">
+			<div class="card-head"><h3>{t('lxc.form.resources')}</h3></div>
+			<div class="set-row">
+				<label class="set-label" for="lxc-cpus">{t('lxc.form.cpus')}</label>
+				<span class="set-control"
+					><input
+						id="lxc-cpus"
+						class="field short"
+						type="number"
+						min="0"
+						max={list.host.cpus}
+						bind:value={cpus}
+					/></span
+				>
+			</div>
+			<div class="set-row">
+				<label class="set-label" for="lxc-memory">{t('lxc.form.memory')}</label>
+				<span class="set-control"
+					><input
+						id="lxc-memory"
+						class="field short"
 						type="number"
 						min="0"
 						step="1"
 						bind:value={() => mibToMB(memoryMiB), (mb) => (memoryMiB = mbToMiB(mb))}
-					/>
-				</label>
+					/></span
+				>
 			</div>
-		</fieldset>
+		</section>
 
-		<fieldset>
-			<legend>{t('lxc.form.network')}</legend>
-			<div class="row">
-				<label>
-					<span>{t('lxc.form.network')}</span>
-					<select class="field" bind:value={network}>
+		<section class="tile ui-card">
+			<div class="card-head"><h3>{t('lxc.form.network')}</h3></div>
+			<div class="set-row">
+				<label class="set-label" for="lxc-network">{t('lxc.form.network')}</label>
+				<span class="set-control"
+					><select id="lxc-network" class="field" bind:value={network}>
 						<option value="none">{t('lxc.net.none')}</option>
 						{#if list.bridge || network === 'bridge'}<option value="bridge"
 								>{t('lxc.net.bridge')}</option
@@ -239,26 +280,38 @@
 						{#each bridges as n (n.id)}<option value={`network:${n.id}`}
 								>{n.name}{n.vlan ? ` · VLAN ${n.vlan}` : ''}</option
 							>{/each}
-					</select>
-				</label>
-				<label>
-					<span>{t('lxc.form.mac')}</span>
-					<input
+					</select></span
+				>
+			</div>
+			<div class="set-row">
+				<label class="set-label" for="lxc-mac">{t('lxc.form.mac')}</label>
+				<span class="set-control"
+					><input
+						id="lxc-mac"
 						class="field mono"
 						bind:value={mac}
 						placeholder="00:16:3e:…"
 						aria-invalid={!validMAC(mac)}
-					/>
-				</label>
+					/></span
+				>
 			</div>
-			{#if !validMAC(mac)}<p class="notice-error" role="alert">{t('lxc.form.badMac')}</p>{/if}
-		</fieldset>
+			{#if !validMAC(mac)}<div class="set-row wide">
+					<p class="notice-error" role="alert">{t('lxc.form.badMac')}</p>
+				</div>{/if}
+		</section>
 
-		<fieldset>
-			<legend>{t('lxc.form.mounts')}</legend>
+		<section class="tile ui-card">
+			<div class="card-head">
+				<h3>{t('lxc.form.mounts')}</h3>
+				<span class="card-tools"
+					><button type="button" class="btn" onclick={addMount} disabled={mounts.length >= 16}
+						>{t('lxc.form.addMount')}</button
+					></span
+				>
+			</div>
 			{#each mounts as mount, index (index)}
-				<div class="mount">
-					<label>
+				<div class="set-row wide mount">
+					<label class="stack">
 						<span>{t('lxc.form.mountPath')}</span>
 						<input
 							class="field mono"
@@ -267,7 +320,7 @@
 							placeholder="/mnt/…"
 						/>
 					</label>
-					<label>
+					<label class="stack">
 						<span>{t('lxc.form.mountTarget')}</span>
 						<input
 							class="field mono"
@@ -291,29 +344,46 @@
 			<datalist id="lxc-shares">
 				{#each shares as share (share.name)}<option value={share.path}>{share.name}</option>{/each}
 			</datalist>
-			{#if invalidMounts && mounts.length > 0}<p class="notice-error" role="alert">
-					{t('lxc.form.badTarget')}
-				</p>{/if}
-			<div>
-				<button type="button" class="btn" onclick={addMount} disabled={mounts.length >= 16}
-					>{t('lxc.form.addMount')}</button
+			{#if invalidMounts && mounts.length > 0}<div class="set-row wide">
+					<p class="notice-error" role="alert">{t('lxc.form.badTarget')}</p>
+				</div>{/if}
+			<p class="set-row wide muted small">{t('lxc.form.mountHint')}</p>
+		</section>
+
+		<section class="tile ui-card">
+			<div class="set-row">
+				<label class="set-label" for="lxc-autostart">{t('lxc.form.autostart')}</label>
+				<span class="set-control end"
+					><input
+						id="lxc-autostart"
+						type="checkbox"
+						class="switch"
+						bind:checked={autostart}
+					/></span
 				>
 			</div>
-			<p class="muted small">{t('lxc.form.mountHint')}</p>
-		</fieldset>
-
-		<label class="check"
-			><input type="checkbox" bind:checked={autostart} />{t('lxc.form.autostart')}</label
-		>
-		{#if initial}
-			{#if initial.privileged}<p class="notice-warn">{t('lxc.form.privilegedWarning')}</p>{/if}
-			<p class="muted small">{t('lxc.form.restartHint')}</p>
-		{:else}
-			<label class="check"
-				><input type="checkbox" bind:checked={privileged} />{t('lxc.form.privileged')}</label
-			>
-			{#if privileged}<p class="notice-warn" role="alert">{t('lxc.form.privilegedWarning')}</p>{/if}
-		{/if}
+			{#if initial}
+				<div class="set-row wide">
+					{#if initial.privileged}<p class="notice-warn">{t('lxc.form.privilegedWarning')}</p>{/if}
+					<p class="muted small">{t('lxc.form.restartHint')}</p>
+				</div>
+			{:else}
+				<div class="set-row">
+					<label class="set-label" for="lxc-privileged">{t('lxc.form.privileged')}</label>
+					<span class="set-control end"
+						><input
+							id="lxc-privileged"
+							type="checkbox"
+							class="switch"
+							bind:checked={privileged}
+						/></span
+					>
+				</div>
+				{#if privileged}<div class="set-row wide">
+						<p class="notice-warn" role="alert">{t('lxc.form.privilegedWarning')}</p>
+					</div>{/if}
+			{/if}
+		</section>
 
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 		<div class="dialog-actions">
@@ -331,9 +401,23 @@
 	.form {
 		display: flex;
 		flex-direction: column;
-		gap: 14px;
+		gap: var(--gap, 16px);
 	}
-	label {
+	.tile.ui-card {
+		flex-shrink: 0;
+	}
+	.set-row.wide {
+		grid-template-columns: minmax(0, 1fr);
+		margin: 0;
+	}
+	.set-control .field {
+		width: 18rem;
+		max-width: 100%;
+	}
+	.set-control .field.short {
+		width: 8rem;
+	}
+	label.stack {
 		display: grid;
 		gap: var(--space-1);
 		font-size: var(--text-base);
@@ -344,38 +428,16 @@
 		gap: var(--space-2);
 		font-size: var(--text-md);
 	}
-	fieldset {
-		display: flex;
-		flex-direction: column;
-		gap: 10px;
-		margin: 0;
-		padding: var(--space-3);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-ctl);
-	}
-	legend {
-		padding: 0 6px;
-		font-size: var(--text-base);
-		font-weight: 600;
-	}
-	.row {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-		gap: 10px;
-	}
-	.mount {
-		display: grid;
+	.set-row.mount {
 		grid-template-columns: 2fr 1.5fr auto auto;
 		align-items: end;
-		gap: var(--space-2);
 	}
 	@media (max-width: 760px) {
-		.mount {
+		.set-row.mount {
 			grid-template-columns: 1fr;
 		}
 	}
 	.small {
-		margin: 0;
 		font-size: var(--text-base);
 	}
 	p {

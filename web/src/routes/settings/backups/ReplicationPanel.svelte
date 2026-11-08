@@ -253,73 +253,105 @@
 		locked={busy}
 		onclose={() => (editing = null)}
 	>
-		<form class="form" onsubmit={save}>
-			<label class="narrow"
-				><span>{t('replication.name')}</span><input
-					class="field mono"
-					bind:value={editing.name}
-					pattern="[A-Za-z][A-Za-z0-9\-]*"
-					maxlength="31"
-					required
-				/></label
-			>
-			<label class="narrow"
-				><span>{t('replication.volume')}</span>
-				<select class="field" bind:value={editing.volume}
-					>{#each btrfsVolumes as name (name)}<option value={name}>{name}</option>{/each}</select
-				>
-			</label>
-			{#if !editing.id}<ClusterPair onpair={(code) => editing && (editing.code = code)} />{/if}
-			<label
-				><span>{t('replication.code')}</span>
-				<textarea
-					class="field mono"
-					rows="3"
-					bind:value={editing.code}
-					required={!editing.id}
-					placeholder="titanos-backup:…"></textarea>
-				<small class="muted"
-					>{t(editing.id ? 'replication.codeKeep' : 'replication.codeHint')}</small
-				>
-			</label>
-			<div class="row">
-				<label class="narrow"
-					><span>{t('replication.everyHours')}</span><input
-						class="field"
-						type="number"
-						min="1"
-						max="168"
-						bind:value={editing.everyHours}
-					/></label
-				>
-
-				<label class="narrow"
-					><span>{t('replication.limit')}</span><input
-						class="field"
-						type="number"
-						min="0"
-						max="10000"
-						bind:value={editing.limitMiB}
-					/></label
-				>
-			</div>
-			<div class="keep-block">
-				<span class="legend-sub">{t('replication.keep')}</span>
-				<KeepChoice
-					bind:count={editing.keep}
-					bind:versions={editing.versions}
-					min={2}
-					max={365}
-					unit="snapshots"
-					rolling
-				/>
-			</div>
-			<label class="check"
-				><input type="checkbox" bind:checked={editing.enabled} /><span
-					>{t('replication.enabled')}</span
-				></label
-			>
-			<p class="muted">{t('replication.subvolumes')}</p>
+		<!-- PLAN 72: cards with rows like every settings card. -->
+		<form class="rform" onsubmit={save}>
+			<section class="tile ui-card">
+				<div class="set-row">
+					<label class="set-label" for="repl-name">{t('replication.name')}</label>
+					<span class="set-control"
+						><input
+							id="repl-name"
+							class="field mono"
+							bind:value={editing.name}
+							pattern="[A-Za-z][A-Za-z0-9\-]*"
+							maxlength="31"
+							required
+						/></span
+					>
+				</div>
+				<div class="set-row">
+					<label class="set-label" for="repl-volume"
+						>{t('replication.volume')}<span class="set-hint">{t('replication.subvolumes')}</span
+						></label
+					>
+					<span class="set-control"
+						><select id="repl-volume" class="field" bind:value={editing.volume}
+							>{#each btrfsVolumes as name (name)}<option value={name}>{name}</option
+								>{/each}</select
+						></span
+					>
+				</div>
+				{#if !editing.id}<div class="set-row wide">
+						<ClusterPair onpair={(code) => editing && (editing.code = code)} />
+					</div>{/if}
+				<div class="set-row wide">
+					<label class="stack" for="repl-code"
+						><span>{t('replication.code')}</span>
+						<small class="set-hint"
+							>{t(editing.id ? 'replication.codeKeep' : 'replication.codeHint')}</small
+						></label
+					>
+					<textarea
+						id="repl-code"
+						class="field mono"
+						rows="3"
+						bind:value={editing.code}
+						required={!editing.id}
+						placeholder="titanos-backup:…"></textarea>
+				</div>
+			</section>
+			<section class="tile ui-card">
+				<div class="set-row">
+					<label class="set-label" for="repl-enabled">{t('replication.enabled')}</label>
+					<span class="set-control end"
+						><input
+							id="repl-enabled"
+							type="checkbox"
+							class="switch"
+							bind:checked={editing.enabled}
+						/></span
+					>
+				</div>
+				<div class="set-row">
+					<label class="set-label" for="repl-hours">{t('replication.everyHours')}</label>
+					<span class="set-control"
+						><input
+							id="repl-hours"
+							class="field short"
+							type="number"
+							min="1"
+							max="168"
+							bind:value={editing.everyHours}
+						/></span
+					>
+				</div>
+				<div class="set-row">
+					<label class="set-label" for="repl-limit">{t('replication.limit')}</label>
+					<span class="set-control"
+						><input
+							id="repl-limit"
+							class="field short"
+							type="number"
+							min="0"
+							max="10000"
+							bind:value={editing.limitMiB}
+						/></span
+					>
+				</div>
+				<div class="set-row">
+					<span class="set-label">{t('replication.keep')}</span>
+					<span class="set-control">
+						<KeepChoice
+							bind:count={editing.keep}
+							bind:versions={editing.versions}
+							min={2}
+							max={365}
+							unit="snapshots"
+							rolling
+						/>
+					</span>
+				</div>
+			</section>
 			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 			<div class="dialog-actions">
 				<button type="button" class="btn" disabled={busy} onclick={() => (editing = null)}
@@ -395,30 +427,27 @@
 		gap: 0.4rem;
 		margin-left: auto;
 	}
-	.form {
-		display: grid;
-		gap: 0.8rem;
+	.rform {
+		display: flex;
+		flex-direction: column;
+		gap: var(--gap, 16px);
 	}
-	.form label {
+	.rform .tile.ui-card {
+		flex-shrink: 0;
+	}
+	.rform .set-row.wide {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.rform .set-control .field {
+		width: 14rem;
+		max-width: 100%;
+	}
+	.rform .set-control .field.short {
+		width: 7rem;
+	}
+	label.stack {
 		display: grid;
 		gap: 0.3rem;
-	}
-	.row {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.8rem 1.2rem;
-	}
-	.narrow {
-		width: min(100%, 14rem);
-		min-width: 0;
-	}
-	.narrow .field {
-		width: 100%;
-	}
-	.check {
-		display: flex !important;
-		align-items: center;
-		gap: 0.5rem;
 	}
 	.small {
 		font-size: 0.8125rem;

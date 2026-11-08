@@ -1,7 +1,7 @@
 // PLAN 54-D, group "Dokumente und Fristen": the rows in Funktionen, the
 // settings of the document memory and of the paperwork autopilot, the
 // deadlines found and the paperwork overview, on the phone (390×844) and
-// the desktop (1440×900, side panel). Isolated API data only: no request
+// the desktop (1440×900, a page next to the side bar, PLAN 72). Isolated API data only: no request
 // reaches a NAS, a mailbox or an Ollama server.
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
@@ -471,17 +471,22 @@ async function full(page, name) {
   await ctx.close();
 }
 
-// ---- desktop: from the agent's menu, as a side panel (draft 05) ----
+// ---- desktop: from the agent's menu, as a page in the main area (PLAN 72) ----
 {
   const { ctx, page } = await open(1440, 900);
   await page.goto(base + "/agent?app=1");
   await page.getByRole("button", { name: "Papierkram" }).first().click();
   await page.locator(".sheet").getByText("Ausgaben im November").waitFor();
   const box = await page.locator(".sheet").boundingBox();
+  // The page fills the main area; the side bar stays visible and usable.
   assert.ok(
-    box && box.width <= 470 && box.x > 900,
-    `side panel: ${JSON.stringify(box)}`,
+    box && box.x >= 200 && box.x <= 240 && box.width > 1100,
+    `page next to the side bar: ${JSON.stringify(box)}`,
   );
+  await page.getByRole("button", { name: "Neuer Chat" }).first().click();
+  await page.locator(".sheet").waitFor({ state: "detached" });
+  await page.getByRole("button", { name: "Papierkram" }).first().click();
+  await page.locator(".sheet").getByText("Ausgaben im November").waitFor();
   await page.waitForTimeout(300);
   await page.screenshot({ path: `${out}/05-papierkram-desktop.png` });
   await ctx.close();

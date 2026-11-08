@@ -33,6 +33,7 @@
 	import { pageTitle } from '#lib/page-title.svelte.ts';
 	import { loadMine, type FeatureViewId, type FeaturesPublic } from '#lib/agent-features.ts';
 	import FeatureView from '#lib/components/agent/features/FeatureView.svelte';
+	import FeatureHost from '#lib/components/agent/features/FeatureHost.svelte';
 	import { session } from '#lib/session.svelte.ts';
 	import { inWindow } from '#lib/desktop/frame.ts';
 	import {
@@ -898,8 +899,14 @@
 		current: current?.id,
 		project,
 		admin: status?.admin ?? false,
-		onopen: (id: string, author?: string) => open(id, true, author ?? ''),
-		onnew: () => newChat(''),
+		onopen: (id: string, author?: string) => {
+			if (dialog?.kind === 'feature') dialog = null;
+			open(id, true, author ?? '');
+		},
+		onnew: () => {
+			if (dialog?.kind === 'feature') dialog = null;
+			newChat('');
+		},
 		onproject: (id: string) => {
 			project = id;
 			// On the phone the menu stays open and shows the project's chats.
@@ -1095,6 +1102,10 @@
 				<aside class="side"><AgentMenu {...menuProps} /></aside>
 			{/if}
 			<section class="main" aria-label={current?.title ?? t('agent.newChat')}>
+				{#if dialog?.kind === 'feature' && !phone}
+					<!-- PLAN 72: a function's view as a page here, the side bar stays. -->
+					<FeatureHost id={dialog.id} {calm} onclose={() => (dialog = null)} />
+				{/if}
 				{#if phone}
 					<header class="top">
 						<button
@@ -1270,7 +1281,7 @@
 	/>
 {/if}
 {#if dialog?.kind === 'feature'}
-	<FeatureView id={dialog.id} {calm} onclose={() => (dialog = null)} />
+	{#if phone}<FeatureView id={dialog.id} {calm} onclose={() => (dialog = null)} />{/if}
 {:else if dialog?.kind === 'project'}
 	<ProjectDialog
 		project={dialog.project}
@@ -1612,6 +1623,7 @@
 		font-size: calc(16px * var(--font-scale) * 1.1);
 	}
 	.main {
+		position: relative;
 		display: flex;
 		flex-direction: column;
 		min-height: 0;

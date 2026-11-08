@@ -172,6 +172,8 @@
 
 <style>
 	.results {
+		/* In the dialog's column it would otherwise shrink to nothing. */
+		flex-shrink: 0;
 		max-height: 45vh;
 		overflow: auto;
 	}

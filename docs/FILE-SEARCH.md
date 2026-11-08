@@ -108,7 +108,9 @@ Goroutine mit 50 ms Pause nach jeder gelesenen Datei.
   VM-geschützte Dateien.
 - Gelesen werden: Text (`.txt`, `.md`, `.csv`, `.log`, `.json`, `.xml`,
   `.html`, `.yaml`, `.ini`, `.conf`, `.tex`, `.srt`, … bis 8 MiB, davon das
-  erste MiB), Word/Excel (`.docx`, `.xlsx` bis 32 MiB, `office.Text`), PDF bis
+  erste MiB), Word/Excel (`.docx`, `.xlsx`) und seit 0.67 OpenDocument
+  (`.odt`, `.ods`, `.odp`) und PowerPoint (`.pptx`), je bis 32 MiB
+  (`office.Text`), PDF bis
   50 MiB (`office.ReadPDF`, 20 Seiten je Aufruf, höchstens 200 Seiten bzw.
   2 MiB Text). Der Dateiname zählt immer mit.
 - Unverändert ist eine Datei bei gleicher Größe, Änderungszeit und Inode; sie
@@ -147,8 +149,14 @@ mit `"content": true` sucht dann im Index:
   Punktordnern fallen weg. Endung, Größe und Datum filtern wie bei der
   Namenssuche.
 - USB-Laufwerke und der Stick haben keinen Index (`index_unavailable`).
-- Inhalte stehen nur im Index auf dem Volume selbst; Treffer zeigen keinen
-  Textauszug.
+- Der Index speichert keinen Text, nur Wörter. Seit 0.67 (PLAN 72) bekommen
+  die ersten 25 Treffer einen **Textausschnitt** (`excerpt`): titand liest die
+  Datei über `os.Root` der Wurzel erneut, mit derselben Lesefunktion wie der
+  Index, aber nie mit Texterkennung, höchstens vier gleichzeitig und zusammen
+  8 Sekunden. Gezeigt wird der Abschnitt um das erste Wort, das mit einem
+  Suchwort beginnt (etwa 90 Zeichen davor und danach, an Wortgrenzen). Die
+  Oberfläche setzt Name und Ausschnitt nur als Text und markiert die
+  passenden Wörter; „Im Inhalt suchen“ ist vorgewählt, wo ein Index besteht.
 
 ### Grenzen
 
@@ -177,6 +185,9 @@ fehlendes Hilfsprogramm, PDF über ein nachgebautes `pdftoppm` mit
 Deskriptorprüfung, Cache-Schlüssel, Cache auf dem Volume, LRU-Bereinigung),
 `internal/fileindex` (Wörter, Hinzufügen/Ändern/Löschen, Filter nach Ordnern,
 Bereichswechsel, Einstellungen, Start nur bei Aktivität bzw. zur Uhrzeit,
-Index löschen) und `internal/api` (Rechte der neuen Routen). Webtests:
-`web/tests/file-media.test.mjs`. Nicht geprüft: echtes `ffmpeg`/`pdftoppm` im
+Index löschen, seit 0.67 Textausschnitte: `TestExcerptOf`,
+`TestManagerExcerptReadsTheFile`), `internal/office` (`TestODFAndPPTXText`) und
+`internal/api` (Rechte der neuen Routen). Webtests:
+`web/tests/file-media.test.mjs`, `web/tests/excerpt.test.mjs`; UI:
+`scripts/test-ui-content-search.mjs` (Ausschnitt, Markierung, kein HTML). Nicht geprüft: echtes `ffmpeg`/`pdftoppm` im
 Abbild, große reale Datenbestände, Verhalten mit echten schlafenden Platten.

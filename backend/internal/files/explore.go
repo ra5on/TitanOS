@@ -15,10 +15,16 @@ var ErrScanLimit = errors.New("files: scan limit reached")
 
 const scanLimit = 50000
 
+// usageScanLimit bounds the storage analysis (PLAN 72).
+const usageScanLimit = 2_000_000
+
 type FoundEntry struct {
 	Version string `json:"version,omitempty"`
 	Entry
 	Path string `json:"path"`
+	// Excerpt is the passage around the first match of a full-text search
+	// (PLAN 72), only for the first hits.
+	Excerpt string `json:"excerpt,omitempty"`
 }
 type SearchOptions struct {
 	Path, Query, Extension string
@@ -35,6 +41,12 @@ type SearchResult struct {
 
 // scan is demand-driven, confined to the selected root and does not follow links.
 func (m *Manager) scan(ctx context.Context, root Root, dir string, showHidden bool, visit func(string, fs.FileInfo) error) error {
+	return m.scanUpTo(ctx, root, dir, showHidden, scanLimit, visit)
+}
+
+// scanUpTo is scan with its own entry limit (the storage analysis keeps
+// only totals and short lists, so it may walk far more entries).
+func (m *Manager) scanUpTo(ctx context.Context, root Root, dir string, showHidden bool, limit int, visit func(string, fs.FileInfo) error) error {
 	dir, err := clean(dir)
 	if err != nil || root.secret(dir) || m.protected(root, dir) {
 		return ErrInvalid
@@ -62,7 +74,7 @@ func (m *Manager) scan(ctx context.Context, root Root, dir string, showHidden bo
 			return nil
 		}
 		count++
-		if count > scanLimit {
+		if count > limit {
 			return ErrScanLimit
 		}
 		info, e := d.Info()

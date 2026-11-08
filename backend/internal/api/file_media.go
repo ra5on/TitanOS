@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/fileindex"
@@ -202,7 +203,44 @@ func (s *Server) contentSearch(ctx context.Context, root files.Root, opt files.S
 	}
 	result.Scanned = len(hits)
 	result.Truncated = truncated
+	s.addExcerpts(ctx, pinned, index, result.Entries, opt.Query)
 	return result, nil
+}
+
+// excerptHits is how many of the first hits get a passage of their text.
+const excerptHits = 25
+
+// addExcerpts reads the first hits again (the account's own root, already
+// checked) and adds the passage around the first match. It is bounded in
+// time; what does not finish simply has no excerpt.
+func (s *Server) addExcerpts(ctx context.Context, pinned *os.Root, index *fileindex.Manager, entries []files.FoundEntry, query string) {
+	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+	n := min(len(entries), excerptHits)
+	var wg sync.WaitGroup
+	work := make(chan int)
+	for range min(n, 4) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range work {
+				if ctx.Err() != nil {
+					continue
+				}
+				f, err := pinned.Open(entries[i].Path)
+				if err != nil {
+					continue
+				}
+				entries[i].Excerpt = index.Excerpt(ctx, f, entries[i].Name, entries[i].Size, query)
+				f.Close()
+			}
+		}()
+	}
+	for i := range n {
+		work <- i
+	}
+	close(work)
+	wg.Wait()
 }
 
 type indexShare struct {

@@ -244,8 +244,10 @@ func (s *Server) handleFileJobControl(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleFileUsage(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Root, Path string
-		ShowHidden bool
+		Root, Path    string
+		ShowHidden    bool
+		OlderThanDays int   `json:"olderThanDays"`
+		MinOldBytes   int64 `json:"minOldBytes"`
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -254,9 +256,15 @@ func (s *Server) handleFileUsage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
-	result, err := s.opts.Files.DirectoryUsage(ctx, root, req.Path, req.ShowHidden)
+	if req.OlderThanDays < 0 || req.OlderThanDays > 36500 || req.MinOldBytes < 0 {
+		writeError(w, http.StatusBadRequest, "invalid_request", "")
+		return
+	}
+	result, err := s.opts.Files.DirectoryUsageWith(ctx, root, req.Path, files.UsageOptions{
+		ShowHidden: req.ShowHidden, OlderThanDays: req.OlderThanDays, MinOldBytes: req.MinOldBytes,
+	})
 	if err != nil {
 		writeFileError(w, err)
 		return
