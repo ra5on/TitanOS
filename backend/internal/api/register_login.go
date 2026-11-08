@@ -36,6 +36,8 @@ func (s *Server) registerLogin(mux *routeMux) {
 	mux.HandleFunc(mcpPath, s.handleMCP)
 	mux.HandleFunc("GET /api/v1/system/mcp", s.requireUser(s.handleMCPSettings))
 	mux.HandleFunc("PUT /api/v1/system/mcp", s.requireAdmin(s.handleMCPSettingsSet))
+	mux.HandleFunc("GET /api/v1/system/startup", s.requireAdmin(s.handleStartup))
+	mux.HandleFunc("PUT /api/v1/system/startup", s.requireAdmin(s.handlePutStartup))
 	mux.HandleFunc("GET /api/v1/system/webdav", s.requireAdmin(s.handleWebDAVSettings))
 	mux.HandleFunc("PUT /api/v1/system/webdav", s.requireAdmin(s.handleWebDAVSettingsSet))
 	mux.HandleFunc("GET /api/v1/account/webdav", s.requireUser(s.handleAccountWebDAV))

@@ -194,6 +194,9 @@ type Manager struct {
 	off               atomic.Bool
 	ScheduleAdmission func() (func(), error)
 	AutoReady         func() bool
+	// Ordered: the VM is in the start order after boot (PLAN 73) and is
+	// started by that instead of the plain autostart.
+	Ordered func(name string) bool
 	// BridgeReady rejects creation/start until the network trial is confirmed.
 	BridgeReady   func() bool
 	NetworkBridge func(string) (string, bool)

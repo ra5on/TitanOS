@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/ra5on/TitanOS/backend/internal/startup"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -75,23 +76,25 @@ type titand struct {
 	// services are the background goroutines, waited for on shutdown.
 	services sync.WaitGroup
 
-	store            *config.Store
-	users            *auth.Users
-	base             string
-	settings         *system.Settings
-	connection       *network.Manager
-	packetFilter     *firewall.Manager
-	volumes          *storage.Manager
-	smartHistory     *smarthistory.Recorder
-	folders          *shares.Manager
-	routes           *appproxy.Manager
-	appRights        *appaccess.Manager
-	remoteView       *viewer.Manager
-	webApps          *webapps.Manager
-	devices          *hardware.Manager
-	containers       *docker.Manager
-	appCatalog       *catalog.Manager
-	machines         *vm.Manager
+	store        *config.Store
+	users        *auth.Users
+	base         string
+	settings     *system.Settings
+	connection   *network.Manager
+	packetFilter *firewall.Manager
+	volumes      *storage.Manager
+	smartHistory *smarthistory.Recorder
+	folders      *shares.Manager
+	routes       *appproxy.Manager
+	appRights    *appaccess.Manager
+	remoteView   *viewer.Manager
+	webApps      *webapps.Manager
+	devices      *hardware.Manager
+	containers   *docker.Manager
+	appCatalog   *catalog.Manager
+	machines     *vm.Manager
+	// start: when apps and VMs start after boot (PLAN 73).
+	start            *startup.Manager
 	systemContainers *lxc.Manager
 	// consoleMu keeps giving the text console back apart from a VM start.
 	consoleMu       sync.Mutex
