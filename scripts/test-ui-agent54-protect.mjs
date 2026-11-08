@@ -62,7 +62,6 @@ const features = {
   advisor: {},
   buddy: {},
   catalog: {},
-  diary: {},
   guard: {
     enabled: true,
     mode: "lock",
@@ -94,7 +93,6 @@ const pub = {
   advisor: false,
   buddy: false,
   catalog: false,
-  diary: false,
 };
 const handbook = {
   made: ago(60 * 7),
@@ -230,7 +228,7 @@ async function open(width, height) {
     if (p === "/agent/features" && method === "PUT")
       return json(route.request().postDataJSON());
     if (p === "/agent/features/me")
-      return json({ mine: { docs: {}, paper: {}, diary: {} }, nas: pub });
+      return json({ mine: { docs: {}, paper: {} }, nas: pub });
     if (p === "/agent/protect/me")
       return json({
         guard: true,
@@ -443,7 +441,7 @@ for (const [width, height, tag] of [
     if (p === "/agent/chats") return json({ chats: [] });
     if (p === "/agent/projects") return json({ projects: [] });
     if (p === "/agent/features/me")
-      return json({ mine: { docs: {}, paper: {}, diary: {} }, nas: pub });
+      return json({ mine: { docs: {}, paper: {} }, nas: pub });
     if (p === "/agent/protect/me")
       return json({
         guard: false,

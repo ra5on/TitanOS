@@ -22,7 +22,7 @@ import (
 // mailbox, its sources) in features.json in its private agent folder on
 // the agent's volume, never on the stick.
 
-// agentFeatures are the NAS-wide settings of the nine functions.
+// agentFeatures are the NAS-wide settings of the eight functions.
 type agentFeatures struct {
 	Docs      agentDocsNAS   `json:"docs"`
 	Guard     agentGuard     `json:"guard"`
@@ -32,14 +32,12 @@ type agentFeatures struct {
 	Advisor   agentAdvisor   `json:"advisor"`
 	Buddy     agentBuddy     `json:"buddy"`
 	Catalog   agentCatalog   `json:"catalog"`
-	Diary     agentDiaryNAS  `json:"diary"`
 }
 
 // agentFeaturesMine are an account's own settings of the functions.
 type agentFeaturesMine struct {
 	Docs  agentDocsMine  `json:"docs"`
 	Paper agentPaperMine `json:"paper"`
-	Diary agentDiaryMine `json:"diary"`
 }
 
 const agentFeaturesFile = "features.json"
@@ -65,10 +63,7 @@ func (s *Server) checkAgentFeaturesMine(user string, m *agentFeaturesMine, old a
 	if err := s.checkDocsMine(user, &m.Docs, old.Docs); err != nil {
 		return err
 	}
-	if err := s.checkPaperMine(user, &m.Paper, old.Paper); err != nil {
-		return err
-	}
-	return s.checkDiaryMine(user, &m.Diary, old.Diary)
+	return s.checkPaperMine(user, &m.Paper, old.Paper)
 }
 
 func (s *Server) handleAgentFeatures(w http.ResponseWriter, r *http.Request) {
@@ -148,7 +143,7 @@ func (f agentFeatures) view() agentFeatures {
 	f.Docs = f.Docs.view()
 	f.Guard, f.Handbook, f.Emergency = f.Guard.view(), f.Handbook.view(), f.Emergency.view()
 	f.WhatIf, f.Advisor = f.WhatIf.view(), f.Advisor.view()
-	f.Buddy, f.Catalog, f.Diary = f.Buddy.view(), f.Catalog.view(), f.Diary.view()
+	f.Buddy, f.Catalog = f.Buddy.view(), f.Catalog.view()
 	return f
 }
 
@@ -159,12 +154,12 @@ func (f agentFeatures) public() map[string]bool {
 		"docs": f.Docs.Enabled, "deadlines": f.Docs.Enabled && f.Docs.Deadlines, "paper": f.Docs.Enabled && f.Docs.Paper,
 		"guard": f.Guard.Enabled, "handbook": f.Handbook.Enabled, "emergency": f.Emergency.Enabled,
 		"whatIf": f.WhatIf.Enabled, "advisor": f.Advisor.Enabled,
-		"buddy": f.Buddy.Enabled, "catalog": f.Catalog.Enabled, "diary": f.Diary.Enabled,
+		"buddy": f.Buddy.Enabled, "catalog": f.Catalog.Enabled,
 	}
 }
 
 func (m agentFeaturesMine) view() agentFeaturesMine {
-	m.Docs, m.Paper, m.Diary = m.Docs.view(), m.Paper.view(), m.Diary.view()
+	m.Docs, m.Paper = m.Docs.view(), m.Paper.view()
 	return m
 }
 
@@ -196,6 +191,5 @@ func (b *agentToolbox) featureTools() []*agentTool {
 	out = append(out, b.docsTools()...)
 	out = append(out, b.protectTools()...)
 	out = append(out, b.foresightTools()...)
-	out = append(out, b.family54Tools()...)
 	return out
 }

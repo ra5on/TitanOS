@@ -5,7 +5,6 @@
 	// and what the agent remembered, questions with buttons, the banner of a
 	// step that waits for approval and, while it runs, what streams in.
 	import Icon from '#lib/components/Icon.svelte';
-	import FamilyDiarySources from './features/FamilyDiarySources.svelte';
 	import { chatMarkdown } from '#lib/chat-markdown.ts';
 	import { formatDateTime } from '#lib/format.ts';
 	import { canSpeak, speak, speech } from '#lib/agent-speech.svelte.ts';
@@ -264,7 +263,6 @@
 						<!-- eslint-disable-next-line svelte/no-at-html-tags -- chatMarkdown escapes everything first -->
 						<div class="md">{@html chatMarkdown(block.entry.content)}</div>
 					{/if}
-					{#if prev?.kind === 'steps'}<FamilyDiarySources steps={prev.steps} />{/if}
 					{#if block.entry.choices?.length && block.entry.id === lastAnswer && !busy && !readonly}
 						<div class="choices">
 							{#each block.entry.choices as choice, n (choice)}

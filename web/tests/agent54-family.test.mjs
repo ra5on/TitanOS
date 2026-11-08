@@ -1,12 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import {
-	diarySources,
-	formatCode,
-	quotaPercent,
-	stepsPreview,
-} from '../src/lib/features/family.ts';
+import { formatCode, quotaPercent, stepsPreview } from '../src/lib/features/family.ts';
 
 test('pairing codes are typed in groups of three', () => {
 	assert.equal(formatCode('k7q4mz92x'), 'K7Q-4MZ-92X');
@@ -18,17 +13,6 @@ test('quota share stays between 0 and 100', () => {
 	assert.equal(quotaPercent(0, 0), 0);
 	assert.equal(quotaPercent(2.3, 3), 77);
 	assert.equal(quotaPercent(5, 3), 100);
-});
-
-test('diary sources come only from titanos:diary links', () => {
-	assert.deepEqual(
-		diarySources([
-			{ title: 'Fotos (48)', url: 'titanos:diary/photos' },
-			{ title: 'Web', url: 'https://example.org' },
-		]),
-		[{ title: 'Fotos (48)', id: 'photos' }],
-	);
-	assert.deepEqual(diarySources(undefined), []);
 });
 
 test('steps preview keeps the first lines', () => {

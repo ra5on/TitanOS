@@ -18,7 +18,7 @@ func TestAgentFeaturesSkeleton(t *testing.T) {
 		NAS map[string]bool `json:"nas"`
 	}
 	json.Unmarshal(body, &me)
-	if len(me.NAS) != 11 {
+	if len(me.NAS) != 10 {
 		t.Fatalf("public: %s", body)
 	}
 	for k, on := range me.NAS {

@@ -1,11 +1,9 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"net/netip"
 	"strings"
 	"testing"
 
@@ -143,70 +141,5 @@ func TestFamily54BuddyNoDoublePairing(t *testing.T) {
 	}
 	if _, _, ok := f.codes.Active(); !ok {
 		t.Fatal("full list used up the code")
-	}
-}
-
-// Fix 6: the stored Immich key goes only with the address it was given for.
-func TestFamily54DiaryKeyFollowsAddress(t *testing.T) {
-	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard})
-	put := func(d map[string]any) {
-		if res, body := ts.request("PUT", "/api/v1/agent/features/me", map[string]any{"diary": d}); res.StatusCode != 200 {
-			t.Fatalf("put: %d %s", res.StatusCode, body)
-		}
-	}
-	put(map[string]any{"immichUrl": "http://immich.local:2283", "immichKey": "k-1"})
-	put(map[string]any{"immichUrl": "http://immich.local:2283"})
-	if mine, _ := ts.server.agentFeaturesOf("alex"); mine.Diary.ImmichKey != "k-1" {
-		t.Fatal("key lost for the same address")
-	}
-	put(map[string]any{"immichUrl": "http://elsewhere.example:2283"})
-	if mine, _ := ts.server.agentFeaturesOf("alex"); mine.Diary.ImmichKey != "" {
-		t.Fatal("key went to another address")
-	}
-}
-
-// Audit C: Immich and Frigate addresses take no fragment, user info or
-// query, and the diary never connects to loopback, link-local or the NAS.
-func TestFamily54DiaryNoSSRF(t *testing.T) {
-	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard})
-	for _, bad := range []string{"http://immich.local:2283#", "http://immich.local:2283/#x", "http://user:pw@immich.local", "http://immich.local/?a=1", "http://evil.example@immich.local"} {
-		if res, _ := ts.request("PUT", "/api/v1/agent/features/me", map[string]any{"diary": map[string]any{"immichUrl": bad}}); res.StatusCode != http.StatusBadRequest {
-			t.Errorf("accepted %q", bad)
-		}
-	}
-	for _, addr := range []string{"127.0.0.1:2283", "[::1]:2283", "169.254.169.254:80", "0.0.0.0:80"} {
-		if diaryAddressAllowed(netip.MustParseAddrPort(addr)) {
-			t.Errorf("allowed %s", addr)
-		}
-	}
-	if !diaryAddressAllowed(netip.MustParseAddrPort("10.255.254.253:2283")) {
-		t.Error("home network refused")
-	}
-	// At connection time, after name resolution.
-	frigate := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("[]")) }))
-	defer frigate.Close()
-	var out []any
-	if err := diaryRequest(context.Background(), http.MethodGet, frigate.URL+"/api/events", nil, nil, &out); err == nil {
-		t.Fatal("reached a loopback server")
-	}
-}
-
-// Immich or Frigate as an app on this NAS: loopback and the NAS's own
-// address only on a port a running app publishes, never on titand's ports.
-func TestFamily54DiaryAppOnThisNAS(t *testing.T) {
-	old := diaryAppPort
-	t.Cleanup(func() { diaryAppPort = old })
-	diaryAppPort = func(port uint16) bool { return port == 2283 }
-	if !diaryAddressAllowed(netip.MustParseAddrPort("127.0.0.1:2283")) {
-		t.Fatal("app on this NAS refused")
-	}
-	for _, addr := range []string{"127.0.0.1:2284", "127.0.0.1:22", "169.254.169.254:2283"} {
-		if diaryAddressAllowed(netip.MustParseAddrPort(addr)) {
-			t.Errorf("allowed %s", addr)
-		}
-	}
-	diaryAppPort = nil
-	if diaryAddressAllowed(netip.MustParseAddrPort("127.0.0.1:2283")) {
-		t.Fatal("without Docker no own address")
 	}
 }

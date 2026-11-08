@@ -16,7 +16,6 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/buddy"
-	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 )
 
 // setAgent changes the stored agent settings directly (the volume checks
@@ -44,13 +43,13 @@ func guestClient(t *testing.T, ts *testServer) *http.Client {
 	return guest
 }
 
-// Ab Werk: all three are off; the diary tool is not there, the catalog
+// Ab Werk: both are off; there is no diary tool (removed in 0.69), the catalog
 // and pairing refuse, the server answers nothing.
 func TestFamily54Defaults(t *testing.T) {
 	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard})
 	box := ts.server.newAgentToolbox(mustUser(t, ts, "alex"), ts.server.agentSettings())
 	if _, ok := box.tools["diary"]; ok {
-		t.Fatal("diary on by default")
+		t.Fatal("the removed diary tool is back")
 	}
 	if res, _ := ts.request("GET", "/api/v1/agent/catalog", nil); res.StatusCode != http.StatusConflict {
 		t.Fatalf("catalog: %d", res.StatusCode)
@@ -321,157 +320,5 @@ func TestFamily54Catalog(t *testing.T) {
 	res, body = ts.request("GET", "/api/v1/agent/catalog/export/"+skills[0].ID, nil)
 	if res.StatusCode != 200 || !strings.Contains(res.Header.Get("Content-Disposition"), "attachment") || !strings.Contains(string(body), catalogSubmitFmt) || !strings.Contains(string(body), "files_search") || !strings.Contains(string(body), "skill.yaml") {
 		t.Fatalf("export: %d %s", res.StatusCode, body)
-	}
-}
-
-// ---------- diary ----------
-
-func TestFamily54DiarySettings(t *testing.T) {
-	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard})
-	put := func(d map[string]any) (*http.Response, []byte) {
-		return ts.request("PUT", "/api/v1/agent/features/me", map[string]any{"diary": d})
-	}
-	if res, body := put(map[string]any{"immichUrl": "http://immich.local:2283", "immichKey": "immich-secret-key", "frigateUrl": "http://frigate.local:5000", "off": []string{"chats", "nonsense"}}); res.StatusCode != 200 || strings.Contains(string(body), "immich-secret-key") {
-		t.Fatalf("set: %d %s", res.StatusCode, body)
-	}
-	_, body := ts.request("GET", "/api/v1/agent/features/me", nil)
-	if strings.Contains(string(body), "immich-secret-key") || !strings.Contains(string(body), `"immichKeySet":true`) || strings.Contains(string(body), "nonsense") {
-		t.Fatalf("view: %s", body)
-	}
-	// Saving without the key keeps it.
-	put(map[string]any{"immichUrl": "http://immich.local:2283"})
-	mine, _ := ts.server.agentFeaturesOf("alex")
-	if mine.Diary.ImmichKey != "immich-secret-key" {
-		t.Fatal("key lost")
-	}
-	// A folder in a root this account cannot open is refused.
-	if res, _ := put(map[string]any{"photos": map[string]any{"root": "share/gast-privat", "path": "Fotos"}}); res.StatusCode != http.StatusBadRequest {
-		t.Fatalf("foreign folder: %d", res.StatusCode)
-	}
-	if res, _ := put(map[string]any{"immichUrl": "ftp://x"}); res.StatusCode != http.StatusBadRequest {
-		t.Fatalf("bad address: %d", res.StatusCode)
-	}
-	if res, _ := put(map[string]any{"clearImmichKey": true, "immichUrl": "http://immich.local:2283"}); res.StatusCode != 200 {
-		t.Fatal("clear")
-	}
-	if mine, _ := ts.server.agentFeaturesOf("alex"); mine.Diary.ImmichKey != "" {
-		t.Fatal("key not cleared")
-	}
-}
-
-func TestFamily54DiaryTool(t *testing.T) {
-	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard})
-	// The fakes listen on loopback, which the real client refuses.
-	old := diaryHTTP
-	diaryHTTP = &http.Client{}
-	t.Cleanup(func() { diaryHTTP = old })
-	loc := ts.server.agentLocation()
-	day := time.Date(2026, 10, 31, 0, 0, 0, 0, loc)
-	// Immich: two photos at the lake, with Bello.
-	var immichKey string
-	immich := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		immichKey = r.Header.Get("x-api-key")
-		if r.URL.Path != "/api/search/metadata" || r.Method != http.MethodPost {
-			http.NotFound(w, r)
-			return
-		}
-		w.Write([]byte(`{"assets":{"items":[
-			{"localDateTime":"2026-10-31T15:10:00.000Z","exifInfo":{"city":"Lohsa"},"people":[{"name":"Bello"}]},
-			{"localDateTime":"2026-10-31T15:20:00.000Z","exifInfo":{"city":"Lohsa"},"people":[]}],"nextPage":null}}`))
-	}))
-	defer immich.Close()
-	// Frigate: the doorbell rang twice on Sunday.
-	frigate := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		at := time.Date(2026, 11, 1, 18, 5, 0, 0, loc).Unix()
-		json.NewEncoder(w).Encode([]map[string]any{
-			{"camera": "haustuer", "label": "person", "sub_label": nil, "start_time": at},
-			{"camera": "haustuer", "label": "person", "sub_label": []any{"Oma", 0.9}, "start_time": at + 3600},
-		})
-	}))
-	defer frigate.Close()
-	// Home Assistant: the alarm was armed, a lock not released stays out.
-	ha := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/api/states":
-			w.Write([]byte(`[{"entity_id":"alarm_control_panel.home","state":"disarmed","attributes":{"friendly_name":"Alarmanlage"}},{"entity_id":"lock.garage","state":"locked","attributes":{}}]`))
-		case r.URL.Path == "/api/template":
-			w.Write([]byte(""))
-		case strings.HasPrefix(r.URL.Path, "/api/history/period/"):
-			if r.URL.Query().Get("filter_entity_id") != "alarm_control_panel.home" {
-				t.Errorf("history of an entity not released: %s", r.URL.RawQuery)
-			}
-			start, _ := time.Parse(time.RFC3339, strings.TrimPrefix(r.URL.Path, "/api/history/period/"))
-			if start.In(loc).Day() != 31 {
-				w.Write([]byte(`[]`))
-				return
-			}
-			w.Write([]byte(`[[{"entity_id":"alarm_control_panel.home","state":"armed_away","last_changed":"2026-10-31T08:40:00Z"},{"state":"disarmed","last_changed":"2026-10-31T13:10:00Z"}]]`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer ha.Close()
-	if err := ts.home.SetSettings(homeassistant.Settings{Enabled: true, URL: ha.URL, Token: "t", Domains: []string{"alarm_control_panel", "lock"}}); err != nil {
-		t.Fatal(err)
-	}
-	setAgent(ts, func(s *agentSettings) {
-		s.Features.Diary.Enabled = true
-		s.HA.Release = homeassistant.Release{Entities: []string{"alarm_control_panel.home"}}
-	})
-	if res, body := ts.request("PUT", "/api/v1/agent/features/me", map[string]any{"diary": map[string]any{"immichUrl": immich.URL, "immichKey": "k-123", "frigateUrl": frigate.URL}}); res.StatusCode != 200 {
-		t.Fatalf("mine: %d %s", res.StatusCode, body)
-	}
-	box := ts.server.newAgentToolbox(mustUser(t, ts, "alex"), ts.server.agentSettings())
-	tool, ok := box.tools["diary"]
-	if !ok || !tool.untrusted || tool.kind != agent.KindRead {
-		t.Fatalf("diary tool: %+v", tool)
-	}
-	args, _ := json.Marshal(map[string]string{"from": day.Format("2006-01-02"), "to": day.AddDate(0, 0, 1).Format("2006-01-02")})
-	p, err := box.Prepare(context.Background(), nil, "diary", args)
-	if err != nil {
-		t.Fatal(err)
-	}
-	out, err := box.Execute(context.Background(), nil, p)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if immichKey != "k-123" {
-		t.Fatalf("immich key: %q", immichKey)
-	}
-	for _, want := range []string{"Lohsa", "Bello", "haustuer: Oma", "Alarmanlage: armed_away", "2026-10-31 Saturday", "2026-11-01 Sunday"} {
-		if !strings.Contains(out.Text, want) {
-			t.Errorf("missing %q in %s", want, out.Text)
-		}
-	}
-	if strings.Contains(out.Text, "lock.garage") || strings.Contains(out.Text, "k-123") {
-		t.Fatalf("leak: %s", out.Text)
-	}
-	titles := []string{}
-	for _, s := range out.Sources {
-		titles = append(titles, s.Title)
-	}
-	if got := strings.Join(titles, ","); got != "Home Assistant,Immich (2),Frigate (2)" {
-		t.Fatalf("sources: %s", got)
-	}
-	// "Wer war an der Tür?" only from Frigate.
-	args, _ = json.Marshal(map[string]string{"from": "2026-11-01", "to": "2026-11-01", "focus": "door"})
-	out, _ = box.diary(context.Background(), nil, args)
-	if !strings.Contains(out.Text, "Oma") || strings.Contains(out.Text, "Lohsa") {
-		t.Fatalf("door: %s", out.Text)
-	}
-	// A user does not get Home Assistant; its own settings decide the rest.
-	guestClient(t, ts)
-	gbox := ts.server.newAgentToolbox(mustUser(t, ts, "gast"), ts.server.agentSettings())
-	args, _ = json.Marshal(map[string]string{"from": "2026-10-31", "to": "2026-11-01"})
-	out, _ = gbox.diary(context.Background(), nil, args)
-	if strings.Contains(out.Text, "Alarmanlage") || strings.Contains(out.Text, "Lohsa") {
-		t.Fatalf("guest sees the owner's sources: %s", out.Text)
-	}
-	// Ranges are checked.
-	for _, bad := range []map[string]string{{"from": "2026-11-01", "to": "2026-10-01"}, {"from": "2026-01-01", "to": "2026-12-31"}, {"from": "gestern", "to": "heute"}} {
-		args, _ := json.Marshal(bad)
-		if _, err := box.diary(context.Background(), nil, args); err == nil {
-			t.Errorf("accepted %v", bad)
-		}
 	}
 }
