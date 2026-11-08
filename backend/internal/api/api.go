@@ -207,9 +207,11 @@ type Server struct {
 	loginLook loginLook
 	// loginAccounts limits and checks the account list of the login page.
 	loginAccounts loginAccountsState
-	appIcon       appIcons
-	dav           davState
-	mcp           mcpState
+	// accountPictures: the picture each account chose (account_picture.go).
+	accountPictures accountPictures
+	appIcon         appIcons
+	dav             davState
+	mcp             mcpState
 	// migration is the move from Docker versions to web apps (PLAN 66).
 	migration webappMigration
 	haStore   haStorageState
