@@ -146,6 +146,8 @@ test('PLAN 62: dock and bar settings are checked', () => {
 		opacity: 30,
 		magnify: 2,
 		position: 'bottom',
+		// PLAN 73: with the frame unless switched off.
+		border: true,
 	});
 	expect(v.iconPos).toEqual({ 'app:files': { c: 2, r: 3 } });
 	expect(v.widgetsHidden).toBe(true);

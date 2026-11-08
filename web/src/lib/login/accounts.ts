@@ -22,9 +22,14 @@ function sane(value: unknown): LoginAccount | null {
 	const out: LoginAccount = { name: v.name.trim() };
 	if (typeof v.displayName === 'string' && v.displayName.trim() && v.displayName.length <= 80)
 		out.displayName = v.displayName.trim();
-	const p = (typeof v.picture === 'object' && v.picture ? v.picture : {}) as Record<string, unknown>;
-	if (typeof p.builtin === 'string' && /^[a-z]{2,20}$/.test(p.builtin)) out.picture = { builtin: p.builtin };
-	else if (typeof p.photo === 'string' && /^[0-9a-f]{64}$/.test(p.photo)) out.picture = { photo: p.photo };
+	const p = (typeof v.picture === 'object' && v.picture ? v.picture : {}) as Record<
+		string,
+		unknown
+	>;
+	if (typeof p.builtin === 'string' && /^[a-z]{2,20}$/.test(p.builtin))
+		out.picture = { builtin: p.builtin };
+	else if (typeof p.photo === 'string' && /^[0-9a-f]{64}$/.test(p.photo))
+		out.picture = { photo: p.photo };
 	return out;
 }
 
@@ -137,7 +142,9 @@ export function pictureStyle(
 ): { url: string; position: string } {
 	if (picture?.photo)
 		return {
-			url: own ? `/api/v1/account/picture/${picture.photo}` : `/api/v1/login/pictures/${picture.photo}`,
+			url: own
+				? `/api/v1/account/picture/${picture.photo}`
+				: `/api/v1/login/pictures/${picture.photo}`,
 			position: 'center',
 		};
 	if (picture?.builtin) return { url: `/backgrounds/${picture.builtin}.webp`, position: 'center' };

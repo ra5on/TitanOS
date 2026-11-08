@@ -25,7 +25,8 @@ export function takeEnter(): Enter | null {
 		const v = JSON.parse(raw) as { kind?: string; picture?: string; at?: number };
 		if (!v || typeof v.at !== 'number' || Date.now() - v.at > 15_000) return null;
 		if (!['zoom', 'curtain', 'focus', 'split'].includes(v.kind ?? '')) return null;
-		const picture = typeof v.picture === 'string' && /^\/[\w\-/.?=&]*$/.test(v.picture) ? v.picture : '';
+		const picture =
+			typeof v.picture === 'string' && /^\/[\w\-/.?=&]*$/.test(v.picture) ? v.picture : '';
 		return { kind: v.kind as Enter['kind'], picture };
 	} catch {
 		return null;

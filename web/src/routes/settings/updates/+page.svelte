@@ -405,7 +405,12 @@
 				kernel: running?.kernel || '–',
 			})}{#if loaderKey}{' · '}{t(loaderKey as 'update.boot.bios')}{/if}
 		</p>
-		{#if canCheck && (status.checkError || checked || status.lastCheck)}<p class="muted" role="status">{@render checkState()}</p>{/if}
+		{#if canCheck && (status.checkError || checked || status.lastCheck)}<p
+				class="muted"
+				role="status"
+			>
+				{@render checkState()}
+			</p>{/if}
 		{#if restartedTo}<p class="notice-ok" role="status">
 				{t('update.app.restarted', { version: restartedTo })}
 				<!-- PLAN 67: the whole UI loads the new version (desktop and every

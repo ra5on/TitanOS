@@ -441,8 +441,7 @@
 	<p class="hint muted">{t('loginLook.movingHint')}</p>
 	<label class="stack"
 		>{t('loginLook.enter')}<select class="field" bind:value={draft.enter}>
-			{#each LOGIN_ENTERS as id (id)}<option value={id}>{t(`loginLook.enter.${id}`)}</option
-				>{/each}
+			{#each LOGIN_ENTERS as id (id)}<option value={id}>{t(`loginLook.enter.${id}`)}</option>{/each}
 		</select></label
 	>
 	<label class="check"

@@ -146,10 +146,7 @@
 		const user = session.data?.user;
 		if (user) rememberAccount(user.name);
 		// PLAN 74: the desktop plays the chosen animation once (lib/login/enter.ts).
-		noteEnter(
-			current?.enter ?? 'zoom',
-			live ? `/backgrounds/${live}.webp` : picture || '',
-		);
+		noteEnter(current?.enter ?? 'zoom', live ? `/backgrounds/${live}.webp` : picture || '');
 	}
 
 	const current = $derived(look === undefined ? loginLook.value : look);
@@ -376,11 +373,7 @@
 										}}
 									>
 										<!-- svelte-ignore a11y_autofocus -->
-										<button
-											type="button"
-											role="menuitem"
-											autofocus
-											onclick={() => forget(account)}
+										<button type="button" role="menuitem" autofocus onclick={() => forget(account)}
 											>{t('login.forgetNamed', { name: shown })}</button
 										>
 									</div>
