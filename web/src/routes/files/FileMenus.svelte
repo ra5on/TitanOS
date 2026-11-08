@@ -9,6 +9,7 @@
 	import { isEditableText } from '#lib/text-files.ts';
 	import { appsFor, EDITOR, extOf, webAppKey } from '#lib/webapps/protocol.ts';
 	import { appForFile, webapps } from '#lib/webapps/webapps.svelte.ts';
+	import { dockerAppForExt, fileOpeners, type FileOpener } from '#lib/docker-opens.ts';
 
 	type Props = {
 		/** The menu of entries, opened on one of them. */
@@ -23,6 +24,8 @@
 		view: FileView;
 		/** The text editor may save in this folder. */
 		writableText?: boolean;
+		/** The folder of the entries, relative to the root (for the Docker apps, PLAN 72). */
+		dir?: string;
 		/** PLAN 66: opens the entry in an app ("webapp:<id>" or the text editor); always = make it the standard. */
 		onopenwith?: (entry: FileEntry, app: string, always: boolean) => void;
 		/** Runs a command; the entry is the one the menu was opened on. */
@@ -39,6 +42,7 @@
 		canPaste,
 		view,
 		writableText = false,
+		dir = '',
 		onopenwith,
 		oncommand,
 		onclose,
@@ -55,7 +59,24 @@
 		always = false;
 		pointed = '';
 	});
-	type Choice = { key: string; name: string; note: string };
+	// PLAN 72: the Docker apps that open the file come from titand (which
+	// knows the app's folders); they follow the web apps under a heading.
+	let dockerApps = $state<FileOpener[]>([]);
+	$effect(() => {
+		const entry = menu?.entry;
+		const rootId = root?.id;
+		dockerApps = [];
+		if (!entry || entry.dir || selected.length !== 1 || !rootId || root?.kind === 'stick') return;
+		const path = dir ? `${dir}/${entry.name}` : entry.name;
+		let current = true;
+		void fileOpeners(rootId, path).then((list) => {
+			if (current) dockerApps = list;
+		});
+		return () => {
+			current = false;
+		};
+	});
+	type Choice = { key: string; name: string; note: string; hint?: string; docker?: boolean };
 	const choices = $derived.by((): Choice[] => {
 		const entry = menu?.entry;
 		if (!entry || entry.dir || selected.length !== 1) return [];
@@ -72,11 +93,26 @@
 				name: t('files.openWith.editor'),
 				note: standard === EDITOR ? t('files.openWith.standard') : t('files.openWith.titanos'),
 			});
+		const dockerStandard = dockerAppForExt(ext);
+		for (const o of dockerApps)
+			list.push({
+				key: 'docker:' + o.app,
+				name: o.name,
+				docker: true,
+				note: o.app === dockerStandard ? t('files.openWith.standard') : '',
+				hint: o.mounted
+					? undefined
+					: o.share
+						? t('files.openWith.notMounted', { share: o.share })
+						: t('files.openWith.outside'),
+			});
 		return list;
 	});
 	const standardApp = $derived.by(() => {
 		const entry = menu?.entry;
 		if (!entry || entry.dir || selected.length !== 1) return null;
+		const docker = dockerAppForExt(extOf(entry.name));
+		if (docker && dockerApps.some((o) => o.app === docker)) return 'docker:' + docker;
 		const s = appForFile(entry.name);
 		return s?.startsWith('webapp:') ? s : null;
 	});
@@ -126,7 +162,10 @@
 			>
 			{#if withOpen}
 				<div class="with" role="group" aria-label={t('files.openWith.title')}>
-					{#each choices as c (c.key)}
+					{#each choices as c, i (c.key)}
+						{#if c.docker && !choices[i - 1]?.docker}<div class="group" role="presentation">
+								{t('files.openWith.docker')}
+							</div>{/if}
 						<button
 							type="button"
 							role="menuitem"
@@ -134,7 +173,8 @@
 							onpointerenter={() => (pointed = c.key)}
 							onfocus={() => (pointed = c.key)}
 							onclick={() => onopenwith(entry, c.key, always)}
-							><span>{c.name}</span>{#if c.note}<small class="note">{c.note}</small>{/if}</button
+							><span>{c.name}</span>{#if c.note}<small class="note">{c.note}</small
+								>{/if}{#if c.hint}<small class="hint">{c.hint}</small>{/if}</button
 						>
 					{/each}
 					<label class="always"
@@ -272,6 +312,23 @@
 		margin: 2px 0 4px 26px;
 		padding-left: 6px;
 		border-left: 2px solid var(--border);
+	}
+	.group {
+		padding: 6px 10px 2px;
+		font-size: var(--text-xs);
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--muted);
+	}
+	.choice:has(.hint) {
+		flex-wrap: wrap;
+	}
+	.choice .hint {
+		flex-basis: 100%;
+		color: var(--muted);
+		font-size: var(--text-xs);
+		white-space: normal;
+		overflow-wrap: break-word;
 	}
 	.choice .note {
 		color: var(--muted);

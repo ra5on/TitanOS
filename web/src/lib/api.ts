@@ -294,6 +294,8 @@ export type Preferences = {
 	desktop?: Record<string, unknown> | null;
 	/** PLAN 66: standard apps per file type; missing on NAS versions before it. */
 	fileapps?: Record<string, unknown> | null;
+	/** PLAN 72: standard Docker apps per file type; missing before 0.69. */
+	fileappsdocker?: Record<string, unknown> | null;
 };
 
 export type Temperature = {

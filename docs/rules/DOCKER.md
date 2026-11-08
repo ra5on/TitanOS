@@ -81,3 +81,4 @@ Bereich: Container bearbeiten, Übersicht, App-Store/Katalog, Docker-Layout.
   Versionen sie lesen können. Die Tabelle folgt der gespeicherten Reihenfolge
   (`order` bzw. A–Z); geändert wird nur noch `primaryServices` („Verknüpfungen“
   im Zeilen-Menü eines Stacks), nur bei einer Änderung.
+- **„Öffnen mit“ für Docker-Apps** (PLAN 72, Entscheidung 8.11.2026, `docs/OPEN-WITH-DOCKER.md`): Die Vorlage nennt in `x-titanos.opens` Dateitypen und das Programm als Argumentliste. titand rechnet den Pfad im Container aus den Bind-Mounts aus und startet das Programm per `docker exec`. Eine Freigabe hängen nur Besitzer und Administratoren nach einfacher Rückfrage ein (Abbrechen hat den Fokus; die App sieht die ganze Freigabe; der Container wird neu erstellt), unter `/shares/<Freigabe>` über `SetCompose`. Die Rechte des Kontos auf die Datei und auf die App gelten bei jedem Öffnen.
