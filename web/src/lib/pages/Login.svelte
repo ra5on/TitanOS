@@ -27,7 +27,7 @@
 	import LiveBackground from '#lib/live/LiveBackground.svelte';
 	import { isLivePicture } from '#lib/live/shaders.ts';
 	import {
-		fallbackPicture,
+		pictureStyle,
 		firstLetter,
 		forgetAccount,
 		mergeAccounts,
@@ -310,7 +310,7 @@
 				<ul class="accounts {pickStyle}">
 					{#each accounts as account (account.name)}
 						{@const shown = account.displayName ?? account.name}
-						{@const pic = fallbackPicture(account.name)}
+						{@const pic = pictureStyle(account.name, account.picture)}
 						{@const on = account.name === selected.name}
 						<li
 							class:on
