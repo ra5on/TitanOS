@@ -25,6 +25,7 @@
 	import Launcher from './Launcher.svelte';
 	import NotifyCenter from './NotifyCenter.svelte';
 	import LiveBackground from '../live/LiveBackground.svelte';
+	import { takeEnter } from '../login/enter.ts';
 	import { isLivePicture } from '../live/shaders.ts';
 	import DesktopDialogs from './DesktopDialogs.svelte';
 	import Window from './Window.svelte';
@@ -174,6 +175,12 @@
 	);
 	// LiveBackground holds still by itself with "reduce motion".
 	const liveOn = $derived(desktop.prefs.wallpaper.live);
+	// PLAN 74: right after a login the chosen animation plays once (lib/login/enter.ts).
+	const entering = takeEnter();
+	const firstEnter =
+		entering && !matchMedia('(prefers-reduced-motion: reduce)').matches ? entering.kind : '';
+	let enterKind = $state(firstEnter);
+	if (firstEnter) setTimeout(() => (enterKind = ''), 1600);
 	const wallpaper = $derived(
 		desktop.prefs.wallpaper.source === 'custom'
 			? `url("/api/v1/background?v=${desktop.prefs.wallpaper.version}") center / cover`
@@ -750,10 +757,10 @@
 <svelte:window onkeydown={keys} onkeyup={keyUp} onpointerdowncapture={outside} onblur={blurred} />
 
 <div
-	class="desktop"
 	class:light
 	class:live={desktop.prefs.wallpaper.live && !reduced}
 	class:moving={wm.dragging}
+	class="desktop enter-{enterKind || 'none'}"
 	style:--wallpaper={wallpaper}
 	style:--tint="{tint}deg"
 	style:--icon={iconPx + 'px'}
@@ -767,6 +774,16 @@
 		</div>
 	{:else}
 		<div class="paper" aria-hidden="true"></div>
+	{/if}
+	{#if enterKind === 'curtain' || enterKind === 'split'}
+		<!-- The login picture leaves: upwards, or to both sides. -->
+		<div class="enter-cover {enterKind}" aria-hidden="true">
+			<span style:background-image={entering?.picture ? `url("${entering.picture}")` : undefined}
+			></span>
+			{#if enterKind === 'split'}<span
+					style:background-image={entering?.picture ? `url("${entering.picture}")` : undefined}
+				></span>{/if}
+		</div>
 	{/if}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<!-- PLAN 67: one bar across the top (variant B): the logo menu, the
@@ -1615,6 +1632,63 @@
 		background: var(--wallpaper);
 		/* "Farbstärke" (Settings › Appearance, PLAN 64) reaches the wallpaper too. */
 		filter: hue-rotate(var(--tint)) var(--wallpaper-filter, saturate(1));
+	}
+	/* PLAN 74: the way into the desktop after a login. */
+	.enter-zoom {
+		animation: enter-zoom 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+	}
+	@keyframes enter-zoom {
+		from {
+			opacity: 0;
+			transform: scale(1.1);
+		}
+	}
+	.enter-focus {
+		animation: enter-focus 1.1s ease both;
+	}
+	@keyframes enter-focus {
+		from {
+			filter: blur(28px) brightness(0.7);
+		}
+	}
+	.enter-cover {
+		position: fixed;
+		inset: 0;
+		z-index: 2147483000;
+		pointer-events: none;
+		display: flex;
+	}
+	.enter-cover span {
+		flex: 1;
+		background: #0b0f16 center / cover no-repeat;
+	}
+	.enter-cover.curtain span {
+		animation: enter-up 0.9s cubic-bezier(0.7, 0, 0.2, 1) 0.1s forwards;
+	}
+	.enter-cover.split span:first-child {
+		background-position: left center;
+		background-size: 200% 100%;
+		animation: enter-left 0.9s cubic-bezier(0.7, 0, 0.2, 1) 0.1s forwards;
+	}
+	.enter-cover.split span:last-child {
+		background-position: right center;
+		background-size: 200% 100%;
+		animation: enter-right 0.9s cubic-bezier(0.7, 0, 0.2, 1) 0.1s forwards;
+	}
+	@keyframes enter-up {
+		to {
+			transform: translateY(-100%);
+		}
+	}
+	@keyframes enter-left {
+		to {
+			transform: translateX(-100%);
+		}
+	}
+	@keyframes enter-right {
+		to {
+			transform: translateX(100%);
+		}
 	}
 	.live .paper:not(.photo) {
 		animation: drift 90s ease-in-out infinite alternate;

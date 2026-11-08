@@ -38,6 +38,7 @@
 		type LoginAccount,
 	} from '#lib/login/accounts.ts';
 	import { onMount, tick } from 'svelte';
+	import { noteEnter } from '#lib/login/enter.ts';
 
 	type Props = {
 		/** Only shows the page (preview of Settings › Appearance): nothing is sent. */
@@ -70,6 +71,20 @@
 	let menuFor = $state<string | null>(null);
 	let nameField = $state<HTMLInputElement>();
 	let passwordField = $state<HTMLInputElement>();
+
+	// PLAN 74: "<host> ist bereit" where the owner switched it on (GET /health is public).
+	let ready = $state<boolean | null>(null);
+	$effect(() => {
+		if (preview || !current?.showStatus) return;
+		const ask = () =>
+			fetch('/api/v1/health', { cache: 'no-store' })
+				.then((r) => r.json())
+				.then((v: { ready?: boolean }) => (ready = v.ready === true))
+				.catch(() => (ready = false));
+		void ask();
+		const timer = setInterval(ask, 10_000);
+		return () => clearInterval(timer);
+	});
 
 	onMount(() => {
 		if (preview) return;
@@ -130,6 +145,11 @@
 	function remember() {
 		const user = session.data?.user;
 		if (user) rememberAccount(user.name);
+		// PLAN 74: the desktop plays the chosen animation once (lib/login/enter.ts).
+		noteEnter(
+			current?.enter ?? 'zoom',
+			live ? `/backgrounds/${live}.webp` : picture || '',
+		);
 	}
 
 	const current = $derived(look === undefined ? loginLook.value : look);
@@ -463,7 +483,15 @@
 	</section>
 
 	{#if !current?.hideLogo}<div class="mark"><Logo size={22} /></div>{/if}
-	<div class="lang"><LanguageSwitch /></div>
+	<div class="lang">
+		{#if current?.showStatus && ready !== null && host}<p class="status" role="status">
+				<span class="dot" class:on={ready} aria-hidden="true"></span>{t(
+					ready ? 'login.ready' : 'login.starting',
+					{ host },
+				)}
+			</p>{/if}
+		<LanguageSwitch />
+	</div>
 </main>
 
 <style>
@@ -904,6 +932,26 @@
 		position: absolute;
 		right: 30px;
 		bottom: 22px;
+		display: flex;
+		align-items: center;
+		gap: 16px;
+	}
+	.status {
+		margin: 0;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		font-size: var(--text-sm);
+		text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
+	}
+	.dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: #f0b429;
+	}
+	.dot.on {
+		background: #4cc38a;
 	}
 	.preview .time,
 	.preview .mark,
