@@ -209,15 +209,15 @@
 </script>
 
 {#snippet sw(checked: boolean, label: string, onchange: (on: boolean) => void)}
-	<label class="sw"
-		><input
-			type="checkbox"
-			role="switch"
-			{checked}
-			aria-label={label}
-			onchange={(e) => onchange(e.currentTarget.checked)}
-		/><span aria-hidden="true"></span></label
-	>
+	<!-- PLAN 72: the switch of every settings row. -->
+	<input
+		type="checkbox"
+		class="switch"
+		role="switch"
+		{checked}
+		aria-label={label}
+		onchange={(e) => onchange(e.currentTarget.checked)}
+	/>
 {/snippet}
 
 <div class="fgrp">
@@ -261,7 +261,7 @@
 			<p class="muted">{t('agent.f.notThere')}</p>
 		{:else}
 			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-			<div class="dgrp">
+			<section class="dgrp tile ui-card">
 				<div class="drow">
 					<span class="dt"
 						><strong>{t('agent.f.docs.memory')}</strong><small
@@ -270,9 +270,9 @@
 					>
 					{@render sw(!!docs.on, t('agent.f.docs.memory'), (on) => saveDocs({ ...docs, on }))}
 				</div>
-			</div>
-			<h3 class="dh">{t('agent.f.docs.folders')}</h3>
-			<div class="dgrp">
+			</section>
+			<section class="dgrp tile ui-card">
+				<div class="card-head"><h3>{t('agent.f.docs.folders')}</h3></div>
 				{#each folders as f (f.root + '/' + f.path)}
 					{@const tag = stateTag(f.state)}
 					<div class="drow">
@@ -294,15 +294,15 @@
 						><small>{t('agent.f.docs.addHint')}</small></span
 					>
 				</div>
-			</div>
+			</section>
 			<div class="acts">
 				<button type="button" class="btn" disabled={!docs.on || status?.running} onclick={runNow}
 					>{status?.running ? t('agent.f.docs.state.running') : t('agent.f.docs.runNow')}</button
 				>
 			</div>
 			{#if pub?.deadlines}
-				<h3 class="dh">{t('agent.f.docs.deadlines')}</h3>
-				<div class="dgrp">
+				<section class="dgrp tile ui-card">
+					<div class="card-head"><h3>{t('agent.f.docs.deadlines')}</h3></div>
 					<div class="drow">
 						<span class="dt"
 							><strong>{t('agent.f.docs.findDeadlines')}</strong><small
@@ -350,10 +350,10 @@
 							>{t('agent.f.docs.show')}</button
 						>
 					</div>
-				</div>
+				</section>
 			{/if}
-			<h3 class="dh">{t('agent.f.docs.ocr')}</h3>
-			<div class="dgrp">
+			<section class="dgrp tile ui-card">
+				<div class="card-head"><h3>{t('agent.f.docs.ocr')}</h3></div>
 				<div class="drow">
 					<span class="dt"
 						><strong>{t('agent.f.docs.pdfText')}</strong><small
@@ -371,7 +371,7 @@
 						saveDocs({ ...docs, noScans: !on }),
 					)}
 				</div>
-			</div>
+			</section>
 		{/if}
 	</DocsSheet>
 {:else if page === 'paper'}
@@ -381,7 +381,7 @@
 		{:else}
 			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 			{#if note}<p class="notice-ok" role="status">{note}</p>{/if}
-			<div class="dgrp">
+			<section class="dgrp tile ui-card">
 				<div class="drow">
 					<span class="dt"
 						><strong>{t('agent.f.docs.paper')}</strong><small>{t('agent.f.docs.paperOwn')}</small
@@ -391,9 +391,9 @@
 						savePaper({ ...paper, on }).catch(() => {}),
 					)}
 				</div>
-			</div>
-			<h3 class="dh">{t('agent.f.docs.inbox')}</h3>
-			<div class="dgrp">
+			</section>
+			<section class="dgrp tile ui-card">
+				<div class="card-head"><h3>{t('agent.f.docs.inbox')}</h3></div>
 				<div class="drow">
 					<span class="dic" aria-hidden="true">📥</span>
 					<span class="dt"
@@ -413,9 +413,9 @@
 						>{t('agent.f.docs.lookNow')}</button
 					>
 				</div>
-			</div>
-			<h3 class="dh">{t('agent.f.docs.filing')}</h3>
-			<div class="dgrp">
+			</section>
+			<section class="dgrp tile ui-card">
+				<div class="card-head"><h3>{t('agent.f.docs.filing')}</h3></div>
 				<div class="drow col">
 					<div class="seg" role="group" aria-label={t('agent.f.docs.filing')}>
 						<button
@@ -465,9 +465,9 @@
 						<option value="year">{t('agent.f.docs.schemeYear')}</option>
 					</select>
 				</div>
-			</div>
-			<h3 class="dh">{t('agent.f.docs.mailbox')}</h3>
-			<div class="dgrp">
+			</section>
+			<section class="dgrp tile ui-card">
+				<div class="card-head"><h3>{t('agent.f.docs.mailbox')}</h3></div>
 				<div class="drow">
 					<span class="dt"
 						><strong>{t('agent.f.docs.mailOn')}</strong><small>{t('agent.f.docs.mailSub')}</small
@@ -550,7 +550,7 @@
 						>
 					</div>
 				</div>
-			</div>
+			</section>
 			<div class="acts">
 				<button type="button" class="btn btn-primary" onclick={() => (page = 'paperView')}
 					>{t('agent.f.docs.openPaper')}</button
@@ -594,46 +594,5 @@
 		background: none;
 		color: var(--muted);
 		cursor: pointer;
-	}
-	.sw {
-		position: relative;
-		flex-shrink: 0;
-		width: 44px;
-		height: 26px;
-	}
-	.sw input {
-		position: absolute;
-		inset: 0;
-		opacity: 0;
-		margin: 0;
-		cursor: pointer;
-	}
-	.sw span {
-		position: absolute;
-		inset: 0;
-		border-radius: 13px;
-		background: color-mix(in srgb, var(--text) 18%, transparent);
-		pointer-events: none;
-	}
-	.sw span::after {
-		content: '';
-		position: absolute;
-		top: 3px;
-		left: 3px;
-		width: 20px;
-		height: 20px;
-		border-radius: 50%;
-		background: #fff;
-		transition: left 0.15s;
-	}
-	.sw input:checked + span {
-		background: var(--accent);
-	}
-	.sw input:checked + span::after {
-		left: 21px;
-	}
-	.sw input:focus-visible + span {
-		outline: 2px solid var(--accent);
-		outline-offset: 2px;
 	}
 </style>

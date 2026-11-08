@@ -189,7 +189,7 @@
 					>
 				{/each}
 			</div>
-			<div class="dgrp">
+			<section class="dgrp tile ui-card">
 				<div class="drow col">
 					<small class="muted"
 						>{t('agent.f.docs.spentIn', { month: monthName(sum.month, true).split(' ')[0] })}</small
@@ -203,9 +203,9 @@
 						{euro(sum.prevTotal, i18n.locale)}</small
 					>
 				</div>
-			</div>
-			<h3 class="dh">{t('agent.f.docs.byType')}</h3>
-			<div class="dgrp">
+			</section>
+			<section class="dgrp tile ui-card">
+				<div class="card-head"><h3>{t('agent.f.docs.byType')}</h3></div>
 				{#each sum.types as ty (ty.type)}
 					<div class="drow">
 						<span class="dic" style:--c={typeLook[ty.type].color} aria-hidden="true"
@@ -228,9 +228,9 @@
 						<span class="dt"><small>{t('agent.f.docs.noneMonth')}</small></span>
 					</div>
 				{/each}
-			</div>
-			<h3 class="dh">{t('agent.f.docs.open')}</h3>
-			<div class="dgrp">
+			</section>
+			<section class="dgrp tile ui-card">
+				<div class="card-head"><h3>{t('agent.f.docs.open')}</h3></div>
 				{#each sum.open as e (e.id)}
 					<div class="drow">
 						<span class="dt"
@@ -248,9 +248,9 @@
 						<span class="dt"><small>{t('agent.f.docs.noneOpen')}</small></span>
 					</div>
 				{/each}
-			</div>
-			<h3 class="dh">{t('agent.f.docs.recent')}</h3>
-			<div class="dgrp">
+			</section>
+			<section class="dgrp tile ui-card">
+				<div class="card-head"><h3>{t('agent.f.docs.recent')}</h3></div>
 				{#each sum.recent as e (e.id)}
 					<div class="drow">
 						<span class="dic" aria-hidden="true">{entryIcon(e)}</span>
@@ -270,7 +270,7 @@
 						<span class="dt"><small>{t('agent.f.docs.noneRecent')}</small></span>
 					</div>
 				{/each}
-			</div>
+			</section>
 		{:else if !error}
 			<p class="muted">…</p>
 		{/if}

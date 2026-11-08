@@ -128,28 +128,19 @@
 	.body > :global(*) {
 		flex-shrink: 0;
 	}
-	/* Shared look of the group's pages. */
-	.body :global(.dh) {
-		margin: 6px 2px -6px;
-		font-size: var(--text-xs, 0.75rem);
-		font-weight: 600;
-		letter-spacing: 0.06em;
-		text-transform: uppercase;
-		color: var(--muted);
-	}
-	.body :global(.dgrp) {
-		border: 1px solid var(--border);
-		border-radius: 14px;
-		overflow: hidden;
-		background: color-mix(in srgb, var(--surface) 70%, transparent);
-	}
+	/* Shared look of the group's pages. PLAN 72: cards with rows like the
+	   settings (.tile.ui-card, .card-head from app.css); a row keeps its
+	   icon, text and action side by side. */
 	.body :global(.drow) {
 		display: flex;
 		align-items: center;
 		gap: 12px;
-		padding: 12px 14px;
-		border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+		padding: 12px 16px;
+		min-height: 48px;
+		border-top: 1px solid var(--panel-border, var(--border));
+		font-size: var(--text-md);
 	}
+	.body :global(.card-head + .drow),
 	.body :global(.drow:first-child) {
 		border-top: 0;
 	}
@@ -166,8 +157,15 @@
 		gap: 2px;
 		overflow-wrap: anywhere;
 	}
+	.body :global(.dt strong),
+	.body :global(.drow.col > strong),
+	.body :global(.drow.col label strong) {
+		font-weight: 400;
+		color: var(--text);
+	}
 	.body :global(.dt small) {
 		color: var(--muted);
+		font-size: var(--text-sm);
 		line-height: 1.35;
 	}
 	.body :global(.dic) {
