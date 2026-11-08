@@ -140,12 +140,17 @@ const (
 
 // Chat is one conversation.
 type Chat struct {
-	ID      string    `json:"id"`
-	Title   string    `json:"title"`
-	Project string    `json:"project,omitempty"`
-	Pinned  bool      `json:"pinned,omitempty"`
-	Created time.Time `json:"created"`
-	Updated time.Time `json:"updated"`
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Project string `json:"project,omitempty"`
+	Pinned  bool   `json:"pinned,omitempty"`
+	// Archived chats leave the list for the Archiv (PLAN 72); they are
+	// kept like pinned ones. Older versions show them in the list again.
+	Archived bool      `json:"archived,omitempty"`
+	Created  time.Time `json:"created"`
+	Updated  time.Time `json:"updated"`
+	// Schedule is the planned task that started the chat (its wake choice).
+	Schedule string `json:"schedule,omitempty"`
 	// Model and Think as chosen in the chat; empty uses the settings.
 	Model string `json:"model,omitempty"`
 	Think string `json:"think,omitempty"`
@@ -170,14 +175,15 @@ type Chat struct {
 
 // ChatInfo is a chat in the list, without its entries.
 type ChatInfo struct {
-	ID      string    `json:"id"`
-	Title   string    `json:"title"`
-	Project string    `json:"project,omitempty"`
-	Pinned  bool      `json:"pinned,omitempty"`
-	Created time.Time `json:"created"`
-	Updated time.Time `json:"updated"`
-	State   string    `json:"state"`
-	Origin  string    `json:"origin,omitempty"`
+	ID       string    `json:"id"`
+	Title    string    `json:"title"`
+	Project  string    `json:"project,omitempty"`
+	Pinned   bool      `json:"pinned,omitempty"`
+	Archived bool      `json:"archived,omitempty"`
+	Created  time.Time `json:"created"`
+	Updated  time.Time `json:"updated"`
+	State    string    `json:"state"`
+	Origin   string    `json:"origin,omitempty"`
 	// Preview is the start of the last answer.
 	Preview string `json:"preview,omitempty"`
 	// Unread: changed since the person last looked (only in the list
@@ -190,7 +196,7 @@ type ChatInfo struct {
 
 // Info returns the list entry of a chat.
 func (c *Chat) Info() ChatInfo {
-	info := ChatInfo{ID: c.ID, Title: c.Title, Project: c.Project, Pinned: c.Pinned, Created: c.Created, Updated: c.Updated, State: c.State, Origin: c.Origin}
+	info := ChatInfo{ID: c.ID, Title: c.Title, Project: c.Project, Pinned: c.Pinned, Archived: c.Archived, Created: c.Created, Updated: c.Updated, State: c.State, Origin: c.Origin}
 	for i := len(c.Entries) - 1; i >= 0; i-- {
 		e := c.Entries[i]
 		if e.Role == "assistant" && strings.TrimSpace(e.Content) != "" {
@@ -265,7 +271,10 @@ type Schedule struct {
 	// Trigger "homeassistant": runs when an entity reaches a state.
 	Trigger *Trigger `json:"trigger,omitempty"`
 	// Button offers the task as a button in Home Assistant (MQTT).
-	Button  bool      `json:"button,omitempty"`
+	Button bool `json:"button,omitempty"`
+	// Wake: whether the task may wake a sleeping disk (PLAN 53, 72): ""
+	// as the account chose (Eigeninitiative), "wake", "ask" or "never".
+	Wake    string    `json:"wake,omitempty"`
 	Created time.Time `json:"created"`
 }
 
@@ -429,7 +438,8 @@ func (s *Store) SaveChat(user string, c *Chat) error {
 	return nil
 }
 
-// trimLocked keeps at most MaxChats, dropping the oldest unpinned ones.
+// trimLocked keeps at most MaxChats, dropping the oldest unpinned ones;
+// archived chats are kept like pinned ones.
 func (s *Store) trimLocked(index *[]ChatInfo) []string {
 	if len(*index) <= MaxChats {
 		return nil
@@ -438,7 +448,7 @@ func (s *Store) trimLocked(index *[]ChatInfo) []string {
 	var removed []string
 	kept := (*index)[:0]
 	for i, c := range *index {
-		if i >= MaxChats && !c.Pinned {
+		if i >= MaxChats && !c.Pinned && !c.Archived {
 			removed = append(removed, c.ID)
 			continue
 		}

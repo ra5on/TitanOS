@@ -519,13 +519,36 @@ func (b *agentToolbox) initiativeCheck(ctx context.Context, chat *agent.Chat, na
 		return nil
 	}
 	background := chat == nil || chat.Origin == "event" || chat.Origin == "reflect" || isMorningReport(chat)
+	wake := in.Wake
+	// A planned task may choose for itself (PLAN 72); empty keeps the account's choice.
+	if w := b.s.scheduleWake(b.user.Name, chat); w != "" {
+		wake = w
+	}
 	switch {
-	case background || in.Wake == "never":
+	case background || wake == "never":
 		return toolcatalog.Errorf("the disk of %s is asleep and must not be woken now; tell the person and try later", a.Root)
-	case in.Wake == "ask":
+	case wake == "ask":
 		*mode = agent.Stricter(*mode, agent.ModeAsk)
 	}
 	return nil
+}
+
+// scheduleWake is the wake choice of the planned task that started a chat,
+// "" for other chats and tasks that keep the account's choice.
+func (s *Server) scheduleWake(user string, chat *agent.Chat) string {
+	if chat == nil || chat.Origin != "schedule" || chat.Schedule == "" {
+		return ""
+	}
+	list, err := s.agentStore().Schedules(user)
+	if err != nil {
+		return ""
+	}
+	for _, sc := range list {
+		if sc.ID == chat.Schedule {
+			return sc.Wake
+		}
+	}
+	return ""
 }
 
 // namedInChat: the last message of the person names the root ("Backup").

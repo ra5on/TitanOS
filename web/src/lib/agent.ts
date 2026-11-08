@@ -53,6 +53,8 @@ export type Chat = {
 	title: string;
 	project?: string;
 	pinned?: boolean;
+	/** PLAN 72: in the Archiv, not in the list. */
+	archived?: boolean;
 	created: string;
 	updated: string;
 	model?: string;
@@ -155,6 +157,8 @@ export type Schedule = {
 	chat?: string;
 	trigger?: { entity: string; state: string; for?: number; connection?: string } | null;
 	button?: boolean;
+	/** PLAN 72: may it wake a sleeping disk; empty = as the account chose. */
+	wake?: '' | 'wake' | 'ask' | 'never';
 	created?: string;
 };
 
@@ -564,7 +568,7 @@ export function tokens(n: number): string {
  * (PLAN 68): colors come from the TitanOS theme. Stored values of the old
  * look (accent, style, background, glass, glassLevel, glow) are ignored.
  */
-export type Swipe = 'pin' | 'delete' | 'menu' | 'none';
+export type Swipe = 'pin' | 'archive' | 'delete' | 'menu' | 'none';
 export type Look = {
 	typing: boolean;
 	vibrate: boolean;
@@ -643,7 +647,7 @@ export function sanitizeLook(v: unknown): Look {
 	};
 }
 
-export const SWIPES: readonly Swipe[] = ['pin', 'delete', 'menu', 'none'];
+export const SWIPES: readonly Swipe[] = ['pin', 'archive', 'delete', 'menu', 'none'];
 
 /** The part of a look that is saved for the account on the NAS. */
 export function accountLook(look: Look): Partial<Look> {

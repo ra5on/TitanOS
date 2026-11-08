@@ -165,6 +165,7 @@
 			state: s?.trigger?.state ?? '',
 			enabled: s ? String(s.enabled) : 'true',
 			button: String(!!s?.button),
+			wake: s?.wake ?? '',
 			project: s?.project ?? '',
 		};
 		days = s?.weekdays?.length ? [...s.weekdays] : [1, 2, 3, 4, 5];
@@ -192,6 +193,7 @@
 			cron: draft.cron,
 			enabled: draft.enabled !== 'false',
 			button: draft.button === 'true',
+			wake: draft.kind === 'reminder' ? undefined : (draft.wake as Schedule['wake']) || undefined,
 			trigger,
 		};
 	}
@@ -486,6 +488,19 @@
 						placeholder="on"
 						aria-label={t('agent.triggerState')}
 					/>
+				</div>
+			{/if}
+			{#if draft.kind !== 'reminder'}
+				<!-- PLAN 53/72: whether this task may wake a sleeping disk. -->
+				<label class="label" for="plan-wake">{t('agent.scheduleWake')}</label>
+				<div>
+					<select id="plan-wake" class="field" bind:value={draft.wake}>
+						<option value="">{t('agent.scheduleWakeAccount')}</option>
+						<option value="wake">{t('agent.scheduleWakeYes')}</option>
+						<option value="ask">{t('agent.scheduleWakeAsk')}</option>
+						<option value="never">{t('agent.scheduleWakeNever')}</option>
+					</select>
+					<p class="muted small">{t('agent.scheduleWakeHint')}</p>
 				</div>
 			{/if}
 			{#if projects.length && draft.kind !== 'reminder'}

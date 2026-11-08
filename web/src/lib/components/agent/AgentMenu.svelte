@@ -13,7 +13,7 @@
 	import { groupChats, type ChatInfo, type Project, type Swipe } from '#lib/agent.ts';
 
 	let {
-		chats,
+		chats: allChats,
 		projects,
 		current = '',
 		project = '',
@@ -39,6 +39,7 @@
 		inboxCount = 0,
 		oninbox,
 		plannedCount = 0,
+		onarchive,
 		settingsOn = false,
 		onfold,
 		ontitanos,
@@ -78,6 +79,8 @@
 		oninbox?: () => void;
 		/** Planned tasks and reminders of the account. */
 		plannedCount?: number;
+		/** PLAN 72: opens the archived chats (the entry shows while there are some). */
+		onarchive?: () => void;
 		/** The settings are open (their row is marked). */
 		settingsOn?: boolean;
 		/** Folds the side bar away (desktop). */
@@ -85,6 +88,10 @@
 		/** Back to TitanOS (phone, installed app). */
 		ontitanos?: () => void;
 	} = $props();
+
+	// PLAN 72: archived chats leave the list; the entry „Archiv“ leads to them.
+	const chats = $derived(allChats.filter((c) => !c.archived));
+	const archivedCount = $derived(allChats.filter((c) => c.archived && !c.author).length);
 
 	let query = $state('');
 	let searching = $state(false);
@@ -251,6 +258,11 @@
 				><span class="em"><Icon name="fileText" size={16} /></span><span class="name"
 					>{t('agent.notes.title')}</span
 				></button
+			>{/if}
+		{#if onarchive && archivedCount}<button type="button" class="item" onclick={onarchive}
+				><span class="em"><Icon name="archive" size={16} /></span><span class="name"
+					>{t('agent.archive.title')}</span
+				><span class="n">{archivedCount}</span></button
 			>{/if}
 		{#each features as f (f.id)}<button type="button" class="item" onclick={() => onfeature?.(f.id)}
 				><span class="em"><Icon name={f.icon} size={16} /></span><span class="name">{f.label}</span

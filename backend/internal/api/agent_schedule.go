@@ -176,7 +176,7 @@ func (s *Server) agentRunSchedule(user auth.User, id string, now time.Time, late
 	if sc.Kind == "morning" {
 		task = agentMorningTask(sc.Report) + nightNote(user.Name)
 	}
-	chat := &agent.Chat{ID: agent.NewID(), Title: title, Project: sc.Project, Created: now, Updated: now, Origin: origin, State: agent.StateIdle,
+	chat := &agent.Chat{ID: agent.NewID(), Title: title, Project: sc.Project, Created: now, Updated: now, Origin: origin, Schedule: sc.ID, State: agent.StateIdle,
 		Entries: []agent.Entry{{ID: agent.NewID(), At: now, Role: "user", Content: task}}}
 	if sc.Kind == "reminder" {
 		chat.Origin = "reminder"

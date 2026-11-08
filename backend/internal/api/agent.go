@@ -338,8 +338,10 @@ func (s *Server) handleAgentChatPatch(w http.ResponseWriter, r *http.Request) {
 		Title   *string `json:"title"`
 		Project *string `json:"project"`
 		Pinned  *bool   `json:"pinned"`
-		Model   *string `json:"model"`
-		Think   *string `json:"think"`
+		// Archived moves the chat to the Archiv and back (PLAN 72).
+		Archived *bool   `json:"archived"`
+		Model    *string `json:"model"`
+		Think    *string `json:"think"`
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -374,6 +376,9 @@ func (s *Server) handleAgentChatPatch(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Pinned != nil {
 		chat.Pinned = *req.Pinned
+	}
+	if req.Archived != nil {
+		chat.Archived = *req.Archived
 	}
 	if req.Model != nil && len(*req.Model) <= 200 {
 		chat.Model = *req.Model
