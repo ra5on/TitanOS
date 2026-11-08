@@ -95,3 +95,6 @@ Bereich: VM-Erstellung, Firmware, Konsole, Snapshots, App-Vorlagen, Hardware und
 - Konsole (`lxc-attach`) und Textkonsole (`lxc-console`) als Terminal-Tab „LXC“ nach den gemeinsamen Konsolenregeln (bestehende Anmeldung, keine Passwortabfrage). Entfernen behält die Daten ab Werk; Häkchen „Auch die Daten löschen“ mit einfachem Bestätigungsdialog, verweigert, solange unter dem Ordner etwas eingebunden ist. Btrfs-Snapshots (Anlegen, Wiederherstellen nur ausgeschaltet, Löschen) nur für Container, die auf Btrfs angelegt wurden.
 - Anlegen/Snapshots melden `Busy` an App-Updates und Wartung; `/api/v1/lxc` liegt hinter der Sperre der Anwendungssicherungen. Container werden von Anwendungssicherungen noch nicht selbst angehalten. Entwicklungsmodus zeigt nur an.
 - Geprüft nur mit nachgebautem Runner und künstlichen cgroup-Dateien; echtes LXC im Abbild, cgroup-Pfade unter systemd, Herunterfahren, AppArmor und Konsolen auf echter Hardware/QEMU noch abzunehmen. Kein Dashboard-Kacheltyp.
+
+- **Start nach dem Hochfahren (PLAN 73, seit 0.70):** VMs mit Autostart starten erst, wenn TitanOS mit seinen Freigaben bereit ist (plus zusätzliche Wartezeit), und in der Reihenfolge aus Freigaben › Dienste mit Wartezeit je Eintrag. Einzelheiten `docs/rules/DOCKER.md` › „Start nach dem Hochfahren“.
+
