@@ -188,7 +188,9 @@ type Manager struct {
 	samples  map[string]*sample
 	jobs     map[string]*Job
 	appList  []string // apps in /config; nil until read
-	backups  int      // open BackupLeases; no container lifecycle changes
+	// opens caches x-titanos.opens per app (opens.go); nil with appList.
+	opens   map[string]openEntry
+	backups int // open BackupLeases; no container lifecycle changes
 	// backupStopped are containers the open backup stopped and will start
 	// again; a VM must not take their hardware meanwhile.
 	backupStopped map[string]bool

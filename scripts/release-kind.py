@@ -71,6 +71,16 @@ ALLOWED = (
     "CLAUDE.md",
     "CONTRIBUTING.md",
     "SECURITY.md",
+    # Only git reads it; nothing of it reaches the image (PLAN 72: the
+    # cleanup of 8.11.2026 made 0.67.0 and 0.68.0 full releases by mistake).
+    ".gitignore",
+    # A Python wheel checked in by accident and removed on 8.11.2026; it was
+    # never part of the image.
+    "shellcheck_py-0.11.0.1-",
+    # Checks of the QEMU storage test (smoke-storage.py) that run in CI against
+    # a full image; they are not in the image, and an app release does not run
+    # them (PR #289 fixed only the trusted certificate there).
+    "scripts/workflows023_smoke.py",
 )
 
 

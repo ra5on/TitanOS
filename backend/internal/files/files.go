@@ -488,6 +488,22 @@ func (m *Manager) Open(root Root, name string) (*os.File, fs.FileInfo, error) {
 	return f, info, nil
 }
 
+// HostPath is the path on the NAS of an existing file in a root (PLAN 72,
+// „Öffnen mit“ for Docker apps), after the same checks as Open: no hidden
+// or secret names, links only inside the root, a regular file.
+func (m *Manager) HostPath(root Root, name string) (string, error) {
+	f, _, err := m.Open(root, name)
+	if err != nil {
+		return "", err
+	}
+	f.Close()
+	name, _ = clean(name)
+	if name, err = root.followLink(name); err != nil {
+		return "", err
+	}
+	return filepath.Join(root.Dir, filepath.FromSlash(name)), nil
+}
+
 // Zip writes the given files and folders as a zip archive to w, without
 // storing it anywhere in between. Symbolic links are left out.
 func (m *Manager) Zip(w io.Writer, root Root, paths []string) error {

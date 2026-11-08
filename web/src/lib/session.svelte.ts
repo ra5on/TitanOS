@@ -20,6 +20,8 @@ export const session = $state<{
 	desktop: Record<string, unknown> | null;
 	/** PLAN 66: the standard app per file type ({"docx": "webapp:wordcraft"}). */
 	fileapps: Record<string, unknown> | null;
+	/** PLAN 72: the standard Docker app per file type ({"3mf": "docker:bambu-lab"}). */
+	fileappsdocker: Record<string, unknown> | null;
 	/** Settings › Services: docker, vms and lxc, false when switched off. */
 	services: Record<string, boolean>;
 	prefsLoaded: number;
@@ -33,6 +35,7 @@ export const session = $state<{
 	hints: null,
 	desktop: null,
 	fileapps: null,
+	fileappsdocker: null,
 	services: {},
 	/** Counts loads of the account's preferences (the desktop applies them once they are there). */
 	prefsLoaded: 0,
@@ -48,6 +51,7 @@ async function loadPreferences() {
 		session.hints = prefs.hints ?? null;
 		session.desktop = prefs.desktop ?? null;
 		session.fileapps = prefs.fileapps ?? null;
+		session.fileappsdocker = prefs.fileappsdocker ?? null;
 		session.prefsLoaded++;
 		sound.settings = sanitizeSound(prefs.sound);
 		bell.settings = sanitizeBell(prefs.bell);
@@ -62,6 +66,7 @@ async function loadPreferences() {
 		session.hints = null;
 		session.desktop = null;
 		session.fileapps = null;
+		session.fileappsdocker = null;
 	}
 }
 

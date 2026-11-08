@@ -113,7 +113,7 @@ Nachrichten zwischen Fenster und `host.js` per `postMessage` (Fenster prüft `ev
 
 ## Dateimanager
 
-- Doppelklick öffnet die **Standard-App** des Dateityps; Rechtsklick „Öffnen mit ›“ listet passende Web-Apps, Docker-Apps nicht (vorerst), den Texteditor; Haken „Immer mit … öffnen“ setzt die Standard-App.
+- Doppelklick öffnet die **Standard-App** des Dateityps; Rechtsklick „Öffnen mit ›“ listet passende Web-Apps, den Texteditor und seit 0.69 Docker-Apps mit `x-titanos.opens` (`docs/OPEN-WITH-DOCKER.md`); Haken „Immer mit … öffnen“ setzt die Standard-App.
 - Standard-Apps je Konto in der Einstellung `fileapps` (`PUT /api/v1/preferences/fileapps`, `{"<ext>":"webapp:<id>"|"editor"}`; Endungen klein ohne Punkt, 1–10 Zeichen, höchstens 200 Einträge, `<id>` muss im Katalog stehen, sonst `400 bad_request`; fehlt die Einstellung, gilt die Vorgabe aus dem Katalog), verwaltet unter Dateien › Einstellungen › Standard-Apps.
 
 ## Ersteinrichtung und Update

@@ -72,6 +72,16 @@
 	// PLAN 66: files open in their standard app (a web app running in the browser).
 	import { appForFile, loadWebApps, setFileApp } from '#lib/webapps/webapps.svelte.ts';
 	import { EDITOR, extOf } from '#lib/webapps/protocol.ts';
+	import DockerMountDialog from './DockerMountDialog.svelte';
+	import {
+		dockerAppForExt,
+		fileOpeners,
+		mountShare,
+		openInDockerApp,
+		setDockerFileApp,
+		waitMounted,
+		type FileOpener,
+	} from '#lib/docker-opens.ts';
 	import { openInWebApp } from '#lib/webapps/open.ts';
 
 	const canAdminister = $derived(
@@ -583,6 +593,12 @@
 		anchor = entry.name;
 	}
 	function openWithStandard(entry: FileEntry): boolean {
+		// PLAN 72: a standard Docker app comes first (choosing one clears the other).
+		const docker = dockerAppForExt(extOf(entry.name));
+		if (docker) {
+			void openDocker(entry, docker, false);
+			return true;
+		}
 		const choice = appForFile(entry.name);
 		if (
 			choice === EDITOR &&
@@ -598,15 +614,84 @@
 	}
 	/** "Öffnen mit": an app chosen for this file, and with "always" as its standard app. */
 	async function openWith(entry: FileEntry, app: string, always: boolean) {
+		if (app.startsWith('docker:')) return openDocker(entry, app.slice(7), always);
 		if (always) {
 			try {
 				await setFileApp(extOf(entry.name), app);
+				if (dockerAppForExt(extOf(entry.name))) await setDockerFileApp(extOf(entry.name), null);
 			} catch (e) {
 				error = apiErrorText(e);
 			}
 		}
 		if (app === EDITOR) editing = join(dir, entry.name);
 		else openInWebApp(app, rootId, join(dir, entry.name));
+	}
+
+	// --- PLAN 72: „Öffnen mit“ für Docker-Apps --------------------------------
+
+	let dockerMount = $state<{
+		opener: FileOpener;
+		root: string;
+		path: string;
+		file: string;
+		busy: boolean;
+		error: string;
+	} | null>(null);
+
+	async function openDocker(entry: FileEntry, app: string, always: boolean) {
+		const ext = extOf(entry.name);
+		if (always) {
+			try {
+				await setDockerFileApp(ext, app);
+				if (appForFile(entry.name)?.startsWith('webapp:')) await setFileApp(ext, null);
+			} catch (e) {
+				error = apiErrorText(e);
+			}
+		}
+		const root = rootId;
+		const path = join(dir, entry.name);
+		const opener = (await fileOpeners(root, path)).find((o) => o.app === app);
+		if (!opener) {
+			error = t('files.openWith.dockerGone');
+			return;
+		}
+		if (opener.mounted) return startDocker(app, root, path);
+		if (opener.canMount && opener.share) {
+			dockerMount = { opener, root, path, file: entry.name, busy: false, error: '' };
+			return;
+		}
+		error = opener.share
+			? t('files.openWith.askAdmin', { share: opener.share, app: opener.name })
+			: t('files.openWith.outside');
+	}
+
+	async function startDocker(app: string, root: string, path: string) {
+		try {
+			await openInDockerApp(app, root, path);
+		} catch (e) {
+			error = apiErrorText(e);
+		}
+	}
+
+	async function confirmMount(readOnly: boolean) {
+		const m = dockerMount;
+		if (!m?.opener.share) return;
+		m.busy = true;
+		m.error = '';
+		try {
+			await mountShare(m.opener.app, m.opener.share, readOnly);
+			if (!(await waitMounted(m.opener.app, m.root, m.path))) {
+				m.busy = false;
+				m.error = t('files.openWith.mountSlow', { app: m.opener.name });
+				return;
+			}
+		} catch (e) {
+			m.busy = false;
+			m.error = apiErrorText(e);
+			return;
+		}
+		dockerMount = null;
+		await startDocker(m.opener.app, m.root, m.path);
 	}
 	function entryMenu(entry: FileEntry, x: number, y: number) {
 		if (!selectedNames.has(entry.name)) selected = [entry.name];
@@ -1376,6 +1461,7 @@
 	{canPaste}
 	view={prefs.view}
 	{writableText}
+	{dir}
 	onopenwith={(entry, app, always) => choose(() => void openWith(entry, app, always))}
 	oncommand={(action, entry) => choose(() => command(action, entry))}
 	onclose={() => {
@@ -1384,6 +1470,19 @@
 	}}
 />
 
+{#if dockerMount}
+	<DockerMountDialog
+		app={dockerMount.opener.name}
+		share={dockerMount.opener.share ?? ''}
+		file={dockerMount.file}
+		busy={dockerMount.busy}
+		error={dockerMount.error}
+		onconfirm={(readOnly) => void confirmMount(readOnly)}
+		onclose={() => {
+			if (!dockerMount?.busy) dockerMount = null;
+		}}
+	/>
+{/if}
 {#if dropReview}
 	<Dialog title={t('files.dropTransfer')} onclose={() => (dropReview = null)}>
 		<p>{t('files.dropTransferHint', { count: dropReview.source.paths.length })}</p>
