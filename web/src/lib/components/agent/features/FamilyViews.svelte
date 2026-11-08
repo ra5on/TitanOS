@@ -7,12 +7,20 @@
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import FamilyBuddy from './FamilyBuddy.svelte';
 	import FamilyCatalog from './FamilyCatalog.svelte';
+	import FeaturePage from './FeaturePage.svelte';
+	import { featurePage } from './page-mode.ts';
 
 	type Props = { id: FeatureViewId; onclose: () => void; calm?: boolean };
 	let { id, onclose }: Props = $props();
+	// PLAN 72: a page in the agent's main area on a computer.
+	const page = featurePage();
 </script>
 
-{#if id === 'buddy'}
+{#if page && id === 'buddy'}
+	<FeaturePage title={t('agent.f.family.buddy.title')} {onclose}><FamilyBuddy /></FeaturePage>
+{:else if page && id === 'catalog'}
+	<FeaturePage title={t('agent.f.family.catalog.title')} {onclose}><FamilyCatalog /></FeaturePage>
+{:else if id === 'buddy'}
 	<Dialog title={t('agent.f.family.buddy.title')} {onclose}>
 		<FamilyBuddy />
 		<div class="close">

@@ -5,10 +5,13 @@
 	import type { Snippet } from 'svelte';
 	import { fly } from 'svelte/transition';
 	import { t } from '#lib/i18n/index.svelte.ts';
+	import { featurePage } from './page-mode.ts';
 
 	type Props = { title: string; onclose: () => void; calm?: boolean; children: Snippet };
 	let { title, onclose, calm = false, children }: Props = $props();
 	const id = $props.id();
+	// PLAN 72: a page in the agent's main area on a computer.
+	const page = featurePage();
 
 	// To the end of the page: a parent with a backdrop filter (the tiles of
 	// the settings) would otherwise hold the fixed panel inside it.
@@ -20,15 +23,8 @@
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && onclose()} />
 
-<div use:portal class="docs-layer">
-	<div class="scrim" role="presentation" onclick={onclose}></div>
-	<div
-		class="sheet"
-		role="dialog"
-		aria-modal="true"
-		aria-labelledby="{id}-t"
-		transition:fly={{ x: 380, duration: calm ? 0 : 240, opacity: 1 }}
-	>
+{#if page}
+	<section class="sheet page" aria-labelledby="{id}-t">
 		<header>
 			<button type="button" class="back" aria-label={t('agent.f.docs.back')} onclick={onclose}
 				><span aria-hidden="true">‹</span></button
@@ -38,8 +34,29 @@
 		<div class="body">
 			{@render children()}
 		</div>
+	</section>
+{:else}
+	<div use:portal class="docs-layer">
+		<div class="scrim" role="presentation" onclick={onclose}></div>
+		<div
+			class="sheet"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="{id}-t"
+			transition:fly={{ x: 380, duration: calm ? 0 : 240, opacity: 1 }}
+		>
+			<header>
+				<button type="button" class="back" aria-label={t('agent.f.docs.back')} onclick={onclose}
+					><span aria-hidden="true">‹</span></button
+				>
+				<h2 id="{id}-t">{title}</h2>
+			</header>
+			<div class="body">
+				{@render children()}
+			</div>
+		</div>
 	</div>
-</div>
+{/if}
 
 <style>
 	.scrim {
@@ -57,8 +74,18 @@
 		color: var(--text);
 		background: var(--bg);
 	}
+	/* PLAN 72: inside the agent's main area, no panel over the side bar. */
+	.sheet.page {
+		position: absolute;
+		z-index: 5;
+	}
+	.page .body {
+		width: min(100%, 880px);
+		box-sizing: border-box;
+		margin: 0 auto;
+	}
 	@media (min-width: 900px) {
-		.sheet {
+		.sheet:not(.page) {
 			left: auto;
 			width: 460px;
 			border-left: 1px solid var(--border);

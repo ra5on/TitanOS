@@ -58,7 +58,7 @@
 	import UploadReview from './UploadReview.svelte';
 	import UrlDownloadDialog from './UrlDownloadDialog.svelte';
 	import DriveFormatDialog from './DriveFormatDialog.svelte';
-	import UsageDialog from './UsageDialog.svelte';
+	import StorageAnalysis from './StorageAnalysis.svelte';
 	import WindowsPath from './WindowsPath.svelte';
 	import { FileClipboard } from './clipboard.svelte.ts';
 	import type { FileCommand } from './commands.ts';
@@ -1199,6 +1199,23 @@
 							loadRoots();
 						}}
 					/>
+				{:else if usage && root}
+					<StorageAnalysis
+						root={safeRoots.find((r) => r.id === rootId) ?? root}
+						{dir}
+						showHidden={prefs.showHidden}
+						onback={() => (usage = false)}
+						onopen={(path) => {
+							usage = false;
+							open(rootId, path);
+						}}
+						onduplicates={() => (duplicates = true)}
+						onchanged={() => {
+							load();
+							loadRoots();
+							jobsTick++;
+						}}
+					/>
 				{:else}
 					<NavBar
 						bind:this={navBar}
@@ -1482,16 +1499,6 @@
 			load();
 			loadRoots();
 			jobsTick++;
-		}}
-	/>{/if}
-{#if usage && root}<UsageDialog
-		{root}
-		{dir}
-		showHidden={prefs.showHidden}
-		onclose={() => (usage = false)}
-		onopen={(path) => {
-			usage = false;
-			open(rootId, path);
 		}}
 	/>{/if}
 {#if photos && root}<PhotoView root={rootId} {dir} onclose={() => (photos = false)} />{/if}

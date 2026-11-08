@@ -71,76 +71,99 @@
 </script>
 
 <Dialog title={start ? t('agent.projectEdit') : t('agent.newProject')} locked={busy} {onclose}>
+	<!-- PLAN 72: cards with rows like every settings card. -->
 	<form class="form" onsubmit={save}>
-		<label class="stack">
-			<span>{t('agent.projectName')}</span>
-			<input class="field" bind:value={name} required maxlength="80" />
-		</label>
-		<div class="two">
-			<label class="stack">
-				<span>{t('agent.projectIcon')}</span>
-				<input class="field" bind:value={icon} maxlength="4" placeholder="🏠" />
-			</label>
-			<div class="stack">
-				<span>{t('agent.projectColor')}</span>
-				<div class="colors" role="radiogroup" aria-label={t('agent.projectColor')}>
-					{#each COLORS as c (c)}
-						<button
-							type="button"
-							role="radio"
-							aria-checked={color === c}
-							aria-label={c || t('agent.colorTheme')}
-							class="swatch"
-							style:background={c || 'var(--accent)'}
-							onclick={() => (color = c)}
-						></button>
-					{/each}
-				</div>
+		<section class="tile ui-card">
+			<div class="set-row">
+				<label class="set-label" for="project-name">{t('agent.projectName')}</label>
+				<span class="set-control"
+					><input id="project-name" class="field" bind:value={name} required maxlength="80" /></span
+				>
 			</div>
-		</div>
-		<label class="stack">
-			<span>{t('agent.projectLocation')}</span>
-			<select class="field" bind:value={location}>
-				<option value="">{t('agent.projectLocationNone')}</option>
-				{#each locations as l (l.name)}<option value={l.name}>{l.name}</option>{/each}
-			</select>
-		</label>
-		<label class="stack">
-			<span>{t('agent.projectInstructions')}</span>
-			<textarea
-				class="field"
-				rows="5"
-				maxlength="8000"
-				bind:value={instructions}
-				placeholder={t('agent.projectInstructionsHint')}></textarea>
-		</label>
+			<div class="set-row">
+				<label class="set-label" for="project-icon">{t('agent.projectIcon')}</label>
+				<span class="set-control"
+					><input
+						id="project-icon"
+						class="field icon"
+						bind:value={icon}
+						maxlength="4"
+						placeholder="🏠"
+					/></span
+				>
+			</div>
+			<div class="set-row">
+				<span class="set-label">{t('agent.projectColor')}</span>
+				<span class="set-control">
+					<span class="colors" role="radiogroup" aria-label={t('agent.projectColor')}>
+						{#each COLORS as c (c)}
+							<button
+								type="button"
+								role="radio"
+								aria-checked={color === c}
+								aria-label={c || t('agent.colorTheme')}
+								class="swatch"
+								style:background={c || 'var(--accent)'}
+								onclick={() => (color = c)}
+							></button>
+						{/each}
+					</span>
+				</span>
+			</div>
+			<div class="set-row">
+				<label class="set-label" for="project-location">{t('agent.projectLocation')}</label>
+				<span class="set-control"
+					><select id="project-location" class="field" bind:value={location}>
+						<option value="">{t('agent.projectLocationNone')}</option>
+						{#each locations as l (l.name)}<option value={l.name}>{l.name}</option>{/each}
+					</select></span
+				>
+			</div>
+		</section>
+		<section class="tile ui-card">
+			<div class="card-head">
+				<h3><label for="project-instructions">{t('agent.projectInstructions')}</label></h3>
+			</div>
+			<div class="set-row wide">
+				<textarea
+					id="project-instructions"
+					class="field"
+					rows="5"
+					maxlength="8000"
+					bind:value={instructions}
+					placeholder={t('agent.projectInstructionsHint')}></textarea>
+			</div>
+		</section>
 		{#if shared}
 			<p class="notice-warn">{t('agent.projectShared', { name: start?.owner ?? '' })}</p>
 		{:else}
-			<fieldset class="stack members">
-				<legend>{t('agent.members')}</legend>
+			<section class="tile ui-card">
+				<div class="card-head"><h3>{t('agent.members')}</h3></div>
 				{#if accounts === null}
-					<span class="muted">…</span>
+					<p class="set-row wide muted">…</p>
 				{:else if accounts.length === 0}
-					<span class="muted">{t('agent.membersNone')}</span>
+					<p class="set-row wide muted">{t('agent.membersNone')}</p>
 				{:else}
-					<div class="names">
-						{#each accounts as a (a)}
-							<label class="check"
+					{#each accounts as a (a)}
+						<div class="set-row">
+							<label class="set-label" for={`member-${a}`}>{a}</label>
+							<span class="set-control end"
 								><input
+									id={`member-${a}`}
 									type="checkbox"
+									class="switch"
 									checked={members.includes(a)}
 									onchange={(e) =>
 										(members = e.currentTarget.checked
 											? [...members, a]
 											: members.filter((m) => m !== a))}
-								/><span>{a}</span></label
+								/></span
 							>
-						{/each}
-					</div>
+						</div>
+					{/each}
 				{/if}
-				<span class="muted">{t('agent.membersHint')}</span>
-			</fieldset>
+				<p class="set-row wide muted hint">{t('agent.membersHint')}</p>
+			</section>
 		{/if}
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 		<div class="dialog-actions">
@@ -170,37 +193,35 @@
 </Dialog>
 
 <style>
-	.members {
-		border: 0;
-		padding: 0;
-		margin: 0;
-	}
-	.members legend {
-		padding: 0;
-		margin-bottom: 4px;
-	}
-	.names {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 4px 16px;
-	}
 	.form {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-3);
+		gap: var(--gap, 16px);
 	}
-	.stack {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
+	.tile.ui-card {
+		flex-shrink: 0;
 	}
-	.two {
-		display: grid;
-		grid-template-columns: 100px 1fr;
-		gap: var(--space-3);
+	.set-row.wide {
+		grid-template-columns: minmax(0, 1fr);
+		margin: 0;
+	}
+	.set-control .field {
+		width: 16rem;
+		max-width: 100%;
+	}
+	.set-control .field.icon {
+		width: 5rem;
+	}
+	textarea {
+		width: 100%;
+		box-sizing: border-box;
+	}
+	.hint {
+		font-size: var(--text-sm);
 	}
 	.colors {
 		display: flex;
+		flex-wrap: wrap;
 		gap: 8px;
 		align-items: center;
 		min-height: var(--control-height);

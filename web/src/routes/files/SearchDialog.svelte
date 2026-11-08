@@ -3,6 +3,7 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { MB, formatBytes, formatDateTime } from '#lib/format.ts';
+	import { highlight } from './excerpt.ts';
 	let {
 		root,
 		dir,
@@ -16,7 +17,8 @@
 		onclose: () => void;
 		onopen: (path: string) => void;
 	} = $props();
-	let content = $state(false),
+	// PLAN 72: where an index exists, names and content are searched by default.
+	let content = $state((() => !!root.indexed)()),
 		query = $state(''),
 		extension = $state(''),
 		minimum = $state<number | undefined>(),
@@ -24,13 +26,19 @@
 		after = $state(''),
 		before = $state('');
 	type SearchResult = {
-		entries: (FileEntry & { path: string })[];
+		entries: (FileEntry & { path: string; excerpt?: string })[];
 		scanned: number;
 		truncated: boolean;
 	};
-	let result = $state<SearchResult | null>(null),
+	let asked = $state(''),
+		result = $state<SearchResult | null>(null),
 		busy = $state(false),
 		error = $state('');
+	let resultsBox = $state<HTMLElement>();
+	// Brings the hits into view once they are there.
+	$effect(() => {
+		if (result && resultsBox) resultsBox.scrollIntoView({ block: 'nearest' });
+	});
 	let controller: AbortController | undefined;
 	$effect(() => () => controller?.abort());
 	async function search(event: SubmitEvent) {
@@ -41,6 +49,7 @@
 		busy = true;
 		error = '';
 		result = null;
+		asked = query;
 		try {
 			result = await api.post<SearchResult>(
 				'/files/search',
@@ -142,9 +151,20 @@
 				: t('files.searchCount', { count: result.entries.length, scanned: result.scanned })}
 		</p>
 		{#if result.truncated}<p class="notice-warn">{t('files.searchLimited')}</p>{/if}
-		<div class="results">
+		<div class="results" bind:this={resultsBox}>
 			{#each result.entries as entry (entry.path)}<div class="result">
-					<span class="mono">{root.name}/{entry.path}</span><span class="muted"
+					<span class="what"
+						><strong>{entry.name}</strong>
+						<small class="muted mono"
+							>{root.name}/{entry.path.split('/').slice(0, -1).join('/')}</small
+						></span
+					>
+					{#if entry.excerpt}<p class="excerpt">
+							{#each highlight(entry.excerpt, asked) as part, i (i)}{#if part.hit}<mark
+										>{part.text}</mark
+									>{:else}{part.text}{/if}{/each}
+						</p>{/if}
+					<span class="muted"
 						>{formatBytes(entry.size)} · {formatDateTime(new Date(entry.modified))}</span
 					><button class="btn" onclick={() => onopen(entry.path.split('/').slice(0, -1).join('/'))}
 						>{t('files.openFolder')}</button
@@ -174,6 +194,8 @@
 		grid-column: 1/-1;
 	}
 	.results {
+		/* In the dialog's column it would otherwise shrink to nothing. */
+		flex-shrink: 0;
 		max-height: 45vh;
 		overflow: auto;
 	}
@@ -184,9 +206,25 @@
 		padding: var(--space-3) 0;
 		border-top: 1px solid var(--border);
 	}
-	.result .mono {
+	.what {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
 		width: 100%;
 		overflow-wrap: anywhere;
+	}
+	.excerpt {
+		width: 100%;
+		margin: 0;
+		color: var(--muted);
+		font-size: var(--text-base);
+		overflow-wrap: anywhere;
+	}
+	mark {
+		background: color-mix(in srgb, var(--accent) 35%, transparent);
+		color: var(--text);
+		border-radius: 3px;
+		padding: 0 2px;
 	}
 	.result .btn {
 		margin-left: auto;

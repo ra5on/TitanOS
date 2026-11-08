@@ -4,27 +4,46 @@
 	// button, title, one column. Escape closes it.
 	import type { Snippet } from 'svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
+	import { featurePage } from './page-mode.ts';
 
 	type Props = { title: string; onclose: () => void; children: Snippet };
 	let { title, onclose, children }: Props = $props();
-	let dialog: HTMLDialogElement;
+	let dialog = $state<HTMLDialogElement>();
 	const id = $props.id();
+	// PLAN 72: a page in the agent's main area on a computer.
+	const page = featurePage();
 	$effect(() => {
-		dialog.showModal();
+		dialog?.showModal();
 	});
 </script>
 
-<dialog bind:this={dialog} class="fsheet" aria-labelledby="{id}-t" {onclose}>
-	<header>
-		<button type="button" class="back" aria-label={t('agent.f.foresight.back')} onclick={onclose}
-			>‹</button
-		>
-		<h2 id="{id}-t">{title}</h2>
-	</header>
-	<div class="body">
-		{@render children()}
-	</div>
-</dialog>
+<svelte:window onkeydown={(e) => page && e.key === 'Escape' && onclose()} />
+
+{#if page}
+	<section class="fsheet page" aria-labelledby="{id}-t">
+		<header>
+			<button type="button" class="back" aria-label={t('agent.f.foresight.back')} onclick={onclose}
+				>‹</button
+			>
+			<h2 id="{id}-t">{title}</h2>
+		</header>
+		<div class="body">
+			{@render children()}
+		</div>
+	</section>
+{:else}
+	<dialog bind:this={dialog} class="fsheet" aria-labelledby="{id}-t" {onclose}>
+		<header>
+			<button type="button" class="back" aria-label={t('agent.f.foresight.back')} onclick={onclose}
+				>‹</button
+			>
+			<h2 id="{id}-t">{title}</h2>
+		</header>
+		<div class="body">
+			{@render children()}
+		</div>
+	</dialog>
+{/if}
 
 <style>
 	.fsheet {
@@ -43,14 +62,24 @@
 		background: var(--bg);
 		font-size: 15px;
 	}
-	.fsheet:not([open]) {
+	.fsheet:not([open]):not(.page) {
 		display: none;
+	}
+	/* PLAN 72: inside the agent's main area, no panel over the side bar. */
+	.fsheet.page {
+		position: absolute;
+		z-index: 5;
+	}
+	.page .body {
+		width: min(100%, 880px);
+		box-sizing: border-box;
+		margin: 0 auto;
 	}
 	.fsheet::backdrop {
 		background: color-mix(in srgb, #000 45%, transparent);
 	}
 	@media (min-width: 768px) {
-		.fsheet {
+		.fsheet:not(.page) {
 			left: auto;
 			width: 460px;
 			border-left: 1px solid var(--border);

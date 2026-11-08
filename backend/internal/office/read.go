@@ -287,6 +287,10 @@ func Text(name string, data []byte) (string, error) {
 		return DOCXText(data)
 	case ".xlsx":
 		return XLSXText(data)
+	case ".odt", ".ods", ".odp":
+		return ODFText(data)
+	case ".pptx":
+		return PPTXText(data)
 	}
 	return "", ErrUnsupported
 }

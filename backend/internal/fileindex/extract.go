@@ -29,13 +29,16 @@ var plainTypes = map[string]bool{
 	".srt": true, ".vtt": true, ".rst": true, ".org": true,
 }
 
+// officeTypes are read by office.Text (.odt, .ods, .odp and .pptx since PLAN 72).
+var officeTypes = map[string]bool{".docx": true, ".xlsx": true, ".odt": true, ".ods": true, ".odp": true, ".pptx": true}
+
 // Indexable reports whether the text of a file of this name and size is read.
 func Indexable(name string, size int64) bool {
 	ext := strings.ToLower(path.Ext(name))
 	switch {
 	case plainTypes[ext]:
 		return size <= maxPlainFile
-	case ext == ".docx" || ext == ".xlsx":
+	case officeTypes[ext]:
 		return size <= maxOfficeFile
 	case ext == ".pdf":
 		return size <= maxPDFFile

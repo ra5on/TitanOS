@@ -366,6 +366,8 @@ Neun Funktionen in vier Gruppen, jede **ab Werk aus** und einzeln einstellbar: E
 | Vorausschau | Was-wäre-wenn („Durchspielen“ auf der Speicher-Seite, Werkzeug `whatif`), Hardware-Berater (SMART-Verlauf, Engpässe, Werkzeug `hardware_advice`) | `docs/agent54/foresight.md` |
 | Gemeinschaft und Familie | Backup-Buddy (restic REST auf TCP 8752, nur Tailscale), Skill-Katalog (Ordner `skills/` der App-Store-Quellen), Familien-Tagebuch (Werkzeug `diary`) | `docs/agent54/family.md` |
 
+**Ansichten als Seite (PLAN 72, 0.67):** Im Agent-Fenster am Computer öffnen die Ansichten der Funktionen (Papierkram, Fristen, Ransomware-Wächter, Notfallhandbuch, Notfallzugang, Hardware-Berater, Backup-Buddy, Skill-Katalog) als Seite im Hauptbereich rechts der Seitenleiste (`FeatureHost.svelte`, Kontext aus `features/page-mode.ts`), nicht mehr als Blatt über der Leiste. Die Leiste bleibt bedienbar; „Neuer Chat“ und ein Chat schließen die Seite, Escape und „‹“ ebenso. Am Handy und beim Öffnen aus den Einstellungen bleibt es beim Blatt. Prüfung: `scripts/test-ui-agent54-docs.mjs` (Lage neben der Leiste, Schließen über „Neuer Chat“) und die übrigen `test-ui-agent54-*.mjs`.
+
 Der Ransomware-Wächter läuft auch, wenn der Chat des Agenten aus ist; er ergänzt den älteren Wächter je Freigabe (Samba `full_audit`, Freigaben › Ransomware-Wächter), „Wieder öffnen“ hebt beide Sperren auf. Der Backup-Buddy ergänzt „Backups anderer TitanOS“ (TCP 8750) um Kopplung per Code, Kontingent und gegenseitiges Sichern. Hintergrundarbeit weckt keine schlafende Platte und schreibt nicht auf den Stick.
 
 ## Daten

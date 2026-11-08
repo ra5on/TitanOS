@@ -12,6 +12,7 @@
 	import ProtectGuard from './ProtectGuard.svelte';
 	import ProtectHandbook from './ProtectHandbook.svelte';
 	import ProtectEmergency from './ProtectEmergency.svelte';
+	import { featurePage } from './page-mode.ts';
 
 	type Props = { id: FeatureViewId; onclose: () => void; calm?: boolean; extra?: Snippet };
 	let { id, onclose, calm = false, extra }: Props = $props();
@@ -21,6 +22,8 @@
 		document.body.appendChild(node);
 		return { destroy: () => node.remove() };
 	}
+	// PLAN 72: a page in the agent's main area on a computer.
+	const page = featurePage();
 	const mine = $derived(id === 'guard' || id === 'handbook' || id === 'emergency');
 	const titles: Partial<Record<FeatureViewId, string>> = $derived({
 		guard: t('agent.f.protect.guard'),
@@ -31,7 +34,26 @@
 
 <svelte:window onkeydown={(e) => mine && e.key === 'Escape' && onclose()} />
 
-{#if mine}
+{#if mine && page}
+	<section class="sheet page" aria-label={titles[id]}>
+		<header>
+			<button type="button" class="back" aria-label={t('agent.f.protect.back')} onclick={onclose}
+				><Icon name="chevronLeft" size={18} /></button
+			>
+			<h2>{titles[id]}</h2>
+		</header>
+		<div class="body">
+			{#if id === 'guard'}
+				<ProtectGuard />
+			{:else if id === 'handbook'}
+				<ProtectHandbook />
+			{:else}
+				<ProtectEmergency />
+			{/if}
+			{#if extra}{@render extra()}{/if}
+		</div>
+	</section>
+{:else if mine}
 	<div class="protect-layer" use:portal>
 		<div class="scrim" role="presentation" onclick={onclose}></div>
 		<div
@@ -81,6 +103,20 @@
 		background: var(--bg, var(--surface));
 		border-left: 1px solid var(--border);
 		box-shadow: var(--shadow-menu, -18px 0 44px rgb(0 0 0 / 0.5));
+	}
+	/* PLAN 72: inside the agent's main area, no panel over the side bar. */
+	.sheet.page {
+		position: absolute;
+		z-index: 5;
+		inset: 0;
+		width: auto;
+		border-left: 0;
+		box-shadow: none;
+	}
+	.page .body {
+		width: min(100%, 880px);
+		box-sizing: border-box;
+		margin: 0 auto;
 	}
 	header {
 		display: flex;

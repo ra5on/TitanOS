@@ -15,7 +15,7 @@
 	import DiskPicker from './DiskPicker.svelte';
 	import SmrWarning from './SmrWarning.svelte';
 	import { isUsable } from './labels.ts';
-	import { radioKeys } from '#lib/radio-group.ts';
+	import Segments from '#lib/components/Segments.svelte';
 
 	type Props = { disks: Disk[]; taken: string[]; onclose: () => void; ondone: () => void };
 	let { disks, taken, onclose, ondone }: Props = $props();
@@ -165,179 +165,219 @@
 </script>
 
 <Dialog title={t('create.title')} wide locked={working} {onclose}>
+	<!-- PLAN 72: cards with rows like every settings card (label and hint left, control right). -->
 	<form onsubmit={(event) => event.preventDefault()}>
-		<label class="field-row">
-			<span class="label">{t('create.name')}</span>
-			<!-- svelte-ignore a11y_autofocus -->
-			<input
-				class="field mono"
-				type="text"
-				bind:value={name}
-				maxlength="12"
-				autocapitalize="none"
-				spellcheck="false"
-				autofocus
-				aria-describedby="volume-name-hint"
-			/>
-			<small id="volume-name-hint" class:problem={nameError}
-				>{nameError || t('create.nameHint')}</small
-			>
-		</label>
-
-		<div class="field-row">
-			<span class="label" id="fs-label">{t('create.filesystem')}<HelpTip term="filesystem" /></span>
-			<div
-				class="options two"
-				role="radiogroup"
-				aria-labelledby="fs-label"
-				tabindex="-1"
-				onkeydown={radioKeys}
-			>
-				{#each FILESYSTEMS as id (id)}
-					<button
-						type="button"
-						class="option"
-						role="radio"
-						aria-checked={filesystem === id}
-						tabindex={filesystem === id ? 0 : -1}
-						onclick={() => pickFilesystem(id)}
-					>
-						<span class="option-name">{t(`fs.${id}`)}</span>
-						<span class="muted small">{t(`fs.${id}Desc`)}</span>
-					</button>
-				{/each}
-			</div>
-		</div>
-
-		<div class="field-row">
-			<span class="label" id="level-label">{t('create.level')}<HelpTip term="raid" /></span>
-			<div
-				class="options"
-				role="radiogroup"
-				aria-labelledby="level-label"
-				tabindex="-1"
-				onkeydown={radioKeys}
-			>
-				{#each levels as entry (entry.id)}
-					<button
-						type="button"
-						class="option"
-						role="radio"
-						aria-checked={level === entry.id}
-						tabindex={level === entry.id ? 0 : -1}
-						onclick={() => (level = entry.id)}
-					>
-						<span class="option-name">{t(`level.${entry.id}`)}</span>
-						<span class="muted small">{t(`level.${entry.id}Desc`)}</span>
-					</button>
-				{/each}
-			</div>
-			{#if filesystem === 'btrfs'}<p class="muted small">
-					{t('create.btrfsProfiles')}
-				</p>{:else if level !== 'raid0' && level !== 'single'}<p class="muted small">
-					{t('create.bitmap')}<HelpTip term="bitmap" />
-				</p>{/if}
-			{#if level === 'raid0' || level === 'single'}<p class="notice-warn" role="alert">
-					{t(level === 'single' ? 'create.singleWarning' : 'create.raid0Warning')}
-				</p>{/if}
-		</div>
-
-		<div class="field-row">
-			<span class="label">{t('create.disks')}</span>
-			<DiskPicker {disks} bind:selected name="volume-disks" onselect={remember} />
-			<SmrWarning {level} {selected} />
-			{#if staleSelection}
-				<p class="notice-warn" role="alert">{t('create.changedDisks')}</p>
-				<button
-					type="button"
-					class="btn"
-					onclick={() => {
-						selected = [];
-						selectionIdentities = {};
-					}}>{t('create.clearSelection')}</button
+		<section class="tile ui-card">
+			<div class="set-row">
+				<label class="set-label" for="volume-name"
+					>{t('create.name')}<small id="volume-name-hint" class="set-hint" class:problem={nameError}
+						>{nameError || t('create.nameHint')}</small
+					></label
 				>
-			{/if}
-		</div>
-
-		<fieldset class="checks">
-			<legend>{t('create.checks')}<HelpTip term="checks" /></legend>
-			<p class="muted small">{t('create.checksIntro')}</p>
-			<label class="confirm"
-				><input type="checkbox" bind:checked={checks.parity} /><span
-					><strong>{t(filesystem === 'btrfs' ? 'create.checkScrub' : 'create.checkParity')}</strong>
-					<span class="muted small"
-						>{t(filesystem === 'btrfs' ? 'create.checkScrubHint' : 'create.checkParityHint')}</span
+				<span class="set-control">
+					<!-- svelte-ignore a11y_autofocus -->
+					<input
+						id="volume-name"
+						class="field mono name"
+						type="text"
+						bind:value={name}
+						maxlength="12"
+						autocapitalize="none"
+						spellcheck="false"
+						autofocus
+						aria-describedby="volume-name-hint"
+					/>
+				</span>
+			</div>
+			<div class="set-row">
+				<span class="set-label"
+					><span>{t('create.filesystem')}<HelpTip term="filesystem" /></span><span class="set-hint"
+						>{t(`fs.${filesystem}Desc`)}</span
 					></span
-				></label
-			>
-			<label class="confirm"
-				><input type="checkbox" bind:checked={checks.smartShort} /><span
-					><strong>{t('create.checkSmartShort')}</strong>
-					<span class="muted small">{t('create.checkSmartShortHint')}</span></span
-				></label
-			>
-			<label class="confirm"
-				><input type="checkbox" bind:checked={checks.smartLong} /><span
-					><strong>{t('create.checkSmartLong')}</strong>
-					<span class="muted small">{t('create.checkSmartLongHint')}</span></span
-				></label
-			>
-			{#if filesystem === 'btrfs'}<label class="confirm"
-					><input type="checkbox" bind:checked={checks.snapshots} /><span
-						><strong>{t('create.checkSnapshots')}</strong>
-						<span class="muted small">{t('create.checkSnapshotsHint')}</span></span
-					></label
-				>{:else}<label class="confirm unavailable"
-					><input type="checkbox" checked={false} disabled aria-describedby="no-snapshots" /><span
-						><strong>{t('create.checkSnapshots')}</strong>
-						<span class="muted small" id="no-snapshots">{t('create.noSnapshots')}</span></span
-					></label
-				>{/if}
-		</fieldset>
-
-		<div class="field-row">
-			<label class="confirm">
-				<input type="checkbox" bind:checked={encrypt} />
-				<span
-					><strong>{t('crypt.createEncrypt')}</strong><HelpTip term="luks" />
-					<span class="muted small">{t('crypt.createEncryptDesc')}</span></span
 				>
-			</label>
-			{#if encrypt}
-				<label class="field-row">
-					<span class="label">{t('crypt.password')}</span>
-					<input
-						class="field"
-						type="password"
-						autocomplete="new-password"
-						bind:value={password}
-						maxlength="512"
+				<span class="set-control">
+					<Segments
+						compact
+						label={t('create.filesystem')}
+						options={FILESYSTEMS.map((id) => ({ value: id, label: t(`fs.${id}`) }))}
+						value={filesystem}
+						onchange={pickFilesystem}
 					/>
-				</label>
-				<label class="field-row">
-					<span class="label">{t('crypt.repeat')}</span>
-					<input
-						class="field"
-						type="password"
-						autocomplete="new-password"
-						bind:value={repeat}
-						maxlength="512"
+				</span>
+			</div>
+			<div class="set-row">
+				<span class="set-label"
+					><span>{t('create.level')}<HelpTip term="raid" /></span><span class="set-hint"
+						>{t(`level.${level}Desc`)}
+						{#if filesystem === 'btrfs'}{t('create.btrfsProfiles')}{:else if level !== 'raid0'}{t(
+								'create.bitmap',
+							)}<HelpTip term="bitmap" />{/if}</span
+					></span
+				>
+				<span class="set-control">
+					<Segments
+						compact
+						label={t('create.level')}
+						options={levels.map((entry) => ({ value: entry.id, label: t(`level.${entry.id}`) }))}
+						bind:value={level}
 					/>
-					{#if passwordProblem}<small class="problem">{passwordProblem}</small>{/if}
-				</label>
-				<p class="notice-warn" role="alert">{t('crypt.createWarning')}</p>
-				<label class="confirm">
-					<input type="checkbox" bind:checked={understood} />
-					<span>{t('crypt.createUnderstood')}</span>
-				</label>
-			{/if}
-		</div>
+				</span>
+			</div>
+			{#if level === 'raid0' || level === 'single'}<div class="set-row wide">
+					<p class="notice-warn" role="alert">
+						{t(level === 'single' ? 'create.singleWarning' : 'create.raid0Warning')}
+					</p>
+				</div>{/if}
+		</section>
 
-		<div class="capacity">
-			<span>{t('create.capacity')}</span>
-			<span class="mono" class:muted={!capacity.ok}>{capacity.text}</span>
-		</div>
-		{#if taken.length === 0}<p class="muted">{t('create.firstFolders')}</p>{/if}
+		<section class="tile ui-card">
+			<div class="card-head">
+				<h3>{t('create.disks')}</h3>
+				<span class="card-meta"
+					>{t('create.capacity')}: <span class="mono">{capacity.text}</span></span
+				>
+			</div>
+			<div class="card-body">
+				<DiskPicker {disks} bind:selected name="volume-disks" onselect={remember} />
+				<SmrWarning {level} {selected} />
+				{#if staleSelection}
+					<p class="notice-warn" role="alert">{t('create.changedDisks')}</p>
+					<button
+						type="button"
+						class="btn"
+						onclick={() => {
+							selected = [];
+							selectionIdentities = {};
+						}}>{t('create.clearSelection')}</button
+					>
+				{/if}
+				{#if taken.length === 0}<p class="muted small">{t('create.firstFolders')}</p>{/if}
+			</div>
+		</section>
+
+		<section class="tile ui-card">
+			<div class="card-head"><h3>{t('create.checks')}<HelpTip term="checks" /></h3></div>
+			<p class="set-row wide muted small">{t('create.checksIntro')}</p>
+			<div class="set-row">
+				<label class="set-label" for="check-parity"
+					>{t(filesystem === 'btrfs' ? 'create.checkScrub' : 'create.checkParity')}<span
+						class="set-hint"
+						>{t(filesystem === 'btrfs' ? 'create.checkScrubHint' : 'create.checkParityHint')}</span
+					></label
+				>
+				<span class="set-control end"
+					><input
+						id="check-parity"
+						type="checkbox"
+						class="switch"
+						bind:checked={checks.parity}
+					/></span
+				>
+			</div>
+			<div class="set-row">
+				<label class="set-label" for="check-short"
+					>{t('create.checkSmartShort')}<span class="set-hint"
+						>{t('create.checkSmartShortHint')}</span
+					></label
+				>
+				<span class="set-control end"
+					><input
+						id="check-short"
+						type="checkbox"
+						class="switch"
+						bind:checked={checks.smartShort}
+					/></span
+				>
+			</div>
+			<div class="set-row">
+				<label class="set-label" for="check-long"
+					>{t('create.checkSmartLong')}<span class="set-hint">{t('create.checkSmartLongHint')}</span
+					></label
+				>
+				<span class="set-control end"
+					><input
+						id="check-long"
+						type="checkbox"
+						class="switch"
+						bind:checked={checks.smartLong}
+					/></span
+				>
+			</div>
+			<div class="set-row">
+				<label class="set-label" class:unavailable={filesystem !== 'btrfs'} for="check-snapshots"
+					>{t('create.checkSnapshots')}<span class="set-hint" id="no-snapshots"
+						>{t(filesystem === 'btrfs' ? 'create.checkSnapshotsHint' : 'create.noSnapshots')}</span
+					></label
+				>
+				<span class="set-control end">
+					{#if filesystem === 'btrfs'}<input
+							id="check-snapshots"
+							type="checkbox"
+							class="switch"
+							bind:checked={checks.snapshots}
+						/>{:else}<input
+							id="check-snapshots"
+							type="checkbox"
+							class="switch"
+							checked={false}
+							disabled
+							aria-describedby="no-snapshots"
+						/>{/if}
+				</span>
+			</div>
+		</section>
+
+		<section class="tile ui-card">
+			<div class="set-row">
+				<label class="set-label" for="volume-encrypt"
+					><span>{t('crypt.createEncrypt')}<HelpTip term="luks" /></span><span class="set-hint"
+						>{t('crypt.createEncryptDesc')}</span
+					></label
+				>
+				<span class="set-control end"
+					><input id="volume-encrypt" type="checkbox" class="switch" bind:checked={encrypt} /></span
+				>
+			</div>
+			{#if encrypt}
+				<div class="set-row">
+					<label class="set-label" for="volume-password">{t('crypt.password')}</label>
+					<span class="set-control"
+						><input
+							id="volume-password"
+							class="field"
+							type="password"
+							autocomplete="new-password"
+							bind:value={password}
+							maxlength="512"
+						/></span
+					>
+				</div>
+				<div class="set-row">
+					<label class="set-label" for="volume-repeat"
+						>{t('crypt.repeat')}{#if passwordProblem}<small class="set-hint problem"
+								>{passwordProblem}</small
+							>{/if}</label
+					>
+					<span class="set-control"
+						><input
+							id="volume-repeat"
+							class="field"
+							type="password"
+							autocomplete="new-password"
+							bind:value={repeat}
+							maxlength="512"
+						/></span
+					>
+				</div>
+				<div class="set-row wide">
+					<p class="notice-warn" role="alert">{t('crypt.createWarning')}</p>
+					<label class="confirm">
+						<input type="checkbox" bind:checked={understood} />
+						<span>{t('crypt.createUnderstood')}</span>
+					</label>
+				</div>
+			{/if}
+		</section>
 
 		{#if capacity.ok}
 			<label class="confirm">
@@ -370,76 +410,30 @@
 	form {
 		display: flex;
 		flex-direction: column;
-		gap: 18px;
+		gap: var(--gap, 16px);
 	}
-	.field-row {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
+	.tile.ui-card {
+		flex-shrink: 0;
 	}
-	.label {
-		font-size: var(--text-md);
-		font-weight: 500;
+	.set-row.wide {
+		grid-template-columns: minmax(0, 1fr);
+		margin: 0;
 	}
-	.field {
-		max-width: 16rem;
+	.set-row.wide > p {
+		margin: 0;
 	}
-	small {
-		font-size: var(--text-sm);
-		color: var(--muted);
+	.name {
+		width: 12rem;
+		max-width: 100%;
 	}
-	small.problem {
+	.problem {
 		color: var(--warn-text);
 	}
 	.small {
 		font-size: var(--text-sm);
 	}
-	.options {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-		gap: var(--space-2);
-	}
-	.options.two {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-	}
-	.option {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
-		padding: var(--space-3);
-		text-align: left;
-		background: var(--bg);
-		border: 2px solid var(--border);
-		border-radius: var(--radius-ctl);
-		color: var(--text);
-		font: inherit;
-		cursor: pointer;
-	}
-	.option:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-	.option[aria-checked='true'] {
-		border-color: var(--accent);
-	}
-	.option-name {
-		font-size: var(--text-md);
-		font-weight: 600;
-	}
-	.capacity {
-		display: flex;
-		justify-content: space-between;
-		gap: var(--space-3);
-		padding: var(--space-3) 14px;
-		background: var(--chip);
-		border-radius: var(--radius-ctl);
-		font-size: var(--text-md);
-	}
-	.confirm {
-		display: flex;
-		gap: var(--space-2);
-		align-items: flex-start;
-		font-size: var(--text-md);
+	.unavailable {
+		color: var(--muted);
 	}
 	.working {
 		order: -2;
@@ -454,23 +448,5 @@
 		font-size: var(--text-sm);
 		white-space: pre-wrap;
 		word-break: break-word;
-	}
-	.checks {
-		display: grid;
-		gap: var(--space-2);
-		margin: 0;
-		padding: var(--space-3) 14px;
-		border: 1px solid var(--border);
-		border-radius: var(--radius-ctl);
-	}
-	.checks legend {
-		padding: 0 6px;
-		font-weight: 600;
-	}
-	.checks p {
-		margin: 0;
-	}
-	.unavailable strong {
-		color: var(--muted);
 	}
 </style>
