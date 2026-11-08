@@ -592,7 +592,17 @@
 		selected = [entry.name];
 		anchor = entry.name;
 	}
+	// PLAN 74 (owner 8.11.2026: hint only): "._name" is the Finder data of a
+	// Mac (AppleDouble), not the file itself; opening it explains that.
+	let companion = $state<{ file: FileEntry; real: FileEntry | null } | null>(null);
+	function macCompanion(entry: FileEntry): boolean {
+		if (entry.dir || !entry.name.startsWith('._') || entry.name.length < 3) return false;
+		const name = entry.name.slice(2);
+		companion = { file: entry, real: entries?.find((e) => !e.dir && e.name === name) ?? null };
+		return true;
+	}
 	function openWithStandard(entry: FileEntry): boolean {
+		if (macCompanion(entry)) return true;
 		// PLAN 72: a standard Docker app comes first (choosing one clears the other).
 		const docker = dockerAppForExt(extOf(entry.name));
 		if (docker) {
@@ -614,6 +624,7 @@
 	}
 	/** "Öffnen mit": an app chosen for this file, and with "always" as its standard app. */
 	async function openWith(entry: FileEntry, app: string, always: boolean) {
+		if (macCompanion(entry)) return;
 		if (app.startsWith('docker:')) return openDocker(entry, app.slice(7), always);
 		if (always) {
 			try {
@@ -1502,6 +1513,32 @@
 				disabled={!safeRoots.find((r) => r.id === dropReview?.source.root)?.writable}
 				onclick={() => acceptDrop(true)}>{t('files.move')}</button
 			>
+		</div>
+	</Dialog>
+{/if}
+{#if companion}
+	<Dialog title={t('files.macCompanion.title')} onclose={() => (companion = null)}>
+		<p>{t('files.macCompanion.text', { name: companion.file.name })}</p>
+		<p>
+			{companion.real
+				? t('files.macCompanion.real', { name: companion.real.name })
+				: t('files.macCompanion.noReal', { name: companion.file.name.slice(2) })}
+		</p>
+		<div class="dialog-actions">
+			<button class="btn" onclick={() => (companion = null)}>{t('common.close')}</button>
+			{#if companion.real}<button
+					class="btn btn-primary"
+					onclick={() => {
+						const real = companion?.real;
+						companion = null;
+						if (!real) return;
+						selected = [real.name];
+						anchor = real.name;
+						if (openWithStandard(real)) return;
+						if (previewKind(real.name, real.size)) preview = real;
+						else if (editable) editing = join(dir, real.name);
+					}}>{t('files.macCompanion.open', { name: companion.real.name })}</button
+				>{/if}
 		</div>
 	</Dialog>
 {/if}
