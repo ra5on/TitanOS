@@ -6,40 +6,40 @@
   "demoData": true,
   "theme": "Graphit / Blau (Standard der Testdaten)",
   "browser": "Playwright Chromium",
-  "note": "Bilder ohne uiVersion 0.62.0 stammen aus früheren Aufnahmen (alte Oberfläche) und werden in der README nicht mehr eingebunden.",
+  "note": "Bilder ohne uiVersion 0.62.0 stammen aus früheren Aufnahmen (alte Oberfläche) und werden in der README nicht mehr eingebunden. Seit 8.11.2026: Bilder mit uiVersion 0.70.0 aus scripts/capture-readme-screenshots.mjs (feat/0.70, vite dev 127.0.0.1:5290).",
   "images": [
     {
       "file": "anmeldeseite.png",
-      "script": "scripts/test-ui-appearance.mjs (unverändert)",
-      "output": "09-abgemeldet-desktop.png",
-      "uiVersion": "0.62.0 (Arbeitsstand)",
-      "captured": "2026-11-07",
-      "width": 1440,
-      "height": 900,
-      "bytes": 359759,
-      "sha256": "2a5b77538158140003943def5682067722215bed7deb5820f669cd31b3235ca8"
+      "script": "scripts/capture-readme-screenshots.mjs",
+      "output": "anmeldeseite.png",
+      "uiVersion": "0.70.0",
+      "captured": "2026-11-08",
+      "width": 1600,
+      "height": 1000,
+      "bytes": 1052330,
+      "sha256": "0ae1472b64580028347e1c4928293b16881e5deef0e084b9254c74c8582ba0b8"
     },
     {
       "file": "arbeitsplatz.png",
-      "script": "scripts/test-ui-desktop.mjs (Variante: Original-App-Symbole)",
-      "output": "01-arbeitsplatz.png",
-      "uiVersion": "0.62.0 (Arbeitsstand)",
-      "captured": "2026-11-07",
+      "script": "scripts/capture-readme-screenshots.mjs",
+      "output": "arbeitsplatz.png",
+      "uiVersion": "0.70.0",
+      "captured": "2026-11-08",
       "width": 1600,
       "height": 1000,
-      "bytes": 346780,
-      "sha256": "878b008565988ecce504d2925d5373b350df4a6adfdbf09d6cafa6419796208f"
+      "bytes": 393515,
+      "sha256": "7f260abcf50c7bc1229a146461fbca7e7b98c0bf903b071f80e6e90619b95b04"
     },
     {
       "file": "darstellung.png",
-      "script": "Aufnahmeskript nach scripts/test-ui-desktop.mjs (Fenster /settings/appearance maximiert)",
-      "output": "sys-darstellung.png",
-      "uiVersion": "0.62.0 (Arbeitsstand)",
-      "captured": "2026-11-07",
+      "script": "scripts/capture-readme-screenshots.mjs",
+      "output": "darstellung.png",
+      "uiVersion": "0.70.0",
+      "captured": "2026-11-08",
       "width": 1600,
       "height": 1000,
-      "bytes": 229648,
-      "sha256": "eb6a8f5d1749541845830ad4acff9a999ca832708f0101ee1ca77b8c5e85aaf7"
+      "bytes": 258296,
+      "sha256": "8ae16215a17102ed1a51535f934b252ee818a193d9c9a32892e8521376dd752f"
     },
     {
       "file": "dateien-auftraege-1440.png",
@@ -83,13 +83,14 @@
     },
     {
       "file": "dateien.png",
-      "script": "docs/screenshots/capture.mjs",
-      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
-      "captured": "2026-10-31",
+      "script": "scripts/capture-readme-screenshots.mjs",
+      "uiVersion": "0.70.0",
+      "captured": "2026-11-08",
       "width": 1600,
       "height": 1000,
-      "bytes": 669708,
-      "sha256": "76bd3e8cf278342644feb75d2ef86e00c316d8b47e8dae4f76269e4ad984f75a"
+      "bytes": 145041,
+      "sha256": "e172727960bef832b6708c58f9dbff2bddf12dc96aa23d031f792f4ac9a29879",
+      "output": "dateien.png"
     },
     {
       "file": "dock-bearbeiten.png",
@@ -104,14 +105,14 @@
     },
     {
       "file": "docker.png",
-      "script": "Aufnahmeskript nach scripts/test-ui-desktop.mjs (Fenster /docker maximiert)",
+      "script": "scripts/capture-readme-screenshots.mjs",
       "output": "docker.png",
-      "uiVersion": "0.62.0 (Arbeitsstand)",
-      "captured": "2026-11-07",
+      "uiVersion": "0.70.0",
+      "captured": "2026-11-08",
       "width": 1600,
       "height": 1000,
-      "bytes": 203430,
-      "sha256": "7df024efc0ac769478280a171012b2f7ae5a46e13d316a9ae8f4c5ae1aa18208"
+      "bytes": 149520,
+      "sha256": "89a0a584d3e26c0de02a86261342c6aa4abe3898a4b3e8b571c122dde7853de5"
     },
     {
       "file": "fernansicht-mobil.png",
@@ -147,14 +148,14 @@
     },
     {
       "file": "handy-start.png",
-      "script": "scripts/test-ui-desktop.mjs (Variante: Original-App-Symbole)",
-      "output": "12-handy-start.png",
-      "uiVersion": "0.62.0 (Arbeitsstand)",
-      "captured": "2026-11-07",
+      "script": "scripts/capture-readme-screenshots.mjs",
+      "output": "handy-start.png",
+      "uiVersion": "0.70.0",
+      "captured": "2026-11-08",
       "width": 390,
       "height": 844,
-      "bytes": 146200,
-      "sha256": "f8ac8c0975eaca47a84c135e9d5675b9ffad3f35d339d5d4d89af540081860a0"
+      "bytes": 142016,
+      "sha256": "9b7de84fd7018f9f4ee7921071689b7944419da76643d6dd76c265af43f5182e"
     },
     {
       "file": "hauptmenue.png",
@@ -229,13 +230,14 @@
     },
     {
       "file": "speicher.png",
-      "script": "docs/screenshots/capture.mjs",
-      "uiVersion": "0.47.1 bzw. laut README (alte Oberfläche)",
-      "captured": "2026-10-31",
+      "script": "scripts/capture-readme-screenshots.mjs",
+      "uiVersion": "0.70.0",
+      "captured": "2026-11-08",
       "width": 1600,
       "height": 1000,
-      "bytes": 685682,
-      "sha256": "ac16a4d68a0eb513a52211a5bafc21b13737d3fa28e116d07320198ac5e1588f"
+      "bytes": 137129,
+      "sha256": "affab2550403ea843a9d6fa59ca884c01022986dcd26b8454486cadf23dca02f",
+      "output": "speicher.png"
     },
     {
       "file": "systemsteuerung.png",
@@ -270,14 +272,25 @@
     },
     {
       "file": "vms.png",
-      "script": "Aufnahmeskript nach scripts/test-ui-desktop.mjs (Fenster /vms maximiert)",
+      "script": "scripts/capture-readme-screenshots.mjs",
       "output": "vms.png",
-      "uiVersion": "0.62.0 (Arbeitsstand)",
-      "captured": "2026-11-07",
+      "uiVersion": "0.70.0",
+      "captured": "2026-11-08",
       "width": 1600,
       "height": 1000,
-      "bytes": 210190,
-      "sha256": "8611a5bc5035b99047a48de7e1c4fbaf574b8c9b4277729e9e1f39c2b6e9596e"
+      "bytes": 129529,
+      "sha256": "53ae2f789e71e1a4753d3a94bdcd9394ac1757415d09470c2d06f55ddc4244cb"
+    },
+    {
+      "file": "freigaben.png",
+      "uiVersion": "0.70.0",
+      "captured": "2026-11-08",
+      "script": "scripts/capture-readme-screenshots.mjs",
+      "bytes": 98571,
+      "sha256": "b0f707b03373e6bfc9776240f5255a076c6a1d43656e46a7743d7a18eef934ab",
+      "width": 1600,
+      "height": 1000,
+      "output": "freigaben.png"
     }
   ]
 }
