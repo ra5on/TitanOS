@@ -38,9 +38,10 @@
 	// On the phone the bar above names the program: the page's name only when it differs.
 	const program = $derived(appForPath(page.url.pathname));
 	const ownName = $derived(!program || t(program.label) !== title);
-	// A bar only with something in it: actions, the page's name on the phone or
-	// (in a window) the page's intro. Never an empty strip.
-	const hasBar = $derived(!!actions || (phone ? ownName : !!children));
+	// A bar only with something in it: actions or the page's name on the phone.
+	// PLAN 74: in a window the intro alone gets no strip of its own; it is the
+	// first line of the page (no room lost above the content).
+	const hasBar = $derived(!!actions || (phone && ownName));
 
 	// Buttons that can move into the "⋯" menu: plain buttons and links of the
 	// bar, never the main action, a field, a group or a button with a menu of
@@ -156,7 +157,6 @@
 		{:else}
 			<h1 class="sr-only" {id}>{title}</h1>
 		{/if}
-		{#if !actions && !phone && children}<div class="win-lead">{@render children()}</div>{/if}
 		{#if actions}
 			<div class="win-actions" bind:this={box}>
 				{@render actions()}
@@ -211,15 +211,6 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-	}
-	.win-lead {
-		flex: 1;
-		min-width: 0;
-		font-size: var(--text-base);
-		color: var(--muted);
-	}
-	.win-lead :global(p) {
-		margin: 0;
 	}
 	.win-actions {
 		flex: 1;
@@ -291,9 +282,5 @@
 	.win-toolbar.phone {
 		flex-wrap: wrap;
 		min-height: 48px;
-	}
-	.phone .win-lead {
-		flex-basis: 100%;
-		order: 5;
 	}
 </style>

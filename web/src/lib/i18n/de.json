@@ -1960,6 +1960,7 @@
 	"error.provider_auth": "Der Modellanbieter hat den API-Schlüssel abgelehnt.",
 	"error.invalid_certificate": "Dieses Zertifikat lässt sich nicht verwenden:",
 	"update.title": "Updates",
+	"update.replacePending": "{version} statt {waiting} installieren",
 	"update.installed": "Diese Version",
 	"update.devBuild": "Entwicklungsversion",
 	"update.noKey": "Dieses Abbild enthält keinen Schlüssel, mit dem sich Updates prüfen ließen. Ohne gültige Signatur installiert TitanOS nichts – bei einer Entwicklungsversion ist das der Normalfall. Für eine neue Version bespielst du den Stick neu.",

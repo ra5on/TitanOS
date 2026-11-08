@@ -1960,6 +1960,7 @@
 	"error.provider_auth": "The model provider refused the API key.",
 	"error.invalid_certificate": "This certificate cannot be used:",
 	"update.title": "Updates",
+	"update.replacePending": "Install {version} instead of {waiting}",
 	"update.installed": "This version",
 	"update.devBuild": "Development build",
 	"update.noKey": "This image holds no key that updates could be verified with. Without a valid signature TitanOS installs nothing – for a development build that is the normal case. For a new version you write the stick anew.",

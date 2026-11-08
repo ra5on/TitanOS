@@ -357,6 +357,8 @@
 		status?.app.previous || (status ? t('update.app.base', { version: status.base }) : ''),
 	);
 	const other = $derived(status?.slots.find((slot) => !slot.running));
+	// PLAN 74: also while an update waits for the restart: a newer one replaces it.
+	const canCheck = $derived(!!status?.canVerify && !working);
 
 	function slotState(slot: Slot): string {
 		if (slot.running) return t(slot.next ? 'update.slot.running' : 'update.slot.runningNotNext');
@@ -378,17 +380,8 @@
 		>{t(busy === 'check' ? 'update.checking' : 'update.check')}</button
 	>
 {/snippet}
-{#if status?.canVerify && !status.pending && !working}
-	<!-- PLAN 64: in a window the search for updates is the tool bar's action. -->
-	<PageHead title={t('update.title')}>
-		{#snippet actions()}
-			<span class="muted toolbar-state" role="status">{@render checkState()}</span>
-			{@render checkButton()}
-		{/snippet}
-	</PageHead>
-{:else}
-	<PageHead title={t('update.title')} />
-{/if}
+<!-- PLAN 74: the search for updates sits in the header of "Diese Version": no tool bar for one button. -->
+<PageHead title={t('update.title')} />
 
 {#if error}<div class="notice-error" role="alert">
 		{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
@@ -399,6 +392,7 @@
 		<div class="head">
 			<h2 class="tile-title" id="upd-now">{t('update.installed')}</h2>
 			{#if !status.release}<span class="chip warn">{t('update.devBuild')}</span>{/if}
+			{#if canCheck}<span class="check">{@render checkButton()}</span>{/if}
 		</div>
 		<p class="version">
 			<span class="mono">TitanOS {status.version}</span
@@ -411,6 +405,7 @@
 				kernel: running?.kernel || '–',
 			})}{#if loaderKey}{' · '}{t(loaderKey as 'update.boot.bios')}{/if}
 		</p>
+		{#if canCheck && (status.checkError || checked || status.lastCheck)}<p class="muted" role="status">{@render checkState()}</p>{/if}
 		{#if restartedTo}<p class="notice-ok" role="status">
 				{t('update.app.restarted', { version: restartedTo })}
 				<!-- PLAN 67: the whole UI loads the new version (desktop and every
@@ -483,7 +478,7 @@
 			<p class="notice-warn" role="status">{t('update.fallbackRemoved')}</p>
 		{/if}
 
-		{#if status.available && !status.pending && !working}
+		{#if status.available && !working}
 			<div class="available">
 				<div class="head">
 					<span class="name"
@@ -519,11 +514,16 @@
 						class="btn btn-primary"
 						disabled={busy !== '' || status.unconfirmed || status.app.trial}
 						onclick={() => (asking = 'install')}
-						>{t(status.kernelSwitch ? 'update.kernel.switch' : 'update.install')}</button
+						>{status.pending
+							? t('update.replacePending', {
+									version: status.available.version,
+									waiting: status.pending.version,
+								})
+							: t(status.kernelSwitch ? 'update.kernel.switch' : 'update.install')}</button
 					>
 				</div>
 			</div>
-		{:else if status.canVerify && !status.pending && !working}
+		{:else if status.canVerify && !working}
 			{#if status.kernelMissing}<p class="notice-warn" role="status">
 					{t('update.kernel.missing', { version: status.kernelMissing })}
 				</p>{/if}
@@ -991,12 +991,7 @@
 	.slots .kernel {
 		font-size: var(--text-sm);
 	}
-	:global(.win-actions) > .toolbar-state {
-		flex-shrink: 1;
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		font-size: var(--text-base);
+	.head .check {
+		margin-left: auto;
 	}
 </style>

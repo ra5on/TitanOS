@@ -778,3 +778,32 @@ func TestNoRoomForThreeSystemsSaysTheFallbackIsGone(t *testing.T) {
 		t.Fatal("no room at all:", err)
 	}
 }
+
+// PLAN 74: a newer release found while an update waits for the restart
+// replaces it; the same or an older one is not offered again.
+func TestNewerReleaseReplacesTheWaitingUpdate(t *testing.T) {
+	e := newEnv(t)
+	e.publish(t, "1.1.0", ChannelStable, nil)
+	e.install(t)
+	if status := e.m.Status(); status.Pending == nil || status.Pending.Version != "1.1.0" {
+		t.Fatalf("waiting: %+v", status.Pending)
+	}
+	if err := e.m.Check(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if status := e.m.Status(); status.Available != nil {
+		t.Fatalf("the waiting version is offered again: %+v", status.Available)
+	}
+	e.publish(t, "1.2.0", ChannelStable, nil)
+	e.install(t)
+	status := e.m.Status()
+	if status.Progress.Phase != "done" || status.Pending == nil || status.Pending.Version != "1.2.0" || status.Pending.Slot != "b" {
+		t.Fatalf("after replacing: %+v %+v", status.Progress, status.Pending)
+	}
+	if got := entries(e); got != "titanos-a.conf[titanos-2] titanos-b+3.conf[titanos-1]" {
+		t.Errorf("entries: %s", got)
+	}
+	if data, _ := os.ReadFile(filepath.Join(e.boot, "titanos/a/vmlinuz")); string(data) != "old vmlinuz" {
+		t.Errorf("slot a changed: %q", data)
+	}
+}

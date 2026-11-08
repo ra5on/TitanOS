@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, tick, untrack } from 'svelte';
-	import { beforeNavigate } from '$app/navigation';
+	import { beforeNavigate, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, type Account, type Share } from '#lib/api.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
@@ -17,6 +17,7 @@
 		visibleShares,
 		type ShareView,
 	} from '#lib/share-view.ts';
+	import { inWindow } from '#lib/desktop/frame.ts';
 	import ShareDialog from './ShareDialog.svelte';
 	import ConnectDialog from './ConnectDialog.svelte';
 	import DeleteShareDialog from './DeleteShareDialog.svelte';
@@ -175,6 +176,18 @@
 	// PLAN 67-1: the menu bar of the desktop runs the same actions as the page.
 	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
 	const adminReady = () => canAdminister && accountReady;
+	// PLAN 74: "?new=1" comes from the entry "Neue Freigabe" in the window's side bar.
+	$effect(() => {
+		if (page.url.searchParams.get('new') !== '1' || !adminReady() || volumes.length === 0) return;
+		untrack(() => {
+			try {
+				replaceState(location.pathname + location.hash, page.state);
+			} catch {
+				// The address keeps the parameter; the dialog is open already.
+			}
+			dialog = { kind: 'create' };
+		});
+	});
 	registerMenuCommands({
 		'shares.new': {
 			run: () => (dialog = { kind: 'create' }),
@@ -220,13 +233,14 @@
 	});
 </script>
 
-<PageHead title={t('shares.title')}>
+{#snippet newShare()}<button
+		class="btn btn-primary"
+		disabled={!accountReady || volumes.length === 0}
+		onclick={() => (dialog = { kind: 'create' })}>{t('shares.new')}</button
+	>{/snippet}
+<!-- PLAN 74: in a window "Neue Freigabe" is an entry of the side bar: no tool bar for one button. -->
+<PageHead title={t('shares.title')} actions={canAdminister && !inWindow ? newShare : undefined}>
 	{#if shares}<p class="muted">{t('shares.summary', { count: shares.length })}</p>{/if}
-	{#snippet actions()}{#if canAdminister}<button
-				class="btn btn-primary"
-				disabled={!accountReady || volumes.length === 0}
-				onclick={() => (dialog = { kind: 'create' })}>{t('shares.new')}</button
-			>{/if}{/snippet}
 </PageHead>
 {#if purgeStarted}<div class="notice-ok" role="status">
 		{t('share.deleteDataStarted', { name: purgeStarted })}
