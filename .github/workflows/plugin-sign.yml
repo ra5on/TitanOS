@@ -43,7 +43,7 @@ permissions:
 
 env:
   PLUGINS: ra5on/TitanOS-Plugins
-  DRAFTS: '[.[] | select(.draft) | select(.tag_name | test("^((common|kernel-[0-9][0-9A-Za-z._~-]*)-[1-9][0-9]*|pending-nvidia-[0-9]+-kernel-[0-9][0-9A-Za-z._~-]*-[1-9][0-9]*)$")) | .tag_name]'
+  DRAFTS: '[.[] | select(.draft) | select(.tag_name | test("^((common|kernel-[0-9][0-9A-Za-z._~-]*)-[1-9][0-9]*|pending-nvidia-[0-9]+-kernel-[0-9][0-9A-Za-z._~-]*-[1-9][0-9]*)$")) | .tag_name] | unique'
 
 jobs:
   dispatch:
@@ -201,7 +201,14 @@ jobs:
               echo "$tag keeps the approval."
               continue
             fi
-            id=$(jq -r --arg t "$tag" '.[] | select(.draft and .tag_name == $t) | .id' <<<"$releases")
+            # A set built twice (a repeated release run) leaves drafts with the
+            # same tag: sign the newest, drop the older ones.
+            ids=$(jq -r --arg t "$tag" '[.[] | select(.draft and .tag_name == $t)] | sort_by(.created_at) | .[].id' <<<"$releases")
+            id=$(tail -n 1 <<<"$ids")
+            for older in $(head -n -1 <<<"$ids"); do
+              gh api -X DELETE "repos/$PLUGINS/releases/$older"
+              echo "$tag: older draft $older removed."
+            done
             dir=$(mktemp -d)
             while IFS=$'\t' read -r asset name; do
               [[ $name =~ ^[A-Za-z0-9][A-Za-z0-9._+-]{0,120}$ ]] || { echo "odd asset name $name" >&2; exit 1; }
