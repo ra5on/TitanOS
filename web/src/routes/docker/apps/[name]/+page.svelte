@@ -42,6 +42,7 @@
 	import RemoveAppDialog from '../../RemoveAppDialog.svelte';
 	import { inTailnet, tailnetPort } from '#lib/app-proxy.ts';
 	import AppIpv64 from './AppIpv64.svelte';
+	import AppOpens from './AppOpens.svelte';
 	import {
 		check,
 		NETWORKS,
@@ -645,6 +646,8 @@
 			>
 				<Toggle bind:checked={form.privileged} label={t('editor.privileged')} onchange={commit} />
 			</FormRow>
+
+			<AppOpens app={name} {services} locked={changed} onchanged={() => loadCompose()} />
 
 			<FormSection title={t('appform.sectionDevices')} />
 			<FormRow

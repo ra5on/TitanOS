@@ -197,7 +197,7 @@ func (m *Manager) CreateApp(ctx context.Context, name, compose string, env map[s
 		_ = m.store.RemoveAll(appsDir + "/" + name) // cleanup, best effort: nothing more can be done if it fails
 		m.mu.Lock()
 		delete(m.jobs, name)
-		m.appList = nil
+		m.forgetApps()
 		m.mu.Unlock()
 		return err
 	}
@@ -213,7 +213,7 @@ func (m *Manager) CreateApp(ctx context.Context, name, compose string, env map[s
 		return abandon(err)
 	}
 	m.mu.Lock()
-	m.appList = nil
+	m.forgetApps()
 	m.mu.Unlock()
 
 	m.startJob(ctx, settings.Volume, name, job, false)
@@ -459,6 +459,9 @@ func (m *Manager) SetCompose(ctx context.Context, name, compose string) error {
 		m.mu.Unlock()
 		return err
 	}
+	m.mu.Lock()
+	delete(m.opens, name)
+	m.mu.Unlock()
 	m.startJob(ctx, volume, name, job, false)
 	return nil
 }
@@ -545,7 +548,7 @@ func (m *Manager) RemoveApp(ctx context.Context, name string, purge bool) error 
 		return err
 	}
 	m.mu.Lock()
-	m.appList = nil
+	m.forgetApps()
 	delete(m.jobs, name)
 	m.mu.Unlock()
 	return nil

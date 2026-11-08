@@ -50,6 +50,7 @@ func (s *Server) registerDocker(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/docker/proxy/apps/{app}/tailnet/check", s.requireAppAdmin(s.handleAppTailnetCheck))
 	mux.HandleFunc("PUT /api/v1/docker/proxy/targets/{id}", s.requireAppAdmin(s.handleAppProxyTarget))
 	mux.HandleFunc("DELETE /api/v1/docker/proxy/targets/{id}", s.requireAppAdmin(s.handleAppProxyTargetRemove))
+	s.registerDockerOpens(mux)
 }
 
 // registerAppStore registers the routes of the app store.

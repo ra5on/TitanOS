@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -20,7 +21,7 @@ import (
 
 // preferenceKinds are the per-account settings the web UI stores. The
 // backend keeps them as opaque JSON objects; their shape belongs to the UI.
-var preferenceKinds = []string{"appearance", "dashboard", "sound", "docker", "vnc", "files", "bell", "shares", "hints", "desktop", "fileapps"}
+var preferenceKinds = []string{"appearance", "dashboard", "sound", "docker", "vnc", "files", "bell", "shares", "hints", "desktop", "fileapps", "fileappsdocker"}
 
 // maxBackgroundBytes limits an uploaded background image. It is stored on the stick.
 const maxBackgroundBytes = 10 << 20
@@ -149,6 +150,10 @@ func (s *Server) handlePutPreferences(w http.ResponseWriter, r *http.Request) {
 		s.saveDashboard(w, r, value, nil)
 		return
 	}
+	if kind == "fileappsdocker" && !validDockerFileApps(value) {
+		writeError(w, http.StatusBadRequest, "bad_request", `fileappsdocker maps file endings (lower case, without dot) to "docker:<app>"`)
+		return
+	}
 	if kind == "fileapps" && !validFileApps(value) {
 		writeError(w, http.StatusBadRequest, "bad_request", `fileapps maps file endings (lower case, without dot) to "webapp:<id>" or "editor"`)
 		return
@@ -220,6 +225,24 @@ func (s *Server) handleDeleteBackground(w http.ResponseWriter, r *http.Request) 
 
 // fileAppsExt is a file ending as the default apps store it (PLAN 66).
 var fileAppsExt = regexp.MustCompile(`^[a-z0-9]{1,10}$`)
+
+// validDockerFileApps checks the preference kind fileappsdocker (PLAN 72):
+// the default Docker app per file ending, {"3mf":"docker:bambu-lab"}. It is
+// a kind of its own, so that titand 0.66 keeps reading and writing
+// fileapps unchanged after going back.
+func validDockerFileApps(value json.RawMessage) bool {
+	var m map[string]string
+	if json.Unmarshal(value, &m) != nil || len(m) > 200 {
+		return false
+	}
+	for ext, app := range m {
+		name, ok := strings.CutPrefix(app, "docker:")
+		if !fileAppsExt.MatchString(ext) || !ok || !docker.ValidAppName(name) {
+			return false
+		}
+	}
+	return true
+}
 
 // validFileApps checks the preference kind fileapps: the default app per
 // file ending, {"docx":"webapp:wordcraft","txt":"editor"}.
