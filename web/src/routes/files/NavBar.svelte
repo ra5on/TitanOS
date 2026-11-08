@@ -28,6 +28,8 @@
 		onreload: () => void;
 		/** The search text changed. */
 		onsearch: () => void;
+		/** PLAN 73: the address row of the window (like Explorer): reload, the path in a box, star inside. */
+		windowed?: boolean;
 	};
 	let {
 		root,
@@ -46,10 +48,12 @@
 		onwindowspath,
 		onreload,
 		onsearch,
+		windowed = false,
 	}: Props = $props();
 
 	let pathField = $state<HTMLInputElement>();
 	const crumbs = $derived(dir ? dir.split('/') : []);
+	const here = $derived(crumbs.at(-1) ?? root?.name ?? '');
 
 	export async function editPath() {
 		input = '/' + dir;
@@ -87,7 +91,7 @@
 </script>
 
 <!-- Where: history, path and search. -->
-<div class="toolbar nav-bar" class:path-editing={editing}>
+<div class="toolbar nav-bar" class:path-editing={editing} class:windowed>
 	<div class="nav-buttons">
 		<button
 			type="button"
@@ -113,6 +117,13 @@
 			disabled={!dir}
 			onclick={() => oncommand('up')}><Icon name="arrowUp" size={16} /></button
 		>
+		{#if windowed}<button
+				type="button"
+				class="btn icon"
+				aria-label={t('files.reload')}
+				title={t('files.reload')}
+				onclick={onreload}><Icon name="refresh" size={16} /></button
+			>{/if}
 	</div>
 	{#if editing && root}
 		<form class="path-form" onsubmit={goToPath}>
@@ -153,9 +164,11 @@
 				if (event.target === event.currentTarget) editPath();
 			}}
 		>
+			{#if windowed}<span class="box-icon" aria-hidden="true"><Icon name="folder" size={15} /></span
+				>{/if}
 			{#if root}<button type="button" onclick={() => onopen(rootId, '')}>{root.name}</button>{/if}
 			{#each crumbs as crumb, index (index)}
-				<span class="muted" aria-hidden="true">/</span>
+				<span class="muted" aria-hidden="true">{windowed ? '›' : '/'}</span>
 				<button type="button" onclick={() => onopen(rootId, crumbs.slice(0, index + 1).join('/'))}
 					>{crumb}</button
 				>
@@ -225,7 +238,7 @@
 			class="field"
 			type="search"
 			aria-label={t('files.searchFolder')}
-			placeholder={t('files.searchFolder')}
+			placeholder={windowed && here ? t('files.searchIn', { name: here }) : t('files.searchFolder')}
 			bind:value={search}
 			oninput={onsearch}
 		/>
@@ -324,6 +337,47 @@
 	.search input {
 		width: 100%;
 		padding-left: 34px;
+	}
+
+	/* PLAN 73, draft 16: the address row of the window – quiet buttons, the
+	   path in one box with a folder symbol and › between the parts. */
+	.windowed {
+		flex-wrap: nowrap;
+		gap: 6px;
+		padding: 8px 12px;
+	}
+	.windowed .btn {
+		height: 2rem;
+	}
+	.windowed .btn.icon {
+		width: 2rem;
+		border-color: transparent;
+		background: transparent;
+	}
+	.windowed .btn.icon:hover:not(:disabled) {
+		background: var(--chip);
+	}
+	.windowed .crumbs {
+		flex: 1 1 auto;
+		flex-wrap: nowrap;
+		overflow: hidden;
+		min-height: 2rem;
+		border-color: var(--border);
+		background: color-mix(in srgb, var(--bg) 60%, transparent);
+	}
+	.windowed .crumbs button:last-of-type:not(.edit-path) {
+		font-weight: 600;
+	}
+	.box-icon {
+		display: inline-flex;
+		color: var(--muted);
+		padding: 0 4px;
+	}
+	.windowed .search {
+		flex: 0 1 280px;
+	}
+	.windowed .search input {
+		height: 2rem;
 	}
 
 	@media (max-width: 760px) {

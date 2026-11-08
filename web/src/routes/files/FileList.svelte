@@ -18,6 +18,8 @@
 		getColumns: () => number;
 	};
 	type Props = {
+		/** PLAN 73: the checkboxes show (in a window only once more than one entry is selected). */
+		checks?: boolean;
 		/** The entries on screen: filtered and sorted. */
 		items: FileEntry[];
 		/** Everything in the folder; null while it loads or failed. */
@@ -53,6 +55,7 @@
 		ondropon: (event: DragEvent, path: string) => void;
 	};
 	let {
+		checks = true,
 		items,
 		entries,
 		root,
@@ -99,7 +102,12 @@
 	}
 </script>
 
-<div class="file-entries" class:small={view === 'small'} class:large={view === 'large'}>
+<div
+	class="file-entries"
+	class:small={view === 'small'}
+	class:large={view === 'large'}
+	class:no-checks={!checks}
+>
 	<div class="row header">
 		<input
 			type="checkbox"
@@ -363,6 +371,13 @@
 		margin: 0 -12px var(--space-2);
 		padding-left: 26px;
 	}
+	/* PLAN 73: without the checkbox column the names start at the edge (Explorer). */
+	.no-checks .row > input[type='checkbox'] {
+		display: none;
+	}
+	.no-checks .row {
+		grid-template-columns: minmax(0, 1fr) 96px 170px 36px;
+	}
 	.small .row:not(.header),
 	.large .row:not(.header) {
 		border: 1px solid var(--border);
@@ -370,6 +385,9 @@
 		padding: 10px;
 		grid-template-columns: 18px minmax(0, 1fr) 32px;
 		gap: var(--space-2);
+	}
+	.no-checks:is(.small, .large) .row:not(.header) {
+		grid-template-columns: minmax(0, 1fr) 32px;
 	}
 	.small .row:not(.header) > .num,
 	.large .row:not(.header) > .num {

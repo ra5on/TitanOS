@@ -67,7 +67,7 @@ const representative = [
   ["docker", "/docker/networks", "Netzwerke", true],
   ["storage", "/storage", "Übersicht", true],
   ["storage", "/storage/smart", null, true],
-  ["shares", "/shares", null, true],
+  ["shares", "/shares", null, false], // PLAN 74: "Neue Freigabe" is in the side bar
   ["vms", "/vms?vm=source", "Source VM", true],
   ["files", "/files", null, false],
   ["vms", "/vms/media", null, false],
@@ -80,7 +80,7 @@ const representative = [
   ["users", "/users", null, false],
   ["security", "/settings/firewall", null, false],
   ["account", "/account", null, false],
-  ["settings", "/settings/updates", "Updates", true],
+  ["settings", "/settings/updates", "Updates", false], // PLAN 74: the search is in "Diese Version"
   ["settings", "/settings/network", null, true],
   ["settings", "/settings/about", null, false],
 ];

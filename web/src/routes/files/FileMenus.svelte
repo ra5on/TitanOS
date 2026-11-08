@@ -138,6 +138,44 @@
 		<div class="menu-title" role="presentation">
 			{one ? entry.name : t('files.selected', { count: selected.length })}
 		</div>
+		<!-- PLAN 73 (draft 16): the frequent commands as a row of symbols, like Explorer. -->
+		<div class="icon-row" role="group" aria-label={t('files.commands')}>
+			{#if writable}<button
+					type="button"
+					role="menuitem"
+					aria-label={t('files.cut')}
+					title={t('files.cut')}
+					onclick={() => oncommand('cut', entry)}><Icon name="cut" size={16} /></button
+				>{/if}
+			<button
+				type="button"
+				role="menuitem"
+				aria-label={t('files.clipboardCopy')}
+				title={t('files.clipboardCopy')}
+				onclick={() => oncommand('clipboardCopy', entry)}><Icon name="copy" size={16} /></button
+			>
+			{#if one && writable}<button
+					type="button"
+					role="menuitem"
+					aria-label={t('files.rename')}
+					title={t('files.rename')}
+					onclick={() => oncommand('rename', entry)}><Icon name="edit" size={16} /></button
+				>{/if}
+			{#if writable}<button
+					type="button"
+					role="menuitem"
+					aria-label={t('files.delete')}
+					title={t('files.delete')}
+					onclick={() => oncommand('delete', entry)}><Icon name="trash" size={16} /></button
+				>{/if}
+			{#if one}<button
+					type="button"
+					role="menuitem"
+					aria-label={t('files.properties')}
+					title={t('files.properties')}
+					onclick={() => oncommand('properties', entry)}><Icon name="info" size={16} /></button
+				>{/if}
+		</div>
 		{#if standardApp && onopenwith}<button
 				type="button"
 				role="menuitem"
@@ -298,6 +336,30 @@
 {/if}
 
 <style>
+	.icon-row {
+		display: flex;
+		justify-content: space-between;
+		gap: 2px;
+		padding: 2px 4px 6px;
+		margin-bottom: 4px;
+		border-bottom: 1px solid var(--border);
+	}
+	.icon-row button {
+		width: 2.25rem;
+		height: 2rem;
+		display: grid;
+		place-items: center;
+		padding: 0;
+		border: 0;
+		border-radius: var(--radius-small, 6px);
+		background: none;
+		color: var(--text);
+		cursor: pointer;
+	}
+	.icon-row button:hover,
+	.icon-row button:focus-visible {
+		background: var(--chip);
+	}
 	.chev {
 		flex: none !important;
 		color: var(--muted);

@@ -25,6 +25,8 @@
 	import { isEditableText } from '#lib/text-files.ts';
 	import { enqueue, uploads } from '#lib/uploads.svelte.ts';
 	import ActionBar from './ActionBar.svelte';
+	import CommandBar from './CommandBar.svelte';
+	import { formatDiskBytes } from '#lib/format.ts';
 	import ArchiveDialog from './ArchiveDialog.svelte';
 	import BackupLock from './BackupLock.svelte';
 	import CompareDialog from './CompareDialog.svelte';
@@ -567,7 +569,11 @@
 		if (event.shiftKey) selectRange(entry.name, event.ctrlKey || event.metaKey);
 		else if (event.ctrlKey || event.metaKey) toggle(entry.name, !selectedNames.has(entry.name));
 		else if (entry.dir) open(rootId, join(dir, entry.name));
-		else toggle(entry.name, !selectedNames.has(entry.name));
+		else if (inWindow) {
+			// PLAN 73: like Explorer – a click selects this one entry only.
+			selected = [entry.name];
+			anchor = entry.name;
+		} else toggle(entry.name, !selectedNames.has(entry.name));
 	}
 	/** Double click on a file: preview, or the editor for text the preview does not show. */
 	function rowDoubleClicked(entry: FileEntry, event: MouseEvent) {
@@ -1315,6 +1321,7 @@
 				{:else}
 					<NavBar
 						bind:this={navBar}
+						windowed={inWindow}
 						{root}
 						{rootId}
 						{dir}
@@ -1338,25 +1345,50 @@
 							anchor = '';
 						}}
 					/>
-					<ActionBar
-						{root}
-						{writable}
-						clipboard={!!clipboard.content}
-						{canPaste}
-						selected={selected.length}
-						split={prefs.split}
-						canCompare={!!rightRoot}
-						view={prefs.view}
-						preferencesReady={prefs.ready}
-						showHidden={prefs.showHidden}
-						folderViewSaved={prefs.folderViewSaved}
-						folderViewsFull={prefs.folderViews.length >= 200}
-						bind:selectionFilter
-						bind:fileInput
-						bind:folderInput
-						onpicked={(input) => upload(pickedFiles(input))}
-						oncommand={command}
-					/>
+					{#if inWindow}
+						<!-- PLAN 73: the command bar like Explorer (drafts 16–18). -->
+						<CommandBar
+							{root}
+							{writable}
+							{canPaste}
+							selected={selected.length}
+							split={prefs.split}
+							canCompare={!!rightRoot}
+							view={prefs.view}
+							sort={prefs.sort}
+							descending={prefs.descending}
+							preferencesReady={prefs.ready}
+							showHidden={prefs.showHidden}
+							folderViewSaved={prefs.folderViewSaved}
+							folderViewsFull={prefs.folderViews.length >= 200}
+							bind:selectionFilter
+							bind:fileInput
+							bind:folderInput
+							onpicked={(input) => upload(pickedFiles(input))}
+							oncommand={command}
+							onsort={(column) => prefs.sortBy(column)}
+						/>
+					{:else}
+						<ActionBar
+							{root}
+							{writable}
+							clipboard={!!clipboard.content}
+							{canPaste}
+							selected={selected.length}
+							split={prefs.split}
+							canCompare={!!rightRoot}
+							view={prefs.view}
+							preferencesReady={prefs.ready}
+							showHidden={prefs.showHidden}
+							folderViewSaved={prefs.folderViewSaved}
+							folderViewsFull={prefs.folderViews.length >= 200}
+							bind:selectionFilter
+							bind:fileInput
+							bind:folderInput
+							onpicked={(input) => upload(pickedFiles(input))}
+							oncommand={command}
+						/>
+					{/if}
 
 					<UnfinishedUploads
 						{pending}
@@ -1386,6 +1418,7 @@
 
 					<FileList
 						bind:virtualList
+						checks={!inWindow || selected.length > 1}
 						items={visibleEntries}
 						{entries}
 						{root}
@@ -1417,19 +1450,43 @@
 						ondropon={(event, path) => reviewDrop(event, rootId, path)}
 					/>
 
-					<p class="list-footer muted" role="status">
-						{t('files.resultCount', {
-							shown: visibleEntries.length,
-							total: entries?.length ?? 0,
-						})}{#if clipboard.content}
-							· {t(clipboard.content.move ? 'files.cutCount' : 'files.copiedCount', {
-								count: clipboard.content.paths.length,
-							})}{/if}
-					</p>
-					{#if root?.kind === 'stick'}<p class="muted none">{t('files.stickNote')}</p>{/if}
 					{#if writable}<DropHint {dragging} path={join(root?.name ?? '', dir)} />{/if}
+					{#if inWindow}
+						<!-- PLAN 73: the status line at the bottom (Explorer): entries, selection, free space. -->
+						<p class="status-line muted" role="status">
+							<span>{t('files.statusEntries', { count: visibleEntries.length })}</span>
+							{#if selected.length}<span
+									>{t('files.statusSelected', {
+										count: selected.length,
+									})}{#if selectionBytes}{' · '}{formatDiskBytes(selectionBytes)}{/if}</span
+								>{/if}
+							{#if clipboard.content}<span
+									>{t(clipboard.content.move ? 'files.cutCount' : 'files.copiedCount', {
+										count: clipboard.content.paths.length,
+									})}</span
+								>{/if}
+							<span class="spacer"></span>
+							{#if root && root.totalBytes > 0}<span
+									>{t('files.statusFree', {
+										name: root.name,
+										free: formatDiskBytes(root.freeBytes),
+									})}</span
+								>{/if}
+						</p>
+					{:else}
+						<p class="list-footer muted" role="status">
+							{t('files.resultCount', {
+								shown: visibleEntries.length,
+								total: entries?.length ?? 0,
+							})}{#if clipboard.content}
+								· {t(clipboard.content.move ? 'files.cutCount' : 'files.copiedCount', {
+									count: clipboard.content.paths.length,
+								})}{/if}
+						</p>
+					{/if}
+					{#if root?.kind === 'stick'}<p class="muted none">{t('files.stickNote')}</p>{/if}
 
-					{#if selected.length > 0}
+					{#if selected.length > 0 && !inWindow}
 						<SelectionBar
 							count={selected.length}
 							bytes={selectionBytes}
@@ -1799,6 +1856,21 @@
 	}
 	.browser.dragging {
 		border-color: var(--accent);
+	}
+	.status-line {
+		display: flex;
+		align-items: center;
+		gap: 16px;
+		margin: 0;
+		padding: 6px 16px;
+		border-top: 1px solid var(--panel-border);
+		font-size: var(--text-sm);
+		position: sticky;
+		bottom: 0;
+		background: var(--bg);
+	}
+	.status-line .spacer {
+		flex: 1;
 	}
 	.list-footer {
 		margin: 0;
