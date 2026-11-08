@@ -7,6 +7,8 @@ import "strings"
 var texts = map[string]map[string][2]string{
 	"de": {
 		"fan_stopped":               {"Lüfter {s} steht", "Der Lüfter {s} hat sich gedreht und steht jetzt, obwohl er angesteuert wird. Prüfe Kabel und Lüfter, sonst wird das NAS zu warm."},
+		"heat_shutdown":             {"Überhitzung: NAS fährt herunter", "{s} war fünf Minuten lang an seiner Grenze. Wie unter Einstellungen › Temperaturen eingestellt, fährt TitanOS das NAS geordnet herunter (VMs und Apps werden beendet). Prüfe Lüftung und Lüfter, bevor du es wieder einschaltest."},
+		"heat_shutdown_failed":      {"Überhitzung: Herunterfahren fehlgeschlagen", "TitanOS konnte das NAS nicht herunterfahren: {s}. Schalte es von Hand aus."},
 		"temperature_critical":      {"Kritische Temperatur: {s}", "Ein Sensor nähert sich seinem kritischen Wert. Prüfe Lüftung und Lüfter; bei Überhitzung schaltet sich die Hardware selbst ab."},
 		"memory_corrected":          {"Arbeitsspeicher: korrigierte Fehler ({s})", "ECC hat Fehler im Arbeitsspeicher korrigiert. Einzelne sind unbedenklich; häufen sie sich, kündigt sich ein defektes Modul an."},
 		"memory_uncorrected":        {"Arbeitsspeicher: nicht korrigierbare Fehler ({s})", "Der Arbeitsspeicher hat Fehler, die ECC nicht korrigieren konnte. Daten können verfälscht werden: Speichermodul prüfen und tauschen."},
@@ -104,6 +106,8 @@ var texts = map[string]map[string][2]string{
 	},
 	"en": {
 		"fan_stopped":               {"Fan {s} stopped", "The fan {s} was turning and stands now although it is driven. Check the cable and the fan, or the NAS gets too warm."},
+		"heat_shutdown":             {"Overheating: the NAS shuts down", "{s} stayed at its limit for five minutes. As set in Settings › Temperatures, TitanOS shuts the NAS down in an orderly way (VMs and apps are stopped). Check the airflow and the fans before you switch it on again."},
+		"heat_shutdown_failed":      {"Overheating: shutting down failed", "TitanOS could not shut the NAS down: {s}. Switch it off by hand."},
 		"temperature_critical":      {"Critical temperature: {s}", "A sensor is getting close to its critical value. Check the airflow and the fans; when overheating, the hardware switches itself off."},
 		"memory_corrected":          {"Memory: corrected errors ({s})", "ECC corrected errors in the memory. A few are harmless; if they pile up, a module is failing."},
 		"memory_uncorrected":        {"Memory: uncorrectable errors ({s})", "The memory has errors ECC could not correct. Data can be corrupted: check and replace the memory module."},

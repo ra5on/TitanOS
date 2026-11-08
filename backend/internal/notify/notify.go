@@ -175,9 +175,11 @@ type Manager struct {
 	loaded   bool
 	settings Settings
 	// mutes are the temperature sensors that raise no notification.
-	mutes    map[string]bool
-	messages []Message
-	nextID   int
+	mutes map[string]bool
+	// heatShutdown: shut down when a reliable sensor stays too hot (heat_shutdown.go).
+	heatShutdown bool
+	messages     []Message
+	nextID       int
 	// bellLoaded says the kept messages were read (bell_keep.go).
 	bellLoaded bool
 	bellWrite  sync.Mutex
@@ -231,6 +233,9 @@ func (m *Manager) Load() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if err := m.loadMutesLocked(); err != nil {
+		return err
+	}
+	if err := m.loadHeatLocked(); err != nil {
 		return err
 	}
 	m.settings, m.loaded = settings, true

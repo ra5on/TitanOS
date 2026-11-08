@@ -36,7 +36,8 @@ const keywords: Record<string, string> = {
 		'dateisuche volltext index inhalt full text search content ocr vorschaubilder thumbnails miniaturen',
 	energy:
 		'energie energy governor cpu strom zeitplan schedule herunterfahren shutdown einschalten wake on lan wol rtc ruhemodus standby festplatten platten-ruhe plattenruhe disk sleep spindown',
-	temperatures: 'temperatur temperature sensor wärme heat lüfter fan pwm drehzahl kurve curve',
+	temperatures:
+		'temperatur temperature sensor wärme heat lüfter fan pwm drehzahl kurve curve überhitzung overheating notabschaltung herunterfahren shutdown',
 	about: 'lizenz license version titanos fair source',
 	timezone: 'zeitzone timezone time zone uhrzeit zeit clock',
 	coverage: 'abdeckung coverage geschützt protected ungesichert unprotected',

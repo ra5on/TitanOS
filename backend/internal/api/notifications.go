@@ -140,6 +140,8 @@ type temperatureAlarm struct {
 	// default for its kind of chip.
 	Own   bool `json:"own"`
 	Muted bool `json:"muted"`
+	// Shutdown: this sensor can switch the NAS off on heat (PLAN 75-9).
+	Shutdown bool `json:"shutdown"`
 }
 
 // handleTemperatureAlarms lists the sensors with their limits and the
@@ -150,23 +152,30 @@ func (s *Server) handleTemperatureAlarms(w http.ResponseWriter, r *http.Request)
 	if s.opts.Monitor != nil {
 		for _, t := range s.opts.Monitor.Info().Temperatures {
 			alarm := temperatureAlarm{ID: t.ID, Muted: slices.Contains(muted, t.ID)}
+			_, alarm.Shutdown = notify.ShutsDownOnHeat(t.Chip, t.CriticalC)
 			if limit, own, ok := notify.AlarmLimitSource(t.Chip, t.CriticalC); ok {
 				alarm.Limit, alarm.Own = &limit, own
 			}
 			sensors = append(sensors, alarm)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"sensors": sensors, "muted": muted})
+	writeJSON(w, http.StatusOK, map[string]any{"sensors": sensors, "muted": muted, "heatShutdown": s.opts.Notify.HeatShutdown()})
 }
 
 func (s *Server) handleTemperatureAlarmsChange(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Muted []string `json:"muted"`
+		// HeatShutdown is optional: an older page sends only the mutes.
+		HeatShutdown *bool `json:"heatShutdown"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Notify.SetMutedTemperatures(req.Muted); err != nil {
+	err := s.opts.Notify.SetMutedTemperatures(req.Muted)
+	if err == nil && req.HeatShutdown != nil {
+		err = s.opts.Notify.SetHeatShutdown(*req.HeatShutdown)
+	}
+	if err != nil {
 		switch {
 		case errors.Is(err, notify.ErrInvalid):
 			writeError(w, http.StatusBadRequest, "invalid_notify_settings", err.Error())
@@ -177,6 +186,6 @@ func (s *Server) handleTemperatureAlarmsChange(w http.ResponseWriter, r *http.Re
 		}
 		return
 	}
-	slog.Info("temperature notifications changed", "muted", len(req.Muted), "by", currentUser(r).Name, "ip", remoteIP(r))
+	slog.Info("temperature notifications changed", "muted", len(req.Muted), "heatShutdown", req.HeatShutdown != nil && *req.HeatShutdown, "by", currentUser(r).Name, "ip", remoteIP(r))
 	s.handleTemperatureAlarms(w, r)
 }

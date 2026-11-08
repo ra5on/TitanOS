@@ -1,6 +1,7 @@
 package notify
 
 import (
+	"github.com/ra5on/TitanOS/backend/internal/config"
 	"os"
 	"path/filepath"
 	"strings"
@@ -183,5 +184,85 @@ func TestHardwareWatcherDiskLimit(t *testing.T) {
 	messages := m.Messages()
 	if len(messages) != 1 || !strings.HasPrefix(messages[0].Subject, "drivetemp ") {
 		t.Fatalf("messages: %+v", messages)
+	}
+}
+
+// PLAN 75-9: shut down on heat only when switched on, only for reliable
+// chips with a critical value of their own, after five looks in a row.
+func TestHardwareWatcherHeatShutdown(t *testing.T) {
+	hot, cool, crit := 98.0, 60.0, 100.0
+	cases := []struct {
+		name   string
+		temp   TempReading
+		on     bool
+		mute   bool
+		looks  int
+		gapAt  int
+		wantOn bool
+	}{
+		{"cpu at its limit for five minutes", TempReading{ID: "a", Chip: "coretemp", Celsius: &hot, Critical: &crit}, true, false, 5, -1, true},
+		{"switched off by default", TempReading{ID: "b", Chip: "coretemp", Celsius: &hot, Critical: &crit}, false, false, 8, -1, false},
+		{"four minutes are not enough", TempReading{ID: "c", Chip: "coretemp", Celsius: &hot, Critical: &crit}, true, false, 4, -1, false},
+		{"a cool look starts again", TempReading{ID: "d", Chip: "coretemp", Celsius: &hot, Critical: &crit}, true, false, 6, 2, false},
+		{"motherboard chip never", TempReading{ID: "e", Chip: "nct6798", Label: "temp8", Celsius: &hot, Critical: &crit}, true, false, 8, -1, false},
+		{"cpu without its own critical value never", TempReading{ID: "f", Chip: "coretemp", Celsius: &hot}, true, false, 8, -1, false},
+		{"muted sensor never", TempReading{ID: "0123456789abcdef0123456789abcdef", Chip: "coretemp", Celsius: &hot, Critical: &crit}, true, true, 8, -1, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m, _ := newManager(t)
+			if err := m.SetHeatShutdown(c.on); err != nil {
+				t.Fatal(err)
+			}
+			if c.mute {
+				if err := m.SetMutedTemperatures([]string{c.temp.ID}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			w := NewHardwareWatcher(m)
+			w.edac = t.TempDir()
+			offs := 0
+			w.Poweroff = func() error { offs++; return nil }
+			for i := range c.looks {
+				reading := c.temp
+				if i == c.gapAt {
+					reading.Celsius = &cool
+				}
+				w.Temperatures = func() []TempReading { return []TempReading{reading} }
+				w.look()
+			}
+			if got := offs > 0; got != c.wantOn {
+				t.Fatalf("shut down: %v, want %v", got, c.wantOn)
+			}
+			if offs > 1 {
+				t.Fatalf("asked to shut down %d times", offs)
+			}
+			said := false
+			for _, msg := range m.Messages() {
+				if msg.Kind == "heat_shutdown" {
+					said = true
+				}
+			}
+			if said != c.wantOn {
+				t.Fatalf("message heat_shutdown: %v, want %v", said, c.wantOn)
+			}
+		})
+	}
+}
+
+func TestHeatShutdownSettingSurvivesReload(t *testing.T) {
+	m, dir := newManager(t)
+	if m.HeatShutdown() {
+		t.Fatal("on by default")
+	}
+	if err := m.SetHeatShutdown(true); err != nil {
+		t.Fatal(err)
+	}
+	again := NewManager(config.Open(dir))
+	if err := again.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if !again.HeatShutdown() {
+		t.Fatal("setting lost")
 	}
 }
