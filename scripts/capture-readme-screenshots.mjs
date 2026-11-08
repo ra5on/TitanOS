@@ -9,7 +9,10 @@ const create = fixtureFactory(browser, []);
 const out = (process.env.OUT || 'out/readme-shots') + '/';
 const names = [['Angebote', true], ['Rechnungen 2026', true], ['Verträge', true], ['Urlaub Garda', true], ['Gehäuse Deckel.3mf', false, 2.4e6], ['Angebot Gartenhaus.docx', false, 24e3], ['Halterung.stl', false, 820e3], ['Kfz-Versicherung 2026.pdf', false, 210e3], ['Strom Abschlag.xlsx', false, 38e3], ['Notiz.txt', false, 1e3]];
 const files = names.map(([n, d, s]) => ({ name: n, dir: d, size: s ?? 0, modified: '2026-11-0' + (1 + (n.length % 7)) + 'T10:00:00Z' }));
+// ONLY=name,name captures just these pictures.
+const only = process.env.ONLY ? process.env.ONLY.split(',') : null;
 async function shot(path, name, { w = 1600, h = 1000, max = true, act } = {}) {
+  if (only && !only.includes(name)) return;
   const made = await create('owner', 'graphit', w);
   await made.page.setViewportSize({ width: w, height: h });
   await made.ctx.addInitScript(() => localStorage.removeItem('titanos.layout'));
@@ -36,8 +39,17 @@ await shot('/shares', 'freigaben');
 await shot('/storage', 'speicher');
 await shot('/settings/appearance', 'darstellung');
 await shot('/', 'handy-start', { w: 390, h: 844, max: false });
+await shot('/settings', 'systemsteuerung');
+await shot('/', 'hauptmenue', { max: false, act: async (p) => { await p.getByRole('button', { name: 'Alle Programme' }).click(); await p.waitForTimeout(800); } });
+await shot('/', 'dock-bearbeiten', { max: false, act: async (p) => {
+  const d = await p.locator('.dock').first().boundingBox();
+  await p.mouse.click(d.x + 4, d.y + d.height / 2, { button: 'right' });
+  await p.getByRole('menuitem', { name: 'Dock bearbeiten' }).click();
+  await p.getByRole('group', { name: 'Dock bearbeiten' }).waitFor();
+  await p.waitForTimeout(500);
+} });
 // The login page: logged out with four accounts.
-{
+if (!only || only.includes('anmeldeseite')) {
   const made = await create('owner', 'graphit', 1600);
   await made.page.setViewportSize({ width: 1600, height: 1000 });
   await made.ctx.addInitScript(() => localStorage.setItem('titanos.login.accounts', JSON.stringify([{ name: 'patrick', displayName: 'Patrick' }])));

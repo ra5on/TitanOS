@@ -38,8 +38,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Every mocked stream's timer, stopped at the end (a closed context does not always say goodbye).
 const timers = new Set();
-const W = 640;
-const H = 400;
+// VIEWER_PICTURE=/backgrounds/kueste.webp streams that picture instead of
+// the red test frame (README pictures, docs/screenshots/README.md).
+const picture = process.env.VIEWER_PICTURE || "";
+const W = picture ? 1280 : 640;
+const H = picture ? 800 : 400;
 
 // ---- Real frames, made once by the browser's own encoder ----
 async function encodeFrames() {
@@ -54,7 +57,10 @@ async function encodeFrames() {
   );
   await page.goto(base + "/encoder");
   const result = await page.evaluate(
-    async ({ W, H }) => {
+    async ({ W, H, picture }) => {
+      const photo = picture
+        ? await createImageBitmap(await (await fetch(picture)).blob())
+        : null;
       const b64 = (u8) => {
         let s = "";
         for (const b of u8) s += String.fromCharCode(b);
@@ -94,11 +100,15 @@ async function encodeFrames() {
       const canvas = new OffscreenCanvas(W, H);
       const g = canvas.getContext("2d");
       for (let i = 0; i < 30; i++) {
-        // A red picture with a moving green square.
-        g.fillStyle = "rgb(200, 40, 40)";
-        g.fillRect(0, 0, W, H);
-        g.fillStyle = "rgb(40, 200, 60)";
-        g.fillRect(20 + i * 4, 20, 80, 80);
+        if (photo) {
+          g.drawImage(photo, 0, 0, W, H);
+        } else {
+          // A red picture with a moving green square.
+          g.fillStyle = "rgb(200, 40, 40)";
+          g.fillRect(0, 0, W, H);
+          g.fillStyle = "rgb(40, 200, 60)";
+          g.fillRect(20 + i * 4, 20, 80, 80);
+        }
         const f = new VideoFrame(canvas, { timestamp: i * 33333 });
         enc.encode(f, { keyFrame: i % 15 === 0 });
         f.close();
@@ -140,7 +150,7 @@ async function encodeFrames() {
       }
       return { codec: config.codec, frames, audio };
     },
-    { W, H },
+    { W, H, picture },
   );
   await ctx.close();
   assert.ok(result, "the test browser can encode and decode VP8 or H.264");
@@ -389,15 +399,15 @@ async function open(width, height, behave, init) {
 
 async function painted(canvas) {
   await canvas.page().waitForFunction(
-    (el) => {
+    ([el, any]) => {
       if (!el || el.width < 2 || getComputedStyle(el).visibility === "hidden")
         return false;
       const [r, g, b, a] = el
         .getContext("2d")
         .getImageData(el.width - 20, el.height - 20, 1, 1).data;
-      return a > 0 && r > 150 && g < 100 && b < 100;
+      return a > 0 && (any ? r + g + b > 0 : r > 150 && g < 100 && b < 100);
     },
-    await canvas.elementHandle(),
+    [await canvas.elementHandle(), !!picture],
     { timeout: 10000 },
   );
 }
@@ -960,7 +970,10 @@ const until = async (fn, what, ms = 5000) => {
   await remote.dispatchEvent("drop", { dataTransfer: drop });
   await win.getByText("unter „Hochgeladen“", { exact: false }).waitFor();
   await until(
-    () => v.sent.some((m) => m.t === "upload" && m.name === "notiz.txt" && m.size === 5),
+    () =>
+      v.sent.some(
+        (m) => m.t === "upload" && m.name === "notiz.txt" && m.size === 5,
+      ),
     "upload of the dropped file",
   );
   await ctx.close();

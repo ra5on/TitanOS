@@ -2,11 +2,11 @@
 
 `current/` enthält die aktuellen Aufnahmen für die Projekt-README und die Fachdokumente.
 
-**Aufnahmestand:** Arbeitsplatz, Anmeldeseite, Docker, Dateien, Virtuelle Maschinen, Freigaben, Speicher, Darstellung und Handy-Start zeigen **TitanOS 0.70.0** (Zweig `feat/0.70`), aufgenommen am **8. November 2026** mit `scripts/capture-readme-screenshots.mjs` (Chromium/Playwright gegen `vite dev`, Theme Graphit, blauer Akzent, Deutsch, Fenster maximiert). Die Docker-Apps (immich, jellyfin, paperless, home-assistant, vaultwarden) sind Beispieldaten des Skripts mit Buchstaben-Symbolen. Hauptmenü, Systemsteuerung, Dock bearbeiten und die Fernansicht stammen noch aus der Aufnahme von 0.62.0 (7. November 2026); ihre Oberfläche hat sich seither nur wenig geändert.
+**Aufnahmestand:** Alle in der README eingebundenen Bilder zeigen **TitanOS 0.70.0** (Zweig `feat/0.70`), aufgenommen am **8. November 2026** mit `scripts/capture-readme-screenshots.mjs` (Chromium/Playwright gegen `vite dev`, Theme Graphit, blauer Akzent, Deutsch, Fenster maximiert). Die Docker-Apps (immich, jellyfin, paperless, home-assistant, vaultwarden) sind Beispieldaten des Skripts mit Buchstaben-Symbolen. Die Fernansicht kommt aus `scripts/test-ui-viewer.mjs` mit `VIEWER_PICTURE=/backgrounds/kueste.webp`.
 
 Ältere Bilder in `current/` (Speicher, Freigaben, Dateien, Firewall, VM erstellen, Protokoll, Dateiaufträge, KI-Agent) zeigen die **alte Oberfläche** mit Kopfzeile (0.47.1 bzw. KI-Agent 0.51.0/0.54.0). Kopfzeile und Seitennavigation sind seit 0.62.0 entfernt; diese Bilder sind nur noch in Fachdokumenten verlinkt (VM erstellen, Protokoll) bzw. als Nachweis ihrer damaligen Prüfungen und werden in der README nicht mehr eingebunden. Die Aufnahmen des alten Dashboards und der alten Navigation sind entfernt.
 
-Alle NAS-Antworten werden durch isolierte Demonstrationsdaten ersetzt (`scripts/test-ui-fixtures.mjs`). Hostname, Konten, Dateien, Laufwerke, Adressen und Messwerte sind Beispiele. Es werden weder echte NAS-Geräte angesprochen noch Container oder VMs gestartet. Das Bild in der **Fernansicht** ist ein nachgebildeter Strom (rote Fläche mit grünem Quadrat, im Browser selbst kodiert), keine echte App. Die sichtbaren App-Symbole (immich, jellyfin, paperless, vaultwarden) sind die Originalbilder der Projekte aus dem Zwischenspeicher `out/readme-icons/` (SHA-256 bei der Aufnahme mit `icon-sources.json` verglichen, gleich); Quellen und SHA-256 stehen in [icon-sources.json](icon-sources.json), Namen und Logos gehören den jeweiligen Projekten. Keine nachträgliche Bildbearbeitung und keine Design-Mockups. Die Bilder ersetzen keine Funktions- oder Hardwareprüfung.
+Alle NAS-Antworten werden durch isolierte Demonstrationsdaten ersetzt (`scripts/test-ui-fixtures.mjs`). Hostname, Konten, Dateien, Laufwerke, Adressen und Messwerte sind Beispiele. Es werden weder echte NAS-Geräte angesprochen noch Container oder VMs gestartet. Das Bild in der **Fernansicht** ist ein nachgebildeter Strom (das mitgelieferte Foto „Küste“, im Browser selbst als Video kodiert), keine echte App. Die App-Symbole sind Buchstaben, keine Logos der Projekte ([icon-sources.json](icon-sources.json) gehört zu älteren Aufnahmen). Keine nachträgliche Bildbearbeitung und keine Design-Mockups. Die Bilder ersetzen keine Funktions- oder Hardwareprüfung.
 
 [capture.json](current/capture.json) nennt Quellstand, Aufnahmedatum und für jedes Bild Aufnahmeskript, Originaldatei der Skriptausgabe, Größe und SHA-256.
 
@@ -15,13 +15,13 @@ Alle NAS-Antworten werden durch isolierte Demonstrationsdaten ersetzt (`scripts/
 | Datei | Inhalt | Darstellung |
 |---|---|---|
 | [arbeitsplatz.png](current/arbeitsplatz.png) | Arbeitsplatz: Programmsymbole mit Abzeichen (Update, läuft/gestoppt), Widgets rechts (Zustand, CPU/RAM, Volumes, Docker-Apps), Leisten oben, Dock | Desktop 1600 × 1000 |
-| [fernansicht.png](current/fernansicht.png) | Fenster der Docker-App „immich“ in der Fernansicht: Zustand, Bildrate, GPU, Lautstärke, Qualität, Zwischenablage, Dateien; Bild nachgebildet | Desktop 1600 × 1000 |
+| [fernansicht.png](current/fernansicht.png) | Fenster der Docker-App „immich“ in der Fernansicht mit geöffnetem Menü „…“: Lautstärke, Datei öffnen, Zwischenablage, Qualität, Zustand; Bild nachgebildet | Desktop 1600 × 1000 |
 | [hauptmenue.png](current/hauptmenue.png) | Hauptmenü mit Suche, Filtern, Programmen, Docker-Apps und VM-Bildschirm, unten Konto, Sperren, Ein/Aus | Desktop 1600 × 1000 |
 | [docker.png](current/docker.png) | Programm Docker (Fenster maximiert): Seitenleiste, Werkzeugleiste, Container-Karten | Desktop 1600 × 1000 |
 | [vms.png](current/vms.png) | Programm Virtuelle Maschinen: „Deine VMs“ in der Seitenleiste, Übersicht einer VM mit Gefahrenzone | Desktop 1600 × 1000 |
-| [systemsteuerung.png](current/systemsteuerung.png) | Systemsteuerung › Alle Einstellungen mit Suche und Bereichen | Desktop 1600 × 1000 |
-| [darstellung.png](current/darstellung.png) | Systemsteuerung › Darstellung: Theme, Variante, Akzent, fünf Schieberegler | Desktop 1600 × 1000 |
-| [dock-bearbeiten.png](current/dock-bearbeiten.png) | Dock bearbeiten: Größe, Deckkraft, Vergrößern, Position | Desktop 1600 × 1000 |
+| [systemsteuerung.png](current/systemsteuerung.png) | Systemsteuerung › Übersicht: Seitenleiste mit Suche, Zustand, Dienste, Zu erledigen | Desktop 1600 × 1000 |
+| [darstellung.png](current/darstellung.png) | Systemsteuerung › Darstellung: Theme, Variante, Akzent, Glas von Klar bis Getönt, Hintergründe | Desktop 1600 × 1000 |
+| [dock-bearbeiten.png](current/dock-bearbeiten.png) | Dock bearbeiten: Größe, Deckkraft, Vergrößern, Position; Programme im Dock mit × | Desktop 1600 × 1000 |
 | [anmeldeseite.png](current/anmeldeseite.png) | Anmeldeseite nach dem Abmelden: Uhr, Glaskarte, Sprache | Desktop 1440 × 900 |
 | [handy-start.png](current/handy-start.png) | Startbildschirm am Handy: Suche, Zustand, App-Raster mit Docker-Apps | Smartphone 390 × 844 |
 | [fernansicht-mobil.png](current/fernansicht-mobil.png) | Fernansicht am Handy im Vollbild mit Lautstärke und Tastatur | Smartphone 390 × 844 |
