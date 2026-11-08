@@ -109,7 +109,13 @@ eingebauten Weboberfläche, ohne Neustart des NAS). Das entscheidet
   des Projektinhabers vom 4.11.2026). Soll eine Änderung an `release.yml`
   das Abbild ändern, braucht der Tag `[system]`. Jede andere Änderung, etwa unter
   `build/`, `boot/`, `scripts/` (außer Browserprüfungen), `.github/` (außer
-  `release.yml`) oder am `Makefile`, ergibt ein volles Release.
+  `release.yml`) oder am `Makefile`, ergibt ein volles Release. Ebenfalls
+  kein Systemanteil: `.gitignore` und die Prüfungen des QEMU-Speichertests
+  (`scripts/workflows023_smoke.py`), die nur im CI gegen ein volles Abbild
+  laufen. Die vollständige Liste steht in `ALLOWED` in `release-kind.py`
+  (Nachtrag 8.11.2026: das Aufräumen am selben Tag hatte 0.67.0 und 0.68.0
+  versehentlich zu vollen Releases gemacht; beide warteten dann vergeblich
+  auf die Plugin-Sets des neuen Kernels).
 - Eine Tag-Nachricht mit `[system]` erzwingt ein volles Release. Das gilt überall in
   der Nachricht, auch in erklärendem Text: Release-Notes eines App-Updates nennen
   die Markierung deshalb nicht wörtlich (v0.47.3 lief so versehentlich als volles
