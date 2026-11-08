@@ -174,6 +174,7 @@ func keepResult(text string) string {
 
 // olderResultText is how much of a result of an earlier turn it sees.
 const olderResultText = 1500
+
 // Hints the runner gives the model as notes; they are part of the
 // conversation for the model, short lines for the person.
 const (

@@ -56,6 +56,7 @@ func Errorf(format string, args ...any) error {
 func CodedErrorf(code, format string, args ...any) error {
 	return &ToolError{Code: code, Message: fmt.Sprintf(format, args...)}
 }
+
 // DecodeArgs reads the arguments of a call strictly.
 func DecodeArgs(args json.RawMessage, v any) error {
 	if len(bytes.TrimSpace(args)) == 0 || bytes.TrimSpace(args)[0] != '{' {

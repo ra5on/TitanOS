@@ -200,6 +200,7 @@ var texts = map[string]map[string][2]string{
 		"vm_schedule_forced":        {"{s} switched off", "The guest of the VM {s} did not shut down within the waiting time. TitanOS switched the VM off (like pulling the plug)."},
 	},
 }
+
 // wording returns title and text of an event in a language.
 func wording(language, kind, subject string) (string, string) {
 	entry, known := texts[language][kind]
