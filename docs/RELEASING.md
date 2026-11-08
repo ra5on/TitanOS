@@ -115,7 +115,10 @@ eingebauten Weboberfläche, ohne Neustart des NAS). Das entscheidet
   laufen. Die vollständige Liste steht in `ALLOWED` in `release-kind.py`
   (Nachtrag 8.11.2026: das Aufräumen am selben Tag hatte 0.67.0 und 0.68.0
   versehentlich zu vollen Releases gemacht; beide warteten dann vergeblich
-  auf die Plugin-Sets des neuen Kernels).
+  auf die Plugin-Sets des neuen Kernels; ebenso der erste Tag v0.70.0 wegen
+  des neuen Aufnahmeskripts `scripts/capture-readme-screenshots.mjs`. Der Lauf
+  wurde abgebrochen, der unveröffentlichte Tag gelöscht und nach der Korrektur
+  neu gesetzt).
 - Eine Tag-Nachricht mit `[system]` erzwingt ein volles Release. Das gilt überall in
   der Nachricht, auch in erklärendem Text: Release-Notes eines App-Updates nennen
   die Markierung deshalb nicht wörtlich (v0.47.3 lief so versehentlich als volles
