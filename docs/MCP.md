@@ -97,7 +97,7 @@ Welche Werkzeuge ein Token bekommt, entscheiden seine Bereiche und die
 | `system:read` | `docs_search`, `docs_read` (Handbuch); `system_status`, `notifications`, `update_status`, `ups_status`, `storage_overview`, `disk_tests`, `backup_status`, `backup_snapshots`, `backup_files`, `network_status`, `network_diagnostics`, `hardware_status`, `firewall_status`, `accounts_list`, `plugins_list`, `logs_search`, `ha_entities`, `ha_state`, `ha_history`, `ha_capabilities`, `ha_diagnostics`; für Benutzer `nas_info` | alle; die meisten nur Besitzer/Administratoren |
 | `system:write` | `volume_create`, `volume_action`, `disk_test`, `share_create`, `share_delete`, `backup_action`, `backup_check`, `backup_restore_files`, `backup_schedule`, `stick_backup`, `firewall_rule_add`, `firewall_rule_remove`, `firewall_unblock`, `account_action`, `plugin_install`, `plugin_switch`, `plugin_update`, `plugin_remove`, `update_action`, `power_action`, `ha_call`, `ha_undo` | nur Besitzer/Administratoren |
 | `files:read` | `files_list`, `file_read`, `document_read`, `files_search`, `file_jobs`, `shares_list`, `my_shares`, `files_read_text` | alle, nur eigene Wurzeln |
-| `files:write` | `file_write`, `files_move`, `file_copy` und die `files_*`-Routen | alle, nur eigene Wurzeln |
+| `files:write` | `file_write`, `document_edit`, `files_move`, `file_copy` und die `files_*`-Routen | alle, nur eigene Wurzeln |
 | `docker:read` / `docker:write` | `docker_list`, `container_logs`, `docker_auto_updates` / `app_action`, `apps_update_all`, `docker_check_updates`, `docker_auto_update` und die `docker_*`-Routen | nur Besitzer/Administratoren |
 | `vms:read` / `vms:write` | `vm_list` / `vm_action` und die `vm_*`-Routen | nur Besitzer/Administratoren |
 

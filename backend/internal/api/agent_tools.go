@@ -222,7 +222,7 @@ func (b *agentToolbox) Prepare(ctx context.Context, chat *agent.Chat, name strin
 		// A new file only adds something; replacing one changes it.
 		if a.Key == "file.write" || a.Key == "folder.create" {
 			kind = agent.KindCreate
-		} else if a.Key == "file.replace" || a.Key == "files.moveTo" {
+		} else if a.Key == "file.replace" || a.Key == "file.edit" || a.Key == "files.moveTo" {
 			kind = agent.KindChange
 		}
 	} else if t.route != nil && t.route.Method != http.MethodGet {
@@ -443,7 +443,7 @@ func (b *agentToolbox) Execute(ctx context.Context, chat *agent.Chat, p agent.Pr
 		if snap != "" {
 			out.Note, out.NoteText = "snapshot", snap
 		}
-		if a.Key == "file.write" || a.Key == "file.replace" {
+		if a.Key == "file.write" || a.Key == "file.replace" || a.Key == "file.edit" {
 			out.Files = []agent.FileRef{{Root: a.Params["root"], Path: a.Params["path"]}}
 		}
 		return out, nil

@@ -37,6 +37,7 @@ func (s *Server) registerFiles(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/files/inspect", s.requireUser(s.handleFileInspect))
 	mux.HandleFunc("POST /api/v1/files/copy", s.requireUser(s.handleFileCopy))
 	mux.HandleFunc("POST /api/v1/files/write-document", s.requireUser(s.handleWriteDocument))
+	mux.HandleFunc("POST /api/v1/files/edit-document", s.requireUser(s.handleEditDocument))
 	mux.HandleFunc("POST /api/v1/files/move-many", s.requireUser(s.handleMoveMany))
 	mux.HandleFunc("POST /api/v1/files/url-download/probe", s.requireUser(s.handleFileDownloadProbe))
 	mux.HandleFunc("POST /api/v1/files/url-download", s.requireUser(s.handleFileURLDownload))
