@@ -31,6 +31,9 @@ const PALETTES: Record<string, { dark: Palette; light: Palette }> = {
 	},
 };
 
+/** Built-in photo wallpapers (static/backgrounds/<id>.webp). */
+const PHOTOS = ['nordlicht', 'bergsee', 'kueste', 'nebelwald', 'wueste', 'weltraum'];
+
 function svg(id: string, p: Palette): string {
 	const [base, deep, mid, glow, line] = p;
 	let body = '';
@@ -77,6 +80,8 @@ function svg(id: string, p: Palette): string {
 
 /** The CSS background of a built-in wallpaper. */
 export function wallpaperCss(id: string, light: boolean): string {
+	// PLAN 74: the photos (static/backgrounds) are the same in light and dark.
+	if (PHOTOS.includes(id)) return `url("/backgrounds/${id}.webp")`;
 	const p = PALETTES[id] ?? PALETTES.wave;
 	return svg(id in PALETTES ? id : 'wave', light ? p.light : p.dark);
 }

@@ -15,6 +15,8 @@ export type SideItem =
 			/** PLAN 69: on this entry's pages the page draws the window's one side
 			 * bar itself (the file manager's folder tree); the window shows none. */
 			page?: true;
+			/** PLAN 74: a command of the program (e.g. "Neue Freigabe"), never the current page. */
+			action?: true;
 	  }
 	/** One thing of the program by name (a VM), with its state as a dot. */
 	| { href: string; text: string; state: 'on' | 'off' };
@@ -70,6 +72,7 @@ export const SYSTEM_APPS: SystemApp[] = [
 		paths: ['/shares', '/settings/services'],
 		side: [
 			{ href: '/shares', label: 'desktop.side.shares', icon: 'globe' },
+			{ href: '/shares?new=1', label: 'shares.new', icon: 'plus', action: true },
 			{ group: 'desktop.side.settings' },
 			{ href: '/settings/services', label: 'desktop.side.services', icon: 'gear' },
 		],
@@ -390,7 +393,7 @@ export function appForPath(path: string, apps: SystemApp[] = SYSTEM_APPS): Syste
 
 /** Whether a side bar entry stands for the page shown. */
 export function sideActive(item: SideItem, path: string, items: SideItem[]): boolean {
-	if (!('href' in item) || 'text' in item) return false;
+	if (!('href' in item) || 'text' in item || item.action) return false;
 	const prefixes = item.match ?? [item.href];
 	if (prefixes.some((p) => path === p)) return true;
 	// The most specific entry wins when several prefixes match.
@@ -402,6 +405,7 @@ export function sideActive(item: SideItem, path: string, items: SideItem[]): boo
 		(other) =>
 			'href' in other &&
 			!('text' in other) &&
+			!other.action &&
 			other !== item &&
 			(other.match ?? [other.href]).some(
 				(p) => (path === p || path.startsWith(p + '/')) && p.length > own.length,

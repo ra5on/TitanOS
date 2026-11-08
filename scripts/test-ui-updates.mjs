@@ -144,6 +144,8 @@ async function context(theme = "graphit", width = 1440) {
   await ctx.addInitScript(
     ({ theme }) => {
       localStorage.setItem("titanos.locale", "de");
+      // PLAN 65: the page alone, the way its window shows it.
+      localStorage.setItem("titanos.layout", "bare");
       localStorage.setItem("titanos.appearance", JSON.stringify({ theme }));
     },
     { theme },

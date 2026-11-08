@@ -256,7 +256,8 @@ const pages = [
   },
   {
     id: "vms",
-    path: "/vms?vm=source&tab=overview",
+    // The zone ends the Hardware tab now.
+    path: "/vms?vm=source&tab=hardware",
     buttons: [["Entfernen …", /entfernen/i]],
   },
   {
@@ -308,6 +309,20 @@ async function routes(ctx, data) {
   );
   await ctx.route("**/api/v1/docker/apps/photos", (r) =>
     r.fulfill({ json: { compose } }),
+  );
+  // PLAN 72: the app page also reads its „Öffnen mit“ settings.
+  await ctx.route("**/api/v1/docker/apps/photos/opens", (r) =>
+    r.fulfill({
+      json: {
+        app: "photos",
+        name: "photos",
+        types: [],
+        command: [],
+        service: "web",
+        running: true,
+        mounts: [],
+      },
+    }),
   );
   await ctx.route("**/api/v1/firewall", (r) => r.fulfill({ json: firewall() }));
   await ctx.route("**/api/v1/cluster", (r) => r.fulfill({ json: cluster() }));

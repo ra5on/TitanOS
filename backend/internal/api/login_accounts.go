@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
-	"slices"
 	"sync"
 	"time"
 
@@ -39,10 +38,11 @@ type loginBucket struct {
 	at     time.Time
 }
 
-// loginAccount is one entry of the picker. There are no avatars or display
-// names in TitanOS; the page draws the initials.
+// loginAccount is one entry of the picker: the name and, since PLAN 74, the
+// picture the account chose (account_picture.go). Older pages ignore it.
 type loginAccount struct {
-	Name string `json:"name"`
+	Name    string          `json:"name"`
+	Picture *accountPicture `json:"picture,omitempty"`
 }
 
 // proxyHeaders are set by tunnels and reverse proxies (Cloudflare Tunnel,
@@ -154,21 +154,13 @@ func (s *Server) handleLoginAccounts(w http.ResponseWriter, r *http.Request) {
 	if answer.Style == "" {
 		answer.Style = "circles"
 	}
-	if look.ShowAccounts && s.opts.Users.Loaded() && (look.ShowAccountsExternal || s.fromHomeNetwork(r)) {
-		for _, user := range s.opts.Users.List() {
-			if !user.Disabled && !slices.Contains(look.HiddenAccounts, user.Name) {
-				answer.Accounts = append(answer.Accounts, loginAccount{Name: user.Name})
-			}
+	pictures := s.pictures()
+	for _, name := range s.shownAccounts(r) {
+		account := loginAccount{Name: name}
+		if p, ok := pictures[name]; ok {
+			account.Picture = &p
 		}
-		slices.SortFunc(answer.Accounts, func(a, b loginAccount) int {
-			switch {
-			case a.Name < b.Name:
-				return -1
-			case a.Name > b.Name:
-				return 1
-			}
-			return 0
-		})
+		answer.Accounts = append(answer.Accounts, account)
 	}
 	writeJSON(w, http.StatusOK, answer)
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
@@ -95,7 +96,21 @@ func chromeArgs(cfg config, w, h int, scale float64) []string {
 	if cfg.GPU == "cpu" {
 		args = append(args, "--disable-gpu")
 	}
+	if cfg.TrustKey != "" {
+		// Only this one key: every other certificate is checked as before.
+		args = append(args, "--ignore-certificate-errors-spki-list="+cfg.TrustKey)
+	}
 	return append(args, cfg.URL)
+}
+
+// trustKey accepts only one base64 SHA-256 (44 characters, 32 bytes):
+// anything else (a list, a flag) is dropped.
+func trustKey(v string) string {
+	raw, err := base64.StdEncoding.DecodeString(v)
+	if err != nil || len(raw) != 32 || len(v) != 44 {
+		return ""
+	}
+	return v
 }
 
 func envOr(k, def string) string {

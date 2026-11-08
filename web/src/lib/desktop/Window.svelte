@@ -990,8 +990,12 @@
 	   (icon names of the desktop shone through it, owner's photo of 7 Nov
 	   2026): an opaque layer from the theme, tinted a little toward the page
 	   so it still reads as its own glass pane; also while the window moves. */
+	/* PLAN 74: as wide as its longest entry (owner: automatically, no
+	   dragging), within 200–320 px; the scroll bar has room of its own. */
 	.side {
-		width: 220px;
+		width: max-content;
+		min-width: 200px;
+		max-width: 320px;
 		flex: none;
 		display: flex;
 		flex-direction: column;
@@ -1048,6 +1052,7 @@
 	}
 	.side.folded {
 		width: 60px;
+		min-width: 60px;
 		align-items: center;
 		padding: 12px 8px;
 	}
@@ -1067,6 +1072,8 @@
 	.items {
 		flex: 1;
 		overflow-y: auto;
+		scrollbar-width: thin;
+		scrollbar-gutter: stable;
 		display: flex;
 		flex-direction: column;
 		gap: 2px;

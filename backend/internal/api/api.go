@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"github.com/ra5on/TitanOS/backend/internal/startup"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -92,8 +93,10 @@ type Options struct {
 	Monitor            *system.Monitor
 	Storage            *storage.Manager
 	Shares             *shares.Manager
-	Files              *files.Manager
-	Docker             *docker.Manager
+	// Startup: when apps and VMs start after boot (PLAN 73); nil in tests.
+	Startup *startup.Manager
+	Files   *files.Manager
+	Docker  *docker.Manager
 	// SmartHistory keeps the daily SMART values per disk; nil keeps none.
 	SmartHistory *smarthistory.Recorder
 	// AppProxy gives apps HTTPS names of their own; nil leaves them out.
@@ -207,9 +210,11 @@ type Server struct {
 	loginLook loginLook
 	// loginAccounts limits and checks the account list of the login page.
 	loginAccounts loginAccountsState
-	appIcon       appIcons
-	dav           davState
-	mcp           mcpState
+	// accountPictures: the picture each account chose (account_picture.go).
+	accountPictures accountPictures
+	appIcon         appIcons
+	dav             davState
+	mcp             mcpState
 	// migration is the move from Docker versions to web apps (PLAN 66).
 	migration webappMigration
 	haStore   haStorageState

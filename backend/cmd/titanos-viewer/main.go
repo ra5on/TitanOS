@@ -60,6 +60,9 @@ type config struct {
 	Scale     float64
 	Sandbox   bool
 	Listen    string
+	// TrustKey: base64 SHA-256 of the app's public key, read by titand from
+	// the app (PLAN 74); its self-signed certificate shows no warning page.
+	TrustKey string
 }
 
 func loadConfig() (config, error) {
@@ -76,6 +79,7 @@ func loadConfig() (config, error) {
 		Height:    800,
 		Scale:     1,
 		Sandbox:   os.Getenv("VIEWER_SANDBOX") == "1",
+		TrustKey:  trustKey(os.Getenv("VIEWER_TRUST_KEY")),
 		Listen:    fmt.Sprintf(":%d", proto.Port),
 	}
 	origin, err := appOrigin(c.URL)

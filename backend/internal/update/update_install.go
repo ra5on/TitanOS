@@ -36,6 +36,20 @@ func (m *Manager) Install(ctx context.Context) error {
 	manifest, pending, phase, appTrial := m.available, m.pending, m.progress.Phase, m.appTrial
 	raw, signature := m.availableRaw, m.availableSig
 	m.mu.Unlock()
+	// PLAN 74: a newer release found while an update waits for the restart
+	// takes its place (the owner need not update twice): the waiting switch
+	// is cancelled first, then the newer one installs as usual. Check never
+	// offers one that is not newer (evaluateLocked).
+	if pending != nil && pending.Kind == "update" && manifest != nil && !appTrial &&
+		phase != "download" && phase != "switch" && phase != "restart" {
+		if err := m.Cancel(); err != nil {
+			if errors.Is(err, ErrNothing) {
+				return ErrBusy
+			}
+			return err
+		}
+		pending = nil
+	}
 	switch {
 	case phase == "download" || phase == "switch" || phase == "restart" || pending != nil || appTrial:
 		return ErrBusy

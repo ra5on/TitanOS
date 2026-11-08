@@ -843,6 +843,19 @@ main.readable :target {
 :is(main.in-window, main.phone-page) {
 	--gap: 16px;
 }
+/* PLAN 73 (owner 8.11.2026, draft 13/14 "randlos"): in a program's window
+   the content sits 16 px from the window's edges, and a list is no card of
+   its own – no frame, no surface of its own, just the rows on the window. */
+main.in-window {
+	--page-pad: 16px;
+}
+main.in-window :is(.tile.table, .tile.share-list, .tile.flush) {
+	border-color: transparent;
+	background: none;
+	box-shadow: none;
+	border-radius: 0;
+	backdrop-filter: none;
+}
 :is(main.in-window, main.phone-page):has(.win-toolbar) {
 	padding-top: 0;
 }

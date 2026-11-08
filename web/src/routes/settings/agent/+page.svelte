@@ -8,11 +8,9 @@
 	import Segments from '#lib/components/Segments.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import DesktopIcon from '#lib/desktop/DesktopIcon.svelte';
-	import Tabs from '#lib/components/Tabs.svelte';
 	import QrCode from '#lib/components/QrCode.svelte';
 	import AgentVolume from '#lib/components/agent/AgentVolume.svelte';
 	import FeaturesPanel from '#lib/components/agent/features/FeaturesPanel.svelte';
-	import AgentSideNav from '#lib/components/agent/AgentSideNav.svelte';
 	import { inWindow } from '#lib/desktop/frame.ts';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
@@ -36,13 +34,6 @@
 	} from '#lib/agent.ts';
 
 	let settings = $state<Settings | null>(null);
-	let wide = $state(matchMedia('(min-width: 760px)').matches);
-	$effect(() => {
-		const query = matchMedia('(min-width: 760px)');
-		const change = () => (wide = query.matches);
-		query.addEventListener('change', change);
-		return () => query.removeEventListener('change', change);
-	});
 	let status = $state<Status | null>(null);
 	let tools = $state<ToolView[]>([]);
 	let roots = $state<FileRoot[]>([]);
@@ -172,6 +163,7 @@
 				key,
 				mode,
 			}));
+			base = current();
 		} catch (e) {
 			error = apiErrorText(e);
 			return;
@@ -199,6 +191,12 @@
 		void load();
 	});
 
+	// PLAN 73: the save bar shows only when something was changed.
+	let base = $state('');
+	const current = () =>
+		JSON.stringify([$state.snapshot(settings), haNotify, $state.snapshot(haRules)]);
+	const dirty = $derived(!!settings && base !== '' && current() !== base);
+
 	async function save() {
 		if (!settings) return;
 		saving = true;
@@ -214,6 +212,7 @@
 		try {
 			settings = await api.put<Settings>('/agent/settings', $state.snapshot(settings));
 			saved = true;
+			base = current();
 			void api.get<Status>('/agent/status').then((s) => (status = s));
 			void api.get<{ tools: ToolView[] }>('/agent/tools').then((r) => (tools = r.tools));
 		} catch (e) {
@@ -365,13 +364,17 @@
 	);
 
 	// PLAN 53: the page in tabs instead of one long column.
+	// PLAN 73 (draft 06): the overview lists the areas with a summary each;
+	// an area opens with "‹ Übersicht" above instead of a row of tabs.
 	const TABS = [
 		'overview',
 		'connection',
 		'rights',
 		'accounts',
+		'phone',
 		'ha',
 		'initiative',
+		'instruction',
 		'features',
 	] as const;
 	type Tab = (typeof TABS)[number];
@@ -380,6 +383,31 @@
 	$effect(() => {
 		tab = tabOf(page.url.searchParams.get('tab'));
 	});
+	function summary(id: Tab): string {
+		if (!settings) return '';
+		switch (id) {
+			case 'connection':
+				return settings.model || '–';
+			case 'rights':
+				return t(
+					({
+						read: 'agent.presetRead',
+						standard: 'agent.presetStandard',
+						all: 'agent.presetAll',
+					}[settings.policy.preset as string] ?? 'agent.presetCustom') as MessageKey,
+				);
+			case 'accounts':
+				return t('agent.summaryAccounts', { count: (settings.users ?? []).length });
+			case 'phone':
+				return appUrl.startsWith('https:') ? 'HTTPS' : appUrl ? 'HTTP' : '';
+			case 'ha':
+				return t(settings.homeassistant.assist ? 'agent.summaryOn' : 'agent.summaryOff');
+			case 'instruction':
+				return settings.instruction?.trim() ? t('agent.summarySet') : '';
+			default:
+				return '';
+		}
+	}
 	function choose(next: Tab) {
 		tab = next;
 		void goto(`/settings/agent?tab=${next}`, {
@@ -454,18 +482,17 @@
 		<p class="muted">{t('agent.settingsIntro')}</p>
 	</PageHead>
 {/if}
-<!-- PLAN 68: in the agent's window the agent's side bar stays beside the settings. -->
-{#if inWindow && wide}<AgentSideNav />{/if}
 
 {#if error}<div class="notice-error" role="alert">{error}</div>{/if}
 
 {#if settings}
-	<Tabs
-		tabs={TABS.map((id) => ({ id, label: t(`agent.tab.${id}` as MessageKey) }))}
-		value={tab}
-		label={t('agent.settingsTitle')}
-		onchange={choose}
-	/>
+	{#if tab !== 'overview'}
+		<nav class="back-row" aria-label={t('agent.settingsTitle')}>
+			<button type="button" class="link" onclick={() => choose('overview')}
+				>‹ {t('agent.tab.overview')}</button
+			><span aria-hidden="true">·</span><strong>{t(`agent.tab.${tab}` as MessageKey)}</strong>
+		</nav>
+	{/if}
 	{#if tab === 'features'}
 		<!-- PLAN 68: one card per group of functions, each function a row. -->
 		<FeaturesPanel admin={true} heading={t('agent.f.title')} />
@@ -475,7 +502,9 @@
 				<div class="set-label hero-label">
 					<DesktopIcon glyph="agent" gradient="violet" size={36} name={t('nav.agent')} />
 					<span class="hero-text">
-						<strong id="ag-hero">{t('nav.agent')}</strong>
+						<strong id="ag-hero"
+							>{t(settings.enabled ? 'agent.heroStateOn' : 'agent.heroStateOff')}</strong
+						>
 						<span class="set-hint"
 							>{status?.reachable
 								? t('agent.heroOn', { version: status.version ?? '', model: settings.model || '–' })
@@ -507,6 +536,23 @@
 			}}
 			onmoved={(v) => (settings!.volume = v)}
 		/>
+		<section class="tile ui-card areas" aria-labelledby="ag-areas">
+			<div class="card-head"><h2 id="ag-areas">{t('agent.areasTitle')}</h2></div>
+			{#each TABS.filter((x) => x !== 'overview') as id (id)}
+				<button type="button" class="set-row area" onclick={() => choose(id)}>
+					<span class="set-label"
+						>{t(`agent.tab.${id}` as MessageKey)}<span class="set-hint"
+							>{t(`agent.areaHint.${id}` as MessageKey)}</span
+						></span
+					>
+					<span class="set-control end summary"
+						>{summary(id)}<Icon name="chevronRight" size={16} /></span
+					>
+				</button>
+			{/each}
+		</section>
+	{/if}
+	{#if tab === 'phone'}
 		<section class="tile ui-card" aria-labelledby="ag-phone">
 			<div class="card-head"><h2 id="ag-phone">{t('agent.phoneApp')}</h2></div>
 			<div class="set-row one">
@@ -1045,7 +1091,7 @@
 		</section>
 	{/if}
 
-	{#if tab === 'overview'}
+	{#if tab === 'instruction'}
 		<section class="tile ui-card" aria-labelledby="ag-instruction">
 			<div class="card-head"><h2 id="ag-instruction">{t('agent.sectionInstruction')}</h2></div>
 			<div class="set-row one">
@@ -1512,16 +1558,59 @@
 		</section>
 	{/if}
 
-	<div class="row-actions sticky">
-		<button type="button" class="btn btn-primary" disabled={saving} onclick={save}
-			>{t('common.save')}</button
-		>
-		{#if saved}<span class="muted" role="status">✓ {t('agent.saved')}</span>{/if}
-		<a class="btn" href="/agent">{t('agent.openAgent')}</a>
-	</div>
+	{#if dirty || saving}
+		<div class="row-actions sticky">
+			<span class="grow muted">{t('agent.unsaved')}</span>
+			<button type="button" class="btn" disabled={saving} onclick={() => void load()}
+				>{t('common.cancel')}</button
+			>
+			<button type="button" class="btn btn-primary" disabled={saving} onclick={save}
+				>{t('common.save')}</button
+			>
+		</div>
+	{:else if saved}<p class="muted saved-note" role="status">✓ {t('agent.saved')}</p>{/if}
 {/if}
 
 <style>
+	.back-row {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		font-size: var(--text-md);
+	}
+	.areas .area {
+		all: unset;
+		box-sizing: border-box;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: center;
+		gap: 12px;
+		width: 100%;
+		padding: 11px 16px;
+		border-top: 1px solid var(--panel-border, var(--border));
+		cursor: pointer;
+	}
+	.areas .area:hover,
+	.areas .area:focus-visible {
+		background: color-mix(in srgb, var(--text) 5%, transparent);
+	}
+	.areas .set-label {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+	.summary {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		color: var(--muted);
+	}
+	.row-actions .grow {
+		flex: 1;
+	}
+	.saved-note {
+		margin: 0;
+	}
 	/* PLAN 68: every tab in cards with rows "label (+ hint) left, control
 	   right"; lists as rows; the card's own actions in its foot. */
 	.set-row.one {

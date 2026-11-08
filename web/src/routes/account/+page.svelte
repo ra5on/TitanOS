@@ -23,6 +23,7 @@
 	import SshKeys from './SshKeys.svelte';
 	import Passkeys from './Passkeys.svelte';
 	import WebDav from './WebDav.svelte';
+	import Picture from './Picture.svelte';
 	import AppInstallCard from '#lib/components/AppInstallCard.svelte';
 
 	type Device = {
@@ -269,15 +270,13 @@
 {#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 
 {#if user}
-	<section class="tile">
-		<div class="who">
-			<span class="initial" aria-hidden="true">{user.name.slice(0, 1).toUpperCase()}</span>
-			<div>
-				<span class="name mono">{user.name}</span><span class="muted"
-					>{t('account.role')}: {t(`role.${user.role}`)}</span
-				>
-			</div>
-		</div>
+	<section class="tile" aria-labelledby="acc-who">
+		<h2 class="tile-title" id="acc-who">
+			<span class="mono">{user.name}</span>
+			<span class="muted">· {t('account.role')}: {t(`role.${user.role}`)}</span>
+		</h2>
+		<!-- PLAN 74: the picture of the account on the login page. -->
+		<Picture name={user.name} />
 	</section>
 
 	<section class="tile" aria-labelledby="acc-password">
@@ -556,32 +555,6 @@
 		gap: var(--space-3);
 		padding: 18px;
 		font-size: var(--text-md);
-	}
-	.who {
-		display: flex;
-		align-items: center;
-		gap: 14px;
-	}
-	.who div {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-	}
-	.initial {
-		width: 44px;
-		height: 44px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: var(--accent);
-		border-radius: var(--radius-ctl);
-		color: var(--on-accent);
-		font-size: var(--text-lg);
-		font-weight: 600;
-	}
-	.name {
-		font-size: var(--text-md);
-		font-weight: 600;
 	}
 	.row {
 		display: flex;

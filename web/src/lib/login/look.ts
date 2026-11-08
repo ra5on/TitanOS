@@ -42,6 +42,9 @@ export const LOGIN_SOURCES = ['theme', 'builtin', 'custom'] as const;
 export type LoginSource = (typeof LOGIN_SOURCES)[number];
 export const LOGIN_POSITIONS = ['center', 'left', 'right'] as const;
 export type LoginPosition = (typeof LOGIN_POSITIONS)[number];
+export const LOGIN_ENTERS = ['zoom', 'curtain', 'focus', 'split', 'none'] as const;
+export type LoginEnter = (typeof LOGIN_ENTERS)[number];
+
 export const LOGIN_WIDTHS = ['normal', 'wide'] as const;
 export type LoginWidth = (typeof LOGIN_WIDTHS)[number];
 export const LOGIN_LOCALES = ['de', 'en'] as const;
@@ -80,6 +83,12 @@ export type LoginLook = {
 	texts: Partial<Record<LoginLocale, LoginTexts>>;
 	hideHost: boolean;
 	hideLogo: boolean;
+	/** PLAN 74: the moving picture holds still (moving by default). */
+	still: boolean;
+	/** PLAN 74: the animation into the desktop after the login. */
+	enter: LoginEnter;
+	/** PLAN 74: "<host> ist bereit" on the login page (off by default). */
+	showStatus: boolean;
 	clock: boolean;
 	/** PLAN 67: the account picker – circles or a list. */
 	accountsStyle: 'circles' | 'list';
@@ -106,6 +115,9 @@ export function defaultLoginLook(): LoginLook {
 		texts: {},
 		hideHost: false,
 		hideLogo: false,
+		still: false,
+		enter: 'zoom',
+		showStatus: false,
 		clock: false,
 		accountsStyle: 'circles',
 		showAccounts: true,
@@ -180,6 +192,9 @@ export function sanitizeLoginLook(input: unknown): LoginLook {
 		texts,
 		hideHost: v.hideHost === true,
 		hideLogo: v.hideLogo === true,
+		still: v.still === true,
+		enter: oneOf(v.enter, LOGIN_ENTERS, 'zoom'),
+		showStatus: v.showStatus === true,
 		clock: v.clock === true,
 		// Only owners and administrators get these from titand; the defaults otherwise.
 		accountsStyle: v.accountsStyle === 'list' ? 'list' : d.accountsStyle,

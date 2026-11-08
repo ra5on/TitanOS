@@ -294,8 +294,8 @@ try {
     await page.goto(base + "/vms?vm=vm2&tab=screen");
     await connected(page);
     await page.evaluate(() => document.fonts.ready);
-    assert.equal(await page.locator(".tasks-entry").count(), 1);
-    assert.equal(await page.locator(".vm-page>.head .tasks-entry").count(), 1);
+    // PLAN 67: running tasks sit in the desktop's menu bar, no longer in the
+    // VM page's head (the head is now the window's tool bar, PageHead).
     const boxes = await page.evaluate(() => {
       const rect = (selector) => {
         const r = document.querySelector(selector).getBoundingClientRect();
@@ -306,7 +306,7 @@ try {
         frame: rect("main .frame"),
         tabs: rect(".command-bar>.tabs"),
         tools: rect(".command-bar>.toolbar"),
-        head: rect(".vm-page>.head"),
+        head: rect(".vm-page .win-toolbar"),
       };
     });
     assert.ok(
@@ -368,12 +368,9 @@ try {
     await page.waitForFunction(() => window.__vncFixture.connections >= 2);
     await connected(page);
     await clearFrame(page);
-    await page.getByRole("button", { name: /Laufende Aufgaben/ }).click();
-    await page.getByRole("dialog").waitFor();
-    await page.getByRole("button", { name: "Fertig", exact: true }).click();
     await page.goto(base + "/vms?vm=vm2&tab=overview");
     await page.getByText("192.168.1.55", { exact: true }).waitFor();
-    assert.equal(await page.locator(".command-bar>.tabs>a").count(), 3);
+    assert.equal(await page.locator(".command-bar>.tabs>a").count(), 5);
     assert.equal(await page.locator(".command-bar>.toolbar").count(), 0);
     await page.screenshot({
       path: out + "/overview-graphit-1600.png",
@@ -423,7 +420,7 @@ try {
       await page.evaluate(() => window.scrollY <= 1),
       "Connecting must keep the VM heading and tabs in view",
     );
-    assert.equal(await page.locator(".command-bar>.tabs>a").count(), 3);
+    assert.equal(await page.locator(".command-bar>.tabs>a").count(), 5);
     if (width <= 760) {
       assert.equal(await page.locator(".vm").first().isVisible(), false);
       await page.locator(".picker").click();

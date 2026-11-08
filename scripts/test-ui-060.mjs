@@ -112,17 +112,26 @@ let offline = false,
   failZone = false,
   failTasks = false;
 const requests = [];
-async function context(role = "owner", theme = "graphit", width = 1440) {
+// layout "bare": the page alone, the way its window shows it (PLAN 65);
+// "desktop": the desktop with windows (from 900 px) or the phone frame.
+async function context(
+  role = "owner",
+  theme = "graphit",
+  width = 1440,
+  layout = "bare",
+) {
   const ctx = await browser.newContext({
     locale: "de-DE",
     viewport: { width, height: 1000 },
   });
   await ctx.addInitScript(
-    ({ theme }) => {
+    ({ theme, layout }) => {
       localStorage.setItem("titanos.locale", "de");
+      if (layout === "bare") localStorage.setItem("titanos.layout", "bare");
+      else localStorage.removeItem("titanos.layout");
       localStorage.setItem("titanos.appearance", JSON.stringify({ theme }));
     },
-    { theme },
+    { theme, layout },
   );
   await ctx.route("**/api/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname.slice(
@@ -387,80 +396,96 @@ try {
       }
     console.log("Docker comparison screenshots captured.");
   } else {
+    // PLAN 71: the settings search sits in the side bar of the
+    // Systemsteuerung window; tasks and notifications in the desktop's menu
+    // bar; the page of a window shows the connection banner.
+    const desk = await context("owner", "graphit", 1440, "desktop");
+    {
+      const { page } = desk;
+      await page.goto(base + "/settings");
+      const side = page.locator("section.win nav.side");
+      const frame = page.frameLocator("section.win iframe").first();
+      const items = () =>
+        side
+          .locator(".items .item")
+          .evaluateAll((a) => a.map((x) => x.textContent.trim()));
+      const search = side.getByRole("searchbox", {
+        name: "Einstellung suchen",
+      });
+      // The window's page has loaded the timezone page (a new document).
+      const timezone = async () => {
+        await page.waitForFunction(
+          () =>
+            document.querySelector("section.win iframe")?.contentWindow
+              ?.location.pathname === "/settings/timezone",
+        );
+        await frame.locator("main").waitFor();
+        await page.waitForTimeout(500);
+      };
+      await search.waitFor({ timeout: 15000 });
+      await search.fill("SSH");
+      assert.deepEqual(await items(), ["Zugang und Sitzungen"]);
+      await search.fill("DNS");
+      assert.ok((await items()).includes("Netzwerk"), "DNS finds Netzwerk");
+      await search.fill("Zeitzone");
+      assert.deepEqual(await items(), ["Zeitzone"]);
+      await side.getByRole("button", { name: "Zeitzone", exact: true }).click();
+      await timezone();
+      await frame.locator("select").selectOption("UTC");
+      await frame.getByText("Gespeichert", { exact: true }).waitFor();
+      failZone = true;
+      await frame.locator("select").selectOption("Europe/Berlin");
+      await frame.locator("[role=alert]").waitFor();
+      assert.equal(await frame.locator("select").inputValue(), "UTC");
+      failZone = false;
+      await search.fill("unknown-no-match");
+      await side.getByText("Nichts gefunden", { exact: true }).waitFor();
+      assert.deepEqual(await items(), []);
+      await search.fill("Zeitzone");
+      await search.press("Enter");
+      await frame.locator("select").selectOption("Europe/Berlin");
+      await frame.getByText("Gespeichert", { exact: true }).waitFor();
+      await search.press("Escape");
+      await page.screenshot({
+        path: out + "/settings-desktop.png",
+        fullPage: true,
+      });
+      await page.getByRole("button", { name: /Laufende Aufgaben/ }).click();
+      const tasks = page.getByRole("dialog", { name: "Laufende Aufgaben" });
+      await tasks.waitFor();
+      assert.equal(await tasks.locator("progress").count(), 4);
+      failTasks = true;
+      await tasks
+        .getByText(/Ein Teil der Aufgaben konnte nicht aktualisiert/)
+        .waitFor({ timeout: 15000 });
+      assert.equal(await tasks.locator("progress").count(), 4);
+      failTasks = false;
+      await tasks
+        .getByText(/Ein Teil der Aufgaben konnte nicht aktualisiert/)
+        .waitFor({ state: "hidden", timeout: 15000 });
+      await page.screenshot({ path: out + "/tasks-desktop.png" });
+      await page.keyboard.press("Escape");
+      await tasks.waitFor({ state: "hidden" });
+      offline = true;
+      await frame
+        .getByText("Verbindung zum NAS unterbrochen", { exact: true })
+        .waitFor({ timeout: 15000 });
+      await frame
+        .getByText(/Angezeigte Werte sind möglicherweise veraltet/)
+        .waitFor();
+      await page.screenshot({ path: out + "/connection-lost.png" });
+      offline = false;
+      await frame
+        .getByRole("status")
+        .filter({ hasText: "Verbindung zum NAS" })
+        .getByRole("button", { name: "Erneut versuchen", exact: true })
+        .click();
+      await frame
+        .getByText("Verbindung zum NAS unterbrochen", { exact: true })
+        .waitFor({ state: "hidden" });
+      await desk.ctx.close();
+    }
     const { ctx, page } = await context();
-    await page.goto(base + "/settings");
-    const side = page.getByRole("navigation", {
-      name: "Einstellungsbereiche",
-      exact: true,
-    });
-    const search = side.getByRole("searchbox", {
-      name: "Einstellungen suchen",
-    });
-    await search.waitFor();
-    await search.fill("SSH");
-    assert.equal(await side.locator("#settings-side-results a").count(), 1);
-    assert.match(await side.innerText(), /Zugang/);
-    await search.fill("DNS");
-    assert.match(await side.innerText(), /Netzwerk/);
-    await search.fill("Zeitzone");
-    await side.locator("#settings-side-results a").click();
-    await page.locator("select").selectOption("UTC");
-    await page.getByText("Gespeichert", { exact: true }).waitFor();
-    failZone = true;
-    await page.locator("select").selectOption("Europe/Berlin");
-    await page.locator("[role=alert]").waitFor();
-    assert.equal(await page.locator("select").inputValue(), "UTC");
-    failZone = false;
-    await page.goto(base + "/settings");
-    await search.fill("unknown-no-match");
-    await side.getByText("Keine passenden Einstellungen gefunden.").waitFor();
-    await search.fill("Zeitzone");
-    await side.locator("#settings-side-results a").click();
-    await page.locator("select").selectOption("Europe/Berlin");
-    await page.getByText("Gespeichert", { exact: true }).waitFor();
-    await page.goto(base + "/settings");
-    await search.waitFor();
-    await page.screenshot({
-      path: out + "/settings-desktop.png",
-      fullPage: true,
-    });
-    await page.getByRole("button", { name: /Laufende Aufgaben/ }).click();
-    await page.getByRole("dialog").waitFor();
-    assert.equal(await page.locator("dialog progress").count(), 4);
-    failTasks = true;
-    await page
-      .getByText(/Ein Teil der Aufgaben konnte nicht aktualisiert/)
-      .waitFor({ timeout: 15000 });
-    assert.equal(await page.locator("dialog progress").count(), 4);
-    failTasks = false;
-    await page
-      .getByText(/Ein Teil der Aufgaben konnte nicht aktualisiert/)
-      .waitFor({ state: "hidden", timeout: 15000 });
-    await page.screenshot({ path: out + "/tasks-desktop.png" });
-    await page.keyboard.press("Escape");
-    await page.locator(".notifications > button").click();
-    await page
-      .getByRole("link", { name: "Details öffnen", exact: true })
-      .click();
-    await page.locator("#volume-data").waitFor();
-    assert.equal(new URL(page.url()).hash, "#volume-data");
-    offline = true;
-    await page
-      .getByText("Verbindung zum NAS unterbrochen", { exact: true })
-      .waitFor({ timeout: 15000 });
-    await page
-      .getByText(/Angezeigte Werte sind möglicherweise veraltet/)
-      .waitFor();
-    await page.screenshot({ path: out + "/connection-lost.png" });
-    offline = false;
-    await page
-      .getByRole("status")
-      .filter({ hasText: "Verbindung zum NAS" })
-      .getByRole("button", { name: "Erneut versuchen", exact: true })
-      .click();
-    await page
-      .getByText("Verbindung zum NAS unterbrochen", { exact: true })
-      .waitFor({ state: "hidden" });
     await page.goto(base + "/vms");
     await page
       .getByRole("heading", { name: "Linux Server", exact: true })
@@ -506,9 +531,11 @@ try {
     });
     await ctx.close();
     for (const theme of ["graphit", "hell"]) {
-      const { ctx, page } = await context("owner", theme, 390);
+      // The phone: the settings overview full screen (PLAN 64/71).
+      const { ctx, page } = await context("owner", theme, 390, "desktop");
       await page.goto(base + "/settings");
-      await page.getByRole("searchbox").waitFor();
+      await page.locator(".phone-bar").waitFor();
+      await page.locator(".overview .tile.ui-card").first().waitFor();
       assert.ok(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= innerWidth,
@@ -535,20 +562,22 @@ try {
       });
       await ctx.close();
     }
-    const user = await context("user");
+    const user = await context("user", "graphit", 1440, "desktop");
     await user.page.goto(base + "/settings");
-    await user.page.getByRole("searchbox").waitFor();
-    await user.page.getByRole("searchbox").fill("SSH");
-    assert.equal(
-      await user.page
-        .getByRole("navigation", { name: "Einstellungsbereiche", exact: true })
-        .locator("#settings-side-results a")
-        .count(),
-      0,
-    );
+    const userSide = user.page.locator("section.win nav.side");
+    const userSearch = userSide.getByRole("searchbox", {
+      name: "Einstellung suchen",
+    });
+    await userSearch.waitFor({ timeout: 15000 });
+    await userSearch.fill("SSH");
+    await userSide.getByText("Nichts gefunden", { exact: true }).waitFor();
+    assert.equal(await userSide.locator(".items .item").count(), 0);
     await user.page.getByRole("button", { name: /Laufende Aufgaben/ }).click();
-    await user.page.getByRole("dialog").waitFor();
-    assert.equal(await user.page.locator("dialog progress").count(), 1);
+    const userTasks = user.page.getByRole("dialog", {
+      name: "Laufende Aufgaben",
+    });
+    await userTasks.waitFor();
+    assert.equal(await userTasks.locator("progress").count(), 1);
     assert.ok(
       !requests.some(
         ([role, , path]) =>
@@ -557,6 +586,33 @@ try {
       ),
     );
     await user.ctx.close();
+    // A notification's "Details öffnen" in the desktop's menu bar opens the
+    // page it names in its window.
+    {
+      const { ctx, page } = await context("owner", "graphit", 1440, "desktop");
+      await page.goto(base + "/");
+      await page.locator(".notifications > button").first().click();
+      await page
+        .getByRole("link", { name: "Details öffnen", exact: true })
+        .click();
+      const storage = page.frameLocator("section.win iframe").last();
+      await storage
+        .locator("#volume-data")
+        .waitFor({ timeout: 15000 })
+        .catch(() => {
+          throw new Error(
+            "Details öffnen opens Speicher in a window at #volume-data",
+          );
+        });
+      await page.waitForFunction(() =>
+        [...document.querySelectorAll("section.win iframe")].some(
+          (f) =>
+            f.contentWindow?.location.pathname === "/storage" &&
+            f.contentWindow.location.hash === "#volume-data",
+        ),
+      );
+      await ctx.close();
+    }
     assert.deepEqual(errors, []);
     console.log(
       "UI 0.6.0 browser checks passed (desktop, 390px, Graphit/Hell, roles, errors, tasks, Docker isolation).",

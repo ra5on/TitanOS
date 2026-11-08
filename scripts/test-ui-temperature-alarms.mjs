@@ -140,7 +140,8 @@ try {
   const { ctx, page, data } = await context("user");
   data.system = { ...data.system, temperatures };
   await page.goto(base + "/settings/temperatures");
-  await page.getByText("Temperaturen auf dem Dashboard anzeigen").waitFor();
+  // PLAN 65: the dashboard tile choice is gone; wait for the sensor list.
+  await page.getByText("coretemp · devices/platform/coretemp.0").waitFor();
   assert.equal(await page.getByText("Meldungen bei Hitze").count(), 0);
   await ctx.close();
   assert.deepEqual(errors, []);

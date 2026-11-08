@@ -25,6 +25,8 @@
 	import { isEditableText } from '#lib/text-files.ts';
 	import { enqueue, uploads } from '#lib/uploads.svelte.ts';
 	import ActionBar from './ActionBar.svelte';
+	import CommandBar from './CommandBar.svelte';
+	import { formatDiskBytes } from '#lib/format.ts';
 	import ArchiveDialog from './ArchiveDialog.svelte';
 	import BackupLock from './BackupLock.svelte';
 	import CompareDialog from './CompareDialog.svelte';
@@ -567,7 +569,11 @@
 		if (event.shiftKey) selectRange(entry.name, event.ctrlKey || event.metaKey);
 		else if (event.ctrlKey || event.metaKey) toggle(entry.name, !selectedNames.has(entry.name));
 		else if (entry.dir) open(rootId, join(dir, entry.name));
-		else toggle(entry.name, !selectedNames.has(entry.name));
+		else if (inWindow) {
+			// PLAN 73: like Explorer – a click selects this one entry only.
+			selected = [entry.name];
+			anchor = entry.name;
+		} else toggle(entry.name, !selectedNames.has(entry.name));
 	}
 	/** Double click on a file: preview, or the editor for text the preview does not show. */
 	function rowDoubleClicked(entry: FileEntry, event: MouseEvent) {
@@ -592,7 +598,17 @@
 		selected = [entry.name];
 		anchor = entry.name;
 	}
+	// PLAN 74 (owner 8.11.2026: hint only): "._name" is the Finder data of a
+	// Mac (AppleDouble), not the file itself; opening it explains that.
+	let companion = $state<{ file: FileEntry; real: FileEntry | null } | null>(null);
+	function macCompanion(entry: FileEntry): boolean {
+		if (entry.dir || !entry.name.startsWith('._') || entry.name.length < 3) return false;
+		const name = entry.name.slice(2);
+		companion = { file: entry, real: entries?.find((e) => !e.dir && e.name === name) ?? null };
+		return true;
+	}
 	function openWithStandard(entry: FileEntry): boolean {
+		if (macCompanion(entry)) return true;
 		// PLAN 72: a standard Docker app comes first (choosing one clears the other).
 		const docker = dockerAppForExt(extOf(entry.name));
 		if (docker) {
@@ -614,6 +630,7 @@
 	}
 	/** "Öffnen mit": an app chosen for this file, and with "always" as its standard app. */
 	async function openWith(entry: FileEntry, app: string, always: boolean) {
+		if (macCompanion(entry)) return;
 		if (app.startsWith('docker:')) return openDocker(entry, app.slice(7), always);
 		if (always) {
 			try {
@@ -1126,7 +1143,7 @@
 		text={canAdminister ? t('files.noRootsAdmin') : undefined}
 	/>
 {:else if roots}
-	<div class="layout" class:windowed={inWindow}>
+	<div class="layout" class:windowed={inWindow} class:folded={inWindow && sideFolded}>
 		<MobileLocation
 			{root}
 			{dir}
@@ -1304,6 +1321,7 @@
 				{:else}
 					<NavBar
 						bind:this={navBar}
+						windowed={inWindow}
 						{root}
 						{rootId}
 						{dir}
@@ -1327,25 +1345,50 @@
 							anchor = '';
 						}}
 					/>
-					<ActionBar
-						{root}
-						{writable}
-						clipboard={!!clipboard.content}
-						{canPaste}
-						selected={selected.length}
-						split={prefs.split}
-						canCompare={!!rightRoot}
-						view={prefs.view}
-						preferencesReady={prefs.ready}
-						showHidden={prefs.showHidden}
-						folderViewSaved={prefs.folderViewSaved}
-						folderViewsFull={prefs.folderViews.length >= 200}
-						bind:selectionFilter
-						bind:fileInput
-						bind:folderInput
-						onpicked={(input) => upload(pickedFiles(input))}
-						oncommand={command}
-					/>
+					{#if inWindow}
+						<!-- PLAN 73: the command bar like Explorer (drafts 16–18). -->
+						<CommandBar
+							{root}
+							{writable}
+							{canPaste}
+							selected={selected.length}
+							split={prefs.split}
+							canCompare={!!rightRoot}
+							view={prefs.view}
+							sort={prefs.sort}
+							descending={prefs.descending}
+							preferencesReady={prefs.ready}
+							showHidden={prefs.showHidden}
+							folderViewSaved={prefs.folderViewSaved}
+							folderViewsFull={prefs.folderViews.length >= 200}
+							bind:selectionFilter
+							bind:fileInput
+							bind:folderInput
+							onpicked={(input) => upload(pickedFiles(input))}
+							oncommand={command}
+							onsort={(column) => prefs.sortBy(column)}
+						/>
+					{:else}
+						<ActionBar
+							{root}
+							{writable}
+							clipboard={!!clipboard.content}
+							{canPaste}
+							selected={selected.length}
+							split={prefs.split}
+							canCompare={!!rightRoot}
+							view={prefs.view}
+							preferencesReady={prefs.ready}
+							showHidden={prefs.showHidden}
+							folderViewSaved={prefs.folderViewSaved}
+							folderViewsFull={prefs.folderViews.length >= 200}
+							bind:selectionFilter
+							bind:fileInput
+							bind:folderInput
+							onpicked={(input) => upload(pickedFiles(input))}
+							oncommand={command}
+						/>
+					{/if}
 
 					<UnfinishedUploads
 						{pending}
@@ -1375,6 +1418,7 @@
 
 					<FileList
 						bind:virtualList
+						checks={!inWindow || selected.length > 1}
 						items={visibleEntries}
 						{entries}
 						{root}
@@ -1406,19 +1450,43 @@
 						ondropon={(event, path) => reviewDrop(event, rootId, path)}
 					/>
 
-					<p class="list-footer muted" role="status">
-						{t('files.resultCount', {
-							shown: visibleEntries.length,
-							total: entries?.length ?? 0,
-						})}{#if clipboard.content}
-							· {t(clipboard.content.move ? 'files.cutCount' : 'files.copiedCount', {
-								count: clipboard.content.paths.length,
-							})}{/if}
-					</p>
-					{#if root?.kind === 'stick'}<p class="muted none">{t('files.stickNote')}</p>{/if}
 					{#if writable}<DropHint {dragging} path={join(root?.name ?? '', dir)} />{/if}
+					{#if inWindow}
+						<!-- PLAN 73: the status line at the bottom (Explorer): entries, selection, free space. -->
+						<p class="status-line muted" role="status">
+							<span>{t('files.statusEntries', { count: visibleEntries.length })}</span>
+							{#if selected.length}<span
+									>{t('files.statusSelected', {
+										count: selected.length,
+									})}{#if selectionBytes}{' · '}{formatDiskBytes(selectionBytes)}{/if}</span
+								>{/if}
+							{#if clipboard.content}<span
+									>{t(clipboard.content.move ? 'files.cutCount' : 'files.copiedCount', {
+										count: clipboard.content.paths.length,
+									})}</span
+								>{/if}
+							<span class="spacer"></span>
+							{#if root && root.totalBytes > 0}<span
+									>{t('files.statusFree', {
+										name: root.name,
+										free: formatDiskBytes(root.freeBytes),
+									})}</span
+								>{/if}
+						</p>
+					{:else}
+						<p class="list-footer muted" role="status">
+							{t('files.resultCount', {
+								shown: visibleEntries.length,
+								total: entries?.length ?? 0,
+							})}{#if clipboard.content}
+								· {t(clipboard.content.move ? 'files.cutCount' : 'files.copiedCount', {
+									count: clipboard.content.paths.length,
+								})}{/if}
+						</p>
+					{/if}
+					{#if root?.kind === 'stick'}<p class="muted none">{t('files.stickNote')}</p>{/if}
 
-					{#if selected.length > 0}
+					{#if selected.length > 0 && !inWindow}
 						<SelectionBar
 							count={selected.length}
 							bytes={selectionBytes}
@@ -1502,6 +1570,32 @@
 				disabled={!safeRoots.find((r) => r.id === dropReview?.source.root)?.writable}
 				onclick={() => acceptDrop(true)}>{t('files.move')}</button
 			>
+		</div>
+	</Dialog>
+{/if}
+{#if companion}
+	<Dialog title={t('files.macCompanion.title')} onclose={() => (companion = null)}>
+		<p>{t('files.macCompanion.text', { name: companion.file.name })}</p>
+		<p>
+			{companion.real
+				? t('files.macCompanion.real', { name: companion.real.name })
+				: t('files.macCompanion.noReal', { name: companion.file.name.slice(2) })}
+		</p>
+		<div class="dialog-actions">
+			<button class="btn" onclick={() => (companion = null)}>{t('common.close')}</button>
+			{#if companion.real}<button
+					class="btn btn-primary"
+					onclick={() => {
+						const real = companion?.real;
+						companion = null;
+						if (!real) return;
+						selected = [real.name];
+						anchor = real.name;
+						if (openWithStandard(real)) return;
+						if (previewKind(real.name, real.size)) preview = real;
+						else if (editable) editing = join(dir, real.name);
+					}}>{t('files.macCompanion.open', { name: companion.real.name })}</button
+				>{/if}
 		</div>
 	</Dialog>
 {/if}
@@ -1763,6 +1857,21 @@
 	.browser.dragging {
 		border-color: var(--accent);
 	}
+	.status-line {
+		display: flex;
+		align-items: center;
+		gap: 16px;
+		margin: 0;
+		padding: 6px 16px;
+		border-top: 1px solid var(--panel-border);
+		font-size: var(--text-sm);
+		position: sticky;
+		bottom: 0;
+		background: var(--bg);
+	}
+	.status-line .spacer {
+		flex: 1;
+	}
 	.list-footer {
 		margin: 0;
 		padding: 10px 14px 0;
@@ -1831,23 +1940,40 @@
 		color: var(--muted);
 		margin-top: 6px;
 	}
+	/* The page head is a heading for screen readers only: it takes no room
+	   (in a window the flex gap above the content came from it, PLAN 73). */
+	.files-pagehead {
+		display: contents;
+	}
 	@media (min-width: 761px) {
+		/* PLAN 73: edge to edge in the window – the places are a column of the
+		   page's own grid (no fixed bar laid over the list), the list reaches
+		   the window's edges, the bars keep their inner spacing. */
 		.layout.windowed {
-			grid-template-columns: minmax(0, 1fr);
+			grid-template-columns: 220px minmax(0, 1fr);
+			gap: 0;
+			align-items: stretch;
+			margin: calc(-1 * var(--page-pad));
+			min-height: 100dvh;
 		}
-		:global(main.in-window):has(.places.windowed) {
-			padding-left: calc(220px + var(--page-pad));
+		.layout.windowed.folded {
+			grid-template-columns: 60px minmax(0, 1fr);
 		}
-		:global(main.in-window):has(.places.windowed.folded) {
-			padding-left: calc(60px + var(--page-pad));
+		.layout.windowed > .workspace {
+			align-content: start;
+		}
+		.layout.windowed .browser {
+			border: 0;
+			border-radius: 0;
+			background: none;
+			box-shadow: none;
 		}
 		.places.windowed {
-			position: fixed;
+			position: sticky;
 			z-index: 25;
 			top: 0;
-			bottom: 0;
-			left: 0;
-			width: 220px;
+			height: 100dvh;
+			width: auto;
 			max-height: none;
 			gap: 0;
 			padding: 12px 10px;
@@ -1863,7 +1989,6 @@
 			border-right: 1px solid var(--border);
 		}
 		.places.windowed.folded {
-			width: 60px;
 			padding: 12px 8px;
 			align-items: center;
 		}
@@ -1958,13 +2083,6 @@
 		}
 		.places.open {
 			display: flex;
-		}
-		.files-pagehead {
-			position: absolute;
-			width: 1px;
-			height: 1px;
-			overflow: hidden;
-			clip-path: inset(50%);
 		}
 	}
 </style>

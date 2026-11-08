@@ -191,6 +191,20 @@
 					/></span
 				>
 			</div>
+			<div class="set-row">
+				<span class="set-label">{t('desktop.dock.border')}</span>
+				<span class="set-control"
+					><Segments
+						label={t('desktop.dock.border')}
+						options={[
+							{ value: 'on', label: t('desktop.dock.borderOn') },
+							{ value: 'off', label: t('desktop.dock.borderOff') },
+						]}
+						value={dock.border ? 'on' : 'off'}
+						onchange={(v) => changeDock((d) => (d.border = v === 'on'))}
+					/></span
+				>
+			</div>
 			<div class="card-foot">
 				<span class="grow">{t('look.dock.intro')}</span>
 				<button type="button" class="btn" onclick={reset}>{t('desktop.dock.reset')}</button>

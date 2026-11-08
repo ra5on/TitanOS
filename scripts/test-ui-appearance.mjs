@@ -70,11 +70,11 @@ async function desktop(path = "/", width = 1600, height = 1000) {
   const made = await desktop("/settings/appearance");
   const { page, data } = made;
   const frame = page.frameLocator("section.win iframe").first();
-  await frame.locator("#look-glass").waitFor({ timeout: 15000 });
+  await frame.locator("#look-liquid").waitFor({ timeout: 15000 });
   await shot(page, "01-darstellung");
   const before = await rootVar(page, "--desk-surface");
-  await frame.locator("#look-glass").fill("90");
-  await frame.locator("#look-blur").fill("30");
+  // PLAN 73: one slider "Klar ↔ Getönt" sets transparency and blur together.
+  await frame.locator("#look-liquid").fill("0");
   await frame.locator("#look-corners").fill("28");
   await frame.locator("#look-saturation").fill("140");
   await frame.locator("#look-font").fill("110");
@@ -90,7 +90,8 @@ async function desktop(path = "/", width = 1600, height = 1000) {
     before,
     "desktop glass follows",
   );
-  assert.equal(await rootVar(page, "--desk-blur"), "36px");
+  const deskBlur = await rootVar(page, "--desk-blur");
+  assert.match(deskBlur, /^\d+px$/);
   assert.equal(await rootVar(page, "--wallpaper-filter"), "saturate(1.40)");
   assert.equal(await rootVar(page, "--font-scale"), "1.10");
   const panel = await page
@@ -99,13 +100,13 @@ async function desktop(path = "/", width = 1600, height = 1000) {
     .evaluate((el) => getComputedStyle(el).backdropFilter);
   assert.match(
     panel,
-    /blur\(36px\)/,
+    new RegExp(`blur\\(${deskBlur.replace("px", "")}px\\)`),
     "the desktop's glass panels use the new blur",
   );
   // Saved to the account a moment later.
   await page.waitForTimeout(1200);
-  assert.equal(data.prefs.appearance.glass, 90);
-  assert.equal(data.prefs.appearance.blur, 30);
+  assert.equal(data.prefs.appearance.glass, 80, "clear: most transparent");
+  assert.equal(data.prefs.appearance.blur, 10);
   assert.equal(data.prefs.appearance.rTile, 28);
   assert.equal(data.prefs.appearance.rCtl, 20);
   assert.equal(data.prefs.appearance.saturation, 140);
@@ -145,7 +146,7 @@ async function desktop(path = "/", width = 1600, height = 1000) {
   }
   // Removed options of the classic frame are gone.
   const frame2 = page.frameLocator("section.win iframe").first();
-  await frame2.locator("#look-glass").waitFor({ timeout: 15000 });
+  await frame2.locator("#look-liquid").waitFor({ timeout: 15000 });
   for (const gone of ["Oben", "Seitlich", "Hintergrund des Dashboards"])
     assert.equal(
       await frame2.getByText(gone, { exact: true }).count(),

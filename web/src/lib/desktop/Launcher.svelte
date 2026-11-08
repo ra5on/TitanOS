@@ -126,11 +126,19 @@
 	);
 	void SYSTEM_APPS;
 
+	// PLAN 73 (owner 8.11.2026: "lässt sich nicht auf den Arbeitsplatz ziehen"):
+	// closing the menu at the start of the drag removed the dragged button and
+	// the browser cancelled the drag. The menu now only steps aside (invisible,
+	// lets the pointer through) and closes when the drag ends.
+	let dragging = $state(false);
 	function drag(event: DragEvent, key: string) {
 		event.dataTransfer?.setData('text/x-titanos-program', key);
 		if (event.dataTransfer) event.dataTransfer.effectAllowed = 'copyMove';
-		// The menu steps aside so the desktop can take the icon.
-		setTimeout(onclose, 0);
+		requestAnimationFrame(() => (dragging = true));
+	}
+	function dragEnd() {
+		dragging = false;
+		onclose();
 	}
 	let root = $state<HTMLElement>();
 	function keys(event: KeyboardEvent) {
@@ -192,6 +200,7 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
 	class="launcher glass-panel at-{at}"
+	class:dragging
 	bind:this={root}
 	role="dialog"
 	aria-label={t('desktop.menu.title')}
@@ -226,6 +235,7 @@
 				class="prog"
 				draggable="true"
 				ondragstart={(e) => drag(e, p.key)}
+				ondragend={dragEnd}
 				onclick={() => onopen(p.key)}
 				title={onDesk.has(p.key) ? undefined : t('desktop.menu.dragHint')}
 			>
@@ -351,6 +361,10 @@
 {/if}
 
 <style>
+	.launcher.dragging {
+		opacity: 0;
+		pointer-events: none;
+	}
 	.actions .group-title {
 		display: block;
 		padding: 2px 4px 4px;

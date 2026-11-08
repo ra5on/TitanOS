@@ -220,6 +220,12 @@ func (m *Manager) evaluateLocked(announce bool) {
 	default:
 		return
 	}
+	// PLAN 74: an update waiting for the restart is only replaced by a newer one.
+	if m.pending != nil && m.pending.Kind == "update" {
+		if waiting, ok := parseVersion(m.pending.Version); ok && found.compare(waiting) <= 0 {
+			return
+		}
+	}
 	m.available, m.availableRaw, m.availableSig = manifest, m.foundRaw, m.foundSig
 	if announce && m.announced != manifest.Version && m.OnEvent != nil {
 		m.announced = manifest.Version

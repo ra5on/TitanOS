@@ -26,6 +26,7 @@
 		LOGIN_THEMES,
 		LOGIN_TITLE_MAX,
 		LOGIN_WIDTHS,
+		LOGIN_ENTERS,
 		loginAppearance,
 		loginBackgroundURL,
 		loginSaveBody,
@@ -430,6 +431,23 @@
 			onchange={(e) => (draft.hideLogo = !e.currentTarget.checked)}
 		/>{t('loginLook.showLogo')}</label
 	>
+	<label class="check"
+		><input
+			type="checkbox"
+			checked={!draft.still}
+			onchange={(e) => (draft.still = !e.currentTarget.checked)}
+		/>{t('loginLook.moving')}</label
+	>
+	<p class="hint muted">{t('loginLook.movingHint')}</p>
+	<label class="stack"
+		>{t('loginLook.enter')}<select class="field" bind:value={draft.enter}>
+			{#each LOGIN_ENTERS as id (id)}<option value={id}>{t(`loginLook.enter.${id}`)}</option>{/each}
+		</select></label
+	>
+	<label class="check"
+		><input type="checkbox" bind:checked={draft.showStatus} />{t('loginLook.showStatus')}</label
+	>
+	<p class="hint muted">{t('loginLook.showStatusHint')}</p>
 
 	<fieldset class="divided texts">
 		<legend class="tile-title">{t('loginLook.texts')}</legend>

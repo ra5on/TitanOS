@@ -559,6 +559,12 @@ func (m *Manager) start(ctx context.Context, s *session) (err error) {
 		}
 	}
 	spec.Env = viewerEnv(appURL, hex.EncodeToString(secret), kind, gpu, settings)
+	if scheme == "https" {
+		// PLAN 74: the app's own certificate, so its browser shows no warning page.
+		if pin := appKeyPin(ctx, hostPort(appAddress, target.port)); pin != "" {
+			spec.Env = append(spec.Env, "VIEWER_TRUST_KEY="+pin)
+		}
+	}
 	id, err := m.Engine.ViewerCreate(ctx, spec)
 	if err != nil {
 		return err

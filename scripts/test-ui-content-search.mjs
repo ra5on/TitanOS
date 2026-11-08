@@ -38,11 +38,13 @@ for (const [width, height] of [[1440, 900], [390, 844]]) {
   await page.goto(base + "/files?root=share/Documents");
   const ui = width < 500 ? page : page.frameLocator("iframe[data-window]").first();
   await ui.locator('[data-file-name="Versicherungen"]').first().waitFor({ timeout: 15000 });
+  // PLAN 73: in a window the tools are in the "…" of the command bar.
   const tools = ui.getByRole("button", { name: /Werkzeuge/ });
+  const bar = ui.locator(".command-bar");
   if (await tools.count()) await tools.first().click();
-  else {
-    await ui.getByRole("button", { name: /Mehr|Weitere/ }).first().click({ timeout: 5000 });
-  }
+  else if (await bar.isVisible())
+    await bar.getByRole("button", { name: "Weitere Aktionen" }).click({ timeout: 5000 });
+  else await ui.getByRole("button", { name: /Mehr|Weitere/ }).first().click({ timeout: 5000 });
   await ui.getByRole("menuitem", { name: "Unterordner durchsuchen" }).click();
   const dialog = ui.getByRole("dialog", { name: "Unterordner durchsuchen" });
   await dialog.waitFor();

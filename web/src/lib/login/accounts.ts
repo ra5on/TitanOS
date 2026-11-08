@@ -6,7 +6,9 @@
 // outside) is part of the login look (LoginLook, PUT /login-appearance).
 import { api } from '../api.ts';
 
-export type LoginAccount = { name: string; displayName?: string };
+/** PLAN 74: the picture an account chose: a built-in one or its own photo (by id). */
+export type AccountPicture = { builtin?: string; photo?: string };
+export type LoginAccount = { name: string; displayName?: string; picture?: AccountPicture };
 export type AccountsStyle = 'circles' | 'list';
 export type ServerAccounts = { style: AccountsStyle; accounts: LoginAccount[] };
 
@@ -20,6 +22,14 @@ function sane(value: unknown): LoginAccount | null {
 	const out: LoginAccount = { name: v.name.trim() };
 	if (typeof v.displayName === 'string' && v.displayName.trim() && v.displayName.length <= 80)
 		out.displayName = v.displayName.trim();
+	const p = (typeof v.picture === 'object' && v.picture ? v.picture : {}) as Record<
+		string,
+		unknown
+	>;
+	if (typeof p.builtin === 'string' && /^[a-z]{2,20}$/.test(p.builtin))
+		out.picture = { builtin: p.builtin };
+	else if (typeof p.photo === 'string' && /^[0-9a-f]{64}$/.test(p.photo))
+		out.picture = { photo: p.photo };
 	return out;
 }
 
@@ -50,6 +60,8 @@ function store(list: LoginAccount[]) {
 export function rememberAccount(name: string, displayName?: string) {
 	const account = sane({ name, displayName });
 	if (!account) return;
+	const before = rememberedAccounts().find((a) => a.name === account.name);
+	if (before?.picture) account.picture = before.picture;
 	store([account, ...rememberedAccounts().filter((a) => a.name !== account.name)]);
 }
 
@@ -91,4 +103,63 @@ export function initials(account: LoginAccount): string {
 	const letters =
 		words.length > 1 ? words[0][0] + words[words.length - 1][0] : (words[0] ?? '?').slice(0, 1);
 	return letters.toUpperCase();
+}
+
+/** PLAN 74: the one letter on the account's picture. */
+export function firstLetter(account: LoginAccount): string {
+	return [...(account.displayName ?? account.name).trim()][0]?.toUpperCase() ?? '?';
+}
+
+// PLAN 74: until an account has a picture of its own, it shows a part of one
+// of the built-in photos – always the same one for the same name, never a
+// plain colour with a letter (owner's decision 8.11.2026).
+const FALLBACK = [
+	['nordlicht', '45% 30%'],
+	['kueste', '20% 70%'],
+	['wueste', '60% 60%'],
+	['nebelwald', '50% 40%'],
+	['bergsee', '50% 45%'],
+	['weltraum', '50% 50%'],
+] as const;
+
+/** The built-in photo and its part an account without a picture shows. */
+export function fallbackPicture(name: string): { url: string; position: string } {
+	let hash = 0;
+	for (const c of name) hash = (hash * 31 + c.codePointAt(0)!) >>> 0;
+	const [id, position] = FALLBACK[hash % FALLBACK.length];
+	return { url: `/backgrounds/${id}.webp`, position };
+}
+
+/**
+ * What the circle of an account shows: its own photo (from the login page's
+ * gated address, or the account's own when logged in), the built-in picture
+ * it chose, else the part of a built-in picture by its name.
+ */
+export function pictureStyle(
+	name: string,
+	picture: AccountPicture | undefined,
+	own = false,
+): { url: string; position: string } {
+	if (picture?.photo)
+		return {
+			url: own
+				? `/api/v1/account/picture/${picture.photo}`
+				: `/api/v1/login/pictures/${picture.photo}`,
+			position: 'center',
+		};
+	if (picture?.builtin) return { url: `/backgrounds/${picture.builtin}.webp`, position: 'center' };
+	return fallbackPicture(name);
+}
+
+/** After a change on My account: the remembered account of this browser keeps the built-in choice. */
+export function rememberPicture(name: string, picture: AccountPicture) {
+	const list = rememberedAccounts();
+	const i = list.findIndex((a) => a.name === name);
+	if (i < 0) return;
+	const next = { ...list[i] };
+	// A photo needs the gate of the NAS; only the choice of a built-in picture is kept here.
+	if (picture.builtin) next.picture = { builtin: picture.builtin };
+	else delete next.picture;
+	list[i] = next;
+	store(list);
 }

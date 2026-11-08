@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ra5on/TitanOS/backend/internal/startup"
 	"log/slog"
 	"strings"
 
@@ -218,7 +219,66 @@ func (w *titand) wireApplications() error {
 	if err := w.extensions.Load(); err != nil {
 		slog.Warn("plugin settings not readable from /config", "err", err)
 	}
-	w.containers.Ready = w.extensions.Healthy
-	w.machines.AutoReady = func() bool { return w.extensions.Healthy() && w.containers.StartupReady() }
+	// PLAN 73: Docker and VM autostart wait until TitanOS is ready – the
+	// volumes settled and the shares served – plus the owner's extra wait.
+	w.start = startup.NewManager(w.store)
+	w.start.Settled = w.volumes.Settled
+	w.start.SharesApplied = w.folders.LastApplied
+	w.containers.Ready = func() bool { return w.extensions.Healthy() && w.start.Ready() }
+	w.machines.AutoReady = func() bool {
+		return w.extensions.Healthy() && w.containers.StartupReady() && w.start.Ready()
+	}
+	w.machines.Ordered = func(name string) bool { return w.start.Ordered("vm", name) }
+	// The owner's order: VMs and Docker apps one after the other, with waits.
+	w.background(func() {
+		w.start.Run(ctx, startup.Steps{
+			EngineReady: func() bool { return w.extensions.Healthy() && w.containers.StartupReady() },
+			StartVM: func(ctx context.Context, name string) error {
+				return w.machines.StartOrdered(ctx, name, w.volumes.Mounted())
+			},
+			StartApp: w.containers.StartApp,
+			Restore: func(ctx context.Context, held map[string]startup.Policy) error {
+				return w.containers.RestorePolicies(ctx, dockerPolicies(held))
+			},
+			DoneFile: "/run/titanos/startup-order-done",
+		})
+	})
 	return nil
+}
+
+func dockerPolicies(held map[string]startup.Policy) map[string]docker.HeldPolicy {
+	out := make(map[string]docker.HeldPolicy, len(held))
+	for id, p := range held {
+		out[id] = docker.HeldPolicy{Name: p.Name, MaxRetries: p.MaxRetries}
+	}
+	return out
+}
+
+// holdOrderedApps runs just before the engine stops for a shutdown or
+// restart of the NAS (PLAN 73): the apps of the start order get restart
+// policy "no" so that titand can start them in order at boot. Not while a
+// system update or a step back waits: that version may not know the order.
+func (w *titand) holdOrderedApps(ctx context.Context) {
+	apps := w.start.Apps()
+	if len(apps) == 0 || w.containers.Disabled {
+		return
+	}
+	if w.updates != nil && w.updates.Status().Pending != nil {
+		slog.Info("start order left out: a system change waits for the restart")
+		return
+	}
+	held, err := w.containers.HoldApps(ctx, apps)
+	policies := make(map[string]startup.Policy, len(held))
+	for id, p := range held {
+		policies[id] = startup.Policy{Name: p.Name, MaxRetries: p.MaxRetries}
+	}
+	// Written even after an error: what was changed must be given back.
+	if saveErr := w.start.Hold(policies); saveErr != nil {
+		slog.Error("start order: policies not noted, giving them back", "err", saveErr)
+		_ = w.containers.RestorePolicies(ctx, held)
+		return
+	}
+	if err != nil {
+		slog.Warn("start order: not every app held", "err", err)
+	}
 }

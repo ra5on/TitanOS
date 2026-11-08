@@ -325,9 +325,6 @@ func (m *Manager) reconcile(ctx context.Context, mounted []string) error {
 		return nil
 	}
 
-	if want != "" && m.Ready != nil && !m.Ready() {
-		return nil
-	}
 	daemon, _ := json.MarshalIndent(map[string]any{
 		"data-root":  want,
 		"log-driver": "json-file",
@@ -360,6 +357,11 @@ func (m *Manager) reconcile(ctx context.Context, mounted []string) error {
 				return nil
 			}
 		}
+	}
+	// A fresh start waits for Ready (plugins healthy, PLAN 73: TitanOS ready
+	// with its shares); an engine that runs already was adopted above.
+	if want != "" && m.Ready != nil && !m.Ready() {
+		return nil
 	}
 	if want != "" && len(m.gpuLeases) > 0 {
 		return fmt.Errorf("%w: return VM GPUs before restarting Docker", ErrInvalid)

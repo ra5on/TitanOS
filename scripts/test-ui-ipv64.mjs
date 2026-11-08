@@ -694,6 +694,20 @@ async function routeIPv64(ctx, d) {
       },
     }),
   );
+  // PLAN 72: the app page also reads its „Öffnen mit“ settings.
+  await ctx.route("**/api/v1/docker/apps/photos/opens", (route) =>
+    route.fulfill({
+      json: {
+        app: "photos",
+        name: "photos",
+        types: [],
+        command: [],
+        service: "server",
+        running: true,
+        mounts: [],
+      },
+    }),
+  );
 }
 
 const tab = async (page, name) => {
@@ -701,29 +715,59 @@ const tab = async (page, name) => {
 };
 
 try {
+  // IPv64 is a tab of Dynamic DNS (since 29 Oct 2026), not an area of its own.
+  // PLAN 71: the side bar of the Systemsteuerung window lists the areas and
+  // its search finds the parts of IPv64 under Dynamic DNS.
+  {
+    const made = await create("owner");
+    await made.ctx.addInitScript(() =>
+      localStorage.removeItem("titanos.layout"),
+    );
+    await routeIPv64(made.ctx, ipv64Data());
+    await made.page.goto(base + "/settings");
+    const side = made.page.locator("section.win nav.side");
+    const items = () =>
+      side
+        .locator(".items .item")
+        .evaluateAll((a) => a.map((x) => x.textContent.trim()));
+    await side
+      .getByRole("button", { name: "Dynamisches DNS", exact: true })
+      .waitFor({ timeout: 15000 });
+    assert.equal(
+      (await items()).filter((x) => /^IPv64/.test(x)).length,
+      0,
+      "no IPv64 entry in the settings",
+    );
+    await side
+      .getByRole("searchbox", { name: "Einstellung suchen" })
+      .fill("cloud router");
+    assert.deepEqual(await items(), ["Dynamisches DNS"]);
+    await side
+      .getByRole("button", { name: "Dynamisches DNS", exact: true })
+      .click();
+    await made.page.waitForFunction(
+      () => {
+        const loc =
+          document.querySelector("section.win iframe")?.contentWindow?.location;
+        return (
+          loc?.pathname === "/settings/ddns" &&
+          loc.search === "?tab=ipv64&sub=router"
+        );
+      },
+      null,
+      { timeout: 8000 },
+    );
+    await made.page
+      .frameLocator("section.win iframe")
+      .first()
+      .getByRole("tab", { name: "Cloud Router", exact: true, selected: true })
+      .waitFor();
+    await made.ctx.close();
+  }
+
   const { ctx, page } = await create("owner");
   const d = ipv64Data();
   await routeIPv64(ctx, d);
-
-  // IPv64 is a tab of Dynamic DNS (since 29 Oct 2026), not an area of its own.
-  await page.goto(base + "/settings");
-  await page
-    .getByRole("link", { name: /^Dynamisches DNS( neu)?$/ })
-    .first()
-    .waitFor();
-  assert.equal(
-    await page.getByRole("link", { name: /^IPv64( neu)?$/ }).count(),
-    0,
-    "no IPv64 entry in the settings",
-  );
-  // The settings search finds the parts of IPv64 under Dynamic DNS.
-  await page.getByRole("searchbox").first().fill("cloud router");
-  await page
-    .getByRole("link", {
-      name: "Dynamisches DNS › IPv64 › Cloud Router und Tunnel",
-    })
-    .first()
-    .waitFor();
 
   // Old links land on the tab, with their sub-tab.
   await page.goto(base + "/settings/ipv64?tab=blocklist");
@@ -1101,9 +1145,17 @@ try {
   // Accounts with the role "user" do not get the area.
   {
     const { ctx: userCtx, page: userPage } = await create("user");
+    await userCtx.addInitScript(() =>
+      localStorage.removeItem("titanos.layout"),
+    );
     await userPage.goto(base + "/settings");
+    const side = userPage.locator("section.win nav.side");
+    await side.locator(".items .item").first().waitFor({ timeout: 15000 });
+    const items = await side
+      .locator(".items .item")
+      .evaluateAll((a) => a.map((x) => x.textContent.trim()));
     assert.equal(
-      await userPage.getByRole("link", { name: "IPv64", exact: true }).count(),
+      items.filter((x) => /IPv64|Dynamisches DNS/.test(x)).length,
       0,
     );
     await userCtx.close();

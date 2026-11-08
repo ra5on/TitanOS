@@ -69,9 +69,20 @@ func (w *titand) wireUpdates() error {
 		StartLXC: func(ctx context.Context, name string) error {
 			return w.systemContainers.Start(ctx, name, w.volumes.Mounted())
 		},
-		Containers:  w.containers.RunningContainers,
-		StopDocker:  w.containers.StopEngine,
-		StartDocker: w.containers.StartEngine,
+		Containers: w.containers.RunningContainers,
+		StopDocker: func(ctx context.Context) error {
+			w.holdOrderedApps(ctx)
+			return w.containers.StopEngine(ctx)
+		},
+		StartDocker: func(ctx context.Context) error {
+			// Going down was called off: everything as it was.
+			if held := w.start.Held(); len(held) > 0 {
+				if err := w.containers.RestorePolicies(ctx, dockerPolicies(held)); err == nil {
+					w.start.ClearHeld()
+				}
+			}
+			return w.containers.StartEngine(ctx)
+		},
 		// The person's shutdown scripts, before the guests end (Tools ›
 		// Scripts); w.userScripts is wired further down.
 		Scripts: func(ctx context.Context, progress func(name, state string, err error)) {

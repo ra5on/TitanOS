@@ -187,7 +187,9 @@ type Manager struct {
 	// gen counts saved changes; appliedGen is the newest one Apply has
 	// brought to the system. Deleting a share's data waits for it.
 	gen, appliedGen uint64
-	purge           purgeState
+	// lastApplied: when Apply last ended without error (LastApplied).
+	lastApplied time.Time
+	purge       purgeState
 
 	guard guardState
 	// Shadow returns the folder of @GMT snapshots of a volume, "" if it has

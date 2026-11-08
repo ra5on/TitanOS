@@ -961,7 +961,17 @@ func (m *Manager) markApplied(gen uint64) {
 	if gen > m.appliedGen {
 		m.appliedGen = gen
 	}
+	m.lastApplied = time.Now()
 	m.mu.Unlock()
+}
+
+// LastApplied is when the shares last matched the configuration (files
+// written, smbd/nfsd started or reloaded): PLAN 73 starts apps and VMs only
+// after this happened once the volumes were settled.
+func (m *Manager) LastApplied() time.Time {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.lastApplied
 }
 
 // OnPurgeResumed sets who is told how a resumed deletion ended.

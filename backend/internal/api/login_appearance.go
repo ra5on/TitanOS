@@ -55,6 +55,7 @@ var (
 	// loginAccountStyles are the looks of the account picker.
 	loginAccountStyles = []string{"circles", "list"}
 	loginLocales       = []string{"de", "en"}
+	loginEnters        = []string{"zoom", "curtain", "focus", "split", "none"}
 	loginBackgrounds   = []string{"nordlicht", "nebelwald", "bergsee", "kueste", "wueste", "weltraum", "graphit", "mitternacht", "wellen", "geometrie"}
 	loginHex           = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
 )
@@ -98,6 +99,14 @@ type loginAppearance struct {
 	HideHost     bool                  `json:"hideHost"`
 	HideLogo     bool                  `json:"hideLogo"`
 	Clock        bool                  `json:"clock"`
+	// Still stops the moving picture (northern lights, mountain lake) of the
+	// login page (PLAN 74: moving by default). Older titand ignore it.
+	Still bool `json:"still,omitempty"`
+	// Enter is the animation from the login page to the desktop (PLAN 74):
+	// zoom (default, empty), curtain, focus, split or none. ShowStatus names
+	// "<host> ist bereit" / "startet noch" on the login page (off by default).
+	Enter      string `json:"enter,omitempty"`
+	ShowStatus bool   `json:"showStatus,omitempty"`
 	// The account picker of the login page (PLAN 67, login_accounts.go):
 	// circles or a list; all accounts are shown only from the home
 	// network unless ShowAccountsExternal. Older titand ignore the fields.
@@ -184,6 +193,11 @@ func (v *loginAppearance) validate() error {
 		return errors.New("unknown card width")
 	case v.AccountsStyle != "" && !in(v.AccountsStyle, loginAccountStyles):
 		return errors.New("unknown account style")
+	case v.Enter != "" && !in(v.Enter, loginEnters):
+		return errors.New("unknown enter animation")
+	}
+	if v.Enter == "zoom" {
+		v.Enter = ""
 	}
 	if v.AccountsStyle == "" {
 		v.AccountsStyle = "circles"

@@ -57,6 +57,10 @@ func (m *Manager) autostart(ctx context.Context, mounted []string) {
 	m.mu.Lock()
 	var due []string
 	for name, vm := range m.vms {
+		// PLAN 73: a VM in the start order is started by that, in its turn.
+		if m.Ordered != nil && m.Ordered(name) {
+			continue
+		}
 		if vm.Autostart && !m.autostarted[name] && m.available(vm, mounted) {
 			// One attempt per boot: a VM someone shut down stays down.
 			m.autostarted[name] = true
@@ -144,4 +148,24 @@ func bootTime(procDir string) time.Time {
 		}
 	}
 	return time.Time{}
+}
+
+// StartOrdered starts a VM in its turn of the start order after boot
+// (PLAN 73): only with its autostart on, once per boot like autostart.
+func (m *Manager) StartOrdered(ctx context.Context, name string, mounted []string) error {
+	m.mu.Lock()
+	vm, ok := m.vms[name]
+	due := ok && vm.Autostart && !m.autostarted[name] && m.available(vm, mounted)
+	if due {
+		m.autostarted[name] = true
+		m.noteAutostarted()
+	}
+	m.mu.Unlock()
+	if !due {
+		return nil
+	}
+	if err := m.Start(ctx, name, mounted); err != nil && !errors.Is(err, ErrRunning) {
+		return err
+	}
+	return nil
 }

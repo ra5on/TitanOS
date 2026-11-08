@@ -1,9 +1,11 @@
 <script lang="ts">
-	// The login page in the style of the desktop (PLAN 64): the wallpaper of
-	// the desktop (or the picture the owner chose for the login page), clock
-	// and date, and one glass card with the form. Password, second factor and
-	// passkey work as before. The owner's login look (Settings › Appearance ›
-	// Login page) still sets theme, accent, picture, place, width and texts.
+	// The login page (PLAN 74, owner's design of 8.11.2026): the moving
+	// northern lights (or the picture the owner chose), no card; in the middle
+	// a row of account pictures, the chosen one large with its name once below
+	// and the password as a glass pill; TitanOS mark bottom left, time and date
+	// top right. Password, second factor and passkey work as before. The
+	// owner's login look (Settings › Appearance › Login page) still sets theme,
+	// accent, picture, place, texts and the account list.
 	import { ApiError } from '#lib/api.ts';
 	import { apiErrorText, errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { login, refreshSession, session } from '#lib/session.svelte.ts';
@@ -22,9 +24,12 @@
 	import Logo from '#lib/components/Logo.svelte';
 	import LanguageSwitch from '#lib/components/LanguageSwitch.svelte';
 	import Icon from '#lib/components/Icon.svelte';
+	import LiveBackground from '#lib/live/LiveBackground.svelte';
+	import { isLivePicture } from '#lib/live/shaders.ts';
 	import {
+		pictureStyle,
+		firstLetter,
 		forgetAccount,
-		initials,
 		mergeAccounts,
 		rememberAccount,
 		rememberedAccounts,
@@ -33,6 +38,7 @@
 		type LoginAccount,
 	} from '#lib/login/accounts.ts';
 	import { onMount, tick } from 'svelte';
+	import { noteEnter } from '#lib/login/enter.ts';
 
 	type Props = {
 		/** Only shows the page (preview of Settings › Appearance): nothing is sent. */
@@ -59,12 +65,26 @@
 	// same error as ever for a wrong name or password.
 	let local = $state<LoginAccount[]>([]);
 	let server = $state<{ style: AccountsStyle; accounts: LoginAccount[] } | null>(null);
-	/** 'pick' while the picker shows, 'form' once an account (or "other") is chosen. */
+	/** PLAN 74: 'pick' – the row of accounts with the password below; 'form' – "Anderes Konto" (name and password). */
 	let step = $state<'pick' | 'form'>('pick');
 	let chosen = $state<LoginAccount | null>(null);
 	let menuFor = $state<string | null>(null);
 	let nameField = $state<HTMLInputElement>();
 	let passwordField = $state<HTMLInputElement>();
+
+	// PLAN 74: "<host> ist bereit" where the owner switched it on (GET /health is public).
+	let ready = $state<boolean | null>(null);
+	$effect(() => {
+		if (preview || !current?.showStatus) return;
+		const ask = () =>
+			fetch('/api/v1/health', { cache: 'no-store' })
+				.then((r) => r.json())
+				.then((v: { ready?: boolean }) => (ready = v.ready === true))
+				.catch(() => (ready = false));
+		void ask();
+		const timer = setInterval(ask, 10_000);
+		return () => clearInterval(timer);
+	});
 
 	onMount(() => {
 		if (preview) return;
@@ -79,7 +99,22 @@
 		}
 		return mergeAccounts(local, server?.accounts ?? []);
 	});
-	const picking = $derived(step === 'pick' && accounts.length > 0 && !needsCode);
+	const picking = $derived(step === 'pick' && accounts.length > 0);
+	// The account the row shows large: the one picked, else the first (last used on this browser).
+	const selected = $derived(
+		picking ? (accounts.find((a) => a.name === chosen?.name) ?? accounts[0]) : null,
+	);
+	$effect(() => {
+		if (selected && !needsCode) name = selected.name;
+	});
+	// The accounts of the NAS arrive after the page: then the password takes the focus once.
+	let focused = false;
+	$effect(() => {
+		if (!picking || preview || focused || !passwordField) return;
+		focused = true;
+		const active = document.activeElement;
+		if (!active || active === document.body) passwordField.focus();
+	});
 	const remembered = (name: string) => local.some((a) => a.name === name);
 
 	async function pick(account: LoginAccount | null) {
@@ -88,7 +123,8 @@
 		name = account?.name ?? '';
 		password = '';
 		error = '';
-		step = 'form';
+		needsCode = false;
+		step = account ? 'pick' : 'form';
 		await tick();
 		(account ? passwordField : nameField)?.focus();
 	}
@@ -99,7 +135,7 @@
 		password = '';
 		error = '';
 		await tick();
-		document.querySelector<HTMLElement>('.accounts .account')?.focus();
+		passwordField?.focus();
 	}
 	function forget(account: LoginAccount) {
 		forgetAccount(account.name);
@@ -109,6 +145,8 @@
 	function remember() {
 		const user = session.data?.user;
 		if (user) rememberAccount(user.name);
+		// PLAN 74: the desktop plays the chosen animation once (lib/login/enter.ts).
+		noteEnter(current?.enter ?? 'zoom', live ? `/backgrounds/${live}.webp` : picture || '');
 	}
 
 	const current = $derived(look === undefined ? loginLook.value : look);
@@ -127,8 +165,24 @@
 	);
 	const dark = $derived(resolvePalette(resolved.appearance, appearance.systemLight).dark);
 	const picture = $derived(loginBackgroundURL(current, imageURL));
-	const wallpaper = $derived(`${wallpaperCss(loginWallpaper(), !dark)} center / cover`);
-	const words = $derived(loginTexts(current, i18n.locale, t('auth.loginTitle')));
+	// PLAN 74: the northern lights and the mountain lake move – as the owner's
+	// built-in picture or as the desktop wallpaper of the last account here.
+	const desktopPaper = loginWallpaper();
+	const live = $derived(
+		current?.background.source === 'builtin'
+			? isLivePicture(current.background.id)
+				? current.background.id
+				: null
+			: !picture && isLivePicture(desktopPaper)
+				? desktopPaper
+				: null,
+	);
+	const wallpaper = $derived(`${wallpaperCss(desktopPaper, !dark)} center / cover`);
+	const words = $derived.by(() => {
+		const texts = loginTexts(current, i18n.locale, t('auth.loginTitle'));
+		// PLAN 74: the standard title is for screen readers only; an own title of the owner shows.
+		return { ...texts, custom: texts.title !== t('auth.loginTitle') };
+	});
 	const host = $derived(hostname ?? session.data?.hostname ?? '');
 	const position = $derived(current?.position ?? 'center');
 	const pickStyle = $derived<AccountsStyle>(
@@ -148,6 +202,14 @@
 			now,
 		),
 	);
+
+	function sheen(e: PointerEvent) {
+		const pill = (e.target as Element).closest<HTMLElement>('.pill');
+		if (!pill) return;
+		const r = pill.getBoundingClientRect();
+		pill.style.setProperty('--sx', `${e.clientX - r.left}px`);
+		pill.style.setProperty('--sy', `${e.clientY - r.top}px`);
+	}
 
 	async function withPasskey() {
 		if (preview) return;
@@ -223,7 +285,9 @@
 	data-testid="login-page"
 >
 	<div class="paper" aria-hidden="true">
-		{#if picture && current}
+		{#if live && !preview}
+			<LiveBackground picture={live} moving={!current?.still} />
+		{:else if picture && current}
 			<div
 				class="picture"
 				style:background-image={`url("${picture}")`}
@@ -233,207 +297,216 @@
 					? `scale(${current.background.zoom / 100})`
 					: undefined}
 			></div>
-			<div class="dim" style:opacity={current.background.dim / 100}></div>
+		{:else if live}
+			<div class="picture" style:background-image={`url("/backgrounds/${live}.webp")`}></div>
 		{:else}
 			<div class="picture wallpaper" style:background={wallpaper}></div>
 		{/if}
+		<div class="dim" style:opacity={(current?.background.dim ?? 30) / 100}></div>
 	</div>
 
-	<div class="content">
-		<div class="time" aria-hidden={preview ? 'true' : undefined}>
-			<p class="clock mono">{time}</p>
-			<p class="date">{date}</p>
-		</div>
+	<div class="time" aria-hidden={preview ? 'true' : undefined}>
+		<p class="clock">{time}</p>
+		<p class="date">{date}</p>
+	</div>
 
-		<section class="card" class:wide={current?.width === 'wide'} aria-labelledby="login-title">
-			<div class="head">
-				{#if !current?.hideLogo}<Logo size={44} stacked />{/if}
-				<div class="titles">
-					<!-- The editor's preview is no page of its own: no second main heading there. -->
-					<svelte:element this={preview ? 'p' : 'h1'} class="h1" id="login-title"
-						>{words.title}</svelte:element
-					>
-					{#if host && !current?.hideHost}<span class="mono host">{host}</span>{/if}
-				</div>
-			</div>
-			{#if words.notice}<p class="notice">{words.notice}</p>{/if}
+	<section class="card" class:wide={current?.width === 'wide'} aria-labelledby="login-title">
+		<!-- The editor's preview is no page of its own: no second main heading there. -->
+		<svelte:element
+			this={preview ? 'p' : 'h1'}
+			class="h1"
+			class:sr-only={!words.custom}
+			id="login-title"
+			>{words.title}{#if host && !current?.hideHost && !words.custom}<span>{' – ' + host}</span
+				>{/if}</svelte:element
+		>
+		{#if words.notice}<p class="notice">{words.notice}</p>{/if}
 
-			{#if picking}
-				<div class="picker" role="group" aria-label={t('login.pick')}>
-					<p class="pick-title">{t('login.pick')}</p>
-					<ul class="accounts {pickStyle}">
-						{#each accounts as account (account.name)}
-							{@const shown = account.displayName ?? account.name}
-							<li
-								oncontextmenu={(e) => {
-									if (!remembered(account.name) || preview) return;
-									e.preventDefault();
-									menuFor = account.name;
-								}}
+		{#if picking && selected}
+			<div class="picker" role="group" aria-label={t('login.pick')}>
+				<ul class="accounts {pickStyle}">
+					{#each accounts as account (account.name)}
+						{@const shown = account.displayName ?? account.name}
+						{@const pic = pictureStyle(account.name, account.picture)}
+						{@const on = account.name === selected.name}
+						<li
+							class:on
+							oncontextmenu={(e) => {
+								if (!remembered(account.name) || preview) return;
+								e.preventDefault();
+								menuFor = account.name;
+							}}
+						>
+							<button
+								type="button"
+								class="account"
+								aria-label={t('login.as', { name: shown })}
+								aria-pressed={on}
+								onclick={() => pick(account)}
 							>
+								<span
+									class="avatar"
+									aria-hidden="true"
+									style:background-image={`url("${pic.url}")`}
+									style:background-position={pic.position}
+									><span class="letter">{firstLetter(account)}</span></span
+								>
+								<span class="account-name">{shown}</span>
+							</button>
+							{#if remembered(account.name) && !preview}
 								<button
 									type="button"
-									class="account"
-									aria-label={t('login.as', { name: shown })}
-									onclick={() => pick(account)}
+									class="account-more"
+									aria-label={t('login.accountMenu', { name: shown })}
+									aria-haspopup="menu"
+									aria-expanded={menuFor === account.name}
+									onclick={() => (menuFor = menuFor === account.name ? null : account.name)}
+									><Icon name="more" size={14} /></button
 								>
-									<span class="avatar" aria-hidden="true">{initials(account)}</span>
-									<span class="account-name">{shown}</span>
-									{#if account.displayName && account.displayName !== account.name}<span
-											class="account-login mono">{account.name}</span
-										>{/if}
-								</button>
-								{#if remembered(account.name) && !preview}
-									<button
-										type="button"
-										class="account-more"
-										aria-label={t('login.accountMenu', { name: shown })}
-										aria-haspopup="menu"
-										aria-expanded={menuFor === account.name}
-										onclick={() => (menuFor = menuFor === account.name ? null : account.name)}
-										><Icon name="more" size={14} /></button
+								{#if menuFor === account.name}
+									<div
+										class="account-menu"
+										role="menu"
+										tabindex="-1"
+										onkeydown={(e) => {
+											if (e.key === 'Escape') menuFor = null;
+										}}
 									>
-									{#if menuFor === account.name}
-										<div
-											class="account-menu"
-											role="menu"
-											tabindex="-1"
-											onkeydown={(e) => {
-												if (e.key === 'Escape') menuFor = null;
-											}}
+										<!-- svelte-ignore a11y_autofocus -->
+										<button type="button" role="menuitem" autofocus onclick={() => forget(account)}
+											>{t('login.forgetNamed', { name: shown })}</button
 										>
-											<!-- svelte-ignore a11y_autofocus -->
-											<button
-												type="button"
-												role="menuitem"
-												autofocus
-												onclick={() => forget(account)}
-												>{t('login.forgetNamed', { name: shown })}</button
-											>
-										</div>
-									{/if}
+									</div>
 								{/if}
-							</li>
-						{/each}
-						<li>
-							<button type="button" class="account other" onclick={() => pick(null)}>
-								<span class="avatar" aria-hidden="true"><Icon name="plus" size={18} /></span>
-								<span class="account-name">{t('login.other')}</span>
-							</button>
+							{/if}
 						</li>
-					</ul>
+					{/each}
+				</ul>
+				<p class="chosen" aria-live="polite">{selected.displayName ?? selected.name}</p>
+			</div>
+		{/if}
+
+		<form onsubmit={submit} onpointermove={sheen}>
+			{#if picking && !needsCode}
+				<!-- The picked account; the name goes along for password managers. -->
+				<input
+					class="sr-only"
+					type="text"
+					tabindex="-1"
+					aria-hidden="true"
+					value={name}
+					autocomplete="username"
+					readonly
+				/>
+			{/if}
+			{#if needsCode}
+				<p class="hint">{t('auth.codeHint')}</p>
+				<div class="pill">
+					<!-- svelte-ignore a11y_autofocus -->
+					<input
+						class="mono"
+						type="text"
+						bind:value={code}
+						inputmode="numeric"
+						autocomplete="one-time-code"
+						spellcheck="false"
+						placeholder={t('auth.code')}
+						aria-label={t('auth.code')}
+						required
+						autofocus
+					/>
+					<button class="go" type="submit" disabled={busy} aria-label={t('auth.login')}
+						><Icon name="arrowRight" size={16} /></button
+					>
 				</div>
 			{:else}
-				<form onsubmit={submit}>
-					{#if needsCode}
-						<p class="hint">{t('auth.codeHint')}</p>
-						<label>
-							<span>{t('auth.code')}</span>
-							<!-- svelte-ignore a11y_autofocus -->
-							<input
-								class="field mono"
-								type="text"
-								bind:value={code}
-								inputmode="numeric"
-								autocomplete="one-time-code"
-								spellcheck="false"
-								required
-								autofocus
-							/>
-						</label>
-					{:else}
-						{#if chosen}
-							<!-- The picked account; the name goes along for password managers. -->
-							<div class="chosen">
-								<span class="avatar small" aria-hidden="true">{initials(chosen)}</span>
-								<span class="chosen-name">{chosen.displayName ?? chosen.name}</span>
-								<button type="button" class="link" onclick={backToPicker}
-									>{t('login.switch')}</button
-								>
-							</div>
-							<input
-								class="sr-only"
-								type="text"
-								tabindex="-1"
-								aria-hidden="true"
-								value={name}
-								autocomplete="username"
-								readonly
-							/>
-						{:else}
-							<label>
-								<span>{t('auth.name')}</span>
-								<!-- svelte-ignore a11y_autofocus -->
-								<input
-									class="field"
-									type="text"
-									bind:this={nameField}
-									bind:value={name}
-									autocomplete="username"
-									autocapitalize="none"
-									spellcheck="false"
-									required
-									autofocus={!preview && !accounts.length}
-								/>
-							</label>
-						{/if}
-						<label>
-							<span>{t('auth.password')}</span>
-							<input
-								class="field"
-								type="password"
-								bind:this={passwordField}
-								bind:value={password}
-								autocomplete="current-password"
-								required
-							/>
-						</label>
-					{/if}
-					{#if error}<p class="notice-warn" role="alert">{error}</p>{/if}
-					<button class="btn btn-primary" type="submit" disabled={busy}
-						>{t('auth.login')}<Icon name="arrowRight" size={16} /></button
+				{#if !picking}
+					<div class="pill plain">
+						<!-- svelte-ignore a11y_autofocus -->
+						<input
+							type="text"
+							bind:this={nameField}
+							bind:value={name}
+							autocomplete="username"
+							autocapitalize="none"
+							spellcheck="false"
+							placeholder={t('auth.name')}
+							aria-label={t('auth.name')}
+							required
+							autofocus={!preview && !accounts.length}
+						/>
+					</div>
+				{/if}
+				<div class="pill" class:filled={!!password}>
+					<!-- svelte-ignore a11y_autofocus -->
+					<input
+						type="password"
+						bind:this={passwordField}
+						bind:value={password}
+						autocomplete="current-password"
+						placeholder={t('auth.password')}
+						aria-label={t('auth.password')}
+						required
+						autofocus={!preview && picking}
+					/>
+					<button class="go" type="submit" disabled={busy} aria-label={t('auth.login')}
+						><Icon name="arrowRight" size={16} /></button
 					>
-					{#if passkeys && !needsCode}
-						<button class="btn" type="button" disabled={busy} onclick={withPasskey}
-							><Icon name="key" size={16} />{t('passkeys.login')}</button
-						>
-					{/if}
-					{#if accounts.length && !chosen && !needsCode}
-						<button type="button" class="link back" onclick={backToPicker}>{t('login.back')}</button
-						>
-					{/if}
-				</form>
+				</div>
 			{/if}
-		</section>
-	</div>
+			{#if error}<p class="error" role="alert">{error}</p>{/if}
+			<div class="links">
+				{#if needsCode}
+					<button type="button" class="link" onclick={backToPicker}>{t('login.back')}</button>
+				{:else}
+					{#if picking}
+						<button type="button" class="link" onclick={() => pick(null)}>{t('login.other')}</button
+						>
+					{:else if accounts.length}
+						<button type="button" class="link" onclick={backToPicker}>{t('login.back')}</button>
+					{/if}
+					{#if passkeys}
+						<button type="button" class="link" disabled={busy} onclick={withPasskey}
+							>{t('passkeys.login')}</button
+						>
+					{/if}
+				{/if}
+			</div>
+		</form>
+	</section>
 
-	<div class="lang"><LanguageSwitch /></div>
+	{#if !current?.hideLogo}<div class="mark"><Logo size={22} /></div>{/if}
+	<div class="lang">
+		{#if current?.showStatus && ready !== null && host}<p class="status" role="status">
+				<span class="dot" class:on={ready} aria-hidden="true"></span>{t(
+					ready ? 'login.ready' : 'login.starting',
+					{ host },
+				)}
+			</p>{/if}
+		<LanguageSwitch />
+	</div>
 </main>
 
 <style>
+	/* PLAN 74: no card – the page is the picture with the form on it. White
+	   text over the picture with a shade behind (contrast at least 4.5:1). */
 	.login {
 		position: relative;
 		z-index: 1;
 		min-height: 100vh;
 		min-height: 100dvh;
-		display: flex;
-		flex-direction: column;
-		color: var(--text);
-		isolation: isolate;
+		color: #fff;
 		overflow: hidden;
-		padding: calc(var(--space-5) + env(safe-area-inset-top)) var(--space-4)
-			calc(var(--space-3) + env(safe-area-inset-bottom));
 	}
 	.login.preview {
-		position: absolute;
-		inset: 0;
 		min-height: 0;
+		height: 100%;
 	}
 	.paper {
 		position: fixed;
 		inset: 0;
 		z-index: -1;
-		background: #070d1c;
+		background: #0b0f16;
 	}
 	.preview .paper {
 		position: absolute;
@@ -441,339 +514,464 @@
 	.picture {
 		position: absolute;
 		inset: 0;
-		background-repeat: no-repeat;
-	}
-	.wallpaper {
-		filter: var(--wallpaper-filter, none);
+		background: center / cover no-repeat;
 	}
 	.dim {
 		position: absolute;
 		inset: 0;
-		background: var(--image-dim, #000);
-	}
-	.content {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		/* A short screen (phone across) scrolls from the top. */
-		justify-content: safe center;
-		gap: clamp(20px, 5vh, 48px);
-		width: 100%;
-	}
-	.left .content {
-		align-items: flex-start;
-		padding-left: max(0px, calc(8vw - var(--space-4)));
-	}
-	.right .content {
-		align-items: flex-end;
-		padding-right: max(0px, calc(8vw - var(--space-4)));
+		background: radial-gradient(ellipse at 50% 52%, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.85));
 	}
 	.time {
-		color: #fff;
-		text-align: center;
-		text-shadow: 0 2px 16px rgb(0 0 0 / 0.4);
+		position: absolute;
+		top: 24px;
+		right: 30px;
+		text-align: right;
+		text-shadow: 0 1px 10px rgba(0, 0, 0, 0.55);
+		font-variant-numeric: tabular-nums;
 	}
 	.clock {
 		margin: 0;
-		font-size: clamp(56px, 14vw, 104px);
+		font-size: 30px;
 		font-weight: 300;
-		line-height: 1;
-		letter-spacing: -0.02em;
-		font-variant-numeric: tabular-nums;
+		line-height: 1.1;
 	}
 	.date {
-		margin: var(--space-2) 0 0;
-		font-size: var(--text-lg);
+		margin: 2px 0 0;
+		font-size: var(--text-sm);
 	}
 	.card {
-		width: min(380px, 100%);
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-4);
-		padding: var(--space-5);
-		border-radius: calc(var(--radius-tile) + 4px);
-		background: var(--desk-surface, color-mix(in srgb, var(--surface) 72%, transparent));
-		backdrop-filter: blur(var(--desk-blur, 22px)) saturate(1.4);
-		-webkit-backdrop-filter: blur(var(--desk-blur, 22px)) saturate(1.4);
-		border: 1px solid color-mix(in srgb, #fff 14%, transparent);
-		box-shadow: 0 20px 50px rgb(0 0 0 / 0.35);
-	}
-	.card.wide {
-		width: min(480px, 100%);
-	}
-	.head {
+		position: absolute;
+		left: 50%;
+		top: 50%;
+		transform: translate(-50%, -50%);
+		width: min(360px, calc(100% - 32px));
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: var(--space-3);
-		min-width: 0;
 		text-align: center;
 	}
-	.titles {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		min-width: 0;
+	.card.wide {
+		width: min(480px, calc(100% - 32px));
+	}
+	.left .card {
+		left: clamp(16px, 12vw, 220px);
+		transform: translate(0, -50%);
+	}
+	.right .card {
+		left: auto;
+		right: clamp(16px, 12vw, 220px);
+		transform: translate(0, -50%);
 	}
 	.h1 {
-		margin: 0;
-		font-size: var(--text-lg);
+		margin: 0 0 14px;
+		font-size: 22px;
 		font-weight: 600;
-		overflow-wrap: anywhere;
-	}
-	.host {
-		color: var(--muted);
-		font-size: var(--text-sm);
-		overflow-wrap: anywhere;
+		text-shadow: 0 1px 10px rgba(0, 0, 0, 0.5);
 	}
 	.notice {
-		margin: 0;
-		font-size: var(--text-md);
+		margin: 0 0 14px;
+		padding: 8px 14px;
+		border-radius: 12px;
+		background: rgba(0, 0, 0, 0.45);
+		font-size: var(--text-sm);
 		white-space: pre-line;
-		overflow-wrap: anywhere;
-	}
-	form {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-3);
 	}
 	.hint {
-		margin: 0;
-		font-size: var(--text-md);
+		margin: 0 0 10px;
+		font-size: var(--text-sm);
+		text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
 	}
-	label {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		font-size: var(--text-md);
-	}
-	form .btn {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: var(--space-2);
-	}
-	/* PLAN 67: the account picker – circles (avatar and name) or a list. */
 	.picker {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-3);
-	}
-	.pick-title {
-		margin: 0;
-		text-align: center;
-		color: var(--muted);
-		font-size: var(--text-md);
+		align-items: center;
 	}
 	.accounts {
 		list-style: none;
 		margin: 0;
 		padding: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-wrap: wrap;
+		gap: 18px;
+		min-height: 112px;
 	}
 	.accounts li {
 		position: relative;
-		min-width: 0;
 	}
 	.account {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		width: 100%;
-		min-width: 0;
-		padding: 8px;
-		background: transparent;
-		border: 1px solid transparent;
-		border-radius: var(--radius-ctl);
-		color: var(--text);
-		font: inherit;
+		all: unset;
 		cursor: pointer;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		border-radius: 50%;
+		transition: transform 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2);
 	}
-	.account:hover,
-	.account:focus-visible {
-		background: color-mix(in srgb, var(--text) 8%, transparent);
+	.account:focus-visible .avatar {
+		outline: 2px solid #fff;
+		outline-offset: 3px;
 	}
 	.avatar {
-		flex: none;
-		display: grid;
-		place-items: center;
-		width: 40px;
-		height: 40px;
-		border-radius: 50%;
-		background: var(--accent);
-		color: var(--on-accent);
-		font-weight: 600;
-		font-size: var(--text-md);
-	}
-	.other .avatar {
-		background: color-mix(in srgb, var(--text) 12%, transparent);
-		color: var(--text);
-	}
-	.account-name {
-		min-width: 0;
-		font-size: var(--text-md);
-		font-weight: 500;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.account-login {
-		color: var(--muted);
-		font-size: var(--text-sm);
-	}
-	/* Circles: a row of avatars with the name under each. */
-	.accounts.circles {
-		display: flex;
-		flex-wrap: wrap;
-		justify-content: center;
-		gap: var(--space-2);
-	}
-	.circles li {
-		width: 92px;
-	}
-	.circles .account {
-		flex-direction: column;
-		gap: 6px;
-		padding: 10px 4px;
-		text-align: center;
-	}
-	.circles .avatar {
+		position: relative;
 		width: 56px;
 		height: 56px;
-		font-size: var(--text-lg);
+		border-radius: 50%;
+		background: center / cover no-repeat;
+		box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.7);
+		opacity: 0.75;
+		outline: 2px solid transparent;
+		outline-offset: 3px;
+		transition:
+			width 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.1),
+			height 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.1),
+			opacity 0.3s,
+			outline-color 0.3s;
 	}
-	/* Names wrap (two lines) instead of being cut off. */
-	.circles .account-name {
-		max-width: 100%;
-		font-size: var(--text-base);
-		white-space: normal;
-		overflow-wrap: anywhere;
-		line-height: 1.25;
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		line-clamp: 2;
-		-webkit-box-orient: vertical;
+	.letter {
+		position: absolute;
+		inset: 0;
+		display: grid;
+		place-items: center;
+		font-weight: 700;
+		font-size: 22px;
+		color: #fff;
+		text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6);
+		transition: font-size 0.4s;
 	}
-	.circles .account-login {
-		display: none;
+	.account:hover {
+		transform: translateY(-4px);
 	}
-	/* List: one row per account. */
+	.account:hover .avatar {
+		opacity: 1;
+		outline-color: rgba(255, 255, 255, 0.55);
+	}
+	.on .avatar {
+		width: 96px;
+		height: 96px;
+		opacity: 1;
+		box-shadow: 0 18px 44px -14px rgba(0, 0, 0, 0.75);
+	}
+	.on .letter {
+		font-size: 38px;
+	}
+	/* The names of the others appear on hover only; the chosen one stands below once. */
+	.account-name {
+		position: absolute;
+		top: calc(100% + 8px);
+		left: 50%;
+		transform: translateX(-50%);
+		font-size: 12px;
+		white-space: nowrap;
+		opacity: 0;
+		pointer-events: none;
+		text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
+		transition: opacity 0.2s;
+	}
+	li:not(.on) .account:is(:hover, :focus-visible) .account-name {
+		opacity: 1;
+	}
 	.accounts.list {
-		display: flex;
 		flex-direction: column;
-		gap: 2px;
+		align-items: stretch;
+		gap: 6px;
+		min-height: 0;
 	}
 	.list .account {
-		padding-right: 40px;
+		flex-direction: row;
+		gap: 10px;
+		border-radius: 12px;
+		padding: 4px 10px 4px 4px;
+	}
+	.list .avatar,
+	.list .on .avatar {
+		width: 36px;
+		height: 36px;
+	}
+	.list .letter,
+	.list .on .letter {
+		font-size: 15px;
+	}
+	.list .account-name {
+		position: static;
+		transform: none;
+		opacity: 1;
+		font-size: var(--text-base);
+	}
+	.list .on .account {
+		background: rgba(255, 255, 255, 0.16);
+	}
+	.list + .chosen {
+		display: none;
 	}
 	.account-more {
 		position: absolute;
-		top: 4px;
-		right: 4px;
+		top: -2px;
+		right: -6px;
+		width: 24px;
+		height: 24px;
+		border-radius: 50%;
+		border: 0;
 		display: grid;
 		place-items: center;
-		width: 28px;
-		height: 28px;
-		padding: 0;
-		background: transparent;
-		border: 0;
-		border-radius: 50%;
-		color: var(--muted);
+		background: rgba(0, 0, 0, 0.55);
+		color: #fff;
 		cursor: pointer;
+		opacity: 0;
+		transition: opacity 0.2s;
 	}
-	.list .account-more {
-		top: 50%;
-		transform: translateY(-50%);
-	}
-	.account-more:hover,
-	.account-more:focus-visible {
-		background: color-mix(in srgb, var(--text) 12%, transparent);
-		color: var(--text);
+	li:hover .account-more,
+	.account-more:focus-visible,
+	.account-more[aria-expanded='true'] {
+		opacity: 1;
 	}
 	.account-menu {
 		position: absolute;
 		z-index: 5;
-		top: 34px;
-		right: 0;
+		top: calc(100% + 6px);
+		left: 50%;
+		transform: translateX(-50%);
 		min-width: 200px;
 		padding: 4px;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-ctl);
-		box-shadow: 0 10px 30px rgb(0 0 0 / 0.35);
+		border-radius: 12px;
+		background: rgba(20, 24, 30, 0.92);
+		box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.7);
 	}
 	.account-menu button {
 		width: 100%;
-		padding: 8px 10px;
-		background: transparent;
 		border: 0;
-		border-radius: var(--radius-small, 6px);
-		color: var(--text);
+		background: none;
+		color: #fff;
 		font: inherit;
-		font-size: var(--text-base);
 		text-align: left;
+		padding: 8px 10px;
+		border-radius: 8px;
 		cursor: pointer;
 	}
 	.account-menu button:hover,
 	.account-menu button:focus-visible {
-		background: color-mix(in srgb, var(--text) 10%, transparent);
+		background: rgba(255, 255, 255, 0.12);
 	}
 	.chosen {
+		margin: 16px 0 0;
+		font-size: 20px;
+		font-weight: 600;
+		text-shadow: 0 1px 10px rgba(0, 0, 0, 0.55);
+	}
+	form {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		width: 100%;
+	}
+	.pill {
+		position: relative;
+		margin-top: 16px;
+		width: 300px;
+		max-width: 100%;
+		height: 44px;
+		border-radius: 22px;
 		display: flex;
 		align-items: center;
-		gap: 10px;
-		min-width: 0;
+		padding: 0 5px 0 18px;
+		background: rgba(255, 255, 255, 0.16);
+		border: 1px solid rgba(255, 255, 255, 0.3);
+		backdrop-filter: blur(22px) saturate(1.5);
+		-webkit-backdrop-filter: blur(22px) saturate(1.5);
+		overflow: hidden;
+		transition: background 0.25s;
 	}
-	.avatar.small {
-		width: 32px;
-		height: 32px;
-		font-size: var(--text-base);
+	.pill.plain {
+		padding-right: 18px;
 	}
-	.chosen-name {
+	.pill + .pill {
+		margin-top: 10px;
+	}
+	.pill:focus-within {
+		background: rgba(255, 255, 255, 0.22);
+	}
+	/* A light edge runs round the pill while it has the focus. */
+	.pill::before {
+		content: '';
+		position: absolute;
+		inset: -1px;
+		border-radius: 22px;
+		padding: 1.5px;
+		background: conic-gradient(
+			from var(--edge-angle),
+			transparent 0 70%,
+			rgba(255, 255, 255, 0.95) 85%,
+			transparent 100%
+		);
+		-webkit-mask:
+			linear-gradient(#000 0 0) content-box,
+			linear-gradient(#000 0 0);
+		mask:
+			linear-gradient(#000 0 0) content-box,
+			linear-gradient(#000 0 0);
+		-webkit-mask-composite: xor;
+		mask-composite: exclude;
+		opacity: 0;
+		transition: opacity 0.3s;
+		pointer-events: none;
+	}
+	.pill:focus-within::before {
+		opacity: 1;
+		animation: edge 2.6s linear infinite;
+	}
+	@property --edge-angle {
+		syntax: '<angle>';
+		inherits: false;
+		initial-value: 0deg;
+	}
+	@keyframes edge {
+		to {
+			--edge-angle: 360deg;
+		}
+	}
+	/* A soft sheen follows the pointer over the pill. */
+	.pill::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+		background: radial-gradient(
+			110px circle at var(--sx, -200px) var(--sy, -200px),
+			rgba(255, 255, 255, 0.18),
+			transparent 70%
+		);
+	}
+	.pill input {
 		flex: 1;
 		min-width: 0;
-		font-weight: 600;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.link {
-		padding: 4px 0;
-		background: none;
 		border: 0;
-		color: var(--accent);
+		background: none;
+		outline: none;
+		color: #fff;
 		font: inherit;
-		font-size: var(--text-base);
-		text-decoration: underline;
+		font-size: 15px;
+	}
+	.pill input[type='password'] {
+		letter-spacing: 0.08em;
+	}
+	.pill input::placeholder {
+		color: rgba(255, 255, 255, 0.8);
+		letter-spacing: 0;
+	}
+	.go {
+		position: relative;
+		z-index: 1;
+		flex: none;
+		width: 34px;
+		height: 34px;
+		border-radius: 50%;
+		border: 0;
+		display: grid;
+		place-items: center;
+		background: rgba(255, 255, 255, 0.92);
+		color: #10151c;
 		cursor: pointer;
 	}
-	.link.back {
-		align-self: center;
+	.go :global(svg) {
+		transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.3);
+	}
+	.go:hover :global(svg) {
+		transform: translateX(3px);
+	}
+	.go:disabled {
+		opacity: 0.6;
+		cursor: default;
+	}
+	.error {
+		margin: 10px 0 0;
+		padding: 6px 12px;
+		border-radius: 10px;
+		background: rgba(0, 0, 0, 0.55);
+		font-size: var(--text-sm);
+	}
+	.links {
+		margin-top: 14px;
+		display: flex;
+		gap: 18px;
+		justify-content: center;
+		flex-wrap: wrap;
+	}
+	.link {
+		border: 0;
+		background: none;
+		padding: 2px 0;
+		color: #fff;
+		font: inherit;
+		font-size: 12.5px;
+		opacity: 0.85;
+		cursor: pointer;
+		text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
+	}
+	.link:hover,
+	.link:focus-visible {
+		opacity: 1;
+		text-decoration: underline;
+		text-underline-offset: 3px;
+	}
+	.mark {
+		position: absolute;
+		left: 30px;
+		bottom: 26px;
+		opacity: 0.92;
+		filter: drop-shadow(0 1px 8px rgba(0, 0, 0, 0.5));
 	}
 	.lang {
+		position: absolute;
+		right: 30px;
+		bottom: 22px;
 		display: flex;
-		justify-content: center;
-		padding-top: var(--space-3);
+		align-items: center;
+		gap: 16px;
 	}
-	.lang :global(select),
-	.lang :global(button) {
-		color: var(--text);
+	.status {
+		margin: 0;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		font-size: var(--text-sm);
+		text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
 	}
-	@media (max-width: 480px) {
-		.card {
-			padding: var(--space-4);
+	.dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: #f0b429;
+	}
+	.dot.on {
+		background: #4cc38a;
+	}
+	.preview .time,
+	.preview .mark,
+	.preview .lang {
+		transform: scale(0.8);
+	}
+	@media (max-width: 640px) {
+		.time {
+			top: 18px;
+			right: 18px;
 		}
-		.left .content,
-		.right .content {
-			align-items: center;
-			padding: 0;
+		.clock {
+			font-size: 22px;
 		}
-	}
-	@media (prefers-reduced-transparency: reduce) {
-		.card {
-			background: var(--surface);
-			backdrop-filter: none;
-			-webkit-backdrop-filter: none;
+		.mark {
+			left: 18px;
+			bottom: 20px;
+		}
+		.lang {
+			right: 18px;
+			bottom: 16px;
+		}
+		.left .card,
+		.right .card {
+			left: 50%;
+			right: auto;
+			transform: translate(-50%, -50%);
 		}
 	}
 </style>

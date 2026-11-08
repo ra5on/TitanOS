@@ -45,6 +45,7 @@ func (w *titand) wireAPI() error {
 		Storage:            w.volumes,
 		SmartHistory:       w.smartHistory,
 		Shares:             w.folders,
+		Startup:            w.start,
 		Files:              w.fileManager,
 		Thumbs:             w.previews,
 		FileIndex:          w.fullText,
