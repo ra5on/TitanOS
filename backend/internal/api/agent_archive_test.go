@@ -68,6 +68,14 @@ func TestScheduleWakeChoice(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The run goes on in the background; it must end before the test
+	// removes its folders.
+	for until := time.Now().Add(10 * time.Second); ts.server.agentRunning("alex", chatID) && time.Now().Before(until); {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if ts.server.agentRunning("alex", chatID) {
+		t.Fatal("the run did not end")
+	}
 	if c, _ := ts.server.agentStore().Chat("alex", chatID); c.Schedule != id {
 		t.Fatalf("chat of the run: %q", c.Schedule)
 	}
