@@ -249,8 +249,12 @@ ip -n titan-peer link set peer30 up
     token_path=directory/'api-token'; token_path.write_text(token['secret']); token_path.chmod(0o600)
     put(token_path,'/root/api-token');remote('chmod 600 /root/api-token')
     # The certificate is trusted explicitly. No TLS verification bypass in CLI.
-    cert=['/config/tls/cert.pem']
-    assert cert, 'NAS certificate missing'
+    # Since PLAN 61-9 titand serves "localhost" a leaf of its own certificate
+    # authority (made on the first handshake), so the authority is trusted,
+    # not the self-signed fallback cert.pem.
+    remote('titanosctl --url https://localhost --token-file /root/api-token status >/dev/null 2>&1 || true')
+    cert=[remote('if [ -f /config/tls/ca-cert.pem ]; then echo /config/tls/ca-cert.pem; else echo /config/tls/cert.pem; fi').strip()]
+    assert cert[0], 'NAS certificate missing'
     result=remote('titanosctl --url https://localhost --ca-file '+shlex.quote(cert[0])+' --token-file /root/api-token status')
     assert json.loads(result)['version']==current_version
     request('/account/tokens/'+token['token']['id'],method='DELETE')
