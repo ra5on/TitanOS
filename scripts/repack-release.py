@@ -24,6 +24,7 @@ the Go toolchain and web/node_modules that built backend/bin/titand.
 """
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -31,6 +32,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -43,6 +46,11 @@ NO_SUDO = os.environ.get("REPACK_NO_SUDO") == "1"
 LICENSES = os.environ.get("REPACK_LICENSES", str(REPO / "scripts/third-party-licenses.py"))
 
 
+_spec = importlib.util.spec_from_file_location("release_kind", REPO / "scripts/release-kind.py")
+release_kind = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(release_kind)
+
+
 def run(*args, **kwargs):
     subprocess.run(args, check=True, **kwargs)
 
@@ -53,10 +61,10 @@ def sudo(*args):
 
 
 def download(url, target):
-    request = urllib.request.Request(url, headers={"User-Agent": "TitanOS release"})
-    with urllib.request.urlopen(request, timeout=120) as response, open(target, "wb") as out:
+    """Downloads url to target, through release_kind.open_release (tried
+    again, then the GitHub API)."""
+    with release_kind.open_release(url) as response, open(target, "wb") as out:
         shutil.copyfileobj(response, out, 1 << 20)
-
 
 def sha256(path):
     with open(path, "rb") as stream:

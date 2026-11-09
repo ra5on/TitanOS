@@ -40,6 +40,10 @@ class ReleaseKindTest(unittest.TestCase):
         result = self.decide("0.8.2", ["web/src/app.css", ".github/workflows/plugin-sign.yml"])
         self.assertEqual(result[:2], ("app", "0.8.0"))
 
+    def test_the_repack_script_is_not_part_of_the_image(self):
+        result = self.decide("0.8.2", ["web/src/app.css", "scripts/repack-release.py"])
+        self.assertEqual(result[:2], ("app", "0.8.0"))
+
     def test_the_viewer_image_is_not_part_of_the_system_image(self):
         result = self.decide("0.8.2", ["backend/internal/viewer/manager.go", "viewer/Dockerfile", "viewer/policies.json", "scripts/build-viewer-image.sh"])
         self.assertEqual(result[:2], ("app", "0.8.0"))

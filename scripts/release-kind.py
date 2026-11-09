@@ -15,10 +15,13 @@ Usage: release-kind.py <version> [--tag-message FILE] [--source URL]
 """
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
+import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 VERSION = re.compile(r"([0-9]+)\.([0-9]+)\.([0-9]+)(?:-([a-z0-9.]+))?")
@@ -53,6 +56,9 @@ ALLOWED = (
     # image follows with the next full release, the release archive carries
     # the complete inventory of every release.
     "scripts/make-release.sh",
+    # repack-release.py makes the app release itself in CI and is never in
+    # an image (9 Nov 2026: retries for GitHub's 504 on release downloads).
+    "scripts/repack-release.py",
     "scripts/third-party-licenses.py",
     "scripts/verify-release.py",
     "scripts/tests/test_release.py",
@@ -104,10 +110,78 @@ def git(*args):
     return subprocess.run(["git", *args], check=True, capture_output=True, text=True).stdout
 
 
+GITHUB_DOWNLOAD = re.compile(r"^https://github\.com/([^/]+/[^/]+)/releases/download/([^/]+)/([^/?#]+)$")
+
+
+def api_headers(accept):
+    headers = {"User-Agent": "TitanOS release", "Accept": accept}
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    return headers
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+def api_asset(url, timeout):
+    """The file of a github.com release download through the API, or None
+    when the address is no such download or the release has no such file."""
+    match = GITHUB_DOWNLOAD.match(url)
+    if not match:
+        return None
+    repo, tag, name = match.groups()
+    request = urllib.request.Request(f"https://api.github.com/repos/{repo}/releases/tags/{tag}", headers=api_headers("application/vnd.github+json"))
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        release = json.load(response)
+    asset = next((a for a in release.get("assets", []) if a.get("name") == urllib.parse.unquote(name)), None)
+    if not asset:
+        return None
+    # The API sends the file from storage elsewhere: that address gets no token.
+    request = urllib.request.Request(asset["url"], headers=api_headers("application/octet-stream"))
+    try:
+        return urllib.request.build_opener(_NoRedirect).open(request, timeout=timeout)
+    except urllib.error.HTTPError as error:
+        if error.code not in (301, 302, 303, 307, 308):
+            raise
+        location = error.headers["Location"]
+    if not location.startswith("https://"):
+        raise SystemExit("insecure redirect: " + url)
+    return urllib.request.urlopen(urllib.request.Request(location, headers={"User-Agent": "TitanOS release"}), timeout=timeout)
+
+
+def open_release(url, timeout=120, attempts=4, pause=10):
+    """Opens a release download. Server errors and broken connections are
+    tried again; then a github.com file comes through the API. GitHub
+    answered the download address of single files with 504 for hours while
+    the API delivered them (9 Nov 2026, releases of 0.70.2 and 0.71.0).
+    A 404 raises at once, as from urlopen."""
+    failure = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "TitanOS release"}), timeout=timeout)
+        except urllib.error.HTTPError as error:
+            if error.code < 500:
+                raise
+            failure = error
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as error:
+            failure = error
+        if attempt < attempts:
+            print(f"{url}: try {attempt} failed ({failure}), again in {pause * attempt} s", flush=True)
+            time.sleep(pause * attempt)
+    response = api_asset(url, timeout)
+    if response is None:
+        raise failure
+    print(f"{url}: through the GitHub API", flush=True)
+    return response
+
+
 def manifest(source, tag):
     url = f"{source}/releases/download/{tag}/manifest.json"
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "TitanOS release"}), timeout=60) as response:
+        with open_release(url, timeout=60) as response:
             return json.load(response)
     except urllib.error.HTTPError as error:
         if error.code == 404:

@@ -169,6 +169,8 @@ nächste Tag ein volles Release. In den Repository-Einstellungen muss dafür
 „Allow GitHub Actions to create and approve pull requests“ an sein.
 Einzelheiten, Einrichtung und Grenzen: [AUTOPILOT.md](AUTOPILOT.md).
 
+**Downloads früherer Releases (ab 0.71.1):** `release-kind.py`, `repack-release.py` und `viewer-image-reuse.py` laden über `open_release` (in `release-kind.py`). Serverfehler (5xx) und abgebrochene Verbindungen werden bis zu viermal mit wachsender Pause wiederholt; danach holt es die Datei über die GitHub-API (Token des Laufs, `GH_TOKEN`). Am 9.11.2026 antwortete die Download-Adresse einzelner Dateien stundenlang mit 504, während die API sie lieferte; die Läufe von 0.70.2 und 0.71.0 brachen daran ab. `repack-release.py` läuft nur in CI und löst daher kein volles Release aus.
+
 ## Ab 0.41: zweiter Kernel, Stick-Abbild und GRUB
 
 - **Kernel „Neu“** ([KERNEL.md](KERNEL.md)): Ein volles Release baut das

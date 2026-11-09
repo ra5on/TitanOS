@@ -77,7 +77,7 @@ class ReleaseTest(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.repo = Path(self.tmp.name)
         (self.repo / "scripts").mkdir()
-        for name in ["make-release.sh", "sign-release.sh", "third-party-licenses.py", "fetch-webapps.py"]:
+        for name in ["make-release.sh", "sign-release.sh", "third-party-licenses.py", "fetch-webapps.py", "release-kind.py"]:
             shutil.copy2(REPO / "scripts" / name, self.repo / "scripts" / name)
         # One web app (PLAN 66) from a local folder instead of GitHub.
         self.webapp_source = self.repo / "webapp-source"

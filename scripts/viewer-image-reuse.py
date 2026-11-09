@@ -63,9 +63,10 @@ release_kind = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release_kind)
 
 
-def fetch(url, limit):
+def fetch(url, limit, pause=10):
+    # Through release_kind.open_release: tried again, then the GitHub API.
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "TitanOS release"}), timeout=120) as response:
+        with release_kind.open_release(url, pause=pause) as response:
             data = response.read(limit + 1)
     except urllib.error.HTTPError as error:
         if error.code == 404:
