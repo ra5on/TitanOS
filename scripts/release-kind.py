@@ -53,6 +53,9 @@ ALLOWED = (
     # image follows with the next full release, the release archive carries
     # the complete inventory of every release.
     "scripts/make-release.sh",
+    # repack-release.py makes the app release itself in CI and is never in
+    # an image (9 Nov 2026: retries for GitHub's 504 on release downloads).
+    "scripts/repack-release.py",
     "scripts/third-party-licenses.py",
     "scripts/verify-release.py",
     "scripts/tests/test_release.py",

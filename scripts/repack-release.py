@@ -31,6 +31,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -52,10 +54,24 @@ def sudo(*args):
     run(*prefix, *args)
 
 
-def download(url, target):
+def download(url, target, attempts=5, pause=10):
+    """Downloads url to target. A server error or a broken connection is
+    tried again: GitHub answered release downloads with 504 for minutes
+    (9 Nov 2026), and the release of 0.70.2 failed on it twice."""
     request = urllib.request.Request(url, headers={"User-Agent": "TitanOS release"})
-    with urllib.request.urlopen(request, timeout=120) as response, open(target, "wb") as out:
-        shutil.copyfileobj(response, out, 1 << 20)
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response, open(target, "wb") as out:
+                shutil.copyfileobj(response, out, 1 << 20)
+            return
+        except urllib.error.HTTPError as error:
+            if error.code < 500 or attempt == attempts:
+                raise
+        except (urllib.error.URLError, TimeoutError, ConnectionError):
+            if attempt == attempts:
+                raise
+        print(f"{url}: try {attempt} failed, again in {pause * attempt} s", flush=True)
+        time.sleep(pause * attempt)
 
 
 def sha256(path):

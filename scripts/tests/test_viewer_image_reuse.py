@@ -11,6 +11,7 @@ import tarfile
 import tempfile
 import threading
 import unittest
+import urllib.error
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -210,3 +211,43 @@ class ReuseTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FetchRetries(unittest.TestCase):
+    """GitHub answered release downloads with 504 for minutes (9 Nov 2026)."""
+
+    def serve(self, answers):
+        calls = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                code = answers[min(len(calls), len(answers) - 1)]
+                calls.append(code)
+                self.send_response(code)
+                self.end_headers()
+                if code == 200:
+                    self.wfile.write(b"manifest")
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.shutdown)
+        return f"http://127.0.0.1:{server.server_address[1]}/m", calls
+
+    def test_server_errors_are_tried_again(self):
+        url, calls = self.serve([504, 504, 200])
+        self.assertEqual(reuse.fetch(url, 100, pause=0), b"manifest")
+        self.assertEqual(calls, [504, 504, 200])
+
+    def test_missing_is_not_tried_again(self):
+        url, calls = self.serve([404])
+        self.assertIsNone(reuse.fetch(url, 100, pause=0))
+        self.assertEqual(calls, [404])
+
+    def test_gives_up(self):
+        url, calls = self.serve([503])
+        with self.assertRaises(urllib.error.HTTPError):
+            reuse.fetch(url, 100, attempts=3, pause=0)
+        self.assertEqual(len(calls), 3)
