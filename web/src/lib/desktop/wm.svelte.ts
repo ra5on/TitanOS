@@ -90,6 +90,7 @@ export function loadDesktop() {
 export function applyStoredPrefs() {
 	desktop.prefs = sanitizeDesktop(session.desktop);
 	desktop.from = session.prefsLoaded;
+	listenForPrefs();
 	try {
 		const recent = JSON.parse(localStorage.getItem(recentKey()) ?? 'null');
 		if (Array.isArray(recent)) desktop.prefs.recent = sanitizeDesktop({ recent }).recent;
@@ -152,6 +153,28 @@ export function saveWindows() {
 	}, 400);
 }
 
+// PLAN 75-17: the desktop's settings changed in another tab of this
+// browser (Einstellungen opened in a tab of its own, say a smaller dock)
+// reach every desktop at once, not only after a reload: a maximised window
+// then follows the new dock. Only the same account takes them.
+const PREFS_CHANNEL = 'titanos-desktop-prefs';
+let prefsChannel: BroadcastChannel | null = null;
+function channel(): BroadcastChannel | null {
+	if (prefsChannel || typeof BroadcastChannel === 'undefined') return prefsChannel;
+	prefsChannel = new BroadcastChannel(PREFS_CHANNEL);
+	prefsChannel.onmessage = (event: MessageEvent) => {
+		const data = event.data as { user?: unknown; prefs?: unknown } | null;
+		if (!data || data.user !== (session.data?.user?.name ?? '')) return;
+		session.desktop = data.prefs as Record<string, unknown>;
+		desktop.prefs = sanitizeDesktop(data.prefs);
+	};
+	return prefsChannel;
+}
+/** Listens for the settings other tabs save (called when the desktop loads). */
+export function listenForPrefs() {
+	channel();
+}
+
 let savePrefsTimer: ReturnType<typeof setTimeout> | undefined;
 /** Saves the desktop's settings on the NAS, a moment after the last change. */
 export function savePrefs(change?: (p: DesktopPrefs) => void) {
@@ -167,6 +190,7 @@ export function savePrefs(change?: (p: DesktopPrefs) => void) {
 	savePrefsTimer = setTimeout(() => {
 		const value = $state.snapshot(desktop.prefs);
 		session.desktop = value as unknown as Record<string, unknown>;
+		channel()?.postMessage({ user: session.data?.user?.name ?? '', prefs: value });
 		api.put('/preferences/desktop', value).catch(() => {
 			// Kept in this browser until the next change succeeds.
 		});

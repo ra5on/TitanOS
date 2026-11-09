@@ -69,6 +69,56 @@ for (const [width, height] of [
   await ctx.close();
 }
 
+// PLAN 75-17: the dock made smaller in another tab (Einstellungen in a tab
+// of its own): the maximised window of the desktop follows at once, without
+// a reload – its bottom stays just above the dock.
+{
+  const made = await create("owner", "graphit", 1440);
+  const { ctx, page } = made;
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await ctx.addInitScript(() => localStorage.removeItem("titanos.layout"));
+  await page.goto(base + "/");
+  await page.locator(".dock").waitFor({ timeout: 15000 });
+  await page
+    .locator(".dock")
+    .getByRole("button", { name: "Dateien", exact: true })
+    .click();
+  const win = page.locator("section.win.focused");
+  await win.waitFor();
+  await win.locator("header.titlebar").dblclick();
+  await page.waitForTimeout(400);
+  const gap = async () => {
+    await page.mouse.move(5, 300);
+    await page.waitForTimeout(400);
+    const dock = await page.locator(".dock").boundingBox();
+    const box = await win.boundingBox();
+    return { gap: dock.y - (box.y + box.height), dockTop: dock.y };
+  };
+  const before = await gap();
+  // The other tab saves the desktop with a smaller dock.
+  const other = await ctx.newPage();
+  await other.goto(base + "/");
+  await other.locator(".dock").waitFor({ timeout: 15000 });
+  await other.evaluate(
+    ({ user }) => {
+      const channel = new BroadcastChannel("titanos-desktop-prefs");
+      channel.postMessage({ user, prefs: { dock: { size: 36 } } });
+    },
+    { user: "alex" },
+  );
+  await page.waitForTimeout(800);
+  const after = await gap();
+  assert.ok(
+    after.dockTop > before.dockTop + 8,
+    `the dock got smaller (${before.dockTop} → ${after.dockTop})`,
+  );
+  assert.ok(
+    Math.abs(after.gap - before.gap) <= 2,
+    `the maximised window follows the dock (gap ${before.gap} → ${after.gap})`,
+  );
+  await ctx.close();
+}
+
 await browser.close();
 assert.deepEqual(errors, [], "no script errors");
 console.log("dock clear UI ok");
