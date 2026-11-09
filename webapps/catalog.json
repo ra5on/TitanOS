@@ -4,10 +4,10 @@
       "id": "t-word",
       "name": "T-Word",
       "repo": "ra5on/TitanOS-Office",
-      "version": "1.0.0",
-      "upstreamAsset": "t-word-web-1.0.0.zip",
-      "sha256": "a7337c936d1ad97416f9f48afea723c11a40bae6b9088935492934fa50a01244",
-      "size": 21553600,
+      "version": "1.1.0",
+      "upstreamAsset": "t-word-web-1.1.0.zip",
+      "sha256": "b63d22e89ff665038ec6acf2544859a12cc42cb57484e62862fd965fc6968c34",
+      "size": 19745650,
       "license": "MIT OR Apache-2.0",
       "bridge": "host",
       "types": [
@@ -23,10 +23,10 @@
       "id": "t-pdf",
       "name": "T-PDF",
       "repo": "ra5on/TitanOS-Office",
-      "version": "1.0.0",
-      "upstreamAsset": "t-pdf-web-1.0.0.zip",
-      "sha256": "50f88ce50fc7f6b0bd4bfc72eee529eb24da535a5f57f850c6edd78de477f2b5",
-      "size": 19951097,
+      "version": "1.1.0",
+      "upstreamAsset": "t-pdf-web-1.1.0.zip",
+      "sha256": "9a0e05c215f329cd8b3c8d5de8c23cf6b15cc4f10437a7bee4054bdcaa1a57a8",
+      "size": 16134138,
       "license": "MIT OR Apache-2.0",
       "bridge": "host",
       "types": [
@@ -39,10 +39,10 @@
       "id": "t-exel",
       "name": "T-Exel",
       "repo": "ra5on/TitanOS-Office",
-      "version": "1.0.0",
-      "upstreamAsset": "t-exel-web-1.0.0.zip",
-      "sha256": "b931fc07c612f1f93959b17c6478c290eaca992dec04fb932137554f6dd4d00a",
-      "size": 9475532,
+      "version": "1.1.0",
+      "upstreamAsset": "t-exel-web-1.1.0.zip",
+      "sha256": "c88a87e6017a2aa097c3ad54d4928e3589a20ed7c64c8f6fba9b223c41e4da43",
+      "size": 9475851,
       "license": "MIT OR Apache-2.0",
       "bridge": "host",
       "types": [
@@ -52,6 +52,190 @@
         "csv"
       ],
       "default": true,
+      "trusted": true
+    },
+    {
+      "id": "t-deck",
+      "name": "T-Deck",
+      "repo": "ra5on/TitanOS-Office",
+      "version": "1.1.0",
+      "upstreamAsset": "t-deck-web-1.1.0.zip",
+      "sha256": "db4f21372674def7ece67f600b7c6c457ec991b69e0b8b22ae707d3ba52e4d13",
+      "size": 11802096,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "host",
+      "types": [
+        "pptx",
+        "potx",
+        "ppsx"
+      ],
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "t-cad",
+      "name": "T-CAD",
+      "repo": "ra5on/TitanOS-Office",
+      "version": "1.1.0",
+      "upstreamAsset": "t-cad-web-1.1.0.zip",
+      "sha256": "b22612efcaefd8e931f90be231cc633d1fb0773b09a1dbeab452b3d37f289976",
+      "size": 11234572,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "host",
+      "types": [
+        "dxf"
+      ],
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "t-fig",
+      "name": "T-Fig",
+      "repo": "ra5on/TitanOS-Office",
+      "version": "1.1.0",
+      "upstreamAsset": "t-fig-web-1.1.0.zip",
+      "sha256": "ca4d79390cddc61cd639530b82610ca9f109a196713077e4c51048da17b87ee4",
+      "size": 9300844,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "host",
+      "types": [
+        "figcraft"
+      ],
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "t-film",
+      "name": "T-Film",
+      "repo": "ra5on/TitanOS-Office",
+      "version": "1.1.0",
+      "upstreamAsset": "t-film-web-1.1.0.zip",
+      "sha256": "857fed9a32fb6daf35de6cd38fa4b707a5a7de040da02b6ed241a314fed098fc",
+      "size": 15296878,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "host",
+      "types": [
+        "fcproj"
+      ],
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "t-light",
+      "name": "T-Light",
+      "repo": "ra5on/TitanOS-Office",
+      "version": "1.1.0",
+      "upstreamAsset": "t-light-web-1.1.0.zip",
+      "sha256": "8e2d802ab6a2d26ed7a99d6999b0cb8d4ff47723ab5752ed0ab8aab294afb368",
+      "size": 26611546,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "host",
+      "types": [],
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "t-vector",
+      "name": "T-Vector",
+      "repo": "ra5on/TitanOS-Office",
+      "version": "1.1.0",
+      "upstreamAsset": "t-vector-web-1.1.0.zip",
+      "sha256": "523022d28da94d6853ee6fe9ecfbd8b4af79aa9a236480eb72f46ab414241c79",
+      "size": 30326175,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "adapter",
+      "types": [
+        "svg",
+        "ai"
+      ],
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "t-design",
+      "name": "T-Design",
+      "repo": "ra5on/TitanOS-Office",
+      "version": "1.1.0",
+      "upstreamAsset": "t-design-web-1.1.0.zip",
+      "sha256": "f0bcbce5bc2d7aa24706ca4ebed65e4c5ed23bc0dcc87e11b1a73ade7c3060d8",
+      "size": 23941209,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "adapter",
+      "types": [
+        "designcraft",
+        "idml"
+      ],
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "t-effect",
+      "name": "T-Effect",
+      "repo": "ra5on/TitanOS-Office",
+      "version": "1.1.0",
+      "upstreamAsset": "t-effect-web-1.1.0.zip",
+      "sha256": "08076537c9c6b303c8d00604714efaffadeeea7bd3369c26207e8be048d76834",
+      "size": 22156892,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "adapter",
+      "types": [
+        "ecproj"
+      ],
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "t-sound",
+      "name": "T-Sound",
+      "repo": "ra5on/TitanOS-Office",
+      "version": "1.1.0",
+      "upstreamAsset": "t-sound-web-1.1.0.zip",
+      "sha256": "a565f821aa2e1e3f308dc7f17acc3c84a3907e99268765c8e2e8481c539cb289",
+      "size": 6853395,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "adapter",
+      "types": [
+        "scraftz",
+        "wav"
+      ],
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "t-texture",
+      "name": "T-Texture",
+      "repo": "ra5on/TitanOS-Office",
+      "version": "1.1.0",
+      "upstreamAsset": "t-texture-web-1.1.0.zip",
+      "sha256": "1d935b128afa94c79b30d1326ba7a17f4c9c6ecbd9a1af25c310e7e8b4b8b89d",
+      "size": 5332076,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "adapter",
+      "types": [
+        "tcraft",
+        "obj",
+        "glb",
+        "gltf",
+        "fbx",
+        "stl"
+      ],
+      "default": false,
+      "trusted": true
+    },
+    {
+      "id": "t-material",
+      "name": "T-Material",
+      "repo": "ra5on/TitanOS-Office",
+      "version": "1.1.0",
+      "upstreamAsset": "t-material-web-1.1.0.zip",
+      "sha256": "d5bd3ba41f79ab71d527198abbf34d9ad67504fc3d3643c01539272753b45999",
+      "size": 4604967,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "adapter",
+      "types": [
+        "sbs"
+      ],
+      "default": false,
       "trusted": true
     },
     {
@@ -123,7 +307,8 @@
         "potx",
         "ppsx"
       ],
-      "default": false
+      "default": false,
+      "successor": "t-deck"
     },
     {
       "id": "cadcraft",
@@ -138,7 +323,8 @@
       "types": [
         "dxf"
       ],
-      "default": false
+      "default": false,
+      "successor": "t-cad"
     },
     {
       "id": "figcraft",
@@ -153,7 +339,8 @@
       "types": [
         "figcraft"
       ],
-      "default": false
+      "default": false,
+      "successor": "t-fig"
     },
     {
       "id": "filmcraft",
@@ -168,7 +355,8 @@
       "types": [
         "fcproj"
       ],
-      "default": false
+      "default": false,
+      "successor": "t-film"
     },
     {
       "id": "lightcraft",
@@ -181,7 +369,8 @@
       "license": "MIT OR Apache-2.0",
       "bridge": "host",
       "types": [],
-      "default": false
+      "default": false,
+      "successor": "t-light"
     },
     {
       "id": "vectorcraft",
@@ -197,7 +386,8 @@
         "svg",
         "ai"
       ],
-      "default": false
+      "default": false,
+      "successor": "t-vector"
     },
     {
       "id": "designcraft",
@@ -213,7 +403,8 @@
         "designcraft",
         "idml"
       ],
-      "default": false
+      "default": false,
+      "successor": "t-design"
     },
     {
       "id": "effectcraft",
@@ -228,7 +419,8 @@
       "types": [
         "ecproj"
       ],
-      "default": false
+      "default": false,
+      "successor": "t-effect"
     },
     {
       "id": "soundcraft",
@@ -244,7 +436,8 @@
         "scraftz",
         "wav"
       ],
-      "default": false
+      "default": false,
+      "successor": "t-sound"
     },
     {
       "id": "texturecraft",
@@ -264,7 +457,8 @@
         "fbx",
         "stl"
       ],
-      "default": false
+      "default": false,
+      "successor": "t-texture"
     },
     {
       "id": "materialcraft",
@@ -279,7 +473,8 @@
       "types": [
         "sbs"
       ],
-      "default": false
+      "default": false,
+      "successor": "t-material"
     }
   ]
 }

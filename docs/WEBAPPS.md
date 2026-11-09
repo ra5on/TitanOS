@@ -159,3 +159,27 @@ Seit 0.72 gehören **T-Word**, **T-PDF** und **T-Exel** zur Grundausstattung, ni
 - **Speichern einer so geöffneten Datei:** Die App kennt den Ort nicht und meldet beim ersten Speichern `saveAs: true` mit dem Dateinamen. Hat das Fenster unter genau diesem Namen eine Datei des NAS für die App geöffnet und gehört die Endung zu den Typen der App, schreibt es in diese Datei (`expect` = ihre Zeit beim Lesen, `409` → Rückfrage „Ersetzen?“) und macht sie zur Datei des Fensters. Sonst der Speicherdialog wie bisher.
 - **`successor`** im Katalog (wordcraft → t-word, pdfcraft → t-pdf, gridcraft → t-exel und die übrigen Craft-Apps → ihre T-Fassung): Docker-Versionen einer Craft-App werden durch den Nachfolger ersetzt. Im App-Center zeigt ein installiertes Original „Durch T-Word ersetzen“: erst wird der Nachfolger installiert, wenn er bereit ist, wird das Original entfernt.
 - **Fehler in 0.72 behoben:** Die Liste der Web-Apps in der Oberfläche verlor `trusted`; T-Word, T-PDF und T-Exel liefen dadurch weiter abgeschottet und über Cloudflare Access nicht ohne Bypass-Regel.
+
+## Alle Craft-Apps als T-Fassungen (0.73, TitanOS-Office 1.1.0)
+
+| T-Fassung | Original | Brücke | Typen |
+|---|---|---|---|
+| T-Word, T-PDF, T-Exel | WordCraft, PdfCraft, GridCraft | host | wie oben, jetzt mit vollständigen deutschen Übersetzungen |
+| T-Deck | DeckCraft | host | pptx potx ppsx |
+| T-CAD | CADCraft | host | dxf |
+| T-Fig | FigCraft | host | figcraft |
+| T-Film | FilmCraft | host | fcproj |
+| T-Light | LightCraft | host | – |
+| T-Vector | VectorCraft | adapter | svg ai |
+| T-Design | DesignCraft | adapter | designcraft idml |
+| T-Effect | EffectCraft | adapter | ecproj |
+| T-Sound | SoundCraft | adapter | scraftz wav |
+| T-Texture | TextureCraft | adapter | tcraft obj glb gltf fbx stl |
+| T-Material | MaterialCraft | adapter | sbs |
+
+- Alle `trusted`, Version 1.1.0, Archiv `t-<x>-web-1.1.0.zip` aus `ra5on/TitanOS-Office`. Zur Grundausstattung gehören weiter nur T-Word, T-PDF und T-Exel.
+- **Geprüft (9.11.2026):** Jede der elf neuen Fassungen startet in Chromium (SwiftShader-WebGL) von einem einfachen Server, mit Titel T-… und ohne Skriptfehler. Im TitanOS-Fenster mit Öffnen und Speichern ist nur T-Word (bzw. das baugleiche WordCraft) im UI-Test.
+- **Grenzen:**
+  - Beispieldokumente der Adapter-Apps (z. B. T-Effect) nennen in ihrem Inhalt noch den Originalnamen.
+  - T-Fig, T-Light und T-Vector bauen ohne craft-fonts, nur mit den eingebauten Schriften.
+  - T-Effect lief upstream mit Cross-Origin-Isolation (Threads). TitanOS sendet sie nicht; die App startet trotzdem.
