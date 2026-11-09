@@ -15,6 +15,9 @@ Stand: offen · behoben (PR) · bewusst gelassen (Grund) · beim Inhaber.
 | F-1-4 | Altlast | `backend/` | deadcode: keine tote Funktion im Produktivcode. Nur von Tests benutzt: `agentDue`, `agentInbox`, `backup.copyFile`, `backup.remoteSMB`, `Job.sourceVersion`, `usb.waitFormat`, `homeassistant.WithRelease`, `webapps.Catalog`, `nalTypes`. | bewusst gelassen (kleine Testhelfer) |
 | F-1-5 | Lücke | `homeassistant/watch.go` `Match` | Auswertung von Schwellwerten (über/unter) ist fertig und getestet, aber nirgends angeschlossen; Auslöser des Agenten kennen nur einen exakten Zustand. | offen → 11.2 |
 | F-1-6 | – | CI | Von 74 UI-Suites (`scripts/test-ui-*.mjs`) läuft in der CI nur `test-ui-crawl`. | offen → 1.3/13.3 |
+| F-1-7 | Fehler | gebautes CSS: `Desktop.svelte`, `Dock.svelte`, `Window.svelte`, `AuthCard.svelte`, `Login.svelte`, `files/+page.svelte` | Der Weichzeichner der Glasflächen fehlte im Bau: stand `backdrop-filter` vor `-webkit-backdrop-filter`, blieb nur die Zeile mit Präfix übrig, die Chromium und Firefox nicht beachten. Arbeitsplatz, Dock, Fensterrahmen und Anmeldekarte waren nur durchsichtig. Aufgefallen durch `test-ui-appearance`. | behoben (#316): Reihenfolge getauscht, `web/tests/glass-order.test.mjs` |
+| F-1-8 | Fehler | `desktop/wm.svelte.ts` `navigateWindow` | Klick in der Seitenleiste eines Fensters ging verloren, solange die Seite im Fenster noch lud (Nachricht kam vor dem Empfänger an). Aufgefallen durch `test-ui-mcp-user` und `test-ui-scripts`. | behoben (#316): gewünschte Seite wird nachgereicht. Rest: ein Klick während eines vollen Neuladens im Fenster kann weiter verloren gehen |
+| F-1-9 | Altlast (Tests) | `scripts/test-ui-appform`, `-mcp-user`, `-pwa`, `-schedule`, `-activity` | Vier Suites kannten Tabellen, Statusleisten und aufklappbare Gruppen aus 0.74 nicht; `activity` wartete auf eine Zeile, die vor und nach dem Filtern da ist. | behoben (#316), keine Prüfung entfernt. Stand 10.11.2026: alle 72 Suites grün gegen die Vorschau |
 
 ## 2. Sicherheit und Zugang
 
@@ -75,3 +78,15 @@ Noch nicht gelesen: `ha_*`, `homeassistant*`, `app_access.go`, Benachrichtigunge
 | F-3-14 | Fehler (klein) | `api/docker.go:139`, `api/volume_checks.go:34` | LAN-Zuweisung einer App und „Prüfungen des neuen Volumes“ lesen und schreiben ohne gemeinsame Sperre; eine gleichzeitige zweite Änderung ginge verloren. | bewusst gelassen (Fenster von Millisekunden, zwei Administratoren zugleich) |
 | F-3-15 | Altlast | `api/webapps.go:304`, `users.go:250`, `app_access.go:206/510` | Hintergrundarbeit ohne `goJob`: `Server.Close` wartet nicht darauf. `system.go:164` hält `powerMu` bis 10 s. | offen → 3.4 |
 | F-3-16 | Fehler (Test) | `api/agent_test.go` | `TestAgentNASMapAndInstructions` wackelte in der CI: ein Lauf schrieb nach der Antwort noch in die Freigabe, während der Test aufräumte. | behoben (in #316): Läufe werden gezählt, Tests warten |
+
+## 12. Weboberfläche (vorgemerkt, noch nicht bearbeitet)
+
+| Nr. | Art | Wo | Befund | Stand |
+|---|---|---|---|---|
+| F-12-1 | Fehler | `routes/account/WebDav.svelte` | Gruppe „WebDAV“ unter Mein Konto ohne Innenabstand (siehe F-2-9). | offen |
+| F-12-2 | Fehler | `routes/share/+page.svelte` bei 390 px | Statusleiste steht mitten im Bild unter den Karten, eingerückt, darunter leere Seite. | offen |
+| F-12-3 | Fehler | `routes/docker/apps/[name]/+page.svelte` | Namenszeile „immich· immich-server“ (Leerzeichen fehlt vor dem Punkt); Schalter „Aus Anmeldung im Browser prüfen“ mit dem Zustand vor der Beschriftung; Warnung „Mindestens ein Dateityp.“ ohne Eingabe. | offen |
+| F-12-4 | Fehler | `routes/tools/scripts/+page.svelte` bei 390 px | Skript ohne letzten Lauf zeigt ein einzelnes „—“ ohne Beschriftung; Trennlinie mit Leerraum am Ende der Gruppe. | offen |
+| F-12-5 | Fehler | `routes/docker/apps/[name]/AppAccess.svelte:23` | Eine unerwartete Antwort von `/apps/access` reißt die ganze Seite mit (500-Ansicht) statt nur die Zeile. | offen |
+| F-12-6 | Frage | Dialog „Office-Programme direkt im Browser“ | Text nennt „Ab TitanOS 0.63“; prüfen, ob die Angabe noch stimmt. | offen |
+
