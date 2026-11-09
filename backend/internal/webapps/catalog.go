@@ -57,7 +57,7 @@ var (
 	versionRE = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 	shaRE     = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	repoRE    = regexp.MustCompile(`^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$`)
-	typeRE    = regexp.MustCompile(`^[a-z0-9]{1,10}$`)
+	typeRE    = regexp.MustCompile(`^[a-z0-9]{1,16}$`)
 )
 
 // ValidID reports whether id can name an app (and a folder).
