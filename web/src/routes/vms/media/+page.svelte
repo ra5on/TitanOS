@@ -9,6 +9,7 @@
 	import { formatBytes } from '#lib/format.ts';
 	import { mediaActive, verifyMediaUpload, type MediaJob } from '#lib/media.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -324,19 +325,40 @@
 			{t('common.loading')}
 		</p>
 	{:else if media && media.length === 0}<p class="muted">{t('media.filesEmpty')}</p>
-	{:else if media}<ul class="file-list">
-			{#each media as entry (entry.path)}
-				{@const users = usedBy(entry.path)}
-				<li>
-					<span class="mono path">{entry.path}</span>
-					<span class="muted mono">{formatBytes(entry.sizeBytes)}</span>
-					<span class="muted"
-						>{users.length ? t('media.usedBy', { vms: users.join(', ') }) : t('media.unused')}</span
-					>
-				</li>
-			{/each}
-		</ul>{/if}
+	{:else if media}<div class="table-wrap">
+			<table class="data-table media-files">
+				<thead
+					><tr
+						><th>{t('media.col.file')}</th><th class="num">{t('media.col.size')}</th><th
+							>{t('media.col.used')}</th
+						></tr
+					></thead
+				>
+				<tbody>
+					{#each media as entry (entry.path)}
+						{@const users = usedBy(entry.path)}
+						<tr>
+							<td class="mono path">{entry.path}</td>
+							<td class="num muted">{formatBytes(entry.sizeBytes)}</td>
+							<td class="muted"
+								>{users.length
+									? t('media.usedBy', { vms: users.join(', ') })
+									: t('media.unused')}</td
+							>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>{/if}
 </section>
+{#if media}<StatusBar label={t('media.statusBar')}>
+		<span
+			>{t('media.statFiles', { count: media.length })} · {formatBytes(
+				media.reduce((sum, m) => sum + m.sizeBytes, 0),
+			)}</span
+		>
+		<span>{t('media.unused')}: <b>{media.filter((m) => !usedBy(m.path).length).length}</b></span>
+	</StatusBar>{/if}
 {#if adding}<Dialog title={t('media.add')} wide locked={busy} onclose={() => (adding = false)}
 		><form onsubmit={create}>
 			{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
@@ -511,24 +533,23 @@
 		gap: var(--gap);
 		margin-top: var(--gap);
 	}
-	.file-list {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: grid;
+	.media-files .path {
+		overflow-wrap: anywhere;
 	}
-	.file-list li {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr) auto minmax(8rem, auto);
-		gap: var(--space-1) var(--space-4);
-		align-items: center;
-		padding: var(--space-2) 0;
-		border-top: 1px solid var(--panel-border);
-		font-size: var(--text-base);
-	}
-	@media (max-width: 760px) {
-		.file-list li {
-			grid-template-columns: minmax(0, 1fr);
+	@media (max-width: 640px) {
+		.media-files thead {
+			display: none;
+		}
+		.media-files tr {
+			display: grid;
+			gap: 2px;
+			padding: var(--space-2) 0;
+			border-bottom: 1px solid var(--border);
+		}
+		.media-files td {
+			padding: 0;
+			border: 0;
+			text-align: left;
 		}
 	}
 </style>
