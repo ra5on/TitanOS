@@ -317,3 +317,60 @@ func TestHAQuotaTakesDecimalBytesFirst(t *testing.T) {
 		t.Fatalf("no limit: %d", got)
 	}
 }
+
+// The account deleted under Settings › Users (owner test of 9 Nov 2026):
+// the page says so, and the next entry makes it again with its access to
+// the earlier shares instead of failing on an unknown account.
+func TestStorageForHomeAssistantAfterTheAccountWasDeleted(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	docs := ts.withShare()
+	fake := haConnected(t, ts)
+	os.MkdirAll(filepath.Join(docs, "Musik"), 0o755)
+	if res, body := ts.request("POST", "/api/v1/homeassistant/storage", map[string]any{"volume": "tank", "share": "homeassistant", "account": "homeassistant", "usage": "backup", "register": true}); res.StatusCode != http.StatusCreated {
+		t.Fatalf("first: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("DELETE", "/api/v1/users/homeassistant", nil); res.StatusCode != http.StatusOK && res.StatusCode != http.StatusNoContent {
+		t.Fatalf("delete account: %d %s", res.StatusCode, body)
+	}
+	if share := findShare(ts, "homeassistant"); share.Access["homeassistant"] != "" {
+		t.Fatalf("access kept after deleting: %v", share.Access)
+	}
+	if _, body := ts.request("GET", "/api/v1/homeassistant/storage", nil); !strings.Contains(string(body), `"accountMissing":true`) {
+		t.Fatalf("status: %s", body)
+	}
+
+	res, body := ts.request("POST", "/api/v1/homeassistant/storage", map[string]any{"share": "Docs", "existing": true, "folder": "Musik", "usage": "media", "register": false})
+	var made haAnswer
+	json.Unmarshal(body, &made)
+	if res.StatusCode != http.StatusCreated || len(made.Password) < 20 || len(made.Setup.Entries) != 2 {
+		t.Fatalf("after deleting: %d %s", res.StatusCode, body)
+	}
+	if _, ok := ts.users.Get("homeassistant"); !ok {
+		t.Fatal("account not made again")
+	}
+	if share := findShare(ts, "homeassistant"); share.Access["homeassistant"] != "rw" {
+		t.Fatalf("earlier share without access: %v", share.Access)
+	}
+	if share := findShare(ts, "Docs"); share.Access["homeassistant"] != "rw" || share.Access["alex"] != "rw" {
+		t.Fatalf("new share: %v", share.Access)
+	}
+	if _, body := ts.request("GET", "/api/v1/homeassistant/storage", nil); !strings.Contains(string(body), `"accountMissing":false`) {
+		t.Fatalf("status after: %s", body)
+	}
+
+	// Deleted again, "enter everything again" makes it as well.
+	ts.request("DELETE", "/api/v1/users/homeassistant", nil)
+	res, body = ts.request("POST", "/api/v1/homeassistant/storage/register", nil)
+	var again haAnswer
+	json.Unmarshal(body, &again)
+	if res.StatusCode != http.StatusOK || len(again.Results) != 2 || !again.Results[0].OK || !again.Results[1].OK {
+		t.Fatalf("register after deleting: %d %s", res.StatusCode, body)
+	}
+	if m := fake.mount("titanos_homeassistant"); m["password"] != again.Password {
+		t.Fatalf("mount kept the old password: %v", m)
+	}
+	if share := findShare(ts, "Docs"); share.Access["homeassistant"] != "rw" {
+		t.Fatalf("access after register: %v", share.Access)
+	}
+}

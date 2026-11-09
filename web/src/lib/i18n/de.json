@@ -7030,6 +7030,7 @@
 	"error.ha_storage_folder": "Diesen Ordner gibt es in der Freigabe nicht, oder er ist nicht wählbar.",
 	"error.ha_storage_read_only": "Backups brauchen Schreibzugriff.",
 	"hastore.accountLine": "Konto {account} · Server {server}",
+	"hastore.accountMissing": "Das Konto {account} gibt es nicht mehr. Beim nächsten „Speicher einrichten“ oder „Erneut in Home Assistant eintragen“ legt TitanOS es mit neuem Passwort wieder an und gibt ihm den Zugriff auf die Freigaben oben zurück.",
 	"hastore.mountLine": "In Home Assistant: {mount}",
 	"hastore.add": "Speicher einrichten",
 	"hastore.addMore": "Freigabe hinzufügen",

@@ -7030,6 +7030,7 @@
 	"error.ha_storage_folder": "This folder does not exist in the share, or it cannot be chosen.",
 	"error.ha_storage_read_only": "Backups need to write.",
 	"hastore.accountLine": "Account {account} · server {server}",
+	"hastore.accountMissing": "The account {account} no longer exists. The next “Set up storage” or “Enter in Home Assistant again” makes it anew with a new password and gives it back its access to the shares above.",
 	"hastore.mountLine": "In Home Assistant: {mount}",
 	"hastore.add": "Set up storage",
 	"hastore.addMore": "Add share",

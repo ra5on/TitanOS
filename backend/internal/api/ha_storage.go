@@ -223,8 +223,15 @@ func (s *Server) handleHAStorage(w http.ResponseWriter, r *http.Request) {
 			choices = append(choices, map[string]string{"name": share.Name, "volume": share.Volume})
 		}
 	}
+	// accountMissing: the account was deleted (Settings › Users); the next
+	// entry or entering everything again makes it anew.
+	missing := false
+	if account != "" {
+		_, exists := s.opts.Users.Get(account)
+		missing = !exists
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"account": account, "server": server, "entries": entries,
-		"volumes": mounted, "shares": choices, "homeAssistant": active})
+		"volumes": mounted, "shares": choices, "homeAssistant": active, "accountMissing": missing})
 }
 
 // handleHAStorageAdd adds an entry: a new share or one that exists, a
@@ -305,6 +312,7 @@ func (s *Server) handleHAStorageAdd(w http.ResponseWriter, r *http.Request) {
 		entry.MaxAgeDays = 3
 	}
 	newAccount := setup == nil
+	restore := false
 	if newAccount {
 		if _, exists := s.opts.Users.Get(req.Account); exists {
 			writeError(w, http.StatusConflict, "ha_storage_account_exists", "an account of this name exists; choose another name")
@@ -314,13 +322,16 @@ func (s *Server) handleHAStorageAdd(w http.ResponseWriter, r *http.Request) {
 	} else if slices.ContainsFunc(setup.Entries, func(e haEntry) bool { return e.Mount == entry.Mount }) {
 		writeError(w, http.StatusConflict, "ha_storage_entry_exists", "Home Assistant has this share or folder already")
 		return
+	} else {
+		_, exists := s.opts.Users.Get(setup.Account)
+		restore = !exists
 	}
 	setup.Server = s.haServerAddress(r)
 
 	// A new password whenever there is something to tell Home Assistant,
 	// and always for a new account.
 	password := ""
-	if newAccount || req.Register {
+	if newAccount || restore || req.Register {
 		password = haPassword()
 	}
 	if newAccount {
@@ -329,14 +340,18 @@ func (s *Server) handleHAStorageAdd(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if restore {
+		if err := s.haRestoreAccount(setup, password); err != nil {
+			writeShareError(w, err)
+			return
+		}
+	}
 	undo := func() {
-		if !newAccount {
+		if !newAccount && !restore {
 			return
 		}
 		// Nothing half: the account was only for this.
-		if err := s.opts.Users.Delete(setup.Account); err != nil {
-			slog.Warn("account for Home Assistant not removed again", "account", setup.Account, "err", err)
-		}
+		s.haDropAccount(setup.Account)
 	}
 	access := shares.ReadWrite
 	if req.ReadOnly {
@@ -356,7 +371,7 @@ func (s *Server) handleHAStorageAdd(w http.ResponseWriter, r *http.Request) {
 		writeShareError(w, err)
 		return
 	}
-	if !newAccount && password != "" {
+	if !newAccount && !restore && password != "" {
 		if _, err := s.opts.Users.SetPassword(setup.Account, password); err != nil {
 			writeAccountError(w, err)
 			return
@@ -396,6 +411,44 @@ func (s *Server) haGrant(share shares.Share, account, access string) error {
 	return s.opts.Shares.Update(share.Name, changed, s.opts.Storage.Names(), s.userNames())
 }
 
+// haRestoreAccount makes the account of a setup again after it was
+// deleted under Settings › Users (owner test of 9 Nov 2026: afterwards no
+// storage could be added, every share refused the unknown account). Same
+// name, this password, and the access to every entry's share it lost; a
+// share that is gone is skipped. Nothing half: on an error it goes again.
+func (s *Server) haRestoreAccount(setup *haStorage, password string) error {
+	if _, err := s.opts.Users.Create(setup.Account, password, auth.RoleUser); err != nil {
+		return err
+	}
+	for _, e := range setup.Entries {
+		share, found := s.findShare(e.Share)
+		if !found {
+			continue
+		}
+		access := shares.ReadWrite
+		if e.ReadOnly {
+			access = shares.ReadOnly
+		}
+		if err := s.haGrant(share, setup.Account, access); err != nil {
+			s.haDropAccount(setup.Account)
+			return err
+		}
+	}
+	slog.Info("account for Home Assistant made again", "account", setup.Account, "entries", len(setup.Entries))
+	return nil
+}
+
+// haDropAccount takes an account made for Home Assistant away again, with
+// its access to the shares.
+func (s *Server) haDropAccount(account string) {
+	if err := s.opts.Users.Delete(account); err != nil {
+		slog.Warn("account for Home Assistant not removed again", "account", account, "err", err)
+	}
+	if err := s.opts.Shares.ForgetUser(account); err != nil {
+		slog.Warn("access of the account for Home Assistant left in shares", "account", account, "err", err)
+	}
+}
+
 // handleHAStorageRegister gives the account a new password and enters
 // every entry in Home Assistant with it: TitanOS does not keep the old one.
 func (s *Server) handleHAStorageRegister(w http.ResponseWriter, r *http.Request) {
@@ -417,7 +470,13 @@ func (s *Server) handleHAStorageRegister(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	password := haPassword()
-	if _, err := s.opts.Users.SetPassword(setup.Account, password); err != nil {
+	if _, exists := s.opts.Users.Get(setup.Account); !exists {
+		if err := s.haRestoreAccount(setup, password); err != nil {
+			writeShareError(w, err)
+			return
+		}
+		s.opts.SSH.Kick()
+	} else if _, err := s.opts.Users.SetPassword(setup.Account, password); err != nil {
 		writeAccountError(w, err)
 		return
 	}

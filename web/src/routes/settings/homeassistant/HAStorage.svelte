@@ -39,6 +39,9 @@
 		volumes: string[];
 		shares: { name: string; volume: string }[];
 		homeAssistant: boolean;
+		// The account was deleted under Settings › Users; the next entry or
+		// entering everything again makes it anew (ha_storage.go).
+		accountMissing?: boolean;
 	};
 	type HAResult = { mount: string; ok: boolean; error?: string };
 	type Answer = {
@@ -249,6 +252,11 @@
 			<p class="account">
 				{t('hastore.accountLine', { account: status.account, server: status.server })}
 			</p>
+			{#if status.accountMissing}
+				<p class="notice-warn" role="status">
+					{t('hastore.accountMissing', { account: status.account })}
+				</p>
+			{/if}
 		{/if}
 		{#if status.entries.length}
 			<ul class="entries">
