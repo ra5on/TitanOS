@@ -114,7 +114,7 @@
 	"webapps.migrate.running": "Installing … You can keep working.",
 	"webapps.migrate.title": "Office programs right in the browser",
 	"webapps.migrate.whyText": "From TitanOS 0.63 these programs run right in your browser, in a TitanOS window. That is faster than before, needs no container and no memory on the NAS, and works wherever you reach TitanOS – on the go and on your phone, too. You open documents with a double click in the file manager, and saving writes straight into the original file. The programs are checked by TitanOS and come with TitanOS updates.",
-	"webapps.migrate.whyTitle": "Why WordCraft, GridCraft and PdfCraft are now installed this way",
+	"webapps.migrate.whyTitle": "Why T-Word, T-Exel and T-PDF are now installed this way",
 	"webapps.office.kind.gridcraft": "Spreadsheets like Excel",
 	"webapps.office.kind.pdfcraft": "View and edit PDF",
 	"webapps.office.kind.wordcraft": "Documents like Word",
@@ -158,6 +158,6 @@
 	"welcome.officeInstall": "Install and continue",
 	"welcome.officeLater": "More programs, and removing them, are in the App Center under “Programs for the browser”.",
 	"welcome.officeNoVolume": "They are installed as soon as the first volume exists (they are kept on the volume, not on the stick).",
-	"welcome.officeText": "WordCraft, GridCraft and PdfCraft open Word, Excel and PDF files right in the browser, in a TitanOS window: double-click in the file manager, saving writes the original file. They run on your device, not on the NAS, and come checked with TitanOS updates.",
+	"welcome.officeText": "T-Word, T-Exel and T-PDF open Word, Excel and PDF files right in the browser, in a TitanOS window: double-click in the file manager, saving writes the original file. They run on your device, not on the NAS, and come checked with TitanOS updates.",
 	"welcome.officeUnavailable": "This NAS does not offer programs for the browser yet."
 }
