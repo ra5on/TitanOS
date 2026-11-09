@@ -1855,6 +1855,8 @@
 	"tools.loading": "Loading …",
 	"tools.noLines": "No lines for this choice.",
 	"tools.logsNote": "The log is kept in memory and starts anew with every start of the NAS.",
+	"tools.logsStatusBar": "Figures of the log",
+	"tools.statLines": "{count} lines",
 	"tools.range": "Time range",
 	"error.logs_failed": "The log could not be read.",
 	"disk.testing": "Being tested",

@@ -7,6 +7,7 @@
 	import { apiPath } from '#lib/cluster-node.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import { errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 
 	const SOURCES = [
@@ -343,6 +344,14 @@
 	</div>
 	<p class="muted note">{t('tools.logsNote')}</p>
 </section>
+<!-- Style W4 (0.74): the figures of the shown lines in the status bar. -->
+<StatusBar label={t('tools.logsStatusBar')}>
+	<span>{t('tools.statLines', { count: entries.length })}</span>
+	<span class:warn={entries.some((e) => e.priority <= 3)}
+		>{t('notify.severity.error')}: <b>{entries.filter((e) => e.priority <= 3).length}</b></span
+	>
+	<span>{t('notify.severity.warning')}: <b>{entries.filter((e) => e.priority === 4).length}</b></span>
+</StatusBar>
 
 <style>
 	section {

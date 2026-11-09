@@ -1855,6 +1855,8 @@
 	"tools.loading": "Lade …",
 	"tools.noLines": "Keine Zeilen zu dieser Auswahl.",
 	"tools.logsNote": "Das Protokoll liegt im Arbeitsspeicher und beginnt mit jedem Start des NAS neu.",
+	"tools.logsStatusBar": "Kennzahlen des Protokolls",
+	"tools.statLines": "{count} Zeilen",
 	"tools.range": "Zeitraum",
 	"error.logs_failed": "Das Protokoll konnte nicht gelesen werden.",
 	"disk.testing": "Wird geprüft",
