@@ -17,6 +17,9 @@
 		{ id: 'photocraft', name: 'PhotoCraft', why: 'webapps.center.photocraftWhy' },
 	];
 	const notYet = $derived(NOT_YET.filter((n) => !webapps.apps.some((a) => a.id === n.id)));
+	// Originals with our own build as successor (WordCraft → T-Word) are no
+	// longer offered; an installed one stays listed until it is replaced.
+	const shown = $derived(webapps.apps.filter((a) => !a.successor || a.installed));
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 	let busy = $state('');
 	let error = $state('');
@@ -112,7 +115,7 @@
 				{t('webapps.center.noVolume')}
 			</p>{/if}
 		<ul class="list">
-			{#each webapps.apps as a (a.id)}
+			{#each shown as a (a.id)}
 				<li class="app">
 					<DesktopIcon
 						glyph=""

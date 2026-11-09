@@ -937,7 +937,8 @@ async function filesWindow(page) {
   await made.ctx.close();
 }
 
-// 6. The offer after the update to 0.63 (owner/admin): install, optionally remove the Docker versions.
+// 6. The offer after the update to 0.63 (owner/admin): install the office programs.
+//    Docker versions are replaced by titand itself (PLAN 75-20): no choice here.
 for (const width of [1280, 390]) {
   const list = (made) => {
     const base = webappsList(made);
@@ -974,29 +975,20 @@ for (const width of [1280, 390]) {
     name: "Office-Programme direkt im Browser",
   });
   await dialog.waitFor({ timeout: 15000 });
-  await dialog
-    .getByText("Warum die Docker-Versionen entfernt werden")
-    .waitFor();
+  assert.equal(
+    await dialog.getByText("Warum die Docker-Versionen entfernt werden").count(),
+    0,
+    "no Docker choice in the dialog",
+  );
   const wide = await page.evaluate(() => document.documentElement.scrollWidth);
   assert.ok(wide <= width, `no horizontal overflow (${wide})`);
   await shot(page, `14-offer-${width}`);
-  // photocraft's web app is not installed and not chosen: its Docker app stays.
-  assert.ok(
-    await dialog
-      .getByRole("checkbox", { name: /„photocraft“ entfernen/ })
-      .isDisabled(),
-  );
-  assert.ok(
-    await dialog
-      .getByRole("checkbox", { name: /„wordcraft“ entfernen/ })
-      .isChecked(),
-  );
+  assert.equal(await dialog.getByRole("checkbox", { name: /entfernen/ }).count(), 0);
   await dialog.getByRole("button", { name: "Installieren" }).click();
   await page.waitForTimeout(500);
   const post = made.posts.at(-1);
-  assert.equal(post.path, "/webapps/migrate");
-  assert.deepEqual(post.body.removeDocker, ["wordcraft"]);
-  assert.deepEqual([...post.body.install].sort(), [
+  assert.equal(post.path, "/webapps/defaults/install");
+  assert.deepEqual([...post.body.apps].sort(), [
     "gridcraft",
     "pdfcraft",
     "wordcraft",

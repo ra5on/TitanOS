@@ -61,6 +61,7 @@ function sanitizeApp(raw: unknown): WebApp | null {
 			typeof a.successor === 'string' && /^[a-z0-9][a-z0-9-]{0,63}$/.test(a.successor)
 				? a.successor
 				: undefined,
+		startNew: a.startNew === true,
 	};
 }
 

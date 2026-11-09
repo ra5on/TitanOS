@@ -296,13 +296,14 @@ func (s *Server) handleWebappsMigrate(w http.ResponseWriter, r *http.Request) {
 	}
 	user := currentUser(r).Name
 	ctx := s.ctx
-	go s.runMigration(ctx, user)
+	go s.runMigration(ctx, user, false)
 	slog.Info("web app migration started", "install", req.Install, "removeDocker", req.RemoveDocker, "by", user, "ip", remoteIP(r))
 	s.handleWebappsAccepted(w, r)
 }
 
 // runMigration waits for each web app and removes its Docker app after it.
-func (s *Server) runMigration(ctx context.Context, user string) {
+// purge also deletes the Docker data of the app (automatic replacement).
+func (s *Server) runMigration(ctx context.Context, user string, purge bool) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Hour)
 	defer cancel()
 	items := s.migration.status().Items
@@ -313,7 +314,7 @@ func (s *Server) runMigration(ctx context.Context, user string) {
 			continue
 		}
 		s.migration.set(i, "removing", "")
-		remove := func(ctx context.Context, name string) error { return s.removeDockerApp(ctx, name, false) }
+		remove := func(ctx context.Context, name string) error { return s.removeDockerApp(ctx, name, purge) }
 		if s.migration.remove != nil {
 			remove = s.migration.remove
 		}

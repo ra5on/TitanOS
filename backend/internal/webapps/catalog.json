@@ -17,7 +17,8 @@
         "rtf"
       ],
       "default": true,
-      "trusted": true
+      "trusted": true,
+      "startNew": true
     },
     {
       "id": "t-pdf",

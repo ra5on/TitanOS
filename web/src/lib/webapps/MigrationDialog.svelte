@@ -1,7 +1,7 @@
 <script lang="ts">
 	// PLAN 66, update to 0.63 (owner 7.11.2026): once for owners and
-	// administrators – install the office programs as web apps and, as an
-	// option, remove the Docker versions of the Craft apps they replace.
+	// administrators – install the office programs as web apps. Docker
+	// versions of the Craft apps are replaced by titand itself (PLAN 75-20).
 	import { api } from '#lib/api.ts';
 	import { activeNode } from '#lib/cluster-node.ts';
 	import { clusterNodes } from '#lib/cluster.svelte.ts';
@@ -38,7 +38,7 @@
 			!later &&
 			webapps.loaded &&
 			!webapps.unavailable &&
-			(started || webapps.docker.length > 0 || missing.length > 0),
+			(started || missing.length > 0),
 	);
 
 	// A migration that runs (also after a reload) shows its progress, not the choice again.
@@ -46,24 +46,11 @@
 		if (webapps.migration?.running) started = true;
 	});
 	let install = $state<string[] | null>(null);
-	let remove = $state<string[] | null>(null);
 	$effect(() => {
 		if (!show || started) return;
 		install ??= missing.map((a) => a.id);
 	});
-	// A Docker app is preselected only when its web app comes (or is there).
-	const comes = (id: string) =>
-		(install ?? []).includes(id) || !!webapps.apps.find((a) => a.id === id)?.installed;
-	$effect(() => {
-		if (!show || started || remove !== null || install === null) return;
-		remove = webapps.docker.filter((d) => comes(d.webapp)).map((d) => d.app);
-	});
-	const chosenRemove = $derived(
-		(remove ?? []).filter((app) => {
-			const d = webapps.docker.find((x) => x.app === app);
-			return !!d && comes(d.webapp);
-		}),
-	);
+	// Docker versions of Craft apps are replaced by titand itself (PLAN 75-20).
 
 	async function dismiss() {
 		const value = { ...sanitizeHints(session.hints), [HINT]: true };
@@ -80,9 +67,7 @@
 		error = '';
 		try {
 			const apps = install ?? [];
-			if (chosenRemove.length)
-				await api.post('/webapps/migrate', { install: apps, removeDocker: chosenRemove });
-			else await api.post('/webapps/defaults/install', { apps });
+			await api.post('/webapps/defaults/install', { apps });
 			started = true;
 			await loadWebApps();
 		} catch (e) {
@@ -133,38 +118,6 @@
 					/>
 				{/if}
 				{#if !webapps.volume}<p class="muted small">{t('welcome.officeNoVolume')}</p>{/if}
-				{#if webapps.docker.length}
-					<h3>{t('webapps.migrate.dockerTitle')}</h3>
-					<p>{t('webapps.migrate.dockerText')}</p>
-					<ul class="docker">
-						{#each webapps.docker as d (d.app)}
-							{@const possible = comes(d.webapp)}
-							<li>
-								<label class="check">
-									<input
-										type="checkbox"
-										disabled={busy || !possible}
-										checked={possible && (remove ?? []).includes(d.app)}
-										onchange={(e) =>
-											(remove = e.currentTarget.checked
-												? [...(remove ?? []), d.app]
-												: (remove ?? []).filter((x) => x !== d.app))}
-									/>
-									<span class="what">
-										<b>{t('webapps.migrate.removeApp', { app: d.app })}</b>
-										<span class="muted small"
-											>{possible
-												? t('webapps.migrate.removeHint', { app: d.app })
-												: t('webapps.migrate.keepHint', {
-														webapp: webapps.apps.find((a) => a.id === d.webapp)?.name ?? d.webapp,
-													})}</span
-										>
-									</span>
-								</label>
-							</li>
-						{/each}
-					</ul>
-				{/if}
 				<details>
 					<summary>{t('webapps.migrate.more')}</summary>
 					<p class="muted small">{t('webapps.migrate.moreText')}</p>
@@ -215,7 +168,7 @@
 				<button
 					type="button"
 					class="btn btn-primary"
-					disabled={busy || (!(install ?? []).length && !chosenRemove.length)}
+					disabled={busy || !(install ?? []).length}
 					onclick={go}>{t('webapps.migrate.install')}</button
 				>
 			{:else}

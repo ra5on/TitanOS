@@ -265,3 +265,44 @@ func validFileApps(value json.RawMessage) bool {
 	}
 	return true
 }
+
+// replaceOpenWith points every account's "open with" choice from one app
+// to another ("webapp:wordcraft" → "webapp:t-word"). Files of accounts
+// without such a choice are not written (the stick is written rarely).
+func (p *preferences) replaceOpenWith(from, to string) error {
+	users, err := p.store.List("users")
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	var errs []error
+	for _, user := range users {
+		data, err := p.get(user, "fileapps")
+		if err != nil || data == nil {
+			continue
+		}
+		var m map[string]string
+		if json.Unmarshal(data, &m) != nil {
+			continue
+		}
+		changed := false
+		for ext, app := range m {
+			if app == from {
+				m[ext], changed = to, true
+			}
+		}
+		if !changed {
+			continue
+		}
+		out, err := json.Marshal(m)
+		if err == nil {
+			err = p.set(user, "fileapps", out)
+		}
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}

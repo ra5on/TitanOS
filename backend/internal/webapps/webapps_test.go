@@ -258,7 +258,7 @@ func TestRewriteIndex(t *testing.T) {
 	if !strings.Contains(out, `<canvas data-host="page" id="wordcraft_canvas">`) {
 		t.Fatal(out)
 	}
-	host := `<script src="/webapps/_host/host.js" data-app="wordcraft" data-bridge="host"></script><script type="module">`
+	host := `<script src="/webapps/_host/host.js" data-app="wordcraft" data-bridge="host" data-events="wordcraft"></script><script type="module">`
 	if !strings.Contains(out, host) {
 		t.Fatal(out)
 	}
@@ -274,7 +274,7 @@ func TestRewriteIndex(t *testing.T) {
 	pdf, _ := Lookup("pdfcraft")
 	body := `<html><head><title>x</title></head><body><canvas id="pdfcraft"></canvas><script type="module">x</script></body></html>`
 	out = string(RewriteIndex([]byte(body), pdf))
-	if !strings.Contains(out, `<script src="/webapps/_host/host.js" data-app="pdfcraft" data-bridge="host"></script></head>`) || !strings.Contains(out, `<canvas data-host="page" id="pdfcraft">`) {
+	if !strings.Contains(out, `<script src="/webapps/_host/host.js" data-app="pdfcraft" data-bridge="host" data-events="pdfcraft"></script></head>`) || !strings.Contains(out, `<canvas data-host="page" id="pdfcraft">`) {
 		t.Fatal(out)
 	}
 }
@@ -687,5 +687,23 @@ func TestTrustedAppWithoutSandbox(t *testing.T) {
 	theirs := get("/webapps/pdfcraft/0.19.0/index.html")
 	if theirs.Get("Content-Security-Policy") != sandboxPolicy || theirs.Get("Access-Control-Allow-Origin") != "*" {
 		t.Fatalf("original: %v", theirs)
+	}
+}
+
+// Our own builds keep the event prefix of their original (T-Word sends
+// wordcraft:ready); the mediator is told so.
+func TestEventPrefix(t *testing.T) {
+	for id, want := range map[string]string{"t-word": "wordcraft", "t-exel": "gridcraft", "t-material": "materialcraft", "wordcraft": "wordcraft"} {
+		app, ok := Lookup(id)
+		if !ok {
+			t.Fatal(id)
+		}
+		if got := app.EventPrefix(); got != want {
+			t.Errorf("%s: %s, want %s", id, got, want)
+		}
+	}
+	app, _ := Lookup("t-word")
+	if out := string(RewriteIndex([]byte(`<head><script></script></head><canvas id="wordcraft_canvas">`), app)); !strings.Contains(out, `data-app="t-word" data-bridge="host" data-events="wordcraft"`) {
+		t.Fatal(out)
 	}
 }

@@ -183,3 +183,16 @@ Seit 0.72 gehören **T-Word**, **T-PDF** und **T-Exel** zur Grundausstattung, ni
   - Beispieldokumente der Adapter-Apps (z. B. T-Effect) nennen in ihrem Inhalt noch den Originalnamen.
   - T-Fig, T-Light und T-Vector bauen ohne craft-fonts, nur mit den eingebauten Schriften.
   - T-Effect lief upstream mit Cross-Origin-Isolation (Threads). TitanOS sendet sie nicht; die App startet trotzdem.
+
+## Alte Craft-Apps werden selbst ersetzt (0.74, PLAN 75-20)
+
+Entscheidung des Projektinhabers vom 9.11.2026: ohne Rückfrage.
+- **Web-Originale** (WordCraft, PdfCraft …): titand installiert den Nachfolger (T-Word, T-PDF …) und entfernt danach das Original. „Öffnen mit“-Zuordnungen aller Konten (`fileapps`, `webapp:wordcraft`) zeigen danach auf den Nachfolger. Scheitert die Installation, bleibt das Original.
+- **Docker-Fassungen**: nach der Installation der T-App wird die Docker-App **samt ihrer Docker-Daten** entfernt (`docker compose down --volumes`, Datenordner der App). Dateien in den Freigaben bleiben. Der Fortschritt steht in `migration` wie bei der früheren Umstellung per Dialog.
+- Läuft zwei Minuten nach dem Start und danach stündlich (Docker und das App-Volume können später kommen), nur wenn ein App-Volume da ist (`RunCraftReplacement`, `api/craft_replace.go`).
+- Das App-Center bietet Originale mit Nachfolger nicht mehr an (installierte erscheinen bis zur Ersetzung). Der Dialog nach dem Update fragt nicht mehr nach Docker-Apps.
+- Der Docker-Katalog (TitanOS-Apps) enthält die zwölf Craft-Apps mit T-Fassung nicht mehr; PhotoCraft und SolidCraft bleiben, ihre Ports bleiben gleich.
+
+## Ereignisname der eigenen Fassungen (0.74)
+
+Die T-Apps senden die Host-Ereignisse weiter unter dem Namen ihres Originals (`wordcraft:ready`, `wordcraft:save`). titand gibt `host.js` diesen Namen als `data-events` mit (`App.EventPrefix`); vorher kam bei den T-Apps mit `bridge: host` kein Ereignis an (Öffnen/Speichern über die Brücke ging nicht). **`startNew`** im Katalog (T-Word): ohne Datei geöffnet bleibt die App leer; das Fenster schickt dann „Neu“ (Strg+N), T-Word zeigt seine Startseite mit den Vorlagen.

@@ -44,6 +44,9 @@ type App struct {
 	// (wordcraft → t-word, PLAN 75-20). Docker versions of the app are
 	// replaced by the successor, and the App-Center offers the switch.
 	Successor string `json:"successor,omitempty"`
+	// StartNew: opened without a file the app shows nothing (T-Word in
+	// host mode waits for a document); the window then asks for a new one.
+	StartNew bool `json:"startNew,omitempty"`
 }
 
 // successorOf is the id that replaces id (its successor in the catalog), or id.
@@ -58,6 +61,18 @@ func successorOf(id string) string {
 		}
 	}
 	return id
+}
+
+// EventPrefix is the name the app uses for the Craft host events
+// ("wordcraft:ready"): our own builds keep the id of their original
+// (T-Word → wordcraft), the others use their own id.
+func (a App) EventPrefix() string {
+	for _, app := range catalog {
+		if app.Successor == a.ID {
+			return app.ID
+		}
+	}
+	return a.ID
 }
 
 // Asset is the name of the app's archive in a TitanOS release.

@@ -19,6 +19,9 @@
 	var fromPath = /\/webapps\/([a-z0-9][a-z0-9-]*)\//.exec(location.pathname);
 	var app = data.app || query.get('app') || (fromPath && fromPath[1]) || '';
 	if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(app)) return;
+	// The prefix of the Craft host events: our own builds keep their original's
+	// (T-Word sends wordcraft:ready), given by titand as data-events.
+	var events = /^[a-z0-9][a-z0-9-]{0,63}$/.test(data.events || '') ? data.events : app;
 	var bridge = (data.bridge || query.get('bridge')) === 'adapter' ? 'adapter' : 'host';
 	var parent = window.parent;
 	// Opened in a tab of its own: no TitanOS window to talk to.
@@ -48,7 +51,7 @@
 		return (
 			(announced && announced.isConnected ? announced : null) ||
 			document.querySelector('canvas[data-host="page"]') ||
-			document.getElementById(app + '_canvas') ||
+			document.getElementById(events + '_canvas') ||
 			document.querySelector('canvas')
 		);
 	}
@@ -108,7 +111,7 @@
 		if (!target) return void post({ type: 'webapp-failed', text: 'no canvas' });
 		if (bridge === 'host') {
 			target.dispatchEvent(
-				new CustomEvent(app + ':open', { detail: { name: message.name, bytes: message.bytes } }),
+				new CustomEvent(events + ':open', { detail: { name: message.name, bytes: message.bytes } }),
 			);
 			return;
 		}
@@ -133,6 +136,7 @@
 	// Menu commands of the TitanOS window and the Ctrl key they stand for.
 	var KEYS = {
 		save: ['s', 'KeyS', 83],
+		new: ['n', 'KeyN', 78],
 		undo: ['z', 'KeyZ', 90],
 		redo: ['y', 'KeyY', 89],
 		find: ['f', 'KeyF', 70],
@@ -184,7 +188,7 @@
 			var id = saveIds.shift();
 			if (msg.ok === true && id != null && bridge === 'host') {
 				var target = canvas();
-				if (target) target.dispatchEvent(new CustomEvent(app + ':saved', { detail: { id: id } }));
+				if (target) target.dispatchEvent(new CustomEvent(events + ':saved', { detail: { id: id } }));
 			}
 		}
 	});
@@ -267,7 +271,7 @@
 		// capture phase, which sees every event on its way to its target.
 		var on = function (kind, handle) {
 			window.addEventListener(
-				app + ':' + kind,
+				events + ':' + kind,
 				function (event) {
 					handle((event && event.detail) || {}, event);
 				},
@@ -382,7 +386,7 @@
 	var settled = 0;
 	var timer = setInterval(function () {
 		var loading =
-			document.getElementById(app + '_loading') || document.querySelector('[id$="_loading"]');
+			document.getElementById(events + '_loading') || document.querySelector('[id$="_loading"]');
 		var shown = loading && loading.isConnected && getComputedStyle(loading).display !== 'none';
 		var c = canvas();
 		var sized =
