@@ -294,7 +294,7 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		min-width: 0;
 		font-size: var(--text-base);
 	}
@@ -322,7 +322,7 @@
 		display: grid;
 		grid-template-columns: 10.5rem 9rem minmax(0, 1fr);
 		gap: var(--space-1) 14px;
-		padding: 10px 0;
+		padding: var(--space-2-5) 0;
 		border-bottom: 1px solid var(--border);
 	}
 	.entries li:last-child {

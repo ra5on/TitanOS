@@ -219,7 +219,7 @@
 	.fam {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 		min-width: 0;
 	}
 	.fam p {
@@ -228,7 +228,7 @@
 	.field-row {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 		min-width: 0;
 	}
 	.field-row > span {
@@ -241,7 +241,7 @@
 	.two {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	@media (max-width: 420px) {
 		.two {
@@ -252,6 +252,6 @@
 		display: flex;
 		flex-wrap: wrap;
 		justify-content: flex-end;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 </style>

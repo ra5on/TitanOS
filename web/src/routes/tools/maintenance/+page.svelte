@@ -574,7 +574,7 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-base);
 		flex: 1 1 170px;
 		min-width: 0;
@@ -592,7 +592,7 @@
 	.actions {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.table-wrap {
 		overflow-x: auto;
@@ -621,7 +621,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: var(--space-3);
-		padding: 10px 0;
+		padding: var(--space-2-5) 0;
 		border-bottom: 1px solid var(--border);
 	}
 	.result span {

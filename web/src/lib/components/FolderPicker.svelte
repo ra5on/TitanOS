@@ -147,14 +147,14 @@
 		border-top: 1px solid var(--border);
 	}
 	.list .muted {
-		padding: 10px var(--space-3);
+		padding: var(--space-2-5) var(--space-3);
 	}
 	.row {
 		display: flex;
 		gap: var(--space-2);
 		align-items: center;
 		width: 100%;
-		padding: 10px var(--space-3);
+		padding: var(--space-2-5) var(--space-3);
 		background: none;
 		border: 0;
 		color: inherit;

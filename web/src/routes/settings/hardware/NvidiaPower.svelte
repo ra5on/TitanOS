@@ -68,7 +68,7 @@
 		flex-wrap: wrap;
 		align-items: end;
 		gap: var(--space-2);
-		margin-bottom: 10px;
+		margin-bottom: var(--space-2-5);
 	}
 	p {
 		flex-basis: 100%;

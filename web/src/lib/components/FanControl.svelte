@@ -211,7 +211,7 @@
 	}
 	.head {
 		display: flex;
-		gap: 10px;
+		gap: var(--space-2-5);
 		flex-wrap: wrap;
 		align-items: baseline;
 	}

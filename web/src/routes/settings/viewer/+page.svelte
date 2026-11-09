@@ -370,9 +370,9 @@
 	.row {
 		display: grid;
 		grid-template-columns: minmax(12rem, 1fr) 2fr;
-		gap: 8px 24px;
+		gap: var(--space-2) var(--space-5);
 		align-items: start;
-		padding: 12px 0;
+		padding: var(--space-3) 0;
 		border-top: 1px solid var(--panel-border);
 	}
 	.row:first-child {
@@ -383,7 +383,7 @@
 		font-weight: 600;
 	}
 	.hint {
-		margin: 4px 0 0;
+		margin: var(--space-1) 0 0;
 		font-size: var(--text-sm);
 		hyphens: auto;
 		overflow-wrap: break-word;
@@ -394,7 +394,7 @@
 	.control {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 		align-items: flex-start;
 		min-width: 0;
 	}
@@ -417,11 +417,11 @@
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	.views li {
 		display: flex;
-		gap: 12px;
+		gap: var(--space-3);
 		justify-content: space-between;
 		max-width: 26rem;
 	}

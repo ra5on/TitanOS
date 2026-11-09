@@ -160,11 +160,11 @@
 	fieldset {
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
-		padding: 10px var(--space-3);
+		padding: var(--space-2-5) var(--space-3);
 		margin: 0 0 var(--space-3);
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	legend {
 		font-size: var(--text-base);
@@ -178,7 +178,7 @@
 	}
 	.summary p,
 	fieldset p {
-		margin: 0 0 6px;
+		margin: 0 0 var(--space-1-5);
 		overflow-wrap: anywhere;
 	}
 	.mono {

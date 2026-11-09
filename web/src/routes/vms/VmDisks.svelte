@@ -321,7 +321,7 @@
 <style>
 	.advanced {
 		border-top: 1px solid var(--panel-border);
-		padding-top: 10px;
+		padding-top: var(--space-2-5);
 		min-width: 0;
 	}
 	summary {
@@ -349,7 +349,7 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-base);
 	}
 	label > span {
@@ -426,7 +426,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.size label {
 		flex-direction: row;
@@ -449,7 +449,7 @@
 	.presets {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.presets button {
 		border: 1px solid var(--border);

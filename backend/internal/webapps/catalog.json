@@ -152,7 +152,10 @@
       "size": 27161221,
       "license": "MIT OR Apache-2.0",
       "bridge": "adapter",
-      "types": [],
+      "types": [
+        "designcraft",
+        "idml"
+      ],
       "default": false
     },
     {
@@ -180,7 +183,10 @@
       "size": 6865877,
       "license": "MIT OR Apache-2.0",
       "bridge": "adapter",
-      "types": [],
+      "types": [
+        "scraftz",
+        "wav"
+      ],
       "default": false
     },
     {
@@ -193,7 +199,14 @@
       "size": 9180138,
       "license": "MIT OR Apache-2.0",
       "bridge": "adapter",
-      "types": [],
+      "types": [
+        "tcraft",
+        "obj",
+        "glb",
+        "gltf",
+        "fbx",
+        "stl"
+      ],
       "default": false
     },
     {
@@ -206,7 +219,9 @@
       "size": 4618296,
       "license": "MIT OR Apache-2.0",
       "bridge": "adapter",
-      "types": [],
+      "types": [
+        "sbs"
+      ],
       "default": false
     }
   ]

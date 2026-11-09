@@ -629,7 +629,7 @@
 		flex-direction: column;
 		align-items: center;
 		gap: 2px;
-		padding: 12px 28px;
+		padding: var(--space-3) 28px;
 		border-radius: 18px;
 		border: 1px solid color-mix(in srgb, #fff 18%, transparent);
 		color: var(--text);
@@ -642,7 +642,7 @@
 	.liquid-ends {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 		font-size: var(--text-sm);
 		color: var(--muted);
 	}
@@ -653,7 +653,7 @@
 		position: relative;
 		display: flex;
 		align-items: flex-end;
-		gap: 12px;
+		gap: var(--space-3);
 		min-width: 0;
 	}
 	.tab-row :global(.tabs) {
@@ -680,7 +680,7 @@
 	.tab-panel {
 		display: flex;
 		flex-direction: column;
-		gap: var(--gap, 16px);
+		gap: var(--gap, var(--space-4));
 		min-width: 0;
 	}
 	.tab-panel[hidden] {
@@ -690,13 +690,13 @@
 	.modes {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.mode {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		padding: 0;
 		background: none;
 		border: 0;
@@ -768,14 +768,14 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.variant {
 		display: inline-flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		min-height: 32px;
-		padding: 0 12px 0 8px;
+		padding: 0 var(--space-3) 0 var(--space-2);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 		background: transparent;
@@ -797,14 +797,14 @@
 	.custom {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-		gap: 8px;
+		gap: var(--space-2);
 		width: 100%;
 	}
 	.color {
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		padding: 4px 8px;
+		gap: var(--space-2);
+		padding: var(--space-1) var(--space-2);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 		font-size: var(--text-base);
@@ -835,8 +835,8 @@
 	.own-accent {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
-		margin-left: 6px;
+		gap: var(--space-1-5);
+		margin-left: var(--space-1-5);
 		color: var(--muted);
 		font-size: var(--text-base);
 		cursor: pointer;
@@ -854,13 +854,13 @@
 		display: flex;
 		flex-direction: column;
 		align-items: stretch;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.slider-top {
 		display: flex;
 		align-items: flex-start;
 		justify-content: space-between;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.value {
 		flex: none;
@@ -877,7 +877,7 @@
 	}
 	.card-note {
 		margin: 0;
-		padding: 10px 16px 14px;
+		padding: var(--space-2-5) var(--space-4) 14px;
 		border-top: 1px solid var(--panel-border, var(--border));
 		color: var(--muted);
 		font-size: var(--text-sm);
@@ -894,8 +894,8 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px 12px;
-		padding: 10px 16px;
+		gap: var(--space-2) var(--space-3);
+		padding: var(--space-2-5) var(--space-4);
 		border: 1px solid var(--panel-border, var(--border));
 		border-radius: calc(12px * var(--radius-scale, 1));
 		background: var(--panel-bg, var(--surface));
@@ -919,7 +919,7 @@
 	}
 	.save-bar .row-actions {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	@media (max-width: 639px) {
 		.status {
@@ -929,7 +929,7 @@
 		.tab-row {
 			flex-direction: column;
 			align-items: stretch;
-			gap: 4px;
+			gap: var(--space-1);
 		}
 	}
 </style>

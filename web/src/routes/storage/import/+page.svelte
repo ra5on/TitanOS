@@ -213,7 +213,7 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		margin-top: 14px;
 		font-size: var(--text-base);
 	}

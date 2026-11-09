@@ -103,7 +103,7 @@
 	.trigger {
 		display: flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		padding: 0;
 		border: 1px solid transparent;
 		border-radius: var(--radius-ctl);
@@ -127,7 +127,7 @@
 	}
 	.desk .trigger {
 		height: var(--pb, 34px);
-		padding: 0 8px 0 10px;
+		padding: 0 var(--space-2) 0 var(--space-2-5);
 		gap: 7px;
 		border-color: color-mix(in srgb, var(--accent) 60%, transparent);
 		background: color-mix(in srgb, var(--accent) 14%, transparent);
@@ -168,16 +168,16 @@
 		max-width: calc(100vw - 16px);
 		display: flex;
 		flex-direction: column;
-		padding: 6px;
+		padding: var(--space-1-5);
 	}
 	.menu button,
 	.menu a {
 		display: grid;
 		grid-template-columns: 10px 1fr auto;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		min-height: 40px;
-		padding: 6px 10px;
+		padding: var(--space-1-5) var(--space-2-5);
 		border: 0;
 		border-radius: var(--radius-small);
 		background: transparent;

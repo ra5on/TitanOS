@@ -410,7 +410,7 @@
 	form {
 		display: flex;
 		flex-direction: column;
-		gap: var(--gap, 16px);
+		gap: var(--gap, var(--space-4));
 	}
 	.tile.ui-card {
 		flex-shrink: 0;

@@ -447,8 +447,8 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
-		padding: 10px 16px;
+		gap: var(--space-2);
+		padding: var(--space-2-5) var(--space-4);
 		border-bottom: 1px solid var(--panel-border, var(--border));
 	}
 	.crumbs {
@@ -463,7 +463,7 @@
 		border: 0;
 		color: var(--text);
 		font: inherit;
-		padding: 2px 4px;
+		padding: 2px var(--space-1);
 		border-radius: 6px;
 		cursor: pointer;
 		overflow-wrap: anywhere;
@@ -479,20 +479,20 @@
 	}
 	.summary {
 		margin: 0;
-		padding: 8px 16px;
+		padding: var(--space-2) var(--space-4);
 		font-size: var(--text-sm);
 	}
 	.tabs {
 		display: flex;
-		gap: 4px;
-		padding: 0 16px;
+		gap: var(--space-1);
+		padding: 0 var(--space-4);
 		border-bottom: 1px solid var(--panel-border, var(--border));
 		overflow-x: auto;
 	}
 	.tab {
 		background: none;
 		border: 0;
-		padding: 10px 12px;
+		padding: var(--space-2-5) var(--space-3);
 		font: inherit;
 		font-size: var(--text-base);
 		color: var(--muted);
@@ -506,11 +506,11 @@
 	}
 	.hint {
 		margin: 0;
-		padding: 10px 16px 0;
+		padding: var(--space-2-5) var(--space-4) 0;
 		font-size: var(--text-sm);
 	}
 	.map-wrap {
-		padding: 10px 16px 16px;
+		padding: var(--space-2-5) var(--space-4) var(--space-4);
 		min-width: 0;
 	}
 	.measure {
@@ -529,10 +529,10 @@
 	}
 	.area-head {
 		display: flex;
-		gap: 6px;
+		gap: var(--space-1-5);
 		align-items: baseline;
 		width: 100%;
-		padding: 4px 4px 0;
+		padding: var(--space-1) var(--space-1) 0;
 		background: none;
 		border: 0;
 		color: var(--text);
@@ -603,7 +603,7 @@
 		font-size: var(--text-base);
 	}
 	.data-table :is(th, td) {
-		padding: 8px 10px;
+		padding: var(--space-2) var(--space-2-5);
 		text-align: left;
 		border-bottom: 1px solid var(--panel-border, var(--border));
 	}
@@ -635,14 +635,14 @@
 	.filters {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 10px 16px;
-		padding: 10px 16px;
+		gap: var(--space-2-5) var(--space-4);
+		padding: var(--space-2-5) var(--space-4);
 		border-bottom: 1px solid var(--panel-border, var(--border));
 	}
 	.filters label {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		font-size: var(--text-base);
 	}
 	.filters .field {
@@ -655,8 +655,8 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
-		padding: 12px 16px;
+		gap: var(--space-2);
+		padding: var(--space-3) var(--space-4);
 		border-top: 1px solid var(--panel-border, var(--border));
 	}
 	.paths {
@@ -669,7 +669,7 @@
 	}
 	.small {
 		min-height: 28px;
-		padding: 0 10px;
+		padding: 0 var(--space-2-5);
 		font-size: var(--text-sm);
 	}
 	@media (max-width: 640px) {

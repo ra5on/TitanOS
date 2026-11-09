@@ -153,7 +153,7 @@
 <style>
 	.load-failed {
 		margin: 0;
-		padding: 24px;
+		padding: var(--space-5);
 		color: var(--text);
 	}
 	.remote-full {
@@ -167,8 +167,8 @@
 		min-height: 100dvh;
 		overflow-x: clip;
 		/* PLAN 64: safe areas on every side (iPhone across: the notch is at a side). */
-		padding: 0 calc(12px + env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom))
-			calc(12px + env(safe-area-inset-left));
+		padding: 0 calc(var(--space-3) + env(safe-area-inset-right))
+			calc(20px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));
 		position: relative;
 		isolation: isolate;
 		width: 100%;
@@ -188,10 +188,10 @@
 		top: 0;
 		z-index: 5;
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		align-items: center;
-		margin: 0 -12px 12px;
-		padding: calc(10px + env(safe-area-inset-top)) 12px 10px;
+		margin: 0 -12px var(--space-3);
+		padding: calc(var(--space-2-5) + env(safe-area-inset-top)) var(--space-3) var(--space-2-5);
 		background: linear-gradient(to bottom, rgb(0 0 0 / 0.28), transparent);
 	}
 	.light .top {
@@ -205,7 +205,7 @@
 		flex: 1;
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		height: 44px;
 		padding: 0 14px;
 		border-radius: calc(14px * min(var(--radius-scale, 1), 1.6));
@@ -229,10 +229,10 @@
 	.status {
 		display: flex;
 		align-items: center;
-		gap: 12px;
-		padding: 12px;
+		gap: var(--space-3);
+		padding: var(--space-3);
 		border-radius: 16px;
-		margin-bottom: 16px;
+		margin-bottom: var(--space-4);
 	}
 	.dot {
 		width: 38px;
@@ -252,13 +252,13 @@
 	.grid {
 		display: grid;
 		grid-template-columns: repeat(4, minmax(0, 1fr));
-		gap: 16px 4px;
+		gap: var(--space-4) var(--space-1);
 	}
 	.app {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		border: 0;
 		background: none;
 		color: #fff;

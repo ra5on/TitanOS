@@ -220,7 +220,7 @@
 <style>
 	.advanced {
 		border-top: 1px solid var(--panel-border);
-		padding-top: 10px;
+		padding-top: var(--space-2-5);
 		min-width: 0;
 	}
 	summary {
@@ -243,7 +243,7 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-base);
 	}
 	label > span {
@@ -271,7 +271,7 @@
 	}
 	.line label {
 		flex-direction: row;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-md);
 	}
 	input[type='range'] {
@@ -281,7 +281,7 @@
 	.facts {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.segments {
 		display: inline-flex;
@@ -310,7 +310,7 @@
 	.presets {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.presets button {
 		border: 1px solid var(--border);
@@ -323,7 +323,7 @@
 	.check {
 		flex-direction: row;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		font-size: var(--text-md);
 	}
 	.check span {
@@ -345,7 +345,7 @@
 		flex-direction: column;
 		gap: var(--space-1);
 		min-height: 3.75rem;
-		padding: var(--space-2) 10px;
+		padding: var(--space-2) var(--space-2-5);
 		background: transparent;
 		border: 2px solid var(--border);
 		border-radius: var(--radius-ctl);
@@ -363,7 +363,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.cpu-note {
 		font-size: var(--text-xs);

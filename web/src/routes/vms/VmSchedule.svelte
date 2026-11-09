@@ -108,13 +108,13 @@
 	.schedule {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 		padding: var(--space-4);
 	}
 	.check {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		font-size: var(--text-md);
 	}
 	.check input {
@@ -189,7 +189,7 @@
 		flex-direction: column;
 		gap: var(--space-2);
 		border-top: 1px solid var(--panel-border);
-		padding-top: 10px;
+		padding-top: var(--space-2-5);
 	}
 	.stop label:not(.check) {
 		display: flex;

@@ -396,7 +396,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	time {
 		font-size: var(--text-sm);

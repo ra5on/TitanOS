@@ -317,7 +317,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: var(--space-2) 10px;
+		gap: var(--space-2) var(--space-2-5);
 	}
 	.name {
 		font-size: var(--text-xl);
@@ -344,7 +344,7 @@
 		flex-wrap: wrap;
 		justify-content: space-between;
 		align-items: baseline;
-		gap: 6px var(--space-4);
+		gap: var(--space-1-5) var(--space-4);
 	}
 	.sync-top {
 		font-size: var(--text-md);
@@ -386,7 +386,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: var(--space-2);
-		padding: 6px 10px;
+		padding: var(--space-1-5) var(--space-2-5);
 		background: var(--chip);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);

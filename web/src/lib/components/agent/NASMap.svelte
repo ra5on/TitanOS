@@ -173,12 +173,12 @@
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 		color: var(--muted);
-		margin: var(--space-3) 0 4px;
+		margin: var(--space-3) 0 var(--space-1);
 	}
 	.row {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px;
+		gap: var(--space-1-5);
 		align-items: baseline;
 		padding: 5px 0;
 		border-bottom: 1px solid var(--border);
@@ -201,7 +201,7 @@
 	}
 	.edit {
 		display: flex;
-		gap: 6px;
+		gap: var(--space-1-5);
 		flex: 1;
 		min-width: 240px;
 	}

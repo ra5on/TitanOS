@@ -151,7 +151,7 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-base);
 		min-width: 0;
 	}

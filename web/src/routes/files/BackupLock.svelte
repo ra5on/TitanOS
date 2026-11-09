@@ -52,7 +52,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-2);
-		padding: 10px var(--space-3);
+		padding: var(--space-2-5) var(--space-3);
 		border-bottom: 1px solid var(--panel-border);
 	}
 	.toolbar .btn {

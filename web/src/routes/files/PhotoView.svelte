@@ -195,7 +195,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-1);
-		padding: 6px;
+		padding: var(--space-1-5);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 		background: var(--surface);

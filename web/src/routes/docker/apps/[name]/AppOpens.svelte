@@ -294,13 +294,13 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.chip {
 		display: inline-flex;
 		align-items: center;
-		gap: 4px;
-		padding: 2px 4px 2px 10px;
+		gap: var(--space-1);
+		padding: 2px var(--space-1) 2px var(--space-2-5);
 		border: 1px solid var(--border);
 		border-radius: 999px;
 		font-size: var(--text-sm);
@@ -310,7 +310,7 @@
 		background: none;
 		color: var(--muted);
 		cursor: pointer;
-		padding: 0 4px;
+		padding: 0 var(--space-1);
 		font-size: 1rem;
 		line-height: 1;
 	}
@@ -329,14 +329,14 @@
 	@media (max-width: 760px) {
 		.actions {
 			grid-template-columns: minmax(0, 1fr);
-			padding: 6px var(--space-3);
+			padding: var(--space-1-5) var(--space-3);
 		}
 		.actions > * {
 			grid-column: 1;
 		}
 	}
 	.actions .hint {
-		margin: 6px 0 0;
+		margin: var(--space-1-5) 0 0;
 		font-size: var(--text-sm);
 		color: var(--muted);
 	}
@@ -346,10 +346,10 @@
 	.ro {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-sm);
 	}
 	p {
-		margin: 0 0 12px;
+		margin: 0 0 var(--space-3);
 	}
 </style>

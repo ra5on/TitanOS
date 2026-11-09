@@ -412,14 +412,14 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.quick .chosen {
 		border-color: var(--accent);
 	}
 	.groups {
 		display: grid;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.group {
 		border: 1px solid var(--border);
@@ -455,14 +455,14 @@
 	}
 	.tools {
 		display: grid;
-		padding: 0 0 10px 30px;
+		padding: 0 0 var(--space-2-5) 30px;
 	}
 	.tool {
 		display: grid;
 		grid-template-columns: minmax(150px, 190px) 1fr auto 170px;
 		gap: var(--space-3);
 		align-items: center;
-		padding: 6px 0;
+		padding: var(--space-1-5) 0;
 		border-top: 1px solid var(--border);
 	}
 	.tool .name {
@@ -482,7 +482,7 @@
 		font-size: var(--text-base);
 	}
 	.calls td {
-		padding: 6px var(--space-2) 6px 0;
+		padding: var(--space-1-5) var(--space-2) var(--space-1-5) 0;
 		border-top: 1px solid var(--border);
 	}
 	.calls .result {

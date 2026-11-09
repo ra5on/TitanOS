@@ -709,7 +709,7 @@
 	}
 	.advanced {
 		border-top: 1px solid var(--panel-border);
-		padding-top: 10px;
+		padding-top: var(--space-2-5);
 		min-width: 0;
 	}
 	summary {
@@ -743,7 +743,7 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-3);
-		padding: 10px var(--space-4);
+		padding: var(--space-2-5) var(--space-4);
 		border-bottom: 1px solid var(--panel-border);
 	}
 	h2 {
@@ -761,7 +761,7 @@
 	.templates {
 		display: grid;
 		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.templates button {
 		display: flex;
@@ -800,7 +800,7 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-base);
 	}
 	label > span {
@@ -858,7 +858,7 @@
 	.check {
 		flex-direction: row;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		font-size: var(--text-md);
 	}
 	.check span {

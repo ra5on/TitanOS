@@ -144,11 +144,11 @@
 		overflow: auto;
 		display: flex;
 		flex-direction: column;
-		padding: 6px;
+		padding: var(--space-1-5);
 		/* Surface from .floating-menu (app.css). */
 	}
 	.dropdown-panel.panel {
-		gap: 10px;
+		gap: var(--space-2-5);
 		padding: var(--space-3);
 	}
 	.chevron {

@@ -28,6 +28,20 @@
 		if (framed) parent.postMessage(message, '*', transfer || []);
 	}
 
+	// The app's own files come by requests without the cookies of the page
+	// (its origin is opaque): a gate in front of the NAS that wants a cookie
+	// (Cloudflare Access) turns them away, and the app never starts. Asked
+	// once the same way the app asks; turned away, the window says why.
+	if (framed && window.fetch) {
+		fetch(location.href, { cache: 'no-store' })
+			.then(function (r) {
+				if (!r.ok) throw new Error(String(r.status));
+			})
+			.catch(function () {
+				post({ type: 'webapp-failed', text: 'files_blocked' });
+			});
+	}
+
 	// The element the app announced itself on (its canvas): opens go there.
 	var announced = null;
 	function canvas() {

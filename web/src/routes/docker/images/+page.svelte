@@ -286,7 +286,7 @@
 		font-size: var(--text-base);
 	}
 	.name .chip {
-		margin-left: 6px;
+		margin-left: var(--space-1-5);
 	}
 	.name strong {
 		font-weight: 600;
@@ -294,7 +294,7 @@
 	}
 	.tag {
 		color: var(--muted);
-		margin-left: 4px;
+		margin-left: var(--space-1);
 		overflow-wrap: anywhere;
 	}
 	.unused .num,
@@ -308,37 +308,37 @@
 	}
 	.small {
 		min-height: 30px;
-		padding: 0 10px;
+		padding: 0 var(--space-2-5);
 		font-size: var(--text-base);
 	}
 	.none {
 		margin: 0;
-		padding: 16px;
+		padding: var(--space-4);
 	}
 	.narrow {
 		display: none;
 	}
 	.names {
-		margin: 8px 0 0;
+		margin: var(--space-2) 0 0;
 		padding: 0;
 		list-style: none;
 		max-height: 220px;
 		overflow: auto;
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	.names li {
 		display: flex;
 		justify-content: space-between;
-		gap: 12px;
+		gap: var(--space-3);
 		font-size: var(--text-base);
 	}
 	.names .mono {
 		overflow-wrap: anywhere;
 	}
 	.dialog-actions {
-		margin-top: 16px;
+		margin-top: var(--space-4);
 	}
 	@media (max-width: 639px) {
 		.resources .created {

@@ -598,16 +598,16 @@
 	.checks {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px;
+		gap: var(--space-1-5);
 		align-items: center;
 	}
 	.checks {
-		gap: 4px 16px;
+		gap: var(--space-1) var(--space-4);
 	}
 	.chip-btn {
 		min-width: 40px;
 		min-height: 34px;
-		padding: 0 10px;
+		padding: 0 var(--space-2-5);
 		border-radius: 999px;
 		border: 1px solid var(--border);
 		background: none;
@@ -633,7 +633,7 @@
 		background: none;
 		color: var(--text);
 		font: inherit;
-		padding: 6px 14px;
+		padding: var(--space-1-5) 14px;
 		border-radius: 999px;
 		cursor: pointer;
 	}
@@ -662,7 +662,7 @@
 	.acts {
 		display: flex;
 		align-items: center;
-		gap: 4px;
+		gap: var(--space-1);
 		flex: none;
 	}
 	.acts .btn {
@@ -676,7 +676,7 @@
 	.switch {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		cursor: pointer;
 	}
 	.switch input {

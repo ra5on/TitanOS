@@ -108,7 +108,7 @@
 	dialog :global(.confirm) {
 		display: flex;
 		align-items: flex-start;
-		gap: 10px;
+		gap: var(--space-2-5);
 		font-size: var(--text-md);
 	}
 	dialog :global(.confirm input) {

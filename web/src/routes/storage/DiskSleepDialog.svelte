@@ -303,7 +303,7 @@
 	.sleep-default {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		flex-wrap: wrap;
 	}
 	.sleep-default select,
@@ -346,7 +346,7 @@
 	}
 	.sleep-state {
 		display: flex;
-		gap: 6px;
+		gap: var(--space-1-5);
 		flex-wrap: wrap;
 	}
 	.small {

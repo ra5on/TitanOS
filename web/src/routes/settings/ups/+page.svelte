@@ -381,7 +381,7 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--space-2) 14px;
-		padding: 10px var(--space-3);
+		padding: var(--space-2-5) var(--space-3);
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-ctl);
 	}
@@ -391,7 +391,7 @@
 		font-size: var(--text-base);
 	}
 	fieldset {
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	legend {
 		font-size: var(--text-base);
@@ -403,7 +403,7 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-base);
 	}
 	label > span {

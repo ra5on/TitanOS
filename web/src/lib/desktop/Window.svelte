@@ -24,6 +24,8 @@
 	import { menuKeyReset, screenOwnsKeys } from './menubar/keys.ts';
 	import { clearFrameCommands } from './menubar/state.svelte.ts';
 	import { sources } from './sources.svelte.ts';
+	import DirectView from './DirectView.svelte';
+	import { chooseDirect, directChosen, hasOwnStream } from './direct.ts';
 	import {
 		closeWindow,
 		requestClose,
@@ -497,6 +499,20 @@
 	// PLAN 67-1: web apps and the remote view live in the desktop itself, so
 	// their commands for the menu bar are registered here (not by a frame).
 	let remote = $state<RemoteViewType>();
+	// PLAN 75-14: an app with its own desktop stream shows it directly; the
+	// remote view when the account chose it or the app was not reached.
+	const dockerApp = $derived(win.app.startsWith('docker:') ? win.app.slice('docker:'.length) : '');
+	const ownStream = $derived(
+		!!dockerApp && hasOwnStream(sources.mine?.find((m) => m.app === dockerApp)?.stream),
+	);
+	let directOn = $state(directChosen(untrack(() => win.app.replace(/^docker:/, ''))));
+	let directFailed = $state(false);
+	const direct = $derived(ownStream && directOn && !directFailed);
+	function switchDirect(on: boolean) {
+		chooseDirect(dockerApp, on);
+		directOn = on;
+		directFailed = false;
+	}
 	async function restartDockerApp() {
 		const app = win.app.slice('docker:'.length);
 		for (const c of sources.containers.filter((x) => (x.app || x.name) === app))
@@ -752,6 +768,23 @@
 								<!-- PLAN 66: the remote view puts its controls here (RemoteView, inTitle). -->
 								<div class="remote-host" bind:this={remoteHost}></div>
 								<hr />
+								{#if ownStream}
+									<button
+										type="button"
+										role="menuitemcheckbox"
+										aria-checked={direct}
+										onclick={() => {
+											moreOpen = false;
+											switchDirect(!directOn || directFailed);
+										}}
+										><Icon name={direct ? 'monitor' : 'zap'} size={16} /><span
+											>{t(direct ? 'desktop.direct.useRemote' : 'desktop.direct.useDirect')}</span
+										></button
+									>
+									{#if directFailed && directOn}<p class="menu-note">
+											{t('desktop.direct.notReached')}
+										</p>{/if}
+								{/if}
 								<button
 									type="button"
 									role="menuitem"
@@ -861,15 +894,8 @@
 				{/if}
 			{:else if external}
 				<!-- The remote view's player loads with the first Docker app (PLAN 65-6). -->
-				{#await import('./RemoteView.svelte') then { default: RemoteView }}
-					<RemoteView
-						bind:this={remote}
-						app={win.app.replace(/^docker:/, '')}
-						title={win.title}
-						onopentab={openTab}
-						inTitle
-						menuHost={moreOpen ? remoteHost : null}
-					>
+				{#if direct}
+					<DirectView app={dockerApp} title={win.title} onfallback={() => (directFailed = true)}>
 						{#snippet splash()}<DesktopIcon
 								{glyph}
 								{gradient}
@@ -877,10 +903,29 @@
 								size={72}
 								name={win.title}
 							/>{/snippet}
-					</RemoteView>
-				{:catch}
-					<p class="load-failed">{t('desktop.window.loadFailed')}</p>
-				{/await}
+					</DirectView>
+				{:else}
+					{#await import('./RemoteView.svelte') then { default: RemoteView }}
+						<RemoteView
+							bind:this={remote}
+							app={win.app.replace(/^docker:/, '')}
+							title={win.title}
+							onopentab={openTab}
+							inTitle
+							menuHost={moreOpen ? remoteHost : null}
+						>
+							{#snippet splash()}<DesktopIcon
+									{glyph}
+									{gradient}
+									{image}
+									size={72}
+									name={win.title}
+								/>{/snippet}
+						</RemoteView>
+					{:catch}
+						<p class="load-failed">{t('desktop.window.loadFailed')}</p>
+					{/await}
+				{/if}
 			{:else}
 				<iframe
 					bind:this={frame}
@@ -999,7 +1044,7 @@
 		flex: none;
 		display: flex;
 		flex-direction: column;
-		padding: 12px 10px;
+		padding: var(--space-3) var(--space-2-5);
 		background:
 			linear-gradient(
 				180deg,
@@ -1012,7 +1057,7 @@
 	}
 	.side-search {
 		position: relative;
-		margin: 0 0 8px;
+		margin: 0 0 var(--space-2);
 	}
 	.side-search .glass {
 		position: absolute;
@@ -1026,7 +1071,7 @@
 	.side-search input {
 		width: 100%;
 		min-height: 32px;
-		padding: 4px 8px 4px 30px;
+		padding: var(--space-1) var(--space-2) var(--space-1) 30px;
 		border: 1px solid var(--border);
 		border-radius: calc(8px * var(--radius-scale, 1));
 		background: var(--bg);
@@ -1043,7 +1088,7 @@
 		outline-offset: -1px;
 	}
 	.side-none {
-		margin: 4px 10px 8px;
+		margin: var(--space-1) var(--space-2-5) var(--space-2);
 		color: var(--muted);
 		font-size: var(--text-sm);
 	}
@@ -1054,13 +1099,13 @@
 		width: 60px;
 		min-width: 60px;
 		align-items: center;
-		padding: 12px 8px;
+		padding: var(--space-3) var(--space-2);
 	}
 	.side-title {
 		display: flex;
 		align-items: center;
-		gap: 10px;
-		padding: 4px 6px 14px;
+		gap: var(--space-2-5);
+		padding: var(--space-1) var(--space-1-5) 14px;
 		font-size: var(--text-lg);
 		min-width: 0;
 	}
@@ -1080,20 +1125,20 @@
 		width: 100%;
 	}
 	.group {
-		margin: 12px 10px 4px;
+		margin: var(--space-3) var(--space-2-5) var(--space-1);
 		font-size: var(--text-xs);
 		color: var(--muted);
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 	}
 	.item.thing {
-		padding-left: 16px;
+		padding-left: var(--space-4);
 	}
 	.state {
 		flex: none;
 		width: 9px;
 		height: 9px;
-		margin: 0 4px;
+		margin: 0 var(--space-1);
 		border-radius: 50%;
 		border: 1.5px solid var(--muted);
 	}
@@ -1103,15 +1148,15 @@
 	}
 	.rule {
 		height: 1px;
-		margin: 8px 6px;
+		margin: var(--space-2) var(--space-1-5);
 		background: var(--border);
 	}
 	.item {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		min-height: 36px;
-		padding: 6px 10px;
+		padding: var(--space-1-5) var(--space-2-5);
 		border: 0;
 		border-radius: calc(9px * var(--radius-scale, 1));
 		background: none;
@@ -1149,7 +1194,7 @@
 	}
 	.fold {
 		color: var(--muted);
-		margin-top: 6px;
+		margin-top: var(--space-1-5);
 	}
 	.main {
 		flex: 1;
@@ -1166,7 +1211,7 @@
 		display: flex;
 		align-items: center;
 		gap: 9px;
-		padding: 0 6px 0 14px;
+		padding: 0 var(--space-1-5) 0 14px;
 		background: color-mix(in srgb, var(--header) 55%, transparent);
 		border-bottom: 1px solid var(--border);
 		user-select: none;
@@ -1217,10 +1262,10 @@
 			color-mix(in srgb, var(--surface) 88%, transparent);
 		display: flex;
 		flex-direction: column;
-		padding: 6px;
+		padding: var(--space-1-5);
 	}
 	.menu-status {
-		margin: 4px 10px 2px;
+		margin: var(--space-1) var(--space-2-5) 2px;
 		font-size: var(--text-xs);
 	}
 	.ctl {
@@ -1243,9 +1288,16 @@
 		background: #c42b1c;
 		color: #fff;
 	}
+	.menu-note {
+		margin: 0;
+		padding: var(--space-1) var(--space-3) var(--space-2);
+		font-size: var(--text-sm);
+		color: var(--muted);
+		max-width: 18rem;
+	}
 	.load-failed {
 		margin: 0;
-		padding: 24px;
+		padding: var(--space-5);
 		color: var(--text);
 	}
 	.body {

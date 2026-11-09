@@ -127,7 +127,7 @@
 		flex-direction: column;
 		align-items: flex-start;
 		width: 100%;
-		padding: 10px 0;
+		padding: var(--space-2-5) 0;
 		border: 0;
 		border-bottom: 1px solid var(--border);
 		background: none;
@@ -142,7 +142,7 @@
 		overflow-wrap: anywhere;
 	}
 	.mem {
-		padding: 8px 0;
+		padding: var(--space-2) 0;
 		border-bottom: 1px solid var(--border);
 	}
 	.pre {

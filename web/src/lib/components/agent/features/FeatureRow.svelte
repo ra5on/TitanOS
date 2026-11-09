@@ -40,9 +40,9 @@
 	.frow {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 		min-height: 48px;
-		padding: 10px 16px;
+		padding: var(--space-2-5) var(--space-4);
 		border-top: 1px solid var(--panel-border, var(--border));
 	}
 	.frow:first-child {
@@ -53,7 +53,7 @@
 		min-width: 0;
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 		padding: 0;
 		border: 0;
 		background: none;

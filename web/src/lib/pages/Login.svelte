@@ -570,14 +570,14 @@
 	}
 	.notice {
 		margin: 0 0 14px;
-		padding: 8px 14px;
+		padding: var(--space-2) 14px;
 		border-radius: 12px;
 		background: rgba(0, 0, 0, 0.45);
 		font-size: var(--text-sm);
 		white-space: pre-line;
 	}
 	.hint {
-		margin: 0 0 10px;
+		margin: 0 0 var(--space-2-5);
 		font-size: var(--text-sm);
 		text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
 	}
@@ -675,14 +675,14 @@
 	.accounts.list {
 		flex-direction: column;
 		align-items: stretch;
-		gap: 6px;
+		gap: var(--space-1-5);
 		min-height: 0;
 	}
 	.list .account {
 		flex-direction: row;
-		gap: 10px;
+		gap: var(--space-2-5);
 		border-radius: 12px;
-		padding: 4px 10px 4px 4px;
+		padding: var(--space-1) var(--space-2-5) var(--space-1) var(--space-1);
 	}
 	.list .avatar,
 	.list .on .avatar {
@@ -733,7 +733,7 @@
 		left: 50%;
 		transform: translateX(-50%);
 		min-width: 200px;
-		padding: 4px;
+		padding: var(--space-1);
 		border-radius: 12px;
 		background: rgba(20, 24, 30, 0.92);
 		box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.7);
@@ -745,7 +745,7 @@
 		color: #fff;
 		font: inherit;
 		text-align: left;
-		padding: 8px 10px;
+		padding: var(--space-2) var(--space-2-5);
 		border-radius: 8px;
 		cursor: pointer;
 	}
@@ -754,7 +754,7 @@
 		background: rgba(255, 255, 255, 0.12);
 	}
 	.chosen {
-		margin: 16px 0 0;
+		margin: var(--space-4) 0 0;
 		font-size: 20px;
 		font-weight: 600;
 		text-shadow: 0 1px 10px rgba(0, 0, 0, 0.55);
@@ -767,7 +767,7 @@
 	}
 	.pill {
 		position: relative;
-		margin-top: 16px;
+		margin-top: var(--space-4);
 		width: 300px;
 		max-width: 100%;
 		height: 44px;
@@ -786,7 +786,7 @@
 		padding-right: 18px;
 	}
 	.pill + .pill {
-		margin-top: 10px;
+		margin-top: var(--space-2-5);
 	}
 	.pill:focus-within {
 		background: rgba(255, 255, 255, 0.22);
@@ -884,8 +884,8 @@
 		cursor: default;
 	}
 	.error {
-		margin: 10px 0 0;
-		padding: 6px 12px;
+		margin: var(--space-2-5) 0 0;
+		padding: var(--space-1-5) var(--space-3);
 		border-radius: 10px;
 		background: rgba(0, 0, 0, 0.55);
 		font-size: var(--text-sm);
@@ -927,13 +927,13 @@
 		bottom: 22px;
 		display: flex;
 		align-items: center;
-		gap: 16px;
+		gap: var(--space-4);
 	}
 	.status {
 		margin: 0;
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		font-size: var(--text-sm);
 		text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
 	}

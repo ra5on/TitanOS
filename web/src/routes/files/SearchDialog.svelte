@@ -188,7 +188,7 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.wide {
 		grid-column: 1/-1;
@@ -202,7 +202,7 @@
 	.result {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 10px;
+		gap: var(--space-2-5);
 		padding: var(--space-3) 0;
 		border-top: 1px solid var(--border);
 	}

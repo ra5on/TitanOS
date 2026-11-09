@@ -81,7 +81,7 @@
 		flex: 1;
 		min-width: 0;
 		overflow-wrap: anywhere;
-		padding: 10px;
+		padding: var(--space-2-5);
 		background: var(--chip);
 		border-radius: var(--radius-ctl);
 		user-select: all;

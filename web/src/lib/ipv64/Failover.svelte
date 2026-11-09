@@ -820,7 +820,7 @@
 
 <style>
 	.chip {
-		margin-left: 6px;
+		margin-left: var(--space-1-5);
 	}
 	.steps {
 		margin: 0;
@@ -832,7 +832,7 @@
 		padding: var(--space-2) var(--space-3);
 	}
 	.setup ul {
-		margin: 6px 0;
+		margin: var(--space-1-5) 0;
 		padding-left: 1.25rem;
 	}
 	.policy {
@@ -845,7 +845,7 @@
 		height: 20px;
 		object-fit: contain;
 		vertical-align: middle;
-		margin-right: 6px;
+		margin-right: var(--space-1-5);
 	}
 	.upload input {
 		display: none;

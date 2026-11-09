@@ -469,7 +469,7 @@
 	.messages {
 		flex: 1;
 		overflow-y: auto;
-		padding: 20px 24px;
+		padding: 20px var(--space-5);
 		overscroll-behavior: contain;
 	}
 	.column {
@@ -477,12 +477,12 @@
 		margin: 0 auto;
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.user {
 		display: flex;
 		justify-content: flex-end;
-		margin: 4px 0;
+		margin: var(--space-1) 0;
 	}
 	.user span {
 		max-width: 78%;
@@ -501,7 +501,7 @@
 		margin: 0 0 0.6em;
 	}
 	.md :global(.table) {
-		margin: 4px 0 12px;
+		margin: var(--space-1) 0 var(--space-3);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-tile);
 		background: var(--surface);
@@ -558,9 +558,9 @@
 		cursor: pointer;
 		display: flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		min-height: 34px;
-		padding: 6px 12px;
+		padding: var(--space-1-5) var(--space-3);
 		color: var(--muted);
 		min-width: 0;
 	}
@@ -586,8 +586,8 @@
 		flex: none;
 		display: inline-flex;
 		align-items: center;
-		gap: 4px;
-		padding-left: 8px;
+		gap: var(--space-1);
+		padding-left: var(--space-2);
 	}
 	.steps .hide,
 	.steps[open] .show {
@@ -600,7 +600,7 @@
 		transform: rotate(180deg);
 	}
 	.thinking {
-		padding: 8px 12px;
+		padding: var(--space-2) var(--space-3);
 		border-top: 1px solid var(--border);
 	}
 	.thinking strong {
@@ -618,8 +618,8 @@
 	.step {
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		padding: 6px 12px;
+		gap: var(--space-2);
+		padding: var(--space-1-5) var(--space-3);
 		border-top: 1px solid var(--border);
 		flex-wrap: wrap;
 	}
@@ -628,7 +628,7 @@
 		background: none;
 		color: var(--text);
 		border-radius: 999px;
-		padding: 1px 8px;
+		padding: 1px var(--space-2);
 		font: inherit;
 		font-size: var(--text-xs);
 		cursor: pointer;
@@ -651,16 +651,16 @@
 	}
 	.choices {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		flex-wrap: wrap;
-		margin-top: 6px;
+		margin-top: var(--space-1-5);
 	}
 	/* The small row under an answer: Vorlesen, Kopieren, Gemerkt. */
 	.acts {
 		display: flex;
 		align-items: center;
 		flex-wrap: wrap;
-		gap: 4px 14px;
+		gap: var(--space-1) 14px;
 		margin-top: 2px;
 		font-size: var(--text-sm);
 		color: var(--muted);
@@ -670,7 +670,7 @@
 		align-items: center;
 		gap: 5px;
 		min-height: 28px;
-		padding: 0 4px;
+		padding: 0 var(--space-1);
 		border: 0;
 		border-radius: var(--radius-small, 6px);
 		background: none;
@@ -694,7 +694,7 @@
 	.learn {
 		align-self: flex-start;
 		font-size: var(--text-sm);
-		padding: 3px 10px;
+		padding: 3px var(--space-2-5);
 		border-radius: 999px;
 		background: var(--chip);
 		color: var(--text);
@@ -704,7 +704,7 @@
 		color: var(--muted);
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		flex-wrap: wrap;
 	}
 	.note.bad {
@@ -722,8 +722,8 @@
 	.file {
 		display: flex;
 		align-items: center;
-		gap: 12px;
-		padding: 12px 16px;
+		gap: var(--space-3);
+		padding: var(--space-3) var(--space-4);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-tile);
 		background: var(--surface);
@@ -758,25 +758,25 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius-tile);
 		background: var(--surface);
-		padding: 10px 16px;
+		padding: var(--space-2-5) var(--space-4);
 	}
 	.plan header {
 		display: flex;
 		justify-content: space-between;
-		gap: 8px;
+		gap: var(--space-2);
 		flex-wrap: wrap;
 		font-size: var(--text-base);
 	}
 	.plan ol {
 		list-style: none;
-		margin: 6px 0 0;
+		margin: var(--space-1-5) 0 0;
 		padding: 0;
 		display: grid;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	.plan li {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		align-items: flex-start;
 		font-size: var(--text-base);
 		overflow-wrap: anywhere;
@@ -805,8 +805,8 @@
 	.plan-card {
 		display: flex;
 		align-items: center;
-		gap: 12px;
-		padding: 10px 16px;
+		gap: var(--space-3);
+		padding: var(--space-2-5) var(--space-4);
 		border-radius: var(--radius-tile);
 		border: 1px solid var(--border);
 		background: var(--surface);
@@ -822,7 +822,7 @@
 	.live-step {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		font-size: var(--text-base);
 		color: var(--muted);
 	}
@@ -871,8 +871,8 @@
 		display: flex;
 		align-items: center;
 		flex-wrap: wrap;
-		gap: 10px 12px;
-		padding: 12px 16px;
+		gap: var(--space-2-5) var(--space-3);
+		padding: var(--space-3) var(--space-4);
 	}
 	.ask-ic {
 		flex: none;
@@ -896,7 +896,7 @@
 	}
 	.ask-acts {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		margin-left: auto;
 	}
 	.ask-details {
@@ -905,15 +905,15 @@
 	}
 	.ask-details summary {
 		cursor: pointer;
-		padding: 6px 16px;
+		padding: var(--space-1-5) var(--space-4);
 		color: var(--muted);
 	}
 	.ask-details dl {
 		display: grid;
 		grid-template-columns: max-content 1fr;
-		gap: 2px 12px;
+		gap: 2px var(--space-3);
 		margin: 0;
-		padding: 0 16px 10px;
+		padding: 0 var(--space-4) var(--space-2-5);
 	}
 	.ask-details dt {
 		color: var(--muted);
@@ -923,17 +923,17 @@
 		overflow-wrap: anywhere;
 	}
 	.ask-details pre {
-		margin: 0 16px 12px;
+		margin: 0 var(--space-4) var(--space-3);
 		max-height: 160px;
 		overflow: auto;
 		background: var(--bg);
-		padding: 8px;
+		padding: var(--space-2);
 		border-radius: var(--radius-small);
 		white-space: pre-wrap;
 	}
 	@media (max-width: 760px) {
 		.messages {
-			padding: 12px 14px;
+			padding: var(--space-3) 14px;
 		}
 		.user span {
 			max-width: 86%;
@@ -942,7 +942,7 @@
 			display: none;
 		}
 		.md :global(.table :is(th, td)) {
-			padding: 8px 8px;
+			padding: var(--space-2) var(--space-2);
 		}
 		.ask-acts {
 			width: 100%;

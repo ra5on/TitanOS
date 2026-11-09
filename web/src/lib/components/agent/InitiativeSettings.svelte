@@ -338,7 +338,7 @@
 <style>
 	/* PLAN 68: the same cards and rows as AgentSettings, theme colors only. */
 	.cap {
-		margin: 12px 4px 2px;
+		margin: var(--space-3) var(--space-1) 2px;
 		font-size: var(--text-xs);
 		font-weight: 600;
 		letter-spacing: 0.05em;
@@ -355,10 +355,10 @@
 	.row {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 		width: 100%;
 		min-height: 48px;
-		padding: 10px 16px;
+		padding: var(--space-2-5) var(--space-4);
 		border: 0;
 		border-top: 1px solid var(--border);
 		background: none;
@@ -409,7 +409,7 @@
 	.seg label {
 		text-align: center;
 		white-space: nowrap;
-		padding: 6px 8px;
+		padding: var(--space-1-5) var(--space-2);
 		border-radius: calc(var(--radius-ctl) - 2px);
 		font-size: var(--text-sm);
 		color: var(--text);
@@ -434,7 +434,7 @@
 	.level {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 		padding: 14px;
 	}
 	.steps {
@@ -446,7 +446,7 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-xs);
 		color: var(--muted);
 		cursor: pointer;

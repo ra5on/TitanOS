@@ -34,7 +34,7 @@
 
 <style>
 	section {
-		margin: 24px;
+		margin: var(--space-5);
 		padding: 32px;
 		display: flex;
 		flex-direction: column;

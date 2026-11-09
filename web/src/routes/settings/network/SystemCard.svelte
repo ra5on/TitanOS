@@ -83,7 +83,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: flex-end;
-		gap: 10px var(--space-4);
+		gap: var(--space-2-5) var(--space-4);
 	}
 	.row .stack {
 		flex: 1 1 18rem;
@@ -97,7 +97,7 @@
 	.zone {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px var(--space-3);
+		gap: var(--space-1-5) var(--space-3);
 		align-items: baseline;
 		font-size: var(--text-md);
 	}

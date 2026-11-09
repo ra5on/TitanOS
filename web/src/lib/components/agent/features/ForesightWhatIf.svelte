@@ -329,7 +329,7 @@
 	.pick {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	.pick select {
 		width: 100%;

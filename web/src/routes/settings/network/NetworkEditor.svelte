@@ -264,7 +264,7 @@
 	.grid {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
-		gap: 10px var(--space-4);
+		gap: var(--space-2-5) var(--space-4);
 	}
 	.grid .stack {
 		max-width: none;

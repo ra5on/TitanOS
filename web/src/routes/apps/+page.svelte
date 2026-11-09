@@ -455,7 +455,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 10px var(--space-4);
+		gap: var(--space-2-5) var(--space-4);
 		padding: var(--space-3) 18px;
 		border-bottom: 1px solid var(--panel-border);
 		font-size: var(--text-md);
@@ -509,7 +509,7 @@
 	.add label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		flex: 0 1 240px;
 		font-size: var(--text-base);
 	}
@@ -555,7 +555,7 @@
 	.categories {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.categories button {
 		height: 2.25rem;

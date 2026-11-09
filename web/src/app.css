@@ -53,7 +53,9 @@
 	--text-section: var(--text-lg);
 	/* Spacing scale for gaps, padding and margins. */
 	--space-1: 4px;
+	--space-1-5: 6px;
 	--space-2: 8px;
+	--space-2-5: 10px;
 	--space-3: 12px;
 	--space-4: 16px;
 	--space-5: 24px;
@@ -404,7 +406,7 @@ input[type='checkbox'] {
 }
 
 .notice-warn {
-	padding: 10px 14px;
+	padding: var(--space-2-5) 14px;
 	background: var(--warn-bg);
 	border: 1px solid var(--warn-border);
 	border-radius: var(--radius-ctl);
@@ -413,7 +415,7 @@ input[type='checkbox'] {
 }
 
 .notice-error {
-	padding: 10px 14px;
+	padding: var(--space-2-5) 14px;
 	background: var(--error-bg);
 	border: 1px solid var(--error-border);
 	border-radius: var(--radius-ctl);
@@ -424,7 +426,7 @@ input[type='checkbox'] {
 .chip {
 	display: inline-flex;
 	align-items: center;
-	gap: 4px;
+	gap: var(--space-1);
 	padding: 2px var(--space-2);
 	background: var(--chip);
 	border: 1px solid var(--border);
@@ -475,7 +477,7 @@ input[type='checkbox'] {
 }
 
 .notice-ok {
-	padding: 10px 14px;
+	padding: var(--space-2-5) 14px;
 	background: var(--ok-bg);
 	border: 1px solid var(--ok-border);
 	border-radius: var(--radius-ctl);
@@ -632,7 +634,7 @@ main.readable :target {
 .panel .stack {
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
+	gap: var(--space-1-5);
 	max-width: 32rem;
 	font-size: var(--text-md);
 }
@@ -642,7 +644,7 @@ main.readable :target {
 .panel .check {
 	display: flex;
 	align-items: center;
-	gap: 10px;
+	gap: var(--space-2-5);
 	font-size: var(--text-md);
 }
 .panel .check input {
@@ -655,7 +657,7 @@ main.readable :target {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
-	gap: 10px;
+	gap: var(--space-2-5);
 }
 .panel .divided {
 	padding-top: 14px;
@@ -673,7 +675,7 @@ main.readable :target {
 	font-size: var(--text-md);
 }
 .data-table :is(th, td) {
-	padding: var(--space-2) 10px;
+	padding: var(--space-2) var(--space-2-5);
 	border-bottom: 1px solid var(--border);
 	text-align: left;
 	vertical-align: middle;
@@ -878,13 +880,13 @@ main.in-window :is(.tile.table, .tile.share-list, .tile.flush) {
 }
 /* In a section card the heading (alone or with its badges) is the header row. */
 :is(main.in-window, main.phone-page) .tile.panel {
-	gap: 12px;
-	padding: 16px;
+	gap: var(--space-3);
+	padding: var(--space-4);
 }
 :is(main.in-window, main.phone-page) .tile.panel > :is(h2, h3).tile-title:first-child,
 :is(main.in-window, main.phone-page) .tile.panel > div:first-child:has(> :is(h2, h3).tile-title) {
 	margin: -16px -16px 0;
-	padding: 12px 16px;
+	padding: var(--space-3) var(--space-4);
 	border-bottom: 1px solid var(--panel-border, var(--border));
 }
 /* Settings as rows: label (with its hint) left, control right. */
@@ -897,7 +899,7 @@ main.in-window :is(.tile.table, .tile.share-list, .tile.flush) {
 		display: grid;
 		grid-template-columns: minmax(10rem, 240px) minmax(0, 1fr);
 		align-items: center;
-		column-gap: 16px;
+		column-gap: var(--space-4);
 	}
 	main.in-window .tile.panel label.stack:not(dialog *) > span:first-child {
 		color: var(--text);
@@ -911,7 +913,7 @@ main.in-window :is(.tile.table, .tile.share-list, .tile.flush) {
 }
 /* Compact tables: muted 12 px header, 9 px rows. */
 :is(main.in-window, main.phone-page) :is(.data-table, .tile table) :is(th, td) {
-	padding: 9px 12px;
+	padding: 9px var(--space-3);
 }
 :is(main.in-window, main.phone-page) :is(.data-table, .tile table) th {
 	font-size: var(--text-sm);
@@ -948,9 +950,9 @@ main.in-window :is(.tile.table, .tile.share-list, .tile.flush) {
 	display: flex;
 	align-items: center;
 	flex-wrap: wrap;
-	gap: 8px 12px;
+	gap: var(--space-2) var(--space-3);
 	min-height: 48px;
-	padding: 10px 16px;
+	padding: var(--space-2-5) var(--space-4);
 	border-bottom: 1px solid var(--panel-border, var(--border));
 }
 .card-head > :is(h2, h3) {
@@ -970,28 +972,28 @@ main.in-window :is(.tile.table, .tile.share-list, .tile.flush) {
 	display: flex;
 	align-items: center;
 	flex-wrap: wrap;
-	gap: 8px;
+	gap: var(--space-2);
 }
 .card-head .card-tools .btn,
 .card-foot .btn,
 .set-row .btn {
 	min-height: 32px;
 	font-size: var(--text-base);
-	padding: 0 12px;
+	padding: 0 var(--space-3);
 }
 .card-body {
 	display: flex;
 	flex-direction: column;
-	gap: 12px;
-	padding: 16px;
+	gap: var(--space-3);
+	padding: var(--space-4);
 	min-width: 0;
 }
 .set-row {
 	display: grid;
 	grid-template-columns: minmax(10rem, 36%) minmax(0, 1fr);
 	align-items: center;
-	gap: 6px 16px;
-	padding: 12px 16px;
+	gap: var(--space-1-5) var(--space-4);
+	padding: var(--space-3) var(--space-4);
 	min-height: 48px;
 	border-top: 1px solid var(--panel-border, var(--border));
 	min-width: 0;
@@ -1017,7 +1019,7 @@ main.in-window :is(.tile.table, .tile.share-list, .tile.flush) {
 	display: flex;
 	align-items: center;
 	flex-wrap: wrap;
-	gap: 8px;
+	gap: var(--space-2);
 	min-width: 0;
 }
 .set-control.end {
@@ -1027,8 +1029,8 @@ main.in-window :is(.tile.table, .tile.share-list, .tile.flush) {
 	display: flex;
 	align-items: center;
 	flex-wrap: wrap;
-	gap: 8px;
-	padding: 12px 16px;
+	gap: var(--space-2);
+	padding: var(--space-3) var(--space-4);
 	border-top: 1px solid var(--panel-border, var(--border));
 }
 .card-foot > .grow {
@@ -1042,8 +1044,8 @@ main.in-window :is(.tile.table, .tile.share-list, .tile.flush) {
 	flex-direction: row;
 	flex-wrap: wrap;
 	align-items: center;
-	gap: 12px 16px;
-	padding: 14px 16px;
+	gap: var(--space-3) var(--space-4);
+	padding: 14px var(--space-4);
 }
 .banner .banner-text {
 	flex: 1 1 18rem;
@@ -1062,7 +1064,7 @@ main.in-window :is(.tile.table, .tile.share-list, .tile.flush) {
 .banner .banner-actions {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 8px;
+	gap: var(--space-2);
 }
 /* Tables inside a card run edge to edge. */
 .tile.ui-card > .table-wrap,
@@ -1070,10 +1072,10 @@ main.in-window :is(.tile.table, .tile.share-list, .tile.flush) {
 	width: 100%;
 }
 .tile.ui-card .data-table :is(th, td):first-child {
-	padding-left: 16px;
+	padding-left: var(--space-4);
 }
 .tile.ui-card .data-table :is(th, td):last-child {
-	padding-right: 16px;
+	padding-right: var(--space-4);
 }
 .tile.ui-card .data-table tr:last-child td {
 	border-bottom: 0;
@@ -1092,11 +1094,11 @@ main.in-window :is(.tile.table, .tile.share-list, .tile.flush) {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	column-gap: 32px;
-	padding: 4px 16px;
+	padding: var(--space-1) var(--space-4);
 }
 .set-grid > .set-row {
 	grid-template-columns: minmax(0, 1fr);
-	padding: 12px 0;
+	padding: var(--space-3) 0;
 	border-top: 0;
 }
 @media (max-width: 760px) {

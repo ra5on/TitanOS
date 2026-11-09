@@ -1734,8 +1734,8 @@
 		flex: none;
 		display: flex;
 		align-items: center;
-		gap: 6px;
-		padding: 0 8px 0 6px;
+		gap: var(--space-1-5);
+		padding: 0 var(--space-2) 0 var(--space-1-5);
 		position: relative;
 		z-index: 9500;
 		border: 0;
@@ -1753,7 +1753,7 @@
 		--quick-button-size: var(--pb);
 	}
 	.load {
-		padding: 0 8px;
+		padding: 0 var(--space-2);
 		color: var(--muted);
 		white-space: nowrap;
 		font-variant-numeric: tabular-nums;
@@ -1761,7 +1761,7 @@
 	.clock {
 		display: flex;
 		gap: 0.5em;
-		padding: 0 8px;
+		padding: 0 var(--space-2);
 		white-space: nowrap;
 		font-variant-numeric: tabular-nums;
 	}
@@ -1808,7 +1808,7 @@
 		width: 1px;
 		height: 22px;
 		background: var(--border);
-		margin: 0 4px;
+		margin: 0 var(--space-1);
 		flex: none;
 	}
 	.space {
@@ -1842,7 +1842,7 @@
 		flex-direction: column;
 		align-items: center;
 		gap: 7px;
-		padding: 6px 2px;
+		padding: var(--space-1-5) 2px;
 		border: 0;
 		border-radius: 12px;
 		background: none;
@@ -1904,7 +1904,7 @@
 	:global(.menu-rule) {
 		display: block;
 		height: 1px;
-		margin: 4px 6px;
+		margin: var(--space-1) var(--space-1-5);
 		background: var(--border);
 	}
 	.ico .label {
@@ -1923,8 +1923,8 @@
 	.folder-ico {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
-		gap: 4px;
-		padding: 8px;
+		gap: var(--space-1);
+		padding: var(--space-2);
 		border-radius: 23%;
 		background: color-mix(in srgb, #fff 20%, transparent);
 		backdrop-filter: blur(10px);
@@ -1936,7 +1936,7 @@
 		right: -8px;
 		min-width: 22px;
 		height: 22px;
-		padding: 0 6px;
+		padding: 0 var(--space-1-5);
 		border-radius: 11px;
 		display: grid;
 		place-items: center;
@@ -1979,7 +1979,7 @@
 	.widget {
 		position: absolute;
 		border-radius: 18px;
-		padding: 14px 16px;
+		padding: 14px var(--space-4);
 		overflow: auto;
 		scrollbar-width: thin;
 		z-index: 1;
@@ -2021,8 +2021,8 @@
 		display: flex;
 		align-items: center;
 		flex-wrap: wrap;
-		gap: 10px;
-		padding: 10px 14px;
+		gap: var(--space-2-5);
+		padding: var(--space-2-5) 14px;
 		border-radius: 14px;
 		z-index: 8000;
 		max-width: calc(100% - 40px);
@@ -2030,7 +2030,7 @@
 	.edit-bar .btn {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.snap-preview {
 		position: absolute;
@@ -2050,7 +2050,7 @@
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		border: 3px dashed var(--accent);
 		border-radius: 20px;
 		background: color-mix(in srgb, var(--accent) 12%, transparent);
@@ -2064,14 +2064,14 @@
 		transform: translateX(-50%);
 		width: min(460px, calc(100% - 40px));
 		border-radius: 22px;
-		padding: 16px 18px;
+		padding: var(--space-4) 18px;
 		z-index: 8800;
 	}
 	.folder-head {
 		display: flex;
 		align-items: center;
-		gap: 10px;
-		margin-bottom: 12px;
+		gap: var(--space-2-5);
+		margin-bottom: var(--space-3);
 	}
 	.folder-head b {
 		flex: 1;
@@ -2080,7 +2080,7 @@
 	.folder-grid {
 		display: grid;
 		grid-template-columns: repeat(4, 1fr);
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.ico.small {
 		color: var(--text);
@@ -2120,7 +2120,7 @@
 	}
 	.thumb {
 		width: 190px;
-		padding: 8px;
+		padding: var(--space-2);
 		border: 0;
 		border-radius: 14px;
 		background: none;
@@ -2138,7 +2138,7 @@
 		border-radius: 10px;
 		background: var(--bg);
 		border: 1px solid var(--border);
-		padding: 8px;
+		padding: var(--space-2);
 		display: grid;
 		grid-template-columns: 34px 1fr 1fr;
 		grid-template-rows: 1fr 1fr;
@@ -2155,8 +2155,8 @@
 	.thumb-name {
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		margin-top: 8px;
+		gap: var(--space-2);
+		margin-top: var(--space-2);
 		min-width: 0;
 	}
 	.thumb-name b {
@@ -2167,7 +2167,7 @@
 	}
 	.keys {
 		flex-basis: 100%;
-		margin: 4px 0 0;
+		margin: var(--space-1) 0 0;
 		text-align: center;
 		color: var(--muted);
 		font-size: var(--text-sm);
@@ -2212,8 +2212,8 @@
 	.bubble-head {
 		display: flex;
 		align-items: center;
-		gap: 10px;
-		padding: 8px 8px 8px 14px;
+		gap: var(--space-2-5);
+		padding: var(--space-2) var(--space-2) var(--space-2) 14px;
 		border-bottom: 1px solid var(--border);
 	}
 	.bubble-pop iframe {

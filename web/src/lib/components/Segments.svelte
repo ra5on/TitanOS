@@ -68,7 +68,7 @@
 	}
 	.compact button {
 		min-height: 26px;
-		padding: 0 10px;
+		padding: 0 var(--space-2-5);
 		border-radius: calc(var(--radius-ctl) - 2px);
 		font-size: var(--text-sm);
 		white-space: nowrap;

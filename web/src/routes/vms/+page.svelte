@@ -972,14 +972,14 @@
 	.filters {
 		display: flex;
 		gap: var(--space-1);
-		padding: 0 var(--space-3) 10px;
+		padding: 0 var(--space-3) var(--space-2-5);
 	}
 	.filter {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		height: 1.875rem;
-		padding: 0 10px;
+		padding: 0 var(--space-2-5);
 		background: transparent;
 		border: 1px solid var(--border);
 		border-radius: 999px;
@@ -1022,7 +1022,7 @@
 		flex-direction: column;
 		gap: var(--space-2);
 		min-width: 0;
-		padding: 14px 6px 14px 14px;
+		padding: 14px var(--space-1-5) 14px 14px;
 		color: var(--text);
 		text-decoration: none;
 	}
@@ -1037,7 +1037,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: var(--space-1) 6px;
+		gap: var(--space-1) var(--space-1-5);
 		font-size: var(--text-sm);
 	}
 	.autostart {
@@ -1102,7 +1102,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px var(--space-3);
+		gap: var(--space-1-5) var(--space-3);
 	}
 	.notice-text {
 		flex: 1 1 16rem;
@@ -1119,7 +1119,7 @@
 	}
 	.btn.small {
 		height: 2rem;
-		padding: 0 10px;
+		padding: 0 var(--space-2-5);
 		font-size: var(--text-base);
 	}
 	.tabs {
@@ -1153,7 +1153,7 @@
 		flex: 1;
 		min-width: 0;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-base);
 	}
 	.toolbar::before {
@@ -1161,7 +1161,7 @@
 		height: 22px;
 		width: 1px;
 		background: var(--border);
-		margin-right: 10px;
+		margin-right: var(--space-2-5);
 	}
 	.grow {
 		flex: 1 1 auto;
@@ -1216,7 +1216,7 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-base);
 	}
 	label > span {

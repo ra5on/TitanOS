@@ -41,11 +41,37 @@ func contentSecurityPolicy(ui fs.FS) string {
 	return "object-src 'none'; base-uri 'self'; " + cspExtra
 }
 
+// narrowFrames sets the frame-src of the header policy to the UI itself
+// and the apps' names (direct windows, PLAN 75-14). The page's own policy
+// allows any https frame, since the names are not known when it is built;
+// both policies hold, so the header decides.
+func narrowFrames(policy string, sources []string) string {
+	directive := strings.Join(append([]string{"frame-src 'self'"}, sources...), " ")
+	parts := strings.Split(policy, ";")
+	for i, p := range parts {
+		if f := strings.Fields(p); len(f) > 0 && strings.EqualFold(f[0], "frame-src") {
+			parts[i] = " " + directive
+			if i == 0 {
+				parts[i] = directive
+			}
+			return strings.Join(parts, ";")
+		}
+	}
+	return policy + "; " + directive
+}
+
 // uiHandler serves the web UI. The UI is a single-page app with client-side
 // routing, so every path that is not a file gets index.html.
-func uiHandler(ui fs.FS) http.Handler {
+func uiHandler(ui fs.FS, frames ...func() []string) http.Handler {
 	files := http.FileServerFS(ui)
-	csp := sync.OnceValue(func() string { return contentSecurityPolicy(ui) })
+	built := sync.OnceValue(func() string { return contentSecurityPolicy(ui) })
+	csp := func() string {
+		var sources []string
+		for _, f := range frames {
+			sources = append(sources, f()...)
+		}
+		return narrowFrames(built(), sources)
+	}
 	agentIndex := sync.OnceValues(func() ([]byte, error) { return agentIndexHTML(ui) })
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// PLAN 70: the share target of the installed web app. The service

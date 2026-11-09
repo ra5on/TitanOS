@@ -388,8 +388,8 @@
 		display: flex;
 		flex-wrap: nowrap;
 		align-items: center;
-		gap: 4px;
-		padding: 6px 12px;
+		gap: var(--space-1);
+		padding: var(--space-1-5) var(--space-3);
 		border-bottom: 1px solid var(--panel-border);
 		overflow: hidden;
 		min-width: 0;
@@ -403,8 +403,8 @@
 	.cmd {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
-		padding: 0 10px;
+		gap: var(--space-1-5);
+		padding: 0 var(--space-2-5);
 		border: 1px solid transparent;
 		border-radius: var(--radius-ctl);
 		background: transparent;
@@ -440,7 +440,7 @@
 	.sep {
 		width: 1px;
 		height: 20px;
-		margin: 0 4px;
+		margin: 0 var(--space-1);
 		background: var(--border);
 	}
 	.spacer {
@@ -449,7 +449,7 @@
 	}
 	.segmented {
 		display: flex;
-		gap: 4px;
+		gap: var(--space-1);
 	}
 	/* Phones (and narrow windows) have their own bar for these. */
 	@media (max-width: 760px) {

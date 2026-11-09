@@ -143,7 +143,7 @@
 	dl {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	dl div {
 		display: flex;

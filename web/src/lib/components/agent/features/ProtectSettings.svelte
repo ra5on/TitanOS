@@ -278,12 +278,12 @@
 		flex-basis: 100%;
 		display: flex;
 		align-items: flex-start;
-		gap: 10px;
-		padding: 4px 0;
+		gap: var(--space-2-5);
+		padding: var(--space-1) 0;
 		cursor: pointer;
 	}
 	.choice input {
-		margin-top: 4px;
+		margin-top: var(--space-1);
 	}
 	.num {
 		width: 96px;
@@ -293,12 +293,12 @@
 		flex-basis: 100%;
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px 14px;
+		gap: var(--space-1-5) 14px;
 	}
 	.checks label {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		overflow-wrap: anywhere;
 	}
 	.grow {
@@ -311,7 +311,7 @@
 	.inline {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: var(--space-1);
 		flex: 1 1 140px;
 		min-width: 0;
 	}
@@ -325,7 +325,7 @@
 	.save {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 	}
 	.small {
 		font-size: var(--text-sm, 0.875rem);

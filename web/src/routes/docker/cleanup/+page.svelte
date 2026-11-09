@@ -295,7 +295,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		padding: 12px 16px;
+		padding: var(--space-3) var(--space-4);
 		box-shadow: inset 1px 0 0 var(--panel-border, var(--border));
 		margin-left: -1px;
 		min-width: 0;
@@ -319,10 +319,10 @@
 	}
 	.none {
 		margin: 0;
-		padding: 16px;
+		padding: var(--space-4);
 	}
 	.names {
-		margin: 8px 0;
+		margin: var(--space-2) 0;
 		padding: 0;
 		list-style: none;
 		max-height: 200px;
@@ -330,6 +330,6 @@
 		font-size: var(--text-base);
 	}
 	.dialog-actions {
-		margin-top: 16px;
+		margin-top: var(--space-4);
 	}
 </style>

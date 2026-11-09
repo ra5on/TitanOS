@@ -45,7 +45,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.head h2 {
 		margin: 0;

@@ -219,10 +219,10 @@
 	}
 	.steps {
 		margin: 0;
-		padding: 4px 16px 12px 36px;
+		padding: var(--space-1) var(--space-4) var(--space-3) 36px;
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		line-height: 1.45;
 		overflow-wrap: anywhere;
 	}

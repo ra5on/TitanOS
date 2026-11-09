@@ -136,6 +136,13 @@ func (s *Server) fileTools(user auth.User) []toolcatalog.Tool {
 				"content": str("The content (Markdown for docx and pdf)."), "sheets": sheets,
 				"replace": map[string]any{"type": "boolean", "description": "Replace an existing file; its old version is kept as .prev."}},
 			[]string{"root", "path"}, s.planWrite(user)),
+		actionTool("document_edit", "Propose to change an existing Excel or Word document in place, keeping its layout: for .xlsx set values of existing cells (no formulas; type number, string or bool), for .docx replace exact text (count = how often it occurs). The old version is kept as .prev. To make a new document use file_write.",
+			map[string]any{"root": str("Root ID such as share/Documents."), "path": str("Path of the .xlsx or .docx inside the root."),
+				"cells": map[string]any{"type": "array", "maxItems": 500, "description": "For .xlsx: the cells to set.",
+					"items": map[string]any{"type": "object", "properties": map[string]any{"sheet": str("Sheet name."), "cell": str("Address such as B7."), "value": str("New value as text."), "type": enum("How to store the value.", "string", "number", "bool")}, "required": []string{"sheet", "cell", "value"}}},
+				"texts": map[string]any{"type": "array", "maxItems": 100, "description": "For .docx: exact replacements; a match must lie within one formatting run.",
+					"items": map[string]any{"type": "object", "properties": map[string]any{"find": str("Exact text."), "replace": str("New text."), "count": map[string]any{"type": "integer", "minimum": 1, "description": "How often find occurs; guards against the wrong place."}}, "required": []string{"find", "replace", "count"}}}},
+			[]string{"root", "path"}, s.planEdit(user)),
 		actionTool("files_move", "Propose to move or rename many files and folders within one root at once, e.g. to sort them into folders. Never replaces anything.",
 			map[string]any{"root": str("Root ID."), "moves": moves}, []string{"root", "moves"}, s.planMoves(user)),
 		actionTool("file_copy", "Propose to copy or move files and folders into a folder of another (or the same) root. Runs in the background; existing names get a number.",
@@ -412,4 +419,130 @@ func (s *Server) handleMoveMany(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("files moved in one batch", "root", root.ID, "count", done, "by", user.Name, "ip", remoteIP(r))
 	writeJSON(w, http.StatusOK, map[string]any{"moved": done})
+}
+
+// editRequest changes an existing Word or Excel document in place
+// (PLAN 75-12): cells of an .xlsx or exact text replacements in a .docx.
+// The old version is kept as .prev, like file_write with replace.
+type editRequest struct {
+	Root  string            `json:"root"`
+	Path  string            `json:"path"`
+	Cells []office.CellEdit `json:"cells,omitempty"`
+	Texts []office.TextEdit `json:"texts,omitempty"`
+}
+
+// maxEditDocument is the largest document document_edit opens.
+const maxEditDocument = 50 << 20
+
+// apply edits the bytes of the document.
+func (req editRequest) apply(data []byte) ([]byte, error) {
+	switch strings.ToLower(path.Ext(req.Path)) {
+	case ".xlsx":
+		if len(req.Cells) == 0 || len(req.Texts) > 0 {
+			return nil, errors.New("for .xlsx give cells (and no texts)")
+		}
+		return office.EditCells(data, req.Cells)
+	case ".docx":
+		if len(req.Texts) == 0 || len(req.Cells) > 0 {
+			return nil, errors.New("for .docx give texts (and no cells)")
+		}
+		return office.EditText(req.Path, data, req.Texts)
+	}
+	return nil, errors.New("only .xlsx and .docx can be edited; write other files with file_write")
+}
+
+// readEditable reads a document of a root for document_edit.
+func (s *Server) readEditable(root files.Root, p string) ([]byte, error) {
+	f, _, err := s.opts.Files.Open(root, p)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, maxEditDocument+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxEditDocument {
+		return nil, office.ErrTooLarge
+	}
+	return data, nil
+}
+
+func (s *Server) planEdit(user auth.User) plan {
+	return func(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
+		var req editRequest
+		if err := toolcatalog.DecodeArgs(args, &req); err != nil {
+			return nil, err
+		}
+		p, err := s.fileTarget(user, req.Root, req.Path, true)
+		if err != nil {
+			return nil, err
+		}
+		req.Path = p
+		root, err := s.catalogRoot(user, req.Root)
+		if err != nil {
+			return nil, err
+		}
+		data, err := s.readEditable(root, p)
+		if err != nil {
+			return nil, toolcatalog.Errorf("%s cannot be read: %v", p, err)
+		}
+		// Tried now, so that the card only offers what will work.
+		if _, err := req.apply(data); err != nil {
+			return nil, toolcatalog.Errorf("%v", err)
+		}
+		var lines []string
+		for _, c := range req.Cells {
+			if len(lines) == 12 {
+				break
+			}
+			lines = append(lines, fmt.Sprintf("%s!%s = %s", c.Sheet, c.Cell, c.Value))
+		}
+		for _, e := range req.Texts {
+			if len(lines) == 12 {
+				break
+			}
+			lines = append(lines, fmt.Sprintf("%q → %q", e.Find, e.Replace))
+		}
+		preview := strings.Join(lines, "\n")
+		if r := []rune(preview); len(r) > 600 {
+			preview = string(r[:600]) + " …"
+		}
+		params := map[string]string{"root": req.Root, "path": p, "preview": preview}
+		return withLevel(card("file.edit", params, "POST", "/files/edit-document", req), toolcatalog.LevelDanger, "", ""), nil
+	}
+}
+
+// handleEditDocument applies document_edit with the rights of the account.
+func (s *Server) handleEditDocument(w http.ResponseWriter, r *http.Request) {
+	var req editRequest
+	r.Body = http.MaxBytesReader(w, r.Body, 2*maxDocument)
+	if !readJSONBody(w, r, &req) {
+		return
+	}
+	root, ok := s.fileRoot(w, r, req.Root)
+	if !ok {
+		return
+	}
+	if root.Kind == "stick" || hiddenPath(req.Path) {
+		writeFileError(w, files.ErrProtected)
+		return
+	}
+	data, err := s.readEditable(root, req.Path)
+	if err != nil {
+		writeFileError(w, err)
+		return
+	}
+	out, err := req.apply(data)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_document", err.Error())
+		return
+	}
+	user := currentUser(r)
+	if err := s.opts.Files.WriteFile(root, req.Path, out, user.UID, true); err != nil {
+		writeFileError(w, err)
+		return
+	}
+	slog.Info("document edited", "root", root.ID, "path", req.Path, "cells", len(req.Cells), "texts", len(req.Texts), "bytes", len(out), "by", user.Name, "ip", remoteIP(r))
+	writeJSON(w, http.StatusOK, map[string]any{"root": root.ID, "path": req.Path, "bytes": len(out), "sha256": fmt.Sprintf("%x", sha256.Sum256(out))})
 }

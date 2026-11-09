@@ -242,7 +242,7 @@
 		bottom: 0;
 		max-width: 520px;
 		margin: 0 auto;
-		padding: 8px 14px calc(env(safe-area-inset-bottom, 0px) + 18px);
+		padding: var(--space-2) 14px calc(env(safe-area-inset-bottom, 0px) + 18px);
 		border-radius: 18px 18px 0 0;
 		color: var(--text);
 		background: var(--bg);
@@ -264,12 +264,12 @@
 		width: 44px;
 		height: 5px;
 		border-radius: 3px;
-		margin: 2px auto 10px;
+		margin: 2px auto var(--space-2-5);
 		background: color-mix(in srgb, var(--text) 25%, transparent);
 	}
 	.sheet-title {
 		display: block;
-		padding: 0 6px 10px;
+		padding: 0 var(--space-1-5) var(--space-2-5);
 		font-size: var(--text-md);
 	}
 	.sheet-list {
@@ -281,10 +281,10 @@
 	.sheet-list > * {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 		width: 100%;
 		min-height: 54px;
-		padding: 8px 12px;
+		padding: var(--space-2) var(--space-3);
 		border: 0;
 		border-top: 1px solid var(--border);
 		background: none;

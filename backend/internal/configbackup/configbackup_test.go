@@ -6,13 +6,14 @@ import (
 	"compress/gzip"
 	"context"
 	"errors"
-	"github.com/ra5on/TitanOS/backend/internal/retention"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/retention"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
 )

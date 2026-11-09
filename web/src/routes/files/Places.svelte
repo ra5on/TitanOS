@@ -288,7 +288,7 @@
 <style>
 	.group {
 		display: block;
-		padding: 10px 10px var(--space-1);
+		padding: var(--space-2-5) var(--space-2-5) var(--space-1);
 		font-size: var(--text-sm);
 		color: var(--muted);
 	}
@@ -304,7 +304,7 @@
 		justify-content: center;
 		width: 28px;
 		height: 28px;
-		margin-top: 6px;
+		margin-top: var(--space-1-5);
 		padding: 0;
 		background: transparent;
 		border: 0;
@@ -319,10 +319,10 @@
 	.place {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		width: 100%;
 		min-height: 38px;
-		padding: 0 10px;
+		padding: 0 var(--space-2-5);
 		background: transparent;
 		border: 0;
 		border-radius: var(--radius-ctl);
@@ -358,7 +358,7 @@
 		flex: none;
 	}
 	.advanced summary {
-		padding: 10px;
+		padding: var(--space-2-5);
 		cursor: pointer;
 		font-size: var(--text-base);
 		color: var(--text);
@@ -373,7 +373,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-1);
-		margin: 2px 10px var(--space-2) 34px;
+		margin: 2px var(--space-2-5) var(--space-2) 34px;
 		font-size: var(--text-sm);
 		color: var(--muted);
 	}
@@ -409,7 +409,7 @@
 	}
 	.eject {
 		align-self: flex-end;
-		margin: -4px 10px var(--space-1);
+		margin: -4px var(--space-2-5) var(--space-1);
 	}
 	.drive-description {
 		flex: 1;
@@ -426,9 +426,9 @@
 	.usb {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		min-height: 38px;
-		padding: 0 10px;
+		padding: 0 var(--space-2-5);
 		color: var(--muted);
 		font-size: var(--text-md);
 	}
@@ -436,7 +436,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 3px;
-		padding: 0 10px var(--space-2) 36px;
+		padding: 0 var(--space-2-5) var(--space-2) 36px;
 		font-size: var(--text-sm);
 		color: var(--muted);
 	}
@@ -453,7 +453,7 @@
 		overflow-wrap: anywhere;
 	}
 	.note {
-		padding: var(--space-1) 10px;
+		padding: var(--space-1) var(--space-2-5);
 		font-size: var(--text-base);
 	}
 	.link {
@@ -462,7 +462,7 @@
 	.format-link {
 		display: flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		border: 0;
 		background: none;
 		text-align: left;

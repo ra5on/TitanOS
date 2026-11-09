@@ -120,7 +120,15 @@ func waitChat(t *testing.T, ts *testServer, client *http.Client, id string) agen
 		if res.StatusCode != http.StatusOK {
 			t.Fatalf("chat: %d %s", res.StatusCode, body)
 		}
-		if chat.State != agent.StateRunning && !ts.server.agentRunning("alex", id) && !ts.server.agentRunning("gast", id) {
+		// Done once no account's run of it is left: the run saves the chat
+		// after its state changed (a member's chat, e.g. maria's in a shared
+		// project, ran on after a check of alex and gast only, and wrote into
+		// the test's folder while it was removed).
+		running := chat.State == agent.StateRunning
+		for _, u := range ts.users.List() {
+			running = running || ts.server.agentRunning(u.Name, id)
+		}
+		if !running {
 			return chat
 		}
 		if time.Now().After(deadline) {

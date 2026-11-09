@@ -268,7 +268,7 @@
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
 		align-items: start;
-		gap: var(--gap, 16px);
+		gap: var(--gap, var(--space-4));
 		min-width: 0;
 	}
 	@media (min-width: 52rem) {
@@ -306,7 +306,7 @@
 	}
 	.card-text {
 		margin: 0;
-		padding: 12px 16px;
+		padding: var(--space-3) var(--space-4);
 		font-size: var(--text-base);
 	}
 	.card-text + .card-text {
@@ -318,7 +318,7 @@
 	.done {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		color: var(--text);
 	}
 	.mark {
@@ -336,7 +336,7 @@
 	.state {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-weight: 600;
 	}
 	.dot {
@@ -355,7 +355,7 @@
 	ul {
 		list-style: none;
 		margin: 0;
-		padding: 0 16px;
+		padding: 0 var(--space-4);
 	}
 	.recent li {
 		display: grid;

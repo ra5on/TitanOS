@@ -72,7 +72,7 @@
 	.head {
 		display: flex;
 		justify-content: space-between;
-		gap: 10px;
+		gap: var(--space-2-5);
 		flex-wrap: wrap;
 	}
 	.head span {
@@ -105,7 +105,7 @@
 	.axis {
 		display: flex;
 		justify-content: space-between;
-		gap: 10px;
+		gap: var(--space-2-5);
 		font-size: var(--text-xs);
 		color: var(--muted);
 	}

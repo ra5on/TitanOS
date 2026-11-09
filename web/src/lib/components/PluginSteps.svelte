@@ -90,13 +90,13 @@
 		list-style: none;
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	li {
 		display: grid;
 		grid-template-columns: 1.25rem 1fr;
 		align-items: baseline;
-		column-gap: 6px;
+		column-gap: var(--space-1-5);
 		color: var(--muted);
 	}
 	li.running,

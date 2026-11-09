@@ -359,7 +359,7 @@
 	.card {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 		padding: 14px;
 		border-radius: 14px;
 		border: 1px solid var(--warn-border);
@@ -372,12 +372,12 @@
 	.btns {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.form {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
-		margin-bottom: 12px;
+		gap: var(--space-1-5);
+		margin-bottom: var(--space-3);
 	}
 </style>

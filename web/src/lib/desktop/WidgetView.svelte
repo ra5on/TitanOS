@@ -288,7 +288,7 @@
 
 <style>
 	h4 {
-		margin: 0 0 10px;
+		margin: 0 0 var(--space-2-5);
 		font-size: var(--text-md);
 		font-weight: 600;
 	}
@@ -314,8 +314,8 @@
 	.status {
 		display: flex;
 		align-items: center;
-		gap: 12px;
-		margin-bottom: 12px;
+		gap: var(--space-3);
+		margin-bottom: var(--space-3);
 	}
 	.dot {
 		width: 40px;
@@ -336,18 +336,18 @@
 	.two {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.in {
 		background: color-mix(in srgb, var(--bg) 45%, transparent);
 		border-radius: 12px;
-		padding: 10px 12px;
+		padding: var(--space-2-5) var(--space-3);
 		min-width: 0;
 	}
 	.row-btn {
 		display: block;
 		width: 100%;
-		margin-bottom: 6px;
+		margin-bottom: var(--space-1-5);
 		border: 0;
 		color: inherit;
 		font: inherit;
@@ -357,14 +357,14 @@
 	.row {
 		display: flex;
 		justify-content: space-between;
-		gap: 8px;
+		gap: var(--space-2);
 		padding: 3px 0;
 	}
 	.meter {
 		height: 5px;
 		border-radius: 3px;
 		background: var(--track);
-		margin-top: 6px;
+		margin-top: var(--space-1-5);
 		overflow: hidden;
 	}
 	.meter i {
@@ -375,9 +375,9 @@
 	.list-row {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		width: 100%;
-		padding: 5px 4px;
+		padding: 5px var(--space-1);
 		border: 0;
 		border-radius: 8px;
 		background: none;
@@ -402,7 +402,7 @@
 		display: inline-block;
 		width: 8px;
 		height: 8px;
-		margin-right: 6px;
+		margin-right: var(--space-1-5);
 		border-radius: 50%;
 		background: var(--muted);
 	}
@@ -424,6 +424,6 @@
 		display: block;
 	}
 	.small-btn {
-		margin-top: 8px;
+		margin-top: var(--space-2);
 	}
 </style>

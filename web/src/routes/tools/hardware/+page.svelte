@@ -295,7 +295,7 @@
 	.actions {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 10px;
+		gap: var(--space-2-5);
 		margin-bottom: var(--gap);
 	}
 	.small {
@@ -331,7 +331,7 @@
 	.findings li {
 		display: flex;
 		align-items: baseline;
-		gap: 10px;
+		gap: var(--space-2-5);
 		overflow-wrap: anywhere;
 	}
 	.row {
@@ -361,11 +361,11 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px 12px;
-		margin-top: 6px;
+		gap: var(--space-2) var(--space-3);
+		margin-top: var(--space-1-5);
 	}
 	.sub {
-		margin: 6px 0 0;
+		margin: var(--space-1-5) 0 0;
 		font-size: var(--text-md);
 	}
 </style>

@@ -95,8 +95,8 @@
 	header {
 		display: flex;
 		align-items: center;
-		gap: 10px;
-		padding: calc(env(safe-area-inset-top, 0px) + 14px) 16px 10px;
+		gap: var(--space-2-5);
+		padding: calc(env(safe-area-inset-top, 0px) + 14px) var(--space-4) var(--space-2-5);
 	}
 	h2 {
 		flex: 1;
@@ -120,7 +120,7 @@
 	.body {
 		flex: 1;
 		overflow-y: auto;
-		padding: 4px 16px calc(env(safe-area-inset-bottom, 0px) + 24px);
+		padding: var(--space-1) var(--space-4) calc(env(safe-area-inset-bottom, 0px) + var(--space-5));
 		display: flex;
 		flex-direction: column;
 		gap: 14px;
@@ -134,8 +134,8 @@
 	.body :global(.drow) {
 		display: flex;
 		align-items: center;
-		gap: 12px;
-		padding: 12px 16px;
+		gap: var(--space-3);
+		padding: var(--space-3) var(--space-4);
 		min-height: 48px;
 		border-top: 1px solid var(--panel-border, var(--border));
 		font-size: var(--text-md);
@@ -147,7 +147,7 @@
 	.body :global(.drow.col) {
 		flex-direction: column;
 		align-items: stretch;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.body :global(.dt) {
 		flex: 1;
@@ -180,7 +180,7 @@
 	}
 	.body :global(.tag) {
 		font-size: var(--text-xs, 0.75rem);
-		padding: 2px 8px;
+		padding: 2px var(--space-2);
 		border-radius: 999px;
 		border: 1px solid currentColor;
 		white-space: nowrap;
@@ -208,7 +208,7 @@
 	.body :global(.seg button) {
 		flex: 1;
 		min-width: 0;
-		padding: 8px 4px;
+		padding: var(--space-2) var(--space-1);
 		border: 0;
 		background: none;
 		color: var(--text);

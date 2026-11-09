@@ -7,8 +7,15 @@
 
 	// own: the limit comes from the chip's critical value, else from the
 	// default for its kind of chip (notify.AlarmLimitSource).
-	type Alarm = { id: string; limit: number | null; own?: boolean; muted: boolean };
-	type Alarms = { sensors: Alarm[]; muted: string[] };
+	type Alarm = {
+		id: string;
+		limit: number | null;
+		own?: boolean;
+		muted: boolean;
+		shutdown?: boolean;
+	};
+	// heatShutdown: PLAN 75-9, shut down when a reliable sensor stays too hot.
+	type Alarms = { sensors: Alarm[]; muted: string[]; heatShutdown?: boolean };
 	const sensors = $derived(system.info?.temperatures ?? []);
 	let alarms = $state<Alarms | null>(null);
 	let busy = $state(false);
@@ -26,6 +33,30 @@
 	$effect(() => {
 		load();
 	});
+
+	// The sensors that can switch the NAS off (reliable chip, own critical
+	// value, not muted): notify.ShutsDownOnHeat.
+	const guards = $derived(
+		sensors.filter((s) => alarmOf(s.id)?.shutdown && !alarms?.muted.includes(s.id)),
+	);
+
+	async function setHeat(on: boolean) {
+		if (!alarms) return;
+		busy = true;
+		error = '';
+		saved = false;
+		try {
+			alarms = await api.put<Alarms>('/notifications/temperatures', {
+				muted: alarms.muted,
+				heatShutdown: on,
+			});
+			saved = true;
+		} catch (err) {
+			error = apiErrorText(err);
+		} finally {
+			busy = false;
+		}
+	}
 
 	async function toggle(id: string, report: boolean) {
 		if (!alarms) return;
@@ -86,6 +117,26 @@
 			</div>
 		{/each}
 	</div>
+	<div class="heat">
+		<span class="name"
+			><strong>{t('temperatures.heatTitle')}</strong><span class="muted"
+				>{guards.length
+					? t('temperatures.heatHint', {
+							sensors: guards.map((s) => `${s.chip} ${s.label}`).join(', '),
+						})
+					: t('temperatures.heatNone')}</span
+			></span
+		>
+		<input
+			type="checkbox"
+			class="switch"
+			role="switch"
+			aria-label={t('temperatures.heatTitle')}
+			checked={!!alarms?.heatShutdown}
+			disabled={!alarms || busy}
+			onchange={(e) => setHeat(e.currentTarget.checked)}
+		/>
+	</div>
 	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	{#if saved}<p role="status">{t('temperatures.alarmSaved')}</p>{/if}
 </section>
@@ -119,13 +170,19 @@
 	.name .muted {
 		font-size: var(--text-sm);
 	}
+	.heat {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+		padding: var(--space-4) 0 var(--space-2);
+	}
 	.value {
 		white-space: nowrap;
 	}
 	.check {
 		display: flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		white-space: nowrap;
 	}
 </style>

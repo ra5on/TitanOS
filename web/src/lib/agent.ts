@@ -849,6 +849,7 @@ export const ASK_CARDS = [
 	'apps.updateAll',
 	'file.write',
 	'file.replace',
+	'file.edit',
 	'file.rename',
 	'file.delete',
 	'file.trash',

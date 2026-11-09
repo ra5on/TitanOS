@@ -63,7 +63,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		max-width: 32rem;
 	}
 	.chip {

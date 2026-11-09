@@ -34,9 +34,9 @@
 	header {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 		min-height: 56px;
-		padding: 8px 20px;
+		padding: var(--space-2) 20px;
 		border-bottom: 1px solid var(--panel-border, var(--border));
 	}
 	h2 {
@@ -49,7 +49,7 @@
 	}
 	.back {
 		min-height: 32px;
-		padding: 0 12px;
+		padding: 0 var(--space-3);
 		font-size: var(--text-base);
 	}
 	.body {

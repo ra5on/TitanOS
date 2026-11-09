@@ -90,11 +90,11 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	textarea {
 		height: auto;
-		padding: 10px;
+		padding: var(--space-2-5);
 		resize: vertical;
 		overflow-wrap: anywhere;
 	}

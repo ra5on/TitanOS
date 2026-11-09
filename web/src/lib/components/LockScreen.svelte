@@ -268,7 +268,7 @@
 		align-items: center;
 		/* Taller than a short screen (phone across): scrolls from the top. */
 		justify-content: safe center;
-		padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
+		padding: var(--space-5) var(--space-4) calc(var(--space-5) + env(safe-area-inset-bottom));
 		overflow-y: auto;
 		color: #fff;
 		background: var(
@@ -311,7 +311,7 @@
 		text-shadow: 0 2px 16px rgb(0 0 0 / 0.35);
 	}
 	.date {
-		margin: 12px 0 0;
+		margin: var(--space-3) 0 0;
 		font-size: var(--text-lg, 20px);
 		text-shadow: 0 1px 8px rgb(0 0 0 / 0.35);
 		text-align: center;
@@ -320,7 +320,7 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 		margin-top: clamp(32px, 8vh, 72px);
 	}
 	.avatar {
@@ -347,15 +347,15 @@
 	.unlock {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 		width: 100%;
 		margin-top: 14px;
 	}
 	.pill {
 		display: flex;
 		align-items: center;
-		gap: 6px;
-		padding: 4px 4px 4px 16px;
+		gap: var(--space-1-5);
+		padding: var(--space-1) var(--space-1) var(--space-1) var(--space-4);
 		border: 1px solid rgb(255 255 255 / 0.28);
 		border-radius: 999px;
 		background: rgb(8 14 30 / 0.62);
@@ -384,7 +384,7 @@
 	.code {
 		flex: none;
 		height: 44px;
-		padding: 0 16px;
+		padding: 0 var(--space-4);
 		border: 1px solid rgb(255 255 255 / 0.28);
 		border-radius: 999px;
 		background: rgb(8 14 30 / 0.62);
@@ -418,7 +418,7 @@
 	.error,
 	.busy {
 		margin: 0;
-		padding: 8px 12px;
+		padding: var(--space-2) var(--space-3);
 		border-radius: 10px;
 		background: rgb(8 14 30 / 0.72);
 		font-size: var(--text-sm, 13px);
@@ -431,14 +431,14 @@
 		display: flex;
 		flex-wrap: wrap;
 		justify-content: center;
-		gap: 8px;
-		margin-top: 12px;
+		gap: var(--space-2);
+		margin-top: var(--space-3);
 	}
 	.chip {
 		min-height: 34px;
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		padding: 0 14px;
 		border: 1px solid rgb(255 255 255 / 0.25);
 		border-radius: 999px;
@@ -458,7 +458,7 @@
 	}
 	.quiet {
 		position: relative;
-		margin: 24px 0 0;
+		margin: var(--space-5) 0 0;
 		font-size: var(--text-sm, 13px);
 		color: rgb(255 255 255 / 0.88);
 		text-align: center;
@@ -475,11 +475,11 @@
 			font-size: 56px;
 		}
 		.date {
-			margin-top: 4px;
+			margin-top: var(--space-1);
 		}
 		.who {
 			flex-direction: row;
-			margin-top: 16px;
+			margin-top: var(--space-4);
 		}
 		.avatar {
 			width: 44px;

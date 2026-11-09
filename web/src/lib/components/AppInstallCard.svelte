@@ -31,12 +31,12 @@
 <style>
 	.hint {
 		margin: 0;
-		padding: 0 16px 14px;
+		padding: 0 var(--space-4) 14px;
 		font-size: var(--text-sm);
 	}
 	.chip {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 </style>

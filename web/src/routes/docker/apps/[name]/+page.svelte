@@ -1040,7 +1040,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
-		gap: 10px var(--space-4);
+		gap: var(--space-2-5) var(--space-4);
 		padding: var(--space-3) 18px;
 	}
 	.app-state,
@@ -1125,7 +1125,7 @@
 	.link {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		padding: 0;
 		background: none;
 		border: 0;

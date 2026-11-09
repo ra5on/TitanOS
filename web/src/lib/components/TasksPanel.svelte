@@ -316,7 +316,7 @@
 		align-items: center;
 		gap: var(--space-1);
 		height: 28px;
-		padding: 0 var(--space-1) 0 6px;
+		padding: 0 var(--space-1) 0 var(--space-1-5);
 		border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
 		border-radius: 999px;
 		background: color-mix(in srgb, var(--accent) 12%, transparent);
@@ -406,7 +406,7 @@
 		background: var(--overlay, rgb(0 0 0 / 0.5));
 	}
 	.sheet-body {
-		padding: 8px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+		padding: var(--space-2) var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
 	}
 	.grab {
 		display: block;
@@ -414,7 +414,7 @@
 		height: 5px;
 		border-radius: 3px;
 		background: var(--border);
-		margin: 0 auto 6px;
+		margin: 0 auto var(--space-1-5);
 	}
 	.sheet header {
 		display: flex;
@@ -437,7 +437,7 @@
 		cursor: pointer;
 	}
 	.short {
-		margin: 2px 0 8px;
+		margin: 2px 0 var(--space-2);
 		font-size: var(--text-sm);
 	}
 	.rows {
@@ -452,8 +452,8 @@
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) auto auto;
 		align-items: center;
-		gap: 4px 10px;
-		padding: 12px 2px;
+		gap: var(--space-1) var(--space-2-5);
+		padding: var(--space-3) 2px;
 		color: var(--text);
 		text-decoration: none;
 	}

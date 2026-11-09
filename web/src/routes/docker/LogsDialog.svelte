@@ -129,13 +129,13 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-md);
 	}
 	.check {
 		flex-direction: row;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.check input {
 		width: 18px;
@@ -167,7 +167,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-2) var(--space-4);
-		margin-bottom: 10px;
+		margin-bottom: var(--space-2-5);
 	}
 	.logs-search {
 		flex: 1 1 14rem;
@@ -179,6 +179,6 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--space-2);
-		margin-bottom: 10px;
+		margin-bottom: var(--space-2-5);
 	}
 </style>

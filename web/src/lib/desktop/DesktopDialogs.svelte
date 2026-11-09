@@ -339,7 +339,7 @@
 	.papers {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-		gap: 10px;
+		gap: var(--space-2-5);
 		margin-bottom: 14px;
 	}
 	.paper {
@@ -348,7 +348,7 @@
 		border-radius: 12px;
 		display: flex;
 		align-items: flex-end;
-		padding: 8px;
+		padding: var(--space-2);
 		color: #fff;
 		font: inherit;
 		font-weight: 600;
@@ -363,9 +363,9 @@
 	.layout-row {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		flex-wrap: wrap;
-		margin: 8px 0;
+		margin: var(--space-2) 0;
 	}
 	.space {
 		flex: 1;
@@ -373,8 +373,8 @@
 	.check {
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		margin-top: 12px;
+		gap: var(--space-2);
+		margin-top: var(--space-3);
 	}
 	.muted {
 		color: var(--muted);
@@ -388,21 +388,21 @@
 	.gallery {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.g-item {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
-		padding: 12px;
+		gap: var(--space-1);
+		padding: var(--space-3);
 		border: 1px solid var(--border);
 		border-radius: 12px;
 		background: var(--surface);
 	}
 	.sizes {
 		display: flex;
-		gap: 6px;
-		margin-top: 8px;
+		gap: var(--space-1-5);
+		margin-top: var(--space-2);
 	}
 	.rows {
 		border: 1px solid var(--border);

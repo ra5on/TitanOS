@@ -253,7 +253,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: var(--space-1) 6px;
+		gap: var(--space-1) var(--space-1-5);
 		font-weight: 600;
 		font-size: var(--text-md);
 		overflow-wrap: break-word;

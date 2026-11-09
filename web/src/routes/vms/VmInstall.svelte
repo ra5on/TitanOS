@@ -102,7 +102,7 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-base);
 	}
 	label > span {
@@ -137,7 +137,7 @@
 	.check {
 		flex-direction: row;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		font-size: var(--text-md);
 	}
 	.check span {

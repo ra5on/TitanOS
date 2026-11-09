@@ -297,16 +297,16 @@
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
-		margin: 12px 0 6px;
+		gap: var(--space-1-5);
+		margin: var(--space-3) 0 var(--space-1-5);
 		padding: 0;
 		border: 0;
 	}
 	.vol {
 		display: flex;
 		align-items: center;
-		gap: 10px;
-		padding: 10px 12px;
+		gap: var(--space-2-5);
+		padding: var(--space-2-5) var(--space-3);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 		cursor: pointer;
@@ -325,7 +325,7 @@
 	}
 	.badge {
 		flex-shrink: 0;
-		padding: 2px 8px;
+		padding: 2px var(--space-2);
 		border-radius: 999px;
 		font-size: var(--text-xs, 0.75rem);
 		color: var(--accent);
@@ -345,7 +345,7 @@
 		color: color-mix(in srgb, var(--muted) 85%, var(--text));
 	}
 	.moving {
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.bar {
 		height: 8px;

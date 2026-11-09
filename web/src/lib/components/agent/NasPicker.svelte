@@ -201,7 +201,7 @@
 	.search {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		color: var(--muted);
 	}
 	.search input {
@@ -210,7 +210,7 @@
 	.crumbs {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px;
+		gap: var(--space-1);
 		align-items: center;
 		font-size: var(--text-sm);
 		color: var(--muted);
@@ -236,15 +236,15 @@
 		border-top: 1px solid var(--border);
 	}
 	.pad {
-		padding: 12px;
+		padding: var(--space-3);
 	}
 	.row {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 		width: 100%;
 		min-height: 48px;
-		padding: 4px 12px;
+		padding: var(--space-1) var(--space-3);
 		background: none;
 		border: 0;
 		color: var(--text);

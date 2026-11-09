@@ -2,9 +2,9 @@
 .dropdown-panel [role^='menuitem'] {
 	display: flex;
 	align-items: center;
-	gap: 10px;
+	gap: var(--space-2-5);
 	min-height: 2.25rem;
-	padding: 0 10px;
+	padding: 0 var(--space-2-5);
 	background: transparent;
 	border: 0;
 	border-radius: var(--radius-small);
@@ -43,12 +43,12 @@
 }
 .dropdown-panel hr {
 	height: 1px;
-	margin: 6px var(--space-1);
+	margin: var(--space-1-5) var(--space-1);
 	border: 0;
 	background: var(--border);
 }
 .dropdown-panel .menu-title {
-	padding: 6px 10px var(--space-2);
+	padding: var(--space-1-5) var(--space-2-5) var(--space-2);
 	color: var(--muted);
 	font-size: var(--text-sm);
 	overflow: hidden;

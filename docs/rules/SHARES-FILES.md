@@ -74,7 +74,7 @@ Bereich: Shares, Freigabe-Löschen, Kontingente, Dateimanager, Datei-Editor, USB
   `.prev` als vorherige Fassung. Rechte, Eigentümer, Benutzerattribute und
   Zugriffs-ACLs erhalten; VM-Dateien und Stick-Geheimnisse schützen.
 - Schreibbare Shares für berechtigte Nutzer, ganze Volumes/USB/Stick weiterhin
-  nur über die vorhandenen Administrator-Wurzeln. Der direkte Texteditor bearbeitet keine Office-/PDF-Dateien; Dokumenterzeugung und Word-/Excel-/PDF-Lesen über MCP (`file_write`, `file_read`, `document_read`) sind davon getrennt.
+  nur über die vorhandenen Administrator-Wurzeln. Der direkte Texteditor bearbeitet keine Office-/PDF-Dateien; Dokumenterzeugung, Word-/Excel-/PDF-Lesen und das Ändern vorhandener Word-/Excel-Dokumente über MCP und den KI-Agenten (`file_write`, `file_read`, `document_read`, `document_edit`: Excel nur vorhandene Zellen ohne Formeln, Word exakte Textstellen mit Anzahl; immer mit Bestätigung, alte Fassung als `.prev`; PLAN 75-12) sind davon getrennt.
 - `PUT /files/content?root=&path=&expect=` (PLAN 66, `docs/WEBAPPS.md`): ganze Datei für Web-Apps, höchstens 2 GiB, Rechte wie beim Hochladen (nie Stick/nur lesbar), Konfliktprüfung über die Änderungszeit (`expect` Nanosekunden, `modified` der Liste auf Sekunden, oder `none` für neue Dateien), `409 file_changed`; Teil-Datei im selben Ordner, Besitzer/Rechte übernommen, fsync, Prüfung direkt vor dem atomaren Umbenennen, alte Fassung als `.prev` wie beim Texteditor. Standard-Apps je Dateiendung in der Einstellung `fileapps`.
 - USB-Verfügbarkeit anhand Mount-ID und Pfad statt leerem internen Volume-Namen.
   Upload-Abschluss mit `renameat2(RENAME_NOREPLACE)` über geöffnete Elternordner;

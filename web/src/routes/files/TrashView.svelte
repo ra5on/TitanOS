@@ -431,7 +431,7 @@
 		font-size: var(--text-md);
 	}
 	.crumbs button {
-		padding: var(--space-1) 6px;
+		padding: var(--space-1) var(--space-1-5);
 		background: transparent;
 		border: 0;
 		border-radius: var(--radius-small);
@@ -444,12 +444,12 @@
 	}
 	.hint {
 		margin: 0;
-		padding: 10px 14px;
+		padding: var(--space-2-5) 14px;
 		border-bottom: 1px solid var(--panel-border);
 		font-size: var(--text-base);
 	}
 	.notice-error {
-		margin: 10px 14px;
+		margin: var(--space-2-5) 14px;
 	}
 	.row {
 		display: grid;
@@ -480,7 +480,7 @@
 	.entry {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		min-width: 0;
 		padding: 0;
 		background: transparent;
@@ -505,7 +505,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-2);
-		padding: 10px 14px;
+		padding: var(--space-2-5) 14px;
 		background: var(--chip);
 		border-bottom: 1px solid var(--panel-border);
 	}

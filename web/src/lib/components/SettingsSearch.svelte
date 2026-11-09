@@ -70,7 +70,7 @@
 <style>
 	.search {
 		display: grid;
-		gap: 6px;
+		gap: var(--space-1-5);
 		width: 100%;
 	}
 	.search.visible {

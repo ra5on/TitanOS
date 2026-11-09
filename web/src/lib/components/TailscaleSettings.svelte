@@ -257,12 +257,12 @@
 	.check {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.actions,
 	.meta {
 		display: flex;
-		gap: 10px;
+		gap: var(--space-2-5);
 		flex-wrap: wrap;
 		align-items: center;
 	}
@@ -285,7 +285,7 @@
 		cursor: pointer;
 	}
 	details p {
-		margin-top: 10px;
+		margin-top: var(--space-2-5);
 	}
 	button {
 		align-self: flex-start;

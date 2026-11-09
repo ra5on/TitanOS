@@ -412,17 +412,17 @@
 
 <style>
 	.content {
-		padding: 0 16px;
+		padding: 0 var(--space-4);
 	}
 	fieldset {
 		padding: var(--tile-pad);
 	}
 	.inside {
-		margin: 12px 16px 0;
+		margin: var(--space-3) var(--space-4) 0;
 	}
 	.none {
 		margin: 0;
-		padding: 12px 16px;
+		padding: var(--space-3) var(--space-4);
 	}
 	.foot {
 		border-top: 1px solid var(--panel-border, var(--border));
@@ -435,7 +435,7 @@
 		white-space: nowrap;
 	}
 	.name .chip {
-		margin-left: 6px;
+		margin-left: var(--space-1-5);
 	}
 	.actions {
 		width: 1%;
@@ -444,14 +444,14 @@
 	}
 	.small {
 		min-height: 30px;
-		padding: 0 10px;
+		padding: 0 var(--space-2-5);
 		font-size: var(--text-base);
 	}
 	.narrow {
 		display: none;
 	}
 	.names {
-		margin: 8px 0;
+		margin: var(--space-2) 0;
 		padding: 0;
 		list-style: none;
 		max-height: 200px;

@@ -847,13 +847,13 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 10px 14px;
+		gap: var(--space-2-5) 14px;
 	}
 	.head {
 		justify-content: space-between;
 	}
 	.notice-ok .row {
-		margin-top: 10px;
+		margin-top: var(--space-2-5);
 	}
 	.version {
 		display: flex;
@@ -868,12 +868,12 @@
 	.chips {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.available {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 		padding: calc(var(--row-pad) + 2px) var(--tile-pad);
 		border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
 		border-radius: var(--radius-ctl);
@@ -888,7 +888,7 @@
 	.changelog {
 		max-height: 18rem;
 		overflow-y: auto;
-		padding: 10px var(--space-3);
+		padding: var(--space-2-5) var(--space-3);
 		background: var(--track);
 		border-radius: var(--radius-ctl);
 	}
@@ -900,7 +900,7 @@
 		overflow-wrap: anywhere;
 	}
 	.notice-error pre {
-		margin-top: 6px;
+		margin-top: var(--space-1-5);
 	}
 	.progress {
 		display: flex;
@@ -919,8 +919,8 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px 18px;
-		padding: 10px var(--space-3);
+		gap: var(--space-1-5) 18px;
+		padding: var(--space-2-5) var(--space-3);
 		border: 1px solid var(--panel-border);
 		border-radius: var(--radius-ctl);
 	}
@@ -933,7 +933,7 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-base);
 	}
 	label > span {
@@ -945,13 +945,13 @@
 	.choose {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.interval {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: flex-end;
-		gap: 10px var(--space-3);
+		gap: var(--space-2-5) var(--space-3);
 	}
 	.interval .narrow {
 		flex: 1 1 220px;

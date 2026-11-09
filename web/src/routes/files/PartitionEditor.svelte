@@ -587,7 +587,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 10px;
+		gap: var(--space-2-5);
 		flex-wrap: wrap;
 	}
 	.bar {
@@ -643,7 +643,7 @@
 	}
 	th,
 	td {
-		padding: 6px var(--space-2);
+		padding: var(--space-1-5) var(--space-2);
 		text-align: left;
 		vertical-align: top;
 		border-bottom: 1px solid var(--border);
@@ -676,7 +676,7 @@
 		align-items: center;
 	}
 	.notice-info {
-		padding: 10px var(--space-3);
+		padding: var(--space-2-5) var(--space-3);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-sm, 8px);
 		background: var(--surface-2, var(--surface));

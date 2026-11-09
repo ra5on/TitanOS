@@ -1430,9 +1430,9 @@
 	.top {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: var(--space-2);
 		min-height: 56px;
-		padding: 10px 20px;
+		padding: var(--space-2-5) 20px;
 		border-bottom: 1px solid var(--border);
 		min-width: 0;
 	}
@@ -1458,8 +1458,8 @@
 	.chip {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
-		padding: 4px 10px;
+		gap: var(--space-1-5);
+		padding: var(--space-1) var(--space-2-5);
 		border-radius: 999px;
 		background: var(--chip);
 		color: var(--text);
@@ -1508,7 +1508,7 @@
 	}
 	.agent.phone .top {
 		min-height: 48px;
-		padding: calc(env(safe-area-inset-top, 0px) + 4px) 6px 4px;
+		padding: calc(env(safe-area-inset-top, 0px) + var(--space-1)) var(--space-1-5) var(--space-1);
 		gap: 2px;
 	}
 	.agent.phone .top .more :global(.btn) {
@@ -1517,7 +1517,7 @@
 		height: 40px;
 	}
 	.app-name {
-		margin-left: 4px;
+		margin-left: var(--space-1);
 		font-size: var(--text-md);
 		font-weight: 600;
 	}
@@ -1525,8 +1525,8 @@
 		display: flex;
 		align-items: center;
 		flex-wrap: wrap;
-		gap: 8px;
-		padding: 10px 14px;
+		gap: var(--space-2);
+		padding: var(--space-2-5) 14px;
 		border-bottom: 1px solid var(--border);
 		min-width: 0;
 	}
@@ -1554,7 +1554,7 @@
 		margin: var(--space-2) var(--space-4) 0;
 	}
 	.dock {
-		padding: 12px 24px 14px;
+		padding: var(--space-3) var(--space-5) 14px;
 	}
 	.dock :global(.composer),
 	.where {
@@ -1563,17 +1563,17 @@
 		margin-right: auto;
 	}
 	.where {
-		margin-top: 6px;
+		margin-top: var(--space-1-5);
 		margin-bottom: 0;
 		text-align: center;
 		font-size: var(--text-xs);
 		color: var(--muted);
 	}
 	.agent.phone .dock {
-		padding: 8px 12px calc(env(safe-area-inset-bottom, 0px) + 8px);
+		padding: var(--space-2) var(--space-3) calc(env(safe-area-inset-bottom, 0px) + var(--space-2));
 	}
 	.agent.phone.keyboard .dock {
-		padding-bottom: 6px;
+		padding-bottom: var(--space-1-5);
 	}
 	.agent.phone.keyboard .where {
 		display: none;

@@ -124,14 +124,14 @@
 		min-width: 220px;
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.choose p {
 		margin: 0;
 	}
 	.builtin {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		flex-wrap: wrap;
 	}
 	.builtin button {
@@ -153,7 +153,7 @@
 	}
 	.actions {
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		flex-wrap: wrap;
 	}
 	.disabled {

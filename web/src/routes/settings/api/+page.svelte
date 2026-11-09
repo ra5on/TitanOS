@@ -262,7 +262,7 @@
 		justify-content: space-between;
 		align-items: center;
 		gap: var(--gap);
-		padding: calc(var(--row-pad) + 6px) 0;
+		padding: calc(var(--row-pad) + var(--space-1-5)) 0;
 		border-bottom: 1px solid var(--border);
 	}
 	.token:last-child {
@@ -290,7 +290,7 @@
 	}
 	.check {
 		display: flex;
-		gap: 10px;
+		gap: var(--space-2-5);
 		align-items: center;
 		min-height: 44px;
 	}

@@ -418,8 +418,8 @@
 	header {
 		display: flex;
 		align-items: center;
-		gap: 10px;
-		padding: calc(env(safe-area-inset-top, 0px) + 10px) 14px 10px;
+		gap: var(--space-2-5);
+		padding: calc(env(safe-area-inset-top, 0px) + var(--space-2-5)) 14px var(--space-2-5);
 		border-bottom: 1px solid var(--border);
 	}
 	h2 {
@@ -449,10 +449,10 @@
 	.body {
 		flex: 1;
 		overflow-y: auto;
-		padding: 16px 16px calc(env(safe-area-inset-bottom, 0px) + 18px);
+		padding: var(--space-4) var(--space-4) calc(env(safe-area-inset-bottom, 0px) + 18px);
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.body > *,
 	.pane > * {
@@ -461,14 +461,14 @@
 	.pane {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.who {
 		display: flex;
 		align-items: center;
-		gap: 12px;
-		padding: 12px 16px;
-		margin-bottom: 8px;
+		gap: var(--space-3);
+		padding: var(--space-3) var(--space-4);
+		margin-bottom: var(--space-2);
 		border-radius: var(--radius-tile);
 		background: var(--surface);
 		border: 1px solid var(--border);
@@ -494,7 +494,7 @@
 		background: var(--accent);
 	}
 	.cap {
-		margin: 12px 4px 2px;
+		margin: var(--space-3) var(--space-1) 2px;
 		font-size: var(--text-xs);
 		font-weight: 600;
 		letter-spacing: 0.05em;
@@ -502,7 +502,7 @@
 		color: var(--muted);
 	}
 	.pushhint {
-		margin: 0 4px 12px;
+		margin: 0 var(--space-1) var(--space-3);
 		font-size: var(--text-base);
 		line-height: 1.45;
 		color: var(--muted);
@@ -516,10 +516,10 @@
 	.row {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 		width: 100%;
 		min-height: 48px;
-		padding: 10px 16px;
+		padding: var(--space-2-5) var(--space-4);
 		border: 0;
 		border-top: 1px solid var(--border);
 		background: none;
@@ -581,7 +581,7 @@
 	.seg label {
 		text-align: center;
 		white-space: nowrap;
-		padding: 6px 8px;
+		padding: var(--space-1-5) var(--space-2);
 		border-radius: calc(var(--radius-ctl) - 2px);
 		font-size: var(--text-sm);
 		color: var(--text);
@@ -608,8 +608,8 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		gap: 8px;
-		margin-top: 12px;
+		gap: var(--space-2);
+		margin-top: var(--space-3);
 		min-height: 40px;
 		border-radius: var(--radius-ctl);
 		border: 1px solid var(--border);
@@ -621,7 +621,7 @@
 	}
 	.small {
 		min-height: 32px;
-		padding: 0 12px;
+		padding: 0 var(--space-3);
 	}
 	.field {
 		max-width: 46%;

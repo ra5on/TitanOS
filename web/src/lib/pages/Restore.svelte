@@ -283,7 +283,7 @@
 	.box {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 		padding: 14px var(--space-4);
 		background: color-mix(in srgb, var(--accent) 10%, transparent);
 		border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
@@ -302,7 +302,7 @@
 	fieldset {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		margin: 0;
 		padding: 0;
 		border: 0;
@@ -316,8 +316,8 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px 10px;
-		padding: var(--space-2) 10px;
+		gap: var(--space-1-5) var(--space-2-5);
+		padding: var(--space-2) var(--space-2-5);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
 		cursor: pointer;
@@ -334,7 +334,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px 10px;
+		gap: var(--space-1-5) var(--space-2-5);
 		overflow-wrap: anywhere;
 	}
 	.box .btn-primary {
@@ -406,7 +406,7 @@
 	.stack {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-md);
 	}
 	.stack small {

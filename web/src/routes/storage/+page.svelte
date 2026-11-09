@@ -879,7 +879,7 @@
 	.checks-hint .row-actions {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.storage-toolbar,
 	.tabs,
@@ -887,7 +887,7 @@
 	.detail-heading {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		flex-wrap: wrap;
 	}
 	.storage-toolbar {
@@ -960,7 +960,7 @@
 		text-decoration-color: currentColor;
 	}
 	.chev {
-		margin-left: 6px;
+		margin-left: var(--space-1-5);
 		text-decoration: none;
 		display: inline-block;
 	}
@@ -1012,7 +1012,7 @@
 	.sync-inline {
 		font-size: var(--text-sm);
 		margin-top: 7px;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.sync-inline progress {
 		width: 70px;
@@ -1030,7 +1030,7 @@
 		font-size: var(--text-lg);
 	}
 	.detail-heading .btn {
-		padding: 6px;
+		padding: var(--space-1-5);
 		min-height: 30px;
 	}
 	.disk-details {
@@ -1064,7 +1064,7 @@
 	}
 	.usage dl {
 		display: grid;
-		gap: 10px;
+		gap: var(--space-2-5);
 		margin: 0;
 	}
 	.usage dt {

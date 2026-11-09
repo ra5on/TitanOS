@@ -136,7 +136,7 @@ func mcpToolScope(tool toolcatalog.Tool) string {
 var mcpDangerous = map[string]bool{
 	"app_action": true, "apps_update_all": true, "vm_action": true, "lxc_action": true, "volume_action": true, "volume_create": true,
 	"disk_test": true, "share_delete": true, "account_action": true, "update_action": true, "power_action": true,
-	"file_write": true, "files_move": true, "file_copy": true, "backup_restore_files": true, "backup_schedule": true,
+	"file_write": true, "document_edit": true, "files_move": true, "file_copy": true, "backup_restore_files": true, "backup_schedule": true,
 	"firewall_rule_add": true, "firewall_rule_remove": true, "firewall_unblock": true,
 	"plugin_install": true, "plugin_update": true, "plugin_remove": true, "plugin_switch": true, "ha_call": true,
 }

@@ -366,7 +366,7 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-2);
-		padding: 8px 0;
+		padding: var(--space-2) 0;
 		border-bottom: 1px solid var(--border);
 		flex-wrap: wrap;
 	}
@@ -396,13 +396,13 @@
 	pre {
 		white-space: pre-wrap;
 		font-size: var(--text-sm);
-		margin: 6px 0;
+		margin: var(--space-1-5) 0;
 		color: var(--muted);
 	}
 	summary {
 		cursor: pointer;
 		display: flex;
-		gap: 8px;
+		gap: var(--space-2);
 		align-items: baseline;
 		flex-wrap: wrap;
 	}

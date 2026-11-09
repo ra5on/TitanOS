@@ -533,7 +533,7 @@
 		align-items: center;
 		gap: var(--space-2);
 		height: 100%;
-		padding: 0 6px 0 var(--space-3);
+		padding: 0 var(--space-1-5) 0 var(--space-3);
 		background: transparent;
 		border: 0;
 		color: inherit;
@@ -543,11 +543,11 @@
 		cursor: pointer;
 	}
 	.tab .x {
-		padding: 0 10px 0 var(--space-1);
+		padding: 0 var(--space-2-5) 0 var(--space-1);
 		color: var(--muted);
 	}
 	.kind {
-		padding: 1px 6px;
+		padding: 1px var(--space-1-5);
 		background: color-mix(in srgb, var(--accent) 18%, transparent);
 		border-radius: var(--radius-small);
 		font-size: var(--text-xs);
@@ -584,7 +584,7 @@
 		width: 280px;
 		max-height: 50vh;
 		overflow-y: auto;
-		padding: 6px;
+		padding: var(--space-1-5);
 		display: flex;
 		flex-direction: column;
 	}
@@ -596,7 +596,7 @@
 	.menu a {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		min-height: 2.5rem;
 		padding: 0 var(--space-3);
 		background: transparent;
@@ -609,7 +609,7 @@
 		cursor: pointer;
 	}
 	.menu a {
-		margin-top: 6px;
+		margin-top: var(--space-1-5);
 		border-top: 1px solid var(--border);
 		border-radius: 0;
 		text-decoration: none;
@@ -620,13 +620,13 @@
 	}
 	.heading,
 	.none {
-		padding: 6px var(--space-3);
+		padding: var(--space-1-5) var(--space-3);
 		font-size: var(--text-sm);
 	}
 	.shell {
 		display: flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-sm);
 	}
 	.shell .user {
@@ -694,7 +694,7 @@
 		flex-wrap: wrap;
 		justify-content: space-between;
 		gap: var(--space-1) 20px;
-		padding: 6px 20px;
+		padding: var(--space-1-5) 20px;
 		border-top: 1px solid var(--border);
 		color: var(--muted);
 		font-size: var(--text-sm);

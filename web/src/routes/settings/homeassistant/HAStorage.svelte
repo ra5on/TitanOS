@@ -631,7 +631,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-1);
-		padding: 10px 0;
+		padding: var(--space-2-5) 0;
 		border-top: 1px solid var(--panel-border);
 	}
 	.entries li:last-child {
@@ -641,7 +641,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px var(--space-2);
+		gap: var(--space-1-5) var(--space-2);
 	}
 	.entry-head .name {
 		font-weight: 600;
@@ -654,7 +654,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px var(--space-4);
+		gap: var(--space-1-5) var(--space-4);
 	}
 	.age {
 		display: flex;
@@ -692,7 +692,7 @@
 		gap: var(--space-2);
 	}
 	.usage legend {
-		margin-bottom: 6px;
+		margin-bottom: var(--space-1-5);
 		font-size: var(--text-md);
 	}
 	.folder-row {
@@ -711,7 +711,7 @@
 	.results {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		margin: 0;
 		padding: 0;
 		list-style: none;
@@ -719,7 +719,7 @@
 	.values {
 		display: grid;
 		grid-template-columns: max-content minmax(0, 1fr);
-		gap: 6px var(--space-4);
+		gap: var(--space-1-5) var(--space-4);
 		margin: 0;
 		font-size: var(--text-md);
 	}
@@ -754,7 +754,7 @@
 	}
 	.dir {
 		width: 100%;
-		padding: var(--space-2) 10px;
+		padding: var(--space-2) var(--space-2-5);
 		background: none;
 		border: 0;
 		border-radius: var(--radius-small);

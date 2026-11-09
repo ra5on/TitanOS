@@ -168,7 +168,7 @@
 		gap: 5px;
 		max-width: 100%;
 		min-height: 30px;
-		padding: 4px 10px;
+		padding: var(--space-1) var(--space-2-5);
 		border-radius: 999px;
 		border: 0;
 		background: var(--chip);
@@ -218,11 +218,11 @@
 		width: 320px;
 		max-height: min(70dvh, calc(100dvh - var(--top) - 16px));
 		overflow-y: auto;
-		padding: 8px 12px 10px;
+		padding: var(--space-2) var(--space-3) var(--space-2-5);
 		text-align: left;
 	}
 	h3 {
-		margin: 8px 4px 2px;
+		margin: var(--space-2) var(--space-1) 2px;
 		font-size: var(--text-xs);
 		font-weight: 500;
 		letter-spacing: 0.07em;
@@ -232,9 +232,9 @@
 	.opt {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: var(--space-3);
 		width: 100%;
-		padding: 10px 6px;
+		padding: var(--space-2-5) var(--space-1-5);
 		border: 0;
 		border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
 		background: none;
@@ -267,7 +267,7 @@
 		height: 5px;
 		border-radius: 3px;
 		background: var(--border);
-		margin: 2px auto 8px;
+		margin: 2px auto var(--space-2);
 	}
 	@media (max-width: 760px) {
 		.scrim {
@@ -282,7 +282,7 @@
 			translate: none;
 			width: auto;
 			border-radius: 22px 22px 0 0;
-			padding: 8px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+			padding: var(--space-2) var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
 		}
 		.opt {
 			font-size: 16px;

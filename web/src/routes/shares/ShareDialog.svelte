@@ -451,7 +451,7 @@
 	.field-row {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.label,
 	legend {
@@ -468,7 +468,7 @@
 		border: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	small {
 		font-size: var(--text-sm);
@@ -480,7 +480,7 @@
 	.check {
 		display: flex;
 		align-items: flex-start;
-		gap: 10px;
+		gap: var(--space-2-5);
 		font-size: var(--text-md);
 	}
 	.check input {
@@ -532,7 +532,7 @@
 	}
 	.segments button {
 		height: 30px;
-		padding: 0 10px;
+		padding: 0 var(--space-2-5);
 		background: transparent;
 		border: 0;
 		border-radius: var(--radius-ctl);

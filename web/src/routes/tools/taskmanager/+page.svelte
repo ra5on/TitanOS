@@ -716,7 +716,7 @@
 		padding: 0;
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(2.2rem, 1fr));
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.cores li {
 		display: flex;
@@ -746,12 +746,12 @@
 	.pairs {
 		display: flex;
 		flex-wrap: wrap;
-		gap: var(--space-2) var(--space-4, 24px);
+		gap: var(--space-2) var(--space-4, var(--space-5));
 		margin: 0;
 	}
 	.pairs div {
 		display: flex;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	dt {
 		color: var(--muted);
@@ -765,13 +765,13 @@
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.rows li {
 		display: flex;
 		justify-content: space-between;
 		flex-wrap: wrap;
-		gap: 4px var(--space-2);
+		gap: var(--space-1) var(--space-2);
 		min-width: 0;
 	}
 	.name {
@@ -795,12 +795,12 @@
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.proc {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
-		gap: 6px;
+		gap: var(--space-1-5);
 		padding: var(--space-2) var(--tile-pad);
 	}
 	.proc-main,
@@ -818,32 +818,32 @@
 	.proc-facts {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 2px var(--space-3, 12px);
+		gap: 2px var(--space-3, var(--space-3));
 		margin: 0;
 		font-size: var(--text-sm, 0.85rem);
 	}
 	.proc-facts div {
 		display: flex;
-		gap: 4px;
+		gap: var(--space-1);
 		min-width: 0;
 	}
 	.actions {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px;
+		gap: var(--space-1-5);
 		align-items: center;
 	}
 	.entry {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
-		gap: 6px;
+		gap: var(--space-1-5);
 		padding: var(--space-2) var(--tile-pad);
 		align-items: center;
 	}
 	.state {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.num {
 		font-variant-numeric: tabular-nums;
@@ -851,7 +851,7 @@
 	.net {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		padding: var(--space-2) var(--tile-pad);
 	}
 	.spark {
@@ -867,7 +867,7 @@
 		.proc-head {
 			display: grid;
 			grid-template-columns: minmax(0, 1.4fr) minmax(0, 2fr) 11.5rem;
-			gap: 6px;
+			gap: var(--space-1-5);
 			padding: 0 var(--tile-pad);
 			color: var(--muted);
 			font-size: var(--text-sm, 0.85rem);

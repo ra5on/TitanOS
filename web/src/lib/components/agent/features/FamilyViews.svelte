@@ -40,6 +40,6 @@
 	.close {
 		display: flex;
 		justify-content: flex-end;
-		margin-top: 12px;
+		margin-top: var(--space-3);
 	}
 </style>

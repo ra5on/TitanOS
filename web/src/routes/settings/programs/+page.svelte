@@ -211,7 +211,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.hint {
 		font-size: var(--text-md);
@@ -245,7 +245,7 @@
 	.app {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		min-width: 10rem;
 	}
 	.icon {
@@ -272,13 +272,13 @@
 		font-size: var(--text-md);
 	}
 	.field-row .label {
-		padding-top: 8px;
+		padding-top: var(--space-2);
 		color: var(--muted);
 	}
 	.field-row .value {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		max-width: 28rem;
 	}
 	@media (max-width: 640px) {

@@ -1860,9 +1860,9 @@
 	.status-line {
 		display: flex;
 		align-items: center;
-		gap: 16px;
+		gap: var(--space-4);
 		margin: 0;
-		padding: 6px 16px;
+		padding: var(--space-1-5) var(--space-4);
 		border-top: 1px solid var(--panel-border);
 		font-size: var(--text-sm);
 		position: sticky;
@@ -1874,7 +1874,7 @@
 	}
 	.list-footer {
 		margin: 0;
-		padding: 10px 14px 0;
+		padding: var(--space-2-5) 14px 0;
 		font-size: var(--text-base);
 	}
 	.saving {
@@ -1883,7 +1883,7 @@
 		bottom: 44px;
 		z-index: 50;
 		margin: 0;
-		padding: 6px var(--space-3);
+		padding: var(--space-1-5) var(--space-3);
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
@@ -1903,7 +1903,7 @@
 		display: none;
 	}
 	.side-group {
-		margin: 12px 10px 4px;
+		margin: var(--space-3) var(--space-2-5) var(--space-1);
 		font-size: var(--text-xs);
 		color: var(--muted);
 		text-transform: uppercase;
@@ -1912,9 +1912,9 @@
 	.side-item {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		min-height: 36px;
-		padding: 6px 10px;
+		padding: var(--space-1-5) var(--space-2-5);
 		border: 0;
 		border-radius: calc(9px * var(--radius-scale, 1));
 		background: none;
@@ -1938,7 +1938,7 @@
 	}
 	.side-fold {
 		color: var(--muted);
-		margin-top: 6px;
+		margin-top: var(--space-1-5);
 	}
 	/* The page head is a heading for screen readers only: it takes no room
 	   (in a window the flex gap above the content came from it, PLAN 73). */
@@ -1976,7 +1976,7 @@
 			width: auto;
 			max-height: none;
 			gap: 0;
-			padding: 12px 10px;
+			padding: var(--space-3) var(--space-2-5);
 			overflow: hidden;
 			/* The same opaque pane as the window's side bar (PLAN 71). */
 			background:
@@ -1989,7 +1989,7 @@
 			border-right: 1px solid var(--border);
 		}
 		.places.windowed.folded {
-			padding: 12px 8px;
+			padding: var(--space-3) var(--space-2);
 			align-items: center;
 		}
 		.side-tree {
@@ -2020,7 +2020,7 @@
 		}
 		/* The places look like the entries of a window's side bar. */
 		.places.windowed :global(.group) {
-			margin: 12px 10px 4px;
+			margin: var(--space-3) var(--space-2-5) var(--space-1);
 			padding: 0;
 			font-size: var(--text-xs);
 			text-transform: uppercase;

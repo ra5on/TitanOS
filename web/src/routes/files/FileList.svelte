@@ -291,7 +291,7 @@
 		align-items: center;
 		gap: var(--space-1);
 		min-width: 0;
-		padding: var(--space-1) 6px;
+		padding: var(--space-1) var(--space-1-5);
 		margin: 0 -6px;
 		background: transparent;
 		border: 0;
@@ -319,7 +319,7 @@
 	.entry {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		min-width: 0;
 		padding: 0;
 		background: transparent;
@@ -382,7 +382,7 @@
 	.large .row:not(.header) {
 		border: 1px solid var(--border);
 		border-radius: var(--radius-ctl);
-		padding: 10px;
+		padding: var(--space-2-5);
 		grid-template-columns: 18px minmax(0, 1fr) 32px;
 		gap: var(--space-2);
 	}

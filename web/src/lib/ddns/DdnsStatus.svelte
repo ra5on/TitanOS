@@ -111,7 +111,7 @@
 		overflow-wrap: anywhere;
 	}
 	pre {
-		margin: 6px 0 0;
+		margin: var(--space-1-5) 0 0;
 		font-family: var(--font-mono);
 		font-size: var(--text-sm);
 		white-space: pre-wrap;

@@ -26,6 +26,8 @@ export type MineApp = {
 	url: string;
 	webui?: string;
 	running?: boolean;
+	/** PLAN 75-14: the desktop stream the app brings itself (novnc, selkies, kasmvnc). */
+	stream?: string;
 };
 
 export const sources = $state<{

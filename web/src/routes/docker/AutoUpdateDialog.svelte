@@ -130,7 +130,7 @@
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	legend {
 		font-weight: 500;
@@ -141,7 +141,7 @@
 	}
 	.days {
 		display: flex;
-		gap: 10px;
+		gap: var(--space-2-5);
 		flex-wrap: wrap;
 	}
 	.narrow input {

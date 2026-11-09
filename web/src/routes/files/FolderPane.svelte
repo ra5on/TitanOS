@@ -298,7 +298,7 @@
 	}
 	.controls {
 		display: flex;
-		gap: 10px;
+		gap: var(--space-2-5);
 		flex-wrap: wrap;
 		padding: var(--space-3);
 		border-bottom: 1px solid var(--border);
@@ -306,7 +306,7 @@
 	.controls label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 		width: 100%;
 	}
 	.controls p {
@@ -317,9 +317,9 @@
 	.entry {
 		display: grid;
 		grid-template-columns: 20px minmax(0, 1fr) auto;
-		gap: 10px;
+		gap: var(--space-2-5);
 		align-items: center;
-		padding: 10px;
+		padding: var(--space-2-5);
 		border-bottom: 1px solid var(--border);
 	}
 	.entry span {
@@ -339,6 +339,6 @@
 		font: inherit;
 	}
 	p {
-		padding: 10px;
+		padding: var(--space-2-5);
 	}
 </style>

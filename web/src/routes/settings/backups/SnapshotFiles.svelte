@@ -120,7 +120,7 @@
 	.where {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		min-width: 0;
 	}
 	.where .mono {
@@ -139,8 +139,8 @@
 	li {
 		display: flex;
 		align-items: center;
-		gap: 10px;
-		padding: 6px 10px;
+		gap: var(--space-2-5);
+		padding: var(--space-1-5) var(--space-2-5);
 		border-bottom: 1px solid var(--border);
 		font-size: 0.875rem;
 	}

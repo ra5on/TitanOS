@@ -146,11 +146,11 @@
 		font-size: var(--text-sm);
 		font-weight: 600;
 		color: var(--muted);
-		padding: 6px 10px;
+		padding: var(--space-1-5) var(--space-2-5);
 		border-bottom: 1px solid var(--border);
 	}
 	td {
-		padding: var(--space-2) 10px;
+		padding: var(--space-2) var(--space-2-5);
 		border-bottom: 1px solid var(--border);
 	}
 	td .chip {
@@ -160,18 +160,18 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-2);
-		margin: 14px 0 6px;
+		margin: 14px 0 var(--space-1-5);
 		padding: 0;
 		border: 0;
 	}
 	.order legend {
 		font-weight: 600;
-		margin-bottom: 6px;
+		margin-bottom: var(--space-1-5);
 		font-size: var(--text-md);
 	}
 	.order label {
 		display: flex;
-		gap: 10px;
+		gap: var(--space-2-5);
 		align-items: flex-start;
 		font-size: var(--text-md);
 	}

@@ -303,10 +303,10 @@
 	.dock-tab {
 		display: flex;
 		flex-direction: column;
-		gap: var(--gap, 16px);
+		gap: var(--gap, var(--space-4));
 	}
 	.stage {
-		margin: 16px;
+		margin: var(--space-4);
 		position: relative;
 		/* The dock's own z-index stays inside the preview. */
 		isolation: isolate;
@@ -358,7 +358,7 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-2);
-		padding: 6px var(--space-2);
+		padding: var(--space-1-5) var(--space-2);
 		border-radius: var(--radius-ctl);
 		background: var(--chip);
 		border: 1px solid transparent;

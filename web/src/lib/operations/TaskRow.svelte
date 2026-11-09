@@ -77,11 +77,11 @@
 		color: var(--warn-text);
 	}
 	p {
-		margin: 6px 0;
+		margin: var(--space-1-5) 0;
 		overflow-wrap: anywhere;
 	}
 	details {
-		margin-top: 6px;
+		margin-top: var(--space-1-5);
 	}
 	summary {
 		cursor: pointer;
@@ -96,7 +96,7 @@
 	}
 	.actions {
 		display: flex;
-		gap: 6px;
+		gap: var(--space-1-5);
 		flex-wrap: wrap;
 	}
 	progress {

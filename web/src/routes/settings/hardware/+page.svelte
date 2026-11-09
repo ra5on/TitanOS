@@ -123,7 +123,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 10px 20px;
+		gap: var(--space-2-5) 20px;
 		padding-top: 14px;
 		border-top: 1px solid var(--panel-border);
 		font-size: var(--text-md);

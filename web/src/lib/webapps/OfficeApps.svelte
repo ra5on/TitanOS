@@ -61,13 +61,13 @@
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.pick {
 		display: flex;
 		align-items: center;
-		gap: 12px;
-		padding: 10px 12px;
+		gap: var(--space-3);
+		padding: var(--space-2-5) var(--space-3);
 		border: 1px solid var(--border);
 		border-radius: calc(10px * var(--radius-scale, 1));
 		cursor: pointer;

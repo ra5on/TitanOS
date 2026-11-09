@@ -224,7 +224,7 @@
 	}
 	.summary > div {
 		display: grid;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.summary span {
 		color: var(--muted);
@@ -239,7 +239,7 @@
 	.actions {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	section > .btn {
 		align-self: flex-start;

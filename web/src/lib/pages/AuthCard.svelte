@@ -148,11 +148,11 @@
 	}
 	main.left {
 		align-items: flex-start;
-		padding-left: max(24px, 8vw);
+		padding-left: max(var(--space-5), 8vw);
 	}
 	main.right {
 		align-items: flex-end;
-		padding-right: max(24px, 8vw);
+		padding-right: max(var(--space-5), 8vw);
 	}
 	main.preview.left {
 		padding-left: 8%;
@@ -220,7 +220,7 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		text-align: center;
 	}
 	h1 {

@@ -220,7 +220,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		min-height: 60vh;
 		margin: 0;
 		font-size: var(--text-md);

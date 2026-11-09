@@ -120,6 +120,10 @@ func (w *titand) wireMaintenance() error {
 		}
 		return list
 	}
+	// PLAN 75-9: shut down in order when a reliable sensor stays too hot
+	// (Settings › Temperatures, off by default). Never in development mode:
+	// there the watcher does not run at all.
+	hardware.Poweroff = w.unattended("poweroff", "heat", w.power.Poweroff)
 	if !w.opts.dev {
 		w.background(func() { hardware.Run(ctx) })
 	}

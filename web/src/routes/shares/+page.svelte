@@ -547,7 +547,7 @@
 		flex-wrap: wrap;
 		gap: var(--space-2);
 		align-items: center;
-		margin-bottom: 10px;
+		margin-bottom: var(--space-2-5);
 	}
 	.locked p {
 		margin: 0;
@@ -555,7 +555,7 @@
 	.quota-bar {
 		display: block;
 		height: 6px;
-		margin: 6px 0 2px;
+		margin: var(--space-1-5) 0 2px;
 		max-width: 260px;
 		border-radius: 3px;
 		background: var(--track);
@@ -591,7 +591,7 @@
 	.density {
 		display: flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-base);
 		margin-left: auto;
 	}
@@ -627,7 +627,7 @@
 		vertical-align: middle;
 	}
 	.compact td {
-		padding: 10px 14px;
+		padding: var(--space-2-5) 14px;
 	}
 	th button,
 	.share-name {
@@ -681,7 +681,7 @@
 		height: 6px;
 		border-radius: 50%;
 		background: var(--ok-text);
-		margin-right: 6px;
+		margin-right: var(--space-1-5);
 	}
 	.state.problem {
 		color: var(--warn-text);
@@ -697,7 +697,7 @@
 		justify-content: center;
 	}
 	.list-count {
-		padding: 10px 14px;
+		padding: var(--space-2-5) 14px;
 		font-size: var(--text-sm);
 		color: var(--muted);
 	}
@@ -726,7 +726,7 @@
 		color: var(--muted);
 		border: 0;
 		border-bottom: 2px solid transparent;
-		padding: 10px 0;
+		padding: var(--space-2-5) 0;
 		font: inherit;
 		font-size: var(--text-base);
 		cursor: pointer;
@@ -796,7 +796,7 @@
 		td,
 		th,
 		.compact td {
-			padding: 10px;
+			padding: var(--space-2-5);
 		}
 		.state {
 			white-space: normal;

@@ -93,8 +93,8 @@
 		display: flex;
 		align-items: center;
 		flex-wrap: wrap;
-		gap: 10px;
-		margin-top: 10px;
+		gap: var(--space-2-5);
+		margin-top: var(--space-2-5);
 	}
 	.unfinished-row > span {
 		flex: 1;

@@ -158,7 +158,7 @@
 		margin: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	legend {
 		padding: 0 var(--space-1);

@@ -171,3 +171,15 @@ Richtung Agent lässt titand nur durch: Text-JSON ≤ 6 MiB (`proto.MaxTextMessa
 - HTTPS-Apps mit eigenem Zertifikat (z. B. Bambu Studio, linuxserver/Selkies): Seit 0.70 (PLAN 74, Inhaber 8.11.2026) liest titand beim Start der Ansicht das Zertifikat der App an ihrer Adresse im Netz der Ansicht und gibt Chromium genau diesen Schlüssel als vertrauenswürdig mit (`--ignore-certificate-errors-spki-list`, ein einziger Schlüssel, vom Agenten auf Form geprüft). Die Warnseite entfällt; jede andere Seite und die App mit einem anderen Schlüssel werden wie bisher geprüft. Antwortet die App beim Start noch nicht, bleibt es beim alten Verhalten (Warnseite) bis zum nächsten Öffnen.
 - `imageId` setzt den klassischen Image-Speicher von Docker voraus (Debian trixie); mit dem containerd-Speicher wäre die ID eine andere.
 
+
+## Direkt im Fenster (0.71, PLAN 75-14)
+
+Apps, die ihren Desktop selbst streamen, zeigt das Fenster **direkt** unter ihrem HTTPS-Namen statt über Chromium auf dem NAS – wie bei Kasm Workspaces. Reine Web-Apps (Immich, Jellyfin …) bleiben in der Fernansicht.
+
+- **Erkennung** (`api/app_access.go` `appStream`, Feld `stream` in `GET /apps/mine`): Abbild `jlesage/…` → `novnc`, `kasmweb/…` → `kasmvnc`, `linuxserver/…` mit WebUI auf Container-Port 3000/3001 → `selkies`.
+- **Öffnen:** `POST /apps/{app}/window?direct=1` gibt die Einstiegsadresse unter dem Namen der App für die Endung, über die die Oberfläche erreicht ist (`appproxy.DirectHost`); erreicht über eine IP oder einen fremden Namen (Tunnel): `409 direct_unreachable`. Die Einstiegsseite (`/.titanos/enter?…&frame=1`, `appproxy/direct.go`) setzt das Gate-Cookie und meldet dem Fenster per `postMessage` (nur an die Ursprünge der Oberfläche) `titanos-direct`, dann geht sie zur App.
+- **Rückfall:** Keine Meldung binnen 8 s oder 409: das Fenster zeigt die Fernansicht; im ⋯-Menü steht dann „Direkt nicht erreichbar“.
+- **Umschalter je App** im ⋯-Menü („Über Fernansicht anzeigen“ / „Direkt anzeigen“), gemerkt in diesem Browser (`titanos.direct`).
+- **Sicherheit:** Die Seite erlaubt `frame-src https:`, der Header von titand engt das auf `https://*.<Endung>` der App-Namen ein (`api/ui.go` `narrowFrames`); beide Richtlinien gelten. Die Anmeldung der App selbst bleibt an (`WEB_AUTHENTICATION`, `CUSTOM_USER`): das Gate prüft WebSockets nicht.
+- **Fehlt direkt:** Zwischenablage über TitanOS, Hochladen in Freigaben, „Öffnen mit“, Leerlauf-Ende und die Speichergrenzen der Fernansicht. Am Handy bleibt es bei der Fernansicht.
+- **HTTPS-Apps:** Automatische App-Namen übernehmen jetzt `https` aus dem WebUI-Label (`appproxy.WebUIHTTPS`); vorher wurden jlesage (5800) und Selkies (3001) per http angesprochen – auch von der Fernansicht.

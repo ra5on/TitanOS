@@ -100,7 +100,7 @@ func (m *Manager) enter(w http.ResponseWriter, r *http.Request, app string) {
 		// again; a browser that still holds a valid pass for this app
 		// and login simply goes on.
 		if held, err := r.Cookie(gateCookie); err == nil && m.Access.Admit(held.Value, app) {
-			http.Redirect(w, r, "/", http.StatusSeeOther)
+			m.entered(w, r)
 			return
 		}
 		m.refuse(w, r, app)
@@ -110,6 +110,16 @@ func (m *Manager) enter(w http.ResponseWriter, r *http.Request, app string) {
 		Name: gateCookie, Value: cookie, Path: "/", MaxAge: int(ttl / time.Second),
 		HttpOnly: true, Secure: true, SameSite: http.SameSiteNoneMode, Partitioned: true,
 	})
+	m.entered(w, r)
+}
+
+// entered goes on to the app's start page; a direct window first hears
+// that the app was reached (direct.go).
+func (m *Manager) entered(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get(directQuery) == "1" {
+		m.enteredFrame(w)
+		return
+	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 

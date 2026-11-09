@@ -524,7 +524,7 @@
 	.tests li {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.grow {
 		flex: 1 1 240px;
@@ -557,7 +557,7 @@
 	fieldset {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 		margin: 0;
 		padding: 0;
 		border: 0;
@@ -571,12 +571,12 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.choice {
 		flex-direction: row;
 		align-items: flex-start;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.choice input {
 		width: 18px;
@@ -594,7 +594,7 @@
 		color: var(--muted);
 	}
 	pre {
-		margin: 6px 0 0;
+		margin: var(--space-1-5) 0 0;
 		font-family: var(--font-mono);
 		font-size: var(--text-sm);
 		white-space: pre-wrap;

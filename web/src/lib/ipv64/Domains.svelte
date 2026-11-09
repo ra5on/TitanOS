@@ -460,6 +460,6 @@
 
 <style>
 	.chip {
-		margin-left: 6px;
+		margin-left: var(--space-1-5);
 	}
 </style>

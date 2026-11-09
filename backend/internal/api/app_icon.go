@@ -183,7 +183,7 @@ func (s *Server) handleAppIconFile(w http.ResponseWriter, r *http.Request) {
 	data := a.files[name]
 	a.mu.Unlock()
 	if _, known := appIconSizes[name]; !known || data == nil {
-		uiHandler(s.opts.UI).ServeHTTP(w, r)
+		uiHandler(s.opts.UI, s.appFrameSources).ServeHTTP(w, r)
 		return
 	}
 	w.Header().Set("Content-Type", "image/png")

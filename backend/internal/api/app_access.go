@@ -19,7 +19,9 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/appaccess"
+	"github.com/ra5on/TitanOS/backend/internal/appproxy"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/docker"
 )
 
 // dockerApp is one Docker app (Compose project) as the pages list it.
@@ -29,6 +31,32 @@ type dockerApp struct {
 	URL     string `json:"url"`
 	WebUI   string `json:"webui"`
 	Running bool   `json:"running"`
+	// Stream is the desktop stream the app brings itself (PLAN 75-14):
+	// "novnc", "selkies" or "kasmvnc"; such an app opens directly in its
+	// window when the browser reaches its name.
+	Stream string `json:"stream,omitempty"`
+}
+
+// appStream tells from a container's image (and the container port of its
+// WebUI) whether the app brings its own desktop stream.
+func appStream(c docker.Container) string {
+	image := strings.ToLower(c.Image)
+	switch {
+	case strings.Contains(image, "jlesage/"):
+		return "novnc"
+	case strings.Contains(image, "kasmweb/"):
+		return "kasmvnc"
+	case strings.Contains(image, "linuxserver/"):
+		// The desktop images of linuxserver (Selkies, before that
+		// KasmVNC) serve their desktop on 3000 (http) and 3001 (https).
+		port := appproxy.WebUIPort(c.WebUI)
+		for _, p := range c.Ports {
+			if p.Host == port && (p.Container == 3000 || p.Container == 3001) {
+				return "selkies"
+			}
+		}
+	}
+	return ""
 }
 
 // dockerApps lists the apps with their icon, HTTPS name and state, sorted.
@@ -62,6 +90,9 @@ func (s *Server) dockerApps(r *http.Request) []dockerApp {
 		}
 		if a.WebUI == "" {
 			a.WebUI = c.WebUI
+		}
+		if a.Stream == "" && c.WebUI != "" {
+			a.Stream = appStream(c)
 		}
 		a.Running = a.Running || c.State == "running"
 	}
@@ -194,6 +225,14 @@ func (s *Server) handleAppsMine(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"apps": out})
 }
 
+// appFrameSources are the origins the web UI may frame (direct windows).
+func (s *Server) appFrameSources() []string {
+	if s.opts.AppProxy == nil {
+		return nil
+	}
+	return s.opts.AppProxy.FrameSources()
+}
+
 // enterURL makes the address that lets the account's browser in to an
 // app once; host picks one of the app's names.
 func (s *Server) enterURL(r *http.Request, app, host string) (string, time.Time, int, string) {
@@ -221,10 +260,27 @@ func (s *Server) enterURL(r *http.Request, app, host string) (string, time.Time,
 // a tab): {url, expires}. The token in it holds 60 seconds, once.
 func (s *Server) handleAppWindow(w http.ResponseWriter, r *http.Request) {
 	app := r.PathValue("app")
-	link, expires, status, code := s.enterURL(r, app, "")
+	// ?direct=1: a direct window (PLAN 75-14) on the app's name under the
+	// suffix the web UI is reached by; none (an IP address, a tunnel) and
+	// the window takes the remote view at once.
+	host, direct := "", r.URL.Query().Get("direct") == "1"
+	if direct {
+		ok := false
+		if s.opts.AppProxy != nil {
+			host, ok = s.opts.AppProxy.DirectHost(app, r.Host)
+		}
+		if !ok {
+			writeError(w, http.StatusConflict, "direct_unreachable", "the web UI is not reached by a name the app has")
+			return
+		}
+	}
+	link, expires, status, code := s.enterURL(r, app, host)
 	if status != 0 {
 		writeError(w, status, code, appWindowMessage(code))
 		return
+	}
+	if direct {
+		link += "&frame=1"
 	}
 	noteTarget(r, app)
 	writeJSON(w, http.StatusOK, map[string]any{"url": link, "expires": expires.UTC().Format(time.RFC3339)})

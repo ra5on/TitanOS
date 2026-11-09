@@ -221,7 +221,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px var(--space-3);
+		gap: var(--space-1-5) var(--space-3);
 		min-height: var(--control-height);
 		font-size: var(--text-md);
 		overflow-wrap: anywhere;
@@ -234,7 +234,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px 14px;
+		gap: var(--space-1-5) 14px;
 		font-size: var(--text-base);
 		overflow-wrap: anywhere;
 	}
@@ -242,7 +242,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		font-size: var(--text-base);
 	}
 	.small {
@@ -253,7 +253,7 @@
 	.domain {
 		display: flex;
 		flex-wrap: wrap;
-		gap: var(--space-1) 10px;
+		gap: var(--space-1) var(--space-2-5);
 		padding-top: var(--space-3);
 		border-top: 1px solid var(--panel-border);
 	}

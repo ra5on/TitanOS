@@ -18,6 +18,10 @@ type HardwareWatcher struct {
 	// Fans and Temperatures read the sensors; nil leaves them out.
 	Fans         func() []FanReading
 	Temperatures func() []TempReading
+	// Poweroff shuts the NAS down in an orderly way when a reliable sensor
+	// stays too hot and the owner switched that on (heat_shutdown.go); nil
+	// never shuts down.
+	Poweroff func() error
 	// edac is where the kernel counts memory errors.
 	edac string
 
@@ -26,7 +30,11 @@ type HardwareWatcher struct {
 	hot     map[string]bool
 	// hotLooks counts looks in a row at or above the limit.
 	hotLooks map[string]int
-	ce, ue   map[string]int64
+	// heatLooks counts looks in a row at the limit of ShutsDownOnHeat;
+	// poweredOff is set once the shutdown was asked for.
+	heatLooks  map[string]int
+	poweredOff bool
+	ce, ue     map[string]int64
 }
 
 // FanReading is one fan with a speed sensor.
@@ -105,7 +113,7 @@ const hotMargin, coolMargin = 5.0, 15.0
 
 // NewHardwareWatcher returns a watcher that reports through m.
 func NewHardwareWatcher(m *Manager) *HardwareWatcher {
-	return &HardwareWatcher{notify: m, edac: "/sys/devices/system/edac/mc", spun: map[string]bool{}, stopped: map[string]int{}, hot: map[string]bool{}, hotLooks: map[string]int{}, ce: map[string]int64{}, ue: map[string]int64{}}
+	return &HardwareWatcher{notify: m, edac: "/sys/devices/system/edac/mc", spun: map[string]bool{}, stopped: map[string]int{}, hot: map[string]bool{}, hotLooks: map[string]int{}, heatLooks: map[string]int{}, ce: map[string]int64{}, ue: map[string]int64{}}
 }
 
 // Run looks every minute until ctx is done.
@@ -151,8 +159,10 @@ func (w *HardwareWatcher) look() {
 			if t.Celsius == nil {
 				// No reading breaks a run: the two hot looks must be in a row.
 				delete(w.hotLooks, t.ID)
+				delete(w.heatLooks, t.ID)
 				continue
 			}
+			w.lookHeat(t)
 			limit, alarms := AlarmLimit(t.Chip, t.Critical)
 			if !alarms || w.notify.TemperatureMuted(t.ID) {
 				delete(w.hotLooks, t.ID)
@@ -175,6 +185,29 @@ func (w *HardwareWatcher) look() {
 		}
 	}
 	w.lookMemory()
+}
+
+// lookHeat shuts the NAS down when a reliable sensor (ShutsDownOnHeat)
+// that is not muted stays at its alarm limit for heatLooksNeeded looks in a
+// row and the owner switched it on. It says so first, then shuts down once
+// in an orderly way (VMs and apps stop, as with the power schedule).
+func (w *HardwareWatcher) lookHeat(t TempReading) {
+	limit, ok := ShutsDownOnHeat(t.Chip, t.Critical)
+	if !ok || *t.Celsius < limit || w.notify.TemperatureMuted(t.ID) {
+		delete(w.heatLooks, t.ID)
+		return
+	}
+	w.heatLooks[t.ID]++
+	if w.heatLooks[t.ID] < heatLooksNeeded || w.poweredOff || w.Poweroff == nil || !w.notify.HeatShutdown() {
+		return
+	}
+	w.poweredOff = true
+	w.notify.Notify(Error, "heat_shutdown", t.subject(w.notify.language()))
+	if err := w.Poweroff(); err != nil {
+		// It may try again on the next looks.
+		w.poweredOff = false
+		w.notify.Notify(Error, "heat_shutdown_failed", err.Error())
+	}
 }
 
 // lookMemory compares the ECC counters of each memory controller with the

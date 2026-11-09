@@ -42,7 +42,7 @@
 	.cpus {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px;
+		gap: var(--space-1-5);
 		max-width: 34rem;
 		padding-top: var(--space-1);
 	}
@@ -52,7 +52,7 @@
 		align-items: center;
 		gap: 3px;
 		min-width: 2.75rem;
-		padding: 5px 6px;
+		padding: 5px var(--space-1-5);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-small);
 		color: var(--muted);

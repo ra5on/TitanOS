@@ -159,7 +159,7 @@
 <style>
 	.search {
 		display: grid;
-		gap: 6px;
+		gap: var(--space-1-5);
 		font-size: var(--text-base);
 	}
 	.results {
@@ -181,7 +181,7 @@
 		background: none;
 		border: 0;
 		border-radius: var(--radius-ctl);
-		padding: var(--space-2) 10px;
+		padding: var(--space-2) var(--space-2-5);
 		color: var(--text);
 		cursor: pointer;
 	}

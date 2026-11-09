@@ -234,11 +234,11 @@
 	.migrate {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--space-2-5);
 		min-width: 0;
 	}
 	h3 {
-		margin: 6px 0 0;
+		margin: var(--space-1-5) 0 0;
 		font-size: var(--text-md);
 	}
 	p {
@@ -252,12 +252,12 @@
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: var(--space-2);
 	}
 	.check {
 		display: flex;
 		align-items: flex-start;
-		gap: 10px;
+		gap: var(--space-2-5);
 	}
 	.check input {
 		margin-top: 3px;

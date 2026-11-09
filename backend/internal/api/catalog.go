@@ -77,7 +77,7 @@ func enum(description string, values ...string) map[string]any {
 var toolAreas = map[string]string{
 	"docs_search": toolcatalog.AreaSystem, "docs_read": toolcatalog.AreaSystem, "files_list": toolcatalog.AreaFiles, "document_read": toolcatalog.AreaFiles, "file_read": toolcatalog.AreaFiles, "file_jobs": toolcatalog.AreaFiles, "files_search": toolcatalog.AreaFiles,
 	"folder_create": toolcatalog.AreaFiles, "file_rename": toolcatalog.AreaFiles, "file_delete": toolcatalog.AreaFiles,
-	"file_write": toolcatalog.AreaFiles, "files_move": toolcatalog.AreaFiles, "file_copy": toolcatalog.AreaFiles,
+	"file_write": toolcatalog.AreaFiles, "document_edit": toolcatalog.AreaFiles, "files_move": toolcatalog.AreaFiles, "file_copy": toolcatalog.AreaFiles,
 	"system_status": toolcatalog.AreaSystem, "notifications": toolcatalog.AreaSystem, "nas_info": toolcatalog.AreaSystem, "my_shares": toolcatalog.AreaFiles,
 	"network_status": toolcatalog.AreaSystem, "hardware_status": toolcatalog.AreaSystem, "logs_search": toolcatalog.AreaSystem, "ups_status": toolcatalog.AreaSystem,
 	"update_status": toolcatalog.AreaUpdates, "update_action": toolcatalog.AreaUpdates, "power_action": toolcatalog.AreaUpdates,

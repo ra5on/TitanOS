@@ -335,7 +335,7 @@
 		margin: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	legend {
 		font-weight: 500;
@@ -350,7 +350,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px var(--space-3);
+		gap: var(--space-1-5) var(--space-3);
 		padding: var(--space-2) 0;
 	}
 	.peers .name {

@@ -278,8 +278,8 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: center;
-		gap: 10px var(--space-4);
-		padding: 10px var(--space-4);
+		gap: var(--space-2-5) var(--space-4);
+		padding: var(--space-2-5) var(--space-4);
 		background: var(--warn-bg);
 		border-bottom: 1px solid var(--warn-border);
 		color: var(--warn-text);

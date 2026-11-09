@@ -40,7 +40,7 @@
 		border: 0;
 		border-radius: 0;
 		min-height: 44px;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.tabs [aria-selected='true'] {
 		/* Mixed toward the text colour: readable (4.5:1) on every theme and background. */
@@ -50,7 +50,7 @@
 	}
 	.badge {
 		font-size: var(--text-xs);
-		padding: 1px 6px;
+		padding: 1px var(--space-1-5);
 		border-radius: 999px;
 		background: var(--border);
 		color: var(--text);

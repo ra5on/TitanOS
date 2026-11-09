@@ -367,7 +367,7 @@
 	}
 	.actions .group-title {
 		display: block;
-		padding: 2px 4px 4px;
+		padding: 2px var(--space-1) var(--space-1);
 		color: var(--muted);
 		font-size: var(--text-xs);
 		letter-spacing: 0.06em;
@@ -377,7 +377,7 @@
 		display: none;
 	}
 	.action-note {
-		margin: 8px 0 0;
+		margin: var(--space-2) 0 0;
 		font-size: var(--text-sm);
 	}
 	/* PLAN 62: nearly solid, so icons and widgets behind never shine through the text. */
@@ -434,7 +434,7 @@
 	.search {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		height: 44px;
 		padding: 0 14px;
 		border: 1px solid var(--border);
@@ -461,8 +461,8 @@
 	.filters {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px;
-		margin: 12px 0;
+		gap: var(--space-1-5);
+		margin: var(--space-3) 0;
 	}
 	.chip {
 		height: 30px;
@@ -484,17 +484,17 @@
 	.grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-		gap: 10px 4px;
+		gap: var(--space-2-5) var(--space-1);
 		overflow-y: auto;
 		min-height: 120px;
-		padding: 4px;
+		padding: var(--space-1);
 	}
 	.prog {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 		gap: 7px;
-		padding: 8px 4px;
+		padding: var(--space-2) var(--space-1);
 		border: 0;
 		border-radius: 12px;
 		background: none;
@@ -525,15 +525,15 @@
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		margin-top: 8px;
+		margin-top: var(--space-2);
 		border-top: 1px solid var(--border);
-		padding-top: 8px;
+		padding-top: var(--space-2);
 	}
 	.page {
 		display: flex;
 		align-items: center;
-		gap: 10px;
-		padding: 6px 8px;
+		gap: var(--space-2-5);
+		padding: var(--space-1-5) var(--space-2);
 		border: 0;
 		border-radius: 8px;
 		background: none;
@@ -546,20 +546,20 @@
 		display: flex;
 		align-items: center;
 		flex-wrap: wrap;
-		gap: 8px;
+		gap: var(--space-2);
 		border-top: 1px solid var(--border);
-		padding-top: 12px;
-		margin-top: 12px;
+		padding-top: var(--space-3);
+		margin-top: var(--space-3);
 	}
 	footer .btn {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
+		gap: var(--space-1-5);
 	}
 	.who {
 		display: flex;
 		align-items: center;
-		gap: 10px;
+		gap: var(--space-2-5);
 		line-height: 1.25;
 	}
 	.avatar {
