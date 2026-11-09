@@ -35,6 +35,20 @@ func WebUIPort(label string) int {
 	return port
 }
 
+// WebUIHTTPS tells whether a WebUI label names an HTTPS address
+// ("https://[host]:5800"): apps like jlesage with SECURE_CONNECTION or the
+// linuxserver Selkies images answer only over HTTPS on that port.
+func WebUIHTTPS(label string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(label)), "https://")
+}
+
+// AutoApp is the port of an app's WebUI on the NAS and whether the app
+// answers there over HTTPS.
+type AutoApp struct {
+	Port  int
+	HTTPS bool
+}
+
 // AppContainer is what the automatic names need of a container.
 type AppContainer struct {
 	// App is the Compose project; containers without one get no name.
@@ -52,14 +66,14 @@ type AppContainer struct {
 // compose file; pointing it at a port the app does not publish (the web
 // UI, SSH, another app) must not give that port a name under the app.
 // Containers in the host's network publish no ports and get no name.
-func AutoPorts(containers []AppContainer) map[string]int {
+func AutoPorts(containers []AppContainer) map[string]AutoApp {
 	published := map[string][]int{}
 	for _, c := range containers {
 		if c.App != "" {
 			published[c.App] = append(published[c.App], c.Ports...)
 		}
 	}
-	out := map[string]int{}
+	out := map[string]AutoApp{}
 	for _, c := range containers {
 		if c.App == "" {
 			continue
@@ -68,7 +82,7 @@ func AutoPorts(containers []AppContainer) map[string]int {
 			continue
 		}
 		if port := WebUIPort(c.WebUI); port > 0 && slices.Contains(published[c.App], port) {
-			out[c.App] = port
+			out[c.App] = AutoApp{Port: port, HTTPS: WebUIHTTPS(c.WebUI)}
 		}
 	}
 	return out
@@ -77,9 +91,9 @@ func AutoPorts(containers []AppContainer) map[string]int {
 // SetAutoApps tells the manager which apps have a WebUI now and on which
 // port of the NAS (app → port); see the wiring, which asks Docker. Only a
 // change of the resulting names publishes anew.
-func (m *Manager) SetAutoApps(ports map[string]int) {
+func (m *Manager) SetAutoApps(apps map[string]AutoApp) {
 	m.mu.Lock()
-	m.autoInput = maps.Clone(ports)
+	m.autoInput = maps.Clone(apps)
 	changed := m.recomputeAuto()
 	m.mu.Unlock()
 	if changed {
@@ -91,7 +105,7 @@ func (m *Manager) SetAutoApps(ports map[string]int) {
 // settings; m.mu is held. It tells whether they changed.
 func (m *Manager) recomputeAuto() bool {
 	next := m.computeAuto(m.settings, m.autoInput)
-	if maps.EqualFunc(next, m.auto, func(a, b Route) bool { return a.Name == b.Name && a.Port == b.Port }) {
+	if maps.EqualFunc(next, m.auto, func(a, b Route) bool { return a.Name == b.Name && a.Port == b.Port && a.Scheme == b.Scheme }) {
 		return false
 	}
 	m.auto = next
@@ -99,7 +113,7 @@ func (m *Manager) recomputeAuto() bool {
 	return true
 }
 
-func (m *Manager) computeAuto(s Settings, input map[string]int) map[string]Route {
+func (m *Manager) computeAuto(s Settings, input map[string]AutoApp) map[string]Route {
 	out := map[string]Route{}
 	var taken []string
 	for _, routes := range []map[string]Route{s.Apps, s.Targets} {
@@ -110,7 +124,7 @@ func (m *Manager) computeAuto(s Settings, input map[string]int) map[string]Route
 	apps := slices.Sorted(maps.Keys(input))
 	sort.Strings(apps)
 	for _, app := range apps {
-		port := input[app]
+		port := input[app].Port
 		if _, own := s.Apps[app]; own || !appRE.MatchString(app) || port < 1 || port > 65535 || slices.Contains(m.Reserved, port) {
 			continue
 		}
@@ -119,7 +133,13 @@ func (m *Manager) computeAuto(s Settings, input map[string]int) map[string]Route
 			continue
 		}
 		taken = append(taken, name)
-		out[app] = Route{Enabled: true, Name: name, Port: port, LocalOnly: true}
+		route := Route{Enabled: true, Name: name, Port: port, LocalOnly: true}
+		if input[app].HTTPS {
+			// The app's own certificate is its own (self-signed); the
+			// proxy reaches it like a manual route without VerifyTLS.
+			route.Scheme = "https"
+		}
+		out[app] = route
 	}
 	return out
 }

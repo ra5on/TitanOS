@@ -67,7 +67,7 @@ func TestAppAccessRoutes(t *testing.T) {
 	if res, body := ts.request("POST", "/api/v1/apps/immich/window", nil); res.StatusCode != http.StatusConflict || errorCode(t, body) != "proxy_no_route" {
 		t.Fatalf("window without a name: %d %s", res.StatusCode, body)
 	}
-	routes.SetAutoApps(map[string]int{"immich": 2283, "jellyfin": 8096})
+	routes.SetAutoApps(map[string]appproxy.AutoApp{"immich": {Port: 2283}, "jellyfin": {Port: 8096}})
 
 	res, body = ts.request("PUT", "/api/v1/apps/access", map[string]any{"newApps": "admins", "apps": []map[string]any{
 		{"app": "immich", "gate": true, "users": []string{"anna", "alex", "ghost"}},

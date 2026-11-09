@@ -92,7 +92,7 @@ func (w *titand) feedAutoApps(ctx context.Context) {
 // a TCP port one of the app's containers publishes on the NAS, with that
 // port. Containers without a project, in the host's network and WebUIs
 // elsewhere get no automatic name.
-func autoApps(containers []docker.Container) map[string]int {
+func autoApps(containers []docker.Container) map[string]appproxy.AutoApp {
 	in := make([]appproxy.AppContainer, 0, len(containers))
 	for _, c := range containers {
 		ac := appproxy.AppContainer{App: c.App, WebUI: c.WebUI}

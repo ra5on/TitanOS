@@ -2,11 +2,13 @@ package appproxy
 
 import (
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -364,14 +366,16 @@ func TestAutoPortsOnlyPublished(t *testing.T) {
 		{App: "jellyfin", WebUI: "8096/web", Ports: []int{8096}},
 		// No project, no name.
 		{WebUI: "9000", Ports: []int{9000}},
+		// HTTPS only (jlesage SECURE_CONNECTION, linuxserver Selkies).
+		{App: "thunderbird", WebUI: "https://[host]:5800", Ports: []int{5800}},
 	})
-	want := map[string]int{"immich": 2283, "paperless": 8000, "jellyfin": 8096}
+	want := map[string]AutoApp{"immich": {Port: 2283}, "paperless": {Port: 8000}, "jellyfin": {Port: 8096}, "thunderbird": {Port: 5800, HTTPS: true}}
 	if len(got) != len(want) {
 		t.Fatalf("auto ports %v, want %v", got, want)
 	}
-	for app, port := range want {
-		if got[app] != port {
-			t.Errorf("%s: %d, want %d", app, got[app], port)
+	for app, a := range want {
+		if got[app] != a {
+			t.Errorf("%s: %+v, want %+v", app, got[app], a)
 		}
 	}
 }
@@ -386,7 +390,7 @@ func TestAutoRoutes(t *testing.T) {
 		t.Fatal(err)
 	}
 	changes := store.Changes()
-	m.SetAutoApps(map[string]int{"immich": port, "jellyfin": port, "My_App": port, "web": 443, "paperless": port})
+	m.SetAutoApps(map[string]AutoApp{"immich": {Port: port}, "jellyfin": {Port: port}, "My_App": {Port: port}, "web": {Port: 443}, "paperless": {Port: port}})
 	if store.Changes() != changes {
 		t.Error("automatic names written to the stick")
 	}
@@ -441,7 +445,7 @@ func TestAutoRoutes(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A removed app loses its name.
-	m.SetAutoApps(map[string]int{"jellyfin": port})
+	m.SetAutoApps(map[string]AutoApp{"jellyfin": {Port: port}})
 	if _, ok := m.Route("paperless"); ok {
 		t.Error("removed app keeps its automatic name")
 	}
@@ -483,5 +487,31 @@ func TestEnterURL(t *testing.T) {
 	}
 	if _, ok := m.EnterURL("none", "", "x"); ok {
 		t.Error("enter address for an app without a name")
+	}
+}
+
+// An app that answers only over HTTPS with its own certificate (jlesage
+// with SECURE_CONNECTION, linuxserver Selkies such as Bambu Studio): its
+// automatic name reaches it over HTTPS; before 0.71 it was asked over http
+// and answered with an error.
+func TestAutoRouteHTTPSApp(t *testing.T) {
+	m, _ := newTestManager(t)
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, "desktop")
+	}))
+	t.Cleanup(upstream.Close)
+	port := upstream.Listener.Addr().(*net.TCPAddr).Port
+	m.SetAutoApps(AutoPorts([]AppContainer{{App: "thunderbird", WebUI: "https://[host]:" + strconv.Itoa(port), Ports: []int{port}}}))
+	r, ok := m.Route("thunderbird")
+	if !ok || r.Scheme != "https" {
+		t.Fatalf("route %+v %v", r, ok)
+	}
+	h := m.Handler(http.NotFoundHandler())
+	req := httptest.NewRequest("GET", "https://thunderbird.nas.local/", nil)
+	req.RemoteAddr = "192.168.1.30:5000"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || rec.Body.String() != "desktop" {
+		t.Fatalf("through the proxy: %d %q", rec.Code, rec.Body.String())
 	}
 }

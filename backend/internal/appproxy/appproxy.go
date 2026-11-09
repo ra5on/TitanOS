@@ -180,7 +180,7 @@ type Manager struct {
 
 	// autoInput are the apps with a WebUI and their ports, auto the
 	// routes made from them (RAM only, see auto.go).
-	autoInput map[string]int
+	autoInput map[string]AutoApp
 	auto      map[string]Route
 }
 
