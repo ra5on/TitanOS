@@ -1997,6 +1997,11 @@
 			min-height: 0;
 			overflow-x: hidden;
 			overflow-y: auto;
+			/* The scroll bar gets a lane of its own instead of lying over the names
+			   (owner 9.11.2026); overlay scroll bars keep a small distance too. */
+			scrollbar-gutter: stable;
+			scrollbar-width: thin;
+			padding-right: var(--space-1);
 		}
 		.folded .side-tree,
 		.folded .side-group,
