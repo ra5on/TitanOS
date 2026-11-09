@@ -10,6 +10,7 @@ package configbackup
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -472,7 +473,16 @@ func (m *Manager) create(volume string) (string, error) {
 		password = string(secret)
 		digest.Write([]byte(encMagic))
 	}
-	zip := gzip.NewWriter(part)
+	// An encrypted backup is put together in RAM (it is bounded by
+	// maxArchive and was read whole for sealing anyway): written to the
+	// volume first, the unencrypted archive would stay in freed blocks and
+	// in snapshots of the volume, for whoever holds a disk later.
+	var plain bytes.Buffer
+	var sink io.Writer = part
+	if encrypt {
+		sink = &plain
+	}
+	zip := gzip.NewWriter(sink)
 	archive := tar.NewWriter(zip)
 	if err := archive.WriteHeader(&tar.Header{Name: manifestName, Mode: 0o600, Size: int64(len(manifest)), ModTime: now, Typeflag: tar.TypeReg}); err != nil {
 		return "", err
@@ -501,21 +511,14 @@ func (m *Manager) create(volume string) (string, error) {
 		return "", err
 	}
 	if encrypt {
-		if _, err := part.Seek(0, io.SeekStart); err != nil {
-			return "", err
+		if int64(plain.Len()) > maxArchive {
+			return "", fmt.Errorf("%w: archive of %d MiB", ErrTooLarge, plain.Len()>>20)
 		}
-		plain, err := io.ReadAll(io.LimitReader(part, maxArchive+1))
+		sealed, err := seal(manifest, plain.Bytes(), password)
 		if err != nil {
 			return "", err
 		}
-		sealed, err := seal(manifest, plain, password)
-		if err != nil {
-			return "", err
-		}
-		if err := part.Truncate(0); err != nil {
-			return "", err
-		}
-		if _, err := part.WriteAt(sealed, 0); err != nil {
+		if _, err := part.Write(sealed); err != nil {
 			return "", err
 		}
 	}

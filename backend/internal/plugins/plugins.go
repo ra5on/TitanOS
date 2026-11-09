@@ -405,6 +405,8 @@ func parseManifest(data []byte, filename string) (Manifest, error) {
 	if _, err := hex.DecodeString(manifest.SHA256); err != nil {
 		return manifest, fmt.Errorf("%w: invalid image checksum", ErrInvalid)
 	}
+	// hashFile answers in lowercase; every comparison sees the same form.
+	manifest.SHA256 = strings.ToLower(manifest.SHA256)
 	for _, unit := range append(slices.Clone(manifest.Modules), manifest.Services...) {
 		if !unitRE.MatchString(unit) {
 			return manifest, fmt.Errorf("%w: odd name of a module or service", ErrInvalid)

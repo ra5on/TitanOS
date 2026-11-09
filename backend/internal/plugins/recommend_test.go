@@ -210,3 +210,17 @@ func TestParseUevent(t *testing.T) {
 		t.Fatalf("%q %q", action, subsystem)
 	}
 }
+
+// A checksum written in capitals is the same checksum: it must not pass
+// the installation and then fail the comparison before a system update.
+func TestManifestChecksumIsLowercase(t *testing.T) {
+	sum := strings.Repeat("AB", 32)
+	data := []byte(`{"name":"x","version":"1","sha256":"` + sum + `","size":1}`)
+	manifest, err := parseManifest(data, "x.plugin.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manifest.SHA256 != strings.ToLower(sum) {
+		t.Fatalf("checksum %q", manifest.SHA256)
+	}
+}

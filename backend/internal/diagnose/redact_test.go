@@ -20,6 +20,8 @@ func TestRedact(t *testing.T) {
 		{"POSTGRES_PASSWORD=hunter2 TZ=Europe/Berlin", "POSTGRES_PASSWORD=<removed> TZ=Europe/Berlin"},
 		{`"token": "abc123", "name": "x"`, `"token": <removed>, "name": "x"`},
 		{"api_key: sk-123456 secret=\"a b\"", "api_key: <removed> secret=<removed>"},
+		{`"presharedKey": "q83hf0=", "setup_key=ABCD-12 joinKey: xyz"`, `"presharedKey": <removed>, "setup_key=<removed> joinKey: <removed>`},
+		{"tunnelKey=abc accessKey=def webhook: https://hooks.example/T0/B1", "tunnelKey=<removed> accessKey=<removed> webhook: <removed>"},
 		{"pull https://bob:s3cret@registry.example/v2/", "pull https://<removed>@registry.example/v2/"},
 		// The scheme goes too; what matters is that the token does.
 		{"Authorization: Bearer abcdefghijklmnop", "Authorization: <removed> <removed>"},

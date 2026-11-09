@@ -49,7 +49,7 @@ func (r *Redactor) standIn(kind, value string) string {
 
 var (
 	// key = value, key: value and "key": "value" where the key speaks of a secret.
-	secretPair = regexp.MustCompile(`(?i)("?[a-z0-9_.-]*(?:passw(?:or)?d|passphrase|secret|token|api[_-]?key|apikey|private[_-]?key|credential|auth)[a-z0-9_.-]*"?\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s,;&]+)`)
+	secretPair = regexp.MustCompile(`(?i)("?[a-z0-9_.-]*(?:passw(?:or)?d|passphrase|secret|token|api[_-]?key|apikey|private[_-]?key|(?:preshared|setup|tunnel|join|access)[_-]?key|psk|webhook|credential|auth)[a-z0-9_.-]*"?\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s,;&]+)`)
 	// user:password@ in addresses.
 	urlLogin = regexp.MustCompile(`([a-z][a-z0-9+.-]*://)[^/\s:@]+:[^/\s@]+@`)
 	bearer   = regexp.MustCompile(`(?i)\b(bearer|basic)\s+[a-z0-9._~+/=-]{8,}`)
