@@ -677,7 +677,8 @@ func TestTrustedAppWithoutSandbox(t *testing.T) {
 		}
 		return rec.Header()
 	}
-	mine := get("/webapps/t-pdf/1.1.0/index.html")
+	tpdf, _ := Lookup("t-pdf")
+	mine := get("/webapps/t-pdf/" + tpdf.Version + "/index.html")
 	if mine.Get("Content-Security-Policy") != trustedPolicy || mine.Get("Access-Control-Allow-Origin") != "" {
 		t.Fatalf("trusted: %v", mine)
 	}
