@@ -31,7 +31,14 @@ async function open(role = "owner", theme = "graphit", width = 1440, prepare) {
   await made.page.waitForLoadState("networkidle");
   return made;
 }
-const row = (page, name) => page.locator("li.script").filter({ hasText: name });
+const row = (page, name) =>
+  page.locator("table.scripts tbody tr:not(.output)").filter({ hasText: name });
+// Style W4 (0.74): a script's output is the table row right below it.
+const outputOf = (page, name) =>
+  page
+    .locator("table.scripts tbody tr:not(.output)", { hasText: name })
+    .locator("xpath=following-sibling::tr[1][contains(@class,'output')]")
+    .locator(".output");
 const noSideScroll = (page) =>
   page.evaluate(
     () =>
@@ -66,7 +73,10 @@ try {
   }
   {
     const { ctx, page, data } = await open();
-    assert.equal(await page.locator("li.script").count(), 4);
+    assert.equal(
+      await page.locator("table.scripts tbody tr:not(.output)").count(),
+      4,
+    );
     assert.ok(
       await row(page, "Fotos sichern")
         .getByText("Täglich um 03:00")
@@ -105,7 +115,7 @@ try {
     await row(page, "Fotos sichern")
       .getByRole("button", { name: "Starten" })
       .click();
-    const output = row(page, "Fotos sichern").locator(".output");
+    const output = outputOf(page, "Fotos sichern");
     await output.getByText("Sicherung beginnt", { exact: false }).waitFor();
     await output.getByText("12 Dateien kopiert", { exact: false }).waitFor();
     await output.getByText("erfolgreich").waitFor();
@@ -129,10 +139,7 @@ try {
     });
     await cancel.waitFor();
     await cancel.click();
-    await row(page, "Docker aufräumen")
-      .locator(".output")
-      .getByText("abgebrochen")
-      .waitFor();
+    await outputOf(page, "Docker aufräumen").getByText("abgebrochen").waitFor();
     data.scriptHold = false;
 
     // The log of the runs.
@@ -259,7 +266,7 @@ try {
     await row(page, "Fotos sichern")
       .getByRole("button", { name: "Ausgabe" })
       .click();
-    await row(page, "Fotos sichern").locator(".output").waitFor();
+    await outputOf(page, "Fotos sichern").waitFor();
     await page.screenshot({
       path: `${out}/liste-hell-1440.png`,
       fullPage: true,
