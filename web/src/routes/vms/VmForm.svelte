@@ -24,6 +24,7 @@
 	import VmInstall from './VmInstall.svelte';
 	import VmSchedule from './VmSchedule.svelte';
 	import { GB, diskBlocked, folderProblem, freeOn, type DiskDraft } from './vm-form.ts';
+	import { rememberStartError } from './vm-page.ts';
 	import { MIB, formatBytes } from '#lib/format.ts';
 	import { scheduleDraft, schedulePayload, scheduleProblems } from '#lib/vm-schedule.ts';
 	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
@@ -308,7 +309,10 @@
 		busy = true;
 		error = null;
 		try {
-			await api.post('/vms', {
+			const made = await api.post<{
+				started?: boolean;
+				startError?: { code: string; message: string };
+			}>('/vms', {
 				name,
 				directory: directory !== name ? directory : undefined,
 				volume: reuseImageFolder && directFolder ? directFolder.volume : undefined,
@@ -334,6 +338,9 @@
 				// A disk that is still being copied cannot be started from.
 				start: start && !disks.some((disk) => disk.mode === 'copy'),
 			});
+			// Created, but the first start failed: the page of the VM says
+			// why, instead of this form staying open as if nothing was made.
+			if (made?.startError) rememberStartError(name, made.startError);
 			await goto(`/vms?vm=${name}`);
 		} catch (err) {
 			problem(err);

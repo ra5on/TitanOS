@@ -1513,6 +1513,7 @@
 	"error.plugin_failed": "The plugin could not be put into the system:",
 	"error.volume_has_vms": "The volume still holds virtual machines. Remove them first.",
 	"error.volume_has_plugins": "Plugins are installed on this volume. Remove them first.",
+	"error.volume_has_lxc": "The volume still holds system containers. Remove them first.",
 	"netcfg.title": "Network",
 	"netcfg.dns": "Name servers",
 	"netcfg.hostname": "Name of the NAS",

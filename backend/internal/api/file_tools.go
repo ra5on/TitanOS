@@ -193,10 +193,12 @@ func (s *Server) handleFileExtract(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleFileJobControl(w http.ResponseWriter, r *http.Request) {
+	// A field that is left out keeps what the job has: "pause" alone must
+	// not reset the speed limit and the priority to zero.
 	var req struct {
-		Paused   bool
-		Priority int
-		Rate     int64
+		Paused   *bool
+		Priority *int
+		Rate     *int64
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -214,7 +216,17 @@ func (s *Server) handleFileJobControl(w http.ResponseWriter, r *http.Request) {
 		writeFileError(w, files.ErrNoJob)
 		return
 	}
-	if !req.Paused {
+	paused, priority, rate := job.Paused, job.Priority, job.Rate
+	if req.Paused != nil {
+		paused = *req.Paused
+	}
+	if req.Priority != nil {
+		priority = *req.Priority
+	}
+	if req.Rate != nil {
+		rate = *req.Rate
+	}
+	if !paused {
 		if s.opts.Maintenance != nil {
 			leave, ok := s.admitOperation(w)
 			if !ok {
@@ -235,7 +247,7 @@ func (s *Server) handleFileJobControl(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := s.opts.Files.ControlJob(user.Name, job.ID, req.Paused, req.Priority, req.Rate); err != nil {
+	if err := s.opts.Files.ControlJob(user.Name, job.ID, paused, priority, rate); err != nil {
 		writeFileError(w, err)
 		return
 	}

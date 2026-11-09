@@ -213,6 +213,25 @@ func (m *Manager) Load() error {
 
 // SetSettings stores new settings. known are the volumes that exist.
 func (m *Manager) SetSettings(settings Settings, known []string) error {
+	if err := CheckSettings(settings, known); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.loaded {
+		return ErrNotLoaded
+	}
+	if err := m.store.WriteJSON(settingsFile, settings); err != nil {
+		return err
+	}
+	m.settings = settings
+	return nil
+}
+
+// CheckSettings reports what SetSettings would refuse, without storing
+// anything: callers that change more than the settings (the password)
+// check first, so that a refused request changes nothing.
+func CheckSettings(settings Settings, known []string) error {
 	if err := checkSchedule(settings); err != nil {
 		return err
 	}
@@ -225,15 +244,6 @@ func (m *Manager) SetSettings(settings Settings, known []string) error {
 	if settings.Volume != "" && !slices.Contains(known, settings.Volume) {
 		return fmt.Errorf("%w: volume", ErrInvalid)
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if !m.loaded {
-		return ErrNotLoaded
-	}
-	if err := m.store.WriteJSON(settingsFile, settings); err != nil {
-		return err
-	}
-	m.settings = settings
 	return nil
 }
 

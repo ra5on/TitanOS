@@ -203,7 +203,7 @@ func (s *Server) handleMonitoringHistory(w http.ResponseWriter, r *http.Request)
 	}
 	hours, err := strconv.Atoi(r.URL.Query().Get("hours"))
 	if err != nil {
-		featureError(w, err)
+		writeError(w, http.StatusBadRequest, "bad_request", "hours must be a number")
 		return
 	}
 	out, err := s.opts.Monitoring.History(r.Context(), hours)
@@ -289,7 +289,7 @@ func (s *Server) handleGrowthRecover(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Storage.RecoverGrowth(r.Context(), req.Confirm); err != nil {
+	if err := s.opts.Storage.RecoverGrowth(context.WithoutCancel(r.Context()), req.Confirm); err != nil {
 		writeStorageError(w, r, "growth recovery", err)
 		return
 	}
@@ -326,7 +326,7 @@ func (s *Server) handleSnapshotFilesRestore(w http.ResponseWriter, r *http.Reque
 	if !readJSON(w, r, &req) {
 		return
 	}
-	out, err := s.opts.Storage.RestoreSnapshotFiles(r.Context(), r.PathValue("name"), r.PathValue("snapshot"), req)
+	out, err := s.opts.Storage.RestoreSnapshotFiles(context.WithoutCancel(r.Context()), r.PathValue("name"), r.PathValue("snapshot"), req)
 	if err != nil {
 		writeStorageError(w, r, "snapshot restore", err)
 		return
@@ -384,7 +384,7 @@ func (s *Server) handleApplicationRecover(w http.ResponseWriter, r *http.Request
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.ApplicationBackups.Recover(r.Context(), req.Confirm, req.Restart); err != nil {
+	if err := s.opts.ApplicationBackups.Recover(context.WithoutCancel(r.Context()), req.Confirm, req.Restart); err != nil {
 		featureError(w, err)
 		return
 	}
@@ -395,7 +395,7 @@ func (s *Server) handleVMClone(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.VMs.Clone(r.Context(), r.PathValue("name"), req, s.opts.Storage.Mounted()); err != nil {
+	if err := s.opts.VMs.Clone(context.WithoutCancel(r.Context()), r.PathValue("name"), req, s.opts.Storage.Mounted()); err != nil {
 		writeVMError(w, err)
 		return
 	}
@@ -503,7 +503,7 @@ func (s *Server) handleGrowthCancel(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Storage.CancelGrowth(r.Context(), req.Confirm); err != nil {
+	if err := s.opts.Storage.CancelGrowth(context.WithoutCancel(r.Context()), req.Confirm); err != nil {
 		writeStorageError(w, r, "cancel growth preparation", err)
 		return
 	}

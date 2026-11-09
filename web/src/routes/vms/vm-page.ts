@@ -117,3 +117,31 @@ export const keyLabel = (label: string, _locale?: Locale) =>
 		.join('+');
 
 export const MODES: ScaleMode[] = ['scale', 'remote', 'full'];
+
+const startErrorKey = 'titanos.vm.startError';
+
+/** Keeps why the first start of a new VM failed for the page of the VM. */
+export function rememberStartError(name: string, error: { code: string; message: string }) {
+	try {
+		sessionStorage.setItem(startErrorKey, JSON.stringify({ name, ...error }));
+	} catch {
+		// No storage (private window): the VM is listed as stopped, without the reason.
+	}
+}
+
+/** The start error rememberStartError kept, once. */
+export function takeStartError(): { name: string; problem: Problem } | null {
+	try {
+		const raw = sessionStorage.getItem(startErrorKey);
+		if (!raw) return null;
+		sessionStorage.removeItem(startErrorKey);
+		const kept = JSON.parse(raw) as { name?: string; code?: string; message?: string };
+		if (!kept.name || !kept.code) return null;
+		return {
+			name: kept.name,
+			problem: problem(new ApiError(409, kept.code, kept.message ?? '')),
+		};
+	} catch {
+		return null;
+	}
+}

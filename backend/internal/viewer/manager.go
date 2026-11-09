@@ -872,11 +872,19 @@ func (m *Manager) profileDir(user, app string) (string, error) {
 
 // Check makes sure, right before titand dials the agent, that the view's
 // container still runs with the address it had on the view's own network.
-// Otherwise the view is stopped and ErrStale returned: open it again.
+// Otherwise the view is stopped and ErrStale returned: open it again. A
+// cancelled ctx ends only this lease and returns its error.
 func (l *Lease) Check(ctx context.Context) error {
 	address, running, err := l.m.Engine.ViewerState(ctx, l.s.container, l.s.network)
 	if err == nil && running && address == l.s.address {
 		return nil
+	}
+	// The window that asked went away while the engine was asked: that
+	// says nothing about the view. Only this lease ends, like a closed
+	// window; other windows of the account keep the view.
+	if err != nil && ctx.Err() != nil {
+		l.Close(true)
+		return ctx.Err()
 	}
 	l.m.mu.Lock()
 	current := l.m.sessions[l.s.key] == l.s

@@ -51,13 +51,25 @@ func (s *Server) readServices() serviceSettings {
 	return s.services.settings
 }
 
-func (s *Server) writeServices(settings serviceSettings) error {
+// updateServices changes the switches under one lock: two switches set at
+// the same time must not each write their own copy of the file and lose
+// the other's change. A file that cannot be read is not written over.
+func (s *Server) updateServices(change func(*serviceSettings)) error {
 	s.services.mu.Lock()
 	defer s.services.mu.Unlock()
+	if !s.services.loaded {
+		var settings serviceSettings
+		if err := s.opts.Store.ReadJSON(servicesFile, &settings); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		s.services.settings, s.services.loaded = settings, true
+	}
+	settings := s.services.settings
+	change(&settings)
 	if err := s.opts.Store.WriteJSON(servicesFile, settings); err != nil {
 		return err
 	}
-	s.services.settings, s.services.loaded = settings, true
+	s.services.settings = settings
 	return nil
 }
 
@@ -137,20 +149,18 @@ func (s *Server) handleServiceSet(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		services := s.readServices()
-		services.DockerOff = !req.Enabled
-		if err := s.writeServices(services); err != nil {
+		if err := s.updateServices(func(v *serviceSettings) { v.DockerOff = !req.Enabled }); err != nil {
 			writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 			return
 		}
 	case "vms", "lxc":
-		settings := s.readServices()
-		if name == "vms" {
-			settings.VMsOff = !req.Enabled
-		} else {
-			settings.LXCOff = !req.Enabled
-		}
-		if err := s.writeServices(settings); err != nil {
+		if err := s.updateServices(func(v *serviceSettings) {
+			if name == "vms" {
+				v.VMsOff = !req.Enabled
+			} else {
+				v.LXCOff = !req.Enabled
+			}
+		}); err != nil {
 			writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 			return
 		}

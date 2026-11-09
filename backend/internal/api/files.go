@@ -441,7 +441,15 @@ func (s *Server) handleFileZip(w http.ResponseWriter, r *http.Request) {
 	}
 	attachment(w, name)
 	w.Header().Set("Content-Type", "application/zip")
-	if err := s.opts.Files.Zip(w, root, paths); err != nil {
+	out := &headerWriter{w: w}
+	if err := s.opts.Files.Zip(out, root, paths); err != nil {
+		if !out.started {
+			// Nothing was sent yet (a path that is not there or hidden):
+			// a proper answer instead of a broken connection.
+			w.Header().Del("Content-Disposition")
+			writeFileError(w, err)
+			return
+		}
 		// The answer has started; all that is left is to end it early.
 		slog.Warn("zip download", "root", root.ID, "err", err)
 		panic(http.ErrAbortHandler)
