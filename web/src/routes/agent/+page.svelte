@@ -7,6 +7,7 @@
 	// app of its own too (/agent.webmanifest, start /agent?app=1).
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
+	import { untrack } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
 	import Dropdown from '#lib/components/Dropdown.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -421,9 +422,21 @@
 				if (ask || attach) queueMicrotask(() => composer?.fill(ask ?? ''));
 				// Ollama loads the model now, not with the first message.
 				void api.post('/agent/preload', { model }).catch(() => {});
+				listsReady = true;
 			}
 		})();
 		return () => stream?.abort();
+	});
+
+	// PLAN 75-16: a notification tapped while the agent is already open moves
+	// it to its chat (/agent?chat=…); the effect above reads the address only
+	// once, after its awaits.
+	let listsReady = $state(false);
+	$effect(() => {
+		const id = page.url.searchParams.get('chat');
+		const author = page.url.searchParams.get('author') ?? '';
+		if (!listsReady || !id || id === untrack(() => current?.id)) return;
+		untrack(() => void open(id, false, author));
 	});
 
 	async function open(id: string, push = true, author = '') {
