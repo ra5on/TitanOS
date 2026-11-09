@@ -11,6 +11,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/appaccess"
 	"github.com/ra5on/TitanOS/backend/internal/appproxy"
+	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/tlscert"
 )
 
@@ -101,6 +102,12 @@ func TestAppAccessRoutes(t *testing.T) {
 		t.Error("the token of the window does not let in")
 	}
 
+	// A direct window (PLAN 75-14): the web UI reached by an IP gives none.
+	if res, body := ts.do(anna, "POST", "/api/v1/apps/immich/window?direct=1", nil); res.StatusCode != http.StatusConflict || errorCode(t, body) != "direct_unreachable" {
+		t.Fatalf("direct by IP: %d %s", res.StatusCode, body)
+	}
+	// The name under the suffix: TestDirectHost (appproxy).
+
 	// The link of the gate page: logged in, it sends on with a fresh token.
 	client := ts.newClient()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
@@ -146,5 +153,34 @@ func TestCADownload(t *testing.T) {
 	_, body = ts.request("GET", "/api/v1/certs/ca", nil)
 	if !strings.Contains(string(body), `"available":true`) || !strings.Contains(string(body), "TitanOS nas CA") || strings.Contains(string(body), "PRIVATE") {
 		t.Errorf("info: %s", body)
+	}
+}
+
+// PLAN 75-14: which apps bring their own desktop stream.
+func TestAppStream(t *testing.T) {
+	for _, c := range []struct {
+		c    docker.Container
+		want string
+	}{
+		{docker.Container{Image: "jlesage/thunderbird:latest", WebUI: "https://[host]:5800"}, "novnc"},
+		{docker.Container{Image: "lscr.io/linuxserver/bambustudio:latest", WebUI: "https://[host]:3003", Ports: []docker.Port{{Host: 3003, Container: 3001}}}, "selkies"},
+		{docker.Container{Image: "lscr.io/linuxserver/grocy:latest", WebUI: "9283", Ports: []docker.Port{{Host: 9283, Container: 80}}}, ""},
+		{docker.Container{Image: "kasmweb/firefox:1.16", WebUI: "6901"}, "kasmvnc"},
+		{docker.Container{Image: "ghcr.io/immich-app/immich-server", WebUI: "2283"}, ""},
+	} {
+		if got := appStream(c.c); got != c.want {
+			t.Errorf("%s: %q, want %q", c.c.Image, got, c.want)
+		}
+	}
+}
+
+// The header narrows the page's frame-src (any https) to the apps' names.
+func TestNarrowFrames(t *testing.T) {
+	got := narrowFrames("default-src 'self'; frame-src 'self' https:; object-src 'none'", []string{"https://*.nas.local"})
+	if got != "default-src 'self'; frame-src 'self' https://*.nas.local; object-src 'none'" {
+		t.Errorf("%q", got)
+	}
+	if got := narrowFrames("object-src 'none'", nil); got != "object-src 'none'; frame-src 'self'" {
+		t.Errorf("without frame-src: %q", got)
 	}
 }

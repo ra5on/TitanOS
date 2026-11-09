@@ -24,6 +24,8 @@
 	import { menuKeyReset, screenOwnsKeys } from './menubar/keys.ts';
 	import { clearFrameCommands } from './menubar/state.svelte.ts';
 	import { sources } from './sources.svelte.ts';
+	import DirectView from './DirectView.svelte';
+	import { chooseDirect, directChosen, hasOwnStream } from './direct.ts';
 	import {
 		closeWindow,
 		requestClose,
@@ -497,6 +499,20 @@
 	// PLAN 67-1: web apps and the remote view live in the desktop itself, so
 	// their commands for the menu bar are registered here (not by a frame).
 	let remote = $state<RemoteViewType>();
+	// PLAN 75-14: an app with its own desktop stream shows it directly; the
+	// remote view when the account chose it or the app was not reached.
+	const dockerApp = $derived(win.app.startsWith('docker:') ? win.app.slice('docker:'.length) : '');
+	const ownStream = $derived(
+		!!dockerApp && hasOwnStream(sources.mine?.find((m) => m.app === dockerApp)?.stream),
+	);
+	let directOn = $state(directChosen(untrack(() => win.app.replace(/^docker:/, ''))));
+	let directFailed = $state(false);
+	const direct = $derived(ownStream && directOn && !directFailed);
+	function switchDirect(on: boolean) {
+		chooseDirect(dockerApp, on);
+		directOn = on;
+		directFailed = false;
+	}
 	async function restartDockerApp() {
 		const app = win.app.slice('docker:'.length);
 		for (const c of sources.containers.filter((x) => (x.app || x.name) === app))
@@ -752,6 +768,23 @@
 								<!-- PLAN 66: the remote view puts its controls here (RemoteView, inTitle). -->
 								<div class="remote-host" bind:this={remoteHost}></div>
 								<hr />
+								{#if ownStream}
+									<button
+										type="button"
+										role="menuitemcheckbox"
+										aria-checked={direct}
+										onclick={() => {
+											moreOpen = false;
+											switchDirect(!directOn || directFailed);
+										}}
+										><Icon name={direct ? 'monitor' : 'zap'} size={16} /><span
+											>{t(direct ? 'desktop.direct.useRemote' : 'desktop.direct.useDirect')}</span
+										></button
+									>
+									{#if directFailed && directOn}<p class="menu-note">
+											{t('desktop.direct.notReached')}
+										</p>{/if}
+								{/if}
 								<button
 									type="button"
 									role="menuitem"
@@ -861,15 +894,8 @@
 				{/if}
 			{:else if external}
 				<!-- The remote view's player loads with the first Docker app (PLAN 65-6). -->
-				{#await import('./RemoteView.svelte') then { default: RemoteView }}
-					<RemoteView
-						bind:this={remote}
-						app={win.app.replace(/^docker:/, '')}
-						title={win.title}
-						onopentab={openTab}
-						inTitle
-						menuHost={moreOpen ? remoteHost : null}
-					>
+				{#if direct}
+					<DirectView app={dockerApp} title={win.title} onfallback={() => (directFailed = true)}>
 						{#snippet splash()}<DesktopIcon
 								{glyph}
 								{gradient}
@@ -877,10 +903,29 @@
 								size={72}
 								name={win.title}
 							/>{/snippet}
-					</RemoteView>
-				{:catch}
-					<p class="load-failed">{t('desktop.window.loadFailed')}</p>
-				{/await}
+					</DirectView>
+				{:else}
+					{#await import('./RemoteView.svelte') then { default: RemoteView }}
+						<RemoteView
+							bind:this={remote}
+							app={win.app.replace(/^docker:/, '')}
+							title={win.title}
+							onopentab={openTab}
+							inTitle
+							menuHost={moreOpen ? remoteHost : null}
+						>
+							{#snippet splash()}<DesktopIcon
+									{glyph}
+									{gradient}
+									{image}
+									size={72}
+									name={win.title}
+								/>{/snippet}
+						</RemoteView>
+					{:catch}
+						<p class="load-failed">{t('desktop.window.loadFailed')}</p>
+					{/await}
+				{/if}
 			{:else}
 				<iframe
 					bind:this={frame}
@@ -1242,6 +1287,13 @@
 	.ctl.close:hover {
 		background: #c42b1c;
 		color: #fff;
+	}
+	.menu-note {
+		margin: 0;
+		padding: var(--space-1) var(--space-3) var(--space-2);
+		font-size: var(--text-sm);
+		color: var(--muted);
+		max-width: 18rem;
 	}
 	.load-failed {
 		margin: 0;

@@ -47,8 +47,10 @@ export default defineConfig(({ mode }) => ({
 					'font-src': ['self', 'data:'],
 					'connect-src': ['self'],
 					'worker-src': ['self', 'blob:'],
-					// PLAN 63: Docker apps come as a remote view, no foreign page is framed.
-					'frame-src': ['self'],
+					// PLAN 75-14: apps with their own desktop stream are framed under
+					// their HTTPS names; titand's header narrows this to exactly those
+					// names (api/ui.go narrowFrames), both policies hold.
+					'frame-src': ['self', 'https:'],
 					'object-src': ['none'],
 					'base-uri': ['self'],
 				},

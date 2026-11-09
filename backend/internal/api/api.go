@@ -416,7 +416,7 @@ func New(opts Options) *Server {
 	s.routeCluster(mux)
 
 	mux.HandleFunc("/api/", handleAPINotFound)
-	mux.Handle("/", uiHandler(opts.UI))
+	mux.Handle("/", uiHandler(opts.UI, s.appFrameSources))
 
 	// Browsers must not let another website send requests with our cookie.
 	s.patterns = mux.patterns
