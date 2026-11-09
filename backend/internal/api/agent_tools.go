@@ -387,14 +387,16 @@ func (b *agentToolbox) realFolderMode(root, p string) string {
 	if dir == "" {
 		return b.settings.Policy.FolderMode(root, p)
 	}
-	target := filepath.Join(dir, filepath.FromSlash(path.Clean("/"+p)))
+	// Links are resolved on both sides: a link in an allowed folder that
+	// leads into a locked one (made over SMB, say) must not open it.
+	target := resolveLinks(filepath.Join(dir, filepath.FromSlash(path.Clean("/"+p))))
 	mode := ""
 	for _, f := range b.settings.Policy.Folders {
 		base := b.rootDir(f.Root)
 		if base == "" {
 			continue
 		}
-		rule := filepath.Join(base, filepath.FromSlash(path.Clean("/"+f.Path)))
+		rule := resolveLinks(filepath.Join(base, filepath.FromSlash(path.Clean("/"+f.Path))))
 		if target == rule || strings.HasPrefix(target, rule+string(filepath.Separator)) {
 			if mode == "" {
 				mode = f.Mode
@@ -404,6 +406,23 @@ func (b *agentToolbox) realFolderMode(root, p string) string {
 		}
 	}
 	return mode
+}
+
+// resolveLinks returns p with the symbolic links of its existing part
+// resolved; what does not exist yet (the name of a new file) stays as it
+// is behind the deepest folder that does.
+func resolveLinks(p string) string {
+	rest := ""
+	for cur := p; ; {
+		if real, err := filepath.EvalSymlinks(cur); err == nil {
+			return filepath.Join(real, rest)
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return p
+		}
+		rest, cur = filepath.Join(filepath.Base(cur), rest), parent
+	}
 }
 
 // Execute runs a prepared call as the account.

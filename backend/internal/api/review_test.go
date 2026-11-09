@@ -13,7 +13,9 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/appbackup"
+	"github.com/ra5on/TitanOS/backend/internal/files"
 )
 
 // The stick manager shows settings without secrets and nothing else, and
@@ -300,5 +302,40 @@ func TestJSONBodyHasADeadline(t *testing.T) {
 	res.Body.Close()
 	if res.StatusCode != http.StatusRequestTimeout {
 		t.Fatalf("slow body: %d", res.StatusCode)
+	}
+}
+
+// Roots handed to tokens, MCP clients and the agent carry the fence
+// against .titanos and .env for every file route.
+func TestMachineRootsAreMarked(t *testing.T) {
+	roots := machineRoots([]files.Root{{ID: "volume/Data"}, {ID: "share/Docs"}})
+	for _, root := range roots {
+		if !root.Machine {
+			t.Errorf("root %s is not marked", root.ID)
+		}
+	}
+}
+
+// A folder rule of the agent holds for the real folder: a link in an
+// allowed folder that leads into a locked one is the locked one.
+func TestAgentFolderRuleFollowsLinks(t *testing.T) {
+	dir := t.TempDir()
+	for _, d := range []string{"Docs/Open", "Docs/Private"} {
+		if err := os.MkdirAll(filepath.Join(dir, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(filepath.Join(dir, "Docs/Private"), filepath.Join(dir, "Docs/Open/link")); err != nil {
+		t.Fatal(err)
+	}
+	b := &agentToolbox{dirs: map[string]string{"share/Docs": filepath.Join(dir, "Docs")}}
+	b.settings.Policy.Folders = []agent.FolderRule{{Root: "share/Docs", Path: "Private", Mode: agent.ModeDeny}}
+	for p, want := range map[string]string{
+		"Private/tax.pdf": agent.ModeDeny, "Open/link/tax.pdf": agent.ModeDeny, "Open/link/new-file.txt": agent.ModeDeny,
+		"Open/note.txt": "", "Open/new/deeper/file.txt": "",
+	} {
+		if got := b.realFolderMode("share/Docs", p); got != want {
+			t.Errorf("%s: mode %q, want %q", p, got, want)
+		}
 	}
 }

@@ -105,7 +105,9 @@ func (b *agentToolbox) codeRun(ctx context.Context, _ *agent.Chat, args json.Raw
 	return agent.Outcome{Text: out.String()}, nil
 }
 
-// codeSummary is what the approval card shows: the whole program.
+// codeSummary is the short form for notifications and the note in the
+// chat: the start of the program. The approval card shows the whole
+// program from the arguments (ChatView.svelte, preview), not this.
 func codeSummary(args json.RawMessage) string {
 	req, err := parseCode(args)
 	if err != nil {

@@ -53,10 +53,32 @@ type Root struct {
 	// its way. Everything else counts as hidden, so a secret that a new
 	// version adds stays out of sight.
 	Show []string `json:"-"`
+	// Machine marks a root handed to an API token, an MCP client or the
+	// AI agent instead of a person in the web interface: what TitanOS
+	// keeps on a volume (.titanos), .env files and unfinished uploads do
+	// not exist there, whatever route or tool asks (MachineHidden).
+	Machine bool `json:"-"`
+}
+
+// MachineHidden reports whether a path is one a token, an MCP client or the
+// AI agent must not see: what TitanOS keeps on a volume (chats, the files
+// of apps with their .env, backups of the stick), .env files anywhere and
+// unfinished uploads.
+func MachineHidden(p string) bool {
+	for _, part := range strings.Split(path.Clean("/"+p), "/") {
+		lower := strings.ToLower(part)
+		if lower == ".titanos" || strings.HasSuffix(lower, ".env") || strings.HasSuffix(lower, ".titanos-part") {
+			return true
+		}
+	}
+	return false
 }
 
 // secret reports whether a path is one the root hides.
 func (r Root) secret(rel string) bool {
+	if r.Machine && MachineHidden(rel) {
+		return true
+	}
 	if len(r.Hide) == 0 && len(r.Show) == 0 {
 		return false
 	}

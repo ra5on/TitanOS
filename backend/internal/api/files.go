@@ -169,13 +169,30 @@ var stickShown = []string{
 
 // requestRoots are the roots of the account behind a request. The stick is
 // offered only to a browser session on this NAS: API tokens, MCP clients,
-// MCP clients and other nodes of the cluster never see it.
+// the AI agent and other nodes of the cluster never see it. Tokens, MCP
+// clients and the agent also never see .titanos, .env files and unfinished
+// uploads in any root (machineRoots).
 func (s *Server) requestRoots(r *http.Request) []files.Root {
 	roots := s.fileRoots(currentUser(r))
 	if webSession(r) && !viaCluster(r) {
 		return roots
 	}
-	return slices.DeleteFunc(roots, func(root files.Root) bool { return root.Kind == "stick" })
+	roots = slices.DeleteFunc(roots, func(root files.Root) bool { return root.Kind == "stick" })
+	if !webSession(r) {
+		roots = machineRoots(roots)
+	}
+	return roots
+}
+
+// machineRoots marks roots as handed to a token, an MCP client or the AI
+// agent. The tools of the catalog refuse hidden paths themselves; the
+// routes open to tokens (files_read_text, files_copy …) get the same fence
+// through the root, so that no route can be forgotten.
+func machineRoots(roots []files.Root) []files.Root {
+	for i := range roots {
+		roots[i].Machine = true
+	}
+	return roots
 }
 
 // fileRoot resolves the root a request names, or answers it with an error.

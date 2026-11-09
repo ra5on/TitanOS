@@ -461,6 +461,13 @@ func (s *Server) agentPrompt(ctx context.Context, user auth.User, settings agent
 		if len(in.Memories) > 60 {
 			in.Memories = in.Memories[len(in.Memories)-60:]
 		}
+		// A memory saved after reading outside content (web page, file of
+		// a stranger) may carry what that content wanted remembered. It
+		// steers this chat like an outside skill: web tools ask first, so
+		// that nothing can be sent out on the word of an old web page.
+		if chat != nil && slices.ContainsFunc(in.Memories, func(m agent.Memory) bool { return m.Untrusted }) {
+			chat.OutsideSkill = true
+		}
 	}
 	if skills, err := s.agentSkills(user.Name); err == nil {
 		for _, sk := range skills {
