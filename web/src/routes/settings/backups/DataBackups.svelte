@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { poll } from '#lib/poll.ts';
 	import ClusterPair from '#lib/components/ClusterPair.svelte';
+	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import ApplicationSelection, {
 		type Application,
 	} from '#lib/operations/ApplicationSelection.svelte';
@@ -915,6 +916,35 @@
 	{:else}
 		{#if !draft}<div class="tile panel"><p class="muted">{t('backup.none')}</p></div>{/if}
 	{/each}
+	{#if !restoreOnly && overview.jobs.length}<StatusBar label={t('backup.statusBar')}>
+			<span>{t('backup.statJobs', { count: overview.jobs.length })}</span>
+			<span
+				>{t('backup.statRunning')}
+				<b>{overview.jobs.filter((v) => v.state.running).length}</b></span
+			>
+			<span
+				class:warn={overview.jobs.some(
+					(v) => v.state.lastError && v.state.lastError !== 'cancelled',
+				)}
+				>{t('backup.statFailed')}
+				<b
+					>{overview.jobs.filter((v) => v.state.lastError && v.state.lastError !== 'cancelled')
+						.length}</b
+				></span
+			>
+			{#if overview.jobs.some((v) => v.state.lastOK)}<span class="end"
+					>{t('backup.statLastOk')}
+					{formatDateTime(
+						new Date(
+							overview.jobs
+								.map((v) => v.state.lastOK ?? '')
+								.filter(Boolean)
+								.sort()
+								.at(-1) ?? '',
+						),
+					)}</span
+				>{/if}
+		</StatusBar>{/if}
 
 	{#if !draft && !restoreOnly}
 		{#if overview.shares.length === 0}
