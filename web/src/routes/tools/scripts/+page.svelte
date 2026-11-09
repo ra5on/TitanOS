@@ -198,7 +198,8 @@
 							><tr
 								><th>{t('scripts.col.name')}</th><th>{t('scripts.col.when')}</th><th
 									>{t('scripts.col.last')}</th
-								><th class="actions"><span class="sr-only">{t('scripts.col.actions')}</span></th></tr
+								><th class="actions"><span class="sr-only">{t('scripts.col.actions')}</span></th
+								></tr
 							></thead
 						>
 						<tbody>
@@ -229,7 +230,9 @@
 											class="btn small"
 											aria-expanded={shown.includes(script.id)}
 											onclick={() => toggleOutput(script.id)}
-											>{t(shown.includes(script.id) ? 'scripts.hideOutput' : 'scripts.output')}</button
+											>{t(
+												shown.includes(script.id) ? 'scripts.hideOutput' : 'scripts.output',
+											)}</button
 										><button class="btn small" onclick={() => (history = script)}
 											>{t('scripts.runs')}</button
 										><button
@@ -259,8 +262,10 @@
 		</section>
 		<StatusBar label={t('scripts.statusBar')}>
 			<span>{t('scripts.statCount', { count: status.scripts.length })}</span>
-			<span>{t('scripts.statRunning')} <b>{status.scripts.filter((x) => x.running).length}</b></span>
-			{#if status.volume}<span class="end">{t('scripts.statPlace', { volume: status.volume })}</span>{/if}
+			<span>{t('scripts.statRunning')} <b>{status.scripts.filter((x) => x.running).length}</b></span
+			>
+			{#if status.volume}<span class="end">{t('scripts.statPlace', { volume: status.volume })}</span
+				>{/if}
 		</StatusBar>{/if}
 </div>
 

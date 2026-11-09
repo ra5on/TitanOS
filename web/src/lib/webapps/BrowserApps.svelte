@@ -261,8 +261,11 @@
 						? t('webapps.center.install')
 						: t('webapps.volume.moveButton')}</button
 			>
-			<button type="button" class="btn" disabled={busy === 'volume'} onclick={() => (volumeDialog = null)}
-				>{t('common.cancel')}</button
+			<button
+				type="button"
+				class="btn"
+				disabled={busy === 'volume'}
+				onclick={() => (volumeDialog = null)}>{t('common.cancel')}</button
 			>
 		</div>
 	</Dialog>

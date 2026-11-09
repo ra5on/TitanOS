@@ -33,7 +33,16 @@ export const webapps = $state<{
 	volumes: string[];
 	/** Several volumes, no program yet, none chosen: ask before installing. */
 	needsVolume: boolean;
-}>({ apps: [], volume: '', docker: [], migration: null, loaded: false, unavailable: false, volumes: [], needsVolume: false });
+}>({
+	apps: [],
+	volume: '',
+	docker: [],
+	migration: null,
+	loaded: false,
+	unavailable: false,
+	volumes: [],
+	needsVolume: false,
+});
 
 function sanitizeApp(raw: unknown): WebApp | null {
 	if (!raw || typeof raw !== 'object') return null;

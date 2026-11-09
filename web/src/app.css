@@ -1233,4 +1233,6 @@ input.switch:disabled {
 .e3-group[data-closed] > :not(.tile-title) {
 	display: none !important;
 }
-.page-groups { display: contents; }
+.page-groups {
+	display: contents;
+}

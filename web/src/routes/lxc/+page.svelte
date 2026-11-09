@@ -455,10 +455,12 @@
 	<StatusBar label={t('lxc.statusBar')}>
 		<span>{t('lxc.statCount', { count: list.containers.length })}</span>
 		<span
-			>{t('lxc.statRunning')} <b>{list.containers.filter((c) => c.state === 'running').length}</b></span
+			>{t('lxc.statRunning')}
+			<b>{list.containers.filter((c) => c.state === 'running').length}</b></span
 		>
 		{#if list.containers.some((c) => c.job?.state === 'running')}<span
-				>{t('lxc.statJobs')} <b>{list.containers.filter((c) => c.job?.state === 'running').length}</b></span
+				>{t('lxc.statJobs')}
+				<b>{list.containers.filter((c) => c.job?.state === 'running').length}</b></span
 			>{/if}
 	</StatusBar>
 {/if}

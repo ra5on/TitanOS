@@ -815,7 +815,9 @@
 			>{t('plugins.statUpdates')} <b>{plugins.filter((p) => p.update).length}</b></span
 		>
 		<span class="end"
-			>{status.volume ? t('plugins.where', { volume: status.volume }) : t('plugins.whereNone')}</span
+			>{status.volume
+				? t('plugins.where', { volume: status.volume })
+				: t('plugins.whereNone')}</span
 		>
 	</StatusBar>
 {/if}

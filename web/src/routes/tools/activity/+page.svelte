@@ -240,7 +240,9 @@
 			>{t('activity.statFailed')} <b>{entries.filter((e) => !e.ok).length}</b></span
 		>
 		<span class="end"
-			>{status.settings.enabled ? t('activity.statOn') : t('activity.statOff')}{#if status.settings.volume}
+			>{status.settings.enabled
+				? t('activity.statOn')
+				: t('activity.statOff')}{#if status.settings.volume}
 				· {status.settings.volume}{/if}</span
 		>
 	</StatusBar>{/if}

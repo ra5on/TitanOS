@@ -44,7 +44,10 @@
 		<label class="opt" class:on={value === v && !here} class:here>
 			<input type="radio" {name} value={v} bind:group={value} disabled={disabled || here} />
 			<span class="what">
-				<b>{v}{#if vol} · {t(`level.${vol.level}`)}{/if}</b>
+				<b
+					>{v}{#if vol}
+						· {t(`level.${vol.level}`)}{/if}</b
+				>
 				<span class="muted small"
 					>{here
 						? t('webapps.volume.here')
