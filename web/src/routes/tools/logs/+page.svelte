@@ -350,7 +350,9 @@
 	<span class:warn={entries.some((e) => e.priority <= 3)}
 		>{t('notify.severity.error')}: <b>{entries.filter((e) => e.priority <= 3).length}</b></span
 	>
-	<span>{t('notify.severity.warning')}: <b>{entries.filter((e) => e.priority === 4).length}</b></span>
+	<span
+		>{t('notify.severity.warning')}: <b>{entries.filter((e) => e.priority === 4).length}</b></span
+	>
 </StatusBar>
 
 <style>

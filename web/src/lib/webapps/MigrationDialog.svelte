@@ -209,7 +209,6 @@
 		margin: 0;
 		overflow-wrap: break-word;
 	}
-	.docker,
 	.progress {
 		list-style: none;
 		margin: 0;
@@ -217,22 +216,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-2);
-	}
-	.check {
-		display: flex;
-		align-items: flex-start;
-		gap: var(--space-2-5);
-	}
-	.check input {
-		margin-top: 3px;
-		flex: none;
-	}
-	.what {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		min-width: 0;
-		overflow-wrap: break-word;
 	}
 	.progress li {
 		display: flex;
