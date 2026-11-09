@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/version"
 )
 
 // The emergency handbook (PLAN 54-S): what the NAS is built of and what to
@@ -229,7 +231,7 @@ func Markdown(f Facts, made time.Time, de bool) string {
 	fmt.Fprintf(&b, "# %s – %s\n\n", t("Notfallhandbuch", "Emergency handbook"), f.Host)
 	fmt.Fprintf(&b, "%s %s. %s\n\n", t("Stand", "As of"), made.Format("02.01.2006 15:04"), t("Enthält keine Passwörter und keine Schlüssel. Ausdrucken und beim NAS aufbewahren.", "Holds no passwords and no keys. Print it and keep it with the NAS."))
 	if f.Version != "" {
-		fmt.Fprintf(&b, "TitanOS %s.\n\n", f.Version)
+		fmt.Fprintf(&b, "TitanOS %s.\n\n", version.Display(f.Version))
 	}
 	fmt.Fprintf(&b, "## %s\n\n", t("Aufbau", "Build"))
 	fmt.Fprintf(&b, "### %s\n\n", t("Volumes und Platten", "Volumes and disks"))

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, test } from 'vitest';
 import {
 	formatBytes,
 	formatBytesOf,
@@ -8,6 +8,7 @@ import {
 	formatMegabytesPerSecond,
 	formatNumber,
 	formatPercent,
+	osVersion,
 } from '#lib/format.ts';
 import { i18n } from '#lib/i18n/index.svelte.ts';
 
@@ -68,4 +69,16 @@ test('formatDateTime: in a given zone, an unknown zone falls back', () => {
 	expect(plain(formatDateTime(date, 'Europe/Berlin'))).toBe('31.10.2026, 13:00');
 	expect(plain(formatDateTime(date, 'UTC'))).toBe('31.10.2026, 12:00');
 	expect(formatDateTime(date, 'Nowhere/Invalid')).toBe(formatDateTime(date));
+});
+
+describe('osVersion (PLAN 75-20)', () => {
+	it('shows releases since 0.72 in two parts', () => {
+		expect(osVersion('0.72.0')).toBe('0.72');
+		expect(osVersion('1.3.0')).toBe('1.3');
+	});
+	it('keeps older versions with a third number and pre-releases', () => {
+		expect(osVersion('0.71.1')).toBe('0.71.1');
+		expect(osVersion('0.72.0-rc.1')).toBe('0.72.0-rc.1');
+		expect(osVersion('0.70.10')).toBe('0.70.10');
+	});
 });

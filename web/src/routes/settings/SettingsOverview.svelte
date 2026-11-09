@@ -8,7 +8,7 @@
 	import { api, type VolumeState } from '#lib/api.ts';
 	import { activityLabel, type ActivityEntry, type ActivityPage } from '#lib/activity.ts';
 	import { t, type MessageKey } from '#lib/i18n/index.svelte.ts';
-	import { formatDateTime, formatDuration } from '#lib/format.ts';
+	import { formatDateTime, formatDuration, osVersion } from '#lib/format.ts';
 	import { settingsAreas } from '#lib/settings-search.ts';
 	import { recentSettingsChanges } from '#lib/settings-recent.ts';
 	import { settingsStates } from '#lib/settings-states.svelte.ts';
@@ -95,7 +95,7 @@
 			</div>
 			<div class="set-row">
 				<span class="set-label">{t('settingshome.health.version')}</span>
-				<span class="set-control value">{info.version}</span>
+				<span class="set-control value">{osVersion(info.version)}</span>
 			</div>
 			<div class="set-row">
 				<span class="set-label">{t('settingshome.health.uptime')}</span>
