@@ -1184,10 +1184,25 @@ try {
       seen.posts.some((x) => x === `/agent/chats/${haChat.id}/seen`),
       "open chat reports it is seen",
     );
-    await page.goto(base + "/agent?chat=" + docChat.id);
+    // PLAN 75-16: a tapped notification of another chat (the service worker
+    // posts {type:'open'}) moves the open agent to that chat, without a reload.
+    await page.evaluate((id) => {
+      window.__docChat = id;
+      window.__noReload = true;
+      navigator.serviceWorker.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "open", url: "/agent?chat=" + window.__docChat },
+        }),
+      );
+    }, docChat.id);
     await page
       .getByRole("heading", { name: "Docker-Übersicht als Word" })
       .waitFor();
+    assert.equal(
+      await page.evaluate(() => window.__noReload === true),
+      true,
+      "the notification switched the chat without reloading",
+    );
     await page.getByText("Im Dateimanager").first().waitFor();
     await page
       .getByRole("button", { name: "Modell und Denkstufe wählen" })

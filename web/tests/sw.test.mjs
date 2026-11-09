@@ -52,12 +52,35 @@ test('agent message goes to the agent window', async () => {
 	assert.equal(files.sent.length, 0);
 });
 
-test('without an agent window a new one opens', async () => {
+// PLAN 75-16: without an agent window the tap still lands in the chat: an
+// open TitanOS window (the desktop first) opens the agent; an installed app
+// brought forward by openWindow would keep its page (the home screen).
+test('without an agent window the desktop opens the chat', async () => {
+	const files = win('https://nas.local/files');
+	const desk = win('https://nas.local/');
+	const sw = load([files, desk]);
+	await click(sw, '/agent?chat=abc');
+	assert.deepEqual(JSON.parse(JSON.stringify(desk.sent)), [
+		{ type: 'open', url: '/agent?chat=abc' },
+	]);
+	assert.equal(desk.focused, true);
+	assert.equal(files.sent.length, 0);
+	assert.deepEqual([...sw.opened], []);
+});
+
+test('any TitanOS window opens the chat when no desktop is open', async () => {
 	const files = win('https://nas.local/files');
 	const sw = load([files]);
 	await click(sw, '/agent?chat=abc');
+	assert.deepEqual(JSON.parse(JSON.stringify(files.sent)), [
+		{ type: 'open', url: '/agent?chat=abc' },
+	]);
+});
+
+test('without any TitanOS window a new one opens at the chat', async () => {
+	const sw = load([]);
+	await click(sw, '/agent?chat=abc');
 	assert.deepEqual([...sw.opened], ['https://nas.local/agent?chat=abc']);
-	assert.equal(files.focused, false);
 });
 
 test('a NAS message uses any TitanOS window', async () => {
