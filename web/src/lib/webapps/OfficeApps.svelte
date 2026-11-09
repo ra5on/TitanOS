@@ -17,6 +17,10 @@
 		wordcraft: 'webapps.office.kind.wordcraft',
 		gridcraft: 'webapps.office.kind.gridcraft',
 		pdfcraft: 'webapps.office.kind.pdfcraft',
+		// PLAN 75-20: our own builds, the basic set since 0.72.
+		't-word': 'webapps.office.kind.wordcraft',
+		't-exel': 'webapps.office.kind.gridcraft',
+		't-pdf': 'webapps.office.kind.pdfcraft',
 	};
 	function toggle(id: string, on: boolean) {
 		selected = on ? [...new Set([...selected, id])] : selected.filter((s) => s !== id);

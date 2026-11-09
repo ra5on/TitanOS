@@ -17,6 +17,8 @@ export type WebApp = {
 	types: string[];
 	default: boolean;
 	url: string;
+	/** Our own build (TitanOS-Office): runs on the web UI's origin, without the sandbox. */
+	trusted?: boolean;
 	/** Optional: the app's own icon among its files. */
 	icon?: string;
 	/** Size of the archive in bytes (for the offer to install). */
@@ -248,6 +250,9 @@ export function ownAppUrl(url: string): boolean {
 const LETTER_GRADIENTS = ['blue', 'green', 'red', 'violet', 'teal', 'orange', 'pink', 'yellow'];
 const KNOWN_GRADIENTS: Record<string, string> = {
 	wordcraft: 'blue',
+	't-word': 'blue',
+	't-exel': 'green',
+	't-pdf': 'red',
 	gridcraft: 'green',
 	pdfcraft: 'red',
 	deckcraft: 'orange',

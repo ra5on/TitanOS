@@ -35,6 +35,11 @@ type App struct {
 	Bridge        string   `json:"bridge"`
 	Types         []string `json:"types"`
 	Default       bool     `json:"default"`
+	// Trusted: our own build (TitanOS-Office: T-Word, T-PDF, T-Exel, PLAN
+	// 75-18/75-20). It runs without the sandbox, on the web UI's origin
+	// with the account's login: through Cloudflare Access it loads its
+	// files with the Cloudflare cookie like every page of TitanOS.
+	Trusted bool `json:"trusted,omitempty"`
 }
 
 // Asset is the name of the app's archive in a TitanOS release.

@@ -114,7 +114,8 @@
 	// redirect followed): a redirect or a refusal means the files are blocked.
 	$effect(() => {
 		void reloads;
-		if (!ownAppUrl(app.url)) return;
+		// A trusted app loads its files with the page's cookies: nothing to probe.
+		if (!ownAppUrl(app.url) || app.trusted) return;
 		let gone = false;
 		probeFiles(app.url).then((ok) => {
 			if (!gone && !ok && phase !== 'ready') phase = 'blocked';
@@ -419,7 +420,7 @@
 			bind:this={frame}
 			{src}
 			title={app.name}
-			sandbox="allow-scripts allow-downloads allow-modals allow-popups"
+			sandbox={app.trusted ? undefined : 'allow-scripts allow-downloads allow-modals allow-popups'}
 			allow="fullscreen; clipboard-read; clipboard-write"
 			referrerpolicy="no-referrer"
 			data-webapp={app.id}
