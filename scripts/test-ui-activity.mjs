@@ -32,6 +32,9 @@ try {
 
     await page.getByLabel("Konto").selectOption("sam");
     await list.getByText("Anmeldung fehlgeschlagen").waitFor();
+    // That entry was there before the filter too: wait for the filtered
+    // list itself, not for a line both lists have.
+    await list.getByText("Dateien gelöscht").waitFor({ state: "detached" });
     assert.equal(await list.getByText("Dateien gelöscht").count(), 0);
     assert.equal(data.activity.queries.at(-1).user, "sam");
     await page.getByLabel("Konto").selectOption("");
