@@ -4,6 +4,7 @@
 	// plain confirmation that says so (CLAUDE.md, no name to type), the
 	// dangerous button left of "Cancel", never the focused one.
 	import PageHead from '#lib/components/PageHead.svelte';
+	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -218,6 +219,14 @@
 			<p class="muted none">{t('dres.volumes.noMatch')}</p>
 		{/if}
 	</section>
+	<StatusBar label={t('dres.statusBar')}>
+		<span
+			>{known
+				? t('dres.images.count', { count: volumes.length, size: formatBytes(sumSize(volumes)) })
+				: volumes.length}</span
+		>
+		<span class:warn={anonymous.length > 0}>{t('dres.statUnused')} <b>{anonymous.length}</b></span>
+	</StatusBar>
 {/if}
 
 {#if remove}
