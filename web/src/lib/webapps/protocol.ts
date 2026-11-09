@@ -19,6 +19,8 @@ export type WebApp = {
 	url: string;
 	/** Our own build (TitanOS-Office): runs on the web UI's origin, without the sandbox. */
 	trusted?: boolean;
+	/** Our own build that replaces this app (wordcraft → t-word, PLAN 75-20). */
+	successor?: string;
 	/** Optional: the app's own icon among its files. */
 	icon?: string;
 	/** Size of the archive in bytes (for the offer to install). */
@@ -90,7 +92,19 @@ export function hostMessage(data: unknown): HostMessage | null {
 	}
 }
 
-const IMAGE_TYPES = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'tif', 'tiff', 'avif', 'ico'];
+const IMAGE_TYPES = [
+	'png',
+	'jpg',
+	'jpeg',
+	'gif',
+	'webp',
+	'bmp',
+	'svg',
+	'tif',
+	'tiff',
+	'avif',
+	'ico',
+];
 const AUDIO_TYPES = ['wav', 'mp3', 'ogg', 'flac', 'm4a', 'aac', 'opus', 'aif', 'aiff'];
 const VIDEO_TYPES = ['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v'];
 const FONT_TYPES = ['ttf', 'otf', 'woff', 'woff2', 'ttc'];

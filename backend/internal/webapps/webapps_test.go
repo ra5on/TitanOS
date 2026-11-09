@@ -606,9 +606,10 @@ func TestDetectDocker(t *testing.T) {
 	managed := []string{"word", "grid", "pdfcraft", "photo", "nextcloud", "fig", "mixed", "deckdb", "two", "lone", "cadcraft-web", "empty"}
 	got := DetectDocker(managed, containers)
 	want := []DockerApp{
-		{App: "word", Webapp: "wordcraft", Running: true, Image: "ghcr.io/storytold/wordcraft:0.15.0"},
-		{App: "grid", Webapp: "gridcraft", Image: "storytold/gridcraft-web@sha256:abc"},
-		{App: "pdfcraft", Webapp: "pdfcraft", Running: true, Image: "nginx:alpine"},
+		// PLAN 75-20: our own builds replace the originals.
+		{App: "word", Webapp: "t-word", Running: true, Image: "ghcr.io/storytold/wordcraft:0.15.0"},
+		{App: "grid", Webapp: "t-exel", Image: "storytold/gridcraft-web@sha256:abc"},
+		{App: "pdfcraft", Webapp: "t-pdf", Running: true, Image: "nginx:alpine"},
 		{App: "photo", Webapp: "vectorcraft", Running: true, Image: "registry.example.com:5000/me/vectorcraft:latest"},
 		{App: "cadcraft-web", Webapp: "cadcraft"},
 	}

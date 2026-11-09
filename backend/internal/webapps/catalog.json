@@ -70,7 +70,8 @@
         "odt",
         "rtf"
       ],
-      "default": false
+      "default": false,
+      "successor": "t-word"
     },
     {
       "id": "gridcraft",
@@ -88,7 +89,8 @@
         "ods",
         "csv"
       ],
-      "default": false
+      "default": false,
+      "successor": "t-exel"
     },
     {
       "id": "pdfcraft",
@@ -103,7 +105,8 @@
       "types": [
         "pdf"
       ],
-      "default": false
+      "default": false,
+      "successor": "t-pdf"
     },
     {
       "id": "deckcraft",

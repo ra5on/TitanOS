@@ -70,6 +70,8 @@
 	"webapps.center.install": "Install",
 	"webapps.center.intro": "These programs run right in your browser in a TitanOS window, without Docker and without load on the NAS. TitanOS checks them and brings new versions with its updates.",
 	"webapps.center.noVolume": "Installing needs a volume: the programs are kept on the volume, not on the stick.",
+	"webapps.center.replaceBy": "Replace with {app}",
+	"webapps.center.replacing": "Replacing with {app} …",
 	"webapps.center.remove": "Remove",
 	"webapps.center.removeText": "{app} disappears from the desktop of every account. Your files stay where they are. You can install the program again at any time.",
 	"webapps.center.removeTitle": "Remove {app}?",

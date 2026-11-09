@@ -57,6 +57,10 @@ function sanitizeApp(raw: unknown): WebApp | null {
 		pending: a.pending === true,
 		// Our own builds (T-Word …): framed without the sandbox (PLAN 75-18).
 		trusted: a.trusted === true,
+		successor:
+			typeof a.successor === 'string' && /^[a-z0-9][a-z0-9-]{0,63}$/.test(a.successor)
+				? a.successor
+				: undefined,
 	};
 }
 

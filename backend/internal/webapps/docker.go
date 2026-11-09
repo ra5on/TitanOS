@@ -120,6 +120,8 @@ func DetectDocker(managed []string, containers []Container) []DockerApp {
 			}
 		}
 		if ok && found.Webapp != "" {
+			// Our own build replaces the original (WordCraft → T-Word).
+			found.Webapp = successorOf(found.Webapp)
 			out = append(out, found)
 		}
 	}
