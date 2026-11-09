@@ -405,3 +405,18 @@ func TestBtrfsGraceHoldsSettledOnlyWhileWaiting(t *testing.T) {
 		t.Fatal("a mirror past its grace still holds the boot check")
 	}
 }
+
+// A member partition that shares its disk with other partitions (an array
+// taken over from another system) is wiped alone: the partition table of
+// the disk, and with it the other partitions, stays.
+func TestWipeKeepsThePartitionTableOfASharedDisk(t *testing.T) {
+	member := blockDevice{KName: "/dev/sda3", Type: "part"}
+	own := blockDevice{Name: "/dev/sdb", Children: []blockDevice{{KName: "/dev/sdb1", Type: "part"}}}
+	shared := blockDevice{Name: "/dev/sda", Children: []blockDevice{{KName: "/dev/sda1", Type: "part"}, member}}
+	if got := wipeTarget(own, own.Children[0]); got != "/dev/sdb" {
+		t.Errorf("disk with the member alone: wiped %s, want the whole disk", got)
+	}
+	if got := wipeTarget(shared, member); got != "/dev/sda3" {
+		t.Errorf("disk with other partitions: wiped %s, want only the member", got)
+	}
+}

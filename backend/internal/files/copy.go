@@ -836,7 +836,7 @@ func (m *Manager) copyFile(ctx context.Context, job *Job, sr, dr *os.Root, rel, 
 	if err := storeErr(m.saveTransfer(job, "publish "+final)); err != nil {
 		return err
 	}
-	publishErr := m.publishCopy(job, dr, rel, part, final, replace)
+	final, publishErr := m.publishCopy(job, dr, rel, part, final, replace)
 	if publishErr != nil {
 		// Nothing was published: the outcome is known.
 		empty := ""
@@ -851,29 +851,44 @@ func (m *Manager) copyFile(ctx context.Context, job *Job, sr, dr *os.Root, rel, 
 	return m.markCopied(job, dr, rel, final, info)
 }
 
-// publishCopy gives the finished part file its name. A file it replaces goes
-// to the recycle bin where there is one.
-func (m *Manager) publishCopy(job *Job, dr *os.Root, rel, part, final string, replace bool) error {
+// publishCopy gives the finished part file its name and returns that name.
+// A file it replaces goes to the recycle bin where there is one.
+func (m *Manager) publishCopy(job *Job, dr *os.Root, rel, part, final string, replace bool) (string, error) {
 	choice, explicit := job.choices[rel]
 	if explicit && choice.TargetVersion != "" {
 		if err := checkChoice(dr, final, choice.TargetVersion); err != nil {
-			return failure("changed_target", ErrSourceChanged)
+			return final, failure("changed_target", ErrSourceChanged)
 		}
 	}
 	if replace {
 		recycled, err := m.retire(job, dr, final)
 		if err != nil {
-			return err
+			return final, err
 		}
 		if recycled {
-			return mapError(renameNoReplace(dr, part, final))
+			return final, mapError(renameNoReplace(dr, part, final))
 		}
-		return mapError(dr.Rename(part, final))
+		return final, mapError(dr.Rename(part, final))
 	}
 	if explicit {
-		return mapError(renameNoReplace(dr, part, final))
+		return final, mapError(renameNoReplace(dr, part, final))
 	}
-	return mapError(dr.Rename(part, final))
+	// The name was free when the copy began, which may be hours ago. A
+	// file that took it meanwhile (another job, an upload, a save over
+	// SMB) is never replaced unasked: the copy takes the next free name.
+	err := renameNoReplace(dr, part, final)
+	for range 5 {
+		if !errors.Is(err, fs.ErrExist) {
+			break
+		}
+		free, nameErr := freeName(dr, final)
+		if nameErr != nil {
+			return final, mapError(nameErr)
+		}
+		final = free
+		err = renameNoReplace(dr, part, final)
+	}
+	return final, mapError(err)
 }
 
 // retire moves a file that is about to be replaced into the recycle bin of
