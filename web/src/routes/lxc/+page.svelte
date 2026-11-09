@@ -5,6 +5,7 @@
 	import DangerZone from '#lib/components/DangerZone.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
+	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { api, ApiError } from '#lib/api.ts';
 	import { formatBytes, formatDateTime } from '#lib/format.ts';
@@ -450,6 +451,16 @@
 			</section>
 		{/if}
 	</div>
+	<!-- Style W4 (0.74): the figures of the list in the status bar. -->
+	<StatusBar label={t('lxc.statusBar')}>
+		<span>{t('lxc.statCount', { count: list.containers.length })}</span>
+		<span
+			>{t('lxc.statRunning')} <b>{list.containers.filter((c) => c.state === 'running').length}</b></span
+		>
+		{#if list.containers.some((c) => c.job?.state === 'running')}<span
+				>{t('lxc.statJobs')} <b>{list.containers.filter((c) => c.job?.state === 'running').length}</b></span
+			>{/if}
+	</StatusBar>
 {/if}
 
 {#if form && list}
