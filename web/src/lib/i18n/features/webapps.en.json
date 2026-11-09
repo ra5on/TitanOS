@@ -87,6 +87,7 @@
 	"webapps.dialog.open": "Open",
 	"webapps.dialog.place": "Place",
 	"webapps.dialog.replaceHint": "“{name}” already exists here. You will be asked whether to replace it.",
+	"webapps.dialog.recent": "Recently opened",
 	"webapps.dialog.save": "Save",
 	"webapps.dialog.up": "Parent folder",
 	"webapps.dropOpen": "Open in {app}",

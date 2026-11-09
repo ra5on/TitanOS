@@ -14,6 +14,7 @@
 	import DesktopIcon from '#lib/desktop/DesktopIcon.svelte';
 	import { registerCloseGuard, wm } from '#lib/desktop/wm.svelte.ts';
 	import FileDialog from './FileDialog.svelte';
+	import { recentDocs, rememberDoc } from './recent.ts';
 	import { namesIn, readDoc, writeDoc } from './files.ts';
 	import {
 		appSrc,
@@ -84,6 +85,13 @@
 	let dropping = $state<{ name: string } | null>(null);
 
 	const unsaved = () => appDirty || unwritten;
+	const user = () => session.data?.user?.name ?? '';
+	let recent = $state<DocRef[]>([]);
+	const refreshRecent = () => (recent = recentDocs(user(), app.id));
+	const remember = (d: DocRef) => {
+		rememberDoc(user(), app.id, d);
+		refreshRecent();
+	};
 	// Plain information goes away by itself; errors and created files stay until closed.
 	$effect(() => {
 		if (notice?.kind !== 'info') return;
@@ -152,6 +160,7 @@
 			const { bytes, mtime } = await readDoc(next);
 			if (opened !== key) return;
 			current = { doc: next, mtime };
+			remember(next);
 			outside = false;
 			unwritten = false;
 			give(baseName(next.path), bytes);
@@ -186,6 +195,7 @@
 			} else if (msg.text)
 				notice = { kind: 'error', text: t('webapps.appFailed', { error: msg.text }) };
 		} else if (msg.type === 'webapp-pick') {
+			refreshRecent();
 			pick = { types: msg.types, multiple: msg.multiple };
 		} else if (msg.type === 'webapp-save') {
 			saveAsAsked = false;
@@ -295,6 +305,7 @@
 			}
 			if (adopt) {
 				current = { doc: target, mtime: r.mtime };
+				remember(target);
 				opened = target.root + '\n' + target.path;
 				unwritten = false;
 				onname?.(baseName(target.path));
@@ -331,6 +342,7 @@
 
 	/** "Datei öffnen …": a file of the NAS of a type the app takes. */
 	export function openPicker() {
+		refreshRecent();
 		picking = true;
 	}
 	/**
@@ -383,6 +395,7 @@
 			const { bytes, mtime } = await readDoc(next);
 			const name = baseName(next.path);
 			pickedDocs.set(name, { doc: next, mtime });
+			remember(next);
 			answerPick([{ name, bytes }]);
 		} catch (e) {
 			answerPick([]);
@@ -626,6 +639,7 @@
 		title={t('webapps.openTitle', { app: app.name })}
 		types={app.types}
 		start={startDir}
+		{recent}
 		onpick={picked}
 		onclose={() => (picking = false)}
 	/>
@@ -637,6 +651,7 @@
 		title={t('webapps.openTitle', { app: app.name })}
 		types={pick.types}
 		start={startDir}
+		{recent}
 		onpick={(chosen) => void pickedForApp(chosen)}
 		onlocal={() => localInput?.click()}
 		onclose={() => answerPick([])}

@@ -87,6 +87,7 @@
 	"webapps.dialog.open": "Öffnen",
 	"webapps.dialog.place": "Ort",
 	"webapps.dialog.replaceHint": "„{name}“ gibt es hier schon. Beim Speichern wirst du gefragt, ob sie ersetzt werden soll.",
+	"webapps.dialog.recent": "Zuletzt geöffnet",
 	"webapps.dialog.save": "Speichern",
 	"webapps.dialog.up": "Übergeordneter Ordner",
 	"webapps.dropOpen": "In {app} öffnen",

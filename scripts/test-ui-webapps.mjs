@@ -615,9 +615,15 @@ async function filesWindow(page) {
   const fd = page.locator("form.fd");
   await fd.locator(".row.file", { hasText: "Angebot.docx" }).first().waitFor();
   assert.deepEqual(
-    await fd.locator(".row.file .name").allTextContents(),
+    await fd.locator(".list .row.file .name").allTextContents(),
     ["Angebot.docx"],
     "only the document, no companion file",
+  );
+  // PLAN 75-20: the document opened before is listed first as recent.
+  assert.deepEqual(
+    await fd.locator(".recent .row.file .name").allTextContents(),
+    ["Angebot.docx"],
+    "recently opened with this app",
   );
   await page.keyboard.press("Escape");
   await fd.waitFor({ state: "detached" });
@@ -1219,8 +1225,12 @@ for (const width of [1280, 390]) {
     await fd.getByRole("button", { name: "Von diesem Gerät …" }).isVisible(),
     "the dialog offers a file of this device",
   );
+  await page.waitForTimeout(500);
   await shot(page, "19-app-open-dialog");
-  await fd.locator(".row.file", { hasText: "Angebot.docx" }).first().click();
+  await fd
+    .locator(".list .row.file", { hasText: "Angebot.docx" })
+    .first()
+    .click();
   await fd.locator("button.btn-primary").click();
   await fd.waitFor({ state: "detached" });
   await page.waitForTimeout(2000);
