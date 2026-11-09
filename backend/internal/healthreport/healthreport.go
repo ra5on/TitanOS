@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"github.com/ra5on/TitanOS/backend/internal/version"
 )
 
 const settingsFile = "system/health-report.json"
@@ -248,7 +249,7 @@ func Build(d Data, language string, now time.Time) Report {
 	add(backups)
 
 	system := Section{Title: w["system"], Status: OK}
-	system.Lines = append(system.Lines, fmt.Sprintf("TitanOS %s · %s %s", d.Version, w["uptime"], duration(w, d.Uptime)))
+	system.Lines = append(system.Lines, fmt.Sprintf("TitanOS %s · %s %s", version.Display(d.Version), w["uptime"], duration(w, d.Uptime)))
 	if d.MemoryPercent >= 0 {
 		system.Lines = append(system.Lines, fmt.Sprintf("%s %d %%", w["memory"], d.MemoryPercent))
 	}

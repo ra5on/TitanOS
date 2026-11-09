@@ -244,6 +244,14 @@ kopieren; das ist kein volles Release (`scripts/release-kind.py`).
 Nicht abgedeckt: Die QEMU-Smoke-Tests des Releases laden das Abbild nicht und
 öffnen keine Fernansicht.
 
+## Ab 0.72: zweiteilige Versionen
+
+Angezeigt wird ab 0.72 nur noch `0.72`, `0.73` … (Inhaber 9.11.2026). Jedes Release erhöht die zweite Zahl, auch eine reine Korrektur: nach 0.72 kommt 0.73, nie 0.72.1.
+
+- **Technisch bleibt die Version dreiteilig mit `.0`:** Tag `v0.72.0`, Manifest `"version": "0.72.0"`, Notizen `docs/releases/v0.72.0.md`, Dateinamen. titand bis 0.71.1 erkennt nur dreiteilige Versionen als Update; mit `0.72` käme das Update dort nie an.
+- Oberfläche, Statusbericht, Handbuch und KI-Agent zeigen ohne `.0` (`osVersion` in `web/src/lib/format.ts`, `version.Display` in Go). Der Titel der Release-Notizen heißt „TitanOS 0.72 — …“.
+- Ältere Versionen mit dritter Zahl (0.71.1) bleiben so, wie sie sind.
+
 ## Probelauf ohne Veröffentlichung
 
 Änderungen an Build, Boot oder Release-Skripten lösen in Pull Requests den

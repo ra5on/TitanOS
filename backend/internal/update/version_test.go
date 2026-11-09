@@ -28,3 +28,16 @@ func TestVersions(t *testing.T) {
 		}
 	}
 }
+
+// PLAN 75-20: from 0.72 on only the second number rises and the wire keeps
+// ".0"; a NAS on 0.71.1 must see 0.72.0 as newer.
+func TestTwoPartReleasesAreNewer(t *testing.T) {
+	from, ok1 := parseVersion("0.71.1")
+	to, ok2 := parseVersion("0.72.0")
+	if !ok1 || !ok2 || from.compare(to) >= 0 {
+		t.Fatalf("0.71.1 must be older than 0.72.0 (%v %v %d)", ok1, ok2, from.compare(to))
+	}
+	if _, ok := parseVersion("0.72"); ok {
+		t.Fatal("a two-part version must not reach the update feed")
+	}
+}

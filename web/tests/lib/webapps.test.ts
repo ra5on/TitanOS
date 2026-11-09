@@ -15,6 +15,7 @@ import {
 	letterGradient,
 	mtimeNs,
 	ownAppUrl,
+	probeFiles,
 	parentDir,
 	sanitizeFileApps,
 	savedMtime,
@@ -220,4 +221,26 @@ test('readDoc: the time is taken before the bytes', async () => {
 	expect(order).toEqual(['/api/v1/files/properties', '/api/v1/files/download']);
 	expect(r.mtime).toBe('1794039123000000000');
 	expect(new Uint8Array(r.bytes)).toEqual(new Uint8Array([80, 75, 3, 4]));
+});
+
+// PLAN 75-18: Cloudflare Access turns cookie-less requests away with a redirect.
+test('probeFiles tells a blocked app from a reachable one', async () => {
+	const answer = (type: string, status: number) => async () => ({ type, status }) as Response;
+	const url = '/webapps/pdfcraft/1.0.0/';
+	expect(await probeFiles(url, answer('basic', 200))).toBe(true);
+	expect(await probeFiles(url, answer('opaqueredirect', 0))).toBe(false);
+	expect(await probeFiles(url, answer('basic', 302))).toBe(false);
+	expect(await probeFiles(url, answer('basic', 403))).toBe(false);
+	expect(
+		await probeFiles(url, async () => {
+			throw new TypeError('offline');
+		}),
+	).toBe(true);
+	// The request carries no cookie and follows no redirect.
+	const seen: RequestInit[] = [];
+	await probeFiles(url, (async (_p: string, init: RequestInit) => {
+		seen.push(init);
+		return { type: 'basic', status: 200 } as Response;
+	}) as typeof fetch);
+	expect(seen.every((i) => i.credentials === 'omit' && i.redirect === 'manual')).toBe(true);
 });

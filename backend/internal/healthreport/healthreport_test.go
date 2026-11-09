@@ -29,7 +29,7 @@ func TestAllGood(t *testing.T) {
 		t.Fatalf("%s %q", r.Status, r.Title)
 	}
 	text := r.Text()
-	for _, want := range []string{"✔ Volumes", "data: in Ordnung · 25 % belegt (1.0 TB / 4.0 TB)", "2 Platten, davon 2 ohne SMART-Fehler · wärmste 40 °C", "täglich: zuletzt gelungen 27.10. 03:00", "TitanOS 0.34.0 · läuft seit 2 Tagen", "0 Fehler und 0 Warnungen"} {
+	for _, want := range []string{"✔ Volumes", "data: in Ordnung · 25 % belegt (1.0 TB / 4.0 TB)", "2 Platten, davon 2 ohne SMART-Fehler · wärmste 40 °C", "täglich: zuletzt gelungen 27.10. 03:00", "TitanOS 0.34 · läuft seit 2 Tagen", "0 Fehler und 0 Warnungen"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing %q in\n%s", want, text)
 		}

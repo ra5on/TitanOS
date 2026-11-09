@@ -135,6 +135,7 @@ titanos/
 - Quelle nur GitHub Releases von `ra5on/TitanOS`, **nur Stable**, Manifest direkt ohne GitHub-API. **Ohne gültige Signatur keine Installation, auch nicht mit Warnung oder manuell**; danach Größe und SHA-256 jeder Datei.
 - Neue Konfigurationsfelder müssen von Basis und voriger App-Version weiterhin lesbar sein; keine inkompatiblen Umbenennungen/Pflichtfelder. Rückwege einschließlich Plugin-Einstellungen erhalten.
 - Volle Systemupdates: A/B-Slots mit drei Probestarts und Boot-Check über `/api/v1/health` (**kein `systemd-bless-boot`**); Bootloader (`EFI/BOOT/BOOTX64.EFI`, `EFI/BOOT/BOOTIA32.EFI`, `boot/grub/`) werden nicht ersetzt.
+- **Versionen ab 0.72 zweiteilig angezeigt** (`0.72`, nie mehr 0.72.1; jede Korrektur ist das nächste Release). Tag/Manifest bleiben `v0.72.0` für ältere NAS. Siehe docs/RELEASING.md „Ab 0.72“.
 - App-Updates: nur titand mit Weboberfläche bei passender Basis-Version, Probe und Rückfall ohne NAS-Neustart; Installation wartet auf laufende dauerhafte Aufträge. Plugin-Katalog, NVIDIA-Bauumgebung und Treiber richten sich nach der **Basis-Version**.
 
 ### Release-Prüfung und Grenzen
