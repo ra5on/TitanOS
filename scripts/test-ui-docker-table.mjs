@@ -158,11 +158,25 @@ try {
     assert.match(await segments.innerText(), /Laufen\s*2/);
     assert.match(await segments.innerText(), /Gestoppt\s*1/);
     assert.match(await segments.innerText(), /Updates\s*1/);
-    // Four figures.
-    const stats = frame.locator(".stats .stat");
-    assert.equal(await stats.count(), 4);
-    assert.match(await stats.nth(0).innerText(), /2 von 4/);
-    assert.match(await stats.nth(3).innerText(), /1 verfügbar/);
+    // PLAN 75-19 (style W4): the figures in the status bar, no tiles.
+    assert.equal(await frame.locator(".stats").count(), 0, "no figure tiles");
+    const bar = frame.locator("footer.statusbar");
+    assert.match(await bar.innerText(), /Laufen\s*2 von 4/);
+    assert.match(await bar.innerText(), /Updates\s*1 verfügbar/);
+    const pinned = await bar.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return Math.abs(r.bottom - innerHeight) <= 1;
+    });
+    assert.ok(pinned, `status bar at the window's lower edge at ${width}`);
+    // A stack opens downward to its containers (style E3).
+    await row(frame, "immich")
+      .getByRole("button", { name: "Container von immich zeigen" })
+      .click();
+    assert.equal(await table(frame).locator("tbody tr.member").count(), 3);
+    await row(frame, "immich")
+      .getByRole("button", { name: "Container von immich zeigen" })
+      .click();
+    assert.equal(await table(frame).locator("tbody tr.member").count(), 0);
     // No view switch any more.
     assert.equal(
       await frame.getByRole("button", { name: "Karten" }).count(),
@@ -225,8 +239,28 @@ try {
           .getByRole("button", { name: "jellyfin stoppen" })
           .isVisible(),
       );
-      // A click on the row opens the app's own page.
+      // A wide window (maximised) shows the selected app at the right
+      // (style W4): a click selects, a double click opens the app's page.
+      await page
+        .locator("section.win")
+        .first()
+        .getByRole("button", { name: "Maximieren" })
+        .click();
+      await page.waitForTimeout(600);
       await row(frame, "jellyfin").locator("td.state").click();
+      const pane = frame.locator("aside.detail-pane");
+      await pane.waitFor();
+      assert.match(await pane.innerText(), /jellyfin/);
+      assert.match(await pane.innerText(), /8096/);
+      assert.equal(
+        await pane
+          .getByRole("link", { name: "Bearbeiten" })
+          .getAttribute("href"),
+        "/docker/apps/jellyfin",
+      );
+      await page.screenshot({ path: `${out}/02b-details.png` });
+      // A double click opens the app's own page.
+      await row(frame, "jellyfin").locator("td.state").dblclick();
       await frame
         .locator("main")
         .getByText("jellyfin", { exact: false })

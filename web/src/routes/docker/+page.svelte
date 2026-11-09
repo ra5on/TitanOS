@@ -46,6 +46,8 @@
 	import AppIcon from '#lib/components/AppIcon.svelte';
 	import ContextMenu from '#lib/components/ContextMenu.svelte';
 	import RowMenu from './RowMenu.svelte';
+	import DetailPane from '#lib/components/explorer/DetailPane.svelte';
+	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import { isRunning, portLabels, webLinks } from './container.ts';
 
 	let tailnet = $state<TailnetStatus | null>(null);
@@ -486,12 +488,58 @@
 		rowMenu = { group, x: Math.max(8, rect.right - 260), y: rect.bottom + 4 };
 	}
 	/** A click on a row opens the app's own page (not on its buttons and links). */
-	function rowClick(event: MouseEvent, group: DockerGroup) {
-		if ((event.target as Element).closest('button, a, input')) return;
+	const phone = $derived(phoneView());
+	// PLAN 75-19 (style W4): a wide window shows the selected app at the
+	// right; a click selects, a double click or the name opens its page. A
+	// narrow window (and the phone) opens the page right away as before.
+	let wide = $state(matchMedia('(min-width: 1000px)').matches);
+	$effect(() => {
+		const query = matchMedia('(min-width: 1000px)');
+		const change = () => (wide = query.matches);
+		query.addEventListener('change', change);
+		return () => query.removeEventListener('change', change);
+	});
+	let selectedId = $state<string | null>(null);
+	const selected = $derived(
+		wide && !phone ? (shownGroups.find((g) => g.id === selectedId) ?? null) : null,
+	);
+	// Apps of several containers open downward to show them (style E3).
+	const expanded = new SvelteSet<string>();
+	function toggleMembers(group: DockerGroup) {
+		if (expanded.has(group.id)) expanded.delete(group.id);
+		else expanded.add(group.id);
+	}
+
+	function openGroup(event: MouseEvent, group: DockerGroup) {
 		const app = groupApp(group);
 		if (app) void goto(`/docker/apps/${encodeURIComponent(app)}`);
 		else rowMenu = { group, x: event.clientX, y: event.clientY };
 	}
+	function rowClick(event: MouseEvent, group: DockerGroup) {
+		if ((event.target as Element).closest('button, a, input')) return;
+		if (wide && !phone) {
+			selectedId = group.id;
+			return;
+		}
+		openGroup(event, group);
+	}
+	function rowOpen(event: MouseEvent, group: DockerGroup) {
+		if ((event.target as Element).closest('button, a, input')) return;
+		if (wide && !phone) openGroup(event, group);
+	}
+	function rowKey(event: KeyboardEvent, group: DockerGroup) {
+		if (event.key !== 'Enter' || (event.target as Element) !== event.currentTarget) return;
+		const box = (event.currentTarget as Element).getBoundingClientRect();
+		openGroup(new MouseEvent('click', { clientX: box.x + 40, clientY: box.y + box.height }), group);
+	}
+	const memberState = (c: DockerContainer) =>
+		c.state === 'running'
+			? 'running'
+			: c.state === 'restarting'
+				? 'restarting'
+				: c.state === 'dead'
+					? 'error'
+					: 'stopped';
 
 	const checkUpdates = () =>
 		run('global', async () => (status = await api.post<DockerStatus>('/docker/updates/check')));
@@ -515,7 +563,6 @@
 			api.put('/docker/settings', { enabled: true, volume: draft.volume || volumes[0] }),
 		);
 	// PLAN 64: the phone's full-screen view (in a window: inWindow).
-	const phone = $derived(phoneView());
 	// A narrow window: the filters get a row of their own under the tool bar.
 	let roomy = $state(matchMedia('(min-width: 760px)').matches);
 	$effect(() => {
@@ -816,165 +863,259 @@
 	{/each}
 
 	{#if containers.length > 0}
-		<div class="stats">
-			<section class="tile ui-card stat">
-				<span class="stat-label">{t('docker.table.statRunning')}</span>
-				<b class="stat-value"
-					>{t('docker.table.statRunningValue', { running: counts.running, total: counts.all })}</b
-				>
-			</section>
-			<section class="tile ui-card stat">
-				<span class="stat-label">{t('docker.cpu')}</span>
-				<b class="stat-value">{formatPercent(totalCpu)}</b>
-			</section>
-			<section class="tile ui-card stat">
-				<span class="stat-label">{t('docker.table.statRam')}</span>
-				<b class="stat-value">{formatBytes(totalRam)}</b>
-			</section>
-			<section class="tile ui-card stat">
-				<span class="stat-label">{t('docker.table.statUpdates')}</span>
-				<b class="stat-value" class:warn={counts.updates > 0}
-					>{counts.updates
-						? t('docker.table.statUpdatesValue', { count: counts.updates })
-						: t('docker.table.statUpdatesNone')}</b
-				>
-			</section>
-		</div>
-
 		{#if shownGroups.length > 0}
-			<section class="tile ui-card apps" aria-label={t('docker.table.title')}>
-				<div class="table-wrap">
-					<table class="data-table app-table">
-						<thead>
-							<tr>
-								<th scope="col">{t('docker.table.colName')}</th>
-								<th scope="col">{t('docker.table.colState')}</th>
-								<th scope="col" class="wide">{t('docker.cpu')}</th>
-								<th scope="col" class="wide num">{t('docker.ram')}</th>
-								<th scope="col" class="wide">{t('docker.column.ports')}</th>
-								<th scope="col" class="upd"><span class="sr-only">{t('docker.update')}</span></th>
-								<th scope="col"><span class="sr-only">{t('docker.table.colActions')}</span></th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each shownGroups as group (group.id)}
-								{@const state = stateOf.get(group.id) ?? 'stopped'}
-								{@const on = isOn(group) || state === 'restarting'}
-								{@const app = groupApp(group)}
-								{@const icon = group.members.find((c) => c.icon)?.icon ?? ''}
-								{@const cpu = groupCpu(group)}
-								{@const ports = groupPorts(group)}
-								{@const busy = groupBusy(group)}
-								<tr
-									class:clickable={!!app}
-									data-app={group.name}
-									onclick={(event) => rowClick(event, group)}
-									oncontextmenu={(event) => {
-										event.preventDefault();
-										rowMenu = { group, x: event.clientX, y: event.clientY };
-									}}
-								>
-									<td class="name">
-										<span class="who">
-											<span
-												class="app-icon"
-												style:--hue={hue(group.name)}
-												class:letter={!icon}
-												aria-hidden="true"><AppIcon src={icon} name={group.name} /></span
-											>
-											<span class="lines">
-												<span class="title-line"
-													>{#if app}<a
-															class="app-link"
-															href="/docker/apps/{encodeURIComponent(app)}">{group.name}</a
-														>{:else}<strong>{group.name}</strong>{/if}
-
-													{#if groupUpdate(group)}<span class="chip warn narrow-chip"
-															>{t('docker.update')}</span
-														>{/if}</span
-												>
-												<span class="sub">{subLine(group)}</span>
-												<!-- Narrow screens: the figures in the sub-line instead of columns. -->
-												<span class="sub narrow"
-													>{on
-														? `${t('docker.cpu')} ${formatPercent(cpu)} · ${t('docker.ram')} ${formatBytes(groupRam(group))}`
-														: ''}{on && ports.length ? ' · ' : ''}{ports.join(', ')}</span
-												>
-											</span>
-										</span>
-									</td>
-									<td class="state {state}">
-										<!-- The mark has a shape of its own per state (dot, ring, triangle). -->
-										<span class="mark" aria-hidden="true"></span>{state === 'partial'
-											? t('docker.stackSummary', {
-													running: running(group).length,
-													total: group.members.length,
-												})
-											: t(`docker.table.state.${state}`)}
-									</td>
-									<td class="wide cpu">
-										{#if on}<span class="bar" aria-hidden="true"
-												><span style:width="{Math.min(100, Math.max(2, cpu))}%"></span></span
-											>{formatPercent(cpu)}{:else}<span class="muted">–</span>{/if}
-									</td>
-									<td class="wide num"
-										>{#if on}{formatBytes(groupRam(group))}{:else}<span class="muted">–</span
-											>{/if}</td
-									>
-									<td class="wide ports mono">{ports.length ? ports.join(', ') : '–'}</td>
-									<td class="upd"
-										>{#if groupUpdate(group)}<span class="chip warn"
-												><Icon name="download" size={12} />{t('docker.update')}</span
-											>{/if}</td
-									>
-									<td class="actions">
-										<button
-											type="button"
-											class="btn icon-btn small"
-											disabled={busy || globalBusy}
-											aria-label={t(on ? 'docker.table.stopNamed' : 'docker.table.startNamed', {
-												name: group.name,
-											})}
-											title={t(on ? 'docker.stop' : 'docker.start')}
-											onclick={() => groupAction(group, on ? 'stop' : 'start')}
-											><Icon name={on ? 'stop' : 'play'} size={14} /></button
-										>
-										<button
-											type="button"
-											class="btn icon-btn small"
-											aria-label={t('docker.actionsFor', { name: group.name })}
-											title={t('docker.actionsFor', { name: group.name })}
-											aria-haspopup="menu"
-											aria-expanded={rowMenu?.group.id === group.id}
-											onpointerdown={() =>
-												(rowMenuWasOpen = rowMenu?.group.id === group.id ? group.id : '')}
-											onclick={(event) => openRowMenu(group, event.currentTarget)}
-											><Icon name="more" size={15} /></button
-										>
-									</td>
+			<div class="explorer" class:with-pane={!!selected}>
+				<section class="tile ui-card apps" aria-label={t('docker.table.title')}>
+					<div class="table-wrap">
+						<table class="data-table app-table">
+							<thead>
+								<tr>
+									<th scope="col">{t('docker.table.colName')}</th>
+									<th scope="col">{t('docker.table.colState')}</th>
+									<th scope="col" class="wide">{t('docker.cpu')}</th>
+									<th scope="col" class="wide num">{t('docker.ram')}</th>
+									<th scope="col" class="wide">{t('docker.column.ports')}</th>
+									<th scope="col" class="upd"><span class="sr-only">{t('docker.update')}</span></th>
+									<th scope="col"><span class="sr-only">{t('docker.table.colActions')}</span></th>
 								</tr>
-							{/each}
-						</tbody>
-					</table>
-				</div>
-			</section>
+							</thead>
+							<tbody>
+								{#each shownGroups as group (group.id)}
+									{@const state = stateOf.get(group.id) ?? 'stopped'}
+									{@const on = isOn(group) || state === 'restarting'}
+									{@const app = groupApp(group)}
+									{@const icon = group.members.find((c) => c.icon)?.icon ?? ''}
+									{@const cpu = groupCpu(group)}
+									{@const ports = groupPorts(group)}
+									{@const busy = groupBusy(group)}
+									<tr
+										class:clickable={!!app || (wide && !phone)}
+										class:selected={selected?.id === group.id}
+										aria-selected={selected ? selected.id === group.id : undefined}
+										tabindex={wide && !phone ? 0 : undefined}
+										data-app={group.name}
+										onclick={(event) => rowClick(event, group)}
+										ondblclick={(event) => rowOpen(event, group)}
+										onkeydown={(event) => rowKey(event, group)}
+										oncontextmenu={(event) => {
+											event.preventDefault();
+											rowMenu = { group, x: event.clientX, y: event.clientY };
+										}}
+									>
+										<td class="name">
+											<span class="who">
+												{#if group.members.length > 1}<button
+														type="button"
+														class="twisty"
+														class:open={expanded.has(group.id)}
+														aria-expanded={expanded.has(group.id)}
+														aria-label={t('docker.table.showContainers', { name: group.name })}
+														title={t('docker.table.showContainers', { name: group.name })}
+														onclick={() => toggleMembers(group)}
+														><Icon name="chevronRight" size={14} /></button
+													>{:else}<span class="twisty-gap" aria-hidden="true"></span>{/if}
+												<span
+													class="app-icon"
+													style:--hue={hue(group.name)}
+													class:letter={!icon}
+													aria-hidden="true"><AppIcon src={icon} name={group.name} /></span
+												>
+												<span class="lines">
+													<span class="title-line"
+														>{#if app}<a
+																class="app-link"
+																href="/docker/apps/{encodeURIComponent(app)}">{group.name}</a
+															>{:else}<strong>{group.name}</strong>{/if}
+
+														{#if groupUpdate(group)}<span class="chip warn narrow-chip"
+																>{t('docker.update')}</span
+															>{/if}</span
+													>
+													<span class="sub">{subLine(group)}</span>
+													<!-- Narrow screens: the figures in the sub-line instead of columns. -->
+													<span class="sub narrow"
+														>{on
+															? `${t('docker.cpu')} ${formatPercent(cpu)} · ${t('docker.ram')} ${formatBytes(groupRam(group))}`
+															: ''}{on && ports.length ? ' · ' : ''}{ports.join(', ')}</span
+													>
+												</span>
+											</span>
+										</td>
+										<td class="state {state}">
+											<!-- The mark has a shape of its own per state (dot, ring, triangle). -->
+											<span class="mark" aria-hidden="true"></span>{state === 'partial'
+												? t('docker.stackSummary', {
+														running: running(group).length,
+														total: group.members.length,
+													})
+												: t(`docker.table.state.${state}`)}
+										</td>
+										<td class="wide cpu">
+											{#if on}<span class="bar" aria-hidden="true"
+													><span style:width="{Math.min(100, Math.max(2, cpu))}%"></span></span
+												>{formatPercent(cpu)}{:else}<span class="muted">–</span>{/if}
+										</td>
+										<td class="wide num"
+											>{#if on}{formatBytes(groupRam(group))}{:else}<span class="muted">–</span
+												>{/if}</td
+										>
+										<td class="wide ports mono">{ports.length ? ports.join(', ') : '–'}</td>
+										<td class="upd"
+											>{#if groupUpdate(group)}<span class="chip warn"
+													><Icon name="download" size={12} />{t('docker.update')}</span
+												>{/if}</td
+										>
+										<td class="actions">
+											<button
+												type="button"
+												class="btn icon-btn small"
+												disabled={busy || globalBusy}
+												aria-label={t(on ? 'docker.table.stopNamed' : 'docker.table.startNamed', {
+													name: group.name,
+												})}
+												title={t(on ? 'docker.stop' : 'docker.start')}
+												onclick={() => groupAction(group, on ? 'stop' : 'start')}
+												><Icon name={on ? 'stop' : 'play'} size={14} /></button
+											>
+											<button
+												type="button"
+												class="btn icon-btn small"
+												aria-label={t('docker.actionsFor', { name: group.name })}
+												title={t('docker.actionsFor', { name: group.name })}
+												aria-haspopup="menu"
+												aria-expanded={rowMenu?.group.id === group.id}
+												onpointerdown={() =>
+													(rowMenuWasOpen = rowMenu?.group.id === group.id ? group.id : '')}
+												onclick={(event) => openRowMenu(group, event.currentTarget)}
+												><Icon name="more" size={15} /></button
+											>
+										</td>
+									</tr>
+									{#if group.members.length > 1 && expanded.has(group.id)}
+										{#each group.members as c (c.id)}
+											{@const cOn = isRunning(c)}
+											<tr class="member" data-container={c.name}>
+												<td class="name"
+													><span class="member-name"
+														><strong>{c.service || c.name}</strong><span class="sub">{c.image}</span
+														></span
+													></td
+												>
+												<td class="state {memberState(c)}"
+													><span class="mark" aria-hidden="true"></span>{t(
+														`docker.table.state.${memberState(c)}`,
+													)}</td
+												>
+												<td class="wide cpu"
+													>{#if cOn}{formatPercent(c.cpuPercent)}{:else}<span class="muted">–</span
+														>{/if}</td
+												>
+												<td class="wide num"
+													>{#if cOn}{formatBytes(c.memoryBytes)}{:else}<span class="muted">–</span
+														>{/if}</td
+												>
+												<td class="wide ports mono">{portLabels(c).join(', ') || '–'}</td>
+												<td class="upd"
+													>{#if c.updateAvailable}<span class="chip warn"
+															><Icon name="download" size={12} />{t('docker.update')}</span
+														>{/if}</td
+												>
+												<td class="actions"></td>
+											</tr>
+										{/each}
+									{/if}
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				</section>
+				{#if selected}
+					{@const sApp = groupApp(selected)}
+					{@const sOn = isOn(selected)}
+					{@const sIcon = selected.members.find((c) => c.icon)?.icon ?? ''}
+					<DetailPane
+						title={selected.name}
+						sub={stateOf.get(selected.id) === 'partial'
+							? t('docker.stackSummary', {
+									running: running(selected).length,
+									total: selected.members.length,
+								})
+							: t(`docker.table.state.${stateOf.get(selected.id) ?? 'stopped'}`)}
+						facts={[
+							[t('docker.detail.containers'), String(selected.members.length)],
+							[t('docker.cpu'), sOn ? formatPercent(groupCpu(selected)) : ''],
+							[t('docker.ram'), sOn ? formatBytes(groupRam(selected)) : ''],
+							[t('docker.column.ports'), groupPorts(selected).join(', ')],
+							[
+								t('docker.detail.image'),
+								[...new Set(selected.members.map((c) => c.image))].join(', '),
+							],
+							[t('docker.update'), groupUpdate(selected) ? t('docker.detail.updateReady') : ''],
+						]}
+						onclose={() => (selectedId = null)}
+					>
+						{#snippet icon()}<span
+								class="app-icon big-icon"
+								style:--hue={hue(selected.name)}
+								class:letter={!sIcon}
+								aria-hidden="true"><AppIcon src={sIcon} name={selected.name} /></span
+							>{/snippet}
+						{#snippet actions()}
+							{#if sApp}<a class="btn btn-primary" href="/docker/apps/{encodeURIComponent(sApp)}"
+									>{t('docker.edit')}</a
+								>{/if}
+							<button
+								type="button"
+								class="btn"
+								disabled={groupBusy(selected) || globalBusy}
+								onclick={() => groupAction(selected, sOn ? 'stop' : 'start')}
+								>{t(sOn ? 'docker.stop' : 'docker.start')}</button
+							>
+							<button
+								type="button"
+								class="btn icon-btn"
+								aria-label={t('docker.actionsFor', { name: selected.name })}
+								title={t('docker.actionsFor', { name: selected.name })}
+								aria-haspopup="menu"
+								onclick={(event) => openRowMenu(selected, event.currentTarget)}
+								><Icon name="more" size={15} /></button
+							>
+						{/snippet}
+					</DetailPane>
+				{/if}
+			</div>
 		{:else}
 			<EmptyState title={t('docker.noMatch')} />
 		{/if}
-		<p class="foot muted">
-			<span>{t('docker.onVolume', { volume: status.settings.volume })}</span>
-			<span aria-hidden="true">·</span>
-			<span>{checked}</span><button
-				type="button"
-				class="icon-link"
-				aria-label={t('docker.checkUpdates')}
-				title={t('docker.checkUpdates')}
-				onclick={checkUpdates}
-				disabled={globalBusy}><Icon name="refresh" size={14} /></button
+		<StatusBar label={t('docker.table.statusBar')}>
+			<span>{t('docker.table.statApps', { count: counts.all })}</span>
+			<span
+				>{t('docker.table.statRunning')}
+				<b>{t('docker.table.statRunningValue', { running: counts.running, total: counts.all })}</b
+				></span
 			>
-			<span aria-hidden="true">·</span>
+			<span>{t('docker.cpu')} <b>{formatPercent(totalCpu)}</b></span>
+			<span>{t('docker.table.statRam')} <b>{formatBytes(totalRam)}</b></span>
+			<span class:warn={counts.updates > 0}
+				>{t('docker.table.statUpdates')}
+				<b
+					>{counts.updates
+						? t('docker.table.statUpdatesValue', { count: counts.updates })
+						: t('docker.table.statUpdatesNone')}</b
+				></span
+			>
+			<span class="end">{t('docker.onVolume', { volume: status.settings.volume })}</span>
+			<span
+				>{checked}<button
+					type="button"
+					aria-label={t('docker.checkUpdates')}
+					title={t('docker.checkUpdates')}
+					onclick={checkUpdates}
+					disabled={globalBusy}><Icon name="refresh" size={13} /></button
+				></span
+			>
 			<span>{t('docker.version', { version: status.version })}</span>
-		</p>
+		</StatusBar>
 	{:else if jobs.length === 0 && idleApps.length === 0}
 		<EmptyState title={t('docker.empty')} />
 	{/if}
@@ -1248,30 +1389,68 @@
 		color: var(--text);
 		font-weight: 600;
 	}
-	/* Four figures above the table. */
-	.stats {
+	/* PLAN 75-19, style W4: the list and the selected app's details beside it. */
+	.explorer {
 		display: grid;
-		grid-template-columns: repeat(4, minmax(0, 1fr));
-		gap: var(--gap, var(--space-4));
+		grid-template-columns: minmax(0, 1fr);
+		align-items: start;
 	}
-	.stat {
-		gap: 2px;
-		padding: var(--space-3) var(--space-4);
+	.explorer.with-pane {
+		grid-template-columns: minmax(0, 1fr) 300px;
 	}
-	.stat-label {
+	.app-table tbody tr.selected,
+	.app-table tbody tr.selected:hover {
+		background: color-mix(in srgb, var(--accent) 16%, transparent);
+	}
+	.app-table tbody tr:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+	}
+	.twisty,
+	.twisty-gap {
+		flex: none;
+		width: 20px;
+		height: 20px;
+	}
+	.twisty {
+		display: grid;
+		place-items: center;
+		margin-right: calc(-1 * var(--space-1-5));
+		padding: 0;
+		border: 0;
+		border-radius: var(--radius-bar);
+		background: none;
 		color: var(--muted);
-		font-size: var(--text-sm);
+		cursor: pointer;
+		transition: transform 0.15s;
 	}
-	.stat-value {
+	.twisty.open {
+		transform: rotate(90deg);
+	}
+	.twisty:hover {
+		color: var(--text);
+	}
+	.twisty-gap {
+		margin-right: calc(-1 * var(--space-1-5));
+	}
+	.app-table tr.member td {
+		background: color-mix(in srgb, var(--bg) 30%, transparent);
+		font-size: var(--text-base);
+	}
+	.member-name {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		padding-left: calc(20px + 30px + var(--space-3));
+	}
+	.member-name strong {
+		font-weight: 500;
+	}
+	.big-icon {
+		width: 52px;
+		height: 52px;
+		border-radius: 14px;
 		font-size: var(--text-lg);
-		font-weight: 600;
-		font-variant-numeric: tabular-nums;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	.stat-value.warn {
-		color: var(--warn-text);
 	}
 	/* The table of apps. */
 	.app-table tbody tr {
@@ -1426,14 +1605,6 @@
 		height: 30px;
 		width: 30px;
 	}
-	.foot {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-1) var(--space-2);
-		margin: 0;
-		font-size: var(--text-sm);
-	}
 	.icon-link {
 		display: inline-flex;
 		padding: 2px;
@@ -1514,9 +1685,6 @@
 		}
 	}
 	@media (max-width: 699px) {
-		.stats {
-			grid-template-columns: repeat(2, minmax(0, 1fr));
-		}
 		.app-table .wide {
 			display: none;
 		}
