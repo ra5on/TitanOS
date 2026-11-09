@@ -249,8 +249,9 @@ try {
   ]) {
     const { ctx, page } = await open(theme, width);
     await page.goto(`${base}/settings/energy`);
-    const tile = page.locator("section.tile.panel", {
-      has: page.getByRole("heading", { name: "Ruhemodus der Festplatten" }),
+    // PLAN 75-19, style E3: the disk sleep is a row with its summary.
+    const tile = page.locator("section.expander", {
+      hasText: "Ruhemodus der Festplatten",
     });
     await tile
       .getByText("Standard: 15 Minuten · 1 von 3 Platten schlafen")

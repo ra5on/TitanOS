@@ -21,6 +21,7 @@
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { formatDiskBytes, formatPercent } from '#lib/format.ts';
+	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import { apiErrorText, errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { refreshStorage, storage } from '#lib/storage.svelte.ts';
@@ -804,6 +805,22 @@
 		</aside>
 	{/if}
 </div>
+{#if storage.status}
+	{@const size = volumes.reduce((sum, v) => sum + v.sizeBytes, 0)}
+	{@const used = volumes.reduce((sum, v) => sum + v.usedBytes, 0)}
+	{@const problems = volumes.filter((v) => !['ok', 'syncing'].includes(v.state)).length}
+	<!-- PLAN 75-19, style W4: the figures of the page in one line at the bottom. -->
+	<StatusBar label={t('storage.title')}>
+		<span>{t('storage.tabVolumes')} <b>{volumes.length}</b></span>
+		<span>{t('storage.tabDisks')} <b>{disks.length}</b></span>
+		{#if size > 0}<span
+				>{t('storage.used')}
+				<b>{t('storage.usedOf', { used: formatDiskBytes(used), size: formatDiskBytes(size) })}</b
+				></span
+			>{/if}
+		{#if problems}<span class="warn">{t('storage.problemCount', { count: problems })}</span>{/if}
+	</StatusBar>
+{/if}
 {#if sleepOpen}<DiskSleepDialog
 		status={diskSleep}
 		focus={sleepFocus}
