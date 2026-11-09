@@ -3530,6 +3530,7 @@
 	"files.sortBy": "Sortieren: {column}",
 	"files.commands": "Befehle",
 	"files.statusEntries": "{count} Einträge",
+	"files.statusBar": "Kennzahlen des Ordners",
 	"files.statusSelected": "{count} ausgewählt",
 	"files.statusFree": "{name} · {free} frei",
 	"files.sort": "Sortieren nach",

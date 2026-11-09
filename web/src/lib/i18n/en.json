@@ -3530,6 +3530,7 @@
 	"files.sortBy": "Sort: {column}",
 	"files.commands": "Commands",
 	"files.statusEntries": "{count} items",
+	"files.statusBar": "Figures of the folder",
 	"files.statusSelected": "{count} selected",
 	"files.statusFree": "{name} · {free} free",
 	"files.sort": "Sort by",

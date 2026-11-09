@@ -434,7 +434,7 @@
 		{/if}
 	</div>
 
-	<div class="foot mono">
+	<div class="foot">
 		<span>{status()}</span>
 		<span>{t('terminal.footer', { name: account.data?.user?.name ?? '' })}</span>
 	</div>
@@ -694,8 +694,12 @@
 		flex-wrap: wrap;
 		justify-content: space-between;
 		gap: var(--space-1) 20px;
-		padding: var(--space-1-5) 20px;
+		min-height: 28px;
+		align-items: center;
+		padding: var(--space-1) var(--space-4);
 		border-top: 1px solid var(--border);
+		/* Style W4 (0.74): the status bar of the window, as in the other views. */
+		background: color-mix(in srgb, var(--surface) 92%, var(--bg));
 		color: var(--muted);
 		font-size: var(--text-sm);
 	}
