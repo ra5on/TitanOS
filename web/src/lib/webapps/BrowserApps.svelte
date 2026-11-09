@@ -8,6 +8,7 @@
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { letterGradient, type WebApp } from './protocol.ts';
+	import VolumeChoice from './VolumeChoice.svelte';
 	import { loadWebApps, webapps } from './webapps.svelte.ts';
 
 	// Craft apps whose web version does not start yet (PLAN 75-9: visible,
@@ -24,6 +25,25 @@
 	let busy = $state('');
 	let error = $state('');
 	let removing = $state<WebApp | null>(null);
+	// PLAN 75-21: choosing where the programs lie (first install) or moving them.
+	let volumeDialog = $state<{ then?: WebApp } | null>(null);
+	let target = $state('');
+	const installedCount = $derived(webapps.apps.filter((a) => a.installed).length);
+	async function chooseVolume() {
+		const next = volumeDialog?.then;
+		busy = 'volume';
+		error = '';
+		try {
+			await api.post('/webapps/volume', { volume: target });
+			volumeDialog = null;
+			await loadWebApps();
+		} catch (e) {
+			error = apiErrorText(e);
+		} finally {
+			busy = '';
+		}
+		if (next && !error) await install(next);
+	}
 
 	$effect(() => {
 		void loadWebApps();
@@ -37,6 +57,10 @@
 	});
 
 	async function install(a: WebApp) {
+		if (webapps.needsVolume) {
+			volumeDialog = { then: a };
+			return;
+		}
 		busy = a.id;
 		error = '';
 		try {
@@ -114,6 +138,21 @@
 		{#if !webapps.volume}<p class="notice-warn" role="status">
 				{t('webapps.center.noVolume')}
 			</p>{/if}
+		{#if admin && webapps.volume && webapps.volumes.length > 1 && installedCount > 0}
+			<div class="where">
+				<span class="grow"
+					><span class="muted small">{t('webapps.volume.where')}</span><br /><b>{webapps.volume}</b
+					><span class="muted small">
+						· {t(installedCount === 1 ? 'webapps.volume.count.one' : 'webapps.volume.count.other', {
+							count: installedCount,
+						})}</span
+					></span
+				>
+				<button type="button" class="btn" disabled={!!busy} onclick={() => (volumeDialog = {})}
+					>{t('webapps.volume.move')}</button
+				>
+			</div>
+		{/if}
 		<ul class="list">
 			{#each shown as a (a.id)}
 				<li class="app">
@@ -194,6 +233,39 @@
 		</ul>
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 	</section>
+{/if}
+
+{#if volumeDialog}
+	<Dialog
+		title={t(volumeDialog.then ? 'webapps.volume.choose' : 'webapps.volume.moveTitle')}
+		locked={busy === 'volume'}
+		onclose={() => (volumeDialog = null)}
+	>
+		<p>{t(volumeDialog.then ? 'webapps.volume.hint' : 'webapps.volume.moveText')}</p>
+		<VolumeChoice
+			volumes={webapps.volumes}
+			bind:value={target}
+			current={volumeDialog.then ? '' : webapps.volume}
+			disabled={busy === 'volume'}
+		/>
+		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+		<div class="dialog-actions">
+			<button
+				type="button"
+				class="btn btn-primary"
+				disabled={!!busy || !target || (!volumeDialog.then && target === webapps.volume)}
+				onclick={chooseVolume}
+				>{busy === 'volume'
+					? t('webapps.volume.moving')
+					: volumeDialog.then
+						? t('webapps.center.install')
+						: t('webapps.volume.moveButton')}</button
+			>
+			<button type="button" class="btn" disabled={busy === 'volume'} onclick={() => (volumeDialog = null)}
+				>{t('common.cancel')}</button
+			>
+		</div>
+	</Dialog>
 {/if}
 
 {#if removing}
@@ -280,5 +352,20 @@
 		display: flex;
 		gap: var(--space-2);
 		margin-left: auto;
+	}
+	.where {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-2) var(--space-3);
+		margin: var(--space-2) 0;
+		padding: var(--space-2) var(--space-3);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-small);
+	}
+	.where .grow {
+		flex: 1 1 14rem;
+		min-width: 0;
+		overflow-wrap: anywhere;
 	}
 </style>

@@ -1238,6 +1238,57 @@ for (const width of [1280, 390]) {
   await made.ctx.close();
 }
 
+// 12. PLAN 75-21: several volumes and no program yet – the offer asks where the
+//     programs go (POST /webapps/volume before the install); the App-Center
+//     shows where they lie and moves them.
+for (const width of [1280, 390]) {
+  const choose = (made) => {
+    const base = webappsList(made);
+    base.apps = base.apps.map((a) => ({ ...a, installed: false, state: "missing", url: "" }));
+    base.volumes = ["Data", "Fast"];
+    base.needsVolume = true;
+    base.docker = [];
+    base.migration = null;
+    return base;
+  };
+  const made = await open(width, width < 900 ? 844 : 900, "/", { offer: true, list: choose, phone: width < 900 });
+  const { page } = made;
+  const dialog = page.getByRole("dialog", { name: "Office-Programme direkt im Browser" });
+  await dialog.waitFor({ timeout: 15000 });
+  await dialog.getByText("Wo sollen die Programme liegen?").waitFor();
+  await dialog.getByRole("radio", { name: /Fast/ }).check();
+  let wide = await page.evaluate(() => document.documentElement.scrollWidth);
+  assert.ok(wide <= width, `volume choice: no overflow (${wide})`);
+  await shot(page, `20-volume-offer-${width}`);
+  await dialog.getByRole("button", { name: "Installieren" }).click();
+  await page.waitForTimeout(500);
+  const paths = made.posts.map((x) => x.path);
+  assert.deepEqual(paths.slice(-2), ["/webapps/volume", "/webapps/defaults/install"], "the volume first");
+  assert.equal(made.posts.at(-2).body.volume, "Fast");
+  await made.ctx.close();
+
+  // App-Center: where the programs lie, and moving them.
+  const moved = (made2) => ({ ...webappsList(made2), volumes: ["Data", "Fast"], needsVolume: false });
+  const m2 = await open(width, width < 900 ? 844 : 900, "/", { list: moved, phone: width < 900 });
+  await m2.page.goto(base + "/apps");
+  const scope = width < 900 ? m2.page : m2.page.frameLocator("iframe[data-window]").first();
+  await scope.getByText("Speicherort der Programme").waitFor({ timeout: 15000 });
+  await scope.getByRole("button", { name: "Verschieben …" }).click();
+  const mv = scope.getByRole("dialog", { name: "Programme verschieben" });
+  await mv.waitFor();
+  assert.ok(await mv.getByRole("radio", { name: /Data/ }).isDisabled(), "the current volume is not choosable");
+  await mv.getByRole("radio", { name: /Fast/ }).check();
+  wide = await m2.page.evaluate(() => document.documentElement.scrollWidth);
+  assert.ok(wide <= width, `move dialog: no overflow (${wide})`);
+  await shot(m2.page, `21-volume-move-${width}`);
+  await mv.getByRole("button", { name: "Verschieben", exact: true }).click();
+  await m2.page.waitForTimeout(500);
+  const last = m2.posts.at(-1);
+  assert.equal(last.path, "/webapps/volume");
+  assert.equal(last.body.volume, "Fast");
+  await m2.ctx.close();
+}
+
 await browser.close();
 server.close();
 const real = errors.filter(

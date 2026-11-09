@@ -11,6 +11,7 @@
 	import { session } from '#lib/session.svelte.ts';
 	import { sanitizeHints } from '../../routes/storage/checks-hint.ts';
 	import OfficeApps from './OfficeApps.svelte';
+	import VolumeChoice from './VolumeChoice.svelte';
 	import { loadWebApps, webapps } from './webapps.svelte.ts';
 
 	// Per node (PLAN 69): the hints live on this NAS, the web apps on the
@@ -62,11 +63,16 @@
 		}
 	}
 
+	let chosenVolume = $state('');
+
 	async function go() {
 		busy = true;
 		error = '';
 		try {
 			const apps = install ?? [];
+			// PLAN 75-21: several volumes and no program yet – where they go first.
+			if (webapps.needsVolume && chosenVolume)
+				await api.post('/webapps/volume', { volume: chosenVolume });
 			await api.post('/webapps/defaults/install', { apps });
 			started = true;
 			await loadWebApps();
@@ -116,6 +122,11 @@
 						bind:selected={() => install ?? [], (v) => (install = v)}
 						disabled={busy}
 					/>
+				{/if}
+				{#if webapps.needsVolume && (install ?? []).length}
+					<h3>{t('webapps.volume.choose')}</h3>
+					<p class="muted small">{t('webapps.volume.hint')}</p>
+					<VolumeChoice volumes={webapps.volumes} bind:value={chosenVolume} disabled={busy} />
 				{/if}
 				{#if !webapps.volume}<p class="muted small">{t('welcome.officeNoVolume')}</p>{/if}
 				<details>
@@ -168,7 +179,7 @@
 				<button
 					type="button"
 					class="btn btn-primary"
-					disabled={busy || !(install ?? []).length}
+					disabled={busy || !(install ?? []).length || (webapps.needsVolume && !chosenVolume)}
 					onclick={go}>{t('webapps.migrate.install')}</button
 				>
 			{:else}
