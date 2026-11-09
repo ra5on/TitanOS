@@ -32,12 +32,18 @@ self.addEventListener('notificationclick', (event) => {
 		(async () => {
 			const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
 			const same = windows.filter((c) => new URL(c.url).origin === self.location.origin);
-			// The agent's message goes to an open agent window; others to any
-			// TitanOS window. The page moves itself (no reload, so nothing
+			// The agent's message goes to an open agent window, else – like any
+			// other – to any TitanOS window, which opens the agent with that
+			// chat (desktop: its window; phone: the agent app). A new window
+			// only when none is open: an installed app brought forward by
+			// openWindow keeps its page and would show the home screen
+			// (PLAN 75-16). The page moves itself (no reload, so nothing
 			// unsaved in an editor or a console is lost), PLAN 59.
-			const target = agent(url.pathname)
-				? same.find((c) => agent(new URL(c.url).pathname))
-				: same[0];
+			const home = same.find((c) => new URL(c.url).pathname === '/');
+			const target =
+				(agent(url.pathname) && same.find((c) => agent(new URL(c.url).pathname))) ||
+				home ||
+				same[0];
 			if (target) {
 				await target.focus();
 				target.postMessage({ type: 'open', url: url.pathname + url.search });
@@ -73,7 +79,9 @@ self.addEventListener('fetch', (event) => {
 					const key = `/share-target/file/${i}`;
 					await cache.put(
 						key,
-						new Response(file, { headers: { 'Content-Type': file.type || 'application/octet-stream' } }),
+						new Response(file, {
+							headers: { 'Content-Type': file.type || 'application/octet-stream' },
+						}),
 					);
 					list.push({ key, name: file.name || `datei-${i + 1}`, size: file.size, type: file.type });
 				}
