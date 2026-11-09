@@ -1522,6 +1522,35 @@ export function fixtureFactory(browser, errors) {
           ],
           readOnly: false,
         });
+      // Benutzer (U2, PLAN 75-20): the apps of one account.
+      {
+        const m = path.match(/^\/users\/([^/]+)\/apps$/);
+        if (m) {
+          data.userApps ??= {};
+          const admin = m[1] === "alex";
+          const own = (data.userApps[m[1]] ??= {
+            newApps: true,
+            apps: { photos: true, jellyfin: true, bambustudio: false },
+          });
+          if (method === "PUT") {
+            const body = route.request().postDataJSON();
+            if (typeof body.newApps === "boolean") own.newApps = body.newApps;
+            Object.assign(own.apps, body.apps ?? {});
+          }
+          return json({
+            admin,
+            newApps: admin || own.newApps,
+            apps: Object.entries(own.apps).map(([app, allowed]) => ({
+              app,
+              icon: "",
+              url: "",
+              webui: "",
+              running: true,
+              allowed: admin || allowed,
+            })),
+          });
+        }
+      }
       // Settings › Programs: who sees which app.
       if (path === "/apps/access" && method === "GET")
         return json({

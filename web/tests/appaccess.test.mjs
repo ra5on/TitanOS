@@ -19,15 +19,15 @@ test('app links go through TitanOS so that the app gate lets the browser in', as
 	assert.equal(gatedAppURL('immich', '', open), '');
 });
 
-test('Programme is an admin-only settings page that the search finds', async () => {
-	const { settingsAreas, userSettingsPaths, matchesSetting } =
-		await import('../src/lib/settings-search.ts');
-	const area = settingsAreas.find((a) => a.id === 'programs');
-	assert.ok(area?.admin);
-	assert.equal(area.label, 'settingshome.area.programs');
-	assert.ok(!userSettingsPaths.includes('/settings/programs'));
-	for (const q of ['Programme', 'rechte', 'benutzer', 'desktop'])
-		assert.ok(matchesSetting(q, 'Programme', 'programs'), q);
+// PLAN 75-20: Einstellungen › Programme is gone; the search leads to Benutzer.
+test('the app rights are found under Benutzer, Programme is no settings area any more', async () => {
+	const { settingsAreas, matchesSetting } = await import('../src/lib/settings-search.ts');
+	assert.equal(
+		settingsAreas.find((a) => a.id === 'programs'),
+		undefined,
+	);
+	for (const q of ['Programme', 'rechte', 'apps', 'benutzer'])
+		assert.ok(matchesSetting(q, 'Benutzer', 'users'), q);
 	assert.ok(matchesSetting('zertifizierungsstelle', 'HTTPS-Namen für Apps', 'proxy'));
 });
 

@@ -152,8 +152,12 @@ func (s *Server) appAccessView(r *http.Request) appAccessView {
 					users = append(users, name)
 				}
 			}
-		case view.NewApps == appaccess.NewAppsEveryone:
-			users = append(users, normal...)
+		default:
+			for _, u := range normal {
+				if settings.NewAppsFor(u) {
+					users = append(users, u)
+				}
+			}
 		}
 		view.Apps = append(view.Apps, appAccessApp{dockerApp: a, Gate: !entry.NoGate, Users: users})
 	}
@@ -184,7 +188,8 @@ func (s *Server) handleAppAccessSet(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	settings := appaccess.Settings{NewApps: req.NewApps, Apps: map[string]appaccess.App{}}
+	current := s.opts.AppAccess.Settings()
+	settings := appaccess.Settings{NewApps: req.NewApps, Apps: map[string]appaccess.App{}, PerUser: current.PerUser, NewAppsUsers: current.NewAppsUsers}
 	for _, a := range req.Apps {
 		settings.Apps[a.App] = appaccess.App{Users: a.Users, NoGate: !a.Gate}
 	}
@@ -373,4 +378,136 @@ func (s *Server) handleCADownload(w http.ResponseWriter, r *http.Request) {
 
 func pemCertificate(der []byte) []byte {
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+}
+
+// PLAN 75-20 (U2): the apps of one account on its page under Benutzer –
+// which Docker apps it may use and whether new apps come to it by
+// themselves. Owners and administrators may always use every app.
+type userAppsView struct {
+	Admin   bool          `json:"admin"`
+	NewApps bool          `json:"newApps"`
+	Apps    []userAppView `json:"apps"`
+}
+
+type userAppView struct {
+	dockerApp
+	Allowed bool `json:"allowed"`
+}
+
+func (s *Server) userAppsView(r *http.Request, name string, admin bool) userAppsView {
+	settings := appaccess.Settings{Apps: map[string]appaccess.App{}}
+	if s.opts.AppAccess != nil {
+		settings = s.opts.AppAccess.Settings()
+	}
+	view := userAppsView{Admin: admin, NewApps: admin || settings.NewAppsFor(name), Apps: []userAppView{}}
+	for _, a := range s.dockerApps(r) {
+		allowed := admin
+		if !admin {
+			if entry, ok := settings.Apps[a.App]; ok {
+				allowed = slices.Contains(entry.Users, name)
+			} else {
+				allowed = settings.NewAppsFor(name)
+			}
+		}
+		view.Apps = append(view.Apps, userAppView{dockerApp: a, Allowed: allowed})
+	}
+	return view
+}
+
+func (s *Server) handleUserApps(w http.ResponseWriter, r *http.Request) {
+	target, ok := s.opts.Users.Get(r.PathValue("name"))
+	if !ok {
+		writeError(w, http.StatusNotFound, "user_not_found", "no such account")
+		return
+	}
+	writeJSON(w, http.StatusOK, s.userAppsView(r, target.Name, target.Role.CanAdminister()))
+}
+
+// handleUserAppsSet changes the apps of one normal account:
+// {newApps: bool, apps: {"immich": true, …}}; apps left out stay as they are.
+func (s *Server) handleUserAppsSet(w http.ResponseWriter, r *http.Request) {
+	if s.opts.AppAccess == nil {
+		writeError(w, http.StatusNotFound, "not_found", "no app rights")
+		return
+	}
+	target, ok := s.opts.Users.Get(r.PathValue("name"))
+	if !ok {
+		writeError(w, http.StatusNotFound, "user_not_found", "no such account")
+		return
+	}
+	if target.Role.CanAdminister() {
+		writeError(w, http.StatusBadRequest, "app_access_admin", "owners and administrators may always use every app")
+		return
+	}
+	var req struct {
+		NewApps *bool           `json:"newApps"`
+		Apps    map[string]bool `json:"apps"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	var normal []string
+	for _, u := range s.opts.Users.List() {
+		if !u.Role.CanAdminister() {
+			normal = append(normal, u.Name)
+		}
+	}
+	settings := s.opts.AppAccess.Settings()
+	// The setting for new apps becomes one per account; the old value
+	// carries over to every account first.
+	if !settings.PerUser {
+		settings.NewAppsUsers = []string{}
+		if settings.NewApps == appaccess.NewAppsEveryone {
+			settings.NewAppsUsers = slices.Clone(normal)
+		}
+		settings.PerUser = true
+	}
+	apps := s.dockerApps(r)
+	// Apps without an entry went to whoever gets new apps; they keep that
+	// before the setting for new apps changes.
+	for _, a := range apps {
+		if _, ok := settings.Apps[a.App]; ok {
+			continue
+		}
+		entry := appaccess.App{Users: []string{}}
+		for _, u := range normal {
+			if settings.NewAppsFor(u) {
+				entry.Users = append(entry.Users, u)
+			}
+		}
+		settings.Apps[a.App] = entry
+	}
+	for _, a := range apps {
+		want, given := req.Apps[a.App]
+		if !given {
+			continue
+		}
+		entry := settings.Apps[a.App]
+		entry.Users = slices.DeleteFunc(entry.Users, func(u string) bool { return u == target.Name })
+		if want {
+			entry.Users = append(entry.Users, target.Name)
+		}
+		settings.Apps[a.App] = entry
+	}
+	if req.NewApps != nil {
+		settings.NewAppsUsers = slices.DeleteFunc(settings.NewAppsUsers, func(u string) bool { return u == target.Name })
+		if *req.NewApps {
+			settings.NewAppsUsers = append(settings.NewAppsUsers, target.Name)
+		}
+	}
+	// What older titand read on the way back: everyone only if every
+	// normal account gets new apps.
+	settings.NewApps = appaccess.NewAppsAdmins
+	if len(normal) > 0 && !slices.ContainsFunc(normal, func(u string) bool { return !slices.Contains(settings.NewAppsUsers, u) }) {
+		settings.NewApps = appaccess.NewAppsEveryone
+	}
+	if err := s.opts.AppAccess.Set(settings); err != nil {
+		slog.Error("app rights not saved", "err", err)
+		writeError(w, http.StatusInternalServerError, "internal", "could not save the setting")
+		return
+	}
+	noteTarget(r, "apps")
+	go s.viewerRecheckRights()
+	slog.Info("app rights of an account changed", "account", target.Name, "by", currentUser(r).Name, "ip", remoteIP(r))
+	writeJSON(w, http.StatusOK, s.userAppsView(r, target.Name, false))
 }

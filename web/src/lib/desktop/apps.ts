@@ -296,7 +296,6 @@ export const SYSTEM_APPS: SystemApp[] = [
 		paths: ['/users', '/settings/access', '/settings/programs'],
 		side: [
 			{ href: '/users', label: 'desktop.side.accounts', icon: 'users' },
-			{ href: '/settings/programs', label: 'desktop.side.programs', icon: 'grid' },
 			{ href: '/settings/access', label: 'desktop.side.access', icon: 'key' },
 		],
 		roles: ADMIN,
@@ -353,7 +352,6 @@ export const SYSTEM_APPS: SystemApp[] = [
 			{ group: 'desktop.side.accountsServices' },
 			{ href: '/settings/users', label: 'desktop.app.users', icon: 'users' },
 			{ href: '/settings/access', label: 'desktop.side.access', icon: 'lock' },
-			{ href: '/settings/programs', label: 'desktop.side.programs', icon: 'grid' },
 			{ href: '/settings/services', label: 'desktop.side.services', icon: 'gear' },
 			{ href: '/settings/notifications', label: 'desktop.side.notifications', icon: 'bell' },
 			{ href: '/settings/homeassistant', label: 'desktop.side.homeassistant', icon: 'home' },

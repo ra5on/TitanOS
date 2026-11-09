@@ -51,5 +51,6 @@
 	"appaccess.caKey": "The private key stays on the stick in /config. TitanOS never hands it out, not even in the diagnostic bundle.",
 	"appaccess.certKindCa": "TitanOS certificate authority",
 	"appaccess.certCa": "Issued by the TitanOS certificate authority. Once it is installed on your device, the browser does not warn.",
-	"appaccess.certCaLink": "Install the certificate authority"
+	"appaccess.certCaLink": "Install the certificate authority",
+	"appaccess.whoMay": "Who may use the app"
 }

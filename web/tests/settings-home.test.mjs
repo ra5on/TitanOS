@@ -22,11 +22,11 @@ test('the texts of the overview exist in both languages', () => {
 test('every settings route has exactly one area (redirects excepted)', () => {
 	const dir = new URL('../src/routes/settings/', import.meta.url);
 	const routes = readdirSync(dir).filter((name) => statSync(new URL(name, dir)).isDirectory());
-	const redirects = { ipv64: 'ddns', stick: 'backups' };
+	const redirects = { ipv64: 'ddns', stick: 'backups', programs: 'users' };
 	const ids = settingsAreas.map((a) => a.id);
 	assert.equal(new Set(ids).size, ids.length);
 	for (const route of routes) assert.ok(ids.includes(redirects[route] ?? route), route);
-	assert.ok(ids.includes('programs'));
+	assert.ok(!ids.includes('programs'));
 	for (const area of settingsAreas) assert.ok(settingsGroups.includes(area.group), area.id);
 });
 

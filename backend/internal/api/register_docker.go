@@ -65,6 +65,8 @@ func (s *Server) registerAppStore(mux *routeMux) {
 	// Programme (PLAN 61): who may use which Docker app, and its window.
 	mux.HandleFunc("GET /api/v1/apps/access", s.requireAdmin(s.handleAppAccess))
 	mux.HandleFunc("PUT /api/v1/apps/access", s.requireAdmin(s.handleAppAccessSet))
+	mux.HandleFunc("GET /api/v1/users/{name}/apps", s.requireAdmin(s.handleUserApps))
+	mux.HandleFunc("PUT /api/v1/users/{name}/apps", s.requireAdmin(s.handleUserAppsSet))
 	mux.HandleFunc("GET /api/v1/apps/mine", s.requireUser(s.handleAppsMine))
 	mux.HandleFunc("POST /api/v1/apps/{app}/window", s.requireUser(s.handleAppWindow))
 	mux.HandleFunc("GET /api/v1/apps/{app}/open", s.handleAppOpen)

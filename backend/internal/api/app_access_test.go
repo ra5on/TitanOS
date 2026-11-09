@@ -184,3 +184,70 @@ func TestNarrowFrames(t *testing.T) {
 		t.Errorf("without frame-src: %q", got)
 	}
 }
+
+// PLAN 75-20 (U2): the apps of one account on its page; new apps per account.
+func TestUserApps(t *testing.T) {
+	ts := newTestServer(t)
+	for _, name := range []string{"immich", "jellyfin"} {
+		if err := ts.store.Write("apps/"+name+"/compose.yaml", []byte("services: {}\n")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rights := appaccess.New(ts.store)
+	rights.Lookup = func(name string) (appaccess.Account, bool) {
+		u, ok := ts.server.opts.Users.Get(name)
+		return appaccess.Account{Name: u.Name, Admin: u.Role.CanAdminister(), Disabled: u.Disabled}, ok
+	}
+	ts.server.opts.AppAccess = rights
+	ts.setup()
+	for _, name := range []string{"anna", "max"} {
+		if res, body := ts.request("POST", "/api/v1/users", map[string]any{"name": name, "password": testPassword, "role": "user"}); res.StatusCode != http.StatusCreated {
+			t.Fatalf("user %s: %d %s", name, res.StatusCode, body)
+		}
+	}
+	// The old setting "new apps for everyone" carries over to every account.
+	if err := rights.Set(appaccess.Settings{NewApps: appaccess.NewAppsEveryone, Apps: map[string]appaccess.App{}}); err != nil {
+		t.Fatal(err)
+	}
+	anna := ts.newClient()
+	ts.do(anna, "POST", "/api/v1/login", credentials{Name: "anna", Password: testPassword})
+	if res, _ := ts.do(anna, "GET", "/api/v1/users/max/apps", nil); res.StatusCode != http.StatusForbidden {
+		t.Fatalf("a normal account reads another's apps: %d", res.StatusCode)
+	}
+	var view userAppsView
+	res, body := ts.request("GET", "/api/v1/users/max/apps", nil)
+	json.Unmarshal(body, &view)
+	if res.StatusCode != http.StatusOK || view.Admin || !view.NewApps || len(view.Apps) != 2 || !view.Apps[0].Allowed || !view.Apps[1].Allowed {
+		t.Fatalf("max before: %d %s", res.StatusCode, body)
+	}
+	// Max loses jellyfin and new apps; anna keeps both.
+	res, body = ts.request("PUT", "/api/v1/users/max/apps", map[string]any{"newApps": false, "apps": map[string]bool{"jellyfin": false}})
+	json.Unmarshal(body, &view)
+	if res.StatusCode != http.StatusOK || view.NewApps || !view.Apps[0].Allowed || view.Apps[1].Allowed {
+		t.Fatalf("max after: %d %s", res.StatusCode, body)
+	}
+	if !rights.Allows("anna", "jellyfin") || rights.Allows("max", "jellyfin") || !rights.Allows("max", "immich") {
+		t.Fatal("rights after the change")
+	}
+	if !rights.Allows("anna", "newapp") || rights.Allows("max", "newapp") {
+		t.Fatal("new apps per account")
+	}
+	// The way back: older titand read newApps; not every account gets new apps now.
+	if s := rights.Settings(); !s.PerUser || s.NewApps == appaccess.NewAppsEveryone || strings.Join(s.NewAppsUsers, ",") != "anna" {
+		t.Fatalf("stored: %+v", s)
+	}
+	// The old page's PUT keeps the per-account setting.
+	ts.request("PUT", "/api/v1/apps/access", map[string]any{"newApps": "admins", "apps": []map[string]any{{"app": "immich", "gate": false, "users": []string{"anna", "max"}}}})
+	if s := rights.Settings(); !s.PerUser || strings.Join(s.NewAppsUsers, ",") != "anna" {
+		t.Fatalf("after the old PUT: %+v", s)
+	}
+	// Owners and administrators may always.
+	res, body = ts.request("GET", "/api/v1/users/alex/apps", nil)
+	json.Unmarshal(body, &view)
+	if res.StatusCode != http.StatusOK || !view.Admin || !view.Apps[0].Allowed {
+		t.Fatalf("owner: %d %s", res.StatusCode, body)
+	}
+	if res, body := ts.request("PUT", "/api/v1/users/alex/apps", map[string]any{"newApps": false}); res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("owner changed: %d %s", res.StatusCode, body)
+	}
+}

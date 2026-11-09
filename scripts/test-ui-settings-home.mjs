@@ -149,8 +149,7 @@ function problems(page, frame) {
 }
 
 const pages = [
-  ...ids.filter((id) => id !== "programs").map((id) => `/settings/${id}`),
-  "/settings/programs",
+  ...ids.map((id) => `/settings/${id}`),
   "/settings/backups/data",
   "/settings/backups/applications",
   "/settings/backups/configuration",

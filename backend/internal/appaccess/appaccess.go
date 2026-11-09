@@ -66,9 +66,23 @@ type App struct {
 // Settings are the content of /config/docker/app-access.json.
 type Settings struct {
 	// NewApps is who gets an app that has no entry yet: NewAppsAdmins
-	// (also when empty) or NewAppsEveryone.
+	// (also when empty) or NewAppsEveryone. Since 0.72 it is only what
+	// older titand read (the way back); PerUser decides.
 	NewApps string         `json:"newApps,omitempty"`
 	Apps    map[string]App `json:"apps"`
+	// PerUser: who gets a new app is set per account (PLAN 75-20, U2:
+	// "Neu installierte Apps automatisch freigeben" on the account's page);
+	// NewAppsUsers are those normal accounts.
+	PerUser      bool     `json:"newAppsPerUser,omitempty"`
+	NewAppsUsers []string `json:"newAppsUsers,omitempty"`
+}
+
+// NewAppsFor tells whether a normal account gets an app without an entry.
+func (s Settings) NewAppsFor(user string) bool {
+	if s.PerUser {
+		return slices.Contains(s.NewAppsUsers, user)
+	}
+	return s.NewApps == NewAppsEveryone
 }
 
 // Account is what the rights need to know of an account right now.
@@ -134,7 +148,7 @@ func (m *Manager) Settings() Settings {
 }
 
 func copySettings(s Settings) Settings {
-	out := Settings{NewApps: s.NewApps, Apps: make(map[string]App, len(s.Apps))}
+	out := Settings{NewApps: s.NewApps, Apps: make(map[string]App, len(s.Apps)), PerUser: s.PerUser, NewAppsUsers: slices.Clone(s.NewAppsUsers)}
 	for name, app := range s.Apps {
 		app.Users = slices.Clone(app.Users)
 		out.Apps[name] = app
@@ -153,7 +167,16 @@ func (m *Manager) Set(s Settings) error {
 	default:
 		return fmt.Errorf("%w: new apps", ErrInvalid)
 	}
-	clean := Settings{NewApps: s.NewApps, Apps: map[string]App{}}
+	clean := Settings{NewApps: s.NewApps, Apps: map[string]App{}, PerUser: s.PerUser}
+	if s.PerUser {
+		clean.NewAppsUsers = []string{}
+		for _, user := range s.NewAppsUsers {
+			if account, ok := m.lookup(user); ok && !account.Admin && !slices.Contains(clean.NewAppsUsers, user) {
+				clean.NewAppsUsers = append(clean.NewAppsUsers, user)
+			}
+		}
+		sort.Strings(clean.NewAppsUsers)
+	}
 	for name, app := range s.Apps {
 		if !appRE.MatchString(name) {
 			return fmt.Errorf("%w: app name %q", ErrInvalid, name)
@@ -201,7 +224,7 @@ func (m *Manager) Allows(user, app string) bool {
 	defer m.mu.RUnlock()
 	entry, ok := m.settings.Apps[app]
 	if !ok {
-		return m.settings.NewApps == NewAppsEveryone
+		return m.settings.NewAppsFor(user)
 	}
 	return slices.Contains(entry.Users, user)
 }

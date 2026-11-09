@@ -51,5 +51,6 @@
 	"appaccess.caKey": "Der private Schlüssel bleibt auf dem Stick in /config. TitanOS gibt ihn nie heraus, auch nicht im Diagnosepaket.",
 	"appaccess.certKindCa": "TitanOS-Zertifizierungsstelle",
 	"appaccess.certCa": "Ausgestellt von der TitanOS-Zertifizierungsstelle. Ist sie auf deinem Gerät installiert, warnt der Browser nicht.",
-	"appaccess.certCaLink": "Zertifizierungsstelle installieren"
+	"appaccess.certCaLink": "Zertifizierungsstelle installieren",
+	"appaccess.whoMay": "Wer darf die App nutzen"
 }

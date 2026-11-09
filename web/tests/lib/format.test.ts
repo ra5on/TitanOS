@@ -80,5 +80,6 @@ describe('osVersion (PLAN 75-20)', () => {
 		expect(osVersion('0.71.1')).toBe('0.71.1');
 		expect(osVersion('0.72.0-rc.1')).toBe('0.72.0-rc.1');
 		expect(osVersion('0.70.10')).toBe('0.70.10');
+		expect(osVersion(undefined)).toBe('');
 	});
 });
