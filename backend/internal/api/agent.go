@@ -41,6 +41,10 @@ type agentRun struct {
 type agentRuntime struct {
 	mu   sync.Mutex
 	runs map[string]*agentRun
+	// work counts the runs still at it, including what follows the
+	// answer (copy in the share, learning). Tests wait for it before
+	// their folders go away.
+	work sync.WaitGroup
 }
 
 func runKey(user, chat string) string { return user + "/" + chat }
@@ -476,9 +480,11 @@ func (s *Server) agentStart(user auth.User, chat *agent.Chat, work func(*agent.R
 	ctx, cancel := context.WithCancel(s.agentBase())
 	run := &agentRun{user: user.Name, chat: chat.ID, cancel: cancel, subs: map[chan agent.Event]struct{}{}}
 	s.agentRT.runs[key] = run
+	s.agentRT.work.Add(1)
 	s.agentRT.mu.Unlock()
 
 	go func() {
+		defer s.agentRT.work.Done()
 		defer func() {
 			cancel()
 			s.agentRT.mu.Lock()
