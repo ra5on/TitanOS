@@ -286,7 +286,7 @@ try {
       await page.getByText("läuft auf Probe", { exact: false }).isVisible(),
     );
     assert.ok(
-      await page.getByText("App-Update auf Systemabbild 0.8.0").isVisible(),
+      await page.getByText("App-Update auf Systemabbild 0.8").isVisible(),
     );
     assert.equal(installs, 1);
     await page.screenshot({
