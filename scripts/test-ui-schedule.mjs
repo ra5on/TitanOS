@@ -32,7 +32,10 @@ async function open(width = 1440, prepare) {
   await made.page.waitForLoadState("networkidle");
   return made;
 }
-const row = (page, name) => page.locator("li.script").filter({ hasText: name });
+// Style W4 (0.74): the scripts are rows of a table (a script's output is a
+// row of its own below it).
+const row = (page, name) =>
+  page.locator("table.scripts tbody tr:not(.output)").filter({ hasText: name });
 const settle = (dialog) =>
   dialog.evaluate((d) =>
     Promise.all(d.getAnimations({ subtree: true }).map((a) => a.finished)),

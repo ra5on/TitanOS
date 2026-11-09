@@ -2078,7 +2078,7 @@
 	/* The pinned status bar (style W4) sits at the window's lower edge: a glass
 	   tile (backdrop-filter) would become its frame and hold it below the list. */
 	:global(body.has-statusbar) .browser {
-		backdrop-filter: none;
 		-webkit-backdrop-filter: none;
+		backdrop-filter: none;
 	}
 </style>

@@ -166,7 +166,16 @@ async function phone() {
   const dialog = page.getByRole("dialog", { name: "Ablegen in" });
   await dialog.getByRole("button", { name: "Handy" }).click();
   await dialog.getByRole("button", { name: "Hier ablegen" }).click();
-  await page.getByText("Fotos / Handy").waitFor();
+  // Style W4 (0.74): the chosen folder shows in its row and, as before a
+  // tile would, in the status bar at the end of the page.
+  await page
+    .locator(".set-row .set-label")
+    .getByText("Fotos / Handy", { exact: true })
+    .waitFor();
+  await page
+    .locator("footer.statusbar .end")
+    .getByText("Fotos / Handy", { exact: true })
+    .waitFor();
   await page.screenshot({ path: `${out}/teilen-handy.png` });
   await page.getByRole("button", { name: "Hochladen" }).click();
   await page

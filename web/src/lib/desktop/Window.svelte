@@ -32,6 +32,7 @@
 		desktop,
 		focus,
 		minimize,
+		frameListening,
 		navigateWindow,
 		openWindow,
 		registerFrame,
@@ -327,8 +328,10 @@
 		const msg = frameMessage(event);
 		if (msg?.type === 'titanos-page') {
 			pageName = msg.title;
-			win.href = msg.path;
-			if (focused) onaddress?.(msg.path);
+			// A page chosen in the side bar while this one still loaded comes next.
+			const path = frameListening(win.id) ?? msg.path;
+			win.href = path;
+			if (focused) onaddress?.(path);
 			saveWindows();
 		} else if (msg?.type === 'titanos-side-get') {
 			tellSide();
@@ -1001,8 +1004,8 @@
 		background:
 			linear-gradient(var(--desk-surface, var(--bg)), var(--desk-surface, var(--bg))),
 			color-mix(in srgb, var(--surface) 55%, transparent);
-		backdrop-filter: blur(max(var(--desk-blur, 0px), 14px)) saturate(1.3);
 		-webkit-backdrop-filter: blur(max(var(--desk-blur, 0px), 14px)) saturate(1.3);
+		backdrop-filter: blur(max(var(--desk-blur, 0px), 14px)) saturate(1.3);
 		border: 1px solid var(--border);
 		box-shadow: 0 10px 28px rgb(0 0 0 / 0.35);
 	}
@@ -1012,8 +1015,8 @@
 	/* While moving: one layer for the GPU and a lighter shadow (smooth in every browser). */
 	.win.dragging {
 		will-change: transform;
-		backdrop-filter: none;
 		-webkit-backdrop-filter: none;
+		backdrop-filter: none;
 		box-shadow: 0 14px 34px rgb(0 0 0 / 0.4);
 	}
 	.win.snapped {
