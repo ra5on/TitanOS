@@ -707,3 +707,56 @@ func TestEventPrefix(t *testing.T) {
 		t.Fatal(out)
 	}
 }
+
+// PLAN 75-21: with several volumes and no program yet the owner chooses
+// first; pending installs wait. SetVolume then moves installed programs,
+// the old copy goes once the new one is ready.
+func TestVolumeChoiceAndMove(t *testing.T) {
+	h := newHarness(t, map[string][]byte{"wordcraft": appZip(t, "wordcraft")})
+	os.Mkdir(filepath.Join(h.mounts, "fast"), 0o755)
+	h.mounted = []string{"data", "fast"}
+	if !h.m.NeedsVolume() {
+		t.Fatal("two volumes, nothing installed: the owner chooses")
+	}
+	if err := h.m.SetVolume("nope"); !errors.Is(err, ErrVolume) {
+		t.Fatal(err)
+	}
+	if err := h.m.SetVolume("fast"); err != nil {
+		t.Fatal(err)
+	}
+	if h.m.NeedsVolume() || h.m.Volume() != "fast" {
+		t.Fatal(h.m.NeedsVolume(), h.m.Volume())
+	}
+	if err := h.m.Install("wordcraft"); err != nil {
+		t.Fatal(err)
+	}
+	if st := h.wait(t, "wordcraft"); st.State != "ready" {
+		t.Fatalf("%+v", st)
+	}
+	if _, err := os.Stat(filepath.Join(h.mounts, "fast/.titanos/webapps/wordcraft/0.16.0")); err != nil {
+		t.Fatal("installed on the chosen volume", err)
+	}
+	// Move to data: installed again there, the copy on fast removed.
+	if err := h.m.SetVolume("data"); err != nil {
+		t.Fatal(err)
+	}
+	h.wait(t, "wordcraft")
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		_, errNew := os.Stat(filepath.Join(h.mounts, "data/.titanos/webapps/wordcraft/0.16.0"))
+		_, errOld := os.Stat(filepath.Join(h.mounts, "fast/.titanos/webapps/wordcraft"))
+		if errNew == nil && os.IsNotExist(errOld) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("not moved", errNew, errOld)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	// The choice survives a restart.
+	m2 := New(h.store)
+	m2.MountRoot, m2.Mounted = h.mounts, func() []string { return []string{"data", "fast"} }
+	if err := m2.Load(); err != nil || m2.Volume() != "data" || m2.NeedsVolume() {
+		t.Fatal(err, m2.Volume(), m2.NeedsVolume())
+	}
+}

@@ -41,8 +41,8 @@ func (s *Server) RunCraftReplacement(ctx context.Context) {
 
 // replaceCraftOnce does one round: web originals first, then Docker apps.
 func (s *Server) replaceCraftOnce(ctx context.Context) {
-	if s.opts.Webapps.Volume() == "" {
-		return // no place for web apps yet
+	if s.opts.Webapps.Volume() == "" || s.opts.Webapps.NeedsVolume() {
+		return // no place for web apps yet, or the owner has yet to choose it
 	}
 	s.replaceCraftWebapps(ctx)
 	s.replaceCraftDocker(ctx)

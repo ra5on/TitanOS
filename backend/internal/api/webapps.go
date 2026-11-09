@@ -22,6 +22,7 @@ func (s *Server) registerWebapps(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/webapps", s.requireUser(s.handleWebapps))
 	mux.HandleFunc("POST /api/v1/webapps/defaults/install", s.requireAdmin(s.handleWebappsDefaults))
 	mux.HandleFunc("POST /api/v1/webapps/migrate", s.requireAppAdmin(s.handleWebappsMigrate))
+	mux.HandleFunc("POST /api/v1/webapps/volume", s.requireAdmin(s.handleWebappsVolume))
 	mux.HandleFunc("POST /api/v1/webapps/{id}/install", s.requireAdmin(s.handleWebappInstall))
 	mux.HandleFunc("DELETE /api/v1/webapps/{id}", s.requireAdmin(s.handleWebappRemove))
 	// The mediator in the app's document is a file of the web UI; "_host"
@@ -71,6 +72,8 @@ func (s *Server) webappsBody(r *http.Request) map[string]any {
 		return body
 	}
 	body["apps"], body["volume"] = s.opts.Webapps.List(), s.opts.Webapps.Volume()
+	// PLAN 75-21: where the programs can lie, and whether the owner has to choose first.
+	body["volumes"], body["needsVolume"] = s.opts.Webapps.Volumes(), s.opts.Webapps.NeedsVolume()
 	if currentUser(r).Role.CanAdminister() {
 		if found := s.dockerCraftApps(r.Context()); found != nil {
 			body["docker"] = found
@@ -115,6 +118,8 @@ func writeWebappError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, "webapp_not_installed", err.Error())
 	case errors.Is(err, webapps.ErrBusy):
 		writeError(w, http.StatusConflict, "webapp_busy", err.Error())
+	case errors.Is(err, webapps.ErrVolume):
+		writeError(w, http.StatusBadRequest, "volume_not_mounted", err.Error())
 	default:
 		writeError(w, http.StatusInternalServerError, "config_write_failed", "the web apps could not be saved to /config")
 	}
@@ -330,4 +335,26 @@ func (s *Server) runMigration(ctx context.Context, user string, purge bool) {
 	s.migration.mu.Lock()
 	s.migration.last.Running, s.migration.last.Finished = false, time.Now()
 	s.migration.mu.Unlock()
+}
+
+// handleWebappsVolume chooses where the programs lie and moves the installed
+// ones there: {"volume":"data"} (PLAN 75-21).
+func (s *Server) handleWebappsVolume(w http.ResponseWriter, r *http.Request) {
+	if s.opts.Webapps == nil {
+		writeError(w, http.StatusServiceUnavailable, "webapps_unavailable", "web apps are not available")
+		return
+	}
+	var req struct {
+		Volume string `json:"volume"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	noteTarget(r, req.Volume)
+	if err := s.opts.Webapps.SetVolume(req.Volume); err != nil {
+		writeWebappError(w, err)
+		return
+	}
+	slog.Info("web apps volume chosen", "volume", req.Volume, "by", currentUser(r).Name, "ip", remoteIP(r))
+	s.handleWebappsAccepted(w, r)
 }
