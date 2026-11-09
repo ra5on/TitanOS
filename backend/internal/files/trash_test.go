@@ -111,3 +111,31 @@ func TestTrashDelete(t *testing.T) {
 		t.Errorf("read-only account empties the bin: %v", err)
 	}
 }
+
+// The folders the file manager makes in the recycle bin are writable for
+// the group of the shares: Samba works as the account and deletes a file
+// for good when it cannot move it into the bin. Folders an older version
+// left writable for root only are repaired.
+func TestRecycleBinFoldersAreGroupWritable(t *testing.T) {
+	m, root, _ := newRoot(t)
+	// Left behind by an older version.
+	stale := filepath.Join(root.Dir, ".recycle")
+	if err := os.Mkdir(stale, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Delete(root, []string{"urlaub/strand.jpg"}, "alex", false); err != nil {
+		t.Fatal(err)
+	}
+	for _, dir := range []string{".recycle", ".recycle/alex", ".recycle/alex/urlaub"} {
+		info, err := os.Stat(filepath.Join(root.Dir, dir))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o770 || info.Mode()&os.ModeSetgid == 0 {
+			t.Errorf("%s has mode %v, want group-writable with setgid", dir, info.Mode())
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root.Dir, ".recycle/alex/urlaub/strand.jpg")); err != nil {
+		t.Errorf("the deleted file is not in the bin: %v", err)
+	}
+}

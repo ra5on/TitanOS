@@ -2,6 +2,7 @@ package shares
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/config"
+	"golang.org/x/sys/unix"
 )
 
 type fakeRunner struct {
@@ -330,6 +332,8 @@ func TestSweepRecycle(t *testing.T) {
 	}
 	old := write(".recycle/alex/urlaub/alt.jpg", 40*24*time.Hour)
 	fresh := write(".recycle/alex/neu.jpg", 5*24*time.Hour)
+	// A bin folder an older version made for root only is opened for the group.
+	os.Chmod(filepath.Join(root, ".recycle/alex"), 0o750)
 	live := write("urlaub/uralt.jpg", 400*24*time.Hour)
 
 	m.sweepRecycle([]string{"data"}, now)
@@ -338,6 +342,9 @@ func TestSweepRecycle(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Dir(old)); err == nil {
 		t.Error("the emptied folder was left in the recycle bin")
+	}
+	if info, err := os.Stat(filepath.Join(root, ".recycle/alex")); err != nil || info.Mode().Perm() != 0o770 {
+		t.Errorf("bin folder not repaired: %v %v", info, err)
 	}
 	for _, keep := range []string{fresh, live} {
 		if _, err := os.Stat(keep); err != nil {
@@ -433,5 +440,38 @@ func TestPerUserShare(t *testing.T) {
 	sh := Share{Name: "KI-Agent", Volume: "data", PerUser: true, Guest: true, NFS: NFS{Enabled: true, Clients: []string{"192.168.1.0/24"}}, Access: map[string]string{"alex": ReadWrite}}
 	if err := normalize(&sh, []string{"data"}, []string{"alex"}); err != nil || sh.Guest || sh.NFS.Enabled {
 		t.Fatalf("normalize: %v %+v", err, sh)
+	}
+}
+
+// A folder deleted in the file manager keeps the dates of its files; when
+// it was deleted is noted on the folder (user.titanos.trash). The bin must
+// keep its files for the retention time from that day, not drop them at
+// once because they are old.
+func TestSweepRecycleKeepsOldFilesOfAFreshlyDeletedFolder(t *testing.T) {
+	m, _ := newTestManager(t)
+	m.Create(Share{Name: "fotos", Volume: "data", SMB: true, Recycle: Recycle{Enabled: true, Days: 30}, Access: map[string]string{"alex": ReadWrite}}, volumes, users)
+	root := filepath.Join(m.mountRoot, "data/fotos")
+	now := time.Now()
+	deleted := func(dir string, ago time.Duration, file string) string {
+		path := filepath.Join(root, ".recycle/alex", dir, file)
+		os.MkdirAll(filepath.Dir(path), 0o755)
+		os.WriteFile(path, []byte("x"), 0o644)
+		old := now.Add(-400 * 24 * time.Hour)
+		os.Chtimes(path, old, old)
+		note, _ := json.Marshal(map[string]any{"original": dir, "deleted": now.Add(-ago)})
+		if err := unix.Setxattr(filepath.Join(root, ".recycle/alex", dir), "user.titanos.trash", note, 0); err != nil {
+			t.Skipf("no extended attributes here: %v", err)
+		}
+		return path
+	}
+	yesterday := deleted("2019", 24*time.Hour, "sommer/strand.jpg")
+	longAgo := deleted("2018", 40*24*time.Hour, "winter/schnee.jpg")
+
+	m.sweepRecycle([]string{"data"}, now)
+	if _, err := os.Stat(yesterday); err != nil {
+		t.Error("a file of a folder deleted yesterday is gone from the recycle bin")
+	}
+	if _, err := os.Stat(longAgo); err == nil {
+		t.Error("a file of a folder deleted 40 days ago is still in the recycle bin")
 	}
 }
