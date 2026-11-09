@@ -262,3 +262,30 @@ export function letterGradient(id: string): string {
 	for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
 	return LETTER_GRADIENTS[h % LETTER_GRADIENTS.length];
 }
+
+/**
+ * Whether the files of a web app reach a frame that sends no cookies
+ * (PLAN 75-18): Cloudflare Access answers such a request with a redirect to
+ * its login. Network errors count as reachable (the frame tells the rest).
+ */
+export async function probeFiles(url: string, fetcher: typeof fetch = fetch): Promise<boolean> {
+	for (const path of ['/webapps/_host/host.js', url]) {
+		try {
+			const res = await fetcher(path, {
+				credentials: 'omit',
+				redirect: 'manual',
+				cache: 'no-store',
+			});
+			if (
+				res.type === 'opaqueredirect' ||
+				(res.status >= 300 && res.status < 400) ||
+				res.status === 401 ||
+				res.status === 403
+			)
+				return false;
+		} catch {
+			return true;
+		}
+	}
+	return true;
+}

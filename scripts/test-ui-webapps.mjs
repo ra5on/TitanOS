@@ -1147,6 +1147,40 @@ for (const width of [1280, 390]) {
   await made.ctx.close();
 }
 
+// 9. PLAN 75-18: behind Cloudflare Access every file under /webapps/ – the app
+//    and host.js alike – is answered with a redirect to the login. The window
+//    says why instead of waiting ("meldet sich nicht").
+{
+  const made = await open();
+  const { page } = made;
+  const login = (route) =>
+    route.fulfill({
+      status: 302,
+      headers: {
+        location: "https://team.cloudflareaccess.com/cdn-cgi/access/login",
+      },
+    });
+  // Routes added later win: both the mediator and the app's files are turned away.
+  await made.ctx.route("**/webapps/_host/host.js", login);
+  await made.ctx.route("**/webapps/wordcraft/0.16.0/**", login);
+  const files = await filesWindow(page);
+  await files.locator('[data-file-name="Angebot.docx"]').click();
+  await files.locator('[data-file-name="Angebot.docx"]').dblclick();
+  const win = page.locator("section.win", {
+    has: page.locator("iframe[data-webapp=wordcraft]"),
+  });
+  await win
+    .getByText("Die Programmdateien der App kommen nicht an")
+    .waitFor({ timeout: 15000 });
+  assert.match(
+    await win.innerText(),
+    /Bypass/,
+    "the window names the Cloudflare rule",
+  );
+  await shot(page, "18-cloudflare-blocked");
+  await made.ctx.close();
+}
+
 await browser.close();
 server.close();
 const real = errors.filter(

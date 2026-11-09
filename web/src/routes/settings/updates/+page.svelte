@@ -8,7 +8,7 @@
 	import ClusterUpdates from '#lib/components/cluster/ClusterUpdates.svelte';
 	import { activeNode } from '#lib/cluster-node.ts';
 	import PowerDialog from '#lib/components/PowerDialog.svelte';
-	import { formatBytes, formatDate, formatDateTime } from '#lib/format.ts';
+	import { formatBytes, formatDate, formatDateTime, osVersion } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
 
 	/** checkEvery: minutes between automatic checks; 0 or missing is once a day, -1 manual only. */
@@ -395,9 +395,9 @@
 			{#if canCheck}<span class="check">{@render checkButton()}</span>{/if}
 		</div>
 		<p class="version">
-			<span class="mono">TitanOS {status.version}</span
+			<span class="mono">TitanOS {osVersion(status.version)}</span
 			>{#if status.base && status.base !== status.version}<span class="muted base"
-					>{t('update.app.onBase', { version: status.base })}</span
+					>{t('update.app.onBase', { version: osVersion(status.base) })}</span
 				>{/if}
 		</p>
 		<p class="muted">
@@ -551,9 +551,11 @@
 					><span>{t('update.choose.version')}</span>
 					<select class="field" bind:value={picked} aria-label={t('update.choose.version')}>
 						{#each versions as v (v.version)}<option value={v.version}
-								>TitanOS {v.version} · {formatDate(new Date(v.released))}{#if v.running}{' · '}{t(
-										'update.choose.running',
-									)}{:else if v.newest}{' · '}{t('update.choose.newest')}{/if}</option
+								>TitanOS {osVersion(v.version)} · {formatDate(
+									new Date(v.released),
+								)}{#if v.running}{' · '}{t('update.choose.running')}{:else if v.newest}{' · '}{t(
+										'update.choose.newest',
+									)}{/if}</option
 							>{/each}
 					</select>
 				</label>
@@ -590,11 +592,11 @@
 	{#if status.app.current || status.app.previous}
 		<section class="tile panel" aria-labelledby="upd-app">
 			<h2 class="tile-title" id="upd-app">{t('update.app.title')}</h2>
-			<p class="muted">{t('update.app.text', { version: status.base })}</p>
+			<p class="muted">{t('update.app.text', { version: osVersion(status.base) })}</p>
 			<ul class="slots">
 				<li>
 					<span class="name">{t('update.app.running')}</span><span class="mono"
-						>{status.app.current || t('update.app.base', { version: status.base })}</span
+						>{status.app.current || t('update.app.base', { version: osVersion(status.base) })}</span
 					>
 				</li>
 				{#if status.app.previous}<li>

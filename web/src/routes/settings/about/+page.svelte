@@ -4,6 +4,7 @@
 	import { api } from '#lib/api.ts';
 	import Logo from '#lib/components/Logo.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import { osVersion } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import { system } from '#lib/system.svelte.ts';
 
@@ -32,7 +33,7 @@
 		<dl>
 			<div>
 				<dt>{t('about.version')}</dt>
-				<dd class="mono">{about.version}</dd>
+				<dd class="mono">{osVersion(about.version)}</dd>
 			</div>
 			{#if slot}<div>
 					<dt>{t('about.slot')}</dt>

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/version"
 )
 
 // The system prompt tells the model who it works for, how it works and
@@ -69,7 +71,7 @@ func BuildPrompt(in PromptInput) string {
 	if in.Admin {
 		role = "administrator"
 	}
-	fmt.Fprintf(&b, "Name: %s, TitanOS %s. You act for the account %q (%s). Now: %s.\n", in.Host, in.Version, in.Account, role, in.Now.Format("Monday, 2006-01-02 15:04 MST"))
+	fmt.Fprintf(&b, "Name: %s, TitanOS %s. You act for the account %q (%s). Now: %s.\n", in.Host, version.Display(in.Version), in.Account, role, in.Now.Format("Monday, 2006-01-02 15:04 MST"))
 	if !in.Web {
 		b.WriteString("Web search is switched off.\n")
 	}

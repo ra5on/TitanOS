@@ -24,6 +24,7 @@
 		letterGradient,
 		ownAppUrl,
 		parentDir,
+		probeFiles,
 		saveTarget,
 		type DocRef,
 		type WebApp,
@@ -106,6 +107,20 @@
 		return () => clearTimeout(slowTimer);
 	});
 	onDestroy(() => clearTimeout(slowTimer));
+
+	// PLAN 75-18: behind Cloudflare Access the sandboxed frame loads its files
+	// without the Cloudflare cookie and is turned away – host.js itself too,
+	// so it cannot report it. The window asks the same way (no cookie, no
+	// redirect followed): a redirect or a refusal means the files are blocked.
+	$effect(() => {
+		void reloads;
+		if (!ownAppUrl(app.url)) return;
+		let gone = false;
+		probeFiles(app.url).then((ok) => {
+			if (!gone && !ok && phase !== 'ready') phase = 'blocked';
+		});
+		return () => (gone = true);
+	});
 
 	function post(message: Record<string, unknown>, transfer: Transferable[] = []) {
 		// The frame has no origin of its own ("null"): "*" is the only target that reaches it.

@@ -117,3 +117,12 @@ export function formatDiskBytes(bytes: number): string {
 	}
 	return `${number(value, unit === 0 || value >= 100 ? 0 : 1)} ${UNITS[unit]}`;
 }
+
+/**
+ * A TitanOS version as people read it (PLAN 75-20): releases since 0.72 count
+ * in two parts, "0.72"; the wire keeps "0.72.0" for older NAS. Earlier
+ * releases with a third number (0.71.1) stay as they are.
+ */
+export function osVersion(version: string): string {
+	return version.replace(/^(\d+\.\d+)\.0$/, '$1');
+}
