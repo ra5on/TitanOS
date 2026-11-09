@@ -55,6 +55,8 @@ function sanitizeApp(raw: unknown): WebApp | null {
 		icon: typeof a.icon === 'string' && a.icon.startsWith('/webapps/') ? a.icon : undefined,
 		size: typeof a.size === 'number' && a.size > 0 ? a.size : undefined,
 		pending: a.pending === true,
+		// Our own builds (T-Word …): framed without the sandbox (PLAN 75-18).
+		trusted: a.trusted === true,
 	};
 }
 

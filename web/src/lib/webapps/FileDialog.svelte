@@ -21,8 +21,10 @@
 		/** A chosen file (open) or the file to write (save: dir + name). */
 		onpick: (chosen: { root: string; path: string; entry?: FileEntry }) => void;
 		onclose: () => void;
+		/** open: offers "Von diesem Gerät …" (a file of this PC instead of the NAS). */
+		onlocal?: () => void;
 	};
-	let { mode, title, start, name = '', types = [], onpick, onclose }: Props = $props();
+	let { mode, title, start, name = '', types = [], onpick, onclose, onlocal }: Props = $props();
 
 	const first = (() => start)();
 	let roots = $state<FileRoot[] | null>(null);
@@ -181,6 +183,9 @@
 		{/if}
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 		<div class="dialog-actions">
+			{#if onlocal && mode === 'open'}
+				<button type="button" class="btn local" onclick={onlocal}>{t('webapps.fromDevice')}</button>
+			{/if}
 			<button type="button" class="btn" onclick={onclose}>{t('common.cancel')}</button>
 			<button class="btn btn-primary" disabled={!valid}
 				>{mode === 'open'
@@ -282,5 +287,8 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-1-5);
+	}
+	.local {
+		margin-inline-end: auto;
 	}
 </style>

@@ -121,6 +121,7 @@
 	"webapps.office.kind.pdfcraft": "PDF ansehen und bearbeiten",
 	"webapps.office.kind.wordcraft": "Texte wie Word",
 	"webapps.openFailed": "Die Datei konnte nicht geöffnet werden: {error}",
+	"webapps.fromDevice": "Von diesem Gerät …",
 	"webapps.openTitle": "Datei in {app} öffnen",
 	"webapps.overwrite": "Überschreiben",
 	"webapps.problem": "Problem",

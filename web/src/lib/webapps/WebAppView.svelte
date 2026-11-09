@@ -70,6 +70,15 @@
 	let saving = $state<{ name: string; bytes: ArrayBuffer; adopt: boolean } | null>(null);
 	let replace = $state<{ target: DocRef; bytes: ArrayBuffer; adopt: boolean } | null>(null);
 	let picking = $state(false);
+	/** The app opened its own file picker (PLAN 75-20): the window shows its dialog instead. */
+	let pick = $state<{ types: string[]; multiple: boolean } | null>(null);
+	let localInput = $state<HTMLInputElement>();
+	/**
+	 * Files of the NAS the app opened through its own picker, by name: a save
+	 * of the app under that name goes back to that file (the app does not know
+	 * where it came from and asks for "Save As").
+	 */
+	const pickedDocs = new Map<string, { doc: DocRef; mtime: string | null }>();
 	/** The app shows a file from this PC (no file of the NAS behind it). */
 	let outside = false;
 	let dropping = $state<{ name: string } | null>(null);
@@ -176,6 +185,8 @@
 				if (phase !== 'ready') phase = 'blocked';
 			} else if (msg.text)
 				notice = { kind: 'error', text: t('webapps.appFailed', { error: msg.text }) };
+		} else if (msg.type === 'webapp-pick') {
+			pick = { types: msg.types, multiple: msg.multiple };
 		} else if (msg.type === 'webapp-save') {
 			saveAsAsked = false;
 			enqueueSave(msg.name, msg.saveAs, msg.bytes);
@@ -184,6 +195,14 @@
 
 	async function onSave(name: string, saveAs: boolean, bytes: ArrayBuffer) {
 		const target = saveTarget(current?.doc ?? null, { name, saveAs }, app);
+		// A file the app opened from the NAS through its own picker, saved under
+		// its name: back into that file, guarded by its time like any save.
+		const known = target === 'dialog' ? pickedDocs.get(name) : undefined;
+		if (known && app.types.includes(extOf(name))) {
+			pickedDocs.delete(name);
+			await writeNew(known.doc, bytes, true, known.mtime ?? 'none');
+			return;
+		}
 		if (target === 'dialog') {
 			saving = { name, bytes, adopt: true };
 			return;
@@ -347,6 +366,41 @@
 	}
 	export function isUnsaved() {
 		return unsaved();
+	}
+
+	/** Answers the app's picker: the chosen files, or none (cancelled). */
+	function answerPick(files: { name: string; bytes: ArrayBuffer }[]) {
+		pick = null;
+		post(
+			{ type: 'webapp-picked', files },
+			files.map((f) => f.bytes),
+		);
+	}
+	async function pickedForApp(chosen: { root: string; path: string }) {
+		const next = { root: chosen.root, path: chosen.path };
+		busy = true;
+		try {
+			const { bytes, mtime } = await readDoc(next);
+			const name = baseName(next.path);
+			pickedDocs.set(name, { doc: next, mtime });
+			answerPick([{ name, bytes }]);
+		} catch (e) {
+			answerPick([]);
+			notice = { kind: 'error', text: t('webapps.openFailed', { error: apiErrorText(e) }) };
+		} finally {
+			busy = false;
+		}
+	}
+	async function pickedLocal() {
+		const files = [...(localInput?.files ?? [])];
+		if (localInput) localInput.value = '';
+		if (!files.length) return;
+		const out: { name: string; bytes: ArrayBuffer }[] = [];
+		for (const f of files.slice(0, pick?.multiple ? files.length : 1)) {
+			pickedDocs.delete(f.name);
+			out.push({ name: f.name, bytes: await f.arrayBuffer() });
+		}
+		answerPick(out);
 	}
 
 	function picked(chosen: { root: string; path: string }) {
@@ -576,6 +630,28 @@
 		onclose={() => (picking = false)}
 	/>
 {/if}
+
+{#if pick}
+	<FileDialog
+		mode="open"
+		title={t('webapps.openTitle', { app: app.name })}
+		types={pick.types}
+		start={startDir}
+		onpick={(chosen) => void pickedForApp(chosen)}
+		onlocal={() => localInput?.click()}
+		onclose={() => answerPick([])}
+	/>
+{/if}
+<input
+	bind:this={localInput}
+	class="sr-only"
+	type="file"
+	tabindex="-1"
+	aria-hidden="true"
+	accept={pick?.types.length ? pick.types.map((x) => '.' + x).join(',') : undefined}
+	multiple={pick?.multiple ?? false}
+	onchange={pickedLocal}
+/>
 
 <span class="sr-only" aria-live="polite">{docName}</span>
 

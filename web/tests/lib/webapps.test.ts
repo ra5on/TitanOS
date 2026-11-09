@@ -2,6 +2,7 @@
 // host.js, where a save goes, standard apps per file type, the file API.
 import { afterEach, expect, test, vi } from 'vitest';
 import {
+	acceptTypes,
 	appSrc,
 	appsFor,
 	catalogDefault,
@@ -243,4 +244,19 @@ test('probeFiles tells a blocked app from a reachable one', async () => {
 		return { type: 'basic', status: 200 } as Response;
 	}) as typeof fetch);
 	expect(seen.every((i) => i.credentials === 'omit' && i.redirect === 'manual')).toBe(true);
+});
+
+test('acceptTypes reads the file picker of the app (PLAN 75-20)', () => {
+	expect(acceptTypes('.docx,.DOC')).toEqual(['docx', 'doc']);
+	expect(acceptTypes('application/pdf')).toEqual(['pdf']);
+	expect(acceptTypes('image/*')).toContain('png');
+	expect(acceptTypes('image/jpeg')).toEqual(['jpg', 'jpeg']);
+	// Not understood, or none: every file.
+	expect(acceptTypes('')).toEqual([]);
+	expect(acceptTypes('weird stuff')).toEqual([]);
+	expect(hostMessage({ type: 'webapp-pick', accept: '.xlsx', multiple: true })).toEqual({
+		type: 'webapp-pick',
+		types: ['xlsx'],
+		multiple: true,
+	});
 });

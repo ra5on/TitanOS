@@ -34,7 +34,9 @@ export type HostMessage =
 	| { type: 'webapp-ready' }
 	| { type: 'webapp-save'; name: string; saveAs: boolean; bytes: ArrayBuffer }
 	| { type: 'webapp-dirty'; dirty: boolean }
-	| { type: 'webapp-failed'; text: string };
+	| { type: 'webapp-failed'; text: string }
+	/** The app opened its file picker (an `<input type=file>`): the window shows its own. */
+	| { type: 'webapp-pick'; types: string[]; multiple: boolean };
 
 const ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
@@ -77,9 +79,45 @@ export function hostMessage(data: unknown): HostMessage | null {
 				type: 'webapp-failed',
 				text: typeof d.text === 'string' ? d.text.slice(0, 500) : '',
 			};
+		case 'webapp-pick':
+			return {
+				type: 'webapp-pick',
+				types: acceptTypes(typeof d.accept === 'string' ? d.accept : ''),
+				multiple: d.multiple === true,
+			};
 		default:
 			return null;
 	}
+}
+
+const IMAGE_TYPES = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'tif', 'tiff', 'avif', 'ico'];
+const AUDIO_TYPES = ['wav', 'mp3', 'ogg', 'flac', 'm4a', 'aac', 'opus', 'aif', 'aiff'];
+const VIDEO_TYPES = ['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v'];
+const FONT_TYPES = ['ttf', 'otf', 'woff', 'woff2', 'ttc'];
+
+/**
+ * The file types an `accept` attribute of a file picker names, as extensions
+ * without the dot (`.docx,.doc` → docx, doc; `image/*` → the usual picture
+ * types). Anything not understood, or no attribute: [] (every file).
+ */
+export function acceptTypes(accept: string): string[] {
+	const out = new Set<string>();
+	for (const raw of accept.split(',')) {
+		const token = raw.trim().toLowerCase();
+		if (!token) continue;
+		if (/^\.[a-z0-9]{1,10}$/.test(token)) out.add(token.slice(1));
+		else if (token === 'image/*') IMAGE_TYPES.forEach((x) => out.add(x));
+		else if (token === 'audio/*') AUDIO_TYPES.forEach((x) => out.add(x));
+		else if (token === 'video/*') VIDEO_TYPES.forEach((x) => out.add(x));
+		else if (token.startsWith('font/')) FONT_TYPES.forEach((x) => out.add(x));
+		else if (token === 'application/pdf') out.add('pdf');
+		else if (/^[a-z]+\/[a-z0-9.+-]+$/.test(token)) {
+			const sub = token.split('/')[1].replace(/^x-/, '');
+			if (/^[a-z0-9]{1,10}$/.test(sub)) out.add(sub === 'jpeg' ? 'jpg' : sub);
+			if (sub === 'jpeg') out.add('jpeg');
+		} else return [];
+	}
+	return [...out];
 }
 
 /** The lower-case extension of a file name without the dot ("" without one). */

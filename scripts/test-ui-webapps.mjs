@@ -1181,6 +1181,61 @@ for (const width of [1280, 390]) {
   await made.ctx.close();
 }
 
+// 10. PLAN 75-20: an app of our own build (trusted, like T-Word) runs without
+//     the sandbox attribute, and the app's own "Open …" (Ctrl+O) shows the
+//     file dialog of TitanOS instead of the browser's; saving the file it
+//     picked there goes back into that file of the NAS, guarded by its time.
+{
+  const trusted = (m) => {
+    const l = webappsList(m);
+    l.apps[0] = { ...l.apps[0], trusted: true };
+    return l;
+  };
+  const made = await open(1600, 1000, "/", { list: trusted });
+  const { page, nas } = made;
+  const files = await filesWindow(page);
+  await files.locator('[data-file-name="Angebot.docx"]').click();
+  await files.locator('[data-file-name="Angebot.docx"]').dblclick();
+  const win = page.locator("section.win", {
+    has: page.locator("iframe[data-webapp=wordcraft]"),
+  });
+  const app = win.locator("iframe[data-webapp=wordcraft]");
+  await app.and(page.locator(":not(.hidden)")).waitFor({ timeout: 60000 });
+  await page.waitForTimeout(2500);
+  assert.equal(
+    await app.getAttribute("sandbox"),
+    null,
+    "a trusted app is framed without the sandbox attribute",
+  );
+  const box = await app.boundingBox();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await page.keyboard.press("Control+o");
+  const fd = page.locator("form.fd");
+  await fd
+    .locator(".row.file", { hasText: "Angebot.docx" })
+    .first()
+    .waitFor({ timeout: 15000 });
+  assert.ok(
+    await fd.getByRole("button", { name: "Von diesem Gerät …" }).isVisible(),
+    "the dialog offers a file of this device",
+  );
+  await shot(page, "19-app-open-dialog");
+  await fd.locator(".row.file", { hasText: "Angebot.docx" }).first().click();
+  await fd.locator("button.btn-primary").click();
+  await fd.waitFor({ state: "detached" });
+  await page.waitForTimeout(2000);
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await page.keyboard.type("Neu ");
+  await page.waitForTimeout(400);
+  const before = nas.puts.length;
+  await page.keyboard.press("Control+s");
+  const put = await waitPut(nas, before + 1);
+  assert.ok(put, "the save reached PUT /files/content");
+  assert.equal(put.path, "Angebot.docx", "back into the picked file");
+  assert.equal(put.expect, MODIFIED_NS, "guarded by the time it was read");
+  await made.ctx.close();
+}
+
 await browser.close();
 server.close();
 const real = errors.filter(
