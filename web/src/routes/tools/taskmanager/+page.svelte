@@ -788,6 +788,8 @@
 		flex: 1 1 14rem;
 		min-width: 0;
 	}
+	/* PLAN 75-19, style W4: one list with lines between the rows, not a
+	   tile around every process, container or disk. */
 	.proc-list,
 	.rows-list {
 		list-style: none;
@@ -795,7 +797,33 @@
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-1-5);
+		gap: 0;
+		overflow: hidden;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-small);
+		background: color-mix(in srgb, var(--surface) 70%, transparent);
+	}
+	.proc-list > li.tile,
+	.rows-list > li.tile {
+		border: 0;
+		border-radius: 0;
+		box-shadow: none;
+		background: none;
+		-webkit-backdrop-filter: none;
+		backdrop-filter: none;
+	}
+	.proc-list > li + li,
+	.rows-list > li + li,
+	.proc-list > li.tile + li.tile,
+	.rows-list > li.tile + li.tile {
+		border-top: 1px solid var(--border);
+	}
+	.proc-list > li:hover,
+	.rows-list > li:hover {
+		background: color-mix(in srgb, var(--text) 3%, transparent);
+	}
+	.rows-list > li.muted {
+		padding: var(--space-2) var(--tile-pad);
 	}
 	.proc {
 		display: grid;
