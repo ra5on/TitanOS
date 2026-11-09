@@ -4,6 +4,7 @@
 	import { api } from '#lib/api.ts';
 	import DangerZone from '#lib/components/DangerZone.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
+	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import TailscaleSettings from '#lib/components/TailscaleSettings.svelte';
 	import NetbirdSettings from '#lib/components/NetbirdSettings.svelte';
@@ -497,9 +498,6 @@
 			{:else}
 				<p class="muted note">{t('plugins.noMatch')}</p>
 			{/each}
-			<p class="muted note">
-				{status.volume ? t('plugins.where', { volume: status.volume }) : t('plugins.whereNone')}
-			</p>
 		</div>
 
 		<aside class="tile" aria-labelledby="plugin-title" bind:this={details}>
@@ -809,6 +807,17 @@
 			</div>
 		</aside>
 	</div>
+	<!-- Style W4 (0.74): the figures of the list in the status bar. -->
+	<StatusBar label={t('plugins.statusBar')}>
+		<span>{t('plugins.statCount', { count: plugins.length })}</span>
+		<span>{t('plugins.statInstalled')} <b>{plugins.filter((p) => p.installed).length}</b></span>
+		<span class:warn={plugins.some((p) => p.update)}
+			>{t('plugins.statUpdates')} <b>{plugins.filter((p) => p.update).length}</b></span
+		>
+		<span class="end"
+			>{status.volume ? t('plugins.where', { volume: status.volume }) : t('plugins.whereNone')}</span
+		>
+	</StatusBar>
 {/if}
 
 {#if removing}
