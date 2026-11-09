@@ -153,3 +153,31 @@ func (f runnerFunc) Run(_ context.Context, stdin, name string, args ...string) (
 	f(stdin, append([]string{name}, args...)...)
 	return "", nil
 }
+
+// A second window of the same view that is closed while it starts must
+// not take the view of the first window with it.
+func TestCancelledWindowKeepsTheSharedView(t *testing.T) {
+	engine := newFakeEngine()
+	m := testManager(t, engine)
+	m.Policy = func(origin string) ([]byte, error) { return []byte(origin), nil }
+	first, err := m.Open(t.Context(), "anna", "immich")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := m.Open(t.Context(), "anna", "immich")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gone, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := second.Check(gone); !errors.Is(err, context.Canceled) {
+		t.Fatalf("check of the closed window: %v", err)
+	}
+	if len(engine.removed) != 0 {
+		t.Fatalf("the shared view was stopped: %v", engine.removed)
+	}
+	if err := first.Check(t.Context()); err != nil {
+		t.Fatalf("the first window lost its view: %v", err)
+	}
+	first.Close(false)
+}

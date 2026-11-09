@@ -302,14 +302,30 @@ func (s *Server) handleUpdatesCheck(w http.ResponseWriter, r *http.Request) {
 // handleUpdatesApply updates every app that has a newer image available.
 func (s *Server) handleUpdatesApply(w http.ResponseWriter, r *http.Request) {
 	apps := s.opts.Docker.AppsWithUpdates(r.Context())
+	// One app that cannot be updated does not hold back the others, and
+	// the answer does not read as "nothing happened" while updates run.
+	started, failed := []string{}, map[string]string{}
+	var first error
 	for _, app := range apps {
 		if err := s.opts.Docker.UpdateApp(r.Context(), app); err != nil && !errors.Is(err, docker.ErrBusy) {
-			writeDockerError(w, err)
-			return
+			failed[app] = err.Error()
+			if first == nil {
+				first = err
+			}
+			continue
 		}
+		started = append(started, app)
 	}
-	slog.Info("update of all apps started", "apps", apps, "by", currentUser(r).Name, "ip", remoteIP(r))
-	writeJSON(w, http.StatusAccepted, map[string][]string{"apps": apps})
+	if len(started) == 0 && first != nil {
+		writeDockerError(w, first)
+		return
+	}
+	slog.Info("update of all apps started", "apps", started, "failed", len(failed), "by", currentUser(r).Name, "ip", remoteIP(r))
+	out := map[string]any{"apps": started}
+	if len(failed) > 0 {
+		out["failed"] = failed
+	}
+	writeJSON(w, http.StatusAccepted, out)
 }
 
 // handleContainerConsole connects a WebSocket to a shell inside a container.

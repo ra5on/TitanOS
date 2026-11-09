@@ -53,20 +53,24 @@ var vmErrors = []struct {
 }
 
 func writeVMError(w http.ResponseWriter, err error) {
+	status, code, message := vmErrorOf(err)
+	writeError(w, status, code, message)
+}
+
+// vmErrorOf is the status, code and message of a failed VM action.
+func vmErrorOf(err error) (int, string, string) {
 	for _, known := range vmErrors {
 		if errors.Is(err, known.err) {
-			writeError(w, known.status, known.code, err.Error())
-			return
+			return known.status, known.code, err.Error()
 		}
 	}
 	// What libvirt or QEMU said is the useful part.
 	var command *run.CommandError
 	if errors.As(err, &command) {
-		writeError(w, http.StatusInternalServerError, "vm_failed", command.Output)
-		return
+		return http.StatusInternalServerError, "vm_failed", command.Output
 	}
 	slog.Error("VM action failed", "err", err)
-	writeError(w, http.StatusInternalServerError, "vm_failed", err.Error())
+	return http.StatusInternalServerError, "vm_failed", err.Error()
 }
 
 func (s *Server) handleVMs(w http.ResponseWriter, r *http.Request) {
@@ -110,14 +114,19 @@ func (s *Server) handleVMCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("VM created", "vm", req.Name, "by", currentUser(r).Name, "ip", remoteIP(r))
+	started := false
 	if req.Start {
 		if err := s.opts.VMs.Start(r.Context(), req.Name, mounted); err != nil {
-			// The VM exists; only its first start failed.
-			writeVMError(w, err)
+			// The VM exists; only its first start failed. The answer says
+			// both: an error answer would read as "not created", and
+			// creating it again would fail with "exists".
+			_, code, message := vmErrorOf(err)
+			writeJSON(w, http.StatusCreated, map[string]any{"started": false, "startError": apiError{Code: code, Message: message}})
 			return
 		}
+		started = true
 	}
-	w.WriteHeader(http.StatusCreated)
+	writeJSON(w, http.StatusCreated, map[string]any{"started": started})
 }
 
 // handleVMAdoptable lists the copies of VM settings on the mounted volumes

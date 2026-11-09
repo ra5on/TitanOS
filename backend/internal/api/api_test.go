@@ -1164,6 +1164,13 @@ func TestRestoreOnlyOnANewStick(t *testing.T) {
 		t.Errorf("unknown volume: %d %s", res.StatusCode, body)
 	}
 	// A backup holds every secret: not without the password once more.
+	// A refused request stores nothing, also not the password it carried.
+	if res, body := ts.request("PUT", "/api/v1/config-backup", map[string]any{"enabled": true, "volume": "nowhere", "keep": 14, "password": "ein langes Sicherungspasswort"}); res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "invalid_backup_settings" {
+		t.Fatalf("unknown volume with a password: %d %s", res.StatusCode, body)
+	}
+	if ts.server.opts.ConfigBackup.PasswordSet() {
+		t.Fatal("the password of a refused request was stored")
+	}
 	if res, body := ts.request("GET", "/api/v1/config-backup/download?volume=data&name=config-20261013T120000Z-000000000000.tar.gz", nil); res.StatusCode != http.StatusForbidden || errorCode(t, body) != "confirm_required" {
 		t.Errorf("download without confirmation: %d %s", res.StatusCode, body)
 	}
@@ -1828,6 +1835,11 @@ func TestZipDownloadNameAndEmptyDirectory(t *testing.T) {
 	z, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
 	if err != nil || len(z.File) != 1 || z.File[0].Name != "Leer/" {
 		t.Fatalf("%v %v", z, err)
+	}
+	// A folder that is not there is an answer, not a broken connection.
+	missing := url.Values{"root": {"stick"}, "path": {"network/Gibt-es-nicht"}}
+	if res, body := ts.request("GET", "/api/v1/files/zip?"+missing.Encode(), nil); res.StatusCode != http.StatusNotFound || errorCode(t, body) != "file_not_found" {
+		t.Fatalf("zip of a missing folder: %d %s", res.StatusCode, body)
 	}
 	for _, name := range []string{"../other.zip", "bad\\name.zip", "bad\nname.zip", "bad\x00name.zip", ".zip", "without-extension"} {
 		q.Set("name", name)

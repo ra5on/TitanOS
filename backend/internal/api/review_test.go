@@ -16,6 +16,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/appbackup"
 	"github.com/ra5on/TitanOS/backend/internal/files"
+	"github.com/ra5on/TitanOS/backend/internal/lxc"
 )
 
 // The stick manager shows settings without secrets and nothing else, and
@@ -336,6 +337,42 @@ func TestAgentFolderRuleFollowsLinks(t *testing.T) {
 	} {
 		if got := b.realFolderMode("share/Docs", p); got != want {
 			t.Errorf("%s: mode %q, want %q", p, got, want)
+		}
+	}
+}
+
+// A volume with the root filesystem of a system container on it is not
+// deleted, running or not.
+func TestVolumeWithSystemContainerIsKept(t *testing.T) {
+	list := []lxc.Status{{Container: lxc.Container{Name: "pihole", Volume: "tank"}}}
+	if name, ok := lxcOnVolume(list, "tank"); !ok || name != "pihole" {
+		t.Fatalf("container on tank: %q %v", name, ok)
+	}
+	if _, ok := lxcOnVolume(list, "other"); ok {
+		t.Fatal("container reported on another volume")
+	}
+}
+
+// Two services switched off at the same moment both stay off in the file:
+// each change is made on the current settings, not on a copy read earlier.
+func TestServiceSwitchesDoNotLoseEachOther(t *testing.T) {
+	ts := newTestServer(t)
+	for range 50 {
+		ts.server.services = servicesState{}
+		if err := ts.store.Remove(servicesFile); err != nil && !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+		done := make(chan error, 2)
+		go func() { done <- ts.server.updateServices(func(v *serviceSettings) { v.VMsOff = true }) }()
+		go func() { done <- ts.server.updateServices(func(v *serviceSettings) { v.LXCOff = true }) }()
+		for range 2 {
+			if err := <-done; err != nil {
+				t.Fatal(err)
+			}
+		}
+		var stored serviceSettings
+		if err := ts.store.ReadJSON(servicesFile, &stored); err != nil || !stored.VMsOff || !stored.LXCOff {
+			t.Fatalf("stored %+v, %v", stored, err)
 		}
 	}
 }

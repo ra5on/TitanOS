@@ -39,6 +39,7 @@
 		MODES,
 		noticeClass,
 		problem,
+		takeStartError,
 		vmNotices,
 		type Failure,
 		type Problem,
@@ -63,6 +64,9 @@
 	let feedback = $state('');
 	// The failed action of each VM, shown only with that VM.
 	let failures = $state<Record<string, Failure>>({});
+	// A VM that was just created but did not start says why (VmForm.svelte).
+	const notStarted = takeStartError();
+	if (notStarted) failures[notStarted.name] = { problem: notStarted.problem, action: 'start' };
 	let search = $state('');
 	let filter = $state<Filter>('all');
 	// On a phone the list folds away behind the name of the chosen VM.

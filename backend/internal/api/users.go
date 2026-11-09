@@ -134,6 +134,13 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	if req.ResetTwoFactor && target.Name == actor.Name && !s.reconfirmProof(w, actor, req.proof) {
 		return
 	}
+	// The role first: it is what can be refused (the last owner stays
+	// one), and a refused request must not have reset anything.
+	user, err := s.opts.Users.SetRole(target.Name, req.Role)
+	if err != nil {
+		writeAccountError(w, err)
+		return
+	}
 	if req.ResetTwoFactor {
 		if err := s.opts.Users.DisableTwoFactor(target.Name); err != nil {
 			writeAccountError(w, err)
@@ -148,11 +155,9 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		s.sessions.DeleteUser(target.Name, "")
 		s.forgetWebDAV(target.Name)
 		slog.Info("two-factor login reset", "user", target.Name, "by", actor.Name, "ip", remoteIP(r))
-	}
-	user, err := s.opts.Users.SetRole(target.Name, req.Role)
-	if err != nil {
-		writeAccountError(w, err)
-		return
+		if fresh, ok := s.opts.Users.Get(target.Name); ok {
+			user = fresh
+		}
 	}
 	slog.Info("account role changed", "user", user.Name, "role", user.Role, "by", actor.Name, "ip", remoteIP(r))
 	// SSH is for owners and administrators only.

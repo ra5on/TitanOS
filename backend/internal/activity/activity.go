@@ -138,6 +138,9 @@ func validate(s Settings) error {
 	return nil
 }
 
+// Check reports what Set would refuse about the settings themselves.
+func Check(s Settings) error { return validate(s) }
+
 func (m *Manager) Set(s Settings) error {
 	if err := validate(s); err != nil {
 		return err
