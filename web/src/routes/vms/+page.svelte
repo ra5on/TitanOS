@@ -737,8 +737,8 @@
 						{#if shown.length === 0}<p class="vm-empty muted">{t('ui.vmNoResults')}</p>{:else}
 							<!-- PLAN 75-19/75-20, style W4: one row per VM, columns instead of cards. -->
 							<div class="vm-cols muted" aria-hidden="true">
-								<span>{t('vms.col.name')}</span><span>{t('vms.col.state')}</span><span
-									class="num">{t('vms.col.memory')}</span
+								<span>{t('vms.col.name')}</span><span>{t('vms.col.state')}</span><span class="num"
+									>{t('vms.col.memory')}</span
 								>
 							</div>
 						{/if}

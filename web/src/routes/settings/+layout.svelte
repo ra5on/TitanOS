@@ -59,6 +59,23 @@
 		cursor: pointer;
 		user-select: none;
 	}
+	.settings-shell :global(.e3-summary) {
+		display: none;
+		min-width: 0;
+		margin-left: auto;
+		overflow: hidden;
+		color: var(--muted);
+		font-size: var(--text-sm);
+		font-weight: 400;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.settings-shell :global(.e3-group[data-closed] .e3-summary) {
+		display: block;
+	}
+	.settings-shell :global(.e3-group[data-closed] .e3-summary + .e3-toggle) {
+		margin-left: 0;
+	}
 	.settings-shell :global(.e3-toggle) {
 		display: grid;
 		place-items: center;
