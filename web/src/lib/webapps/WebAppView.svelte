@@ -47,7 +47,7 @@
 	let { app, doc, winId, ondoc, onname, onopen, onunsaved }: Props = $props();
 
 	let frame = $state<HTMLIFrameElement>();
-	let phase = $state<'starting' | 'ready' | 'slow'>('starting');
+	let phase = $state<'starting' | 'ready' | 'slow' | 'blocked'>('starting');
 	let reloads = $state(0);
 	const src = $derived(
 		ownAppUrl(app.url) ? appSrc(app, session.data?.user?.name ?? '') : 'about:blank',
@@ -155,7 +155,11 @@
 			phase = 'ready';
 		} else if (msg.type === 'webapp-dirty') appDirty = msg.dirty;
 		else if (msg.type === 'webapp-failed') {
-			if (msg.text) notice = { kind: 'error', text: t('webapps.appFailed', { error: msg.text }) };
+			// host.js: the app's files were turned away (Cloudflare Access).
+			if (msg.text === 'files_blocked') {
+				if (phase !== 'ready') phase = 'blocked';
+			} else if (msg.text)
+				notice = { kind: 'error', text: t('webapps.appFailed', { error: msg.text }) };
 		} else if (msg.type === 'webapp-save') {
 			saveAsAsked = false;
 			enqueueSave(msg.name, msg.saveAs, msg.bytes);
@@ -422,7 +426,7 @@
 				<span class="bar" aria-hidden="true"><span></span></span>
 				<span class="muted">{t('webapps.starting')}</span>
 			{:else}
-				<span class="muted">{t('webapps.slow')}</span>
+				<span class="muted">{t(phase === 'blocked' ? 'webapps.blocked' : 'webapps.slow')}</span>
 				<span class="actions">
 					<button type="button" class="btn" onclick={restart}>{t('webapps.restart')}</button>
 					<button type="button" class="btn" onclick={openTab}>{t('desktop.window.openTab')}</button>
