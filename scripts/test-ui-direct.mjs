@@ -154,7 +154,10 @@ async function launch(page, name) {
   assert.equal(await win.locator(".remote").count(), 0, "no remote view");
   assert.deepEqual(asked, ["?direct=1"]);
   await shot(page, "01-direct");
-  await win.locator(".titlebar button.close, .titlebar button[aria-label='Schließen']").first().click();
+  await win
+    .locator(".titlebar button.close, .titlebar button[aria-label='Schließen']")
+    .first()
+    .click();
   await win.waitFor({ state: "detached" });
   const immich = await launch(page, "immich");
   await immich.locator(".remote").waitFor();
