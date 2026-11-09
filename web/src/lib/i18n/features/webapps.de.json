@@ -135,6 +135,8 @@
 	"webapps.saveTitle": "Speichern aus {app}",
 	"webapps.savedAs": "Gespeichert als „{name}“.",
 	"webapps.slow": "Die App meldet sich nicht. Du kannst sie neu starten oder in einem eigenen Tab öffnen.",
+	"webapps.center.notYet": "Noch nicht nutzbar",
+	"webapps.center.photocraftWhy": "Der Web-Fassung von storytold fehlt eine Datei, die die App beim Start lädt. Sobald eine Fassung startet, lässt sie sich hier installieren.",
 	"webapps.blocked": "Die Programmdateien der App kommen nicht an. Läuft der Zugang über Cloudflare Access, braucht der Pfad /webapps/ dort eine Regel „Bypass“: Die App lädt ihre Dateien ohne dein Cloudflare-Cookie. Die Dateien sind öffentlich und enthalten nichts Persönliches.",
 	"webapps.standard.intro": "Welches Programm ein Doppelklick im Dateimanager öffnet. Gilt nur für dein Konto.",
 	"webapps.standard.none": "Es sind keine Programme für den Browser installiert. Installieren kannst du sie im App-Center.",

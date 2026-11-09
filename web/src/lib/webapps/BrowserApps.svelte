@@ -10,6 +10,13 @@
 	import { letterGradient, type WebApp } from './protocol.ts';
 	import { loadWebApps, webapps } from './webapps.svelte.ts';
 
+	// Craft apps whose web version does not start yet (PLAN 75-9: visible,
+	// installing locked). PhotoCraft: storytold's web zip lacks a file the
+	// app loads (docs/WEBAPPS.md); it comes into the catalog once it starts.
+	const NOT_YET: { id: string; name: string; why: MessageKey }[] = [
+		{ id: 'photocraft', name: 'PhotoCraft', why: 'webapps.center.photocraftWhy' },
+	];
+	const notYet = $derived(NOT_YET.filter((n) => !webapps.apps.some((a) => a.id === n.id)));
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 	let busy = $state('');
 	let error = $state('');
@@ -121,6 +128,23 @@
 									>{a.state === 'error' ? t('common.retry') : t('webapps.center.install')}</button
 								>
 							{/if}
+						</div>
+					{/if}
+				</li>
+			{/each}
+			{#each notYet as n (n.id)}
+				<li class="app">
+					<DesktopIcon glyph="" gradient={letterGradient(n.id)} image="" name={n.name} size={40} />
+					<div class="text">
+						<b>{n.name}</b>
+						<span class="muted small">{t(n.why)}</span>
+						<span class="status small" role="status"
+							><span class="dot" aria-hidden="true"></span>{t('webapps.center.notYet')}</span
+						>
+					</div>
+					{#if admin}
+						<div class="actions">
+							<button type="button" class="btn" disabled>{t('webapps.center.install')}</button>
 						</div>
 					{/if}
 				</li>
