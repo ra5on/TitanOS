@@ -73,6 +73,9 @@ type fileState struct {
 	Pending []string `json:"pending,omitempty"`
 	// Offered: the notice "install office programs?" was sent or answered.
 	Offered bool `json:"offered,omitempty"`
+	// Volume: where the owner chose the programs to lie (PLAN 75-21); "" until
+	// chosen. It goes before every other rule of [Manager.Volume].
+	Volume string `json:"volume,omitempty"`
 }
 
 // Status is one app as GET /api/v1/webapps shows it.
@@ -95,6 +98,7 @@ type Status struct {
 	Repo      string   `json:"repo"`
 	Trusted   bool     `json:"trusted,omitempty"`
 	Successor string   `json:"successor,omitempty"`
+	StartNew  bool     `json:"startNew,omitempty"`
 }
 
 // job is an install in progress or its failure, in RAM.
@@ -186,7 +190,7 @@ func (m *Manager) normalize(s fileState) fileState {
 			pending = append(pending, id)
 		}
 	}
-	return fileState{Installed: installed, Pending: pending, Offered: s.Offered}
+	return fileState{Installed: installed, Pending: pending, Offered: s.Offered, Volume: s.Volume}
 }
 
 func (m *Manager) mounted() []string {
@@ -222,6 +226,9 @@ func (m *Manager) volumeLocked() string {
 		return ""
 	}
 	mounted := m.mounted()
+	if m.state.Volume != "" && slices.Contains(mounted, m.state.Volume) {
+		return m.state.Volume
+	}
 	for _, in := range m.state.Installed {
 		if slices.Contains(mounted, in.Volume) {
 			return in.Volume
@@ -247,7 +254,7 @@ func (m *Manager) List() []Status {
 	var out []Status
 	for _, app := range catalog {
 		st := Status{ID: app.ID, Name: app.Name, Version: app.Version, State: "missing", Bridge: app.Bridge,
-			Types: slices.Clone(app.Types), Default: app.Default, Size: app.Size, License: app.License, Repo: app.Repo, Trusted: app.Trusted, Successor: app.Successor,
+			Types: slices.Clone(app.Types), Default: app.Default, Size: app.Size, License: app.License, Repo: app.Repo, Trusted: app.Trusted, Successor: app.Successor, StartNew: app.StartNew,
 			Pending: slices.Contains(m.state.Pending, app.ID)}
 		if in, ok := m.installedLocked(app.ID); ok {
 			st.Installed, st.Version = true, in.Version
@@ -428,6 +435,7 @@ func (m *Manager) run(ctx context.Context, id string) {
 		return
 	}
 	j.err = ""
+	prev, had := m.installedLocked(id)
 	m.state.Installed = slices.DeleteFunc(m.state.Installed, func(x Installed) bool { return x.ID == id })
 	m.state.Installed = append(m.state.Installed, in)
 	m.state.Pending = slices.DeleteFunc(m.state.Pending, func(x string) bool { return x == id })
@@ -435,6 +443,94 @@ func (m *Manager) run(ctx context.Context, id string) {
 		slog.Warn("web apps not saved to /config", "err", err)
 	}
 	slog.Info("web app installed", "app", id, "version", in.Version, "volume", in.Volume)
+	// Moved to another volume: the old copy goes once the new one serves.
+	if had && prev.Volume != in.Volume && prev.Volume != "" {
+		go m.removeCopy(prev.Volume, id)
+	}
+}
+
+// removeCopy deletes the files of id on volume (after a move).
+func (m *Manager) removeCopy(volume, id string) {
+	root, err := m.openPrivate(volume)
+	if err != nil {
+		slog.Warn("old copy of a web app not removed", "app", id, "volume", volume, "err", err)
+		return
+	}
+	defer root.Close()
+	if err := root.RemoveAll(id); err != nil {
+		slog.Warn("old copy of a web app not removed", "app", id, "volume", volume, "err", err)
+		return
+	}
+	slog.Info("old copy of a web app removed", "app", id, "volume", volume)
+}
+
+// Volumes are the mounted volumes the programs can lie on.
+func (m *Manager) Volumes() []string {
+	if m.Dev {
+		return nil
+	}
+	return slices.Clone(m.mounted())
+}
+
+// NeedsVolume: there is a choice to make before anything is installed –
+// several volumes, no program yet, none chosen (PLAN 75-21). Installs that
+// were not asked for (pending, the automatic replacement) wait for it.
+func (m *Manager) NeedsVolume() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.needsVolumeLocked()
+}
+
+func (m *Manager) needsVolumeLocked() bool {
+	if m.Dev || m.state.Volume != "" {
+		return false
+	}
+	mounted := m.mounted()
+	if len(mounted) < 2 {
+		return false
+	}
+	return !slices.ContainsFunc(m.state.Installed, func(in Installed) bool { return slices.Contains(mounted, in.Volume) })
+}
+
+// ErrVolume: the volume is not mounted.
+var ErrVolume = errors.New("webapps: volume not mounted")
+
+// SetVolume records where the programs lie and moves those that lie
+// elsewhere there: each is installed again on volume and its old copy
+// removed once the new one is ready, so it stays usable meanwhile.
+func (m *Manager) SetVolume(volume string) error {
+	if m.Dev {
+		return nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !slices.Contains(m.mounted(), volume) {
+		return ErrVolume
+	}
+	for _, j := range m.jobs {
+		if j.running {
+			return ErrBusy
+		}
+	}
+	m.state.Volume = volume
+	if err := m.saveLocked(); err != nil {
+		return err
+	}
+	for _, in := range m.state.Installed {
+		if in.Volume != volume {
+			_ = m.startLocked(in.ID)
+		}
+	}
+	m.poke()
+	return nil
+}
+
+// poke wakes Run (pending installs).
+func (m *Manager) poke() {
+	select {
+	case m.wake <- struct{}{}:
+	default:
+	}
 }
 
 func (m *Manager) setJob(id string, f func(*job)) {
@@ -694,7 +790,7 @@ func (m *Manager) startPending() {
 		}
 		_ = m.startLocked(in.ID)
 	}
-	if len(m.state.Pending) == 0 || (m.volumeLocked() == "" && !m.Dev) {
+	if len(m.state.Pending) == 0 || (m.volumeLocked() == "" && !m.Dev) || m.needsVolumeLocked() {
 		return
 	}
 	for _, id := range m.state.Pending {

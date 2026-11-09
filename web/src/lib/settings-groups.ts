@@ -103,6 +103,24 @@ function wire(title: HTMLElement, path: () => string) {
 		button.setAttribute('aria-label', t(closed ? 'settings.groupOpen' : 'settings.groupClose'));
 	};
 	title.append(summary, button);
+	// The heading keeps its own name: without this, screen readers (and
+	// getByRole) would read the summary and the toggle's label as part of it.
+	const ownName = () =>
+		Array.from(title.childNodes)
+			.filter((n) => n !== summary && n !== button)
+			.map((n) => n.textContent ?? '')
+			.join('')
+			.trim();
+	const named = () => {
+		const own = ownName();
+		if (own && title.getAttribute('aria-label') !== own) title.setAttribute('aria-label', own);
+	};
+	named();
+	new MutationObserver(named).observe(title, {
+		childList: true,
+		characterData: true,
+		subtree: true,
+	});
 	set(closedSet().has(id()));
 	const toggle = () => {
 		const closed = !tile.hasAttribute('data-closed');

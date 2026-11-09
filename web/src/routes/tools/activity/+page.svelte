@@ -5,6 +5,7 @@
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
+	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import { formatDateTime, mbToMiB, mibToMB } from '#lib/format.ts';
 	import { operationError } from '#lib/operations.ts';
 	import {
@@ -183,35 +184,68 @@
 			>{t('tasks.exportJSON')}</button
 		>
 	</div>
-	<ul class="entries">
-		{#each entries as entry, index (index)}
-			<li class:failed={!entry.ok}>
-				<time datetime={entry.at}>{formatDateTime(new Date(entry.at))}</time>
-				<span class="who"
-					>{entry.user || '—'}{#if entry.via !== 'web'}<span class="via"
-							>{t(`activity.via.${entry.via}` as 'activity.via.token')}</span
-						>{/if}</span
+	<!-- Style W4 (0.74): the entries as a dense table, the figures in the status bar. -->
+	{#if entries.length}
+		<div class="table-wrap">
+			<table class="data-table entries">
+				<thead
+					><tr
+						><th>{t('activity.col.time')}</th><th>{t('activity.user')}</th><th
+							>{t('activity.col.action')}</th
+						><th>{t('activity.col.target')}</th><th>{t('activity.col.result')}</th></tr
+					></thead
 				>
-				<span class="what"
-					><strong>{describe(entry)}</strong
-					>{#if !entry.ok && !entry.action.startsWith('login_') && !entry.action.startsWith('ssh_login')}<span
-							class="tag"
-							>{t('activity.failed')}{#if entry.status}
-								({entry.status}){/if}</span
-						>{/if}{#if entry.target}<span class="target">{entry.target}</span>{/if}<span
-						class="raw mono"
-						>{entry.action}{#if entry.ip}&ensp;·&ensp;{entry.ip}{/if}</span
-					></span
-				>
-			</li>
-		{:else}
-			<EmptyState inline title={busy ? t('tools.loading') : t('activity.none')} />
-		{/each}
-	</ul>
+				<tbody>
+					{#each entries as entry, index (index)}
+						<tr class:failed={!entry.ok}>
+							<td class="nowrap"
+								><time datetime={entry.at}>{formatDateTime(new Date(entry.at))}</time></td
+							>
+							<td class="who"
+								>{entry.user || '—'}{#if entry.via !== 'web'}<span class="via"
+										>{t(`activity.via.${entry.via}` as 'activity.via.token')}</span
+									>{/if}</td
+							>
+							<td class="what"
+								><strong>{describe(entry)}</strong><span class="raw mono"
+									>{entry.action}{#if entry.ip}&ensp;·&ensp;{entry.ip}{/if}</span
+								></td
+							>
+							<td class="target" class:none={!entry.target}>{entry.target || '—'}</td>
+							<td class="nowrap"
+								>{#if !entry.ok && !entry.action.startsWith('login_') && !entry.action.startsWith('ssh_login')}<span
+										class="tag"
+										>{t('activity.failed')}{#if entry.status}
+											({entry.status}){/if}</span
+									>{:else if !entry.ok}<span class="tag">{t('activity.failed')}</span>{:else}<span
+										class="muted">{t('activity.ok')}</span
+									>{/if}</td
+							>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+	{:else}
+		<EmptyState inline title={busy ? t('tools.loading') : t('activity.none')} />
+	{/if}
 	{#if more}<div>
 			<button class="btn" disabled={busy} onclick={() => load(true)}>{t('activity.older')}</button>
 		</div>{/if}
 </section>
+
+{#if status}<StatusBar label={t('activity.statusBar')}>
+		<span>{t('activity.statEntries', { count: entries.length })}</span>
+		<span class:warn={entries.some((e) => !e.ok)}
+			>{t('activity.statFailed')} <b>{entries.filter((e) => !e.ok).length}</b></span
+		>
+		<span class="end"
+			>{status.settings.enabled
+				? t('activity.statOn')
+				: t('activity.statOff')}{#if status.settings.volume}
+				· {status.settings.volume}{/if}</span
+		>
+	</StatusBar>{/if}
 
 {#if settings}<form
 		class="tile settings"
@@ -313,21 +347,6 @@
 	.check span {
 		color: var(--text);
 	}
-	.entries {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-	}
-	.entries li {
-		display: grid;
-		grid-template-columns: 10.5rem 9rem minmax(0, 1fr);
-		gap: var(--space-1) 14px;
-		padding: var(--space-2-5) 0;
-		border-bottom: 1px solid var(--border);
-	}
-	.entries li:last-child {
-		border-bottom: 0;
-	}
 	time,
 	.who {
 		color: var(--muted);
@@ -338,15 +357,16 @@
 		font-size: var(--text-sm);
 	}
 	.what {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
 		min-width: 0;
+	}
+	.what strong {
+		display: block;
 	}
 	.target {
 		overflow-wrap: anywhere;
 	}
 	.raw {
+		display: block;
 		color: var(--muted);
 		font-size: var(--text-sm);
 		overflow-wrap: anywhere;
@@ -359,9 +379,37 @@
 		font-weight: 600;
 		font-size: var(--text-base);
 	}
+	.entries .nowrap {
+		white-space: nowrap;
+	}
+	.entries tr.failed td:first-child {
+		box-shadow: inset 3px 0 0 var(--error-text);
+	}
+	.entries .target {
+		overflow-wrap: anywhere;
+	}
+	/* Phone: one entry per block – time and account above, the action below. */
 	@media (max-width: 640px) {
-		.entries li {
-			grid-template-columns: minmax(0, 1fr);
+		.entries thead {
+			display: none;
+		}
+		.entries tr {
+			display: grid;
+			grid-template-columns: auto minmax(0, 1fr);
+			gap: 2px var(--space-2);
+			padding: var(--space-2) 0;
+			border-bottom: 1px solid var(--border);
+		}
+		.entries td {
+			padding: 0;
+			border: 0;
+		}
+		.entries td.what,
+		.entries td.target {
+			grid-column: 1 / -1;
+		}
+		.entries td.target.none {
+			display: none;
 		}
 	}
 </style>

@@ -141,15 +141,19 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-1);
-		padding: var(--space-1) var(--space-3);
+		min-height: 28px;
+		padding: var(--space-1) var(--space-4);
 		border-top: 1px solid var(--border);
-		font-size: var(--text-base);
+		/* Style W4 (0.74): the status bar of the window, as in the other views. */
+		background: color-mix(in srgb, var(--surface) 92%, var(--bg));
+		color: var(--muted);
+		font-size: var(--text-sm);
 	}
 	.grow {
 		flex: 1 1 auto;
 	}
 	.bar button {
-		height: 2rem;
+		height: 1.75rem;
 		padding: 0 var(--space-2-5);
 		background: transparent;
 		border: 0;

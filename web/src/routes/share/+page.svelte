@@ -9,6 +9,7 @@
 	import { api, type FileRoot } from '#lib/api.ts';
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import { formatBytes } from '#lib/format.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { enqueue, uploads, type Upload } from '#lib/uploads.svelte.ts';
@@ -205,6 +206,12 @@
 		</section>
 	{/if}
 </div>
+{#if shared?.length}<StatusBar label={t('share.statusBar')}>
+		<span>{t('share.statFiles', { count: shared.length })} · {formatBytes(total)}</span>
+		{#if sent.length}<span>{t('share.statSent')} <b>{sent.length}</b></span>{/if}
+		{#if target}<span class="end">{target.rootName + (target.dir ? ' / ' + target.dir : '')}</span
+			>{/if}
+	</StatusBar>{/if}
 
 {#if choosing}<FileDialog
 		mode="folder"

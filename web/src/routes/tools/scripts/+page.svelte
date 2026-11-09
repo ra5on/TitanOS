@@ -6,6 +6,7 @@
 	import { formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import HelpTip from '#lib/components/HelpTip.svelte';
 	import ScriptEditor from './ScriptEditor.svelte';
@@ -189,52 +190,83 @@
 
 		<section class="tile panel" aria-labelledby="scripts-list">
 			<h2 class="tile-title" id="scripts-list">{t('scripts.list')}</h2>
-			<ul class="scripts">
-				{#each status.scripts as script (script.id)}<li class="script">
-						<div class="head">
-							<div class="name">
-								<strong>{script.name}</strong>
-								{#if script.description}<span class="muted">{script.description}</span>{/if}
-							</div>
-							<div class="facts">
-								<span class="chip">{when(script)}</span>
-								{#if script.running}<span class="chip info" role="status"
-										>{t('scripts.outcome.running')}</span
-									>{:else if script.last}<span
-										class="chip {outcomeTone(script.last.outcome)}"
-										title={script.last.error}>{outcomeLabel(script.last)}</span
+			<!-- Style W4 (0.74): one row per script, its output opens below it. -->
+			{#if status.scripts.length}
+				<div class="table-wrap">
+					<table class="data-table scripts">
+						<thead
+							><tr
+								><th>{t('scripts.col.name')}</th><th>{t('scripts.col.when')}</th><th
+									>{t('scripts.col.last')}</th
+								><th class="actions"><span class="sr-only">{t('scripts.col.actions')}</span></th
+								></tr
+							></thead
+						>
+						<tbody>
+							{#each status.scripts as script (script.id)}
+								<tr>
+									<td class="name"
+										><strong>{script.name}</strong>{#if script.description}<span class="muted small"
+												>{script.description}</span
+											>{/if}<span class="meta muted small">{meta(script)}</span></td
+									>
+									<td>{when(script)}</td>
+									<td
+										>{#if script.running}<span class="chip info" role="status"
+												>{t('scripts.outcome.running')}</span
+											>{:else if script.last}<span
+												class="chip {outcomeTone(script.last.outcome)}"
+												title={script.last.error}>{outcomeLabel(script.last)}</span
+											>{:else}<span class="muted">—</span>{/if}</td
+									>
+									<td class="actions"
+										>{#if script.running}<button class="btn small" onclick={() => cancel(script)}
+												>{t('scripts.cancel')}</button
+											>{:else}<button
+												class="btn btn-primary small"
+												disabled={status.disabled}
+												onclick={() => start(script)}>{t('scripts.run')}</button
+											>{/if}<button
+											class="btn small"
+											aria-expanded={shown.includes(script.id)}
+											onclick={() => toggleOutput(script.id)}
+											>{t(
+												shown.includes(script.id) ? 'scripts.hideOutput' : 'scripts.output',
+											)}</button
+										><button class="btn small" onclick={() => (history = script)}
+											>{t('scripts.runs')}</button
+										><button
+											class="btn small"
+											disabled={script.running}
+											onclick={() => (editing = script.id)}>{t('ops.edit')}</button
+										></td
+									>
+								</tr>
+								{#if shown.includes(script.id)}<tr class="output"
+										><td colspan="4"
+											><ScriptOutput
+												id={script.id}
+												name={script.name}
+												running={script.running}
+												onended={load}
+											/></td
+										></tr
 									>{/if}
-							</div>
-						</div>
-						<p class="meta muted">{meta(script)}</p>
-						<div class="row-actions">
-							{#if script.running}<button class="btn" onclick={() => cancel(script)}
-									>{t('scripts.cancel')}</button
-								>{:else}<button
-									class="btn btn-primary"
-									disabled={status.disabled}
-									onclick={() => start(script)}>{t('scripts.run')}</button
-								>{/if}<button
-								class="btn"
-								aria-expanded={shown.includes(script.id)}
-								onclick={() => toggleOutput(script.id)}
-								>{t(shown.includes(script.id) ? 'scripts.hideOutput' : 'scripts.output')}</button
-							><button class="btn" onclick={() => (history = script)}>{t('scripts.runs')}</button
-							><button class="btn" disabled={script.running} onclick={() => (editing = script.id)}
-								>{t('ops.edit')}</button
-							>
-						</div>
-						{#if shown.includes(script.id)}<ScriptOutput
-								id={script.id}
-								name={script.name}
-								running={script.running}
-								onended={load}
-							/>{/if}
-					</li>{:else}<li>
-						<EmptyState inline title={t('scripts.none')} />
-					</li>{/each}
-			</ul>
-		</section>{/if}
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{:else}
+				<EmptyState inline title={t('scripts.none')} />
+			{/if}
+		</section>
+		<StatusBar label={t('scripts.statusBar')}>
+			<span>{t('scripts.statCount', { count: status.scripts.length })}</span>
+			<span>{t('scripts.statRunning')} <b>{status.scripts.filter((x) => x.running).length}</b></span
+			>
+			{#if status.volume}<span class="end">{t('scripts.statPlace', { volume: status.volume })}</span
+				>{/if}
+		</StatusBar>{/if}
 </div>
 
 {#if editing !== null}<ScriptEditor
@@ -271,45 +303,43 @@
 	.place label {
 		min-width: 14rem;
 	}
-	.scripts {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-	}
-	.script {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-		padding: var(--space-3) 0;
-		border-top: 1px solid var(--border);
-	}
-	.script:first-child {
-		border-top: none;
-		padding-top: 0;
-	}
-	.head {
-		display: flex;
-		flex-wrap: wrap;
-		justify-content: space-between;
-		gap: var(--space-2);
-	}
-	.name {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
-		min-width: 0;
-		overflow-wrap: break-word;
-	}
-	.facts {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-2);
-		align-items: flex-start;
-	}
 	.meta {
 		margin: 0;
 		font-size: var(--text-sm);
+	}
+	.scripts .name strong,
+	.scripts .name span {
+		display: block;
+	}
+	.scripts td.actions {
+		white-space: nowrap;
+	}
+	.scripts td.actions .btn {
+		margin: 2px 0 2px var(--space-1);
+	}
+	.scripts tr.output td {
+		padding-top: 0;
+	}
+	@media (max-width: 640px) {
+		.scripts thead {
+			display: none;
+		}
+		.scripts tr {
+			display: grid;
+			gap: var(--space-1);
+			padding: var(--space-2) 0;
+			border-bottom: 1px solid var(--border);
+		}
+		.scripts td {
+			padding: 0;
+			border: 0;
+		}
+		.scripts td.actions {
+			text-align: left;
+			white-space: normal;
+		}
+		.scripts td.actions .btn {
+			margin: 2px var(--space-1) 2px 0;
+		}
 	}
 </style>

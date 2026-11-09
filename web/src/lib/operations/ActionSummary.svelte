@@ -6,6 +6,7 @@
 	import { operationError, type Operations } from '#lib/operations.ts';
 	import { taskItems, needsAttention, isActive, type TaskAction } from './tasks.ts';
 	import TaskRow from './TaskRow.svelte';
+	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	let { compact = false }: { compact?: boolean } = $props();
 	let data = $state<Operations | null>(null),
 		error = $state(''),
@@ -95,6 +96,15 @@
 				{t('ops.none')}
 			</p>{/each}
 	</section>
+	<!-- Style W4 (0.74): the figures of the tasks in the status bar. -->
+	<StatusBar label={t('tasks.statusBar')}>
+		<span>{t('tasks.statCount', { count: tasks.length })}</span>
+		<span>{t('tasks.filter.active')}: <b>{tasks.filter(isActive).length}</b></span>
+		<span>{t('tasks.filter.scheduled')}: <b>{upcoming.length}</b></span>
+		<span class:warn={problems.length > 0}
+			>{t('tasks.filter.failed')}: <b>{problems.length}</b></span
+		>
+	</StatusBar>
 {/if}
 
 <style>

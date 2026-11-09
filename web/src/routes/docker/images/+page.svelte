@@ -3,6 +3,7 @@
 	// app uses them; unused ones can go one by one or all at once. Images in
 	// use are never offered for deletion (the NAS refuses them too).
 	import PageHead from '#lib/components/PageHead.svelte';
+	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -231,6 +232,13 @@
 			<p class="muted none">{t('dres.images.noMatch')}</p>
 		{/if}
 	</section>
+	<StatusBar label={t('dres.statusBar')}>
+		<span>{t('dres.images.count', { count: images.length, size: formatBytes(total) })}</span>
+		<span class:warn={unused.length > 0}
+			>{t('dres.statUnused')} <b>{unused.length}</b>{#if unused.length}
+				· {formatBytes(unusedSize)}{/if}</span
+		>
+	</StatusBar>
 {/if}
 
 {#if remove}

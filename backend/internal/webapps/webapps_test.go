@@ -258,7 +258,7 @@ func TestRewriteIndex(t *testing.T) {
 	if !strings.Contains(out, `<canvas data-host="page" id="wordcraft_canvas">`) {
 		t.Fatal(out)
 	}
-	host := `<script src="/webapps/_host/host.js" data-app="wordcraft" data-bridge="host"></script><script type="module">`
+	host := `<script src="/webapps/_host/host.js" data-app="wordcraft" data-bridge="host" data-events="wordcraft"></script><script type="module">`
 	if !strings.Contains(out, host) {
 		t.Fatal(out)
 	}
@@ -274,7 +274,7 @@ func TestRewriteIndex(t *testing.T) {
 	pdf, _ := Lookup("pdfcraft")
 	body := `<html><head><title>x</title></head><body><canvas id="pdfcraft"></canvas><script type="module">x</script></body></html>`
 	out = string(RewriteIndex([]byte(body), pdf))
-	if !strings.Contains(out, `<script src="/webapps/_host/host.js" data-app="pdfcraft" data-bridge="host"></script></head>`) || !strings.Contains(out, `<canvas data-host="page" id="pdfcraft">`) {
+	if !strings.Contains(out, `<script src="/webapps/_host/host.js" data-app="pdfcraft" data-bridge="host" data-events="pdfcraft"></script></head>`) || !strings.Contains(out, `<canvas data-host="page" id="pdfcraft">`) {
 		t.Fatal(out)
 	}
 }
@@ -677,7 +677,8 @@ func TestTrustedAppWithoutSandbox(t *testing.T) {
 		}
 		return rec.Header()
 	}
-	mine := get("/webapps/t-pdf/1.1.0/index.html")
+	tpdf, _ := Lookup("t-pdf")
+	mine := get("/webapps/t-pdf/" + tpdf.Version + "/index.html")
 	if mine.Get("Content-Security-Policy") != trustedPolicy || mine.Get("Access-Control-Allow-Origin") != "" {
 		t.Fatalf("trusted: %v", mine)
 	}
@@ -687,5 +688,76 @@ func TestTrustedAppWithoutSandbox(t *testing.T) {
 	theirs := get("/webapps/pdfcraft/0.19.0/index.html")
 	if theirs.Get("Content-Security-Policy") != sandboxPolicy || theirs.Get("Access-Control-Allow-Origin") != "*" {
 		t.Fatalf("original: %v", theirs)
+	}
+}
+
+// Our own builds keep the event prefix of their original (T-Word sends
+// wordcraft:ready); the mediator is told so.
+func TestEventPrefix(t *testing.T) {
+	for id, want := range map[string]string{"t-word": "wordcraft", "t-exel": "gridcraft", "t-material": "materialcraft", "wordcraft": "wordcraft"} {
+		app, ok := Lookup(id)
+		if !ok {
+			t.Fatal(id)
+		}
+		if got := app.EventPrefix(); got != want {
+			t.Errorf("%s: %s, want %s", id, got, want)
+		}
+	}
+	app, _ := Lookup("t-word")
+	if out := string(RewriteIndex([]byte(`<head><script></script></head><canvas id="wordcraft_canvas">`), app)); !strings.Contains(out, `data-app="t-word" data-bridge="host" data-events="wordcraft"`) {
+		t.Fatal(out)
+	}
+}
+
+// PLAN 75-21: with several volumes and no program yet the owner chooses
+// first; pending installs wait. SetVolume then moves installed programs,
+// the old copy goes once the new one is ready.
+func TestVolumeChoiceAndMove(t *testing.T) {
+	h := newHarness(t, map[string][]byte{"wordcraft": appZip(t, "wordcraft")})
+	os.Mkdir(filepath.Join(h.mounts, "fast"), 0o755)
+	h.mounted = []string{"data", "fast"}
+	if !h.m.NeedsVolume() {
+		t.Fatal("two volumes, nothing installed: the owner chooses")
+	}
+	if err := h.m.SetVolume("nope"); !errors.Is(err, ErrVolume) {
+		t.Fatal(err)
+	}
+	if err := h.m.SetVolume("fast"); err != nil {
+		t.Fatal(err)
+	}
+	if h.m.NeedsVolume() || h.m.Volume() != "fast" {
+		t.Fatal(h.m.NeedsVolume(), h.m.Volume())
+	}
+	if err := h.m.Install("wordcraft"); err != nil {
+		t.Fatal(err)
+	}
+	if st := h.wait(t, "wordcraft"); st.State != "ready" {
+		t.Fatalf("%+v", st)
+	}
+	if _, err := os.Stat(filepath.Join(h.mounts, "fast/.titanos/webapps/wordcraft/0.16.0")); err != nil {
+		t.Fatal("installed on the chosen volume", err)
+	}
+	// Move to data: installed again there, the copy on fast removed.
+	if err := h.m.SetVolume("data"); err != nil {
+		t.Fatal(err)
+	}
+	h.wait(t, "wordcraft")
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		_, errNew := os.Stat(filepath.Join(h.mounts, "data/.titanos/webapps/wordcraft/0.16.0"))
+		_, errOld := os.Stat(filepath.Join(h.mounts, "fast/.titanos/webapps/wordcraft"))
+		if errNew == nil && os.IsNotExist(errOld) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("not moved", errNew, errOld)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	// The choice survives a restart.
+	m2 := New(h.store)
+	m2.MountRoot, m2.Mounted = h.mounts, func() []string { return []string{"data", "fast"} }
+	if err := m2.Load(); err != nil || m2.Volume() != "data" || m2.NeedsVolume() {
+		t.Fatal(err, m2.Volume(), m2.NeedsVolume())
 	}
 }

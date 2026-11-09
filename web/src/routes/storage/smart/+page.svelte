@@ -6,6 +6,7 @@
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
+	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import SmartHistory from './SmartHistory.svelte';
 	import { formatDateTime, formatNumber } from '#lib/format.ts';
 	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
@@ -361,6 +362,13 @@
 		<summary>{t('smart.thresholdsTitle')}</summary>
 		<p>{t('smart.thresholds')}</p>
 	</details>
+	{#if reports}<StatusBar label={t('smart.statusBar')}>
+			<span>{t('smart.statDisks', { count: reports.length })}</span>
+			<span>{t('smart.statOk')} <b>{counts.ok}</b></span>
+			<span class:warn={counts.warning > 0}>{t('smart.statWarning')} <b>{counts.warning}</b></span>
+			<span class:warn={counts.failed > 0}>{t('smart.statFailed')} <b>{counts.failed}</b></span>
+			{#if counts.sleeping}<span>{t('smart.statSleeping')} <b>{counts.sleeping}</b></span>{/if}
+		</StatusBar>{/if}
 {:else}<p class="notice-error">{t('error.forbidden')}</p>{/if}
 
 <style>

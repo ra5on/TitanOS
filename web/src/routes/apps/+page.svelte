@@ -12,6 +12,7 @@
 		type Share,
 	} from '#lib/api.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
+	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { localize } from '#lib/compose/template.ts';
 	import { errorText, i18n, t, tOr } from '#lib/i18n/index.svelte.ts';
@@ -398,6 +399,13 @@
 			{#if visible.length === 0}<EmptyState inline title={t('apps.none')} />{/if}
 		</div>
 	</div>
+	<!-- Style W4 (0.74): the figures of the catalog in the status bar. -->
+	<StatusBar label={t('apps.statusBar')}>
+		<span>{t('apps.statApps', { count: apps.length })}</span>
+		<span>{t('apps.installed')}: <b>{installedCount}</b></span>
+		<span>{t('apps.statShown')} <b>{visible.length}</b></span>
+		<span class="end">{t('apps.statSources', { count: sources.length })}</span>
+	</StatusBar>
 {/if}
 
 <style>

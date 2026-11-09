@@ -180,6 +180,14 @@
 		void untrack(() => openDoc(d));
 	});
 
+	// Opened without a file, T-Word waits for one and stays empty: ask it for a
+	// new document (its start page with the templates), once per start.
+	$effect(() => {
+		if (phase !== 'ready' || doc || !app.startNew || app.bridge !== 'host') return;
+		if (untrack(() => current)) return;
+		post({ type: 'webapp-command', command: 'new' });
+	});
+
 	function message(event: MessageEvent) {
 		if (!frame || event.source !== frame.contentWindow) return;
 		const msg = hostMessage(event.data);

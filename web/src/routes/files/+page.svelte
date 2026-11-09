@@ -14,6 +14,7 @@
 		type UploadStatus,
 	} from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { folderPath, rangeSelection, previewKind, selectionType } from '#lib/file-actions.ts';
@@ -1453,7 +1454,7 @@
 					{#if writable}<DropHint {dragging} path={join(root?.name ?? '', dir)} />{/if}
 					{#if inWindow}
 						<!-- PLAN 73: the status line at the bottom (Explorer): entries, selection, free space. -->
-						<p class="status-line muted" role="status">
+						<StatusBar label={t('files.statusBar')}>
 							<span>{t('files.statusEntries', { count: visibleEntries.length })}</span>
 							{#if selected.length}<span
 									>{t('files.statusSelected', {
@@ -1465,14 +1466,13 @@
 										count: clipboard.content.paths.length,
 									})}</span
 								>{/if}
-							<span class="spacer"></span>
-							{#if root && root.totalBytes > 0}<span
+							{#if root && root.totalBytes > 0}<span class="end"
 									>{t('files.statusFree', {
 										name: root.name,
 										free: formatDiskBytes(root.freeBytes),
 									})}</span
 								>{/if}
-						</p>
+						</StatusBar>
 					{:else}
 						<p class="list-footer muted" role="status">
 							{t('files.resultCount', {
@@ -1857,21 +1857,6 @@
 	.browser.dragging {
 		border-color: var(--accent);
 	}
-	.status-line {
-		display: flex;
-		align-items: center;
-		gap: var(--space-4);
-		margin: 0;
-		padding: var(--space-1-5) var(--space-4);
-		border-top: 1px solid var(--panel-border);
-		font-size: var(--text-sm);
-		position: sticky;
-		bottom: 0;
-		background: var(--bg);
-	}
-	.status-line .spacer {
-		flex: 1;
-	}
 	.list-footer {
 		margin: 0;
 		padding: var(--space-2-5) 14px 0;
@@ -2089,5 +2074,11 @@
 		.places.open {
 			display: flex;
 		}
+	}
+	/* The pinned status bar (style W4) sits at the window's lower edge: a glass
+	   tile (backdrop-filter) would become its frame and hold it below the list. */
+	:global(body.has-statusbar) .browser {
+		backdrop-filter: none;
+		-webkit-backdrop-filter: none;
 	}
 </style>

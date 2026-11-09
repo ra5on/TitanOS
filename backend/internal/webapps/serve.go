@@ -211,7 +211,7 @@ func RewriteIndex(data []byte, app App) []byte {
 			out = append(append(append([]byte{}, out[:at]...), ` data-host="page"`...), out[at:]...)
 		}
 	}
-	tag := []byte(`<script src="` + HostScript + `" data-app="` + html.EscapeString(app.ID) + `" data-bridge="` + html.EscapeString(app.Bridge) + `"></script>`)
+	tag := []byte(`<script src="` + HostScript + `" data-app="` + html.EscapeString(app.ID) + `" data-bridge="` + html.EscapeString(app.Bridge) + `" data-events="` + html.EscapeString(app.EventPrefix()) + `"></script>`)
 	at := -1
 	if loc := scriptTag.FindIndex(out); loc != nil {
 		at = loc[0]

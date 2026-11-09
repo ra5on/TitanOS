@@ -193,7 +193,10 @@ try {
     )
     .waitFor();
   await page.goto(base + "/settings/backups/data");
-  await page.getByText("Zustand unbekannt", { exact: true }).waitFor();
+  await page
+    .locator("table.backup-table")
+    .getByText("Zustand unbekannt", { exact: true })
+    .waitFor();
   await page
     .getByText(
       "Gespeicherter Auftragszustand konnte nicht verlässlich geladen werden.",
@@ -210,6 +213,7 @@ try {
   };
   await page.reload();
   await page
+    .locator("table.backup-table")
     .getByText("Anwendungswiederherstellung", { exact: true })
     .waitFor();
   data.backups[0].state = { running: false, phase: "" };

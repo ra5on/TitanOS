@@ -29,7 +29,20 @@ export const webapps = $state<{
 	loaded: boolean;
 	/** The NAS has no web apps (older version or no volume yet). */
 	unavailable: boolean;
-}>({ apps: [], volume: '', docker: [], migration: null, loaded: false, unavailable: false });
+	/** PLAN 75-21: the mounted volumes the programs can lie on. */
+	volumes: string[];
+	/** Several volumes, no program yet, none chosen: ask before installing. */
+	needsVolume: boolean;
+}>({
+	apps: [],
+	volume: '',
+	docker: [],
+	migration: null,
+	loaded: false,
+	unavailable: false,
+	volumes: [],
+	needsVolume: false,
+});
 
 function sanitizeApp(raw: unknown): WebApp | null {
 	if (!raw || typeof raw !== 'object') return null;
@@ -61,6 +74,7 @@ function sanitizeApp(raw: unknown): WebApp | null {
 			typeof a.successor === 'string' && /^[a-z0-9][a-z0-9-]{0,63}$/.test(a.successor)
 				? a.successor
 				: undefined,
+		startNew: a.startNew === true,
 	};
 }
 
@@ -68,10 +82,21 @@ let loading: Promise<void> | null = null;
 /** Reads the list of the NAS (again). */
 export function loadWebApps(): Promise<void> {
 	loading ??= api
-		.get<{ apps?: unknown[]; volume?: string; docker?: unknown[]; migration?: unknown }>('/webapps')
+		.get<{
+			apps?: unknown[];
+			volume?: string;
+			docker?: unknown[];
+			migration?: unknown;
+			volumes?: unknown[];
+			needsVolume?: boolean;
+		}>('/webapps')
 		.then((r) => {
 			webapps.apps = (r?.apps ?? []).map(sanitizeApp).filter((a): a is WebApp => !!a);
 			webapps.volume = typeof r?.volume === 'string' ? r.volume : '';
+			webapps.volumes = (Array.isArray(r?.volumes) ? r.volumes : []).filter(
+				(v): v is string => typeof v === 'string' && v !== '',
+			);
+			webapps.needsVolume = r?.needsVolume === true;
 			webapps.docker = (Array.isArray(r?.docker) ? r.docker : [])
 				.filter(
 					(d): d is CraftDocker =>

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { poll } from '#lib/poll.ts';
 	import ClusterPair from '#lib/components/ClusterPair.svelte';
+	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import ApplicationSelection, {
 		type Application,
 	} from '#lib/operations/ApplicationSelection.svelte';
@@ -616,6 +617,36 @@
 		}
 	}
 
+	// Style W4 (owner 9.11.2026): the backups as a table; the chosen one's
+	// tile is its detail. A link to #backup-<id> chooses that one.
+	let picked = $state('');
+	$effect(() => {
+		const fromHash = () => {
+			const m = /^#backup-(.+)$/.exec(location.hash);
+			if (m) picked = decodeURIComponent(m[1]);
+		};
+		fromHash();
+		addEventListener('hashchange', fromHash);
+		return () => removeEventListener('hashchange', fromHash);
+	});
+	const chosenId = $derived(
+		overview?.jobs.some((v) => v.job.id === picked) ? picked : (overview?.jobs[0]?.job.id ?? ''),
+	);
+	function stateChip(view: View): { text: string; tone: string } {
+		const state = view.state;
+		if (state.running && state.queued) return { text: t('backup.queued'), tone: '' };
+		if (state.running)
+			return { text: t(`backup.phase.${state.phase}` as 'backup.phase.backup'), tone: 'info' };
+		if (view.stateKnown === false || state.statusError)
+			return { text: t('tasks.state.unknown'), tone: 'warn' };
+		if (state.lastError && state.lastError !== 'cancelled')
+			return { text: t('backup.failed'), tone: 'error' };
+		if (state.lastError === 'cancelled') return { text: t('backup.cancelled'), tone: 'warn' };
+		if (state.warning) return { text: t('backup.withWarning'), tone: 'warn' };
+		if (state.lastOK) return { text: t('backup.ok'), tone: 'ok' };
+		return { text: t('backup.never'), tone: '' };
+	}
+
 	function when(job: Job): string {
 		if (!job.enabled) return t('backup.manual');
 		const times = (job.times?.length ? job.times : [job.time]).join(', ');
@@ -719,11 +750,58 @@
 	{#if !restoreOnly}<h2 class="tile-title" id="backup-history" use:revealTarget>
 			{t('safeguard.history')}
 		</h2>{/if}
+	{#if !restoreOnly && overview.jobs.length}
+		<div class="table-wrap">
+			<table class="data-table backup-table">
+				<thead
+					><tr
+						><th>{t('backup.col.name')}</th><th>{t('backup.col.route')}</th><th
+							>{t('backup.col.state')}</th
+						><th>{t('backup.schedule')}</th><th>{t('safeguard.lastRun')}</th><th
+							>{t('backup.next')}</th
+						></tr
+					></thead
+				>
+				<tbody>
+					{#each overview.jobs as view (view.job.id)}
+						{@const chip = stateChip(view)}
+						<tr
+							class:selected={view.job.id === chosenId}
+							aria-selected={view.job.id === chosenId}
+							onclick={() => (picked = view.job.id)}
+						>
+							<td
+								><button type="button" class="link mono" onclick={() => (picked = view.job.id)}
+									>{view.job.id}</button
+								></td
+							>
+							<td class="route muted"
+								>{[...view.job.sources, ...(view.job.applications ?? []).map((a) => a.name)].join(
+									', ',
+								)} → <span class="mono">{where(view.job.destination)}</span></td
+							>
+							<td><span class="chip {chip.tone}">{chip.text}</span></td>
+							<td>{when(view.job)}</td>
+							<td class="nowrap"
+								>{view.state.lastRun ? formatDateTime(new Date(view.state.lastRun)) : '–'}</td
+							>
+							<td class="nowrap">{view.next ? formatDateTime(new Date(view.next)) : '–'}</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+	{/if}
 	{#each overview.jobs as view (view.job.id)}
 		{@const job = view.job}
 		{@const state = view.state}
 		{@const next = view.next}
-		<section class="tile panel" use:revealTarget id="backup-{job.id}">
+		<section
+			class="tile panel"
+			class:hidden-job={!restoreOnly && job.id !== chosenId}
+			use:revealTarget
+			id="backup-{job.id}"
+		>
 			<div class="head">
 				<div>
 					<h2 class="name mono">{job.id}</h2>
@@ -915,6 +993,35 @@
 	{:else}
 		{#if !draft}<div class="tile panel"><p class="muted">{t('backup.none')}</p></div>{/if}
 	{/each}
+	{#if !restoreOnly && overview.jobs.length}<StatusBar label={t('backup.statusBar')}>
+			<span>{t('backup.statJobs', { count: overview.jobs.length })}</span>
+			<span
+				>{t('backup.statRunning')}
+				<b>{overview.jobs.filter((v) => v.state.running).length}</b></span
+			>
+			<span
+				class:warn={overview.jobs.some(
+					(v) => v.state.lastError && v.state.lastError !== 'cancelled',
+				)}
+				>{t('backup.statFailed')}
+				<b
+					>{overview.jobs.filter((v) => v.state.lastError && v.state.lastError !== 'cancelled')
+						.length}</b
+				></span
+			>
+			{#if overview.jobs.some((v) => v.state.lastOK)}<span class="end"
+					>{t('backup.statLastOk')}
+					{formatDateTime(
+						new Date(
+							overview.jobs
+								.map((v) => v.state.lastOK ?? '')
+								.filter(Boolean)
+								.sort()
+								.at(-1) ?? '',
+						),
+					)}</span
+				>{/if}
+		</StatusBar>{/if}
 
 	{#if !draft && !restoreOnly}
 		{#if overview.shares.length === 0}
@@ -1787,5 +1894,50 @@
 		display: grid;
 		gap: 0.3rem;
 		margin-top: 0.6rem;
+	}
+	.backup-table tbody tr {
+		cursor: pointer;
+	}
+	.backup-table tr.selected td {
+		background: color-mix(in srgb, var(--accent) 12%, transparent);
+	}
+	.backup-table .link {
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--text);
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.backup-table .route {
+		overflow-wrap: anywhere;
+	}
+	.backup-table .nowrap {
+		white-space: nowrap;
+	}
+	/* Only the chosen backup's tile is shown: it is the detail of the row. */
+	.hidden-job {
+		display: none;
+	}
+	@media (max-width: 760px) {
+		.backup-table thead {
+			display: none;
+		}
+		.backup-table tr {
+			display: grid;
+			gap: 2px;
+			padding: var(--space-2) 0;
+			border-bottom: 1px solid var(--border);
+		}
+		.backup-table td {
+			padding: 0 var(--space-2);
+			border: 0;
+		}
+		.backup-table tr.selected {
+			background: color-mix(in srgb, var(--accent) 12%, transparent);
+		}
+		.backup-table tr.selected td {
+			background: none;
+		}
 	}
 </style>

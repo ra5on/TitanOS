@@ -1161,3 +1161,78 @@ input.switch:disabled {
 		transition: none;
 	}
 }
+
+/* PLAN 75-19, style E3: a group (settings, and since 0.74 every page with titled tiles) is a row that opens downward. */
+.tile.e3-group {
+	border-radius: var(--radius-small);
+}
+.e3-group > .tile-title {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-2));
+	padding: var(--space-1) var(--space-2);
+	border-radius: var(--radius-bar);
+	color: var(--text);
+	font-size: var(--text-md);
+	font-weight: 600;
+	letter-spacing: 0;
+	text-transform: none;
+	cursor: pointer;
+	user-select: none;
+}
+.e3-summary {
+	display: none;
+	min-width: 0;
+	margin-left: auto;
+	overflow: hidden;
+	color: var(--muted);
+	font-size: var(--text-sm);
+	font-weight: 400;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.e3-group[data-closed] .e3-summary {
+	display: block;
+}
+.e3-group[data-closed] .e3-summary + .e3-toggle {
+	margin-left: 0;
+}
+.e3-toggle {
+	display: grid;
+	place-items: center;
+	flex: none;
+	width: 26px;
+	height: 26px;
+	margin-left: auto;
+	padding: 0;
+	border: 0;
+	border-radius: var(--radius-bar);
+	background: none;
+	cursor: pointer;
+}
+.e3-toggle::after {
+	content: '';
+	width: 8px;
+	height: 8px;
+	border-right: 1.6px solid var(--muted);
+	border-bottom: 1.6px solid var(--muted);
+	transform: translateY(2px) rotate(-135deg);
+	transition: transform 0.15s;
+}
+.e3-group[data-closed] .e3-toggle::after {
+	transform: translateY(-2px) rotate(45deg);
+}
+.e3-toggle:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+.e3-group > .tile-title:hover {
+	background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+.e3-group[data-closed] > :not(.tile-title) {
+	display: none !important;
+}
+.page-groups {
+	display: contents;
+}

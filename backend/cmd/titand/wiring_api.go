@@ -115,6 +115,8 @@ func (w *titand) wireAPI() error {
 		_ = w.handler.Close() // cleanup, best effort: nothing more can be done if it fails
 	})
 
+	// Old Craft apps give way to the T-apps by themselves (PLAN 75-20).
+	w.background(func() { w.handler.RunCraftReplacement(ctx) })
 	// Watches that Home Assistant keeps putting its backups on the NAS.
 	w.background(func() { w.handler.RunHAStorage(ctx) })
 	// Leftovers of the AI chat removed in 0.41.0, once.

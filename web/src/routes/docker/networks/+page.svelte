@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { api } from '#lib/api.ts';
+	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
@@ -409,6 +410,11 @@
 			><button class="btn btn-danger" disabled={busy} onclick={prune}>{t('dnet.remove')}</button>
 		</div></Dialog
 	>{/if}
+
+<StatusBar label={t('dres.statusBar')}>
+	<span>{t('dres.statNetworks', { count: all.length })}</span>
+	<span class:warn={unused.length > 0}>{t('dres.statUnused')} <b>{unused.length}</b></span>
+</StatusBar>
 
 <style>
 	.content {

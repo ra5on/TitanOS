@@ -21,6 +21,8 @@ export type WebApp = {
 	trusted?: boolean;
 	/** Our own build that replaces this app (wordcraft → t-word, PLAN 75-20). */
 	successor?: string;
+	/** Opened without a file it shows nothing: the window asks it for a new document. */
+	startNew?: boolean;
 	/** Optional: the app's own icon among its files. */
 	icon?: string;
 	/** Size of the archive in bytes (for the offer to install). */
