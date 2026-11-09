@@ -2,6 +2,7 @@
 	import { api, type DiskSleepStatus } from '#lib/api.ts';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import PowerSchedule from '#lib/components/PowerSchedule.svelte';
+	import Expander from '#lib/components/explorer/Expander.svelte';
 	import { apiErrorText, t, tOr } from '#lib/i18n/index.svelte.ts';
 	// Disk sleep stays set in its one dialog (Plan 28b): this page only links
 	// to it, so there are never two places with their own values.
@@ -41,8 +42,9 @@
 			(err) => (sleepError = apiErrorText(err)),
 		);
 	});
-	async function save(event: SubmitEvent) {
-		event.preventDefault();
+	let cpuOpen = $state(false);
+	// E3: a changed profile is stored right away.
+	async function store() {
 		busy = true;
 		error = '';
 		saved = false;
@@ -76,20 +78,37 @@
 		</p>{/if}
 	{#if status.readOnly}<p class="notice-warn">{t('energy.readOnly')}</p>{/if}
 	{#if status.controls.length === 0}
-		<section class="tile panel"><p>{t('energy.unsupported')}</p></section>
+		<Expander icon="chip" title={t('energy.cpu')} summary={t('energy.unsupported')} />
 	{:else}
-		<form onsubmit={save}>
+		<!-- PLAN 75-19, draft E3: each profile a row, saved when it changes. -->
+		<Expander
+			icon="chip"
+			title={t('energy.cpu')}
+			summary={[
+				...status.controls.map(
+					(c) => `${t(`energy.${c.key}`)}: ${c.mixed ? t('energy.mixed') : label(c.current)}`,
+				),
+				status.drivers.length ? `${t('energy.driver')} ${status.drivers.join(', ')}` : '',
+			]
+				.filter(Boolean)
+				.join(' · ')}
+			bind:open={cpuOpen}
+		>
 			{#each status.controls as control (control.key)}
-				<section class="tile panel">
-					<label class="stack" for="energy-{control.key}"
-						><span>{t(`energy.${control.key}`)}</span></label
+				<div class="part">
+					<span class="t"
+						><label for="energy-{control.key}">{t(`energy.${control.key}`)}</label><small
+							>{t(`energy.${control.key}Hint`)} · {t('energy.current')}: {control.mixed
+								? t('energy.mixed')
+								: label(control.current)}</small
+						></span
 					>
-					<p class="muted hint">{t(`energy.${control.key}Hint`)}</p>
 					<select
 						id="energy-{control.key}"
 						class="field"
 						bind:value={draft[control.key]}
 						disabled={busy || status.readOnly}
+						onchange={store}
 					>
 						<option value="">{t('energy.unmanaged')}</option>
 						{#if draft[control.key] && !control.choices.includes(draft[control.key])}<option
@@ -100,34 +119,23 @@
 								>{label(choice)}{label(choice) !== choice ? ` (${choice})` : ''}</option
 							>{/each}
 					</select>
-					<p class="muted current">
-						{t('energy.current')}: {control.mixed ? t('energy.mixed') : label(control.current)}
-					</p>
-				</section>
+				</div>
 			{/each}
-			{#if status.drivers.length}<p class="muted">
-					{t('energy.driver')}: <span class="mono">{status.drivers.join(', ')}</span>
-				</p>{/if}
-			<div class="actions">
-				<button class="btn btn-primary" disabled={busy || status.readOnly}
-					>{t('common.save')}</button
-				>
-				{#if saved}<span class="muted" role="status">{t('energy.saved')}</span>{/if}
-			</div>
-		</form>
+			{#if saved}<p class="part muted" role="status">{t('energy.saved')}</p>{/if}
+		</Expander>
 	{/if}
 {:else if !error}<p>{t('common.loading')}</p>{/if}
-<section class="tile panel" aria-labelledby="energy-disk-sleep">
-	<h2 id="energy-disk-sleep" class="tile-title">{t('energy.diskSleep')}</h2>
-	<p class="muted hint">{t('energy.diskSleepHint')}</p>
-	{#if sleepError}<p class="notice-error" role="alert">{sleepError}</p>
-	{:else if sleep}<p class="muted current">{sleepSummary}</p>{/if}
-	<div class="actions">
+<Expander
+	icon="disk"
+	title={t('energy.diskSleep')}
+	summary={sleepError || sleepSummary || t('energy.diskSleepHint')}
+>
+	{#snippet control()}
 		<button type="button" class="btn" disabled={!sleep} onclick={() => (sleepOpen = true)}
 			>{t('energy.diskSleepOpen')}</button
 		>
-	</div>
-</section>
+	{/snippet}
+</Expander>
 {#if sleepOpen && sleep}<DiskSleepDialog
 		status={sleep}
 		onclose={() => (sleepOpen = false)}
@@ -136,30 +144,14 @@
 <PowerSchedule />
 
 <style>
-	form {
-		display: flex;
-		flex-direction: column;
-		gap: var(--gap);
+	.part select {
+		max-width: 20rem;
 	}
-	select {
-		max-width: 32rem;
-	}
-	.stack > span {
-		color: var(--text);
-		font-weight: 600;
-	}
-	.hint,
-	.current {
-		font-size: var(--text-base);
+	.part label {
+		font-weight: 500;
 	}
 	p {
 		margin: 0;
-	}
-	.actions {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2-5);
 	}
 	.notice-error {
 		white-space: pre-wrap;

@@ -123,6 +123,6 @@ export function formatDiskBytes(bytes: number): string {
  * in two parts, "0.72"; the wire keeps "0.72.0" for older NAS. Earlier
  * releases with a third number (0.71.1) stay as they are.
  */
-export function osVersion(version: string): string {
-	return version.replace(/^(\d+\.\d+)\.0$/, '$1');
+export function osVersion(version: string | undefined | null): string {
+	return (version ?? '').replace(/^(\d+\.\d+)\.0$/, '$1');
 }

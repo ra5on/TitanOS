@@ -5,6 +5,7 @@
 	import { api, type Account, type Share } from '#lib/api.ts';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Icon from '#lib/components/Icon.svelte';
+	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
@@ -505,6 +506,17 @@
 		onclose={() => (menu = null)}
 		onchoose={(choice) => menuChoice(share, choice)}
 	/>
+{/if}
+{#if shares && shares.length > 0}
+	<!-- PLAN 75-19, style W4: the figures in one line at the bottom. -->
+	<StatusBar label={t('shares.title')}>
+		<span>{t('shares.title')} <b>{shares.length}</b></span>
+		<span>SMB <b>{shares.filter((s) => s.smb).length}</b></span>
+		<span>NFS <b>{shares.filter((s) => s.nfs?.enabled).length}</b></span>
+		{#if shares.some((s) => s.guardLocked)}<span class="warn"
+				>{t('shares.lockedCount', { count: shares.filter((s) => s.guardLocked).length })}</span
+			>{/if}
+	</StatusBar>
 {/if}
 {#if dialog?.kind === 'create'}<ShareDialog
 		{volumes}

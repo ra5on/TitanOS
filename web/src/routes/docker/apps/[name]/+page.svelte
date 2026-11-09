@@ -16,6 +16,7 @@
 	import MemoryLimit from '#lib/components/appform/MemoryLimit.svelte';
 	import PathField from '#lib/components/appform/PathField.svelte';
 	import Toggle from '#lib/components/appform/Toggle.svelte';
+	import AppAccess from './AppAccess.svelte';
 	import ViewSwitch, { storedAdvanced } from '#lib/components/appform/ViewSwitch.svelte';
 	import { where } from '#lib/components/appform/where.ts';
 	import { validImage } from '#lib/compose/image.ts';
@@ -615,6 +616,9 @@
 			{/if}
 			<FormRow label={t('appform.httpsName')}>
 				<AppProxy app={name} {members} version={proxyVersion} embedded />
+			</FormRow>
+			<FormRow label={t('appaccess.whoMay')}>
+				<AppAccess app={name} />
 			</FormRow>
 			{#if proxy}
 				<FormRow

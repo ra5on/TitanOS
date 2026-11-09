@@ -1,5 +1,6 @@
 <script lang="ts">
 	import AdoptDialog from './AdoptDialog.svelte';
+	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
 	import CloneDialog from './CloneDialog.svelte';
 	let cloning = $state<VM | null>(null);
 	// VMs: the list on the left, the chosen VM on the right with the tabs
@@ -18,7 +19,7 @@
 	import { addVmConsole } from '#lib/terminal.svelte.ts';
 	import { vmLabel } from '#lib/vm-name.ts';
 	import { nextScheduled } from '#lib/vm-schedule.ts';
-	import { formatDateTime } from '#lib/format.ts';
+	import { formatBytes, formatDateTime } from '#lib/format.ts';
 	import { VNC_HEIGHT } from '#lib/vnc-size.ts';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -864,6 +865,17 @@
 	</div>
 {/if}
 
+{#if status && vms.length > 0}
+	{@const memory = vms
+		.filter((vm) => vm.state === 'running')
+		.reduce((sum, vm) => sum + vm.memoryMiB, 0)}
+	<!-- PLAN 75-19, style W4: the figures in one line at the bottom. -->
+	<StatusBar label={t('vms.title')}>
+		<span>{t('vms.title')} <b>{counts.all}</b></span>
+		<span>{t('vms.filter.running')} <b>{counts.running}</b></span>
+		<span>{t('vms.memoryRunning')} <b>{formatBytes(memory * 1024 * 1024)}</b></span>
+	</StatusBar>
+{/if}
 {#if rowMenu}
 	{@const vm = rowMenu.vm}
 	<VmRowMenu

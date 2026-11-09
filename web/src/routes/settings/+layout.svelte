@@ -7,6 +7,7 @@
 	import { userSettingsPaths } from '#lib/settings-search.ts';
 	import { loadSettingsStates } from '#lib/settings-states.svelte.ts';
 	import { markAreaSeen } from '#lib/settings-seen.svelte.ts';
+	import { settingsGroups } from '#lib/settings-groups.ts';
 	let { children }: { children: Snippet } = $props();
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
 	const allowed = $derived(
@@ -22,10 +23,9 @@
 <!-- PLAN 61/65: the window (or the phone's bar) lists the settings pages;
      the page takes the whole width. -->
 <div class="settings-shell">
-	{#if allowed}<div class="settings-page column">{@render children()}</div>{:else}<p
-			class="notice-error"
-			role="alert"
-		>
+	{#if allowed}<div class="settings-page column" use:settingsGroups={() => page.url.pathname}>
+			{@render children()}
+		</div>{:else}<p class="notice-error" role="alert">
 			{t('error.forbidden')}
 		</p>{/if}
 </div>
@@ -39,6 +39,60 @@
 	}
 	.settings-shell :global(.settings-page.column) {
 		max-width: none;
+	}
+	/* PLAN 75-19, style E3: a group of settings is a row that opens downward. */
+	.settings-shell :global(.tile.e3-group) {
+		border-radius: var(--radius-small);
+	}
+	.settings-shell :global(.e3-group > .tile-title) {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-2));
+		padding: var(--space-1) var(--space-2);
+		border-radius: var(--radius-bar);
+		color: var(--text);
+		font-size: var(--text-md);
+		font-weight: 600;
+		letter-spacing: 0;
+		text-transform: none;
+		cursor: pointer;
+		user-select: none;
+	}
+	.settings-shell :global(.e3-toggle) {
+		display: grid;
+		place-items: center;
+		flex: none;
+		width: 26px;
+		height: 26px;
+		margin-left: auto;
+		padding: 0;
+		border: 0;
+		border-radius: var(--radius-bar);
+		background: none;
+		cursor: pointer;
+	}
+	.settings-shell :global(.e3-toggle::after) {
+		content: '';
+		width: 8px;
+		height: 8px;
+		border-right: 1.6px solid var(--muted);
+		border-bottom: 1.6px solid var(--muted);
+		transform: translateY(2px) rotate(-135deg);
+		transition: transform 0.15s;
+	}
+	.settings-shell :global(.e3-group[data-closed] .e3-toggle::after) {
+		transform: translateY(-2px) rotate(45deg);
+	}
+	.settings-shell :global(.e3-toggle:focus-visible) {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
+	}
+	.settings-shell :global(.e3-group > .tile-title:hover) {
+		background: color-mix(in srgb, var(--text) 5%, transparent);
+	}
+	.settings-shell :global(.e3-group[data-closed] > :not(.tile-title)) {
+		display: none !important;
 	}
 	/* Settings are dense forms: buttons and fields a little smaller than
 	   elsewhere, still following font size and density. Touch keeps 44 px. */

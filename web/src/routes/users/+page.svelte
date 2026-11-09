@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { api, type Account, type Role, type Share } from '#lib/api.ts';
+	import AccountDetail from './AccountDetail.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import PasswordDialog from '#lib/components/PasswordDialog.svelte';
-	import Dropdown from '#lib/components/Dropdown.svelte';
 	import { apiErrorText, errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import {
@@ -200,6 +200,32 @@
 		}
 	}
 
+	// PLAN 75-20 (U2): the chosen account; at first one's own.
+	let chosen = $state('');
+	let showDetail = $state(false);
+	let narrow = $state(matchMedia('(max-width: 720px)').matches);
+	$effect(() => {
+		const query = matchMedia('(max-width: 720px)');
+		const change = () => (narrow = query.matches);
+		query.addEventListener('change', change);
+		return () => query.removeEventListener('change', change);
+	});
+	const current = $derived(
+		shown.find((a) => a.name === chosen) ??
+			shown.find((a) => a.name === me?.name) ??
+			shown[0] ??
+			null,
+	);
+	function choose(name: string) {
+		chosen = name;
+		showDetail = true;
+	}
+	function hue(name: string) {
+		let h = 0;
+		for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360;
+		return h;
+	}
+
 	// PLAN 67-1: the menu bar of the desktop; actions on one account list the accounts.
 	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
 	const findAccount = (name?: string) => accounts?.find((a) => a.name === name);
@@ -277,157 +303,77 @@
 {#if accounts === null}
 	{#if !loadError}<p class="muted loading" role="status">{t('common.loading')}</p>{/if}
 {:else}
-	<div class="toolbar">
-		<label>
-			<span>{t('users.filter')}</span>
-			<select class="field filter" bind:value={statusFilter}>
-				{#each ACCOUNT_STATUS_FILTERS as option (option)}<option value={option}
-						>{t(filterLabel[option])}</option
-					>{/each}
-			</select>
-		</label>
-	</div>
-	<div class="tile table">
-		<table>
-			<thead>
-				<tr>
-					<th scope="col">{t('users.name')}</th>
-					<th scope="col">{t('users.role')}</th>
-					<th scope="col">{t('users.status')}</th>
-					<th scope="col" class="reach">{t('users.shares')}</th>
-					<th scope="col" class="date">{t('users.created')}</th>
-					<th scope="col"></th>
-				</tr>
-			</thead>
-			<tbody>
+	<!-- PLAN 75-19/75-20, draft U2: the accounts at the left, the chosen one at the right. -->
+	<div class="u2" class:detail-only={narrow && showDetail}>
+		<nav class="accounts" aria-label={t('users.list')}>
+			<label class="filter-row">
+				<span class="sr-only">{t('users.filter')}</span>
+				<select class="field filter" bind:value={statusFilter} aria-label={t('users.filter')}>
+					{#each ACCOUNT_STATUS_FILTERS as option (option)}<option value={option}
+							>{t(filterLabel[option])}</option
+						>{/each}
+				</select>
+			</label>
+			<ul>
 				{#each shown as account (account.name)}
-					{@const manageable = mayManage(account.role)}
-					<tr class:locked={account.disabled}>
-						<td>
-							<span class="who">
-								<span class="avatar" aria-hidden="true">{account.name.charAt(0).toUpperCase()}</span
-								>
-								<span>
-									<span class="mono name">{account.name}</span>{#if account.name === me?.name}<span
-											class="chip you">{t('users.you')}</span
-										>{/if}
-									{#if !account.smbReady}<span class="sub">{t('users.smbPending')}</span>{/if}
-									{#if account.twoFactor}<span class="chip">{t('users.twoFactor')}</span>{/if}
-								</span>
-							</span>
-						</td>
-						<td>
-							{#if manageable && account.name !== me?.name}
-								<select
-									class="field role"
-									aria-label="{t('users.role')}: {account.name}"
-									value={account.role}
-									disabled={working}
-									onchange={(event) =>
-										pickRole(account, event.currentTarget.value as Role, event.currentTarget)}
-								>
-									{#each offeredRoles as role (role)}<option value={role}
-											>{t(`role.${role}`)}</option
-										>{/each}
-								</select>
-							{:else}
-								{t(`role.${account.role}`)}
-							{/if}
-						</td>
-						<td>
-							{#if account.disabled}
-								<span class="chip warn" title={lockedTitle(account)}>{t('users.statusLocked')}</span
-								>
-								{#if account.disabledAt}<span class="sub">{lockedTitle(account)}</span>{/if}
-							{:else}
-								<span class="chip ok">{t('users.statusActive')}</span>
-							{/if}
-						</td>
-						<td class="reach">
-							{#if shares === null}
-								<span class="muted">{t('users.sharesUnknown')}</span>
-							{:else}
-								{#each reach(account.name) as entry (entry.name)}
-									<a
-										class="chip"
-										href="/shares?share={encodeURIComponent(entry.name)}&tab=access"
-										title={t(`share.${entry.level}`)}
-										><span class="mono">{entry.name}</span> · {t(
-											entry.level === 'rw' ? 'users.shareRw' : 'users.shareRo',
-										)}</a
-									>
-								{:else}
-									<span class="muted">{t('users.sharesNone')}</span>
-								{/each}
-							{/if}
-						</td>
-						<td class="muted date">{day(account.created)}</td>
-						<td class="actions">
-							<!-- PLAN 67: the account's actions in one "⋯" menu (the list keeps its width). -->
-							{#if manageable || account.name === me?.name || (accounts && mayLock(me, account, accounts))}
-								<Dropdown
-									label={t('users.actionsFor', { name: account.name })}
-									icon="more"
-									align="right"
-								>
-									{#snippet children(close)}
-										{#if manageable || account.name === me?.name}
-											<button
-												type="button"
-												role="menuitem"
-												onclick={() => {
-													close();
-													dialog = { kind: 'password', name: account.name };
-												}}><span>{t('users.changePassword')}</span></button
-											>
-											{#if account.twoFactor && manageable && account.name !== me?.name}
-												<button
-													type="button"
-													role="menuitem"
-													onclick={() => {
-														close();
-														dialogError = '';
-														dialog = { kind: 'twoFactor', account };
-													}}><span>{t('users.resetTwoFactor')}</span></button
-												>
-											{/if}
-										{/if}
-										{#if accounts && mayLock(me, account, accounts)}
-											<button
-												type="button"
-												role="menuitem"
-												onclick={() => {
-													close();
-													dialogError = '';
-													dialog = { kind: 'lock', account, disabled: !account.disabled };
-												}}
-												><span>{account.disabled ? t('users.unlock') : t('users.lock')}</span
-												></button
-											>
-										{/if}
-										{#if manageable && account.name !== me?.name}
-											<hr />
-											<button
-												type="button"
-												role="menuitem"
-												class="danger"
-												onclick={() => {
-													close();
-													dialogError = '';
-													dialog = { kind: 'delete', name: account.name };
-												}}><span>{t('users.delete')}</span></button
-											>
-										{/if}
-									{/snippet}
-								</Dropdown>
-							{/if}
-						</td>
-					</tr>
+					<li>
+						<button
+							type="button"
+							class="acct"
+							class:on={current?.name === account.name}
+							class:locked={account.disabled}
+							aria-current={current?.name === account.name ? 'true' : undefined}
+							data-account={account.name}
+							onclick={() => choose(account.name)}
+						>
+							<span class="avatar" style:--hue={hue(account.name)} aria-hidden="true"
+								>{account.name.charAt(0).toUpperCase()}</span
+							>
+							<span class="lines"
+								><span class="mono name">{account.name}</span><span class="sub"
+									>{t(`role.${account.role}`)}{account.disabled
+										? ' · ' + t('users.statusLocked')
+										: ''}{account.twoFactor ? ' · ' + t('users.twoFactor') : ''}</span
+								></span
+							>
+						</button>
+					</li>
 				{:else}
-					<tr><td colspan="6" class="muted">{t('users.filterEmpty')}</td></tr>
+					<li class="muted empty">{t('users.filterEmpty')}</li>
 				{/each}
-			</tbody>
-		</table>
+			</ul>
+			<button type="button" class="acct new" onclick={openCreate}>+ {t('users.new')}</button>
+		</nav>
+		{#if current}
+			{@const account = current}
+			<AccountDetail
+				{account}
+				me={me?.name}
+				{shares}
+				manageable={mayManage(account.role)}
+				mayLock={!!accounts && mayLock(me, account, accounts)}
+				{offeredRoles}
+				{working}
+				created={day(account.created)}
+				lockedTitle={account.disabled ? lockedTitle(account) : ''}
+				onrole={(role, select) => pickRole(account, role, select)}
+				onpassword={() => (dialog = { kind: 'password', name: account.name })}
+				onlock={() => {
+					dialogError = '';
+					dialog = { kind: 'lock', account, disabled: !account.disabled };
+				}}
+				ondelete={() => {
+					dialogError = '';
+					dialog = { kind: 'delete', name: account.name };
+				}}
+				onreset2fa={() => {
+					dialogError = '';
+					dialog = { kind: 'twoFactor', account };
+				}}
+				onshares={load}
+				onback={narrow ? () => (showDetail = false) : undefined}
+			/>
+		{/if}
 	</div>
 {/if}
 
@@ -584,82 +530,117 @@
 {/if}
 
 <style>
-	.table {
-		overflow-x: auto;
+	/* PLAN 75-20, draft U2. */
+	.u2 {
+		display: grid;
+		grid-template-columns: 230px minmax(0, 1fr);
+		gap: var(--space-4);
+		align-items: start;
 	}
-	.toolbar {
+	.accounts {
+		position: sticky;
+		top: var(--space-2);
 		display: flex;
-		justify-content: flex-start;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
 	}
-	.toolbar label {
-		flex-direction: row;
-		align-items: center;
-		gap: var(--space-2);
+	.accounts ul {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.filter-row {
+		margin-bottom: var(--space-2);
 	}
 	.filter {
-		width: auto;
-		height: 2.25rem;
-	}
-	tr.locked .name {
-		color: var(--muted);
-	}
-	table {
 		width: 100%;
-		min-width: 620px;
-		border-collapse: collapse;
-		font-size: var(--text-md);
 	}
-	th {
-		padding: calc(var(--row-pad) + 2px) var(--tile-pad);
-		border-bottom: 1px solid var(--panel-border);
-		text-align: left;
-		font-size: var(--text-sm);
-		font-weight: 500;
-		color: var(--muted);
-	}
-	td {
-		padding: var(--space-2-5) var(--space-4);
-		border-bottom: 1px solid var(--panel-border);
-		vertical-align: middle;
-	}
-	tbody tr:last-child td {
-		border-bottom: 0;
-	}
-	.who {
+	.acct {
 		display: flex;
 		align-items: center;
-		gap: var(--space-3);
+		gap: var(--space-2-5);
+		width: 100%;
+		min-height: 44px;
+		padding: var(--space-1-5) var(--space-2-5);
+		border: 0;
+		border-radius: var(--radius-small);
+		background: none;
+		color: inherit;
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+		position: relative;
+	}
+	.acct:hover {
+		background: color-mix(in srgb, var(--text) 5%, transparent);
+	}
+	.acct.on {
+		background: color-mix(in srgb, var(--text) 8%, transparent);
+	}
+	.acct.on::before {
+		content: '';
+		position: absolute;
+		left: 0;
+		top: 10px;
+		bottom: 10px;
+		width: 3px;
+		border-radius: 2px;
+		background: var(--accent);
+	}
+	.acct.locked .name {
+		text-decoration: line-through;
+		color: var(--muted);
+	}
+	.acct.new {
+		min-height: 36px;
+		color: var(--accent);
 	}
 	.avatar {
-		width: 32px;
-		height: 32px;
+		display: grid;
+		place-items: center;
 		flex: none;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border-radius: var(--radius-ctl);
-		background: var(--accent);
-		color: var(--on-accent);
-		font-size: var(--text-base);
+		width: 26px;
+		height: 26px;
+		border-radius: 50%;
+		background: hsl(var(--hue) 55% 42%);
+		color: #fff;
+		font-size: var(--text-sm);
 		font-weight: 700;
 	}
-	.name {
-		font-weight: 500;
+	.lines {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
 	}
-	.you {
-		margin-left: var(--space-2);
+	.name {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.sub {
-		display: block;
-		font-size: var(--text-sm);
 		color: var(--muted);
-		/* Cells may break anywhere (main.readable td); these hints are words. */
-		overflow-wrap: break-word;
+		font-size: var(--text-sm);
 	}
-	.role {
-		width: auto;
-		height: 2.25rem;
-		font-size: var(--text-md);
+	.empty {
+		padding: var(--space-2);
+	}
+	@media (max-width: 720px) {
+		.u2 {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.u2 > :global(.account) {
+			display: none;
+		}
+		.u2.detail-only > .accounts {
+			display: none;
+		}
+		.u2.detail-only > :global(.account) {
+			display: block;
+		}
+		.accounts {
+			position: static;
+		}
 	}
 	.failed {
 		display: flex;
@@ -667,49 +648,6 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--space-2-5);
-	}
-	.reach {
-		max-width: 22rem;
-	}
-	.reach a {
-		display: inline-block;
-		margin: 2px var(--space-1) 2px 0;
-		color: var(--text);
-		text-decoration: none;
-		font-size: var(--text-sm);
-	}
-	.reach a:hover {
-		text-decoration: underline;
-	}
-	.actions {
-		width: 1%;
-		text-align: right;
-		white-space: nowrap;
-	}
-	.date {
-		white-space: nowrap;
-	}
-	/* PLAN 67: narrow windows and phones keep name, role, state and the menu. */
-	@media (max-width: 639px) {
-		table {
-			min-width: 0;
-		}
-		.reach,
-		.date {
-			display: none;
-		}
-		.tile.table :is(th, td) {
-			padding-left: var(--space-2);
-			padding-right: var(--space-2);
-		}
-		.role {
-			width: 7.5rem;
-			min-width: 0;
-		}
-	}
-	.actions .btn {
-		height: 2.25rem;
-		margin-left: var(--space-1-5);
 	}
 	form {
 		display: flex;
@@ -721,6 +659,9 @@
 		flex-direction: column;
 		gap: var(--space-1-5);
 		font-size: var(--text-md);
+	}
+	.filter-row {
+		display: block;
 	}
 	small {
 		font-size: var(--text-sm);

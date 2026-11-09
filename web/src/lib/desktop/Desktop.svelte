@@ -1315,14 +1315,6 @@
 							menu = null;
 						}}><span>{t('desktop.ctx.showInDocker')}</span></button
 					>
-					<button
-						type="button"
-						role="menuitem"
-						onclick={() => {
-							open('app:users', undefined, '/settings/programs');
-							menu = null;
-						}}><span>{t('desktop.ctx.whoMay')}</span></button
-					>
 				{/if}
 				<span class="menu-rule" role="separator"></span>
 				{#if inDock.has(key)}

@@ -3,7 +3,7 @@ import type { IconName } from '#lib/components/Icon.svelte';
 
 const keywords: Record<string, string> = {
 	users:
-		'nutzer benutzer konto konten account accounts passwort password rolle role administrator besitzer owner 2fa sperren lock anlegen',
+		'nutzer benutzer konto konten account accounts passwort password rolle role administrator besitzer owner 2fa sperren lock anlegen apps app programme programs docker rechte rights erlauben allow freigaben shares',
 	appearance:
 		'navigation reiter tabs leiste kopfzeile header reihenfolge order theme design farbe color font schrift hintergrund background app symbol icon home bildschirm screen menü menu fenster window dialog transparenz transparency glas glass glaseffekt ecken corners farbstärke saturation dock anmeldeseite login',
 	network:
@@ -81,8 +81,6 @@ const keywords: Record<string, string> = {
 		'zertifizierungsstelle certificate authority ca root stammzertifikat installieren install iphone ipad android windows macos linux',
 	viewer:
 		'fernansicht remote view docker app apps fenster window browser chromium gpu grafikkarte graphics vaapi nvenc qualität quality bildrate frame rate fps ton sound audio lautstärke volume profil profile',
-	programs:
-		'programme programs apps app docker rechte rights benutzer user users konto account erlauben allow sperre lock arbeitsplatz desktop fenster window browser anmeldung login',
 };
 
 function normalize(text: string): string {
@@ -384,14 +382,6 @@ export const settingsAreas: SettingsArea[] = [
 	},
 	{ id: 'api', label: 'api.title', group: 'accounts', icon: 'key' },
 	{ id: 'appearance', label: 'menu.appearance', group: 'system', icon: 'palette' },
-	{
-		id: 'programs',
-		label: 'settingshome.area.programs',
-		group: 'accounts',
-		icon: 'grid',
-		admin: true,
-		newSince: { version: '0.58.0', date: '2026-11-06' },
-	},
 	{
 		id: 'viewer',
 		label: 'settingshome.area.viewer',

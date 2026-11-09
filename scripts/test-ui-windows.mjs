@@ -150,7 +150,7 @@ const everything = [
   ["logs", ["/tools/logs", "/tools/activity", "/tools/bundle"]],
   ["planner", ["/tools/scripts", "/tools/maintenance", "/settings/energy"]],
   ["terminal", ["/terminal"]],
-  ["users", ["/users", "/settings/programs", "/settings/access"]],
+  ["users", ["/users", "/settings/access"]],
   ["security", ["/settings/firewall"]],
   ["account", ["/account"]],
   [

@@ -462,7 +462,6 @@ const PROGRAMS: Record<string, Menu[]> = {
 			cmd('users.refresh', 'menubar.refresh'),
 			sep,
 			go('users.go.accounts', 'desktop.side.accounts', '/users'),
-			go('users.go.programs', 'desktop.side.programs', '/settings/programs'),
 			go('users.go.access', 'desktop.side.access', '/settings/access'),
 		]),
 	],

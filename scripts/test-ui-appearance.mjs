@@ -354,11 +354,11 @@ for (const [width, height, label] of [
   await shot(page, `07-anmeldung-${label}`);
   await page.getByLabel("Name").fill("alex");
   await page.getByLabel("Passwort").fill("secret-test");
-  await page.getByRole("button", { name: "Anmelden" }).click();
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
   await page.locator('input[autocomplete="one-time-code"]').waitFor();
   await shot(page, `08-anmeldung-2fa-${label}`);
   await page.locator('input[autocomplete="one-time-code"]').fill("123456");
-  await page.getByRole("button", { name: "Anmelden" }).click();
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
   await page.waitForSelector(width < 900 ? ".home" : ".desktop", {
     timeout: 15000,
   });
