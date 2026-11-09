@@ -139,3 +139,26 @@ func TestRecycleBinFoldersAreGroupWritable(t *testing.T) {
 		t.Errorf("the deleted file is not in the bin: %v", err)
 	}
 }
+
+// A copy that finishes after another file took its name (another job, an
+// upload, a save over SMB) does not replace that file.
+func TestFinishedCopyDoesNotReplaceAFileThatAppeared(t *testing.T) {
+	m, root, _ := newRoot(t)
+	r, err := os.OpenRoot(root.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	os.WriteFile(filepath.Join(root.Dir, ".film.part"), []byte("copy"), 0o644)
+	os.WriteFile(filepath.Join(root.Dir, "film.mkv"), []byte("arrived meanwhile"), 0o644)
+	final, err := m.publishCopy(&Job{}, r, "film.mkv", ".film.part", "film.mkv", false)
+	if err != nil || final != "film (2).mkv" {
+		t.Fatalf("published as %q, %v", final, err)
+	}
+	if data, _ := os.ReadFile(filepath.Join(root.Dir, "film.mkv")); string(data) != "arrived meanwhile" {
+		t.Fatalf("the file that appeared was replaced: %q", data)
+	}
+	if data, _ := os.ReadFile(filepath.Join(root.Dir, final)); string(data) != "copy" {
+		t.Fatalf("the copy is not there: %q", data)
+	}
+}
