@@ -128,7 +128,7 @@ func TestWebappsRoutes(t *testing.T) {
 	var list struct {
 		Apps []webapps.Status `json:"apps"`
 	}
-	if res.StatusCode != 200 || json.Unmarshal(body, &list) != nil || len(list.Apps) != 17 || list.Apps[0].ID != "t-word" || !list.Apps[0].Trusted || list.Apps[0].State != "missing" {
+	if res.StatusCode != 200 || json.Unmarshal(body, &list) != nil || len(list.Apps) != 28 || list.Apps[0].ID != "t-word" || !list.Apps[0].Trusted || list.Apps[0].State != "missing" {
 		t.Fatalf("%d %s", res.StatusCode, body)
 	}
 	if res, body := ts.request("POST", "/api/v1/webapps/nope/install", nil); res.StatusCode != http.StatusNotFound || errorCode(t, body) != "webapp_unknown" {

@@ -734,7 +734,14 @@
 								>
 							{/each}
 						</div>
-						{#if shown.length === 0}<p class="vm-empty muted">{t('ui.vmNoResults')}</p>{/if}
+						{#if shown.length === 0}<p class="vm-empty muted">{t('ui.vmNoResults')}</p>{:else}
+							<!-- PLAN 75-19/75-20, style W4: one row per VM, columns instead of cards. -->
+							<div class="vm-cols muted" aria-hidden="true">
+								<span>{t('vms.col.name')}</span><span>{t('vms.col.state')}</span><span class="num"
+									>{t('vms.col.memory')}</span
+								>
+							</div>
+						{/if}
 						{#each shown as vm (vm.name)}
 							{@const selected = vm.name === current.name}
 							<div
@@ -745,6 +752,7 @@
 							>
 								<a class="vm-link" href={link(vm)} aria-current={selected ? 'page' : undefined}>
 									<span class="vm-name">{vmLabel(vm)}</span>
+									<span class="vm-mem num">{formatBytes(vm.memoryMiB * 1024 * 1024)}</span>
 									<span class="vm-state">
 										<span class="dot" class:ok={vm.state === 'running'} aria-hidden="true"
 										></span>{t(`vms.state.${vm.state}`)}
@@ -1013,13 +1021,29 @@
 		padding: var(--space-1) 14px var(--space-3);
 		font-size: var(--text-base);
 	}
+	.vm-cols {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		gap: var(--space-2);
+		padding: var(--space-1) calc(2rem + var(--space-3)) var(--space-1) 17px;
+		border-bottom: 1px solid var(--panel-border);
+		font-size: var(--text-xs);
+	}
+	.vm-cols span:nth-child(2) {
+		display: none;
+	}
+	.num {
+		text-align: end;
+		font-variant-numeric: tabular-nums;
+	}
 	.vm {
 		display: flex;
 		align-items: center;
 		gap: var(--space-1);
 		padding-right: var(--space-2);
 		border-left: 3px solid transparent;
-		min-height: 74px;
+		border-bottom: 1px solid var(--panel-border);
+		min-height: 44px;
 	}
 	.vm:hover {
 		background: var(--chip);
@@ -1029,12 +1053,13 @@
 		background: var(--chip);
 	}
 	.vm-link {
-		display: flex;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: center;
+		gap: 2px var(--space-2);
 		flex: 1;
-		flex-direction: column;
-		gap: var(--space-2);
 		min-width: 0;
-		padding: 14px var(--space-1-5) 14px 14px;
+		padding: var(--space-2) var(--space-1-5) var(--space-2) 14px;
 		color: var(--text);
 		text-decoration: none;
 	}
@@ -1045,7 +1070,12 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
+	.vm-mem {
+		color: var(--muted);
+		font-size: var(--text-sm);
+	}
 	.vm-state {
+		grid-column: 1 / -1;
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;

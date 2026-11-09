@@ -189,6 +189,78 @@
 		}
 	});
 
+	// --- File pickers (PLAN 75-20) -------------------------------------------
+	// The app's own "Open …" (and picture, font, sound pickers) uses an
+	// <input type=file>. In a TitanOS window the window shows its own dialog
+	// with the files of the NAS instead (and "Von diesem Gerät …" for a file
+	// of this PC); the chosen files come back as webapp-picked and are put
+	// into the input, as if picked in the browser's dialog.
+	var picking = null;
+	function pickFor(input) {
+		if (picking && picking !== input) {
+			picking.dispatchEvent(new Event('cancel', { bubbles: true }));
+		}
+		picking = input;
+		post({ type: 'webapp-pick', accept: input.accept || '', multiple: input.multiple === true });
+	}
+	function isFileInput(el) {
+		return el instanceof HTMLInputElement && el.type === 'file';
+	}
+	if (framed) {
+		var originalInputClick = HTMLInputElement.prototype.click;
+		HTMLInputElement.prototype.click = function () {
+			if (isFileInput(this)) return void pickFor(this);
+			return originalInputClick.call(this);
+		};
+		if (typeof HTMLInputElement.prototype.showPicker === 'function') {
+			var originalShowPicker = HTMLInputElement.prototype.showPicker;
+			HTMLInputElement.prototype.showPicker = function () {
+				if (isFileInput(this)) return void pickFor(this);
+				return originalShowPicker.call(this);
+			};
+		}
+		// A file input the app shows itself (a visible button) is clicked by the user.
+		document.addEventListener(
+			'click',
+			function (event) {
+				var target = event.target;
+				var input = isFileInput(target)
+					? target
+					: target instanceof HTMLLabelElement && isFileInput(target.control)
+						? target.control
+						: null;
+				if (!input) return;
+				event.preventDefault();
+				pickFor(input);
+			},
+			true,
+		);
+		window.addEventListener('message', function (event) {
+			if (event.source !== parent) return;
+			var msg = event.data;
+			if (!msg || msg.type !== 'webapp-picked' || !picking) return;
+			var input = picking;
+			picking = null;
+			var list = Array.isArray(msg.files) ? msg.files : [];
+			var files = [];
+			list.forEach(function (f) {
+				var bytes = f && buffer(f.bytes);
+				if (bytes) files.push(new File([bytes], cleanName(f.name, 'document')));
+			});
+			if (!files.length) {
+				input.dispatchEvent(new Event('cancel', { bubbles: true }));
+				return;
+			}
+			var transfer = new DataTransfer();
+			files.slice(0, input.multiple ? files.length : 1).forEach(function (file) {
+				transfer.items.add(file);
+			});
+			input.files = transfer.files;
+			input.dispatchEvent(new Event('input', { bubbles: true }));
+			input.dispatchEvent(new Event('change', { bubbles: true }));
+		});
+	}
+
 	if (bridge === 'host') {
 		// The app's events are dispatched on its canvas without bubbling, and the
 		// canvas does not exist yet when this runs: listen on the window in the

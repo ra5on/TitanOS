@@ -40,6 +40,24 @@ type App struct {
 	// with the account's login: through Cloudflare Access it loads its
 	// files with the Cloudflare cookie like every page of TitanOS.
 	Trusted bool `json:"trusted,omitempty"`
+	// Successor: the catalog id of our own build that replaces this app
+	// (wordcraft → t-word, PLAN 75-20). Docker versions of the app are
+	// replaced by the successor, and the App-Center offers the switch.
+	Successor string `json:"successor,omitempty"`
+}
+
+// successorOf is the id that replaces id (its successor in the catalog), or id.
+func successorOf(id string) string {
+	for _, app := range catalog {
+		if app.ID == id && app.Successor != "" {
+			for _, next := range catalog {
+				if next.ID == app.Successor {
+					return next.ID
+				}
+			}
+		}
+	}
+	return id
 }
 
 // Asset is the name of the app's archive in a TitanOS release.

@@ -54,7 +54,7 @@ class FetchWebappsTest(unittest.TestCase):
 
     def test_repository_catalog(self):
         apps = fw.load_catalog(REPO / "webapps/catalog.json")
-        self.assertEqual(len(apps), 17)
+        self.assertEqual(len(apps), 28)
         self.assertEqual(sorted(a["id"] for a in apps if a["default"]), ["t-exel", "t-pdf", "t-word"])
         # titand embeds a copy; both must be the same.
         self.assertEqual((REPO / "webapps/catalog.json").read_bytes(),

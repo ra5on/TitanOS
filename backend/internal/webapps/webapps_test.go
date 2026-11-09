@@ -35,7 +35,7 @@ func TestCatalogMatchesRepository(t *testing.T) {
 
 func TestCatalogContents(t *testing.T) {
 	apps := Catalog()
-	if len(apps) != 17 {
+	if len(apps) != 28 {
 		t.Fatalf("%d apps", len(apps))
 	}
 	defaults := Defaults()
@@ -54,6 +54,16 @@ func TestCatalogContents(t *testing.T) {
 		}
 		if !slices.Equal(mine.Types, types) || mine.Bridge != "host" || !mine.Trusted || mine.Repo != "ra5on/TitanOS-Office" {
 			t.Fatalf("%s: %+v", own[id], mine)
+		}
+	}
+	// PLAN 75-20: every Craft original has its own build as successor, trusted, same types and bridge.
+	for _, app := range apps {
+		if app.Repo == "ra5on/TitanOS-Office" {
+			continue
+		}
+		next, ok := Lookup(app.Successor)
+		if !ok || !next.Trusted || next.Bridge != app.Bridge || !slices.Equal(next.Types, app.Types) {
+			t.Fatalf("%s → %q: %+v", app.ID, app.Successor, next)
 		}
 	}
 	if _, ok := Lookup("_host"); ok || ValidID("_host") {
@@ -606,11 +616,12 @@ func TestDetectDocker(t *testing.T) {
 	managed := []string{"word", "grid", "pdfcraft", "photo", "nextcloud", "fig", "mixed", "deckdb", "two", "lone", "cadcraft-web", "empty"}
 	got := DetectDocker(managed, containers)
 	want := []DockerApp{
-		{App: "word", Webapp: "wordcraft", Running: true, Image: "ghcr.io/storytold/wordcraft:0.15.0"},
-		{App: "grid", Webapp: "gridcraft", Image: "storytold/gridcraft-web@sha256:abc"},
-		{App: "pdfcraft", Webapp: "pdfcraft", Running: true, Image: "nginx:alpine"},
-		{App: "photo", Webapp: "vectorcraft", Running: true, Image: "registry.example.com:5000/me/vectorcraft:latest"},
-		{App: "cadcraft-web", Webapp: "cadcraft"},
+		// PLAN 75-20: our own builds replace the originals.
+		{App: "word", Webapp: "t-word", Running: true, Image: "ghcr.io/storytold/wordcraft:0.15.0"},
+		{App: "grid", Webapp: "t-exel", Image: "storytold/gridcraft-web@sha256:abc"},
+		{App: "pdfcraft", Webapp: "t-pdf", Running: true, Image: "nginx:alpine"},
+		{App: "photo", Webapp: "t-vector", Running: true, Image: "registry.example.com:5000/me/vectorcraft:latest"},
+		{App: "cadcraft-web", Webapp: "t-cad"},
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("got  %+v\nwant %+v", got, want)
@@ -666,7 +677,7 @@ func TestTrustedAppWithoutSandbox(t *testing.T) {
 		}
 		return rec.Header()
 	}
-	mine := get("/webapps/t-pdf/1.0.0/index.html")
+	mine := get("/webapps/t-pdf/1.1.0/index.html")
 	if mine.Get("Content-Security-Policy") != trustedPolicy || mine.Get("Access-Control-Allow-Origin") != "" {
 		t.Fatalf("trusted: %v", mine)
 	}

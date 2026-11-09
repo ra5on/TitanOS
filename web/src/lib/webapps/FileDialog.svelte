@@ -21,8 +21,22 @@
 		/** A chosen file (open) or the file to write (save: dir + name). */
 		onpick: (chosen: { root: string; path: string; entry?: FileEntry }) => void;
 		onclose: () => void;
+		/** open: offers "Von diesem Gerät …" (a file of this PC instead of the NAS). */
+		onlocal?: () => void;
+		/** open: files of the NAS opened lately with this app, listed first. */
+		recent?: { root: string; path: string }[];
 	};
-	let { mode, title, start, name = '', types = [], onpick, onclose }: Props = $props();
+	let {
+		mode,
+		title,
+		start,
+		name = '',
+		types = [],
+		onpick,
+		onclose,
+		onlocal,
+		recent = [],
+	}: Props = $props();
 
 	const first = (() => start)();
 	let roots = $state<FileRoot[] | null>(null);
@@ -95,6 +109,15 @@
 	});
 
 	const join = (a: string, b: string) => (a ? `${a}/${b}` : b);
+	const rootName = (id: string) => (roots ?? []).find((r) => r.id === id)?.name ?? id;
+	const recentShown = $derived(
+		mode === 'open'
+			? recent.filter(
+					(d) =>
+						usable.some((r) => r.id === d.root) && (!types.length || types.includes(extOf(d.path))),
+				)
+			: [],
+	);
 	const valid = $derived(
 		mode === 'open' ? !!chosen : mode === 'folder' ? !!root : !!root && validFileName(fileName),
 	);
@@ -112,6 +135,24 @@
 
 <Dialog {title} {onclose} wide>
 	<form class="fd" onsubmit={submit}>
+		{#if recentShown.length}
+			<section class="recent" aria-labelledby="{id}-recent">
+				<h3 class="small muted" id="{id}-recent">{t('webapps.dialog.recent')}</h3>
+				{#each recentShown as d (d.root + '/' + d.path)}
+					<button
+						type="button"
+						class="row file"
+						onclick={() => onpick({ root: d.root, path: d.path })}
+						><Icon name="file" size={16} /><span class="name">{d.path.split('/').pop()}</span><span
+							class="muted small where-from"
+							>{rootName(d.root)}{d.path.includes('/')
+								? ' › ' + d.path.split('/').slice(0, -1).join(' › ')
+								: ''}</span
+						></button
+					>
+				{/each}
+			</section>
+		{/if}
 		<div class="where">
 			<label class="place"
 				><span class="sr-only">{t('webapps.dialog.place')}</span>
@@ -181,6 +222,9 @@
 		{/if}
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 		<div class="dialog-actions">
+			{#if onlocal && mode === 'open'}
+				<button type="button" class="btn local" onclick={onlocal}>{t('webapps.fromDevice')}</button>
+			{/if}
 			<button type="button" class="btn" onclick={onclose}>{t('common.cancel')}</button>
 			<button class="btn btn-primary" disabled={!valid}
 				>{mode === 'open'
@@ -282,5 +326,23 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-1-5);
+	}
+	.recent {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+	.recent h3 {
+		margin: 0 0 var(--space-1);
+		font-weight: 600;
+	}
+	.where-from {
+		margin-left: auto;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.local {
+		margin-inline-end: auto;
 	}
 </style>

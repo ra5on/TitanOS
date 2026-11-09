@@ -60,6 +60,34 @@
 			busy = '';
 		}
 	}
+	/**
+	 * PLAN 75-20: an original Craft app is replaced by our own build (WordCraft
+	 * → T-Word): the build is installed, and once it is ready the original goes.
+	 */
+	const successorOf = (a: WebApp) =>
+		a.successor ? webapps.apps.find((x) => x.id === a.successor) : undefined;
+	async function replaceBy(a: WebApp) {
+		const next = successorOf(a);
+		if (!next) return;
+		busy = a.id;
+		error = '';
+		try {
+			if (!next.installed) await api.post(`/webapps/${encodeURIComponent(next.id)}/install`);
+			for (let i = 0; i < 600; i++) {
+				await loadWebApps();
+				const now = webapps.apps.find((x) => x.id === next.id);
+				if (now?.installed && now.state === 'ready') break;
+				if (now?.state === 'error') throw new Error(stateText(now));
+				await new Promise((ok) => setTimeout(ok, 1500));
+			}
+			await api.delete(`/webapps/${encodeURIComponent(a.id)}`);
+			await loadWebApps();
+		} catch (e) {
+			error = apiErrorText(e);
+		} finally {
+			busy = '';
+		}
+	}
 	/** The NAS reports install errors as codes (no_volume, download_failed, …). */
 	function errorWord(code = ''): string {
 		const key = `error.${code}` as MessageKey;
@@ -112,6 +140,17 @@
 					</div>
 					{#if admin}
 						<div class="actions">
+							{#if a.installed && successorOf(a)}
+								<button
+									type="button"
+									class="btn btn-primary"
+									disabled={!!busy || !webapps.volume}
+									onclick={() => replaceBy(a)}
+									>{busy === a.id
+										? t('webapps.center.replacing', { app: successorOf(a)?.name ?? '' })
+										: t('webapps.center.replaceBy', { app: successorOf(a)?.name ?? '' })}</button
+								>
+							{/if}
 							{#if a.installed}
 								<button
 									type="button"
