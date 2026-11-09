@@ -27,6 +27,9 @@ const maxIndex = 1 << 20
 // and .wasm need CORS (the files are public open-source code anyway).
 const (
 	sandboxPolicy = "sandbox allow-scripts allow-downloads allow-modals allow-popups; frame-ancestors 'self'"
+	// trustedPolicy is the header of a trusted app (our own build): framed
+	// only by the web UI, no sandbox.
+	trustedPolicy = "frame-ancestors 'self'"
 	cacheForever  = "public, max-age=31536000, immutable"
 )
 
@@ -58,15 +61,20 @@ func (m *Manager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h := w.Header()
-	h.Set("Content-Security-Policy", sandboxPolicy)
 	h.Set("X-Content-Type-Options", "nosniff")
-	h.Set("Cross-Origin-Resource-Policy", "cross-origin")
-	h.Set("Access-Control-Allow-Origin", "*")
 	id, version, name := r.PathValue("id"), r.PathValue("version"), r.PathValue("path")
 	app, ok := Lookup(id)
 	if !ok || !ValidVersion(version) {
+		h.Set("Content-Security-Policy", sandboxPolicy)
 		http.NotFound(w, r)
 		return
+	}
+	if app.Trusted {
+		h.Set("Content-Security-Policy", trustedPolicy)
+	} else {
+		h.Set("Content-Security-Policy", sandboxPolicy)
+		h.Set("Cross-Origin-Resource-Policy", "cross-origin")
+		h.Set("Access-Control-Allow-Origin", "*")
 	}
 	if name == "" {
 		name = "index.html"

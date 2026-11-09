@@ -35,19 +35,25 @@ func TestCatalogMatchesRepository(t *testing.T) {
 
 func TestCatalogContents(t *testing.T) {
 	apps := Catalog()
-	if len(apps) != 14 {
+	if len(apps) != 17 {
 		t.Fatalf("%d apps", len(apps))
 	}
 	defaults := Defaults()
 	slices.Sort(defaults)
-	if !slices.Equal(defaults, []string{"gridcraft", "pdfcraft", "wordcraft"}) {
+	// PLAN 75-20: our own builds are the defaults; the Craft originals stay in the catalog.
+	if !slices.Equal(defaults, []string{"t-exel", "t-pdf", "t-word"}) {
 		t.Fatalf("defaults %v", defaults)
 	}
 	want := map[string][]string{"wordcraft": {"docx", "doc", "odt", "rtf"}, "gridcraft": {"xlsx", "xls", "ods", "csv"}, "pdfcraft": {"pdf"}}
+	own := map[string]string{"wordcraft": "t-word", "gridcraft": "t-exel", "pdfcraft": "t-pdf"}
 	for id, types := range want {
 		app, _ := Lookup(id)
-		if !slices.Equal(app.Types, types) || app.Bridge != "host" {
+		mine, _ := Lookup(own[id])
+		if !slices.Equal(app.Types, types) || app.Bridge != "host" || app.Trusted {
 			t.Fatalf("%s: %+v", id, app)
+		}
+		if !slices.Equal(mine.Types, types) || mine.Bridge != "host" || !mine.Trusted || mine.Repo != "ra5on/TitanOS-Office" {
+			t.Fatalf("%s: %+v", own[id], mine)
 		}
 	}
 	if _, ok := Lookup("_host"); ok || ValidID("_host") {
@@ -428,7 +434,7 @@ func TestInstallServeUninstall(t *testing.T) {
 
 	// Without the volume: listed as an error, not served.
 	h.mounted = nil
-	if st := h.m.List()[0]; st.State != "error" || st.Error != ErrCodeVolumeMissing {
+	if st := status(h.m, "wordcraft"); st.State != "error" || st.Error != ErrCodeVolumeMissing {
 		t.Fatalf("%+v", st)
 	}
 	if rec := get("/webapps/wordcraft/0.16.0/index.html"); rec.Code != 404 {
@@ -491,7 +497,7 @@ func TestInstallFailures(t *testing.T) {
 }
 
 func TestDefaultsWaitForVolume(t *testing.T) {
-	h := newHarness(t, map[string][]byte{"wordcraft": appZip(t, "wordcraft"), "gridcraft": appZip(t, "gridcraft"), "pdfcraft": appZip(t, "pdfcraft")})
+	h := newHarness(t, map[string][]byte{"t-word": appZip(t, "t-word"), "t-exel": appZip(t, "t-exel"), "t-pdf": appZip(t, "t-pdf")})
 	h.mounted = nil
 	if err := h.m.InstallDefaults(nil); err != nil {
 		t.Fatal(err)
@@ -508,7 +514,7 @@ func TestDefaultsWaitForVolume(t *testing.T) {
 	}
 	h.mounted = []string{"data"}
 	h.m.startPending()
-	for _, id := range []string{"wordcraft", "gridcraft", "pdfcraft"} {
+	for _, id := range []string{"t-word", "t-exel", "t-pdf"} {
 		if st := h.wait(t, id); st.State != "ready" {
 			t.Fatalf("%+v", st)
 		}
@@ -566,7 +572,7 @@ func TestDevMode(t *testing.T) {
 	deadline := time.Now().Add(5 * time.Second)
 	var st Status
 	for time.Now().Before(deadline) {
-		st = m.List()[0]
+		st = status(m, "wordcraft")
 		if st.State != "downloading" {
 			break
 		}
@@ -625,5 +631,50 @@ func TestNewCatalogVersionIsInstalled(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	if h.release.downloads != before {
 		t.Fatal("downloaded again")
+	}
+}
+
+// status is the listed state of one app.
+func status(m *Manager, id string) Status {
+	for _, st := range m.List() {
+		if st.ID == id {
+			return st
+		}
+	}
+	return Status{}
+}
+
+// PLAN 75-20: our own builds (trusted) are served without the sandbox, on the
+// web UI's origin; the Craft originals keep it.
+func TestTrustedAppWithoutSandbox(t *testing.T) {
+	h := newHarness(t, map[string][]byte{"t-pdf": appZip(t, "t-pdf"), "pdfcraft": appZip(t, "pdfcraft")})
+	for _, id := range []string{"t-pdf", "pdfcraft"} {
+		if err := h.m.Install(id); err != nil {
+			t.Fatal(err)
+		}
+		if st := h.wait(t, id); st.State != "ready" {
+			t.Fatalf("%+v", st)
+		}
+	}
+	mux := http.NewServeMux()
+	mux.Handle("GET /webapps/{id}/{version}/{path...}", h.m)
+	get := func(path string) http.Header {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: %d", path, rec.Code)
+		}
+		return rec.Header()
+	}
+	mine := get("/webapps/t-pdf/1.0.0/index.html")
+	if mine.Get("Content-Security-Policy") != trustedPolicy || mine.Get("Access-Control-Allow-Origin") != "" {
+		t.Fatalf("trusted: %v", mine)
+	}
+	if st := status(h.m, "t-pdf"); !st.Trusted {
+		t.Fatalf("%+v", st)
+	}
+	theirs := get("/webapps/pdfcraft/0.19.0/index.html")
+	if theirs.Get("Content-Security-Policy") != sandboxPolicy || theirs.Get("Access-Control-Allow-Origin") != "*" {
+		t.Fatalf("original: %v", theirs)
 	}
 }

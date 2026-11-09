@@ -142,3 +142,13 @@ Nachrichten zwischen Fenster und `host.js` per `postMessage` (Fenster prüft `ev
 ## Hinter Cloudflare Access (0.71)
 
 Die App lädt ihre eigenen Dateien (Module, WebAssembly) aus dem abgeschotteten Rahmen ohne die Cookies der Seite. Cloudflare Access verlangt sein Cookie und leitet diese Anfragen auf seine Anmeldung um; die App startet dann nie. `host.js` fragt deshalb beim Start einmal die eigene Seite so ab, wie die App es tut. Wird sie abgewiesen, meldet es `webapp-failed` mit `files_blocked`, und das Fenster erklärt statt „meldet sich nicht“: Für den Pfad `/webapps/` braucht Cloudflare Access eine Regel „Bypass“. Die Dateien unter `/webapps/` liefert titand ohnehin ohne Anmeldung aus (öffentliche Programmdateien, keine Daten des NAS).
+
+## Eigene Fassungen: T-Word, T-PDF, T-Exel (0.72)
+
+Seit 0.72 gehören **T-Word**, **T-PDF** und **T-Exel** zur Grundausstattung, nicht mehr WordCraft, PdfCraft und GridCraft. Sie stammen aus dem Repo [ra5on/TitanOS-Office](https://github.com/ra5on/TitanOS-Office) (PLAN 75-18/75-20).
+
+- **Was sie sind:** eigene Fassungen der Craft-Originale, ohne ArtCraft-Marke und mit eigenen Kopien der Bausteine.
+- **Katalog:** `repo: ra5on/TitanOS-Office`, gemeinsamer Tag `vX.Y.Z`, Archiv `t-<app>-web-X.Y.Z.zip` mit dem Ordner `t-<app>-web-X.Y.Z/`.
+- **`trusted: true`:** Weil sie aus unserem eigenen Build stammen, liefert titand sie ohne CSP-Sandbox aus (`frame-ancestors 'self'`). Das Fenster rahmt sie ohne `sandbox`. Sie laufen damit auf der Herkunft der Weboberfläche und laden ihre Dateien mit den Cookies der Seite. Hinter Cloudflare Access brauchen sie deshalb keine Bypass-Regel, und die Prüfung „Programmdateien kommen nicht an“ entfällt für sie.
+- **Fremde Builds:** Die Craft-Originale und alle anderen Apps bleiben abgeschottet wie bisher.
+- **Bestehende Installationen:** Die Originale bleiben im Katalog. Wer sie installiert hat, behält sie, bis er sie im App-Center entfernt.

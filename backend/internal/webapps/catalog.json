@@ -1,6 +1,60 @@
 {
   "apps": [
     {
+      "id": "t-word",
+      "name": "T-Word",
+      "repo": "ra5on/TitanOS-Office",
+      "version": "1.0.0",
+      "upstreamAsset": "t-word-web-1.0.0.zip",
+      "sha256": "a7337c936d1ad97416f9f48afea723c11a40bae6b9088935492934fa50a01244",
+      "size": 21553600,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "host",
+      "types": [
+        "docx",
+        "doc",
+        "odt",
+        "rtf"
+      ],
+      "default": true,
+      "trusted": true
+    },
+    {
+      "id": "t-pdf",
+      "name": "T-PDF",
+      "repo": "ra5on/TitanOS-Office",
+      "version": "1.0.0",
+      "upstreamAsset": "t-pdf-web-1.0.0.zip",
+      "sha256": "50f88ce50fc7f6b0bd4bfc72eee529eb24da535a5f57f850c6edd78de477f2b5",
+      "size": 19951097,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "host",
+      "types": [
+        "pdf"
+      ],
+      "default": true,
+      "trusted": true
+    },
+    {
+      "id": "t-exel",
+      "name": "T-Exel",
+      "repo": "ra5on/TitanOS-Office",
+      "version": "1.0.0",
+      "upstreamAsset": "t-exel-web-1.0.0.zip",
+      "sha256": "b931fc07c612f1f93959b17c6478c290eaca992dec04fb932137554f6dd4d00a",
+      "size": 9475532,
+      "license": "MIT OR Apache-2.0",
+      "bridge": "host",
+      "types": [
+        "xlsx",
+        "xls",
+        "ods",
+        "csv"
+      ],
+      "default": true,
+      "trusted": true
+    },
+    {
       "id": "wordcraft",
       "name": "WordCraft",
       "repo": "storytold/wordcraft",
@@ -16,7 +70,7 @@
         "odt",
         "rtf"
       ],
-      "default": true
+      "default": false
     },
     {
       "id": "gridcraft",
@@ -34,7 +88,7 @@
         "ods",
         "csv"
       ],
-      "default": true
+      "default": false
     },
     {
       "id": "pdfcraft",
@@ -49,7 +103,7 @@
       "types": [
         "pdf"
       ],
-      "default": true
+      "default": false
     },
     {
       "id": "deckcraft",

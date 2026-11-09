@@ -93,6 +93,7 @@ type Status struct {
 	Size      int64    `json:"size"`
 	License   string   `json:"license"`
 	Repo      string   `json:"repo"`
+	Trusted   bool     `json:"trusted,omitempty"`
 }
 
 // job is an install in progress or its failure, in RAM.
@@ -245,7 +246,7 @@ func (m *Manager) List() []Status {
 	var out []Status
 	for _, app := range catalog {
 		st := Status{ID: app.ID, Name: app.Name, Version: app.Version, State: "missing", Bridge: app.Bridge,
-			Types: slices.Clone(app.Types), Default: app.Default, Size: app.Size, License: app.License, Repo: app.Repo,
+			Types: slices.Clone(app.Types), Default: app.Default, Size: app.Size, License: app.License, Repo: app.Repo, Trusted: app.Trusted,
 			Pending: slices.Contains(m.state.Pending, app.ID)}
 		if in, ok := m.installedLocked(app.ID); ok {
 			st.Installed, st.Version = true, in.Version
