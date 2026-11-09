@@ -199,7 +199,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	req.normalize()
 	ip := remoteIP(r)
-	userKey, ipKey := "user:"+req.Name, "ip:"+ip
+	userKey, ipKey := "user:"+req.Name, passkeySource(r)
 	// A browser that logged into this account before is limited on its
 	// own (login_device.go): failures of strangers lock the account name
 	// for unknown devices only, never its owner out. The lock of the

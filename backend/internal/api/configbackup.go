@@ -145,12 +145,14 @@ func (s *Server) newStickLocked(w http.ResponseWriter) bool {
 // and link-local addresses, and the networks of its own interfaces (a home
 // network often has a public IPv6 prefix only). A NAS that is reachable
 // from the internet before it is set up must not be taken over by the
-// first stranger.
+// first stranger. A request a reverse proxy or tunnel passed on comes from
+// the address of the proxy, which says nothing about who asks: it is
+// refused as well.
 func setupLocal(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		addr, err := netip.ParseAddr(remoteIP(r))
 		addr = addr.Unmap()
-		if err != nil || !(addr.IsLoopback() || addr.IsPrivate() || addr.IsLinkLocalUnicast() || onLink(addr)) {
+		if err != nil || viaProxy(r) || !(addr.IsLoopback() || addr.IsPrivate() || addr.IsLinkLocalUnicast() || onLink(addr)) {
 			slog.Warn("setup from outside the home network refused", "ip", remoteIP(r))
 			writeError(w, http.StatusForbidden, "setup_not_local", "set up the NAS from a device in the same network")
 			return

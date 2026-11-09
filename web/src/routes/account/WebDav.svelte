@@ -2,8 +2,9 @@
 	// My account › WebDAV: the password apps use for the shares over WebDAV,
 	// made by the NAS and shown once.
 	import { onMount } from 'svelte';
-	import { api } from '#lib/api.ts';
+	import { api, ApiError } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
+	import ReconfirmFields, { reconfirmComplete } from '#lib/components/ReconfirmFields.svelte';
 	import { formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
 
@@ -11,6 +12,11 @@
 	let info = $state<State | null>(null);
 	let shown = $state<{ user: string; password: string } | null>(null);
 	let removing = $state(false);
+	// The NAS asks for the password (and a code) again, as for an API token.
+	let asking = $state(false);
+	let password = $state('');
+	let code = $state('');
+	let askError = $state('');
 	let busy = $state(false);
 	let error = $state('');
 
@@ -23,14 +29,30 @@
 	}
 	onMount(load);
 
-	async function create() {
+	function ask() {
+		password = '';
+		code = '';
+		askError = '';
+		asking = true;
+	}
+
+	async function create(event: SubmitEvent) {
+		event.preventDefault();
 		busy = true;
-		error = '';
+		askError = '';
 		try {
-			shown = await api.post<{ user: string; password: string }>('/account/webdav', {});
+			shown = await api.post<{ user: string; password: string }>('/account/webdav', {
+				password,
+				code: code.trim(),
+			});
+			asking = false;
+			password = '';
+			code = '';
 			await load();
 		} catch (err) {
-			error = apiErrorText(err);
+			askError = apiErrorText(err);
+			// A used or wrong code cannot be sent again.
+			if (err instanceof ApiError && err.code === 'invalid_code') code = '';
 		} finally {
 			busy = false;
 		}
@@ -62,7 +84,7 @@
 			</p>{/if}
 		{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
 		<div class="row-actions">
-			<button type="button" class="btn" disabled={busy || !info.enabled} onclick={create}
+			<button type="button" class="btn" disabled={busy || !info.enabled} onclick={ask}
 				>{t(info.set ? 'webdav.renew' : 'webdav.create')}</button
 			>
 			{#if info.set}<button
@@ -73,6 +95,26 @@
 				>{/if}
 		</div>
 	</section>
+{/if}
+
+{#if asking}
+	<Dialog title={t(info?.set ? 'webdav.renew' : 'webdav.create')} onclose={() => (asking = false)}>
+		<form class="ask" onsubmit={create}>
+			<ReconfirmFields bind:password bind:code />
+			{#if askError}<p class="notice-error" role="alert">{askError}</p>{/if}
+			<div class="dialog-actions">
+				<button type="button" class="btn" disabled={busy} onclick={() => (asking = false)}
+					>{t('common.cancel')}</button
+				>
+				<button
+					type="submit"
+					class="btn btn-primary"
+					disabled={busy || !reconfirmComplete(password, code)}
+					>{t(info?.set ? 'webdav.renew' : 'webdav.create')}</button
+				>
+			</div>
+		</form>
+	</Dialog>
 {/if}
 
 {#if shown}
@@ -115,6 +157,11 @@
 {/if}
 
 <style>
+	.ask {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+	}
 	.grid {
 		display: grid;
 		grid-template-columns: auto 1fr;

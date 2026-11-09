@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -464,7 +465,25 @@ func (s *Server) handleClusterProxy(w http.ResponseWriter, r *http.Request) {
 	if !s.clusterAvailable(w) {
 		return
 	}
+	// A console of the other node is a WebSocket. Browsers send those
+	// across origins with the cookie of this site (a page of an app on a
+	// neighbouring name is the same site), the protection against
+	// cross-site requests lets GET pass, and the proxy removes Origin, so
+	// the other node cannot tell which page asks. Check it here, as
+	// websocket.Accept does for the consoles of this node.
+	if r.Header.Get("Upgrade") != "" && !sameOrigin(r) {
+		writeError(w, http.StatusForbidden, "cross_origin", "this page may not open a connection to another node")
+		return
+	}
 	s.opts.Cluster.Proxy(w, r, r.PathValue("id"), currentUser(r).Name, r.PathValue("path"))
+}
+
+// sameOrigin reports whether the page that sent the request is this site:
+// its Origin names the host the request went to. A request without Origin
+// does not count; browsers always send it with a WebSocket.
+func sameOrigin(r *http.Request) bool {
+	origin, err := url.Parse(r.Header.Get("Origin"))
+	return err == nil && origin.Host != "" && strings.EqualFold(origin.Host, r.Host)
 }
 
 // clusterApplied follows up an account another node changed, as the
@@ -489,6 +508,9 @@ func (s *Server) clusterApplied(before auth.User, existed bool, after auth.User,
 		after.Disabled || len(after.Passkeys) < len(before.Passkeys) || !before.Created.Equal(after.Created)):
 		// Whoever knew the old password or held a removed factor is out.
 		s.sessions.DeleteUser(name, "")
+		if before.PasswordHash != after.PasswordHash || before.TOTPSecret != after.TOTPSecret {
+			s.forgetWebDAV(name)
+		}
 	}
 	slog.Info("account taken over from the cluster", "user", name, "deleted", deleted)
 	s.opts.Shares.Kick()

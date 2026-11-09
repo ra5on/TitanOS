@@ -1,6 +1,5 @@
 """GRUB for legacy BIOS and 32-bit UEFI: MBR installation and the stick image."""
 import importlib.util
-import os
 import shutil
 import struct
 import subprocess

@@ -200,7 +200,7 @@ func (s *Server) handleSessionUnlock(w http.ResponseWriter, r *http.Request) {
 	}
 	user := currentUser(r)
 	ip := remoteIP(r)
-	userKey, ipKey := "user:"+user.Name, "ip:"+ip
+	userKey, ipKey := "user:"+user.Name, passkeySource(r)
 	guessKey := userKey
 	if device := s.knownDevice(r, user.Name); device != "" {
 		guessKey = device

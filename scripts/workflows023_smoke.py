@@ -94,7 +94,7 @@ ip -n titan-peer link set peer30 up
 ''')
     wait(lambda: remote('ping -c1 -W1 -I tnapps 172.29.30.2') is not None, 'tagged VLAN peer')
     wait(lambda: remote('ping -6 -c1 -W1 -I tnapps fd23:30::2') is not None, 'IPv6 VLAN peer')
-    assert remote(f'cat /sys/class/net/tbuplink/bonding/active_slave') in (pbond1, pbond2)
+    assert remote('cat /sys/class/net/tbuplink/bonding/active_slave') in (pbond1, pbond2)
     active = remote('cat /sys/class/net/tbuplink/bonding/active_slave')
     remote(f'ip link set {active} down')
     wait(lambda: remote('cat /sys/class/net/tbuplink/bonding/active_slave') not in ('', active), 'bond failover')

@@ -242,6 +242,23 @@ func TestSetupOnlyFromTheHomeNetwork(t *testing.T) {
 	}
 }
 
+// A reverse proxy or tunnel in the home network has a private address, but
+// whoever asks through it may sit anywhere.
+func TestSetupNotThroughAProxy(t *testing.T) {
+	for _, header := range []string{"X-Forwarded-For", "Cf-Connecting-Ip", "Forwarded"} {
+		reached := false
+		handler := setupLocal(func(w http.ResponseWriter, r *http.Request) { reached = true })
+		req := httptest.NewRequest("POST", "/api/v1/setup", nil)
+		req.RemoteAddr = "192.168.1.20:1"
+		req.Header.Set(header, "203.0.113.9")
+		rec := httptest.NewRecorder()
+		handler(rec, req)
+		if reached || rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "setup_not_local") {
+			t.Errorf("%s: reached %v, %d %s", header, reached, rec.Code, rec.Body)
+		}
+	}
+}
+
 // index.html carries its policy also as a header, with what a meta tag
 // cannot say; without TLS from Let's Encrypt there is no HSTS.
 func TestContentSecurityPolicyHeader(t *testing.T) {

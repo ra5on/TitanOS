@@ -3,7 +3,7 @@
 The harness passes an authenticated API request, a root shell in that NAS,
 and a file transfer function. Never call this against a user's NAS.
 """
-import base64,gzip,json,lzma,os,shlex,subprocess,time,xml.etree.ElementTree as ET
+import base64,lzma,shlex,subprocess,time,xml.etree.ElementTree as ET
 from pathlib import Path
 
 def check_vm_snapshots(request,remote,put,directory,volume='testdata'):

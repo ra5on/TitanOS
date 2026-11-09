@@ -317,3 +317,24 @@ func TestTokensWaitForTheStick(t *testing.T) {
 		t.Fatalf("stick is there now: %v", err)
 	}
 }
+
+// Filling the table with keys that failed once (random names, fresh
+// addresses) must not make the limiter forget an account that is being
+// guessed: its count would start over after every flood.
+func TestLimiterFloodKeepsGuessedAccount(t *testing.T) {
+	limiter := NewLimiter()
+	now := time.Unix(1_800_000_000, 0)
+	limiter.now = func() time.Time { return now }
+	for range limiterFreeAttempts {
+		limiter.Fail("user:alex")
+	}
+	// The block of the account ends; the attacker floods the table.
+	now = now.Add(limiterBaseDelay + time.Second)
+	for i := range 2 * limiterMaxKeys {
+		limiter.Fail(fmt.Sprintf("user:noise%d", i))
+	}
+	limiter.Fail("user:alex")
+	if wait := limiter.RetryAfter("user:alex"); wait != 2*limiterBaseDelay {
+		t.Fatalf("wait after the flood = %v, want %v: the failures of the account were forgotten", wait, 2*limiterBaseDelay)
+	}
+}

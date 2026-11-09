@@ -67,9 +67,9 @@ func (l *Limiter) Fail(keys ...string) {
 		if !ok || now.Sub(e.last) > limiterForget {
 			if !ok && len(l.entries) >= limiterMaxKeys {
 				// A full table must not let guesses through uncounted:
-				// make room by forgetting the key that failed longest ago,
-				// a blocked one only if all are blocked. Keys under attack
-				// stay, because every guess makes them recent again.
+				// make room by forgetting the key with the fewest failures
+				// that failed longest ago, a blocked one only if all are
+				// blocked. Keys under attack stay.
 				l.evict(now)
 			}
 			e = &limiterEntry{}
@@ -87,7 +87,11 @@ func (l *Limiter) Fail(keys ...string) {
 	}
 }
 
-// evict forgets one key, see Fail.
+// evict forgets one key, see Fail: of the keys that are not blocked the one
+// with the fewest failures, among those the one that failed longest ago. A
+// flood of keys that failed once (random names, fresh addresses) therefore
+// pushes out its own keys and not the count of an account that is being
+// guessed between two of its blocks.
 func (l *Limiter) evict(now time.Time) {
 	oldest, oldestBlocked := "", ""
 	for key, e := range l.entries {
@@ -95,7 +99,13 @@ func (l *Limiter) evict(now time.Time) {
 			if oldestBlocked == "" || e.last.Before(l.entries[oldestBlocked].last) {
 				oldestBlocked = key
 			}
-		} else if oldest == "" || e.last.Before(l.entries[oldest].last) {
+			continue
+		}
+		if oldest == "" {
+			oldest = key
+			continue
+		}
+		if o := l.entries[oldest]; e.failures < o.failures || e.failures == o.failures && e.last.Before(o.last) {
 			oldest = key
 		}
 	}
