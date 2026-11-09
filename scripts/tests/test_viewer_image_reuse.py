@@ -247,7 +247,16 @@ class FetchRetries(unittest.TestCase):
         self.assertEqual(calls, [404])
 
     def test_gives_up(self):
+        # Not a github.com download: no way through the API either.
         url, calls = self.serve([503])
         with self.assertRaises(urllib.error.HTTPError):
-            reuse.fetch(url, 100, attempts=3, pause=0)
-        self.assertEqual(len(calls), 3)
+            reuse.fetch(url, 100, pause=0)
+        self.assertEqual(len(calls), 4)
+
+    def test_api_fallback_only_for_github_downloads(self):
+        kind = reuse.release_kind
+        self.assertIsNone(kind.api_asset("https://example.org/releases/download/v1/x", 5))
+        self.assertEqual(
+            kind.GITHUB_DOWNLOAD.match("https://github.com/ra5on/TitanOS/releases/download/v0.70.2/manifest.json").groups(),
+            ("ra5on/TitanOS", "v0.70.2", "manifest.json"),
+        )

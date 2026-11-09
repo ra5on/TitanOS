@@ -148,6 +148,8 @@ jobs:
         id: kind
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          # Release downloads that GitHub answers with 5xx come through the API.
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ "$REAL_TAG" = true ]; then
             python3 scripts/release-kind.py "$VERSION" --tag-message changelog.txt >> "$GITHUB_OUTPUT"
@@ -213,6 +215,8 @@ jobs:
 
       - name: The image of the base release with the new titand
         if: steps.kind.outputs.kind == 'app'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: python3 scripts/repack-release.py --base ${{ steps.kind.outputs.base }} --version ${{ steps.version.outputs.version }}
 
       - name: Plugin sets for the kernel of this image
@@ -281,6 +285,7 @@ jobs:
       - name: Image of the remote view (titanos-viewer, docs/FERNANSICHT.md)
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -o pipefail
           mkdir -p out/viewer

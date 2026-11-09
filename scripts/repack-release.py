@@ -24,6 +24,7 @@ the Go toolchain and web/node_modules that built backend/bin/titand.
 """
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -45,6 +46,11 @@ NO_SUDO = os.environ.get("REPACK_NO_SUDO") == "1"
 LICENSES = os.environ.get("REPACK_LICENSES", str(REPO / "scripts/third-party-licenses.py"))
 
 
+_spec = importlib.util.spec_from_file_location("release_kind", REPO / "scripts/release-kind.py")
+release_kind = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(release_kind)
+
+
 def run(*args, **kwargs):
     subprocess.run(args, check=True, **kwargs)
 
@@ -54,25 +60,11 @@ def sudo(*args):
     run(*prefix, *args)
 
 
-def download(url, target, attempts=5, pause=10):
-    """Downloads url to target. A server error or a broken connection is
-    tried again: GitHub answered release downloads with 504 for minutes
-    (9 Nov 2026), and the release of 0.70.2 failed on it twice."""
-    request = urllib.request.Request(url, headers={"User-Agent": "TitanOS release"})
-    for attempt in range(1, attempts + 1):
-        try:
-            with urllib.request.urlopen(request, timeout=120) as response, open(target, "wb") as out:
-                shutil.copyfileobj(response, out, 1 << 20)
-            return
-        except urllib.error.HTTPError as error:
-            if error.code < 500 or attempt == attempts:
-                raise
-        except (urllib.error.URLError, TimeoutError, ConnectionError):
-            if attempt == attempts:
-                raise
-        print(f"{url}: try {attempt} failed, again in {pause * attempt} s", flush=True)
-        time.sleep(pause * attempt)
-
+def download(url, target):
+    """Downloads url to target, through release_kind.open_release (tried
+    again, then the GitHub API)."""
+    with release_kind.open_release(url) as response, open(target, "wb") as out:
+        shutil.copyfileobj(response, out, 1 << 20)
 
 def sha256(path):
     with open(path, "rb") as stream:

@@ -63,24 +63,15 @@ release_kind = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release_kind)
 
 
-def fetch(url, limit, attempts=5, pause=10):
-    # GitHub answers release downloads now and then with 502/503/504 for a
-    # while (9 Nov 2026: 504 for minutes); a server error is tried again.
-    for attempt in range(1, attempts + 1):
-        try:
-            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "TitanOS release"}), timeout=120) as response:
-                data = response.read(limit + 1)
-            break
-        except urllib.error.HTTPError as error:
-            if error.code == 404:
-                return None
-            if error.code < 500 or attempt == attempts:
-                raise
-        except (urllib.error.URLError, TimeoutError, ConnectionError):
-            if attempt == attempts:
-                raise
-        print(f"{url}: try {attempt} failed, again in {pause * attempt} s", flush=True)
-        time.sleep(pause * attempt)
+def fetch(url, limit, pause=10):
+    # Through release_kind.open_release: tried again, then the GitHub API.
+    try:
+        with release_kind.open_release(url, pause=pause) as response:
+            data = response.read(limit + 1)
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            return None
+        raise
     if len(data) > limit:
         raise ValueError(f"{url} is larger than expected")
     return data
