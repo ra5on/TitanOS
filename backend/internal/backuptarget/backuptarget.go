@@ -632,6 +632,16 @@ func (m *Manager) serveFile(w http.ResponseWriter, r *http.Request, repo *os.Roo
 				return
 			}
 		}
+		if err == nil {
+			// The name itself has to survive a power cut too: restic
+			// takes the answer as "stored".
+			if dir, openErr := repo.Open(filepath.Dir(path)); openErr != nil {
+				err = openErr
+			} else {
+				err = dir.Sync()
+				dir.Close()
+			}
+		}
 		if err != nil {
 			fail(w, err)
 			return

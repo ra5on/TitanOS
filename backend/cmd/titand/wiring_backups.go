@@ -80,6 +80,7 @@ func (w *titand) wireBackups() error {
 	if err := w.backups.Load(); err != nil {
 		slog.Warn("backup jobs not readable from /config", "err", err)
 	}
+	w.backups.ReleaseStaleSMB()
 	// Backups of other TitanOS, taken in over Tailscale.
 	w.backupTarget = backuptarget.NewManager(w.store)
 	w.backupTarget.Disabled = w.opts.dev

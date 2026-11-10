@@ -162,6 +162,8 @@ type classifier struct {
 	// change ("can you still reach the web UI?") and the answer to "may
 	// this sender see the web UI?" would be about the wrong zone.
 	vpn []netip.Prefix
+	// via names the interface towards an address; see Manager.RouteDevice.
+	via func(netip.Addr) string
 }
 
 func newClassifier(cfg Config, networks []Network, home, vpn []netip.Prefix) classifier {
@@ -178,10 +180,14 @@ func (c classifier) zone(addr netip.Addr) Zone {
 		// The NAS itself; always let in before any zone.
 		return Home
 	}
+	// Over a VPN interface no network of an own zone is reached: the
+	// rules ask for its interface. Zones by source address come first
+	// there too.
+	overVPN := c.via != nil && slices.Contains(vpnInterfaces, c.via(addr))
 	for _, m := range c.members {
 		for _, b := range m.bindings {
 			for _, p := range b.subnets {
-				if p.Contains(addr) {
+				if !overVPN && p.Contains(addr) {
 					return m.zone
 				}
 			}
@@ -191,6 +197,9 @@ func (c classifier) zone(addr netip.Addr) Zone {
 				return m.zone
 			}
 		}
+	}
+	if overVPN {
+		return VPN
 	}
 	for _, p := range c.vpn {
 		if p.Contains(addr) {

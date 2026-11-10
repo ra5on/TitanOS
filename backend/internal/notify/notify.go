@@ -657,7 +657,10 @@ func sendMail(cfg Email, message []byte) error {
 	if err := body.Close(); err != nil {
 		return err
 	}
-	return client.Quit()
+	// The server has taken the message: a failed goodbye must not report
+	// a failure, or the caller sends the same mail again.
+	_ = client.Quit()
+	return nil
 }
 
 // confinedClient connects to public addresses only and follows no redirect.

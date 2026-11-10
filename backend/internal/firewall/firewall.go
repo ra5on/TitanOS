@@ -70,6 +70,12 @@ type Manager struct {
 	// VPN interface (the tunnel network of the WireGuard server); nil for
 	// none. See classifier.vpn.
 	VPNNetworks func() []string
+	// RouteDevice names the interface the NAS reaches an address over
+	// (empty: unknown). A private address a Tailscale or NetBird device
+	// routes here comes in over the VPN interface, and the rules count it
+	// as VPN whatever its number says; with this the answers of titand
+	// agree with them. Nil: told by address alone.
+	RouteDevice func(netip.Addr) string
 	// Apps returns the Docker apps with their published ports; ok false
 	// keeps the last known list (Docker not answering).
 	Apps func(ctx context.Context) ([]App, bool)
@@ -323,7 +329,7 @@ func (m *Manager) Change(ctx context.Context, cfg Config, admin string) error {
 		return fmt.Errorf("%w: unknown client address", ErrInvalid)
 	}
 	addr = addr.Unmap().WithZone("")
-	if cfg.Enabled && !addr.IsLoopback() && !decide(cfg, Services(&m.Web), newClassifier(cfg, m.networks, m.home, m.vpnNetworks()).zone(addr), addr, "tcp", m.Web.or().HTTPS, "webui") {
+	if cfg.Enabled && !addr.IsLoopback() && !decide(cfg, Services(&m.Web), m.classifier(cfg).zone(addr), addr, "tcp", m.Web.or().HTTPS, "webui") {
 		return ErrExcludesYou
 	}
 	return m.changeLocked(ctx, cfg, addr)
@@ -508,7 +514,7 @@ func (m *Manager) AllowHTTP(remoteAddr string, app bool) bool {
 	if app {
 		service = "apps"
 	}
-	return decide(cfg, Services(&m.Web), newClassifier(cfg, m.networks, m.home, m.vpnNetworks()).zone(addr), addr, "tcp", m.Web.or().HTTPS, service)
+	return decide(cfg, Services(&m.Web), m.classifier(cfg).zone(addr), addr, "tcp", m.Web.or().HTTPS, service)
 }
 
 // Status returns the settings and the state; client is the address of the
@@ -529,7 +535,7 @@ func (m *Manager) Status(client string) Status {
 		status.VPNNetworks = append(status.VPNNetworks, p.String())
 	}
 	if addr, err := netip.ParseAddr(client); err == nil {
-		status.ClientZone = newClassifier(m.current(), m.networks, m.home, m.vpnNetworks()).zone(addr)
+		status.ClientZone = m.classifier(m.current()).zone(addr)
 	}
 	status.Networks = statusNetworks(m.networks, m.active, m.pending)
 	status.DockerError = m.dockerUserErr
@@ -725,6 +731,13 @@ func statusNetworks(live []Network, active Config, pending *Config) []Network {
 		}
 	}
 	return out
+}
+
+// classifier tells the zone of an address under cfg, the way the rules do.
+func (m *Manager) classifier(cfg Config) classifier {
+	c := newClassifier(cfg, m.networks, m.home, m.vpnNetworks())
+	c.via = m.RouteDevice
+	return c
 }
 
 // vpnNetworks are the networks VPNNetworks names, as prefixes.

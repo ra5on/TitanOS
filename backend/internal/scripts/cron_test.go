@@ -1,6 +1,7 @@
 package scripts
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -102,5 +103,45 @@ func TestCronLastDayOfTheMonth(t *testing.T) {
 		if _, err := parseCron(bad); err == nil {
 			t.Errorf("%q accepted", bad)
 		}
+	}
+}
+
+// A schedule with a fixed hour runs once in each of the two nights the
+// clock changes; an hourly one follows the hours as they pass.
+func TestCronInTheNightsOfTheClockChange(t *testing.T) {
+	berlin, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Skip("no time zone data")
+	}
+	runs := func(expr string, day time.Time) []string {
+		c, err := parseCron(expr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var at []string
+		for m := day; m.Before(day.Add(30 * time.Hour)); m = m.Add(time.Minute) {
+			if c.due(m) {
+				at = append(at, m.Format("02 15:04 MST"))
+			}
+		}
+		return at
+	}
+	same := func(got, want []string) bool { return strings.Join(got, ",") == strings.Join(want, ",") }
+
+	// 29 March 2026: 02:00 becomes 03:00.
+	spring := time.Date(2026, 3, 29, 0, 0, 0, 0, berlin)
+	if got := runs("30 2 * * *", spring); !same(got, []string{"29 03:00 CEST", "30 02:30 CEST"}) {
+		t.Fatalf("skipped time: %v", got)
+	}
+	if got := runs("0 3 * * *", spring); !same(got, []string{"29 03:00 CEST", "30 03:00 CEST"}) {
+		t.Fatalf("time after the jump: %v", got)
+	}
+	// 25 October 2026: 03:00 becomes 02:00.
+	autumn := time.Date(2026, 10, 25, 0, 0, 0, 0, berlin)
+	if got := runs("30 2 * * *", autumn); !same(got, []string{"25 02:30 CEST", "26 02:30 CET"}) {
+		t.Fatalf("repeated time: %v", got)
+	}
+	if got := runs("15 * * * *", autumn); len(got) != 30 {
+		t.Fatalf("hourly runs %d times in 30 hours", len(got))
 	}
 }

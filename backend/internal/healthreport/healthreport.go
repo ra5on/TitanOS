@@ -22,7 +22,10 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/version"
 )
 
-const settingsFile = "system/health-report.json"
+const (
+	settingsFile = "system/health-report.json"
+	sentName     = "system/health-report-sent.json"
+)
 
 var (
 	ErrInvalid = errors.New("health report: invalid settings")
@@ -367,6 +370,13 @@ func (m *Manager) Load() error {
 		s.Enabled = enabled
 	}
 	m.settings, m.loaded = s, true
+	// The time of the last scheduled report lies on the stick too (one
+	// small write per report): /run is empty after a start of the NAS, and
+	// a report from before it would go out a second time.
+	var sent time.Time
+	if m.store.ReadJSON(sentName, &sent) == nil && sent.After(m.lastSent) {
+		m.lastSent = sent
+	}
 	return nil
 }
 
@@ -463,7 +473,9 @@ func (m *Manager) Next() time.Time {
 func (m *Manager) Run(ctx context.Context) {
 	if data, err := readSent(m.sentFile); err == nil {
 		m.mu.Lock()
-		m.lastSent = data
+		if data.After(m.lastSent) {
+			m.lastSent = data
+		}
 		m.mu.Unlock()
 	}
 	ticker := time.NewTicker(time.Minute)
@@ -500,6 +512,9 @@ func (m *Manager) tick() {
 		return
 	}
 	writeSent(m.sentFile, report.Generated)
+	if err := m.store.WriteJSON(sentName, report.Generated.UTC()); err != nil {
+		slog.Warn("time of the health report not kept; it may go out again after a restart", "err", err)
+	}
 }
 
 func readSent(path string) (time.Time, error) {
