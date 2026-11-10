@@ -14,6 +14,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/config"
 )
 
 // twoNodes returns A (admin) and B (member) in one cluster.
@@ -387,5 +390,22 @@ func TestUpdateAllNodes(t *testing.T) {
 	}
 	if r.Nodes[1].ID != a.m.ID() || r.Nodes[1].State != "restarting" {
 		t.Fatalf("this node last: %+v", r.Nodes[1])
+	}
+}
+
+// Accounts that could not be read on the admin node (one broken account
+// file fails the whole load, titand keeps running) are not "deleted": the
+// regular sync must not take them away from every node of the cluster.
+func TestUnreadAccountsAreNotDeletedAcrossTheCluster(t *testing.T) {
+	a, b := twoNodes(t)
+	eventually(t, "alex on B", func() bool { _, ok := b.users.Get("alex"); return ok })
+	// The admin node comes up without its accounts.
+	a.m.Users = auth.NewUsers(config.Open(t.TempDir()))
+	a.m.syncAccounts(context.Background())
+	if v := a.m.versions()["alex"]; v.Deleted {
+		t.Fatal("the account that could not be read was marked as deleted")
+	}
+	if _, ok := b.users.Get("alex"); !ok {
+		t.Fatal("alex was deleted on the member")
 	}
 }
