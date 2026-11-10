@@ -111,18 +111,33 @@ func (a sshArea) handleSSHChange(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a.sshView(r, status))
 }
 
-func (s *Server) accountKeys(w http.ResponseWriter, user auth.User) {
+// accountKeysArea is the SSH keys of one's own account; an area with narrow
+// dependencies (PLAN 8a, see fansArea). ssh takes up a changed key at once;
+// reconfirm asks for the password again before a key is added.
+type accountKeysArea struct {
+	users     *auth.Users
+	ssh       *sshd.Manager
+	reconfirm reconfirmFunc
+}
+
+func (a accountKeysArea) register(mux *routeMux, user func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/account/ssh-keys", user(a.handleAccountKeys))
+	mux.HandleFunc("POST /api/v1/account/ssh-keys", user(a.handleAccountKeyAdd))
+	mux.HandleFunc("DELETE /api/v1/account/ssh-keys/{id}", user(a.handleAccountKeyRemove))
+}
+
+func (a accountKeysArea) accountKeys(w http.ResponseWriter, user auth.User) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"keys": user.DescribeSSHKeys(),
 		// Keys only open the door for owners and administrators, and
 		// only while SSH is switched on.
 		"mayLogin":   user.Role.CanAdminister(),
-		"sshEnabled": s.opts.SSH.Status().Enabled,
+		"sshEnabled": a.ssh.Status().Enabled,
 	})
 }
 
-func (s *Server) handleAccountKeys(w http.ResponseWriter, r *http.Request) {
-	s.accountKeys(w, currentUser(r))
+func (a accountKeysArea) handleAccountKeys(w http.ResponseWriter, r *http.Request) {
+	a.accountKeys(w, currentUser(r))
 }
 
 func writeKeyError(w http.ResponseWriter, err error) {
@@ -140,7 +155,7 @@ func writeKeyError(w http.ResponseWriter, err error) {
 	}
 }
 
-func (s *Server) handleAccountKeyAdd(w http.ResponseWriter, r *http.Request) {
+func (a accountKeysArea) handleAccountKeyAdd(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Key string `json:"key"`
 		// Password and Code confirm it like switching two-factor login
@@ -151,28 +166,28 @@ func (s *Server) handleAccountKeyAdd(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if !s.reconfirm(w, currentUser(r), req.Password, req.Code) {
+	if !a.reconfirm(w, currentUser(r), req.Password, req.Code) {
 		return
 	}
-	user, err := s.opts.Users.AddSSHKey(currentUser(r).Name, req.Key)
+	user, err := a.users.AddSSHKey(currentUser(r).Name, req.Key)
 	if err != nil {
 		writeKeyError(w, err)
 		return
 	}
 	slog.Info("SSH key added", "user", user.Name, "ip", remoteIP(r))
-	s.opts.SSH.Kick()
-	s.accountKeys(w, user)
+	a.ssh.Kick()
+	a.accountKeys(w, user)
 }
 
-func (s *Server) handleAccountKeyRemove(w http.ResponseWriter, r *http.Request) {
-	user, err := s.opts.Users.RemoveSSHKey(currentUser(r).Name, r.PathValue("id"))
+func (a accountKeysArea) handleAccountKeyRemove(w http.ResponseWriter, r *http.Request) {
+	user, err := a.users.RemoveSSHKey(currentUser(r).Name, r.PathValue("id"))
 	if err != nil {
 		writeKeyError(w, err)
 		return
 	}
 	slog.Info("SSH key removed", "user", user.Name, "ip", remoteIP(r))
-	s.opts.SSH.Kick()
-	s.accountKeys(w, user)
+	a.ssh.Kick()
+	a.accountKeys(w, user)
 }
 
 // certificateArea is the certificate of the web UI; an area with narrow
@@ -242,11 +257,23 @@ type loginView struct {
 	Choices  []int `json:"choices"`
 }
 
-func (s *Server) handleLoginSettings(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, loginView{StayDays: s.sessions.Stay(), Choices: auth.StayChoices})
+// loginSettingsArea is how long a login stays; an area with narrow
+// dependencies (PLAN 8a, see fansArea). sessions are the logins of the
+// server.
+type loginSettingsArea struct {
+	sessions *auth.Sessions
 }
 
-func (s *Server) handleSetLoginSettings(w http.ResponseWriter, r *http.Request) {
+func (a loginSettingsArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/system/login", admin(a.handleLoginSettings))
+	mux.HandleFunc("PUT /api/v1/system/login", admin(a.handleSetLoginSettings))
+}
+
+func (a loginSettingsArea) handleLoginSettings(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, loginView{StayDays: a.sessions.Stay(), Choices: auth.StayChoices})
+}
+
+func (a loginSettingsArea) handleSetLoginSettings(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		StayDays *int `json:"stayDays"`
 	}
@@ -254,7 +281,7 @@ func (s *Server) handleSetLoginSettings(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if req.StayDays != nil {
-		if err := s.sessions.SetStay(*req.StayDays); errors.Is(err, auth.ErrStayChoice) {
+		if err := a.sessions.SetStay(*req.StayDays); errors.Is(err, auth.ErrStayChoice) {
 			writeError(w, http.StatusBadRequest, "invalid_stay", err.Error())
 			return
 		} else if err != nil {
@@ -263,5 +290,5 @@ func (s *Server) handleSetLoginSettings(w http.ResponseWriter, r *http.Request) 
 		}
 		slog.Info("stay logged in changed", "days", *req.StayDays, "by", currentUser(r).Name, "ip", remoteIP(r))
 	}
-	s.handleLoginSettings(w, r)
+	a.handleLoginSettings(w, r)
 }

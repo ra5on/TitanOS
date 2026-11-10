@@ -31,8 +31,6 @@ func (s *Server) registerAccount(mux *routeMux) {
 	mux.HandleFunc("POST /api/v1/account/2fa/enable", s.requireUser(s.handleTwoFactorEnable))
 	mux.HandleFunc("POST /api/v1/account/2fa/disable", s.requireUser(s.handleTwoFactorDisable))
 	mux.HandleFunc("POST /api/v1/account/2fa/recovery", s.requireUser(s.handleTwoFactorRecovery))
-	mux.HandleFunc("GET /api/v1/account/ssh-keys", s.requireUser(s.handleAccountKeys))
-	mux.HandleFunc("POST /api/v1/account/ssh-keys", s.requireUser(s.handleAccountKeyAdd))
-	mux.HandleFunc("DELETE /api/v1/account/ssh-keys/{id}", s.requireUser(s.handleAccountKeyRemove))
+	accountKeysArea{users: s.opts.Users, ssh: s.opts.SSH, reconfirm: s.reconfirm}.register(mux, s.requireUser)
 	accountNotifyArea{notify: s.opts.Notify}.register(mux, s.requireUser)
 }
