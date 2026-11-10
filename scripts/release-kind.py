@@ -49,6 +49,9 @@ ALLOWED = (
     # squashfs. make-release.sh and third-party-licenses.py only pack it.
     "viewer/",
     "scripts/build-viewer-image.sh",
+    # Writes docs/API-LAYOUT.md from the source tree; a tool for the
+    # repository, never in an image.
+    "scripts/api-layout.py",
     # Release tooling that runs only in CI (manifest, license inventory of the
     # release archive, release checks, the build workflow); an app release
     # uses it to repack the base image anyway (decision of 7.11.2026, PLAN 63).
