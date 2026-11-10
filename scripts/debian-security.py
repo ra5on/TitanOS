@@ -34,6 +34,7 @@ BASE_SUITES = [(MIRROR, "trixie"), (MIRROR, "trixie-updates"), (SECURITY, "trixi
 # The image with the newer kernel additionally pins kernel and firmware to backports.
 VARIANT_SUITES = BASE_SUITES + [(MIRROR, "trixie-backports")]
 VARIANT_HEADER = re.compile(r"Image with the new kernel .*additionally:")
+OTHER_HEADER = re.compile(r"(Viewer image \(|Web apps \()")
 KERNEL = re.compile(r"linux-image-")
 
 
@@ -51,6 +52,12 @@ def image_sections(sources):
     for line in sources.splitlines():
         if VARIANT_HEADER.fullmatch(line.strip()):
             current = variant
+            continue
+        # The remote view is a container of its own with its own Debian
+        # packages (Chromium, GStreamer …), and the web apps follow it:
+        # neither belongs to the system image.
+        if OTHER_HEADER.match(line):
+            current = {}
             continue
         match = re.fullmatch(r"Debian: (\S+) (\S+)", line.strip())
         if match:

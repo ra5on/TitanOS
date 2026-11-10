@@ -30,6 +30,7 @@
 		'ai',
 		'finance',
 		'social',
+		'games',
 	];
 
 	// Stores of others that TitanOS can read. They are offered, never added

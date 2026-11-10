@@ -69,6 +69,11 @@
 	>(null);
 	let conflict = $state<{ name: string; bytes: ArrayBuffer } | null>(null);
 	let saving = $state<{ name: string; bytes: ArrayBuffer; adopt: boolean } | null>(null);
+	// The name the app uses for the window's document where it differs from
+	// the file's (saved under another name in the dialog); askedName is the
+	// one of the save that is being asked about.
+	let appName = '',
+		askedName = '';
 	let replace = $state<{ target: DocRef; bytes: ArrayBuffer; adopt: boolean } | null>(null);
 	let picking = $state(false);
 	/** The app opened its own file picker (PLAN 75-20): the window shows its dialog instead. */
@@ -160,6 +165,7 @@
 			const { bytes, mtime } = await readDoc(next);
 			if (opened !== key) return;
 			current = { doc: next, mtime };
+			appName = '';
 			remember(next);
 			outside = false;
 			unwritten = false;
@@ -212,7 +218,10 @@
 	}
 
 	async function onSave(name: string, saveAs: boolean, bytes: ArrayBuffer) {
-		const target = saveTarget(current?.doc ?? null, { name, saveAs }, app);
+		const target = saveTarget(current?.doc ?? null, { name, saveAs }, app, appName);
+		// Should this save become the window's file, the app goes on calling
+		// it by this name, whatever the person names it in the dialog.
+		if (target === 'dialog') askedName = name;
 		// A file the app opened from the NAS through its own picker, saved under
 		// its name: back into that file, guarded by its time like any save.
 		const known = target === 'dialog' ? pickedDocs.get(name) : undefined;
@@ -261,7 +270,9 @@
 			}
 			current = { doc: current.doc, mtime: r.mtime };
 			unwritten = false;
-			notice = null;
+			// A file the app made beside this save (a backup copy of the project)
+			// still waits for its answer: that offer stays.
+			if (notice?.kind !== 'created') notice = null;
 			post({ type: 'webapp-saved', ok: true });
 		} catch (e) {
 			notice = { kind: 'error', text: t('webapps.saveFailed', { error: apiErrorText(e) }) };
@@ -313,6 +324,7 @@
 			}
 			if (adopt) {
 				current = { doc: target, mtime: r.mtime };
+				appName = askedName;
 				remember(target);
 				opened = target.root + '\n' + target.path;
 				unwritten = false;

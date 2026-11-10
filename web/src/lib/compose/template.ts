@@ -253,6 +253,15 @@ export function readTemplate(
 				(editedEnv === undefined || pair.value === '${' + info.from + '}')
 			)
 				continue;
+			// The same secret named in two services (a database and the app
+			// that logs in to it) is one value: one field, both services read
+			// it from .env (PLAN 76, F-14-7). Two fields would show two
+			// generated passwords, of which only one is used.
+			if (
+				(info.secret === 'generate' || info.secret === true) &&
+				form.vars.some((v) => v.secret && v.name === pair.name && v.service !== service)
+			)
+				continue;
 			const fill = (
 				['timezone', 'uid', 'gid'].includes(String(info.fill))
 					? String(info.fill)
@@ -266,7 +275,10 @@ export function readTemplate(
 				placeholder: typeof info.placeholder === 'string' ? info.placeholder : '',
 				value: pair.value,
 				origin: 'template',
-				secret: info.secret === 'generate',
+				// "generate": TitanOS makes the value. true: the person enters it
+				// (a token, an admin password) – hidden in the form and kept in
+				// .env like a generated one, never in compose.yaml (PLAN 76, F-14-1).
+				secret: info.secret === 'generate' || info.secret === true,
 				required: info.required === true,
 				fill,
 			};
@@ -278,7 +290,7 @@ export function readTemplate(
 					Object.hasOwn(editedEnv, pair.name) &&
 					pair.value === '${' + pair.name + '}';
 				if (field.secret) field.value = editedEnv[pair.name];
-			} else if (field.secret) {
+			} else if (info.secret === 'generate') {
 				field.value = generateSecret();
 				field.origin = 'generated';
 			} else if (fill) {
@@ -485,6 +497,9 @@ export function build(
 				const from = meta.variables[pair.name]?.from;
 				if (typeof from === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(from))
 					pair.value = '${' + from + '}';
+				// The shared secret of another service (see readTemplate).
+				else if (form.vars.some((v) => v.secret && v.name === pair.name && v.value !== ''))
+					pair.value = '${' + pair.name + '}';
 				continue;
 			}
 			if (field.secret && field.value !== '') {

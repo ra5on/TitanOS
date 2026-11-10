@@ -241,6 +241,9 @@ class ReleaseTest(unittest.TestCase):
         verify.CATALOG.write_text(json.dumps(catalog))
         with self.assertRaisesRegex(ValueError, "web app"):
             verify.verify(self.release, self.keys)
+        # PLAN 76 (F-13-3): as the base of a later app release it is checked
+        # against its own signed checksums; the catalog may have moved on.
+        self.assertEqual(verify.verify(self.release, self.keys, as_base=True), "0.1.0-beta.1")
 
     def test_web_app_differing_from_the_catalog_is_not_packed(self):
         self.command("mksquashfs", str(self.root), str(self.slot / "filesystem.squashfs"), "-noappend", "-quiet", "-processors", "1")

@@ -1150,6 +1150,7 @@
 	"error.invalid_env": "Ein Geheimnis enthält Zeichen, die nicht gespeichert werden können (Zeilenumbruch oder einfaches Anführungszeichen).",
 	"apps.format.casaos": "CasaOS-Store",
 	"apps.category.ai": "KI",
+	"apps.category.games": "Spiele",
 	"apps.category.finance": "Finanzen",
 	"apps.category.social": "Soziales",
 	"apps.fromSource": "Quelle",

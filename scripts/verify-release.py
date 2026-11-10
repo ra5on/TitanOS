@@ -30,12 +30,32 @@ OFFICIAL = {p.stem for p in (Path(__file__).resolve().parent.parent / "plugins/c
 CATALOG = Path(__file__).resolve().parent.parent / "webapps/catalog.json"
 
 
-def verify_webapps(manifest, release, checksums):
+def verify_base_webapps(webapps, release, checksums):
+    """The web apps of an earlier release that serves as the base of an app
+    release: checked against that release's own signed checksums, not against
+    today's catalog, which may have moved on (PLAN 76, F-13-3)."""
+    seen = set()
+    if not isinstance(webapps, list):
+        raise ValueError("web apps of the base are no list")
+    for entry in webapps:
+        if not isinstance(entry, dict) or set(entry) != {"id", "version", "asset", "sha256", "size"}:
+            raise ValueError("web app entry of the base is malformed")
+        asset = entry["asset"]
+        if not isinstance(asset, str) or not re.fullmatch(r"titanos-webapp-[a-z0-9-]+-[0-9A-Za-z.+-]+\.zip", asset) \
+                or asset in seen or checksums.get(asset) != entry["sha256"] \
+                or (release / asset).stat().st_size != entry["size"]:
+            raise ValueError("web app mismatch in the base: " + str(asset))
+        seen.add(asset)
+
+
+def verify_webapps(manifest, release, checksums, as_base=False):
     """Every app of the catalog, unchanged upstream archive (the catalog's
     SHA-256 and size), listed in the checksums; optional for older releases."""
     webapps = manifest.get("webapps")
     if webapps is None:
         return
+    if as_base:
+        return verify_base_webapps(webapps, release, checksums)
     catalog = json.loads(CATALOG.read_text())["apps"]
     if not isinstance(webapps, list) or [e.get("id") for e in webapps if isinstance(e, dict)] != [a["id"] for a in catalog]:
         raise ValueError("web apps do not match the catalog")
@@ -47,7 +67,7 @@ def verify_webapps(manifest, release, checksums):
             raise ValueError("web app mismatch: " + asset)
 
 
-def verify(release, keys, without_plugins=False):
+def verify(release, keys, without_plugins=False, as_base=False):
     manifest = json.loads((release / "manifest.json").read_text())
     version = manifest["version"]
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9.]+)?", version):
@@ -141,7 +161,7 @@ def verify(release, keys, without_plugins=False):
                 or (release / asset).stat().st_size != viewer.get("size") \
                 or not re.fullmatch(r"sha256:[0-9a-f]{64}", str(viewer.get("imageId", ""))):
             raise ValueError("viewer image mismatch: " + asset)
-    verify_webapps(manifest, release, checksums)
+    verify_webapps(manifest, release, checksums, as_base)
     if sdk := manifest.get("nvidiaBuildSDK"):
         if sdk.get("kernel") != manifest["kernel"] or sdk.get("version") != base or sdk.get("asset") != "nvidia-build-sdk.tar.zst":
             raise ValueError("SDK target mismatch")
@@ -155,9 +175,13 @@ if __name__ == "__main__":
     without_plugins = "--without-plugins" in args
     if without_plugins:
         args.remove("--without-plugins")
+    # --base: an earlier release used as the base of an app release.
+    as_base = "--base" in args
+    if as_base:
+        args.remove("--base")
     if len(args) != 2:
-        sys.exit("usage: verify-release.py [--without-plugins] <release directory> <public keys directory>")
+        sys.exit("usage: verify-release.py [--without-plugins] [--base] <release directory> <public keys directory>")
     try:
-        print("Verified TitanOS", verify(Path(args[0]), Path(args[1]), without_plugins))
+        print("Verified TitanOS", verify(Path(args[0]), Path(args[1]), without_plugins, as_base))
     except (ValueError, OSError, KeyError) as error:
         sys.exit(str(error))

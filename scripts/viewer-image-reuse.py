@@ -216,7 +216,9 @@ def reuse(version, out, tag, manifest, source, keys, packages=None):
     out.mkdir(parents=True, exist_ok=True)
     target = out / f"titanos-viewer-{version}.tar.zst"
     digest, size = hashlib.sha256(), 0
-    with urllib.request.urlopen(urllib.request.Request(base + viewer["asset"], headers={"User-Agent": "TitanOS release"}), timeout=600) as response, target.open("wb") as f:
+    # Tried again on a server error (PLAN 76, F-13-13): one 5xx from GitHub
+    # on this large file must not end the release run.
+    with release_kind.open_release(base + viewer["asset"], timeout=600) as response, target.open("wb") as f:
         for block in iter(lambda: response.read(1 << 20), b""):
             size += len(block)
             if size > viewer["size"]:

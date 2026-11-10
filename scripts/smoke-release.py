@@ -138,6 +138,11 @@ def smoke(archive, timeout, log, plugins=None, force_tcg=False, firmware="uefi",
                 if time.monotonic() > deadline:
                     raise TimeoutError("SSH test access did not start")
                 time.sleep(1)
+            # PLAN 76: port 53 is free for apps that are DNS servers (no stub
+            # listener), the NAS still knows the DNS servers of the network, and the
+            # watchdog of a hanging trial start is armed.
+            command(*ssh, "sh -ec 'grep -q ^nameserver /etc/resolv.conf; ! grep -q 127.0.0.53 /etc/resolv.conf; "
+                    "! ss -H -lntu | grep -q 127.0.0.5[34]:53; systemctl is-active --quiet titanos-trial-watchdog.timer'")
             if boot == 1:
                 command(*ssh, "sudo mkdir -p /mnt/smoketest/plugins && sudo chown betatester /mnt/smoketest/plugins")
                 files = [plugins / "nvidia.raw", plugins / "nvidia.plugin.json"]

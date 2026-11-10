@@ -22,6 +22,8 @@ import re
 import shutil
 import stat
 import sys
+import time
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -112,9 +114,27 @@ def validate_archive(path, app_id, version):
     return names
 
 
-def download(url, dest, size):
+def open_url(url, attempts=4, pause=10):
+    """Opens a download; server errors and broken connections are tried again
+    (PLAN 76, F-13-13: one 5xx from GitHub must not end the release run)."""
     request = urllib.request.Request(url, headers={"User-Agent": "TitanOS release"})
-    with urllib.request.urlopen(request, timeout=120) as response, open(dest, "wb") as out:
+    for attempt in range(1, attempts + 1):
+        try:
+            return urllib.request.urlopen(request, timeout=120)
+        except urllib.error.HTTPError as error:
+            if error.code < 500 or attempt == attempts:
+                raise
+            failure = error
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as error:
+            if attempt == attempts:
+                raise
+            failure = error
+        print(f"{url}: try {attempt} failed ({failure}), again in {pause * attempt} s", flush=True)
+        time.sleep(pause * attempt)
+
+
+def download(url, dest, size):
+    with open_url(url) as response, open(dest, "wb") as out:
         read = 0
         for block in iter(lambda: response.read(1 << 20), b""):
             read += len(block)

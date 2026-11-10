@@ -134,3 +134,52 @@ services:
 	assert.equal(check(next, [], new Map([['8088/tcp', 'other']])).blocking, true);
 	assert.throws(() => readTemplate(template('services: ['), 'test', [], new Map(), first.env));
 });
+
+test('a secret the person enters is hidden and kept in .env (PLAN 76, F-14-1)', () => {
+	const tpl = template(`x-titanos:
+  variables:
+    TOKEN: {secret: true, required: true}
+    PASSWORD: {secret: generate}
+services:
+  web:
+    image: app:1
+    environment: {TOKEN: '', PASSWORD: ''}
+`);
+	const form = readTemplate(tpl, 'test', [], new Map());
+	const token = form.vars.find((v) => v.name === 'TOKEN');
+	const password = form.vars.find((v) => v.name === 'PASSWORD');
+	// Not generated: the person has to enter it; it is a secret all the same.
+	assert.equal(token.secret, true);
+	assert.equal(token.value, '');
+	assert.equal(token.origin, 'required');
+	assert.equal(password.origin, 'generated');
+	token.value = 'my-tunnel-token';
+	const built = build(tpl, form);
+	assert.equal(built.env.TOKEN, 'my-tunnel-token');
+	assert.equal(read(built.compose).toJS().services.web.environment.TOKEN, '${TOKEN}');
+	assert.ok(!built.compose.includes('my-tunnel-token'));
+});
+
+test('one secret named in two services is one field and one value (PLAN 76, F-14-7)', () => {
+	const tpl = template(`x-titanos:
+  variables:
+    MYSQL_PASSWORD: {secret: generate}
+services:
+  db:
+    image: mariadb:11
+    environment: {MYSQL_PASSWORD: ''}
+  app:
+    image: app:1
+    environment: {MYSQL_PASSWORD: ''}
+`);
+	const form = readTemplate(tpl, 'test', [], new Map());
+	assert.equal(form.vars.filter((v) => v.name === 'MYSQL_PASSWORD').length, 1);
+	const built = build(tpl, form);
+	const plain = read(built.compose).toJS();
+	assert.equal(plain.services.db.environment.MYSQL_PASSWORD, '${MYSQL_PASSWORD}');
+	assert.equal(plain.services.app.environment.MYSQL_PASSWORD, '${MYSQL_PASSWORD}');
+	assert.ok(built.env.MYSQL_PASSWORD.length >= 16);
+	// Editing the YAML afterwards keeps the one value.
+	const again = readTemplate(template(built.compose), 'test', [], new Map(), built.env);
+	assert.deepEqual(build(template(built.compose), again).env, built.env);
+});

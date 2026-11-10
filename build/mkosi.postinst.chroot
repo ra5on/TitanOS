@@ -104,9 +104,13 @@ chmod -R go-w /etc /usr/lib/os-release /usr/lib/systemd/system/titand.service \
     /usr/lib/systemd/system/titanos-boot-check.service \
     /usr/lib/systemd/system/titanos-app-check.service \
     /usr/lib/systemd/system/titanos-firewall-open.service \
+    /usr/lib/systemd/system/titanos-network-recovery.service \
+    /usr/lib/systemd/system/titanos-trial-watchdog.service \
+    /usr/lib/systemd/system/titanos-trial-watchdog.timer \
     /usr/lib/systemd/system/titanos-lxc@.service \
     /usr/lib/systemd/system/docker.service.d /usr/libexec/titanos-firewall-open \
-    /usr/lib/systemd/system-preset /usr/lib/udev/rules.d /usr/share/titanos
+    /usr/lib/systemd/system-preset /usr/lib/udev/rules.d /usr/share/titanos \
+    /usr/lib/tmpfiles.d/titanos-resolv.conf
 
 # SSH is off: titand starts it when an administrator switches it on. The
 # keys made while the package was installed would be the same on every

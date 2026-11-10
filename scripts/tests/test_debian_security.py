@@ -68,6 +68,31 @@ Debian: linux-image-amd64 7.2.11-1~bpo13+1
         self.assertEqual(security.updates(variant, security.merge(trixie, backports)),
                          [("linux-image-amd64", "7.2.11-1~bpo13+1", "7.2.13-1~bpo13+1")])
 
+    def test_the_viewer_image_is_not_the_system_image(self):
+        # PLAN 76 (F-13-2): the remote view's container has Debian packages
+        # of its own, listed after the system's. They must neither replace a
+        # version of the system image nor count as packages of it.
+        sources = """Debian: openssl 3.5.1-1
+  https://snapshot.debian.org/package/openssl/3.5.1-1/
+
+Viewer image (titanos-viewer-0.74.0.tar.zst):
+Debian: openssl 3.5.4-1
+  https://snapshot.debian.org/package/openssl/3.5.4-1/
+Debian: chromium 150.0-1
+  https://snapshot.debian.org/package/chromium/150.0-1/
+
+Web apps (titanos-webapp-*.zip, unchanged upstream archives):
+wordcraft 1.2.0 (MIT)
+  https://github.com/example/wordcraft/archive/refs/tags/v1.2.0.tar.gz
+
+Image with the new kernel (titanos-0.74.0-new-*), additionally:
+Debian: linux-image-amd64 7.2.11-1~bpo13+1
+  https://snapshot.debian.org/package/linux-signed-amd64/7.2.11-1~bpo13+1/
+"""
+        base, variant = security.image_sections(sources)
+        self.assertEqual(base, {"openssl": "3.5.1-1"})
+        self.assertEqual(variant, {"linux-image-amd64": "7.2.11-1~bpo13+1"})
+
     def test_suites_merge_newest_over_all(self):
         urls = []
 

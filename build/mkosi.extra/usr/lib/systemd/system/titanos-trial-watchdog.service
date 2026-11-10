@@ -1,0 +1,18 @@
+[Unit]
+Description=TitanOS restarts a trial start that hangs
+Documentation=https://github.com/ra5on/TitanOS
+# After an update the new system starts on trial (titanos-boot-check.service).
+# That check only runs once the system reaches titand. A start that hangs
+# before it (emergency mode after a failed mount, a unit that never ends)
+# would wait for someone to press the power button three times. This unit
+# is run by its timer half an hour after the start: if the boot entry still
+# carries its counter, it fails and the NAS restarts, which costs one try.
+# Without a counter it does nothing.
+DefaultDependencies=no
+# Stays when the system changes to emergency.target.
+IgnoreOnIsolate=yes
+FailureAction=reboot-force
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/titand -trial-watchdog
