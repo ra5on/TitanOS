@@ -366,13 +366,26 @@ func (m *Manager) Rename(root Root, from, to string) error {
 		return mapError(err)
 	}
 	defer r.Close()
-	if _, err := r.Lstat(from); err != nil {
+	source, err := r.Lstat(from)
+	if err != nil {
 		return mapError(err)
 	}
-	if _, err := r.Lstat(to); err == nil {
+	if target, err := r.Lstat(to); err == nil {
+		// On a drive that does not tell capitals apart (exFAT, FAT, NTFS
+		// on USB) "foto.JPG" and "foto.jpg" are the same entry: changing
+		// only the case is a rename of that entry, not a clash.
+		if caseOnly(from, to) && os.SameFile(source, target) {
+			return mapError(r.Rename(from, to))
+		}
 		return ErrExists
 	}
 	return mapError(publishNewFile(r, from, to))
+}
+
+// caseOnly reports whether two paths differ in nothing but the case of
+// their last element.
+func caseOnly(from, to string) bool {
+	return from != to && path.Dir(from) == path.Dir(to) && strings.EqualFold(path.Base(from), path.Base(to))
 }
 
 // Delete removes files and folders. Inside a share with a recycle bin
