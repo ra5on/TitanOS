@@ -270,6 +270,14 @@ func TestRewriteIndex(t *testing.T) {
 	if out := string(RewriteIndex([]byte(testIndex), photo)); strings.Contains(out, "data-host") || !strings.Contains(out, `data-bridge="adapter"`) {
 		t.Fatal(out)
 	}
+	// An app that marks its title from the start says so to the mediator.
+	if strings.Contains(string(RewriteIndex([]byte(testIndex), photo)), "data-dirty") {
+		t.Fatal("data-dirty without the flag")
+	}
+	photo.DirtyTitle = true
+	if out := string(RewriteIndex([]byte(testIndex), photo)); !strings.Contains(out, `data-dirty="title"></script>`) {
+		t.Fatal(out)
+	}
 	// Script in the body (LightCraft, EffectCraft): the mediator goes into <head>.
 	pdf, _ := Lookup("pdfcraft")
 	body := `<html><head><title>x</title></head><body><canvas id="pdfcraft"></canvas><script type="module">x</script></body></html>`
@@ -693,6 +701,39 @@ func TestTrustedAppWithoutSandbox(t *testing.T) {
 	}
 	if st := status(h.m, "t-pdf"); !st.Trusted {
 		t.Fatalf("%+v", st)
+	}
+	// What the policy of a trusted app must keep (F-2-15): it runs with
+	// the login of whoever looks at a document, so it loads and reaches
+	// nothing but this NAS.
+	directives := map[string]string{}
+	for _, d := range strings.Split(mine.Get("Content-Security-Policy"), ";") {
+		name, value, _ := strings.Cut(strings.TrimSpace(d), " ")
+		directives[name] = value
+	}
+	for name, want := range map[string]string{
+		"default-src":     "'self' data: blob:",
+		"script-src":      "'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:",
+		"style-src":       "'self' 'unsafe-inline'",
+		"worker-src":      "'self' blob:",
+		"object-src":      "'none'",
+		"base-uri":        "'self'",
+		"form-action":     "'self'",
+		"frame-ancestors": "'self'",
+	} {
+		if directives[name] != want {
+			t.Fatalf("trusted policy: %s is %q, want %q", name, directives[name], want)
+		}
+	}
+	// No directive of its own for requests: they fall under default-src.
+	for _, name := range []string{"connect-src", "img-src", "font-src", "media-src", "sandbox"} {
+		if _, ok := directives[name]; ok {
+			t.Fatalf("trusted policy: unexpected %s", name)
+		}
+	}
+	for _, open := range []string{"*", "http:", "https:", "ws:", "wss:", "//", "'unsafe-eval'"} {
+		if strings.Contains(strings.ReplaceAll(trustedPolicy, "'wasm-unsafe-eval'", ""), open) {
+			t.Fatalf("trusted policy opens %q: %s", open, trustedPolicy)
+		}
 	}
 	theirs := get("/webapps/pdfcraft/0.19.0/index.html")
 	if theirs.Get("Content-Security-Policy") != sandboxPolicy || theirs.Get("Access-Control-Allow-Origin") != "*" {

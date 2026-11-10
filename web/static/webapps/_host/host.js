@@ -389,7 +389,9 @@
 	// something) is no change. The question may come once too often; a
 	// drawing lost without one is worse.
 	var touched = false;
-	var titleTells = false;
+	// An app the catalog says marks its title from the start (dirtyTitle)
+	// is believed right away.
+	var titleTells = data.dirty === 'title';
 	var saidDirty = false;
 	function tellDirty() {
 		var star = document.title.indexOf('*') >= 0;

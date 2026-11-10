@@ -35,6 +35,11 @@ type App struct {
 	Bridge        string   `json:"bridge"`
 	Types         []string `json:"types"`
 	Default       bool     `json:"default"`
+	// DirtyTitle: the app marks unsaved changes with a "*" in the title
+	// of its page from the start. The mediator then takes the title as
+	// the truth right away instead of guessing from keys and the mouse
+	// until it has seen a star once. Only for bridge "adapter".
+	DirtyTitle bool `json:"dirtyTitle,omitempty"`
 	// Trusted: our own build (TitanOS-Office: T-Word, T-PDF, T-Exel, PLAN
 	// 75-18/75-20). It runs without the sandbox, on the web UI's origin
 	// with the account's login: through Cloudflare Access it loads its
