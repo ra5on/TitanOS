@@ -1,0 +1,434 @@
+<script lang="ts">
+	// The context menus of the desktop: of an icon, a widget, the dock, the
+	// top bar and the free desktop, with their sub-menus.
+	import ContextMenu from '../components/ContextMenu.svelte';
+	import { t } from '../i18n/index.svelte.ts';
+	import {
+		autoArrange,
+		dockerAction as runDocker,
+		removeIcon as dropIcon,
+		removeWidget,
+		resizeWidget,
+		type Cell,
+		type DeskDialog,
+		type DeskMenu,
+		type IconsNow,
+	} from './desk-ops.ts';
+	import { dockPin, dockUnpin } from './Dock.svelte';
+	import { openProgram, openTab, type Program } from './programs.svelte.ts';
+	import { desktop, requestClose, savePrefs, wm } from './wm.svelte.ts';
+
+	let {
+		menu = $bindable(),
+		openFolder = $bindable(),
+		renaming = $bindable(),
+		editWidgets = $bindable(),
+		editDock = $bindable(),
+		dialog = $bindable(),
+		byKey,
+		role,
+		inDock,
+		known,
+		icons,
+		places,
+		iconsNow,
+		open,
+		newFolder,
+	}: {
+		menu: DeskMenu | null;
+		openFolder: string | null;
+		renaming: string | null;
+		editWidgets: boolean;
+		editDock: boolean;
+		dialog: DeskDialog | null;
+		byKey: Map<string, Program>;
+		role: string;
+		inDock: Set<string>;
+		known: Set<string>;
+		icons: string[];
+		places: Map<string, Cell>;
+		iconsNow: IconsNow;
+		open: (key: string, event?: Event, href?: string) => void;
+		newFolder: () => void;
+	} = $props();
+
+	const removeIcon = (key: string) => dropIcon(key, iconsNow);
+	function dockerAction(key: string, action: 'restart' | 'stop' | 'start') {
+		menu = null;
+		return runDocker(key, action);
+	}
+</script>
+
+{#if menu}
+	<ContextMenu
+		label={t('desktop.menu.context')}
+		x={menu.x}
+		y={menu.y}
+		onclose={() => (menu = null)}
+	>
+		{#if menu.kind === 'icon' && menu.key}
+			{@const key = menu.key}
+			{@const p = byKey.get(key)}
+			{#if key.startsWith('folder:')}
+				<button
+					type="button"
+					role="menuitem"
+					onclick={() => {
+						openFolder = key;
+						menu = null;
+					}}><span>{t('desktop.ctx.open')}</span></button
+				>
+				<button
+					type="button"
+					role="menuitem"
+					onclick={() => {
+						renaming = key;
+						menu = null;
+					}}><span>{t('desktop.folder.rename')}</span></button
+				>
+				<button
+					type="button"
+					role="menuitem"
+					class="danger"
+					onclick={() => {
+						removeIcon(key);
+						menu = null;
+					}}><span>{t('desktop.folder.remove')}</span></button
+				>
+			{:else if p}
+				<button
+					type="button"
+					role="menuitem"
+					onclick={() => {
+						open(key);
+						menu = null;
+					}}><span>{t('desktop.ctx.open')}</span></button
+				>
+				{#if p.multi || p.kind === 'system'}<button
+						type="button"
+						role="menuitem"
+						onclick={() => {
+							void openProgram(key, { fresh: true });
+							menu = null;
+						}}><span>{t('desktop.ctx.newWindow')}</span></button
+					>{/if}
+				<button
+					type="button"
+					role="menuitem"
+					onclick={() => {
+						void openTab(key, p.href);
+						menu = null;
+					}}><span>{t('desktop.window.openTab')}</span></button
+				>
+				{#if p.kind === 'docker' && role !== 'user'}
+					<button type="button" role="menuitem" onclick={() => dockerAction(key, 'restart')}
+						><span>{t('desktop.ctx.restart')}</span></button
+					>
+					<button
+						type="button"
+						role="menuitem"
+						onclick={() => dockerAction(key, p.badge?.dot === 'off' ? 'start' : 'stop')}
+						><span>{t(p.badge?.dot === 'off' ? 'desktop.ctx.start' : 'desktop.ctx.stop')}</span
+						></button
+					>
+					<button
+						type="button"
+						role="menuitem"
+						onclick={() => {
+							open('app:docker', undefined, '/docker/apps/' + encodeURIComponent(key.slice(7)));
+							menu = null;
+						}}><span>{t('desktop.ctx.showInDocker')}</span></button
+					>
+				{/if}
+				<span class="menu-rule" role="separator"></span>
+				{#if inDock.has(key)}
+					<button
+						type="button"
+						role="menuitem"
+						onclick={() => {
+							dockUnpin(key, known);
+							menu = null;
+						}}><span>{t('desktop.dock.unpin')}</span></button
+					>
+				{:else}
+					<button
+						type="button"
+						role="menuitem"
+						onclick={() => {
+							dockPin(key, known);
+							if (!desktop.prefs.dock.show) savePrefs((d) => (d.dock.show = true));
+							menu = null;
+						}}><span>{t('desktop.dock.pin')}</span></button
+					>
+				{/if}
+				{#if icons.includes(key)}
+					{#if !menu.dock}
+						<button
+							type="button"
+							role="menuitem"
+							class="danger"
+							onclick={() => {
+								removeIcon(key);
+								menu = null;
+							}}><span>{t('desktop.ctx.removeFromDesktop')}</span></button
+						>
+					{/if}
+				{:else}
+					<button
+						type="button"
+						role="menuitem"
+						onclick={() => {
+							savePrefs((d) => {
+								d.icons = [...iconsNow(), key];
+								d.customIcons = true;
+							});
+							menu = null;
+						}}><span>{t('desktop.ctx.toDesktop')}</span></button
+					>
+				{/if}
+				{#if wm.windows.some((w) => w.app === key)}
+					<button
+						type="button"
+						role="menuitem"
+						onclick={() => {
+							wm.windows.filter((w) => w.app === key).forEach((w) => requestClose(w.id));
+							menu = null;
+						}}><span>{t('desktop.dock.closeAll')}</span></button
+					>
+				{/if}
+			{/if}
+		{:else if menu.kind === 'bar'}
+			{#each [['s', 'desktop.size.s'], ['m', 'desktop.size.m'], ['l', 'desktop.size.l']] as const as [size, label] (size)}
+				<button
+					type="button"
+					role="menuitemradio"
+					aria-checked={desktop.prefs.barSize === size}
+					onclick={() => {
+						savePrefs((p) => (p.barSize = size));
+						menu = null;
+					}}><span>{t('desktop.bar.size')}: {t(label)}</span></button
+				>
+			{/each}
+		{:else if menu.kind === 'widget' && menu.key}
+			{@const id = menu.key}
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => (menu = menu && { ...menu, kind: 'widgetSize' })}
+				><span>{t('desktop.widgets.size')}</span><span aria-hidden="true">›</span></button
+			>
+			<button
+				type="button"
+				role="menuitem"
+				class="danger"
+				onclick={() => {
+					removeWidget(id);
+					menu = null;
+				}}><span>{t('desktop.widgets.removeOne')}</span></button
+			>
+			<span class="menu-rule" role="separator"></span>
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => {
+					editWidgets = true;
+					menu = null;
+				}}><span>{t('desktop.ctx.widgets')}</span></button
+			>
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => {
+					dialog = 'gallery';
+					menu = null;
+				}}><span>{t('desktop.widgets.add')}</span></button
+			>
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => {
+					savePrefs((p) => (p.widgetsHidden = true));
+					editWidgets = false;
+					menu = null;
+				}}><span>{t('desktop.widgets.hideAll')}</span></button
+			>
+		{:else if menu.kind === 'widgetSize' && menu.key}
+			{@const id = menu.key}
+			{#each [['s', 'desktop.size.s'], ['m', 'desktop.size.m'], ['l', 'desktop.size.l']] as const as [size, label] (size)}
+				<button
+					type="button"
+					role="menuitem"
+					onclick={() => {
+						resizeWidget(id, size);
+						menu = null;
+					}}><span>{t(label)}</span></button
+				>
+			{/each}
+		{:else if menu.kind === 'dock'}
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => {
+					editDock = true;
+					menu = null;
+				}}><span>{t('desktop.dock.edit')}</span></button
+			>
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => (menu = menu && { ...menu, kind: 'dockPos' })}
+				><span>{t('desktop.dock.position')}</span><span aria-hidden="true">›</span></button
+			>
+			<button
+				type="button"
+				role="menuitemcheckbox"
+				aria-checked={desktop.prefs.dock.magnify > 0}
+				onclick={() => {
+					savePrefs((p) => (p.dock.magnify = p.dock.magnify ? 0 : 1));
+					menu = null;
+				}}><span>{t('desktop.dock.magnify')}</span></button
+			>
+			<span class="menu-rule" role="separator"></span>
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => {
+					savePrefs((p) => (p.dock.show = false));
+					editDock = false;
+					menu = null;
+				}}><span>{t('desktop.dock.hide')}</span></button
+			>
+		{:else if menu.kind === 'dockPos'}
+			{#each [['bottom', 'desktop.dock.bottom'], ['left', 'desktop.dock.left'], ['right', 'desktop.dock.right']] as const as [pos, label] (pos)}
+				<button
+					type="button"
+					role="menuitemradio"
+					aria-checked={desktop.prefs.dock.position === pos}
+					onclick={() => {
+						savePrefs((p) => (p.dock.position = pos));
+						menu = null;
+					}}><span>{t(label)}</span></button
+				>
+			{/each}
+		{:else if menu.kind === 'desk'}
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => (menu = menu && { ...menu, kind: 'sort' })}
+				><span>{t('desktop.ctx.sort')}</span><span aria-hidden="true">›</span></button
+			>
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => (menu = menu && { ...menu, kind: 'size' })}
+				><span>{t('desktop.ctx.iconSize')}</span><span aria-hidden="true">›</span></button
+			>
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => {
+					autoArrange();
+					menu = null;
+				}}><span>{t('desktop.ctx.autoArrange')}</span></button
+			>
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => {
+					newFolder();
+					menu = null;
+				}}><span>{t('desktop.ctx.newFolder')}</span></button
+			>
+			<span class="menu-rule" role="separator"></span>
+			<button
+				type="button"
+				role="menuitemcheckbox"
+				aria-checked={!desktop.prefs.widgetsHidden}
+				onclick={() => {
+					savePrefs((p) => (p.widgetsHidden = !p.widgetsHidden));
+					menu = null;
+				}}><span>{t('desktop.widgets.show')}</span></button
+			>
+			<button
+				type="button"
+				role="menuitemcheckbox"
+				aria-checked={desktop.prefs.dock.show}
+				onclick={() => {
+					savePrefs((p) => (p.dock.show = !p.dock.show));
+					menu = null;
+				}}><span>{t('desktop.dock.show')}</span></button
+			>
+			<span class="menu-rule" role="separator"></span>
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => {
+					dialog = 'wallpaper';
+					menu = null;
+				}}><span>{t('desktop.ctx.wallpaper')}</span></button
+			>
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => {
+					editWidgets = true;
+					if (desktop.prefs.widgetsHidden) savePrefs((p) => (p.widgetsHidden = false));
+					menu = null;
+				}}><span>{t('desktop.ctx.widgets')}</span></button
+			>
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => {
+					dialog = 'layout';
+					menu = null;
+				}}><span>{t('desktop.ctx.layouts')}</span></button
+			>
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => {
+					dialog = 'settings';
+					menu = null;
+				}}><span>{t('desktop.ctx.settings')}</span></button
+			>
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => {
+					open('app:settings', undefined, '/settings/appearance');
+					menu = null;
+				}}><span>{t('desktop.ctx.appearance')}</span></button
+			>
+		{:else if menu.kind === 'sort'}
+			{#each [['name', 'desktop.sort.name'], ['kind', 'desktop.sort.kind'], ['recent', 'desktop.sort.recent'], ['free', 'desktop.sort.free']] as const as [mode, label] (mode)}
+				<button
+					type="button"
+					role="menuitemradio"
+					aria-checked={desktop.prefs.sort === mode}
+					onclick={() => {
+						savePrefs((p) => {
+							// Into "free" without own places: the icons stay where they are now.
+							if (mode === 'free' && p.sort !== 'free' && !Object.keys(p.iconPos).length)
+								p.iconPos = Object.fromEntries([...places].map(([k, at]) => [k, { ...at }]));
+							p.sort = mode;
+						});
+						menu = null;
+					}}><span>{t(label)}</span></button
+				>
+			{/each}
+		{:else if menu.kind === 'size'}
+			{#each [['s', 'desktop.size.s'], ['m', 'desktop.size.m'], ['l', 'desktop.size.l']] as const as [size, label] (size)}
+				<button
+					type="button"
+					role="menuitemradio"
+					aria-checked={desktop.prefs.iconSize === size}
+					onclick={() => {
+						savePrefs((p) => (p.iconSize = size));
+						menu = null;
+					}}><span>{t(label)}</span></button
+				>
+			{/each}
+		{/if}
+	</ContextMenu>
+{/if}

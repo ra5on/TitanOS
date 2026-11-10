@@ -1,10 +1,6 @@
 <script lang="ts">
 	import { poll } from '#lib/poll.ts';
-	import ClusterPair from '#lib/components/ClusterPair.svelte';
 	import StatusBar from '#lib/components/explorer/StatusBar.svelte';
-	import ApplicationSelection, {
-		type Application,
-	} from '#lib/operations/ApplicationSelection.svelte';
 	import ProbeDialog from '#lib/operations/ProbeDialog.svelte';
 	import RecoveryPanel from '#lib/operations/RecoveryPanel.svelte';
 	let probing = $state('');
@@ -13,143 +9,31 @@
 	// Backups of shares to another volume, another server or the cloud.
 	import { api, ApiError } from '#lib/api.ts';
 	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
-	import DangerZone from '#lib/components/DangerZone.svelte';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
-	import Icon from '#lib/components/Icon.svelte';
-	import { formatBytes, formatDateTime } from '#lib/format.ts';
+	import { formatDateTime } from '#lib/format.ts';
+	import { lastOf } from '#lib/components/KeepVersions.svelte';
 	import {
-		bandwidthForm,
-		bandwidthParts,
-		bandwidthPayload,
-		maxBandwidth,
-		type Bandwidth,
-		type BandwidthForm,
-	} from '#lib/backup-bandwidth.ts';
-	import FolderPicker from '#lib/components/FolderPicker.svelte';
-	import { selectionOfIn, shareOfIn, type Chosen } from './selection.ts';
-	import KeepVersions, {
-		keepPayload,
-		lastOf,
-		type Keep,
-	} from '#lib/components/KeepVersions.svelte';
+		editableJob,
+		newJob,
+		plainCopy,
+		stateChip,
+		when,
+		where,
+		type Job,
+		type Overview,
+		type UsbDrive,
+		type View,
+	} from './data-backups.ts';
+	import JobForm from './JobForm.svelte';
+	import JobTile from './JobTile.svelte';
 	import RestoreDialog from './RestoreDialog.svelte';
-	import ScheduleFields from './ScheduleFields.svelte';
-	import SmbTargets, { type SmbTarget } from './SmbTargets.svelte';
+	import SmbTargets from './SmbTargets.svelte';
 	import TargetPanel from './TargetPanel.svelte';
 	import ReplicationPanel from './ReplicationPanel.svelte';
-	import { apiErrorText, errorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
 
-	type Kind =
-		| 'smb-copy'
-		| 'usb-copy'
-		| 'local-copy'
-		| 'local'
-		| 'usb'
-		| 'smb'
-		| 's3'
-		| 'sftp'
-		| 'rest'
-		| 'titanos';
-	/** Where a backup goes, as the page offers it; the kind adds the format. */
-	type Place = 'local' | 'usb' | 'smb' | 'titanos' | 's3' | 'sftp' | 'rest';
-	const PLACES: Place[] = ['local', 'usb', 'smb', 'titanos', 's3', 'sftp', 'rest'];
-	type Destination = {
-		type: Kind;
-		deviceId?: string;
-		/** The drive's name when the job was saved, only for showing. */
-		deviceName?: string;
-		targetId?: string;
-		volume?: string;
-		folder?: string;
-		endpoint?: string;
-		bucket?: string;
-		prefix?: string;
-		accessKey?: string;
-		secretKey?: string;
-		host?: string;
-		port?: number;
-		user?: string;
-		path?: string;
-		url?: string;
-		username?: string;
-		password?: string;
-	};
-	type Job = {
-		applications?: Application[];
-		allowStop?: boolean;
-		id: string;
-		sources: string[];
-		folders?: Record<string, string[]>;
-		skip?: string[];
-		patterns?: string[];
-		extras?: string[];
-		destination: Destination;
-		enabled: boolean;
-		every: 'hourly' | 'daily' | 'weekly' | 'monthly';
-		interval?: number;
-		weekday: number;
-		weekdays?: number[];
-		monthDay?: number;
-		time: string;
-		times?: string[];
-		windowFrom?: string;
-		windowTo?: string;
-		keep: Keep;
-		/** Options of a readable copy (0.41.0). */
-		copy?: { dated?: boolean; mirror?: boolean; mirrorDays?: number };
-		/** Whole volumes and folders outside shares ("volume/folder"). */
-		volumes?: string[];
-		places?: string[];
-		bandwidth?: Bandwidth;
-	};
-	type State = {
-		statusError?: string;
-		probe?: {
-			at: string;
-			snapshot: string;
-			files: number;
-			bytes: number;
-			truncated: boolean;
-			error: string;
-		};
-		running: boolean;
-		phase: string;
-		/** Started, but waiting for another job to end. */
-		queued?: boolean;
-		percent: number;
-		bytesDone: number;
-		bytesTotal: number;
-		bandwidthLimit?: number;
-		lastRun: string | null;
-		lastOK: string | null;
-		lastError: string;
-		/** A known cause of lastError, with a text under error.<code>. */
-		lastErrorCode?: string;
-		warning: string;
-		/** Links and special files (FIFOs, sockets, devices) the last run left out. */
-		skipped?: number;
-		bytes: number;
-		restoredTo: string;
-		restoreError?: string;
-		lastCheck?: string;
-		checkError?: string;
-	};
-	type View = {
-		stateKnown?: boolean;
-		job: Job;
-		secretSet: Record<string, boolean>;
-		state: State;
-		next: string | null;
-	};
-	type Overview = {
-		smbTargets: SmbTarget[];
-		jobs: View[];
-		shares: { name: string; volume: string }[];
-		volumes: string[] | null;
-	};
-
-	let usbDrives = $state<{ id: string; name: string; supported: boolean }[]>([]);
+	let usbDrives = $state<UsbDrive[]>([]);
 	let overview = $state<Overview | null>(null);
 	let error = $state<{ text: string; detail: string } | null>(null);
 	let busy = $state(false);
@@ -163,9 +47,10 @@
 	let pending = $state<Record<string, string>>({});
 	let feedback = $state('');
 	let retry = $state<{ job: Job; action: 'run' | 'stop' } | null>(null);
-	// The job being created (isNew) or changed.
+	// The job being created (isNew) or changed; the form starts over each time one is opened.
 	let draft = $state<Job | null>(null);
 	let isNew = $state(false);
+	let opened = $state(0);
 	let secretSet = $state<Record<string, boolean>>({});
 	let publicKey = $state('');
 	let removing = $state<Job | null>(null);
@@ -226,24 +111,8 @@
 		error = null;
 		isNew = true;
 		secretSet = {};
-		draft = {
-			id: '',
-			sources: [],
-			applications: [],
-			allowStop: false,
-			destination: { type: 'local', volume: '', folder: '', port: 22 },
-			enabled: true,
-			every: 'daily',
-			interval: 6,
-			weekday: 0,
-			weekdays: [1],
-			monthDay: 1,
-			time: '02:30',
-			times: ['02:30'],
-			keep: { last: 10, daily: 0, weekly: 0, monthly: 0 },
-		};
-		original = null;
-		loadSelection(draft);
+		draft = newJob();
+		opened++;
 		loadUSB();
 	}
 
@@ -251,108 +120,11 @@
 		error = null;
 		isNew = false;
 		secretSet = view.secretSet;
-		draft = JSON.parse(JSON.stringify(view.job)) as Job;
-		draft.destination = { port: 22, ...draft.destination, secretKey: '', password: '' };
-		// Jobs from before the schedule grew carry one weekday and one time.
-		draft.interval ||= 6;
-		draft.monthDay ||= 1;
-		// ApplicationSelection binds both; a bound prop may not be undefined.
-		draft.applications ??= [];
-		draft.allowStop ??= false;
-		draft.keep = { ...draft.keep, last: lastOf(draft.keep) };
-		if (!draft.weekdays?.length) draft.weekdays = [draft.weekday];
-		if (!draft.times?.length) draft.times = [draft.time];
-		original = { ...draft.destination };
-		loadSelection(draft);
+		draft = editableJob(view.job, lastOf);
+		opened++;
 		loadUSB();
 		if (draft.destination.type === 'sftp') showKey();
 	}
-	// The destination as it was stored: a stored secret only stays for the
-	// same server and account (the NAS does not send it anywhere else).
-	let original = $state<Destination | null>(null);
-	const secretKept = $derived.by(() => {
-		const d = draft?.destination;
-		if (!d || !original || d.type !== original.type) return { secretKey: false, password: false };
-		return {
-			secretKey:
-				!!secretSet.secretKey &&
-				d.endpoint?.trim() === original.endpoint &&
-				d.accessKey?.trim() === original.accessKey,
-			password:
-				!!secretSet.password &&
-				d.url?.trim() === original.url &&
-				(d.username?.trim() ?? '') === (original.username ?? ''),
-		};
-	});
-
-	const EXTRAS = ['appdata', 'vms', 'lxc', 'config'] as const;
-	let patterns = $state('');
-	let bandwidth = $state<BandwidthForm>(bandwidthForm());
-	/** What is saved, as one list of folders (decided 31.10.2026). */
-	let chosen = $state<Chosen[]>([]);
-	/** The row whose folder is being picked; -1 adds a new one. */
-	let picking = $state<number | null>(null);
-
-	const shareOf = (c: Chosen) => shareOfIn(overview?.shares ?? [], c);
-	function loadSelection(job: Job) {
-		const list: Chosen[] = [];
-		const volumeOf = (share: string) =>
-			overview?.shares.find((s) => s.name === share)?.volume ?? '';
-		for (const name of job.sources) {
-			const volume = volumeOf(name);
-			const only = job.folders?.[name] ?? [];
-			if (only.length) for (const f of only) list.push({ volume, path: `${name}/${f}` });
-			else list.push({ volume, path: name });
-		}
-		for (const v of job.volumes ?? []) list.push({ volume: v, path: '' });
-		for (const place of job.places ?? []) {
-			const at = place.indexOf('/');
-			list.push({ volume: place.slice(0, at), path: place.slice(at + 1) });
-		}
-		chosen = list.length ? list : [{ volume: '', path: '' }];
-		patterns = (job.patterns ?? []).join('\n');
-		bandwidth = bandwidthForm(job.bandwidth);
-	}
-
-	const selectionOf = (list: Chosen[]) => selectionOfIn(overview?.shares ?? [], list);
-
-	function pick(c: Chosen) {
-		if (picking === null) return;
-		if (picking < 0) chosen = [...chosen.filter((x) => x.volume), c];
-		else chosen[picking] = c;
-		picking = null;
-	}
-
-	function toggleExtra(extra: string) {
-		if (!draft) return;
-		const list = draft.extras ?? [];
-		draft.extras = list.includes(extra) ? list.filter((e) => e !== extra) : [...list, extra];
-	}
-
-	/** A pairing code of another TitanOS: titanos-backup: and base64url JSON. */
-	let pairCode = $state('');
-	function decodeCode(text: string): { url: string; user: string; password: string } | null {
-		try {
-			const body = text
-				.trim()
-				.replace(/^titanos-backup:/, '')
-				.replace(/-/g, '+')
-				.replace(/_/g, '/');
-			const data = JSON.parse(
-				new TextDecoder().decode(Uint8Array.from(atob(body), (c) => c.charCodeAt(0))),
-			);
-			return data.v === 1 &&
-				typeof data.url === 'string' &&
-				typeof data.user === 'string' &&
-				typeof data.password === 'string'
-				? data
-				: null;
-		} catch {
-			return null;
-		}
-	}
-	const pairing = $derived(decodeCode(pairCode));
-
 	async function showKey() {
 		if (publicKey) return;
 		try {
@@ -362,163 +134,12 @@
 		}
 	}
 
-	const plainCopy = (kind: string) =>
-		kind === 'usb-copy' || kind === 'smb-copy' || kind === 'local-copy';
-	const placeOf = (kind: Kind): Place =>
-		kind === 'local-copy'
-			? 'local'
-			: kind === 'usb-copy'
-				? 'usb'
-				: kind === 'smb-copy'
-					? 'smb'
-					: kind;
-	/** Volume, drive and share offer a readable copy besides encrypted versions. */
-	const twoFormats = (place: Place) => place === 'local' || place === 'usb' || place === 'smb';
-	const kindOf = (place: Place, readable: boolean): Kind =>
-		readable && twoFormats(place) ? (`${place}-copy` as Kind) : place;
-	const fullTarget = (kind: Kind) =>
-		placeOf(kind) === 'usb'
-			? 'drive'
-			: placeOf(kind) === 'local'
-				? 'volume'
-				: placeOf(kind) === 'smb'
-					? 'share'
-					: 'storage';
-	function setKind(kind: Kind) {
-		if (!draft) return;
-		draft.destination.type = kind;
-		if (plainCopy(kind)) {
-			draft.applications = [];
-			draft.allowStop = false;
-			draft.extras = [];
-			draft.copy ??= {};
-		}
-		if (kind === 'sftp') showKey();
-		if (kind === 'titanos') pairCode = '';
-	}
-
-	// Only what belongs to the chosen kind of destination is sent.
-	function destination(d: Destination): Destination {
-		switch (d.type) {
-			case 'smb-copy':
-				return { type: 'smb-copy', targetId: d.targetId, folder: d.folder };
-			case 'usb-copy':
-				return {
-					type: 'usb-copy',
-					deviceId: d.deviceId,
-					deviceName: usbDrives.find((drive) => drive.id === d.deviceId)?.name ?? d.deviceName,
-					folder: d.folder,
-				};
-			case 'local':
-			case 'local-copy':
-				return { type: d.type, volume: d.volume, folder: d.folder };
-			case 'usb':
-				return {
-					type: 'usb',
-					deviceId: d.deviceId,
-					deviceName: usbDrives.find((drive) => drive.id === d.deviceId)?.name ?? d.deviceName,
-					folder: d.folder,
-				};
-			case 'smb':
-				return { type: 'smb', targetId: d.targetId, folder: d.folder };
-			case 's3':
-				return {
-					type: 's3',
-					endpoint: d.endpoint?.trim(),
-					bucket: d.bucket?.trim(),
-					prefix: d.prefix?.trim(),
-					accessKey: d.accessKey?.trim(),
-					secretKey: d.secretKey,
-				};
-			case 'sftp':
-				return {
-					type: 'sftp',
-					host: d.host?.trim(),
-					port: Number(d.port) || 22,
-					user: d.user?.trim(),
-					path: d.path?.trim(),
-				};
-			case 'titanos': {
-				const code = decodeCode(pairCode);
-				return { type: 'rest', url: code?.url, username: code?.user, password: code?.password };
-			}
-			default:
-				return {
-					type: 'rest',
-					url: d.url?.trim(),
-					username: d.username?.trim(),
-					password: d.password,
-				};
-		}
-	}
-
-	async function save(event: SubmitEvent) {
-		event.preventDefault();
-		if (!draft) return;
-		busy = true;
-		error = null;
-		if (draft.destination.type === 'titanos' && !decodeCode(pairCode)) {
-			error = { text: t('backup.pairCodeInvalid'), detail: '' };
-			busy = false;
-			return;
-		}
-		const selection = selectionOf(chosen);
-		// Left-out folders of shares that are no longer chosen go too.
-		const skip = (draft.skip ?? []).filter((entry) =>
-			selection.sources.includes(entry.split('/')[0]),
-		);
-		const times = [...new Set((draft.times ?? []).filter(Boolean))].sort();
-		const weekdays = [...(draft.weekdays ?? [])].sort();
-		const job = {
-			...draft,
-			sources: selection.sources,
-			folders: selection.folders,
-			skip,
-			patterns: patterns
-				.split('\n')
-				.map((line) => line.trim())
-				.filter(Boolean),
-			extras: draft.extras ?? [],
-			id: draft.id.trim(),
-			interval: Number(draft.interval) || 0,
-			monthDay: Number(draft.monthDay) || 0,
-			times,
-			time: times[0] ?? draft.time,
-			weekdays,
-			weekday: weekdays[0] ?? 0,
-			windowFrom: draft.windowFrom || '',
-			windowTo: draft.windowFrom ? draft.windowTo || '' : '',
-			destination: destination(draft.destination),
-			bandwidth: bandwidthPayload(bandwidth),
-			keep:
-				plainCopy(draft.destination.type) && !draft.copy?.dated
-					? { daily: 0, weekly: 0, monthly: 0 }
-					: keepPayload(draft.keep),
-			copy: plainCopy(draft.destination.type)
-				? {
-						dated: !!draft.copy?.dated,
-						mirror: !draft.copy?.dated && !!draft.copy?.mirror,
-						mirrorDays: draft.copy?.mirror ? Number(draft.copy.mirrorDays) || 30 : 0,
-					}
-				: undefined,
-			volumes: selection.volumes,
-			places: selection.places,
-		};
-		try {
-			apply(
-				isNew
-					? await api.post<Overview>('/backups', job)
-					: await api.put<Overview>(`/backups/${job.id}`, job),
-			);
-			feedback = t('ui.saved');
-			const created = isNew ? job : null;
-			draft = null;
-			// Without its password a backup is worthless: show it right away.
-			if (created && !plainCopy(created.destination.type)) showPassword(created as Job);
-		} catch (err) {
-			problem(err);
-		}
-		busy = false;
+	function saved(next: Overview, created: Job | null) {
+		apply(next);
+		feedback = t('ui.saved');
+		draft = null;
+		// Without its password a backup is worthless: show it right away.
+		if (created && !plainCopy(created.destination.type)) showPassword(created);
 	}
 
 	async function act(job: Job, action: 'run' | 'stop') {
@@ -601,22 +222,6 @@
 		busy = false;
 	}
 
-	function where(d: Destination): string {
-		if (d.type === 'smb-copy') return `${d.targetId} / ${d.folder}`;
-		if (d.type === 'usb-copy')
-			return `${t('backup.kind.usb-copy')} ${d.deviceName || d.deviceId} / ${d.folder}`;
-		switch (d.type) {
-			case 'local':
-				return `/mnt/${d.volume}/${d.folder}`;
-			case 's3':
-				return `${d.endpoint}/${d.bucket}${d.prefix ? '/' + d.prefix : ''}`;
-			case 'sftp':
-				return `${d.user}@${d.host}:${d.path}`;
-			default:
-				return d.url ?? '';
-		}
-	}
-
 	// Style W4 (owner 9.11.2026): the backups as a table; the chosen one's
 	// tile is its detail. A link to #backup-<id> chooses that one.
 	let picked = $state('');
@@ -632,60 +237,6 @@
 	const chosenId = $derived(
 		overview?.jobs.some((v) => v.job.id === picked) ? picked : (overview?.jobs[0]?.job.id ?? ''),
 	);
-	function stateChip(view: View): { text: string; tone: string } {
-		const state = view.state;
-		if (state.running && state.queued) return { text: t('backup.queued'), tone: '' };
-		if (state.running)
-			return { text: t(`backup.phase.${state.phase}` as 'backup.phase.backup'), tone: 'info' };
-		if (view.stateKnown === false || state.statusError)
-			return { text: t('tasks.state.unknown'), tone: 'warn' };
-		if (state.lastError && state.lastError !== 'cancelled')
-			return { text: t('backup.failed'), tone: 'error' };
-		if (state.lastError === 'cancelled') return { text: t('backup.cancelled'), tone: 'warn' };
-		if (state.warning) return { text: t('backup.withWarning'), tone: 'warn' };
-		if (state.lastOK) return { text: t('backup.ok'), tone: 'ok' };
-		return { text: t('backup.never'), tone: '' };
-	}
-
-	function when(job: Job): string {
-		if (!job.enabled) return t('backup.manual');
-		const times = (job.times?.length ? job.times : [job.time]).join(', ');
-		let text: string;
-		switch (job.every) {
-			case 'hourly':
-				text = t('backup.whenHourly', { hours: job.interval ?? 1, minute: job.time.slice(3) });
-				break;
-			case 'weekly': {
-				const days = (job.weekdays?.length ? job.weekdays : [job.weekday])
-					.slice()
-					.sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7));
-				text = t('backup.whenWeekly', {
-					day: days.map((d) => t(`backup.dayShort.${d}` as 'backup.dayShort.0')).join(', '),
-					time: times,
-				});
-				break;
-			}
-			case 'monthly':
-				text = t('backup.whenMonthly', { day: job.monthDay ?? 1, time: times });
-				break;
-			default:
-				text = t('backup.whenDaily', { time: times });
-		}
-		return job.windowFrom
-			? `${text} · ${t('backup.whenWindow', { from: job.windowFrom, to: job.windowTo ?? '' })}`
-			: text;
-	}
-
-	const rate = (mib: number) =>
-		mib > 0 ? t('backup.bandwidthRate', { value: mib }) : t('backup.bandwidthNone');
-	function bandwidthText(b?: Bandwidth): string {
-		const parts = bandwidthParts(b);
-		if (!parts) return t('backup.bandwidthNone');
-		return parts.window
-			? `${rate(parts.limit)} · ${t('backup.bandwidthWindowText', { from: parts.window.from, to: parts.window.to, limit: rate(parts.window.limit) })}`
-			: rate(parts.limit);
-	}
-
 	// PLAN 67-1: the menu bar of the desktop (Sicherung › Ablage). "?new=1"
 	// comes from the menu on the overview: a new job opens once the jobs are here.
 	import { registerMenuCommands } from '#lib/menu-commands.svelte.ts';
@@ -793,203 +344,19 @@
 		</div>
 	{/if}
 	{#each overview.jobs as view (view.job.id)}
-		{@const job = view.job}
-		{@const state = view.state}
-		{@const next = view.next}
-		<section
-			class="tile panel"
-			class:hidden-job={!restoreOnly && job.id !== chosenId}
-			use:revealTarget
-			id="backup-{job.id}"
-		>
-			<div class="head">
-				<div>
-					<h2 class="name mono">{job.id}</h2>
-					{#if job.destination.type === 'smb-copy'}<span class="chip warn">{t('backup.beta')}</span
-						>{/if}
-					<p class="muted">
-						{[...job.sources, ...(job.applications ?? []).map((a) => a.name)].join(', ')} →
-						<span class="mono">{where(job.destination)}</span>
-					</p>
-				</div>
-				{#if state.running && state.queued}<span class="chip">{t('backup.queued')}</span
-					>{:else if state.running}<span class="chip info"
-						>{t(`backup.phase.${state.phase}` as 'backup.phase.backup')}</span
-					>
-				{:else if view.stateKnown === false || state.statusError}<span class="chip warn"
-						>{t('tasks.state.unknown')}</span
-					>
-				{:else if state.lastError && state.lastError !== 'cancelled'}<span class="chip error"
-						>{t('backup.failed')}</span
-					>
-				{:else if state.lastError === 'cancelled'}<span class="chip warn"
-						>{t('backup.cancelled')}</span
-					>
-				{:else if state.warning}<span class="chip warn">{t('backup.withWarning')}</span>
-				{:else if state.lastOK}<span class="chip ok">{t('backup.ok')}</span>
-				{:else}<span class="chip">{t('backup.never')}</span>{/if}
-			</div>
-			{#if state.running}
-				<div
-					class="bar"
-					role="progressbar"
-					aria-valuemin="0"
-					aria-valuemax="100"
-					aria-valuenow={Math.round(state.percent)}
-					aria-label={t(`backup.phase.${state.phase}` as 'backup.phase.backup')}
-				>
-					<span style:width="{state.percent}%"></span>
-				</div>
-				<p class="muted mono">
-					{#if state.bytesTotal > 0}{state.percent.toFixed(0)} %{' · '}{formatBytes(
-							state.bytesDone,
-						)} / {formatBytes(state.bytesTotal)}{:else}{formatBytes(
-							state.bytesDone,
-						)}{/if}{#if job.bandwidth}{' · '}{(state.bandwidthLimit ?? 0) > 0
-							? t('backup.bandwidthActive', { value: state.bandwidthLimit ?? 0 })
-							: t('backup.bandwidthActiveNone')}{/if}
-				</p>
-			{/if}
-			{#if view.stateKnown === false || state.statusError}<p class="notice-warn">
-					{t('coverage.stateUnknown')}
-				</p>{/if}
-			<dl>
-				<div>
-					<dt>{t('backup.schedule')}</dt>
-					<dd>{when(job)}</dd>
-				</div>
-				{#if next}<div>
-						<dt>{t('backup.next')}</dt>
-						<dd>{formatDateTime(new Date(next))}</dd>
-					</div>
-				{:else if job.enabled}<div>
-						<dt>{t('backup.next')}</dt>
-						<dd class="muted">{t('backup.nextUnknown')}</dd>
-					</div>{/if}
-				<div>
-					<dt>{t('safeguard.lastRun')}</dt>
-					<dd>{state.lastRun ? formatDateTime(new Date(state.lastRun)) : '–'}</dd>
-				</div>
-				<div>
-					<dt>{t('backup.lastOK')}</dt>
-					<dd>
-						{state.lastOK
-							? formatDateTime(new Date(state.lastOK))
-							: '–'}{#if state.lastOK && state.bytes > 0}{' · '}{formatBytes(state.bytes)}{/if}
-					</dd>
-				</div>
-				{#if job.bandwidth}<div>
-						<dt>{t('backup.bandwidth')}</dt>
-						<dd>{bandwidthText(job.bandwidth)}</dd>
-					</div>{/if}
-				<div>
-					<dt>{t('backup.keeps')}</dt>
-					<dd>
-						{plainCopy(job.destination.type) && !job.copy?.dated
-							? t(job.copy?.mirror ? 'backup.copyMirror' : 'backup.copyRetain')
-							: job.keep.mode === 'rolling'
-								? t('backup.keepsRolling')
-								: job.keep.daily + job.keep.weekly + job.keep.monthly > 0
-									? t('backup.keepsText', {
-											daily: job.keep.daily,
-											weekly: job.keep.weekly,
-											monthly: job.keep.monthly,
-										})
-									: t('backup.keepsAll')}
-					</dd>
-				</div>
-			</dl>
-			{#if !state.running && state.lastError && state.lastError !== 'cancelled'}<div
-					class="notice-error"
-				>
-					{t('backup.lastError')}
-					{#if state.lastErrorCode}<p>{t(`error.${state.lastErrorCode}` as MessageKey)}</p>{/if}
-					<pre>{state.lastError}</pre>
-				</div>{/if}
-			{#if !state.running && state.warning}<div class="notice-warn">
-					{t('backup.warning')}
-					<pre>{state.warning}</pre>
-				</div>{/if}
-			{#if !state.running && state.skipped}<p class="muted">
-					{t('backup.skipped', { n: state.skipped })}
-				</p>{/if}
-			{#if !state.running && state.lastCheck}
-				{#if state.checkError}<div class="notice-error">
-						{t('backup.checkFailed')}
-						<pre>{state.checkError}</pre>
-					</div>
-				{:else}<p class="muted">
-						{t('backup.checkOk', { at: formatDateTime(new Date(state.lastCheck)) })}
-					</p>{/if}
-			{/if}
-			{#if state.probe}<p class={state.probe.error ? 'notice-warn' : 'muted'}>
-					{t('ops.probe')} · {formatDateTime(new Date(state.probe.at))} · {t('backup.probeFiles', {
-						count: state.probe.files,
-					})} · {formatBytes(state.probe.bytes)}{#if state.probe.truncated}<span>
-							· {t('ops.truncated')}</span
-						>{/if}{#if state.probe.error}<span> · {state.probe.error}</span>{/if}
-				</p>{/if}
-			{#if !state.running && state.restoreError}<div class="notice-error">
-					{t('backup.restoreFailed')}
-					<pre>{state.restoreError}</pre>
-				</div>
-			{:else if !state.running && state.restoredTo}<p class="notice-ok">
-					{t('backup.restoredTo')} <span class="mono">{state.restoredTo}</span>
-				</p>{/if}
-			{#if pending[job.id]}<p role="status">
-					{t(pending[job.id] === 'run' ? 'ui.starting' : 'ui.stopping')}
-				</p>{/if}
-			<div class="row">
-				{#if state.running}
-					<button
-						type="button"
-						class="btn"
-						disabled={!!pending[job.id]}
-						onclick={() => act(job, 'stop')}>{t('backup.stop')}</button
-					>
-				{:else}
-					{#if !restoreOnly}<button
-							type="button"
-							class="btn btn-primary"
-							disabled={!!pending[job.id]}
-							onclick={() => act(job, 'run')}>{t('backup.run')}</button
-						>{/if}
-					{#if !plainCopy(job.destination.type)}<button
-							type="button"
-							class="btn"
-							onclick={() => openRestore(job)}>{t('backup.restore')}</button
-						>
-						<button type="button" class="btn" onclick={() => (probing = job.id)}
-							>{t('ops.probe')}</button
-						>
-						<button
-							type="button"
-							class="btn"
-							onclick={() => ((checking = { job, readData: 0 }), (dialogError = ''))}
-							>{t('backup.check')}</button
-						>
-						<button type="button" class="btn" onclick={() => showPassword(job)}
-							>{t('backup.showPassword')}</button
-						>{:else}<span class="muted">{t('backup.copyRestore')}</span>{/if}
-					{#if !restoreOnly}<button
-							type="button"
-							class="btn"
-							aria-label={t('backup.editNamed', { name: job.id })}
-							onclick={() => edit(view)}>{t('backup.edit')}</button
-						>{/if}
-				{/if}
-			</div>
-			{#if !state.running && !restoreOnly}
-				<DangerZone hint={t('backup.removeHint')}>
-					<button
-						type="button"
-						class="btn btn-danger"
-						aria-label={t('backup.removeNamed', { name: job.id })}
-						onclick={() => ((removing = job), (removeError = ''))}>{t('backup.remove')}</button
-					>
-				</DangerZone>
-			{/if}
-		</section>
+		<JobTile
+			{view}
+			hidden={!restoreOnly && view.job.id !== chosenId}
+			{restoreOnly}
+			pending={pending[view.job.id]}
+			{act}
+			{openRestore}
+			{showPassword}
+			{edit}
+			onprobe={() => (probing = view.job.id)}
+			oncheck={() => ((checking = { job: view.job, readData: 0 }), (dialogError = ''))}
+			onremove={() => ((removing = view.job), (removeError = ''))}
+		/>
 	{:else}
 		{#if !draft}<div class="tile panel"><p class="muted">{t('backup.none')}</p></div>{/if}
 	{/each}
@@ -1035,538 +402,24 @@
 {/if}
 
 {#if draft && overview}
-	<form class="tile panel" onsubmit={save}>
-		<h2 class="tile-title">
-			{isNew ? t('backup.add') : t('backup.editTitle', { name: draft.id })}
-		</h2>
-		{#if isNew}
-			<label class="narrow"
-				><span>{t('backup.name')}</span>
-				<input
-					class="field mono"
-					type="text"
-					bind:value={draft.id}
-					pattern="[A-Za-z][A-Za-z0-9\-]*"
-					maxlength="31"
-					autocapitalize="none"
-					spellcheck="false"
-					required
-				/>
-				<small>{t('backup.nameHint')}</small>
-			</label>
-		{/if}
-		<fieldset>
-			<legend>{t('backup.sources')}</legend>
-			<p class="muted small">{t('backup.pick.hint')}</p>
-			{#each chosen as c, i (i)}
-				<div class="picked">
-					<button
-						type="button"
-						class="field pickfield"
-						onclick={() => (picking = i)}
-						aria-label={t('backup.pick.change')}
-						>{#if c.volume}<Icon name="folder" />
-							<span class="mono"
-								>{c.volume}{c.path ? ' › ' + c.path.replaceAll('/', ' › ') : ''}</span
-							>{#if !c.path}<span class="muted small">{t('backup.pick.whole')}</span
-								>{:else if shareOf(c) && !shareOf(c)?.rest}<span class="chip"
-									>{t('backup.pick.share')}</span
-								>{/if}{:else}<span class="muted">{t('backup.pick.choose')}</span>{/if}</button
-					>
-					{#if chosen.length > 1 || c.volume}<button
-							type="button"
-							class="btn small"
-							aria-label={t('backup.pick.remove')}
-							onclick={() =>
-								(chosen =
-									chosen.length > 1
-										? chosen.filter((_, n) => n !== i)
-										: [{ volume: '', path: '' }])}><Icon name="close" /></button
-						>{/if}
-				</div>
-			{/each}
-			<div>
-				<button type="button" class="btn small" onclick={() => (picking = -1)}
-					><Icon name="plus" /> {t('backup.pick.add')}</button
-				>
-			</div>
-			<p class="muted small">{t('backup.neverSaved')}</p>
-			<details class="more">
-				<summary>{t('backup.moreOptions')}</summary>
-				{#if !plainCopy(draft.destination.type)}<p class="legend-sub">{t('backup.extras')}</p>
-					<div class="row">
-						{#each EXTRAS as extra (extra)}
-							<label class="check"
-								><input
-									type="checkbox"
-									checked={draft.extras?.includes(extra)}
-									onchange={() => toggleExtra(extra)}
-								/><span>{t(`backup.extra.${extra}` as 'backup.extra.appdata')}</span></label
-							>
-						{/each}
-					</div>
-					{#if draft.extras?.includes('config')}<p class="notice-warn">
-							{t('backup.extra.configHint')}
-						</p>{/if}
-					<ApplicationSelection
-						bind:applications={draft.applications}
-						bind:allowStop={draft.allowStop}
-					/>
-				{/if}
-				{#if draft.skip?.length}
-					<p class="legend-sub">{t('backup.skipList')}</p>
-					<div class="row">
-						{#each draft.skip as entry (entry)}<span class="chip"
-								>{entry}
-								<button
-									type="button"
-									class="link"
-									aria-label={t('backup.pick.remove')}
-									onclick={() => (draft!.skip = draft!.skip!.filter((e) => e !== entry))}
-									><Icon name="close" size={12} /></button
-								></span
-							>{/each}
-					</div>
-				{/if}
-				<label class="block"
-					><span>{t('backup.patterns')}</span>
-					<textarea class="field mono" rows="2" bind:value={patterns} placeholder="*.tmp"
-					></textarea>
-				</label>
-				<p class="muted">
-					{t(plainCopy(draft.destination.type) ? 'backup.copyPatterns' : 'backup.patternsHint')}
-				</p>
-			</details>
-		</fieldset>
-		{#if picking !== null}<FolderPicker
-				volumes={overview.volumes ?? []}
-				shares={overview.shares}
-				start={picking >= 0 && chosen[picking]?.volume ? chosen[picking] : undefined}
-				onpick={pick}
-				onclose={() => (picking = null)}
-			/>{/if}
-		<fieldset class="divided">
-			<legend>{t('backup.destination')}</legend>
-			<div class="segments" role="radiogroup" aria-label={t('backup.destination')}>
-				{#each PLACES as place (place)}
-					{@const kind = kindOf(place, plainCopy(draft.destination.type))}
-					<button
-						type="button"
-						role="radio"
-						aria-checked={placeOf(draft.destination.type) === place}
-						disabled={!isNew && plainCopy(kind) !== plainCopy(draft.destination.type)}
-						onclick={() => setKind(kind)}>{t(`backup.place.${place}` as MessageKey)}</button
-					>
-				{/each}
-			</div>
-			{#if twoFormats(placeOf(draft.destination.type))}
-				{@const place = placeOf(draft.destination.type)}
-				<p class="muted">{t(`backup.placeHint.${place}` as MessageKey)}</p>
-				<div class="formats" role="radiogroup" aria-label={t('backup.format')}>
-					{#each [true, false] as readable (readable)}
-						{@const on = plainCopy(draft.destination.type) === readable}
-						<div class="format" class:on>
-							<label class="fhead"
-								><input
-									type="radio"
-									name="format"
-									checked={on}
-									disabled={!isNew && !on}
-									onchange={() => setKind(kindOf(place, readable))}
-								/><strong
-									>{t(readable ? 'backup.format.readable' : 'backup.format.encrypted')}</strong
-								></label
-							>
-							<span class="muted small"
-								>{t(readable ? 'backup.format.readableHint' : 'backup.format.encryptedHint')}</span
-							>
-							{#if readable && on}
-								<label class="dated"
-									><input
-										type="checkbox"
-										checked={!!draft.copy?.dated}
-										onchange={(e) =>
-											(draft!.copy = { ...draft!.copy, dated: e.currentTarget.checked })}
-									/><span class="small">{t('backup.copy.dated')}</span></label
-								>
-							{/if}
-						</div>
-					{/each}
-				</div>
-				{#if !isNew}<p class="muted small">{t('backup.format.fixed')}</p>{/if}
-			{:else}
-				<p class="muted">{t(`backup.kindHint.${draft.destination.type}` as MessageKey)}</p>
-			{/if}
-			{#if draft.destination.type === 'smb-copy' || draft.destination.type === 'smb'}
-				<label class="block"
-					><span>{t('backup.smb.target')}</span><select
-						class="field"
-						bind:value={draft.destination.targetId}
-						required
-						><option value="" disabled>–</option
-						>{#each overview?.smbTargets ?? [] as target (target.id)}<option value={target.id}
-								>{target.id} · {target.host}/{target.share}</option
-							>{/each}</select
-					></label
-				>
-				<p class="muted">{t('backup.smb.first')}</p>
-				<label class="block"
-					><span>{t('backup.smb.jobFolder')}</span><input
-						class="field"
-						bind:value={draft.destination.folder}
-						placeholder="backups/{draft.id}"
-					/></label
-				>
-			{:else if draft.destination.type === 'usb-copy' || draft.destination.type === 'usb'}
-				{#if usbError}<p class="notice-warn" role="alert">
-						{usbError}
-						<button type="button" class="btn small" onclick={loadUSB}>{t('ui.retry')}</button>
-					</p>{/if}
-				<label class="block"
-					><span>{t('backup.usbDevice')}</span><select
-						class="field"
-						bind:value={draft.destination.deviceId}
-						required
-					>
-						<option value="" disabled>–</option>
-						{#if draft.destination.deviceId && !usbDrives.some((d) => d.id === draft?.destination.deviceId)}<option
-								value={draft.destination.deviceId}
-								>{draft.destination.deviceName || draft.destination.deviceId} · {t(
-									'backup.usbMissing',
-								)}</option
-							>{/if}
-						{#each usbDrives.filter((d) => d.supported) as drive (drive.id)}<option value={drive.id}
-								>{drive.name} · {drive.id}</option
-							>{/each}
-					</select></label
-				>
-				<label class="block"
-					><span>{t('backup.folder')}</span><input
-						class="field mono"
-						bind:value={draft.destination.folder}
-						placeholder={`backups/${draft.id || 'name'}`}
-					/></label
-				>
-			{:else if draft.destination.type === 'local' || draft.destination.type === 'local-copy'}
-				<div class="row">
-					<label class="narrow"
-						><span>{t('backup.volume')}</span>
-						<select class="field" bind:value={draft.destination.volume} required>
-							<option value="" disabled>–</option>
-							{#each volumes as volume (volume)}<option value={volume}>{volume}</option>{/each}
-						</select>
-					</label>
-					<label class="narrow"
-						><span>{t('backup.folder')}</span><input
-							class="field mono"
-							type="text"
-							bind:value={draft.destination.folder}
-							placeholder={`backups/${draft.id || 'name'}`}
-							spellcheck="false"
-						/></label
-					>
-				</div>
-				{#if volumes.length === 0}<p class="notice-warn">{t('backup.noVolume')}</p>{/if}
-			{:else if draft.destination.type === 's3'}
-				<div class="row">
-					<label class="wide"
-						><span>{t('backup.endpoint')}</span><input
-							class="field mono"
-							type="url"
-							bind:value={draft.destination.endpoint}
-							placeholder="https://s3.eu-central-1.amazonaws.com"
-							spellcheck="false"
-							required
-						/></label
-					>
-					<label class="narrow"
-						><span>{t('backup.bucket')}</span><input
-							class="field mono"
-							type="text"
-							bind:value={draft.destination.bucket}
-							spellcheck="false"
-							autocapitalize="none"
-							required
-						/></label
-					>
-					<label class="narrow"
-						><span>{t('backup.prefix')}</span><input
-							class="field mono"
-							type="text"
-							bind:value={draft.destination.prefix}
-							spellcheck="false"
-						/></label
-					>
-				</div>
-				<div class="row">
-					<label class="narrow"
-						><span>{t('backup.accessKey')}</span><input
-							class="field mono"
-							type="text"
-							bind:value={draft.destination.accessKey}
-							autocomplete="off"
-							spellcheck="false"
-							required
-						/></label
-					>
-					<label class="narrow"
-						><span>{t('backup.secretKey')}</span><input
-							class="field mono"
-							type="password"
-							bind:value={draft.destination.secretKey}
-							autocomplete="new-password"
-							placeholder={secretKept.secretKey ? t('notify.secretStored') : ''}
-							required={!secretKept.secretKey}
-						/></label
-					>
-				</div>
-				{#if secretSet.secretKey && !secretKept.secretKey}<p class="notice-warn">
-						{t('backup.secretAgain')}
-					</p>{/if}
-			{:else if draft.destination.type === 'sftp'}
-				<div class="row">
-					<label class="narrow"
-						><span>{t('backup.host')}</span><input
-							class="field mono"
-							type="text"
-							bind:value={draft.destination.host}
-							spellcheck="false"
-							autocapitalize="none"
-							required
-						/></label
-					>
-					<label class="tiny"
-						><span>{t('notify.port')}</span><input
-							class="field mono"
-							type="number"
-							min="1"
-							max="65535"
-							bind:value={draft.destination.port}
-							required
-						/></label
-					>
-					<label class="narrow"
-						><span>{t('notify.username')}</span><input
-							class="field mono"
-							type="text"
-							bind:value={draft.destination.user}
-							spellcheck="false"
-							autocapitalize="none"
-							required
-						/></label
-					>
-					<label class="narrow"
-						><span>{t('backup.remotePath')}</span><input
-							class="field mono"
-							type="text"
-							bind:value={draft.destination.path}
-							placeholder="backups/nas"
-							spellcheck="false"
-							required
-						/></label
-					>
-				</div>
-				{#if publicKey}
-					<label
-						><span>{t('backup.publicKey')}</span><textarea
-							class="field mono key"
-							readonly
-							rows="2"
-							onfocus={(event) => event.currentTarget.select()}>{publicKey}</textarea
-						></label
-					>
-					<p class="muted">{t('backup.publicKeyHint')}</p>
-				{/if}
-			{:else if draft.destination.type === 'titanos'}
-				<ClusterPair onpair={(code) => (pairCode = code)} />
-				<label class="block"
-					><span>{t('backup.pairCode')}</span>
-					<textarea
-						class="field mono"
-						rows="3"
-						bind:value={pairCode}
-						spellcheck="false"
-						autocomplete="off"
-						placeholder="titanos-backup:…"
-						required></textarea>
-				</label>
-				{#if pairing}<p class="notice-ok">
-						{t('backup.pairCodeOk', { url: pairing.url })}
-					</p>{:else if pairCode.trim()}<p class="notice-warn">
-						{t('backup.pairCodeInvalid')}
-					</p>{/if}
-				<p class="muted">{t('backup.pairCodeHint')}</p>
-			{:else}
-				<div class="row">
-					<label class="wide"
-						><span>{t('backup.restUrl')}</span><input
-							class="field mono"
-							type="url"
-							bind:value={draft.destination.url}
-							placeholder="https://backup.example.org:8000/nas"
-							spellcheck="false"
-							required
-						/></label
-					>
-					<label class="narrow"
-						><span>{t('notify.username')}</span><input
-							class="field mono"
-							type="text"
-							bind:value={draft.destination.username}
-							autocomplete="off"
-							spellcheck="false"
-						/></label
-					>
-					<label class="narrow"
-						><span>{t('notify.password')}</span><input
-							class="field mono"
-							type="password"
-							bind:value={draft.destination.password}
-							autocomplete="new-password"
-							placeholder={secretKept.password ? t('notify.secretStored') : ''}
-						/></label
-					>
-				</div>
-				{#if secretSet.password && !secretKept.password}<p class="notice-warn">
-						{t('backup.secretAgain')}
-					</p>{/if}
-			{/if}
-		</fieldset>
-		<ScheduleFields bind:schedule={draft} />
-		<fieldset class="divided">
-			<legend>{t('backup.bandwidth')}</legend>
-			<label class="check"
-				><input type="checkbox" bind:checked={bandwidth.on} /><span
-					>{t('backup.bandwidthLimit')}</span
-				></label
-			>
-			{#if bandwidth.on}
-				<div class="row">
-					<label class="tiny"
-						><span>{t('backup.bandwidthMax')}</span><input
-							class="field mono"
-							type="number"
-							min="0"
-							max={maxBandwidth}
-							step="1"
-							bind:value={bandwidth.limit}
-						/></label
-					>
-				</div>
-				<label class="check"
-					><input type="checkbox" bind:checked={bandwidth.window} /><span
-						>{t('backup.bandwidthWindow')}</span
-					></label
-				>
-				{#if bandwidth.window}
-					<div class="row">
-						<label class="tiny"
-							><span>{t('backup.windowFrom')}</span><input
-								class="field mono"
-								type="time"
-								bind:value={bandwidth.windowFrom}
-								required
-							/></label
-						>
-						<label class="tiny"
-							><span>{t('backup.windowTo')}</span><input
-								class="field mono"
-								type="time"
-								bind:value={bandwidth.windowTo}
-								required
-							/></label
-						>
-						<label class="tiny"
-							><span>{t('backup.bandwidthWindowLimit')}</span><input
-								class="field mono"
-								type="number"
-								min="0"
-								max={maxBandwidth}
-								step="1"
-								bind:value={bandwidth.windowLimit}
-							/></label
-						>
-					</div>
-				{/if}
-				<p class="muted">
-					{t(
-						plainCopy(draft.destination.type)
-							? 'backup.bandwidthHintCopy'
-							: 'backup.bandwidthHintRestic',
-					)}
-				</p>
-			{/if}
-		</fieldset>
-		{#if plainCopy(draft.destination.type)}<fieldset class="divided">
-				<legend>{t('backup.copy.deleted')}</legend>
-				{#if draft.copy?.dated}
-					<p class="muted">{t('backup.copy.datedDeleted')}</p>
-				{:else}
-					<label class="check"
-						><input
-							type="radio"
-							name="deleted"
-							checked={!draft.copy?.mirror}
-							onchange={() => (draft!.copy = { ...draft!.copy, mirror: false })}
-						/><span>{t('backup.copy.keepDeleted')}</span></label
-					>
-					<p class="muted small indent">{t('backup.copy.keepDeletedHint')}</p>
-					<label class="check"
-						><input
-							type="radio"
-							name="deleted"
-							checked={!!draft.copy?.mirror}
-							onchange={() =>
-								(draft!.copy = {
-									...draft!.copy,
-									mirror: true,
-									mirrorDays: draft!.copy?.mirrorDays || 30,
-								})}
-						/><span>{t('backup.copy.mirror')}</span></label
-					>
-					<p class="muted small indent">
-						{t('backup.copy.mirrorHint')}
-						{#if draft.copy?.mirror}<span class="inline"
-								><input
-									class="field mono days-input"
-									type="number"
-									min="1"
-									max="3650"
-									aria-label={t('backup.copy.mirrorDays')}
-									bind:value={draft.copy.mirrorDays}
-								/>
-								{t('backup.copy.mirrorDays')}</span
-							>{/if}
-					</p>
-				{/if}
-			</fieldset>{/if}
-		<fieldset class="divided">
-			<legend>{t('backup.keeps')}</legend>
-			{#if plainCopy(draft.destination.type) && !draft.copy?.dated}
-				<p class="muted">{t('backup.copy.noVersions')}</p>
-			{:else}
-				<KeepVersions bind:keep={draft.keep} target={fullTarget(draft.destination.type)} />
-			{/if}
-		</fieldset>
-		{#if error}<div class="notice-error" role="alert">
-				{error.text}{#if error.detail}<pre>{error.detail}</pre>{/if}
-			</div>{/if}
-		<div class="row-actions">
-			<button
-				type="button"
-				class="btn"
-				onclick={() => ((draft = null), (error = null))}
-				disabled={busy}>{t('common.cancel')}</button
-			>
-			<button
-				type="submit"
-				class="btn btn-primary"
-				disabled={busy ||
-					(!chosen.some((c) => c.volume) && !draft.extras?.length && !draft.applications?.length)}
-				>{isNew ? t('backup.create') : t('notify.save')}</button
-			>
-		</div>
-	</form>
+	<JobForm
+		bind:draft={() => draft as Job, (v) => (draft = v)}
+		bind:error
+		bind:busy
+		{opened}
+		{isNew}
+		{secretSet}
+		{overview}
+		{volumes}
+		{usbDrives}
+		{usbError}
+		{loadUSB}
+		{publicKey}
+		{showKey}
+		{problem}
+		onsaved={saved}
+		oncancel={() => ((draft = null), (error = null))}
+	/>
 {/if}
 
 {#if removing}
@@ -1675,10 +528,6 @@
 		display: grid;
 		gap: var(--gap);
 	}
-	section,
-	form.tile {
-		font-size: 0.875rem;
-	}
 	form.plain {
 		display: flex;
 		flex-direction: column;
@@ -1687,41 +536,6 @@
 	}
 	p {
 		margin: 0;
-	}
-	.head {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: var(--space-3);
-	}
-	.name {
-		font-size: 1rem;
-		font-weight: 600;
-	}
-	.head p {
-		margin-top: 2px;
-		overflow-wrap: anywhere;
-	}
-	dl {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-		gap: var(--space-3) var(--space-5);
-		margin: 0;
-	}
-	dt {
-		color: var(--muted);
-		font-size: 0.75rem;
-	}
-	dd {
-		margin: 2px 0 0;
-	}
-	.row {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-3) 20px;
-	}
-	fieldset {
-		gap: var(--space-3);
 	}
 	label {
 		display: flex;
@@ -1732,61 +546,6 @@
 	label > span {
 		color: var(--muted);
 	}
-	small {
-		font-size: 0.75rem;
-		color: var(--muted);
-	}
-	.narrow {
-		flex: 0 1 260px;
-		max-width: 320px;
-	}
-	.tiny {
-		flex: 0 1 120px;
-		max-width: 140px;
-	}
-	.wide {
-		flex: 1 1 360px;
-		max-width: 560px;
-	}
-	label.check {
-		flex-direction: row;
-		align-items: center;
-		gap: var(--space-2);
-		font-size: 0.875rem;
-	}
-	.check > span {
-		color: var(--text);
-	}
-	.check input {
-		width: 18px;
-		height: 18px;
-		margin: 0;
-	}
-	.picked {
-		display: flex;
-		gap: var(--space-2);
-		align-items: center;
-		margin-bottom: var(--space-1-5);
-	}
-	.pickfield {
-		display: flex;
-		gap: var(--space-2);
-		align-items: center;
-		flex: 1;
-		min-width: 0;
-		text-align: left;
-		cursor: pointer;
-	}
-	.pickfield .mono {
-		overflow-wrap: anywhere;
-	}
-	.more {
-		margin-top: var(--space-2);
-	}
-	.more summary {
-		cursor: pointer;
-		color: var(--accent);
-	}
 	.link {
 		background: none;
 		border: 0;
@@ -1794,104 +553,12 @@
 		cursor: pointer;
 		padding: 0 0 0 var(--space-1);
 	}
-	.formats {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: var(--space-2-5);
-	}
-	.format {
-		display: grid;
-		gap: var(--space-1);
-		align-content: start;
-		border: 1px solid var(--border);
-		border-radius: 10px;
-		padding: var(--space-3) 14px;
-	}
-	.format.on {
-		border-color: var(--accent);
-	}
-	.format .fhead,
-	.format .dated {
-		display: flex;
-		flex-direction: row;
-		gap: var(--space-2);
-		align-items: center;
-		justify-content: flex-start;
-		text-align: left;
-		font-size: inherit;
-	}
-	.format .dated {
-		align-items: flex-start;
-		margin: var(--space-1-5) 0 0 var(--space-5);
-	}
-	.format > .muted {
-		margin-left: var(--space-5);
-	}
-	.small {
-		font-size: 0.8125rem;
-	}
-	.indent {
-		margin: 0 0 0 var(--space-5);
-	}
-	.days-input {
-		width: 4.5rem;
-		text-align: center;
-	}
-	@media (max-width: 760px) {
-		.formats {
-			grid-template-columns: 1fr;
-		}
-	}
-	.segments {
-		display: inline-flex;
-		flex-wrap: wrap;
-		align-self: flex-start;
-		gap: var(--space-1);
-		padding: 3px;
-		border: 1px solid var(--panel-border);
-		border-radius: var(--radius-ctl);
-	}
-	.segments button {
-		height: 2.25rem;
-		padding: 0 14px;
-		background: transparent;
-		border: 0;
-		border-radius: var(--radius-ctl);
-		color: var(--text);
-		font: inherit;
-		font-size: 0.8125rem;
-		cursor: pointer;
-	}
-	.segments button[aria-checked='true'] {
-		background: var(--accent);
-		color: var(--on-accent);
-	}
-	.key {
-		height: auto;
-		padding: var(--space-2-5) var(--space-3);
-		font-size: 0.75rem;
-		resize: none;
-	}
 	pre {
 		margin: var(--space-1-5) 0 0;
 		font-family: var(--font-mono);
 		font-size: 0.75rem;
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
-	}
-	.inline {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
-	}
-	.legend-sub {
-		margin: 0.8rem 0 0.3rem;
-		font-weight: 600;
-	}
-	.block {
-		display: grid;
-		gap: 0.3rem;
-		margin-top: 0.6rem;
 	}
 	.backup-table tbody tr {
 		cursor: pointer;
@@ -1912,10 +579,6 @@
 	}
 	.backup-table .nowrap {
 		white-space: nowrap;
-	}
-	/* Only the chosen backup's tile is shown: it is the detail of the row. */
-	.hidden-job {
-		display: none;
 	}
 	@media (max-width: 760px) {
 		.backup-table thead {

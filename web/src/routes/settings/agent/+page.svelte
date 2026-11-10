@@ -11,22 +11,17 @@
 	import QrCode from '#lib/components/QrCode.svelte';
 	import AgentVolume from '#lib/components/agent/AgentVolume.svelte';
 	import FeaturesPanel from '#lib/components/agent/features/FeaturesPanel.svelte';
-	import AgentHARelease from './AgentHARelease.svelte';
+	import AccountsTab from './AccountsTab.svelte';
+	import ConnectionTab from './ConnectionTab.svelte';
+	import HomeAssistantTab from './HomeAssistantTab.svelte';
+	import RightsTab from './RightsTab.svelte';
 	import { inWindow } from '#lib/desktop/frame.ts';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { api, type DockerStatus, type FileRoot } from '#lib/api.ts';
 	import { apiErrorText, i18n, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
 	import {
-		AREAS,
-		areaMode,
-		levelLabel,
-		presetOf,
-		tokens,
-		toolMode,
-		gb,
 		type Mode,
-		type Preset,
 		type ClusterInfo,
 		type Settings,
 		type ShareState,
@@ -79,14 +74,6 @@
 			error = apiErrorText(e);
 		}
 	}
-	const shareText: Record<ShareState, MessageKey> = {
-		allowed: 'agent.shareAllowed',
-		pending: 'agent.sharePending',
-		off: 'agent.shareOff',
-		unreachable: 'agent.shareUnreachable',
-		old: 'agent.shareOld',
-		nocluster: 'agent.shareNoCluster',
-	};
 	let haNotify = $state('');
 	let haRules = $state<{ key: string; mode: Mode }[]>([]);
 
@@ -216,14 +203,6 @@
 		}
 	}
 
-	const models = $derived((status?.models ?? []).filter((m) => m.capabilities.includes('tools')));
-	const others = $derived((status?.models ?? []).filter((m) => !m.capabilities.includes('tools')));
-	const chosen = $derived(models.find((m) => m.name === settings?.model));
-	// Speech and pictures (PLAN 49).
-	const visionModels = $derived(
-		(status?.models ?? []).filter((m) => m.capabilities.includes('vision')),
-	);
-	const vram = $derived((status?.running ?? []).reduce((sum, r) => sum + (r.vram ?? 0), 0));
 	let voiceCheck = $state<{ reachable: boolean; models?: string[]; error?: string } | null>(null);
 	async function checkVoice() {
 		voiceCheck = null;
@@ -236,71 +215,15 @@
 			voiceCheck = { reachable: false, error: apiErrorText(e) };
 		}
 	}
-	const runningContext = $derived(
-		status?.running?.find((r) => r.name === settings?.model)?.contextLength ?? 0,
-	);
 
 	const modeOptions = $derived<{ value: Mode; label: string }[]>([
 		{ value: 'allow', label: t('agent.modeAllow') },
 		{ value: 'ask', label: t('agent.modeAsk') },
 		{ value: 'deny', label: t('agent.modeDeny') },
 	]);
-	const preset = $derived(settings ? presetOf(settings.policy) : 'standard');
-	function setPreset(p: Preset | 'custom') {
-		if (!settings || p === 'custom') return;
-		settings.policy = { preset: p, folders: settings.policy.folders ?? [] };
-	}
-	function setArea(area: string, mode: Mode) {
-		if (!settings) return;
-		settings.policy.areas = { ...(settings.policy.areas ?? {}), [area]: mode };
-		// Single tools of the area follow it again.
-		const tl = { ...(settings.policy.tools ?? {}) };
-		for (const tool of tools.filter((x) => x.area === area)) delete tl[tool.name];
-		settings.policy.tools = tl;
-	}
-	function setTool(name: string, mode: Mode) {
-		if (!settings) return;
-		settings.policy.tools = { ...(settings.policy.tools ?? {}), [name]: mode };
-	}
-	const areaLabel = (a: string) => t(`agent.area.${a}` as MessageKey);
-	// PLAN 68: areas that are rarely changed wait behind "weitere Bereiche"
-	// – but only while nothing of them is set apart from the Schnellwahl;
-	// a changed area is always in view.
-	const RARE = ['backups', 'storage', 'shares', 'accounts', 'plugins', 'home', 'code'];
+	// PLAN 68: areas that are rarely changed wait behind "weitere Bereiche" (RightsTab).
 	let allAreas = $state(false);
-	const withTools = $derived(AREAS.filter((a) => tools.some((x) => x.area === a)));
-	function ownSetting(area: string): boolean {
-		if (!settings) return false;
-		if (settings.policy.areas?.[area]) return true;
-		return tools.some((x) => x.area === area && settings!.policy.tools?.[x.name]);
-	}
-	const hiddenAreas = $derived(withTools.filter((a) => RARE.includes(a) && !ownSetting(a)));
-	const shownAreas = $derived(
-		allAreas ? withTools : withTools.filter((a) => !hiddenAreas.includes(a)),
-	);
-	const kindLabel: Record<string, MessageKey> = {
-		read: 'agent.kindRead',
-		create: 'agent.kindCreate',
-		change: 'agent.kindChange',
-	};
-	const userAccounts = $derived(accounts.filter((a) => a.role !== 'owner'));
 	const admins = $derived(accounts.filter((a) => a.role === 'owner' || a.role === 'admin'));
-	function toggleUser(name: string, on: boolean) {
-		if (!settings) return;
-		const set = new Set(settings.users ?? []);
-		if (on) set.add(name);
-		else set.delete(name);
-		settings.users = [...set];
-	}
-	// PLAN 59a: up to 256k, but never more than the model can.
-	const modelContext = $derived(
-		status?.models?.find((m) => m.name === settings?.model)?.contextLength ?? 0,
-	);
-	const contexts = $derived(
-		[0, 8192, 16384, 32768, 65536, 131072, 196608, 262144].filter(
-			(c) => c === 0 || !modelContext || c <= modelContext || c === settings?.context,
-		),
-	);
 
 	// PLAN 53: the page in tabs instead of one long column.
 	// PLAN 73 (draft 06): the overview lists the areas with a summary each;
@@ -546,489 +469,23 @@
 		</section>
 	{/if}
 	{#if tab === 'connection'}
-		<section class="tile ui-card" aria-labelledby="ag-conn">
-			<div class="card-head"><h2 id="ag-conn">{t('agent.sectionConnection')}</h2></div>
-			{#if clusterInfo?.member || settings.source === 'cluster'}
-				<div class="set-row">
-					<span class="set-label"
-						>{t('agent.source')}<span class="set-hint">{t('agent.sourceHint')}</span></span
-					>
-					<div class="set-control">
-						<Segments
-							compact
-							label={t('agent.source')}
-							value={settings.source ?? ''}
-							options={[
-								{ value: '', label: t('agent.sourceOwn') },
-								{
-									value: 'cluster',
-									label: t('agent.sourceCluster', { node: clusterInfo?.adminNode ?? '' }),
-								},
-							]}
-							onchange={(v) => (settings!.source = v)}
-						/>
-					</div>
-				</div>
-			{/if}
-			{#if settings.source === 'cluster'}
-				<div class="set-row one">
-					<p class={shareState === 'allowed' ? 'notice-ok' : 'notice-warn'}>
-						{shareState
-							? t(shareText[shareState], { node: clusterInfo?.adminNode ?? '' })
-							: t('agent.shareNotAsked', { node: clusterInfo?.adminNode ?? '' })}
-					</p>
-				</div>
-			{:else}
-				<label class="set-row">
-					<span class="set-label"
-						>{t('agent.ollamaServer')}<span class="set-hint">{t('agent.ollamaHint')}</span></span
-					>
-					<span class="set-control">
-						<input
-							class="field"
-							bind:value={settings.ollama}
-							placeholder="http://192.168.1.5:11434"
-						/>
-					</span>
-				</label>
-			{/if}
-			{#if check}
-				<div class="set-row one">
-					<p class={check.reachable ? 'notice-ok' : 'notice-warn'}>
-						{check.reachable
-							? t('agent.checkOk', { version: check.version ?? '', models: check.models ?? 0 })
-							: t('agent.checkFail', { error: check.error ?? '' })}
-					</p>
-				</div>
-			{:else if status?.enabled}
-				<div class="set-row one">
-					<p class="set-hint state">
-						<span class="dot {status.reachable ? 'ok' : 'error'}"></span>
-						{status.reachable
-							? t('agent.connected', {
-									version: status.version ?? '',
-									models: status.models?.length ?? 0,
-								})
-							: t('agent.notConnected', { error: status.error ?? '' })}
-					</p>
-				</div>
-			{/if}
-			{#if status && !status.volume}<div class="set-row one">
-					<p class="notice-warn">{t('agent.noVolume')}</p>
-				</div>{/if}
-			{#if settings.source === 'cluster'}
-				{#if shareState !== 'allowed'}
-					<div class="card-foot">
-						<button type="button" class="btn" onclick={askAdmin}
-							>{t('agent.shareAsk', { node: clusterInfo?.adminNode ?? '' })}</button
-						>
-					</div>
-				{/if}
-			{:else}
-				<div class="card-foot">
-					<button type="button" class="btn" onclick={test}>{t('agent.check')}</button>
-				</div>
-			{/if}
-		</section>
-
-		{#if clusterInfo?.admin}
-			<section class="tile ui-card" aria-labelledby="ag-nodes">
-				<div class="card-head"><h2 id="ag-nodes">{t('agent.sectionNodes')}</h2></div>
-				<div class="set-row one"><span class="set-hint">{t('agent.nodesIntro')}</span></div>
-				{#each settings.shared ?? [] as sh (sh.node)}
-					<div class="set-row">
-						<span class="set-label"
-							><strong>{sh.name}</strong><span class="set-hint"
-								>{t('agent.nodeAsked', { date: new Date(sh.asked).toLocaleString() })}</span
-							></span
-						>
-						<div class="set-control node-tools">
-							<span class="chip {sh.allowed ? 'ok' : 'warn'}"
-								>{sh.allowed ? '✓ ' + t('agent.nodeAllowed') : t('agent.nodePending')}</span
-							>
-							<button
-								type="button"
-								class="btn {sh.allowed ? '' : 'btn-primary'}"
-								onclick={() => setShare(sh.node, { allowed: !sh.allowed })}
-								>{sh.allowed ? t('agent.nodeRevoke') : t('agent.nodeRelease')}</button
-							>
-							<button type="button" class="btn" onclick={() => setShare(sh.node, { remove: true })}
-								>{t('agent.nodeRemove')}</button
-							>
-						</div>
-					</div>
-				{:else}
-					<div class="set-row one"><span class="set-hint">{t('agent.nodesNone')}</span></div>
-				{/each}
-			</section>
-		{/if}
-
-		<section class="tile ui-card" aria-labelledby="ag-model">
-			<div class="card-head"><h2 id="ag-model">{t('agent.sectionModel')}</h2></div>
-			<label class="set-row">
-				<span class="set-label"
-					>{t('agent.model')}
-					{#if chosen}
-						<span class="set-hint caps">
-							{t('agent.can')}
-							{#each ['tools', 'thinking', 'vision'] as cap (cap)}
-								<span class="chip {chosen.capabilities.includes(cap) ? 'ok' : ''}"
-									>{chosen.capabilities.includes(cap) ? '✓' : '–'}
-									{t(`agent.cap.${cap}` as MessageKey)}</span
-								>
-							{/each}
-						</span>
-					{/if}
-					{#if others.length}<span class="set-hint"
-							>{t('agent.modelsWithoutTools', {
-								names: others.map((m) => m.name).join(', '),
-							})}</span
-						>{/if}</span
-				>
-				<span class="set-control">
-					<select class="field" bind:value={settings.model}>
-						<option value="">{t('agent.modelChoose')}</option>
-						{#each models as m (m.name)}<option value={m.name}>{m.name} ({gb(m.size)})</option
-							>{/each}
-						{#if settings.model && !models.some((m) => m.name === settings!.model)}<option
-								value={settings.model}>{settings.model}</option
-							>{/if}
-					</select>
-				</span>
-			</label>
-			{#if chosen && chosen.levels.length}
-				<div class="set-row">
-					<span class="set-label"
-						>{t('agent.thinkDefault')}<span class="set-hint">{t('agent.thinkHint')}</span></span
-					>
-					<div class="set-control">
-						<Segments
-							compact
-							label={t('agent.thinkDefault')}
-							value={settings.think || chosen.defaultLevel || chosen.levels[0]}
-							options={chosen.levels.map((l) => ({ value: l, label: levelLabel(l, i18n.locale) }))}
-							onchange={(v) => (settings!.think = v)}
-						/>
-					</div>
-				</div>
-			{/if}
-			<label class="set-row">
-				<span class="set-label"
-					>{t('agent.context')}<span class="set-hint">
-						{#if modelContext}{t('agent.contextModel', { tokens: tokens(modelContext) })}{/if}
-						{#if runningContext}{t('agent.contextNow', {
-								tokens: tokens(runningContext),
-							})}{:else}{t('agent.contextUnknown')}{/if}
-						{t('agent.contextHint')}
-						{#if (settings.context ?? 0) > 65536}{t('agent.contextVram')}{/if}
-					</span></span
-				>
-				<span class="set-control">
-					<select class="field" bind:value={settings.context}>
-						{#each contexts as c (c)}<option value={c}
-								>{c === 0
-									? t('agent.contextOllama')
-									: tokens(c) + ' ' + t('agent.tokensWord')}</option
-							>{/each}
-					</select>
-				</span>
-			</label>
-			<label class="set-row">
-				<span class="set-label"
-					>{t('agent.maxSteps')}<span class="set-hint">{t('agent.maxStepsHint')}</span></span
-				>
-				<span class="set-control">
-					<input
-						class="field narrow"
-						type="number"
-						min="1"
-						max="100"
-						bind:value={settings.maxSteps}
-					/>
-				</span>
-			</label>
-			<label class="set-row">
-				<span class="set-label"
-					>{t('agent.maxMinutes')}<span class="set-hint">{t('agent.maxMinutesHint')}</span></span
-				>
-				<span class="set-control">
-					<input
-						class="field narrow"
-						type="number"
-						min="1"
-						max="600"
-						bind:value={settings.maxMinutes}
-					/>
-				</span>
-			</label>
-			<label class="set-row">
-				<span class="set-label"
-					>{t('agent.lazyTools')}<span class="set-hint">{t('agent.lazyToolsHint')}</span></span
-				>
-				<span class="set-control end"
-					><input
-						type="checkbox"
-						class="switch"
-						role="switch"
-						checked={!settings.allTools}
-						onchange={(e) => (settings!.allTools = !e.currentTarget.checked)}
-					/></span
-				>
-			</label>
-			<label class="set-row">
-				<span class="set-label"
-					>{t('agent.delegate')}<span class="set-hint">{t('agent.delegateHint')}</span></span
-				>
-				<span class="set-control end"
-					><input
-						type="checkbox"
-						class="switch"
-						role="switch"
-						checked={!settings.noDelegate}
-						onchange={(e) => (settings!.noDelegate = !e.currentTarget.checked)}
-					/></span
-				>
-			</label>
-			<label class="set-row">
-				<span class="set-label"
-					>{t('agent.keepAlive')}<span class="set-hint">{t('agent.keepAliveHint')}</span></span
-				>
-				<span class="set-control">
-					<select class="field" bind:value={settings.keepAlive}>
-						<option value="">{t('agent.keepAliveOllama')}</option>
-						{#each ['5m', '30m', '2h', '-1'] as k (k)}<option value={k}
-								>{t(`agent.keepAlive.${k}` as MessageKey)}</option
-							>{/each}
-					</select>
-				</span>
-			</label>
-			{#if settings.source !== 'cluster'}<div class="set-row">
-					<span class="set-label"
-						><label for="ag-pull">{t('agent.pull')}</label><span class="set-hint"
-							>{t('agent.pullHint')}</span
-						>
-						{#if pull?.model}
-							<span class="set-hint" role="status"
-								>{pull.model}: {pull.error ? pull.error : pull.status}{pull.total
-									? ` · ${Math.round(((pull.completed ?? 0) / pull.total) * 100)} %`
-									: ''}</span
-							>
-						{/if}</span
-					>
-					<div class="set-control">
-						<input
-							id="ag-pull"
-							class="field grow"
-							bind:value={pullName}
-							placeholder="qwen3:8b"
-							aria-label={t('agent.pull')}
-						/>
-						<button
-							type="button"
-							class="btn"
-							disabled={pull?.running || !pullName.trim()}
-							onclick={startPull}>{t('agent.pullStart')}</button
-						>
-					</div>
-				</div>{/if}
-		</section>
-
-		<section class="tile ui-card" aria-labelledby="ag-media">
-			<div class="card-head"><h2 id="ag-media">{t('agent.sectionMedia')}</h2></div>
-			<div class="set-row one">
-				<span class="set-label"
-					>{t('agent.pictures')}
-					{#if chosen?.capabilities.includes('vision')}
-						<span class="set-hint">✓ {t('agent.picturesMain', { model: chosen.name })}</span>
-					{:else}
-						<span class="set-hint">{t('agent.picturesNone')}</span>
-					{/if}
-					{#if vram}<span class="set-hint"
-							>{t('agent.vramNow', {
-								gb: (vram / 1e9).toFixed(1).replace('.', i18n.locale === 'de' ? ',' : '.'),
-							})}</span
-						>{/if}
-				</span>
-			</div>
-			<label class="set-row">
-				<span class="set-label">{t('agent.visionOwn')}</span>
-				<span class="set-control end"
-					><input
-						type="checkbox"
-						class="switch"
-						role="switch"
-						checked={!!settings.vision?.enabled}
-						onchange={(e) =>
-							(settings!.vision = {
-								...(settings!.vision ?? {}),
-								enabled: e.currentTarget.checked,
-							})}
-					/></span
-				>
-			</label>
-			{#if settings.vision?.enabled}
-				<div class="set-row">
-					<span class="set-label"
-						><label for="ag-vision">{t('agent.visionModel')}</label><span class="set-hint"
-							>{t('agent.visionHint')}</span
-						></span
-					>
-					<div class="set-control">
-						<select
-							id="ag-vision"
-							class="field"
-							value={settings.vision?.model ?? ''}
-							aria-label={t('agent.visionModel')}
-							onchange={(e) =>
-								(settings!.vision = { ...(settings!.vision ?? {}), model: e.currentTarget.value })}
-						>
-							<option value="">{t('agent.modelChoose')}</option>
-							{#each visionModels as m (m.name)}<option value={m.name}
-									>{m.name} ({gb(m.size)})</option
-								>{/each}
-						</select>
-					</div>
-				</div>
-			{/if}
-			<label class="set-row">
-				<span class="set-label"
-					>{t('agent.voiceOn')}<span class="set-hint">{t('agent.voiceHint')}</span></span
-				>
-				<span class="set-control end"
-					><input
-						type="checkbox"
-						class="switch"
-						role="switch"
-						checked={!!settings.voice?.enabled}
-						onchange={(e) =>
-							(settings!.voice = {
-								...(settings!.voice ?? {}),
-								enabled: e.currentTarget.checked,
-							})}
-					/></span
-				>
-			</label>
-			{#if !settings.voice?.url}
-				<div class="set-row" id="voice">
-					<span class="set-label"
-						>{t('agent.voice')}{#if !whisperApp}<span class="set-hint"
-								>{t('agent.whisperSetupHint')}</span
-							>{/if}</span
-					>
-					<div class="set-control">
-						{#if whisperApp}
-							<button type="button" class="btn btn-primary" onclick={useWhisperApp}
-								>{t('agent.whisperUse', { name: whisperApp.name, port: whisperApp.port })}</button
-							>
-						{:else}
-							<a class="btn btn-primary" href="/apps/install/titanos/whisper"
-								>{t('agent.whisperSetup')}</a
-							>
-						{/if}
-					</div>
-				</div>
-			{/if}
-			{#if settings.voice?.enabled}
-				<div class="set-row">
-					<span class="set-label"><label for="ag-voice-url">{t('agent.voiceUrl')}</label></span>
-					<div class="set-control">
-						<input
-							id="ag-voice-url"
-							class="field grow"
-							value={settings.voice?.url ?? ''}
-							placeholder="http://192.168.1.5:8000"
-							aria-label={t('agent.voiceUrl')}
-							oninput={(e) =>
-								(settings!.voice = { ...(settings!.voice ?? {}), url: e.currentTarget.value })}
-						/>
-						<button type="button" class="btn" onclick={checkVoice}>{t('agent.voiceCheck')}</button>
-					</div>
-				</div>
-				<div class="set-row">
-					<span class="set-label"><label for="ag-voice-model">{t('agent.voiceModel')}</label></span>
-					<div class="set-control">
-						<input
-							id="ag-voice-model"
-							class="field"
-							value={settings.voice?.model ?? ''}
-							placeholder="Systran/faster-whisper-large-v3"
-							aria-label={t('agent.voiceModel')}
-							oninput={(e) =>
-								(settings!.voice = { ...(settings!.voice ?? {}), model: e.currentTarget.value })}
-						/>
-					</div>
-				</div>
-				{#if voiceCheck}
-					<div class="set-row one">
-						<p class={voiceCheck.reachable ? 'notice-ok' : 'notice-error'} role="status">
-							{voiceCheck.reachable
-								? t('agent.voiceOk', { models: (voiceCheck.models ?? []).join(', ') || '–' })
-								: t('agent.voiceDown', { error: voiceCheck.error ?? '' })}
-						</p>
-					</div>
-				{/if}
-			{/if}
-			<label class="set-row">
-				<span class="set-label"
-					>{t('agent.snapshots')}<span class="set-hint">{t('agent.snapshotsHint')}</span></span
-				>
-				<span class="set-control end"
-					><input
-						type="checkbox"
-						class="switch"
-						role="switch"
-						checked={!settings.noSnapshots}
-						onchange={(e) => (settings!.noSnapshots = !e.currentTarget.checked)}
-					/></span
-				>
-			</label>
-			<label class="set-row">
-				<span class="set-label"
-					>{t('agent.code')}<span class="set-hint">{t('agent.codeHint')}</span></span
-				>
-				<span class="set-control end"
-					><input
-						type="checkbox"
-						class="switch"
-						role="switch"
-						checked={!!settings.code?.enabled}
-						onchange={(e) =>
-							(settings!.code = { ...(settings!.code ?? {}), enabled: e.currentTarget.checked })}
-					/></span
-				>
-			</label>
-			{#if settings.code?.enabled}
-				<label class="set-row sub">
-					<span class="set-label">{t('agent.codeTimeout')}</span>
-					<span class="set-control">
-						<input
-							class="field narrow"
-							type="number"
-							min="1"
-							max="600"
-							value={settings.code.timeout ?? 60}
-							oninput={(e) =>
-								(settings!.code = { ...settings!.code, timeout: Number(e.currentTarget.value) })}
-						/>
-					</span>
-				</label>
-				<label class="set-row sub">
-					<span class="set-label">{t('agent.codeMemory')}</span>
-					<span class="set-control">
-						<input
-							class="field narrow"
-							type="number"
-							min="64"
-							max="8192"
-							step="64"
-							value={settings.code.memory ?? 512}
-							oninput={(e) =>
-								(settings!.code = { ...settings!.code, memory: Number(e.currentTarget.value) })}
-						/>
-					</span>
-				</label>
-			{/if}
-		</section>
+		<ConnectionTab
+			bind:settings={() => settings as Settings, (v) => (settings = v)}
+			bind:pullName
+			{status}
+			{clusterInfo}
+			{shareState}
+			{check}
+			{pull}
+			{voiceCheck}
+			{whisperApp}
+			{askAdmin}
+			{setShare}
+			{startPull}
+			{test}
+			{checkVoice}
+			{useWhisperApp}
+		/>
 	{/if}
 
 	{#if tab === 'instruction'}
@@ -1058,233 +515,22 @@
 	{/if}
 
 	{#if tab === 'accounts'}
-		<section class="tile ui-card" aria-labelledby="ag-users">
-			<div class="card-head"><h2 id="ag-users">{t('agent.sectionAccounts')}</h2></div>
-			<div class="set-row one"><span class="set-hint">{t('agent.accountsHint')}</span></div>
-			{#each userAccounts as a (a.name)}
-				<label class="set-row">
-					<span class="set-label"
-						>{a.name}<span class="set-hint"
-							>{t(a.role === 'admin' ? 'agent.roleAdmin' : 'agent.roleUser')}</span
-						></span
-					>
-					<span class="set-control end"
-						><input
-							type="checkbox"
-							class="switch"
-							role="switch"
-							checked={settings.users?.includes(a.name)}
-							onchange={(e) => toggleUser(a.name, e.currentTarget.checked)}
-						/></span
-					>
-				</label>
-			{:else}
-				<div class="set-row one"><span class="set-hint">{t('agent.accountsNone')}</span></div>
-			{/each}
-		</section>
-
-		<section class="tile ui-card" aria-labelledby="ag-loc">
-			<div class="card-head">
-				<h2 id="ag-loc">{t('agent.sectionLocations')}</h2>
-				<div class="card-tools">
-					<button
-						type="button"
-						class="btn"
-						onclick={() =>
-							(settings!.locations = [
-								...(settings!.locations ?? []),
-								{ name: '', root: roots[0]?.id ?? '', path: '', note: '' },
-							])}><Icon name="plus" size={15} />{t('agent.locationAdd')}</button
-					>
-				</div>
-			</div>
-			<div class="set-row one"><span class="set-hint">{t('agent.locationsHint')}</span></div>
-			{#each settings.locations ?? [] as l, i (i)}
-				<div class="set-row loc">
-					<span class="set-label loc-fields">
-						<input
-							class="field"
-							bind:value={l.name}
-							placeholder={t('agent.locationName')}
-							aria-label={t('agent.locationName')}
-						/>
-						<select class="field" bind:value={l.root} aria-label={t('agent.locationRoot')}>
-							<option value="">{t('agent.locationRoot')}</option>
-							{#each roots as r (r.id)}<option value={r.id}
-									>{r.name} ({r.kind === 'share' ? t('agent.share') : t('agent.volume')})</option
-								>{/each}
-						</select>
-						<input
-							class="field"
-							bind:value={l.path}
-							placeholder={t('agent.locationPath')}
-							aria-label={t('agent.locationPath')}
-						/>
-						<input
-							class="field"
-							bind:value={l.note}
-							placeholder={t('agent.locationNote')}
-							aria-label={t('agent.locationNote')}
-						/>
-					</span>
-					<div class="set-control end">
-						<button
-							type="button"
-							class="btn"
-							aria-label={t('common.delete')}
-							title={t('common.delete')}
-							onclick={() => settings!.locations!.splice(i, 1)}
-							><Icon name="trash" size={15} /></button
-						>
-					</div>
-				</div>
-			{/each}
-		</section>
+		<AccountsTab
+			bind:settings={() => settings as Settings, (v) => (settings = v)}
+			{accounts}
+			{roots}
+		/>
 	{/if}
 
 	{#if tab === 'rights'}
-		<!-- PLAN 68: Schnellwahl, Bereiche and Ordner-Regeln as cards with rows. -->
-		<section class="tile ui-card" aria-labelledby="ag-perm">
-			<div class="card-head">
-				<h2 id="ag-perm">{t('agent.preset')}</h2>
-				<span class="card-meta">{t('agent.presetShort')}</span>
-				<div class="card-tools preset-tools">
-					<Segments
-						compact
-						label={t('agent.preset')}
-						value={preset}
-						options={[
-							{ value: 'read', label: t('agent.presetRead') },
-							{ value: 'standard', label: t('agent.presetStandard') },
-							{ value: 'all', label: t('agent.presetAll') },
-							{ value: 'custom', label: t('agent.presetCustom') },
-						]}
-						onchange={(v) => setPreset(v as Preset | 'custom')}
-					/>
-				</div>
-			</div>
-			<div class="set-row one">
-				<span class="set-label"
-					>{t('agent.alwaysDeniedLabel')}<span class="set-hint">{t('agent.alwaysDenied')}</span
-					></span
-				>
-			</div>
-		</section>
-		<section class="tile ui-card" aria-labelledby="ag-areas">
-			<div class="card-head">
-				<h2 id="ag-areas">{t('agent.areas')}</h2>
-			</div>
-			{#each shownAreas as area (area)}
-				{@const list = tools.filter((x) => x.area === area)}
-				{@const m = areaMode(settings.policy, area, list)}
-				<div class="set-row area">
-					<button
-						type="button"
-						class="set-label expand"
-						aria-expanded={!!open[area]}
-						onclick={() => (open[area] = !open[area])}
-					>
-						<Icon name={open[area] ? 'chevronDown' : 'chevronRight'} size={15} />
-						<span
-							><strong>{areaLabel(area)}</strong><span class="set-hint"
-								>{t('agent.toolCount', { count: list.length })}{m === 'mixed'
-									? ' · ' + t('agent.mixed')
-									: ''}</span
-							></span
-						>
-					</button>
-					<div class="set-control end">
-						<Segments
-							compact
-							label={areaLabel(area)}
-							value={m === 'mixed' ? ('' as Mode) : m}
-							options={modeOptions}
-							onchange={(v) => setArea(area, v)}
-						/>
-					</div>
-				</div>
-				{#if open[area]}
-					{#each list as tool (tool.name)}
-						<div class="set-row area tool">
-							<span class="set-label tname"
-								><code>{tool.name}</code>
-								<span class="chip {tool.dangerous ? 'warn' : ''}"
-									>{t(kindLabel[tool.kind] ?? 'agent.kindChange')}</span
-								></span
-							>
-							<div class="set-control end">
-								<Segments
-									compact
-									label={tool.name}
-									value={toolMode(settings.policy, tool)}
-									options={modeOptions}
-									onchange={(v) => setTool(tool.name, v)}
-								/>
-							</div>
-						</div>
-					{/each}
-				{/if}
-			{/each}
-			{#if hiddenAreas.length}
-				<div class="card-foot">
-					<button type="button" class="link-btn" onclick={() => (allAreas = !allAreas)}
-						>{allAreas
-							? t('agent.areasFewer')
-							: t('agent.areasMore', { count: hiddenAreas.length })}</button
-					>
-				</div>
-			{/if}
-		</section>
-		<section class="tile ui-card" aria-labelledby="ag-folders">
-			<div class="card-head">
-				<h2 id="ag-folders">{t('agent.folderRules')}</h2>
-				<div class="card-tools">
-					<button
-						type="button"
-						class="btn"
-						onclick={() =>
-							(settings!.policy.folders = [
-								...(settings!.policy.folders ?? []),
-								{ root: roots[0]?.id ?? '', path: '', mode: 'deny' },
-							])}><Icon name="plus" size={15} />{t('agent.folderRule')}</button
-					>
-				</div>
-			</div>
-			{#each settings.policy.folders ?? [] as f, i (i)}
-				<div class="set-row frule">
-					<span class="set-label frule-where">
-						<select class="field" bind:value={f.root} aria-label={t('agent.locationRoot')}>
-							{#each roots as r (r.id)}<option value={r.id}>{r.name}</option>{/each}
-						</select>
-						<input
-							class="field"
-							bind:value={f.path}
-							placeholder={t('agent.locationPath')}
-							aria-label={t('agent.locationPath')}
-						/>
-					</span>
-					<div class="set-control end">
-						<Segments
-							compact
-							label={t('agent.folderRules')}
-							bind:value={f.mode}
-							options={modeOptions}
-						/>
-						<button
-							type="button"
-							class="btn"
-							aria-label={t('common.delete')}
-							title={t('common.delete')}
-							onclick={() => settings!.policy.folders!.splice(i, 1)}
-							><Icon name="trash" size={15} /></button
-						>
-					</div>
-				</div>
-			{:else}
-				<div class="set-row one"><span class="set-hint">{t('agent.folderNone')}</span></div>
-			{/each}
-			<div class="card-foot"><span class="grow">{t('agent.folderHint')}</span></div>
-		</section>
+		<RightsTab
+			bind:settings={() => settings as Settings, (v) => (settings = v)}
+			bind:allAreas
+			bind:open
+			{tools}
+			{roots}
+			{modeOptions}
+		/>
 	{/if}
 
 	{#if tab === 'initiative'}
@@ -1327,93 +573,13 @@
 	{/if}
 
 	{#if tab === 'ha'}
-		<section class="tile ui-card" aria-labelledby="ag-ha">
-			<div class="card-head"><h2 id="ag-ha">{t('agent.sectionHA')}</h2></div>
-			<div class="set-row one"><span class="set-hint">{t('agent.haIntro')}</span></div>
-			<label class="set-row">
-				<span class="set-label"
-					>{t('agent.haNotify')}<span class="set-hint">{t('agent.haNotifyHint')}</span></span
-				>
-				<span class="set-control">
-					<input class="field" bind:value={haNotify} placeholder="notify.mobile_app_iphone" />
-				</span>
-			</label>
-			<label class="set-row">
-				<span class="set-label"
-					>{t('agent.haAssist')}<span class="set-hint">{t('agent.haAssistHint')}</span></span
-				>
-				<span class="set-control end"
-					><input
-						type="checkbox"
-						class="switch"
-						role="switch"
-						bind:checked={settings.homeassistant.assist}
-					/></span
-				>
-			</label>
-			{#if settings.homeassistant.assist}
-				<label class="set-row">
-					<span class="set-label">{t('agent.haAssistAs')}</span>
-					<span class="set-control">
-						<select class="field" bind:value={settings.homeassistant.assistAs}>
-							<option value="">{t('agent.firstOwner')}</option>
-							{#each admins as a (a.name)}<option value={a.name}>{a.name}</option>{/each}
-						</select>
-					</span>
-				</label>
-				<div class="set-row one">
-					<p class="notice-ok">
-						{t('agent.haAssistSetup', {
-							url: typeof location === 'undefined' ? '' : location.origin + '/agent-ollama',
-						})}
-					</p>
-				</div>
-			{/if}
-		</section>
-
-		{#if settings}<AgentHARelease bind:settings />{/if}
-
-		<section class="tile ui-card" aria-labelledby="ag-ha-rules">
-			<div class="card-head">
-				<h2 id="ag-ha-rules">{t('agent.haRules')}</h2>
-				<div class="card-tools">
-					<button
-						type="button"
-						class="btn"
-						onclick={() => haRules.push({ key: 'domain:', mode: 'ask' })}
-						><Icon name="plus" size={15} />{t('agent.haRuleAdd')}</button
-					>
-				</div>
-			</div>
-			{#each haRules as r, i (i)}
-				<div class="set-row frule">
-					<span class="set-label frule-where">
-						<input
-							class="field"
-							bind:value={r.key}
-							placeholder="domain:lock · entity:light.flur · area:kueche"
-							aria-label={t('agent.haRules')}
-						/>
-					</span>
-					<div class="set-control end">
-						<Segments
-							compact
-							label={t('agent.haRules')}
-							bind:value={r.mode}
-							options={modeOptions}
-						/>
-						<button
-							type="button"
-							class="btn"
-							aria-label={t('common.delete')}
-							title={t('common.delete')}
-							onclick={() => haRules.splice(i, 1)}><Icon name="trash" size={15} /></button
-						>
-					</div>
-				</div>
-			{/each}
-			<div class="card-foot"><span class="grow">{t('agent.haRulesHint')}</span></div>
-		</section>
+		<HomeAssistantTab
+			bind:settings={() => settings as Settings, (v) => (settings = v)}
+			bind:haNotify
+			bind:haRules
+			{admins}
+			{modeOptions}
+		/>
 	{/if}
 
 	{#if dirty || saving}
@@ -1474,9 +640,7 @@
 	.set-row.one {
 		grid-template-columns: minmax(0, 1fr);
 	}
-	.set-row.one > p {
-		margin: 0;
-	}
+
 	/* The hint on the card's surface: a little toward the text for 4.5:1. */
 	.set-hint {
 		color: color-mix(in srgb, var(--muted) 85%, var(--text));
@@ -1485,34 +649,7 @@
 		flex: 1 1 12rem;
 		min-width: 0;
 	}
-	.set-control > .field.grow {
-		flex: 1 1 14rem;
-	}
-	.set-control > .field.narrow,
-	.narrow {
-		flex: none;
-		width: 100px;
-	}
-	.set-control .btn {
-		max-width: 100%;
-		white-space: normal;
-		height: auto;
-	}
-	.set-row.sub {
-		padding-left: 40px;
-	}
-	.node-tools {
-		justify-content: flex-end;
-	}
-	.state {
-		margin: 0;
-	}
-	.caps {
-		display: flex;
-		gap: var(--space-1-5);
-		align-items: center;
-		flex-wrap: wrap;
-	}
+
 	.mono {
 		font-family: var(--font-mono, monospace);
 		overflow-wrap: anywhere;
@@ -1565,65 +702,16 @@
 		padding: 0.6rem 0.75rem;
 		resize: vertical;
 	}
-	/* Ablageorte: the fields of a place left, its delete button right. */
-	.loc-fields {
-		flex-direction: row;
-		flex-wrap: wrap;
-		gap: var(--space-2);
-	}
-	.loc-fields .field {
-		flex: 1 1 9rem;
-		min-width: 0;
-	}
-	.set-row.loc {
-		grid-template-columns: minmax(0, 1fr) auto;
-	}
 	/* PLAN 68: an area is a row; the label opens its tools. */
-	.area .expand {
-		flex-direction: row;
-		align-items: center;
-		gap: var(--space-2);
-		border: 0;
-		background: none;
-		color: var(--text);
-		font: inherit;
-		cursor: pointer;
-		text-align: left;
-		padding: 0;
-	}
-	.area .expand > span {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-	}
-	.area .expand strong {
-		font-weight: 600;
-	}
-	.area .expand:focus-visible {
-		outline: 2px solid var(--accent);
-		outline-offset: 2px;
-	}
-	.area .set-control :global(.segments),
-	.frule .set-control :global(.segments) {
+
+	.area .set-control :global(.segments) {
 		flex-wrap: nowrap;
 	}
 	.area {
 		padding-top: 9px;
 		padding-bottom: 9px;
 	}
-	.area.tool {
-		padding-left: 40px;
-		background: color-mix(in srgb, var(--text) 2.5%, transparent);
-	}
-	.frule-where {
-		flex-direction: row;
-		flex-wrap: wrap;
-		gap: var(--space-2);
-	}
-	.frule-where .field {
-		flex: 1 1 9rem;
-		min-width: 0;
-	}
+
 	.hero-label {
 		flex-direction: row;
 		align-items: center;
@@ -1644,58 +732,17 @@
 		gap: var(--space-2-5);
 		cursor: pointer;
 	}
-	.link-btn {
-		border: 0;
-		background: none;
-		padding: 0;
-		color: var(--muted);
-		font: inherit;
-		font-size: var(--text-base);
-		cursor: pointer;
-	}
-	.link-btn:hover {
-		color: var(--text);
-	}
-	.link-btn:focus-visible {
-		outline: 2px solid var(--accent);
-		outline-offset: 2px;
-	}
+
 	/* The phone: long choices on a line of their own. */
 	@media (max-width: 639px) {
-		.preset-tools {
-			width: 100%;
-			margin-left: 0;
-		}
-		.preset-tools :global(.segments) {
-			display: grid;
-			grid-template-columns: repeat(2, minmax(0, 1fr));
-			width: 100%;
-		}
-		.area,
-		.frule {
+		.area {
 			grid-template-columns: minmax(0, 1fr) !important;
 		}
-		.area .set-control,
-		.frule .set-control {
-			justify-content: flex-start;
-		}
-		.area.tool,
-		.set-row.sub {
-			padding-left: var(--space-4);
-		}
-		.set-row.loc {
-			align-items: start;
-		}
-		.node-tools {
+		.area .set-control {
 			justify-content: flex-start;
 		}
 	}
-	.tname {
-		display: flex;
-		gap: var(--space-2);
-		align-items: center;
-		flex-wrap: wrap;
-	}
+
 	.sticky {
 		position: sticky;
 		bottom: 0;
