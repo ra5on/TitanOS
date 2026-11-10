@@ -17,7 +17,7 @@ func (s *Server) registerMaintenance(mux *routeMux) {
 	diagnoseArea{diagnose: s.opts.Diagnose, logKeep: s.opts.LogKeep, users: s.opts.Users}.register(mux, s.requireAdmin)
 	mux.HandleFunc("GET /api/v1/activity", s.requireAdmin(s.handleActivity))
 	mux.HandleFunc("PUT /api/v1/activity", s.requireAdmin(s.handleActivitySettings))
-	mux.HandleFunc("GET /api/v1/about", s.requireUser(s.handleAbout))
+	aboutArea{version: s.opts.Version, shareDir: s.opts.ShareDir}.register(mux, s.requireUser)
 }
 
 // registerUPS registers the routes of the UPS.
@@ -27,12 +27,7 @@ func (s *Server) registerUPS(mux *routeMux) {
 
 // registerUpdate registers the routes of updates.
 func (s *Server) registerUpdate(mux *routeMux) {
-	mux.HandleFunc("GET /api/v1/update", s.requireAdmin(s.handleUpdate))
-	mux.HandleFunc("GET /api/v1/update/progress", s.requireAdmin(s.handleUpdateProgress))
-	mux.HandleFunc("PUT /api/v1/update/settings", s.requireAdmin(s.handleUpdateSettings))
-	mux.HandleFunc("GET /api/v1/update/versions", s.requireAdmin(s.handleUpdateVersions))
-	mux.HandleFunc("POST /api/v1/update/install-version", s.requireAdmin(s.handleUpdateInstallVersion))
-	mux.HandleFunc("POST /api/v1/update/{action}", s.requireAdmin(s.handleUpdateAction))
+	updateArea{update: s.opts.Update}.register(mux, s.requireAdmin)
 }
 
 // registerSystemSettings registers the routes of time zone and host name.

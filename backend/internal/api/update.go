@@ -38,43 +38,58 @@ func writeUpdateError(w http.ResponseWriter, err error) {
 	writeError(w, http.StatusBadGateway, "update_failed", err.Error())
 }
 
-func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.opts.Update.Status())
+// updateArea is the updates of TitanOS; an area with narrow dependencies
+// (PLAN 8a, see fansArea).
+type updateArea struct {
+	update *update.Manager
 }
 
-func (s *Server) handleUpdateProgress(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"progress": s.opts.Update.CurrentProgress()})
+func (a updateArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/update", admin(a.handleUpdate))
+	mux.HandleFunc("GET /api/v1/update/progress", admin(a.handleUpdateProgress))
+	mux.HandleFunc("PUT /api/v1/update/settings", admin(a.handleUpdateSettings))
+	mux.HandleFunc("GET /api/v1/update/versions", admin(a.handleUpdateVersions))
+	mux.HandleFunc("POST /api/v1/update/install-version", admin(a.handleUpdateInstallVersion))
+	mux.HandleFunc("POST /api/v1/update/{action}", admin(a.handleUpdateAction))
 }
 
-func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
+func (a updateArea) handleUpdate(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, a.update.Status())
+}
+
+func (a updateArea) handleUpdateProgress(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"progress": a.update.CurrentProgress()})
+}
+
+func (a updateArea) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	var settings update.Settings
 	if !readJSON(w, r, &settings) {
 		return
 	}
-	if err := s.opts.Update.SetSettings(settings); err != nil {
+	if err := a.update.SetSettings(settings); err != nil {
 		writeUpdateError(w, err)
 		return
 	}
 	slog.Info("update settings changed", "channel", settings.Channel, "auto", settings.AutoInstall, "checkEvery", settings.CheckEvery, "kernel", settings.Kernel, "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleUpdate(w, r)
+	a.handleUpdate(w, r)
 }
 
 // handleUpdateAction looks for a release, installs it into the other slot,
 // goes back to the system in the other slot, or takes a pending switch back.
-func (s *Server) handleUpdateAction(w http.ResponseWriter, r *http.Request) {
+func (a updateArea) handleUpdateAction(w http.ResponseWriter, r *http.Request) {
 	var err error
 	action := r.PathValue("action")
 	switch action {
 	case "check":
-		err = s.opts.Update.Check(r.Context())
+		err = a.update.Check(r.Context())
 	case "install":
-		err = s.opts.Update.Install(r.Context())
+		err = a.update.Install(r.Context())
 	case "rollback":
-		err = s.opts.Update.Rollback()
+		err = a.update.Rollback()
 	case "cancel":
-		err = s.opts.Update.Cancel()
+		err = a.update.Cancel()
 	case "app-rollback":
-		err = s.opts.Update.AppRollback()
+		err = a.update.AppRollback()
 	default:
 		writeError(w, http.StatusNotFound, "not_found", "no such action")
 		return
@@ -86,12 +101,12 @@ func (s *Server) handleUpdateAction(w http.ResponseWriter, r *http.Request) {
 	if action != "check" {
 		slog.Info("update action", "action", action, "by", currentUser(r).Name, "ip", remoteIP(r))
 	}
-	s.handleUpdate(w, r)
+	a.handleUpdate(w, r)
 }
 
 // handleUpdateVersions lists the releases that can be chosen.
-func (s *Server) handleUpdateVersions(w http.ResponseWriter, r *http.Request) {
-	versions, err := s.opts.Update.Versions(r.Context())
+func (a updateArea) handleUpdateVersions(w http.ResponseWriter, r *http.Request) {
+	versions, err := a.update.Versions(r.Context())
 	if err != nil {
 		writeUpdateError(w, err)
 		return
@@ -100,17 +115,17 @@ func (s *Server) handleUpdateVersions(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleUpdateInstallVersion installs a chosen release, newer or older.
-func (s *Server) handleUpdateInstallVersion(w http.ResponseWriter, r *http.Request) {
+func (a updateArea) handleUpdateInstallVersion(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Version string `json:"version"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Update.InstallVersion(r.Context(), req.Version); err != nil {
+	if err := a.update.InstallVersion(r.Context(), req.Version); err != nil {
 		writeUpdateError(w, err)
 		return
 	}
 	slog.Info("update action", "action", "install-version", "version", req.Version, "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleUpdate(w, r)
+	a.handleUpdate(w, r)
 }
