@@ -208,10 +208,16 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 		warning = fmt.Sprintf("The target was full; removed the oldest %d version(s): %s", len(freed), strings.Join(freed, ", "))
 	}
 	var exit *exec.ExitError
+	// unreadable: the version of this run misses files (a disk with read
+	// errors, a folder without rights). The older versions may be the
+	// only copy of them, so none is forgotten for such a run: a row of
+	// incomplete nights would otherwise push the last complete ones out.
+	unreadable := false
 	switch {
 	case errors.As(err, &exit) && exit.ExitCode() == 3:
 		// A backup was made, but some files could not be read.
-		warning = strings.TrimSpace(warning + "\n" + lastLines(out, job.Password))
+		unreadable = true
+		warning = strings.TrimSpace(warning + "\n" + lastLines(out, job.Password) + "\nOlder backups are all kept until every file can be read again.")
 	case err != nil:
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -236,11 +242,11 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 		m.OnIncomplete(job.ID)
 	}
 
-	if job.Keep.Chosen() && len(sel.missing) == 0 {
+	if job.Keep.Chosen() && len(sel.missing) == 0 && !unreadable {
 		if err := m.forgetChosen(ctx, job, env, base); err != nil && ctx.Err() == nil {
 			m.update(job, func(s *State) { s.Warning = strings.TrimSpace(s.Warning + "\n" + err.Error()) })
 		}
-	} else if job.Keep.Daily+job.Keep.Weekly+job.Keep.Monthly > 0 && len(sel.missing) == 0 {
+	} else if job.Keep.Daily+job.Keep.Weekly+job.Keep.Monthly > 0 && len(sel.missing) == 0 && !unreadable {
 		args := append(slices.Clone(base), "forget", "--tag", "titanos", "--group-by", "tags", "--prune")
 		for flag, count := range map[string]int{"--keep-daily": job.Keep.Daily, "--keep-weekly": job.Keep.Weekly, "--keep-monthly": job.Keep.Monthly} {
 			if count > 0 {
