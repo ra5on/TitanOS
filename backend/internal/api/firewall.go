@@ -40,13 +40,29 @@ func writeFirewallError(w http.ResponseWriter, err error) {
 	}
 }
 
-func (s *Server) handleFirewall(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.opts.Firewall.Status(remoteIP(r)))
+// firewallArea is the packet filter; an area with narrow dependencies
+// (PLAN 8a, see fansArea).
+type firewallArea struct {
+	firewall *firewall.Manager
+}
+
+func (a firewallArea) register(mux *routeMux, admin, clusterLocal func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/firewall", admin(a.handleFirewall))
+	mux.HandleFunc("PUT /api/v1/firewall", admin(clusterLocal(a.handleFirewallChange)))
+	mux.HandleFunc("POST /api/v1/firewall/confirm", admin(clusterLocal(a.handleFirewallConfirm)))
+	mux.HandleFunc("POST /api/v1/firewall/revert", admin(a.handleFirewallRevert))
+	mux.HandleFunc("PUT /api/v1/firewall/autoblock", admin(a.handleFirewallAutoBlock))
+	mux.HandleFunc("POST /api/v1/firewall/unblock", admin(a.handleFirewallUnblock))
+	mux.HandleFunc("DELETE /api/v1/firewall/recent", admin(a.handleFirewallClearRecent))
+}
+
+func (a firewallArea) handleFirewall(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, a.firewall.Status(remoteIP(r)))
 }
 
 // handleFirewallChange puts new settings on trial (switching off applies
 // at once). The address of this request must keep reaching the web UI.
-func (s *Server) handleFirewallChange(w http.ResponseWriter, r *http.Request) {
+func (a firewallArea) handleFirewallChange(w http.ResponseWriter, r *http.Request) {
 	var cfg firewall.Config
 	if !readJSON(w, r, &cfg) {
 		return
@@ -55,9 +71,9 @@ func (s *Server) handleFirewallChange(w http.ResponseWriter, r *http.Request) {
 	// rules only, never the switch, and a person confirms in the web UI.
 	var err error
 	if _, agent := r.Context().Value(inProcessIdentity{}).(string); agent {
-		err = s.opts.Firewall.ChangeInProcess(r.Context(), cfg)
+		err = a.firewall.ChangeInProcess(r.Context(), cfg)
 	} else {
-		err = s.opts.Firewall.Change(r.Context(), cfg, remoteIP(r))
+		err = a.firewall.Change(r.Context(), cfg, remoteIP(r))
 	}
 	if err != nil {
 		writeFirewallError(w, err)
@@ -69,59 +85,59 @@ func (s *Server) handleFirewallChange(w http.ResponseWriter, r *http.Request) {
 		noteTarget(r, "off")
 	}
 	slog.Info("firewall settings changed", "enabled", cfg.Enabled, "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleFirewall(w, r)
+	a.handleFirewall(w, r)
 }
 
 // handleFirewallConfirm keeps the change on trial. Only a person in the
 // web UI may do it: API tokens and MCP never reach this route.
-func (s *Server) handleFirewallConfirm(w http.ResponseWriter, r *http.Request) {
-	if err := s.opts.Firewall.Confirm(r.Context()); err != nil {
+func (a firewallArea) handleFirewallConfirm(w http.ResponseWriter, r *http.Request) {
+	if err := a.firewall.Confirm(r.Context()); err != nil {
 		writeFirewallError(w, err)
 		return
 	}
 	slog.Info("firewall change confirmed", "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleFirewall(w, r)
+	a.handleFirewall(w, r)
 }
 
-func (s *Server) handleFirewallRevert(w http.ResponseWriter, r *http.Request) {
-	if err := s.opts.Firewall.Revert(r.Context()); err != nil {
+func (a firewallArea) handleFirewallRevert(w http.ResponseWriter, r *http.Request) {
+	if err := a.firewall.Revert(r.Context()); err != nil {
 		writeFirewallError(w, err)
 		return
 	}
 	slog.Info("firewall change given up", "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleFirewall(w, r)
+	a.handleFirewall(w, r)
 }
 
-func (s *Server) handleFirewallAutoBlock(w http.ResponseWriter, r *http.Request) {
+func (a firewallArea) handleFirewallAutoBlock(w http.ResponseWriter, r *http.Request) {
 	var req firewall.AutoBlock
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Firewall.SetAutoBlock(r.Context(), req); err != nil {
+	if err := a.firewall.SetAutoBlock(r.Context(), req); err != nil {
 		writeFirewallError(w, err)
 		return
 	}
 	slog.Info("automatic blocking changed", "enabled", req.Enabled, "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleFirewall(w, r)
+	a.handleFirewall(w, r)
 }
 
-func (s *Server) handleFirewallUnblock(w http.ResponseWriter, r *http.Request) {
+func (a firewallArea) handleFirewallUnblock(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Address string `json:"address"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Firewall.Unblock(r.Context(), req.Address); err != nil {
+	if err := a.firewall.Unblock(r.Context(), req.Address); err != nil {
 		writeFirewallError(w, err)
 		return
 	}
 	noteTarget(r, req.Address)
 	slog.Info("blocked address released", "address", req.Address, "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleFirewall(w, r)
+	a.handleFirewall(w, r)
 }
 
-func (s *Server) handleFirewallClearRecent(w http.ResponseWriter, r *http.Request) {
-	s.opts.Firewall.ClearRecent()
-	s.handleFirewall(w, r)
+func (a firewallArea) handleFirewallClearRecent(w http.ResponseWriter, r *http.Request) {
+	a.firewall.ClearRecent()
+	a.handleFirewall(w, r)
 }
