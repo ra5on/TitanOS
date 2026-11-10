@@ -96,11 +96,12 @@ type agentSuggestion struct {
 // agent could look into. Only owners and administrators see NAS-wide
 // messages, like on the notification page.
 func (s *Server) handleAgentSuggestions(w http.ResponseWriter, r *http.Request) {
+	env := s.agentEnv()
 	list := []agentSuggestion{}
-	if (currentUser(r).Role == auth.RoleOwner || currentUser(r).Role == auth.RoleAdmin) && s.opts.Notify != nil {
+	if (currentUser(r).Role == auth.RoleOwner || currentUser(r).Role == auth.RoleAdmin) && env.notify != nil {
 		since := time.Now().Add(-48 * time.Hour)
 		seen := map[string]bool{}
-		msgs := s.opts.Notify.Messages()
+		msgs := env.notify.Messages()
 		slices.SortFunc(msgs, func(a, b notify.Message) int { return b.Time.Compare(a.Time) })
 		for _, m := range msgs {
 			if m.Time.Before(since) || m.Severity == "info" && m.Kind != "update_available" {

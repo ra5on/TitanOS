@@ -142,12 +142,13 @@ func (s *Server) guardOpenCount() int {
 
 // guardMounts are the mount points of the mounted volumes.
 func (s *Server) guardMounts() []string {
-	if s.opts.Storage == nil {
+	env := s.agentEnv()
+	if env.storage == nil {
 		return nil
 	}
 	var out []string
-	for _, v := range s.opts.Storage.Mounted() {
-		out = append(out, s.opts.Storage.MountPoint(v))
+	for _, v := range env.storage.Mounted() {
+		out = append(out, env.storage.MountPoint(v))
 	}
 	slices.Sort(out)
 	return out
@@ -249,11 +250,12 @@ func (s *Server) guardWatch(ctx context.Context, mounts []string) {
 
 // guardShareOf maps an absolute path to a watched share and the path in it.
 func (s *Server) guardShareOf(p string, g agentGuard) (shares.Share, string, bool) {
-	if s.opts.Shares == nil {
+	env := s.agentEnv()
+	if env.shares == nil {
 		return shares.Share{}, "", false
 	}
-	for _, sh := range s.opts.Shares.List() {
-		dir := s.opts.Shares.Path(sh)
+	for _, sh := range env.shares.List() {
+		dir := env.shares.Path(sh)
 		rel, err := filepath.Rel(dir, p)
 		if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
 			continue
@@ -340,13 +342,15 @@ func (s *Server) snapshotTime(name string) (time.Time, bool) {
 }
 
 func (s *Server) isBtrfs(volume string) bool {
-	return s.opts.Storage != nil && s.opts.Storage.FilesystemOf(volume) == "btrfs"
+	env := s.agentEnv()
+	return env.storage != nil && env.storage.FilesystemOf(volume) == "btrfs"
 }
 
 // guardPreSnapshot keeps a point to go back to: while a Btrfs volume is
 // written to anyway (its disks are awake), at most one read-only snapshot
 // an hour, kept two days.
 func (s *Server) guardPreSnapshot(volume string, g agentGuard, at time.Time) {
+	env := s.agentEnv()
 	if g.NoPreSnapshots || !s.isBtrfs(volume) {
 		return
 	}
@@ -362,7 +366,7 @@ func (s *Server) guardPreSnapshot(volume string, g agentGuard, at time.Time) {
 		ctx, cancel := context.WithTimeout(s.agentBase(), time.Minute)
 		defer cancel()
 		name := guardPrePrefix + at.UTC().Format("20060102-150405")
-		if err := s.opts.Storage.SnapshotAction(ctx, volume, name, "create", ""); err != nil {
+		if err := env.storage.SnapshotAction(ctx, volume, name, "create", ""); err != nil {
 			slog.Warn("ransomware guard snapshot not taken", "volume", volume, "err", err)
 			return
 		}
@@ -374,7 +378,8 @@ func (s *Server) guardPreSnapshot(volume string, g agentGuard, at time.Time) {
 // not needed by an open alert. It runs right after a new one was taken,
 // when the volume is awake.
 func (s *Server) guardPrune(ctx context.Context, volume string, now time.Time) {
-	list, err := s.opts.Storage.Snapshots(volume)
+	env := s.agentEnv()
+	list, err := env.storage.Snapshots(volume)
 	if err != nil {
 		return
 	}
@@ -401,7 +406,7 @@ func (s *Server) guardPrune(ctx context.Context, volume string, now time.Time) {
 		if !ok || needed[snap.Name] || now.Sub(at) < keep {
 			continue
 		}
-		if err := s.opts.Storage.SnapshotAction(ctx, volume, snap.Name, "delete", snap.Name); err != nil {
+		if err := env.storage.SnapshotAction(ctx, volume, snap.Name, "delete", snap.Name); err != nil {
 			slog.Warn("old ransomware guard snapshot not removed", "volume", volume, "snapshot", snap.Name, "err", err)
 		}
 	}
@@ -410,7 +415,8 @@ func (s *Server) guardPrune(ctx context.Context, volume string, now time.Time) {
 // guardFindSnapshot picks the newest snapshot of the volume from before
 // the attack.
 func (s *Server) guardFindSnapshot(volume string, before time.Time) (string, time.Time) {
-	list, err := s.opts.Storage.Snapshots(volume)
+	env := s.agentEnv()
+	list, err := env.storage.Snapshots(volume)
 	if err != nil {
 		return "", time.Time{}
 	}
@@ -431,17 +437,19 @@ func (s *Server) guardFindSnapshot(volume string, before time.Time) (string, tim
 }
 
 func (s *Server) snapshotPath(volume, name string) string {
-	return filepath.Join(s.opts.Storage.MountPoint(volume), ".titanos", "snapshots", name)
+	env := s.agentEnv()
+	return filepath.Join(env.storage.MountPoint(volume), ".titanos", "snapshots", name)
 }
 
 // guardHold keeps a read-only copy of a snapshot that is not the guard's
 // own, so the retention of agent or scheduled snapshots cannot take it.
 func (s *Server) guardHold(ctx context.Context, volume, snap string, at time.Time) string {
+	env := s.agentEnv()
 	if strings.HasPrefix(snap, guardPrePrefix) {
 		return ""
 	}
 	name := guardHoldPrefix + at.UTC().Format("20060102-150405")
-	dir := filepath.Join(s.opts.Storage.MountPoint(volume), ".titanos", "snapshots")
+	dir := filepath.Join(env.storage.MountPoint(volume), ".titanos", "snapshots")
 	if _, err := s.protect().runner.Run(ctx, "", "btrfs", "subvolume", "snapshot", "-r", filepath.Join(dir, snap), filepath.Join(dir, name)); err != nil {
 		slog.Warn("snapshot for the ransomware alert not held", "volume", volume, "snapshot", snap, "err", err)
 		return ""
@@ -477,6 +485,7 @@ func newAlertID(at time.Time) string {
 
 // guardStart acts on a new incident.
 func (s *Server) guardStart(inc protect.Incident, pid int, g agentGuard) {
+	env := s.agentEnv()
 	ctx, cancel := context.WithTimeout(s.agentBase(), 2*time.Minute)
 	defer cancel()
 	ps := s.protect()
@@ -512,16 +521,17 @@ func (s *Server) guardStart(inc protect.Incident, pid int, g agentGuard) {
 	s.guardSaveLocked(ps)
 	ps.mu.Unlock()
 	slog.Error("ransomware guard alarm", "share", a.Share, "reason", a.Reason, "client", a.Client.Label(), "account", a.Client.User, "files", a.Count, "locked", a.Locked)
-	s.opts.Activity.Record(activity.Entry{At: time.Now().UTC(), User: a.Client.User, Via: activity.ViaSystem, Action: "ransomware guard alarm", Target: a.Share, OK: true})
+	env.activity.Record(activity.Entry{At: time.Now().UTC(), User: a.Client.User, Via: activity.ViaSystem, Action: "ransomware guard alarm", Target: a.Share, OK: true})
 	s.guardTell(a)
 }
 
 // guardTell sends the alarm to owners and administrators.
 func (s *Server) guardTell(a guardAlert) {
-	if a.Locked && s.opts.Notify != nil {
-		s.opts.Notify.Notify(notify.Error, "share_guard_locked", a.Share)
+	env := s.agentEnv()
+	if a.Locked && env.notify != nil {
+		env.notify.Notify(notify.Error, "share_guard_locked", a.Share)
 	}
-	if s.opts.WebPush == nil {
+	if env.webPush == nil {
 		return
 	}
 	who := a.Client.Label()
@@ -533,15 +543,16 @@ func (s *Server) guardTell(a guardAlert) {
 		body += " Die Freigabe ist nur noch lesbar."
 	}
 	for _, name := range s.notifyAudience() {
-		s.opts.WebPush.SendTo(name, webpush.Message{Title: "🛡️ Ransomware-Wächter: " + a.Share, Body: body, URL: "/agent?feature=guard", Tag: "guard-" + a.ID})
+		env.webPush.SendTo(name, webpush.Message{Title: "🛡️ Ransomware-Wächter: " + a.Share, Body: body, URL: "/agent?feature=guard", Tag: "guard-" + a.ID})
 	}
 }
 
 func (s *Server) shareByName(name string) (shares.Share, bool) {
-	if s.opts.Shares == nil {
+	env := s.agentEnv()
+	if env.shares == nil {
 		return shares.Share{}, false
 	}
-	for _, sh := range s.opts.Shares.List() {
+	for _, sh := range env.shares.List() {
 		if sh.Name == name {
 			return sh, true
 		}
@@ -550,14 +561,15 @@ func (s *Server) shareByName(name string) (shares.Share, bool) {
 }
 
 func (s *Server) updateShare(sh shares.Share) error {
+	env := s.agentEnv()
 	var volumes []string
-	if s.opts.Storage != nil {
-		volumes = s.opts.Storage.Names()
+	if env.storage != nil {
+		volumes = env.storage.Names()
 	}
-	if err := s.opts.Shares.Update(sh.Name, sh, volumes, s.sharesArea().userNames()); err != nil {
+	if err := env.shares.Update(sh.Name, sh, volumes, env.userNames()); err != nil {
 		return err
 	}
-	s.opts.Shares.Kick()
+	env.shares.Kick()
 	return nil
 }
 
@@ -601,6 +613,7 @@ func (s *Server) guardLockShare(ctx context.Context, a *guardAlert) error {
 // guardUnlockShare gives back the access the guard took; entries changed
 // in between stay as they are.
 func (s *Server) guardUnlockShare(a *guardAlert) error {
+	env := s.agentEnv()
 	if !a.Locked {
 		return nil
 	}
@@ -629,7 +642,7 @@ func (s *Server) guardUnlockShare(a *guardAlert) error {
 		return err
 	}
 	if sh.GuardLocked != nil {
-		_ = s.opts.Shares.UnlockGuard(sh.Name)
+		_ = env.shares.UnlockGuard(sh.Name)
 	}
 	a.Locked = false
 	return nil
@@ -778,6 +791,7 @@ func (s *Server) guardRestore(id, by string) (guardAlert, error) {
 }
 
 func (s *Server) guardRestoreFiles(a guardAlert) (protect.RestoreResult, error) {
+	env := s.agentEnv()
 	snap := a.Held
 	if snap == "" {
 		snap = a.Snapshot
@@ -789,8 +803,8 @@ func (s *Server) guardRestoreFiles(a guardAlert) (protect.RestoreResult, error) 
 	if !ok {
 		return protect.RestoreResult{}, shares.ErrNotFound
 	}
-	shareDir := s.opts.Shares.Path(sh)
-	rel, err := filepath.Rel(s.opts.Storage.MountPoint(sh.Volume), shareDir)
+	shareDir := env.shares.Path(sh)
+	rel, err := filepath.Rel(env.storage.MountPoint(sh.Volume), shareDir)
 	if err != nil || strings.HasPrefix(rel, "..") {
 		return protect.RestoreResult{}, fmt.Errorf("share outside its volume")
 	}

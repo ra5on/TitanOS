@@ -60,12 +60,13 @@ type agentToolbox struct {
 
 // newAgentToolbox collects the tools of an account.
 func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentToolbox {
-	b := &agentToolbox{s: s, user: user, settings: settings, tools: map[string]*agentTool{}, version: s.opts.Version}
+	env := s.agentEnv()
+	b := &agentToolbox{s: s, user: user, settings: settings, tools: map[string]*agentTool{}, version: env.version}
 	// Requests of the tools come from titand itself.
 	r, _ := http.NewRequest(http.MethodPost, "/agent", nil)
 	r.RemoteAddr = "127.0.0.1:0"
 	b.session = &mcpSession{user: user, token: auth.APIToken{Name: "KI-Agent"}, version: mcpVersions[0], r: r}
-	on := s.servicesArea().servicesOn()
+	on := env.servicesOn()
 	off := func(area string) bool {
 		return area == toolcatalog.AreaDocker && !on["docker"] || area == toolcatalog.AreaVMs && !on["vms"]
 	}
@@ -364,12 +365,13 @@ func (b *agentToolbox) folderMode(args json.RawMessage) string {
 // through the roots of the owner.
 func (b *agentToolbox) rootDir(id string) string {
 	if b.dirs == nil {
+		env := b.s.agentEnv()
 		b.dirs = map[string]string{}
-		for _, r := range b.s.filesArea().fileRoots(b.user) {
+		for _, r := range env.fileRoots(b.user) {
 			b.dirs[r.ID] = r.Dir
 		}
-		if owner, ok := b.s.opts.Users.Get(b.s.firstOwner()); ok {
-			for _, r := range b.s.filesArea().fileRoots(owner) {
+		if owner, ok := env.users.Get(b.s.firstOwner()); ok {
+			for _, r := range env.fileRoots(owner) {
 				if _, seen := b.dirs[r.ID]; !seen {
 					b.dirs[r.ID] = r.Dir
 				}

@@ -53,6 +53,7 @@ var ollamaPaths = []string{"/api/version", "/api/tags", "/api/show", "/api/ps", 
 // nodes (cluster.Manager.Agent). The cluster checked the signature and
 // the certificate of the node; this decides by the release.
 func (s *Server) agentClusterHandler() http.Handler {
+	env := s.agentEnv()
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			target := pr.In.Context().Value(agentRelayKey{}).(*url.URL)
@@ -68,7 +69,7 @@ func (s *Server) agentClusterHandler() http.Handler {
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id, ok := cluster.FromContext(r.Context())
-		if !ok || s.opts.Cluster == nil || !s.opts.Cluster.IsAdmin() {
+		if !ok || env.cluster == nil || !env.cluster.IsAdmin() {
 			writeError(w, http.StatusForbidden, "agent_not_admin", "only the admin node shares its agent")
 			return
 		}
@@ -123,7 +124,8 @@ func (s *Server) agentShareState(id string) string {
 // agentShareRequest records the request of node id and tells the owners
 // and administrators.
 func (s *Server) agentShareRequest(id string) string {
-	name := s.opts.Cluster.NodeName(id)
+	env := s.agentEnv()
+	name := env.cluster.NodeName(id)
 	if name == "" {
 		return shareNoCluster
 	}
@@ -151,7 +153,7 @@ func (s *Server) agentShareRequest(id string) string {
 		return sharePending
 	}
 	settings.Shared = append(slices.Clone(settings.Shared), agentShare{Node: id, Name: name, Asked: time.Now().UTC().Truncate(time.Second)})
-	err := s.opts.Store.WriteJSON(agentSettingsFile, settings)
+	err := env.store.WriteJSON(agentSettingsFile, settings)
 	if err == nil {
 		a.settings = settings
 	}
@@ -159,8 +161,8 @@ func (s *Server) agentShareRequest(id string) string {
 	if err != nil {
 		return sharePending
 	}
-	if s.opts.Notify != nil {
-		s.opts.Notify.Notify(notify.Info, "agent_cluster_request", name)
+	if env.notify != nil {
+		env.notify.Notify(notify.Info, "agent_cluster_request", name)
 	}
 	return sharePending
 }
@@ -168,6 +170,7 @@ func (s *Server) agentShareRequest(id string) string {
 // handleAgentShareSet releases a node or takes the release back; remove
 // forgets the node (it asks anew).
 func (s *Server) handleAgentShareSet(w http.ResponseWriter, r *http.Request) {
+	env := s.agentEnv()
 	var req struct {
 		Allowed bool `json:"allowed"`
 		Remove  bool `json:"remove"`
@@ -196,7 +199,7 @@ func (s *Server) handleAgentShareSet(w http.ResponseWriter, r *http.Request) {
 	} else {
 		settings.Shared[i].Allowed = req.Allowed
 	}
-	if err := s.opts.Store.WriteJSON(agentSettingsFile, settings); err != nil {
+	if err := env.store.WriteJSON(agentSettingsFile, settings); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 		return
 	}
@@ -207,13 +210,14 @@ func (s *Server) handleAgentShareSet(w http.ResponseWriter, r *http.Request) {
 // agentClusterCall asks the admin node's agent end (method, path) and
 // decodes the state it answers.
 func (s *Server) agentClusterCall(ctx context.Context, method, path string) string {
-	if s.opts.Cluster == nil || !s.opts.Cluster.InCluster() || s.opts.Cluster.IsAdmin() {
+	env := s.agentEnv()
+	if env.cluster == nil || !env.cluster.InCluster() || env.cluster.IsAdmin() {
 		return shareNoCluster
 	}
 	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 	req, _ := http.NewRequestWithContext(ctx, method, "http://titanos-cluster-admin"+path, nil)
-	res, err := s.opts.Cluster.AgentTransport().RoundTrip(req)
+	res, err := env.cluster.AgentTransport().RoundTrip(req)
 	if err != nil {
 		return shareUnreachable
 	}
@@ -236,8 +240,9 @@ func (s *Server) handleAgentShareRequest(w http.ResponseWriter, r *http.Request)
 // handleAgentClusterInfo tells the settings page what the cluster offers:
 // whether this node can use the admin node's model, and its state.
 func (s *Server) handleAgentClusterInfo(w http.ResponseWriter, r *http.Request) {
+	env := s.agentEnv()
 	out := map[string]any{"member": false, "admin": false}
-	c := s.opts.Cluster
+	c := env.cluster
 	if c != nil && c.InCluster() {
 		if c.IsAdmin() {
 			out["admin"] = true

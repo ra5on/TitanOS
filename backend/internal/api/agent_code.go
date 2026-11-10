@@ -24,7 +24,8 @@ const codeMax = 32 << 10
 
 // codeTool is code_run, or nil when it is not offered.
 func (b *agentToolbox) codeTool() *agentTool {
-	if !b.settings.Code.Enabled || !b.s.servicesArea().servicesOn()["docker"] || (b.s.opts.Docker == nil && b.s.agentSandbox == nil) {
+	env := b.s.agentEnv()
+	if !b.settings.Code.Enabled || !env.servicesOn()["docker"] || (env.docker == nil && b.s.agentSandbox == nil) {
 		return nil
 	}
 	return &agentTool{name: "code_run", area: agent.AreaCode, kind: agent.KindChange, untrusted: true,
@@ -68,12 +69,13 @@ func parseCode(args json.RawMessage) (codeArgs, error) {
 }
 
 func (b *agentToolbox) codeRun(ctx context.Context, _ *agent.Chat, args json.RawMessage) (agent.Outcome, error) {
+	env := b.s.agentEnv()
 	req, err := parseCode(args)
 	if err != nil {
 		return agent.Outcome{}, err
 	}
 	sh, ok := b.s.agentShare()
-	if !ok || b.s.opts.Shares == nil {
+	if !ok || env.shares == nil {
 		return agent.Outcome{}, errors.New("the share KI-Agent is not there (no data volume?)")
 	}
 	root, err := b.s.agentUserRoot(sh, b.user)
@@ -83,9 +85,9 @@ func (b *agentToolbox) codeRun(ctx context.Context, _ *agent.Chat, args json.Raw
 	root.Close()
 	run := b.s.agentSandbox
 	if run == nil {
-		run = b.s.opts.Docker.Sandbox
+		run = env.docker.Sandbox
 	}
-	res, err := run(ctx, docker.SandboxRequest{Language: req.Language, Code: req.Code, Work: b.s.opts.Shares.UserFolder(sh, b.user.Name),
+	res, err := run(ctx, docker.SandboxRequest{Language: req.Language, Code: req.Code, Work: env.shares.UserFolder(sh, b.user.Name),
 		UID: b.user.UID, GID: b.s.usersGID(), Timeout: time.Duration(b.settings.Code.Timeout) * time.Second, MemoryMB: b.settings.Code.Memory, User: b.user.Name})
 	if err != nil {
 		return agent.Outcome{}, err

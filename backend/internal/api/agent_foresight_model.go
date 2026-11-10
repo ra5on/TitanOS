@@ -118,14 +118,15 @@ func mergeSamples(saved, ram []monitoring.Sample) []monitoring.Sample {
 // monitor's values, /proc and the storage status (lsblk, mdstat, statfs of
 // mounted volumes), none of which wakes a disk.
 func (s *Server) foresightSample(now time.Time, f agentFeatures) {
+	env := s.agentEnv()
 	st := s.foresight()
 	st.mu.Lock()
-	if s.opts.Monitor != nil && f.Advisor.Enabled {
-		info := s.opts.Monitor.Info()
+	if env.monitor != nil && f.Advisor.Enabled {
+		info := env.monitor.Info()
 		st.cpu = ring(st.cpu, advisor.CPUSample{At: now, Percent: info.CPU.UsagePercent}, cpuRing)
 		if now.Sub(st.memAt) >= memEvery {
 			st.memAt = now
-			mem := s.opts.Monitor.Memory()
+			mem := env.monitor.Memory()
 			sample := advisor.MemorySample{At: now, Total: mem.TotalBytes, Available: mem.AvailableBytes}
 			if mem.Pressure != nil {
 				sample.PressureSome = mem.Pressure.SomeAvg10
@@ -134,7 +135,7 @@ func (s *Server) foresightSample(now time.Time, f agentFeatures) {
 			st.mem = ring(st.mem, sample, memRing)
 		}
 	}
-	if s.opts.Storage == nil || now.Sub(st.statAt) < statEvery {
+	if env.storage == nil || now.Sub(st.statAt) < statEvery {
 		st.mu.Unlock()
 		return
 	}
@@ -143,7 +144,7 @@ func (s *Server) foresightSample(now time.Time, f agentFeatures) {
 	// The status is read without the lock: it may take a while.
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	status, err := s.opts.Storage.Status(ctx)
+	status, err := env.storage.Status(ctx)
 	if err != nil {
 		return
 	}
@@ -170,13 +171,14 @@ func (s *Server) foresightSample(now time.Time, f agentFeatures) {
 // monitoring history when it is on, else from the adviser's own hourly
 // samples. The regression is monitoring's.
 func (s *Server) growth(now time.Time) map[string]float64 {
+	env := s.agentEnv()
 	st := s.foresight()
 	st.mu.Lock()
 	samples := slices.Clone(st.vols)
 	st.mu.Unlock()
 	var trends []monitoring.Trend
-	if s.opts.Monitoring != nil {
-		trends = s.opts.Monitoring.CachedTrends(now)
+	if env.monitoring != nil {
+		trends = env.monitoring.CachedTrends(now)
 	}
 	known := map[string]bool{}
 	out := map[string]float64{}
@@ -197,11 +199,12 @@ var errNoStorage = errors.New("storage is not available")
 
 // smartOf is the SMART report of each disk, from the RAM cache.
 func (s *Server) smartOf(ctx context.Context) map[string]storage.SmartReport {
+	env := s.agentEnv()
 	out := map[string]storage.SmartReport{}
-	if s.opts.Storage == nil {
+	if env.storage == nil {
 		return out
 	}
-	reports, err := s.opts.Storage.SmartReports(ctx, false)
+	reports, err := env.storage.SmartReports(ctx, false)
 	if err != nil {
 		return out
 	}
@@ -221,14 +224,15 @@ func deref[T any](p *T) T {
 
 // whatifModel is the picture of the NAS the scenarios are played on.
 func (s *Server) whatifModel(ctx context.Context) (whatif.Model, error) {
+	env := s.agentEnv()
 	st := s.foresight()
 	if st.model != nil {
 		return st.model(ctx)
 	}
-	if s.opts.Storage == nil {
+	if env.storage == nil {
 		return whatif.Model{}, errNoStorage
 	}
-	status, err := s.opts.Storage.Status(ctx)
+	status, err := env.storage.Status(ctx)
 	if err != nil {
 		return whatif.Model{}, err
 	}
@@ -276,14 +280,14 @@ func (s *Server) whatifModel(ctx context.Context) (whatif.Model, error) {
 		}
 		m.Volumes = append(m.Volumes, wv)
 	}
-	if s.opts.Shares != nil {
-		for _, sh := range s.opts.Shares.List() {
+	if env.shares != nil {
+		for _, sh := range env.shares.List() {
 			m.Shares = append(m.Shares, whatif.Share{Name: sh.Name, Volume: sh.Volume})
 		}
 	}
-	if s.opts.Backup != nil {
+	if env.backup != nil {
 		// Cached states only: never opens a repository or a state file.
-		for _, view := range s.opts.Backup.CachedViews() {
+		for _, view := range env.backup.CachedViews() {
 			m.Backups = append(m.Backups, backupOf(view))
 		}
 	}
@@ -307,12 +311,13 @@ func backupOf(view backup.View) whatif.Backup {
 // volumeAsleep reports whether a disk of the volume sleeps; reading or
 // writing there would wake it.
 func (s *Server) volumeAsleep(vol string) bool {
-	if s.opts.Storage == nil || vol == "" {
+	env := s.agentEnv()
+	if env.storage == nil || vol == "" {
 		return false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	st, err := s.opts.Storage.DiskSleepStatus(ctx)
+	st, err := env.storage.DiskSleepStatus(ctx)
 	if err != nil {
 		return true
 	}
@@ -327,10 +332,11 @@ func (s *Server) volumeAsleep(vol string) bool {
 // smartHistoryVolume is where internal/smarthistory keeps the history: the
 // first mounted volume by name (its own rule).
 func (s *Server) smartHistoryVolume() string {
-	if s.opts.Storage == nil {
+	env := s.agentEnv()
+	if env.storage == nil {
 		return ""
 	}
-	for _, v := range slices.Sorted(slices.Values(s.opts.Storage.Mounted())) {
+	for _, v := range slices.Sorted(slices.Values(env.storage.Mounted())) {
 		if naming.ValidVolume(v) {
 			return v
 		}
@@ -354,6 +360,7 @@ func sampleOfValues(day string, v *storage.SmartValues) advisor.Sample {
 // advisorInput collects what the adviser judges. withHistory reads the
 // kept SMART history (callers check that its volume is awake).
 func (s *Server) advisorInput(ctx context.Context, a agentAdvisor, now time.Time, withHistory bool) advisor.Input {
+	env := s.agentEnv()
 	st := s.foresight()
 	if st.input != nil {
 		in := st.input(ctx)
@@ -362,23 +369,23 @@ func (s *Server) advisorInput(ctx context.Context, a agentAdvisor, now time.Time
 	}
 	in := advisor.Input{Now: now, Predict: a.predict(), Bottlenecks: a.bottlenecks()}
 	var status storage.Status
-	if s.opts.Storage != nil {
-		status, _ = s.opts.Storage.Status(ctx)
+	if env.storage != nil {
+		status, _ = env.storage.Status(ctx)
 	}
 	sizes := map[string]storage.Disk{}
 	for _, d := range status.Disks {
 		sizes[d.Name] = d
 	}
-	if s.opts.Storage != nil {
-		reports, _ := s.opts.Storage.SmartReports(ctx, false)
+	if env.storage != nil {
+		reports, _ := env.storage.SmartReports(ctx, false)
 		for _, r := range reports {
 			if r.Role == storage.RoleStick || r.State == storage.SmartUnavailable {
 				continue
 			}
 			d := advisor.Disk{Name: r.Disk, Model: r.Model, Serial: r.Serial, Kind: r.Kind, SizeBytes: sizes[r.Disk].SizeBytes, Volume: r.Volume,
 				Known: r.Values != nil, SmartFailed: r.State == storage.SmartFailed, Current: sampleOfValues(now.Format(time.DateOnly), r.Values)}
-			if withHistory && s.opts.SmartHistory != nil {
-				if h, err := s.opts.SmartHistory.History(r); err == nil {
+			if withHistory && env.smartHistory != nil {
+				if h, err := env.smartHistory.History(r); err == nil {
 					for _, x := range h.Samples {
 						d.History = append(d.History, advisor.Sample{Day: x.Day, PowerOnHours: x.PowerOnHours, TemperatureC: x.TemperatureC, Reallocated: x.Reallocated,
 							Pending: x.Pending, Uncorrectable: x.Uncorrectable, CRC: x.CRCErrors, MediaErrors: x.MediaErrors, PercentageUsed: x.PercentageUsed, AvailableSpare: x.AvailableSpare})
@@ -402,17 +409,17 @@ func (s *Server) advisorInput(ctx context.Context, a agentAdvisor, now time.Time
 		}
 		in.Volumes = append(in.Volumes, vol)
 	}
-	if s.opts.Monitor != nil {
-		for _, t := range s.opts.Monitor.Info().Temperatures {
+	if env.monitor != nil {
+		for _, t := range env.monitor.Info().Temperatures {
 			if t.Celsius == nil || strings.HasPrefix(t.Chip, "drivetemp") || strings.HasPrefix(t.Chip, "nvme") {
 				continue // disks come from SMART
 			}
 			in.Temps = append(in.Temps, advisor.Temperature{Label: strings.TrimSpace(t.Chip + " " + t.Label), Celsius: *t.Celsius})
 		}
 	}
-	if s.opts.Accelerators != nil {
+	if env.accelerators != nil {
 		ollama := s.ollamaVRAM(ctx)
-		for _, acc := range s.opts.Accelerators.Snapshot() {
+		for _, acc := range env.accelerators.Snapshot() {
 			if acc.MemoryTotalBytes == nil {
 				continue
 			}

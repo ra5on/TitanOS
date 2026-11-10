@@ -483,14 +483,15 @@ func memoryConflict(list []agent.Memory, text string) *agent.Memory {
 // from what titand already knows (lsblk and its own standby list; no disk
 // is touched).
 func (s *Server) agentAsleep(ctx context.Context, user auth.User, rootID string) bool {
-	if s.opts.Storage == nil || rootID == "" {
+	env := s.agentEnv()
+	if env.storage == nil || rootID == "" {
 		return false
 	}
 	root, err := s.catalogRoot(user, rootID)
 	if err != nil || root.Volume == "" {
 		return false
 	}
-	st, err := s.opts.Storage.DiskSleepStatus(ctx)
+	st, err := env.storage.DiskSleepStatus(ctx)
 	if err != nil {
 		return false
 	}
@@ -570,8 +571,9 @@ func namedInChat(chat *agent.Chat, root string) bool {
 // agentInitiativeObserve hands a NAS message to every account that watches:
 // a hint in "Vorschläge", or with "Handelt selbst" a chat of its own.
 func (s *Server) agentInitiativeObserve(m notify.Message) {
+	env := s.agentEnv()
 	settings := s.agentSettings()
-	if !settings.Enabled || s.opts.Users == nil {
+	if !settings.Enabled || env.users == nil {
 		return
 	}
 	event := agentEventKind(m.Kind)
@@ -579,7 +581,7 @@ func (s *Server) agentInitiativeObserve(m notify.Message) {
 	if !warning && event == "" {
 		return
 	}
-	for _, u := range s.opts.Users.List() {
+	for _, u := range env.users.List() {
 		if u.Disabled || (u.Role != auth.RoleOwner && u.Role != auth.RoleAdmin) || !s.agentAllowed(u) {
 			continue
 		}
@@ -623,7 +625,8 @@ var agentForecast struct {
 // agentForecastTick takes one sample of each volume a day (statfs from
 // kernel memory, no disk is woken) and warns when one fills up within 60 days.
 func (s *Server) agentForecastTick(now time.Time) {
-	if s.opts.Storage == nil {
+	env := s.agentEnv()
+	if env.storage == nil {
 		return
 	}
 	day := now.Format("2006-01-02")
@@ -637,7 +640,7 @@ func (s *Server) agentForecastTick(now time.Time) {
 	s.loadForecast()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	st, err := s.opts.Storage.Status(ctx)
+	st, err := env.storage.Status(ctx)
 	if err != nil {
 		return
 	}
@@ -658,10 +661,10 @@ func (s *Server) agentForecastTick(now time.Time) {
 	}
 	agentForecast.Unlock()
 	s.saveForecast()
-	if len(warn) == 0 || s.opts.Users == nil {
+	if len(warn) == 0 || env.users == nil {
 		return
 	}
-	for _, u := range s.opts.Users.List() {
+	for _, u := range env.users.List() {
 		if u.Disabled || (u.Role != auth.RoleOwner && u.Role != auth.RoleAdmin) || !s.agentAllowed(u) {
 			continue
 		}

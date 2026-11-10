@@ -41,10 +41,11 @@ var (
 
 // catalogSkills are the skills of the App-Store sources.
 func (s *Server) catalogSkills() []catalog.SkillOf {
-	if s.opts.Catalog == nil {
+	env := s.agentEnv()
+	if env.catalog == nil {
 		return nil
 	}
-	return s.opts.Catalog.Skills()
+	return env.catalog.Skills()
 }
 
 // catalogKey names a skill of a source: "<source>/<id>".
@@ -177,6 +178,7 @@ func (s *Server) handleCatalogInstall(w http.ResponseWriter, r *http.Request) {
 // handleCatalogExport makes a submission package of an own skill, to send
 // to whoever runs the catalog (submitting itself is not part of TitanOS).
 func (s *Server) handleCatalogExport(w http.ResponseWriter, r *http.Request) {
+	env := s.agentEnv()
 	if !s.agentSettings().Features.Catalog.Enabled {
 		writeError(w, http.StatusConflict, "catalog_off", errCatalogOff.Error())
 		return
@@ -217,7 +219,7 @@ func (s *Server) handleCatalogExport(w http.ResponseWriter, r *http.Request) {
 		Tools       []string `json:"tools"`
 	}
 	pkg := map[string]any{
-		"format": catalogSubmitFmt, "version": 1, "titanos": s.opts.Version, "created": time.Now().UTC().Truncate(time.Second),
+		"format": catalogSubmitFmt, "version": 1, "titanos": env.version, "created": time.Now().UTC().Truncate(time.Second),
 		"skill": entry{ID: id, Name: sk.Name, Description: sk.Description, When: sk.When, Steps: sk.Steps, Tools: tools},
 		// The folder and file it goes to in the App-Store repository.
 		"path": "skills/" + id + "/skill.yaml",

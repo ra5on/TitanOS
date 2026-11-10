@@ -71,6 +71,7 @@ func (s *Server) handleAgentFeatures(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAgentFeaturesSet(w http.ResponseWriter, r *http.Request) {
+	env := s.agentEnv()
 	var req agentFeatures
 	if !readJSON(w, r, &req) {
 		return
@@ -89,7 +90,7 @@ func (s *Server) handleAgentFeaturesSet(w http.ResponseWriter, r *http.Request) 
 	}
 	next := a.settings
 	next.Features = req
-	if err := s.opts.Store.WriteJSON(agentSettingsFile, next); err != nil {
+	if err := env.store.WriteJSON(agentSettingsFile, next); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 		return
 	}

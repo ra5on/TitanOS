@@ -71,6 +71,7 @@ func (c agentCatalog) view() agentCatalog { return c }
 var clockForm = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
 
 func (s *Server) checkFamilyNAS(f *agentFeatures, old agentFeatures) error {
+	env := s.agentEnv()
 	b := &f.Buddy
 	if b.Address != "" {
 		address, err := buddy.CheckAddress(b.Address)
@@ -95,7 +96,7 @@ func (s *Server) checkFamilyNAS(f *agentFeatures, old agentFeatures) error {
 		return errors.New("buddy: 1 to 200 sample files")
 	}
 	if b.Volume != "" || b.Enabled {
-		if s.opts.Storage == nil || !slices.Contains(s.opts.Storage.Mounted(), b.Volume) {
+		if env.storage == nil || !slices.Contains(env.storage.Mounted(), b.Volume) {
 			if b.Volume != old.Buddy.Volume || b.Enabled && !old.Buddy.Enabled {
 				return errors.New("buddy: choose a mounted volume for the backups of the partners")
 			}

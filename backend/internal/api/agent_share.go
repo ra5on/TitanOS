@@ -68,8 +68,9 @@ type agentMirror struct {
 
 // agentShareUsers are the accounts that may use the agent.
 func (s *Server) agentShareUsers(settings agentSettings) []auth.User {
+	env := s.agentEnv()
 	var list []auth.User
-	for _, u := range s.opts.Users.List() {
+	for _, u := range env.users.List() {
 		if u.Disabled {
 			continue
 		}
@@ -84,12 +85,13 @@ func (s *Server) agentShareUsers(settings agentSettings) []auth.User {
 // when there is none (agent off, no volume, a share of the same name that
 // is not the agent's).
 func (s *Server) agentShare() (shares.Share, bool) {
+	env := s.agentEnv()
 	settings := s.agentSettings()
-	if !settings.Enabled || s.agentMoving() || s.opts.Shares == nil || s.opts.Storage == nil || s.opts.Users == nil {
+	if !settings.Enabled || s.agentMoving() || env.shares == nil || env.storage == nil || env.users == nil {
 		return shares.Share{}, false
 	}
 	// The same volume as the agent's own data (chosen once, then kept).
-	volume, ok := s.agentVolume(s.opts.Storage.Mounted())
+	volume, ok := s.agentVolume(env.storage.Mounted())
 	if !ok {
 		return shares.Share{}, false
 	}
@@ -98,7 +100,7 @@ func (s *Server) agentShare() (shares.Share, bool) {
 	for _, u := range s.agentShareUsers(settings) {
 		access[u.Name] = shares.ReadWrite
 	}
-	for _, sh := range s.opts.Shares.List() {
+	for _, sh := range env.shares.List() {
 		if !strings.EqualFold(sh.Name, agentShareName) {
 			continue
 		}
@@ -113,24 +115,24 @@ func (s *Server) agentShare() (shares.Share, bool) {
 		}
 		if !mapsEqual(sh.Access, access) {
 			sh.Access = access
-			if err := s.opts.Shares.Update(sh.Name, sh, s.opts.Storage.Names(), s.sharesArea().userNames()); err != nil {
+			if err := env.shares.Update(sh.Name, sh, env.storage.Names(), env.userNames()); err != nil {
 				slog.Warn("access of the share KI-Agent not updated", "err", err)
 			} else {
-				s.opts.Shares.Kick()
+				env.shares.Kick()
 			}
 		}
 		return sh, true
 	}
 	sh := shares.Share{Name: agentShareName, Volume: settings.Volume, SMB: true, Browseable: true, Access: access, PerUser: true,
 		Recycle: shares.Recycle{Enabled: true, Days: 30}}
-	if err := s.opts.Shares.Create(sh, s.opts.Storage.Names(), s.sharesArea().userNames()); err != nil {
+	if err := env.shares.Create(sh, env.storage.Names(), env.userNames()); err != nil {
 		if !errors.Is(err, shares.ErrExists) {
 			slog.Warn("share KI-Agent not made", "err", err)
 		}
 		return shares.Share{}, false
 	}
 	slog.Info("share KI-Agent made", "volume", settings.Volume)
-	s.opts.Shares.Kick()
+	env.shares.Kick()
 	return sh, true
 }
 
@@ -149,11 +151,12 @@ func mapsEqual(a, b map[string]string) bool {
 // agentUserRoot opens the account's folder in the share; nil when it is
 // not there yet (the share manager makes it).
 func (s *Server) agentUserRoot(sh shares.Share, user auth.User) (*os.Root, error) {
-	dir := s.opts.Shares.UserFolder(sh, user.Name)
+	env := s.agentEnv()
+	dir := env.shares.UserFolder(sh, user.Name)
 	st, err := os.Lstat(dir)
 	if errors.Is(err, fs.ErrNotExist) {
 		// The share manager makes it too; whoever is first.
-		if err := os.MkdirAll(s.opts.Shares.Path(sh), 0o770); err != nil {
+		if err := os.MkdirAll(env.shares.Path(sh), 0o770); err != nil {
 			return nil, err
 		}
 		if err := os.Mkdir(dir, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
@@ -318,6 +321,7 @@ func (s *Server) agentSyncShare() {
 }
 
 func (s *Server) agentSyncUser(sh shares.Share, user auth.User) error {
+	env := s.agentEnv()
 	store := s.agentStore()
 	updates, err := store.KnownUpdates(user.Name)
 	if err != nil {
@@ -330,7 +334,7 @@ func (s *Server) agentSyncUser(sh shares.Share, user auth.User) error {
 		return nil // the data is being moved (PLAN 58)
 	}
 	st := m.load(s, user.Name)
-	version := s.opts.Version
+	version := env.version
 	changed := version != st.Version
 	for id, up := range updates {
 		if c, ok := st.Chats[id]; !ok || !c.Updated.Equal(up) {
@@ -523,8 +527,9 @@ func (s *Server) agentWriteKnowledge(root *os.Root, user auth.User, gid int) err
 
 // usersGID is the group "users" of the share files.
 func (s *Server) usersGID() int {
-	if s.opts.Shares != nil {
-		return s.opts.Shares.GID()
+	env := s.agentEnv()
+	if env.shares != nil {
+		return env.shares.GID()
 	}
 	return 100
 }

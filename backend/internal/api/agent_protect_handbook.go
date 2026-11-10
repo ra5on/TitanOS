@@ -33,15 +33,16 @@ type handbookDoc struct {
 
 // handbookFacts collects the facts. Contacts and probes only when chosen.
 func (s *Server) handbookFacts(ctx context.Context, h agentHandbook) protect.Facts {
-	f := protect.Facts{Version: s.opts.Version, Volumes: []protect.VolumeFact{}, Shares: []protect.NamedFact{}}
-	if s.opts.Monitor != nil {
-		f.Host = s.opts.Monitor.Info().Hostname
+	env := s.agentEnv()
+	f := protect.Facts{Version: env.version, Volumes: []protect.VolumeFact{}, Shares: []protect.NamedFact{}}
+	if env.monitor != nil {
+		f.Host = env.monitor.Info().Hostname
 	}
 	if f.Host == "" {
 		f.Host = "TitanOS"
 	}
-	if s.opts.Storage != nil {
-		if st, err := s.opts.Storage.Status(ctx); err == nil {
+	if env.storage != nil {
+		if st, err := env.storage.Status(ctx); err == nil {
 			disks := map[string]protect.DiskFact{}
 			for _, d := range st.Disks {
 				disks[d.Name] = protect.DiskFact{Model: strings.TrimSpace(d.Model), Serial: d.Serial, Size: d.SizeBytes, Kind: d.Kind}
@@ -61,8 +62,8 @@ func (s *Server) handbookFacts(ctx context.Context, h agentHandbook) protect.Fac
 			}
 		}
 	}
-	if s.opts.Shares != nil {
-		for _, sh := range s.opts.Shares.List() {
+	if env.shares != nil {
+		for _, sh := range env.shares.List() {
 			f.Shares = append(f.Shares, protect.NamedFact{Name: sh.Name, Detail: sh.Volume})
 		}
 	}
@@ -78,22 +79,22 @@ func (s *Server) handbookFacts(ctx context.Context, h agentHandbook) protect.Fac
 		}
 	}
 	f.Network = handbookNetwork()
-	if ts := s.opts.Tailscale; ts != nil {
+	if ts := env.tailscale; ts != nil {
 		if st := ts.Status(); st.Active {
 			f.Remote = append(f.Remote, protect.NamedFact{Name: "Tailscale", Detail: strings.TrimSpace(st.Name + " " + strings.Join(st.IPs, ", "))})
 		}
 	}
-	if nb := s.opts.Netbird; nb != nil {
+	if nb := env.netbird; nb != nil {
 		if st := nb.Status(); st.Active {
 			f.Remote = append(f.Remote, protect.NamedFact{Name: "NetBird", Detail: st.FQDN})
 		}
 	}
-	if wg := s.opts.WireGuard; wg != nil {
+	if wg := env.wireGuard; wg != nil {
 		if st := wg.Status(); st.Enabled {
 			f.Remote = append(f.Remote, protect.NamedFact{Name: "WireGuard", Detail: strings.TrimSpace(fmt.Sprintf("%s:%d", st.Endpoint, st.Port))})
 		}
 	}
-	if b := s.opts.Backup; b != nil {
+	if b := env.backup; b != nil {
 		for _, j := range b.List() {
 			f.Backups = append(f.Backups, protect.NamedFact{Name: j.Job.ID, Detail: backupWhere(j.Job.Destination)})
 			if h.Probes && j.State.Probe != nil {

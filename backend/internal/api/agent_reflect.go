@@ -23,8 +23,9 @@ import (
 var agentReflecting sync.Map // user → true while a run goes
 
 func (s *Server) agentReflectTick(now time.Time) {
+	env := s.agentEnv()
 	settings := s.agentSettings()
-	if !settings.Enabled || s.opts.Users == nil {
+	if !settings.Enabled || env.users == nil {
 		return
 	}
 	s.agentRT.mu.Lock()
@@ -33,7 +34,7 @@ func (s *Server) agentReflectTick(now time.Time) {
 	if busy {
 		return
 	}
-	for _, u := range s.opts.Users.List() {
+	for _, u := range env.users.List() {
 		if u.Disabled || !s.agentAllowed(u) {
 			continue
 		}
@@ -69,16 +70,17 @@ func reflectDue(in agentInitiative, now time.Time) bool {
 
 // agentVolumeAsleep: a disk of the volume with the agent's data sleeps.
 func (s *Server) agentVolumeAsleep() bool {
-	if s.opts.Storage == nil {
+	env := s.agentEnv()
+	if env.storage == nil {
 		return false
 	}
-	vol, ok := s.agentVolume(s.opts.Storage.Mounted())
+	vol, ok := s.agentVolume(env.storage.Mounted())
 	if !ok {
 		return true
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	st, err := s.opts.Storage.DiskSleepStatus(ctx)
+	st, err := env.storage.DiskSleepStatus(ctx)
 	if err != nil {
 		return false
 	}

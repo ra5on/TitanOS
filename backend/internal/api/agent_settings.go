@@ -130,12 +130,13 @@ type agentSettingsState struct {
 }
 
 func (s *Server) agentSettings() agentSettings {
+	env := s.agentEnv()
 	a := &s.agentConf
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if !a.loaded {
 		var settings agentSettings
-		err := s.opts.Store.ReadJSON(agentSettingsFile, &settings)
+		err := env.store.ReadJSON(agentSettingsFile, &settings)
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			slog.Warn("agent settings not readable", "err", err)
 			return agentSettings{}
@@ -179,6 +180,7 @@ func (s *Server) handleAgentSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAgentSettingsSet(w http.ResponseWriter, r *http.Request) {
+	env := s.agentEnv()
 	var req agentSettings
 	if !readJSON(w, r, &req) {
 		return
@@ -203,8 +205,8 @@ func (s *Server) handleAgentSettingsSet(w http.ResponseWriter, r *http.Request) 
 		req.Volume = a.settings.Volume
 	}
 	var mounted []string
-	if s.opts.Storage != nil {
-		mounted = s.opts.Storage.Mounted()
+	if env.storage != nil {
+		mounted = env.storage.Mounted()
 	}
 	switch {
 	case a.settings.Volume != "" && req.Volume != a.settings.Volume:
@@ -219,7 +221,7 @@ func (s *Server) handleAgentSettingsSet(w http.ResponseWriter, r *http.Request) 
 	}
 	req.Shared = a.settings.Shared
 	req.Features = a.settings.Features
-	if err := s.opts.Store.WriteJSON(agentSettingsFile, req); err != nil {
+	if err := env.store.WriteJSON(agentSettingsFile, req); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 		return
 	}
@@ -231,6 +233,7 @@ func (s *Server) handleAgentSettingsSet(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) checkAgentSettings(req *agentSettings) error {
+	env := s.agentEnv()
 	if req.Ollama != "" {
 		u, err := agent.ParseOllamaURL(req.Ollama)
 		if err != nil {
@@ -244,7 +247,7 @@ func (s *Server) checkAgentSettings(req *agentSettings) error {
 			return errors.New("the agent needs the address of an Ollama server")
 		}
 	case agentSourceCluster:
-		c := s.opts.Cluster
+		c := env.cluster
 		if c == nil || !c.InCluster() || c.IsAdmin() {
 			return errors.New("only a node of a cluster other than the admin node uses the admin node's agent")
 		}
@@ -295,7 +298,7 @@ func (s *Server) checkAgentSettings(req *agentSettings) error {
 		return errors.New("too many entries")
 	}
 	for _, name := range req.Users {
-		if _, ok := s.opts.Users.Get(name); !ok {
+		if _, ok := env.users.Get(name); !ok {
 			return errors.New("unknown account " + name)
 		}
 	}
@@ -316,7 +319,7 @@ func (s *Server) checkAgentSettings(req *agentSettings) error {
 		if name == "" {
 			continue
 		}
-		if u, ok := s.opts.Users.Get(name); !ok || !u.Role.CanAdminister() {
+		if u, ok := env.users.Get(name); !ok || !u.Role.CanAdminister() {
 			return errors.New("acting account must be an owner or administrator")
 		}
 	}
@@ -370,15 +373,16 @@ func (s *Server) checkAgentSettings(req *agentSettings) error {
 
 // agentOllama returns the client for the configured server.
 func (s *Server) agentOllama() (*agent.Ollama, error) {
+	env := s.agentEnv()
 	settings := s.agentSettings()
 	if settings.Source == agentSourceCluster {
-		if s.opts.Cluster == nil {
+		if env.cluster == nil {
 			return nil, errors.New("no cluster")
 		}
 		if c := s.agentClient.Load(); c != nil && c.Address() == agent.ClusterAddress {
 			return c, nil
 		}
-		c := agent.NewOllamaVia(s.opts.Cluster.AgentTransport())
+		c := agent.NewOllamaVia(env.cluster.AgentTransport())
 		s.agentClient.Store(c)
 		return c, nil
 	}
@@ -526,6 +530,7 @@ func (s *Server) handleAgentTools(w http.ResponseWriter, r *http.Request) {
 // the stick). A chosen volume that is not mounted makes the agent
 // unavailable instead of starting empty somewhere else.
 func (s *Server) agentVolume(mounted []string) (string, bool) {
+	env := s.agentEnv()
 	a := &s.agentConf
 	current := s.agentSettings()
 	if current.Volume != "" {
@@ -541,7 +546,7 @@ func (s *Server) agentVolume(mounted []string) (string, bool) {
 	if a.loaded && a.settings.Volume == "" && !a.volumeNotKept {
 		next := a.settings
 		next.Volume = chosen
-		if err := s.opts.Store.WriteJSON(agentSettingsFile, next); err == nil {
+		if err := env.store.WriteJSON(agentSettingsFile, next); err == nil {
 			a.settings = next
 		} else {
 			a.volumeNotKept = true

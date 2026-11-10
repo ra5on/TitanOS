@@ -98,14 +98,15 @@ type agentVolumeView struct {
 // space and the kind of disks (SSD recommended: the agent writes often and
 // would keep hard disks from sleeping).
 func (s *Server) handleAgentVolumes(w http.ResponseWriter, r *http.Request) {
+	env := s.agentEnv()
 	out := map[string]any{"volumes": []agentVolumeView{}, "current": s.agentSettings().Volume, "move": s.agentMoveView()}
-	if s.opts.Storage == nil {
+	if env.storage == nil {
 		writeJSON(w, http.StatusOK, out)
 		return
 	}
 	kinds := map[string]string{}
 	fsys := map[string]string{}
-	if st, err := s.opts.Storage.Status(r.Context()); err == nil {
+	if st, err := env.storage.Status(r.Context()); err == nil {
 		disk := map[string]string{}
 		for _, d := range st.Disks {
 			disk[d.Name] = d.Kind
@@ -129,10 +130,10 @@ func (s *Server) handleAgentVolumes(w http.ResponseWriter, r *http.Request) {
 	}
 	current := s.agentSettings().Volume
 	list := []agentVolumeView{}
-	for _, name := range slices.Sorted(slices.Values(s.opts.Storage.Mounted())) {
-		v := agentVolumeView{Name: name, Filesystem: fsys[name], Kind: kinds[name], Current: name == current, OldCopy: s.hasOldCopy(name, s.opts.Storage.Mounted())}
+	for _, name := range slices.Sorted(slices.Values(env.storage.Mounted())) {
+		v := agentVolumeView{Name: name, Filesystem: fsys[name], Kind: kinds[name], Current: name == current, OldCopy: s.hasOldCopy(name, env.storage.Mounted())}
 		var st syscall.Statfs_t
-		if syscall.Statfs(s.opts.Storage.MountPoint(name), &st) == nil {
+		if syscall.Statfs(env.storage.MountPoint(name), &st) == nil {
 			v.SizeBytes = st.Blocks * uint64(st.Bsize)
 			v.FreeBytes = st.Bavail * uint64(st.Bsize)
 		}
@@ -148,17 +149,18 @@ func (s *Server) handleAgentMoveStatus(w http.ResponseWriter, r *http.Request) {
 
 // handleAgentMove starts moving the agent's data to another volume.
 func (s *Server) handleAgentMove(w http.ResponseWriter, r *http.Request) {
+	env := s.agentEnv()
 	var req struct {
 		To string `json:"to"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if s.opts.Storage == nil {
+	if env.storage == nil {
 		writeError(w, http.StatusServiceUnavailable, "agent_no_volume", "no data volume")
 		return
 	}
-	mounted := s.opts.Storage.Mounted()
+	mounted := env.storage.Mounted()
 	from, ok := s.agentVolume(mounted)
 	if !ok {
 		writeError(w, http.StatusConflict, "agent_volume_missing", "the agent's volume is not mounted")
@@ -231,7 +233,8 @@ func (e errMoveSpace) Error() string {
 var errMoveNotEmpty = errors.New("the target volume already holds data of the agent")
 
 func (s *Server) mountRoot(volume string) string {
-	return filepath.Dir(s.opts.Storage.MountPoint(volume))
+	env := s.agentEnv()
+	return filepath.Dir(env.storage.MountPoint(volume))
 }
 
 // moveMarker on the target marks a copy that has not been switched to yet;
@@ -246,9 +249,10 @@ const moveOld = ".titanos/agent-old"
 var errShareElsewhere = errors.New("the share KI-Agent lies on another volume than the agent's data")
 
 func (s *Server) agentMovePlan(from, to string, mounted []string) (agentMovePlan, error) {
+	env := s.agentEnv()
 	plan := agentMovePlan{from: from, to: to, mounted: mounted}
-	if s.opts.Shares != nil {
-		for _, sh := range s.opts.Shares.List() {
+	if env.shares != nil {
+		for _, sh := range env.shares.List() {
 			if strings.EqualFold(sh.Name, agentShareName) && sh.Volume != from {
 				return plan, fmt.Errorf("%w (%s)", errShareElsewhere, sh.Volume)
 			}
@@ -287,7 +291,7 @@ func (s *Server) agentMovePlan(from, to string, mounted []string) (agentMovePlan
 		}
 	}
 	var st syscall.Statfs_t
-	if err := syscall.Statfs(s.opts.Storage.MountPoint(to), &st); err == nil {
+	if err := syscall.Statfs(env.storage.MountPoint(to), &st); err == nil {
 		free := st.Bavail * uint64(st.Bsize)
 		need := uint64(plan.total) + uint64(plan.total)/10 + 64<<20
 		if free < need {
@@ -317,6 +321,7 @@ func treeSize(root *os.Root, dir string) (int64, int, error) {
 }
 
 func (s *Server) agentMoveRun(plan agentMovePlan) {
+	env := s.agentEnv()
 	defer s.agentMove.active.Store(false)
 	var dst *os.Root
 	// clean says whether the copy on the target may go: never once the
@@ -384,22 +389,22 @@ func (s *Server) agentMoveRun(plan agentMovePlan) {
 	// The share first, then the agent's own data: a restart in between
 	// leaves the data where agent.json says (the marker stays, the next
 	// move cleans up), and the share is moved back below.
-	if err := s.opts.Shares.Relocate(agentShareName, plan.to, s.opts.Storage.Names()); err != nil && !errors.Is(err, shares.ErrNotFound) {
+	if err := env.shares.Relocate(agentShareName, plan.to, env.storage.Names()); err != nil && !errors.Is(err, shares.ErrNotFound) {
 		fail(err)
 		return
 	}
 	if err := s.agentSetVolume(plan.to); err != nil {
-		if back := s.opts.Shares.Relocate(agentShareName, plan.from, s.opts.Storage.Names()); back != nil && !errors.Is(back, shares.ErrNotFound) {
+		if back := env.shares.Relocate(agentShareName, plan.from, env.storage.Names()); back != nil && !errors.Is(back, shares.ErrNotFound) {
 			slog.Error("share KI-Agent could not be set back", "err", back)
 			clean = false
 		}
-		s.opts.Shares.Kick()
+		env.shares.Kick()
 		fail(err)
 		return
 	}
 	clean = false
 	_ = dst.Remove(moveMarker)
-	s.opts.Shares.Kick()
+	env.shares.Kick()
 	s.agentMoveUpdate(func(j *agentMoveJob) { j.State = moveCleaning })
 	// The old data is kept aside, not deleted (see moveOld).
 	var problems []string
@@ -425,17 +430,18 @@ func (s *Server) agentMoveRun(plan agentMovePlan) {
 
 // handleAgentMoveCleanup removes the old copy of a moved agent on a volume.
 func (s *Server) handleAgentMoveCleanup(w http.ResponseWriter, r *http.Request) {
+	env := s.agentEnv()
 	var req struct {
 		Volume string `json:"volume"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if s.opts.Storage == nil || s.agentMoving() {
+	if env.storage == nil || s.agentMoving() {
 		writeError(w, http.StatusConflict, "agent_moving", errAgentMoving.Error())
 		return
 	}
-	mounted := s.opts.Storage.Mounted()
+	mounted := env.storage.Mounted()
 	root, err := volumedata.OpenVolume(s.mountRoot(req.Volume), req.Volume, mounted)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "agent_volume_unknown", "no such mounted volume")
@@ -463,6 +469,7 @@ func (s *Server) hasOldCopy(volume string, mounted []string) bool {
 
 // agentSetVolume writes the agent's volume to agent.json.
 func (s *Server) agentSetVolume(volume string) error {
+	env := s.agentEnv()
 	s.agentSettings() // loaded
 	a := &s.agentConf
 	a.mu.Lock()
@@ -472,7 +479,7 @@ func (s *Server) agentSetVolume(volume string) error {
 	}
 	next := a.settings
 	next.Volume = volume
-	if err := s.opts.Store.WriteJSON(agentSettingsFile, next); err != nil {
+	if err := env.store.WriteJSON(agentSettingsFile, next); err != nil {
 		return err
 	}
 	a.settings, a.loaded = next, true
