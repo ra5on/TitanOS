@@ -420,7 +420,7 @@ func TestExistingImagesAndWholeDisks(t *testing.T) {
 	if vm.Job != nil || vm.Disks[0].Source != "" || vm.Disks[0].SizeBytes != 8*gib || vm.Disks[1].SizeBytes != 3*gib || vm.Disks[1].Format != "qcow2" || vm.Disks[2].Format != "raw" {
 		t.Fatalf("prepared VM: %+v", vm)
 	}
-	if !slices.Contains(runner.commands, "qemu-img convert -f vmdk -O qcow2 "+image+" "+copied) || !slices.Contains(runner.commands, "qemu-img resize -q -f qcow2 "+copied+" 8589934592") {
+	if !slices.Contains(runner.commands, "qemu-img convert -f vmdk -O qcow2 "+image+" "+copied+".partial") || !slices.Contains(runner.commands, "qemu-img resize -q -f qcow2 "+copied+" 8589934592") {
 		t.Errorf("commands = %v", runner.commands)
 	}
 	if images := m.Images(ctx, mounted); images[1].UsedBy != "alt" {
@@ -566,5 +566,24 @@ func TestBridgeTrialBlocksCreationAndStart(t *testing.T) {
 	}
 	if len(runner.commands) != before {
 		t.Fatal("start performed work before network confirmation")
+	}
+}
+
+// A copy of a disk that titand did not see finish (a crash, a power cut)
+// leaves a VM that says so and does not start on half an image.
+func TestInterruptedDiskCopyIsMarkedAtStart(t *testing.T) {
+	store := config.Open(t.TempDir())
+	if err := store.WriteJSON(configDir+"/alt.json", VM{Name: "alt", Disks: []Disk{{Format: "qcow2", File: "vdisk1.qcow2", Volume: "fast", Source: "/mnt/data/media/alt.vmdk"}}}); err != nil {
+		t.Fatal(err)
+	}
+	m := NewManager(store, os.Getgid())
+	if err := m.Load(); err != nil {
+		t.Fatal(err)
+	}
+	m.mu.Lock()
+	job := m.jobs["alt"]
+	m.mu.Unlock()
+	if job == nil || job.State != "failed" || !strings.Contains(job.Text, "alt.vmdk") {
+		t.Fatalf("job after loading: %+v", job)
 	}
 }
