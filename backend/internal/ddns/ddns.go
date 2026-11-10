@@ -45,6 +45,8 @@ const (
 	maxHosts        = 8
 	// retry is the wait after a failure when the interval is longer.
 	retry = 5 * time.Minute
+	// maxRetry is the longest wait between attempts while they fail.
+	maxRetry = 6 * time.Hour
 )
 
 // LookupServices answer a plain request with the address it came from.
@@ -128,6 +130,8 @@ type Manager struct {
 	lastUpdate time.Time
 	lastError  string
 	failing    bool
+	// failures counts the failed attempts in a row, for the backoff.
+	failures   int
 	running    bool
 	nextCheck  time.Time
 	retryAfter time.Duration
@@ -266,7 +270,7 @@ func (m *Manager) keep(s Settings) error {
 	m.settings = s
 	// Other names or another provider: look up again what they point at.
 	m.published4, m.published6, m.seeded = netip.Addr{}, netip.Addr{}, false
-	m.lastError, m.failing, m.retryAfter, m.limitKnown = "", false, 0, false
+	m.lastError, m.failing, m.failures, m.retryAfter, m.limitKnown = "", false, 0, 0, false
 	m.poke(false)
 	m.pokeBeat()
 	return nil
@@ -377,6 +381,11 @@ func (s Settings) interval() time.Duration {
 	return time.Duration(s.Interval) * time.Minute
 }
 
+// retryWait is the wait before the next attempt after failures in a row.
+func retryWait(failures int) time.Duration {
+	return min(retry<<min(max(failures-1, 0), 10), maxRetry)
+}
+
 // Run looks at the addresses every interval until ctx ends.
 func (m *Manager) Run(ctx context.Context) {
 	go m.runHeartbeat(ctx)
@@ -386,7 +395,13 @@ func (m *Manager) Run(ctx context.Context) {
 		m.mu.Lock()
 		wait := m.settings.interval()
 		if m.lastError != "" {
-			wait = min(wait, retry)
+			// The first retry comes soon; after that the wait doubles
+			// with every failure in a row, up to maxRetry. A provider
+			// that keeps saying no (wrong key, unknown host, blocked
+			// for abuse) is not asked 288 times a day: that is what
+			// gets accounts locked. A change of the settings or
+			// "check now" asks at once.
+			wait = retryWait(m.failures)
 		}
 		// A provider that asks to wait (429, locked key) is obeyed.
 		wait = max(wait, m.retryAfter)
@@ -559,8 +574,10 @@ func (m *Manager) check(ctx context.Context, force bool) {
 	}
 	if err != nil {
 		m.lastError, m.failing = err.Error(), true
+		m.failures++
 	} else {
 		m.lastError, m.failing = "", false
+		m.failures = 0
 	}
 	m.mu.Unlock()
 
