@@ -358,6 +358,9 @@ type Manager struct {
 	appFor func(slot string) *app.Stick
 	// restartDelay lets the last answers out before titand restarts.
 	restartDelay time.Duration
+	// trialMinutes counts the minutes an app stood on trial without running
+	// (restartForTrial); only the Run loop touches it.
+	trialMinutes int
 
 	// work serializes everything that writes to the stick.
 	work sync.Mutex

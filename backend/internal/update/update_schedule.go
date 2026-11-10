@@ -65,6 +65,7 @@ func (m *Manager) Run(ctx context.Context) {
 		m.Confirm()
 		if m.appOnTrial() {
 			m.settleApp()
+			m.restartForTrial()
 		}
 		m.scheduledCheck(ctx)
 		m.mu.Lock()

@@ -104,6 +104,37 @@ func (m *Manager) restart() {
 	}
 }
 
+// trialRestartAfter is how many minutes in a row an app may stand on trial
+// on the stick while this titand is still another one, before titand is
+// restarted again.
+const trialRestartAfter = 10
+
+// restartForTrial ends a trial that never began: the stick names a new app
+// on trial, but the restart into it did not happen (the restart command
+// failed, titand was busy past its patience and something went wrong
+// after). Without it every installation says "busy" and the stick is read
+// every minute until someone restarts the NAS. Called once a minute.
+func (m *Manager) restartForTrial() {
+	if m.Apps == nil {
+		return
+	}
+	m.mu.Lock()
+	cache, phase := m.appCache, m.progress.Phase
+	m.mu.Unlock()
+	waiting := cache != nil && cache.Trial && cache.Current != "" && m.Apps.Running() != cache.Current &&
+		phase != "download" && (m.Working == nil || !m.Working())
+	if !waiting {
+		m.trialMinutes = 0
+		return
+	}
+	if m.trialMinutes++; m.trialMinutes < trialRestartAfter {
+		return
+	}
+	m.trialMinutes = 0
+	slog.Warn("an app update is on trial but titand did not restart into it, restarting", "app", cache.Current)
+	m.restart()
+}
+
 // AppRollback goes back to the app before, or to the titand of the system
 // image, and restarts titand. Going back to an app is on trial too.
 func (m *Manager) AppRollback() error {
