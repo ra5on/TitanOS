@@ -32,10 +32,10 @@ export function groupId(path: string, title: string): string {
 	return `${path.replace(/\/$/, '')}#${title.trim().toLowerCase()}`;
 }
 
-const clean = (text: string | null | undefined, max = 28) => {
-	const one = (text ?? '').replace(/\s+/g, ' ').trim();
-	return one.length > max ? one.slice(0, max - 1).trimEnd() + '…' : one;
-};
+// Text is never cut off (owner 10.11.2026): the summary wraps in its row; a
+// value too long to say in passing is left out instead.
+const clean = (text: string | null | undefined) => (text ?? '').replace(/\s+/g, ' ').trim();
+const LONG = 40;
 
 function labelOf(control: HTMLElement): string {
 	const own =
@@ -52,7 +52,7 @@ function labelOf(control: HTMLElement): string {
  * by its value. Passwords, hidden and search fields never show.
  */
 export function summaryOf(tile: HTMLElement): string {
-	if (tile.dataset.summary) return clean(tile.dataset.summary, 90);
+	if (tile.dataset.summary) return clean(tile.dataset.summary);
 	const parts: string[] = [];
 	const controls = tile.querySelectorAll<HTMLElement>(
 		'input:not([type=hidden]):not([type=password]):not([type=search]):not([type=file]), select',
@@ -72,12 +72,12 @@ export function summaryOf(tile: HTMLElement): string {
 				if (label) parts.push(`${label}: ${t(control.checked ? 'appform.on' : 'appform.off')}`);
 			} else if (control.value.trim()) {
 				const label = labelOf(control);
-				const value = clean(control.value, 24);
-				parts.push(label ? `${label}: ${value}` : value);
+				const value = clean(control.value);
+				if (value.length <= LONG) parts.push(label ? `${label}: ${value}` : value);
 			}
 		}
 	}
-	return clean(parts.filter(Boolean).join(' · '), 90);
+	return parts.filter((p) => p && p.length <= 2 * LONG).join(' · ');
 }
 
 function wire(title: HTMLElement, path: () => string) {
@@ -95,9 +95,28 @@ function wire(title: HTMLElement, path: () => string) {
 	summary.className = 'e3-summary';
 	// The title's own text, without the summary and the toggle.
 	const name = (title.textContent ?? '').trim();
-	const id = () => groupId(path(), name);
+	// PLAN 76 (F-12-13): a group with an id of its own keeps its state when the
+	// language changes; the title's text is the older identity and still read.
+	const byTitle = () => groupId(path(), name);
+	const own = tile.id || title.id || tile.dataset.group || '';
+	const id = () => (own ? `${path().replace(/\/$/, '')}#id:${own}` : byTitle());
+	const isClosed = () => {
+		const all = closedSet();
+		return all.has(id()) || all.has(byTitle());
+	};
+	// The settings of a closed group may arrive or change later (loaded data, a
+	// save elsewhere): its summary follows instead of staying at the first guess.
+	const refresh = () => {
+		if (!tile.isConnected) return clearInterval(timer);
+		if (!tile.hasAttribute('data-closed') || document.hidden) return;
+		const text = summaryOf(tile);
+		if (summary.textContent !== text) summary.textContent = text;
+	};
+	let timer: ReturnType<typeof setInterval> | undefined;
 	const set = (closed: boolean) => {
 		if (closed) summary.textContent = summaryOf(tile);
+		clearInterval(timer);
+		if (closed) timer = setInterval(refresh, 1000);
 		tile.toggleAttribute('data-closed', closed);
 		button.setAttribute('aria-expanded', String(!closed));
 		button.setAttribute('aria-label', t(closed ? 'settings.groupOpen' : 'settings.groupClose'));
@@ -121,11 +140,12 @@ function wire(title: HTMLElement, path: () => string) {
 		characterData: true,
 		subtree: true,
 	});
-	set(closedSet().has(id()));
+	set(isClosed());
 	const toggle = () => {
 		const closed = !tile.hasAttribute('data-closed');
 		set(closed);
 		remember(id(), closed);
+		if (own) remember(byTitle(), false);
 	};
 	button.addEventListener('click', (event) => {
 		event.stopPropagation();

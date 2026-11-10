@@ -1181,16 +1181,17 @@ input.switch:disabled {
 	cursor: pointer;
 	user-select: none;
 }
+/* Never cut off (owner 10.11.2026): a long summary wraps beside the title. */
 .e3-summary {
 	display: none;
-	min-width: 0;
+	flex: 1 1 0;
+	min-width: 8ch;
 	margin-left: auto;
-	overflow: hidden;
 	color: var(--muted);
 	font-size: var(--text-sm);
 	font-weight: 400;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	text-align: right;
+	overflow-wrap: anywhere;
 }
 .e3-group[data-closed] .e3-summary {
 	display: block;

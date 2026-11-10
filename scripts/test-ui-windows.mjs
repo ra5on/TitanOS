@@ -516,6 +516,34 @@ if (!allOnly && (!onlyPaths || onlyPaths.includes("/tools/monitoring"))) {
   await made.ctx.close();
 }
 
+// PLAN 76 (F-12-8, F-12-11): the browser dragged narrower than 900 px keeps
+// the desktop while a window is open; the window stays within reach. The
+// phone's frame comes once the last window is closed.
+if (!allOnly && !onlyPaths) {
+  const made = await openWindow("monitor", "/tools/monitoring", 1100);
+  const { page } = made;
+  await page.setViewportSize({ width: 700, height: 900 });
+  await page.waitForTimeout(500);
+  check(
+    (await page.locator("section.win iframe").count()) === 1,
+    "narrow browser: the open window is still there",
+  );
+  const box = await page.locator("section.win button.ctl.close").boundingBox();
+  check(
+    box && box.x >= 0 && box.x + box.width <= 700,
+    `narrow browser: the window's close button is on the screen (${JSON.stringify(box)})`,
+  );
+  await page.locator("section.win button.ctl.close").click();
+  await page.waitForFunction(
+    () =>
+      !document.querySelector("section.win") &&
+      !document.querySelector(".desk-area"),
+    null,
+    { timeout: 8000 },
+  );
+  await made.ctx.close();
+}
+
 // PLAN 71 ("Variante C"): Systemsteuerung has one menu – the side bar with
 // its search – and the start page is the overview with cards. The side bar
 // covers the desktop completely.

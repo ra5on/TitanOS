@@ -2,9 +2,21 @@
 	import { apiPath } from '#lib/cluster-node.ts';
 	import { api, type FileRoot } from '#lib/api.ts';
 	import Dialog from '#lib/components/Dialog.svelte';
-	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, t } from '#lib/i18n/index.svelte.ts';
+	import { saveFile } from '#lib/save-file.ts';
 	import { formatBytes } from '#lib/format.ts';
-	let { root, paths, onclose }: { root: FileRoot; paths: string[]; onclose: () => void } = $props();
+	let {
+		root,
+		paths,
+		onclose,
+		onfailed,
+	}: {
+		root: FileRoot;
+		paths: string[];
+		onclose: () => void;
+		/** The NAS answered with an error instead of the archive (text for the user). */
+		onfailed?: (text: string) => void;
+	} = $props();
 	let name = $state(''),
 		data = $state<{ files: number; bytes: number } | null>(null),
 		error = $state('');
@@ -28,7 +40,7 @@
 		if (!data || !valid) return;
 		const q = new URLSearchParams({ root: root.id, name });
 		for (const p of paths) q.append('path', p);
-		location.href = apiPath('/files/zip?' + q);
+		saveFile(apiPath('/files/zip?' + q), (code) => onfailed?.(errorText(code)));
 		onclose();
 	}
 </script>

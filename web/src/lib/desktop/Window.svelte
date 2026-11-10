@@ -21,7 +21,7 @@
 	import { api } from '../api.ts';
 	import { registerWindowCommands } from '../menu-commands.svelte.ts';
 	import type RemoteViewType from './RemoteView.svelte';
-	import { menuKeyReset, screenOwnsKeys } from './menubar/keys.ts';
+	import { deskKey, menuKeyReset, screenOwnsKeys } from './menubar/keys.ts';
 	import { clearFrameCommands } from './menubar/state.svelte.ts';
 	import { sources } from './sources.svelte.ts';
 	import DirectView from './DirectView.svelte';
@@ -169,9 +169,7 @@
 				menuKeyReset();
 				// Alt + K (show the desktop) stays with a screen or terminal (readline, guests).
 				if (e.altKey && e.code === 'KeyK' && screenOwnsKeys(e.target)) return;
-				const desk =
-					(e.altKey && !e.ctrlKey && !e.metaKey && /^(q|w|m|k|arrow)/i.test(e.key)) ||
-					((e.ctrlKey || e.metaKey) && e.code === 'Space');
+				const desk = !!deskKey(e) || ((e.ctrlKey || e.metaKey) && e.code === 'Space');
 				if (!desk) return;
 				e.preventDefault();
 				e.stopImmediatePropagation();

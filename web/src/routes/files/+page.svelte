@@ -21,9 +21,10 @@
 	import { beginFileDrag, hasFileDrag, takeFileDrag, type FileDrag } from '#lib/file-drag.ts';
 	import { fileList } from '#lib/file-list.ts';
 	import { preferredFileRoot } from '#lib/file-root.ts';
-	import { apiErrorText, i18n, t } from '#lib/i18n/index.svelte.ts';
+	import { apiErrorText, errorText, i18n, t } from '#lib/i18n/index.svelte.ts';
 	import { session } from '#lib/session.svelte.ts';
 	import { isEditableText } from '#lib/text-files.ts';
+	import { saveFile } from '#lib/save-file.ts';
 	import { enqueue, uploads } from '#lib/uploads.svelte.ts';
 	import ActionBar from './ActionBar.svelte';
 	import CommandBar from './CommandBar.svelte';
@@ -784,8 +785,11 @@
 			return;
 		}
 		// The browser saves the answer; nothing passes through this page's memory.
-		location.href = apiPath(
-			'/files/download?' + new URLSearchParams({ root: rootId, path: join(dir, single.name) }),
+		saveFile(
+			apiPath(
+				'/files/download?' + new URLSearchParams({ root: rootId, path: join(dir, single.name) }),
+			),
+			(code) => (error = errorText(code)),
 		);
 	}
 	function show(kind: 'mkdir' | 'rename' | 'delete') {
@@ -1678,6 +1682,7 @@
 		{root}
 		paths={downloadPaths}
 		onclose={() => (downloadPaths = null)}
+		onfailed={(text) => (error = text)}
 	/>{/if}
 {#if duplicates && root}<DuplicatesDialog
 		root={safeRoots.find((r) => r.id === rootId) ?? root}
