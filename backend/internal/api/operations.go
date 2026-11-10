@@ -29,14 +29,8 @@ func (s *Server) operationsRoutes(mux *routeMux) {
 	heavy := func(route string, fn http.HandlerFunc) { register(route, fn, s.requireHeavyAdmin) }
 	heavyApp := func(route string, fn http.HandlerFunc) { register(route, fn, s.requireHeavyAppAdmin) }
 	admin("GET /api/v1/operations", s.handleOperations)
-	admin("GET /api/v1/maintenance", s.handleMaintenance)
-	admin("PUT /api/v1/maintenance", s.handleMaintenanceSet)
-	admin("POST /api/v1/maintenance/{id}/{action}", s.handleMaintenanceAction)
-	admin("GET /api/v1/monitoring", s.handleMonitoring)
-	admin("PUT /api/v1/monitoring", s.handleMonitoringSet)
-	admin("GET /api/v1/monitoring/history", s.handleMonitoringHistory)
-	admin("GET /api/v1/monitoring/export", s.handleMonitoringExport)
-	admin("GET /api/v1/monitoring/trends", s.handleCapacityTrends)
+	maintenanceArea{maintenance: s.opts.Maintenance, storage: s.opts.Storage, backup: s.opts.Backup}.register(admin)
+	monitoringArea{monitoring: s.opts.Monitoring}.register(admin)
 	admin("GET /api/v1/storage/import", s.handleImportCandidates)
 	heavy("POST /api/v1/storage/import/preview", s.handleImportPreview)
 	heavy("POST /api/v1/storage/import", s.handleImport)
@@ -71,15 +65,33 @@ func featureError(w http.ResponseWriter, err error) {
 func featureUnavailable(w http.ResponseWriter) {
 	writeError(w, http.StatusServiceUnavailable, "unavailable", "service unavailable")
 }
-func (s *Server) handleMaintenance(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Maintenance == nil {
+
+// maintenanceArea is the planned maintenance; an area with narrow
+// dependencies (PLAN 8a, see fansArea). storage and backup name the
+// volumes, disks and backup jobs a maintenance job may point at (backup
+// nil: none). admin registers a route for administrators with the log of
+// operationsRoutes.
+type maintenanceArea struct {
+	maintenance *maintenance.Manager
+	storage     *storage.Manager
+	backup      *backup.Manager
+}
+
+func (a maintenanceArea) register(admin func(route string, fn http.HandlerFunc)) {
+	admin("GET /api/v1/maintenance", a.handleMaintenance)
+	admin("PUT /api/v1/maintenance", a.handleMaintenanceSet)
+	admin("POST /api/v1/maintenance/{id}/{action}", a.handleMaintenanceAction)
+}
+
+func (a maintenanceArea) handleMaintenance(w http.ResponseWriter, r *http.Request) {
+	if a.maintenance == nil {
 		featureUnavailable(w)
 		return
 	}
-	writeJSON(w, 200, s.opts.Maintenance.Status())
+	writeJSON(w, 200, a.maintenance.Status())
 }
-func (s *Server) handleMaintenanceSet(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Maintenance == nil {
+func (a maintenanceArea) handleMaintenanceSet(w http.ResponseWriter, r *http.Request) {
+	if a.maintenance == nil {
 		featureUnavailable(w)
 		return
 	}
@@ -93,7 +105,7 @@ func (s *Server) handleMaintenanceSet(w http.ResponseWriter, r *http.Request) {
 		}
 		switch j.Kind {
 		case "raid-check", "snapshot":
-			status, err := s.opts.Storage.Status(r.Context())
+			status, err := a.storage.Status(r.Context())
 			if err != nil {
 				featureError(w, err)
 				return
@@ -109,7 +121,7 @@ func (s *Server) handleMaintenanceSet(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case "smart-short", "smart-long":
-			status, err := s.opts.Storage.Status(r.Context())
+			status, err := a.storage.Status(r.Context())
 			if err != nil {
 				featureError(w, err)
 				return
@@ -126,8 +138,8 @@ func (s *Server) handleMaintenanceSet(w http.ResponseWriter, r *http.Request) {
 			}
 		case "backup-check", "restore-probe":
 			found := false
-			if s.opts.Backup != nil {
-				for _, v := range s.opts.Backup.CachedViews() {
+			if a.backup != nil {
+				for _, v := range a.backup.CachedViews() {
 					if v.Job.ID == j.Target && !backup.PlainCopy(v.Job.Destination.Type) {
 						found = true
 					}
@@ -139,14 +151,14 @@ func (s *Server) handleMaintenanceSet(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	if err := s.opts.Maintenance.Set(req); err != nil {
+	if err := a.maintenance.Set(req); err != nil {
 		featureError(w, err)
 		return
 	}
-	s.handleMaintenance(w, r)
+	a.handleMaintenance(w, r)
 }
-func (s *Server) handleMaintenanceAction(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Maintenance == nil {
+func (a maintenanceArea) handleMaintenanceAction(w http.ResponseWriter, r *http.Request) {
+	if a.maintenance == nil {
 		featureUnavailable(w)
 		return
 	}
@@ -154,9 +166,9 @@ func (s *Server) handleMaintenanceAction(w http.ResponseWriter, r *http.Request)
 	var err error
 	switch r.PathValue("action") {
 	case "run":
-		err = s.opts.Maintenance.Start(id)
+		err = a.maintenance.Start(id)
 	case "stop":
-		err = s.opts.Maintenance.Stop(id)
+		err = a.maintenance.Stop(id)
 	case "review":
 		var req struct {
 			Confirm string `json:"confirm"`
@@ -164,7 +176,7 @@ func (s *Server) handleMaintenanceAction(w http.ResponseWriter, r *http.Request)
 		if !readJSON(w, r, &req) {
 			return
 		}
-		err = s.opts.Maintenance.Acknowledge(id, req.Confirm)
+		err = a.maintenance.Acknowledge(id, req.Confirm)
 	default:
 		err = errors.New("unknown maintenance action")
 	}
@@ -172,17 +184,33 @@ func (s *Server) handleMaintenanceAction(w http.ResponseWriter, r *http.Request)
 		featureError(w, err)
 		return
 	}
-	s.handleMaintenance(w, r)
+	a.handleMaintenance(w, r)
 }
-func (s *Server) handleMonitoring(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Monitoring == nil {
+
+// monitoringArea is the monitoring history; an area with narrow
+// dependencies (PLAN 8a, see fansArea). admin registers a route for
+// administrators with the log of operationsRoutes.
+type monitoringArea struct {
+	monitoring *monitoring.Manager
+}
+
+func (a monitoringArea) register(admin func(route string, fn http.HandlerFunc)) {
+	admin("GET /api/v1/monitoring", a.handleMonitoring)
+	admin("PUT /api/v1/monitoring", a.handleMonitoringSet)
+	admin("GET /api/v1/monitoring/history", a.handleMonitoringHistory)
+	admin("GET /api/v1/monitoring/export", a.handleMonitoringExport)
+	admin("GET /api/v1/monitoring/trends", a.handleCapacityTrends)
+}
+
+func (a monitoringArea) handleMonitoring(w http.ResponseWriter, r *http.Request) {
+	if a.monitoring == nil {
 		featureUnavailable(w)
 		return
 	}
-	writeJSON(w, 200, s.opts.Monitoring.Status())
+	writeJSON(w, 200, a.monitoring.Status())
 }
-func (s *Server) handleMonitoringSet(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Monitoring == nil {
+func (a monitoringArea) handleMonitoringSet(w http.ResponseWriter, r *http.Request) {
+	if a.monitoring == nil {
 		featureUnavailable(w)
 		return
 	}
@@ -190,14 +218,14 @@ func (s *Server) handleMonitoringSet(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Monitoring.Set(req); err != nil {
+	if err := a.monitoring.Set(req); err != nil {
 		featureError(w, err)
 		return
 	}
-	s.handleMonitoring(w, r)
+	a.handleMonitoring(w, r)
 }
-func (s *Server) handleMonitoringHistory(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Monitoring == nil {
+func (a monitoringArea) handleMonitoringHistory(w http.ResponseWriter, r *http.Request) {
+	if a.monitoring == nil {
 		featureUnavailable(w)
 		return
 	}
@@ -206,7 +234,7 @@ func (s *Server) handleMonitoringHistory(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "bad_request", "hours must be a number")
 		return
 	}
-	out, err := s.opts.Monitoring.History(r.Context(), hours)
+	out, err := a.monitoring.History(r.Context(), hours)
 	if err != nil {
 		featureError(w, err)
 		return
