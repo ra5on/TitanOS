@@ -10,20 +10,31 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/system"
 )
 
-func (s *Server) handleEnergy(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Energy == nil {
-		writeError(w, http.StatusServiceUnavailable, "config_unavailable", "energy settings unavailable")
-		return
-	}
-	writeJSON(w, http.StatusOK, s.opts.Energy.Status())
+// energyArea is the energy profiles; an area with narrow dependencies
+// (PLAN 8a, see fansArea).
+type energyArea struct {
+	energy *system.EnergyManager
 }
 
-func (s *Server) handleEnergyChange(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Energy == nil {
+func (a energyArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/system/energy", admin(a.handleEnergy))
+	mux.HandleFunc("PUT /api/v1/system/energy", admin(a.handleEnergyChange))
+}
+
+func (a energyArea) handleEnergy(w http.ResponseWriter, r *http.Request) {
+	if a.energy == nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", "energy settings unavailable")
 		return
 	}
-	if s.opts.Energy.Disabled {
+	writeJSON(w, http.StatusOK, a.energy.Status())
+}
+
+func (a energyArea) handleEnergyChange(w http.ResponseWriter, r *http.Request) {
+	if a.energy == nil {
+		writeError(w, http.StatusServiceUnavailable, "config_unavailable", "energy settings unavailable")
+		return
+	}
+	if a.energy.Disabled {
 		writeError(w, http.StatusConflict, "read_only", "energy profiles are read-only in development mode")
 		return
 	}
@@ -31,7 +42,7 @@ func (s *Server) handleEnergyChange(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &settings) {
 		return
 	}
-	if err := s.opts.Energy.Set(settings); err != nil {
+	if err := a.energy.Set(settings); err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, system.ErrEnergyChoice) {
 			status = http.StatusBadRequest
@@ -40,19 +51,30 @@ func (s *Server) handleEnergyChange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("energy profiles changed", "by", currentUser(r).Name)
-	s.handleEnergy(w, r)
+	a.handleEnergy(w, r)
 }
 
-func (s *Server) handlePowerSchedule(w http.ResponseWriter, r *http.Request) {
-	if s.opts.PowerSchedule == nil {
+// powerScheduleArea is the power schedule; an area with narrow dependencies
+// (PLAN 8a, see fansArea). schedule is nil where there is none.
+type powerScheduleArea struct {
+	schedule *system.PowerScheduler
+}
+
+func (a powerScheduleArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/system/power-schedule", admin(a.handlePowerSchedule))
+	mux.HandleFunc("PUT /api/v1/system/power-schedule", admin(a.handlePowerScheduleChange))
+}
+
+func (a powerScheduleArea) handlePowerSchedule(w http.ResponseWriter, r *http.Request) {
+	if a.schedule == nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", "power schedule unavailable")
 		return
 	}
-	writeJSON(w, http.StatusOK, s.opts.PowerSchedule.Status())
+	writeJSON(w, http.StatusOK, a.schedule.Status())
 }
 
-func (s *Server) handlePowerScheduleChange(w http.ResponseWriter, r *http.Request) {
-	if s.opts.PowerSchedule == nil {
+func (a powerScheduleArea) handlePowerScheduleChange(w http.ResponseWriter, r *http.Request) {
+	if a.schedule == nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", "power schedule unavailable")
 		return
 	}
@@ -60,7 +82,7 @@ func (s *Server) handlePowerScheduleChange(w http.ResponseWriter, r *http.Reques
 	if !readJSON(w, r, &settings) {
 		return
 	}
-	if err := s.opts.PowerSchedule.Set(settings); err != nil {
+	if err := a.schedule.Set(settings); err != nil {
 		if errors.Is(err, system.ErrPowerSchedule) {
 			writeError(w, http.StatusBadRequest, "invalid_power_schedule", err.Error())
 			return
@@ -69,7 +91,7 @@ func (s *Server) handlePowerScheduleChange(w http.ResponseWriter, r *http.Reques
 		slog.Warn("power schedule applied with problems", "err", err)
 	}
 	slog.Info("power schedule changed", "by", currentUser(r).Name)
-	s.handlePowerSchedule(w, r)
+	a.handlePowerSchedule(w, r)
 }
 
 // PowerBusy says whether work is running that a scheduled shutdown would

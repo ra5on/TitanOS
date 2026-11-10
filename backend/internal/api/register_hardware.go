@@ -3,14 +3,10 @@ package api
 // registerHardware registers the routes of hardware, memory, power button, energy and power schedule.
 func (s *Server) registerHardware(mux *routeMux) {
 	mux.HandleFunc("GET /api/v1/hardware", s.requireAdmin(s.handleHardware))
-	mux.HandleFunc("GET /api/v1/system/memory", s.requireAdmin(s.handleMemoryPolicy))
-	mux.HandleFunc("PUT /api/v1/system/memory", s.requireAdmin(s.handleMemoryPolicyChange))
-	mux.HandleFunc("GET /api/v1/system/power-button", s.requireAdmin(s.handlePowerButton))
-	mux.HandleFunc("PUT /api/v1/system/power-button", s.requireAdmin(s.handlePowerButtonChange))
-	mux.HandleFunc("GET /api/v1/system/energy", s.requireAdmin(s.handleEnergy))
-	mux.HandleFunc("PUT /api/v1/system/energy", s.requireAdmin(s.handleEnergyChange))
-	mux.HandleFunc("GET /api/v1/system/power-schedule", s.requireAdmin(s.handlePowerSchedule))
-	mux.HandleFunc("PUT /api/v1/system/power-schedule", s.requireAdmin(s.handlePowerScheduleChange))
+	memoryArea{memory: s.opts.MemoryPolicy}.register(mux, s.requireAdmin)
+	powerButtonArea{button: s.opts.PowerButton}.register(mux, s.requireAdmin)
+	energyArea{energy: s.opts.Energy}.register(mux, s.requireAdmin)
+	powerScheduleArea{schedule: s.opts.PowerSchedule}.register(mux, s.requireAdmin)
 	mux.HandleFunc("GET /api/v1/hardware/container-devices", s.requireAdmin(s.handleContainerDevices))
 	nvidiaArea{nvidia: s.opts.Nvidia}.register(mux, s.requireAdmin)
 	intelGucArea{guc: s.opts.IntelGuc}.register(mux, s.requireAdmin)
