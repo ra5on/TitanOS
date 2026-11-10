@@ -163,21 +163,21 @@ func (a ipv64Area) assignments(ctx context.Context, c *dnsprovider.IPv64) (map[s
 	}
 	hosts := a.ddnsHosts()
 	byName := map[string]*assignment{}
-	add := func(name string, a assignment) {
+	add := func(name string, item assignment) {
 		zone, prefix, ok := zoneOf(domains, name)
 		if !ok {
 			return
 		}
-		a.Domain, a.Zone, a.Prefix = name, zone.Name, prefix
-		if a.Target != "public" {
+		item.Domain, item.Zone, item.Prefix = name, zone.Name, prefix
+		if item.Target != "public" {
 			switch {
 			case slices.Contains(hosts, name):
-				a.DNS = "ddns"
+				item.DNS = "ddns"
 			case wildcardCovered(zone, name, hosts):
-				a.DNS = "wildcard"
+				item.DNS = "wildcard"
 			}
 		}
-		byName[name] = &a
+		byName[name] = &item
 	}
 	for _, name := range hosts {
 		add(name, assignment{Target: "nas", URL: "https://" + name})
@@ -189,13 +189,13 @@ func (a ipv64Area) assignments(ctx context.Context, c *dnsprovider.IPv64) (map[s
 	}{{"app", proxy.Apps}, {"target", proxy.Targets}} {
 		for _, info := range list.apps {
 			for _, name := range info.Domains {
-				a := assignment{Target: list.kind, App: info.App, Port: info.Port, Scheme: info.Scheme}
+				item := assignment{Target: list.kind, App: info.App, Port: info.Port, Scheme: info.Scheme}
 				for _, u := range info.URLs {
 					if strings.HasPrefix(u, "https://"+name) {
-						a.URL = u
+						item.URL = u
 					}
 				}
-				add(name, a)
+				add(name, item)
 			}
 		}
 	}
@@ -204,8 +204,8 @@ func (a ipv64Area) assignments(ctx context.Context, c *dnsprovider.IPv64) (map[s
 		add(name, assignment{Target: "public", App: p.App, Port: p.Port, URL: "https://" + name})
 	}
 	out := make([]assignment, 0, len(byName))
-	for _, a := range byName {
-		out = append(out, *a)
+	for _, item := range byName {
+		out = append(out, *item)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Domain < out[j].Domain })
 	st := a.ddns.Status()
