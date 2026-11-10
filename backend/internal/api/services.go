@@ -8,7 +8,12 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
+	"github.com/ra5on/TitanOS/backend/internal/lxc"
+	"github.com/ra5on/TitanOS/backend/internal/storage"
+	"github.com/ra5on/TitanOS/backend/internal/vm"
 )
 
 // Settings › Services (decided 31.10.2026): Docker, VMs and system
@@ -35,41 +40,68 @@ type serviceView struct {
 	Available bool `json:"available"`
 }
 
+// servicesArea is the switches of Docker, VMs and system containers; an
+// area with narrow dependencies (PLAN 8a, see fansArea). store holds the
+// switches, state what was read from it (state of the server), storage
+// names the volumes. agentOn says whether the KI-Agent is on for an account.
+type servicesArea struct {
+	docker  *docker.Manager
+	vms     *vm.Manager
+	lxc     *lxc.Manager
+	store   *config.Store
+	storage *storage.Manager
+	state   *servicesState
+	agentOn func(user auth.User) bool
+}
+
+// servicesArea is the area of the server; the tools of MCP and of the
+// KI-Agent ask it which services are on.
+func (s *Server) servicesArea() servicesArea {
+	return servicesArea{docker: s.opts.Docker, vms: s.opts.VMs, lxc: s.opts.LXC, store: s.opts.Store, storage: s.opts.Storage, state: &s.services,
+		agentOn: func(user auth.User) bool { return s.agentSettings().Enabled && s.agentAllowed(user) }}
+}
+
+func (a servicesArea) register(mux *routeMux, g guards) {
+	mux.HandleFunc("GET /api/v1/services/state", g.user(a.handleServicesState))
+	mux.HandleFunc("GET /api/v1/services", g.admin(a.handleServices))
+	mux.HandleFunc("PUT /api/v1/services/{name}", g.admin(a.handleServiceSet))
+}
+
 // readServices returns the switches, read from the stick once and then
 // kept in memory: the navigation and MCP ask often.
-func (s *Server) readServices() serviceSettings {
-	s.services.mu.Lock()
-	defer s.services.mu.Unlock()
-	if !s.services.loaded {
+func (a servicesArea) readServices() serviceSettings {
+	a.state.mu.Lock()
+	defer a.state.mu.Unlock()
+	if !a.state.loaded {
 		var settings serviceSettings
-		if err := s.opts.Store.ReadJSON(servicesFile, &settings); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		if err := a.store.ReadJSON(servicesFile, &settings); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			slog.Warn("service settings not readable", "err", err)
 			return settings
 		}
-		s.services.settings, s.services.loaded = settings, true
+		a.state.settings, a.state.loaded = settings, true
 	}
-	return s.services.settings
+	return a.state.settings
 }
 
 // updateServices changes the switches under one lock: two switches set at
 // the same time must not each write their own copy of the file and lose
 // the other's change. A file that cannot be read is not written over.
-func (s *Server) updateServices(change func(*serviceSettings)) error {
-	s.services.mu.Lock()
-	defer s.services.mu.Unlock()
-	if !s.services.loaded {
+func (a servicesArea) updateServices(change func(*serviceSettings)) error {
+	a.state.mu.Lock()
+	defer a.state.mu.Unlock()
+	if !a.state.loaded {
 		var settings serviceSettings
-		if err := s.opts.Store.ReadJSON(servicesFile, &settings); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		if err := a.store.ReadJSON(servicesFile, &settings); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err
 		}
-		s.services.settings, s.services.loaded = settings, true
+		a.state.settings, a.state.loaded = settings, true
 	}
-	settings := s.services.settings
+	settings := a.state.settings
 	change(&settings)
-	if err := s.opts.Store.WriteJSON(servicesFile, settings); err != nil {
+	if err := a.store.WriteJSON(servicesFile, settings); err != nil {
 		return err
 	}
-	s.services.settings = settings
+	a.state.settings = settings
 	return nil
 }
 
@@ -80,37 +112,37 @@ type servicesState struct {
 }
 
 // servicesOn are the switches for everyone, for the navigation.
-func (s *Server) servicesOn() map[string]bool {
+func (a servicesArea) servicesOn() map[string]bool {
 	on := map[string]bool{"docker": true, "vms": true, "lxc": true}
-	if s.opts.Docker != nil {
-		on["docker"] = !s.readServices().DockerOff
+	if a.docker != nil {
+		on["docker"] = !a.readServices().DockerOff
 	}
-	if s.opts.VMs != nil {
-		on["vms"] = !s.opts.VMs.Off()
+	if a.vms != nil {
+		on["vms"] = !a.vms.Off()
 	}
-	if s.opts.LXC != nil {
-		on["lxc"] = !s.opts.LXC.Off()
+	if a.lxc != nil {
+		on["lxc"] = !a.lxc.Off()
 	}
 	return on
 }
 
-func (s *Server) handleServicesState(w http.ResponseWriter, r *http.Request) {
-	on := s.servicesOn()
+func (a servicesArea) handleServicesState(w http.ResponseWriter, r *http.Request) {
+	on := a.servicesOn()
 	out := make(map[string]bool, len(on)+1)
 	for k, v := range on {
 		out[k] = v
 	}
 	// The tab of the KI-Agent: switched on and allowed for this account.
-	out["agent"] = s.agentSettings().Enabled && s.agentAllowed(currentUser(r))
+	out["agent"] = a.agentOn(currentUser(r))
 	writeJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
-	mounted := s.opts.Storage.Mounted()
+func (a servicesArea) handleServices(w http.ResponseWriter, r *http.Request) {
+	mounted := a.storage.Mounted()
 	out := map[string]serviceView{}
-	if d := s.opts.Docker; d != nil {
+	if d := a.docker; d != nil {
 		status := d.Status(r.Context())
-		v := serviceView{Enabled: !s.readServices().DockerOff, Total: len(status.Containers), Available: true}
+		v := serviceView{Enabled: !a.readServices().DockerOff, Total: len(status.Containers), Available: true}
 		for _, c := range status.Containers {
 			if c.State == "running" {
 				v.Running++
@@ -118,16 +150,16 @@ func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
 		}
 		out["docker"] = v
 	}
-	if m := s.opts.VMs; m != nil {
+	if m := a.vms; m != nil {
 		out["vms"] = serviceView{Enabled: !m.Off(), Running: len(m.RunningNames()), Total: len(m.List(mounted)), Available: m.HasKVM()}
 	}
-	if m := s.opts.LXC; m != nil {
+	if m := a.lxc; m != nil {
 		out["lxc"] = serviceView{Enabled: !m.Off(), Running: len(m.RunningNames()), Total: len(m.List(mounted)), Available: m.Installed()}
 	}
 	writeJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) handleServiceSet(w http.ResponseWriter, r *http.Request) {
+func (a servicesArea) handleServiceSet(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Enabled bool `json:"enabled"`
 	}
@@ -141,20 +173,20 @@ func (s *Server) handleServiceSet(w http.ResponseWriter, r *http.Request) {
 	case "docker":
 		// On again: the engine runs where it is set up; without a volume
 		// the Docker page asks for one.
-		settings := s.opts.Docker.Current()
+		settings := a.docker.Current()
 		if req.Enabled == settings.Enabled || !req.Enabled || settings.Volume != "" {
 			settings.Enabled = req.Enabled && settings.Volume != ""
-			if err := s.opts.Docker.SetSettings(settings, s.opts.Storage.Names()); err != nil && !errors.Is(err, docker.ErrDisabled) {
+			if err := a.docker.SetSettings(settings, a.storage.Names()); err != nil && !errors.Is(err, docker.ErrDisabled) {
 				writeDockerError(w, err)
 				return
 			}
 		}
-		if err := s.updateServices(func(v *serviceSettings) { v.DockerOff = !req.Enabled }); err != nil {
+		if err := a.updateServices(func(v *serviceSettings) { v.DockerOff = !req.Enabled }); err != nil {
 			writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 			return
 		}
 	case "vms", "lxc":
-		if err := s.updateServices(func(v *serviceSettings) {
+		if err := a.updateServices(func(v *serviceSettings) {
 			if name == "vms" {
 				v.VMsOff = !req.Enabled
 			} else {
@@ -166,9 +198,9 @@ func (s *Server) handleServiceSet(w http.ResponseWriter, r *http.Request) {
 		}
 		var err error
 		if name == "vms" {
-			err = s.opts.VMs.SetOff(ctx, !req.Enabled)
+			err = a.vms.SetOff(ctx, !req.Enabled)
 		} else {
-			err = s.opts.LXC.SetOff(ctx, !req.Enabled, s.opts.Storage.Mounted())
+			err = a.lxc.SetOff(ctx, !req.Enabled, a.storage.Mounted())
 		}
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "service_switch_failed", err.Error())
@@ -179,5 +211,5 @@ func (s *Server) handleServiceSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("service switched", "service", name, "enabled", req.Enabled, "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleServices(w, r)
+	a.handleServices(w, r)
 }

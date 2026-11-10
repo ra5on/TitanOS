@@ -364,8 +364,8 @@ func TestServiceSwitchesDoNotLoseEachOther(t *testing.T) {
 			t.Fatal(err)
 		}
 		done := make(chan error, 2)
-		go func() { done <- ts.server.updateServices(func(v *serviceSettings) { v.VMsOff = true }) }()
-		go func() { done <- ts.server.updateServices(func(v *serviceSettings) { v.LXCOff = true }) }()
+		go func() { done <- ts.server.servicesArea().updateServices(func(v *serviceSettings) { v.VMsOff = true }) }()
+		go func() { done <- ts.server.servicesArea().updateServices(func(v *serviceSettings) { v.LXCOff = true }) }()
 		for range 2 {
 			if err := <-done; err != nil {
 				t.Fatal(err)

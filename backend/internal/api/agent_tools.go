@@ -65,7 +65,7 @@ func (s *Server) newAgentToolbox(user auth.User, settings agentSettings) *agentT
 	r, _ := http.NewRequest(http.MethodPost, "/agent", nil)
 	r.RemoteAddr = "127.0.0.1:0"
 	b.session = &mcpSession{user: user, token: auth.APIToken{Name: "KI-Agent"}, version: mcpVersions[0], r: r}
-	on := s.servicesOn()
+	on := s.servicesArea().servicesOn()
 	off := func(area string) bool {
 		return area == toolcatalog.AreaDocker && !on["docker"] || area == toolcatalog.AreaVMs && !on["vms"]
 	}

@@ -24,7 +24,7 @@ const codeMax = 32 << 10
 
 // codeTool is code_run, or nil when it is not offered.
 func (b *agentToolbox) codeTool() *agentTool {
-	if !b.settings.Code.Enabled || !b.s.servicesOn()["docker"] || (b.s.opts.Docker == nil && b.s.agentSandbox == nil) {
+	if !b.settings.Code.Enabled || !b.s.servicesArea().servicesOn()["docker"] || (b.s.opts.Docker == nil && b.s.agentSandbox == nil) {
 		return nil
 	}
 	return &agentTool{name: "code_run", area: agent.AreaCode, kind: agent.KindChange, untrusted: true,

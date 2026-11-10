@@ -157,7 +157,7 @@ func (s *Server) mcpAvailable(user auth.User, scopes []string) []mcpTool {
 	allowed := func(scope string) bool {
 		return slices.Contains(scopes, scope) && (!auth.AdminScope(scope) || user.Role.CanAdminister())
 	}
-	on := s.servicesOn()
+	on := s.servicesArea().servicesOn()
 	off := func(area string) bool {
 		return area == toolcatalog.AreaDocker && !on["docker"] || area == toolcatalog.AreaVMs && !on["vms"]
 	}
