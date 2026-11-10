@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"slices"
 )
 
 // ionos speaks the DNS API of IONOS (developer.hosting.ionos.de) with an API
@@ -134,11 +135,15 @@ func (i *ionos) SetAddresses(ctx context.Context, host string, v4, v6 netip.Addr
 			}
 			continue
 		}
-		for _, r := range existing {
-			update := map[string]any{"content": a.value, "ttl": r.TTL, "disabled": false}
-			if err := i.call(ctx, http.MethodPut, "/zones/"+url.PathEscape(zone)+"/records/"+url.PathEscape(r.ID), update, nil); err != nil {
-				return err
-			}
+		// One record carries the address; further records of the name stay
+		// as they are (see cloudflare.go).
+		if slices.ContainsFunc(existing, func(r ionosRecord) bool { return r.Content == a.value && !r.Disabled }) {
+			continue
+		}
+		r := existing[0]
+		update := map[string]any{"content": a.value, "ttl": r.TTL, "disabled": false}
+		if err := i.call(ctx, http.MethodPut, "/zones/"+url.PathEscape(zone)+"/records/"+url.PathEscape(r.ID), update, nil); err != nil {
+			return err
 		}
 	}
 	return nil

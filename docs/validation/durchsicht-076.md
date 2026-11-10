@@ -177,7 +177,7 @@ Ganz gelesen: `vm` (außer Medien-Import), `lxc`, `network`, `firewall` (Regeln,
 | F-8-3 | Fehler | `ddns/ddns.go:388`, `dnsprovider/dyndns2.go:84` | DDNS wiederholt dauerhafte Fehler (`badauth`, `nohost`, 403) alle 5 Minuten für immer: so werden Konten gesperrt. | behoben: Wartezeit verdoppelt sich je Fehlschlag bis 6 Stunden, Einstellungsänderung oder „jetzt prüfen“ fragt sofort; `TestRetryBacksOff`. `Retry-After` der Anbieter wird weiter nur bei IPv64 gelesen |
 | F-8-4 | Risiko | `network/topology.go:167` | Zeilenumbruch in der Zone einer IPv6-Adresse (`fe80::1%x\n[Route]…`) landet in der networkd-Datei. | behoben: Zone nur als Schnittstellenname, Test |
 | F-8-5 | Fehler | `firewall/firewall.go:150` | Erste Regeln nach dem Start von titand kennen Apps und eigene Netze noch nicht: eine verbotene App ist kurz offen. | bewusst gelassen: die Schleife holt Apps und Netze sofort nach dem Laden; die Lücke sind Sekunden, in denen Docker selbst erst startet |
-| F-8-6 | Fehler (vermutet) | `dnsprovider/cloudflare.go:131`, `ionos.go:137`, `cloudflare.go:94` | Alle A/AAAA-Einträge eines Namens bekommen denselben Wert; `ClearTXT` löscht alle TXT-Einträge am Namen, auch fremde ACME-Werte. | offen |
+| F-8-6 | Fehler (vermutet) | `dnsprovider/cloudflare.go:131`, `ionos.go:137`, `cloudflare.go:94` | Alle A/AAAA-Einträge eines Namens bekommen denselben Wert; `ClearTXT` löscht alle TXT-Einträge am Namen, auch fremde ACME-Werte. | behoben: genau ein A/AAAA-Eintrag trägt die Adresse, weitere von Hand angelegte bleiben (Cloudflare, IONOS; Test). Bewusst gelassen: `ClearTXT` räumt alle TXT unter `_acme-challenge.<name>` – dort stehen nur ACME-Werte, liegengebliebene sollen weg. |
 
 ## 9. Sicherung, Replikation, Cluster
 
