@@ -90,3 +90,39 @@ Noch nicht gelesen: `ha_*`, `homeassistant*`, `app_access.go`, Benachrichtigunge
 | F-12-5 | Fehler | `routes/docker/apps/[name]/AppAccess.svelte:23` | Eine unerwartete Antwort von `/apps/access` reißt die ganze Seite mit (500-Ansicht) statt nur die Zeile. | offen |
 | F-12-6 | Frage | Dialog „Office-Programme direkt im Browser“ | Text nennt „Ab TitanOS 0.63“; prüfen, ob die Angabe noch stimmt. | offen |
 
+
+## 4. Speicher und Hardware
+
+Ganz gelesen: `storage` (22 Dateien: Anlegen, Löschen, mdadm, Erweitern, Übernehmen, Btrfs, LUKS, Cache, Plattentest, Ruhemodus, SMART), `usb`, `stickwatch`, `volumedata`, `quota`, `retention`, `smarthistory`, `fans`. Ohne Befund: Ausschlussprüfungen und erneute Prüfung nach dem Stoppen, Identitätsprüfung vor dem Löschen, Passwortwege von LUKS, dm-cache, Kontingente, Plattentest-Fortsetzung, USB-Formatieren. Nur überflogen: Snapshot-Dateien, `hardware`, `hwcheck`.
+
+| Nr. | Art | Wo | Befund | Stand |
+|---|---|---|---|---|
+| F-4-1 | Fehler (Datenverlust, kritisch) | `storage/actions.go` `wipePartitionTables`, `RemoveDisk` | Löschen oder Verkleinern eines übernommenen Arrays löschte die Partitionstabelle der ganzen Platte, auch wenn dort andere Partitionen liegen (System, Daten, Mitglied eines anderen Arrays). | behoben: bei geteilter Platte nur die Mitgliedspartition, `TestWipeKeepsThePartitionTableOfASharedDisk` |
+| F-4-2 | Fehler (Datenverlust) | `storage/btrfs_layout.go` `RemoveBtrfsDisk` | Nach stundenlangem Entfernen einer Btrfs-Platte wurde über den Kernel-Namen (sdc) gelöscht; der kann inzwischen eine andere Platte sein. | behoben: Wiederfinden über die Partitions-ID, sonst kein Löschen; `TestRemovedBtrfsDiskIsFoundAgainByItsPartition` |
+| F-4-3 | Fehler | `storage/grow.go` | RAID-Erweiterung nach Ausschalten des Caches im selben Start vergrößerte das Dateisystem nicht (XFS, verschlüsselt) oder scheiterte (ext4). | behoben: verlangt einen Neustart (`volume_cache_restart`, de/en); ohne eigenen Test |
+| F-4-4 | Fehler | `storage/import.go` | Btrfs auf einem md-Array wurde als eigenes Btrfs-Volume übernommen; seine Platten galten nie als Mitglieder. | behoben; ohne eigenen Test |
+| F-4-5 | Fehler (Absturz) | `storage/btrfs.go`, `cache.go` | `btrfsSeen`/`cacheSeen` ohne Sperre gelesen und geschrieben: Entsperren oder Löschen im falschen Moment konnte titand beenden. | behoben: `seenMu`, Race-Lauf grün |
+| F-4-6 | Fehler | `storage/btrfs.go:369` | Btrfs-Ersatzplatte wurde abgelehnt, wenn sie auch nur 1 MiB kleiner war, obwohl die Partition gepasst hätte. | behoben |
+| F-4-7 | Fehler | `storage/btrfs_layout.go:67` | Kapazitätsschätzung für RAID1C3 mit ungleichen Platten zu hoch (10+5+5+5: 8,33 statt 7,5). | behoben, Testfall ergänzt |
+| F-4-8 | Fehler | `storage/shadowcopy.go` `lockedUntil` | Unlesbare Liste der Snapshot-Sperren galt als „nicht gesperrt“. | behoben: gilt als gesperrt |
+| F-4-9 | Fehler | `storage/crypt.go:537`, `storage/import.go:400` | Sperren: scheiterte das Schließen von LUKS, blieben gestoppte VMs/Container aus. Übernahme: offener LUKS-Container nach gescheitertem Speichern. | behoben |
+| F-4-10 | Fehler (Absturz) | `fans/fans.go` `Load` | Lüftereinstellungen vom Stick wurden nicht geprüft: Kurve ohne Punkte ließ die Schleife bei jedem Start abstürzen. | behoben, `TestBrokenFanSettingsFromTheStickAreLeftOut` |
+| F-4-11 | Fehler (vermutet) | `storage/storage.go:402` | `mdadm --detail` in jeder Statusabfrage und alle 10 s im Ruhemodus liest vermutlich von einer Mitgliedsplatte und hält sie wach. | offen: prüfen, UUID je md-Gerät merken |
+| F-4-12 | Fehler | `storage/crypt.go:680`, `btrfs.go:392` | Scheitert `btrfs device add`/`replace`, bleibt die neue LUKS-UUID in `volumes.json`; die Platte lässt sich weder erneut hinzufügen noch entfernen. | offen |
+| F-4-13 | Fehler (klein) | `storage/cache.go:107`, `grow.go:55`, `sleep.go:454`, `stickwatch.go:49` | Cache-Rückfall mountet über `UUID=` (kann die SSD treffen); kaputte `growth.json` blockiert alle Mounts und liest `/config` alle 5 s; Stick-Fehler nach dem Abziehen werden nicht zugeordnet. | offen |
+
+## 5. Dateien und Freigaben
+
+Ganz gelesen: `files` (29 Dateien: Kopieren/Verschieben, Aufträge, Papierkorb, Uploads, Textdateien, WebDAV, Archive, Duplikate), `shares/purge.go`, `render.go`, `apply.go`, `shares.go`, `office/edit*.go`. Ohne Befund: Verschieben löscht keine Quelle auf Verdacht, Freigabe samt Daten löschen, Uploads/Speichern/Entpacken über Teildatei, `smb.conf`/`exports`. Nicht gelesen: `files/inspect.go`, `properties.go`, `shares/guard.go`, `quota.go`, `docindex`, `media`, Rest von `fileindex`/`office`/`thumbs`.
+
+| Nr. | Art | Wo | Befund | Stand |
+|---|---|---|---|---|
+| F-5-1 | Fehler (Datenverlust, kritisch) | `shares/shares.go` `sweepRecycle` | Der stündliche Aufräumlauf zählte je Datei deren eigenes Datum. Ein im Dateimanager oder über WebDAV gelöschter Ordner behält die Daten seiner Dateien; der Löschzeitpunkt steht nur am Ordner. Alte Dateien waren nach höchstens einer Stunde endgültig weg. | behoben: der vermerkte Löschzeitpunkt zählt, `TestSweepRecycleKeepsOldFilesOfAFreshlyDeletedFolder` (schlug vorher fehl) |
+| F-5-2 | Fehler (Datenverlust) | `files/files.go` `recycleIn` | Papierkorbordner, die der Dateimanager anlegt, waren nur für root beschreibbar. Samba arbeitet als das Konto und löscht eine Datei endgültig, wenn es sie nicht in den Papierkorb legen kann (Verhalten von Samba aus der Kenntnis von `vfs_recycle`, nicht nachgestellt). | behoben: Gruppe darf schreiben; alte Ordner repariert der Aufräumlauf; Tests. Im QEMU-Freigabetest gegenprüfen → 16.2 |
+| F-5-3 | Fehler (Datenverlust) | `files/copy.go` `publishCopy` | Eine fertige Kopie ersetzte still eine Datei, die inzwischen unter ihrem Namen entstanden war (anderer Auftrag, Upload, Speichern über SMB). | behoben: nimmt den nächsten freien Namen, Test |
+| F-5-4 | Fehler | `files/trash.go` `TrashRestore`, `trash_metadata.go` | Wiederherstellen ersetzte eine inzwischen entstandene Datei; der alte Löschvermerk blieb an der Datei und schickte ein späteres Wiederherstellen an den alten Ort. | behoben, `TestRestoreForgetsTheDeletionNote` |
+| F-5-5 | Fehler | `files/files.go` `Zip` | Nicht lesbare Datei landete als leerer Eintrag in einem „erfolgreichen“ Download. | behoben, Test |
+| F-5-6 | Fehler (Datenverlust) | `files/webdav.go` `OpenFile` | WebDAV-PUT kürzt die Zieldatei sofort und schreibt hinein: bricht die Übertragung ab oder läuft das Volume voll, ist die alte Fassung weg. | offen |
+| F-5-7 | Fehler | `shares/purge.go:850` | Scheitert das Fortsetzen einer Freigabe-Löschung nach einem Neustart, wird es alle 5 s endlos wiederholt. | offen |
+| F-5-8 | Risiko | `thumbs/render.go:36` | Grenze von 100 Megapixel zählt Pixel, nicht Bytes: zwei sehr große 16-Bit-Bilder können titand beim Vorschaubild rund 1,6 GB kosten. | offen |
+| F-5-9 | Fehler (klein) | `files/transfers.go:490`, `files/files.go:372`, `office/edit_xlsx.go:195`, `files/job_control.go:18` | Wiederholter Auftrag verliert seinen Eintrag; Umbenennen nur in Groß-/Kleinschreibung auf exFAT/NTFS abgelehnt; `calcPr` an falscher Stelle; Pausieren hängt, solange ein Auftrag plant. | offen |
