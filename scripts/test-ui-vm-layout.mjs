@@ -396,7 +396,7 @@ try {
     await page.goto(base + "/vms/screen?vm=vm2");
     await connected(page);
     await clearFrame(page);
-    assert.equal(await page.locator(".bar").count(), 1);
+    assert.equal(await page.locator(".screen-bar").count(), 1);
     assert.deepEqual(
       data.requests.filter(([method]) => !["GET", "HEAD"].includes(method)),
       [],

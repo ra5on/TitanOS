@@ -379,11 +379,21 @@
 	.who,
 	time {
 		color: var(--muted);
+	}
+	time {
 		white-space: nowrap;
+	}
+	/* A long account name wraps instead of pushing the row out of the card. */
+	.who {
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.recent li {
+		grid-template-columns: minmax(7rem, 12rem) minmax(0, 1fr) minmax(0, auto) auto;
 	}
 	@container (max-width: 34rem) {
 		.recent li {
-			grid-template-columns: minmax(0, 1fr) auto;
+			grid-template-columns: minmax(0, 1fr) minmax(0, auto);
 		}
 		.recent .what {
 			grid-column: 1;
