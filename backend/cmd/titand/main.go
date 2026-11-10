@@ -59,6 +59,7 @@ func main() {
 	flag.StringVar(&opts.webappsDir, "webapps-dir", "", "development mode: folder with web app archives (titanos-webapp-<id>-<version>.zip or the upstream <id>-web-<version>.zip)")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	checkBoot := flag.Bool("check-boot", false, "wait until the running titand is ready, for the boot check after an update")
+	trialWatchdog := flag.Bool("trial-watchdog", false, "fail if the boot loader still has this system on trial, for the watchdog of a trial start that hangs")
 	checkApp := flag.Bool("check-app", false, "wait until a new app update is ready, and go back if it does not get there")
 	recovery := flag.Bool("network-recovery", false, "authenticated local-console network recovery")
 	flag.Parse()
@@ -82,6 +83,21 @@ func main() {
 				fmt.Fprintln(os.Stderr, "app update:", err)
 				os.Exit(1)
 			}
+		}
+		return
+	}
+
+	if *trialWatchdog {
+		// PLAN 76 (F-13-5): half an hour after the start the boot check has
+		// long taken the counter off a system that came up. One that still
+		// stands on trial hangs somewhere before titand (emergency mode, a
+		// unit that never ends): the unit fails and restarts the NAS, which
+		// costs a try like any other failed start, so the loader goes back
+		// to the system of before by itself. Not on trial: nothing to do.
+		trial := update.NewManager(config.Open(opts.configDir), version.Version, system.BootSlot())
+		if trial.OnTrial() {
+			fmt.Fprintln(os.Stderr, "this system is still on trial half an hour after its start; restarting")
+			os.Exit(1)
 		}
 		return
 	}

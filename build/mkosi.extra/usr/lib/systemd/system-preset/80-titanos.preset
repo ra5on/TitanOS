@@ -16,3 +16,5 @@ enable libvirt-guests.service
 # once titand is ready; see the unit.
 enable titanos-boot-check.service
 enable titanos-app-check.service
+# Restarts a trial start that never gets as far as the boot check.
+enable titanos-trial-watchdog.timer

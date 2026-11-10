@@ -1,0 +1,15 @@
+[Unit]
+Description=TitanOS looks after a trial start half an hour in
+Documentation=https://github.com/ra5on/TitanOS
+DefaultDependencies=no
+IgnoreOnIsolate=yes
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Timer]
+# The boot check itself waits up to 16 minutes for titand.
+OnBootSec=30min
+AccuracySec=1min
+
+[Install]
+WantedBy=sysinit.target
