@@ -22,9 +22,11 @@ Autopilot wartet auf diesen Tag. Kernel-Updates laufen also nur mit
    werden zusätzlich mit `trixie-backports` verglichen. Point-Releases zählen:
    Debian bringt Kernel-ABI-Wechsel oft über sie und nicht über
    trixie-security. Nichts Neues: Ende.
-2. **Tag wählen** (`scripts/autopilot.py plan`): die nächste freie
-   Patch-Version nach dem neuesten veröffentlichten Release, z. B. 0.45.1 →
-   0.45.2. Vorhandene Tags werden übersprungen. Der Autopilot wartet,
+2. **Tag wählen** (`scripts/autopilot.py plan`): die nächste freie Version
+   nach dem neuesten veröffentlichten Release. Ab 0.72 ist das die nächste
+   zweite Zahl (0.74 → 0.75, Tag `v0.75.0`; Entscheidung vom 10.11.2026),
+   davor war es der nächste Patch (0.45.1 → 0.45.2). Vorhandene Tags werden
+   übersprungen. Der Autopilot wartet,
    - solange ein eigener Tag noch kein Release hat (baut noch, wartet auf
      Plugin-Sätze oder ist gescheitert: nie ein zweiter Tag dafür),
    - solange ein Tag des Inhabers, der neuer als das letzte Release ist,
@@ -51,8 +53,10 @@ Autopilot wartet auf diesen Tag. Kernel-Updates laufen also nur mit
    Publish-Job im Environment `security-release` (ohne Freigabe), sonst wie
    immer in `release` (mit Freigabe). Die Bedingungen:
    - der Commit hat genau einen Elternteil, und der trägt den Tag eines
-     **veröffentlichten** Releases derselben Minor-Version,
-   - die Version ist ein späterer Patch dieses Releases (keine Vorabversion),
+     **veröffentlichten** Releases,
+   - die Version folgt auf dieses Release (keine Vorabversion): ab 0.72
+     dieselbe Hauptzahl, eine höhere zweite Zahl und dritte Zahl 0; bis 0.71
+     ein späterer Patch derselben Minor-Version,
    - der Commit ändert **nur** `build/debian-security.txt`.
    Die Tag-Nachricht spielt dabei keine Rolle.
 6. **Auf dem NAS:** Das Update erscheint über die normale Suche. Mit „Von
@@ -127,8 +131,11 @@ PLAN.md Punkt 31).
 - **Plugin-Signatur ohne Freigabe** (`AUTOPILOT_PLUGINS=on`) heißt: Was das
   Plugin-Repository baut, wird als Kernelmodul signiert und an alle NAS
   verteilt. Das Repository muss dafür so vertrauenswürdig sein wie dieses.
-- Der Autopilot erzeugt nur Patch-Releases auf dem letzten Release. Neue
-  Funktionen, App-Releases und Minor-Versionen bleiben beim Inhaber.
+- Der Autopilot erzeugt nur Sicherheits-Releases auf dem letzten Release
+  (einzige Änderung: `build/debian-security.txt`). Neue Funktionen und
+  App-Releases bleiben beim Inhaber. Weil seit 0.72 jedes Release die zweite
+  Zahl erhöht, kann der Autopilot eine Nummer belegen, die der Inhaber für
+  sein nächstes Release vorgesehen hatte; dieses nimmt dann die nächste.
 
 ## Einrichtung (einmalig, durch den Inhaber)
 

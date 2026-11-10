@@ -23,6 +23,12 @@ accept_first() {
 }
 
 for firewall in iptables ip6tables; do
+    # Without IPv6 in the kernel (ipv6.disable=1) ip6tables has no tables:
+    # nothing to open there, and no reason to keep Docker from starting.
+    if [ "$firewall" = ip6tables ] && ! ip6tables -w 30 -S INPUT >/dev/null 2>&1; then
+        echo "titanos-firewall-open: ip6tables not usable, IPv6 chains left alone" >&2
+        continue
+    fi
     for chain in INPUT FORWARD OUTPUT; do
         "$firewall" -w 30 -P "$chain" ACCEPT
         accept_first "$chain"

@@ -27,10 +27,13 @@ grub-mkimage --directory "$lib/i386-pc" --format i386-pc --compression auto \
     biosdisk $common
 cp "$lib/i386-pc/boot.img" "$out/i386-pc/boot.img"
 
+# part_gpt: a stick with a GPT starts under 32-bit UEFI too, as it does with
+# systemd-boot (PLAN 76, F-13-6). The BIOS core stays without it (size, and
+# stick-bios.py refuses GPT there).
 # shellcheck disable=SC2086
 grub-mkimage --directory "$lib/i386-efi" --format i386-efi \
     --config "$early" --prefix /boot/grub --output "$out/BOOTIA32.EFI" \
-    efi_gop efi_uga $common
+    efi_gop efi_uga part_gpt $common
 
 # The BIOS core must fit between the MBR and a partition at 1 MiB.
 size=$(wc -c < "$out/i386-pc/core.img")

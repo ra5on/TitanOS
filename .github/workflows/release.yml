@@ -393,7 +393,7 @@ jobs:
     timeout-minutes: 15
     # Both environments hold the signing key. release asks for an approval;
     # security-release does not and takes only what the guard allowed: a
-    # patch on a published release that changes build/debian-security.txt.
+    # release on top of a published one that changes build/debian-security.txt alone.
     environment: ${{ needs.build.outputs.autopilot == 'true' && 'security-release' || 'release' }}
     permissions:
       contents: write

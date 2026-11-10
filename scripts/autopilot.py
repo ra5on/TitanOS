@@ -3,11 +3,13 @@
 
 plan     For the nightly autopilot: is a security release possible now, and
          under which tag? It is cut from the latest published release, as
-         the next free patch version. Prints action=tag|wait and, for tag,
+         the next free version (from 0.72: the next minor version, x.y.0;
+         before: the next patch). Prints action=tag|wait and, for tag,
          tag=v<x.y.z> and from=v<latest>; reason= says why.
 guard    For the release workflow: may this tag be published without the
          owner? Only when its commit is a direct child of a published
-         release tag, the version is a later patch of that release and the
+         release tag, the version follows that release (from 0.72 a later
+         minor version with patch 0, before a later patch) and the
          commit changes build/debian-security.txt alone. Prints
          autopilot=true|false. The tag message plays no part.
 verify   For the release workflow, after the build: every update listed in
@@ -79,6 +81,22 @@ def local_tags():
     return tags
 
 
+# Versions are two-part from here on (owner, 9 Nov 2026): 0.72, 0.73 …,
+# written x.y.0 in tags and manifests.
+TWO_PART = (0, 72, 0)
+
+
+def follows(own, release):
+    """Whether version own may be the autopilot's release on top of release:
+    up to 0.71 a later patch of the same minor version; from 0.72 a later
+    minor version of the same major one, with patch 0."""
+    if release >= own:
+        return False
+    if own >= TWO_PART:
+        return own[0] == release[0] and own[2] == 0
+    return own[:2] == release[:2]
+
+
 def plan(latest, tags, is_published, now):
     """Returns (action, tag, reason)."""
     own = stable(latest)
@@ -94,6 +112,13 @@ def plan(latest, tags, is_published, now):
             return "wait", "", f"{name} of the owner is on its way"
     taken = {numbers(name)[:3] for name, _, _ in tags if numbers(name)}
     major, minor, patch = own
+    if own >= TWO_PART:
+        # From 0.72 every release raises the second number, a security
+        # release too: after 0.74 comes 0.75, never 0.74.1 (docs/RELEASING.md).
+        minor, patch = minor + 1, 0
+        while (major, minor, patch) in taken:
+            minor += 1
+        return "tag", f"v{major}.{minor}.{patch}", f"next free version after {latest}"
     patch += 1
     while (major, minor, patch) in taken:
         patch += 1
@@ -152,10 +177,10 @@ def guard(version, head_parents, parent_tags, changed, is_published):
         return False, "not a stable version"
     if len(head_parents) != 1:
         return False, "the commit is not a plain child of one release"
-    releases = [t for t in parent_tags if stable(t) and stable(t)[:2] == own[:2] and stable(t) < own]
+    releases = [t for t in parent_tags if stable(t) and follows(own, stable(t))]
     release = next((t for t in sorted(releases, key=stable, reverse=True) if is_published(t)), None)
     if release is None:
-        return False, "the parent commit is no published release of the same minor version"
+        return False, "the parent commit is no published release this version may follow"
     if changed != [MARKER_FILE]:
         return False, f"changed since {release}: " + ", ".join(changed[:10] or ["nothing"])
     return True, f"only {MARKER_FILE} changed since {release}"

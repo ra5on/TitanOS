@@ -5,7 +5,7 @@ name: Autopilot
 # trixie-updates, trixie-security and, for the image with the newer kernel,
 # trixie-backports. Kernel updates count.
 #
-# With the repository variable AUTOPILOT=on it cuts the next patch release
+# With the repository variable AUTOPILOT=on it cuts the next release (from 0.72: x.y+1.0)
 # from the latest published release tag: one commit that changes
 # build/debian-security.txt alone, a tag "Sicherheitsupdate (Autopilot)",
 # and the release workflow started on that tag. There scripts/autopilot.py

@@ -49,6 +49,12 @@ class PlanTest(unittest.TestCase):
         tags = [("v0.45.1", NOW - 9 * DAY, "x"), ("v0.45.2", NOW - DAY, MARK)]
         self.assertEqual(autopilot.plan("0.45.2", tags, published("v0.45.1", "v0.45.2"), NOW)[:2], ("tag", "v0.45.3"))
 
+    def test_from_0_72_the_second_number_rises(self):
+        # PLAN 76 (F-13-17): no 0.74.1; a taken number is skipped.
+        self.assertEqual(autopilot.plan("0.74.0", [("v0.74.0", NOW - 10 * 86400, "0.74")], published("v0.74.0"), NOW)[:2], ("tag", "v0.75.0"))
+        tags = [("v0.74.0", NOW - 10 * 86400, "0.74"), ("v0.75.0", NOW - 10 * 86400, "never released")]
+        self.assertEqual(autopilot.plan("0.74.0", tags, published("v0.74.0"), NOW)[:2], ("tag", "v0.76.0"))
+
     def test_no_autopilot_on_a_pre_release(self):
         self.assertEqual(autopilot.plan("0.46.0-beta.1", [], published(), NOW)[0], "wait")
 
@@ -83,6 +89,19 @@ class GuardTest(unittest.TestCase):
         self.assertFalse(self.guard(pub=()))  # the parent was never published
         self.assertFalse(self.guard(tags=()))  # the parent is no release at all
         self.assertFalse(self.guard(parents=("a", "b")))  # a merge
+
+    def test_guard_from_0_72_wants_the_next_minor_version(self):
+        ok = dict(tags=("v0.74.0",), pub=("v0.74.0",))
+        self.assertTrue(self.guard(version="0.75.0", **ok))
+        self.assertTrue(self.guard(version="0.76.0", **ok))  # 0.75.0 was taken
+        self.assertFalse(self.guard(version="0.74.1", **ok))  # no third number any more
+        self.assertFalse(self.guard(version="0.75.1", **ok))
+        self.assertFalse(self.guard(version="1.0.0", **ok))  # another major version
+        self.assertFalse(self.guard(version="0.74.0", **ok))  # not later
+        self.assertFalse(self.guard(version="0.75.0", tags=("v0.74.0",), pub=()))
+        self.assertFalse(self.guard(version="0.75.0", changed=("backend/main.go",), **ok))
+        # The last three-part release may be followed by a two-part one.
+        self.assertTrue(self.guard(version="0.72.0", tags=("v0.71.1",), pub=("v0.71.1",)))
 
 
 class VerifyTest(unittest.TestCase):
