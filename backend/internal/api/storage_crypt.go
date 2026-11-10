@@ -8,7 +8,11 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/backup"
+	"github.com/ra5on/TitanOS/backend/internal/files"
+	"github.com/ra5on/TitanOS/backend/internal/media"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
+	"github.com/ra5on/TitanOS/backend/internal/vm"
 )
 
 // Encrypted volumes (storage/crypt.go, docs/ENCRYPTION.md). Passwords come
@@ -51,8 +55,37 @@ func writeCryptError(w http.ResponseWriter, r *http.Request, action string, err 
 	writeStorageError(w, r, action, err)
 }
 
-func (s *Server) handleVolumeUnlock(w http.ResponseWriter, r *http.Request) {
-	if !s.requireWebSession(w, r) {
+// storageCryptArea is the encrypted volumes: unlocking, locking, passwords
+// and the LUKS header; an area with narrow dependencies (PLAN 8a, see
+// fansArea). files, backup, vms and media say what still works on a volume
+// before it is locked. webSession lets only a person at a web session
+// through.
+type storageCryptArea struct {
+	storage    *storage.Manager
+	files      *files.Manager
+	backup     *backup.Manager
+	vms        *vm.Manager
+	media      *media.Manager
+	webSession webSessionFunc
+}
+
+// storageCryptArea is the area of the server.
+func (s *Server) storageCryptArea() storageCryptArea {
+	return storageCryptArea{storage: s.opts.Storage, files: s.opts.Files, backup: s.opts.Backup, vms: s.opts.VMs, media: s.opts.Media,
+		webSession: s.requireWebSession}
+}
+
+func (a storageCryptArea) register(mux *routeMux, g guards) {
+	// Encrypted volumes: browser sessions only, never over MCP
+	// catalog or the public API (storage_crypt.go).
+	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/unlock", g.admin(a.handleVolumeUnlock))
+	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/lock", g.heavyAdmin(a.handleVolumeLock))
+	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/passwords", g.admin(a.handleVolumePasswords))
+	mux.HandleFunc("GET /api/v1/storage/volumes/{name}/luks-header", g.admin(a.handleVolumeHeaderBackup))
+}
+
+func (a storageCryptArea) handleVolumeUnlock(w http.ResponseWriter, r *http.Request) {
+	if !a.webSession(w, r) {
 		return
 	}
 	var req struct {
@@ -66,24 +99,24 @@ func (s *Server) handleVolumeUnlock(w http.ResponseWriter, r *http.Request) {
 	req.Password = ""
 	defer wipeBytes(password)
 	slog.Info("unlock requested", "volume", name, "user", currentUser(r).Name, "ip", remoteIP(r))
-	if err := s.opts.Storage.Unlock(context.WithoutCancel(r.Context()), name, password); err != nil {
+	if err := a.storage.Unlock(context.WithoutCancel(r.Context()), name, password); err != nil {
 		writeCryptError(w, r, "unlock volume", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleVolumeLock(w http.ResponseWriter, r *http.Request) {
-	if !s.requireWebSession(w, r) {
+func (a storageCryptArea) handleVolumeLock(w http.ResponseWriter, r *http.Request) {
+	if !a.webSession(w, r) {
 		return
 	}
 	name := r.PathValue("name")
-	if (s.opts.Files != nil && s.opts.Files.Busy()) || (s.opts.Backup != nil && s.opts.Backup.Busy()) || (s.opts.VMs != nil && s.opts.VMs.Busy()) || (s.opts.Media != nil && s.opts.Media.Working()) {
+	if (a.files != nil && a.files.Busy()) || (a.backup != nil && a.backup.Busy()) || (a.vms != nil && a.vms.Busy()) || (a.media != nil && a.media.Working()) {
 		writeError(w, http.StatusConflict, "volume_work_running", "wait for file, backup and VM operations")
 		return
 	}
 	slog.Info("lock requested", "volume", name, "user", currentUser(r).Name, "ip", remoteIP(r))
-	if err := s.opts.Storage.Lock(context.WithoutCancel(r.Context()), name); err != nil {
+	if err := a.storage.Lock(context.WithoutCancel(r.Context()), name); err != nil {
 		writeCryptError(w, r, "lock volume", err)
 		return
 	}
@@ -91,8 +124,8 @@ func (s *Server) handleVolumeLock(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleVolumePasswords adds, changes or removes a password (key slot).
-func (s *Server) handleVolumePasswords(w http.ResponseWriter, r *http.Request) {
-	if !s.requireWebSession(w, r) {
+func (a storageCryptArea) handleVolumePasswords(w http.ResponseWriter, r *http.Request) {
+	if !a.webSession(w, r) {
 		return
 	}
 	var req struct {
@@ -112,11 +145,11 @@ func (s *Server) handleVolumePasswords(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch req.Action {
 	case "add":
-		err = s.opts.Storage.AddPassword(ctx, name, current, password)
+		err = a.storage.AddPassword(ctx, name, current, password)
 	case "change":
-		err = s.opts.Storage.ChangePassword(ctx, name, current, password)
+		err = a.storage.ChangePassword(ctx, name, current, password)
 	case "remove":
-		err = s.opts.Storage.RemovePassword(ctx, name, current)
+		err = a.storage.RemovePassword(ctx, name, current)
 	default:
 		writeError(w, http.StatusBadRequest, "bad_request", "action must be add, change or remove")
 		return
@@ -131,12 +164,12 @@ func (s *Server) handleVolumePasswords(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleVolumeHeaderBackup downloads the LUKS headers of a volume as tar.
-func (s *Server) handleVolumeHeaderBackup(w http.ResponseWriter, r *http.Request) {
-	if !s.requireWebSession(w, r) {
+func (a storageCryptArea) handleVolumeHeaderBackup(w http.ResponseWriter, r *http.Request) {
+	if !a.webSession(w, r) {
 		return
 	}
 	name := r.PathValue("name")
-	if _, ok := s.volumeExists(name); !ok {
+	if _, ok := a.volumeExists(name); !ok {
 		writeError(w, http.StatusNotFound, "volume_not_found", "no such volume")
 		return
 	}
@@ -145,7 +178,7 @@ func (s *Server) handleVolumeHeaderBackup(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`-luks-header.tar"`)
 	w.Header().Set("Cache-Control", "no-store")
 	buffered := &headerWriter{w: w}
-	if err := s.opts.Storage.HeaderBackup(r.Context(), name, buffered); err != nil {
+	if err := a.storage.HeaderBackup(r.Context(), name, buffered); err != nil {
 		if !buffered.started {
 			w.Header().Del("Content-Disposition")
 			w.Header().Del("Content-Type")
@@ -168,8 +201,8 @@ func (h *headerWriter) Write(p []byte) (int, error) {
 	return h.w.Write(p)
 }
 
-func (s *Server) volumeExists(name string) (string, bool) {
-	for _, existing := range s.opts.Storage.Names() {
+func (a storageCryptArea) volumeExists(name string) (string, bool) {
+	for _, existing := range a.storage.Names() {
 		if existing == name {
 			return existing, true
 		}
