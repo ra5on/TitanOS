@@ -285,7 +285,7 @@ def smoke(archive, output, timeout, force_tcg=False):
                             assert checksum(sums[name][0]) == sums[name][1], name
                             record('c', **{f'{name}UnlockSeconds': sec})
                         wait(lambda: '[docs]' in remote('testparm -s 2>/dev/null || true') and '[archive]' in remote('testparm -s 2>/dev/null || true'), 'shares back', 60)
-                        got = wait(lambda: smb('docs', f'get blob.bin {directory}/smb-blob.bin', account).returncode == 0, 'SMB after unlock', 60)
+                        wait(lambda: smb('docs', f'get blob.bin {directory}/smb-blob.bin', account).returncode == 0, 'SMB after unlock', 60)
                         assert hashlib.sha256((directory / 'smb-blob.bin').read_bytes()).hexdigest() == sums['secure'][1]
                         root = wait(lambda: remote("docker info -f '{{.DockerRootDir}}'", check=False).stdout.strip(), 'docker after unlock', 180, 3)
                         assert root.startswith('/mnt/secure/'), root

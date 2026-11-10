@@ -3,7 +3,6 @@
 Tests create private test accounts and a tiny model/image. Never target user data.
 The standalone runner below is restricted to an ephemeral GitHub Actions runner.
 """
-import base64
 import hashlib
 import json
 import os

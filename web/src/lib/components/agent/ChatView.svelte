@@ -194,12 +194,16 @@
 	function argLines(args: unknown): [string, string][] {
 		if (!args || typeof args !== 'object') return [];
 		return Object.entries(args as Record<string, unknown>)
-			.filter(([k]) => k !== 'content' && k !== 'sheets')
+			.filter(([k]) => k !== 'content' && k !== 'sheets' && k !== 'code')
 			.map(([k, v]) => [k, typeof v === 'string' ? v : JSON.stringify(v)] as [string, string])
 			.map(([k, v]) => [k, v.length > 160 ? v.slice(0, 159) + '…' : v]);
 	}
 	function preview(args: unknown): string {
 		if (!args || typeof args !== 'object') return '';
+		// A program the agent wants to run is shown whole, however long:
+		// nobody approves lines they could not read.
+		const code = (args as Record<string, unknown>).code;
+		if (typeof code === 'string') return code;
 		const c = (args as Record<string, unknown>).content;
 		return typeof c === 'string' ? (c.length > 600 ? c.slice(0, 599) + '…' : c) : '';
 	}
@@ -450,7 +454,7 @@
 					<summary>{t('agent.ask.details')}</summary>
 					<dl>
 						<dt>{t('agent.ask.tool')}</dt>
-						<dd>{p.tool}{p.summary ? ' — ' + p.summary : ''}</dd>
+						<dd>{p.tool}{p.summary && p.tool !== 'code_run' ? ' — ' + p.summary : ''}</dd>
 						{#each lines as [k, v] (k)}<dt>{k}</dt>
 							<dd>{v}</dd>{/each}
 					</dl>
@@ -924,7 +928,7 @@
 	}
 	.ask-details pre {
 		margin: 0 var(--space-4) var(--space-3);
-		max-height: 160px;
+		max-height: 320px;
 		overflow: auto;
 		background: var(--bg);
 		padding: var(--space-2);

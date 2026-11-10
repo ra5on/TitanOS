@@ -286,6 +286,7 @@ Jedes Konto stellt in der Agent-App unter Einstellungen › Eigeninitiative und 
   - Systemtexte und Werkzeug-JSON (der Fehler, den OpenClaw-Nutzer beim „Dreaming“ sahen);
   - Doppeltes.
 - „Erst bestätigen“ (Standard) legt die Funde unter „Vorschläge“ ab, „Einfach machen“ übernimmt sie direkt. Funde aus Chats mit fremden Inhalten sind markiert.
+- Seit 0.75: Steht ein markiertes Gemerktes (aus einem Chat mit fremden Inhalten) im Systemprompt, fragen Web-Werkzeuge in diesem Chat nach, wie bei einem Skill von außen (`chat.OutsideSkill`, `TestUntrustedMemoryMakesWebToolsAsk`). Beschreibungen, die der Agent in einem solchen Chat gespeichert hat, stehen in keinem Systemprompt; unter „Karte“ bleiben sie sichtbar. Ordnerregeln gelten für den echten Ordner, auch hinter einem Link (`TestAgentFolderRuleFollowsLinks`). Die Freigabekarte von `code_run` zeigt das ganze Programm, nicht nur den Anfang.
 - Auf Wunsch erwähnt der Morgenbericht in einem Satz, was neu gemerkt wurde.
 - Wann der Lauf startet:
   - Er wartet, solange irgendein Chat läuft.

@@ -402,21 +402,9 @@ func (s *Server) handleConfirm(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	user := currentUser(r)
-	key := "user:" + user.Name
-	if wait := s.limiter.RetryAfter(key); wait > 0 {
-		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
-		return
-	}
-	if _, ok := s.opts.Users.Authenticate(user.Name, req.Password); !ok {
-		s.limiter.Fail(key)
-		writeError(w, http.StatusForbidden, "wrong_password", "the password is wrong")
-		return
-	}
 	// With two-factor login the confirmation takes both factors as well.
-	if user.TwoFactor() && !s.opts.Users.CheckSecondFactor(user.Name, req.Code) {
-		s.limiter.Fail(key)
-		writeError(w, http.StatusForbidden, "invalid_code", "the code is wrong or was used already")
+	// reconfirm also holds the limit against guesses sent at the same time.
+	if !s.reconfirm(w, currentUser(r), req.Password, req.Code) {
 		return
 	}
 	if cookie, err := r.Cookie(s.cookieName()); err == nil {

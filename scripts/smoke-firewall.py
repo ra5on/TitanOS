@@ -264,7 +264,7 @@ def smoke(archive, output, timeout, force_tcg=False):
                         request('/firewall/confirm', {})
                         host_445 = tcp_from_host(smb_port)
                         assert host_445 == 'silence', host_445
-                        restored = request('/firewall', confirmed['config'], 'PUT')
+                        request('/firewall', confirmed['config'], 'PUT')
                         request('/firewall/confirm', {})
                         host_445_open = tcp_from_host(smb_port)
                         assert host_445_open == 'closed', host_445_open

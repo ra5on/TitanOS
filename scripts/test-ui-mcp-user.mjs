@@ -186,7 +186,13 @@ try {
       await page.getByLabel("MCP-Server für dieses NAS einschalten").count(),
       0,
     );
-    assert.equal(await block.locator("pre, code, button").count(), 0);
+    // Style E3 (0.74): the title row's own open/close button is the only
+    // button a settings group has; nothing of the old MCP block is left.
+    assert.equal(
+      await block.locator("pre, code, button:not(.e3-toggle)").count(),
+      0,
+    );
+    assert.equal(await block.locator("button.e3-toggle").count(), 1);
     assert.equal(
       await block.getByRole("link", { name: "MCP-Server" }).count(),
       1,

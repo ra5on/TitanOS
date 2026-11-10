@@ -198,8 +198,8 @@
 		color: var(--text);
 		border-radius: calc(var(--radius-tile) + 4px);
 		background: var(--desk-surface, color-mix(in srgb, var(--surface) 72%, transparent));
-		backdrop-filter: blur(var(--desk-blur, 22px)) saturate(1.4);
 		-webkit-backdrop-filter: blur(var(--desk-blur, 22px)) saturate(1.4);
+		backdrop-filter: blur(var(--desk-blur, 22px)) saturate(1.4);
 		border: 1px solid color-mix(in srgb, #fff 14%, transparent);
 		box-shadow: 0 20px 50px rgb(0 0 0 / 0.35);
 		width: 100%;

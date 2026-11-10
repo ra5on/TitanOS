@@ -51,6 +51,39 @@ func TestParallelGuessesAreLimited(t *testing.T) {
 	}
 }
 
+// The same holds for the confirmation of a session (stick backup): whoever
+// holds a session cookie must not get more answers than the limit allows
+// by sending guesses at the same time.
+func TestParallelConfirmGuessesAreLimited(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	const guesses = 12
+	codes := make(chan int, guesses)
+	var wg sync.WaitGroup
+	for range guesses {
+		wg.Go(func() {
+			res, _ := ts.request("POST", "/api/v1/session/confirm", map[string]string{"password": "a wrong guess, long enough"})
+			codes <- res.StatusCode
+		})
+	}
+	wg.Wait()
+	close(codes)
+	answered, limited := 0, 0
+	for code := range codes {
+		switch code {
+		case http.StatusForbidden:
+			answered++
+		case http.StatusTooManyRequests:
+			limited++
+		default:
+			t.Fatalf("unexpected status %d", code)
+		}
+	}
+	if answered > 7 || limited < guesses-7 {
+		t.Fatalf("%d guesses answered, %d limited", answered, limited)
+	}
+}
+
 // A reset of the second factor with a role the server refuses must not
 // happen at all.
 func TestResetTwoFactorWithInvalidRoleChangesNothing(t *testing.T) {

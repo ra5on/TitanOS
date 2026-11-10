@@ -104,6 +104,18 @@ func (s *Server) handleAccountWebDAVNew(w http.ResponseWriter, r *http.Request) 
 	if !s.requireWebSession(w, r) {
 		return
 	}
+	// Password and Code confirm it like an API token: the WebDAV password
+	// is another way to the shares of the account.
+	var req struct {
+		Password string `json:"password"`
+		Code     string `json:"code"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if !s.reconfirm(w, currentUser(r), req.Password, req.Code) {
+		return
+	}
 	raw := make([]byte, 18)
 	if _, err := rand.Read(raw); err != nil {
 		writeError(w, http.StatusInternalServerError, "internal", err.Error())
@@ -117,6 +129,15 @@ func (s *Server) handleAccountWebDAVNew(w http.ResponseWriter, r *http.Request) 
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]any{"user": currentUser(r).Name, "password": password})
+}
+
+// forgetWebDAV removes the WebDAV password of an account whose password
+// changed or whose factors were reset: whoever made it with a session that
+// has just ended would keep the way to the shares otherwise.
+func (s *Server) forgetWebDAV(name string) {
+	if err := s.opts.Store.Remove(davPasswordFile(name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		slog.Error("remove the WebDAV password", "user", name, "err", err)
+	}
 }
 
 func (s *Server) handleAccountWebDAVDelete(w http.ResponseWriter, r *http.Request) {

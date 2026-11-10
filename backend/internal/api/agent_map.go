@@ -254,7 +254,10 @@ func (s *Server) mapPrompt(user auth.User) string {
 	m = s.mapFor(user, m)
 	desc := s.agentDescriptions()
 	note := func(key string) string {
-		if d, ok := desc[key]; ok && d.Text != "" {
+		// A description the agent wrote after reading outside content
+		// stays out of every prompt: it would speak to all accounts in
+		// all later chats. It is still listed for the administrators.
+		if d, ok := desc[key]; ok && d.Text != "" && d.By != descriptionByOutside {
 			return " – " + d.Text
 		}
 		return ""
@@ -327,6 +330,10 @@ func (s *Server) handleAgentMapRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"map": m, "built": true, "descriptions": s.agentDescriptions()})
 }
+
+// descriptionByOutside marks a description the agent saved in a chat that
+// had read outside content.
+const descriptionByOutside = "agent (outside content)"
 
 // saveDescription sets or removes (empty text) a description.
 func (s *Server) saveDescription(key, text, by string) error {
@@ -432,7 +439,7 @@ func (b *agentToolbox) mapTools() []*agentTool {
 				}
 				by := "agent"
 				if chat != nil && chat.Tainted {
-					by = "agent (outside content)"
+					by = descriptionByOutside
 				}
 				if err := b.s.saveDescription(req.Key, req.Text, by); err != nil {
 					return agent.Outcome{}, err

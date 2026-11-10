@@ -44,7 +44,11 @@ func TestWebDAV(t *testing.T) {
 		t.Fatalf("off: %d", res.StatusCode)
 	}
 	ts.request("PUT", "/api/v1/system/webdav", map[string]any{"enabled": true})
-	res, body := ts.request("POST", "/api/v1/account/webdav", map[string]any{})
+	// A session alone makes no WebDAV password: it takes the password again.
+	if res, body := ts.request("POST", "/api/v1/account/webdav", map[string]any{}); res.StatusCode != http.StatusForbidden || errorCode(t, body) != "wrong_password" {
+		t.Fatalf("password without confirmation: %d %s", res.StatusCode, body)
+	}
+	res, body := ts.request("POST", "/api/v1/account/webdav", map[string]any{"password": testPassword})
 	var created struct{ User, Password string }
 	if json.Unmarshal(body, &created); res.StatusCode != 200 || len(created.Password) < 20 || res.Header.Get("Cache-Control") != "no-store" {
 		t.Fatalf("password: %d %s", res.StatusCode, body)
@@ -93,7 +97,7 @@ func TestWebDAV(t *testing.T) {
 	// Read-only access stays read-only.
 	reader := ts.newClient()
 	ts.do(reader, "POST", "/api/v1/login", credentials{Name: "reader", Password: testPassword})
-	_, body = ts.do(reader, "POST", "/api/v1/account/webdav", map[string]any{})
+	_, body = ts.do(reader, "POST", "/api/v1/account/webdav", map[string]any{"password": testPassword})
 	var readerPass struct{ Password string }
 	json.Unmarshal(body, &readerPass)
 	if res, got := ts.dav("GET", "/dav/Docs/hello.txt", "reader", readerPass.Password, "", nil); res.StatusCode != 200 || got != "hi" {
@@ -101,6 +105,14 @@ func TestWebDAV(t *testing.T) {
 	}
 	if res, _ := ts.dav("PUT", "/dav/Docs/evil.txt", "reader", readerPass.Password, "x", nil); res.StatusCode < 400 {
 		t.Fatalf("reader put: %d", res.StatusCode)
+	}
+	// A new account password ends the WebDAV password too: whoever made it
+	// with a stolen session must not keep the way to the shares.
+	if res, body := ts.request("POST", "/api/v1/users/reader/password", map[string]string{"password": testPassword + " new"}); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("set password: %d %s", res.StatusCode, body)
+	}
+	if res, _ := ts.dav("GET", "/dav/Docs/hello.txt", "reader", readerPass.Password, "", nil); res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("WebDAV password after a password change: %d", res.StatusCode)
 	}
 	// Guessing is slowed down.
 	limited := false

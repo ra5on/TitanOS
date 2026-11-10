@@ -57,8 +57,9 @@ type passkeyChallenges struct {
 	begins map[string][]time.Time
 }
 
-// passkeySource is the source of a login challenge: the address, or its
-// /64 for IPv6, where one device easily has many addresses.
+// passkeySource is the source of a login attempt or challenge as a key of
+// the limiter: the address, or its /64 for IPv6, where one device easily
+// has many addresses and a guesser could take a fresh one for every try.
 func passkeySource(r *http.Request) string {
 	ip := net.ParseIP(remoteIP(r))
 	if ip == nil {
@@ -359,7 +360,7 @@ func (s *Server) handlePasskeyLoginBegin(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "passkey_address", "passkeys need a host name with a trusted HTTPS certificate, not an IP address")
 		return
 	}
-	if wait := s.limiter.RetryAfter("ip:" + remoteIP(r)); wait > 0 {
+	if wait := s.limiter.RetryAfter(passkeySource(r)); wait > 0 {
 		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed logins, try again later")
 		return
 	}
@@ -395,7 +396,7 @@ func (s *Server) handlePasskeyLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ip := remoteIP(r)
-	ipKey := "ip:" + ip
+	ipKey := passkeySource(r)
 	if wait := s.limiter.RetryAfter(ipKey); wait > 0 {
 		writeJSON(w, http.StatusTooManyRequests, map[string]apiError{"error": {
 			Code: "rate_limited", Message: "too many failed logins, try again later", RetryAfter: int(math.Ceil(wait.Seconds())),

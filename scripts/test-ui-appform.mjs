@@ -238,6 +238,28 @@ async function open(width, path, extra = {}) {
       missingDevices: [],
       cpuMissing: [],
     });
+    // 0.74: the edit page also shows who may use the app (AppAccess).
+    if (p === "/apps/access")
+      return route.fulfill({
+        json: {
+          newApps: "admins",
+          apps: [
+            {
+              app: "immich",
+              icon: "",
+              url: "",
+              webui: "8097",
+              running: true,
+              gate: false,
+              users: [],
+            },
+          ],
+          accounts: [
+            { name: "alex", role: "owner", disabled: false },
+            { name: "mia", role: "user", disabled: false },
+          ],
+        },
+      });
     if (p === "/apps/blank")
       return route.fulfill({
         json: tpl(

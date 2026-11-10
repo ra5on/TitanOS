@@ -223,15 +223,7 @@ func (s *Server) catalogMyShares(user auth.User) map[string]any {
 
 // hiddenPath reports whether MCP must not see a path: what
 // TitanOS keeps on a volume (chats, backups of the stick) and .env files.
-func hiddenPath(p string) bool {
-	for _, part := range strings.Split(path.Clean("/"+p), "/") {
-		lower := strings.ToLower(part)
-		if lower == ".titanos" || lower == ".env" || strings.HasSuffix(lower, ".env") || strings.HasSuffix(lower, ".titanos-part") {
-			return true
-		}
-	}
-	return false
-}
+func hiddenPath(p string) bool { return files.MachineHidden(p) }
 
 // Preserve error categories without putting paths or file contents in the
 // default diagnostic export. The model still receives actionable details.

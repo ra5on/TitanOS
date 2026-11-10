@@ -10,8 +10,11 @@ Zertifikat. **Ab Werk aus.**
 
 1. Einstellungen › Zugang › **WebDAV einschalten** (Besitzer/Administratoren).
 2. Jedes Konto erzeugt unter Mein Konto › **WebDAV** ein eigenes
-   WebDAV-Passwort. TitanOS zeigt es genau einmal; ein neues ersetzt das alte,
-   Löschen sperrt alle Apps damit aus.
+   WebDAV-Passwort und bestätigt das mit dem Kontopasswort (bei
+   Zwei-Faktor-Anmeldung zusätzlich mit einem Code). TitanOS zeigt es genau
+   einmal; ein neues ersetzt das alte, Löschen sperrt alle Apps damit aus.
+   Wer sein Kontopasswort ändert oder die Zwei-Faktor-Anmeldung zurücksetzen
+   lässt, braucht danach ein neues WebDAV-Passwort: das alte wird gelöscht.
 3. In der App: Server `https://<NAS>/dav/`, Benutzer = Kontoname, Passwort =
    WebDAV-Passwort. `/dav/` listet die Freigaben des Kontos, jede Freigabe ist
    ein Ordner (`/dav/<Freigabe>/`).

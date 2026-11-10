@@ -134,6 +134,31 @@ func TestClusterThroughTheAPI(t *testing.T) {
 	if res, err := http.DefaultClient.Do(req); err != nil || res.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("proxy without login: %v %v", err, res)
 	}
+	// A page of another origin (an app on a neighbouring name sends the
+	// cookie too) must not open a console of B through A.
+	upgrade := func(origin string) int {
+		req, _ := http.NewRequest("GET", a.url+"/api/v1/cluster/nodes/"+bID+"/api/terminal/shell", nil)
+		req.Header.Set("Connection", "Upgrade")
+		req.Header.Set("Upgrade", "websocket")
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		res, err := a.client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.StatusCode
+	}
+	if code := upgrade("https://app.nas.example"); code != http.StatusForbidden {
+		t.Fatalf("console of B from another origin: %d", code)
+	}
+	if code := upgrade(""); code != http.StatusForbidden {
+		t.Fatalf("console of B without Origin: %d", code)
+	}
+	if code := upgrade(a.url); code == http.StatusForbidden {
+		t.Fatalf("console of B from the web interface of A refused: %d", code)
+	}
 	// A forged signature does not reach B.
 	req, _ = http.NewRequest("GET", b.url+"/api/v1/users", nil)
 	req.Header.Set(cluster.Header, "node="+nodeA.ID()+", gen=0, time=1, nonce=000000000000000000000000, user=alex, sig=AAAA")

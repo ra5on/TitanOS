@@ -146,6 +146,7 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		}
 		// Whoever had the lost phone is logged out as well.
 		s.sessions.DeleteUser(target.Name, "")
+		s.forgetWebDAV(target.Name)
 		slog.Info("two-factor login reset", "user", target.Name, "by", actor.Name, "ip", remoteIP(r))
 	}
 	user, err := s.opts.Users.SetRole(target.Name, req.Role)
@@ -216,6 +217,7 @@ func (s *Server) handleSetPassword(w http.ResponseWriter, r *http.Request) {
 		keep = cookie.Value
 	}
 	s.sessions.DeleteUser(target.Name, keep)
+	s.forgetWebDAV(target.Name)
 	slog.Info("password changed", "user", target.Name, "by", actor.Name, "ip", remoteIP(r))
 	s.opts.Shares.Kick()
 	s.opts.SSH.Kick()

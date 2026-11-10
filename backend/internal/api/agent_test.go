@@ -102,6 +102,9 @@ func agentServer(t *testing.T, fake *agentOllama, policy agent.Policy) *testServ
 	ts.setup()
 	dir := t.TempDir()
 	ts.server.agentOpen = func() (*os.Root, error) { return os.OpenRoot(dir) }
+	// A run still writes after its answer (copy of the chat and the guides
+	// in the share); the folders of the test go away only after that.
+	t.Cleanup(ts.server.agentRT.work.Wait)
 	settings := map[string]any{"enabled": true, "ollama": fake.start(t), "model": "gpt-oss:20b", "think": "high", "policy": policy}
 	if res, body := ts.request("PUT", "/api/v1/agent/settings", settings); res.StatusCode != http.StatusOK {
 		t.Fatalf("settings: %d %s", res.StatusCode, body)

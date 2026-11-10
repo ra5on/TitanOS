@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Exercise the new backend using a published base and a local titand, only on disposable QEMU disks."""
 import argparse
-import hashlib
 import http.cookiejar
 import http.client
 import importlib.util

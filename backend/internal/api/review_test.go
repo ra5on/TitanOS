@@ -13,7 +13,9 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/appbackup"
+	"github.com/ra5on/TitanOS/backend/internal/files"
 )
 
 // The stick manager shows settings without secrets and nothing else, and
@@ -242,6 +244,23 @@ func TestSetupOnlyFromTheHomeNetwork(t *testing.T) {
 	}
 }
 
+// A reverse proxy or tunnel in the home network has a private address, but
+// whoever asks through it may sit anywhere.
+func TestSetupNotThroughAProxy(t *testing.T) {
+	for _, header := range []string{"X-Forwarded-For", "Cf-Connecting-Ip", "Forwarded"} {
+		reached := false
+		handler := setupLocal(func(w http.ResponseWriter, r *http.Request) { reached = true })
+		req := httptest.NewRequest("POST", "/api/v1/setup", nil)
+		req.RemoteAddr = "192.168.1.20:1"
+		req.Header.Set(header, "203.0.113.9")
+		rec := httptest.NewRecorder()
+		handler(rec, req)
+		if reached || rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "setup_not_local") {
+			t.Errorf("%s: reached %v, %d %s", header, reached, rec.Code, rec.Body)
+		}
+	}
+}
+
 // index.html carries its policy also as a header, with what a meta tag
 // cannot say; without TLS from Let's Encrypt there is no HSTS.
 func TestContentSecurityPolicyHeader(t *testing.T) {
@@ -283,5 +302,40 @@ func TestJSONBodyHasADeadline(t *testing.T) {
 	res.Body.Close()
 	if res.StatusCode != http.StatusRequestTimeout {
 		t.Fatalf("slow body: %d", res.StatusCode)
+	}
+}
+
+// Roots handed to tokens, MCP clients and the agent carry the fence
+// against .titanos and .env for every file route.
+func TestMachineRootsAreMarked(t *testing.T) {
+	roots := machineRoots([]files.Root{{ID: "volume/Data"}, {ID: "share/Docs"}})
+	for _, root := range roots {
+		if !root.Machine {
+			t.Errorf("root %s is not marked", root.ID)
+		}
+	}
+}
+
+// A folder rule of the agent holds for the real folder: a link in an
+// allowed folder that leads into a locked one is the locked one.
+func TestAgentFolderRuleFollowsLinks(t *testing.T) {
+	dir := t.TempDir()
+	for _, d := range []string{"Docs/Open", "Docs/Private"} {
+		if err := os.MkdirAll(filepath.Join(dir, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(filepath.Join(dir, "Docs/Private"), filepath.Join(dir, "Docs/Open/link")); err != nil {
+		t.Fatal(err)
+	}
+	b := &agentToolbox{dirs: map[string]string{"share/Docs": filepath.Join(dir, "Docs")}}
+	b.settings.Policy.Folders = []agent.FolderRule{{Root: "share/Docs", Path: "Private", Mode: agent.ModeDeny}}
+	for p, want := range map[string]string{
+		"Private/tax.pdf": agent.ModeDeny, "Open/link/tax.pdf": agent.ModeDeny, "Open/link/new-file.txt": agent.ModeDeny,
+		"Open/note.txt": "", "Open/new/deeper/file.txt": "",
+	} {
+		if got := b.realFolderMode("share/Docs", p); got != want {
+			t.Errorf("%s: mode %q, want %q", p, got, want)
+		}
 	}
 }

@@ -459,7 +459,9 @@ func TestRealRestic(t *testing.T) {
 	})
 	// forget --prune as the sender runs it: works, nothing refused.
 	out := must("forget", "--keep-last", "1", "--prune")
-	if strings.Contains(out, "403") || strings.Contains(out, "unable to remove") {
+	// Not a bare "403": the output names the temporary folder of the test,
+	// whose random number may hold those digits.
+	if strings.Contains(out, "403 Forbidden") || strings.Contains(out, "(403)") || strings.Contains(out, "unable to remove") {
 		t.Fatalf("prune refused: %s", out)
 	}
 	must("check")

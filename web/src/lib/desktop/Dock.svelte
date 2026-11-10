@@ -353,8 +353,8 @@
 		border-radius: calc((var(--size) * 0.36 + 9px) * min(var(--radius-scale, 1), 1.4));
 		background: color-mix(in srgb, var(--surface) var(--plate), transparent);
 		/* The global "Glaseffekt" (Settings › Appearance, PLAN 64). */
-		backdrop-filter: blur(var(--desk-blur, 20px)) saturate(1.3);
 		-webkit-backdrop-filter: blur(var(--desk-blur, 20px)) saturate(1.3);
+		backdrop-filter: blur(var(--desk-blur, 20px)) saturate(1.3);
 		border: 1px solid color-mix(in srgb, #fff 14%, transparent);
 		box-shadow: 0 16px 40px rgb(0 0 0 / 0.4);
 		max-width: calc(100% - 24px);
@@ -485,8 +485,8 @@
 		background: none;
 		border-color: transparent;
 		box-shadow: none;
-		backdrop-filter: none;
 		-webkit-backdrop-filter: none;
+		backdrop-filter: none;
 	}
 	.dot.on {
 		background: var(--text);

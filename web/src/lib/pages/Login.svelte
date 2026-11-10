@@ -777,8 +777,8 @@
 		padding: 0 5px 0 18px;
 		background: rgba(255, 255, 255, 0.16);
 		border: 1px solid rgba(255, 255, 255, 0.3);
-		backdrop-filter: blur(22px) saturate(1.5);
 		-webkit-backdrop-filter: blur(22px) saturate(1.5);
+		backdrop-filter: blur(22px) saturate(1.5);
 		overflow: hidden;
 		transition: background 0.25s;
 	}

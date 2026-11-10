@@ -50,16 +50,24 @@ type loginAccount struct {
 // came through one and counts as from outside, whatever its address.
 var proxyHeaders = []string{"Cf-Connecting-Ip", "Cf-Ray", "Cf-Ipcountry", "True-Client-Ip", "X-Forwarded-For", "X-Forwarded-Host", "X-Real-Ip", "Forwarded", "Via"}
 
+// viaProxy reports whether a tunnel or reverse proxy passed the request on.
+func viaProxy(r *http.Request) bool {
+	for _, h := range proxyHeaders {
+		if r.Header.Get(h) != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // fromHomeNetwork tells whether a request comes straight from a device in
 // the home network. It fails closed: loopback and the NAS's own addresses
 // are outside (a tunnel such as cloudflared on the NAS connects from
 // there), so are Docker networks, VPNs (Tailscale, NetBird, WireGuard) and
 // any request a proxy passed on.
 func (s *Server) fromHomeNetwork(r *http.Request) bool {
-	for _, h := range proxyHeaders {
-		if r.Header.Get(h) != "" {
-			return false
-		}
+	if viaProxy(r) {
+		return false
 	}
 	addr, err := netip.ParseAddr(remoteIP(r))
 	if err != nil {
@@ -135,9 +143,8 @@ func (s *Server) handleLoginAccounts(w http.ResponseWriter, r *http.Request) {
 	// A cache (browser, Cloudflare) must never hand the home network's
 	// answer to someone else.
 	w.Header().Set("Cache-Control", "no-store")
-	ip := remoteIP(r)
 	// An address that is guessing passwords gets no names either.
-	if wait := s.limiter.RetryAfter("ip:" + ip); wait > 0 {
+	if wait := s.limiter.RetryAfter(passkeySource(r)); wait > 0 {
 		writeRateLimited(w, wait, "too many failed logins, try again later")
 		return
 	}

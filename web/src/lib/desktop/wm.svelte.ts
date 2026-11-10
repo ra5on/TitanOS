@@ -418,9 +418,18 @@ export function snapAt(x: number, y: number): Snap {
 
 /** Frames register here so the side bar can steer them. */
 const frames = new Map<string, HTMLIFrameElement>();
+// A frame listens for "titanos-goto" only once its page is up; it says so
+// with its first "titanos-page". A page asked for before that waits here,
+// so a click on the side bar while the window still loads is not lost.
+const listening = new Set<string>();
+const waiting = new Map<string, string>();
 export function registerFrame(id: string, frame: HTMLIFrameElement | null) {
 	if (frame) frames.set(id, frame);
-	else frames.delete(id);
+	else {
+		frames.delete(id);
+		listening.delete(id);
+		waiting.delete(id);
+	}
 }
 
 /** PLAN 67-1: the frame of a window (pages of TitanOS), for the menu bar. */
@@ -428,18 +437,31 @@ export function frameOf(id: string): HTMLIFrameElement | undefined {
 	return frames.get(id);
 }
 
+function sendGoto(id: string, href: string) {
+	try {
+		// Inside the frame SvelteKit moves without loading the app anew.
+		frames.get(id)?.contentWindow?.postMessage({ type: 'titanos-goto', href }, location.origin);
+	} catch {
+		// The frame loads the page through its src instead.
+	}
+}
+
+/** The page in a window's frame is up; returns the page asked for meanwhile, now sent. */
+export function frameListening(id: string): string | undefined {
+	listening.add(id);
+	const href = waiting.get(id);
+	waiting.delete(id);
+	if (href !== undefined) sendGoto(id, href);
+	return href;
+}
+
 /** Shows another page of the program in its window. */
 export function navigateWindow(id: string, href: string) {
 	const win = wm.windows.find((w) => w.id === id);
 	if (!win) return;
 	win.href = href;
-	const frame = frames.get(id);
-	try {
-		// Inside the frame SvelteKit moves without loading the app anew.
-		frame?.contentWindow?.postMessage({ type: 'titanos-goto', href }, location.origin);
-	} catch {
-		// The frame loads the page through its src instead.
-	}
+	if (frames.has(id) && !listening.has(id)) waiting.set(id, href);
+	sendGoto(id, href);
 	saveWindows();
 }
 
