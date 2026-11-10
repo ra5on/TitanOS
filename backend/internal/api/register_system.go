@@ -28,9 +28,7 @@ func (s *Server) registerMaintenance(mux *routeMux) {
 
 // registerUPS registers the routes of the UPS.
 func (s *Server) registerUPS(mux *routeMux) {
-	mux.HandleFunc("GET /api/v1/ups", s.requireAdmin(s.handleUPS))
-	mux.HandleFunc("PUT /api/v1/ups", s.requireAdmin(s.handleUPSChange))
-	mux.HandleFunc("POST /api/v1/ups/scan", s.requireAdmin(s.handleUPSScan))
+	upsArea{ups: s.opts.UPS}.register(mux, s.requireAdmin)
 }
 
 // registerUpdate registers the routes of updates.
