@@ -343,7 +343,7 @@ func (m *Manager) Load() error {
 				if m.jobs == nil {
 					m.jobs = map[string]*Job{}
 				}
-				m.jobs[name] = &Job{State: "failed", Text: "the copy of " + filepath.Base(disk.Source) + " was interrupted; remove the VM and create it again"}
+				m.jobs[name] = &Job{Operation: "copy-interrupted", State: "failed", Text: "the copy of " + filepath.Base(disk.Source) + " was interrupted; remove the VM and create it again"}
 				break
 			}
 		}

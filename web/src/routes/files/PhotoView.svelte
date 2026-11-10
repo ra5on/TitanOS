@@ -85,7 +85,7 @@
 	{:else if list === null}<p role="status">{t('files.previewLoading')}</p>
 	{:else if photos.length === 0}<p class="muted">{t('files.photoEmpty')}</p>
 	{:else}
-		<div class="bar">
+		<div class="photo-bar">
 			<label
 				>{t('files.photoOrder')}
 				<select class="field" bind:value={order}
@@ -171,7 +171,7 @@
 </Dialog>
 
 <style>
-	.bar {
+	.photo-bar {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
@@ -179,7 +179,7 @@
 		gap: var(--space-3);
 		margin-bottom: var(--space-3);
 	}
-	.bar label {
+	.photo-bar label {
 		display: flex;
 		align-items: center;
 		gap: var(--space-2);

@@ -288,6 +288,10 @@ type Status struct {
 	// KernelMissing names a newer release that has no system with the
 	// chosen kernel variant: it is not offered until the choice changes.
 	KernelMissing string `json:"kernelMissing,omitempty"`
+	// FailedVersion names the release that did not come up on this NAS
+	// (its trial starts failed, the old system came back). It is not
+	// installed by itself again; by hand it still can be.
+	FailedVersion string `json:"failedVersion,omitempty"`
 }
 
 // AppStatus tells about the app updates of the running slot.
@@ -711,6 +715,7 @@ func (m *Manager) Status() Status {
 	status.Variant = normalVariant(m.Variant)
 	status.BootLoader = m.BootLoader()
 	status.KernelMissing = m.kernelMissing
+	status.FailedVersion = m.failedVersion
 	if m.available != nil {
 		status.Kind = KindSystem
 		if m.appKind(m.available) {

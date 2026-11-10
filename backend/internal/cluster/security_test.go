@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -470,5 +471,39 @@ func TestNewAdminNodeKeepsItsOwnAccountsLocal(t *testing.T) {
 	eventually(t, "dora on A", func() bool { return hasAccount(a.users, "dora") })
 	if hasAccount(a.users, "carol") {
 		t.Fatal("carol spread with the next sync")
+	}
+}
+
+// The owner makes an account that stayed local on the admin node an
+// account of the cluster: only then does it reach the other nodes.
+func TestSharingAKeptLocalAccount(t *testing.T) {
+	ctx := context.Background()
+	a, b := joinedPair(t)
+	if _, err := b.users.Create("carol", "password-of-b", auth.RoleAdmin); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.m.ShareAccount(ctx, "alex"); err == nil {
+		t.Fatal("an account of the cluster was shared once more")
+	}
+	if err := a.m.HandOver(ctx, b.m.ID()); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "B is the admin node", func() bool { return b.m.IsAdmin() && a.m.View().Admin == b.m.ID() })
+	b.m.syncAccounts(ctx)
+	if got := b.m.View().LocalAccounts; !slices.Contains(got, "carol") {
+		t.Fatalf("local accounts shown: %v", got)
+	}
+	if len(a.m.View().LocalAccounts) != 0 {
+		t.Fatal("a member shows local accounts of the admin node")
+	}
+	if err := a.m.ShareAccount(ctx, "carol"); err == nil {
+		t.Fatal("a member shared an account")
+	}
+	if err := b.m.ShareAccount(ctx, "carol"); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "carol on A", func() bool { return hasAccount(a.users, "carol") })
+	if !b.m.ClusterAccount("carol") || slices.Contains(b.m.View().LocalAccounts, "carol") {
+		t.Fatal("carol still counts as local")
 	}
 }

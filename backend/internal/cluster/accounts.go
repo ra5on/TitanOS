@@ -45,6 +45,40 @@ func (m *Manager) AccountChanged(name string) {
 	}
 }
 
+// ShareAccount makes an account that stayed local on this admin node
+// (State.KeptLocal) an account of the cluster: from now on it is handed
+// out like the others, and an account of the same name on another node
+// is replaced by it. Only someone at this node decides that; a hand-over
+// of the role never does.
+func (m *Manager) ShareAccount(ctx context.Context, name string) error {
+	if !m.IsAdmin() {
+		return ErrNotPermitted
+	}
+	if !m.accountsLoaded() {
+		return ErrNotLoaded
+	}
+	if _, exists := m.Users.Get(name); !exists {
+		return ErrInvalid
+	}
+	m.settleAdminAccounts()
+	m.mu.Lock()
+	if m.state == nil || !slices.Contains(m.state.KeptLocal, name) {
+		m.mu.Unlock()
+		return ErrInvalid
+	}
+	next := cloneState(m.state)
+	next.KeptLocal = slices.DeleteFunc(next.KeptLocal, func(n string) bool { return n == name })
+	err := m.saveLocked(next, m.secrets)
+	m.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	if m.noteLocal(name, false) {
+		m.pushAccount(ctx, name)
+	}
+	return nil
+}
+
 // accountsLoaded reports whether the accounts of this NAS were read. While
 // they were not (one unreadable account file fails the whole load, and
 // titand keeps running), "the account is not there" means nothing.

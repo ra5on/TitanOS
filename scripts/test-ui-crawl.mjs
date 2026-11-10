@@ -2,6 +2,7 @@
 // find pages and dialogs that break while rendering. titand -dev changes no
 // disks or system settings; use a throwaway -config directory.
 import { mkdir, writeFile } from "node:fs/promises";
+import { cutTextIn } from "./test-ui-fixtures.mjs";
 const { chromium } = await import(
   process.env.PLAYWRIGHT_MODULE || "playwright"
 );
@@ -144,6 +145,20 @@ async function broken() {
     .catch(() => 0);
 }
 
+// No text may be cut off (docs/rules/WEB-UI.md): on the page as it loads
+// and in whatever a click opens (dialog, menu, folded section). Each
+// finding is reported once per route.
+const cutSeen = new Set();
+async function cutText(route, step) {
+  const found = await page.evaluate(cutTextIn).catch(() => []);
+  for (const item of found) {
+    const key = route + " " + item;
+    if (cutSeen.has(key)) continue;
+    cutSeen.add(key);
+    note(route, step, "cut-off text: " + item);
+  }
+}
+
 function note(route, step, detail) {
   findings.push({ route, step, detail });
   console.log(`FAIL ${route} :: ${step} :: ${detail}`);
@@ -173,6 +188,7 @@ async function crawl(route) {
     );
     return;
   }
+  await cutText(route, "load");
   const labels = await page
     .locator("main button:visible")
     .evaluateAll((buttons) =>
@@ -202,6 +218,7 @@ async function crawl(route) {
       );
       await page.screenshot({ path: `${out}/${findings.length}.png` });
     }
+    await cutText(route, `click "${label}"`);
     await page.keyboard.press("Escape");
     if (
       new URL(page.url()).pathname !== new URL(base + route).pathname ||

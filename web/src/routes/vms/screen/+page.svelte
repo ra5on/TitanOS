@@ -91,7 +91,7 @@
 				/>{/key}
 		{/if}
 	</div>
-	<div class="bar">
+	<div class="screen-bar">
 		<span class="mono">{displayName || name}</span>
 		{#if error}<span class="muted" role="alert">{error}</span>
 		{:else if running === null}<span class="muted" role="status">{t('common.loading')}</span>
@@ -135,7 +135,7 @@
 		flex-direction: column;
 		background: var(--bg);
 	}
-	.bar {
+	.screen-bar {
 		flex-wrap: wrap;
 		flex: none;
 		display: flex;
@@ -152,7 +152,7 @@
 	.grow {
 		flex: 1 1 auto;
 	}
-	.bar button {
+	.screen-bar button {
 		height: 1.75rem;
 		padding: 0 var(--space-2-5);
 		background: transparent;
@@ -162,8 +162,8 @@
 		font: inherit;
 		cursor: pointer;
 	}
-	.bar button:hover,
-	.bar button[aria-pressed='true'] {
+	.screen-bar button:hover,
+	.screen-bar button[aria-pressed='true'] {
 		background: var(--chip);
 	}
 	.frame {

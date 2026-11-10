@@ -20,6 +20,7 @@ const base = process.env.UI_URL || "http://127.0.0.1:5240";
 const out = process.env.UI_OUTPUT || "out/validation/windows";
 await mkdir(out, { recursive: true });
 const errors = [];
+// WINDOWS_LONG=1 makes every name of the fixtures very long for that pass.
 // WINDOWS_REPORT=1 lists findings instead of stopping at the first one.
 const failures = [];
 function check(ok, message) {
@@ -277,6 +278,68 @@ const names = {
 
 /** The desktop with one window of a program at the given width; once more
  * if the dev server reloaded the page meanwhile. */
+// WINDOWS_LONG=1: every name the API answers with is made very long (in the
+// page, after the fixtures answered), so that the pass over all pages also
+// shows where a long share, volume, container or account name is cut off.
+// References between answers stay intact: each string grows the same way.
+async function longNames(ctx) {
+  if (!process.env.WINDOWS_LONG) return;
+  await ctx.addInitScript(() => {
+    const keys = new Set([
+      "name",
+      "displayName",
+      "label",
+      "title",
+      "model",
+      "hostname",
+      "comment",
+      "description",
+      "app",
+      "image",
+      "volume",
+      "share",
+      "user",
+      "username",
+      "folder",
+      "target",
+      "source",
+    ]);
+    const tail = " Sehr-langer-Name-zur-Probe-der-Umbrueche-0123456789";
+    const grow = (value, key) => {
+      if (Array.isArray(value)) return value.map((v) => grow(v, key));
+      if (value && typeof value === "object") {
+        const out = {};
+        for (const [k, v] of Object.entries(value)) out[k] = grow(v, k);
+        return out;
+      }
+      return typeof value === "string" && value && keys.has(key)
+        ? value + tail
+        : value;
+    };
+    const plain = window.fetch;
+    window.fetch = async (...args) => {
+      const res = await plain(...args);
+      const url = String(args[0]?.url ?? args[0] ?? "");
+      if (
+        !url.includes("/api/v1/") ||
+        url.includes("/session") ||
+        url.includes("/preferences") ||
+        !(res.headers.get("content-type") ?? "").includes("json")
+      )
+        return res;
+      try {
+        const body = grow(await res.clone().json(), "");
+        return new Response(JSON.stringify(body), {
+          status: res.status,
+          headers: res.headers,
+        });
+      } catch {
+        return res;
+      }
+    };
+  });
+}
+
 async function openWindow(app, path, w) {
   try {
     return await openWindowOnce(app, path, w);
@@ -288,6 +351,7 @@ async function openWindow(app, path, w) {
 async function openWindowOnce(app, path, w) {
   const made = await create("owner", "graphit", 1600);
   await made.page.setViewportSize({ width: 1600, height: 1000 });
+  await longNames(made.ctx);
   await made.ctx.addInitScript(
     ({ app, path, w, names }) => {
       localStorage.removeItem("titanos.layout");
@@ -662,6 +726,7 @@ if (process.env.WINDOWS_ALL) {
   for (const [, paths] of everything) {
     const made = await create("owner", "graphit", 390);
     await made.page.setViewportSize({ width: 390, height: 844 });
+    await longNames(made.ctx);
     await made.ctx.addInitScript(() =>
       localStorage.removeItem("titanos.layout"),
     );

@@ -136,7 +136,10 @@
 			ondone(name);
 		} catch (err) {
 			const code = err instanceof ApiError ? err.code : 'internal';
-			error = code === 'lxc_failed' && err instanceof ApiError ? err.message : errorText(code);
+			error =
+				code === 'lxc_failed' && err instanceof ApiError
+					? `${errorText(code)} ${err.message}`
+					: errorText(code);
 		} finally {
 			busy = false;
 		}
