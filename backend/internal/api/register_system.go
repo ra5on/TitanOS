@@ -15,8 +15,7 @@ func (s *Server) registerPower(mux *routeMux) {
 func (s *Server) registerMaintenance(mux *routeMux) {
 	configBackupArea{backup: s.opts.ConfigBackup, storage: s.opts.Storage, confirmed: s.confirmed}.register(mux, s.requireAdmin)
 	diagnoseArea{diagnose: s.opts.Diagnose, logKeep: s.opts.LogKeep, users: s.opts.Users}.register(mux, s.requireAdmin)
-	mux.HandleFunc("GET /api/v1/activity", s.requireAdmin(s.handleActivity))
-	mux.HandleFunc("PUT /api/v1/activity", s.requireAdmin(s.handleActivitySettings))
+	activityArea{activity: s.opts.Activity}.register(mux, s.requireAdmin)
 	aboutArea{version: s.opts.Version, shareDir: s.opts.ShareDir}.register(mux, s.requireUser)
 }
 
