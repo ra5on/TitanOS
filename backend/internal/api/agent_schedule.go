@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -144,13 +145,21 @@ func (s *Server) agentTriggered(user string, sc agent.Schedule, now time.Time) b
 		r.marks[key] = newest
 		return false
 	}
-	for _, t := range transitions {
-		if !strings.EqualFold(t.To, sc.Trigger.State) {
+	for i, t := range transitions {
+		if !agentTriggerFits(*sc.Trigger, t) {
 			continue
 		}
-		if sc.Trigger.For > 0 && now.Sub(t.Time) < time.Duration(sc.Trigger.For)*time.Minute {
-			// Not long enough yet: look again next minute.
-			return false
+		if sc.Trigger.For > 0 {
+			// "For N minutes" means the state was kept that long: a door
+			// that was opened and shut again a minute later did not stay
+			// open, however long ago that was.
+			if !agentTriggerHeld(*sc.Trigger, transitions[i+1:]) {
+				continue
+			}
+			if now.Sub(t.Time) < time.Duration(sc.Trigger.For)*time.Minute {
+				// Not long enough yet: look again next minute.
+				return false
+			}
 		}
 		r.marks[key] = newest
 		return true
@@ -193,11 +202,12 @@ func (s *Server) agentRunSchedule(user auth.User, id string, now time.Time, late
 	if err := store.SaveChat(user.Name, chat); err != nil {
 		return "", err
 	}
-	list[i].LastRun, list[i].Chat = now, chat.ID
-	if sc.Kind == "reminder" {
-		list[i].LastOK = true
-	}
-	if err := store.SaveSchedules(user.Name, list); err != nil {
+	if err := store.UpdateSchedule(user.Name, id, func(current *agent.Schedule) {
+		current.LastRun, current.Chat = now, chat.ID
+		if sc.Kind == "reminder" {
+			current.LastOK = true
+		}
+	}); err != nil {
 		return "", err
 	}
 	if sc.Kind == "reminder" {
@@ -257,17 +267,10 @@ func agentMorningTask(r *agent.Report) string {
 }
 
 func (s *Server) agentScheduleResult(user, id string, chat *agent.Chat) {
-	store := s.agentStore()
-	list, err := store.Schedules(user)
-	if err != nil {
-		return
-	}
-	for i := range list {
-		if list[i].ID == id {
-			list[i].LastOK = chat.State == agent.StateIdle
-		}
-	}
-	if err := store.SaveSchedules(user, list); err != nil {
+	err := s.agentStore().UpdateSchedule(user, id, func(current *agent.Schedule) {
+		current.LastOK = chat.State == agent.StateIdle
+	})
+	if err != nil && !errors.Is(err, agent.ErrNotFound) {
 		slog.Warn("result of a recurring task not saved", "schedule", id, "err", err)
 	}
 	s.agentHANotify(chat)
@@ -428,4 +431,31 @@ func (s *Server) agentButton(key, action string) error {
 		}
 	}
 	return fmt.Errorf("no such task with a button")
+}
+
+// agentTriggerFits says whether a change of an entity is what a trigger
+// waits for: its state (if one is named) and its thresholds (if any),
+// which count when the value crosses them.
+func agentTriggerFits(tr agent.Trigger, t homeassistant.Transition) bool {
+	if tr.State != "" && !strings.EqualFold(t.To, tr.State) {
+		return false
+	}
+	return homeassistant.Match(t, "", "", tr.Above, tr.Below)
+}
+
+// agentTriggerHeld says whether, after a change that fits, the entity
+// stayed in what the trigger waits for through all later changes.
+func agentTriggerHeld(tr agent.Trigger, later []homeassistant.Transition) bool {
+	for _, t := range later {
+		if tr.State != "" && !strings.EqualFold(t.To, tr.State) {
+			return false
+		}
+		if tr.Above != nil || tr.Below != nil {
+			value, err := strconv.ParseFloat(t.To, 64)
+			if err != nil || tr.Above != nil && value <= *tr.Above || tr.Below != nil && value >= *tr.Below {
+				return false
+			}
+		}
+	}
+	return true
 }

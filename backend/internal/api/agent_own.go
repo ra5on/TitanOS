@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/ra5on/TitanOS/backend/internal/scripts"
+	"math"
 	"regexp"
 	"slices"
 	"strings"
@@ -255,9 +256,14 @@ func checkSchedule(sc *agent.Schedule) error {
 	}
 	if sc.Trigger != nil {
 		t := sc.Trigger
-		if !regexp.MustCompile(`^[a-z_]+\.[a-z0-9_]+$`).MatchString(t.Entity) || t.State == "" || len(t.State) > 100 || t.For < 0 || t.For > 1440 ||
+		limit := func(v *float64) bool {
+			return v == nil || !math.IsNaN(*v) && !math.IsInf(*v, 0) && math.Abs(*v) <= 1e12
+		}
+		if !regexp.MustCompile(`^[a-z_]+\.[a-z0-9_]+$`).MatchString(t.Entity) || len(t.State) > 100 || t.For < 0 || t.For > 1440 ||
+			t.State == "" && t.Above == nil && t.Below == nil || !limit(t.Above) || !limit(t.Below) ||
+			t.Above != nil && t.Below != nil && *t.Below <= *t.Above ||
 			!regexp.MustCompile(`^(|main|[a-z0-9]{8})$`).MatchString(t.Connection) {
-			return toolcatalog.Errorf("a trigger needs an entity id like binary_sensor.door and a state")
+			return toolcatalog.Errorf("a trigger needs an entity id like binary_sensor.door and a state, or a threshold (above, below) for a value")
 		}
 		sc.Every = "trigger"
 		return nil

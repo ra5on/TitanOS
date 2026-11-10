@@ -155,7 +155,15 @@ export type Schedule = {
 	lastRun?: string;
 	lastOk?: boolean;
 	chat?: string;
-	trigger?: { entity: string; state: string; for?: number; connection?: string } | null;
+	trigger?: {
+		entity: string;
+		state: string;
+		/** Thresholds for entities with numbers: fires when the value crosses them. */
+		above?: number;
+		below?: number;
+		for?: number;
+		connection?: string;
+	} | null;
 	button?: boolean;
 	/** PLAN 72: may it wake a sleeping disk; empty = as the account chose. */
 	wake?: '' | 'wake' | 'ask' | 'never';

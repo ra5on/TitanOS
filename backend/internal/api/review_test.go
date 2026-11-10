@@ -16,6 +16,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/agent"
 	"github.com/ra5on/TitanOS/backend/internal/appbackup"
 	"github.com/ra5on/TitanOS/backend/internal/files"
+	"github.com/ra5on/TitanOS/backend/internal/homeassistant"
 	"github.com/ra5on/TitanOS/backend/internal/lxc"
 )
 
@@ -374,5 +375,34 @@ func TestServiceSwitchesDoNotLoseEachOther(t *testing.T) {
 		if err := ts.store.ReadJSON(servicesFile, &stored); err != nil || !stored.VMsOff || !stored.LXCOff {
 			t.Fatalf("stored %+v, %v", stored, err)
 		}
+	}
+}
+
+// Triggers of the agent on Home Assistant: a state, or a threshold a value
+// crosses, and "for N minutes" only when it stayed that way.
+func TestAgentTriggerFitsAndHolds(t *testing.T) {
+	f := func(v float64) *float64 { return &v }
+	change := func(from, to string) homeassistant.Transition { return homeassistant.Transition{From: from, To: to} }
+	door := agent.Trigger{Entity: "binary_sensor.door", State: "on"}
+	if !agentTriggerFits(door, change("off", "ON")) || agentTriggerFits(door, change("on", "off")) {
+		t.Error("state trigger")
+	}
+	warm := agent.Trigger{Entity: "sensor.temp", Above: f(28)}
+	if !agentTriggerFits(warm, change("27.5", "28.4")) {
+		t.Error("crossing the threshold upwards does not fire")
+	}
+	if agentTriggerFits(warm, change("28.4", "29")) || agentTriggerFits(warm, change("27", "27.9")) || agentTriggerFits(warm, change("27", "unavailable")) {
+		t.Error("fires without crossing the threshold")
+	}
+	cold := agent.Trigger{Entity: "sensor.temp", Below: f(5)}
+	if !agentTriggerFits(cold, change("6", "4.5")) || agentTriggerFits(cold, change("4.5", "4")) {
+		t.Error("threshold downwards")
+	}
+	// Held: the door was shut again, the temperature fell back.
+	if agentTriggerHeld(door, []homeassistant.Transition{change("on", "off")}) || !agentTriggerHeld(door, nil) {
+		t.Error("a door that was shut again counts as kept open")
+	}
+	if agentTriggerHeld(warm, []homeassistant.Transition{change("28.4", "27")}) || !agentTriggerHeld(warm, []homeassistant.Transition{change("28.4", "30")}) {
+		t.Error("held above the threshold")
 	}
 }

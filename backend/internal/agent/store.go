@@ -295,7 +295,14 @@ type Trigger struct {
 	// first one (files of older versions).
 	Connection string `json:"connection,omitempty"`
 	Entity     string `json:"entity"`
-	State      string `json:"state"`
+	// State is the state the entity has to reach ("on"); empty with Above
+	// or Below, which then decide alone.
+	State string `json:"state"`
+	// Above and Below are thresholds for entities with numbers
+	// (temperature, power, humidity): the trigger fires when the value
+	// crosses the threshold, not for every value beyond it.
+	Above *float64 `json:"above,omitempty"`
+	Below *float64 `json:"below,omitempty"`
 	// For keeps the state that long (minutes) before it counts.
 	For int `json:"for,omitempty"`
 }
@@ -669,6 +676,31 @@ func (s *Store) SaveSchedules(user string, list []Schedule) error {
 		s.schedules = map[string][]Schedule{}
 	}
 	s.schedules[user] = slices.Clone(list)
+	return nil
+}
+
+// UpdateSchedule changes one schedule of an account in one step: the list
+// as it is now is read, change is applied to the schedule with that ID and
+// the list is written. Reading the list, changing a copy and saving it in
+// separate steps loses what another change wrote in between (a task that
+// ends while the minute tick stamps another: a "once" task would run again).
+// It reports ErrNotFound when the schedule is gone.
+func (s *Store) UpdateSchedule(user, id string, change func(*Schedule)) error {
+	if _, err := s.Schedules(user); err != nil { // fills the RAM copy
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	list := slices.Clone(s.schedules[user])
+	i := slices.IndexFunc(list, func(sc Schedule) bool { return sc.ID == id })
+	if i < 0 {
+		return ErrNotFound
+	}
+	change(&list[i])
+	if err := s.write(user, "schedules.json", list); err != nil {
+		return err
+	}
+	s.schedules[user] = list
 	return nil
 }
 

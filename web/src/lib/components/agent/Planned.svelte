@@ -163,6 +163,14 @@
 			entity: s?.trigger?.entity ?? '',
 			conn: s?.trigger?.connection ?? '',
 			state: s?.trigger?.state ?? '',
+			// What the trigger waits for: a state, or a value above or below a threshold.
+			cond:
+				s?.trigger?.above !== undefined
+					? 'above'
+					: s?.trigger?.below !== undefined
+						? 'below'
+						: 'state',
+			limit: String(s?.trigger?.above ?? s?.trigger?.below ?? ''),
 			enabled: s ? String(s.enabled) : 'true',
 			button: String(!!s?.button),
 			wake: s?.wake ?? '',
@@ -174,7 +182,13 @@
 		const base = list.find((s) => s.id === editing);
 		const trigger =
 			draft.every === 'trigger'
-				? { entity: draft.entity, state: draft.state, connection: draft.conn || undefined }
+				? {
+						entity: draft.entity,
+						state: draft.cond === 'state' ? draft.state : '',
+						above: draft.cond === 'above' ? Number(draft.limit.replace(',', '.')) : undefined,
+						below: draft.cond === 'below' ? Number(draft.limit.replace(',', '.')) : undefined,
+						connection: draft.conn || undefined,
+					}
 				: null;
 		return {
 			...(base ?? ({} as Schedule)),
@@ -482,12 +496,27 @@
 						placeholder="binary_sensor.haustuer"
 						aria-label={t('agent.triggerEntity')}
 					/>
-					<input
-						class="field small-in"
-						bind:value={draft.state}
-						placeholder="on"
-						aria-label={t('agent.triggerState')}
-					/>
+					<select class="field" bind:value={draft.cond} aria-label={t('agent.triggerCond')}>
+						<option value="state">{t('agent.triggerCondState')}</option>
+						<option value="above">{t('agent.triggerCondAbove')}</option>
+						<option value="below">{t('agent.triggerCondBelow')}</option>
+					</select>
+					{#if draft.cond === 'state'}
+						<input
+							class="field small-in"
+							bind:value={draft.state}
+							placeholder="on"
+							aria-label={t('agent.triggerState')}
+						/>
+					{:else}
+						<input
+							class="field small-in"
+							bind:value={draft.limit}
+							inputmode="decimal"
+							placeholder="28"
+							aria-label={t('agent.triggerLimit')}
+						/>
+					{/if}
 				</div>
 			{/if}
 			{#if draft.kind !== 'reminder'}
