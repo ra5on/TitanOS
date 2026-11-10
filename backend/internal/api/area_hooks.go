@@ -89,3 +89,10 @@ type sessionsFunc func() *auth.Sessions
 
 // sessionStore are the logins of the server as they are now.
 func (s *Server) sessionStore() *auth.Sessions { return s.sessions }
+
+// limiterFunc reads the limit against guessed passwords when it is asked
+// (Server.rateLimiter): tests put a fresh limiter on a running server.
+type limiterFunc func() *auth.Limiter
+
+// rateLimiter is the limit against guessed passwords as it is now.
+func (s *Server) rateLimiter() *auth.Limiter { return s.limiter }

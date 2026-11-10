@@ -210,7 +210,7 @@ func (au authArea) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	blocked := func() bool {
-		wait := au.limiter.RetryAfter(guessKey, ipKey)
+		wait := au.limiter().RetryAfter(guessKey, ipKey)
 		if wait <= 0 {
 			return false
 		}
@@ -234,16 +234,16 @@ func (au authArea) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// first of them is counted (hashing is slow and runs two at a time).
 	// Once the limit was reached meanwhile, the answer is not told, right
 	// or wrong; a wrong guess still counts.
-	if au.limiter.RetryAfter(guessKey, ipKey) > 0 {
+	if au.limiter().RetryAfter(guessKey, ipKey) > 0 {
 		if !ok {
-			au.limiter.Fail(guessKey, ipKey)
+			au.limiter().Fail(guessKey, ipKey)
 			au.firewall.Failed(ip, firewall.SourceWeb)
 		}
 		blocked()
 		return
 	}
 	if !ok {
-		au.limiter.Fail(guessKey, ipKey)
+		au.limiter().Fail(guessKey, ipKey)
 		au.firewall.Failed(ip, firewall.SourceWeb)
 		slog.Warn("login failed", "user", req.Name, "ip", ip)
 		au.recordEvent(r, req.Name, "login_failed", "", false)
@@ -260,16 +260,16 @@ func (au authArea) handleLogin(w http.ResponseWriter, r *http.Request) {
 		codeOK := au.users.CheckSecondFactor(user.Name, req.Code)
 		// As for the password: codes guessed at the same time are not
 		// answered once the limit was reached meanwhile.
-		if au.limiter.RetryAfter(guessKey, ipKey) > 0 {
+		if au.limiter().RetryAfter(guessKey, ipKey) > 0 {
 			if !codeOK {
-				au.limiter.Fail(guessKey, ipKey)
+				au.limiter().Fail(guessKey, ipKey)
 				au.firewall.Failed(ip, firewall.SourceWeb)
 			}
 			blocked()
 			return
 		}
 		if !codeOK {
-			au.limiter.Fail(guessKey, ipKey)
+			au.limiter().Fail(guessKey, ipKey)
 			au.firewall.Failed(ip, firewall.SourceWeb)
 			slog.Warn("login failed at the second factor", "user", req.Name, "ip", ip)
 			au.recordEvent(r, req.Name, "login_failed", "2fa", false)
@@ -284,8 +284,8 @@ func (au authArea) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "account_disabled", "this account is locked; ask an owner or administrator")
 		return
 	}
-	au.limiter.Reset(userKey)
-	au.limiter.Reset(guessKey)
+	au.limiter().Reset(userKey)
+	au.limiter().Reset(guessKey)
 	au.rememberDevice(w, user.Name)
 	slog.Info("login", "user", user.Name, "ip", ip)
 	// Accounts from before shares existed get their SMB password now, the

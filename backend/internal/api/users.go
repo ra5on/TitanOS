@@ -84,7 +84,7 @@ type usersArea struct {
 	ssh              *sshd.Manager
 	notify           *notify.Manager
 	sessions         sessionsFunc
-	limiter          *auth.Limiter
+	limiter          limiterFunc
 	tokens           *auth.Tokens
 	prefs            *preferences
 	reconfirmProof   func(w http.ResponseWriter, user auth.User, p proof) bool
@@ -96,7 +96,7 @@ type usersArea struct {
 // usersArea is the area of the server.
 func (s *Server) usersArea() usersArea {
 	return usersArea{users: s.opts.Users, shares: s.opts.Shares, ssh: s.opts.SSH, notify: s.opts.Notify,
-		sessions: s.sessionStore, limiter: s.limiter, tokens: s.tokens, prefs: s.prefs,
+		sessions: s.sessionStore, limiter: s.rateLimiter, tokens: s.tokens, prefs: s.prefs,
 		reconfirmProof: s.authArea().reconfirmProof, cookieName: s.authArea().cookieName, forgetWebDAV: s.davArea().forgetWebDAV, viewerForgetUser: s.viewerArea().viewerForgetUser}
 }
 
@@ -226,21 +226,21 @@ func (a usersArea) handleSetPassword(w http.ResponseWriter, r *http.Request) {
 	case self:
 		// The limiter also guards this check: it is a password guess like any other.
 		key := "user:" + actor.Name
-		if wait := a.limiter.RetryAfter(key); wait > 0 {
+		if wait := a.limiter().RetryAfter(key); wait > 0 {
 			writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
 			return
 		}
 		_, valid := a.users.Authenticate(actor.Name, req.Current)
 		// Guesses sent at the same time all passed the check above.
-		if a.limiter.RetryAfter(key) > 0 {
+		if a.limiter().RetryAfter(key) > 0 {
 			if !valid {
-				a.limiter.Fail(key)
+				a.limiter().Fail(key)
 			}
 			writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
 			return
 		}
 		if !valid {
-			a.limiter.Fail(key)
+			a.limiter().Fail(key)
 			writeError(w, http.StatusForbidden, "wrong_password", "the current password is wrong")
 			return
 		}

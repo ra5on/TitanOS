@@ -102,7 +102,7 @@ func (au authArea) reconfirm(w http.ResponseWriter, user auth.User, password, co
 	// every answer: once the limit was reached meanwhile, the answer is
 	// not told, right or wrong; a wrong proof still counts.
 	blocked := func() bool {
-		if au.limiter.RetryAfter(key) <= 0 {
+		if au.limiter().RetryAfter(key) <= 0 {
 			return false
 		}
 		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
@@ -114,24 +114,24 @@ func (au authArea) reconfirm(w http.ResponseWriter, user auth.User, password, co
 	_, ok := au.users.Authenticate(user.Name, password)
 	if blocked() {
 		if !ok {
-			au.limiter.Fail(key)
+			au.limiter().Fail(key)
 		}
 		return false
 	}
 	if !ok {
-		au.limiter.Fail(key)
+		au.limiter().Fail(key)
 		writeError(w, http.StatusForbidden, "wrong_password", "the password is wrong")
 		return false
 	}
 	ok = au.users.CheckSecondFactor(user.Name, code)
 	if blocked() {
 		if !ok {
-			au.limiter.Fail(key)
+			au.limiter().Fail(key)
 		}
 		return false
 	}
 	if !ok {
-		au.limiter.Fail(key)
+		au.limiter().Fail(key)
 		writeError(w, http.StatusForbidden, "invalid_code", "the code is wrong or was used already")
 		return false
 	}
@@ -164,7 +164,7 @@ func (au authArea) reconfirmProof(w http.ResponseWriter, user auth.User, p proof
 		return au.reconfirm(w, user, p.Password, p.Code)
 	}
 	key := "user:" + user.Name
-	if wait := au.limiter.RetryAfter(key); wait > 0 {
+	if wait := au.limiter().RetryAfter(key); wait > 0 {
 		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
 		return false
 	}
@@ -174,7 +174,7 @@ func (au authArea) reconfirmProof(w http.ResponseWriter, user auth.User, p proof
 	case "passkey_expired":
 		writeError(w, http.StatusBadRequest, "passkey_expired", "the request expired, start again")
 	default:
-		au.limiter.Fail(key)
+		au.limiter().Fail(key)
 		writeError(w, http.StatusForbidden, "passkey_failed", "the passkey was not accepted")
 	}
 	return false

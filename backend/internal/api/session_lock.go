@@ -205,7 +205,7 @@ func (au authArea) handleSessionUnlock(w http.ResponseWriter, r *http.Request) {
 	if device := au.knownDevice(r, user.Name); device != "" {
 		guessKey = device
 	}
-	if wait := au.limiter.RetryAfter(guessKey, ipKey); wait > 0 {
+	if wait := au.limiter().RetryAfter(guessKey, ipKey); wait > 0 {
 		au.recordEvent(r, user.Name, "session_unlock_blocked", "", false)
 		writeJSON(w, http.StatusTooManyRequests, map[string]apiError{"error": {
 			Code: "rate_limited", Message: "too many failed attempts, try again later", RetryAfter: int(math.Ceil(wait.Seconds())),
@@ -216,7 +216,7 @@ func (au authArea) handleSessionUnlock(w http.ResponseWriter, r *http.Request) {
 	// first of them is counted (hashing is slow); once the limit was
 	// reached meanwhile, the answer is not told, right or wrong.
 	blocked := func(how string) bool {
-		wait := au.limiter.RetryAfter(guessKey, ipKey)
+		wait := au.limiter().RetryAfter(guessKey, ipKey)
 		if wait <= 0 {
 			return false
 		}
@@ -225,8 +225,8 @@ func (au authArea) handleSessionUnlock(w http.ResponseWriter, r *http.Request) {
 		return true
 	}
 	fail := func(code, message, how string) {
-		wasBlocked := au.limiter.RetryAfter(guessKey, ipKey) > 0
-		au.limiter.Fail(guessKey, ipKey)
+		wasBlocked := au.limiter().RetryAfter(guessKey, ipKey) > 0
+		au.limiter().Fail(guessKey, ipKey)
 		au.firewall.Failed(ip, firewall.SourceWeb)
 		if wasBlocked && blocked(how) {
 			return
@@ -270,8 +270,8 @@ func (au authArea) handleSessionUnlock(w http.ResponseWriter, r *http.Request) {
 	if blocked(how) {
 		return
 	}
-	au.limiter.Reset(userKey)
-	au.limiter.Reset(guessKey)
+	au.limiter().Reset(userKey)
+	au.limiter().Reset(guessKey)
 	if !au.sessions().Unlock(token) {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "not logged in")
 		return

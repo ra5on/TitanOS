@@ -293,13 +293,6 @@ func New(opts Options) *Server {
 	if s.sessions == nil {
 		s.sessions = auth.NewSessions()
 	}
-	if s.opts.Shares != nil {
-		s.opts.Shares.OnPurgeResumed(s.sharesArea().sharePurgeDone)
-	}
-	if c := s.opts.Cluster; c != nil {
-		area := s.clusterArea()
-		c.Applied, c.Status, c.Notify = area.clusterApplied, area.ClusterStatus, area.clusterNotify
-	}
 	if s.opts.Processes == nil {
 		// Not given (tests): the list reads /proc, signals are refused.
 		s.opts.Processes = procs.New()
@@ -355,6 +348,15 @@ func New(opts Options) *Server {
 			return ddns, le
 		}
 		s.pending = append(s.pending, s.opts.IPv64.Load)
+	}
+	// Only now, with every stand-in in place: the areas built here take
+	// the managers as they are at this moment.
+	if s.opts.Shares != nil {
+		s.opts.Shares.OnPurgeResumed(s.sharesArea().sharePurgeDone)
+	}
+	if c := s.opts.Cluster; c != nil {
+		area := s.clusterArea()
+		c.Applied, c.Status, c.Notify = area.clusterApplied, area.ClusterStatus, area.clusterNotify
 	}
 	s.manual = toolcatalog.NewManual(nil)
 	if s.opts.UI != nil {

@@ -51,7 +51,7 @@ type authArea struct {
 	secureCookies bool
 
 	sessions     sessionsFunc
-	limiter      *auth.Limiter
+	limiter      limiterFunc
 	prefs        *preferences
 	passkeyState *passkeyChallenges
 	pictureState *accountPictures
@@ -73,7 +73,7 @@ func (s *Server) authArea() authArea {
 	return authArea{users: s.opts.Users, store: s.opts.Store, firewall: s.opts.Firewall, update: s.opts.Update, shares: s.opts.Shares,
 		ssh: s.opts.SSH, terminal: s.opts.Terminal, configBackup: s.opts.ConfigBackup, power: s.opts.Power, version: s.opts.Version,
 		secureCookies: s.opts.SecureCookies,
-		sessions:      s.sessionStore, limiter: s.limiter, prefs: s.prefs, passkeyState: &s.passkeys, pictureState: &s.accountPictures,
+		sessions:      s.sessionStore, limiter: s.rateLimiter, prefs: s.prefs, passkeyState: &s.passkeys, pictureState: &s.accountPictures,
 		loginState: &s.loginAccounts, loadMu: &s.loadMu, lastLoadTry: &s.lastLoadTry,
 		recordEvent: s.recordEvent, loginAppearance: s.loginAppearance, webSession: s.requireWebSession, goJob: s.goJob}
 }

@@ -67,7 +67,7 @@ type davArea struct {
 	users      *auth.Users
 	files      *files.Manager
 	state      *davState
-	limiter    *auth.Limiter
+	limiter    limiterFunc
 	webSession webSessionFunc
 	reconfirm  reconfirmFunc
 	fileRoots  func(user auth.User) []files.Root
@@ -76,7 +76,7 @@ type davArea struct {
 // davArea is the area of the server; removing an account forgets its
 // WebDAV password through it.
 func (s *Server) davArea() davArea {
-	return davArea{store: s.opts.Store, users: s.opts.Users, files: s.opts.Files, state: &s.dav, limiter: s.limiter,
+	return davArea{store: s.opts.Store, users: s.opts.Users, files: s.opts.Files, state: &s.dav, limiter: s.rateLimiter,
 		webSession: s.requireWebSession, reconfirm: s.authArea().reconfirm, fileRoots: func(user auth.User) []files.Root { return s.filesArea().fileRoots(user) }}
 }
 
@@ -188,7 +188,7 @@ func (a davArea) handleAccountWebDAVDelete(w http.ResponseWriter, r *http.Reques
 func (a davArea) davUser(r *http.Request) (auth.User, bool, time.Duration) {
 	name, password, ok := r.BasicAuth()
 	ip := remoteIP(r)
-	if wait := a.limiter.RetryAfter("dav:"+ip, "dav-user:"+name); wait > 0 {
+	if wait := a.limiter().RetryAfter("dav:"+ip, "dav-user:"+name); wait > 0 {
 		return auth.User{}, false, wait
 	}
 	if !ok || name == "" || len(password) > 256 {
@@ -200,7 +200,7 @@ func (a davArea) davUser(r *http.Request) (auth.User, bool, time.Duration) {
 	sum := sha256.Sum256([]byte(password))
 	want, _ := hex.DecodeString(stored.SHA256)
 	if !known || err != nil || len(want) != len(sum) || subtle.ConstantTimeCompare(sum[:], want) != 1 || user.Disabled {
-		a.limiter.Fail("dav:"+ip, "dav-user:"+name)
+		a.limiter().Fail("dav:"+ip, "dav-user:"+name)
 		slog.Warn("WebDAV sign-in refused", "user", name, "ip", ip)
 		return auth.User{}, false, 0
 	}

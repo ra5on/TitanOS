@@ -144,7 +144,7 @@ func (au authArea) handleLoginAccounts(w http.ResponseWriter, r *http.Request) {
 	// answer to someone else.
 	w.Header().Set("Cache-Control", "no-store")
 	// An address that is guessing passwords gets no names either.
-	if wait := au.limiter.RetryAfter(passkeySource(r)); wait > 0 {
+	if wait := au.limiter().RetryAfter(passkeySource(r)); wait > 0 {
 		writeRateLimited(w, wait, "too many failed logins, try again later")
 		return
 	}

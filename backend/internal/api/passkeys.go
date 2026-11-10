@@ -331,7 +331,7 @@ func (au authArea) handlePasskeyConfirmBegin(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusConflict, "no_passkey", "the account has no passkey for this address")
 		return
 	}
-	if wait := au.limiter.RetryAfter("user:" + user.Name); wait > 0 {
+	if wait := au.limiter().RetryAfter("user:" + user.Name); wait > 0 {
 		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
 		return
 	}
@@ -360,7 +360,7 @@ func (au authArea) handlePasskeyLoginBegin(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "passkey_address", "passkeys need a host name with a trusted HTTPS certificate, not an IP address")
 		return
 	}
-	if wait := au.limiter.RetryAfter(passkeySource(r)); wait > 0 {
+	if wait := au.limiter().RetryAfter(passkeySource(r)); wait > 0 {
 		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed logins, try again later")
 		return
 	}
@@ -397,7 +397,7 @@ func (au authArea) handlePasskeyLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	ip := remoteIP(r)
 	ipKey := passkeySource(r)
-	if wait := au.limiter.RetryAfter(ipKey); wait > 0 {
+	if wait := au.limiter().RetryAfter(ipKey); wait > 0 {
 		writeJSON(w, http.StatusTooManyRequests, map[string]apiError{"error": {
 			Code: "rate_limited", Message: "too many failed logins, try again later", RetryAfter: int(math.Ceil(wait.Seconds())),
 		}})
@@ -408,7 +408,7 @@ func (au authArea) handlePasskeyLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fail := func(name, why string) {
-		au.limiter.Fail(ipKey)
+		au.limiter().Fail(ipKey)
 		au.firewall.Failed(ip, firewall.SourceWeb)
 		slog.Warn("passkey login failed", "user", name, "ip", ip, "why", why)
 		au.recordEvent(r, name, "login_failed", "passkey", false)
