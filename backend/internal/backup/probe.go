@@ -157,6 +157,8 @@ func (m *Manager) Probe(id string, req ProbeRequest) error {
 
 // MaintenanceRun waits for the backend-owned operation and returns its actual result.
 func (m *Manager) MaintenanceRun(ctx context.Context, id, kind string, readData int, probe ProbeRequest) error {
+	// Only a result of this run counts, never the one an earlier run left.
+	started := m.now()
 	var err error
 	if kind == "restore-probe" {
 		err = m.Probe(id, probe)
@@ -183,14 +185,14 @@ func (m *Manager) MaintenanceRun(ctx context.Context, id, kind string, readData 
 				break
 			}
 			if kind == "restore-probe" {
-				if view.State.Probe == nil {
+				if view.State.Probe == nil || view.State.Probe.At.Before(started) {
 					return errors.New("restore probe has no recorded result")
 				}
 				if view.State.Probe.Error != "" {
 					return errors.New(view.State.Probe.Error)
 				}
 			} else {
-				if view.State.LastCheck == nil {
+				if view.State.LastCheck == nil || view.State.LastCheck.Before(started) {
 					return errors.New("repository check has no recorded result")
 				}
 				if view.State.CheckError != "" {

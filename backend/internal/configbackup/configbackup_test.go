@@ -515,3 +515,39 @@ func TestAuthorityKeysStayOut(t *testing.T) {
 		t.Error("other files of tls not restored")
 	}
 }
+
+// PLAN 76 (F-9-9): a NAS set up anew writes into the folder of the earlier
+// installation; its retention must not remove that one's backups.
+func TestRetentionLeavesBackupsOfAnotherSetupAlone(t *testing.T) {
+	e := newEnv(t)
+	if err := e.m.SetSettings(Settings{Enabled: true, Volume: "tank", Keep: 2}, []string{"tank"}); err != nil {
+		t.Fatal(err)
+	}
+	e.write(t, "cluster/node.json", `{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`)
+	var earlier []string
+	for i := range 2 {
+		e.clock = e.clock.Add(time.Hour)
+		e.write(t, "system/settings.json", strings.Repeat("a", i+1))
+		earlier = append(earlier, e.create(t))
+	}
+	// The stick died; the NAS was set up from scratch: a new node ID.
+	e.write(t, "cluster/node.json", `{"id":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}`)
+	var mine []string
+	for i := range 4 {
+		e.clock = e.clock.Add(time.Hour)
+		e.write(t, "system/settings.json", strings.Repeat("b", i+1))
+		mine = append(mine, e.create(t))
+	}
+	have := map[string]bool{}
+	for _, b := range e.m.List([]string{"tank"}) {
+		have[b.Name] = true
+	}
+	for _, name := range earlier {
+		if !have[name] {
+			t.Errorf("backup %s of the earlier setup was removed", name)
+		}
+	}
+	if have[mine[0]] || have[mine[1]] || !have[mine[2]] || !have[mine[3]] || len(have) != 4 {
+		t.Errorf("own backups kept wrongly: %v", have)
+	}
+}

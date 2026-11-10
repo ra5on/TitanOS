@@ -452,6 +452,7 @@ func (o *Ollama) Chat(ctx context.Context, r ChatRequest, onChunk func(Chunk)) (
 	var msg Message
 	var content, thinking strings.Builder
 	var stats Stats
+	done := false
 	scanner := bufio.NewScanner(res.Body)
 	scanner.Buffer(make([]byte, 64<<10), 16<<20)
 	for scanner.Scan() {
@@ -485,6 +486,7 @@ func (o *Ollama) Chat(ctx context.Context, r ChatRequest, onChunk func(Chunk)) (
 		msg.ToolCalls = append(msg.ToolCalls, part.Message.ToolCalls...)
 		if part.Done {
 			stats = Stats{PromptTokens: part.PromptEvalCount, OutputTokens: part.EvalCount}
+			done = true
 			break
 		}
 	}
@@ -493,6 +495,15 @@ func (o *Ollama) Chat(ctx context.Context, r ChatRequest, onChunk func(Chunk)) (
 			return Message{}, stats, ctx.Err()
 		}
 		return Message{}, stats, fmt.Errorf("%w: %v", ErrUnreachable, err)
+	}
+	// A stream that ends without its last line was cut off (Ollama stopped, a
+	// proxy closed the connection): half an answer – or half a tool call –
+	// is not an answer.
+	if !done {
+		if ctx.Err() != nil {
+			return Message{}, stats, ctx.Err()
+		}
+		return Message{}, stats, fmt.Errorf("%w: the answer ended before it was complete", ErrUnreachable)
 	}
 	msg.Role = "assistant"
 	msg.Content = content.String()

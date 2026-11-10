@@ -309,3 +309,30 @@ func TestUSBCopyReportsOncePerSeriesAndCatchesUpOnPlug(t *testing.T) {
 		t.Fatalf("messages %v", got)
 	}
 }
+
+// PLAN 76 (F-9-7): two readable copies in one folder remove each other's versions.
+func TestTwoCopiesCannotShareAFolder(t *testing.T) {
+	a := Destination{Type: "usb-copy", DeviceID: "ABCD-1234", Folder: "backup"}
+	for name, tc := range map[string]struct {
+		b    Destination
+		same bool
+	}{
+		"same folder":     {Destination{Type: "usb-copy", DeviceID: "ABCD-1234", Folder: "Backup/"}, true},
+		"folder inside":   {Destination{Type: "usb-copy", DeviceID: "ABCD-1234", Folder: "backup/photos"}, true},
+		"folder around":   {Destination{Type: "usb-copy", DeviceID: "ABCD-1234", Folder: ""}, true},
+		"similar name":    {Destination{Type: "usb-copy", DeviceID: "ABCD-1234", Folder: "backup2"}, false},
+		"other drive":     {Destination{Type: "usb-copy", DeviceID: "FFFF-0000", Folder: "backup"}, false},
+		"encrypted there": {Destination{Type: "usb", DeviceID: "ABCD-1234", Folder: "backup"}, false},
+	} {
+		if got := sameCopyPlace(a, tc.b); got != tc.same {
+			t.Errorf("%s: %v", name, got)
+		}
+	}
+	jobs := []Job{{ID: "eins", Destination: a}}
+	if err := copyPlaceTaken(jobs, Job{ID: "zwei", Destination: a}); !errors.Is(err, ErrInvalid) {
+		t.Errorf("second job in the same folder: %v", err)
+	}
+	if err := copyPlaceTaken(jobs, Job{ID: "eins", Destination: a}); err != nil {
+		t.Errorf("the job itself: %v", err)
+	}
+}
