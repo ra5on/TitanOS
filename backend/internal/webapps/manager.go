@@ -47,6 +47,9 @@ var (
 	ErrUnknown = errors.New("webapps: no such app")
 	ErrBusy    = errors.New("webapps: the app is being installed")
 	ErrNoApp   = errors.New("webapps: the app is not installed")
+	// ErrUnreadable: the list of programs could not be read from /config
+	// at the start and is not changed until it was.
+	ErrUnreadable = errors.New("webapps: the list of programs could not be read from /config")
 )
 
 // Release gives the signed manifest and assets of a release (package
@@ -135,12 +138,14 @@ type Manager struct {
 
 	store *config.Store
 
-	mu     sync.Mutex
-	state  fileState
-	jobs   map[string]*job
-	devDir string
-	base   context.Context
-	wake   chan struct{}
+	mu    sync.Mutex
+	state fileState
+	// unreadable: see Load.
+	unreadable bool
+	jobs       map[string]*job
+	devDir     string
+	base       context.Context
+	wake       chan struct{}
 }
 
 // New makes a manager with the defaults of a NAS.
@@ -154,6 +159,11 @@ func (m *Manager) Load() error {
 	var s fileState
 	err := m.store.ReadJSON(configFile, &s)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		// The list is there but could not be read: it is not written
+		// over with an empty one (saveLocked).
+		m.mu.Lock()
+		m.unreadable = true
+		m.mu.Unlock()
 		return err
 	}
 	if err != nil {
@@ -161,7 +171,7 @@ func (m *Manager) Load() error {
 	}
 	s = m.normalize(s)
 	m.mu.Lock()
-	m.state = s
+	m.state, m.unreadable = s, false
 	m.mu.Unlock()
 	return nil
 }
@@ -201,6 +211,9 @@ func (m *Manager) mounted() []string {
 }
 
 func (m *Manager) saveLocked() error {
+	if m.unreadable {
+		return ErrUnreadable
+	}
 	return m.store.WriteJSON(configFile, m.state)
 }
 

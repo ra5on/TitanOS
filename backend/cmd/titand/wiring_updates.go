@@ -149,5 +149,15 @@ func (w *titand) wireUpdates() error {
 	w.extensions.CleanupProtected = w.updates.PluginReleaseProtection
 	w.background(func() { w.extensions.Run(ctx, w.volumes.Mounted) })
 	w.background(func() { w.containers.Run(ctx, w.volumes.Mounted) })
+	// Docker › Automatic updates: the loop that opens the window. It was
+	// never started (0.35 to 0.74): the page showed the next window, and
+	// nothing ever updated. It waits while other work of the NAS runs that
+	// an update of an app would disturb (docs/rules/DOCKER.md).
+	w.containers.Timezone = w.settings.CurrentTimezone
+	w.containers.ExternalBusy = func() bool {
+		return w.upkeep.Busy() || w.appBackups.Busy() || w.backups.Busy() || w.replicas.Busy() || w.volumes.ActionsRunning() || w.volumes.SnapshotRestoresRunning() || w.volumes.GrowthPending() || w.volumes.Reshaping() || w.machines.Busy() || w.extensions.Busy() || w.folders.PurgeBusy()
+	}
+	w.containers.OnEvent = func(severity, kind, subject string) { w.notifier.Notify(severity, kind, subject) }
+	w.background(func() { w.containers.RunAutoUpdates(ctx) })
 	return nil
 }

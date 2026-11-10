@@ -383,3 +383,23 @@ func TestClientCannotClaimRealIP(t *testing.T) {
 		t.Errorf("app saw X-Real-IP %q, want the connection's address", got)
 	}
 }
+
+// Routes that are there but could not be read at the start are not written
+// over by the next change (and no device of an app is logged out).
+func TestUnreadableRoutesAreNotOverwritten(t *testing.T) {
+	dir := t.TempDir()
+	store := config.Open(dir)
+	path := filepath.Join(dir, configFile)
+	os.MkdirAll(filepath.Dir(path), 0o700)
+	os.WriteFile(path, []byte("{ not json"), 0o600)
+	m := NewManager(store)
+	if err := m.Load(); err == nil {
+		t.Fatal("Load accepted an unreadable file")
+	}
+	if err := m.SetDomain("nas.example"); !errors.Is(err, ErrUnreadable) {
+		t.Fatalf("change after a failed load: %v", err)
+	}
+	if data, _ := os.ReadFile(path); string(data) != "{ not json" {
+		t.Fatalf("the file was written over: %q", data)
+	}
+}

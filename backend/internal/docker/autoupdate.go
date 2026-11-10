@@ -383,14 +383,26 @@ func (m *Manager) realUpdater() updater {
 				found = true
 				var info struct {
 					State struct {
-						Running bool
-						Health  *struct{ Status string }
+						Running  bool
+						ExitCode int
+						Status   string
+						Health   *struct{ Status string }
+					}
+					HostConfig struct {
+						RestartPolicy struct{ Name string }
 					}
 				}
 				if err := m.api.getJSON(ctx, "/containers/"+url.PathEscape(c.ID)+"/json", nil, &info); err != nil {
 					return false, "container not readable"
 				}
 				name := c.Labels["com.docker.compose.service"]
+				// A service that does its work once and ends (a migration,
+				// an init step: exit code 0, no restart) has done what it
+				// is for; it must not send the whole app back.
+				if !info.State.Running && info.State.Status == "exited" && info.State.ExitCode == 0 &&
+					(info.HostConfig.RestartPolicy.Name == "" || info.HostConfig.RestartPolicy.Name == "no") {
+					continue
+				}
 				if !info.State.Running {
 					return false, name + " is not running"
 				}
