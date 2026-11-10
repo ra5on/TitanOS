@@ -56,6 +56,7 @@ func (m *Manager) Run(ctx context.Context) {
 	// for up to six hours.
 	var waiting time.Time
 	skipped := false // the release that failed here was already named in the log
+	attempted := ""  // the day whose install time was already taken
 	for {
 		select {
 		case <-ctx.Done():
@@ -74,8 +75,15 @@ func (m *Manager) Run(ctx context.Context) {
 		retry := !waiting.IsZero() && m.now().Sub(waiting) < 6*time.Hour
 		// Manual checks rule out installing by itself, even if a file
 		// edited by hand asks for both.
-		if !settings.AutoInstall || settings.Manual() || (m.clock().Format("15:04") != settings.InstallTime && !retry) {
+		if !settings.AutoInstall || settings.Manual() {
 			continue
+		}
+		due := installDue(m.clock(), settings.InstallTime, attempted)
+		if !due && !retry {
+			continue
+		}
+		if due {
+			attempted = m.clock().Format("2006-01-02")
 		}
 		switch {
 		case available != nil && m.failedBefore(available.Version):
@@ -124,4 +132,20 @@ func (m *Manager) Run(ctx context.Context) {
 			}()
 		}
 	}
+}
+
+// installWindow is how long after the chosen time an automatic installation
+// still starts: the loop looks once a minute, and a look that is late (a
+// slow check of the release before it) must not cost the whole night.
+const installWindow = 10 * time.Minute
+
+// installDue reports whether now lies in the window after the install time
+// of its day and that day was not taken yet (attempted, "2006-01-02").
+func installDue(now time.Time, installTime, attempted string) bool {
+	at, err := time.ParseInLocation("15:04", installTime, now.Location())
+	if err != nil || now.Format("2006-01-02") == attempted {
+		return false
+	}
+	start := time.Date(now.Year(), now.Month(), now.Day(), at.Hour(), at.Minute(), 0, 0, now.Location())
+	return !now.Before(start) && now.Sub(start) < installWindow
 }

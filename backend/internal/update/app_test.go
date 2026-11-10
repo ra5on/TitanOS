@@ -283,3 +283,27 @@ func TestTrialThatNeverBeganRestartsTitand(t *testing.T) {
 	}
 	e.waitRestarts(t, 2)
 }
+
+// PLAN 76 (F-10-8): the automatic installation does not need the exact minute.
+func TestInstallDueHasAWindowAndRunsOncePerDay(t *testing.T) {
+	at := func(s string) time.Time { v, _ := time.ParseInLocation("2006-01-02 15:04:05", s, time.UTC); return v }
+	for _, c := range []struct {
+		now, attempted string
+		want           bool
+	}{
+		{"2026-11-10 02:59:59", "", false},
+		{"2026-11-10 03:00:00", "", true},
+		{"2026-11-10 03:01:20", "", true}, // the look at 03:00 was late
+		{"2026-11-10 03:09:59", "", true},
+		{"2026-11-10 03:10:00", "", false},
+		{"2026-11-10 03:01:00", "2026-11-10", false}, // taken already
+		{"2026-11-11 03:00:30", "2026-11-10", true},
+	} {
+		if got := installDue(at(c.now), "03:00", c.attempted); got != c.want {
+			t.Errorf("%s after %q: %v", c.now, c.attempted, got)
+		}
+	}
+	if installDue(at("2026-11-10 03:00:00"), "", "") {
+		t.Error("no install time set")
+	}
+}
