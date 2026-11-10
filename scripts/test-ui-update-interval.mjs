@@ -76,7 +76,7 @@ try {
     assert.equal(data.updatePuts.at(-1).autoInstall, false);
     assert.equal(await page.getByText(/^Nächste Prüfung/).count(), 0);
     // The button still looks.
-    await page.getByRole("button", { name: "Nach Updates suchen" }).click();
+    await page.getByRole("button", { name: "Jetzt suchen" }).click();
     await page
       .getByText("TitanOS ist aktuell.", { exact: false })
       .or(page.getByText("Zuletzt gesucht", { exact: false }))

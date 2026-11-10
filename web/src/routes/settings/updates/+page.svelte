@@ -6,10 +6,21 @@
 	import Dialog from '#lib/components/Dialog.svelte';
 	import PageHead from '#lib/components/PageHead.svelte';
 	import ClusterUpdates from '#lib/components/cluster/ClusterUpdates.svelte';
+	import Icon from '#lib/components/Icon.svelte';
+	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
+	import SettingSub from '#lib/components/settings/SettingSub.svelte';
 	import { activeNode } from '#lib/cluster-node.ts';
 	import PowerDialog from '#lib/components/PowerDialog.svelte';
 	import { formatBytes, formatDate, formatDateTime, osVersion } from '#lib/format.ts';
 	import { errorText, t } from '#lib/i18n/index.svelte.ts';
+	import Changelog from '#lib/update/Changelog.svelte';
+	import {
+		counts,
+		leadOf,
+		parseChangelog,
+		type Changelog as Notes,
+	} from '#lib/update/changelog.ts';
 
 	/** checkEvery: minutes between automatic checks; 0 or missing is once a day, -1 manual only. */
 	type Settings = {
@@ -123,13 +134,6 @@
 		loadVersions();
 	});
 	const pick = $derived(versions?.find((v) => v.version === picked));
-	// The first line of the release notes without the version: "Kernel 6.12.115, …".
-	function summary(changelog: string): string {
-		const first = changelog.split('\n').find((line) => line.trim()) ?? '';
-		const text = first.replace(/^#+\s*/, '');
-		const dash = text.indexOf(' — ');
-		return dash >= 0 ? text.slice(dash + 3) : text;
-	}
 	function versionNumbers(v: string): number[] {
 		return v.split('-')[0].split('.').map(Number);
 	}
@@ -273,6 +277,8 @@
 	});
 
 	async function installVersion() {
+		flow = 'system';
+		target = picked;
 		busy = 'action';
 		error = null;
 		asking = '';
@@ -289,6 +295,12 @@
 	}
 
 	async function act(action: 'check' | 'install' | 'rollback' | 'cancel' | 'app-rollback') {
+		if (action !== 'check') {
+			// What the steps show: an app update, a system update, or (going
+			// back, cancelling) no installation at all.
+			flow = action === 'install' ? (appUpdate ? 'app' : 'system') : '';
+			if (action === 'install') target = status?.available?.version ?? '';
+		}
 		busy = action === 'check' ? 'check' : 'action';
 		error = null;
 		asking = '';
@@ -368,21 +380,130 @@
 		if (slot.triesLeft === 0) return t('update.slot.bad');
 		return t(slot.next ? 'update.slot.next' : 'update.slot.fallback');
 	}
+
+	// PLAN 78-3: the release notes as data (lib/update/changelog.ts), shown as
+	// text by Changelog.svelte. Parsed again only when the text changes, not
+	// with every poll.
+	const newsText = $derived(status?.available?.changelog ?? '');
+	const news = $derived(parseChangelog(newsText));
+	// "Was war neu?": the notes of the running version, if the list of
+	// releases has it (GET /update/versions). Without them the row of the
+	// installed version simply has nothing to open.
+	const ranText = $derived(versions?.find((v) => v.running)?.changelog ?? '');
+	const ran = $derived(parseChangelog(ranText));
+	const hasNotes = (log: Notes) => log.sections.length > 0 || !!log.lead;
+	// "4 Neuerungen · 3 zur Sicherheit · 12 Korrekturen": only what the notes have.
+	function countText(log: Notes): string {
+		const sum = counts(log);
+		const parts: string[] = [];
+		if (sum.new)
+			parts.push(
+				sum.new === 1 ? t('update.news.new.one') : t('update.news.new.many', { count: sum.new }),
+			);
+		if (sum.security) parts.push(t('update.news.security', { count: sum.security }));
+		if (sum.fixed)
+			parts.push(
+				sum.fixed === 1
+					? t('update.news.fixed.one')
+					: t('update.news.fixed.many', { count: sum.fixed }),
+			);
+		return parts.join(' · ');
+	}
+
+	// The steps of an installation follow the phases titand reports
+	// (backend/internal/update/update_install.go, app.go):
+	//   system: download → switch → done, then `pending` waits for the restart,
+	//           after it the new system runs `unconfirmed` (trial starts);
+	//   app:    download → restart, then `app.trial`.
+	// "Prüfen" has no phase of its own: titand checks size and SHA-256 of
+	// every file as it has loaded it, inside `download`. The step therefore
+	// never shows as the current one; it counts as done once `download` is over.
+	// Which kind runs: the page knows it from its own click, else from the
+	// download (an app update loads the one file "titand"). A restart of the
+	// web interface whose reason the page did not see (going back to the app
+	// before, a reload in the middle) shows no steps rather than guessed ones.
+	let flow = $state<'' | 'app' | 'system'>('');
+	// The version being installed, for the title of the row.
+	let target = $state('');
+	$effect(() => {
+		const progress = status?.progress;
+		if (!progress) return;
+		if (progress.phase === 'download') flow = progress.file === 'titand' ? 'app' : 'system';
+		else if (progress.phase === 'switch') flow = 'system';
+		// install-version makes the chosen release the available one too.
+		if ((progress.phase === 'download' || progress.phase === 'switch') && status?.available)
+			target = status.available.version;
+	});
+	// Nothing runs and nothing was just asked for: the next installation says
+	// its kind anew.
+	$effect(() => {
+		if (!working && busy === '') flow = '';
+	});
+	const stage = $derived.by((): { kind: '' | 'app' | 'system'; at: number } | null => {
+		if (!status) return null;
+		if (working) {
+			if (!flow) return { kind: '', at: 0 };
+			return { kind: flow, at: status.progress.phase === 'download' ? 1 : 3 };
+		}
+		if (status.pending?.kind === 'update') return { kind: 'system', at: 4 };
+		if (status.app.trial) return { kind: 'app', at: 4 };
+		if (status.unconfirmed && !status.pending) return { kind: 'system', at: 5 };
+		return null;
+	});
+	const steps = $derived.by(() => {
+		if (!stage || !stage.kind) return [];
+		const names =
+			stage.kind === 'app'
+				? (['load', 'check', 'service', 'appTrial'] as const)
+				: (['load', 'check', 'switch', 'restart', 'trialStart'] as const);
+		return names.map((name, i) => ({
+			label: t(`update.steps.${name}`),
+			state:
+				i + 1 < stage.at
+					? ('done' as const)
+					: i + 1 === stage.at
+						? ('now' as const)
+						: ('next' as const),
+		}));
+	});
+	const stepsTitle = $derived.by(() => {
+		if (!status || !stage) return '';
+		if (working) {
+			if (!stage.kind) return t('update.steps.restarting');
+			return target
+				? t('update.steps.title', { version: osVersion(target) })
+				: t('update.steps.titlePlain');
+		}
+		if (status.pending)
+			return t('update.steps.waiting', { version: osVersion(status.pending.version) });
+		return t('update.steps.trial', { version: osVersion(status.version) });
+	});
+	// What comes back if the new system does not start: the running one while
+	// the update waits, the other slot once the new one runs on trial.
+	const fallbackVersion = $derived(
+		!status || stage?.kind !== 'system' || status.progress.fallbackRemoved
+			? ''
+			: stage.at === 5
+				? other?.complete
+					? other.version
+					: ''
+				: status.version,
+	);
 </script>
 
-{#snippet checkState()}
-	{#if status?.checkError}{t('update.checkFailed')}
-	{:else if checked}{t('update.upToDate')}
-	{:else if status?.lastCheck}{t('update.lastCheck', {
-			time: formatDateTime(new Date(status.lastCheck)),
-		})}{/if}
+{#snippet percent()}
+	{#if status}<span class="mono"
+			>{status.progress.percent.toFixed(0)} % · {(
+				status.progress.speedBytesPerSecond / 1e6
+			).toFixed(1)} MB/s</span
+		>{/if}
 {/snippet}
-{#snippet checkButton()}
-	<button type="button" class="btn btn-primary" disabled={busy !== ''} onclick={() => act('check')}
-		>{t(busy === 'check' ? 'update.checking' : 'update.check')}</button
-	>
+{#snippet devChip()}
+	<span class="chip warn">{t('update.devBuild')}</span>
 {/snippet}
-<!-- PLAN 74: the search for updates sits in the header of "Diese Version": no tool bar for one button. -->
+{#snippet ranNotes()}
+	<div class="srow-block"><Changelog log={ran} version={status?.version ?? ''} /></div>
+{/snippet}
 <PageHead title={t('update.title')} />
 
 {#if error}<div class="notice-error" role="alert">
@@ -390,94 +511,42 @@
 	</div>{/if}
 
 {#if status && draft}
-	<section class="tile panel" aria-labelledby="upd-now">
-		<div class="head">
-			<h2 class="tile-title" id="upd-now">{t('update.installed')}</h2>
-			{#if !status.release}<span class="chip warn">{t('update.devBuild')}</span>{/if}
-			{#if canCheck}<span class="check">{@render checkButton()}</span>{/if}
-		</div>
-		<p class="version">
-			<span class="mono">TitanOS {osVersion(status.version)}</span
-			>{#if status.base && status.base !== status.version}<span class="muted base"
-					>{t('update.app.onBase', { version: osVersion(status.base) })}</span
-				>{/if}
-		</p>
-		<p class="muted">
-			{t(status.variant === 'new' ? 'update.kernel.runningNew' : 'update.kernel.runningStable', {
-				kernel: running?.kernel || '–',
-			})}{#if loaderKey}{' · '}{t(loaderKey as 'update.boot.bios')}{/if}
-		</p>
-		{#if canCheck && (status.checkError || checked || status.lastCheck)}<p
-				class="muted"
-				role="status"
+	<!-- What happened or is in the way, above everything else. -->
+	{#if restartedTo}<p class="notice-ok" role="status">
+			{t('update.app.restarted', { version: restartedTo })}
+			<!-- PLAN 67: the whole UI loads the new version (desktop and every
+			     window), so no part keeps running the old one. Never by itself:
+			     a window may hold unsaved work. -->
+			<button
+				type="button"
+				class="btn small"
+				onclick={() => (window.top ?? window).location.reload()}>{t('update.app.reloadUi')}</button
 			>
-				{@render checkState()}
-			</p>{/if}
-		{#if restartedTo}<p class="notice-ok" role="status">
-				{t('update.app.restarted', { version: restartedTo })}
-				<!-- PLAN 67: the whole UI loads the new version (desktop and every
-				     window), so no part keeps running the old one. Never by itself:
-				     a window may hold unsaved work. -->
-				<button
-					type="button"
-					class="btn small"
-					onclick={() => (window.top ?? window).location.reload()}
-					>{t('update.app.reloadUi')}</button
+		</p>{/if}
+	{#if !status.canVerify}<p class="notice-warn">{t('update.noKey')}</p>{/if}
+	{#if status.pending?.kind === 'rollback'}
+		<div class="notice-ok" role="status">
+			{t('update.pendingRollback', { version: status.pending.version })}
+			<div class="row">
+				<button type="button" class="btn btn-primary" onclick={() => (restarting = true)}
+					>{t('update.restartNow')}</button
 				>
-			</p>{/if}
-		{#if status.app.trial}<p class="notice-warn" role="status">{t('update.app.trial')}</p>{/if}
-
-		{#if status.pending}
-			<div class="notice-ok" role="status">
-				{t(status.pending.kind === 'rollback' ? 'update.pendingRollback' : 'update.pendingUpdate', {
-					version: status.pending.version,
-				})}
-				<div class="row">
-					<button type="button" class="btn btn-primary" onclick={() => (restarting = true)}
-						>{t('update.restartNow')}</button
-					>
-					<button type="button" class="btn" disabled={busy !== ''} onclick={() => act('cancel')}
-						>{t('update.cancel')}</button
-					>
-				</div>
-			</div>
-		{:else if status.unconfirmed}
-			<p class="notice-warn" role="status">{t('update.unconfirmed')}</p>
-		{/if}
-
-		{#if status.failedVersion && status.available && status.available.version.replace(/^v/, '') === status.failedVersion}
-			<p class="notice-warn" role="status">
-				{t('update.failedBefore', { version: status.available.version })}
-			</p>
-		{/if}
-		{#if !status.canVerify}
-			<p class="notice-warn">{t('update.noKey')}</p>
-		{:else if working}
-			<div class="progress">
-				<div
-					class="bar"
-					role="progressbar"
-					aria-valuemin="0"
-					aria-valuemax="100"
-					aria-valuenow={Math.round(status.progress.percent)}
-					aria-label={t('update.downloading')}
+				<button type="button" class="btn" disabled={busy !== ''} onclick={() => act('cancel')}
+					>{t('update.cancel')}</button
 				>
-					<span style:width="{status.progress.percent}%"></span>
-				</div>
-				<p class="muted">
-					{#if status.progress.phase === 'download'}
-						{t('update.downloading')}{' · '}<span class="mono"
-							>{status.progress.percent.toFixed(0)} % · {(
-								status.progress.speedBytesPerSecond / 1e6
-							).toFixed(1)} MB/s</span
-						>
-					{:else if status.progress.phase === 'restart' || restartFrom}{t('update.app.restarting')}
-					{:else}{t('update.switching')}{/if}
-				</p>
-				{#if status.progress.fallbackRemoved}<p class="notice-warn" role="status">
-						{t('update.fallbackRemoved')}
-					</p>{/if}
 			</div>
+		</div>
+	{/if}
+	{#if status.failedVersion && status.available && status.available.version.replace(/^v/, '') === status.failedVersion}
+		<p class="notice-warn" role="status">
+			{t('update.failedBefore', { version: status.available.version })}
+		</p>
+	{/if}
+	{#if status.canVerify}
+		{#if working}
+			{#if status.progress.fallbackRemoved}<p class="notice-warn" role="status">
+					{t('update.fallbackRemoved')}
+				</p>{/if}
 		{:else if status.progress.phase === 'failed'}
 			<div class="notice-error" role="alert">
 				{t('update.failed')}
@@ -489,272 +558,494 @@
 		{:else if status.progress.phase === 'done' && status.progress.fallbackRemoved}
 			<p class="notice-warn" role="status">{t('update.fallbackRemoved')}</p>
 		{/if}
+		{#if !working && !status.available && status.kernelMissing}<p class="notice-warn" role="status">
+				{t('update.kernel.missing', { version: status.kernelMissing })}
+			</p>{/if}
+		{#if !working && status.checkError}
+			<div class="notice-warn" role="status">
+				{t('update.checkFailed')}
+				<pre>{status.checkError}</pre>
+			</div>
+		{/if}
+	{/if}
 
-		{#if status.available && !working}
-			<div class="available">
-				<div class="head">
-					<span class="name"
-						>TitanOS {status.available.version}{#if status.kernelSwitch}{' · '}{t(
-								status.settings.kernel === 'new'
-									? 'update.kernel.withNew'
-									: 'update.kernel.withStable',
-							)}{/if}</span
-					>
-					<span class="chips">
-						{#if appUpdate}<span class="chip ok">{t('update.app.noRestart')}</span>{/if}
-						<span class="chip info"
-							>{t(
-								status.available.channel === 'beta'
-									? 'update.channel.beta'
-									: 'update.channel.stable',
-							)}</span
+	<!-- PLAN 78-3, draft 78-updates: the update itself first – the card of
+	     the new version, what is new in it, and where an installation stands. -->
+	{#if (status.available && !working) || (status.available && hasNotes(news)) || stage}
+		<SettingGroup>
+			{#if status.available && !working}
+				{@const kernelName = chosen?.kernel ?? status.available.kernel}
+				<div class="hero" data-testid="update-hero">
+					<span class="hero-ico" aria-hidden="true"><Icon name="download" size={26} /></span>
+					<div class="hero-text">
+						<h2 class="hero-title">
+							{#if status.kernelSwitch}TitanOS {osVersion(status.available.version)}{' · '}{t(
+									status.settings.kernel === 'new'
+										? 'update.kernel.withNew'
+										: 'update.kernel.withStable',
+								)}{:else}{t('update.hero.title', {
+									version: osVersion(status.available.version),
+								})}{/if}
+						</h2>
+						<!-- True at this point: the check verified the signature of the
+						     release's manifest (update_check.go, latest). Size and
+						     SHA-256 of the files are checked while installing. -->
+						<p class="muted">
+							{t('update.hero.released', {
+								date: formatDate(new Date(status.available.released)),
+							})}
+						</p>
+						<div class="facts">
+							{#if !status.kernelSwitch}
+								<span class="jump">
+									<span class="sr-only"
+										>{t('update.hero.jump', {
+											from: osVersion(status.version),
+											to: osVersion(status.available.version),
+										})}</span
+									>
+									<b aria-hidden="true">{osVersion(status.version)}</b>
+									<span class="arrow" aria-hidden="true"><Icon name="arrowRight" size={15} /></span>
+									<b class="to" aria-hidden="true">{osVersion(status.available.version)}</b>
+								</span>
+							{/if}
+							<span class="chip {appUpdate ? 'ok' : 'info'}" data-testid="update-kind"
+								>{t(
+									status.kernelSwitch
+										? 'update.kind.kernel'
+										: appUpdate
+											? 'update.kind.app'
+											: 'update.kind.system',
+								)}</span
+							>
+							<span class="chip" data-testid="update-size">{formatBytes(size)}</span>
+							{#if kernelName}<span class="chip"
+									>{t('update.hero.kernel', { kernel: kernelName })}</span
+								>{/if}
+							{#if status.available.channel === 'beta'}<span class="chip warn"
+									>{t('update.channel.beta')}</span
+								>{/if}
+						</div>
+					</div>
+					<div class="hero-act">
+						<button
+							type="button"
+							class="btn btn-primary"
+							disabled={busy !== '' || status.unconfirmed || status.app.trial}
+							onclick={() => (asking = 'install')}
+							>{status.pending
+								? t('update.replacePending', {
+										version: status.available.version,
+										waiting: status.pending.version,
+									})
+								: t(status.kernelSwitch ? 'update.kernel.switch' : 'update.install')}</button
 						>
-					</span>
+					</div>
 				</div>
-				<p class="muted">
-					{t('update.availableMeta', {
-						date: formatDateTime(new Date(status.available.released)),
-						kernel: chosen?.kernel ?? status.available.kernel,
-						size: formatBytes(size),
-					})}
-				</p>
-				{#if status.available.changelog}<pre class="changelog">{status.available
-							.changelog}</pre>{/if}
-				<div>
+			{/if}
+			{#if status.available && hasNotes(news)}
+				<SettingRow
+					id="news"
+					icon="sparkle"
+					title={t('update.news.title', { version: osVersion(status.available.version) })}
+					desc={countText(news) || undefined}
+				>
+					<div class="srow-block">
+						<Changelog log={news} version={status.available.version} />
+					</div>
+				</SettingRow>
+			{/if}
+			{#if stage}
+				<SettingRow
+					icon="clock"
+					title={stepsTitle}
+					desc={!working || !stage.kind
+						? undefined
+						: t(stage.kind === 'app' ? 'update.steps.appRuns' : 'update.steps.reachable')}
+					control={status.progress.phase === 'download' ? percent : undefined}
+					open
+				>
+					<div class="srow-block" data-testid="update-steps">
+						{#if steps.length}
+							<ol class="steps" aria-label={t('update.steps.label')}>
+								{#each steps as step, i (i)}
+									<li class={step.state} aria-current={step.state === 'now' ? 'step' : undefined}>
+										<span class="mark" aria-hidden="true"
+											>{#if step.state === 'done'}<Icon name="check" size={16} />{:else}{i +
+													1}{/if}</span
+										>
+										<span class="step-name">{step.label}</span>
+										<span class="sr-only">({t(`update.steps.${step.state}`)})</span>
+									</li>
+								{/each}
+							</ol>
+						{/if}
+						{#if working}
+							<div
+								class="bar"
+								role="progressbar"
+								aria-valuemin="0"
+								aria-valuemax="100"
+								aria-valuenow={Math.round(status.progress.percent)}
+								aria-label={t('update.downloading')}
+							>
+								<span style:width="{status.progress.percent}%"></span>
+							</div>
+							<p class="muted">
+								{#if status.progress.phase === 'download'}{t('update.downloading')}
+								{:else if status.progress.phase === 'restart' || restartFrom}{t(
+										'update.app.restarting',
+									)}
+								{:else}{t('update.switching')}{/if}
+							</p>
+						{:else if status.pending}
+							<div class="notice-ok" role="status">
+								{t('update.pendingUpdate', { version: status.pending.version })}
+								<div class="row">
+									<button type="button" class="btn btn-primary" onclick={() => (restarting = true)}
+										>{t('update.restartNow')}</button
+									>
+									<button
+										type="button"
+										class="btn"
+										disabled={busy !== ''}
+										onclick={() => act('cancel')}>{t('update.cancel')}</button
+									>
+								</div>
+							</div>
+						{:else if status.unconfirmed}
+							<p class="notice-warn" role="status">{t('update.unconfirmed')}</p>
+						{/if}
+						{#if status.app.trial}<p class="notice-warn" role="status">
+								{t('update.app.trial')}
+							</p>{/if}
+						{#if stage.kind === 'system' && fallbackVersion}
+							<p class="muted">
+								{t('update.steps.fallback', { version: osVersion(fallbackVersion) })}
+							</p>
+						{:else if stage.kind === 'app' && working}
+							<p class="muted">{t('update.steps.appFallback')}</p>
+						{/if}
+					</div>
+				</SettingRow>
+			{/if}
+		</SettingGroup>
+	{/if}
+
+	<SettingGroup title={t('update.nas')} id="nas">
+		{#if status.canVerify && !working && !status.available && !status.kernelMissing && !status.checkError && (checked || status.lastCheck)}
+			<SettingRow
+				icon="check"
+				title={t('update.upToDate')}
+				desc={status.lastCheck
+					? t('update.lastCheck', { time: formatDateTime(new Date(status.lastCheck)) })
+					: undefined}
+			/>
+		{/if}
+		<SettingRow
+			id="installed"
+			icon="box"
+			title="TitanOS {osVersion(status.version)}"
+			badge={status.release ? undefined : devChip}
+			summary={hasNotes(ran) ? t('update.news.was') : undefined}
+			children={hasNotes(ran) ? ranNotes : undefined}
+		>
+			{#snippet description()}
+				<span class="line"
+					>{t(
+						status?.variant === 'new' ? 'update.kernel.runningNew' : 'update.kernel.runningStable',
+						{ kernel: running?.kernel || '–' },
+					)}{#if loaderKey}{' · '}{t(loaderKey as 'update.boot.bios')}{/if}</span
+				>
+				{#if status?.base && status.base !== status.version}<span class="line"
+						>{t('update.app.onBase', { version: osVersion(status.base) })}</span
+					>{/if}
+			{/snippet}
+		</SettingRow>
+		{#if status.canRollback && !status.pending && other}
+			<SettingRow
+				icon="undo"
+				title={t('update.back.title', { version: other.version || '?' })}
+				desc={t('update.back.desc')}
+			>
+				{#snippet control()}
 					<button
 						type="button"
-						class="btn btn-primary"
-						disabled={busy !== '' || status.unconfirmed || status.app.trial}
-						onclick={() => (asking = 'install')}
-						>{status.pending
-							? t('update.replacePending', {
-									version: status.available.version,
-									waiting: status.pending.version,
-								})
-							: t(status.kernelSwitch ? 'update.kernel.switch' : 'update.install')}</button
+						class="btn"
+						disabled={busy !== '' || working}
+						aria-label="{t('update.back.do')} – TitanOS {other.version || '?'}"
+						onclick={() => (asking = 'rollback')}>{t('update.back.do')}</button
 					>
-				</div>
-			</div>
-		{:else if status.canVerify && !working}
-			{#if status.kernelMissing}<p class="notice-warn" role="status">
-					{t('update.kernel.missing', { version: status.kernelMissing })}
-				</p>{/if}
-			{#if status.checkError}<pre class="muted">{status.checkError}</pre>{/if}
+				{/snippet}
+			</SettingRow>
 		{/if}
-	</section>
-
-	{#if status.canVerify}
-		<section class="tile panel" aria-labelledby="upd-choose">
-			<h2 class="tile-title" id="upd-choose">{t('update.choose.title')}</h2>
-			<p class="muted">{t('update.choose.text', { floor: floor || '0.46.2' })}</p>
-			{#if versionsFailed}
-				<p class="muted" role="status">{t('update.choose.failed')}</p>
-			{:else if !versions}
-				<p class="muted" role="status">{t('update.choose.loading')}</p>
-			{:else if versions.length === 0}
-				<p class="muted" role="status">{t('update.choose.none', { floor })}</p>
-			{:else}
-				<label class="narrow choose"
-					><span>{t('update.choose.version')}</span>
-					<select class="field" bind:value={picked} aria-label={t('update.choose.version')}>
-						{#each versions as v (v.version)}<option value={v.version}
-								>TitanOS {osVersion(v.version)} · {formatDate(
-									new Date(v.released),
-								)}{#if v.running}{' · '}{t('update.choose.running')}{:else if v.newest}{' · '}{t(
-										'update.choose.newest',
-									)}{/if}</option
-							>{/each}
-					</select>
-				</label>
-				{#if pick}
-					<p class="muted">
-						{t('update.choose.meta', {
-							date: formatDate(new Date(pick.released)),
-							kernel: pick.kernel,
-							size: formatBytes(pick.size),
-						})}
-					</p>
-					{#if summary(pick.changelog)}<p>{summary(pick.changelog)}</p>{/if}
-					<div>
+		{#if status.app.current || status.app.previous}
+			<SettingRow
+				id="app"
+				icon="sparkle"
+				title={t('update.app.title')}
+				desc={t('update.app.text', { version: osVersion(status.base) })}
+				summary={status.app.current || t('update.app.base', { version: osVersion(status.base) })}
+			>
+				<SettingSub title={t('update.app.running')}>
+					{#snippet control()}<span class="mono value"
+							>{status?.app.current ||
+								t('update.app.base', { version: osVersion(status?.base) })}</span
+						>{/snippet}
+				</SettingSub>
+				{#if status.app.previous}
+					<SettingSub title={t('update.app.previous')}>
+						{#snippet control()}<span class="mono value">{status?.app.previous}</span>{/snippet}
+					</SettingSub>
+				{/if}
+			</SettingRow>
+			{#if status.app.canRollback && !status.pending}
+				<SettingRow
+					icon="undo"
+					title={t('update.app.backTitle', { target: appTarget })}
+					desc={t('update.app.backDesc')}
+				>
+					{#snippet control()}
 						<button
 							type="button"
 							class="btn"
-							disabled={pick.running ||
-								busy !== '' ||
-								working ||
-								!!status.pending ||
-								status.unconfirmed ||
-								status.app.trial}
-							onclick={() => (asking = 'choose')}
-							>{t('update.choose.install', { version: pick.version })}</button
+							disabled={busy !== '' || working}
+							aria-label="{t('update.back.do')} – {appTarget}"
+							onclick={() => (asking = 'app-rollback')}>{t('update.back.do')}</button
 						>
-					</div>
-				{/if}
+					{/snippet}
+				</SettingRow>
 			{/if}
-		</section>
-	{/if}
-
-	{#if !activeNode()}<ClusterUpdates />{/if}
-
-	{#if status.app.current || status.app.previous}
-		<section class="tile panel" aria-labelledby="upd-app">
-			<h2 class="tile-title" id="upd-app">{t('update.app.title')}</h2>
-			<p class="muted">{t('update.app.text', { version: osVersion(status.base) })}</p>
-			<ul class="slots">
-				<li>
-					<span class="name">{t('update.app.running')}</span><span class="mono"
-						>{status.app.current || t('update.app.base', { version: osVersion(status.base) })}</span
-					>
-				</li>
-				{#if status.app.previous}<li>
-						<span class="name">{t('update.app.previous')}</span><span class="mono"
-							>{status.app.previous}</span
-						>
-					</li>{/if}
-			</ul>
-			{#if status.app.canRollback && !status.pending}
-				<div>
-					<button
-						type="button"
-						class="btn"
-						disabled={busy !== '' || working}
-						onclick={() => (asking = 'app-rollback')}
-						>{t('update.app.rollback', { target: appTarget })}</button
-					>
-				</div>
-			{/if}
-		</section>
-	{/if}
-
-	{#if status.slots.length > 0}
-		<section class="tile panel" aria-labelledby="upd-slots">
-			<h2 class="tile-title" id="upd-slots">{t('update.slots')}</h2>
-			<p class="muted">{t('update.slotsText')}</p>
-			<ul class="slots">
-				{#each status.slots as slot (slot.name)}
-					<li>
-						<span class="mono name">{t('update.slot', { name: slot.name.toUpperCase() })}</span>
-						<span class="mono">{slot.complete || slot.running ? slot.version || '–' : '–'}</span>
-						{#if slot.kernel}<span class="mono muted kernel"
-								>{t(slot.variant === 'new' ? 'update.kernel.slotNew' : 'update.kernel.slotStable', {
-									kernel: slot.kernel,
-								})}</span
-							>{/if}
-						<span class="grow muted"
-							>{slotState(slot)}{#if slot.triesLeft !== null && slot.triesLeft > 0}{' · '}{t(
-									'update.slot.tries',
-									{ count: slot.triesLeft },
-								)}{/if}</span
-						>
-					</li>
-				{/each}
-			</ul>
-			{#if status.canRollback && !status.pending && other}
-				<div>
-					<button
-						type="button"
-						class="btn"
-						disabled={busy !== '' || working}
-						onclick={() => (asking = 'rollback')}
-						>{t('update.rollback', { version: other.version || '?' })}</button
-					>
-				</div>
-			{/if}
-		</section>
-	{/if}
-
-	<form class="tile panel" onsubmit={save}>
-		<h2 class="tile-title">{t('update.settings')}</h2>
-		<p class="muted">{t('update.singleChannel')}</p>
-		<div class="interval">
-			<label class="narrow"
-				><span>{t('update.interval')}</span>
-				<select class="field" bind:value={mode} onchange={pickMode}>
-					{#each presets as every (every)}<option value={String(every)}
-							>{t(`update.interval.${every}` as 'update.interval.0')}</option
-						>{/each}
-					<option value="custom">{t('update.interval.custom')}</option>
-					<option value="manual">{t('update.interval.manual')}</option>
-				</select>
-			</label>
-			{#if mode === 'custom'}
-				<label class="amount"
-					><span>{t('update.interval.every')}</span><input
-						class="field mono"
-						type="number"
-						min="1"
-						max={unit === 'days' ? 30 : 720}
-						step="1"
-						bind:value={amount}
-						oninput={chooseEvery}
-						aria-invalid={customInvalid}
-					/></label
-				>
-				<select
-					class="field unit"
-					bind:value={unit}
-					onchange={chooseEvery}
-					aria-label={t('update.interval.unit')}
-				>
-					<option value="hours">{t('update.interval.hours')}</option>
-					<option value="days">{t('update.interval.days')}</option>
-				</select>
-			{/if}
-		</div>
-		{#if customInvalid}<p class="notice-error" role="alert">{t('update.interval.range')}</p>{/if}
-		<p class="muted">{t(manual ? 'update.interval.manualHint' : 'update.interval.hint')}</p>
-		{#if nextCheck && !manual}<p class="muted" role="status">
-				{nextCheck.getTime() <= Date.now()
-					? t('update.nextCheckSoon')
-					: t('update.nextCheck', { time: formatDateTime(nextCheck) })}
-			</p>{/if}
-		<fieldset class="kernel-choice">
-			<legend>{t('update.kernel.title')}</legend>
-			<label class="check"
-				><input type="radio" name="kernel" value="" bind:group={draft.kernel} /><span
-					><strong>{t('update.kernel.stable')}</strong><span class="muted"
-						>{t('update.kernel.stableText')}</span
-					></span
-				></label
-			>
-			<label class="check"
-				><input type="radio" name="kernel" value="new" bind:group={draft.kernel} /><span
-					><strong>{t('update.kernel.new')}</strong><span class="muted"
-						>{t('update.kernel.newText')}</span
-					></span
-				></label
-			>
-			<p class="muted">{t('update.kernel.hint')}</p>
-		</fieldset>
-		<label class="check"
-			><input type="checkbox" bind:checked={draft.autoInstall} disabled={manual} /><span
-				>{t('update.auto')}</span
-			></label
-		>
-		{#if manual}
-			<p class="muted">{t('update.autoNeedsChecks')}</p>
-		{:else if draft.autoInstall}
-			<label class="narrow"
-				><span>{t('update.autoTime')}</span><input
-					class="field mono"
-					type="time"
-					bind:value={draft.installTime}
-					required
-				/></label
-			>
-			<p class="muted">{t('update.autoHint')}</p>
-		{:else}
-			<p class="muted">{t('update.manualHint')}</p>
 		{/if}
-		<div class="row-actions">
-			<button
-				type="submit"
-				class="btn btn-primary"
-				disabled={!changed || customInvalid || busy !== ''}
-				>{t(busy === 'save' ? 'ui.saving' : 'notify.save')}</button
-			>{#if saved && !changed}<span class="muted" role="status">{t('ui.saved')}</span>{/if}
-		</div>
+		{#if status.slots.length > 0}
+			<SettingRow
+				id="slots"
+				icon="disk"
+				title={t('update.slots')}
+				desc={t('update.slotsText')}
+				summary={status.slots
+					.map(
+						(slot) =>
+							`${slot.name.toUpperCase()}: ${slot.complete || slot.running ? slot.version || '–' : '–'}`,
+					)
+					.join(' · ')}
+			>
+				{#each status.slots as slot (slot.name)}
+					<SettingSub
+						title={t('update.slot', { name: slot.name.toUpperCase() })}
+						desc={slot.kernel
+							? t(slot.variant === 'new' ? 'update.kernel.slotNew' : 'update.kernel.slotStable', {
+									kernel: slot.kernel,
+								})
+							: undefined}
+					>
+						{#snippet control()}
+							<span class="mono value"
+								>{slot.complete || slot.running ? slot.version || '–' : '–'}</span
+							>
+							<span
+								>{slotState(slot)}{#if slot.triesLeft !== null && slot.triesLeft > 0}{' · '}{t(
+										'update.slot.tries',
+										{ count: slot.triesLeft },
+									)}{/if}</span
+							>
+						{/snippet}
+					</SettingSub>
+				{/each}
+			</SettingRow>
+		{/if}
+		{#if status.canVerify}
+			<SettingRow
+				id="choose"
+				icon="list"
+				title={t('update.choose.title')}
+				desc={t('update.choose.text', { floor: floor || '0.46.2' })}
+			>
+				{#if versionsFailed}
+					<div class="srow-block">
+						<p class="muted" role="status">{t('update.choose.failed')}</p>
+					</div>
+				{:else if !versions}
+					<div class="srow-block">
+						<p class="muted" role="status">{t('update.choose.loading')}</p>
+					</div>
+				{:else if versions.length === 0}
+					<div class="srow-block">
+						<p class="muted" role="status">{t('update.choose.none', { floor })}</p>
+					</div>
+				{:else}
+					<SettingSub title={t('update.choose.version')} for="upd-pick">
+						{#snippet control()}
+							<select id="upd-pick" class="field" bind:value={picked}>
+								{#each versions ?? [] as v (v.version)}<option value={v.version}
+										>TitanOS {osVersion(v.version)} · {formatDate(
+											new Date(v.released),
+										)}{#if v.running}{' · '}{t(
+												'update.choose.running',
+											)}{:else if v.newest}{' · '}{t('update.choose.newest')}{/if}</option
+									>{/each}
+							</select>
+						{/snippet}
+					</SettingSub>
+					{#if pick}
+						<div class="srow-block">
+							<p class="muted">
+								{t('update.choose.meta', {
+									date: formatDate(new Date(pick.released)),
+									kernel: pick.kernel,
+									size: formatBytes(pick.size),
+								})}
+							</p>
+							{#if leadOf(pick.changelog)}<p>{leadOf(pick.changelog)}</p>{/if}
+							<div>
+								<button
+									type="button"
+									class="btn"
+									disabled={pick.running ||
+										busy !== '' ||
+										working ||
+										!!status.pending ||
+										status.unconfirmed ||
+										status.app.trial}
+									onclick={() => (asking = 'choose')}
+									>{t('update.choose.install', { version: pick.version })}</button
+								>
+							</div>
+						</div>
+					{/if}
+				{/if}
+			</SettingRow>
+		{/if}
+	</SettingGroup>
+
+	<form onsubmit={save}>
+		<SettingGroup title={t('update.auto.group')} id="auto" desc={t('update.singleChannel')}>
+			<SettingRow icon="search" title={t('update.check')}>
+				{#snippet description()}
+					{#if status?.lastCheck}<span class="line" role="status"
+							>{t('update.lastCheck', {
+								time: formatDateTime(new Date(status.lastCheck)),
+							})}</span
+						>{/if}
+					{#if nextCheck && !manual}<span class="line" role="status"
+							>{nextCheck.getTime() <= Date.now()
+								? t('update.nextCheckSoon')
+								: t('update.nextCheck', { time: formatDateTime(nextCheck) })}</span
+						>{/if}
+					<span class="line"
+						>{t(manual ? 'update.interval.manualHint' : 'update.interval.hint')}</span
+					>
+				{/snippet}
+				{#snippet control()}
+					<select
+						class="field"
+						bind:value={mode}
+						onchange={pickMode}
+						aria-label={t('update.interval')}
+					>
+						{#each presets as every (every)}<option value={String(every)}
+								>{t(`update.interval.${every}` as 'update.interval.0')}</option
+							>{/each}
+						<option value="custom">{t('update.interval.custom')}</option>
+						<option value="manual">{t('update.interval.manual')}</option>
+					</select>
+					{#if mode === 'custom'}
+						<label class="amount"
+							><span>{t('update.interval.every')}</span><input
+								class="field mono"
+								type="number"
+								min="1"
+								max={unit === 'days' ? 30 : 720}
+								step="1"
+								bind:value={amount}
+								oninput={chooseEvery}
+								aria-invalid={customInvalid}
+							/></label
+						>
+						<select
+							class="field unit"
+							bind:value={unit}
+							onchange={chooseEvery}
+							aria-label={t('update.interval.unit')}
+						>
+							<option value="hours">{t('update.interval.hours')}</option>
+							<option value="days">{t('update.interval.days')}</option>
+						</select>
+					{/if}
+					<!-- PLAN 74: also while an update waits for the restart: a newer one replaces it. -->
+					<button
+						type="button"
+						class="btn"
+						disabled={!canCheck || busy !== ''}
+						onclick={() => act('check')}
+						>{t(busy === 'check' ? 'update.checking' : 'update.checkNow')}</button
+					>
+				{/snippet}
+			</SettingRow>
+			{#if customInvalid}<p class="notice-error" role="alert">{t('update.interval.range')}</p>{/if}
+			<SettingRow
+				icon="clock"
+				title={t('update.auto.title')}
+				for="upd-auto"
+				desc={t(
+					manual
+						? 'update.autoNeedsChecks'
+						: draft.autoInstall
+							? 'update.autoHint'
+							: 'update.manualHint',
+				)}
+			>
+				{#snippet control()}
+					{#if draft?.autoInstall && !manual}
+						<input
+							class="field mono"
+							type="time"
+							bind:value={draft.installTime}
+							aria-label={t('update.autoTime')}
+							required
+						/>
+					{/if}
+					{#if draft}<input
+							id="upd-auto"
+							class="switch"
+							type="checkbox"
+							role="switch"
+							bind:checked={draft.autoInstall}
+							disabled={manual}
+							aria-label={t('update.auto')}
+						/>{/if}
+				{/snippet}
+			</SettingRow>
+			<SettingRow icon="chip" title={t('update.kernel.title')} for="upd-kernel">
+				{#snippet description()}
+					<span class="line"
+						><strong>{t('update.kernel.stable')}:</strong> {t('update.kernel.stableText')}</span
+					>
+					<span class="line"
+						><strong>{t('update.kernel.new')}:</strong> {t('update.kernel.newText')}</span
+					>
+					<span class="line">{t('update.kernel.hint')}</span>
+				{/snippet}
+				{#snippet control()}
+					{#if draft}<select id="upd-kernel" class="field" bind:value={draft.kernel}>
+							<option value="">{t('update.kernel.stable')}</option>
+							<option value="new">{t('update.kernel.new')}</option>
+						</select>{/if}
+				{/snippet}
+			</SettingRow>
+			<div class="save">
+				<button
+					type="submit"
+					class="btn btn-primary"
+					disabled={!changed || customInvalid || busy !== ''}
+					>{t(busy === 'save' ? 'ui.saving' : 'notify.save')}</button
+				>{#if saved && !changed}<span class="muted" role="status">{t('ui.saved')}</span>{/if}
+			</div>
+		</SettingGroup>
 	</form>
+
+	<!-- The nodes of the cluster keep their own section (cluster work). -->
+	{#if !activeNode()}<ClusterUpdates />{/if}
 {/if}
 
 {#if asking === 'install' && status?.available}
@@ -844,62 +1135,17 @@
 {/if}
 
 <style>
-	section,
 	form {
-		font-size: var(--text-md);
+		display: contents;
 	}
-	p {
-		max-width: 60rem;
-	}
-	.head,
 	.row {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-2-5) 14px;
 	}
-	.head {
-		justify-content: space-between;
-	}
 	.notice-ok .row {
 		margin-top: var(--space-2-5);
-	}
-	.version {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: baseline;
-		gap: var(--space-1) var(--space-3);
-		font-size: var(--text-lg);
-	}
-	.base {
-		font-size: var(--text-md);
-	}
-	.chips {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-1-5);
-	}
-	.available {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2-5);
-		padding: calc(var(--row-pad) + 2px) var(--tile-pad);
-		border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
-		border-radius: var(--radius-ctl);
-		background: color-mix(in srgb, var(--accent) 8%, transparent);
-	}
-	.name {
-		font-weight: 600;
-	}
-	.available .name {
-		font-size: var(--text-lg);
-	}
-	.changelog {
-		max-height: 18rem;
-		overflow-y: auto;
-		padding: var(--space-2-5) var(--space-3);
-		background: var(--track);
-		border-radius: var(--radius-ctl);
 	}
 	pre {
 		margin: 0;
@@ -908,104 +1154,160 @@
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 	}
-	.notice-error pre {
+	:is(.notice-error, .notice-warn) pre {
 		margin-top: var(--space-1-5);
 	}
-	.progress {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-	}
-	.slots {
-		margin: 0;
-		padding: 0;
-		list-style: none;
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-	}
-	.slots li {
-		display: flex;
-		flex-wrap: wrap;
+	/* The card of the new version: a tint of the accent, the text in the
+	   theme's own colours. */
+	.hero {
+		display: grid;
+		grid-template-columns: 56px minmax(0, 1fr) auto;
 		align-items: center;
-		gap: var(--space-1-5) 18px;
-		padding: var(--space-2-5) var(--space-3);
-		border: 1px solid var(--panel-border);
-		border-radius: var(--radius-ctl);
+		gap: var(--space-2) var(--space-4);
+		padding: var(--space-4);
+		min-width: 0;
+		border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+		border-radius: calc(8px * var(--radius-scale, 1));
+		background: color-mix(in srgb, var(--accent) 9%, transparent);
 	}
-	.slots .name {
-		min-width: 4.5rem;
-	}
-	.grow {
-		flex: 1 1 200px;
-	}
-	label {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1-5);
-		font-size: var(--text-base);
-	}
-	label > span {
-		color: var(--muted);
-	}
-	.narrow {
-		max-width: 320px;
-	}
-	.choose {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1-5);
-	}
-	.interval {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-end;
-		gap: var(--space-2-5) var(--space-3);
-	}
-	.interval .narrow {
-		flex: 1 1 220px;
-	}
-	.amount {
-		width: 6.5rem;
-	}
-	.unit {
-		width: 8rem;
-	}
-	.check input:disabled + span {
-		color: var(--muted);
-	}
-	label.check {
-		flex-direction: row;
-	}
-	.check > span {
+	.hero-ico {
+		display: grid;
+		place-items: center;
+		width: 56px;
+		height: 56px;
+		border-radius: calc(14px * var(--radius-scale, 1));
+		background: color-mix(in srgb, var(--accent) 22%, transparent);
 		color: var(--text);
 	}
-	.kernel-choice {
-		margin: 0;
-		padding: 0;
-		border: 0;
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-	}
-	.kernel-choice legend {
-		padding: 0;
-		margin-bottom: var(--space-1);
-		font-size: var(--text-base);
-		color: var(--muted);
-	}
-	.kernel-choice label.check {
-		align-items: flex-start;
-	}
-	.kernel-choice label.check > span {
+	.hero-text {
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
+		min-width: 0;
 	}
-	.slots .kernel {
+	.hero-title {
+		margin: 0;
+		font-size: 1.25rem;
+		font-weight: 600;
+		line-height: 1.3;
+		letter-spacing: 0;
+		text-transform: none;
+		color: var(--text);
+		overflow-wrap: anywhere;
+	}
+	.hero p {
+		margin: 0;
+	}
+	.facts {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-1-5) var(--space-2);
+		margin-top: var(--space-2);
+	}
+	.jump {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-1-5);
+		font-variant-numeric: tabular-nums;
+	}
+	.jump b {
+		padding: 2px 9px;
+		border-radius: var(--radius-small);
+		background: var(--chip);
+		border: 1px solid var(--border);
+		font-weight: 600;
+	}
+	.jump b.to {
+		background: var(--accent);
+		border-color: transparent;
+		color: var(--on-accent);
+	}
+	.arrow {
+		display: grid;
+		color: var(--muted);
+	}
+	/* The steps of the installation: the done ones with a check mark, the
+	   current one framed and bold – never told apart by colour alone. */
+	.steps {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+		gap: var(--space-1-5);
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.steps li {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 2px;
+		padding: var(--space-2-5) var(--space-2);
+		border: 1px solid var(--srow-line);
+		border-radius: var(--srow-radius);
+		color: var(--muted);
 		font-size: var(--text-sm);
+		text-align: center;
+		overflow-wrap: anywhere;
 	}
-	.head .check {
-		margin-left: auto;
+	.steps .mark {
+		display: grid;
+		place-items: center;
+		min-height: 1.5rem;
+		font-size: 1rem;
+		font-weight: 700;
+	}
+	.steps li.done {
+		border-color: var(--ok-border);
+		color: var(--text);
+	}
+	.steps li.done .mark {
+		color: var(--ok-text);
+	}
+	.steps li.now {
+		border: 2px solid var(--accent);
+		padding: calc(var(--space-2-5) - 1px) calc(var(--space-2) - 1px);
+		background: color-mix(in srgb, var(--accent) 10%, transparent);
+		color: var(--text);
+		font-weight: 600;
+	}
+	.line {
+		display: block;
+	}
+	.value {
+		color: var(--text);
+	}
+	.amount {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-1-5);
+		color: var(--muted);
+	}
+	.save {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-2-5);
+		margin-top: var(--space-2);
+	}
+	@media (max-width: 639px) {
+		.hero {
+			grid-template-columns: 44px minmax(0, 1fr);
+			padding: var(--space-3);
+		}
+		.hero-ico {
+			width: 44px;
+			height: 44px;
+		}
+		.hero-act {
+			grid-column: 1 / -1;
+		}
+		.hero-act .btn {
+			width: 100%;
+		}
+		/* Two columns of steps, as in the draft. */
+		.steps {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
 	}
 </style>

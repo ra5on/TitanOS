@@ -1501,8 +1501,15 @@ span.srow-chev {
 	.srow-sub {
 		flex-wrap: wrap;
 	}
+	/* The symbol and the chevron stay beside the name, not in the middle of
+	   the stacked row. */
+	.srow-head > .srow-ico {
+		align-self: flex-start;
+		min-height: 1.4rem;
+	}
 	.srow-chev {
 		order: 2;
+		align-self: flex-start;
 	}
 	.srow-ctl {
 		order: 3;
