@@ -233,7 +233,7 @@ func (s *Server) mapFor(user auth.User, m nasMap) nasMap {
 		return m
 	}
 	roots := map[string]bool{}
-	for _, r := range s.fileRoots(user) {
+	for _, r := range s.filesArea().fileRoots(user) {
 		roots[r.ID] = true
 	}
 	out := nasMap{Built: m.Built, Host: m.Host}

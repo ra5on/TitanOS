@@ -189,7 +189,7 @@ func (s *Server) handleWebDAV(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var roots []files.Root
-	for _, root := range s.fileRoots(user) {
+	for _, root := range s.filesArea().fileRoots(user) {
 		if root.Kind == "share" {
 			roots = append(roots, root)
 		}

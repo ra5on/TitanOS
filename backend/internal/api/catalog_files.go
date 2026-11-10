@@ -355,7 +355,7 @@ func (s *Server) handleWriteDocument(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_document", err.Error())
 		return
 	}
-	root, ok := s.fileRoot(w, r, req.Root)
+	root, ok := s.filesArea().fileRoot(w, r, req.Root)
 	if !ok {
 		return
 	}
@@ -388,7 +388,7 @@ func (s *Server) handleMoveMany(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "give 1 to 500 moves")
 		return
 	}
-	root, ok := s.fileRoot(w, r, req.Root)
+	root, ok := s.filesArea().fileRoot(w, r, req.Root)
 	if !ok {
 		return
 	}
@@ -520,7 +520,7 @@ func (s *Server) handleEditDocument(w http.ResponseWriter, r *http.Request) {
 	if !readJSONBody(w, r, &req) {
 		return
 	}
-	root, ok := s.fileRoot(w, r, req.Root)
+	root, ok := s.filesArea().fileRoot(w, r, req.Root)
 	if !ok {
 		return
 	}

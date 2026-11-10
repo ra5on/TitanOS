@@ -83,7 +83,7 @@ func TestAgentShareFolders(t *testing.T) {
 	// Each account sees only its own folder, in the file manager too.
 	roots := func(name string) string {
 		u, _ := ts.users.Get(name)
-		for _, r := range ts.server.fileRoots(u) {
+		for _, r := range ts.server.filesArea().fileRoots(u) {
 			if r.ID == "share/"+agentShareName {
 				return r.Dir
 			}

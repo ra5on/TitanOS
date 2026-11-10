@@ -207,7 +207,7 @@ func (s *Server) catalogMyShares(user auth.User) map[string]any {
 		Recycle   bool   `json:"recycleBin"`
 	}
 	list := []share{}
-	for _, root := range s.fileRoots(user) {
+	for _, root := range s.filesArea().fileRoots(user) {
 		if root.Kind != "share" {
 			continue
 		}
@@ -249,13 +249,13 @@ func catalogFileError(err error) error {
 // catalogRoot finds a root of the file manager for MCP: the
 // same as the account has, without the stick.
 func (s *Server) catalogRoot(user auth.User, id string) (files.Root, error) {
-	for _, root := range s.fileRoots(user) {
+	for _, root := range s.filesArea().fileRoots(user) {
 		if root.ID == id && root.Kind != "stick" {
 			return root, nil
 		}
 	}
 	ids := []string{}
-	for _, root := range s.fileRoots(user) {
+	for _, root := range s.filesArea().fileRoots(user) {
 		if root.Kind != "stick" {
 			ids = append(ids, root.ID)
 		}
@@ -281,7 +281,7 @@ func (s *Server) catalogFilesList(user auth.User) func(context.Context, json.Raw
 				Recycle  bool   `json:"recycleBin"`
 			}
 			roots := []rootInfo{}
-			for _, root := range s.fileRoots(user) {
+			for _, root := range s.filesArea().fileRoots(user) {
 				if root.Kind != "stick" {
 					roots = append(roots, rootInfo{root.ID, root.Name, root.Kind, root.Writable, root.Recycle})
 				}

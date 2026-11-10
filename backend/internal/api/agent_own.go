@@ -192,7 +192,7 @@ func (b *agentToolbox) skillSave(_ context.Context, chat *agent.Chat, args json.
 
 func (b *agentToolbox) locationsList(context.Context, *agent.Chat, json.RawMessage) (agent.Outcome, error) {
 	roots := []map[string]any{}
-	for _, r := range b.s.fileRoots(b.user) {
+	for _, r := range b.s.filesArea().fileRoots(b.user) {
 		if r.Kind == "stick" {
 			continue
 		}

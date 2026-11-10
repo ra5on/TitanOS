@@ -93,7 +93,7 @@ func (s *Server) handleDockerOpeners(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, out)
 		return
 	}
-	root, ok := s.fileRoot(w, r, q.Get("root"))
+	root, ok := s.filesArea().fileRoot(w, r, q.Get("root"))
 	if !ok {
 		return
 	}
@@ -140,7 +140,7 @@ func (s *Server) handleDockerOpen(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "app_forbidden", appWindowMessage("app_forbidden"))
 		return
 	}
-	root, ok := s.fileRoot(w, r, req.Root)
+	root, ok := s.filesArea().fileRoot(w, r, req.Root)
 	if !ok {
 		return
 	}

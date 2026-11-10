@@ -10,7 +10,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/files"
 )
 
-func (s *Server) handleFileSearch(w http.ResponseWriter, r *http.Request) {
+func (a filesArea) handleFileSearch(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Root string
 		// Content searches words inside files in the full-text index.
@@ -20,14 +20,14 @@ func (s *Server) handleFileSearch(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	root, ok := s.fileRoot(w, r, req.Root)
+	root, ok := a.fileRoot(w, r, req.Root)
 	if !ok {
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 	if req.Content {
-		result, err := s.contentSearch(ctx, root, req.SearchOptions)
+		result, err := a.contentSearch(ctx, root, req.SearchOptions)
 		switch {
 		case errors.Is(err, fileindex.ErrInvalid):
 			writeError(w, http.StatusBadRequest, "invalid_query", "enter one to sixteen words")
@@ -40,14 +40,14 @@ func (s *Server) handleFileSearch(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	result, err := s.opts.Files.Search(ctx, root, req.SearchOptions)
+	result, err := a.files.Search(ctx, root, req.SearchOptions)
 	if err != nil {
 		writeFileError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
 }
-func (s *Server) handleFileCompare(w http.ResponseWriter, r *http.Request) {
+func (a filesArea) handleFileCompare(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Root, Path, ToRoot, ToDir string
 		Checksum, ShowHidden      bool
@@ -55,17 +55,17 @@ func (s *Server) handleFileCompare(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	left, ok := s.fileRoot(w, r, req.Root)
+	left, ok := a.fileRoot(w, r, req.Root)
 	if !ok {
 		return
 	}
-	right, ok := s.fileRoot(w, r, req.ToRoot)
+	right, ok := a.fileRoot(w, r, req.ToRoot)
 	if !ok {
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
-	result, err := s.opts.Files.Compare(ctx, left, req.Path, right, req.ToDir, req.Checksum, req.ShowHidden)
+	result, err := a.files.Compare(ctx, left, req.Path, right, req.ToDir, req.Checksum, req.ShowHidden)
 	if err != nil {
 		writeFileError(w, err)
 		return
@@ -73,13 +73,13 @@ func (s *Server) handleFileCompare(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (s *Server) handleFileUndoList(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.opts.Files.UndoList(currentUser(r).Name))
+func (a filesArea) handleFileUndoList(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, a.files.UndoList(currentUser(r).Name))
 }
-func (s *Server) handleFileUndo(w http.ResponseWriter, r *http.Request) {
+func (a filesArea) handleFileUndo(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r)
 	var item *files.UndoInfo
-	for _, record := range s.opts.Files.UndoList(user.Name) {
+	for _, record := range a.files.UndoList(user.Name) {
 		if record.ID == r.PathValue("id") {
 			item = &record
 			break
@@ -91,7 +91,7 @@ func (s *Server) handleFileUndo(w http.ResponseWriter, r *http.Request) {
 	}
 	roots := map[string]files.Root{}
 	for _, id := range item.Roots {
-		root, ok := s.fileRoot(w, r, id)
+		root, ok := a.fileRoot(w, r, id)
 		if !ok {
 			return
 		}
@@ -99,14 +99,14 @@ func (s *Server) handleFileUndo(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
-	if err := s.opts.Files.Undo(ctx, user.Name, item.ID, roots, user.UID); err != nil {
+	if err := a.files.Undo(ctx, user.Name, item.ID, roots, user.UID); err != nil {
 		writeFileError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleFileRenamePreview(w http.ResponseWriter, r *http.Request) {
+func (a filesArea) handleFileRenamePreview(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Root string
 		files.RenameOptions
@@ -114,18 +114,18 @@ func (s *Server) handleFileRenamePreview(w http.ResponseWriter, r *http.Request)
 	if !readJSON(w, r, &req) {
 		return
 	}
-	root, ok := s.fileRoot(w, r, req.Root)
+	root, ok := a.fileRoot(w, r, req.Root)
 	if !ok {
 		return
 	}
-	result, err := s.opts.Files.RenamePreview(root, req.RenameOptions)
+	result, err := a.files.RenamePreview(root, req.RenameOptions)
 	if err != nil {
 		writeFileError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
 }
-func (s *Server) handleFileRenameBatch(w http.ResponseWriter, r *http.Request) {
+func (a filesArea) handleFileRenameBatch(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Root    string
 		Changes []files.RenameChange
@@ -136,13 +136,13 @@ func (s *Server) handleFileRenameBatch(w http.ResponseWriter, r *http.Request) {
 	for _, c := range req.Changes {
 		noteTarget(r, filePlace(req.Root, c.From)+" → "+c.To)
 	}
-	root, ok := s.fileRoot(w, r, req.Root)
+	root, ok := a.fileRoot(w, r, req.Root)
 	if !ok {
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	result, err := s.opts.Files.RenameBatch(ctx, root, req.Changes, currentUser(r).Name)
+	result, err := a.files.RenameBatch(ctx, root, req.Changes, currentUser(r).Name)
 	if err != nil {
 		writeFileError(w, err)
 		return
@@ -150,23 +150,23 @@ func (s *Server) handleFileRenameBatch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (s *Server) handleFileArchiveList(w http.ResponseWriter, r *http.Request) {
+func (a filesArea) handleFileArchiveList(w http.ResponseWriter, r *http.Request) {
 	var req struct{ Root, Path string }
 	if !readJSON(w, r, &req) {
 		return
 	}
-	root, ok := s.fileRoot(w, r, req.Root)
+	root, ok := a.fileRoot(w, r, req.Root)
 	if !ok {
 		return
 	}
-	result, err := s.opts.Files.ArchiveList(root, req.Path)
+	result, err := a.files.ArchiveList(root, req.Path)
 	if err != nil {
 		writeFileError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
 }
-func (s *Server) handleFileExtract(w http.ResponseWriter, r *http.Request) {
+func (a filesArea) handleFileExtract(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Root, Path, Version, ToRoot, ToDir, Name string
 		Paths                                    []string
@@ -175,16 +175,16 @@ func (s *Server) handleFileExtract(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	noteTarget(r, filePlace(req.Root, req.Path), "→ "+filePlace(req.ToRoot, req.ToDir))
-	src, ok := s.fileRoot(w, r, req.Root)
+	src, ok := a.fileRoot(w, r, req.Root)
 	if !ok {
 		return
 	}
-	dst, ok := s.fileRoot(w, r, req.ToRoot)
+	dst, ok := a.fileRoot(w, r, req.ToRoot)
 	if !ok {
 		return
 	}
 	user := currentUser(r)
-	result, err := s.opts.Files.StartExtract(src, req.Path, req.Version, req.Paths, dst, req.ToDir, req.Name, user.Name, user.UID)
+	result, err := a.files.StartExtract(src, req.Path, req.Version, req.Paths, dst, req.ToDir, req.Name, user.Name, user.UID)
 	if err != nil {
 		writeFileError(w, err)
 		return
@@ -192,7 +192,7 @@ func (s *Server) handleFileExtract(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, result)
 }
 
-func (s *Server) handleFileJobControl(w http.ResponseWriter, r *http.Request) {
+func (a filesArea) handleFileJobControl(w http.ResponseWriter, r *http.Request) {
 	// A field that is left out keeps what the job has: "pause" alone must
 	// not reset the speed limit and the priority to zero.
 	var req struct {
@@ -206,7 +206,7 @@ func (s *Server) handleFileJobControl(w http.ResponseWriter, r *http.Request) {
 	// Resolve current access again before resuming a transfer.
 	user := currentUser(r)
 	var job *files.Job
-	for _, item := range s.opts.Files.Jobs(user.Name) {
+	for _, item := range a.files.Jobs(user.Name) {
 		if item.ID == r.PathValue("id") {
 			job = &item
 			break
@@ -227,18 +227,18 @@ func (s *Server) handleFileJobControl(w http.ResponseWriter, r *http.Request) {
 		rate = *req.Rate
 	}
 	if !paused {
-		if s.opts.Maintenance != nil {
-			leave, ok := s.admitOperation(w)
+		if a.maintenance() != nil {
+			leave, ok := a.admitOperation(w)
 			if !ok {
 				return
 			}
 			defer leave()
 		}
-		src, ok := s.fileRoot(w, r, job.From)
+		src, ok := a.fileRoot(w, r, job.From)
 		if !ok {
 			return
 		}
-		dst, ok := s.fileRoot(w, r, job.To)
+		dst, ok := a.fileRoot(w, r, job.To)
 		if !ok {
 			return
 		}
@@ -247,14 +247,14 @@ func (s *Server) handleFileJobControl(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := s.opts.Files.ControlJob(user.Name, job.ID, paused, priority, rate); err != nil {
+	if err := a.files.ControlJob(user.Name, job.ID, paused, priority, rate); err != nil {
 		writeFileError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleFileUsage(w http.ResponseWriter, r *http.Request) {
+func (a filesArea) handleFileUsage(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Root, Path    string
 		ShowHidden    bool
@@ -264,7 +264,7 @@ func (s *Server) handleFileUsage(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	root, ok := s.fileRoot(w, r, req.Root)
+	root, ok := a.fileRoot(w, r, req.Root)
 	if !ok {
 		return
 	}
@@ -274,7 +274,7 @@ func (s *Server) handleFileUsage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request", "")
 		return
 	}
-	result, err := s.opts.Files.DirectoryUsageWith(ctx, root, req.Path, files.UsageOptions{
+	result, err := a.files.DirectoryUsageWith(ctx, root, req.Path, files.UsageOptions{
 		ShowHidden: req.ShowHidden, OlderThanDays: req.OlderThanDays, MinOldBytes: req.MinOldBytes,
 	})
 	if err != nil {
@@ -284,19 +284,19 @@ func (s *Server) handleFileUsage(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (s *Server) handleFilePrevious(w http.ResponseWriter, r *http.Request) {
-	root, ok := s.fileRoot(w, r, r.URL.Query().Get("root"))
+func (a filesArea) handleFilePrevious(w http.ResponseWriter, r *http.Request) {
+	root, ok := a.fileRoot(w, r, r.URL.Query().Get("root"))
 	if !ok {
 		return
 	}
-	result, err := s.opts.Files.ReadPreviousText(root, r.URL.Query().Get("path"))
+	result, err := a.files.ReadPreviousText(root, r.URL.Query().Get("path"))
 	if err != nil {
 		writeFileError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
 }
-func (s *Server) handleFileDuplicates(w http.ResponseWriter, r *http.Request) {
+func (a filesArea) handleFileDuplicates(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Root, Path string
 		ShowHidden bool
@@ -304,13 +304,13 @@ func (s *Server) handleFileDuplicates(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	root, ok := s.fileRoot(w, r, req.Root)
+	root, ok := a.fileRoot(w, r, req.Root)
 	if !ok {
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
-	result, err := s.opts.Files.Duplicates(ctx, root, req.Path, req.ShowHidden)
+	result, err := a.files.Duplicates(ctx, root, req.Path, req.ShowHidden)
 	if err != nil {
 		writeFileError(w, err)
 		return

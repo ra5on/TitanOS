@@ -691,7 +691,7 @@ func (s *Server) docsSearch(user auth.User, query string, limit int, keep func(d
 		idx = docindex.Index{} // unreadable: empty until the next run builds it anew
 	}
 	roots := map[string]bool{}
-	for _, r := range s.fileRoots(user) {
+	for _, r := range s.filesArea().fileRoots(user) {
 		if r.Kind == "share" {
 			roots[r.ID] = true
 		}

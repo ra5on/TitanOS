@@ -55,7 +55,7 @@ func (b *agentToolbox) agentSnapTarget(tool string, args json.RawMessage) string
 }
 
 func (b *agentToolbox) rootVolume(id string) string {
-	for _, r := range b.s.fileRoots(b.user) {
+	for _, r := range b.s.filesArea().fileRoots(b.user) {
 		if r.ID == id {
 			return r.Volume
 		}

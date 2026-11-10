@@ -12,9 +12,11 @@ import (
 // Thumbnails, the photo list and content search resolve the root with the
 // account's rights like a download; the index settings are for administrators.
 func TestThumbnailAndIndexRights(t *testing.T) {
-	ts := newTestServer(t)
-	ts.server.opts.Thumbs = thumbs.New()
-	ts.server.opts.FileIndex = fileindex.New(ts.store)
+	// The area takes its managers when the routes are registered.
+	ts := newTestServerWith(t, func(o *Options) {
+		o.Thumbs = thumbs.New()
+		o.FileIndex = fileindex.New(o.Store)
+	})
 	gets := []string{"/api/v1/files/thumb?root=stick&path=a.jpg", "/api/v1/files/photos?root=stick&path=", "/api/v1/files/index"}
 	for _, path := range gets {
 		if res, _ := ts.request("GET", path, nil); res.StatusCode != http.StatusUnauthorized {

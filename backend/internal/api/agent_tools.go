@@ -365,11 +365,11 @@ func (b *agentToolbox) folderMode(args json.RawMessage) string {
 func (b *agentToolbox) rootDir(id string) string {
 	if b.dirs == nil {
 		b.dirs = map[string]string{}
-		for _, r := range b.s.fileRoots(b.user) {
+		for _, r := range b.s.filesArea().fileRoots(b.user) {
 			b.dirs[r.ID] = r.Dir
 		}
 		if owner, ok := b.s.opts.Users.Get(b.s.firstOwner()); ok {
-			for _, r := range b.s.fileRoots(owner) {
+			for _, r := range b.s.filesArea().fileRoots(owner) {
 				if _, seen := b.dirs[r.ID]; !seen {
 					b.dirs[r.ID] = r.Dir
 				}

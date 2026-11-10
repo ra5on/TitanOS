@@ -138,7 +138,7 @@ func (s *Server) docsShareRoot(user auth.User, id string) (files.Root, bool) {
 	if s.opts.Shares == nil || s.opts.Storage == nil {
 		return files.Root{}, false
 	}
-	for _, r := range s.fileRoots(user) {
+	for _, r := range s.filesArea().fileRoots(user) {
 		if r.ID == id && r.Kind == "share" {
 			return r, true
 		}
