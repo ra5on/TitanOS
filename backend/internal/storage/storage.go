@@ -263,6 +263,10 @@ type Manager struct {
 	// btrfsSeen is when mountAll first saw a member of an unmounted Btrfs
 	// mirror (protected by actions). clock replaces time.Now in tests.
 	btrfsSeen map[string]time.Time
+	// seenMu guards btrfsSeen and cacheSeen: the loop reads them every
+	// round (btrfsWaiting) while unlocking or deleting a volume writes
+	// them from a request.
+	seenMu sync.Mutex
 	// cacheSeen is when mountAll first missed the read cache SSD of a
 	// volume (protected by actions).
 	cacheSeen map[string]time.Time

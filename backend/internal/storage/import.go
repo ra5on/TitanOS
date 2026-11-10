@@ -409,6 +409,11 @@ func (m *Manager) Import(ctx context.Context, req ImportRequest) error {
 		v.Profile, v.Devices = preview.Candidate.Level, len(c.Disks)
 	}
 	if err := m.saveVolumes(append(m.configured(), v)); err != nil {
+		if c.Encrypted {
+			// Nothing was taken over: the container does not stay open
+			// under the name of a volume that does not exist.
+			_ = m.luksClose(ctx, cryptName(v, "")) // cleanup, best effort: nothing more can be done if it fails
+		}
 		return err
 	}
 	return m.mount(ctx, v)

@@ -64,12 +64,17 @@ func btrfsUsable(profile string, sizes []uint64) uint64 {
 	}
 	// Every copy of a block lies on a different disk: the largest disks
 	// can only be filled as far as the others hold the other copies.
+	// With the k largest disks each holding one copy of everything, the
+	// rest must hold the other copies: the smallest of (sum − largest k) /
+	// (copies − k) for k = 0 … copies−1. For 10+5+5+5 with three copies
+	// that is 7.5, not 25/3.
 	usable := sum / copies
 	rest := sum
-	for i := len(sorted) - 1; i >= 0 && uint64(len(sorted)-1-i) < copies-1; i-- {
-		rest -= sorted[i]
+	for k := uint64(1); k < copies && int(k) <= len(sorted); k++ {
+		rest -= sorted[len(sorted)-int(k)]
+		usable = min(usable, rest/(copies-k))
 	}
-	return min(usable, rest)
+	return usable
 }
 
 var (

@@ -149,7 +149,9 @@ func (m *Manager) lowerDevice(ctx context.Context, volume VolumeConfig, plain st
 		}
 		return plain, nil
 	}
+	m.seenMu.Lock()
 	delete(m.cacheSeen, volume.Name)
+	m.seenMu.Unlock()
 	a, ok := m.arrayOf(ctx, volume)
 	if !ok || a.sectors == 0 {
 		return "", fmt.Errorf("%w: array of %s not running", ErrNotPossible, volume.Name)
@@ -729,6 +731,8 @@ var ErrCacheConfigured = errors.New("storage: switch the SSD cache off first")
 // cacheWaiting reports whether the cache SSD of a volume is still within
 // its grace, counted from the first time mountAll missed it.
 func (m *Manager) cacheWaiting(name string) bool {
+	m.seenMu.Lock()
+	defer m.seenMu.Unlock()
 	if m.cacheSeen == nil {
 		m.cacheSeen = map[string]time.Time{}
 	}
