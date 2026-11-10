@@ -480,7 +480,7 @@
 			hint={t('editor.location', { path: `/config/apps/${name}/compose.yaml` })}
 		>
 			<p class="text mono">
-				{name}{#if services.length > 1}<span class="muted"> · {service}</span>{/if}
+				{name}{#if services.length > 1}<span class="muted">&nbsp;· {service}</span>{/if}
 			</p>
 		</FormRow>
 		{#if view === 'compose'}

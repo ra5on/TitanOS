@@ -217,7 +217,7 @@
 											>{:else if script.last}<span
 												class="chip {outcomeTone(script.last.outcome)}"
 												title={script.last.error}>{outcomeLabel(script.last)}</span
-											>{:else}<span class="muted">—</span>{/if}</td
+											>{:else}<span class="muted none">—</span>{/if}</td
 									>
 									<td class="actions"
 										>{#if script.running}<button class="btn small" onclick={() => cancel(script)}
@@ -329,6 +329,15 @@
 			gap: var(--space-1);
 			padding: var(--space-2) 0;
 			border-bottom: 1px solid var(--border);
+		}
+		/* Without the table's head a lone dash says nothing (the row names "not run yet"). */
+		.scripts td:has(> .none) {
+			display: none;
+		}
+		/* No rule and no gap below the last script of the group. */
+		.scripts tbody tr:last-child {
+			padding-bottom: 0;
+			border-bottom: 0;
 		}
 		.scripts td {
 			padding: 0;

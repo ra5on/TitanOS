@@ -124,7 +124,7 @@
 			autofocus
 		/></label
 	>
-	<p class="keys muted">{t('palette.keys', { open: isMac ? '⌘K' : 'Ctrl+K' })}</p>
+	<p class="keys muted">{t('palette.keys', { open: isMac ? '⌘K' : t('shortcuts.ctrl') + '+K' })}</p>
 	{#if loading}<p class="muted loading" role="status">{t('common.loading')}</p>{/if}
 	{#if partial}<p class="notice-warn" role="alert">
 			{t('palette.partial')}

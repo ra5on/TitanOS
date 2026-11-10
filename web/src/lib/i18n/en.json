@@ -5783,6 +5783,7 @@
 	"ddns.lookupHint": "Empty asks api.ipify.org, ipv4.icanhazip.com and v4.ident.me in turn (with IPv64 first IPv64). The service sees the address of the connection.",
 	"ddns.interface": "Interface for IPv6",
 	"ddns.interfaceAuto": "automatic",
+	"ipv64.nameExample": "mynas",
 	"ipv64.title": "IPv64.net",
 	"ipv64.intro": "Account, domains, DNS records and reachability at IPv64. Every call counts against the limits of the account; that is why TitanOS loads only on a click.",
 	"ipv64.needsKey": "This needs the API key of the account (enter it above; it is stored only with “Save”).",

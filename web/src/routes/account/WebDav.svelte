@@ -157,6 +157,14 @@
 {/if}
 
 <style>
+	/* Like the other groups of „Mein Konto“ (their style is scoped to that page). */
+	section {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+		padding: 18px;
+		font-size: var(--text-md);
+	}
 	.ask {
 		display: flex;
 		flex-direction: column;
