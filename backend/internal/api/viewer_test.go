@@ -225,12 +225,15 @@ func TestAttachmentName(t *testing.T) {
 }
 
 func TestDeletedAccountLosesItsViewerProfiles(t *testing.T) {
-	ts := newTestServer(t)
-	m := viewer.New(ts.store)
-	m.MountRoot = t.TempDir()
-	m.Mounted = func() []string { return []string{"data"} }
-	m.DockerVolume = func() string { return "data" }
-	ts.server.opts.Viewer = m
+	// The area takes its manager when the routes are registered.
+	var m *viewer.Manager
+	ts := newTestServerWith(t, func(o *Options) {
+		m = viewer.New(o.Store)
+		m.MountRoot = t.TempDir()
+		m.Mounted = func() []string { return []string{"data"} }
+		m.DockerVolume = func() string { return "data" }
+		o.Viewer = m
+	})
 	ts.setup()
 	ts.users.Create("gast", testPassword, auth.RoleUser)
 	profile := filepath.Join(m.MountRoot, "data/.titanos/viewer/profiles/gast/immich")

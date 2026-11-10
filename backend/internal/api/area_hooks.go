@@ -68,8 +68,8 @@ type recordFunc func(entry activity.Entry)
 
 // recordActivity writes an entry of the activity log, if there is one.
 func (s *Server) recordActivity(entry activity.Entry) {
-	if s.opts.Activity != nil {
-		s.opts.Activity.Record(entry)
+	if s.core().activity != nil {
+		s.core().activity.Record(entry)
 	}
 }
 

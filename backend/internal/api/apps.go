@@ -8,6 +8,7 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/catalog"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
+	"github.com/ra5on/TitanOS/backend/internal/hwcheck"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
@@ -40,19 +41,19 @@ func writeCatalogError(w http.ResponseWriter, err error) {
 
 // appStoreArea is the app store: templates to install as Docker apps; an
 // area with narrow dependencies (PLAN 8a, see fansArea). docker, storage and
-// settings fill in what a template asks for; cpuMissing names what a
-// compose file needs that the CPU lacks.
+// settings fill in what a template asks for; hwcheck names what a compose
+// file needs that the CPU lacks (nil: nothing).
 type appStoreArea struct {
-	catalog    *catalog.Manager
-	docker     *docker.Manager
-	storage    *storage.Manager
-	settings   *system.Settings
-	cpuMissing func(compose string) []string
+	catalog  *catalog.Manager
+	docker   *docker.Manager
+	storage  *storage.Manager
+	settings *system.Settings
+	hwcheck  *hwcheck.Checker
 }
 
 // appStoreArea is the area of the server.
 func (s *Server) appStoreArea() appStoreArea {
-	return appStoreArea{catalog: s.opts.Catalog, docker: s.opts.Docker, storage: s.opts.Storage, settings: s.opts.Settings, cpuMissing: s.cpuMissing}
+	return appStoreArea{catalog: s.opts.Catalog, docker: s.opts.Docker, storage: s.opts.Storage, settings: s.opts.Settings, hwcheck: s.opts.HWCheck}
 }
 
 func (a appStoreArea) register(mux *routeMux, g guards) {

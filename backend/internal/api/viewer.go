@@ -22,6 +22,7 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/ra5on/TitanOS/backend/internal/activity"
+	"github.com/ra5on/TitanOS/backend/internal/appaccess"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/viewer"
 )
@@ -40,14 +41,16 @@ func (s *Server) registerViewer(mux *routeMux) {
 // dependencies (PLAN 8a, see fansArea). viewer is nil where there is none;
 // activity records starts and ends (nil: nothing). openOverride reads the
 // opener tests put in place of the manager on a running server.
-// allowsAppNow says whether an account may use an app right now,
+// appAccess holds who may use which app (nil: owners and administrators
+// only), activeUser finds an account that is not locked,
 // consoleIdleAfter how long a view may stay without input, and loginHolds
 // whether the login of a request still stands.
 type viewerArea struct {
 	viewer           *viewer.Manager
 	activity         *activity.Manager
 	openOverride     func() viewerOpener
-	allowsAppNow     func(user auth.User, app string) bool
+	appAccess        *appaccess.Manager
+	activeUser       func(name string) (auth.User, bool)
 	consoleIdleAfter func() time.Duration
 	loginHolds       func(r *http.Request, user auth.User) (auth.User, bool)
 }
@@ -55,7 +58,7 @@ type viewerArea struct {
 // viewerArea is the area of the server.
 func (s *Server) viewerArea() viewerArea {
 	return viewerArea{viewer: s.opts.Viewer, activity: s.opts.Activity, openOverride: func() viewerOpener { return s.viewerOpen },
-		allowsAppNow: s.allowsAppNow, consoleIdleAfter: s.consoleIdleAfter, loginHolds: s.loginHolds}
+		appAccess: s.opts.AppAccess, activeUser: s.authArea().activeUser, consoleIdleAfter: s.consoleIdleAfter, loginHolds: s.loginHolds}
 }
 
 func (a viewerArea) register(mux *routeMux, admin, user func(http.HandlerFunc) http.HandlerFunc) {
@@ -165,11 +168,11 @@ func viewerError(err error) (code, text string) {
 
 // allowsAppNow tells whether the account (as it is now) may use an app:
 // the check of the app window, repeated while a view is open.
-func (s *Server) allowsAppNow(user auth.User, app string) bool {
-	if s.opts.AppAccess == nil {
+func (a viewerArea) allowsAppNow(user auth.User, app string) bool {
+	if a.appAccess == nil {
 		return user.Role.CanAdminister()
 	}
-	return s.opts.AppAccess.Allows(user.Name, app)
+	return a.appAccess.Allows(user.Name, app)
 }
 
 // handleViewerStream relays the remote view of an app. Problems are told
@@ -460,24 +463,24 @@ func rfc5987(s string) string {
 
 // viewerForgetUser ends the views of a deleted account and removes its
 // browser profiles.
-func (s *Server) viewerForgetUser(name string) {
-	if s.opts.Viewer == nil {
+func (a viewerArea) viewerForgetUser(name string) {
+	if a.viewer == nil {
 		return
 	}
-	s.opts.Viewer.Stop(name, "")
-	if err := s.opts.Viewer.DeleteProfiles(name); err != nil {
+	a.viewer.Stop(name, "")
+	if err := a.viewer.DeleteProfiles(name); err != nil {
 		slog.Warn("remote view profiles not removed", "user", name, "err", err)
 	}
 }
 
 // viewerRecheckRights ends views (also those waiting for their window) of
 // accounts that lost the right on their app.
-func (s *Server) viewerRecheckRights() {
-	if s.opts.Viewer == nil {
+func (a viewerArea) viewerRecheckRights() {
+	if a.viewer == nil {
 		return
 	}
-	s.opts.Viewer.StopWhere(func(user, app string) bool {
-		account, ok := s.authArea().activeUser(user)
-		return !ok || !s.allowsAppNow(account, app)
+	a.viewer.StopWhere(func(user, app string) bool {
+		account, ok := a.activeUser(user)
+		return !ok || !a.allowsAppNow(account, app)
 	})
 }

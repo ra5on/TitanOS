@@ -88,7 +88,7 @@ func (s *Server) activityLog(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// A route called by an MCP tool is recorded once, as that tool call
 		// (mcp.go).
-		if _, mcp := r.Context().Value(mcpCallKey{}).(*mcpCall); s.opts.Activity == nil || !strings.HasPrefix(r.URL.Path, "/api/v1/") || mcp {
+		if _, mcp := r.Context().Value(mcpCallKey{}).(*mcpCall); s.core().activity == nil || !strings.HasPrefix(r.URL.Path, "/api/v1/") || mcp {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -102,7 +102,7 @@ func (s *Server) activityLog(next http.Handler) http.Handler {
 		if status == 0 {
 			status = http.StatusOK
 		}
-		s.opts.Activity.Record(activity.Entry{
+		s.core().activity.Record(activity.Entry{
 			User:   rec.user,
 			Via:    rec.via,
 			IP:     remoteIP(r),
@@ -207,10 +207,10 @@ func contains(list []string, s string) bool {
 
 // recordEvent writes an entry outside a logged-in request, such as a login.
 func (s *Server) recordEvent(r *http.Request, user, action, target string, ok bool) {
-	if s.opts.Activity == nil {
+	if s.core().activity == nil {
 		return
 	}
-	s.opts.Activity.Record(activity.Entry{User: user, Via: activity.ViaWeb, IP: remoteIP(r), Action: action, Target: target, OK: ok})
+	s.core().activity.Record(activity.Entry{User: user, Via: activity.ViaWeb, IP: remoteIP(r), Action: action, Target: target, OK: ok})
 }
 
 // statusWriter remembers the status code and still lets WebSockets take

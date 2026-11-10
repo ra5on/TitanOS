@@ -83,7 +83,7 @@ type appAccessArea struct {
 // account may use an app, the web UI which sources apps are framed from.
 func (s *Server) appAccessArea() appAccessArea {
 	return appAccessArea{appAccess: s.opts.AppAccess, appProxy: s.opts.AppProxy, users: s.opts.Users, certificate: s.opts.Certificate,
-		docker: s.opts.Docker, viewerRecheckRights: s.viewerRecheckRights, sessionToken: s.authArea().sessionToken, authenticate: s.authArea().authenticate}
+		docker: s.opts.Docker, viewerRecheckRights: s.viewerArea().viewerRecheckRights, sessionToken: s.authArea().sessionToken, authenticate: s.authArea().authenticate}
 }
 
 // registerCA registers the certificate (never the key) of the TitanOS

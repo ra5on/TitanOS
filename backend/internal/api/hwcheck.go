@@ -80,9 +80,9 @@ func (a hwcheckArea) handleHardwareDisks(w http.ResponseWriter, r *http.Request)
 }
 
 // cpuMissing is what a compose file needs that the CPU lacks.
-func (s *Server) cpuMissing(compose string) []string {
-	if s.opts.HWCheck == nil {
+func (a appStoreArea) cpuMissing(compose string) []string {
+	if a.hwcheck == nil {
 		return []string{}
 	}
-	return s.opts.HWCheck.MissingCPU(compose)
+	return a.hwcheck.MissingCPU(compose)
 }

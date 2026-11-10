@@ -97,7 +97,7 @@ func (a powerScheduleArea) handlePowerScheduleChange(w http.ResponseWriter, r *h
 // PowerBusy says whether work is running that a scheduled shutdown would
 // break off: copies, backups, disk tests or a rebuild.
 func (s *Server) PowerBusy() (bool, string) {
-	if s.opts.Update != nil && s.opts.Update.Working != nil && s.opts.Update.Working() {
+	if s.core().update != nil && s.core().update.Working != nil && s.core().update.Working() {
 		return true, "copies, backups or disk tests"
 	}
 	// Asked by the power schedule, not by a request: the root context.

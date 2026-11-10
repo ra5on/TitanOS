@@ -19,7 +19,7 @@ func TestHardwareReportRoutes(t *testing.T) {
 	if res, _ := ts.request("GET", "/api/v1/hardware/report", nil); res.StatusCode != http.StatusServiceUnavailable {
 		t.Errorf("without a checker: %d", res.StatusCode)
 	}
-	if missing := ts.server.cpuMissing("services:\n  db:\n    image: mongo:7\n"); len(missing) != 0 {
+	if missing := ts.server.appStoreArea().cpuMissing("services:\n  db:\n    image: mongo:7\n"); len(missing) != 0 {
 		t.Errorf("without a checker: %v", missing)
 	}
 
@@ -69,7 +69,7 @@ func TestHardwareReportRoutes(t *testing.T) {
 	if res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"smr":"known_model"`) {
 		t.Errorf("disks: %d %s", res.StatusCode, body)
 	}
-	if missing := ts.server.cpuMissing("services:\n  db:\n    image: mongo:7\n"); !slices.Equal(missing, []string{"avx"}) {
+	if missing := ts.server.appStoreArea().cpuMissing("services:\n  db:\n    image: mongo:7\n"); !slices.Equal(missing, []string{"avx"}) {
 		t.Errorf("cpu missing: %v", missing)
 	}
 }

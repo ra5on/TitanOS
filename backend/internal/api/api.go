@@ -469,14 +469,14 @@ const hstsValue = "max-age=15552000"
 // Let's Encrypt. Only then is HSTS safe: with the self-signed or an own
 // certificate the browser could no longer be told to accept it.
 func (s *Server) trustedTLS(r *http.Request) bool {
-	if r.TLS == nil || r.TLS.ServerName == "" || s.opts.Certificate == nil {
+	if r.TLS == nil || r.TLS.ServerName == "" || s.core().certificate == nil {
 		return false
 	}
-	info := s.opts.Certificate.Info()
+	info := s.core().certificate.Info()
 	if info.LetsEncrypt == nil {
 		return false
 	}
-	served, err := s.opts.Certificate.GetCertificate(&tls.ClientHelloInfo{ServerName: r.TLS.ServerName})
+	served, err := s.core().certificate.GetCertificate(&tls.ClientHelloInfo{ServerName: r.TLS.ServerName})
 	return err == nil && tlscert.Describe(served).Fingerprint == info.LetsEncrypt.Fingerprint
 }
 
@@ -674,7 +674,7 @@ func (s *Server) requireAppConsole(next http.HandlerFunc) http.HandlerFunc {
 // waits for review. With hold it keeps the gate for the whole request.
 func (s *Server) appLifecycle(hold bool, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		gate := s.opts.ApplicationBackups
+		gate := s.core().applications
 		if gate == nil {
 			next(w, r)
 			return
@@ -704,6 +704,6 @@ func (s *Server) appLifecycle(hold bool, next http.HandlerFunc) http.HandlerFunc
 // configuration and volumes. After an update the boot check waits for
 // that before the new system is marked good.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	ready := s.opts.Users.Loaded() && s.opts.Storage.Settled() && (s.opts.Update == nil || s.opts.Update.Healthy())
+	ready := s.core().users.Loaded() && s.core().storage.Settled() && (s.core().update == nil || s.core().update.Healthy())
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "ready": ready})
 }

@@ -5,10 +5,10 @@ import "net/http"
 // Admit a backend job before it is published. Automatic jobs use the same
 // maintenance manager's Enter hook. Stop/review routes remain available.
 func (s *Server) admitOperation(w http.ResponseWriter) (func(), bool) {
-	if s.opts.Maintenance == nil {
+	if s.core().maintenance == nil {
 		return func() {}, true
 	}
-	leave, err := s.opts.Maintenance.Enter()
+	leave, err := s.core().maintenance.Enter()
 	if err != nil {
 		writeError(w, http.StatusLocked, "maintenance_running", err.Error())
 		return nil, false

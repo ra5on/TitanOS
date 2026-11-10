@@ -245,7 +245,7 @@ func (hass haArea) HACommand(ctx context.Context, kind, name, action string) err
 
 // storageBusy says whether an array is being rebuilt or checked.
 func (s *Server) storageBusy(ctx context.Context) bool {
-	status, err := s.opts.Storage.Status(ctx)
+	status, err := s.core().storage.Status(ctx)
 	if err != nil {
 		return true
 	}
