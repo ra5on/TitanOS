@@ -270,6 +270,14 @@ func TestRewriteIndex(t *testing.T) {
 	if out := string(RewriteIndex([]byte(testIndex), photo)); strings.Contains(out, "data-host") || !strings.Contains(out, `data-bridge="adapter"`) {
 		t.Fatal(out)
 	}
+	// An app that marks its title from the start says so to the mediator.
+	if strings.Contains(string(RewriteIndex([]byte(testIndex), photo)), "data-dirty") {
+		t.Fatal("data-dirty without the flag")
+	}
+	photo.DirtyTitle = true
+	if out := string(RewriteIndex([]byte(testIndex), photo)); !strings.Contains(out, `data-dirty="title"></script>`) {
+		t.Fatal(out)
+	}
 	// Script in the body (LightCraft, EffectCraft): the mediator goes into <head>.
 	pdf, _ := Lookup("pdfcraft")
 	body := `<html><head><title>x</title></head><body><canvas id="pdfcraft"></canvas><script type="module">x</script></body></html>`
