@@ -41,6 +41,10 @@ type consoleOpen = func(ctx context.Context) (io.ReadWriteCloser, func(cols, row
 // console (Server.serveConsole).
 type consoleFunc func(w http.ResponseWriter, r *http.Request, target string, open consoleOpen)
 
+// streamFunc is consoleFunc for a stream with options of its own, like the
+// screen of a VM (Server.serveStream).
+type streamFunc func(w http.ResponseWriter, r *http.Request, opts consoleOptions, open consoleOpen)
+
 // confirmedFunc says whether the password was entered again for this
 // request (Server.confirmed).
 type confirmedFunc func(r *http.Request) bool

@@ -2,7 +2,7 @@ package api
 
 // registerHardware registers the routes of hardware, memory, power button, energy and power schedule.
 func (s *Server) registerHardware(mux *routeMux) {
-	mux.HandleFunc("GET /api/v1/hardware", s.requireAdmin(s.handleHardware))
+	mux.HandleFunc("GET /api/v1/hardware", s.requireAdmin(s.vmsArea().handleHardware))
 	memoryArea{memory: s.opts.MemoryPolicy}.register(mux, s.requireAdmin)
 	powerButtonArea{button: s.opts.PowerButton}.register(mux, s.requireAdmin)
 	energyArea{energy: s.opts.Energy}.register(mux, s.requireAdmin)
