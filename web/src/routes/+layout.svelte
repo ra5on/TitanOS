@@ -29,6 +29,8 @@
 	import { frameFor, inWindow } from '#lib/desktop/mode.svelte.ts';
 	import { appForPath } from '#lib/desktop/apps.ts';
 	import { desktop } from '#lib/desktop/wm.svelte.ts';
+	import { guardWindowClose } from '#lib/desktop/unsaved.svelte.ts';
+	import { uploads } from '#lib/uploads.svelte.ts';
 	import { settingsGroups } from '#lib/settings-groups.ts';
 	import { wallpaperCss } from '#lib/desktop/wallpapers.ts';
 	import { THEMES } from '#lib/theme/themes.ts';
@@ -64,6 +66,10 @@
 	});
 
 	let { children } = $props();
+	// PLAN 76: closing a window would cut off an upload that still runs in its page.
+	guardWindowClose(() =>
+		uploads.items.some((u) => u.state !== 'done' && u.state !== 'failed') ? 'busy' : '',
+	);
 
 	// A tapped notification moves the open window (sw.js, PLAN 59): no
 	// reload, nothing unsaved gets lost; crossing to the agent loads anew.

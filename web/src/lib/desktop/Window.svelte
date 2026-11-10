@@ -29,6 +29,8 @@
 	import {
 		closeWindow,
 		requestClose,
+		setFrameUnsaved,
+		unsavedKind,
 		desktop,
 		focus,
 		minimize,
@@ -95,6 +97,8 @@
 	let restartAsk = $state(false);
 	const docName = $derived(win.docName || (win.doc ? baseName(win.doc.path) : ''));
 	const closing = $derived(wm.closing.includes(win.id));
+	// Only running work (an upload), no changed fields: the question says so.
+	const busyOnly = $derived(closing && unsavedKind(win.id) === 'busy');
 
 	const MIN_W = 360;
 	const MIN_H = 240;
@@ -195,6 +199,8 @@
 		untrack(tellSide);
 	});
 	function loaded() {
+		// A page loaded anew holds no unsaved work yet (it says so itself once it does).
+		setFrameUnsaved(win.id, '');
 		tellVisible();
 		tellSide();
 		// PLAN 67-1: the new page announces its menu commands; ask in case it already did.
@@ -333,6 +339,8 @@
 			win.href = path;
 			if (focused) onaddress?.(path);
 			saveWindows();
+		} else if (msg?.type === 'titanos-unsaved') {
+			setFrameUnsaved(win.id, msg.state);
 		} else if (msg?.type === 'titanos-side-get') {
 			tellSide();
 		} else if (msg?.type === 'titanos-side-fold') {
@@ -947,10 +955,12 @@
 	</div>
 	{#if closing}
 		<Dialog
-			title={t('webapps.unsavedTitle')}
+			title={t(busyOnly ? 'desktop.closeBusyTitle' : 'webapps.unsavedTitle')}
 			onclose={() => (wm.closing = wm.closing.filter((c) => c !== win.id))}
 		>
-			<p>{t('webapps.unsavedText', { app: win.title })}</p>
+			<p>
+				{t(busyOnly ? 'desktop.closeBusyText' : 'webapps.unsavedText', { app: win.title })}
+			</p>
 			<div class="dialog-actions">
 				<button
 					type="button"
@@ -959,7 +969,7 @@
 					>{t('common.cancel')}</button
 				>
 				<button type="button" class="btn btn-danger" onclick={() => closeWindow(win.id)}
-					>{t('webapps.closeAnyway')}</button
+					>{t(busyOnly ? 'desktop.closeBusyAnyway' : 'webapps.closeAnyway')}</button
 				>
 			</div>
 		</Dialog>

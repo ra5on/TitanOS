@@ -484,6 +484,38 @@ for (const [, path] of allOnly ? [] : representative.slice(0, 9)) {
   await made.ctx.close();
 }
 
+// PLAN 76 (F-12-7): a window whose page holds changes that are not saved
+// asks before it closes; without changes it closes at once.
+if (!allOnly && (!onlyPaths || onlyPaths.includes("/tools/monitoring"))) {
+  const made = await openWindow("monitor", "/tools/monitoring", 1100);
+  const { page, frame } = made;
+  const box = frame.locator("form.settings input[type=checkbox]").first();
+  await box.waitFor();
+  await box.click();
+  const close = page.locator("section.win button.ctl.close");
+  await close.click();
+  const ask = page.getByRole("dialog", { name: "Ungespeicherte Änderungen" });
+  await ask.waitFor({ timeout: 5000 });
+  check(
+    (await page.locator("section.win").count()) === 1,
+    "a window with unsaved changes stays open until the question is answered",
+  );
+  await ask.getByRole("button", { name: "Abbrechen" }).click();
+  await ask.waitFor({ state: "detached" });
+  // Taking the change back: no question any more.
+  await box.click();
+  await page.waitForTimeout(300);
+  await close.click();
+  await page.waitForFunction(
+    () => !document.querySelector("section.win"),
+    null,
+    {
+      timeout: 5000,
+    },
+  );
+  await made.ctx.close();
+}
+
 // PLAN 71 ("Variante C"): Systemsteuerung has one menu – the side bar with
 // its search – and the start page is the overview with cards. The side bar
 // covers the desktop completely.

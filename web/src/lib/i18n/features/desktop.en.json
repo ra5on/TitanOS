@@ -1,4 +1,7 @@
 {
+	"desktop.closeBusyAnyway": "Close anyway",
+	"desktop.closeBusyText": "{app} is still working, for example on an upload. Closing the window stops it.",
+	"desktop.closeBusyTitle": "Something is still running",
 	"desktop.agent.bubble": "Ask the AI agent",
 	"desktop.agent.context": "About the window “{name}” ({page}): ",
 	"desktop.agent.openWindow": "Open in chat window",

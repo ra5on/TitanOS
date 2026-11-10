@@ -315,8 +315,19 @@ export function registerCloseGuard(id: string, unsaved: (() => boolean) | null) 
 	if (unsaved) closeGuards.set(id, unsaved);
 	else closeGuards.delete(id);
 }
+/** What the page inside a window said about itself (lib/desktop/unsaved.svelte.ts). */
+const frameUnsaved = new Map<string, 'edits' | 'busy'>();
+export function setFrameUnsaved(id: string, state: 'edits' | 'busy' | '') {
+	if (state) frameUnsaved.set(id, state);
+	else frameUnsaved.delete(id);
+}
+/** 'busy': the window's page only has running work, no changed fields. */
+export function unsavedKind(id: string): 'edits' | 'busy' | '' {
+	if (closeGuards.get(id)?.()) return 'edits';
+	return frameUnsaved.get(id) ?? '';
+}
 export function hasUnsaved(id: string): boolean {
-	return closeGuards.get(id)?.() ?? false;
+	return unsavedKind(id) !== '';
 }
 export function requestClose(id: string) {
 	if (hasUnsaved(id)) {
@@ -334,6 +345,7 @@ export function anyUnsaved(): boolean {
 export function closeWindow(id: string) {
 	wm.closing = wm.closing.filter((c) => c !== id);
 	closeGuards.delete(id);
+	frameUnsaved.delete(id);
 	wm.windows = wm.windows.filter((w) => w.id !== id);
 	if (wm.focused === id)
 		wm.focused = [...wm.windows].sort((a, b) => b.z - a.z).find((w) => !w.minimized)?.id ?? null;

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { guardWindowClose } from '#lib/desktop/unsaved.svelte.ts';
 	import { poll } from '#lib/poll.ts';
 	import { beforeNavigate, goto } from '$app/navigation';
 	import { onDestroy, untrack } from 'svelte';
@@ -70,6 +71,7 @@
 	let loadError = $state('');
 	let loaded = $state(false);
 	let applying = $state(false);
+	guardWindowClose(() => changed && !applying);
 	let result = $state<{ ok: boolean; text: string; detail: string } | null>(null);
 
 	let doc: Document | undefined;

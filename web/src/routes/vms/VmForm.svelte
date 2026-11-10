@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { guardWindowClose } from '#lib/desktop/unsaved.svelte.ts';
 	// The form a VM is made and changed with. With `existing` it edits that
 	// VM: the internal identifier, template and firmware stay fixed. The
 	// sections live in VmCpu, VmDisks, VmInstall and VmConnections; this
@@ -254,6 +255,7 @@
 	});
 	const markEdited = () => (edited = true);
 	const dirty = $derived(formState !== baseline);
+	guardWindowClose(() => dirty && !busy);
 	let leaving = $state<URL | null>(null),
 		allowNavigation = false;
 	beforeNavigate((navigation) => {

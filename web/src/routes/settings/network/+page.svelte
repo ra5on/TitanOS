@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { guardWindowClose } from '#lib/desktop/unsaved.svelte.ts';
 	// Settings › Network: named networks (overview), ports and bonds,
 	// diagnostics and remote access. Every change is a draft until it is
 	// tested on trial; older single-network configurations arrive already
@@ -59,6 +60,7 @@
 	const dirty = $derived(!!draft && !!current && JSON.stringify(draft) !== JSON.stringify(current));
 	const locked = $derived(busy || !!status?.pending);
 	const ports = $derived(status?.interfaces ?? []);
+	guardWindowClose(() => dirty && !status?.pending);
 
 	beforeNavigate((n) => {
 		if (dirty && !status?.pending) {
