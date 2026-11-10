@@ -496,8 +496,23 @@ func (m *Manager) ViewerAttached(ctx context.Context, network, alias string) ([]
 		}
 		return nil, err
 	}
-	out := []string{}
+	// The network itself only lists containers that run. An app that is
+	// stopped right now (by the person, for a backup) still names the
+	// network, and would not start again once the network is gone: ask
+	// the engine for every container that refers to it, stopped or not.
+	ids := map[string]bool{}
 	for id := range net.Containers {
+		ids[id] = true
+	}
+	var referring []struct{ Id string }
+	filters, _ := json.Marshal(map[string][]string{"network": {network}})
+	if err := m.api.getJSON(ctx, "/containers/json", url.Values{"all": {"true"}, "filters": {string(filters)}}, &referring); err == nil {
+		for _, c := range referring {
+			ids[c.Id] = true
+		}
+	}
+	out := []string{}
+	for id := range ids {
 		info, err := m.inspectAny(ctx, id)
 		if err != nil || info.Config.Labels[ViewerLabel] != "" || strings.HasPrefix(strings.TrimPrefix(info.Name, "/"), ViewerPrefix) {
 			continue
