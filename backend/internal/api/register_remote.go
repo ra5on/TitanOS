@@ -2,12 +2,8 @@ package api
 
 // registerRemoteAccess registers the routes of SSH, the certificate, Let's Encrypt and dynamic DNS.
 func (s *Server) registerRemoteAccess(mux *routeMux) {
-	mux.HandleFunc("GET /api/v1/system/ssh", s.requireAdmin(s.handleSSH))
-	mux.HandleFunc("PUT /api/v1/system/ssh", s.requireAdmin(s.handleSSHChange))
-	mux.HandleFunc("PUT /api/v1/system/ssh/networks", s.requireAdmin(s.handleSSHNetworks))
-	mux.HandleFunc("GET /api/v1/system/certificate", s.requireAdmin(s.handleCertificate))
-	mux.HandleFunc("PUT /api/v1/system/certificate", s.requireAdmin(s.handleCertificateSet))
-	mux.HandleFunc("DELETE /api/v1/system/certificate", s.requireAdmin(s.handleCertificateRemove))
+	sshArea{ssh: s.opts.SSH}.register(mux, s.requireAdmin)
+	certificateArea{cert: s.opts.Certificate}.register(mux, s.requireAdmin)
 	// The certificate (never the key) of the TitanOS authority, for devices.
 	mux.HandleFunc("GET /api/v1/certs/ca", s.requireUser(s.handleCAInfo))
 	mux.HandleFunc("GET /api/v1/certs/{file}", s.requireUser(s.handleCADownload))
