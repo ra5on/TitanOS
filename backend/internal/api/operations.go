@@ -31,27 +31,11 @@ func (s *Server) operationsRoutes(mux *routeMux) {
 	admin("GET /api/v1/operations", s.handleOperations)
 	maintenanceArea{maintenance: s.opts.Maintenance, storage: s.opts.Storage, backup: s.opts.Backup}.register(admin)
 	monitoringArea{monitoring: s.opts.Monitoring}.register(admin)
-	admin("GET /api/v1/storage/import", s.handleImportCandidates)
-	heavy("POST /api/v1/storage/import/preview", s.handleImportPreview)
-	heavy("POST /api/v1/storage/import", s.handleImport)
-	admin("GET /api/v1/storage/growth", s.handleGrowth)
-	heavy("POST /api/v1/storage/growth/recover", s.handleGrowthRecover)
-	heavy("POST /api/v1/storage/growth/cancel", s.handleGrowthCancel)
-	heavy("POST /api/v1/storage/volumes/{name}/growth/preview", s.handleGrowthPreview)
-	heavy("POST /api/v1/storage/volumes/{name}/growth", s.handleGrowthStart)
-	admin("GET /api/v1/storage/volumes/{name}/usage", s.handleVolumeUsage)
-	admin("GET /api/v1/storage/volumes/{name}/snapshots/{snapshot}/files", s.handleSnapshotFiles)
-	heavy("POST /api/v1/storage/volumes/{name}/snapshots/{snapshot}/files/restore", s.handleSnapshotFilesRestore)
-	heavy("POST /api/v1/storage/volumes/{name}/snapshots/{snapshot}/files/preview", s.handleSnapshotRestorePreview)
-	heavy("POST /api/v1/storage/volumes/{name}/snapshots/{snapshot}/folders/preview", s.handleSnapshotFolderPreview)
-	heavy("POST /api/v1/storage/volumes/{name}/snapshots/{snapshot}/folders/restore", s.handleSnapshotFolderRestore)
-	admin("GET /api/v1/storage/snapshot-restores", s.handleSnapshotRestores)
-	admin("POST /api/v1/storage/snapshot-restores/{id}/cancel", s.handleSnapshotRestoreCancel)
-	admin("DELETE /api/v1/storage/snapshot-restores/{id}", s.handleSnapshotRestoreForget)
+	s.storageArea().registerOperations(admin, heavy)
 	s.backupsArea().registerOperations(admin, heavy)
 	s.vmsArea().registerOperations(admin, heavyApp)
-	mux.HandleFunc("DELETE /api/v1/files/transfers", s.requireUser(s.handleTransfersClear))
-	mux.HandleFunc("DELETE /api/v1/files/transfers/{id}", s.requireUser(s.handleTransferForget))
+	mux.HandleFunc("DELETE /api/v1/files/transfers", s.requireUser(s.filesArea().handleTransfersClear))
+	mux.HandleFunc("DELETE /api/v1/files/transfers/{id}", s.requireUser(s.filesArea().handleTransferForget))
 }
 func featureError(w http.ResponseWriter, err error) {
 	writeError(w, http.StatusConflict, "operation_failed", err.Error())
@@ -235,23 +219,23 @@ func (a monitoringArea) handleMonitoringHistory(w http.ResponseWriter, r *http.R
 	}
 	writeJSON(w, 200, out)
 }
-func (s *Server) handleImportCandidates(w http.ResponseWriter, r *http.Request) {
-	out, err := s.opts.Storage.ImportCandidates(r.Context())
+func (a storageArea) handleImportCandidates(w http.ResponseWriter, r *http.Request) {
+	out, err := a.storage.ImportCandidates(r.Context())
 	if err != nil {
 		writeStorageError(w, r, "import discovery", err)
 		return
 	}
 	writeJSON(w, 200, out)
 }
-func (s *Server) handleImportPreview(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleImportPreview(w http.ResponseWriter, r *http.Request) {
 	var req storage.ImportRequest
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if req.Password != "" && !s.requireWebSession(w, r) {
+	if req.Password != "" && !a.webSession(w, r) {
 		return
 	}
-	out, err := s.opts.Storage.PreviewImport(r.Context(), req)
+	out, err := a.storage.PreviewImport(r.Context(), req)
 	req.Password = ""
 	if err != nil {
 		writeCryptError(w, r, "import preview", err)
@@ -259,73 +243,73 @@ func (s *Server) handleImportPreview(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, out)
 }
-func (s *Server) handleImport(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleImport(w http.ResponseWriter, r *http.Request) {
 	var req storage.ImportRequest
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if req.Password != "" && !s.requireWebSession(w, r) {
+	if req.Password != "" && !a.webSession(w, r) {
 		return
 	}
-	if err := s.opts.Storage.Import(context.WithoutCancel(r.Context()), req); err != nil {
+	if err := a.storage.Import(context.WithoutCancel(r.Context()), req); err != nil {
 		writeCryptError(w, r, "import registration", err)
 		return
 	}
 	w.WriteHeader(201)
 }
-func (s *Server) handleGrowth(w http.ResponseWriter, r *http.Request) {
-	g, pending, err := s.opts.Storage.GrowthStatus()
+func (a storageArea) handleGrowth(w http.ResponseWriter, r *http.Request) {
+	g, pending, err := a.storage.GrowthStatus()
 	message := ""
 	if err != nil {
 		message = err.Error()
 	}
-	writeJSON(w, 200, map[string]any{"pending": pending, "active": s.opts.Storage.GrowthActive(), "operation": g, "error": message})
+	writeJSON(w, 200, map[string]any{"pending": pending, "active": a.storage.GrowthActive(), "operation": g, "error": message})
 }
-func (s *Server) handleGrowthPreview(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleGrowthPreview(w http.ResponseWriter, r *http.Request) {
 	var req storage.GrowthRequest
 	if !readJSON(w, r, &req) {
 		return
 	}
-	out, err := s.opts.Storage.GrowthPreview(r.Context(), r.PathValue("name"), req)
+	out, err := a.storage.GrowthPreview(r.Context(), r.PathValue("name"), req)
 	if err != nil {
 		writeStorageError(w, r, "growth preview", err)
 		return
 	}
 	writeJSON(w, 200, out)
 }
-func (s *Server) handleGrowthStart(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleGrowthStart(w http.ResponseWriter, r *http.Request) {
 	var req storage.GrowthRequest
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Storage.StartGrowth(context.WithoutCancel(r.Context()), r.PathValue("name"), req); err != nil {
+	if err := a.storage.StartGrowth(context.WithoutCancel(r.Context()), r.PathValue("name"), req); err != nil {
 		writeStorageError(w, r, "growth start", err)
 		return
 	}
 	w.WriteHeader(202)
 }
-func (s *Server) handleGrowthRecover(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleGrowthRecover(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Confirm string `json:"confirm"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Storage.RecoverGrowth(context.WithoutCancel(r.Context()), req.Confirm); err != nil {
+	if err := a.storage.RecoverGrowth(context.WithoutCancel(r.Context()), req.Confirm); err != nil {
 		writeStorageError(w, r, "growth recovery", err)
 		return
 	}
 	w.WriteHeader(202)
 }
-func (s *Server) handleVolumeUsage(w http.ResponseWriter, r *http.Request) {
-	out, err := s.opts.Storage.Usage(r.Context(), r.PathValue("name"))
+func (a storageArea) handleVolumeUsage(w http.ResponseWriter, r *http.Request) {
+	out, err := a.storage.Usage(r.Context(), r.PathValue("name"))
 	if err != nil {
 		writeStorageError(w, r, "usage", err)
 		return
 	}
-	if s.opts.Shares != nil {
+	if a.shares != nil {
 		for i := range out.Entries {
-			for _, share := range s.opts.Shares.List() {
+			for _, share := range a.shares.List() {
 				if share.Volume == r.PathValue("name") && share.Name == out.Entries[i].Name && out.Entries[i].Kind == "other" {
 					out.Entries[i].Kind = "share"
 				}
@@ -334,21 +318,21 @@ func (s *Server) handleVolumeUsage(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, out)
 }
-func (s *Server) handleSnapshotFiles(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleSnapshotFiles(w http.ResponseWriter, r *http.Request) {
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
-	out, err := s.opts.Storage.SnapshotFiles(r.Context(), r.PathValue("name"), r.PathValue("snapshot"), r.URL.Query().Get("path"), offset)
+	out, err := a.storage.SnapshotFiles(r.Context(), r.PathValue("name"), r.PathValue("snapshot"), r.URL.Query().Get("path"), offset)
 	if err != nil {
 		writeStorageError(w, r, "snapshot browse", err)
 		return
 	}
 	writeJSON(w, 200, out)
 }
-func (s *Server) handleSnapshotFilesRestore(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleSnapshotFilesRestore(w http.ResponseWriter, r *http.Request) {
 	var req storage.SnapshotRestore
 	if !readJSON(w, r, &req) {
 		return
 	}
-	out, err := s.opts.Storage.RestoreSnapshotFiles(context.WithoutCancel(r.Context()), r.PathValue("name"), r.PathValue("snapshot"), req)
+	out, err := a.storage.RestoreSnapshotFiles(context.WithoutCancel(r.Context()), r.PathValue("name"), r.PathValue("snapshot"), req)
 	if err != nil {
 		writeStorageError(w, r, "snapshot restore", err)
 		return
@@ -445,9 +429,9 @@ func (a vmsArea) handleVMCloneRecover(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(204)
 }
-func (s *Server) handleTransferForget(w http.ResponseWriter, r *http.Request) {
+func (a filesArea) handleTransferForget(w http.ResponseWriter, r *http.Request) {
 	slog.Info("forget transfer requested", "id", r.PathValue("id"), "user", currentUser(r).Name, "ip", remoteIP(r))
-	if err := s.opts.Files.ForgetTransfer(currentUser(r).Name, r.PathValue("id")); err != nil {
+	if err := a.files.ForgetTransfer(currentUser(r).Name, r.PathValue("id")); err != nil {
 		writeFileError(w, err)
 		return
 	}
@@ -518,26 +502,26 @@ func (s *Server) handleOperations(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, out)
 }
 
-func (s *Server) handleGrowthCancel(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleGrowthCancel(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Confirm string `json:"confirm"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Storage.CancelGrowth(context.WithoutCancel(r.Context()), req.Confirm); err != nil {
+	if err := a.storage.CancelGrowth(context.WithoutCancel(r.Context()), req.Confirm); err != nil {
 		writeStorageError(w, r, "cancel growth preparation", err)
 		return
 	}
 	w.WriteHeader(204)
 }
 
-func (s *Server) handleSnapshotRestorePreview(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleSnapshotRestorePreview(w http.ResponseWriter, r *http.Request) {
 	var req storage.SnapshotRestore
 	if !readJSON(w, r, &req) {
 		return
 	}
-	out, err := s.opts.Storage.PreviewSnapshotRestore(r.Context(), r.PathValue("name"), r.PathValue("snapshot"), req)
+	out, err := a.storage.PreviewSnapshotRestore(r.Context(), r.PathValue("name"), r.PathValue("snapshot"), req)
 	if err != nil {
 		writeStorageError(w, r, "snapshot restore preview", err)
 		return
@@ -545,8 +529,8 @@ func (s *Server) handleSnapshotRestorePreview(w http.ResponseWriter, r *http.Req
 	writeJSON(w, 200, out)
 }
 
-func (s *Server) handleTransfersClear(w http.ResponseWriter, r *http.Request) {
-	if err := s.opts.Files.ClearTransfers(currentUser(r).Name); err != nil {
+func (a filesArea) handleTransfersClear(w http.ResponseWriter, r *http.Request) {
+	if err := a.files.ClearTransfers(currentUser(r).Name); err != nil {
 		writeFileError(w, err)
 		return
 	}

@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/ra5on/TitanOS/backend/internal/lxc"
+	"github.com/ra5on/TitanOS/backend/internal/shares"
 	"github.com/ra5on/TitanOS/backend/internal/smarthistory"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 )
@@ -62,8 +63,81 @@ func writeStorageError(w http.ResponseWriter, r *http.Request, action string, er
 	writeError(w, http.StatusInternalServerError, "storage_failed", err.Error())
 }
 
-func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request) {
-	status, err := s.opts.Storage.Status(r.Context())
+// storageArea is the volumes, disks, SMART, disk tests and snapshots; an
+// area with narrow dependencies (PLAN 8a, see fansArea). smartHistory keeps
+// the daily SMART values (nil: none), shares the quotas of a volume.
+// webSession lets only a person at a web session through; addVolumeChecks
+// adds the checks chosen for a new volume as maintenance jobs. Removing a
+// volume (handleDeleteVolume) asks every part of the NAS that may still use
+// it and stays with the server.
+type storageArea struct {
+	storage         *storage.Manager
+	smartHistory    *smarthistory.Recorder
+	shares          *shares.Manager
+	webSession      webSessionFunc
+	addVolumeChecks func(ctx context.Context, r *http.Request, req storage.CreateRequest, checks volumeChecks)
+}
+
+// storageArea is the area of the server.
+func (s *Server) storageArea() storageArea {
+	return storageArea{storage: s.opts.Storage, smartHistory: s.opts.SmartHistory, shares: s.opts.Shares,
+		webSession: s.requireWebSession, addVolumeChecks: s.addVolumeChecks}
+}
+
+// registerOperations registers the workflows of the storage (import,
+// growth, usage, restoring from snapshots), with the log of
+// operationsRoutes.
+func (a storageArea) registerOperations(admin, heavy func(route string, fn http.HandlerFunc)) {
+	admin("GET /api/v1/storage/import", a.handleImportCandidates)
+	heavy("POST /api/v1/storage/import/preview", a.handleImportPreview)
+	heavy("POST /api/v1/storage/import", a.handleImport)
+	admin("GET /api/v1/storage/growth", a.handleGrowth)
+	heavy("POST /api/v1/storage/growth/recover", a.handleGrowthRecover)
+	heavy("POST /api/v1/storage/growth/cancel", a.handleGrowthCancel)
+	heavy("POST /api/v1/storage/volumes/{name}/growth/preview", a.handleGrowthPreview)
+	heavy("POST /api/v1/storage/volumes/{name}/growth", a.handleGrowthStart)
+	admin("GET /api/v1/storage/volumes/{name}/usage", a.handleVolumeUsage)
+	admin("GET /api/v1/storage/volumes/{name}/snapshots/{snapshot}/files", a.handleSnapshotFiles)
+	heavy("POST /api/v1/storage/volumes/{name}/snapshots/{snapshot}/files/restore", a.handleSnapshotFilesRestore)
+	heavy("POST /api/v1/storage/volumes/{name}/snapshots/{snapshot}/files/preview", a.handleSnapshotRestorePreview)
+	heavy("POST /api/v1/storage/volumes/{name}/snapshots/{snapshot}/folders/preview", a.handleSnapshotFolderPreview)
+	heavy("POST /api/v1/storage/volumes/{name}/snapshots/{snapshot}/folders/restore", a.handleSnapshotFolderRestore)
+	admin("GET /api/v1/storage/snapshot-restores", a.handleSnapshotRestores)
+	admin("POST /api/v1/storage/snapshot-restores/{id}/cancel", a.handleSnapshotRestoreCancel)
+	admin("DELETE /api/v1/storage/snapshot-restores/{id}", a.handleSnapshotRestoreForget)
+}
+
+func (a storageArea) register(mux *routeMux, g guards) {
+	mux.HandleFunc("GET /api/v1/storage", g.user(a.handleStorage))
+	mux.HandleFunc("GET /api/v1/storage/disk-sleep", g.admin(a.handleDiskSleep))
+	mux.HandleFunc("PUT /api/v1/storage/disk-sleep", g.admin(a.handleSetDiskSleep))
+	mux.HandleFunc("PUT /api/v1/storage/volumes/{name}/quotas", g.admin(a.handleSetShareQuotas))
+	mux.HandleFunc("PUT /api/v1/storage/volumes/{name}/sync-speed", g.admin(a.handleSetSyncSpeed))
+	mux.HandleFunc("POST /api/v1/storage/rescan", g.admin(a.handleStorageRescan))
+	mux.HandleFunc("GET /api/v1/storage/smart", g.admin(a.handleSmart))
+	mux.HandleFunc("POST /api/v1/storage/smart/refresh", g.admin(a.handleSmartRefresh))
+	mux.HandleFunc("GET /api/v1/storage/smart/{disk}", g.admin(a.handleSmartDisk))
+	mux.HandleFunc("GET /api/v1/storage/smart/{disk}/history", g.admin(a.handleSmartHistory))
+	mux.HandleFunc("POST /api/v1/storage/volumes", g.heavyAdmin(a.handleCreateVolume))
+	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/disks", g.heavyAdmin(a.handleAddVolumeDisk))
+	mux.HandleFunc("DELETE /api/v1/storage/volumes/{name}/disks/{disk}", g.heavyAdmin(a.handleRemoveVolumeDisk))
+	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/replace", g.heavyAdmin(a.handleReplaceVolumeDisk))
+	mux.HandleFunc("POST /api/v1/storage/disks/{disk}/identify", g.admin(a.handleIdentifyDisk))
+	mux.HandleFunc("PUT /api/v1/storage/volumes/{name}/profile", g.heavyAdmin(a.handleBtrfsProfile))
+	mux.HandleFunc("PUT /api/v1/storage/volumes/{name}/cache", g.heavyAdmin(a.handleVolumeCache))
+	mux.HandleFunc("DELETE /api/v1/storage/volumes/{name}/cache", g.heavyAdmin(a.handleVolumeCacheRemove))
+	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/check", g.heavyAdmin(a.handleCheckVolume))
+	mux.HandleFunc("GET /api/v1/storage/volumes/{name}/snapshots", g.admin(a.handleSnapshots))
+	mux.HandleFunc("POST /api/v1/storage/volumes/{name}/snapshots", g.heavyAdmin(a.handleSnapshotAction))
+	mux.HandleFunc("GET /api/v1/storage/tests", g.admin(a.handleDiskTests))
+	mux.HandleFunc("POST /api/v1/storage/tests", g.heavyAdmin(a.handleDiskTestStart))
+	mux.HandleFunc("DELETE /api/v1/storage/tests/{disk}", g.admin(a.handleDiskTestStop))
+	mux.HandleFunc("POST /api/v1/storage/tests/{disk}/resume", g.heavyAdmin(a.handleDiskTestResume))
+	mux.HandleFunc("DELETE /api/v1/storage/test-notices", g.admin(a.handleDiskTestNotices))
+}
+
+func (a storageArea) handleStorage(w http.ResponseWriter, r *http.Request) {
+	status, err := a.storage.Status(r.Context())
 	if err != nil {
 		writeStorageError(w, r, "status", err)
 		return
@@ -73,13 +147,13 @@ func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request) {
 
 // handleDiskSleep returns the settings with volumes and disks and their
 // effective values. Listing the disks (lsblk) wakes none of them.
-func (s *Server) handleDiskSleep(w http.ResponseWriter, r *http.Request) {
-	status, err := s.opts.Storage.DiskSleepStatus(r.Context())
+func (a storageArea) handleDiskSleep(w http.ResponseWriter, r *http.Request) {
+	status, err := a.storage.DiskSleepStatus(r.Context())
 	if err != nil {
 		// Without the disk list only the settings from RAM; clients then
 		// must not send overrides (they would replace the stored ones).
 		slog.Warn("disk sleep: listing disks failed", "err", err)
-		status = s.opts.Storage.DiskSleep()
+		status = a.storage.DiskSleep()
 	}
 	writeJSON(w, http.StatusOK, status)
 }
@@ -87,7 +161,7 @@ func (s *Server) handleDiskSleep(w http.ResponseWriter, r *http.Request) {
 // handleSetDiskSleep sets the default and, if given, replaces the overrides
 // per volume and per disk. A missing "volumes" or "disks" keeps the stored
 // ones, so clients that only know the default change nothing else.
-func (s *Server) handleSetDiskSleep(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleSetDiskSleep(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		IdleMinutes *int            `json:"idleMinutes"`
 		Volumes     *map[string]int `json:"volumes"`
@@ -100,25 +174,25 @@ func (s *Server) handleSetDiskSleep(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_disk_idle_time", "idleMinutes is required")
 		return
 	}
-	settings, err := s.opts.Storage.UpdateDiskSleep(r.Context(), *req.IdleMinutes, req.Volumes, req.Disks)
+	settings, err := a.storage.UpdateDiskSleep(r.Context(), *req.IdleMinutes, req.Volumes, req.Disks)
 	if err != nil {
 		writeStorageError(w, r, "set disk sleep", err)
 		return
 	}
 	slog.Info("disk sleep changed", "idleMinutes", settings.IdleMinutes, "volumes", len(settings.Volumes), "disks", len(settings.Disks), "user", currentUser(r).Name)
-	s.handleDiskSleep(w, r)
+	a.handleDiskSleep(w, r)
 }
 
 // handleStorageRescan reads the SMART values again and returns the fresh state.
-func (s *Server) handleStorageRescan(w http.ResponseWriter, r *http.Request) {
-	s.opts.Storage.RefreshSmart(r.Context())
-	s.handleStorage(w, r)
+func (a storageArea) handleStorageRescan(w http.ResponseWriter, r *http.Request) {
+	a.storage.RefreshSmart(r.Context())
+	a.handleStorage(w, r)
 }
 
 // handleSmart lists the SMART state of all disks from the RAM cache. It runs
 // no smartctl and so never wakes a disk.
-func (s *Server) handleSmart(w http.ResponseWriter, r *http.Request) {
-	reports, err := s.opts.Storage.SmartReports(r.Context(), false)
+func (a storageArea) handleSmart(w http.ResponseWriter, r *http.Request) {
+	reports, err := a.storage.SmartReports(r.Context(), false)
 	if err != nil {
 		writeStorageError(w, r, "smart", err)
 		return
@@ -128,14 +202,14 @@ func (s *Server) handleSmart(w http.ResponseWriter, r *http.Request) {
 
 // handleSmartRefresh reads SMART of the awake disks again (at most every 30
 // seconds); disks in standby are left asleep.
-func (s *Server) handleSmartRefresh(w http.ResponseWriter, r *http.Request) {
-	s.opts.Storage.RefreshSmartSoon(r.Context())
-	s.handleSmart(w, r)
+func (a storageArea) handleSmartRefresh(w http.ResponseWriter, r *http.Request) {
+	a.storage.RefreshSmartSoon(r.Context())
+	a.handleSmart(w, r)
 }
 
 // handleSmartDisk returns one disk with its full attribute table.
-func (s *Server) handleSmartDisk(w http.ResponseWriter, r *http.Request) {
-	report, err := s.opts.Storage.SmartReport(r.Context(), r.PathValue("disk"))
+func (a storageArea) handleSmartDisk(w http.ResponseWriter, r *http.Request) {
+	report, err := a.storage.SmartReport(r.Context(), r.PathValue("disk"))
 	if err != nil {
 		writeStorageError(w, r, "smart disk", err)
 		return
@@ -144,15 +218,15 @@ func (s *Server) handleSmartDisk(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleSmartHistory returns the daily SMART values kept for one disk.
-func (s *Server) handleSmartHistory(w http.ResponseWriter, r *http.Request) {
-	report, err := s.opts.Storage.SmartReport(r.Context(), r.PathValue("disk"))
+func (a storageArea) handleSmartHistory(w http.ResponseWriter, r *http.Request) {
+	report, err := a.storage.SmartReport(r.Context(), r.PathValue("disk"))
 	if err != nil {
 		writeStorageError(w, r, "smart history", err)
 		return
 	}
 	history := smarthistory.History{Disk: report.Disk, Samples: []smarthistory.Sample{}}
-	if s.opts.SmartHistory != nil {
-		if history, err = s.opts.SmartHistory.History(report); err != nil {
+	if a.smartHistory != nil {
+		if history, err = a.smartHistory.History(report); err != nil {
 			slog.Warn("SMART history not readable", "disk", report.Disk, "err", err)
 			writeError(w, http.StatusServiceUnavailable, "smart_history_unavailable", "the SMART history could not be read")
 			return
@@ -161,7 +235,7 @@ func (s *Server) handleSmartHistory(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, history)
 }
 
-func (s *Server) handleCreateVolume(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleCreateVolume(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		storage.CreateRequest
 		Checks volumeChecks `json:"checks"`
@@ -171,15 +245,15 @@ func (s *Server) handleCreateVolume(w http.ResponseWriter, r *http.Request) {
 	}
 	req := body.CreateRequest
 	noteTarget(r, req.Name)
-	if req.Encrypt && !s.requireWebSession(w, r) {
+	if req.Encrypt && !a.webSession(w, r) {
 		return
 	}
 	slog.Info("create volume requested", "name", req.Name, "level", req.Level, "disks", req.Disks, "encrypted", req.Encrypt, "user", currentUser(r).Name, "ip", remoteIP(r))
-	if err := s.opts.Storage.Create(context.WithoutCancel(r.Context()), req); err != nil {
+	if err := a.storage.Create(context.WithoutCancel(r.Context()), req); err != nil {
 		writeStorageError(w, r, "create volume", err)
 		return
 	}
-	s.addVolumeChecks(context.WithoutCancel(r.Context()), r, req, body.Checks)
+	a.addVolumeChecks(context.WithoutCancel(r.Context()), r, req, body.Checks)
 	w.WriteHeader(http.StatusCreated)
 }
 
@@ -269,7 +343,7 @@ func lxcOnVolume(containers []lxc.Status, volume string) (string, bool) {
 	return "", false
 }
 
-func (s *Server) handleAddVolumeDisk(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleAddVolumeDisk(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Disk  string `json:"disk"`
 		Erase bool   `json:"erase"`
@@ -289,7 +363,7 @@ func (s *Server) handleAddVolumeDisk(w http.ResponseWriter, r *http.Request) {
 	password := []byte(req.Password)
 	req.Password = ""
 	defer wipeBytes(password)
-	if len(password) > 0 && !s.requireWebSession(w, r) {
+	if len(password) > 0 && !a.webSession(w, r) {
 		return
 	}
 	name := r.PathValue("name")
@@ -297,9 +371,9 @@ func (s *Server) handleAddVolumeDisk(w http.ResponseWriter, r *http.Request) {
 	ctx := context.WithoutCancel(r.Context())
 	var err error
 	if req.Profile != "" {
-		err = s.opts.Storage.AddBtrfsDiskWithPassword(ctx, name, req.Disk, req.Profile, req.Identity, req.Erase, password)
+		err = a.storage.AddBtrfsDiskWithPassword(ctx, name, req.Disk, req.Profile, req.Identity, req.Erase, password)
 	} else {
-		err = s.opts.Storage.AddDiskWithPassword(ctx, name, req.Disk, req.Erase, req.Identity, password)
+		err = a.storage.AddDiskWithPassword(ctx, name, req.Disk, req.Erase, req.Identity, password)
 	}
 	if err != nil {
 		writeCryptError(w, r, "add disk", err)
@@ -308,17 +382,17 @@ func (s *Server) handleAddVolumeDisk(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleRemoveVolumeDisk(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleRemoveVolumeDisk(w http.ResponseWriter, r *http.Request) {
 	name, disk := r.PathValue("name"), r.PathValue("disk")
 	slog.Info("remove disk requested", "volume", name, "disk", disk, "user", currentUser(r).Name, "ip", remoteIP(r))
-	if err := s.opts.Storage.RemoveDisk(context.WithoutCancel(r.Context()), name, disk); err != nil {
+	if err := a.storage.RemoveDisk(context.WithoutCancel(r.Context()), name, disk); err != nil {
 		writeStorageError(w, r, "remove disk", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleCheckVolume(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleCheckVolume(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Action string `json:"action"`
 	}
@@ -329,7 +403,7 @@ func (s *Server) handleCheckVolume(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", `action must be "start" or "stop"`)
 		return
 	}
-	if err := s.opts.Storage.Check(context.WithoutCancel(r.Context()), r.PathValue("name"), req.Action == "start"); err != nil {
+	if err := a.storage.Check(context.WithoutCancel(r.Context()), r.PathValue("name"), req.Action == "start"); err != nil {
 		writeStorageError(w, r, "check volume", err)
 		return
 	}
@@ -338,14 +412,14 @@ func (s *Server) handleCheckVolume(w http.ResponseWriter, r *http.Request) {
 
 // handleDiskTests lists the tests of disks that run, have finished or wait
 // to be continued after a restart, and the checkpoints that were dropped.
-func (s *Server) handleDiskTests(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"tests": s.opts.Storage.Tests(), "notices": s.opts.Storage.TestNotices()})
+func (a storageArea) handleDiskTests(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"tests": a.storage.Tests(), "notices": a.storage.TestNotices()})
 }
 
 // handleDiskTestStart begins the test of a disk. Overwriting it needs its
 // name once more. autoResume lets a read test continue by itself after a
 // restart.
-func (s *Server) handleDiskTestStart(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleDiskTestStart(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Disk, Mode, Confirm string
 		AutoResume          bool `json:"autoResume"`
@@ -353,54 +427,54 @@ func (s *Server) handleDiskTestStart(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Storage.StartTest(r.Context(), req.Disk, req.Mode, req.Confirm, req.AutoResume); err != nil {
+	if err := a.storage.StartTest(r.Context(), req.Disk, req.Mode, req.Confirm, req.AutoResume); err != nil {
 		writeStorageError(w, r, "test disk", err)
 		return
 	}
 	slog.Info("disk test requested", "disk", req.Disk, "mode", req.Mode, "autoResume", req.AutoResume, "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleDiskTests(w, r)
+	a.handleDiskTests(w, r)
 }
 
 // handleDiskTestResume continues a test that a restart stopped. A test
 // that overwrites needs the name of the disk once more.
-func (s *Server) handleDiskTestResume(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleDiskTestResume(w http.ResponseWriter, r *http.Request) {
 	var req struct{ Confirm string }
 	if !readJSON(w, r, &req) {
 		return
 	}
 	disk := r.PathValue("disk")
-	if err := s.opts.Storage.ResumeTest(r.Context(), disk, req.Confirm); err != nil {
+	if err := a.storage.ResumeTest(r.Context(), disk, req.Confirm); err != nil {
 		writeStorageError(w, r, "continue disk test", err)
 		return
 	}
 	slog.Info("disk test continued", "disk", disk, "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleDiskTests(w, r)
+	a.handleDiskTests(w, r)
 }
 
 // handleDiskTestNotices forgets the notices about dropped checkpoints.
-func (s *Server) handleDiskTestNotices(w http.ResponseWriter, r *http.Request) {
-	s.opts.Storage.DismissTestNotices()
-	s.handleDiskTests(w, r)
+func (a storageArea) handleDiskTestNotices(w http.ResponseWriter, r *http.Request) {
+	a.storage.DismissTestNotices()
+	a.handleDiskTests(w, r)
 }
 
 // handleDiskTestStop cancels a running test or dismisses a finished one.
-func (s *Server) handleDiskTestStop(w http.ResponseWriter, r *http.Request) {
-	if err := s.opts.Storage.StopTest(r.PathValue("disk")); err != nil {
+func (a storageArea) handleDiskTestStop(w http.ResponseWriter, r *http.Request) {
+	if err := a.storage.StopTest(r.PathValue("disk")); err != nil {
 		writeStorageError(w, r, "stop disk test", err)
 		return
 	}
-	s.handleDiskTests(w, r)
+	a.handleDiskTests(w, r)
 }
 
-func (s *Server) handleSnapshots(w http.ResponseWriter, r *http.Request) {
-	snapshots, err := s.opts.Storage.Snapshots(r.PathValue("name"))
+func (a storageArea) handleSnapshots(w http.ResponseWriter, r *http.Request) {
+	snapshots, err := a.storage.Snapshots(r.PathValue("name"))
 	if err != nil {
 		writeStorageError(w, r, "list snapshots", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, snapshots)
 }
-func (s *Server) handleSnapshotAction(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleSnapshotAction(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name    string `json:"name"`
 		Action  string `json:"action"`
@@ -409,7 +483,7 @@ func (s *Server) handleSnapshotAction(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Storage.SnapshotAction(context.WithoutCancel(r.Context()), r.PathValue("name"), req.Name, req.Action, req.Confirm); err != nil {
+	if err := a.storage.SnapshotAction(context.WithoutCancel(r.Context()), r.PathValue("name"), req.Name, req.Action, req.Confirm); err != nil {
 		writeStorageError(w, r, "snapshot", err)
 		return
 	}
@@ -419,25 +493,25 @@ func (s *Server) handleSnapshotAction(w http.ResponseWriter, r *http.Request) {
 
 // handleSetShareQuotas switches limits for the shares of a volume on or off.
 // They take effect at the next start of the NAS.
-func (s *Server) handleSetShareQuotas(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleSetShareQuotas(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Enabled bool `json:"enabled"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Storage.SetShareQuotas(r.PathValue("name"), req.Enabled); err != nil {
+	if err := a.storage.SetShareQuotas(r.PathValue("name"), req.Enabled); err != nil {
 		writeStorageError(w, r, "share quotas", err)
 		return
 	}
 	slog.Info("share quotas changed", "volume", r.PathValue("name"), "enabled", req.Enabled, "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.opts.Shares.Kick()
+	a.shares.Kick()
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleSetSyncSpeed sets how fast the RAID array of a volume rebuilds:
 // gentle, normal or fast (storage/syncspeed.go).
-func (s *Server) handleSetSyncSpeed(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleSetSyncSpeed(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Speed string `json:"speed"`
 	}
@@ -449,7 +523,7 @@ func (s *Server) handleSetSyncSpeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	noteTarget(r, r.PathValue("name"))
-	if err := s.opts.Storage.SetSyncSpeed(context.WithoutCancel(r.Context()), r.PathValue("name"), req.Speed); err != nil {
+	if err := a.storage.SetSyncSpeed(context.WithoutCancel(r.Context()), r.PathValue("name"), req.Speed); err != nil {
 		writeStorageError(w, r, "rebuild speed", err)
 		return
 	}
@@ -458,7 +532,7 @@ func (s *Server) handleSetSyncSpeed(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleBtrfsProfile changes the profile of a Btrfs volume in place.
-func (s *Server) handleBtrfsProfile(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleBtrfsProfile(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Profile string `json:"profile"`
 	}
@@ -467,7 +541,7 @@ func (s *Server) handleBtrfsProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	name := r.PathValue("name")
 	slog.Info("Btrfs profile change requested", "volume", name, "profile", req.Profile, "user", currentUser(r).Name, "ip", remoteIP(r))
-	if err := s.opts.Storage.ConvertBtrfs(context.WithoutCancel(r.Context()), name, req.Profile); err != nil {
+	if err := a.storage.ConvertBtrfs(context.WithoutCancel(r.Context()), name, req.Profile); err != nil {
 		writeStorageError(w, r, "change Btrfs profile", err)
 		return
 	}
@@ -476,7 +550,7 @@ func (s *Server) handleBtrfsProfile(w http.ResponseWriter, r *http.Request) {
 
 // handleVolumeCache switches the SSD cache of a volume on (disk, erase) or
 // changes its mode (mode only, when it has one).
-func (s *Server) handleVolumeCache(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleVolumeCache(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Disk     string `json:"disk"`
 		Mode     string `json:"mode"`
@@ -491,9 +565,9 @@ func (s *Server) handleVolumeCache(w http.ResponseWriter, r *http.Request) {
 	var err error
 	if req.Disk != "" {
 		slog.Info("SSD cache requested", "volume", name, "disk", req.Disk, "mode", req.Mode, "user", currentUser(r).Name, "ip", remoteIP(r))
-		err = s.opts.Storage.EnableCache(ctx, name, req.Disk, req.Mode, req.Identity, req.Erase)
+		err = a.storage.EnableCache(ctx, name, req.Disk, req.Mode, req.Identity, req.Erase)
 	} else {
-		err = s.opts.Storage.SetCacheMode(ctx, name, req.Mode)
+		err = a.storage.SetCacheMode(ctx, name, req.Mode)
 	}
 	if err != nil {
 		writeStorageError(w, r, "SSD cache", err)
@@ -502,10 +576,10 @@ func (s *Server) handleVolumeCache(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleVolumeCacheRemove(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleVolumeCacheRemove(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	slog.Info("SSD cache removal requested", "volume", name, "user", currentUser(r).Name, "ip", remoteIP(r))
-	if err := s.opts.Storage.DisableCache(context.WithoutCancel(r.Context()), name); err != nil {
+	if err := a.storage.DisableCache(context.WithoutCancel(r.Context()), name); err != nil {
 		writeStorageError(w, r, "SSD cache", err)
 		return
 	}
@@ -514,7 +588,7 @@ func (s *Server) handleVolumeCacheRemove(w http.ResponseWriter, r *http.Request)
 
 // handleReplaceVolumeDisk swaps a working disk of an mdadm volume for a new
 // one without losing redundancy (assistant for swapping a disk).
-func (s *Server) handleReplaceVolumeDisk(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleReplaceVolumeDisk(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Old      string `json:"old"`
 		New      string `json:"new"`
@@ -527,7 +601,7 @@ func (s *Server) handleReplaceVolumeDisk(w http.ResponseWriter, r *http.Request)
 	name := r.PathValue("name")
 	noteTarget(r, name+": "+req.Old+" → "+req.New)
 	slog.Info("replace disk requested", "volume", name, "old", req.Old, "new", req.New, "user", currentUser(r).Name, "ip", remoteIP(r))
-	if err := s.opts.Storage.ReplaceDisk(context.WithoutCancel(r.Context()), name, req.Old, req.New, req.Identity, req.Erase); err != nil {
+	if err := a.storage.ReplaceDisk(context.WithoutCancel(r.Context()), name, req.Old, req.New, req.Identity, req.Erase); err != nil {
 		writeStorageError(w, r, "replace disk", err)
 		return
 	}
@@ -535,7 +609,7 @@ func (s *Server) handleReplaceVolumeDisk(w http.ResponseWriter, r *http.Request)
 }
 
 // handleIdentifyDisk makes the activity light of a disk flicker for a while.
-func (s *Server) handleIdentifyDisk(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleIdentifyDisk(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Seconds int `json:"seconds"`
 	}
@@ -545,7 +619,7 @@ func (s *Server) handleIdentifyDisk(w http.ResponseWriter, r *http.Request) {
 	if req.Seconds == 0 {
 		req.Seconds = 30
 	}
-	if err := s.opts.Storage.IdentifyDisk(r.Context(), r.PathValue("disk"), req.Seconds); err != nil {
+	if err := a.storage.IdentifyDisk(r.Context(), r.PathValue("disk"), req.Seconds); err != nil {
 		writeStorageError(w, r, "identify disk", err)
 		return
 	}
