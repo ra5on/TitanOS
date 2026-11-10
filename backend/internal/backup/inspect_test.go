@@ -130,3 +130,24 @@ func TestCheckThatCannotStartIsRecordedAsFailed(t *testing.T) {
 		t.Fatalf("state %+v, heard %v", s, heard)
 	}
 }
+
+// PLAN 76 (F-9-11): a deleted job takes its state along; a new job of the
+// same name does not start with the old "last success".
+func TestDeletedJobLeavesNoStateForANewOneOfItsName(t *testing.T) {
+	e := newEnv(t)
+	id := localJob(t, e)
+	e.m.Start(id)
+	e.result(t)
+	if e.state(id).LastRun == nil {
+		t.Fatal("no run recorded")
+	}
+	if err := e.m.Delete(id); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.m.Create(s3Job(), volumes); err != nil {
+		t.Fatal(err)
+	}
+	if s := e.state(id); s.LastRun != nil {
+		t.Fatalf("new job inherited %+v", s)
+	}
+}

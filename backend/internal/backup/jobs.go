@@ -5,7 +5,10 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io/fs"
+	"log/slog"
 	"net/url"
+	"os"
 	"path"
 	"regexp"
 	"slices"
@@ -335,6 +338,11 @@ func (m *Manager) Update(id string, job Job, volumes []string) error {
 
 // Delete forgets a job. What it backed up stays where it is.
 func (m *Manager) Delete(id string) error {
+	// Where the job kept its state is asked before the lock is taken.
+	file := ""
+	if job, ok := m.find(id); ok {
+		file = m.stateFile(job)
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	at := slices.IndexFunc(m.jobs, func(j Job) bool { return j.ID == id })
@@ -344,8 +352,18 @@ func (m *Manager) Delete(id string) error {
 	if state := m.states[id]; state != nil && state.Running {
 		return ErrRunning
 	}
+	if err := m.save(slices.Delete(slices.Clone(m.jobs), at, at+1)); err != nil {
+		return err
+	}
+	// The state goes with the job: a new job of the same name must not
+	// start out with this one's "last success".
 	delete(m.states, id)
-	return m.save(slices.Delete(slices.Clone(m.jobs), at, at+1))
+	if file != "" {
+		if err := os.Remove(file); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			slog.Warn("state of the deleted backup job not removed", "job", id, "err", err)
+		}
+	}
+	return nil
 }
 
 // Password returns the password a job's backups are encrypted with.
