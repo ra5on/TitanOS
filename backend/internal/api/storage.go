@@ -69,7 +69,7 @@ func writeStorageError(w http.ResponseWriter, r *http.Request, action string, er
 // webSession lets only a person at a web session through; addVolumeChecks
 // adds the checks chosen for a new volume as maintenance jobs. Removing a
 // volume (handleDeleteVolume) asks every part of the NAS that may still use
-// it and stays with the server.
+// it and belongs to volumeUseArea.
 type storageArea struct {
 	storage         *storage.Manager
 	smartHistory    *smarthistory.Recorder
@@ -81,7 +81,7 @@ type storageArea struct {
 // storageArea is the area of the server.
 func (s *Server) storageArea() storageArea {
 	return storageArea{storage: s.opts.Storage, smartHistory: s.opts.SmartHistory, shares: s.opts.Shares,
-		webSession: s.requireWebSession, addVolumeChecks: s.addVolumeChecks}
+		webSession: s.requireWebSession, addVolumeChecks: s.volumeUseArea().addVolumeChecks}
 }
 
 // registerOperations registers the workflows of the storage (import,
@@ -257,7 +257,7 @@ func (a storageArea) handleCreateVolume(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusCreated)
 }
 
-func (s *Server) handleDeleteVolume(w http.ResponseWriter, r *http.Request) {
+func (a volumeUseArea) handleDeleteVolume(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Confirm string `json:"confirm"`
 	}
@@ -265,43 +265,43 @@ func (s *Server) handleDeleteVolume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := r.PathValue("name")
-	if (s.opts.Files != nil && s.opts.Files.Busy()) || (s.opts.Backup != nil && s.opts.Backup.Busy()) || (s.opts.VMs != nil && s.opts.VMs.Busy()) || (s.opts.Media != nil && s.opts.Media.Working()) {
+	if (a.files != nil && a.files.Busy()) || (a.backup != nil && a.backup.Busy()) || (a.vms != nil && a.vms.Busy()) || (a.media != nil && a.media.Working()) {
 		writeError(w, 409, "volume_work_running", "wait for file, backup and VM operations")
 		return
 	}
-	if s.opts.Monitoring != nil {
-		cfg := s.opts.Monitoring.Status().Settings
+	if a.monitoring != nil {
+		cfg := a.monitoring.Status().Settings
 		if cfg.Enabled && cfg.Volume == name {
 			writeError(w, 409, "volume_has_monitoring", "disable monitoring on this volume first")
 			return
 		}
 	}
-	if s.opts.Maintenance != nil {
-		cfg := s.opts.Maintenance.Status().Settings
+	if a.maintenance() != nil {
+		cfg := a.maintenance().Status().Settings
 		if cfg.Enabled && cfg.Volume == name {
 			writeError(w, 409, "volume_has_maintenance", "disable maintenance on this volume first")
 			return
 		}
 	}
-	if s.opts.ApplicationBackups != nil {
-		op, _ := s.opts.ApplicationBackups.Status()
+	if a.applications() != nil {
+		op, _ := a.applications().Status()
 		if op != nil && op.Volume == name {
 			writeError(w, 409, "volume_has_recovery", "review the pending application backup first")
 			return
 		}
 	}
-	for _, share := range s.opts.Shares.List() {
+	for _, share := range a.shares.List() {
 		if share.Volume == name {
 			writeError(w, http.StatusConflict, "volume_has_shares", "the volume still holds the share "+share.Name)
 			return
 		}
 	}
-	if docker := s.opts.Docker.Current(); docker.Enabled && docker.Volume == name {
+	if docker := a.docker.Current(); docker.Enabled && docker.Volume == name {
 		writeError(w, http.StatusConflict, "volume_has_docker", "Docker keeps its data on this volume")
 		return
 	}
 	// Disks of VMs and installed plugins would go with the volume.
-	for _, machine := range s.opts.VMs.List(nil) {
+	for _, machine := range a.vms.List(nil) {
 		for _, disk := range machine.Disks {
 			if machine.Volume == name || disk.Volume == name {
 				writeError(w, http.StatusConflict, "volume_has_vms", "the volume holds the VM "+machine.Name)
@@ -313,19 +313,19 @@ func (s *Server) handleDeleteVolume(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if s.opts.Plugins.Volume() == name {
+	if a.plugins.Volume() == name {
 		writeError(w, http.StatusConflict, "volume_has_plugins", "the plugins are installed on this volume")
 		return
 	}
 	// A system container keeps its whole root filesystem on its volume. A
 	// stopped one holds nothing open, so the volume would unmount and go,
 	// and the container would stay registered without its system.
-	if container, ok := lxcOnVolume(s.opts.LXC.List(nil), name); ok {
+	if container, ok := lxcOnVolume(a.lxc.List(nil), name); ok {
 		writeError(w, http.StatusConflict, "volume_has_lxc", "the volume holds the system container "+container)
 		return
 	}
 	slog.Info("delete volume requested", "name", name, "user", currentUser(r).Name, "ip", remoteIP(r))
-	if err := s.opts.Storage.Delete(context.WithoutCancel(r.Context()), name, req.Confirm); err != nil {
+	if err := a.storage.Delete(context.WithoutCancel(r.Context()), name, req.Confirm); err != nil {
 		writeStorageError(w, r, "delete volume", err)
 		return
 	}

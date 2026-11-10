@@ -5,6 +5,6 @@ func (s *Server) registerStorage(mux *routeMux) {
 	// Everyone may see the volumes; only administrators may change disks.
 	s.operationsRoutes(mux)
 	s.storageArea().register(mux, s.guards())
-	mux.HandleFunc("DELETE /api/v1/storage/volumes/{name}", s.requireHeavyAdmin(s.handleDeleteVolume))
+	mux.HandleFunc("DELETE /api/v1/storage/volumes/{name}", s.requireHeavyAdmin(s.volumeUseArea().handleDeleteVolume))
 	s.storageCryptArea().register(mux, s.guards())
 }

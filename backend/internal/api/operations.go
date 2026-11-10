@@ -28,7 +28,7 @@ func (s *Server) operationsRoutes(mux *routeMux) {
 	admin := func(route string, fn http.HandlerFunc) { register(route, fn, s.requireAdmin) }
 	heavy := func(route string, fn http.HandlerFunc) { register(route, fn, s.requireHeavyAdmin) }
 	heavyApp := func(route string, fn http.HandlerFunc) { register(route, fn, s.requireHeavyAppAdmin) }
-	admin("GET /api/v1/operations", s.handleOperations)
+	admin("GET /api/v1/operations", s.volumeUseArea().handleOperations)
 	maintenanceArea{maintenance: s.opts.Maintenance, storage: s.opts.Storage, backup: s.opts.Backup}.register(admin)
 	monitoringArea{monitoring: s.opts.Monitoring}.register(admin)
 	s.storageArea().registerOperations(admin, heavy)
@@ -437,25 +437,25 @@ func (a filesArea) handleTransferForget(w http.ResponseWriter, r *http.Request) 
 	}
 	w.WriteHeader(204)
 }
-func (s *Server) handleOperations(w http.ResponseWriter, r *http.Request) {
+func (a volumeUseArea) handleOperations(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r)
-	out := map[string]any{"transfers": s.opts.Files.Jobs(user.Name), "uploads": s.opts.Files.UploadTasks(user.Name)}
+	out := map[string]any{"transfers": a.files.Jobs(user.Name), "uploads": a.files.UploadTasks(user.Name)}
 	problems := []string{}
-	if s.opts.Media != nil {
-		out["media"] = s.opts.Media.List()
+	if a.media != nil {
+		out["media"] = a.media.List()
 	}
-	if s.opts.ApplicationBackups != nil {
-		op, active := s.opts.ApplicationBackups.Status()
+	if a.applications() != nil {
+		op, active := a.applications().Status()
 		out["applicationRecovery"] = map[string]any{"operation": op, "active": active}
-		if op == nil && s.opts.ApplicationBackups.Busy() && !active {
+		if op == nil && a.applications().Busy() && !active {
 			problems = append(problems, "application-recovery")
 		}
 	}
-	if s.opts.VMs != nil && s.opts.Storage != nil {
+	if a.vms != nil && a.storage != nil {
 		clones := []vm.CloneOperation{}
-		mounted := s.opts.Storage.Mounted()
+		mounted := a.storage.Mounted()
 		for _, volume := range mounted {
-			ops, err := s.opts.VMs.CloneOperations(volume, mounted)
+			ops, err := a.vms.CloneOperations(volume, mounted)
 			if err != nil {
 				problems = append(problems, "vm-clones")
 			} else {
@@ -464,38 +464,38 @@ func (s *Server) handleOperations(w http.ResponseWriter, r *http.Request) {
 		}
 		out["clones"] = clones
 	}
-	if s.opts.Maintenance != nil {
-		out["maintenance"] = s.opts.Maintenance.Status()
+	if a.maintenance() != nil {
+		out["maintenance"] = a.maintenance().Status()
 	}
-	if s.opts.Plugins != nil {
+	if a.plugins != nil {
 		// RAM only and under its own lock: a running activation does not hold this up.
-		out["plugins"] = s.opts.Plugins.Progress()
+		out["plugins"] = a.plugins.Progress()
 	}
-	if s.opts.Shares != nil {
-		out["shareDeletions"] = s.opts.Shares.PurgeJobs()
+	if a.shares != nil {
+		out["shareDeletions"] = a.shares.PurgeJobs()
 	}
-	if s.opts.Backup != nil {
-		out["backups"] = s.opts.Backup.CachedViews()
+	if a.backup != nil {
+		out["backups"] = a.backup.CachedViews()
 	}
-	if s.opts.Docker != nil {
-		status := s.opts.Docker.Status(r.Context())
+	if a.docker != nil {
+		status := a.docker.Status(r.Context())
 		out["docker"] = status.Jobs
 		if status.Settings.Enabled && !status.Running {
 			problems = append(problems, "docker")
 		}
 	}
-	if s.opts.VMs != nil {
-		out["vms"] = s.opts.VMs.List(s.opts.Storage.Mounted())
+	if a.vms != nil {
+		out["vms"] = a.vms.List(a.storage.Mounted())
 	}
-	if s.opts.Storage != nil {
-		g, pending, err := s.opts.Storage.GrowthStatus()
+	if a.storage != nil {
+		g, pending, err := a.storage.GrowthStatus()
 		out["growth"] = map[string]any{"pending": pending, "operation": g}
 		if err != nil {
 			out["growthError"] = err.Error()
 		}
-		out["diskTests"] = s.opts.Storage.Tests()
-		out["snapshotRestores"] = s.opts.Storage.SnapshotRestores()
-		out["storageActive"] = s.opts.Storage.ActionsRunning()
+		out["diskTests"] = a.storage.Tests()
+		out["snapshotRestores"] = a.storage.SnapshotRestores()
+		out["storageActive"] = a.storage.ActionsRunning()
 	}
 	slices.Sort(problems)
 	out["unavailable"] = slices.Compact(problems)
