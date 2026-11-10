@@ -77,7 +77,7 @@ type davArea struct {
 // WebDAV password through it.
 func (s *Server) davArea() davArea {
 	return davArea{store: s.opts.Store, users: s.opts.Users, files: s.opts.Files, state: &s.dav, limiter: s.limiter,
-		webSession: s.requireWebSession, reconfirm: s.reconfirm, fileRoots: func(user auth.User) []files.Root { return s.filesArea().fileRoots(user) }}
+		webSession: s.requireWebSession, reconfirm: s.authArea().reconfirm, fileRoots: func(user auth.User) []files.Root { return s.filesArea().fileRoots(user) }}
 }
 
 func (a davArea) register(mux *routeMux, admin, user func(http.HandlerFunc) http.HandlerFunc) {

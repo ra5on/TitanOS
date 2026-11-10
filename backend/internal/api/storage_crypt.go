@@ -36,7 +36,7 @@ func (s *Server) requireWebSession(w http.ResponseWriter, r *http.Request) bool 
 	if viaCluster(r) {
 		return true
 	}
-	if !webSession(r) || s.sessionToken(r) == "" {
+	if !webSession(r) || s.authArea().sessionToken(r) == "" {
 		writeError(w, http.StatusForbidden, "web_session_required", "only possible on the web interface")
 		return false
 	}

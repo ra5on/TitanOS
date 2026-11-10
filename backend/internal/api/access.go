@@ -261,7 +261,7 @@ type loginView struct {
 // dependencies (PLAN 8a, see fansArea). sessions are the logins of the
 // server.
 type loginSettingsArea struct {
-	sessions *auth.Sessions
+	sessions sessionsFunc
 }
 
 func (a loginSettingsArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
@@ -270,7 +270,7 @@ func (a loginSettingsArea) register(mux *routeMux, admin func(http.HandlerFunc) 
 }
 
 func (a loginSettingsArea) handleLoginSettings(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, loginView{StayDays: a.sessions.Stay(), Choices: auth.StayChoices})
+	writeJSON(w, http.StatusOK, loginView{StayDays: a.sessions().Stay(), Choices: auth.StayChoices})
 }
 
 func (a loginSettingsArea) handleSetLoginSettings(w http.ResponseWriter, r *http.Request) {
@@ -281,7 +281,7 @@ func (a loginSettingsArea) handleSetLoginSettings(w http.ResponseWriter, r *http
 		return
 	}
 	if req.StayDays != nil {
-		if err := a.sessions.SetStay(*req.StayDays); errors.Is(err, auth.ErrStayChoice) {
+		if err := a.sessions().SetStay(*req.StayDays); errors.Is(err, auth.ErrStayChoice) {
 			writeError(w, http.StatusBadRequest, "invalid_stay", err.Error())
 			return
 		} else if err != nil {

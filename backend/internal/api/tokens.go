@@ -31,7 +31,7 @@ type tokensArea struct {
 // tokensArea is the area of the server; the handler chain and the MCP
 // server check tokens through it.
 func (s *Server) tokensArea() tokensArea {
-	return tokensArea{users: s.opts.Users, tokens: s.tokens, reconfirm: s.reconfirm}
+	return tokensArea{users: s.opts.Users, tokens: s.tokens, reconfirm: s.authArea().reconfirm}
 }
 
 func (a tokensArea) register(mux *routeMux, user func(http.HandlerFunc) http.HandlerFunc) {

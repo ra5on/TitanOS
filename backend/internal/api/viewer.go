@@ -477,7 +477,7 @@ func (s *Server) viewerRecheckRights() {
 		return
 	}
 	s.opts.Viewer.StopWhere(func(user, app string) bool {
-		account, ok := s.activeUser(user)
+		account, ok := s.authArea().activeUser(user)
 		return !ok || !s.allowsAppNow(account, app)
 	})
 }

@@ -39,7 +39,7 @@ type clusterArea struct {
 	notify         *notify.Manager
 	shares         *shares.Manager
 	ssh            *sshd.Manager
-	sessions       *auth.Sessions
+	sessions       sessionsFunc
 	tokens         *auth.Tokens
 	prefs          *preferences
 	requireUser    func(http.HandlerFunc) http.HandlerFunc
@@ -52,8 +52,8 @@ type clusterArea struct {
 // cluster manager, the handler chain starts with clusterAccess.
 func (s *Server) clusterArea() clusterArea {
 	return clusterArea{cluster: s.opts.Cluster, version: s.opts.Version, monitor: s.opts.Monitor, storage: s.opts.Storage,
-		notify: s.opts.Notify, shares: s.opts.Shares, ssh: s.opts.SSH, sessions: s.sessions, tokens: s.tokens, prefs: s.prefs,
-		requireUser: s.requireUser, sessionToken: s.sessionToken, reconfirmProof: s.reconfirmProof, forgetWebDAV: s.davArea().forgetWebDAV}
+		notify: s.opts.Notify, shares: s.opts.Shares, ssh: s.opts.SSH, sessions: s.sessionStore, tokens: s.tokens, prefs: s.prefs,
+		requireUser: s.requireUser, sessionToken: s.authArea().sessionToken, reconfirmProof: s.authArea().reconfirmProof, forgetWebDAV: s.davArea().forgetWebDAV}
 }
 
 // routeCluster registers the routes of the cluster.
@@ -538,7 +538,7 @@ func (a clusterArea) clusterApplied(before auth.User, existed bool, after auth.U
 	}
 	switch {
 	case deleted:
-		a.sessions.DeleteUser(name, "")
+		a.sessions().DeleteUser(name, "")
 		if err := a.tokens.RemoveUser(name); err != nil {
 			slog.Error("remove API tokens of the deleted account", "user", name, "err", err)
 		}
@@ -550,7 +550,7 @@ func (a clusterArea) clusterApplied(before auth.User, existed bool, after auth.U
 	case existed && (before.PasswordHash != after.PasswordHash || before.TOTPSecret != after.TOTPSecret ||
 		after.Disabled || len(after.Passkeys) < len(before.Passkeys) || !before.Created.Equal(after.Created)):
 		// Whoever knew the old password or held a removed factor is out.
-		a.sessions.DeleteUser(name, "")
+		a.sessions().DeleteUser(name, "")
 		if before.PasswordHash != after.PasswordHash || before.TOTPSecret != after.TOTPSecret {
 			a.forgetWebDAV(name)
 		}

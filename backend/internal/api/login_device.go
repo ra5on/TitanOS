@@ -23,8 +23,8 @@ import (
 // deviceCookieAge is how long a browser stays known after a login.
 const deviceCookieAge = 400 * 24 * time.Hour
 
-func (s *Server) deviceCookieName() string {
-	if s.opts.SecureCookies {
+func (au authArea) deviceCookieName() string {
+	if au.secureCookies {
 		return "__Host-titanos_device"
 	}
 	return "titanos_device"
@@ -40,8 +40,8 @@ func deviceMAC(passwordHash, name, nonce string) []byte {
 
 // knownDevice returns the limiter key of the browser if it carries a valid
 // device cookie of the account; "" means an unknown device.
-func (s *Server) knownDevice(r *http.Request, name string) string {
-	cookie, err := r.Cookie(s.deviceCookieName())
+func (au authArea) knownDevice(r *http.Request, name string) string {
+	cookie, err := r.Cookie(au.deviceCookieName())
 	if err != nil {
 		return ""
 	}
@@ -53,7 +53,7 @@ func (s *Server) knownDevice(r *http.Request, name string) string {
 	if err != nil {
 		return ""
 	}
-	user, ok := s.opts.Users.Get(name)
+	user, ok := au.users.Get(name)
 	if !ok || user.PasswordHash == "" || !hmac.Equal(sum, deviceMAC(user.PasswordHash, name, parts[1])) {
 		return ""
 	}
@@ -61,8 +61,8 @@ func (s *Server) knownDevice(r *http.Request, name string) string {
 }
 
 // rememberDevice marks the browser as one that logged into the account.
-func (s *Server) rememberDevice(w http.ResponseWriter, name string) {
-	user, ok := s.opts.Users.Get(name)
+func (au authArea) rememberDevice(w http.ResponseWriter, name string) {
+	user, ok := au.users.Get(name)
 	if !ok || user.PasswordHash == "" {
 		return
 	}
@@ -70,12 +70,12 @@ func (s *Server) rememberDevice(w http.ResponseWriter, name string) {
 	rand.Read(raw)
 	nonce := base64.RawURLEncoding.EncodeToString(raw)
 	http.SetCookie(w, &http.Cookie{
-		Name:     s.deviceCookieName(),
+		Name:     au.deviceCookieName(),
 		Value:    name + "." + nonce + "." + base64.RawURLEncoding.EncodeToString(deviceMAC(user.PasswordHash, name, nonce)),
 		Path:     "/",
 		MaxAge:   int(deviceCookieAge.Seconds()),
 		HttpOnly: true,
-		Secure:   s.opts.SecureCookies,
+		Secure:   au.secureCookies,
 		SameSite: http.SameSiteStrictMode,
 	})
 }

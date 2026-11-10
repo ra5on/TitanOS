@@ -15,34 +15,34 @@ import (
 
 // cookieName uses the __Host- prefix over HTTPS: browsers then only accept
 // the cookie from exactly this host, over a secure connection.
-func (s *Server) cookieName() string {
-	if s.opts.SecureCookies {
+func (au authArea) cookieName() string {
+	if au.secureCookies {
 		return "__Host-titanos_session"
 	}
 	return "titanos_session"
 }
 
-func (s *Server) setSessionCookie(w http.ResponseWriter, token string, maxAge int) {
+func (au authArea) setSessionCookie(w http.ResponseWriter, token string, maxAge int) {
 	http.SetCookie(w, &http.Cookie{
-		Name:     s.cookieName(),
+		Name:     au.cookieName(),
 		Value:    token,
 		Path:     "/",
 		MaxAge:   maxAge,
 		HttpOnly: true,
-		Secure:   s.opts.SecureCookies,
+		Secure:   au.secureCookies,
 		SameSite: http.SameSiteStrictMode,
 	})
 }
 
-func (s *Server) startSession(w http.ResponseWriter, r *http.Request, user auth.User) bool {
-	token, err := s.sessions.Create(user.Name, remoteIP(r), r.UserAgent())
+func (au authArea) startSession(w http.ResponseWriter, r *http.Request, user auth.User) bool {
+	token, err := au.sessions().Create(user.Name, remoteIP(r), r.UserAgent())
 	if err != nil {
 		slog.Error("create session", "err", err)
 		writeError(w, http.StatusInternalServerError, "internal", "could not start a session")
 		return false
 	}
-	session, _ := s.sessions.Peek(token)
-	s.setSessionCookie(w, token, cookieAge(session))
+	session, _ := au.sessions().Peek(token)
+	au.setSessionCookie(w, token, cookieAge(session))
 	return true
 }
 
@@ -60,20 +60,20 @@ func cookieAge(session auth.Session) int {
 
 // ensureUsersLoaded retries reading the accounts if that failed at startup,
 // for example because the stick was not there yet.
-func (s *Server) ensureUsersLoaded() bool {
-	if s.opts.Users.Loaded() {
+func (au authArea) ensureUsersLoaded() bool {
+	if au.users.Loaded() {
 		return true
 	}
-	s.loadMu.Lock()
-	defer s.loadMu.Unlock()
-	if s.opts.Users.Loaded() {
+	au.loadMu.Lock()
+	defer au.loadMu.Unlock()
+	if au.users.Loaded() {
 		return true
 	}
-	if time.Since(s.lastLoadTry) < 5*time.Second {
+	if time.Since(*au.lastLoadTry) < 5*time.Second {
 		return false
 	}
-	s.lastLoadTry = time.Now()
-	if err := s.opts.Users.Load(); err != nil {
+	*au.lastLoadTry = time.Now()
+	if err := au.users.Load(); err != nil {
 		slog.Warn("accounts not readable", "err", err)
 		return false
 	}
@@ -109,32 +109,32 @@ type sessionResponse struct {
 	LockMinutes *int `json:"lockMinutes,omitempty"`
 }
 
-func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
+func (au authArea) handleSession(w http.ResponseWriter, r *http.Request) {
 	hostname, _ := os.Hostname()
 	res := sessionResponse{Hostname: hostname}
-	res.ConfigAvailable = s.ensureUsersLoaded()
-	res.SetupRequired = res.ConfigAvailable && s.opts.Users.Count() == 0
-	if user, state := s.authenticateState(r); state != authNone {
+	res.ConfigAvailable = au.ensureUsersLoaded()
+	res.SetupRequired = res.ConfigAvailable && au.users.Count() == 0
+	if user, state := au.authenticateState(r); state != authNone {
 		answer := userOf(user)
 		res.User = &answer
 		// The lock of this login: a phone has its own (PLAN 69).
-		minutes := s.lockMinutes(user.Name, r.UserAgent())
+		minutes := au.lockMinutes(user.Name, r.UserAgent())
 		res.LockMinutes = &minutes
 		if state == authLocked {
 			// What the lock screen needs, nothing more.
 			res.Locked = true
 			res.Passkey = hasPasskeyHere(r, user)
 		} else {
-			res.Version = s.opts.Version
+			res.Version = au.version
 		}
 		// A login that stays keeps its cookie as long as the browser allows,
 		// also after the setting was switched on for it.
-		if cookie, err := r.Cookie(s.cookieName()); err == nil {
-			if session, ok := s.sessions.Peek(cookie.Value); ok && session.Remember {
-				s.setSessionCookie(w, cookie.Value, cookieAge(session))
+		if cookie, err := r.Cookie(au.cookieName()); err == nil {
+			if session, ok := au.sessions().Peek(cookie.Value); ok && session.Remember {
+				au.setSessionCookie(w, cookie.Value, cookieAge(session))
 			}
 		}
-	} else if look, _ := s.loginAppearance(); look.HideHost {
+	} else if look, _ := au.loginAppearance(); look.HideHost {
 		// The login page was set not to name the NAS.
 		res.Hostname = ""
 	}
@@ -153,19 +153,19 @@ func (c *credentials) normalize() {
 }
 
 // handleSetup creates the owner account. It only works while no account exists.
-func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
+func (au authArea) handleSetup(w http.ResponseWriter, r *http.Request) {
 	var req credentials
 	if !readJSON(w, r, &req) {
 		return
 	}
 	req.normalize()
-	if !s.ensureUsersLoaded() {
+	if !au.ensureUsersLoaded() {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", "/config is not available, is the stick plugged in?")
 		return
 	}
 
 	setupMu.Lock()
-	user, err := s.opts.Users.CreateOwner(req.Name, req.Password)
+	user, err := au.users.CreateOwner(req.Name, req.Password)
 	setupMu.Unlock()
 	switch {
 	case errors.Is(err, auth.ErrSetupDone):
@@ -183,16 +183,16 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "config_write_failed", "the account could not be saved to /config")
 	default:
 		slog.Info("owner account created", "user", user.Name, "ip", remoteIP(r))
-		s.recordEvent(r, user.Name, "setup", "", true)
-		s.opts.Shares.Kick()
-		s.opts.SSH.Kick()
-		if s.startSession(w, r, user) {
+		au.recordEvent(r, user.Name, "setup", "", true)
+		au.shares.Kick()
+		au.ssh.Kick()
+		if au.startSession(w, r, user) {
 			writeJSON(w, http.StatusCreated, userOf(user))
 		}
 	}
 }
 
-func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+func (au authArea) handleLogin(w http.ResponseWriter, r *http.Request) {
 	var req credentials
 	if !readJSON(w, r, &req) {
 		return
@@ -205,23 +205,23 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// for unknown devices only, never its owner out. The lock of the
 	// address holds for everyone.
 	guessKey := userKey
-	if device := s.knownDevice(r, req.Name); device != "" {
+	if device := au.knownDevice(r, req.Name); device != "" {
 		guessKey = device
 	}
 
 	blocked := func() bool {
-		wait := s.limiter.RetryAfter(guessKey, ipKey)
+		wait := au.limiter.RetryAfter(guessKey, ipKey)
 		if wait <= 0 {
 			return false
 		}
-		s.recordEvent(r, req.Name, "login_blocked", "", false)
+		au.recordEvent(r, req.Name, "login_blocked", "", false)
 		writeRateLimited(w, wait, "too many failed logins, try again later")
 		return true
 	}
 	if blocked() {
 		return
 	}
-	if !s.ensureUsersLoaded() {
+	if !au.ensureUsersLoaded() {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", "/config is not available, is the stick plugged in?")
 		return
 	}
@@ -229,24 +229,24 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// Verify also passes a locked account: whether it is locked is told
 	// only after the password (and the second factor) were right, so the
 	// answer reveals nothing to someone guessing.
-	user, ok := s.opts.Users.Verify(req.Name, req.Password)
+	user, ok := au.users.Verify(req.Name, req.Password)
 	// Guesses sent at the same time all pass the check above before the
 	// first of them is counted (hashing is slow and runs two at a time).
 	// Once the limit was reached meanwhile, the answer is not told, right
 	// or wrong; a wrong guess still counts.
-	if s.limiter.RetryAfter(guessKey, ipKey) > 0 {
+	if au.limiter.RetryAfter(guessKey, ipKey) > 0 {
 		if !ok {
-			s.limiter.Fail(guessKey, ipKey)
-			s.opts.Firewall.Failed(ip, firewall.SourceWeb)
+			au.limiter.Fail(guessKey, ipKey)
+			au.firewall.Failed(ip, firewall.SourceWeb)
 		}
 		blocked()
 		return
 	}
 	if !ok {
-		s.limiter.Fail(guessKey, ipKey)
-		s.opts.Firewall.Failed(ip, firewall.SourceWeb)
+		au.limiter.Fail(guessKey, ipKey)
+		au.firewall.Failed(ip, firewall.SourceWeb)
 		slog.Warn("login failed", "user", req.Name, "ip", ip)
-		s.recordEvent(r, req.Name, "login_failed", "", false)
+		au.recordEvent(r, req.Name, "login_failed", "", false)
 		writeError(w, http.StatusUnauthorized, "invalid_credentials", "wrong name or password")
 		return
 	}
@@ -257,22 +257,22 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusUnauthorized, "second_factor_required", "enter the code from your authenticator app")
 			return
 		}
-		codeOK := s.opts.Users.CheckSecondFactor(user.Name, req.Code)
+		codeOK := au.users.CheckSecondFactor(user.Name, req.Code)
 		// As for the password: codes guessed at the same time are not
 		// answered once the limit was reached meanwhile.
-		if s.limiter.RetryAfter(guessKey, ipKey) > 0 {
+		if au.limiter.RetryAfter(guessKey, ipKey) > 0 {
 			if !codeOK {
-				s.limiter.Fail(guessKey, ipKey)
-				s.opts.Firewall.Failed(ip, firewall.SourceWeb)
+				au.limiter.Fail(guessKey, ipKey)
+				au.firewall.Failed(ip, firewall.SourceWeb)
 			}
 			blocked()
 			return
 		}
 		if !codeOK {
-			s.limiter.Fail(guessKey, ipKey)
-			s.opts.Firewall.Failed(ip, firewall.SourceWeb)
+			au.limiter.Fail(guessKey, ipKey)
+			au.firewall.Failed(ip, firewall.SourceWeb)
 			slog.Warn("login failed at the second factor", "user", req.Name, "ip", ip)
-			s.recordEvent(r, req.Name, "login_failed", "2fa", false)
+			au.recordEvent(r, req.Name, "login_failed", "2fa", false)
 			writeError(w, http.StatusUnauthorized, "invalid_code", "the code is wrong or was used already")
 			return
 		}
@@ -280,24 +280,24 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if user.Disabled {
 		// Not a guess, so the limiter is left alone; no session, no SMB hash.
 		slog.Warn("login of a locked account refused", "user", user.Name, "ip", ip)
-		s.recordEvent(r, user.Name, "login_disabled", "", false)
+		au.recordEvent(r, user.Name, "login_disabled", "", false)
 		writeError(w, http.StatusForbidden, "account_disabled", "this account is locked; ask an owner or administrator")
 		return
 	}
-	s.limiter.Reset(userKey)
-	s.limiter.Reset(guessKey)
-	s.rememberDevice(w, user.Name)
+	au.limiter.Reset(userKey)
+	au.limiter.Reset(guessKey)
+	au.rememberDevice(w, user.Name)
 	slog.Info("login", "user", user.Name, "ip", ip)
 	// Accounts from before shares existed get their SMB password now, the
 	// only moment the password is known.
-	if _, stored := s.opts.Users.RememberSMBHash(user.Name, req.Password); stored {
-		s.opts.Shares.Kick()
-		s.opts.SSH.Kick()
+	if _, stored := au.users.RememberSMBHash(user.Name, req.Password); stored {
+		au.shares.Kick()
+		au.ssh.Kick()
 	}
-	if s.startSession(w, r, user) {
-		s.recordEvent(r, user.Name, "login", "", true)
-		if user.Role.CanAdminister() && s.opts.Update != nil {
-			s.opts.Update.CheckAfterLogin()
+	if au.startSession(w, r, user) {
+		au.recordEvent(r, user.Name, "login", "", true)
+		if user.Role.CanAdminister() && au.update != nil {
+			au.update.CheckAfterLogin()
 		}
 		writeJSON(w, http.StatusOK, userOf(user))
 	}
@@ -310,13 +310,13 @@ func writeRateLimited(w http.ResponseWriter, wait time.Duration, message string)
 	}})
 }
 
-func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
-	if cookie, err := r.Cookie(s.cookieName()); err == nil {
-		if session, ok := s.sessions.Get(cookie.Value); ok {
-			s.recordEvent(r, session.User, "logout", "", true)
+func (au authArea) handleLogout(w http.ResponseWriter, r *http.Request) {
+	if cookie, err := r.Cookie(au.cookieName()); err == nil {
+		if session, ok := au.sessions().Get(cookie.Value); ok {
+			au.recordEvent(r, session.User, "logout", "", true)
 		}
-		s.sessions.Delete(cookie.Value)
+		au.sessions().Delete(cookie.Value)
 	}
-	s.setSessionCookie(w, "", -1)
+	au.setSessionCookie(w, "", -1)
 	w.WriteHeader(http.StatusNoContent)
 }

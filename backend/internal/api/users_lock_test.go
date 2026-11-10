@@ -144,7 +144,7 @@ func TestConsoleEndsWithTheLock(t *testing.T) {
 	if ts.server.consoleAllowed(r, bea) {
 		t.Error("console of a locked account still allowed")
 	}
-	if _, ok := ts.server.activeUser("bea"); ok {
+	if _, ok := ts.server.authArea().activeUser("bea"); ok {
 		t.Error("activeUser returned a locked account")
 	}
 }

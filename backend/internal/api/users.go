@@ -83,7 +83,7 @@ type usersArea struct {
 	shares           *shares.Manager
 	ssh              *sshd.Manager
 	notify           *notify.Manager
-	sessions         *auth.Sessions
+	sessions         sessionsFunc
 	limiter          *auth.Limiter
 	tokens           *auth.Tokens
 	prefs            *preferences
@@ -96,8 +96,8 @@ type usersArea struct {
 // usersArea is the area of the server.
 func (s *Server) usersArea() usersArea {
 	return usersArea{users: s.opts.Users, shares: s.opts.Shares, ssh: s.opts.SSH, notify: s.opts.Notify,
-		sessions: s.sessions, limiter: s.limiter, tokens: s.tokens, prefs: s.prefs,
-		reconfirmProof: s.reconfirmProof, cookieName: s.cookieName, forgetWebDAV: s.davArea().forgetWebDAV, viewerForgetUser: s.viewerForgetUser}
+		sessions: s.sessionStore, limiter: s.limiter, tokens: s.tokens, prefs: s.prefs,
+		reconfirmProof: s.authArea().reconfirmProof, cookieName: s.authArea().cookieName, forgetWebDAV: s.davArea().forgetWebDAV, viewerForgetUser: s.viewerForgetUser}
 }
 
 func (a usersArea) register(mux *routeMux, admin, user func(http.HandlerFunc) http.HandlerFunc) {
@@ -196,7 +196,7 @@ func (a usersArea) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Whoever had the lost phone is logged out as well.
-		a.sessions.DeleteUser(target.Name, "")
+		a.sessions().DeleteUser(target.Name, "")
 		a.forgetWebDAV(target.Name)
 		slog.Info("two-factor login reset", "user", target.Name, "by", actor.Name, "ip", remoteIP(r))
 		if fresh, ok := a.users.Get(target.Name); ok {
@@ -265,7 +265,7 @@ func (a usersArea) handleSetPassword(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(a.cookieName()); err == nil && self {
 		keep = cookie.Value
 	}
-	a.sessions.DeleteUser(target.Name, keep)
+	a.sessions().DeleteUser(target.Name, keep)
 	a.forgetWebDAV(target.Name)
 	slog.Info("password changed", "user", target.Name, "by", actor.Name, "ip", remoteIP(r))
 	a.shares.Kick()
@@ -292,7 +292,7 @@ func (a usersArea) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		writeAccountError(w, err)
 		return
 	}
-	a.sessions.DeleteUser(target.Name, "")
+	a.sessions().DeleteUser(target.Name, "")
 	if err := a.tokens.RemoveUser(target.Name); err != nil {
 		slog.Error("remove API tokens of the deleted account", "user", target.Name, "err", err)
 	}
@@ -335,7 +335,7 @@ func (a usersArea) handleLockUser(disabled bool) http.HandlerFunc {
 			return
 		}
 		if disabled {
-			a.sessions.DeleteUser(user.Name, "")
+			a.sessions().DeleteUser(user.Name, "")
 			slog.Info("account locked", "user", user.Name, "by", actor.Name, "ip", remoteIP(r))
 		} else {
 			slog.Info("account unlocked", "user", user.Name, "by", actor.Name, "ip", remoteIP(r))

@@ -142,22 +142,22 @@ func (a configBackupArea) handleConfigBackupDownload(w http.ResponseWriter, r *h
 // may a backup be put back, and it needs no login: there is nobody yet who
 // could log in. A restore gives nobody access they did not have, it brings
 // back the accounts of the backup.
-func (s *Server) newStick(w http.ResponseWriter) bool {
+func (au authArea) newStick(w http.ResponseWriter) bool {
 	setupMu.Lock()
 	defer setupMu.Unlock()
-	return s.newStickLocked(w)
+	return au.newStickLocked(w)
 }
 
 // setupMu keeps the first owner account and a restore of a backup apart:
 // both are allowed only while there is no account, and only one may win.
 var setupMu sync.Mutex
 
-func (s *Server) newStickLocked(w http.ResponseWriter) bool {
-	if !s.ensureUsersLoaded() {
+func (au authArea) newStickLocked(w http.ResponseWriter) bool {
+	if !au.ensureUsersLoaded() {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", "/config is not available, is the stick plugged in?")
 		return false
 	}
-	if s.opts.Users.Count() > 0 {
+	if au.users.Count() > 0 {
 		writeError(w, http.StatusConflict, "setup_done", "this NAS is set up already")
 		return false
 	}
@@ -202,42 +202,42 @@ func onLink(addr netip.Addr) bool {
 }
 
 // handleSetupBackups lists the backups found on the disks of this machine.
-func (s *Server) handleSetupBackups(w http.ResponseWriter, r *http.Request) {
-	if !s.newStick(w) {
+func (au authArea) handleSetupBackups(w http.ResponseWriter, r *http.Request) {
+	if !au.newStick(w) {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"backups": s.opts.ConfigBackup.Find(r.Context())})
+	writeJSON(w, http.StatusOK, map[string]any{"backups": au.configBackup.Find(r.Context())})
 }
 
 // restored finishes a restore: the accounts are there now, and the NAS
 // starts again to take everything else from the stick.
-func (s *Server) restored(w http.ResponseWriter, r *http.Request, source string) {
+func (au authArea) restored(w http.ResponseWriter, r *http.Request, source string) {
 	// From here on the setup is closed, even before the restart.
-	if err := s.opts.Users.Load(); err != nil {
+	if err := au.users.Load(); err != nil {
 		slog.Warn("accounts not readable after the restore", "err", err)
 	}
 	slog.Info("configuration restored, restarting", "from", source, "ip", remoteIP(r))
 	w.WriteHeader(http.StatusAccepted)
-	s.goJob(func(context.Context) {
+	au.goJob(func(context.Context) {
 		time.Sleep(time.Second)
-		if err := s.opts.Power.Reboot(); err != nil {
+		if err := au.power.Reboot(); err != nil {
 			slog.Error("restart after the restore failed", "err", err)
 		}
 	})
 }
 
-func (s *Server) handleSetupRestore(w http.ResponseWriter, r *http.Request) {
+func (au authArea) handleSetupRestore(w http.ResponseWriter, r *http.Request) {
 	setupMu.Lock()
 	defer setupMu.Unlock()
 	var req struct{ Device, Name, Password string }
-	if !readJSON(w, r, &req) || !s.newStickLocked(w) {
+	if !readJSON(w, r, &req) || !au.newStickLocked(w) {
 		return
 	}
-	if _, err := s.opts.ConfigBackup.RestoreFound(r.Context(), req.Device, req.Name, req.Password); err != nil {
+	if _, err := au.configBackup.RestoreFound(r.Context(), req.Device, req.Name, req.Password); err != nil {
 		writeBackupError(w, err)
 		return
 	}
-	s.restored(w, r, req.Device+"/"+req.Name)
+	au.restored(w, r, req.Device+"/"+req.Name)
 }
 
 // setupUploadTimeout is how long a backup of the settings (a few MiB) may
@@ -245,20 +245,20 @@ func (s *Server) handleSetupRestore(w http.ResponseWriter, r *http.Request) {
 const setupUploadTimeout = 2 * time.Minute
 
 // handleSetupRestoreUpload takes a backup file as the body of the request.
-func (s *Server) handleSetupRestoreUpload(w http.ResponseWriter, r *http.Request) {
+func (au authArea) handleSetupRestoreUpload(w http.ResponseWriter, r *http.Request) {
 	// The body has a time limit: the server sets none (uploads of files
 	// take long), and a device that starts the upload and then stalls
 	// would hold the lock of the first setup for everyone else.
 	_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(setupUploadTimeout)) // not every writer supports it (tests)
 	setupMu.Lock()
 	defer setupMu.Unlock()
-	if !s.newStickLocked(w) {
+	if !au.newStickLocked(w) {
 		return
 	}
-	if _, err := s.opts.ConfigBackup.RestoreUpload(r.Body, r.Header.Get("X-Backup-Password")); err != nil {
+	if _, err := au.configBackup.RestoreUpload(r.Body, r.Header.Get("X-Backup-Password")); err != nil {
 		writeBackupError(w, err)
 		return
 	}
 	_ = http.NewResponseController(w).SetReadDeadline(time.Time{}) // see above
-	s.restored(w, r, "upload")
+	au.restored(w, r, "upload")
 }

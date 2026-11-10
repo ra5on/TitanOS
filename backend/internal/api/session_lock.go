@@ -66,8 +66,8 @@ const (
 // a phone), read from the cached preferences. Never called with the lock
 // of the session store held: the first read of an account may wake the
 // stick.
-func (s *Server) lockMinutes(user, userAgent string) int {
-	times := s.prefs.lockTimes(user)
+func (au authArea) lockMinutes(user, userAgent string) int {
+	times := au.prefs.lockTimes(user)
 	if phoneAgent(userAgent) {
 		return times.phone
 	}
@@ -137,23 +137,23 @@ func clampLockMinutes(value float64) int {
 // session first if it was not used for the account's lockMinutes (the
 // automatic lock also holds when no browser is left to lock it), then
 // counts the request as use.
-func (s *Server) cookieState(r *http.Request) (auth.User, authState) {
-	cookie, err := r.Cookie(s.cookieName())
+func (au authArea) cookieState(r *http.Request) (auth.User, authState) {
+	cookie, err := r.Cookie(au.cookieName())
 	if err != nil {
 		return auth.User{}, authNone
 	}
-	if peek, ok := s.sessions.Peek(cookie.Value); ok && !peek.Locked {
-		if minutes := s.lockMinutes(peek.User, peek.UserAgent); minutes > 0 && s.sessions.LockIfIdle(cookie.Value, time.Duration(minutes)*time.Minute) {
+	if peek, ok := au.sessions().Peek(cookie.Value); ok && !peek.Locked {
+		if minutes := au.lockMinutes(peek.User, peek.UserAgent); minutes > 0 && au.sessions().LockIfIdle(cookie.Value, time.Duration(minutes)*time.Minute) {
 			slog.Info("session locked after inactivity", "user", peek.User, "ip", remoteIP(r))
-			s.recordEvent(r, peek.User, "session_autolock", "", true)
+			au.recordEvent(r, peek.User, "session_autolock", "", true)
 		}
 	}
-	session, ok := s.sessions.Get(cookie.Value)
+	session, ok := au.sessions().Get(cookie.Value)
 	if !ok {
 		return auth.User{}, authNone
 	}
 	// The account may have been removed or locked since the login.
-	user, ok := s.activeUser(session.User)
+	user, ok := au.activeUser(session.User)
 	if !ok {
 		return auth.User{}, authNone
 	}
@@ -169,16 +169,16 @@ func writeLocked(w http.ResponseWriter) {
 }
 
 // handleSessionLock locks the session the request came with.
-func (s *Server) handleSessionLock(w http.ResponseWriter, r *http.Request) {
-	token := s.sessionToken(r)
+func (au authArea) handleSessionLock(w http.ResponseWriter, r *http.Request) {
+	token := au.sessionToken(r)
 	if token == "" {
 		writeError(w, http.StatusBadRequest, "session_required", "only a logged-in browser can lock its session")
 		return
 	}
 	user := currentUser(r)
-	if peek, ok := s.sessions.Peek(token); ok && !peek.Locked && s.sessions.Lock(token) {
+	if peek, ok := au.sessions().Peek(token); ok && !peek.Locked && au.sessions().Lock(token) {
 		slog.Info("session locked", "user", user.Name, "ip", remoteIP(r))
-		s.recordEvent(r, user.Name, "session_lock", "", true)
+		au.recordEvent(r, user.Name, "session_lock", "", true)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -188,8 +188,8 @@ func (s *Server) handleSessionLock(w http.ResponseWriter, r *http.Request) {
 // POST /account/passkeys/confirm. Failures count like failed logins:
 // the same limiter keys (known device or account name, and the address)
 // and the firewall's count of failures.
-func (s *Server) handleSessionUnlock(w http.ResponseWriter, r *http.Request) {
-	token := s.sessionToken(r)
+func (au authArea) handleSessionUnlock(w http.ResponseWriter, r *http.Request) {
+	token := au.sessionToken(r)
 	if token == "" {
 		writeError(w, http.StatusBadRequest, "session_required", "only a logged-in browser can unlock its session")
 		return
@@ -202,11 +202,11 @@ func (s *Server) handleSessionUnlock(w http.ResponseWriter, r *http.Request) {
 	ip := remoteIP(r)
 	userKey, ipKey := "user:"+user.Name, passkeySource(r)
 	guessKey := userKey
-	if device := s.knownDevice(r, user.Name); device != "" {
+	if device := au.knownDevice(r, user.Name); device != "" {
 		guessKey = device
 	}
-	if wait := s.limiter.RetryAfter(guessKey, ipKey); wait > 0 {
-		s.recordEvent(r, user.Name, "session_unlock_blocked", "", false)
+	if wait := au.limiter.RetryAfter(guessKey, ipKey); wait > 0 {
+		au.recordEvent(r, user.Name, "session_unlock_blocked", "", false)
 		writeJSON(w, http.StatusTooManyRequests, map[string]apiError{"error": {
 			Code: "rate_limited", Message: "too many failed attempts, try again later", RetryAfter: int(math.Ceil(wait.Seconds())),
 		}})
@@ -216,29 +216,29 @@ func (s *Server) handleSessionUnlock(w http.ResponseWriter, r *http.Request) {
 	// first of them is counted (hashing is slow); once the limit was
 	// reached meanwhile, the answer is not told, right or wrong.
 	blocked := func(how string) bool {
-		wait := s.limiter.RetryAfter(guessKey, ipKey)
+		wait := au.limiter.RetryAfter(guessKey, ipKey)
 		if wait <= 0 {
 			return false
 		}
-		s.recordEvent(r, user.Name, "session_unlock_blocked", how, false)
+		au.recordEvent(r, user.Name, "session_unlock_blocked", how, false)
 		writeRateLimited(w, wait, "too many failed attempts, try again later")
 		return true
 	}
 	fail := func(code, message, how string) {
-		wasBlocked := s.limiter.RetryAfter(guessKey, ipKey) > 0
-		s.limiter.Fail(guessKey, ipKey)
-		s.opts.Firewall.Failed(ip, firewall.SourceWeb)
+		wasBlocked := au.limiter.RetryAfter(guessKey, ipKey) > 0
+		au.limiter.Fail(guessKey, ipKey)
+		au.firewall.Failed(ip, firewall.SourceWeb)
 		if wasBlocked && blocked(how) {
 			return
 		}
 		slog.Warn("unlock failed", "user", user.Name, "ip", ip, "how", how)
-		s.recordEvent(r, user.Name, "session_unlock_failed", how, false)
+		au.recordEvent(r, user.Name, "session_unlock_failed", how, false)
 		writeError(w, http.StatusForbidden, code, message)
 	}
 	how := "password"
 	if req.Passkey != nil {
 		how = "passkey"
-		switch s.checkPasskeyProof(user, req.Passkey) {
+		switch au.checkPasskeyProof(user, req.Passkey) {
 		case "":
 		case "passkey_expired":
 			writeError(w, http.StatusBadRequest, "passkey_expired", "the request expired, start again")
@@ -248,7 +248,7 @@ func (s *Server) handleSessionUnlock(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		if _, ok := s.opts.Users.Authenticate(user.Name, req.Password); !ok {
+		if _, ok := au.users.Authenticate(user.Name, req.Password); !ok {
 			fail("wrong_password", "the password is wrong", how)
 			return
 		}
@@ -261,7 +261,7 @@ func (s *Server) handleSessionUnlock(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusForbidden, "second_factor_required", "enter the code from your authenticator app")
 				return
 			}
-			if !s.opts.Users.CheckSecondFactor(user.Name, req.Code) {
+			if !au.users.CheckSecondFactor(user.Name, req.Code) {
 				fail("invalid_code", "the code is wrong or was used already", "2fa")
 				return
 			}
@@ -270,14 +270,14 @@ func (s *Server) handleSessionUnlock(w http.ResponseWriter, r *http.Request) {
 	if blocked(how) {
 		return
 	}
-	s.limiter.Reset(userKey)
-	s.limiter.Reset(guessKey)
-	if !s.sessions.Unlock(token) {
+	au.limiter.Reset(userKey)
+	au.limiter.Reset(guessKey)
+	if !au.sessions().Unlock(token) {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "not logged in")
 		return
 	}
 	slog.Info("session unlocked", "user", user.Name, "ip", ip, "how", how)
-	s.recordEvent(r, user.Name, "session_unlock", how, true)
+	au.recordEvent(r, user.Name, "session_unlock", how, true)
 	writeJSON(w, http.StatusOK, userOf(user))
 }
 

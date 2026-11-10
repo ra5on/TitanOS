@@ -264,7 +264,7 @@ func (a loginLookArea) register(mux *routeMux, admin func(http.HandlerFunc) http
 // loginLookArea is the area of the server; the login page, the account
 // picker and the account pictures read the look through loginAppearance.
 func (s *Server) loginLookArea() loginLookArea {
-	return loginLookArea{store: s.opts.Store, look: &s.loginLook, authenticate: s.authenticate}
+	return loginLookArea{store: s.opts.Store, look: &s.loginLook, authenticate: s.authArea().authenticate}
 }
 
 // loginAppearance is the look for the parts of the server outside the area.

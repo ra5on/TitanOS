@@ -488,34 +488,34 @@ func (a terminalArea) handleTerminalSettings(w http.ResponseWriter, r *http.Requ
 
 // handleConfirm marks the session as confirmed after the password was
 // entered again. Consoles ask for this.
-func (s *Server) handleConfirm(w http.ResponseWriter, r *http.Request) {
+func (au authArea) handleConfirm(w http.ResponseWriter, r *http.Request) {
 	var req struct{ Password, Code string }
 	if !readJSON(w, r, &req) {
 		return
 	}
 	// With two-factor login the confirmation takes both factors as well.
 	// reconfirm also holds the limit against guesses sent at the same time.
-	if !s.reconfirm(w, currentUser(r), req.Password, req.Code) {
+	if !au.reconfirm(w, currentUser(r), req.Password, req.Code) {
 		return
 	}
-	if cookie, err := r.Cookie(s.cookieName()); err == nil {
-		s.sessions.Confirm(cookie.Value)
+	if cookie, err := r.Cookie(au.cookieName()); err == nil {
+		au.sessions().Confirm(cookie.Value)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleConfirmed(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]bool{"confirmed": s.confirmed(r)})
+func (au authArea) handleConfirmed(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]bool{"confirmed": au.confirmed(r)})
 }
 
 // confirmed reports whether the password was entered again recently. When
 // the owner switched the prompt off in the settings, it always counts.
-func (s *Server) confirmed(r *http.Request) bool {
-	if !s.opts.Terminal.ConfirmRequired() {
+func (au authArea) confirmed(r *http.Request) bool {
+	if !au.terminal.ConfirmRequired() {
 		return true
 	}
-	cookie, err := r.Cookie(s.cookieName())
-	return err == nil && s.sessions.Confirmed(cookie.Value)
+	cookie, err := r.Cookie(au.cookieName())
+	return err == nil && au.sessions().Confirmed(cookie.Value)
 }
 
 // handleAutoUpdates shows the automatic app updates.

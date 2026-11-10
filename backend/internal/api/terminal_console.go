@@ -179,7 +179,7 @@ func (s *Server) loginHolds(r *http.Request, user auth.User) (auth.User, bool) {
 	// A console opened through another node of the cluster has no cookie
 	// here; that node checks its session.
 	if !token && !agent && !viaCluster(r) {
-		cookie, err := r.Cookie(s.cookieName())
+		cookie, err := r.Cookie(s.authArea().cookieName())
 		if err != nil {
 			return auth.User{}, false
 		}
@@ -189,7 +189,7 @@ func (s *Server) loginHolds(r *http.Request, user auth.User) (auth.User, bool) {
 			return auth.User{}, false
 		}
 	}
-	current, ok := s.activeUser(name)
+	current, ok := s.authArea().activeUser(name)
 	// The same name may have been given to a new account.
 	if !ok || !current.Created.Equal(user.Created) {
 		return auth.User{}, false

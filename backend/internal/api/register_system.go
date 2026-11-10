@@ -10,7 +10,7 @@ func (s *Server) registerPower(mux *routeMux) {
 
 // registerMaintenance registers the routes of the backup of the stick, logs, the activity log, diagnostics and the about page.
 func (s *Server) registerMaintenance(mux *routeMux) {
-	configBackupArea{backup: s.opts.ConfigBackup, storage: s.opts.Storage, confirmed: s.confirmed}.register(mux, s.requireAdmin)
+	configBackupArea{backup: s.opts.ConfigBackup, storage: s.opts.Storage, confirmed: s.authArea().confirmed}.register(mux, s.requireAdmin)
 	diagnoseArea{diagnose: s.opts.Diagnose, logKeep: s.opts.LogKeep, users: s.opts.Users}.register(mux, s.requireAdmin)
 	activityArea{activity: s.opts.Activity}.register(mux, s.requireAdmin)
 	aboutArea{version: s.opts.Version, shareDir: s.opts.ShareDir}.register(mux, s.requireUser)

@@ -13,39 +13,39 @@ import (
 // What everyone does with their own account: the second factor and the
 // devices that are logged in.
 
-func (s *Server) sessionToken(r *http.Request) string {
-	if cookie, err := r.Cookie(s.cookieName()); err == nil {
+func (au authArea) sessionToken(r *http.Request) string {
+	if cookie, err := r.Cookie(au.cookieName()); err == nil {
 		return cookie.Value
 	}
 	return ""
 }
 
-func (s *Server) handleAccountSessions(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"sessions": s.sessions.List(currentUser(r).Name, s.sessionToken(r))})
+func (au authArea) handleAccountSessions(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"sessions": au.sessions().List(currentUser(r).Name, au.sessionToken(r))})
 }
 
-func (s *Server) handleAccountSessionEnd(w http.ResponseWriter, r *http.Request) {
+func (au authArea) handleAccountSessionEnd(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r)
-	if !s.sessions.DeleteByID(user.Name, r.PathValue("id")) {
+	if !au.sessions().DeleteByID(user.Name, r.PathValue("id")) {
 		writeError(w, http.StatusNotFound, "session_not_found", "no such session")
 		return
 	}
 	slog.Info("session ended from the list of devices", "user", user.Name, "ip", remoteIP(r))
-	s.handleAccountSessions(w, r)
+	au.handleAccountSessions(w, r)
 }
 
 // handleAccountSessionsEndOthers ends every session of the account except
 // the one the request came with ("log out all other devices").
-func (s *Server) handleAccountSessionsEndOthers(w http.ResponseWriter, r *http.Request) {
-	user, token := currentUser(r), s.sessionToken(r)
+func (au authArea) handleAccountSessionsEndOthers(w http.ResponseWriter, r *http.Request) {
+	user, token := currentUser(r), au.sessionToken(r)
 	if token == "" {
 		// Without a session of its own the request would end all of them.
 		writeError(w, http.StatusBadRequest, "session_required", "only a logged-in browser can end its other sessions")
 		return
 	}
-	s.sessions.DeleteUser(user.Name, token)
+	au.sessions().DeleteUser(user.Name, token)
 	slog.Info("other sessions ended from the list of devices", "user", user.Name, "ip", remoteIP(r))
-	s.handleAccountSessions(w, r)
+	au.handleAccountSessions(w, r)
 }
 
 // handleTwoFactorBegin hands out a secret for the authenticator app. It
@@ -53,7 +53,7 @@ func (s *Server) handleAccountSessionsEndOthers(w http.ResponseWriter, r *http.R
 // Like switching it off it needs the password (or a passkey) of the
 // account: a session alone must not set up a second factor that locks
 // the owner of the account out (owner decision 7.11.2026).
-func (s *Server) handleTwoFactorBegin(w http.ResponseWriter, r *http.Request) {
+func (au authArea) handleTwoFactorBegin(w http.ResponseWriter, r *http.Request) {
 	var req proof
 	if !readJSON(w, r, &req) {
 		return
@@ -63,11 +63,11 @@ func (s *Server) handleTwoFactorBegin(w http.ResponseWriter, r *http.Request) {
 		writeTwoFactorError(w, auth.ErrTwoFactorEnabled)
 		return
 	}
-	if !s.reconfirmProof(w, user, req) {
+	if !au.reconfirmProof(w, user, req) {
 		return
 	}
 	hostname, _ := os.Hostname()
-	secret, uri, err := s.opts.Users.BeginTwoFactor(user.Name, "TitanOS "+hostname)
+	secret, uri, err := au.users.BeginTwoFactor(user.Name, "TitanOS "+hostname)
 	if err != nil {
 		writeTwoFactorError(w, err)
 		return
@@ -75,13 +75,13 @@ func (s *Server) handleTwoFactorBegin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"secret": secret, "uri": uri})
 }
 
-func (s *Server) handleTwoFactorEnable(w http.ResponseWriter, r *http.Request) {
+func (au authArea) handleTwoFactorEnable(w http.ResponseWriter, r *http.Request) {
 	var req struct{ Code string }
 	if !readJSON(w, r, &req) {
 		return
 	}
 	user := currentUser(r)
-	codes, err := s.opts.Users.EnableTwoFactor(user.Name, req.Code)
+	codes, err := au.users.EnableTwoFactor(user.Name, req.Code)
 	if err != nil {
 		writeTwoFactorError(w, err)
 		return
@@ -95,14 +95,14 @@ func (s *Server) handleTwoFactorEnable(w http.ResponseWriter, r *http.Request) {
 // proof that it is the owner of the account who asks for a change that
 // opens another way into it. Failures count against the account like a
 // failed login; it answers the request itself when the proof fails.
-func (s *Server) reconfirm(w http.ResponseWriter, user auth.User, password, code string) bool {
+func (au authArea) reconfirm(w http.ResponseWriter, user auth.User, password, code string) bool {
 	key := "user:" + user.Name
 	// Proofs sent at the same time all pass this check before the first
 	// of them is counted (hashing is slow), so it is made again before
 	// every answer: once the limit was reached meanwhile, the answer is
 	// not told, right or wrong; a wrong proof still counts.
 	blocked := func() bool {
-		if s.limiter.RetryAfter(key) <= 0 {
+		if au.limiter.RetryAfter(key) <= 0 {
 			return false
 		}
 		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
@@ -111,27 +111,27 @@ func (s *Server) reconfirm(w http.ResponseWriter, user auth.User, password, code
 	if blocked() {
 		return false
 	}
-	_, ok := s.opts.Users.Authenticate(user.Name, password)
+	_, ok := au.users.Authenticate(user.Name, password)
 	if blocked() {
 		if !ok {
-			s.limiter.Fail(key)
+			au.limiter.Fail(key)
 		}
 		return false
 	}
 	if !ok {
-		s.limiter.Fail(key)
+		au.limiter.Fail(key)
 		writeError(w, http.StatusForbidden, "wrong_password", "the password is wrong")
 		return false
 	}
-	ok = s.opts.Users.CheckSecondFactor(user.Name, code)
+	ok = au.users.CheckSecondFactor(user.Name, code)
 	if blocked() {
 		if !ok {
-			s.limiter.Fail(key)
+			au.limiter.Fail(key)
 		}
 		return false
 	}
 	if !ok {
-		s.limiter.Fail(key)
+		au.limiter.Fail(key)
 		writeError(w, http.StatusForbidden, "invalid_code", "the code is wrong or was used already")
 		return false
 	}
@@ -159,22 +159,22 @@ type proof struct {
 // reconfirmProof is reconfirm that also takes a passkey of the account
 // instead of password and code: it asks for user verification and counts
 // as both factors, as at the login.
-func (s *Server) reconfirmProof(w http.ResponseWriter, user auth.User, p proof) bool {
+func (au authArea) reconfirmProof(w http.ResponseWriter, user auth.User, p proof) bool {
 	if p.Passkey == nil {
-		return s.reconfirm(w, user, p.Password, p.Code)
+		return au.reconfirm(w, user, p.Password, p.Code)
 	}
 	key := "user:" + user.Name
-	if wait := s.limiter.RetryAfter(key); wait > 0 {
+	if wait := au.limiter.RetryAfter(key); wait > 0 {
 		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
 		return false
 	}
-	switch s.checkPasskeyProof(user, p.Passkey) {
+	switch au.checkPasskeyProof(user, p.Passkey) {
 	case "":
 		return true
 	case "passkey_expired":
 		writeError(w, http.StatusBadRequest, "passkey_expired", "the request expired, start again")
 	default:
-		s.limiter.Fail(key)
+		au.limiter.Fail(key)
 		writeError(w, http.StatusForbidden, "passkey_failed", "the passkey was not accepted")
 	}
 	return false
@@ -185,8 +185,8 @@ func (s *Server) reconfirmProof(w http.ResponseWriter, user auth.User, p proof) 
 // "passkey_expired" when the challenge is unknown (no guess, nothing to
 // count) and "passkey_failed" when the answer is wrong; the caller counts
 // that as a failed attempt with the keys of its own limiter.
-func (s *Server) checkPasskeyProof(user auth.User, a *passkeyAssertion) string {
-	c, ok := s.passkeys.take(a.ChallengeID)
+func (au authArea) checkPasskeyProof(user auth.User, a *passkeyAssertion) string {
+	c, ok := au.passkeyState.take(a.ChallengeID)
 	if !ok || !c.confirm || c.user != user.Name {
 		return "passkey_expired"
 	}
@@ -201,7 +201,7 @@ func (s *Server) checkPasskeyProof(user auth.User, a *passkeyAssertion) string {
 	if err1 != nil || err2 != nil || err3 != nil || err4 != nil {
 		return fail("malformed")
 	}
-	owner, passkey, found := s.opts.Users.FindPasskey(a.ID, handle)
+	owner, passkey, found := au.users.FindPasskey(a.ID, handle)
 	if !found || owner.Name != user.Name || passkey.RPID != c.rpID {
 		return fail("not a passkey of the account")
 	}
@@ -209,7 +209,7 @@ func (s *Server) checkPasskeyProof(user auth.User, a *passkeyAssertion) string {
 	if err != nil {
 		return fail(err.Error())
 	}
-	if err := s.opts.Users.UsePasskey(user.Name, passkey.ID, count); err != nil {
+	if err := au.users.UsePasskey(user.Name, passkey.ID, count); err != nil {
 		slog.Warn("passkey counter not saved", "user", user.Name, "err", err)
 	}
 	return ""
@@ -218,16 +218,16 @@ func (s *Server) checkPasskeyProof(user auth.User, a *passkeyAssertion) string {
 // handleTwoFactorDisable switches the second factor off, with the password
 // and a code (or a passkey) as proof that it is the owner of the account
 // who asks.
-func (s *Server) handleTwoFactorDisable(w http.ResponseWriter, r *http.Request) {
+func (au authArea) handleTwoFactorDisable(w http.ResponseWriter, r *http.Request) {
 	var req proof
 	if !readJSON(w, r, &req) {
 		return
 	}
 	user := currentUser(r)
-	if !s.reconfirmProof(w, user, req) {
+	if !au.reconfirmProof(w, user, req) {
 		return
 	}
-	if err := s.opts.Users.DisableTwoFactor(user.Name); err != nil {
+	if err := au.users.DisableTwoFactor(user.Name); err != nil {
 		writeTwoFactorError(w, err)
 		return
 	}
@@ -238,7 +238,7 @@ func (s *Server) handleTwoFactorDisable(w http.ResponseWriter, r *http.Request) 
 // handleTwoFactorRecovery replaces the recovery codes, with the password
 // and a code as proof like switching the second factor off. The new codes
 // are shown this once; only their hashes are kept.
-func (s *Server) handleTwoFactorRecovery(w http.ResponseWriter, r *http.Request) {
+func (au authArea) handleTwoFactorRecovery(w http.ResponseWriter, r *http.Request) {
 	var req proof
 	if !readJSON(w, r, &req) {
 		return
@@ -248,10 +248,10 @@ func (s *Server) handleTwoFactorRecovery(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusConflict, "two_factor_not_begun", "two-factor login is off")
 		return
 	}
-	if !s.reconfirmProof(w, user, req) {
+	if !au.reconfirmProof(w, user, req) {
 		return
 	}
-	codes, err := s.opts.Users.NewRecoveryCodes(user.Name)
+	codes, err := au.users.NewRecoveryCodes(user.Name)
 	if err != nil {
 		writeTwoFactorError(w, err)
 		return

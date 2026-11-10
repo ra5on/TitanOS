@@ -53,7 +53,7 @@ type confirmedFunc func(r *http.Request) bool
 // consoles: the web session of the request must have had the password
 // entered again.
 func (s *Server) sessionConfirmed(r *http.Request) bool {
-	cookie, err := r.Cookie(s.cookieName())
+	cookie, err := r.Cookie(s.authArea().cookieName())
 	return err == nil && s.sessions.Confirmed(cookie.Value)
 }
 
@@ -81,3 +81,11 @@ type jobFunc func(job func(ctx context.Context))
 // once more and answers the request itself when it refuses
 // (Server.reconfirm).
 type reconfirmFunc func(w http.ResponseWriter, user auth.User, password, code string) bool
+
+// sessionsFunc reads the logins of the server when it is asked
+// (Server.sessionStore): a restart is played in tests by a new store on a
+// running server, and every area must then see the same one.
+type sessionsFunc func() *auth.Sessions
+
+// sessionStore are the logins of the server as they are now.
+func (s *Server) sessionStore() *auth.Sessions { return s.sessions }

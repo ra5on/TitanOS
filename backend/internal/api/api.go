@@ -571,37 +571,37 @@ func currentUser(r *http.Request) auth.User {
 }
 
 // authenticate returns the account behind the session cookie.
-func (s *Server) authenticate(r *http.Request) (auth.User, bool) {
+func (au authArea) authenticate(r *http.Request) (auth.User, bool) {
 	if name, ok := r.Context().Value(apiTokenIdentity{}).(string); ok {
-		return s.activeUser(name)
+		return au.activeUser(name)
 	}
 	// Only in-process requests can carry this unexported context key.
 	if name, ok := r.Context().Value(inProcessIdentity{}).(string); ok {
-		return s.activeUser(name)
+		return au.activeUser(name)
 	}
 	// Signed by another node of the cluster on behalf of this account.
 	if id, ok := cluster.FromContext(r.Context()); ok {
-		return s.activeUser(id.User)
+		return au.activeUser(id.User)
 	}
 	// A locked session (session_lock.go) counts as not logged in here;
 	// requireUser tells it apart.
-	user, state := s.cookieState(r)
+	user, state := au.cookieState(r)
 	return user, state == authOK
 }
 
 // authenticateState is authenticate that also tells a locked session
 // apart; tokens, in-process and cluster identities are never locked.
-func (s *Server) authenticateState(r *http.Request) (auth.User, authState) {
+func (au authArea) authenticateState(r *http.Request) (auth.User, authState) {
 	if _, ok := r.Context().Value(apiTokenIdentity{}).(string); ok {
-		return stateOf(s.authenticate(r))
+		return stateOf(au.authenticate(r))
 	}
 	if _, ok := r.Context().Value(inProcessIdentity{}).(string); ok {
-		return stateOf(s.authenticate(r))
+		return stateOf(au.authenticate(r))
 	}
 	if _, ok := cluster.FromContext(r.Context()); ok {
-		return stateOf(s.authenticate(r))
+		return stateOf(au.authenticate(r))
 	}
-	return s.cookieState(r)
+	return au.cookieState(r)
 }
 
 func stateOf(user auth.User, ok bool) (auth.User, authState) {
@@ -615,8 +615,8 @@ func stateOf(user auth.User, ok bool) (auth.User, authState) {
 // that acts as an account (sessions, API tokens, MCP, Home
 // Assistant, consoles) goes through it, so a lock holds on every path even
 // before its sessions are ended.
-func (s *Server) activeUser(name string) (auth.User, bool) {
-	user, ok := s.opts.Users.Get(name)
+func (au authArea) activeUser(name string) (auth.User, bool) {
+	user, ok := au.users.Get(name)
 	if !ok || user.Disabled {
 		return auth.User{}, false
 	}
@@ -625,7 +625,7 @@ func (s *Server) activeUser(name string) (auth.User, bool) {
 
 func (s *Server) requireUser(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user, state := s.authenticateState(r)
+		user, state := s.authArea().authenticateState(r)
 		switch {
 		case state == authNone:
 			writeError(w, http.StatusUnauthorized, "unauthorized", "not logged in")
