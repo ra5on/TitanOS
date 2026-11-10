@@ -22,6 +22,9 @@ func TestBtrfsUsable(t *testing.T) {
 		{"raid1", []uint64{4 * g, 4 * g, 8 * g}, 8 * g},   // 16 GiB raw, halved
 		{"raid1c3", []uint64{8 * g, 8 * g, 8 * g}, 8 * g}, // three copies
 		{"raid1c3", []uint64{4 * g, 8 * g, 8 * g, 8 * g}, 9*g + g/3},
+		// One large disk next to small ones: with one copy of everything
+		// on the large disk, the other two copies must fit on 15 GiB.
+		{"raid1c3", []uint64{10 * g, 5 * g, 5 * g, 5 * g}, 7*g + g/2},
 		{"raid1", nil, 0},
 	} {
 		if got := btrfsUsable(c.profile, c.sizes); got != c.want {

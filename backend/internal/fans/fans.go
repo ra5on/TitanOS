@@ -177,6 +177,20 @@ func (m *Manager) Load() error {
 	if data, err := os.ReadFile(m.runtime); err == nil {
 		_ = json.Unmarshal(data, &m.original) // a value that cannot be read leaves the zero value, which the code handles
 	}
+	// The file is checked like a request: a curve without points (a file
+	// edited by hand or cut short) would crash the loop at every start,
+	// a missing minimum could stop a fan. What does not pass is left out,
+	// so that fan goes back to the BIOS.
+	valid := s.Fans[:0:0]
+	for _, c := range s.Fans {
+		checked, err := check(c)
+		if err != nil {
+			slog.Warn("fan setting from the stick left out", "fan", c.ID, "err", err)
+			continue
+		}
+		valid = append(valid, checked)
+	}
+	s.Fans = valid
 	m.settings, m.loaded = s, true
 	return nil
 }

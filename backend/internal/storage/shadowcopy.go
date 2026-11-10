@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -190,16 +191,28 @@ func (m *Manager) lockSnapshot(volume, name string, until time.Time) error {
 	return volumedata.WriteJSON(root, "locks.json", locks)
 }
 
+// lockUnknown is how far ahead a snapshot counts as locked while the list
+// of locks cannot be read; it is looked at again on every request.
+const lockUnknown = 24 * time.Hour
+
 // lockedUntil reports the end of a snapshot's lock, zero if it has none.
 func (m *Manager) lockedUntil(volume, name string) time.Time {
 	root, err := volumedata.Open(m.mountRoot, volume, "snaplocks", m.Mounted())
 	if err != nil {
-		return time.Time{}
+		if errors.Is(err, volumedata.ErrUnavailable) {
+			return time.Time{}
+		}
+		// The locks cannot be looked at: a snapshot is not deleted on
+		// the guess that it has none.
+		return m.now().Add(lockUnknown)
 	}
 	defer root.Close()
 	locks := map[string]time.Time{}
-	if volumedata.ReadJSON(root, "locks.json", &locks, 1<<20) != nil {
-		return time.Time{}
+	if err := volumedata.ReadJSON(root, "locks.json", &locks, 1<<20); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return time.Time{} // no snapshot was ever locked
+		}
+		return m.now().Add(lockUnknown) // damaged or unreadable: see above
 	}
 	if end := locks[name]; end.After(m.now()) {
 		return end

@@ -162,3 +162,27 @@ func TestDevelopmentModeOnlyReads(t *testing.T) {
 		t.Fatal("development mode wrote to the fan")
 	}
 }
+
+// A settings file with a curve that has no points (edited by hand, cut
+// short) must not crash the loop: that fan is left to the BIOS, the valid
+// ones are kept.
+func TestBrokenFanSettingsFromTheStickAreLeftOut(t *testing.T) {
+	sys := fakeSys(t)
+	store := config.Open(t.TempDir())
+	if err := store.WriteJSON(settingsFile, Settings{Fans: []Control{
+		{ID: "broken", Mode: "curve", Sensor: "cpu"},
+		{ID: "ok", Mode: "fixed", Percent: 60},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	m := New(store)
+	m.sys, m.runtime = sys, filepath.Join(t.TempDir(), "original.json")
+	if err := m.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if len(m.settings.Fans) != 1 || m.settings.Fans[0].ID != "ok" || m.settings.Fans[0].Min != 30 {
+		t.Fatalf("settings after loading: %+v", m.settings.Fans)
+	}
+	m.Temperatures = func() map[string]float64 { return map[string]float64{"cpu": 50} }
+	m.apply() // must not panic
+}

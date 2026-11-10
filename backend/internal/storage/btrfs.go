@@ -93,6 +93,8 @@ const (
 // cache SSD, is still within its grace.
 func (m *Manager) btrfsWaiting() bool {
 	now := m.now()
+	m.seenMu.Lock()
+	defer m.seenMu.Unlock()
 	for _, first := range m.btrfsSeen {
 		if now.Sub(first) < btrfsGrace {
 			return true
@@ -111,11 +113,17 @@ func (m *Manager) btrfsWaiting() bool {
 // mounts degraded. It never blocks: mountAll calls again next round.
 func (m *Manager) mountBtrfs(ctx context.Context, volume VolumeConfig, devices []blockDevice) {
 	parts := btrfsParts(devices, volume.FilesystemUUID)
-	if len(parts) == 0 {
+	forget := func() {
+		m.seenMu.Lock()
 		delete(m.btrfsSeen, volume.Name)
+		m.seenMu.Unlock()
+	}
+	if len(parts) == 0 {
+		forget()
 		return
 	}
 	now := m.now()
+	m.seenMu.Lock()
 	if m.btrfsSeen == nil {
 		m.btrfsSeen = map[string]time.Time{}
 	}
@@ -124,11 +132,12 @@ func (m *Manager) mountBtrfs(ctx context.Context, volume VolumeConfig, devices [
 		first = now
 		m.btrfsSeen[volume.Name] = now
 	}
+	m.seenMu.Unlock()
 	waited := now.Sub(first) >= btrfsGrace
 	if len(parts) >= btrfsDiskCount(volume) {
 		err := m.mountWith(ctx, volume, false)
 		if err == nil {
-			delete(m.btrfsSeen, volume.Name)
+			forget()
 			slog.Info("volume mounted", "name", volume.Name)
 			return
 		}
@@ -150,7 +159,7 @@ func (m *Manager) mountBtrfs(ctx context.Context, volume VolumeConfig, devices [
 		slog.Warn("mount Btrfs mirror", "name", volume.Name, "err", err)
 		return
 	}
-	delete(m.btrfsSeen, volume.Name)
+	forget()
 }
 
 // btrfsMissing counts the devices a mounted Btrfs filesystem misses, from
@@ -371,7 +380,12 @@ func (m *Manager) replaceMissingBtrfs(ctx context.Context, volume VolumeConfig, 
 		// The LUKS header takes room the Btrfs device needs again.
 		sizeMiB += luksHeaderMiB
 	}
-	if memberSizeMiB(disk.SizeBytes) < sizeMiB {
+	// The partition is made exactly sizeMiB large (prepareDisk); the disk
+	// needs that plus the partition table at both ends, as on the mdadm
+	// way (prepareMember). The reserve a new volume leaves free is there
+	// so that a replacement a little smaller still fits: it is not asked
+	// for again here.
+	if disk.SizeBytes < (sizeMiB+2)*mebibyte {
 		return ErrDiskTooSmall
 	}
 	if err := m.checkNewMemberPassword(ctx, volume, password); err != nil {

@@ -543,7 +543,10 @@ func (m *Manager) Lock(ctx context.Context, name string) error {
 		closeErr = m.luksClose(ctx, cryptName(volume, ""))
 	}
 	if closeErr != nil {
-		return closeErr
+		// Not locked: the loop mounts the volume again within seconds.
+		// What was stopped for the lock (VMs, containers) starts again
+		// like after any other failed attempt, instead of staying off.
+		return fail(closeErr)
 	}
 	m.mu.Lock()
 	if m.lockNotified == nil {
