@@ -253,6 +253,15 @@ export function readTemplate(
 				(editedEnv === undefined || pair.value === '${' + info.from + '}')
 			)
 				continue;
+			// The same secret named in two services (a database and the app
+			// that logs in to it) is one value: one field, both services read
+			// it from .env (PLAN 76, F-14-7). Two fields would show two
+			// generated passwords, of which only one is used.
+			if (
+				(info.secret === 'generate' || info.secret === true) &&
+				form.vars.some((v) => v.secret && v.name === pair.name && v.service !== service)
+			)
+				continue;
 			const fill = (
 				['timezone', 'uid', 'gid'].includes(String(info.fill))
 					? String(info.fill)
@@ -488,6 +497,9 @@ export function build(
 				const from = meta.variables[pair.name]?.from;
 				if (typeof from === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(from))
 					pair.value = '${' + from + '}';
+				// The shared secret of another service (see readTemplate).
+				else if (form.vars.some((v) => v.secret && v.name === pair.name && v.value !== ''))
+					pair.value = '${' + pair.name + '}';
 				continue;
 			}
 			if (field.secret && field.value !== '') {
