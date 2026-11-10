@@ -8,12 +8,28 @@ import (
 	"net/http"
 )
 
-func (s *Server) handleTailscale(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Tailscale == nil {
+// tailscaleArea is the Tailscale plugin; an area with narrow dependencies
+// (PLAN 8a, see fansArea). plugins runs changes as a runtime action of the
+// plugin; nil runs them directly.
+type tailscaleArea struct {
+	tailscale *tailscale.Manager
+	plugins   *plugins.Manager
+}
+
+func (a tailscaleArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/plugins/tailscale", admin(a.handleTailscale))
+	mux.HandleFunc("GET /api/v1/plugins/tailscale/devices", admin(a.handleTailscaleDevices))
+	mux.HandleFunc("PUT /api/v1/plugins/tailscale", admin(a.handleTailscaleSettings))
+	mux.HandleFunc("PUT /api/v1/plugins/tailscale/https", admin(a.handleTailscaleHTTPS))
+	mux.HandleFunc("POST /api/v1/plugins/tailscale/control/{action}", admin(a.handleTailscaleAction))
+}
+
+func (a tailscaleArea) handleTailscale(w http.ResponseWriter, r *http.Request) {
+	if a.tailscale == nil {
 		writeError(w, 503, "config_unavailable", "Tailscale settings unavailable")
 		return
 	}
-	writeJSON(w, 200, s.opts.Tailscale.Status())
+	writeJSON(w, 200, a.tailscale.Status())
 }
 func writeTailscaleError(w http.ResponseWriter, err error) {
 	status := http.StatusInternalServerError
@@ -25,8 +41,8 @@ func writeTailscaleError(w http.ResponseWriter, err error) {
 	}
 	writeError(w, status, "tailscale_failed", err.Error())
 }
-func (s *Server) handleTailscaleSettings(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Tailscale == nil {
+func (a tailscaleArea) handleTailscaleSettings(w http.ResponseWriter, r *http.Request) {
+	if a.tailscale == nil {
 		writeError(w, 503, "config_unavailable", "Tailscale settings unavailable")
 		return
 	}
@@ -34,15 +50,15 @@ func (s *Server) handleTailscaleSettings(w http.ResponseWriter, r *http.Request)
 	if !readJSON(w, r, &settings) {
 		return
 	}
-	if err := s.tailscaleRuntimeAction(func() error { return s.opts.Tailscale.Set(settings) }); err != nil {
+	if err := a.tailscaleRuntimeAction(func() error { return a.tailscale.Set(settings) }); err != nil {
 		writeTailscaleError(w, err)
 		return
 	}
 	slog.Info("Tailscale configuration applied on trial", "by", currentUser(r).Name)
-	s.handleTailscale(w, r)
+	a.handleTailscale(w, r)
 }
-func (s *Server) handleTailscaleAction(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Tailscale == nil {
+func (a tailscaleArea) handleTailscaleAction(w http.ResponseWriter, r *http.Request) {
+	if a.tailscale == nil {
 		writeError(w, 503, "config_unavailable", "Tailscale settings unavailable")
 		return
 	}
@@ -50,41 +66,41 @@ func (s *Server) handleTailscaleAction(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch action {
 	case "confirm":
-		err = s.opts.Tailscale.Confirm()
+		err = a.tailscale.Confirm()
 	case "undo":
-		err = s.opts.Tailscale.Undo()
+		err = a.tailscale.Undo()
 	default:
-		err = s.tailscaleRuntimeAction(func() error { return s.opts.Tailscale.Action(action) })
+		err = a.tailscaleRuntimeAction(func() error { return a.tailscale.Action(action) })
 	}
 	if err != nil {
 		writeTailscaleError(w, err)
 		return
 	}
 	slog.Info("Tailscale action", "action", action, "by", currentUser(r).Name)
-	s.handleTailscale(w, r)
+	a.handleTailscale(w, r)
 }
 
-func (s *Server) tailscaleRuntimeAction(action func() error) error {
-	if s.opts.Plugins != nil {
-		return s.opts.Plugins.RuntimeAction("tailscale", action)
+func (a tailscaleArea) tailscaleRuntimeAction(action func() error) error {
+	if a.plugins != nil {
+		return a.plugins.RuntimeAction("tailscale", action)
 	}
 	return action()
 }
 
 // handleTailscaleDevices lists the tailnet for the dashboard. Without an
 // active plugin the answer is the state "inactive", not an error.
-func (s *Server) handleTailscaleDevices(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Tailscale == nil {
+func (a tailscaleArea) handleTailscaleDevices(w http.ResponseWriter, r *http.Request) {
+	if a.tailscale == nil {
 		writeJSON(w, 200, tailscale.Devices{State: "inactive", Devices: []tailscale.Device{}})
 		return
 	}
-	writeJSON(w, 200, s.opts.Tailscale.Devices())
+	writeJSON(w, 200, a.tailscale.Devices())
 }
 
 // handleTailscaleHTTPS switches the Tailscale certificate of the NAS's own
 // name on or off. Stored at once, without the trial of the other settings.
-func (s *Server) handleTailscaleHTTPS(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Tailscale == nil {
+func (a tailscaleArea) handleTailscaleHTTPS(w http.ResponseWriter, r *http.Request) {
+	if a.tailscale == nil {
 		writeError(w, 503, "config_unavailable", "Tailscale settings unavailable")
 		return
 	}
@@ -94,10 +110,10 @@ func (s *Server) handleTailscaleHTTPS(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Tailscale.SetHTTPSCertificate(req.Enabled); err != nil {
+	if err := a.tailscale.SetHTTPSCertificate(req.Enabled); err != nil {
 		writeTailscaleError(w, err)
 		return
 	}
 	slog.Info("Tailscale HTTPS certificate switched", "enabled", req.Enabled, "by", currentUser(r).Name)
-	s.handleTailscale(w, r)
+	a.handleTailscale(w, r)
 }

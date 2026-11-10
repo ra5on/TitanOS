@@ -3,16 +3,8 @@ package api
 // registerPlugins registers the routes of plugins, Tailscale and NetBird.
 func (s *Server) registerPlugins(mux *routeMux) {
 	// Plugins become part of the system: administrators only.
-	mux.HandleFunc("GET /api/v1/plugins/tailscale", s.requireAdmin(s.handleTailscale))
-	mux.HandleFunc("GET /api/v1/plugins/tailscale/devices", s.requireAdmin(s.handleTailscaleDevices))
-	mux.HandleFunc("PUT /api/v1/plugins/tailscale", s.requireAdmin(s.handleTailscaleSettings))
-	mux.HandleFunc("PUT /api/v1/plugins/tailscale/https", s.requireAdmin(s.handleTailscaleHTTPS))
-	mux.HandleFunc("POST /api/v1/plugins/tailscale/control/{action}", s.requireAdmin(s.handleTailscaleAction))
-	mux.HandleFunc("GET /api/v1/plugins/netbird", s.requireAdmin(s.handleNetbird))
-	mux.HandleFunc("GET /api/v1/plugins/netbird/peers", s.requireAdmin(s.handleNetbirdPeers))
-	mux.HandleFunc("PUT /api/v1/plugins/netbird", s.requireAdmin(s.handleNetbirdSettings))
-	mux.HandleFunc("PUT /api/v1/plugins/netbird/setup-key", s.requireAdmin(s.handleNetbirdSetupKey))
-	mux.HandleFunc("POST /api/v1/plugins/netbird/control/{action}", s.requireAdmin(s.handleNetbirdAction))
+	tailscaleArea{tailscale: s.opts.Tailscale, plugins: s.opts.Plugins}.register(mux, s.requireAdmin)
+	netbirdArea{netbird: s.opts.Netbird, plugins: s.opts.Plugins}.register(mux, s.requireAdmin)
 	mux.HandleFunc("GET /api/v1/plugins", s.requireAdmin(s.handlePlugins))
 	mux.HandleFunc("GET /api/v1/plugins/progress", s.requireAdmin(s.handlePluginProgress))
 	mux.HandleFunc("DELETE /api/v1/plugins/progress/{id}", s.requireAdmin(s.handlePluginProgressForget))
