@@ -30,7 +30,8 @@ import (
 // switching the firewall on or off, confirming a change on trial.
 
 func (s *Server) areaTools() []toolcatalog.Tool {
-	mounted := func() []string { return s.opts.Storage.Mounted() }
+	env := s.toolEnv()
+	mounted := func() []string { return env.storage.Mounted() }
 	return []toolcatalog.Tool{
 		// plugins
 		reading("plugins_list", "Installed plugins (version, on/off, active, official or community, problem, an update found in a share) and official plugins that can be installed from the signed catalog of this TitanOS version. refresh loads the catalog anew from the release and looks for plugin files in the shares.",
@@ -43,11 +44,11 @@ func (s *Server) areaTools() []toolcatalog.Tool {
 				if req.Refresh {
 					// A failure shows as the state of the catalog below,
 					// never as "no plugins".
-					_ = s.opts.Plugins.RefreshCatalog(ctx, false)
-					s.opts.Plugins.DetectHardware()
-					s.opts.Plugins.ScanShares(mounted())
+					_ = env.plugins.RefreshCatalog(ctx, false)
+					env.plugins.DetectHardware()
+					env.plugins.ScanShares(mounted())
 				}
-				return pluginsView(s.opts.Plugins.Status(mounted())), nil
+				return pluginsView(env.plugins.Status(mounted())), nil
 			}),
 		actionTool("plugin_install", "Propose to install an official plugin by its name from plugins_list (installable true). Community plugins, files and addresses are never installed over MCP. A plugin becomes part of the system with full rights.",
 			map[string]any{"name": str("Name as plugins_list shows it."), "volume": str("Volume for the plugin files; only needed while no plugin is installed yet."),
@@ -60,7 +61,7 @@ func (s *Server) areaTools() []toolcatalog.Tool {
 				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
-				return planPluginInstall(s.opts.Plugins.Status(mounted()), mounted(), req.Name, req.Volume, req.Activate)
+				return planPluginInstall(env.plugins.Status(mounted()), mounted(), req.Name, req.Volume, req.Activate)
 			}),
 		actionTool("plugin_switch", "Propose to switch an installed plugin on or off.",
 			map[string]any{"name": str("Name as plugins_list shows it."), "action": enum("What to do.", "enable", "disable")}, []string{"name", "action"},
@@ -69,7 +70,7 @@ func (s *Server) areaTools() []toolcatalog.Tool {
 				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
-				return planPluginSwitch(s.opts.Plugins.Status(mounted()), req.Name, req.Action)
+				return planPluginSwitch(env.plugins.Status(mounted()), req.Name, req.Action)
 			}),
 		actionTool("plugin_update", "Propose to replace an installed plugin with the newer version plugins_list names under update (found in a share). A version that is not official needs the strongest confirmation.",
 			map[string]any{"name": str("Name as plugins_list shows it.")}, []string{"name"},
@@ -78,7 +79,7 @@ func (s *Server) areaTools() []toolcatalog.Tool {
 				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
-				return planPluginUpdate(s.opts.Plugins.Status(mounted()), req.Name)
+				return planPluginUpdate(env.plugins.Status(mounted()), req.Name)
 			}),
 		actionTool("plugin_remove", "Propose to remove an installed plugin: it is switched off and its files are deleted.",
 			map[string]any{"name": str("Name as plugins_list shows it.")}, []string{"name"},
@@ -87,13 +88,13 @@ func (s *Server) areaTools() []toolcatalog.Tool {
 				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
-				return planPluginRemove(s.opts.Plugins.Status(mounted()), req.Name)
+				return planPluginRemove(env.plugins.Status(mounted()), req.Name)
 			}),
 		// network and firewall
 		reading("network_diagnostics", "Check one network of the NAS: link, addresses, gateway, name resolution. Without network, lists the networks to check. Reads only; changes of the network are made by a person in the web UI.",
 			schema(map[string]any{"network": str("ID of the network from the list.")}), false, s.toolNetworkDiagnostics),
 		reading("firewall_status", "The firewall: on or off, a change on trial, zones, the cells (source zone × destination nas, apps or a zone) with their numbered rules and default, services, Docker apps, blocked addresses and recently dropped packets.",
-			nil, true, noArgs(func(ctx context.Context) (any, error) { return firewallView(s.opts.Firewall.Status("")), nil })),
+			nil, true, noArgs(func(ctx context.Context) (any, error) { return firewallView(env.firewall.Status("")), nil })),
 		actionTool("firewall_rule_add", "Propose to add a rule to one cell of the firewall. The first matching rule of a cell decides. A change of a switched-on firewall runs 2 minutes on trial; a person confirms it in the web UI or it goes back. Switching the firewall on or off is not possible here.",
 			map[string]any{
 				"from":        str("Source zone ID from firewall_status (home, vpn, internet, docker or an own zone)."),
@@ -113,11 +114,11 @@ func (s *Server) areaTools() []toolcatalog.Tool {
 				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
-				a, cfg, err := planFirewallRuleAdd(s.opts.Firewall.Status(""), req)
+				a, cfg, err := planFirewallRuleAdd(env.firewall.Status(""), req)
 				if err != nil {
 					return nil, err
 				}
-				return a, firewallProposalError(s.opts.Firewall.CheckProposal(cfg))
+				return a, firewallProposalError(env.firewall.CheckProposal(cfg))
 			}),
 		actionTool("firewall_rule_remove", "Propose to remove one rule of a cell of the firewall, by its number in firewall_status. A change of a switched-on firewall runs 2 minutes on trial; a person confirms it in the web UI.",
 			map[string]any{"from": str("Source zone ID."), "to": str("Destination: nas, apps or a zone ID."),
@@ -130,11 +131,11 @@ func (s *Server) areaTools() []toolcatalog.Tool {
 				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
-				a, cfg, err := planFirewallRuleRemove(s.opts.Firewall.Status(""), req.From, req.To, req.Index)
+				a, cfg, err := planFirewallRuleRemove(env.firewall.Status(""), req.From, req.To, req.Index)
 				if err != nil {
 					return nil, err
 				}
-				return a, firewallProposalError(s.opts.Firewall.CheckProposal(cfg))
+				return a, firewallProposalError(env.firewall.CheckProposal(cfg))
 			}),
 		actionTool("firewall_unblock", "Propose to release an address the automatic blocking locked out after failed logins.",
 			map[string]any{"address": str("Address as firewall_status lists it under blocked.")}, []string{"address"},
@@ -143,7 +144,7 @@ func (s *Server) areaTools() []toolcatalog.Tool {
 				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
-				return planFirewallUnblock(s.opts.Firewall.Status(""), req.Address)
+				return planFirewallUnblock(env.firewall.Status(""), req.Address)
 			}),
 		// backups
 		reading("backup_snapshots", "The saved states of a backup job (ID, time, paths, size), newest last.",
@@ -153,7 +154,7 @@ func (s *Server) areaTools() []toolcatalog.Tool {
 				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
-				list, err := s.opts.Backup.Snapshots(ctx, req.Job)
+				list, err := env.backup.Snapshots(ctx, req.Job)
 				if err != nil {
 					return nil, toolcatalog.Errorf("saved states of %q unavailable: %v", req.Job, err)
 				}
@@ -173,7 +174,7 @@ func (s *Server) areaTools() []toolcatalog.Tool {
 				}
 				bounded, cancel := context.WithTimeout(ctx, 2*time.Minute)
 				defer cancel()
-				entries, total, cut, err := s.opts.Backup.Files(bounded, req.Job, req.Snapshot, req.Path, req.Offset)
+				entries, total, cut, err := env.backup.Files(bounded, req.Job, req.Snapshot, req.Path, req.Offset)
 				if err != nil {
 					return nil, toolcatalog.Errorf("folder of the saved state unavailable: %v", err)
 				}
@@ -196,7 +197,7 @@ func (s *Server) areaTools() []toolcatalog.Tool {
 				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
-				return planBackupCheck(s.opts.Backup.List(), req.Job, req.ReadData)
+				return planBackupCheck(env.backup.List(), req.Job, req.ReadData)
 			}),
 		actionTool("backup_restore_files", "Propose to restore files and folders of a saved state into a new folder restored/<job>-<time> on a volume. Nothing is overwritten; the shares stay as they are.",
 			map[string]any{"job": str("ID as backup_status shows it."), "snapshot": str("ID from backup_snapshots."), "volume": str("Volume for the new folder."),
@@ -209,7 +210,7 @@ func (s *Server) areaTools() []toolcatalog.Tool {
 				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
-				return planBackupRestore(s.opts.Backup.List(), s.opts.Storage.Mounted(), req.Job, req.Snapshot, req.Volume, req.Paths)
+				return planBackupRestore(env.backup.List(), env.storage.Mounted(), req.Job, req.Snapshot, req.Volume, req.Paths)
 			}),
 		actionTool("backup_schedule", "Propose to pause the schedule of a backup job (no more automatic runs) or to resume it.",
 			map[string]any{"job": str("ID as backup_status shows it."), "action": enum("What to do.", "pause", "resume")}, []string{"job", "action"},
@@ -218,11 +219,11 @@ func (s *Server) areaTools() []toolcatalog.Tool {
 				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
-				return planBackupSchedule(s.opts.Backup.List(), req.Job, req.Action)
+				return planBackupSchedule(env.backup.List(), req.Job, req.Action)
 			}),
 		// automatic updates of Docker apps
 		reading("docker_auto_updates", "Which apps update by themselves, the window (weekdays, time in the time zone of the NAS), the next window and the last result per app.",
-			nil, false, noArgs(func(ctx context.Context) (any, error) { return s.opts.Docker.AutoUpdates(), nil })),
+			nil, false, noArgs(func(ctx context.Context) (any, error) { return env.docker.AutoUpdates(), nil })),
 		actionTool("docker_auto_update", "Propose to switch the automatic update of one app on or off, optionally with a new window for all apps.",
 			map[string]any{"app": str("Name of the app (Compose project) as docker_list shows it."), "enabled": map[string]any{"type": "boolean", "description": "true updates the app by itself."},
 				"time":     str("New time of the window, HH:MM; the current one if left out."),
@@ -238,7 +239,7 @@ func (s *Server) areaTools() []toolcatalog.Tool {
 				if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 					return nil, err
 				}
-				return planAutoUpdate(s.opts.Docker.AutoUpdates().Settings, s.opts.Docker.Status(ctx).Apps, req.App, req.Enabled, req.Time, req.Weekdays)
+				return planAutoUpdate(env.docker.AutoUpdates().Settings, env.docker.Status(ctx).Apps, req.App, req.Enabled, req.Time, req.Weekdays)
 			}),
 	}
 }
@@ -377,6 +378,7 @@ func planPluginRemove(st plugins.Status, name string) (*toolcatalog.Action, erro
 // --- network
 
 func (s *Server) toolNetworkDiagnostics(ctx context.Context, args json.RawMessage) (any, error) {
+	env := s.toolEnv()
 	var req struct{ Network string }
 	if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 		return nil, err
@@ -387,13 +389,13 @@ func (s *Server) toolNetworkDiagnostics(ctx context.Context, args json.RawMessag
 		Management bool   `json:"management"`
 	}
 	known := []item{}
-	for _, n := range s.opts.Network.Connections() {
+	for _, n := range env.network.Connections() {
 		known = append(known, item{n.ID, n.Name, n.Management})
 	}
 	if req.Network == "" {
 		return map[string]any{"networks": known}, nil
 	}
-	checks, err := s.opts.Network.Diagnostics(ctx, req.Network)
+	checks, err := env.network.Diagnostics(ctx, req.Network)
 	switch {
 	case errors.Is(err, network.ErrInvalid):
 		return nil, toolcatalog.Errorf("no network %q; networks: %v", req.Network, known)

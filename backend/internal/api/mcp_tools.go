@@ -154,10 +154,11 @@ func (m mcpSettings) mode(name string) string {
 // mcpAvailable are all tools a token could have, before the switches of the
 // MCP page: its scopes and the current role of its account decide.
 func (s *Server) mcpAvailable(user auth.User, scopes []string) []mcpTool {
+	env := s.toolEnv()
 	allowed := func(scope string) bool {
 		return slices.Contains(scopes, scope) && (!auth.AdminScope(scope) || user.Role.CanAdminister())
 	}
-	on := s.servicesArea().servicesOn()
+	on := env.servicesOn()
 	off := func(area string) bool {
 		return area == toolcatalog.AreaDocker && !on["docker"] || area == toolcatalog.AreaVMs && !on["vms"]
 	}

@@ -17,7 +17,8 @@ import (
 // returns a compact JSON object for the model.
 
 func (s *Server) toolSystemStatus(ctx context.Context) (any, error) {
-	info := s.opts.Monitor.Info()
+	env := s.toolEnv()
+	info := env.monitor.Info()
 	type temperature struct {
 		Sensor    string   `json:"sensor"`
 		Celsius   float64  `json:"celsius"`
@@ -33,7 +34,7 @@ func (s *Server) toolSystemStatus(ctx context.Context) (any, error) {
 	}
 	res := map[string]any{
 		"hostname":      info.Hostname,
-		"version":       s.opts.Version,
+		"version":       env.version,
 		"kernel":        info.Kernel,
 		"uptimeSeconds": info.UptimeSeconds,
 		"cpu": map[string]any{
@@ -45,8 +46,8 @@ func (s *Server) toolSystemStatus(ctx context.Context) (any, error) {
 		"temperatures": temperatures,
 		"stickPresent": info.Stick.Present,
 	}
-	if s.opts.Update != nil && s.opts.Update.Base != "" {
-		res["baseVersion"] = s.opts.Update.Base
+	if env.update != nil && env.update.Base != "" {
+		res["baseVersion"] = env.update.Base
 	}
 	if info.Image != nil {
 		res["slot"] = info.Image.Slot
@@ -56,6 +57,7 @@ func (s *Server) toolSystemStatus(ctx context.Context) (any, error) {
 }
 
 func (s *Server) toolNotifications(ctx context.Context, args json.RawMessage) (any, error) {
+	env := s.toolEnv()
 	var req struct {
 		Limit       int    `json:"limit"`
 		MinSeverity string `json:"minSeverity"`
@@ -80,7 +82,7 @@ func (s *Server) toolNotifications(ctx context.Context, args json.RawMessage) (a
 		Text     string    `json:"text"`
 	}
 	list := []message{}
-	for _, m := range s.opts.Notify.Messages() {
+	for _, m := range env.notify.Messages() {
 		if rank[m.Severity] < least {
 			continue
 		}
@@ -93,10 +95,11 @@ func (s *Server) toolNotifications(ctx context.Context, args json.RawMessage) (a
 }
 
 func (s *Server) toolUpdateStatus(ctx context.Context) (any, error) {
-	if s.opts.Update == nil {
-		return map[string]any{"version": s.opts.Version}, nil
+	env := s.toolEnv()
+	if env.update == nil {
+		return map[string]any{"version": env.version}, nil
 	}
-	status := s.opts.Update.Status()
+	status := env.update.Status()
 	res := map[string]any{
 		"version":     status.Version,
 		"channel":     status.Settings.Channel,
@@ -128,17 +131,19 @@ func (s *Server) toolUpdateStatus(ctx context.Context) (any, error) {
 }
 
 func (s *Server) toolUPSStatus(ctx context.Context) (any, error) {
-	if s.opts.UPS == nil {
+	env := s.toolEnv()
+	if env.ups == nil {
 		return map[string]any{"mode": "none"}, nil
 	}
-	status := s.opts.UPS.Status()
+	status := env.ups.Status()
 	// Raw is everything the driver said; the fields below are what counts.
 	status.Raw = ""
 	return status, nil
 }
 
 func (s *Server) toolStorage(ctx context.Context) (any, error) {
-	status, err := s.opts.Storage.Status(ctx)
+	env := s.toolEnv()
+	status, err := env.storage.Status(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +189,8 @@ func (s *Server) toolStorage(ctx context.Context) (any, error) {
 }
 
 func (s *Server) toolShares(ctx context.Context) (any, error) {
-	mounted := s.opts.Storage.Mounted()
+	env := s.toolEnv()
+	mounted := env.storage.Mounted()
 	type share struct {
 		Root        string `json:"root"`
 		Writable    bool   `json:"writable"`
@@ -200,15 +206,16 @@ func (s *Server) toolShares(ctx context.Context) (any, error) {
 	}
 	// Who may open a share is left out: it names the accounts.
 	list := []share{}
-	for _, sh := range s.opts.Shares.List() {
-		list = append(list, share{Root: "share/" + sh.Name, Writable: slices.Contains(mounted, sh.Volume), Name: sh.Name, Volume: sh.Volume, Path: s.opts.Shares.Path(sh), Available: slices.Contains(mounted, sh.Volume),
+	for _, sh := range env.shares.List() {
+		list = append(list, share{Root: "share/" + sh.Name, Writable: slices.Contains(mounted, sh.Volume), Name: sh.Name, Volume: sh.Volume, Path: env.shares.Path(sh), Available: slices.Contains(mounted, sh.Volume),
 			SMB: sh.SMB, NFS: sh.NFS.Enabled, Guest: sh.Guest, Recycle: sh.Recycle.Enabled, TimeMachine: sh.TimeMachine.Enabled})
 	}
 	return map[string]any{"shares": list}, nil
 }
 
 func (s *Server) toolDocker(ctx context.Context) (any, error) {
-	status := s.opts.Docker.Status(ctx)
+	env := s.toolEnv()
+	status := env.docker.Status(ctx)
 	type container struct {
 		ID              string    `json:"id"`
 		Name            string    `json:"name"`
@@ -244,14 +251,16 @@ func (s *Server) toolDocker(ctx context.Context) (any, error) {
 
 // redactor hides addresses, account names and secrets in log lines.
 func (s *Server) redactor() *diagnose.Redactor {
+	env := s.toolEnv()
 	var accounts []string
-	for _, user := range s.opts.Users.List() {
+	for _, user := range env.users.List() {
 		accounts = append(accounts, user.Name)
 	}
 	return diagnose.NewRedactor("", accounts)
 }
 
 func (s *Server) toolContainerLogs(ctx context.Context, args json.RawMessage) (any, error) {
+	env := s.toolEnv()
 	var req struct {
 		Container string `json:"container"`
 		Lines     int    `json:"lines"`
@@ -261,7 +270,7 @@ func (s *Server) toolContainerLogs(ctx context.Context, args json.RawMessage) (a
 	}
 	name := strings.TrimPrefix(strings.TrimSpace(req.Container), "/")
 	var id string
-	for _, c := range s.opts.Docker.Status(ctx).Containers {
+	for _, c := range env.docker.Status(ctx).Containers {
 		if c.Name == name || len(name) >= 12 && strings.HasPrefix(c.ID, name) {
 			id = c.ID
 			break
@@ -270,7 +279,7 @@ func (s *Server) toolContainerLogs(ctx context.Context, args json.RawMessage) (a
 	if id == "" {
 		return nil, toolcatalog.Errorf("no container %q; docker_list shows the names", req.Container)
 	}
-	logs, err := s.opts.Docker.Logs(ctx, id, clampLines(req.Lines))
+	logs, err := env.docker.Logs(ctx, id, clampLines(req.Lines))
 	if err != nil {
 		return nil, err
 	}
@@ -278,6 +287,7 @@ func (s *Server) toolContainerLogs(ctx context.Context, args json.RawMessage) (a
 }
 
 func (s *Server) toolVMs(ctx context.Context) (any, error) {
+	env := s.toolEnv()
 	type machine struct {
 		Name        string    `json:"name"`
 		DisplayName string    `json:"displayName,omitempty"`
@@ -293,12 +303,12 @@ func (s *Server) toolVMs(ctx context.Context) (any, error) {
 		Addresses   []string  `json:"addresses,omitempty"`
 	}
 	list := []machine{}
-	for _, vm := range s.opts.VMs.List(s.opts.Storage.Mounted()) {
+	for _, vm := range env.vms.List(env.storage.Mounted()) {
 		item := machine{Name: vm.Name, DisplayName: vm.DisplayName, Description: vm.Description, State: vm.State, Available: vm.Available,
 			VCPUs: vm.VCPUs, MemoryMiB: vm.MemoryMiB, CPUPercent: math.Round(vm.CPUPercent*10) / 10, MemoryBytes: vm.MemoryBytes, Since: vm.Since, Autostart: vm.Autostart}
 		if vm.State == "running" {
 			lookup, cancel := context.WithTimeout(ctx, 5*time.Second)
-			if addresses, err := s.opts.VMs.Addresses(lookup, vm.Name); err == nil {
+			if addresses, err := env.vms.Addresses(lookup, vm.Name); err == nil {
 				item.Addresses = addresses.Addresses
 			}
 			cancel()
@@ -306,10 +316,11 @@ func (s *Server) toolVMs(ctx context.Context) (any, error) {
 		list = append(list, item)
 	}
 	slices.SortFunc(list, func(a, b machine) int { return strings.Compare(a.Name, b.Name) })
-	return map[string]any{"kvm": s.opts.VMs.HasKVM(), "vms": list}, nil
+	return map[string]any{"kvm": env.vms.HasKVM(), "vms": list}, nil
 }
 
 func (s *Server) toolBackups(ctx context.Context) (any, error) {
+	env := s.toolEnv()
 	type job struct {
 		ID          string     `json:"id"`
 		Enabled     bool       `json:"enabled"`
@@ -325,15 +336,16 @@ func (s *Server) toolBackups(ctx context.Context) (any, error) {
 		Overdue     bool       `json:"overdue"`
 	}
 	list := []job{}
-	for _, view := range s.opts.Backup.List() {
+	for _, view := range env.backup.List() {
 		list = append(list, job{ID: view.Job.ID, Enabled: view.Job.Enabled, Destination: view.Job.Destination.Type, Sources: view.Job.Sources,
 			Running: view.State.Running, Percent: view.State.Percent, LastRun: view.State.LastRun, LastOK: view.State.LastOK,
-			LastError: view.State.LastError, Warning: view.State.Warning, Next: view.Next, Overdue: s.opts.Backup.Overdue(view)})
+			LastError: view.State.LastError, Warning: view.State.Warning, Next: view.Next, Overdue: env.backup.Overdue(view)})
 	}
 	return map[string]any{"jobs": list}, nil
 }
 
 func (s *Server) toolLogs(ctx context.Context, args json.RawMessage) (any, error) {
+	env := s.toolEnv()
 	var req struct {
 		Source   string `json:"source"`
 		MinLevel string `json:"minLevel"`
@@ -357,7 +369,7 @@ func (s *Server) toolLogs(ctx context.Context, args json.RawMessage) (any, error
 	if len(req.Search) > 200 {
 		return nil, toolcatalog.Errorf("search is too long")
 	}
-	logs, err := s.opts.Diagnose.Logs(ctx, diagnose.Query{Source: req.Source, Priority: level, Search: req.Search, Lines: clampLines(req.Lines)})
+	logs, err := env.diagnose.Logs(ctx, diagnose.Query{Source: req.Source, Priority: level, Search: req.Search, Lines: clampLines(req.Lines)})
 	if err != nil {
 		return nil, err
 	}
@@ -385,6 +397,7 @@ func (s *Server) toolLogs(ctx context.Context, args json.RawMessage) (any, error
 }
 
 func (s *Server) toolLXC(ctx context.Context) (any, error) {
+	env := s.toolEnv()
 	type container struct {
 		Name         string  `json:"name"`
 		DisplayName  string  `json:"displayName,omitempty"`
@@ -397,8 +410,8 @@ func (s *Server) toolLXC(ctx context.Context) (any, error) {
 		MemoryBytes  uint64  `json:"memoryBytes"`
 	}
 	list := []container{}
-	if s.opts.LXC != nil {
-		for _, c := range s.opts.LXC.List(s.opts.Storage.Mounted()) {
+	if env.lxc != nil {
+		for _, c := range env.lxc.List(env.storage.Mounted()) {
 			list = append(list, container{c.Name, c.DisplayName, c.Description, c.State, c.Available, c.Distribution, c.Release, math.Round(c.CPUPercent*10) / 10, c.MemoryBytes})
 		}
 	}
