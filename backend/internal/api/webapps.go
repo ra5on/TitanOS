@@ -13,43 +13,69 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/webapps"
 )
 
 // registerWebapps registers "Web-Apps direkt" (PLAN 66, docs/WEBAPPS.md):
 // the catalog and its installation, and the files of installed apps.
 func (s *Server) registerWebapps(mux *routeMux) {
-	mux.HandleFunc("GET /api/v1/webapps", s.requireUser(s.handleWebapps))
-	mux.HandleFunc("POST /api/v1/webapps/defaults/install", s.requireAdmin(s.handleWebappsDefaults))
-	mux.HandleFunc("POST /api/v1/webapps/migrate", s.requireAppAdmin(s.handleWebappsMigrate))
-	mux.HandleFunc("POST /api/v1/webapps/volume", s.requireAdmin(s.handleWebappsVolume))
-	mux.HandleFunc("POST /api/v1/webapps/{id}/install", s.requireAdmin(s.handleWebappInstall))
-	mux.HandleFunc("DELETE /api/v1/webapps/{id}", s.requireAdmin(s.handleWebappRemove))
+	s.webappsArea().register(mux, s.requireAdmin, s.requireUser, s.requireAppAdmin)
+}
+
+// webappsArea is the web apps; an area with narrow dependencies (PLAN 8a,
+// see fansArea). webapps is nil where there are none. ui holds the
+// mediator files, docker finds the Docker versions of the programs,
+// migration is the move from them (state of the server), ctx the root
+// context for a migration that outlives its request, and removeDockerApp
+// removes a Docker app like "remove app" does.
+type webappsArea struct {
+	webapps         *webapps.Manager
+	ui              fs.FS
+	docker          *docker.Manager
+	migration       *webappMigration
+	ctx             context.Context
+	removeDockerApp func(ctx context.Context, name string, purge bool) error
+}
+
+// webappsArea is the area of the server; the automatic replacement
+// (craft_replace.go) uses its detection and migration.
+func (s *Server) webappsArea() webappsArea {
+	return webappsArea{webapps: s.opts.Webapps, ui: s.opts.UI, docker: s.opts.Docker, migration: &s.migration, ctx: s.ctx, removeDockerApp: s.removeDockerApp}
+}
+
+func (a webappsArea) register(mux *routeMux, admin, user, appAdmin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/webapps", user(a.handleWebapps))
+	mux.HandleFunc("POST /api/v1/webapps/defaults/install", admin(a.handleWebappsDefaults))
+	mux.HandleFunc("POST /api/v1/webapps/migrate", appAdmin(a.handleWebappsMigrate))
+	mux.HandleFunc("POST /api/v1/webapps/volume", admin(a.handleWebappsVolume))
+	mux.HandleFunc("POST /api/v1/webapps/{id}/install", admin(a.handleWebappInstall))
+	mux.HandleFunc("DELETE /api/v1/webapps/{id}", admin(a.handleWebappRemove))
 	// The mediator in the app's document is a file of the web UI; "_host"
 	// is never an app id, and this route is more specific than the apps'.
-	mux.HandleFunc("GET /webapps/_host/{file}", s.handleWebappHost)
+	mux.HandleFunc("GET /webapps/_host/{file}", a.handleWebappHost)
 	// The apps' files: public open-source code, without sign-in; the
 	// sandboxed frame sends no cookies anyway.
-	if s.opts.Webapps != nil {
-		mux.Handle("GET /webapps/{id}/{version}/{path...}", s.opts.Webapps)
+	if a.webapps != nil {
+		mux.Handle("GET /webapps/{id}/{version}/{path...}", a.webapps)
 	}
 }
 
 // handleWebappHost serves the mediator files of the web UI under
 // webapps/_host/ (only files that exist there, never the UI's index.html:
 // a script answered with HTML would be blocked silently).
-func (s *Server) handleWebappHost(w http.ResponseWriter, r *http.Request) {
+func (a webappsArea) handleWebappHost(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("file")
 	h := w.Header()
 	h.Set("Content-Security-Policy", "sandbox allow-scripts; frame-ancestors 'self'")
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Cross-Origin-Resource-Policy", "cross-origin")
 	h.Set("Access-Control-Allow-Origin", "*")
-	if s.opts.UI == nil || !strings.HasSuffix(name, ".js") || strings.HasPrefix(name, ".") || strings.ContainsAny(name, "/\\") {
+	if a.ui == nil || !strings.HasSuffix(name, ".js") || strings.HasPrefix(name, ".") || strings.ContainsAny(name, "/\\") {
 		http.NotFound(w, r)
 		return
 	}
-	data, err := fs.ReadFile(s.opts.UI, "webapps/_host/"+name)
+	data, err := fs.ReadFile(a.ui, "webapps/_host/"+name)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -60,50 +86,50 @@ func (s *Server) handleWebappHost(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(data))
 }
 
-func (s *Server) handleWebapps(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.webappsBody(r))
+func (a webappsArea) handleWebapps(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, a.webappsBody(r))
 }
 
 // webappsBody is the answer of GET /api/v1/webapps. Docker versions and
 // the migration are for administrators only.
-func (s *Server) webappsBody(r *http.Request) map[string]any {
+func (a webappsArea) webappsBody(r *http.Request) map[string]any {
 	body := map[string]any{"apps": []webapps.Status{}, "volume": "", "docker": []webapps.DockerApp{}, "migration": nil}
-	if s.opts.Webapps == nil {
+	if a.webapps == nil {
 		return body
 	}
-	body["apps"], body["volume"] = s.opts.Webapps.List(), s.opts.Webapps.Volume()
+	body["apps"], body["volume"] = a.webapps.List(), a.webapps.Volume()
 	// PLAN 75-21: where the programs can lie, and whether the owner has to choose first.
-	body["volumes"], body["needsVolume"] = s.opts.Webapps.Volumes(), s.opts.Webapps.NeedsVolume()
+	body["volumes"], body["needsVolume"] = a.webapps.Volumes(), a.webapps.NeedsVolume()
 	if currentUser(r).Role.CanAdminister() {
-		if found := s.dockerCraftApps(r.Context()); found != nil {
+		if found := a.dockerCraftApps(r.Context()); found != nil {
 			body["docker"] = found
 		}
-		body["migration"] = s.migration.status()
+		body["migration"] = a.migration.status()
 	}
 	return body
 }
 
 // dockerCraftApps are the TitanOS Docker apps that are Craft apps.
-func (s *Server) dockerCraftApps(ctx context.Context) []webapps.DockerApp {
-	if s.migration.detect != nil {
-		return s.migration.detect(ctx)
+func (a webappsArea) dockerCraftApps(ctx context.Context) []webapps.DockerApp {
+	if a.migration.detect != nil {
+		return a.migration.detect(ctx)
 	}
-	if s.opts.Docker == nil || s.opts.Docker.Disabled {
+	if a.docker == nil || a.docker.Disabled {
 		return nil
 	}
 	// The list is asked for often while installs run; Docker is asked at
 	// most every 20 seconds (and always for a migration, see fresh).
-	s.migration.mu.Lock()
-	if time.Since(s.migration.detectedAt) < 20*time.Second && ctx.Value(freshDetection{}) == nil {
-		found := slices.Clone(s.migration.detected)
-		s.migration.mu.Unlock()
+	a.migration.mu.Lock()
+	if time.Since(a.migration.detectedAt) < 20*time.Second && ctx.Value(freshDetection{}) == nil {
+		found := slices.Clone(a.migration.detected)
+		a.migration.mu.Unlock()
 		return found
 	}
-	s.migration.mu.Unlock()
-	found := webapps.DetectDockerStatus(s.opts.Docker.Status(ctx))
-	s.migration.mu.Lock()
-	s.migration.detected, s.migration.detectedAt = slices.Clone(found), time.Now()
-	s.migration.mu.Unlock()
+	a.migration.mu.Unlock()
+	found := webapps.DetectDockerStatus(a.docker.Status(ctx))
+	a.migration.mu.Lock()
+	a.migration.detected, a.migration.detectedAt = slices.Clone(found), time.Now()
+	a.migration.mu.Unlock()
 	return found
 }
 
@@ -125,39 +151,39 @@ func writeWebappError(w http.ResponseWriter, err error) {
 	}
 }
 
-func (s *Server) handleWebappInstall(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Webapps == nil {
+func (a webappsArea) handleWebappInstall(w http.ResponseWriter, r *http.Request) {
+	if a.webapps == nil {
 		writeError(w, http.StatusServiceUnavailable, "webapps_unavailable", "web apps are not available")
 		return
 	}
-	if err := s.opts.Webapps.Install(r.PathValue("id")); err != nil {
+	if err := a.webapps.Install(r.PathValue("id")); err != nil {
 		writeWebappError(w, err)
 		return
 	}
-	s.handleWebappsAccepted(w, r)
+	a.handleWebappsAccepted(w, r)
 }
 
-func (s *Server) handleWebappsAccepted(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusAccepted, s.webappsBody(r))
+func (a webappsArea) handleWebappsAccepted(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusAccepted, a.webappsBody(r))
 }
 
-func (s *Server) handleWebappRemove(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Webapps == nil {
+func (a webappsArea) handleWebappRemove(w http.ResponseWriter, r *http.Request) {
+	if a.webapps == nil {
 		writeError(w, http.StatusServiceUnavailable, "webapps_unavailable", "web apps are not available")
 		return
 	}
-	if err := s.opts.Webapps.Uninstall(r.PathValue("id")); err != nil {
+	if err := a.webapps.Uninstall(r.PathValue("id")); err != nil {
 		writeWebappError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, s.webappsBody(r))
+	writeJSON(w, http.StatusOK, a.webappsBody(r))
 }
 
 // handleWebappsDefaults installs the basic set, or {"apps":[…]} if given;
 // an empty list only records that the offer was answered. Without a
 // mounted volume the apps wait until one is.
-func (s *Server) handleWebappsDefaults(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Webapps == nil {
+func (a webappsArea) handleWebappsDefaults(w http.ResponseWriter, r *http.Request) {
+	if a.webapps == nil {
 		writeError(w, http.StatusServiceUnavailable, "webapps_unavailable", "web apps are not available")
 		return
 	}
@@ -182,11 +208,11 @@ func (s *Server) handleWebappsDefaults(w http.ResponseWriter, r *http.Request) {
 	if req.Apps != nil {
 		ids = append([]string{}, *req.Apps...)
 	}
-	if err := s.opts.Webapps.InstallDefaults(ids); err != nil {
+	if err := a.webapps.InstallDefaults(ids); err != nil {
 		writeWebappError(w, err)
 		return
 	}
-	s.handleWebappsAccepted(w, r)
+	a.handleWebappsAccepted(w, r)
 }
 
 // MigrationItem is one Docker app of a migration.
@@ -241,8 +267,8 @@ func (m *webappMigration) set(i int, state, msg string) {
 // Docker app must be detected as a Craft app, and its web app must be in
 // "install" or installed. It is removed only after its web app installed;
 // the removal is the normal "remove app" without deleting data.
-func (s *Server) handleWebappsMigrate(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Webapps == nil {
+func (a webappsArea) handleWebappsMigrate(w http.ResponseWriter, r *http.Request) {
+	if a.webapps == nil {
 		writeError(w, http.StatusServiceUnavailable, "webapps_unavailable", "web apps are not available")
 		return
 	}
@@ -261,10 +287,10 @@ func (s *Server) handleWebappsMigrate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	installed := map[string]bool{}
-	for _, st := range s.opts.Webapps.List() {
+	for _, st := range a.webapps.List() {
 		installed[st.ID] = st.Installed && st.State == "ready"
 	}
-	found := s.dockerCraftApps(context.WithValue(r.Context(), freshDetection{}, true))
+	found := a.dockerCraftApps(context.WithValue(r.Context(), freshDetection{}, true))
 	var items []MigrationItem
 	for _, name := range req.RemoveDocker {
 		i := slices.IndexFunc(found, func(d webapps.DockerApp) bool { return d.App == name })
@@ -282,65 +308,65 @@ func (s *Server) handleWebappsMigrate(w http.ResponseWriter, r *http.Request) {
 		}
 		items = append(items, MigrationItem{App: name, Webapp: id, State: "waiting"})
 	}
-	s.migration.mu.Lock()
-	if s.migration.last != nil && s.migration.last.Running {
-		s.migration.mu.Unlock()
+	a.migration.mu.Lock()
+	if a.migration.last != nil && a.migration.last.Running {
+		a.migration.mu.Unlock()
 		writeError(w, http.StatusConflict, "webapp_busy", "a migration is running")
 		return
 	}
-	s.migration.last = &MigrationStatus{Running: true, Started: time.Now(), Install: slices.Clone(req.Install), Items: items}
-	s.migration.mu.Unlock()
+	a.migration.last = &MigrationStatus{Running: true, Started: time.Now(), Install: slices.Clone(req.Install), Items: items}
+	a.migration.mu.Unlock()
 	for _, id := range req.Install {
 		// Already there in the catalog's version: nothing to fetch.
-		if app, _ := webapps.Lookup(id); installed[id] && slices.ContainsFunc(s.opts.Webapps.List(), func(st webapps.Status) bool { return st.ID == id && st.Version == app.Version }) {
+		if app, _ := webapps.Lookup(id); installed[id] && slices.ContainsFunc(a.webapps.List(), func(st webapps.Status) bool { return st.ID == id && st.Version == app.Version }) {
 			continue
 		}
-		if err := s.opts.Webapps.Install(id); err != nil {
+		if err := a.webapps.Install(id); err != nil {
 			slog.Warn("web app install not started", "app", id, "err", err)
 		}
 	}
 	user := currentUser(r).Name
-	ctx := s.ctx
-	go s.runMigration(ctx, user, false)
+	ctx := a.ctx
+	go a.runMigration(ctx, user, false)
 	slog.Info("web app migration started", "install", req.Install, "removeDocker", req.RemoveDocker, "by", user, "ip", remoteIP(r))
-	s.handleWebappsAccepted(w, r)
+	a.handleWebappsAccepted(w, r)
 }
 
 // runMigration waits for each web app and removes its Docker app after it.
 // purge also deletes the Docker data of the app (automatic replacement).
-func (s *Server) runMigration(ctx context.Context, user string, purge bool) {
+func (a webappsArea) runMigration(ctx context.Context, user string, purge bool) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Hour)
 	defer cancel()
-	items := s.migration.status().Items
+	items := a.migration.status().Items
 	for i, it := range items {
-		if err := s.opts.Webapps.Await(ctx, it.Webapp); err != nil {
-			s.migration.set(i, "kept", err.Error())
+		if err := a.webapps.Await(ctx, it.Webapp); err != nil {
+			a.migration.set(i, "kept", err.Error())
 			slog.Warn("Docker app kept: its web app did not install", "app", it.App, "webapp", it.Webapp, "err", err)
 			continue
 		}
-		s.migration.set(i, "removing", "")
-		remove := func(ctx context.Context, name string) error { return s.removeDockerApp(ctx, name, purge) }
-		if s.migration.remove != nil {
-			remove = s.migration.remove
+		a.migration.set(i, "removing", "")
+		remove := func(ctx context.Context, name string) error { return a.removeDockerApp(ctx, name, purge) }
+		if a.migration.remove != nil {
+			remove = a.migration.remove
 		}
 		if err := remove(ctx, it.App); err != nil {
-			s.migration.set(i, "failed", err.Error())
+			a.migration.set(i, "failed", err.Error())
 			slog.Warn("Docker app not removed", "app", it.App, "err", err)
 			continue
 		}
-		s.migration.set(i, "removed", "")
+		a.migration.set(i, "removed", "")
 		slog.Info("Docker app replaced by its web app", "app", it.App, "webapp", it.Webapp, "by", user)
 	}
 	// Installs without a Docker app to remove are followed in the list.
-	s.migration.mu.Lock()
-	s.migration.last.Running, s.migration.last.Finished = false, time.Now()
-	s.migration.mu.Unlock()
+	a.migration.mu.Lock()
+	a.migration.last.Running, a.migration.last.Finished = false, time.Now()
+	a.migration.mu.Unlock()
 }
 
 // handleWebappsVolume chooses where the programs lie and moves the installed
 // ones there: {"volume":"data"} (PLAN 75-21).
-func (s *Server) handleWebappsVolume(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Webapps == nil {
+func (a webappsArea) handleWebappsVolume(w http.ResponseWriter, r *http.Request) {
+	if a.webapps == nil {
 		writeError(w, http.StatusServiceUnavailable, "webapps_unavailable", "web apps are not available")
 		return
 	}
@@ -351,10 +377,10 @@ func (s *Server) handleWebappsVolume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	noteTarget(r, req.Volume)
-	if err := s.opts.Webapps.SetVolume(req.Volume); err != nil {
+	if err := a.webapps.SetVolume(req.Volume); err != nil {
 		writeWebappError(w, err)
 		return
 	}
 	slog.Info("web apps volume chosen", "volume", req.Volume, "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleWebappsAccepted(w, r)
+	a.handleWebappsAccepted(w, r)
 }

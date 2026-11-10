@@ -83,7 +83,7 @@ func (s *Server) replaceCraftDocker(ctx context.Context) {
 	if s.migration.detect == nil && (s.opts.Docker == nil || s.opts.Docker.Disabled) {
 		return
 	}
-	found := s.dockerCraftApps(context.WithValue(ctx, freshDetection{}, true))
+	found := s.webappsArea().dockerCraftApps(context.WithValue(ctx, freshDetection{}, true))
 	if len(found) == 0 {
 		return
 	}
@@ -118,7 +118,7 @@ func (s *Server) replaceCraftDocker(ctx context.Context) {
 		}
 	}
 	slog.Info("Docker versions of Craft apps are replaced", "apps", len(items))
-	s.runMigration(ctx, "TitanOS", true)
+	s.webappsArea().runMigration(ctx, "TitanOS", true)
 }
 
 // awaitWebapp waits at most two hours for an install.
