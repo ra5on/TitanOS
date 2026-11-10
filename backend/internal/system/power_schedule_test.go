@@ -161,3 +161,35 @@ func TestShutdownSoonForVMSchedules(t *testing.T) {
 		t.Fatal("postponed shutdown not reported")
 	}
 }
+
+// A NAS without a battery-backed clock starts with an old date and gets
+// the real one from the network a moment later. The shutdown that became
+// "due" through that jump is not carried out: the NAS would switch itself
+// off a minute after every start.
+func TestClockJumpDoesNotShutDown(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 30, 0, time.Local) // the stale boot clock
+	p, _, _ := newScheduler(t, now)
+	p.now = func() time.Time { return now }
+	var off int
+	p.Poweroff = func() error { off++; return nil }
+	if err := p.Set(PowerSchedule{Off: ScheduleTime{Enabled: true, Days: []int{0, 1, 2, 3, 4, 5, 6}, Time: "23:00"}}); err != nil {
+		t.Fatal(err)
+	}
+	p.mu.Lock()
+	due, _ := p.set.Off.next(now) // as Run does at its start
+	p.mu.Unlock()
+	now = time.Date(2026, 11, 10, 8, 0, 0, 0, time.Local) // the network set the clock
+	next := p.step(due)
+	if off != 0 {
+		t.Fatal("the NAS was switched off because the clock was set")
+	}
+	if !next.After(now) {
+		t.Fatalf("next shutdown %v is not after %v", next, now)
+	}
+	// The shutdown of that evening is carried out as usual.
+	now = next.Add(20 * time.Second)
+	p.step(next)
+	if off != 1 {
+		t.Fatal("the regular shutdown was not carried out")
+	}
+}

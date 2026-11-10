@@ -302,10 +302,13 @@ func slots(j Job, now time.Time, loc *time.Location) (previous, next *time.Time)
 	local := now.In(loc)
 	minute, _ := clock(j.Time)
 	if j.Every == "hours" && j.EveryHours > 0 {
-		// Every N hours from Time on a fixed grid, counted from a day in
-		// the past, so that the times do not move when titand restarts.
+		// Every N hours from Time on a fixed grid, counted from one day
+		// that never moves, so that the times stay where they are when
+		// titand restarts and from one day to the next. Counted from
+		// "two weeks ago" the grid moved along every day: every 48 or
+		// 168 hours came out as every day at Time.
 		step := time.Duration(j.EveryHours) * time.Hour
-		anchor := time.Date(local.Year(), local.Month(), local.Day()-14, minute/60, minute%60, 0, 0, loc)
+		anchor := time.Date(2026, 1, 1, minute/60, minute%60, 0, 0, loc)
 		n := now.Sub(anchor) / step
 		prev := anchor.Add(n * step).UTC()
 		nxt := anchor.Add((n + 1) * step).UTC()

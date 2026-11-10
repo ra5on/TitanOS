@@ -152,3 +152,23 @@ func TestAdmissionAndBlockedTargetsCannotBeBypassed(t *testing.T) {
 	}
 	m.admission.Unlock()
 }
+
+// "Every 48 hours" and "every 168 hours" must not run every day: the grid
+// is counted from a fixed day, not from a day that moves along with today.
+func TestEveryHoursGridDoesNotMove(t *testing.T) {
+	for _, hours := range []int{48, 168, 36} {
+		j := Job{Every: "hours", EveryHours: hours, Time: "03:00"}
+		day := time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC)
+		_, next := slots(j, day, time.UTC)
+		for range 6 {
+			previous, after := slots(j, next.Add(time.Minute), time.UTC)
+			if !previous.Equal(*next) {
+				t.Fatalf("every %d h: the slot %v is not the previous one a minute later (%v)", hours, next, previous)
+			}
+			if got := after.Sub(*next); got != time.Duration(hours)*time.Hour {
+				t.Fatalf("every %d h: next slot after %v", hours, got)
+			}
+			next = after
+		}
+	}
+}

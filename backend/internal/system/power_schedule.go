@@ -280,6 +280,10 @@ func (p *PowerScheduler) ShutdownSoon(within time.Duration) bool {
 	return ok && at.Sub(now) <= within
 }
 
+// missedShutdown is how far past its time a shutdown is still carried out
+// (the loop looks every half minute); beyond that the clock was set.
+const missedShutdown = 10 * time.Minute
+
 // maxPostpone is how long a due shutdown waits for running work.
 const maxPostpone = 6 * time.Hour
 
@@ -316,6 +320,15 @@ func (p *PowerScheduler) step(due time.Time) time.Time {
 	}
 	if now.Before(due) {
 		return due
+	}
+	// The time waited for is long past, and not because work held the
+	// shutdown back: the clock jumped (a NAS without a battery-backed
+	// clock starts with an old date and gets the real one from the
+	// network a moment later). That is no reason to switch off a NAS that
+	// has just started: the next time of the schedule counts.
+	if p.postponedSince.IsZero() && now.Sub(due) > missedShutdown {
+		slog.Info("scheduled shutdown skipped: its time passed while the clock was set", "due", due, "now", now)
+		return next
 	}
 	if p.Busy != nil {
 		if busy, why := p.Busy(); busy {
