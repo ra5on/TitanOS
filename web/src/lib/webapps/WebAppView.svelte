@@ -270,7 +270,9 @@
 			}
 			current = { doc: current.doc, mtime: r.mtime };
 			unwritten = false;
-			notice = null;
+			// A file the app made beside this save (a backup copy of the project)
+			// still waits for its answer: that offer stays.
+			if (notice?.kind !== 'created') notice = null;
 			post({ type: 'webapp-saved', ok: true });
 		} catch (e) {
 			notice = { kind: 'error', text: t('webapps.saveFailed', { error: apiErrorText(e) }) };

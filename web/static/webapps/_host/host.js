@@ -404,12 +404,27 @@
 		touched = true;
 		tellDirty();
 	}
+	// Tried with T-Vector: one letter is a tool's shortcut ("v"), not text, and
+	// holding Space while dragging only moves the view. So: deleting counts at
+	// once, letters only as a run of typing, a drag only with the main button
+	// and without Space.
+	var typed = 0;
+	var space = false;
 	window.addEventListener(
 		'keydown',
 		function (event) {
-			if (event.ctrlKey || event.metaKey || event.altKey) return;
 			var k = event.key;
-			if (k.length === 1 || k === 'Backspace' || k === 'Delete' || k === 'Enter') touch();
+			if (k === ' ') space = true;
+			if (event.ctrlKey || event.metaKey || event.altKey) return;
+			if (k === 'Backspace' || k === 'Delete') return touch();
+			if (k.length === 1 && k !== ' ' && ++typed >= 4) touch();
+		},
+		true,
+	);
+	window.addEventListener(
+		'keyup',
+		function (event) {
+			if (event.key === ' ') space = false;
 		},
 		true,
 	);
@@ -417,7 +432,7 @@
 	window.addEventListener(
 		'pointerdown',
 		function (event) {
-			pressed = { x: event.clientX, y: event.clientY };
+			pressed = event.button === 0 && !space ? { x: event.clientX, y: event.clientY } : null;
 		},
 		true,
 	);
@@ -435,6 +450,7 @@
 		var msg = event.data;
 		if (msg && msg.type === 'webapp-saved' && msg.ok === true) {
 			touched = false;
+			typed = 0;
 			tellDirty();
 		}
 	});
