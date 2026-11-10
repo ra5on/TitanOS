@@ -15,26 +15,35 @@ import (
 // of an owner or administrator. They are not in publicRoutes and not in
 // the MCP tool catalog: what runs as root comes from the person only.
 func (s *Server) registerScripts(mux *routeMux) {
+	scriptsArea{scripts: s.opts.Scripts}.register(mux, s.requireAdmin, s.browserOnly)
+}
+
+// scriptsArea is an area with narrow dependencies (PLAN 8a, see fansArea).
+type scriptsArea struct {
+	scripts *scripts.Manager
+}
+
+func (a scriptsArea) register(mux *routeMux, admin, browserOnly func(http.HandlerFunc) http.HandlerFunc) {
 	route := func(pattern string, h http.HandlerFunc) {
-		mux.HandleFunc(pattern, s.requireAdmin(s.browserOnly(s.scriptsAvailable(h))))
+		mux.HandleFunc(pattern, admin(browserOnly(a.scriptsAvailable(h))))
 	}
-	route("GET /api/v1/scripts", s.handleScripts)
-	route("PUT /api/v1/scripts/volume", s.handleScriptsVolume)
-	route("POST /api/v1/scripts", s.handleScriptCreate)
-	route("GET /api/v1/scripts/{id}", s.handleScript)
-	route("PUT /api/v1/scripts/{id}", s.handleScriptUpdate)
-	route("DELETE /api/v1/scripts/{id}", s.handleScriptDelete)
-	route("POST /api/v1/scripts/{id}/run", s.handleScriptRun)
-	route("POST /api/v1/scripts/{id}/cancel", s.handleScriptCancel)
-	route("GET /api/v1/scripts/{id}/output", s.handleScriptOutput)
-	route("GET /api/v1/scripts/{id}/runs", s.handleScriptRuns)
+	route("GET /api/v1/scripts", a.handleScripts)
+	route("PUT /api/v1/scripts/volume", a.handleScriptsVolume)
+	route("POST /api/v1/scripts", a.handleScriptCreate)
+	route("GET /api/v1/scripts/{id}", a.handleScript)
+	route("PUT /api/v1/scripts/{id}", a.handleScriptUpdate)
+	route("DELETE /api/v1/scripts/{id}", a.handleScriptDelete)
+	route("POST /api/v1/scripts/{id}/run", a.handleScriptRun)
+	route("POST /api/v1/scripts/{id}/cancel", a.handleScriptCancel)
+	route("GET /api/v1/scripts/{id}/output", a.handleScriptOutput)
+	route("GET /api/v1/scripts/{id}/runs", a.handleScriptRuns)
 }
 
 var scriptID = regexp.MustCompile(`^[0-9a-f]{16}$`)
 
-func (s *Server) scriptsAvailable(next http.HandlerFunc) http.HandlerFunc {
+func (a scriptsArea) scriptsAvailable(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if s.opts.Scripts == nil {
+		if a.scripts == nil {
 			featureUnavailable(w)
 			return
 		}
@@ -69,11 +78,11 @@ func scriptError(w http.ResponseWriter, err error) {
 	}
 }
 
-func (s *Server) handleScripts(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.opts.Scripts.Status())
+func (a scriptsArea) handleScripts(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, a.scripts.Status())
 }
 
-func (s *Server) handleScriptsVolume(w http.ResponseWriter, r *http.Request) {
+func (a scriptsArea) handleScriptsVolume(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Volume string `json:"volume"`
 	}
@@ -81,11 +90,11 @@ func (s *Server) handleScriptsVolume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	noteTarget(r, req.Volume)
-	if err := s.opts.Scripts.SetVolume(req.Volume); err != nil {
+	if err := a.scripts.SetVolume(req.Volume); err != nil {
 		scriptError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, s.opts.Scripts.Status())
+	writeJSON(w, http.StatusOK, a.scripts.Status())
 }
 
 // readScript reads a draft; the content may be up to scripts.MaxContent,
@@ -101,13 +110,13 @@ type scriptAnswer struct {
 	Content string `json:"content"`
 }
 
-func (s *Server) handleScriptCreate(w http.ResponseWriter, r *http.Request) {
+func (a scriptsArea) handleScriptCreate(w http.ResponseWriter, r *http.Request) {
 	d, ok := readScript(w, r)
 	if !ok {
 		return
 	}
 	noteTarget(r, d.Name)
-	created, err := s.opts.Scripts.Create(d)
+	created, err := a.scripts.Create(d)
 	if err != nil {
 		scriptError(w, err)
 		return
@@ -119,8 +128,8 @@ func (s *Server) handleScriptCreate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, scriptAnswer{created, content})
 }
 
-func (s *Server) handleScript(w http.ResponseWriter, r *http.Request) {
-	script, content, err := s.opts.Scripts.Get(r.PathValue("id"))
+func (a scriptsArea) handleScript(w http.ResponseWriter, r *http.Request) {
+	script, content, err := a.scripts.Get(r.PathValue("id"))
 	if err != nil {
 		scriptError(w, err)
 		return
@@ -128,18 +137,18 @@ func (s *Server) handleScript(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, scriptAnswer{script, content})
 }
 
-func (s *Server) handleScriptUpdate(w http.ResponseWriter, r *http.Request) {
+func (a scriptsArea) handleScriptUpdate(w http.ResponseWriter, r *http.Request) {
 	d, ok := readScript(w, r)
 	if !ok {
 		return
 	}
 	noteTarget(r, d.Name)
-	changed, err := s.opts.Scripts.Update(r.PathValue("id"), d)
+	changed, err := a.scripts.Update(r.PathValue("id"), d)
 	if err != nil {
 		scriptError(w, err)
 		return
 	}
-	_, content, err := s.opts.Scripts.Get(changed.ID)
+	_, content, err := a.scripts.Get(changed.ID)
 	if err != nil {
 		scriptError(w, err)
 		return
@@ -148,47 +157,47 @@ func (s *Server) handleScriptUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 // scriptName names a script for the activity log.
-func (s *Server) scriptName(r *http.Request) {
-	for _, v := range s.opts.Scripts.Status().Scripts {
+func (a scriptsArea) scriptName(r *http.Request) {
+	for _, v := range a.scripts.Status().Scripts {
 		if v.ID == r.PathValue("id") {
 			noteTarget(r, v.Name)
 		}
 	}
 }
 
-func (s *Server) handleScriptDelete(w http.ResponseWriter, r *http.Request) {
-	s.scriptName(r)
-	if err := s.opts.Scripts.Delete(r.PathValue("id")); err != nil {
+func (a scriptsArea) handleScriptDelete(w http.ResponseWriter, r *http.Request) {
+	a.scriptName(r)
+	if err := a.scripts.Delete(r.PathValue("id")); err != nil {
 		scriptError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleScriptRun(w http.ResponseWriter, r *http.Request) {
-	s.scriptName(r)
-	if err := s.opts.Scripts.Run(r.PathValue("id")); err != nil {
+func (a scriptsArea) handleScriptRun(w http.ResponseWriter, r *http.Request) {
+	a.scriptName(r)
+	if err := a.scripts.Run(r.PathValue("id")); err != nil {
 		scriptError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
 }
 
-func (s *Server) handleScriptCancel(w http.ResponseWriter, r *http.Request) {
-	s.scriptName(r)
-	if err := s.opts.Scripts.Cancel(r.PathValue("id")); err != nil {
+func (a scriptsArea) handleScriptCancel(w http.ResponseWriter, r *http.Request) {
+	a.scriptName(r)
+	if err := a.scripts.Cancel(r.PathValue("id")); err != nil {
 		scriptError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
 }
 
-func (s *Server) handleScriptOutput(w http.ResponseWriter, r *http.Request) {
+func (a scriptsArea) handleScriptOutput(w http.ResponseWriter, r *http.Request) {
 	from, _ := strconv.ParseInt(r.URL.Query().Get("from"), 10, 64)
 	if from < 0 {
 		from = 0
 	}
-	out, err := s.opts.Scripts.Output(r.PathValue("id"), from)
+	out, err := a.scripts.Output(r.PathValue("id"), from)
 	if err != nil {
 		scriptError(w, err)
 		return
@@ -196,8 +205,8 @@ func (s *Server) handleScriptOutput(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) handleScriptRuns(w http.ResponseWriter, r *http.Request) {
-	runs, err := s.opts.Scripts.Runs(r.PathValue("id"))
+func (a scriptsArea) handleScriptRuns(w http.ResponseWriter, r *http.Request) {
+	runs, err := a.scripts.Runs(r.PathValue("id"))
 	if err != nil {
 		scriptError(w, err)
 		return
