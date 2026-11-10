@@ -49,4 +49,16 @@ docker run --rm --entrypoint cat "$TAG" /usr/share/titanos-viewer/packages.txt >
 docker save "$TAG" | zstd -q -19 -T0 -f -o "$OUT/titanos-viewer-$VERSION.tar.zst"
 ls -l "$OUT/titanos-viewer-$VERSION.tar.zst" >&2
 docker image inspect -f '{{.Size}}' "$TAG" | awk '{printf "image size: %.0f MB\n", $1/1000000}' >&2
-docker image inspect -f '{{.Id}}' "$TAG"
+# The ID titand compares after "docker load" is the digest of the image's
+# configuration. "docker image inspect" names that only with the classic
+# image store; with the containerd store it names the manifest. The archive
+# itself says it either way: manifest.json points at the configuration by
+# its digest ("<digest>.json" or "blobs/sha256/<digest>").
+zstd -dc "$OUT/titanos-viewer-$VERSION.tar.zst" | tar -xO manifest.json | python3 -c '
+import json, re, sys
+config = json.load(sys.stdin)[0]["Config"]
+digest = re.search(r"[0-9a-f]{64}", config)
+if not digest:
+    sys.exit("no configuration digest in manifest.json: " + config)
+print("sha256:" + digest.group(0))
+'
