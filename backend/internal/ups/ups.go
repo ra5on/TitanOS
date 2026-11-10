@@ -510,6 +510,17 @@ func (m *Manager) look(ctx context.Context) {
 		status.Since = before.Since
 	case status.OnBattery:
 		status.Since = &now
+	case !status.Connected && before.Since != nil:
+		// No answer while it was on battery (a driver that reports "data
+		// stale" now and then): that is no return of the mains. The time
+		// on battery goes on, or "shut down after N minutes" would start
+		// over with every missed answer and never be reached.
+		status.Since = before.Since
+	}
+	// Mains are back for sure: an earlier shutdown that did not come about
+	// no longer stands in the way of the next one.
+	if status.Connected && !status.OnBattery {
+		status.ShuttingDown = false
 	}
 
 	event := func(kind, subject string) {
@@ -529,7 +540,7 @@ func (m *Manager) look(ctx context.Context) {
 		// upsmon shuts down now; this only tells.
 		event("ups_low_battery", status.Model)
 	}
-	shutdown := status.OnBattery && settings.ShutdownAfter > 0 && status.Since != nil &&
+	shutdown := (status.OnBattery || !status.Connected) && settings.ShutdownAfter > 0 && status.Since != nil &&
 		now.Sub(*status.Since) >= time.Duration(settings.ShutdownAfter)*time.Minute && !before.ShuttingDown
 	m.mu.Lock()
 	m.status = status
@@ -548,8 +559,18 @@ func (m *Manager) look(ctx context.Context) {
 		} else if m.Poweroff != nil {
 			err = m.Poweroff()
 		}
+		// upsmon may not run (the monitor crashed, the unit is off) while
+		// upsd still answers: the NAS then switches itself off.
+		if err != nil && settings.Mode == "local" && m.Poweroff != nil {
+			slog.Error("upsmon did not take the shutdown, switching off directly", "err", err)
+			err = m.Poweroff()
+		}
 		if err != nil {
 			slog.Error("shutdown on battery failed", "err", err)
+			// Not on its way: the next look tries again.
+			m.mu.Lock()
+			m.status.ShuttingDown = false
+			m.mu.Unlock()
 		}
 	}
 }
