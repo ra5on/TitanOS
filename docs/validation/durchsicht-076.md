@@ -126,3 +126,40 @@ Ganz gelesen: `files` (29 Dateien: Kopieren/Verschieben, Aufträge, Papierkorb, 
 | F-5-7 | Fehler | `shares/purge.go:850` | Scheiterte das Fortsetzen einer Freigabe-Löschung nach einem Neustart, wurde es alle 5 s endlos wiederholt. | behoben: ein Versuch je Start von titand; ohne eigenen Test |
 | F-5-8 | Risiko | `thumbs/render.go:36` | Grenze von 100 Megapixel zählt Pixel, nicht Bytes: zwei sehr große 16-Bit-Bilder konnten titand beim Vorschaubild rund 1,6 GB kosten. | behoben: Grenze nach Speicherbedarf (400 MiB je Bild), Test |
 | F-5-9 | Fehler (klein) | `files/transfers.go:490`, `files/files.go:372`, `office/edit_xlsx.go:195`, `files/job_control.go:18` | Wiederholter Auftrag verliert seinen Eintrag; Umbenennen nur in Groß-/Kleinschreibung auf exFAT/NTFS abgelehnt; `calcPr` an falscher Stelle; Pausieren hängt, solange ein Auftrag plant. | Umbenennen behoben (nicht auf exFAT/NTFS geprüft); die drei anderen offen (kein Verlust von Nutzdaten) |
+
+## 6. Apps, Docker, Plugins
+
+Ganz gelesen: `docker` (Engine, Apps, Aufräumen, Auto-Update, Client, Sicherung, Startreihenfolge, Netze), `startup`, `app`, `appbackup`, `webapps/manager.go`, `webapps/docker.go`, `api/craft_replace.go`, `api/retired.go`, `plugins` (Anwenden, Update, Installieren, Aufräumen). Ohne Befund: „samt Daten entfernen“, Aufräumen (kein Engine-Prune, Volumes gespeicherter Apps bleiben), Erkennung der Craft-Apps, App-Update von titand mit Probe und Rückfall. Nicht gelesen: NVIDIA-Bau, Treiberwahl, Community-Quellen, Routen und Zertifikate des App-Tors, Fernansicht-Abbild.
+
+| Nr. | Art | Wo | Befund | Stand |
+|---|---|---|---|---|
+| F-6-1 | Defekt | `docker/autoupdate.go:268`, `cmd/titand/wiring_updates.go` | Das automatische App-Update wird nie gestartet (`RunAutoUpdates` nirgends aufgerufen, `Timezone`, `ExternalBusy`, `OnEvent` nie gesetzt): die Seite zeigt „nächstes Update 04:00“, es passiert nichts. | offen |
+| F-6-2 | Fehler | `cmd/titand/wiring_updates.go:77` | Nach abgebrochenem Herunterfahren werden die Neustart-Regeln der Apps wiederhergestellt, bevor die Engine läuft: Apps mit Startreihenfolge bleiben bis zum nächsten Neustart aus. | offen |
+| F-6-3 | Fehler | `viewer/manager.go:316`, `docker/viewer.go:487` | Ende einer Fernansicht löscht ihr Netz, während ein gestoppter App-Container es noch nennt: der nächste Start scheitert mit „network not found“ (Docker-Verhalten vermutet). | offen |
+| F-6-4 | Fehler | `docker/apps.go:501` `RemoveApp` | Entfernen einer App hält keinen Auftrag und keine Sperre: ein Update oder eine Änderung kann währenddessen `up` ausführen; die automatische Craft-Ersetzung läuft außerhalb der App-Sperre. | offen |
+| F-6-5 | Fehler | `cmd/titand/wiring_maintenance.go:198`, `update/app.go` | Ein App-Update von titand startet titand neu, auch während `docker compose pull/up` läuft: die App kann mitten im Neuanlegen gestoppt bleiben. | offen |
+| F-6-6 | Fehler (Datenverlust an Einstellungen) | `appproxy/appproxy.go:193`, `webapps/manager.go:153` | Scheitert das Laden vom Stick, arbeiten beide mit leerem Zustand weiter und überschreiben `proxy.json` bzw. `webapps.json`; das App-Tor meldet dann jedes Tailnet-Gerät der Apps ab und löscht dessen Zustand. | offen |
+| F-6-7 | Fehler | `docker/startorder.go:88` | Geordneter Start startet Container in Listenreihenfolge, einmal, ohne Abhängigkeiten (`network_mode: service:vpn`). | offen (vermutet) |
+| F-6-8 | Fehler | `docker/lan.go:374` `AssignLAN` | LAN-Zuweisung schreibt die Compose-Datei über eine Map neu: Kommentare, Reihenfolge und Anker gehen verloren (gegen die Regel „Kommentare bleiben“). | offen |
+| F-6-9 | Fehler | `appbackup/appbackup.go:189` | Scheitert das Schreiben des Zeigers auf den Stick, bleibt „Sicherung läuft“ gesetzt: alle App-Änderungen sind bis zum Neustart gesperrt. | offen |
+| F-6-10 | Fehler | `docker/autoupdate.go:394` | Rückfall nach Update, wenn nicht jeder Container läuft: Stacks mit einmaligem Init-Dienst würden bei jedem Update zurückgesetzt (wirkt erst mit F-6-1). | offen |
+| F-6-11 | Fehler | `docker/apps.go:521` | App „samt Daten“ entfernen bei nicht laufender Engine (Volume gesperrt): meldet Erfolg, löscht nur die Compose-Datei; nach dem Entsperren ist alles wieder da, aber unverwaltet. | offen |
+| F-6-12 | Fehler (klein) | `api/webapps.go:330`, `plugins/plugins_update.go:104`, `startup/startup.go:254`, `api/retired.go:49`, `docker/viewer.go:580`, `docker/lan.go:288` | Craft-Ersetzung prüft vor dem Löschen nicht erneut; Plugin nach Absturz nur in `.previous-*`, Reste nie aufgeräumt; `/config` alle 2 s gelesen bis zum Start; zurückgehaltene Mitteilungen gehen bei gescheitertem Umzug verloren; nicht geschlossene Antwort; Netzname als Präfix verglichen. | offen |
+
+## 7. Virtuelle Maschinen und Systemcontainer / 8. Netzwerk und Fernzugriff
+
+Ganz gelesen: `vm` (außer Medien-Import), `lxc`, `network`, `firewall` (Regeln, Zonen, Sperrliste, Docker), `wgserver`, `ddns`, sechs DNS-Anbieter. Ohne Befund: VM löschen (nur eigene Platten), Klonen, Snapshots, Domain-XML (über `encoding/xml`), LXC-Konfiguration und -Löschen, Netzwerk auf Probe (Zustand nur im RAM, Rückfall wiederholt sich), Firewall als eine `nft`-Transaktion, WireGuard-Adressen. Nicht gelesen: `lxc/images.go`, `firewall/services.go`, Tailscale-/NetBird-Geräte, INWX/netcup/RFC 2136, `ipv64`, Medien-Import.
+
+| Nr. | Art | Wo | Befund | Stand |
+|---|---|---|---|---|
+| F-8-1 | Fehler (Aussperren) | `network/network.go:196` | Scheitert die gespeicherte Netzwerkkonfiguration einmal beim Start (Anschluss heißt nach Kartentausch anders), blieb sie „nicht geladen“: keine Änderung über die Oberfläche mehr möglich, keine VM und kein Systemcontainer startete. | behoben: bleibt änderbar, Status und Netzwerkseite nennen den Grund; `TestStoredConfigurationThatFailsToApplyCanStillBeChanged` |
+| F-8-2 | Fehler (Aussperren, Regelumgehung) | `firewall/zone.go:73`, `networks.go:167`, `render.go:324` | titand ordnet Adressen des WireGuard-Servers (privater Bereich) der Zone „Zuhause“ zu, nft dagegen der Zone „VPN“. Wer über WireGuard „VPN: verbieten“ speichert, besteht die Probe und ist nach dem Bestätigen ausgesperrt; umgekehrt erreicht die VPN-Zone die Weboberfläche, obwohl sie ihr verboten ist. | offen |
+| F-7-1 | Fehler | `vm/extras.go:361`, `vm_lifecycle.go:53` | Plattenkopie beim Anlegen, durch Absturz unterbrochen: die VM startet auf dem halben Abbild und gilt für immer als „wird vorbereitet“. | offen |
+| F-7-2 | Fehler | `vm/extras.go:378` | Endet die Plattenkopie, werden inzwischen geänderte VM-Einstellungen (RAM, Autostart, Zeitplan) mit dem Stand vom Anlegen überschrieben. | offen |
+| F-7-3 | Fehler | `vm/vm_prepare.go:159` | `Disk.File` aus der Anfrage ungeprüft: `../../…` legt das Abbild außerhalb des VM-Ordners an; „samt Platten löschen“ entfernt später, was dort liegt. | offen |
+| F-7-4 | Fehler | `vm/vm_lifecycle.go:253`, `lxc/actions.go:175` | „Samt Platten/Daten löschen“ meldet Erfolg, während das Volume nicht eingebunden ist: die Daten bleiben, die Prüfung auf Snapshots entfällt. | offen |
+| F-7-5 | Fehler | `vm/snapshots_schedule.go:89` | Snapshot-Zeitplan feuert nur, wenn die 5-s-Schleife genau die Minute trifft; „7:05“ passt nie auf „07:05“. | offen |
+| F-8-3 | Fehler | `ddns/ddns.go:388`, `dnsprovider/dyndns2.go:84` | DDNS wiederholt dauerhafte Fehler (`badauth`, `nohost`, 403) alle 5 Minuten für immer: so werden Konten gesperrt. | offen |
+| F-8-4 | Risiko | `network/topology.go:167` | Zeilenumbruch in der Zone einer IPv6-Adresse (`fe80::1%x\n[Route]…`) landet in der networkd-Datei. | offen |
+| F-8-5 | Fehler | `firewall/firewall.go:150` | Erste Regeln nach dem Start von titand kennen Apps und eigene Netze noch nicht: eine verbotene App ist kurz offen. | offen |
+| F-8-6 | Fehler (vermutet) | `dnsprovider/cloudflare.go:131`, `ionos.go:137`, `cloudflare.go:94` | Alle A/AAAA-Einträge eines Namens bekommen denselben Wert; `ClearTXT` löscht alle TXT-Einträge am Namen, auch fremde ACME-Werte. | offen |

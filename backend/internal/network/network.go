@@ -99,6 +99,10 @@ type Status struct {
 	Config      Config `json:"config"`
 	Configured  bool   `json:"configured"`
 	BridgeReady bool   `json:"bridgeReady"`
+	// NotApplied says why the stored configuration could not be put in
+	// place at the start (the NAS then runs on what the image sets up);
+	// empty when it is in use.
+	NotApplied string `json:"notApplied,omitempty"`
 	// Pending is a change on trial; PendingSeconds is how long it has left.
 	Pending        *Config     `json:"pending"`
 	PendingSeconds int         `json:"pendingSeconds"`
@@ -143,8 +147,10 @@ type Manager struct {
 	// (slow drivers, firmware loading, USB adapters, late renames).
 	portWait time.Duration
 
-	mu         sync.Mutex
-	loaded     bool
+	mu     sync.Mutex
+	loaded bool
+	// notApplied: see Status.NotApplied.
+	notApplied string
 	configured bool
 	active     Config
 	pending    *Config
@@ -193,12 +199,17 @@ func (m *Manager) Load(ctx context.Context) error {
 	if missing || m.Disabled {
 		return nil
 	}
+	// The configuration was read; that it cannot be put in place (a port
+	// that is gone after a board or card was swapped, a reload that
+	// failed once) must not close the way to repair it: it stays loaded,
+	// so that a change on trial is still possible, and the status says
+	// that the stored configuration is not the one in use.
 	if err := m.validate(m.active); err != nil {
-		m.loaded = false
+		m.notApplied = err.Error()
 		return err
 	}
 	if err := m.apply(ctx, m.active); err != nil {
-		m.loaded = false
+		m.notApplied = err.Error()
 		return err
 	}
 	return nil
@@ -638,6 +649,7 @@ func (m *Manager) changeLocked(ctx context.Context, cfg Config) error {
 		m.before, m.pending = m.active, &cfg
 		return errors.Join(err, m.rollback(ctx))
 	}
+	m.notApplied = ""
 	m.before, m.pending, m.deadline = m.active, &cfg, time.Now().Add(m.trial)
 	m.timer = time.AfterFunc(m.trial, func() {
 		m.mu.Lock()
@@ -770,6 +782,7 @@ func (m *Manager) Status(ctx context.Context) Status {
 		status.Pending = &pending
 		status.PendingSeconds = max(1, int(time.Until(m.deadline).Seconds()))
 	}
+	status.NotApplied = m.notApplied
 	status.VLANsInUse = m.vlansInUseLocked()
 	status.VLANs = m.options.VLANs || status.VLANsInUse
 	m.mu.Unlock()

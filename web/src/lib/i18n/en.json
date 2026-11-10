@@ -1541,6 +1541,7 @@
 	"error.invalid_timezone": "The NAS does not know this time zone.",
 	"error.no_bridge": "The bridge br0 is not set up. Set it up under Settings › Network or switch the VM to “outgoing only”.",
 	"netcfg.lost": "The NAS does not answer here right now – it probably has another address now. Open the web UI at the new address, log in and confirm the change there. Without confirmation the NAS is reachable at the previous address again after 2 minutes.",
+	"netcfg.notApplied": "The stored network configuration could not be applied at start; the NAS runs on the basic setup (DHCP on all ports). Adjust the configuration here and test it.",
 	"auth.code": "Code from the authenticator app",
 	"auth.codeHint": "This account is protected with a second factor. Enter the six-digit code from your app – or one of your recovery codes.",
 	"account.picture.hint": "The picture of your account on the login page: a photo of your own or one of the built-in pictures.",

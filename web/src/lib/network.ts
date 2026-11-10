@@ -39,6 +39,8 @@ export type NetworkStatus = {
 	config: NetworkConfig;
 	pending: NetworkConfig | null;
 	pendingSeconds: number;
+	/** Why the stored configuration is not in use; absent when it is. */
+	notApplied?: string;
 	interfaces: NetworkPort[];
 	device: string;
 	addresses: string[];

@@ -231,6 +231,10 @@
 		</div>
 	</section>
 {/if}
+{#if status?.notApplied}<p class="notice-warn" role="status">
+		{t('netcfg.notApplied')}
+		<span class="mono not-applied">{status.notApplied}</span>
+	</p>{/if}
 {#if lost}<p class="notice-warn" role="status">{t('netcfg.lost')}</p>{/if}
 {#if error}<div class="notice-error" role="alert">{error}</div>{/if}
 
@@ -368,6 +372,11 @@
 {/if}
 
 <style>
+	.not-applied {
+		display: block;
+		margin-top: var(--space-1);
+		overflow-wrap: anywhere;
+	}
 	.unsaved {
 		display: flex;
 		flex-direction: column;
