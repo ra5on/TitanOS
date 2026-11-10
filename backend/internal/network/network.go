@@ -315,7 +315,7 @@ func (m *Manager) validate(cfg Config) error {
 		return invalid("too many name servers")
 	}
 	for _, server := range cfg.DNS {
-		if _, err := netip.ParseAddr(server); err != nil {
+		if _, err := parseAddr(server); err != nil {
 			return invalid("name server %q", server)
 		}
 	}
@@ -332,7 +332,7 @@ func (m *Manager) validate(cfg Config) error {
 		return invalid("address")
 	}
 	if cfg.Gateway != "" {
-		gateway, err := netip.ParseAddr(cfg.Gateway)
+		gateway, err := parseAddr(cfg.Gateway)
 		if err != nil || !network.Contains(gateway) || gateway == address.Addr() {
 			return invalid("gateway")
 		}

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime"
+	"slices"
 
 	"github.com/ra5on/TitanOS/backend/internal/lxc"
 	"github.com/ra5on/TitanOS/backend/internal/run"
@@ -132,6 +133,16 @@ func (s *Server) handleLXCDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	name := r.PathValue("name")
 	noteTarget(r, name)
+	// With its data: only while its volume is there (see vm.Manager.Delete).
+	if req.DeleteData {
+		mounted := s.opts.Storage.Mounted()
+		for _, c := range s.opts.LXC.List(nil) {
+			if c.Name == name && !slices.Contains(mounted, c.Volume) {
+				writeLXCError(w, lxc.ErrUnknownVolume)
+				return
+			}
+		}
+	}
 	if err := s.opts.LXC.Delete(r.Context(), name, req.DeleteData, req.Confirm); err != nil {
 		writeLXCError(w, err)
 		return

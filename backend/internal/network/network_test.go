@@ -496,3 +496,16 @@ func TestStoredConfigurationThatFailsToApplyCanStillBeChanged(t *testing.T) {
 	}
 	m.Revert(ctx)
 }
+
+// An address goes into the files of systemd-networkd as it was given: a
+// zone may only be an interface name, never something with a line break.
+func TestAddressZoneCannotCarryLines(t *testing.T) {
+	for text, ok := range map[string]bool{
+		"192.168.1.1": true, "fe80::1": true, "fe80::1%enp1s0": true,
+		"fe80::1%x\n[Route]\nGateway=10.0.0.9": false, "fe80::1%a b": false, "fe80::1%" + strings.Repeat("x", 16): false,
+	} {
+		if _, err := parseAddr(text); (err == nil) != ok {
+			t.Errorf("%q: accepted %v, want %v", text, err == nil, ok)
+		}
+	}
+}

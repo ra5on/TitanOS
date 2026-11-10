@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -270,6 +271,18 @@ func (m *Manager) Delete(name string, deleteDisks bool, confirm string) error {
 	}
 	if deleteDisks && confirm != name && confirm != vm.Label() {
 		return ErrNotConfirmed
+	}
+	// With its disks: only while the volumes are there. On a volume that
+	// is locked or not mounted nothing would be deleted (the mount point
+	// is an empty folder), the VM would be reported as removed with its
+	// disks, and they would all still be there afterwards.
+	if deleteDisks && m.Mounted != nil {
+		mounted := m.Mounted()
+		for _, volume := range vm.volumes() {
+			if !slices.Contains(mounted, volume) {
+				return ErrUnknownVolume
+			}
+		}
 	}
 	if err := m.store.Remove(configDir + "/" + name + ".json"); err != nil {
 		return err

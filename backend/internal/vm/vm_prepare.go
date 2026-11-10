@@ -156,6 +156,13 @@ func (m *Manager) prepare(ctx context.Context, vm *VM, mounted []string) error {
 			return ErrUnknownVolume
 		}
 		file++
+		// A name from the request is the name of a file in the folder of
+		// the VM, nothing else: a path would put the image somewhere on
+		// the NAS (and "delete with disks" would later remove what is
+		// there), and the names TitanOS keeps in that folder are taken.
+		if disk.File != "" && !validDiskFile(disk.File, disk.Format) {
+			return fmt.Errorf("%w: disk file name", ErrInvalid)
+		}
 		if disk.File == "" {
 			extension := map[string]string{"qcow2": "qcow2", "raw": "img"}[disk.Format]
 			disk.File = fmt.Sprintf("vdisk%d.%s", file, extension)
@@ -240,4 +247,23 @@ func newMAC() string {
 	b := make([]byte, 3)
 	rand.Read(b)
 	return fmt.Sprintf("52:54:00:%02x:%02x:%02x", b[0], b[1], b[2])
+}
+
+// validDiskFile reports whether name may be the image of a disk in the
+// folder of its VM: a plain file name with the ending of its format.
+func validDiskFile(name, format string) bool {
+	if name != filepath.Base(name) || strings.HasPrefix(name, ".") || len(name) > 128 || strings.ContainsAny(name, "\x00\n\r\\") {
+		return false
+	}
+	lower := strings.ToLower(name)
+	if lower == "nvram.fd" || lower == "vm.json" || lower == "tpm" {
+		return false
+	}
+	switch format {
+	case "qcow2":
+		return strings.HasSuffix(lower, ".qcow2")
+	case "raw":
+		return strings.HasSuffix(lower, ".img") || strings.HasSuffix(lower, ".raw")
+	}
+	return false
 }

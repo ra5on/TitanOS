@@ -66,6 +66,10 @@ type Manager struct {
 	Web WebPorts
 	// HomeNetworks returns the networks of the NAS's own interfaces.
 	HomeNetworks func() []string
+	// VPNNetworks returns private networks that reach the NAS only over a
+	// VPN interface (the tunnel network of the WireGuard server); nil for
+	// none. See classifier.vpn.
+	VPNNetworks func() []string
 	// Apps returns the Docker apps with their published ports; ok false
 	// keeps the last known list (Docker not answering).
 	Apps func(ctx context.Context) ([]App, bool)
@@ -319,7 +323,7 @@ func (m *Manager) Change(ctx context.Context, cfg Config, admin string) error {
 		return fmt.Errorf("%w: unknown client address", ErrInvalid)
 	}
 	addr = addr.Unmap().WithZone("")
-	if cfg.Enabled && !addr.IsLoopback() && !decide(cfg, Services(&m.Web), newClassifier(cfg, m.networks, m.home).zone(addr), addr, "tcp", m.Web.or().HTTPS, "webui") {
+	if cfg.Enabled && !addr.IsLoopback() && !decide(cfg, Services(&m.Web), newClassifier(cfg, m.networks, m.home, m.vpnNetworks()).zone(addr), addr, "tcp", m.Web.or().HTTPS, "webui") {
 		return ErrExcludesYou
 	}
 	return m.changeLocked(ctx, cfg, addr)
@@ -504,7 +508,7 @@ func (m *Manager) AllowHTTP(remoteAddr string, app bool) bool {
 	if app {
 		service = "apps"
 	}
-	return decide(cfg, Services(&m.Web), newClassifier(cfg, m.networks, m.home).zone(addr), addr, "tcp", m.Web.or().HTTPS, service)
+	return decide(cfg, Services(&m.Web), newClassifier(cfg, m.networks, m.home, m.vpnNetworks()).zone(addr), addr, "tcp", m.Web.or().HTTPS, service)
 }
 
 // Status returns the settings and the state; client is the address of the
@@ -525,7 +529,7 @@ func (m *Manager) Status(client string) Status {
 		status.VPNNetworks = append(status.VPNNetworks, p.String())
 	}
 	if addr, err := netip.ParseAddr(client); err == nil {
-		status.ClientZone = newClassifier(m.current(), m.networks, m.home).zone(addr)
+		status.ClientZone = newClassifier(m.current(), m.networks, m.home, m.vpnNetworks()).zone(addr)
 	}
 	status.Networks = statusNetworks(m.networks, m.active, m.pending)
 	status.DockerError = m.dockerUserErr
@@ -718,6 +722,20 @@ func statusNetworks(live []Network, active Config, pending *Config) []Network {
 				}
 				out = append(out, Network{ID: id, Kind: kind, Name: name, Subnets: []string{}, Missing: true})
 			}
+		}
+	}
+	return out
+}
+
+// vpnNetworks are the networks VPNNetworks names, as prefixes.
+func (m *Manager) vpnNetworks() []netip.Prefix {
+	if m.VPNNetworks == nil {
+		return nil
+	}
+	var out []netip.Prefix
+	for _, text := range m.VPNNetworks() {
+		if p, err := netip.ParsePrefix(text); err == nil {
+			out = append(out, p.Masked())
 		}
 	}
 	return out

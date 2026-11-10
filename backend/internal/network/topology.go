@@ -3,6 +3,7 @@ package network
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/netip"
@@ -163,7 +164,7 @@ func (m *Manager) validateTopology(cfg Config) error {
 			}
 			prefixes = append(prefixes, p)
 			if v.gateway != "" {
-				g, err := netip.ParseAddr(v.gateway)
+				g, err := parseAddr(v.gateway)
 				if err != nil || g.Is4() != v.v4 || g == p.Addr() || g.IsUnspecified() || g.IsMulticast() || (!p.Contains(g) && !(!v.v4 && g.IsLinkLocalUnicast())) {
 					return invalid("gateway")
 				}
@@ -173,14 +174,14 @@ func (m *Manager) validateTopology(cfg Config) error {
 			return invalid("DNS or route count")
 		}
 		for _, dns := range n.DNS {
-			a, e := netip.ParseAddr(dns)
+			a, e := parseAddr(dns)
 			if e != nil || a.IsUnspecified() || a.IsMulticast() {
 				return invalid("DNS server")
 			}
 		}
 		for _, r := range n.Routes {
 			p, e := netip.ParsePrefix(r.Destination)
-			g, ge := netip.ParseAddr(r.Gateway)
+			g, ge := parseAddr(r.Gateway)
 			if e != nil || ge != nil || g.Is4() != p.Addr().Is4() || g.IsUnspecified() || g.IsMulticast() || r.Metric < 0 || r.Metric > 65535 {
 				return invalid("route")
 			}
@@ -497,4 +498,24 @@ func (m *Manager) Recover(ctx context.Context, port string) error {
 	}
 	m.active, m.pending, m.loaded, m.configured = cfg, nil, true, true
 	return nil
+}
+
+// parseAddr reads an address that goes into a file of systemd-networkd.
+// netip takes anything after "%" as the zone of an IPv6 address, line
+// breaks included, and the address is written as it was given: a zone is
+// only let through when it is a plain interface name.
+func parseAddr(text string) (netip.Addr, error) {
+	addr, err := netip.ParseAddr(text)
+	if err != nil {
+		return addr, err
+	}
+	for _, r := range addr.Zone() {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '.' || r == '_' || r == '-') {
+			return netip.Addr{}, errors.New("network: invalid zone of an address")
+		}
+	}
+	if len(addr.Zone()) > 15 {
+		return netip.Addr{}, errors.New("network: invalid zone of an address")
+	}
+	return addr, nil
 }

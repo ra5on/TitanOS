@@ -121,7 +121,7 @@ func TestRenderZonesGolden(t *testing.T) {
 
 func TestClassifyOwnZones(t *testing.T) {
 	cfg := sampleZones()
-	c := newClassifier(cfg, sampleNetworks(), homeNetworks([]string{"192.168.1.0/24"}))
+	c := newClassifier(cfg, sampleNetworks(), homeNetworks([]string{"192.168.1.0/24"}), nil)
 	for addr, want := range map[string]Zone{
 		"192.168.50.7":  "ziot",
 		"10.20.3.4":     "ziot",
@@ -426,5 +426,24 @@ func TestSetAppZonesKeepsOrder(t *testing.T) {
 	}
 	if errors.Is(validate(normal(cfg)), ErrInvalid) {
 		t.Error("invalid")
+	}
+}
+
+// The tunnel network of the WireGuard server is a private one, but its
+// devices come in over the VPN interface and the rules treat them as VPN.
+// titand must put them into the same zone, or the check before a change
+// would say "you can still reach the web UI" to someone it then locks out.
+func TestWireGuardClientsAreVPNLikeInTheRules(t *testing.T) {
+	home := homeNetworks([]string{"192.168.1.0/24", "10.253.0.0/24"})
+	client := netip.MustParseAddr("10.253.0.2")
+	if got := newClassifier(Config{}, nil, home, nil).zone(client); got != Home {
+		t.Fatalf("without the hint the address counts as %v (the old behaviour this test documents)", got)
+	}
+	vpn := []netip.Prefix{netip.MustParsePrefix("10.253.0.0/24")}
+	if got := newClassifier(Config{}, nil, home, vpn).zone(client); got != VPN {
+		t.Fatalf("WireGuard client in zone %v, want VPN", got)
+	}
+	if got := newClassifier(Config{}, nil, home, vpn).zone(netip.MustParseAddr("192.168.1.20")); got != Home {
+		t.Fatalf("home device in zone %v", got)
 	}
 }
