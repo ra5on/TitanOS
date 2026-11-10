@@ -307,6 +307,14 @@ func (m *Manager) RemoveBtrfsDisk(ctx context.Context, name, diskName string) er
 	if used := btrfsDataUsed(usage); used == 0 || used > btrfsUsable(btrfsProfile(volume), others)*95/100 {
 		return fmt.Errorf("%w: the other disks cannot hold the data", ErrDiskTooSmall)
 	}
+	// The partition that leaves, by its own ID: the names of the kernel
+	// (sdc) can go to another disk while the removal runs for hours.
+	memberID := ""
+	device.walk(func(node blockDevice) {
+		if node.Type == "part" && (node.KName == part.KName || node.KName == luksPart) {
+			memberID = node.PartUUID
+		}
+	})
 	slog.Info("removing disk from Btrfs volume", "name", name, "disk", diskName)
 	m.mu.Lock()
 	if m.btrfsRemoving == nil {
@@ -325,11 +333,8 @@ func (m *Manager) RemoveBtrfsDisk(ctx context.Context, name, diskName string) er
 			if err := m.saveLayout(volume.Name, btrfsProfile(volume), len(parts)-1); err != nil {
 				slog.Error("Btrfs layout not saved after removing a disk", "name", name, "err", err)
 			}
-			_, _ = m.runner.Run(ctx, "", "wipefs", "--all", "--force", part.KName) // cleanup, best effort: nothing more can be done if it fails
 			if luksUUID != "" {
-				_ = m.luksClose(ctx, cryptName(volume, luksUUID))                    // cleanup, best effort: nothing more can be done if it fails
-				_ = m.eraseLUKS(ctx, luksPart)                                       // cleanup, best effort: nothing more can be done if it fails
-				_, _ = m.runner.Run(ctx, "", "wipefs", "--all", "--force", luksPart) // cleanup, best effort: nothing more can be done if it fails
+				_ = m.luksClose(ctx, cryptName(volume, luksUUID)) // cleanup, best effort: nothing more can be done if it fails
 				if err := m.updateVolume(volume.Name, func(v *VolumeConfig) {
 					if v.Encryption != nil {
 						v.Encryption.UUIDs = uuidsWithout(v.Encryption.UUIDs, luksUUID)
@@ -338,8 +343,23 @@ func (m *Manager) RemoveBtrfsDisk(ctx context.Context, name, diskName string) er
 					slog.Error("LUKS UUID of a removed disk not forgotten", "name", name, "err", err)
 				}
 			}
-			_, _ = m.runner.Run(ctx, "", "wipefs", "--all", "--force", device.Name) // cleanup, best effort: nothing more can be done if it fails
-			_, _ = m.runner.Run(ctx, "", "udevadm", "settle")                       // only waits for the kernel and udev; the next step checks the result
+			// Wiped is what is found now under the ID of the partition,
+			// not what was called sdc when the removal began. Btrfs has
+			// cleared its own signature already; when the disk cannot be
+			// found for sure, it is left as it is.
+			_, _ = m.runner.Run(ctx, "", "udevadm", "settle") // only waits for the kernel and udev; the next step checks the result
+			if disk, member, ok := m.removedMember(ctx, memberID, volume.FilesystemUUID, luksUUID); ok {
+				if luksUUID != "" {
+					_ = m.eraseLUKS(ctx, member.KName) // cleanup, best effort: nothing more can be done if it fails
+				}
+				_, _ = m.runner.Run(ctx, "", "wipefs", "--all", "--force", member.KName) // cleanup, best effort: nothing more can be done if it fails
+				if target := wipeTarget(disk, member); target != member.KName {
+					_, _ = m.runner.Run(ctx, "", "wipefs", "--all", "--force", target) // cleanup, best effort: nothing more can be done if it fails
+				}
+			} else {
+				slog.Warn("removed disk not wiped: it could not be identified for sure", "name", name, "disk", diskName)
+			}
+			_, _ = m.runner.Run(ctx, "", "udevadm", "settle") // only waits for the kernel and udev; the next step checks the result
 			slog.Info("disk removed from Btrfs volume", "name", name, "disk", diskName)
 		}
 		m.mu.Lock()
@@ -407,4 +427,36 @@ func (m *Manager) btrfsState(name string) btrfsProgress {
 func (m *Manager) FilesystemOf(name string) string {
 	volume, _ := m.find(name)
 	return volume.Filesystem
+}
+
+// removedMember finds, after a member left its Btrfs volume, the disk and
+// partition it was on by the ID of the partition. It reports false when
+// that partition is gone, still carries the volume, or (encrypted) is no
+// longer the LUKS container that was removed.
+func (m *Manager) removedMember(ctx context.Context, partUUID, filesystemUUID, luksUUID string) (blockDevice, blockDevice, bool) {
+	if partUUID == "" {
+		return blockDevice{}, blockDevice{}, false
+	}
+	devices, err := m.blockDevices(ctx)
+	if err != nil {
+		return blockDevice{}, blockDevice{}, false
+	}
+	for _, disk := range devices {
+		for _, part := range disk.partitions() {
+			if part.PartUUID != partUUID {
+				continue
+			}
+			still := false
+			part.walk(func(node blockDevice) {
+				if node.UUID == filesystemUUID && node.FSType == "btrfs" {
+					still = true
+				}
+			})
+			if still || (luksUUID != "" && part.UUID != luksUUID) || (luksUUID == "" && part.FSType != "") {
+				return blockDevice{}, blockDevice{}, false
+			}
+			return disk, part, true
+		}
+	}
+	return blockDevice{}, blockDevice{}, false
 }

@@ -761,7 +761,7 @@ func (m *Manager) RemoveDisk(ctx context.Context, name, diskName string) error {
 			return err
 		}
 		_, _ = m.runner.Run(ctx, "", "mdadm", "--zero-superblock", "--force", part) // cleanup, best effort: nothing more can be done if it fails
-		_, _ = m.runner.Run(ctx, "", "wipefs", "--all", "--force", part) // cleanup, best effort: nothing more can be done if it fails
+		_, _ = m.runner.Run(ctx, "", "wipefs", "--all", "--force", part)            // cleanup, best effort: nothing more can be done if it fails
 		// The partition table goes only when this member was all the disk held.
 		if target := wipeTarget(device, blockDevice{KName: part}); target != part {
 			_, _ = m.runner.Run(ctx, "", "wipefs", "--all", "--force", target) // cleanup, best effort: nothing more can be done if it fails
