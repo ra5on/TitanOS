@@ -14,6 +14,12 @@
 import type { Role } from '../../api.ts';
 import type { MessageKey } from '../../i18n/index.svelte.ts';
 import { appAllowed, appForPath, SYSTEM_APPS } from '../apps.ts';
+import {
+	settingsAreas,
+	settingsGroupHref,
+	settingsGroupLabel,
+	settingsGroups,
+} from '../../settings-search.ts';
 
 export type WinOp =
 	| 'minimize'
@@ -507,14 +513,18 @@ const PROGRAMS: Record<string, Menu[]> = {
 		]),
 		menu('view', 'menubar.menu.view', [
 			go('settings.go.all', 'desktop.side.allSettings', '/settings'),
-			sub('settings.groups', 'menubar.settings.groups', [
-				go('settings.go.system', 'desktop.side.system', '/settings/about'),
-				go('settings.go.network', 'desktop.side.network', '/settings/network', { roles: ADMIN }),
-				go('settings.go.accounts', 'desktop.side.accountsServices', '/settings/access', {
-					roles: ADMIN,
-				}),
-				go('settings.go.data', 'desktop.side.dataGroup', '/settings/files'),
-			]),
+			// PLAN 78: the areas of the menu; one the account may not open is left out.
+			sub(
+				'settings.groups',
+				'menubar.settings.groups',
+				settingsGroups.map((group) =>
+					go(`settings.go.${group}`, settingsGroupLabel(group), settingsGroupHref(group), {
+						roles: settingsAreas.some((area) => area.group === group && !area.admin)
+							? undefined
+							: ADMIN,
+					}),
+				),
+			),
 		]),
 	],
 	// PLAN 66: web apps running in the browser (WordCraft …), handled by the window itself.
@@ -798,7 +808,13 @@ export function goTarget(
 	// (Systemsteuerung › Zugang, though Zugang belongs to Benutzer).
 	const own = SYSTEM_APPS.find((a) => 'app:' + a.id === key);
 	const bare = path.split('?')[0];
-	if (own?.side.some((i) => 'href' in i && i.href.split('?')[0] === bare))
+	if (
+		own?.side.some(
+			(i) =>
+				'href' in i &&
+				(i.href.split('?')[0] === bare || ('match' in i && !!i.match?.includes(bare))),
+		)
+	)
 		return { kind: 'here', app: key, href: path };
 	return { kind: 'program', app: 'app:' + target.id, href: path };
 }

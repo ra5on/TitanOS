@@ -205,6 +205,8 @@
 		// The entry of the side bar for exactly this page, else the page's own
 		// title (a page below an entry, e.g. one app), else the entry above it.
 		const own = pageName.trim();
+		// PLAN 78: the menu of Systemsteuerung names areas; the page names itself.
+		if (win.app === 'app:settings') return own && own !== win.title ? own : label(true);
 		return label(true) || (own && own !== win.title ? own : '') || label(false);
 	});
 
@@ -471,6 +473,7 @@
 					bind:this={frame}
 					onload={loaded}
 					data-window={win.id}
+					data-app={win.app}
 					{src}
 					title={win.title}
 					allow="clipboard-read; clipboard-write; fullscreen; publickey-credentials-get; publickey-credentials-create; camera; microphone"

@@ -1237,3 +1237,294 @@ input.switch:disabled {
 .page-groups {
 	display: contents;
 }
+
+/* PLAN 78-1 (owner 10.11.2026, draft Entwuerfe/78-einstellungen-win11): the
+   pages of the control panel like Windows 11's settings. The page title is a
+   path ("Hardware und Energie › Energie"); a group is a plain heading above
+   its rows, no box around it; every setting is a flat row of its own (symbol,
+   name, explanation, the control on the right); a setting with parts opens
+   downward inside its row. Components: settings/SettingGroup, SettingRow,
+   SettingSub. Only theme variables: the fill is a quiet tint of the text
+   colour, so it reads on every theme and on glass. */
+:root {
+	--srow-bg: color-mix(in srgb, var(--text) 4.5%, transparent);
+	--srow-hover: color-mix(in srgb, var(--text) 7.5%, transparent);
+	--srow-line: color-mix(in srgb, var(--text) 9%, transparent);
+	--srow-radius: calc(6px * var(--radius-scale, 1));
+	--srow-indent: calc(var(--space-4) + 24px + var(--space-4));
+}
+.set-path {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0 var(--space-2-5);
+	margin: var(--space-1) 0 0;
+	font-size: 1.625rem;
+	font-weight: 600;
+	line-height: 1.25;
+	min-width: 0;
+}
+.set-path nav {
+	display: contents;
+}
+.set-path :is(a, .sep) {
+	color: var(--muted);
+	font-weight: 500;
+	text-decoration: none;
+}
+.set-path a:hover {
+	color: var(--text);
+}
+.set-path a:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+	border-radius: var(--radius-bar);
+}
+.set-path h1 {
+	margin: 0;
+	font: inherit;
+	min-width: 0;
+	overflow-wrap: break-word;
+}
+.sgroup {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	min-width: 0;
+}
+.sgroup-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-1) var(--space-3);
+	margin: var(--space-1) 0 var(--space-1-5);
+	min-width: 0;
+}
+.sgroup-title {
+	margin: 0;
+	color: var(--text);
+	font-size: var(--text-md);
+	font-weight: 600;
+	letter-spacing: 0;
+	text-transform: none;
+}
+.sgroup-tools {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-2);
+	margin-left: auto;
+}
+.sgroup-desc {
+	flex-basis: 100%;
+	margin: 0;
+	color: var(--muted);
+	font-size: var(--text-base);
+}
+.srow {
+	display: block;
+	min-width: 0;
+	border: 1px solid var(--srow-line);
+	border-radius: var(--srow-radius);
+	background: var(--srow-bg);
+	color: var(--text);
+	text-decoration: none;
+}
+.srow-head {
+	display: flex;
+	align-items: center;
+	gap: var(--space-1-5) var(--space-4);
+	min-height: 60px;
+	padding: var(--space-2-5) var(--space-4);
+	min-width: 0;
+}
+.srow-head.can-open {
+	cursor: pointer;
+}
+.srow-head.can-open:hover,
+a.srow:hover {
+	background: var(--srow-hover);
+}
+a.srow:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+.srow-ico {
+	display: grid;
+	place-items: center;
+	flex: none;
+	width: 24px;
+	color: var(--muted);
+}
+.srow-text {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	flex: 1 1 0;
+	min-width: 0;
+}
+.srow-title {
+	margin: 0;
+	color: var(--text);
+	font-size: var(--text-md);
+	font-weight: 500;
+	letter-spacing: 0;
+	text-transform: none;
+	overflow-wrap: break-word;
+}
+.srow-title .chip {
+	margin-left: var(--space-1-5);
+	font-weight: 400;
+}
+.srow-desc {
+	margin: 0;
+	color: var(--muted);
+	font-size: var(--text-sm);
+	line-height: 1.4;
+	overflow-wrap: anywhere;
+}
+.srow-ctl {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: flex-end;
+	gap: var(--space-2) var(--space-2-5);
+	flex: 0 1 auto;
+	max-width: 62%;
+	min-width: 0;
+	color: var(--muted);
+	font-size: var(--text-base);
+	text-align: right;
+}
+.srow-ctl:empty {
+	display: none;
+}
+.srow-summary {
+	overflow-wrap: anywhere;
+}
+.srow-ctl :is(select.field, input.field) {
+	width: auto;
+	min-width: 9rem;
+}
+.srow-ctl
+	input.field:is([type='text'], [type='url'], [type='email'], [type='password'], :not([type])) {
+	width: 17rem;
+}
+.srow-ctl input.field:is([type='number'], [type='time']) {
+	min-width: 5.5rem;
+	width: 7rem;
+}
+.srow-ctl .btn {
+	min-height: 32px;
+}
+.srow-chev {
+	display: grid;
+	place-items: center;
+	flex: none;
+	width: 28px;
+	height: 28px;
+	margin-right: -6px;
+	padding: 0;
+	border: 0;
+	border-radius: var(--radius-bar);
+	background: none;
+	color: var(--muted);
+	cursor: pointer;
+}
+.srow-chev svg {
+	transition: transform 0.15s;
+}
+.srow.open > .srow-head .srow-chev svg {
+	transform: rotate(180deg);
+}
+.srow-chev:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+span.srow-chev {
+	cursor: inherit;
+}
+/* The parts of an open row: indented under its name, hair lines between. */
+.srow-body {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	border-top: 1px solid var(--srow-line);
+}
+.srow-body > * + * {
+	border-top: 1px solid var(--srow-line);
+}
+.srow-sub {
+	display: flex;
+	align-items: center;
+	gap: var(--space-1-5) var(--space-4);
+	min-height: 50px;
+	padding: var(--space-2-5) var(--space-4) var(--space-2-5) var(--srow-indent);
+	min-width: 0;
+}
+/* Free content of an open row (a list, a table, a note, the row's buttons). */
+.srow-block {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+	padding: var(--space-3) var(--space-4) var(--space-3) var(--srow-indent);
+	min-width: 0;
+}
+.srow-block.actions {
+	flex-direction: row;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-2-5);
+}
+.srow-block :is(p, fieldset) {
+	margin: 0;
+}
+.srow-block.wide {
+	padding-left: var(--space-4);
+}
+/* A row without a symbol keeps its text at the row's edge: so do its parts. */
+.srow.plain {
+	--srow-indent: var(--space-4);
+}
+@media (prefers-reduced-motion: reduce) {
+	.srow-chev svg {
+		transition: none;
+	}
+}
+/* A narrow window or the phone: the control below the text, nothing beside
+   it that could be squeezed; the chevron stays at the end of the first line. */
+@media (max-width: 639px) {
+	.set-path {
+		font-size: 1.3125rem;
+	}
+	.srow-head,
+	.srow-sub {
+		flex-wrap: wrap;
+	}
+	.srow-chev {
+		order: 2;
+	}
+	.srow-ctl {
+		order: 3;
+		flex: 1 1 100%;
+		max-width: none;
+		justify-content: flex-start;
+		text-align: left;
+	}
+	.srow-head > .srow-ico ~ .srow-ctl {
+		padding-left: calc(24px + var(--space-4));
+	}
+	.srow-ctl :is(select.field, input.field),
+	.srow-ctl
+		input.field:is([type='text'], [type='url'], [type='email'], [type='password'], :not([type])) {
+		width: 100%;
+	}
+	.srow-block {
+		padding-left: var(--space-4);
+	}
+}
+/* The path title stands above a page's tool bar: the page keeps its top
+   padding there (a window without the path starts with the bar). */
+:is(main.in-window, main.phone-page):has(.set-path) {
+	padding-top: var(--page-pad);
+}

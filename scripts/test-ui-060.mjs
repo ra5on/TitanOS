@@ -424,12 +424,18 @@ try {
       };
       await search.waitFor({ timeout: 15000 });
       await search.fill("SSH");
-      assert.deepEqual(await items(), ["Zugang und Sitzungen"]);
+      // PLAN 78: the search lists the pages and sections it finds.
+      assert.deepEqual(await items(), ["Zugang › SSH"]);
       await search.fill("DNS");
-      assert.ok((await items()).includes("Netzwerk"), "DNS finds Netzwerk");
+      assert.ok(
+        (await items()).some((name) => name.startsWith("Netzwerk")),
+        "DNS finds Netzwerk",
+      );
       await search.fill("Zeitzone");
-      assert.deepEqual(await items(), ["Zeitzone"]);
-      await side.getByRole("button", { name: "Zeitzone", exact: true }).click();
+      assert.deepEqual(await items(), ["Datum und Uhrzeit"]);
+      await side
+        .getByRole("button", { name: "Datum und Uhrzeit", exact: true })
+        .click();
       await timezone();
       await frame.locator("select").selectOption("UTC");
       await frame.getByText("Gespeichert", { exact: true }).waitFor();

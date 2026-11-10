@@ -391,15 +391,15 @@ try {
     // The overview lists the firewall under "Netzwerk" (PLAN 61), A–Z and
     // with the "neu" badge.
     await page.goto(base + "/settings");
-    await nav(page).locator(".home-tile").first().waitFor();
-    const group = nav(page).locator(".group-title", { hasText: "Netzwerk" });
+    await nav(page).locator("a.srow").first().waitFor();
+    const group = nav(page).locator(".sgroup-title", { hasText: "Netzwerk" });
     await group.waitFor();
     await page.screenshot({
       path: `${out}/settings-overview-desktop.png`,
       fullPage: true,
     });
     const hrefs = await nav(page)
-      .locator("a.home-tile")
+      .locator("a.srow")
       .evaluateAll((links) => links.map((a) => a.getAttribute("href")));
     const network = hrefs.slice(
       hrefs.indexOf("/settings/ddns"),
@@ -430,7 +430,7 @@ try {
       .waitFor({ state: "attached" });
     // Opening an area once takes its "new" badge away; the others keep theirs.
     await page.goto(base + "/settings");
-    await nav(page).locator(".home-tile").first().waitFor();
+    await nav(page).locator("a.srow").first().waitFor();
     assert.equal(
       await nav(page)
         .locator('a[href="/settings/firewall"]')
@@ -690,7 +690,7 @@ try {
         }
     }
     await page.goto(base + "/settings");
-    await page.locator(".home-tile").first().waitFor();
+    await page.locator("a.srow").first().waitFor();
     await page.screenshot({
       path: `${out}/settings-overview-mobile.png`,
       fullPage: true,

@@ -1,8 +1,11 @@
 <script lang="ts">
-	// Shutting down and switching on at set times, and Wake-on-LAN.
+	// Shutting down and switching on at set times, and Wake-on-LAN: two rows
+	// of Einstellungen › Energie (PLAN 78-1, draft 78).
 	import { api } from '#lib/api.ts';
 	import { formatDateTime } from '#lib/format.ts';
 	import { apiErrorText, t, type MessageKey } from '#lib/i18n/index.svelte.ts';
+	import SettingRow from '#lib/components/settings/SettingRow.svelte';
+	import SettingSub from '#lib/components/settings/SettingSub.svelte';
 
 	type Time = { enabled: boolean; days: number[]; time: string };
 	type Schedule = { off: Time; on: Time; wakeOnLan: boolean };
@@ -44,8 +47,9 @@
 	$effect(() => {
 		api.get<Status>('/system/power-schedule').then(take, fail);
 	});
-	async function save(event: SubmitEvent) {
-		event.preventDefault();
+	// PLAN 78-1: no Save button – every change is stored right away (the same
+	// PUT with the whole schedule as before).
+	async function store() {
 		if (!draft) return;
 		busy = true;
 		error = '';
@@ -63,146 +67,136 @@
 		entry.days = entry.days.includes(day)
 			? entry.days.filter((d) => d !== day)
 			: [...entry.days, day];
+		void store();
 	}
 	const anyWake = $derived(status?.interfaces.some((i) => i.supported) ?? false);
+	// What the row says at its right: "Aus", or the times that are switched on.
+	const summary = $derived.by(() => {
+		if (!draft) return '';
+		const parts = [
+			draft.off.enabled ? t('powerSchedule.sumOff', { time: draft.off.time }) : '',
+			draft.on.enabled ? t('powerSchedule.sumOn', { time: draft.on.time }) : '',
+		].filter(Boolean);
+		return parts.length ? parts.join(' · ') : t('appform.off');
+	});
 </script>
 
-{#snippet times(entry: Time, which: 'off' | 'on')}
-	<label class="check"
-		><input
-			type="checkbox"
-			bind:checked={entry.enabled}
-			disabled={busy || (which === 'on' && !status?.rtc)}
-		/><span>{t(`powerSchedule.${which}` as MessageKey)}</span></label
+{#snippet times(entry: Time, which: 'off' | 'on', next: string | undefined)}
+	<SettingSub
+		title={t(`powerSchedule.${which}` as MessageKey)}
+		for="schedule-{which}"
+		desc={next && entry.enabled
+			? t(`powerSchedule.next${which === 'off' ? 'Off' : 'On'}` as MessageKey, {
+					at: formatDateTime(new Date(next)),
+				})
+			: undefined}
 	>
-	<div class="row">
-		<label class="tiny"
-			><span>{t('powerSchedule.time')}</span><input
+		{#snippet control()}
+			<input
+				id="schedule-{which}"
+				class="switch"
+				type="checkbox"
+				role="switch"
+				bind:checked={entry.enabled}
+				disabled={busy || (which === 'on' && !status?.rtc)}
+				onchange={store}
+			/>
+		{/snippet}
+	</SettingSub>
+	<div class="srow-sub">
+		<div class="srow-text">
+			<label class="srow-title" for="schedule-{which}-time">{t('powerSchedule.time')}</label>
+		</div>
+		<div class="srow-ctl">
+			<div class="days" role="group" aria-label={t('powerSchedule.days')}>
+				{#each DAYS as day}
+					<button
+						type="button"
+						class="btn day"
+						class:active={entry.days.includes(day)}
+						aria-pressed={entry.days.includes(day)}
+						disabled={busy || !entry.enabled}
+						onclick={() => toggleDay(entry, day)}
+						>{t(`common.day${day}` as MessageKey).slice(0, 2)}</button
+					>
+				{/each}
+			</div>
+			<input
+				id="schedule-{which}-time"
 				class="field mono"
 				type="time"
 				bind:value={entry.time}
 				disabled={busy || !entry.enabled}
-			/></label
-		>
-		<div class="days" role="group" aria-label={t('powerSchedule.days')}>
-			{#each DAYS as day}
-				<button
-					type="button"
-					class="btn day"
-					class:active={entry.days.includes(day)}
-					aria-pressed={entry.days.includes(day)}
-					disabled={busy || !entry.enabled}
-					onclick={() => toggleDay(entry, day)}
-					>{t(`common.day${day}` as MessageKey).slice(0, 2)}</button
-				>
-			{/each}
+				onchange={store}
+			/>
 		</div>
 	</div>
 {/snippet}
 
-<section class="tile panel schedule" id="power-schedule">
-	<h2 class="tile-title">{t('powerSchedule.title')}</h2>
-	<p class="muted">{t('powerSchedule.intro')}</p>
-	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
+<SettingRow
+	id="power-schedule"
+	icon="clock"
+	title={t('powerSchedule.schedule')}
+	desc={t('powerSchedule.intro')}
+	{summary}
+>
+	{#if error}<div class="srow-block"><p class="notice-error" role="alert">{error}</p></div>{/if}
 	{#if status && draft}
-		{#if status.readOnly}<p class="notice-warn">{t('powerSchedule.readOnly')}</p>{/if}
-		{#if status.error}<p class="notice-warn">
-				{t('powerSchedule.problem')} <span class="mono">{status.error}</span>
-			</p>{/if}
-		{#if status.postponed}<p class="notice-warn">
-				{t('powerSchedule.postponed', { why: status.postponed })}
-			</p>{/if}
-		<form onsubmit={save}>
-			{@render times(draft.off, 'off')}
-			{#if status.nextOff && draft.off.enabled}<p class="muted small">
-					{t('powerSchedule.nextOff', { at: formatDateTime(new Date(status.nextOff)) })}
-				</p>{/if}
-			{@render times(draft.on, 'on')}
-			{#if !status.rtc}<p class="muted small">{t('powerSchedule.noRtc')}</p>{:else}<p
-					class="muted small"
-				>
-					{t('powerSchedule.rtcHint')}
-				</p>{/if}
-			{#if status.nextOn && draft.on.enabled}<p class="muted small">
-					{t('powerSchedule.nextOn', { at: formatDateTime(new Date(status.nextOn)) })}
-				</p>{/if}
-			<label class="check"
-				><input type="checkbox" bind:checked={draft.wakeOnLan} disabled={busy || !anyWake} /><span
-					>{t('powerSchedule.wol')}</span
-				></label
-			>
-			<ul class="ifaces">
-				{#each status.interfaces as iface (iface.name)}
-					<li>
-						<span class="mono">{iface.name}</span><span class="mono muted">{iface.mac}</span><span
-							class="chip {iface.supported ? (iface.enabled ? 'ok' : 'info') : ''}"
-							>{t(
-								iface.supported
-									? iface.enabled
-										? 'powerSchedule.wolOn'
-										: 'powerSchedule.wolOff'
-									: 'powerSchedule.wolNone',
-							)}</span
-						>
-					</li>
-				{/each}
-			</ul>
-			<p class="muted small">{t('powerSchedule.wolHint')}</p>
-			<div class="actions">
-				{#if saved}<span role="status">{t('notify.saved')}</span>{/if}
-				<button class="btn btn-primary" disabled={busy}>{t('common.save')}</button>
-			</div>
-		</form>
-	{/if}
-</section>
+		{#if status.readOnly || status.error || status.postponed}<div class="srow-block">
+				{#if status.readOnly}<p class="notice-warn">{t('powerSchedule.readOnly')}</p>{/if}
+				{#if status.error}<p class="notice-warn">
+						{t('powerSchedule.problem')} <span class="mono">{status.error}</span>
+					</p>{/if}
+				{#if status.postponed}<p class="notice-warn">
+						{t('powerSchedule.postponed', { why: status.postponed })}
+					</p>{/if}
+			</div>{/if}
+		{@render times(draft.off, 'off', status.nextOff)}
+		{@render times(draft.on, 'on', status.nextOn)}
+		<div class="srow-block">
+			<p class="muted small">{t(status.rtc ? 'powerSchedule.rtcHint' : 'powerSchedule.noRtc')}</p>
+			{#if saved}<p class="muted small" role="status">{t('notify.saved')}</p>{/if}
+		</div>
+	{:else if !error}<div class="srow-block"><p class="muted">{t('common.loading')}</p></div>{/if}
+</SettingRow>
+<SettingRow
+	id="power-wol"
+	icon="globe"
+	title={t('powerSchedule.wolTitle')}
+	desc={t('powerSchedule.wolDesc')}
+	summary={draft ? t(draft.wakeOnLan ? 'appform.on' : 'appform.off') : undefined}
+>
+	{#snippet control()}
+		{#if draft}<input
+				class="switch"
+				type="checkbox"
+				role="switch"
+				aria-label={t('powerSchedule.wolTitle')}
+				bind:checked={draft.wakeOnLan}
+				disabled={busy || !anyWake}
+				onchange={store}
+			/>{/if}
+	{/snippet}
+	{#each status?.interfaces ?? [] as iface (iface.name)}
+		<SettingSub title={iface.name} desc={iface.mac}>
+			{#snippet control()}<span
+					class="chip {iface.supported ? (iface.enabled ? 'ok' : 'info') : ''}"
+					>{t(
+						iface.supported
+							? iface.enabled
+								? 'powerSchedule.wolOn'
+								: 'powerSchedule.wolOff'
+							: 'powerSchedule.wolNone',
+					)}</span
+				>{/snippet}
+		</SettingSub>
+	{/each}
+	<div class="srow-block"><p class="muted small">{t('powerSchedule.wolHint')}</p></div>
+</SettingRow>
 
 <style>
-	.schedule {
-		gap: var(--space-2-5);
-	}
-	form {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2-5);
-	}
-	p {
-		margin: 0;
-	}
 	.small {
 		font-size: var(--text-base);
-	}
-	.row {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-end;
-		gap: var(--space-3) 20px;
-	}
-	label {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1-5);
-		font-size: var(--text-base);
-	}
-	label > span {
-		color: var(--muted);
-	}
-	.tiny {
-		width: 120px;
-	}
-	.check {
-		flex-direction: row;
-		align-items: center;
-		gap: var(--space-2-5);
-		font-size: var(--text-md);
-		font-weight: 600;
-	}
-	.check > span {
-		color: var(--text);
-	}
-	input[type='checkbox'] {
-		width: 18px;
-		height: 18px;
-		margin: 0;
 	}
 	.days {
 		display: flex;
@@ -217,26 +211,5 @@
 		background: var(--accent);
 		color: var(--on-accent);
 		border-color: var(--accent);
-	}
-	.ifaces {
-		margin: 0;
-		padding: 0;
-		list-style: none;
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1-5);
-	}
-	.ifaces li {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2) var(--space-4);
-		font-size: var(--text-base);
-	}
-	.actions {
-		display: flex;
-		align-items: center;
-		justify-content: flex-end;
-		gap: var(--space-4);
 	}
 </style>

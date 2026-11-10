@@ -225,12 +225,35 @@ export const settingSections: Record<string, { id: string; label: MessageKey; hr
 	],
 };
 
-/** The groups of the settings navigation, in the order they are shown. */
-// Since PLAN 61 (owner's wish of 6 Nov 2026, "Einstellungsmenü überarbeiten")
-// four groups in this fixed order, the same for the sidebar and the tiles of
-// the overview; within a group the areas are sorted A–Z.
-export const settingsGroups = ['system', 'network', 'accounts', 'data'] as const;
+/** The areas of the control panel's menu, in the order they are shown. */
+// PLAN 78-1/78-2 (owner 10.11.2026, draft 78): eight areas like the menu of
+// Windows 11's settings. Every page belongs to exactly one; the menu, the
+// path title of a page ("Hardware und Energie › Energie"), the area pages
+// and the command palette read it from here. Within an area the pages are
+// sorted A–Z in the page language (PLAN 53).
+export const settingsGroups = [
+	'system',
+	'hardware',
+	'network',
+	'accounts',
+	'services',
+	'ai',
+	'data',
+	'updates',
+] as const;
 export type SettingsGroup = (typeof settingsGroups)[number];
+
+/** The symbol of an area in the menu. */
+export const settingsGroupIcons: Record<SettingsGroup, IconName> = {
+	system: 'monitor',
+	hardware: 'chip',
+	network: 'globe',
+	accounts: 'users',
+	services: 'bell',
+	ai: 'sparkle',
+	data: 'archive',
+	updates: 'download',
+};
 
 /** The title of a settings group in the page language. */
 export function settingsGroupLabel(group: SettingsGroup): MessageKey {
@@ -286,65 +309,29 @@ export function stillNew(
 // palette and the route guard. Within a group the areas appear in exactly
 // this order; adding an area is one line in the right place.
 export const settingsAreas: SettingsArea[] = [
-	// Order decided by the owner on 30 Oct 2026: from the everyday to the rare.
-	{ id: 'about', label: 'about.title', group: 'system', icon: 'fileText' },
-	{ id: 'updates', label: 'update.title', group: 'system', icon: 'download', admin: true },
+	{ id: 'about', label: 'about.title', group: 'system', icon: 'info' },
 	{ id: 'timezone', label: 'settings.datetime', group: 'system', icon: 'clock', admin: true },
+	{ id: 'appearance', label: 'menu.appearance', group: 'system', icon: 'palette' },
 	{
-		id: 'services',
-		label: 'services.title',
-		group: 'accounts',
-		icon: 'box',
+		id: 'viewer',
+		label: 'settingshome.area.viewer',
+		group: 'system',
+		icon: 'monitor',
 		admin: true,
-		newSince: { version: '0.41.0', date: '2026-10-31' },
+		newSince: { version: '0.61.0', date: '2026-11-07' },
 	},
-	{
-		id: 'notifications',
-		label: 'notify.settingsTitle',
-		group: 'accounts',
-		icon: 'bell',
-		admin: true,
-	},
+	{ id: 'hardware', label: 'hardware.title', group: 'hardware', icon: 'gpu', admin: true },
+	{ id: 'temperatures', label: 'temperatures.title', group: 'hardware', icon: 'activity' },
+	{ id: 'energy', label: 'energy.title', group: 'hardware', icon: 'zap', admin: true },
+	{ id: 'ups', label: 'ups.title', group: 'hardware', icon: 'battery', admin: true },
+	{ id: 'power-button', label: 'powerButton.title', group: 'hardware', icon: 'power', admin: true },
+	{ id: 'memory', label: 'memoryPolicy.title', group: 'hardware', icon: 'memory', admin: true },
 	{ id: 'network', label: 'netcfg.title', group: 'network', icon: 'globe', admin: true },
-	{
-		id: 'ddns',
-		label: 'ddns.title',
-		group: 'network',
-		icon: 'refresh',
-		admin: true,
-		newSince: { version: '0.31.0', date: '2026-10-28' },
-	},
-	{ id: 'proxy', label: 'proxy.settingsTitle', group: 'network', icon: 'external', admin: true },
-	{
-		id: 'cluster',
-		label: 'cluster.title',
-		group: 'accounts',
-		icon: 'tailnet',
-		admin: true,
-		newSince: { version: '0.38.0', date: '2026-10-30' },
-	},
-	{
-		id: 'users',
-		label: 'desktop.app.users',
-		group: 'accounts',
-		icon: 'users',
-		admin: true,
-		newSince: { version: '0.70.1', date: '2026-11-08' },
-	},
-	{ id: 'access', label: 'access.title', group: 'accounts', icon: 'lock', admin: true },
 	{
 		id: 'firewall',
 		label: 'firewall.title',
 		group: 'network',
 		icon: 'shield',
-		admin: true,
-		newSince: { version: '0.31.0', date: '2026-10-28' },
-	},
-	{
-		id: 'letsencrypt',
-		label: 'letsencrypt.title',
-		group: 'network',
-		icon: 'check',
 		admin: true,
 		newSince: { version: '0.31.0', date: '2026-10-28' },
 	},
@@ -356,19 +343,60 @@ export const settingsAreas: SettingsArea[] = [
 		admin: true,
 		newSince: { version: '0.34.0', date: '2026-10-28' },
 	},
-	{ id: 'hardware', label: 'hardware.title', group: 'system', icon: 'monitor', admin: true },
-	{ id: 'temperatures', label: 'temperatures.title', group: 'system', icon: 'activity' },
-	{ id: 'energy', label: 'energy.title', group: 'system', icon: 'zap', admin: true },
-	{ id: 'ups', label: 'ups.title', group: 'system', icon: 'battery', admin: true },
-	{ id: 'power-button', label: 'powerButton.title', group: 'system', icon: 'power', admin: true },
-	{ id: 'memory', label: 'memoryPolicy.title', group: 'data', icon: 'memory', admin: true },
-	{ id: 'backups', label: 'safeguard.title', group: 'data', icon: 'archive', admin: true },
-	{ id: 'files', label: 'fileIndex.title', group: 'data', icon: 'search', admin: true },
-	{ id: 'homeassistant', label: 'ha.title', group: 'accounts', icon: 'home', admin: true },
+	{
+		id: 'ddns',
+		label: 'ddns.title',
+		group: 'network',
+		icon: 'refresh',
+		admin: true,
+		newSince: { version: '0.31.0', date: '2026-10-28' },
+	},
+	{
+		id: 'letsencrypt',
+		label: 'letsencrypt.title',
+		group: 'network',
+		icon: 'check',
+		admin: true,
+		newSince: { version: '0.31.0', date: '2026-10-28' },
+	},
+	{ id: 'proxy', label: 'proxy.settingsTitle', group: 'network', icon: 'external', admin: true },
+	{
+		id: 'users',
+		label: 'desktop.app.users',
+		group: 'accounts',
+		icon: 'users',
+		admin: true,
+		newSince: { version: '0.70.1', date: '2026-11-08' },
+	},
+	{ id: 'access', label: 'access.title', group: 'accounts', icon: 'lock', admin: true },
+	{ id: 'api', label: 'api.title', group: 'accounts', icon: 'terminal' },
+	{
+		id: 'services',
+		label: 'services.title',
+		group: 'services',
+		icon: 'box',
+		admin: true,
+		newSince: { version: '0.41.0', date: '2026-10-31' },
+	},
+	{
+		id: 'notifications',
+		label: 'notify.settingsTitle',
+		group: 'services',
+		icon: 'bell',
+		admin: true,
+	},
+	{
+		id: 'cluster',
+		label: 'cluster.title',
+		group: 'services',
+		icon: 'tailnet',
+		admin: true,
+		newSince: { version: '0.38.0', date: '2026-10-30' },
+	},
 	{
 		id: 'agent',
 		label: 'agent.settingsTitle',
-		group: 'accounts',
+		group: 'ai',
 		icon: 'sparkle',
 		admin: true,
 		newSince: { version: '0.48.0', date: '2026-11-05' },
@@ -376,20 +404,14 @@ export const settingsAreas: SettingsArea[] = [
 	{
 		id: 'mcp',
 		label: 'mcp.pageTitle',
-		group: 'accounts',
+		group: 'ai',
 		icon: 'chat',
 		newSince: { version: '0.41.0', date: '2026-10-31' },
 	},
-	{ id: 'api', label: 'api.title', group: 'accounts', icon: 'key' },
-	{ id: 'appearance', label: 'menu.appearance', group: 'system', icon: 'palette' },
-	{
-		id: 'viewer',
-		label: 'settingshome.area.viewer',
-		group: 'system',
-		icon: 'monitor',
-		admin: true,
-		newSince: { version: '0.61.0', date: '2026-11-07' },
-	},
+	{ id: 'homeassistant', label: 'ha.title', group: 'ai', icon: 'home', admin: true },
+	{ id: 'backups', label: 'safeguard.title', group: 'data', icon: 'archive', admin: true },
+	{ id: 'files', label: 'fileIndex.title', group: 'data', icon: 'search', admin: true },
+	{ id: 'updates', label: 'update.title', group: 'updates', icon: 'download', admin: true },
 ];
 
 /** The area a settings path belongs to ("/settings/ddns/x" → "ddns"), or "" for the overview. */
@@ -462,36 +484,81 @@ export function settingsEntries(
 		.filter((group) => group.entries.length);
 }
 
-/** Whether an account may open the settings page of a side bar entry (PLAN 71). */
+/** Whether an account may open a settings page (the server decides again). */
 export function settingsSideAllowed(href: string, admin: boolean): boolean {
 	if (admin) return true;
 	const path = href.split(/[?#]/)[0].replace(/\/$/, '');
 	return !path.startsWith('/settings') || userSettingsPaths.includes(path);
 }
 
+/** The address of an area's own page: the list of its settings pages. */
+export function settingsGroupHref(group: SettingsGroup): string {
+	return `/settings?area=${group}`;
+}
+
+/** The area an address stands for: "?area=" of the start page, else the page's own. */
+export function settingsGroupOf(href: string): SettingsGroup | undefined {
+	const [path, query = ''] = href.split('#')[0].split('?');
+	const id = settingsAreaOf(path);
+	if (id) return settingsAreas.find((area) => area.id === id)?.group;
+	const wanted = new URLSearchParams(query).get('area');
+	return settingsGroups.find((group) => group === wanted);
+}
+
+/** One entry of the control panel's menu (PLAN 78): an area and where it leads. */
+export type SettingsMenuEntry = {
+	group: SettingsGroup;
+	label: MessageKey;
+	icon: IconName;
+	/** The area's page, or its one page when the account sees only one. */
+	href: string;
+	pages: SettingsArea[];
+};
+
 /**
- * PLAN 71: the search above the side bar of Systemsteuerung. Returns, for
- * every side bar entry the search finds, where it leads: a matching section
- * (e.g. "ssh" → Zugang › SSH) shows its area and opens its anchor; an entry
- * also matches its own side bar name (which may differ from the area's).
+ * The areas of the menu for an account: only areas with a page the account
+ * may open (PLAN 78: "Ein Benutzer sieht nur, was er öffnen darf").
  */
-export function settingsSideMatches(
-	query: string,
+export function settingsMenu(admin: boolean): SettingsMenuEntry[] {
+	return settingsGroups.flatMap((group) => {
+		const pages = settingsAreas.filter((area) => area.group === group && (!area.admin || admin));
+		if (!pages.length) return [];
+		return [
+			{
+				group,
+				label: settingsGroupLabel(group),
+				icon: settingsGroupIcons[group],
+				href: pages.length === 1 ? `/settings/${pages[0].id}` : settingsGroupHref(group),
+				pages,
+			},
+		];
+	});
+}
+
+/**
+ * The path above a settings page's title (PLAN 78-1): its area, and for a
+ * page below a settings page (Sicherungen › Abdeckung) that page too.
+ */
+export function settingsCrumbs(
+	pathname: string,
 	admin: boolean,
-	translate: (key: MessageKey) => string,
-	items: { href: string; label: MessageKey }[],
-): Map<string, string> {
-	const hits = new Map<string, string>();
-	for (const group of settingsEntries(query, admin, translate))
-		for (const entry of group.entries) if (!hits.has(entry.id)) hits.set(entry.id, entry.href);
-	const out = new Map<string, string>();
-	for (const item of items) {
-		if (!settingsSideAllowed(item.href, admin)) continue;
-		const id = settingsAreaOf(item.href.split(/[?#]/)[0]);
-		const target =
-			(id ? hits.get(id) : undefined) ??
-			(matchesSetting(query, translate(item.label), id) ? item.href : undefined);
-		if (target) out.set(item.href, target);
-	}
-	return out;
+): { label: MessageKey; href: string }[] {
+	const parts = pathname.replace(/\/$/, '').split('/');
+	if (parts[1] !== 'settings' || !parts[2]) return [];
+	const area = settingsAreas.find((a) => a.id === parts[2]);
+	if (!area) return [];
+	const entry = settingsMenu(admin).find((e) => e.group === area.group);
+	// An area that is one page (Updates) has no path above its name.
+	const alone = settingsAreas.filter((a) => a.group === area.group).length === 1;
+	if (alone && parts.length <= 3) return [];
+	const crumbs = alone
+		? []
+		: [
+				{
+					label: settingsGroupLabel(area.group),
+					href: entry?.href ?? settingsGroupHref(area.group),
+				},
+			];
+	if (parts.length > 3) crumbs.push({ label: area.label, href: `/settings/${area.id}` });
+	return crumbs;
 }

@@ -492,10 +492,15 @@ for (const w of allOnly ? [] : [800, 1100]) {
       .locator("section.win")
       .screenshot({ path: `${out}/${w}-${slug(path)}.png` });
     const where = `${path} @${w}`;
-    check(
-      !res.h1.length,
-      `${where}: no big heading inside the window (${res.h1})`,
-    );
+    // PLAN 78-1: a page of the control panel shows its title large, as a
+    // path; every other page leaves its name to the title bar.
+    if (path.startsWith("/settings"))
+      check(res.h1.length === 1, `${where}: one path title (${res.h1})`);
+    else
+      check(
+        !res.h1.length,
+        `${where}: no big heading inside the window (${res.h1})`,
+      );
     if (hasBar) check(res.toolbar, `${where}: tool bar under the title bar`);
     check(
       res.overflowX <= 1,
@@ -637,7 +642,7 @@ if (!allOnly && (!onlyPaths || onlyPaths.includes("/settings"))) {
   const search = side.getByRole("searchbox", { name: "Einstellung suchen" });
   await search.fill("ssh");
   check(
-    JSON.stringify(await items()) === JSON.stringify(["Zugang und Sitzungen"]),
+    JSON.stringify(await items()) === JSON.stringify(["Zugang › SSH"]),
     `side bar search "ssh" finds Zugang (${await items()})`,
   );
   // By keyboard: the window's page loads after Enter (no wait for it here).
@@ -651,7 +656,10 @@ if (!allOnly && (!onlyPaths || onlyPaths.includes("/settings"))) {
     { timeout: 8000 },
   );
   await search.fill("zeitzone");
-  check((await items()).includes("Zeitzone"), "side bar search finds Zeitzone");
+  check(
+    (await items()).includes("Datum und Uhrzeit"),
+    "side bar search finds Zeitzone",
+  );
   await search.fill("platten-ruhe");
   check(
     (await items()).includes("Energie"),

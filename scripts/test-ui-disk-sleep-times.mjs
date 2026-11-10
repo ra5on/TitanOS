@@ -249,8 +249,8 @@ try {
   ]) {
     const { ctx, page } = await open(theme, width);
     await page.goto(`${base}/settings/energy`);
-    // PLAN 75-19, style E3: the disk sleep is a row with its summary.
-    const tile = page.locator("section.expander", {
+    // PLAN 78-1: the disk sleep is a row with its summary.
+    const tile = page.locator(".srow", {
       hasText: "Ruhemodus der Festplatten",
     });
     await tile

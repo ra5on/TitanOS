@@ -128,6 +128,34 @@ lokalen Vite-Server. Benötigt eine vorhandene Playwright-Installation (über
 erzeugt Vergleichsbilder für Graphit/Hell bei 1440 und 390 Pixeln.
 Die Testdaten gehören ausschließlich zum Testskript, nicht zum Produkt.
 
+### Systemsteuerung wie Windows 11: Zeilen statt Kacheln (PLAN 78-1/78-2, 10. November 2026)
+
+Entscheidung 78-1 des Projektinhabers („loslegen“ am 10.11.2026). Entwurf:
+`Entwuerfe/78-einstellungen-win11/entwurf.html` (Seiten „Energie“ und
+„Hardware“, Bilder `entwurf-1100.png` und `entwurf-handy.png`; Vorbild war ein
+Bild von Windows 11 „System › Display“). Echte Aufnahmen der umgesetzten Seiten
+liegen daneben unter `ist/`.
+
+- Seitentitel groß als Pfad („Hardware und Energie › Energie“).
+- Eine Gruppe ist eine schlichte Überschrift über ihren Zeilen. Die Kachel mit
+  runder Umrandung und Kopfzeile um eine Gruppe ist verworfen, ebenso der erste
+  Wurf, der sie nur flacher machte („weit weg von meinem Beispiel“).
+- Jede Einstellung ist eine flache Zeile: Symbol, Name, Erklärung, rechts Wert,
+  Schalter, Auswahl oder Knopf. Unterpunkte klappen in der Zeile nach unten
+  auf; zugeklappt nennt die Zeile rechts ihren Zustand.
+- Linkes Menü: Konto mit echter Rolle, Suchfeld, die acht Bereiche System,
+  Hardware und Energie, Netzwerk, Konten und Zugang, Dienste und Meldungen, KI
+  und Smart Home, Daten und Sicherung, Updates (zugleich 78-2: Seiten neu
+  einsortiert). Ein Bereich zeigt die Liste seiner Seiten.
+- Tabellen und Werkzeuge (Firewall, Sicherungsaufträge) bleiben Tabellen unter
+  Pfadtitel und Überschrift.
+
+Verbindlicher Wortlaut: `docs/rules/WEB-UI.md`, Absatz „Systemsteuerung im
+Zeilenaufbau“. Er ersetzt für die Seiten unter `/settings` die Kachel-Abschnitte
+der drei folgenden Abschnitte (Gruppen, Seitenleiste, Gerüst 0.30.0) und die
+aufklappbaren Kacheln aus PLAN 75-19 (Stil E3), die für die Seiten anderer
+Programme weiter gelten.
+
 ### „Alle Einstellungen“ und vier Gruppen (PLAN 61, 6. November 2026)
 
 Wunsch des Projektinhabers „Einstellungsmenü überarbeiten“ (PLAN 61-8,

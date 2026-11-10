@@ -4,6 +4,13 @@
 import type { Role } from '../api.ts';
 import type { IconName } from '../components/Icon.svelte';
 import type { MessageKey } from '../i18n/index.svelte.ts';
+import {
+	settingsAreas,
+	settingsGroupHref,
+	settingsGroupIcons,
+	settingsGroupLabel,
+	settingsGroups,
+} from '../settings-search.ts';
 
 export type SideItem =
 	| { group: MessageKey }
@@ -329,40 +336,19 @@ export const SYSTEM_APPS: SystemApp[] = [
 		gradient: 'grey',
 		href: '/settings',
 		paths: ['/settings'],
+		// PLAN 78 (owner 10.11.2026, draft 78): the menu lists the areas like
+		// Windows 11's settings; an area opens the list of its pages. The window
+		// shows only the areas the account may open (settingsMenu).
 		side: [
 			{ href: '/settings', label: 'desktop.side.allSettings', icon: 'home', match: ['/settings'] },
-			{ group: 'desktop.side.system' },
-			{ href: '/settings/about', label: 'desktop.side.about', icon: 'home' },
-			{ href: '/settings/updates', label: 'desktop.side.updates', icon: 'download' },
-			{ href: '/settings/timezone', label: 'desktop.side.timezone', icon: 'clock' },
-			{ href: '/settings/appearance', label: 'desktop.side.appearance', icon: 'palette' },
-			{ href: '/settings/hardware', label: 'desktop.side.hardware', icon: 'monitor' },
-			{ href: '/settings/temperatures', label: 'desktop.side.temperatures', icon: 'activity' },
-			{ href: '/settings/energy', label: 'desktop.side.energy', icon: 'zap' },
-			{ href: '/settings/ups', label: 'desktop.side.ups', icon: 'battery' },
-			{ href: '/settings/power-button', label: 'desktop.side.powerButton', icon: 'power' },
-			{ href: '/settings/viewer', label: 'desktop.side.viewer', icon: 'monitor' },
-			{ group: 'desktop.side.network' },
-			{ href: '/settings/network', label: 'desktop.side.network', icon: 'globe' },
-			{ href: '/settings/firewall', label: 'desktop.side.firewall', icon: 'shield' },
-			{ href: '/settings/wireguard', label: 'desktop.side.remote', icon: 'key' },
-			{ href: '/settings/ddns', label: 'desktop.side.ddns', icon: 'refresh' },
-			{ href: '/settings/letsencrypt', label: 'desktop.side.certificates', icon: 'lock' },
-			{ href: '/settings/proxy', label: 'desktop.side.httpsNames', icon: 'external' },
-			{ group: 'desktop.side.accountsServices' },
-			{ href: '/settings/users', label: 'desktop.app.users', icon: 'users' },
-			{ href: '/settings/access', label: 'desktop.side.access', icon: 'lock' },
-			{ href: '/settings/services', label: 'desktop.side.services', icon: 'gear' },
-			{ href: '/settings/notifications', label: 'desktop.side.notifications', icon: 'bell' },
-			{ href: '/settings/homeassistant', label: 'desktop.side.homeassistant', icon: 'home' },
-			{ href: '/settings/agent', label: 'desktop.side.agent', icon: 'sparkle' },
-			{ href: '/settings/mcp', label: 'desktop.side.mcp', icon: 'chat' },
-			{ href: '/settings/api', label: 'desktop.side.api', icon: 'terminal' },
-			{ href: '/settings/cluster', label: 'desktop.side.cluster', icon: 'columns' },
-			{ group: 'desktop.side.dataGroup' },
-			{ href: '/settings/backups', label: 'desktop.side.backups', icon: 'archive' },
-			{ href: '/settings/files', label: 'desktop.side.filesSettings', icon: 'search' },
-			{ href: '/settings/memory', label: 'desktop.side.memory', icon: 'chip' },
+			...settingsGroups.map((group) => ({
+				href: settingsGroupHref(group),
+				label: settingsGroupLabel(group),
+				icon: settingsGroupIcons[group],
+				match: settingsAreas
+					.filter((area) => area.group === group)
+					.map((area) => `/settings/${area.id}`),
+			})),
 		],
 		kind: 'system',
 	},

@@ -492,8 +492,23 @@ try {
         await frame.locator("main select, main input[type=checkbox]").count(),
         0,
       );
-      // All areas plus the overview.
-      assert.equal((await items()).length, allAreas + 1);
+      // PLAN 78: the overview and the eight areas of the menu, with the
+      // account and its real role on top.
+      assert.deepEqual(await items(), [
+        "Übersicht",
+        "System",
+        "Hardware und Energie",
+        "Netzwerk",
+        "Konten und Zugang",
+        "Dienste und Meldungen",
+        "KI und Smart Home",
+        "Daten und Sicherung",
+        "Updates",
+      ]);
+      assert.equal(
+        (await side.locator(".side-account small").textContent()).trim(),
+        "Besitzer",
+      );
       const at = (href) =>
         page.waitForFunction(
           (href) => {
@@ -505,23 +520,53 @@ try {
           href,
           { timeout: 8000 },
         );
+      // An area opens the list of its pages; a row there opens the page,
+      // whose title is the path "area › page".
+      await side.getByRole("button", { name: "System", exact: true }).click();
+      await at("/settings?area=system");
+      await frame
+        .getByRole("heading", { name: "System", exact: true })
+        .waitFor();
+      assert.deepEqual(
+        await frame
+          .locator("a.srow .srow-title")
+          .evaluateAll((a) => a.map((x) => x.firstChild.textContent.trim())),
+        ["Darstellung", "Datum und Uhrzeit", "Fernansicht", "Über TitanOS"],
+      );
+      await frame.locator('a.srow[href="/settings/timezone"]').click();
+      await at("/settings/timezone");
+      await frame
+        .getByRole("heading", { name: "Datum und Uhrzeit", exact: true })
+        .waitFor();
+      assert.equal(
+        (await frame.locator(".set-path").innerText()).replace(/\s+/g, " "),
+        "System › Datum und Uhrzeit",
+      );
+      assert.equal(
+        await side
+          .locator('.item[aria-current="page"]')
+          .evaluate((x) => x.textContent.trim()),
+        "System",
+      );
+      await frame.locator(".set-path a").click();
+      await at("/settings?area=system");
       for (const [query, area, href] of [
-        ["SSH", "Zugang und Sitzungen", "/settings/access#access-ssh"],
-        ["Zertifikat", "Zugang und Sitzungen", "/settings/access#access-cert"],
-        [
-          "Terminal",
-          "Zugang und Sitzungen",
-          "/settings/access#access-terminal",
-        ],
+        ["SSH", "Zugang", "/settings/access#access-ssh"],
+        ["Zertifikat", "Zugang", "/settings/access#access-cert"],
+        ["Terminal", "Zugang", "/settings/access#access-terminal"],
         ["DNS", "Netzwerk", "/settings/network#network-dns"],
-        ["Zeitzone", "Zeitzone", "/settings/timezone"],
+        ["Zeitzone", "Datum und Uhrzeit", "/settings/timezone"],
         ["Backup", "Sicherungen", "/settings/backups/data"],
       ]) {
-        // The area is among the results (others may match too: HTTPS names
+        // The page is among the results (others may match too: HTTPS names
         // know "Zertifikat" and mDNS) and opens at the section found.
         await search.fill(query);
-        assert.ok((await items()).includes(area), query);
-        await side.getByRole("button", { name: area, exact: true }).click();
+        const hit = side
+          .locator(".items .item")
+          .filter({ hasText: new RegExp("^\\s*" + area) })
+          .first();
+        await hit.waitFor();
+        await hit.click();
         await at(href);
         // Let the window's page finish loading before the next search.
         await frame.locator("main h1").first().waitFor({ state: "attached" });
@@ -725,7 +770,34 @@ try {
       .getByRole("searchbox", { name: "Einstellung suchen" })
       .waitFor({ timeout: 15000 });
     await userSide.locator(".items .item").first().waitFor();
-    assert.equal(await userSide.locator(".items .item").count(), userAreas + 1);
+    // PLAN 78: the overview and the areas with a page the account may open,
+    // under its real role.
+    assert.deepEqual(
+      await userSide
+        .locator(".items .item")
+        .evaluateAll((a) => a.map((x) => x.textContent.trim())),
+      [
+        "Übersicht",
+        "System",
+        "Hardware und Energie",
+        "Konten und Zugang",
+        "KI und Smart Home",
+      ],
+    );
+    assert.equal(
+      (await userSide.locator(".side-account small").textContent()).trim(),
+      "Benutzer",
+    );
+    // An area lists only the pages the account may open.
+    await userSide.getByRole("button", { name: "System", exact: true }).click();
+    const userFrame = userDesk.page.frameLocator("section.win iframe").first();
+    await userFrame.locator("a.srow").first().waitFor();
+    assert.deepEqual(
+      await userFrame
+        .locator("a.srow")
+        .evaluateAll((a) => a.map((x) => x.getAttribute("href"))),
+      ["/settings/appearance", "/settings/about"],
+    );
     await userDesk.ctx.close();
     const user = await context("user");
     for (const path of [

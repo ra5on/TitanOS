@@ -43,7 +43,13 @@ try {
       route.fulfill({ json: report }),
     );
     await page.goto(base + "/settings/hardware");
-    const panel = page.getByRole("region", { name: "Geräte ohne Treiber" });
+    // PLAN 78: "Geräte ohne Treiber" is a row; it says "In Ordnung" and opens
+    // to the list.
+    const panel = page.locator("#unbound");
+    await panel.getByText("In Ordnung", { exact: true }).waitFor();
+    await panel
+      .getByRole("button", { name: "Geräte ohne Treiber: Aufklappen" })
+      .click();
     // Needs no attention, so it is folded away.
     await panel.locator("summary").waitFor();
     assert.equal(

@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { api } from '#lib/api.ts';
 	import { apiErrorText, t } from '#lib/i18n/index.svelte.ts';
+	import SettingSub from '#lib/components/settings/SettingSub.svelte';
 	let { address }: { address: string } = $props();
 	let percent = $state(0);
 	let error = $state('');
@@ -38,40 +39,25 @@
 	}
 </script>
 
-<form
-	onsubmit={(event) => {
-		event.preventDefault();
-		save();
-	}}
+<!-- PLAN 78-1: a part of the card's row; the choice is stored when it changes. -->
+<SettingSub
+	title={t('hardware.powerLimit')}
+	for="nvidia-power-{address}"
+	desc={saved ? t('hardware.powerSaved') : undefined}
 >
-	<label class="stack"
-		><span>{t('hardware.powerLimit')}</span><select
+	{#snippet control()}
+		<select
+			id="nvidia-power-{address}"
 			class="field"
 			bind:value={percent}
 			disabled={!ready || busy}
-			onchange={() => (saved = false)}
+			onchange={save}
 		>
 			<option value={0}>{t('hardware.powerDefault')}</option>
 			{#each [20, 30, 40, 50, 60, 70, 80, 90, 100] as value (value)}<option {value}
 					>{value} %</option
 				>{/each}
-		</select></label
-	>
-	<button class="btn" disabled={!ready || busy}>{t('common.save')}</button>
-	{#if saved}<span role="status">{t('hardware.powerSaved')}</span>{/if}
-	{#if error}<p class="notice-error" role="alert">{error}</p>{/if}
-</form>
-
-<style>
-	form {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: end;
-		gap: var(--space-2);
-		margin-bottom: var(--space-2-5);
-	}
-	p {
-		flex-basis: 100%;
-		overflow-wrap: anywhere;
-	}
-</style>
+		</select>
+	{/snippet}
+</SettingSub>
+{#if error}<div class="srow-block"><p class="notice-error" role="alert">{error}</p></div>{/if}

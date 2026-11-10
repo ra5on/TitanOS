@@ -1,11 +1,17 @@
 <script lang="ts">
 	// PLAN 61: the side bar of a window – the program's pages, for virtual
 	// machines the machines themselves, and at the bottom the fold button.
+	// For Systemsteuerung (PLAN 78) the account, the search and the areas.
 	import { tick } from 'svelte';
 	import Icon from '../components/Icon.svelte';
 	import { t } from '../i18n/index.svelte.ts';
 	import { session } from '../session.svelte.ts';
-	import { settingsSideAllowed, settingsSideMatches } from '../settings-search.ts';
+	import {
+		settingsEntries,
+		settingsGroupOf,
+		settingsMenu,
+		type SettingsEntry,
+	} from '../settings-search.ts';
 	import { sideActive, type SideItem } from './apps.ts';
 	import DesktopIcon from './DesktopIcon.svelte';
 	import { navigateWindow, type Win } from './wm.svelte.ts';
@@ -40,27 +46,23 @@
 	let hit = $state(0);
 	let searchEl = $state<HTMLInputElement>();
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
-	type Link = Extract<SideItem, { label: unknown }>;
-	const isLink = (item: SideItem): item is Link => 'label' in item && 'href' in item;
-	const matches = $derived(
-		searchable && query.trim() ? settingsSideMatches(query, admin, t, side.filter(isLink)) : null,
+	// PLAN 78 (owner 10.11.2026, draft 78): on top the signed-in account with
+	// its real role, then the search, then the areas. An area opens the list
+	// of its pages; a search lists the pages (and sections) it finds instead.
+	const account = $derived(session.data?.user);
+	const areas = $derived(searchable ? settingsMenu(admin) : []);
+	const area = $derived(searchable ? settingsGroupOf(win.href) : undefined);
+	const links = $derived<SettingsEntry[]>(
+		searchable && query.trim()
+			? settingsEntries(query, admin, t).flatMap((group) => group.entries)
+			: [],
 	);
-	const shownSide = $derived.by(() => {
-		if (!searchable) return side;
-		const kept = side.filter((item) =>
-			isLink(item)
-				? settingsSideAllowed(item.href, admin) && (!matches || matches.has(item.href))
-				: true,
-		);
-		// A group title only above entries of its own.
-		return kept.filter(
-			(item, i) => !('group' in item) || (kept[i + 1] && !('group' in kept[i + 1])),
-		);
-	});
-	const links = $derived(matches ? shownSide.filter(isLink) : []);
+	const searching = $derived(searchable && query.trim() !== '');
 	const current = $derived(links.length ? Math.min(hit, links.length - 1) : -1);
-	function openSide(item: Link) {
-		navigateWindow(win.id, matches?.get(item.href) ?? item.href);
+	function openHit(entry: SettingsEntry) {
+		navigateWindow(win.id, entry.href);
+		query = '';
+		hit = 0;
 	}
 	function searchKey(e: KeyboardEvent) {
 		if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -72,7 +74,7 @@
 			const item = links[current];
 			if (!item) return;
 			e.preventDefault();
-			openSide(item);
+			openHit(item);
 		} else if (e.key === 'Escape' && query) {
 			e.preventDefault();
 			e.stopPropagation();
@@ -90,10 +92,23 @@
 </script>
 
 <nav class="side" class:folded aria-label={win.title}>
-	<div class="side-title">
-		<DesktopIcon {glyph} {gradient} size={folded ? 32 : 28} name={win.title} />
-		{#if !folded}<b>{win.title}</b>{/if}
-	</div>
+	{#if searchable && account}
+		<!-- PLAN 78: who is signed in, with the role the session reports. -->
+		<div
+			class="side-account"
+			title={folded ? `${account.name} · ${t(`role.${account.role}`)}` : undefined}
+		>
+			<span class="avatar" aria-hidden="true">{account.name.charAt(0).toUpperCase()}</span>
+			{#if !folded}<span class="who"
+					><b>{account.name}</b><small>{t(`role.${account.role}`)}</small></span
+				>{:else}<span class="sr-only">{account.name} · {t(`role.${account.role}`)}</span>{/if}
+		</div>
+	{:else}
+		<div class="side-title">
+			<DesktopIcon {glyph} {gradient} size={folded ? 32 : 28} name={win.title} />
+			{#if !folded}<b>{win.title}</b>{/if}
+		</div>
+	{/if}
 	{#if searchable}
 		{#if folded}
 			<button
@@ -120,47 +135,85 @@
 					onkeydown={searchKey}
 				/>
 			</div>
-			{#if matches && !links.length}<p class="side-none" role="status">
+			{#if searching && !links.length}<p class="side-none" role="status">
 					{t('settingshome.sideNone')}
 				</p>{/if}
 		{/if}
 	{/if}
 	<div class="items" id="side-{win.id}">
-		{#each shownSide as item, i (i)}
-			{#if 'group' in item}
-				{#if !folded}<div class="group">{t(item.group)}</div>{:else}<div class="rule"></div>{/if}
-			{:else if 'text' in item}
-				{@const on =
-					new URLSearchParams(win.href.split('?')[1] ?? '').get('vm') ===
-					new URLSearchParams(item.href.split('?')[1]).get('vm')}
-				<button
-					type="button"
-					class="item thing"
-					class:on
-					title={folded ? item.text : undefined}
-					aria-current={on ? 'page' : undefined}
-					onclick={() => navigateWindow(win.id, item.href)}
-				>
-					<span class="state {item.state}" aria-hidden="true"></span>
-					{#if !folded}<span>{item.text}</span>{/if}
-				</button>
-			{:else}
-				{@const n = links.indexOf(item)}
+		{#if searching}
+			{#each links as entry, n (entry.href)}
 				<button
 					type="button"
 					class="item"
-					id={n >= 0 ? `side-${win.id}-${n}` : undefined}
-					class:on={sideActive(item, path, side)}
-					class:hit={n >= 0 && n === current}
-					title={folded ? t(item.label) : undefined}
-					aria-current={sideActive(item, path, side) ? 'page' : undefined}
-					onclick={() => openSide(item)}
+					id="side-{win.id}-{n}"
+					class:hit={n === current}
+					onclick={() => openHit(entry)}
 				>
-					<Icon name={item.icon} size={17} />
-					{#if !folded}<span>{t(item.label)}</span>{/if}
+					<Icon name={entry.icon} size={17} />
+					<span>{entry.label}</span>
 				</button>
-			{/if}
-		{/each}
+			{/each}
+		{:else if searchable}
+			{@const start = path === '/settings' && !area}
+			<button
+				type="button"
+				class="item"
+				class:on={start}
+				title={folded ? t('desktop.side.allSettings') : undefined}
+				aria-current={start ? 'page' : undefined}
+				onclick={() => navigateWindow(win.id, '/settings')}
+			>
+				<Icon name="home" size={17} />
+				{#if !folded}<span>{t('desktop.side.allSettings')}</span>{/if}
+			</button>
+			{#each areas as entry (entry.group)}
+				<button
+					type="button"
+					class="item"
+					class:on={area === entry.group}
+					title={folded ? t(entry.label) : undefined}
+					aria-current={area === entry.group ? 'page' : undefined}
+					onclick={() => navigateWindow(win.id, entry.href)}
+				>
+					<Icon name={entry.icon} size={17} />
+					{#if !folded}<span>{t(entry.label)}</span>{/if}
+				</button>
+			{/each}
+		{:else}
+			{#each side as item, i (i)}
+				{#if 'group' in item}
+					{#if !folded}<div class="group">{t(item.group)}</div>{:else}<div class="rule"></div>{/if}
+				{:else if 'text' in item}
+					{@const on =
+						new URLSearchParams(win.href.split('?')[1] ?? '').get('vm') ===
+						new URLSearchParams(item.href.split('?')[1]).get('vm')}
+					<button
+						type="button"
+						class="item thing"
+						class:on
+						title={folded ? item.text : undefined}
+						aria-current={on ? 'page' : undefined}
+						onclick={() => navigateWindow(win.id, item.href)}
+					>
+						<span class="state {item.state}" aria-hidden="true"></span>
+						{#if !folded}<span>{item.text}</span>{/if}
+					</button>
+				{:else}
+					<button
+						type="button"
+						class="item"
+						class:on={sideActive(item, path, side)}
+						title={folded ? t(item.label) : undefined}
+						aria-current={sideActive(item, path, side) ? 'page' : undefined}
+						onclick={() => navigateWindow(win.id, item.href)}
+					>
+						<Icon name={item.icon} size={17} />
+						{#if !folded}<span>{t(item.label)}</span>{/if}
+					</button>
+				{/if}
+			{/each}
+		{/if}
 	</div>
 	<button
 		type="button"
@@ -243,6 +296,38 @@
 		min-width: 60px;
 		align-items: center;
 		padding: var(--space-3) var(--space-2);
+	}
+	/* PLAN 78: the account on top of the control panel's menu. */
+	.side-account {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2-5);
+		padding: var(--space-1) var(--space-1-5) var(--space-3);
+		min-width: 0;
+	}
+	.side-account .avatar {
+		display: grid;
+		place-items: center;
+		flex: none;
+		width: 38px;
+		height: 38px;
+		border-radius: 50%;
+		background: var(--accent);
+		color: var(--on-accent);
+		font-weight: 700;
+	}
+	.folded .side-account {
+		padding: var(--space-1) 0 var(--space-3);
+	}
+	.side-account .who {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.side-account small {
+		color: var(--muted);
+		font-size: var(--text-sm);
 	}
 	.side-title {
 		display: flex;

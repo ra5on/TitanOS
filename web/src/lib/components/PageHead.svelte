@@ -16,6 +16,9 @@
 	import { page } from '$app/state';
 	import { appForPath } from '#lib/desktop/apps.ts';
 	import Dropdown from './Dropdown.svelte';
+	import { settingsCrumbs } from '#lib/settings-search.ts';
+	import { session } from '#lib/session.svelte.ts';
+	import { inWindow, windowApp } from '#lib/desktop/frame.ts';
 
 	type Props = {
 		title: string;
@@ -41,7 +44,15 @@
 	// A bar only with something in it: actions or the page's name on the phone.
 	// PLAN 74: in a window the intro alone gets no strip of its own; it is the
 	// first line of the page (no room lost above the content).
-	const hasBar = $derived(!!actions || (phone && ownName));
+	// PLAN 78-1 (owner 10.11.2026, draft 78): a page of the control panel shows
+	// its title large, as a path: "Hardware und Energie › Energie". The area is
+	// a link to the list of its pages (in a window of another program it only
+	// names the place); the page's own name stays the one <h1>.
+	const settingsPage = $derived(/^\/settings(\/|$)/.test(page.url.pathname));
+	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
+	const crumbs = $derived(settingsPage ? settingsCrumbs(page.url.pathname, admin) : []);
+	const crumbLinks = !inWindow || windowApp() === 'app:settings';
+	const hasBar = $derived(!!actions || (phone && ownName && !settingsPage));
 
 	// Buttons that can move into the "⋯" menu: plain buttons and links of the
 	// bar, never the main action, a field, a group or a button with a menu of
@@ -147,12 +158,24 @@
 	});
 </script>
 
+{#if settingsPage}
+	<div class="set-path">
+		{#if crumbs.length}<nav aria-label={t('settings.path')}>
+				{#each crumbs as crumb (crumb.href)}{#if crumbLinks}<a href={crumb.href}>{t(crumb.label)}</a
+						>{:else}<span class="sep">{t(crumb.label)}</span>{/if}<span
+						class="sep"
+						aria-hidden="true">›</span
+					>{/each}
+			</nav>{/if}
+		<h1 {id}>{title}</h1>
+	</div>
+{/if}
 {#if !hasBar}
-	<h1 class="sr-only" {id}>{title}</h1>
+	{#if !settingsPage}<h1 class="sr-only" {id}>{title}</h1>{/if}
 	{#if children}<div class="win-intro alone">{@render children()}</div>{/if}
 {:else}
 	<div class="win-toolbar" class:phone class:sticky={!!actions || phone} bind:this={bar}>
-		{#if phone && ownName}
+		{#if settingsPage}{:else if phone && ownName}
 			<h1 class="win-title" {id}>{title}</h1>
 		{:else}
 			<h1 class="sr-only" {id}>{title}</h1>

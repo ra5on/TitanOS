@@ -225,28 +225,28 @@ for (const [width, height] of [
   await ctx.close();
 }
 
-// PLAN 69: the control panel on a phone has one column of tiles, so long
-// names like "Benachrichtigungen" stay whole.
+// PLAN 69/78: the control panel on a phone lists every page as a row in one
+// column, so long names like "Benachrichtigungen" stay whole.
 {
   const { ctx, page } = await phone(390, 844, { cluster: false });
   await page.goto(base + "/settings");
   const tile = page
-    .locator(".home-tile", { hasText: "Benachrichtigungen" })
+    .locator("a.srow", { hasText: "Benachrichtigungen" })
     .first();
   await tile.waitFor({ timeout: 15000 });
   const lefts = await page
-    .locator(".tiles li")
+    .locator("a.srow")
     .evaluateAll((items) => [
       ...new Set(
         items.map((li) => Math.round(li.getBoundingClientRect().left)),
       ),
     ]);
   assert.equal(lefts.length, 1, `one column: ${lefts}`);
-  // PLAN 71: the phone has no side bar, so it keeps the search and a tile
-  // for every area; the overview cards follow below, inside the screen.
+  // PLAN 71: the phone has no side bar, so it keeps the search and a row
+  // for every page; the overview cards follow below, inside the screen.
   await page.getByRole("searchbox", { name: "Einstellungen suchen" }).waitFor();
   assert.ok(
-    (await page.locator(".home-tile").count()) >= 20,
+    (await page.locator("a.srow").count()) >= 20,
     "every area as a tile",
   );
   const card = page.locator(".overview .health");
@@ -256,7 +256,7 @@ for (const [width, height] of [
     box.x >= 0 && box.x + box.width <= 391,
     `overview card fits (${box.x}, ${box.width})`,
   );
-  const name = tile.locator(".name");
+  const name = tile.locator(".srow-title");
   const lines = await name.evaluate((el) =>
     Math.round(
       el.getBoundingClientRect().height /
