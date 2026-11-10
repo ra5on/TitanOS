@@ -266,7 +266,10 @@ export function readTemplate(
 				placeholder: typeof info.placeholder === 'string' ? info.placeholder : '',
 				value: pair.value,
 				origin: 'template',
-				secret: info.secret === 'generate',
+				// "generate": TitanOS makes the value. true: the person enters it
+				// (a token, an admin password) – hidden in the form and kept in
+				// .env like a generated one, never in compose.yaml (PLAN 76, F-14-1).
+				secret: info.secret === 'generate' || info.secret === true,
 				required: info.required === true,
 				fill,
 			};
@@ -278,7 +281,7 @@ export function readTemplate(
 					Object.hasOwn(editedEnv, pair.name) &&
 					pair.value === '${' + pair.name + '}';
 				if (field.secret) field.value = editedEnv[pair.name];
-			} else if (field.secret) {
+			} else if (info.secret === 'generate') {
 				field.value = generateSecret();
 				field.origin = 'generated';
 			} else if (fill) {

@@ -243,3 +243,37 @@ Gelesen vom Prüfer (nur lesend, 10.11.2026): `boot/`, `build/` vollständig, al
 | F-13-17 | Lücke (Regel) | `scripts/autopilot.py:95`, `docs/RELEASING.md` | Der Autopilot vergibt dreiteilige Nummern (0.74.1), die Regel „ab 0.72 zweiteilig“ nennt die Ausnahme nicht. | behoben (Auftrag des Inhabers vom 10.11.2026): `plan` vergibt ab 0.72 die nächste zweite Zahl, `guard` verlangt gleiche Hauptzahl, höhere zweite Zahl und dritte Zahl 0 (Tests); Doku in RELEASING.md und AUTOPILOT.md. |
 | F-13-18 | Fehler (klein) | `build/mkosi.postinst.chroot:103` | Liste für `chmod go-w` lässt `titanos-network-recovery.service` aus. | behoben. |
 | F-13-19 | Aufräumen | `scripts/test-ui-023/060/061/agent54-*.mjs`, 24 UI-Suites ohne Erwähnung, `linuxhw-corpus.py` | Alte einmalige Skripte und Suites, die nirgends genannt sind; in CI läuft nur `test-ui-crawl`. | offen: Liste liegt vor; gelöscht wird nichts ohne Auftrag. |
+
+
+## 14. Schwester-Repos
+
+### 14.1 TitanOS-Apps (Prüfer, nur lesend, 10.11.2026)
+
+Gelesen: alle 42 Vorlagen (strukturiert), README, Workflows `catalog.yml`/`storytold.yml`, alle 17 Skills gegen den Werkzeugkatalog. Ohne Befund: Skills (alle Werkzeuge existieren, zerstörende Schritte fragen vorher), keine doppelten Host-Ports außer dem gewollten Paar auf 53, keine privilegierten Container, 13 verdächtige Images existieren. Nicht gelesen: lange Inline-Skripte von matrix-element und mattermost, die Smoke-Skripte.
+
+| ID | Art | Ort | Fund | Stand |
+|---|---|---|---|---|
+| F-14-1 | Fehler | TitanOS `web/src/lib/compose/template.ts:269`; Vorlagen cloudflare-tunnel, hermes-agent, nextcloud, node-red, pihole, frigate, bambu-lab | `secret: true` kennt die Oberfläche nicht (nur `generate`): neun Zugangsdaten stehen im Klartext im Formular und in `compose.yaml` statt verdeckt in `.env`. | behoben in TitanOS: `secret: true` ist ein verdecktes Feld, dessen Wert in `.env` steht (Test); Schema in `docs/rules/DOCKER.md`. Die Vorlagen selbst bleiben, wie sie sind. |
+| F-14-2 | Fehler (vermutet) | adguard, pihole; `build/mkosi.conf` (systemd-resolved) | Port 53 ist auf dem NAS vom Stub-Resolver belegt: das Formular weicht still auf 54 aus, ein DNS-Server dort nützt niemandem. | behoben in TitanOS (Abbild, volles Release): Stub-Listener von systemd-resolved aus, `/etc/resolv.conf` nennt die DNS-Server des Netzes; der QEMU-Start prüft beides. Nicht auf echter Hardware geprüft. |
+| F-14-3 | Fehler (vermutet) | deepseek-harness, whisper, syncthing | Ordner gehören root, der Dienst läuft als anderer Benutzer: Start bzw. Modell-Download scheitert an Rechten. | offen |
+| F-14-4 | Lücke | Apps `.github/workflows/storytold.yml:6,43` | Der Build-Job läuft bei Pull Requests mit `packages: write` und führt Code aus dem PR aus. | offen |
+| F-14-5 | Lücke | beide Repos | `main` ist ungeschützt; jeder Push erreicht alle NAS binnen eines Tages (Vorlagen, Skills). Actions nur über Tags festgelegt. | beim Inhaber |
+| F-14-6 | Lücke | vaultwarden | Registrierung ab Werk offen (`SIGNUPS_ALLOWED: "true"`). | offen |
+| F-14-7 | Lücke | nextcloud (`MYSQL_PASSWORD` in zwei Diensten), hermes-agent (Port-Eintrag `127.0.0.1:8642:8642`) | Zwei erzeugte Passwörter, von denen eines falsch angezeigt wird; Port-Beschriftung wird nie gezeigt. | offen |
+| F-14-8 | Lücke | TitanOS `web/src/routes/apps/+page.svelte:21`, i18n | Kategorie `games` (sechs Vorlagen) hat keinen Namen: der Filter zeigt das rohe Wort. Fünf KI-Vorlagen stehen unter „Produktivität“ statt `ai`. | teilweise behoben: Kategorie „Spiele“ in TitanOS; die fünf KI-Vorlagen wechseln im Apps-Repo die Kategorie. |
+| F-14-9 | Lücke | Apps `catalog.yml` | Tests laufen gegen den Formularcode von 0.21.0; keine Prüfung der Metadaten, der Skills, der `secret`-Werte; `check-registry-images.py` läuft nie. | offen |
+| F-14-10 | Aufräumen | Apps `docs/IMAGE-TAGS.md`, README | Zahlen und Listen veraltet (entfernte Craft-Apps). | offen |
+
+### 14.2 TitanOS-Plugins (Prüfer, nur lesend, 10.11.2026)
+
+Ohne Befund: kein Signierschlüssel im Repo, Downloads mit SHA-256 festgelegt, NVIDIA-Archiv gpg-geprüft, Skripte mit `set -euo pipefail`, NAS-seitige Skripte ohne `rm -rf` auf Variablen, keine Unit aktiviert sich selbst.
+
+| ID | Art | Ort | Fund | Stand |
+|---|---|---|---|---|
+| F-14-11 | Lücke (Signaturkette) | TitanOS `scripts/plugin-guard.py:57`, `plugin-sign.yml`; Plugins `release.yml` | Mit `AUTOPILOT_PLUGINS=on` (ist an) wird ein `common-<n>`-Entwurf ohne Freigabe signiert, wenn nur die Angaben in `index.json` passen; nichts bindet das Abbild an einen Build. Wer einen Entwurf schreiben kann, bekommt ein beliebiges `tailscale.raw` signiert. | offen |
+| F-14-12 | Lücke | Plugins `scripts/upstream.py:123` | Der nächtliche Lauf legt die Prüfsumme dessen fest, was er gerade geladen hat, ohne die Prüfsummen der Hersteller zu vergleichen. | offen |
+| F-14-13 | Fehler | Plugins `.github/workflows/upstream.yml:41` | `… \| tee` ohne `pipefail`: scheitert die nächtliche Prüfung, ist der Schritt trotzdem grün und niemand erfährt es. | offen |
+| F-14-14 | Lücke | Plugins `release.yml` („What to publish“, Entwürfe) | Ein Abruffehler gilt als „noch kein Katalog“ und baut alles neu; ein Fehler von `gh api` in der Schleife erzeugt einen zweiten Entwurf. | offen |
+| F-14-15 | Lücke | Plugins `plugins/netbird/root/usr/libexec/titanos-netbird-firewall:14` | Ohne nutzbares `ip6tables` startet NetBird nicht (Tailscale hat die Prüfung). | offen |
+| F-14-16 | Lücke | Plugins `scripts/sets.py:48` | Der Hash für `intel-gpu-tools` enthält das Abbild nicht: alter Build bleibt über Abbildwechsel. | offen |
+| F-14-17 | Aufräumen | Plugins `RELEASING.md`, `scripts/__pycache__/*.pyc` im Repo, tote `sign()`/`pointer()` in `sets.py`, Actions nur über Tags | Doku nennt den nächtlichen Lauf nicht; eingecheckte Binärdateien. | offen |

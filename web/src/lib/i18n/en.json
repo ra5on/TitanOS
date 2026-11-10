@@ -1150,6 +1150,7 @@
 	"error.invalid_env": "A secret contains characters that cannot be stored (a line break or a single quote).",
 	"apps.format.casaos": "CasaOS store",
 	"apps.category.ai": "AI",
+	"apps.category.games": "Games",
 	"apps.category.finance": "Finance",
 	"apps.category.social": "Social",
 	"apps.fromSource": "Source",
