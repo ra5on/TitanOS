@@ -403,6 +403,7 @@ func (m *Manager) replaceMissingBtrfs(ctx context.Context, volume VolumeConfig, 
 	if err != nil {
 		return err
 	}
+	rawPart := part
 	if volume.Encryption != nil {
 		// The missing member is replaced for good: only the members that
 		// are there stay in the configuration, plus the new one.
@@ -415,6 +416,8 @@ func (m *Manager) replaceMissingBtrfs(ctx context.Context, volume VolumeConfig, 
 	_, err = m.runner.Run(ctx, "", "btrfs", "replace", "start", missing, part, point)
 	if err == nil {
 		m.setBtrfsProgress(volume.Name, VolumeRebuilding)
+	} else {
+		m.undoNewMember(ctx, volume, rawPart)
 	}
 	return err
 }

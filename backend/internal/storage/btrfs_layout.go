@@ -198,12 +198,14 @@ func (m *Manager) addBtrfsDisk(ctx context.Context, volume VolumeConfig, diskNam
 	if err != nil {
 		return err
 	}
+	rawPart := part
 	if volume.Encryption != nil {
 		if part, err = m.encryptNewMember(ctx, volume, part, password, nil); err != nil {
 			return err
 		}
 	}
 	if _, err := m.runner.Run(ctx, "", "btrfs", "device", "add", "-f", part, point); err != nil {
+		m.undoNewMember(ctx, volume, rawPart)
 		return err
 	}
 	// From here on the disk belongs to the file system: say so before the
