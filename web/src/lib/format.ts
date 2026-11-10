@@ -49,7 +49,9 @@ export function formatBytesOf(used: number, total: number): string {
 }
 
 export function formatPercent(value: number): string {
-	return `${number(value, 0)} %`;
+	// Not "100 %" before the end, not "0 %" once something is there.
+	const shown = value < 100 && value >= 99.5 ? 99 : value > 0 && value < 0.5 ? 1 : value;
+	return `${number(shown, 0)} %`;
 }
 
 /** A number with up to `digits` decimals in the interface language ("2,15"). */

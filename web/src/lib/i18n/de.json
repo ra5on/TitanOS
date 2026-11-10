@@ -606,6 +606,7 @@
 	"error.download_blocked": "Diese Adresse oder Weiterleitung ist nicht erlaubt.",
 	"error.download_hash_mismatch": "Die SHA-256-Prüfsumme stimmt nicht.",
 	"error.download_failed": "Der Link konnte nicht abgefragt werden.",
+	"error.upload_source_changed": "Die Datei auf deinem Gerät wurde geändert oder ist nicht mehr da. Wähle sie neu aus und lade sie noch einmal hoch.",
 	"error.upload_not_found": "Dieses Hochladen ist nicht mehr bekannt. Bitte starte es neu.",
 	"files.macCompanion.title": "macOS-Begleitdatei",
 	"files.macCompanion.text": "„{name}“ ist keine eigene Datei, sondern eine Begleitdatei eines Macs mit Finder-Daten (Symbol, Etiketten). Sie lässt sich nicht öffnen.",

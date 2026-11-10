@@ -31,6 +31,17 @@
 		dialog.showModal();
 	});
 
+	// Escape is answered here: browsers close a dialog at the second Escape in
+	// a row even when "cancel" was refused – a locked dialog (work in
+	// progress) must stay.
+	function keydown(event: KeyboardEvent) {
+		if (event.key !== 'Escape' || event.defaultPrevented) return;
+		if (locked) event.preventDefault();
+		else if (onrequestclose) {
+			event.preventDefault();
+			onrequestclose();
+		}
+	}
 	function cancel(event: Event) {
 		if (locked) event.preventDefault();
 		else if (onrequestclose) {
@@ -49,6 +60,7 @@
 	aria-labelledby="{id}-title"
 	{onclose}
 	oncancel={cancel}
+	onkeydown={keydown}
 >
 	<h2 id="{id}-title">{title}</h2>
 	{@render children()}
