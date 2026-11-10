@@ -352,3 +352,27 @@ func TestRollingReplicaMakesRoomOnTheOtherNAS(t *testing.T) {
 		t.Fatal("whenFull accepted")
 	}
 }
+
+// PLAN 76 (F-9-5): btrfs send fails in the middle. Its stream must not end
+// cleanly at the other NAS, which would publish half a snapshot.
+func TestReplicationDoesNotPublishAStreamOfAFailedSend(t *testing.T) {
+	p := newPair(t)
+	p.sender.command = func(_ context.Context, args ...string) *exec.Cmd {
+		return exec.Command("sh", "-c", `printf 'NAME:%s PARENT:\n' "$1"; echo "read error" >&2; exit 1`, "_", filepath.Base(args[len(args)-1]))
+	}
+	id, _ := p.sender.Save("", Request{Name: "offsite", Enabled: true, Volume: "tank", Code: code(p.server.URL+"/home", "home", "secret"), EveryHours: 24, Keep: 7})
+	done := make(chan error, 1)
+	p.sender.OnResult = func(_ Job, err error) { done <- err }
+	p.sender.Start(context.Background(), id)
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "btrfs send") {
+			t.Fatalf("failed send: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("run never ended")
+	}
+	if got := received(p.inbox); len(got) != 0 {
+		t.Fatalf("half a snapshot was published: %v", got)
+	}
+}

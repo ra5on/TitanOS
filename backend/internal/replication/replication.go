@@ -549,11 +549,18 @@ func (m *Manager) stream(ctx context.Context, job Job, name string, args []strin
 	if err := cmd.Start(); err != nil {
 		return err
 	}
+	// btrfs send is waited for once, wherever its end is noticed first.
+	var waitOnce sync.Once
+	var waitErr error
+	wait := func() error {
+		waitOnce.Do(func() { waitErr = cmd.Wait() })
+		return waitErr
+	}
 	// finish ends btrfs send after an early end of the request.
 	finish := func(err error) error {
 		cancel()
 		stdout.Close()
-		cmd.Wait()
+		_ = wait() // the request's own error is the one to report
 		stallMu.Lock()
 		defer stallMu.Unlock()
 		if stalled {
@@ -562,6 +569,16 @@ func (m *Manager) stream(ctx context.Context, job Job, name string, args []strin
 		return err
 	}
 	body := &counter{r: stdout, closer: stdout, limit: int64(job.LimitMiB) << 20, start: time.Now(), progress: progress,
+		// A stream that ends because btrfs send failed must not reach the
+		// other NAS as a clean end: it would take half a snapshot for a
+		// whole one and let it push older replicas out. The failed read
+		// breaks the request off instead.
+		atEnd: func() error {
+			if err := wait(); err != nil {
+				return fmt.Errorf("btrfs send: %v: %s", err, strings.TrimSpace(stderr.String()))
+			}
+			return nil
+		},
 		activity: func(sent bool) {
 			if sent {
 				watchdog.Reset(m.answerWait)
@@ -586,8 +603,8 @@ func (m *Manager) stream(ctx context.Context, job Job, name string, args []strin
 		// still be writing into the pipe.
 		return finish(fmt.Errorf("other NAS: %s: %s", res.Status, strings.TrimSpace(string(answer))))
 	}
-	if waitErr := cmd.Wait(); waitErr != nil {
-		return fmt.Errorf("btrfs send: %v: %s", waitErr, strings.TrimSpace(stderr.String()))
+	if err := wait(); err != nil {
+		return fmt.Errorf("btrfs send: %v: %s", err, strings.TrimSpace(stderr.String()))
 	}
 	return nil
 }
@@ -613,13 +630,19 @@ type counter struct {
 	start    time.Time
 	progress func(int64)
 	activity func(sent bool)
+	// atEnd is asked when the reader ends: an error replaces the clean end.
+	atEnd func() error
 }
 
 func (c *counter) Close() error {
 	if c.closer == nil {
 		return nil
 	}
-	return c.closer.Close()
+	// Waiting for btrfs send at the end of its stream closed the pipe already.
+	if err := c.closer.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
+		return err
+	}
+	return nil
 }
 
 func (c *counter) Read(p []byte) (int, error) {
@@ -627,6 +650,11 @@ func (c *counter) Read(p []byte) (int, error) {
 		p = p[:max(1, c.limit/4)]
 	}
 	n, err := c.r.Read(p)
+	if err == io.EOF && c.atEnd != nil {
+		if failed := c.atEnd(); failed != nil {
+			err = failed
+		}
+	}
 	c.n += int64(n)
 	if c.progress != nil {
 		c.progress(c.n)
