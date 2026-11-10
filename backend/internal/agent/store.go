@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"regexp"
 	"slices"
@@ -416,7 +417,16 @@ func (s *Store) SaveChat(user string, c *Chat) error {
 	if err := s.write(user, "chats/"+c.ID+".json", c); err != nil {
 		return err
 	}
-	index, _ := s.indexLocked(user)
+	index, err := s.indexLocked(user)
+	if err != nil {
+		// The list of chats cannot be read (damaged, a read error). It is
+		// not written anew with this one chat alone, which would take
+		// every other chat off the list: it is put together again from
+		// the chats themselves, or the save fails.
+		if index, err = s.rebuildIndexLocked(user); err != nil {
+			return err
+		}
+	}
 	info := c.Info()
 	replaced := false
 	for i := range index {
@@ -477,6 +487,35 @@ func (s *Store) indexLocked(user string) ([]ChatInfo, error) {
 		return nil, err
 	}
 	s.updatedLocked(user, index)
+	return index, nil
+}
+
+// rebuildIndexLocked makes the list of chats from the chat files, oldest
+// change first, for a list that cannot be read.
+func (s *Store) rebuildIndexLocked(user string) ([]ChatInfo, error) {
+	root, done, err := s.userRoot(user, false)
+	if err != nil {
+		return nil, err
+	}
+	defer done()
+	entries, err := fs.ReadDir(root.FS(), "chats")
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+	index := []ChatInfo{}
+	for _, entry := range entries {
+		id, isChat := strings.CutSuffix(entry.Name(), ".json")
+		if entry.IsDir() || !isChat || !ValidID(id) {
+			continue
+		}
+		var c Chat
+		if volumedata.ReadJSON(root, "chats/"+entry.Name(), &c, maxChatFile) != nil || c.ID != id {
+			continue // a chat that cannot be read stays as a file, off the list
+		}
+		index = append(index, c.Info())
+	}
+	slices.SortFunc(index, func(a, b ChatInfo) int { return a.Updated.Compare(b.Updated) })
+	slog.Warn("agent: list of chats rebuilt from the chat files", "account", user, "chats", len(index))
 	return index, nil
 }
 

@@ -2,7 +2,9 @@ package agent
 
 import (
 	"encoding/json"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -83,5 +85,52 @@ func TestScheduleNeverRanHasNoLastRun(t *testing.T) {
 	}
 	if strings.Contains(string(b), "lastRun") {
 		t.Fatalf("zero lastRun marshaled: %s", b)
+	}
+}
+
+// A list of chats that cannot be read is not replaced by a list with only
+// the chat that is being saved: every chat stays on it.
+func TestDamagedChatListDoesNotLoseTheOtherChats(t *testing.T) {
+	dir := t.TempDir()
+	s := &Store{Open: func() (*os.Root, error) { return os.OpenRoot(dir) }}
+	start := time.Now().UTC()
+	var ids []string
+	for i := range 3 {
+		c := &Chat{ID: NewID(), Title: "Chat", Created: start, Updated: start.Add(time.Duration(i) * time.Second), State: StateIdle}
+		if err := s.SaveChat("alex", c); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, c.ID)
+	}
+	// Find and damage the list.
+	var list string
+	filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err == nil && d.Name() == "chats.json" {
+			list = p
+		}
+		return nil
+	})
+	if list == "" {
+		t.Fatal("no list of chats written")
+	}
+	if err := os.WriteFile(list, []byte("{ damaged"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	another := &Chat{ID: NewID(), Title: "Neu", Created: start, Updated: start.Add(time.Minute), State: StateIdle}
+	if err := s.SaveChat("alex", another); err != nil {
+		t.Fatal(err)
+	}
+	chats, err := s.Chats("alex")
+	if err != nil || len(chats) != 4 {
+		t.Fatalf("%d chats on the list after saving one more, want 4 (%v)", len(chats), err)
+	}
+	for _, id := range ids {
+		found := false
+		for _, c := range chats {
+			found = found || c.ID == id
+		}
+		if !found {
+			t.Fatalf("chat %s is gone from the list", id)
+		}
 	}
 }
