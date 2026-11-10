@@ -104,7 +104,7 @@ if [ -d "$variant" ]; then
     if [ "$(unsquashfs -cat "$vsquash" usr/share/titanos/kernel-variant)" != new ]; then
         echo "$variant is not the image with the new kernel" >&2; exit 1
     fi
-    if [ "${ALLOW_DEV:-}" != 1 ] && { unsquashfs -l "$vsquash" | grep -q 'getty@.*\.service\.d/autologin\.conf' \
+    if [ "${ALLOW_DEV:-}" != 1 ] && { unsquashfs -l "$vsquash" | grep 'getty@.*\.service\.d/autologin\.conf' >/dev/null \
         || unsquashfs -cat "$vsquash" usr/lib/os-release | grep -q '^VARIANT_ID=dev$'; }; then
         echo "refusing to publish a development image with the new kernel" >&2; exit 1
     fi

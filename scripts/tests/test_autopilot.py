@@ -59,6 +59,11 @@ class PendingTest(unittest.TestCase):
         self.assertEqual(autopilot.pending(tags, published("v0.45.2")), "v0.45.3")
         self.assertEqual(autopilot.pending(tags, published("v0.45.2", "v0.45.3")), "")
         self.assertEqual(autopilot.pending([("v0.46.0", NOW, "owner")], published()), "")
+        # PLAN 76 (F-13-1): an autopilot tag that never came out and was
+        # overtaken by a published release is not pending for ever.
+        stale = [*tags, ("v0.46.0", NOW, "0.46"), ("v0.47.0", NOW, "0.47")]
+        self.assertEqual(autopilot.pending(stale, published("v0.45.2", "v0.46.0")), "")
+        self.assertEqual(autopilot.pending(stale, published("v0.45.2")), "v0.45.3")
 
 
 class GuardTest(unittest.TestCase):

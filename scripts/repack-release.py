@@ -68,6 +68,8 @@ def sha256(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
+SAFE_NAME = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9._-]*")
+
 def fetch_base(source, base, work, keys):
     """Downloads every asset of the base release and verifies it like the publish job."""
     directory = work / "base"
@@ -78,11 +80,16 @@ def fetch_base(source, base, work, keys):
     names = [line.split("  ", 1)[1] for line in (directory / "SHA256SUMS").read_text().splitlines()]
     manifest = json.loads((directory / "manifest.json").read_text())
     signatures = [f"titanos-{base}.zip.minisig"] + [p["asset"] + ".minisig" for p in manifest.get("plugins", [])]
+    # The list is verified only below, once everything is there: until then
+    # a name from it is just a file name, never a path out of this folder.
+    for name in names + signatures:
+        if not isinstance(name, str) or not SAFE_NAME.fullmatch(name):
+            raise SystemExit(f"v{base} lists a file with an unusable name: {name!r}")
     for name in names + signatures:
         if not (directory / name).exists():
             print("loading", name, flush=True)
             download(url + name, directory / name)
-    run(sys.executable, str(REPO / "scripts/verify-release.py"), str(directory), str(keys))
+    run(sys.executable, str(REPO / "scripts/verify-release.py"), "--base", str(directory), str(keys))
     if manifest["version"] != base or manifest.get("app", {}).get("base") != base:
         raise SystemExit(f"v{base} is not a release with its own system image")
     return directory, manifest

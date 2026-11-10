@@ -104,7 +104,15 @@ def pending(tags, is_published):
     """The newest autopilot tag without a published release, or ""."""
     ours = [name for name, _, subject in tags if MARKER in subject and stable(name)]
     for name in sorted(ours, key=stable, reverse=True):
-        return "" if is_published(name) else name
+        if is_published(name):
+            return ""
+        # A tag of the autopilot that never came out and was overtaken by a
+        # later release is not on its way any more: nothing waits for it, and
+        # plugin sets must not be signed in its name without approval.
+        later = [other for other, _, _ in tags if stable(other) and stable(other) > stable(name)]
+        if any(is_published(other) for other in sorted(later, key=stable, reverse=True)):
+            return ""
+        return name
     return ""
 
 

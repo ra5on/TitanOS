@@ -251,6 +251,7 @@ Angezeigt wird ab 0.72 nur noch `0.72`, `0.73` … (Inhaber 9.11.2026). Jedes Re
 - **Technisch bleibt die Version dreiteilig mit `.0`:** Tag `v0.72.0`, Manifest `"version": "0.72.0"`, Notizen `docs/releases/v0.72.0.md`, Dateinamen. titand bis 0.71.1 erkennt nur dreiteilige Versionen als Update; mit `0.72` käme das Update dort nie an.
 - Oberfläche, Statusbericht, Handbuch und KI-Agent zeigen ohne `.0` (`osVersion` in `web/src/lib/format.ts`, `version.Display` in Go). Der Titel der Release-Notizen heißt „TitanOS 0.72 — …“.
 - Ältere Versionen mit dritter Zahl (0.71.1) bleiben so, wie sie sind.
+- **Ausnahme Autopilot (Stand 10.11.2026, offen beim Inhaber):** Ein Sicherheits-Release des Autopiloten ist weiterhin der nächste freie Patch des letzten Releases (`scripts/autopilot.py plan`, z. B. 0.74.1), weil sein Wächter (`guard`) genau das prüft: direkter Nachfolger des veröffentlichten Tags, gleiche Haupt- und Nebenzahl. Soll auch der Autopilot die zweite Zahl erhöhen, müssen `plan` und `guard` zusammen geändert werden (PLAN 76, F-13-17).
 
 ## Probelauf ohne Veröffentlichung
 

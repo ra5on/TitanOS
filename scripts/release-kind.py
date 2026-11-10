@@ -93,6 +93,19 @@ ALLOWED = (
     # Takes the README pictures against vite dev with test data; nothing of it
     # is in the image (v0.70.0 became a full release by mistake, 8.11.2026).
     "scripts/capture-readme-screenshots.mjs",
+    # PLAN 76 (F-13-4): tools that run only in CI or on the developer's
+    # machine and are in no image – the QEMU smoke tests, every test of the
+    # scripts, the nightly check for Debian updates, the autopilot and the
+    # plugin sets. What the image build itself uses (make-zip.sh,
+    # make-grub.sh, stick-bios.py, grubenv.py, check-image-hardware.py,
+    # normalize-image-tmpfiles.py, fetch-pci-ids.sh) stays outside this list.
+    "scripts/smoke-",
+    "scripts/vm_snapshot_smoke.py",
+    "scripts/tests/",
+    "scripts/autopilot.py",
+    "scripts/debian-security.py",
+    "scripts/plugin-set.py",
+    ".github/workflows/autopilot.yml",
 )
 
 
