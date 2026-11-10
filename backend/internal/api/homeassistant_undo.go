@@ -27,7 +27,7 @@ type haUndoStore struct {
 
 // Undo is deliberately limited to one switch/input_boolean, with an observed
 // transition. No scenes, toggle, doors, locks or implicit physical rollback.
-func (s *Server) beforeHAUndo(ctx context.Context, ha *homeassistant.Manager, q haCall) *homeassistant.State {
+func (hass haArea) beforeHAUndo(ctx context.Context, ha *homeassistant.Manager, q haCall) *homeassistant.State {
 	if len(q.Entities) != 1 || len(q.Data) > 0 || (q.Domain != "switch" && q.Domain != "input_boolean") || (q.Service != "turn_on" && q.Service != "turn_off") {
 		return nil
 	}
@@ -37,7 +37,7 @@ func (s *Server) beforeHAUndo(ctx context.Context, ha *homeassistant.Manager, q 
 	}
 	return &st
 }
-func (s *Server) afterHAUndo(ctx context.Context, ha *homeassistant.Manager, u auth.User, q haCall, before *homeassistant.State) string {
+func (hass haArea) afterHAUndo(ctx context.Context, ha *homeassistant.Manager, u auth.User, q haCall, before *homeassistant.State) string {
 	if before == nil {
 		return ""
 	}
@@ -58,27 +58,27 @@ func (s *Server) afterHAUndo(ctx context.Context, ha *homeassistant.Manager, u a
 		return ""
 	}
 	id := hex.EncodeToString(key[:])
-	s.haUndo.Lock()
-	defer s.haUndo.Unlock()
-	if s.haUndo.Entries == nil {
-		s.haUndo.Entries = map[string]haUndoReceipt{}
+	hass.undo.Lock()
+	defer hass.undo.Unlock()
+	if hass.undo.Entries == nil {
+		hass.undo.Entries = map[string]haUndoReceipt{}
 	}
-	for k, v := range s.haUndo.Entries {
+	for k, v := range hass.undo.Entries {
 		if time.Now().After(v.Expires) {
-			delete(s.haUndo.Entries, k)
+			delete(hass.undo.Entries, k)
 		}
 	}
-	if len(s.haUndo.Entries) >= 200 {
+	if len(hass.undo.Entries) >= 200 {
 		return ""
 	}
-	s.haUndo.Entries[id] = haUndoReceipt{u.Name, ha.ID(), settings.URL, q.Entities[0], before.State, after.State, after.LastChanged, time.Now().Add(30 * time.Minute)}
+	hass.undo.Entries[id] = haUndoReceipt{u.Name, ha.ID(), settings.URL, q.Entities[0], before.State, after.State, after.LastChanged, time.Now().Add(30 * time.Minute)}
 	return id
 }
-func (s *Server) undoReceipt(ctx context.Context, user, id string) (*homeassistant.Manager, haUndoReceipt, error) {
-	s.haUndo.Lock()
-	defer s.haUndo.Unlock()
-	r, ok := s.haUndo.Entries[id]
-	ha := s.haConnection(r.Conn)
+func (hass haArea) undoReceipt(ctx context.Context, user, id string) (*homeassistant.Manager, haUndoReceipt, error) {
+	hass.undo.Lock()
+	defer hass.undo.Unlock()
+	r, ok := hass.undo.Entries[id]
+	ha := hass.haConnection(r.Conn)
 	if !ok || ha == nil || r.User != user || time.Now().After(r.Expires) {
 		return nil, r, toolcatalog.ErrInvalid
 	}
@@ -91,7 +91,7 @@ func (s *Server) undoReceipt(ctx context.Context, user, id string) (*homeassista
 	}
 	return ha, r, nil
 }
-func (s *Server) haUndoTool(u auth.User) toolcatalog.Tool {
+func (hass haArea) haUndoTool(u auth.User) toolcatalog.Tool {
 	return actionTool("ha_undo", "Undo a previously verified single switch action ONLY using its undoReceipt returned by ha_call. Expires after 30 minutes or a service restart. Rejects intervening state changes and current access restrictions. Never undo scenes, doors or arbitrary actions.", map[string]any{"receipt": str("Exact undoReceipt from ha_call")}, []string{"receipt"}, func(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
 		var q struct {
 			Receipt string `json:"receipt"`
@@ -99,15 +99,15 @@ func (s *Server) haUndoTool(u auth.User) toolcatalog.Tool {
 		if err := toolcatalog.DecodeArgs(args, &q); err != nil {
 			return nil, err
 		}
-		_, receipt, err := s.undoReceipt(ctx, u.Name, q.Receipt)
+		_, receipt, err := hass.undoReceipt(ctx, u.Name, q.Receipt)
 		if err != nil {
 			return nil, err
 		}
 		return card("api.change", map[string]string{"summary": receipt.Entity + " → " + receipt.Before}, "POST", "/homeassistant/undo", q), nil
 	})
 }
-func (s *Server) handleHAUndo(w http.ResponseWriter, r *http.Request) {
-	if !s.haReady(w) {
+func (hass haArea) handleHAUndo(w http.ResponseWriter, r *http.Request) {
+	if !hass.haReady(w) {
 		return
 	}
 	var q struct {
@@ -116,7 +116,7 @@ func (s *Server) handleHAUndo(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &q) {
 		return
 	}
-	ha, saved, err := s.undoReceipt(r.Context(), currentUser(r).Name, q.Receipt)
+	ha, saved, err := hass.undoReceipt(r.Context(), currentUser(r).Name, q.Receipt)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_receipt", "the undo receipt is not valid or has expired")
 		return
@@ -131,10 +131,10 @@ func (s *Server) handleHAUndo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Consume before mutation, including a timeout with an unknown outcome.
-	s.haUndo.Lock()
-	_, exists := s.haUndo.Entries[q.Receipt]
-	delete(s.haUndo.Entries, q.Receipt)
-	s.haUndo.Unlock()
+	hass.undo.Lock()
+	_, exists := hass.undo.Entries[q.Receipt]
+	delete(hass.undo.Entries, q.Receipt)
+	hass.undo.Unlock()
 	if !exists {
 		writeError(w, http.StatusBadRequest, "invalid_receipt", "the undo receipt is not valid or has expired")
 		return

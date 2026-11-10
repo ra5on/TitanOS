@@ -45,8 +45,8 @@ func haMetric(key, name string, value any, unit, class, stateClass string) homea
 	m.Value = &text
 	return m
 }
-func (s *Server) haAdditional(snap *homeassistant.Snapshot) {
-	info := s.opts.Monitor.Info()
+func (hass haArea) haAdditional(snap *homeassistant.Snapshot) {
+	info := hass.monitor.Info()
 	add := func(group, id, name string, metrics ...homeassistant.MetricValue) {
 		snap.Telemetry = append(snap.Telemetry, homeassistant.DeviceValues{Group: group, ID: id, Name: name, Metrics: metrics})
 	}
@@ -59,8 +59,8 @@ func (s *Server) haAdditional(snap *homeassistant.Snapshot) {
 			metric("overlay", "Overlay used", info.Image.OverlayUsedBytes, "B", "data_size", "measurement"),
 			metric("overlay_total", "Overlay total", info.Image.OverlayTotalBytes, "B", "data_size", "measurement"))
 	}
-	if s.opts.Update != nil {
-		p := s.opts.Update.CurrentProgress()
+	if hass.update != nil {
+		p := hass.update.CurrentProgress()
 		add("system", "update", "Update",
 			metric("phase", "Phase", p.Phase, "", "", ""),
 			metric("progress", "Progress", p.Percent, "%", "", "measurement"))
@@ -72,8 +72,8 @@ func (s *Server) haAdditional(snap *homeassistant.Snapshot) {
 			metric("send", "Send", n.TxBytesPerSecond, "B/s", "data_rate", "measurement"),
 			metric("speed", "Link speed", n.SpeedMbps, "Mbit/s", "data_rate", "measurement"))
 	}
-	if s.opts.Accelerators != nil {
-		for _, d := range s.opts.Accelerators.Snapshot() {
+	if hass.accelerators != nil {
+		for _, d := range hass.accelerators.Snapshot() {
 			group := "igpu"
 			if d.Kind == "npu" {
 				group = "npu"
@@ -95,8 +95,8 @@ func (s *Server) haAdditional(snap *homeassistant.Snapshot) {
 			add(group, d.Address, d.Name, metrics...)
 		}
 	}
-	if s.opts.Maintenance != nil {
-		status := s.opts.Maintenance.Status()
+	if hass.maintenance() != nil {
+		status := hass.maintenance().Status()
 		if status.Error != "" || status.Settings.Enabled && !status.Available {
 			snap.UnavailableGroups = append(snap.UnavailableGroups, "maintenance")
 		}
@@ -112,16 +112,16 @@ func (s *Server) haAdditional(snap *homeassistant.Snapshot) {
 				metric("next", "Next run", next, "", "timestamp", ""))
 		}
 	}
-	if s.opts.Monitoring != nil {
-		for _, v := range s.opts.Monitoring.CachedTrends(time.Now()) {
+	if hass.monitoring != nil {
+		for _, v := range hass.monitoring.CachedTrends(time.Now()) {
 			add("capacity", v.Volume, v.Volume,
 				metric("days_90", "Days to 90 percent", v.DaysTo90, "d", "duration", "measurement"),
 				metric("days_full", "Days to full", v.DaysToFull, "d", "duration", "measurement"))
 		}
 	}
-	if s.opts.Backup != nil {
-		mounted := s.opts.Storage.Mounted()
-		for _, v := range s.opts.Backup.CachedViews() {
+	if hass.backup != nil {
+		mounted := hass.storage.Mounted()
+		for _, v := range hass.backup.CachedViews() {
 			var check, probe *time.Time
 			var phase any
 			if v.StateKnown {
@@ -133,7 +133,7 @@ func (s *Server) haAdditional(snap *homeassistant.Snapshot) {
 			}
 			var problem, overdue any
 			if v.StateKnown {
-				overdue = s.opts.Backup.Overdue(v)
+				overdue = hass.backup.Overdue(v)
 				problem = v.State.CheckError != "" || (v.State.Probe != nil && v.State.Probe.Error != "")
 			}
 			metrics := []homeassistant.MetricValue{metric("last_check", "Last archive check", check, "", "timestamp", ""),
@@ -154,8 +154,8 @@ func (s *Server) haAdditional(snap *homeassistant.Snapshot) {
 			add("backups", v.Job.ID, v.Job.ID, metrics...)
 		}
 	}
-	if s.opts.ApplicationBackups != nil {
-		op, active := s.opts.ApplicationBackups.Status()
+	if hass.applications() != nil {
+		op, active := hass.applications().Status()
 		add("work", "application_recovery", "Application backup",
 			metric("recovery", "Recovery required", op != nil && !active, "", "problem", ""))
 	}

@@ -127,7 +127,7 @@ func (s *Server) agentLocation() *time.Location {
 // agentTriggered reports whether a Home Assistant entity reached the state
 // of a trigger since the last look (and kept it long enough).
 func (s *Server) agentTriggered(user string, sc agent.Schedule, now time.Time) bool {
-	ha := s.haConnection(sc.Trigger.Connection)
+	ha := s.haArea().haConnection(sc.Trigger.Connection)
 	if ha == nil {
 		return false
 	}
@@ -406,7 +406,7 @@ func (s *Server) agentHANotify(chat *agent.Chat) {
 		if !found {
 			conn, service = "", entry
 		}
-		ha := s.haConnection(conn)
+		ha := s.haArea().haConnection(conn)
 		if ha == nil || !ha.Active() {
 			continue
 		}

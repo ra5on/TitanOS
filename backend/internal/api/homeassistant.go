@@ -37,27 +37,27 @@ func writeHAError(w http.ResponseWriter, err error) {
 }
 
 // haRequest is the connection a request is about, or nil after an answer.
-func (s *Server) haRequest(w http.ResponseWriter, r *http.Request) *homeassistant.Manager {
-	if !s.haReady(w) {
+func (hass haArea) haRequest(w http.ResponseWriter, r *http.Request) *homeassistant.Manager {
+	if !hass.haReady(w) {
 		return nil
 	}
-	ha := s.haOf(r)
+	ha := hass.haOf(r)
 	if ha == nil {
 		writeError(w, http.StatusNotFound, "ha_connection_missing", homeassistant.ErrNoConnection.Error())
 	}
 	return ha
 }
 
-func (s *Server) haReady(w http.ResponseWriter) bool {
-	if s.opts.HomeAssistant == nil {
+func (hass haArea) haReady(w http.ResponseWriter) bool {
+	if hass.home == nil {
 		writeError(w, http.StatusNotFound, "ha_off", "Home Assistant is not available")
 		return false
 	}
 	return true
 }
 
-func (s *Server) handleHASettings(w http.ResponseWriter, r *http.Request) {
-	ha := s.haRequest(w, r)
+func (hass haArea) handleHASettings(w http.ResponseWriter, r *http.Request) {
+	ha := hass.haRequest(w, r)
 	if ha == nil {
 		return
 	}
@@ -65,12 +65,12 @@ func (s *Server) handleHASettings(w http.ResponseWriter, r *http.Request) {
 	watching, watchError := ha.WatchStatus()
 	publishing, mqttError := ha.MQTTStatus()
 	writeJSON(w, http.StatusOK, map[string]any{"settings": settings, "tokenSet": set["token"], "mqttPasswordSet": set["mqtt"], "domains": homeassistant.Domains(),
-		"diagnostics": ha.Diagnostics(), "sensorGroups": homeassistant.SensorGroups, "commandGroups": homeassistant.CommandGroups, "mqttDevices": s.HASnapshot(r.Context()).Telemetry,
+		"diagnostics": ha.Diagnostics(), "sensorGroups": homeassistant.SensorGroups, "commandGroups": homeassistant.CommandGroups, "mqttDevices": hass.HASnapshot(r.Context()).Telemetry,
 		"status": map[string]any{"watching": watching, "watchError": watchError, "mqtt": publishing, "mqttError": mqttError}})
 }
 
-func (s *Server) handleHASettingsChange(w http.ResponseWriter, r *http.Request) {
-	ha := s.haRequest(w, r)
+func (hass haArea) handleHASettingsChange(w http.ResponseWriter, r *http.Request) {
+	ha := hass.haRequest(w, r)
 	if ha == nil {
 		return
 	}
@@ -83,7 +83,7 @@ func (s *Server) handleHASettingsChange(w http.ResponseWriter, r *http.Request) 
 	}
 	// Buttons and Assist act for an owner or administrator only.
 	if req.Account != "" {
-		if u, ok := s.opts.Users.Get(req.Account); !ok || !u.Role.CanAdminister() {
+		if u, ok := hass.users.Get(req.Account); !ok || !u.Role.CanAdminister() {
 			writeError(w, http.StatusBadRequest, "invalid_ha_settings", "the account must be an owner or administrator")
 			return
 		}
@@ -93,11 +93,11 @@ func (s *Server) handleHASettingsChange(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	slog.Info("Home Assistant settings changed", "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleHASettings(w, r)
+	hass.handleHASettings(w, r)
 }
 
-func (s *Server) handleHACheck(w http.ResponseWriter, r *http.Request) {
-	ha := s.haRequest(w, r)
+func (hass haArea) handleHACheck(w http.ResponseWriter, r *http.Request) {
+	ha := hass.haRequest(w, r)
 	if ha == nil {
 		return
 	}
@@ -113,8 +113,8 @@ func (s *Server) handleHACheck(w http.ResponseWriter, r *http.Request) {
 
 // handleHAEntities lists every entity for choosing what to release, or with
 // ?released=1 only the released ones (for automations).
-func (s *Server) handleHAEntities(w http.ResponseWriter, r *http.Request) {
-	ha := s.haRequest(w, r)
+func (hass haArea) handleHAEntities(w http.ResponseWriter, r *http.Request) {
+	ha := hass.haRequest(w, r)
 	if ha == nil {
 		return
 	}
@@ -139,8 +139,8 @@ func (s *Server) handleHAEntities(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleHANotifyServices lists notify services, for choosing one's own phone.
-func (s *Server) handleHANotifyServices(w http.ResponseWriter, r *http.Request) {
-	ha := s.haRequest(w, r)
+func (hass haArea) handleHANotifyServices(w http.ResponseWriter, r *http.Request) {
+	ha := hass.haRequest(w, r)
 	if ha == nil {
 		return
 	}
@@ -151,7 +151,7 @@ func (s *Server) handleHANotifyServices(w http.ResponseWriter, r *http.Request) 
 		Name string `json:"name"`
 	}
 	choices := []choice{}
-	for _, m := range s.haHub().Active() {
+	for _, m := range hass.hub().Active() {
 		choices = append(choices, choice{m.ID(), m.Name()})
 	}
 	services, err := ha.NotifyServices(r.Context())
@@ -178,8 +178,8 @@ type haCall struct {
 
 // handleHACall calls a service for released entities. The assistant's
 // action ha_call ends here; the release is checked again.
-func (s *Server) handleHACall(w http.ResponseWriter, r *http.Request) {
-	if !s.haReady(w) {
+func (hass haArea) handleHACall(w http.ResponseWriter, r *http.Request) {
+	if !hass.haReady(w) {
 		return
 	}
 	var req haCall
@@ -189,12 +189,12 @@ func (s *Server) handleHACall(w http.ResponseWriter, r *http.Request) {
 	if q := r.URL.Query().Get("connection"); q != "" && req.Connection == "" {
 		req.Connection = q
 	}
-	ha := s.haConnection(req.Connection)
+	ha := hass.haConnection(req.Connection)
 	if ha == nil {
 		writeError(w, http.StatusNotFound, "ha_connection_missing", homeassistant.ErrNoConnection.Error())
 		return
 	}
-	before := s.beforeHAUndo(r.Context(), ha, req)
+	before := hass.beforeHAUndo(r.Context(), ha, req)
 	changed, err := ha.Call(r.Context(), req.Domain, req.Service, req.Entities, req.Data)
 	if err != nil {
 		writeHAError(w, err)
@@ -212,13 +212,13 @@ func (s *Server) handleHACall(w http.ResponseWriter, r *http.Request) {
 		}
 		list = append(list, entity{st.EntityID, st.State})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"changed": list, "undoReceipt": s.afterHAUndo(r.Context(), ha, currentUser(r), req, before)})
+	writeJSON(w, http.StatusOK, map[string]any{"changed": list, "undoReceipt": hass.afterHAUndo(r.Context(), ha, currentUser(r), req, before)})
 }
 
 // haTools are the assistant's tools for Home Assistant, only for owners and
 // administrators and only while a server is set up.
-func (s *Server) haTools(user auth.User) []toolcatalog.Tool {
-	hub := s.haHub()
+func (hass haArea) haTools(user auth.User) []toolcatalog.Tool {
+	hub := hass.hub()
 	if hub == nil || len(hub.Active()) == 0 || !user.Role.CanAdminister() {
 		return nil
 	}
@@ -230,13 +230,13 @@ func (s *Server) haTools(user auth.User) []toolcatalog.Tool {
 			if p == nil {
 				p = map[string]any{}
 			}
-			p["connection"] = s.haConnectionProperty()
+			p["connection"] = hass.haConnectionProperty()
 		}
 		return p
 	}
 	on := func(f func(ctx context.Context, ha *homeassistant.Manager, args json.RawMessage) (any, error)) func(context.Context, json.RawMessage) (any, error) {
 		return func(ctx context.Context, args json.RawMessage) (any, error) {
-			ha, rest, err := s.haConnectionArg(args)
+			ha, rest, err := hass.haConnectionArg(args)
 			if err != nil {
 				return nil, err
 			}
@@ -247,7 +247,7 @@ func (s *Server) haTools(user auth.User) []toolcatalog.Tool {
 		}
 	}
 	return []toolcatalog.Tool{
-		s.haUndoTool(user),
+		hass.haUndoTool(user),
 		reading("ha_diagnostics", "Read the HA observer connection timeline and lost-buffer counters. Gaps are not replayed; use ha_history for bounded recorder evidence and never infer a cause from correlation alone.", haDiagnosticsSchema(props(nil)), false, on(func(ctx context.Context, ha *homeassistant.Manager, args json.RawMessage) (any, error) {
 			if err := toolcatalog.DecodeArgs(args, &struct{}{}); err != nil {
 				return nil, err
@@ -343,7 +343,7 @@ func (s *Server) haTools(user auth.User) []toolcatalog.Tool {
 				"data":     map[string]any{"type": "object", "description": "Service data without targets, optional."},
 			}), []string{"domain", "service", "entities"},
 			func(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
-				ha, args, err := s.haConnectionArg(args)
+				ha, args, err := hass.haConnectionArg(args)
 				if err != nil {
 					return nil, err
 				}

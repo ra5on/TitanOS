@@ -110,7 +110,7 @@ func (s *Server) catalogTools(user auth.User) []toolcatalog.Tool {
 	tools = append(tools, s.fileTools(user)...)
 	if user.Role.CanAdminister() {
 		tools = append(tools, s.areaTools()...)
-		tools = append(tools, s.haTools(user)...)
+		tools = append(tools, s.haArea().haTools(user)...)
 	}
 	tools = append(tools, s.catalogActions(user)...)
 	for i := range tools {
