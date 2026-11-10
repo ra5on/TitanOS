@@ -314,6 +314,9 @@ type Manager struct {
 	version, slot string
 	bootID        string
 	now           func() time.Time
+	// Timezone names the time zone of the NAS as set now, for the time
+	// updates install by themselves (Go keeps the zone of the start).
+	Timezone func() string
 	// stall is how long a download may stand still, retryPause the wait
 	// before it is taken up again.
 	stall, retryPause time.Duration
@@ -746,4 +749,15 @@ func knowsEncryption(target string) bool {
 	v, ok := parseVersion(target)
 	since, _ := parseVersion(encryptionSince)
 	return !ok || v.compare(since) >= 0
+}
+
+// clock is the time now in the time zone of the NAS (see Timezone).
+func (m *Manager) clock() time.Time {
+	now := m.now()
+	if m.Timezone != nil {
+		if zone, err := time.LoadLocation(m.Timezone()); err == nil {
+			return now.In(zone)
+		}
+	}
+	return now
 }

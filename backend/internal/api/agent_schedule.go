@@ -109,7 +109,15 @@ func (s *Server) agentStartSchedule(user auth.User, id string, now time.Time, la
 	}
 }
 
+// agentLocation is the time zone of the NAS as set now. Go keeps the zone
+// it found when titand started; tasks, reminders and the morning report
+// would otherwise run on the old one until a restart.
 func (s *Server) agentLocation() *time.Location {
+	if s.opts.Settings != nil {
+		if zone, err := time.LoadLocation(s.opts.Settings.CurrentTimezone()); err == nil {
+			return zone
+		}
+	}
 	return time.Local
 }
 

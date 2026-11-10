@@ -73,7 +73,7 @@ func (m *Manager) Run(ctx context.Context) {
 		retry := !waiting.IsZero() && m.now().Sub(waiting) < 6*time.Hour
 		// Manual checks rule out installing by itself, even if a file
 		// edited by hand asks for both.
-		if !settings.AutoInstall || settings.Manual() || (m.now().Format("15:04") != settings.InstallTime && !retry) {
+		if !settings.AutoInstall || settings.Manual() || (m.clock().Format("15:04") != settings.InstallTime && !retry) {
 			continue
 		}
 		switch {

@@ -76,6 +76,10 @@ type PowerScheduler struct {
 
 	sys string
 	now func() time.Time
+	// Timezone names the time zone of the NAS as set now. Go keeps the
+	// zone it found when titand started: without this, a zone changed in
+	// the settings would count for the schedule only after a restart.
+	Timezone func() string
 	// wolGet and wolSet reach the network card; tests replace them.
 	wolGet func(name string) (supported, enabled bool, err error)
 	wolSet func(name string, enable bool) error
@@ -210,7 +214,7 @@ func (p *PowerScheduler) setAlarm() error {
 	if err := write("0"); err != nil {
 		return fmt.Errorf("wake alarm: %w", err)
 	}
-	if at, ok := p.set.On.next(p.now()); ok {
+	if at, ok := p.set.On.next(p.clock()); ok {
 		if err := write(strconv.FormatInt(at.Unix(), 10)); err != nil {
 			return fmt.Errorf("wake alarm: %w", err)
 		}
@@ -246,7 +250,7 @@ func (p *PowerScheduler) interfaces() []WakeInterface {
 func (p *PowerScheduler) Status() PowerScheduleStatus {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	now := p.now()
+	now := p.clock()
 	st := PowerScheduleStatus{Settings: p.set, Interfaces: p.interfaces(), ReadOnly: p.Disabled, Error: p.problem}
 	if st.Interfaces == nil {
 		st.Interfaces = []WakeInterface{}
@@ -275,7 +279,7 @@ func (p *PowerScheduler) ShutdownSoon(within time.Duration) bool {
 	if !p.postponedSince.IsZero() {
 		return true
 	}
-	now := p.now()
+	now := p.clock()
 	at, ok := p.set.Off.next(now)
 	return ok && at.Sub(now) <= within
 }
@@ -290,7 +294,7 @@ const maxPostpone = 6 * time.Hour
 // Run checks the schedule every half minute until ctx ends.
 func (p *PowerScheduler) Run(ctx context.Context) {
 	p.mu.Lock()
-	due, _ := p.set.Off.next(p.now())
+	due, _ := p.set.Off.next(p.clock())
 	p.mu.Unlock()
 	tick := time.NewTicker(30 * time.Second)
 	defer tick.Stop()
@@ -308,7 +312,7 @@ func (p *PowerScheduler) Run(ctx context.Context) {
 func (p *PowerScheduler) step(due time.Time) time.Time {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	now := p.now()
+	now := p.clock()
 	next, scheduled := p.set.Off.next(now)
 	if !scheduled {
 		p.postponedSince = time.Time{}
@@ -364,4 +368,15 @@ func (p *PowerScheduler) notify(severity, kind, subject string) {
 	if p.Notify != nil {
 		p.Notify(severity, kind, subject)
 	}
+}
+
+// clock is the time now in the time zone of the NAS (see Timezone).
+func (p *PowerScheduler) clock() time.Time {
+	now := p.now()
+	if p.Timezone != nil {
+		if zone, err := time.LoadLocation(p.Timezone()); err == nil {
+			return now.In(zone)
+		}
+	}
+	return now
 }

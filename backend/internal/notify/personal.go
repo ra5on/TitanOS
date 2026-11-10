@@ -351,6 +351,12 @@ func (m *Manager) SendPersonal(user, key string, message PersonalMessage) error 
 		message.Text = ""
 	}
 	message.Text = shorten(message.Text, MaxPersonalText)
+	// Quiet hours are meant by the clock of the NAS as set now.
+	if m.Timezone != nil {
+		if zone, err := time.LoadLocation(m.Timezone()); err == nil {
+			now = now.In(zone)
+		}
+	}
 	if end, quiet := quietUntil(p.Quiet, now); quiet && message.Severity != Error {
 		held := append(slices.Clone(state.held), message)
 		if len(held) > 50 {

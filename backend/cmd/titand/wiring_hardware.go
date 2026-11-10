@@ -68,6 +68,7 @@ func (w *titand) wireHardware() error {
 	}
 	// Shutting down and waking on a schedule, and Wake-on-LAN.
 	w.schedule = system.NewPowerScheduler(w.store)
+	w.schedule.Timezone = func() string { return w.settings.CurrentTimezone() }
 	w.schedule.Disabled = w.opts.dev
 	w.schedule.Poweroff = w.unattended("poweroff", "power schedule", w.power.Poweroff)
 	w.schedule.Notify = w.notifier.Notify

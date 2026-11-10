@@ -193,3 +193,19 @@ func TestClockJumpDoesNotShutDown(t *testing.T) {
 		t.Fatal("the regular shutdown was not carried out")
 	}
 }
+
+// The schedule is meant by the clock of the NAS as it is set now, not by
+// the zone titand found when it started.
+func TestScheduleFollowsTheTimeZoneOfTheNAS(t *testing.T) {
+	now := time.Date(2026, 11, 10, 21, 30, 0, 0, time.UTC)
+	p, _, _ := newScheduler(t, now)
+	p.now = func() time.Time { return now }
+	p.Timezone = func() string { return "Europe/Berlin" }
+	if err := p.Set(PowerSchedule{Off: ScheduleTime{Enabled: true, Days: []int{0, 1, 2, 3, 4, 5, 6}, Time: "23:00"}}); err != nil {
+		t.Fatal(err)
+	}
+	next := p.step(time.Time{})
+	if want := time.Date(2026, 11, 10, 22, 0, 0, 0, time.UTC); !next.Equal(want) {
+		t.Fatalf("next shutdown %v, want 23:00 in Berlin (%v)", next.UTC(), want)
+	}
+}

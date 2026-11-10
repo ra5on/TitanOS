@@ -165,6 +165,7 @@ func (w *titand) wireUpdates() error {
 	// Started by GRUB (legacy BIOS, 32-bit UEFI): its try count becomes
 	// part of the entry names before anything looks at them.
 	w.updates.ReconcileBootLoader()
+	w.updates.Timezone = func() string { return w.settings.CurrentTimezone() }
 	if err := w.updates.Load(); err != nil {
 		slog.Warn("update settings not readable from /config", "err", err)
 	}
