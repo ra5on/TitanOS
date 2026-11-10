@@ -2,13 +2,7 @@ package api
 
 // registerNotifications registers the routes of notifications and their settings.
 func (s *Server) registerNotifications(mux *routeMux) {
-	mux.HandleFunc("GET /api/v1/notifications", s.requireAdmin(s.handleNotifications))
-	mux.HandleFunc("POST /api/v1/notifications/dismiss", s.requireAdmin(s.handleDismissNotifications))
-	mux.HandleFunc("GET /api/v1/notifications/settings", s.requireAdmin(s.handleNotifySettings))
-	mux.HandleFunc("PUT /api/v1/notifications/settings", s.requireAdmin(s.handleNotifySettingsChange))
-	mux.HandleFunc("POST /api/v1/notifications/test", s.requireAdmin(s.handleNotifyTest))
-	mux.HandleFunc("GET /api/v1/notifications/temperatures", s.requireAdmin(s.handleTemperatureAlarms))
-	mux.HandleFunc("PUT /api/v1/notifications/temperatures", s.requireAdmin(s.handleTemperatureAlarmsChange))
+	notifyArea{notify: s.opts.Notify, monitor: s.opts.Monitor}.register(mux, s.requireAdmin)
 }
 
 // registerHealthReport registers the routes of the regular health report.

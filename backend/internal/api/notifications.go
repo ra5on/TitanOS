@@ -7,13 +7,32 @@ import (
 	"slices"
 
 	"github.com/ra5on/TitanOS/backend/internal/notify"
+	"github.com/ra5on/TitanOS/backend/internal/system"
 )
 
-func (s *Server) handleNotifications(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"messages": s.opts.Notify.Messages()})
+// notifyArea is the notifications, where they go and the heat alarms; an
+// area with narrow dependencies (PLAN 8a, see fansArea). monitor names the
+// temperature sensors; nil lists none.
+type notifyArea struct {
+	notify  *notify.Manager
+	monitor *system.Monitor
 }
 
-func (s *Server) handleDismissNotifications(w http.ResponseWriter, r *http.Request) {
+func (a notifyArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/notifications", admin(a.handleNotifications))
+	mux.HandleFunc("POST /api/v1/notifications/dismiss", admin(a.handleDismissNotifications))
+	mux.HandleFunc("GET /api/v1/notifications/settings", admin(a.handleNotifySettings))
+	mux.HandleFunc("PUT /api/v1/notifications/settings", admin(a.handleNotifySettingsChange))
+	mux.HandleFunc("POST /api/v1/notifications/test", admin(a.handleNotifyTest))
+	mux.HandleFunc("GET /api/v1/notifications/temperatures", admin(a.handleTemperatureAlarms))
+	mux.HandleFunc("PUT /api/v1/notifications/temperatures", admin(a.handleTemperatureAlarmsChange))
+}
+
+func (a notifyArea) handleNotifications(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"messages": a.notify.Messages()})
+}
+
+func (a notifyArea) handleDismissNotifications(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		IDs []int `json:"ids"`
 	}
@@ -30,18 +49,18 @@ func (s *Server) handleDismissNotifications(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	}
-	s.opts.Notify.Dismiss(req.IDs)
-	s.handleNotifications(w, r)
+	a.notify.Dismiss(req.IDs)
+	a.handleNotifications(w, r)
 }
 
 // handleNotifySettings shows where messages go. Passwords and tokens are
 // left out; secretSet says which of them are stored.
-func (s *Server) handleNotifySettings(w http.ResponseWriter, r *http.Request) {
-	settings, set := s.opts.Notify.Settings()
+func (a notifyArea) handleNotifySettings(w http.ResponseWriter, r *http.Request) {
+	settings, set := a.notify.Settings()
 	writeJSON(w, http.StatusOK, map[string]any{"settings": settings, "secretSet": set})
 }
 
-func (s *Server) handleNotifySettingsChange(w http.ResponseWriter, r *http.Request) {
+func (a notifyArea) handleNotifySettingsChange(w http.ResponseWriter, r *http.Request) {
 	// ClearSecrets names the channels whose stored password or token is
 	// to be dropped; an empty one in the settings keeps what is stored.
 	var req struct {
@@ -51,7 +70,7 @@ func (s *Server) handleNotifySettingsChange(w http.ResponseWriter, r *http.Reque
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Notify.SetSettings(req.Settings, req.ClearSecrets...); err != nil {
+	if err := a.notify.SetSettings(req.Settings, req.ClearSecrets...); err != nil {
 		switch {
 		case errors.Is(err, notify.ErrInvalid):
 			writeError(w, http.StatusBadRequest, "invalid_notify_settings", err.Error())
@@ -63,17 +82,17 @@ func (s *Server) handleNotifySettingsChange(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	slog.Info("notification settings changed", "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleNotifySettings(w, r)
+	a.handleNotifySettings(w, r)
 }
 
 // handleNotifyTest sends a test message through one channel with the
 // stored settings and says what the other side answered.
-func (s *Server) handleNotifyTest(w http.ResponseWriter, r *http.Request) {
+func (a notifyArea) handleNotifyTest(w http.ResponseWriter, r *http.Request) {
 	var req struct{ Channel string }
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Notify.Test(req.Channel); err != nil {
+	if err := a.notify.Test(req.Channel); err != nil {
 		if errors.Is(err, notify.ErrInvalid) {
 			writeError(w, http.StatusBadRequest, "invalid_notify_settings", err.Error())
 			return
@@ -84,18 +103,30 @@ func (s *Server) handleNotifyTest(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// accountNotifyArea is where the NAS reaches one's own account; an area
+// with narrow dependencies (PLAN 8a, see fansArea).
+type accountNotifyArea struct {
+	notify *notify.Manager
+}
+
+func (a accountNotifyArea) register(mux *routeMux, user func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/account/notifications", user(a.handleAccountNotify))
+	mux.HandleFunc("PUT /api/v1/account/notifications", user(a.handleAccountNotifyChange))
+	mux.HandleFunc("POST /api/v1/account/notifications/test", user(a.handleAccountNotifyTest))
+}
+
 // handleAccountNotify shows where the NAS reaches one's own account.
-func (s *Server) handleAccountNotify(w http.ResponseWriter, r *http.Request) {
-	settings, set, err := s.opts.Notify.PersonalSettings(currentUser(r).Name)
+func (a accountNotifyArea) handleAccountNotify(w http.ResponseWriter, r *http.Request) {
+	settings, set, err := a.notify.PersonalSettings(currentUser(r).Name)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 		return
 	}
-	general, _ := s.opts.Notify.Settings()
-	writeJSON(w, http.StatusOK, map[string]any{"delivery": s.opts.Notify.Deliveries(currentUser(r).Name), "settings": settings, "secretSet": set, "mailServer": general.Email.Host != ""})
+	general, _ := a.notify.Settings()
+	writeJSON(w, http.StatusOK, map[string]any{"delivery": a.notify.Deliveries(currentUser(r).Name), "settings": settings, "secretSet": set, "mailServer": general.Email.Host != ""})
 }
 
-func (s *Server) handleAccountNotifyChange(w http.ResponseWriter, r *http.Request) {
+func (a accountNotifyArea) handleAccountNotifyChange(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		notify.Personal
 		ClearSecrets []string `json:"clearSecrets"`
@@ -103,7 +134,7 @@ func (s *Server) handleAccountNotifyChange(w http.ResponseWriter, r *http.Reques
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Notify.SetPersonal(currentUser(r).Name, req.Personal, req.ClearSecrets...); err != nil {
+	if err := a.notify.SetPersonal(currentUser(r).Name, req.Personal, req.ClearSecrets...); err != nil {
 		if errors.Is(err, notify.ErrInvalid) {
 			writeError(w, http.StatusBadRequest, "invalid_notify_settings", err.Error())
 			return
@@ -111,15 +142,15 @@ func (s *Server) handleAccountNotifyChange(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusInternalServerError, "config_write_failed", err.Error())
 		return
 	}
-	s.handleAccountNotify(w, r)
+	a.handleAccountNotify(w, r)
 }
 
-func (s *Server) handleAccountNotifyTest(w http.ResponseWriter, r *http.Request) {
+func (a accountNotifyArea) handleAccountNotifyTest(w http.ResponseWriter, r *http.Request) {
 	var req struct{ Channel string }
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Notify.TestPersonal(currentUser(r).Name, req.Channel); err != nil {
+	if err := a.notify.TestPersonal(currentUser(r).Name, req.Channel); err != nil {
 		if errors.Is(err, notify.ErrInvalid) {
 			writeError(w, http.StatusBadRequest, "invalid_notify_settings", err.Error())
 			return
@@ -146,11 +177,11 @@ type temperatureAlarm struct {
 
 // handleTemperatureAlarms lists the sensors with their limits and the
 // muted ones, also those that are not there now.
-func (s *Server) handleTemperatureAlarms(w http.ResponseWriter, r *http.Request) {
-	muted := s.opts.Notify.MutedTemperatures()
+func (a notifyArea) handleTemperatureAlarms(w http.ResponseWriter, r *http.Request) {
+	muted := a.notify.MutedTemperatures()
 	sensors := []temperatureAlarm{}
-	if s.opts.Monitor != nil {
-		for _, t := range s.opts.Monitor.Info().Temperatures {
+	if a.monitor != nil {
+		for _, t := range a.monitor.Info().Temperatures {
 			alarm := temperatureAlarm{ID: t.ID, Muted: slices.Contains(muted, t.ID)}
 			_, alarm.Shutdown = notify.ShutsDownOnHeat(t.Chip, t.CriticalC)
 			if limit, own, ok := notify.AlarmLimitSource(t.Chip, t.CriticalC); ok {
@@ -159,10 +190,10 @@ func (s *Server) handleTemperatureAlarms(w http.ResponseWriter, r *http.Request)
 			sensors = append(sensors, alarm)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"sensors": sensors, "muted": muted, "heatShutdown": s.opts.Notify.HeatShutdown()})
+	writeJSON(w, http.StatusOK, map[string]any{"sensors": sensors, "muted": muted, "heatShutdown": a.notify.HeatShutdown()})
 }
 
-func (s *Server) handleTemperatureAlarmsChange(w http.ResponseWriter, r *http.Request) {
+func (a notifyArea) handleTemperatureAlarmsChange(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Muted []string `json:"muted"`
 		// HeatShutdown is optional: an older page sends only the mutes.
@@ -171,9 +202,9 @@ func (s *Server) handleTemperatureAlarmsChange(w http.ResponseWriter, r *http.Re
 	if !readJSON(w, r, &req) {
 		return
 	}
-	err := s.opts.Notify.SetMutedTemperatures(req.Muted)
+	err := a.notify.SetMutedTemperatures(req.Muted)
 	if err == nil && req.HeatShutdown != nil {
-		err = s.opts.Notify.SetHeatShutdown(*req.HeatShutdown)
+		err = a.notify.SetHeatShutdown(*req.HeatShutdown)
 	}
 	if err != nil {
 		switch {
@@ -187,5 +218,5 @@ func (s *Server) handleTemperatureAlarmsChange(w http.ResponseWriter, r *http.Re
 		return
 	}
 	slog.Info("temperature notifications changed", "muted", len(req.Muted), "heatShutdown", req.HeatShutdown != nil && *req.HeatShutdown, "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleTemperatureAlarms(w, r)
+	a.handleTemperatureAlarms(w, r)
 }
