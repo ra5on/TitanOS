@@ -4,12 +4,7 @@ package api
 func (s *Server) registerVMs(mux *routeMux) {
 	// Virtual machines. Like containers: administrators only.
 	mux.HandleFunc("GET /api/v1/vms", s.requireAdmin(s.handleVMs))
-	mux.HandleFunc("GET /api/v1/vms/imports", s.requireAdmin(s.handleMediaImports))
-	mux.HandleFunc("POST /api/v1/vms/imports", s.requireHeavyAppAdmin(s.handleMediaImport))
-	mux.HandleFunc("POST /api/v1/vms/virtio", s.requireHeavyAppAdmin(s.handleVirtIO))
-	mux.HandleFunc("PUT /api/v1/vms/imports/{id}/data", s.requireHeavyAppAdmin(s.handleMediaChunk))
-	mux.HandleFunc("POST /api/v1/vms/imports/{id}/verify", s.requireHeavyAppAdmin(s.handleMediaUploadVerify))
-	mux.HandleFunc("POST /api/v1/vms/imports/{id}/{action}", s.requireAppAdmin(s.handleMediaControl))
+	mediaArea{media: s.opts.Media, admitOperation: s.admitOperation}.register(mux, s.requireAdmin, s.requireAppAdmin, s.requireHeavyAppAdmin)
 	mux.HandleFunc("POST /api/v1/vms", s.requireHeavyAppAdmin(s.handleVMCreate))
 	mux.HandleFunc("GET /api/v1/vms/media", s.requireAdmin(s.handleVMMedia))
 	mux.HandleFunc("GET /api/v1/vms/host", s.requireAdmin(s.handleVMHost))
