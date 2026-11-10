@@ -11,12 +11,8 @@ func (s *Server) registerRemoteAccess(mux *routeMux) {
 	// The certificate (never the key) of the TitanOS authority, for devices.
 	mux.HandleFunc("GET /api/v1/certs/ca", s.requireUser(s.handleCAInfo))
 	mux.HandleFunc("GET /api/v1/certs/{file}", s.requireUser(s.handleCADownload))
-	mux.HandleFunc("GET /api/v1/system/letsencrypt", s.requireAdmin(s.handleLetsEncrypt))
-	mux.HandleFunc("PUT /api/v1/system/letsencrypt", s.requireAdmin(s.handleLetsEncryptChange))
-	mux.HandleFunc("POST /api/v1/system/letsencrypt/renew", s.requireAdmin(s.handleLetsEncryptRenew))
-	mux.HandleFunc("GET /api/v1/network/ddns", s.requireAdmin(s.handleDDNS))
-	mux.HandleFunc("PUT /api/v1/network/ddns", s.requireAdmin(s.handleDDNSChange))
-	mux.HandleFunc("POST /api/v1/network/ddns/update", s.requireAdmin(s.handleDDNSUpdate))
+	letsEncryptArea{acme: s.opts.LetsEncrypt, firewall: s.opts.Firewall}.register(mux, s.requireAdmin)
+	ddnsArea{ddns: s.opts.DDNS}.register(mux, s.requireAdmin)
 }
 
 // registerIPv64 registers the routes of the IPv64.net account.
