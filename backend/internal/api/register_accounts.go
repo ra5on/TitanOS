@@ -16,9 +16,7 @@ func (s *Server) registerUsers(mux *routeMux) {
 func (s *Server) registerAccount(mux *routeMux) {
 	// One's own account.
 	mux.HandleFunc("GET /api/v1/account/sessions", s.requireUser(s.handleAccountSessions))
-	mux.HandleFunc("GET /api/v1/account/tokens", s.requireUser(s.handleTokens))
-	mux.HandleFunc("POST /api/v1/account/tokens", s.requireUser(s.handleTokenCreate))
-	mux.HandleFunc("DELETE /api/v1/account/tokens/{id}", s.requireUser(s.handleTokenRevoke))
+	s.tokensArea().register(mux, s.requireUser)
 	mux.HandleFunc("GET /api/v1/openapi.json", s.requireUser(s.handleOpenAPI))
 	mux.HandleFunc("DELETE /api/v1/account/sessions/{id}", s.requireUser(s.handleAccountSessionEnd))
 	mux.HandleFunc("DELETE /api/v1/account/sessions", s.requireUser(s.handleAccountSessionsEndOthers))

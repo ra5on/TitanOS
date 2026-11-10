@@ -420,7 +420,7 @@ func New(opts Options) *Server {
 
 	// Browsers must not let another website send requests with our cookie.
 	s.patterns = mux.patterns
-	s.handler = s.securityHeaders(s.clusterAccess(http.NewCrossOriginProtection().Handler(s.bearerAccess(s.activityLog(mux.ServeMux)))))
+	s.handler = s.securityHeaders(s.clusterAccess(http.NewCrossOriginProtection().Handler(s.tokensArea().bearerAccess(s.activityLog(mux.ServeMux)))))
 	return s
 }
 

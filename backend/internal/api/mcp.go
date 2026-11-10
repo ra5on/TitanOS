@@ -250,7 +250,7 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "mcp_disabled", "the MCP server is switched off under Settings › MCP server")
 		return
 	}
-	token, user, failed := s.tokenAccount(r.Header.Get("Authorization"))
+	token, user, failed := s.tokensArea().tokenAccount(r.Header.Get("Authorization"))
 	if failed != nil {
 		w.Header().Set("WWW-Authenticate", `Bearer realm="TitanOS"`)
 		writeError(w, failed.status, failed.code, failed.message)
