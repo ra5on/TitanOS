@@ -113,7 +113,7 @@ func (s *Server) agentShare() (shares.Share, bool) {
 		}
 		if !mapsEqual(sh.Access, access) {
 			sh.Access = access
-			if err := s.opts.Shares.Update(sh.Name, sh, s.opts.Storage.Names(), s.userNames()); err != nil {
+			if err := s.opts.Shares.Update(sh.Name, sh, s.opts.Storage.Names(), s.sharesArea().userNames()); err != nil {
 				slog.Warn("access of the share KI-Agent not updated", "err", err)
 			} else {
 				s.opts.Shares.Kick()
@@ -123,7 +123,7 @@ func (s *Server) agentShare() (shares.Share, bool) {
 	}
 	sh := shares.Share{Name: agentShareName, Volume: settings.Volume, SMB: true, Browseable: true, Access: access, PerUser: true,
 		Recycle: shares.Recycle{Enabled: true, Days: 30}}
-	if err := s.opts.Shares.Create(sh, s.opts.Storage.Names(), s.userNames()); err != nil {
+	if err := s.opts.Shares.Create(sh, s.opts.Storage.Names(), s.sharesArea().userNames()); err != nil {
 		if !errors.Is(err, shares.ErrExists) {
 			slog.Warn("share KI-Agent not made", "err", err)
 		}

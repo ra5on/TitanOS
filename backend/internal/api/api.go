@@ -294,7 +294,7 @@ func New(opts Options) *Server {
 		s.sessions = auth.NewSessions()
 	}
 	if s.opts.Shares != nil {
-		s.opts.Shares.OnPurgeResumed(s.sharePurgeDone)
+		s.opts.Shares.OnPurgeResumed(s.sharesArea().sharePurgeDone)
 	}
 	if c := s.opts.Cluster; c != nil {
 		c.Applied, c.Status, c.Notify = s.clusterApplied, s.ClusterStatus, s.clusterNotify

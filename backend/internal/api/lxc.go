@@ -70,7 +70,7 @@ type lxcArea struct {
 	storage      *storage.Manager
 	network      *network.Manager
 	monitor      *system.Monitor
-	serveConsole func(w http.ResponseWriter, r *http.Request, target string, open func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error))
+	serveConsole consoleFunc
 }
 
 func (a lxcArea) register(mux *routeMux, admin, appAdmin, heavyAppAdmin, appConsole func(http.HandlerFunc) http.HandlerFunc) {

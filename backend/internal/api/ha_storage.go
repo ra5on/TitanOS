@@ -290,7 +290,7 @@ func (s *Server) handleHAStorageAdd(w http.ResponseWriter, r *http.Request) {
 	var existing shares.Share
 	if req.Existing {
 		var ok bool
-		if existing, ok = s.findShare(req.Share); !ok {
+		if existing, ok = s.sharesArea().findShare(req.Share); !ok {
 			writeError(w, http.StatusNotFound, "share_not_found", "no such share")
 			return
 		}
@@ -364,7 +364,7 @@ func (s *Server) handleHAStorageAdd(w http.ResponseWriter, r *http.Request) {
 			Name: req.Share, Volume: req.Volume, SMB: true,
 			Access: map[string]string{setup.Account: access},
 			Quota:  haQuota(req.QuotaBytes, req.QuotaGiB),
-		}, s.opts.Storage.Names(), s.userNames())
+		}, s.opts.Storage.Names(), s.sharesArea().userNames())
 	}
 	if err != nil {
 		undo()
@@ -408,7 +408,7 @@ func (s *Server) haGrant(share shares.Share, account, access string) error {
 		changed.Access = map[string]string{}
 	}
 	changed.Access[account] = access
-	return s.opts.Shares.Update(share.Name, changed, s.opts.Storage.Names(), s.userNames())
+	return s.opts.Shares.Update(share.Name, changed, s.opts.Storage.Names(), s.sharesArea().userNames())
 }
 
 // haRestoreAccount makes the account of a setup again after it was
@@ -421,7 +421,7 @@ func (s *Server) haRestoreAccount(setup *haStorage, password string) error {
 		return err
 	}
 	for _, e := range setup.Entries {
-		share, found := s.findShare(e.Share)
+		share, found := s.sharesArea().findShare(e.Share)
 		if !found {
 			continue
 		}
@@ -595,14 +595,14 @@ func (s *Server) handleHAStorageRemove(w http.ResponseWriter, r *http.Request) {
 	noteTarget(r, entry.place())
 	setup.Entries = slices.Delete(setup.Entries, i, i+1)
 	if !slices.ContainsFunc(setup.Entries, func(e haEntry) bool { return e.Share == entry.Share }) {
-		if share, found := s.findShare(entry.Share); found && share.Access[setup.Account] != "" {
+		if share, found := s.sharesArea().findShare(entry.Share); found && share.Access[setup.Account] != "" {
 			changed := share
 			changed.Access = maps.Clone(share.Access)
 			delete(changed.Access, setup.Account)
 			if len(changed.Access) == 0 && !changed.Guest {
 				changed.Access[currentUser(r).Name] = shares.ReadWrite
 			}
-			if err := s.opts.Shares.Update(share.Name, changed, s.opts.Storage.Names(), s.userNames()); err != nil {
+			if err := s.opts.Shares.Update(share.Name, changed, s.opts.Storage.Names(), s.sharesArea().userNames()); err != nil {
 				writeShareError(w, err)
 				return
 			}

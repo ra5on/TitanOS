@@ -15,7 +15,7 @@ import (
 // runs; it answers itself when it refuses.
 type mediaArea struct {
 	media          *media.Manager
-	admitOperation func(w http.ResponseWriter) (func(), bool)
+	admitOperation admitFunc
 }
 
 func (a mediaArea) register(mux *routeMux, admin, appAdmin, heavyAppAdmin func(http.HandlerFunc) http.HandlerFunc) {

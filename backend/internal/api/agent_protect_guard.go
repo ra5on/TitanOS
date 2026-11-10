@@ -554,7 +554,7 @@ func (s *Server) updateShare(sh shares.Share) error {
 	if s.opts.Storage != nil {
 		volumes = s.opts.Storage.Names()
 	}
-	if err := s.opts.Shares.Update(sh.Name, sh, volumes, s.userNames()); err != nil {
+	if err := s.opts.Shares.Update(sh.Name, sh, volumes, s.sharesArea().userNames()); err != nil {
 		return err
 	}
 	s.opts.Shares.Kick()

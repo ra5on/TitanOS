@@ -124,7 +124,7 @@ func (s *Server) handleDockerOpeners(w http.ResponseWriter, r *http.Request) {
 // mountableShare: a share that can go into an app as a whole (not the
 // per-account share of the KI agent).
 func (s *Server) mountableShare(name string) bool {
-	share, ok := s.findShare(name)
+	share, ok := s.sharesArea().findShare(name)
 	return ok && !share.PerUser
 }
 
@@ -201,7 +201,7 @@ func (s *Server) handleDockerShareMount(w http.ResponseWriter, r *http.Request) 
 	}
 	app := r.PathValue("name")
 	noteTarget(r, app+": "+req.Share)
-	share, ok := s.findShare(req.Share)
+	share, ok := s.sharesArea().findShare(req.Share)
 	if !ok || share.PerUser {
 		writeError(w, http.StatusNotFound, "share_not_found", "no such share")
 		return

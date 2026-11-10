@@ -50,7 +50,7 @@ func writeBackupError(w http.ResponseWriter, err error) {
 type configBackupArea struct {
 	backup    *configbackup.Manager
 	storage   *storage.Manager
-	confirmed func(r *http.Request) bool
+	confirmed confirmedFunc
 }
 
 func (a configBackupArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {

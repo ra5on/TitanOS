@@ -346,7 +346,7 @@ func (s *Server) handleContainerConsole(w http.ResponseWriter, r *http.Request) 
 // connects a WebSocket to a shell with the rules of every console.
 type terminalArea struct {
 	terminal     *terminal.Manager
-	serveConsole func(w http.ResponseWriter, r *http.Request, target string, open func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error))
+	serveConsole consoleFunc
 }
 
 func (a terminalArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
