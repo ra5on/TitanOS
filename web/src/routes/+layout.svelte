@@ -80,6 +80,17 @@
 			if (url.startsWith('/') && !url.startsWith('//')) void goto(url);
 		};
 		navigator.serviceWorker.addEventListener('message', open);
+		// PLAN 76: a service worker a web app registered before titand refused
+		// it (T-Effect) answers from its own cache, also for the bridge. It is
+		// taken away; the one of TitanOS itself (scope "/") stays.
+		void navigator.serviceWorker
+			.getRegistrations()
+			.then((all) =>
+				all
+					.filter((r) => new URL(r.scope).pathname.startsWith('/webapps/'))
+					.forEach((r) => void r.unregister()),
+			)
+			.catch(() => {});
 		return () => navigator.serviceWorker.removeEventListener('message', open);
 	});
 	onMount(() => {

@@ -188,7 +188,8 @@
 			var id = saveIds.shift();
 			if (msg.ok === true && id != null && bridge === 'host') {
 				var target = canvas();
-				if (target) target.dispatchEvent(new CustomEvent(events + ':saved', { detail: { id: id } }));
+				if (target)
+					target.dispatchEvent(new CustomEvent(events + ':saved', { detail: { id: id } }));
 			}
 		}
 	});
@@ -379,6 +380,65 @@
 		},
 		true,
 	);
+
+	// Unsaved work (PLAN 76, hands-on test): an app without the bridge never
+	// says that its document changed, so its window closed without a question.
+	// Two signs stand in for it: a "*" in the page's title, where the app
+	// keeps one (then only that counts), else typing or dragging in the app
+	// since the last save that reached the NAS. A click alone (choosing
+	// something) is no change. The question may come once too often; a
+	// drawing lost without one is worse.
+	var touched = false;
+	var titleTells = false;
+	var saidDirty = false;
+	function tellDirty() {
+		var star = document.title.indexOf('*') >= 0;
+		if (star) titleTells = true;
+		var dirty = titleTells ? star : touched;
+		if (dirty === saidDirty) return;
+		saidDirty = dirty;
+		post({ type: 'webapp-dirty', dirty: dirty });
+	}
+	function touch() {
+		if (!ready) return;
+		touched = true;
+		tellDirty();
+	}
+	window.addEventListener(
+		'keydown',
+		function (event) {
+			if (event.ctrlKey || event.metaKey || event.altKey) return;
+			var k = event.key;
+			if (k.length === 1 || k === 'Backspace' || k === 'Delete' || k === 'Enter') touch();
+		},
+		true,
+	);
+	var pressed = null;
+	window.addEventListener(
+		'pointerdown',
+		function (event) {
+			pressed = { x: event.clientX, y: event.clientY };
+		},
+		true,
+	);
+	window.addEventListener(
+		'pointerup',
+		function (event) {
+			if (pressed && Math.abs(event.clientX - pressed.x) + Math.abs(event.clientY - pressed.y) > 6)
+				touch();
+			pressed = null;
+		},
+		true,
+	);
+	window.addEventListener('message', function (event) {
+		if (event.source !== parent) return;
+		var msg = event.data;
+		if (msg && msg.type === 'webapp-saved' && msg.ok === true) {
+			touched = false;
+			tellDirty();
+		}
+	});
+	setInterval(tellDirty, 1000);
 
 	// Ready: the app took away its loading notice and sized its canvas to the
 	// page (a canvas the app does not run yet keeps the browser's 300 × 150).

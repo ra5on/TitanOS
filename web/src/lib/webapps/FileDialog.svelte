@@ -55,7 +55,11 @@
 	const parts = $derived(dir ? dir.split('/') : []);
 	// Hidden like in the file manager (PLAN 69): "._name" companion files a
 	// Mac leaves on shares looked like the document and failed to open.
-	const visible = $derived((entries ?? []).filter((e) => !e.name.startsWith('.')));
+	// Not listed: hidden files, and the copy of the version before that every
+	// save through TitanOS leaves next to a file (<name>.prev).
+	const visible = $derived(
+		(entries ?? []).filter((e) => !e.name.startsWith('.') && (e.dir || !e.name.endsWith('.prev'))),
+	);
 	const folders = $derived(visible.filter((e) => e.dir));
 	const files = $derived(
 		visible.filter(

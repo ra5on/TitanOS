@@ -98,6 +98,16 @@ test('save decision: the original only for its own format', () => {
 	expect(
 		saveTarget({ root: 'r', path: 'alt.doc' }, { name: 'alt.docx', saveAs: false }, word),
 	).toBe('dialog');
+	// Another file of the same format (a backup copy, the next export) is
+	// not the open document: never over it (PLAN 76).
+	expect(saveTarget(doc, { name: 'Angebot (Sicherung).docx', saveAs: false }, word)).toBe(
+		'created',
+	);
+	// The app keeps calling the document by the name it had before the
+	// person chose another one in the save dialog.
+	expect(saveTarget(doc, { name: 'Unbenannt.docx', saveAs: false }, word, 'Unbenannt.docx')).toBe(
+		'original',
+	);
 	expect(saveTarget(doc, { name: 'Angebot.docx', saveAs: true }, word)).toBe('dialog');
 	expect(saveTarget(null, { name: 'Neu.docx', saveAs: false }, word)).toBe('dialog');
 	// Without the bridge every save asks where (the app only downloads).

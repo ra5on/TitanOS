@@ -62,6 +62,16 @@ func (m *Manager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	h := w.Header()
 	h.Set("X-Content-Type-Options", "nosniff")
+	// A web app gets no service worker (PLAN 76, hands-on test): a trusted
+	// app runs on the address of TitanOS itself, and its worker would answer
+	// requests there from its own cache – also the bridge host.js, which a
+	// later update of TitanOS then never reaches. The browser names the
+	// request for a worker's script; the app goes on without one.
+	if r.Header.Get("Service-Worker") != "" {
+		h.Set("Content-Security-Policy", sandboxPolicy)
+		http.Error(w, "web apps run without a service worker", http.StatusForbidden)
+		return
+	}
 	id, version, name := r.PathValue("id"), r.PathValue("version"), r.PathValue("path")
 	app, ok := Lookup(id)
 	if !ok || !ValidVersion(version) {

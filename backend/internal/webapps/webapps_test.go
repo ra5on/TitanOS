@@ -441,6 +441,15 @@ func TestInstallServeUninstall(t *testing.T) {
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatal(rec.Code)
 	}
+	// PLAN 76: a web app gets no service worker; the same file is still
+	// served as a plain script.
+	req = httptest.NewRequest("GET", "/webapps/wordcraft/0.16.0/index.html", nil)
+	req.Header.Set("Service-Worker", "script")
+	rec = httptest.NewRecorder()
+	h.m.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("service worker script: %d", rec.Code)
+	}
 
 	// Without the volume: listed as an error, not served.
 	h.mounted = nil

@@ -160,17 +160,29 @@ export function parentDir(path: string): string {
  *   document in another format the app edits (GridCraft saves a .csv as
  *   .xlsx, WordCraft a .doc as .docx) – the save dialog, then it is the
  *   window's file;
- * - `created`: an export (PDF, picture) – never over the original; a notice
- *   offers to keep it.
+ * - `created`: an export (PDF, picture) or another file of the same format
+ *   under another name – never over the original; a notice offers to keep it.
  */
 export function saveTarget(
 	doc: DocRef | null,
 	save: { name: string; saveAs: boolean },
 	app: Pick<WebApp, 'bridge' | 'types'>,
+	/** The name the app itself uses for the open document, if it differs from the file's. */
+	appName = '',
 ): 'original' | 'dialog' | 'created' {
 	if (app.bridge === 'adapter' || save.saveAs || !doc) return 'dialog';
 	const ext = extOf(save.name);
-	if (ext === extOf(doc.path)) return 'original';
+	if (ext === extOf(doc.path)) {
+		// PLAN 76 (hands-on test): the same format is not yet the same
+		// document. A second file of that format – a backup copy next to the
+		// project, the next exported picture – must never replace the open one.
+		const same = (a: string, b: string) =>
+			a.normalize('NFC').toLowerCase() === b.normalize('NFC').toLowerCase();
+		const sent = baseName(save.name);
+		return same(sent, baseName(doc.path)) || (appName !== '' && same(sent, baseName(appName)))
+			? 'original'
+			: 'created';
+	}
 	return app.types.includes(ext) ? 'dialog' : 'created';
 }
 
