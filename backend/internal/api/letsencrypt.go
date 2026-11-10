@@ -120,12 +120,6 @@ func (a ddnsArea) dynamicDNS(w http.ResponseWriter) bool {
 	return true
 }
 
-// dynamicDNS is the same check for the IPv64 routes, which are not an area
-// of their own yet.
-func (s *Server) dynamicDNS(w http.ResponseWriter) bool {
-	return ddnsArea{ddns: s.opts.DDNS}.dynamicDNS(w)
-}
-
 func (a ddnsArea) handleDDNS(w http.ResponseWriter, r *http.Request) {
 	if a.dynamicDNS(w) {
 		writeJSON(w, http.StatusOK, a.ddns.Status())

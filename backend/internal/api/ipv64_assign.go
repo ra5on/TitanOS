@@ -96,12 +96,12 @@ func assignFailure(w http.ResponseWriter, err error) {
 }
 
 // assignRun is ipv64Run with the errors of assignFailure.
-func (s *Server) assignRun(w http.ResponseWriter, r *http.Request, timeout time.Duration, fn func(ctx context.Context, c *dnsprovider.IPv64) (any, error)) {
-	if s.opts.DDNS == nil || s.opts.AppProxy == nil {
+func (a ipv64Area) assignRun(w http.ResponseWriter, r *http.Request, timeout time.Duration, fn func(ctx context.Context, c *dnsprovider.IPv64) (any, error)) {
+	if a.ddns == nil || a.appProxy == nil {
 		writeError(w, http.StatusServiceUnavailable, "unavailable", "dynamic DNS or the app proxy is not available")
 		return
 	}
-	client, err := s.opts.IPv64.Client()
+	client, err := a.ipv64.Client()
 	if err != nil {
 		ipv64AreaFailure(w, err)
 		return
@@ -133,8 +133,8 @@ func zoneOf(domains []dnsprovider.IPv64Domain, name string) (dnsprovider.IPv64Do
 }
 
 // ddnsHosts are the names of dynamic DNS if it works with IPv64.
-func (s *Server) ddnsHosts() []string {
-	st := s.opts.DDNS.Status()
+func (a ipv64Area) ddnsHosts() []string {
+	st := a.ddns.Status()
 	if st.Settings.Provider.Type != dnsprovider.IPv64Net {
 		return []string{}
 	}
@@ -156,12 +156,12 @@ func publishedName(p ipv64.Published) string {
 }
 
 // assignments lists the table for the domains of the account.
-func (s *Server) assignments(ctx context.Context, c *dnsprovider.IPv64) (map[string]any, error) {
+func (a ipv64Area) assignments(ctx context.Context, c *dnsprovider.IPv64) (map[string]any, error) {
 	domains, err := c.Domains(ctx)
 	if err != nil {
 		return nil, err
 	}
-	hosts := s.ddnsHosts()
+	hosts := a.ddnsHosts()
 	byName := map[string]*assignment{}
 	add := func(name string, a assignment) {
 		zone, prefix, ok := zoneOf(domains, name)
@@ -182,7 +182,7 @@ func (s *Server) assignments(ctx context.Context, c *dnsprovider.IPv64) (map[str
 	for _, name := range hosts {
 		add(name, assignment{Target: "nas", URL: "https://" + name})
 	}
-	proxy := s.opts.AppProxy.Info()
+	proxy := a.appProxy.Info()
 	for _, list := range []struct {
 		kind string
 		apps []appproxy.AppInfo
@@ -199,7 +199,7 @@ func (s *Server) assignments(ctx context.Context, c *dnsprovider.IPv64) (map[str
 			}
 		}
 	}
-	for _, p := range s.opts.IPv64.Settings().Published {
+	for _, p := range a.ipv64.Settings().Published {
 		name := publishedName(p)
 		add(name, assignment{Target: "public", App: p.App, Port: p.Port, URL: "https://" + name})
 	}
@@ -208,17 +208,17 @@ func (s *Server) assignments(ctx context.Context, c *dnsprovider.IPv64) (map[str
 		out = append(out, *a)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Domain < out[j].Domain })
-	st := s.opts.DDNS.Status()
+	st := a.ddns.Status()
 	return map[string]any{
 		"domains": domains, "assignments": out, "zones": dnsprovider.IPv64Zones,
 		"ddns":     map[string]any{"enabled": st.Settings.Enabled, "provider": st.Settings.Provider.Type, "hostnames": st.Settings.Hostnames, "max": 8},
-		"firewall": s.opts.Firewall.Enabled(),
+		"firewall": a.firewall.Enabled(),
 	}, nil
 }
 
-func (s *Server) handleIPv64Assignments(w http.ResponseWriter, r *http.Request) {
-	s.assignRun(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (any, error) {
-		return s.assignments(ctx, c)
+func (a ipv64Area) handleIPv64Assignments(w http.ResponseWriter, r *http.Request) {
+	a.assignRun(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (any, error) {
+		return a.assignments(ctx, c)
 	})
 }
 
@@ -237,34 +237,34 @@ func proxyLabel(app string) string {
 // releaseDomain takes a name from wherever it is assigned except keep
 // ("public", "proxy", "ddns"): the CDN publication (routed back), the
 // HTTPS names and dynamic DNS.
-func (s *Server) releaseDomain(ctx context.Context, c *dnsprovider.IPv64, name string, keep ...string) error {
+func (a ipv64Area) releaseDomain(ctx context.Context, c *dnsprovider.IPv64, name string, keep ...string) error {
 	if !slices.Contains(keep, "public") {
-		for _, p := range s.opts.IPv64.Settings().Published {
+		for _, p := range a.ipv64.Settings().Published {
 			if publishedName(p) != name {
 				continue
 			}
-			if err := s.unpublish(ctx, c, p); err != nil {
+			if err := a.unpublish(ctx, c, p); err != nil {
 				return err
 			}
-			if err := s.opts.IPv64.RemovePublished(p.App); err != nil {
+			if err := a.ipv64.RemovePublished(p.App); err != nil {
 				return err
 			}
 		}
 	}
 	if !slices.Contains(keep, "proxy") {
-		if err := s.opts.AppProxy.RemoveDomain(name); err != nil {
+		if err := a.appProxy.RemoveDomain(name); err != nil {
 			return err
 		}
 	}
 	if !slices.Contains(keep, "ddns") {
-		return s.opts.DDNS.RemoveHostname(name)
+		return a.ddns.RemoveHostname(name)
 	}
 	return nil
 }
 
 // handleIPv64Assign points a domain of the account at the NAS, an app or
 // a target, taking it from where it pointed before.
-func (s *Server) handleIPv64Assign(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64Assign(w http.ResponseWriter, r *http.Request) {
 	name, err := domainParam(r)
 	if err != nil {
 		assignFailure(w, err)
@@ -291,7 +291,7 @@ func (s *Server) handleIPv64Assign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	noteTarget(r, name, req.Target, req.App+req.TargetID)
-	s.assignRun(w, r, 3*time.Minute, func(ctx context.Context, c *dnsprovider.IPv64) (any, error) {
+	a.assignRun(w, r, 3*time.Minute, func(ctx context.Context, c *dnsprovider.IPv64) (any, error) {
 		domains, err := c.Domains(ctx)
 		if err != nil {
 			return nil, err
@@ -301,9 +301,9 @@ func (s *Server) handleIPv64Assign(w http.ResponseWriter, r *http.Request) {
 			return nil, &dnsprovider.APIError{Provider: "IPv64", Status: http.StatusNotFound, Message: "no domain of this account holds " + name}
 		}
 		if req.Target == "app" && req.Public {
-			return s.assignPublic(ctx, c, name, zone, prefix, req, currentUser(r).Name)
+			return a.assignPublic(ctx, c, name, zone, prefix, req, currentUser(r).Name)
 		}
-		settings := s.opts.AppProxy.Settings()
+		settings := a.appProxy.Settings()
 		_, hasRoute := settings.Apps[req.App]
 		switch req.Target {
 		case "target":
@@ -313,50 +313,50 @@ func (s *Server) handleIPv64Assign(w http.ResponseWriter, r *http.Request) {
 		case "app":
 			if !hasRoute {
 				// A new HTTPS name: the app must publish the port.
-				ports, found := s.appPorts(ctx, req.App)
+				ports, found := a.appPorts(ctx, req.App)
 				if !found || !slices.Contains(ports, req.Port) {
 					return nil, &refusedError{publishRefusal{http.StatusBadRequest, "ipv64_port_not_published", "the app publishes no such TCP port on the NAS"}}
 				}
-				if s.reservedPort(req.Port) {
+				if a.reservedPort(req.Port) {
 					return nil, &refusedError{publishRefusal{http.StatusBadRequest, "ipv64_reserved_port", "the ports of the TitanOS web UI are never used"}}
 				}
 			}
 		}
 		// Taken from the CDN first, so that dynamic DNS may set the records.
-		if err := s.releaseDomain(ctx, c, name, "proxy", "ddns"); err != nil {
+		if err := a.releaseDomain(ctx, c, name, "proxy", "ddns"); err != nil {
 			return nil, err
 		}
-		if !wildcardCovered(zone, name, s.ddnsHosts()) {
-			key, _ := s.opts.IPv64.Key()
-			if err := s.opts.DDNS.AddHostname(name, key); err != nil {
+		if !wildcardCovered(zone, name, a.ddnsHosts()) {
+			key, _ := a.ipv64.Key()
+			if err := a.ddns.AddHostname(name, key); err != nil {
 				return nil, err
 			}
 		}
-		if err := s.opts.AppProxy.RemoveDomain(name); err != nil {
+		if err := a.appProxy.RemoveDomain(name); err != nil {
 			return nil, err
 		}
 		switch {
 		case req.Target == "target":
-			err = s.opts.AppProxy.AddDomain(true, req.TargetID, name)
+			err = a.appProxy.AddDomain(true, req.TargetID, name)
 		case req.Target == "app" && hasRoute:
-			err = s.opts.AppProxy.AddDomain(false, req.App, name)
+			err = a.appProxy.AddDomain(false, req.App, name)
 		case req.Target == "app":
 			local := req.LocalOnly == nil || *req.LocalOnly
-			err = s.opts.AppProxy.SetRoute(req.App, appproxy.Route{Enabled: true, Name: proxyLabel(req.App), Port: req.Port, Scheme: req.Scheme, LocalOnly: local, Domains: []string{name}})
+			err = a.appProxy.SetRoute(req.App, appproxy.Route{Enabled: true, Name: proxyLabel(req.App), Port: req.Port, Scheme: req.Scheme, LocalOnly: local, Domains: []string{name}})
 		}
 		if err != nil {
 			return nil, err
 		}
 		slog.Info("IPv64 domain assigned", "domain", name, "target", req.Target, "app", req.App+req.TargetID, "by", currentUser(r).Name)
-		return s.assignments(ctx, c)
+		return a.assignments(ctx, c)
 	})
 }
 
 // assignPublic publishes an app through the CDN under a name, after the
 // name left dynamic DNS and the HTTPS names.
-func (s *Server) assignPublic(ctx context.Context, c *dnsprovider.IPv64, name string, zone dnsprovider.IPv64Domain, prefix string, req assignRequest, by string) (any, error) {
-	if p, ok := s.opts.IPv64.PublishedApp(req.App); ok && publishedName(p) == name && p.Port == req.Port {
-		return s.assignments(ctx, c)
+func (a ipv64Area) assignPublic(ctx context.Context, c *dnsprovider.IPv64, name string, zone dnsprovider.IPv64Domain, prefix string, req assignRequest, by string) (any, error) {
+	if p, ok := a.ipv64.PublishedApp(req.App); ok && publishedName(p) == name && p.Port == req.Port {
+		return a.assignments(ctx, c)
 	}
 	pub := publishRequest{Domain: zone.Name, Prefix: prefix, Port: req.Port, Scheme: req.Scheme, Firewall: req.Firewall, Confirm: req.Confirm}
 	if strings.Contains(prefix, ".") {
@@ -364,41 +364,41 @@ func (s *Server) assignPublic(ctx context.Context, c *dnsprovider.IPv64, name st
 	}
 	// Checked before anything changes; another name of this app is then
 	// taken back first.
-	if refusal := s.checkPublish(ctx, req.App, &pub, true); refusal != nil {
+	if refusal := a.checkPublish(ctx, req.App, &pub, true); refusal != nil {
 		return nil, &refusedError{*refusal}
 	}
-	if p, ok := s.opts.IPv64.PublishedApp(req.App); ok {
-		if err := s.unpublish(ctx, c, p); err != nil {
+	if p, ok := a.ipv64.PublishedApp(req.App); ok {
+		if err := a.unpublish(ctx, c, p); err != nil {
 			return nil, err
 		}
-		if err := s.opts.IPv64.RemovePublished(p.App); err != nil {
+		if err := a.ipv64.RemovePublished(p.App); err != nil {
 			return nil, err
 		}
 	}
-	if err := s.releaseDomain(ctx, c, name); err != nil {
+	if err := a.releaseDomain(ctx, c, name); err != nil {
 		return nil, err
 	}
-	if _, err := s.publishApp(ctx, c, req.App, pub, by); err != nil {
+	if _, err := a.publishApp(ctx, c, req.App, pub, by); err != nil {
 		return nil, err
 	}
-	return s.assignments(ctx, c)
+	return a.assignments(ctx, c)
 }
 
 // handleIPv64Unassign takes an assignment back; the domain and its records
 // stay at IPv64.
-func (s *Server) handleIPv64Unassign(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64Unassign(w http.ResponseWriter, r *http.Request) {
 	name, err := domainParam(r)
 	if err != nil {
 		assignFailure(w, err)
 		return
 	}
 	noteTarget(r, name)
-	s.assignRun(w, r, 3*time.Minute, func(ctx context.Context, c *dnsprovider.IPv64) (any, error) {
-		if err := s.releaseDomain(ctx, c, name); err != nil {
+	a.assignRun(w, r, 3*time.Minute, func(ctx context.Context, c *dnsprovider.IPv64) (any, error) {
+		if err := a.releaseDomain(ctx, c, name); err != nil {
 			return nil, err
 		}
 		slog.Info("IPv64 domain assignment removed", "domain", name, "by", currentUser(r).Name)
-		return s.assignments(ctx, c)
+		return a.assignments(ctx, c)
 	})
 }
 
@@ -419,12 +419,12 @@ type ipv64DDNSRequest struct {
 // settings as Settings › Dynamic DNS, with IPv64 as provider. The key is
 // the one dynamic DNS has for IPv64, else the one of this area; no second
 // key is typed in.
-func (s *Server) handleIPv64DDNS(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64DDNS(w http.ResponseWriter, r *http.Request) {
 	var req ipv64DDNSRequest
-	if !readJSON(w, r, &req) || !s.dynamicDNS(w) {
+	if !readJSON(w, r, &req) || !a.dynamicDNS(w) {
 		return
 	}
-	current := s.opts.DDNS.Status()
+	current := a.ddns.Status()
 	next := current.Settings
 	next.Enabled, next.Hostnames, next.IPv4, next.IPv6 = req.Enabled, req.Hostnames, req.IPv4, req.IPv6
 	next.Interval, next.LookupURL, next.Interface = req.Interval, req.LookupURL, req.Interface
@@ -434,7 +434,7 @@ func (s *Server) handleIPv64DDNS(w http.ResponseWriter, r *http.Request) {
 	// The stored secrets come back in Set for the same provider.
 	provider := dnsprovider.Config{Type: dnsprovider.IPv64Net, IPv6Prefix: req.IPv6Prefix}
 	if current.Settings.Provider.Type != dnsprovider.IPv64Net || !current.Secrets["token"] {
-		key, _ := s.opts.IPv64.Key()
+		key, _ := a.ipv64.Key()
 		if key == "" && !(current.Settings.Provider.Type == dnsprovider.IPv64Net && current.Secrets["updateToken"]) {
 			writeError(w, http.StatusBadRequest, "ipv64_no_key", "the API key of the IPv64 account is needed")
 			return
@@ -442,11 +442,11 @@ func (s *Server) handleIPv64DDNS(w http.ResponseWriter, r *http.Request) {
 		provider.Token = key
 	}
 	next.Provider = provider
-	if err := s.opts.DDNS.Set(next, nil); err != nil {
+	if err := a.ddns.Set(next, nil); err != nil {
 		assignFailure(w, err)
 		return
 	}
 	slog.Info("dynamic DNS settings changed in Settings › IPv64", "by", currentUser(r).Name, "ip", remoteIP(r))
-	noteTarget(r, s.opts.DDNS.Status().Settings.Hostnames...)
-	writeJSON(w, http.StatusOK, s.opts.DDNS.Status())
+	noteTarget(r, a.ddns.Status().Settings.Hostnames...)
+	writeJSON(w, http.StatusOK, a.ddns.Status())
 }

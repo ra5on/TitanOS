@@ -14,8 +14,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/appproxy"
+	"github.com/ra5on/TitanOS/backend/internal/ddns"
 	"github.com/ra5on/TitanOS/backend/internal/dnsprovider"
+	"github.com/ra5on/TitanOS/backend/internal/docker"
+	"github.com/ra5on/TitanOS/backend/internal/firewall"
 	"github.com/ra5on/TitanOS/backend/internal/ipv64"
+	"github.com/ra5on/TitanOS/backend/internal/letsencrypt"
 )
 
 // Settings › Dynamic DNS › IPv64 (until 28 Oct 2026 an area of its own): everything API v2 of IPv64.net offers that TitanOS
@@ -26,8 +31,8 @@ import (
 // Home Assistant or an API token), and none of these routes is in the
 // MCP catalog.
 
-// ipv64Area keeps what the routes remember in RAM.
-type ipv64Area struct {
+// ipv64State keeps what the routes remember in RAM.
+type ipv64State struct {
 	mu sync.Mutex
 	// checks maps the ID of a healthcheck to its token.
 	checks map[string]string
@@ -39,37 +44,85 @@ type ipv64Area struct {
 	appPorts func(app string) ([]int, bool)
 }
 
-func (a *ipv64Area) rememberChecks(list []dnsprovider.IPv64Check) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.checks == nil {
-		a.checks = map[string]string{}
+func (st *ipv64State) rememberChecks(list []dnsprovider.IPv64Check) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if st.checks == nil {
+		st.checks = map[string]string{}
 	}
 	for _, c := range list {
 		if c.Token() != "" {
-			a.checks[c.ID] = c.Token()
+			st.checks[c.ID] = c.Token()
 		}
 	}
 }
 
-func (a *ipv64Area) token(id string) string {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.checks[id]
+func (st *ipv64State) token(id string) string {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return st.checks[id]
 }
 
 // testAllowed keeps test messages to one per 30 seconds and target.
-func (a *ipv64Area) testAllowed(key string, now time.Time) bool {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.tests == nil {
-		a.tests = map[string]time.Time{}
+func (st *ipv64State) testAllowed(key string, now time.Time) bool {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if st.tests == nil {
+		st.tests = map[string]time.Time{}
 	}
-	if now.Sub(a.tests[key]) < 30*time.Second {
+	if now.Sub(st.tests[key]) < 30*time.Second {
 		return false
 	}
-	a.tests[key] = now
+	st.tests[key] = now
 	return true
+}
+
+// ipv64Area is IPv64.net: the account, its domains, healthchecks and the
+// publishing of apps; an area with narrow dependencies (PLAN 8a, see
+// fansArea). ddns and letsEncrypt hold the stored keys and host names,
+// ipv64 the account area, firewall and appProxy what publishing an app
+// touches, docker the ports of an app, reserved the ports of titand that
+// are never published, state what the routes remember in RAM (state of the
+// server; tests replace its look at Docker).
+type ipv64Area struct {
+	ddns        *ddns.Manager
+	letsEncrypt *letsencrypt.Manager
+	ipv64       *ipv64.Manager
+	firewall    *firewall.Manager
+	appProxy    *appproxy.Manager
+	docker      *docker.Manager
+	reserved    []int
+	state       *ipv64State
+}
+
+// ipv64Area is the area of the server. It reads the managers when it is
+// asked for, so the agent's list of addresses (agent_addresses.go) sees
+// the same ones.
+func (s *Server) ipv64Area() ipv64Area {
+	return ipv64Area{ddns: s.opts.DDNS, letsEncrypt: s.opts.LetsEncrypt, ipv64: s.opts.IPv64, firewall: s.opts.Firewall,
+		appProxy: s.opts.AppProxy, docker: s.opts.Docker, reserved: s.opts.IPv64Reserved, state: &s.ipv64}
+}
+
+func (a ipv64Area) register(mux *routeMux, admin, browserOnly func(http.HandlerFunc) http.HandlerFunc) {
+	// IPv64.net: POST everywhere, so that a typed-in API key stays out of addresses.
+	mux.HandleFunc("POST /api/v1/network/ipv64/account", admin(a.handleIPv64Account))
+	mux.HandleFunc("POST /api/v1/network/ipv64/domains", admin(a.handleIPv64Domains))
+	mux.HandleFunc("POST /api/v1/network/ipv64/domains/create", admin(a.handleIPv64DomainCreate))
+	mux.HandleFunc("POST /api/v1/network/ipv64/domains/change", admin(a.handleIPv64DomainChange))
+	mux.HandleFunc("POST /api/v1/network/ipv64/records", admin(a.handleIPv64Records))
+	mux.HandleFunc("POST /api/v1/network/ipv64/records/add", admin(a.handleIPv64RecordAdd))
+	mux.HandleFunc("POST /api/v1/network/ipv64/records/delete", admin(a.handleIPv64RecordDelete))
+	mux.HandleFunc("POST /api/v1/network/ipv64/healthchecks", admin(a.handleIPv64Healthchecks))
+	mux.HandleFunc("POST /api/v1/network/ipv64/heartbeat/on", admin(a.handleIPv64HeartbeatOn))
+	mux.HandleFunc("POST /api/v1/network/ipv64/heartbeat/off", admin(a.handleIPv64HeartbeatOff))
+	mux.HandleFunc("POST /api/v1/network/ipv64/heartbeat/status", admin(a.handleIPv64HeartbeatStatus))
+	mux.HandleFunc("POST /api/v1/network/ipv64/heartbeat/test", admin(a.handleIPv64HeartbeatTest))
+	a.ipv64Routes(mux, admin, browserOnly)
+}
+
+// dynamicDNS answers when dynamic DNS is not available.
+func (a ipv64Area) dynamicDNS(w http.ResponseWriter) bool {
+	return ddnsArea{ddns: a.ddns}.dynamicDNS(w)
 }
 
 // browserOnly refuses requests made by the assistant, Home Assistant or
@@ -110,8 +163,8 @@ func ipv64AreaFailure(w http.ResponseWriter, err error) {
 }
 
 // ipv64Run calls fn with a client and writes its answer: nil out is 204.
-func (s *Server) ipv64Run(w http.ResponseWriter, r *http.Request, timeout time.Duration, fn func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error)) {
-	client, err := s.opts.IPv64.Client()
+func (a ipv64Area) ipv64Run(w http.ResponseWriter, r *http.Request, timeout time.Duration, fn func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error)) {
+	client, err := a.ipv64.Client()
 	if err != nil {
 		ipv64AreaFailure(w, err)
 		return
@@ -133,9 +186,9 @@ func (s *Server) ipv64Run(w http.ResponseWriter, r *http.Request, timeout time.D
 	writeJSON(w, status, out)
 }
 
-func (s *Server) ipv64Handle(fn func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error)) http.HandlerFunc {
+func (a ipv64Area) ipv64Handle(fn func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		s.ipv64Run(w, r, 45*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) { return fn(ctx, c, r) })
+		a.ipv64Run(w, r, 45*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) { return fn(ctx, c, r) })
 	}
 }
 
@@ -177,26 +230,26 @@ func decode(r *http.Request, v any) error {
 
 // checkToken returns the token of a healthcheck ID, listing the checks if
 // the ID is not known yet.
-func (s *Server) checkToken(ctx context.Context, c *dnsprovider.IPv64, id string) (string, error) {
-	if token := s.ipv64.token(id); token != "" {
+func (a ipv64Area) checkToken(ctx context.Context, c *dnsprovider.IPv64, id string) (string, error) {
+	if token := a.state.token(id); token != "" {
 		return token, nil
 	}
 	list, err := c.Checks(ctx)
 	if err != nil {
 		return "", err
 	}
-	s.ipv64.rememberChecks(list)
-	if token := s.ipv64.token(id); token != "" {
+	a.state.rememberChecks(list)
+	if token := a.state.token(id); token != "" {
 		return token, nil
 	}
 	return "", &dnsprovider.APIError{Provider: "IPv64", Status: http.StatusNotFound, Message: "no such healthcheck"}
 }
 
-func (s *Server) nasCheckID() string {
-	if s.opts.DDNS == nil {
+func (a ipv64Area) nasCheckID() string {
+	if a.ddns == nil {
 		return ""
 	}
-	if token := s.opts.DDNS.HeartbeatToken(); token != "" {
+	if token := a.ddns.HeartbeatToken(); token != "" {
 		return dnsprovider.HealthcheckID(token)
 	}
 	return ""
@@ -204,16 +257,16 @@ func (s *Server) nasCheckID() string {
 
 // --- settings ---
 
-func (s *Server) handleIPv64Status(w http.ResponseWriter, r *http.Request) {
-	st := s.opts.IPv64.Status()
+func (a ipv64Area) handleIPv64Status(w http.ResponseWriter, r *http.Request) {
+	st := a.ipv64.Status()
 	hostname, _ := os.Hostname()
 	writeJSON(w, http.StatusOK, map[string]any{
-		"status": st, "firewall": s.opts.Firewall.Enabled(), "nasCheck": s.nasCheckID(), "hostname": hostname,
+		"status": st, "firewall": a.firewall.Enabled(), "nasCheck": a.nasCheckID(), "hostname": hostname,
 		"zones": dnsprovider.IPv64Zones, "recordTypes": dnsprovider.IPv64RecordTypes,
 	})
 }
 
-func (s *Server) handleIPv64Key(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64Key(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		APIKey string `json:"apiKey"`
 		Clear  bool   `json:"clear"`
@@ -230,48 +283,48 @@ func (s *Server) handleIPv64Key(w http.ResponseWriter, r *http.Request) {
 		// Checked before it is stored.
 		ctx, cancel := ipv64Context(r)
 		defer cancel()
-		if _, err := dnsprovider.NewIPv64(req.APIKey, "", s.opts.IPv64.Options).Me(ctx); err != nil {
+		if _, err := dnsprovider.NewIPv64(req.APIKey, "", a.ipv64.Options).Me(ctx); err != nil {
 			ipv64AreaFailure(w, err)
 			return
 		}
 	}
-	if err := s.opts.IPv64.SetKey(req.APIKey, req.Clear); err != nil {
+	if err := a.ipv64.SetKey(req.APIKey, req.Clear); err != nil {
 		writeError(w, http.StatusInternalServerError, "config_write_failed", "the settings could not be saved to /config")
 		return
 	}
 	noteTarget(r, map[bool]string{true: "clear", false: "set"}[req.Clear])
-	s.handleIPv64Status(w, r)
+	a.handleIPv64Status(w, r)
 }
 
-func (s *Server) handleIPv64Notify(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64Notify(w http.ResponseWriter, r *http.Request) {
 	var req ipv64.Notify
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.IPv64.SetNotify(req); err != nil {
+	if err := a.ipv64.SetNotify(req); err != nil {
 		writeError(w, http.StatusInternalServerError, "config_write_failed", "the settings could not be saved to /config")
 		return
 	}
-	s.handleIPv64Status(w, r)
+	a.handleIPv64Status(w, r)
 }
 
-func (s *Server) handleIPv64Blocklist(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64Blocklist(w http.ResponseWriter, r *http.Request) {
 	var req ipv64.Blocklist
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.IPv64.SetBlocklist(r.Context(), req); err != nil {
+	if err := a.ipv64.SetBlocklist(r.Context(), req); err != nil {
 		writeError(w, http.StatusInternalServerError, "config_write_failed", "the settings could not be saved to /config")
 		return
 	}
 	noteTarget(r, map[bool]string{true: "on", false: "off"}[req.Enabled])
-	s.handleIPv64Status(w, r)
+	a.handleIPv64Status(w, r)
 }
 
-func (s *Server) handleIPv64BlocklistRefresh(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64BlocklistRefresh(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Minute)
 	defer cancel()
-	if err := s.opts.IPv64.RefreshBlocklist(ctx); err != nil {
+	if err := a.ipv64.RefreshBlocklist(ctx); err != nil {
 		var apiErr *dnsprovider.APIError
 		if errors.As(err, &apiErr) || errors.Is(err, ipv64.ErrNoKey) {
 			ipv64AreaFailure(w, err)
@@ -280,51 +333,51 @@ func (s *Server) handleIPv64BlocklistRefresh(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusBadGateway, "ipv64_blocklist", err.Error())
 		return
 	}
-	s.handleIPv64Status(w, r)
+	a.handleIPv64Status(w, r)
 }
 
 // --- overview ---
 
-func (s *Server) handleIPv64Me(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
+func (a ipv64Area) handleIPv64Me(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
 		me, err := c.Me(ctx)
-		_, source := s.opts.IPv64.Key()
+		_, source := a.ipv64.Key()
 		return 0, map[string]any{"me": me, "keySource": source}, err
 	})
 }
 
-func (s *Server) handleIPv64Logs(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64Logs(w http.ResponseWriter, r *http.Request) {
 	before, _ := strconv.ParseInt(r.URL.Query().Get("before"), 10, 64)
 	limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
 	if err != nil || limit == 0 {
 		limit = 50
 	}
-	s.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
+	a.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
 		page, err := c.Logs(ctx, limit, max(before, 0))
 		return 0, page, err
 	})
 }
 
 // usedKeys returns the IDs at IPv64 of the keys TitanOS keeps, by use.
-func (s *Server) usedKeys(ctx context.Context) map[int64][]string {
+func (a ipv64Area) usedKeys(ctx context.Context) map[int64][]string {
 	out := map[int64][]string{}
-	for use, key := range s.opts.IPv64.Keys() {
+	for use, key := range a.ipv64.Keys() {
 		hash := dnsprovider.HealthcheckID(key)
-		s.ipv64.mu.Lock()
-		id, ok := s.ipv64.keyIDs[hash]
-		s.ipv64.mu.Unlock()
+		a.state.mu.Lock()
+		id, ok := a.state.keyIDs[hash]
+		a.state.mu.Unlock()
 		if !ok {
-			me, err := dnsprovider.NewIPv64(key, "", s.opts.IPv64.Options).Me(ctx)
+			me, err := dnsprovider.NewIPv64(key, "", a.ipv64.Options).Me(ctx)
 			if err != nil || me.Auth.KeyID == nil {
 				continue
 			}
 			id = *me.Auth.KeyID
-			s.ipv64.mu.Lock()
-			if s.ipv64.keyIDs == nil {
-				s.ipv64.keyIDs = map[string]int64{}
+			a.state.mu.Lock()
+			if a.state.keyIDs == nil {
+				a.state.keyIDs = map[string]int64{}
 			}
-			s.ipv64.keyIDs[hash] = id
-			s.ipv64.mu.Unlock()
+			a.state.keyIDs[hash] = id
+			a.state.mu.Unlock()
 		}
 		out[id] = append(out[id], use)
 		slices.Sort(out[id])
@@ -332,13 +385,13 @@ func (s *Server) usedKeys(ctx context.Context) map[int64][]string {
 	return out
 }
 
-func (s *Server) handleIPv64Keys(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
+func (a ipv64Area) handleIPv64Keys(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
 		keys, err := c.APIKeys(ctx)
 		if err != nil {
 			return 0, nil, err
 		}
-		used := s.usedKeys(ctx)
+		used := a.usedKeys(ctx)
 		type key struct {
 			dnsprovider.IPv64APIKey
 			UsedBy []string `json:"usedBy"`
@@ -351,7 +404,7 @@ func (s *Server) handleIPv64Keys(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleIPv64KeyCreate(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64KeyCreate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name      string `json:"name"`
 		ExpiresIn int    `json:"expiresIn"`
@@ -360,7 +413,7 @@ func (s *Server) handleIPv64KeyCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	noteTarget(r, req.Name)
-	s.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
+	a.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
 		key, token, err := c.CreateAPIKey(ctx, req.Name, req.ExpiresIn)
 		if err != nil {
 			return 0, nil, err
@@ -371,14 +424,14 @@ func (s *Server) handleIPv64KeyCreate(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleIPv64KeyDelete(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64KeyDelete(w http.ResponseWriter, r *http.Request) {
 	id, err := pathInt(r, "id")
 	if err != nil {
 		ipv64AreaFailure(w, err)
 		return
 	}
-	s.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
-		if uses := s.usedKeys(ctx)[id]; len(uses) > 0 {
+	a.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
+		if uses := a.usedKeys(ctx)[id]; len(uses) > 0 {
 			return 0, nil, &dnsprovider.APIError{Provider: "IPv64", Status: http.StatusConflict, Code: "key_in_use", Message: "TitanOS uses this key (" + strings.Join(uses, ", ") + ")"}
 		}
 		noteTarget(r, strconv.FormatInt(id, 10))
@@ -388,18 +441,18 @@ func (s *Server) handleIPv64KeyDelete(w http.ResponseWriter, r *http.Request) {
 
 // --- domains and records ---
 
-func (s *Server) handleIPv64AreaDomains(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
+func (a ipv64Area) handleIPv64AreaDomains(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
 		domains, err := c.Domains(ctx)
 		hosts := []string{}
-		if s.opts.DDNS != nil {
-			hosts = s.opts.DDNS.Status().Settings.Hostnames
+		if a.ddns != nil {
+			hosts = a.ddns.Status().Settings.Hostnames
 		}
 		return 0, map[string]any{"domains": domains, "zones": dnsprovider.IPv64Zones, "ddnsHosts": hosts}, err
 	})
 }
 
-func (s *Server) handleIPv64AreaDomainCreate(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64AreaDomainCreate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name string `json:"name"`
 		Own  bool   `json:"own"`
@@ -408,7 +461,7 @@ func (s *Server) handleIPv64AreaDomainCreate(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	noteTarget(r, req.Name)
-	s.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
+	a.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
 		if req.Own {
 			d, err := c.CreateOwnDomain(ctx, req.Name)
 			return http.StatusCreated, d, err
@@ -426,8 +479,8 @@ func domainParam(r *http.Request) (string, error) {
 	return name, nil
 }
 
-func (s *Server) handleIPv64AreaDomain(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64AreaDomain(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		name, err := domainParam(r)
 		if err != nil {
 			return 0, nil, err
@@ -437,8 +490,8 @@ func (s *Server) handleIPv64AreaDomain(w http.ResponseWriter, r *http.Request) {
 	})(w, r)
 }
 
-func (s *Server) handleIPv64AreaDomainChange(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64AreaDomainChange(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		name, err := domainParam(r)
 		if err != nil {
 			return 0, nil, err
@@ -458,8 +511,8 @@ func (s *Server) handleIPv64AreaDomainChange(w http.ResponseWriter, r *http.Requ
 	})(w, r)
 }
 
-func (s *Server) handleIPv64AreaDomainDelete(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64AreaDomainDelete(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		name, err := domainParam(r)
 		if err != nil {
 			return 0, nil, err
@@ -469,8 +522,8 @@ func (s *Server) handleIPv64AreaDomainDelete(w http.ResponseWriter, r *http.Requ
 	})(w, r)
 }
 
-func (s *Server) handleIPv64AreaDomainRotate(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64AreaDomainRotate(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		name, err := domainParam(r)
 		if err != nil {
 			return 0, nil, err
@@ -485,8 +538,8 @@ func (s *Server) handleIPv64AreaDomainRotate(w http.ResponseWriter, r *http.Requ
 			return 0, nil, err
 		}
 		followed := false
-		if s.opts.DDNS != nil {
-			if followed, err = s.opts.DDNS.ReplaceTokens(old, fresh, "", ""); err != nil {
+		if a.ddns != nil {
+			if followed, err = a.ddns.ReplaceTokens(old, fresh, "", ""); err != nil {
 				slog.Error("new IPv64 update token not stored", "domain", name, "err", err)
 			}
 		}
@@ -494,8 +547,8 @@ func (s *Server) handleIPv64AreaDomainRotate(w http.ResponseWriter, r *http.Requ
 	})(w, r)
 }
 
-func (s *Server) handleIPv64AreaDomainReset(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64AreaDomainReset(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		name, err := domainParam(r)
 		if err != nil {
 			return 0, nil, err
@@ -506,8 +559,8 @@ func (s *Server) handleIPv64AreaDomainReset(w http.ResponseWriter, r *http.Reque
 	})(w, r)
 }
 
-func (s *Server) handleIPv64AreaRecordAdd(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64AreaRecordAdd(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		name, err := domainParam(r)
 		if err != nil {
 			return 0, nil, err
@@ -526,8 +579,8 @@ func (s *Server) handleIPv64AreaRecordAdd(w http.ResponseWriter, r *http.Request
 	})(w, r)
 }
 
-func (s *Server) handleIPv64AreaRecordChange(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64AreaRecordChange(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		id, err := pathRef(r, "record")
 		if err != nil {
 			return 0, nil, err
@@ -546,8 +599,8 @@ func (s *Server) handleIPv64AreaRecordChange(w http.ResponseWriter, r *http.Requ
 	})(w, r)
 }
 
-func (s *Server) handleIPv64AreaRecordDelete(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64AreaRecordDelete(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		id, err := pathRef(r, "record")
 		if err != nil {
 			return 0, nil, err

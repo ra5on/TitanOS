@@ -263,7 +263,7 @@ type Server struct {
 
 	loadMu      sync.Mutex
 	lastLoadTry time.Time
-	ipv64       ipv64Area
+	ipv64       ipv64State
 
 	// ctx is the root context of the server: it ends with Close (or with
 	// the context given to Start), and with it every job the server

@@ -25,15 +25,15 @@ var ipv64Wait = 3 * time.Second
 
 // --- CDN ---
 
-func (s *Server) handleIPv64CDNs(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
+func (a ipv64Area) handleIPv64CDNs(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
 		list, err := c.CDNs(ctx)
-		return 0, map[string]any{"cdn": list, "published": s.opts.IPv64.Settings().Published}, err
+		return 0, map[string]any{"cdn": list, "published": a.ipv64.Settings().Published}, err
 	})
 }
 
-func (s *Server) handleIPv64CDNCreate(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64CDNCreate(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		var req struct {
 			Domain string `json:"domain"`
 		}
@@ -46,8 +46,8 @@ func (s *Server) handleIPv64CDNCreate(w http.ResponseWriter, r *http.Request) {
 	})(w, r)
 }
 
-func (s *Server) handleIPv64CDN(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64CDN(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		token, err := pathRef(r, "token")
 		if err != nil {
 			return 0, nil, err
@@ -65,8 +65,8 @@ func (s *Server) handleIPv64CDN(w http.ResponseWriter, r *http.Request) {
 	})(w, r)
 }
 
-func (s *Server) handleIPv64CDNChange(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64CDNChange(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		token, err := pathRef(r, "token")
 		if err != nil {
 			return 0, nil, err
@@ -75,7 +75,7 @@ func (s *Server) handleIPv64CDNChange(w http.ResponseWriter, r *http.Request) {
 		if err := decode(r, &in); err != nil {
 			return 0, nil, err
 		}
-		if in.BackendPort != nil && s.reservedPort(*in.BackendPort) {
+		if in.BackendPort != nil && a.reservedPort(*in.BackendPort) {
 			return 0, nil, invalidIPv64("the ports of the TitanOS web UI are never published")
 		}
 		noteTarget(r, token)
@@ -84,8 +84,8 @@ func (s *Server) handleIPv64CDNChange(w http.ResponseWriter, r *http.Request) {
 	})(w, r)
 }
 
-func (s *Server) handleIPv64CDNDelete(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64CDNDelete(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		token, err := pathRef(r, "token")
 		if err != nil {
 			return 0, nil, err
@@ -96,8 +96,8 @@ func (s *Server) handleIPv64CDNDelete(w http.ResponseWriter, r *http.Request) {
 	})(w, r)
 }
 
-func (s *Server) handleIPv64CDNAction(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64CDNAction(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		token, err := pathRef(r, "token")
 		if err != nil {
 			return 0, nil, err
@@ -114,8 +114,8 @@ func (s *Server) handleIPv64CDNAction(w http.ResponseWriter, r *http.Request) {
 	})(w, r)
 }
 
-func (s *Server) handleIPv64CDNRecord(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64CDNRecord(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		token, err := pathRef(r, "token")
 		if err != nil {
 			return 0, nil, err
@@ -137,8 +137,8 @@ func (s *Server) handleIPv64CDNRecord(w http.ResponseWriter, r *http.Request) {
 	})(w, r)
 }
 
-func (s *Server) handleIPv64MappingCreate(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64MappingCreate(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		token, err := pathRef(r, "token")
 		if err != nil {
 			return 0, nil, err
@@ -147,7 +147,7 @@ func (s *Server) handleIPv64MappingCreate(w http.ResponseWriter, r *http.Request
 		if err := decode(r, &in); err != nil {
 			return 0, nil, err
 		}
-		if s.reservedPort(in.TargetPort) {
+		if a.reservedPort(in.TargetPort) {
 			return 0, nil, invalidIPv64("the ports of the TitanOS web UI are never published")
 		}
 		noteTarget(r, token, in.Name)
@@ -156,8 +156,8 @@ func (s *Server) handleIPv64MappingCreate(w http.ResponseWriter, r *http.Request
 	})(w, r)
 }
 
-func (s *Server) handleIPv64MappingDelete(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64MappingDelete(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		token, err := pathRef(r, "token")
 		if err != nil {
 			return 0, nil, err
@@ -171,8 +171,8 @@ func (s *Server) handleIPv64MappingDelete(w http.ResponseWriter, r *http.Request
 	})(w, r)
 }
 
-func (s *Server) handleIPv64AccessAdd(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64AccessAdd(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		token, err := pathRef(r, "token")
 		if err != nil {
 			return 0, nil, err
@@ -189,8 +189,8 @@ func (s *Server) handleIPv64AccessAdd(w http.ResponseWriter, r *http.Request) {
 	})(w, r)
 }
 
-func (s *Server) handleIPv64AccessRemove(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64AccessRemove(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		token, err := pathRef(r, "token")
 		if err != nil {
 			return 0, nil, err
@@ -208,27 +208,27 @@ func (s *Server) handleIPv64AccessRemove(w http.ResponseWriter, r *http.Request)
 
 // reservedPort tells whether a port belongs to titand (web UI, HTTPS names
 // of apps) or another service of the NAS that must never be published.
-func (s *Server) reservedPort(port int) bool {
+func (a ipv64Area) reservedPort(port int) bool {
 	reserved := []int{22, 80, 443, 8750, 8752}
-	reserved = append(reserved, s.opts.IPv64Reserved...)
-	if s.opts.AppProxy != nil {
-		reserved = append(reserved, s.opts.AppProxy.Reserved...)
-		if s.opts.AppProxy.HTTPSPort > 0 {
-			reserved = append(reserved, s.opts.AppProxy.HTTPSPort)
+	reserved = append(reserved, a.reserved...)
+	if a.appProxy != nil {
+		reserved = append(reserved, a.appProxy.Reserved...)
+		if a.appProxy.HTTPSPort > 0 {
+			reserved = append(reserved, a.appProxy.HTTPSPort)
 		}
 	}
 	return slices.Contains(reserved, port)
 }
 
 // appPorts are the TCP ports the containers of an app publish on the NAS.
-func (s *Server) appPorts(ctx context.Context, app string) ([]int, bool) {
-	if s.ipv64.appPorts != nil {
-		return s.ipv64.appPorts(app)
+func (a ipv64Area) appPorts(ctx context.Context, app string) ([]int, bool) {
+	if a.state.appPorts != nil {
+		return a.state.appPorts(app)
 	}
-	if s.opts.Docker == nil {
+	if a.docker == nil {
 		return nil, false
 	}
-	status := s.opts.Docker.Status(ctx)
+	status := a.docker.Status(ctx)
 	found := false
 	var ports []int
 	for _, c := range status.Containers {
@@ -246,21 +246,21 @@ func (s *Server) appPorts(ctx context.Context, app string) ([]int, bool) {
 	return ports, found
 }
 
-func (s *Server) handleIPv64App(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64App(w http.ResponseWriter, r *http.Request) {
 	app := r.PathValue("app")
-	ports, _ := s.appPorts(r.Context(), app)
+	ports, _ := a.appPorts(r.Context(), app)
 	var usable []int
 	for _, p := range ports {
-		if !s.reservedPort(p) {
+		if !a.reservedPort(p) {
 			usable = append(usable, p)
 		}
 	}
-	entry, published := s.opts.IPv64.PublishedApp(app)
-	out := map[string]any{"ports": append([]int{}, usable...), "firewall": s.opts.Firewall.Enabled(), "zones": s.opts.Firewall.AppZones(app)}
+	entry, published := a.ipv64.PublishedApp(app)
+	out := map[string]any{"ports": append([]int{}, usable...), "firewall": a.firewall.Enabled(), "zones": a.firewall.AppZones(app)}
 	if published {
 		out["published"] = entry
 	}
-	_, source := s.opts.IPv64.Key()
+	_, source := a.ipv64.Key()
 	out["keySource"] = source
 	writeJSON(w, http.StatusOK, out)
 }
@@ -309,7 +309,7 @@ type publishRefusal struct {
 // checkPublish normalizes a request and returns why it cannot be
 // published, or nil. replacing allows an app that is published already
 // (its publication is taken back before the new one).
-func (s *Server) checkPublish(ctx context.Context, app string, req *publishRequest, replacing bool) *publishRefusal {
+func (a ipv64Area) checkPublish(ctx context.Context, app string, req *publishRequest, replacing bool) *publishRefusal {
 	req.Domain, req.Prefix = strings.ToLower(strings.TrimSpace(req.Domain)), strings.ToLower(strings.TrimSpace(req.Prefix))
 	if req.Scheme == "" {
 		req.Scheme = "http"
@@ -321,13 +321,13 @@ func (s *Server) checkPublish(ctx context.Context, app string, req *publishReque
 		return &publishRefusal{http.StatusBadRequest, "invalid_ipv64", "domain or prefix"}
 	case req.Scheme != "http" && req.Scheme != "https":
 		return &publishRefusal{http.StatusBadRequest, "invalid_ipv64", "scheme"}
-	case s.reservedPort(req.Port):
+	case a.reservedPort(req.Port):
 		return &publishRefusal{http.StatusBadRequest, "ipv64_reserved_port", "the ports of the TitanOS web UI are never published"}
 	}
-	if _, ok := s.opts.IPv64.PublishedApp(app); ok && !replacing {
+	if _, ok := a.ipv64.PublishedApp(app); ok && !replacing {
 		return &publishRefusal{http.StatusConflict, "ipv64_exists", "the app is already published"}
 	}
-	ports, found := s.appPorts(ctx, app)
+	ports, found := a.appPorts(ctx, app)
 	if !found || !slices.Contains(ports, req.Port) {
 		return &publishRefusal{http.StatusBadRequest, "ipv64_port_not_published", "the app publishes no such TCP port on the NAS"}
 	}
@@ -336,19 +336,19 @@ func (s *Server) checkPublish(ctx context.Context, app string, req *publishReque
 
 // handleIPv64Publish makes an app reachable from the internet (see
 // publishApp).
-func (s *Server) handleIPv64Publish(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64Publish(w http.ResponseWriter, r *http.Request) {
 	app := r.PathValue("app")
 	var req publishRequest
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if refusal := s.checkPublish(r.Context(), app, &req, false); refusal != nil {
+	if refusal := a.checkPublish(r.Context(), app, &req, false); refusal != nil {
 		writeError(w, refusal.status, refusal.code, refusal.message)
 		return
 	}
 	noteTarget(r, app, req.Domain)
-	s.ipv64Run(w, r, 3*time.Minute, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
-		entry, err := s.publishApp(ctx, c, app, req, currentUser(r).Name)
+	a.ipv64Run(w, r, 3*time.Minute, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
+		entry, err := a.publishApp(ctx, c, app, req, currentUser(r).Name)
 		if err != nil {
 			return 0, nil, err
 		}
@@ -362,7 +362,7 @@ func (s *Server) handleIPv64Publish(w http.ResponseWriter, r *http.Request) {
 // reverse proxy on with HTTPS to the app's port, and, if the firewall is
 // on and the owner allows it, the app's ports open from the internet
 // zone. req must have passed checkPublish.
-func (s *Server) publishApp(ctx context.Context, c *dnsprovider.IPv64, app string, req publishRequest, by string) (ipv64.Published, error) {
+func (a ipv64Area) publishApp(ctx context.Context, c *dnsprovider.IPv64, app string, req publishRequest, by string) (ipv64.Published, error) {
 	fail := func(err error) (ipv64.Published, error) { return ipv64.Published{}, err }
 	entry := ipv64.Published{App: app, Port: req.Port, Domain: req.Domain, Prefix: req.Prefix, At: time.Now().UTC(), Records: []string{}}
 	names := func() ([]dnsprovider.IPv64FullRecord, error) {
@@ -380,7 +380,7 @@ func (s *Server) publishApp(ctx context.Context, c *dnsprovider.IPv64, app strin
 		return fail(err)
 	}
 	if len(records) == 0 {
-		v4, v6 := s.ddnsAddresses()
+		v4, v6 := a.ddnsAddresses()
 		if _, err := c.UpdatePrefix(ctx, req.Domain, req.Prefix, v4, v6); err != nil {
 			return fail(err)
 		}
@@ -414,7 +414,7 @@ func (s *Server) publishApp(ctx context.Context, c *dnsprovider.IPv64, app strin
 	// "Fertig ist die Änderung, wenn bei CDN-Domains die Liste pending
 	// leer ist": wait for the server, looking every few seconds.
 	if err := waitForServer(ctx, c, entry.CDN); err != nil {
-		_ = s.unpublish(context.WithoutCancel(ctx), c, entry) // cleanup, best effort: nothing more can be done if it fails
+		_ = a.unpublish(context.WithoutCancel(ctx), c, entry) // cleanup, best effort: nothing more can be done if it fails
 		return fail(err)
 	}
 	for _, rec := range records {
@@ -427,7 +427,7 @@ func (s *Server) publishApp(ctx context.Context, c *dnsprovider.IPv64, app strin
 			return err
 		})
 		if err != nil && !isCode(err, "already_enabled") {
-			_ = s.unpublish(context.WithoutCancel(ctx), c, entry) // cleanup, best effort: nothing more can be done if it fails
+			_ = a.unpublish(context.WithoutCancel(ctx), c, entry) // cleanup, best effort: nothing more can be done if it fails
 			return fail(err)
 		}
 		entry.Records = append(entry.Records, ref)
@@ -439,7 +439,7 @@ func (s *Server) publishApp(ctx context.Context, c *dnsprovider.IPv64, app strin
 		}
 		return err
 	}); err != nil {
-		_ = s.unpublish(context.WithoutCancel(ctx), c, entry) // cleanup, best effort: nothing more can be done if it fails
+		_ = a.unpublish(context.WithoutCancel(ctx), c, entry) // cleanup, best effort: nothing more can be done if it fails
 		return fail(err)
 	}
 	frontend, on := "https_redirect", true
@@ -450,15 +450,15 @@ func (s *Server) publishApp(ctx context.Context, c *dnsprovider.IPv64, app strin
 		detail, err = c.ChangeCDN(ctx, entry.CDN, in)
 		return err
 	}); err != nil {
-		_ = s.unpublish(context.WithoutCancel(ctx), c, entry) // cleanup, best effort: nothing more can be done if it fails
+		_ = a.unpublish(context.WithoutCancel(ctx), c, entry) // cleanup, best effort: nothing more can be done if it fails
 		return fail(err)
 	}
 	entry.Pending = detail.Pending
-	if req.Firewall && s.opts.Firewall.Enabled() {
-		before := s.opts.Firewall.AppZones(app)
+	if req.Firewall && a.firewall.Enabled() {
+		before := a.firewall.AppZones(app)
 		zones := before
 		zones.Internet = true
-		changed, err := s.opts.Firewall.SetAppZones(ctx, app, zones)
+		changed, err := a.firewall.SetAppZones(ctx, app, zones)
 		if err != nil {
 			slog.Error("firewall zones of a published app not changed", "app", app, "err", err)
 		} else if changed {
@@ -466,23 +466,23 @@ func (s *Server) publishApp(ctx context.Context, c *dnsprovider.IPv64, app strin
 			entry.Before = &ipv64.AppZones{Home: before.Home, VPN: before.VPN, Internet: before.Internet}
 		}
 	}
-	if err := s.opts.IPv64.AddPublished(entry); err != nil {
+	if err := a.ipv64.AddPublished(entry); err != nil {
 		return fail(err)
 	}
 	slog.Info("app published through IPv64", "app", app, "domain", req.Domain, "port", req.Port, "by", by)
 	return entry, nil
 }
 
-func (s *Server) ddnsAddresses() (v4, v6 netip.Addr) {
-	if s.opts.DDNS == nil {
+func (a ipv64Area) ddnsAddresses() (v4, v6 netip.Addr) {
+	if a.ddns == nil {
 		return
 	}
-	return s.opts.DDNS.Addresses()
+	return a.ddns.Addresses()
 }
 
 // unpublish routes the records back, switches off and removes what was
 // made for the app; errors are logged, the caller reports its own.
-func (s *Server) unpublish(ctx context.Context, c *dnsprovider.IPv64, entry ipv64.Published) error {
+func (a ipv64Area) unpublish(ctx context.Context, c *dnsprovider.IPv64, entry ipv64.Published) error {
 	var firstErr error
 	keep := func(err error) {
 		if err != nil && firstErr == nil && !isCode(err, "not_enabled", "not_found", "cdn_not_found", "record_not_found") {
@@ -504,7 +504,7 @@ func (s *Server) unpublish(ctx context.Context, c *dnsprovider.IPv64, entry ipv6
 		}))
 	}
 	if entry.Firewall && entry.Before != nil {
-		if _, err := s.opts.Firewall.SetAppZones(ctx, entry.App, firewall.Zones{Home: entry.Before.Home, VPN: entry.Before.VPN, Internet: entry.Before.Internet}); err != nil {
+		if _, err := a.firewall.SetAppZones(ctx, entry.App, firewall.Zones{Home: entry.Before.Home, VPN: entry.Before.VPN, Internet: entry.Before.Internet}); err != nil {
 			keep(err)
 		}
 	}
@@ -561,33 +561,33 @@ func untilRecordsOff(ctx context.Context, call func() error) error {
 	}
 }
 
-func (s *Server) handleIPv64Unpublish(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64Unpublish(w http.ResponseWriter, r *http.Request) {
 	app := r.PathValue("app")
-	entry, ok := s.opts.IPv64.PublishedApp(app)
+	entry, ok := a.ipv64.PublishedApp(app)
 	if !ok {
 		writeError(w, http.StatusNotFound, "ipv64_not_found", "the app is not published")
 		return
 	}
 	noteTarget(r, app, entry.Domain)
-	s.ipv64Run(w, r, 3*time.Minute, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
-		if err := s.unpublish(ctx, c, entry); err != nil {
+	a.ipv64Run(w, r, 3*time.Minute, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
+		if err := a.unpublish(ctx, c, entry); err != nil {
 			return 0, nil, err
 		}
-		return 0, nil, s.opts.IPv64.RemovePublished(app)
+		return 0, nil, a.ipv64.RemovePublished(app)
 	})
 }
 
 // --- Cloud Router ---
 
-func (s *Server) handleIPv64Routers(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
+func (a ipv64Area) handleIPv64Routers(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
 		list, err := c.Routers(ctx)
 		return 0, map[string]any{"routers": list}, err
 	})
 }
 
-func (s *Server) handleIPv64RouterCreate(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64RouterCreate(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		var req struct {
 			Name string `json:"name"`
 		}
@@ -600,8 +600,8 @@ func (s *Server) handleIPv64RouterCreate(w http.ResponseWriter, r *http.Request)
 	})(w, r)
 }
 
-func (s *Server) handleIPv64Router(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64Router(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		token, err := pathRef(r, "token")
 		if err != nil {
 			return 0, nil, err
@@ -623,8 +623,8 @@ func (s *Server) handleIPv64Router(w http.ResponseWriter, r *http.Request) {
 	})(w, r)
 }
 
-func (s *Server) handleIPv64RouterRename(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64RouterRename(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		token, err := pathRef(r, "token")
 		if err != nil {
 			return 0, nil, err
@@ -641,8 +641,8 @@ func (s *Server) handleIPv64RouterRename(w http.ResponseWriter, r *http.Request)
 	})(w, r)
 }
 
-func (s *Server) handleIPv64RouterAdd(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64RouterAdd(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		token, err := pathRef(r, "token")
 		if err != nil {
 			return 0, nil, err
@@ -681,8 +681,8 @@ func (s *Server) handleIPv64RouterAdd(w http.ResponseWriter, r *http.Request) {
 	})(w, r)
 }
 
-func (s *Server) handleIPv64RouterItem(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64RouterItem(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		token, err := pathRef(r, "token")
 		if err != nil {
 			return 0, nil, err
@@ -713,8 +713,8 @@ func (s *Server) handleIPv64RouterItem(w http.ResponseWriter, r *http.Request) {
 	})(w, r)
 }
 
-func (s *Server) handleIPv64GatewayChange(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64GatewayChange(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		token, err := pathRef(r, "token")
 		if err != nil {
 			return 0, nil, err
@@ -729,8 +729,8 @@ func (s *Server) handleIPv64GatewayChange(w http.ResponseWriter, r *http.Request
 	})(w, r)
 }
 
-func (s *Server) handleIPv64GatewayAction(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64GatewayAction(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		token, err := pathRef(r, "token")
 		if err != nil {
 			return 0, nil, err
@@ -738,7 +738,7 @@ func (s *Server) handleIPv64GatewayAction(w http.ResponseWriter, r *http.Request
 		action := r.PathValue("action")
 		if r.Method == http.MethodDelete {
 			action = "delete"
-			if wg := s.opts.IPv64.Settings().WireGuard; wg.Enabled && wg.Gateway == token {
+			if wg := a.ipv64.Settings().WireGuard; wg.Enabled && wg.Gateway == token {
 				return 0, nil, &dnsprovider.APIError{Provider: "IPv64", Status: http.StatusConflict, Code: "nas_connected", Message: "this NAS is connected to the gateway; disconnect it first"}
 			}
 		}
@@ -748,8 +748,8 @@ func (s *Server) handleIPv64GatewayAction(w http.ResponseWriter, r *http.Request
 	})(w, r)
 }
 
-func (s *Server) handleIPv64PeerCreate(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64PeerCreate(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		token, err := pathRef(r, "token")
 		if err != nil {
 			return 0, nil, err
@@ -766,13 +766,13 @@ func (s *Server) handleIPv64PeerCreate(w http.ResponseWriter, r *http.Request) {
 	})(w, r)
 }
 
-func (s *Server) handleIPv64PeerDelete(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64PeerDelete(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		token, err := pathRef(r, "token")
 		if err != nil {
 			return 0, nil, err
 		}
-		if wg := s.opts.IPv64.Settings().WireGuard; wg.Enabled && wg.Peer == token {
+		if wg := a.ipv64.Settings().WireGuard; wg.Enabled && wg.Peer == token {
 			return 0, nil, &dnsprovider.APIError{Provider: "IPv64", Status: http.StatusConflict, Code: "nas_connected", Message: "this is the peer of this NAS; disconnect it instead"}
 		}
 		noteTarget(r, token)
@@ -782,18 +782,18 @@ func (s *Server) handleIPv64PeerDelete(w http.ResponseWriter, r *http.Request) {
 
 // --- the tunnel of this NAS ---
 
-func (s *Server) handleIPv64Tunnel(w http.ResponseWriter, r *http.Request) {
-	st := s.opts.IPv64.Status()
+func (a ipv64Area) handleIPv64Tunnel(w http.ResponseWriter, r *http.Request) {
+	st := a.ipv64.Status()
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	tunnel := st.Tunnel
 	if st.Settings.WireGuard.Enabled {
-		tunnel.LastHandshake = s.opts.IPv64.Handshake(ctx)
+		tunnel.LastHandshake = a.ipv64.Handshake(ctx)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"wireguard": st.Settings.WireGuard, "tunnel": tunnel, "readOnly": st.ReadOnly})
 }
 
-func (s *Server) handleIPv64TunnelConnect(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64TunnelConnect(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Router  string `json:"router"`
 		Gateway string `json:"gateway"`
@@ -807,16 +807,16 @@ func (s *Server) handleIPv64TunnelConnect(w http.ResponseWriter, r *http.Request
 		return
 	}
 	noteTarget(r, req.Name)
-	s.ipv64Run(w, r, 5*time.Minute, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
-		if err := s.opts.IPv64.Connect(ctx, c, req.Router, req.Gateway, req.Name); err != nil {
+	a.ipv64Run(w, r, 5*time.Minute, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
+		if err := a.ipv64.Connect(ctx, c, req.Router, req.Gateway, req.Name); err != nil {
 			return 0, nil, err
 		}
 		slog.Info("NAS connected to an IPv64 Cloud Router", "gateway", req.Gateway, "by", currentUser(r).Name)
-		return 0, s.opts.IPv64.Status().Tunnel, nil
+		return 0, a.ipv64.Status().Tunnel, nil
 	})
 }
 
-func (s *Server) handleIPv64TunnelDisconnect(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64TunnelDisconnect(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		DeletePeer bool `json:"deletePeer"`
 	}
@@ -824,10 +824,10 @@ func (s *Server) handleIPv64TunnelDisconnect(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	noteTarget(r, map[bool]string{true: "delete peer", false: "keep peer"}[req.DeletePeer])
-	client, _ := s.opts.IPv64.Client()
+	client, _ := a.ipv64.Client()
 	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
 	defer cancel()
-	if err := s.opts.IPv64.Disconnect(ctx, client, req.DeletePeer); err != nil {
+	if err := a.ipv64.Disconnect(ctx, client, req.DeletePeer); err != nil {
 		ipv64AreaFailure(w, err)
 		return
 	}

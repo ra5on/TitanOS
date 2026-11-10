@@ -56,7 +56,7 @@ func (s *Server) agentAddresses(r *http.Request) []agentAddress {
 	if s.opts.LetsEncrypt != nil {
 		domains = s.opts.LetsEncrypt.Status().Settings.Domains
 	}
-	for _, h := range s.ddnsHosts() {
+	for _, h := range s.ipv64Area().ddnsHosts() {
 		if slices.Contains(domains, h) {
 			add("ddns", "https", h)
 		} else {

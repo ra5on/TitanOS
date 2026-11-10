@@ -20,30 +20,30 @@ import (
 
 // --- healthchecks ---
 
-func (s *Server) handleIPv64Checks(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
+func (a ipv64Area) handleIPv64Checks(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
 		checks, err := c.Checks(ctx)
 		if err != nil {
 			return 0, nil, err
 		}
-		s.ipv64.rememberChecks(checks)
+		a.state.rememberChecks(checks)
 		integrations, err := c.FullIntegrations(ctx)
-		return 0, map[string]any{"healthchecks": checks, "integrations": integrations, "nasCheck": s.nasCheckID()}, err
+		return 0, map[string]any{"healthchecks": checks, "integrations": integrations, "nasCheck": a.nasCheckID()}, err
 	})
 }
 
-func (s *Server) checkParam(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (string, string, error) {
+func (a ipv64Area) checkParam(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (string, string, error) {
 	id, err := pathRef(r, "id")
 	if err != nil {
 		return "", "", err
 	}
-	token, err := s.checkToken(ctx, c, id)
+	token, err := a.checkToken(ctx, c, id)
 	return id, token, err
 }
 
-func (s *Server) handleIPv64Check(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
-		_, token, err := s.checkParam(ctx, c, r)
+func (a ipv64Area) handleIPv64Check(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+		_, token, err := a.checkParam(ctx, c, r)
 		if err != nil {
 			return 0, nil, err
 		}
@@ -52,8 +52,8 @@ func (s *Server) handleIPv64Check(w http.ResponseWriter, r *http.Request) {
 	})(w, r)
 }
 
-func (s *Server) handleIPv64CheckCreate(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64CheckCreate(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		var in dnsprovider.HealthcheckInput
 		if err := decode(r, &in); err != nil {
 			return 0, nil, err
@@ -63,15 +63,15 @@ func (s *Server) handleIPv64CheckCreate(w http.ResponseWriter, r *http.Request) 
 		}
 		check, err := c.CreateCheck(ctx, in)
 		if err == nil {
-			s.ipv64.rememberChecks([]dnsprovider.IPv64Check{check})
+			a.state.rememberChecks([]dnsprovider.IPv64Check{check})
 		}
 		return http.StatusCreated, check, err
 	})(w, r)
 }
 
-func (s *Server) handleIPv64CheckChange(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
-		_, token, err := s.checkParam(ctx, c, r)
+func (a ipv64Area) handleIPv64CheckChange(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+		_, token, err := a.checkParam(ctx, c, r)
 		if err != nil {
 			return 0, nil, err
 		}
@@ -85,9 +85,9 @@ func (s *Server) handleIPv64CheckChange(w http.ResponseWriter, r *http.Request) 
 	})(w, r)
 }
 
-func (s *Server) handleIPv64CheckDelete(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
-		id, token, err := s.checkParam(ctx, c, r)
+func (a ipv64Area) handleIPv64CheckDelete(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+		id, token, err := a.checkParam(ctx, c, r)
 		if err != nil {
 			return 0, nil, err
 		}
@@ -96,8 +96,8 @@ func (s *Server) handleIPv64CheckDelete(w http.ResponseWriter, r *http.Request) 
 			return 0, nil, err
 		}
 		// The check of "watch reachability": the NAS stops pinging it.
-		if s.opts.DDNS != nil && s.opts.DDNS.HeartbeatToken() == token {
-			if err := s.opts.DDNS.StopHeartbeat(true); err != nil {
+		if a.ddns != nil && a.ddns.HeartbeatToken() == token {
+			if err := a.ddns.StopHeartbeat(true); err != nil {
 				slog.Error("heartbeat not stopped after its check was deleted", "err", err)
 			}
 		}
@@ -105,16 +105,16 @@ func (s *Server) handleIPv64CheckDelete(w http.ResponseWriter, r *http.Request) 
 	})(w, r)
 }
 
-func (s *Server) handleIPv64CheckAction(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
-		id, token, err := s.checkParam(ctx, c, r)
+func (a ipv64Area) handleIPv64CheckAction(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+		id, token, err := a.checkParam(ctx, c, r)
 		if err != nil {
 			return 0, nil, err
 		}
 		action := r.PathValue("action")
 		noteTarget(r, id, action)
 		if action == "test-notification" {
-			if !s.ipv64.testAllowed("check:"+id, time.Now()) {
+			if !a.state.testAllowed("check:"+id, time.Now()) {
 				return 0, nil, &dnsprovider.APIError{Provider: "IPv64", Status: http.StatusTooManyRequests, Message: "one test message every 30 seconds", RetryAfter: 30 * time.Second}
 			}
 			return 0, map[string]bool{"sent": true}, c.TestNotification(ctx, token)
@@ -123,10 +123,10 @@ func (s *Server) handleIPv64CheckAction(w http.ResponseWriter, r *http.Request) 
 		if err != nil {
 			return 0, nil, err
 		}
-		s.ipv64.rememberChecks([]dnsprovider.IPv64Check{check})
+		a.state.rememberChecks([]dnsprovider.IPv64Check{check})
 		followed := false
-		if action == "rotate-token" && s.opts.DDNS != nil {
-			if followed, err = s.opts.DDNS.ReplaceTokens("", "", token, check.Token()); err != nil {
+		if action == "rotate-token" && a.ddns != nil {
+			if followed, err = a.ddns.ReplaceTokens("", "", token, check.Token()); err != nil {
 				slog.Error("new healthcheck token not stored", "err", err)
 			}
 		}
@@ -134,9 +134,9 @@ func (s *Server) handleIPv64CheckAction(w http.ResponseWriter, r *http.Request) 
 	})(w, r)
 }
 
-func (s *Server) handleIPv64CheckEvents(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
-		_, token, err := s.checkParam(ctx, c, r)
+func (a ipv64Area) handleIPv64CheckEvents(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+		_, token, err := a.checkParam(ctx, c, r)
 		if err != nil {
 			return 0, nil, err
 		}
@@ -146,9 +146,9 @@ func (s *Server) handleIPv64CheckEvents(w http.ResponseWriter, r *http.Request) 
 	})(w, r)
 }
 
-func (s *Server) handleIPv64CheckIncidents(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
-		_, token, err := s.checkParam(ctx, c, r)
+func (a ipv64Area) handleIPv64CheckIncidents(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+		_, token, err := a.checkParam(ctx, c, r)
 		if err != nil {
 			return 0, nil, err
 		}
@@ -157,9 +157,9 @@ func (s *Server) handleIPv64CheckIncidents(w http.ResponseWriter, r *http.Reques
 	})(w, r)
 }
 
-func (s *Server) handleIPv64CheckStats(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
-		_, token, err := s.checkParam(ctx, c, r)
+func (a ipv64Area) handleIPv64CheckStats(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+		_, token, err := a.checkParam(ctx, c, r)
 		if err != nil {
 			return 0, nil, err
 		}
@@ -174,15 +174,15 @@ func (s *Server) handleIPv64CheckStats(w http.ResponseWriter, r *http.Request) {
 
 // --- integrations ---
 
-func (s *Server) handleIPv64Integrations(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
+func (a ipv64Area) handleIPv64Integrations(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
 		list, err := c.FullIntegrations(ctx)
 		return 0, map[string]any{"integrations": list, "types": dnsprovider.IPv64IntegrationTypes}, err
 	})
 }
 
-func (s *Server) handleIPv64IntegrationCreate(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64IntegrationCreate(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		var in dnsprovider.IntegrationInput
 		if err := decode(r, &in); err != nil {
 			return 0, nil, err
@@ -193,8 +193,8 @@ func (s *Server) handleIPv64IntegrationCreate(w http.ResponseWriter, r *http.Req
 	})(w, r)
 }
 
-func (s *Server) handleIPv64IntegrationChange(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64IntegrationChange(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		id, err := pathInt(r, "id")
 		if err != nil {
 			return 0, nil, err
@@ -212,8 +212,8 @@ func (s *Server) handleIPv64IntegrationChange(w http.ResponseWriter, r *http.Req
 	})(w, r)
 }
 
-func (s *Server) handleIPv64IntegrationDelete(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64IntegrationDelete(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		id, err := pathInt(r, "id")
 		if err != nil || id == 0 {
 			return 0, nil, invalidIPv64("the account e-mail cannot be deleted")
@@ -223,13 +223,13 @@ func (s *Server) handleIPv64IntegrationDelete(w http.ResponseWriter, r *http.Req
 	})(w, r)
 }
 
-func (s *Server) handleIPv64IntegrationTest(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64IntegrationTest(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		id, err := pathInt(r, "id")
 		if err != nil {
 			return 0, nil, err
 		}
-		if !s.ipv64.testAllowed("integration:"+strconv.FormatInt(id, 10), time.Now()) {
+		if !a.state.testAllowed("integration:"+strconv.FormatInt(id, 10), time.Now()) {
 			return 0, nil, &dnsprovider.APIError{Provider: "IPv64", Status: http.StatusTooManyRequests, Message: "one test message every 30 seconds", RetryAfter: 30 * time.Second}
 		}
 		noteTarget(r, strconv.FormatInt(id, 10))
@@ -241,7 +241,7 @@ func (s *Server) handleIPv64IntegrationTest(w http.ResponseWriter, r *http.Reque
 
 // statusPageBody reads a status page with healthcheck IDs and turns them
 // into tokens.
-func (s *Server) statusPageBody(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (dnsprovider.StatusPageInput, error) {
+func (a ipv64Area) statusPageBody(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (dnsprovider.StatusPageInput, error) {
 	var in dnsprovider.StatusPageInput
 	if err := decode(r, &in); err != nil {
 		return in, err
@@ -252,7 +252,7 @@ func (s *Server) statusPageBody(ctx context.Context, c *dnsprovider.IPv64, r *ht
 			if !dnsprovider.ValidIPv64Ref(id) {
 				return in, invalidIPv64("healthcheck")
 			}
-			token, err := s.checkToken(ctx, c, id)
+			token, err := a.checkToken(ctx, c, id)
 			if err != nil {
 				return in, err
 			}
@@ -263,16 +263,16 @@ func (s *Server) statusPageBody(ctx context.Context, c *dnsprovider.IPv64, r *ht
 	return in, nil
 }
 
-func (s *Server) handleIPv64StatusPages(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
+func (a ipv64Area) handleIPv64StatusPages(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
 		list, err := c.StatusPages(ctx)
 		return 0, map[string]any{"pages": list}, err
 	})
 }
 
-func (s *Server) handleIPv64StatusPageCreate(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
-		in, err := s.statusPageBody(ctx, c, r)
+func (a ipv64Area) handleIPv64StatusPageCreate(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+		in, err := a.statusPageBody(ctx, c, r)
 		if err != nil {
 			return 0, nil, err
 		}
@@ -282,13 +282,13 @@ func (s *Server) handleIPv64StatusPageCreate(w http.ResponseWriter, r *http.Requ
 	})(w, r)
 }
 
-func (s *Server) handleIPv64StatusPageChange(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64StatusPageChange(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		id, err := pathInt(r, "id")
 		if err != nil {
 			return 0, nil, err
 		}
-		in, err := s.statusPageBody(ctx, c, r)
+		in, err := a.statusPageBody(ctx, c, r)
 		if err != nil {
 			return 0, nil, err
 		}
@@ -298,8 +298,8 @@ func (s *Server) handleIPv64StatusPageChange(w http.ResponseWriter, r *http.Requ
 	})(w, r)
 }
 
-func (s *Server) handleIPv64StatusPageDelete(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64StatusPageDelete(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		id, err := pathInt(r, "id")
 		if err != nil {
 			return 0, nil, err
@@ -311,15 +311,15 @@ func (s *Server) handleIPv64StatusPageDelete(w http.ResponseWriter, r *http.Requ
 
 // --- offline pages ---
 
-func (s *Server) handleIPv64OfflinePages(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
+func (a ipv64Area) handleIPv64OfflinePages(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
 		list, err := c.OfflinePages(ctx)
 		return 0, map[string]any{"pages": list}, err
 	})
 }
 
-func (s *Server) handleIPv64OfflinePageCreate(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64OfflinePageCreate(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		var in dnsprovider.OfflinePageInput
 		if err := decode(r, &in); err != nil {
 			return 0, nil, err
@@ -330,8 +330,8 @@ func (s *Server) handleIPv64OfflinePageCreate(w http.ResponseWriter, r *http.Req
 	})(w, r)
 }
 
-func (s *Server) handleIPv64OfflinePageChange(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64OfflinePageChange(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		id, err := pathRef(r, "id")
 		if err != nil {
 			return 0, nil, err
@@ -346,8 +346,8 @@ func (s *Server) handleIPv64OfflinePageChange(w http.ResponseWriter, r *http.Req
 	})(w, r)
 }
 
-func (s *Server) handleIPv64OfflinePageDelete(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64OfflinePageDelete(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		id, err := pathRef(r, "id")
 		if err != nil {
 			return 0, nil, err
@@ -359,7 +359,7 @@ func (s *Server) handleIPv64OfflinePageDelete(w http.ResponseWriter, r *http.Req
 
 // handleIPv64OfflineIcon takes the logo as the raw body (Content-Type of
 // the image) and sends it to IPv64 as multipart.
-func (s *Server) handleIPv64OfflineIcon(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64OfflineIcon(w http.ResponseWriter, r *http.Request) {
 	id, err := pathRef(r, "id")
 	if err != nil {
 		ipv64AreaFailure(w, err)
@@ -375,14 +375,14 @@ func (s *Server) handleIPv64OfflineIcon(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	noteTarget(r, id)
-	s.ipv64Run(w, r, 45*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
+	a.ipv64Run(w, r, 45*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
 		page, err := c.UploadIcon(ctx, id, data)
 		return 0, page, err
 	})
 }
 
-func (s *Server) handleIPv64OfflineIconDelete(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64OfflineIconDelete(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		id, err := pathRef(r, "id")
 		if err != nil {
 			return 0, nil, err
@@ -394,15 +394,15 @@ func (s *Server) handleIPv64OfflineIconDelete(w http.ResponseWriter, r *http.Req
 
 // --- failover ---
 
-func (s *Server) handleIPv64Policies(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
+func (a ipv64Area) handleIPv64Policies(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Run(w, r, 30*time.Second, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
 		list, err := c.Policies(ctx)
-		return 0, map[string]any{"policies": list, "maintenance": s.opts.IPv64.Settings().Maintenance}, err
+		return 0, map[string]any{"policies": list, "maintenance": a.ipv64.Settings().Maintenance}, err
 	})
 }
 
-func (s *Server) handleIPv64PolicyCreate(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64PolicyCreate(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		var in dnsprovider.PolicyInput
 		if err := decode(r, &in); err != nil {
 			return 0, nil, err
@@ -413,8 +413,8 @@ func (s *Server) handleIPv64PolicyCreate(w http.ResponseWriter, r *http.Request)
 	})(w, r)
 }
 
-func (s *Server) handleIPv64PolicyChange(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64PolicyChange(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		id, err := pathRef(r, "id")
 		if err != nil {
 			return 0, nil, err
@@ -429,8 +429,8 @@ func (s *Server) handleIPv64PolicyChange(w http.ResponseWriter, r *http.Request)
 	})(w, r)
 }
 
-func (s *Server) handleIPv64PolicyDelete(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64PolicyDelete(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		id, err := pathRef(r, "id")
 		if err != nil {
 			return 0, nil, err
@@ -440,8 +440,8 @@ func (s *Server) handleIPv64PolicyDelete(w http.ResponseWriter, r *http.Request)
 	})(w, r)
 }
 
-func (s *Server) handleIPv64PolicyAction(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64PolicyAction(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		id, err := pathRef(r, "id")
 		if err != nil {
 			return 0, nil, err
@@ -457,8 +457,8 @@ func (s *Server) handleIPv64PolicyAction(w http.ResponseWriter, r *http.Request)
 	})(w, r)
 }
 
-func (s *Server) handleIPv64MonitorAdd(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64MonitorAdd(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		id, err := pathRef(r, "id")
 		if err != nil {
 			return 0, nil, err
@@ -473,7 +473,7 @@ func (s *Server) handleIPv64MonitorAdd(w http.ResponseWriter, r *http.Request) {
 		if !dnsprovider.ValidIPv64Ref(req.Healthcheck) {
 			return 0, nil, invalidIPv64("healthcheck")
 		}
-		token, err := s.checkToken(ctx, c, req.Healthcheck)
+		token, err := a.checkToken(ctx, c, req.Healthcheck)
 		if err != nil {
 			return 0, nil, err
 		}
@@ -483,8 +483,8 @@ func (s *Server) handleIPv64MonitorAdd(w http.ResponseWriter, r *http.Request) {
 	})(w, r)
 }
 
-func (s *Server) handleIPv64MonitorRemove(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64MonitorRemove(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		id, err := pathRef(r, "id")
 		if err != nil {
 			return 0, nil, err
@@ -493,7 +493,7 @@ func (s *Server) handleIPv64MonitorRemove(w http.ResponseWriter, r *http.Request
 		if err != nil {
 			return 0, nil, err
 		}
-		token, err := s.checkToken(ctx, c, check)
+		token, err := a.checkToken(ctx, c, check)
 		if err != nil {
 			return 0, nil, err
 		}
@@ -502,8 +502,8 @@ func (s *Server) handleIPv64MonitorRemove(w http.ResponseWriter, r *http.Request
 	})(w, r)
 }
 
-func (s *Server) handleIPv64RuleAdd(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64RuleAdd(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		id, err := pathRef(r, "id")
 		if err != nil {
 			return 0, nil, err
@@ -518,8 +518,8 @@ func (s *Server) handleIPv64RuleAdd(w http.ResponseWriter, r *http.Request) {
 	})(w, r)
 }
 
-func (s *Server) handleIPv64RuleRemove(w http.ResponseWriter, r *http.Request) {
-	s.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
+func (a ipv64Area) handleIPv64RuleRemove(w http.ResponseWriter, r *http.Request) {
+	a.ipv64Handle(func(ctx context.Context, c *dnsprovider.IPv64, r *http.Request) (int, any, error) {
 		id, err := pathRef(r, "id")
 		if err != nil {
 			return 0, nil, err
@@ -541,27 +541,27 @@ func (s *Server) handleIPv64RuleRemove(w http.ResponseWriter, r *http.Request) {
 // the domain to that page while the heartbeat is down, and back after.
 // What it made is listed and removable; on a failure on the way, what was
 // made so far is removed again.
-func (s *Server) handleIPv64MaintenanceCreate(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64MaintenanceCreate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Domain string `json:"domain"`
 		Text   string `json:"text"`
 		Email  string `json:"email"`
 	}
-	if !readJSON(w, r, &req) || !s.dynamicDNS(w) {
+	if !readJSON(w, r, &req) || !a.dynamicDNS(w) {
 		return
 	}
 	if !dnsprovider.ValidHost(req.Domain) {
 		writeError(w, http.StatusBadRequest, "invalid_ipv64", "domain")
 		return
 	}
-	for _, m := range s.opts.IPv64.Settings().Maintenance {
+	for _, m := range a.ipv64.Settings().Maintenance {
 		if m.Domain == req.Domain {
 			writeError(w, http.StatusConflict, "ipv64_exists", "this domain already has a maintenance page")
 			return
 		}
 	}
 	noteTarget(r, req.Domain)
-	s.ipv64Run(w, r, 2*time.Minute, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
+	a.ipv64Run(w, r, 2*time.Minute, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
 		records, err := c.FullRecords(ctx, req.Domain)
 		if err != nil {
 			return 0, nil, err
@@ -583,21 +583,21 @@ func (s *Server) handleIPv64MaintenanceCreate(w http.ResponseWriter, r *http.Req
 				undo[i]()
 			}
 		}
-		token := s.opts.DDNS.HeartbeatToken()
-		entry.CheckName = s.opts.DDNS.Status().Settings.Heartbeat.Check
+		token := a.ddns.HeartbeatToken()
+		entry.CheckName = a.ddns.Status().Settings.Heartbeat.Check
 		if token == "" {
 			name := "titanos-" + hostname
 			check, err := c.CreateHealthcheck(ctx, name, 30*time.Minute, 10*time.Minute, []int{0})
 			if err != nil {
 				return 0, nil, err
 			}
-			if err := s.opts.DDNS.SetHeartbeat(check.Token(), check.Name, 30, true); err != nil {
+			if err := a.ddns.SetHeartbeat(check.Token(), check.Name, 30, true); err != nil {
 				_ = c.DeleteHealthcheck(context.WithoutCancel(ctx), check.Token()) // cleanup, best effort: nothing more can be done if it fails
 				return 0, nil, err
 			}
 			token, entry.CheckName, entry.CreatedNew = check.Token(), check.Name, true
 			undo = append(undo, func() {
-				_ = s.opts.DDNS.StopHeartbeat(true)                        // cleanup, best effort: nothing more can be done if it fails
+				_ = a.ddns.StopHeartbeat(true)                             // cleanup, best effort: nothing more can be done if it fails
 				_ = c.DeleteHealthcheck(context.WithoutCancel(ctx), token) // cleanup, best effort: nothing more can be done if it fails
 			})
 		}
@@ -637,7 +637,7 @@ func (s *Server) handleIPv64MaintenanceCreate(w http.ResponseWriter, r *http.Req
 				return 0, nil, err
 			}
 		}
-		if err := s.opts.IPv64.AddMaintenance(entry); err != nil {
+		if err := a.ipv64.AddMaintenance(entry); err != nil {
 			rollback()
 			return 0, nil, err
 		}
@@ -646,7 +646,7 @@ func (s *Server) handleIPv64MaintenanceCreate(w http.ResponseWriter, r *http.Req
 	})
 }
 
-func (s *Server) handleIPv64MaintenanceDelete(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64MaintenanceDelete(w http.ResponseWriter, r *http.Request) {
 	id, err := pathRef(r, "id")
 	if err != nil {
 		ipv64AreaFailure(w, err)
@@ -660,7 +660,7 @@ func (s *Server) handleIPv64MaintenanceDelete(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var entry *ipv64.Maintenance
-	for _, m := range s.opts.IPv64.Settings().Maintenance {
+	for _, m := range a.ipv64.Settings().Maintenance {
 		if m.ID == id {
 			entry = &m
 		}
@@ -670,7 +670,7 @@ func (s *Server) handleIPv64MaintenanceDelete(w http.ResponseWriter, r *http.Req
 		return
 	}
 	noteTarget(r, entry.Domain)
-	s.ipv64Run(w, r, time.Minute, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
+	a.ipv64Run(w, r, time.Minute, func(ctx context.Context, c *dnsprovider.IPv64) (int, any, error) {
 		gone := func(err error) bool {
 			var apiErr *dnsprovider.APIError
 			return err == nil || (errors.As(err, &apiErr) && apiErr.Status == http.StatusNotFound)
@@ -681,15 +681,15 @@ func (s *Server) handleIPv64MaintenanceDelete(w http.ResponseWriter, r *http.Req
 		if err := c.DeleteOfflinePage(ctx, entry.OfflinePage); !gone(err) {
 			return 0, nil, err
 		}
-		if req.DeleteCheck && entry.CreatedNew && s.opts.DDNS != nil {
-			token := s.opts.DDNS.HeartbeatToken()
+		if req.DeleteCheck && entry.CreatedNew && a.ddns != nil {
+			token := a.ddns.HeartbeatToken()
 			if token != "" && dnsprovider.HealthcheckID(token) == entry.Check {
 				if err := c.DeleteHealthcheck(ctx, token); !gone(err) {
 					return 0, nil, err
 				}
-				_ = s.opts.DDNS.StopHeartbeat(true) // cleanup, best effort: nothing more can be done if it fails
+				_ = a.ddns.StopHeartbeat(true) // cleanup, best effort: nothing more can be done if it fails
 			}
 		}
-		return 0, nil, s.opts.IPv64.RemoveMaintenance(id)
+		return 0, nil, a.ipv64.RemoveMaintenance(id)
 	})
 }

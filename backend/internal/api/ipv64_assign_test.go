@@ -159,12 +159,15 @@ func TestIPv64Assignments(t *testing.T) {
 // account entered there by hand is an assignment, and taking the assignment
 // back takes it out of the field, leaving the other domains.
 func TestIPv64AssignmentsShareOwnDomains(t *testing.T) {
-	ts, _ := ipv64AreaServer(t)
-	routes := appproxy.NewManager(ts.store)
-	routes.Disabled = true
-	routes.Hostname = func() string { return "nas" }
-	routes.Reserved = []int{443}
-	ts.server.opts.AppProxy = routes
+	// The area takes its managers when the routes are registered.
+	var routes *appproxy.Manager
+	ts, _ := ipv64AreaServerWith(t, func(o *Options) {
+		routes = appproxy.NewManager(o.Store)
+		routes.Disabled = true
+		routes.Hostname = func() string { return "nas" }
+		routes.Reserved = []int{443}
+		o.AppProxy = routes
+	})
 	ts.server.ipv64.appPorts = func(app string) ([]int, bool) { return []int{2283}, app == "immich" }
 	if res, body := ts.request("PUT", "/api/v1/ipv64/key", map[string]string{"apiKey": ipv64fake.Key}); res.StatusCode != 200 {
 		t.Fatalf("key: %d %s", res.StatusCode, body)
