@@ -302,6 +302,16 @@ func mergeInbox(list []agentInboxItem, item agentInboxItem) []agentInboxItem {
 	if slices.ContainsFunc(list, func(x agentInboxItem) bool { return x.Kind == item.Kind && x.Title == item.Title }) {
 		return list
 	}
+	// One forecast per volume: tomorrow's has another number of days in
+	// its title and would otherwise stand below today's.
+	if item.Kind == "forecast" {
+		for i, x := range list {
+			if x.Kind == item.Kind && x.Data["volume"] == item.Data["volume"] {
+				list[i].Title, list[i].Body = item.Title, item.Body
+				return list
+			}
+		}
+	}
 	list = append(list, item)
 	if len(list) > maxInbox {
 		list = list[len(list)-maxInbox:]

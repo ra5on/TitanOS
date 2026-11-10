@@ -478,7 +478,7 @@ func (m *Manager) Tick(ctx context.Context, now time.Time) {
 			continue
 		}
 		for at := first; !at.After(minute); at = at.Add(time.Minute) {
-			if c.matches(at) {
+			if c.due(at) {
 				if _, err := m.start(s.ID, Scheduled, 0); err != nil && !errors.Is(err, ErrRunning) {
 					slog.Warn("scheduled script not started", "script", s.Name, "err", err)
 				} else if errors.Is(err, ErrRunning) {

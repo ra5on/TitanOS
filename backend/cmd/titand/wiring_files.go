@@ -120,6 +120,9 @@ func (w *titand) wireFiles() error {
 		}
 		return nil
 	}
+	if !w.opts.dev {
+		w.packetFilter.RouteDevice = firewall.KernelRoute()
+	}
 	w.packetFilter.OnBlock = func(block firewall.Block) {
 		w.notifier.Notify(notify.Warning, "firewall_blocked", block.Address)
 		w.audit.Record(activity.Entry{Via: activity.ViaSystem, IP: block.Address, Action: "firewall_block", Target: block.Source, OK: true})

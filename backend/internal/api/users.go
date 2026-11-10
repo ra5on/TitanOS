@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -91,13 +92,15 @@ type usersArea struct {
 	cookieName       func() string
 	forgetWebDAV     func(name string)
 	viewerForgetUser func(name string)
+	// goJob runs the clearing in the background; Close waits for it.
+	goJob jobFunc
 }
 
 // usersArea is the area of the server.
 func (s *Server) usersArea() usersArea {
 	return usersArea{users: s.opts.Users, shares: s.opts.Shares, ssh: s.opts.SSH, notify: s.opts.Notify,
 		sessions: s.sessionStore, limiter: s.rateLimiter, tokens: s.tokens, prefs: s.prefs,
-		reconfirmProof: s.authArea().reconfirmProof, cookieName: s.authArea().cookieName, forgetWebDAV: s.davArea().forgetWebDAV, viewerForgetUser: s.viewerArea().viewerForgetUser}
+		reconfirmProof: s.authArea().reconfirmProof, cookieName: s.authArea().cookieName, forgetWebDAV: s.davArea().forgetWebDAV, viewerForgetUser: s.viewerArea().viewerForgetUser, goJob: s.goJob}
 }
 
 func (a usersArea) register(mux *routeMux, admin, user func(http.HandlerFunc) http.HandlerFunc) {
@@ -296,7 +299,7 @@ func (a usersArea) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	if err := a.tokens.RemoveUser(target.Name); err != nil {
 		slog.Error("remove API tokens of the deleted account", "user", target.Name, "err", err)
 	}
-	go a.viewerForgetUser(target.Name)
+	a.goJob(func(context.Context) { a.viewerForgetUser(target.Name) })
 	a.prefs.forget(target.Name)
 	a.notify.ForgetPersonal(target.Name)
 	if err := a.shares.ForgetUser(target.Name); err != nil {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -101,6 +102,7 @@ func (m *Manager) replace(ctx context.Context, name, real string, manifest Manif
 
 	// The new files are copied and checked next to the installed ones
 	// before anything running is touched.
+	m.undoInterruptedUpdate(dir)
 	stage, err := os.MkdirTemp(dir, ".update-")
 	if err != nil {
 		return err
@@ -205,4 +207,46 @@ func (m *Manager) replace(ctx context.Context, name, real string, manifest Manif
 		tr.complete()
 	}
 	return err
+}
+
+// undoInterruptedUpdate brings back the version an update had moved aside
+// when titand ended in the middle of it, and removes what the update left.
+// A ".previous-" folder only exists while an update has not finished, so
+// whatever lies in it is the last version that was known to work. Once per
+// folder and run of titand: a running update has such a folder too.
+func (m *Manager) undoInterruptedUpdate(dir string) {
+	if m.recovered[dir] {
+		return
+	}
+	if m.recovered == nil {
+		m.recovered = map[string]bool{}
+	}
+	m.recovered[dir] = true
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		path := filepath.Join(dir, e.Name())
+		switch {
+		case strings.HasPrefix(e.Name(), ".previous-"):
+			files, _ := os.ReadDir(path)
+			for _, f := range files {
+				if err := os.Rename(filepath.Join(path, f.Name()), filepath.Join(dir, f.Name())); err != nil {
+					slog.Warn("plugin of an interrupted update not put back", "file", f.Name(), "err", err)
+				} else {
+					slog.Info("plugin of an interrupted update put back", "file", f.Name())
+				}
+			}
+			_ = syncDirectory(dir)
+			if err := os.Remove(path); err != nil {
+				slog.Warn("rest of an interrupted plugin update not removed", "err", err)
+			}
+		case strings.HasPrefix(e.Name(), ".update-"):
+			_ = os.RemoveAll(path) // a copy of files that lie elsewhere
+		}
+	}
 }

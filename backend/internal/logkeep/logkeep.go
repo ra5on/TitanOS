@@ -340,20 +340,26 @@ func (m *Manager) flush(ctx context.Context) {
 		slog.Warn("journal not read for keeping", "err", err)
 		return
 	}
+	// The cursor moves on only once the lines are on the disk: after a
+	// failed write the next round reads them again.
 	text, cursor := splitCursor(out)
-	if cursor != "" {
-		m.cursor = cursor
-	}
+	defer func() {
+		if cursor != "" {
+			m.cursor = cursor
+		}
+	}()
 	if strings.TrimSpace(text) != "" {
 		f, err := os.OpenFile(filepath.Join(dir, m.boot+".log"), os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
 		if err != nil {
 			slog.Warn("kept log not written", "err", err)
+			cursor = ""
 			return
 		}
 		_, werr := f.WriteString(text)
 		cerr := f.Close()
 		if err := errors.Join(werr, cerr); err != nil {
 			slog.Warn("kept log not written", "err", err)
+			cursor = ""
 			return
 		}
 		m.last = m.now()

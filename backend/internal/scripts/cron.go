@@ -124,12 +124,49 @@ func (c cron) matches(t time.Time) bool {
 	}
 }
 
+// allHours is the hour field of "*": such a schedule follows the passing
+// hours, not the clock on the wall.
+const allHours = 1<<24 - 1
+
+// due tells whether the schedule runs in the minute of t. It is matches
+// with the two nights of the clock change set right for schedules with a
+// fixed hour: in the hour the clock passes twice they run the first time
+// only, and one whose time the clock jumps over runs in the first minute
+// after the jump instead of not at all.
+func (c cron) due(t time.Time) bool {
+	if c.hour == allHours {
+		return c.matches(t)
+	}
+	_, now := t.Zone()
+	_, before := t.Add(-time.Hour).Zone()
+	if before > now && t.Add(-time.Hour).Hour() == t.Hour() {
+		// The second pass through this hour.
+		return false
+	}
+	if c.matches(t) {
+		return true
+	}
+	_, minuteAgo := t.Add(-time.Minute).Zone()
+	if now <= minuteAgo {
+		return false
+	}
+	// The first minute after a jump ahead: the minutes on the wall that
+	// never came, as plain clock readings.
+	wall := time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), 0, 0, time.UTC)
+	for skipped := wall.Add(-time.Duration(now-minuteAgo) * time.Second); skipped.Before(wall); skipped = skipped.Add(time.Minute) {
+		if c.matches(skipped) {
+			return true
+		}
+	}
+	return false
+}
+
 // next returns the first due minute after t, looking at most a year and a
 // day ahead (a 30 February never comes).
 func (c cron) next(t time.Time) *time.Time {
 	at := t.Truncate(time.Minute).Add(time.Minute)
 	for range 366 * 24 * 60 {
-		if c.matches(at) {
+		if c.due(at) {
 			return &at
 		}
 		at = at.Add(time.Minute)

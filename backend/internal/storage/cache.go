@@ -113,6 +113,15 @@ func (m *Manager) lowerDevice(ctx context.Context, volume VolumeConfig, plain st
 	if volume.Filesystem == "btrfs" {
 		return plain, nil
 	}
+	// Without the cache the array itself is mounted, not "the file system
+	// with this UUID": a cache SSD (also one taken out of use but still
+	// plugged in) can hold a copy of the first blocks and answer to the
+	// same UUID.
+	if strings.HasPrefix(plain, "UUID=") {
+		if a, ok := m.arrayOf(ctx, volume); ok && a.device != "" {
+			plain = "/dev/" + a.device
+		}
+	}
 	name := cacheName(volume.Name)
 	device := "/dev/mapper/" + name
 	if volume.Cache == nil {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"net"
 	"os"
 	"os/exec"
@@ -175,6 +176,30 @@ func (m *Manager) SMBDiscover(ctx context.Context, target SMBTarget) ([]string, 
 	return slices.Compact(shares), nil
 }
 
+// ReleaseStaleSMB unmounts the shares a titand that ended in the middle of
+// a backup left behind and removes their folders with the credentials. It
+// is for the start, before any backup runs.
+func (m *Manager) ReleaseStaleSMB() {
+	if m.Disabled {
+		return
+	}
+	dirs, _ := filepath.Glob(filepath.Join(m.workDir, "smb-*"))
+	for _, dir := range dirs {
+		mount := filepath.Join(dir, "share")
+		err := unix.Unmount(mount, unix.MNT_DETACH)
+		if err != nil && !errors.Is(err, unix.EINVAL) && !errors.Is(err, unix.ENOENT) {
+			// Still mounted: removing would reach into the share.
+			slog.Warn("SMB share of an earlier backup not unmounted", "err", err)
+			continue
+		}
+		_ = os.Remove(mount)
+		_ = os.Remove(filepath.Join(dir, "credentials"))
+		if err := os.Remove(dir); err != nil {
+			slog.Warn("folder of an earlier SMB backup not removed", "err", err)
+		}
+	}
+}
+
 func (m *Manager) withSMB(ctx context.Context, t SMBTarget, work func(*os.Root) error) (result error) {
 	if m.Disabled {
 		return ErrDisabled
@@ -312,7 +337,7 @@ func (m *Manager) DeleteSMBTarget(id string) error {
 		return ErrNotLoaded
 	}
 	for _, j := range m.jobs {
-		if j.Destination.Type == "smb-copy" && j.Destination.TargetID == id {
+		if (j.Destination.Type == "smb-copy" || j.Destination.Type == "smb") && j.Destination.TargetID == id {
 			return invalid("SMB target is still used by a backup job")
 		}
 	}

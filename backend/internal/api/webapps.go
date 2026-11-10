@@ -38,12 +38,14 @@ type webappsArea struct {
 	ctx             context.Context
 	removeDockerApp func(ctx context.Context, name string, purge bool) error
 	prefs           *preferences
+	// goJob runs the migration in the background; Close waits for it.
+	goJob jobFunc
 }
 
 // webappsArea is the area of the server; the automatic replacement
 // (craft_replace.go) uses its detection and migration.
 func (s *Server) webappsArea() webappsArea {
-	return webappsArea{webapps: s.opts.Webapps, ui: s.opts.UI, docker: s.opts.Docker, migration: &s.migration, ctx: s.ctx, removeDockerApp: s.dockerArea().removeDockerApp, prefs: s.prefs}
+	return webappsArea{webapps: s.opts.Webapps, ui: s.opts.UI, docker: s.opts.Docker, migration: &s.migration, ctx: s.ctx, removeDockerApp: s.dockerArea().removeDockerApp, prefs: s.prefs, goJob: s.goJob}
 }
 
 func (a webappsArea) register(mux *routeMux, admin, user, appAdmin func(http.HandlerFunc) http.HandlerFunc) {
@@ -328,8 +330,7 @@ func (a webappsArea) handleWebappsMigrate(w http.ResponseWriter, r *http.Request
 		}
 	}
 	user := currentUser(r).Name
-	ctx := a.ctx
-	go a.runMigration(ctx, user, false)
+	a.goJob(func(ctx context.Context) { a.runMigration(ctx, user, false) })
 	slog.Info("web app migration started", "install", req.Install, "removeDocker", req.RemoveDocker, "by", user, "ip", remoteIP(r))
 	a.handleWebappsAccepted(w, r)
 }

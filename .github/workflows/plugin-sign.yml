@@ -23,6 +23,10 @@ name: Plugin sets
 #   differs from the published one only in newer Tailscale or NetBird
 #   versions (scripts/plugin-guard.py, checked here and again next to the key).
 # NVIDIA driver updates always keep the approval.
+#
+# With or without an approval, a set is signed only if every file of it
+# carries the attestation of the plugin repository's release workflow on its
+# main branch: nothing else ties a draft to a build.
 
 on:
   schedule:
@@ -231,6 +235,21 @@ jobs:
               continue
             fi
             rm -f "$dir"/*.minisig
+            # Every file of a set must come out of release.yml of the plugin
+            # repository on its main branch (the attestation its job draft
+            # makes). A draft someone else wrote, or a file swapped in one,
+            # has none: it is left unsigned and the run fails.
+            proven=true
+            for file in "$dir"/*; do
+              if ! gh attestation verify "$file" --repo "$PLUGINS" --signer-workflow "$PLUGINS/.github/workflows/release.yml" --source-ref refs/heads/main >/dev/null 2>"$dir.err"; then
+                echo "::error::$tag: $(basename "$file") has no proof of where it was built: $(tail -n 1 "$dir.err")"
+                proven=false
+              fi
+            done
+            if [ "$proven" != true ]; then
+              unproven=true
+              continue
+            fi
             # Signs manifests and index, then checks the set against the keys
             # of the image: only a signature the image accepts goes out.
             python3 scripts/sign-plugin-set.py set "$dir" "$key"
@@ -247,3 +266,7 @@ jobs:
             gh release upload catalog --repo "$PLUGINS" catalog-new/catalog.json catalog-new/catalog.json.minisig --clobber
             echo "$tag published, catalog updated."
           done
+          if [ "${unproven:-false}" = true ]; then
+            echo "At least one set was not signed: see the errors above." >&2
+            exit 1
+          fi

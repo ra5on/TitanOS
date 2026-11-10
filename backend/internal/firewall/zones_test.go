@@ -447,3 +447,29 @@ func TestWireGuardClientsAreVPNLikeInTheRules(t *testing.T) {
 		t.Fatalf("home device in zone %v", got)
 	}
 }
+
+// A private address a Tailscale or NetBird device routes to the NAS comes
+// in over the VPN interface: titand has to call it VPN like the rules do,
+// or the check before a change is about the wrong zone.
+func TestAddressRoutedOverAVPNIsVPN(t *testing.T) {
+	home := homeNetworks([]string{"192.168.1.0/24", "192.168.50.0/24"})
+	c := newClassifier(Config{}, nil, home, nil)
+	c.via = func(addr netip.Addr) string {
+		if netip.MustParsePrefix("192.168.50.0/24").Contains(addr) {
+			return "tailscale0"
+		}
+		return "br0"
+	}
+	if got := c.zone(netip.MustParseAddr("192.168.50.7")); got != VPN {
+		t.Fatalf("routed address in zone %v, want VPN", got)
+	}
+	if got := c.zone(netip.MustParseAddr("192.168.1.20")); got != Home {
+		t.Fatalf("home device in zone %v", got)
+	}
+	if got := routeDevice("192.168.50.7 dev tailscale0 table 52 src 100.101.102.103 uid 0 \\    cache "); got != "tailscale0" {
+		t.Fatalf("device read as %q", got)
+	}
+	if got := routeDevice("RTNETLINK answers: Network is unreachable"); got != "" {
+		t.Fatalf("device read as %q", got)
+	}
+}

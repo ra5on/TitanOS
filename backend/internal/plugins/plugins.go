@@ -241,6 +241,9 @@ type Manager struct {
 	keysFrom time.Time
 	// applied is what was last handed to systemd, to notice changes.
 	applied string
+	// recovered are the plugin folders whose interrupted update, if any,
+	// has been undone in this run of titand.
+	recovered map[string]bool
 	// retryAt is when a failed activation is tried again on its own;
 	// retries counts those tries (a driver whose device is not ready yet
 	// right after the start). Zero: no automatic retry.

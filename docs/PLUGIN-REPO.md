@@ -107,6 +107,12 @@ Signiert und veröffentlicht wird in TitanOS (`.github/workflows/plugin-sign.yml
   Release-Tag aus, der ihn enthält, denn das Environment `release` erlaubt nur
   Tags `v*`. Ein Tag reicht: Das volle Release, das auf seinen Kernel-Satz wartet,
   ist zu dem Zeitpunkt noch nicht veröffentlicht. Dieser Lauf wartet auf die Freigabe des Projektinhabers.
+- Vor dem Signieren eines Satzes prüft er für jede Datei des Entwurfs den
+  Herkunftsnachweis (GitHub Artifact Attestation, `gh attestation verify`):
+  gebaut von `release.yml` des Plugin-Repositorys auf dessen Zweig `main`.
+  Fehlt er bei einer Datei, bleibt der Satz unsigniert und der Lauf schlägt
+  fehl – mit und ohne Freigabe (seit 0.76; Treiberupdates behalten stattdessen
+  immer die Freigabe).
 - Nach der Freigabe prüft er, dass der Schlüssel zu den öffentlichen Schlüsseln
   des Abbilds passt, signiert Manifeste und Index, veröffentlicht den Satz und
   erhöht `serial` im Zeiger. Treiberupdates hängt er an ihren Kernel-Satz und
