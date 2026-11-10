@@ -56,7 +56,7 @@ func dashboardImageIDs(value []byte) ([]string, error) {
 	return ids, nil
 }
 
-func (s *Server) handlePutDashboardImages(w http.ResponseWriter, r *http.Request) {
+func (a prefsArea) handlePutDashboardImages(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxDashboardImages*maxBackgroundBytes+maxDashboardPreferences+(1<<20))
 	reader, err := r.MultipartReader()
 	if err != nil {
@@ -115,10 +115,10 @@ func (s *Server) handlePutDashboardImages(w http.ResponseWriter, r *http.Request
 		writeError(w, 400, "bad_request", "preferences must be a JSON object")
 		return
 	}
-	s.saveDashboard(w, r, value, images)
+	a.saveDashboard(w, r, value, images)
 }
 
-func (s *Server) saveDashboard(w http.ResponseWriter, r *http.Request, value json.RawMessage, images map[string][]byte) {
+func (a prefsArea) saveDashboard(w http.ResponseWriter, r *http.Request, value json.RawMessage, images map[string][]byte) {
 	ids, err := dashboardImageIDs(value)
 	if err != nil {
 		writeError(w, 400, "bad_request", "invalid background library")
@@ -131,7 +131,7 @@ func (s *Server) saveDashboard(w http.ResponseWriter, r *http.Request, value jso
 		}
 	}
 	user := currentUser(r).Name
-	p := s.prefs
+	p := a.prefs
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	key := user + "/dashboard"
@@ -193,13 +193,13 @@ func (s *Server) saveDashboard(w http.ResponseWriter, r *http.Request, value jso
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleGetDashboardImage(w http.ResponseWriter, r *http.Request) {
+func (a prefsArea) handleGetDashboardImage(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if !backgroundID.MatchString(id) {
 		writeError(w, 404, "not_found", "no background image")
 		return
 	}
-	data, err := s.opts.Store.Read(dashboardImageFile(currentUser(r).Name, id))
+	data, err := a.store.Read(dashboardImageFile(currentUser(r).Name, id))
 	if err != nil || !slices.Contains(backgroundTypes, http.DetectContentType(data)) {
 		writeError(w, 404, "not_found", "no background image")
 		return
