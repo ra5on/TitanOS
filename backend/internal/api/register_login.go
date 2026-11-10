@@ -27,8 +27,7 @@ func (s *Server) registerLogin(mux *routeMux) {
 	// The lock screen (session_lock.go): requireUser lets a locked session through to these two.
 	mux.HandleFunc("POST /api/v1/session/lock", s.requireUser(s.handleSessionLock))
 	mux.HandleFunc("POST /api/v1/session/unlock", s.requireUser(s.handleSessionUnlock))
-	// The look of the login page is public; changing it is not.
-	mux.HandleFunc("GET /api/v1/login-appearance", s.handleLoginAppearance)
+	s.loginLookArea().register(mux, s.requireAdmin)
 	mux.HandleFunc("GET /icons/{file}", s.handleAppIconFile)
 	mux.HandleFunc("/dav/", s.handleWebDAV)
 	mux.HandleFunc("/dav", s.handleWebDAV)
@@ -45,7 +44,4 @@ func (s *Server) registerLogin(mux *routeMux) {
 	mux.HandleFunc("DELETE /api/v1/account/webdav", s.requireUser(s.handleAccountWebDAVDelete))
 	mux.HandleFunc("GET /api/v1/app-icon", s.requireAdmin(s.handleAppIcon))
 	mux.HandleFunc("PUT /api/v1/app-icon", s.requireAdmin(s.handlePutAppIcon))
-	mux.HandleFunc("GET /api/v1/login-appearance/background/{id}", s.handleLoginBackground)
-	mux.HandleFunc("PUT /api/v1/login-appearance", s.requireAdmin(s.handlePutLoginAppearance))
-	mux.HandleFunc("DELETE /api/v1/login-appearance", s.requireAdmin(s.handleDeleteLoginAppearance))
 }
