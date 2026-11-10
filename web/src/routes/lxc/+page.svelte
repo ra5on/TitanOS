@@ -77,7 +77,9 @@
 
 	function problem(err: unknown): string {
 		const code = err instanceof ApiError ? err.code : 'internal';
-		return code === 'lxc_failed' && err instanceof ApiError ? err.message : errorText(code);
+		return code === 'lxc_failed' && err instanceof ApiError
+			? `${errorText(code)} ${err.message}`
+			: errorText(code);
 	}
 
 	async function run(name: string, work: () => Promise<unknown>) {

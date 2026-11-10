@@ -265,7 +265,8 @@
 					{},
 				);
 			} catch (err) {
-				checkError = err instanceof ApiError ? err.message : errorText('internal');
+				checkError =
+					err instanceof ApiError ? `${t('ha.checkFailed')} ${err.message}` : errorText('internal');
 			}
 		}
 		busy = null;

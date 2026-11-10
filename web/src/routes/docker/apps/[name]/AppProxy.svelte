@@ -105,8 +105,11 @@
 			);
 			notice = t('proxy.saved');
 		} catch (err) {
-			error =
-				err instanceof ApiError && err.code === 'proxy_invalid' ? err.message : apiErrorText(err);
+			// What is wrong only the server can name: after the sentence in the
+			// language of the page.
+			error = apiErrorText(err, {
+				detail: err instanceof ApiError && err.code === 'proxy_invalid',
+			});
 		} finally {
 			busy = false;
 		}

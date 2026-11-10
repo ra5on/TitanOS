@@ -79,6 +79,8 @@
 		kernelSwitch?: boolean;
 		/** A newer release without a system with the chosen kernel. */
 		kernelMissing?: string;
+		/** The release that failed its trial starts on this NAS. */
+		failedVersion?: string;
 	};
 
 	/** A release that can be chosen (GET /update/versions). */
@@ -443,6 +445,11 @@
 			<p class="notice-warn" role="status">{t('update.unconfirmed')}</p>
 		{/if}
 
+		{#if status.failedVersion && status.available && status.available.version.replace(/^v/, '') === status.failedVersion}
+			<p class="notice-warn" role="status">
+				{t('update.failedBefore', { version: status.available.version })}
+			</p>
+		{/if}
 		{#if !status.canVerify}
 			<p class="notice-warn">{t('update.noKey')}</p>
 		{:else if working}

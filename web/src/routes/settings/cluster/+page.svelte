@@ -72,6 +72,8 @@
 	let routing = $state<NodeView | null>(null);
 	let updating = $state(false);
 	let handing = $state<NodeView | null>(null);
+	/** The local account about to become one of the cluster. */
+	let sharing = $state<string | null>(null);
 	// The node whose warnings and errors are unfolded under it.
 	let noticesOf = $state('');
 
@@ -278,6 +280,15 @@
 		} catch {
 			// The field stays selectable to copy by hand.
 		}
+	}
+
+	async function shareAccount(name: string) {
+		if (
+			await act(() =>
+				api.post<ClusterPage>('/cluster/accounts/' + encodeURIComponent(name) + '/share'),
+			)
+		)
+			sharing = null;
 	}
 
 	async function handOver(node: NodeView) {
@@ -763,6 +774,23 @@
 		</div>
 	</form>
 
+	{#if owner && cluster.localAccounts?.length}
+		<section class="tile panel" id="cluster-local" aria-labelledby="cluster-local-title">
+			<h2 class="tile-title" id="cluster-local-title">{t('cluster.local.title')}</h2>
+			<p class="muted">{t('cluster.local.hint')}</p>
+			<ul class="local-accounts">
+				{#each cluster.localAccounts as name (name)}
+					<li>
+						<span class="local-name">{name}</span>
+						<button type="button" class="btn" disabled={busy} onclick={() => (sharing = name)}
+							>{t('cluster.local.share')}</button
+						>
+					</li>
+				{/each}
+			</ul>
+		</section>
+	{/if}
+
 	{#if manages}<section class="tile panel" id="cluster-join" aria-labelledby="cluster-join-title">
 			<h2 class="tile-title" id="cluster-join-title">{t('cluster.joinInfo')}</h2>
 			<p class="muted">{t('cluster.joinInfoHint')}</p>
@@ -839,6 +867,23 @@
 				>
 			</div>
 		</form>
+	</Dialog>
+{/if}
+
+{#if sharing}
+	<Dialog title={t('cluster.local.share')} locked={busy} onclose={() => (sharing = null)}>
+		<p>{t('cluster.local.confirm', { name: sharing })}</p>
+		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={() => (sharing = null)}
+				>{t('common.cancel')}</button
+			>
+			<button
+				type="button"
+				class="btn btn-danger"
+				disabled={busy}
+				onclick={() => sharing && shareAccount(sharing)}>{t('cluster.local.share')}</button
+			>
+		</div>
 	</Dialog>
 {/if}
 
@@ -1106,5 +1151,24 @@
 		.form-foot > div {
 			grid-column: 1;
 		}
+	}
+	.local-accounts {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 8px;
+	}
+	.local-accounts li {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px 16px;
+	}
+	.local-name {
+		min-width: 0;
+		overflow-wrap: anywhere;
+		font-weight: 600;
 	}
 </style>

@@ -145,7 +145,10 @@
 			onchanged?.();
 		} catch (err) {
 			const code = err instanceof ApiError ? err.code : 'internal';
-			error = code === 'proxy_invalid' && err instanceof ApiError ? err.message : errorText(code);
+			error =
+				code === 'proxy_invalid' && err instanceof ApiError
+					? `${errorText(code)} ${err.message}`
+					: errorText(code);
 			if (code === 'tailnet_key_missing' || code === 'tailnet_unavailable') void load();
 		} finally {
 			busy = false;

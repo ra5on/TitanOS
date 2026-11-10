@@ -361,6 +361,10 @@ type View struct {
 	// Version and Protocol are those of this node.
 	Version  string `json:"version"`
 	Protocol int    `json:"protocol"`
+	// LocalAccounts are the accounts of this admin node that stayed its
+	// own after it took over the role (State.KeptLocal); ShareAccount
+	// makes one an account of the cluster.
+	LocalAccounts []string `json:"localAccounts,omitempty"`
 }
 
 // View returns the cluster for the settings page.
@@ -382,6 +386,9 @@ func (m *Manager) View() View {
 			view.Routes[k] = v
 		}
 		view.Tunnel = m.tunnelViewLocked()
+		if view.Admin == m.self.ID {
+			view.LocalAccounts = slices.Clone(m.state.KeptLocal)
+		}
 	}
 	return view
 }

@@ -162,6 +162,7 @@ func (a clusterArea) register(mux *routeMux, admin, user func(http.HandlerFunc) 
 	mux.HandleFunc("POST /api/v1/cluster/nodes/{id}/backup-pair", admin(a.requireOwnSession(a.handleClusterBackupPair)))
 	mux.HandleFunc("PUT /api/v1/cluster/nodes/{id}/route", admin(a.requireOwnSession(a.handleClusterRoute)))
 	mux.HandleFunc("POST /api/v1/cluster/nodes/{id}/admin", a.requireOwner(a.requireOwnSession(a.handleClusterHandOver)))
+	mux.HandleFunc("POST /api/v1/cluster/accounts/{name}/share", a.requireOwner(a.requireOwnSession(a.handleClusterShareAccount)))
 	mux.HandleFunc("POST /api/v1/cluster/probe", admin(a.requireOwnSession(a.handleClusterProbe)))
 	mux.HandleFunc("GET /api/v1/cluster/update", admin(a.requireOwnSession(a.handleClusterUpdateRun)))
 	mux.HandleFunc("POST /api/v1/cluster/update", admin(a.requireOwnSession(a.handleClusterUpdateAll)))
@@ -337,6 +338,22 @@ func (a clusterArea) handleClusterHandOver(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	slog.Info("cluster admin role handed over", "node", r.PathValue("id"), "by", currentUser(r).Name, "ip", remoteIP(r))
+	a.handleCluster(w, r)
+}
+
+// handleClusterShareAccount makes an account that stayed local on the
+// admin node an account of the cluster.
+func (a clusterArea) handleClusterShareAccount(w http.ResponseWriter, r *http.Request) {
+	if !a.clusterAvailable(w) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	if err := a.cluster.ShareAccount(ctx, r.PathValue("name")); err != nil {
+		writeClusterError(w, err)
+		return
+	}
+	slog.Info("local account made a cluster account", "account", r.PathValue("name"), "by", currentUser(r).Name, "ip", remoteIP(r))
 	a.handleCluster(w, r)
 }
 

@@ -140,6 +140,8 @@ export type ClusterView = {
 	routes: Record<string, Route>;
 	tunnel: TunnelView;
 	version: string;
+	/** Accounts of this admin node that stayed its own after it took over. */
+	localAccounts?: string[];
 	protocol: number;
 };
 

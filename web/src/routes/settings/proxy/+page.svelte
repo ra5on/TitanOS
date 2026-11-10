@@ -78,7 +78,7 @@
 			(err.code === 'proxy_invalid' || err.code === 'proxy_name_taken')
 			? err.code === 'proxy_name_taken'
 				? errorText(err.code)
-				: err.message
+				: `${errorText(err.code)} ${err.message}`
 			: apiErrorText(err);
 	}
 	function take(next: AppProxyStatus) {

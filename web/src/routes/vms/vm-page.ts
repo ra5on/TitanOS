@@ -63,8 +63,13 @@ export function vmNotices(input: {
 			detail: failure.problem.detail,
 			retry: !!failure.action,
 		});
-	if (current.job?.state === 'failed')
-		list.push({ level: 'error', text: t('vms.jobFailed'), detail: current.job.text });
+	if (current.job?.state === 'failed') {
+		// A copy that titand's end cut off has a sentence of its own; other
+		// failures show what the tool said.
+		if (current.job.operation === 'copy-interrupted')
+			list.push({ level: 'error', text: t('vms.copyInterrupted') });
+		else list.push({ level: 'error', text: t('vms.jobFailed'), detail: current.job.text });
+	}
 	if (status && !status.kvm) list.push({ level: 'warn', text: t('vms.noKvm') });
 	if (!current.available) list.push({ level: 'warn', text: t('vms.unavailable') });
 	if (current.job?.state === 'running')

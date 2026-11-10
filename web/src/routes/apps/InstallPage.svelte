@@ -73,6 +73,11 @@
 	let draftEnv: Record<string, string> = {};
 	let selectedHardware = $state<Record<string, string[]>>({});
 	let advanced = $state(storedAdvanced());
+	// The basic view shows one image: that of the main service (Nextcloud,
+	// not its database), else the first.
+	const mainImage = $derived(
+		Math.max(0, form?.images.findIndex((field) => field.service === form?.main) ?? 0),
+	);
 	let adding = $state(false);
 	let error = $state<{ text: string; detail: string } | null>(null);
 	// The HTTPS name the app gets once it runs (Settings › HTTPS names for apps).
@@ -622,7 +627,7 @@
 			</FormRow>
 		{:else}
 			{#each form.images as field, index (field.service)}
-				{#if index === 0 || advanced}
+				{#if index === mainImage || advanced}
 					<FormRow
 						label={form.images.length > 1
 							? t('appform.repositoryOf', { service: field.service })
@@ -630,7 +635,7 @@
 						id="image-{index}"
 						hint={!validImage(field.image)
 							? t('editor.imageInvalid')
-							: index === 0 && form.images.length > 1 && !advanced
+							: index === mainImage && form.images.length > 1 && !advanced
 								? t('appform.moreImages', { count: form.images.length - 1 })
 								: ''}
 						tone={!validImage(field.image) ? 'error' : ''}

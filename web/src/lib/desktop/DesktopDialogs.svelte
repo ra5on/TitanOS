@@ -48,7 +48,7 @@
 				(p) => (p.wallpaper = { source: 'custom', version: Date.now(), live: p.wallpaper.live }),
 			);
 		} catch (err) {
-			error = err instanceof Error ? err.message : String(err);
+			error = `${t('desktop.wallpaper.failed')} ${err instanceof Error ? err.message : String(err)}`;
 		}
 		busy = false;
 	}
