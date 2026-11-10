@@ -49,9 +49,7 @@ func (s *Server) operationsRoutes(mux *routeMux) {
 	admin("POST /api/v1/storage/snapshot-restores/{id}/cancel", s.handleSnapshotRestoreCancel)
 	admin("DELETE /api/v1/storage/snapshot-restores/{id}", s.handleSnapshotRestoreForget)
 	s.backupsArea().registerOperations(admin, heavy)
-	heavyApp("POST /api/v1/vms/{name}/clone", s.handleVMClone)
-	admin("GET /api/v1/vm-clones/{volume}", s.handleVMClones)
-	heavyApp("POST /api/v1/vm-clones/{volume}/{id}", s.handleVMCloneRecover)
+	s.vmsArea().registerOperations(admin, heavyApp)
 	mux.HandleFunc("DELETE /api/v1/files/transfers", s.requireUser(s.handleTransfersClear))
 	mux.HandleFunc("DELETE /api/v1/files/transfers/{id}", s.requireUser(s.handleTransferForget))
 }
@@ -414,26 +412,26 @@ func (a backupsArea) handleApplicationRecover(w http.ResponseWriter, r *http.Req
 	}
 	w.WriteHeader(204)
 }
-func (s *Server) handleVMClone(w http.ResponseWriter, r *http.Request) {
+func (a vmsArea) handleVMClone(w http.ResponseWriter, r *http.Request) {
 	var req vm.CloneRequest
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.VMs.Clone(context.WithoutCancel(r.Context()), r.PathValue("name"), req, s.opts.Storage.Mounted()); err != nil {
+	if err := a.vms.Clone(context.WithoutCancel(r.Context()), r.PathValue("name"), req, a.storage.Mounted()); err != nil {
 		writeVMError(w, err)
 		return
 	}
 	w.WriteHeader(202)
 }
-func (s *Server) handleVMClones(w http.ResponseWriter, r *http.Request) {
-	out, err := s.opts.VMs.CloneOperations(r.PathValue("volume"), s.opts.Storage.Mounted())
+func (a vmsArea) handleVMClones(w http.ResponseWriter, r *http.Request) {
+	out, err := a.vms.CloneOperations(r.PathValue("volume"), a.storage.Mounted())
 	if err != nil {
 		writeVMError(w, err)
 		return
 	}
 	writeJSON(w, 200, out)
 }
-func (s *Server) handleVMCloneRecover(w http.ResponseWriter, r *http.Request) {
+func (a vmsArea) handleVMCloneRecover(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Action  string `json:"action"`
 		Confirm string `json:"confirm"`
@@ -441,7 +439,7 @@ func (s *Server) handleVMCloneRecover(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.VMs.RecoverClone(context.WithoutCancel(r.Context()), r.PathValue("volume"), r.PathValue("id"), req.Action, req.Confirm, s.opts.Storage.Mounted()); err != nil {
+	if err := a.vms.RecoverClone(context.WithoutCancel(r.Context()), r.PathValue("volume"), r.PathValue("id"), req.Action, req.Confirm, a.storage.Mounted()); err != nil {
 		writeVMError(w, err)
 		return
 	}

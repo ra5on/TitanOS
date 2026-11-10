@@ -108,6 +108,14 @@ func (a vmsArea) register(mux *routeMux, g guards) {
 	mux.HandleFunc("POST /api/v1/vms/adopt", g.appAdmin(a.handleVMAdopt))
 }
 
+// registerOperations registers the clones of VMs, which belong to the
+// workflows of operationsRoutes, with its log.
+func (a vmsArea) registerOperations(admin, heavyApp func(route string, fn http.HandlerFunc)) {
+	heavyApp("POST /api/v1/vms/{name}/clone", a.handleVMClone)
+	admin("GET /api/v1/vm-clones/{volume}", a.handleVMClones)
+	heavyApp("POST /api/v1/vm-clones/{volume}/{id}", a.handleVMCloneRecover)
+}
+
 // registerDetails registers the routes of snapshots, consoles and actions
 // of single virtual machines.
 func (a vmsArea) registerDetails(mux *routeMux, g guards) {
