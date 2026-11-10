@@ -41,15 +41,7 @@ func (s *Server) registerDocker(mux *routeMux) {
 	mux.HandleFunc("PUT /api/v1/docker/auto-update", s.requireAppAdmin(s.handleAutoUpdatesSet))
 	mux.HandleFunc("POST /api/v1/docker/updates/apply", s.requireHeavyAppAdmin(s.handleUpdatesApply))
 	mux.HandleFunc("GET /api/v1/docker/containers/{id}/console", s.requireAppConsole(s.handleContainerConsole))
-	mux.HandleFunc("GET /api/v1/docker/proxy", s.requireAdmin(s.handleAppProxy))
-	mux.HandleFunc("PUT /api/v1/docker/proxy", s.requireAppAdmin(s.handleAppProxyDomain))
-	mux.HandleFunc("PUT /api/v1/docker/proxy/apps/{app}", s.requireAppAdmin(s.handleAppProxyRoute))
-	mux.HandleFunc("DELETE /api/v1/docker/proxy/apps/{app}", s.requireAppAdmin(s.handleAppProxyRemove))
-	mux.HandleFunc("POST /api/v1/docker/proxy/apps/{app}/tailnet", s.requireAppAdmin(s.handleAppTailnet))
-	mux.HandleFunc("DELETE /api/v1/docker/proxy/apps/{app}/tailnet", s.requireAppAdmin(s.handleAppTailnetRemove))
-	mux.HandleFunc("POST /api/v1/docker/proxy/apps/{app}/tailnet/check", s.requireAppAdmin(s.handleAppTailnetCheck))
-	mux.HandleFunc("PUT /api/v1/docker/proxy/targets/{id}", s.requireAppAdmin(s.handleAppProxyTarget))
-	mux.HandleFunc("DELETE /api/v1/docker/proxy/targets/{id}", s.requireAppAdmin(s.handleAppProxyTargetRemove))
+	appProxyArea{proxy: s.opts.AppProxy, docker: s.opts.Docker}.register(mux, s.requireAdmin, s.requireAppAdmin)
 	s.registerDockerOpens(mux)
 }
 

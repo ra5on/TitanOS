@@ -11,12 +11,15 @@ import (
 )
 
 func TestAppProxyRoutes(t *testing.T) {
-	ts := newTestServer(t)
-	routes := appproxy.NewManager(ts.store)
-	routes.Disabled = true
-	routes.Hostname = func() string { return "nas" }
-	routes.Reserved = []int{443}
-	ts.server.opts.AppProxy = routes
+	// The area takes its manager when the routes are registered.
+	var routes *appproxy.Manager
+	ts := newTestServerWith(t, func(o *Options) {
+		routes = appproxy.NewManager(o.Store)
+		routes.Disabled = true
+		routes.Hostname = func() string { return "nas" }
+		routes.Reserved = []int{443}
+		o.AppProxy = routes
+	})
 
 	for _, route := range []struct{ method, path string }{{"GET", "/docker/proxy"}, {"PUT", "/docker/proxy"}, {"PUT", "/docker/proxy/apps/immich"}, {"DELETE", "/docker/proxy/apps/immich"}, {"PUT", "/docker/proxy/targets/ha"}, {"DELETE", "/docker/proxy/targets/ha"}} {
 		if res, _ := ts.request(route.method, "/api/v1"+route.path, map[string]any{}); res.StatusCode != http.StatusUnauthorized {
