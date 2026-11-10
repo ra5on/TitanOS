@@ -55,10 +55,31 @@ type usbDevice struct {
 	Root string `json:"root"`
 }
 
-func (s *Server) handleUSB(w http.ResponseWriter, r *http.Request) {
+// usbArea is the unmanaged data drives; an area with narrow dependencies
+// (PLAN 8a, see fansArea).
+type usbArea struct {
+	usb *usb.Manager
+}
+
+func (a usbArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/usb", admin(a.handleUSB))
+	mux.HandleFunc("POST /api/v1/usb/{id}/mount", admin(a.handleUSBMount))
+	mux.HandleFunc("POST /api/v1/usb/{id}/eject", admin(a.handleUSBEject))
+	mux.HandleFunc("GET /api/v1/usb/disks", admin(a.handleUSBDisks))
+	mux.HandleFunc("POST /api/v1/usb/disks/{id}/format", admin(a.handleUSBFormat))
+	mux.HandleFunc("GET /api/v1/usb/disks/{id}/partitions", admin(a.handleUSBPartitions))
+	mux.HandleFunc("POST /api/v1/usb/disks/{id}/table", admin(a.handleUSBTable))
+	mux.HandleFunc("POST /api/v1/usb/disks/{id}/partitions", admin(a.handleUSBPartitionCreate))
+	mux.HandleFunc("DELETE /api/v1/usb/disks/{id}/partitions/{number}", admin(a.handleUSBPartitionDelete))
+	mux.HandleFunc("POST /api/v1/usb/disks/{id}/partitions/{number}/format", admin(a.handleUSBPartitionFormat))
+	mux.HandleFunc("PUT /api/v1/usb/disks/{id}/partitions/{number}/label", admin(a.handleUSBPartitionLabel))
+	mux.HandleFunc("POST /api/v1/usb/disks/{id}/partitions/{number}/grow", admin(a.handleUSBPartitionGrow))
+}
+
+func (a usbArea) handleUSB(w http.ResponseWriter, r *http.Request) {
 	list := []usbDevice{}
-	if s.opts.USB != nil {
-		devices, err := s.opts.USB.List(r.Context())
+	if a.usb != nil {
+		devices, err := a.usb.List(r.Context())
 		if err != nil {
 			writeUSBError(w, err)
 			return
@@ -75,37 +96,37 @@ func (s *Server) handleUSB(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, list)
 }
 
-func (s *Server) handleUSBMount(w http.ResponseWriter, r *http.Request) {
-	if s.opts.USB == nil {
+func (a usbArea) handleUSBMount(w http.ResponseWriter, r *http.Request) {
+	if a.usb == nil {
 		writeUSBError(w, usb.ErrNotFound)
 		return
 	}
-	if err := s.opts.USB.Mount(r.Context(), r.PathValue("id")); err != nil {
+	if err := a.usb.Mount(r.Context(), r.PathValue("id")); err != nil {
 		writeUSBError(w, err)
 		return
 	}
 	slog.Info("usb drive mounted", "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleUSB(w, r)
+	a.handleUSB(w, r)
 }
 
-func (s *Server) handleUSBEject(w http.ResponseWriter, r *http.Request) {
-	if s.opts.USB == nil {
+func (a usbArea) handleUSBEject(w http.ResponseWriter, r *http.Request) {
+	if a.usb == nil {
 		writeUSBError(w, usb.ErrNotFound)
 		return
 	}
-	if err := s.opts.USB.Eject(r.Context(), r.PathValue("id")); err != nil {
+	if err := a.usb.Eject(r.Context(), r.PathValue("id")); err != nil {
 		writeUSBError(w, err)
 		return
 	}
 	slog.Info("usb drive ejected", "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleUSB(w, r)
+	a.handleUSB(w, r)
 }
 
-func (s *Server) handleUSBDisks(w http.ResponseWriter, r *http.Request) {
+func (a usbArea) handleUSBDisks(w http.ResponseWriter, r *http.Request) {
 	disks, job := []usb.Disk{}, (*usb.FormatJob)(nil)
-	if s.opts.USB != nil {
+	if a.usb != nil {
 		var err error
-		if disks, job, err = s.opts.USB.Disks(r.Context()); err != nil {
+		if disks, job, err = a.usb.Disks(r.Context()); err != nil {
 			writeUSBError(w, err)
 			return
 		}
@@ -113,8 +134,8 @@ func (s *Server) handleUSBDisks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"disks": disks, "job": job})
 }
 
-func (s *Server) handleUSBFormat(w http.ResponseWriter, r *http.Request) {
-	if s.opts.USB == nil {
+func (a usbArea) handleUSBFormat(w http.ResponseWriter, r *http.Request) {
+	if a.usb == nil {
 		writeUSBError(w, usb.ErrNotFound)
 		return
 	}
@@ -122,20 +143,20 @@ func (s *Server) handleUSBFormat(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.USB.Format(r.Context(), r.PathValue("id"), req); err != nil {
+	if err := a.usb.Format(r.Context(), r.PathValue("id"), req); err != nil {
 		writeUSBError(w, err)
 		return
 	}
 	slog.Info("drive format started", "fs", req.Filesystem, "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleUSBDisks(w, r)
+	a.handleUSBDisks(w, r)
 }
 
-func (s *Server) handleUSBPartitions(w http.ResponseWriter, r *http.Request) {
-	if s.opts.USB == nil {
+func (a usbArea) handleUSBPartitions(w http.ResponseWriter, r *http.Request) {
+	if a.usb == nil {
 		writeUSBError(w, usb.ErrNotFound)
 		return
 	}
-	layout, err := s.opts.USB.Partitions(r.Context(), r.PathValue("id"))
+	layout, err := a.usb.Partitions(r.Context(), r.PathValue("id"))
 	if err != nil {
 		writeUSBError(w, err)
 		return
@@ -145,13 +166,13 @@ func (s *Server) handleUSBPartitions(w http.ResponseWriter, r *http.Request) {
 
 // usbPartitionStarted answers a partition change that was started with the
 // drives and the job, like a format.
-func (s *Server) usbPartitionStarted(w http.ResponseWriter, r *http.Request, action string, err error) {
+func (a usbArea) usbPartitionStarted(w http.ResponseWriter, r *http.Request, action string, err error) {
 	if err != nil {
 		writeUSBError(w, err)
 		return
 	}
 	slog.Info("partition change started", "action", action, "number", r.PathValue("number"), "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleUSBDisks(w, r)
+	a.handleUSBDisks(w, r)
 }
 
 // usbPartition reads the partition number of a route; a bad one is a
@@ -165,55 +186,55 @@ func usbPartition(w http.ResponseWriter, r *http.Request) (int, bool) {
 	return number, true
 }
 
-func (s *Server) handleUSBTable(w http.ResponseWriter, r *http.Request) {
+func (a usbArea) handleUSBTable(w http.ResponseWriter, r *http.Request) {
 	var req usb.TableRequest
-	if s.opts.USB == nil {
+	if a.usb == nil {
 		writeUSBError(w, usb.ErrNotFound)
 	} else if readJSON(w, r, &req) {
-		s.usbPartitionStarted(w, r, "table", s.opts.USB.NewTable(r.Context(), r.PathValue("id"), req))
+		a.usbPartitionStarted(w, r, "table", a.usb.NewTable(r.Context(), r.PathValue("id"), req))
 	}
 }
 
-func (s *Server) handleUSBPartitionCreate(w http.ResponseWriter, r *http.Request) {
+func (a usbArea) handleUSBPartitionCreate(w http.ResponseWriter, r *http.Request) {
 	var req usb.PartitionRequest
-	if s.opts.USB == nil {
+	if a.usb == nil {
 		writeUSBError(w, usb.ErrNotFound)
 	} else if readJSON(w, r, &req) {
-		s.usbPartitionStarted(w, r, "create", s.opts.USB.CreatePartition(r.Context(), r.PathValue("id"), req))
+		a.usbPartitionStarted(w, r, "create", a.usb.CreatePartition(r.Context(), r.PathValue("id"), req))
 	}
 }
 
-func (s *Server) handleUSBPartitionDelete(w http.ResponseWriter, r *http.Request) {
-	if s.opts.USB == nil {
+func (a usbArea) handleUSBPartitionDelete(w http.ResponseWriter, r *http.Request) {
+	if a.usb == nil {
 		writeUSBError(w, usb.ErrNotFound)
 	} else if number, ok := usbPartition(w, r); ok {
-		s.usbPartitionStarted(w, r, "delete", s.opts.USB.DeletePartition(r.Context(), r.PathValue("id"), number))
+		a.usbPartitionStarted(w, r, "delete", a.usb.DeletePartition(r.Context(), r.PathValue("id"), number))
 	}
 }
 
-func (s *Server) handleUSBPartitionFormat(w http.ResponseWriter, r *http.Request) {
+func (a usbArea) handleUSBPartitionFormat(w http.ResponseWriter, r *http.Request) {
 	var req usb.PartitionRequest
-	if s.opts.USB == nil {
+	if a.usb == nil {
 		writeUSBError(w, usb.ErrNotFound)
 	} else if number, ok := usbPartition(w, r); ok && readJSON(w, r, &req) {
-		s.usbPartitionStarted(w, r, "format", s.opts.USB.FormatPartition(r.Context(), r.PathValue("id"), number, req))
+		a.usbPartitionStarted(w, r, "format", a.usb.FormatPartition(r.Context(), r.PathValue("id"), number, req))
 	}
 }
 
-func (s *Server) handleUSBPartitionLabel(w http.ResponseWriter, r *http.Request) {
+func (a usbArea) handleUSBPartitionLabel(w http.ResponseWriter, r *http.Request) {
 	var req usb.PartitionRequest
-	if s.opts.USB == nil {
+	if a.usb == nil {
 		writeUSBError(w, usb.ErrNotFound)
 	} else if number, ok := usbPartition(w, r); ok && readJSON(w, r, &req) {
-		s.usbPartitionStarted(w, r, "label", s.opts.USB.SetLabel(r.Context(), r.PathValue("id"), number, req.Label))
+		a.usbPartitionStarted(w, r, "label", a.usb.SetLabel(r.Context(), r.PathValue("id"), number, req.Label))
 	}
 }
 
-func (s *Server) handleUSBPartitionGrow(w http.ResponseWriter, r *http.Request) {
+func (a usbArea) handleUSBPartitionGrow(w http.ResponseWriter, r *http.Request) {
 	var req usb.PartitionRequest
-	if s.opts.USB == nil {
+	if a.usb == nil {
 		writeUSBError(w, usb.ErrNotFound)
 	} else if number, ok := usbPartition(w, r); ok && readJSON(w, r, &req) {
-		s.usbPartitionStarted(w, r, "grow", s.opts.USB.GrowPartition(r.Context(), r.PathValue("id"), number, req))
+		a.usbPartitionStarted(w, r, "grow", a.usb.GrowPartition(r.Context(), r.PathValue("id"), number, req))
 	}
 }
