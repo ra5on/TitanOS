@@ -193,6 +193,10 @@ func (m *Manager) backup(ctx context.Context, job Job) (result error) {
 		if err == nil || ctx.Err() != nil || !noSpace(out) || !job.Keep.DropsOldest() {
 			break
 		}
+		if localFull(env) {
+			slog.Warn("backup: no space on this NAS for restic's working files; no version removed at the target", "job", job.ID)
+			break
+		}
 		gone, ferr := m.dropOldest(ctx, job, env, base)
 		if ferr != nil || gone == "" {
 			break

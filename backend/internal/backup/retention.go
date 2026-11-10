@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/retention"
+	"golang.org/x/sys/unix"
 )
 
 // noSpace recognises what restic and its backends say when the target is
@@ -21,6 +23,40 @@ func noSpace(out string) bool {
 		}
 	}
 	return false
+}
+
+// localFull reports whether restic's own working places on this NAS are
+// full: its cache and the folder for temporary files. "No space left" then
+// comes from here, not from the target – removing versions there would
+// cost history and help nothing.
+func localFull(env []string) bool {
+	places := []string{os.TempDir()}
+	for _, entry := range env {
+		if dir, ok := strings.CutPrefix(entry, "RESTIC_CACHE_DIR="); ok && dir != "" {
+			places = append(places, dir)
+		}
+		if dir, ok := strings.CutPrefix(entry, "TMPDIR="); ok && dir != "" {
+			places[0] = dir
+		}
+	}
+	for _, dir := range places {
+		if free, ok := freeBytes(dir); ok && free < localFullBelow {
+			return true
+		}
+	}
+	return false
+}
+
+// localFullBelow is the free room below which a working place counts as full.
+const localFullBelow = 32 << 20
+
+// freeBytes is the room left for titand at dir; a test replaces it.
+var freeBytes = func(dir string) (uint64, bool) {
+	var st unix.Statfs_t
+	if err := unix.Statfs(dir, &st); err != nil {
+		return 0, false
+	}
+	return st.Bavail * uint64(st.Bsize), true
 }
 
 type resticVersion struct {

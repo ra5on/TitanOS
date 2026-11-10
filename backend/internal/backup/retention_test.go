@@ -155,3 +155,27 @@ func TestReadableCopyToAnotherVolume(t *testing.T) {
 		t.Fatal("copy onto the volume of its shares accepted")
 	}
 }
+
+// PLAN 76 (F-9-6): "no space" while the NAS's own working folder is full
+// says nothing about the target; no version is removed there.
+func TestNoSpaceOnTheNASRemovesNoVersion(t *testing.T) {
+	e := newEnv(t)
+	job := s3Job()
+	job.Keep = Keep{Daily: 7, WhenFull: "oldest"}
+	if err := e.m.Create(job, volumes); err != nil {
+		t.Fatal(err)
+	}
+	versions := "v1 2026-10-01T03:00:00Z\nv2 2026-10-02T03:00:00Z\nv3 2026-10-03T03:00:00Z\n"
+	os.WriteFile(filepath.Join(e.dir, "versions"), []byte(versions), 0o644)
+	os.WriteFile(filepath.Join(e.dir, "full"), []byte("1\n"), 0o644)
+	was := freeBytes
+	freeBytes = func(string) (uint64, bool) { return 1 << 20, true }
+	t.Cleanup(func() { freeBytes = was })
+	e.m.Start("cloud")
+	if got := e.result(t); !strings.Contains(got, "not enough space") {
+		t.Fatalf("full working folder: %s", got)
+	}
+	if data, _ := os.ReadFile(filepath.Join(e.dir, "versions")); string(data) != versions {
+		t.Fatalf("versions removed although the target was not the full one: %s", data)
+	}
+}
