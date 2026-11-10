@@ -63,6 +63,7 @@ on:
       - 'scripts/boot_log.py'
       - 'scripts/fetch-pci-ids.sh'
       - 'scripts/smoke-app-update.py'
+      - 'scripts/smoke-system-update.py'
       - 'scripts/repack-release.py'
       - 'scripts/release-kind.py'
       - 'scripts/autopilot.py'
@@ -110,8 +111,9 @@ jobs:
     runs-on: ubuntu-24.04
     # A tag may wait for the plugin set of a new kernel (built and approved
     # in the plugin repository). A pull request runs every QEMU test under
-    # TCG, which since the hardware variants takes about 90 minutes.
-    timeout-minutes: ${{ startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || inputs.publish) && 360 || 150 }}
+    # TCG, which since the hardware variants takes about 90 minutes; the
+    # full system updates (smoke-system-update.py) come on top of that.
+    timeout-minutes: ${{ startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || inputs.publish) && 360 || 210 }}
     outputs:
       version: ${{ steps.version.outputs.version }}
       channel: ${{ steps.version.outputs.channel }}
@@ -344,7 +346,25 @@ jobs:
         if: env.REAL_TAG != 'true'
         run: |
           python3 scripts/smoke-app-update.py out/release/titanos-${{ steps.version.outputs.version }}.zip --release out/release --key "$RUNNER_TEMP/rehearsal.key" --timeout 420
-          rm "$RUNNER_TEMP/rehearsal.key"
+
+      - name: Full system update (A/B), systems that do not come up and a trial start that hangs
+        # PLAN 76 (F-13-7, F-13-5): a good update is confirmed by the boot
+        # check; a titand that does not start, a kernel panic and a start that
+        # stops in emergency mode fall back to the system of before by
+        # themselves. With GRUB (legacy BIOS) the good update and the titand
+        # that does not start, which is where GRUB counts differently.
+        if: env.REAL_TAG != 'true'
+        timeout-minutes: 90
+        run: |
+          zip=out/release/titanos-${{ steps.version.outputs.version }}.zip
+          python3 scripts/smoke-system-update.py "$zip" --release out/release --key "$RUNNER_TEMP/rehearsal.key" --timeout 420
+          if unzip -l "$zip" boot/grub/grub.cfg > /dev/null; then
+            python3 scripts/smoke-system-update.py "$zip" --release out/release --key "$RUNNER_TEMP/rehearsal.key" --firmware bios --scenarios good,nostart --log out/system-update-smoke-bios.log --timeout 420
+          fi
+
+      - name: Remove the disposable signing key
+        if: always() && env.REAL_TAG != 'true'
+        run: rm -f "$RUNNER_TEMP/rehearsal.key"
 
       - name: Different virtual hardware, slow disks and a late USB disk
         # Network cards, disk controllers and timing beyond the default VM;
@@ -371,6 +391,7 @@ jobs:
           path: |
             out/release-smoke*.log
             out/app-update-smoke*.log
+            out/system-update-smoke*.log
             out/storage-smoke*.log
             out/network-smoke*.log
             out/validation/cache/cache-result.json

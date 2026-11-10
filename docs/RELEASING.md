@@ -149,6 +149,41 @@ eines, das läuft (ohne Neustart, Anmeldung bleibt, nach einem Neustart des
 NAS noch da), eines, das nicht startet (nach drei Starts zurück), und den Weg
 zurück zum titand des Systemabbilds.
 
+Danach spielt er volle Systemupdates durch (`scripts/smoke-system-update.py`,
+PLAN 76 F-13-7 und F-13-5), ebenfalls mit dem Wegwerf-Schlüssel und einem
+Release-Server auf dem Host: Jedes Release wird über die API in den anderen
+Slot installiert; den Stick liest das Skript vom Host mit mtools (Namen in
+`loader/entries`, bei GRUB dazu `boot/grub/grubenv`).
+
+- **good:** ein neueres System. Der Eintrag trägt beim Probestart seinen Zähler
+  (`+2-1`), das NAS läuft aus dem anderen Slot, der Boot-Check entfernt den
+  Zähler, `/api/v1/update` zeigt das System bestätigt.
+- **nostart:** ein System, dessen titand nicht startet. Der Zähler sinkt mit
+  jedem Start, der vierte Start ist wieder das System von vorher; titand
+  schreibt `config/system/update-failed.json`, meldet den Fehlschlag und
+  installiert dieses Release nicht noch einmal von selbst.
+- **panic:** ein System mit unbrauchbarer initrd. Der Kernel gerät in Panik,
+  `panic=10` startet neu, nach drei Starts läuft das System von vorher.
+- **hang:** ein System, das vor titand im Notfallmodus stehen bleibt (ein
+  Mount, der nie kommt, über die Kommandozeile des Releases).
+  `titanos-trial-watchdog.timer` startet es jeweils nach 30 Minuten neu, nach
+  drei Starts läuft das System von vorher.
+
+Mit SeaBIOS/GRUB (`--firmware bios`) laufen im Workflow `good` und `nostart`;
+das Skript kann dort alle vier (`--scenarios`).
+
+Grenzen, auch im Kopf des Skripts genannt: `good` und `nostart` sind das
+Abbild des ZIP, entpackt und mit anderem titand und anderer Basis-Version neu
+gepackt (zstd 6 statt 19), Kernel und initrd bleiben die des ZIP; es ist also
+kein Wechsel auf einen anderen Kernel. Die Manifeste tragen keine
+Kernel-Variante. Bei `hang` läuft die Uhr der VM über QEMUs Befehlszähler
+(`-icount sleep=off`) und springt im Leerlauf vor: die 30 Minuten vergehen im
+Gast, nicht auf dem Host; Abbild und Timer bleiben unverändert (`--real-time`
+wartet sie ab). Nicht abgedeckt: echte Hardware, 32-Bit-UEFI, Plugins und
+Volumes im Boot-Check, der Rückwechsel („Zurück zur vorigen Version“) und ein
+Start, der im initramfs oder in einer hängenden Unit ohne Notfallmodus stehen
+bleibt.
+
 Der Probelauf startet nur, wenn ein Pull Request Dateien aus der Liste
 `paths` in `release.yml` ändert (Abbild, Boot, Plugin-Katalog, QEMU-Prüfungen).
 Release-Notizen unter `docs/releases/` gehören nicht dazu: Sie werden erst beim
