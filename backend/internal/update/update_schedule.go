@@ -55,6 +55,7 @@ func (m *Manager) Run(ctx context.Context) {
 	// restart of titand would break off; it is tried again every minute,
 	// for up to six hours.
 	var waiting time.Time
+	skipped := false // the release that failed here was already named in the log
 	for {
 		select {
 		case <-ctx.Done():
@@ -76,7 +77,14 @@ func (m *Manager) Run(ctx context.Context) {
 			continue
 		}
 		switch {
+		case available != nil && m.failedBefore(available.Version):
+			// Failed its trial here before: not again by itself.
+			if !skipped {
+				slog.Info("scheduled update left out: this release failed its trial on this NAS", "version", available.Version)
+				skipped = true
+			}
 		case available != nil && pending == nil && phase != "download" && phase != "switch":
+			skipped = false
 			if err := m.Install(ctx); err != nil {
 				if errors.Is(err, ErrWorking) {
 					if !retry {

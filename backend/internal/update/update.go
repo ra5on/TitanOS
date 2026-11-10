@@ -34,7 +34,9 @@ import (
 
 const (
 	settingsFile = "system/update.json"
-	pendingFile  = "system/update-pending.json"
+	// failedFile names the release that failed its trial on this NAS.
+	failedFile  = "system/update-failed.json"
+	pendingFile = "system/update-pending.json"
 	// DefaultSource is where the releases are.
 	DefaultSource = "https://github.com/ra5on/TitanOS"
 
@@ -361,6 +363,8 @@ type Manager struct {
 	loaded    bool
 	settings  Settings
 	available *Manifest
+	// failedVersion: see noteFailed.
+	failedVersion string
 	// availableRaw and availableSig are the signed manifest as it came:
 	// an app keeps them next to it on the stick.
 	availableRaw, availableSig []byte
@@ -433,6 +437,16 @@ func (m *Manager) Load() error {
 			return err
 		}
 	}
+	// A release that failed its trial here is not installed again by
+	// itself (failedVersion); a missing or unreadable note means none.
+	var failed struct {
+		Version string `json:"version"`
+	}
+	if m.store.ReadJSON(failedFile, &failed) == nil {
+		m.mu.Lock()
+		m.failedVersion = failed.Version
+		m.mu.Unlock()
+	}
 	var pending *Pending
 	var stored Pending
 	if err := m.store.ReadJSON(pendingFile, &stored); err == nil {
@@ -477,6 +491,9 @@ func (m *Manager) settleApp() {
 		version = m.Base
 	}
 	kind := map[string]string{app.ResultInstalled: "update_installed", app.ResultFailed: "update_failed", app.ResultRolledBack: "update_rolled_back"}[result]
+	if result == app.ResultFailed {
+		m.noteFailed(version)
+	}
 	slog.Info("app update settled", "outcome", result, "version", version, "running", m.version)
 	if kind != "" && m.OnEvent != nil {
 		m.OnEvent(kind, version)
@@ -569,6 +586,9 @@ func (m *Manager) Confirm() {
 		kind = "update_installed"
 	}
 	slog.Info("pending update settled", "outcome", kind, "version", pending.Version, "slot", pending.Slot, "running", m.slot)
+	if kind == "update_failed" {
+		m.noteFailed(pending.Version)
+	}
 	if err := m.store.Remove(pendingFile); err != nil {
 		slog.Warn("pending update not cleared", "err", err)
 	}
@@ -578,6 +598,31 @@ func (m *Manager) Confirm() {
 	if m.OnEvent != nil {
 		m.OnEvent(kind, subject)
 	}
+}
+
+// noteFailed remembers a release that did not come up on this NAS (its
+// trial starts failed and the old system came back). Installing by itself
+// leaves that release alone from then on: night after night it would
+// write the stick, restart the NAS, fail three starts and fall back again.
+// The next release, or installing it by hand, is not held back.
+func (m *Manager) noteFailed(version string) {
+	version = strings.TrimPrefix(version, "v")
+	if version == "" {
+		return
+	}
+	m.mu.Lock()
+	m.failedVersion = version
+	m.mu.Unlock()
+	if err := m.store.WriteJSON(failedFile, map[string]string{"version": version}); err != nil {
+		slog.Warn("failed release not noted", "version", version, "err", err)
+	}
+}
+
+// failedBefore reports whether version is the release that failed here.
+func (m *Manager) failedBefore(version string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.failedVersion != "" && strings.TrimPrefix(version, "v") == m.failedVersion
 }
 
 // Healthy reports whether this system may be marked good. It always is,
