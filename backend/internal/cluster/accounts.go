@@ -66,6 +66,7 @@ func (m *Manager) noteLocal(name string, removed bool) bool {
 	if !m.accountsLoaded() {
 		return false
 	}
+	m.settleAdminAccounts()
 	m.pushing.Lock()
 	defer m.pushing.Unlock()
 	user, exists := m.Users.Get(name)
@@ -75,6 +76,17 @@ func (m *Manager) noteLocal(name string, removed bool) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.state == nil {
+		return false
+	}
+	if slices.Contains(m.state.KeptLocal, name) {
+		if !exists {
+			// Deleted here: the name is free for the cluster again.
+			next := cloneState(m.state)
+			next.KeptLocal = slices.DeleteFunc(next.KeptLocal, func(n string) bool { return n == name })
+			if err := m.saveLocked(next, m.secrets); err != nil {
+				slog.Error("cluster: local account not forgotten", "user", name, "err", err)
+			}
+		}
 		return false
 	}
 	known, had := m.state.Accounts[name]
@@ -124,6 +136,40 @@ func (m *Manager) record(name string) (accountRecord, bool) {
 		rec.User = &user
 	}
 	return rec, true
+}
+
+// settleAdminAccounts decides once, after this node became the admin node
+// by a handover, which of its accounts are the cluster's. Those the cluster
+// already held go on as before. Accounts that only this node had (made here
+// before or after it joined, never taken over) stay local: a handover moves
+// the role, it must not push one node's private accounts onto every node
+// and over accounts of the same name there. An account made on the admin
+// node afterwards is a cluster account as always. The node that founded
+// the cluster (no handover yet) keeps all its accounts in the cluster.
+func (m *Manager) settleAdminAccounts() {
+	if !m.accountsLoaded() {
+		return
+	}
+	users := m.Users.List()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.state == nil || m.adminLocked() != m.self.ID || m.state.AccountsGen == m.state.AdminGen {
+		return
+	}
+	next := cloneState(m.state)
+	next.AccountsGen = next.AdminGen
+	for _, u := range users {
+		if _, had := next.Accounts[u.Name]; !had && !slices.Contains(next.KeptLocal, u.Name) {
+			next.KeptLocal = append(next.KeptLocal, u.Name)
+		}
+	}
+	if err := m.saveLocked(next, m.secrets); err != nil {
+		slog.Error("cluster: accounts of the new admin node not settled", "err", err)
+		return
+	}
+	if len(next.KeptLocal) > 0 {
+		slog.Info("cluster: this node is the admin node now; its own accounts stay local", "accounts", next.KeptLocal)
+	}
 }
 
 // pushAccount sends one account to all other nodes.
@@ -224,6 +270,7 @@ func (m *Manager) syncAccounts(ctx context.Context) {
 	if !m.accountsLoaded() {
 		return
 	}
+	m.settleAdminAccounts()
 	for name := range names {
 		m.noteLocal(name, false)
 	}
@@ -259,15 +306,17 @@ func (m *Manager) clusterAccounts(state *State) []auth.User {
 	}
 	admin := state != nil && adminOf(state) == m.self.ID
 	known := map[string]bool{}
+	var local []string
 	if state != nil {
 		for name, v := range state.Accounts {
 			known[name] = !v.Deleted
 		}
+		local = slices.Clone(state.KeptLocal)
 	}
 	m.mu.Unlock()
 	var out []auth.User
 	for _, u := range m.Users.List() {
-		if admin || known[u.Name] {
+		if (admin && !slices.Contains(local, u.Name)) || known[u.Name] {
 			out = append(out, u)
 		}
 	}

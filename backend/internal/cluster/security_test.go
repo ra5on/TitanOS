@@ -437,3 +437,38 @@ func hasAccount(users *auth.Users, name string) bool {
 	}
 	return false
 }
+
+// PLAN 76 (F-9-10): a node that takes the admin role over keeps the accounts
+// only it had to itself; they do not spread over the cluster, and an account
+// of the same name on another node stays what it was.
+func TestNewAdminNodeKeepsItsOwnAccountsLocal(t *testing.T) {
+	ctx := context.Background()
+	a, b := joinedPair(t)
+	// carol exists on B only, and with another password on A's side never.
+	if _, err := b.users.Create("carol", "password-of-b", auth.RoleAdmin); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.m.HandOver(ctx, b.m.ID()); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "B is the admin node", func() bool { return b.m.IsAdmin() && a.m.View().Admin == b.m.ID() })
+	b.m.syncAccounts(ctx)
+	if hasAccount(a.users, "carol") {
+		t.Fatal("the new admin node pushed its own account onto the other node")
+	}
+	if b.m.ClusterAccount("carol") {
+		t.Fatal("carol counts as an account of the cluster")
+	}
+	if !b.m.ClusterAccount("alex") {
+		t.Fatal("the cluster's account is no longer one")
+	}
+	// An account made on the admin node afterwards is the cluster's, as always.
+	if _, err := b.users.Create("dora", "password-of-d", auth.RoleUser); err != nil {
+		t.Fatal(err)
+	}
+	b.m.syncAccounts(ctx)
+	eventually(t, "dora on A", func() bool { return hasAccount(a.users, "dora") })
+	if hasAccount(a.users, "carol") {
+		t.Fatal("carol spread with the next sync")
+	}
+}

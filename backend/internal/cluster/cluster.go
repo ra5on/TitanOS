@@ -125,7 +125,14 @@ type State struct {
 	Routes   map[string]Route          `json:"routes,omitempty"`
 	Tunnel   Tunnel                    `json:"tunnel"`
 	Accounts map[string]AccountVersion `json:"accounts"`
-	Created  time.Time                 `json:"created"`
+	// KeptLocal are the accounts of this node that the cluster did not hold
+	// when the node became the admin node by a handover: they stay accounts
+	// of this node alone instead of spreading to every node (PLAN 76,
+	// F-9-10). AccountsGen is the AdminGen that was settled for. Both are
+	// this node's own notes; they are not sent to other nodes.
+	KeptLocal   []string  `json:"keptLocal,omitempty"`
+	AccountsGen int       `json:"accountsGen,omitempty"`
+	Created     time.Time `json:"created"`
 }
 
 type secrets struct {
@@ -452,6 +459,7 @@ func cloneState(s *State) *State {
 	for k, v := range s.Tunnel.Addresses {
 		next.Tunnel.Addresses[k] = v
 	}
+	next.KeptLocal = slices.Clone(s.KeptLocal)
 	next.Accounts = make(map[string]AccountVersion, len(s.Accounts))
 	for k, v := range s.Accounts {
 		next.Accounts[k] = v

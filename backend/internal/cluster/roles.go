@@ -166,7 +166,8 @@ func (m *Manager) ClusterAccount(name string) bool {
 		return false
 	}
 	if m.adminLocked() == m.self.ID {
-		return true
+		// All but those that stayed local when this node took the role over.
+		return !slices.Contains(m.state.KeptLocal, name)
 	}
 	v, ok := m.state.Accounts[name]
 	return ok && !v.Deleted
