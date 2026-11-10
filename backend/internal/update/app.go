@@ -46,10 +46,23 @@ func (m *Manager) installApp(ctx context.Context, manifest Manifest, raw, signat
 		// The answer to the request and a look at the progress should get
 		// out before titand goes.
 		time.Sleep(m.restartDelay)
+		// Work that began while titand was downloading (an app that is
+		// being updated or removed, a copy, a backup) would be cut off
+		// by the restart: it is waited for, though not for ever.
+		for waited := time.Duration(0); m.Working != nil && m.Working() && waited < restartWait; waited += restartPoll {
+			time.Sleep(restartPoll)
+		}
 		m.restart()
 	}()
 	return nil
 }
+
+// restartWait is how long a downloaded app update waits for running work
+// before it restarts titand anyway; restartPoll is how often it looks.
+var (
+	restartWait = 15 * time.Minute
+	restartPoll = 5 * time.Second
+)
 
 func (m *Manager) loadApp(ctx context.Context, manifest Manifest, raw, signature []byte) error {
 	slog.Info("installing app update", "version", manifest.Version, "base", manifest.App.Base)

@@ -374,6 +374,21 @@ func TestApps(t *testing.T) {
 	// Removing it with its data leaves nothing behind for a new install.
 	geheimData := filepath.Join(m.mountRoot, "data/appdata/geheim")
 	os.WriteFile(filepath.Join(geheimData, "alt.db"), []byte("x"), 0o644)
+	// Not while the engine does not run (the volume is locked): nothing
+	// could be taken down, and the app would only look removed.
+	m.mu.Lock()
+	applied := m.applied
+	m.applied = ""
+	m.mu.Unlock()
+	if err := m.RemoveApp(ctx, "geheim", true); !errors.Is(err, ErrNotRunning) {
+		t.Fatalf("removal with data without the engine: %v", err)
+	}
+	if _, err := m.Compose("geheim"); err != nil {
+		t.Fatalf("the app was forgotten although nothing was removed: %v", err)
+	}
+	m.mu.Lock()
+	m.applied = applied
+	m.mu.Unlock()
 	runner.fail = "--rmi all"
 	if err := m.RemoveApp(ctx, "geheim", true); err != nil {
 		t.Fatal(err)

@@ -197,6 +197,9 @@ func (w *titand) wireMaintenance() error {
 	// An app update restarts titand: it waits for work that would break off.
 	w.updates.Working = func() bool {
 		return w.upkeep.Busy() || w.appBackups.Busy() || w.volumes.ActionsRunning() || w.volumes.SnapshotRestoresRunning() || w.volumes.GrowthPending() || w.volumes.Reshaping() || w.replicas.Busy() || w.fileManager.Busy() || w.backups.Busy() || w.volumes.TestsRunning() || w.machines.Busy() || w.systemContainers.Busy() || w.extensions.Busy() || w.mediaImports.Working() || w.folders.PurgeBusy() ||
+			// docker compose runs below titand's unit and would die with it,
+			// leaving an app stopped half way through pull, up or removal.
+			w.containers.Busy() ||
 			// A run of the KI-Agent would end as "interrupted".
 			(w.handler != nil && w.handler.AgentRunning())
 	}
