@@ -341,10 +341,24 @@ func (s *Server) handleContainerConsole(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+// terminalArea is the shell on the NAS and whether consoles are allowed; an
+// area with narrow dependencies (PLAN 8a, see fansArea). serveConsole
+// connects a WebSocket to a shell with the rules of every console.
+type terminalArea struct {
+	terminal     *terminal.Manager
+	serveConsole func(w http.ResponseWriter, r *http.Request, target string, open func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error))
+}
+
+func (a terminalArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/terminal", admin(a.handleTerminal))
+	mux.HandleFunc("PUT /api/v1/terminal", admin(a.handleTerminalSettings))
+	mux.HandleFunc("GET /api/v1/terminal/shell", admin(a.handleShell))
+}
+
 // handleShell connects a WebSocket to a root shell on the NAS.
-func (s *Server) handleShell(w http.ResponseWriter, r *http.Request) {
-	s.serveConsole(w, r, "nas", func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error) {
-		session, err := s.opts.Terminal.Shell(ctx)
+func (a terminalArea) handleShell(w http.ResponseWriter, r *http.Request) {
+	a.serveConsole(w, r, "nas", func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error) {
+		session, err := a.terminal.Shell(ctx)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -363,19 +377,19 @@ func (s *Server) serveConsole(w http.ResponseWriter, r *http.Request, target str
 }
 
 // handleTerminal tells the web UI whether terminals are allowed.
-func (s *Server) handleTerminal(w http.ResponseWriter, r *http.Request) {
-	idle, _ := s.opts.Terminal.IdleMinutes()
+func (a terminalArea) handleTerminal(w http.ResponseWriter, r *http.Request) {
+	idle, _ := a.terminal.IdleMinutes()
 	writeJSON(w, http.StatusOK, map[string]any{
-		"enabled": s.opts.Terminal.Enabled(),
-		"confirm": s.opts.Terminal.ConfirmRequired(),
+		"enabled": a.terminal.Enabled(),
+		"confirm": a.terminal.ConfirmRequired(),
 		// Without a shell on the NAS there are container consoles only.
-		"nasShell": !s.opts.Terminal.Disabled,
+		"nasShell": !a.terminal.Disabled,
 		// Minutes without input until consoles and VM screens end; 0: never.
 		"idleMinutes": idle,
 	})
 }
 
-func (s *Server) handleTerminalSettings(w http.ResponseWriter, r *http.Request) {
+func (a terminalArea) handleTerminalSettings(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Enabled, Confirm *bool
 		IdleMinutes      *int `json:"idleMinutes"`
@@ -388,27 +402,27 @@ func (s *Server) handleTerminalSettings(w http.ResponseWriter, r *http.Request) 
 			writeError(w, http.StatusBadRequest, "invalid_idle", "idle time must be one of 0, 5, 15, 30, 60, 120 minutes")
 			return
 		}
-		if err := s.opts.Terminal.SetIdleMinutes(*req.IdleMinutes); err != nil {
+		if err := a.terminal.SetIdleMinutes(*req.IdleMinutes); err != nil {
 			writeError(w, http.StatusInternalServerError, "config_write_failed", err.Error())
 			return
 		}
 		slog.Info("console idle time changed", "minutes", *req.IdleMinutes, "by", currentUser(r).Name, "ip", remoteIP(r))
 	}
 	if req.Enabled != nil {
-		if err := s.opts.Terminal.SetEnabled(*req.Enabled); err != nil {
+		if err := a.terminal.SetEnabled(*req.Enabled); err != nil {
 			writeError(w, http.StatusInternalServerError, "config_write_failed", err.Error())
 			return
 		}
 		slog.Info("terminals switched", "enabled", *req.Enabled, "by", currentUser(r).Name, "ip", remoteIP(r))
 	}
 	if req.Confirm != nil {
-		if err := s.opts.Terminal.SetConfirmRequired(*req.Confirm); err != nil {
+		if err := a.terminal.SetConfirmRequired(*req.Confirm); err != nil {
 			writeError(w, http.StatusInternalServerError, "config_write_failed", err.Error())
 			return
 		}
 		slog.Info("password prompt for consoles switched", "required", *req.Confirm, "by", currentUser(r).Name, "ip", remoteIP(r))
 	}
-	s.handleTerminal(w, r)
+	a.handleTerminal(w, r)
 }
 
 // handleConfirm marks the session as confirmed after the password was
