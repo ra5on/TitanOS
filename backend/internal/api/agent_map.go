@@ -69,11 +69,12 @@ var descriptionKey = regexp.MustCompile(`^(share|folder|app|vm|lxc|backup|room):
 
 // buildNASMap reads the NAS through the catalog as the first owner.
 func (s *Server) buildNASMap(ctx context.Context) (nasMap, error) {
+	env := s.agentEnv()
 	m := nasMap{Built: time.Now().UTC()}
-	if s.opts.Monitor != nil {
-		m.Host = s.opts.Monitor.Info().Hostname
+	if env.monitor != nil {
+		m.Host = env.monitor.Info().Hostname
 	}
-	owner, ok := s.opts.Users.Get(s.firstOwner())
+	owner, ok := env.users.Get(s.firstOwner())
 	if !ok {
 		return m, fmt.Errorf("no owner account")
 	}
@@ -229,11 +230,12 @@ func (s *Server) agentDescriptions() map[string]agentDescription {
 
 // mapFor is the map as an account may see it: users only their shares.
 func (s *Server) mapFor(user auth.User, m nasMap) nasMap {
+	env := s.agentEnv()
 	if user.Role.CanAdminister() {
 		return m
 	}
 	roots := map[string]bool{}
-	for _, r := range s.fileRoots(user) {
+	for _, r := range env.fileRoots(user) {
 		roots[r.ID] = true
 	}
 	out := nasMap{Built: m.Built, Host: m.Host}

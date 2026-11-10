@@ -11,30 +11,37 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/appaccess"
 	"github.com/ra5on/TitanOS/backend/internal/appproxy"
+	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/tlscert"
 )
 
 func TestAppAccessRoutes(t *testing.T) {
-	ts := newTestServer(t)
-	for _, name := range []string{"immich", "jellyfin"} {
-		if err := ts.store.Write("apps/"+name+"/compose.yaml", []byte("services: {}\n")); err != nil {
-			t.Fatal(err)
+	// The area takes its managers when the routes are registered.
+	var routes *appproxy.Manager
+	var rights *appaccess.Manager
+	ts := newTestServerWith(t, func(o *Options) {
+		for _, name := range []string{"immich", "jellyfin"} {
+			if err := o.Store.Write("apps/"+name+"/compose.yaml", []byte("services: {}\n")); err != nil {
+				t.Fatal(err)
+			}
 		}
-	}
-	routes := appproxy.NewManager(ts.store)
-	routes.Disabled = true
-	routes.Hostname = func() string { return "nas" }
-	routes.Reserved = []int{443}
-	ts.server.opts.AppProxy = routes
-	rights := appaccess.New(ts.store)
-	rights.Lookup = func(name string) (appaccess.Account, bool) {
-		u, ok := ts.server.opts.Users.Get(name)
-		return appaccess.Account{Name: u.Name, Admin: u.Role.CanAdminister(), Disabled: u.Disabled}, ok
-	}
-	rights.SessionUsable = ts.server.sessions.Usable
-	ts.server.opts.AppAccess = rights
-	routes.Access = rights
+		sessions := auth.NewSessions()
+		o.Sessions = sessions
+		routes = appproxy.NewManager(o.Store)
+		routes.Disabled = true
+		routes.Hostname = func() string { return "nas" }
+		routes.Reserved = []int{443}
+		o.AppProxy = routes
+		rights = appaccess.New(o.Store)
+		rights.Lookup = func(name string) (appaccess.Account, bool) {
+			u, ok := o.Users.Get(name)
+			return appaccess.Account{Name: u.Name, Admin: u.Role.CanAdminister(), Disabled: u.Disabled}, ok
+		}
+		rights.SessionUsable = sessions.Usable
+		o.AppAccess = rights
+		routes.Access = rights
+	})
 
 	for _, route := range []struct{ method, path string }{{"GET", "/apps/access"}, {"PUT", "/apps/access"}, {"GET", "/apps/mine"}, {"POST", "/apps/immich/window"}, {"GET", "/certs/ca"}, {"GET", "/certs/ca.crt"}} {
 		if res, _ := ts.request(route.method, "/api/v1"+route.path, map[string]any{}); res.StatusCode != http.StatusUnauthorized {
@@ -127,12 +134,13 @@ func TestAppAccessRoutes(t *testing.T) {
 }
 
 func TestCADownload(t *testing.T) {
-	ts := newTestServer(t)
-	certs, err := tlscert.NewManager(ts.store, "nas")
-	if certs == nil {
-		t.Fatal(err)
-	}
-	ts.server.opts.Certificate = certs
+	ts := newTestServerWith(t, func(o *Options) {
+		certs, err := tlscert.NewManager(o.Store, "nas")
+		if certs == nil {
+			t.Fatal(err)
+		}
+		o.Certificate = certs
+	})
 	ts.setup()
 	res, body := ts.request("GET", "/api/v1/certs/ca.crt", nil)
 	if res.StatusCode != http.StatusOK || res.Header.Get("Content-Type") != "application/x-x509-ca-cert" || !strings.Contains(res.Header.Get("Content-Disposition"), "attachment") {
@@ -187,18 +195,20 @@ func TestNarrowFrames(t *testing.T) {
 
 // PLAN 75-20 (U2): the apps of one account on its page; new apps per account.
 func TestUserApps(t *testing.T) {
-	ts := newTestServer(t)
-	for _, name := range []string{"immich", "jellyfin"} {
-		if err := ts.store.Write("apps/"+name+"/compose.yaml", []byte("services: {}\n")); err != nil {
-			t.Fatal(err)
+	var rights *appaccess.Manager
+	ts := newTestServerWith(t, func(o *Options) {
+		for _, name := range []string{"immich", "jellyfin"} {
+			if err := o.Store.Write("apps/"+name+"/compose.yaml", []byte("services: {}\n")); err != nil {
+				t.Fatal(err)
+			}
 		}
-	}
-	rights := appaccess.New(ts.store)
-	rights.Lookup = func(name string) (appaccess.Account, bool) {
-		u, ok := ts.server.opts.Users.Get(name)
-		return appaccess.Account{Name: u.Name, Admin: u.Role.CanAdminister(), Disabled: u.Disabled}, ok
-	}
-	ts.server.opts.AppAccess = rights
+		rights = appaccess.New(o.Store)
+		rights.Lookup = func(name string) (appaccess.Account, bool) {
+			u, ok := o.Users.Get(name)
+			return appaccess.Account{Name: u.Name, Admin: u.Role.CanAdminister(), Disabled: u.Disabled}, ok
+		}
+		o.AppAccess = rights
+	})
 	ts.setup()
 	for _, name := range []string{"anna", "max"} {
 		if res, body := ts.request("POST", "/api/v1/users", map[string]any{"name": name, "password": testPassword, "role": "user"}); res.StatusCode != http.StatusCreated {

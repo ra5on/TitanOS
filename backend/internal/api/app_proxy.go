@@ -9,20 +9,40 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 )
 
+// appProxyArea is the HTTPS names of apps; an area with narrow dependencies
+// (PLAN 8a, see fansArea). proxy is nil where apps get no names; docker
+// finds the web port of an app.
+type appProxyArea struct {
+	proxy  *appproxy.Manager
+	docker *docker.Manager
+}
+
+func (a appProxyArea) register(mux *routeMux, admin, appAdmin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/docker/proxy", admin(a.handleAppProxy))
+	mux.HandleFunc("PUT /api/v1/docker/proxy", appAdmin(a.handleAppProxyDomain))
+	mux.HandleFunc("PUT /api/v1/docker/proxy/apps/{app}", appAdmin(a.handleAppProxyRoute))
+	mux.HandleFunc("DELETE /api/v1/docker/proxy/apps/{app}", appAdmin(a.handleAppProxyRemove))
+	mux.HandleFunc("POST /api/v1/docker/proxy/apps/{app}/tailnet", appAdmin(a.handleAppTailnet))
+	mux.HandleFunc("DELETE /api/v1/docker/proxy/apps/{app}/tailnet", appAdmin(a.handleAppTailnetRemove))
+	mux.HandleFunc("POST /api/v1/docker/proxy/apps/{app}/tailnet/check", appAdmin(a.handleAppTailnetCheck))
+	mux.HandleFunc("PUT /api/v1/docker/proxy/targets/{id}", appAdmin(a.handleAppProxyTarget))
+	mux.HandleFunc("DELETE /api/v1/docker/proxy/targets/{id}", appAdmin(a.handleAppProxyTargetRemove))
+}
+
 // handleAppProxy lists the HTTPS names of apps with their addresses.
-func (s *Server) handleAppProxy(w http.ResponseWriter, r *http.Request) {
-	if s.opts.AppProxy == nil {
+func (a appProxyArea) handleAppProxy(w http.ResponseWriter, r *http.Request) {
+	if a.proxy == nil {
 		writeError(w, http.StatusNotFound, "not_found", "no app proxy")
 		return
 	}
-	writeJSON(w, http.StatusOK, s.opts.AppProxy.Info())
+	writeJSON(w, http.StatusOK, a.proxy.Info())
 }
 
 // handleAppProxyDomain sets what holds for all names: the domain of one's
 // own, the local name, mDNS and the switch for all names. A field that is
 // not sent stays as it is (older pages only send the domain).
-func (s *Server) handleAppProxyDomain(w http.ResponseWriter, r *http.Request) {
-	if s.opts.AppProxy == nil {
+func (a appProxyArea) handleAppProxyDomain(w http.ResponseWriter, r *http.Request) {
+	if a.proxy == nil {
 		writeError(w, http.StatusNotFound, "not_found", "no app proxy")
 		return
 	}
@@ -31,14 +51,14 @@ func (s *Server) handleAppProxyDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Domain != nil || req.LocalName != nil || req.MDNS != nil || req.Off != nil {
-		if err := s.opts.AppProxy.SetGeneral(req); err != nil {
+		if err := a.proxy.SetGeneral(req); err != nil {
 			writeAppProxyError(w, err)
 			return
 		}
 	}
 	if req.TailscaleKey != nil {
 		// The key itself is never logged or noted, only that it changed.
-		if err := s.opts.AppProxy.SetTailnetKey(*req.TailscaleKey); err != nil {
+		if err := a.proxy.SetTailnetKey(*req.TailscaleKey); err != nil {
 			writeAppProxyError(w, err)
 			return
 		}
@@ -48,12 +68,12 @@ func (s *Server) handleAppProxyDomain(w http.ResponseWriter, r *http.Request) {
 		noteTarget(r, *req.Domain)
 	}
 	slog.Info("app proxy settings changed", "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleAppProxy(w, r)
+	a.handleAppProxy(w, r)
 }
 
 // handleAppProxyTarget sets the HTTPS name of a target outside Docker.
-func (s *Server) handleAppProxyTarget(w http.ResponseWriter, r *http.Request) {
-	if s.opts.AppProxy == nil {
+func (a appProxyArea) handleAppProxyTarget(w http.ResponseWriter, r *http.Request) {
+	if a.proxy == nil {
 		writeError(w, http.StatusNotFound, "not_found", "no app proxy")
 		return
 	}
@@ -62,34 +82,34 @@ func (s *Server) handleAppProxyTarget(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	if err := s.opts.AppProxy.SetTarget(id, route); err != nil {
+	if err := a.proxy.SetTarget(id, route); err != nil {
 		writeAppProxyError(w, err)
 		return
 	}
 	noteTarget(r, id, route.Name, route.Host)
 	slog.Info("app proxy target changed", "target", id, "name", route.Name, "host", route.Host, "port", route.Port, "enabled", route.Enabled, "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleAppProxy(w, r)
+	a.handleAppProxy(w, r)
 }
 
 // handleAppProxyTargetRemove forgets a target outside Docker.
-func (s *Server) handleAppProxyTargetRemove(w http.ResponseWriter, r *http.Request) {
-	if s.opts.AppProxy == nil {
+func (a appProxyArea) handleAppProxyTargetRemove(w http.ResponseWriter, r *http.Request) {
+	if a.proxy == nil {
 		writeError(w, http.StatusNotFound, "not_found", "no app proxy")
 		return
 	}
 	id := r.PathValue("id")
-	if err := s.opts.AppProxy.RemoveTarget(id); err != nil {
+	if err := a.proxy.RemoveTarget(id); err != nil {
 		writeAppProxyError(w, err)
 		return
 	}
 	noteTarget(r, id)
 	slog.Info("app proxy target removed", "target", id, "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleAppProxy(w, r)
+	a.handleAppProxy(w, r)
 }
 
 // handleAppProxyRoute sets the HTTPS name of one app.
-func (s *Server) handleAppProxyRoute(w http.ResponseWriter, r *http.Request) {
-	if s.opts.AppProxy == nil {
+func (a appProxyArea) handleAppProxyRoute(w http.ResponseWriter, r *http.Request) {
+	if a.proxy == nil {
 		writeError(w, http.StatusNotFound, "not_found", "no app proxy")
 		return
 	}
@@ -98,37 +118,37 @@ func (s *Server) handleAppProxyRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	app := r.PathValue("app")
-	if err := s.opts.AppProxy.SetRoute(app, route); err != nil {
+	if err := a.proxy.SetRoute(app, route); err != nil {
 		writeAppProxyError(w, err)
 		return
 	}
 	noteTarget(r, app, route.Name)
 	slog.Info("app proxy route changed", "app", app, "name", route.Name, "port", route.Port, "enabled", route.Enabled, "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleAppProxy(w, r)
+	a.handleAppProxy(w, r)
 }
 
 // handleAppProxyRemove forgets the HTTPS name of an app.
-func (s *Server) handleAppProxyRemove(w http.ResponseWriter, r *http.Request) {
-	if s.opts.AppProxy == nil {
+func (a appProxyArea) handleAppProxyRemove(w http.ResponseWriter, r *http.Request) {
+	if a.proxy == nil {
 		writeError(w, http.StatusNotFound, "not_found", "no app proxy")
 		return
 	}
 	app := r.PathValue("app")
-	if err := s.opts.AppProxy.RemoveRoute(app); err != nil {
+	if err := a.proxy.RemoveRoute(app); err != nil {
 		writeAppProxyError(w, err)
 		return
 	}
 	noteTarget(r, app)
 	slog.Info("app proxy route removed", "app", app, "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleAppProxy(w, r)
+	a.handleAppProxy(w, r)
 }
 
 // handleAppTailnet publishes an app in the tailnet with one click
 // ("Im Tailnet veröffentlichen"): {port, tailscaleKey}, both optional.
 // The page sends the WebUI port of the app's main service; without one,
 // the NAS takes the app's WebUI label, else its first TCP port.
-func (s *Server) handleAppTailnet(w http.ResponseWriter, r *http.Request) {
-	if s.opts.AppProxy == nil {
+func (a appProxyArea) handleAppTailnet(w http.ResponseWriter, r *http.Request) {
+	if a.proxy == nil {
 		writeError(w, http.StatusNotFound, "not_found", "no app proxy")
 		return
 	}
@@ -140,10 +160,10 @@ func (s *Server) handleAppTailnet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	app := r.PathValue("app")
-	if req.Port == 0 && s.opts.Docker != nil {
-		req.Port = webPort(s.opts.Docker.Status(r.Context()).Containers, app)
+	if req.Port == 0 && a.docker != nil {
+		req.Port = webPort(a.docker.Status(r.Context()).Containers, app)
 	}
-	route, err := s.opts.AppProxy.PublishTailnet(app, req.Port, req.TailscaleKey)
+	route, err := a.proxy.PublishTailnet(app, req.Port, req.TailscaleKey)
 	if err != nil {
 		writeAppProxyError(w, err)
 		return
@@ -154,35 +174,35 @@ func (s *Server) handleAppTailnet(w http.ResponseWriter, r *http.Request) {
 	}
 	noteTarget(r, app, route.TailscaleName, route.Name)
 	slog.Info("app published in the tailnet", "app", app, "name", route.Name, "tailnet", route.TailscaleName, "port", route.Port, "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleAppProxy(w, r)
+	a.handleAppProxy(w, r)
 }
 
 // handleAppTailnetRemove takes an app out of the tailnet: its device logs
 // out and stops (it stays in the tailnet's admin console until removed
 // there).
-func (s *Server) handleAppTailnetRemove(w http.ResponseWriter, r *http.Request) {
-	if s.opts.AppProxy == nil {
+func (a appProxyArea) handleAppTailnetRemove(w http.ResponseWriter, r *http.Request) {
+	if a.proxy == nil {
 		writeError(w, http.StatusNotFound, "not_found", "no app proxy")
 		return
 	}
 	app := r.PathValue("app")
-	if err := s.opts.AppProxy.UnpublishTailnet(app); err != nil {
+	if err := a.proxy.UnpublishTailnet(app); err != nil {
 		writeAppProxyError(w, err)
 		return
 	}
 	noteTarget(r, app)
 	slog.Info("app taken out of the tailnet", "app", app, "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleAppProxy(w, r)
+	a.handleAppProxy(w, r)
 }
 
 // handleAppTailnetCheck asks the app's ts.net address over the tailnet,
 // with its certificate checked; the dialog shows the address once it works.
-func (s *Server) handleAppTailnetCheck(w http.ResponseWriter, r *http.Request) {
-	if s.opts.AppProxy == nil {
+func (a appProxyArea) handleAppTailnetCheck(w http.ResponseWriter, r *http.Request) {
+	if a.proxy == nil {
 		writeError(w, http.StatusNotFound, "not_found", "no app proxy")
 		return
 	}
-	check, err := s.opts.AppProxy.CheckTailnet(r.Context(), r.PathValue("app"))
+	check, err := a.proxy.CheckTailnet(r.Context(), r.PathValue("app"))
 	if err != nil {
 		writeAppProxyError(w, err)
 		return

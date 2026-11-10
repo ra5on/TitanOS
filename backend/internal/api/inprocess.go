@@ -14,25 +14,25 @@ type inProcessIdentity struct{}
 // notifyDir is where personal notifications held back for quiet hours are
 // kept: on the first mounted volume, never on the stick.
 func (s *Server) notifyDir() (string, bool) {
-	if s.opts.Storage == nil {
+	if s.core().storage == nil {
 		return "", false
 	}
-	mounted := s.opts.Storage.Mounted()
+	mounted := s.core().storage.Mounted()
 	if len(mounted) == 0 {
 		return "", false
 	}
 	slices.Sort(mounted)
-	return filepath.Join(s.opts.Storage.MountPoint(mounted[0]), ".titanos", "notify"), true
+	return filepath.Join(s.core().storage.MountPoint(mounted[0]), ".titanos", "notify"), true
 }
 
 // notifyAudience are the accounts that may get the notifications of the NAS
 // on their own channels: owners and administrators that are not locked.
 func (s *Server) notifyAudience() []string {
-	if s.opts.Users == nil {
+	if s.core().users == nil {
 		return nil
 	}
 	var names []string
-	for _, user := range s.opts.Users.List() {
+	for _, user := range s.core().users.List() {
 		if user.Role.CanAdminister() && !user.Disabled {
 			names = append(names, user.Name)
 		}

@@ -21,12 +21,12 @@ func writeSnapshotFolderError(w http.ResponseWriter, r *http.Request, action str
 	writeStorageError(w, r, action, err)
 }
 
-func (s *Server) handleSnapshotFolderPreview(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleSnapshotFolderPreview(w http.ResponseWriter, r *http.Request) {
 	var req storage.SnapshotFolderRequest
 	if !readJSON(w, r, &req) {
 		return
 	}
-	out, err := s.opts.Storage.PreviewSnapshotFolder(r.Context(), r.PathValue("name"), r.PathValue("snapshot"), req)
+	out, err := a.storage.PreviewSnapshotFolder(r.Context(), r.PathValue("name"), r.PathValue("snapshot"), req)
 	if err != nil {
 		writeSnapshotFolderError(w, r, "snapshot folder preview", err)
 		return
@@ -34,14 +34,14 @@ func (s *Server) handleSnapshotFolderPreview(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) handleSnapshotFolderRestore(w http.ResponseWriter, r *http.Request) {
+func (a storageArea) handleSnapshotFolderRestore(w http.ResponseWriter, r *http.Request) {
 	var req storage.SnapshotFolderRequest
 	if !readJSON(w, r, &req) {
 		return
 	}
 	noteTarget(r, req.Path, req.Mode, req.Conflict)
 	user := currentUser(r).Name
-	job, err := s.opts.Storage.StartSnapshotFolderRestore(context.WithoutCancel(r.Context()), user, r.PathValue("name"), r.PathValue("snapshot"), req)
+	job, err := a.storage.StartSnapshotFolderRestore(context.WithoutCancel(r.Context()), user, r.PathValue("name"), r.PathValue("snapshot"), req)
 	if err != nil {
 		writeSnapshotFolderError(w, r, "snapshot folder restore", err)
 		return
@@ -50,20 +50,20 @@ func (s *Server) handleSnapshotFolderRestore(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusAccepted, job)
 }
 
-func (s *Server) handleSnapshotRestores(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"restores": s.opts.Storage.SnapshotRestores()})
+func (a storageArea) handleSnapshotRestores(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"restores": a.storage.SnapshotRestores()})
 }
 
-func (s *Server) handleSnapshotRestoreCancel(w http.ResponseWriter, r *http.Request) {
-	if err := s.opts.Storage.CancelSnapshotRestore(r.PathValue("id")); err != nil {
+func (a storageArea) handleSnapshotRestoreCancel(w http.ResponseWriter, r *http.Request) {
+	if err := a.storage.CancelSnapshotRestore(r.PathValue("id")); err != nil {
 		writeStorageError(w, r, "cancel snapshot restore", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleSnapshotRestoreForget(w http.ResponseWriter, r *http.Request) {
-	if err := s.opts.Storage.ForgetSnapshotRestore(r.PathValue("id")); err != nil {
+func (a storageArea) handleSnapshotRestoreForget(w http.ResponseWriter, r *http.Request) {
+	if err := a.storage.ForgetSnapshotRestore(r.PathValue("id")); err != nil {
 		writeStorageError(w, r, "forget snapshot restore", err)
 		return
 	}

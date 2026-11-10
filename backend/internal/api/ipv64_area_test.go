@@ -16,13 +16,19 @@ import (
 
 func ipv64AreaServer(t *testing.T) (*testServer, *ipv64fake.Fake) {
 	t.Helper()
+	return ipv64AreaServerWith(t, nil)
+}
+
+// ipv64AreaServerWith is ipv64AreaServer with a last change to the options.
+func ipv64AreaServerWith(t *testing.T, change func(*Options)) (*testServer, *ipv64fake.Fake) {
+	t.Helper()
 	fake := ipv64fake.New(t)
 	ipv64Options = dnsprovider.Options{BaseURL: fake.Server.URL}
 	t.Cleanup(func() { ipv64Options = dnsprovider.Options{} })
 	saved := ipv64Wait
 	ipv64Wait = time.Millisecond
 	t.Cleanup(func() { ipv64Wait = saved })
-	ts := newTestServer(t)
+	ts := newTestServerWith(t, change)
 	ts.server.opts.DDNS.IPv64Options = ipv64Options
 	ts.setup()
 	return ts, fake

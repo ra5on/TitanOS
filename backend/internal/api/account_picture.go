@@ -56,13 +56,13 @@ type accountPictures struct {
 func accountPictureFile(id string) string { return "accounts/picture-" + id + ".jpg" }
 
 // pictures returns the stored choices; the file is read once.
-func (s *Server) pictures() map[string]accountPicture {
-	p := &s.accountPictures
+func (au authArea) pictures() map[string]accountPicture {
+	p := au.pictureState
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if !p.loaded {
 		p.byName = map[string]accountPicture{}
-		_ = s.opts.Store.ReadJSON(accountPicturesFile, &p.byName)
+		_ = au.store.ReadJSON(accountPicturesFile, &p.byName)
 		p.photos = map[string][]byte{}
 		p.loaded = true
 	}
@@ -70,14 +70,14 @@ func (s *Server) pictures() map[string]accountPicture {
 }
 
 // setPicture stores the choice of an account (zero value: back to the standard).
-func (s *Server) setPicture(name string, choice accountPicture, photo []byte) error {
-	s.pictures()
-	p := &s.accountPictures
+func (au authArea) setPicture(name string, choice accountPicture, photo []byte) error {
+	au.pictures()
+	p := au.pictureState
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	old := p.byName[name]
 	if photo != nil {
-		if err := s.opts.Store.Write(accountPictureFile(choice.Photo), photo); err != nil {
+		if err := au.store.Write(accountPictureFile(choice.Photo), photo); err != nil {
 			return err
 		}
 	}
@@ -87,9 +87,9 @@ func (s *Server) setPicture(name string, choice accountPicture, photo []byte) er
 	} else {
 		next[name] = choice
 	}
-	if err := s.opts.Store.WriteJSON(accountPicturesFile, next); err != nil {
+	if err := au.store.WriteJSON(accountPicturesFile, next); err != nil {
 		if photo != nil {
-			_ = s.opts.Store.Remove(accountPictureFile(choice.Photo))
+			_ = au.store.Remove(accountPictureFile(choice.Photo))
 		}
 		return err
 	}
@@ -104,7 +104,7 @@ func (s *Server) setPicture(name string, choice accountPicture, photo []byte) er
 			used = used || other.Photo == old.Photo
 		}
 		if !used {
-			_ = s.opts.Store.Remove(accountPictureFile(old.Photo))
+			_ = au.store.Remove(accountPictureFile(old.Photo))
 			delete(p.photos, old.Photo)
 		}
 	}
@@ -112,15 +112,15 @@ func (s *Server) setPicture(name string, choice accountPicture, photo []byte) er
 }
 
 // photo returns the bytes of a stored photo (read from the stick once).
-func (s *Server) photo(id string) ([]byte, bool) {
-	s.pictures()
-	p := &s.accountPictures
+func (au authArea) photo(id string) ([]byte, bool) {
+	au.pictures()
+	p := au.pictureState
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if data, ok := p.photos[id]; ok {
 		return data, true
 	}
-	data, err := s.opts.Store.Read(accountPictureFile(id))
+	data, err := au.store.Read(accountPictureFile(id))
 	if err != nil {
 		return nil, false
 	}
@@ -128,14 +128,14 @@ func (s *Server) photo(id string) ([]byte, bool) {
 	return data, true
 }
 
-func (s *Server) handleAccountPicture(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.pictures()[currentUser(r).Name])
+func (au authArea) handleAccountPicture(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, au.pictures()[currentUser(r).Name])
 }
 
 // handlePutAccountPicture takes a built-in picture as JSON ({"builtin": id})
 // or a photo as the body (JPEG, PNG or WebP).
-func (s *Server) handlePutAccountPicture(w http.ResponseWriter, r *http.Request) {
-	if !s.requireWebSession(w, r) {
+func (au authArea) handlePutAccountPicture(w http.ResponseWriter, r *http.Request) {
+	if !au.webSession(w, r) {
 		return
 	}
 	name := currentUser(r).Name
@@ -159,7 +159,7 @@ func (s *Server) handlePutAccountPicture(w http.ResponseWriter, r *http.Request)
 		}
 		choice = accountPicture{Photo: digest(photo)}
 	}
-	if err := s.setPicture(name, choice, photo); err != nil {
+	if err := au.setPicture(name, choice, photo); err != nil {
 		writeError(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
@@ -167,11 +167,11 @@ func (s *Server) handlePutAccountPicture(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, choice)
 }
 
-func (s *Server) handleDeleteAccountPicture(w http.ResponseWriter, r *http.Request) {
-	if !s.requireWebSession(w, r) {
+func (au authArea) handleDeleteAccountPicture(w http.ResponseWriter, r *http.Request) {
+	if !au.webSession(w, r) {
 		return
 	}
-	if err := s.setPicture(currentUser(r).Name, accountPicture{}, nil); err != nil {
+	if err := au.setPicture(currentUser(r).Name, accountPicture{}, nil); err != nil {
 		writeError(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
@@ -181,13 +181,13 @@ func (s *Server) handleDeleteAccountPicture(w http.ResponseWriter, r *http.Reque
 
 // shownAccounts are the accounts the login page may name for this request
 // (the gate of GET /login/accounts).
-func (s *Server) shownAccounts(r *http.Request) []string {
-	look, _ := s.loginAppearance()
-	if !look.ShowAccounts || !s.opts.Users.Loaded() || !(look.ShowAccountsExternal || s.fromHomeNetwork(r)) {
+func (au authArea) shownAccounts(r *http.Request) []string {
+	look, _ := au.loginAppearance()
+	if !look.ShowAccounts || !au.users.Loaded() || !(look.ShowAccountsExternal || au.fromHomeNetwork(r)) {
 		return nil
 	}
 	var names []string
-	for _, user := range s.opts.Users.List() {
+	for _, user := range au.users.List() {
 		if !user.Disabled && !slices.Contains(look.HiddenAccounts, user.Name) {
 			names = append(names, user.Name)
 		}
@@ -197,7 +197,7 @@ func (s *Server) shownAccounts(r *http.Request) []string {
 }
 
 // handleLoginPicture serves the photo of an account the login page names.
-func (s *Server) handleLoginPicture(w http.ResponseWriter, r *http.Request) {
+func (au authArea) handleLoginPicture(w http.ResponseWriter, r *http.Request) {
 	// The address names the content (sha256); private: a shared cache never keeps it.
 	w.Header().Set("Cache-Control", "private, max-age=3600")
 	notFound := func() { writeError(w, http.StatusNotFound, "not_found", "no such picture") }
@@ -207,16 +207,16 @@ func (s *Server) handleLoginPicture(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Own bucket: a page with several photos must not use up the one of the account list.
-	if ok, wait := s.allowLoginAccounts("picture:" + passkeySource(r)); !ok {
+	if ok, wait := au.allowLoginAccounts("picture:" + passkeySource(r)); !ok {
 		writeRateLimited(w, wait, "too many requests, try again later")
 		return
 	}
-	pictures := s.pictures()
+	pictures := au.pictures()
 	allowed := false
-	for _, name := range s.shownAccounts(r) {
+	for _, name := range au.shownAccounts(r) {
 		allowed = allowed || pictures[name].Photo == id
 	}
-	data, ok := s.photo(id)
+	data, ok := au.photo(id)
 	if !allowed || !ok {
 		notFound()
 		return
@@ -227,10 +227,10 @@ func (s *Server) handleLoginPicture(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleAccountPicturePhoto serves the own photo to the logged-in account.
-func (s *Server) handleAccountPicturePhoto(w http.ResponseWriter, r *http.Request) {
+func (au authArea) handleAccountPicturePhoto(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	data, ok := s.photo(id)
-	if !accountPictureID.MatchString(id) || !ok || s.pictures()[currentUser(r).Name].Photo != id {
+	data, ok := au.photo(id)
+	if !accountPictureID.MatchString(id) || !ok || au.pictures()[currentUser(r).Name].Photo != id {
 		writeError(w, http.StatusNotFound, "not_found", "no such picture")
 		return
 	}

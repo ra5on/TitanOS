@@ -27,7 +27,7 @@ func (b *agentToolbox) haTools() []*agentTool {
 	// With several connections the tools take "connection".
 	props := func(p map[string]any) map[string]any {
 		if len(hub.All()) > 1 {
-			p["connection"] = b.s.haConnectionProperty()
+			p["connection"] = b.s.haArea().haConnectionProperty()
 		}
 		return p
 	}
@@ -58,7 +58,7 @@ func (b *agentToolbox) haTools() []*agentTool {
 }
 
 func (b *agentToolbox) haStatistics(ctx context.Context, _ *agent.Chat, args json.RawMessage) (agent.Outcome, error) {
-	ha, args, err := b.s.haConnectionArg(args)
+	ha, args, err := b.s.haArea().haConnectionArg(args)
 	if err != nil {
 		return agent.Outcome{}, err
 	}
@@ -90,8 +90,9 @@ func (b *agentToolbox) haStatistics(ctx context.Context, _ *agent.Chat, args jso
 }
 
 func (b *agentToolbox) haSave(kind string) func(context.Context, *agent.Chat, json.RawMessage) (agent.Outcome, error) {
+	env := b.s.agentEnv()
 	return func(ctx context.Context, _ *agent.Chat, args json.RawMessage) (agent.Outcome, error) {
-		ha, args, err := b.s.haConnectionArg(args)
+		ha, args, err := b.s.haArea().haConnectionArg(args)
 		if err != nil {
 			return agent.Outcome{}, err
 		}
@@ -113,12 +114,12 @@ func (b *agentToolbox) haSave(kind string) func(context.Context, *agent.Chat, js
 		}
 		err = ha.SaveConfig(ctx, kind, req.ID, req.Config)
 		// Not a route of TitanOS, so the activity log hears it from here.
-		if b.s.opts.Activity != nil {
+		if env.activity != nil {
 			status := http.StatusOK
 			if err != nil {
 				status = http.StatusBadGateway
 			}
-			b.s.opts.Activity.Record(activity.Entry{User: b.user.Name, Via: activity.ViaAgent, Action: "homeassistant_" + kind + "_save", Target: req.ID, Status: status, OK: err == nil})
+			env.activity.Record(activity.Entry{User: b.user.Name, Via: activity.ViaAgent, Action: "homeassistant_" + kind + "_save", Target: req.ID, Status: status, OK: err == nil})
 		}
 		if err != nil {
 			return agent.Outcome{}, err

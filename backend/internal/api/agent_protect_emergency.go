@@ -26,7 +26,8 @@ import (
 // goes into the activity log.
 
 func (s *Server) emergencyRecord(user, action, target string) {
-	s.opts.Activity.Record(activity.Entry{At: time.Now().UTC(), User: user, Via: activity.ViaSystem, Action: action, Target: target, OK: true})
+	env := s.agentEnv()
+	env.activity.Record(activity.Entry{At: time.Now().UTC(), User: user, Via: activity.ViaSystem, Action: action, Target: target, OK: true})
 }
 
 func (s *Server) emergencyWaitingCount() int {
@@ -58,6 +59,7 @@ func (s *Server) emergencyLatest(account string) (protect.Request, bool) {
 
 // emergencyAsk files a request of an account (via: web or agent).
 func (s *Server) emergencyAsk(user auth.User, reason, code, via string) (protect.Request, error) {
+	env := s.agentEnv()
 	e := s.agentSettings().Features.Emergency
 	if !e.Enabled {
 		return protect.Request{}, errors.New("the emergency access is not switched on")
@@ -79,13 +81,13 @@ func (s *Server) emergencyAsk(user auth.User, reason, code, via string) (protect
 	if req.Code {
 		return s.emergencyGrant(req, "", now)
 	}
-	if s.opts.WebPush != nil {
+	if env.webPush != nil {
 		body := fmt.Sprintf("Grund: „%s“. Ohne Antwort wird der Zugang am %s freigeschaltet.", req.Reason, req.Due.In(s.agentLocation()).Format("02.01. um 15:04"))
 		for _, name := range s.notifyAudience() {
 			if name == user.Name {
 				continue
 			}
-			s.opts.WebPush.SendTo(name, webpush.Message{Title: "🔑 " + user.Name + " beantragt den Notfallzugang", Body: body, URL: "/agent?feature=emergency", Tag: "emergency-" + req.ID})
+			env.webPush.SendTo(name, webpush.Message{Title: "🔑 " + user.Name + " beantragt den Notfallzugang", Body: body, URL: "/agent?feature=emergency", Tag: "emergency-" + req.ID})
 		}
 	}
 	return req, nil
@@ -93,6 +95,7 @@ func (s *Server) emergencyAsk(user auth.User, reason, code, via string) (protect
 
 // emergencyGrant gives the read access of a request and keeps what it added.
 func (s *Server) emergencyGrant(req protect.Request, by string, now time.Time) (protect.Request, error) {
+	env := s.agentEnv()
 	ps := s.protect()
 	ps.accessMu.Lock()
 	var added []string
@@ -134,10 +137,10 @@ func (s *Server) emergencyGrant(req protect.Request, by string, now time.Time) (
 	}
 	s.emergencyRecord(req.Account, "emergency access granted", fmt.Sprintf("%s: %v (%s)", req.Account, added, how))
 	slog.Warn("emergency access granted", "account", req.Account, "shares", added, "how", how, "ends", out.Ends)
-	if s.opts.WebPush != nil {
-		s.opts.WebPush.SendTo(req.Account, webpush.Message{Title: "🔑 Notfallzugang freigeschaltet", Body: "Du kannst jetzt lesend auf die Freigaben und das Notfallhandbuch zugreifen.", URL: "/agent?feature=emergency", Tag: "emergency-" + req.ID})
+	if env.webPush != nil {
+		env.webPush.SendTo(req.Account, webpush.Message{Title: "🔑 Notfallzugang freigeschaltet", Body: "Du kannst jetzt lesend auf die Freigaben und das Notfallhandbuch zugreifen.", URL: "/agent?feature=emergency", Tag: "emergency-" + req.ID})
 		for _, name := range s.notifyAudience() {
-			s.opts.WebPush.SendTo(name, webpush.Message{Title: "🔑 Notfallzugang für " + req.Account + " freigeschaltet", Body: "Er endet von selbst nach 30 Tagen.", URL: "/agent?feature=emergency", Tag: "emergency-" + req.ID})
+			env.webPush.SendTo(name, webpush.Message{Title: "🔑 Notfallzugang für " + req.Account + " freigeschaltet", Body: "Er endet von selbst nach 30 Tagen.", URL: "/agent?feature=emergency", Tag: "emergency-" + req.ID})
 		}
 	}
 	return out, nil
@@ -226,6 +229,7 @@ func (s *Server) emergencyDetach() {
 // emergencyReconcile ends requests and grants that no longer have a
 // registered person (or when the function was switched off).
 func (s *Server) emergencyReconcile(e agentEmergency, now time.Time) {
+	env := s.agentEnv()
 	ps := s.protect()
 	st, err := ps.emergency.State()
 	if err != nil {
@@ -236,7 +240,7 @@ func (s *Server) emergencyReconcile(e agentEmergency, now time.Time) {
 			continue
 		}
 		p := e.person(r.Account)
-		user, ok := s.opts.Users.Get(r.Account)
+		user, ok := env.users.Get(r.Account)
 		gone := !e.Enabled || p == nil || !ok || user.Disabled
 		if !gone {
 			continue
@@ -315,6 +319,7 @@ func (s *Server) handleEmergencyRequest(w http.ResponseWriter, r *http.Request) 
 // handleEmergencyAction: decline, grant and end are for owners and
 // administrators; a person may cancel their own waiting request.
 func (s *Server) handleEmergencyAction(w http.ResponseWriter, r *http.Request) {
+	env := s.agentEnv()
 	user := currentUser(r)
 	id, action := r.PathValue("id"), r.PathValue("action")
 	ps := s.protect()
@@ -346,8 +351,8 @@ func (s *Server) handleEmergencyAction(w http.ResponseWriter, r *http.Request) {
 		out, err = ps.emergency.Decline(id, user.Name, now)
 		if err == nil {
 			s.emergencyRecord(user.Name, "emergency access declined", req.Account)
-			if s.opts.WebPush != nil {
-				s.opts.WebPush.SendTo(req.Account, webpush.Message{Title: "🔑 Notfallzugang abgelehnt", Body: "Dein Antrag wurde abgelehnt.", URL: "/agent?feature=emergency", Tag: "emergency-" + id})
+			if env.webPush != nil {
+				env.webPush.SendTo(req.Account, webpush.Message{Title: "🔑 Notfallzugang abgelehnt", Body: "Dein Antrag wurde abgelehnt.", URL: "/agent?feature=emergency", Tag: "emergency-" + id})
 			}
 		}
 	case "grant":

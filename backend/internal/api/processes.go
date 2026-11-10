@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/procs"
 )
 
@@ -19,22 +20,36 @@ type containerNameCache struct {
 	names map[string]string
 }
 
+// processesArea is the task manager; an area with narrow dependencies
+// (PLAN 8a, see fansArea). docker names the containers processes belong to
+// (nil names none), names keeps them for a few seconds.
+type processesArea struct {
+	procs  *procs.Sampler
+	docker *docker.Manager
+	names  *containerNameCache
+}
+
+func (a processesArea) register(mux *routeMux, admin, browserOnly func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/system/processes", admin(a.handleProcesses))
+	mux.HandleFunc("POST /api/v1/system/processes/{pid}/signal", admin(browserOnly(a.handleProcessSignal)))
+}
+
 // handleProcesses lists the processes of the NAS with CPU, memory and
 // what they belong to (task manager, PLAN 61). Owners and administrators
 // only; not in publicRoutes, so neither tokens nor MCP reach it.
-func (s *Server) handleProcesses(w http.ResponseWriter, r *http.Request) {
-	list, err := s.opts.Processes.List()
+func (a processesArea) handleProcesses(w http.ResponseWriter, r *http.Request) {
+	list, err := a.procs.List()
 	if err != nil {
 		slog.Error("processes", "err", err)
 		writeError(w, http.StatusInternalServerError, "processes_failed", "the processes could not be read")
 		return
 	}
 	var names map[string]string
-	if s.opts.Docker != nil {
-		c := &s.containerNames
+	if a.docker != nil {
+		c := a.names
 		c.mu.Lock()
 		if time.Since(c.at) > 5*time.Second {
-			c.names, c.at = s.opts.Docker.ContainerNames(r.Context()), time.Now()
+			c.names, c.at = a.docker.ContainerNames(r.Context()), time.Now()
 		}
 		names = c.names
 		c.mu.Unlock()
@@ -51,7 +66,7 @@ func (s *Server) handleProcesses(w http.ResponseWriter, r *http.Request) {
 // "kill" ends it at once (SIGKILL). start is the start time from the
 // list; the request fails if the pid names another process by now.
 // init, kernel threads, titand and its parent are refused.
-func (s *Server) handleProcessSignal(w http.ResponseWriter, r *http.Request) {
+func (a processesArea) handleProcessSignal(w http.ResponseWriter, r *http.Request) {
 	pid, err := strconv.Atoi(r.PathValue("pid"))
 	if err != nil {
 		writeError(w, http.StatusNotFound, "process_not_found", "no such process")
@@ -64,7 +79,7 @@ func (s *Server) handleProcessSignal(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	name, err := s.opts.Processes.Signal(pid, req.Start, req.Signal)
+	name, err := a.procs.Signal(pid, req.Start, req.Signal)
 	noteTarget(r, name, req.Signal)
 	switch {
 	case err == nil:

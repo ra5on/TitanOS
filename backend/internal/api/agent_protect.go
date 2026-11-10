@@ -140,6 +140,7 @@ func (e agentEmergency) person(account string) *protect.Person {
 // checkProtect validates the settings of the group. It runs while the
 // agent settings are locked: it must not call agentSettings.
 func (s *Server) checkProtect(f *agentFeatures, old agentFeatures) error {
+	env := s.agentEnv()
 	g := &f.Guard
 	switch g.Mode {
 	case "", guardReport, guardLock, guardAuto:
@@ -166,8 +167,8 @@ func (s *Server) checkProtect(f *agentFeatures, old agentFeatures) error {
 		}
 	}
 	names := map[string]bool{}
-	if s.opts.Shares != nil {
-		for _, sh := range s.opts.Shares.List() {
+	if env.shares != nil {
+		for _, sh := range env.shares.List() {
 			names[sh.Name] = true
 		}
 	}
@@ -203,7 +204,7 @@ func (s *Server) checkProtect(f *agentFeatures, old agentFeatures) error {
 	seen := map[string]bool{}
 	for i := range e.Persons {
 		p := &e.Persons[i]
-		user, ok := s.opts.Users.Get(p.Account)
+		user, ok := env.users.Get(p.Account)
 		if !ok {
 			return fmt.Errorf("unknown account %q", p.Account)
 		}

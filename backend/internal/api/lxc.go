@@ -10,7 +10,10 @@ import (
 	"slices"
 
 	"github.com/ra5on/TitanOS/backend/internal/lxc"
+	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/run"
+	"github.com/ra5on/TitanOS/backend/internal/storage"
+	"github.com/ra5on/TitanOS/backend/internal/system"
 	"github.com/ra5on/TitanOS/backend/internal/terminal"
 )
 
@@ -58,25 +61,52 @@ func writeLXCError(w http.ResponseWriter, err error) {
 	writeError(w, http.StatusInternalServerError, "lxc_failed", err.Error())
 }
 
+// lxcArea is the system containers; an area with narrow dependencies
+// (PLAN 8a, see fansArea). storage names the mounted volumes, network the
+// bridge and the connections, monitor the memory of the host. serveConsole
+// connects a WebSocket to a shell with the rules of every console.
+type lxcArea struct {
+	lxc          *lxc.Manager
+	storage      *storage.Manager
+	network      *network.Manager
+	monitor      *system.Monitor
+	serveConsole consoleFunc
+}
+
+func (a lxcArea) register(mux *routeMux, admin, appAdmin, heavyAppAdmin, appConsole func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/lxc", admin(a.handleLXC))
+	mux.HandleFunc("GET /api/v1/lxc/images", admin(a.handleLXCImages))
+	mux.HandleFunc("POST /api/v1/lxc", heavyAppAdmin(a.handleLXCCreate))
+	mux.HandleFunc("PUT /api/v1/lxc/{name}", appAdmin(a.handleLXCUpdate))
+	mux.HandleFunc("DELETE /api/v1/lxc/{name}", appAdmin(a.handleLXCDelete))
+	mux.HandleFunc("GET /api/v1/lxc/{name}/config", admin(a.handleLXCConfig))
+	mux.HandleFunc("GET /api/v1/lxc/{name}/console", appConsole(a.handleLXCConsole))
+	mux.HandleFunc("GET /api/v1/lxc/{name}/snapshots", admin(a.handleLXCSnapshots))
+	mux.HandleFunc("POST /api/v1/lxc/{name}/snapshots", heavyAppAdmin(a.handleLXCSnapshotCreate))
+	mux.HandleFunc("POST /api/v1/lxc/{name}/snapshots/{snapshot}/restore", heavyAppAdmin(a.handleLXCSnapshotRestore))
+	mux.HandleFunc("DELETE /api/v1/lxc/{name}/snapshots/{snapshot}", heavyAppAdmin(a.handleLXCSnapshotDelete))
+	mux.HandleFunc("POST /api/v1/lxc/{name}/{action}", appAdmin(a.handleLXCAction))
+}
+
 // handleLXC lists the system containers with what the create dialog needs.
-func (s *Server) handleLXC(w http.ResponseWriter, r *http.Request) {
-	memory := s.opts.Monitor.Info().Memory
+func (a lxcArea) handleLXC(w http.ResponseWriter, r *http.Request) {
+	memory := a.monitor.Info().Memory
 	writeJSON(w, http.StatusOK, map[string]any{
-		"installed": s.opts.LXC.Installed(),
-		"dev":       s.opts.LXC.Disabled,
+		"installed": a.lxc.Installed(),
+		"dev":       a.lxc.Disabled,
 		"host": map[string]any{
 			"cpus":        runtime.NumCPU(),
 			"memoryBytes": memory.TotalBytes,
 		},
-		"bridge":     s.opts.Network.BridgeReady(),
-		"networks":   s.opts.Network.Connections(),
-		"containers": s.opts.LXC.List(s.opts.Storage.Mounted()),
+		"bridge":     a.network.BridgeReady(),
+		"networks":   a.network.Connections(),
+		"containers": a.lxc.List(a.storage.Mounted()),
 	})
 }
 
 // handleLXCImages lists the images of images.linuxcontainers.org, kept in RAM.
-func (s *Server) handleLXCImages(w http.ResponseWriter, r *http.Request) {
-	images, err := s.opts.LXC.Images(r.Context())
+func (a lxcArea) handleLXCImages(w http.ResponseWriter, r *http.Request) {
+	images, err := a.lxc.Images(r.Context())
 	message := ""
 	if err != nil {
 		message = err.Error()
@@ -87,7 +117,7 @@ func (s *Server) handleLXCImages(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"images": images, "error": message})
 }
 
-func (s *Server) handleLXCCreate(w http.ResponseWriter, r *http.Request) {
+func (a lxcArea) handleLXCCreate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		lxc.Container
 		// Start starts the container once it was made.
@@ -99,7 +129,7 @@ func (s *Server) handleLXCCreate(w http.ResponseWriter, r *http.Request) {
 	noteTarget(r, req.Name)
 	// What is decided by TitanOS, not by the request.
 	req.Btrfs = false
-	if err := s.opts.LXC.Create(r.Context(), req.Container, s.opts.Storage.Mounted()); err != nil {
+	if err := a.lxc.Create(r.Context(), req.Container, a.storage.Mounted()); err != nil {
 		writeLXCError(w, err)
 		return
 	}
@@ -107,14 +137,14 @@ func (s *Server) handleLXCCreate(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 }
 
-func (s *Server) handleLXCUpdate(w http.ResponseWriter, r *http.Request) {
+func (a lxcArea) handleLXCUpdate(w http.ResponseWriter, r *http.Request) {
 	var change lxc.Change
 	if !readJSON(w, r, &change) {
 		return
 	}
 	name := r.PathValue("name")
 	noteTarget(r, name)
-	if err := s.opts.LXC.Update(name, change); err != nil {
+	if err := a.lxc.Update(name, change); err != nil {
 		writeLXCError(w, err)
 		return
 	}
@@ -122,7 +152,7 @@ func (s *Server) handleLXCUpdate(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleLXCDelete(w http.ResponseWriter, r *http.Request) {
+func (a lxcArea) handleLXCDelete(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		DeleteData bool   `json:"deleteData"`
 		Confirm    string `json:"confirm"`
@@ -135,15 +165,15 @@ func (s *Server) handleLXCDelete(w http.ResponseWriter, r *http.Request) {
 	noteTarget(r, name)
 	// With its data: only while its volume is there (see vm.Manager.Delete).
 	if req.DeleteData {
-		mounted := s.opts.Storage.Mounted()
-		for _, c := range s.opts.LXC.List(nil) {
+		mounted := a.storage.Mounted()
+		for _, c := range a.lxc.List(nil) {
 			if c.Name == name && !slices.Contains(mounted, c.Volume) {
 				writeLXCError(w, lxc.ErrUnknownVolume)
 				return
 			}
 		}
 	}
-	if err := s.opts.LXC.Delete(r.Context(), name, req.DeleteData, req.Confirm); err != nil {
+	if err := a.lxc.Delete(r.Context(), name, req.DeleteData, req.Confirm); err != nil {
 		writeLXCError(w, err)
 		return
 	}
@@ -151,11 +181,11 @@ func (s *Server) handleLXCDelete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleLXCAction(w http.ResponseWriter, r *http.Request) {
+func (a lxcArea) handleLXCAction(w http.ResponseWriter, r *http.Request) {
 	name, action := r.PathValue("name"), r.PathValue("action")
 	noteTarget(r, name)
 	// Stopping waits for the container to shut down; a closed page must not break that off.
-	if err := s.opts.LXC.Action(context.WithoutCancel(r.Context()), name, action, s.opts.Storage.Mounted()); err != nil {
+	if err := a.lxc.Action(context.WithoutCancel(r.Context()), name, action, a.storage.Mounted()); err != nil {
 		writeLXCError(w, err)
 		return
 	}
@@ -164,8 +194,8 @@ func (s *Server) handleLXCAction(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleLXCConfig shows the LXC configuration the next start writes.
-func (s *Server) handleLXCConfig(w http.ResponseWriter, r *http.Request) {
-	text, err := s.opts.LXC.GeneratedConfig(r.PathValue("name"))
+func (a lxcArea) handleLXCConfig(w http.ResponseWriter, r *http.Request) {
+	text, err := a.lxc.GeneratedConfig(r.PathValue("name"))
 	if err != nil {
 		writeLXCError(w, err)
 		return
@@ -176,14 +206,14 @@ func (s *Server) handleLXCConfig(w http.ResponseWriter, r *http.Request) {
 // handleLXCConsole connects a WebSocket to a shell inside a running
 // container (mode=shell, the default) or to its text console
 // (mode=console), with the same rules as every console.
-func (s *Server) handleLXCConsole(w http.ResponseWriter, r *http.Request) {
+func (a lxcArea) handleLXCConsole(w http.ResponseWriter, r *http.Request) {
 	name, mode := r.PathValue("name"), r.URL.Query().Get("mode")
-	command, err := s.opts.LXC.ConsoleCommand(name, mode)
+	command, err := a.lxc.ConsoleCommand(name, mode)
 	if err != nil {
 		writeLXCError(w, err)
 		return
 	}
-	s.serveConsole(w, r, "lxc "+name, func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error) {
+	a.serveConsole(w, r, "lxc "+name, func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error) {
 		session, err := terminal.Start(command)
 		if err != nil {
 			return nil, nil, err
@@ -192,8 +222,8 @@ func (s *Server) handleLXCConsole(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleLXCSnapshots(w http.ResponseWriter, r *http.Request) {
-	list, err := s.opts.LXC.Snapshots(r.PathValue("name"))
+func (a lxcArea) handleLXCSnapshots(w http.ResponseWriter, r *http.Request) {
+	list, err := a.lxc.Snapshots(r.PathValue("name"))
 	if err != nil {
 		writeLXCError(w, err)
 		return
@@ -201,10 +231,10 @@ func (s *Server) handleLXCSnapshots(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"snapshots": list})
 }
 
-func (s *Server) handleLXCSnapshotCreate(w http.ResponseWriter, r *http.Request) {
+func (a lxcArea) handleLXCSnapshotCreate(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	noteTarget(r, name)
-	snapshot, err := s.opts.LXC.CreateSnapshot(context.WithoutCancel(r.Context()), name)
+	snapshot, err := a.lxc.CreateSnapshot(context.WithoutCancel(r.Context()), name)
 	if err != nil {
 		writeLXCError(w, err)
 		return
@@ -213,10 +243,10 @@ func (s *Server) handleLXCSnapshotCreate(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusCreated, snapshot)
 }
 
-func (s *Server) handleLXCSnapshotRestore(w http.ResponseWriter, r *http.Request) {
+func (a lxcArea) handleLXCSnapshotRestore(w http.ResponseWriter, r *http.Request) {
 	name, id := r.PathValue("name"), r.PathValue("snapshot")
 	noteTarget(r, name+"@"+id)
-	if err := s.opts.LXC.RestoreSnapshot(context.WithoutCancel(r.Context()), name, id); err != nil {
+	if err := a.lxc.RestoreSnapshot(context.WithoutCancel(r.Context()), name, id); err != nil {
 		writeLXCError(w, err)
 		return
 	}
@@ -224,10 +254,10 @@ func (s *Server) handleLXCSnapshotRestore(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleLXCSnapshotDelete(w http.ResponseWriter, r *http.Request) {
+func (a lxcArea) handleLXCSnapshotDelete(w http.ResponseWriter, r *http.Request) {
 	name, id := r.PathValue("name"), r.PathValue("snapshot")
 	noteTarget(r, name+"@"+id)
-	if err := s.opts.LXC.DeleteSnapshot(context.WithoutCancel(r.Context()), name, id); err != nil {
+	if err := a.lxc.DeleteSnapshot(context.WithoutCancel(r.Context()), name, id); err != nil {
 		writeLXCError(w, err)
 		return
 	}

@@ -11,23 +11,35 @@ import (
 // devices. Owners and administrators only; the configuration of a new
 // device, with its private key, is answered once and kept nowhere.
 
-func (s *Server) handleWireGuard(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.opts.WireGuard.Status())
+// wireGuardArea is an area with narrow dependencies (PLAN 8a, see fansArea).
+type wireGuardArea struct {
+	wireGuard *wgserver.Manager
 }
 
-func (s *Server) handleWireGuardSet(w http.ResponseWriter, r *http.Request) {
+func (a wireGuardArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/network/wireguard", admin(a.handleWireGuard))
+	mux.HandleFunc("PUT /api/v1/network/wireguard", admin(a.handleWireGuardSet))
+	mux.HandleFunc("POST /api/v1/network/wireguard/peers", admin(a.handleWireGuardAdd))
+	mux.HandleFunc("POST /api/v1/network/wireguard/peers/remove", admin(a.handleWireGuardRemove))
+}
+
+func (a wireGuardArea) handleWireGuard(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, a.wireGuard.Status())
+}
+
+func (a wireGuardArea) handleWireGuardSet(w http.ResponseWriter, r *http.Request) {
 	var req wgserver.Settings
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.WireGuard.Set(r.Context(), req); err != nil {
+	if err := a.wireGuard.Set(r.Context(), req); err != nil {
 		wireGuardError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, s.opts.WireGuard.Status())
+	writeJSON(w, http.StatusOK, a.wireGuard.Status())
 }
 
-func (s *Server) handleWireGuardAdd(w http.ResponseWriter, r *http.Request) {
+func (a wireGuardArea) handleWireGuardAdd(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name string `json:"name"`
 	}
@@ -35,7 +47,7 @@ func (s *Server) handleWireGuardAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	noteTarget(r, req.Name)
-	peer, config, err := s.opts.WireGuard.AddPeer(r.Context(), req.Name)
+	peer, config, err := a.wireGuard.AddPeer(r.Context(), req.Name)
 	if err != nil {
 		wireGuardError(w, err)
 		return
@@ -44,7 +56,7 @@ func (s *Server) handleWireGuardAdd(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"name": peer.Name, "address": peer.Address, "publicKey": peer.PublicKey, "config": config})
 }
 
-func (s *Server) handleWireGuardRemove(w http.ResponseWriter, r *http.Request) {
+func (a wireGuardArea) handleWireGuardRemove(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		PublicKey string `json:"publicKey"`
 		Name      string `json:"name"`
@@ -53,11 +65,11 @@ func (s *Server) handleWireGuardRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	noteTarget(r, req.Name)
-	if err := s.opts.WireGuard.RemovePeer(r.Context(), req.PublicKey); err != nil {
+	if err := a.wireGuard.RemovePeer(r.Context(), req.PublicKey); err != nil {
 		wireGuardError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, s.opts.WireGuard.Status())
+	writeJSON(w, http.StatusOK, a.wireGuard.Status())
 }
 
 func wireGuardError(w http.ResponseWriter, err error) {

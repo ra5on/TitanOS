@@ -88,7 +88,7 @@ func (s *Server) activityLog(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// A route called by an MCP tool is recorded once, as that tool call
 		// (mcp.go).
-		if _, mcp := r.Context().Value(mcpCallKey{}).(*mcpCall); s.opts.Activity == nil || !strings.HasPrefix(r.URL.Path, "/api/v1/") || mcp {
+		if _, mcp := r.Context().Value(mcpCallKey{}).(*mcpCall); s.core().activity == nil || !strings.HasPrefix(r.URL.Path, "/api/v1/") || mcp {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -102,7 +102,7 @@ func (s *Server) activityLog(next http.Handler) http.Handler {
 		if status == 0 {
 			status = http.StatusOK
 		}
-		s.opts.Activity.Record(activity.Entry{
+		s.core().activity.Record(activity.Entry{
 			User:   rec.user,
 			Via:    rec.via,
 			IP:     remoteIP(r),
@@ -207,10 +207,10 @@ func contains(list []string, s string) bool {
 
 // recordEvent writes an entry outside a logged-in request, such as a login.
 func (s *Server) recordEvent(r *http.Request, user, action, target string, ok bool) {
-	if s.opts.Activity == nil {
+	if s.core().activity == nil {
 		return
 	}
-	s.opts.Activity.Record(activity.Entry{User: user, Via: activity.ViaWeb, IP: remoteIP(r), Action: action, Target: target, OK: ok})
+	s.core().activity.Record(activity.Entry{User: user, Via: activity.ViaWeb, IP: remoteIP(r), Action: action, Target: target, OK: ok})
 }
 
 // statusWriter remembers the status code and still lets WebSockets take
@@ -250,8 +250,20 @@ func (w *statusWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return conn, rw, err
 }
 
-func (s *Server) handleActivity(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Activity == nil {
+// activityArea is the page of the activity log; an area with narrow
+// dependencies (PLAN 8a, see fansArea). Recording stays with the server
+// (activityLog, recordEvent).
+type activityArea struct {
+	activity *activity.Manager
+}
+
+func (a activityArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/activity", admin(a.handleActivity))
+	mux.HandleFunc("PUT /api/v1/activity", admin(a.handleActivitySettings))
+}
+
+func (a activityArea) handleActivity(w http.ResponseWriter, r *http.Request) {
+	if a.activity == nil {
 		featureUnavailable(w)
 		return
 	}
@@ -278,7 +290,7 @@ func (s *Server) handleActivity(w http.ResponseWriter, r *http.Request) {
 	} else if f.Limit > 1000 {
 		f.Limit = 1000
 	}
-	entries, more, stored, err := s.opts.Activity.Query(r.Context(), f)
+	entries, more, stored, err := a.activity.Query(r.Context(), f)
 	if err != nil {
 		featureError(w, err)
 		return
@@ -299,7 +311,7 @@ func (s *Server) handleActivity(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Disposition", `attachment; filename="titanos-activity-`+stamp+`.json"`)
 		json.NewEncoder(w).Encode(entries)
 	default:
-		writeJSON(w, http.StatusOK, map[string]any{"entries": entries, "more": more, "stored": stored, "status": s.opts.Activity.Status()})
+		writeJSON(w, http.StatusOK, map[string]any{"entries": entries, "more": more, "stored": stored, "status": a.activity.Status()})
 	}
 }
 
@@ -312,8 +324,8 @@ func csvSafe(s string) string {
 	return s
 }
 
-func (s *Server) handleActivitySettings(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Activity == nil {
+func (a activityArea) handleActivitySettings(w http.ResponseWriter, r *http.Request) {
+	if a.activity == nil {
 		featureUnavailable(w)
 		return
 	}
@@ -331,14 +343,14 @@ func (s *Server) handleActivitySettings(w http.ResponseWriter, r *http.Request) 
 	// noted before, a log that is off takes nothing.
 	var rec *pendingActivity
 	action := ""
-	if was := s.opts.Activity.Status().Settings; was.Enabled && !req.Enabled {
+	if was := a.activity.Status().Settings; was.Enabled && !req.Enabled {
 		if p, ok := r.Context().Value(activityKey{}).(*pendingActivity); ok && p.user != "" {
 			rec, action = p, p.action
-			s.opts.Activity.Record(activity.Entry{User: rec.user, Via: rec.via, IP: remoteIP(r), Action: rec.action, Target: "off", Status: http.StatusOK, OK: true})
+			a.activity.Record(activity.Entry{User: rec.user, Via: rec.via, IP: remoteIP(r), Action: rec.action, Target: "off", Status: http.StatusOK, OK: true})
 			rec.action = ""
 		}
 	}
-	if err := s.opts.Activity.Set(req); err != nil {
+	if err := a.activity.Set(req); err != nil {
 		// The stick did not take it: the log stays on, and this request
 		// is noted as failed after the entry above.
 		if rec != nil {
@@ -347,5 +359,5 @@ func (s *Server) handleActivitySettings(w http.ResponseWriter, r *http.Request) 
 		featureError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, s.opts.Activity.Status())
+	writeJSON(w, http.StatusOK, a.activity.Status())
 }

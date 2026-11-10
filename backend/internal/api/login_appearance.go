@@ -28,6 +28,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/config"
 	xdraw "golang.org/x/image/draw"
 	_ "golang.org/x/image/webp"
 )
@@ -241,22 +243,51 @@ func (v *loginAppearance) validate() error {
 	return nil
 }
 
-// current returns the setting, reading the stick only the first time.
+// loginLookArea is the look of the login page; an area with narrow
+// dependencies (PLAN 8a, see fansArea). store holds the setting and its
+// image, look what was read from it. authenticate names the account of a
+// request, if it has a login.
+type loginLookArea struct {
+	store        *config.Store
+	look         *loginLook
+	authenticate func(r *http.Request) (auth.User, bool)
+}
+
+func (a loginLookArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
+	// The look of the login page is public; changing it is not.
+	mux.HandleFunc("GET /api/v1/login-appearance", a.handleLoginAppearance)
+	mux.HandleFunc("GET /api/v1/login-appearance/background/{id}", a.handleLoginBackground)
+	mux.HandleFunc("PUT /api/v1/login-appearance", admin(a.handlePutLoginAppearance))
+	mux.HandleFunc("DELETE /api/v1/login-appearance", admin(a.handleDeleteLoginAppearance))
+}
+
+// loginLookArea is the area of the server; the login page, the account
+// picker and the account pictures read the look through loginAppearance.
+func (s *Server) loginLookArea() loginLookArea {
+	return loginLookArea{store: s.opts.Store, look: &s.loginLook, authenticate: s.authArea().authenticate}
+}
+
+// loginAppearance is the look for the parts of the server outside the area.
 func (s *Server) loginAppearance() (loginAppearance, bool) {
-	l := &s.loginLook
+	return s.loginLookArea().loginAppearance()
+}
+
+// current returns the setting, reading the stick only the first time.
+func (a loginLookArea) loginAppearance() (loginAppearance, bool) {
+	l := a.look
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	s.loadLoginLookLocked()
+	a.loadLoginLookLocked()
 	return l.value, l.exists
 }
 
-func (s *Server) loadLoginLookLocked() {
-	l := &s.loginLook
+func (a loginLookArea) loadLoginLookLocked() {
+	l := a.look
 	if l.loaded {
 		return
 	}
 	l.value = defaultLoginAppearance()
-	data, err := s.opts.Store.Read(loginAppearanceFile)
+	data, err := a.store.Read(loginAppearanceFile)
 	if err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
 			// Try again on the next request; until then the default look.
@@ -273,7 +304,7 @@ func (s *Server) loadLoginLookLocked() {
 		return
 	}
 	if value.Image != nil {
-		image, err := s.opts.Store.Read(loginImageFile(value.Image.ID))
+		image, err := a.store.Read(loginImageFile(value.Image.ID))
 		if err != nil || digest(image) != value.Image.ID {
 			slog.Warn("login image missing or damaged")
 			value.Image = nil
@@ -317,17 +348,17 @@ func lookAnswer(configured bool, value loginAppearance, admin bool) publicLoginL
 }
 
 // handleLoginAppearance answers without login: display values only.
-func (s *Server) handleLoginAppearance(w http.ResponseWriter, r *http.Request) {
-	value, exists := s.loginAppearance()
-	user, ok := s.authenticate(r)
+func (a loginLookArea) handleLoginAppearance(w http.ResponseWriter, r *http.Request) {
+	value, exists := a.loginAppearance()
+	user, ok := a.authenticate(r)
 	writeJSON(w, http.StatusOK, lookAnswer(exists, value, ok && user.Role.CanAdminister()))
 }
 
 // handleLoginBackground serves the configured image and nothing else.
-func (s *Server) handleLoginBackground(w http.ResponseWriter, r *http.Request) {
-	l := &s.loginLook
+func (a loginLookArea) handleLoginBackground(w http.ResponseWriter, r *http.Request) {
+	l := a.look
 	l.mu.Lock()
-	s.loadLoginLookLocked()
+	a.loadLoginLookLocked()
 	image, value := l.image, l.value
 	l.mu.Unlock()
 	if value.Image == nil || r.PathValue("id") != value.Image.ID || image == nil {
@@ -343,7 +374,7 @@ func (s *Server) handleLoginBackground(w http.ResponseWriter, r *http.Request) {
 
 // handlePutLoginAppearance saves the setting: JSON, or multipart with the
 // fields "settings" and "image".
-func (s *Server) handlePutLoginAppearance(w http.ResponseWriter, r *http.Request) {
+func (a loginLookArea) handlePutLoginAppearance(w http.ResponseWriter, r *http.Request) {
 	var raw, upload []byte
 	if isMultipartImageUpload(r) {
 		r.Body = http.MaxBytesReader(w, r.Body, maxLoginImageBytes+maxJSONBody+(64<<10))
@@ -416,10 +447,10 @@ func (s *Server) handlePutLoginAppearance(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	l := &s.loginLook
+	l := a.look
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	s.loadLoginLookLocked()
+	a.loadLoginLookLocked()
 	if !l.loaded {
 		writeError(w, 503, "config_unavailable", "/config could not be read")
 		return
@@ -439,22 +470,22 @@ func (s *Server) handlePutLoginAppearance(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if meta != nil && (old == nil || old.ID != meta.ID) {
-		if err := s.opts.Store.Write(loginImageFile(meta.ID), image); err != nil {
+		if err := a.store.Write(loginImageFile(meta.ID), image); err != nil {
 			slog.Error("write login image", "err", err)
 			writeError(w, 500, "config_write_failed", "the image could not be saved to /config")
 			return
 		}
 	}
-	if err := s.opts.Store.WriteJSON(loginAppearanceFile, next); err != nil {
+	if err := a.store.WriteJSON(loginAppearanceFile, next); err != nil {
 		slog.Error("write login appearance", "err", err)
 		if meta != nil && (old == nil || old.ID != meta.ID) {
-			_ = s.opts.Store.Remove(loginImageFile(meta.ID))
+			_ = a.store.Remove(loginImageFile(meta.ID))
 		}
 		writeError(w, 500, "config_write_failed", "the settings could not be saved to /config")
 		return
 	}
 	if old != nil && (next.Image == nil || next.Image.ID != old.ID) {
-		_ = s.opts.Store.Remove(loginImageFile(old.ID))
+		_ = a.store.Remove(loginImageFile(old.ID))
 	}
 	if meta != nil {
 		l.image = image
@@ -467,17 +498,17 @@ func (s *Server) handlePutLoginAppearance(w http.ResponseWriter, r *http.Request
 }
 
 // handleDeleteLoginAppearance goes back to the default look.
-func (s *Server) handleDeleteLoginAppearance(w http.ResponseWriter, r *http.Request) {
-	l := &s.loginLook
+func (a loginLookArea) handleDeleteLoginAppearance(w http.ResponseWriter, r *http.Request) {
+	l := a.look
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	s.loadLoginLookLocked()
-	if err := s.opts.Store.Remove(loginAppearanceFile); err != nil {
+	a.loadLoginLookLocked()
+	if err := a.store.Remove(loginAppearanceFile); err != nil {
 		writeError(w, 500, "config_write_failed", "the settings could not be removed from /config")
 		return
 	}
 	if l.value.Image != nil {
-		_ = s.opts.Store.Remove(loginImageFile(l.value.Image.ID))
+		_ = a.store.Remove(loginImageFile(l.value.Image.ID))
 	}
 	l.loaded, l.exists, l.value, l.image = true, false, defaultLoginAppearance(), nil
 	noteTarget(r, "login-appearance")

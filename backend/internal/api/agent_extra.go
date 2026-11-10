@@ -45,7 +45,8 @@ var clusterReads = map[string]string{
 }
 
 func (b *agentToolbox) clusterTools() []*agentTool {
-	c := b.s.opts.Cluster
+	env := b.s.agentEnv()
+	c := env.cluster
 	if c == nil || !c.InCluster() || !c.Manages() || !b.user.Role.CanAdminister() {
 		return nil
 	}
@@ -66,6 +67,7 @@ func (b *agentToolbox) clusterTools() []*agentTool {
 }
 
 func (b *agentToolbox) clusterCall(ctx context.Context, node, method, p string, body any) (string, error) {
+	env := b.s.agentEnv()
 	var reader io.Reader
 	if body != nil {
 		data, _ := json.Marshal(body)
@@ -79,7 +81,7 @@ func (b *agentToolbox) clusterCall(ctx context.Context, node, method, p string, 
 		req.Header.Set("Content-Type", "application/json")
 	}
 	rec := httptest.NewRecorder()
-	b.s.opts.Cluster.Proxy(rec, req, node, b.user.Name, p)
+	env.cluster.Proxy(rec, req, node, b.user.Name, p)
 	data, _ := io.ReadAll(io.LimitReader(rec.Result().Body, 2<<20))
 	if rec.Code >= 300 {
 		return "", fmt.Errorf("node answered HTTP %d: %s", rec.Code, strings.TrimSpace(string(data)))
@@ -88,6 +90,7 @@ func (b *agentToolbox) clusterCall(ctx context.Context, node, method, p string, 
 }
 
 func (b *agentToolbox) clusterNodes(ctx context.Context, _ *agent.Chat, _ json.RawMessage) (agent.Outcome, error) {
+	env := b.s.agentEnv()
 	type node struct {
 		ID, Name, Version string
 		Self, Online      bool
@@ -95,7 +98,7 @@ func (b *agentToolbox) clusterNodes(ctx context.Context, _ *agent.Chat, _ json.R
 		Error             string   `json:",omitempty"`
 	}
 	var out []node
-	for _, n := range b.s.opts.Cluster.Overview(ctx) {
+	for _, n := range env.cluster.Overview(ctx) {
 		v := node{ID: n.ID, Name: n.Name, Self: n.Self, Online: n.Online, Error: n.Error}
 		if n.Status != nil {
 			v.Version, v.CPU = n.Status.Version, n.Status.CPU
@@ -126,6 +129,7 @@ func (b *agentToolbox) clusterRead(ctx context.Context, _ *agent.Chat, args json
 }
 
 func (b *agentToolbox) clusterAction(ctx context.Context, _ *agent.Chat, args json.RawMessage) (agent.Outcome, error) {
+	env := b.s.agentEnv()
 	var req struct{ Node, Kind, Name, Action string }
 	if err := json.Unmarshal(args, &req); err != nil {
 		return agent.Outcome{}, toolcatalog.Errorf("invalid arguments")
@@ -150,8 +154,8 @@ func (b *agentToolbox) clusterAction(ctx context.Context, _ *agent.Chat, args js
 	if err != nil {
 		return agent.Outcome{}, err
 	}
-	if b.s.opts.Activity != nil {
-		b.s.opts.Activity.Record(activity.Entry{User: b.user.Name, Via: activity.ViaAgent, Action: "cluster_" + req.Kind + "_" + req.Action, Target: req.Node + ", " + req.Name, Status: 200, OK: true})
+	if env.activity != nil {
+		env.activity.Record(activity.Entry{User: b.user.Name, Via: activity.ViaAgent, Action: "cluster_" + req.Kind + "_" + req.Action, Target: req.Node + ", " + req.Name, Status: 200, OK: true})
 	}
 	if strings.TrimSpace(text) == "" {
 		text = `{"ok":true}`
@@ -401,6 +405,7 @@ func nonEmptyJSON(s string) string {
 
 // undoActions are the web API calls that take a step back.
 func (s *Server) undoActions(ctx context.Context, user auth.User, step *agent.Entry) ([]*toolcatalog.Action, error) {
+	env := s.agentEnv()
 	var args map[string]any
 	_ = json.Unmarshal(step.Args, &args)
 	str := func(k string) string { v, _ := args[k].(string); return v }
@@ -431,7 +436,7 @@ func (s *Server) undoActions(ctx context.Context, user auth.User, step *agent.En
 		if err != nil || root.Kind != "share" {
 			return nil, fmt.Errorf("only files deleted in a share come back from its recycle bin")
 		}
-		entries, err := s.opts.Files.TrashFlat(ctx, root, user.Name, user.Role.CanAdminister())
+		entries, err := env.files.TrashFlat(ctx, root, user.Name, user.Role.CanAdminister())
 		if err != nil {
 			return nil, err
 		}
@@ -569,8 +574,9 @@ func (s *Server) handleAgentPull(w http.ResponseWriter, r *http.Request) {
 // agentWeeklyReport sends on Monday morning what the agent did in the past
 // week, when the owner switched it on.
 func (s *Server) agentWeeklyReport(now time.Time) {
+	env := s.agentEnv()
 	settings := s.agentSettings()
-	if !settings.WeeklyReport || now.Weekday() != time.Monday || now.Hour() != 8 || s.opts.Notify == nil || s.opts.Activity == nil {
+	if !settings.WeeklyReport || now.Weekday() != time.Monday || now.Hour() != 8 || env.notify == nil || env.activity == nil {
 		return
 	}
 	r := &s.agentReact
@@ -584,7 +590,7 @@ func (s *Server) agentWeeklyReport(now time.Time) {
 	go func() {
 		ctx, cancel := context.WithTimeout(s.agentBase(), time.Minute)
 		defer cancel()
-		entries, _, _, err := s.opts.Activity.Query(ctx, activity.Filter{Days: 7, Via: activity.ViaAgent, Limit: 500})
+		entries, _, _, err := env.activity.Query(ctx, activity.Filter{Days: 7, Via: activity.ViaAgent, Limit: 500})
 		if err != nil {
 			return
 		}
@@ -606,7 +612,7 @@ func (s *Server) agentWeeklyReport(now time.Time) {
 		if len(lines) > 0 {
 			text += "\n" + strings.Join(lines, "\n")
 		}
-		if err := s.opts.Notify.SendReport("Wochenbericht KI-Agent", text); err != nil {
+		if err := env.notify.SendReport("Wochenbericht KI-Agent", text); err != nil {
 			slog.Info("agent weekly report not sent", "err", err)
 		}
 	}()

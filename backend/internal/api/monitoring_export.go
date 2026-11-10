@@ -16,8 +16,8 @@ func csvText(value string) string {
 	}
 	return value
 }
-func (s *Server) handleMonitoringExport(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Monitoring == nil {
+func (a monitoringArea) handleMonitoringExport(w http.ResponseWriter, r *http.Request) {
+	if a.monitoring == nil {
 		featureUnavailable(w)
 		return
 	}
@@ -31,7 +31,7 @@ func (s *Server) handleMonitoringExport(w http.ResponseWriter, r *http.Request) 
 		writeError(w, 400, "invalid_format", "choose csv or json")
 		return
 	}
-	samples, err := s.opts.Monitoring.History(r.Context(), hours)
+	samples, err := a.monitoring.History(r.Context(), hours)
 	if err != nil {
 		featureError(w, err)
 		return
@@ -91,12 +91,12 @@ func (s *Server) handleMonitoringExport(w http.ResponseWriter, r *http.Request) 
 	out.Flush()
 }
 
-func (s *Server) handleCapacityTrends(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Monitoring == nil {
+func (a monitoringArea) handleCapacityTrends(w http.ResponseWriter, r *http.Request) {
+	if a.monitoring == nil {
 		featureUnavailable(w)
 		return
 	}
-	samples, err := s.opts.Monitoring.History(r.Context(), 720)
+	samples, err := a.monitoring.History(r.Context(), 720)
 	if err != nil {
 		featureError(w, err)
 		return

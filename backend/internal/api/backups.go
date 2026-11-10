@@ -11,7 +11,12 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/appbackup"
 	"github.com/ra5on/TitanOS/backend/internal/backup"
+	"github.com/ra5on/TitanOS/backend/internal/docker"
+	"github.com/ra5on/TitanOS/backend/internal/shares"
+	"github.com/ra5on/TitanOS/backend/internal/storage"
+	"github.com/ra5on/TitanOS/backend/internal/vm"
 )
 
 var backupErrors = []struct {
@@ -40,44 +45,97 @@ func writeBackupJobError(w http.ResponseWriter, err error) {
 	writeError(w, http.StatusBadGateway, "backup_job_failed", err.Error())
 }
 
-func (s *Server) handleBackups(w http.ResponseWriter, r *http.Request) {
-	shares := s.opts.Backup.Sources()
+// backupsArea is the backups of shares; an area with narrow dependencies
+// (PLAN 8a, see fansArea). storage names the volumes; docker, vms and shares
+// say what a backup should cover. applications reads the coordinator of
+// application backups when it is asked (tests replace it on a running
+// server; nil: none). admitOperation admits a restore unless maintenance
+// runs; sessionConfirmed says whether the password was entered again.
+type backupsArea struct {
+	backup           *backup.Manager
+	storage          *storage.Manager
+	docker           *docker.Manager
+	vms              *vm.Manager
+	shares           *shares.Manager
+	applications     func() *appbackup.Manager
+	admitOperation   admitFunc
+	sessionConfirmed confirmedFunc
+}
+
+// backupsArea is the area of the server.
+func (s *Server) backupsArea() backupsArea {
+	return backupsArea{backup: s.opts.Backup, storage: s.opts.Storage, docker: s.opts.Docker, vms: s.opts.VMs, shares: s.opts.Shares,
+		applications:   func() *appbackup.Manager { return s.opts.ApplicationBackups },
+		admitOperation: s.admitOperation, sessionConfirmed: s.sessionConfirmed}
+}
+
+// registerOperations registers the routes that belong to the workflows of
+// operationsRoutes, with its log.
+func (a backupsArea) registerOperations(admin, heavy func(route string, fn http.HandlerFunc)) {
+	heavy("POST /api/v1/backups/{id}/probe", a.handleBackupProbe)
+	admin("GET /api/v1/backups/coverage", a.handleBackupCoverage)
+	heavy("POST /api/v1/backups/{id}/applications/{step}", a.handleApplicationRestore)
+	admin("GET /api/v1/backups/application-recovery", a.handleApplicationRecovery)
+	admin("POST /api/v1/backups/application-recovery", a.handleApplicationRecover)
+}
+
+func (a backupsArea) register(mux *routeMux, g guards) {
+	mux.HandleFunc("POST /api/v1/backups/smb/discover", g.admin(a.handleSMBDiscover))
+	mux.HandleFunc("PUT /api/v1/backups/smb", g.admin(a.backupJobOr("smb", a.handleSMBSave)))
+	mux.HandleFunc("DELETE /api/v1/backups/smb/{target}", g.admin(a.handleSMBDelete))
+	mux.HandleFunc("GET /api/v1/backups/progress", g.admin(a.handleUSBBackupProgress))
+	mux.HandleFunc("GET /api/v1/backups", g.admin(a.handleBackups))
+	mux.HandleFunc("POST /api/v1/backups", g.admin(a.handleBackupCreate))
+	mux.HandleFunc("GET /api/v1/backups/folders", g.admin(a.handleBackupFolders))
+	mux.HandleFunc("POST /api/v1/backups/ssh-key", g.admin(a.handleBackupKey))
+	mux.HandleFunc("PUT /api/v1/backups/{id}", g.admin(a.handleBackupUpdate))
+	mux.HandleFunc("DELETE /api/v1/backups/{id}", g.admin(a.handleBackupDelete))
+	mux.HandleFunc("GET /api/v1/backups/{id}/snapshots", g.admin(a.handleBackupSnapshots))
+	mux.HandleFunc("GET /api/v1/backups/{id}/password", g.admin(a.handleBackupPassword))
+	mux.HandleFunc("POST /api/v1/backups/{id}/restore", g.heavyAdmin(a.handleBackupRestore))
+	mux.HandleFunc("POST /api/v1/backups/{id}/check", g.heavyAdmin(a.handleBackupCheck))
+	mux.HandleFunc("GET /api/v1/backups/{id}/snapshots/{snapshot}/files", g.admin(a.handleBackupFiles))
+	mux.HandleFunc("POST /api/v1/backups/{id}/{action}", g.admin(a.handleBackupAction))
+}
+
+func (a backupsArea) handleBackups(w http.ResponseWriter, r *http.Request) {
+	shares := a.backup.Sources()
 	if shares == nil {
 		shares = []backup.Source{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"jobs":       s.opts.Backup.List(),
-		"smbTargets": s.opts.Backup.SMBTargets(),
+		"jobs":       a.backup.List(),
+		"smbTargets": a.backup.SMBTargets(),
 		"shares":     shares,
-		"volumes":    s.opts.Storage.Mounted(),
+		"volumes":    a.storage.Mounted(),
 	})
 }
 
-func (s *Server) handleBackupCreate(w http.ResponseWriter, r *http.Request) {
+func (a backupsArea) handleBackupCreate(w http.ResponseWriter, r *http.Request) {
 	var job backup.Job
 	if !readJSON(w, r, &job) {
 		return
 	}
 	noteTarget(r, job.ID)
-	if err := s.opts.Backup.Create(job, s.opts.Storage.Names()); err != nil {
+	if err := a.backup.Create(job, a.storage.Names()); err != nil {
 		writeBackupJobError(w, err)
 		return
 	}
 	slog.Info("backup job created", "job", job.ID, "kind", job.Destination.Type, "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleBackups(w, r)
+	a.handleBackups(w, r)
 }
 
-func (s *Server) handleBackupUpdate(w http.ResponseWriter, r *http.Request) {
+func (a backupsArea) handleBackupUpdate(w http.ResponseWriter, r *http.Request) {
 	var job backup.Job
 	if !readJSON(w, r, &job) {
 		return
 	}
-	if err := s.opts.Backup.Update(r.PathValue("id"), job, s.opts.Storage.Names()); err != nil {
+	if err := a.backup.Update(r.PathValue("id"), job, a.storage.Names()); err != nil {
 		writeBackupJobError(w, err)
 		return
 	}
 	slog.Info("backup job changed", "job", r.PathValue("id"), "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleBackups(w, r)
+	a.handleBackups(w, r)
 }
 
 // backupJobOr sends a PUT that changes a job to handleBackupUpdate. The fixed
@@ -85,7 +143,7 @@ func (s *Server) handleBackupUpdate(w http.ResponseWriter, r *http.Request) {
 // with such a name before the names were reserved could otherwise not be
 // changed, and its form would be taken for the settings of that route. A job
 // always has a destination; neither of those bodies has one.
-func (s *Server) backupJobOr(id string, next http.HandlerFunc) http.HandlerFunc {
+func (a backupsArea) backupJobOr(id string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, maxJSONBody)
 		body, err := io.ReadAll(r.Body)
@@ -98,7 +156,7 @@ func (s *Server) backupJobOr(id string, next http.HandlerFunc) http.HandlerFunc 
 		if json.Unmarshal(body, &probe) == nil {
 			if _, ok := probe["destination"]; ok {
 				r.SetPathValue("id", id)
-				s.handleBackupUpdate(w, r)
+				a.handleBackupUpdate(w, r)
 				return
 			}
 		}
@@ -107,28 +165,28 @@ func (s *Server) backupJobOr(id string, next http.HandlerFunc) http.HandlerFunc 
 }
 
 // handleBackupDelete forgets a job. The backups it made stay where they are.
-func (s *Server) handleBackupDelete(w http.ResponseWriter, r *http.Request) {
-	if err := s.opts.Backup.Delete(r.PathValue("id")); err != nil {
+func (a backupsArea) handleBackupDelete(w http.ResponseWriter, r *http.Request) {
+	if err := a.backup.Delete(r.PathValue("id")); err != nil {
 		writeBackupJobError(w, err)
 		return
 	}
 	slog.Info("backup job removed", "job", r.PathValue("id"), "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleBackups(w, r)
+	a.handleBackups(w, r)
 }
 
-func (s *Server) handleBackupAction(w http.ResponseWriter, r *http.Request) {
+func (a backupsArea) handleBackupAction(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var err error
 	switch r.PathValue("action") {
 	case "run":
-		leave, ok := s.admitOperation(w)
+		leave, ok := a.admitOperation(w)
 		if !ok {
 			return
 		}
 		defer leave()
-		err = s.opts.Backup.Start(id)
+		err = a.backup.Start(id)
 	case "stop":
-		err = s.opts.Backup.Stop(id)
+		err = a.backup.Stop(id)
 	default:
 		writeError(w, http.StatusNotFound, "not_found", "no such action")
 		return
@@ -137,11 +195,11 @@ func (s *Server) handleBackupAction(w http.ResponseWriter, r *http.Request) {
 		writeBackupJobError(w, err)
 		return
 	}
-	s.handleBackups(w, r)
+	a.handleBackups(w, r)
 }
 
-func (s *Server) handleBackupSnapshots(w http.ResponseWriter, r *http.Request) {
-	snapshots, err := s.opts.Backup.Snapshots(r.Context(), r.PathValue("id"))
+func (a backupsArea) handleBackupSnapshots(w http.ResponseWriter, r *http.Request) {
+	snapshots, err := a.backup.Snapshots(r.Context(), r.PathValue("id"))
 	if err != nil {
 		writeBackupJobError(w, err)
 		return
@@ -150,7 +208,7 @@ func (s *Server) handleBackupSnapshots(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleBackupRestore copies a backup back into a new folder on a volume.
-func (s *Server) handleBackupRestore(w http.ResponseWriter, r *http.Request) {
+func (a backupsArea) handleBackupRestore(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Snapshot, Volume string
 		// Paths restores only these files and folders of the saved state.
@@ -162,9 +220,9 @@ func (s *Server) handleBackupRestore(w http.ResponseWriter, r *http.Request) {
 	var target string
 	var err error
 	if len(req.Paths) > 0 {
-		target, err = s.opts.Backup.RestoreFiles(r.PathValue("id"), req.Snapshot, req.Volume, req.Paths)
+		target, err = a.backup.RestoreFiles(r.PathValue("id"), req.Snapshot, req.Volume, req.Paths)
 	} else {
-		target, err = s.opts.Backup.Restore(r.PathValue("id"), req.Snapshot, req.Volume)
+		target, err = a.backup.Restore(r.PathValue("id"), req.Snapshot, req.Volume)
 	}
 	if err != nil {
 		writeBackupJobError(w, err)
@@ -177,13 +235,12 @@ func (s *Server) handleBackupRestore(w http.ResponseWriter, r *http.Request) {
 // handleBackupPassword shows the password a job's backups are encrypted
 // with: whoever wants to read them without this NAS needs it. Like other
 // secrets it takes the account's password once more.
-func (s *Server) handleBackupPassword(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie(s.cookieName())
-	if err != nil || !s.sessions.Confirmed(cookie.Value) {
+func (a backupsArea) handleBackupPassword(w http.ResponseWriter, r *http.Request) {
+	if !a.sessionConfirmed(r) {
 		writeError(w, http.StatusForbidden, "confirm_required", "enter your password again to see the password of the backup")
 		return
 	}
-	password, err := s.opts.Backup.Password(r.PathValue("id"))
+	password, err := a.backup.Password(r.PathValue("id"))
 	if err != nil {
 		writeBackupJobError(w, err)
 		return
@@ -195,8 +252,8 @@ func (s *Server) handleBackupPassword(w http.ResponseWriter, r *http.Request) {
 
 // handleBackupKey returns the SSH key this NAS shows to SFTP servers,
 // making it first if there is none.
-func (s *Server) handleBackupKey(w http.ResponseWriter, r *http.Request) {
-	key, err := s.opts.Backup.PublicKey()
+func (a backupsArea) handleBackupKey(w http.ResponseWriter, r *http.Request) {
+	key, err := a.backup.PublicKey()
 	if err != nil {
 		writeBackupJobError(w, err)
 		return
@@ -207,14 +264,14 @@ func (s *Server) handleBackupKey(w http.ResponseWriter, r *http.Request) {
 // handleBackupFolders lists the folders in a folder of a share, or of a
 // volume (?volume=) for folders outside the shares, for choosing what a
 // backup saves.
-func (s *Server) handleBackupFolders(w http.ResponseWriter, r *http.Request) {
+func (a backupsArea) handleBackupFolders(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	var folders []string
 	var err error
 	if volume := query.Get("volume"); volume != "" {
-		folders, err = s.opts.Backup.VolumeFolders(volume, query.Get("dir"))
+		folders, err = a.backup.VolumeFolders(volume, query.Get("dir"))
 	} else {
-		folders, err = s.opts.Backup.Folders(query.Get("share"), query.Get("dir"))
+		folders, err = a.backup.Folders(query.Get("share"), query.Get("dir"))
 	}
 	if err != nil {
 		writeBackupJobError(w, err)
@@ -223,50 +280,50 @@ func (s *Server) handleBackupFolders(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"folders": folders})
 }
 
-func (s *Server) handleSMBDiscover(w http.ResponseWriter, r *http.Request) {
+func (a backupsArea) handleSMBDiscover(w http.ResponseWriter, r *http.Request) {
 	var target backup.SMBTarget
 	if !readJSON(w, r, &target) {
 		return
 	}
-	shares, err := s.opts.Backup.SMBDiscover(r.Context(), target)
+	shares, err := a.backup.SMBDiscover(r.Context(), target)
 	if err != nil {
 		writeBackupJobError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"shares": shares})
 }
-func (s *Server) handleSMBSave(w http.ResponseWriter, r *http.Request) {
+func (a backupsArea) handleSMBSave(w http.ResponseWriter, r *http.Request) {
 	var target backup.SMBTarget
 	if !readJSON(w, r, &target) {
 		return
 	}
-	if err := s.opts.Backup.SaveSMBTarget(r.Context(), target); err != nil {
+	if err := a.backup.SaveSMBTarget(r.Context(), target); err != nil {
 		writeBackupJobError(w, err)
 		return
 	}
-	s.handleBackups(w, r)
+	a.handleBackups(w, r)
 }
-func (s *Server) handleSMBDelete(w http.ResponseWriter, r *http.Request) {
-	if err := s.opts.Backup.DeleteSMBTarget(r.PathValue("target")); err != nil {
+func (a backupsArea) handleSMBDelete(w http.ResponseWriter, r *http.Request) {
+	if err := a.backup.DeleteSMBTarget(r.PathValue("target")); err != nil {
 		writeBackupJobError(w, err)
 		return
 	}
-	s.handleBackups(w, r)
+	a.handleBackups(w, r)
 }
 
-func (s *Server) handleUSBBackupProgress(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.opts.Backup.USBProgress())
+func (a backupsArea) handleUSBBackupProgress(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, a.backup.USBProgress())
 }
 
 // handleBackupCheck lets restic check a job's repository in the background.
-func (s *Server) handleBackupCheck(w http.ResponseWriter, r *http.Request) {
+func (a backupsArea) handleBackupCheck(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ReadData int `json:"readData"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Backup.Check(r.PathValue("id"), req.ReadData); err != nil {
+	if err := a.backup.Check(r.PathValue("id"), req.ReadData); err != nil {
 		writeBackupJobError(w, err)
 		return
 	}
@@ -275,11 +332,11 @@ func (s *Server) handleBackupCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleBackupFiles lists one folder of a saved state.
-func (s *Server) handleBackupFiles(w http.ResponseWriter, r *http.Request) {
+func (a backupsArea) handleBackupFiles(w http.ResponseWriter, r *http.Request) {
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
-	entries, total, cut, err := s.opts.Backup.Files(ctx, r.PathValue("id"), r.PathValue("snapshot"), r.URL.Query().Get("path"), offset)
+	entries, total, cut, err := a.backup.Files(ctx, r.PathValue("id"), r.PathValue("snapshot"), r.URL.Query().Get("path"), offset)
 	if err != nil {
 		writeBackupJobError(w, err)
 		return

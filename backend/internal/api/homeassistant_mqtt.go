@@ -18,9 +18,9 @@ import (
 
 // HASnapshot gathers the values Home Assistant gets by MQTT, from what titand
 // keeps in memory. Disks are not asked anything: sleeping ones stay asleep.
-func (s *Server) HASnapshot(ctx context.Context) homeassistant.Snapshot {
-	info := s.opts.Monitor.Info()
-	snap := homeassistant.Snapshot{Host: info.Hostname, Version: s.opts.Version}
+func (hass haArea) HASnapshot(ctx context.Context) homeassistant.Snapshot {
+	info := hass.monitor.Info()
+	snap := homeassistant.Snapshot{Host: info.Hostname, Version: hass.version}
 	sys := &homeassistant.SystemValues{CPUPercent: info.CPU.UsagePercent, UptimeSeconds: uint64(max(info.UptimeSeconds, 0))}
 	if info.Memory.TotalBytes > 0 {
 		sys.MemoryPercent = float64(info.Memory.UsedBytes) / float64(info.Memory.TotalBytes) * 100
@@ -31,15 +31,15 @@ func (s *Server) HASnapshot(ctx context.Context) homeassistant.Snapshot {
 			break
 		}
 	}
-	if s.opts.Update != nil {
-		sys.UpdateAvailable = s.opts.Update.Status().Available != nil
+	if hass.update != nil {
+		sys.UpdateAvailable = hass.update.Status().Available != nil
 	}
 	snap.System = sys
 	add := func(group, id, name string, metrics ...homeassistant.MetricValue) {
 		snap.Telemetry = append(snap.Telemetry, homeassistant.DeviceValues{Group: group, ID: id, Name: name, Metrics: metrics})
 	}
 	metric := haMetric
-	if status, err := s.opts.Storage.Status(ctx); err == nil {
+	if status, err := hass.storage.Status(ctx); err == nil {
 		for _, v := range status.Volumes {
 			values := homeassistant.VolumeValues{Name: v.Name, State: v.State}
 			if v.Mounted && v.SizeBytes > 0 {
@@ -91,8 +91,8 @@ func (s *Server) HASnapshot(ctx context.Context) homeassistant.Snapshot {
 	} else {
 		snap.UnavailableGroups = append(snap.UnavailableGroups, "volumes", "disks")
 	}
-	if s.opts.Docker != nil {
-		status := s.opts.Docker.Status(ctx)
+	if hass.docker != nil {
+		status := hass.docker.Status(ctx)
 		if status.Settings.Enabled && !status.Running {
 			snap.UnavailableGroups = append(snap.UnavailableGroups, "containers", "stacks")
 		}
@@ -118,8 +118,8 @@ func (s *Server) HASnapshot(ctx context.Context) homeassistant.Snapshot {
 			add("stacks", name, name, metric("running", "Running services", v.running, "", "", "measurement"), metric("stopped", "Stopped services", v.total-v.running, "", "", "measurement"), metric("total", "Services", v.total, "", "", "measurement"))
 		}
 	}
-	if s.opts.VMs != nil {
-		for _, v := range s.opts.VMs.List(s.opts.Storage.Mounted()) {
+	if hass.vms != nil {
+		for _, v := range hass.vms.List(hass.storage.Mounted()) {
 			snap.VMs = append(snap.VMs, homeassistant.RunValues{Name: v.Name, Running: v.State == "running", Unavailable: !v.Available})
 			var cpu, memory any
 			if v.Available {
@@ -129,8 +129,8 @@ func (s *Server) HASnapshot(ctx context.Context) homeassistant.Snapshot {
 			add("vms", v.Name, v.Name, metric("state", "State", v.State, "", "", ""), metric("cpu", "CPU", cpu, "%", "", "measurement"), metric("memory", "Host RAM", memory, "B", "data_size", "measurement"))
 		}
 	}
-	if s.opts.UPS != nil {
-		if u := s.opts.UPS.Status(); u.Mode != "off" {
+	if hass.ups != nil {
+		if u := hass.ups.Status(); u.Mode != "off" {
 			state := "online"
 			switch {
 			case !u.Connected:
@@ -159,16 +159,16 @@ func (s *Server) HASnapshot(ctx context.Context) homeassistant.Snapshot {
 			add("ups", "ups", "UPS", metric("runtime", "Runtime", runtime, "s", "duration", "measurement"), metric("load", "Load", load, "%", "", "measurement"), metric("on_battery", "On battery", battery, "", "", ""), metric("low_battery", "Low battery", low, "", "problem", ""), metric("shutdown", "Shutdown initiated", shutdown, "", "", ""))
 		}
 	}
-	if s.opts.Backup != nil {
-		for _, b := range s.opts.Backup.CachedViews() {
+	if hass.backup != nil {
+		for _, b := range hass.backup.CachedViews() {
 			snap.Backups = append(snap.Backups, homeassistant.BackupValues{Known: b.StateKnown, Name: b.Job.ID, Running: b.State.Running, Percent: b.State.Percent, LastOK: b.State.LastOK, Next: b.Next, Problem: b.State.LastError != "" || b.State.Warning != ""})
 		}
 	}
-	settings, _ := s.haFromContext(ctx).Settings()
-	if user, ok := s.activeUser(settings.Account); ok && user.Role.CanAdminister() {
-		work := &homeassistant.WorkValues{Busy: s.opts.Update != nil && s.opts.Update.Working != nil && s.opts.Update.Working() || s.storageBusy(ctx)}
-		if s.opts.Files != nil {
-			for _, job := range s.opts.Files.Jobs(user.Name) {
+	settings, _ := hass.haFromContext(ctx).Settings()
+	if user, ok := hass.activeUser(settings.Account); ok && user.Role.CanAdminister() {
+		work := &homeassistant.WorkValues{Busy: hass.update != nil && hass.update.Working != nil && hass.update.Working() || hass.storageBusy(ctx)}
+		if hass.files != nil {
+			for _, job := range hass.files.Jobs(user.Name) {
 				if job.State == files.JobRunning {
 					work.Copies++
 				}
@@ -176,18 +176,18 @@ func (s *Server) HASnapshot(ctx context.Context) homeassistant.Snapshot {
 		}
 		snap.Work = work
 	}
-	s.haAdditional(&snap)
-	snap.AgentTasks = s.agentButtons()
+	hass.haAdditional(&snap)
+	snap.AgentTasks = hass.agentButtons()
 	return snap
 }
 
 // HACommand carries out a button or switch pressed in Home Assistant, as
 // the account chosen in the settings and through the same routes as the web
 // interface, so that its rights and checks apply.
-func (s *Server) HACommand(ctx context.Context, kind, name, action string) error {
+func (hass haArea) HACommand(ctx context.Context, kind, name, action string) error {
 	// The account of the connection whose Home Assistant pressed it.
-	settings, _ := s.haFromContext(ctx).Settings()
-	user, ok := s.activeUser(settings.Account)
+	settings, _ := hass.haFromContext(ctx).Settings()
+	user, ok := hass.activeUser(settings.Account)
 	if !ok || !user.Role.CanAdminister() {
 		return fmt.Errorf("no owner or administrator account chosen for Home Assistant")
 	}
@@ -196,15 +196,15 @@ func (s *Server) HACommand(ctx context.Context, kind, name, action string) error
 	switch kind {
 	case "agent":
 		// A recurring task of the KI-Agent; it runs as its own account.
-		return s.agentButton(name, action)
+		return hass.agentButton(name, action)
 	case "backup":
-		if action != "run" || s.opts.Backup == nil {
+		if action != "run" || hass.backup == nil {
 			return fmt.Errorf("unknown backup command")
 		}
 		method, route = http.MethodPost, "/api/v1/backups/"+url.PathEscape(name)+"/run"
 	case "container":
 		id := ""
-		status := s.opts.Docker.Status(ctx)
+		status := hass.docker.Status(ctx)
 		for _, c := range status.Containers {
 			if c.Name == name {
 				id = c.ID
@@ -222,8 +222,8 @@ func (s *Server) HACommand(ctx context.Context, kind, name, action string) error
 			method, route = http.MethodPost, "/api/v1/update/check"
 		case "power":
 			// Never in the middle of copies, backups, disk tests or a rebuild.
-			if s.opts.Update != nil && s.opts.Update.Working != nil && s.opts.Update.Working() || s.storageBusy(ctx) {
-				s.opts.Notify.Notify("warning", "ha_power_refused", action)
+			if hass.update != nil && hass.update.Working != nil && hass.update.Working() || hass.storageBusy(ctx) {
+				hass.notify.Notify("warning", "ha_power_refused", action)
 				return fmt.Errorf("the NAS is busy; %s refused", action)
 			}
 			method, route, body = http.MethodPost, "/api/v1/system/power", map[string]string{"action": action}
@@ -232,7 +232,7 @@ func (s *Server) HACommand(ctx context.Context, kind, name, action string) error
 	if route == "" {
 		return fmt.Errorf("unknown command")
 	}
-	code, answer := s.internalAs(ctx, user, method, route, body)
+	code, answer := hass.internalAs(ctx, user, method, route, body)
 	if len(answer) > 300 {
 		answer = answer[:300]
 	}
@@ -245,7 +245,7 @@ func (s *Server) HACommand(ctx context.Context, kind, name, action string) error
 
 // storageBusy says whether an array is being rebuilt or checked.
 func (s *Server) storageBusy(ctx context.Context) bool {
-	status, err := s.opts.Storage.Status(ctx)
+	status, err := s.core().storage.Status(ctx)
 	if err != nil {
 		return true
 	}

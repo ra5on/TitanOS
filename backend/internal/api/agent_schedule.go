@@ -53,13 +53,14 @@ func (s *Server) AgentScheduler(ctx context.Context) {
 }
 
 func (s *Server) agentTick(now time.Time) {
+	env := s.agentEnv()
 	settings := s.agentSettings()
 	// Protection (ransomware guard, ends of emergency access) works also
 	// while the agent itself is off (PLAN 54-S); each part checks its switch.
-	if s.opts.Users != nil {
+	if env.users != nil {
 		s.agentProtectTick(now.In(s.agentLocation()))
 	}
-	if !settings.Enabled || s.opts.Users == nil {
+	if !settings.Enabled || env.users == nil {
 		return
 	}
 	s.nightlyNASMap(now)
@@ -72,7 +73,7 @@ func (s *Server) agentTick(now time.Time) {
 	// The entities of triggers, per connection.
 	watched := map[string][]string{}
 	for _, name := range store.ScheduleAccounts() {
-		user, ok := s.opts.Users.Get(name)
+		user, ok := env.users.Get(name)
 		if !ok || !s.agentAllowed(user) {
 			continue
 		}
@@ -114,8 +115,9 @@ func (s *Server) agentStartSchedule(user auth.User, id string, now time.Time, la
 // it found when titand started; tasks, reminders and the morning report
 // would otherwise run on the old one until a restart.
 func (s *Server) agentLocation() *time.Location {
-	if s.opts.Settings != nil {
-		if zone, err := time.LoadLocation(s.opts.Settings.CurrentTimezone()); err == nil {
+	env := s.agentEnv()
+	if env.settings != nil {
+		if zone, err := time.LoadLocation(env.settings.CurrentTimezone()); err == nil {
 			return zone
 		}
 	}
@@ -125,7 +127,7 @@ func (s *Server) agentLocation() *time.Location {
 // agentTriggered reports whether a Home Assistant entity reached the state
 // of a trigger since the last look (and kept it long enough).
 func (s *Server) agentTriggered(user string, sc agent.Schedule, now time.Time) bool {
-	ha := s.haConnection(sc.Trigger.Connection)
+	ha := s.haArea().haConnection(sc.Trigger.Connection)
 	if ha == nil {
 		return false
 	}
@@ -253,12 +255,13 @@ func agentStartProblem(err error) string {
 // notify services of Home Assistant. A reminder always goes out, also when
 // a page of the agent is open: it is what the person asked for.
 func (s *Server) agentRemind(user auth.User, chat *agent.Chat, sc agent.Schedule) {
-	if s.opts.WebPush != nil {
+	env := s.agentEnv()
+	if env.webPush != nil {
 		body := sc.Task
 		if r := []rune(body); len(r) > 180 {
 			body = string(r[:179]) + "…"
 		}
-		s.opts.WebPush.SendTo(user.Name, webpush.Message{Title: "⏰ " + sc.Name, Body: body, URL: "/agent?chat=" + chat.ID, Tag: "agent-" + chat.ID})
+		env.webPush.SendTo(user.Name, webpush.Message{Title: "⏰ " + sc.Name, Body: body, URL: "/agent?chat=" + chat.ID, Tag: "agent-" + chat.ID})
 	}
 	s.agentHANotify(chat)
 }
@@ -307,19 +310,20 @@ func (s *Server) agentScheduleResult(user, id string, chat *agent.Chat) {
 // agent's initiative switched on, it looks into them as the chosen account,
 // at most once an hour per kind of notification.
 func (s *Server) agentObserve(m notify.Message) {
+	env := s.agentEnv()
 	s.agentInitiativeObserve(m)
 	settings := s.agentSettings()
 	if m.Severity != notify.Warning && m.Severity != notify.Error {
 		return
 	}
-	if !settings.Enabled || !settings.React || s.opts.Users == nil {
+	if !settings.Enabled || !settings.React || env.users == nil {
 		return
 	}
 	as := settings.ReactAs
 	if as == "" {
 		as = s.firstOwner()
 	}
-	user, ok := s.opts.Users.Get(as)
+	user, ok := env.users.Get(as)
 	if !ok || user.Disabled || !s.agentAllowed(user) {
 		return
 	}
@@ -361,7 +365,8 @@ func (s *Server) agentObserveAs(user auth.User, m notify.Message) {
 }
 
 func (s *Server) firstOwner() string {
-	for _, u := range s.opts.Users.List() {
+	env := s.agentEnv()
+	for _, u := range env.users.List() {
 		if u.Role == auth.RoleOwner && !u.Disabled {
 			return u.Name
 		}
@@ -401,7 +406,7 @@ func (s *Server) agentHANotify(chat *agent.Chat) {
 		if !found {
 			conn, service = "", entry
 		}
-		ha := s.haConnection(conn)
+		ha := s.haArea().haConnection(conn)
 		if ha == nil || !ha.Active() {
 			continue
 		}
@@ -413,14 +418,15 @@ func (s *Server) agentHANotify(chat *agent.Chat) {
 
 // agentButtons are the recurring tasks that have a button in Home Assistant.
 func (s *Server) agentButtons() []homeassistant.AgentTaskValues {
+	env := s.agentEnv()
 	settings := s.agentSettings()
-	if !settings.Enabled || s.opts.Users == nil {
+	if !settings.Enabled || env.users == nil {
 		return nil
 	}
 	store := s.agentStore()
 	var out []homeassistant.AgentTaskValues
 	for _, name := range store.ScheduleAccounts() {
-		user, ok := s.opts.Users.Get(name)
+		user, ok := env.users.Get(name)
 		if !ok || !s.agentAllowed(user) {
 			continue
 		}
@@ -439,11 +445,12 @@ func (s *Server) agentButtons() []homeassistant.AgentTaskValues {
 
 // agentButton runs the task behind a button pressed in Home Assistant.
 func (s *Server) agentButton(key, action string) error {
+	env := s.agentEnv()
 	name, id, ok := strings.Cut(key, "/")
 	if !ok || action != "run" {
 		return fmt.Errorf("unknown agent command")
 	}
-	user, found := s.opts.Users.Get(name)
+	user, found := env.users.Get(name)
 	if !found || !s.agentAllowed(user) {
 		return fmt.Errorf("account may not use the agent")
 	}

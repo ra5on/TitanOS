@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
+	"github.com/ra5on/TitanOS/backend/internal/storage"
 )
 
 func writeBackupError(w http.ResponseWriter, err error) {
@@ -42,15 +43,32 @@ func writeBackupError(w http.ResponseWriter, err error) {
 	}
 }
 
-func (s *Server) handleConfigBackup(w http.ResponseWriter, r *http.Request) {
+// configBackupArea is the backup of the stick; an area with narrow
+// dependencies (PLAN 8a, see fansArea). storage names the volumes a backup
+// can go to. confirmed says whether the password was entered again for this
+// request.
+type configBackupArea struct {
+	backup    *configbackup.Manager
+	storage   *storage.Manager
+	confirmed confirmedFunc
+}
+
+func (a configBackupArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/config-backup", admin(a.handleConfigBackup))
+	mux.HandleFunc("PUT /api/v1/config-backup", admin(a.handleConfigBackupSettings))
+	mux.HandleFunc("POST /api/v1/config-backup/run", admin(a.handleConfigBackupRun))
+	mux.HandleFunc("GET /api/v1/config-backup/download", admin(a.handleConfigBackupDownload))
+}
+
+func (a configBackupArea) handleConfigBackup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"backup":      s.opts.ConfigBackup.State(s.opts.Storage.Mounted()),
-		"volumes":     s.opts.Storage.Names(),
-		"passwordSet": s.opts.ConfigBackup.PasswordSet(),
+		"backup":      a.backup.State(a.storage.Mounted()),
+		"volumes":     a.storage.Names(),
+		"passwordSet": a.backup.PasswordSet(),
 	})
 }
 
-func (s *Server) handleConfigBackupSettings(w http.ResponseWriter, r *http.Request) {
+func (a configBackupArea) handleConfigBackupSettings(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		configbackup.Settings
 		// Password for encrypted backups; empty keeps the one there is.
@@ -62,46 +80,46 @@ func (s *Server) handleConfigBackupSettings(w http.ResponseWriter, r *http.Reque
 	settings := req.Settings
 	// Checked before the password is stored: a refused request must not
 	// leave a new password behind that the person believes was rejected.
-	if err := configbackup.CheckSettings(settings, s.opts.Storage.Names()); err != nil {
+	if err := configbackup.CheckSettings(settings, a.storage.Names()); err != nil {
 		writeBackupError(w, err)
 		return
 	}
 	if req.Password != "" {
-		if err := s.opts.ConfigBackup.SetPassword(req.Password); err != nil {
+		if err := a.backup.SetPassword(req.Password); err != nil {
 			writeBackupError(w, err)
 			return
 		}
 	}
-	if settings.Encrypt && !s.opts.ConfigBackup.PasswordSet() {
+	if settings.Encrypt && !a.backup.PasswordSet() {
 		writeError(w, http.StatusBadRequest, "backup_password_required", "a password is needed to encrypt backups")
 		return
 	}
-	if err := s.opts.ConfigBackup.SetSettings(settings, s.opts.Storage.Names()); err != nil {
+	if err := a.backup.SetSettings(settings, a.storage.Names()); err != nil {
 		writeBackupError(w, err)
 		return
 	}
 	slog.Info("backup settings changed", "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleConfigBackup(w, r)
+	a.handleConfigBackup(w, r)
 }
 
-func (s *Server) handleConfigBackupRun(w http.ResponseWriter, r *http.Request) {
-	if _, err := s.opts.ConfigBackup.Create(s.opts.Storage.Mounted()); err != nil {
+func (a configBackupArea) handleConfigBackupRun(w http.ResponseWriter, r *http.Request) {
+	if _, err := a.backup.Create(a.storage.Mounted()); err != nil {
 		writeBackupError(w, err)
 		return
 	}
-	s.handleConfigBackup(w, r)
+	a.handleConfigBackup(w, r)
 }
 
 // handleConfigBackupDownload hands out a backup, to keep a copy away from
 // the NAS. It holds password hashes and every secret of the NAS, so the
 // password has to be entered again first, as for a console.
-func (s *Server) handleConfigBackupDownload(w http.ResponseWriter, r *http.Request) {
-	if !s.confirmed(r) {
+func (a configBackupArea) handleConfigBackupDownload(w http.ResponseWriter, r *http.Request) {
+	if !a.confirmed(r) {
 		writeError(w, http.StatusForbidden, "confirm_required", "enter your password again to download a backup")
 		return
 	}
 	name := r.URL.Query().Get("name")
-	file, err := s.opts.ConfigBackup.Open(s.opts.Storage.Mounted(), r.URL.Query().Get("volume"), name)
+	file, err := a.backup.Open(a.storage.Mounted(), r.URL.Query().Get("volume"), name)
 	if err != nil {
 		writeBackupError(w, err)
 		return
@@ -124,22 +142,22 @@ func (s *Server) handleConfigBackupDownload(w http.ResponseWriter, r *http.Reque
 // may a backup be put back, and it needs no login: there is nobody yet who
 // could log in. A restore gives nobody access they did not have, it brings
 // back the accounts of the backup.
-func (s *Server) newStick(w http.ResponseWriter) bool {
+func (au authArea) newStick(w http.ResponseWriter) bool {
 	setupMu.Lock()
 	defer setupMu.Unlock()
-	return s.newStickLocked(w)
+	return au.newStickLocked(w)
 }
 
 // setupMu keeps the first owner account and a restore of a backup apart:
 // both are allowed only while there is no account, and only one may win.
 var setupMu sync.Mutex
 
-func (s *Server) newStickLocked(w http.ResponseWriter) bool {
-	if !s.ensureUsersLoaded() {
+func (au authArea) newStickLocked(w http.ResponseWriter) bool {
+	if !au.ensureUsersLoaded() {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", "/config is not available, is the stick plugged in?")
 		return false
 	}
-	if s.opts.Users.Count() > 0 {
+	if au.users.Count() > 0 {
 		writeError(w, http.StatusConflict, "setup_done", "this NAS is set up already")
 		return false
 	}
@@ -184,42 +202,42 @@ func onLink(addr netip.Addr) bool {
 }
 
 // handleSetupBackups lists the backups found on the disks of this machine.
-func (s *Server) handleSetupBackups(w http.ResponseWriter, r *http.Request) {
-	if !s.newStick(w) {
+func (au authArea) handleSetupBackups(w http.ResponseWriter, r *http.Request) {
+	if !au.newStick(w) {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"backups": s.opts.ConfigBackup.Find(r.Context())})
+	writeJSON(w, http.StatusOK, map[string]any{"backups": au.configBackup.Find(r.Context())})
 }
 
 // restored finishes a restore: the accounts are there now, and the NAS
 // starts again to take everything else from the stick.
-func (s *Server) restored(w http.ResponseWriter, r *http.Request, source string) {
+func (au authArea) restored(w http.ResponseWriter, r *http.Request, source string) {
 	// From here on the setup is closed, even before the restart.
-	if err := s.opts.Users.Load(); err != nil {
+	if err := au.users.Load(); err != nil {
 		slog.Warn("accounts not readable after the restore", "err", err)
 	}
 	slog.Info("configuration restored, restarting", "from", source, "ip", remoteIP(r))
 	w.WriteHeader(http.StatusAccepted)
-	s.goJob(func(context.Context) {
+	au.goJob(func(context.Context) {
 		time.Sleep(time.Second)
-		if err := s.opts.Power.Reboot(); err != nil {
+		if err := au.power.Reboot(); err != nil {
 			slog.Error("restart after the restore failed", "err", err)
 		}
 	})
 }
 
-func (s *Server) handleSetupRestore(w http.ResponseWriter, r *http.Request) {
+func (au authArea) handleSetupRestore(w http.ResponseWriter, r *http.Request) {
 	setupMu.Lock()
 	defer setupMu.Unlock()
 	var req struct{ Device, Name, Password string }
-	if !readJSON(w, r, &req) || !s.newStickLocked(w) {
+	if !readJSON(w, r, &req) || !au.newStickLocked(w) {
 		return
 	}
-	if _, err := s.opts.ConfigBackup.RestoreFound(r.Context(), req.Device, req.Name, req.Password); err != nil {
+	if _, err := au.configBackup.RestoreFound(r.Context(), req.Device, req.Name, req.Password); err != nil {
 		writeBackupError(w, err)
 		return
 	}
-	s.restored(w, r, req.Device+"/"+req.Name)
+	au.restored(w, r, req.Device+"/"+req.Name)
 }
 
 // setupUploadTimeout is how long a backup of the settings (a few MiB) may
@@ -227,20 +245,20 @@ func (s *Server) handleSetupRestore(w http.ResponseWriter, r *http.Request) {
 const setupUploadTimeout = 2 * time.Minute
 
 // handleSetupRestoreUpload takes a backup file as the body of the request.
-func (s *Server) handleSetupRestoreUpload(w http.ResponseWriter, r *http.Request) {
+func (au authArea) handleSetupRestoreUpload(w http.ResponseWriter, r *http.Request) {
 	// The body has a time limit: the server sets none (uploads of files
 	// take long), and a device that starts the upload and then stalls
 	// would hold the lock of the first setup for everyone else.
 	_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(setupUploadTimeout)) // not every writer supports it (tests)
 	setupMu.Lock()
 	defer setupMu.Unlock()
-	if !s.newStickLocked(w) {
+	if !au.newStickLocked(w) {
 		return
 	}
-	if _, err := s.opts.ConfigBackup.RestoreUpload(r.Body, r.Header.Get("X-Backup-Password")); err != nil {
+	if _, err := au.configBackup.RestoreUpload(r.Body, r.Header.Get("X-Backup-Password")); err != nil {
 		writeBackupError(w, err)
 		return
 	}
 	_ = http.NewResponseController(w).SetReadDeadline(time.Time{}) // see above
-	s.restored(w, r, "upload")
+	au.restored(w, r, "upload")
 }

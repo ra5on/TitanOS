@@ -263,7 +263,7 @@ type Server struct {
 
 	loadMu      sync.Mutex
 	lastLoadTry time.Time
-	ipv64       ipv64Area
+	ipv64       ipv64State
 
 	// ctx is the root context of the server: it ends with Close (or with
 	// the context given to Start), and with it every job the server
@@ -292,12 +292,6 @@ func New(opts Options) *Server {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	if s.sessions == nil {
 		s.sessions = auth.NewSessions()
-	}
-	if s.opts.Shares != nil {
-		s.opts.Shares.OnPurgeResumed(s.sharePurgeDone)
-	}
-	if c := s.opts.Cluster; c != nil {
-		c.Applied, c.Status, c.Notify = s.clusterApplied, s.ClusterStatus, s.clusterNotify
 	}
 	if s.opts.Processes == nil {
 		// Not given (tests): the list reads /proc, signals are refused.
@@ -354,6 +348,15 @@ func New(opts Options) *Server {
 			return ddns, le
 		}
 		s.pending = append(s.pending, s.opts.IPv64.Load)
+	}
+	// Only now, with every stand-in in place: the areas built here take
+	// the managers as they are at this moment.
+	if s.opts.Shares != nil {
+		s.opts.Shares.OnPurgeResumed(s.sharesArea().sharePurgeDone)
+	}
+	if c := s.opts.Cluster; c != nil {
+		area := s.clusterArea()
+		c.Applied, c.Status, c.Notify = area.clusterApplied, area.ClusterStatus, area.clusterNotify
 	}
 	s.manual = toolcatalog.NewManual(nil)
 	if s.opts.UI != nil {
@@ -416,11 +419,11 @@ func New(opts Options) *Server {
 	s.routeCluster(mux)
 
 	mux.HandleFunc("/api/", handleAPINotFound)
-	mux.Handle("/", uiHandler(opts.UI, s.appFrameSources))
+	mux.Handle("/", uiHandler(opts.UI, s.appAccessArea().appFrameSources))
 
 	// Browsers must not let another website send requests with our cookie.
 	s.patterns = mux.patterns
-	s.handler = s.securityHeaders(s.clusterAccess(http.NewCrossOriginProtection().Handler(s.bearerAccess(s.activityLog(mux.ServeMux)))))
+	s.handler = s.securityHeaders(s.clusterArea().clusterAccess(http.NewCrossOriginProtection().Handler(s.tokensArea().bearerAccess(s.activityLog(mux.ServeMux)))))
 	return s
 }
 
@@ -468,14 +471,14 @@ const hstsValue = "max-age=15552000"
 // Let's Encrypt. Only then is HSTS safe: with the self-signed or an own
 // certificate the browser could no longer be told to accept it.
 func (s *Server) trustedTLS(r *http.Request) bool {
-	if r.TLS == nil || r.TLS.ServerName == "" || s.opts.Certificate == nil {
+	if r.TLS == nil || r.TLS.ServerName == "" || s.core().certificate == nil {
 		return false
 	}
-	info := s.opts.Certificate.Info()
+	info := s.core().certificate.Info()
 	if info.LetsEncrypt == nil {
 		return false
 	}
-	served, err := s.opts.Certificate.GetCertificate(&tls.ClientHelloInfo{ServerName: r.TLS.ServerName})
+	served, err := s.core().certificate.GetCertificate(&tls.ClientHelloInfo{ServerName: r.TLS.ServerName})
 	return err == nil && tlscert.Describe(served).Fingerprint == info.LetsEncrypt.Fingerprint
 }
 
@@ -570,37 +573,37 @@ func currentUser(r *http.Request) auth.User {
 }
 
 // authenticate returns the account behind the session cookie.
-func (s *Server) authenticate(r *http.Request) (auth.User, bool) {
+func (au authArea) authenticate(r *http.Request) (auth.User, bool) {
 	if name, ok := r.Context().Value(apiTokenIdentity{}).(string); ok {
-		return s.activeUser(name)
+		return au.activeUser(name)
 	}
 	// Only in-process requests can carry this unexported context key.
 	if name, ok := r.Context().Value(inProcessIdentity{}).(string); ok {
-		return s.activeUser(name)
+		return au.activeUser(name)
 	}
 	// Signed by another node of the cluster on behalf of this account.
 	if id, ok := cluster.FromContext(r.Context()); ok {
-		return s.activeUser(id.User)
+		return au.activeUser(id.User)
 	}
 	// A locked session (session_lock.go) counts as not logged in here;
 	// requireUser tells it apart.
-	user, state := s.cookieState(r)
+	user, state := au.cookieState(r)
 	return user, state == authOK
 }
 
 // authenticateState is authenticate that also tells a locked session
 // apart; tokens, in-process and cluster identities are never locked.
-func (s *Server) authenticateState(r *http.Request) (auth.User, authState) {
+func (au authArea) authenticateState(r *http.Request) (auth.User, authState) {
 	if _, ok := r.Context().Value(apiTokenIdentity{}).(string); ok {
-		return stateOf(s.authenticate(r))
+		return stateOf(au.authenticate(r))
 	}
 	if _, ok := r.Context().Value(inProcessIdentity{}).(string); ok {
-		return stateOf(s.authenticate(r))
+		return stateOf(au.authenticate(r))
 	}
 	if _, ok := cluster.FromContext(r.Context()); ok {
-		return stateOf(s.authenticate(r))
+		return stateOf(au.authenticate(r))
 	}
-	return s.cookieState(r)
+	return au.cookieState(r)
 }
 
 func stateOf(user auth.User, ok bool) (auth.User, authState) {
@@ -614,8 +617,8 @@ func stateOf(user auth.User, ok bool) (auth.User, authState) {
 // that acts as an account (sessions, API tokens, MCP, Home
 // Assistant, consoles) goes through it, so a lock holds on every path even
 // before its sessions are ended.
-func (s *Server) activeUser(name string) (auth.User, bool) {
-	user, ok := s.opts.Users.Get(name)
+func (au authArea) activeUser(name string) (auth.User, bool) {
+	user, ok := au.users.Get(name)
 	if !ok || user.Disabled {
 		return auth.User{}, false
 	}
@@ -624,7 +627,7 @@ func (s *Server) activeUser(name string) (auth.User, bool) {
 
 func (s *Server) requireUser(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user, state := s.authenticateState(r)
+		user, state := s.authArea().authenticateState(r)
 		switch {
 		case state == authNone:
 			writeError(w, http.StatusUnauthorized, "unauthorized", "not logged in")
@@ -673,7 +676,7 @@ func (s *Server) requireAppConsole(next http.HandlerFunc) http.HandlerFunc {
 // waits for review. With hold it keeps the gate for the whole request.
 func (s *Server) appLifecycle(hold bool, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		gate := s.opts.ApplicationBackups
+		gate := s.core().applications
 		if gate == nil {
 			next(w, r)
 			return
@@ -703,6 +706,6 @@ func (s *Server) appLifecycle(hold bool, next http.HandlerFunc) http.HandlerFunc
 // configuration and volumes. After an update the boot check waits for
 // that before the new system is marked good.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	ready := s.opts.Users.Loaded() && s.opts.Storage.Settled() && (s.opts.Update == nil || s.opts.Update.Healthy())
+	ready := s.core().users.Loaded() && s.core().storage.Settled() && (s.core().update == nil || s.core().update.Healthy())
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "ready": ready})
 }

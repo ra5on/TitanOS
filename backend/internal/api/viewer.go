@@ -22,6 +22,7 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/ra5on/TitanOS/backend/internal/activity"
+	"github.com/ra5on/TitanOS/backend/internal/appaccess"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/viewer"
 )
@@ -33,33 +34,61 @@ type viewerOpener interface {
 
 // registerViewer registers the routes of the remote view.
 func (s *Server) registerViewer(mux *routeMux) {
-	mux.HandleFunc("GET /api/v1/viewer/settings", s.requireAdmin(s.handleViewerSettings))
-	mux.HandleFunc("PUT /api/v1/viewer/settings", s.requireAdmin(s.handleViewerSettingsSet))
-	mux.HandleFunc("GET /api/v1/viewer/status", s.requireUser(s.handleViewerStatus))
-	mux.HandleFunc("POST /api/v1/viewer/image", s.requireAdmin(s.handleViewerImage))
-	mux.HandleFunc("GET /api/v1/viewer/{app}/stream", s.requireUser(s.handleViewerStream))
-	mux.HandleFunc("GET /api/v1/viewer/{app}/downloads/{id}", s.requireUser(s.handleViewerDownload))
+	s.viewerArea().register(mux, s.requireAdmin, s.requireUser)
 }
 
-func (s *Server) handleViewerSettings(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Viewer == nil {
+// viewerArea is the remote view of Docker apps; an area with narrow
+// dependencies (PLAN 8a, see fansArea). viewer is nil where there is none;
+// activity records starts and ends (nil: nothing). openOverride reads the
+// opener tests put in place of the manager on a running server.
+// appAccess holds who may use which app (nil: owners and administrators
+// only), activeUser finds an account that is not locked,
+// consoleIdleAfter how long a view may stay without input, and loginHolds
+// whether the login of a request still stands.
+type viewerArea struct {
+	viewer           *viewer.Manager
+	activity         *activity.Manager
+	openOverride     func() viewerOpener
+	appAccess        *appaccess.Manager
+	activeUser       func(name string) (auth.User, bool)
+	consoleIdleAfter func() time.Duration
+	loginHolds       func(r *http.Request, user auth.User) (auth.User, bool)
+}
+
+// viewerArea is the area of the server.
+func (s *Server) viewerArea() viewerArea {
+	return viewerArea{viewer: s.opts.Viewer, activity: s.opts.Activity, openOverride: func() viewerOpener { return s.viewerOpen },
+		appAccess: s.opts.AppAccess, activeUser: s.authArea().activeUser, consoleIdleAfter: s.consoleIdleAfter, loginHolds: s.loginHolds}
+}
+
+func (a viewerArea) register(mux *routeMux, admin, user func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/viewer/settings", admin(a.handleViewerSettings))
+	mux.HandleFunc("PUT /api/v1/viewer/settings", admin(a.handleViewerSettingsSet))
+	mux.HandleFunc("GET /api/v1/viewer/status", user(a.handleViewerStatus))
+	mux.HandleFunc("POST /api/v1/viewer/image", admin(a.handleViewerImage))
+	mux.HandleFunc("GET /api/v1/viewer/{app}/stream", user(a.handleViewerStream))
+	mux.HandleFunc("GET /api/v1/viewer/{app}/downloads/{id}", user(a.handleViewerDownload))
+}
+
+func (a viewerArea) handleViewerSettings(w http.ResponseWriter, r *http.Request) {
+	if a.viewer == nil {
 		writeJSON(w, http.StatusOK, viewer.Defaults())
 		return
 	}
-	writeJSON(w, http.StatusOK, s.opts.Viewer.Settings())
+	writeJSON(w, http.StatusOK, a.viewer.Settings())
 }
 
 // handleViewerSettingsSet stores {gpu, quality, fps, audio, volume}.
-func (s *Server) handleViewerSettingsSet(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Viewer == nil {
+func (a viewerArea) handleViewerSettingsSet(w http.ResponseWriter, r *http.Request) {
+	if a.viewer == nil {
 		writeError(w, http.StatusNotFound, "not_found", "no remote view")
 		return
 	}
-	req := s.opts.Viewer.Settings()
+	req := a.viewer.Settings()
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Viewer.SetSettings(r.Context(), req); err != nil {
+	if err := a.viewer.SetSettings(r.Context(), req); err != nil {
 		if errors.Is(err, viewer.ErrInvalid) {
 			writeError(w, http.StatusBadRequest, "viewer_settings_invalid", err.Error())
 			return
@@ -69,7 +98,7 @@ func (s *Server) handleViewerSettingsSet(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	noteTarget(r, "viewer")
-	writeJSON(w, http.StatusOK, s.opts.Viewer.Settings())
+	writeJSON(w, http.StatusOK, a.viewer.Settings())
 }
 
 // viewerStatus is GET /api/v1/viewer/status. Accounts that do not
@@ -85,10 +114,10 @@ type viewerStatus struct {
 	IdleMinutes int `json:"idleMinutes"`
 }
 
-func (s *Server) handleViewerStatus(w http.ResponseWriter, r *http.Request) {
+func (a viewerArea) handleViewerStatus(w http.ResponseWriter, r *http.Request) {
 	out := viewerStatus{Image: viewer.ImageStatus{State: "missing"}, GPU: "cpu", GPUs: []viewer.GPU{}, Sessions: []viewer.SessionInfo{},
-		IdleMinutes: int(s.consoleIdleAfter() / time.Minute)}
-	if m := s.opts.Viewer; m != nil {
+		IdleMinutes: int(a.consoleIdleAfter() / time.Minute)}
+	if m := a.viewer; m != nil {
 		user := currentUser(r)
 		out.Image, out.Memory = m.ImageStatus(), m.MemoryEstimate()
 		out.GPU = m.NewViewGPU(r.Context())
@@ -104,14 +133,14 @@ func (s *Server) handleViewerStatus(w http.ResponseWriter, r *http.Request) {
 
 // handleViewerImage starts getting the image now (it is otherwise fetched
 // with the first view) and answers the status of the image.
-func (s *Server) handleViewerImage(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Viewer == nil {
+func (a viewerArea) handleViewerImage(w http.ResponseWriter, r *http.Request) {
+	if a.viewer == nil {
 		writeError(w, http.StatusNotFound, "not_found", "no remote view")
 		return
 	}
-	s.opts.Viewer.PrepareImage()
+	a.viewer.PrepareImage()
 	noteTarget(r, "viewer")
-	writeJSON(w, http.StatusOK, s.opts.Viewer.ImageStatus())
+	writeJSON(w, http.StatusOK, a.viewer.ImageStatus())
 }
 
 // viewerError maps a failed Open to the code the window shows.
@@ -139,17 +168,17 @@ func viewerError(err error) (code, text string) {
 
 // allowsAppNow tells whether the account (as it is now) may use an app:
 // the check of the app window, repeated while a view is open.
-func (s *Server) allowsAppNow(user auth.User, app string) bool {
-	if s.opts.AppAccess == nil {
+func (a viewerArea) allowsAppNow(user auth.User, app string) bool {
+	if a.appAccess == nil {
 		return user.Role.CanAdminister()
 	}
-	return s.opts.AppAccess.Allows(user.Name, app)
+	return a.appAccess.Allows(user.Name, app)
 }
 
 // handleViewerStream relays the remote view of an app. Problems are told
 // after the upgrade as {"t":"error","code":…}: a browser cannot read the
 // answer of a refused WebSocket handshake.
-func (s *Server) handleViewerStream(w http.ResponseWriter, r *http.Request) {
+func (a viewerArea) handleViewerStream(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r)
 	app := r.PathValue("app")
 	// Accept checks that the page asking is this site, not another one.
@@ -161,12 +190,12 @@ func (s *Server) handleViewerStream(w http.ResponseWriter, r *http.Request) {
 	conn.SetReadLimit(viewer.MaxBrowserMessage)
 	ctx := r.Context()
 	record := func(action, target string, ok bool) {
-		if s.opts.Activity != nil {
+		if a.activity != nil {
 			status := http.StatusOK
 			if !ok {
 				status = http.StatusConflict
 			}
-			s.opts.Activity.Record(activity.Entry{User: user.Name, Via: activity.ViaWeb, IP: remoteIP(r), Action: action, Target: target, Status: status, OK: ok})
+			a.activity.Record(activity.Entry{User: user.Name, Via: activity.ViaWeb, IP: remoteIP(r), Action: action, Target: target, Status: status, OK: ok})
 		}
 	}
 	fail := func(code, text string, extra map[string]any) {
@@ -181,15 +210,16 @@ func (s *Server) handleViewerStream(w http.ResponseWriter, r *http.Request) {
 		}
 		conn.Close(websocket.StatusPolicyViolation, code)
 	}
-	var opener viewerOpener = s.opts.Viewer
-	if s.viewerOpen != nil {
-		opener = s.viewerOpen
+	var opener viewerOpener = a.viewer
+	override := a.openOverride()
+	if override != nil {
+		opener = override
 	}
-	if s.opts.Viewer == nil && s.viewerOpen == nil {
+	if a.viewer == nil && override == nil {
 		fail("viewer_unavailable", "the remote view is not available", nil)
 		return
 	}
-	if !s.allowsAppNow(user, app) {
+	if !a.allowsAppNow(user, app) {
 		record("viewer_start", app+", app_forbidden", false)
 		fail("app_forbidden", appWindowMessage("app_forbidden"), nil)
 		return
@@ -213,12 +243,12 @@ func (s *Server) handleViewerStream(w http.ResponseWriter, r *http.Request) {
 		var extra map[string]any
 		switch code {
 		case "viewer_image":
-			if s.opts.Viewer != nil {
-				extra = map[string]any{"image": s.opts.Viewer.ImageStatus()}
+			if a.viewer != nil {
+				extra = map[string]any{"image": a.viewer.ImageStatus()}
 			}
 		case "viewer_memory":
-			if s.opts.Viewer != nil {
-				extra = map[string]any{"memory": s.opts.Viewer.MemoryEstimate()}
+			if a.viewer != nil {
+				extra = map[string]any{"memory": a.viewer.MemoryEstimate()}
 			}
 		case "viewer_error":
 			slog.Warn("remote view not started", "user", user.Name, "app", app, "err", err)
@@ -250,7 +280,7 @@ func (s *Server) handleViewerStream(w http.ResponseWriter, r *http.Request) {
 	record("viewer_start", app, true)
 	slog.Info("remote view opened", "user", user.Name, "app", app, "ip", remoteIP(r))
 
-	reason := s.watchViewer(ctx, r, user, app, lease, func(run context.Context, input func()) viewer.End {
+	reason := a.watchViewer(ctx, r, user, app, lease, func(run context.Context, input func()) viewer.End {
 		return viewer.Relay(run, conn, agent, input)
 	})
 	linger := false
@@ -278,7 +308,7 @@ func (s *Server) handleViewerStream(w http.ResponseWriter, r *http.Request) {
 // console idle time (0: never) or another window took the view over. It
 // returns why: closed (the window went), idle, logout, forbidden,
 // replaced, stopped or error.
-func (s *Server) watchViewer(ctx context.Context, r *http.Request, user auth.User, app string, lease *viewer.Lease, relay func(context.Context, func()) viewer.End) string {
+func (a viewerArea) watchViewer(ctx context.Context, r *http.Request, user auth.User, app string, lease *viewer.Lease, relay func(context.Context, func()) viewer.End) string {
 	run, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var mu sync.Mutex
@@ -291,7 +321,7 @@ func (s *Server) watchViewer(ctx context.Context, r *http.Request, user auth.Use
 		mu.Unlock()
 		cancel()
 	}
-	idleAfter := s.consoleIdleAfter()
+	idleAfter := a.consoleIdleAfter()
 	var idle *time.Timer
 	if idleAfter > 0 {
 		idle = time.AfterFunc(idleAfter, func() { stop("idle") })
@@ -307,12 +337,12 @@ func (s *Server) watchViewer(ctx context.Context, r *http.Request, user auth.Use
 		for {
 			select {
 			case <-recheck.C:
-				current, ok := s.loginHolds(r, user)
+				current, ok := a.loginHolds(r, user)
 				if !ok {
 					stop("logout")
 					return
 				}
-				if !s.allowsAppNow(current, app) {
+				if !a.allowsAppNow(current, app) {
 					stop("forbidden")
 					return
 				}
@@ -352,18 +382,18 @@ var viewerDownloadID = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
 // handleViewerDownload hands over a file the browser in the view
 // downloaded, from the agent, always as an attachment.
-func (s *Server) handleViewerDownload(w http.ResponseWriter, r *http.Request) {
+func (a viewerArea) handleViewerDownload(w http.ResponseWriter, r *http.Request) {
 	app, id := r.PathValue("app"), r.PathValue("id")
 	user := currentUser(r)
-	if !s.allowsAppNow(user, app) {
+	if !a.allowsAppNow(user, app) {
 		writeError(w, http.StatusForbidden, "app_forbidden", appWindowMessage("app_forbidden"))
 		return
 	}
-	if s.opts.Viewer == nil || !viewerDownloadID.MatchString(id) {
+	if a.viewer == nil || !viewerDownloadID.MatchString(id) {
 		writeError(w, http.StatusNotFound, "not_found", "no such download")
 		return
 	}
-	lease, ok := s.opts.Viewer.Peek(user.Name, app)
+	lease, ok := a.viewer.Peek(user.Name, app)
 	if !ok {
 		writeError(w, http.StatusNotFound, "viewer_no_session", "the remote view of this app is not open")
 		return
@@ -433,24 +463,24 @@ func rfc5987(s string) string {
 
 // viewerForgetUser ends the views of a deleted account and removes its
 // browser profiles.
-func (s *Server) viewerForgetUser(name string) {
-	if s.opts.Viewer == nil {
+func (a viewerArea) viewerForgetUser(name string) {
+	if a.viewer == nil {
 		return
 	}
-	s.opts.Viewer.Stop(name, "")
-	if err := s.opts.Viewer.DeleteProfiles(name); err != nil {
+	a.viewer.Stop(name, "")
+	if err := a.viewer.DeleteProfiles(name); err != nil {
 		slog.Warn("remote view profiles not removed", "user", name, "err", err)
 	}
 }
 
 // viewerRecheckRights ends views (also those waiting for their window) of
 // accounts that lost the right on their app.
-func (s *Server) viewerRecheckRights() {
-	if s.opts.Viewer == nil {
+func (a viewerArea) viewerRecheckRights() {
+	if a.viewer == nil {
 		return
 	}
-	s.opts.Viewer.StopWhere(func(user, app string) bool {
-		account, ok := s.activeUser(user)
-		return !ok || !s.allowsAppNow(account, app)
+	a.viewer.StopWhere(func(user, app string) bool {
+		account, ok := a.activeUser(user)
+		return !ok || !a.allowsAppNow(account, app)
 	})
 }

@@ -44,27 +44,27 @@ func (s *Server) RemoveRetiredAssistant(ctx context.Context) {
 
 func (s *Server) removeRetiredAssistant() {
 	var removed []string
-	if s.opts.Store != nil && s.opts.Users != nil {
+	if s.core().store != nil && s.core().users != nil {
 		// The chat page kept its preferences per account.
-		for _, user := range s.opts.Users.List() {
+		for _, user := range s.core().users.List() {
 			name := preferenceFile(user.Name, "assistant")
-			if _, err := s.opts.Store.Read(name); err == nil && s.opts.Store.Remove(name) == nil {
+			if _, err := s.core().store.Read(name); err == nil && s.core().store.Remove(name) == nil {
 				removed = append(removed, "stick:"+user.Name)
 			}
 		}
 	}
-	if s.opts.Store != nil {
-		if _, err := s.opts.Store.Read(retiredAssistantSettings); err == nil {
-			if err := s.opts.Store.Remove(retiredAssistantSettings); err != nil {
+	if s.core().store != nil {
+		if _, err := s.core().store.Read(retiredAssistantSettings); err == nil {
+			if err := s.core().store.Remove(retiredAssistantSettings); err != nil {
 				slog.Warn("old assistant settings not removed from the stick", "err", err)
 			} else {
 				removed = append(removed, "stick")
 			}
 		}
 	}
-	if s.opts.Storage != nil {
-		for _, volume := range s.opts.Storage.Mounted() {
-			base := filepath.Join(s.opts.Storage.MountPoint(volume), ".titanos")
+	if s.core().storage != nil {
+		for _, volume := range s.core().storage.Mounted() {
+			base := filepath.Join(s.core().storage.MountPoint(volume), ".titanos")
 			old := filepath.Join(base, "assistant")
 			if _, err := os.Lstat(old); err != nil {
 				continue
@@ -86,9 +86,9 @@ func (s *Server) removeRetiredAssistant() {
 		return
 	}
 	slog.Info("old assistant data removed", "from", removed)
-	if s.opts.Activity != nil {
+	if s.core().activity != nil {
 		for _, where := range removed {
-			s.opts.Activity.Record(activity.Entry{User: "system", Via: activity.ViaSystem, Action: "retired_assistant_removed", Target: where, Status: 200, OK: true})
+			s.core().activity.Record(activity.Entry{User: "system", Via: activity.ViaSystem, Action: "retired_assistant_removed", Target: where, Status: 200, OK: true})
 		}
 	}
 }

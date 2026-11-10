@@ -149,6 +149,7 @@ func (s *Server) catalogActions(user auth.User) []toolcatalog.Tool {
 func esc(s string) string { return url.PathEscape(s) }
 
 func (s *Server) planContainer(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
+	env := s.toolEnv()
 	var req struct{ Container, Action string }
 	if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 		return nil, err
@@ -157,7 +158,7 @@ func (s *Server) planContainer(ctx context.Context, args json.RawMessage) (*tool
 		return nil, toolcatalog.Errorf("action must be start, stop or restart")
 	}
 	name := strings.TrimPrefix(strings.TrimSpace(req.Container), "/")
-	for _, c := range s.opts.Docker.Status(ctx).Containers {
+	for _, c := range env.docker.Status(ctx).Containers {
 		if c.Name == name {
 			return card("container."+req.Action, map[string]string{"name": c.Name}, "POST", "/docker/containers/"+esc(c.ID)+"/"+req.Action, nil), nil
 		}
@@ -166,11 +167,12 @@ func (s *Server) planContainer(ctx context.Context, args json.RawMessage) (*tool
 }
 
 func (s *Server) planApp(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
+	env := s.toolEnv()
 	var req struct{ App, Action string }
 	if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 		return nil, err
 	}
-	status := s.opts.Docker.Status(ctx)
+	status := env.docker.Status(ctx)
 	_, failed := status.Jobs[req.App]
 	if !slices.Contains(status.Apps, req.App) && !failed {
 		return nil, toolcatalog.Errorf("no app %q; docker_list shows the app of each container", req.App)
@@ -188,10 +190,11 @@ func (s *Server) planApp(ctx context.Context, args json.RawMessage) (*toolcatalo
 }
 
 func (s *Server) planAppsUpdateAll(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
+	env := s.toolEnv()
 	if err := toolcatalog.DecodeArgs(args, &struct{}{}); err != nil {
 		return nil, err
 	}
-	apps := s.opts.Docker.AppsWithUpdates(ctx)
+	apps := env.docker.AppsWithUpdates(ctx)
 	if len(apps) == 0 {
 		return nil, toolcatalog.Errorf("no app has a newer image; docker_check_updates asks the registries again")
 	}
@@ -199,12 +202,13 @@ func (s *Server) planAppsUpdateAll(ctx context.Context, args json.RawMessage) (*
 }
 
 func (s *Server) planVM(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
+	env := s.toolEnv()
 	var req struct{ VM, Action string }
 	if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 		return nil, err
 	}
 	found := false
-	for _, vm := range s.opts.VMs.List(nil) {
+	for _, vm := range env.vms.List(nil) {
 		found = found || vm.Name == req.VM
 	}
 	if !found {
@@ -226,6 +230,7 @@ func (s *Server) planVM(ctx context.Context, args json.RawMessage) (*toolcatalog
 }
 
 func (s *Server) planBackup(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
+	env := s.toolEnv()
 	var req struct{ Job, Action string }
 	if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 		return nil, err
@@ -233,7 +238,7 @@ func (s *Server) planBackup(ctx context.Context, args json.RawMessage) (*toolcat
 	if req.Action != "run" && req.Action != "stop" {
 		return nil, toolcatalog.Errorf("action must be run or stop")
 	}
-	for _, view := range s.opts.Backup.List() {
+	for _, view := range env.backup.List() {
 		if view.Job.ID == req.Job {
 			return card("backup."+req.Action, map[string]string{"name": req.Job}, "POST", "/backups/"+esc(req.Job)+"/"+req.Action, nil), nil
 		}
@@ -242,11 +247,12 @@ func (s *Server) planBackup(ctx context.Context, args json.RawMessage) (*toolcat
 }
 
 func (s *Server) planVolume(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
+	env := s.toolEnv()
 	var req struct{ Volume, Action string }
 	if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 		return nil, err
 	}
-	if !slices.Contains(s.opts.Storage.Names(), req.Volume) {
+	if !slices.Contains(env.storage.Names(), req.Volume) {
 		return nil, toolcatalog.Errorf("no volume %q; storage_overview shows them", req.Volume)
 	}
 	params := map[string]string{"name": req.Volume}
@@ -263,6 +269,7 @@ func (s *Server) planVolume(ctx context.Context, args json.RawMessage) (*toolcat
 }
 
 func (s *Server) planVolumeCreate(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
+	env := s.toolEnv()
 	var req storage.CreateRequest
 	if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 		return nil, err
@@ -270,7 +277,7 @@ func (s *Server) planVolumeCreate(ctx context.Context, args json.RawMessage) (*t
 	if len(req.Disks) == 0 {
 		return nil, toolcatalog.Errorf("disks are required")
 	}
-	status, err := s.opts.Storage.Status(ctx)
+	status, err := env.storage.Status(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -296,11 +303,12 @@ func (s *Server) planVolumeCreate(ctx context.Context, args json.RawMessage) (*t
 }
 
 func (s *Server) planDiskTest(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
+	env := s.toolEnv()
 	var req struct{ Disk, Mode string }
 	if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 		return nil, err
 	}
-	status, err := s.opts.Storage.Status(ctx)
+	status, err := env.storage.Status(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -320,11 +328,12 @@ func (s *Server) planDiskTest(ctx context.Context, args json.RawMessage) (*toolc
 }
 
 func (s *Server) planShareCreate(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
+	env := s.toolEnv()
 	var req struct{ Name, Volume string }
 	if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 		return nil, err
 	}
-	if !slices.Contains(s.opts.Storage.Names(), req.Volume) {
+	if !slices.Contains(env.storage.Names(), req.Volume) {
 		return nil, toolcatalog.Errorf("no volume %q", req.Volume)
 	}
 	body := map[string]any{"name": req.Name, "volume": req.Volume, "smb": true, "browseable": true}
@@ -332,12 +341,13 @@ func (s *Server) planShareCreate(ctx context.Context, args json.RawMessage) (*to
 }
 
 func (s *Server) planShareDelete(user auth.User) plan {
+	env := s.toolEnv()
 	return func(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
 		var req struct{ Share string }
 		if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 			return nil, err
 		}
-		for _, share := range s.opts.Shares.List() {
+		for _, share := range env.shares.List() {
 			if share.Name == req.Share {
 				return withLevel(card("share.delete", map[string]string{"name": share.Name}, "DELETE", "/shares/"+esc(share.Name), nil), toolcatalog.LevelDanger, "", ""), nil
 			}
@@ -347,12 +357,13 @@ func (s *Server) planShareDelete(user auth.User) plan {
 }
 
 func (s *Server) planAccount(user auth.User) plan {
+	env := s.toolEnv()
 	return func(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
 		var req struct{ Account, Action string }
 		if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 			return nil, err
 		}
-		target, ok := s.opts.Users.Get(req.Account)
+		target, ok := env.users.Get(req.Account)
 		if !ok {
 			return nil, toolcatalog.Errorf("no account %q", req.Account)
 		}
@@ -374,11 +385,12 @@ func (s *Server) planAccount(user auth.User) plan {
 }
 
 func (s *Server) planUpdate(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
+	env := s.toolEnv()
 	var req struct{ Action string }
 	if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 		return nil, err
 	}
-	if s.opts.Update == nil {
+	if env.update == nil {
 		return nil, toolcatalog.Errorf("updates are not available on this system")
 	}
 	switch req.Action {
@@ -386,7 +398,7 @@ func (s *Server) planUpdate(ctx context.Context, args json.RawMessage) (*toolcat
 		return card("update."+req.Action, nil, "POST", "/update/"+req.Action, nil), nil
 	case "install":
 		params := map[string]string{}
-		if a := s.opts.Update.Status().Available; a != nil {
+		if a := env.update.Status().Available; a != nil {
 			params["version"] = a.Version
 		} else {
 			return nil, toolcatalog.Errorf("no update was found; check first")
@@ -487,15 +499,16 @@ func (s *Server) planDelete(user auth.User) plan {
 }
 
 func (s *Server) planLXC(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
+	env := s.toolEnv()
 	var req struct{ Container, Action string }
 	if err := toolcatalog.DecodeArgs(args, &req); err != nil {
 		return nil, err
 	}
-	if s.opts.LXC == nil {
+	if env.lxc == nil {
 		return nil, toolcatalog.Errorf("system containers are not available")
 	}
 	found := false
-	for _, c := range s.opts.LXC.List(s.opts.Storage.Mounted()) {
+	for _, c := range env.lxc.List(env.storage.Mounted()) {
 		found = found || c.Name == req.Container
 	}
 	if !found {

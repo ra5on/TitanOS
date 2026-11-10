@@ -46,7 +46,7 @@ func TestCraftReplacement(t *testing.T) {
 		removed = append(removed, name)
 		return nil
 	}
-	ts.server.replaceCraftOnce(context.Background())
+	ts.server.webappsArea().replaceCraftOnce(context.Background())
 	for _, st := range manager.List() {
 		if st.ID == "pdfcraft" && st.Installed {
 			t.Fatal("PdfCraft still installed next to T-PDF")

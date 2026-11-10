@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/webdav"
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/files"
 )
 
@@ -54,13 +55,48 @@ type davPassword struct {
 	Created time.Time `json:"created"`
 }
 
-func (s *Server) davSettings() davSettings {
-	d := &s.dav
+// davArea is WebDAV: its switch, the WebDAV passwords of the accounts and
+// the server under /dav; an area with narrow dependencies (PLAN 8a, see
+// fansArea). store holds switch and passwords, state what was read and the
+// locks (state of the server), users the accounts, files the folders.
+// limiter is the limit against guessed passwords (state of the server).
+// webSession and reconfirm guard a new password; fileRoots says where an
+// account may work.
+type davArea struct {
+	store      *config.Store
+	users      *auth.Users
+	files      *files.Manager
+	state      *davState
+	limiter    limiterFunc
+	webSession webSessionFunc
+	reconfirm  reconfirmFunc
+	fileRoots  func(user auth.User) []files.Root
+}
+
+// davArea is the area of the server; removing an account forgets its
+// WebDAV password through it.
+func (s *Server) davArea() davArea {
+	return davArea{store: s.opts.Store, users: s.opts.Users, files: s.opts.Files, state: &s.dav, limiter: s.rateLimiter,
+		webSession: s.requireWebSession, reconfirm: s.authArea().reconfirm, fileRoots: func(user auth.User) []files.Root { return s.filesArea().fileRoots(user) }}
+}
+
+func (a davArea) register(mux *routeMux, admin, user func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("/dav/", a.handleWebDAV)
+	mux.HandleFunc("/dav", a.handleWebDAV)
+	mux.HandleFunc("GET /api/v1/system/webdav", admin(a.handleWebDAVSettings))
+	mux.HandleFunc("PUT /api/v1/system/webdav", admin(a.handleWebDAVSettingsSet))
+	mux.HandleFunc("GET /api/v1/account/webdav", user(a.handleAccountWebDAV))
+	mux.HandleFunc("POST /api/v1/account/webdav", user(a.handleAccountWebDAVNew))
+	mux.HandleFunc("DELETE /api/v1/account/webdav", user(a.handleAccountWebDAVDelete))
+}
+
+func (a davArea) davSettings() davSettings {
+	d := a.state
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if !d.loaded {
 		var settings davSettings
-		if err := s.opts.Store.ReadJSON(davSettingsFile, &settings); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		if err := a.store.ReadJSON(davSettingsFile, &settings); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			slog.Warn("WebDAV settings not readable", "err", err)
 		}
 		d.settings, d.loaded, d.locks = settings, true, webdav.NewMemLS()
@@ -68,31 +104,31 @@ func (s *Server) davSettings() davSettings {
 	return d.settings
 }
 
-func (s *Server) handleWebDAVSettings(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.davSettings())
+func (a davArea) handleWebDAVSettings(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, a.davSettings())
 }
 
-func (s *Server) handleWebDAVSettingsSet(w http.ResponseWriter, r *http.Request) {
+func (a davArea) handleWebDAVSettingsSet(w http.ResponseWriter, r *http.Request) {
 	var req davSettings
 	if !readJSON(w, r, &req) {
 		return
 	}
-	s.davSettings()
-	s.dav.mu.Lock()
-	defer s.dav.mu.Unlock()
-	if err := s.opts.Store.WriteJSON(davSettingsFile, req); err != nil {
+	a.davSettings()
+	a.state.mu.Lock()
+	defer a.state.mu.Unlock()
+	if err := a.store.WriteJSON(davSettingsFile, req); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 		return
 	}
-	s.dav.settings = req
+	a.state.settings = req
 	writeJSON(w, http.StatusOK, req)
 }
 
 // handleAccountWebDAV tells whether the account has a WebDAV password.
-func (s *Server) handleAccountWebDAV(w http.ResponseWriter, r *http.Request) {
+func (a davArea) handleAccountWebDAV(w http.ResponseWriter, r *http.Request) {
 	var p davPassword
-	err := s.opts.Store.ReadJSON(davPasswordFile(currentUser(r).Name), &p)
-	answer := map[string]any{"enabled": s.davSettings().Enabled, "set": err == nil && p.SHA256 != ""}
+	err := a.store.ReadJSON(davPasswordFile(currentUser(r).Name), &p)
+	answer := map[string]any{"enabled": a.davSettings().Enabled, "set": err == nil && p.SHA256 != ""}
 	if err == nil && p.SHA256 != "" {
 		answer["created"] = p.Created
 	}
@@ -100,8 +136,8 @@ func (s *Server) handleAccountWebDAV(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleAccountWebDAVNew makes a new WebDAV password and shows it once.
-func (s *Server) handleAccountWebDAVNew(w http.ResponseWriter, r *http.Request) {
-	if !s.requireWebSession(w, r) {
+func (a davArea) handleAccountWebDAVNew(w http.ResponseWriter, r *http.Request) {
+	if !a.webSession(w, r) {
 		return
 	}
 	// Password and Code confirm it like an API token: the WebDAV password
@@ -113,7 +149,7 @@ func (s *Server) handleAccountWebDAVNew(w http.ResponseWriter, r *http.Request) 
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if !s.reconfirm(w, currentUser(r), req.Password, req.Code) {
+	if !a.reconfirm(w, currentUser(r), req.Password, req.Code) {
 		return
 	}
 	raw := make([]byte, 18)
@@ -123,7 +159,7 @@ func (s *Server) handleAccountWebDAVNew(w http.ResponseWriter, r *http.Request) 
 	}
 	password := base64.RawURLEncoding.EncodeToString(raw)
 	sum := sha256.Sum256([]byte(password))
-	if err := s.opts.Store.WriteJSON(davPasswordFile(currentUser(r).Name), davPassword{SHA256: hex.EncodeToString(sum[:]), Created: time.Now().UTC()}); err != nil {
+	if err := a.store.WriteJSON(davPasswordFile(currentUser(r).Name), davPassword{SHA256: hex.EncodeToString(sum[:]), Created: time.Now().UTC()}); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 		return
 	}
@@ -134,14 +170,14 @@ func (s *Server) handleAccountWebDAVNew(w http.ResponseWriter, r *http.Request) 
 // forgetWebDAV removes the WebDAV password of an account whose password
 // changed or whose factors were reset: whoever made it with a session that
 // has just ended would keep the way to the shares otherwise.
-func (s *Server) forgetWebDAV(name string) {
-	if err := s.opts.Store.Remove(davPasswordFile(name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+func (a davArea) forgetWebDAV(name string) {
+	if err := a.store.Remove(davPasswordFile(name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		slog.Error("remove the WebDAV password", "user", name, "err", err)
 	}
 }
 
-func (s *Server) handleAccountWebDAVDelete(w http.ResponseWriter, r *http.Request) {
-	if err := s.opts.Store.Remove(davPasswordFile(currentUser(r).Name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+func (a davArea) handleAccountWebDAVDelete(w http.ResponseWriter, r *http.Request) {
+	if err := a.store.Remove(davPasswordFile(currentUser(r).Name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 		return
 	}
@@ -149,22 +185,22 @@ func (s *Server) handleAccountWebDAVDelete(w http.ResponseWriter, r *http.Reques
 }
 
 // davUser checks the Basic credentials of a request.
-func (s *Server) davUser(r *http.Request) (auth.User, bool, time.Duration) {
+func (a davArea) davUser(r *http.Request) (auth.User, bool, time.Duration) {
 	name, password, ok := r.BasicAuth()
 	ip := remoteIP(r)
-	if wait := s.limiter.RetryAfter("dav:"+ip, "dav-user:"+name); wait > 0 {
+	if wait := a.limiter().RetryAfter("dav:"+ip, "dav-user:"+name); wait > 0 {
 		return auth.User{}, false, wait
 	}
 	if !ok || name == "" || len(password) > 256 {
 		return auth.User{}, false, 0
 	}
 	var stored davPassword
-	user, known := s.opts.Users.Get(name)
-	err := s.opts.Store.ReadJSON(davPasswordFile(name), &stored)
+	user, known := a.users.Get(name)
+	err := a.store.ReadJSON(davPasswordFile(name), &stored)
 	sum := sha256.Sum256([]byte(password))
 	want, _ := hex.DecodeString(stored.SHA256)
 	if !known || err != nil || len(want) != len(sum) || subtle.ConstantTimeCompare(sum[:], want) != 1 || user.Disabled {
-		s.limiter.Fail("dav:"+ip, "dav-user:"+name)
+		a.limiter().Fail("dav:"+ip, "dav-user:"+name)
 		slog.Warn("WebDAV sign-in refused", "user", name, "ip", ip)
 		return auth.User{}, false, 0
 	}
@@ -172,12 +208,12 @@ func (s *Server) davUser(r *http.Request) (auth.User, bool, time.Duration) {
 }
 
 // handleWebDAV serves /dav/…: the shares of the account as folders.
-func (s *Server) handleWebDAV(w http.ResponseWriter, r *http.Request) {
-	if !s.davSettings().Enabled {
+func (a davArea) handleWebDAV(w http.ResponseWriter, r *http.Request) {
+	if !a.davSettings().Enabled {
 		http.NotFound(w, r)
 		return
 	}
-	user, ok, wait := s.davUser(r)
+	user, ok, wait := a.davUser(r)
 	if !ok {
 		if wait > 0 {
 			w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
@@ -189,15 +225,15 @@ func (s *Server) handleWebDAV(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var roots []files.Root
-	for _, root := range s.fileRoots(user) {
+	for _, root := range a.fileRoots(user) {
 		if root.Kind == "share" {
 			roots = append(roots, root)
 		}
 	}
 	handler := &webdav.Handler{
 		Prefix:     davPrefix,
-		FileSystem: &davShares{roots: roots, open: func(root files.Root) webdav.FileSystem { return s.opts.Files.DAV(root, user.Name, user.UID) }},
-		LockSystem: s.dav.locks,
+		FileSystem: &davShares{roots: roots, open: func(root files.Root) webdav.FileSystem { return a.files.DAV(root, user.Name, user.UID) }},
+		LockSystem: a.state.locks,
 		Logger: func(r *http.Request, err error) {
 			if err != nil && !errors.Is(err, os.ErrNotExist) {
 				slog.Info("WebDAV", "user", user.Name, "method", r.Method, "path", r.URL.Path, "err", err)

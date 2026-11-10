@@ -68,6 +68,7 @@ type buddyCodeMeta struct {
 
 // buddyLoad reads the partners once; afterwards they are kept in RAM.
 func (s *Server) buddyLoad() error {
+	env := s.agentEnv()
 	f := s.family54()
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -75,7 +76,7 @@ func (s *Server) buddyLoad() error {
 		return nil
 	}
 	var list []buddyPartner
-	if err := s.opts.Store.ReadJSON(buddyFile, &list); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	if err := env.store.ReadJSON(buddyFile, &list); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
 	f.partners, f.loaded = list, true
@@ -84,10 +85,11 @@ func (s *Server) buddyLoad() error {
 
 // buddySave writes the partners (only when pairing changes them).
 func (s *Server) buddySaveLocked(f *family54, next []buddyPartner) error {
+	env := s.agentEnv()
 	if next == nil {
 		next = []buddyPartner{}
 	}
-	if err := s.opts.Store.WriteJSON(buddyFile, next); err != nil {
+	if err := env.store.WriteJSON(buddyFile, next); err != nil {
 		return err
 	}
 	f.partners = next
@@ -106,10 +108,11 @@ func (s *Server) buddySettings() agentBuddy {
 }
 
 func (s *Server) mountedVolumes() []string {
-	if s.opts.Storage == nil {
+	env := s.agentEnv()
+	if env.storage == nil {
 		return nil
 	}
-	return s.opts.Storage.Mounted()
+	return env.storage.Mounted()
 }
 
 // buddyServer is the receiving side, made once.
@@ -296,11 +299,12 @@ type buddyPartnerView struct {
 }
 
 func (s *Server) buddyJobs() map[string]backup.View {
+	env := s.agentEnv()
 	out := map[string]backup.View{}
-	if s.opts.Backup == nil {
+	if env.backup == nil {
 		return out
 	}
-	for _, v := range s.opts.Backup.CachedViews() {
+	for _, v := range env.backup.CachedViews() {
 		if strings.HasPrefix(v.Job.ID, buddyJobPrefix) {
 			out[v.Job.ID] = v
 		}
@@ -309,6 +313,7 @@ func (s *Server) buddyJobs() map[string]backup.View {
 }
 
 func (s *Server) handleBuddy(w http.ResponseWriter, r *http.Request) {
+	env := s.agentEnv()
 	if err := s.buddyLoad(); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 		return
@@ -332,8 +337,8 @@ func (s *Server) handleBuddy(w http.ResponseWriter, r *http.Request) {
 		partners = append(partners, v)
 	}
 	shares := []string{}
-	if s.opts.Backup != nil && s.opts.Backup.Sources != nil {
-		for _, src := range s.opts.Backup.Sources() {
+	if env.backup != nil && env.backup.Sources != nil {
+		for _, src := range env.backup.Sources() {
 			shares = append(shares, src.Name)
 		}
 	}
@@ -355,6 +360,7 @@ func (s *Server) handleBuddy(w http.ResponseWriter, r *http.Request) {
 
 // buddyProblem says why partners cannot reach this NAS, if they cannot.
 func (s *Server) buddyProblem(settings agentBuddy) string {
+	env := s.agentEnv()
 	switch {
 	case !settings.Enabled:
 		return "off"
@@ -362,7 +368,7 @@ func (s *Server) buddyProblem(settings agentBuddy) string {
 		return "volume"
 	case settings.Address == "":
 		return "address"
-	case s.opts.Tailscale == nil:
+	case env.tailscale == nil:
 		return "tailscale"
 	}
 	f := s.family54()
@@ -375,12 +381,13 @@ func (s *Server) buddyProblem(settings agentBuddy) string {
 }
 
 func (s *Server) buddyCheckShares(shares []string) ([]string, error) {
+	env := s.agentEnv()
 	if len(shares) > 32 {
 		return nil, errors.New("too many shares")
 	}
 	known := []string{}
-	if s.opts.Backup != nil && s.opts.Backup.Sources != nil {
-		for _, src := range s.opts.Backup.Sources() {
+	if env.backup != nil && env.backup.Sources != nil {
+		for _, src := range env.backup.Sources() {
 			known = append(known, src.Name)
 		}
 	}
@@ -547,6 +554,7 @@ func (s *Server) handleBuddyPartnerSet(w http.ResponseWriter, r *http.Request) {
 // ?data=1 also what it stored here. What this NAS stored at the partner
 // stays there until the partner removes it.
 func (s *Server) handleBuddyPartnerDelete(w http.ResponseWriter, r *http.Request) {
+	env := s.agentEnv()
 	if err := s.buddyLoad(); err != nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", err.Error())
 		return
@@ -557,12 +565,12 @@ func (s *Server) handleBuddyPartnerDelete(w http.ResponseWriter, r *http.Request
 		return
 	}
 	// The job goes first: while it runs, nothing is removed.
-	if s.opts.Backup != nil {
+	if env.backup != nil {
 		if buddyJobRunning(s, buddyJobPrefix+id) {
 			writeError(w, http.StatusConflict, "buddy_running", "the backup to this partner is running; try again when it is done")
 			return
 		}
-		if err := s.opts.Backup.Delete(buddyJobPrefix + id); errors.Is(err, backup.ErrRunning) {
+		if err := env.backup.Delete(buddyJobPrefix + id); errors.Is(err, backup.ErrRunning) {
 			writeError(w, http.StatusConflict, "buddy_running", "the backup to this partner is running; try again when it is done")
 			return
 		} else if err != nil && !errors.Is(err, backup.ErrNotFound) {
@@ -612,7 +620,8 @@ func (s *Server) buddyJob(p buddyPartner, settings agentBuddy) backup.Job {
 // buddySyncJob makes the job of a partner match: there while shares are
 // chosen, gone without. It writes /config only when something differs.
 func (s *Server) buddySyncJob(p buddyPartner) error {
-	if s.opts.Backup == nil || s.opts.Storage == nil {
+	env := s.agentEnv()
+	if env.backup == nil || env.storage == nil {
 		return nil
 	}
 	id := buddyJobPrefix + p.ID
@@ -621,13 +630,13 @@ func (s *Server) buddySyncJob(p buddyPartner) error {
 	var err error
 	switch {
 	case len(p.Shares) == 0 && exists:
-		err = s.opts.Backup.Delete(id)
+		err = env.backup.Delete(id)
 	case len(p.Shares) == 0:
 	case exists && !buddyJobDiffers(have.Job, want):
 	case exists:
-		err = s.opts.Backup.Update(id, want, s.opts.Storage.Names())
+		err = env.backup.Update(id, want, env.storage.Names())
 	default:
-		err = s.opts.Backup.Create(want, s.opts.Storage.Names())
+		err = env.backup.Create(want, env.storage.Names())
 	}
 	f := s.family54()
 	f.mu.Lock()
@@ -655,6 +664,7 @@ func buddyJobDiffers(have, want backup.Job) bool {
 // settings and starts the monthly probe restore right after a backup that
 // worked (the disks are awake then).
 func (s *Server) buddyTick(now time.Time) {
+	env := s.agentEnv()
 	settings := s.buddySettings()
 	f := s.family54()
 	if !settings.Enabled {
@@ -676,9 +686,9 @@ func (s *Server) buddyTick(now time.Time) {
 	f.mu.Unlock()
 	if due {
 		var want []string
-		devMode := s.opts.BackupTarget == nil || s.opts.BackupTarget.Disabled
-		if s.opts.Tailscale != nil && !devMode && slices.Contains(s.mountedVolumes(), settings.Volume) {
-			for _, ip := range buddy.TailscaleOnly(s.opts.Tailscale.Status().IPs) {
+		devMode := env.backupTarget == nil || env.backupTarget.Disabled
+		if env.tailscale != nil && !devMode && slices.Contains(s.mountedVolumes(), settings.Volume) {
+			for _, ip := range buddy.TailscaleOnly(env.tailscale.Status().IPs) {
 				want = append(want, net.JoinHostPort(ip, strconv.Itoa(buddy.DefaultPort)))
 			}
 		}
@@ -702,7 +712,7 @@ func (s *Server) buddyTick(now time.Time) {
 			}
 		}
 	}
-	if settings.Probe != "monthly" || s.opts.Backup == nil {
+	if settings.Probe != "monthly" || env.backup == nil {
 		return
 	}
 	for id, job := range s.buddyJobs() {
@@ -722,7 +732,7 @@ func (s *Server) buddyTick(now time.Time) {
 		if tried {
 			continue
 		}
-		if err := s.opts.Backup.Probe(id, backup.ProbeRequest{MaxBytes: 256 << 20, MaxFiles: settings.ProbeFiles}); err != nil {
+		if err := env.backup.Probe(id, backup.ProbeRequest{MaxBytes: 256 << 20, MaxFiles: settings.ProbeFiles}); err != nil {
 			slog.Warn("buddy probe not started", "job", id, "err", err)
 		}
 	}

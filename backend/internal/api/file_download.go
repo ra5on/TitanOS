@@ -18,18 +18,18 @@ import (
 // reads web pages must not make the NAS fetch what a page tells it to.
 
 // handleFileDownloadProbe asks a link for its file name and size.
-func (s *Server) handleFileDownloadProbe(w http.ResponseWriter, r *http.Request) {
+func (a filesArea) handleFileDownloadProbe(w http.ResponseWriter, r *http.Request) {
 	var req struct{ Root, Dir, URL string }
 	if !readJSON(w, r, &req) {
 		return
 	}
-	root, ok := s.fileRoot(w, r, req.Root)
+	root, ok := a.fileRoot(w, r, req.Root)
 	if !ok {
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	probe, err := s.opts.Files.ProbeDownload(ctx, root, req.Dir, req.URL, !currentUser(r).Role.CanAdminister())
+	probe, err := a.files.ProbeDownload(ctx, root, req.Dir, req.URL, !currentUser(r).Role.CanAdminister())
 	if err != nil {
 		writeDownloadError(w, err)
 		return
@@ -38,9 +38,9 @@ func (s *Server) handleFileDownloadProbe(w http.ResponseWriter, r *http.Request)
 }
 
 // handleFileURLDownload starts a download job.
-func (s *Server) handleFileURLDownload(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Maintenance != nil {
-		leave, ok := s.admitOperation(w)
+func (a filesArea) handleFileURLDownload(w http.ResponseWriter, r *http.Request) {
+	if a.maintenance() != nil {
+		leave, ok := a.admitOperation(w)
 		if !ok {
 			return
 		}
@@ -53,12 +53,12 @@ func (s *Server) handleFileURLDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	noteTarget(r, filePlace(req.Root, path.Join(req.Dir, req.Name)), urlPlace(req.URL))
-	root, ok := s.fileRoot(w, r, req.Root)
+	root, ok := a.fileRoot(w, r, req.Root)
 	if !ok {
 		return
 	}
 	user := currentUser(r)
-	job, err := s.opts.Files.StartDownload(root, files.DownloadRequest{URL: req.URL, Dir: req.Dir, Name: req.Name, SHA256: req.SHA256, Conflict: req.Conflict}, user.Name, user.UID, !user.Role.CanAdminister())
+	job, err := a.files.StartDownload(root, files.DownloadRequest{URL: req.URL, Dir: req.Dir, Name: req.Name, SHA256: req.SHA256, Conflict: req.Conflict}, user.Name, user.UID, !user.Role.CanAdminister())
 	if err != nil {
 		writeDownloadError(w, err)
 		return

@@ -51,6 +51,7 @@ var docsUserName = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 // docsRoot opens .titanos/docs/<account> on the agent's volume (root,
 // 0700). In tests the agent's own test folder holds it.
 func (s *Server) docsRoot(user string) (*os.Root, error) {
+	env := s.agentEnv()
 	if !docsUserName.MatchString(user) {
 		return nil, errors.New("invalid account name")
 	}
@@ -68,16 +69,16 @@ func (s *Server) docsRoot(user string) (*os.Root, error) {
 			return nil, err
 		}
 	} else {
-		if s.agentMoving() || s.opts.Storage == nil {
+		if s.agentMoving() || env.storage == nil {
 			return nil, volumedata.ErrUnavailable
 		}
-		mounted := s.opts.Storage.Mounted()
+		mounted := env.storage.Mounted()
 		volume, ok := s.agentVolume(mounted)
 		if !ok {
 			return nil, volumedata.ErrUnavailable
 		}
 		var err error
-		if base, err = volumedata.Open(filepath.Dir(s.opts.Storage.MountPoint(volume)), volume, "docs", mounted); err != nil {
+		if base, err = volumedata.Open(filepath.Dir(env.storage.MountPoint(volume)), volume, "docs", mounted); err != nil {
 			return nil, err
 		}
 	}
@@ -546,13 +547,14 @@ func inFolders(root, p string, folders []agentFolderRef) bool {
 // docsWalk lists the supported files below a folder, without hidden ones,
 // at most docsMaxFiles and docsMaxDepth deep.
 func (s *Server) docsWalk(ctx context.Context, root files.Root, dir string) ([]docsFile, error) {
+	env := s.agentEnv()
 	var out []docsFile
 	var walk func(dir string, depth int) error
 	walk = func(dir string, depth int) error {
 		if ctx.Err() != nil || depth > docsMaxDepth || len(out) >= docsMaxFiles {
 			return nil
 		}
-		entries, err := s.opts.Files.List(root, dir)
+		entries, err := env.files.List(root, dir)
 		if err != nil {
 			if depth == 0 {
 				return err
@@ -586,7 +588,8 @@ func (s *Server) docsWalk(ctx context.Context, root files.Root, dir string) ([]d
 }
 
 func (s *Server) docsReadFile(root files.Root, p string) ([]byte, error) {
-	f, info, err := s.opts.Files.Open(root, p)
+	env := s.agentEnv()
+	f, info, err := env.files.Open(root, p)
 	if err != nil {
 		return nil, err
 	}
@@ -681,6 +684,7 @@ func (s *Server) handleDocsRun(w http.ResponseWriter, r *http.Request) {
 // docsSearch searches the account's index and keeps only what the account
 // may see now (rights of today, folder rules of the agent).
 func (s *Server) docsSearch(user auth.User, query string, limit int, keep func(docindex.Doc) bool) ([]docindex.Hit, error) {
+	env := s.agentEnv()
 	// The run writes the index atomically (a new file renamed over the
 	// old), so reading needs no lock.
 	var idx docindex.Index
@@ -691,7 +695,7 @@ func (s *Server) docsSearch(user auth.User, query string, limit int, keep func(d
 		idx = docindex.Index{} // unreadable: empty until the next run builds it anew
 	}
 	roots := map[string]bool{}
-	for _, r := range s.fileRoots(user) {
+	for _, r := range env.fileRoots(user) {
 		if r.Kind == "share" {
 			roots[r.ID] = true
 		}

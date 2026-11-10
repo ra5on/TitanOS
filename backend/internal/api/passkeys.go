@@ -187,21 +187,21 @@ func passkeyList(user auth.User) []passkeyResponse {
 	return list
 }
 
-func (s *Server) handlePasskeys(w http.ResponseWriter, r *http.Request) {
-	user, _ := s.opts.Users.Get(currentUser(r).Name)
+func (au authArea) handlePasskeys(w http.ResponseWriter, r *http.Request) {
+	user, _ := au.users.Get(currentUser(r).Name)
 	rpID, _, usable := passkeyOrigin(r)
 	writeJSON(w, http.StatusOK, map[string]any{"passkeys": passkeyList(user), "rpId": rpID, "usable": usable})
 }
 
 // handlePasskeyBegin starts a registration after checking password and
 // second factor: a passkey is a way into the account like the password.
-func (s *Server) handlePasskeyBegin(w http.ResponseWriter, r *http.Request) {
+func (au authArea) handlePasskeyBegin(w http.ResponseWriter, r *http.Request) {
 	var req struct{ Password, Code string }
 	if !readJSON(w, r, &req) {
 		return
 	}
 	user := currentUser(r)
-	if s.sessionToken(r) == "" {
+	if au.sessionToken(r) == "" {
 		writeError(w, http.StatusBadRequest, "session_required", "passkeys are added from a logged-in browser")
 		return
 	}
@@ -210,15 +210,15 @@ func (s *Server) handlePasskeyBegin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "passkey_address", "passkeys need a host name with a trusted HTTPS certificate, not an IP address")
 		return
 	}
-	if !s.reconfirm(w, user, req.Password, req.Code) {
+	if !au.reconfirm(w, user, req.Password, req.Code) {
 		return
 	}
-	handle, err := s.opts.Users.WebAuthnUserID(user.Name)
+	handle, err := au.users.WebAuthnUserID(user.Name)
 	if err != nil {
 		writeAccountError(w, err)
 		return
 	}
-	current, _ := s.opts.Users.Get(user.Name)
+	current, _ := au.users.Get(user.Name)
 	exclude := []map[string]string{}
 	for _, key := range current.Passkeys {
 		exclude = append(exclude, map[string]string{"type": "public-key", "id": key.ID})
@@ -227,7 +227,7 @@ func (s *Server) handlePasskeyBegin(w http.ResponseWriter, r *http.Request) {
 	for _, alg := range webauthn.Algorithms {
 		params = append(params, map[string]any{"type": "public-key", "alg": alg})
 	}
-	id, challenge, ok := s.passkeys.put(passkeyChallenge{user: user.Name, rpID: rpID, origin: origin, source: "user:" + user.Name})
+	id, challenge, ok := au.passkeyState.put(passkeyChallenge{user: user.Name, rpID: rpID, origin: origin, source: "user:" + user.Name})
 	if !ok {
 		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many passkey requests, try again later")
 		return
@@ -252,7 +252,7 @@ func (s *Server) handlePasskeyBegin(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handlePasskeyFinish(w http.ResponseWriter, r *http.Request) {
+func (au authArea) handlePasskeyFinish(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ChallengeID       string `json:"challengeId"`
 		Name              string `json:"name"`
@@ -263,7 +263,7 @@ func (s *Server) handlePasskeyFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := currentUser(r)
-	c, ok := s.passkeys.take(req.ChallengeID)
+	c, ok := au.passkeyState.take(req.ChallengeID)
 	if !ok || c.user != user.Name || c.confirm {
 		writeError(w, http.StatusBadRequest, "passkey_expired", "the request expired, start again")
 		return
@@ -284,7 +284,7 @@ func (s *Server) handlePasskeyFinish(w http.ResponseWriter, r *http.Request) {
 	if name == "" {
 		name = "Passkey"
 	}
-	updated, err := s.opts.Users.AddPasskey(user.Name, auth.Passkey{
+	updated, err := au.users.AddPasskey(user.Name, auth.Passkey{
 		ID: webauthn.Encoding.EncodeToString(cred.ID), Name: name, PublicKey: cred.PublicKey,
 		RPID: c.rpID, SignCount: cred.SignCount, Synced: cred.Synced, Created: time.Now().UTC(),
 	})
@@ -297,9 +297,9 @@ func (s *Server) handlePasskeyFinish(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"passkeys": passkeyList(updated)})
 }
 
-func (s *Server) handlePasskeyDelete(w http.ResponseWriter, r *http.Request) {
+func (au authArea) handlePasskeyDelete(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r)
-	updated, err := s.opts.Users.RemovePasskey(user.Name, r.PathValue("id"))
+	updated, err := au.users.RemovePasskey(user.Name, r.PathValue("id"))
 	if err != nil {
 		writePasskeyError(w, err)
 		return
@@ -310,9 +310,9 @@ func (s *Server) handlePasskeyDelete(w http.ResponseWriter, r *http.Request) {
 
 // handlePasskeyConfirmBegin hands out a challenge for one of the account's
 // own passkeys of this host name, as proof for reconfirmProof.
-func (s *Server) handlePasskeyConfirmBegin(w http.ResponseWriter, r *http.Request) {
-	user, _ := s.opts.Users.Get(currentUser(r).Name)
-	if s.sessionToken(r) == "" {
+func (au authArea) handlePasskeyConfirmBegin(w http.ResponseWriter, r *http.Request) {
+	user, _ := au.users.Get(currentUser(r).Name)
+	if au.sessionToken(r) == "" {
 		writeError(w, http.StatusBadRequest, "session_required", "only possible from a logged-in browser")
 		return
 	}
@@ -331,11 +331,11 @@ func (s *Server) handlePasskeyConfirmBegin(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusConflict, "no_passkey", "the account has no passkey for this address")
 		return
 	}
-	if wait := s.limiter.RetryAfter("user:" + user.Name); wait > 0 {
+	if wait := au.limiter().RetryAfter("user:" + user.Name); wait > 0 {
 		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
 		return
 	}
-	id, challenge, ok := s.passkeys.put(passkeyChallenge{user: user.Name, rpID: rpID, origin: origin, source: "user:" + user.Name, confirm: true})
+	id, challenge, ok := au.passkeyState.put(passkeyChallenge{user: user.Name, rpID: rpID, origin: origin, source: "user:" + user.Name, confirm: true})
 	if !ok {
 		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many passkey requests, try again later")
 		return
@@ -354,17 +354,17 @@ func (s *Server) handlePasskeyConfirmBegin(w http.ResponseWriter, r *http.Reques
 
 // handlePasskeyLoginBegin hands out a challenge for a login. Nothing about
 // accounts is revealed: the browser offers the passkeys it holds.
-func (s *Server) handlePasskeyLoginBegin(w http.ResponseWriter, r *http.Request) {
+func (au authArea) handlePasskeyLoginBegin(w http.ResponseWriter, r *http.Request) {
 	rpID, origin, ok := passkeyOrigin(r)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "passkey_address", "passkeys need a host name with a trusted HTTPS certificate, not an IP address")
 		return
 	}
-	if wait := s.limiter.RetryAfter(passkeySource(r)); wait > 0 {
+	if wait := au.limiter().RetryAfter(passkeySource(r)); wait > 0 {
 		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed logins, try again later")
 		return
 	}
-	id, challenge, ok := s.passkeys.put(passkeyChallenge{rpID: rpID, origin: origin, source: passkeySource(r)})
+	id, challenge, ok := au.passkeyState.put(passkeyChallenge{rpID: rpID, origin: origin, source: passkeySource(r)})
 	if !ok {
 		writeJSON(w, http.StatusTooManyRequests, map[string]apiError{"error": {
 			Code: "rate_limited", Message: "too many passkey requests, try again later", RetryAfter: int(passkeyBeginWindow.Seconds()),
@@ -383,7 +383,7 @@ func (s *Server) handlePasskeyLoginBegin(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-func (s *Server) handlePasskeyLogin(w http.ResponseWriter, r *http.Request) {
+func (au authArea) handlePasskeyLogin(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ChallengeID       string `json:"challengeId"`
 		ID                string `json:"id"`
@@ -397,24 +397,24 @@ func (s *Server) handlePasskeyLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	ip := remoteIP(r)
 	ipKey := passkeySource(r)
-	if wait := s.limiter.RetryAfter(ipKey); wait > 0 {
+	if wait := au.limiter().RetryAfter(ipKey); wait > 0 {
 		writeJSON(w, http.StatusTooManyRequests, map[string]apiError{"error": {
 			Code: "rate_limited", Message: "too many failed logins, try again later", RetryAfter: int(math.Ceil(wait.Seconds())),
 		}})
 		return
 	}
-	if !s.ensureUsersLoaded() {
+	if !au.ensureUsersLoaded() {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", "/config is not available, is the stick plugged in?")
 		return
 	}
 	fail := func(name, why string) {
-		s.limiter.Fail(ipKey)
-		s.opts.Firewall.Failed(ip, firewall.SourceWeb)
+		au.limiter().Fail(ipKey)
+		au.firewall.Failed(ip, firewall.SourceWeb)
 		slog.Warn("passkey login failed", "user", name, "ip", ip, "why", why)
-		s.recordEvent(r, name, "login_failed", "passkey", false)
+		au.recordEvent(r, name, "login_failed", "passkey", false)
 		writeError(w, http.StatusUnauthorized, "passkey_failed", "the passkey was not accepted")
 	}
-	c, ok := s.passkeys.take(req.ChallengeID)
+	c, ok := au.passkeyState.take(req.ChallengeID)
 	if !ok || c.user != "" {
 		writeError(w, http.StatusBadRequest, "passkey_expired", "the request expired, start again")
 		return
@@ -427,7 +427,7 @@ func (s *Server) handlePasskeyLogin(w http.ResponseWriter, r *http.Request) {
 		fail("", "malformed")
 		return
 	}
-	user, key, found := s.opts.Users.FindPasskey(req.ID, handle)
+	user, key, found := au.users.FindPasskey(req.ID, handle)
 	if !found || key.RPID != c.rpID {
 		fail("", "unknown passkey")
 		return
@@ -439,18 +439,18 @@ func (s *Server) handlePasskeyLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	if user.Disabled {
 		slog.Warn("login of a locked account refused", "user", user.Name, "ip", ip)
-		s.recordEvent(r, user.Name, "login_disabled", "passkey", false)
+		au.recordEvent(r, user.Name, "login_disabled", "passkey", false)
 		writeError(w, http.StatusForbidden, "account_disabled", "this account is locked; ask an owner or administrator")
 		return
 	}
-	if err := s.opts.Users.UsePasskey(user.Name, key.ID, count); err != nil {
+	if err := au.users.UsePasskey(user.Name, key.ID, count); err != nil {
 		slog.Warn("passkey counter not saved", "user", user.Name, "err", err)
 	}
 	slog.Info("login", "user", user.Name, "ip", ip, "with", "passkey")
-	if s.startSession(w, r, user) {
-		s.recordEvent(r, user.Name, "login", "passkey", true)
-		if user.Role.CanAdminister() && s.opts.Update != nil {
-			s.opts.Update.CheckAfterLogin()
+	if au.startSession(w, r, user) {
+		au.recordEvent(r, user.Name, "login", "passkey", true)
+		if user.Role.CanAdminister() && au.update != nil {
+			au.update.CheckAfterLogin()
 		}
 		writeJSON(w, http.StatusOK, userOf(user))
 	}

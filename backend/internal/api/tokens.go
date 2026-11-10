@@ -17,17 +17,40 @@ type tokenError struct {
 	code, message string
 }
 
+// tokensArea is the personal API tokens: their check for every request and
+// their management by the account; an area with narrow dependencies
+// (PLAN 8a, see fansArea). tokens are the tokens of the server, users the
+// accounts they belong to; reconfirm asks for the password again before a
+// token is made.
+type tokensArea struct {
+	users     *auth.Users
+	tokens    *auth.Tokens
+	reconfirm reconfirmFunc
+}
+
+// tokensArea is the area of the server; the handler chain and the MCP
+// server check tokens through it.
+func (s *Server) tokensArea() tokensArea {
+	return tokensArea{users: s.opts.Users, tokens: s.tokens, reconfirm: s.authArea().reconfirm}
+}
+
+func (a tokensArea) register(mux *routeMux, user func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/account/tokens", user(a.handleTokens))
+	mux.HandleFunc("POST /api/v1/account/tokens", user(a.handleTokenCreate))
+	mux.HandleFunc("DELETE /api/v1/account/tokens/{id}", user(a.handleTokenRevoke))
+}
+
 // tokenAccount checks a Bearer header: a token that exists, of an account
 // that still exists unchanged and is not locked.
-func (s *Server) tokenAccount(header string) (auth.APIToken, auth.User, *tokenError) {
+func (a tokensArea) tokenAccount(header string) (auth.APIToken, auth.User, *tokenError) {
 	if !strings.HasPrefix(header, "Bearer ") {
 		return auth.APIToken{}, auth.User{}, &tokenError{401, "unauthorized", "expected a Bearer token"}
 	}
-	token, ok := s.tokens.Lookup(strings.TrimPrefix(header, "Bearer "))
+	token, ok := a.tokens.Lookup(strings.TrimPrefix(header, "Bearer "))
 	if !ok {
 		return auth.APIToken{}, auth.User{}, &tokenError{401, "unauthorized", "invalid or revoked API token"}
 	}
-	user, ok := s.opts.Users.Get(token.User)
+	user, ok := a.users.Get(token.User)
 	if !ok || !user.Created.Equal(token.AccountCreated) || token.AccountKey != auth.TokenAccountKey(user) {
 		return auth.APIToken{}, auth.User{}, &tokenError{401, "unauthorized", "token account no longer exists"}
 	}
@@ -37,7 +60,7 @@ func (s *Server) tokenAccount(header string) (auth.APIToken, auth.User, *tokenEr
 	return token, user, nil
 }
 
-func (s *Server) bearerAccess(next http.Handler) http.Handler {
+func (a tokensArea) bearerAccess(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		header := r.Header.Get("Authorization")
 		// WebDAV checks its own Basic sign-in (webdav.go), the MCP server
@@ -46,7 +69,7 @@ func (s *Server) bearerAccess(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		token, user, failed := s.tokenAccount(header)
+		token, user, failed := a.tokenAccount(header)
 		if failed != nil {
 			writeError(w, failed.status, failed.code, failed.message)
 			return
@@ -60,10 +83,10 @@ func (s *Server) bearerAccess(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, map[string]any{"tokens": s.tokens.List(currentUser(r)), "scopes": auth.TokenScopes})
+func (a tokensArea) handleTokens(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, map[string]any{"tokens": a.tokens.List(currentUser(r)), "scopes": auth.TokenScopes})
 }
-func (s *Server) handleTokenCreate(w http.ResponseWriter, r *http.Request) {
+func (a tokensArea) handleTokenCreate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name   string   `json:"name"`
 		Scopes []string `json:"scopes"`
@@ -76,18 +99,18 @@ func (s *Server) handleTokenCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	noteTarget(r, req.Name)
-	if !s.reconfirm(w, currentUser(r), req.Password, req.Code) {
+	if !a.reconfirm(w, currentUser(r), req.Password, req.Code) {
 		return
 	}
-	token, plain, err := s.tokens.Create(currentUser(r), req.Name, req.Scopes)
+	token, plain, err := a.tokens.Create(currentUser(r), req.Name, req.Scopes)
 	if err != nil {
 		writeError(w, 400, "invalid_api_token", err.Error())
 		return
 	}
 	writeJSON(w, 201, map[string]any{"token": token, "secret": plain})
 }
-func (s *Server) handleTokenRevoke(w http.ResponseWriter, r *http.Request) {
-	if err := s.tokens.Revoke(currentUser(r).Name, r.PathValue("id")); err != nil {
+func (a tokensArea) handleTokenRevoke(w http.ResponseWriter, r *http.Request) {
+	if err := a.tokens.Revoke(currentUser(r).Name, r.PathValue("id")); err != nil {
 		writeError(w, 404, "api_token_not_found", err.Error())
 		return
 	}

@@ -47,13 +47,13 @@ func TestServicesSwitchVMsAndLXC(t *testing.T) {
 func TestDockerHiddenOnlyWhenSwitchedOff(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
-	if !ts.server.servicesOn()["docker"] {
+	if !ts.server.servicesArea().servicesOn()["docker"] {
 		t.Fatal("docker hidden on a new NAS")
 	}
 	if res, body := ts.request("PUT", "/api/v1/services/docker", map[string]any{"enabled": false}); res.StatusCode != 200 {
 		t.Fatalf("%d %s", res.StatusCode, body)
 	}
-	if ts.server.servicesOn()["docker"] {
+	if ts.server.servicesArea().servicesOn()["docker"] {
 		t.Fatal("docker still shown after switching off")
 	}
 }

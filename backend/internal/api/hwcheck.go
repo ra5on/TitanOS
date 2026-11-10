@@ -9,24 +9,38 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/hwcheck"
 )
 
+// hwcheckArea is the hardware compatibility check; an area with narrow
+// dependencies (PLAN 8a, see fansArea). version names TitanOS in the
+// files to save.
+type hwcheckArea struct {
+	check   *hwcheck.Checker
+	version string
+}
+
+func (a hwcheckArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/hardware/report", admin(a.handleHardwareReport))
+	mux.HandleFunc("GET /api/v1/hardware/snapshot", admin(a.handleHardwareSnapshot))
+	mux.HandleFunc("GET /api/v1/hardware/disks", admin(a.handleHardwareDisks))
+}
+
 // handleHardwareReport is the compatibility check (Diagnose › Hardware
 // prüfen, Einstellungen › Hardware › Geräte ohne Treiber). It only reads
 // sysfs, procfs and the kernel log. format=text or format=json sends it
 // as a file to save.
-func (s *Server) handleHardwareReport(w http.ResponseWriter, r *http.Request) {
-	if s.opts.HWCheck == nil {
+func (a hwcheckArea) handleHardwareReport(w http.ResponseWriter, r *http.Request) {
+	if a.check == nil {
 		writeError(w, http.StatusServiceUnavailable, "hwcheck_unavailable", "the hardware check is not available")
 		return
 	}
-	report := s.opts.HWCheck.Report(r.Context())
+	report := a.check.Report(r.Context())
 	name := "titanos-hardware-" + time.Now().Format("2006-01-02T15-04-05")
 	switch r.URL.Query().Get("format") {
 	case "text":
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("Content-Disposition", `attachment; filename="`+name+`.txt"`)
-		w.Write([]byte(report.Text(s.opts.Version)))
+		w.Write([]byte(report.Text(a.version)))
 	case "json":
-		data, _ := json.MarshalIndent(map[string]any{"version": s.opts.Version, "report": report}, "", "  ")
+		data, _ := json.MarshalIndent(map[string]any{"version": a.version, "report": report}, "", "  ")
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Content-Disposition", `attachment; filename="`+name+`.json"`)
 		w.Write(append(data, '\n'))
@@ -39,13 +53,13 @@ func (s *Server) handleHardwareReport(w http.ResponseWriter, r *http.Request) {
 // hardware page reads from sysfs, the kernel log and the module aliases,
 // without serial numbers, MAC or IP addresses. A reported machine becomes a
 // test case (backend/internal/hwcheck/testdata/snapshots).
-func (s *Server) handleHardwareSnapshot(w http.ResponseWriter, r *http.Request) {
-	if s.opts.HWCheck == nil {
+func (a hwcheckArea) handleHardwareSnapshot(w http.ResponseWriter, r *http.Request) {
+	if a.check == nil {
 		writeError(w, http.StatusServiceUnavailable, "hwcheck_unavailable", "the hardware check is not available")
 		return
 	}
 	var archive bytes.Buffer
-	if err := s.opts.HWCheck.Snapshot(r.Context(), &archive, s.opts.Version); err != nil {
+	if err := a.check.Snapshot(r.Context(), &archive, a.version); err != nil {
 		writeError(w, http.StatusInternalServerError, "internal", "the snapshot could not be made")
 		return
 	}
@@ -57,18 +71,18 @@ func (s *Server) handleHardwareSnapshot(w http.ResponseWriter, r *http.Request) 
 
 // handleHardwareDisks lists the disks with SMR, UAS and SAS hints, from
 // sysfs only (the volume dialog warns before RAID 5/6 on SMR disks).
-func (s *Server) handleHardwareDisks(w http.ResponseWriter, r *http.Request) {
+func (a hwcheckArea) handleHardwareDisks(w http.ResponseWriter, r *http.Request) {
 	disks := []hwcheck.Disk{}
-	if s.opts.HWCheck != nil {
-		disks = s.opts.HWCheck.Disks()
+	if a.check != nil {
+		disks = a.check.Disks()
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"disks": disks})
 }
 
 // cpuMissing is what a compose file needs that the CPU lacks.
-func (s *Server) cpuMissing(compose string) []string {
-	if s.opts.HWCheck == nil {
+func (a appStoreArea) cpuMissing(compose string) []string {
+	if a.hwcheck == nil {
 		return []string{}
 	}
-	return s.opts.HWCheck.MissingCPU(compose)
+	return a.hwcheck.MissingCPU(compose)
 }

@@ -8,19 +8,30 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/system"
 )
 
-func (s *Server) handlePowerButton(w http.ResponseWriter, r *http.Request) {
-	if s.opts.PowerButton == nil {
-		writeError(w, http.StatusServiceUnavailable, "config_unavailable", "power button settings unavailable")
-		return
-	}
-	writeJSON(w, http.StatusOK, s.opts.PowerButton.Status())
+// powerButtonArea is what the power button does; an area with narrow
+// dependencies (PLAN 8a, see fansArea).
+type powerButtonArea struct {
+	button *system.PowerButtonManager
 }
-func (s *Server) handlePowerButtonChange(w http.ResponseWriter, r *http.Request) {
-	if s.opts.PowerButton == nil {
+
+func (a powerButtonArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/system/power-button", admin(a.handlePowerButton))
+	mux.HandleFunc("PUT /api/v1/system/power-button", admin(a.handlePowerButtonChange))
+}
+
+func (a powerButtonArea) handlePowerButton(w http.ResponseWriter, r *http.Request) {
+	if a.button == nil {
 		writeError(w, http.StatusServiceUnavailable, "config_unavailable", "power button settings unavailable")
 		return
 	}
-	if s.opts.PowerButton.Disabled {
+	writeJSON(w, http.StatusOK, a.button.Status())
+}
+func (a powerButtonArea) handlePowerButtonChange(w http.ResponseWriter, r *http.Request) {
+	if a.button == nil {
+		writeError(w, http.StatusServiceUnavailable, "config_unavailable", "power button settings unavailable")
+		return
+	}
+	if a.button.Disabled {
 		writeError(w, http.StatusConflict, "read_only", "development mode")
 		return
 	}
@@ -28,7 +39,7 @@ func (s *Server) handlePowerButtonChange(w http.ResponseWriter, r *http.Request)
 	if !readJSON(w, r, &settings) {
 		return
 	}
-	if err := s.opts.PowerButton.Set(settings); err != nil {
+	if err := a.button.Set(settings); err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, system.ErrPowerButtonChoice) {
 			status = http.StatusBadRequest
@@ -37,5 +48,5 @@ func (s *Server) handlePowerButtonChange(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	slog.Info("power button action changed", "by", currentUser(r).Name, "action", settings.Action)
-	s.handlePowerButton(w, r)
+	a.handlePowerButton(w, r)
 }

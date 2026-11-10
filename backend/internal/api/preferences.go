@@ -105,11 +105,28 @@ func isJSONObject(data []byte) bool {
 	return json.Unmarshal(data, &object) == nil && object != nil
 }
 
-func (s *Server) handleGetPreferences(w http.ResponseWriter, r *http.Request) {
+// prefsArea is the preferences and backgrounds of each account; an area
+// with narrow dependencies (PLAN 8a, see fansArea). store holds the
+// backgrounds, prefs the preferences.
+type prefsArea struct {
+	store *config.Store
+	prefs *preferences
+}
+
+func (a prefsArea) register(mux *routeMux, user func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/preferences", user(a.handleGetPreferences))
+	mux.HandleFunc("PUT /api/v1/preferences/{kind}", user(a.handlePutPreferences))
+	mux.HandleFunc("GET /api/v1/background/{id}", user(a.handleGetDashboardImage))
+	mux.HandleFunc("GET /api/v1/background", user(a.handleGetBackground))
+	mux.HandleFunc("PUT /api/v1/background", user(a.handlePutBackground))
+	mux.HandleFunc("DELETE /api/v1/background", user(a.handleDeleteBackground))
+}
+
+func (a prefsArea) handleGetPreferences(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r).Name
 	res := map[string]json.RawMessage{}
 	for _, kind := range preferenceKinds {
-		value, err := s.prefs.get(user, kind)
+		value, err := a.prefs.get(user, kind)
 		if err != nil {
 			slog.Error("read preferences", "user", user, "kind", kind, "err", err)
 			writeError(w, http.StatusServiceUnavailable, "config_unavailable", "/config could not be read")
@@ -123,7 +140,7 @@ func (s *Server) handleGetPreferences(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, res)
 }
 
-func (s *Server) handlePutPreferences(w http.ResponseWriter, r *http.Request) {
+func (a prefsArea) handlePutPreferences(w http.ResponseWriter, r *http.Request) {
 	kind := r.PathValue("kind")
 	if !slices.Contains(preferenceKinds, kind) {
 		writeError(w, http.StatusNotFound, "not_found", "no such preference")
@@ -131,7 +148,7 @@ func (s *Server) handlePutPreferences(w http.ResponseWriter, r *http.Request) {
 	}
 	var value json.RawMessage
 	if kind == "dashboard" && isMultipartImageUpload(r) {
-		s.handlePutDashboardImages(w, r)
+		a.handlePutDashboardImages(w, r)
 		return
 	}
 	if kind == "dashboard" {
@@ -147,7 +164,7 @@ func (s *Server) handlePutPreferences(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if kind == "dashboard" {
-		s.saveDashboard(w, r, value, nil)
+		a.saveDashboard(w, r, value, nil)
 		return
 	}
 	if kind == "fileappsdocker" && !validDockerFileApps(value) {
@@ -159,7 +176,7 @@ func (s *Server) handlePutPreferences(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := currentUser(r).Name
-	if err := s.prefs.set(user, kind, value); err != nil {
+	if err := a.prefs.set(user, kind, value); err != nil {
 		slog.Error("write preferences", "user", user, "kind", kind, "err", err)
 		writeError(w, http.StatusInternalServerError, "config_write_failed", "the settings could not be saved to /config")
 		return
@@ -171,8 +188,8 @@ func backgroundFile(user string) string {
 	return "users/" + user + "/background"
 }
 
-func (s *Server) handleGetBackground(w http.ResponseWriter, r *http.Request) {
-	data, err := s.opts.Store.Read(backgroundFile(currentUser(r).Name))
+func (a prefsArea) handleGetBackground(w http.ResponseWriter, r *http.Request) {
+	data, err := a.store.Read(backgroundFile(currentUser(r).Name))
 	if err != nil {
 		writeError(w, http.StatusNotFound, "not_found", "no background image")
 		return
@@ -189,7 +206,7 @@ func (s *Server) handleGetBackground(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
-func (s *Server) handlePutBackground(w http.ResponseWriter, r *http.Request) {
+func (a prefsArea) handlePutBackground(w http.ResponseWriter, r *http.Request) {
 	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBackgroundBytes))
 	if err != nil {
 		var tooLarge *http.MaxBytesError
@@ -205,7 +222,7 @@ func (s *Server) handlePutBackground(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := currentUser(r).Name
-	if err := s.opts.Store.Write(backgroundFile(user), data); err != nil {
+	if err := a.store.Write(backgroundFile(user), data); err != nil {
 		slog.Error("write background", "user", user, "err", err)
 		writeError(w, http.StatusInternalServerError, "config_write_failed", "the image could not be saved to /config")
 		return
@@ -213,9 +230,9 @@ func (s *Server) handlePutBackground(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleDeleteBackground(w http.ResponseWriter, r *http.Request) {
+func (a prefsArea) handleDeleteBackground(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r).Name
-	if err := s.opts.Store.Remove(backgroundFile(user)); err != nil {
+	if err := a.store.Remove(backgroundFile(user)); err != nil {
 		slog.Error("remove background", "user", user, "err", err)
 		writeError(w, http.StatusInternalServerError, "config_write_failed", "the image could not be removed from /config")
 		return

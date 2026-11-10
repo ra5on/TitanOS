@@ -7,13 +7,30 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/diagnose"
 	"github.com/ra5on/TitanOS/backend/internal/logkeep"
 )
 
+// diagnoseArea is the logs and the bundle for bug reports; an area with
+// narrow dependencies (PLAN 8a, see fansArea). logKeep holds the journal of
+// the previous start (nil: none kept); users names the accounts a bundle
+// hides.
+type diagnoseArea struct {
+	diagnose *diagnose.Manager
+	logKeep  *logkeep.Manager
+	users    *auth.Users
+}
+
+func (a diagnoseArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/logs", admin(a.handleLogs))
+	mux.HandleFunc("GET /api/v1/logs/export", admin(a.handleLogsExport))
+	mux.HandleFunc("GET /api/v1/diagnostics/bundle", admin(a.handleDiagnosticBundle))
+}
+
 // handleLogs returns lines of the journal. The log names accounts and
 // addresses and is for administrators.
-func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
+func (a diagnoseArea) handleLogs(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	q := diagnose.Query{Source: query.Get("source"), Priority: 6, After: query.Get("after"), Search: query.Get("search")}
 	if value := query.Get("priority"); value != "" {
@@ -33,7 +50,7 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 		q.Since = time.Unix(seconds, 0)
 	}
 	q.Lines, _ = strconv.Atoi(query.Get("lines"))
-	logs, err := s.opts.Diagnose.Logs(r.Context(), q)
+	logs, err := a.diagnose.Logs(r.Context(), q)
 	if err != nil {
 		if errors.Is(err, diagnose.ErrInvalid) {
 			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
@@ -48,7 +65,7 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 
 // handleLogsExport sends the journal of this or the previous start as a
 // text file, up to 50,000 lines, filtered like the view.
-func (s *Server) handleLogsExport(w http.ResponseWriter, r *http.Request) {
+func (a diagnoseArea) handleLogsExport(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	q := diagnose.ExportQuery{Source: query.Get("source"), Priority: 6, Previous: query.Get("boot") == "previous"}
 	if value := query.Get("priority"); value != "" {
@@ -69,15 +86,15 @@ func (s *Server) handleLogsExport(w http.ResponseWriter, r *http.Request) {
 	}
 	var text string
 	var err error
-	if q.Previous && s.opts.LogKeep != nil {
+	if q.Previous && a.logKeep != nil {
 		// The journal of an earlier start only survives on a volume.
-		text, err = s.opts.LogKeep.Previous()
+		text, err = a.logKeep.Previous()
 		if errors.Is(err, logkeep.ErrNoStart) {
 			writeError(w, http.StatusNotFound, "no_previous_logs", "no log of the previous start was kept")
 			return
 		}
 	} else {
-		text, err = s.opts.Diagnose.Export(r.Context(), q)
+		text, err = a.diagnose.Export(r.Context(), q)
 	}
 	if err != nil {
 		if errors.Is(err, diagnose.ErrInvalid) {
@@ -96,9 +113,9 @@ func (s *Server) handleLogsExport(w http.ResponseWriter, r *http.Request) {
 
 // handleDiagnosticBundle packs logs and the state of the system into a zip
 // file for a bug report, with addresses, names and secrets taken out.
-func (s *Server) handleDiagnosticBundle(w http.ResponseWriter, r *http.Request) {
+func (a diagnoseArea) handleDiagnosticBundle(w http.ResponseWriter, r *http.Request) {
 	var accounts []string
-	for _, user := range s.opts.Users.List() {
+	for _, user := range a.users.List() {
 		accounts = append(accounts, user.Name)
 	}
 	slog.Info("diagnostic bundle requested", "by", currentUser(r).Name, "ip", remoteIP(r))
@@ -107,7 +124,7 @@ func (s *Server) handleDiagnosticBundle(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
 	w.Header().Set("Cache-Control", "no-store")
-	if err := s.opts.Diagnose.Bundle(r.Context(), w, accounts); err != nil {
+	if err := a.diagnose.Bundle(r.Context(), w, accounts); err != nil {
 		// The answer has begun; all that is left is to cut it short.
 		slog.Error("diagnostic bundle failed", "err", err)
 		panic(http.ErrAbortHandler)

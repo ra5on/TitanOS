@@ -6,7 +6,13 @@ import (
 	"net/http"
 	"slices"
 
+	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/backup"
+	"github.com/ra5on/TitanOS/backend/internal/docker"
+	"github.com/ra5on/TitanOS/backend/internal/notify"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
+	"github.com/ra5on/TitanOS/backend/internal/storage"
+	"github.com/ra5on/TitanOS/backend/internal/vm"
 )
 
 type shareResponse struct {
@@ -50,9 +56,40 @@ func writeShareError(w http.ResponseWriter, err error) {
 	writeError(w, http.StatusInternalServerError, "config_write_failed", "the share could not be saved to /config")
 }
 
-func (s *Server) userNames() []string {
+// sharesArea is the shares; an area with narrow dependencies (PLAN 8a, see
+// fansArea). storage names the volumes, users the accounts a share can name;
+// vms, docker and backup say what still uses the data of a share (nil: not
+// asked); notify and record report the end of a deletion with its data.
+type sharesArea struct {
+	shares  *shares.Manager
+	storage *storage.Manager
+	users   *auth.Users
+	vms     *vm.Manager
+	docker  *docker.Manager
+	backup  *backup.Manager
+	notify  *notify.Manager
+	record  recordFunc
+}
+
+// sharesArea is the area of the server.
+func (s *Server) sharesArea() sharesArea {
+	return sharesArea{shares: s.opts.Shares, storage: s.opts.Storage, users: s.opts.Users, vms: s.opts.VMs, docker: s.opts.Docker,
+		backup: s.opts.Backup, notify: s.opts.Notify, record: s.recordActivity}
+}
+
+func (a sharesArea) register(mux *routeMux, g guards) {
+	mux.HandleFunc("GET /api/v1/shares", g.user(a.handleListShares))
+	mux.HandleFunc("POST /api/v1/shares", g.admin(a.handleCreateShare))
+	mux.HandleFunc("PUT /api/v1/shares/{name}", g.admin(a.handleUpdateShare))
+	mux.HandleFunc("DELETE /api/v1/shares/{name}", g.admin(a.handleDeleteShare))
+	mux.HandleFunc("POST /api/v1/shares/{name}/unlock", g.admin(a.handleShareUnlock))
+	mux.HandleFunc("GET /api/v1/shares/{name}/delete-data", g.admin(a.handleShareDataPreview))
+	mux.HandleFunc("POST /api/v1/shares/{name}/delete-data", g.heavyAdmin(a.handleShareDataDelete))
+}
+
+func (a sharesArea) userNames() []string {
 	var names []string
-	for _, user := range s.opts.Users.List() {
+	for _, user := range a.users.List() {
 		names = append(names, user.Name)
 	}
 	return names
@@ -60,11 +97,11 @@ func (s *Server) userNames() []string {
 
 // handleListShares returns all shares to administrators and to everyone
 // else the ones they have access to.
-func (s *Server) handleListShares(w http.ResponseWriter, r *http.Request) {
+func (a sharesArea) handleListShares(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r)
-	mounted := s.opts.Storage.Mounted()
+	mounted := a.storage.Mounted()
 	list := []shareResponse{}
-	for _, share := range s.opts.Shares.List() {
+	for _, share := range a.shares.List() {
 		if _, has := share.Access[user.Name]; !has && !user.Role.CanAdminister() {
 			continue
 		}
@@ -73,8 +110,8 @@ func (s *Server) handleListShares(w http.ResponseWriter, r *http.Request) {
 			share.Access = map[string]string{user.Name: share.Access[user.Name]}
 			share.NFS.Clients = nil
 		}
-		item := shareResponse{Share: share, Path: s.opts.Shares.Path(share), Available: slices.Contains(mounted, share.Volume)}
-		if st, ok := s.opts.Shares.Quota(share.Name); ok {
+		item := shareResponse{Share: share, Path: a.shares.Path(share), Available: slices.Contains(mounted, share.Volume)}
+		if st, ok := a.shares.Quota(share.Name); ok {
 			item.QuotaStatus = &st
 		}
 		list = append(list, item)
@@ -82,7 +119,7 @@ func (s *Server) handleListShares(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, list)
 }
 
-func (s *Server) handleCreateShare(w http.ResponseWriter, r *http.Request) {
+func (a sharesArea) handleCreateShare(w http.ResponseWriter, r *http.Request) {
 	var share shares.Share
 	if !readJSON(w, r, &share) {
 		return
@@ -95,7 +132,7 @@ func (s *Server) handleCreateShare(w http.ResponseWriter, r *http.Request) {
 	if len(share.Access) == 0 && !share.Guest {
 		share.Access = map[string]string{currentUser(r).Name: shares.ReadWrite}
 	}
-	if err := s.opts.Shares.Create(share, s.opts.Storage.Names(), s.userNames()); err != nil {
+	if err := a.shares.Create(share, a.storage.Names(), a.userNames()); err != nil {
 		writeShareError(w, err)
 		return
 	}
@@ -103,13 +140,13 @@ func (s *Server) handleCreateShare(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 }
 
-func (s *Server) handleUpdateShare(w http.ResponseWriter, r *http.Request) {
+func (a sharesArea) handleUpdateShare(w http.ResponseWriter, r *http.Request) {
 	var share shares.Share
 	if !readJSON(w, r, &share) {
 		return
 	}
 	name := r.PathValue("name")
-	if err := s.opts.Shares.Update(name, share, s.opts.Storage.Names(), s.userNames()); err != nil {
+	if err := a.shares.Update(name, share, a.storage.Names(), a.userNames()); err != nil {
 		writeShareError(w, err)
 		return
 	}
@@ -118,9 +155,9 @@ func (s *Server) handleUpdateShare(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDeleteShare stops sharing a folder. Its files stay on the volume.
-func (s *Server) handleDeleteShare(w http.ResponseWriter, r *http.Request) {
+func (a sharesArea) handleDeleteShare(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	if err := s.opts.Shares.Delete(name); err != nil {
+	if err := a.shares.Delete(name); err != nil {
 		writeShareError(w, err)
 		return
 	}
@@ -129,9 +166,9 @@ func (s *Server) handleDeleteShare(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleShareUnlock lifts the lock the ransomware guard put on a share.
-func (s *Server) handleShareUnlock(w http.ResponseWriter, r *http.Request) {
+func (a sharesArea) handleShareUnlock(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	if err := s.opts.Shares.UnlockGuard(name); err != nil {
+	if err := a.shares.UnlockGuard(name); err != nil {
 		writeShareError(w, err)
 		return
 	}

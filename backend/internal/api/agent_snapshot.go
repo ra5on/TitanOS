@@ -33,6 +33,7 @@ type agentSnapState struct {
 
 // agentSnapTarget names the volume a change touches, or "".
 func (b *agentToolbox) agentSnapTarget(tool string, args json.RawMessage) string {
+	env := b.s.agentEnv()
 	var a map[string]any
 	_ = json.Unmarshal(args, &a)
 	str := func(k string) string { v, _ := a[k].(string); return v }
@@ -40,8 +41,8 @@ func (b *agentToolbox) agentSnapTarget(tool string, args json.RawMessage) string
 	case "app_action":
 		switch str("action") {
 		case "update", "remove", "remove_with_data":
-			if b.s.opts.Docker != nil {
-				return b.s.opts.Docker.Current().Volume
+			if env.docker != nil {
+				return env.docker.Current().Volume
 			}
 		}
 	case "files_move", "file_rename", "files_rename":
@@ -55,7 +56,8 @@ func (b *agentToolbox) agentSnapTarget(tool string, args json.RawMessage) string
 }
 
 func (b *agentToolbox) rootVolume(id string) string {
-	for _, r := range b.s.fileRoots(b.user) {
+	env := b.s.agentEnv()
+	for _, r := range env.fileRoots(b.user) {
 		if r.ID == id {
 			return r.Volume
 		}
@@ -66,14 +68,15 @@ func (b *agentToolbox) rootVolume(id string) string {
 // agentSnapshotBefore takes the snapshot and returns the note for the
 // chat ("" when none was needed or possible).
 func (b *agentToolbox) agentSnapshotBefore(ctx context.Context, tool string, args json.RawMessage) string {
-	if b.settings.NoSnapshots || b.s.opts.Storage == nil {
+	env := b.s.agentEnv()
+	if b.settings.NoSnapshots || env.storage == nil {
 		return ""
 	}
 	volume := b.agentSnapTarget(tool, args)
 	if volume == "" {
 		return ""
 	}
-	if b.s.opts.Storage.FilesystemOf(volume) != "btrfs" {
+	if env.storage.FilesystemOf(volume) != "btrfs" {
 		return fmt.Sprintf("Kein Snapshot vor der Änderung: das Volume „%s“ hat kein Btrfs.", volume)
 	}
 	st := &b.s.agentSnaps
@@ -90,7 +93,7 @@ func (b *agentToolbox) agentSnapshotBefore(ctx context.Context, tool string, arg
 	name := agentSnapPrefix + time.Now().In(b.s.agentLocation()).Format("20060102-150405")
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
 	defer cancel()
-	if err := b.s.opts.Storage.SnapshotAction(ctx, volume, name, "create", ""); err != nil {
+	if err := env.storage.SnapshotAction(ctx, volume, name, "create", ""); err != nil {
 		slog.Warn("snapshot before an agent change failed", "volume", volume, "err", err)
 		return fmt.Sprintf("Snapshot vor der Änderung nicht möglich (%v).", err)
 	}
@@ -101,14 +104,15 @@ func (b *agentToolbox) agentSnapshotBefore(ctx context.Context, tool string, arg
 // agentPruneSnapshots removes agent snapshots older than seven days; it
 // runs with the nightly work of the agent.
 func (s *Server) agentPruneSnapshots(now time.Time) {
-	if s.opts.Storage == nil {
+	env := s.agentEnv()
+	if env.storage == nil {
 		return
 	}
-	for _, volume := range s.opts.Storage.Mounted() {
-		if s.opts.Storage.FilesystemOf(volume) != "btrfs" {
+	for _, volume := range env.storage.Mounted() {
+		if env.storage.FilesystemOf(volume) != "btrfs" {
 			continue
 		}
-		list, err := s.opts.Storage.Snapshots(volume)
+		list, err := env.storage.Snapshots(volume)
 		if err != nil {
 			continue
 		}
@@ -121,7 +125,7 @@ func (s *Server) agentPruneSnapshots(now time.Time) {
 			if err != nil || now.Sub(at) < agentSnapKeep {
 				continue
 			}
-			if err := s.opts.Storage.SnapshotAction(context.Background(), volume, snap.Name, "delete", snap.Name); err != nil {
+			if err := env.storage.SnapshotAction(context.Background(), volume, snap.Name, "delete", snap.Name); err != nil {
 				slog.Warn("old agent snapshot not removed", "volume", volume, "snapshot", snap.Name, "err", err)
 			}
 		}

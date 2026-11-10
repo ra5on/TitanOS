@@ -7,28 +7,28 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/vm"
 )
 
-func (s *Server) handleVMSnapshots(w http.ResponseWriter, r *http.Request) {
-	result, err := s.opts.VMs.SnapshotStatus(r.PathValue("name"), s.opts.Storage.Mounted())
+func (a vmsArea) handleVMSnapshots(w http.ResponseWriter, r *http.Request) {
+	result, err := a.vms.SnapshotStatus(r.PathValue("name"), a.storage.Mounted())
 	if err != nil {
 		writeVMError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
 }
-func (s *Server) handleVMSnapshotCreate(w http.ResponseWriter, r *http.Request) {
+func (a vmsArea) handleVMSnapshotCreate(w http.ResponseWriter, r *http.Request) {
 	var req vm.SnapshotRequest
 	if !readJSON(w, r, &req) {
 		return
 	}
 	name := r.PathValue("name")
-	if err := s.opts.VMs.CreateSnapshot(r.Context(), name, req, s.opts.Storage.Mounted()); err != nil {
+	if err := a.vms.CreateSnapshot(r.Context(), name, req, a.storage.Mounted()); err != nil {
 		writeVMError(w, err)
 		return
 	}
 	slog.Info("VM snapshot requested", "vm", name, "by", currentUser(r).Name)
 	w.WriteHeader(http.StatusAccepted)
 }
-func (s *Server) handleVMSnapshotRestore(w http.ResponseWriter, r *http.Request) {
+func (a vmsArea) handleVMSnapshotRestore(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Confirm string `json:"confirm"`
 		Memory  bool   `json:"memory"`
@@ -37,40 +37,40 @@ func (s *Server) handleVMSnapshotRestore(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	name := r.PathValue("name")
-	if err := s.opts.VMs.RestoreSnapshot(r.Context(), name, r.PathValue("snapshot"), req.Confirm, req.Memory, s.opts.Storage.Mounted()); err != nil {
+	if err := a.vms.RestoreSnapshot(r.Context(), name, r.PathValue("snapshot"), req.Confirm, req.Memory, a.storage.Mounted()); err != nil {
 		writeVMError(w, err)
 		return
 	}
 	slog.Info("VM snapshot restore requested", "vm", name, "snapshot", r.PathValue("snapshot"), "by", currentUser(r).Name)
 	w.WriteHeader(http.StatusAccepted)
 }
-func (s *Server) handleVMSnapshotDelete(w http.ResponseWriter, r *http.Request) {
+func (a vmsArea) handleVMSnapshotDelete(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Confirm string `json:"confirm"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.VMs.DeleteSnapshot(r.PathValue("name"), r.PathValue("snapshot"), req.Confirm, s.opts.Storage.Mounted()); err != nil {
+	if err := a.vms.DeleteSnapshot(r.PathValue("name"), r.PathValue("snapshot"), req.Confirm, a.storage.Mounted()); err != nil {
 		writeVMError(w, err)
 		return
 	}
 	slog.Info("VM snapshot deleted", "vm", r.PathValue("name"), "snapshot", r.PathValue("snapshot"), "by", currentUser(r).Name)
 	w.WriteHeader(http.StatusNoContent)
 }
-func (s *Server) handleVMSnapshotSchedule(w http.ResponseWriter, r *http.Request) {
+func (a vmsArea) handleVMSnapshotSchedule(w http.ResponseWriter, r *http.Request) {
 	var req vm.SnapshotSchedule
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.VMs.SetSnapshotSchedule(r.PathValue("name"), req); err != nil {
+	if err := a.vms.SetSnapshotSchedule(r.PathValue("name"), req); err != nil {
 		writeVMError(w, err)
 		return
 	}
 	slog.Info("VM snapshot schedule changed", "vm", r.PathValue("name"), "by", currentUser(r).Name)
 	w.WriteHeader(http.StatusNoContent)
 }
-func (s *Server) handleVMSnapshotRecover(w http.ResponseWriter, r *http.Request) {
+func (a vmsArea) handleVMSnapshotRecover(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Confirm       string `json:"confirm"`
 		DiscardMemory bool   `json:"discardMemory"`
@@ -78,7 +78,7 @@ func (s *Server) handleVMSnapshotRecover(w http.ResponseWriter, r *http.Request)
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.VMs.RecoverSnapshot(r.Context(), r.PathValue("name"), req.Confirm, req.DiscardMemory, s.opts.Storage.Mounted()); err != nil {
+	if err := a.vms.RecoverSnapshot(r.Context(), r.PathValue("name"), req.Confirm, req.DiscardMemory, a.storage.Mounted()); err != nil {
 		writeVMError(w, err)
 		return
 	}

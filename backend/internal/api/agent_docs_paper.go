@@ -144,6 +144,7 @@ func (s *Server) paperStartRun(u auth.User, m agentFeaturesMine, mail bool, at t
 // paperRun fetches new mail (when mail), then looks at every file in the
 // inbox folder. The disk of the KI-Agent folder must be awake.
 func (s *Server) paperRun(ctx context.Context, u auth.User, m agentFeaturesMine, mail bool, now time.Time) error {
+	env := s.agentEnv()
 	root, ok := s.paperInboxRoot(u)
 	if !ok {
 		return errors.New("the share KI-Agent is not there")
@@ -151,7 +152,7 @@ func (s *Server) paperRun(ctx context.Context, u auth.User, m agentFeaturesMine,
 	if s.agentAsleep(ctx, u, root.ID) {
 		return nil
 	}
-	if err := s.opts.Files.Mkdir(root, paperInbox, u.UID); err != nil && !errors.Is(err, files.ErrExists) {
+	if err := env.files.Mkdir(root, paperInbox, u.UID); err != nil && !errors.Is(err, files.ErrExists) {
 		return err
 	}
 	rt := s.docsRT(u.Name)
@@ -180,7 +181,7 @@ func (s *Server) paperRun(ctx context.Context, u auth.User, m agentFeaturesMine,
 			before = p
 		}
 	}
-	entries, err := s.opts.Files.List(root, paperInbox)
+	entries, err := env.files.List(root, paperInbox)
 	if err != nil {
 		return err
 	}
@@ -340,12 +341,13 @@ func (s *Server) paperFile(u auth.User, src files.Root, e *paperEntry, data []by
 }
 
 func (s *Server) paperMkdirAll(root files.Root, dir string, uid int) error {
+	env := s.agentEnv()
 	if dir == "" || dir == "." {
 		return nil
 	}
 	parts := strings.Split(dir, "/")
 	for i := range parts {
-		if err := s.opts.Files.Mkdir(root, strings.Join(parts[:i+1], "/"), uid); err != nil && !errors.Is(err, files.ErrExists) {
+		if err := env.files.Mkdir(root, strings.Join(parts[:i+1], "/"), uid); err != nil && !errors.Is(err, files.ErrExists) {
 			return err
 		}
 	}
@@ -354,6 +356,7 @@ func (s *Server) paperMkdirAll(root files.Root, dir string, uid int) error {
 
 // paperFree finds a name in dir that is not taken: "x.pdf", "x (2).pdf".
 func (s *Server) paperFree(root files.Root, dir, name string) (string, error) {
+	env := s.agentEnv()
 	ext := path.Ext(name)
 	base := strings.TrimSuffix(name, ext)
 	for n := 1; n < 100; n++ {
@@ -362,7 +365,7 @@ func (s *Server) paperFree(root files.Root, dir, name string) (string, error) {
 			cand = fmt.Sprintf("%s (%d)%s", base, n, ext)
 		}
 		p := path.Join(dir, cand)
-		f, _, err := s.opts.Files.Open(root, p)
+		f, _, err := env.files.Open(root, p)
 		if errors.Is(err, files.ErrNotFound) {
 			return p, nil
 		}
@@ -376,8 +379,9 @@ func (s *Server) paperFree(root files.Root, dir, name string) (string, error) {
 // paperMove moves a file within a root (rename) or across roots (write the
 // copy, then remove the source, into the recycle bin where there is one).
 func (s *Server) paperMove(u auth.User, src files.Root, from string, dst files.Root, to string, data []byte) error {
+	env := s.agentEnv()
 	if src.ID == dst.ID {
-		return s.opts.Files.Rename(src, from, to)
+		return env.files.Rename(src, from, to)
 	}
 	if data == nil {
 		var err error
@@ -385,10 +389,10 @@ func (s *Server) paperMove(u auth.User, src files.Root, from string, dst files.R
 			return err
 		}
 	}
-	if err := s.opts.Files.WriteFile(dst, to, data, u.UID, false); err != nil {
+	if err := env.files.WriteFile(dst, to, data, u.UID, false); err != nil {
 		return err
 	}
-	f, info, err := s.opts.Files.Open(dst, to)
+	f, info, err := env.files.Open(dst, to)
 	if err != nil {
 		return err
 	}
@@ -396,7 +400,7 @@ func (s *Server) paperMove(u auth.User, src files.Root, from string, dst files.R
 	if info.Size() != int64(len(data)) {
 		return errors.New("the copy is not complete")
 	}
-	return s.opts.Files.Delete(src, []string{from}, u.Name, !src.Recycle)
+	return env.files.Delete(src, []string{from}, u.Name, !src.Recycle)
 }
 
 // paperFetchMail takes new mails of the account's mailbox into the inbox
@@ -512,6 +516,7 @@ func (s *Server) paperFetchOne(c *imapmini.Client, uid uint32) ([]byte, error) {
 }
 
 func (s *Server) paperTakeMail(u auth.User, p agentPaperMine, root files.Root, lg *paperLog, mail imapmini.Mail, now time.Time) error {
+	env := s.agentEnv()
 	date := mail.Date
 	if date.IsZero() {
 		date = now
@@ -527,7 +532,7 @@ func (s *Server) paperTakeMail(u auth.User, p agentPaperMine, root files.Root, l
 		if err != nil {
 			return err
 		}
-		if err := s.opts.Files.WriteFile(root, to, a.Data, u.UID, false); err != nil {
+		if err := env.files.WriteFile(root, to, a.Data, u.UID, false); err != nil {
 			return err
 		}
 		lg.Hints[to] = hint
@@ -543,7 +548,7 @@ func (s *Server) paperTakeMail(u auth.User, p agentPaperMine, root files.Root, l
 		if err != nil {
 			return err
 		}
-		if err := s.opts.Files.WriteFile(root, to, []byte(b.String()), u.UID, false); err != nil {
+		if err := env.files.WriteFile(root, to, []byte(b.String()), u.UID, false); err != nil {
 			return err
 		}
 		h := hint

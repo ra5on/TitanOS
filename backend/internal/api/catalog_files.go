@@ -153,6 +153,7 @@ func (s *Server) fileTools(user auth.User) []toolcatalog.Tool {
 }
 
 func (s *Server) planWrite(user auth.User) plan {
+	env := s.toolEnv()
 	return func(ctx context.Context, args json.RawMessage) (*toolcatalog.Action, error) {
 		var req writeRequest
 		if err := toolcatalog.DecodeArgs(args, &req); err != nil {
@@ -171,7 +172,7 @@ func (s *Server) planWrite(user auth.User) plan {
 		}
 		root, _ := s.catalogRoot(user, req.Root)
 		exists := false
-		if f, _, err := s.opts.Files.Open(root, p); err == nil {
+		if f, _, err := env.files.Open(root, p); err == nil {
 			f.Close()
 			exists = true
 		}
@@ -276,6 +277,7 @@ func (s *Server) planCopy(user auth.User) plan {
 }
 
 func (s *Server) catalogFilesSearch(user auth.User) func(context.Context, json.RawMessage) (any, error) {
+	env := s.toolEnv()
 	return func(ctx context.Context, args json.RawMessage) (any, error) {
 		var req struct {
 			Root, Query, Path, Extension string
@@ -304,7 +306,7 @@ func (s *Server) catalogFilesSearch(user auth.User) func(context.Context, json.R
 		if extension != "" {
 			opt.Extensions = strings.Split(extension, ",")
 		}
-		result, err := s.opts.Files.Search(ctx, root, opt)
+		result, err := env.files.Search(ctx, root, opt)
 		if err != nil {
 			return nil, catalogFileError(err)
 		}
@@ -329,7 +331,8 @@ func (s *Server) catalogFilesSearch(user auth.User) func(context.Context, json.R
 
 // readDocument reads a Word or Excel file as text.
 func (s *Server) readDocument(root files.Root, p string) (string, error) {
-	f, info, err := s.opts.Files.Open(root, p)
+	env := s.toolEnv()
+	f, info, err := env.files.Open(root, p)
 	if err != nil {
 		return "", err
 	}
@@ -346,6 +349,7 @@ func (s *Server) readDocument(root files.Root, p string) (string, error) {
 
 // handleWriteDocument writes a file that an MCP client made.
 func (s *Server) handleWriteDocument(w http.ResponseWriter, r *http.Request) {
+	env := s.toolEnv()
 	var req writeRequest
 	r.Body = http.MaxBytesReader(w, r.Body, 2*maxDocument)
 	if !readJSONBody(w, r, &req) {
@@ -355,7 +359,7 @@ func (s *Server) handleWriteDocument(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_document", err.Error())
 		return
 	}
-	root, ok := s.fileRoot(w, r, req.Root)
+	root, ok := env.fileRoot(w, r, req.Root)
 	if !ok {
 		return
 	}
@@ -369,7 +373,7 @@ func (s *Server) handleWriteDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := currentUser(r)
-	if err := s.opts.Files.WriteFile(root, req.Path, data, user.UID, req.Replace); err != nil {
+	if err := env.files.WriteFile(root, req.Path, data, user.UID, req.Replace); err != nil {
 		writeFileError(w, err)
 		return
 	}
@@ -380,6 +384,7 @@ func (s *Server) handleWriteDocument(w http.ResponseWriter, r *http.Request) {
 // handleMoveMany moves many files within one root, creating missing
 // folders. It stops at the first that fails and says how far it got.
 func (s *Server) handleMoveMany(w http.ResponseWriter, r *http.Request) {
+	env := s.toolEnv()
 	var req moveRequest
 	if !readJSON(w, r, &req) {
 		return
@@ -388,7 +393,7 @@ func (s *Server) handleMoveMany(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "give 1 to 500 moves")
 		return
 	}
-	root, ok := s.fileRoot(w, r, req.Root)
+	root, ok := env.fileRoot(w, r, req.Root)
 	if !ok {
 		return
 	}
@@ -406,12 +411,12 @@ func (s *Server) handleMoveMany(w http.ResponseWriter, r *http.Request) {
 			if dir == "." {
 				break
 			}
-			if err := s.opts.Files.Mkdir(root, strings.Join(parts[:i+1], "/"), user.UID); err != nil && !errors.Is(err, files.ErrExists) {
+			if err := env.files.Mkdir(root, strings.Join(parts[:i+1], "/"), user.UID); err != nil && !errors.Is(err, files.ErrExists) {
 				writeError(w, http.StatusConflict, "move_failed", fmt.Sprintf("%d of %d moved; %s: %v", done, len(req.Moves), m.To, err))
 				return
 			}
 		}
-		if err := s.opts.Files.Rename(root, m.From, m.To); err != nil {
+		if err := env.files.Rename(root, m.From, m.To); err != nil {
 			writeError(w, http.StatusConflict, "move_failed", fmt.Sprintf("%d of %d moved; %s → %s: %v", done, len(req.Moves), m.From, m.To, err))
 			return
 		}
@@ -453,7 +458,8 @@ func (req editRequest) apply(data []byte) ([]byte, error) {
 
 // readEditable reads a document of a root for document_edit.
 func (s *Server) readEditable(root files.Root, p string) ([]byte, error) {
-	f, _, err := s.opts.Files.Open(root, p)
+	env := s.toolEnv()
+	f, _, err := env.files.Open(root, p)
 	if err != nil {
 		return nil, err
 	}
@@ -515,12 +521,13 @@ func (s *Server) planEdit(user auth.User) plan {
 
 // handleEditDocument applies document_edit with the rights of the account.
 func (s *Server) handleEditDocument(w http.ResponseWriter, r *http.Request) {
+	env := s.toolEnv()
 	var req editRequest
 	r.Body = http.MaxBytesReader(w, r.Body, 2*maxDocument)
 	if !readJSONBody(w, r, &req) {
 		return
 	}
-	root, ok := s.fileRoot(w, r, req.Root)
+	root, ok := env.fileRoot(w, r, req.Root)
 	if !ok {
 		return
 	}
@@ -539,7 +546,7 @@ func (s *Server) handleEditDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := currentUser(r)
-	if err := s.opts.Files.WriteFile(root, req.Path, out, user.UID, true); err != nil {
+	if err := env.files.WriteFile(root, req.Path, out, user.UID, true); err != nil {
 		writeFileError(w, err)
 		return
 	}

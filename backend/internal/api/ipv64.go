@@ -31,12 +31,12 @@ var lastIPv64Test struct {
 	at time.Time
 }
 
-func (s *Server) ipv64Client(w http.ResponseWriter, key string) (*dnsprovider.IPv64, bool) {
-	if key == "" && s.opts.DDNS != nil {
-		key = s.opts.DDNS.IPv64Key()
+func (a ipv64Area) ipv64Client(w http.ResponseWriter, key string) (*dnsprovider.IPv64, bool) {
+	if key == "" && a.ddns != nil {
+		key = a.ddns.IPv64Key()
 	}
-	if key == "" && s.opts.LetsEncrypt != nil {
-		key = s.opts.LetsEncrypt.IPv64Key()
+	if key == "" && a.letsEncrypt != nil {
+		key = a.letsEncrypt.IPv64Key()
 	}
 	if key == "" {
 		writeError(w, http.StatusBadRequest, "ipv64_no_key", "the API key of the IPv64 account is needed")
@@ -65,12 +65,12 @@ func ipv64Context(r *http.Request) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(r.Context(), 30*time.Second)
 }
 
-func (s *Server) handleIPv64Account(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64Account(w http.ResponseWriter, r *http.Request) {
 	var req ipv64Request
 	if !readJSON(w, r, &req) {
 		return
 	}
-	client, ok := s.ipv64Client(w, req.APIKey)
+	client, ok := a.ipv64Client(w, req.APIKey)
 	if !ok {
 		return
 	}
@@ -84,12 +84,12 @@ func (s *Server) handleIPv64Account(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, account)
 }
 
-func (s *Server) handleIPv64Domains(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64Domains(w http.ResponseWriter, r *http.Request) {
 	var req ipv64Request
 	if !readJSON(w, r, &req) {
 		return
 	}
-	client, ok := s.ipv64Client(w, req.APIKey)
+	client, ok := a.ipv64Client(w, req.APIKey)
 	if !ok {
 		return
 	}
@@ -103,7 +103,7 @@ func (s *Server) handleIPv64Domains(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"domains": domains, "zones": dnsprovider.IPv64Zones})
 }
 
-func (s *Server) handleIPv64DomainCreate(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64DomainCreate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ipv64Request
 		Name string `json:"name"`
@@ -111,7 +111,7 @@ func (s *Server) handleIPv64DomainCreate(w http.ResponseWriter, r *http.Request)
 	if !readJSON(w, r, &req) {
 		return
 	}
-	client, ok := s.ipv64Client(w, req.APIKey)
+	client, ok := a.ipv64Client(w, req.APIKey)
 	if !ok {
 		return
 	}
@@ -127,7 +127,7 @@ func (s *Server) handleIPv64DomainCreate(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusCreated, domain)
 }
 
-func (s *Server) handleIPv64DomainChange(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64DomainChange(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ipv64Request
 		Domain string `json:"domain"`
@@ -136,7 +136,7 @@ func (s *Server) handleIPv64DomainChange(w http.ResponseWriter, r *http.Request)
 	if !readJSON(w, r, &req) {
 		return
 	}
-	client, ok := s.ipv64Client(w, req.APIKey)
+	client, ok := a.ipv64Client(w, req.APIKey)
 	if !ok {
 		return
 	}
@@ -151,7 +151,7 @@ func (s *Server) handleIPv64DomainChange(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, domain)
 }
 
-func (s *Server) handleIPv64Records(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64Records(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ipv64Request
 		Domain string `json:"domain"`
@@ -159,7 +159,7 @@ func (s *Server) handleIPv64Records(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	client, ok := s.ipv64Client(w, req.APIKey)
+	client, ok := a.ipv64Client(w, req.APIKey)
 	if !ok {
 		return
 	}
@@ -173,7 +173,7 @@ func (s *Server) handleIPv64Records(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"records": records, "types": dnsprovider.IPv64RecordTypes})
 }
 
-func (s *Server) handleIPv64RecordAdd(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64RecordAdd(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ipv64Request
 		Domain  string `json:"domain"`
@@ -184,7 +184,7 @@ func (s *Server) handleIPv64RecordAdd(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	client, ok := s.ipv64Client(w, req.APIKey)
+	client, ok := a.ipv64Client(w, req.APIKey)
 	if !ok {
 		return
 	}
@@ -199,7 +199,7 @@ func (s *Server) handleIPv64RecordAdd(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, record)
 }
 
-func (s *Server) handleIPv64RecordDelete(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64RecordDelete(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ipv64Request
 		Domain string `json:"domain"`
@@ -212,7 +212,7 @@ func (s *Server) handleIPv64RecordDelete(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "invalid_ipv64", "no record")
 		return
 	}
-	client, ok := s.ipv64Client(w, req.APIKey)
+	client, ok := a.ipv64Client(w, req.APIKey)
 	if !ok {
 		return
 	}
@@ -226,12 +226,12 @@ func (s *Server) handleIPv64RecordDelete(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleIPv64Healthchecks(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64Healthchecks(w http.ResponseWriter, r *http.Request) {
 	var req ipv64Request
 	if !readJSON(w, r, &req) {
 		return
 	}
-	client, ok := s.ipv64Client(w, req.APIKey)
+	client, ok := a.ipv64Client(w, req.APIKey)
 	if !ok {
 		return
 	}
@@ -248,8 +248,8 @@ func (s *Server) handleIPv64Healthchecks(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	current := ""
-	if s.opts.DDNS != nil {
-		if token := s.opts.DDNS.HeartbeatToken(); token != "" {
+	if a.ddns != nil {
+		if token := a.ddns.HeartbeatToken(); token != "" {
 			current = dnsprovider.HealthcheckID(token)
 		}
 	}
@@ -259,7 +259,7 @@ func (s *Server) handleIPv64Healthchecks(w http.ResponseWriter, r *http.Request)
 
 // handleIPv64HeartbeatOn creates a push healthcheck (or takes an existing
 // one) and switches the pings on. Nothing happens at IPv64 before this.
-func (s *Server) handleIPv64HeartbeatOn(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64HeartbeatOn(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ipv64Request
 		// ID picks an existing check; empty creates one named Name.
@@ -270,7 +270,7 @@ func (s *Server) handleIPv64HeartbeatOn(w http.ResponseWriter, r *http.Request) 
 		Integrations []int  `json:"integrations"`
 		AutoPause    bool   `json:"autoPause"`
 	}
-	if !readJSON(w, r, &req) || !s.dynamicDNS(w) {
+	if !readJSON(w, r, &req) || !a.dynamicDNS(w) {
 		return
 	}
 	if req.Period == 0 {
@@ -283,7 +283,7 @@ func (s *Server) handleIPv64HeartbeatOn(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "invalid_ipv64", "period 20–1440 minutes, grace 1–1440 minutes")
 		return
 	}
-	client, ok := s.ipv64Client(w, req.APIKey)
+	client, ok := a.ipv64Client(w, req.APIKey)
 	if !ok {
 		return
 	}
@@ -320,33 +320,33 @@ func (s *Server) handleIPv64HeartbeatOn(w http.ResponseWriter, r *http.Request) 
 		}
 		check = created
 	}
-	if err := s.opts.DDNS.SetHeartbeat(check.Token(), check.Name, req.Period, req.AutoPause); err != nil {
+	if err := a.ddns.SetHeartbeat(check.Token(), check.Name, req.Period, req.AutoPause); err != nil {
 		writeError(w, http.StatusInternalServerError, "config_write_failed", "the settings could not be saved to /config")
 		return
 	}
 	noteTarget(r, check.Name)
 	slog.Info("IPv64 healthcheck switched on", "check", check.Name, "by", currentUser(r).Name)
-	writeJSON(w, http.StatusOK, s.opts.DDNS.Status())
+	writeJSON(w, http.StatusOK, a.ddns.Status())
 }
 
 // handleIPv64HeartbeatOff stops the pings and pauses or deletes the check
 // at IPv64, as the dialog asked.
-func (s *Server) handleIPv64HeartbeatOff(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64HeartbeatOff(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ipv64Request
 		// Action is "pause", "delete" or "" (only stop pinging).
 		Action string `json:"action"`
 	}
-	if !readJSON(w, r, &req) || !s.dynamicDNS(w) {
+	if !readJSON(w, r, &req) || !a.dynamicDNS(w) {
 		return
 	}
 	if req.Action != "" && req.Action != "pause" && req.Action != "delete" {
 		writeError(w, http.StatusBadRequest, "invalid_ipv64", "action")
 		return
 	}
-	token := s.opts.DDNS.HeartbeatToken()
+	token := a.ddns.HeartbeatToken()
 	if req.Action != "" && token != "" {
-		client, ok := s.ipv64Client(w, req.APIKey)
+		client, ok := a.ipv64Client(w, req.APIKey)
 		if !ok {
 			return
 		}
@@ -364,25 +364,25 @@ func (s *Server) handleIPv64HeartbeatOff(w http.ResponseWriter, r *http.Request)
 			return
 		}
 	}
-	if err := s.opts.DDNS.StopHeartbeat(req.Action == "delete"); err != nil {
+	if err := a.ddns.StopHeartbeat(req.Action == "delete"); err != nil {
 		writeError(w, http.StatusInternalServerError, "config_write_failed", "the settings could not be saved to /config")
 		return
 	}
 	noteTarget(r, req.Action)
-	writeJSON(w, http.StatusOK, s.opts.DDNS.Status())
+	writeJSON(w, http.StatusOK, a.ddns.Status())
 }
 
-func (s *Server) handleIPv64HeartbeatStatus(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64HeartbeatStatus(w http.ResponseWriter, r *http.Request) {
 	var req ipv64Request
-	if !readJSON(w, r, &req) || !s.dynamicDNS(w) {
+	if !readJSON(w, r, &req) || !a.dynamicDNS(w) {
 		return
 	}
-	token := s.opts.DDNS.HeartbeatToken()
+	token := a.ddns.HeartbeatToken()
 	if token == "" {
 		writeError(w, http.StatusConflict, "ipv64_no_healthcheck", "no healthcheck chosen")
 		return
 	}
-	client, ok := s.ipv64Client(w, req.APIKey)
+	client, ok := a.ipv64Client(w, req.APIKey)
 	if !ok {
 		return
 	}
@@ -396,12 +396,12 @@ func (s *Server) handleIPv64HeartbeatStatus(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, check)
 }
 
-func (s *Server) handleIPv64HeartbeatTest(w http.ResponseWriter, r *http.Request) {
+func (a ipv64Area) handleIPv64HeartbeatTest(w http.ResponseWriter, r *http.Request) {
 	var req ipv64Request
-	if !readJSON(w, r, &req) || !s.dynamicDNS(w) {
+	if !readJSON(w, r, &req) || !a.dynamicDNS(w) {
 		return
 	}
-	token := s.opts.DDNS.HeartbeatToken()
+	token := a.ddns.HeartbeatToken()
 	if token == "" {
 		writeError(w, http.StatusConflict, "ipv64_no_healthcheck", "no healthcheck chosen")
 		return
@@ -416,7 +416,7 @@ func (s *Server) handleIPv64HeartbeatTest(w http.ResponseWriter, r *http.Request
 	}
 	lastIPv64Test.at = time.Now()
 	lastIPv64Test.Unlock()
-	client, ok := s.ipv64Client(w, req.APIKey)
+	client, ok := a.ipv64Client(w, req.APIKey)
 	if !ok {
 		return
 	}

@@ -21,9 +21,10 @@ const maxMembers = 20
 
 // agentAccounts are the accounts that may use the agent.
 func (s *Server) agentAccounts() []string {
+	env := s.agentEnv()
 	settings := s.agentSettings()
 	var names []string
-	for _, u := range s.opts.Users.List() {
+	for _, u := range env.users.List() {
 		if !u.Disabled && (u.Role == auth.RoleOwner || slices.Contains(settings.Users, u.Name)) {
 			names = append(names, u.Name)
 		}

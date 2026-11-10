@@ -135,10 +135,11 @@ func cleanFolderPath(p string) (string, error) {
 // docsShareRoot is a share the account can read now (the brief: only
 // shares, never volumes, USB or the stick).
 func (s *Server) docsShareRoot(user auth.User, id string) (files.Root, bool) {
-	if s.opts.Shares == nil || s.opts.Storage == nil {
+	env := s.agentEnv()
+	if env.shares == nil || env.storage == nil {
 		return files.Root{}, false
 	}
-	for _, r := range s.fileRoots(user) {
+	for _, r := range env.fileRoots(user) {
 		if r.ID == id && r.Kind == "share" {
 			return r, true
 		}
@@ -147,10 +148,11 @@ func (s *Server) docsShareRoot(user auth.User, id string) (files.Root, bool) {
 }
 
 func (s *Server) docsUser(name string) (auth.User, bool) {
-	if s.opts.Users == nil {
+	env := s.agentEnv()
+	if env.users == nil {
 		return auth.User{}, false
 	}
-	return s.opts.Users.Get(name)
+	return env.users.Get(name)
 }
 
 func (s *Server) checkDocsMine(user string, d *agentDocsMine, old agentDocsMine) error {
@@ -344,8 +346,9 @@ func docsOff(w http.ResponseWriter) {
 // folder and the mailbox. Nothing here wakes a disk: the agent's volume
 // and the folder's volume must be awake, else the work waits.
 func (s *Server) agentDocsTick(now agentNow) {
+	env := s.agentEnv()
 	nas := s.agentSettings().Features.Docs
-	if !nas.Enabled || s.opts.Users == nil || s.opts.Storage == nil {
+	if !nas.Enabled || env.users == nil || env.storage == nil {
 		return
 	}
 	indexDue := docsNightDue(nas.at(), now)

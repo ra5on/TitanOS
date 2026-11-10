@@ -21,27 +21,39 @@ func writeUPSError(w http.ResponseWriter, err error) {
 	}
 }
 
-func (s *Server) handleUPS(w http.ResponseWriter, r *http.Request) {
-	settings, passwordSet := s.opts.UPS.Settings()
-	writeJSON(w, http.StatusOK, map[string]any{"settings": settings, "passwordSet": passwordSet, "status": s.opts.UPS.Status(), "drivers": ups.Drivers})
+// upsArea is the uninterruptible power supply; an area with narrow
+// dependencies (PLAN 8a, see fansArea).
+type upsArea struct {
+	ups *ups.Manager
 }
 
-func (s *Server) handleUPSChange(w http.ResponseWriter, r *http.Request) {
+func (a upsArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/ups", admin(a.handleUPS))
+	mux.HandleFunc("PUT /api/v1/ups", admin(a.handleUPSChange))
+	mux.HandleFunc("POST /api/v1/ups/scan", admin(a.handleUPSScan))
+}
+
+func (a upsArea) handleUPS(w http.ResponseWriter, r *http.Request) {
+	settings, passwordSet := a.ups.Settings()
+	writeJSON(w, http.StatusOK, map[string]any{"settings": settings, "passwordSet": passwordSet, "status": a.ups.Status(), "drivers": ups.Drivers})
+}
+
+func (a upsArea) handleUPSChange(w http.ResponseWriter, r *http.Request) {
 	var settings ups.Settings
 	if !readJSON(w, r, &settings) {
 		return
 	}
-	if err := s.opts.UPS.SetSettings(settings); err != nil {
+	if err := a.ups.SetSettings(settings); err != nil {
 		writeUPSError(w, err)
 		return
 	}
 	slog.Info("UPS settings changed", "mode", settings.Mode, "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleUPS(w, r)
+	a.handleUPS(w, r)
 }
 
 // handleUPSScan looks for UPS on USB.
-func (s *Server) handleUPSScan(w http.ResponseWriter, r *http.Request) {
-	found, err := s.opts.UPS.Scan(r.Context())
+func (a upsArea) handleUPSScan(w http.ResponseWriter, r *http.Request) {
+	found, err := a.ups.Scan(r.Context())
 	if err != nil {
 		writeUPSError(w, err)
 		return

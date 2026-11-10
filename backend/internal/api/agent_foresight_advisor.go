@@ -94,6 +94,7 @@ func advisorDue(at string, last, now time.Time) bool {
 }
 
 func (s *Server) advisorNightly(now time.Time, a agentAdvisor) {
+	env := s.agentEnv()
 	st := s.foresight()
 	st.mu.Lock()
 	if st.running || now.Sub(st.tried) < 10*time.Minute {
@@ -109,7 +110,7 @@ func (s *Server) advisorNightly(now time.Time, a agentAdvisor) {
 	st.tried = now
 	st.mu.Unlock()
 	// Later, when the disks are awake anyway.
-	if s.advisorStoreAsleep() || s.opts.SmartHistory != nil && s.volumeAsleep(s.smartHistoryVolume()) {
+	if s.advisorStoreAsleep() || env.smartHistory != nil && s.volumeAsleep(s.smartHistoryVolume()) {
 		return
 	}
 	s.advisorLoad()
@@ -130,6 +131,7 @@ func (s *Server) advisorNightly(now time.Time, a agentAdvisor) {
 // runAdvisor judges now and keeps the report. nightly runs also send the
 // monthly report.
 func (s *Server) runAdvisor(ctx context.Context, a agentAdvisor, now time.Time, nightly bool) advisorSaved {
+	env := s.agentEnv()
 	st := s.foresight()
 	defer func() {
 		st.mu.Lock()
@@ -137,7 +139,7 @@ func (s *Server) runAdvisor(ctx context.Context, a agentAdvisor, now time.Time, 
 		st.mu.Unlock()
 	}()
 	s.advisorLoad()
-	history := s.opts.SmartHistory != nil && !s.volumeAsleep(s.smartHistoryVolume())
+	history := env.smartHistory != nil && !s.volumeAsleep(s.smartHistoryVolume())
 	in := s.advisorInput(ctx, a, now, history)
 	report := advisor.Judge(in)
 	var offers map[string][]advisorOffer
@@ -150,8 +152,8 @@ func (s *Server) runAdvisor(ctx context.Context, a agentAdvisor, now time.Time, 
 	saved.Volumes = append([]monitoring.Sample{}, st.vols...)
 	saved.Measured = maps.Clone(st.measured)
 	st.mu.Unlock()
-	if nightly && a.Monthly && saved.LastMonthly != now.Format("2006-01") && s.opts.Notify != nil {
-		if err := s.opts.Notify.SendReport("Hardware-Berater", advisorText(report)); err != nil {
+	if nightly && a.Monthly && saved.LastMonthly != now.Format("2006-01") && env.notify != nil {
+		if err := env.notify.SendReport("Hardware-Berater", advisorText(report)); err != nil {
 			slog.Info("hardware adviser report not sent", "err", err)
 		} else {
 			saved.LastMonthly = now.Format("2006-01")
@@ -179,6 +181,7 @@ var priceRe = regexp.MustCompile(`(\d{1,4}(?:[.,]\d{2})?)\s?€|€\s?(\d{1,4}(?
 // fail. The query holds only model and size, never a serial number, name
 // or path.
 func (s *Server) advisorOffers(ctx context.Context, report advisor.Report) map[string][]advisorOffer {
+	env := s.agentEnv()
 	out := map[string][]advisorOffer{}
 	web := s.agentWeb()
 	for _, f := range report.Findings {
@@ -186,7 +189,7 @@ func (s *Server) advisorOffers(ctx context.Context, report advisor.Report) map[s
 			continue
 		}
 		query := replacementQuery(f)
-		results, err := web.Search(ctx, s.opts.Version, query)
+		results, err := web.Search(ctx, env.version, query)
 		if err != nil {
 			continue
 		}

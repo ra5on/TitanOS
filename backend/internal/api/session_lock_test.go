@@ -272,12 +272,12 @@ func TestConsoleEndsWithTheSessionLock(t *testing.T) {
 	alex, _ := ts.users.Get("alex")
 	var token string
 	for _, c := range ts.client.Jar.Cookies(mustURL(t, ts.url)) {
-		if c.Name == ts.server.cookieName() {
+		if c.Name == ts.server.authArea().cookieName() {
 			token = c.Value
 		}
 	}
 	r := httptest.NewRequest("GET", "/api/v1/terminal/shell", nil)
-	r.AddCookie(&http.Cookie{Name: ts.server.cookieName(), Value: token})
+	r.AddCookie(&http.Cookie{Name: ts.server.authArea().cookieName(), Value: token})
 	if !ts.server.consoleAllowed(r, alex) {
 		t.Fatal("console refused")
 	}
@@ -312,7 +312,7 @@ func TestAgentEventsEndWithTheSessionLock(t *testing.T) {
 	alex, _ := ts.users.Get("alex")
 	var token string
 	for _, c := range ts.client.Jar.Cookies(mustURL(t, ts.url)) {
-		if c.Name == ts.server.cookieName() {
+		if c.Name == ts.server.authArea().cookieName() {
 			token = c.Value
 		}
 	}
@@ -327,7 +327,7 @@ func TestAgentEventsEndWithTheSessionLock(t *testing.T) {
 	stream := func() chan struct{} {
 		r := httptest.NewRequest("GET", "/api/v1/agent/chats/"+id+"/events", nil)
 		r.SetPathValue("id", id)
-		r.AddCookie(&http.Cookie{Name: ts.server.cookieName(), Value: token})
+		r.AddCookie(&http.Cookie{Name: ts.server.authArea().cookieName(), Value: token})
 		r = r.WithContext(context.WithValue(r.Context(), contextKey{}, alex))
 		done := make(chan struct{})
 		go func() {
@@ -376,18 +376,18 @@ func TestPhoneLockMinutes(t *testing.T) {
 	ts := newTestServer(t)
 	ts.setup()
 	const iphone = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Mobile/15E148"
-	if d, p := ts.server.lockMinutes("alex", "Firefox"), ts.server.lockMinutes("alex", iphone); d != 15 || p != 0 {
+	if d, p := ts.server.authArea().lockMinutes("alex", "Firefox"), ts.server.authArea().lockMinutes("alex", iphone); d != 15 || p != 0 {
 		t.Fatalf("defaults: computer %d, phone %d", d, p)
 	}
 	if res, _ := ts.request("PUT", "/api/v1/preferences/desktop", map[string]any{"lockMinutes": 5, "lockMinutesPhone": 240}); res.StatusCode != http.StatusNoContent {
 		t.Fatalf("preferences: %d", res.StatusCode)
 	}
-	if d, p := ts.server.lockMinutes("alex", "Firefox"), ts.server.lockMinutes("alex", iphone); d != 5 || p != 240 {
+	if d, p := ts.server.authArea().lockMinutes("alex", "Firefox"), ts.server.authArea().lockMinutes("alex", iphone); d != 5 || p != 240 {
 		t.Fatalf("chosen: computer %d, phone %d", d, p)
 	}
 	// The phone keeps its own value when only the computer's changes.
 	ts.request("PUT", "/api/v1/preferences/desktop", map[string]any{"lockMinutes": 10})
-	if p := ts.server.lockMinutes("alex", iphone); p != 0 {
+	if p := ts.server.authArea().lockMinutes("alex", iphone); p != 0 {
 		t.Errorf("phone without the field: %d", p)
 	}
 }

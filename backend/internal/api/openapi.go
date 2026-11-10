@@ -38,7 +38,7 @@ func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		ops[strings.ToLower(route.Method)] = operation
 	}
-	writeJSON(w, 200, map[string]any{"openapi": "3.1.0", "info": map[string]any{"title": "TitanOS public API", "version": s.opts.Version, "description": "Personal scoped tokens. Account and share permissions are evaluated on every request. Tokens cannot manage credentials, sessions, shells, network or firewall confirmation or updates. Last-used timestamps are in memory and reset on service restart. The same routes are offered as tools of the MCP server at /mcp (docs/MCP.md)."}, "servers": []any{map[string]any{"url": "/api/v1"}}, "paths": paths, "components": map[string]any{"securitySchemes": map[string]any{"bearerAuth": map[string]any{"type": "http", "scheme": "bearer"}}}})
+	writeJSON(w, 200, map[string]any{"openapi": "3.1.0", "info": map[string]any{"title": "TitanOS public API", "version": s.core().version, "description": "Personal scoped tokens. Account and share permissions are evaluated on every request. Tokens cannot manage credentials, sessions, shells, network or firewall confirmation or updates. Last-used timestamps are in memory and reset on service restart. The same routes are offered as tools of the MCP server at /mcp (docs/MCP.md)."}, "servers": []any{map[string]any{"url": "/api/v1"}}, "paths": paths, "components": map[string]any{"securitySchemes": map[string]any{"bearerAuth": map[string]any{"type": "http", "scheme": "bearer"}}}})
 }
 
 func containsPlaceholder(path, name string) bool {

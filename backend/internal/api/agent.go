@@ -57,19 +57,20 @@ func (s *Server) agentStore() *agent.Store {
 }
 
 func (s *Server) newAgentStore() *agent.Store {
+	env := s.agentEnv()
 	if s.agentOpen != nil {
 		return &agent.Store{Open: func() (*os.Root, error) { return s.agentOpen() }}
 	}
 	return &agent.Store{Open: func() (*os.Root, error) {
-		if s.agentMoving() || s.opts.Storage == nil {
+		if s.agentMoving() || env.storage == nil {
 			return nil, volumedata.ErrUnavailable
 		}
-		mounted := s.opts.Storage.Mounted()
+		mounted := env.storage.Mounted()
 		volume, ok := s.agentVolume(mounted)
 		if !ok {
 			return nil, volumedata.ErrUnavailable
 		}
-		point := s.opts.Storage.MountPoint(volume)
+		point := env.storage.MountPoint(volume)
 		return volumedata.Open(filepath.Dir(point), volume, "agent", mounted)
 	}}
 }
@@ -556,7 +557,8 @@ func (s *Server) agentRunner(ctx context.Context, user auth.User, settings agent
 // (PLAN 48): nothing goes out while the chat is open and visible on one of
 // their devices, and only one message per chat until they look at it.
 func (s *Server) agentDone(user auth.User, chat *agent.Chat) {
-	if s.opts.WebPush == nil || !s.agentShouldPush(user.Name, chat.ID) {
+	env := s.agentEnv()
+	if env.webPush == nil || !s.agentShouldPush(user.Name, chat.ID) {
 		return
 	}
 	var body string
@@ -577,7 +579,7 @@ func (s *Server) agentDone(user auth.User, chat *agent.Chat) {
 	if r := []rune(body); len(r) > 180 {
 		body = string(r[:179]) + "…"
 	}
-	s.opts.WebPush.SendTo(user.Name, webpush.Message{Title: "KI-Agent: " + chat.Title, Body: body, URL: "/agent?chat=" + chat.ID, Tag: "agent-" + chat.ID})
+	env.webPush.SendTo(user.Name, webpush.Message{Title: "KI-Agent: " + chat.Title, Body: body, URL: "/agent?chat=" + chat.ID, Tag: "agent-" + chat.ID})
 }
 
 // agentShouldPush decides whether the end of a run goes out as a push

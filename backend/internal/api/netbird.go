@@ -9,12 +9,28 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/plugins"
 )
 
-func (s *Server) handleNetbird(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Netbird == nil {
+// netbirdArea is the NetBird plugin; an area with narrow dependencies
+// (PLAN 8a, see fansArea). plugins runs changes as a runtime action of the
+// plugin; nil runs them directly.
+type netbirdArea struct {
+	netbird *netbird.Manager
+	plugins *plugins.Manager
+}
+
+func (a netbirdArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/plugins/netbird", admin(a.handleNetbird))
+	mux.HandleFunc("GET /api/v1/plugins/netbird/peers", admin(a.handleNetbirdPeers))
+	mux.HandleFunc("PUT /api/v1/plugins/netbird", admin(a.handleNetbirdSettings))
+	mux.HandleFunc("PUT /api/v1/plugins/netbird/setup-key", admin(a.handleNetbirdSetupKey))
+	mux.HandleFunc("POST /api/v1/plugins/netbird/control/{action}", admin(a.handleNetbirdAction))
+}
+
+func (a netbirdArea) handleNetbird(w http.ResponseWriter, r *http.Request) {
+	if a.netbird == nil {
 		writeError(w, 503, "config_unavailable", "NetBird settings unavailable")
 		return
 	}
-	writeJSON(w, 200, s.opts.Netbird.Status())
+	writeJSON(w, 200, a.netbird.Status())
 }
 func writeNetbirdError(w http.ResponseWriter, err error) {
 	status, code := http.StatusInternalServerError, "netbird_failed"
@@ -32,8 +48,8 @@ func writeNetbirdError(w http.ResponseWriter, err error) {
 
 // handleNetbirdSettings starts a trial of the routing choices. The setup key
 // is not part of this body; it has its own route.
-func (s *Server) handleNetbirdSettings(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Netbird == nil {
+func (a netbirdArea) handleNetbirdSettings(w http.ResponseWriter, r *http.Request) {
+	if a.netbird == nil {
 		writeError(w, 503, "config_unavailable", "NetBird settings unavailable")
 		return
 	}
@@ -41,18 +57,18 @@ func (s *Server) handleNetbirdSettings(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &settings) {
 		return
 	}
-	if err := s.netbirdRuntimeAction(func() error { return s.opts.Netbird.Set(settings) }); err != nil {
+	if err := a.netbirdRuntimeAction(func() error { return a.netbird.Set(settings) }); err != nil {
 		writeNetbirdError(w, err)
 		return
 	}
 	slog.Info("NetBird configuration applied on trial", "by", currentUser(r).Name)
-	s.handleNetbird(w, r)
+	a.handleNetbird(w, r)
 }
 
 // handleNetbirdSetupKey stores (or with an empty value removes) the setup
 // key. It is never returned; GET only says whether one is set.
-func (s *Server) handleNetbirdSetupKey(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Netbird == nil {
+func (a netbirdArea) handleNetbirdSetupKey(w http.ResponseWriter, r *http.Request) {
+	if a.netbird == nil {
 		writeError(w, 503, "config_unavailable", "NetBird settings unavailable")
 		return
 	}
@@ -62,16 +78,16 @@ func (s *Server) handleNetbirdSetupKey(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &body) {
 		return
 	}
-	if err := s.opts.Netbird.SetKey(body.SetupKey); err != nil {
+	if err := a.netbird.SetKey(body.SetupKey); err != nil {
 		writeNetbirdError(w, err)
 		return
 	}
 	slog.Info("NetBird setup key changed", "set", body.SetupKey != "", "by", currentUser(r).Name)
-	s.handleNetbird(w, r)
+	a.handleNetbird(w, r)
 }
 
-func (s *Server) handleNetbirdAction(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Netbird == nil {
+func (a netbirdArea) handleNetbirdAction(w http.ResponseWriter, r *http.Request) {
+	if a.netbird == nil {
 		writeError(w, 503, "config_unavailable", "NetBird settings unavailable")
 		return
 	}
@@ -79,33 +95,33 @@ func (s *Server) handleNetbirdAction(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch action {
 	case "confirm":
-		err = s.opts.Netbird.Confirm()
+		err = a.netbird.Confirm()
 	case "undo":
-		err = s.opts.Netbird.Undo()
+		err = a.netbird.Undo()
 	default:
-		err = s.netbirdRuntimeAction(func() error { return s.opts.Netbird.Action(action) })
+		err = a.netbirdRuntimeAction(func() error { return a.netbird.Action(action) })
 	}
 	if err != nil {
 		writeNetbirdError(w, err)
 		return
 	}
 	slog.Info("NetBird action", "action", action, "by", currentUser(r).Name)
-	s.handleNetbird(w, r)
+	a.handleNetbird(w, r)
 }
 
-func (s *Server) netbirdRuntimeAction(action func() error) error {
-	if s.opts.Plugins != nil {
-		return s.opts.Plugins.RuntimeAction("netbird", action)
+func (a netbirdArea) netbirdRuntimeAction(action func() error) error {
+	if a.plugins != nil {
+		return a.plugins.RuntimeAction("netbird", action)
 	}
 	return action()
 }
 
 // handleNetbirdPeers lists the NetBird network for the dashboard. Without an
 // active plugin the answer is the state "inactive", not an error.
-func (s *Server) handleNetbirdPeers(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Netbird == nil {
+func (a netbirdArea) handleNetbirdPeers(w http.ResponseWriter, r *http.Request) {
+	if a.netbird == nil {
 		writeJSON(w, 200, netbird.Peers{State: "inactive", Peers: []netbird.Peer{}})
 		return
 	}
-	writeJSON(w, 200, s.opts.Netbird.Peers())
+	writeJSON(w, 200, a.netbird.Peers())
 }

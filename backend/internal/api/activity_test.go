@@ -30,9 +30,12 @@ func findActivity(rows []activity.Entry, action string) (activity.Entry, bool) {
 }
 
 func TestActivityRecordsChangesLoginsAndNoSecrets(t *testing.T) {
-	ts := newTestServer(t)
-	log := activity.New(ts.store)
-	ts.server.opts.Activity = log
+	// The page of the log takes its manager when the routes are registered.
+	var log *activity.Manager
+	ts := newTestServerWith(t, func(o *Options) {
+		log = activity.New(o.Store)
+		o.Activity = log
+	})
 	ts.setup()
 	if _, ok := findActivity(activityEntries(t, log), "setup"); !ok {
 		t.Fatal("setup not recorded")

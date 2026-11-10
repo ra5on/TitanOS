@@ -36,8 +36,8 @@ func readOptionalJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	return readJSON(w, r, v)
 }
 
-func (s *Server) handleDockerImages(w http.ResponseWriter, r *http.Request) {
-	list, err := s.opts.Docker.Images(r.Context())
+func (a dockerArea) handleDockerImages(w http.ResponseWriter, r *http.Request) {
+	list, err := a.docker.Images(r.Context())
 	if err != nil {
 		writeResourceError(w, "image", err)
 		return
@@ -45,8 +45,8 @@ func (s *Server) handleDockerImages(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, list)
 }
 
-func (s *Server) handleDockerImageRemove(w http.ResponseWriter, r *http.Request) {
-	image, err := s.opts.Docker.RemoveImage(r.Context(), r.PathValue("id"))
+func (a dockerArea) handleDockerImageRemove(w http.ResponseWriter, r *http.Request) {
+	image, err := a.docker.RemoveImage(r.Context(), r.PathValue("id"))
 	if err != nil {
 		writeResourceError(w, "image", err)
 		return
@@ -55,14 +55,14 @@ func (s *Server) handleDockerImageRemove(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleDockerImagesPrune(w http.ResponseWriter, r *http.Request) {
+func (a dockerArea) handleDockerImagesPrune(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Unused bool `json:"unused"`
 	}
 	if !readOptionalJSON(w, r, &req) {
 		return
 	}
-	result, err := s.opts.Docker.PruneImages(r.Context(), req.Unused)
+	result, err := a.docker.PruneImages(r.Context(), req.Unused)
 	if err != nil {
 		writeResourceError(w, "image", err)
 		return
@@ -76,8 +76,8 @@ func (s *Server) handleDockerImagesPrune(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (s *Server) handleDockerVolumes(w http.ResponseWriter, r *http.Request) {
-	list, err := s.opts.Docker.Volumes(r.Context())
+func (a dockerArea) handleDockerVolumes(w http.ResponseWriter, r *http.Request) {
+	list, err := a.docker.Volumes(r.Context())
 	if err != nil {
 		writeResourceError(w, "volume", err)
 		return
@@ -85,22 +85,22 @@ func (s *Server) handleDockerVolumes(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"volumes": list})
 }
 
-func (s *Server) handleDockerVolumeRemove(w http.ResponseWriter, r *http.Request) {
-	if err := s.opts.Docker.RemoveVolume(r.Context(), r.PathValue("name")); err != nil {
+func (a dockerArea) handleDockerVolumeRemove(w http.ResponseWriter, r *http.Request) {
+	if err := a.docker.RemoveVolume(r.Context(), r.PathValue("name")); err != nil {
 		writeResourceError(w, "volume", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleDockerVolumesPrune(w http.ResponseWriter, r *http.Request) {
+func (a dockerArea) handleDockerVolumesPrune(w http.ResponseWriter, r *http.Request) {
 	req := struct {
 		AnonymousOnly bool `json:"anonymousOnly"`
 	}{AnonymousOnly: true}
 	if !readOptionalJSON(w, r, &req) {
 		return
 	}
-	result, err := s.opts.Docker.PruneVolumes(r.Context(), req.AnonymousOnly)
+	result, err := a.docker.PruneVolumes(r.Context(), req.AnonymousOnly)
 	if err != nil {
 		writeResourceError(w, "volume", err)
 		return
@@ -114,8 +114,8 @@ func (s *Server) handleDockerVolumesPrune(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (s *Server) handleDockerBuilderPrune(w http.ResponseWriter, r *http.Request) {
-	result, err := s.opts.Docker.PruneBuildCache(r.Context())
+func (a dockerArea) handleDockerBuilderPrune(w http.ResponseWriter, r *http.Request) {
+	result, err := a.docker.PruneBuildCache(r.Context())
 	if err != nil {
 		writeResourceError(w, "builder", err)
 		return
@@ -123,8 +123,8 @@ func (s *Server) handleDockerBuilderPrune(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]any{"reclaimed": result.Reclaimed, "deleted": len(result.Deleted)})
 }
 
-func (s *Server) handleDockerDiskUsage(w http.ResponseWriter, r *http.Request) {
-	usage, err := s.opts.Docker.DiskUsage(r.Context(), r.URL.Query().Get("fresh") == "1")
+func (a dockerArea) handleDockerDiskUsage(w http.ResponseWriter, r *http.Request) {
+	usage, err := a.docker.DiskUsage(r.Context(), r.URL.Query().Get("fresh") == "1")
 	if err != nil {
 		writeResourceError(w, "docker", err)
 		return
@@ -146,8 +146,8 @@ func writeBridgeError(w http.ResponseWriter, err error) {
 	}
 }
 
-func (s *Server) handleDockerAllNetworks(w http.ResponseWriter, r *http.Request) {
-	list, err := s.opts.Docker.AllNetworks(r.Context())
+func (a dockerArea) handleDockerAllNetworks(w http.ResponseWriter, r *http.Request) {
+	list, err := a.docker.AllNetworks(r.Context())
 	if err != nil {
 		writeBridgeError(w, err)
 		return
@@ -155,12 +155,12 @@ func (s *Server) handleDockerAllNetworks(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]any{"networks": list})
 }
 
-func (s *Server) handleDockerBridgeCreate(w http.ResponseWriter, r *http.Request) {
+func (a dockerArea) handleDockerBridgeCreate(w http.ResponseWriter, r *http.Request) {
 	var req docker.BridgeRequest
 	if !readJSON(w, r, &req) {
 		return
 	}
-	n, err := s.opts.Docker.CreateBridge(r.Context(), req)
+	n, err := a.docker.CreateBridge(r.Context(), req)
 	if err != nil {
 		writeBridgeError(w, err)
 		return
@@ -169,16 +169,16 @@ func (s *Server) handleDockerBridgeCreate(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusCreated, n)
 }
 
-func (s *Server) handleDockerBridgeRemove(w http.ResponseWriter, r *http.Request) {
-	if err := s.opts.Docker.RemoveNetwork(r.Context(), r.PathValue("name")); err != nil {
+func (a dockerArea) handleDockerBridgeRemove(w http.ResponseWriter, r *http.Request) {
+	if err := a.docker.RemoveNetwork(r.Context(), r.PathValue("name")); err != nil {
 		writeBridgeError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleDockerNetworksPrune(w http.ResponseWriter, r *http.Request) {
-	result, err := s.opts.Docker.PruneNetworks(r.Context())
+func (a dockerArea) handleDockerNetworksPrune(w http.ResponseWriter, r *http.Request) {
+	result, err := a.docker.PruneNetworks(r.Context())
 	if err != nil {
 		writeBridgeError(w, err)
 		return

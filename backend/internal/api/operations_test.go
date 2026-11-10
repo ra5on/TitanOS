@@ -68,8 +68,13 @@ func TestOperationsUnavailableAndLifecycleGate(t *testing.T) {
 			t.Fatal(path, res.StatusCode)
 		}
 	}
-	ts.server.opts.Maintenance = maintenance.New(ts.store)
-	ts.server.opts.Monitoring = monitoring.New(ts.store)
+	// The areas take their managers when the routes are registered: a
+	// second server that was built with them.
+	ts = newTestServerWith(t, func(o *Options) {
+		o.Maintenance = maintenance.New(o.Store)
+		o.Monitoring = monitoring.New(o.Store)
+	})
+	ts.setup()
 	for _, path := range []string{"/maintenance", "/monitoring"} {
 		res, body := ts.request("GET", "/api/v1"+path, nil)
 		if res.StatusCode != 200 {

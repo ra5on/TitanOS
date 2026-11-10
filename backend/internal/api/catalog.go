@@ -110,7 +110,7 @@ func (s *Server) catalogTools(user auth.User) []toolcatalog.Tool {
 	tools = append(tools, s.fileTools(user)...)
 	if user.Role.CanAdminister() {
 		tools = append(tools, s.areaTools()...)
-		tools = append(tools, s.haTools(user)...)
+		tools = append(tools, s.haArea().haTools(user)...)
 	}
 	tools = append(tools, s.catalogActions(user)...)
 	for i := range tools {
@@ -122,6 +122,7 @@ func (s *Server) catalogTools(user auth.User) []toolcatalog.Tool {
 // statusTools are the reading tools of the fixed catalog about the state of
 // the NAS and the files of the account.
 func (s *Server) statusTools(user auth.User) []toolcatalog.Tool {
+	env := s.toolEnv()
 	tools := []toolcatalog.Tool{
 		reading("files_list", "List a folder in the file manager: the shares this account may open (root share/<name>) and, for administrators, volumes (volume/<name>) and USB drives. Without root, lists the roots.",
 			schema(map[string]any{"root": str("Root ID such as share/Media, from the list of roots."), "path": str("Folder inside the root, empty for its top."), "offset": map[string]any{"type": "integer", "minimum": 0, "description": "Next page from nextOffset when cut is true."}}), true, s.catalogFilesList(user)),
@@ -129,7 +130,7 @@ func (s *Server) statusTools(user auth.User) []toolcatalog.Tool {
 			schema(map[string]any{"root": str("Root ID such as share/Media."), "path": str("Path of the file inside the root.")}, "root", "path"), true, s.catalogFileRead(user)),
 		reading("file_jobs", "Copy and move jobs of this account in the file manager, with progress.",
 			nil, false, noArgs(func(ctx context.Context) (any, error) {
-				return map[string]any{"jobs": s.opts.Files.Jobs(user.Name)}, nil
+				return map[string]any{"jobs": env.files.Jobs(user.Name)}, nil
 			})),
 	}
 	if user.Role.CanAdminister() {
@@ -145,7 +146,7 @@ func (s *Server) statusTools(user auth.User) []toolcatalog.Tool {
 			reading("ups_status", "State of the uninterruptible power supply: on battery, charge, runtime left.", nil, false, noArgs(s.toolUPSStatus)),
 			reading("storage_overview", "Volumes (RAID level, state, size, use, rebuild or check in progress) and disks (model, size, role, SMART health, temperature, errors, wear).", nil, false, noArgs(s.toolStorage)),
 			reading("disk_tests", "Running and finished disk tests (read test, overwrite test, SMART self-test) with progress and result.", nil, false,
-				noArgs(func(ctx context.Context) (any, error) { return map[string]any{"tests": s.opts.Storage.Tests()}, nil })),
+				noArgs(func(ctx context.Context) (any, error) { return map[string]any{"tests": env.storage.Tests()}, nil })),
 			reading("shares_list", "The SMB/NFS shares with their volume and whether they are available.", nil, false, noArgs(s.toolShares)),
 			reading("docker_list", "Docker containers with state, image, app, CPU, memory, ports and whether an image update is available.", nil, true, noArgs(s.toolDocker)),
 			reading("container_logs", "The newest log lines of one container. Addresses, account names and secrets are replaced by placeholders.",
@@ -154,16 +155,16 @@ func (s *Server) statusTools(user auth.User) []toolcatalog.Tool {
 			reading("lxc_list", "System containers (LXC) with state, distribution, CPU and memory.", nil, false, noArgs(s.toolLXC)),
 			reading("backup_status", "Backup jobs with where they go, the last run and its result, the last backup that worked, the next run, and whether a job is overdue.", nil, false, noArgs(s.toolBackups)),
 			reading("network_status", "Network ports, addresses, bond, VLAN, bridge, gateway and name servers of the NAS, and a change waiting for confirmation.", nil, false,
-				noArgs(func(ctx context.Context) (any, error) { return s.opts.Network.Status(ctx), nil })),
+				noArgs(func(ctx context.Context) (any, error) { return env.network.Status(ctx), nil })),
 			reading("hardware_status", "PCI and USB devices (graphics cards, NPUs, controllers), IOMMU, drivers and which VM uses a device.", nil, false,
 				noArgs(func(ctx context.Context) (any, error) {
 					used := map[string][]string{}
-					for _, machine := range s.opts.VMs.List(nil) {
+					for _, machine := range env.vms.List(nil) {
 						for _, device := range append(append([]string{}, machine.PCI...), machine.USB...) {
 							used[device] = append(used[device], machine.Name)
 						}
 					}
-					return map[string]any{"hardware": s.opts.Hardware.Status(), "usedBy": used}, nil
+					return map[string]any{"hardware": env.hardware.Status(), "usedBy": used}, nil
 				})),
 			reading("accounts_list", "The accounts of the NAS with their role and whether they use two-factor login.", nil, false, noArgs(func(ctx context.Context) (any, error) {
 				type account struct {
@@ -172,7 +173,7 @@ func (s *Server) statusTools(user auth.User) []toolcatalog.Tool {
 					TwoFactor bool   `json:"twoFactor"`
 				}
 				list := []account{}
-				for _, u := range s.opts.Users.List() {
+				for _, u := range env.users.List() {
 					list = append(list, account{u.Name, string(u.Role), u.TOTPSecret != ""})
 				}
 				return map[string]any{"accounts": list}, nil
@@ -188,7 +189,7 @@ func (s *Server) statusTools(user auth.User) []toolcatalog.Tool {
 	} else {
 		tools = append(tools,
 			reading("nas_info", "Name and TitanOS version of the NAS.", nil, false, noArgs(func(ctx context.Context) (any, error) {
-				return map[string]any{"hostname": s.opts.Monitor.Info().Hostname, "version": s.opts.Version}, nil
+				return map[string]any{"hostname": env.monitor.Info().Hostname, "version": env.version}, nil
 			})),
 			reading("my_shares", "The shares this account may open, whether it may write, and the free space of each.", nil, false, noArgs(func(ctx context.Context) (any, error) {
 				return s.catalogMyShares(user), nil
@@ -199,6 +200,7 @@ func (s *Server) statusTools(user auth.User) []toolcatalog.Tool {
 }
 
 func (s *Server) catalogMyShares(user auth.User) map[string]any {
+	env := s.toolEnv()
 	type share struct {
 		Root      string `json:"root"`
 		Name      string `json:"name"`
@@ -207,7 +209,7 @@ func (s *Server) catalogMyShares(user auth.User) map[string]any {
 		Recycle   bool   `json:"recycleBin"`
 	}
 	list := []share{}
-	for _, root := range s.fileRoots(user) {
+	for _, root := range env.fileRoots(user) {
 		if root.Kind != "share" {
 			continue
 		}
@@ -249,13 +251,14 @@ func catalogFileError(err error) error {
 // catalogRoot finds a root of the file manager for MCP: the
 // same as the account has, without the stick.
 func (s *Server) catalogRoot(user auth.User, id string) (files.Root, error) {
-	for _, root := range s.fileRoots(user) {
+	env := s.toolEnv()
+	for _, root := range env.fileRoots(user) {
 		if root.ID == id && root.Kind != "stick" {
 			return root, nil
 		}
 	}
 	ids := []string{}
-	for _, root := range s.fileRoots(user) {
+	for _, root := range env.fileRoots(user) {
 		if root.Kind != "stick" {
 			ids = append(ids, root.ID)
 		}
@@ -264,6 +267,7 @@ func (s *Server) catalogRoot(user auth.User, id string) (files.Root, error) {
 }
 
 func (s *Server) catalogFilesList(user auth.User) func(context.Context, json.RawMessage) (any, error) {
+	env := s.toolEnv()
 	return func(ctx context.Context, args json.RawMessage) (any, error) {
 		var req struct {
 			Root, Path string
@@ -281,7 +285,7 @@ func (s *Server) catalogFilesList(user auth.User) func(context.Context, json.Raw
 				Recycle  bool   `json:"recycleBin"`
 			}
 			roots := []rootInfo{}
-			for _, root := range s.fileRoots(user) {
+			for _, root := range env.fileRoots(user) {
 				if root.Kind != "stick" {
 					roots = append(roots, rootInfo{root.ID, root.Name, root.Kind, root.Writable, root.Recycle})
 				}
@@ -295,7 +299,7 @@ func (s *Server) catalogFilesList(user auth.User) func(context.Context, json.Raw
 		if hiddenPath(req.Path) {
 			return nil, toolcatalog.Errorf("this folder is not shown over MCP")
 		}
-		entries, err := s.opts.Files.List(root, req.Path)
+		entries, err := env.files.List(root, req.Path)
 		if err != nil {
 			return nil, catalogFileError(err)
 		}
@@ -307,6 +311,7 @@ func (s *Server) catalogFilesList(user auth.User) func(context.Context, json.Raw
 }
 
 func (s *Server) catalogFileRead(user auth.User) func(context.Context, json.RawMessage) (any, error) {
+	env := s.toolEnv()
 	return func(ctx context.Context, args json.RawMessage) (any, error) {
 		var req struct{ Root, Path string }
 		if err := toolcatalog.DecodeArgs(args, &req); err != nil {
@@ -329,7 +334,7 @@ func (s *Server) catalogFileRead(user auth.User) func(context.Context, json.RawM
 		if strings.EqualFold(path.Ext(req.Path), ".pdf") {
 			return s.readPDF(ctx, root, req.Path, 1, 20)
 		}
-		text, err := s.opts.Files.ReadText(root, req.Path)
+		text, err := env.files.ReadText(root, req.Path)
 		if err != nil {
 			return nil, catalogFileError(err)
 		}
@@ -366,7 +371,8 @@ func (s *Server) toolDocsRead(ctx context.Context, args json.RawMessage) (any, e
 }
 
 func (s *Server) readPDF(ctx context.Context, root files.Root, path string, first, last int, ocr ...bool) (any, error) {
-	f, info, err := s.opts.Files.Open(root, path)
+	env := s.toolEnv()
+	f, info, err := env.files.Open(root, path)
 	if err != nil {
 		return nil, err
 	}

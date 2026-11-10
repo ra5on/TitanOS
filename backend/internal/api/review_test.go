@@ -141,7 +141,7 @@ func TestStrangersCannotLockTheOwnerOut(t *testing.T) {
 	// A forged device cookie does not count.
 	forged := ts.newClient()
 	req, _ := http.NewRequest("POST", ts.url+"/api/v1/login", strings.NewReader(`{"name":"alex","password":"`+testPassword+`"}`))
-	req.AddCookie(&http.Cookie{Name: ts.server.deviceCookieName(), Value: "alex.AAAAAAAAAAAAAAAAAAAAAA.AAAA"})
+	req.AddCookie(&http.Cookie{Name: ts.server.authArea().deviceCookieName(), Value: "alex.AAAAAAAAAAAAAAAAAAAAAA.AAAA"})
 	for range 6 {
 		ts.do(attacker, "POST", "/api/v1/login", credentials{Name: "alex", Password: "guess"})
 	}
@@ -364,8 +364,8 @@ func TestServiceSwitchesDoNotLoseEachOther(t *testing.T) {
 			t.Fatal(err)
 		}
 		done := make(chan error, 2)
-		go func() { done <- ts.server.updateServices(func(v *serviceSettings) { v.VMsOff = true }) }()
-		go func() { done <- ts.server.updateServices(func(v *serviceSettings) { v.LXCOff = true }) }()
+		go func() { done <- ts.server.servicesArea().updateServices(func(v *serviceSettings) { v.VMsOff = true }) }()
+		go func() { done <- ts.server.servicesArea().updateServices(func(v *serviceSettings) { v.LXCOff = true }) }()
 		for range 2 {
 			if err := <-done; err != nil {
 				t.Fatal(err)

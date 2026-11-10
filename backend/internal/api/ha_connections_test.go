@@ -45,7 +45,7 @@ func TestHomeAssistantSeveralConnections(t *testing.T) {
 		t.Fatalf("unknown connection: %d", res.StatusCode)
 	}
 	// The MQTT identities differ, so both can use one broker.
-	m1, m2 := ts.server.haConnection(""), ts.server.haConnection(id)
+	m1, m2 := ts.server.haArea().haConnection(""), ts.server.haArea().haConnection(id)
 	s1, _ := m1.Settings()
 	s2, _ := m2.Settings()
 	if s1.MQTT.ID == "" || s1.MQTT.ID == s2.MQTT.ID {
@@ -99,10 +99,10 @@ func TestHomeAssistantSeveralConnections(t *testing.T) {
 	second.mu.Unlock()
 
 	// Storage is kept apart: the first in storage.json as before.
-	if err := ts.server.saveHAStorage(id, &haStorage{Account: "hafewo"}); err != nil {
+	if err := ts.server.haArea().saveHAStorage(id, &haStorage{Account: "hafewo"}); err != nil {
 		t.Fatal(err)
 	}
-	if setup, _ := ts.server.haStorage(""); setup != nil {
+	if setup, _ := ts.server.haArea().haStorage(""); setup != nil {
 		t.Fatalf("storage of the second seen as the first's: %+v", setup)
 	}
 	if _, err := ts.store.Read(haStorageFileOf(id)); err != nil {

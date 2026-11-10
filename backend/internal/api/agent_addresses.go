@@ -20,6 +20,7 @@ type agentAddress struct {
 }
 
 func (s *Server) agentAddresses(r *http.Request) []agentAddress {
+	env := s.agentEnv()
 	out := []agentAddress{}
 	seen := map[string]bool{}
 	add := func(kind, scheme, host string) {
@@ -35,8 +36,8 @@ func (s *Server) agentAddresses(r *http.Request) []agentAddress {
 		scheme = "https"
 	}
 	add("lan", scheme, appproxy.PrimaryIPv4())
-	if s.opts.Tailscale != nil {
-		ts := s.opts.Tailscale.Status()
+	if env.tailscale != nil {
+		ts := env.tailscale.Status()
 		if ts.Name != "" {
 			if ts.HTTPS.State == "ok" {
 				add("tailscale", "https", ts.Name)
@@ -47,16 +48,16 @@ func (s *Server) agentAddresses(r *http.Request) []agentAddress {
 			add("tailscale", "http", ts.IPs[0])
 		}
 	}
-	if s.opts.Netbird != nil {
-		if nb := s.opts.Netbird.Status(); nb.FQDN != "" {
+	if env.netbird != nil {
+		if nb := env.netbird.Status(); nb.FQDN != "" {
 			add("netbird", "http", nb.FQDN)
 		}
 	}
 	var domains []string
-	if s.opts.LetsEncrypt != nil {
-		domains = s.opts.LetsEncrypt.Status().Settings.Domains
+	if env.letsEncrypt != nil {
+		domains = env.letsEncrypt.Status().Settings.Domains
 	}
-	for _, h := range s.ddnsHosts() {
+	for _, h := range s.ipv64Area().ddnsHosts() {
 		if slices.Contains(domains, h) {
 			add("ddns", "https", h)
 		} else {

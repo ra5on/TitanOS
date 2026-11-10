@@ -136,6 +136,7 @@ func (s *Server) assistChat(w http.ResponseWriter, r *http.Request) {
 
 // assistAnswer runs a question and waits for the answer, at most a while.
 func (s *Server) assistAnswer(ctx context.Context, question string) string {
+	env := s.agentEnv()
 	if question == "" || len(question) > maxAgentMessage {
 		return "Ich habe keine Frage verstanden."
 	}
@@ -144,7 +145,7 @@ func (s *Server) assistAnswer(ctx context.Context, question string) string {
 	if as == "" {
 		as = s.firstOwner()
 	}
-	user, ok := s.opts.Users.Get(as)
+	user, ok := env.users.Get(as)
 	if !ok || user.Disabled || !s.agentAllowed(user) {
 		return "Der KI-Agent ist für Home Assistant nicht eingerichtet."
 	}

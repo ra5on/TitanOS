@@ -23,11 +23,15 @@ func (f *fakeTailnetRunner) Run(_ context.Context, _, name string, args ...strin
 }
 
 func TestAppTailnetOneClick(t *testing.T) {
-	ts := newTestServer(t)
-	routes := appproxy.NewManager(ts.store)
-	routes.Disabled = true
-	routes.Hostname = func() string { return "nas" }
-	routes.Reserved = []int{443}
+	// The area takes its manager when the routes are registered.
+	var routes *appproxy.Manager
+	ts := newTestServerWith(t, func(o *Options) {
+		routes = appproxy.NewManager(o.Store)
+		routes.Disabled = true
+		routes.Hostname = func() string { return "nas" }
+		routes.Reserved = []int{443}
+		o.AppProxy = routes
+	})
 	mount := t.TempDir()
 	os.MkdirAll(filepath.Join(mount, "data"), 0o755)
 	binary := filepath.Join(t.TempDir(), "tailscaled")
@@ -36,7 +40,6 @@ func TestAppTailnetOneClick(t *testing.T) {
 	routes.Tailnet.Configure(fake, mount, t.TempDir(), binary)
 	active := false
 	routes.Tailnet.Volume = func() (string, bool) { return "data", active }
-	ts.server.opts.AppProxy = routes
 
 	for _, route := range []struct{ method, path string }{{"POST", "/tailnet"}, {"DELETE", "/tailnet"}, {"POST", "/tailnet/check"}} {
 		if res, _ := ts.request(route.method, "/api/v1/docker/proxy/apps/immich"+route.path, map[string]any{}); res.StatusCode != http.StatusUnauthorized {

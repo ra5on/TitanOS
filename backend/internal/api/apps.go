@@ -7,7 +7,10 @@ import (
 	"path/filepath"
 
 	"github.com/ra5on/TitanOS/backend/internal/catalog"
+	"github.com/ra5on/TitanOS/backend/internal/docker"
+	"github.com/ra5on/TitanOS/backend/internal/hwcheck"
 	"github.com/ra5on/TitanOS/backend/internal/shares"
+	"github.com/ra5on/TitanOS/backend/internal/storage"
 	"github.com/ra5on/TitanOS/backend/internal/system"
 )
 
@@ -36,48 +39,74 @@ func writeCatalogError(w http.ResponseWriter, err error) {
 	writeError(w, http.StatusInternalServerError, "internal", err.Error())
 }
 
-func (s *Server) handleApps(w http.ResponseWriter, r *http.Request) {
-	sources, apps := s.opts.Catalog.Status()
+// appStoreArea is the app store: templates to install as Docker apps; an
+// area with narrow dependencies (PLAN 8a, see fansArea). docker, storage and
+// settings fill in what a template asks for; hwcheck names what a compose
+// file needs that the CPU lacks (nil: nothing).
+type appStoreArea struct {
+	catalog  *catalog.Manager
+	docker   *docker.Manager
+	storage  *storage.Manager
+	settings *system.Settings
+	hwcheck  *hwcheck.Checker
+}
+
+// appStoreArea is the area of the server.
+func (s *Server) appStoreArea() appStoreArea {
+	return appStoreArea{catalog: s.opts.Catalog, docker: s.opts.Docker, storage: s.opts.Storage, settings: s.opts.Settings, hwcheck: s.opts.HWCheck}
+}
+
+func (a appStoreArea) register(mux *routeMux, g guards) {
+	mux.HandleFunc("GET /api/v1/apps", g.admin(a.handleApps))
+	mux.HandleFunc("POST /api/v1/apps/refresh", g.admin(a.handleAppsRefresh))
+	mux.HandleFunc("POST /api/v1/apps/sources", g.admin(a.handleSourceAdd))
+	mux.HandleFunc("DELETE /api/v1/apps/sources/{id}", g.admin(a.handleSourceRemove))
+	mux.HandleFunc("GET /api/v1/apps/sources/{source}/apps/{app}", g.admin(a.handleAppTemplate))
+	mux.HandleFunc("GET /api/v1/apps/blank", g.admin(a.handleBlankTemplate))
+}
+
+func (a appStoreArea) handleApps(w http.ResponseWriter, r *http.Request) {
+	sources, apps := a.catalog.Status()
 	writeJSON(w, http.StatusOK, map[string]any{"sources": sources, "apps": apps})
 }
 
-func (s *Server) handleAppsRefresh(w http.ResponseWriter, r *http.Request) {
-	s.opts.Catalog.Refresh(r.Context())
-	s.handleApps(w, r)
+func (a appStoreArea) handleAppsRefresh(w http.ResponseWriter, r *http.Request) {
+	a.catalog.Refresh(r.Context())
+	a.handleApps(w, r)
 }
 
-func (s *Server) handleSourceAdd(w http.ResponseWriter, r *http.Request) {
+func (a appStoreArea) handleSourceAdd(w http.ResponseWriter, r *http.Request) {
 	var req struct{ Name, URL string }
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Catalog.Add(r.Context(), req.Name, req.URL); err != nil {
+	if err := a.catalog.Add(r.Context(), req.Name, req.URL); err != nil {
 		writeCatalogError(w, err)
 		return
 	}
 	slog.Info("app source added", "url", req.URL, "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleApps(w, r)
+	a.handleApps(w, r)
 }
 
-func (s *Server) handleSourceRemove(w http.ResponseWriter, r *http.Request) {
+func (a appStoreArea) handleSourceRemove(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if err := s.opts.Catalog.Remove(id); err != nil {
+	if err := a.catalog.Remove(id); err != nil {
 		writeCatalogError(w, err)
 		return
 	}
 	slog.Info("app source removed", "source", id, "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleApps(w, r)
+	a.handleApps(w, r)
 }
 
 // handleAppTemplate returns the compose file of a template together with
 // what TitanOS fills in when it is installed.
-func (s *Server) handleAppTemplate(w http.ResponseWriter, r *http.Request) {
-	compose, err := s.opts.Catalog.Compose(r.PathValue("source"), r.PathValue("app"))
+func (a appStoreArea) handleAppTemplate(w http.ResponseWriter, r *http.Request) {
+	compose, err := a.catalog.Compose(r.PathValue("source"), r.PathValue("app"))
 	if err != nil {
 		writeCatalogError(w, err)
 		return
 	}
-	s.writeTemplate(w, r, compose)
+	a.writeTemplate(w, r, compose)
 }
 
 // blankTemplate is where an own container starts: one service whose image
@@ -86,18 +115,18 @@ const blankTemplate = "services:\n  app:\n    image: \"\"\n    restart: unless-s
 
 // handleBlankTemplate answers like a template of the catalog, for an own
 // container that is set up in the same form.
-func (s *Server) handleBlankTemplate(w http.ResponseWriter, r *http.Request) {
-	s.writeTemplate(w, r, blankTemplate)
+func (a appStoreArea) handleBlankTemplate(w http.ResponseWriter, r *http.Request) {
+	a.writeTemplate(w, r, blankTemplate)
 }
 
-func (s *Server) writeTemplate(w http.ResponseWriter, r *http.Request, compose string) {
+func (a appStoreArea) writeTemplate(w http.ResponseWriter, r *http.Request, compose string) {
 	appdata := ""
-	if settings := s.opts.Docker.Current(); settings.Enabled && settings.Volume != "" {
-		appdata = filepath.Join(s.opts.Storage.MountPoint(settings.Volume), "appdata")
+	if settings := a.docker.Current(); settings.Enabled && settings.Volume != "" {
+		appdata = filepath.Join(a.storage.MountPoint(settings.Volume), "appdata")
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"compose":  compose,
-		"timezone": s.opts.Settings.CurrentTimezone(),
+		"timezone": a.settings.CurrentTimezone(),
 		// Files the app writes into shares belong to whoever installs it,
 		// and to the group all accounts are in.
 		"uid":       currentUser(r).UID,
@@ -108,6 +137,6 @@ func (s *Server) writeTemplate(w http.ResponseWriter, r *http.Request, compose s
 		// containers would not start.
 		"missingDevices": catalog.MissingDevices(compose),
 		// Instruction sets (AVX, x86-64-v3 …) the app needs and this CPU lacks.
-		"cpuMissing": s.cpuMissing(compose),
+		"cpuMissing": a.cpuMissing(compose),
 	})
 }

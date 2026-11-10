@@ -28,18 +28,18 @@ func relPath(p string) string {
 // handleFileThumb answers with a small preview of a picture, PDF or video.
 // The file is opened like a download (root, rights, os.Root, hidden paths);
 // the answer is always an image, never the file itself.
-func (s *Server) handleFileThumb(w http.ResponseWriter, r *http.Request) {
+func (a filesArea) handleFileThumb(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	root, ok := s.fileRoot(w, r, q.Get("root"))
+	root, ok := a.fileRoot(w, r, q.Get("root"))
 	if !ok {
 		return
 	}
 	rel := relPath(q.Get("path"))
-	if s.opts.Thumbs == nil || root.Kind == "stick" || thumbs.Kind(path.Base(rel)) == "" {
+	if a.thumbs == nil || root.Kind == "stick" || thumbs.Kind(path.Base(rel)) == "" {
 		writeError(w, http.StatusUnsupportedMediaType, "thumb_unsupported", "no thumbnail for this file")
 		return
 	}
-	file, info, err := s.opts.Files.Open(root, rel)
+	file, info, err := a.files.Open(root, rel)
 	if err != nil {
 		writeFileError(w, err)
 		return
@@ -50,7 +50,7 @@ func (s *Server) handleFileThumb(w http.ResponseWriter, r *http.Request) {
 		box = n
 	}
 	box = thumbs.FitSize(box)
-	volumeRel := thumbs.VolumeRel(s.opts.Thumbs.MountRoot, root.Volume, root.Dir, rel)
+	volumeRel := thumbs.VolumeRel(a.thumbs.MountRoot, root.Volume, root.Dir, rel)
 	keyPath := volumeRel
 	if keyPath == "" {
 		keyPath = root.ID + "/" + rel
@@ -66,7 +66,7 @@ func (s *Server) handleFileThumb(w http.ResponseWriter, r *http.Request) {
 	if volumeRel == "" {
 		volume = "" // USB drives and anything off a data volume: no cache
 	}
-	data, contentType, err := s.opts.Thumbs.Get(r.Context(), thumbs.Source{Volume: volume, Rel: keyPath, Name: info.Name(), File: file, Info: info}, box)
+	data, contentType, err := a.thumbs.Get(r.Context(), thumbs.Source{Volume: volume, Rel: keyPath, Name: info.Name(), File: file, Info: info}, box)
 	switch {
 	case errors.Is(err, thumbs.ErrBusy):
 		w.Header().Set("Cache-Control", "no-store")
@@ -100,9 +100,9 @@ type photoEntry struct {
 // handleFilePhotos lists the pictures and videos of one folder for the photo
 // view, with the EXIF date of JPEGs read from the first bytes of each file.
 // It is not recursive and stops after 5000 entries or 20 seconds.
-func (s *Server) handleFilePhotos(w http.ResponseWriter, r *http.Request) {
+func (a filesArea) handleFilePhotos(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	root, ok := s.fileRoot(w, r, q.Get("root"))
+	root, ok := a.fileRoot(w, r, q.Get("root"))
 	if !ok {
 		return
 	}
@@ -111,7 +111,7 @@ func (s *Server) handleFilePhotos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dir := relPath(q.Get("path"))
-	entries, err := s.opts.Files.List(root, dir)
+	entries, err := a.files.List(root, dir)
 	if err != nil {
 		writeFileError(w, err)
 		return
@@ -131,7 +131,7 @@ func (s *Server) handleFilePhotos(w http.ResponseWriter, r *http.Request) {
 		}
 		item := photoEntry{Name: entry.Name, Size: entry.Size, Modified: entry.Modified, Kind: kind}
 		if ext := strings.ToLower(path.Ext(entry.Name)); ext == ".jpg" || ext == ".jpeg" {
-			if f, _, err := s.opts.Files.Open(root, path.Join(dir, entry.Name)); err == nil {
+			if f, _, err := a.files.Open(root, path.Join(dir, entry.Name)); err == nil {
 				item.Taken = thumbs.ReadPhoto(f).Taken
 				f.Close()
 			}
@@ -145,9 +145,9 @@ func (s *Server) handleFilePhotos(w http.ResponseWriter, r *http.Request) {
 // the root (and folder) the request names; the root was already checked
 // against the account's current rights, and every hit is looked up again
 // inside it before it is returned.
-func (s *Server) contentSearch(ctx context.Context, root files.Root, opt files.SearchOptions) (files.SearchResult, error) {
+func (a filesArea) contentSearch(ctx context.Context, root files.Root, opt files.SearchOptions) (files.SearchResult, error) {
 	result := files.SearchResult{Entries: []files.FoundEntry{}}
-	index := s.opts.FileIndex
+	index := a.fileIndex
 	if index == nil || root.Volume == "" || root.Kind == "stick" || root.Kind == "usb" {
 		return result, fileindex.ErrUnavailable
 	}
@@ -203,7 +203,7 @@ func (s *Server) contentSearch(ctx context.Context, root files.Root, opt files.S
 	}
 	result.Scanned = len(hits)
 	result.Truncated = truncated
-	s.addExcerpts(ctx, pinned, index, result.Entries, opt.Query)
+	a.addExcerpts(ctx, pinned, index, result.Entries, opt.Query)
 	return result, nil
 }
 
@@ -213,7 +213,7 @@ const excerptHits = 25
 // addExcerpts reads the first hits again (the account's own root, already
 // checked) and adds the passage around the first match. It is bounded in
 // time; what does not finish simply has no excerpt.
-func (s *Server) addExcerpts(ctx context.Context, pinned *os.Root, index *fileindex.Manager, entries []files.FoundEntry, query string) {
+func (a filesArea) addExcerpts(ctx context.Context, pinned *os.Root, index *fileindex.Manager, entries []files.FoundEntry, query string) {
 	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 	n := min(len(entries), excerptHits)
@@ -248,32 +248,32 @@ type indexShare struct {
 	Volume string `json:"volume"`
 }
 
-func (s *Server) handleFileIndex(w http.ResponseWriter, r *http.Request) {
-	if s.opts.FileIndex == nil {
+func (a filesArea) handleFileIndex(w http.ResponseWriter, r *http.Request) {
+	if a.fileIndex == nil {
 		writeError(w, http.StatusNotFound, "not_found", "no file index")
 		return
 	}
 	shareList := []indexShare{}
-	for _, share := range s.opts.Shares.List() {
+	for _, share := range a.shares.List() {
 		shareList = append(shareList, indexShare{share.Name, share.Volume})
 	}
-	volumes := s.opts.Storage.Names()
+	volumes := a.storage.Names()
 	if volumes == nil {
 		volumes = []string{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"status": s.opts.FileIndex.Status(), "volumes": volumes, "shares": shareList, "mounted": s.opts.Storage.Mounted()})
+	writeJSON(w, http.StatusOK, map[string]any{"status": a.fileIndex.Status(), "volumes": volumes, "shares": shareList, "mounted": a.storage.Mounted()})
 }
 
-func (s *Server) handleSetFileIndex(w http.ResponseWriter, r *http.Request) {
+func (a filesArea) handleSetFileIndex(w http.ResponseWriter, r *http.Request) {
 	var settings fileindex.Settings
 	if !readJSON(w, r, &settings) {
 		return
 	}
-	if s.opts.FileIndex == nil {
+	if a.fileIndex == nil {
 		writeError(w, http.StatusNotFound, "not_found", "no file index")
 		return
 	}
-	if err := s.opts.FileIndex.Set(settings); err != nil {
+	if err := a.fileIndex.Set(settings); err != nil {
 		if errors.Is(err, fileindex.ErrInvalid) {
 			writeError(w, http.StatusBadRequest, "invalid_settings", err.Error())
 			return
@@ -281,30 +281,30 @@ func (s *Server) handleSetFileIndex(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal", "could not save the settings")
 		return
 	}
-	writeJSON(w, http.StatusOK, s.opts.FileIndex.Status())
+	writeJSON(w, http.StatusOK, a.fileIndex.Status())
 }
 
-func (s *Server) handleFileIndexRun(w http.ResponseWriter, r *http.Request) {
+func (a filesArea) handleFileIndexRun(w http.ResponseWriter, r *http.Request) {
 	var req struct{ Volume string }
 	if !readJSON(w, r, &req) {
 		return
 	}
 	noteTarget(r, req.Volume)
-	if s.opts.FileIndex == nil || s.opts.FileIndex.Start(req.Volume) != nil {
+	if a.fileIndex == nil || a.fileIndex.Start(req.Volume) != nil {
 		writeError(w, http.StatusConflict, "index_unavailable", "the full-text index is off for this volume")
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
 }
 
-func (s *Server) handleFileIndexRemove(w http.ResponseWriter, r *http.Request) {
+func (a filesArea) handleFileIndexRemove(w http.ResponseWriter, r *http.Request) {
 	volume := r.PathValue("volume")
 	noteTarget(r, volume)
-	if s.opts.FileIndex == nil {
+	if a.fileIndex == nil {
 		writeError(w, http.StatusNotFound, "not_found", "no file index")
 		return
 	}
-	switch err := s.opts.FileIndex.Remove(volume); {
+	switch err := a.fileIndex.Remove(volume); {
 	case errors.Is(err, fileindex.ErrRunning):
 		writeError(w, http.StatusConflict, "index_running", "a pass is running")
 	case errors.Is(err, fileindex.ErrInvalid), errors.Is(err, fileindex.ErrUnavailable):
@@ -316,14 +316,14 @@ func (s *Server) handleFileIndexRemove(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) handleThumbCacheClear(w http.ResponseWriter, r *http.Request) {
+func (a filesArea) handleThumbCacheClear(w http.ResponseWriter, r *http.Request) {
 	volume := r.PathValue("volume")
 	noteTarget(r, volume)
-	if s.opts.Thumbs == nil || !slices.Contains(s.opts.Storage.Mounted(), volume) {
+	if a.thumbs == nil || !slices.Contains(a.storage.Mounted(), volume) {
 		writeError(w, http.StatusNotFound, "volume_not_found", "volume not mounted")
 		return
 	}
-	if err := s.opts.Thumbs.Clear(volume); err != nil {
+	if err := a.thumbs.Clear(volume); err != nil {
 		writeError(w, http.StatusNotFound, "volume_not_found", "volume not mounted")
 		return
 	}

@@ -99,9 +99,12 @@ func TestViewerStreamChecksRightAndMemory(t *testing.T) {
 }
 
 func TestViewerSettingsAndStatus(t *testing.T) {
-	ts := newTestServer(t)
-	m := viewer.New(ts.store)
-	ts.server.opts.Viewer = m
+	// The area takes its manager when the routes are registered.
+	var m *viewer.Manager
+	ts := newTestServerWith(t, func(o *Options) {
+		m = viewer.New(o.Store)
+		o.Viewer = m
+	})
 	ts.setup()
 	if res, body := ts.request("PUT", "/api/v1/viewer/settings", map[string]any{"gpu": "/dev/sda", "quality": "auto", "fps": 60}); res.StatusCode != http.StatusBadRequest || errorCode(t, body) != "viewer_settings_invalid" {
 		t.Fatalf("arbitrary device: %d %s", res.StatusCode, body)
@@ -180,7 +183,7 @@ func TestViewerEndsLikeAConsole(t *testing.T) {
 		t.Helper()
 		ctx, cancel := context.WithTimeout(context.Background(), within)
 		defer cancel()
-		return ts.server.watchViewer(ctx, r, user, "immich", nil, blockingRelay(nil, every))
+		return ts.server.viewerArea().watchViewer(ctx, r, user, "immich", nil, blockingRelay(nil, every))
 	}
 	// No input: idle after the console idle time.
 	if why := run(ownerRequest(t, ts, ts.client), owner, 0, 2*time.Second); why != "idle" {
@@ -222,12 +225,15 @@ func TestAttachmentName(t *testing.T) {
 }
 
 func TestDeletedAccountLosesItsViewerProfiles(t *testing.T) {
-	ts := newTestServer(t)
-	m := viewer.New(ts.store)
-	m.MountRoot = t.TempDir()
-	m.Mounted = func() []string { return []string{"data"} }
-	m.DockerVolume = func() string { return "data" }
-	ts.server.opts.Viewer = m
+	// The area takes its manager when the routes are registered.
+	var m *viewer.Manager
+	ts := newTestServerWith(t, func(o *Options) {
+		m = viewer.New(o.Store)
+		m.MountRoot = t.TempDir()
+		m.Mounted = func() []string { return []string{"data"} }
+		m.DockerVolume = func() string { return "data" }
+		o.Viewer = m
+	})
 	ts.setup()
 	ts.users.Create("gast", testPassword, auth.RoleUser)
 	profile := filepath.Join(m.MountRoot, "data/.titanos/viewer/profiles/gast/immich")

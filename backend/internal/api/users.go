@@ -7,6 +7,9 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
+	"github.com/ra5on/TitanOS/backend/internal/notify"
+	"github.com/ra5on/TitanOS/backend/internal/shares"
+	"github.com/ra5on/TitanOS/backend/internal/sshd"
 )
 
 type accountResponse struct {
@@ -67,15 +70,56 @@ func writeAccountError(w http.ResponseWriter, err error) {
 	}
 }
 
-func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
+// usersArea is the accounts: list, create, change, lock, password, delete;
+// an area with narrow dependencies (PLAN 8a, see fansArea). shares and ssh
+// take up a changed account at once, notify forgets where a removed account
+// was reached. sessions, limiter, tokens and prefs are state of the server:
+// the logins, the limit against guessed passwords, the API tokens and the
+// preferences a changed or removed account loses. reconfirmProof asks for the
+// password or passkey again, cookieName names the session cookie,
+// forgetWebDAV and viewerForgetUser clear what else belongs to an account.
+type usersArea struct {
+	users            *auth.Users
+	shares           *shares.Manager
+	ssh              *sshd.Manager
+	notify           *notify.Manager
+	sessions         sessionsFunc
+	limiter          limiterFunc
+	tokens           *auth.Tokens
+	prefs            *preferences
+	reconfirmProof   func(w http.ResponseWriter, user auth.User, p proof) bool
+	cookieName       func() string
+	forgetWebDAV     func(name string)
+	viewerForgetUser func(name string)
+}
+
+// usersArea is the area of the server.
+func (s *Server) usersArea() usersArea {
+	return usersArea{users: s.opts.Users, shares: s.opts.Shares, ssh: s.opts.SSH, notify: s.opts.Notify,
+		sessions: s.sessionStore, limiter: s.rateLimiter, tokens: s.tokens, prefs: s.prefs,
+		reconfirmProof: s.authArea().reconfirmProof, cookieName: s.authArea().cookieName, forgetWebDAV: s.davArea().forgetWebDAV, viewerForgetUser: s.viewerArea().viewerForgetUser}
+}
+
+func (a usersArea) register(mux *routeMux, admin, user func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/users", admin(a.handleListUsers))
+	mux.HandleFunc("POST /api/v1/users", admin(a.handleCreateUser))
+	mux.HandleFunc("PUT /api/v1/users/{name}", admin(a.handleUpdateUser))
+	mux.HandleFunc("DELETE /api/v1/users/{name}", admin(a.handleDeleteUser))
+	mux.HandleFunc("POST /api/v1/users/{name}/lock", admin(a.handleLockUser(true)))
+	mux.HandleFunc("POST /api/v1/users/{name}/unlock", admin(a.handleLockUser(false)))
+	// Everyone may change their own password.
+	mux.HandleFunc("POST /api/v1/users/{name}/password", user(a.handleSetPassword))
+}
+
+func (a usersArea) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	accounts := []accountResponse{}
-	for _, user := range s.opts.Users.List() {
+	for _, user := range a.users.List() {
 		accounts = append(accounts, accountOf(user))
 	}
 	writeJSON(w, http.StatusOK, accounts)
 }
 
-func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
+func (a usersArea) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		credentials
 		Role auth.Role `json:"role"`
@@ -90,18 +134,18 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "forbidden", "only an owner can create owners")
 		return
 	}
-	user, err := s.opts.Users.Create(req.Name, req.Password, req.Role)
+	user, err := a.users.Create(req.Name, req.Password, req.Role)
 	if err != nil {
 		writeAccountError(w, err)
 		return
 	}
 	slog.Info("account created", "user", user.Name, "role", user.Role, "by", actor.Name, "ip", remoteIP(r))
-	s.opts.Shares.Kick()
-	s.opts.SSH.Kick()
+	a.shares.Kick()
+	a.ssh.Kick()
 	writeJSON(w, http.StatusCreated, accountOf(user))
 }
 
-func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
+func (a usersArea) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Role auth.Role `json:"role"`
 		// ResetTwoFactor switches the second factor of the account off,
@@ -116,7 +160,7 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	actor := currentUser(r)
-	target, ok := s.opts.Users.Get(r.PathValue("name"))
+	target, ok := a.users.Get(r.PathValue("name"))
 	if !ok {
 		writeAccountError(w, auth.ErrNotFound)
 		return
@@ -131,43 +175,43 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		writeAccountError(w, auth.ErrInvalidRole)
 		return
 	}
-	if req.ResetTwoFactor && target.Name == actor.Name && !s.reconfirmProof(w, actor, req.proof) {
+	if req.ResetTwoFactor && target.Name == actor.Name && !a.reconfirmProof(w, actor, req.proof) {
 		return
 	}
 	// The role first: it is what can be refused (the last owner stays
 	// one), and a refused request must not have reset anything.
-	user, err := s.opts.Users.SetRole(target.Name, req.Role)
+	user, err := a.users.SetRole(target.Name, req.Role)
 	if err != nil {
 		writeAccountError(w, err)
 		return
 	}
 	if req.ResetTwoFactor {
-		if err := s.opts.Users.DisableTwoFactor(target.Name); err != nil {
+		if err := a.users.DisableTwoFactor(target.Name); err != nil {
 			writeAccountError(w, err)
 			return
 		}
 		// Passkeys are factors of the lost devices too.
-		if err := s.opts.Users.ClearPasskeys(target.Name); err != nil {
+		if err := a.users.ClearPasskeys(target.Name); err != nil {
 			writeAccountError(w, err)
 			return
 		}
 		// Whoever had the lost phone is logged out as well.
-		s.sessions.DeleteUser(target.Name, "")
-		s.forgetWebDAV(target.Name)
+		a.sessions().DeleteUser(target.Name, "")
+		a.forgetWebDAV(target.Name)
 		slog.Info("two-factor login reset", "user", target.Name, "by", actor.Name, "ip", remoteIP(r))
-		if fresh, ok := s.opts.Users.Get(target.Name); ok {
+		if fresh, ok := a.users.Get(target.Name); ok {
 			user = fresh
 		}
 	}
 	slog.Info("account role changed", "user", user.Name, "role", user.Role, "by", actor.Name, "ip", remoteIP(r))
 	// SSH is for owners and administrators only.
-	s.opts.SSH.Kick()
+	a.ssh.Kick()
 	writeJSON(w, http.StatusOK, accountOf(user))
 }
 
 // handleSetPassword changes a password: one's own with the current one as
 // proof, or someone else's as their administrator.
-func (s *Server) handleSetPassword(w http.ResponseWriter, r *http.Request) {
+func (a usersArea) handleSetPassword(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Password string `json:"password"`
 		Current  string `json:"current"`
@@ -176,27 +220,27 @@ func (s *Server) handleSetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	actor := currentUser(r)
-	target, ok := s.opts.Users.Get(r.PathValue("name"))
+	target, ok := a.users.Get(r.PathValue("name"))
 	self := ok && target.Name == actor.Name
 	switch {
 	case self:
 		// The limiter also guards this check: it is a password guess like any other.
 		key := "user:" + actor.Name
-		if wait := s.limiter.RetryAfter(key); wait > 0 {
+		if wait := a.limiter().RetryAfter(key); wait > 0 {
 			writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
 			return
 		}
-		_, valid := s.opts.Users.Authenticate(actor.Name, req.Current)
+		_, valid := a.users.Authenticate(actor.Name, req.Current)
 		// Guesses sent at the same time all passed the check above.
-		if s.limiter.RetryAfter(key) > 0 {
+		if a.limiter().RetryAfter(key) > 0 {
 			if !valid {
-				s.limiter.Fail(key)
+				a.limiter().Fail(key)
 			}
 			writeError(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts, try again later")
 			return
 		}
 		if !valid {
-			s.limiter.Fail(key)
+			a.limiter().Fail(key)
 			writeError(w, http.StatusForbidden, "wrong_password", "the current password is wrong")
 			return
 		}
@@ -211,27 +255,27 @@ func (s *Server) handleSetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := s.opts.Users.SetPassword(target.Name, req.Password); err != nil {
+	if _, err := a.users.SetPassword(target.Name, req.Password); err != nil {
 		writeAccountError(w, err)
 		return
 	}
 	// Whoever knew the old password is logged out; the one changing their
 	// own password stays logged in on this device.
 	keep := ""
-	if cookie, err := r.Cookie(s.cookieName()); err == nil && self {
+	if cookie, err := r.Cookie(a.cookieName()); err == nil && self {
 		keep = cookie.Value
 	}
-	s.sessions.DeleteUser(target.Name, keep)
-	s.forgetWebDAV(target.Name)
+	a.sessions().DeleteUser(target.Name, keep)
+	a.forgetWebDAV(target.Name)
 	slog.Info("password changed", "user", target.Name, "by", actor.Name, "ip", remoteIP(r))
-	s.opts.Shares.Kick()
-	s.opts.SSH.Kick()
+	a.shares.Kick()
+	a.ssh.Kick()
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
+func (a usersArea) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	actor := currentUser(r)
-	target, ok := s.opts.Users.Get(r.PathValue("name"))
+	target, ok := a.users.Get(r.PathValue("name"))
 	if !ok {
 		writeAccountError(w, auth.ErrNotFound)
 		return
@@ -244,23 +288,23 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "forbidden", "owners are only managed by owners")
 		return
 	}
-	if err := s.opts.Users.Delete(target.Name); err != nil {
+	if err := a.users.Delete(target.Name); err != nil {
 		writeAccountError(w, err)
 		return
 	}
-	s.sessions.DeleteUser(target.Name, "")
-	if err := s.tokens.RemoveUser(target.Name); err != nil {
+	a.sessions().DeleteUser(target.Name, "")
+	if err := a.tokens.RemoveUser(target.Name); err != nil {
 		slog.Error("remove API tokens of the deleted account", "user", target.Name, "err", err)
 	}
-	go s.viewerForgetUser(target.Name)
-	s.prefs.forget(target.Name)
-	s.opts.Notify.ForgetPersonal(target.Name)
-	if err := s.opts.Shares.ForgetUser(target.Name); err != nil {
+	go a.viewerForgetUser(target.Name)
+	a.prefs.forget(target.Name)
+	a.notify.ForgetPersonal(target.Name)
+	if err := a.shares.ForgetUser(target.Name); err != nil {
 		slog.Error("remove account from shares", "user", target.Name, "err", err)
 	}
 	slog.Info("account deleted", "user", target.Name, "by", actor.Name, "ip", remoteIP(r))
-	s.opts.Shares.Kick()
-	s.opts.SSH.Kick()
+	a.shares.Kick()
+	a.ssh.Kick()
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -269,10 +313,10 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 // owner that is not locked stays unlocked. Locking ends every session of the
 // account at once; open consoles notice within consoleRecheck, SSH sessions
 // end with the next apply of sshd and SMB connections with that of Samba.
-func (s *Server) handleLockUser(disabled bool) http.HandlerFunc {
+func (a usersArea) handleLockUser(disabled bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		actor := currentUser(r)
-		target, ok := s.opts.Users.Get(r.PathValue("name"))
+		target, ok := a.users.Get(r.PathValue("name"))
 		if !ok {
 			writeAccountError(w, auth.ErrNotFound)
 			return
@@ -285,20 +329,20 @@ func (s *Server) handleLockUser(disabled bool) http.HandlerFunc {
 			writeError(w, http.StatusForbidden, "forbidden", "owners are only managed by owners")
 			return
 		}
-		user, err := s.opts.Users.SetDisabled(target.Name, disabled, actor.Name)
+		user, err := a.users.SetDisabled(target.Name, disabled, actor.Name)
 		if err != nil {
 			writeAccountError(w, err)
 			return
 		}
 		if disabled {
-			s.sessions.DeleteUser(user.Name, "")
+			a.sessions().DeleteUser(user.Name, "")
 			slog.Info("account locked", "user", user.Name, "by", actor.Name, "ip", remoteIP(r))
 		} else {
 			slog.Info("account unlocked", "user", user.Name, "by", actor.Name, "ip", remoteIP(r))
 		}
 		// Samba and sshd take the account away or give it back.
-		s.opts.Shares.Kick()
-		s.opts.SSH.Kick()
+		a.shares.Kick()
+		a.ssh.Kick()
 		writeJSON(w, http.StatusOK, accountOf(user))
 	}
 }

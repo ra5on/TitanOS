@@ -4,8 +4,8 @@ import (
 	"net/http"
 )
 
-func (s *Server) handleApplicationRestore(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Backup == nil {
+func (a backupsArea) handleApplicationRestore(w http.ResponseWriter, r *http.Request) {
+	if a.backup == nil {
 		featureUnavailable(w)
 		return
 	}
@@ -15,7 +15,7 @@ func (s *Server) handleApplicationRestore(w http.ResponseWriter, r *http.Request
 	}
 	id := r.PathValue("id")
 	if r.PathValue("step") == "preview" {
-		plan, err := s.opts.Backup.PreviewApplicationRestore(r.Context(), id, req.Snapshot, req.Volume)
+		plan, err := a.backup.PreviewApplicationRestore(r.Context(), id, req.Snapshot, req.Volume)
 		if err != nil {
 			writeBackupJobError(w, err)
 			return
@@ -27,7 +27,7 @@ func (s *Server) handleApplicationRestore(w http.ResponseWriter, r *http.Request
 		writeError(w, 404, "not_found", "no such restore step")
 		return
 	}
-	target, err := s.opts.Backup.RestoreApplication(r.Context(), id, req.Snapshot, req.Volume)
+	target, err := a.backup.RestoreApplication(r.Context(), id, req.Snapshot, req.Volume)
 	if err != nil {
 		writeBackupJobError(w, err)
 		return

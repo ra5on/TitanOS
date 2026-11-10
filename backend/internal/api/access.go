@@ -24,22 +24,34 @@ type sshView struct {
 	ClientAddress string `json:"clientAddress"`
 }
 
-func (s *Server) sshView(r *http.Request, status sshd.Status) sshView {
+// sshArea is the SSH access; an area with narrow dependencies (PLAN 8a, see
+// fansArea).
+type sshArea struct {
+	ssh *sshd.Manager
+}
+
+func (a sshArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/system/ssh", admin(a.handleSSH))
+	mux.HandleFunc("PUT /api/v1/system/ssh", admin(a.handleSSHChange))
+	mux.HandleFunc("PUT /api/v1/system/ssh/networks", admin(a.handleSSHNetworks))
+}
+
+func (a sshArea) sshView(r *http.Request, status sshd.Status) sshView {
 	home := []string{}
-	if !s.opts.SSH.Disabled {
+	if !a.ssh.Disabled {
 		home = sshd.HomeNetworks()
 	}
 	return sshView{Status: status, HomeNetworks: home, Tailscale: sshd.TailscaleNetworks, NetBird: sshd.NetBirdNetworks, ClientAddress: remoteIP(r)}
 }
 
-func (s *Server) handleSSH(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.sshView(r, s.opts.SSH.Status()))
+func (a sshArea) handleSSH(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, a.sshView(r, a.ssh.Status()))
 }
 
 // handleSSHNetworks sets the networks SSH logins may come from. A list
 // that leaves out the address of the admin saving it needs confirm: the
 // admin would most likely shut out their own next SSH login.
-func (s *Server) handleSSHNetworks(w http.ResponseWriter, r *http.Request) {
+func (a sshArea) handleSSHNetworks(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Networks []string `json:"networks"`
 		Confirm  bool     `json:"confirm"`
@@ -61,7 +73,7 @@ func (s *Server) handleSSHNetworks(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "ssh_network_excludes_you", "the list does not contain the address you are connected from ("+client+")")
 		return
 	}
-	if _, err := s.opts.SSH.SetNetworks(networks); err != nil {
+	if _, err := a.ssh.SetNetworks(networks); err != nil {
 		switch {
 		case errors.Is(err, sshd.ErrDisabled):
 			writeError(w, http.StatusConflict, "read_only", err.Error())
@@ -73,15 +85,15 @@ func (s *Server) handleSSHNetworks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("SSH networks changed", "networks", networks, "by", currentUser(r).Name, "ip", client)
-	writeJSON(w, http.StatusOK, s.sshView(r, s.opts.SSH.Status()))
+	writeJSON(w, http.StatusOK, a.sshView(r, a.ssh.Status()))
 }
 
-func (s *Server) handleSSHChange(w http.ResponseWriter, r *http.Request) {
+func (a sshArea) handleSSHChange(w http.ResponseWriter, r *http.Request) {
 	var req struct{ Enabled bool }
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.SSH.SetEnabled(req.Enabled); err != nil {
+	if err := a.ssh.SetEnabled(req.Enabled); err != nil {
 		switch {
 		case errors.Is(err, sshd.ErrDisabled):
 			writeError(w, http.StatusConflict, "read_only", err.Error())
@@ -94,23 +106,38 @@ func (s *Server) handleSSHChange(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("SSH access switched", "enabled", req.Enabled, "by", currentUser(r).Name, "ip", remoteIP(r))
 	// What the settings say; the service follows within a moment.
-	status := s.opts.SSH.Status()
+	status := a.ssh.Status()
 	status.Enabled = req.Enabled
-	writeJSON(w, http.StatusOK, s.sshView(r, status))
+	writeJSON(w, http.StatusOK, a.sshView(r, status))
 }
 
-func (s *Server) accountKeys(w http.ResponseWriter, user auth.User) {
+// accountKeysArea is the SSH keys of one's own account; an area with narrow
+// dependencies (PLAN 8a, see fansArea). ssh takes up a changed key at once;
+// reconfirm asks for the password again before a key is added.
+type accountKeysArea struct {
+	users     *auth.Users
+	ssh       *sshd.Manager
+	reconfirm reconfirmFunc
+}
+
+func (a accountKeysArea) register(mux *routeMux, user func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/account/ssh-keys", user(a.handleAccountKeys))
+	mux.HandleFunc("POST /api/v1/account/ssh-keys", user(a.handleAccountKeyAdd))
+	mux.HandleFunc("DELETE /api/v1/account/ssh-keys/{id}", user(a.handleAccountKeyRemove))
+}
+
+func (a accountKeysArea) accountKeys(w http.ResponseWriter, user auth.User) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"keys": user.DescribeSSHKeys(),
 		// Keys only open the door for owners and administrators, and
 		// only while SSH is switched on.
 		"mayLogin":   user.Role.CanAdminister(),
-		"sshEnabled": s.opts.SSH.Status().Enabled,
+		"sshEnabled": a.ssh.Status().Enabled,
 	})
 }
 
-func (s *Server) handleAccountKeys(w http.ResponseWriter, r *http.Request) {
-	s.accountKeys(w, currentUser(r))
+func (a accountKeysArea) handleAccountKeys(w http.ResponseWriter, r *http.Request) {
+	a.accountKeys(w, currentUser(r))
 }
 
 func writeKeyError(w http.ResponseWriter, err error) {
@@ -128,7 +155,7 @@ func writeKeyError(w http.ResponseWriter, err error) {
 	}
 }
 
-func (s *Server) handleAccountKeyAdd(w http.ResponseWriter, r *http.Request) {
+func (a accountKeysArea) handleAccountKeyAdd(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Key string `json:"key"`
 		// Password and Code confirm it like switching two-factor login
@@ -139,54 +166,66 @@ func (s *Server) handleAccountKeyAdd(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if !s.reconfirm(w, currentUser(r), req.Password, req.Code) {
+	if !a.reconfirm(w, currentUser(r), req.Password, req.Code) {
 		return
 	}
-	user, err := s.opts.Users.AddSSHKey(currentUser(r).Name, req.Key)
+	user, err := a.users.AddSSHKey(currentUser(r).Name, req.Key)
 	if err != nil {
 		writeKeyError(w, err)
 		return
 	}
 	slog.Info("SSH key added", "user", user.Name, "ip", remoteIP(r))
-	s.opts.SSH.Kick()
-	s.accountKeys(w, user)
+	a.ssh.Kick()
+	a.accountKeys(w, user)
 }
 
-func (s *Server) handleAccountKeyRemove(w http.ResponseWriter, r *http.Request) {
-	user, err := s.opts.Users.RemoveSSHKey(currentUser(r).Name, r.PathValue("id"))
+func (a accountKeysArea) handleAccountKeyRemove(w http.ResponseWriter, r *http.Request) {
+	user, err := a.users.RemoveSSHKey(currentUser(r).Name, r.PathValue("id"))
 	if err != nil {
 		writeKeyError(w, err)
 		return
 	}
 	slog.Info("SSH key removed", "user", user.Name, "ip", remoteIP(r))
-	s.opts.SSH.Kick()
-	s.accountKeys(w, user)
+	a.ssh.Kick()
+	a.accountKeys(w, user)
+}
+
+// certificateArea is the certificate of the web UI; an area with narrow
+// dependencies (PLAN 8a, see fansArea). cert is nil in development mode.
+type certificateArea struct {
+	cert *tlscert.Manager
+}
+
+func (a certificateArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/system/certificate", admin(a.handleCertificate))
+	mux.HandleFunc("PUT /api/v1/system/certificate", admin(a.handleCertificateSet))
+	mux.HandleFunc("DELETE /api/v1/system/certificate", admin(a.handleCertificateRemove))
 }
 
 // certificate answers for the certificate in use. Without TLS (development
 // mode) there is none.
-func (s *Server) certificate(w http.ResponseWriter) bool {
-	if s.opts.Certificate == nil {
+func (a certificateArea) certificate(w http.ResponseWriter) bool {
+	if a.cert == nil {
 		writeError(w, http.StatusConflict, "read_only", "there is no certificate in development mode")
 		return false
 	}
 	return true
 }
 
-func (s *Server) handleCertificate(w http.ResponseWriter, r *http.Request) {
-	if s.certificate(w) {
-		writeJSON(w, http.StatusOK, s.opts.Certificate.Info())
+func (a certificateArea) handleCertificate(w http.ResponseWriter, r *http.Request) {
+	if a.certificate(w) {
+		writeJSON(w, http.StatusOK, a.cert.Info())
 	}
 }
 
 // handleCertificateSet takes an own certificate with its key. The key is
 // stored in /config and never handed out again.
-func (s *Server) handleCertificateSet(w http.ResponseWriter, r *http.Request) {
+func (a certificateArea) handleCertificateSet(w http.ResponseWriter, r *http.Request) {
 	var req struct{ Certificate, Key string }
-	if !readJSON(w, r, &req) || !s.certificate(w) {
+	if !readJSON(w, r, &req) || !a.certificate(w) {
 		return
 	}
-	if err := s.opts.Certificate.SetCustom([]byte(req.Certificate), []byte(req.Key)); err != nil {
+	if err := a.cert.SetCustom([]byte(req.Certificate), []byte(req.Key)); err != nil {
 		if errors.Is(err, tlscert.ErrInvalid) {
 			writeError(w, http.StatusBadRequest, "invalid_certificate", err.Error())
 			return
@@ -195,19 +234,19 @@ func (s *Server) handleCertificateSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("own certificate put in place", "by", currentUser(r).Name, "ip", remoteIP(r))
-	writeJSON(w, http.StatusOK, s.opts.Certificate.Info())
+	writeJSON(w, http.StatusOK, a.cert.Info())
 }
 
-func (s *Server) handleCertificateRemove(w http.ResponseWriter, r *http.Request) {
-	if !s.certificate(w) {
+func (a certificateArea) handleCertificateRemove(w http.ResponseWriter, r *http.Request) {
+	if !a.certificate(w) {
 		return
 	}
-	if err := s.opts.Certificate.RemoveCustom(); err != nil {
+	if err := a.cert.RemoveCustom(); err != nil {
 		writeError(w, http.StatusInternalServerError, "config_write_failed", err.Error())
 		return
 	}
 	slog.Info("own certificate removed", "by", currentUser(r).Name, "ip", remoteIP(r))
-	writeJSON(w, http.StatusOK, s.opts.Certificate.Info())
+	writeJSON(w, http.StatusOK, a.cert.Info())
 }
 
 // loginView is the setting "stay logged in" of the NAS.
@@ -218,11 +257,23 @@ type loginView struct {
 	Choices  []int `json:"choices"`
 }
 
-func (s *Server) handleLoginSettings(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, loginView{StayDays: s.sessions.Stay(), Choices: auth.StayChoices})
+// loginSettingsArea is how long a login stays; an area with narrow
+// dependencies (PLAN 8a, see fansArea). sessions are the logins of the
+// server.
+type loginSettingsArea struct {
+	sessions sessionsFunc
 }
 
-func (s *Server) handleSetLoginSettings(w http.ResponseWriter, r *http.Request) {
+func (a loginSettingsArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/system/login", admin(a.handleLoginSettings))
+	mux.HandleFunc("PUT /api/v1/system/login", admin(a.handleSetLoginSettings))
+}
+
+func (a loginSettingsArea) handleLoginSettings(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, loginView{StayDays: a.sessions().Stay(), Choices: auth.StayChoices})
+}
+
+func (a loginSettingsArea) handleSetLoginSettings(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		StayDays *int `json:"stayDays"`
 	}
@@ -230,7 +281,7 @@ func (s *Server) handleSetLoginSettings(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if req.StayDays != nil {
-		if err := s.sessions.SetStay(*req.StayDays); errors.Is(err, auth.ErrStayChoice) {
+		if err := a.sessions().SetStay(*req.StayDays); errors.Is(err, auth.ErrStayChoice) {
 			writeError(w, http.StatusBadRequest, "invalid_stay", err.Error())
 			return
 		} else if err != nil {
@@ -239,5 +290,5 @@ func (s *Server) handleSetLoginSettings(w http.ResponseWriter, r *http.Request) 
 		}
 		slog.Info("stay logged in changed", "days", *req.StayDays, "by", currentUser(r).Name, "ip", remoteIP(r))
 	}
-	s.handleLoginSettings(w, r)
+	a.handleLoginSettings(w, r)
 }

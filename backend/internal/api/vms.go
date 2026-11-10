@@ -12,7 +12,11 @@ import (
 
 	"github.com/ra5on/TitanOS/backend/internal/docker"
 	"github.com/ra5on/TitanOS/backend/internal/hardware"
+	"github.com/ra5on/TitanOS/backend/internal/hwcheck"
+	"github.com/ra5on/TitanOS/backend/internal/network"
 	"github.com/ra5on/TitanOS/backend/internal/run"
+	"github.com/ra5on/TitanOS/backend/internal/storage"
+	"github.com/ra5on/TitanOS/backend/internal/system"
 	"github.com/ra5on/TitanOS/backend/internal/vm"
 )
 
@@ -73,25 +77,84 @@ func vmErrorOf(err error) (int, string, string) {
 	return http.StatusInternalServerError, "vm_failed", err.Error()
 }
 
-func (s *Server) handleVMs(w http.ResponseWriter, r *http.Request) {
-	memory := s.opts.Monitor.Info().Memory
+// vmsArea is the virtual machines; an area with narrow dependencies
+// (PLAN 8a, see fansArea). storage names the volumes, hardware and hwcheck
+// what the host offers, monitor its memory, network its bridges.
+// serveConsole and serveStream connect the serial console and the screen.
+type vmsArea struct {
+	vms          *vm.Manager
+	storage      *storage.Manager
+	hardware     *hardware.Manager
+	hwcheck      *hwcheck.Checker
+	monitor      *system.Monitor
+	network      *network.Manager
+	serveConsole consoleFunc
+	serveStream  streamFunc
+}
+
+// vmsArea is the area of the server.
+func (s *Server) vmsArea() vmsArea {
+	return vmsArea{vms: s.opts.VMs, storage: s.opts.Storage, hardware: s.opts.Hardware, hwcheck: s.opts.HWCheck, monitor: s.opts.Monitor,
+		network: s.opts.Network, serveConsole: s.serveConsole, serveStream: s.serveStream}
+}
+
+func (a vmsArea) register(mux *routeMux, g guards) {
+	mux.HandleFunc("GET /api/v1/vms", g.admin(a.handleVMs))
+	mux.HandleFunc("POST /api/v1/vms", g.heavyAppAdmin(a.handleVMCreate))
+	mux.HandleFunc("GET /api/v1/vms/media", g.admin(a.handleVMMedia))
+	mux.HandleFunc("GET /api/v1/vms/host", g.admin(a.handleVMHost))
+	// Taking a VM over from the copy of its settings on a volume.
+	mux.HandleFunc("GET /api/v1/vms/adopt", g.admin(a.handleVMAdoptable))
+	mux.HandleFunc("POST /api/v1/vms/adopt", g.appAdmin(a.handleVMAdopt))
+}
+
+// registerOperations registers the clones of VMs, which belong to the
+// workflows of operationsRoutes, with its log.
+func (a vmsArea) registerOperations(admin, heavyApp func(route string, fn http.HandlerFunc)) {
+	heavyApp("POST /api/v1/vms/{name}/clone", a.handleVMClone)
+	admin("GET /api/v1/vm-clones/{volume}", a.handleVMClones)
+	heavyApp("POST /api/v1/vm-clones/{volume}/{id}", a.handleVMCloneRecover)
+}
+
+// registerDetails registers the routes of snapshots, consoles and actions
+// of single virtual machines.
+func (a vmsArea) registerDetails(mux *routeMux, g guards) {
+	mux.HandleFunc("GET /api/v1/vms/{name}/snapshots", g.admin(a.handleVMSnapshots))
+	mux.HandleFunc("POST /api/v1/vms/{name}/snapshots", g.heavyAppAdmin(a.handleVMSnapshotCreate))
+	mux.HandleFunc("PUT /api/v1/vms/{name}/snapshot-schedule", g.appAdmin(a.handleVMSnapshotSchedule))
+	mux.HandleFunc("POST /api/v1/vms/{name}/snapshot-recovery", g.heavyAppAdmin(a.handleVMSnapshotRecover))
+	mux.HandleFunc("POST /api/v1/vms/{name}/snapshots/{snapshot}/restore", g.heavyAppAdmin(a.handleVMSnapshotRestore))
+	mux.HandleFunc("DELETE /api/v1/vms/{name}/snapshots/{snapshot}", g.heavyAppAdmin(a.handleVMSnapshotDelete))
+	mux.HandleFunc("POST /api/v1/vms/{name}/grow", g.heavyAppAdmin(a.handleVMGrow))
+	mux.HandleFunc("GET /api/v1/vms/{name}/serial", g.appConsole(a.handleVMSerial))
+	mux.HandleFunc("PUT /api/v1/vms/{name}", g.appAdmin(a.handleVMUpdate))
+	mux.HandleFunc("DELETE /api/v1/vms/{name}", g.appAdmin(a.handleVMDelete))
+	mux.HandleFunc("GET /api/v1/vms/{name}/xml", g.admin(a.handleVMXML))
+	mux.HandleFunc("GET /api/v1/vms/{name}/addresses", g.admin(a.handleVMAddresses))
+	mux.HandleFunc("PUT /api/v1/vms/{name}/medium", g.appAdmin(a.handleVMMedium))
+	mux.HandleFunc("GET /api/v1/vms/{name}/screen", g.appConsole(a.handleVMScreen))
+	mux.HandleFunc("POST /api/v1/vms/{name}/{action}", g.appAdmin(a.handleVMAction))
+}
+
+func (a vmsArea) handleVMs(w http.ResponseWriter, r *http.Request) {
+	memory := a.monitor.Info().Memory
 	writeJSON(w, http.StatusOK, map[string]any{
-		"kvm": s.opts.VMs.HasKVM(),
+		"kvm": a.vms.HasKVM(),
 		"host": map[string]any{
 			"cpus":                 runtime.NumCPU(),
 			"memoryBytes":          memory.TotalBytes,
 			"usedMemoryBytes":      memory.UsedBytes,
 			"availableMemoryBytes": memory.AvailableBytes,
-			"cpuModel":             s.opts.Monitor.Info().CPU.Model,
+			"cpuModel":             a.monitor.Info().CPU.Model,
 		},
 		// With the bridge, VMs can have an address of their own in the network.
-		"bridge":   s.opts.Network.BridgeReady(),
-		"networks": s.opts.Network.Connections(),
-		"vms":      s.opts.VMs.List(s.opts.Storage.Mounted()),
+		"bridge":   a.network.BridgeReady(),
+		"networks": a.network.Connections(),
+		"vms":      a.vms.List(a.storage.Mounted()),
 	})
 }
 
-func (s *Server) handleVMCreate(w http.ResponseWriter, r *http.Request) {
+func (a vmsArea) handleVMCreate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		vm.VM
 		// Start boots the VM right after it was made.
@@ -101,22 +164,22 @@ func (s *Server) handleVMCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	noteTarget(r, req.Name)
-	mounted := s.opts.Storage.Mounted()
+	mounted := a.storage.Mounted()
 	// Validate only the hardware the owner explicitly selected.
-	pci, err := s.opts.Hardware.Check(req.PCI, req.USB)
+	pci, err := a.hardware.Check(req.PCI, req.USB)
 	if err != nil {
 		writeVMError(w, err)
 		return
 	}
 	req.PCI = pci
-	if err := s.opts.VMs.Create(r.Context(), req.VM, mounted); err != nil {
+	if err := a.vms.Create(r.Context(), req.VM, mounted); err != nil {
 		writeVMError(w, err)
 		return
 	}
 	slog.Info("VM created", "vm", req.Name, "by", currentUser(r).Name, "ip", remoteIP(r))
 	started := false
 	if req.Start {
-		if err := s.opts.VMs.Start(r.Context(), req.Name, mounted); err != nil {
+		if err := a.vms.Start(r.Context(), req.Name, mounted); err != nil {
 			// The VM exists; only its first start failed. The answer says
 			// both: an error answer would read as "not created", and
 			// creating it again would fail with "exists".
@@ -131,18 +194,18 @@ func (s *Server) handleVMCreate(w http.ResponseWriter, r *http.Request) {
 
 // handleVMAdoptable lists the copies of VM settings on the mounted volumes
 // whose VMs are not registered. The volumes are only read here, on request.
-func (s *Server) handleVMAdoptable(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"candidates": s.opts.VMs.AdoptCandidates(s.opts.Storage.Mounted())})
+func (a vmsArea) handleVMAdoptable(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"candidates": a.vms.AdoptCandidates(a.storage.Mounted())})
 }
 
 // handleVMAdopt registers the VM of such a copy again.
-func (s *Server) handleVMAdopt(w http.ResponseWriter, r *http.Request) {
+func (a vmsArea) handleVMAdopt(w http.ResponseWriter, r *http.Request) {
 	var req vm.AdoptRequest
 	if !readJSON(w, r, &req) {
 		return
 	}
 	noteTarget(r, req.Volume+"/vms/"+req.Directory)
-	result, err := s.opts.VMs.Adopt(r.Context(), req, s.opts.Storage.Mounted())
+	result, err := a.vms.Adopt(r.Context(), req, a.storage.Mounted())
 	if err != nil {
 		writeVMError(w, err)
 		return
@@ -151,19 +214,19 @@ func (s *Server) handleVMAdopt(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, result)
 }
 
-func (s *Server) handleVMUpdate(w http.ResponseWriter, r *http.Request) {
+func (a vmsArea) handleVMUpdate(w http.ResponseWriter, r *http.Request) {
 	var change vm.Change
 	if !readJSON(w, r, &change) {
 		return
 	}
 	name := r.PathValue("name")
-	pci, err := s.opts.Hardware.Check(change.PCI, change.USB)
+	pci, err := a.hardware.Check(change.PCI, change.USB)
 	if err != nil {
 		writeVMError(w, err)
 		return
 	}
 	change.PCI = pci
-	if err := s.opts.VMs.Update(r.Context(), name, change, s.opts.Storage.Mounted()); err != nil {
+	if err := a.vms.Update(r.Context(), name, change, a.storage.Mounted()); err != nil {
 		writeVMError(w, err)
 		return
 	}
@@ -171,7 +234,7 @@ func (s *Server) handleVMUpdate(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleVMDelete(w http.ResponseWriter, r *http.Request) {
+func (a vmsArea) handleVMDelete(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		DeleteDisks bool   `json:"deleteDisks"`
 		Confirm     string `json:"confirm"`
@@ -181,7 +244,7 @@ func (s *Server) handleVMDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := r.PathValue("name")
-	if err := s.opts.VMs.Delete(name, req.DeleteDisks, req.Confirm); err != nil {
+	if err := a.vms.Delete(name, req.DeleteDisks, req.Confirm); err != nil {
 		writeVMError(w, err)
 		return
 	}
@@ -189,13 +252,13 @@ func (s *Server) handleVMDelete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleVMAction(w http.ResponseWriter, r *http.Request) {
+func (a vmsArea) handleVMAction(w http.ResponseWriter, r *http.Request) {
 	name, action := r.PathValue("name"), r.PathValue("action")
 	var err error
 	if action == "start" {
-		err = s.opts.VMs.Start(r.Context(), name, s.opts.Storage.Mounted())
+		err = a.vms.Start(r.Context(), name, a.storage.Mounted())
 	} else {
-		err = s.opts.VMs.Action(r.Context(), name, action)
+		err = a.vms.Action(r.Context(), name, action)
 	}
 	if err != nil {
 		writeVMError(w, err)
@@ -207,7 +270,7 @@ func (s *Server) handleVMAction(w http.ResponseWriter, r *http.Request) {
 
 // handleVMMedium puts an installation medium into the CD drive of a VM or,
 // with an empty path, takes it out; while the VM runs, too.
-func (s *Server) handleVMMedium(w http.ResponseWriter, r *http.Request) {
+func (a vmsArea) handleVMMedium(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Path string `json:"path"`
 	}
@@ -215,7 +278,7 @@ func (s *Server) handleVMMedium(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := r.PathValue("name")
-	if err := s.opts.VMs.SetMedium(r.Context(), name, req.Path); err != nil {
+	if err := a.vms.SetMedium(r.Context(), name, req.Path); err != nil {
 		writeVMError(w, err)
 		return
 	}
@@ -223,8 +286,8 @@ func (s *Server) handleVMMedium(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleVMAddresses(w http.ResponseWriter, r *http.Request) {
-	addresses, err := s.opts.VMs.Addresses(r.Context(), r.PathValue("name"))
+func (a vmsArea) handleVMAddresses(w http.ResponseWriter, r *http.Request) {
+	addresses, err := a.vms.Addresses(r.Context(), r.PathValue("name"))
 	if err != nil {
 		writeVMError(w, err)
 		return
@@ -232,8 +295,8 @@ func (s *Server) handleVMAddresses(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, addresses)
 }
 
-func (s *Server) handleVMXML(w http.ResponseWriter, r *http.Request) {
-	description, err := s.opts.VMs.XML(r.PathValue("name"))
+func (a vmsArea) handleVMXML(w http.ResponseWriter, r *http.Request) {
+	description, err := a.vms.XML(r.PathValue("name"))
 	if err != nil {
 		writeVMError(w, err)
 		return
@@ -241,23 +304,23 @@ func (s *Server) handleVMXML(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"xml": description})
 }
 
-func (s *Server) handleVMMedia(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"media": s.opts.VMs.Media(s.opts.Storage.Mounted())})
+func (a vmsArea) handleVMMedia(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"media": a.vms.Media(a.storage.Mounted())})
 }
 
 // handleVMHost describes what the NAS offers a new VM: its CPUs, disk
 // images that are there already and disks that are in no volume.
-func (s *Server) handleVMHost(w http.ResponseWriter, r *http.Request) {
+func (a vmsArea) handleVMHost(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"cpus":   s.opts.VMs.CPUs("/sys"),
-		"images": s.opts.VMs.Images(r.Context(), s.opts.Storage.Mounted()),
-		"disks":  s.opts.VMs.WholeDisks(),
+		"cpus":   a.vms.CPUs("/sys"),
+		"images": a.vms.Images(r.Context(), a.storage.Mounted()),
+		"disks":  a.vms.WholeDisks(),
 		// VT-x/AMD-V and the IOMMU, with what to switch on where.
-		"virt": s.vmVirtualization(r),
+		"virt": a.vmVirtualization(r),
 	})
 }
 
-func (s *Server) handleVMGrow(w http.ResponseWriter, r *http.Request) {
+func (a vmsArea) handleVMGrow(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Disk      int   `json:"disk"`
 		SizeBytes int64 `json:"sizeBytes"`
@@ -266,7 +329,7 @@ func (s *Server) handleVMGrow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := r.PathValue("name")
-	if err := s.opts.VMs.Grow(r.Context(), name, req.Disk, req.SizeBytes); err != nil {
+	if err := a.vms.Grow(r.Context(), name, req.Disk, req.SizeBytes); err != nil {
 		writeVMError(w, err)
 		return
 	}
@@ -274,38 +337,38 @@ func (s *Server) handleVMGrow(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) vmVirtualization(r *http.Request) any {
-	if s.opts.HWCheck == nil {
+func (a vmsArea) vmVirtualization(r *http.Request) any {
+	if a.hwcheck == nil {
 		return nil
 	}
-	return s.opts.HWCheck.Virtualization(r.Context())
+	return a.hwcheck.Virtualization(r.Context())
 }
 
 // handleHardware lists the devices that can be handed to VMs, with the
 // VMs that have them.
-func (s *Server) handleHardware(w http.ResponseWriter, r *http.Request) {
+func (a vmsArea) handleHardware(w http.ResponseWriter, r *http.Request) {
 	users := map[string][]string{}
-	for _, machine := range s.opts.VMs.List(nil) {
+	for _, machine := range a.vms.List(nil) {
 		for _, device := range append(append([]string{}, machine.PCI...), machine.USB...) {
 			users[device] = append(users[device], machine.Name)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"hardware": s.opts.Hardware.Status(), "usedBy": users})
+	writeJSON(w, http.StatusOK, map[string]any{"hardware": a.hardware.Status(), "usedBy": users})
 }
 
 // handleVMSerial connects a WebSocket to the serial port of a running VM,
 // with the same checks as every console.
-func (s *Server) handleVMSerial(w http.ResponseWriter, r *http.Request) {
+func (a vmsArea) handleVMSerial(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	s.serveConsole(w, r, "vm "+name, func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error) {
+	a.serveConsole(w, r, "vm "+name, func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error) {
 		running := false
-		for _, known := range s.opts.VMs.List(nil) {
+		for _, known := range a.vms.List(nil) {
 			running = running || (known.Name == name && known.State == "running")
 		}
 		if !running {
 			return nil, nil, vm.ErrNotRunning
 		}
-		port, err := net.DialTimeout("unix", s.opts.VMs.SerialSocket(name), 3*time.Second)
+		port, err := net.DialTimeout("unix", a.vms.SerialSocket(name), 3*time.Second)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -315,8 +378,8 @@ func (s *Server) handleVMSerial(w http.ResponseWriter, r *http.Request) {
 }
 
 // vmRunning reports whether a VM of that name runs.
-func (s *Server) vmRunning(name string) bool {
-	for _, known := range s.opts.VMs.List(nil) {
+func (a vmsArea) vmRunning(name string) bool {
+	for _, known := range a.vms.List(nil) {
 		if known.Name == name && known.State == "running" {
 			return true
 		}
@@ -338,19 +401,19 @@ func vmScreenConsole(name string) consoleOptions {
 // terminals switched on, the password entered again (unless switched off),
 // the end after 15 minutes without keyboard or mouse input, and the end
 // with the login. The stream is binary RFB in both directions.
-func (s *Server) handleVMScreen(w http.ResponseWriter, r *http.Request) {
+func (a vmsArea) handleVMScreen(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	// Whether a VM runs is no secret to an administrator (the list shows
 	// it); telling it first gives a clear error instead of a closed socket.
-	if !s.vmRunning(name) {
+	if !a.vmRunning(name) {
 		writeError(w, http.StatusConflict, "vm_not_running", "the VM is not running")
 		return
 	}
-	s.serveStream(w, r, vmScreenConsole(name), func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error) {
-		if !s.vmRunning(name) {
+	a.serveStream(w, r, vmScreenConsole(name), func(ctx context.Context) (io.ReadWriteCloser, func(cols, rows int), error) {
+		if !a.vmRunning(name) {
 			return nil, nil, vm.ErrNotRunning
 		}
-		screen, err := net.DialTimeout("unix", s.opts.VMs.VNCSocket(name), 3*time.Second)
+		screen, err := net.DialTimeout("unix", a.vms.VNCSocket(name), 3*time.Second)
 		if err != nil {
 			return nil, nil, err
 		}

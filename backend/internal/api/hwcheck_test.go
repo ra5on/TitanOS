@@ -19,7 +19,7 @@ func TestHardwareReportRoutes(t *testing.T) {
 	if res, _ := ts.request("GET", "/api/v1/hardware/report", nil); res.StatusCode != http.StatusServiceUnavailable {
 		t.Errorf("without a checker: %d", res.StatusCode)
 	}
-	if missing := ts.server.cpuMissing("services:\n  db:\n    image: mongo:7\n"); len(missing) != 0 {
+	if missing := ts.server.appStoreArea().cpuMissing("services:\n  db:\n    image: mongo:7\n"); len(missing) != 0 {
 		t.Errorf("without a checker: %v", missing)
 	}
 
@@ -36,7 +36,12 @@ func TestHardwareReportRoutes(t *testing.T) {
 	write("sys/devices/pci0000:00/0000:00:17.0/ata1/host0/target0:0:0/0:0:0:0/block/sda/queue/rotational", "1")
 	os.MkdirAll(filepath.Join(root, "sys/block"), 0o755)
 	os.Symlink(filepath.Join(root, "sys/devices/pci0000:00/0000:00:17.0/ata1/host0/target0:0:0/0:0:0:0/block/sda"), filepath.Join(root, "sys/block/sda"))
-	ts.server.opts.HWCheck = &hwcheck.Checker{Sys: filepath.Join(root, "sys"), Proc: filepath.Join(root, "proc"), Dev: filepath.Join(root, "dev")}
+	// The area takes its checker when the routes are registered: a second
+	// server that was built with it.
+	ts = newTestServerWith(t, func(o *Options) {
+		o.HWCheck = &hwcheck.Checker{Sys: filepath.Join(root, "sys"), Proc: filepath.Join(root, "proc"), Dev: filepath.Join(root, "dev")}
+	})
+	ts.setup()
 
 	ts.users.Create("gast", testPassword, auth.RoleUser)
 	guest := ts.newClient()
@@ -64,7 +69,7 @@ func TestHardwareReportRoutes(t *testing.T) {
 	if res.StatusCode != http.StatusOK || !strings.Contains(string(body), `"smr":"known_model"`) {
 		t.Errorf("disks: %d %s", res.StatusCode, body)
 	}
-	if missing := ts.server.cpuMissing("services:\n  db:\n    image: mongo:7\n"); !slices.Equal(missing, []string{"avx"}) {
+	if missing := ts.server.appStoreArea().cpuMissing("services:\n  db:\n    image: mongo:7\n"); !slices.Equal(missing, []string{"avx"}) {
 		t.Errorf("cpu missing: %v", missing)
 	}
 }

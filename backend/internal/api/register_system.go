@@ -2,49 +2,32 @@ package api
 
 // registerPower registers the routes of the system overview and restart or shutdown.
 func (s *Server) registerPower(mux *routeMux) {
-	mux.HandleFunc("GET /api/v1/system", s.requireUser(s.handleSystem))
-	mux.HandleFunc("POST /api/v1/system/power", s.requireAdmin(s.handlePower))
-	mux.HandleFunc("GET /api/v1/system/power", s.requireAdmin(s.handlePowerStatus))
-	mux.HandleFunc("DELETE /api/v1/system/power", s.requireAdmin(s.handlePowerCancel))
-	mux.HandleFunc("POST /api/v1/system/power/now", s.requireAdmin(s.handlePowerNow))
+	systemArea{monitor: s.opts.Monitor, version: s.opts.Version, network: s.opts.Network, accelerators: s.opts.Accelerators, notify: s.opts.Notify}.register(mux, s.requireUser)
+	s.powerArea().register(mux, s.requireAdmin)
 	// Task manager (PLAN 61): owners and administrators, never tokens/MCP.
-	mux.HandleFunc("GET /api/v1/system/processes", s.requireAdmin(s.handleProcesses))
-	mux.HandleFunc("POST /api/v1/system/processes/{pid}/signal", s.requireAdmin(s.browserOnly(s.handleProcessSignal)))
+	processesArea{procs: s.opts.Processes, docker: s.opts.Docker, names: &s.containerNames}.register(mux, s.requireAdmin, s.browserOnly)
 }
 
 // registerMaintenance registers the routes of the backup of the stick, logs, the activity log, diagnostics and the about page.
 func (s *Server) registerMaintenance(mux *routeMux) {
-	mux.HandleFunc("GET /api/v1/config-backup", s.requireAdmin(s.handleConfigBackup))
-	mux.HandleFunc("PUT /api/v1/config-backup", s.requireAdmin(s.handleConfigBackupSettings))
-	mux.HandleFunc("POST /api/v1/config-backup/run", s.requireAdmin(s.handleConfigBackupRun))
-	mux.HandleFunc("GET /api/v1/config-backup/download", s.requireAdmin(s.handleConfigBackupDownload))
-	mux.HandleFunc("GET /api/v1/logs", s.requireAdmin(s.handleLogs))
-	mux.HandleFunc("GET /api/v1/logs/export", s.requireAdmin(s.handleLogsExport))
-	mux.HandleFunc("GET /api/v1/activity", s.requireAdmin(s.handleActivity))
-	mux.HandleFunc("PUT /api/v1/activity", s.requireAdmin(s.handleActivitySettings))
-	mux.HandleFunc("GET /api/v1/diagnostics/bundle", s.requireAdmin(s.handleDiagnosticBundle))
-	mux.HandleFunc("GET /api/v1/about", s.requireUser(s.handleAbout))
+	configBackupArea{backup: s.opts.ConfigBackup, storage: s.opts.Storage, confirmed: s.authArea().confirmed}.register(mux, s.requireAdmin)
+	diagnoseArea{diagnose: s.opts.Diagnose, logKeep: s.opts.LogKeep, users: s.opts.Users}.register(mux, s.requireAdmin)
+	activityArea{activity: s.opts.Activity}.register(mux, s.requireAdmin)
+	aboutArea{version: s.opts.Version, shareDir: s.opts.ShareDir}.register(mux, s.requireUser)
 }
 
 // registerUPS registers the routes of the UPS.
 func (s *Server) registerUPS(mux *routeMux) {
-	mux.HandleFunc("GET /api/v1/ups", s.requireAdmin(s.handleUPS))
-	mux.HandleFunc("PUT /api/v1/ups", s.requireAdmin(s.handleUPSChange))
-	mux.HandleFunc("POST /api/v1/ups/scan", s.requireAdmin(s.handleUPSScan))
+	upsArea{ups: s.opts.UPS}.register(mux, s.requireAdmin)
 }
 
 // registerUpdate registers the routes of updates.
 func (s *Server) registerUpdate(mux *routeMux) {
-	mux.HandleFunc("GET /api/v1/update", s.requireAdmin(s.handleUpdate))
-	mux.HandleFunc("GET /api/v1/update/progress", s.requireAdmin(s.handleUpdateProgress))
-	mux.HandleFunc("PUT /api/v1/update/settings", s.requireAdmin(s.handleUpdateSettings))
-	mux.HandleFunc("GET /api/v1/update/versions", s.requireAdmin(s.handleUpdateVersions))
-	mux.HandleFunc("POST /api/v1/update/install-version", s.requireAdmin(s.handleUpdateInstallVersion))
-	mux.HandleFunc("POST /api/v1/update/{action}", s.requireAdmin(s.handleUpdateAction))
+	updateArea{update: s.opts.Update}.register(mux, s.requireAdmin)
 }
 
 // registerSystemSettings registers the routes of time zone and host name.
 func (s *Server) registerSystemSettings(mux *routeMux) {
-	mux.HandleFunc("PUT /api/v1/system/timezone", s.requireAdmin(s.handleTimezone))
-	mux.HandleFunc("PUT /api/v1/system/hostname", s.requireAdmin(s.handleHostname))
+	timezoneArea{settings: s.opts.Settings}.register(mux, s.requireAdmin)
+	mux.HandleFunc("PUT /api/v1/system/hostname", s.requireAdmin(s.networkArea().handleHostname))
 }

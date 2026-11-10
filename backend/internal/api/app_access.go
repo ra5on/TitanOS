@@ -22,6 +22,7 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/appproxy"
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/docker"
+	"github.com/ra5on/TitanOS/backend/internal/tlscert"
 )
 
 // dockerApp is one Docker app (Compose project) as the pages list it.
@@ -59,20 +60,64 @@ func appStream(c docker.Container) string {
 	return ""
 }
 
+// appAccessArea is who may use which Docker app, the app windows and the
+// certificate authority for devices; an area with narrow dependencies
+// (PLAN 8a, see fansArea). appAccess holds the rights (nil: owners and
+// administrators only), appProxy the HTTPS names, certificate the authority,
+// docker the apps, users the accounts. viewerRecheckRights ends remote
+// views whose right is gone; sessionToken and authenticate name the web
+// session and the account of a request. The receiver is ac: a is an app
+// in this file.
+type appAccessArea struct {
+	appAccess           *appaccess.Manager
+	appProxy            *appproxy.Manager
+	users               *auth.Users
+	certificate         *tlscert.Manager
+	docker              *docker.Manager
+	viewerRecheckRights func()
+	sessionToken        func(r *http.Request) string
+	authenticate        func(r *http.Request) (auth.User, bool)
+}
+
+// appAccessArea is the area of the server; "open with" asks it whether an
+// account may use an app, the web UI which sources apps are framed from.
+func (s *Server) appAccessArea() appAccessArea {
+	return appAccessArea{appAccess: s.opts.AppAccess, appProxy: s.opts.AppProxy, users: s.opts.Users, certificate: s.opts.Certificate,
+		docker: s.opts.Docker, viewerRecheckRights: s.viewerArea().viewerRecheckRights, sessionToken: s.authArea().sessionToken, authenticate: s.authArea().authenticate}
+}
+
+// registerCA registers the certificate (never the key) of the TitanOS
+// authority, for devices.
+func (ac appAccessArea) registerCA(mux *routeMux, user func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/certs/ca", user(ac.handleCAInfo))
+	mux.HandleFunc("GET /api/v1/certs/{file}", user(ac.handleCADownload))
+}
+
+func (ac appAccessArea) register(mux *routeMux, g guards) {
+	// Programme (PLAN 61): who may use which Docker app, and its window.
+	mux.HandleFunc("GET /api/v1/apps/access", g.admin(ac.handleAppAccess))
+	mux.HandleFunc("PUT /api/v1/apps/access", g.admin(ac.handleAppAccessSet))
+	mux.HandleFunc("GET /api/v1/users/{name}/apps", g.admin(ac.handleUserApps))
+	mux.HandleFunc("PUT /api/v1/users/{name}/apps", g.admin(ac.handleUserAppsSet))
+	mux.HandleFunc("GET /api/v1/apps/mine", g.user(ac.handleAppsMine))
+	mux.HandleFunc("POST /api/v1/apps/{app}/window", g.user(ac.handleAppWindow))
+	mux.HandleFunc("GET /api/v1/apps/{app}/open", ac.handleAppOpen)
+}
+
 // dockerApps lists the apps with their icon, HTTPS name and state, sorted.
-func (s *Server) dockerApps(r *http.Request) []dockerApp {
-	if s.opts.Docker == nil {
+func (ac appAccessArea) dockerApps(r *http.Request) []dockerApp {
+	if ac.docker == nil {
 		return nil
 	}
-	status := s.opts.Docker.Status(r.Context())
+	status := ac.docker.Status(r.Context())
 	byName := map[string]*dockerApp{}
 	add := func(name string) *dockerApp {
 		if a := byName[name]; a != nil {
 			return a
 		}
 		a := &dockerApp{App: name}
-		if s.opts.AppProxy != nil {
-			a.URL = s.opts.AppProxy.URL(name)
+		if ac.appProxy != nil {
+			a.URL = ac.appProxy.URL(name)
 		}
 		byName[name] = a
 		return a
@@ -126,23 +171,23 @@ type appAccessUser struct {
 	Disabled bool      `json:"disabled"`
 }
 
-func (s *Server) appAccessView(r *http.Request) appAccessView {
+func (ac appAccessArea) appAccessView(r *http.Request) appAccessView {
 	settings := appaccess.Settings{Apps: map[string]appaccess.App{}}
-	if s.opts.AppAccess != nil {
-		settings = s.opts.AppAccess.Settings()
+	if ac.appAccess != nil {
+		settings = ac.appAccess.Settings()
 	}
 	view := appAccessView{NewApps: appaccess.NewAppsAdmins, Apps: []appAccessApp{}, Accounts: []appAccessUser{}}
 	if settings.NewApps == appaccess.NewAppsEveryone {
 		view.NewApps = appaccess.NewAppsEveryone
 	}
 	var normal []string
-	for _, u := range s.opts.Users.List() {
+	for _, u := range ac.users.List() {
 		view.Accounts = append(view.Accounts, appAccessUser{Name: u.Name, Role: u.Role, Disabled: u.Disabled})
 		if !u.Role.CanAdminister() {
 			normal = append(normal, u.Name)
 		}
 	}
-	for _, a := range s.dockerApps(r) {
+	for _, a := range ac.dockerApps(r) {
 		entry, ok := settings.Apps[a.App]
 		users := []string{}
 		switch {
@@ -165,15 +210,15 @@ func (s *Server) appAccessView(r *http.Request) appAccessView {
 }
 
 // handleAppAccess shows who may use which Docker app.
-func (s *Server) handleAppAccess(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.appAccessView(r))
+func (ac appAccessArea) handleAppAccess(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, ac.appAccessView(r))
 }
 
 // handleAppAccessSet stores who may use which Docker app:
 // {newApps, apps: [{app, gate, users}]}. Apps left out fall back to the
 // setting for new apps.
-func (s *Server) handleAppAccessSet(w http.ResponseWriter, r *http.Request) {
-	if s.opts.AppAccess == nil {
+func (ac appAccessArea) handleAppAccessSet(w http.ResponseWriter, r *http.Request) {
+	if ac.appAccess == nil {
 		writeError(w, http.StatusNotFound, "not_found", "no app rights")
 		return
 	}
@@ -188,12 +233,12 @@ func (s *Server) handleAppAccessSet(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	current := s.opts.AppAccess.Settings()
+	current := ac.appAccess.Settings()
 	settings := appaccess.Settings{NewApps: req.NewApps, Apps: map[string]appaccess.App{}, PerUser: current.PerUser, NewAppsUsers: current.NewAppsUsers}
 	for _, a := range req.Apps {
 		settings.Apps[a.App] = appaccess.App{Users: a.Users, NoGate: !a.Gate}
 	}
-	if err := s.opts.AppAccess.Set(settings); err != nil {
+	if err := ac.appAccess.Set(settings); err != nil {
 		if errors.Is(err, appaccess.ErrInvalid) {
 			writeError(w, http.StatusBadRequest, "app_access_invalid", err.Error())
 			return
@@ -203,27 +248,27 @@ func (s *Server) handleAppAccessSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	noteTarget(r, "apps")
-	go s.viewerRecheckRights()
+	go ac.viewerRecheckRights()
 	slog.Info("app rights changed", "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleAppAccess(w, r)
+	ac.handleAppAccess(w, r)
 }
 
 // allowsApp tells whether the account of the request may use an app.
-func (s *Server) allowsApp(r *http.Request, app string) bool {
+func (ac appAccessArea) allowsApp(r *http.Request, app string) bool {
 	user := currentUser(r)
-	if s.opts.AppAccess == nil {
+	if ac.appAccess == nil {
 		return user.Role.CanAdminister()
 	}
-	return s.opts.AppAccess.Allows(user.Name, app)
+	return ac.appAccess.Allows(user.Name, app)
 }
 
 // handleAppsMine lists the Docker apps the account may use, for the
 // desktop: {apps: [{app, icon, url, webui, running}]}; url is the HTTPS
 // name ("" without one).
-func (s *Server) handleAppsMine(w http.ResponseWriter, r *http.Request) {
+func (ac appAccessArea) handleAppsMine(w http.ResponseWriter, r *http.Request) {
 	out := []dockerApp{}
-	for _, a := range s.dockerApps(r) {
-		if (a.URL != "" || a.WebUI != "") && s.allowsApp(r, a.App) {
+	for _, a := range ac.dockerApps(r) {
+		if (a.URL != "" || a.WebUI != "") && ac.allowsApp(r, a.App) {
 			out = append(out, a)
 		}
 	}
@@ -231,30 +276,30 @@ func (s *Server) handleAppsMine(w http.ResponseWriter, r *http.Request) {
 }
 
 // appFrameSources are the origins the web UI may frame (direct windows).
-func (s *Server) appFrameSources() []string {
-	if s.opts.AppProxy == nil {
+func (ac appAccessArea) appFrameSources() []string {
+	if ac.appProxy == nil {
 		return nil
 	}
-	return s.opts.AppProxy.FrameSources()
+	return ac.appProxy.FrameSources()
 }
 
 // enterURL makes the address that lets the account's browser in to an
 // app once; host picks one of the app's names.
-func (s *Server) enterURL(r *http.Request, app, host string) (string, time.Time, int, string) {
-	if !s.allowsApp(r, app) {
+func (ac appAccessArea) enterURL(r *http.Request, app, host string) (string, time.Time, int, string) {
+	if !ac.allowsApp(r, app) {
 		return "", time.Time{}, http.StatusForbidden, "app_forbidden"
 	}
-	if s.opts.AppProxy == nil || s.opts.AppAccess == nil {
+	if ac.appProxy == nil || ac.appAccess == nil {
 		return "", time.Time{}, http.StatusConflict, "proxy_no_route"
 	}
 	// The pass is bound to this login: it ends with logout and lock. Only
 	// a browser session has one (no API tokens, no cluster calls).
-	session := auth.SessionID(s.sessionToken(r))
+	session := auth.SessionID(ac.sessionToken(r))
 	if session == "" {
 		return "", time.Time{}, http.StatusForbidden, "session_required"
 	}
-	token, expires := s.opts.AppAccess.EnterToken(currentUser(r).Name, app, session)
-	link, ok := s.opts.AppProxy.EnterURL(app, host, token)
+	token, expires := ac.appAccess.EnterToken(currentUser(r).Name, app, session)
+	link, ok := ac.appProxy.EnterURL(app, host, token)
 	if !ok {
 		return "", time.Time{}, http.StatusConflict, "proxy_no_route"
 	}
@@ -263,7 +308,7 @@ func (s *Server) enterURL(r *http.Request, app, host string) (string, time.Time,
 
 // handleAppWindow returns the address that opens an app in a window (or
 // a tab): {url, expires}. The token in it holds 60 seconds, once.
-func (s *Server) handleAppWindow(w http.ResponseWriter, r *http.Request) {
+func (ac appAccessArea) handleAppWindow(w http.ResponseWriter, r *http.Request) {
 	app := r.PathValue("app")
 	// ?direct=1: a direct window (PLAN 75-14) on the app's name under the
 	// suffix the web UI is reached by; none (an IP address, a tunnel) and
@@ -271,15 +316,15 @@ func (s *Server) handleAppWindow(w http.ResponseWriter, r *http.Request) {
 	host, direct := "", r.URL.Query().Get("direct") == "1"
 	if direct {
 		ok := false
-		if s.opts.AppProxy != nil {
-			host, ok = s.opts.AppProxy.DirectHost(app, r.Host)
+		if ac.appProxy != nil {
+			host, ok = ac.appProxy.DirectHost(app, r.Host)
 		}
 		if !ok {
 			writeError(w, http.StatusConflict, "direct_unreachable", "the web UI is not reached by a name the app has")
 			return
 		}
 	}
-	link, expires, status, code := s.enterURL(r, app, host)
+	link, expires, status, code := ac.enterURL(r, app, host)
 	if status != 0 {
 		writeError(w, status, code, appWindowMessage(code))
 		return
@@ -303,15 +348,15 @@ func appWindowMessage(code string) string {
 
 // handleAppOpen sends a logged-in browser on to an app (links of the web
 // UI and the page the app gate shows); without a login to the web UI.
-func (s *Server) handleAppOpen(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.authenticate(r)
+func (ac appAccessArea) handleAppOpen(w http.ResponseWriter, r *http.Request) {
+	user, ok := ac.authenticate(r)
 	if !ok {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
 	r = r.WithContext(context.WithValue(r.Context(), contextKey{}, user))
 	app := r.PathValue("app")
-	link, _, status, code := s.enterURL(r, app, r.URL.Query().Get("host"))
+	link, _, status, code := ac.enterURL(r, app, r.URL.Query().Get("host"))
 	if status != 0 {
 		http.Error(w, appWindowMessage(code), status)
 		return
@@ -323,12 +368,12 @@ func (s *Server) handleAppOpen(w http.ResponseWriter, r *http.Request) {
 
 // handleCAInfo describes the TitanOS authority: {available, name,
 // fingerprint, notAfter}. Never its key.
-func (s *Server) handleCAInfo(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Certificate == nil {
+func (ac appAccessArea) handleCAInfo(w http.ResponseWriter, r *http.Request) {
+	if ac.certificate == nil {
 		writeJSON(w, http.StatusOK, map[string]any{"available": false})
 		return
 	}
-	info, ok := s.opts.Certificate.CAInfo()
+	info, ok := ac.certificate.CAInfo()
 	if !ok {
 		writeJSON(w, http.StatusOK, map[string]any{"available": false})
 		return
@@ -338,12 +383,12 @@ func (s *Server) handleCAInfo(w http.ResponseWriter, r *http.Request) {
 
 // handleCADownload hands out the certificate of the TitanOS authority to
 // install on a device: ca.crt as PEM, ca.cer as DER.
-func (s *Server) handleCADownload(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Certificate == nil {
+func (ac appAccessArea) handleCADownload(w http.ResponseWriter, r *http.Request) {
+	if ac.certificate == nil {
 		writeError(w, http.StatusNotFound, "not_found", "no certificate authority")
 		return
 	}
-	der, err := s.opts.Certificate.CACertificate()
+	der, err := ac.certificate.CACertificate()
 	if err != nil {
 		slog.Warn("certificate authority not available", "err", err)
 		writeError(w, http.StatusServiceUnavailable, "ca_unavailable", "the certificate authority is not available")
@@ -394,13 +439,13 @@ type userAppView struct {
 	Allowed bool `json:"allowed"`
 }
 
-func (s *Server) userAppsView(r *http.Request, name string, admin bool) userAppsView {
+func (ac appAccessArea) userAppsView(r *http.Request, name string, admin bool) userAppsView {
 	settings := appaccess.Settings{Apps: map[string]appaccess.App{}}
-	if s.opts.AppAccess != nil {
-		settings = s.opts.AppAccess.Settings()
+	if ac.appAccess != nil {
+		settings = ac.appAccess.Settings()
 	}
 	view := userAppsView{Admin: admin, NewApps: admin || settings.NewAppsFor(name), Apps: []userAppView{}}
-	for _, a := range s.dockerApps(r) {
+	for _, a := range ac.dockerApps(r) {
 		allowed := admin
 		if !admin {
 			if entry, ok := settings.Apps[a.App]; ok {
@@ -414,23 +459,23 @@ func (s *Server) userAppsView(r *http.Request, name string, admin bool) userApps
 	return view
 }
 
-func (s *Server) handleUserApps(w http.ResponseWriter, r *http.Request) {
-	target, ok := s.opts.Users.Get(r.PathValue("name"))
+func (ac appAccessArea) handleUserApps(w http.ResponseWriter, r *http.Request) {
+	target, ok := ac.users.Get(r.PathValue("name"))
 	if !ok {
 		writeError(w, http.StatusNotFound, "user_not_found", "no such account")
 		return
 	}
-	writeJSON(w, http.StatusOK, s.userAppsView(r, target.Name, target.Role.CanAdminister()))
+	writeJSON(w, http.StatusOK, ac.userAppsView(r, target.Name, target.Role.CanAdminister()))
 }
 
 // handleUserAppsSet changes the apps of one normal account:
 // {newApps: bool, apps: {"immich": true, …}}; apps left out stay as they are.
-func (s *Server) handleUserAppsSet(w http.ResponseWriter, r *http.Request) {
-	if s.opts.AppAccess == nil {
+func (ac appAccessArea) handleUserAppsSet(w http.ResponseWriter, r *http.Request) {
+	if ac.appAccess == nil {
 		writeError(w, http.StatusNotFound, "not_found", "no app rights")
 		return
 	}
-	target, ok := s.opts.Users.Get(r.PathValue("name"))
+	target, ok := ac.users.Get(r.PathValue("name"))
 	if !ok {
 		writeError(w, http.StatusNotFound, "user_not_found", "no such account")
 		return
@@ -447,12 +492,12 @@ func (s *Server) handleUserAppsSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var normal []string
-	for _, u := range s.opts.Users.List() {
+	for _, u := range ac.users.List() {
 		if !u.Role.CanAdminister() {
 			normal = append(normal, u.Name)
 		}
 	}
-	settings := s.opts.AppAccess.Settings()
+	settings := ac.appAccess.Settings()
 	// The setting for new apps becomes one per account; the old value
 	// carries over to every account first.
 	if !settings.PerUser {
@@ -462,7 +507,7 @@ func (s *Server) handleUserAppsSet(w http.ResponseWriter, r *http.Request) {
 		}
 		settings.PerUser = true
 	}
-	apps := s.dockerApps(r)
+	apps := ac.dockerApps(r)
 	// Apps without an entry went to whoever gets new apps; they keep that
 	// before the setting for new apps changes.
 	for _, a := range apps {
@@ -501,13 +546,13 @@ func (s *Server) handleUserAppsSet(w http.ResponseWriter, r *http.Request) {
 	if len(normal) > 0 && !slices.ContainsFunc(normal, func(u string) bool { return !slices.Contains(settings.NewAppsUsers, u) }) {
 		settings.NewApps = appaccess.NewAppsEveryone
 	}
-	if err := s.opts.AppAccess.Set(settings); err != nil {
+	if err := ac.appAccess.Set(settings); err != nil {
 		slog.Error("app rights not saved", "err", err)
 		writeError(w, http.StatusInternalServerError, "internal", "could not save the setting")
 		return
 	}
 	noteTarget(r, "apps")
-	go s.viewerRecheckRights()
+	go ac.viewerRecheckRights()
 	slog.Info("app rights of an account changed", "account", target.Name, "by", currentUser(r).Name, "ip", remoteIP(r))
-	writeJSON(w, http.StatusOK, s.userAppsView(r, target.Name, false))
+	writeJSON(w, http.StatusOK, ac.userAppsView(r, target.Name, false))
 }

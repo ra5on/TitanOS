@@ -65,7 +65,7 @@ func viaProxy(r *http.Request) bool {
 // are outside (a tunnel such as cloudflared on the NAS connects from
 // there), so are Docker networks, VPNs (Tailscale, NetBird, WireGuard) and
 // any request a proxy passed on.
-func (s *Server) fromHomeNetwork(r *http.Request) bool {
+func (au authArea) fromHomeNetwork(r *http.Request) bool {
 	if viaProxy(r) {
 		return false
 	}
@@ -77,7 +77,7 @@ func (s *Server) fromHomeNetwork(r *http.Request) bool {
 	if addr.IsLoopback() || addr.IsUnspecified() || addr.IsMulticast() {
 		return false
 	}
-	if check := s.loginAccounts.homeNetwork; check != nil {
+	if check := au.loginState.homeNetwork; check != nil {
 		return check(addr)
 	}
 	return inHomeNetwork(addr)
@@ -103,8 +103,8 @@ func inHomeNetwork(addr netip.Addr) bool {
 }
 
 // allowLoginAccounts takes one request from the bucket of an address.
-func (s *Server) allowLoginAccounts(ip string) (bool, time.Duration) {
-	l := &s.loginAccounts
+func (au authArea) allowLoginAccounts(ip string) (bool, time.Duration) {
+	l := au.loginState
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := time.Now()
@@ -139,21 +139,21 @@ func (s *Server) allowLoginAccounts(ip string) (bool, time.Duration) {
 	return true, 0
 }
 
-func (s *Server) handleLoginAccounts(w http.ResponseWriter, r *http.Request) {
+func (au authArea) handleLoginAccounts(w http.ResponseWriter, r *http.Request) {
 	// A cache (browser, Cloudflare) must never hand the home network's
 	// answer to someone else.
 	w.Header().Set("Cache-Control", "no-store")
 	// An address that is guessing passwords gets no names either.
-	if wait := s.limiter.RetryAfter(passkeySource(r)); wait > 0 {
+	if wait := au.limiter().RetryAfter(passkeySource(r)); wait > 0 {
 		writeRateLimited(w, wait, "too many failed logins, try again later")
 		return
 	}
 	// The bucket is per address, per /64 for IPv6 (passkeySource).
-	if ok, wait := s.allowLoginAccounts(passkeySource(r)); !ok {
+	if ok, wait := au.allowLoginAccounts(passkeySource(r)); !ok {
 		writeRateLimited(w, wait, "too many requests, try again later")
 		return
 	}
-	look, _ := s.loginAppearance()
+	look, _ := au.loginAppearance()
 	answer := struct {
 		Style    string         `json:"style"`
 		Accounts []loginAccount `json:"accounts"`
@@ -161,8 +161,8 @@ func (s *Server) handleLoginAccounts(w http.ResponseWriter, r *http.Request) {
 	if answer.Style == "" {
 		answer.Style = "circles"
 	}
-	pictures := s.pictures()
-	for _, name := range s.shownAccounts(r) {
+	pictures := au.pictures()
+	for _, name := range au.shownAccounts(r) {
 		account := loginAccount{Name: name}
 		if p, ok := pictures[name]; ok {
 			account.Picture = &p

@@ -15,11 +15,16 @@ func TestIntelGucRoutes(t *testing.T) {
 	if res, _ := ts.request("GET", "/api/v1/hardware/intel-gpu", nil); res.StatusCode != http.StatusServiceUnavailable {
 		t.Errorf("without the setting: %d", res.StatusCode)
 	}
-	guc := hardware.NewIntelGuc(ts.store, hardware.NewManager(), nil, true)
-	if err := guc.Load(); err != nil {
-		t.Fatal(err)
-	}
-	ts.server.opts.IntelGuc = guc
+	// The area takes its manager when the routes are registered: a second
+	// server that was built with the setting.
+	ts = newTestServerWith(t, func(o *Options) {
+		guc := hardware.NewIntelGuc(o.Store, hardware.NewManager(), nil, true)
+		if err := guc.Load(); err != nil {
+			t.Fatal(err)
+		}
+		o.IntelGuc = guc
+	})
+	ts.setup()
 
 	ts.users.Create("gast", testPassword, auth.RoleUser)
 	guest := ts.newClient()
@@ -53,11 +58,14 @@ func TestUASQuirkRoutes(t *testing.T) {
 	if res, _ := ts.request("GET", "/api/v1/hardware/uas-quirks", nil); res.StatusCode != http.StatusServiceUnavailable {
 		t.Errorf("without the setting: %d", res.StatusCode)
 	}
-	quirks := hardware.NewUASQuirks(ts.store, nil, true)
-	if err := quirks.Load(); err != nil {
-		t.Fatal(err)
-	}
-	ts.server.opts.UASQuirks = quirks
+	ts = newTestServerWith(t, func(o *Options) {
+		quirks := hardware.NewUASQuirks(o.Store, nil, true)
+		if err := quirks.Load(); err != nil {
+			t.Fatal(err)
+		}
+		o.UASQuirks = quirks
+	})
+	ts.setup()
 	ts.users.Create("gast", testPassword, auth.RoleUser)
 	guest := ts.newClient()
 	ts.do(guest, "POST", "/api/v1/login", credentials{Name: "gast", Password: testPassword})

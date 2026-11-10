@@ -49,8 +49,8 @@ func (s *Server) serveStream(w http.ResponseWriter, r *http.Request, opts consol
 	user := currentUser(r)
 	// The channel is taken before the check: switching terminals off
 	// between the two still closes the channel this console waits on.
-	off := s.opts.Terminal.Off()
-	if !s.opts.Terminal.Enabled() {
+	off := s.core().terminal.Off()
+	if !s.core().terminal.Enabled() {
 		writeError(w, http.StatusForbidden, "terminal_off", "terminals are switched off in the settings")
 		return
 	}
@@ -179,7 +179,7 @@ func (s *Server) loginHolds(r *http.Request, user auth.User) (auth.User, bool) {
 	// A console opened through another node of the cluster has no cookie
 	// here; that node checks its session.
 	if !token && !agent && !viaCluster(r) {
-		cookie, err := r.Cookie(s.cookieName())
+		cookie, err := r.Cookie(s.authArea().cookieName())
 		if err != nil {
 			return auth.User{}, false
 		}
@@ -189,7 +189,7 @@ func (s *Server) loginHolds(r *http.Request, user auth.User) (auth.User, bool) {
 			return auth.User{}, false
 		}
 	}
-	current, ok := s.activeUser(name)
+	current, ok := s.authArea().activeUser(name)
 	// The same name may have been given to a new account.
 	if !ok || !current.Created.Equal(user.Created) {
 		return auth.User{}, false
@@ -217,8 +217,8 @@ func vncInput(data []byte) bool {
 // consoleIdleAfter is how long a console may go without input: the owner's
 // choice (0: never) or the standard.
 func (s *Server) consoleIdleAfter() time.Duration {
-	if s.opts.Terminal != nil {
-		if minutes, chosen := s.opts.Terminal.IdleMinutes(); chosen {
+	if s.core().terminal != nil {
+		if minutes, chosen := s.core().terminal.IdleMinutes(); chosen {
 			return time.Duration(minutes) * time.Minute
 		}
 	}

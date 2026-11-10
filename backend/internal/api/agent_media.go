@@ -166,11 +166,12 @@ func chatModel(chat *agent.Chat) string {
 
 // readNASFile reads a file of a root the account sees, at most limit bytes.
 func (b *agentToolbox) readNASFile(rootID, p string, limit int64) ([]byte, error) {
-	for _, root := range b.s.fileRoots(b.user) {
+	env := b.s.agentEnv()
+	for _, root := range env.fileRoots(b.user) {
 		if root.ID != rootID {
 			continue
 		}
-		f, info, err := b.s.opts.Files.Open(root, p)
+		f, info, err := env.files.Open(root, p)
 		if err != nil {
 			return nil, toolcatalog.Errorf("cannot open %s/%s", rootID, p)
 		}
