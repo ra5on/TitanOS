@@ -241,7 +241,7 @@ func TestReadCacheWithoutSSDIsMarkedStaleAndStartsEmpty(t *testing.T) {
 
 	// Then the array is mounted directly, and that is recorded.
 	source, err := m.mountSource(ctx, m.volumes[0])
-	if err != nil || source != "UUID=fs" || missing != "tank" {
+	if err != nil || source != "/dev/md127" || missing != "tank" {
 		t.Fatal(source, err, missing)
 	}
 	cfg, _ := m.find("tank")
@@ -277,7 +277,7 @@ func TestStaleCacheStaysOffWhenMetadataCannotBeCleared(t *testing.T) {
 	ssdPresent(t, m)
 	cachedArray(t, m)
 	source, err := m.mountSource(context.Background(), m.volumes[0])
-	if err != nil || source != "UUID=fs" || runner.fakeDM.live["titanos-cache-tank"] != "" {
+	if err != nil || source != "/dev/md127" || runner.fakeDM.live["titanos-cache-tank"] != "" {
 		t.Fatal("stale cache set up", source, err)
 	}
 }

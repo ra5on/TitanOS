@@ -704,15 +704,23 @@ func (m *Manager) Run(ctx context.Context) {
 	// slow USB bridge or many SAS disks must not hold up the volumes.
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
+	var nextLoad time.Time
+	var loadWait time.Duration
 	for {
 		// If the stick was not readable at start, keep trying: without the
 		// configuration no volume gets mounted.
 		m.mu.RLock()
 		loaded := m.loaded
 		m.mu.RUnlock()
-		if !loaded {
+		if !loaded && !time.Now().Before(nextLoad) {
 			if err := m.Load(); err == nil {
 				slog.Info("volumes read from /config")
+			} else {
+				// A file that is there but broken (growth.json of an
+				// interrupted extension) stays broken: ask the stick ever
+				// more rarely, not every five seconds for good.
+				loadWait = min(max(2*loadWait, 5*time.Second), 5*time.Minute)
+				nextLoad = time.Now().Add(loadWait)
 			}
 		}
 		m.mountAll(ctx)

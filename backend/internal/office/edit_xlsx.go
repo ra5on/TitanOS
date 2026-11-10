@@ -197,9 +197,16 @@ func EditCells(data []byte, edits []CellEdit) ([]byte, error) {
 	if calc.Match(workbook) {
 		workbook = calc.ReplaceAll(workbook, calcTag)
 	} else {
+		// The schema gives the children of the workbook an order: calcPr
+		// stands before these, else at the end. Excel repairs a file that
+		// has it after them.
 		at := bytes.LastIndex(workbook, []byte("</"))
 		if at < 0 {
 			return nil, ErrUnsupported
+		}
+		later := regexp.MustCompile(`<(?:[A-Za-z_][\w.-]*:)?(?:oleSize|customWorkbookViews|pivotCaches|smartTagPr|smartTagTypes|webPublishing|fileRecoveryPr|webPublishObjects|extLst)\b`)
+		if found := later.FindIndex(workbook); found != nil {
+			at = found[0]
 		}
 		workbook = append(append(append([]byte{}, workbook[:at]...), calcTag...), workbook[at:]...)
 	}
