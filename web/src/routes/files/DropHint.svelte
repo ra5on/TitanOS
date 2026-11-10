@@ -11,9 +11,13 @@
 	let { dragging, path }: Props = $props();
 </script>
 
-<p class="drop" class:active={dragging}>
-	<Icon name="upload" size={18} />{dragging ? t('files.dropNow', { path }) : t('files.dropHint')}
-</p>
+<!-- Only while something is dragged over the folder (owner 10.11.2026): a
+     standing hint below the list is in the way. -->
+{#if dragging}
+	<p class="drop active">
+		<Icon name="upload" size={18} />{t('files.dropNow', { path })}
+	</p>
+{/if}
 
 <style>
 	.drop {
@@ -23,14 +27,10 @@
 		gap: var(--space-2);
 		margin: var(--space-3);
 		padding: var(--space-3);
-		border: 1px dashed var(--outline-border);
+		border: 1px dashed var(--accent);
+		background: color-mix(in srgb, var(--accent) 8%, transparent);
 		border-radius: var(--radius-ctl);
 		font-size: var(--text-base);
-		color: var(--muted);
-	}
-	.drop.active {
-		border-color: var(--accent);
-		background: color-mix(in srgb, var(--accent) 8%, transparent);
 		color: var(--text);
 	}
 </style>

@@ -18,6 +18,11 @@
 	$effect(() => {
 		if (!pinned || !bar) return;
 		const body = document.body;
+		// The bar hangs on the body itself. Left where the page puts it, any
+		// box around it with a blur, a transform or a filter (a glass tile)
+		// becomes the frame of "fixed", and the bar stands below the list in
+		// the middle of the window instead of at its lower edge.
+		if (bar.parentElement !== body) body.appendChild(bar);
 		const room = () => body.style.setProperty('--statusbar-height', bar!.offsetHeight + 'px');
 		const observer = new ResizeObserver(room);
 		observer.observe(bar);
