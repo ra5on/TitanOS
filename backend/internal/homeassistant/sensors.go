@@ -549,6 +549,11 @@ func (m *Manager) mqttSession(ctx context.Context, id string, q MQTT, source Sou
 			if err := publish(); err != nil {
 				return err
 			}
+			// After a command the next round came early (see below); from
+			// here on the interval of the settings holds again. Left at
+			// three seconds, every sensor would be published at that pace
+			// for as long as the connection lasts.
+			tick.Reset(publishEvery(q))
 		case msg, ok := <-client.incoming:
 			if !ok {
 				return <-client.errs
