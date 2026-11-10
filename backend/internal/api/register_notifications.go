@@ -13,9 +13,7 @@ func (s *Server) registerNotifications(mux *routeMux) {
 
 // registerHealthReport registers the routes of the regular health report.
 func (s *Server) registerHealthReport(mux *routeMux) {
-	mux.HandleFunc("GET /api/v1/health-report", s.requireAdmin(s.handleHealthReport))
-	mux.HandleFunc("PUT /api/v1/health-report", s.requireAdmin(s.handleHealthReportSet))
-	mux.HandleFunc("POST /api/v1/health-report/send", s.requireAdmin(s.handleHealthReportSend))
+	healthReportArea{report: s.opts.HealthReport}.register(mux, s.requireAdmin)
 }
 
 // registerPush registers the routes of push notifications to browsers.
