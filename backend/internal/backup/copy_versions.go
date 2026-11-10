@@ -76,6 +76,26 @@ func datedRuns(target *os.Root, folder string, zone *time.Location) []datedRun {
 }
 
 // newRunName names the folder of a run starting at now.
+// partialRun ends the name of a dated run that is still being written.
+const partialRun = ".partial"
+
+// removeStaleRuns removes what a dated run left behind that never got its
+// name: it broke off, and is no version.
+func removeStaleRuns(target *os.Root, folder string) {
+	dir, err := target.Open(folder)
+	if err != nil {
+		return
+	}
+	entries, _ := dir.ReadDir(-1)
+	dir.Close()
+	for _, e := range entries {
+		name, isPartial := strings.CutSuffix(e.Name(), partialRun)
+		if e.IsDir() && isPartial && runName.MatchString(name) {
+			_ = target.RemoveAll(path.Join(folder, e.Name())) // best effort: the next run tries again
+		}
+	}
+}
+
 func newRunName(now time.Time, runs []datedRun) string {
 	name := now.Format("2006-01-02_1504")
 	taken := func(n string) bool { return slices.ContainsFunc(runs, func(r datedRun) bool { return r.name == n }) }

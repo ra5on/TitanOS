@@ -136,7 +136,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 	// With dated folders each run gets a folder of its own; unchanged
 	// files are hard links to the run before, where the drive allows it.
 	dated := job.Copy != nil && job.Copy.Dated
-	base, prev := job.Destination.Folder, ""
+	base, prev, finalBase := job.Destination.Folder, "", ""
 	links := false
 	var runs []datedRun
 	if dated {
@@ -144,8 +144,23 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		if len(runs) > 0 {
 			prev = path.Join(job.Destination.Folder, runs[len(runs)-1].name)
 		}
-		base = path.Join(job.Destination.Folder, newRunName(m.local(m.now()), runs))
+		// The run is written into "<date>.partial" and gets its name when
+		// all of it is on the drive. A run that broke off (drive full,
+		// drive pulled, power cut) therefore never counts as a version:
+		// counted as the newest one, it would push complete versions out
+		// when room or the number to keep runs short. What an earlier
+		// run left half done goes first.
+		removeStaleRuns(target, job.Destination.Folder)
+		finalBase = path.Join(job.Destination.Folder, newRunName(m.local(m.now()), runs))
+		base = finalBase + partialRun
 		links = canLink(target, job.Destination.Folder)
+	}
+	// Shares or folders that are not there in this run (their volume is
+	// not mounted or locked): the copy is made of what is there, but no
+	// older version is deleted for it. After a week without that volume
+	// the drive would otherwise hold nothing of those shares any more.
+	incomplete := func() bool {
+		return problems.count["shares not available"] > 0 || problems.count["folders not available"] > 0
 	}
 	seen := map[string]string{}
 
@@ -256,7 +271,7 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		if !ok || needed <= free {
 			break
 		}
-		if !dated || !job.Keep.DropsOldest() || len(runs) < 2 {
+		if !dated || !job.Keep.DropsOldest() || len(runs) < 2 || incomplete() {
 			return fmt.Errorf("%w: %d MB needed, %d MB free on the drive", errNoSpace, needed>>20, free>>20)
 		}
 		if err := target.RemoveAll(path.Join(job.Destination.Folder, runs[0].name)); err != nil {
@@ -331,8 +346,19 @@ func (m *Manager) copyTo(ctx context.Context, job Job, target *os.Root) error {
 		}
 	}
 	if dated {
-		if err := m.keepRuns(job, target, datedRuns(target, job.Destination.Folder, m.local(m.now()).Location())); err != nil {
-			return err
+		// Whole and on the drive: now it is a version.
+		if _, err := target.Lstat(base); err == nil {
+			if err := syncTarget(target); err != nil {
+				return err
+			}
+			if err := target.Rename(base, finalBase); err != nil {
+				return err
+			}
+		}
+		if !incomplete() {
+			if err := m.keepRuns(job, target, datedRuns(target, job.Destination.Folder, m.local(m.now()).Location())); err != nil {
+				return err
+			}
 		}
 	}
 	// Everything on the drive, also the renames, before it counts as done:
