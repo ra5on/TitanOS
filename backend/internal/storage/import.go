@@ -84,7 +84,12 @@ func (m *Manager) ImportCandidates(ctx context.Context) ([]ImportCandidate, erro
 				nodes[filepath.Base(node.Name)] = node
 				owners[filepath.Base(node.Name)] = append(owners[filepath.Base(node.Name)], disk)
 			}
-			if node.FSType == "btrfs" && node.UUID != "" {
+			// Btrfs on top of an md array is no Btrfs volume of its own
+			// disks: the array branch below turns it down as an
+			// unsupported file system. Taken over as native Btrfs, its
+			// disks would never count as members and could be offered
+			// for a new volume while it is not mounted.
+			if node.FSType == "btrfs" && node.UUID != "" && !isArray(node) {
 				btrfsCounts[node.UUID]++
 				if !slices.ContainsFunc(btrfs[node.UUID], func(d Disk) bool { return d.Path == disk.Path }) {
 					btrfs[node.UUID] = append(btrfs[node.UUID], disk)

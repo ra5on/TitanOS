@@ -614,15 +614,22 @@ func (m *Manager) Zip(w io.Writer, root Root, paths []string) error {
 			if !info.Mode().IsRegular() {
 				return nil
 			}
+			// Opened before its entry is written: a file that cannot be
+			// read must not end up as an empty entry in a download that
+			// reports success. One that vanished in between is left out;
+			// anything else ends the download with an error.
+			in, err := r.Open(name)
+			if err != nil {
+				if errors.Is(err, fs.ErrNotExist) {
+					return nil
+				}
+				return err
+			}
+			defer in.Close()
 			out, err := archive.CreateHeader(header)
 			if err != nil {
 				return err
 			}
-			in, err := r.Open(name)
-			if err != nil {
-				return nil // vanished in between
-			}
-			defer in.Close()
 			_, err = io.Copy(out, in)
 			return err
 		})

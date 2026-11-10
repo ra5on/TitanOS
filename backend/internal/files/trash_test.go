@@ -1,7 +1,9 @@
 package files
 
 import (
+	"bytes"
 	"errors"
+	"golang.org/x/sys/unix"
 	"os"
 	"path/filepath"
 	"testing"
@@ -160,5 +162,41 @@ func TestFinishedCopyDoesNotReplaceAFileThatAppeared(t *testing.T) {
 	}
 	if data, _ := os.ReadFile(filepath.Join(root.Dir, final)); string(data) != "copy" {
 		t.Fatalf("the copy is not there: %q", data)
+	}
+}
+
+// A restored entry no longer carries the note of its deletion: deleted
+// again over SMB (Samba writes none), it would otherwise show the old date
+// and go back to the old place.
+func TestRestoreForgetsTheDeletionNote(t *testing.T) {
+	m, root, _ := newRoot(t)
+	if err := m.Delete(root, []string{"notiz.txt"}, "alex", false); err != nil {
+		t.Fatal(err)
+	}
+	binned := filepath.Join(root.Dir, ".recycle/alex/notiz.txt")
+	if _, err := unix.Lgetxattr(binned, trashAttribute, make([]byte, 512)); err != nil {
+		t.Skipf("no extended attributes here: %v", err)
+	}
+	if err := m.TrashRestore(root, []string{"alex/notiz.txt"}, "alex", os.Getuid(), false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := unix.Lgetxattr(filepath.Join(root.Dir, "notiz.txt"), trashAttribute, make([]byte, 512)); err == nil {
+		t.Fatal("the restored file still carries the note of its deletion")
+	}
+}
+
+// A file that cannot be read ends a zip download with an error instead of
+// an empty entry in a download that looks complete.
+func TestZipDoesNotHideAnUnreadableFile(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root reads everything")
+	}
+	m, root, _ := newRoot(t)
+	if err := os.Chmod(filepath.Join(root.Dir, "urlaub/strand.jpg"), 0); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := m.Zip(&out, root, []string{"urlaub"}); err == nil {
+		t.Fatal("zip of a folder with an unreadable file reported success")
 	}
 }
