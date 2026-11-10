@@ -15,9 +15,7 @@ func (s *Server) registerHardware(mux *routeMux) {
 	nvidiaArea{nvidia: s.opts.Nvidia}.register(mux, s.requireAdmin)
 	intelGucArea{guc: s.opts.IntelGuc}.register(mux, s.requireAdmin)
 	uasQuirksArea{quirks: s.opts.UASQuirks}.register(mux, s.requireAdmin)
-	mux.HandleFunc("GET /api/v1/hardware/report", s.requireAdmin(s.handleHardwareReport))
-	mux.HandleFunc("GET /api/v1/hardware/snapshot", s.requireAdmin(s.handleHardwareSnapshot))
-	mux.HandleFunc("GET /api/v1/hardware/disks", s.requireAdmin(s.handleHardwareDisks))
+	hwcheckArea{check: s.opts.HWCheck, version: s.opts.Version}.register(mux, s.requireAdmin)
 }
 
 // registerFans registers the routes of the fans.
