@@ -56,9 +56,7 @@
 		.places-toggle span {
 			flex: 1;
 			text-align: left;
-			overflow: hidden;
-			text-overflow: ellipsis;
-			white-space: nowrap;
+			overflow-wrap: anywhere;
 		}
 		.mobile-location {
 			display: flex;

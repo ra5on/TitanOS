@@ -497,7 +497,8 @@ export function stepDetail(args: unknown): string {
 		.replace(/^share\//, '');
 	const parts = [where, s('query'), s('url'), s('name'), s('entity_id'), s('vm'), s('container')];
 	const text = parts.filter(Boolean).join(' · ');
-	return text.length > 90 ? text.slice(0, 89) + '…' : text;
+	// Shown whole (never cut off); the step's row wraps.
+	return text;
 }
 
 /** Whether a step failed (its result starts with "Error:"). */

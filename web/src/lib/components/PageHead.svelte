@@ -197,26 +197,30 @@
 		background: var(--win-toolbar-bg, var(--bg));
 		border-bottom: 1px solid var(--border);
 		min-width: 0;
+		flex-wrap: wrap;
 	}
 	.win-toolbar.sticky {
 		position: sticky;
 		top: var(--header-height, 0px);
 		z-index: 20;
 	}
+	/* Never cut off, never over each other (owner 10.11.2026): the name keeps
+	   its words, the controls keep their width; what does not fit beside
+	   the name takes the next row. */
 	.win-title {
-		flex: none;
-		max-width: 45%;
+		flex: 0 1 auto;
+		max-width: 100%;
 		font-size: var(--text-md);
 		font-weight: 600;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		overflow-wrap: break-word;
 	}
 	.win-actions {
-		flex: 1;
-		min-width: 0;
+		flex: 1 1 auto;
+		min-width: min-content;
+		max-width: 100%;
 		display: flex;
-		flex-wrap: nowrap;
+		/* In a narrow window the controls take a second row; none is cut off. */
+		flex-wrap: wrap;
 		align-items: center;
 		justify-content: flex-end;
 		gap: var(--space-2);

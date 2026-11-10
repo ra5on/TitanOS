@@ -387,9 +387,8 @@
 	}
 	.label {
 		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	form,
 	.body {

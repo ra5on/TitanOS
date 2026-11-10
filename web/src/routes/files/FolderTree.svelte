@@ -139,10 +139,8 @@
 	.name {
 		flex: 1;
 		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 		padding: var(--space-1);
+		overflow-wrap: anywhere;
 	}
 	.name.with-icon {
 		display: flex;
@@ -151,8 +149,7 @@
 	}
 	.with-icon .label {
 		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		overflow-wrap: anywhere;
 	}
 	.with-icon :global(svg) {
 		flex: none;

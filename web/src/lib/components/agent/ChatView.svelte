@@ -581,9 +581,7 @@
 	}
 	.gist {
 		min-width: 0;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		overflow-wrap: anywhere;
 	}
 	.toggle {
 		margin-left: auto;
@@ -754,9 +752,7 @@
 	}
 	.file .meta .muted {
 		font-size: var(--text-sm);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: anywhere;
 	}
 	.plan {
 		border: 1px solid var(--border);

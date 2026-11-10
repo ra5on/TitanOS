@@ -51,9 +51,8 @@
 	padding: var(--space-1-5) var(--space-2-5) var(--space-2);
 	color: var(--muted);
 	font-size: var(--text-sm);
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	overflow-wrap: break-word;
+	hyphens: auto;
 }
 .dropdown-panel.panel label {
 	display: flex;

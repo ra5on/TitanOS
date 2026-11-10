@@ -389,9 +389,8 @@
 	.brand {
 		font-size: var(--text-lg);
 		font-weight: 600;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	.new-chat {
 		justify-content: center;
@@ -497,9 +496,8 @@
 	.name {
 		flex: 1;
 		min-width: 0;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	.by {
 		flex: none;

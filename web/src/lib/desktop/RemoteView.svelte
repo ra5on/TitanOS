@@ -1506,10 +1506,9 @@
 		gap: var(--space-1);
 	}
 	.title {
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
 		min-width: 0;
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	.fill {
 		flex: 1;
@@ -1535,7 +1534,8 @@
 		color: var(--muted);
 		font-family: var(--font-mono, monospace);
 		font-size: var(--text-sm);
-		overflow-wrap: anywhere;
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	.pill.ended {
 		color: var(--muted);
@@ -1547,10 +1547,8 @@
 		background: currentColor;
 	}
 	.stats {
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
 		min-width: 0;
+		overflow-wrap: anywhere;
 	}
 	.vol {
 		display: inline-flex;

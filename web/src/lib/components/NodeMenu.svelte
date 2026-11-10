@@ -134,11 +134,9 @@
 	}
 	.desk .name {
 		max-width: 140px;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 		font-size: var(--text-base);
 		font-weight: 600;
+		overflow-wrap: anywhere;
 	}
 	.desk .menu {
 		background: var(--surface);

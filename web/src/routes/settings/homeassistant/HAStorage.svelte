@@ -704,9 +704,7 @@
 		min-width: 0;
 		display: flex;
 		align-items: center;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: anywhere;
 	}
 	.results {
 		display: flex;

@@ -776,6 +776,7 @@
 	class:live={desktop.prefs.wallpaper.live && !reduced}
 	class:moving={wm.dragging}
 	class="desktop enter-{enterKind || 'none'}"
+	data-cut="frame"
 	style:--wallpaper={wallpaper}
 	style:--tint="{tint}deg"
 	style:--icon={iconPx + 'px'}
@@ -996,7 +997,7 @@
 								aria-label={t('desktop.folder.rename')}
 							/>
 						{:else}
-							<span class="label">{folder?.name ?? p?.label}</span>
+							<span class="label" data-cut="excerpt">{folder?.name ?? p?.label}</span>
 						{/if}
 					</button>
 				{/if}
@@ -1143,7 +1144,7 @@
 										/>{#if fp.badge?.count}<span class="badge count">{fp.badge.count}</span
 											>{/if}</span
 									>
-									<span class="label">{fp.label}</span>
+									<span class="label" data-cut="excerpt">{fp.label}</span>
 								</button>
 							{/if}
 						{:else}
@@ -1903,7 +1904,8 @@
 	}
 	.ico .label {
 		max-width: 100%;
-		overflow-wrap: anywhere;
+		overflow-wrap: break-word;
+		hyphens: auto;
 		display: -webkit-box;
 		-webkit-line-clamp: 2;
 		line-clamp: 2;
@@ -2154,10 +2156,8 @@
 		min-width: 0;
 	}
 	.thumb-name b {
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
 		font-size: var(--text-sm);
+		overflow-wrap: anywhere;
 	}
 	.keys {
 		flex-basis: 100%;

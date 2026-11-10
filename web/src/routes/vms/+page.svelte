@@ -935,11 +935,9 @@
 	.bar-name {
 		min-width: 0;
 		max-width: 40%;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 		font-size: var(--text-lg);
 		font-weight: 600;
+		overflow-wrap: anywhere;
 	}
 	.vm-page {
 		width: 100%;
@@ -1068,11 +1066,9 @@
 		text-decoration: none;
 	}
 	.vm-name {
-		overflow: hidden;
 		font-size: var(--text-md);
 		font-weight: 500;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: anywhere;
 	}
 	.vm-mem {
 		color: var(--muted);
@@ -1313,9 +1309,7 @@
 			min-width: 0;
 		}
 		.picker span {
-			overflow: hidden;
-			text-overflow: ellipsis;
-			white-space: nowrap;
+			overflow-wrap: anywhere;
 		}
 		aside:not(.open) .list-body {
 			display: none;

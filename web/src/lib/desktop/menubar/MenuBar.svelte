@@ -642,15 +642,12 @@
 		border: 1.5px solid var(--surface);
 	}
 	.program {
-		flex: 0 1 auto;
-		min-width: 2.5em;
-		max-width: 220px;
+		/* The bar has one line: the name is shown whole in it, never cut off. */
+		flex: none;
 		padding: 0 var(--space-2) 0 var(--space-1);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 		font-size: var(--mb-font, 0.875rem);
 		font-weight: 700;
+		white-space: nowrap;
 	}
 	.mb-menu {
 		position: fixed;
@@ -703,8 +700,8 @@
 	.text {
 		flex: 1;
 		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	kbd {
 		margin-left: 18px;

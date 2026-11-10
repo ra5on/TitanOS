@@ -479,9 +479,7 @@
 	.url {
 		font-size: var(--text-sm);
 		font-weight: 400;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: anywhere;
 	}
 	.count {
 		width: 5.5rem;
@@ -648,13 +646,8 @@
 		min-height: 2.4rem;
 		font-size: var(--text-base);
 		line-height: 1.45;
+		/* Some stores write whole paragraphs: they are shown whole, never cut off. */
 		overflow-wrap: anywhere;
-		/* Some stores write whole paragraphs. */
-		display: -webkit-box;
-		-webkit-box-orient: vertical;
-		-webkit-line-clamp: 4;
-		line-clamp: 4;
-		overflow: hidden;
 	}
 	.card-foot {
 		display: flex;
@@ -664,8 +657,6 @@
 		margin-top: auto;
 	}
 	.source-label {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: anywhere;
 	}
 </style>

@@ -225,16 +225,30 @@
 		}, 0);
 	});
 
-	const folded = $derived(desktop.prefs.folded.includes(foldKey));
-	function toggleFold() {
-		savePrefs((p) => {
-			p.folded = folded ? p.folded.filter((k) => k !== foldKey) : [...p.folded, foldKey];
-		});
-	}
-
 	const rect = $derived(
 		snapRect(win.snap) ?? clearOfDock({ x: win.x, y: win.y, w: win.w, h: win.h }),
 	);
+	const foldedPref = $derived(desktop.prefs.folded.includes(foldKey));
+	// PLAN 76 (F-12-15): in a narrow window the side bar folds to its icons by
+	// itself, so the page keeps the width of a phone and nothing is cut off.
+	// Unfolding it there holds until the window is wide again.
+	const NARROW = 620;
+	let heldOpen = $state(false);
+	const narrow = $derived(rect.w < NARROW);
+	$effect(() => {
+		if (!narrow) heldOpen = false;
+	});
+	const folded = $derived(narrow ? !heldOpen : foldedPref);
+	function toggleFold() {
+		if (narrow) {
+			heldOpen = !heldOpen;
+			return;
+		}
+		savePrefs((p) => {
+			p.folded = foldedPref ? p.folded.filter((k) => k !== foldKey) : [...p.folded, foldKey];
+		});
+	}
+
 	const focused = $derived(wm.focused === win.id);
 	const path = $derived(win.href.split('?')[0]);
 	// PLAN 69: on these pages the page itself draws the one side bar.
@@ -743,13 +757,14 @@
 					size={22}
 					name={win.title}
 				/>{/if}
-			<b class="title">{win.title}</b>{#if webappId}{#if docName}<span
-						class="crumb"
-						aria-hidden="true">·</span
-					><span class="title page">{docName}</span>{/if}{:else if crumb}<span
-					class="crumb"
-					aria-hidden="true">›</span
-				><span class="title page">{crumb}</span>{/if}
+			<!-- Program and page: the page's name takes a second line before a word is broken. -->
+			<span class="titles"
+				><b class="title">{win.title}</b>{#if webappId}{#if docName}<span class="title page"
+							><span class="crumb" aria-hidden="true">·</span>{docName}</span
+						>{/if}{:else if crumb}<span class="title page"
+						><span class="crumb" aria-hidden="true">›</span>{crumb}</span
+					>{/if}</span
+			>
 			<span class="fill"></span>
 			{#if webappId || external}
 				<span class="more-wrap">
@@ -1121,9 +1136,9 @@
 		min-width: 0;
 	}
 	.side-title b {
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		min-width: 0;
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	.items {
 		flex: 1;
@@ -1214,7 +1229,7 @@
 		flex-direction: column;
 	}
 	.titlebar {
-		height: 42px;
+		min-height: 42px;
 		flex: none;
 		/* Above the body (the ⋯ menu of a web app opens over the app), below the resize edges. */
 		position: relative;
@@ -1229,14 +1244,24 @@
 		touch-action: none;
 		cursor: default;
 	}
-	.title {
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
+	/* Never cut off (owner 10.11.2026): a long title wraps, the bar grows with it. */
+	.titles {
+		flex: 0 1 auto;
+		min-width: 0;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		column-gap: 9px;
+		padding: 5px 0;
 	}
 	.title {
-		flex: none;
-		max-width: 45%;
+		min-width: 0;
+		line-height: 1.2;
+		overflow-wrap: break-word;
+		hyphens: auto;
+	}
+	.title .crumb {
+		margin: 0 6px 0 0;
 	}
 	.title.page {
 		flex: 0 1 auto;

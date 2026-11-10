@@ -839,8 +839,8 @@
 	}
 	.cmd {
 		font-size: var(--text-xs);
-		overflow: hidden;
-		text-overflow: ellipsis;
+		overflow-x: auto;
+		scrollbar-width: thin;
 		white-space: nowrap;
 	}
 	.proc-facts {
@@ -894,7 +894,8 @@
 	@container (min-width: 700px) {
 		.proc-head {
 			display: grid;
-			grid-template-columns: minmax(0, 1.4fr) minmax(0, 2fr) 11.5rem;
+			/* The facts get the room: nothing in them is cut off, "belongs to" wraps at words. */
+			grid-template-columns: minmax(0, 1fr) minmax(0, 2.6fr) 11.5rem;
 			gap: var(--space-1-5);
 			padding: 0 var(--tile-pad);
 			color: var(--muted);
@@ -906,7 +907,8 @@
 			gap: var(--space-2);
 		}
 		.proc {
-			grid-template-columns: minmax(0, 1.4fr) minmax(0, 2fr) 11.5rem;
+			/* The facts get the room: nothing in them is cut off, "belongs to" wraps at words. */
+			grid-template-columns: minmax(0, 1fr) minmax(0, 2.6fr) 11.5rem;
 			align-items: center;
 		}
 		.proc-facts {
@@ -923,9 +925,8 @@
 			white-space: nowrap;
 		}
 		.proc-facts dd {
-			overflow: hidden;
-			text-overflow: ellipsis;
-			white-space: nowrap;
+			min-width: 0;
+			overflow-wrap: break-word;
 		}
 		.entry {
 			grid-template-columns: minmax(0, 1fr) 8rem 5rem 6rem 13rem;

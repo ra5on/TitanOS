@@ -374,10 +374,9 @@
 	.label {
 		flex: 1;
 		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 		font-size: var(--text-md);
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	.add {
 		display: flex;

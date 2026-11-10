@@ -2161,8 +2161,10 @@ function scriptRoute(data, path, method, route, time) {
  * overflow or a line limit. The owner's rule: never; a place too small
  * wraps, scrolls or shows an icon instead. Runs in the page
  * (`frame.evaluate(cutTextIn)`), returns "selector: text" per finding.
- * Fields (their value scrolls), screen-reader-only text and places marked
- * `data-cut="scroll"` (they scroll by other means) do not count.
+ * Fields (their value scrolls) and screen-reader-only text do not count,
+ * nor does a box marked `data-cut` itself: "excerpt" for the first lines of
+ * long content shown whole elsewhere, "frame" for the desktop and its
+ * windows, which clip what is moved partly out of them.
  */
 export function cutTextIn() {
   const found = [];
@@ -2183,11 +2185,14 @@ export function cutTextIn() {
       el = el.parentElement, hops++
     ) {
       if (seen.has(el)) break;
+      // Deliberate: an excerpt of long content (a note's first lines), or a
+      // frame that clips what is moved partly out of it (the desktop).
+      if (el.hasAttribute("data-cut")) continue;
       const cs = getComputedStyle(el);
       if (cs.display === "inline" || cs.display === "contents") continue;
       if (
         el.closest(
-          'input, textarea, select, .sr-only, [aria-hidden="true"], [data-cut="scroll"], canvas, svg, .xterm',
+          'input, textarea, select, .sr-only, [aria-hidden="true"], canvas, svg, .xterm',
         )
       )
         break;
