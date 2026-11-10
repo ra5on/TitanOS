@@ -504,11 +504,13 @@ func (m *Manager) ViewerAttached(ctx context.Context, network, alias string) ([]
 	for id := range net.Containers {
 		ids[id] = true
 	}
-	var referring []struct{ Id string }
+	var referring []struct {
+		ID string `json:"Id"`
+	}
 	filters, _ := json.Marshal(map[string][]string{"network": {network}})
 	if err := m.api.getJSON(ctx, "/containers/json", url.Values{"all": {"true"}, "filters": {string(filters)}}, &referring); err == nil {
 		for _, c := range referring {
-			ids[c.Id] = true
+			ids[c.ID] = true
 		}
 	}
 	out := []string{}
