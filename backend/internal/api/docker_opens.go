@@ -86,7 +86,7 @@ func (s *Server) handleDockerOpeners(w http.ResponseWriter, r *http.Request) {
 		}
 		out := []typesOf{}
 		for _, a := range all {
-			if a.Error == "" && !a.Hidden && s.allowsApp(r, a.App) {
+			if a.Error == "" && !a.Hidden && s.appAccessArea().allowsApp(r, a.App) {
 				out = append(out, typesOf{App: a.App, Name: a.Name, Types: a.Types})
 			}
 		}
@@ -106,7 +106,7 @@ func (s *Server) handleDockerOpeners(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r)
 	out := []fileOpener{}
 	for _, a := range all {
-		if a.Error != "" || a.Hidden || !a.Opens(ext) || !s.allowsApp(r, a.App) {
+		if a.Error != "" || a.Hidden || !a.Opens(ext) || !s.appAccessArea().allowsApp(r, a.App) {
 			continue
 		}
 		item := fileOpener{App: a.App, Name: a.Name, Running: a.Running}
@@ -136,7 +136,7 @@ func (s *Server) handleDockerOpen(w http.ResponseWriter, r *http.Request) {
 	}
 	app := r.PathValue("name")
 	noteTarget(r, app+": "+filePlace(req.Root, req.Path))
-	if !s.allowsApp(r, app) {
+	if !s.appAccessArea().allowsApp(r, app) {
 		writeError(w, http.StatusForbidden, "app_forbidden", appWindowMessage("app_forbidden"))
 		return
 	}

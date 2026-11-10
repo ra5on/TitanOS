@@ -4,9 +4,7 @@ package api
 func (s *Server) registerRemoteAccess(mux *routeMux) {
 	sshArea{ssh: s.opts.SSH}.register(mux, s.requireAdmin)
 	certificateArea{cert: s.opts.Certificate}.register(mux, s.requireAdmin)
-	// The certificate (never the key) of the TitanOS authority, for devices.
-	mux.HandleFunc("GET /api/v1/certs/ca", s.requireUser(s.handleCAInfo))
-	mux.HandleFunc("GET /api/v1/certs/{file}", s.requireUser(s.handleCADownload))
+	s.appAccessArea().registerCA(mux, s.requireUser)
 	letsEncryptArea{acme: s.opts.LetsEncrypt, firewall: s.opts.Firewall}.register(mux, s.requireAdmin)
 	ddnsArea{ddns: s.opts.DDNS}.register(mux, s.requireAdmin)
 }

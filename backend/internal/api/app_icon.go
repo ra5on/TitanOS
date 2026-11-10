@@ -68,7 +68,7 @@ type appIconArea struct {
 
 // appIconArea is the area of the server.
 func (s *Server) appIconArea() appIconArea {
-	return appIconArea{store: s.opts.Store, ui: s.opts.UI, state: &s.appIcon, appFrameSources: s.appFrameSources}
+	return appIconArea{store: s.opts.Store, ui: s.opts.UI, state: &s.appIcon, appFrameSources: s.appAccessArea().appFrameSources}
 }
 
 func (ic appIconArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
