@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
@@ -155,6 +156,15 @@ func (m *Manager) takeAccounts(records []accountRecord) error {
 			continue
 		}
 		if rec.Version.Deleted {
+			if !had {
+				// The cluster never held this account here: an account of that
+				// name on this node is its own (created here, never taken
+				// over). A note that it was deleted elsewhere does not remove it.
+				if slices.ContainsFunc(m.Users.List(), func(u auth.User) bool { return u.Name == rec.Name }) {
+					slog.Info("cluster: deleted account of the cluster has a local namesake, which stays", "user", rec.Name)
+					continue
+				}
+			}
 			before, existed, err := m.Users.Forget(rec.Name)
 			if err != nil {
 				slog.Error("cluster: account not removed", "user", rec.Name, "err", err)
