@@ -133,12 +133,22 @@ func (s *Server) handleHostname(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleTimezone(w http.ResponseWriter, r *http.Request) {
+// timezoneArea is the time zone of the NAS; an area with narrow dependencies
+// (PLAN 8a, see fansArea).
+type timezoneArea struct {
+	settings *system.Settings
+}
+
+func (a timezoneArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("PUT /api/v1/system/timezone", admin(a.handleTimezone))
+}
+
+func (a timezoneArea) handleTimezone(w http.ResponseWriter, r *http.Request) {
 	var req struct{ Timezone string }
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Settings.SetTimezone(req.Timezone); err != nil {
+	if err := a.settings.SetTimezone(req.Timezone); err != nil {
 		if errors.Is(err, system.ErrInvalidTimezone) {
 			writeError(w, http.StatusBadRequest, "invalid_timezone", err.Error())
 			return

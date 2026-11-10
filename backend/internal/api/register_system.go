@@ -14,11 +14,9 @@ func (s *Server) registerPower(mux *routeMux) {
 // registerMaintenance registers the routes of the backup of the stick, logs, the activity log, diagnostics and the about page.
 func (s *Server) registerMaintenance(mux *routeMux) {
 	configBackupArea{backup: s.opts.ConfigBackup, storage: s.opts.Storage, confirmed: s.confirmed}.register(mux, s.requireAdmin)
-	mux.HandleFunc("GET /api/v1/logs", s.requireAdmin(s.handleLogs))
-	mux.HandleFunc("GET /api/v1/logs/export", s.requireAdmin(s.handleLogsExport))
+	diagnoseArea{diagnose: s.opts.Diagnose, logKeep: s.opts.LogKeep, users: s.opts.Users}.register(mux, s.requireAdmin)
 	mux.HandleFunc("GET /api/v1/activity", s.requireAdmin(s.handleActivity))
 	mux.HandleFunc("PUT /api/v1/activity", s.requireAdmin(s.handleActivitySettings))
-	mux.HandleFunc("GET /api/v1/diagnostics/bundle", s.requireAdmin(s.handleDiagnosticBundle))
 	mux.HandleFunc("GET /api/v1/about", s.requireUser(s.handleAbout))
 }
 
@@ -39,6 +37,6 @@ func (s *Server) registerUpdate(mux *routeMux) {
 
 // registerSystemSettings registers the routes of time zone and host name.
 func (s *Server) registerSystemSettings(mux *routeMux) {
-	mux.HandleFunc("PUT /api/v1/system/timezone", s.requireAdmin(s.handleTimezone))
+	timezoneArea{settings: s.opts.Settings}.register(mux, s.requireAdmin)
 	mux.HandleFunc("PUT /api/v1/system/hostname", s.requireAdmin(s.handleHostname))
 }
