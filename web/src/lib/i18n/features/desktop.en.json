@@ -1,4 +1,7 @@
 {
+	"desktop.closeBusyAnyway": "Close anyway",
+	"desktop.closeBusyText": "{app} is still working, for example on an upload. Closing the window stops it.",
+	"desktop.closeBusyTitle": "Something is still running",
 	"desktop.agent.bubble": "Ask the AI agent",
 	"desktop.agent.context": "About the window “{name}” ({page}): ",
 	"desktop.agent.openWindow": "Open in chat window",
@@ -306,7 +309,7 @@
 	"quick.confirm": "Do “{name}” now?",
 	"quick.confirmDo": "Do it",
 	"share.title": "Share to the NAS",
-	"share.none": "Nothing to store",
+	"share.nothing": "Nothing to store",
 	"share.noneHint": "Share files from another app with “TitanOS” and they show up here.",
 	"share.missing": "The shared files did not arrive. Open TitanOS as an app once and share them again.",
 	"share.home": "To the home screen",

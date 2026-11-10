@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
+	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/app"
 	"github.com/ra5on/TitanOS/backend/internal/logkeep"
@@ -75,13 +76,40 @@ func (w *titand) wireUpdates() error {
 			return w.containers.StopEngine(ctx)
 		},
 		StartDocker: func(ctx context.Context) error {
-			// Going down was called off: everything as it was.
-			if held := w.start.Held(); len(held) > 0 {
-				if err := w.containers.RestorePolicies(ctx, dockerPolicies(held)); err == nil {
-					w.start.ClearHeld()
+			// Going down was called off: everything as it was. The engine
+			// first: the restart policies of the apps of the start order
+			// can only be given back once it answers, and those apps do
+			// not come up by themselves (their policy was set to "no").
+			if err := w.containers.StartEngine(ctx); err != nil {
+				return err
+			}
+			held := w.start.Held()
+			if len(held) == 0 {
+				return nil
+			}
+			policies := dockerPolicies(held)
+			var err error
+			for range 30 {
+				if err = w.containers.RestorePolicies(ctx, policies); err == nil {
+					break
+				}
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(2 * time.Second):
 				}
 			}
-			return w.containers.StartEngine(ctx)
+			if err != nil {
+				slog.Error("start order: policies not given back after a cancelled shutdown", "err", err)
+				return err
+			}
+			w.start.ClearHeld()
+			for _, app := range w.start.Apps() {
+				if err := w.containers.StartApp(ctx, app); err != nil {
+					slog.Warn("start order: app not started again after a cancelled shutdown", "app", app, "err", err)
+				}
+			}
+			return nil
 		},
 		// The person's shutdown scripts, before the guests end (Tools ›
 		// Scripts); w.userScripts is wired further down.
@@ -137,6 +165,7 @@ func (w *titand) wireUpdates() error {
 	// Started by GRUB (legacy BIOS, 32-bit UEFI): its try count becomes
 	// part of the entry names before anything looks at them.
 	w.updates.ReconcileBootLoader()
+	w.updates.Timezone = func() string { return w.settings.CurrentTimezone() }
 	if err := w.updates.Load(); err != nil {
 		slog.Warn("update settings not readable from /config", "err", err)
 	}
@@ -149,5 +178,15 @@ func (w *titand) wireUpdates() error {
 	w.extensions.CleanupProtected = w.updates.PluginReleaseProtection
 	w.background(func() { w.extensions.Run(ctx, w.volumes.Mounted) })
 	w.background(func() { w.containers.Run(ctx, w.volumes.Mounted) })
+	// Docker › Automatic updates: the loop that opens the window. It was
+	// never started (0.35 to 0.74): the page showed the next window, and
+	// nothing ever updated. It waits while other work of the NAS runs that
+	// an update of an app would disturb (docs/rules/DOCKER.md).
+	w.containers.Timezone = w.settings.CurrentTimezone
+	w.containers.ExternalBusy = func() bool {
+		return w.upkeep.Busy() || w.appBackups.Busy() || w.backups.Busy() || w.replicas.Busy() || w.volumes.ActionsRunning() || w.volumes.SnapshotRestoresRunning() || w.volumes.GrowthPending() || w.volumes.Reshaping() || w.machines.Busy() || w.extensions.Busy() || w.folders.PurgeBusy()
+	}
+	w.containers.OnEvent = func(severity, kind, subject string) { w.notifier.Notify(severity, kind, subject) }
+	w.background(func() { w.containers.RunAutoUpdates(ctx) })
 	return nil
 }

@@ -334,6 +334,20 @@ func (m *Manager) Load() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.vms, m.loaded = vms, true
+	// A disk still named as a copy of another image was being copied
+	// when titand ended (a crash, a power cut): the copy is not there or
+	// not whole. The VM says so and does not start on it.
+	for name, vm := range vms {
+		for _, disk := range vm.Disks {
+			if disk.Source != "" {
+				if m.jobs == nil {
+					m.jobs = map[string]*Job{}
+				}
+				m.jobs[name] = &Job{State: "failed", Text: "the copy of " + filepath.Base(disk.Source) + " was interrupted; remove the VM and create it again"}
+				break
+			}
+		}
+	}
 	if data, err := os.ReadFile(m.autostartFile); err == nil {
 		for _, name := range strings.Fields(string(data)) {
 			m.autostarted[name] = true

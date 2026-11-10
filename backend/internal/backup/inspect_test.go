@@ -106,3 +106,48 @@ func TestRestoreChosenFiles(t *testing.T) {
 		}
 	}
 }
+
+// PLAN 76 (F-9-8): a check that cannot even start (the target is away) is a
+// failed check – a planned run must not report the success of last time.
+func TestCheckThatCannotStartIsRecordedAsFailed(t *testing.T) {
+	e := newEnv(t)
+	local := Job{ID: "kopie", Sources: []string{"media"}, Every: "daily", Time: "02:00",
+		Destination: Destination{Type: "local", Volume: "cold"}}
+	if err := e.m.Create(local, volumes); err != nil {
+		t.Fatal(err)
+	}
+	// An earlier check went well.
+	earlier := e.m.now().Add(-24 * time.Hour)
+	e.m.update(local, func(s *State) { s.LastCheck, s.CheckError = &earlier, "" })
+	var heard error
+	e.m.OnCheck = func(_ string, err error) { heard = err }
+	err := e.m.MaintenanceRun(context.Background(), "kopie", "check", 0, ProbeRequest{})
+	if err == nil || !strings.Contains(err.Error(), "not mounted") {
+		t.Fatalf("planned check without its target: %v", err)
+	}
+	s := e.state("kopie")
+	if !strings.Contains(s.CheckError, "not mounted") || s.LastCheck == nil || !s.LastCheck.After(earlier) || heard == nil {
+		t.Fatalf("state %+v, heard %v", s, heard)
+	}
+}
+
+// PLAN 76 (F-9-11): a deleted job takes its state along; a new job of the
+// same name does not start with the old "last success".
+func TestDeletedJobLeavesNoStateForANewOneOfItsName(t *testing.T) {
+	e := newEnv(t)
+	id := localJob(t, e)
+	e.m.Start(id)
+	e.result(t)
+	if e.state(id).LastRun == nil {
+		t.Fatal("no run recorded")
+	}
+	if err := e.m.Delete(id); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.m.Create(s3Job(), volumes); err != nil {
+		t.Fatal(err)
+	}
+	if s := e.state(id); s.LastRun != nil {
+		t.Fatalf("new job inherited %+v", s)
+	}
+}

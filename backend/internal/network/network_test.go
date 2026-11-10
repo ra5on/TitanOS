@@ -466,3 +466,46 @@ func TestLoadWaitsForLatePorts(t *testing.T) {
 		t.Errorf("missing port: %v", err)
 	}
 }
+
+// A stored configuration that cannot be put in place at the start (a port
+// that is gone, a reload that failed) must not close the way to repair it
+// in the web interface: changes on trial stay possible, and the status
+// says that the stored configuration is not in use.
+func TestStoredConfigurationThatFailsToApplyCanStillBeChanged(t *testing.T) {
+	m, runner := newTestManager(t)
+	ctx := context.Background()
+	m.trial = 150 * time.Millisecond
+	if err := m.store.WriteJSON(configFile, Config{Hostname: "nas", Ports: []string{"enp1s0"}, Bridge: true, DHCP: true}); err != nil {
+		t.Fatal(err)
+	}
+	runner.fail = "networkctl"
+	if err := m.Load(ctx); err == nil {
+		t.Fatal("Load reported success although the configuration was not applied")
+	}
+	if m.Status(ctx).NotApplied == "" {
+		t.Fatal("the status does not say that the stored configuration is not in use")
+	}
+	runner.fail = ""
+	if err := m.Change(ctx, Config{Hostname: "nas", Ports: []string{"enp1s0"}, DHCP: true}); errors.Is(err, ErrNotLoaded) {
+		t.Fatalf("the configuration can no longer be changed: %v", err)
+	} else if err != nil {
+		t.Fatal(err)
+	}
+	if m.Status(ctx).NotApplied != "" {
+		t.Fatal("the note stayed after a configuration was applied")
+	}
+	m.Revert(ctx)
+}
+
+// An address goes into the files of systemd-networkd as it was given: a
+// zone may only be an interface name, never something with a line break.
+func TestAddressZoneCannotCarryLines(t *testing.T) {
+	for text, ok := range map[string]bool{
+		"192.168.1.1": true, "fe80::1": true, "fe80::1%enp1s0": true,
+		"fe80::1%x\n[Route]\nGateway=10.0.0.9": false, "fe80::1%a b": false, "fe80::1%" + strings.Repeat("x", 16): false,
+	} {
+		if _, err := parseAddr(text); (err == nil) != ok {
+			t.Errorf("%q: accepted %v, want %v", text, err == nil, ok)
+		}
+	}
+}

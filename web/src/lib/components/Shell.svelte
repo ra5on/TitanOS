@@ -31,6 +31,7 @@
 	import { appForPath } from '#lib/desktop/apps.ts';
 	import { announcePage, frameMessage, inWindow, ownPath } from '#lib/desktop/frame.ts';
 	import { frameFor, mode } from '#lib/desktop/mode.svelte.ts';
+	import { deskKey } from '#lib/desktop/menubar/keys.ts';
 	import { goto } from '$app/navigation';
 	import { pageTitle } from '#lib/page-title.svelte.ts';
 
@@ -90,15 +91,13 @@
 		};
 		// Keys of the desktop (Alt+Q, Alt+W, Alt+arrows, Ctrl+Space) also work inside a window.
 		const key = (event: KeyboardEvent) => {
-			const desk =
-				(event.altKey && !event.ctrlKey && !event.metaKey && /^(q|w|m|k|arrow)/i.test(event.key)) ||
-				((event.ctrlKey || event.metaKey) && event.code === 'Space');
+			const desk = !!deskKey(event) || ((event.ctrlKey || event.metaKey) && event.code === 'Space');
 			if (!desk) return;
 			event.preventDefault();
 			window.parent.postMessage(
 				{
 					type: 'titanos-key',
-					key: event.key,
+					key: deskKey(event) || event.key,
 					alt: event.altKey,
 					ctrl: event.ctrlKey,
 					shift: event.shiftKey,

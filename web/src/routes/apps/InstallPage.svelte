@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { guardWindowClose } from '#lib/desktop/unsaved.svelte.ts';
 	// Installs an app: a template of the catalog, or a blank one for an own
 	// container. One column of lines like the app editor (decided 1.11.2026,
 	// PLAN 21): name, repository, access, devices, paths, ports and
@@ -170,6 +171,9 @@
 	});
 	let leaving = $state<string | null>(null);
 	let allowLeave = false;
+	guardWindowClose(
+		() => !allowLeave && phase === 'form' && !!form && !!baseline && snapshot() !== baseline,
+	);
 	beforeNavigate((navigation) => {
 		if (allowLeave || phase !== 'form' || !form || snapshot() === baseline) return;
 		navigation.cancel();
@@ -938,10 +942,11 @@
 	<Dialog title={t('apps.discardTitle')} onclose={() => (leaving = null)}>
 		<p>{t('apps.discardText', { name: form?.name ?? '' })}</p>
 		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={() => (leaving = null)}
+				>{t('shares.keepEditing')}</button
+			>
 			<button type="button" class="btn btn-warn" onclick={() => leave(leaving ?? '/apps')}
 				>{t('shares.discard')}</button
-			><button type="button" class="btn" onclick={() => (leaving = null)}
-				>{t('shares.keepEditing')}</button
 			>
 		</div>
 	</Dialog>

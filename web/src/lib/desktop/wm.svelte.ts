@@ -2,6 +2,7 @@
 import { untrack } from 'svelte';
 import { api } from '../api.ts';
 import { inWindow } from './frame.ts';
+import { followWidth, setDesktopHold } from './mode.svelte.ts';
 import { session } from '../session.svelte.ts';
 import { defaultDesktop, sanitizeDesktop, type DesktopPrefs } from './prefs.ts';
 
@@ -109,6 +110,20 @@ if (!inWindow)
 		});
 	});
 
+if (!inWindow) setDesktopHold(() => wm.windows.length > 0);
+
+/** Stored geometry may be broken (an older version, a hand-edited value): numbers within sane bounds. */
+function storedRect(w: Record<string, unknown>, i: number) {
+	const num = (v: unknown, fallback: number, min: number, max: number) =>
+		typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
+	return {
+		x: num(w.x, 80 + i * 28, -20000, 20000),
+		y: num(w.y, 40 + i * 28, 0, 20000),
+		w: num(w.w, 900, 360, 20000),
+		h: num(w.h, 600, 240, 20000),
+	};
+}
+
 /** The windows open in this browser. */
 function loadWindows() {
 	try {
@@ -120,8 +135,13 @@ function loadWindows() {
 						typeof w?.id === 'string' && typeof w?.app === 'string' && typeof w?.href === 'string',
 				)
 				.slice(0, 30)
-				.map((w, i) => ({
+				// The order the windows lay in stays (stored z), the numbers start anew.
+				.map((w, i) => ({ w, i, z: Number.isFinite(w.z) ? Number(w.z) : i }))
+				.sort((a, b) => a.z - b.z || a.i - b.i)
+				.map(({ w }, i) => ({
 					...w,
+					...storedRect(w, i),
+					title: typeof w.title === 'string' ? w.title : '',
 					z: 10 + i,
 					minimized: !!w.minimized,
 					snap: w.snap ?? null,
@@ -315,8 +335,19 @@ export function registerCloseGuard(id: string, unsaved: (() => boolean) | null) 
 	if (unsaved) closeGuards.set(id, unsaved);
 	else closeGuards.delete(id);
 }
+/** What the page inside a window said about itself (lib/desktop/unsaved.svelte.ts). */
+const frameUnsaved = new Map<string, 'edits' | 'busy'>();
+export function setFrameUnsaved(id: string, state: 'edits' | 'busy' | '') {
+	if (state) frameUnsaved.set(id, state);
+	else frameUnsaved.delete(id);
+}
+/** 'busy': the window's page only has running work, no changed fields. */
+export function unsavedKind(id: string): 'edits' | 'busy' | '' {
+	if (closeGuards.get(id)?.()) return 'edits';
+	return frameUnsaved.get(id) ?? '';
+}
 export function hasUnsaved(id: string): boolean {
-	return closeGuards.get(id)?.() ?? false;
+	return unsavedKind(id) !== '';
 }
 export function requestClose(id: string) {
 	if (hasUnsaved(id)) {
@@ -334,10 +365,13 @@ export function anyUnsaved(): boolean {
 export function closeWindow(id: string) {
 	wm.closing = wm.closing.filter((c) => c !== id);
 	closeGuards.delete(id);
+	frameUnsaved.delete(id);
 	wm.windows = wm.windows.filter((w) => w.id !== id);
 	if (wm.focused === id)
 		wm.focused = [...wm.windows].sort((a, b) => b.z - a.z).find((w) => !w.minimized)?.id ?? null;
 	saveWindows();
+	// The browser got narrow while windows were open: now the phone's frame may come.
+	if (!wm.windows.length) followWidth();
 }
 
 export function minimize(id: string) {
@@ -367,7 +401,32 @@ export function clearOfDock(r: { x: number; y: number; w: number; h: number }) {
 	const room = wm.area.h - wm.inset.b;
 	if (room <= 0) return r;
 	const h = Math.min(r.h, room);
-	return { x: r.x, y: Math.max(0, Math.min(r.y, room - h)), w: r.w, h };
+	// PLAN 76 (F-12-11): on a smaller screen a window must stay within reach –
+	// at least a piece of its title bar with the buttons at its right end.
+	const grip = 140;
+	const left = wm.inset.l;
+	const right = wm.area.w - wm.inset.r;
+	const w = right - left > grip ? Math.min(r.w, Math.max(360, right - left)) : r.w;
+	const x = right - left > grip ? Math.max(left + grip - w, Math.min(r.x, right - grip)) : r.x;
+	return { x, y: Math.max(0, Math.min(r.y, room - h)), w, h };
+}
+
+/** The screen got narrower: windows that would end beyond its right edge move back in. */
+export function pullWindowsIn() {
+	const left = wm.inset.l;
+	const right = wm.area.w - wm.inset.r;
+	if (right - left < 200) return;
+	let changed = false;
+	for (const win of wm.windows) {
+		if (win.snap) continue;
+		const w = Math.min(win.w, Math.max(360, right - left));
+		const x = Math.max(left, Math.min(win.x, right - w));
+		if (x !== win.x && win.x + w > right) {
+			win.x = x;
+			changed = true;
+		}
+	}
+	if (changed) saveWindows();
 }
 
 /** The rectangle a snapped window takes. */

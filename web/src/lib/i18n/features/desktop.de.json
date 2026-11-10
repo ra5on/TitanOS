@@ -1,4 +1,7 @@
 {
+	"desktop.closeBusyAnyway": "Trotzdem schließen",
+	"desktop.closeBusyText": "In {app} läuft noch ein Vorgang, zum Beispiel ein Hochladen. Beim Schließen wird er abgebrochen.",
+	"desktop.closeBusyTitle": "Hier läuft noch etwas",
 	"desktop.agent.bubble": "KI-Agent fragen",
 	"desktop.agent.context": "Zum Fenster „{name}“ ({page}): ",
 	"desktop.agent.openWindow": "Im Chatfenster öffnen",
@@ -306,7 +309,7 @@
 	"quick.confirm": "„{name}“ jetzt ausführen?",
 	"quick.confirmDo": "Ausführen",
 	"share.title": "Aufs NAS teilen",
-	"share.none": "Nichts zum Ablegen",
+	"share.nothing": "Nichts zum Ablegen",
 	"share.noneHint": "Teile Dateien aus einer anderen App mit „TitanOS“, dann erscheinen sie hier.",
 	"share.missing": "Die geteilten Dateien sind nicht angekommen. Öffne TitanOS einmal als App und teile sie noch einmal.",
 	"share.home": "Zum Startbildschirm",

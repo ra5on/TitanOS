@@ -278,11 +278,11 @@
 	>
 		<p>{t('webapps.center.removeText', { app: removing.name })}</p>
 		<div class="dialog-actions">
-			<button type="button" class="btn btn-danger" disabled={!!busy} onclick={remove}
-				>{t('webapps.center.remove')}</button
-			>
 			<button type="button" class="btn" onclick={() => (removing = null)}
 				>{t('common.cancel')}</button
+			>
+			<button type="button" class="btn btn-danger" disabled={!!busy} onclick={remove}
+				>{t('webapps.center.remove')}</button
 			>
 		</div>
 	</Dialog>

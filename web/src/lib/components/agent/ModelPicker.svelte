@@ -187,8 +187,8 @@
 	}
 	.trigger strong {
 		font-weight: 500;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	.trigger span {
 		color: var(--text);

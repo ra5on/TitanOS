@@ -73,6 +73,8 @@
 	});
 
 	const args = $derived(splitCommand(command));
+	// Nothing entered yet: no warning about what is missing (the button stays off).
+	const started = $derived(types.length > 0 || command.trim() !== '');
 	const problem = $derived.by(() => {
 		if (!types.length) return t('appopens.needTypes');
 		const n = args.filter((a) => a === '{file}').length;
@@ -167,8 +169,8 @@
 	<FormRow
 		label={t('appopens.command')}
 		id="opens-command"
-		hint={problem || t('appopens.commandHint')}
-		tone={problem ? 'warn' : ''}
+		hint={(started && problem) || t('appopens.commandHint')}
+		tone={started && problem ? 'warn' : ''}
 	>
 		<input
 			id="opens-command"

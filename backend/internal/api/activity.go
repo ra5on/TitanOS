@@ -321,14 +321,29 @@ func (s *Server) handleActivitySettings(w http.ResponseWriter, r *http.Request) 
 	if !readJSON(w, r, &req) {
 		return
 	}
-	// Turning the log off is the last thing it records.
+	// Settings that will be refused are refused before the log notes
+	// anything.
+	if err := activity.Check(req); err != nil {
+		featureError(w, err)
+		return
+	}
+	// Turning the log off is the last thing it records; it has to be
+	// noted before, a log that is off takes nothing.
+	var rec *pendingActivity
+	action := ""
 	if was := s.opts.Activity.Status().Settings; was.Enabled && !req.Enabled {
-		if rec, ok := r.Context().Value(activityKey{}).(*pendingActivity); ok && rec.user != "" {
+		if p, ok := r.Context().Value(activityKey{}).(*pendingActivity); ok && p.user != "" {
+			rec, action = p, p.action
 			s.opts.Activity.Record(activity.Entry{User: rec.user, Via: rec.via, IP: remoteIP(r), Action: rec.action, Target: "off", Status: http.StatusOK, OK: true})
 			rec.action = ""
 		}
 	}
 	if err := s.opts.Activity.Set(req); err != nil {
+		// The stick did not take it: the log stays on, and this request
+		// is noted as failed after the entry above.
+		if rec != nil {
+			rec.action = action
+		}
 		featureError(w, err)
 		return
 	}

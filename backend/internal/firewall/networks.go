@@ -154,10 +154,18 @@ func (m member) devices() []string {
 type classifier struct {
 	members []member
 	home    []netip.Prefix
+	// vpn are networks that reach the NAS only over a VPN interface
+	// although their addresses are private ones: the tunnel network of
+	// the WireGuard server. The rules send everything that comes in over
+	// such an interface to the VPN zone; told by address alone, these
+	// senders would count as home network here, and the check before a
+	// change ("can you still reach the web UI?") and the answer to "may
+	// this sender see the web UI?" would be about the wrong zone.
+	vpn []netip.Prefix
 }
 
-func newClassifier(cfg Config, networks []Network, home []netip.Prefix) classifier {
-	return classifier{members: members(cfg, networks), home: home}
+func newClassifier(cfg Config, networks []Network, home, vpn []netip.Prefix) classifier {
+	return classifier{members: members(cfg, networks), home: home, vpn: vpn}
 }
 
 // zone of an address: own zones (subnets of their networks, sources),
@@ -182,6 +190,11 @@ func (c classifier) zone(addr netip.Addr) Zone {
 			if p.Contains(addr) {
 				return m.zone
 			}
+		}
+	}
+	for _, p := range c.vpn {
+		if p.Contains(addr) {
+			return VPN
 		}
 	}
 	return classify(addr, c.home)

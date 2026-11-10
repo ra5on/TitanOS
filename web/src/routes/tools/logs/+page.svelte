@@ -440,9 +440,7 @@
 	.line time,
 	.source {
 		color: var(--muted);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		overflow-wrap: anywhere;
 	}
 	.message {
 		white-space: pre-wrap;

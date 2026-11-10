@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"regexp"
 	"slices"
@@ -294,7 +295,14 @@ type Trigger struct {
 	// first one (files of older versions).
 	Connection string `json:"connection,omitempty"`
 	Entity     string `json:"entity"`
-	State      string `json:"state"`
+	// State is the state the entity has to reach ("on"); empty with Above
+	// or Below, which then decide alone.
+	State string `json:"state"`
+	// Above and Below are thresholds for entities with numbers
+	// (temperature, power, humidity): the trigger fires when the value
+	// crosses the threshold, not for every value beyond it.
+	Above *float64 `json:"above,omitempty"`
+	Below *float64 `json:"below,omitempty"`
 	// For keeps the state that long (minutes) before it counts.
 	For int `json:"for,omitempty"`
 }
@@ -416,7 +424,16 @@ func (s *Store) SaveChat(user string, c *Chat) error {
 	if err := s.write(user, "chats/"+c.ID+".json", c); err != nil {
 		return err
 	}
-	index, _ := s.indexLocked(user)
+	index, err := s.indexLocked(user)
+	if err != nil {
+		// The list of chats cannot be read (damaged, a read error). It is
+		// not written anew with this one chat alone, which would take
+		// every other chat off the list: it is put together again from
+		// the chats themselves, or the save fails.
+		if index, err = s.rebuildIndexLocked(user); err != nil {
+			return err
+		}
+	}
 	info := c.Info()
 	replaced := false
 	for i := range index {
@@ -477,6 +494,35 @@ func (s *Store) indexLocked(user string) ([]ChatInfo, error) {
 		return nil, err
 	}
 	s.updatedLocked(user, index)
+	return index, nil
+}
+
+// rebuildIndexLocked makes the list of chats from the chat files, oldest
+// change first, for a list that cannot be read.
+func (s *Store) rebuildIndexLocked(user string) ([]ChatInfo, error) {
+	root, done, err := s.userRoot(user, false)
+	if err != nil {
+		return nil, err
+	}
+	defer done()
+	entries, err := fs.ReadDir(root.FS(), "chats")
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+	index := []ChatInfo{}
+	for _, entry := range entries {
+		id, isChat := strings.CutSuffix(entry.Name(), ".json")
+		if entry.IsDir() || !isChat || !ValidID(id) {
+			continue
+		}
+		var c Chat
+		if volumedata.ReadJSON(root, "chats/"+entry.Name(), &c, maxChatFile) != nil || c.ID != id {
+			continue // a chat that cannot be read stays as a file, off the list
+		}
+		index = append(index, c.Info())
+	}
+	slices.SortFunc(index, func(a, b ChatInfo) int { return a.Updated.Compare(b.Updated) })
+	slog.Warn("agent: list of chats rebuilt from the chat files", "account", user, "chats", len(index))
 	return index, nil
 }
 
@@ -630,6 +676,31 @@ func (s *Store) SaveSchedules(user string, list []Schedule) error {
 		s.schedules = map[string][]Schedule{}
 	}
 	s.schedules[user] = slices.Clone(list)
+	return nil
+}
+
+// UpdateSchedule changes one schedule of an account in one step: the list
+// as it is now is read, change is applied to the schedule with that ID and
+// the list is written. Reading the list, changing a copy and saving it in
+// separate steps loses what another change wrote in between (a task that
+// ends while the minute tick stamps another: a "once" task would run again).
+// It reports ErrNotFound when the schedule is gone.
+func (s *Store) UpdateSchedule(user, id string, change func(*Schedule)) error {
+	if _, err := s.Schedules(user); err != nil { // fills the RAM copy
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	list := slices.Clone(s.schedules[user])
+	i := slices.IndexFunc(list, func(sc Schedule) bool { return sc.ID == id })
+	if i < 0 {
+		return ErrNotFound
+	}
+	change(&list[i])
+	if err := s.write(user, "schedules.json", list); err != nil {
+		return err
+	}
+	s.schedules[user] = list
 	return nil
 }
 

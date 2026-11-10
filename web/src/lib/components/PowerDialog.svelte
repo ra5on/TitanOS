@@ -277,9 +277,8 @@
 	.items .name {
 		flex: 1;
 		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	.state {
 		color: var(--muted);

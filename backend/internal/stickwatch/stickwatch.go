@@ -38,6 +38,8 @@ type Watcher struct {
 
 	mu   sync.Mutex
 	last time.Time
+	// names are the device names of the stick as last resolved.
+	names []string
 }
 
 // New returns a watcher for the real stick.
@@ -66,7 +68,16 @@ func (w *Watcher) Line(line string) {
 	if !failure.MatchString(line) {
 		return
 	}
-	for _, name := range w.resolve() {
+	// The names are kept: when the stick drops out, udev removes its
+	// label before or while the kernel reports the errors, and without
+	// the names of a moment ago those lines would belong to nobody.
+	names := w.resolve()
+	if len(names) > 0 {
+		w.names = names
+	} else {
+		names = w.names
+	}
+	for _, name := range names {
 		if name != "" && regexp.MustCompile(`\b`+regexp.QuoteMeta(name)+`\b`).MatchString(line) {
 			w.report("read/write error: " + strings.TrimSpace(line))
 			return
@@ -118,6 +129,10 @@ func (w *Watcher) Follow(ctx context.Context) {
 }
 
 func (w *Watcher) read(r io.Reader) {
+	// Where the stick is, while it is still there (see Line).
+	if names := w.resolve(); len(names) > 0 {
+		w.names = names
+	}
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 64<<10), 64<<10)
 	for scanner.Scan() {

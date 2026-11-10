@@ -539,10 +539,8 @@
 		font: inherit;
 		font-size: var(--text-sm);
 		text-align: left;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
 		cursor: pointer;
+		overflow-wrap: anywhere;
 	}
 	.area-head.file {
 		cursor: default;
@@ -582,9 +580,7 @@
 	.sub b,
 	.sub span {
 		max-width: 100%;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: anywhere;
 	}
 	.sub.plain {
 		background: color-mix(in srgb, var(--accent) 12%, var(--surface));

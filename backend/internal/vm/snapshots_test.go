@@ -483,3 +483,22 @@ func TestSnapshotScheduleUsesCurrentTimezoneAndSkipsRepeatedDSTHour(t *testing.T
 		t.Fatalf("new timezone did not take effect: %+v", s)
 	}
 }
+
+// The loop may come a few minutes late (a VM that took long to start):
+// the day's snapshot is still made, once, and "7:05" means 07:05.
+func TestSnapshotScheduleCatchesUpALateRound(t *testing.T) {
+	m, v := snapshotFixture(t)
+	m.Timezone = func() string { return "UTC" }
+	if err := m.SetSnapshotSchedule(v.Name, SnapshotSchedule{Enabled: true, Time: "7:05", Days: []int{0}, Keep: 5}); err != nil {
+		t.Fatal(err)
+	}
+	sunday := time.Date(2026, 11, 8, 7, 8, 0, 0, time.UTC) // three minutes late
+	m.runSnapshotSchedules(context.Background(), v.volumes(), sunday)
+	if s := waitSnapshot(t, m, v); len(s.Snapshots) != 1 {
+		t.Fatalf("the late round made no snapshot: %+v", s)
+	}
+	m.runSnapshotSchedules(context.Background(), v.volumes(), sunday.Add(5*time.Minute))
+	if s := waitSnapshot(t, m, v); len(s.Snapshots) != 1 {
+		t.Fatalf("a second snapshot on the same day: %+v", s)
+	}
+}

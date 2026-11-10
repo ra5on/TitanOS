@@ -287,3 +287,20 @@ func TestCloneRefusesAutoGPUBeforeCopying(t *testing.T) {
 		t.Fatal("clone registered")
 	}
 }
+
+// The image of a new disk is a file in the folder of its VM: no path, no
+// name TitanOS keeps there, and the ending of its format.
+func TestDiskFileNameOfANewVM(t *testing.T) {
+	for name, ok := range map[string]bool{
+		"vdisk1.qcow2": true, "system.QCOW2": true,
+		"../../../etc/x.qcow2": false, "a/b.qcow2": false, ".hidden.qcow2": false,
+		"nvram.fd": false, "vm.json": false, "disk.img": false, "disk": false,
+	} {
+		if got := validDiskFile(name, "qcow2"); got != ok {
+			t.Errorf("%q (qcow2): %v, want %v", name, got, ok)
+		}
+	}
+	if !validDiskFile("data.img", "raw") || validDiskFile("data.qcow2", "raw") {
+		t.Error("raw images end in .img or .raw")
+	}
+}

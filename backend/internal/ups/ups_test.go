@@ -300,3 +300,32 @@ func TestLateUSBUPSStillStartsTheMonitor(t *testing.T) {
 		t.Errorf("monitor not started: %v", system.calls)
 	}
 }
+
+// On battery, a UPS that misses an answer now and then ("data stale") has
+// not got its mains back: the minutes on battery go on. And when upsmon
+// does not take the shutdown, the NAS switches itself off.
+func TestMissedAnswersDoNotRestartTheTimeOnBattery(t *testing.T) {
+	m, system, _ := newManager(t)
+	m.SetSettings(Settings{Mode: "local", ShutdownAfter: 5})
+	clock := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	m.now = func() time.Time { return clock }
+	powered := false
+	m.Poweroff = func() error { powered = true; return nil }
+	look := func(upsc string, after time.Duration) Status {
+		clock = clock.Add(after)
+		system.upsc = upsc
+		m.look(context.Background())
+		return m.Status()
+	}
+	battery := "battery.charge: 80\nups.status: OB DISCHRG\n"
+	look(battery, 0)
+	look(battery, 2*time.Minute)
+	look("", time.Minute) // no answer
+	if status := look(battery, time.Minute); status.Since == nil || clock.Sub(*status.Since) != 4*time.Minute {
+		t.Fatalf("the time on battery started over after a missed answer: %+v", status)
+	}
+	system.failing = "upsmon"
+	if status := look(battery, time.Minute+time.Second); !powered || !status.ShuttingDown {
+		t.Fatalf("upsmon failed and the NAS was not switched off directly: powered=%v %+v", powered, status)
+	}
+}

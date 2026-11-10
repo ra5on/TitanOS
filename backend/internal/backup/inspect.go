@@ -48,6 +48,15 @@ func (m *Manager) Check(id string, readData int) error {
 	return m.begin(job, "check", func(ctx context.Context) error {
 		_, base, env, cleanup, err := m.repository(job)
 		if err != nil {
+			// The check did not even start (USB drive gone, SMB target away):
+			// that is its result – not the success of the last time.
+			if ctx.Err() == nil {
+				now := m.now()
+				m.update(job, func(s *State) { s.LastCheck, s.CheckError = &now, err.Error() })
+				if m.OnCheck != nil {
+					m.OnCheck(job.ID, err)
+				}
+			}
 			return err
 		}
 		defer cleanup()

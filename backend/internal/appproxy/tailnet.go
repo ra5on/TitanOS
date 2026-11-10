@@ -250,6 +250,12 @@ func (m *Manager) tailnetWanted() []tailnetWant {
 }
 
 func (m *Manager) reconcileTailnet(ctx context.Context) {
+	m.mu.RLock()
+	unreadable := m.unreadable
+	m.mu.RUnlock()
+	if unreadable {
+		return // which devices are wanted is not known (see Load)
+	}
 	t := m.Tailnet
 	wanted := m.tailnetWanted()
 	volume, ok := t.available()

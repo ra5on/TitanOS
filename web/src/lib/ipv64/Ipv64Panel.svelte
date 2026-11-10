@@ -173,7 +173,7 @@
 						class="field mono"
 						type="text"
 						bind:value={wish}
-						placeholder="meinnas"
+						placeholder={t('ipv64.nameExample')}
 						spellcheck="false"
 						autocapitalize="off"
 					/></label

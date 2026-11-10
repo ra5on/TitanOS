@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { guardWindowClose } from '#lib/desktop/unsaved.svelte.ts';
 	// Settings › Network: named networks (overview), ports and bonds,
 	// diagnostics and remote access. Every change is a draft until it is
 	// tested on trial; older single-network configurations arrive already
@@ -59,6 +60,7 @@
 	const dirty = $derived(!!draft && !!current && JSON.stringify(draft) !== JSON.stringify(current));
 	const locked = $derived(busy || !!status?.pending);
 	const ports = $derived(status?.interfaces ?? []);
+	guardWindowClose(() => dirty && !status?.pending);
 
 	beforeNavigate((n) => {
 		if (dirty && !status?.pending) {
@@ -82,15 +84,20 @@
 		if (!keep) draft = structuredClone(r.network.pendingTopology ?? r.network.topology);
 		if (!r.network.pending) lost = false;
 	}
-	async function load() {
+	// A status asked for before "Testen", "Behalten" or "Zurück" answered is
+	// older than their answer and must not replace it.
+	let changes = 0;
+	async function load(asked = false) {
+		const before = changes;
 		try {
-			take(await api.get<NetworkAnswer>('/network'));
+			const answer = await api.get<NetworkAnswer>('/network');
+			if (asked || (before === changes && !busy)) take(answer);
 		} catch (e) {
 			// While a change is on trial the NAS may be unreachable here.
 			if (!status) problem(e);
 		}
 	}
-	$effect(() => poll(load, { interval: 3000, skip: () => busy }));
+	$effect(() => poll(() => load(), { interval: 3000, skip: () => busy }));
 
 	function show(next: Tab) {
 		tab = next;
@@ -105,6 +112,7 @@
 	async function apply() {
 		if (!draft) return;
 		busy = true;
+		changes++;
 		error = '';
 		lost = false;
 		const body = networkPayload($state.snapshot(draft));
@@ -133,6 +141,7 @@
 	}
 	async function settle(kind: 'confirm' | 'revert') {
 		busy = true;
+		changes++;
 		error = '';
 		try {
 			const res = await api.post<{ network: NetworkStatus; bondModes: string[] }>(
@@ -145,7 +154,7 @@
 			// While bonds or VLANs settle, the answer to "confirm" can be cut
 			// off after the NAS stored it: what counts is the state now.
 			if (kind === 'confirm' && !(e instanceof ApiError && e.status >= 400)) {
-				await load();
+				await load(true);
 				if (status && !status.pending) {
 					draft = structuredClone($state.snapshot(status.topology));
 					return;
@@ -231,6 +240,10 @@
 		</div>
 	</section>
 {/if}
+{#if status?.notApplied}<p class="notice-warn" role="status">
+		{t('netcfg.notApplied')}
+		<span class="mono not-applied">{status.notApplied}</span>
+	</p>{/if}
 {#if lost}<p class="notice-warn" role="status">{t('netcfg.lost')}</p>{/if}
 {#if error}<div class="notice-error" role="alert">{error}</div>{/if}
 
@@ -368,6 +381,11 @@
 {/if}
 
 <style>
+	.not-applied {
+		display: block;
+		margin-top: var(--space-1);
+		overflow-wrap: anywhere;
+	}
 	.unsaved {
 		display: flex;
 		flex-direction: column;

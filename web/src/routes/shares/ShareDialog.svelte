@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { guardWindowClose } from '#lib/desktop/unsaved.svelte.ts';
 	import { untrack } from 'svelte';
 	import { beforeNavigate, goto } from '$app/navigation';
 	import { api, ApiError, type AccessLevel, type Account, type Share } from '#lib/api.ts';
@@ -55,6 +56,7 @@
 	const tabs = ['general', 'access', 'options'] as const;
 	const initial = JSON.stringify(untrack(() => $state.snapshot(draft)));
 	const dirty = $derived(JSON.stringify(draft) !== initial);
+	guardWindowClose(() => dirty);
 	let confirmClose = $state(false),
 		pendingURL = '',
 		allowNavigation = false;

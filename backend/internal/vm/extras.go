@@ -358,8 +358,16 @@ func (m *Manager) copyDisks(ctx context.Context, vm VM) {
 		m.mu.Lock()
 		m.jobs[vm.Name] = &Job{State: "running", Text: filepath.Base(disk.Source)}
 		m.mu.Unlock()
-		if _, err := m.runner.Run(ctx, "", "qemu-img", "convert", "-f", source.Format, "-O", disk.Format, disk.Source, path); err != nil {
-			os.Remove(path)
+		// Converted next to its place and put there when it is whole: a
+		// copy that broke off never looks like the disk of the VM.
+		partial := path + ".partial"
+		if _, err := m.runner.Run(ctx, "", "qemu-img", "convert", "-f", source.Format, "-O", disk.Format, disk.Source, partial); err != nil {
+			os.Remove(partial)
+			fail(err)
+			return
+		}
+		if err := os.Rename(partial, path); err != nil {
+			os.Remove(partial)
 			fail(err)
 			return
 		}
@@ -375,6 +383,20 @@ func (m *Manager) copyDisks(ctx context.Context, vm VM) {
 		}
 		vm.Disks[i].Source = ""
 	}
+	// The copy took a while: what was changed on the VM meanwhile (memory,
+	// autostart, schedule, medium) stays. Only the note "copy of" goes from
+	// the disks that are done.
+	m.mu.Lock()
+	if current, ok := m.vms[vm.Name]; ok && len(current.Disks) == len(vm.Disks) {
+		current.Disks = slices.Clone(current.Disks)
+		for i := range current.Disks {
+			if current.Disks[i].File == vm.Disks[i].File && current.Disks[i].Volume == vm.Disks[i].Volume {
+				current.Disks[i].Source = vm.Disks[i].Source
+			}
+		}
+		vm = current
+	}
+	m.mu.Unlock()
 	if err := m.persistVM(vm); err != nil {
 		fail(err)
 		return

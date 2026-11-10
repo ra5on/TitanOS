@@ -4,18 +4,36 @@
 	// window of the desktop it stays at the window's lower edge; elsewhere it
 	// ends the page.
 	import type { Snippet } from 'svelte';
-	import { inWindow } from '#lib/desktop/mode.svelte.ts';
+	import { inWindow, phoneView } from '#lib/desktop/mode.svelte.ts';
 
 	let { children, label }: { children: Snippet; label?: string } = $props();
 
+	// Pinned to the lower edge in a window and on the phone (PLAN 76: there it
+	// stood in the middle of a short page, with empty room below).
+	const pinned = $derived(inWindow || phoneView());
+	let bar = $state<HTMLElement>();
+
+	// The page ends above the bar, however many rows its figures take in a
+	// narrow window: the last rows of the page are never covered.
 	$effect(() => {
-		if (!inWindow) return;
-		document.body.classList.add('has-statusbar');
-		return () => document.body.classList.remove('has-statusbar');
+		if (!pinned || !bar) return;
+		const body = document.body;
+		const room = () => body.style.setProperty('--statusbar-height', bar!.offsetHeight + 'px');
+		const observer = new ResizeObserver(room);
+		observer.observe(bar);
+		room();
+		body.classList.add('has-statusbar');
+		return () => {
+			observer.disconnect();
+			body.classList.remove('has-statusbar');
+			body.style.removeProperty('--statusbar-height');
+		};
 	});
 </script>
 
-<footer class="statusbar" class:pinned={inWindow} aria-label={label}>{@render children()}</footer>
+<footer class="statusbar" class:pinned bind:this={bar} aria-label={label}>
+	{@render children()}
+</footer>
 
 <style>
 	.statusbar {
@@ -39,9 +57,10 @@
 		right: 0;
 		bottom: 0;
 		margin: 0;
+		padding-bottom: calc(var(--space-1) + env(safe-area-inset-bottom, 0px));
 	}
 	:global(body.has-statusbar) {
-		padding-bottom: 30px;
+		padding-bottom: var(--statusbar-height, 30px);
 	}
 	.statusbar :global(b) {
 		color: var(--text);

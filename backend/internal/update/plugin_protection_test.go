@@ -49,3 +49,22 @@ func TestPluginProtectionReadsRealBaseOfRepackedFallbackSlot(t *testing.T) {
 		t.Fatal("unknown fallback base allowed cleanup")
 	}
 }
+
+// A release that failed its trial on this NAS is remembered across starts
+// of titand, so that installing by itself does not try it night after
+// night; another release is not held back.
+func TestFailedReleaseIsRemembered(t *testing.T) {
+	store := config.Open(filepath.Join(t.TempDir(), "config"))
+	m := NewManager(store, "0.74.0", "a")
+	m.noteFailed("v0.75.0")
+	if !m.failedBefore("0.75.0") || m.failedBefore("0.76.0") {
+		t.Fatal("the failed release is not told apart from the next one")
+	}
+	again := NewManager(store, "0.74.0", "a")
+	if err := again.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if !again.failedBefore("v0.75.0") {
+		t.Fatal("the failed release was forgotten after a restart of titand")
+	}
+}

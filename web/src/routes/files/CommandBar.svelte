@@ -193,7 +193,8 @@
 				role="menuitem"
 				disabled={!selected || !writable}
 				onclick={() => run(close, 'cut')}
-				><Icon name="cut" size={16} /><span>{t('files.cut')}</span><kbd>Strg+X</kbd></button
+				><Icon name="cut" size={16} /><span>{t('files.cut')}</span><kbd>{t('shortcuts.ctrl')}+X</kbd
+				></button
 			>
 			<button
 				type="button"

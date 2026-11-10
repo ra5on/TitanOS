@@ -9,9 +9,11 @@ package storage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -262,7 +264,13 @@ type Manager struct {
 	btrfsProbed time.Time
 	// btrfsSeen is when mountAll first saw a member of an unmounted Btrfs
 	// mirror (protected by actions). clock replaces time.Now in tests.
-	btrfsSeen map[string]time.Time
+	// arrayUUIDs keeps the UUID of running md arrays (see arrays).
+	arrayUUIDs map[string]string
+	btrfsSeen  map[string]time.Time
+	// seenMu guards btrfsSeen and cacheSeen: the loop reads them every
+	// round (btrfsWaiting) while unlocking or deleting a volume writes
+	// them from a request.
+	seenMu sync.Mutex
 	// cacheSeen is when mountAll first missed the read cache SSD of a
 	// volume (protected by actions).
 	cacheSeen map[string]time.Time
@@ -401,12 +409,53 @@ func (m *Manager) saveVolumes(volumes []VolumeConfig) error {
 // arrays reads the live md arrays.
 func (m *Manager) arrays(ctx context.Context) []array {
 	return readArrays(m.sysBlock, func(device string) string {
+		// mdadm reads the UUID from the superblock on a member disk.
+		// Asked on every status request and every round of the sleep
+		// timer, that is a read on a disk every few seconds: its idle
+		// time starts over and it never goes to sleep. The UUID of an
+		// array does not change while it runs, so it is asked once per
+		// running array. A stopped array loses its folder in sysfs; a
+		// new one under the same name has another, so it is asked again.
+		key, known := m.arrayIdentity(device)
+		if known {
+			m.mu.RLock()
+			cached, ok := m.arrayUUIDs[key]
+			m.mu.RUnlock()
+			if ok {
+				return cached
+			}
+		}
 		output, err := m.runner.Run(ctx, "", "mdadm", "--detail", "--export", "/dev/"+device)
 		if err != nil {
 			return ""
 		}
-		return parseMdadmExport(output)["MD_UUID"]
+		uuid := parseMdadmExport(output)["MD_UUID"]
+		if known && uuid != "" {
+			m.mu.Lock()
+			// Arrays that are gone leave with the map: it is rebuilt
+			// when it holds more than a NAS has arrays.
+			if m.arrayUUIDs == nil || len(m.arrayUUIDs) > 64 {
+				m.arrayUUIDs = map[string]string{}
+			}
+			m.arrayUUIDs[key] = uuid
+			m.mu.Unlock()
+		}
+		return uuid
 	})
+}
+
+// arrayIdentity names a running array for the cache of UUIDs: its device
+// and the folder the kernel made for it in sysfs when it was started.
+func (m *Manager) arrayIdentity(device string) (string, bool) {
+	info, err := os.Stat(filepath.Join(m.sysBlock, device, "md"))
+	if err != nil {
+		return "", false
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return "", false
+	}
+	return fmt.Sprintf("%s/%d", device, st.Ino), true
 }
 
 func (m *Manager) blockDevices(ctx context.Context) ([]blockDevice, error) {

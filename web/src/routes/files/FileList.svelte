@@ -335,9 +335,7 @@
 		text-decoration: underline;
 	}
 	.entry span {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: anywhere;
 	}
 	.entry-more {
 		display: inline-flex;

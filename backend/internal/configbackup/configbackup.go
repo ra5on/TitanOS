@@ -120,6 +120,11 @@ type Manifest struct {
 	Time     time.Time `json:"time"`
 	Hostname string    `json:"hostname"`
 	Version  string    `json:"version"`
+	// Setup tells the backups of one installation from those of another
+	// that wrote into the same folder (a NAS set up anew instead of
+	// restored): a digest of this node's ID, which a restore carries along.
+	// Empty in backups older than 0.75.
+	Setup string `json:"setup,omitempty"`
 }
 
 // Backup is one saved state of /config.
@@ -141,6 +146,8 @@ type Backup struct {
 	// running: the stick should be updated to that version first, or
 	// settings that only the newer version knows may be lost.
 	Newer bool `json:"newer,omitempty"`
+	// setup is the installation that wrote it (Manifest.Setup).
+	setup string
 }
 
 // State is what the settings page shows.
@@ -213,6 +220,25 @@ func (m *Manager) Load() error {
 
 // SetSettings stores new settings. known are the volumes that exist.
 func (m *Manager) SetSettings(settings Settings, known []string) error {
+	if err := CheckSettings(settings, known); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.loaded {
+		return ErrNotLoaded
+	}
+	if err := m.store.WriteJSON(settingsFile, settings); err != nil {
+		return err
+	}
+	m.settings = settings
+	return nil
+}
+
+// CheckSettings reports what SetSettings would refuse, without storing
+// anything: callers that change more than the settings (the password)
+// check first, so that a refused request changes nothing.
+func CheckSettings(settings Settings, known []string) error {
 	if err := checkSchedule(settings); err != nil {
 		return err
 	}
@@ -225,15 +251,6 @@ func (m *Manager) SetSettings(settings Settings, known []string) error {
 	if settings.Volume != "" && !slices.Contains(known, settings.Volume) {
 		return fmt.Errorf("%w: volume", ErrInvalid)
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if !m.loaded {
-		return ErrNotLoaded
-	}
-	if err := m.store.WriteJSON(settingsFile, settings); err != nil {
-		return err
-	}
-	m.settings = settings
 	return nil
 }
 
@@ -302,7 +319,7 @@ func readFolder(dir string) []Backup {
 		if err != nil {
 			continue
 		}
-		list = append(list, Backup{Name: entry.Name(), Time: manifest.Time, SizeBytes: info.Size(), Encrypted: sealed, Hostname: manifest.Hostname, Version: manifest.Version})
+		list = append(list, Backup{Name: entry.Name(), Time: manifest.Time, SizeBytes: info.Size(), Encrypted: sealed, Hostname: manifest.Hostname, Version: manifest.Version, setup: manifest.Setup})
 	}
 	return list
 }
@@ -417,6 +434,19 @@ func (m *Manager) Create(mounted []string) (string, error) {
 	return name, err
 }
 
+// setupID names this installation in its backups: a digest of the node ID
+// that titand created at the first start. Empty if there is none yet.
+func (m *Manager) setupID() string {
+	var node struct {
+		ID string `json:"id"`
+	}
+	if err := m.store.ReadJSON("cluster/node.json", &node); err != nil || node.ID == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte("titanos-config-backup\x00" + node.ID))
+	return hex.EncodeToString(sum[:8])
+}
+
 func (m *Manager) create(volume string) (string, error) {
 	if volume == "" {
 		return "", ErrNoVolume
@@ -458,7 +488,8 @@ func (m *Manager) create(volume string) (string, error) {
 
 	now := m.now().UTC().Truncate(time.Second)
 	hostname, _ := os.Hostname()
-	manifest, _ := json.MarshalIndent(Manifest{Format: format, Time: now, Hostname: hostname, Version: m.version}, "", "  ")
+	setup := m.setupID()
+	manifest, _ := json.MarshalIndent(Manifest{Format: format, Time: now, Hostname: hostname, Version: m.version, Setup: setup}, "", "  ")
 
 	// The digest covers names and content, not times: a backup is new
 	// only if something in it is.
@@ -529,7 +560,15 @@ func (m *Manager) create(volume string) (string, error) {
 	}
 	short := hex.EncodeToString(digest.Sum(nil))[:12]
 
-	existing := readFolder(dir)
+	// Backups another installation left in this folder (the NAS was set up
+	// anew instead of restored) are not ours to count or to remove: they may
+	// be the only copy of the earlier settings.
+	var existing []Backup
+	for _, b := range readFolder(dir) {
+		if setup == "" || b.setup == "" || b.setup == setup {
+			existing = append(existing, b)
+		}
+	}
 	sort.Slice(existing, func(i, j int) bool { return existing[i].Time.After(existing[j].Time) })
 	if len(existing) > 0 && backupName.FindStringSubmatch(existing[0].Name)[2] == short {
 		return existing[0].Name, nil

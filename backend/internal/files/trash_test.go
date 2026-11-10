@@ -1,7 +1,9 @@
 package files
 
 import (
+	"bytes"
 	"errors"
+	"golang.org/x/sys/unix"
 	"os"
 	"path/filepath"
 	"testing"
@@ -109,5 +111,92 @@ func TestTrashDelete(t *testing.T) {
 	root.Writable = false
 	if err := m.TrashDelete(root, []string{"alex"}, "alex", false); !errors.Is(err, ErrReadOnly) {
 		t.Errorf("read-only account empties the bin: %v", err)
+	}
+}
+
+// The folders the file manager makes in the recycle bin are writable for
+// the group of the shares: Samba works as the account and deletes a file
+// for good when it cannot move it into the bin. Folders an older version
+// left writable for root only are repaired.
+func TestRecycleBinFoldersAreGroupWritable(t *testing.T) {
+	m, root, _ := newRoot(t)
+	// Left behind by an older version.
+	stale := filepath.Join(root.Dir, ".recycle")
+	if err := os.Mkdir(stale, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Delete(root, []string{"urlaub/strand.jpg"}, "alex", false); err != nil {
+		t.Fatal(err)
+	}
+	for _, dir := range []string{".recycle", ".recycle/alex", ".recycle/alex/urlaub"} {
+		info, err := os.Stat(filepath.Join(root.Dir, dir))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o770 || info.Mode()&os.ModeSetgid == 0 {
+			t.Errorf("%s has mode %v, want group-writable with setgid", dir, info.Mode())
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root.Dir, ".recycle/alex/urlaub/strand.jpg")); err != nil {
+		t.Errorf("the deleted file is not in the bin: %v", err)
+	}
+}
+
+// A copy that finishes after another file took its name (another job, an
+// upload, a save over SMB) does not replace that file.
+func TestFinishedCopyDoesNotReplaceAFileThatAppeared(t *testing.T) {
+	m, root, _ := newRoot(t)
+	r, err := os.OpenRoot(root.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	os.WriteFile(filepath.Join(root.Dir, ".film.part"), []byte("copy"), 0o644)
+	os.WriteFile(filepath.Join(root.Dir, "film.mkv"), []byte("arrived meanwhile"), 0o644)
+	final, err := m.publishCopy(&Job{}, r, "film.mkv", ".film.part", "film.mkv", false)
+	if err != nil || final != "film (2).mkv" {
+		t.Fatalf("published as %q, %v", final, err)
+	}
+	if data, _ := os.ReadFile(filepath.Join(root.Dir, "film.mkv")); string(data) != "arrived meanwhile" {
+		t.Fatalf("the file that appeared was replaced: %q", data)
+	}
+	if data, _ := os.ReadFile(filepath.Join(root.Dir, final)); string(data) != "copy" {
+		t.Fatalf("the copy is not there: %q", data)
+	}
+}
+
+// A restored entry no longer carries the note of its deletion: deleted
+// again over SMB (Samba writes none), it would otherwise show the old date
+// and go back to the old place.
+func TestRestoreForgetsTheDeletionNote(t *testing.T) {
+	m, root, _ := newRoot(t)
+	if err := m.Delete(root, []string{"notiz.txt"}, "alex", false); err != nil {
+		t.Fatal(err)
+	}
+	binned := filepath.Join(root.Dir, ".recycle/alex/notiz.txt")
+	if _, err := unix.Lgetxattr(binned, trashAttribute, make([]byte, 512)); err != nil {
+		t.Skipf("no extended attributes here: %v", err)
+	}
+	if err := m.TrashRestore(root, []string{"alex/notiz.txt"}, "alex", os.Getuid(), false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := unix.Lgetxattr(filepath.Join(root.Dir, "notiz.txt"), trashAttribute, make([]byte, 512)); err == nil {
+		t.Fatal("the restored file still carries the note of its deletion")
+	}
+}
+
+// A file that cannot be read ends a zip download with an error instead of
+// an empty entry in a download that looks complete.
+func TestZipDoesNotHideAnUnreadableFile(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root reads everything")
+	}
+	m, root, _ := newRoot(t)
+	if err := os.Chmod(filepath.Join(root.Dir, "urlaub/strand.jpg"), 0); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := m.Zip(&out, root, []string{"urlaub"}); err == nil {
+		t.Fatal("zip of a folder with an unreadable file reported success")
 	}
 }

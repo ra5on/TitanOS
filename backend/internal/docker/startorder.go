@@ -90,12 +90,25 @@ func (m *Manager) StartApp(ctx context.Context, app string) error {
 	if err != nil {
 		return err
 	}
-	var errs []error
+	// The engine lists them in no useful order: a container that shares
+	// the network of another (network_mode: service:vpn) cannot start
+	// before that one runs. What fails in the first round is tried once
+	// more after the others are up.
+	start := func(id string) error {
+		return m.api.post(ctx, "/containers/"+url.PathEscape(id)+"/start", nil)
+	}
+	var again []string
 	for _, c := range containers {
 		if c.State == "running" {
 			continue
 		}
-		if err := m.api.post(ctx, "/containers/"+url.PathEscape(c.ID)+"/start", nil); err != nil {
+		if err := start(c.ID); err != nil {
+			again = append(again, c.ID)
+		}
+	}
+	var errs []error
+	for _, id := range again {
+		if err := start(id); err != nil {
 			errs = append(errs, err)
 		}
 	}

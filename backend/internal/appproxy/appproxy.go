@@ -125,6 +125,10 @@ const (
 	maxDomains  = 8
 )
 
+// ErrUnreadable means the routes could not be read from /config at the
+// start; they are not changed until titand has read them.
+var ErrUnreadable = errors.New("appproxy: the routes could not be read from /config")
+
 var (
 	labelRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 	// The same names as Docker apps (docker.appNameRE).
@@ -163,7 +167,9 @@ type Manager struct {
 
 	mu       sync.RWMutex
 	settings Settings
-	proxies  map[string]*appHandler
+	// unreadable: Load could not read the routes from /config (see Load).
+	unreadable bool
+	proxies    map[string]*appHandler
 	// published is the content last written to the avahi hosts file.
 	published string
 	// hostsFile and reload are replaced in tests.
@@ -194,9 +200,16 @@ func (m *Manager) Load() error {
 	var settings Settings
 	err := m.store.ReadJSON(configFile, &settings)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		// The routes are there but could not be read (the stick did not
+		// answer): nothing is written over them and no device of an app
+		// is logged out on the guess that there are none.
+		m.mu.Lock()
+		m.unreadable = true
+		m.mu.Unlock()
 		return err
 	}
 	m.mu.Lock()
+	m.unreadable = false
 	m.settings = fromDisk(settings)
 	m.proxies = map[string]*appHandler{}
 	m.recomputeAuto()
@@ -499,6 +512,10 @@ func names(route Route) []string {
 // change applies fn to a copy, stores it and only then takes it over.
 func (m *Manager) change(fn func(*Settings) error) error {
 	m.mu.Lock()
+	if m.unreadable {
+		m.mu.Unlock()
+		return ErrUnreadable
+	}
 	next := m.copySettings()
 	if err := fn(&next); err != nil {
 		m.mu.Unlock()

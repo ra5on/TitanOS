@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"slices"
 )
 
 // cloudflare speaks API v4 with an API token that may edit DNS of the zone
@@ -128,12 +129,16 @@ func (c *cloudflare) SetAddresses(ctx context.Context, host string, v4, v6 netip
 			}
 			continue
 		}
-		for _, r := range existing {
-			// Only the address changes; proxying and TTL stay as set.
-			patch := map[string]string{"content": addr}
-			if err := c.call(ctx, http.MethodPatch, "/zones/"+url.PathEscape(zone)+"/dns_records/"+url.PathEscape(r.ID), patch, nil); err != nil {
-				return err
-			}
+		// One record carries the address. A name with several records of a
+		// kind (set up by hand) keeps the others: giving all the same value
+		// is refused as a duplicate, and they are not ours to change.
+		if slices.ContainsFunc(existing, func(r cfRecord) bool { return r.Content == addr }) {
+			continue
+		}
+		// Only the address changes; proxying and TTL stay as set.
+		patch := map[string]string{"content": addr}
+		if err := c.call(ctx, http.MethodPatch, "/zones/"+url.PathEscape(zone)+"/dns_records/"+url.PathEscape(existing[0].ID), patch, nil); err != nil {
+			return err
 		}
 	}
 	return nil

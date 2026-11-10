@@ -508,16 +508,48 @@ func (m *Manager) RemoveApp(ctx context.Context, name string, purge bool) error 
 	job := m.jobs[name]
 	running := m.applied != ""
 	backup := m.backups > 0
-	m.mu.Unlock()
 	if !known {
+		m.mu.Unlock()
 		return ErrNotFound
 	}
 	if job != nil && job.State == "running" {
+		m.mu.Unlock()
 		return ErrBusy
 	}
 	if backup {
+		m.mu.Unlock()
 		return errBackupRunning
 	}
+	// With its data: only while the engine runs. Without it (the volume is
+	// locked or not there) nothing could be taken down or deleted, the app
+	// would be reported as removed and come back unmanaged, with all its
+	// data, once the volume is there again.
+	if purge && !running && settings.Enabled {
+		m.mu.Unlock()
+		return ErrNotRunning
+	}
+	// The removal is a job of the app like any other: an update, a change
+	// or an automatic update that comes meanwhile is refused as busy
+	// instead of bringing containers up on a folder that is being deleted.
+	previous := job
+	removing := &Job{State: "running"}
+	m.jobs[name] = removing
+	m.mu.Unlock()
+	failed := true
+	defer func() {
+		if !failed {
+			return
+		}
+		m.mu.Lock()
+		if m.jobs[name] == removing {
+			if previous != nil {
+				m.jobs[name] = previous
+			} else {
+				delete(m.jobs, name)
+			}
+		}
+		m.mu.Unlock()
+	}()
 	if running {
 		// Removing goes on when the page that asked is closed: a "down"
 		// killed halfway leaves the app half removed.
@@ -547,6 +579,7 @@ func (m *Manager) RemoveApp(ctx context.Context, name string, purge bool) error 
 	if err := m.store.RemoveAll(appsDir + "/" + name); err != nil {
 		return err
 	}
+	failed = false
 	m.mu.Lock()
 	m.forgetApps()
 	delete(m.jobs, name)

@@ -86,7 +86,18 @@ func (m *Manager) runSnapshotSchedules(ctx context.Context, mounted []string, no
 	}
 	for _, status := range m.List(mounted) {
 		s := status.SnapshotSchedule
-		if !status.Available || !s.Enabled || !validSnapshotSchedule(s) || now.Format("15:04") != s.Time || !slices.Contains(s.Days, int(now.Weekday())) {
+		if !status.Available || !s.Enabled || !validSnapshotSchedule(s) || !slices.Contains(s.Days, int(now.Weekday())) {
+			continue
+		}
+		// Due from its time on for an hour, once a day (the note below):
+		// a round of the loop that came late (a VM that took long to
+		// start, a slow answer of libvirt) does not cost the day's
+		// snapshot, and "7:05" is the same time as "07:05".
+		// By the clock on the wall, so that an hour that comes twice
+		// (end of summer time) runs at its first coming and an hour
+		// that does not exist (its start) is caught up right after.
+		at, _ := time.Parse("15:04", s.Time) // checked by validSnapshotSchedule
+		if late := (now.Hour()*60 + now.Minute()) - (at.Hour()*60 + at.Minute()); late < 0 || late >= 60 {
 			continue
 		}
 		v := status.VM
@@ -95,7 +106,7 @@ func (m *Manager) runSnapshotSchedules(ctx context.Context, mounted []string, no
 			continue
 		}
 		store := config.Open(root)
-		key := now.Format("2006-01-02") + "T" + s.Time
+		key := now.Format("2006-01-02") + "T" + at.Format("15:04")
 		var last struct {
 			Key string `json:"key"`
 		}

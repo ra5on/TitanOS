@@ -8,7 +8,7 @@
 // beyond overflow), for a visual pass.
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
-import { fixtureFactory } from "./test-ui-fixtures.mjs";
+import { cutTextIn, fixtureFactory } from "./test-ui-fixtures.mjs";
 const { chromium } = await import(
   process.env.PLAYWRIGHT_MODULE || "playwright"
 );
@@ -484,6 +484,66 @@ for (const [, path] of allOnly ? [] : representative.slice(0, 9)) {
   await made.ctx.close();
 }
 
+// PLAN 76 (F-12-7): a window whose page holds changes that are not saved
+// asks before it closes; without changes it closes at once.
+if (!allOnly && (!onlyPaths || onlyPaths.includes("/tools/monitoring"))) {
+  const made = await openWindow("monitor", "/tools/monitoring", 1100);
+  const { page, frame } = made;
+  const box = frame.locator("form.settings input[type=checkbox]").first();
+  await box.waitFor();
+  await box.click();
+  const close = page.locator("section.win button.ctl.close");
+  await close.click();
+  const ask = page.getByRole("dialog", { name: "Ungespeicherte Änderungen" });
+  await ask.waitFor({ timeout: 5000 });
+  check(
+    (await page.locator("section.win").count()) === 1,
+    "a window with unsaved changes stays open until the question is answered",
+  );
+  await ask.getByRole("button", { name: "Abbrechen" }).click();
+  await ask.waitFor({ state: "detached" });
+  // Taking the change back: no question any more.
+  await box.click();
+  await page.waitForTimeout(300);
+  await close.click();
+  await page.waitForFunction(
+    () => !document.querySelector("section.win"),
+    null,
+    {
+      timeout: 5000,
+    },
+  );
+  await made.ctx.close();
+}
+
+// PLAN 76 (F-12-8, F-12-11): the browser dragged narrower than 900 px keeps
+// the desktop while a window is open; the window stays within reach. The
+// phone's frame comes once the last window is closed.
+if (!allOnly && !onlyPaths) {
+  const made = await openWindow("monitor", "/tools/monitoring", 1100);
+  const { page } = made;
+  await page.setViewportSize({ width: 700, height: 900 });
+  await page.waitForTimeout(500);
+  check(
+    (await page.locator("section.win iframe").count()) === 1,
+    "narrow browser: the open window is still there",
+  );
+  const box = await page.locator("section.win button.ctl.close").boundingBox();
+  check(
+    box && box.x >= 0 && box.x + box.width <= 700,
+    `narrow browser: the window's close button is on the screen (${JSON.stringify(box)})`,
+  );
+  await page.locator("section.win button.ctl.close").click();
+  await page.waitForFunction(
+    () =>
+      !document.querySelector("section.win") &&
+      !document.querySelector(".desk-area"),
+    null,
+    { timeout: 8000 },
+  );
+  await made.ctx.close();
+}
+
 // PLAN 71 ("Variante C"): Systemsteuerung has one menu – the side bar with
 // its search – and the start page is the overview with cards. The side bar
 // covers the desktop completely.
@@ -567,7 +627,9 @@ const checkedErrors = errors.filter(
 // 3. Optional: every page of every program, for a visual pass.
 if (process.env.WINDOWS_ALL) {
   const report = [];
-  for (const w of [800, 1100]) {
+  for (const w of process.env.WINDOWS_WIDTHS?.split(",").map(Number) ?? [
+    800, 1100,
+  ]) {
     for (const [app, paths] of everything) {
       for (const path of paths.filter(
         (p) => !onlyPaths || onlyPaths.includes(p),
@@ -578,10 +640,14 @@ if (process.env.WINDOWS_ALL) {
           try {
             made = await openWindow(app, path, w);
             const res = await inspect(made.frame);
+            const cut = [
+              ...(await made.frame.evaluate(cutTextIn)),
+              ...(await made.page.evaluate(cutTextIn)),
+            ];
             await made.page
               .locator("section.win")
               .screenshot({ path: `${out}/all-${w}-${slug(path)}.png` });
-            report.push({ path, w, ...res });
+            report.push({ path, w, ...res, cut });
             attempt = 2;
           } catch (err) {
             if (attempt)
@@ -610,7 +676,8 @@ if (process.env.WINDOWS_ALL) {
         path: `${out}/all-phone-${slug(path)}.png`,
         fullPage: true,
       });
-      report.push({ path, w: 390, ...res });
+      const cut = await made.page.evaluate(cutTextIn);
+      report.push({ path, w: 390, ...res, cut });
     }
     await made.ctx.close();
   }
@@ -620,7 +687,8 @@ if (process.env.WINDOWS_ALL) {
       (r.w !== 390 && r.h1.length) ||
       r.overflowX > 1 ||
       r.covered.length ||
-      r.clipped.length
+      r.clipped.length ||
+      r.cut?.length
     )
       console.log(JSON.stringify(r));
   const later = [...new Set(errors.slice(checkedCount))];

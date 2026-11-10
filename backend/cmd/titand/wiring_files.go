@@ -109,6 +109,17 @@ func (w *titand) wireFiles() error {
 		}
 		return firewallNetworks(w.connection, w.dockerNetworks), true
 	}
+	// Devices of the WireGuard server have private addresses but come in
+	// over the VPN interface: the firewall counts them as VPN.
+	w.packetFilter.VPNNetworks = func() []string {
+		if w.vpnServer == nil {
+			return nil
+		}
+		if s := w.vpnServer.Settings(); s.Enabled && s.Network != "" {
+			return []string{s.Network}
+		}
+		return nil
+	}
 	w.packetFilter.OnBlock = func(block firewall.Block) {
 		w.notifier.Notify(notify.Warning, "firewall_blocked", block.Address)
 		w.audit.Record(activity.Entry{Via: activity.ViaSystem, IP: block.Address, Action: "firewall_block", Target: block.Source, OK: true})

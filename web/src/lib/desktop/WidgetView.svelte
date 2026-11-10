@@ -303,10 +303,9 @@
 		font-weight: 600;
 	}
 	.ellipsis {
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
 		min-width: 0;
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	.grow {
 		flex: 1;

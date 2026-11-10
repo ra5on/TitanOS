@@ -591,6 +591,19 @@ func (m *Manager) Delete(ctx context.Context, name, confirm string) error {
 	return nil
 }
 
+// wipeTarget is what is wiped when a member partition leaves its array for
+// good: the whole disk with its partition table when the member is all the
+// disk holds (the layout TitanOS makes), otherwise only the member itself.
+// An array taken over from another system may share its disks with other
+// partitions (a system or data partition, a member of another array):
+// wiping the disk would take their partition table with it.
+func wipeTarget(disk, member blockDevice) string {
+	if parts := disk.partitions(); len(parts) == 1 && parts[0].KName == member.KName {
+		return disk.Name
+	}
+	return member.KName
+}
+
 // wipePartitionTables turns the former members of an array back into empty disks.
 func (m *Manager) wipePartitionTables(ctx context.Context, a array) {
 	_, _ = m.runner.Run(ctx, "", "udevadm", "settle") // only waits for the kernel and udev; the next step checks the result
@@ -603,8 +616,9 @@ func (m *Manager) wipePartitionTables(ctx context.Context, a array) {
 			if !slices.ContainsFunc(a.members, func(member arrayMember) bool { return "/dev/"+member.device == part.KName }) {
 				continue
 			}
-			if _, err := m.runner.Run(ctx, "", "wipefs", "--all", "--force", device.Name); err != nil {
-				slog.Warn("wipe disk", "device", device.Name, "err", err)
+			target := wipeTarget(device, part)
+			if _, err := m.runner.Run(ctx, "", "wipefs", "--all", "--force", target); err != nil {
+				slog.Warn("wipe disk", "device", target, "err", err)
 			}
 		}
 	}
@@ -748,8 +762,11 @@ func (m *Manager) RemoveDisk(ctx context.Context, name, diskName string) error {
 		}
 		_, _ = m.runner.Run(ctx, "", "mdadm", "--zero-superblock", "--force", part) // cleanup, best effort: nothing more can be done if it fails
 		_, _ = m.runner.Run(ctx, "", "wipefs", "--all", "--force", part)            // cleanup, best effort: nothing more can be done if it fails
-		_, _ = m.runner.Run(ctx, "", "wipefs", "--all", "--force", device.Name)     // cleanup, best effort: nothing more can be done if it fails
-		_, _ = m.runner.Run(ctx, "", "udevadm", "settle")                           // only waits for the kernel and udev; the next step checks the result
+		// The partition table goes only when this member was all the disk held.
+		if target := wipeTarget(device, blockDevice{KName: part}); target != part {
+			_, _ = m.runner.Run(ctx, "", "wipefs", "--all", "--force", target) // cleanup, best effort: nothing more can be done if it fails
+		}
+		_, _ = m.runner.Run(ctx, "", "udevadm", "settle") // only waits for the kernel and udev; the next step checks the result
 		return nil
 	}
 	return fmt.Errorf("%w: %s is not part of %s", ErrDiskUnavailable, diskName, name)

@@ -323,9 +323,7 @@
 		border-bottom: 1px solid var(--border);
 	}
 	.entry span {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: anywhere;
 	}
 	.folder {
 		border: 0;
@@ -333,10 +331,8 @@
 		color: var(--text);
 		text-align: left;
 		cursor: pointer;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 		font: inherit;
+		overflow-wrap: anywhere;
 	}
 	p {
 		padding: var(--space-2-5);

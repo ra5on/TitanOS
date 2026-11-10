@@ -52,6 +52,7 @@
 	import { dayTint, wallpaperCss } from './wallpapers.ts';
 	import {
 		anyUnsaved,
+		pullWindowsIn,
 		byRecency,
 		requestClose,
 		desktop,
@@ -66,7 +67,7 @@
 	import { formatPercent } from '../format.ts';
 	import { i18n } from '../i18n/index.svelte.ts';
 	import MenuBar from './menubar/MenuBar.svelte';
-	import { menuKeyDown, menuKeyReset, menuKeyUp, screenOwnsKeys } from './menubar/keys.ts';
+	import { deskKey, menuKeyDown, menuKeyReset, menuKeyUp, screenOwnsKeys } from './menubar/keys.ts';
 	import type { DeskOp } from './menubar/menus.ts';
 
 	const onlock = () => void lock();
@@ -210,9 +211,14 @@
 				void openProgram('app:' + app.id, { href: path });
 		}
 		const stop = watchSources();
+		let measured = false;
 		const measure = () => {
 			if (!area) return;
+			const narrower = !measured || area.clientWidth < wm.area.w;
+			measured = true;
 			wm.area = { w: area.clientWidth, h: area.clientHeight };
+			// PLAN 76 (F-12-11): a smaller screen pulls the windows back in, buttons included.
+			if (narrower) pullWindowsIn();
 		};
 		measure();
 		const observer = new ResizeObserver(measure);
@@ -563,10 +569,11 @@
 			menuBar?.focusBar();
 			return;
 		}
-		if (event.altKey && !event.ctrlKey && !event.metaKey) {
-			const k = event.key.toLowerCase();
+		// The window passes its page's keys on with the target lost: deskKey ran there already.
+		const k = deskKey(event);
+		if (k) {
 			// PLAN 67-1: Alt + K shows the desktop (Alt + D belongs to the browser's address bar).
-			if (event.code === 'KeyK' || k === 'k') {
+			if (k === 'k') {
 				if (screenOwnsKeys(event.target)) return;
 				event.preventDefault();
 				showDesktop();
@@ -589,20 +596,15 @@
 			} else if (k === 'm') {
 				event.preventDefault();
 				minimize(front);
-			} else if (
-				event.key === 'ArrowLeft' ||
-				event.key === 'ArrowRight' ||
-				event.key === 'ArrowUp' ||
-				event.key === 'ArrowDown'
-			) {
+			} else if (k === 'ArrowLeft' || k === 'ArrowRight' || k === 'ArrowUp' || k === 'ArrowDown') {
 				event.preventDefault();
 				setSnap(
 					front,
-					event.key === 'ArrowLeft'
+					k === 'ArrowLeft'
 						? 'left'
-						: event.key === 'ArrowRight'
+						: k === 'ArrowRight'
 							? 'right'
-							: event.key === 'ArrowUp'
+							: k === 'ArrowUp'
 								? 'max'
 								: null,
 				);
@@ -774,6 +776,7 @@
 	class:live={desktop.prefs.wallpaper.live && !reduced}
 	class:moving={wm.dragging}
 	class="desktop enter-{enterKind || 'none'}"
+	data-cut="frame"
 	style:--wallpaper={wallpaper}
 	style:--tint="{tint}deg"
 	style:--icon={iconPx + 'px'}
@@ -994,7 +997,7 @@
 								aria-label={t('desktop.folder.rename')}
 							/>
 						{:else}
-							<span class="label">{folder?.name ?? p?.label}</span>
+							<span class="label" data-cut="excerpt">{folder?.name ?? p?.label}</span>
 						{/if}
 					</button>
 				{/if}
@@ -1141,7 +1144,7 @@
 										/>{#if fp.badge?.count}<span class="badge count">{fp.badge.count}</span
 											>{/if}</span
 									>
-									<span class="label">{fp.label}</span>
+									<span class="label" data-cut="excerpt">{fp.label}</span>
 								</button>
 							{/if}
 						{:else}
@@ -1901,7 +1904,8 @@
 	}
 	.ico .label {
 		max-width: 100%;
-		overflow-wrap: anywhere;
+		overflow-wrap: break-word;
+		hyphens: auto;
 		display: -webkit-box;
 		-webkit-line-clamp: 2;
 		line-clamp: 2;
@@ -2152,10 +2156,8 @@
 		min-width: 0;
 	}
 	.thumb-name b {
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
 		font-size: var(--text-sm);
+		overflow-wrap: anywhere;
 	}
 	.keys {
 		flex-basis: 100%;

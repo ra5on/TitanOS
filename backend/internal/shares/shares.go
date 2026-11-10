@@ -10,6 +10,7 @@ package shares
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -28,6 +29,8 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/config"
 	"github.com/ra5on/TitanOS/backend/internal/run"
+
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -597,15 +600,40 @@ func (m *Manager) sweepRecycle(mounted []string, now time.Time) {
 		cutoff := now.AddDate(0, 0, -share.Recycle.Days)
 		removed := 0
 		var dirs []string
+		// When a folder was deleted: the file manager notes it on the
+		// folder and leaves the dates of the files inside alone
+		// (files.rememberTrash). A file counts from the newest of its own
+		// date, its own note and the notes of the folders above it, so
+		// old photos in a folder deleted yesterday stay their full time.
+		// WalkDir visits a folder before what is in it.
+		since := map[string]time.Time{}
 		_ = filepath.WalkDir(bin, func(path string, entry fs.DirEntry, err error) error { // the callback collects what it can; unreadable entries are skipped
-			if err != nil || path == bin {
+			if err != nil {
 				return nil
 			}
 			if entry.IsDir() {
+				m.repairBinFolder(path, entry)
+			}
+			if path == bin {
+				return nil
+			}
+			deleted := since[filepath.Dir(path)]
+			if noted := trashNote(path); noted.After(deleted) {
+				deleted = noted
+			}
+			if entry.IsDir() {
+				since[path] = deleted
 				dirs = append(dirs, path)
 				return nil
 			}
-			if info, err := entry.Info(); err == nil && info.ModTime().Before(cutoff) {
+			info, err := entry.Info()
+			if err != nil {
+				return nil
+			}
+			if info.ModTime().After(deleted) {
+				deleted = info.ModTime()
+			}
+			if deleted.Before(cutoff) {
 				if os.Remove(path) == nil {
 					removed++
 				}
@@ -621,6 +649,40 @@ func (m *Manager) sweepRecycle(mounted []string, now time.Time) {
 			slog.Info("recycle bin emptied", "share", share.Name, "files", removed)
 		}
 	}
+}
+
+// repairBinFolder makes a folder of the recycle bin writable for the group
+// of the shares. Versions before 0.75 let the file manager make them for
+// root only; Samba, working as the account, could then not move a deleted
+// file there and deleted it for good.
+func (m *Manager) repairBinFolder(path string, entry fs.DirEntry) {
+	info, err := entry.Info()
+	if err != nil || !info.IsDir() || info.Mode().Perm()&0o020 != 0 {
+		return
+	}
+	_ = os.Lchown(path, -1, m.gid)          // best effort, the next sweep tries again
+	_ = os.Chmod(path, 0o770|os.ModeSetgid) // see above
+}
+
+// trashAttribute is where the file manager notes when and from where an
+// entry went to the recycle bin (files.trashAttribute).
+const trashAttribute = "user.titanos.trash"
+
+// trashNote is the time of deletion noted on an entry of the recycle bin,
+// zero if there is none. Links are not followed.
+func trashNote(path string) time.Time {
+	data := make([]byte, 8192)
+	n, err := unix.Lgetxattr(path, trashAttribute, data)
+	if err != nil {
+		return time.Time{}
+	}
+	var note struct {
+		Deleted time.Time `json:"deleted"`
+	}
+	if json.Unmarshal(data[:n], &note) != nil {
+		return time.Time{}
+	}
+	return note.Deleted
 }
 
 // UseMountRoot puts the volumes below root instead of /mnt. For tests of

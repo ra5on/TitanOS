@@ -201,10 +201,10 @@
 	<Dialog title={t('agent.deleteTitle')} onclose={() => close()}>
 		<p>{t('agent.deleteText', { title: chat.title })}</p>
 		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={() => close()}>{t('common.cancel')}</button>
 			<button type="button" class="btn btn-danger" onclick={() => onremove(chat)}
 				>{t('common.delete')}</button
 			>
-			<button type="button" class="btn" onclick={() => close()}>{t('common.cancel')}</button>
 		</div>
 	</Dialog>
 {:else if sheet.kind === 'deleteAll'}
@@ -219,10 +219,10 @@
 			>
 		{/if}
 		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={() => close()}>{t('common.cancel')}</button>
 			<button type="button" class="btn btn-danger" onclick={onremoveall}
 				>{t('agent.deleteAllButton')}</button
 			>
-			<button type="button" class="btn" onclick={() => close()}>{t('common.cancel')}</button>
 		</div>
 	</Dialog>
 {/if}

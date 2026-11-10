@@ -1778,9 +1778,7 @@
 		cursor: pointer;
 	}
 	.pickfield .mono {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: anywhere;
 	}
 	.more {
 		margin-top: var(--space-2);

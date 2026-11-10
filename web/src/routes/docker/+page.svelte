@@ -1125,10 +1125,10 @@
 	<Dialog title={t('docker.stopAllTitle')} onclose={() => (confirmStopAll = false)}>
 		<p>{t('docker.stopAllText', { count: runCount })}</p>
 		<div class="dialog-actions">
-			<button type="button" class="btn btn-warn" onclick={stopAll}>{t('docker.stopAll')}</button
-			><button type="button" class="btn" onclick={() => (confirmStopAll = false)}
+			<button type="button" class="btn" onclick={() => (confirmStopAll = false)}
 				>{t('common.cancel')}</button
 			>
+			<button type="button" class="btn btn-warn" onclick={stopAll}>{t('docker.stopAll')}</button>
 		</div>
 	</Dialog>
 {/if}
@@ -1509,10 +1509,8 @@
 		min-width: 0;
 	}
 	.lines .sub {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 		max-width: 22rem;
+		overflow-wrap: anywhere;
 	}
 	.narrow,
 	.narrow-chip {
@@ -1579,10 +1577,8 @@
 	}
 	.ports {
 		max-width: 10rem;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 		color: var(--muted);
+		overflow-wrap: anywhere;
 	}
 	.upd {
 		width: 1%;
@@ -1647,7 +1643,8 @@
 	/* PLAN 64: in the window's tool bar the search sits left and gives way first. */
 	:global(.win-toolbar) .search-box {
 		flex: 0 1 15rem;
-		min-width: 7rem;
+		/* Wide enough for its hint; the tool bar wraps before the hint is cut. */
+		min-width: 12rem;
 		width: auto;
 		margin-right: auto;
 	}

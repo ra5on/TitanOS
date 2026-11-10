@@ -21,7 +21,7 @@
 	import { api } from '../api.ts';
 	import { registerWindowCommands } from '../menu-commands.svelte.ts';
 	import type RemoteViewType from './RemoteView.svelte';
-	import { menuKeyReset, screenOwnsKeys } from './menubar/keys.ts';
+	import { deskKey, menuKeyReset, screenOwnsKeys } from './menubar/keys.ts';
 	import { clearFrameCommands } from './menubar/state.svelte.ts';
 	import { sources } from './sources.svelte.ts';
 	import DirectView from './DirectView.svelte';
@@ -29,6 +29,8 @@
 	import {
 		closeWindow,
 		requestClose,
+		setFrameUnsaved,
+		unsavedKind,
 		desktop,
 		focus,
 		minimize,
@@ -95,6 +97,8 @@
 	let restartAsk = $state(false);
 	const docName = $derived(win.docName || (win.doc ? baseName(win.doc.path) : ''));
 	const closing = $derived(wm.closing.includes(win.id));
+	// Only running work (an upload), no changed fields: the question says so.
+	const busyOnly = $derived(closing && unsavedKind(win.id) === 'busy');
 
 	const MIN_W = 360;
 	const MIN_H = 240;
@@ -165,9 +169,7 @@
 				menuKeyReset();
 				// Alt + K (show the desktop) stays with a screen or terminal (readline, guests).
 				if (e.altKey && e.code === 'KeyK' && screenOwnsKeys(e.target)) return;
-				const desk =
-					(e.altKey && !e.ctrlKey && !e.metaKey && /^(q|w|m|k|arrow)/i.test(e.key)) ||
-					((e.ctrlKey || e.metaKey) && e.code === 'Space');
+				const desk = !!deskKey(e) || ((e.ctrlKey || e.metaKey) && e.code === 'Space');
 				if (!desk) return;
 				e.preventDefault();
 				e.stopImmediatePropagation();
@@ -195,6 +197,8 @@
 		untrack(tellSide);
 	});
 	function loaded() {
+		// A page loaded anew holds no unsaved work yet (it says so itself once it does).
+		setFrameUnsaved(win.id, '');
 		tellVisible();
 		tellSide();
 		// PLAN 67-1: the new page announces its menu commands; ask in case it already did.
@@ -221,16 +225,30 @@
 		}, 0);
 	});
 
-	const folded = $derived(desktop.prefs.folded.includes(foldKey));
-	function toggleFold() {
-		savePrefs((p) => {
-			p.folded = folded ? p.folded.filter((k) => k !== foldKey) : [...p.folded, foldKey];
-		});
-	}
-
 	const rect = $derived(
 		snapRect(win.snap) ?? clearOfDock({ x: win.x, y: win.y, w: win.w, h: win.h }),
 	);
+	const foldedPref = $derived(desktop.prefs.folded.includes(foldKey));
+	// PLAN 76 (F-12-15): in a narrow window the side bar folds to its icons by
+	// itself, so the page keeps the width of a phone and nothing is cut off.
+	// Unfolding it there holds until the window is wide again.
+	const NARROW = 620;
+	let heldOpen = $state(false);
+	const narrow = $derived(rect.w < NARROW);
+	$effect(() => {
+		if (!narrow) heldOpen = false;
+	});
+	const folded = $derived(narrow ? !heldOpen : foldedPref);
+	function toggleFold() {
+		if (narrow) {
+			heldOpen = !heldOpen;
+			return;
+		}
+		savePrefs((p) => {
+			p.folded = foldedPref ? p.folded.filter((k) => k !== foldKey) : [...p.folded, foldKey];
+		});
+	}
+
 	const focused = $derived(wm.focused === win.id);
 	const path = $derived(win.href.split('?')[0]);
 	// PLAN 69: on these pages the page itself draws the one side bar.
@@ -333,6 +351,8 @@
 			win.href = path;
 			if (focused) onaddress?.(path);
 			saveWindows();
+		} else if (msg?.type === 'titanos-unsaved') {
+			setFrameUnsaved(win.id, msg.state);
 		} else if (msg?.type === 'titanos-side-get') {
 			tellSide();
 		} else if (msg?.type === 'titanos-side-fold') {
@@ -737,13 +757,14 @@
 					size={22}
 					name={win.title}
 				/>{/if}
-			<b class="title">{win.title}</b>{#if webappId}{#if docName}<span
-						class="crumb"
-						aria-hidden="true">·</span
-					><span class="title page">{docName}</span>{/if}{:else if crumb}<span
-					class="crumb"
-					aria-hidden="true">›</span
-				><span class="title page">{crumb}</span>{/if}
+			<!-- Program and page: the page's name takes a second line before a word is broken. -->
+			<span class="titles"
+				><b class="title">{win.title}</b>{#if webappId}{#if docName}<span class="title page"
+							><span class="crumb" aria-hidden="true">·</span>{docName}</span
+						>{/if}{:else if crumb}<span class="title page"
+						><span class="crumb" aria-hidden="true">›</span>{crumb}</span
+					>{/if}</span
+			>
 			<span class="fill"></span>
 			{#if webappId || external}
 				<span class="more-wrap">
@@ -947,19 +968,21 @@
 	</div>
 	{#if closing}
 		<Dialog
-			title={t('webapps.unsavedTitle')}
+			title={t(busyOnly ? 'desktop.closeBusyTitle' : 'webapps.unsavedTitle')}
 			onclose={() => (wm.closing = wm.closing.filter((c) => c !== win.id))}
 		>
-			<p>{t('webapps.unsavedText', { app: win.title })}</p>
+			<p>
+				{t(busyOnly ? 'desktop.closeBusyText' : 'webapps.unsavedText', { app: win.title })}
+			</p>
 			<div class="dialog-actions">
-				<button type="button" class="btn btn-danger" onclick={() => closeWindow(win.id)}
-					>{t('webapps.closeAnyway')}</button
-				>
 				<button
 					type="button"
 					class="btn btn-primary"
 					onclick={() => (wm.closing = wm.closing.filter((c) => c !== win.id))}
 					>{t('common.cancel')}</button
+				>
+				<button type="button" class="btn btn-danger" onclick={() => closeWindow(win.id)}
+					>{t(busyOnly ? 'desktop.closeBusyAnyway' : 'webapps.closeAnyway')}</button
 				>
 			</div>
 		</Dialog>
@@ -968,6 +991,9 @@
 		<Dialog title={t('webapps.unsavedTitle')} onclose={() => (restartAsk = false)}>
 			<p>{t('webapps.unsavedRestart', { app: win.title })}</p>
 			<div class="dialog-actions">
+				<button type="button" class="btn btn-primary" onclick={() => (restartAsk = false)}
+					>{t('common.cancel')}</button
+				>
 				<button
 					type="button"
 					class="btn btn-danger"
@@ -975,9 +1001,6 @@
 						restartAsk = false;
 						view?.restart();
 					}}>{t('webapps.restartAnyway')}</button
-				>
-				<button type="button" class="btn btn-primary" onclick={() => (restartAsk = false)}
-					>{t('common.cancel')}</button
 				>
 			</div>
 		</Dialog>
@@ -1113,9 +1136,9 @@
 		min-width: 0;
 	}
 	.side-title b {
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		min-width: 0;
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	.items {
 		flex: 1;
@@ -1206,7 +1229,7 @@
 		flex-direction: column;
 	}
 	.titlebar {
-		height: 42px;
+		min-height: 42px;
 		flex: none;
 		/* Above the body (the ⋯ menu of a web app opens over the app), below the resize edges. */
 		position: relative;
@@ -1221,14 +1244,24 @@
 		touch-action: none;
 		cursor: default;
 	}
-	.title {
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
+	/* Never cut off (owner 10.11.2026): a long title wraps, the bar grows with it. */
+	.titles {
+		flex: 0 1 auto;
+		min-width: 0;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		column-gap: 9px;
+		padding: 5px 0;
 	}
 	.title {
-		flex: none;
-		max-width: 45%;
+		min-width: 0;
+		line-height: 1.2;
+		overflow-wrap: break-word;
+		hyphens: auto;
+	}
+	.title .crumb {
+		margin: 0 6px 0 0;
 	}
 	.title.page {
 		flex: 0 1 auto;

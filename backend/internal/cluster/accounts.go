@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
@@ -39,17 +40,38 @@ func (m *Manager) AccountChanged(name string) {
 	if !m.IsAdmin() {
 		return
 	}
-	if m.noteLocal(name) {
+	if m.noteLocal(name, true) {
 		m.pushAccount(context.Background(), name)
 	}
 }
 
+// accountsLoaded reports whether the accounts of this NAS were read. While
+// they were not (one unreadable account file fails the whole load, and
+// titand keeps running), "the account is not there" means nothing.
+func (m *Manager) accountsLoaded() bool {
+	if l, ok := m.Users.(interface{ Loaded() bool }); ok {
+		return l.Loaded()
+	}
+	return true
+}
+
 // noteLocal gives the account a new version if it differs from what the
-// cluster knows of it. It reports whether it did.
-func (m *Manager) noteLocal(name string) bool {
+// cluster knows of it. It reports whether it did. removed says that the
+// account was removed here just now (AccountChanged); only then does an
+// account that is missing become a deletion for the whole cluster. The
+// regular look (syncAccounts) never makes one: accounts that could not be
+// read would otherwise be deleted on every node, with their sessions,
+// tokens and rights on the shares.
+func (m *Manager) noteLocal(name string, removed bool) bool {
+	if !m.accountsLoaded() {
+		return false
+	}
 	m.pushing.Lock()
 	defer m.pushing.Unlock()
 	user, exists := m.Users.Get(name)
+	if !exists && !removed {
+		return false
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.state == nil {
@@ -134,6 +156,15 @@ func (m *Manager) takeAccounts(records []accountRecord) error {
 			continue
 		}
 		if rec.Version.Deleted {
+			if !had {
+				// The cluster never held this account here: an account of that
+				// name on this node is its own (created here, never taken
+				// over). A note that it was deleted elsewhere does not remove it.
+				if slices.ContainsFunc(m.Users.List(), func(u auth.User) bool { return u.Name == rec.Name }) {
+					slog.Info("cluster: deleted account of the cluster has a local namesake, which stays", "user", rec.Name)
+					continue
+				}
+			}
 			before, existed, err := m.Users.Forget(rec.Name)
 			if err != nil {
 				slog.Error("cluster: account not removed", "user", rec.Name, "err", err)
@@ -190,8 +221,11 @@ func (m *Manager) syncAccounts(ctx context.Context) {
 	for name := range m.versions() {
 		names[name] = true
 	}
+	if !m.accountsLoaded() {
+		return
+	}
 	for name := range names {
-		m.noteLocal(name)
+		m.noteLocal(name, false)
 	}
 	mine := m.versions()
 	for _, n := range m.others() {

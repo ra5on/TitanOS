@@ -405,3 +405,67 @@ func TestBtrfsGraceHoldsSettledOnlyWhileWaiting(t *testing.T) {
 		t.Fatal("a mirror past its grace still holds the boot check")
 	}
 }
+
+// A member partition that shares its disk with other partitions (an array
+// taken over from another system) is wiped alone: the partition table of
+// the disk, and with it the other partitions, stays.
+func TestWipeKeepsThePartitionTableOfASharedDisk(t *testing.T) {
+	member := blockDevice{KName: "/dev/sda3", Type: "part"}
+	own := blockDevice{Name: "/dev/sdb", Children: []blockDevice{{KName: "/dev/sdb1", Type: "part"}}}
+	shared := blockDevice{Name: "/dev/sda", Children: []blockDevice{{KName: "/dev/sda1", Type: "part"}, member}}
+	if got := wipeTarget(own, own.Children[0]); got != "/dev/sdb" {
+		t.Errorf("disk with the member alone: wiped %s, want the whole disk", got)
+	}
+	if got := wipeTarget(shared, member); got != "/dev/sda3" {
+		t.Errorf("disk with other partitions: wiped %s, want only the member", got)
+	}
+}
+
+type detailCounter struct {
+	*treeRunner
+	asked int
+}
+
+func (r *detailCounter) Run(ctx context.Context, stdin string, name string, args ...string) (string, error) {
+	if name == "mdadm" && len(args) > 0 && args[0] == "--detail" {
+		r.asked++
+	}
+	return r.treeRunner.Run(ctx, stdin, name, args...)
+}
+
+// mdadm reads the UUID of an array from a member disk. Asked on every
+// status poll, that keeps the disk from ever going to sleep: a running
+// array is asked once, a newly started one under the same name again.
+func TestArrayUUIDIsAskedOncePerRunningArray(t *testing.T) {
+	m, tree := treeManager(t, nil)
+	runner := &detailCounter{treeRunner: tree}
+	m.runner = runner
+	m.sysBlock = t.TempDir()
+	md := filepath.Join(m.sysBlock, "md127", "md")
+	start := func() {
+		if err := os.MkdirAll(md, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		os.WriteFile(filepath.Join(md, "level"), []byte("raid1\n"), 0o644)
+	}
+	start()
+	ctx := context.Background()
+	for range 5 {
+		if got := m.arrays(ctx); len(got) != 1 || got[0].uuid == "" {
+			t.Fatalf("arrays: %+v", got)
+		}
+	}
+	if runner.asked != 1 {
+		t.Fatalf("mdadm --detail ran %d times for one running array", runner.asked)
+	}
+	// Stopped and started again (possibly another array under the name).
+	if err := os.RemoveAll(filepath.Dir(md)); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(m.sysBlock, "placeholder"), nil, 0o644) // takes the freed inode
+	start()
+	m.arrays(ctx)
+	if runner.asked != 2 {
+		t.Fatalf("a newly started array was not asked again (%d)", runner.asked)
+	}
+}

@@ -594,12 +594,12 @@
 	<Dialog title={t('webapps.conflictTitle')} onclose={cancelConflict}>
 		<p>{t('webapps.conflictText', { name: conflict.name })}</p>
 		<div class="dialog-actions">
-			<button type="button" class="btn btn-danger" onclick={overwrite}
-				>{t('webapps.overwrite')}</button
-			>
 			<button type="button" class="btn" onclick={cancelConflict}>{t('common.cancel')}</button>
 			<button type="button" class="btn btn-primary" onclick={saveCopy}
 				>{t('webapps.saveCopy')}</button
+			>
+			<button type="button" class="btn btn-danger" onclick={overwrite}
+				>{t('webapps.overwrite')}</button
 			>
 		</div>
 	</Dialog>
@@ -609,10 +609,10 @@
 	<Dialog title={t('webapps.replaceTitle')} onclose={cancelReplace}>
 		<p>{t('webapps.replaceText', { name: baseName(replace.target.path) })}</p>
 		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={cancelReplace}>{t('common.cancel')}</button>
 			<button type="button" class="btn btn-danger" onclick={confirmReplace}
 				>{t('webapps.replace')}</button
 			>
-			<button type="button" class="btn" onclick={cancelReplace}>{t('common.cancel')}</button>
 		</div>
 	</Dialog>
 {/if}

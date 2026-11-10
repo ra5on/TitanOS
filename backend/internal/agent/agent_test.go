@@ -395,3 +395,33 @@ func TestTrimKeepsPinnedAndArchived(t *testing.T) {
 		t.Fatalf("removed %v", removed)
 	}
 }
+
+// PLAN 76 (F-11-5): a stream that stops without its closing line is a cut
+// connection, not a complete answer.
+func TestChatRefusesAStreamWithoutItsEnd(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+		ok   bool
+	}{
+		{"complete", `{"message":{"content":"Hallo"}}` + "\n" + `{"message":{"content":""},"done":true}` + "\n", true},
+		{"cut off", `{"message":{"content":"Hal"}}` + "\n", false},
+		{"empty", "", false},
+	} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(tc.body))
+		}))
+		o, err := NewOllama(srv.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		msg, _, err := o.Chat(context.Background(), ChatRequest{Model: "m"}, nil)
+		srv.Close()
+		if tc.ok && (err != nil || msg.Content != "Hallo") {
+			t.Errorf("%s: %q, %v", tc.name, msg.Content, err)
+		}
+		if !tc.ok && !errors.Is(err, ErrUnreachable) {
+			t.Errorf("%s: want ErrUnreachable, got %q, %v", tc.name, msg.Content, err)
+		}
+	}
+}

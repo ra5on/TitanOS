@@ -543,7 +543,10 @@ func (m *Manager) Lock(ctx context.Context, name string) error {
 		closeErr = m.luksClose(ctx, cryptName(volume, ""))
 	}
 	if closeErr != nil {
-		return closeErr
+		// Not locked: the loop mounts the volume again within seconds.
+		// What was stopped for the lock (VMs, containers) starts again
+		// like after any other failed attempt, instead of staying off.
+		return fail(closeErr)
 	}
 	m.mu.Lock()
 	if m.lockNotified == nil {
@@ -695,6 +698,33 @@ func (m *Manager) encryptNewMember(ctx context.Context, volume VolumeConfig, par
 		return "", err
 	}
 	return device, nil
+}
+
+// undoNewMember takes back encryptNewMember after Btrfs refused the new
+// device: the container is closed and erased and the configuration names
+// the members it named before (volume is the configuration from before the
+// step). Left in place, the new UUID would make the disk a member that can
+// neither be added again nor removed, and a replaced member would be
+// forgotten although it was not replaced.
+func (m *Manager) undoNewMember(ctx context.Context, volume VolumeConfig, rawPart string) {
+	if volume.Encryption == nil {
+		return
+	}
+	before := slices.Clone(volume.Encryption.UUIDs)
+	if current, ok := m.find(volume.Name); ok && current.Encryption != nil {
+		for _, uuid := range current.Encryption.UUIDs {
+			if !slices.Contains(before, uuid) {
+				_ = m.luksClose(ctx, cryptName(volume, uuid)) // cleanup, best effort: nothing more can be done if it fails
+			}
+		}
+	}
+	if err := m.updateVolume(volume.Name, func(v *VolumeConfig) {
+		v.Encryption = &EncryptionConfig{UUIDs: before}
+	}); err != nil {
+		slog.Error("LUKS members not put back after a failed step", "name", volume.Name, "err", err)
+	}
+	_ = m.eraseLUKS(ctx, rawPart)                                       // cleanup, best effort: nothing more can be done if it fails
+	_, _ = m.runner.Run(ctx, "", "wipefs", "--all", "--force", rawPart) // cleanup, best effort: nothing more can be done if it fails
 }
 
 // checkNewMemberPassword checks the password before a disk is erased.

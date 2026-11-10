@@ -3,6 +3,7 @@ package files
 import (
 	"context"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path"
@@ -68,7 +69,7 @@ func (d *davFS) Mkdir(_ context.Context, raw string, _ os.FileMode) error {
 	return nil
 }
 
-func (d *davFS) OpenFile(_ context.Context, raw string, flag int, _ os.FileMode) (webdav.File, error) {
+func (d *davFS) OpenFile(ctx context.Context, raw string, flag int, _ os.FileMode) (webdav.File, error) {
 	p, err := d.name(raw)
 	if err != nil {
 		return nil, err
@@ -84,6 +85,28 @@ func (d *davFS) OpenFile(_ context.Context, raw string, flag int, _ os.FileMode)
 		return nil, err
 	}
 	defer r.Close()
+	// A whole new content (PUT, COPY onto a file) is written next to the
+	// file and takes its name only when all of it is there: written into
+	// the file itself, a lost connection or a full volume would leave it
+	// cut short with the old version gone, and readers would see half a
+	// file during every save.
+	if flag&os.O_TRUNC != 0 && flag&(os.O_WRONLY|os.O_RDWR) != 0 {
+		if info, err := r.Lstat(p); err == nil && !info.Mode().IsRegular() {
+			return nil, fs.ErrInvalid
+		} else if err != nil && (!errors.Is(err, fs.ErrNotExist) || flag&os.O_CREATE == 0) {
+			return nil, err
+		}
+		part := path.Join(path.Dir(p), ".titanos-dav-"+randomID()+partSuffix)
+		f, err := r.OpenFile(part, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o660)
+		if err != nil {
+			return nil, err
+		}
+		expected, _ := ctx.Value(davLengthKey{}).(int64)
+		if _, known := ctx.Value(davLengthKey{}).(int64); !known {
+			expected = -1
+		}
+		return &davWrite{File: f, fs: d, ctx: ctx, part: part, final: p, expected: expected}, nil
+	}
 	created := false
 	if flag&os.O_CREATE != 0 {
 		if _, err := r.Lstat(p); errors.Is(err, fs.ErrNotExist) {
@@ -156,6 +179,70 @@ func (d *davFS) Stat(_ context.Context, raw string) (os.FileInfo, error) {
 	}
 	defer r.Close()
 	return r.Stat(p)
+}
+
+type davLengthKey struct{}
+
+// WithDAVLength notes how many bytes the body of a WebDAV PUT announced
+// (-1 if it did not say): a file that arrives shorter is not put in place.
+func WithDAVLength(ctx context.Context, length int64) context.Context {
+	return context.WithValue(ctx, davLengthKey{}, length)
+}
+
+// davWrite is a file being saved over WebDAV: a part file that takes the
+// name of the file on Close, if it is complete.
+type davWrite struct {
+	*os.File
+	fs       *davFS
+	ctx      context.Context
+	part     string
+	final    string
+	expected int64
+	failed   bool
+	closed   bool
+}
+
+func (f *davWrite) Write(p []byte) (int, error) {
+	n, err := f.File.Write(p)
+	if err != nil {
+		f.failed = true
+	}
+	return n, err
+}
+
+// Close puts the part file in place. What is incomplete is dropped and the
+// file there stays as it was: a write failed (volume full), the client went
+// away, or fewer bytes came than the request announced.
+func (f *davWrite) Close() error {
+	if f.closed {
+		return fs.ErrClosed
+	}
+	f.closed = true
+	info, statErr := f.File.Stat()
+	syncErr := f.fs.m.syncFile(f.File)
+	closeErr := f.File.Close()
+	r, err := f.fs.open()
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	drop := func(err error) error {
+		_ = r.Remove(f.part) // cleanup, best effort: the sweep of part files takes what is left
+		return err
+	}
+	switch {
+	case f.failed, statErr != nil, syncErr != nil, closeErr != nil:
+		return drop(errors.Join(statErr, syncErr, closeErr, io.ErrShortWrite))
+	case f.ctx != nil && f.ctx.Err() != nil:
+		return drop(f.ctx.Err())
+	case f.expected >= 0 && info.Size() != f.expected:
+		return drop(io.ErrUnexpectedEOF)
+	}
+	f.fs.m.own(r, f.part, f.fs.uid, false)
+	if err := r.Rename(f.part, f.final); err != nil {
+		return drop(err)
+	}
+	return nil
 }
 
 // davFile leaves internal files out of folder listings.

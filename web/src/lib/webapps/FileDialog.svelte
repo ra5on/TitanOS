@@ -338,9 +338,7 @@
 	}
 	.where-from {
 		margin-left: auto;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: anywhere;
 	}
 	.local {
 		margin-inline-end: auto;

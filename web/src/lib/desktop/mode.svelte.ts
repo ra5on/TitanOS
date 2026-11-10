@@ -22,8 +22,23 @@ export const mode = $state<{ wide: boolean; bare: boolean }>({
 	bare: typeof localStorage !== 'undefined' && bareLayout(),
 });
 
+// PLAN 76 (F-12-8): a browser window dragged narrower than 900 px (half the
+// screen, a tablet turned upright) must not tear the desktop down: its
+// windows hold terminals, uploads and forms. While windows are open the
+// desktop stays; the phone's frame comes once the last one is closed.
+let holdDesktop: () => boolean = () => false;
+/** The desktop says whether it holds windows (lib/desktop/wm.svelte.ts). */
+export function setDesktopHold(hold: () => boolean) {
+	holdDesktop = hold;
+}
+/** Follows the width of the browser again (called when the last window closed). */
+export function followWidth() {
+	if (typeof matchMedia === 'function') mode.wide = matchMedia(QUERY).matches;
+}
 if (typeof matchMedia === 'function') {
-	matchMedia(QUERY).addEventListener('change', (e) => (mode.wide = e.matches));
+	matchMedia(QUERY).addEventListener('change', (e) => {
+		if (e.matches || !mode.wide || !holdDesktop()) mode.wide = e.matches;
+	});
 }
 
 export { inWindow };

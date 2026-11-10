@@ -23,7 +23,7 @@ func (s *Server) handleMonitoringExport(w http.ResponseWriter, r *http.Request) 
 	}
 	hours, err := strconv.Atoi(r.URL.Query().Get("hours"))
 	if err != nil {
-		featureError(w, err)
+		writeError(w, http.StatusBadRequest, "bad_request", "hours must be a number")
 		return
 	}
 	format := r.URL.Query().Get("format")

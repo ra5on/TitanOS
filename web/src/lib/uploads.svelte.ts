@@ -165,6 +165,10 @@ async function transfer(item: Upload) {
 				failures = 0;
 			} catch (err) {
 				if (err instanceof ApiError) throw err;
+				// The file on the PC changed or went away since it was chosen: the
+				// browser cannot read it any more. That is no lost connection.
+				if (!(await readable(item.file, item.sent)))
+					throw new ApiError(0, 'upload_source_changed', '');
 				// The connection dropped. Wait, find out what arrived, go on.
 				if (++failures > 30) throw err;
 				if (stateOf(item) === 'uploading') item.state = 'retrying';
@@ -194,6 +198,16 @@ async function transfer(item: Upload) {
 		}
 		item.error = err instanceof ApiError ? err.code : 'unreachable';
 		item.state = 'failed';
+	}
+}
+
+/** Whether the browser can still read the chosen file at this place. */
+async function readable(file: File, offset: number): Promise<boolean> {
+	try {
+		await file.slice(offset, offset + 1).arrayBuffer();
+		return true;
+	} catch {
+		return false;
 	}
 }
 
@@ -277,11 +291,20 @@ export async function cancel(item: Upload) {
 	item.state = 'paused';
 	// Let an in-flight request release its file before asking to remove it.
 	for (let attempt = 0; attempt < 30 && item.busy; attempt++) await sleep(500);
+	// The last request finished the file while the cancel waited: it is there,
+	// complete – nothing to remove and nothing failed.
+	if (stateOf(item) === 'done') return;
 	try {
 		if (item.id) await api.delete(`/files/uploads/${item.id}`);
 		remove(item);
 		uploads.finished++;
 	} catch (err) {
+		// Already gone on the NAS: cancelled all the same.
+		if (err instanceof ApiError && err.status === 404) {
+			remove(item);
+			uploads.finished++;
+			return;
+		}
 		item.error = err instanceof ApiError ? err.code : 'unreachable';
 		item.state = 'failed';
 	}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { guardWindowClose } from '#lib/desktop/unsaved.svelte.ts';
 	import TextDiff from './TextDiff.svelte';
 	import { beforeNavigate } from '$app/navigation';
 	import { api, ApiError } from '#lib/api.ts';
@@ -21,6 +22,7 @@
 	let discard = $state(false);
 	let form: HTMLFormElement;
 	const dirty = $derived(loaded && text !== original);
+	guardWindowClose(() => dirty || busy);
 	const tooLarge = $derived(new TextEncoder().encode(text).length > MAX_TEXT_BYTES);
 
 	$effect(() => {

@@ -354,7 +354,7 @@
 										· {n.folder}</span
 									>{/if}</small
 							>
-							{#if n.preview}<span class="pv">{n.preview}</span>{/if}
+							{#if n.preview}<span class="pv" data-cut="excerpt">{n.preview}</span>{/if}
 						</button>
 						<button
 							type="button"
@@ -569,10 +569,10 @@
 					})}
 		</p>
 		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={() => (dialog = null)}>{t('common.cancel')}</button
+			>
 			<button type="button" class="btn btn-danger" onclick={() => remove(d)}
 				>{t('common.delete')}</button
-			>
-			<button type="button" class="btn" onclick={() => (dialog = null)}>{t('common.cancel')}</button
 			>
 		</div>
 	</Dialog>
@@ -622,9 +622,8 @@
 		min-width: 0;
 		margin: 0;
 		font-size: var(--text-md);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	.ib {
 		width: 40px;
@@ -723,9 +722,8 @@
 	.folder span {
 		flex: 1;
 		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	.folder small {
 		color: var(--muted);
@@ -742,9 +740,8 @@
 		min-width: 0;
 	}
 	.nt strong {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	.note small {
 		color: var(--muted);

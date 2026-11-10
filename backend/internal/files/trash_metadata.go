@@ -34,6 +34,17 @@ func rememberTrash(r *os.Root, target, original string, now time.Time) {
 	_ = unix.Fsetxattr(int(f.Fd()), trashAttribute, data, 0)
 }
 
+// forgetTrash removes the note of a deletion from an entry that left the
+// recycle bin.
+func forgetTrash(r *os.Root, name string) {
+	f, err := r.OpenFile(name, os.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	_ = unix.Fremovexattr(int(f.Fd()), trashAttribute) // none there, or no attributes on this file system: nothing to forget
+}
+
 func trashDetails(r *os.Root, relative string, fallback time.Time) trashMetadata {
 	_, original, _ := strings.Cut(relative, "/")
 	result := trashMetadata{Original: original, Deleted: fallback}

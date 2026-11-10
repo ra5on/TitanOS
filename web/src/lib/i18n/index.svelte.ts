@@ -22,6 +22,8 @@ import type webappsDe from './features/webapps.de.json';
 import type menubarDe from './features/menubar.de.json';
 // PLAN 67: Docker images/volumes, the design of the windows, the login picker.
 import type designDe from './features/design.de.json';
+// PLAN 76 (F-12-17): the texts of the error codes that had none.
+import type errorsDe from './features/errors.de.json';
 
 type Messages = typeof deBase &
 	typeof docsDe &
@@ -37,7 +39,8 @@ type Messages = typeof deBase &
 	typeof lookDe &
 	typeof webappsDe &
 	typeof designDe &
-	typeof menubarDe;
+	typeof menubarDe &
+	typeof errorsDe;
 
 /** The files of a language, in the order they are merged. */
 const FILES = {
@@ -58,6 +61,7 @@ const FILES = {
 			import('./features/webapps.de.json'),
 			import('./features/menubar.de.json'),
 			import('./features/design.de.json'),
+			import('./features/errors.de.json'),
 		]),
 	en: () =>
 		Promise.all([
@@ -76,6 +80,7 @@ const FILES = {
 			import('./features/webapps.en.json'),
 			import('./features/menubar.en.json'),
 			import('./features/design.en.json'),
+			import('./features/errors.en.json'),
 		]),
 };
 

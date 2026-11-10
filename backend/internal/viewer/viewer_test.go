@@ -73,7 +73,10 @@ func (f *fakeEngine) ViewerRemove(_ context.Context, id string) error {
 	f.viewers = slices.DeleteFunc(f.viewers, func(v docker.ViewerContainer) bool { return v.ID == id })
 	return nil
 }
-func (f *fakeEngine) ViewerState(_ context.Context, id, network string) (string, bool, error) {
+func (f *fakeEngine) ViewerState(ctx context.Context, id, network string) (string, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return "", false, err
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.stale[id] {

@@ -22,6 +22,9 @@ func TestBtrfsUsable(t *testing.T) {
 		{"raid1", []uint64{4 * g, 4 * g, 8 * g}, 8 * g},   // 16 GiB raw, halved
 		{"raid1c3", []uint64{8 * g, 8 * g, 8 * g}, 8 * g}, // three copies
 		{"raid1c3", []uint64{4 * g, 8 * g, 8 * g, 8 * g}, 9*g + g/3},
+		// One large disk next to small ones: with one copy of everything
+		// on the large disk, the other two copies must fit on 15 GiB.
+		{"raid1c3", []uint64{10 * g, 5 * g, 5 * g, 5 * g}, 7*g + g/2},
 		{"raid1", nil, 0},
 	} {
 		if got := btrfsUsable(c.profile, c.sizes); got != c.want {
@@ -116,6 +119,14 @@ func (r *layoutRunner) Run(ctx context.Context, stdin, name string, args ...stri
 		r.btrfs = append(r.btrfs, command)
 		if strings.HasPrefix(command, "device remove") && r.removed != nil {
 			<-r.removed
+			// Btrfs clears its signature on the device it gave up.
+			for i := range r.devices {
+				for j := range r.devices[i].Children {
+					if r.devices[i].Children[j].KName == args[2] {
+						r.devices[i].Children[j].FSType, r.devices[i].Children[j].UUID = "", ""
+					}
+				}
+			}
 		}
 		return "", nil
 	}
@@ -123,7 +134,7 @@ func (r *layoutRunner) Run(ctx context.Context, stdin, name string, args ...stri
 }
 
 func btrfsMember(name string) blockDevice {
-	return tdisk(name, strings.ToUpper(name), blockDevice{Name: "/dev/" + name + "1", KName: "/dev/" + name + "1", Type: "part", Size: 7 << 30, FSType: "btrfs", UUID: "fs"})
+	return tdisk(name, strings.ToUpper(name), blockDevice{Name: "/dev/" + name + "1", KName: "/dev/" + name + "1", Type: "part", Size: 7 << 30, FSType: "btrfs", UUID: "fs", PartUUID: "part-" + name})
 }
 
 func layoutManager(t *testing.T, devices ...blockDevice) (*Manager, *layoutRunner) {
@@ -225,7 +236,7 @@ func TestRemoveBtrfsDisk(t *testing.T) {
 	if cfg, _ := m.find("tank"); cfg.Devices != 2 {
 		t.Fatalf("devices after removal: %+v", cfg)
 	}
-	if !strings.Contains(strings.Join(runner.commands, "\n"), "wipefs --all --force /dev/sdc1") {
+	if all := strings.Join(runner.commands, "\n"); !strings.Contains(all, "wipefs --all --force /dev/sdc1") || !strings.Contains(all, "wipefs --all --force /dev/sdc\n") && !strings.HasSuffix(all, "wipefs --all --force /dev/sdc") {
 		t.Fatal("removed disk not wiped:", runner.commands)
 	}
 	// Two disks left: RAID 1 cannot lose another.
@@ -306,5 +317,44 @@ func TestBtrfsStatusPollingAdapts(t *testing.T) {
 	tick(1)
 	if probes() != before+1 {
 		t.Fatal("a running scrub was not followed")
+	}
+}
+
+// The removal of a disk runs for hours without the lock. What the kernel
+// called sdc at the start may be another disk at the end (a disk dropped
+// out and came back, a USB disk was plugged in): nothing is wiped by name.
+func TestRemovedBtrfsDiskIsFoundAgainByItsPartition(t *testing.T) {
+	m, runner := layoutManager(t, btrfsMember("sda"), btrfsMember("sdb"), btrfsMember("sdc"))
+	ctx := context.Background()
+	runner.usage = "Data,RAID1: Size:2000000000, Used:1000000000 (50.00%)\n"
+	runner.removed = make(chan struct{})
+	done := make(chan error, 1)
+	m.OnReshaped = func(volume string, err error) { done <- err }
+	if err := m.RemoveBtrfsDisk(ctx, "tank", "sdc"); err != nil {
+		t.Fatal(err)
+	}
+	// While Btrfs moves the data away, the names change: sdc is now a
+	// disk of another volume, the removed one is called sdd.
+	gone := runner.devices[2]
+	gone.Name, gone.KName = "/dev/sdd", "/dev/sdd"
+	gone.Children[0].Name, gone.Children[0].KName = "/dev/sdd1", "/dev/sdd1"
+	gone.Children[0].FSType, gone.Children[0].UUID = "", ""
+	other := tdisk("sdc", "OTHER", blockDevice{Name: "/dev/sdc1", KName: "/dev/sdc1", Type: "part", Size: 7 << 30, FSType: "btrfs", UUID: "another-volume", PartUUID: "part-other"})
+	runner.devices = []blockDevice{runner.devices[0], runner.devices[1], other, gone}
+	close(runner.removed)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("removal never ended")
+	}
+	all := strings.Join(runner.commands, "\n") + "\n"
+	if strings.Contains(all, "wipefs --all --force /dev/sdc1\n") || strings.Contains(all, "wipefs --all --force /dev/sdc\n") {
+		t.Fatal("a disk of another volume was wiped:", runner.commands)
+	}
+	if !strings.Contains(all, "wipefs --all --force /dev/sdd1\n") {
+		t.Fatal("the removed disk was not wiped under its new name:", runner.commands)
 	}
 }

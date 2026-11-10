@@ -155,6 +155,8 @@
 	let uploadSeq = 0;
 	let sizeTimer = 0;
 	let imageTimer = 0;
+	/** The view was taken down (window closed); answers still on their way are dropped. */
+	let gone = false;
 	let lastMouse = { x: 0, y: 0, buttons: 0 };
 	const held = new Set<string>();
 	const FPS: (30 | 60)[] = [30, 60];
@@ -295,11 +297,12 @@
 	async function refused() {
 		try {
 			const status = sanitizeStatus(await api.get('/viewer/status', AbortSignal.timeout(8000)));
+			if (gone) return;
 			if (status.image.state !== 'ready') return refuse('viewer_image');
 		} catch {
 			// No status (older NAS, no right): the generic message.
 		}
-		end('refused');
+		if (!gone) end('refused');
 	}
 
 	// The viewer program is loading: progress every 2 s, then connect.
@@ -308,6 +311,8 @@
 		if (phase !== 'image') return;
 		try {
 			const status = sanitizeStatus(await api.get('/viewer/status', AbortSignal.timeout(8000)));
+			// The window was closed while the answer was on its way: nothing connects any more.
+			if (gone) return;
 			image = status.image;
 			if (status.image.state === 'ready') {
 				image = undefined;
@@ -317,7 +322,7 @@
 		} catch {
 			// Try again in a moment; the window shows the last known state.
 		}
-		if (phase === 'image') imageTimer = window.setTimeout(watchImage, 2000);
+		if (phase === 'image' && !gone) imageTimer = window.setTimeout(watchImage, 2000);
 	}
 
 	async function onText(msg: ServerMessage) {
@@ -921,6 +926,7 @@
 		}
 		connect();
 		return () => {
+			gone = true;
 			stop();
 			releaseInput(false);
 			void audioCtx?.close();
@@ -1500,10 +1506,9 @@
 		gap: var(--space-1);
 	}
 	.title {
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
 		min-width: 0;
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	.fill {
 		flex: 1;
@@ -1529,7 +1534,8 @@
 		color: var(--muted);
 		font-family: var(--font-mono, monospace);
 		font-size: var(--text-sm);
-		overflow-wrap: anywhere;
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	.pill.ended {
 		color: var(--muted);
@@ -1541,10 +1547,8 @@
 		background: currentColor;
 	}
 	.stats {
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
 		min-width: 0;
+		overflow-wrap: anywhere;
 	}
 	.vol {
 		display: inline-flex;

@@ -149,7 +149,9 @@ func (m *Manager) lowerDevice(ctx context.Context, volume VolumeConfig, plain st
 		}
 		return plain, nil
 	}
+	m.seenMu.Lock()
 	delete(m.cacheSeen, volume.Name)
+	m.seenMu.Unlock()
 	a, ok := m.arrayOf(ctx, volume)
 	if !ok || a.sectors == 0 {
 		return "", fmt.Errorf("%w: array of %s not running", ErrNotPossible, volume.Name)
@@ -726,9 +728,16 @@ func (m *Manager) updateVolume(name string, change func(*VolumeConfig)) error {
 // ErrCacheConfigured keeps grow and import away from cached volumes.
 var ErrCacheConfigured = errors.New("storage: switch the SSD cache off first")
 
+// ErrCacheRestart keeps grow away from a volume whose cache was switched
+// off in this boot: it is still mounted through the plain mapping of the
+// old array size, which a growing array does not follow.
+var ErrCacheRestart = errors.New("storage: restart the NAS once after switching the SSD cache off")
+
 // cacheWaiting reports whether the cache SSD of a volume is still within
 // its grace, counted from the first time mountAll missed it.
 func (m *Manager) cacheWaiting(name string) bool {
+	m.seenMu.Lock()
+	defer m.seenMu.Unlock()
 	if m.cacheSeen == nil {
 		m.cacheSeen = map[string]time.Time{}
 	}

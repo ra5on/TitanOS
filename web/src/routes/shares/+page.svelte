@@ -685,6 +685,8 @@
 	}
 	.state {
 		font-size: var(--text-sm);
+		/* A status word stays whole; its column takes the width it needs. */
+		overflow-wrap: normal;
 	}
 	.state::before {
 		content: '';

@@ -496,8 +496,25 @@ func (m *Manager) ViewerAttached(ctx context.Context, network, alias string) ([]
 		}
 		return nil, err
 	}
-	out := []string{}
+	// The network itself only lists containers that run. An app that is
+	// stopped right now (by the person, for a backup) still names the
+	// network, and would not start again once the network is gone: ask
+	// the engine for every container that refers to it, stopped or not.
+	ids := map[string]bool{}
 	for id := range net.Containers {
+		ids[id] = true
+	}
+	var referring []struct {
+		ID string `json:"Id"`
+	}
+	filters, _ := json.Marshal(map[string][]string{"network": {network}})
+	if err := m.api.getJSON(ctx, "/containers/json", url.Values{"all": {"true"}, "filters": {string(filters)}}, &referring); err == nil {
+		for _, c := range referring {
+			ids[c.ID] = true
+		}
+	}
+	out := []string{}
+	for id := range ids {
 		info, err := m.inspectAny(ctx, id)
 		if err != nil || info.Config.Labels[ViewerLabel] != "" || strings.HasPrefix(strings.TrimPrefix(info.Name, "/"), ViewerPrefix) {
 			continue
@@ -577,7 +594,10 @@ func (m *Manager) ViewerRemoveImage(ctx context.Context, id string) error {
 	if !ownImage(img.Config.Labels) {
 		return errors.New("docker: not an image of the remote view")
 	}
-	_, err := m.api.do(ctx, http.MethodDelete, "/images/"+url.PathEscape(img.ID), nil)
+	res, err := m.api.do(ctx, http.MethodDelete, "/images/"+url.PathEscape(img.ID), nil)
+	if res != nil {
+		res.Body.Close() // the answer lists what was removed; left open, it keeps a connection to the engine
+	}
 	if notFound(err) {
 		return nil
 	}

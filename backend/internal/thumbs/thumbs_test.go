@@ -304,3 +304,15 @@ func TestOfficeThumbnail(t *testing.T) {
 		t.Fatal("office kinds")
 	}
 }
+
+// The memory a decoded picture takes counts, not only its pixels: a 16-bit
+// picture with transparency takes eight bytes per pixel.
+func TestDecodedSizeLimitCountsBytesPerPixel(t *testing.T) {
+	const pixels = 90_000_000 // below maxPixels
+	if pixels*bytesPerPixel(color.YCbCrModel) > maxDecoded {
+		t.Error("a 90 megapixel photo (JPEG) would be refused")
+	}
+	if pixels*bytesPerPixel(color.NRGBA64Model) <= maxDecoded {
+		t.Error("a 90 megapixel 16-bit picture with transparency would be decoded in titand")
+	}
+}

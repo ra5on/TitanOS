@@ -5,7 +5,10 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io/fs"
+	"log/slog"
 	"net/url"
+	"os"
 	"path"
 	"regexp"
 	"slices"
@@ -230,6 +233,30 @@ func defaults(job *Job) {
 	job.Bandwidth = normalBandwidth(job.Bandwidth)
 }
 
+// sameCopyPlace reports whether two readable copies write into the same
+// folder of the same place, or one into a folder of the other. Each job
+// removes old versions in its folder: two there delete each other's.
+func sameCopyPlace(a, b Destination) bool {
+	if !plainCopy(a.Type) || a.Type != b.Type || a.DeviceID != b.DeviceID || a.TargetID != b.TargetID || a.Volume != b.Volume {
+		return false
+	}
+	within := func(folder string) string {
+		return strings.TrimSuffix(strings.ToLower(path.Clean("/"+folder)), "/") + "/"
+	}
+	x, y := within(a.Folder), within(b.Folder)
+	return strings.HasPrefix(x, y) || strings.HasPrefix(y, x)
+}
+
+// copyPlaceTaken names the other job whose folder this one would share.
+func copyPlaceTaken(jobs []Job, job Job) error {
+	for _, other := range jobs {
+		if other.ID != job.ID && sameCopyPlace(other.Destination, job.Destination) {
+			return invalid("the job %q already copies into this folder; choose a folder of its own", other.ID)
+		}
+	}
+	return nil
+}
+
 // reservedNames are fixed routes next to /api/v1/backups/{id}.
 var reservedNames = []string{"smb", "target", "progress", "folders", "ssh-key"}
 
@@ -257,6 +284,9 @@ func (m *Manager) Create(job Job, volumes []string) error {
 	}
 	if job.Destination.Type == "smb-copy" && !slices.ContainsFunc(m.smbTargets, func(t SMBTarget) bool { return t.ID == job.Destination.TargetID }) {
 		return invalid("SMB target")
+	}
+	if err := copyPlaceTaken(m.jobs, job); err != nil {
+		return err
 	}
 	return m.save(append(slices.Clone(m.jobs), job))
 }
@@ -294,6 +324,13 @@ func (m *Manager) Update(id string, job Job, volumes []string) error {
 	if job.Destination.Type == "smb-copy" && !slices.ContainsFunc(m.smbTargets, func(t SMBTarget) bool { return t.ID == job.Destination.TargetID }) {
 		return invalid("SMB target")
 	}
+	// A job that shared its folder before this rule can still be edited;
+	// moving a job into another one's folder cannot.
+	if !sameCopyPlace(old.Destination, job.Destination) || old.Destination.Folder != job.Destination.Folder {
+		if err := copyPlaceTaken(m.jobs, job); err != nil {
+			return err
+		}
+	}
 	jobs := slices.Clone(m.jobs)
 	jobs[at] = job
 	return m.save(jobs)
@@ -301,6 +338,11 @@ func (m *Manager) Update(id string, job Job, volumes []string) error {
 
 // Delete forgets a job. What it backed up stays where it is.
 func (m *Manager) Delete(id string) error {
+	// Where the job kept its state is asked before the lock is taken.
+	file := ""
+	if job, ok := m.find(id); ok {
+		file = m.stateFile(job)
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	at := slices.IndexFunc(m.jobs, func(j Job) bool { return j.ID == id })
@@ -310,8 +352,18 @@ func (m *Manager) Delete(id string) error {
 	if state := m.states[id]; state != nil && state.Running {
 		return ErrRunning
 	}
+	if err := m.save(slices.Delete(slices.Clone(m.jobs), at, at+1)); err != nil {
+		return err
+	}
+	// The state goes with the job: a new job of the same name must not
+	// start out with this one's "last success".
 	delete(m.states, id)
-	return m.save(slices.Delete(slices.Clone(m.jobs), at, at+1))
+	if file != "" {
+		if err := os.Remove(file); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			slog.Warn("state of the deleted backup job not removed", "job", id, "err", err)
+		}
+	}
+	return nil
 }
 
 // Password returns the password a job's backups are encrypted with.

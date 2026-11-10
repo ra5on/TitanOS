@@ -204,6 +204,10 @@ func (s *Server) handleWebDAV(w http.ResponseWriter, r *http.Request) {
 			}
 		},
 	}
+	if r.Method == http.MethodPut {
+		// A file that arrives shorter than announced is not put in place.
+		r = r.WithContext(files.WithDAVLength(r.Context(), r.ContentLength))
+	}
 	handler.ServeHTTP(w, r)
 }
 

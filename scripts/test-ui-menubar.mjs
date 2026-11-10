@@ -103,15 +103,16 @@ for (const width of [1600, 1280, 1024]) {
   await ctx.close();
 }
 {
-  // A long program name (a Docker app) is cut off, the menus stay whole.
+  // A long program name (a Docker app) is shown whole, the menus stay whole.
   const { ctx, page } = await open(1024);
   await page.locator(".ico", { hasText: "paperless" }).first().dblclick();
   await page.locator("section.win").first().waitFor();
   await page.waitForTimeout(600);
   const name = bar(page).locator(".program");
   assert.match(await name.innerText(), /paperless/);
-  const cut = await name.evaluate((el) => el.scrollWidth > el.clientWidth);
-  assert.ok(cut, "long name cut off");
+  // PLAN 76: nothing is cut off, a long name neither.
+  const cut = await name.evaluate((el) => el.scrollWidth > el.clientWidth + 1);
+  assert.ok(!cut, "long name shown whole");
   const help = await top(page, "Hilfe").boundingBox();
   const status = await bar(page).locator(".status").boundingBox();
   assert.ok(help.x + help.width <= status.x, "menus beside the status");

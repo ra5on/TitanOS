@@ -250,8 +250,11 @@ type Steps struct {
 func (m *Manager) Run(ctx context.Context, steps Steps) {
 	tick := time.NewTicker(2 * time.Second)
 	defer tick.Stop()
+	// Read once: the note of the held policies is on the stick, and this
+	// loop turns every two seconds until the NAS is ready.
+	held := len(m.Held()) > 0
 	for {
-		hasApps := len(m.Apps()) > 0 || len(m.Held()) > 0
+		hasApps := held || len(m.Apps()) > 0
 		if m.Ready() && (!hasApps || steps.EngineReady == nil || steps.EngineReady()) {
 			break
 		}

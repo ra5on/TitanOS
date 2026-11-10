@@ -238,6 +238,14 @@ func (c *mqttClient) readLoop() {
 				}
 				continue
 			}
+			// A command the broker kept (an automation that publishes with
+			// "retain") is delivered again at every connection: it would
+			// restart a container, or switch the NAS off, each time titand
+			// starts or the connection comes back. A command counts only
+			// when it is sent now.
+			if header&1 != 0 && strings.Contains(topic, "/cmd/") {
+				continue
+			}
 			select {
 			case c.incoming <- mqttMessage{topic, rest}:
 			default: // a flood of commands is dropped, not queued

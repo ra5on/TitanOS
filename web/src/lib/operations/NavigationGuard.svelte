@@ -1,8 +1,10 @@
 <script lang="ts">
+	import { guardWindowClose } from '#lib/desktop/unsaved.svelte.ts';
 	import { beforeNavigate, goto } from '$app/navigation';
 	import Dialog from '#lib/components/Dialog.svelte';
 	import { t } from '#lib/i18n/index.svelte.ts';
 	let { dirty }: { dirty: boolean } = $props();
+	guardWindowClose(() => dirty);
 	let destination = $state<URL | null>(null),
 		bypass = false;
 	beforeNavigate((navigation) => {

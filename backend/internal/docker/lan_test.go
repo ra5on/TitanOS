@@ -184,3 +184,21 @@ func TestHostEndpointAcceptsKernelParentNameAndRejectsAnotherLink(t *testing.T) 
 		t.Fatal("foreign host link accepted")
 	}
 }
+
+// Giving a service a LAN address changes its networks, not the rest of the
+// file: comments and the order of the services stay as they were written.
+func TestAssignLANKeepsCommentsAndOrder(t *testing.T) {
+	compose := "# Meine Mediathek\nservices:\n  zebra: # zuerst\n    image: example/zebra\n  alpha:\n    image: example/alpha # feste Version\n    ports:\n      - \"8096:8096\"\n"
+	out, err := AssignLAN(compose, "alpha", LANNetwork{Name: "heim", Subnet: "192.168.1.0/24", Range: "192.168.1.192/27"}, "192.168.1.200")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, kept := range []string{"# Meine Mediathek", "# zuerst", "# feste Version", "ipv4_address: 192.168.1.200", "titanos-lan-heim"} {
+		if !strings.Contains(out, kept) {
+			t.Errorf("%q is missing in:\n%s", kept, out)
+		}
+	}
+	if strings.Index(out, "zebra") > strings.Index(out, "alpha") {
+		t.Errorf("the order of the services changed:\n%s", out)
+	}
+}

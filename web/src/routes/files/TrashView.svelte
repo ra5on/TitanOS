@@ -496,9 +496,7 @@
 		text-decoration: underline;
 	}
 	.entry span {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: anywhere;
 	}
 	.actions {
 		display: flex;

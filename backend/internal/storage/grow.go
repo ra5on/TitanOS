@@ -103,6 +103,13 @@ func (m *Manager) GrowthPreview(ctx context.Context, name string, req GrowthRequ
 	if v.Cache != nil {
 		return Growth{}, ErrCacheConfigured
 	}
+	// Switched off in this boot, the cache is still there as a plain
+	// mapping of the old size with the volume mounted through it: the
+	// file system would not grow (XFS, encrypted) or the resize would
+	// fail (ext4). After a restart the volume is mounted from the array.
+	if table, err := m.runner.Run(ctx, "", "dmsetup", "table", cacheName(v.Name)); err == nil && target(table) == "linear" {
+		return Growth{}, ErrCacheRestart
+	}
 	a, ok := m.arrayOf(ctx, v)
 	if !ok || a.degraded != 0 || a.syncAction != "idle" || !slices.Contains(m.Mounted(), name) {
 		return Growth{}, ErrBusy

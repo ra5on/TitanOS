@@ -159,10 +159,9 @@
 		border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
 		background: color-mix(in srgb, var(--accent) 14%, transparent);
 		font-size: var(--text-sm);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
 		flex: none;
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	.back {
 		width: 44px;
@@ -177,9 +176,8 @@
 	}
 	b {
 		min-width: 0;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	.space {
 		flex: 1;

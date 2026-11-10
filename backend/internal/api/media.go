@@ -82,6 +82,11 @@ func (s *Server) handleMediaChunk(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, media.ChunkBytes)
 	data, err := io.ReadAll(r.Body)
 	if err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			writeError(w, http.StatusRequestEntityTooLarge, "too_large", "the chunk is larger than allowed")
+			return
+		}
 		writeMediaError(w, err)
 		return
 	}

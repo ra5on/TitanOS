@@ -614,9 +614,7 @@
 		min-width: 0;
 	}
 	.name {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: anywhere;
 	}
 	.sub {
 		color: var(--muted);

@@ -366,13 +366,26 @@ func (m *Manager) Rename(root Root, from, to string) error {
 		return mapError(err)
 	}
 	defer r.Close()
-	if _, err := r.Lstat(from); err != nil {
+	source, err := r.Lstat(from)
+	if err != nil {
 		return mapError(err)
 	}
-	if _, err := r.Lstat(to); err == nil {
+	if target, err := r.Lstat(to); err == nil {
+		// On a drive that does not tell capitals apart (exFAT, FAT, NTFS
+		// on USB) "foto.JPG" and "foto.jpg" are the same entry: changing
+		// only the case is a rename of that entry, not a clash.
+		if caseOnly(from, to) && os.SameFile(source, target) {
+			return mapError(r.Rename(from, to))
+		}
 		return ErrExists
 	}
 	return mapError(publishNewFile(r, from, to))
+}
+
+// caseOnly reports whether two paths differ in nothing but the case of
+// their last element.
+func caseOnly(from, to string) bool {
+	return from != to && path.Dir(from) == path.Dir(to) && strings.EqualFold(path.Base(from), path.Base(to))
 }
 
 // Delete removes files and folders. Inside a share with a recycle bin
@@ -463,7 +476,7 @@ func (m *Manager) recycleIn(r *os.Root, bin, p, user string) (string, error) {
 		original = strings.TrimPrefix(p, bin+"/")
 	}
 	target := path.Join(bin, RecycleDir, user, original)
-	if err := r.MkdirAll(path.Dir(target), 0o770); err != nil {
+	if err := m.binFolders(r, path.Join(bin, RecycleDir), path.Dir(target)); err != nil {
 		return "", err
 	}
 	// Something with this name may already be in the bin.
@@ -479,6 +492,46 @@ func (m *Manager) recycleIn(r *os.Root, bin, p, user string) (string, error) {
 	rememberTrash(r, target, original, now)
 	_ = r.Chtimes(target, now, now) // permissions and times are a convenience; the data are there either way
 	return target, nil
+}
+
+// binFolders makes the folders of the recycle bin from top (the bin
+// itself) down to dir, each writable for the group of the shares like the
+// folders Samba makes there (recycle:directory_mode 0770). titand runs as
+// root with the usual umask: a plain MkdirAll leaves folders only root can
+// write to, and Samba, which works as the account, then cannot move a
+// deleted file into them and deletes it for good instead. Folders left
+// like that by older versions are repaired on the way.
+func (m *Manager) binFolders(r *os.Root, top, dir string) error {
+	rest := strings.TrimPrefix(strings.TrimPrefix(dir, top), "/")
+	current := top
+	parts := []string{""}
+	if rest != "" {
+		parts = append(parts, strings.Split(rest, "/")...)
+	}
+	for _, part := range parts {
+		current = path.Join(current, part)
+		err := r.Mkdir(current, 0o770)
+		if err != nil && !errors.Is(err, fs.ErrExist) {
+			if errors.Is(err, fs.ErrNotExist) {
+				// The share folder above the bin always exists; anything
+				// else missing is made the plain way.
+				if err := r.MkdirAll(current, 0o770); err != nil {
+					return err
+				}
+			} else {
+				return err
+			}
+		}
+		info, statErr := r.Lstat(current)
+		if statErr != nil || !info.IsDir() {
+			continue
+		}
+		if err == nil || info.Mode().Perm()&0o020 == 0 {
+			_ = r.Lchown(current, -1, m.GID)          // permissions are a convenience; the data are there either way
+			_ = r.Chmod(current, 0o770|os.ModeSetgid) // see above
+		}
+	}
+	return nil
 }
 
 // Open opens a file for download.
@@ -574,15 +627,22 @@ func (m *Manager) Zip(w io.Writer, root Root, paths []string) error {
 			if !info.Mode().IsRegular() {
 				return nil
 			}
+			// Opened before its entry is written: a file that cannot be
+			// read must not end up as an empty entry in a download that
+			// reports success. One that vanished in between is left out;
+			// anything else ends the download with an error.
+			in, err := r.Open(name)
+			if err != nil {
+				if errors.Is(err, fs.ErrNotExist) {
+					return nil
+				}
+				return err
+			}
+			defer in.Close()
 			out, err := archive.CreateHeader(header)
 			if err != nil {
 				return err
 			}
-			in, err := r.Open(name)
-			if err != nil {
-				return nil // vanished in between
-			}
-			defer in.Close()
 			_, err = io.Copy(out, in)
 			return err
 		})

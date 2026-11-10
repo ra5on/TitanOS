@@ -134,8 +134,11 @@ func (m *Manager) RenameBatch(ctx context.Context, root Root, changes []RenameCh
 			return result, ErrTextConflict
 		}
 		if from != to {
-			if _, e = r.Lstat(to); e == nil {
-				return result, ErrExists
+			if target, e := r.Lstat(to); e == nil {
+				// The same entry under another case (see Rename).
+				if !caseOnly(from, to) || !os.SameFile(info, target) {
+					return result, ErrExists
+				}
 			} else if !os.IsNotExist(e) {
 				return result, mapError(e)
 			}
@@ -158,7 +161,12 @@ func (m *Manager) RenameBatch(ctx context.Context, root Root, changes []RenameCh
 			e = ErrTextConflict
 			break
 		}
-		if e = publishNewFile(r, change.From, change.To); e != nil {
+		if target, statErr := r.Lstat(change.To); statErr == nil && caseOnly(change.From, change.To) && os.SameFile(info, target) {
+			e = r.Rename(change.From, change.To) // the same entry under another case
+		} else {
+			e = publishNewFile(r, change.From, change.To)
+		}
+		if e != nil {
 			break
 		}
 		result.Done++

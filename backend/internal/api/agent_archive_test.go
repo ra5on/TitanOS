@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -78,5 +79,35 @@ func TestScheduleWakeChoice(t *testing.T) {
 	}
 	if c, _ := ts.server.agentStore().Chat("alex", chatID); c.Schedule != id {
 		t.Fatalf("chat of the run: %q", c.Schedule)
+	}
+}
+
+// PLAN 76 (F-11-4): a planned run that cannot start says so in its chat and
+// is not left as "last run: ok".
+func TestScheduleThatCannotStartIsRecorded(t *testing.T) {
+	ts := agentServer(t, &agentOllama{}, agent.Policy{Preset: agent.PresetStandard})
+	res, body := ts.request("PUT", "/api/v1/agent/schedules/new", map[string]any{"name": "Fotos", "task": "Fotos sortieren", "every": "daily", "at": "03:00", "enabled": true})
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("%d %s", res.StatusCode, body)
+	}
+	store := ts.server.agentStore()
+	list, _ := store.Schedules("alex")
+	id := list[0].ID
+	if err := store.UpdateSchedule("alex", id, func(sc *agent.Schedule) { sc.LastOK = true }); err != nil {
+		t.Fatal(err)
+	}
+	// The agent is switched off while the task is due.
+	ts.server.agentSettings()
+	ts.server.agentConf.mu.Lock()
+	ts.server.agentConf.settings.Enabled = false
+	ts.server.agentConf.mu.Unlock()
+	chatID, err := ts.server.agentRunSchedule(mustUser(t, ts, "alex"), id, time.Now(), false)
+	if err == nil {
+		t.Fatal("a run with the agent off started")
+	}
+	list, _ = store.Schedules("alex")
+	chat, cerr := store.Chat("alex", chatID)
+	if cerr != nil || list[0].LastOK || chat.State != agent.StateError || len(chat.Entries) != 2 || !strings.Contains(chat.Entries[1].Content, "ausgeschaltet") {
+		t.Fatalf("schedule %+v\nchat %+v %v", list[0], chat, cerr)
 	}
 }

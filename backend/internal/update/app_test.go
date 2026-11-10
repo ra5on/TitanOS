@@ -238,3 +238,72 @@ func TestImageWithoutBaseTakesNoApps(t *testing.T) {
 		t.Errorf("an image without base version is offered an app: %q", kind)
 	}
 }
+
+// PLAN 76 (F-10-7): the stick names an app on trial, but titand never
+// restarted into it. After ten minutes titand is restarted again instead
+// of saying "busy" until the NAS is restarted by hand.
+func TestTrialThatNeverBeganRestartsTitand(t *testing.T) {
+	e := newAppEnv(t)
+	e.publishApp(t, "1.0.1", "1.0.0")
+	if err := e.m.Check(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// The first restart "works" but nothing happens: this titand stays.
+	if err := e.m.Install(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	e.waitPhase(t, "restart")
+	e.waitRestarts(t, 1)
+	e.m.settleApp()
+	if !e.m.appOnTrial() {
+		t.Fatal("the app is not on trial")
+	}
+	// While work runs, nothing is restarted.
+	e.working.Store(true)
+	for range trialRestartAfter + 2 {
+		e.m.restartForTrial()
+	}
+	e.waitRestarts(t, 1)
+	e.working.Store(false)
+	for range trialRestartAfter - 1 {
+		e.m.restartForTrial()
+	}
+	e.waitRestarts(t, 1)
+	e.m.restartForTrial()
+	e.waitRestarts(t, 2)
+	// Once titand runs the app, the trial is the check's business.
+	if err := os.MkdirAll(e.m.Apps.RunDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(e.m.Apps.RunDir, "running"), []byte("1.0.1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 * trialRestartAfter {
+		e.m.restartForTrial()
+	}
+	e.waitRestarts(t, 2)
+}
+
+// PLAN 76 (F-10-8): the automatic installation does not need the exact minute.
+func TestInstallDueHasAWindowAndRunsOncePerDay(t *testing.T) {
+	at := func(s string) time.Time { v, _ := time.ParseInLocation("2006-01-02 15:04:05", s, time.UTC); return v }
+	for _, c := range []struct {
+		now, attempted string
+		want           bool
+	}{
+		{"2026-11-10 02:59:59", "", false},
+		{"2026-11-10 03:00:00", "", true},
+		{"2026-11-10 03:01:20", "", true}, // the look at 03:00 was late
+		{"2026-11-10 03:09:59", "", true},
+		{"2026-11-10 03:10:00", "", false},
+		{"2026-11-10 03:01:00", "2026-11-10", false}, // taken already
+		{"2026-11-11 03:00:30", "2026-11-10", true},
+	} {
+		if got := installDue(at(c.now), "03:00", c.attempted); got != c.want {
+			t.Errorf("%s after %q: %v", c.now, c.attempted, got)
+		}
+	}
+	if installDue(at("2026-11-10 03:00:00"), "", "") {
+		t.Error("no install time set")
+	}
+}

@@ -113,3 +113,24 @@ func TestResetTwoFactorWithInvalidRoleChangesNothing(t *testing.T) {
 		t.Fatal("two-factor login not reset")
 	}
 }
+
+// The last owner cannot be demoted; a request that asks for that and for a
+// reset of the second factor is refused as a whole.
+func TestRefusedDemotionResetsNoFactor(t *testing.T) {
+	ts := newTestServer(t)
+	ts.setup()
+	secret, _, err := ts.users.BeginTwoFactor("alex", "TitanOS test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ts.users.EnableTwoFactor("alex", auth.CodeForTest(secret, 0)); err != nil {
+		t.Fatal(err)
+	}
+	res, body := ts.request("PUT", "/api/v1/users/alex", map[string]any{"role": "admin", "resetTwoFactor": true, "password": testPassword, "code": auth.CodeForTest(secret, 1)})
+	if res.StatusCode != http.StatusConflict || errorCode(t, body) != "last_owner" {
+		t.Fatalf("demotion of the last owner: %d %s", res.StatusCode, body)
+	}
+	if user, _ := ts.users.Get("alex"); !user.TwoFactor() {
+		t.Fatal("two-factor login was reset by a request that was refused")
+	}
+}

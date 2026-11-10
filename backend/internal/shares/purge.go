@@ -154,6 +154,9 @@ type purgeState struct {
 	running *PurgeJob
 	results []PurgeJob
 	resumed map[string]bool
+	// failed are broken-off deletions (volume/id) whose resumption failed
+	// since titand started; they are not tried again before the next start.
+	failed map[string]bool
 	// resumedDone is told how a deletion ended that a restart of titand
 	// had broken off.
 	resumedDone func(PurgeJob)
@@ -909,6 +912,15 @@ func (m *Manager) resumeOne(volume string, mounted []string) bool {
 		if err != nil || !info.IsDir() {
 			continue
 		}
+		// One that failed in this run of titand is not started again
+		// every few seconds (a file that cannot be removed, a volume
+		// that is read-only): it waits for the next start.
+		m.purge.mu.Lock()
+		failed := m.purge.failed[volume+"/"+id]
+		m.purge.mu.Unlock()
+		if failed {
+			continue
+		}
 		job := &PurgeJob{ID: id, Share: note.Share, Volume: volume, Path: filepath.Join(m.mountRoot, volume, note.Share), By: note.By, Phase: "deleting", Started: note.Started, ShareRemoved: true, Resumed: true}
 		m.purge.mu.Lock()
 		if m.purge.running != nil {
@@ -923,6 +935,12 @@ func (m *Manager) resumeOne(volume string, mounted []string) bool {
 			err := m.resumeStaged(job, private, volume)
 			m.purge.mu.Lock()
 			done := m.purge.resumedDone
+			if err != nil {
+				if m.purge.failed == nil {
+					m.purge.failed = map[string]bool{}
+				}
+				m.purge.failed[volume+"/"+job.ID] = true
+			}
 			m.purge.mu.Unlock()
 			m.finish(job, err, done)
 		}()

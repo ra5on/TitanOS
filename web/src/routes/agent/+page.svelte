@@ -1454,9 +1454,8 @@
 		min-width: 0;
 		font-size: var(--text-md);
 		font-weight: 600;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	.fill {
 		flex: 1;
@@ -1464,9 +1463,8 @@
 	.proj {
 		flex: none;
 		max-width: 40%;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: break-word;
+		hyphens: auto;
 	}
 	.chip {
 		display: inline-flex;

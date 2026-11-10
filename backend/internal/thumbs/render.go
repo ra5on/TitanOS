@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"image/draw"
 	_ "image/gif"
 	"image/jpeg"
@@ -34,7 +35,12 @@ var (
 const (
 	// maxPixels refuses decompression bombs before any pixel is decoded.
 	maxPixels = 100_000_000
-	maxImage  = 64 << 20
+	// maxDecoded bounds the memory a decoded picture takes in titand: the
+	// pixels alone say too little, a 16-bit picture with transparency
+	// takes eight bytes each (100 megapixels: 800 MiB, and two pictures
+	// are decoded at a time on a system that runs from RAM).
+	maxDecoded = 400 << 20
+	maxImage   = 64 << 20
 	// maxRendered bounds what pdftoppm or ffmpeg may hand back.
 	maxRendered = 32 << 20
 	toolTimeout = 20 * time.Second
@@ -148,7 +154,8 @@ func decodeImage(f *os.File) (image.Image, int, error) {
 	n, _ := io.ReadFull(f, head)
 	head = head[:n]
 	config, format, err := image.DecodeConfig(bytes.NewReader(head))
-	if err != nil || config.Width <= 0 || config.Height <= 0 || int64(config.Width)*int64(config.Height) > maxPixels {
+	if err != nil || config.Width <= 0 || config.Height <= 0 || int64(config.Width)*int64(config.Height) > maxPixels ||
+		int64(config.Width)*int64(config.Height)*bytesPerPixel(config.ColorModel) > maxDecoded {
 		return nil, 0, ErrUnsupported
 	}
 	orientation := 0
@@ -163,6 +170,27 @@ func decodeImage(f *os.File) (image.Image, int, error) {
 		return nil, 0, ErrUnsupported
 	}
 	return img, orientation, nil
+}
+
+// bytesPerPixel is what a decoded picture of this color model takes per
+// pixel in memory.
+func bytesPerPixel(model color.Model) int64 {
+	switch model {
+	case color.RGBA64Model, color.NRGBA64Model:
+		return 8
+	case color.Gray16Model:
+		return 2
+	case color.GrayModel, color.AlphaModel:
+		return 1
+	case color.YCbCrModel:
+		return 3
+	case color.CMYKModel, color.RGBAModel, color.NRGBAModel, color.NYCbCrAModel:
+		return 4
+	}
+	if _, paletted := model.(color.Palette); paletted {
+		return 1
+	}
+	return 4
 }
 
 var errEmpty = errors.New("thumbs: helper produced no picture")

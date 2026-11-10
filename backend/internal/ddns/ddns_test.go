@@ -361,3 +361,16 @@ func TestAddAndRemoveHostname(t *testing.T) {
 		t.Fatalf("other provider: %v", err)
 	}
 }
+
+// A provider that keeps refusing is asked less and less often.
+func TestRetryBacksOff(t *testing.T) {
+	want := []time.Duration{5 * time.Minute, 5 * time.Minute, 10 * time.Minute, 20 * time.Minute, 40 * time.Minute}
+	for failures, wait := range want {
+		if got := retryWait(failures); got != wait {
+			t.Errorf("after %d failures: %v, want %v", failures, got, wait)
+		}
+	}
+	if got := retryWait(50); got != maxRetry {
+		t.Errorf("after many failures: %v, want %v", got, maxRetry)
+	}
+}

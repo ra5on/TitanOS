@@ -200,6 +200,22 @@ func TestCloudflare(t *testing.T) {
 	if contents["A"] != "198.51.100.1" || contents["AAAA"] != "2001:db8::7" || len(fake.records) != 2 {
 		t.Fatalf("records %+v", fake.records)
 	}
+	// PLAN 76 (F-8-6): a second A record set up by hand keeps its value; one
+	// record carries the address of the NAS.
+	fake.records = append(fake.records, cfRecord{ID: "by-hand", Type: "A", Name: "nas.example.com", Content: "192.0.2.99"})
+	if err := up.SetAddresses(ctx(t), "nas.example.com", netip.MustParseAddr("198.51.100.2"), netip.Addr{}); err != nil {
+		t.Fatal(err)
+	}
+	var as []string
+	for _, rec := range fake.records {
+		if rec.Type == "A" {
+			as = append(as, rec.Content)
+		}
+	}
+	slices.Sort(as)
+	if strings.Join(as, ",") != "192.0.2.99,198.51.100.2" {
+		t.Fatalf("A records %v", as)
+	}
 	if err := ch.SetTXT(ctx(t), "_acme-challenge.other.org", []string{"x"}); err == nil {
 		t.Fatal("name outside the account accepted")
 	}

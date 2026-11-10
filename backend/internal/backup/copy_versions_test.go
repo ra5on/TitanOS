@@ -208,3 +208,64 @@ func TestResticSelectionOfVolumesAndLXC(t *testing.T) {
 		t.Fatalf("excludes %v missing %v", sel.excludes, sel.missing)
 	}
 }
+
+// A share whose volume is not there in a run is copied "not at all" that
+// night. The versions that still hold it must not be thrown away for runs
+// that never had it: after a week nothing of it would be left on the drive.
+func TestMissingShareDoesNotPushItsVersionsOut(t *testing.T) {
+	m, source, target, now := copyEnv(t)
+	photos := t.TempDir()
+	os.WriteFile(filepath.Join(source, "doc"), []byte("doc"), 0o600)
+	os.WriteFile(filepath.Join(photos, "foto"), []byte("foto"), 0o600)
+	both := func() []Source {
+		return []Source{{Name: "docs", Volume: "tank", Path: source}, {Name: "fotos", Volume: "pool", Path: photos}}
+	}
+	m.Sources = both
+	job := Job{ID: "copy", Sources: []string{"docs", "fotos"}, Destination: Destination{Type: "usb-copy", Folder: "b"}, Copy: &CopyOptions{Dated: true}, Keep: Keep{Last: 2}}
+	if err := runCopy(t, m, job, target); err != nil {
+		t.Fatal(err)
+	}
+	// The volume of the photos is gone for the next nights.
+	m.Sources = func() []Source { return both()[:1] }
+	for day := 2; day <= 5; day++ {
+		*now = time.Date(2026, 10, day, 3, 0, 0, 0, time.UTC)
+		if err := runCopy(t, m, job, target); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(target, "b/2026-10-01_0300/fotos/foto")); err != nil {
+		t.Fatalf("the only version with the photos was deleted: %v", err)
+	}
+}
+
+// A run that broke off is no version: its folder keeps the ending
+// ".partial", is not counted and goes with the next run.
+func TestBrokenRunIsNoVersion(t *testing.T) {
+	m, source, target, now := copyEnv(t)
+	os.WriteFile(filepath.Join(source, "doc"), []byte("doc"), 0o600)
+	job := Job{ID: "copy", Sources: []string{"docs"}, Destination: Destination{Type: "usb-copy", Folder: "b"}, Copy: &CopyOptions{Dated: true}, Keep: Keep{Last: 2}}
+	if err := runCopy(t, m, job, target); err != nil {
+		t.Fatal(err)
+	}
+	// What a run left behind that died half way.
+	broken := filepath.Join(target, "b/2026-10-02_0300.partial/docs")
+	os.MkdirAll(broken, 0o700)
+	os.WriteFile(filepath.Join(broken, "half"), []byte("ha"), 0o600)
+	if runs := datedRuns(mustRoot(t, target), "b", time.UTC); len(runs) != 1 {
+		t.Fatalf("the broken run counts as a version: %v", runs)
+	}
+	*now = time.Date(2026, 10, 3, 3, 0, 0, 0, time.UTC)
+	if err := runCopy(t, m, job, target); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(target, "b/2026-10-02_0300.partial")); !os.IsNotExist(err) {
+		t.Fatalf("the broken run was not removed: %v", err)
+	}
+	runs := datedRuns(mustRoot(t, target), "b", time.UTC)
+	if len(runs) != 2 || runs[0].name != "2026-10-01_0300" || runs[1].name != "2026-10-03_0300" {
+		t.Fatalf("runs %v", runs)
+	}
+	if entries, _ := os.ReadDir(filepath.Join(target, "b")); len(entries) != 2 {
+		t.Fatalf("something else is left in the folder: %v", entries)
+	}
+}

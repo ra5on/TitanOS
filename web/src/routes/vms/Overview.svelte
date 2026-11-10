@@ -632,10 +632,8 @@
 	}
 	.name {
 		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 		max-width: 100%;
+		overflow-wrap: anywhere;
 	}
 	.row-actions {
 		display: flex;

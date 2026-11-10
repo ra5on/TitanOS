@@ -601,18 +601,15 @@
 		font-family: inherit;
 		min-width: 6px;
 		padding: 0 var(--space-1);
-		overflow: hidden;
 		font-size: var(--text-sm);
-		white-space: nowrap;
-		text-overflow: ellipsis;
 		border-radius: var(--radius-small);
 		border: 1px solid var(--border);
 		cursor: pointer;
+		overflow-wrap: anywhere;
 	}
 	.segment span {
 		display: block;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		overflow-wrap: anywhere;
 	}
 	.segment.part {
 		background: var(--accent);

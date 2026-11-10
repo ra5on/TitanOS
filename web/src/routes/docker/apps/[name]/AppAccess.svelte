@@ -26,7 +26,14 @@
 	$effect(() => {
 		void app;
 		api.get<Access>('/apps/access').then(
-			(res) => (access = res),
+			// An answer of another shape (an older node, a proxy's page) leaves
+			// the group empty; it must not take the whole page down.
+			(res) =>
+				(access = {
+					...res,
+					apps: Array.isArray(res?.apps) ? res.apps : [],
+					accounts: Array.isArray(res?.accounts) ? res.accounts : [],
+				}),
 			(err) => (error = apiErrorText(err)),
 		);
 	});
@@ -76,12 +83,13 @@
 		</div>
 		<p class="muted small">{t('appaccess.adminAlways')}</p>
 		<div class="gate">
+			<!-- The name first, then the switch with its state ("Aus"): read in that order. -->
+			<span>{t('appaccess.gate')}</span>
 			<Toggle
 				checked={mine.gate}
 				label={t('appaccess.gateFor', { app })}
 				onchange={(on: boolean) => void store((e) => (e.gate = on))}
 			/>
-			<span>{t('appaccess.gate')}</span>
 		</div>
 		<p class="muted small">{t('appaccess.gateHint')}</p>
 	</div>

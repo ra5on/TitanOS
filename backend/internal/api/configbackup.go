@@ -60,6 +60,12 @@ func (s *Server) handleConfigBackupSettings(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	settings := req.Settings
+	// Checked before the password is stored: a refused request must not
+	// leave a new password behind that the person believes was rejected.
+	if err := configbackup.CheckSettings(settings, s.opts.Storage.Names()); err != nil {
+		writeBackupError(w, err)
+		return
+	}
 	if req.Password != "" {
 		if err := s.opts.ConfigBackup.SetPassword(req.Password); err != nil {
 			writeBackupError(w, err)
@@ -216,8 +222,16 @@ func (s *Server) handleSetupRestore(w http.ResponseWriter, r *http.Request) {
 	s.restored(w, r, req.Device+"/"+req.Name)
 }
 
+// setupUploadTimeout is how long a backup of the settings (a few MiB) may
+// take to arrive during the first setup.
+const setupUploadTimeout = 2 * time.Minute
+
 // handleSetupRestoreUpload takes a backup file as the body of the request.
 func (s *Server) handleSetupRestoreUpload(w http.ResponseWriter, r *http.Request) {
+	// The body has a time limit: the server sets none (uploads of files
+	// take long), and a device that starts the upload and then stalls
+	// would hold the lock of the first setup for everyone else.
+	_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(setupUploadTimeout)) // not every writer supports it (tests)
 	setupMu.Lock()
 	defer setupMu.Unlock()
 	if !s.newStickLocked(w) {
@@ -227,5 +241,6 @@ func (s *Server) handleSetupRestoreUpload(w http.ResponseWriter, r *http.Request
 		writeBackupError(w, err)
 		return
 	}
+	_ = http.NewResponseController(w).SetReadDeadline(time.Time{}) // see above
 	s.restored(w, r, "upload")
 }

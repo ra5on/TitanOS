@@ -168,8 +168,11 @@ type Manager struct {
 	// their own channels (owners and administrators); nil sends none.
 	Audience func() []string
 	// now is the clock; tests replace it.
-	now    func() time.Time
-	people personalStore
+	now func() time.Time
+	// Timezone names the time zone of the NAS as set now, for quiet hours
+	// (Go keeps the zone of the start of titand).
+	Timezone func() string
+	people   personalStore
 
 	mu       sync.Mutex
 	loaded   bool

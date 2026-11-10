@@ -39,6 +39,7 @@
 		MODES,
 		noticeClass,
 		problem,
+		takeStartError,
 		vmNotices,
 		type Failure,
 		type Problem,
@@ -63,6 +64,9 @@
 	let feedback = $state('');
 	// The failed action of each VM, shown only with that VM.
 	let failures = $state<Record<string, Failure>>({});
+	// A VM that was just created but did not start says why (VmForm.svelte).
+	const notStarted = takeStartError();
+	if (notStarted) failures[notStarted.name] = { problem: notStarted.problem, action: 'start' };
 	let search = $state('');
 	let filter = $state<Filter>('all');
 	// On a phone the list folds away behind the name of the chosen VM.
@@ -931,11 +935,9 @@
 	.bar-name {
 		min-width: 0;
 		max-width: 40%;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 		font-size: var(--text-lg);
 		font-weight: 600;
+		overflow-wrap: anywhere;
 	}
 	.vm-page {
 		width: 100%;
@@ -1064,11 +1066,9 @@
 		text-decoration: none;
 	}
 	.vm-name {
-		overflow: hidden;
 		font-size: var(--text-md);
 		font-weight: 500;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: anywhere;
 	}
 	.vm-mem {
 		color: var(--muted);
@@ -1309,9 +1309,7 @@
 			min-width: 0;
 		}
 		.picker span {
-			overflow: hidden;
-			text-overflow: ellipsis;
-			white-space: nowrap;
+			overflow-wrap: anywhere;
 		}
 		aside:not(.open) .list-body {
 			display: none;

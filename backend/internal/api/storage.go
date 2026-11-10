@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/ra5on/TitanOS/backend/internal/lxc"
 	"github.com/ra5on/TitanOS/backend/internal/smarthistory"
 	"github.com/ra5on/TitanOS/backend/internal/storage"
 )
@@ -34,6 +35,7 @@ var storageErrors = []struct {
 	{storage.ErrBusy, http.StatusConflict, "volume_busy"},
 	{storage.ErrLocked, http.StatusConflict, "snapshot_locked"},
 	{storage.ErrCacheConfigured, http.StatusConflict, "volume_cache_configured"},
+	{storage.ErrCacheRestart, http.StatusConflict, "volume_cache_restart"},
 	{storage.ErrNotPossible, http.StatusConflict, "not_possible"},
 	{storage.ErrReadOnly, http.StatusConflict, "read_only"},
 	{storage.ErrNoDisk, http.StatusNotFound, "disk_not_found"},
@@ -241,12 +243,30 @@ func (s *Server) handleDeleteVolume(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "volume_has_plugins", "the plugins are installed on this volume")
 		return
 	}
+	// A system container keeps its whole root filesystem on its volume. A
+	// stopped one holds nothing open, so the volume would unmount and go,
+	// and the container would stay registered without its system.
+	if container, ok := lxcOnVolume(s.opts.LXC.List(nil), name); ok {
+		writeError(w, http.StatusConflict, "volume_has_lxc", "the volume holds the system container "+container)
+		return
+	}
 	slog.Info("delete volume requested", "name", name, "user", currentUser(r).Name, "ip", remoteIP(r))
 	if err := s.opts.Storage.Delete(context.WithoutCancel(r.Context()), name, req.Confirm); err != nil {
 		writeStorageError(w, r, "delete volume", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// lxcOnVolume names a system container whose root filesystem lies on the
+// volume.
+func lxcOnVolume(containers []lxc.Status, volume string) (string, bool) {
+	for _, c := range containers {
+		if c.Volume == volume {
+			return c.Name, true
+		}
+	}
+	return "", false
 }
 
 func (s *Server) handleAddVolumeDisk(w http.ResponseWriter, r *http.Request) {
@@ -309,7 +329,7 @@ func (s *Server) handleCheckVolume(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", `action must be "start" or "stop"`)
 		return
 	}
-	if err := s.opts.Storage.Check(r.Context(), r.PathValue("name"), req.Action == "start"); err != nil {
+	if err := s.opts.Storage.Check(context.WithoutCancel(r.Context()), r.PathValue("name"), req.Action == "start"); err != nil {
 		writeStorageError(w, r, "check volume", err)
 		return
 	}
@@ -389,7 +409,7 @@ func (s *Server) handleSnapshotAction(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Storage.SnapshotAction(r.Context(), r.PathValue("name"), req.Name, req.Action, req.Confirm); err != nil {
+	if err := s.opts.Storage.SnapshotAction(context.WithoutCancel(r.Context()), r.PathValue("name"), req.Name, req.Action, req.Confirm); err != nil {
 		writeStorageError(w, r, "snapshot", err)
 		return
 	}
@@ -429,7 +449,7 @@ func (s *Server) handleSetSyncSpeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	noteTarget(r, r.PathValue("name"))
-	if err := s.opts.Storage.SetSyncSpeed(r.Context(), r.PathValue("name"), req.Speed); err != nil {
+	if err := s.opts.Storage.SetSyncSpeed(context.WithoutCancel(r.Context()), r.PathValue("name"), req.Speed); err != nil {
 		writeStorageError(w, r, "rebuild speed", err)
 		return
 	}

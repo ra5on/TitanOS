@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 )
@@ -399,4 +400,40 @@ func TestJoinBodyIsSmallBeforeTheKey(t *testing.T) {
 	if err := b.m.Join(context.Background(), a.m.JoinInfo()); err != nil {
 		t.Fatalf("a real join: %v", err)
 	}
+}
+
+// PLAN 76 (F-9-10): a note that an account was deleted in the cluster does
+// not remove an account of the same name that only ever existed on this node.
+func TestDeletedClusterAccountLeavesALocalNamesake(t *testing.T) {
+	a, b := joinedPair(t)
+	if _, err := b.users.Create("carol", "password-of-b", auth.RoleUser); err != nil {
+		t.Fatal(err)
+	}
+	if b.m.ClusterAccount("carol") {
+		t.Fatal("carol counts as an account of the cluster")
+	}
+	gone := accountRecord{Name: "carol", Version: AccountVersion{Time: time.Now().UnixNano(), Node: a.m.ID(), Deleted: true}}
+	if err := b.m.takeAccounts([]accountRecord{gone}); err != nil {
+		t.Fatal(err)
+	}
+	if !hasAccount(b.users, "carol") {
+		t.Fatal("the local account was removed")
+	}
+	// An account the cluster did hold here goes as before.
+	gone.Name = "alex"
+	if err := b.m.takeAccounts([]accountRecord{gone}); err != nil {
+		t.Fatal(err)
+	}
+	if hasAccount(b.users, "alex") {
+		t.Fatal("the account of the cluster stayed")
+	}
+}
+
+func hasAccount(users *auth.Users, name string) bool {
+	for _, u := range users.List() {
+		if u.Name == name {
+			return true
+		}
+	}
+	return false
 }

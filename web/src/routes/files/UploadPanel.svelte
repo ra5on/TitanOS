@@ -175,17 +175,13 @@
 	}
 	.name {
 		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: anywhere;
 	}
 	.where {
 		flex: 1 1 auto;
 		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 		font-size: var(--text-sm);
+		overflow-wrap: anywhere;
 	}
 	.state {
 		display: inline-flex;
