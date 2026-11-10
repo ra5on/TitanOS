@@ -7,7 +7,7 @@ func (s *Server) registerHardware(mux *routeMux) {
 	powerButtonArea{button: s.opts.PowerButton}.register(mux, s.requireAdmin)
 	energyArea{energy: s.opts.Energy}.register(mux, s.requireAdmin)
 	powerScheduleArea{schedule: s.opts.PowerSchedule}.register(mux, s.requireAdmin)
-	mux.HandleFunc("GET /api/v1/hardware/container-devices", s.requireAdmin(s.handleContainerDevices))
+	mux.HandleFunc("GET /api/v1/hardware/container-devices", s.requireAdmin(s.dockerArea().handleContainerDevices))
 	nvidiaArea{nvidia: s.opts.Nvidia}.register(mux, s.requireAdmin)
 	intelGucArea{guc: s.opts.IntelGuc}.register(mux, s.requireAdmin)
 	uasQuirksArea{quirks: s.opts.UASQuirks}.register(mux, s.requireAdmin)

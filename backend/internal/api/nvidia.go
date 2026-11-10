@@ -41,6 +41,6 @@ func (a nvidiaArea) handleNvidiaSet(w http.ResponseWriter, r *http.Request) {
 	a.handleNvidia(w, r)
 }
 
-func (s *Server) handleContainerDevices(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.opts.Docker.ContainerDevices(r.Context()))
+func (a dockerArea) handleContainerDevices(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, a.docker.ContainerDevices(r.Context()))
 }

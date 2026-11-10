@@ -41,7 +41,7 @@ type webappsArea struct {
 // webappsArea is the area of the server; the automatic replacement
 // (craft_replace.go) uses its detection and migration.
 func (s *Server) webappsArea() webappsArea {
-	return webappsArea{webapps: s.opts.Webapps, ui: s.opts.UI, docker: s.opts.Docker, migration: &s.migration, ctx: s.ctx, removeDockerApp: s.removeDockerApp}
+	return webappsArea{webapps: s.opts.Webapps, ui: s.opts.UI, docker: s.opts.Docker, migration: &s.migration, ctx: s.ctx, removeDockerApp: s.dockerArea().removeDockerApp}
 }
 
 func (a webappsArea) register(mux *routeMux, admin, user, appAdmin func(http.HandlerFunc) http.HandlerFunc) {
