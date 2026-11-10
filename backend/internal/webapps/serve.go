@@ -28,9 +28,20 @@ const maxIndex = 1 << 20
 const (
 	sandboxPolicy = "sandbox allow-scripts allow-downloads allow-modals allow-popups; frame-ancestors 'self'"
 	// trustedPolicy is the header of a trusted app (our own build): framed
-	// only by the web UI, no sandbox.
-	trustedPolicy = "frame-ancestors 'self'"
-	cacheForever  = "public, max-age=31536000, immutable"
+	// only by the web UI, no sandbox. It runs on the address of TitanOS
+	// with the login of whoever looks at a document, so everything it
+	// loads and every address it talks to is this NAS: no script, style,
+	// font or picture from elsewhere, no request to another host. A hole
+	// in showing a prepared document can then neither fetch code nor send
+	// anything away. Inline scripts and WebAssembly are what the programs
+	// start with; data: and blob: are documents and pictures they make.
+	trustedPolicy = "default-src 'self' data: blob:; " +
+		"script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; " +
+		"style-src 'self' 'unsafe-inline'; " +
+		"worker-src 'self' blob:; " +
+		"object-src 'none'; base-uri 'self'; form-action 'self'; " +
+		"frame-ancestors 'self'"
+	cacheForever = "public, max-age=31536000, immutable"
 )
 
 var mimeTypes = map[string]string{
