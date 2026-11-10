@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ra5on/TitanOS/backend/internal/configbackup"
+	"github.com/ra5on/TitanOS/backend/internal/storage"
 )
 
 func writeBackupError(w http.ResponseWriter, err error) {
@@ -42,15 +43,32 @@ func writeBackupError(w http.ResponseWriter, err error) {
 	}
 }
 
-func (s *Server) handleConfigBackup(w http.ResponseWriter, r *http.Request) {
+// configBackupArea is the backup of the stick; an area with narrow
+// dependencies (PLAN 8a, see fansArea). storage names the volumes a backup
+// can go to. confirmed says whether the password was entered again for this
+// request.
+type configBackupArea struct {
+	backup    *configbackup.Manager
+	storage   *storage.Manager
+	confirmed func(r *http.Request) bool
+}
+
+func (a configBackupArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/config-backup", admin(a.handleConfigBackup))
+	mux.HandleFunc("PUT /api/v1/config-backup", admin(a.handleConfigBackupSettings))
+	mux.HandleFunc("POST /api/v1/config-backup/run", admin(a.handleConfigBackupRun))
+	mux.HandleFunc("GET /api/v1/config-backup/download", admin(a.handleConfigBackupDownload))
+}
+
+func (a configBackupArea) handleConfigBackup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"backup":      s.opts.ConfigBackup.State(s.opts.Storage.Mounted()),
-		"volumes":     s.opts.Storage.Names(),
-		"passwordSet": s.opts.ConfigBackup.PasswordSet(),
+		"backup":      a.backup.State(a.storage.Mounted()),
+		"volumes":     a.storage.Names(),
+		"passwordSet": a.backup.PasswordSet(),
 	})
 }
 
-func (s *Server) handleConfigBackupSettings(w http.ResponseWriter, r *http.Request) {
+func (a configBackupArea) handleConfigBackupSettings(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		configbackup.Settings
 		// Password for encrypted backups; empty keeps the one there is.
@@ -62,46 +80,46 @@ func (s *Server) handleConfigBackupSettings(w http.ResponseWriter, r *http.Reque
 	settings := req.Settings
 	// Checked before the password is stored: a refused request must not
 	// leave a new password behind that the person believes was rejected.
-	if err := configbackup.CheckSettings(settings, s.opts.Storage.Names()); err != nil {
+	if err := configbackup.CheckSettings(settings, a.storage.Names()); err != nil {
 		writeBackupError(w, err)
 		return
 	}
 	if req.Password != "" {
-		if err := s.opts.ConfigBackup.SetPassword(req.Password); err != nil {
+		if err := a.backup.SetPassword(req.Password); err != nil {
 			writeBackupError(w, err)
 			return
 		}
 	}
-	if settings.Encrypt && !s.opts.ConfigBackup.PasswordSet() {
+	if settings.Encrypt && !a.backup.PasswordSet() {
 		writeError(w, http.StatusBadRequest, "backup_password_required", "a password is needed to encrypt backups")
 		return
 	}
-	if err := s.opts.ConfigBackup.SetSettings(settings, s.opts.Storage.Names()); err != nil {
+	if err := a.backup.SetSettings(settings, a.storage.Names()); err != nil {
 		writeBackupError(w, err)
 		return
 	}
 	slog.Info("backup settings changed", "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleConfigBackup(w, r)
+	a.handleConfigBackup(w, r)
 }
 
-func (s *Server) handleConfigBackupRun(w http.ResponseWriter, r *http.Request) {
-	if _, err := s.opts.ConfigBackup.Create(s.opts.Storage.Mounted()); err != nil {
+func (a configBackupArea) handleConfigBackupRun(w http.ResponseWriter, r *http.Request) {
+	if _, err := a.backup.Create(a.storage.Mounted()); err != nil {
 		writeBackupError(w, err)
 		return
 	}
-	s.handleConfigBackup(w, r)
+	a.handleConfigBackup(w, r)
 }
 
 // handleConfigBackupDownload hands out a backup, to keep a copy away from
 // the NAS. It holds password hashes and every secret of the NAS, so the
 // password has to be entered again first, as for a console.
-func (s *Server) handleConfigBackupDownload(w http.ResponseWriter, r *http.Request) {
-	if !s.confirmed(r) {
+func (a configBackupArea) handleConfigBackupDownload(w http.ResponseWriter, r *http.Request) {
+	if !a.confirmed(r) {
 		writeError(w, http.StatusForbidden, "confirm_required", "enter your password again to download a backup")
 		return
 	}
 	name := r.URL.Query().Get("name")
-	file, err := s.opts.ConfigBackup.Open(s.opts.Storage.Mounted(), r.URL.Query().Get("volume"), name)
+	file, err := a.backup.Open(a.storage.Mounted(), r.URL.Query().Get("volume"), name)
 	if err != nil {
 		writeBackupError(w, err)
 		return

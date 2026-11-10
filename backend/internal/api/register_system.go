@@ -13,10 +13,7 @@ func (s *Server) registerPower(mux *routeMux) {
 
 // registerMaintenance registers the routes of the backup of the stick, logs, the activity log, diagnostics and the about page.
 func (s *Server) registerMaintenance(mux *routeMux) {
-	mux.HandleFunc("GET /api/v1/config-backup", s.requireAdmin(s.handleConfigBackup))
-	mux.HandleFunc("PUT /api/v1/config-backup", s.requireAdmin(s.handleConfigBackupSettings))
-	mux.HandleFunc("POST /api/v1/config-backup/run", s.requireAdmin(s.handleConfigBackupRun))
-	mux.HandleFunc("GET /api/v1/config-backup/download", s.requireAdmin(s.handleConfigBackupDownload))
+	configBackupArea{backup: s.opts.ConfigBackup, storage: s.opts.Storage, confirmed: s.confirmed}.register(mux, s.requireAdmin)
 	mux.HandleFunc("GET /api/v1/logs", s.requireAdmin(s.handleLogs))
 	mux.HandleFunc("GET /api/v1/logs/export", s.requireAdmin(s.handleLogsExport))
 	mux.HandleFunc("GET /api/v1/activity", s.requireAdmin(s.handleActivity))
