@@ -57,12 +57,15 @@ func TestCatalogContents(t *testing.T) {
 		}
 	}
 	// PLAN 75-20: every Craft original has its own build as successor, trusted, same types and bridge.
+	// Our own build may speak the host bridge where the original only has
+	// the adapter (T-Effect since TitanOS-Office 1.4.0), never the reverse.
 	for _, app := range apps {
 		if app.Repo == "ra5on/TitanOS-Office" {
 			continue
 		}
 		next, ok := Lookup(app.Successor)
-		if !ok || !next.Trusted || next.Bridge != app.Bridge || !slices.Equal(next.Types, app.Types) {
+		sameBridge := next.Bridge == app.Bridge || (app.Bridge == "adapter" && next.Bridge == "host")
+		if !ok || !next.Trusted || !sameBridge || !slices.Equal(next.Types, app.Types) {
 			t.Fatalf("%s → %q: %+v", app.ID, app.Successor, next)
 		}
 	}
