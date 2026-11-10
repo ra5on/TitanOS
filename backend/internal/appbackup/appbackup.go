@@ -190,6 +190,13 @@ func (m *Manager) Prepare(ctx context.Context, job backup.Job, volume string, ra
 		return fail(err)
 	}
 	if err := m.Store.WriteJSON(pointerFile, Operation{ID: op.ID, Volume: volume, Job: job.ID}); err != nil {
+		// Nothing was stopped yet and nothing points to this operation:
+		// it is no pending one. Left set, "a backup is running" would
+		// hold every change of an app until titand restarts.
+		m.mu.Lock()
+		m.pending = nil
+		m.mu.Unlock()
+		_ = root.RemoveAll(op.ID) // cleanup, best effort: an empty journal folder harms nothing
 		return fail(err)
 	}
 	m.mu.Lock()
