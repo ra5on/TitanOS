@@ -569,10 +569,10 @@
 					})}
 		</p>
 		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={() => (dialog = null)}>{t('common.cancel')}</button
+			>
 			<button type="button" class="btn btn-danger" onclick={() => remove(d)}
 				>{t('common.delete')}</button
-			>
-			<button type="button" class="btn" onclick={() => (dialog = null)}>{t('common.cancel')}</button
 			>
 		</div>
 	</Dialog>

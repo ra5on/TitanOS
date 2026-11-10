@@ -306,7 +306,7 @@
 	"quick.confirm": "„{name}“ jetzt ausführen?",
 	"quick.confirmDo": "Ausführen",
 	"share.title": "Aufs NAS teilen",
-	"share.none": "Nichts zum Ablegen",
+	"share.nothing": "Nichts zum Ablegen",
 	"share.noneHint": "Teile Dateien aus einer anderen App mit „TitanOS“, dann erscheinen sie hier.",
 	"share.missing": "Die geteilten Dateien sind nicht angekommen. Öffne TitanOS einmal als App und teile sie noch einmal.",
 	"share.home": "Zum Startbildschirm",

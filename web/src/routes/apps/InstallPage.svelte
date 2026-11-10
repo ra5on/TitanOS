@@ -938,10 +938,11 @@
 	<Dialog title={t('apps.discardTitle')} onclose={() => (leaving = null)}>
 		<p>{t('apps.discardText', { name: form?.name ?? '' })}</p>
 		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={() => (leaving = null)}
+				>{t('shares.keepEditing')}</button
+			>
 			<button type="button" class="btn btn-warn" onclick={() => leave(leaving ?? '/apps')}
 				>{t('shares.discard')}</button
-			><button type="button" class="btn" onclick={() => (leaving = null)}
-				>{t('shares.keepEditing')}</button
 			>
 		</div>
 	</Dialog>

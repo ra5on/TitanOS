@@ -117,7 +117,7 @@
 		<p class="muted" role="status">{t('common.loading')}</p>
 	{:else if nothing}
 		<section class="tile ui-card">
-			<div class="card-head"><h2>{t('share.none')}</h2></div>
+			<div class="card-head"><h2>{t('share.nothing')}</h2></div>
 			<p class="pad muted">
 				{page.url.searchParams.has('missing') ? t('share.missing') : t('share.noneHint')}
 			</p>

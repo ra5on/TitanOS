@@ -952,14 +952,14 @@
 		>
 			<p>{t('webapps.unsavedText', { app: win.title })}</p>
 			<div class="dialog-actions">
-				<button type="button" class="btn btn-danger" onclick={() => closeWindow(win.id)}
-					>{t('webapps.closeAnyway')}</button
-				>
 				<button
 					type="button"
 					class="btn btn-primary"
 					onclick={() => (wm.closing = wm.closing.filter((c) => c !== win.id))}
 					>{t('common.cancel')}</button
+				>
+				<button type="button" class="btn btn-danger" onclick={() => closeWindow(win.id)}
+					>{t('webapps.closeAnyway')}</button
 				>
 			</div>
 		</Dialog>
@@ -968,6 +968,9 @@
 		<Dialog title={t('webapps.unsavedTitle')} onclose={() => (restartAsk = false)}>
 			<p>{t('webapps.unsavedRestart', { app: win.title })}</p>
 			<div class="dialog-actions">
+				<button type="button" class="btn btn-primary" onclick={() => (restartAsk = false)}
+					>{t('common.cancel')}</button
+				>
 				<button
 					type="button"
 					class="btn btn-danger"
@@ -975,9 +978,6 @@
 						restartAsk = false;
 						view?.restart();
 					}}>{t('webapps.restartAnyway')}</button
-				>
-				<button type="button" class="btn btn-primary" onclick={() => (restartAsk = false)}
-					>{t('common.cancel')}</button
 				>
 			</div>
 		</Dialog>

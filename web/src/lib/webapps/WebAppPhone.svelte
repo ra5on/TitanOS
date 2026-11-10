@@ -145,6 +145,9 @@
 				})}
 			</p>
 			<div class="dialog-actions">
+				<button type="button" class="btn btn-primary" onclick={() => (asking = null)}
+					>{t('common.cancel')}</button
+				>
 				<button
 					type="button"
 					class="btn btn-danger"
@@ -154,9 +157,6 @@
 						if (was === 'back') leave();
 						else view?.restart();
 					}}>{t(asking === 'back' ? 'webapps.closeAnyway' : 'webapps.restartAnyway')}</button
-				>
-				<button type="button" class="btn btn-primary" onclick={() => (asking = null)}
-					>{t('common.cancel')}</button
 				>
 			</div>
 		</Dialog>

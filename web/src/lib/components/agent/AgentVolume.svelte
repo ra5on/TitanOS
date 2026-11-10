@@ -266,10 +266,10 @@
 	<Dialog title={t('agent.vol.oldRemove')} onclose={() => (removing = '')}>
 		<p>{t('agent.vol.oldConfirm', { volume: removing })}</p>
 		<div class="dialog-actions">
+			<button type="button" class="btn" onclick={() => (removing = '')}>{t('common.cancel')}</button
+			>
 			<button type="button" class="btn btn-danger" onclick={() => removeOld(removing)}
 				>{t('agent.vol.oldRemove')}</button
-			>
-			<button type="button" class="btn" onclick={() => (removing = '')}>{t('common.cancel')}</button
 			>
 		</div>
 	</Dialog>

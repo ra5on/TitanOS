@@ -1125,10 +1125,10 @@
 	<Dialog title={t('docker.stopAllTitle')} onclose={() => (confirmStopAll = false)}>
 		<p>{t('docker.stopAllText', { count: runCount })}</p>
 		<div class="dialog-actions">
-			<button type="button" class="btn btn-warn" onclick={stopAll}>{t('docker.stopAll')}</button
-			><button type="button" class="btn" onclick={() => (confirmStopAll = false)}
+			<button type="button" class="btn" onclick={() => (confirmStopAll = false)}
 				>{t('common.cancel')}</button
 			>
+			<button type="button" class="btn btn-warn" onclick={stopAll}>{t('docker.stopAll')}</button>
 		</div>
 	</Dialog>
 {/if}

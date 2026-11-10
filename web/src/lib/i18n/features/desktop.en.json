@@ -306,7 +306,7 @@
 	"quick.confirm": "Do “{name}” now?",
 	"quick.confirmDo": "Do it",
 	"share.title": "Share to the NAS",
-	"share.none": "Nothing to store",
+	"share.nothing": "Nothing to store",
 	"share.noneHint": "Share files from another app with “TitanOS” and they show up here.",
 	"share.missing": "The shared files did not arrive. Open TitanOS as an app once and share them again.",
 	"share.home": "To the home screen",
