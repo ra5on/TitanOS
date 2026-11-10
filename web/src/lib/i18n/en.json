@@ -5268,6 +5268,7 @@
 	"cache.disableText": "The cache is no longer used; after the next start at the latest the volume reads the disks directly again. No data is lost.",
 	"cache.disableWriteback": "First all data in the write cache is written back to the disks; the volume stays usable meanwhile. Then the cache is removed and you get a notification.",
 	"error.volume_cache_configured": "The volume has an SSD cache. Switch it off first.",
+	"error.volume_cache_restart": "The SSD cache was switched off since the last start. Restart the NAS once, then the volume can be expanded.",
 	"notify.kind.disk_wear.title": "Disk {subject} shows wear",
 	"notify.kind.disk_wear.text": "The SMART values show new signs of wear or damage. Back up the data and plan a replacement. Details under Storage › SMART.",
 	"notify.kind.vm_io_error.title": "VM {subject} paused after a disk error",

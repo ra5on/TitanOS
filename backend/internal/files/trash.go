@@ -2,6 +2,7 @@ package files
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -134,9 +135,28 @@ func (m *Manager) TrashRestore(root Root, paths []string, user string, uid int, 
 				return err
 			}
 		}
-		if err := r.Rename(source, target); err != nil {
+		// Never over something that took the name since the check above
+		// (a save over SMB, an upload): the restored entry then gets the
+		// dated name instead.
+		err = renameNoReplace(r, source, target)
+		if errors.Is(err, fs.ErrExist) {
+			ext := path.Ext(target)
+			if info, statErr := r.Lstat(source); statErr == nil && info.IsDir() {
+				ext = ""
+			}
+			dated := fmt.Sprintf("%s (%s)%s", strings.TrimSuffix(target, ext), m.now().Format("2006-01-02 15.04.05"), ext)
+			if dated, _, err = m.settle(r, dated, ConflictRename, nil); err == nil {
+				target = dated
+				err = renameNoReplace(r, source, target)
+			}
+		}
+		if err != nil {
 			return mapError(err)
 		}
+		// The note of this deletion is over: left on the entry, it would
+		// send the next restore (after a delete over SMB, which writes no
+		// note) to the old place with the old date.
+		forgetTrash(r, target)
 		m.pruneTrash(r, path.Dir(source))
 	}
 	return nil

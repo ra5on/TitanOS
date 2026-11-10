@@ -35,6 +35,7 @@ var storageErrors = []struct {
 	{storage.ErrBusy, http.StatusConflict, "volume_busy"},
 	{storage.ErrLocked, http.StatusConflict, "snapshot_locked"},
 	{storage.ErrCacheConfigured, http.StatusConflict, "volume_cache_configured"},
+	{storage.ErrCacheRestart, http.StatusConflict, "volume_cache_restart"},
 	{storage.ErrNotPossible, http.StatusConflict, "not_possible"},
 	{storage.ErrReadOnly, http.StatusConflict, "read_only"},
 	{storage.ErrNoDisk, http.StatusNotFound, "disk_not_found"},
