@@ -4,7 +4,7 @@ Ein schlankes NAS-Betriebssystem, das vom USB-Stick bootet und komplett im RAM l
 
 > **Diese Datei enthält nur Kernregeln; Fachregeln stehen in `docs/rules/` bzw. den verlinkten Dokumenten. Vor Arbeiten an einem Bereich dessen Regeldatei lesen. Neue Regeln in die passende Regeldatei, nicht hier anhängen.** Verzeichnis: Abschnitt „Fachregeln“ unten und `docs/rules/README.md`.
 
-Stand: **0.74** (Tag v0.74.0; Release-Prüfstand siehe docs/releases/v0.74.0.md; 0.67.0 und 0.68.0 wurden nicht veröffentlicht). Diese Datei und die Regeldateien beschreiben die aktuell geltenden Entscheidungen, nicht die Reihenfolge ihrer Einführung. Historische Release- und Testberichte stehen in `docs/releases/` und den Fachdokumenten. Bei Änderungen die betroffene Regel dort aktualisieren, wo sie steht, statt widersprechende Nachträge anzuhängen.
+Stand: **0.75** (Tag v0.75.0, volles Systemrelease; Release-Prüfstand siehe docs/releases/v0.75.0.md, Fundliste der Durchsicht in docs/validation/durchsicht-076.md; 0.67.0 und 0.68.0 wurden nicht veröffentlicht). Diese Datei und die Regeldateien beschreiben die aktuell geltenden Entscheidungen, nicht die Reihenfolge ihrer Einführung. Historische Release- und Testberichte stehen in `docs/releases/` und den Fachdokumenten. Bei Änderungen die betroffene Regel dort aktualisieren, wo sie steht, statt widersprechende Nachträge anzuhängen.
 
 Eigenständiges Projekt. Keinen Code, keine Struktur und keine Annahmen aus anderen Projekten übernehmen.
 
@@ -164,7 +164,7 @@ Wortlaut und Einzelheiten in der jeweiligen Regeldatei; bei Widerspruch gilt die
 - **Aufträge:** Das Backend besitzt Aufträge und führt Änderungen aus; Browserergebnisse nie als Ausführungsnachweis. RAM-Aufträge und offene Verbindungen nicht als dauerhaft behandeln (`docs/rules/STORAGE.md`, `docs/rules/UPDATES.md`).
 - **Ab Werk aus:** Firewall, SSH, Verschlüsselung, SSD-Cache, MCP-Server, Wartung, längere Monitoring-Verläufe und andere optionale Funktionen laut Regeldatei.
 - **Plugins:** Vor der Installation auf volle Systemrechte hinweisen; keine Plugin-Sandbox behaupten (`docs/rules/PLUGINS.md`).
-- **Oberfläche:** Status nie nur über Farbe; Kontrast mindestens 4,5:1; Farben aus Theme-Variablen; alle Texte über Übersetzungsdateien (Deutsch/Englisch). Reale Messwerte, Beispieldaten nur in isolierten Tests.
+- **Oberfläche:** Kein abgeschnittener Text (kein „…“, kein verstecktes Überlaufen, keine Zeilenbegrenzung; umbrechen, scrollen oder Symbol, `docs/rules/WEB-UI.md`). Status nie nur über Farbe; Kontrast mindestens 4,5:1; Farben aus Theme-Variablen; alle Texte über Übersetzungsdateien (Deutsch/Englisch). Reale Messwerte, Beispieldaten nur in isolierten Tests.
 - **Prüfstände:** Getestetes immer mit Umfang und Grenzen dokumentieren; frühere Hardwaremeldungen sind keine pauschale Abnahme neuer Funktionen.
 
 ## Arbeitsweise
