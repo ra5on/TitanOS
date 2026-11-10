@@ -71,3 +71,7 @@ func (s *Server) recordActivity(entry activity.Entry) {
 		s.opts.Activity.Record(entry)
 	}
 }
+
+// jobFunc starts work that outlives its request and ends with the server
+// (Server.goJob).
+type jobFunc func(job func(ctx context.Context))
