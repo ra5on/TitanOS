@@ -32,7 +32,30 @@ func writeNetworkError(w http.ResponseWriter, err error) {
 	}
 }
 
-func (s *Server) handleNetworkBridge(w http.ResponseWriter, r *http.Request) {
+// networkArea is how the NAS is connected, and its host name; an area with
+// narrow dependencies (PLAN 8a, see fansArea). settings holds the time zone
+// the page shows with it.
+type networkArea struct {
+	network  *network.Manager
+	settings *system.Settings
+}
+
+// networkArea is the area of the server.
+func (s *Server) networkArea() networkArea {
+	return networkArea{network: s.opts.Network, settings: s.opts.Settings}
+}
+
+func (a networkArea) register(mux *routeMux, g guards) {
+	mux.HandleFunc("GET /api/v1/network", g.admin(a.handleNetwork))
+	mux.HandleFunc("POST /api/v1/network/diagnostics", g.admin(a.handleNetworkDiagnostics))
+	mux.HandleFunc("PUT /api/v1/network", g.admin(g.clusterLocal(a.handleNetworkChange)))
+	mux.HandleFunc("PUT /api/v1/network/options", g.admin(g.clusterLocal(a.handleNetworkOptions)))
+	mux.HandleFunc("POST /api/v1/network/bridge", g.admin(g.clusterLocal(a.handleNetworkBridge)))
+	mux.HandleFunc("POST /api/v1/network/confirm", g.admin(g.clusterLocal(a.handleNetworkConfirm)))
+	mux.HandleFunc("POST /api/v1/network/revert", g.admin(a.handleNetworkRevert))
+}
+
+func (a networkArea) handleNetworkBridge(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Port             string `json:"port"`
 		OnlyUnconfigured bool   `json:"onlyUnconfigured"`
@@ -40,44 +63,44 @@ func (s *Server) handleNetworkBridge(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Network.EnsureBridge(r.Context(), req.Port, req.OnlyUnconfigured); err != nil {
+	if err := a.network.EnsureBridge(r.Context(), req.Port, req.OnlyUnconfigured); err != nil {
 		writeNetworkError(w, err)
 		return
 	}
 	slog.Info("network bridge requested", "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleNetwork(w, r)
+	a.handleNetwork(w, r)
 }
 
-func (s *Server) handleNetwork(w http.ResponseWriter, r *http.Request) {
+func (a networkArea) handleNetwork(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"network":   s.opts.Network.Status(r.Context()),
+		"network":   a.network.Status(r.Context()),
 		"bondModes": network.BondModes,
-		"timezone":  s.opts.Settings.CurrentTimezone(),
+		"timezone":  a.settings.CurrentTimezone(),
 	})
 }
 
 // handleNetworkOptions saves the choices of the network page (VLANs on/off).
-func (s *Server) handleNetworkOptions(w http.ResponseWriter, r *http.Request) {
+func (a networkArea) handleNetworkOptions(w http.ResponseWriter, r *http.Request) {
 	var opts network.Options
 	if !readJSON(w, r, &opts) {
 		return
 	}
-	if err := s.opts.Network.SetOptions(opts); err != nil {
+	if err := a.network.SetOptions(opts); err != nil {
 		writeNetworkError(w, err)
 		return
 	}
 	slog.Info("network options changed", "vlans", opts.VLANs, "by", currentUser(r).Name)
-	s.handleNetwork(w, r)
+	a.handleNetwork(w, r)
 }
 
-func (s *Server) handleNetworkDiagnostics(w http.ResponseWriter, r *http.Request) {
+func (a networkArea) handleNetworkDiagnostics(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Network string `json:"network"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
-	checks, err := s.opts.Network.Diagnostics(r.Context(), req.Network)
+	checks, err := a.network.Diagnostics(r.Context(), req.Network)
 	if err != nil {
 		writeNetworkError(w, err)
 		return
@@ -86,46 +109,46 @@ func (s *Server) handleNetworkDiagnostics(w http.ResponseWriter, r *http.Request
 }
 
 // handleNetworkChange puts a new configuration on trial.
-func (s *Server) handleNetworkChange(w http.ResponseWriter, r *http.Request) {
+func (a networkArea) handleNetworkChange(w http.ResponseWriter, r *http.Request) {
 	var cfg network.Config
 	if !readJSON(w, r, &cfg) {
 		return
 	}
-	if err := s.opts.Network.Change(r.Context(), cfg); err != nil {
+	if err := a.network.Change(r.Context(), cfg); err != nil {
 		writeNetworkError(w, err)
 		return
 	}
 	slog.Info("network change on trial", "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleNetwork(w, r)
+	a.handleNetwork(w, r)
 }
 
 // handleNetworkConfirm keeps the change. That this request arrived shows
 // that the NAS is still reachable with it.
-func (s *Server) handleNetworkConfirm(w http.ResponseWriter, r *http.Request) {
+func (a networkArea) handleNetworkConfirm(w http.ResponseWriter, r *http.Request) {
 	local, _ := r.Context().Value(http.LocalAddrContextKey).(net.Addr)
-	if err := s.opts.Network.ConfirmFrom(r.Context(), local); err != nil {
+	if err := a.network.ConfirmFrom(r.Context(), local); err != nil {
 		writeNetworkError(w, err)
 		return
 	}
 	slog.Info("network change confirmed", "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleNetwork(w, r)
+	a.handleNetwork(w, r)
 }
 
-func (s *Server) handleNetworkRevert(w http.ResponseWriter, r *http.Request) {
-	if err := s.opts.Network.Revert(r.Context()); err != nil {
+func (a networkArea) handleNetworkRevert(w http.ResponseWriter, r *http.Request) {
+	if err := a.network.Revert(r.Context()); err != nil {
 		writeNetworkError(w, err)
 		return
 	}
 	slog.Info("network change given up", "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleNetwork(w, r)
+	a.handleNetwork(w, r)
 }
 
-func (s *Server) handleHostname(w http.ResponseWriter, r *http.Request) {
+func (a networkArea) handleHostname(w http.ResponseWriter, r *http.Request) {
 	var req struct{ Hostname string }
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Network.SetHostname(r.Context(), req.Hostname); err != nil {
+	if err := a.network.SetHostname(r.Context(), req.Hostname); err != nil {
 		writeNetworkError(w, err)
 		return
 	}

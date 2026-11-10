@@ -32,5 +32,5 @@ func (s *Server) registerUpdate(mux *routeMux) {
 // registerSystemSettings registers the routes of time zone and host name.
 func (s *Server) registerSystemSettings(mux *routeMux) {
 	timezoneArea{settings: s.opts.Settings}.register(mux, s.requireAdmin)
-	mux.HandleFunc("PUT /api/v1/system/hostname", s.requireAdmin(s.handleHostname))
+	mux.HandleFunc("PUT /api/v1/system/hostname", s.requireAdmin(s.networkArea().handleHostname))
 }
