@@ -592,7 +592,10 @@ func (m *Manager) ViewerRemoveImage(ctx context.Context, id string) error {
 	if !ownImage(img.Config.Labels) {
 		return errors.New("docker: not an image of the remote view")
 	}
-	_, err := m.api.do(ctx, http.MethodDelete, "/images/"+url.PathEscape(img.ID), nil)
+	res, err := m.api.do(ctx, http.MethodDelete, "/images/"+url.PathEscape(img.ID), nil)
+	if res != nil {
+		res.Body.Close() // the answer lists what was removed; left open, it keeps a connection to the engine
+	}
 	if notFound(err) {
 		return nil
 	}

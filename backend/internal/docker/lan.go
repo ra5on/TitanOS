@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -454,8 +455,49 @@ func AssignLAN(text, service string, n LANNetwork, address string) (string, erro
 			networks["default"] = nil
 		}
 	}
-	out, err := yaml.Marshal(doc)
-	return string(out), err
+	// Only the two parts that changed are written anew: the networks of
+	// the service and the list of networks. Everything else of the file
+	// stays as the person wrote it, with comments, order and anchors
+	// (written out from the map, all of that was lost for good).
+	var root yaml.Node
+	if err := yaml.Unmarshal([]byte(text), &root); err != nil || len(root.Content) == 0 || root.Content[0].Kind != yaml.MappingNode {
+		return "", ErrInvalid
+	}
+	top := root.Content[0]
+	svc := mapValue(mapValue(top, "services"), service)
+	if svc == nil || svc.Kind != yaml.MappingNode {
+		return "", ErrInvalid
+	}
+	for _, part := range []struct {
+		in    *yaml.Node
+		key   string
+		value any
+	}{{svc, "networks", attached}, {top, "networks", networks}} {
+		var node yaml.Node
+		if err := node.Encode(part.value); err != nil {
+			return "", err
+		}
+		setMapNode(part.in, part.key, &node)
+	}
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(&root); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+// setMapNode sets key of a mapping node to value, in place when it is
+// there already (so that it keeps its position), else at the end.
+func setMapNode(mapping *yaml.Node, key string, value *yaml.Node) {
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == key {
+			mapping.Content[i+1] = value
+			return
+		}
+	}
+	mapping.Content = append(mapping.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}, value)
 }
 
 func (m *Manager) validateLANCompose(text string) error {

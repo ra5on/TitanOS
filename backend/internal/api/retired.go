@@ -70,7 +70,10 @@ func (s *Server) removeRetiredAssistant() {
 				continue
 			}
 			if err := moveHeldNotifications(old, filepath.Join(base, "notify")); err != nil {
+				// They stay where they are for the next try: removed with
+				// the folder, they would be lost.
 				slog.Warn("held notifications not moved", "volume", volume, "err", err)
+				continue
 			}
 			if err := os.RemoveAll(old); err != nil {
 				slog.Warn("old assistant data not removed", "volume", volume, "err", err)
