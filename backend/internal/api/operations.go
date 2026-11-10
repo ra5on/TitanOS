@@ -48,11 +48,7 @@ func (s *Server) operationsRoutes(mux *routeMux) {
 	admin("GET /api/v1/storage/snapshot-restores", s.handleSnapshotRestores)
 	admin("POST /api/v1/storage/snapshot-restores/{id}/cancel", s.handleSnapshotRestoreCancel)
 	admin("DELETE /api/v1/storage/snapshot-restores/{id}", s.handleSnapshotRestoreForget)
-	heavy("POST /api/v1/backups/{id}/probe", s.handleBackupProbe)
-	admin("GET /api/v1/backups/coverage", s.handleBackupCoverage)
-	heavy("POST /api/v1/backups/{id}/applications/{step}", s.handleApplicationRestore)
-	admin("GET /api/v1/backups/application-recovery", s.handleApplicationRecovery)
-	admin("POST /api/v1/backups/application-recovery", s.handleApplicationRecover)
+	s.backupsArea().registerOperations(admin, heavy)
 	heavyApp("POST /api/v1/vms/{name}/clone", s.handleVMClone)
 	admin("GET /api/v1/vm-clones/{volume}", s.handleVMClones)
 	heavyApp("POST /api/v1/vm-clones/{volume}/{id}", s.handleVMCloneRecover)
@@ -361,8 +357,8 @@ func (s *Server) handleSnapshotFilesRestore(w http.ResponseWriter, r *http.Reque
 	}
 	writeJSON(w, 201, out)
 }
-func (s *Server) handleBackupProbe(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Backup == nil {
+func (a backupsArea) handleBackupProbe(w http.ResponseWriter, r *http.Request) {
+	if a.backup == nil {
 		featureUnavailable(w)
 		return
 	}
@@ -370,25 +366,25 @@ func (s *Server) handleBackupProbe(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Backup.Probe(r.PathValue("id"), req); err != nil {
+	if err := a.backup.Probe(r.PathValue("id"), req); err != nil {
 		writeBackupJobError(w, err)
 		return
 	}
 	w.WriteHeader(202)
 }
-func (s *Server) handleApplicationRecovery(w http.ResponseWriter, r *http.Request) {
-	if s.opts.ApplicationBackups == nil {
+func (a backupsArea) handleApplicationRecovery(w http.ResponseWriter, r *http.Request) {
+	if a.applications() == nil {
 		featureUnavailable(w)
 		return
 	}
-	op, active := s.opts.ApplicationBackups.Status()
-	if op == nil && !active && s.opts.ApplicationBackups.Busy() {
+	op, active := a.applications().Status()
+	if op == nil && !active && a.applications().Busy() {
 		featureError(w, errors.New("application recovery state could not be loaded; inspect the system log"))
 		return
 	}
 	message, missing := "", false
 	if r.URL.Query().Get("details") == "1" {
-		review, _, err := s.opts.ApplicationBackups.Review()
+		review, _, err := a.applications().Review()
 		switch {
 		case errors.Is(err, appbackup.ErrJournalMissing):
 			missing = true
@@ -400,8 +396,8 @@ func (s *Server) handleApplicationRecovery(w http.ResponseWriter, r *http.Reques
 	}
 	writeJSON(w, 200, map[string]any{"operation": op, "active": active, "error": message, "journalMissing": missing})
 }
-func (s *Server) handleApplicationRecover(w http.ResponseWriter, r *http.Request) {
-	if s.opts.ApplicationBackups == nil {
+func (a backupsArea) handleApplicationRecover(w http.ResponseWriter, r *http.Request) {
+	if a.applications() == nil {
 		featureUnavailable(w)
 		return
 	}
@@ -412,7 +408,7 @@ func (s *Server) handleApplicationRecover(w http.ResponseWriter, r *http.Request
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.ApplicationBackups.Recover(context.WithoutCancel(r.Context()), req.Confirm, req.Restart); err != nil {
+	if err := a.applications().Recover(context.WithoutCancel(r.Context()), req.Confirm, req.Restart); err != nil {
 		featureError(w, err)
 		return
 	}

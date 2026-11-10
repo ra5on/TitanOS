@@ -49,6 +49,14 @@ type streamFunc func(w http.ResponseWriter, r *http.Request, opts consoleOptions
 // request (Server.confirmed).
 type confirmedFunc func(r *http.Request) bool
 
+// sessionConfirmed is a confirmedFunc that ignores the switch of the
+// consoles: the web session of the request must have had the password
+// entered again.
+func (s *Server) sessionConfirmed(r *http.Request) bool {
+	cookie, err := r.Cookie(s.cookieName())
+	return err == nil && s.sessions.Confirmed(cookie.Value)
+}
+
 // reconfirmFunc checks the password (and second factor) of the account
 // once more and answers the request itself when it refuses
 // (Server.reconfirm).

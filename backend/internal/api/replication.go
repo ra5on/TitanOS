@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/ra5on/TitanOS/backend/internal/backuptarget"
 	"github.com/ra5on/TitanOS/backend/internal/replication"
 )
 
@@ -31,21 +32,44 @@ func writeReplicationError(w http.ResponseWriter, err error) {
 	writeError(w, http.StatusInternalServerError, "replication_failed", err.Error())
 }
 
-// handleReplication lists the jobs of this NAS and what it received from others.
-func (s *Server) handleReplication(w http.ResponseWriter, r *http.Request) {
-	received := []replication.Replica{}
-	if volume := s.opts.BackupTarget.View().Volume; volume != "" && s.opts.ReplicaReceiver != nil {
-		received = s.opts.ReplicaReceiver.List(volume)
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"jobs": s.opts.Replication.Jobs(), "received": received, "receiveVolume": s.opts.BackupTarget.View().Volume})
+// replicationArea sends Btrfs volumes to other TitanOS and holds what
+// others sent here; an area with narrow dependencies (PLAN 8a, see
+// fansArea). target knows the paired NAS.
+type replicationArea struct {
+	replication *replication.Manager
+	receiver    *replication.Receiver
+	target      *backuptarget.Manager
 }
 
-func (s *Server) handleReplicationSave(w http.ResponseWriter, r *http.Request) {
+// replicationArea is the area of the server.
+func (s *Server) replicationArea() replicationArea {
+	return replicationArea{replication: s.opts.Replication, receiver: s.opts.ReplicaReceiver, target: s.opts.BackupTarget}
+}
+
+func (a replicationArea) register(mux *routeMux, g guards) {
+	mux.HandleFunc("GET /api/v1/replication", g.admin(a.handleReplication))
+	mux.HandleFunc("POST /api/v1/replication", g.admin(a.handleReplicationSave))
+	mux.HandleFunc("PUT /api/v1/replication/{id}", g.admin(a.handleReplicationSave))
+	mux.HandleFunc("DELETE /api/v1/replication/{id}", g.admin(a.handleReplicationRemove))
+	mux.HandleFunc("POST /api/v1/replication/{id}/run", g.heavyAdmin(a.handleReplicationRun))
+	mux.HandleFunc("POST /api/v1/replication/received/restore", g.heavyAdmin(a.handleReplicaRestore))
+}
+
+// handleReplication lists the jobs of this NAS and what it received from others.
+func (a replicationArea) handleReplication(w http.ResponseWriter, r *http.Request) {
+	received := []replication.Replica{}
+	if volume := a.target.View().Volume; volume != "" && a.receiver != nil {
+		received = a.receiver.List(volume)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"jobs": a.replication.Jobs(), "received": received, "receiveVolume": a.target.View().Volume})
+}
+
+func (a replicationArea) handleReplicationSave(w http.ResponseWriter, r *http.Request) {
 	var req replication.Request
 	if !readJSON(w, r, &req) {
 		return
 	}
-	id, err := s.opts.Replication.Save(r.PathValue("id"), req)
+	id, err := a.replication.Save(r.PathValue("id"), req)
 	if err != nil {
 		writeReplicationError(w, err)
 		return
@@ -55,16 +79,16 @@ func (s *Server) handleReplicationSave(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"id": id})
 }
 
-func (s *Server) handleReplicationRemove(w http.ResponseWriter, r *http.Request) {
-	if err := s.opts.Replication.Remove(r.PathValue("id")); err != nil {
+func (a replicationArea) handleReplicationRemove(w http.ResponseWriter, r *http.Request) {
+	if err := a.replication.Remove(r.PathValue("id")); err != nil {
 		writeReplicationError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleReplicationRun(w http.ResponseWriter, r *http.Request) {
-	if err := s.opts.Replication.Start(r.Context(), r.PathValue("id")); err != nil {
+func (a replicationArea) handleReplicationRun(w http.ResponseWriter, r *http.Request) {
+	if err := a.replication.Start(r.Context(), r.PathValue("id")); err != nil {
 		writeReplicationError(w, err)
 		return
 	}
@@ -72,7 +96,7 @@ func (s *Server) handleReplicationRun(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleReplicaRestore copies a received snapshot into a new folder.
-func (s *Server) handleReplicaRestore(w http.ResponseWriter, r *http.Request) {
+func (a replicationArea) handleReplicaRestore(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Source   string `json:"source"`
 		Snapshot string `json:"snapshot"`
@@ -80,12 +104,12 @@ func (s *Server) handleReplicaRestore(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	volume := s.opts.BackupTarget.View().Volume
-	if volume == "" || s.opts.ReplicaReceiver == nil {
+	volume := a.target.View().Volume
+	if volume == "" || a.receiver == nil {
 		writeReplicationError(w, replication.ErrNotFound)
 		return
 	}
-	path, err := s.opts.ReplicaReceiver.Restore(r.Context(), volume, req.Source, req.Snapshot)
+	path, err := a.receiver.Restore(r.Context(), volume, req.Source, req.Snapshot)
 	if err != nil {
 		writeReplicationError(w, err)
 		return

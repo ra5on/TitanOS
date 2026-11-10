@@ -72,20 +72,20 @@ func coverageFor(kind, name string, available bool, jobs []backup.View, mounted 
 	}
 	return item
 }
-func (s *Server) handleBackupCoverage(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Backup == nil || s.opts.Storage == nil {
+func (a backupsArea) handleBackupCoverage(w http.ResponseWriter, r *http.Request) {
+	if a.backup == nil || a.storage == nil {
 		featureUnavailable(w)
 		return
 	}
-	jobs := s.opts.Backup.List()
-	mounted := s.opts.Storage.Mounted()
+	jobs := a.backup.List()
+	mounted := a.storage.Mounted()
 	out := []coverageItem{}
-	for _, share := range s.opts.Shares.List() {
+	for _, share := range a.shares.List() {
 		out = append(out, coverageFor("share", share.Name, slices.Contains(mounted, share.Volume), jobs, mounted, time.Now()))
 	}
 	sources := []string{}
-	if s.opts.Docker != nil {
-		status := s.opts.Docker.Status(r.Context())
+	if a.docker != nil {
+		status := a.docker.Status(r.Context())
 		if status.Settings.Enabled && !status.Running {
 			sources = append(sources, "docker")
 		}
@@ -93,8 +93,8 @@ func (s *Server) handleBackupCoverage(w http.ResponseWriter, r *http.Request) {
 			out = append(out, coverageFor("docker", container.Name, status.Running, jobs, mounted, time.Now()))
 		}
 	}
-	if s.opts.VMs != nil {
-		for _, machine := range s.opts.VMs.List(mounted) {
+	if a.vms != nil {
+		for _, machine := range a.vms.List(mounted) {
 			out = append(out, coverageFor("vm", machine.Name, machine.Available, jobs, mounted, time.Now()))
 		}
 	}
