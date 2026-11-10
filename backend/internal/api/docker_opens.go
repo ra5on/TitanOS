@@ -12,15 +12,45 @@ import (
 	"strings"
 
 	"github.com/ra5on/TitanOS/backend/internal/docker"
+	"github.com/ra5on/TitanOS/backend/internal/files"
+	"github.com/ra5on/TitanOS/backend/internal/shares"
 )
 
 func (s *Server) registerDockerOpens(mux *routeMux) {
-	mux.HandleFunc("GET /api/v1/docker/openers", s.requireUser(s.handleDockerOpeners))
-	mux.HandleFunc("POST /api/v1/docker/apps/{name}/open", s.requireUser(s.appLifecycle(false, s.handleDockerOpen)))
-	mux.HandleFunc("GET /api/v1/docker/apps/{name}/opens", s.requireAdmin(s.handleDockerOpensGet))
-	mux.HandleFunc("PUT /api/v1/docker/apps/{name}/opens", s.requireAppAdmin(s.handleDockerOpensSet))
-	mux.HandleFunc("POST /api/v1/docker/apps/{name}/shares", s.requireAppAdmin(s.handleDockerShareMount))
-	mux.HandleFunc("DELETE /api/v1/docker/apps/{name}/shares/{share}", s.requireAppAdmin(s.handleDockerShareUnmount))
+	s.dockerOpensArea().register(mux, s.guards(), s.appLifecycle)
+}
+
+// dockerOpensArea is "open with" for Docker apps; an area with narrow
+// dependencies (PLAN 8a, see fansArea). files turns a path of the file
+// manager into one of the host, shares names the folder of a share.
+// allowsApp says whether the account of a request may use an app,
+// fileRoot resolves a root of the file manager with the rights of the
+// account (it answers itself when it refuses), findShare finds a share.
+// The receiver is ar: a is an app in this file.
+type dockerOpensArea struct {
+	docker    *docker.Manager
+	files     *files.Manager
+	shares    *shares.Manager
+	allowsApp func(r *http.Request, app string) bool
+	fileRoot  func(w http.ResponseWriter, r *http.Request, id string) (files.Root, bool)
+	findShare func(name string) (shares.Share, bool)
+}
+
+// dockerOpensArea is the area of the server.
+func (s *Server) dockerOpensArea() dockerOpensArea {
+	return dockerOpensArea{docker: s.opts.Docker, files: s.opts.Files, shares: s.opts.Shares,
+		allowsApp: s.appAccessArea().allowsApp, fileRoot: s.filesArea().fileRoot, findShare: s.sharesArea().findShare}
+}
+
+// register takes appLifecycle of the server: opening a file waits like
+// other actions on an app while its backup runs.
+func (ar dockerOpensArea) register(mux *routeMux, g guards, appLifecycle func(hold bool, next http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/docker/openers", g.user(ar.handleDockerOpeners))
+	mux.HandleFunc("POST /api/v1/docker/apps/{name}/open", g.user(appLifecycle(false, ar.handleDockerOpen)))
+	mux.HandleFunc("GET /api/v1/docker/apps/{name}/opens", g.admin(ar.handleDockerOpensGet))
+	mux.HandleFunc("PUT /api/v1/docker/apps/{name}/opens", g.appAdmin(ar.handleDockerOpensSet))
+	mux.HandleFunc("POST /api/v1/docker/apps/{name}/shares", g.appAdmin(ar.handleDockerShareMount))
+	mux.HandleFunc("DELETE /api/v1/docker/apps/{name}/shares/{share}", g.appAdmin(ar.handleDockerShareUnmount))
 }
 
 var dockerOpenErrors = []struct {
@@ -65,12 +95,12 @@ type fileOpener struct {
 // handleDockerOpeners lists the Docker apps that open a file
 // (?root=&path=), or without root the apps and their types for the
 // standard apps of the account: [{app, name, types}].
-func (s *Server) handleDockerOpeners(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Docker == nil {
+func (ar dockerOpensArea) handleDockerOpeners(w http.ResponseWriter, r *http.Request) {
+	if ar.docker == nil {
 		writeJSON(w, http.StatusOK, []fileOpener{})
 		return
 	}
-	all, err := s.opts.Docker.Openers(r.Context())
+	all, err := ar.docker.Openers(r.Context())
 	if err != nil {
 		// No engine, no apps to open with; the menu simply has none.
 		slog.Warn("docker openers", "err", err)
@@ -86,18 +116,18 @@ func (s *Server) handleDockerOpeners(w http.ResponseWriter, r *http.Request) {
 		}
 		out := []typesOf{}
 		for _, a := range all {
-			if a.Error == "" && !a.Hidden && s.appAccessArea().allowsApp(r, a.App) {
+			if a.Error == "" && !a.Hidden && ar.allowsApp(r, a.App) {
 				out = append(out, typesOf{App: a.App, Name: a.Name, Types: a.Types})
 			}
 		}
 		writeJSON(w, http.StatusOK, out)
 		return
 	}
-	root, ok := s.filesArea().fileRoot(w, r, q.Get("root"))
+	root, ok := ar.fileRoot(w, r, q.Get("root"))
 	if !ok {
 		return
 	}
-	host, err := s.opts.Files.HostPath(root, q.Get("path"))
+	host, err := ar.files.HostPath(root, q.Get("path"))
 	if err != nil {
 		writeFileError(w, err)
 		return
@@ -106,7 +136,7 @@ func (s *Server) handleDockerOpeners(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r)
 	out := []fileOpener{}
 	for _, a := range all {
-		if a.Error != "" || a.Hidden || !a.Opens(ext) || !s.appAccessArea().allowsApp(r, a.App) {
+		if a.Error != "" || a.Hidden || !a.Opens(ext) || !ar.allowsApp(r, a.App) {
 			continue
 		}
 		item := fileOpener{App: a.App, Name: a.Name, Running: a.Running}
@@ -114,7 +144,7 @@ func (s *Server) handleDockerOpeners(w http.ResponseWriter, r *http.Request) {
 			item.Mounted, item.ReadOnly = true, mount.ReadOnly
 		} else if root.Kind == "share" {
 			item.Share = root.Name
-			item.CanMount = user.Role.CanAdminister() && s.mountableShare(root.Name)
+			item.CanMount = user.Role.CanAdminister() && ar.mountableShare(root.Name)
 		}
 		out = append(out, item)
 	}
@@ -123,33 +153,33 @@ func (s *Server) handleDockerOpeners(w http.ResponseWriter, r *http.Request) {
 
 // mountableShare: a share that can go into an app as a whole (not the
 // per-account share of the KI agent).
-func (s *Server) mountableShare(name string) bool {
-	share, ok := s.sharesArea().findShare(name)
+func (ar dockerOpensArea) mountableShare(name string) bool {
+	share, ok := ar.findShare(name)
 	return ok && !share.PerUser
 }
 
 // handleDockerOpen starts the app's program for a file: {root, path}.
-func (s *Server) handleDockerOpen(w http.ResponseWriter, r *http.Request) {
+func (ar dockerOpensArea) handleDockerOpen(w http.ResponseWriter, r *http.Request) {
 	var req struct{ Root, Path string }
 	if !readJSON(w, r, &req) {
 		return
 	}
 	app := r.PathValue("name")
 	noteTarget(r, app+": "+filePlace(req.Root, req.Path))
-	if !s.appAccessArea().allowsApp(r, app) {
+	if !ar.allowsApp(r, app) {
 		writeError(w, http.StatusForbidden, "app_forbidden", appWindowMessage("app_forbidden"))
 		return
 	}
-	root, ok := s.filesArea().fileRoot(w, r, req.Root)
+	root, ok := ar.fileRoot(w, r, req.Root)
 	if !ok {
 		return
 	}
-	host, err := s.opts.Files.HostPath(root, req.Path)
+	host, err := ar.files.HostPath(root, req.Path)
 	if err != nil {
 		writeFileError(w, err)
 		return
 	}
-	if err := s.opts.Docker.OpenFile(r.Context(), app, host); err != nil {
+	if err := ar.docker.OpenFile(r.Context(), app, host); err != nil {
 		writeDockerOpenError(w, err)
 		return
 	}
@@ -158,9 +188,9 @@ func (s *Server) handleDockerOpen(w http.ResponseWriter, r *http.Request) {
 
 // handleDockerOpensGet is the opens block of an app with its mounts, for
 // Docker › Bearbeiten; 404 when the app has none.
-func (s *Server) handleDockerOpensGet(w http.ResponseWriter, r *http.Request) {
+func (ar dockerOpensArea) handleDockerOpensGet(w http.ResponseWriter, r *http.Request) {
 	app := r.PathValue("name")
-	all, err := s.opts.Docker.Openers(r.Context())
+	all, err := ar.docker.Openers(r.Context())
 	if err != nil {
 		writeDockerError(w, err)
 		return
@@ -174,14 +204,14 @@ func (s *Server) handleDockerOpensGet(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusNotFound, "no_opener", docker.ErrNoOpener.Error())
 }
 
-func (s *Server) handleDockerOpensSet(w http.ResponseWriter, r *http.Request) {
+func (ar dockerOpensArea) handleDockerOpensSet(w http.ResponseWriter, r *http.Request) {
 	var op docker.Opener
 	if !readJSON(w, r, &op) {
 		return
 	}
 	app := r.PathValue("name")
 	noteTarget(r, app)
-	if err := s.opts.Docker.SetOpener(r.Context(), app, op); err != nil {
+	if err := ar.docker.SetOpener(r.Context(), app, op); err != nil {
 		writeDockerOpenError(w, err)
 		return
 	}
@@ -191,7 +221,7 @@ func (s *Server) handleDockerOpensSet(w http.ResponseWriter, r *http.Request) {
 
 // handleDockerShareMount mounts a share into an app: {share, readOnly}.
 // The app sees the whole share; the container is created anew.
-func (s *Server) handleDockerShareMount(w http.ResponseWriter, r *http.Request) {
+func (ar dockerOpensArea) handleDockerShareMount(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Share    string
 		ReadOnly bool
@@ -201,12 +231,12 @@ func (s *Server) handleDockerShareMount(w http.ResponseWriter, r *http.Request) 
 	}
 	app := r.PathValue("name")
 	noteTarget(r, app+": "+req.Share)
-	share, ok := s.sharesArea().findShare(req.Share)
+	share, ok := ar.findShare(req.Share)
 	if !ok || share.PerUser {
 		writeError(w, http.StatusNotFound, "share_not_found", "no such share")
 		return
 	}
-	if err := s.opts.Docker.MountShare(r.Context(), app, share.Name, s.opts.Shares.Path(share), req.ReadOnly); err != nil {
+	if err := ar.docker.MountShare(r.Context(), app, share.Name, ar.shares.Path(share), req.ReadOnly); err != nil {
 		writeDockerOpenError(w, err)
 		return
 	}
@@ -214,10 +244,10 @@ func (s *Server) handleDockerShareMount(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusAccepted)
 }
 
-func (s *Server) handleDockerShareUnmount(w http.ResponseWriter, r *http.Request) {
+func (ar dockerOpensArea) handleDockerShareUnmount(w http.ResponseWriter, r *http.Request) {
 	app, share := r.PathValue("name"), r.PathValue("share")
 	noteTarget(r, app+": "+share)
-	if err := s.opts.Docker.UnmountShare(r.Context(), app, share); err != nil {
+	if err := ar.docker.UnmountShare(r.Context(), app, share); err != nil {
 		writeDockerOpenError(w, err)
 		return
 	}
