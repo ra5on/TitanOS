@@ -297,7 +297,8 @@ func New(opts Options) *Server {
 		s.opts.Shares.OnPurgeResumed(s.sharesArea().sharePurgeDone)
 	}
 	if c := s.opts.Cluster; c != nil {
-		c.Applied, c.Status, c.Notify = s.clusterApplied, s.ClusterStatus, s.clusterNotify
+		area := s.clusterArea()
+		c.Applied, c.Status, c.Notify = area.clusterApplied, area.ClusterStatus, area.clusterNotify
 	}
 	if s.opts.Processes == nil {
 		// Not given (tests): the list reads /proc, signals are refused.
@@ -420,7 +421,7 @@ func New(opts Options) *Server {
 
 	// Browsers must not let another website send requests with our cookie.
 	s.patterns = mux.patterns
-	s.handler = s.securityHeaders(s.clusterAccess(http.NewCrossOriginProtection().Handler(s.tokensArea().bearerAccess(s.activityLog(mux.ServeMux)))))
+	s.handler = s.securityHeaders(s.clusterArea().clusterAccess(http.NewCrossOriginProtection().Handler(s.tokensArea().bearerAccess(s.activityLog(mux.ServeMux)))))
 	return s
 }
 

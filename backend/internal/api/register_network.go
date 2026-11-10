@@ -5,7 +5,7 @@ func (s *Server) registerNetwork(mux *routeMux) {
 	// How the NAS is connected. Changes are on trial until confirmed.
 	s.networkArea().register(mux, s.guards())
 	// The packet filter; changes are on trial like network changes.
-	firewallArea{firewall: s.opts.Firewall}.register(mux, s.requireAdmin, s.clusterLocal)
+	firewallArea{firewall: s.opts.Firewall}.register(mux, s.requireAdmin, s.clusterArea().clusterLocal)
 }
 
 // registerWireGuard registers the routes of the WireGuard server.

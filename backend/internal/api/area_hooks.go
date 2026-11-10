@@ -27,7 +27,7 @@ type guards struct {
 // guards are the checks of this server.
 func (s *Server) guards() guards {
 	return guards{user: s.requireUser, admin: s.requireAdmin, appAdmin: s.requireAppAdmin, heavyAdmin: s.requireHeavyAdmin,
-		heavyAppAdmin: s.requireHeavyAppAdmin, appConsole: s.requireAppConsole, clusterLocal: s.clusterLocal, browserOnly: s.browserOnly}
+		heavyAppAdmin: s.requireHeavyAppAdmin, appConsole: s.requireAppConsole, clusterLocal: s.clusterArea().clusterLocal, browserOnly: s.browserOnly}
 }
 
 // admitFunc admits a job unless maintenance runs (Server.admitOperation).

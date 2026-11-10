@@ -12,18 +12,61 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/auth"
 	"github.com/ra5on/TitanOS/backend/internal/cluster"
 	"github.com/ra5on/TitanOS/backend/internal/notify"
+	"github.com/ra5on/TitanOS/backend/internal/shares"
+	"github.com/ra5on/TitanOS/backend/internal/sshd"
+	"github.com/ra5on/TitanOS/backend/internal/storage"
+	"github.com/ra5on/TitanOS/backend/internal/system"
 )
 
 // The cluster (package cluster): requests of other nodes under
 // cluster.PeerPrefix, signed requests on behalf of an account, and the
 // routes of the settings page.
 
+// clusterArea is the cluster: the requests of other nodes, the guards that
+// keep a route on this node or with the owner, and the settings page; an
+// area with narrow dependencies (PLAN 8a, see fansArea). cluster is nil
+// where there is none. version, monitor and storage describe this node,
+// notify, shares and ssh take up what the cluster changes. sessions,
+// tokens and prefs are state of the server: what an account that the
+// cluster changed or removed loses. requireUser is the check of a login,
+// sessionToken names the web session of a request, reconfirmProof asks for
+// the password or passkey again, forgetWebDAV clears a WebDAV password.
+type clusterArea struct {
+	cluster        *cluster.Manager
+	version        string
+	monitor        *system.Monitor
+	storage        *storage.Manager
+	notify         *notify.Manager
+	shares         *shares.Manager
+	ssh            *sshd.Manager
+	sessions       *auth.Sessions
+	tokens         *auth.Tokens
+	prefs          *preferences
+	requireUser    func(http.HandlerFunc) http.HandlerFunc
+	sessionToken   func(r *http.Request) string
+	reconfirmProof func(w http.ResponseWriter, user auth.User, p proof) bool
+	forgetWebDAV   func(name string)
+}
+
+// clusterArea is the area of the server; New wires its callbacks into the
+// cluster manager, the handler chain starts with clusterAccess.
+func (s *Server) clusterArea() clusterArea {
+	return clusterArea{cluster: s.opts.Cluster, version: s.opts.Version, monitor: s.opts.Monitor, storage: s.opts.Storage,
+		notify: s.opts.Notify, shares: s.opts.Shares, ssh: s.opts.SSH, sessions: s.sessions, tokens: s.tokens, prefs: s.prefs,
+		requireUser: s.requireUser, sessionToken: s.sessionToken, reconfirmProof: s.reconfirmProof, forgetWebDAV: s.davArea().forgetWebDAV}
+}
+
+// routeCluster registers the routes of the cluster.
+func (s *Server) routeCluster(mux *routeMux) {
+	s.clusterArea().register(mux, s.requireAdmin, s.requireUser)
+}
+
 // clusterAccess serves the requests of other nodes and checks those they
 // pass on for an account. A signed request carries neither cookie nor
 // API token: the account is the one the other node signed for.
-func (s *Server) clusterAccess(next http.Handler) http.Handler {
+func (a clusterArea) clusterAccess(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c := s.opts.Cluster
+		c := a.cluster
 		if strings.HasPrefix(r.URL.Path, cluster.PeerPrefix) {
 			if c == nil {
 				handleAPINotFound(w, r)
@@ -71,7 +114,7 @@ func viaCluster(r *http.Request) bool {
 // clusterLocal refuses a change from another node: confirming a network
 // or firewall change proves that the browser still reaches the NAS, which
 // a request through another node does not show.
-func (s *Server) clusterLocal(next http.HandlerFunc) http.HandlerFunc {
+func (a clusterArea) clusterLocal(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if viaCluster(r) {
 			writeError(w, http.StatusForbidden, "cluster_local_only", "change this on the web interface of the node itself")
@@ -84,9 +127,9 @@ func (s *Server) clusterLocal(next http.HandlerFunc) http.HandlerFunc {
 // requireOwnSession lets only a browser session of this node through: the
 // cluster itself is managed from the node, and only a person may switch
 // to another node (no API token, MCP or other node).
-func (s *Server) requireOwnSession(next http.HandlerFunc) http.HandlerFunc {
+func (a clusterArea) requireOwnSession(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if viaCluster(r) || !webSession(r) || s.sessionToken(r) == "" {
+		if viaCluster(r) || !webSession(r) || a.sessionToken(r) == "" {
 			writeError(w, http.StatusForbidden, "web_session_required", "only possible on the web interface")
 			return
 		}
@@ -94,8 +137,8 @@ func (s *Server) requireOwnSession(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (s *Server) requireOwner(next http.HandlerFunc) http.HandlerFunc {
-	return s.requireUser(func(w http.ResponseWriter, r *http.Request) {
+func (a clusterArea) requireOwner(next http.HandlerFunc) http.HandlerFunc {
+	return a.requireUser(func(w http.ResponseWriter, r *http.Request) {
 		if currentUser(r).Role != auth.RoleOwner {
 			writeError(w, http.StatusForbidden, "forbidden", "this needs an owner")
 			return
@@ -104,25 +147,25 @@ func (s *Server) requireOwner(next http.HandlerFunc) http.HandlerFunc {
 	})
 }
 
-func (s *Server) routeCluster(mux *routeMux) {
-	mux.HandleFunc("GET /api/v1/cluster", s.requireAdmin(s.requireOwnSession(s.handleCluster)))
-	mux.HandleFunc("GET /api/v1/cluster/nodes", s.requireUser(s.handleClusterNodes))
-	mux.HandleFunc("POST /api/v1/cluster", s.requireOwner(s.requireOwnSession(s.handleClusterCreate)))
-	mux.HandleFunc("PUT /api/v1/cluster", s.requireAdmin(s.requireOwnSession(s.handleClusterSettings)))
-	mux.HandleFunc("POST /api/v1/cluster/preview", s.requireOwner(s.requireOwnSession(s.handleClusterPreview)))
-	mux.HandleFunc("POST /api/v1/cluster/join", s.requireOwner(s.requireOwnSession(s.handleClusterJoin)))
-	mux.HandleFunc("POST /api/v1/cluster/leave", s.requireOwner(s.requireOwnSession(s.handleClusterLeave)))
-	mux.HandleFunc("POST /api/v1/cluster/join-info", s.requireAdmin(s.requireOwnSession(s.handleClusterJoinInfo)))
-	mux.HandleFunc("POST /api/v1/cluster/join-key", s.requireAdmin(s.requireOwnSession(s.handleClusterJoinKey)))
-	mux.HandleFunc("DELETE /api/v1/cluster/nodes/{id}", s.requireOwner(s.requireOwnSession(s.handleClusterRemove)))
-	mux.HandleFunc("PUT /api/v1/cluster/nodes/{id}/manage", s.requireOwner(s.requireOwnSession(s.handleClusterManage)))
-	mux.HandleFunc("POST /api/v1/cluster/nodes/{id}/backup-pair", s.requireAdmin(s.requireOwnSession(s.handleClusterBackupPair)))
-	mux.HandleFunc("PUT /api/v1/cluster/nodes/{id}/route", s.requireAdmin(s.requireOwnSession(s.handleClusterRoute)))
-	mux.HandleFunc("POST /api/v1/cluster/nodes/{id}/admin", s.requireOwner(s.requireOwnSession(s.handleClusterHandOver)))
-	mux.HandleFunc("POST /api/v1/cluster/probe", s.requireAdmin(s.requireOwnSession(s.handleClusterProbe)))
-	mux.HandleFunc("GET /api/v1/cluster/update", s.requireAdmin(s.requireOwnSession(s.handleClusterUpdateRun)))
-	mux.HandleFunc("POST /api/v1/cluster/update", s.requireAdmin(s.requireOwnSession(s.handleClusterUpdateAll)))
-	mux.HandleFunc("/api/v1/cluster/nodes/{id}/api/{path...}", s.requireUser(s.requireOwnSession(s.handleClusterProxy)))
+func (a clusterArea) register(mux *routeMux, admin, user func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/cluster", admin(a.requireOwnSession(a.handleCluster)))
+	mux.HandleFunc("GET /api/v1/cluster/nodes", user(a.handleClusterNodes))
+	mux.HandleFunc("POST /api/v1/cluster", a.requireOwner(a.requireOwnSession(a.handleClusterCreate)))
+	mux.HandleFunc("PUT /api/v1/cluster", admin(a.requireOwnSession(a.handleClusterSettings)))
+	mux.HandleFunc("POST /api/v1/cluster/preview", a.requireOwner(a.requireOwnSession(a.handleClusterPreview)))
+	mux.HandleFunc("POST /api/v1/cluster/join", a.requireOwner(a.requireOwnSession(a.handleClusterJoin)))
+	mux.HandleFunc("POST /api/v1/cluster/leave", a.requireOwner(a.requireOwnSession(a.handleClusterLeave)))
+	mux.HandleFunc("POST /api/v1/cluster/join-info", admin(a.requireOwnSession(a.handleClusterJoinInfo)))
+	mux.HandleFunc("POST /api/v1/cluster/join-key", admin(a.requireOwnSession(a.handleClusterJoinKey)))
+	mux.HandleFunc("DELETE /api/v1/cluster/nodes/{id}", a.requireOwner(a.requireOwnSession(a.handleClusterRemove)))
+	mux.HandleFunc("PUT /api/v1/cluster/nodes/{id}/manage", a.requireOwner(a.requireOwnSession(a.handleClusterManage)))
+	mux.HandleFunc("POST /api/v1/cluster/nodes/{id}/backup-pair", admin(a.requireOwnSession(a.handleClusterBackupPair)))
+	mux.HandleFunc("PUT /api/v1/cluster/nodes/{id}/route", admin(a.requireOwnSession(a.handleClusterRoute)))
+	mux.HandleFunc("POST /api/v1/cluster/nodes/{id}/admin", a.requireOwner(a.requireOwnSession(a.handleClusterHandOver)))
+	mux.HandleFunc("POST /api/v1/cluster/probe", admin(a.requireOwnSession(a.handleClusterProbe)))
+	mux.HandleFunc("GET /api/v1/cluster/update", admin(a.requireOwnSession(a.handleClusterUpdateRun)))
+	mux.HandleFunc("POST /api/v1/cluster/update", admin(a.requireOwnSession(a.handleClusterUpdateAll)))
+	mux.HandleFunc("/api/v1/cluster/nodes/{id}/api/{path...}", user(a.requireOwnSession(a.handleClusterProxy)))
 }
 
 func writeClusterError(w http.ResponseWriter, err error) {
@@ -137,20 +180,20 @@ func writeClusterError(w http.ResponseWriter, err error) {
 	writeError(w, status, code, err.Error())
 }
 
-func (s *Server) clusterAvailable(w http.ResponseWriter) bool {
-	if s.opts.Cluster == nil {
+func (a clusterArea) clusterAvailable(w http.ResponseWriter) bool {
+	if a.cluster == nil {
 		writeError(w, http.StatusConflict, "dev_mode", "the cluster is not available here")
 		return false
 	}
 	return true
 }
 
-func (s *Server) handleCluster(w http.ResponseWriter, r *http.Request) {
-	if !s.clusterAvailable(w) {
+func (a clusterArea) handleCluster(w http.ResponseWriter, r *http.Request) {
+	if !a.clusterAvailable(w) {
 		return
 	}
-	view := s.opts.Cluster.View()
-	writeJSON(w, http.StatusOK, map[string]any{"cluster": view, "nodes": s.opts.Cluster.Overview(r.Context())})
+	view := a.cluster.View()
+	writeJSON(w, http.StatusOK, map[string]any{"cluster": view, "nodes": a.cluster.Overview(r.Context())})
 }
 
 // handleClusterNodes lists the nodes for switching between them; every
@@ -161,9 +204,9 @@ func (s *Server) handleCluster(w http.ResponseWriter, r *http.Request) {
 // only (docs/rules/CLUSTER.md): a token, MCP or another node gets the
 // answer of a NAS outside a cluster, which the switcher takes as "nothing
 // to switch to", not an error.
-func (s *Server) handleClusterNodes(w http.ResponseWriter, r *http.Request) {
-	if viaCluster(r) || !webSession(r) || s.sessionToken(r) == "" {
-		writeJSON(w, http.StatusOK, map[string]any{"nodes": []any{}, "version": s.opts.Version, "manages": false})
+func (a clusterArea) handleClusterNodes(w http.ResponseWriter, r *http.Request) {
+	if viaCluster(r) || !webSession(r) || a.sessionToken(r) == "" {
+		writeJSON(w, http.StatusOK, map[string]any{"nodes": []any{}, "version": a.version, "manages": false})
 		return
 	}
 	type node struct {
@@ -177,7 +220,7 @@ func (s *Server) handleClusterNodes(w http.ResponseWriter, r *http.Request) {
 	}
 	out := []node{}
 	manages := false
-	if c := s.opts.Cluster; c != nil {
+	if c := a.cluster; c != nil {
 		manages = c.Manages()
 		for _, v := range c.Overview(r.Context()) {
 			n := node{ID: v.ID, Name: v.Name, Self: v.Self, Online: v.Online, Compatible: v.Compatible}
@@ -187,25 +230,25 @@ func (s *Server) handleClusterNodes(w http.ResponseWriter, r *http.Request) {
 			out = append(out, n)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"nodes": out, "version": s.opts.Version, "manages": manages})
+	writeJSON(w, http.StatusOK, map[string]any{"nodes": out, "version": a.version, "manages": manages})
 }
 
-func (s *Server) handleClusterCreate(w http.ResponseWriter, r *http.Request) {
+func (a clusterArea) handleClusterCreate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name string `json:"name"`
 	}
-	if !s.clusterAvailable(w) || !readJSON(w, r, &req) {
+	if !a.clusterAvailable(w) || !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Cluster.Create(req.Name); err != nil {
+	if err := a.cluster.Create(req.Name); err != nil {
 		writeClusterError(w, err)
 		return
 	}
 	slog.Info("cluster created", "name", req.Name, "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleCluster(w, r)
+	a.handleCluster(w, r)
 }
 
-func (s *Server) handleClusterSettings(w http.ResponseWriter, r *http.Request) {
+func (a clusterArea) handleClusterSettings(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name     *string       `json:"name"`
 		Internet *bool         `json:"internet"`
@@ -213,10 +256,10 @@ func (s *Server) handleClusterSettings(w http.ResponseWriter, r *http.Request) {
 		Ways     *cluster.Ways `json:"ways"`
 		Tunnel   *bool         `json:"tunnel"`
 	}
-	if !s.clusterAvailable(w) || !readJSON(w, r, &req) {
+	if !a.clusterAvailable(w) || !readJSON(w, r, &req) {
 		return
 	}
-	c := s.opts.Cluster
+	c := a.cluster
 	// A member sets its own addresses; name and internet only change from
 	// a node that may manage, so unchanged values are left alone.
 	view := c.View()
@@ -263,69 +306,69 @@ func (s *Server) handleClusterSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	slog.Info("cluster settings changed", "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleCluster(w, r)
+	a.handleCluster(w, r)
 }
 
 // handleClusterRoute sets the way to one node, an exception to the
 // settings of the cluster; all fields empty remove it.
-func (s *Server) handleClusterRoute(w http.ResponseWriter, r *http.Request) {
+func (a clusterArea) handleClusterRoute(w http.ResponseWriter, r *http.Request) {
 	var req cluster.Route
-	if !s.clusterAvailable(w) || !readJSON(w, r, &req) {
+	if !a.clusterAvailable(w) || !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Cluster.SetRoute(r.Context(), r.PathValue("id"), req); err != nil {
+	if err := a.cluster.SetRoute(r.Context(), r.PathValue("id"), req); err != nil {
 		writeClusterError(w, err)
 		return
 	}
 	slog.Info("cluster way to node changed", "node", r.PathValue("id"), "way", req.Manage, "only", req.Only, "backup", req.Backup, "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleCluster(w, r)
+	a.handleCluster(w, r)
 }
 
 // handleClusterHandOver gives the admin role to a node, or takes it while
 // the admin node does not answer.
-func (s *Server) handleClusterHandOver(w http.ResponseWriter, r *http.Request) {
-	if !s.clusterAvailable(w) {
+func (a clusterArea) handleClusterHandOver(w http.ResponseWriter, r *http.Request) {
+	if !a.clusterAvailable(w) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	if err := s.opts.Cluster.HandOver(ctx, r.PathValue("id")); err != nil {
+	if err := a.cluster.HandOver(ctx, r.PathValue("id")); err != nil {
 		writeClusterError(w, err)
 		return
 	}
 	slog.Info("cluster admin role handed over", "node", r.PathValue("id"), "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleCluster(w, r)
+	a.handleCluster(w, r)
 }
 
 // handleClusterProbe asks every node on each of its ways.
-func (s *Server) handleClusterProbe(w http.ResponseWriter, r *http.Request) {
-	if !s.clusterAvailable(w) {
+func (a clusterArea) handleClusterProbe(w http.ResponseWriter, r *http.Request) {
+	if !a.clusterAvailable(w) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
-	writeJSON(w, http.StatusOK, map[string]any{"nodes": s.opts.Cluster.Probes(ctx), "checked": time.Now().UTC()})
+	writeJSON(w, http.StatusOK, map[string]any{"nodes": a.cluster.Probes(ctx), "checked": time.Now().UTC()})
 }
 
-func (s *Server) handleClusterUpdateRun(w http.ResponseWriter, r *http.Request) {
-	if !s.clusterAvailable(w) {
+func (a clusterArea) handleClusterUpdateRun(w http.ResponseWriter, r *http.Request) {
+	if !a.clusterAvailable(w) {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"run": s.opts.Cluster.UpdateRunState()})
+	writeJSON(w, http.StatusOK, map[string]any{"run": a.cluster.UpdateRunState()})
 }
 
 // handleClusterUpdateAll updates the chosen nodes, one after the other or
 // all at once; this node last.
-func (s *Server) handleClusterUpdateAll(w http.ResponseWriter, r *http.Request) {
+func (a clusterArea) handleClusterUpdateAll(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Nodes    []string `json:"nodes"`
 		Parallel bool     `json:"parallel"`
 	}
-	if !s.clusterAvailable(w) || !readJSON(w, r, &req) {
+	if !a.clusterAvailable(w) || !readJSON(w, r, &req) {
 		return
 	}
 	user := currentUser(r).Name
-	if err := s.opts.Cluster.UpdateAll(r.Context(), user, req.Nodes, req.Parallel); err != nil {
+	if err := a.cluster.UpdateAll(r.Context(), user, req.Nodes, req.Parallel); err != nil {
 		if errors.Is(err, cluster.ErrRunning) {
 			writeError(w, http.StatusConflict, "cluster_update_running", err.Error())
 			return
@@ -334,19 +377,19 @@ func (s *Server) handleClusterUpdateAll(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	slog.Info("cluster update of nodes started", "nodes", len(req.Nodes), "parallel", req.Parallel, "by", user, "ip", remoteIP(r))
-	s.handleClusterUpdateRun(w, r)
+	a.handleClusterUpdateRun(w, r)
 }
 
-func (s *Server) handleClusterPreview(w http.ResponseWriter, r *http.Request) {
+func (a clusterArea) handleClusterPreview(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Info string `json:"info"`
 	}
-	if !s.clusterAvailable(w) || !readJSON(w, r, &req) {
+	if !a.clusterAvailable(w) || !readJSON(w, r, &req) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	p, err := s.opts.Cluster.Preview(ctx, req.Info)
+	p, err := a.cluster.Preview(ctx, req.Info)
 	if err != nil {
 		writeClusterError(w, err)
 		return
@@ -354,48 +397,48 @@ func (s *Server) handleClusterPreview(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, p)
 }
 
-func (s *Server) handleClusterJoin(w http.ResponseWriter, r *http.Request) {
+func (a clusterArea) handleClusterJoin(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Info string `json:"info"`
 	}
-	if !s.clusterAvailable(w) || !readJSON(w, r, &req) {
+	if !a.clusterAvailable(w) || !readJSON(w, r, &req) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
 	defer cancel()
-	if err := s.opts.Cluster.Join(ctx, req.Info); err != nil {
+	if err := a.cluster.Join(ctx, req.Info); err != nil {
 		writeClusterError(w, err)
 		return
 	}
 	slog.Info("cluster joined", "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleCluster(w, r)
+	a.handleCluster(w, r)
 }
 
-func (s *Server) handleClusterLeave(w http.ResponseWriter, r *http.Request) {
-	if !s.clusterAvailable(w) {
+func (a clusterArea) handleClusterLeave(w http.ResponseWriter, r *http.Request) {
+	if !a.clusterAvailable(w) {
 		return
 	}
-	if err := s.opts.Cluster.Leave(r.Context()); err != nil {
+	if err := a.cluster.Leave(r.Context()); err != nil {
 		writeClusterError(w, err)
 		return
 	}
 	slog.Info("cluster left", "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleCluster(w, r)
+	a.handleCluster(w, r)
 }
 
 // handleClusterJoinInfo hands out the join information after password (and
 // code) or a passkey: whoever has it may add a node that sees everything.
-func (s *Server) handleClusterJoinInfo(w http.ResponseWriter, r *http.Request) {
+func (a clusterArea) handleClusterJoinInfo(w http.ResponseWriter, r *http.Request) {
 	var req proof
-	if !s.clusterAvailable(w) || !readJSON(w, r, &req) {
+	if !a.clusterAvailable(w) || !readJSON(w, r, &req) {
 		return
 	}
 	user := currentUser(r)
-	if !s.reconfirmProof(w, user, req) {
+	if !a.reconfirmProof(w, user, req) {
 		return
 	}
-	info := s.opts.Cluster.JoinInfo()
-	if info == "" && s.opts.Cluster.InCluster() {
+	info := a.cluster.JoinInfo()
+	if info == "" && a.cluster.InCluster() {
 		writeError(w, http.StatusForbidden, "cluster_not_permitted", "only a node that may manage admits new ones")
 		return
 	}
@@ -407,52 +450,52 @@ func (s *Server) handleClusterJoinInfo(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"joinInfo": info})
 }
 
-func (s *Server) handleClusterJoinKey(w http.ResponseWriter, r *http.Request) {
-	if !s.clusterAvailable(w) {
+func (a clusterArea) handleClusterJoinKey(w http.ResponseWriter, r *http.Request) {
+	if !a.clusterAvailable(w) {
 		return
 	}
-	if err := s.opts.Cluster.NewJoinKey(r.Context()); err != nil {
+	if err := a.cluster.NewJoinKey(r.Context()); err != nil {
 		writeClusterError(w, err)
 		return
 	}
 	slog.Info("cluster join key replaced", "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleCluster(w, r)
+	a.handleCluster(w, r)
 }
 
-func (s *Server) handleClusterRemove(w http.ResponseWriter, r *http.Request) {
-	if !s.clusterAvailable(w) {
+func (a clusterArea) handleClusterRemove(w http.ResponseWriter, r *http.Request) {
+	if !a.clusterAvailable(w) {
 		return
 	}
-	if err := s.opts.Cluster.Remove(r.Context(), r.PathValue("id")); err != nil {
+	if err := a.cluster.Remove(r.Context(), r.PathValue("id")); err != nil {
 		writeClusterError(w, err)
 		return
 	}
 	slog.Info("cluster node removed", "node", r.PathValue("id"), "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleCluster(w, r)
+	a.handleCluster(w, r)
 }
 
 // handleClusterManage allows a node to manage the others, or takes it
 // back; only on the admin node.
-func (s *Server) handleClusterManage(w http.ResponseWriter, r *http.Request) {
+func (a clusterArea) handleClusterManage(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Manage bool `json:"manage"`
 	}
-	if !s.clusterAvailable(w) || !readJSON(w, r, &req) {
+	if !a.clusterAvailable(w) || !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.opts.Cluster.SetManage(r.Context(), r.PathValue("id"), req.Manage); err != nil {
+	if err := a.cluster.SetManage(r.Context(), r.PathValue("id"), req.Manage); err != nil {
 		writeClusterError(w, err)
 		return
 	}
 	slog.Info("cluster node may manage", "node", r.PathValue("id"), "manage", req.Manage, "by", currentUser(r).Name, "ip", remoteIP(r))
-	s.handleCluster(w, r)
+	a.handleCluster(w, r)
 }
 
-func (s *Server) handleClusterBackupPair(w http.ResponseWriter, r *http.Request) {
-	if !s.clusterAvailable(w) {
+func (a clusterArea) handleClusterBackupPair(w http.ResponseWriter, r *http.Request) {
+	if !a.clusterAvailable(w) {
 		return
 	}
-	code, err := s.opts.Cluster.PairBackup(r.Context(), r.PathValue("id"))
+	code, err := a.cluster.PairBackup(r.Context(), r.PathValue("id"))
 	if err != nil {
 		writeClusterError(w, err)
 		return
@@ -461,8 +504,8 @@ func (s *Server) handleClusterBackupPair(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]string{"code": code})
 }
 
-func (s *Server) handleClusterProxy(w http.ResponseWriter, r *http.Request) {
-	if !s.clusterAvailable(w) {
+func (a clusterArea) handleClusterProxy(w http.ResponseWriter, r *http.Request) {
+	if !a.clusterAvailable(w) {
 		return
 	}
 	// A console of the other node is a WebSocket. Browsers send those
@@ -475,7 +518,7 @@ func (s *Server) handleClusterProxy(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "cross_origin", "this page may not open a connection to another node")
 		return
 	}
-	s.opts.Cluster.Proxy(w, r, r.PathValue("id"), currentUser(r).Name, r.PathValue("path"))
+	a.cluster.Proxy(w, r, r.PathValue("id"), currentUser(r).Name, r.PathValue("path"))
 }
 
 // sameOrigin reports whether the page that sent the request is this site:
@@ -488,52 +531,52 @@ func sameOrigin(r *http.Request) bool {
 
 // clusterApplied follows up an account another node changed, as the
 // handlers of users.go do for a change made here.
-func (s *Server) clusterApplied(before auth.User, existed bool, after auth.User, deleted bool) {
+func (a clusterArea) clusterApplied(before auth.User, existed bool, after auth.User, deleted bool) {
 	name := after.Name
 	if deleted {
 		name = before.Name
 	}
 	switch {
 	case deleted:
-		s.sessions.DeleteUser(name, "")
-		if err := s.tokens.RemoveUser(name); err != nil {
+		a.sessions.DeleteUser(name, "")
+		if err := a.tokens.RemoveUser(name); err != nil {
 			slog.Error("remove API tokens of the deleted account", "user", name, "err", err)
 		}
-		s.prefs.forget(name)
-		s.opts.Notify.ForgetPersonal(name)
-		if err := s.opts.Shares.ForgetUser(name); err != nil {
+		a.prefs.forget(name)
+		a.notify.ForgetPersonal(name)
+		if err := a.shares.ForgetUser(name); err != nil {
 			slog.Error("remove account from shares", "user", name, "err", err)
 		}
 	case existed && (before.PasswordHash != after.PasswordHash || before.TOTPSecret != after.TOTPSecret ||
 		after.Disabled || len(after.Passkeys) < len(before.Passkeys) || !before.Created.Equal(after.Created)):
 		// Whoever knew the old password or held a removed factor is out.
-		s.sessions.DeleteUser(name, "")
+		a.sessions.DeleteUser(name, "")
 		if before.PasswordHash != after.PasswordHash || before.TOTPSecret != after.TOTPSecret {
-			s.davArea().forgetWebDAV(name)
+			a.forgetWebDAV(name)
 		}
 	}
 	slog.Info("account taken over from the cluster", "user", name, "deleted", deleted)
-	s.opts.Shares.Kick()
-	s.opts.SSH.Kick()
+	a.shares.Kick()
+	a.ssh.Kick()
 }
 
 // ClusterStatus is what this node tells the others for the overview, from
 // memory and the storage status of the last seconds.
-func (s *Server) ClusterStatus(ctx context.Context) cluster.Status {
-	info := s.opts.Monitor.Info()
-	st := cluster.Status{Name: info.Hostname, Hostname: info.Hostname, Version: s.opts.Version, Uptime: info.UptimeSeconds, Volumes: []cluster.VolumeStatus{}}
+func (a clusterArea) ClusterStatus(ctx context.Context) cluster.Status {
+	info := a.monitor.Info()
+	st := cluster.Status{Name: info.Hostname, Hostname: info.Hostname, Version: a.version, Uptime: info.UptimeSeconds, Volumes: []cluster.VolumeStatus{}}
 	cpu := info.CPU.UsagePercent
 	st.CPU = &cpu
 	st.Memory.Total, st.Memory.Available = info.Memory.TotalBytes, info.Memory.AvailableBytes
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	if storage, err := s.opts.Storage.Status(ctx); err == nil {
+	if storage, err := a.storage.Status(ctx); err == nil {
 		for _, v := range storage.Volumes {
 			st.Volumes = append(st.Volumes, cluster.VolumeStatus{Name: v.Name, State: v.State, Mounted: v.Mounted, SizeBytes: v.SizeBytes, UsedBytes: v.UsedBytes})
 		}
 	}
 	since := time.Now().Add(-24 * time.Hour)
-	for _, m := range s.opts.Notify.Messages() {
+	for _, m := range a.notify.Messages() {
 		if m.Time.Before(since) {
 			continue
 		}
@@ -548,11 +591,11 @@ func (s *Server) ClusterStatus(ctx context.Context) cluster.Status {
 }
 
 // clusterNotify reports joins, removals and nodes that stopped answering.
-func (s *Server) clusterNotify(kind, subject string) {
+func (a clusterArea) clusterNotify(kind, subject string) {
 	severity := notify.Info
 	switch kind {
 	case "cluster_node_removed", "cluster_node_unreachable":
 		severity = notify.Warning
 	}
-	s.opts.Notify.Notify(severity, kind, subject)
+	a.notify.Notify(severity, kind, subject)
 }
