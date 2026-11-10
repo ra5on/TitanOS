@@ -10,20 +10,32 @@ import (
 	"github.com/ra5on/TitanOS/backend/internal/startup"
 )
 
-func (s *Server) handleStartup(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Startup == nil {
+// startupArea is when apps and VMs start after boot (PLAN 73); an area with
+// narrow dependencies (PLAN 8a, see fansArea). startup is nil where there is
+// no such order.
+type startupArea struct {
+	startup *startup.Manager
+}
+
+func (a startupArea) register(mux *routeMux, admin func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("GET /api/v1/system/startup", admin(a.handleStartup))
+	mux.HandleFunc("PUT /api/v1/system/startup", admin(a.handlePutStartup))
+}
+
+func (a startupArea) handleStartup(w http.ResponseWriter, r *http.Request) {
+	if a.startup == nil {
 		writeJSON(w, http.StatusOK, map[string]any{"settings": startup.Settings{Order: []startup.Entry{}}, "readySince": nil})
 		return
 	}
 	var since any
-	if t := s.opts.Startup.ReadySince(); !t.IsZero() {
+	if t := a.startup.ReadySince(); !t.IsZero() {
 		since = t
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"settings": s.opts.Startup.Settings(), "readySince": since})
+	writeJSON(w, http.StatusOK, map[string]any{"settings": a.startup.Settings(), "readySince": since})
 }
 
-func (s *Server) handlePutStartup(w http.ResponseWriter, r *http.Request) {
-	if s.opts.Startup == nil {
+func (a startupArea) handlePutStartup(w http.ResponseWriter, r *http.Request) {
+	if a.startup == nil {
 		writeError(w, http.StatusServiceUnavailable, "unavailable", "not available")
 		return
 	}
@@ -32,10 +44,10 @@ func (s *Server) handlePutStartup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid settings")
 		return
 	}
-	if err := s.opts.Startup.Save(in); err != nil {
+	if err := a.startup.Save(in); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}
 	noteTarget(r, "startup")
-	writeJSON(w, http.StatusOK, s.opts.Startup.Settings())
+	writeJSON(w, http.StatusOK, a.startup.Settings())
 }

@@ -28,7 +28,8 @@ func (s *Server) registerWebapps(mux *routeMux) {
 // mediator files, docker finds the Docker versions of the programs,
 // migration is the move from them (state of the server), ctx the root
 // context for a migration that outlives its request, and removeDockerApp
-// removes a Docker app like "remove app" does.
+// removes a Docker app like "remove app" does; prefs are the preferences
+// in which "open with" moves to a successor (craft_replace.go).
 type webappsArea struct {
 	webapps         *webapps.Manager
 	ui              fs.FS
@@ -36,12 +37,13 @@ type webappsArea struct {
 	migration       *webappMigration
 	ctx             context.Context
 	removeDockerApp func(ctx context.Context, name string, purge bool) error
+	prefs           *preferences
 }
 
 // webappsArea is the area of the server; the automatic replacement
 // (craft_replace.go) uses its detection and migration.
 func (s *Server) webappsArea() webappsArea {
-	return webappsArea{webapps: s.opts.Webapps, ui: s.opts.UI, docker: s.opts.Docker, migration: &s.migration, ctx: s.ctx, removeDockerApp: s.dockerArea().removeDockerApp}
+	return webappsArea{webapps: s.opts.Webapps, ui: s.opts.UI, docker: s.opts.Docker, migration: &s.migration, ctx: s.ctx, removeDockerApp: s.dockerArea().removeDockerApp, prefs: s.prefs}
 }
 
 func (a webappsArea) register(mux *routeMux, admin, user, appAdmin func(http.HandlerFunc) http.HandlerFunc) {
