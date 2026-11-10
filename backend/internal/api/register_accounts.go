@@ -2,14 +2,7 @@ package api
 
 // registerUsers registers the routes of the accounts of the NAS.
 func (s *Server) registerUsers(mux *routeMux) {
-	mux.HandleFunc("GET /api/v1/users", s.requireAdmin(s.handleListUsers))
-	mux.HandleFunc("POST /api/v1/users", s.requireAdmin(s.handleCreateUser))
-	mux.HandleFunc("PUT /api/v1/users/{name}", s.requireAdmin(s.handleUpdateUser))
-	mux.HandleFunc("DELETE /api/v1/users/{name}", s.requireAdmin(s.handleDeleteUser))
-	mux.HandleFunc("POST /api/v1/users/{name}/lock", s.requireAdmin(s.handleLockUser(true)))
-	mux.HandleFunc("POST /api/v1/users/{name}/unlock", s.requireAdmin(s.handleLockUser(false)))
-	// Everyone may change their own password.
-	mux.HandleFunc("POST /api/v1/users/{name}/password", s.requireUser(s.handleSetPassword))
+	s.usersArea().register(mux, s.requireAdmin, s.requireUser)
 }
 
 // registerAccount registers the routes of one's own account: sessions, tokens, 2FA, passkeys, SSH keys and notifications.
